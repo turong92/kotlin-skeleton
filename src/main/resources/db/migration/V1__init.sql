@@ -1,0 +1,3 @@
+-- Initial migration placeholder.
+-- 스키마 변경은 반드시 새 파일(V2__xxx.sql, V3__xxx.sql)로 추가.
+-- 이 파일을 수정/삭제하지 말 것 (Flyway 체크섬 틀어짐).
