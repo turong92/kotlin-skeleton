@@ -18,3 +18,9 @@ management:
       base-path: /
       exposure:
         include: health, info
+
+logging:
+  pattern:
+    # TraceIdFilter가 MDC에 심은 traceId를 모든 로그 라인 앞에 노출
+    # 결과 예: 2026-04-20 17:00:00.000 INFO  [app,7a8b9c0d1e2f3a4b] ...
+    level: "%5p [${spring.application.name:-},%X{traceId:-}]"
