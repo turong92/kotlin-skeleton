@@ -11,12 +11,12 @@ import org.springframework.web.filter.OncePerRequestFilter
 import java.util.UUID
 
 /**
- * 모든 HTTP 요청에 `traceId`를 부여하고 MDC에 넣어 로그 라인마다 출력되게 한다.
+ * 요청마다 `traceId`를 부여해 MDC에 주입.
  *
- * - 클라이언트가 `X-Request-Id` 헤더로 보내면 **그 값을 승계** → 프론트/백 로그 상관관계 연결
+ * - 클라이언트가 `X-Request-Id` 헤더로 보내면 그 값을 승계 (프론트/Python AI 등 타 서비스 traceId 연결)
  * - 없으면 UUID 생성 (하이픈 제거 후 앞 16자)
- * - 응답 헤더 `X-Trace-Id`로 traceId 반환 → 프론트 콘솔/토스트에서 바로 확인 가능
- * - 에러 응답 body에도 [GlobalExceptionHandler]가 [MDC_KEY]를 읽어 포함
+ * - 응답 헤더 `X-Trace-Id`로 traceId 반환
+ * - 다운스트림 처리(컨트롤러, [GlobalExceptionHandler], [RequestLoggingFilter])가 MDC를 참조
  */
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE)

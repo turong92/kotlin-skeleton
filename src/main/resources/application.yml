@@ -2,7 +2,7 @@ spring:
   application:
     name: kotlin-skeleton
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/app}
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/app?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true}
     username: ${SPRING_DATASOURCE_USERNAME:app}
     password: ${SPRING_DATASOURCE_PASSWORD:dev}
   flyway:
@@ -20,7 +20,10 @@ management:
         include: health, info
 
 logging:
+  level:
+    # Flyway 8.1 이후 버전 경고 억제 (MySQL 8.4 "verified with 8.1" 류)
+    org.flywaydb.core.internal.database.base.Database: ERROR
   pattern:
-    # TraceIdFilter가 MDC에 심은 traceId를 모든 로그 라인 앞에 노출
-    # 결과 예: 2026-04-20 17:00:00.000 INFO  [app,7a8b9c0d1e2f3a4b] ...
-    level: "%5p [${spring.application.name:-},%X{traceId:-}]"
+    # TraceIdFilter가 MDC에 심은 traceId 를 로그 correlation 위치에 faded 톤으로 출력
+    # 결과: "INFO [a1b2c3d4e5f6] 12345 --- [app1] [nio-8080-exec-1] logger : message"
+    correlation: "%clr([%X{traceId:-}]){faded} "
