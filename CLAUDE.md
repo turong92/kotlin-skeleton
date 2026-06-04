@@ -15,7 +15,7 @@ dev.sumin.skeleton/
 │   ├── ApiError.kt                # 표준 에러 응답 포맷
 │   ├── ApplicationException.kt    # 도메인 예외 베이스 클래스
 │   ├── GlobalExceptionHandler.kt  # 모든 예외 → ApiError 변환
-│   └── TraceIdFilter.kt           # X-Request-Id → MDC traceId 심기
+│   └── TraceIdFilter.kt           # W3C traceparent → MDC traceId/spanId 심기
 └── config/                        # @Configuration 빈 (보안, CORS 등)
 ```
 
@@ -33,16 +33,17 @@ dev.sumin.skeleton/
   - 에러: [ApiError] (RFC 7807 변형 + traceId + timestamp)
 - **도메인 예외**: `class XxxNotFoundException : ApplicationException(...)` 식으로 선언, throw만 하면 표준 응답
 - **스키마 변경**: `src/main/resources/db/migration/V{n}__{desc}.sql` — Flyway 마이그레이션만
-- **로그**: SLF4J 사용. 모든 로그 라인엔 traceId 자동 포함 (MDC)
+- **로그**: SLF4J 사용. 모든 로그 라인엔 traceId/spanId/parentSpanId 자동 포함 (MDC)
 
 ## traceId 흐름 (디버깅용 핵심)
 
-1. 프론트엔드가 요청마다 `X-Request-Id: <UUID>` 헤더 부착
-2. [TraceIdFilter]가 이 값을 MDC `traceId` 키에 심음 (없으면 생성)
-3. 모든 로그 라인에 `[app,<traceId>]` 프리픽스 출력
-4. 응답 헤더 `X-Trace-Id` 로 같은 값 반환
-5. 에러 응답 body `traceId` 필드에도 포함
-6. **디버깅**: 프론트 콘솔/토스트에 찍힌 traceId 로 서버 로그 `grep` → 해당 요청 전체 흐름 한 번에 파악
+1. 프론트엔드/에이전트가 작업 전체 `traceId`를 담은 W3C `traceparent` 헤더 부착
+2. [TraceIdFilter]가 traceId를 승계하고 현재 요청용 새 spanId 생성
+3. MDC `traceId`, `spanId`, `parentSpanId` 키에 주입
+4. 모든 로그 라인에 `[traceId=... spanId=... parentSpanId=...]` 프리픽스 출력
+5. 응답 헤더 `traceparent`, `X-Trace-Id`, `X-Span-Id` 로 현재 서버 span 반환
+6. 에러 응답 body `traceId`, `spanId` 필드에도 포함
+7. **디버깅**: 프론트 콘솔/토스트에 찍힌 traceId 로 서버 로그 `grep` → 전체 플로우, spanId 로 특정 요청 단계 좁혀보기
 
 ## 프론트엔드와의 통신
 

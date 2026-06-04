@@ -32,4 +32,4 @@ logging:
   level:
     org.flywaydb.core.internal.database.base.Database: ERROR
   pattern:
-    correlation: "%clr([%X{traceId:-}]){faded} "
+    correlation: "%clr([traceId=%X{traceId:-} spanId=%X{spanId:-} parentSpanId=%X{parentSpanId:-}]){faded} "

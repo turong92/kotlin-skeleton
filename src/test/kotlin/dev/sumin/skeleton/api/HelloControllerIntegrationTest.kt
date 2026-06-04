@@ -10,14 +10,16 @@ import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.get
+import kotlin.test.assertNotEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
  * `/api/v1/hello` 통합 테스트.
  *
  * - Testcontainers 가 실제 MySQL 컨테이너 띄움 (Flyway 마이그레이션 포함 검증)
  * - MockMvc 로 HTTP 레이어까지 왕복
- * - traceId 전파 검증: X-Request-Id 헤더 보내면 X-Trace-Id 로 승계되는지
+ * - traceId 전파 검증: W3C traceparent 헤더를 보내면 traceId 를 승계하는지
  *
  * 이 테스트 하나로:
  * 1. Spring Context 로드
@@ -36,7 +38,7 @@ class HelloControllerIntegrationTest {
 
     @Test
     fun `GET hello returns message + auto-generated traceId header`() {
-        mockMvc.get("/api/v1/hello") {
+        val result = mockMvc.get("/api/v1/hello") {
             accept = MediaType.APPLICATION_JSON
         }.andExpect {
             status { isOk() }
@@ -44,35 +46,56 @@ class HelloControllerIntegrationTest {
             jsonPath("$.message") { value("Hello from Kotlin backend!") }
             jsonPath("$.timestamp") { isNotEmpty() }
             header { exists(TraceIdFilter.HEADER_TRACE_ID) }
-        }
+            header { exists(TraceIdFilter.HEADER_SPAN_ID) }
+            header { exists(TraceIdFilter.HEADER_TRACEPARENT) }
+        }.andReturn()
+
+        val traceId = result.response.getHeader(TraceIdFilter.HEADER_TRACE_ID).orEmpty()
+        val spanId = result.response.getHeader(TraceIdFilter.HEADER_SPAN_ID).orEmpty()
+        assertTrue(traceId.matches(Regex("[0-9a-f]{32}")))
+        assertTrue(spanId.matches(Regex("[0-9a-f]{16}")))
+        assertEquals("00-$traceId-$spanId-01", result.response.getHeader(TraceIdFilter.HEADER_TRACEPARENT))
     }
 
     @Test
-    fun `GET hello propagates X-Request-Id as traceId`() {
-        val clientRequestId = "integration-test-abc-123"
+    fun `GET hello propagates W3C traceparent traceId and creates server spanId`() {
+        val clientTraceId = "4bf92f3577b34da6a3ce929d0e0e4736"
+        val clientSpanId = "00f067aa0ba902b7"
         mockMvc.get("/api/v1/hello") {
-            header(TraceIdFilter.HEADER_REQUEST_ID, clientRequestId)
+            header(TraceIdFilter.HEADER_TRACEPARENT, "00-$clientTraceId-$clientSpanId-01")
         }.andExpect {
             status { isOk() }
             header {
-                string(TraceIdFilter.HEADER_TRACE_ID, clientRequestId)
+                string(TraceIdFilter.HEADER_TRACE_ID, clientTraceId)
+                exists(TraceIdFilter.HEADER_SPAN_ID)
+                exists(TraceIdFilter.HEADER_TRACEPARENT)
             }
+        }.andReturn().response.let { response ->
+            val serverSpanId = response.getHeader(TraceIdFilter.HEADER_SPAN_ID).orEmpty()
+            assertTrue(serverSpanId.matches(Regex("[0-9a-f]{16}")))
+            assertNotEquals(clientSpanId, serverSpanId)
+            assertEquals("00-$clientTraceId-$serverSpanId-01", response.getHeader(TraceIdFilter.HEADER_TRACEPARENT))
         }
     }
 
     @Test
     fun `unmapped path returns standardized ApiError with traceId`() {
+        val traceId = "0123456789abcdef0123456789abcdef"
+        val parentSpanId = "abcdef0123456789"
         val result = mockMvc.get("/api/v1/does-not-exist") {
-            header(TraceIdFilter.HEADER_REQUEST_ID, "err-trace-xyz")
+            header(TraceIdFilter.HEADER_TRACEPARENT, "00-$traceId-$parentSpanId-01")
         }.andExpect {
             status { isNotFound() }
             jsonPath("$.status") { value(404) }
             jsonPath("$.title") { isNotEmpty() }
-            jsonPath("$.traceId") { value("err-trace-xyz") }
+            jsonPath("$.traceId") { value(traceId) }
+            jsonPath("$.spanId") { isNotEmpty() }
             jsonPath("$.timestamp") { isNotEmpty() }
         }.andReturn()
 
-        // 응답 헤더에도 traceId
-        assertEquals("err-trace-xyz", result.response.getHeader(TraceIdFilter.HEADER_TRACE_ID))
+        val spanId = result.response.getHeader(TraceIdFilter.HEADER_SPAN_ID).orEmpty()
+        assertTrue(spanId.matches(Regex("[0-9a-f]{16}")))
+        assertEquals(traceId, result.response.getHeader(TraceIdFilter.HEADER_TRACE_ID))
+        assertEquals("00-$traceId-$spanId-01", result.response.getHeader(TraceIdFilter.HEADER_TRACEPARENT))
     }
 }

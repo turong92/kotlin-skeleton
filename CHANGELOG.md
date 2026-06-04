@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Springdoc OpenAPI UI: `/api/v1/docs`, `/api/v1/docs/ui`
 - `HelloControllerIntegrationTest`: `X-Request-Id` → `X-Trace-Id` 전파, 표준 `ApiError`, 요청 로그 traceId 흐름 검증
+- W3C `traceparent` 기반 trace context: traceId는 전체 플로우로 승계, 각 BE 요청은 새 spanId 생성
+- 로그 correlation 패턴에 `traceId`, `spanId`, `parentSpanId` 모두 출력
+- 에러 응답과 응답 헤더에 `spanId` 포함
 
 ### Fixed
 - 매핑되지 않은 API 경로를 `500`이 아니라 표준 `404 ApiError`로 응답

@@ -5,7 +5,7 @@ import java.time.Instant
 /**
  * 모든 에러 응답의 공통 포맷.
  *
- * RFC 7807 (Problem Details for HTTP APIs) 변형 + traceId/timestamp 추가.
+ * RFC 7807 (Problem Details for HTTP APIs) 변형 + traceId/spanId/timestamp 추가.
  * 프론트엔드의 `ApiError` 타입과 1:1 매칭.
  *
  * 예:
@@ -16,6 +16,7 @@ import java.time.Instant
  *   "status": 400,
  *   "detail": "email format invalid",
  *   "traceId": "7a8b9c0d1e2f...",
+ *   "spanId": "0f1e2d3c4b5a6978",
  *   "timestamp": "2026-04-20T10:00:00Z",
  *   "errors": [{"field": "email", "code": "INVALID_FORMAT"}]
  * }
@@ -27,6 +28,7 @@ data class ApiError(
     val status: Int,
     val detail: String? = null,
     val traceId: String? = null,
+    val spanId: String? = null,
     val timestamp: String = Instant.now().toString(),
     val errors: List<FieldError>? = null,
 ) {

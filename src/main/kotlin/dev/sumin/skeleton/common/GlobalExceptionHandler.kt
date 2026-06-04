@@ -37,6 +37,7 @@ class GlobalExceptionHandler {
                 status = HttpStatus.BAD_REQUEST.value(),
                 detail = "Request body validation failed",
                 traceId = currentTraceId(),
+                spanId = currentSpanId(),
                 errors = fieldErrors,
             ),
         )
@@ -50,6 +51,7 @@ class GlobalExceptionHandler {
                 status = HttpStatus.BAD_REQUEST.value(),
                 detail = ex.message,
                 traceId = currentTraceId(),
+                spanId = currentSpanId(),
             ),
         )
 
@@ -61,6 +63,7 @@ class GlobalExceptionHandler {
                 status = HttpStatus.BAD_REQUEST.value(),
                 detail = ex.mostSpecificCause.message,
                 traceId = currentTraceId(),
+                spanId = currentSpanId(),
             ),
         )
 
@@ -72,6 +75,7 @@ class GlobalExceptionHandler {
                 status = HttpStatus.NOT_FOUND.value(),
                 detail = ex.message,
                 traceId = currentTraceId(),
+                spanId = currentSpanId(),
             ),
         )
 
@@ -84,6 +88,7 @@ class GlobalExceptionHandler {
                 status = ex.status.value(),
                 detail = ex.message,
                 traceId = currentTraceId(),
+                spanId = currentSpanId(),
             ),
         )
     }
@@ -97,9 +102,11 @@ class GlobalExceptionHandler {
                 status = HttpStatus.INTERNAL_SERVER_ERROR.value(),
                 detail = "An unexpected error occurred. Use traceId for investigation.",
                 traceId = currentTraceId(),
+                spanId = currentSpanId(),
             ),
         )
     }
 
     private fun currentTraceId(): String? = MDC.get(TraceIdFilter.MDC_KEY)
+    private fun currentSpanId(): String? = MDC.get(TraceIdFilter.MDC_SPAN_ID_KEY)
 }
