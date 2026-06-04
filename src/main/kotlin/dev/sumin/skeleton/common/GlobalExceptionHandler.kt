@@ -9,6 +9,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
 import org.springframework.web.method.annotation.HandlerMethodValidationException
+import org.springframework.web.servlet.resource.NoResourceFoundException
 
 /**
  * 애플리케이션 전역 예외 → [ApiError] 표준 응답으로 변환.
@@ -59,6 +60,17 @@ class GlobalExceptionHandler {
                 title = "Malformed request body",
                 status = HttpStatus.BAD_REQUEST.value(),
                 detail = ex.mostSpecificCause.message,
+                traceId = currentTraceId(),
+            ),
+        )
+
+    @ExceptionHandler(NoResourceFoundException::class)
+    fun handleNotFound(ex: NoResourceFoundException): ResponseEntity<ApiError> =
+        ResponseEntity.status(HttpStatus.NOT_FOUND).body(
+            ApiError(
+                title = "Not found",
+                status = HttpStatus.NOT_FOUND.value(),
+                detail = ex.message,
                 traceId = currentTraceId(),
             ),
         )

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Springdoc OpenAPI UI: `/api/v1/docs`, `/api/v1/docs/ui`
+- `HelloControllerIntegrationTest`: `X-Request-Id` → `X-Trace-Id` 전파, 표준 `ApiError`, 요청 로그 traceId 흐름 검증
+
+### Fixed
+- 매핑되지 않은 API 경로를 `500`이 아니라 표준 `404 ApiError`로 응답
+
 ## [1.1.1] - 2026-04-20
 
 ### Added
