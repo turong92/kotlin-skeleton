@@ -39,6 +39,7 @@ class TraceIdFilter : OncePerRequestFilter() {
             if (incoming?.parentSpanId != null) {
                 MDC.put(MDC_PARENT_SPAN_ID_KEY, incoming.parentSpanId)
             }
+            MDC.put(MDC_TRACE_CONTEXT_KEY, formatLogContext(traceId, spanId, incoming?.parentSpanId))
             val outgoingTraceparent = formatTraceparent(traceId, spanId, flags)
             response.setHeader(HEADER_TRACE_ID, traceId)
             response.setHeader(HEADER_SPAN_ID, spanId)
@@ -48,6 +49,7 @@ class TraceIdFilter : OncePerRequestFilter() {
             MDC.remove(MDC_KEY)
             MDC.remove(MDC_SPAN_ID_KEY)
             MDC.remove(MDC_PARENT_SPAN_ID_KEY)
+            MDC.remove(MDC_TRACE_CONTEXT_KEY)
         }
     }
 
@@ -55,6 +57,7 @@ class TraceIdFilter : OncePerRequestFilter() {
         const val MDC_KEY = "traceId"
         const val MDC_SPAN_ID_KEY = "spanId"
         const val MDC_PARENT_SPAN_ID_KEY = "parentSpanId"
+        const val MDC_TRACE_CONTEXT_KEY = "traceContext"
         const val HEADER_TRACEPARENT = "traceparent"
         const val HEADER_REQUEST_ID = "X-Request-Id"
         const val HEADER_TRACE_ID = "X-Trace-Id"
@@ -67,6 +70,19 @@ class TraceIdFilter : OncePerRequestFilter() {
 
         fun formatTraceparent(traceId: String, spanId: String, flags: String = DEFAULT_FLAGS): String =
             "$VERSION-$traceId-$spanId-$flags"
+
+        fun formatLogContext(traceId: String, spanId: String, parentSpanId: String?): String =
+            buildString {
+                append("[traceId=")
+                append(traceId)
+                append(" spanId=")
+                append(spanId)
+                if (!parentSpanId.isNullOrBlank()) {
+                    append(" parentSpanId=")
+                    append(parentSpanId)
+                }
+                append("]")
+            }
 
         private fun parseTraceparent(value: String?): IncomingTraceContext? {
             val match = value?.let { TRACEPARENT_REGEX.matchEntire(it.trim()) } ?: return null
