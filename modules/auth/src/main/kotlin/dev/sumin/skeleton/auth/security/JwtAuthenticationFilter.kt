@@ -16,6 +16,12 @@ class JwtAuthenticationFilter(
         response: HttpServletResponse,
         filterChain: FilterChain,
     ) {
+        val existingAuthentication = SecurityContextHolder.getContext().authentication
+        if (existingAuthentication?.isAuthenticated == true) {
+            filterChain.doFilter(request, response)
+            return
+        }
+
         val authorization = request.getHeader("Authorization")
         val token = authorization?.bearerToken()
 

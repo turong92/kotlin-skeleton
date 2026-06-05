@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.auth
 
+import com.jayway.jsonpath.JsonPath
 import dev.sumin.skeleton.TestcontainersConfiguration
 import org.hamcrest.Matchers.contains
 import org.hamcrest.Matchers.hasItem
@@ -12,6 +13,7 @@ import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.get
+import org.springframework.test.web.servlet.post
 
 @SpringBootTest(
     properties = [
@@ -112,6 +114,33 @@ class BreakGlassIntegrationTest {
             jsonPath("$.accountId") { value("acc_admin") }
             jsonPath("$.roles") { value(contains("USER", "ADMIN")) }
             jsonPath("$.roles") { value(not(hasItem("SUPERUSER"))) }
+        }
+    }
+
+    @Test
+    fun `GET me with break glass headers and bearer token keeps break glass principal`() {
+        val loginResponse = mockMvc.post("/api/v1/auth/login") {
+            contentType = MediaType.APPLICATION_JSON
+            accept = MediaType.APPLICATION_JSON
+            content = """{"email":"user@example.com","password":"password"}"""
+        }.andExpect {
+            status { isOk() }
+        }.andReturn().response.contentAsString
+
+        val accessToken = JsonPath.read<String>(loginResponse, "$.accessToken")
+
+        mockMvc.get("/api/v1/auth/me") {
+            header("Authorization", "Bearer $accessToken")
+            header("X-Break-Glass-Secret", "test-break-glass-secret")
+            header("X-Break-Glass-Reason", "production support")
+            header("X-Break-Glass-Account-Id", "acc_admin")
+            accept = MediaType.APPLICATION_JSON
+        }.andExpect {
+            status { isOk() }
+            content { contentTypeCompatibleWith(MediaType.APPLICATION_JSON) }
+            jsonPath("$.accountId") { value("acc_admin") }
+            jsonPath("$.username") { value("admin") }
+            jsonPath("$.roles") { value(hasItem("ADMIN")) }
         }
     }
 }
