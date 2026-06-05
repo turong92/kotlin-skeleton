@@ -137,6 +137,7 @@ class AuthAutoConfiguration {
                         "/info",
                         "/api/v1/hello",
                         "/api/v1/auth/login",
+                        "/api/v1/auth/social/*/login",
                         "/api/v1/docs",
                         "/api/v1/docs/**",
                         "/api/v1/docs/ui",
