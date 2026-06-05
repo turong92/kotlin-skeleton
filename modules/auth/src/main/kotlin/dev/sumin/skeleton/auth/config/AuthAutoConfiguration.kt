@@ -5,11 +5,14 @@ import dev.sumin.skeleton.auth.account.AuthAccountRepository
 import dev.sumin.skeleton.auth.account.InMemoryAuthAccountRepository
 import dev.sumin.skeleton.auth.jwt.JwtTokenService
 import dev.sumin.skeleton.auth.security.AuthErrorWriter
+import dev.sumin.skeleton.auth.security.DevLoginAuthenticationFilter
 import dev.sumin.skeleton.auth.security.JwtAuthenticationFilter
 import org.springframework.boot.ApplicationRunner
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.boot.context.properties.EnableConfigurationProperties
+import org.springframework.beans.factory.ObjectProvider
 import org.springframework.context.annotation.Bean
 import org.springframework.core.env.Environment
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
@@ -75,9 +78,21 @@ class AuthAutoConfiguration {
         JwtAuthenticationFilter(jwtTokenService, authErrorWriter)
 
     @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnProperty(prefix = "skeleton.auth.dev-login", name = ["enabled"], havingValue = "true")
+    fun devLoginAuthenticationFilter(
+        properties: AuthProperties,
+        environment: Environment,
+        accountRepository: AuthAccountRepository,
+        authErrorWriter: AuthErrorWriter,
+    ): DevLoginAuthenticationFilter =
+        DevLoginAuthenticationFilter(properties, environment, accountRepository, authErrorWriter)
+
+    @Bean
     @ConditionalOnMissingBean(SecurityFilterChain::class)
     fun securityFilterChain(
         http: HttpSecurity,
+        devLoginAuthenticationFilter: ObjectProvider<DevLoginAuthenticationFilter>,
         jwtAuthenticationFilter: JwtAuthenticationFilter,
         authErrorWriter: AuthErrorWriter,
     ): SecurityFilterChain {
@@ -113,7 +128,12 @@ class AuthAutoConfiguration {
                     ).permitAll()
                     .anyRequest().authenticated()
             }
-            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter::class.java)
+
+        devLoginAuthenticationFilter.ifAvailable { filter ->
+            http.addFilterBefore(filter, UsernamePasswordAuthenticationFilter::class.java)
+        }
+
+        http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter::class.java)
 
         return http.build()
     }
