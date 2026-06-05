@@ -1,7 +1,6 @@
 import org.gradle.api.plugins.JavaPluginExtension
 import org.gradle.api.tasks.testing.Test
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import org.springframework.boot.gradle.plugin.SpringBootPlugin
 
 plugins {
@@ -20,7 +19,7 @@ allprojects {
     }
 }
 
-subprojects {
+configure(subprojects.filter { it.buildFile.isFile }) {
     pluginManager.apply("org.jetbrains.kotlin.jvm")
     pluginManager.apply("org.jetbrains.kotlin.plugin.spring")
     pluginManager.apply("io.spring.dependency-management")
@@ -38,13 +37,6 @@ subprojects {
     }
 
     extensions.configure<org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension> {
-        compilerOptions {
-            freeCompilerArgs.addAll("-Xjsr305=strict", "-Xannotation-default-target=param-property")
-            jvmTarget.set(JvmTarget.JVM_21)
-        }
-    }
-
-    tasks.withType<KotlinCompile>().configureEach {
         compilerOptions {
             freeCompilerArgs.addAll("-Xjsr305=strict", "-Xannotation-default-target=param-property")
             jvmTarget.set(JvmTarget.JVM_21)
