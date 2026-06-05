@@ -5,6 +5,7 @@ import dev.sumin.skeleton.auth.account.AuthAccountRepository
 import dev.sumin.skeleton.auth.account.InMemoryAuthAccountRepository
 import dev.sumin.skeleton.auth.jwt.JwtTokenService
 import dev.sumin.skeleton.auth.security.AuthErrorWriter
+import dev.sumin.skeleton.auth.security.BreakGlassAuthenticationFilter
 import dev.sumin.skeleton.auth.security.DevLoginAuthenticationFilter
 import dev.sumin.skeleton.auth.security.JwtAuthenticationFilter
 import org.springframework.boot.ApplicationRunner
@@ -89,10 +90,21 @@ class AuthAutoConfiguration {
         DevLoginAuthenticationFilter(properties, environment, accountRepository, authErrorWriter)
 
     @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnProperty(prefix = "skeleton.auth.break-glass", name = ["enabled"], havingValue = "true")
+    fun breakGlassAuthenticationFilter(
+        properties: AuthProperties,
+        accountRepository: AuthAccountRepository,
+        authErrorWriter: AuthErrorWriter,
+    ): BreakGlassAuthenticationFilter =
+        BreakGlassAuthenticationFilter(properties, accountRepository, authErrorWriter)
+
+    @Bean
     @ConditionalOnMissingBean(SecurityFilterChain::class)
     fun securityFilterChain(
         http: HttpSecurity,
         devLoginAuthenticationFilter: ObjectProvider<DevLoginAuthenticationFilter>,
+        breakGlassAuthenticationFilter: ObjectProvider<BreakGlassAuthenticationFilter>,
         jwtAuthenticationFilter: JwtAuthenticationFilter,
         authErrorWriter: AuthErrorWriter,
     ): SecurityFilterChain {
@@ -129,11 +141,15 @@ class AuthAutoConfiguration {
                     .anyRequest().authenticated()
             }
 
+        http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter::class.java)
+
+        breakGlassAuthenticationFilter.ifAvailable { filter ->
+            http.addFilterBefore(filter, JwtAuthenticationFilter::class.java)
+        }
+
         devLoginAuthenticationFilter.ifAvailable { filter ->
             http.addFilterBefore(filter, UsernamePasswordAuthenticationFilter::class.java)
         }
-
-        http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter::class.java)
 
         return http.build()
     }
