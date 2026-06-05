@@ -165,7 +165,28 @@ Provider modules depend on the parent capability module. Parent capability modul
 
 ## Configuration Style
 
-Capability modules should expose clear properties under `skeleton.*`.
+Use Spring Boot's standard model: code owns defaults and structure, while external configuration supplies environment-specific values.
+
+Capability modules should expose typed properties under `skeleton.*` through `@ConfigurationProperties`. YAML should stay thin and should not become a large domain-specific language. Module behavior should be enabled by dependency composition and auto-configuration first, then refined by properties when runtime environments differ.
+
+Use external configuration for:
+
+- Secrets, credentials, and URLs.
+- Token TTLs, issuers, and public origins.
+- Feature enablement when a dependency is present but should be disabled in a profile.
+- Provider routing rules that vary by deployment.
+- Operational thresholds such as slow request duration.
+
+Keep in code:
+
+- Default beans and default policies.
+- Security filter chain structure.
+- Provider contracts and status mapping.
+- Standard endpoint paths.
+- Common domestic/overseas payment routing presets.
+- Validation and error mapping rules.
+
+This keeps local skeleton startup predictable while still allowing production overrides through YAML, properties, environment variables, or command-line arguments.
 
 Example auth properties:
 
@@ -179,7 +200,9 @@ skeleton:
       refresh-token-ttl: 14d
 ```
 
-Example payment properties:
+Payment routing should start with code presets, not mandatory YAML. For example, the payment module can provide a default routing policy where KRW routes to Toss and USD/EUR routes to Stripe when both provider modules are present.
+
+Advanced payment routing can be exposed later as external configuration:
 
 ```yaml
 skeleton:
@@ -242,4 +265,3 @@ Version `v1.3.0` should implement stateless login:
 - Add FE protected-route/auth-client follow-up in the React skeleton.
 
 Payment modules should start after auth proves the module pattern.
-
