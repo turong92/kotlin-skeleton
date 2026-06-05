@@ -1,9 +1,7 @@
 package dev.sumin.skeleton.auth.api
 
 import dev.sumin.skeleton.auth.account.AccountIdentifier
-import dev.sumin.skeleton.auth.account.AuthAccount
 import dev.sumin.skeleton.auth.account.AuthAccountRepository
-import dev.sumin.skeleton.auth.jwt.JwtTokenService
 import dev.sumin.skeleton.auth.principal.CurrentPrincipal
 import dev.sumin.skeleton.common.ApiError
 import dev.sumin.skeleton.common.TraceIdFilter
@@ -38,7 +36,7 @@ data class AuthTokenResponse(
 class AuthController(
     private val accountRepository: AuthAccountRepository,
     private val passwordEncoder: PasswordEncoder,
-    private val jwtTokenService: JwtTokenService,
+    private val authTokenResponseFactory: AuthTokenResponseFactory,
 ) {
     @PostMapping("/login")
     fun login(@RequestBody request: PasswordLoginRequest): ResponseEntity<Any> {
@@ -58,15 +56,7 @@ class AuthController(
             return unauthorized()
         }
 
-        val principal = account.toCurrentPrincipal()
-        val token = jwtTokenService.issue(principal)
-        return ResponseEntity.ok(
-            AuthTokenResponse(
-                accessToken = token.accessToken,
-                expiresAt = token.expiresAt,
-                principal = principal,
-            ),
-        )
+        return ResponseEntity.ok(authTokenResponseFactory.issue(account))
     }
 
     @GetMapping("/me")
@@ -84,11 +74,4 @@ class AuthController(
             ),
         )
 
-    private fun AuthAccount.toCurrentPrincipal(): CurrentPrincipal =
-        CurrentPrincipal(
-            accountId = accountId,
-            username = username,
-            email = email,
-            roles = roles,
-        )
 }
