@@ -5,14 +5,6 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## v1.2.0 - Multi-module foundation
-
-- Converted the backend skeleton to a coarse-grained Gradle multi-module layout.
-- Added `apps/api` as the executable Spring Boot application.
-- Added `modules/platform` for shared web/error/observability infrastructure.
-- Added `modules/auth` as the authentication capability module foundation.
-- Kept the existing trace-aware `/api/v1/hello` behavior and integration tests.
-
 ## [Unreleased]
 
 ### Added
@@ -24,6 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - 매핑되지 않은 API 경로를 `500`이 아니라 표준 `404 ApiError`로 응답
+
+## v1.2.0 - Multi-module foundation
+
+- Converted the backend skeleton to a coarse-grained Gradle multi-module layout.
+- Added `apps/api` as the executable Spring Boot application.
+- Added `modules/platform` for shared web/error/observability infrastructure.
+- Added `modules/auth` as the authentication capability module foundation.
+- Kept the existing trace-aware `/api/v1/hello` behavior and integration tests.
 
 ## [1.1.1] - 2026-04-20
 
