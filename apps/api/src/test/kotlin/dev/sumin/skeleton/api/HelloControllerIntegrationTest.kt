@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.api
 
+import com.jayway.jsonpath.JsonPath
 import dev.sumin.skeleton.TestcontainersConfiguration
 import dev.sumin.skeleton.common.TraceIdFilter
 import org.junit.jupiter.api.Test
@@ -10,6 +11,7 @@ import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.get
+import org.springframework.test.web.servlet.post
 import kotlin.test.assertNotEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -82,8 +84,10 @@ class HelloControllerIntegrationTest {
     fun `unmapped path returns standardized ApiError with traceId`() {
         val traceId = "0123456789abcdef0123456789abcdef"
         val parentSpanId = "abcdef0123456789"
+        val accessToken = loginAccessToken()
         val result = mockMvc.get("/api/v1/does-not-exist") {
             header(TraceIdFilter.HEADER_TRACEPARENT, "00-$traceId-$parentSpanId-01")
+            header("Authorization", "Bearer $accessToken")
         }.andExpect {
             status { isNotFound() }
             jsonPath("$.status") { value(404) }
@@ -97,5 +101,17 @@ class HelloControllerIntegrationTest {
         assertTrue(spanId.matches(Regex("[0-9a-f]{16}")))
         assertEquals(traceId, result.response.getHeader(TraceIdFilter.HEADER_TRACE_ID))
         assertEquals("00-$traceId-$spanId-01", result.response.getHeader(TraceIdFilter.HEADER_TRACEPARENT))
+    }
+
+    private fun loginAccessToken(): String {
+        val response = mockMvc.post("/api/v1/auth/login") {
+            contentType = MediaType.APPLICATION_JSON
+            accept = MediaType.APPLICATION_JSON
+            content = """{"email":"user@example.com","password":"password"}"""
+        }.andExpect {
+            status { isOk() }
+        }.andReturn().response.contentAsString
+
+        return JsonPath.read(response, "$.accessToken")
     }
 }
