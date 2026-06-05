@@ -7,9 +7,10 @@ import dev.sumin.skeleton.auth.jwt.JwtTokenService
 import dev.sumin.skeleton.auth.security.AuthErrorWriter
 import dev.sumin.skeleton.auth.security.JwtAuthenticationFilter
 import org.springframework.boot.ApplicationRunner
+import org.springframework.boot.autoconfigure.AutoConfiguration
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean
-import org.springframework.context.annotation.Configuration
 import org.springframework.core.env.Environment
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.config.http.SessionCreationPolicy
@@ -19,14 +20,16 @@ import org.springframework.security.web.SecurityFilterChain
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter
 import tools.jackson.databind.ObjectMapper
 
-@Configuration(proxyBeanMethods = false)
+@AutoConfiguration
 @EnableConfigurationProperties(AuthProperties::class)
 class AuthAutoConfiguration {
 
     @Bean
+    @ConditionalOnMissingBean
     fun passwordEncoder(): PasswordEncoder = BCryptPasswordEncoder()
 
     @Bean
+    @ConditionalOnMissingBean(AuthAccountRepository::class)
     fun authAccountRepository(passwordEncoder: PasswordEncoder): AuthAccountRepository =
         InMemoryAuthAccountRepository(
             listOf(
@@ -48,6 +51,7 @@ class AuthAutoConfiguration {
         )
 
     @Bean
+    @ConditionalOnMissingBean
     fun jwtTokenService(properties: AuthProperties): JwtTokenService =
         JwtTokenService(properties.jwt)
 
@@ -58,10 +62,12 @@ class AuthAutoConfiguration {
         }
 
     @Bean
+    @ConditionalOnMissingBean
     fun authErrorWriter(objectMapper: ObjectMapper): AuthErrorWriter =
         AuthErrorWriter(objectMapper)
 
     @Bean
+    @ConditionalOnMissingBean
     fun jwtAuthenticationFilter(
         jwtTokenService: JwtTokenService,
         authErrorWriter: AuthErrorWriter,
@@ -69,6 +75,7 @@ class AuthAutoConfiguration {
         JwtAuthenticationFilter(jwtTokenService, authErrorWriter)
 
     @Bean
+    @ConditionalOnMissingBean(SecurityFilterChain::class)
     fun securityFilterChain(
         http: HttpSecurity,
         jwtAuthenticationFilter: JwtAuthenticationFilter,
