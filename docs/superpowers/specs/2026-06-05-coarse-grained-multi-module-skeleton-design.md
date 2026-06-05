@@ -99,7 +99,9 @@ Development login can live inside `auth/dev` because it is a development tool fo
 
 Development login rules:
 
-- Accept only a small, code-defined set of dev principals such as `admin` and `user`.
+- Accept a specific account identifier such as `accountId`, `username`, or `email`.
+- Resolve the identifier through the same account/principal loading path used by real authentication.
+- Optional aliases such as `admin` and `user` may exist, but they should map to configured seed accounts rather than define roles by themselves.
 - Do not trust arbitrary role or permission headers.
 - Log every dev login with trace context.
 - Make the response principal shape identical to real JWT authentication.
