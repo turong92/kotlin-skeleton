@@ -95,7 +95,9 @@ modules/auth/src/main/kotlin/.../auth/
 
 Provider-specific social login can start inside `auth/oauth/providers` if it is lightweight. If Google/Kakao/Naver integrations grow distinct SDK/config surfaces, they can be promoted to separate provider modules such as `auth-social-google`.
 
-Development login can live inside `auth/dev` because it is a development tool for the auth capability, not a product capability. It must be disabled by default and must only work under `local` or `dev` profiles. If it is enabled under `prod` or `staging`, the application must fail during startup.
+Development login can live inside `auth/dev` because it is a development tool for the auth capability, not a product capability. It must be disabled by default and should normally be used under `local` or `dev` profiles.
+
+Production emergency access should be treated as break-glass access, not ordinary dev login. The same account resolution path can be reused, but production enablement must require stronger controls and explicit operator intent.
 
 Development login rules:
 
@@ -106,6 +108,18 @@ Development login rules:
 - Log every dev login with trace context.
 - Make the response principal shape identical to real JWT authentication.
 - Prefer Spring Security test support for automated tests; use dev login for local manual and AI-agent-assisted development flows.
+
+Break-glass production rules:
+
+- Disabled by default.
+- Enabled only by an explicit property such as `skeleton.auth.break-glass.enabled=true`.
+- Require a configured shared secret or signed one-time token; fail startup if production break-glass is enabled without one.
+- Require an operator reason and account identifier on every request.
+- Restrict target accounts through an allowlist or a dedicated emergency-access policy.
+- Log and audit every attempt, success, and failure with trace context, source IP, user agent, target account, and reason.
+- Emit a high-priority operational/security event when used.
+- Keep the resulting principal shape identical to real JWT authentication.
+- Never accept arbitrary role or permission headers.
 
 ### modules/payment
 
