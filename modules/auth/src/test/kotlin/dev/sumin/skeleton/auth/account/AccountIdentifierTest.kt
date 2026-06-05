@@ -3,6 +3,7 @@ package dev.sumin.skeleton.auth.account
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
 
 class AccountIdentifierTest {
     @Test
@@ -81,6 +82,26 @@ class InMemoryAuthAccountRepositoryTest {
         assertEquals(
             usernameMatch,
             repository.findBy(AccountIdentifier(username = "target-user")),
+        )
+    }
+
+    @Test
+    fun `findBy returns null when account id is present and does not match`() {
+        val emailMatch = authAccount(accountId = "acc_email", username = "email-user", email = "target@example.com")
+        val repository = InMemoryAuthAccountRepository(listOf(emailMatch))
+
+        assertNull(
+            repository.findBy(AccountIdentifier(accountId = "missing", email = "target@example.com")),
+        )
+    }
+
+    @Test
+    fun `findBy returns null when email is present and does not match`() {
+        val usernameMatch = authAccount(accountId = "acc_username", username = "target-user", email = "username@example.com")
+        val repository = InMemoryAuthAccountRepository(listOf(usernameMatch))
+
+        assertNull(
+            repository.findBy(AccountIdentifier(email = "missing@example.com", username = "target-user")),
         )
     }
 

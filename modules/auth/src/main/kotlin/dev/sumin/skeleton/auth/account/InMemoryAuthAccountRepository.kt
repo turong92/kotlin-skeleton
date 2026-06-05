@@ -4,11 +4,10 @@ class InMemoryAuthAccountRepository(
     private val accounts: List<AuthAccount>,
 ) : AuthAccountRepository {
     override fun findBy(identifier: AccountIdentifier): AuthAccount? =
-        identifier.accountId?.let { accountId ->
-            accounts.firstOrNull { it.accountId == accountId }
-        } ?: identifier.email?.let { email ->
-            accounts.firstOrNull { it.email == email }
-        } ?: identifier.username?.let { username ->
-            accounts.firstOrNull { it.username == username }
+        when {
+            identifier.accountId != null -> accounts.firstOrNull { it.accountId == identifier.accountId }
+            identifier.email != null -> accounts.firstOrNull { it.email == identifier.email }
+            identifier.username != null -> accounts.firstOrNull { it.username == identifier.username }
+            else -> null
         }
 }
