@@ -33,15 +33,16 @@ class JwtTokenService(
     fun issue(principal: CurrentPrincipal): IssuedToken {
         val now = clock.instant()
         val expiresAt = now.plus(properties.accessTokenTtl)
-        val claims = JwtClaimsSet.builder()
+        val claimsBuilder = JwtClaimsSet.builder()
             .issuer(properties.issuer)
             .issuedAt(now)
             .expiresAt(expiresAt)
             .subject(principal.accountId)
-            .claim("username", principal.username)
-            .claim("email", principal.email)
             .claim("roles", principal.roles.toList())
-            .build()
+        principal.username?.let { claimsBuilder.claim("username", it) }
+        principal.email?.let { claimsBuilder.claim("email", it) }
+
+        val claims = claimsBuilder.build()
         val header = JwsHeader.with(MacAlgorithm.HS256).build()
         val token = encoder.encode(JwtEncoderParameters.from(header, claims)).tokenValue
 

@@ -66,6 +66,16 @@ class JwtTokenServiceTest {
     }
 
     @Test
+    fun `issue and authenticate preserve null optional fields and empty roles`() {
+        val service = JwtTokenService(properties, clock)
+        val principal = CurrentPrincipal(accountId = "acc_system")
+
+        val authenticated = service.authenticate(service.issue(principal).accessToken)
+
+        assertEquals(principal, authenticated)
+    }
+
+    @Test
     fun `authenticate rejects malformed token`() {
         val service = JwtTokenService(properties, clock)
 
