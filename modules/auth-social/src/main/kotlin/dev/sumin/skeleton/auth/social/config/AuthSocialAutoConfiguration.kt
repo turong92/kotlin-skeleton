@@ -3,6 +3,7 @@ package dev.sumin.skeleton.auth.social.config
 import dev.sumin.skeleton.auth.account.AuthAccountRepository
 import dev.sumin.skeleton.auth.api.AuthTokenResponseFactory
 import dev.sumin.skeleton.auth.social.api.OAuthSocialAuthController
+import dev.sumin.skeleton.auth.social.api.OAuthSocialLoginRequest
 import dev.sumin.skeleton.auth.social.oauth.InMemoryOAuthAccountLinkRepository
 import dev.sumin.skeleton.auth.social.oauth.LinkedAccountOnlyOAuthAccountProvisioningPolicy
 import dev.sumin.skeleton.auth.social.oauth.OAuthAccountLink
@@ -15,6 +16,11 @@ import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean
+import org.springframework.http.MediaType
+import org.springframework.web.servlet.function.RequestPredicates.POST
+import org.springframework.web.servlet.function.RouterFunction
+import org.springframework.web.servlet.function.RouterFunctions.route
+import org.springframework.web.servlet.function.ServerResponse
 
 @AutoConfiguration
 @EnableConfigurationProperties(AuthSocialProperties::class)
@@ -65,4 +71,20 @@ class AuthSocialAutoConfiguration {
         loginService: OAuthSocialLoginService,
     ): OAuthSocialAuthController =
         OAuthSocialAuthController(loginService)
+
+    @Bean
+    @ConditionalOnMissingBean(name = ["oauthSocialAuthRoutes"])
+    fun oauthSocialAuthRoutes(
+        controller: OAuthSocialAuthController,
+    ): RouterFunction<ServerResponse> =
+        route(POST("/api/v1/auth/social/{provider}/login")) { request ->
+            val loginRequest = request.body(OAuthSocialLoginRequest::class.java)
+            val response = controller.login(
+                provider = request.pathVariable("provider"),
+                request = loginRequest,
+            )
+            ServerResponse.ok()
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(response)
+        }
 }
