@@ -2,27 +2,37 @@
 
 Kotlin + Spring Boot 백엔드 토이 프로젝트의 공개 출발점.
 
+## Backend Module Layout
+
+- `apps/api` is the only executable Spring Boot application.
+- `modules/platform` owns shared web/error/observability code.
+- `modules/auth` owns authentication contracts and future login flows.
+- Keep provider/vendor integrations out of `platform`.
+
 ## 패키지 구조 (AI 참조용)
 
 ```
-dev.sumin.skeleton/
+apps/api/src/main/kotlin/dev/sumin/skeleton/
 ├── KotlinSkeletonApplication.kt   # 엔트리 포인트 (수정 거의 없음)
-├── api/                           # @RestController + 요청/응답 DTO
-│   └── HelloController.kt
-├── domain/                        # 비즈니스 로직, 서비스, 도메인 엔티티
-├── infra/                         # DB 리포지토리, 외부 API 클라이언트
-├── common/                        # 인프라성 공통 컴포넌트 (수정 드물음)
-│   ├── ApiError.kt                # 표준 에러 응답 포맷
-│   ├── ApplicationException.kt    # 도메인 예외 베이스 클래스
-│   ├── GlobalExceptionHandler.kt  # 모든 예외 → ApiError 변환
-│   └── TraceIdFilter.kt           # W3C traceparent → MDC traceId/spanId 심기
-└── config/                        # @Configuration 빈 (보안, CORS 등)
+└── api/                           # @RestController + 요청/응답 DTO
+    └── HelloController.kt
+
+modules/platform/src/main/kotlin/dev/sumin/skeleton/common/
+├── ApiError.kt                    # 표준 에러 응답 포맷
+├── ApplicationException.kt        # 도메인 예외 베이스 클래스
+├── GlobalExceptionHandler.kt      # 모든 예외 → ApiError 변환
+├── RequestLoggingFilter.kt        # 요청 시작/종료 로그
+└── TraceIdFilter.kt               # W3C traceparent → MDC traceId/spanId 심기
+
+modules/auth/src/main/kotlin/dev/sumin/skeleton/auth/
+└── principal/CurrentPrincipal.kt  # 인증 주체 계약
 ```
 
 **경계 책임:**
-- `api/` 는 HTTP 변환만. 비즈니스 로직 금지. 서비스 호출.
-- `domain/` 은 프레임워크 독립. Spring 애노테이션 최소화 (`@Service` 정도만)
-- `infra/` 만 DB 연결, 외부 HTTP 호출. 도메인 레이어가 이걸 인터페이스로 참조
+- `apps/api` 는 실행 앱 조립과 HTTP 변환만. 비즈니스 로직 금지. 서비스 호출.
+- 앱 고유 `domain/`, `infra/`, `config/` 패키지는 필요할 때 `apps/api` 안에 둔다.
+- `modules/platform` 은 web/error/observability 공통 기반만 담당한다.
+- `modules/auth` 는 인증 계약과 향후 로그인 흐름을 담당한다.
 - 새 파일 200줄 넘어가면 분할 신호
 
 ## 핵심 컨벤션
@@ -32,7 +42,7 @@ dev.sumin.skeleton/
   - 성공: Kotlin data class → JSON (Jackson 자동)
   - 에러: [ApiError] (RFC 7807 변형 + traceId + timestamp)
 - **도메인 예외**: `class XxxNotFoundException : ApplicationException(...)` 식으로 선언, throw만 하면 표준 응답
-- **스키마 변경**: `src/main/resources/db/migration/V{n}__{desc}.sql` — Flyway 마이그레이션만
+- **스키마 변경**: `apps/api/src/main/resources/db/migration/V{n}__{desc}.sql` — Flyway 마이그레이션만
 - **로그**: SLF4J 사용. 모든 로그 라인엔 traceId/spanId/parentSpanId 자동 포함 (MDC)
 
 ## traceId 흐름 (디버깅용 핵심)
@@ -54,11 +64,12 @@ dev.sumin.skeleton/
 - **Kotlin idiomatic**: data class, scope function (`let`/`apply`/`also`), null 안전성 활용
 - **테스트**: Testcontainers로 실 MySQL 띄워 Flyway 마이그레이션 포함 검증
 - **새 기능 추가 시**:
-  1. `api/` 에 컨트롤러 + DTO
-  2. `domain/` 에 서비스
-  3. `infra/` 에 리포지토리 (필요 시)
-  4. DB 스키마 바뀌면 `db/migration/V{n}__.sql`
-  5. `common/` 은 건드리지 말 것 (공통 인프라)
+  1. `apps/api` 에 컨트롤러 + DTO
+  2. 앱 고유 비즈니스 로직은 `apps/api` 안의 `domain/` 패키지에 둔다 (필요 시)
+  3. 앱 고유 DB/외부 연동은 `apps/api` 안의 `infra/` 패키지에 둔다 (필요 시)
+  4. 공통 web/error/observability 코드는 `modules/platform` 에 둔다
+  5. 인증 계약과 로그인 흐름은 `modules/auth` 에 둔다
+  6. DB 스키마 바뀌면 `apps/api/src/main/resources/db/migration/V{n}__.sql`
 
 ## 변경 이력
 

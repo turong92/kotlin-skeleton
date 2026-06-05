@@ -2,6 +2,27 @@
 
 Kotlin + Spring Boot 백엔드 스켈레톤. 새 API 프로젝트 시작점.
 
+## Module Layout
+
+This skeleton uses coarse-grained Gradle modules.
+
+```text
+apps/
+  api                 # executable Spring Boot app
+
+modules/
+  platform            # web, errors, trace/logging, shared infrastructure
+  auth                # authentication capability contracts and future login support
+```
+
+Use modules as capability choices:
+
+- `apps/api` composes the runnable application.
+- `modules/platform` is the shared foundation for most apps.
+- `modules/auth` is included when the app needs authentication.
+
+Fine-grained details such as JWT, password login, OAuth, or dev login live as packages inside `modules/auth` unless they grow into provider-level integrations.
+
 ## 스택
 
 - Kotlin 2.2 / JDK 21
@@ -26,22 +47,6 @@ docker compose up -d mysql
 
 ```bash
 docker compose up -d
-```
-
-## 구조
-
-```
-src/
-├── main/
-│   ├── kotlin/dev/sumin/skeleton/
-│   │   └── KotlinSkeletonApplication.kt
-│   └── resources/
-│       ├── application.yml
-│       └── db/migration/         # Flyway V{n}__{desc}.sql
-└── test/
-    └── kotlin/dev/sumin/skeleton/
-        ├── KotlinSkeletonApplicationTests.kt
-        └── TestcontainersConfiguration.kt
 ```
 
 ## REST 컨벤션

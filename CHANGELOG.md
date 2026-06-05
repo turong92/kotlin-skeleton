@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## v1.2.0 - Multi-module foundation
+
+- Converted the backend skeleton to a coarse-grained Gradle multi-module layout.
+- Added `apps/api` as the executable Spring Boot application.
+- Added `modules/platform` for shared web/error/observability infrastructure.
+- Added `modules/auth` as the authentication capability module foundation.
+- Kept the existing trace-aware `/api/v1/hello` behavior and integration tests.
+
 ## [Unreleased]
 
 ### Added
