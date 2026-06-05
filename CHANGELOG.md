@@ -13,9 +13,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - W3C `traceparent` 기반 trace context: traceId는 전체 플로우로 승계, 각 BE 요청은 새 spanId 생성
 - 로그 correlation 패턴에 `traceId`, `spanId`, `parentSpanId` 모두 출력
 - 에러 응답과 응답 헤더에 `spanId` 포함
+- `modules/auth` stateless auth capability:
+  - `POST /api/v1/auth/login` password login and `GET /api/v1/auth/me`
+  - HS256 JWT issue/authenticate with `CurrentPrincipal`
+  - local/dev header login via `X-Dev-Account-Id`, `X-Dev-Username`, `X-Dev-Email`
+  - production break-glass access via secret, reason, and account allowlist
+  - overridable Spring Boot auth auto-configuration defaults for app-specific repositories and security chains
 
 ### Fixed
 - 매핑되지 않은 API 경로를 `500`이 아니라 표준 `404 ApiError`로 응답
+- break-glass/dev-login authentication is no longer overwritten by a later bearer-token filter when both headers are present
 
 ## v1.2.0 - Multi-module foundation
 

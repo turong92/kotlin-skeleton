@@ -12,16 +12,65 @@ apps/
 
 modules/
   platform            # web, errors, trace/logging, shared infrastructure
-  auth                # authentication capability contracts and future login support
+  auth                # stateless auth, JWT, dev-login, break-glass access
 ```
 
 Use modules as capability choices:
 
 - `apps/api` composes the runnable application.
 - `modules/platform` is the shared foundation for most apps.
-- `modules/auth` is included when the app needs authentication.
+- `modules/auth` is included when the app needs authentication. Its default beans are Spring Boot auto-configuration defaults, so an app can replace `AuthAccountRepository`, `SecurityFilterChain`, token service, or filters with its own beans.
 
 Fine-grained details such as JWT, password login, OAuth, or dev login live as packages inside `modules/auth` unless they grow into provider-level integrations.
+
+## Auth Capability
+
+`modules/auth` provides stateless backend auth defaults:
+
+- `POST /api/v1/auth/login` issues a JWT bearer token.
+- `GET /api/v1/auth/me` returns the authenticated `CurrentPrincipal`.
+- JWT claims use `sub=accountId`, `username`, `email`, `roles`, `iss`, `iat`, and `exp`.
+- All auth failures return the shared `ApiError` shape with trace/span fields.
+
+Development seed accounts:
+
+| accountId | username | email | password | roles |
+| --- | --- | --- | --- | --- |
+| `acc_user` | `user` | `user@example.com` | `password` | `USER` |
+| `acc_admin` | `admin` | `admin@example.com` | `password` | `USER`, `ADMIN` |
+
+Example:
+
+```bash
+curl -s http://localhost:8080/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"user@example.com","password":"password"}'
+```
+
+Local/dev header login can be enabled only for `local` or `dev` profiles:
+
+```yaml
+skeleton:
+  auth:
+    dev-login:
+      enabled: true
+```
+
+Supported headers are `X-Dev-Account-Id`, `X-Dev-Username`, and `X-Dev-Email`. Roles are always loaded from `AuthAccountRepository`; role headers are ignored.
+
+Break-glass access is disabled by default and is intended for audited emergency access:
+
+```yaml
+skeleton:
+  auth:
+    break-glass:
+      enabled: true
+      secret: ${BREAK_GLASS_SECRET}
+      allowed-account-ids:
+        - acc_admin
+```
+
+Requests must include `X-Break-Glass-Secret`, `X-Break-Glass-Reason`, and `X-Break-Glass-Account-Id`. In `prod` and `staging`, startup validation requires a nonblank secret and allowlist. Keep YAML thin; inject secrets through environment variables.
 
 ## 스택
 

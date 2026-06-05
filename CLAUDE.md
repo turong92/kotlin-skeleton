@@ -25,7 +25,12 @@ modules/platform/src/main/kotlin/dev/sumin/skeleton/common/
 └── TraceIdFilter.kt               # W3C traceparent → MDC traceId/spanId 심기
 
 modules/auth/src/main/kotlin/dev/sumin/skeleton/auth/
-└── principal/CurrentPrincipal.kt  # 인증 주체 계약
+├── account/                       # account lookup abstraction and default seed repository
+├── api/AuthController.kt          # password login and current-user endpoint
+├── config/AuthAutoConfiguration.kt # overridable Spring Boot auth defaults
+├── jwt/JwtTokenService.kt         # HS256 JWT issue/authenticate
+├── principal/CurrentPrincipal.kt  # 인증 주체 계약
+└── security/                      # JWT, dev-login, break-glass filters
 ```
 
 **경계 책임:**
@@ -44,6 +49,7 @@ modules/auth/src/main/kotlin/dev/sumin/skeleton/auth/
 - **도메인 예외**: `class XxxNotFoundException : ApplicationException(...)` 식으로 선언, throw만 하면 표준 응답
 - **스키마 변경**: `apps/api/src/main/resources/db/migration/V{n}__{desc}.sql` — Flyway 마이그레이션만
 - **로그**: SLF4J 사용. 모든 로그 라인엔 traceId/spanId/parentSpanId 자동 포함 (MDC)
+- **인증**: `modules/auth` 기본값은 Spring Boot auto-configuration 으로 제공. 실제 앱에서 `AuthAccountRepository`, `SecurityFilterChain`, `JwtTokenService`, 필터 bean을 정의하면 기본값을 대체할 수 있다.
 
 ## traceId 흐름 (디버깅용 핵심)
 
@@ -54,6 +60,25 @@ modules/auth/src/main/kotlin/dev/sumin/skeleton/auth/
 5. 응답 헤더 `traceparent`, `X-Trace-Id`, `X-Span-Id` 로 현재 서버 span 반환
 6. 에러 응답 body `traceId`, `spanId` 필드에도 포함
 7. **디버깅**: 프론트 콘솔/토스트에 찍힌 traceId 로 서버 로그 `grep` → 전체 플로우, spanId 로 특정 요청 단계 좁혀보기
+
+## auth 흐름 (스켈레톤 기본값)
+
+- `POST /api/v1/auth/login`: `accountId`, `username`, 또는 `email` + `password` 로 로그인하고 bearer JWT 발급
+- `GET /api/v1/auth/me`: 현재 `CurrentPrincipal` 반환
+- 기본 개발 계정:
+  - `acc_user` / `user` / `user@example.com` / `password` / `USER`
+  - `acc_admin` / `admin` / `admin@example.com` / `password` / `USER,ADMIN`
+- JWT claim: `sub=accountId`, `username`, `email`, `roles`, `iss`, `iat`, `exp`
+- dev login:
+  - `skeleton.auth.dev-login.enabled=true` + `local`/`dev` profile 에서만 동작
+  - `X-Dev-Account-Id`, `X-Dev-Username`, `X-Dev-Email` 로 실제 계정 선택
+  - roles 관련 헤더는 읽지 않는다. 권한은 항상 `AuthAccountRepository` 기준
+- break-glass:
+  - `skeleton.auth.break-glass.enabled=true`
+  - `X-Break-Glass-Secret`, `X-Break-Glass-Reason`, `X-Break-Glass-Account-Id` 필요
+  - `prod`/`staging` 에서는 secret + allowed account ids 없으면 startup validation 실패
+  - secret 은 로그에 남기지 않는다. reason/account 는 감사 로그로 남긴다.
+- YAML 은 얇게 유지한다. `skeleton.auth.jwt.secret`, `skeleton.auth.break-glass.secret` 같은 secret 은 환경변수로 주입한다.
 
 ## 프론트엔드와의 통신
 
