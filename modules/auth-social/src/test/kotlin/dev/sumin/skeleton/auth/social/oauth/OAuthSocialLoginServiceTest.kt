@@ -6,6 +6,8 @@ import dev.sumin.skeleton.auth.api.AuthTokenResponseFactory
 import dev.sumin.skeleton.auth.config.AuthProperties
 import dev.sumin.skeleton.auth.jwt.JwtTokenService
 import dev.sumin.skeleton.auth.social.config.AuthSocialProperties
+import dev.sumin.skeleton.common.ApplicationException
+import org.springframework.http.HttpStatus
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -56,6 +58,23 @@ class OAuthSocialLoginServiceTest {
     }
 
     @Test
+    fun `login resolves account link under selected provider when profile provider differs`() {
+        val service = service(
+            provider = FakeOAuthProvider(
+                providerId = "fake",
+                validCode = "valid-code",
+                providerUserId = "fake_user",
+                profileProvider = "other",
+            ),
+            links = listOf(OAuthAccountLink(provider = "fake", providerUserId = "fake_user", accountId = "acc_user")),
+        )
+
+        val response = service.login("fake", "valid-code", null)
+
+        assertEquals("acc_user", response.principal.accountId)
+    }
+
+    @Test
     fun `login rejects unknown provider`() {
         val service = service(
             provider = FakeOAuthProvider("fake", "valid-code", providerUserId = "fake_user"),
@@ -103,6 +122,39 @@ class OAuthSocialLoginServiceTest {
         }
     }
 
+    @Test
+    fun `login maps provider application exception to gateway exception`() {
+        val service = service(
+            provider = ApplicationExceptionOAuthProvider(
+                providerId = "fake",
+                exception = ProviderApplicationException("provider-secret-detail"),
+            ),
+            links = listOf(OAuthAccountLink(provider = "fake", providerUserId = "fake_user", accountId = "acc_user")),
+        )
+
+        assertFailsWith<OAuthProviderGatewayException> {
+            service.login("fake", "valid-code", null)
+        }
+    }
+
+    @Test
+    fun `oauth exception messages do not expose provider or account internals`() {
+        val gateway = OAuthProviderGatewayException("fake-secret", RuntimeException("provider-secret-detail"))
+
+        assertEquals("OAuth provider is not enabled or does not exist", OAuthProviderNotFoundException("fake-secret").message)
+        assertEquals("OAuth authorization code is invalid", OAuthInvalidAuthorizationCodeException("fake-secret").message)
+        assertEquals("OAuth provider request failed", gateway.message)
+        assertEquals("provider-secret-detail", gateway.cause?.message)
+        assertEquals(
+            "OAuth account is not linked to an internal account",
+            OAuthAccountLinkNotFoundException("fake", "provider-user-secret").message,
+        )
+        assertEquals(
+            "Linked internal account was not found",
+            OAuthLinkedAccountNotFoundException("internal-account-secret").message,
+        )
+    }
+
     private fun service(
         provider: OAuthProvider,
         links: List<OAuthAccountLink>,
@@ -126,13 +178,14 @@ class OAuthSocialLoginServiceTest {
         override val providerId: String,
         private val validCode: String,
         private val providerUserId: String,
+        private val profileProvider: String = providerId,
     ) : OAuthProvider {
         override fun fetchProfile(authorizationCode: String, redirectUri: String?): OAuthUserProfile {
             if (authorizationCode != validCode) {
                 throw OAuthInvalidAuthorizationCodeException(providerId)
             }
             return OAuthUserProfile(
-                provider = providerId,
+                provider = profileProvider,
                 providerUserId = providerUserId,
                 email = "provider@example.com",
                 username = "provider-user",
@@ -140,4 +193,19 @@ class OAuthSocialLoginServiceTest {
             )
         }
     }
+
+    private class ApplicationExceptionOAuthProvider(
+        override val providerId: String,
+        private val exception: ApplicationException,
+    ) : OAuthProvider {
+        override fun fetchProfile(authorizationCode: String, redirectUri: String?): OAuthUserProfile {
+            throw exception
+        }
+    }
+
+    private class ProviderApplicationException(message: String) : ApplicationException(
+        status = HttpStatus.BAD_REQUEST,
+        title = "Provider application exception",
+        message = message,
+    )
 }

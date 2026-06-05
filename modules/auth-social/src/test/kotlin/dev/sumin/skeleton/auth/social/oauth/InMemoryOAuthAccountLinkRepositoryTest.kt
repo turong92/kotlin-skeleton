@@ -2,6 +2,7 @@ package dev.sumin.skeleton.auth.social.oauth
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 
 class InMemoryOAuthAccountLinkRepositoryTest {
@@ -22,5 +23,17 @@ class InMemoryOAuthAccountLinkRepositoryTest {
 
         assertEquals("acc_user", repository.findAccountId(" Fake ", "fake_user"))
         assertNull(repository.findAccountId("fake", "FAKE_USER"))
+    }
+
+    @Test
+    fun `constructor rejects duplicate normalized provider and provider user id`() {
+        assertFailsWith<IllegalArgumentException> {
+            InMemoryOAuthAccountLinkRepository(
+                links = listOf(
+                    OAuthAccountLink(provider = "fake", providerUserId = "fake_user", accountId = "acc_user"),
+                    OAuthAccountLink(provider = " Fake ", providerUserId = "fake_user", accountId = "acc_other"),
+                ),
+            )
+        }
     }
 }

@@ -5,6 +5,10 @@ class InMemoryOAuthAccountLinkRepository(
 ) : OAuthAccountLinkRepository {
     private val linksByProviderAndUserId = links.associateBy {
         Key(provider = it.provider.normalizeProvider(), providerUserId = it.providerUserId)
+    }.also {
+        require(it.size == links.size) {
+            "Duplicate OAuth account links are not allowed"
+        }
     }
 
     override fun findAccountId(provider: String, providerUserId: String): String? =
