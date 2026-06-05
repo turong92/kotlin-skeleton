@@ -74,6 +74,7 @@ Responsibilities:
 - JWT issuing and verification.
 - Password login option.
 - Refresh token policy when implemented.
+- Local/dev-only development login support.
 - Auth-specific errors and tests.
 - OAuth abstractions if needed later.
 
@@ -88,10 +89,21 @@ modules/auth/src/main/kotlin/.../auth/
   security/
   jwt/
   password/
+  dev/
   oauth/
 ```
 
 Provider-specific social login can start inside `auth/oauth/providers` if it is lightweight. If Google/Kakao/Naver integrations grow distinct SDK/config surfaces, they can be promoted to separate provider modules such as `auth-social-google`.
+
+Development login can live inside `auth/dev` because it is a development tool for the auth capability, not a product capability. It must be disabled by default and must only work under `local` or `dev` profiles. If it is enabled under `prod` or `staging`, the application must fail during startup.
+
+Development login rules:
+
+- Accept only a small, code-defined set of dev principals such as `admin` and `user`.
+- Do not trust arbitrary role or permission headers.
+- Log every dev login with trace context.
+- Make the response principal shape identical to real JWT authentication.
+- Prefer Spring Security test support for automated tests; use dev login for local manual and AI-agent-assisted development flows.
 
 ### modules/payment
 
@@ -261,6 +273,7 @@ Version `v1.3.0` should implement stateless login:
 - Add Spring Security stateless configuration.
 - Add JWT issue/verify behavior.
 - Add password login path.
+- Add local/dev-only dev login.
 - Add current user endpoint.
 - Add FE protected-route/auth-client follow-up in the React skeleton.
 
