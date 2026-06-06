@@ -45,8 +45,11 @@ class HelloControllerIntegrationTest {
         }.andExpect {
             status { isOk() }
             content { contentTypeCompatibleWith(MediaType.APPLICATION_JSON) }
-            jsonPath("$.message") { value("Hello from Kotlin backend!") }
-            jsonPath("$.timestamp") { isNotEmpty() }
+            jsonPath("$.value.message") { value("Hello from Kotlin backend!") }
+            jsonPath("$.value.timestamp") { isNotEmpty() }
+            jsonPath("$.meta.traceId") { isNotEmpty() }
+            jsonPath("$.meta.spanId") { isNotEmpty() }
+            jsonPath("$.meta.timestamp") { isNotEmpty() }
             header { exists(TraceIdFilter.HEADER_TRACE_ID) }
             header { exists(TraceIdFilter.HEADER_SPAN_ID) }
             header { exists(TraceIdFilter.HEADER_TRACEPARENT) }
@@ -112,6 +115,6 @@ class HelloControllerIntegrationTest {
             status { isOk() }
         }.andReturn().response.contentAsString
 
-        return JsonPath.read(response, "$.accessToken")
+        return JsonPath.read(response, "$.value.accessToken")
     }
 }

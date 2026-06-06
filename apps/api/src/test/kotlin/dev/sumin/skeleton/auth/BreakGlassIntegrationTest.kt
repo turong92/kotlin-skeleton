@@ -40,10 +40,12 @@ class BreakGlassIntegrationTest {
         }.andExpect {
             status { isOk() }
             content { contentTypeCompatibleWith(MediaType.APPLICATION_JSON) }
-            jsonPath("$.accountId") { value("acc_admin") }
-            jsonPath("$.username") { value("admin") }
-            jsonPath("$.email") { value("admin@example.com") }
-            jsonPath("$.roles") { value(hasItem("ADMIN")) }
+            jsonPath("$.value.accountId") { value("acc_admin") }
+            jsonPath("$.value.username") { value("admin") }
+            jsonPath("$.value.email") { value("admin@example.com") }
+            jsonPath("$.value.roles") { value(hasItem("ADMIN")) }
+            jsonPath("$.meta.traceId") { isNotEmpty() }
+            jsonPath("$.meta.spanId") { isNotEmpty() }
         }
     }
 
@@ -111,9 +113,9 @@ class BreakGlassIntegrationTest {
         }.andExpect {
             status { isOk() }
             content { contentTypeCompatibleWith(MediaType.APPLICATION_JSON) }
-            jsonPath("$.accountId") { value("acc_admin") }
-            jsonPath("$.roles") { value(contains("USER", "ADMIN")) }
-            jsonPath("$.roles") { value(not(hasItem("SUPERUSER"))) }
+            jsonPath("$.value.accountId") { value("acc_admin") }
+            jsonPath("$.value.roles") { value(contains("USER", "ADMIN")) }
+            jsonPath("$.value.roles") { value(not(hasItem("SUPERUSER"))) }
         }
     }
 
@@ -127,7 +129,7 @@ class BreakGlassIntegrationTest {
             status { isOk() }
         }.andReturn().response.contentAsString
 
-        val accessToken = JsonPath.read<String>(loginResponse, "$.accessToken")
+        val accessToken = JsonPath.read<String>(loginResponse, "$.value.accessToken")
 
         mockMvc.get("/api/v1/auth/me") {
             header("Authorization", "Bearer $accessToken")
@@ -138,9 +140,11 @@ class BreakGlassIntegrationTest {
         }.andExpect {
             status { isOk() }
             content { contentTypeCompatibleWith(MediaType.APPLICATION_JSON) }
-            jsonPath("$.accountId") { value("acc_admin") }
-            jsonPath("$.username") { value("admin") }
-            jsonPath("$.roles") { value(hasItem("ADMIN")) }
+            jsonPath("$.value.accountId") { value("acc_admin") }
+            jsonPath("$.value.username") { value("admin") }
+            jsonPath("$.value.roles") { value(hasItem("ADMIN")) }
+            jsonPath("$.meta.traceId") { isNotEmpty() }
+            jsonPath("$.meta.spanId") { isNotEmpty() }
         }
     }
 }

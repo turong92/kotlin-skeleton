@@ -35,9 +35,11 @@ class AuthDefaultOverrideIntegrationTest {
             content = """{"email":"custom@example.com","password":"custom-password"}"""
         }.andExpect {
             status { isOk() }
-            jsonPath("$.principal.accountId") { value("acc_custom") }
-            jsonPath("$.principal.email") { value("custom@example.com") }
-            jsonPath("$.principal.roles[0]") { value("USER") }
+            jsonPath("$.value.principal.accountId") { value("acc_custom") }
+            jsonPath("$.value.principal.email") { value("custom@example.com") }
+            jsonPath("$.value.principal.roles[0]") { value("USER") }
+            jsonPath("$.meta.traceId") { isNotEmpty() }
+            jsonPath("$.meta.spanId") { isNotEmpty() }
         }
     }
 

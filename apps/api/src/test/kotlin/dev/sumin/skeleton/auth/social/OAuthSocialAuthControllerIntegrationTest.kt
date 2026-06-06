@@ -57,13 +57,15 @@ class OAuthSocialAuthControllerIntegrationTest {
         }.andExpect {
             status { isOk() }
             content { contentTypeCompatibleWith(MediaType.APPLICATION_JSON) }
-            jsonPath("$.accessToken") { isNotEmpty() }
-            jsonPath("$.tokenType") { value("Bearer") }
-            jsonPath("$.expiresAt") { isNotEmpty() }
-            jsonPath("$.principal.accountId") { value("acc_user") }
-            jsonPath("$.principal.username") { value("user") }
-            jsonPath("$.principal.email") { value("user@example.com") }
-            jsonPath("$.principal.roles") { value(hasItem("USER")) }
+            jsonPath("$.value.accessToken") { isNotEmpty() }
+            jsonPath("$.value.tokenType") { value("Bearer") }
+            jsonPath("$.value.expiresAt") { isNotEmpty() }
+            jsonPath("$.value.principal.accountId") { value("acc_user") }
+            jsonPath("$.value.principal.username") { value("user") }
+            jsonPath("$.value.principal.email") { value("user@example.com") }
+            jsonPath("$.value.principal.roles") { value(hasItem("USER")) }
+            jsonPath("$.meta.traceId") { isNotEmpty() }
+            jsonPath("$.meta.spanId") { isNotEmpty() }
         }
     }
 
@@ -77,15 +79,17 @@ class OAuthSocialAuthControllerIntegrationTest {
             status { isOk() }
         }.andReturn().response.contentAsString
 
-        val accessToken = JsonPath.read<String>(loginResponse, "$.accessToken")
+        val accessToken = JsonPath.read<String>(loginResponse, "$.value.accessToken")
 
         mockMvc.get("/api/v1/auth/me") {
             header("Authorization", "Bearer $accessToken")
             accept = MediaType.APPLICATION_JSON
         }.andExpect {
             status { isOk() }
-            jsonPath("$.accountId") { value("acc_user") }
-            jsonPath("$.roles") { value(hasItem("USER")) }
+            jsonPath("$.value.accountId") { value("acc_user") }
+            jsonPath("$.value.roles") { value(hasItem("USER")) }
+            jsonPath("$.meta.traceId") { isNotEmpty() }
+            jsonPath("$.meta.spanId") { isNotEmpty() }
         }
     }
 
@@ -129,8 +133,8 @@ class OAuthSocialAuthControllerIntegrationTest {
             content = """{"authorizationCode":"valid-user-code"}"""
         }.andExpect {
             status { isOk() }
-            jsonPath("$.principal.roles") { value(org.hamcrest.Matchers.contains("USER")) }
-            jsonPath("$.principal.roles") { value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem("ADMIN"))) }
+            jsonPath("$.value.principal.roles") { value(org.hamcrest.Matchers.contains("USER")) }
+            jsonPath("$.value.principal.roles") { value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem("ADMIN"))) }
         }
     }
 
@@ -183,10 +187,10 @@ class OAuthSocialAuthControllerOverrideIntegrationTest {
         }.andExpect {
             status { isOk() }
             content { contentTypeCompatibleWith(MediaType.APPLICATION_JSON) }
-            jsonPath("$.principal.accountId") { value("acc_override") }
-            jsonPath("$.principal.username") { value("override-user") }
-            jsonPath("$.principal.email") { value("override@example.com") }
-            jsonPath("$.principal.roles") { value(hasItem("OVERRIDE")) }
+            jsonPath("$.value.principal.accountId") { value("acc_override") }
+            jsonPath("$.value.principal.username") { value("override-user") }
+            jsonPath("$.value.principal.email") { value("override@example.com") }
+            jsonPath("$.value.principal.roles") { value(hasItem("OVERRIDE")) }
         }
     }
 

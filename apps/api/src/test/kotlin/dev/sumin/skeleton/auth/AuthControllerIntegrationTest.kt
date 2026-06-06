@@ -50,13 +50,15 @@ class AuthControllerIntegrationTest {
         }.andExpect {
             status { isOk() }
             content { contentTypeCompatibleWith(MediaType.APPLICATION_JSON) }
-            jsonPath("$.accessToken") { isNotEmpty() }
-            jsonPath("$.tokenType") { value("Bearer") }
-            jsonPath("$.expiresAt") { isNotEmpty() }
-            jsonPath("$.principal.accountId") { value("acc_user") }
-            jsonPath("$.principal.username") { value("user") }
-            jsonPath("$.principal.email") { value("user@example.com") }
-            jsonPath("$.principal.roles[0]") { value("USER") }
+            jsonPath("$.value.accessToken") { isNotEmpty() }
+            jsonPath("$.value.tokenType") { value("Bearer") }
+            jsonPath("$.value.expiresAt") { isNotEmpty() }
+            jsonPath("$.value.principal.accountId") { value("acc_user") }
+            jsonPath("$.value.principal.username") { value("user") }
+            jsonPath("$.value.principal.email") { value("user@example.com") }
+            jsonPath("$.value.principal.roles[0]") { value("USER") }
+            jsonPath("$.meta.traceId") { isNotEmpty() }
+            jsonPath("$.meta.spanId") { isNotEmpty() }
         }
     }
 
@@ -70,8 +72,8 @@ class AuthControllerIntegrationTest {
             status { isOk() }
         }.andReturn().response.contentAsString
 
-        val accessToken = JsonPath.read<String>(loginResponse, "$.accessToken")
-        val accountId = JsonPath.read<String>(loginResponse, "$.principal.accountId")
+        val accessToken = JsonPath.read<String>(loginResponse, "$.value.accessToken")
+        val accountId = JsonPath.read<String>(loginResponse, "$.value.principal.accountId")
 
         mockMvc.get("/api/v1/auth/me") {
             header("Authorization", "Bearer $accessToken")
@@ -79,10 +81,12 @@ class AuthControllerIntegrationTest {
         }.andExpect {
             status { isOk() }
             content { contentTypeCompatibleWith(MediaType.APPLICATION_JSON) }
-            jsonPath("$.accountId") { value(accountId) }
-            jsonPath("$.username") { value("user") }
-            jsonPath("$.email") { value("user@example.com") }
-            jsonPath("$.roles[0]") { value("USER") }
+            jsonPath("$.value.accountId") { value(accountId) }
+            jsonPath("$.value.username") { value("user") }
+            jsonPath("$.value.email") { value("user@example.com") }
+            jsonPath("$.value.roles[0]") { value("USER") }
+            jsonPath("$.meta.traceId") { isNotEmpty() }
+            jsonPath("$.meta.spanId") { isNotEmpty() }
         }
     }
 
@@ -92,7 +96,7 @@ class AuthControllerIntegrationTest {
             accept = MediaType.APPLICATION_JSON
         }.andExpect {
             status { isOk() }
-            jsonPath("$.message") { value("Hello from Kotlin backend!") }
+            jsonPath("$.value.message") { value("Hello from Kotlin backend!") }
         }.andReturn()
 
         val traceId = result.response.getHeader(TraceIdFilter.HEADER_TRACE_ID).orEmpty()

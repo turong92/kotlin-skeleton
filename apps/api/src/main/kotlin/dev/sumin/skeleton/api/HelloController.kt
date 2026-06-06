@@ -1,5 +1,7 @@
 package dev.sumin.skeleton.api
 
+import dev.sumin.skeleton.common.ApiResponse
+import dev.sumin.skeleton.common.ApiValueResponse
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
@@ -21,9 +23,11 @@ data class HelloResponse(
 @RequestMapping("/api/v1")
 class HelloController {
     @GetMapping("/hello")
-    fun hello(): HelloResponse =
-        HelloResponse(
-            message = "Hello from Kotlin backend!",
-            timestamp = Instant.now().toString(),
+    fun hello(): ApiValueResponse<HelloResponse> =
+        ApiResponse.value(
+            HelloResponse(
+                message = "Hello from Kotlin backend!",
+                timestamp = Instant.now().toString(),
+            ),
         )
 }

@@ -20,6 +20,7 @@ apps/api/src/main/kotlin/dev/sumin/skeleton/
 
 modules/platform/src/main/kotlin/dev/sumin/skeleton/common/
 ├── ApiError.kt                    # 표준 에러 응답 포맷
+├── ApiResponse.kt                 # 표준 성공 응답 envelope
 ├── ApplicationException.kt        # 도메인 예외 베이스 클래스
 ├── GlobalExceptionHandler.kt      # 모든 예외 → ApiError 변환
 ├── RequestLoggingFilter.kt        # 요청 시작/종료 로그
@@ -52,7 +53,10 @@ modules/auth-social/src/main/kotlin/dev/sumin/skeleton/auth/social/
 
 - **REST 네임스페이스**: `/api/v1/*` — 컨트롤러에서 `@RequestMapping("/api/v1/...")`
 - **응답 포맷**:
-  - 성공: Kotlin data class → JSON (Jackson 자동)
+  - 성공 단건: `ApiResponse.value(dto)` → `{ value, meta }`
+  - 성공 목록: `ApiResponse.list(items)` → `{ values, meta }`
+  - 성공 페이지: `ApiResponse.page(items, pagination)` → `{ values, pagination, meta }`
+  - 컨트롤러/라우트는 `Any`, raw `Object`, 임의 `Map` 대신 명시적 response DTO를 반환한다.
   - 에러: [ApiError] (RFC 7807 변형 + traceId + timestamp)
 - **도메인 예외**: `class XxxNotFoundException : ApplicationException(...)` 식으로 선언, throw만 하면 표준 응답
 - **스키마 변경**: `apps/api/src/main/resources/db/migration/V{n}__{desc}.sql` — Flyway 마이그레이션만
@@ -66,7 +70,7 @@ modules/auth-social/src/main/kotlin/dev/sumin/skeleton/auth/social/
 3. MDC `traceId`, `spanId`, `parentSpanId` 키에 주입
 4. 모든 로그 라인에 `[traceId=... spanId=... parentSpanId=...]` 프리픽스 출력
 5. 응답 헤더 `traceparent`, `X-Trace-Id`, `X-Span-Id` 로 현재 서버 span 반환
-6. 에러 응답 body `traceId`, `spanId` 필드에도 포함
+6. 성공 응답 `meta.traceId`/`meta.spanId`, 에러 응답 body `traceId`/`spanId` 필드에도 포함
 7. **디버깅**: 프론트 콘솔/토스트에 찍힌 traceId 로 서버 로그 `grep` → 전체 플로우, spanId 로 특정 요청 단계 좁혀보기
 
 ## auth 흐름 (스켈레톤 기본값)

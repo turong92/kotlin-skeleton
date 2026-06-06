@@ -32,7 +32,7 @@ Fine-grained details such as JWT, password login, OAuth, or dev login live as pa
 - `POST /api/v1/auth/login` issues a JWT bearer token.
 - `GET /api/v1/auth/me` returns the authenticated `CurrentPrincipal`.
 - JWT claims use `sub=accountId`, `username`, `email`, `roles`, `iss`, `iat`, and `exp`.
-- All auth failures return the shared `ApiError` shape with trace/span fields.
+- Successful auth responses use the shared success envelope, and auth failures return the shared `ApiError` shape with trace/span fields.
 
 Development seed accounts:
 
@@ -79,7 +79,7 @@ Requests must include `X-Break-Glass-Secret`, `X-Break-Glass-Reason`, and `X-Bre
 `modules/auth-social` is an optional social-login extension for `modules/auth`.
 
 - `POST /api/v1/auth/social/{provider}/login` exchanges a frontend-provided authorization code through an enabled provider.
-- The response shape is the same as password login: bearer token, expiration, and `CurrentPrincipal`.
+- The `value` response payload is the same as password login: bearer token, expiration, and `CurrentPrincipal`.
 - Provider identity maps to an internal account through `OAuthAccountLinkRepository`.
 - Roles always come from `AuthAccountRepository`, not provider profile data.
 - Google, Kakao, and Naver live under `auth-social/providers/*` when real provider clients are added. They are not separate Gradle modules yet.
@@ -126,6 +126,12 @@ docker compose up -d
 
 - 기본 API 네임스페이스: `/api/v1/*` (컨트롤러에서 `@RequestMapping("/api/v1/...")`)
 - 헬스체크: `/health` (Spring Boot Actuator)
+- 성공 응답은 `modules/platform` 의 envelope DTO를 사용한다.
+  - 단건: `ApiResponse.value(dto)` → `{ "value": ..., "meta": ... }`
+  - 목록: `ApiResponse.list(items)` → `{ "values": [...], "meta": ... }`
+  - 페이지: `ApiResponse.page(items, pagination)` → `{ "values": [...], "pagination": ..., "meta": ... }`
+- `meta` 에는 현재 요청의 `traceId`, `spanId`, `timestamp` 가 들어간다.
+- 에러 응답은 기존 `ApiError` shape를 유지한다.
 
 ## 사용법
 

@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - W3C `traceparent` 기반 trace context: traceId는 전체 플로우로 승계, 각 BE 요청은 새 spanId 생성
 - 로그 correlation 패턴에 `traceId`, `spanId`, `parentSpanId` 모두 출력
 - 에러 응답과 응답 헤더에 `spanId` 포함
+- Standard success response envelopes: single `{value, meta}`, list `{values, meta}`, page `{values, pagination, meta}`
 - `modules/auth` stateless auth capability:
   - `POST /api/v1/auth/login` password login and `GET /api/v1/auth/me`
   - HS256 JWT issue/authenticate with `CurrentPrincipal`

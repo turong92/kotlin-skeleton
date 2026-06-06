@@ -31,10 +31,12 @@ class DevLoginIntegrationTest {
         }.andExpect {
             status { isOk() }
             content { contentTypeCompatibleWith(MediaType.APPLICATION_JSON) }
-            jsonPath("$.accountId") { value("acc_user") }
-            jsonPath("$.username") { value("user") }
-            jsonPath("$.email") { value("user@example.com") }
-            jsonPath("$.roles[0]") { value("USER") }
+            jsonPath("$.value.accountId") { value("acc_user") }
+            jsonPath("$.value.username") { value("user") }
+            jsonPath("$.value.email") { value("user@example.com") }
+            jsonPath("$.value.roles[0]") { value("USER") }
+            jsonPath("$.meta.traceId") { isNotEmpty() }
+            jsonPath("$.meta.spanId") { isNotEmpty() }
         }
     }
 
@@ -46,8 +48,8 @@ class DevLoginIntegrationTest {
         }.andExpect {
             status { isOk() }
             content { contentTypeCompatibleWith(MediaType.APPLICATION_JSON) }
-            jsonPath("$.accountId") { value("acc_admin") }
-            jsonPath("$.roles") { value(org.hamcrest.Matchers.hasItem("ADMIN")) }
+            jsonPath("$.value.accountId") { value("acc_admin") }
+            jsonPath("$.value.roles") { value(org.hamcrest.Matchers.hasItem("ADMIN")) }
         }
     }
 
@@ -60,9 +62,9 @@ class DevLoginIntegrationTest {
         }.andExpect {
             status { isOk() }
             content { contentTypeCompatibleWith(MediaType.APPLICATION_JSON) }
-            jsonPath("$.accountId") { value("acc_user") }
-            jsonPath("$.roles") { value(org.hamcrest.Matchers.contains("USER")) }
-            jsonPath("$.roles") { value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem("ADMIN"))) }
+            jsonPath("$.value.accountId") { value("acc_user") }
+            jsonPath("$.value.roles") { value(org.hamcrest.Matchers.contains("USER")) }
+            jsonPath("$.value.roles") { value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem("ADMIN"))) }
         }
     }
 }
