@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - local/dev header login via `X-Dev-Account-Id`, `X-Dev-Username`, `X-Dev-Email`
   - production break-glass access via secret, reason, and account allowlist
   - overridable Spring Boot auth auto-configuration defaults for app-specific repositories and security chains
+- `modules/auth-social` optional social-login capability with provider-neutral OAuth contracts, account-link resolution, fake-provider integration tests, and `/api/v1/auth/social/{provider}/login`
 
 ### Fixed
 - 매핑되지 않은 API 경로를 `500`이 아니라 표준 `404 ApiError`로 응답

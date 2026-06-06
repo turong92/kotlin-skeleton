@@ -13,6 +13,7 @@ apps/
 modules/
   platform            # web, errors, trace/logging, shared infrastructure
   auth                # stateless auth, JWT, dev-login, break-glass access
+  auth-social         # optional social-login extension for auth
 ```
 
 Use modules as capability choices:
@@ -20,8 +21,9 @@ Use modules as capability choices:
 - `apps/api` composes the runnable application.
 - `modules/platform` is the shared foundation for most apps.
 - `modules/auth` is included when the app needs authentication. Its default beans are Spring Boot auto-configuration defaults, so an app can replace `AuthAccountRepository`, `SecurityFilterChain`, token service, or filters with its own beans.
+- `modules/auth-social` is included when the app needs social login. Its default beans are also auto-configuration defaults, so provider clients, account links, provisioning policy, and the social auth handler can be replaced.
 
-Fine-grained details such as JWT, password login, OAuth, or dev login live as packages inside `modules/auth` unless they grow into provider-level integrations.
+Fine-grained details such as JWT, password login, OAuth, or dev login live as packages inside their capability modules unless they grow into provider-level integrations.
 
 ## Auth Capability
 
@@ -71,6 +73,28 @@ skeleton:
 ```
 
 Requests must include `X-Break-Glass-Secret`, `X-Break-Glass-Reason`, and `X-Break-Glass-Account-Id`. In `prod` and `staging`, startup validation requires a nonblank secret and allowlist. Keep YAML thin; inject secrets through environment variables.
+
+## Auth Social Capability
+
+`modules/auth-social` is an optional social-login extension for `modules/auth`.
+
+- `POST /api/v1/auth/social/{provider}/login` exchanges a frontend-provided authorization code through an enabled provider.
+- The response shape is the same as password login: bearer token, expiration, and `CurrentPrincipal`.
+- Provider identity maps to an internal account through `OAuthAccountLinkRepository`.
+- Roles always come from `AuthAccountRepository`, not provider profile data.
+- Google, Kakao, and Naver live under `auth-social/providers/*` when real provider clients are added. They are not separate Gradle modules yet.
+
+First-slice tests use a fake provider. Real provider credentials should be supplied through environment variables:
+
+```yaml
+skeleton:
+  auth-social:
+    providers:
+      google:
+        enabled: true
+        client-id: ${GOOGLE_OAUTH_CLIENT_ID}
+        client-secret: ${GOOGLE_OAUTH_CLIENT_SECRET}
+```
 
 ## 스택
 
