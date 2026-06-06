@@ -89,6 +89,51 @@ class OAuthSocialAuthControllerIntegrationTest {
         }
     }
 
+    @Test
+    fun `POST social login with invalid code returns bad gateway ApiError for provider failure`() {
+        mockMvc.post("/api/v1/auth/social/fake/login") {
+            contentType = MediaType.APPLICATION_JSON
+            accept = MediaType.APPLICATION_JSON
+            content = """{"authorizationCode":"bad-code"}"""
+        }.andExpect {
+            status { isBadGateway() }
+            content { contentTypeCompatibleWith(MediaType.APPLICATION_JSON) }
+            jsonPath("$.status") { value(502) }
+            jsonPath("$.title") { value("OAuth provider request failed") }
+            jsonPath("$.traceId") { isNotEmpty() }
+            jsonPath("$.spanId") { isNotEmpty() }
+        }
+    }
+
+    @Test
+    fun `POST social login with unlinked provider account returns conflict ApiError`() {
+        mockMvc.post("/api/v1/auth/social/fake/login") {
+            contentType = MediaType.APPLICATION_JSON
+            accept = MediaType.APPLICATION_JSON
+            content = """{"authorizationCode":"valid-unlinked-code"}"""
+        }.andExpect {
+            status { isConflict() }
+            content { contentTypeCompatibleWith(MediaType.APPLICATION_JSON) }
+            jsonPath("$.status") { value(409) }
+            jsonPath("$.title") { value("OAuth account is not linked") }
+            jsonPath("$.traceId") { isNotEmpty() }
+            jsonPath("$.spanId") { isNotEmpty() }
+        }
+    }
+
+    @Test
+    fun `POST social login uses repository roles instead of provider profile roles`() {
+        mockMvc.post("/api/v1/auth/social/fake/login") {
+            contentType = MediaType.APPLICATION_JSON
+            accept = MediaType.APPLICATION_JSON
+            content = """{"authorizationCode":"valid-user-code"}"""
+        }.andExpect {
+            status { isOk() }
+            jsonPath("$.principal.roles") { value(org.hamcrest.Matchers.contains("USER")) }
+            jsonPath("$.principal.roles") { value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem("ADMIN"))) }
+        }
+    }
+
     @TestConfiguration(proxyBeanMethods = false)
     class FakeProviderConfiguration {
         @Bean
@@ -96,18 +141,24 @@ class OAuthSocialAuthControllerIntegrationTest {
             object : OAuthProvider {
                 override val providerId: String = "fake"
 
-                override fun fetchProfile(authorizationCode: String, redirectUri: String?): OAuthUserProfile {
-                    if (authorizationCode != "valid-user-code") {
-                        throw IllegalArgumentException("invalid fake code")
+                override fun fetchProfile(authorizationCode: String, redirectUri: String?): OAuthUserProfile =
+                    when (authorizationCode) {
+                        "valid-user-code" -> OAuthUserProfile(
+                            provider = "fake",
+                            providerUserId = "fake_user",
+                            email = "provider@example.com",
+                            username = "provider-user",
+                            displayName = "Provider User",
+                        )
+                        "valid-unlinked-code" -> OAuthUserProfile(
+                            provider = "fake",
+                            providerUserId = "unlinked_user",
+                            email = "unlinked@example.com",
+                            username = "unlinked-user",
+                            displayName = "Unlinked User",
+                        )
+                        else -> throw IllegalArgumentException("invalid fake code")
                     }
-                    return OAuthUserProfile(
-                        provider = "fake",
-                        providerUserId = "fake_user",
-                        email = "provider@example.com",
-                        username = "provider-user",
-                        displayName = "Provider User",
-                    )
-                }
             }
     }
 }
