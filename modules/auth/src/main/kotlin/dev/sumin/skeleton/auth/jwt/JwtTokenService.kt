@@ -7,11 +7,14 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.time.Clock
 import java.time.Instant
 import javax.crypto.spec.SecretKeySpec
+import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm
 import org.springframework.security.oauth2.jwt.JwsHeader
 import org.springframework.security.oauth2.jwt.JwtClaimsSet
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters
 import org.springframework.security.oauth2.jwt.JwtException
+import org.springframework.security.oauth2.jwt.JwtIssuerValidator
+import org.springframework.security.oauth2.jwt.JwtTimestampValidator
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder
 
@@ -29,6 +32,17 @@ class JwtTokenService(
     private val decoder = NimbusJwtDecoder.withSecretKey(secretKey)
         .macAlgorithm(MacAlgorithm.HS256)
         .build()
+        .apply {
+            val timestampValidator = JwtTimestampValidator().apply {
+                setClock(clock)
+            }
+            setJwtValidator(
+                DelegatingOAuth2TokenValidator(
+                    timestampValidator,
+                    JwtIssuerValidator(properties.issuer),
+                ),
+            )
+        }
 
     fun issue(principal: CurrentPrincipal): IssuedToken {
         val now = clock.instant()
