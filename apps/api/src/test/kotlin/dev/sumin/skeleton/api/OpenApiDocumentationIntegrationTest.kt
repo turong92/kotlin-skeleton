@@ -74,5 +74,34 @@ class OpenApiDocumentationIntegrationTest {
             "$.paths['/api/v1/auth/social/{provider}/login'].post.responses['200'].content['application/json'].schema['\$ref']",
         )
         assertTrue(socialLoginSchemaRef.contains("ApiValueResponse"))
+
+        val createdItemSchemaRef = JsonPath.read<String>(
+            docs,
+            "$.paths['/api/v1/examples/items'].post.responses['201'].content['application/json'].schema['\$ref']",
+        )
+        assertTrue(createdItemSchemaRef.contains("ApiValueResponse"))
+        assertEquals(
+            "Created resource URI",
+            JsonPath.read(docs, "$.paths['/api/v1/examples/items'].post.responses['201'].headers.Location.description"),
+        )
+
+        val acceptedJobSchemaRef = JsonPath.read<String>(
+            docs,
+            "$.paths['/api/v1/examples/jobs'].post.responses['202'].content['application/json'].schema['\$ref']",
+        )
+        assertTrue(acceptedJobSchemaRef.contains("ApiValueResponse"))
+
+        assertEquals(
+            "No content",
+            JsonPath.read(docs, "$.paths['/api/v1/examples/items/{id}'].delete.responses['204'].description"),
+        )
+
+        val itemListParameters = JsonPath.read<List<Map<String, Any?>>>(docs, "$.paths['/api/v1/examples/items'].get.parameters")
+        assertTrue(itemListParameters.any { it["name"] == "page" && it["in"] == "query" })
+        assertTrue(itemListParameters.any { it["name"] == "size" && it["in"] == "query" })
+        val pageSchema = itemListParameters.first { it["name"] == "page" }["schema"] as Map<*, *>
+        val sizeSchema = itemListParameters.first { it["name"] == "size" }["schema"] as Map<*, *>
+        assertEquals(0, pageSchema["minimum"])
+        assertEquals(100, sizeSchema["maximum"])
     }
 }

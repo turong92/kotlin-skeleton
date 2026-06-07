@@ -16,13 +16,16 @@ Kotlin + Spring Boot 백엔드 토이 프로젝트의 공개 출발점.
 apps/api/src/main/kotlin/dev/sumin/skeleton/
 ├── KotlinSkeletonApplication.kt   # 엔트리 포인트 (수정 거의 없음)
 └── api/                           # @RestController + 요청/응답 DTO
-    └── HelloController.kt
+    ├── HelloController.kt
+    └── OperationExampleController.kt # REST operation contract 샘플
 
 modules/platform/src/main/kotlin/dev/sumin/skeleton/common/
 ├── ApiError.kt                    # 표준 에러 응답 포맷
 ├── ApiResponse.kt                 # 표준 성공 응답 envelope
+├── ApiResponseEntity.kt           # 201/202/204 ResponseEntity helper
 ├── ApplicationException.kt        # 도메인 예외 베이스 클래스
 ├── GlobalExceptionHandler.kt      # 모든 예외 → ApiError 변환
+├── PageQuery.kt                   # 표준 page/size query contract
 ├── openapi/                       # Swagger/OpenAPI 공통 자동 명세
 ├── RequestLoggingFilter.kt        # 요청 시작/종료 로그
 └── TraceIdFilter.kt               # W3C traceparent → MDC traceId/spanId 심기
@@ -59,11 +62,15 @@ modules/auth-social/src/main/kotlin/dev/sumin/skeleton/auth/social/
   - 성공 단건: `ApiResponse.value(dto)` → `{ value, meta }`
   - 성공 목록: `ApiResponse.list(items)` → `{ values, meta }`
   - 성공 페이지: `ApiResponse.page(items, pagination)` → `{ values, pagination, meta }`
+  - 생성: `@CreatedOperation` + `ApiResponseEntity.created(location, dto)` → `201 Created` + `Location`
+  - 비동기 시작: `@AcceptedOperation` + `ApiResponseEntity.accepted(dto)` → `202 Accepted`
+  - 삭제/토글/명령 완료: `@NoContentOperation` + `ApiResponseEntity.noContent()` → `204 No Content`
   - 컨트롤러/라우트는 `Any`, raw `Object`, 임의 `Map` 대신 명시적 response DTO를 반환한다.
   - 에러: [ApiError] (RFC 7807 변형 + traceId + timestamp)
 - **요청 검증**:
   - 요청 DTO에는 Jakarta Bean Validation constraint 를 붙인다.
   - 컨트롤러 request body 는 `@Valid @RequestBody` 로 받는다.
+  - 페이지 조회는 `@Valid @ParameterObject @ModelAttribute PageQuery` 를 기본으로 쓰며, `page>=0`, `1<=size<=100` 을 표준으로 한다.
   - validation 실패는 `400 Validation failed` + `ApiError.errors[]` 로 반환한다.
   - 구조적 규칙은 모듈 내부 custom constraint 로 선언한다. 예: `RequiredLoginIdentifier`
 - **도메인 예외**: `class XxxNotFoundException : ApplicationException(...)` 식으로 선언, throw만 하면 표준 응답
@@ -71,6 +78,7 @@ modules/auth-social/src/main/kotlin/dev/sumin/skeleton/auth/social/
   - 기본 경로: `/api/v1/docs`, `/api/v1/docs/ui`
   - code-first. DTO/반환 타입/auto-configuration 이 명세 원천이다.
   - 반복 명세는 module auto-configuration 이 담당한다. controller마다 공통 `ApiError`, trace header, bearer security 를 손으로 반복하지 않는다.
+  - 생성/비동기/204 명세는 `@CreatedOperation`, `@AcceptedOperation`, `@NoContentOperation` 으로 표준화한다.
   - 엔드포인트 의미 설명이 필요할 때만 `@Operation`, 필드 의미가 필요할 때만 `@Schema` 를 추가한다.
 - **스키마 변경**: `apps/api/src/main/resources/db/migration/V{n}__{desc}.sql` — Flyway 마이그레이션만
 - **로그**: SLF4J 사용. 모든 로그 라인엔 traceId/spanId/parentSpanId 자동 포함 (MDC)
@@ -126,10 +134,11 @@ modules/auth-social/src/main/kotlin/dev/sumin/skeleton/auth/social/
   2. 앱 고유 비즈니스 로직은 `apps/api` 안의 `domain/` 패키지에 둔다 (필요 시)
   3. 앱 고유 DB/외부 연동은 `apps/api` 안의 `infra/` 패키지에 둔다 (필요 시)
   4. 요청 DTO에 Bean Validation constraint 를 붙이고 integration test 로 `ApiError.errors[]` 를 확인한다
-  5. 공통 web/error/observability 코드는 `modules/platform` 에 둔다
-  6. 인증 계약과 로그인 흐름은 `modules/auth` 에 둔다
-  7. 기능 모듈이 endpoint/route 를 자동 등록하면 같은 모듈의 `openapi/` 에 명세 기여도 같이 둔다
-  8. DB 스키마 바뀌면 `apps/api/src/main/resources/db/migration/V{n}__.sql`
+  5. 생성/비동기/204/page 응답은 platform 표준 helper와 annotation 을 먼저 사용한다
+  6. 공통 web/error/observability 코드는 `modules/platform` 에 둔다
+  7. 인증 계약과 로그인 흐름은 `modules/auth` 에 둔다
+  8. 기능 모듈이 endpoint/route 를 자동 등록하면 같은 모듈의 `openapi/` 에 명세 기여도 같이 둔다
+  9. DB 스키마 바뀌면 `apps/api/src/main/resources/db/migration/V{n}__.sql`
 
 ## 변경 이력
 

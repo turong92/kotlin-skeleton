@@ -4,6 +4,7 @@ import io.swagger.v3.oas.models.Components
 import io.swagger.v3.oas.models.Operation
 import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.oas.models.info.Info
+import io.swagger.v3.oas.models.headers.Header
 import io.swagger.v3.oas.models.media.ArraySchema
 import io.swagger.v3.oas.models.media.BooleanSchema
 import io.swagger.v3.oas.models.media.Content
@@ -21,6 +22,7 @@ import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean
+import org.springframework.web.method.HandlerMethod
 
 @AutoConfiguration
 @ConditionalOnClass(OpenAPI::class, OpenApiCustomizer::class)
@@ -42,7 +44,7 @@ class PlatformOpenApiAutoConfiguration {
 
     @Bean
     fun standardOperationCustomizer(): GlobalOperationCustomizer =
-        GlobalOperationCustomizer { operation, _ ->
+        GlobalOperationCustomizer { operation, handlerMethod ->
             operation.addHeaderParameter(
                 name = "traceparent",
                 description = "W3C trace context. Reuse this to keep one traceId across a full flow.",
@@ -59,6 +61,7 @@ class PlatformOpenApiAutoConfiguration {
                 pattern = "^[0-9a-f]{16}$",
             )
             operation.addStandardErrorResponses()
+            operation.applyStandardOperationResponse(handlerMethod)
             operation.normalizeJsonResponseContent()
             operation
         }
@@ -86,6 +89,42 @@ class PlatformOpenApiAutoConfiguration {
         currentResponses.putIfAbsent("400", errorResponse("Bad request"))
         currentResponses.putIfAbsent("404", errorResponse("Resource not found"))
         currentResponses.putIfAbsent("500", errorResponse("Internal server error"))
+    }
+
+    private fun Operation.applyStandardOperationResponse(handlerMethod: HandlerMethod) {
+        when {
+            handlerMethod.hasMethodAnnotation(CreatedOperation::class.java) -> {
+                val created = moveResponse(from = "200", to = "201", description = "Created")
+                created.addHeaderObject(
+                    "Location",
+                    Header()
+                        .description("Created resource URI")
+                        .schema(StringSchema().format("uri")),
+                )
+            }
+
+            handlerMethod.hasMethodAnnotation(AcceptedOperation::class.java) -> {
+                moveResponse(from = "200", to = "202", description = "Accepted")
+            }
+
+            handlerMethod.hasMethodAnnotation(NoContentOperation::class.java) -> {
+                val currentResponses = responses ?: ApiResponses().also { responses = it }
+                currentResponses.remove("200")
+                currentResponses.putIfAbsent("204", ApiResponse().description("No content"))
+            }
+        }
+    }
+
+    private fun Operation.moveResponse(
+        from: String,
+        to: String,
+        description: String,
+    ): ApiResponse {
+        val currentResponses = responses ?: ApiResponses().also { responses = it }
+        val source = currentResponses.remove(from) ?: ApiResponse()
+        source.description(description)
+        currentResponses.putIfAbsent(to, source)
+        return currentResponses[to] ?: source
     }
 
     private fun Operation.normalizeJsonResponseContent() {

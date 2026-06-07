@@ -130,10 +130,16 @@ docker compose up -d
   - 단건: `ApiResponse.value(dto)` → `{ "value": ..., "meta": ... }`
   - 목록: `ApiResponse.list(items)` → `{ "values": [...], "meta": ... }`
   - 페이지: `ApiResponse.page(items, pagination)` → `{ "values": [...], "pagination": ..., "meta": ... }`
+- 생성/명령성 작업은 `ApiResponseEntity` 와 표준 OpenAPI annotation 을 같이 사용한다.
+  - 생성: `@CreatedOperation` + `ApiResponseEntity.created(location, dto)` → `201 Created`, `Location`, `{ "value": ..., "meta": ... }`
+  - 비동기 시작: `@AcceptedOperation` + `ApiResponseEntity.accepted(dto)` → `202 Accepted`, `{ "value": ..., "meta": ... }`
+  - 삭제/토글/명령 완료: `@NoContentOperation` + `ApiResponseEntity.noContent()` → `204 No Content`
+- 페이지 요청은 `@Valid @ParameterObject @ModelAttribute pageQuery: PageQuery` 를 기본으로 쓴다. 기본값은 `page=0`, `size=20`, 최대 `size=100` 이다.
 - `meta` 에는 현재 요청의 `traceId`, `spanId`, `timestamp` 가 들어간다.
 - 에러 응답은 기존 `ApiError` shape를 유지한다.
 - 요청 DTO는 Jakarta Bean Validation constraint 를 사용한다. Validation 실패는 `400 Validation failed` 와 `errors[]` 로 응답한다.
   - 예: `{ "field": "email", "code": "Email", "message": "must be a well-formed email address" }`
+- `/api/v1/examples/*` 는 REST operation contract 샘플이다. 실제 프로젝트에서는 같은 패턴을 복사한 뒤 삭제하거나 도메인 예제로 교체한다.
 
 ## Swagger / OpenAPI
 
@@ -142,10 +148,10 @@ docker compose up -d
 - 명세는 code-first 로 생성한다. DTO와 controller/route 반환 타입이 원천이고, 별도 문서를 손으로 맞추지 않는다.
 - Bean Validation constraint 는 OpenAPI request schema 에 자동 반영한다.
 - 반복되는 명세는 capability module auto-configuration 이 기여한다.
-  - `modules/platform`: API info, `ApiError`, `ResponseMeta`, `PaginationMeta`, trace headers, common error responses
+  - `modules/platform`: API info, `ApiError`, `ResponseMeta`, `PaginationMeta`, trace headers, common error responses, 201/202/204 operation responses
   - `modules/auth`: `bearerAuth` JWT security scheme and authenticated endpoint security responses
   - `modules/auth-social`: functional social-login route documentation
-- 엔드포인트별 비즈니스 의미가 필요할 때만 `@Operation`/`@Schema` 같은 annotation 을 추가한다.
+- 엔드포인트별 비즈니스 의미가 필요할 때만 `@Operation`/`@Schema` 같은 annotation 을 추가한다. 생성/비동기/204 같은 반복 status 명세는 `@CreatedOperation`, `@AcceptedOperation`, `@NoContentOperation` 을 우선 사용한다.
 
 ## 사용법
 
