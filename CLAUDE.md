@@ -23,6 +23,7 @@ modules/platform/src/main/kotlin/dev/sumin/skeleton/common/
 ├── ApiResponse.kt                 # 표준 성공 응답 envelope
 ├── ApplicationException.kt        # 도메인 예외 베이스 클래스
 ├── GlobalExceptionHandler.kt      # 모든 예외 → ApiError 변환
+├── openapi/                       # Swagger/OpenAPI 공통 자동 명세
 ├── RequestLoggingFilter.kt        # 요청 시작/종료 로그
 └── TraceIdFilter.kt               # W3C traceparent → MDC traceId/spanId 심기
 
@@ -31,11 +32,13 @@ modules/auth/src/main/kotlin/dev/sumin/skeleton/auth/
 ├── api/AuthController.kt          # password login and current-user endpoint
 ├── config/AuthAutoConfiguration.kt # overridable Spring Boot auth defaults
 ├── jwt/JwtTokenService.kt         # HS256 JWT issue/authenticate
+├── openapi/                       # auth capability OpenAPI 기여
 ├── principal/CurrentPrincipal.kt  # 인증 주체 계약
 └── security/                      # JWT, dev-login, break-glass filters
 
 modules/auth-social/src/main/kotlin/dev/sumin/skeleton/auth/social/
 ├── oauth/                         # provider-neutral social-login contracts and service
+├── openapi/                       # auth-social capability OpenAPI 기여
 ├── providers/                     # google/kakao/naver provider packages when real clients are added
 ├── api/                           # social login request/handler classes
 └── config/                        # Spring Boot auth-social auto-configuration and route registration
@@ -59,6 +62,11 @@ modules/auth-social/src/main/kotlin/dev/sumin/skeleton/auth/social/
   - 컨트롤러/라우트는 `Any`, raw `Object`, 임의 `Map` 대신 명시적 response DTO를 반환한다.
   - 에러: [ApiError] (RFC 7807 변형 + traceId + timestamp)
 - **도메인 예외**: `class XxxNotFoundException : ApplicationException(...)` 식으로 선언, throw만 하면 표준 응답
+- **Swagger/OpenAPI**:
+  - 기본 경로: `/api/v1/docs`, `/api/v1/docs/ui`
+  - code-first. DTO/반환 타입/auto-configuration 이 명세 원천이다.
+  - 반복 명세는 module auto-configuration 이 담당한다. controller마다 공통 `ApiError`, trace header, bearer security 를 손으로 반복하지 않는다.
+  - 엔드포인트 의미 설명이 필요할 때만 `@Operation`, 필드 의미가 필요할 때만 `@Schema` 를 추가한다.
 - **스키마 변경**: `apps/api/src/main/resources/db/migration/V{n}__{desc}.sql` — Flyway 마이그레이션만
 - **로그**: SLF4J 사용. 모든 로그 라인엔 traceId/spanId/parentSpanId 자동 포함 (MDC)
 - **인증**: `modules/auth` 기본값은 Spring Boot auto-configuration 으로 제공. 실제 앱에서 `AuthAccountRepository`, `SecurityFilterChain`, `JwtTokenService`, 필터 bean을 정의하면 기본값을 대체할 수 있다.
@@ -114,7 +122,8 @@ modules/auth-social/src/main/kotlin/dev/sumin/skeleton/auth/social/
   3. 앱 고유 DB/외부 연동은 `apps/api` 안의 `infra/` 패키지에 둔다 (필요 시)
   4. 공통 web/error/observability 코드는 `modules/platform` 에 둔다
   5. 인증 계약과 로그인 흐름은 `modules/auth` 에 둔다
-  6. DB 스키마 바뀌면 `apps/api/src/main/resources/db/migration/V{n}__.sql`
+  6. 기능 모듈이 endpoint/route 를 자동 등록하면 같은 모듈의 `openapi/` 에 명세 기여도 같이 둔다
+  7. DB 스키마 바뀌면 `apps/api/src/main/resources/db/migration/V{n}__.sql`
 
 ## 변경 이력
 

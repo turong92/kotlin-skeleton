@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 로그 correlation 패턴에 `traceId`, `spanId`, `parentSpanId` 모두 출력
 - 에러 응답과 응답 헤더에 `spanId` 포함
 - Standard success response envelopes: single `{value, meta}`, list `{values, meta}`, page `{values, pagination, meta}`
+- Module-composed OpenAPI docs: platform contributes standard schemas/trace/error responses, auth contributes bearer JWT security, and auth-social contributes its functional route docs
 - `modules/auth` stateless auth capability:
   - `POST /api/v1/auth/login` password login and `GET /api/v1/auth/me`
   - HS256 JWT issue/authenticate with `CurrentPrincipal`

@@ -1,1 +1,2 @@
 dev.sumin.skeleton.auth.social.config.AuthSocialAutoConfiguration
+dev.sumin.skeleton.auth.social.openapi.AuthSocialOpenApiAutoConfiguration

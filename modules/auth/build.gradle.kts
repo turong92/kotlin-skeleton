@@ -1,6 +1,7 @@
 dependencies {
     implementation(project(":modules:platform"))
 
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-api:3.0.3")
     implementation("org.springframework.boot:spring-boot-starter-security")
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("org.springframework.security:spring-security-oauth2-jose")

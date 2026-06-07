@@ -19,9 +19,9 @@ modules/
 Use modules as capability choices:
 
 - `apps/api` composes the runnable application.
-- `modules/platform` is the shared foundation for most apps.
-- `modules/auth` is included when the app needs authentication. Its default beans are Spring Boot auto-configuration defaults, so an app can replace `AuthAccountRepository`, `SecurityFilterChain`, token service, or filters with its own beans.
-- `modules/auth-social` is included when the app needs social login. Its default beans are also auto-configuration defaults, so provider clients, account links, provisioning policy, and the social auth handler can be replaced.
+- `modules/platform` is the shared foundation for most apps. It also contributes default OpenAPI metadata, standard response/error schemas, and trace header documentation.
+- `modules/auth` is included when the app needs authentication. Its default beans are Spring Boot auto-configuration defaults, so an app can replace `AuthAccountRepository`, `SecurityFilterChain`, token service, or filters with its own beans. It also contributes JWT bearer security metadata to OpenAPI.
+- `modules/auth-social` is included when the app needs social login. Its default beans are also auto-configuration defaults, so provider clients, account links, provisioning policy, and the social auth handler can be replaced. It also contributes the social-login endpoint to OpenAPI.
 
 Fine-grained details such as JWT, password login, OAuth, or dev login live as packages inside their capability modules unless they grow into provider-level integrations.
 
@@ -132,6 +132,17 @@ docker compose up -d
   - 페이지: `ApiResponse.page(items, pagination)` → `{ "values": [...], "pagination": ..., "meta": ... }`
 - `meta` 에는 현재 요청의 `traceId`, `spanId`, `timestamp` 가 들어간다.
 - 에러 응답은 기존 `ApiError` shape를 유지한다.
+
+## Swagger / OpenAPI
+
+- API spec JSON: `/api/v1/docs`
+- Swagger UI: `/api/v1/docs/ui`
+- 명세는 code-first 로 생성한다. DTO와 controller/route 반환 타입이 원천이고, 별도 문서를 손으로 맞추지 않는다.
+- 반복되는 명세는 capability module auto-configuration 이 기여한다.
+  - `modules/platform`: API info, `ApiError`, `ResponseMeta`, `PaginationMeta`, trace headers, common error responses
+  - `modules/auth`: `bearerAuth` JWT security scheme and authenticated endpoint security responses
+  - `modules/auth-social`: functional social-login route documentation
+- 엔드포인트별 비즈니스 의미가 필요할 때만 `@Operation`/`@Schema` 같은 annotation 을 추가한다.
 
 ## 사용법
 

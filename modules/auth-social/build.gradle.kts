@@ -2,6 +2,7 @@ dependencies {
     implementation(project(":modules:platform"))
     implementation(project(":modules:auth"))
 
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-api:3.0.3")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("org.jetbrains.kotlin:kotlin-reflect")

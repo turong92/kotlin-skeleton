@@ -16,7 +16,7 @@ data class HelloResponse(
  * 샘플 컨트롤러. 실제 앱에선 삭제하거나 대체.
  *
  * - REST 네임스페이스는 `/api/v1/` 하위
- * - 응답 타입은 Kotlin data class 로 선언, Jackson이 직렬화
+ * - 성공 응답은 ApiResponse envelope 로 감싼다
  * - 에러는 [dev.sumin.skeleton.common.ApplicationException] 상속해서 throw하면 [dev.sumin.skeleton.common.GlobalExceptionHandler]가 표준 응답으로 변환
  */
 @RestController
