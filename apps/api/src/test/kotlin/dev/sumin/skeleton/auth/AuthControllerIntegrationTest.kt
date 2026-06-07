@@ -3,6 +3,7 @@ package dev.sumin.skeleton.auth
 import com.jayway.jsonpath.JsonPath
 import dev.sumin.skeleton.TestcontainersConfiguration
 import dev.sumin.skeleton.common.TraceIdFilter
+import org.hamcrest.Matchers.hasItem
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
@@ -59,6 +60,41 @@ class AuthControllerIntegrationTest {
             jsonPath("$.value.principal.roles[0]") { value("USER") }
             jsonPath("$.meta.traceId") { isNotEmpty() }
             jsonPath("$.meta.spanId") { isNotEmpty() }
+        }
+    }
+
+    @Test
+    fun `POST login with malformed fields returns validation errors`() {
+        mockMvc.post("/api/v1/auth/login") {
+            contentType = MediaType.APPLICATION_JSON
+            accept = MediaType.APPLICATION_JSON
+            content = """{"email":"not-an-email","password":" "}"""
+        }.andExpect {
+            status { isBadRequest() }
+            content { contentTypeCompatibleWith(MediaType.APPLICATION_JSON) }
+            jsonPath("$.status") { value(400) }
+            jsonPath("$.title") { value("Validation failed") }
+            jsonPath("$.detail") { value("Request body validation failed") }
+            jsonPath("$.traceId") { isNotEmpty() }
+            jsonPath("$.spanId") { isNotEmpty() }
+            jsonPath("$.timestamp") { isNotEmpty() }
+            jsonPath("$.errors[?(@.field == 'email')].code") { value(hasItem("Email")) }
+            jsonPath("$.errors[?(@.field == 'password')].code") { value(hasItem("NotBlank")) }
+        }
+    }
+
+    @Test
+    fun `POST login without an identifier returns validation error`() {
+        mockMvc.post("/api/v1/auth/login") {
+            contentType = MediaType.APPLICATION_JSON
+            accept = MediaType.APPLICATION_JSON
+            content = """{"password":"password"}"""
+        }.andExpect {
+            status { isBadRequest() }
+            content { contentTypeCompatibleWith(MediaType.APPLICATION_JSON) }
+            jsonPath("$.status") { value(400) }
+            jsonPath("$.title") { value("Validation failed") }
+            jsonPath("$.errors[?(@.field == 'identifier')].code") { value(hasItem("RequiredLoginIdentifier")) }
         }
     }
 

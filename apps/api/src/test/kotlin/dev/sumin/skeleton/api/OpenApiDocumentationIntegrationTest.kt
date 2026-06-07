@@ -41,6 +41,13 @@ class OpenApiDocumentationIntegrationTest {
         assertEquals("bearer", JsonPath.read(docs, "$.components.securitySchemes.bearerAuth.scheme"))
         assertEquals("JWT", JsonPath.read(docs, "$.components.securitySchemes.bearerAuth.bearerFormat"))
 
+        assertEquals("email", JsonPath.read(docs, "$.components.schemas.PasswordLoginRequest.properties.email.format"))
+        assertEquals(254, JsonPath.read(docs, "$.components.schemas.PasswordLoginRequest.properties.email.maxLength"))
+        assertEquals(64, JsonPath.read(docs, "$.components.schemas.PasswordLoginRequest.properties.accountId.maxLength"))
+        assertEquals(128, JsonPath.read(docs, "$.components.schemas.PasswordLoginRequest.properties.password.maxLength"))
+        val loginRequired = JsonPath.read<List<String>>(docs, "$.components.schemas.PasswordLoginRequest.required")
+        assertTrue(loginRequired.contains("password"))
+
         val helloParameters = JsonPath.read<List<Map<String, Any?>>>(docs, "$.paths['/api/v1/hello'].get.parameters")
         assertTrue(helloParameters.any { it["name"] == "traceparent" && it["in"] == "header" })
         assertTrue(helloParameters.any { it["name"] == "X-Trace-Id" && it["in"] == "header" })

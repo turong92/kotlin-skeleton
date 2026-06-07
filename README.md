@@ -132,12 +132,15 @@ docker compose up -d
   - 페이지: `ApiResponse.page(items, pagination)` → `{ "values": [...], "pagination": ..., "meta": ... }`
 - `meta` 에는 현재 요청의 `traceId`, `spanId`, `timestamp` 가 들어간다.
 - 에러 응답은 기존 `ApiError` shape를 유지한다.
+- 요청 DTO는 Jakarta Bean Validation constraint 를 사용한다. Validation 실패는 `400 Validation failed` 와 `errors[]` 로 응답한다.
+  - 예: `{ "field": "email", "code": "Email", "message": "must be a well-formed email address" }`
 
 ## Swagger / OpenAPI
 
 - API spec JSON: `/api/v1/docs`
 - Swagger UI: `/api/v1/docs/ui`
 - 명세는 code-first 로 생성한다. DTO와 controller/route 반환 타입이 원천이고, 별도 문서를 손으로 맞추지 않는다.
+- Bean Validation constraint 는 OpenAPI request schema 에 자동 반영한다.
 - 반복되는 명세는 capability module auto-configuration 이 기여한다.
   - `modules/platform`: API info, `ApiError`, `ResponseMeta`, `PaginationMeta`, trace headers, common error responses
   - `modules/auth`: `bearerAuth` JWT security scheme and authenticated endpoint security responses

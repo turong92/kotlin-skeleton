@@ -61,6 +61,11 @@ modules/auth-social/src/main/kotlin/dev/sumin/skeleton/auth/social/
   - 성공 페이지: `ApiResponse.page(items, pagination)` → `{ values, pagination, meta }`
   - 컨트롤러/라우트는 `Any`, raw `Object`, 임의 `Map` 대신 명시적 response DTO를 반환한다.
   - 에러: [ApiError] (RFC 7807 변형 + traceId + timestamp)
+- **요청 검증**:
+  - 요청 DTO에는 Jakarta Bean Validation constraint 를 붙인다.
+  - 컨트롤러 request body 는 `@Valid @RequestBody` 로 받는다.
+  - validation 실패는 `400 Validation failed` + `ApiError.errors[]` 로 반환한다.
+  - 구조적 규칙은 모듈 내부 custom constraint 로 선언한다. 예: `RequiredLoginIdentifier`
 - **도메인 예외**: `class XxxNotFoundException : ApplicationException(...)` 식으로 선언, throw만 하면 표준 응답
 - **Swagger/OpenAPI**:
   - 기본 경로: `/api/v1/docs`, `/api/v1/docs/ui`
@@ -120,10 +125,11 @@ modules/auth-social/src/main/kotlin/dev/sumin/skeleton/auth/social/
   1. `apps/api` 에 컨트롤러 + DTO
   2. 앱 고유 비즈니스 로직은 `apps/api` 안의 `domain/` 패키지에 둔다 (필요 시)
   3. 앱 고유 DB/외부 연동은 `apps/api` 안의 `infra/` 패키지에 둔다 (필요 시)
-  4. 공통 web/error/observability 코드는 `modules/platform` 에 둔다
-  5. 인증 계약과 로그인 흐름은 `modules/auth` 에 둔다
-  6. 기능 모듈이 endpoint/route 를 자동 등록하면 같은 모듈의 `openapi/` 에 명세 기여도 같이 둔다
-  7. DB 스키마 바뀌면 `apps/api/src/main/resources/db/migration/V{n}__.sql`
+  4. 요청 DTO에 Bean Validation constraint 를 붙이고 integration test 로 `ApiError.errors[]` 를 확인한다
+  5. 공통 web/error/observability 코드는 `modules/platform` 에 둔다
+  6. 인증 계약과 로그인 흐름은 `modules/auth` 에 둔다
+  7. 기능 모듈이 endpoint/route 를 자동 등록하면 같은 모듈의 `openapi/` 에 명세 기여도 같이 둔다
+  8. DB 스키마 바뀌면 `apps/api/src/main/resources/db/migration/V{n}__.sql`
 
 ## 변경 이력
 

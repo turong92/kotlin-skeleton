@@ -6,6 +6,10 @@ import dev.sumin.skeleton.auth.principal.CurrentPrincipal
 import dev.sumin.skeleton.common.ApiResponse
 import dev.sumin.skeleton.common.ApiValueResponse
 import dev.sumin.skeleton.common.ApplicationException
+import jakarta.validation.Valid
+import jakarta.validation.constraints.Email
+import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.Size
 import java.time.Instant
 import org.springframework.http.HttpStatus
 import org.springframework.security.core.Authentication
@@ -16,10 +20,17 @@ import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 
+@RequiredLoginIdentifier
 data class PasswordLoginRequest(
+    @field:Size(max = 64)
     val accountId: String? = null,
+    @field:Size(max = 64)
     val username: String? = null,
+    @field:Email
+    @field:Size(max = 254)
     val email: String? = null,
+    @field:NotBlank
+    @field:Size(max = 128)
     val password: String? = null,
 )
 
@@ -44,7 +55,9 @@ class AuthController(
     private val authTokenResponseFactory: AuthTokenResponseFactory,
 ) {
     @PostMapping("/login")
-    fun login(@RequestBody request: PasswordLoginRequest): ApiValueResponse<AuthTokenResponse> {
+    fun login(
+        @Valid @RequestBody request: PasswordLoginRequest,
+    ): ApiValueResponse<AuthTokenResponse> {
         val identifier = try {
             AccountIdentifier.from(request.accountId, request.username, request.email)
         } catch (_: IllegalArgumentException) {
