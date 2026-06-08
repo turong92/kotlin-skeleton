@@ -1,0 +1,35 @@
+package dev.sumin.skeleton.common.http
+
+import org.springframework.beans.factory.ObjectProvider
+import org.springframework.boot.autoconfigure.AutoConfiguration
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
+import org.springframework.boot.context.properties.EnableConfigurationProperties
+import org.springframework.context.annotation.Bean
+import org.springframework.web.reactive.function.client.WebClient
+
+@AutoConfiguration
+@ConditionalOnClass(WebClient::class)
+@EnableConfigurationProperties(OutboundHttpProperties::class)
+class OutboundHttpAutoConfiguration {
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun defaultExternalHttpErrorMapper(): ExternalHttpErrorMapper =
+        DefaultExternalHttpErrorMapper()
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun externalHttpClient(
+        webClientBuilder: ObjectProvider<WebClient.Builder>,
+        properties: OutboundHttpProperties,
+        defaultErrorMapper: ExternalHttpErrorMapper,
+        customizers: ObjectProvider<ExternalHttpClientCustomizer>,
+    ): ExternalHttpClient =
+        DefaultExternalHttpClient(
+            webClientBuilder = webClientBuilder.getIfAvailable { WebClient.builder() },
+            properties = properties,
+            defaultErrorMapper = defaultErrorMapper,
+            customizers = customizers.orderedStream().toList(),
+        )
+}

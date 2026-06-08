@@ -19,7 +19,7 @@ modules/
 Use modules as capability choices:
 
 - `apps/api` composes the runnable application.
-- `modules/platform` is the shared foundation for most apps. It also contributes default OpenAPI metadata, standard response/error schemas, and trace header documentation.
+- `modules/platform` is the shared foundation for most apps. It also contributes default OpenAPI metadata, standard response/error schemas, web policy defaults, outbound HTTP client scaffolding, and trace header documentation.
 - `modules/auth` is included when the app needs authentication. Its default beans are Spring Boot auto-configuration defaults, so an app can replace `AuthAccountRepository`, `SecurityFilterChain`, token service, or filters with its own beans. It also contributes JWT bearer security metadata to OpenAPI.
 - `modules/auth-social` is included when the app needs social login. Its default beans are also auto-configuration defaults, so provider clients, account links, provisioning policy, and the social auth handler can be replaced. It also contributes the social-login endpoint to OpenAPI.
 
@@ -93,8 +93,44 @@ skeleton:
       google:
         enabled: true
         client-id: ${GOOGLE_OAUTH_CLIENT_ID}
-        client-secret: ${GOOGLE_OAUTH_CLIENT_SECRET}
+      client-secret: ${GOOGLE_OAUTH_CLIENT_SECRET}
 ```
+
+## Web Platform Capability
+
+`modules/platform` provides inbound web policy defaults:
+
+- Forwarded header support is enabled by default, so generated absolute URLs respect reverse proxy headers.
+- Security headers are enabled by default: content type options, frame options, referrer policy, permissions policy, and HSTS on secure requests.
+- CORS is scaffolded but disabled by default. Enable `skeleton.web.cors.enabled=true` for local split frontend/backend development.
+- Rate limit is scaffolded but disabled by default. Enable `skeleton.web.rate-limit.enabled=true` and override `RateLimitStore` or `RateLimitKeyResolver` for Redis/account/API-key policies.
+- Public endpoints are contributed through `PublicEndpointContributor`; `modules/auth` reads the registry and applies `permitAll`.
+
+Example public endpoint contribution:
+
+```kotlin
+@Bean
+fun publicEndpoints(): PublicEndpointContributor =
+    PublicEndpointContributor { registry ->
+        registry.add("GET", "/api/v1/public/catalog/**")
+    }
+```
+
+Outbound HTTP calls should use `ExternalHttpClient` instead of raw `WebClient` construction:
+
+```kotlin
+externalHttpClient.post(
+    clientName = "payment",
+    path = "/v1/payments",
+    body = request,
+    responseType = PaymentResponse::class.java,
+) {
+    header("Idempotency-Key", idempotencyKey)
+    timeout(Duration.ofSeconds(3))
+}
+```
+
+The default client supports `GET`, `POST`, `PUT`, `PATCH`, and `DELETE`, propagates trace headers, applies timeout/error mapping, and can be customized per named client through `ExternalHttpClientCustomizer` or `ExternalHttpErrorMapper`.
 
 ## 스택
 
@@ -102,6 +138,7 @@ skeleton:
 - Spring Boot 4.0
 - Spring Data JDBC + Flyway
 - MySQL 8.4
+- Spring MVC server + WebClient outbound client
 - Gradle (Kotlin DSL)
 
 ## 빠른 시작

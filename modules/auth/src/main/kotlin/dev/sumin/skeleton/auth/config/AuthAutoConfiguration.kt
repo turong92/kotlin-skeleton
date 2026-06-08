@@ -9,12 +9,14 @@ import dev.sumin.skeleton.auth.security.AuthErrorWriter
 import dev.sumin.skeleton.auth.security.BreakGlassAuthenticationFilter
 import dev.sumin.skeleton.auth.security.DevLoginAuthenticationFilter
 import dev.sumin.skeleton.auth.security.JwtAuthenticationFilter
+import dev.sumin.skeleton.common.web.PublicEndpointContributor
+import dev.sumin.skeleton.common.web.PublicEndpointRegistry
+import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.ApplicationRunner
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.boot.context.properties.EnableConfigurationProperties
-import org.springframework.beans.factory.ObjectProvider
 import org.springframework.context.annotation.Bean
 import org.springframework.core.env.Environment
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
@@ -72,6 +74,14 @@ class AuthAutoConfiguration {
         }
 
     @Bean
+    @ConditionalOnMissingBean(name = ["authPublicEndpointContributor"])
+    fun authPublicEndpointContributor(): PublicEndpointContributor =
+        PublicEndpointContributor { registry ->
+            registry.add("POST", "/api/v1/auth/login")
+            registry.add("POST", "/api/v1/auth/social/*/login")
+        }
+
+    @Bean
     @ConditionalOnMissingBean
     fun authErrorWriter(objectMapper: ObjectMapper): AuthErrorWriter =
         AuthErrorWriter(objectMapper)
@@ -109,6 +119,7 @@ class AuthAutoConfiguration {
     @ConditionalOnMissingBean(SecurityFilterChain::class)
     fun securityFilterChain(
         http: HttpSecurity,
+        publicEndpointRegistry: ObjectProvider<PublicEndpointRegistry>,
         devLoginAuthenticationFilter: ObjectProvider<DevLoginAuthenticationFilter>,
         breakGlassAuthenticationFilter: ObjectProvider<BreakGlassAuthenticationFilter>,
         jwtAuthenticationFilter: JwtAuthenticationFilter,
@@ -131,21 +142,14 @@ class AuthAutoConfiguration {
                 }
             }
             .authorizeHttpRequests { authorize ->
-                authorize
-                    .requestMatchers(
-                        "/health",
-                        "/info",
-                        "/api/v1/hello",
-                        "/api/v1/auth/login",
-                        "/api/v1/auth/social/*/login",
-                        "/api/v1/docs",
-                        "/api/v1/docs/**",
-                        "/api/v1/docs/ui",
-                        "/api/v1/docs/ui/**",
-                        "/swagger-ui/**",
-                        "/v3/api-docs/**",
-                    ).permitAll()
-                    .anyRequest().authenticated()
+                val registry = publicEndpointRegistry.getIfAvailable { PublicEndpointRegistry.default() }
+                registry.methodSpecificEndpoints.forEach { endpoint ->
+                    authorize.requestMatchers(endpoint.method, endpoint.pattern).permitAll()
+                }
+                if (registry.pathWidePatterns.isNotEmpty()) {
+                    authorize.requestMatchers(*registry.pathWidePatterns).permitAll()
+                }
+                authorize.anyRequest().authenticated()
             }
 
         http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter::class.java)

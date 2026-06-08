@@ -80,8 +80,8 @@ skeleton:
       enabled: false
       path-pattern: "/api/**"
       allowed-origin-patterns:
-        - "http://localhost:*"
-        - "http://127.0.0.1:*"
+        - "http://localhost:[*]"
+        - "http://127.0.0.1:[*]"
       allowed-methods:
         - GET
         - POST

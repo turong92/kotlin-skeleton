@@ -25,10 +25,12 @@ modules/platform/src/main/kotlin/dev/sumin/skeleton/common/
 ├── ApiResponseEntity.kt           # 201/202/204 ResponseEntity helper
 ├── ApplicationException.kt        # 도메인 예외 베이스 클래스
 ├── GlobalExceptionHandler.kt      # 모든 예외 → ApiError 변환
+├── http/                          # outbound WebClient facade, timeout/error mapping
 ├── PageQuery.kt                   # 표준 page/size query contract
 ├── openapi/                       # Swagger/OpenAPI 공통 자동 명세
 ├── RequestLoggingFilter.kt        # 요청 시작/종료 로그
-└── TraceIdFilter.kt               # W3C traceparent → MDC traceId/spanId 심기
+├── TraceIdFilter.kt               # W3C traceparent → MDC traceId/spanId 심기
+└── web/                           # forwarded headers, public endpoints, CORS, rate limit
 
 modules/auth/src/main/kotlin/dev/sumin/skeleton/auth/
 ├── account/                       # account lookup abstraction and default seed repository
@@ -82,6 +84,14 @@ modules/auth-social/src/main/kotlin/dev/sumin/skeleton/auth/social/
   - 엔드포인트 의미 설명이 필요할 때만 `@Operation`, 필드 의미가 필요할 때만 `@Schema` 를 추가한다.
 - **스키마 변경**: `apps/api/src/main/resources/db/migration/V{n}__{desc}.sql` — Flyway 마이그레이션만
 - **로그**: SLF4J 사용. 모든 로그 라인엔 traceId/spanId/parentSpanId 자동 포함 (MDC)
+- **Web policy**:
+  - public open 은 `PublicEndpointContributor` 로 추가한다. auth 기본 security chain 이 registry 를 읽어 `permitAll` 을 적용한다.
+  - forwarded headers/security headers 는 platform 기본값을 사용한다.
+  - CORS/rate-limit 은 scaffold 만 있고 기본 OFF. 필요할 때 `skeleton.web.cors.enabled=true`, `skeleton.web.rate-limit.enabled=true` 로 켠다.
+- **외부 HTTP**:
+  - raw `WebClient` 직접 생성보다 `ExternalHttpClient` 를 우선 사용한다.
+  - `GET`/`POST`/`PUT`/`PATCH`/`DELETE` helper 로 호출하고, 각 호출에서 header/query/body/timeout/error mapper 를 조작한다.
+  - 서버는 Spring MVC 를 유지한다. WebFlux 는 outbound WebClient runtime 용으로만 사용한다.
 - **인증**: `modules/auth` 기본값은 Spring Boot auto-configuration 으로 제공. 실제 앱에서 `AuthAccountRepository`, `SecurityFilterChain`, `JwtTokenService`, 필터 bean을 정의하면 기본값을 대체할 수 있다.
 
 ## traceId 흐름 (디버깅용 핵심)
@@ -93,6 +103,7 @@ modules/auth-social/src/main/kotlin/dev/sumin/skeleton/auth/social/
 5. 응답 헤더 `traceparent`, `X-Trace-Id`, `X-Span-Id` 로 현재 서버 span 반환
 6. 성공 응답 `meta.traceId`/`meta.spanId`, 에러 응답 body `traceId`/`spanId` 필드에도 포함
 7. **디버깅**: 프론트 콘솔/토스트에 찍힌 traceId 로 서버 로그 `grep` → 전체 플로우, spanId 로 특정 요청 단계 좁혀보기
+8. 외부 HTTP 호출은 `ExternalHttpClient` 가 `traceparent`/`X-Trace-Id` 를 전파한다.
 
 ## auth 흐름 (스켈레톤 기본값)
 
@@ -137,8 +148,9 @@ modules/auth-social/src/main/kotlin/dev/sumin/skeleton/auth/social/
   5. 생성/비동기/204/page 응답은 platform 표준 helper와 annotation 을 먼저 사용한다
   6. 공통 web/error/observability 코드는 `modules/platform` 에 둔다
   7. 인증 계약과 로그인 흐름은 `modules/auth` 에 둔다
-  8. 기능 모듈이 endpoint/route 를 자동 등록하면 같은 모듈의 `openapi/` 에 명세 기여도 같이 둔다
-  9. DB 스키마 바뀌면 `apps/api/src/main/resources/db/migration/V{n}__.sql`
+  8. 외부 API 연동은 `ExternalHttpClient` 기반으로 만들고, provider/vendor 별 mapper/customizer 만 추가한다
+  9. 기능 모듈이 endpoint/route 를 자동 등록하면 같은 모듈의 `openapi/` 에 명세 기여도 같이 둔다
+  10. DB 스키마 바뀌면 `apps/api/src/main/resources/db/migration/V{n}__.sql`
 
 ## 변경 이력
 

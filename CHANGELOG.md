@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 에러 응답과 응답 헤더에 `spanId` 포함
 - Standard success response envelopes: single `{value, meta}`, list `{values, meta}`, page `{values, pagination, meta}`
 - Standard REST operation contracts: `201 Created` with `Location`, `202 Accepted`, `204 No Content`, and reusable `PageQuery`
+- Web platform capability: public endpoint registry for `permitAll`, forwarded/security headers, CORS scaffold, rate-limit scaffold, and WebClient-based outbound HTTP facade
 - Module-composed OpenAPI docs: platform contributes standard schemas/trace/error responses, auth contributes bearer JWT security, and auth-social contributes its functional route docs
 - Standard request validation errors via Jakarta Bean Validation and `ApiError.errors[]`
 - `modules/auth` stateless auth capability:
