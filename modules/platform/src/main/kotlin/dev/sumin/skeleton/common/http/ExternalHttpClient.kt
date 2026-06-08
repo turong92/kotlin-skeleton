@@ -18,6 +18,14 @@ interface ExternalHttpClient {
         customize: ExternalHttpRequestSpec.() -> Unit = {},
     ): Mono<T>
 
+    fun <T : Any> postForm(
+        clientName: String,
+        path: String,
+        form: Map<String, String>,
+        responseType: Class<T>,
+        customize: ExternalHttpRequestSpec.() -> Unit = {},
+    ): Mono<T>
+
     fun <T : Any> put(
         clientName: String,
         path: String,

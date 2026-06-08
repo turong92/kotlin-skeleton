@@ -3,6 +3,7 @@ package dev.sumin.skeleton.auth.social.oauth
 import dev.sumin.skeleton.auth.social.config.AuthSocialProperties
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 
 class OAuthProviderRegistryTest {
@@ -53,6 +54,16 @@ class OAuthProviderRegistryTest {
         )
 
         assertNull(registry.findEnabled("missing"))
+    }
+
+    @Test
+    fun `constructor rejects duplicate provider ids`() {
+        assertFailsWith<IllegalArgumentException> {
+            OAuthProviderRegistry(
+                providers = listOf(FakeOAuthProvider("google"), FakeOAuthProvider(" Google ")),
+                properties = AuthSocialProperties(),
+            )
+        }
     }
 
     private class FakeOAuthProvider(

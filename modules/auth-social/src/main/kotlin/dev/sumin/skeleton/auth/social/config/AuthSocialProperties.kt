@@ -12,5 +12,9 @@ data class AuthSocialProperties(
         val clientSecret: String = "",
         val redirectUri: String? = null,
         val apiBaseUrl: String? = null,
+        val tokenBaseUrl: String? = null,
+        val profileBaseUrl: String? = null,
+        val tokenPath: String? = null,
+        val profilePath: String? = null,
     )
 }

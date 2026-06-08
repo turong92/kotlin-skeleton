@@ -8,9 +8,9 @@ The user should decide at a coarse capability level:
 
 - Include `modules/auth` for stateless authentication.
 - Include `modules/auth-social` when social login is needed.
-- Enable or wire specific providers inside `auth-social` as needed.
+- Add only the provider modules the app needs, such as `modules/auth-social-google`, `modules/auth-social-kakao`, or `modules/auth-social-naver`.
 
-Google, Kakao, and Naver start as provider packages inside `auth-social`, not separate Gradle modules. They can be promoted later only if provider SDKs, credentials, tests, or runtime behavior become large enough to justify new module boundaries.
+Google, Kakao, and Naver are separate optional Gradle modules so services do not carry unused provider clients or dependencies.
 
 ## Current Baseline
 
@@ -40,10 +40,15 @@ modules/
 
   auth-social/
     oauth/
-    providers/
-      google/
-      kakao/
-      naver/
+
+  auth-social-google/
+    google/
+
+  auth-social-kakao/
+    kakao/
+
+  auth-social-naver/
+    naver/
 ```
 
 The package names can follow the existing Kotlin package root:
@@ -51,11 +56,12 @@ The package names can follow the existing Kotlin package root:
 ```text
 modules/auth-social/src/main/kotlin/dev/sumin/skeleton/auth/social/
   oauth/
-  providers/google/
-  providers/kakao/
-  providers/naver/
   config/
   api/
+
+modules/auth-social-google/src/main/kotlin/dev/sumin/skeleton/auth/social/google/
+modules/auth-social-kakao/src/main/kotlin/dev/sumin/skeleton/auth/social/kakao/
+modules/auth-social-naver/src/main/kotlin/dev/sumin/skeleton/auth/social/naver/
 ```
 
 ## Responsibilities
@@ -87,8 +93,7 @@ Responsibilities:
 - Social login endpoint.
 - Mapping provider identity to internal account identity.
 - Default in-memory account-link implementation for skeleton development.
-- Provider packages for Google, Kakao, and Naver.
-- Auto-configuration that activates only when `auth-social` is on the classpath and provider settings are enabled.
+- Auto-configuration that activates only when `auth-social` is on the classpath.
 
 `auth-social` depends on `auth` and `platform`.
 
@@ -101,6 +106,7 @@ The app composes modules.
 Responsibilities:
 
 - Depend on `modules/auth-social` when social login is wanted.
+- Depend on provider modules only when those providers are wanted.
 - Provide real `OAuthAccountLinkRepository` or account provisioning policy when moving beyond skeleton defaults.
 - Provide provider credentials through external configuration.
 
@@ -108,36 +114,22 @@ The app should not call provider HTTP clients directly.
 
 ## Provider Boundary
 
-Provider code starts inside `auth-social/providers`.
+Provider code lives in optional provider modules.
 
 ```text
-providers/google/
-  GoogleOAuthClient
-  GoogleOAuthProperties
+modules/auth-social-google/
   GoogleOAuthProvider
 
-providers/kakao/
-  KakaoOAuthClient
-  KakaoOAuthProperties
+modules/auth-social-kakao/
   KakaoOAuthProvider
 
-providers/naver/
-  NaverOAuthClient
-  NaverOAuthProperties
+modules/auth-social-naver/
   NaverOAuthProvider
 ```
 
-Provider packages implement a shared contract from `oauth/`. They do not redefine account linking, JWT issuing, or controller response types.
+Provider modules implement the shared `OAuthProvider` contract from `modules/auth-social`. They do not redefine account linking, JWT issuing, or controller response types.
 
-Provider packages can become separate Gradle modules later if one of these becomes true:
-
-- They require a heavy provider SDK.
-- They need provider-specific test fixtures or mocks that are not useful to other providers.
-- They introduce provider-specific webhook or callback behavior.
-- They carry credentials or properties large enough to make dependency selection valuable.
-- Users commonly want one provider without shipping classes for the others.
-
-Until then, keeping them in one `auth-social` module is easier to use and matches the coarse-grained skeleton style.
+Each provider module contributes only its own Spring Boot auto-configuration and creates its provider bean only when `skeleton.auth-social.providers.<provider>.enabled=true`.
 
 ## Core Contracts
 

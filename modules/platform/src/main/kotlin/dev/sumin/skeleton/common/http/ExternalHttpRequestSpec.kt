@@ -13,6 +13,7 @@ class ExternalHttpRequestSpec {
     internal var timeout: Duration? = null
     internal var errorMapper: ExternalHttpErrorMapper? = null
     internal var loggingTag: String? = null
+    internal var baseUrl: String? = null
 
     fun uriVariable(name: String, value: Any) {
         uriVariables[name] = value
@@ -36,6 +37,10 @@ class ExternalHttpRequestSpec {
 
     fun timeout(value: Duration) {
         timeout = value
+    }
+
+    fun baseUrl(value: String) {
+        baseUrl = value
     }
 
     fun errorMapper(value: ExternalHttpErrorMapper) {

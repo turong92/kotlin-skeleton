@@ -15,6 +15,7 @@ internal fun externalHttpExceptionUri(
     }
     val uri = when {
         expandedPath.startsWith("http://") || expandedPath.startsWith("https://") -> expandedPath
+        requestSpec.baseUrl != null -> requestSpec.baseUrl!!.trimEnd('/') + "/" + expandedPath.trimStart('/')
         clientProperties.baseUrl.isNotBlank() -> clientProperties.baseUrl.trimEnd('/') + "/" + expandedPath.trimStart('/')
         else -> expandedPath
     }

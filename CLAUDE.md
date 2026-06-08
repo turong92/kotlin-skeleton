@@ -8,6 +8,7 @@ Kotlin + Spring Boot 백엔드 토이 프로젝트의 공개 출발점.
 - `modules/platform` owns shared web/error/observability code.
 - `modules/auth` owns authentication contracts and future login flows.
 - `modules/auth-social` owns optional provider-neutral social-login contracts and endpoint routing.
+- `modules/auth-social-google`, `modules/auth-social-kakao`, and `modules/auth-social-naver` own optional provider-specific OAuth HTTP clients.
 - Keep provider/vendor integrations out of `platform`.
 
 ## 패키지 구조 (AI 참조용)
@@ -44,9 +45,17 @@ modules/auth/src/main/kotlin/dev/sumin/skeleton/auth/
 modules/auth-social/src/main/kotlin/dev/sumin/skeleton/auth/social/
 ├── oauth/                         # provider-neutral social-login contracts and service
 ├── openapi/                       # auth-social capability OpenAPI 기여
-├── providers/                     # google/kakao/naver provider packages when real clients are added
 ├── api/                           # social login request/handler classes
 └── config/                        # Spring Boot auth-social auto-configuration and route registration
+
+modules/auth-social-google/src/main/kotlin/dev/sumin/skeleton/auth/social/google/
+└── GoogleOAuthProvider.kt         # optional Google authorization-code client
+
+modules/auth-social-kakao/src/main/kotlin/dev/sumin/skeleton/auth/social/kakao/
+└── KakaoOAuthProvider.kt          # optional Kakao authorization-code client
+
+modules/auth-social-naver/src/main/kotlin/dev/sumin/skeleton/auth/social/naver/
+└── NaverOAuthProvider.kt          # optional Naver authorization-code client
 ```
 
 **경계 책임:**
@@ -54,7 +63,7 @@ modules/auth-social/src/main/kotlin/dev/sumin/skeleton/auth/social/
 - 앱 고유 `domain/`, `infra/`, `config/` 패키지는 필요할 때 `apps/api` 안에 둔다.
 - `modules/platform` 은 web/error/observability 공통 기반만 담당한다.
 - `modules/auth` 는 인증 계약과 향후 로그인 흐름을 담당한다.
-- `modules/auth-social` 은 선택형 소셜 로그인 흐름을 담당한다. provider 구현은 `providers/*` 패키지로 추가하고, 아직 별도 Gradle 모듈로 쪼개지 않는다.
+- `modules/auth-social` 은 선택형 소셜 로그인 공통 흐름을 담당한다. 실제 provider 구현은 `modules/auth-social-google|kakao|naver` 같은 선택 Gradle 모듈로 둔다.
 - 새 파일 200줄 넘어가면 분할 신호
 
 ## 핵심 컨벤션
@@ -124,8 +133,10 @@ modules/auth-social/src/main/kotlin/dev/sumin/skeleton/auth/social/
   - secret 은 로그에 남기지 않는다. reason/account 는 감사 로그로 남긴다.
 - social login:
   - Optional module: `modules/auth-social`
+  - Optional provider modules: `modules/auth-social-google`, `modules/auth-social-kakao`, `modules/auth-social-naver`
   - Endpoint: `POST /api/v1/auth/social/{provider}/login`
   - Frontend obtains provider authorization code; backend exchanges code through enabled provider
+  - Add only the provider module the app needs; `apps/api` does not have to carry all providers
   - `provider + providerUserId` maps to internal `accountId`
   - JWT response shape is the same as password login
   - roles are always loaded from `AuthAccountRepository`

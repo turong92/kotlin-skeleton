@@ -14,6 +14,9 @@ modules/
   platform            # web, errors, trace/logging, shared infrastructure
   auth                # stateless auth, JWT, dev-login, break-glass access
   auth-social         # optional social-login extension for auth
+  auth-social-google  # optional Google OAuth provider client
+  auth-social-kakao   # optional Kakao OAuth provider client
+  auth-social-naver   # optional Naver OAuth provider client
 ```
 
 Use modules as capability choices:
@@ -21,7 +24,8 @@ Use modules as capability choices:
 - `apps/api` composes the runnable application.
 - `modules/platform` is the shared foundation for most apps. It also contributes default OpenAPI metadata, standard response/error schemas, web policy defaults, outbound HTTP client scaffolding, and trace header documentation.
 - `modules/auth` is included when the app needs authentication. Its default beans are Spring Boot auto-configuration defaults, so an app can replace `AuthAccountRepository`, `SecurityFilterChain`, token service, or filters with its own beans. It also contributes JWT bearer security metadata to OpenAPI.
-- `modules/auth-social` is included when the app needs social login. Its default beans are also auto-configuration defaults, so provider clients, account links, provisioning policy, and the social auth handler can be replaced. It also contributes the social-login endpoint to OpenAPI.
+- `modules/auth-social` is included when the app needs social login. Its default beans are also auto-configuration defaults, so account links, provisioning policy, and the social auth handler can be replaced. It also contributes the social-login endpoint to OpenAPI.
+- `modules/auth-social-google`, `modules/auth-social-kakao`, and `modules/auth-social-naver` are optional provider clients. Add only the provider modules an application actually needs.
 
 Fine-grained details such as JWT, password login, OAuth, or dev login live as packages inside their capability modules unless they grow into provider-level integrations.
 
@@ -82,9 +86,16 @@ Requests must include `X-Break-Glass-Secret`, `X-Break-Glass-Reason`, and `X-Bre
 - The `value` response payload is the same as password login: bearer token, expiration, and `CurrentPrincipal`.
 - Provider identity maps to an internal account through `OAuthAccountLinkRepository`.
 - Roles always come from `AuthAccountRepository`, not provider profile data.
-- Google, Kakao, and Naver live under `auth-social/providers/*` when real provider clients are added. They are not separate Gradle modules yet.
+- Google, Kakao, and Naver are separate optional Gradle modules. Add a provider module to the application build only when that provider is needed:
 
-First-slice tests use a fake provider. Real provider credentials should be supplied through environment variables:
+```kotlin
+dependencies {
+    implementation(project(":modules:auth-social"))
+    implementation(project(":modules:auth-social-google"))
+}
+```
+
+Provider credentials should be supplied through environment variables:
 
 ```yaml
 skeleton:
@@ -93,8 +104,11 @@ skeleton:
       google:
         enabled: true
         client-id: ${GOOGLE_OAUTH_CLIENT_ID}
-      client-secret: ${GOOGLE_OAUTH_CLIENT_SECRET}
+        client-secret: ${GOOGLE_OAUTH_CLIENT_SECRET}
+        redirect-uri: ${GOOGLE_OAUTH_REDIRECT_URI}
 ```
+
+Provider defaults use the public OAuth token/profile hosts. Override `token-base-url`, `profile-base-url`, `token-path`, or `profile-path` only for tests, proxies, or vendor-specific gateway routing.
 
 ## Web Platform Capability
 
@@ -131,6 +145,7 @@ externalHttpClient.post(
 ```
 
 The default client supports `GET`, `POST`, `PUT`, `PATCH`, and `DELETE`, propagates trace headers, applies timeout/error mapping, and can be customized per named client through `ExternalHttpClientCustomizer` or `ExternalHttpErrorMapper`.
+It also supports `postForm(...)` for OAuth/payment-style form-urlencoded APIs and per-call `baseUrl(...)` overrides for calls whose token/profile hosts differ.
 
 ## 스택
 

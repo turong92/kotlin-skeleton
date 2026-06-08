@@ -12,6 +12,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 import org.slf4j.MDC
 import org.springframework.web.reactive.function.client.WebClient
 
@@ -74,6 +75,36 @@ class ExternalHttpClientTest {
         assertEquals("/items/item-1", request.path)
         assertEquals("expand=customer", request.query)
         assertEquals("custom", request.headers["x-test-header"]?.single())
+    }
+
+    @Test
+    fun `per call manipulation can override base url`() {
+        val response = client.get("dynamic", "/base-override", EchoResponse::class.java) {
+            baseUrl("http://localhost:${server.address.port}")
+        }.block()
+
+        assertEquals("GET", response?.method)
+        assertEquals("/base-override", requests.single().path)
+    }
+
+    @Test
+    fun `post form sends application form urlencoded body`() {
+        client.postForm(
+            clientName = "test",
+            path = "/oauth/token",
+            form = linkedMapOf(
+                "grant_type" to "authorization_code",
+                "code" to "abc 123",
+                "client_id" to "client",
+            ),
+            responseType = EchoResponse::class.java,
+        ).block()
+
+        val request = requests.single()
+        assertEquals("POST", request.method)
+        assertEquals("/oauth/token", request.path)
+        assertTrue(request.headers["content-type"]?.single()?.startsWith("application/x-www-form-urlencoded") == true)
+        assertEquals("grant_type=authorization_code&code=abc+123&client_id=client", request.body)
     }
 
     @Test
