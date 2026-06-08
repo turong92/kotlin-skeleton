@@ -17,6 +17,8 @@ modules/
   auth-social-google  # optional Google OAuth provider client
   auth-social-kakao   # optional Kakao OAuth provider client
   auth-social-naver   # optional Naver OAuth provider client
+  notification         # optional notification contracts and local broker
+  notification-sse     # optional server-to-web SSE notification delivery
 ```
 
 Use modules as capability choices:
@@ -26,6 +28,7 @@ Use modules as capability choices:
 - `modules/auth` is included when the app needs authentication. Its default beans are Spring Boot auto-configuration defaults, so an app can replace `AuthAccountRepository`, `SecurityFilterChain`, token service, or filters with its own beans. It also contributes JWT bearer security metadata to OpenAPI.
 - `modules/auth-social` is included when the app needs social login. Its default beans are also auto-configuration defaults, so account links, provisioning policy, and the social auth handler can be replaced. It also contributes the social-login endpoint to OpenAPI.
 - `modules/auth-social-google`, `modules/auth-social-kakao`, and `modules/auth-social-naver` are optional provider clients. Add only the provider modules an application actually needs.
+- `modules/notification` is included when the app needs server-side notification publishing. `modules/notification-sse` adds web delivery through Spring MVC server-sent events.
 
 Fine-grained details such as JWT, password login, OAuth, or dev login live as packages inside their capability modules unless they grow into provider-level integrations.
 
@@ -109,6 +112,30 @@ skeleton:
 ```
 
 Provider defaults use the public OAuth token/profile hosts. Override `token-base-url`, `profile-base-url`, `token-path`, or `profile-path` only for tests, proxies, or vendor-specific gateway routing.
+
+## Notification Capability
+
+`modules/notification` is the provider-neutral notification base:
+
+- `NotificationEvent` carries `topic`, `type`, `severity`, optional text, optional structured payload, and timestamps.
+- `NotificationPublisher` publishes events and returns local delivery counts.
+- `NotificationSubscriptionRegistry` lets delivery modules subscribe to topics.
+- `InMemoryNotificationBroker` is the default single-node skeleton broker and can be replaced by Redis, Kafka, database fanout, or vendor-specific delivery modules.
+
+`modules/notification-sse` is optional web delivery:
+
+```kotlin
+dependencies {
+    implementation(project(":modules:notification"))
+    implementation(project(":modules:notification-sse"))
+}
+```
+
+```text
+GET /api/v1/notifications/sse?topic=runs&topic=orders
+```
+
+The SSE endpoint produces `text/event-stream`, sends an initial `connected` event, and then emits each `NotificationEvent` with SSE `id=event.id` and `name=event.type`. It is not public by default. Enable `skeleton.notification.sse.public-endpoint=true` only when the app handles access through cookies, gateway policy, or scoped topic tokens.
 
 ## Web Platform Capability
 

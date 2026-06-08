@@ -9,6 +9,8 @@ Kotlin + Spring Boot 백엔드 토이 프로젝트의 공개 출발점.
 - `modules/auth` owns authentication contracts and future login flows.
 - `modules/auth-social` owns optional provider-neutral social-login contracts and endpoint routing.
 - `modules/auth-social-google`, `modules/auth-social-kakao`, and `modules/auth-social-naver` own optional provider-specific OAuth HTTP clients.
+- `modules/notification` owns provider-neutral notification contracts and the local broker default.
+- `modules/notification-sse` owns optional Spring MVC server-sent event delivery.
 - Keep provider/vendor integrations out of `platform`.
 
 ## 패키지 구조 (AI 참조용)
@@ -56,6 +58,18 @@ modules/auth-social-kakao/src/main/kotlin/dev/sumin/skeleton/auth/social/kakao/
 
 modules/auth-social-naver/src/main/kotlin/dev/sumin/skeleton/auth/social/naver/
 └── NaverOAuthProvider.kt          # optional Naver authorization-code client
+
+modules/notification/src/main/kotlin/dev/sumin/skeleton/notification/
+├── NotificationEvent.kt           # notification DTO and severity
+├── NotificationContracts.kt       # publisher/subscription contracts
+├── InMemoryNotificationBroker.kt  # single-node skeleton broker
+└── NotificationAutoConfiguration.kt
+
+modules/notification-sse/src/main/kotlin/dev/sumin/skeleton/notification/sse/
+├── NotificationSseController.kt   # GET /api/v1/notifications/sse
+├── NotificationSseService.kt      # SseEmitter lifecycle and fanout
+├── NotificationSseProperties.kt
+└── NotificationSseAutoConfiguration.kt
 ```
 
 **경계 책임:**
@@ -64,6 +78,7 @@ modules/auth-social-naver/src/main/kotlin/dev/sumin/skeleton/auth/social/naver/
 - `modules/platform` 은 web/error/observability 공통 기반만 담당한다.
 - `modules/auth` 는 인증 계약과 향후 로그인 흐름을 담당한다.
 - `modules/auth-social` 은 선택형 소셜 로그인 공통 흐름을 담당한다. 실제 provider 구현은 `modules/auth-social-google|kakao|naver` 같은 선택 Gradle 모듈로 둔다.
+- `modules/notification` 은 알림 이벤트 계약과 기본 로컬 브로커를 담당한다. `modules/notification-sse` 는 웹 클라이언트 SSE 전달만 담당한다.
 - 새 파일 200줄 넘어가면 분할 신호
 
 ## 핵심 컨벤션
@@ -101,6 +116,10 @@ modules/auth-social-naver/src/main/kotlin/dev/sumin/skeleton/auth/social/naver/
   - raw `WebClient` 직접 생성보다 `ExternalHttpClient` 를 우선 사용한다.
   - `GET`/`POST`/`PUT`/`PATCH`/`DELETE` helper 로 호출하고, 각 호출에서 header/query/body/timeout/error mapper 를 조작한다.
   - 서버는 Spring MVC 를 유지한다. WebFlux 는 outbound WebClient runtime 용으로만 사용한다.
+- **Notification**:
+  - 서버 내부 알림 발행은 `NotificationPublisher` 를 사용한다.
+  - 웹 전달이 필요할 때만 `modules/notification-sse` 를 앱에 추가한다.
+  - SSE endpoint 는 `/api/v1/notifications/sse`, 기본은 인증 필요. public open 이 필요할 때만 `skeleton.notification.sse.public-endpoint=true`.
 - **인증**: `modules/auth` 기본값은 Spring Boot auto-configuration 으로 제공. 실제 앱에서 `AuthAccountRepository`, `SecurityFilterChain`, `JwtTokenService`, 필터 bean을 정의하면 기본값을 대체할 수 있다.
 
 ## traceId 흐름 (디버깅용 핵심)
