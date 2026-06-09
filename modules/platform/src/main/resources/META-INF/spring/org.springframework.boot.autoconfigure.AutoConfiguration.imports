@@ -1,3 +1,4 @@
+dev.sumin.skeleton.common.time.TimeAutoConfiguration
 dev.sumin.skeleton.common.web.WebPolicyAutoConfiguration
 dev.sumin.skeleton.common.http.OutboundHttpAutoConfiguration
 dev.sumin.skeleton.common.openapi.PlatformOpenApiAutoConfiguration

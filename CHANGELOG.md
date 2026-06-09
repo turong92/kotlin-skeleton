@@ -29,6 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ExternalHttpClient.postForm(...)` and per-call `baseUrl(...)` overrides for OAuth/payment-style external APIs
 - `modules/notification` optional notification contracts with a replaceable in-memory broker
 - `modules/notification-sse` optional Spring MVC SSE delivery through `GET /api/v1/notifications/sse`
+- Persistence audit timestamp modules:
+  - platform `TimeProvider` auto-configuration and `BaseAuditTimestamps` for UTC `Instant` + MySQL `DATETIME(6)` precision
+  - optional `modules/persistence-jpa` with JPA `AuditTimestamps` and `BaseJpaEntity`
+  - optional `modules/persistence-jdbc` with JDBC `AuditTimestamps`, `JdbcAuditable`, and audit callback auto-configuration
 
 ### Fixed
 - 매핑되지 않은 API 경로를 `500`이 아니라 표준 `404 ApiError`로 응답

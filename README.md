@@ -19,6 +19,8 @@ modules/
   auth-social-naver   # optional Naver OAuth provider client
   notification         # optional notification contracts and local broker
   notification-sse     # optional server-to-web SSE notification delivery
+  persistence-jpa      # optional JPA audit timestamp support
+  persistence-jdbc     # optional Spring Data JDBC audit timestamp support
 ```
 
 Use modules as capability choices:
@@ -29,6 +31,7 @@ Use modules as capability choices:
 - `modules/auth-social` is included when the app needs social login. Its default beans are also auto-configuration defaults, so account links, provisioning policy, and the social auth handler can be replaced. It also contributes the social-login endpoint to OpenAPI.
 - `modules/auth-social-google`, `modules/auth-social-kakao`, and `modules/auth-social-naver` are optional provider clients. Add only the provider modules an application actually needs.
 - `modules/notification` is included when the app needs server-side notification publishing. `modules/notification-sse` adds web delivery through Spring MVC server-sent events.
+- `modules/persistence-jpa` and `modules/persistence-jdbc` are optional persistence adapters. Both use the same platform audit-time contract while keeping JPA/JDBC annotations and lifecycle behavior inside the selected persistence module.
 
 Fine-grained details such as JWT, password login, OAuth, or dev login live as packages inside their capability modules unless they grow into provider-level integrations.
 
@@ -173,6 +176,69 @@ externalHttpClient.post(
 
 The default client supports `GET`, `POST`, `PUT`, `PATCH`, and `DELETE`, propagates trace headers, applies timeout/error mapping, and can be customized per named client through `ExternalHttpClientCustomizer` or `ExternalHttpErrorMapper`.
 It also supports `postForm(...)` for OAuth/payment-style form-urlencoded APIs and per-call `baseUrl(...)` overrides for calls whose token/profile hosts differ.
+
+## Persistence Audit Capability
+
+`modules/platform` defines the shared time contract:
+
+- `TimeProvider` is auto-configured by default and returns UTC `Instant` values truncated to microsecond precision for MySQL `DATETIME(6)`.
+- `BaseAuditTimestamps` is the persistence-neutral contract for `createdAt`, `updatedAt`, and optional `deletedAt`.
+- General event timestamps use `Instant`, are stored as UTC, and are serialized as ISO-8601 `...Z` values.
+
+JPA applications can add:
+
+```kotlin
+dependencies {
+    implementation(project(":modules:persistence-jpa"))
+}
+```
+
+Then either embed the JPA audit value object directly:
+
+```kotlin
+@Entity
+class OrderEntity(
+    @Embedded
+    var audit: AuditTimestamps = AuditTimestamps(),
+)
+```
+
+or extend the convenience base class:
+
+```kotlin
+@Entity
+class OrderEntity : BaseJpaEntity()
+```
+
+`modules/persistence-jpa` owns `@Embeddable`, `@Column(name = "...", columnDefinition = "DATETIME(6)")`, `@PrePersist`, and `@PreUpdate` behavior.
+
+Spring Data JDBC applications can add:
+
+```kotlin
+dependencies {
+    implementation(project(":modules:persistence-jdbc"))
+}
+```
+
+Use the JDBC audit value object with `@Embedded` and implement `JdbcAuditable` to opt into the auto-configured callback:
+
+```kotlin
+@Table("orders")
+data class OrderEntity(
+    @Id
+    val id: Long?,
+    @Embedded.Nullable
+    override val audit: AuditTimestamps = AuditTimestamps.now(),
+) : JdbcAuditable {
+    override val isNew: Boolean
+        get() = id == null
+
+    override fun withAudit(audit: AuditTimestamps): OrderEntity =
+        copy(audit = audit)
+}
+```
+
+`modules/persistence-jdbc` owns Spring Data Relational `@Column` mapping and updates audit fields through `JdbcAuditBeforeConvertCallback`.
 
 ## 스택
 

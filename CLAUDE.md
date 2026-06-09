@@ -11,6 +11,8 @@ Kotlin + Spring Boot 백엔드 토이 프로젝트의 공개 출발점.
 - `modules/auth-social-google`, `modules/auth-social-kakao`, and `modules/auth-social-naver` own optional provider-specific OAuth HTTP clients.
 - `modules/notification` owns provider-neutral notification contracts and the local broker default.
 - `modules/notification-sse` owns optional Spring MVC server-sent event delivery.
+- `modules/persistence-jpa` owns optional JPA audit timestamp mapping and lifecycle callbacks.
+- `modules/persistence-jdbc` owns optional Spring Data JDBC audit timestamp mapping and callbacks.
 - Keep provider/vendor integrations out of `platform`.
 
 ## 패키지 구조 (AI 참조용)
@@ -23,6 +25,7 @@ apps/api/src/main/kotlin/dev/sumin/skeleton/
     └── OperationExampleController.kt # REST operation contract 샘플
 
 modules/platform/src/main/kotlin/dev/sumin/skeleton/common/
+├── audit/                         # persistence-neutral audit timestamp contract
 ├── ApiError.kt                    # 표준 에러 응답 포맷
 ├── ApiResponse.kt                 # 표준 성공 응답 envelope
 ├── ApiResponseEntity.kt           # 201/202/204 ResponseEntity helper
@@ -32,6 +35,7 @@ modules/platform/src/main/kotlin/dev/sumin/skeleton/common/
 ├── PageQuery.kt                   # 표준 page/size query contract
 ├── openapi/                       # Swagger/OpenAPI 공통 자동 명세
 ├── RequestLoggingFilter.kt        # 요청 시작/종료 로그
+├── time/                          # UTC Instant provider + DB precision policy
 ├── TraceIdFilter.kt               # W3C traceparent → MDC traceId/spanId 심기
 └── web/                           # forwarded headers, public endpoints, CORS, rate limit
 
@@ -70,6 +74,16 @@ modules/notification-sse/src/main/kotlin/dev/sumin/skeleton/notification/sse/
 ├── NotificationSseService.kt      # SseEmitter lifecycle and fanout
 ├── NotificationSseProperties.kt
 └── NotificationSseAutoConfiguration.kt
+
+modules/persistence-jpa/src/main/kotlin/dev/sumin/skeleton/persistence/jpa/
+├── AuditTimestamps.kt             # JPA @Embeddable audit fields
+└── BaseJpaEntity.kt               # optional @MappedSuperclass convenience
+
+modules/persistence-jdbc/src/main/kotlin/dev/sumin/skeleton/persistence/jdbc/
+├── AuditTimestamps.kt             # JDBC immutable audit value object
+├── JdbcAuditable.kt               # opt-in contract for audit callbacks
+├── JdbcAuditBeforeConvertCallback.kt
+└── JdbcAuditAutoConfiguration.kt
 ```
 
 **경계 책임:**
@@ -79,6 +93,8 @@ modules/notification-sse/src/main/kotlin/dev/sumin/skeleton/notification/sse/
 - `modules/auth` 는 인증 계약과 향후 로그인 흐름을 담당한다.
 - `modules/auth-social` 은 선택형 소셜 로그인 공통 흐름을 담당한다. 실제 provider 구현은 `modules/auth-social-google|kakao|naver` 같은 선택 Gradle 모듈로 둔다.
 - `modules/notification` 은 알림 이벤트 계약과 기본 로컬 브로커를 담당한다. `modules/notification-sse` 는 웹 클라이언트 SSE 전달만 담당한다.
+- `modules/platform` 은 `TimeProvider`, `BaseAuditTimestamps` 같은 persistence-neutral 시간 계약만 둔다.
+- `modules/persistence-jpa|jdbc` 는 같은 audit 계약을 각 persistence annotation/callback 방식으로 구현한다.
 - 새 파일 200줄 넘어가면 분할 신호
 
 ## 핵심 컨벤션
@@ -107,6 +123,13 @@ modules/notification-sse/src/main/kotlin/dev/sumin/skeleton/notification/sse/
   - 생성/비동기/204 명세는 `@CreatedOperation`, `@AcceptedOperation`, `@NoContentOperation` 으로 표준화한다.
   - 엔드포인트 의미 설명이 필요할 때만 `@Operation`, 필드 의미가 필요할 때만 `@Schema` 를 추가한다.
 - **스키마 변경**: `apps/api/src/main/resources/db/migration/V{n}__{desc}.sql` — Flyway 마이그레이션만
+- **시간/DB timestamp**:
+  - 일반 timestamp 는 Kotlin `Instant`, DB `DATETIME(6)` UTC, API ISO-8601 `...Z` 를 표준으로 한다.
+  - `TimeProvider` 는 기본 auto-configuration 으로 제공되며 MySQL `DATETIME(6)` 에 맞게 microsecond precision 으로 truncate 한다.
+  - 공통 계약은 `BaseAuditTimestamps`; JPA/JDBC 구현체 이름은 각 모듈 안에서 `AuditTimestamps` 로 둔다.
+  - JPA 앱은 `modules/persistence-jpa` 의 `AuditTimestamps` 또는 `BaseJpaEntity` 를 사용한다.
+  - JDBC 앱은 `modules/persistence-jdbc` 의 `AuditTimestamps` 와 `JdbcAuditable` 을 사용한다.
+  - DTO는 기본적으로 `createdAt`, `updatedAt`, `deletedAt` flat 필드로 변환한다.
 - **로그**: SLF4J 사용. 모든 로그 라인엔 traceId/spanId/parentSpanId 자동 포함 (MDC)
 - **Web policy**:
   - public open 은 `PublicEndpointContributor` 로 추가한다. auth 기본 security chain 이 registry 를 읽어 `permitAll` 을 적용한다.
@@ -181,6 +204,7 @@ modules/notification-sse/src/main/kotlin/dev/sumin/skeleton/notification/sse/
   8. 외부 API 연동은 `ExternalHttpClient` 기반으로 만들고, provider/vendor 별 mapper/customizer 만 추가한다
   9. 기능 모듈이 endpoint/route 를 자동 등록하면 같은 모듈의 `openapi/` 에 명세 기여도 같이 둔다
   10. DB 스키마 바뀌면 `apps/api/src/main/resources/db/migration/V{n}__.sql`
+  11. entity audit 이 필요하면 선택한 persistence 모듈의 `AuditTimestamps` 를 사용하고, core/platform 에 JPA/JDBC annotation 을 직접 추가하지 않는다.
 
 ## 변경 이력
 
