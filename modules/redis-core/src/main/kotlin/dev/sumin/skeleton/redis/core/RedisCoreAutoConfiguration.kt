@@ -2,6 +2,7 @@ package dev.sumin.skeleton.redis.core
 
 import io.lettuce.core.ClientOptions
 import io.lettuce.core.SocketOptions
+import java.util.regex.Pattern
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
@@ -42,7 +43,7 @@ class RedisCoreAutoConfiguration {
             .map { it.trim() }
             .filter { it.isNotEmpty() }
             .distinct()
-            .forEach { trustedPackage -> typeValidatorBuilder.allowIfSubType(trustedPackage) }
+            .forEach { trustedPackage -> typeValidatorBuilder.allowIfSubType(trustedPackagePattern(trustedPackage)) }
 
         val typeValidator = typeValidatorBuilder
             .allowIfSubTypeIsArray()
@@ -116,3 +117,6 @@ class RedisCoreAutoConfiguration {
             afterPropertiesSet()
         }
 }
+
+private fun trustedPackagePattern(trustedPackage: String): Pattern =
+    Pattern.compile("${Pattern.quote(trustedPackage)}($|\\..*)")

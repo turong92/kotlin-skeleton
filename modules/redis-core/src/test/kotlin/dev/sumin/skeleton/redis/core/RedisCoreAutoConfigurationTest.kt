@@ -1,8 +1,10 @@
 package dev.sumin.skeleton.redis.core
 
 import com.example.redis.ExternalPayload
+import dev.sumin.skeletonevil.LookalikePayload
 import java.util.function.Supplier
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 import org.springframework.boot.autoconfigure.AutoConfigurations
 import org.springframework.boot.test.context.runner.ApplicationContextRunner
@@ -113,6 +115,24 @@ class RedisCoreAutoConfigurationTest {
 
                 assertThat(deserialized).isInstanceOf(ExternalPayload::class.java)
                 assertThat(deserialized).isEqualTo(payload)
+            }
+    }
+
+    @Test
+    fun `json serializer rejects lookalike package when skeleton package is trusted`() {
+        contextRunner
+            .withPropertyValues(
+                "skeleton.redis.json.trusted-packages=dev.sumin.skeleton",
+            )
+            .run { context ->
+                @Suppress("UNCHECKED_CAST")
+                val serializer = context.getBean("redisJsonSerializer", RedisSerializer::class.java) as RedisSerializer<Any>
+                val payload = LookalikePayload(3, "lookalike")
+
+                val serialized = serializer.serialize(payload)
+
+                assertThatThrownBy { serializer.deserialize(serialized) }
+                    .hasMessageContaining("dev.sumin.skeletonevil.LookalikePayload")
             }
     }
 }

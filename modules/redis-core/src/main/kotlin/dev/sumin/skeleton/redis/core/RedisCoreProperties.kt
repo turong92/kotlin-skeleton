@@ -22,7 +22,7 @@ data class RedisCoreProperties(
 
     data class Ssl(
         val enabled: Boolean = false,
-        val disablePeerVerificationLocal: Boolean = true,
+        val disablePeerVerificationLocal: Boolean = false,
     )
 
     data class Timeout(

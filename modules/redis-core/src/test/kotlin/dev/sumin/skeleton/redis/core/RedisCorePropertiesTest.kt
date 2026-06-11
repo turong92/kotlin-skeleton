@@ -22,7 +22,7 @@ class RedisCorePropertiesTest {
             assertThat(properties.username).isEqualTo("")
             assertThat(properties.password).isEqualTo("")
             assertThat(properties.ssl.enabled).isFalse()
-            assertThat(properties.ssl.disablePeerVerificationLocal).isTrue()
+            assertThat(properties.ssl.disablePeerVerificationLocal).isFalse()
             assertThat(properties.timeout.connect).isEqualTo(Duration.ofSeconds(2))
             assertThat(properties.timeout.command).isEqualTo(Duration.ofSeconds(2))
             assertThat(properties.keyPrefix).isEqualTo("kotlin-skeleton")
