@@ -96,7 +96,6 @@ Example:
 ```yaml
 skeleton:
   redis:
-    enabled: true
     mode: standalone
     host: localhost
     port: 6379
@@ -133,6 +132,11 @@ skeleton:
 `spring.data.redis.*` should not be the primary public contract for skeleton
 users. Internally the module may build Spring Redis objects from
 `skeleton.redis.*`.
+
+`skeleton.redis` is connection configuration, not a feature switch. Feature
+modules such as `redis-lock`, `redis-cache`, and `redis-rate-limit` own their
+own `enabled` and failure-policy properties. This avoids a second global enable
+flag that users must remember to set.
 
 ## Failure Policy
 
