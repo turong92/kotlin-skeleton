@@ -14,6 +14,8 @@
   contract, exception contract, web policy, OpenAPI, and outbound HTTP.
 - Put channel/vendor implementations in separate modules:
   `notification-slack`, `notification-sse`, `payment-toss`, `storage-s3`.
+- Keep Redis capabilities grouped as `redis-*` modules:
+  `redis-core`, `redis-lock`, `redis-cache`, and `redis-rate-limit`.
 - No product-domain dependencies inside skeleton modules. Use contributor,
   resolver, mapper, and customizer interfaces for service-specific context.
 - Prefer property-driven auto-configuration with safe defaults. Missing secrets
@@ -85,7 +87,38 @@ Acceptance:
 - [x] Alert includes trace fields when MDC has them.
 - [x] Sensitive headers/body fields are redacted or absent by default.
 
-### 2. `modules:lock-redisson` - Planned
+### 2. `modules:redis-core` - Planned
+
+Old references:
+
+- `domain/.../RedisConfig.java`
+- `domain/.../RedisValueObjectMapper.java`
+- `infra/lock/.../RedissonConfig.kt`
+
+Absorb:
+
+- [ ] `skeleton.redis.*` connection properties.
+- [ ] Standalone Lettuce connection factory.
+- [ ] `StringRedisTemplate` and JSON Redis template defaults.
+- [ ] Shared key prefix handling.
+- [ ] Serializer override points.
+- [ ] Connect and command timeout properties.
+
+Standardize:
+
+- [ ] Do not eagerly ping Redis in the core module.
+- [ ] Keep `spring.data.redis.*` as internal implementation detail, not the
+  primary skeleton contract.
+- [ ] Keep Redis Cluster support out of the first pass.
+
+Acceptance:
+
+- [ ] App can include `redis-core` without Redis running.
+- [ ] Templates use the configured key/value serializers.
+- [ ] Key prefix helper creates stable namespaced keys.
+- [ ] User-supplied connection factory or templates override defaults.
+
+### 3. `modules:redis-lock` - Planned
 
 Old references:
 
@@ -109,7 +142,8 @@ Standardize:
 - [ ] Rename policy names if needed: `CRITICAL`, `SKIP_ON_FAILURE`, or
   `PROCEED_ON_BACKEND_FAILURE`.
 - [ ] Avoid returning nullable from critical flows unless explicitly configured.
-- [ ] Add property namespace `skeleton.lock.redisson`.
+- [ ] Add property namespace `skeleton.redis-lock`.
+- [ ] Fail startup when Redis is unavailable in every profile, including local.
 
 Acceptance:
 
@@ -119,7 +153,7 @@ Acceptance:
 - [ ] Non-critical acquisition failure follows configured policy.
 - [ ] Redis backend failure behavior is tested.
 
-### 3. `modules:scheduler` - Planned
+### 4. `modules:scheduler` - Planned
 
 Old references:
 
@@ -148,7 +182,7 @@ Acceptance:
 - [ ] Task registration waits until application ready.
 - [ ] Lock integration can be enabled without changing task code.
 
-### 4. `modules:cache-redis` - Planned
+### 5. `modules:redis-cache` - Planned
 
 Old references:
 
@@ -170,6 +204,7 @@ Standardize:
 
 - [ ] Do not expose old app-specific cache names.
 - [ ] Prefer property-defined cache specs plus optional typed constants.
+- [ ] Add property namespace `skeleton.redis-cache`.
 - [ ] Review serializer choice. Avoid unsafe broad default typing unless there
   is a clear, tested reason.
 
@@ -180,7 +215,7 @@ Acceptance:
 - [ ] Redis get/put/evict failures do not break API when fail-open is enabled.
 - [ ] No-op fallback is covered.
 
-### 5. `modules:web-rate-limit-redis` - Planned
+### 6. `modules:redis-rate-limit` - Planned
 
 Old references:
 
@@ -199,6 +234,7 @@ Standardize:
 
 - [ ] Keep basic in-memory rate limiting in `platform`.
 - [ ] Put Redis-backed implementation in this optional module.
+- [ ] Add property namespace `skeleton.redis-rate-limit`.
 - [ ] Allow route key strategy override.
 
 Acceptance:
@@ -208,7 +244,7 @@ Acceptance:
 - [ ] Authenticated and anonymous keys are distinct.
 - [ ] Redis failure respects fail-open/fail-closed.
 
-### 6. `modules:storage-s3` - Planned
+### 7. `modules:storage-s3` - Planned
 
 Old references:
 
@@ -235,7 +271,7 @@ Acceptance:
 - [ ] File validation rejects unsupported extension and size.
 - [ ] Multipart flow exposes stable DTOs.
 
-### 7. `modules:config-aws-ssm` - Done
+### 8. `modules:config-aws-ssm` - Done
 
 Old references:
 
@@ -251,7 +287,7 @@ Standardize:
 
 - [x] Do not hard-code old `/wkwk/...` paths.
 - [x] Use `skeleton.config.aws.ssm.paths`.
-- [x] Default to disabled.
+- [x] Auto-load from runtime context, with explicit disabled override.
 - [x] Decide fail-fast vs warn-only by property.
 
 Acceptance:
@@ -261,7 +297,7 @@ Acceptance:
 - [x] Later paths override earlier paths.
 - [x] AWS failure behavior follows configured policy.
 
-### 8. `modules:event-kafka` - Planned
+### 9. `modules:event-kafka` - Planned
 
 Old references:
 
@@ -292,7 +328,7 @@ Acceptance:
 - [ ] Disabled mode does not call Kafka.
 - [ ] Trace context appears in event headers.
 
-### 9. `modules:notification-websocket` - Planned
+### 10. `modules:notification-websocket` - Planned
 
 Old references:
 
@@ -321,7 +357,7 @@ Acceptance:
 - [ ] Valid token becomes Principal.
 - [ ] User-targeted message delivery path is documented.
 
-### 10. `modules:payment` and `modules:payment-toss` - Planned
+### 11. `modules:payment` and `modules:payment-toss` - Planned
 
 Old references:
 
@@ -375,15 +411,16 @@ Acceptance:
 ## Execution Order
 
 1. `notification-slack`
-2. `lock-redisson`
-3. `scheduler`
-4. `cache-redis`
-5. `web-rate-limit-redis`
-6. `storage-s3`
-7. `config-aws-ssm`
-8. `event-kafka`
-9. `notification-websocket`
-10. `payment` / `payment-toss`
+2. `redis-core`
+3. `redis-lock`
+4. `scheduler`
+5. `redis-cache`
+6. `redis-rate-limit`
+7. `storage-s3`
+8. `config-aws-ssm`
+9. `event-kafka`
+10. `notification-websocket`
+11. `payment` / `payment-toss`
 
 Each module should be implemented with a focused design/spec or implementation
 plan before code changes. When a module is completed, mark its checklist items
@@ -396,3 +433,5 @@ above and add the commit hash or PR reference here.
   commit: `3f5bfe9`.
 - 2026-06-11: `config-aws-ssm` module completed with EnvironmentPostProcessor
   based SSM property loading.
+- 2026-06-11: Redis bundle design approved with `redis-*` module naming and
+  per-feature failure policies.
