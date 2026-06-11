@@ -19,6 +19,22 @@ skeleton:
         paths:
           - /kotlin-skeleton/staging/common/
           - /kotlin-skeleton/staging/api/
+  redis:
+    mode: standalone
+    host: ${SKELETON_REDIS_HOST:localhost}
+    port: ${SKELETON_REDIS_PORT:6379}
+    username: ${SKELETON_REDIS_USERNAME:}
+    password: ${SKELETON_REDIS_PASSWORD:}
+    database: ${SKELETON_REDIS_DATABASE:0}
+    ssl:
+      enabled: ${SKELETON_REDIS_SSL_ENABLED:true}
+      disable-peer-verification-local: ${SKELETON_REDIS_SSL_DISABLE_PEER_VERIFICATION_LOCAL:false}
+    timeout:
+      connect: ${SKELETON_REDIS_CONNECT_TIMEOUT:2s}
+      command: ${SKELETON_REDIS_COMMAND_TIMEOUT:2s}
+    key-prefix: ${SKELETON_REDIS_KEY_PREFIX:kotlin-skeleton:staging}
+    json:
+      trusted-packages: ${SKELETON_REDIS_JSON_TRUSTED_PACKAGES:dev.sumin.skeleton,java.time,java.util}
   auth:
     jwt:
       secret: ${JWT_SECRET:}

@@ -20,6 +20,22 @@ skeleton:
           - /kotlin-skeleton/dev/common/
           - /kotlin-skeleton/dev/api/
           - /kotlin-skeleton/local/api/
+  redis:
+    mode: standalone
+    host: ${SKELETON_REDIS_HOST:localhost}
+    port: ${SKELETON_REDIS_PORT:6379}
+    username: ${SKELETON_REDIS_USERNAME:}
+    password: ${SKELETON_REDIS_PASSWORD:}
+    database: ${SKELETON_REDIS_DATABASE:0}
+    ssl:
+      enabled: ${SKELETON_REDIS_SSL_ENABLED:false}
+      disable-peer-verification-local: ${SKELETON_REDIS_SSL_DISABLE_PEER_VERIFICATION_LOCAL:true}
+    timeout:
+      connect: ${SKELETON_REDIS_CONNECT_TIMEOUT:2s}
+      command: ${SKELETON_REDIS_COMMAND_TIMEOUT:2s}
+    key-prefix: ${SKELETON_REDIS_KEY_PREFIX:kotlin-skeleton:local}
+    json:
+      trusted-packages: ${SKELETON_REDIS_JSON_TRUSTED_PACKAGES:dev.sumin.skeleton,java.time,java.util}
   auth:
     jwt:
       secret: ${JWT_SECRET:dev-local-jwt-secret-change-me-32-bytes}
