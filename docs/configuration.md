@@ -59,6 +59,10 @@ The required config contract is stored in:
 - `docs/config/required-config.yml`
 - `docs/config/ssm-parameters.yml`
 
+Related config docs:
+
+- [Redis configuration](config/redis.md)
+
 If startup fails, the error should say:
 
 - which Spring property is missing,

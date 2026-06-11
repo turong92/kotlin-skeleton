@@ -104,11 +104,13 @@ skeleton:
     database: 0
     ssl:
       enabled: false
-      disable-peer-verification-local: true
+      disable-peer-verification-local: false
     timeout:
       connect: 2s
       command: 2s
     key-prefix: kotlin-skeleton:local
+    json:
+      trusted-packages: dev.sumin.skeleton,java.time,java.util
 
   redis-lock:
     enabled: true
@@ -137,6 +139,11 @@ users. Internally the module may build Spring Redis objects from
 modules such as `redis-lock`, `redis-cache`, and `redis-rate-limit` own their
 own `enabled` and failure-policy properties. This avoids a second global enable
 flag that users must remember to set.
+
+The core default for `skeleton.redis.ssl.disable-peer-verification-local` is
+`false`. A local profile or `.env.local` may opt into `true` only for local or
+self-signed Redis endpoints. Shared dev, staging, and prod environments should
+keep peer verification enabled.
 
 ## Failure Policy
 
