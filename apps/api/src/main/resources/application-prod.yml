@@ -35,6 +35,18 @@ skeleton:
     key-prefix: ${SKELETON_REDIS_KEY_PREFIX:kotlin-skeleton:prod}
     json:
       trusted-packages: ${SKELETON_REDIS_JSON_TRUSTED_PACKAGES:dev.sumin.skeleton,java.time,java.util}
+  redis-lock:
+    enabled: ${SKELETON_REDIS_LOCK_ENABLED:true}
+    startup-check:
+      enabled: ${SKELETON_REDIS_LOCK_STARTUP_CHECK_ENABLED:true}
+      key: ${SKELETON_REDIS_LOCK_STARTUP_CHECK_KEY:__redis_lock_startup_check}
+    retry:
+      attempts: ${SKELETON_REDIS_LOCK_RETRY_ATTEMPTS:3}
+      backoff: ${SKELETON_REDIS_LOCK_RETRY_BACKOFF:200ms}
+    redisson:
+      retry-attempts: ${SKELETON_REDIS_LOCK_REDISSON_RETRY_ATTEMPTS:3}
+      retry-interval: ${SKELETON_REDIS_LOCK_REDISSON_RETRY_INTERVAL:1500ms}
+      timeout: ${SKELETON_REDIS_LOCK_REDISSON_TIMEOUT:3s}
   auth:
     jwt:
       secret: ${JWT_SECRET:}
