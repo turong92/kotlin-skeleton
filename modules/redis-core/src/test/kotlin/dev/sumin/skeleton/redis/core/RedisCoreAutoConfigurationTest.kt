@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.redis.core
 
+import com.example.redis.ExternalPayload
 import java.util.function.Supplier
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
@@ -94,6 +95,25 @@ class RedisCoreAutoConfigurationTest {
             assertThat(deserialized).isInstanceOf(SamplePayload::class.java)
             assertThat(deserialized).isEqualTo(payload)
         }
+    }
+
+    @Test
+    fun `json serializer round trips external payload type when package is trusted`() {
+        contextRunner
+            .withPropertyValues(
+                "skeleton.redis.json.trusted-packages=dev.sumin.skeleton,java.time,java.util,com.example.redis",
+            )
+            .run { context ->
+                @Suppress("UNCHECKED_CAST")
+                val serializer = context.getBean("redisJsonSerializer", RedisSerializer::class.java) as RedisSerializer<Any>
+                val payload = ExternalPayload(2, "external")
+
+                val serialized = serializer.serialize(payload)
+                val deserialized = serializer.deserialize(serialized)
+
+                assertThat(deserialized).isInstanceOf(ExternalPayload::class.java)
+                assertThat(deserialized).isEqualTo(payload)
+            }
     }
 }
 

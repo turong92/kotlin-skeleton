@@ -14,6 +14,7 @@ data class RedisCoreProperties(
     val ssl: Ssl = Ssl(),
     val timeout: Timeout = Timeout(),
     val keyPrefix: String = "kotlin-skeleton",
+    val json: Json = Json(),
 ) {
     enum class Mode {
         STANDALONE,
@@ -27,5 +28,9 @@ data class RedisCoreProperties(
     data class Timeout(
         val connect: Duration = Duration.ofSeconds(2),
         val command: Duration = Duration.ofSeconds(2),
+    )
+
+    data class Json(
+        val trustedPackages: List<String> = listOf("dev.sumin.skeleton", "java.time", "java.util"),
     )
 }

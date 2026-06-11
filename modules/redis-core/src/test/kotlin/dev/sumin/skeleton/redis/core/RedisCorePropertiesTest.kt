@@ -26,6 +26,8 @@ class RedisCorePropertiesTest {
             assertThat(properties.timeout.connect).isEqualTo(Duration.ofSeconds(2))
             assertThat(properties.timeout.command).isEqualTo(Duration.ofSeconds(2))
             assertThat(properties.keyPrefix).isEqualTo("kotlin-skeleton")
+            assertThat(properties.json.trustedPackages)
+                .containsExactly("dev.sumin.skeleton", "java.time", "java.util")
         }
     }
 
@@ -44,6 +46,7 @@ class RedisCorePropertiesTest {
                 "skeleton.redis.timeout.connect=1500ms",
                 "skeleton.redis.timeout.command=2500ms",
                 "skeleton.redis.key-prefix=kotlin-skeleton:dev",
+                "skeleton.redis.json.trusted-packages=dev.sumin.skeleton,java.time,java.util,com.example.redis",
             )
             .run { context ->
                 val properties = context.getBean(RedisCoreProperties::class.java)
@@ -58,6 +61,8 @@ class RedisCorePropertiesTest {
                 assertThat(properties.timeout.connect).isEqualTo(Duration.ofMillis(1500))
                 assertThat(properties.timeout.command).isEqualTo(Duration.ofMillis(2500))
                 assertThat(properties.keyPrefix).isEqualTo("kotlin-skeleton:dev")
+                assertThat(properties.json.trustedPackages)
+                    .containsExactly("dev.sumin.skeleton", "java.time", "java.util", "com.example.redis")
             }
     }
 }

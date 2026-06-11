@@ -35,11 +35,16 @@ class RedisCoreAutoConfiguration {
 
     @Bean("redisJsonSerializer")
     @ConditionalOnMissingBean(name = ["redisJsonSerializer"])
-    fun redisJsonSerializer(): RedisSerializer<Any> {
-        val typeValidator = BasicPolymorphicTypeValidator.builder()
-            .allowIfSubType("dev.sumin.skeleton.")
-            .allowIfSubType("java.time.")
-            .allowIfSubType("java.util.")
+    fun redisJsonSerializer(properties: RedisCoreProperties): RedisSerializer<Any> {
+        val typeValidatorBuilder = BasicPolymorphicTypeValidator.builder()
+
+        properties.json.trustedPackages
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+            .forEach { trustedPackage -> typeValidatorBuilder.allowIfSubType(trustedPackage) }
+
+        val typeValidator = typeValidatorBuilder
             .allowIfSubTypeIsArray()
             .allowSubTypesWithExplicitDeserializer()
             .build()
