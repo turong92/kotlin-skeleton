@@ -1,5 +1,6 @@
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
+    implementation("tools.jackson.module:jackson-module-kotlin")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
 
     testImplementation("org.assertj:assertj-core")
