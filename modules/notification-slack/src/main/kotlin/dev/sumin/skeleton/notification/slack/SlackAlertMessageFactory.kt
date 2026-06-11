@@ -2,9 +2,11 @@ package dev.sumin.skeleton.notification.slack
 
 import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.annotation.JsonProperty
+import dev.sumin.skeleton.common.logging.SensitiveValueRedactor
 
 class SlackAlertMessageFactory(
     private val properties: SlackNotificationProperties,
+    private val redactor: SensitiveValueRedactor = SensitiveValueRedactor(),
 ) {
     fun create(
         alert: SlackAlert,
@@ -15,7 +17,7 @@ class SlackAlertMessageFactory(
             "severity" to alert.severity.name,
             "topic" to displayTopic,
         )
-        fields.putAll(alert.fields)
+        fields.putAll(redactor.redact(alert.fields))
         fields.putAll(
             mapOf(
                 "traceId" to alert.trace.traceId,

@@ -108,6 +108,21 @@ class ExternalHttpClientTest {
     }
 
     @Test
+    fun `response variants expose upstream status headers and body`() {
+        val response = client.postResponse(
+            clientName = "test",
+            path = "/with-headers",
+            body = mapOf("name" to "header-test"),
+            responseType = EchoResponse::class.java,
+        ).block()
+
+        assertNotNull(response)
+        assertEquals(201, response.statusCode)
+        assertEquals("provider-trace-123", response.headers.getFirst("X-Provider-Trace-Id"))
+        assertEquals("POST", response.body.method)
+    }
+
+    @Test
     fun `trace headers propagate from MDC`() {
         MDC.put(TraceIdFilter.MDC_KEY, "4bf92f3577b34da6a3ce929d0e0e4736")
         MDC.put(TraceIdFilter.MDC_SPAN_ID_KEY, "00f067aa0ba902b7")
@@ -171,6 +186,10 @@ class ExternalHttpClientTest {
             "/slow" -> {
                 Thread.sleep(300)
                 exchange.respond(200, """{"method":"${exchange.requestMethod}"}""")
+            }
+            "/with-headers" -> {
+                exchange.responseHeaders.add("X-Provider-Trace-Id", "provider-trace-123")
+                exchange.respond(201, """{"method":"${exchange.requestMethod}"}""")
             }
             else -> exchange.respond(200, """{"method":"${exchange.requestMethod}"}""")
         }

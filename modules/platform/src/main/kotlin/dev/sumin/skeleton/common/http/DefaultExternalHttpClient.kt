@@ -32,6 +32,14 @@ class DefaultExternalHttpClient(
         responseType: Class<T>,
         customize: ExternalHttpRequestSpec.() -> Unit,
     ): Mono<T> =
+        getResponse(clientName, path, responseType, customize).map { it.body }
+
+    override fun <T : Any> getResponse(
+        clientName: String,
+        path: String,
+        responseType: Class<T>,
+        customize: ExternalHttpRequestSpec.() -> Unit,
+    ): Mono<ExternalHttpResponse<T>> =
         execute(HttpMethod.GET, clientName, path, body = null, responseType, customize)
 
     override fun <T : Any> post(
@@ -41,6 +49,15 @@ class DefaultExternalHttpClient(
         responseType: Class<T>,
         customize: ExternalHttpRequestSpec.() -> Unit,
     ): Mono<T> =
+        postResponse(clientName, path, body, responseType, customize).map { it.body }
+
+    override fun <T : Any> postResponse(
+        clientName: String,
+        path: String,
+        body: Any?,
+        responseType: Class<T>,
+        customize: ExternalHttpRequestSpec.() -> Unit,
+    ): Mono<ExternalHttpResponse<T>> =
         execute(HttpMethod.POST, clientName, path, body, responseType, customize)
 
     override fun <T : Any> postForm(
@@ -49,7 +66,16 @@ class DefaultExternalHttpClient(
         form: Map<String, String>,
         responseType: Class<T>,
         customize: ExternalHttpRequestSpec.() -> Unit,
-    ): Mono<T> {
+    ): Mono<T> =
+        postFormResponse(clientName, path, form, responseType, customize).map { it.body }
+
+    override fun <T : Any> postFormResponse(
+        clientName: String,
+        path: String,
+        form: Map<String, String>,
+        responseType: Class<T>,
+        customize: ExternalHttpRequestSpec.() -> Unit,
+    ): Mono<ExternalHttpResponse<T>> {
         val formBody = LinkedMultiValueMap<String, String>().apply {
             form.forEach { (name, value) -> add(name, value) }
         }
@@ -66,6 +92,15 @@ class DefaultExternalHttpClient(
         responseType: Class<T>,
         customize: ExternalHttpRequestSpec.() -> Unit,
     ): Mono<T> =
+        putResponse(clientName, path, body, responseType, customize).map { it.body }
+
+    override fun <T : Any> putResponse(
+        clientName: String,
+        path: String,
+        body: Any?,
+        responseType: Class<T>,
+        customize: ExternalHttpRequestSpec.() -> Unit,
+    ): Mono<ExternalHttpResponse<T>> =
         execute(HttpMethod.PUT, clientName, path, body, responseType, customize)
 
     override fun <T : Any> patch(
@@ -75,6 +110,15 @@ class DefaultExternalHttpClient(
         responseType: Class<T>,
         customize: ExternalHttpRequestSpec.() -> Unit,
     ): Mono<T> =
+        patchResponse(clientName, path, body, responseType, customize).map { it.body }
+
+    override fun <T : Any> patchResponse(
+        clientName: String,
+        path: String,
+        body: Any?,
+        responseType: Class<T>,
+        customize: ExternalHttpRequestSpec.() -> Unit,
+    ): Mono<ExternalHttpResponse<T>> =
         execute(HttpMethod.PATCH, clientName, path, body, responseType, customize)
 
     override fun <T : Any> delete(
@@ -83,6 +127,14 @@ class DefaultExternalHttpClient(
         responseType: Class<T>,
         customize: ExternalHttpRequestSpec.() -> Unit,
     ): Mono<T> =
+        deleteResponse(clientName, path, responseType, customize).map { it.body }
+
+    override fun <T : Any> deleteResponse(
+        clientName: String,
+        path: String,
+        responseType: Class<T>,
+        customize: ExternalHttpRequestSpec.() -> Unit,
+    ): Mono<ExternalHttpResponse<T>> =
         execute(HttpMethod.DELETE, clientName, path, body = null, responseType, customize)
 
     private fun <T : Any> execute(
@@ -92,7 +144,7 @@ class DefaultExternalHttpClient(
         body: Any?,
         responseType: Class<T>,
         customize: ExternalHttpRequestSpec.() -> Unit,
-    ): Mono<T> {
+    ): Mono<ExternalHttpResponse<T>> {
         val requestSpec = ExternalHttpRequestSpec().apply(customize)
         val clientProperties = properties.clients[clientName] ?: OutboundHttpProperties.Client()
         val timeout = requestSpec.timeout ?: clientProperties.responseTimeout ?: properties.defaultResponseTimeout
@@ -105,7 +157,7 @@ class DefaultExternalHttpClient(
                     response.bodyToMono(String::class.java)
                         .defaultIfEmpty("")
                         .flatMap { responseBody ->
-                            Mono.error<T>(
+                            Mono.error<ExternalHttpResponse<T>>(
                                 (requestSpec.errorMapper ?: defaultErrorMapper).map(
                                     ExternalHttpErrorContext(
                                         clientName = clientName,
@@ -115,10 +167,17 @@ class DefaultExternalHttpClient(
                                         upstreamBody = responseBody,
                                     ),
                                 ),
-                            )
-                        }
+                        )
+                    }
                 } else {
                     response.bodyToMono(responseType)
+                        .map { body ->
+                            ExternalHttpResponse(
+                                statusCode = response.statusCode().value(),
+                                headers = HttpHeaders.readOnlyHttpHeaders(response.headers().asHttpHeaders()),
+                                body = body,
+                            )
+                        }
                 }
             }
             .timeout(timeout)

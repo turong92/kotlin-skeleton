@@ -20,6 +20,7 @@ class SlackAlertMessageFactoryTest {
                 topic = "billing",
                 fields = mapOf(
                     "orderId" to "order-1",
+                    "accessToken" to "token-1",
                     "empty" to null,
                 ),
                 trace = SlackTraceContext(
@@ -45,6 +46,8 @@ class SlackAlertMessageFactoryTest {
         assertTrue(body.contains("4bf92f3577b34da6a3ce929d0e0e4736"))
         assertTrue(body.contains("spanId"))
         assertTrue(body.contains("orderId"))
+        assertTrue(body.contains("[REDACTED]"))
+        assertFalse(body.contains("token-1"))
         assertFalse(body.contains("empty"))
     }
 }
