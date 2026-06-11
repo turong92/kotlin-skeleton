@@ -168,7 +168,6 @@ skeleton:
   config:
     aws:
       ssm:
-        enabled: false
         region: ap-northeast-2
         credential-profile: ${AWS_PROFILE:}
         fail-fast: true
@@ -179,8 +178,12 @@ skeleton:
 
 Behavior:
 
-- Disabled mode does nothing.
-- Enabled mode loads configured paths into Spring property sources.
+- If `enabled` is explicitly `false`, the module does nothing.
+- If `enabled` is explicitly `true`, the module loads configured paths.
+- If `enabled` is omitted, the module loads automatically for `dev`,
+  `staging`, and `prod`.
+- If `enabled` is omitted on `local`, the module loads only when
+  `credential-profile` or `AWS_PROFILE` is present.
 - Later paths override earlier paths.
 - Missing credentials fail when `fail-fast=true`.
 - Missing paths or keys fail when the required config manifest marks them as
@@ -214,6 +217,13 @@ skeleton-prod-readonly
 ```
 
 Example local dev SSM run:
+
+```bash
+aws sso login --profile skeleton-dev
+AWS_PROFILE=skeleton-dev SPRING_PROFILES_ACTIVE=local ./gradlew :apps:api:bootRun
+```
+
+Example local dev-profile reproduction:
 
 ```bash
 aws sso login --profile skeleton-dev

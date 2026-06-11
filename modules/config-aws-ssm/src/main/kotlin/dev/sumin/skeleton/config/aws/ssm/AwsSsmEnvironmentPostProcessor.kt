@@ -11,12 +11,15 @@ import org.springframework.core.env.StandardEnvironment
 
 class AwsSsmConfigException(message: String, cause: Throwable? = null) : IllegalStateException(message, cause)
 
-class AwsSsmEnvironmentPostProcessor(
-    private val clientFactory: SsmParameterClientFactory,
-) : EnvironmentPostProcessor, Ordered {
+class AwsSsmEnvironmentPostProcessor : EnvironmentPostProcessor, Ordered {
     constructor() : this(AwsSdkSsmParameterClientFactory())
 
+    private val clientFactory: SsmParameterClientFactory
     private val log = LoggerFactory.getLogger(javaClass)
+
+    constructor(clientFactory: SsmParameterClientFactory) {
+        this.clientFactory = clientFactory
+    }
 
     override fun getOrder(): Int = Ordered.LOWEST_PRECEDENCE - 10
 
@@ -28,7 +31,7 @@ class AwsSsmEnvironmentPostProcessor(
             .bind("skeleton.config.aws.ssm", AwsSsmProperties::class.java)
             .orElse(AwsSsmProperties()) ?: AwsSsmProperties()
 
-        if (!properties.enabled) return
+        if (!shouldLoad(environment, properties)) return
 
         runCatching {
             loadProperties(environment, properties)
@@ -39,6 +42,15 @@ class AwsSsmEnvironmentPostProcessor(
             }
             log.warn(message)
         }
+    }
+
+    private fun shouldLoad(
+        environment: ConfigurableEnvironment,
+        properties: AwsSsmProperties,
+    ): Boolean {
+        properties.enabled?.let { return it }
+        if (properties.credentialProfile.isNotBlank()) return true
+        return environment.activeProfiles.any { profile -> profile in AUTO_ENABLED_PROFILES }
     }
 
     private fun loadProperties(
@@ -133,5 +145,6 @@ class AwsSsmEnvironmentPostProcessor(
 
     companion object {
         const val PROPERTY_SOURCE_NAME = "awsSsmParameterStore"
+        private val AUTO_ENABLED_PROFILES = setOf("dev", "staging", "prod")
     }
 }

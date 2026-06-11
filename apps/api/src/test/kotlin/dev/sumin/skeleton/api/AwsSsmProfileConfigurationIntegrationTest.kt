@@ -20,7 +20,6 @@ class AwsSsmProfileConfigurationIntegrationTest {
                 "test",
                 mapOf(
                     "spring.profiles.active" to "dev",
-                    "skeleton.config.aws.ssm.enabled" to "true",
                     "skeleton.config.aws.ssm.paths[0]" to "/kotlin-skeleton/{profile}/api/",
                 ),
             ),

@@ -72,6 +72,7 @@ class DevLoginIntegrationTest {
 @SpringBootTest(
     properties = [
         "spring.profiles.active=local",
+        "skeleton.auth.dev-login.enabled=false",
     ],
 )
 @AutoConfigureMockMvc

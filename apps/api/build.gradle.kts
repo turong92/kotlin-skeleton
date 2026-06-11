@@ -6,6 +6,7 @@ dependencies {
     implementation(project(":modules:platform"))
     implementation(project(":modules:auth"))
     implementation(project(":modules:auth-social"))
+    implementation(project(":modules:config-aws-ssm"))
     implementation(project(":modules:idempotency"))
 
     implementation("org.springframework.boot:spring-boot-starter-actuator")
@@ -25,7 +26,6 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-flyway-test")
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("org.springframework.boot:spring-boot-testcontainers")
-    testImplementation(project(":modules:config-aws-ssm"))
     testImplementation(project(":modules:notification-slack"))
     testImplementation("org.springframework.security:spring-security-test")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")

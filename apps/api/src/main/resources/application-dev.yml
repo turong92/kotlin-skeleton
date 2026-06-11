@@ -13,7 +13,6 @@ skeleton:
   config:
     aws:
       ssm:
-        enabled: ${SKELETON_CONFIG_AWS_SSM_ENABLED:false}
         region: ${AWS_REGION:ap-northeast-2}
         credential-profile: ${AWS_PROFILE:}
         fail-fast: ${SKELETON_CONFIG_AWS_SSM_FAIL_FAST:true}
