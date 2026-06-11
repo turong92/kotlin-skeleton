@@ -9,6 +9,7 @@ Kotlin + Spring Boot 백엔드 토이 프로젝트의 공개 출발점.
 - `modules/auth` owns authentication contracts and future login flows.
 - `modules/auth-social` owns optional provider-neutral social-login contracts and endpoint routing.
 - `modules/auth-social-google`, `modules/auth-social-kakao`, and `modules/auth-social-naver` own optional provider-specific OAuth HTTP clients.
+- `modules/idempotency` owns optional `Idempotency-Key` command endpoint protection.
 - `modules/notification` owns provider-neutral notification contracts and the local broker default.
 - `modules/notification-sse` owns optional Spring MVC server-sent event delivery.
 - `modules/persistence-jpa` owns optional JPA audit timestamp mapping and lifecycle callbacks.
@@ -27,8 +28,8 @@ apps/api/src/main/kotlin/dev/sumin/skeleton/
 modules/platform/src/main/kotlin/dev/sumin/skeleton/common/
 ├── audit/                         # persistence-neutral audit timestamp contract
 ├── ApiError.kt                    # 표준 에러 응답 포맷
-├── ApiResponse.kt                 # 표준 성공 응답 envelope
-├── ApiResponseEntity.kt           # 201/202/204 ResponseEntity helper
+├── ApiResponse.kt                 # Response.ok/created/accepted/noContent + 표준 성공 응답 envelope
+├── ApiResponseEntity.kt           # old compatibility delegate
 ├── ApplicationException.kt        # 도메인 예외 베이스 클래스
 ├── GlobalExceptionHandler.kt      # 모든 예외 → ApiError 변환
 ├── http/                          # outbound WebClient facade, timeout/error mapping
@@ -63,6 +64,14 @@ modules/auth-social-kakao/src/main/kotlin/dev/sumin/skeleton/auth/social/kakao/
 modules/auth-social-naver/src/main/kotlin/dev/sumin/skeleton/auth/social/naver/
 └── NaverOAuthProvider.kt          # optional Naver authorization-code client
 
+modules/idempotency/src/main/kotlin/dev/sumin/skeleton/idempotency/
+├── IdempotentOperation.kt         # opt-in command endpoint annotation
+├── IdempotencyStore.kt            # storage/replay contract
+├── InMemoryIdempotencyStore.kt    # replaceable default store
+├── IdempotencyHandlerInterceptor.kt
+├── IdempotencyCachingFilter.kt
+└── IdempotencyAutoConfiguration.kt
+
 modules/notification/src/main/kotlin/dev/sumin/skeleton/notification/
 ├── NotificationEvent.kt           # notification DTO and severity
 ├── NotificationContracts.kt       # publisher/subscription contracts
@@ -92,6 +101,7 @@ modules/persistence-jdbc/src/main/kotlin/dev/sumin/skeleton/persistence/jdbc/
 - `modules/platform` 은 web/error/observability 공통 기반만 담당한다.
 - `modules/auth` 는 인증 계약과 향후 로그인 흐름을 담당한다.
 - `modules/auth-social` 은 선택형 소셜 로그인 공통 흐름을 담당한다. 실제 provider 구현은 `modules/auth-social-google|kakao|naver` 같은 선택 Gradle 모듈로 둔다.
+- `modules/idempotency` 는 중복 실행 방지가 필요한 command endpoint 만 담당한다. 저장소는 `IdempotencyStore` 로 교체한다.
 - `modules/notification` 은 알림 이벤트 계약과 기본 로컬 브로커를 담당한다. `modules/notification-sse` 는 웹 클라이언트 SSE 전달만 담당한다.
 - `modules/platform` 은 `TimeProvider`, `BaseAuditTimestamps` 같은 persistence-neutral 시간 계약만 둔다.
 - `modules/persistence-jpa|jdbc` 는 같은 audit 계약을 각 persistence annotation/callback 방식으로 구현한다.
@@ -101,12 +111,14 @@ modules/persistence-jdbc/src/main/kotlin/dev/sumin/skeleton/persistence/jdbc/
 
 - **REST 네임스페이스**: `/api/v1/*` — 컨트롤러에서 `@RequestMapping("/api/v1/...")`
 - **응답 포맷**:
-  - 성공 단건: `ApiResponse.value(dto)` → `{ value, meta }`
-  - 성공 목록: `ApiResponse.list(items)` → `{ values, meta }`
-  - 성공 페이지: `ApiResponse.page(items, pagination)` → `{ values, pagination, meta }`
-  - 생성: `@CreatedOperation` + `ApiResponseEntity.created(location, dto)` → `201 Created` + `Location`
-  - 비동기 시작: `@AcceptedOperation` + `ApiResponseEntity.accepted(dto)` → `202 Accepted`
-  - 삭제/토글/명령 완료: `@NoContentOperation` + `ApiResponseEntity.noContent()` → `204 No Content`
+  - 값 없음: `Response.ok()` → `{ meta }`
+  - 성공 단건: `Response.ok(dto)` → `{ value, meta }`
+  - 성공 목록: `Response.ok(items)` → `{ values, meta }`
+  - 성공 페이지: `Response.ok(items, pagination)` → `{ values, pagination, meta }`
+  - 커서 목록: `Response.ok(items, hasNext) { it.id }` → `{ values, cursor, meta }`
+  - 생성: `@CreatedOperation` + `Response.created(location, dto)` → `201 Created` + `Location`
+  - 비동기 시작: `@AcceptedOperation` + `Response.accepted(dto)` → `202 Accepted`
+  - 삭제/토글/명령 완료: `@NoContentOperation` + `Response.noContent()` → `204 No Content`
   - 컨트롤러/라우트는 `Any`, raw `Object`, 임의 `Map` 대신 명시적 response DTO를 반환한다.
   - 에러: [ApiError] (RFC 7807 변형 + traceId + timestamp)
 - **요청 검증**:
@@ -121,6 +133,7 @@ modules/persistence-jdbc/src/main/kotlin/dev/sumin/skeleton/persistence/jdbc/
   - code-first. DTO/반환 타입/auto-configuration 이 명세 원천이다.
   - 반복 명세는 module auto-configuration 이 담당한다. controller마다 공통 `ApiError`, trace header, bearer security 를 손으로 반복하지 않는다.
   - 생성/비동기/204 명세는 `@CreatedOperation`, `@AcceptedOperation`, `@NoContentOperation` 으로 표준화한다.
+  - 중복 실행 방지가 필요한 command endpoint 는 `@IdempotentOperation` 을 붙인다. OpenAPI 에 required `Idempotency-Key` header 와 `409` 응답이 자동 추가된다.
   - 엔드포인트 의미 설명이 필요할 때만 `@Operation`, 필드 의미가 필요할 때만 `@Schema` 를 추가한다.
 - **스키마 변경**: `apps/api/src/main/resources/db/migration/V{n}__{desc}.sql` — Flyway 마이그레이션만
 - **시간/DB timestamp**:
@@ -139,6 +152,12 @@ modules/persistence-jdbc/src/main/kotlin/dev/sumin/skeleton/persistence/jdbc/
   - raw `WebClient` 직접 생성보다 `ExternalHttpClient` 를 우선 사용한다.
   - `GET`/`POST`/`PUT`/`PATCH`/`DELETE` helper 로 호출하고, 각 호출에서 header/query/body/timeout/error mapper 를 조작한다.
   - 서버는 Spring MVC 를 유지한다. WebFlux 는 outbound WebClient runtime 용으로만 사용한다.
+- **Idempotency**:
+  - Optional module: `modules/idempotency`
+  - `@IdempotentOperation` 은 `Idempotency-Key` 필수 command endpoint 를 뜻한다. optional mode 는 만들지 않는다.
+  - missing key → `400 ApiError`, same key + different request fingerprint → `409 ApiError`, in-progress duplicate → `409 ApiError`
+  - same key + same method/path/query/body fingerprint 는 첫 응답 status/body/Location 을 replay 한다.
+  - 기본 저장소는 in-memory skeleton 용이다. 운영에서는 Redis/JDBC 등으로 `IdempotencyStore` bean 을 교체한다.
 - **Notification**:
   - 서버 내부 알림 발행은 `NotificationPublisher` 를 사용한다.
   - 웹 전달이 필요할 때만 `modules/notification-sse` 를 앱에 추가한다.

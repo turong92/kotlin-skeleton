@@ -44,6 +44,7 @@ class WebPolicyIntegrationTest {
     fun `forwarded headers affect created Location`() {
         mockMvc.post("/api/v1/examples/items") {
             header("Authorization", "Bearer ${loginAccessToken()}")
+            header("Idempotency-Key", "web-policy-forwarded-location")
             header("X-Forwarded-Proto", "https")
             header("X-Forwarded-Host", "api.example.com")
             contentType = MediaType.APPLICATION_JSON

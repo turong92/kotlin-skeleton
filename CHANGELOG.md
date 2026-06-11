@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 로그 correlation 패턴에 `traceId`, `spanId`, `parentSpanId` 모두 출력
 - 에러 응답과 응답 헤더에 `spanId` 포함
 - Standard success response envelopes: single `{value, meta}`, list `{values, meta}`, page `{values, pagination, meta}`
+- `Response` helper and envelope DTOs: `BasicResponse`, `DataResponse`, `ListResponse`, `PageResponse`, and `CursorResponse`
 - Standard REST operation contracts: `201 Created` with `Location`, `202 Accepted`, `204 No Content`, and reusable `PageQuery`
 - Web platform capability: public endpoint registry for `permitAll`, forwarded/security headers, CORS scaffold, rate-limit scaffold, and WebClient-based outbound HTTP facade
 - Module-composed OpenAPI docs: platform contributes standard schemas/trace/error responses, auth contributes bearer JWT security, and auth-social contributes its functional route docs
@@ -26,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - overridable Spring Boot auth auto-configuration defaults for app-specific repositories and security chains
 - `modules/auth-social` optional social-login capability with provider-neutral OAuth contracts, account-link resolution, fake-provider integration tests, and `/api/v1/auth/social/{provider}/login`
 - Optional social OAuth provider client modules: `modules/auth-social-google`, `modules/auth-social-kakao`, and `modules/auth-social-naver`
+- `modules/idempotency` optional command endpoint protection with `@IdempotentOperation`, required `Idempotency-Key`, request fingerprinting, replay headers, and replaceable `IdempotencyStore`
 - `ExternalHttpClient.postForm(...)` and per-call `baseUrl(...)` overrides for OAuth/payment-style external APIs
 - `modules/notification` optional notification contracts with a replaceable in-memory broker
 - `modules/notification-sse` optional Spring MVC SSE delivery through `GET /api/v1/notifications/sse`

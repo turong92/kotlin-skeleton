@@ -9,14 +9,14 @@ object ApiResponseEntity {
         value: T,
         meta: ResponseMeta = ResponseMeta.current(),
     ): ResponseEntity<ApiValueResponse<T>> =
-        ResponseEntity.created(location).body(ApiResponse.value(value, meta))
+        Response.created(location, value, meta)
 
     fun <T> accepted(
         value: T,
         meta: ResponseMeta = ResponseMeta.current(),
     ): ResponseEntity<ApiValueResponse<T>> =
-        ResponseEntity.accepted().body(ApiResponse.value(value, meta))
+        Response.accepted(value, meta)
 
     fun noContent(): ResponseEntity<Void> =
-        ResponseEntity.noContent().build()
+        Response.noContent()
 }

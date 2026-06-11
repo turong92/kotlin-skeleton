@@ -17,6 +17,7 @@ modules/
   auth-social-google  # optional Google OAuth provider client
   auth-social-kakao   # optional Kakao OAuth provider client
   auth-social-naver   # optional Naver OAuth provider client
+  idempotency          # optional Idempotency-Key support for command endpoints
   notification         # optional notification contracts and local broker
   notification-sse     # optional server-to-web SSE notification delivery
   persistence-jpa      # optional JPA audit timestamp support
@@ -30,6 +31,7 @@ Use modules as capability choices:
 - `modules/auth` is included when the app needs authentication. Its default beans are Spring Boot auto-configuration defaults, so an app can replace `AuthAccountRepository`, `SecurityFilterChain`, token service, or filters with its own beans. It also contributes JWT bearer security metadata to OpenAPI.
 - `modules/auth-social` is included when the app needs social login. Its default beans are also auto-configuration defaults, so account links, provisioning policy, and the social auth handler can be replaced. It also contributes the social-login endpoint to OpenAPI.
 - `modules/auth-social-google`, `modules/auth-social-kakao`, and `modules/auth-social-naver` are optional provider clients. Add only the provider modules an application actually needs.
+- `modules/idempotency` is included when command endpoints need `Idempotency-Key` protection. It contributes the `@IdempotentOperation` annotation, request fingerprinting, replay headers, an in-memory default store, and OpenAPI header documentation.
 - `modules/notification` is included when the app needs server-side notification publishing. `modules/notification-sse` adds web delivery through Spring MVC server-sent events.
 - `modules/persistence-jpa` and `modules/persistence-jdbc` are optional persistence adapters. Both use the same platform audit-time contract while keeping JPA/JDBC annotations and lifecycle behavior inside the selected persistence module.
 
@@ -177,6 +179,35 @@ externalHttpClient.post(
 The default client supports `GET`, `POST`, `PUT`, `PATCH`, and `DELETE`, propagates trace headers, applies timeout/error mapping, and can be customized per named client through `ExternalHttpClientCustomizer` or `ExternalHttpErrorMapper`.
 It also supports `postForm(...)` for OAuth/payment-style form-urlencoded APIs and per-call `baseUrl(...)` overrides for calls whose token/profile hosts differ.
 
+## Idempotency Capability
+
+`modules/idempotency` is optional command-endpoint protection:
+
+```kotlin
+dependencies {
+    implementation(project(":modules:idempotency"))
+}
+```
+
+Mark endpoints that must not execute twice:
+
+```kotlin
+@PostMapping("/orders")
+@CreatedOperation
+@IdempotentOperation
+fun createOrder(
+    @Valid @RequestBody request: OrderCreateRequest,
+) = Response.created(location = location, value = order)
+```
+
+- `@IdempotentOperation` means `Idempotency-Key` is required.
+- Missing key returns `400 ApiError`.
+- Same key + same method/path/query/body fingerprint replays the first stored response.
+- Same key + different fingerprint returns `409 ApiError`.
+- Same key while the first request is still processing returns `409 ApiError`.
+- Default storage is in-memory and replaceable by defining an `IdempotencyStore` bean.
+- Response headers include `Idempotency-Key` and `X-Idempotency-Replayed`.
+
 ## Persistence Audit Capability
 
 `modules/platform` defines the shared time contract:
@@ -272,13 +303,15 @@ docker compose up -d
 - 기본 API 네임스페이스: `/api/v1/*` (컨트롤러에서 `@RequestMapping("/api/v1/...")`)
 - 헬스체크: `/health` (Spring Boot Actuator)
 - 성공 응답은 `modules/platform` 의 envelope DTO를 사용한다.
-  - 단건: `ApiResponse.value(dto)` → `{ "value": ..., "meta": ... }`
-  - 목록: `ApiResponse.list(items)` → `{ "values": [...], "meta": ... }`
-  - 페이지: `ApiResponse.page(items, pagination)` → `{ "values": [...], "pagination": ..., "meta": ... }`
-- 생성/명령성 작업은 `ApiResponseEntity` 와 표준 OpenAPI annotation 을 같이 사용한다.
-  - 생성: `@CreatedOperation` + `ApiResponseEntity.created(location, dto)` → `201 Created`, `Location`, `{ "value": ..., "meta": ... }`
-  - 비동기 시작: `@AcceptedOperation` + `ApiResponseEntity.accepted(dto)` → `202 Accepted`, `{ "value": ..., "meta": ... }`
-  - 삭제/토글/명령 완료: `@NoContentOperation` + `ApiResponseEntity.noContent()` → `204 No Content`
+  - 값 없음: `Response.ok()` → `{ "meta": ... }`
+  - 단건: `Response.ok(dto)` → `{ "value": ..., "meta": ... }`
+  - 목록: `Response.ok(items)` → `{ "values": [...], "meta": ... }`
+  - 페이지: `Response.ok(items, pagination)` → `{ "values": [...], "pagination": ..., "meta": ... }`
+  - 커서: `Response.ok(items, hasNext) { it.id }` → `{ "values": [...], "cursor": ..., "meta": ... }`
+- 생성/명령성 작업은 `Response` helper 와 표준 OpenAPI annotation 을 같이 사용한다.
+  - 생성: `@CreatedOperation` + `Response.created(location, dto)` → `201 Created`, `Location`, `{ "value": ..., "meta": ... }`
+  - 비동기 시작: `@AcceptedOperation` + `Response.accepted(dto)` → `202 Accepted`, `{ "value": ..., "meta": ... }`
+  - 삭제/토글/명령 완료: `@NoContentOperation` + `Response.noContent()` → `204 No Content`
 - 페이지 요청은 `@Valid @ParameterObject @ModelAttribute pageQuery: PageQuery` 를 기본으로 쓴다. 기본값은 `page=0`, `size=20`, 최대 `size=100` 이다.
 - `meta` 에는 현재 요청의 `traceId`, `spanId`, `timestamp` 가 들어간다.
 - 에러 응답은 기존 `ApiError` shape를 유지한다.

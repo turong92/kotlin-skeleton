@@ -1,18 +1,16 @@
 package dev.sumin.skeleton.api
 
-import dev.sumin.skeleton.common.ApiPageResponse
-import dev.sumin.skeleton.common.ApiResponse
-import dev.sumin.skeleton.common.ApiResponseEntity
-import dev.sumin.skeleton.common.ApiValueResponse
 import dev.sumin.skeleton.common.PageQuery
+import dev.sumin.skeleton.common.PageResponse
+import dev.sumin.skeleton.common.Response
 import dev.sumin.skeleton.common.openapi.AcceptedOperation
 import dev.sumin.skeleton.common.openapi.CreatedOperation
 import dev.sumin.skeleton.common.openapi.NoContentOperation
+import dev.sumin.skeleton.idempotency.IdempotentOperation
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
 import org.springdoc.core.annotations.ParameterObject
-import org.springframework.http.ResponseEntity
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
@@ -49,27 +47,29 @@ data class ExampleJobResponse(
 class OperationExampleController {
     @PostMapping("/items")
     @CreatedOperation
+    @IdempotentOperation
     fun createItem(
         @Valid @RequestBody request: ExampleItemCreateRequest,
-    ): ResponseEntity<ApiValueResponse<ExampleItemResponse>> {
-        val item = ExampleItemResponse(id = "item-1", name = request.name)
-        val location = ServletUriComponentsBuilder.fromCurrentRequest()
-            .path("/{id}")
-            .buildAndExpand(item.id)
-            .toUri()
-
-        return ApiResponseEntity.created(location = location, value = item)
-    }
+    ) = ExampleItemResponse(id = "item-1", name = request.name)
+        .let { item ->
+            Response.created(
+                location = ServletUriComponentsBuilder.fromCurrentRequest()
+                    .path("/{id}")
+                    .buildAndExpand(item.id)
+                    .toUri(),
+                value = item,
+            )
+        }
 
     @DeleteMapping("/items/{id}")
     @NoContentOperation
-    fun deleteItem(@PathVariable id: String): ResponseEntity<Void> =
-        ApiResponseEntity.noContent()
+    fun deleteItem(@PathVariable id: String) =
+        Response.noContent()
 
     @PostMapping("/jobs")
     @AcceptedOperation
-    fun startJob(): ResponseEntity<ApiValueResponse<ExampleJobResponse>> =
-        ApiResponseEntity.accepted(
+    fun startJob() =
+        Response.accepted(
             ExampleJobResponse(
                 jobId = "job-1",
                 status = "QUEUED",
@@ -79,12 +79,12 @@ class OperationExampleController {
     @GetMapping("/items")
     fun listItems(
         @Valid @ParameterObject @ModelAttribute pageQuery: PageQuery,
-    ): ApiPageResponse<ExampleItemResponse> {
+    ): PageResponse<ExampleItemResponse> {
         val items = exampleItems()
         val fromIndex = pageQuery.offset().coerceAtMost(items.size)
         val toIndex = (fromIndex + pageQuery.size).coerceAtMost(items.size)
 
-        return ApiResponse.page(
+        return Response.ok(
             values = items.subList(fromIndex, toIndex),
             pagination = pageQuery.toPagination(totalElements = items.size.toLong()),
         )

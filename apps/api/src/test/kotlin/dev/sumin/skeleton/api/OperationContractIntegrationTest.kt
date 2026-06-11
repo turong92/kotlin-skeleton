@@ -27,6 +27,7 @@ class OperationContractIntegrationTest {
     fun `POST example item returns created response with location and value envelope`() {
         mockMvc.post("/api/v1/examples/items") {
             header("Authorization", "Bearer ${loginAccessToken()}")
+            header("Idempotency-Key", "operation-contract-create-item")
             contentType = MediaType.APPLICATION_JSON
             accept = MediaType.APPLICATION_JSON
             content = """{"name":"sample"}"""

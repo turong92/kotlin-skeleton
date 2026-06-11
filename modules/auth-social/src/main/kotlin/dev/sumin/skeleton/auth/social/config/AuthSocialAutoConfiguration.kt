@@ -12,7 +12,7 @@ import dev.sumin.skeleton.auth.social.oauth.OAuthAccountProvisioningPolicy
 import dev.sumin.skeleton.auth.social.oauth.OAuthProvider
 import dev.sumin.skeleton.auth.social.oauth.OAuthProviderRegistry
 import dev.sumin.skeleton.auth.social.oauth.OAuthSocialLoginService
-import dev.sumin.skeleton.common.ApiResponse
+import dev.sumin.skeleton.common.Response
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.context.properties.EnableConfigurationProperties
@@ -86,6 +86,6 @@ class AuthSocialAutoConfiguration {
             )
             ServerResponse.ok()
                 .contentType(MediaType.APPLICATION_JSON)
-                .body(ApiResponse.value(response))
+                .body(Response.ok(response))
         }
 }

@@ -68,7 +68,7 @@ class AuthSocialOpenApiAutoConfiguration {
             )
             .responses(
                 ApiResponses()
-                    .addApiResponse("200", jsonResponse("OK", "#/components/schemas/ApiValueResponseAuthTokenResponse"))
+                    .addApiResponse("200", jsonResponse("OK", "#/components/schemas/DataResponseAuthTokenResponse"))
                     .addApiResponse("400", jsonResponse("Bad request", "#/components/schemas/ApiError"))
                     .addApiResponse("404", jsonResponse("Resource not found", "#/components/schemas/ApiError"))
                     .addApiResponse("500", jsonResponse("Internal server error", "#/components/schemas/ApiError")),

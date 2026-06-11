@@ -8,8 +8,23 @@ import kotlin.test.assertTrue
 
 class ApiResponseTest {
     @Test
-    fun `value wraps a single DTO with metadata`() {
-        val response = ApiResponse.value(
+    fun `ok without value returns basic response metadata`() {
+        val response = Response.ok(
+            meta = ResponseMeta(
+                traceId = "trace",
+                spanId = "span",
+                timestamp = "2026-06-06T00:00:00Z",
+            ),
+        )
+
+        assertEquals("trace", response.meta.traceId)
+        assertEquals("span", response.meta.spanId)
+        assertEquals("2026-06-06T00:00:00Z", response.meta.timestamp)
+    }
+
+    @Test
+    fun `ok wraps a custom DTO with metadata`() {
+        val response: DataResponse<SampleDto> = Response.ok(
             value = SampleDto(id = "sample-1"),
             meta = ResponseMeta(
                 traceId = "trace",
@@ -25,8 +40,8 @@ class ApiResponseTest {
     }
 
     @Test
-    fun `list wraps collection values with metadata`() {
-        val response = ApiResponse.list(
+    fun `ok wraps list values with metadata`() {
+        val response: ListResponse<SampleDto> = Response.ok(
             values = listOf(SampleDto(id = "sample-1"), SampleDto(id = "sample-2")),
             meta = ResponseMeta(traceId = "trace"),
         )
@@ -36,8 +51,8 @@ class ApiResponseTest {
     }
 
     @Test
-    fun `page wraps collection values with pagination and metadata`() {
-        val response = ApiResponse.page(
+    fun `ok wraps page values with pagination and metadata`() {
+        val response: PageResponse<SampleDto> = Response.ok(
             values = listOf(SampleDto(id = "sample-1")),
             pagination = PaginationMeta(
                 page = 1,
@@ -60,6 +75,18 @@ class ApiResponseTest {
     }
 
     @Test
+    fun `ok wraps cursor values with cursor metadata`() {
+        val response: CursorResponse<SampleDto> = Response.ok(
+            values = listOf(SampleDto(id = "sample-1"), SampleDto(id = "sample-2")),
+            hasNext = true,
+        ) { it.id }
+
+        assertEquals("sample-2", response.cursor.nextCursor)
+        assertTrue(response.cursor.hasNext)
+        assertEquals(2, response.values.size)
+    }
+
+    @Test
     fun `pagination can be created from page request and total count`() {
         val first = PaginationMeta.of(page = 0, size = 10, totalElements = 21)
         val last = PaginationMeta.of(page = 2, size = 10, totalElements = 21)
@@ -74,7 +101,7 @@ class ApiResponseTest {
     @Test
     fun `response metadata omits null trace fields when serialized`() {
         val json = ObjectMapper().writeValueAsString(
-            ApiResponse.value(
+            Response.ok(
                 value = SampleDto(id = "sample-1"),
                 meta = ResponseMeta(traceId = "trace", spanId = null, timestamp = "2026-06-06T00:00:00Z"),
             ),

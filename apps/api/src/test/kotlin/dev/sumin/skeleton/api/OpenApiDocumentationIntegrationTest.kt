@@ -56,7 +56,7 @@ class OpenApiDocumentationIntegrationTest {
             docs,
             "$.paths['/api/v1/hello'].get.responses['200'].content['application/json'].schema['\$ref']",
         )
-        assertTrue(helloSchemaRef.contains("ApiValueResponse"))
+        assertTrue(helloSchemaRef.contains("DataResponse"))
 
         assertEquals(
             "#/components/schemas/ApiError",
@@ -73,13 +73,16 @@ class OpenApiDocumentationIntegrationTest {
             docs,
             "$.paths['/api/v1/auth/social/{provider}/login'].post.responses['200'].content['application/json'].schema['\$ref']",
         )
-        assertTrue(socialLoginSchemaRef.contains("ApiValueResponse"))
+        assertTrue(socialLoginSchemaRef.contains("DataResponse"))
 
         val createdItemSchemaRef = JsonPath.read<String>(
             docs,
             "$.paths['/api/v1/examples/items'].post.responses['201'].content['application/json'].schema['\$ref']",
         )
-        assertTrue(createdItemSchemaRef.contains("ApiValueResponse"))
+        assertTrue(createdItemSchemaRef.contains("DataResponse"))
+        val createItemParameters = JsonPath.read<List<Map<String, Any?>>>(docs, "$.paths['/api/v1/examples/items'].post.parameters")
+        val idempotencyKey = createItemParameters.first { it["name"] == "Idempotency-Key" && it["in"] == "header" }
+        assertEquals(true, idempotencyKey["required"])
         assertEquals(
             "Created resource URI",
             JsonPath.read(docs, "$.paths['/api/v1/examples/items'].post.responses['201'].headers.Location.description"),
@@ -89,7 +92,7 @@ class OpenApiDocumentationIntegrationTest {
             docs,
             "$.paths['/api/v1/examples/jobs'].post.responses['202'].content['application/json'].schema['\$ref']",
         )
-        assertTrue(acceptedJobSchemaRef.contains("ApiValueResponse"))
+        assertTrue(acceptedJobSchemaRef.contains("DataResponse"))
 
         assertEquals(
             "No content",

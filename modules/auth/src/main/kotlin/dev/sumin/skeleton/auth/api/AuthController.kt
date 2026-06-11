@@ -3,9 +3,9 @@ package dev.sumin.skeleton.auth.api
 import dev.sumin.skeleton.auth.account.AccountIdentifier
 import dev.sumin.skeleton.auth.account.AuthAccountRepository
 import dev.sumin.skeleton.auth.principal.CurrentPrincipal
-import dev.sumin.skeleton.common.ApiResponse
-import dev.sumin.skeleton.common.ApiValueResponse
 import dev.sumin.skeleton.common.ApplicationException
+import dev.sumin.skeleton.common.DataResponse
+import dev.sumin.skeleton.common.Response
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Email
 import jakarta.validation.constraints.NotBlank
@@ -57,7 +57,7 @@ class AuthController(
     @PostMapping("/login")
     fun login(
         @Valid @RequestBody request: PasswordLoginRequest,
-    ): ApiValueResponse<AuthTokenResponse> {
+    ): DataResponse<AuthTokenResponse> {
         val identifier = try {
             AccountIdentifier.from(request.accountId, request.username, request.email)
         } catch (_: IllegalArgumentException) {
@@ -74,10 +74,10 @@ class AuthController(
             throw InvalidCredentialsException()
         }
 
-        return ApiResponse.value(authTokenResponseFactory.issue(account))
+        return Response.ok(authTokenResponseFactory.issue(account))
     }
 
     @GetMapping("/me")
-    fun me(authentication: Authentication): ApiValueResponse<CurrentPrincipal> =
-        ApiResponse.value(authentication.principal as CurrentPrincipal)
+    fun me(authentication: Authentication): DataResponse<CurrentPrincipal> =
+        Response.ok(authentication.principal as CurrentPrincipal)
 }

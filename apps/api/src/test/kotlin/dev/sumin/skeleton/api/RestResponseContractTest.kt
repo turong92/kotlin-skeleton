@@ -12,6 +12,7 @@ class RestResponseContractTest {
     fun `REST handlers return explicit response DTOs`() {
         val handlers = listOf(
             HelloController::class,
+            OperationExampleController::class,
             AuthController::class,
             OAuthSocialAuthController::class,
         )
