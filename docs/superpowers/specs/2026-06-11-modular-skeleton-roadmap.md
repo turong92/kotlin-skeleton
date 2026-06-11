@@ -45,7 +45,7 @@
 
 ## Priority Checklist
 
-### 1. `modules:notification-slack` - Planned
+### 1. `modules:notification-slack` - Done (base webhook + sync exception alerts)
 
 Old references:
 
@@ -59,31 +59,31 @@ Old references:
 
 Absorb:
 
-- [ ] Slack webhook sender with retry and no-op disabled mode.
-- [ ] Slack block message builder for operational alerts.
-- [ ] `@SlackExceptionNotify` concept for sync exception notification.
+- [x] Slack webhook sender with retry and no-op disabled mode.
+- [x] Slack block message builder for operational alerts.
+- [x] `@SlackExceptionNotify` concept for sync exception notification.
 - [ ] Optional async exception hook if it can be integrated cleanly.
-- [ ] Trace fields: `traceId`, `spanId`, `parentSpanId`, and optional
-  Grafana/Loki URL.
-- [ ] Context contributor API for account, user, tenant, plan, route, or
+- [x] Trace fields: `traceId`, `spanId`, `parentSpanId` when MDC has them.
+- [ ] Optional Grafana/Loki URL.
+- [x] Context contributor API for account, user, tenant, plan, route, or
   domain-specific fields.
-- [ ] Topic/severity based routing instead of old hard-coded flags like
+- [x] Topic/severity based routing instead of old hard-coded flags like
   `isPayment` and `isSign`.
 
 Do not absorb directly:
 
-- [ ] Domain service lookups from the aspect.
-- [ ] Static profile state.
-- [ ] Unbounded request body forwarding.
-- [ ] Slack failures that break the original request.
+- [x] Domain service lookups from the aspect.
+- [x] Static profile state.
+- [x] Unbounded request body forwarding.
+- [x] Slack failures that break the original request.
 
 Acceptance:
 
-- [ ] Disabled or missing webhook does not fail startup by default.
-- [ ] Annotation sends one alert for a matching exception.
-- [ ] `exclude` prevents alert delivery.
-- [ ] Alert includes trace fields when MDC has them.
-- [ ] Sensitive headers/body fields are redacted or absent.
+- [x] Disabled or missing webhook does not fail startup by default.
+- [x] Annotation sends one alert for a matching exception.
+- [x] `exclude` prevents alert delivery.
+- [x] Alert includes trace fields when MDC has them.
+- [x] Sensitive headers/body fields are redacted or absent by default.
 
 ### 2. `modules:lock-redisson` - Planned
 
@@ -392,3 +392,5 @@ above and add the commit hash or PR reference here.
 ## Completion Log
 
 - 2026-06-11: Roadmap created from the old `be-api` review.
+- 2026-06-11: `notification-slack` base module completed. Implementation
+  commit: `3f5bfe9`.
