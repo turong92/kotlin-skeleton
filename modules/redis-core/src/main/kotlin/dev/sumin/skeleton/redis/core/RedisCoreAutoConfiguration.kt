@@ -14,9 +14,11 @@ import org.springframework.data.redis.connection.lettuce.LettuceClientConfigurat
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory
 import org.springframework.data.redis.core.RedisTemplate
 import org.springframework.data.redis.core.StringRedisTemplate
-import org.springframework.data.redis.serializer.JacksonJsonRedisSerializer
+import org.springframework.data.redis.serializer.GenericJacksonJsonRedisSerializer
 import org.springframework.data.redis.serializer.RedisSerializer
 import org.springframework.data.redis.serializer.StringRedisSerializer
+import tools.jackson.databind.jsontype.BasicPolymorphicTypeValidator
+import tools.jackson.module.kotlin.kotlinModule
 
 @AutoConfiguration
 @EnableConfigurationProperties(RedisCoreProperties::class)
@@ -33,8 +35,20 @@ class RedisCoreAutoConfiguration {
 
     @Bean("redisJsonSerializer")
     @ConditionalOnMissingBean(name = ["redisJsonSerializer"])
-    fun redisJsonSerializer(): RedisSerializer<Any> =
-        JacksonJsonRedisSerializer(Any::class.java)
+    fun redisJsonSerializer(): RedisSerializer<Any> {
+        val typeValidator = BasicPolymorphicTypeValidator.builder()
+            .allowIfSubType("dev.sumin.skeleton.")
+            .allowIfSubType("java.time.")
+            .allowIfSubType("java.util.")
+            .allowIfSubTypeIsArray()
+            .allowSubTypesWithExplicitDeserializer()
+            .build()
+
+        return GenericJacksonJsonRedisSerializer.builder()
+            .enableDefaultTyping(typeValidator)
+            .customize { builder -> builder.addModule(kotlinModule()) }
+            .build()
+    }
 
     @Bean
     @ConditionalOnMissingBean

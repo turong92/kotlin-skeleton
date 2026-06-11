@@ -80,4 +80,21 @@ class RedisCoreAutoConfigurationTest {
             assertThat(context.getBean("redisJsonSerializer", RedisSerializer::class.java)).isNotNull()
         }
     }
+
+    @Test
+    fun `json serializer round trips custom payload type without redis`() {
+        contextRunner.run { context ->
+            @Suppress("UNCHECKED_CAST")
+            val serializer = context.getBean("redisJsonSerializer", RedisSerializer::class.java) as RedisSerializer<Any>
+            val payload = SamplePayload(1, "sample")
+
+            val serialized = serializer.serialize(payload)
+            val deserialized = serializer.deserialize(serialized)
+
+            assertThat(deserialized).isInstanceOf(SamplePayload::class.java)
+            assertThat(deserialized).isEqualTo(payload)
+        }
+    }
 }
+
+private data class SamplePayload(val id: Long, val name: String)
