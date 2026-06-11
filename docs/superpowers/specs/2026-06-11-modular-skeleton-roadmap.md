@@ -235,7 +235,7 @@ Acceptance:
 - [ ] File validation rejects unsupported extension and size.
 - [ ] Multipart flow exposes stable DTOs.
 
-### 7. `modules:config-aws-ssm` - Planned
+### 7. `modules:config-aws-ssm` - Done
 
 Old references:
 
@@ -243,23 +243,23 @@ Old references:
 
 Absorb:
 
-- [ ] Load Parameter Store paths into Spring property sources.
-- [ ] Support profile-based path mapping.
-- [ ] Local override over shared dev values if configured.
+- [x] Load Parameter Store paths into Spring property sources.
+- [x] Support profile-based path mapping.
+- [x] Local override over shared dev values if configured.
 
 Standardize:
 
-- [ ] Do not hard-code old `/wkwk/...` paths.
-- [ ] Use `skeleton.aws.ssm.paths`.
-- [ ] Default to disabled.
-- [ ] Decide fail-fast vs warn-only by property.
+- [x] Do not hard-code old `/wkwk/...` paths.
+- [x] Use `skeleton.config.aws.ssm.paths`.
+- [x] Default to disabled.
+- [x] Decide fail-fast vs warn-only by property.
 
 Acceptance:
 
-- [ ] Disabled mode does nothing.
-- [ ] Multiple paths merge in order.
-- [ ] Later paths override earlier paths.
-- [ ] AWS failure behavior follows configured policy.
+- [x] Disabled mode does nothing.
+- [x] Multiple paths merge in order.
+- [x] Later paths override earlier paths.
+- [x] AWS failure behavior follows configured policy.
 
 ### 8. `modules:event-kafka` - Planned
 
@@ -394,3 +394,5 @@ above and add the commit hash or PR reference here.
 - 2026-06-11: Roadmap created from the old `be-api` review.
 - 2026-06-11: `notification-slack` base module completed. Implementation
   commit: `3f5bfe9`.
+- 2026-06-11: `config-aws-ssm` module completed with EnvironmentPostProcessor
+  based SSM property loading.
