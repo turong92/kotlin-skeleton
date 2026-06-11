@@ -38,3 +38,16 @@ out/
 
 ### Kotlin ###
 .kotlin
+
+### Local configuration / secrets ###
+.env
+.env.*
+!.env.example
+application-*.private.yml
+application-*.private.yaml
+application-*.private.properties
+application-*.secret.yml
+application-*.secret.yaml
+application-*.secret.properties
+*ssm*dump*
+*ssm*export*

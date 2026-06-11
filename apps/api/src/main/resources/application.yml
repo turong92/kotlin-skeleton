@@ -33,3 +33,27 @@ logging:
     org.flywaydb.core.internal.database.base.Database: ERROR
   pattern:
     correlation: "%clr(%X{traceContext:-}){faded} "
+
+skeleton:
+  config:
+    validation:
+      enabled: true
+      fail-fast: true
+      requirements:
+        - property: skeleton.auth.jwt.secret
+          env: JWT_SECRET
+          ssm: /kotlin-skeleton/{profile}/skeleton.auth.jwt.secret
+          profiles: [dev, staging, prod]
+          allow-dummy-profiles: [local]
+          secret: true
+          description: JWT signing secret
+        - property: spring.datasource.password
+          env: SPRING_DATASOURCE_PASSWORD
+          ssm: /kotlin-skeleton/{profile}/spring.datasource.password
+          profiles: [dev, staging, prod]
+          secret: true
+          description: Database password
+  auth:
+    jwt:
+      issuer: ${JWT_ISSUER:kotlin-skeleton}
+      secret: ${JWT_SECRET:dev-local-jwt-secret-change-me-32-bytes}

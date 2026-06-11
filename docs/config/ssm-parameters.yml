@@ -1,0 +1,30 @@
+parameters:
+  - path: /kotlin-skeleton/dev/common/
+    profile: dev
+    description: Shared dev values.
+  - path: /kotlin-skeleton/dev/api/
+    profile: dev
+    description: API-specific dev values.
+  - path: /kotlin-skeleton/local/api/
+    profile: local
+    description: Optional local overrides.
+  - path: /kotlin-skeleton/staging/common/
+    profile: staging
+    description: Shared staging values.
+  - path: /kotlin-skeleton/staging/api/
+    profile: staging
+    description: API-specific staging values.
+  - path: /kotlin-skeleton/prod/common/
+    profile: prod
+    description: Shared production values.
+  - path: /kotlin-skeleton/prod/api/
+    profile: prod
+    description: API-specific production values.
+
+required-keys:
+  - property: skeleton.auth.jwt.secret
+    key: skeleton.auth.jwt.secret
+    secret: true
+  - property: spring.datasource.password
+    key: spring.datasource.password
+    secret: true

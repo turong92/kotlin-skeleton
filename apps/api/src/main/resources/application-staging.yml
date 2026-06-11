@@ -1,0 +1,31 @@
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:}
+    username: ${SPRING_DATASOURCE_USERNAME:}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+  flyway:
+    enabled: ${FLYWAY_ENABLED:true}
+
+server:
+  port: ${SERVER_PORT:8080}
+
+skeleton:
+  config:
+    aws:
+      ssm:
+        enabled: ${SKELETON_CONFIG_AWS_SSM_ENABLED:false}
+        region: ${AWS_REGION:ap-northeast-2}
+        credential-profile: ${AWS_PROFILE:}
+        fail-fast: ${SKELETON_CONFIG_AWS_SSM_FAIL_FAST:true}
+        paths:
+          - /kotlin-skeleton/staging/common/
+          - /kotlin-skeleton/staging/api/
+  auth:
+    jwt:
+      secret: ${JWT_SECRET:}
+    dev-login:
+      enabled: false
+    break-glass:
+      enabled: ${BREAK_GLASS_ENABLED:false}
+      secret: ${BREAK_GLASS_SECRET:}
+      allowed-account-ids: ${BREAK_GLASS_ALLOWED_ACCOUNT_IDS:}

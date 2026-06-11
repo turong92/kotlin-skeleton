@@ -1,0 +1,29 @@
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/app?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true}
+    username: ${SPRING_DATASOURCE_USERNAME:app}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+  flyway:
+    enabled: ${FLYWAY_ENABLED:true}
+
+server:
+  port: ${SERVER_PORT:8080}
+
+skeleton:
+  config:
+    aws:
+      ssm:
+        enabled: ${SKELETON_CONFIG_AWS_SSM_ENABLED:false}
+        region: ${AWS_REGION:ap-northeast-2}
+        credential-profile: ${AWS_PROFILE:}
+        fail-fast: ${SKELETON_CONFIG_AWS_SSM_FAIL_FAST:true}
+        paths:
+          - /kotlin-skeleton/dev/common/
+          - /kotlin-skeleton/dev/api/
+  auth:
+    jwt:
+      secret: ${JWT_SECRET:}
+    dev-login:
+      enabled: ${DEV_LOGIN_ENABLED:false}
+    break-glass:
+      enabled: ${BREAK_GLASS_ENABLED:false}

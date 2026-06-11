@@ -1,0 +1,15 @@
+required:
+  - property: skeleton.auth.jwt.secret
+    env: JWT_SECRET
+    ssm: /kotlin-skeleton/{profile}/skeleton.auth.jwt.secret
+    profiles: [dev, staging, prod]
+    allow-dummy: [local]
+    secret: true
+    description: JWT signing secret.
+
+  - property: spring.datasource.password
+    env: SPRING_DATASOURCE_PASSWORD
+    ssm: /kotlin-skeleton/{profile}/spring.datasource.password
+    profiles: [dev, staging, prod]
+    secret: true
+    description: Database password.
