@@ -47,6 +47,8 @@ skeleton:
       retry-attempts: ${SKELETON_REDIS_LOCK_REDISSON_RETRY_ATTEMPTS:3}
       retry-interval: ${SKELETON_REDIS_LOCK_REDISSON_RETRY_INTERVAL:1500ms}
       timeout: ${SKELETON_REDIS_LOCK_REDISSON_TIMEOUT:3s}
+  event-kafka:
+    environment: ${SKELETON_EVENT_KAFKA_ENVIRONMENT:dev}
   auth:
     jwt:
       secret: ${JWT_SECRET:}

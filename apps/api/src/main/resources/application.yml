@@ -57,3 +57,78 @@ skeleton:
     jwt:
       issuer: ${JWT_ISSUER:kotlin-skeleton}
       secret: ${JWT_SECRET:dev-local-jwt-secret-change-me-32-bytes}
+  redis-cache:
+    enabled: ${SKELETON_REDIS_CACHE_ENABLED:false}
+    default-ttl: ${SKELETON_REDIS_CACHE_DEFAULT_TTL:10m}
+    failure-policy: ${SKELETON_REDIS_CACHE_FAILURE_POLICY:FAIL_OPEN}
+    no-op-fallback:
+      enabled: ${SKELETON_REDIS_CACHE_NO_OP_FALLBACK_ENABLED:false}
+  redis-rate-limit:
+    enabled: ${SKELETON_REDIS_RATE_LIMIT_ENABLED:false}
+    failure-policy: ${SKELETON_REDIS_RATE_LIMIT_FAILURE_POLICY:FAIL_OPEN}
+    key-namespace: ${SKELETON_REDIS_RATE_LIMIT_KEY_NAMESPACE:api}
+  scheduler:
+    enabled: ${SKELETON_SCHEDULER_ENABLED:false}
+    zone: ${SKELETON_SCHEDULER_ZONE:UTC}
+    pool-size: ${SKELETON_SCHEDULER_POOL_SIZE:2}
+    local-execution:
+      enabled: ${SKELETON_SCHEDULER_LOCAL_EXECUTION_ENABLED:true}
+  storage:
+    validation:
+      max-size-bytes: ${SKELETON_STORAGE_MAX_SIZE_BYTES:10485760}
+      allowed-content-types: ${SKELETON_STORAGE_ALLOWED_CONTENT_TYPES:}
+      allowed-extensions: ${SKELETON_STORAGE_ALLOWED_EXTENSIONS:}
+  storage-s3:
+    enabled: ${SKELETON_STORAGE_S3_ENABLED:false}
+    bucket: ${SKELETON_STORAGE_S3_BUCKET:}
+    region: ${AWS_REGION:ap-northeast-2}
+    endpoint-override: ${SKELETON_STORAGE_S3_ENDPOINT_OVERRIDE:}
+    path-style-access-enabled: ${SKELETON_STORAGE_S3_PATH_STYLE_ACCESS_ENABLED:false}
+    credentials:
+      profile: ${AWS_PROFILE:}
+    presign:
+      upload: ${SKELETON_STORAGE_S3_PRESIGN_UPLOAD:10m}
+      download: ${SKELETON_STORAGE_S3_PRESIGN_DOWNLOAD:10m}
+      multipart-part: ${SKELETON_STORAGE_S3_PRESIGN_MULTIPART_PART:15m}
+    public-url:
+      base-url: ${SKELETON_STORAGE_S3_PUBLIC_URL_BASE_URL:}
+  event-kafka:
+    enabled: ${SKELETON_EVENT_KAFKA_ENABLED:false}
+    environment: ${SKELETON_EVENT_KAFKA_ENVIRONMENT:local}
+    topic-prefix: ${SKELETON_EVENT_KAFKA_TOPIC_PREFIX:}
+    producer:
+      enabled: ${SKELETON_EVENT_KAFKA_PRODUCER_ENABLED:true}
+      partition-key-strategy: ${SKELETON_EVENT_KAFKA_PARTITION_KEY_STRATEGY:EXPLICIT_OR_EVENT_ID}
+    consumer:
+      enabled: ${SKELETON_EVENT_KAFKA_CONSUMER_ENABLED:false}
+  notification-websocket:
+    enabled: ${SKELETON_NOTIFICATION_WEBSOCKET_ENABLED:false}
+    endpoint:
+      path: ${SKELETON_NOTIFICATION_WEBSOCKET_ENDPOINT_PATH:/ws/notifications}
+      allowed-origin-patterns: ${SKELETON_NOTIFICATION_WEBSOCKET_ALLOWED_ORIGIN_PATTERNS:http://localhost:[*],http://127.0.0.1:[*]}
+      sock-js-enabled: ${SKELETON_NOTIFICATION_WEBSOCKET_SOCKJS_ENABLED:false}
+    authentication:
+      enabled: ${SKELETON_NOTIFICATION_WEBSOCKET_AUTH_ENABLED:false}
+    broker:
+      bridge-enabled: ${SKELETON_NOTIFICATION_WEBSOCKET_BRIDGE_ENABLED:true}
+      notification-destination-prefix: ${SKELETON_NOTIFICATION_WEBSOCKET_TOPIC_PREFIX:/topic/notifications}
+      user-notification-destination: ${SKELETON_NOTIFICATION_WEBSOCKET_USER_DESTINATION:/queue/notifications}
+  payment:
+    default-provider: ${SKELETON_PAYMENT_DEFAULT_PROVIDER:}
+    providers:
+      toss:
+        enabled: ${SKELETON_PAYMENT_TOSS_ROUTE_ENABLED:true}
+        currencies: ${SKELETON_PAYMENT_TOSS_CURRENCIES:KRW}
+        countries: ${SKELETON_PAYMENT_TOSS_COUNTRIES:KR}
+      stripe:
+        enabled: ${SKELETON_PAYMENT_STRIPE_ROUTE_ENABLED:true}
+        currencies: ${SKELETON_PAYMENT_STRIPE_CURRENCIES:}
+        countries: ${SKELETON_PAYMENT_STRIPE_COUNTRIES:}
+  payment-toss:
+    enabled: ${SKELETON_PAYMENT_TOSS_ENABLED:false}
+    secret-key: ${TOSS_PAYMENTS_SECRET_KEY:}
+    base-url: ${TOSS_PAYMENTS_BASE_URL:https://api.tosspayments.com}
+  payment-stripe:
+    enabled: ${SKELETON_PAYMENT_STRIPE_ENABLED:false}
+    secret-key: ${STRIPE_SECRET_KEY:}
+    base-url: ${STRIPE_BASE_URL:https://api.stripe.com}
