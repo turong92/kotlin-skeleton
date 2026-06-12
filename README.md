@@ -8,7 +8,7 @@ This skeleton uses coarse-grained Gradle modules.
 
 ```text
 apps/
-  api                 # executable Spring Boot app
+  api                 # executable Spring Boot composition/workbench app
 
 modules/
   platform            # web, errors, trace/logging, shared infrastructure
@@ -17,25 +17,53 @@ modules/
   auth-social-google  # optional Google OAuth provider client
   auth-social-kakao   # optional Kakao OAuth provider client
   auth-social-naver   # optional Naver OAuth provider client
+  config-aws-ssm      # optional AWS SSM Parameter Store property loading
+  event-kafka         # optional Kafka event publishing adapter
   idempotency          # optional Idempotency-Key support for command endpoints
   notification         # optional notification contracts and local broker
+  notification-slack   # optional Slack webhook alerts and exception notices
   notification-sse     # optional server-to-web SSE notification delivery
+  notification-websocket # optional STOMP/WebSocket notification delivery
+  payment             # optional provider-neutral payment contracts
+  payment-toss        # optional Toss payment provider
+  payment-stripe      # optional Stripe payment provider
   persistence-jpa      # optional JPA audit timestamp support
   persistence-jdbc     # optional Spring Data JDBC audit timestamp support
+  redis-core          # optional Redis connection, templates, key prefixing
+  redis-lock          # optional Redis-backed distributed locks
+  redis-cache         # optional Redis cache manager defaults
+  redis-rate-limit    # optional Redis-backed rate-limit store
+  scheduler           # optional annotation-driven scheduler
+  storage             # optional storage contracts and file validation
+  storage-s3          # optional S3 presigned storage adapter
 ```
 
 Use modules as capability choices:
 
-- `apps/api` composes the runnable application.
+- `apps/api` composes the runnable sample application and exercises module wiring. Real services can delete its `/api/v1/examples/*` and `/api/v1/skeleton/*` controllers after choosing their own module set.
 - `modules/platform` is the shared foundation for most apps. It also contributes default OpenAPI metadata, standard response/error schemas, web policy defaults, outbound HTTP client scaffolding, and trace header documentation.
 - `modules/auth` is included when the app needs authentication. Its default beans are Spring Boot auto-configuration defaults, so an app can replace `AuthAccountRepository`, `SecurityFilterChain`, token service, or filters with its own beans. It also contributes JWT bearer security metadata to OpenAPI.
 - `modules/auth-social` is included when the app needs social login. Its default beans are also auto-configuration defaults, so account links, provisioning policy, and the social auth handler can be replaced. It also contributes the social-login endpoint to OpenAPI.
 - `modules/auth-social-google`, `modules/auth-social-kakao`, and `modules/auth-social-naver` are optional provider clients. Add only the provider modules an application actually needs.
 - `modules/idempotency` is included when command endpoints need `Idempotency-Key` protection. It contributes the `@IdempotentOperation` annotation, request fingerprinting, replay headers, an in-memory default store, and OpenAPI header documentation.
-- `modules/notification` is included when the app needs server-side notification publishing. `modules/notification-sse` adds web delivery through Spring MVC server-sent events.
+- `modules/notification` is included when the app needs server-side notification publishing. `modules/notification-sse`, `modules/notification-websocket`, and `modules/notification-slack` add delivery/alert channels.
+- `modules:redis-*`, `modules:storage-*`, `modules:payment-*`, `modules:event-kafka`, and `modules:scheduler` are optional capability bundles. `apps/api` includes them to prove they can coexist, while YAML keeps infrastructure-backed features disabled unless explicitly enabled.
 - `modules/persistence-jpa` and `modules/persistence-jdbc` are optional persistence adapters. Both use the same platform audit-time contract while keeping JPA/JDBC annotations and lifecycle behavior inside the selected persistence module.
 
 Fine-grained details such as JWT, password login, OAuth, or dev login live as packages inside their capability modules unless they grow into provider-level integrations.
+
+## Composition Workbench
+
+`apps/api` is the backend module assembly workbench. It intentionally depends on the skeleton capability modules, then uses properties to decide which runtime integrations are active.
+
+- `GET /api/v1/skeleton/modules` returns the current module catalog as a standard list response.
+- `GET /api/v1/skeleton/redis/key?value=orders:1` proves `redis-core` key prefixing works without pinging Redis.
+- `POST /api/v1/skeleton/storage/validate` proves storage file validation wiring.
+- `POST /api/v1/skeleton/notifications` publishes a provider-neutral notification event so SSE/Slack/WebSocket delivery modules can subscribe.
+
+These endpoints require auth by default. They are development/workbench affordances, not product APIs.
+
+Default `application.yml` keeps Redis lock, Redis cache, Redis rate-limit, scheduler, S3, provider payment modules, and WebSocket disabled so the sample app can start without external infrastructure. Profile-specific YAML can enable stricter behavior. For example, `application-local.yml`, `application-dev.yml`, and `application-prod.yml` enable `redis-lock` by default, so selecting that profile requires a reachable Redis backend unless overridden for tests.
 
 ## Auth Capability
 

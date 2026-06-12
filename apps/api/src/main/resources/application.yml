@@ -67,6 +67,10 @@ skeleton:
     enabled: ${SKELETON_REDIS_RATE_LIMIT_ENABLED:false}
     failure-policy: ${SKELETON_REDIS_RATE_LIMIT_FAILURE_POLICY:FAIL_OPEN}
     key-namespace: ${SKELETON_REDIS_RATE_LIMIT_KEY_NAMESPACE:api}
+  redis-lock:
+    enabled: ${SKELETON_REDIS_LOCK_ENABLED:false}
+    startup-check:
+      enabled: ${SKELETON_REDIS_LOCK_STARTUP_CHECK_ENABLED:true}
   scheduler:
     enabled: ${SKELETON_SCHEDULER_ENABLED:false}
     zone: ${SKELETON_SCHEDULER_ZONE:UTC}

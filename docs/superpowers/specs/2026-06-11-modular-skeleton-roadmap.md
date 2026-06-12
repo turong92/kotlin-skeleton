@@ -39,11 +39,30 @@
 - [x] `modules:auth-social-google`: Google provider.
 - [x] `modules:auth-social-kakao`: Kakao provider.
 - [x] `modules:auth-social-naver`: Naver provider.
+- [x] `modules:config-aws-ssm`: AWS SSM Parameter Store loading.
 - [x] `modules:notification`: notification contracts and in-memory broker.
 - [x] `modules:notification-sse`: optional SSE channel.
+- [x] `modules:notification-slack`: Slack webhook alerts and exception notices.
+- [x] `modules:notification-websocket`: optional STOMP/WebSocket channel.
 - [x] `modules:idempotency`: idempotent operation support.
 - [x] `modules:persistence-jpa`: JPA audit timestamp support.
 - [x] `modules:persistence-jdbc`: JDBC audit timestamp support.
+- [x] `modules:redis-core`: Redis connection/templates/key prefixing.
+- [x] `modules:redis-lock`: Redis distributed lock support.
+- [x] `modules:redis-cache`: Redis cache defaults.
+- [x] `modules:redis-rate-limit`: Redis-backed rate-limit store.
+- [x] `modules:scheduler`: annotation-driven scheduler.
+- [x] `modules:storage`: storage contracts and validation.
+- [x] `modules:storage-s3`: S3 presigned storage adapter.
+- [x] `modules:event-kafka`: Kafka event publishing adapter.
+- [x] `modules:payment`: provider-neutral payment contracts.
+- [x] `modules:payment-toss`: Toss payment provider.
+- [x] `modules:payment-stripe`: Stripe payment provider.
+- [x] `apps:api`: runnable composition workbench for module smoke checks.
+
+The module base layer is now present. Open checklist items below are follow-up
+hardening, extra provider behavior, distributed guarantees, and operational
+polish rather than proof that the module directory is missing.
 
 ## Priority Checklist
 
@@ -87,7 +106,7 @@ Acceptance:
 - [x] Alert includes trace fields when MDC has them.
 - [x] Sensitive headers/body fields are redacted or absent by default.
 
-### 2. `modules:redis-core` - Planned
+### 2. `modules:redis-core` - Done (base)
 
 Old references:
 
@@ -118,7 +137,7 @@ Acceptance:
 - [ ] Key prefix helper creates stable namespaced keys.
 - [ ] User-supplied connection factory or templates override defaults.
 
-### 3. `modules:redis-lock` - Planned
+### 3. `modules:redis-lock` - Done (base)
 
 Old references:
 
@@ -153,7 +172,7 @@ Acceptance:
 - [ ] Non-critical acquisition failure follows configured policy.
 - [ ] Redis backend failure behavior is tested.
 
-### 4. `modules:scheduler` - Planned
+### 4. `modules:scheduler` - Done (base)
 
 Old references:
 
@@ -182,7 +201,7 @@ Acceptance:
 - [ ] Task registration waits until application ready.
 - [ ] Lock integration can be enabled without changing task code.
 
-### 5. `modules:redis-cache` - Planned
+### 5. `modules:redis-cache` - Done (base)
 
 Old references:
 
@@ -215,7 +234,7 @@ Acceptance:
 - [ ] Redis get/put/evict failures do not break API when fail-open is enabled.
 - [ ] No-op fallback is covered.
 
-### 6. `modules:redis-rate-limit` - Planned
+### 6. `modules:redis-rate-limit` - Done (base)
 
 Old references:
 
@@ -244,7 +263,7 @@ Acceptance:
 - [ ] Authenticated and anonymous keys are distinct.
 - [ ] Redis failure respects fail-open/fail-closed.
 
-### 7. `modules:storage-s3` - Planned
+### 7. `modules:storage-s3` - Done (base)
 
 Old references:
 
@@ -297,7 +316,7 @@ Acceptance:
 - [x] Later paths override earlier paths.
 - [x] AWS failure behavior follows configured policy.
 
-### 9. `modules:event-kafka` - Planned
+### 9. `modules:event-kafka` - Done (base)
 
 Old references:
 
@@ -328,7 +347,7 @@ Acceptance:
 - [ ] Disabled mode does not call Kafka.
 - [ ] Trace context appears in event headers.
 
-### 10. `modules:notification-websocket` - Planned
+### 10. `modules:notification-websocket` - Done (base)
 
 Old references:
 
@@ -357,7 +376,7 @@ Acceptance:
 - [ ] Valid token becomes Principal.
 - [ ] User-targeted message delivery path is documented.
 
-### 11. `modules:payment` and `modules:payment-toss` - Planned
+### 11. `modules:payment`, `modules:payment-toss`, and `modules:payment-stripe` - Done (base)
 
 Old references:
 
@@ -422,9 +441,8 @@ Acceptance:
 10. `notification-websocket`
 11. `payment` / `payment-toss`
 
-Each module should be implemented with a focused design/spec or implementation
-plan before code changes. When a module is completed, mark its checklist items
-above and add the commit hash or PR reference here.
+Base module implementation is complete. Continue using this order for follow-up
+hardening when a specific capability needs production-grade depth.
 
 ## Completion Log
 
@@ -435,3 +453,8 @@ above and add the commit hash or PR reference here.
   based SSM property loading.
 - 2026-06-11: Redis bundle design approved with `redis-*` module naming and
   per-feature failure policies.
+- 2026-06-12: `apps/api` promoted from a simple executable sample to a module
+  composition workbench. It now depends on the optional capability modules,
+  keeps infrastructure-backed integrations disabled by default, and exposes
+  `/api/v1/skeleton/modules` plus smoke endpoints for Redis key prefixing,
+  storage validation, and notification publishing.

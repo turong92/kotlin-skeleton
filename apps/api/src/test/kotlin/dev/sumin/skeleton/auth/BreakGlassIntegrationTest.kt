@@ -21,6 +21,7 @@ import org.springframework.test.web.servlet.post
         "skeleton.config.aws.ssm.enabled=false",
         "skeleton.auth.jwt.secret=prod-test-jwt-secret-1234567890abcdef",
         "spring.datasource.password=test-db-password",
+        "skeleton.redis-lock.enabled=false",
         "skeleton.auth.break-glass.enabled=true",
         "skeleton.auth.break-glass.secret=test-break-glass-secret",
         "skeleton.auth.break-glass.allowed-account-ids[0]=acc_admin",

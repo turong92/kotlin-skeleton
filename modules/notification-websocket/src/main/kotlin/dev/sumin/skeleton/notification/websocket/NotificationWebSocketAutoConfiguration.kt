@@ -71,6 +71,13 @@ class NotificationWebSocketAutoConfiguration {
 
 @Configuration(proxyBeanMethods = false)
 @EnableWebSocketMessageBroker
+@ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
+@ConditionalOnProperty(
+    prefix = "skeleton.notification-websocket",
+    name = ["enabled"],
+    havingValue = "true",
+    matchIfMissing = true,
+)
 class NotificationWebSocketBrokerConfiguration {
     @Bean
     @ConditionalOnMissingBean(name = ["notificationWebSocketHeartbeatTaskScheduler"])

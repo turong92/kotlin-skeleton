@@ -14,6 +14,7 @@ import org.springframework.test.web.servlet.get
     properties = [
         "spring.profiles.active=local",
         "skeleton.auth.dev-login.enabled=true",
+        "skeleton.redis-lock.enabled=false",
     ],
 )
 @AutoConfigureMockMvc
@@ -73,6 +74,7 @@ class DevLoginIntegrationTest {
     properties = [
         "spring.profiles.active=local",
         "skeleton.auth.dev-login.enabled=false",
+        "skeleton.redis-lock.enabled=false",
     ],
 )
 @AutoConfigureMockMvc
