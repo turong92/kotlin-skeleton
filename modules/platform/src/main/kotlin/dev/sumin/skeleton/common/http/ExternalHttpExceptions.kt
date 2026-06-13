@@ -11,6 +11,7 @@ open class ExternalHttpException(
     val uri: URI,
     val upstreamStatus: Int?,
     val retryable: Boolean,
+    val providerTraceId: String? = null,
     status: HttpStatus,
     title: String,
     cause: Throwable? = null,
@@ -22,6 +23,7 @@ class ExternalHttpStatusException(
     uri: URI,
     upstreamStatus: Int,
     val upstreamBody: String,
+    providerTraceId: String? = null,
 ) : ExternalHttpException(
     message = "External service returned HTTP $upstreamStatus",
     clientName = clientName,
@@ -29,6 +31,7 @@ class ExternalHttpStatusException(
     uri = uri,
     upstreamStatus = upstreamStatus,
     retryable = upstreamStatus >= 500 || upstreamStatus == 429,
+    providerTraceId = providerTraceId,
     status = HttpStatus.BAD_GATEWAY,
     title = "External service error",
 )

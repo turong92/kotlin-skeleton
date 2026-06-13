@@ -22,6 +22,7 @@ class StripePaymentErrorMapper(
                 message = stripeError?.message,
                 trace = ProviderTrace(
                     provider = providerId,
+                    providerRequestId = context.trace.traceId ?: context.upstreamHeaders.stripeRequestId(),
                     rawCode = stripeError?.type,
                     rawStatus = context.upstreamStatus.toString(),
                     metadata = stripeError?.requestLogUrl
@@ -57,7 +58,17 @@ class StripePaymentErrorMapper(
         val requestLogUrl: String? = null,
     )
 
+    private fun org.springframework.http.HttpHeaders.stripeRequestId(): String? =
+        STRIPE_REQUEST_ID_HEADERS.firstNotNullOfOrNull { name ->
+            getFirst(name)?.takeIf { it.isNotBlank() }
+        }
+
     private companion object {
         const val MAX_BODY_LENGTH = 2_048
+        val STRIPE_REQUEST_ID_HEADERS = listOf(
+            "Request-Id",
+            "Stripe-Request-Id",
+            "X-Request-Id",
+        )
     }
 }

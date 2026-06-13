@@ -1,5 +1,8 @@
 package dev.sumin.skeleton.notification.websocket
 
+import dev.sumin.skeleton.common.web.PublicEndpointContributor
+import dev.sumin.skeleton.common.web.PublicEndpointRegistry
+import dev.sumin.skeleton.common.web.WebProperties
 import dev.sumin.skeleton.notification.NotificationSubscriber
 import dev.sumin.skeleton.notification.NotificationSubscription
 import dev.sumin.skeleton.notification.NotificationSubscriptionRegistry
@@ -10,6 +13,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import org.springframework.boot.autoconfigure.AutoConfigurations
 import org.springframework.boot.test.context.runner.WebApplicationContextRunner
+import org.springframework.http.HttpMethod
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer
 
 class NotificationWebSocketAutoConfigurationTest {
@@ -86,6 +90,21 @@ class NotificationWebSocketAutoConfigurationTest {
                 val interceptor = context.getBean(NotificationWebSocketAuthenticationInterceptor::class.java)
 
                 assertEquals("verified-user", interceptor.verifyForTest("token")?.name)
+            }
+    }
+
+    @Test
+    fun `contributes public endpoint for websocket handshake`() {
+        contextRunner
+            .withPropertyValues("skeleton.notification-websocket.endpoint.path=/realtime")
+            .run { context ->
+                val contributors = context.getBeansOfType(PublicEndpointContributor::class.java).values
+                val registry = PublicEndpointRegistry.from(WebProperties(), contributors)
+                val endpoint = registry.methodSpecificEndpoints.single {
+                    it.pattern == "/realtime"
+                }
+
+                assertEquals(HttpMethod.GET, endpoint.method)
             }
     }
 

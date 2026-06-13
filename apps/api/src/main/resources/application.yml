@@ -103,8 +103,6 @@ skeleton:
     producer:
       enabled: ${SKELETON_EVENT_KAFKA_PRODUCER_ENABLED:true}
       partition-key-strategy: ${SKELETON_EVENT_KAFKA_PARTITION_KEY_STRATEGY:EXPLICIT_OR_EVENT_ID}
-    consumer:
-      enabled: ${SKELETON_EVENT_KAFKA_CONSUMER_ENABLED:false}
   notification-websocket:
     enabled: ${SKELETON_NOTIFICATION_WEBSOCKET_ENABLED:false}
     endpoint:

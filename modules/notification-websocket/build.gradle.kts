@@ -1,4 +1,5 @@
 dependencies {
+    implementation(project(":modules:platform"))
     implementation(project(":modules:notification"))
 
     implementation("org.springframework.boot:spring-boot-starter-websocket")

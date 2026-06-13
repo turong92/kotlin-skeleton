@@ -1,7 +1,10 @@
 package dev.sumin.skeleton.payment
 
+import java.net.URI
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertSame
 
 class PaymentServiceTest {
     @Test
@@ -61,6 +64,39 @@ class PaymentServiceTest {
         assertEquals(refund, stripe.refunded.single())
     }
 
+    @Test
+    fun `provider failures are published to configured failure handlers before rethrowing`() {
+        val failure = paymentProviderException(provider = "toss")
+        val provider = FailingPaymentProvider(providerId = "toss", failure = failure)
+        val events = mutableListOf<PaymentFailureEvent>()
+        val service = PaymentService(
+            router = PaymentProviderRouter(
+                providers = listOf(provider),
+                properties = PaymentProperties(defaultProvider = "toss"),
+            ),
+            failureHandlers = listOf(PaymentFailureHandler { events += it }),
+        )
+        val request = PaymentRefundRequest(
+            providerPaymentId = "pay_1",
+            amount = PaymentAmount(amount = 1_000, currency = "KRW"),
+            reason = "duplicate",
+            idempotencyKey = IdempotencyKey("refund-idem"),
+        )
+
+        val thrown = assertFailsWith<PaymentProviderException> {
+            service.refund(request)
+        }
+
+        val event = events.single()
+        assertSame(failure, thrown)
+        assertEquals(PaymentOperation.REFUND, event.operation)
+        assertEquals("toss", event.provider)
+        assertEquals("pay_1", event.providerPaymentId)
+        assertEquals(PaymentAmount(amount = 1_000, currency = "KRW"), event.amount)
+        assertEquals("refund-idem", event.idempotencyKey?.value)
+        assertSame(failure, event.exception)
+    }
+
     private class RecordingPaymentProvider(
         override val providerId: String,
     ) : PaymentProvider {
@@ -96,4 +132,30 @@ class PaymentServiceTest {
                 trace = ProviderTrace(provider = providerId),
             )
     }
+
+    private class FailingPaymentProvider(
+        override val providerId: String,
+        private val failure: RuntimeException,
+    ) : PaymentProvider {
+        override fun confirm(request: PaymentConfirmRequest): PaymentOperationResult = throw failure
+
+        override fun cancel(request: PaymentCancelRequest): PaymentOperationResult = throw failure
+
+        override fun refund(request: PaymentRefundRequest): PaymentOperationResult = throw failure
+    }
+
+    private fun paymentProviderException(provider: String): PaymentProviderException =
+        PaymentProviderException(
+            providerError = PaymentProviderError(
+                provider = provider,
+                code = "UPSTREAM_ERROR",
+                message = "provider failed",
+                trace = ProviderTrace(provider = provider, providerRequestId = "req_1"),
+                upstreamStatus = 502,
+                retryable = true,
+            ),
+            clientName = "payment-$provider",
+            method = "POST",
+            uri = URI.create("https://provider.example.test/payments"),
+        )
 }

@@ -30,7 +30,28 @@ interface StorageService {
     fun publicUrl(key: ObjectKey): URI? = null
 }
 
-interface PresignedStorage : StorageService {
+interface ObjectStorage : StorageService {
+    fun upload(request: UploadObjectRequest): StoredObjectWriteResult
+
+    fun copy(request: CopyObjectRequest): StoredObjectWriteResult
+
+    fun move(request: MoveObjectRequest): StoredObjectWriteResult {
+        val copied = copy(
+            CopyObjectRequest(
+                sourceKey = request.sourceKey,
+                destinationKey = request.destinationKey,
+                metadata = request.metadata,
+                contentType = request.contentType,
+            ),
+        )
+        delete(request.sourceKey)
+        return copied
+    }
+
+    fun list(request: ListObjectsRequest): ListedObjects
+}
+
+interface PresignedStorage : ObjectStorage {
     fun presignUpload(request: PresignedUploadRequest): PresignedUrl
 
     fun presignDownload(request: PresignedDownloadRequest): PresignedUrl

@@ -39,6 +39,43 @@ class StorageContractsTest {
     }
 
     @Test
+    fun `object storage requests validate copy move list and upload intent`() {
+        val source = ObjectKey("avatars/source.png")
+        val destination = ObjectKey("avatars/destination.png")
+
+        val upload = UploadObjectRequest(
+            key = source,
+            content = "hello".toByteArray(),
+            contentType = "image/png",
+            metadata = mapOf("owner" to "user-1"),
+        )
+        val copy = CopyObjectRequest(
+            sourceKey = source,
+            destinationKey = destination,
+            metadata = mapOf("copied-by" to "storage"),
+        )
+        val move = MoveObjectRequest(sourceKey = source, destinationKey = destination)
+        val list = ListObjectsRequest(prefix = "avatars/", maxKeys = 50)
+
+        assertEquals(source, upload.key)
+        assertEquals("image/png", upload.contentType)
+        assertEquals(mapOf("owner" to "user-1"), upload.metadata)
+        assertEquals(destination, copy.destinationKey)
+        assertEquals(source, move.sourceKey)
+        assertEquals("avatars/", list.prefix)
+        assertEquals(50, list.maxKeys)
+        assertFailsWith<IllegalArgumentException> {
+            UploadObjectRequest(key = source, content = ByteArray(0))
+        }
+        assertFailsWith<IllegalArgumentException> {
+            CopyObjectRequest(sourceKey = source, destinationKey = source)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            ListObjectsRequest(maxKeys = 0)
+        }
+    }
+
+    @Test
     fun `multipart requests validate upload id part number and completed parts`() {
         val key = ObjectKey("videos/intro.mp4")
 

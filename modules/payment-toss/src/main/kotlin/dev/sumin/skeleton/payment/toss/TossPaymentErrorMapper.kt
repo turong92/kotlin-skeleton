@@ -23,7 +23,7 @@ class TossPaymentErrorMapper(
                 message = message,
                 trace = ProviderTrace(
                     provider = providerId,
-                    providerRequestId = response?.traceId,
+                    providerRequestId = response?.traceId ?: context.trace.traceId ?: context.upstreamHeaders.tossTraceId(),
                     rawCode = code,
                     rawStatus = context.upstreamStatus.toString(),
                 ),
@@ -49,7 +49,18 @@ class TossPaymentErrorMapper(
         val error: String? = null,
     )
 
+    private fun org.springframework.http.HttpHeaders.tossTraceId(): String? =
+        TOSS_TRACE_HEADERS.firstNotNullOfOrNull { name ->
+            getFirst(name)?.takeIf { it.isNotBlank() }
+        }
+
     private companion object {
         const val MAX_BODY_LENGTH = 2_048
+        val TOSS_TRACE_HEADERS = listOf(
+            "X-Toss-Trace-Id",
+            "Toss-Trace-Id",
+            "TossPayments-Trace-Id",
+            "X-Request-Id",
+        )
     }
 }

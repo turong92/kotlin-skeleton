@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.notification.websocket
 
+import dev.sumin.skeleton.common.web.PublicEndpointContributor
 import dev.sumin.skeleton.notification.NotificationAutoConfiguration
 import dev.sumin.skeleton.notification.NotificationSubscriptionRegistry
 import org.springframework.beans.factory.ObjectProvider
@@ -46,6 +47,15 @@ class NotificationWebSocketAutoConfiguration {
         properties: NotificationWebSocketProperties,
     ): NotificationWebSocketDestinationResolver =
         DefaultNotificationWebSocketDestinationResolver(properties)
+
+    @Bean("notificationWebSocketPublicEndpointContributor")
+    @ConditionalOnMissingBean(name = ["notificationWebSocketPublicEndpointContributor"])
+    fun notificationWebSocketPublicEndpointContributor(
+        properties: NotificationWebSocketProperties,
+    ): PublicEndpointContributor =
+        PublicEndpointContributor { registry ->
+            registry.add("GET", properties.endpoint.path)
+        }
 
     @Bean
     @ConditionalOnMissingBean

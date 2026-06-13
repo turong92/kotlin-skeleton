@@ -19,6 +19,8 @@ dependencies {
     implementation(project(":modules:payment"))
     implementation(project(":modules:payment-stripe"))
     implementation(project(":modules:payment-toss"))
+    implementation(project(":modules:persistence-jdbc"))
+    implementation(project(":modules:persistence-jpa"))
     implementation(project(":modules:redis-cache"))
     implementation(project(":modules:redis-core"))
     implementation(project(":modules:redis-lock"))

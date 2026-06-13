@@ -20,16 +20,23 @@ class OutboundHttpAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
+    fun defaultExternalHttpTraceExtractor(): ExternalHttpTraceExtractor =
+        DefaultExternalHttpTraceExtractor()
+
+    @Bean
+    @ConditionalOnMissingBean
     fun externalHttpClient(
         webClientBuilder: ObjectProvider<WebClient.Builder>,
         properties: OutboundHttpProperties,
         defaultErrorMapper: ExternalHttpErrorMapper,
         customizers: ObjectProvider<ExternalHttpClientCustomizer>,
+        traceExtractor: ExternalHttpTraceExtractor,
     ): ExternalHttpClient =
         DefaultExternalHttpClient(
             webClientBuilder = webClientBuilder.getIfAvailable { WebClient.builder() },
             properties = properties,
             defaultErrorMapper = defaultErrorMapper,
             customizers = customizers.orderedStream().toList(),
+            traceExtractor = traceExtractor,
         )
 }

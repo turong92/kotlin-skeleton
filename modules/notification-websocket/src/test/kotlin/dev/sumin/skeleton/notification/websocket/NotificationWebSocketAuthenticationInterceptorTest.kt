@@ -69,6 +69,26 @@ class NotificationWebSocketAuthenticationInterceptorTest {
         assertEquals("user-1", accessor.user?.name)
     }
 
+    @Test
+    fun `connect notifies websocket session when principal changes`() {
+        val interceptor = NotificationWebSocketAuthenticationInterceptor(
+            properties = NotificationWebSocketProperties(
+                authentication = NotificationWebSocketProperties.Authentication(enabled = true),
+            ),
+            tokenVerifier = NotificationWebSocketTokenVerifier { TestPrincipal("user-1") },
+        )
+        var changedPrincipal: Principal? = null
+        val accessor = StompHeaderAccessor.create(StompCommand.CONNECT)
+        accessor.addNativeHeader("Authorization", "Bearer access-token")
+        accessor.setUserChangeCallback { changedPrincipal = it }
+        accessor.setLeaveMutable(true)
+        val message = MessageBuilder.createMessage(ByteArray(0), accessor.messageHeaders)
+
+        interceptor.preSend(message, NoopMessageChannel)
+
+        assertEquals("user-1", changedPrincipal?.name)
+    }
+
     private fun connectMessage(vararg nativeHeaders: Pair<String, String>): Message<ByteArray> {
         val accessor = StompHeaderAccessor.create(StompCommand.CONNECT)
         nativeHeaders.forEach { (name, value) -> accessor.addNativeHeader(name, value) }

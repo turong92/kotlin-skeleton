@@ -2,6 +2,7 @@ package dev.sumin.skeleton.api
 
 import com.jayway.jsonpath.JsonPath
 import dev.sumin.skeleton.TestcontainersConfiguration
+import dev.sumin.skeleton.notification.websocket.NotificationWebSocketTokenVerifier
 import org.hamcrest.Matchers.hasItem
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -22,6 +23,14 @@ class SkeletonModuleCompositionIntegrationTest {
     @Autowired
     private lateinit var mockMvc: MockMvc
 
+    @Autowired
+    private lateinit var webSocketTokenVerifiers: List<NotificationWebSocketTokenVerifier>
+
+    @Test
+    fun `module composition wires websocket token verifier from auth jwt`() {
+        assertTrue(webSocketTokenVerifiers.isNotEmpty())
+    }
+
     @Test
     fun `module catalog exposes composed runtime modules`() {
         mockMvc.get("/api/v1/skeleton/modules") {
@@ -34,6 +43,8 @@ class SkeletonModuleCompositionIntegrationTest {
             jsonPath("$.values[?(@.id == 'auth')].status") { value(hasItem("ACTIVE")) }
             jsonPath("$.values[?(@.id == 'redis-core')].status") { value(hasItem("ACTIVE")) }
             jsonPath("$.values[?(@.id == 'redis-lock')].status") { value(hasItem("DISABLED")) }
+            jsonPath("$.values[?(@.id == 'persistence-jpa')].status") { value(hasItem("ACTIVE")) }
+            jsonPath("$.values[?(@.id == 'persistence-jdbc')].status") { value(hasItem("ACTIVE")) }
             jsonPath("$.values[?(@.id == 'notification')].status") { value(hasItem("ACTIVE")) }
             jsonPath("$.values[?(@.id == 'notification-sse')].status") { value(hasItem("ACTIVE")) }
             jsonPath("$.values[?(@.id == 'storage-s3')].status") { value(hasItem("DISABLED")) }
@@ -76,6 +87,18 @@ class SkeletonModuleCompositionIntegrationTest {
             status { isOk() }
             jsonPath("$.value.topic") { value("runs") }
             jsonPath("$.value.type") { value("probe") }
+        }
+
+        mockMvc.get("/api/v1/skeleton/payments/route") {
+            header("Authorization", "Bearer $token")
+            param("amount", "1000")
+            param("currency", "KRW")
+            accept = MediaType.APPLICATION_JSON
+        }.andExpect {
+            status { isOk() }
+            jsonPath("$.value.provider") { value("toss") }
+            jsonPath("$.value.available") { value(false) }
+            jsonPath("$.value.source") { value("configuration") }
         }
     }
 

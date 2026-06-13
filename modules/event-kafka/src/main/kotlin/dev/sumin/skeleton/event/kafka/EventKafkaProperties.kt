@@ -8,16 +8,11 @@ data class EventKafkaProperties(
     val environment: String = "local",
     val topicPrefix: String? = null,
     val producer: Producer = Producer(),
-    val consumer: Consumer = Consumer(),
 ) {
     data class Producer(
         val enabled: Boolean = true,
         val partitionKeyStrategy: KafkaEventPartitionKeyStrategyName =
             KafkaEventPartitionKeyStrategyName.EXPLICIT_OR_EVENT_ID,
-    )
-
-    data class Consumer(
-        val enabled: Boolean = false,
     )
 
     internal fun resolvedTopicPrefix(): String {

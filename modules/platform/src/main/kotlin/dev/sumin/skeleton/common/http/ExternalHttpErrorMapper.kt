@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.common.http
 
 import java.net.URI
+import org.springframework.http.HttpHeaders
 
 data class ExternalHttpErrorContext(
     val clientName: String,
@@ -8,6 +9,8 @@ data class ExternalHttpErrorContext(
     val uri: URI,
     val upstreamStatus: Int,
     val upstreamBody: String,
+    val upstreamHeaders: HttpHeaders = HttpHeaders(),
+    val trace: ExternalHttpTrace = ExternalHttpTrace.NONE,
 )
 
 fun interface ExternalHttpErrorMapper {
@@ -22,6 +25,7 @@ class DefaultExternalHttpErrorMapper : ExternalHttpErrorMapper {
             uri = context.uri,
             upstreamStatus = context.upstreamStatus,
             upstreamBody = context.upstreamBody.take(MAX_BODY_LENGTH),
+            providerTraceId = context.trace.traceId,
         )
 
     private companion object {

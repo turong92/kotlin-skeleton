@@ -30,7 +30,7 @@ class StripePaymentProvider(
 
     override fun confirm(request: PaymentConfirmRequest): PaymentOperationResult {
         val response = requireNotNull(
-            httpClient.postForm(
+            httpClient.postFormResponse(
                 clientName = properties.clientName,
                 path = properties.confirmPath,
                 form = request.providerPayload.toForm(),
@@ -44,15 +44,16 @@ class StripePaymentProvider(
             }.block(),
         )
 
-        return response.toResult(
-            status = response.status.toPaymentIntentStatus(),
+        return response.body.toResult(
+            status = response.body.status.toPaymentIntentStatus(),
             fallbackAmount = request.amount,
+            providerRequestId = response.trace.traceId ?: response.headers.stripeRequestId(),
         )
     }
 
     override fun cancel(request: PaymentCancelRequest): PaymentOperationResult {
         val response = requireNotNull(
-            httpClient.postForm(
+            httpClient.postFormResponse(
                 clientName = properties.clientName,
                 path = properties.cancelPath,
                 form = cancelForm(request),
@@ -66,15 +67,16 @@ class StripePaymentProvider(
             }.block(),
         )
 
-        return response.toResult(
+        return response.body.toResult(
             status = PaymentOperationStatus.CANCELED,
             fallbackAmount = request.amount,
+            providerRequestId = response.trace.traceId ?: response.headers.stripeRequestId(),
         )
     }
 
     override fun refund(request: PaymentRefundRequest): PaymentOperationResult {
         val response = requireNotNull(
-            httpClient.postForm(
+            httpClient.postFormResponse(
                 clientName = properties.clientName,
                 path = properties.refundPath,
                 form = refundForm(request),
@@ -87,7 +89,10 @@ class StripePaymentProvider(
             }.block(),
         )
 
-        return response.toResult(fallbackAmount = request.amount)
+        return response.body.toResult(
+            fallbackAmount = request.amount,
+            providerRequestId = response.trace.traceId ?: response.headers.stripeRequestId(),
+        )
     }
 
     private fun cancelForm(request: PaymentCancelRequest): Map<String, String> =
@@ -112,12 +117,14 @@ class StripePaymentProvider(
 
     private fun dev.sumin.skeleton.common.http.ExternalHttpRequestSpec.commonHeaders(idempotencyKey: IdempotencyKey?) {
         header(HttpHeaders.AUTHORIZATION, "Bearer ${properties.secretKey}")
+        vendorTraceHeaders(*STRIPE_REQUEST_ID_HEADERS.toTypedArray())
         idempotencyKey?.let { header("Idempotency-Key", it.value) }
     }
 
     private fun StripePaymentIntentResponse.toResult(
         status: PaymentOperationStatus,
         fallbackAmount: PaymentAmount?,
+        providerRequestId: String? = null,
     ): PaymentOperationResult =
         PaymentOperationResult(
             provider = providerId,
@@ -126,13 +133,16 @@ class StripePaymentProvider(
             amount = amount.toPaymentAmount(currency = currency, fallback = fallbackAmount),
             trace = ProviderTrace(
                 provider = providerId,
-                providerRequestId = requestId,
+                providerRequestId = requestId ?: providerRequestId,
                 providerOperationId = latestCharge,
                 rawStatus = this.status,
             ),
         )
 
-    private fun StripeRefundResponse.toResult(fallbackAmount: PaymentAmount): PaymentOperationResult =
+    private fun StripeRefundResponse.toResult(
+        fallbackAmount: PaymentAmount,
+        providerRequestId: String? = null,
+    ): PaymentOperationResult =
         PaymentOperationResult(
             provider = providerId,
             providerPaymentId = paymentIntent ?: id,
@@ -140,7 +150,7 @@ class StripePaymentProvider(
             amount = amount.toPaymentAmount(currency = currency, fallback = fallbackAmount),
             trace = ProviderTrace(
                 provider = providerId,
-                providerRequestId = requestId,
+                providerRequestId = requestId ?: providerRequestId,
                 providerOperationId = id,
                 rawStatus = status,
             ),
@@ -172,6 +182,22 @@ class StripePaymentProvider(
             "failed", "canceled" -> PaymentOperationStatus.FAILED
             else -> PaymentOperationStatus.UNKNOWN
         }
+
+    private fun HttpHeaders.stripeRequestId(): String? =
+        firstPresentHeader(STRIPE_REQUEST_ID_HEADERS)
+
+    private fun HttpHeaders.firstPresentHeader(names: List<String>): String? =
+        names.firstNotNullOfOrNull { name ->
+            getFirst(name)?.takeIf { it.isNotBlank() }
+        }
+
+    private companion object {
+        val STRIPE_REQUEST_ID_HEADERS = listOf(
+            "Request-Id",
+            "Stripe-Request-Id",
+            "X-Request-Id",
+        )
+    }
 }
 
 data class StripePaymentIntentResponse(

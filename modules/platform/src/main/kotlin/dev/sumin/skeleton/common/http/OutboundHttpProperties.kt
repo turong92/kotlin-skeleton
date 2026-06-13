@@ -9,6 +9,7 @@ data class OutboundHttpProperties(
     val defaultConnectTimeout: Duration = Duration.ofSeconds(2),
     val defaultResponseTimeout: Duration = Duration.ofSeconds(5),
     val maxInMemorySize: DataSize = DataSize.ofMegabytes(2),
+    val vendorTraceHeaders: List<String> = DefaultExternalHttpTraceExtractor.DEFAULT_HEADER_NAMES,
     val logging: Logging = Logging(),
     val clients: Map<String, Client> = emptyMap(),
 ) {
@@ -17,6 +18,7 @@ data class OutboundHttpProperties(
         val connectTimeout: Duration? = null,
         val responseTimeout: Duration? = null,
         val defaultHeaders: Map<String, String> = emptyMap(),
+        val vendorTraceHeaders: List<String> = emptyList(),
     )
 
     data class Logging(

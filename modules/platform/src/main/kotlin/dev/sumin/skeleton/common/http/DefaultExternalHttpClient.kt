@@ -21,6 +21,7 @@ class DefaultExternalHttpClient(
     private val properties: OutboundHttpProperties,
     private val defaultErrorMapper: ExternalHttpErrorMapper,
     private val customizers: List<ExternalHttpClientCustomizer>,
+    private val traceExtractor: ExternalHttpTraceExtractor = DefaultExternalHttpTraceExtractor(),
 ) : ExternalHttpClient {
     private val log = LoggerFactory.getLogger(javaClass)
     private val filters = ExternalHttpFilters(properties, log)
@@ -154,6 +155,8 @@ class DefaultExternalHttpClient(
         return prepareRequest(client(clientName), clientProperties, method, path, body, requestSpec)
             .exchangeToMono { response ->
                 if (response.statusCode().isError) {
+                    val upstreamHeaders = HttpHeaders.readOnlyHttpHeaders(response.headers().asHttpHeaders())
+                    val upstreamTrace = traceExtractor.extract(upstreamHeaders, traceHeaderNames(clientProperties, requestSpec))
                     response.bodyToMono(String::class.java)
                         .defaultIfEmpty("")
                         .flatMap { responseBody ->
@@ -165,17 +168,22 @@ class DefaultExternalHttpClient(
                                         uri = uri,
                                         upstreamStatus = response.statusCode().value(),
                                         upstreamBody = responseBody,
+                                        upstreamHeaders = upstreamHeaders,
+                                        trace = upstreamTrace,
                                     ),
                                 ),
                         )
                     }
                 } else {
+                    val upstreamHeaders = HttpHeaders.readOnlyHttpHeaders(response.headers().asHttpHeaders())
+                    val upstreamTrace = traceExtractor.extract(upstreamHeaders, traceHeaderNames(clientProperties, requestSpec))
                     response.bodyToMono(responseType)
                         .map { body ->
                             ExternalHttpResponse(
                                 statusCode = response.statusCode().value(),
-                                headers = HttpHeaders.readOnlyHttpHeaders(response.headers().asHttpHeaders()),
+                                headers = upstreamHeaders,
                                 body = body,
+                                trace = upstreamTrace,
                             )
                         }
                 }
@@ -284,6 +292,13 @@ class DefaultExternalHttpClient(
             customizers.forEach { customizer -> customizer.customize(clientName, builder) }
             builder.build()
         }
+
+    private fun traceHeaderNames(
+        clientProperties: OutboundHttpProperties.Client,
+        requestSpec: ExternalHttpRequestSpec,
+    ): List<String> =
+        (requestSpec.vendorTraceHeaders + clientProperties.vendorTraceHeaders + properties.vendorTraceHeaders)
+            .distinctBy { it.lowercase() }
 
     private fun String.isAbsoluteUrl(): Boolean =
         startsWith("http://") || startsWith("https://")

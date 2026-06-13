@@ -14,6 +14,8 @@ import dev.sumin.skeleton.notification.websocket.NotificationWebSocketBridge
 import dev.sumin.skeleton.payment.PaymentService
 import dev.sumin.skeleton.payment.stripe.StripePaymentProvider
 import dev.sumin.skeleton.payment.toss.TossPaymentProvider
+import dev.sumin.skeleton.persistence.jdbc.JdbcAuditBeforeConvertCallback
+import dev.sumin.skeleton.persistence.jpa.JpaPartialUpdateExecutor
 import dev.sumin.skeleton.redis.cache.NamedRedisCacheRegistry
 import dev.sumin.skeleton.redis.core.RedisKeyPrefixer
 import dev.sumin.skeleton.redis.lock.DistributedLockExecutor
@@ -256,6 +258,22 @@ class SkeletonModuleController(
                 requiredInfrastructure = listOf("Redis when enabled"),
             ),
             module(
+                id = "persistence-jdbc",
+                group = "persistence",
+                status = activeWhenBeanPresent(JdbcAuditBeforeConvertCallback::class.java),
+                configPrefix = "n/a",
+                beans = beanNames(JdbcAuditBeforeConvertCallback::class.java),
+                note = "Spring Data JDBC audit timestamp callback.",
+            ),
+            module(
+                id = "persistence-jpa",
+                group = "persistence",
+                status = activeWhenBeanPresent(JpaPartialUpdateExecutor::class.java),
+                configPrefix = "n/a",
+                beans = beanNames(JpaPartialUpdateExecutor::class.java),
+                note = "JPA audit, optimistic locking base, partial updates, and fetch graph hints.",
+            ),
+            module(
                 id = "notification",
                 group = "notification",
                 status = activeWhenBeanPresent(NotificationPublisher::class.java),
@@ -302,6 +320,7 @@ class SkeletonModuleController(
                 defaultEnabled = false,
                 activeBeanType = S3PresignedStorageService::class.java,
                 requiredInfrastructure = listOf("AWS credentials and S3 bucket when enabled"),
+                note = "Direct object upload/copy/move/delete/list, presigned URLs, multipart uploads, and public URL resolving.",
             ),
             module(
                 id = "payment",
@@ -374,6 +393,7 @@ class SkeletonModuleController(
         defaultEnabled: Boolean,
         activeBeanType: Class<T>,
         requiredInfrastructure: List<String> = emptyList(),
+        note: String? = null,
     ): SkeletonModuleResponse {
         val enabled = booleanProperty(enabledProperty, defaultValue = defaultEnabled)
         val beans = beanNames(activeBeanType)
@@ -389,6 +409,7 @@ class SkeletonModuleController(
             configPrefix = configPrefix,
             requiredInfrastructure = requiredInfrastructure,
             beans = beans,
+            note = note,
         )
     }
 

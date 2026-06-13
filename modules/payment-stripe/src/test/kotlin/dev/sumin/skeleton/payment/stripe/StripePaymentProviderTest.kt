@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.payment.stripe
 
 import dev.sumin.skeleton.common.http.ExternalHttpClient
+import dev.sumin.skeleton.common.http.ExternalHttpResponse
 import dev.sumin.skeleton.common.http.ExternalHttpRequestSpec
 import dev.sumin.skeleton.payment.IdempotencyKey
 import dev.sumin.skeleton.payment.PaymentAmount
@@ -12,6 +13,7 @@ import dev.sumin.skeleton.payment.PaymentRefundRequest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import org.springframework.http.HttpHeaders
 import reactor.core.publisher.Mono
 
 class StripePaymentProviderTest {
@@ -54,6 +56,38 @@ class StripePaymentProviderTest {
         assertEquals(PaymentOperationStatus.CONFIRMED, result.status)
         assertEquals("req_1", result.trace.providerRequestId)
         assertEquals("ch_1", result.providerOperationId)
+    }
+
+    @Test
+    fun `confirm uses Stripe request id header when response body has no request id`() {
+        val client = RecordingExternalHttpClient(
+            response = StripePaymentIntentResponse(
+                id = "pi_1",
+                status = "succeeded",
+                amount = 2_500,
+                currency = "usd",
+                latestCharge = "ch_1",
+            ),
+            responseHeaders = HttpHeaders().apply {
+                add("Request-Id", "req_header_1")
+            },
+        )
+        val provider = StripePaymentProvider(
+            httpClient = client,
+            properties = StripePaymentProperties(
+                enabled = true,
+                secretKey = "sk_test_123",
+            ),
+        )
+
+        val result = provider.confirm(
+            PaymentConfirmRequest(
+                providerPaymentId = "pi_1",
+                amount = PaymentAmount(amount = 2_500, currency = "USD"),
+            ),
+        )
+
+        assertEquals("req_header_1", result.trace.providerRequestId)
     }
 
     @Test
@@ -144,9 +178,27 @@ class StripePaymentProviderTest {
         assertEquals(402, paymentException.providerError.upstreamStatus)
     }
 
+    @Test
+    fun `provider error maps Stripe request id header`() {
+        val mapper = StripePaymentErrorMapper(providerId = "stripe")
+        val exception = mapper.map(
+            providerErrorContext(
+                clientName = "payment-stripe",
+                upstreamStatus = 500,
+                body = """{"error":{"type":"api_error","message":"provider failed"}}""",
+                headers = HttpHeaders().apply {
+                    add("Request-Id", "req_error_header_1")
+                },
+            ),
+        )
+
+        assertEquals("req_error_header_1", exception.providerError.trace.providerRequestId)
+    }
+
     private class RecordingExternalHttpClient(
         response: Any? = null,
         private val responses: ArrayDeque<Any> = ArrayDeque(listOfNotNull(response)),
+        private val responseHeaders: HttpHeaders = HttpHeaders(),
     ) : ExternalHttpClient {
         val calls = mutableListOf<RecordedCall>()
 
@@ -181,6 +233,30 @@ class StripePaymentProviderTest {
                 uriVariables = spec.uriVariablesForTest(),
             )
             return Mono.just(responseType.cast(responses.removeFirst()))
+        }
+
+        override fun <T : Any> postFormResponse(
+            clientName: String,
+            path: String,
+            form: Map<String, String>,
+            responseType: Class<T>,
+            customize: ExternalHttpRequestSpec.() -> Unit,
+        ): Mono<ExternalHttpResponse<T>> {
+            val spec = ExternalHttpRequestSpec().apply(customize)
+            calls += RecordedCall(
+                clientName = clientName,
+                path = path,
+                form = form,
+                headers = spec.headersForTest(),
+                uriVariables = spec.uriVariablesForTest(),
+            )
+            return Mono.just(
+                ExternalHttpResponse(
+                    statusCode = 200,
+                    headers = responseHeaders,
+                    body = responseType.cast(responses.removeFirst()),
+                ),
+            )
         }
 
         override fun <T : Any> put(

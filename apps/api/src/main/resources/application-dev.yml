@@ -56,3 +56,6 @@ skeleton:
       enabled: ${DEV_LOGIN_ENABLED:false}
     break-glass:
       enabled: ${BREAK_GLASS_ENABLED:false}
+  web:
+    cors:
+      enabled: ${SKELETON_WEB_CORS_ENABLED:true}

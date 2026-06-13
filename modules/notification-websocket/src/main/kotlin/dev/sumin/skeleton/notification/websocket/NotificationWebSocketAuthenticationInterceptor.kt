@@ -3,6 +3,7 @@ package dev.sumin.skeleton.notification.websocket
 import java.security.Principal
 import org.springframework.messaging.Message
 import org.springframework.messaging.MessageChannel
+import org.springframework.messaging.support.MessageHeaderAccessor
 import org.springframework.messaging.simp.stomp.StompCommand
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor
 import org.springframework.messaging.support.ChannelInterceptor
@@ -20,7 +21,10 @@ class NotificationWebSocketAuthenticationInterceptor(
             return message
         }
 
-        val accessor = StompHeaderAccessor.wrap(message)
+        val existingAccessor = MessageHeaderAccessor
+            .getAccessor(message, StompHeaderAccessor::class.java)
+            ?.takeIf { it.isMutable }
+        val accessor = existingAccessor ?: StompHeaderAccessor.wrap(message)
         if (accessor.command != StompCommand.CONNECT) {
             return message
         }
@@ -33,7 +37,11 @@ class NotificationWebSocketAuthenticationInterceptor(
             ?: throw NotificationWebSocketAuthenticationException("WebSocket CONNECT token was rejected")
 
         accessor.user = principal
-        return MessageBuilder.createMessage(message.payload, accessor.messageHeaders)
+        return if (existingAccessor != null) {
+            message
+        } else {
+            MessageBuilder.createMessage(message.payload, accessor.messageHeaders)
+        }
     }
 
     internal fun verifyForTest(token: String): Principal? =

@@ -62,6 +62,8 @@ The required config contract is stored in:
 Related config docs:
 
 - [Redis configuration](config/redis.md)
+- [External HTTP standard](external-http.md)
+- [S3 storage](storage-s3.md)
 
 If startup fails, the error should say:
 

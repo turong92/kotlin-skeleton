@@ -18,6 +18,12 @@ class PaymentAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    fun paymentService(router: PaymentProviderRouter): PaymentService =
-        PaymentService(router)
+    fun paymentService(
+        router: PaymentProviderRouter,
+        failureHandlers: List<PaymentFailureHandler>,
+    ): PaymentService =
+        PaymentService(
+            router = router,
+            failureHandlers = failureHandlers,
+        )
 }

@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.payment.toss
 
 import dev.sumin.skeleton.common.http.ExternalHttpClient
+import dev.sumin.skeleton.common.http.ExternalHttpResponse
 import dev.sumin.skeleton.payment.IdempotencyKey
 import dev.sumin.skeleton.payment.PaymentAmount
 import dev.sumin.skeleton.payment.PaymentCancelRequest
@@ -31,7 +32,7 @@ class TossPaymentProvider(
 
     override fun confirm(request: PaymentConfirmRequest): PaymentOperationResult {
         val response = requireNotNull(
-            httpClient.post(
+            httpClient.postResponse(
                 clientName = properties.clientName,
                 path = properties.confirmPath,
                 body = confirmBody(request),
@@ -44,10 +45,11 @@ class TossPaymentProvider(
             }.block(),
         )
 
-        return response.toResult(
+        return response.body.toResult(
             fallbackPaymentId = request.providerPaymentId,
             fallbackAmount = request.amount,
-            status = response.status.toConfirmStatus(),
+            status = response.body.status.toConfirmStatus(),
+            providerRequestId = response.trace.traceId ?: response.headers.tossTraceId(),
         )
     }
 
@@ -61,10 +63,11 @@ class TossPaymentProvider(
             loggingTag = "payment.toss.cancel",
         )
 
-        return response.toResult(
+        return response.body.toResult(
             fallbackPaymentId = request.providerPaymentId,
             fallbackAmount = request.amount,
-            status = response.status.toCancelStatus(),
+            status = response.body.status.toCancelStatus(),
+            providerRequestId = response.trace.traceId ?: response.headers.tossTraceId(),
         )
     }
 
@@ -78,10 +81,11 @@ class TossPaymentProvider(
             loggingTag = "payment.toss.refund",
         )
 
-        return response.toResult(
+        return response.body.toResult(
             fallbackPaymentId = request.providerPaymentId,
             fallbackAmount = request.amount,
             status = PaymentOperationStatus.REFUNDED,
+            providerRequestId = response.trace.traceId ?: response.headers.tossTraceId(),
         )
     }
 
@@ -92,9 +96,9 @@ class TossPaymentProvider(
         idempotencyKey: IdempotencyKey?,
         providerPayload: Map<String, Any?>,
         loggingTag: String,
-    ): TossPaymentResponse =
+    ): ExternalHttpResponse<TossPaymentResponse> =
         requireNotNull(
-            httpClient.post(
+            httpClient.postResponse(
                 clientName = properties.clientName,
                 path = properties.cancelPath,
                 body = cancelBody(amount, reason, providerPayload),
@@ -133,6 +137,7 @@ class TossPaymentProvider(
 
     private fun dev.sumin.skeleton.common.http.ExternalHttpRequestSpec.commonHeaders(idempotencyKey: IdempotencyKey?) {
         header(HttpHeaders.AUTHORIZATION, basicAuthorization())
+        vendorTraceHeaders(*TOSS_TRACE_HEADERS.toTypedArray())
         idempotencyKey?.let { header("Idempotency-Key", it.value) }
     }
 
@@ -146,6 +151,7 @@ class TossPaymentProvider(
         fallbackPaymentId: String,
         fallbackAmount: PaymentAmount?,
         status: PaymentOperationStatus,
+        providerRequestId: String? = null,
     ): PaymentOperationResult =
         PaymentOperationResult(
             provider = providerId,
@@ -154,7 +160,7 @@ class TossPaymentProvider(
             amount = amount(fallbackAmount),
             trace = ProviderTrace(
                 provider = providerId,
-                providerRequestId = traceId,
+                providerRequestId = traceId ?: providerRequestId,
                 providerOperationId = transactionKey,
                 rawStatus = this.status,
                 metadata = listOfNotNull(orderId?.let { "orderId" to it }).toMap(),
@@ -184,6 +190,23 @@ class TossPaymentProvider(
             "ABORTED", "EXPIRED" -> PaymentOperationStatus.FAILED
             else -> PaymentOperationStatus.UNKNOWN
         }
+
+    private fun HttpHeaders.tossTraceId(): String? =
+        firstPresentHeader(TOSS_TRACE_HEADERS)
+
+    private fun HttpHeaders.firstPresentHeader(names: List<String>): String? =
+        names.firstNotNullOfOrNull { name ->
+            getFirst(name)?.takeIf { it.isNotBlank() }
+        }
+
+    private companion object {
+        val TOSS_TRACE_HEADERS = listOf(
+            "X-Toss-Trace-Id",
+            "Toss-Trace-Id",
+            "TossPayments-Trace-Id",
+            "X-Request-Id",
+        )
+    }
 }
 
 data class TossPaymentResponse(

@@ -3,6 +3,7 @@ package dev.sumin.skeleton.payment.toss
 import dev.sumin.skeleton.common.http.ExternalHttpErrorContext
 import dev.sumin.skeleton.common.http.ExternalHttpRequestSpec
 import java.net.URI
+import org.springframework.http.HttpHeaders
 import org.springframework.util.MultiValueMap
 
 @Suppress("UNCHECKED_CAST")
@@ -18,6 +19,7 @@ internal fun providerErrorContext(
     clientName: String,
     upstreamStatus: Int,
     body: String,
+    headers: HttpHeaders = HttpHeaders(),
 ): ExternalHttpErrorContext =
     ExternalHttpErrorContext(
         clientName = clientName,
@@ -25,6 +27,7 @@ internal fun providerErrorContext(
         uri = URI.create("https://provider.example.test/payments"),
         upstreamStatus = upstreamStatus,
         upstreamBody = body,
+        upstreamHeaders = headers,
     )
 
 private fun ExternalHttpRequestSpec.reflectedField(name: String): Any {

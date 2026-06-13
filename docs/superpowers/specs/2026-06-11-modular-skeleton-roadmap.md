@@ -53,7 +53,7 @@
 - [x] `modules:redis-rate-limit`: Redis-backed rate-limit store.
 - [x] `modules:scheduler`: annotation-driven scheduler.
 - [x] `modules:storage`: storage contracts and validation.
-- [x] `modules:storage-s3`: S3 presigned storage adapter.
+- [x] `modules:storage-s3`: S3 object storage and presigned storage adapter.
 - [x] `modules:event-kafka`: Kafka event publishing adapter.
 - [x] `modules:payment`: provider-neutral payment contracts.
 - [x] `modules:payment-toss`: Toss payment provider.
@@ -63,6 +63,27 @@
 The module base layer is now present. Open checklist items below are follow-up
 hardening, extra provider behavior, distributed guarantees, and operational
 polish rather than proof that the module directory is missing.
+
+## Capability Matrix
+
+Use this table as the quick orientation point before assigning large batches of
+work.
+
+| Area | Modules | Base status | Default posture | Next hardening focus |
+| --- | --- | --- | --- | --- |
+| Platform | `platform` | Done | Always included | Response/OpenAPI polish and shared redaction |
+| Auth | `auth` | Done | Optional by dependency | More sample principals and app-specific account adapters |
+| Social login | `auth-social`, provider modules | Done | Provider modules opt in | Provider profile mapping samples and callback smoke flows |
+| Config/secrets | `config-aws-ssm` | Done | Auto from profile/runtime context | Real AWS profile/role smoke run when SSM is available |
+| Notification | `notification`, `notification-sse`, `notification-slack`, `notification-websocket` | Done | Channels opt in | Async exception hook, WebSocket auth docs, operational alert links |
+| Idempotency | `idempotency` | Done | Optional by dependency | More sample endpoint patterns |
+| Persistence audit and JPA operations | `persistence-jpa`, `persistence-jdbc` | Done | Optional by dependency | Add Querydsl module later only if needed |
+| Redis | `redis-core`, `redis-lock`, `redis-cache`, `redis-rate-limit` | Done | Core is passive; feature modules own fail policy | Testcontainers concurrency/infra proofs and per-route rate-limit override |
+| Scheduler | `scheduler` | Done | Disabled unless configured by app/profile | Redis lock bridge sample and notification failure bridge |
+| Storage | `storage`, `storage-s3` | Done | S3 disabled until configured | LocalStack or real AWS smoke run when credentials exist |
+| Events | `event-kafka` | Done | Producer-only; disabled sender can log/no-op | Add `event-kafka-consumer` only when consumer conventions are needed |
+| Payment | `payment`, `payment-toss`, `payment-stripe` | Done | Providers disabled until secrets/config exist | Provider routing samples, alerts, response headers/vendor trace hooks |
+| Composition app | `apps:api` | Done | Runnable workbench | Add FE/workbench wiring and more smoke endpoints as modules mature |
 
 ## Priority Checklist
 
@@ -116,26 +137,26 @@ Old references:
 
 Absorb:
 
-- [ ] `skeleton.redis.*` connection properties.
-- [ ] Standalone Lettuce connection factory.
-- [ ] `StringRedisTemplate` and JSON Redis template defaults.
-- [ ] Shared key prefix handling.
-- [ ] Serializer override points.
-- [ ] Connect and command timeout properties.
+- [x] `skeleton.redis.*` connection properties.
+- [x] Standalone Lettuce connection factory.
+- [x] `StringRedisTemplate` and JSON Redis template defaults.
+- [x] Shared key prefix handling.
+- [x] Serializer override points through named serializer beans.
+- [x] Connect and command timeout properties.
 
 Standardize:
 
-- [ ] Do not eagerly ping Redis in the core module.
-- [ ] Keep `spring.data.redis.*` as internal implementation detail, not the
+- [x] Do not eagerly ping Redis in the core module.
+- [x] Keep `spring.data.redis.*` as internal implementation detail, not the
   primary skeleton contract.
-- [ ] Keep Redis Cluster support out of the first pass.
+- [x] Keep Redis Cluster support out of the first pass.
 
 Acceptance:
 
-- [ ] App can include `redis-core` without Redis running.
-- [ ] Templates use the configured key/value serializers.
-- [ ] Key prefix helper creates stable namespaced keys.
-- [ ] User-supplied connection factory or templates override defaults.
+- [x] App can include `redis-core` without Redis running.
+- [x] Templates use the configured key/value serializers.
+- [x] Key prefix helper creates stable namespaced keys.
+- [x] User-supplied connection factory or templates override defaults.
 
 ### 3. `modules:redis-lock` - Done (base)
 
@@ -150,27 +171,29 @@ Old references:
 
 Absorb:
 
-- [ ] `@DistributedLock` with `keyPrefix`, SpEL `key`, wait time, lease time.
-- [ ] Critical vs non-critical lock failure policy.
-- [ ] Redisson-backed executor.
-- [ ] Watchdog mode for negative lease time if retained.
-- [ ] SpEL expression caching and parameter-name support.
+- [x] `@DistributedLock` with `keyPrefix`, SpEL `key`, wait time, lease time,
+  retry attempts, retry backoff, and failure policy.
+- [x] Critical vs non-critical lock failure policy.
+- [x] Redisson-backed executor.
+- [x] Watchdog mode for negative lease time.
+- [x] SpEL expression caching and parameter-name support.
 
 Standardize:
 
-- [ ] Rename policy names if needed: `CRITICAL`, `SKIP_ON_FAILURE`, or
+- [x] Use explicit policy names: `THROW`, `SKIP`, and
   `PROCEED_ON_BACKEND_FAILURE`.
-- [ ] Avoid returning nullable from critical flows unless explicitly configured.
-- [ ] Add property namespace `skeleton.redis-lock`.
-- [ ] Fail startup when Redis is unavailable in every profile, including local.
+- [x] Avoid returning nullable from critical flows unless explicitly configured.
+- [x] Add property namespace `skeleton.redis-lock`.
+- [x] Fail startup when Redis is unavailable when `redis-lock` is enabled,
+  including local.
 
 Acceptance:
 
-- [ ] Same key runs only once under concurrency.
-- [ ] Different keys run concurrently.
-- [ ] Critical acquisition failure throws.
-- [ ] Non-critical acquisition failure follows configured policy.
-- [ ] Redis backend failure behavior is tested.
+- [x] Same key runs only once under concurrency.
+- [x] Different keys run concurrently.
+- [x] Critical acquisition failure throws.
+- [x] Non-critical acquisition failure follows configured policy.
+- [x] Redis backend failure behavior is tested.
 
 ### 4. `modules:scheduler` - Done (base)
 
@@ -182,24 +205,24 @@ Old references:
 
 Absorb:
 
-- [ ] `@SkeletonScheduled` or `@CustomScheduled` equivalent.
-- [ ] Schedule types: every seconds, minutes, hours, fixed time, custom cron.
-- [ ] Time zone selection per task.
-- [ ] Local execution guard.
-- [ ] Optional distributed-lock integration.
+- [x] `@SkeletonScheduled` or `@CustomScheduled` equivalent.
+- [x] Schedule types: fixed delay, fixed rate, local time, custom cron.
+- [x] Time zone selection per task.
+- [x] Local/profile/property execution guard.
+- [x] Optional distributed-lock integration through a lock manager.
 
 Standardize:
 
-- [ ] Keep lock integration optional so `scheduler` can run without Redis.
-- [ ] Use `Clock` or `TimeProvider` where tests need deterministic time.
-- [ ] Keep failed task logging and notification hooks pluggable.
+- [x] Keep lock integration optional so `scheduler` can run without Redis.
+- [x] Use scheduler `Clock` where tests need deterministic time.
+- [x] Keep failed task logging and notification hooks pluggable.
 
 Acceptance:
 
-- [ ] Cron resolution is unit tested.
-- [ ] Local profile skip behavior is tested.
-- [ ] Task registration waits until application ready.
-- [ ] Lock integration can be enabled without changing task code.
+- [x] Cron resolution is unit tested.
+- [x] Local profile skip behavior is tested.
+- [x] Task registration waits until application ready.
+- [x] Lock integration can be enabled without changing task code.
 
 ### 5. `modules:redis-cache` - Done (base)
 
@@ -213,26 +236,26 @@ Old references:
 
 Absorb:
 
-- [ ] Named cache registry with TTL per cache.
-- [ ] Stable key generator.
-- [ ] Redis cache manager auto-configuration.
-- [ ] Cache error handler with fail-open behavior.
-- [ ] No-op cache fallback when Redis is unavailable if configured.
+- [x] Named cache registry with TTL per cache.
+- [x] Stable key generator.
+- [x] Redis cache manager auto-configuration.
+- [x] Cache error handler with fail-open behavior.
+- [x] No-op cache fallback when Redis is unavailable if configured.
 
 Standardize:
 
-- [ ] Do not expose old app-specific cache names.
-- [ ] Prefer property-defined cache specs plus optional typed constants.
-- [ ] Add property namespace `skeleton.redis-cache`.
-- [ ] Review serializer choice. Avoid unsafe broad default typing unless there
+- [x] Do not expose old app-specific cache names.
+- [x] Prefer property-defined cache specs plus optional typed constants.
+- [x] Add property namespace `skeleton.redis-cache`.
+- [x] Review serializer choice. Avoid unsafe broad default typing unless there
   is a clear, tested reason.
 
 Acceptance:
 
-- [ ] Cache TTL is applied per named cache.
-- [ ] Key generator output is stable.
-- [ ] Redis get/put/evict failures do not break API when fail-open is enabled.
-- [ ] No-op fallback is covered.
+- [x] Cache TTL is applied per named cache.
+- [x] Key generator output is stable.
+- [x] Redis get/put/evict failures do not break API when fail-open is enabled.
+- [x] No-op fallback is covered.
 
 ### 6. `modules:redis-rate-limit` - Done (base)
 
@@ -244,24 +267,25 @@ Old references:
 
 Absorb:
 
-- [ ] Annotation-driven per-route rate limit.
-- [ ] Redis Lua `INCR` plus `EXPIRE` atomic fixed-window counter.
-- [ ] Auth principal key fallback to IP key.
-- [ ] Fail-open/fail-closed switch.
+- [ ] Annotation-driven or route-specific rate-limit override on top of the
+  current web filter.
+- [x] Redis Lua `INCR` plus `EXPIRE` atomic fixed-window counter.
+- [x] Auth principal key fallback to IP key.
+- [x] Fail-open/fail-closed switch.
 
 Standardize:
 
-- [ ] Keep basic in-memory rate limiting in `platform`.
-- [ ] Put Redis-backed implementation in this optional module.
-- [ ] Add property namespace `skeleton.redis-rate-limit`.
-- [ ] Allow route key strategy override.
+- [x] Keep basic in-memory rate limiting in `platform`.
+- [x] Put Redis-backed implementation in this optional module.
+- [x] Add property namespace `skeleton.redis-rate-limit`.
+- [x] Allow route key strategy override through `RateLimitKeyResolver`.
 
 Acceptance:
 
-- [ ] Limit allows requests inside window.
-- [ ] Limit rejects requests above threshold.
-- [ ] Authenticated and anonymous keys are distinct.
-- [ ] Redis failure respects fail-open/fail-closed.
+- [x] Limit allows requests inside window.
+- [x] Limit rejects requests above threshold.
+- [x] Authenticated and anonymous keys are distinct.
+- [x] Redis failure respects fail-open/fail-closed.
 
 ### 7. `modules:storage-s3` - Done (base)
 
@@ -272,23 +296,23 @@ Old references:
 
 Absorb:
 
-- [ ] S3 client and presigner auto-configuration.
-- [ ] Put/get presigned URL creation.
-- [ ] Multipart upload start, part presign, complete, abort.
-- [ ] Upload bytes, copy, move, delete, list by prefix.
-- [ ] File upload validation helper pattern.
+- [x] S3 client and presigner auto-configuration.
+- [x] Put/get presigned URL creation.
+- [x] Multipart upload start, part presign, complete, abort.
+- [x] Upload bytes, copy, move, delete, list by prefix.
+- [x] File upload validation helper pattern.
 
 Standardize:
 
-- [ ] Prefer composition over abstract base class.
-- [ ] Use properties for region, bucket aliases, presign durations.
-- [ ] Keep CloudFront/public URL generation pluggable.
+- [x] Prefer composition over abstract base class.
+- [x] Use properties for region, bucket aliases, presign durations.
+- [x] Keep CloudFront/public URL generation pluggable.
 
 Acceptance:
 
-- [ ] Presigned PUT/GET generation can be tested with mocked AWS client.
-- [ ] File validation rejects unsupported extension and size.
-- [ ] Multipart flow exposes stable DTOs.
+- [x] Presigned PUT/GET generation can be tested without contacting AWS.
+- [x] File validation rejects unsupported extension and size.
+- [x] Multipart flow exposes stable DTOs.
 
 ### 8. `modules:config-aws-ssm` - Done
 
@@ -328,24 +352,24 @@ Old references:
 
 Absorb:
 
-- [ ] Application-event based publish API.
-- [ ] Transaction `AFTER_COMMIT` publish listener.
-- [ ] Environment topic prefix.
-- [ ] Partition key strategy.
-- [ ] Headers for event type, environment, event id, trace id.
+- [x] Application-event based publish API.
+- [x] Transaction `AFTER_COMMIT` publish listener.
+- [x] Environment topic prefix.
+- [x] Partition key strategy.
+- [x] Headers for event type, environment, event id, trace id.
 
 Standardize:
 
-- [ ] Fix old package naming issues by designing fresh APIs.
-- [ ] Keep producer-only and consumer support separable if possible.
-- [ ] Provide disabled mode that logs intended events.
+- [x] Fix old package naming issues by designing fresh APIs.
+- [x] Keep `event-kafka` producer-only; add consumer support later as `event-kafka-consumer`.
+- [x] Provide disabled mode that logs intended events.
 
 Acceptance:
 
-- [ ] Event published only after commit.
-- [ ] Rollback does not publish.
-- [ ] Disabled mode does not call Kafka.
-- [ ] Trace context appears in event headers.
+- [x] Event published only after commit.
+- [x] Rollback does not publish.
+- [x] Disabled mode does not call Kafka.
+- [x] Trace context appears in event headers.
 
 ### 10. `modules:notification-websocket` - Done (base)
 
@@ -358,23 +382,23 @@ Old references:
 
 Absorb:
 
-- [ ] STOMP endpoint auto-configuration.
-- [ ] JWT authentication on `CONNECT`.
-- [ ] User destination prefix support.
-- [ ] Heartbeat and bounded channel executors.
-- [ ] Message size, send buffer, and send timeout properties.
+- [x] STOMP endpoint auto-configuration.
+- [x] JWT/token authentication hook on `CONNECT`.
+- [x] User destination prefix support.
+- [x] Heartbeat and bounded channel executors.
+- [x] Message size, send buffer, and send timeout properties.
 
 Standardize:
 
-- [ ] Keep domain chat/support controllers out of module.
-- [ ] Integrate with `notification` contracts where possible.
-- [ ] Keep SSE and WebSocket as separate optional channels.
+- [x] Keep domain chat/support controllers out of module.
+- [x] Integrate with `notification` contracts where possible.
+- [x] Keep SSE and WebSocket as separate optional channels.
 
 Acceptance:
 
-- [ ] CONNECT rejects missing or invalid token when auth is enabled.
-- [ ] Valid token becomes Principal.
-- [ ] User-targeted message delivery path is documented.
+- [x] CONNECT rejects missing or invalid token when auth is enabled.
+- [x] Valid token becomes Principal.
+- [x] User-targeted message delivery path is documented.
 
 ### 11. `modules:payment`, `modules:payment-toss`, and `modules:payment-stripe` - Done (base)
 
@@ -387,34 +411,47 @@ Old references:
 
 Absorb:
 
-- [ ] Provider-neutral payment contracts in `payment`.
-- [ ] Toss implementation in `payment-toss`.
-- [ ] Toss trace header extraction.
-- [ ] Idempotency key header support.
-- [ ] Provider error body mapping.
-- [ ] Payment/refund failure alert hooks through `notification`.
+- [x] Provider-neutral payment contracts in `payment`.
+- [x] Toss implementation in `payment-toss`.
+- [x] Stripe implementation in `payment-stripe`.
+- [x] Provider trace extraction from stable response/error bodies and headers.
+- [x] Idempotency key header support.
+- [x] Provider error body mapping.
+- [x] Payment/refund failure alert hooks through `notification`.
 
 Standardize:
 
-- [ ] Keep domestic/international provider routing in payment core.
-- [ ] Let Toss and Stripe modules implement provider interfaces.
-- [ ] Do not bake product/subscription domain into payment core.
+- [x] Keep domestic/international provider routing in payment core.
+- [x] Let Toss and Stripe modules implement provider interfaces.
+- [x] Do not bake product/subscription domain into payment core.
 
 Acceptance:
 
-- [ ] Provider-neutral service can route to Toss by configuration.
-- [ ] Toss error response maps to stable skeleton exception.
-- [ ] Provider trace id is available for logs and alerts.
-- [ ] Idempotency key is propagated.
+- [x] Provider-neutral service can route to Toss by configuration.
+- [x] Provider-neutral service can route between Toss and Stripe.
+- [x] Toss error response maps to stable skeleton exception.
+- [x] Provider trace id is available in payment results/exceptions.
+- [x] Idempotency key is propagated.
 
 ## Platform Enhancements To Consider While Implementing Modules
 
-- [ ] Add outbound HTTP response-entity support when provider headers matter.
+- [x] Add outbound HTTP response-entity support when provider headers matter.
 - [ ] Add request-specific connect/read/write timeout support if current
   response timeout is not enough.
-- [ ] Add a standard vendor trace-id extractor hook for outbound HTTP clients.
+- [x] Add a standard vendor trace-id extractor hook for outbound HTTP clients.
 - [ ] Add redaction utilities shared by logging and Slack alert modules.
 - [ ] Add OpenAPI helpers for enum descriptions and response wrapper schemas.
+
+## Next Batch Queue
+
+Use this as the default order for the next unattended or subagent batch.
+
+1. Add WebSocket user-targeted delivery documentation and browser/client smoke
+   sample.
+2. Promote shared redaction and OpenAPI helper utilities once at least two
+   modules need them.
+3. Add request-specific connect/read/write timeout support if the current
+   response-timeout override is not enough.
 
 ## Deferred Or Product-Specific Patterns
 
@@ -458,3 +495,29 @@ hardening when a specific capability needs production-grade depth.
   keeps infrastructure-backed integrations disabled by default, and exposes
   `/api/v1/skeleton/modules` plus smoke endpoints for Redis key prefixing,
   storage validation, and notification publishing.
+- 2026-06-13: Roadmap reconciled against the current module implementation.
+  Added a capability matrix and next batch queue, marked implemented Redis,
+  scheduler, storage, event, WebSocket, and payment base capabilities as done,
+  and left only hardening/deferred work as open checklist items.
+- 2026-06-13: Added Redis Testcontainers concurrency proof for `redis-lock`.
+  Same-key attempts are mutually excluded and different keys run concurrently
+  against a real Redis backend.
+- 2026-06-13: Hardened payment skeleton follow-ups. Toss/Stripe now read
+  provider trace IDs from response/error headers, payment failures publish a
+  standard notification event hook, and `apps/api` exposes payment route
+  preview endpoints that work even when real provider beans are disabled.
+- 2026-06-13: Added explicit `event-kafka` rollback proof. The module remains
+  producer-only; consumer conventions should land later as a separate
+  `event-kafka-consumer` module instead of a dormant toggle.
+- 2026-06-13: Wired `apps/api` JWT authentication into
+  `notification-websocket` token verification and documented the STOMP topic
+  plus user-destination smoke flow. The React workbench now has a WebSocket
+  client path beside SSE.
+- 2026-06-13: Hardened `persistence-jpa` beyond audit timestamps with
+  opt-in optimistic locking, CriteriaUpdate-based partial updates with version
+  guards, and standard fetch graph hints for N+1-sensitive read paths. The
+  composition app and React fallback catalog now expose persistence modules.
+- 2026-06-13: Hardened storage and external HTTP. `storage-s3` now implements
+  upload bytes, copy, move, and list by prefix through vendor-neutral contracts,
+  while platform outbound HTTP exposes endpoint value objects and standardized
+  provider trace extraction on successful and failed responses.

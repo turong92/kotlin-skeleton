@@ -5,6 +5,7 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.boot.autoconfigure.AutoConfigurations
 import org.springframework.boot.test.context.runner.ApplicationContextRunner
+import kotlin.reflect.full.memberProperties
 
 class EventKafkaAutoConfigurationTest {
     private val contextRunner = ApplicationContextRunner()
@@ -60,6 +61,12 @@ class EventKafkaAutoConfigurationTest {
                 assertThat(message.key).isEqualTo("account-1")
                 assertThat(message.headers).containsEntry(KafkaEventHeaders.EVENT_ID, "event-1")
             }
+    }
+
+    @Test
+    fun `event kafka properties stay producer only until consumer module is added`() {
+        assertThat(EventKafkaProperties::class.memberProperties.map { it.name })
+            .doesNotContain("consumer")
     }
 
     private class RecordingKafkaEventSender : KafkaEventSender {

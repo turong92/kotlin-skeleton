@@ -14,6 +14,7 @@ class ExternalHttpRequestSpec {
     internal var errorMapper: ExternalHttpErrorMapper? = null
     internal var loggingTag: String? = null
     internal var baseUrl: String? = null
+    internal val vendorTraceHeaders: MutableList<String> = mutableListOf()
 
     fun uriVariable(name: String, value: Any) {
         uriVariables[name] = value
@@ -49,5 +50,14 @@ class ExternalHttpRequestSpec {
 
     fun loggingTag(value: String) {
         loggingTag = value
+    }
+
+    fun vendorTraceHeader(name: String) {
+        require(name.isNotBlank()) { "Vendor trace header must not be blank." }
+        vendorTraceHeaders += name
+    }
+
+    fun vendorTraceHeaders(vararg names: String) {
+        names.forEach(::vendorTraceHeader)
     }
 }

@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.payment.toss
 
 import dev.sumin.skeleton.common.http.ExternalHttpClient
+import dev.sumin.skeleton.common.http.ExternalHttpResponse
 import dev.sumin.skeleton.common.http.ExternalHttpRequestSpec
 import dev.sumin.skeleton.payment.IdempotencyKey
 import dev.sumin.skeleton.payment.PaymentAmount
@@ -12,6 +13,7 @@ import dev.sumin.skeleton.payment.PaymentRefundRequest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import org.springframework.http.HttpHeaders
 import org.springframework.util.MultiValueMap
 import reactor.core.publisher.Mono
 
@@ -65,6 +67,38 @@ class TossPaymentProviderTest {
         assertEquals(PaymentOperationStatus.CONFIRMED, result.status)
         assertEquals("trace-toss-1", result.trace.providerRequestId)
         assertEquals("tx_1", result.providerOperationId)
+    }
+
+    @Test
+    fun `confirm uses Toss trace header when response body has no trace id`() {
+        val client = RecordingExternalHttpClient(
+            response = TossPaymentResponse(
+                paymentKey = "pay_1",
+                status = "DONE",
+                totalAmount = 30_000,
+                currency = "KRW",
+                transactionKey = "tx_1",
+            ),
+            responseHeaders = HttpHeaders().apply {
+                add("X-Toss-Trace-Id", "trace-header-1")
+            },
+        )
+        val provider = TossPaymentProvider(
+            httpClient = client,
+            properties = TossPaymentProperties(
+                enabled = true,
+                secretKey = "test_sk_123",
+            ),
+        )
+
+        val result = provider.confirm(
+            PaymentConfirmRequest(
+                providerPaymentId = "pay_1",
+                amount = PaymentAmount(amount = 30_000, currency = "KRW"),
+            ),
+        )
+
+        assertEquals("trace-header-1", result.trace.providerRequestId)
     }
 
     @Test
@@ -142,8 +176,26 @@ class TossPaymentProviderTest {
         assertEquals(400, paymentException.providerError.upstreamStatus)
     }
 
+    @Test
+    fun `provider error maps Toss trace header when body has no trace id`() {
+        val mapper = TossPaymentErrorMapper(providerId = "toss")
+        val exception = mapper.map(
+            providerErrorContext(
+                clientName = "payment-toss",
+                upstreamStatus = 500,
+                body = """{"code":"FAILED","message":"provider failed"}""",
+                headers = HttpHeaders().apply {
+                    add("X-Toss-Trace-Id", "trace-error-header-1")
+                },
+            ),
+        )
+
+        assertEquals("trace-error-header-1", exception.providerError.trace.providerRequestId)
+    }
+
     private class RecordingExternalHttpClient(
         private val response: Any,
+        private val responseHeaders: HttpHeaders = HttpHeaders(),
     ) : ExternalHttpClient {
         val calls = mutableListOf<RecordedCall>()
 
@@ -170,6 +222,30 @@ class TossPaymentProviderTest {
                 uriVariables = spec.uriVariablesForTest(),
             )
             return Mono.just(responseType.cast(response))
+        }
+
+        override fun <T : Any> postResponse(
+            clientName: String,
+            path: String,
+            body: Any?,
+            responseType: Class<T>,
+            customize: ExternalHttpRequestSpec.() -> Unit,
+        ): Mono<ExternalHttpResponse<T>> {
+            val spec = ExternalHttpRequestSpec().apply(customize)
+            calls += RecordedCall(
+                clientName = clientName,
+                path = path,
+                body = body,
+                headers = spec.headersForTest(),
+                uriVariables = spec.uriVariablesForTest(),
+            )
+            return Mono.just(
+                ExternalHttpResponse(
+                    statusCode = 200,
+                    headers = responseHeaders,
+                    body = responseType.cast(response),
+                ),
+            )
         }
 
         override fun <T : Any> postForm(

@@ -88,6 +88,19 @@ class ExternalHttpClientTest {
     }
 
     @Test
+    fun `endpoint abstraction keeps vendor clients from repeating client name and path`() {
+        val endpoint = ExternalHttpEndpoint(clientName = "test", path = "/methods/get")
+
+        val response = client.get(endpoint, EchoResponse::class.java) {
+            header("X-Endpoint-Test", "true")
+        }.block()
+
+        assertEquals("GET", response?.method)
+        assertEquals("/methods/get", requests.single().path)
+        assertEquals("true", requests.single().headers["x-endpoint-test"]?.single())
+    }
+
+    @Test
     fun `post form sends application form urlencoded body`() {
         client.postForm(
             clientName = "test",
@@ -119,7 +132,20 @@ class ExternalHttpClientTest {
         assertNotNull(response)
         assertEquals(201, response.statusCode)
         assertEquals("provider-trace-123", response.headers.getFirst("X-Provider-Trace-Id"))
+        assertEquals("provider-trace-123", response.trace.traceId)
+        assertEquals("X-Provider-Trace-Id", response.trace.source)
         assertEquals("POST", response.body.method)
+    }
+
+    @Test
+    fun `per call vendor trace headers override default extraction`() {
+        val response = client.getResponse("test", "/with-alt-trace", EchoResponse::class.java) {
+            vendorTraceHeader("X-Alt-Trace")
+        }.block()
+
+        assertNotNull(response)
+        assertEquals("alt-trace-456", response.trace.traceId)
+        assertEquals("X-Alt-Trace", response.trace.source)
     }
 
     @Test
@@ -140,12 +166,13 @@ class ExternalHttpClientTest {
     @Test
     fun `upstream error maps to status exception`() {
         val exception = assertFailsWith<ExternalHttpStatusException> {
-            client.get("test", "/error", EchoResponse::class.java).block()
+            client.get("test", "/error-with-trace", EchoResponse::class.java).block()
         }
 
         assertEquals("test", exception.clientName)
         assertEquals(503, exception.upstreamStatus)
         assertEquals("External service error", exception.title)
+        assertEquals("error-trace-789", exception.providerTraceId)
     }
 
     @Test
@@ -183,6 +210,10 @@ class ExternalHttpClientTest {
 
         when (exchange.requestURI.path) {
             "/error" -> exchange.respond(503, """{"message":"upstream unavailable"}""")
+            "/error-with-trace" -> {
+                exchange.responseHeaders.add("X-Provider-Trace-Id", "error-trace-789")
+                exchange.respond(503, """{"message":"upstream unavailable"}""")
+            }
             "/slow" -> {
                 Thread.sleep(300)
                 exchange.respond(200, """{"method":"${exchange.requestMethod}"}""")
@@ -190,6 +221,10 @@ class ExternalHttpClientTest {
             "/with-headers" -> {
                 exchange.responseHeaders.add("X-Provider-Trace-Id", "provider-trace-123")
                 exchange.respond(201, """{"method":"${exchange.requestMethod}"}""")
+            }
+            "/with-alt-trace" -> {
+                exchange.responseHeaders.add("X-Alt-Trace", "alt-trace-456")
+                exchange.respond(200, """{"method":"${exchange.requestMethod}"}""")
             }
             else -> exchange.respond(200, """{"method":"${exchange.requestMethod}"}""")
         }
