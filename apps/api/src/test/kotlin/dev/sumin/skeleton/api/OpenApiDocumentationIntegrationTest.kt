@@ -36,6 +36,12 @@ class OpenApiDocumentationIntegrationTest {
         assertEquals("object", JsonPath.read(docs, "$.components.schemas.ApiError.type"))
         assertEquals("object", JsonPath.read(docs, "$.components.schemas.ResponseMeta.type"))
         assertEquals("object", JsonPath.read(docs, "$.components.schemas.PaginationMeta.type"))
+        assertEquals("object", JsonPath.read(docs, "$.components.schemas.JsonDocument.type"))
+        assertEquals("object", JsonPath.read(docs, "$.components.schemas.VersionedJsonDocument.type"))
+        assertEquals(
+            "#/components/schemas/JsonDocument",
+            JsonPath.read(docs, "$.components.schemas.VersionedJsonDocument.properties.payload['\$ref']"),
+        )
 
         assertEquals("http", JsonPath.read(docs, "$.components.securitySchemes.bearerAuth.type"))
         assertEquals("bearer", JsonPath.read(docs, "$.components.securitySchemes.bearerAuth.scheme"))
@@ -97,6 +103,20 @@ class OpenApiDocumentationIntegrationTest {
         assertEquals(
             "No content",
             JsonPath.read(docs, "$.paths['/api/v1/examples/items/{id}'].delete.responses['204'].description"),
+        )
+
+        val jsonEchoSchemaRef = JsonPath.read<String>(
+            docs,
+            "$.paths['/api/v1/skeleton/json/echo'].post.responses['200'].content['application/json'].schema['\$ref']",
+        )
+        assertTrue(jsonEchoSchemaRef.contains("DataResponse"))
+        assertEquals(
+            "Echo arbitrary JSON document",
+            JsonPath.read(docs, "$.paths['/api/v1/skeleton/json/echo'].post.summary"),
+        )
+        assertEquals(
+            "Return sample versioned JSON document",
+            JsonPath.read(docs, "$.paths['/api/v1/skeleton/json/versioned'].get.summary"),
         )
 
         val itemListParameters = JsonPath.read<List<Map<String, Any?>>>(docs, "$.paths['/api/v1/examples/items'].get.parameters")

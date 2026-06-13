@@ -1,5 +1,7 @@
 package dev.sumin.skeleton.event.kafka
 
+import dev.sumin.skeleton.json.JacksonJsonCodec
+import dev.sumin.skeleton.json.JsonCodec
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
@@ -8,9 +10,6 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.context.annotation.Bean
 import org.springframework.kafka.core.KafkaOperations
-import tools.jackson.databind.ObjectMapper
-import tools.jackson.databind.json.JsonMapper
-import tools.jackson.module.kotlin.kotlinModule
 
 @AutoConfiguration
 @EnableConfigurationProperties(EventKafkaProperties::class)
@@ -34,11 +33,16 @@ class EventKafkaAutoConfiguration {
         KafkaEventMessageFactory(properties, partitionKeyStrategy)
 
     @Bean
+    @ConditionalOnMissingBean
+    fun kafkaEventPayloadSerializer(jsonCodec: ObjectProvider<JsonCodec>): KafkaEventPayloadSerializer =
+        KafkaEventPayloadSerializer(jsonCodec.ifAvailable ?: JacksonJsonCodec())
+
+    @Bean
     @ConditionalOnMissingBean(KafkaEventSender::class)
     fun kafkaEventSender(
         properties: EventKafkaProperties,
         kafkaOperations: ObjectProvider<KafkaOperations<String, ByteArray>>,
-        objectMapper: ObjectProvider<ObjectMapper>,
+        payloadSerializer: KafkaEventPayloadSerializer,
     ): KafkaEventSender {
         if (!properties.enabled) {
             return LoggingKafkaEventSender()
@@ -51,7 +55,7 @@ class EventKafkaAutoConfiguration {
 
         return SpringKafkaEventSender(
             kafkaOperations = operations,
-            objectMapper = objectMapper.ifAvailable ?: defaultObjectMapper(),
+            payloadSerializer = payloadSerializer,
         )
     }
 
@@ -68,11 +72,6 @@ class EventKafkaAutoConfiguration {
         messageFactory: KafkaEventMessageFactory,
     ): KafkaEventPublishListener =
         KafkaEventPublishListener(sender, messageFactory)
-
-    private fun defaultObjectMapper(): ObjectMapper =
-        JsonMapper.builder()
-            .addModule(kotlinModule())
-            .build()
 }
 
 class EventKafkaConfigurationException(message: String) : RuntimeException(message)

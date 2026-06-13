@@ -63,6 +63,7 @@ Related config docs:
 
 - [Redis configuration](config/redis.md)
 - [External HTTP standard](external-http.md)
+- [JSON standard](json.md)
 - [S3 storage](storage-s3.md)
 
 If startup fails, the error should say:

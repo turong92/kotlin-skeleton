@@ -5,6 +5,7 @@ import dev.sumin.skeleton.auth.social.oauth.OAuthSocialLoginService
 import dev.sumin.skeleton.common.Response
 import dev.sumin.skeleton.common.web.RateLimitStore
 import dev.sumin.skeleton.event.kafka.KafkaEventPublisher
+import dev.sumin.skeleton.json.JsonCodec
 import dev.sumin.skeleton.notification.NotificationEvent
 import dev.sumin.skeleton.notification.NotificationPublisher
 import dev.sumin.skeleton.notification.NotificationSeverity
@@ -185,6 +186,14 @@ class SkeletonModuleController(
                 configPrefix = "skeleton.*",
                 beans = beanNames("dev.sumin.skeleton.common.TraceIdFilter"),
                 note = "Response envelopes, errors, trace context, web policy, OpenAPI, and outbound HTTP.",
+            ),
+            module(
+                id = "json",
+                group = "foundation",
+                status = activeWhenBeanPresent(JsonCodec::class.java),
+                configPrefix = "n/a",
+                beans = beanNames(JsonCodec::class.java),
+                note = "JsonDocument, versioned JSON envelopes, migrations, DB converters, REST and OpenAPI schemas.",
             ),
             module(
                 id = "auth",

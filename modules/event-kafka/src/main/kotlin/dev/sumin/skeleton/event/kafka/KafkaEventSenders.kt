@@ -1,10 +1,10 @@
 package dev.sumin.skeleton.event.kafka
 
+import dev.sumin.skeleton.json.JsonCodec
 import java.nio.charset.StandardCharsets
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.slf4j.LoggerFactory
 import org.springframework.kafka.core.KafkaOperations
-import tools.jackson.databind.ObjectMapper
 
 class LoggingKafkaEventSender : KafkaEventSender {
     private val log = LoggerFactory.getLogger(javaClass)
@@ -22,10 +22,10 @@ class LoggingKafkaEventSender : KafkaEventSender {
 
 class SpringKafkaEventSender(
     private val kafkaOperations: KafkaOperations<String, ByteArray>,
-    private val objectMapper: ObjectMapper,
+    private val payloadSerializer: KafkaEventPayloadSerializer,
 ) : KafkaEventSender {
     override fun send(message: KafkaEventMessage) {
-        val payload = objectMapper.writeValueAsBytes(message.payload)
+        val payload = payloadSerializer.serialize(message.payload)
         val record = if (message.key == null) {
             ProducerRecord(message.topic, payload)
         } else {
@@ -35,5 +35,18 @@ class SpringKafkaEventSender(
             record.headers().add(name, value.toByteArray(StandardCharsets.UTF_8))
         }
         kafkaOperations.send(record)
+    }
+}
+
+class KafkaEventPayloadSerializer(
+    private val jsonCodec: JsonCodec,
+) {
+    fun serialize(payload: Any?): ByteArray {
+        val json = if (payload == null) {
+            "null"
+        } else {
+            jsonCodec.canonicalString(jsonCodec.toDocument(payload))
+        }
+        return json.toByteArray(StandardCharsets.UTF_8)
     }
 }

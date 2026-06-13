@@ -40,6 +40,7 @@ class SkeletonModuleCompositionIntegrationTest {
             status { isOk() }
             content { contentTypeCompatibleWith(MediaType.APPLICATION_JSON) }
             jsonPath("$.values[?(@.id == 'platform')].status") { value(hasItem("ACTIVE")) }
+            jsonPath("$.values[?(@.id == 'json')].status") { value(hasItem("ACTIVE")) }
             jsonPath("$.values[?(@.id == 'auth')].status") { value(hasItem("ACTIVE")) }
             jsonPath("$.values[?(@.id == 'redis-core')].status") { value(hasItem("ACTIVE")) }
             jsonPath("$.values[?(@.id == 'redis-lock')].status") { value(hasItem("DISABLED")) }
