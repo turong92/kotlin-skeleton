@@ -43,6 +43,16 @@ class JsonPayloadRegistry(
         return codec.fromDocument(latest.payload, targetClass)
     }
 
+    fun <T : Any> readLatest(
+        document: VersionedJsonDocument,
+        definition: JsonPayloadDefinition<T>,
+    ): T {
+        require(document.type == definition.type) {
+            "JSON payload type '${document.type}' does not match definition '${definition.type}'."
+        }
+        return readLatest(document, definition.payloadClass)
+    }
+
     fun <T : Any> writeLatest(
         type: String,
         payload: T,
@@ -59,6 +69,17 @@ class JsonPayloadRegistry(
             metadata = metadata,
         )
     }
+
+    fun <T : Any> writeLatest(
+        definition: JsonPayloadDefinition<T>,
+        payload: T,
+        metadata: Map<String, String> = emptyMap(),
+    ): VersionedJsonDocument =
+        writeLatest(
+            type = definition.type,
+            payload = payload,
+            metadata = metadata,
+        )
 
     fun migrateToLatest(document: VersionedJsonDocument): VersionedJsonDocument {
         val definition = definition(document.type)

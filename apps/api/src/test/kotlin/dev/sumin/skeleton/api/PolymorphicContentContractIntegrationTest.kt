@@ -2,6 +2,9 @@ package dev.sumin.skeleton.api
 
 import com.jayway.jsonpath.JsonPath
 import dev.sumin.skeleton.TestcontainersConfiguration
+import dev.sumin.skeleton.json.JsonCodec
+import dev.sumin.skeleton.json.JsonPayloadRegistry
+import dev.sumin.skeleton.json.VersionedJsonDocument
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -21,6 +24,12 @@ class PolymorphicContentContractIntegrationTest {
 
     @Autowired
     private lateinit var mockMvc: MockMvc
+
+    @Autowired
+    private lateinit var jsonCodec: JsonCodec
+
+    @Autowired
+    private lateinit var jsonPayloadRegistry: JsonPayloadRegistry
 
     @Test
     fun `content create request accepts video spec and returns video response spec`() {
@@ -52,6 +61,10 @@ class PolymorphicContentContractIntegrationTest {
             jsonPath("$.value.spec.width") { value(1920) }
             jsonPath("$.value.spec.height") { value(1080) }
             jsonPath("$.value.spec.streamUrl") { value("https://cdn.example.test/sample-video.mp4") }
+            jsonPath("$.value.specDocument.type") { value("skeleton.content-response-spec") }
+            jsonPath("$.value.specDocument.version") { value(1) }
+            jsonPath("$.value.specDocument.payload.type") { value("VIDEO") }
+            jsonPath("$.value.specDocument.metadata.contentType") { value("VIDEO") }
         }
     }
 
@@ -83,6 +96,8 @@ class PolymorphicContentContractIntegrationTest {
             jsonPath("$.value.spec.width") { value(1200) }
             jsonPath("$.value.spec.height") { value(630) }
             jsonPath("$.value.spec.imageUrl") { value("https://cdn.example.test/sample-image.png") }
+            jsonPath("$.value.specDocument.payload.type") { value("IMAGE") }
+            jsonPath("$.value.specDocument.metadata.contentType") { value("IMAGE") }
         }
     }
 
@@ -114,6 +129,8 @@ class PolymorphicContentContractIntegrationTest {
             jsonPath("$.value.spec.voice") { value("alloy") }
             jsonPath("$.value.spec.durationMs") { value(1600) }
             jsonPath("$.value.spec.audioUrl") { value("https://cdn.example.test/sample-tts.mp3") }
+            jsonPath("$.value.specDocument.payload.type") { value("TTS") }
+            jsonPath("$.value.specDocument.metadata.contentType") { value("TTS") }
         }
     }
 
@@ -163,6 +180,32 @@ class PolymorphicContentContractIntegrationTest {
             "#/components/schemas/DataResponseSkeletonContentResponse",
             JsonPath.read(docs, "$.paths['/api/v1/skeleton/polymorphic/contents'].post.responses['201'].content['application/json'].schema['\$ref']"),
         )
+        assertEquals(
+            "#/components/schemas/VersionedJsonDocument",
+            JsonPath.read(docs, "$.components.schemas.SkeletonContentResponse.properties.specDocument['\$ref']"),
+        )
+    }
+
+    @Test
+    fun `versioned spec document can be restored as polymorphic response spec`() {
+        val document = VersionedJsonDocument(
+            type = SkeletonContentResponseSpecPayload.type,
+            version = SkeletonContentResponseSpecPayload.currentVersion,
+            payload = jsonCodec.toDocument(
+                SkeletonVideoContentResponseSpec(
+                    durationMs = 120000,
+                    width = 1920,
+                    height = 1080,
+                    streamUrl = "https://cdn.example.test/sample-video.mp4",
+                ),
+            ),
+        )
+
+        val restored = jsonPayloadRegistry.readLatest(document, SkeletonContentResponseSpecPayload)
+
+        assertTrue(restored is SkeletonVideoContentResponseSpec)
+        assertEquals(SkeletonContentType.VIDEO, restored.type)
+        assertEquals(120000, restored.durationMs)
     }
 
     private fun loginAccessToken(): String {

@@ -43,6 +43,27 @@ class JsonPayloadRegistryTest {
         assertEquals("USD", document.payload.textAt("/currency"))
     }
 
+    @Test
+    fun `registry reads and writes dto through typed definition`() {
+        val registry = JsonPayloadRegistry(
+            codec = codec,
+            definitions = listOf(PaymentResultDefinition),
+            migrators = emptyList(),
+        )
+
+        val document = registry.writeLatest(
+            definition = PaymentResultDefinition,
+            payload = PaymentResultV2(paymentKey = "pay_1", amount = 1000, currency = "USD"),
+            metadata = mapOf("source" to "test"),
+        )
+        val restored = registry.readLatest(document, PaymentResultDefinition)
+
+        assertEquals("payment.provider-result", document.type)
+        assertEquals(2, document.version)
+        assertEquals(mapOf("source" to "test"), document.metadata)
+        assertEquals(PaymentResultV2(paymentKey = "pay_1", amount = 1000, currency = "USD"), restored)
+    }
+
     data class PaymentResultV1(
         val paymentKey: String,
         val amount: Long,

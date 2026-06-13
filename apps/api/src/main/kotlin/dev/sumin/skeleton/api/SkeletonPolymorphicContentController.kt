@@ -6,12 +6,18 @@ import com.fasterxml.jackson.annotation.JsonTypeName
 import dev.sumin.skeleton.common.Response
 import dev.sumin.skeleton.common.enumcode.StringCodeEnum
 import dev.sumin.skeleton.common.openapi.CreatedOperation
+import dev.sumin.skeleton.json.JsonPayloadDefinition
+import dev.sumin.skeleton.json.JsonPayloadRegistry
+import dev.sumin.skeleton.json.VersionedJsonDocument
 import io.swagger.v3.oas.annotations.media.DiscriminatorMapping
 import io.swagger.v3.oas.annotations.media.Schema
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.NotBlank
+import kotlin.reflect.KClass
 import org.springframework.http.MediaType
+import org.springframework.context.annotation.Bean
+import org.springframework.context.annotation.Configuration
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
@@ -189,11 +195,27 @@ data class SkeletonContentResponse(
         ],
     )
     val spec: SkeletonContentResponseSpec,
+    val specDocument: VersionedJsonDocument,
 )
+
+object SkeletonContentResponseSpecPayload : JsonPayloadDefinition<SkeletonContentResponseSpec> {
+    override val type: String = "skeleton.content-response-spec"
+    override val currentVersion: Int = 1
+    override val payloadClass: KClass<SkeletonContentResponseSpec> = SkeletonContentResponseSpec::class
+}
+
+@Configuration
+class SkeletonPolymorphicContentJsonConfiguration {
+    @Bean
+    fun skeletonContentResponseSpecPayloadDefinition(): JsonPayloadDefinition<SkeletonContentResponseSpec> =
+        SkeletonContentResponseSpecPayload
+}
 
 @RestController
 @RequestMapping("/api/v1/skeleton/polymorphic/contents")
-class SkeletonPolymorphicContentController {
+class SkeletonPolymorphicContentController(
+    private val jsonPayloadRegistry: JsonPayloadRegistry,
+) {
     @PostMapping(consumes = [MediaType.APPLICATION_JSON_VALUE])
     @CreatedOperation
     fun create(
@@ -212,7 +234,7 @@ class SkeletonPolymorphicContentController {
     private fun toResponse(request: SkeletonContentCreateRequest): SkeletonContentResponse =
         when (val spec = request.spec) {
             is SkeletonVideoContentCreateSpec ->
-                SkeletonContentResponse(
+                contentResponse(
                     id = "sample-video",
                     type = spec.type,
                     name = request.name,
@@ -225,7 +247,7 @@ class SkeletonPolymorphicContentController {
                     ),
                 )
             is SkeletonImageContentCreateSpec ->
-                SkeletonContentResponse(
+                contentResponse(
                     id = "sample-image",
                     type = spec.type,
                     name = request.name,
@@ -237,7 +259,7 @@ class SkeletonPolymorphicContentController {
                     ),
                 )
             is SkeletonTtsContentCreateSpec ->
-                SkeletonContentResponse(
+                contentResponse(
                     id = "sample-tts",
                     type = spec.type,
                     name = request.name,
@@ -248,6 +270,27 @@ class SkeletonPolymorphicContentController {
                     ),
                 )
         }
+
+    private fun contentResponse(
+        id: String,
+        type: SkeletonContentType,
+        name: String,
+        spec: SkeletonContentResponseSpec,
+    ): SkeletonContentResponse =
+        SkeletonContentResponse(
+            id = id,
+            type = type,
+            name = name,
+            spec = spec,
+            specDocument = jsonPayloadRegistry.writeLatest(
+                definition = SkeletonContentResponseSpecPayload,
+                payload = spec,
+                metadata = mapOf(
+                    "contentId" to id,
+                    "contentType" to type.code,
+                ),
+            ),
+        )
 
     private fun estimateTtsDuration(text: String): Long =
         ((text.length + 1) * 100L).coerceAtLeast(1000L)
