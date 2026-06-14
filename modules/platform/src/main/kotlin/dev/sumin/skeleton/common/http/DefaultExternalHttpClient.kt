@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.common.http
 
+import dev.sumin.skeleton.common.logging.SensitiveValueRedactor
 import io.netty.channel.ChannelOption
 import java.net.URI
 import java.util.concurrent.ConcurrentHashMap
@@ -22,9 +23,10 @@ class DefaultExternalHttpClient(
     private val defaultErrorMapper: ExternalHttpErrorMapper,
     private val customizers: List<ExternalHttpClientCustomizer>,
     private val traceExtractor: ExternalHttpTraceExtractor = DefaultExternalHttpTraceExtractor(),
+    redactor: SensitiveValueRedactor = SensitiveValueRedactor(),
 ) : ExternalHttpClient {
     private val log = LoggerFactory.getLogger(javaClass)
-    private val filters = ExternalHttpFilters(properties, log)
+    private val filters = ExternalHttpFilters(properties, log, redactor)
     private val clients = ConcurrentHashMap<String, WebClient>()
 
     override fun <T : Any> get(

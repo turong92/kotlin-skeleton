@@ -2,7 +2,9 @@ package dev.sumin.skeleton.common.logging
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class SensitiveValueRedactorTest {
     private val redactor = SensitiveValueRedactor()
@@ -37,5 +39,50 @@ class SensitiveValueRedactorTest {
         assertEquals("order-1", redacted["orderId"])
         assertEquals("[REDACTED]", redacted["password"])
         assertNull(redacted["empty"])
+    }
+
+    @Test
+    fun `redacts configured names headers query strings and json bodies`() {
+        val redactor = SensitiveValueRedactor(
+            RedactionProperties(
+                replacement = "***",
+                additionalSensitiveNames = setOf("merchantId"),
+            ),
+        )
+
+        val headers = redactor.redactHeaders(
+            mapOf(
+                "Authorization" to listOf("Bearer token-1"),
+                "X-Request-Id" to listOf("request-1"),
+                "X-Merchant-Id" to listOf("merchant-1"),
+            ),
+        )
+        val query = redactor.redactQueryString("merchantId=merchant-1&status=READY&access_token=token-1")
+        val json = redactor.redactJsonString(
+            """
+            {
+              "merchantId": "merchant-1",
+              "status": "READY",
+              "nested": {
+                "password": "secret-1"
+              },
+              "items": [
+                {
+                  "apiKey": "api-key-1"
+                }
+              ]
+            }
+            """.trimIndent(),
+        )
+
+        assertEquals(listOf("***"), headers["Authorization"])
+        assertEquals(listOf("request-1"), headers["X-Request-Id"])
+        assertEquals(listOf("***"), headers["X-Merchant-Id"])
+        assertEquals("merchantId=***&status=READY&access_token=***", query)
+        assertTrue(json.contains("\"merchantId\":\"***\""))
+        assertTrue(json.contains("\"status\":\"READY\""))
+        assertFalse(json.contains("merchant-1"))
+        assertFalse(json.contains("secret-1"))
+        assertFalse(json.contains("api-key-1"))
     }
 }

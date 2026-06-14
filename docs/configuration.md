@@ -82,3 +82,24 @@ Private config file names are ignored:
 
 Use private files only when your IDE or deployment flow explicitly adds them
 through `spring.config.additional-location`.
+
+## Redaction
+
+Common logging, external HTTP logs, and Slack alerts use the platform redactor.
+Defaults already cover common names such as `Authorization`, `Cookie`,
+`password`, `accessToken`, `refreshToken`, `clientSecret`, and `apiKey`.
+
+Add project-specific names when vendor or domain identifiers must not appear in
+logs:
+
+```yaml
+skeleton:
+  redaction:
+    replacement: "[REDACTED]"
+    additional-sensitive-names:
+      - merchantId
+      - paymentWidgetSecret
+```
+
+Do not enable body logging for secrets-heavy integrations unless the payload is
+small and the redaction rules cover the provider's sensitive field names.

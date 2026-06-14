@@ -443,7 +443,7 @@ Acceptance:
 - [ ] Add request-specific connect/read/write timeout support if current
   response timeout is not enough.
 - [x] Add a standard vendor trace-id extractor hook for outbound HTTP clients.
-- [ ] Add redaction utilities shared by logging and Slack alert modules.
+- [x] Add redaction utilities shared by logging and Slack alert modules.
 - [ ] Add OpenAPI helpers for enum descriptions and response wrapper schemas.
 
 ## Next Batch Queue
@@ -452,8 +452,7 @@ Use this as the default order for the next unattended or subagent batch.
 
 1. Add WebSocket user-targeted delivery documentation and browser/client smoke
    sample.
-2. Promote shared redaction and OpenAPI helper utilities once at least two
-   modules need them.
+2. Promote OpenAPI helper utilities once response/enum docs need another pass.
 3. Add request-specific connect/read/write timeout support if the current
    response-timeout override is not enough.
 

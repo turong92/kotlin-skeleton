@@ -11,11 +11,16 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import org.slf4j.MDC
+import org.junit.jupiter.api.extension.ExtendWith
+import org.springframework.boot.test.system.CapturedOutput
+import org.springframework.boot.test.system.OutputCaptureExtension
 import org.springframework.web.reactive.function.client.WebClient
 
+@ExtendWith(OutputCaptureExtension::class)
 class ExternalHttpClientTest {
     private lateinit var server: HttpServer
     private lateinit var client: ExternalHttpClient
@@ -161,6 +166,34 @@ class ExternalHttpClientTest {
             "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
             request.headers["traceparent"]?.single(),
         )
+    }
+
+    @Test
+    fun `external http logs redact sensitive query parameters`(output: CapturedOutput) {
+        val queryLoggingClient = DefaultExternalHttpClient(
+            webClientBuilder = WebClient.builder(),
+            properties = OutboundHttpProperties(
+                defaultResponseTimeout = Duration.ofSeconds(2),
+                logging = OutboundHttpProperties.Logging(includeQuery = true),
+                clients = mapOf(
+                    "test" to OutboundHttpProperties.Client(
+                        baseUrl = "http://localhost:${server.address.port}",
+                    ),
+                ),
+            ),
+            defaultErrorMapper = DefaultExternalHttpErrorMapper(),
+            customizers = emptyList(),
+        )
+
+        queryLoggingClient.get(
+            clientName = "test",
+            path = "/methods/get?access_token=secret-token&orderId=order-1",
+            responseType = EchoResponse::class.java,
+        ).block()
+
+        assertTrue(output.all.contains("access_token=[REDACTED]"))
+        assertTrue(output.all.contains("orderId=order-1"))
+        assertFalse(output.all.contains("secret-token"))
     }
 
     @Test

@@ -2,12 +2,15 @@ package dev.sumin.skeleton.notification.slack
 
 import dev.sumin.skeleton.common.http.ExternalHttpClient
 import dev.sumin.skeleton.common.http.ExternalHttpRequestSpec
+import dev.sumin.skeleton.common.logging.RedactionAutoConfiguration
 import dev.sumin.skeleton.notification.NotificationSubscriber
 import dev.sumin.skeleton.notification.NotificationSubscription
 import dev.sumin.skeleton.notification.NotificationSubscriptionRegistry
 import java.util.function.Supplier
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import org.springframework.boot.autoconfigure.AutoConfigurations
 import org.springframework.boot.test.context.runner.ApplicationContextRunner
 import reactor.core.publisher.Mono
@@ -36,6 +39,40 @@ class NotificationSlackAutoConfigurationTest {
             .run { context ->
                 assertEquals(1, context.getBeansOfType(SlackAlertSender::class.java).size)
                 assertEquals(0, context.getBeansOfType(SlackWebhookAlertSender::class.java).size)
+            }
+    }
+
+    @Test
+    fun `message factory uses configured platform redactor when present`() {
+        ApplicationContextRunner()
+            .withConfiguration(
+                AutoConfigurations.of(
+                    RedactionAutoConfiguration::class.java,
+                    NotificationSlackAutoConfiguration::class.java,
+                ),
+            )
+            .withPropertyValues("skeleton.redaction.additional-sensitive-names[0]=orderId")
+            .withBean(ExternalHttpClient::class.java, Supplier { NoopExternalHttpClient() })
+            .withBean(NotificationSubscriptionRegistry::class.java, Supplier { NoopSubscriptionRegistry() })
+            .run { context ->
+                val factory = context.getBean(SlackAlertMessageFactory::class.java)
+                val payload = factory.create(
+                    SlackAlert(
+                        title = "Order failed",
+                        message = "Vendor rejected order",
+                        severity = SlackAlertSeverity.ERROR,
+                        topic = "orders",
+                        fields = mapOf(
+                            "orderId" to "order-1",
+                            "providerRequestId" to "request-1",
+                        ),
+                    ),
+                )
+                val fieldText = payload.blocks.flatMap { it.fields }.joinToString("\n") { it.text }
+
+                assertTrue(fieldText.contains("[REDACTED]"))
+                assertTrue(fieldText.contains("request-1"))
+                assertFalse(fieldText.contains("order-1"))
             }
     }
 

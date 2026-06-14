@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.common.http
 
 import dev.sumin.skeleton.common.TraceIdFilter
+import dev.sumin.skeleton.common.logging.SensitiveValueRedactor
 import java.time.Duration
 import java.util.UUID
 import org.slf4j.Logger
@@ -13,6 +14,7 @@ import reactor.core.publisher.Mono
 internal class ExternalHttpFilters(
     private val properties: OutboundHttpProperties,
     private val log: Logger,
+    private val redactor: SensitiveValueRedactor,
 ) {
     fun tracePropagationFilter(): ExchangeFilterFunction =
         ExchangeFilterFunction.ofRequestProcessor { request ->
@@ -55,7 +57,19 @@ internal class ExternalHttpFilters(
     }
 
     private fun sanitizedPath(path: String): String =
-        if (properties.logging.includeQuery) path else path.substringBefore("?")
+        if (properties.logging.includeQuery) {
+            redactQuery(path)
+        } else {
+            path.substringBefore("?")
+        }
+
+    private fun redactQuery(path: String): String {
+        val querySeparator = path.indexOf("?")
+        if (querySeparator < 0) return path
+        val basePath = path.substring(0, querySeparator)
+        val query = path.substring(querySeparator + 1)
+        return "$basePath?${redactor.redactQueryString(query)}"
+    }
 
     private fun randomTraceId(): String = UUID.randomUUID().toString().replace("-", "")
 
