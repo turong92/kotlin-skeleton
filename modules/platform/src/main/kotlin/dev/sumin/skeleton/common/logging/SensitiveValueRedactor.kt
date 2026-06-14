@@ -1,5 +1,12 @@
 package dev.sumin.skeleton.common.logging
 
+import java.time.temporal.TemporalAccessor
+import java.util.Date
+import java.util.UUID
+import kotlin.reflect.KClass
+import kotlin.reflect.KProperty1
+import kotlin.reflect.full.findAnnotation
+import kotlin.reflect.full.memberProperties
 import tools.jackson.databind.JsonNode
 import tools.jackson.databind.ObjectMapper
 import tools.jackson.databind.json.JsonMapper
@@ -40,6 +47,9 @@ class SensitiveValueRedactor(
         runCatching {
             objectMapper.writeValueAsString(redactJsonNode(null, objectMapper.readTree(raw)))
         }.getOrDefault(raw)
+
+    fun redactJsonString(value: Any): String =
+        objectMapper.writeValueAsString(redactObjectValue(value, value::class, sensitive = false))
 
     fun isSensitive(name: String): Boolean {
         val normalized = normalize(name)
@@ -84,6 +94,54 @@ class SensitiveValueRedactor(
         objectMapper.createArrayNode().also { redacted ->
             node.values().forEach { value -> redacted.add(redactJsonNode(null, value)) }
         }
+
+    private fun redactObjectValue(
+        value: Any?,
+        valueClass: KClass<*>?,
+        sensitive: Boolean,
+    ): Any? {
+        if (value == null) return null
+        if (sensitive) return replacement
+
+        return when (value) {
+            is String -> value
+            is Number -> value
+            is Boolean -> value
+            is Enum<*> -> value.name
+            is TemporalAccessor -> value.toString()
+            is Date -> value.toInstant().toString()
+            is UUID -> value.toString()
+            is Map<*, *> -> value.entries.associate { (entryKey, entryValue) ->
+                val key = entryKey?.toString().orEmpty()
+                key to if (isSensitive(key)) replacement else redactObjectValue(entryValue, entryValue?.let { it::class }, sensitive = false)
+            }
+            is Iterable<*> -> value.map { item -> redactObjectValue(item, item?.let { it::class }, sensitive = false) }
+            is Array<*> -> value.map { item -> redactObjectValue(item, item?.let { it::class }, sensitive = false) }
+            else -> redactProperties(value, valueClass ?: value::class)
+        }
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun redactProperties(
+        value: Any,
+        valueClass: KClass<*>,
+    ): Map<String, Any?> =
+        valueClass.memberProperties.associate { property ->
+            val typedProperty = property as KProperty1<Any, *>
+            property.name to redactObjectValue(
+                value = typedProperty.get(value),
+                valueClass = property.returnType.classifier as? KClass<*>,
+                sensitive = property.findAnnotation<Sensitive>() != null || hasSensitiveJavaField(valueClass, property.name),
+            )
+        }
+
+    private fun hasSensitiveJavaField(
+        valueClass: KClass<*>,
+        propertyName: String,
+    ): Boolean =
+        runCatching {
+            valueClass.java.getDeclaredField(propertyName).isAnnotationPresent(Sensitive::class.java)
+        }.getOrDefault(false)
 
     private fun normalize(name: String): String =
         name

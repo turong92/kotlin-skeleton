@@ -64,6 +64,7 @@ Related config docs:
 - [Redis configuration](config/redis.md)
 - [External HTTP standard](external-http.md)
 - [JSON standard](json.md)
+- [Crypto](crypto.md)
 - [S3 storage](storage-s3.md)
 
 If startup fails, the error should say:
@@ -99,6 +100,15 @@ skeleton:
     additional-sensitive-names:
       - merchantId
       - paymentWidgetSecret
+```
+
+For DTOs, prefer annotating the field near the contract:
+
+```kotlin
+data class ProviderCallbackPayload(
+    val orderId: String,
+    @Sensitive val paymentKey: String,
+)
 ```
 
 Do not enable body logging for secrets-heavy integrations unless the payload is

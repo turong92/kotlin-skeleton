@@ -10,6 +10,7 @@ dependencies {
     implementation(project(":modules:auth-social-kakao"))
     implementation(project(":modules:auth-social-naver"))
     implementation(project(":modules:config-aws-ssm"))
+    implementation(project(":modules:crypto"))
     implementation(project(":modules:event-kafka"))
     implementation(project(":modules:idempotency"))
     implementation(project(":modules:json"))

@@ -1,5 +1,7 @@
 package dev.sumin.skeleton.common.logging
 
+import java.time.Instant
+import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -85,4 +87,54 @@ class SensitiveValueRedactorTest {
         assertFalse(json.contains("secret-1"))
         assertFalse(json.contains("api-key-1"))
     }
+
+    @Test
+    fun `redacts dto properties annotated as sensitive`() {
+        val json = redactor.redactJsonString(
+            AnnotatedPaymentPayload(
+                orderId = "order-1",
+                requestId = UUID.fromString("018f7410-4b5d-7cc3-8c75-980e0b8d36af"),
+                createdAt = Instant.parse("2026-06-14T00:00:00Z"),
+                paymentKey = "payment-key-1",
+                customer = AnnotatedCustomerPayload(
+                    email = "user@example.com",
+                    externalCredential = "credential-1",
+                ),
+                history = listOf(
+                    AnnotatedPaymentHistory(note = "approved", providerToken = "provider-token-1"),
+                ),
+            ),
+        )
+
+        assertTrue(json.contains("\"orderId\":\"order-1\""))
+        assertTrue(json.contains("\"requestId\":\"018f7410-4b5d-7cc3-8c75-980e0b8d36af\""))
+        assertTrue(json.contains("\"createdAt\":\"2026-06-14T00:00:00Z\""))
+        assertTrue(json.contains("\"email\":\"user@example.com\""))
+        assertTrue(json.contains("\"note\":\"approved\""))
+        assertTrue(json.contains("\"paymentKey\":\"[REDACTED]\""))
+        assertTrue(json.contains("\"externalCredential\":\"[REDACTED]\""))
+        assertTrue(json.contains("\"providerToken\":\"[REDACTED]\""))
+        assertFalse(json.contains("payment-key-1"))
+        assertFalse(json.contains("credential-1"))
+        assertFalse(json.contains("provider-token-1"))
+    }
+
+    data class AnnotatedPaymentPayload(
+        val orderId: String,
+        val requestId: UUID,
+        val createdAt: Instant,
+        @Sensitive val paymentKey: String,
+        val customer: AnnotatedCustomerPayload,
+        val history: List<AnnotatedPaymentHistory>,
+    )
+
+    data class AnnotatedCustomerPayload(
+        val email: String,
+        @Sensitive val externalCredential: String,
+    )
+
+    data class AnnotatedPaymentHistory(
+        val note: String,
+        @Sensitive val providerToken: String,
+    )
 }

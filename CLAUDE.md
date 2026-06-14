@@ -10,6 +10,7 @@ Kotlin + Spring Boot 백엔드 토이 프로젝트의 공개 출발점.
 - `modules/auth-social` owns optional provider-neutral social-login contracts and endpoint routing.
 - `modules/auth-social-google`, `modules/auth-social-kakao`, and `modules/auth-social-naver` own optional provider-specific OAuth HTTP clients.
 - `modules/idempotency` owns optional `Idempotency-Key` command endpoint protection.
+- `modules/crypto` owns optional AES-GCM text encryption and opt-in persistence converters.
 - `modules/notification` owns provider-neutral notification contracts and the local broker default.
 - `modules/notification-sse` owns optional Spring MVC server-sent event delivery.
 - `modules/persistence-jpa` owns optional JPA audit timestamp mapping and lifecycle callbacks.

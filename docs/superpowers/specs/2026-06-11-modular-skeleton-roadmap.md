@@ -40,6 +40,8 @@
 - [x] `modules:auth-social-kakao`: Kakao provider.
 - [x] `modules:auth-social-naver`: Naver provider.
 - [x] `modules:config-aws-ssm`: AWS SSM Parameter Store loading.
+- [x] `modules:crypto`: AES-GCM text encryption and opt-in persistence
+  converters.
 - [x] `modules:json`: raw JSON, versioned JSON envelopes, migrations,
   DB converters, REST/OpenAPI schemas, external HTTP helpers, and event
   payload serialization.
@@ -78,6 +80,7 @@ work.
 | Auth | `auth` | Done | Optional by dependency | More sample principals and app-specific account adapters |
 | Social login | `auth-social`, provider modules | Done | Provider modules opt in | Provider profile mapping samples and callback smoke flows |
 | Config/secrets | `config-aws-ssm` | Done | Auto from profile/runtime context | Real AWS profile/role smoke run when SSM is available |
+| Crypto | `crypto` | Done | Optional by dependency; passive without keys and fail-fast for invalid configured keys | Public asset URL codec integration only if storage modules need it |
 | JSON | `json` | Done | Optional by dependency; apps can expose `JsonDocument` directly | Add more concrete versioned DTO examples as provider modules need them |
 | Notification | `notification`, `notification-sse`, `notification-slack`, `notification-websocket` | Done | Channels opt in | Async exception hook, WebSocket auth docs, operational alert links |
 | Idempotency | `idempotency` | Done | Optional by dependency | More sample endpoint patterns |
