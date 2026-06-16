@@ -20,6 +20,7 @@ allprojects {
 }
 
 configure(subprojects.filter { it.buildFile.isFile }) {
+    pluginManager.apply("java-library")
     pluginManager.apply("org.jetbrains.kotlin.jvm")
     pluginManager.apply("org.jetbrains.kotlin.plugin.spring")
     pluginManager.apply("io.spring.dependency-management")
