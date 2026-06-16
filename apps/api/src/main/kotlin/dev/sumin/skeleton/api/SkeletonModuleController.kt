@@ -6,6 +6,7 @@ import dev.sumin.skeleton.auth.social.oauth.OAuthSocialLoginService
 import dev.sumin.skeleton.async.AsyncContextTaskDecorator
 import dev.sumin.skeleton.async.AsyncMdcKeys
 import dev.sumin.skeleton.async.AsyncTaskGroup
+import dev.sumin.skeleton.async.notification.AsyncNotificationExceptionHandler
 import dev.sumin.skeleton.common.Response
 import dev.sumin.skeleton.common.TraceIdFilter
 import dev.sumin.skeleton.common.web.RateLimitStore
@@ -148,6 +149,7 @@ class SkeletonModuleController(
     private val storageFileValidator: ObjectProvider<StorageFileValidator>,
     private val storagePublicUrlResolver: ObjectProvider<StoragePublicUrlResolver>,
     private val notificationPublisher: ObjectProvider<NotificationPublisher>,
+    private val asyncFailureProbe: ObjectProvider<SkeletonAsyncFailureProbe>,
 ) {
     @GetMapping("/modules")
     fun modules() =
@@ -228,8 +230,8 @@ class SkeletonModuleController(
                 type = event.type,
                 deliveredSubscribers = result.deliveredSubscribers,
             ),
-            )
-        }
+        )
+    }
 
     @GetMapping("/async/probe")
     fun asyncProbe() =
@@ -264,6 +266,13 @@ class SkeletonModuleController(
             )
         }
 
+    @PostMapping("/async/fail")
+    fun asyncFail() =
+        withProbeMdc {
+            asyncFailureProbe.getObject().fail()
+            Response.ok()
+        }
+
     private fun moduleCatalog(): List<SkeletonModuleResponse> =
         listOf(
             module(
@@ -289,6 +298,14 @@ class SkeletonModuleController(
                 configPrefix = "skeleton.async",
                 beans = beanNames(AsyncContextTaskDecorator::class.java) + beanNameIfPresent("skeletonAsyncTaskExecutor"),
                 note = "Context-propagating @Async executor and named CompletableFuture task group summaries.",
+            ),
+            module(
+                id = "async-notification",
+                group = "foundation",
+                status = activeWhenBeanPresent(AsyncNotificationExceptionHandler::class.java),
+                configPrefix = "skeleton.async-notification",
+                beans = beanNames(AsyncNotificationExceptionHandler::class.java),
+                note = "Bundle module that wires async, notification, and uncaught @Async failure events.",
             ),
             module(
                 id = "auth",

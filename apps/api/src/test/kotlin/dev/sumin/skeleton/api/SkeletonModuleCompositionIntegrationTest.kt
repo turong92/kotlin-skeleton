@@ -2,9 +2,17 @@ package dev.sumin.skeleton.api
 
 import com.jayway.jsonpath.JsonPath
 import dev.sumin.skeleton.TestcontainersConfiguration
+import dev.sumin.skeleton.async.notification.AsyncNotificationExceptionHandler
+import dev.sumin.skeleton.notification.NotificationEvent
+import dev.sumin.skeleton.notification.NotificationSubscriber
+import dev.sumin.skeleton.notification.NotificationSubscriptionRegistry
 import dev.sumin.skeleton.notification.websocket.NotificationWebSocketTokenVerifier
 import dev.sumin.skeleton.storage.StoragePublicUrlResolver
 import java.net.URI
+import java.util.Collections
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import org.springframework.aop.interceptor.AsyncUncaughtExceptionHandler
 import org.hamcrest.Matchers.hasItem
 import org.hamcrest.Matchers.startsWith
 import org.junit.jupiter.api.Test
@@ -15,9 +23,11 @@ import org.springframework.boot.test.system.CapturedOutput
 import org.springframework.boot.test.system.OutputCaptureExtension
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.boot.test.context.TestConfiguration
+import org.springframework.context.ApplicationContext
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
+import org.springframework.scheduling.annotation.AsyncConfigurer
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.post
@@ -35,6 +45,15 @@ class SkeletonModuleCompositionIntegrationTest {
     @Autowired
     private lateinit var webSocketTokenVerifiers: List<NotificationWebSocketTokenVerifier>
 
+    @Autowired
+    private lateinit var notificationSubscriptionRegistry: NotificationSubscriptionRegistry
+
+    @Autowired
+    private lateinit var asyncExceptionHandlers: List<AsyncUncaughtExceptionHandler>
+
+    @Autowired
+    private lateinit var applicationContext: ApplicationContext
+
     @Test
     fun `module composition wires websocket token verifier from auth jwt`() {
         assertTrue(webSocketTokenVerifiers.isNotEmpty())
@@ -50,6 +69,7 @@ class SkeletonModuleCompositionIntegrationTest {
             content { contentTypeCompatibleWith(MediaType.APPLICATION_JSON) }
             jsonPath("$.values[?(@.id == 'platform')].status") { value(hasItem("ACTIVE")) }
             jsonPath("$.values[?(@.id == 'async')].status") { value(hasItem("ACTIVE")) }
+            jsonPath("$.values[?(@.id == 'async-notification')].status") { value(hasItem("ACTIVE")) }
             jsonPath("$.values[?(@.id == 'json')].status") { value(hasItem("ACTIVE")) }
             jsonPath("$.values[?(@.id == 'auth')].status") { value(hasItem("ACTIVE")) }
             jsonPath("$.values[?(@.id == 'redis-core')].status") { value(hasItem("ACTIVE")) }
@@ -142,6 +162,41 @@ class SkeletonModuleCompositionIntegrationTest {
         assertTrue(output.all.contains("traceId=$fixedTraceId"))
         assertTrue(output.all.contains("runId=probe-"))
         assertTrue(output.all.contains("accountId=acc_user"))
+        assertTrue(
+            asyncExceptionHandlers.any { it is AsyncNotificationExceptionHandler },
+            "Async exception handlers: ${asyncExceptionHandlers.map { it::class.qualifiedName }}",
+        )
+        val asyncConfigurerNames = applicationContext.getBeanNamesForType(AsyncConfigurer::class.java).toList()
+        assertTrue(
+            asyncConfigurerNames.size == 1,
+            "Async configurers: $asyncConfigurerNames",
+        )
+
+        val asyncEvents = Collections.synchronizedList(mutableListOf<NotificationEvent>())
+        val asyncEventLatch = CountDownLatch(1)
+        notificationSubscriptionRegistry.subscribe(
+            topics = setOf("async.exception"),
+            subscriber = NotificationSubscriber { event ->
+                asyncEvents += event
+                asyncEventLatch.countDown()
+            },
+        ).use {
+            mockMvc.post("/api/v1/skeleton/async/fail") {
+                header("Authorization", "Bearer $token")
+                header("traceparent", "00-$fixedTraceId-00f067aa0ba902b7-01")
+                accept = MediaType.APPLICATION_JSON
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.meta.traceId") { value(fixedTraceId) }
+            }
+
+            assertTrue(asyncEventLatch.await(3, TimeUnit.SECONDS))
+        }
+        val asyncFailureEvent = asyncEvents.single()
+        assertTrue(asyncFailureEvent.type == "async-exception")
+        assertTrue(asyncFailureEvent.payload["traceId"] == fixedTraceId)
+        assertTrue(asyncFailureEvent.payload["runId"].toString().startsWith("probe-"))
+        assertTrue(asyncFailureEvent.payload["accountId"] == "acc_user")
     }
 
     private fun loginAccessToken(): String {

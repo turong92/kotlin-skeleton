@@ -64,8 +64,38 @@ task is logged with its task name and original exception. When MDC has
 `traceId`, `spanId`, `parentSpanId`, `runId`, or `accountId`, those values are
 included in the log line; blank or missing values are omitted.
 
+## Async Failure Notifications
+
+Use `modules:async-notification` when a service wants async execution plus
+notification events from uncaught `@Async` failures:
+
+```kotlin
+implementation(project(":modules:async-notification"))
+```
+
+That bundle exposes `modules:async` and `modules:notification` transitively,
+then registers an `AsyncUncaughtExceptionHandler` that publishes
+`async.exception` events. The event payload includes exception class, method,
+argument count/types, and any non-blank trace/run/account MDC values.
+
+```yaml
+skeleton:
+  async-notification:
+    enabled: true
+    topic: async.exception
+    type: async-exception
+    title: Async task failed
+```
+
+If an application defines its own `AsyncConfigurer`, the skeleton default backs
+off. If it only needs custom failure routing, prefer defining an
+`AsyncUncaughtExceptionHandler` bean.
+
 ## Workbench Probe
 
 `apps/api` exposes `GET /api/v1/skeleton/async/probe` to prove the module is
 assembled. It submits one task to `skeletonAsyncTaskExecutor` and returns the
 trace/run/account values observed from the executor thread.
+
+`POST /api/v1/skeleton/async/fail` intentionally throws from an `@Async` method
+so the sample app can prove the async-notification bridge.

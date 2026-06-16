@@ -1,18 +1,15 @@
 package dev.sumin.skeleton.async
 
-import java.util.concurrent.Executor
-import org.springframework.aop.interceptor.AsyncUncaughtExceptionHandler
-import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
+import org.springframework.boot.autoconfigure.task.TaskExecutionAutoConfiguration
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean
-import org.springframework.scheduling.annotation.AsyncConfigurer
 import org.springframework.scheduling.annotation.EnableAsync
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
 
-@AutoConfiguration
+@AutoConfiguration(before = [TaskExecutionAutoConfiguration::class])
 @EnableAsync
 @EnableConfigurationProperties(SkeletonAsyncProperties::class)
 @ConditionalOnProperty(prefix = "skeleton.async", name = ["enabled"], havingValue = "true", matchIfMissing = true)
@@ -36,19 +33,5 @@ class SkeletonAsyncAutoConfiguration {
             setTaskDecorator(asyncContextTaskDecorator)
             setWaitForTasksToCompleteOnShutdown(properties.waitForTasksToCompleteOnShutdown)
             setAwaitTerminationSeconds(properties.awaitTerminationSeconds.coerceAtLeast(0))
-        }
-
-    @Bean
-    @ConditionalOnMissingBean(AsyncConfigurer::class)
-    fun skeletonAsyncConfigurer(
-        skeletonAsyncTaskExecutor: ThreadPoolTaskExecutor,
-        handlerProvider: ObjectProvider<AsyncUncaughtExceptionHandler>,
-    ): AsyncConfigurer =
-        object : AsyncConfigurer {
-            override fun getAsyncExecutor(): Executor =
-                skeletonAsyncTaskExecutor
-
-            override fun getAsyncUncaughtExceptionHandler(): AsyncUncaughtExceptionHandler? =
-                handlerProvider.getIfAvailable()
         }
 }

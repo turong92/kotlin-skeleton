@@ -12,7 +12,12 @@ import java.util.function.Supplier
 
 class SkeletonAsyncAutoConfigurationTest {
     private val contextRunner = ApplicationContextRunner()
-        .withConfiguration(AutoConfigurations.of(SkeletonAsyncAutoConfiguration::class.java))
+        .withConfiguration(
+            AutoConfigurations.of(
+                SkeletonAsyncAutoConfiguration::class.java,
+                SkeletonAsyncConfigurerAutoConfiguration::class.java,
+            ),
+        )
 
     @Test
     fun `auto configuration creates context propagating executor by default`() {
@@ -49,21 +54,49 @@ class SkeletonAsyncAutoConfigurationTest {
     @Test
     fun `default async configurer uses supplied uncaught exception handler`() {
         val handler = RecordingAsyncUncaughtExceptionHandler()
+        val exception = IllegalStateException("boom")
+        val method = Supplier::class.java.getMethod("get")
 
         contextRunner
             .withBean(AsyncUncaughtExceptionHandler::class.java, Supplier { handler })
             .run { context ->
                 val configurer = context.getBean(AsyncConfigurer::class.java)
+                val exceptionHandler = requireNotNull(configurer.asyncUncaughtExceptionHandler)
 
-                assertThat(configurer.asyncUncaughtExceptionHandler).isSameAs(handler)
+                exceptionHandler.handleUncaughtException(exception, method, "arg")
+
+                assertThat(handler.exception).isSameAs(exception)
+                assertThat(handler.method).isSameAs(method)
+                assertThat(handler.params).containsExactly("arg")
+            }
+    }
+
+    @Test
+    fun `default async configurer backs off when custom async configurer exists`() {
+        val customConfigurer = object : AsyncConfigurer {}
+
+        contextRunner
+            .withBean(AsyncConfigurer::class.java, Supplier { customConfigurer })
+            .run { context ->
+                assertThat(context).hasSingleBean(AsyncConfigurer::class.java)
+                assertThat(context.getBean(AsyncConfigurer::class.java)).isSameAs(customConfigurer)
+                assertThat(context).hasBean("skeletonAsyncTaskExecutor")
             }
     }
 
     private class RecordingAsyncUncaughtExceptionHandler : AsyncUncaughtExceptionHandler {
+        lateinit var exception: Throwable
+        lateinit var method: Method
+        lateinit var params: Array<out Any?>
+
         override fun handleUncaughtException(
             ex: Throwable,
             method: Method,
             vararg params: Any?,
-        ) = Unit
+        ) {
+            this.exception = ex
+            this.method = method
+            this.params = params
+        }
     }
 }
