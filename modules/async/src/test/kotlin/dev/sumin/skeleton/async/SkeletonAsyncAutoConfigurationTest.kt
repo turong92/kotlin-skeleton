@@ -2,10 +2,13 @@ package dev.sumin.skeleton.async
 
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
+import org.springframework.aop.interceptor.AsyncUncaughtExceptionHandler
 import org.springframework.boot.autoconfigure.AutoConfigurations
 import org.springframework.boot.test.context.runner.ApplicationContextRunner
 import org.springframework.scheduling.annotation.AsyncConfigurer
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
+import java.lang.reflect.Method
+import java.util.function.Supplier
 
 class SkeletonAsyncAutoConfigurationTest {
     private val contextRunner = ApplicationContextRunner()
@@ -41,5 +44,26 @@ class SkeletonAsyncAutoConfigurationTest {
                 assertThat(context).doesNotHaveBean("skeletonAsyncTaskExecutor")
                 assertThat(context).doesNotHaveBean(AsyncConfigurer::class.java)
             }
+    }
+
+    @Test
+    fun `default async configurer uses supplied uncaught exception handler`() {
+        val handler = RecordingAsyncUncaughtExceptionHandler()
+
+        contextRunner
+            .withBean(AsyncUncaughtExceptionHandler::class.java, Supplier { handler })
+            .run { context ->
+                val configurer = context.getBean(AsyncConfigurer::class.java)
+
+                assertThat(configurer.asyncUncaughtExceptionHandler).isSameAs(handler)
+            }
+    }
+
+    private class RecordingAsyncUncaughtExceptionHandler : AsyncUncaughtExceptionHandler {
+        override fun handleUncaughtException(
+            ex: Throwable,
+            method: Method,
+            vararg params: Any?,
+        ) = Unit
     }
 }

@@ -1,6 +1,8 @@
 package dev.sumin.skeleton.async
 
 import java.util.concurrent.Executor
+import org.springframework.aop.interceptor.AsyncUncaughtExceptionHandler
+import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
@@ -40,9 +42,13 @@ class SkeletonAsyncAutoConfiguration {
     @ConditionalOnMissingBean(AsyncConfigurer::class)
     fun skeletonAsyncConfigurer(
         skeletonAsyncTaskExecutor: ThreadPoolTaskExecutor,
+        handlerProvider: ObjectProvider<AsyncUncaughtExceptionHandler>,
     ): AsyncConfigurer =
         object : AsyncConfigurer {
             override fun getAsyncExecutor(): Executor =
                 skeletonAsyncTaskExecutor
+
+            override fun getAsyncUncaughtExceptionHandler(): AsyncUncaughtExceptionHandler? =
+                handlerProvider.getIfAvailable()
         }
 }
