@@ -2,8 +2,10 @@ package dev.sumin.skeleton.api
 
 import dev.sumin.skeleton.auth.api.AuthController
 import dev.sumin.skeleton.auth.social.api.OAuthSocialAuthController
+import dev.sumin.skeleton.common.openapi.ApiResponseEnvelope
 import kotlin.reflect.KVisibility
 import kotlin.reflect.full.memberFunctions
+import kotlin.reflect.jvm.javaMethod
 import kotlin.test.Test
 import kotlin.test.assertFalse
 
@@ -21,6 +23,7 @@ class RestResponseContractTest {
             handler.memberFunctions
                 .filter { it.visibility == KVisibility.PUBLIC }
                 .filterNot { it.name in ignoredFunctionNames }
+                .filterNot { it.javaMethod?.isAnnotationPresent(ApiResponseEnvelope::class.java) == true }
                 .mapNotNull { function ->
                     val returnType = function.returnType.toString()
                     val returnsRawType =

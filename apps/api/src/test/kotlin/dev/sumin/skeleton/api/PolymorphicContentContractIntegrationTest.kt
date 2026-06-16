@@ -177,8 +177,11 @@ class PolymorphicContentContractIntegrationTest {
             ).any { it["\$ref"] == "#/components/schemas/SkeletonImageContentResponseSpec" },
         )
         assertEquals(
-            "#/components/schemas/DataResponseSkeletonContentResponse",
-            JsonPath.read(docs, "$.paths['/api/v1/skeleton/polymorphic/contents'].post.responses['201'].content['application/json'].schema['\$ref']"),
+            "#/components/schemas/SkeletonContentResponse",
+            JsonPath.read(
+                docs,
+                "$.paths['/api/v1/skeleton/polymorphic/contents'].post.responses['201'].content['application/json'].schema.properties.value['\$ref']",
+            ),
         )
         assertEquals(
             "#/components/schemas/VersionedJsonDocument",
