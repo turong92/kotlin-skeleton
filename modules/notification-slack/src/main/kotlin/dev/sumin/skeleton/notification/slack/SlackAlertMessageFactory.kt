@@ -3,6 +3,7 @@ package dev.sumin.skeleton.notification.slack
 import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.annotation.JsonProperty
 import dev.sumin.skeleton.common.logging.SensitiveValueRedactor
+import dev.sumin.skeleton.common.observability.ObservabilityLink
 
 class SlackAlertMessageFactory(
     private val properties: SlackNotificationProperties,
@@ -26,30 +27,41 @@ class SlackAlertMessageFactory(
             ),
         )
 
+        val blocks = mutableListOf(
+            SlackBlock(
+                type = "section",
+                text = SlackText(
+                    text = "*[${alert.severity.name}] ${escape(alert.title)}*\n${escape(alert.message)}",
+                ),
+            ),
+            SlackBlock(
+                type = "section",
+                fields = fields
+                    .filterValues { !it.isNullOrBlank() }
+                    .map { (name, value) -> SlackText(text = "*${escape(name)}*\n${escape(value.orEmpty())}") },
+            ),
+        )
+        alert.links.takeIf { it.isNotEmpty() }?.let { links ->
+            blocks += SlackBlock(
+                type = "context",
+                elements = listOf(SlackText(text = "Links: ${links.joinToString(" · ") { it.toSlackLink() }}")),
+            )
+        }
+        blocks += SlackBlock(
+            type = "context",
+            elements = listOf(SlackText(text = "occurredAt=${alert.occurredAt}")),
+        )
+
         return SlackWebhookPayload(
             text = "[${alert.severity.name}] ${alert.title}",
             username = route.username,
             iconEmoji = route.iconEmoji,
-            blocks = listOf(
-                SlackBlock(
-                    type = "section",
-                    text = SlackText(
-                        text = "*[${alert.severity.name}] ${escape(alert.title)}*\n${escape(alert.message)}",
-                    ),
-                ),
-                SlackBlock(
-                    type = "section",
-                    fields = fields
-                        .filterValues { !it.isNullOrBlank() }
-                        .map { (name, value) -> SlackText(text = "*${escape(name)}*\n${escape(value.orEmpty())}") },
-                ),
-                SlackBlock(
-                    type = "context",
-                    elements = listOf(SlackText(text = "occurredAt=${alert.occurredAt}")),
-                ),
-            ),
+            blocks = blocks,
         )
     }
+
+    private fun ObservabilityLink.toSlackLink(): String =
+        "<${escape(url)}|${escape(label)}>"
 
     private fun escape(value: String): String =
         value

@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.notification.slack
 
+import dev.sumin.skeleton.common.observability.ObservabilityLink
 import java.time.Instant
 
 data class SlackAlert(
@@ -10,6 +11,7 @@ data class SlackAlert(
     val route: String? = null,
     val fields: Map<String, String?> = emptyMap(),
     val trace: SlackTraceContext = SlackTraceContext.empty(),
+    val links: List<ObservabilityLink> = emptyList(),
     val occurredAt: Instant = Instant.now(),
 )
 

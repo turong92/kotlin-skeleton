@@ -1,5 +1,7 @@
 package dev.sumin.skeleton.notification.slack
 
+import dev.sumin.skeleton.common.observability.ObservabilityLink
+import dev.sumin.skeleton.common.observability.ObservabilityLinkKind
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -49,5 +51,36 @@ class SlackAlertMessageFactoryTest {
         assertTrue(body.contains("[REDACTED]"))
         assertFalse(body.contains("token-1"))
         assertFalse(body.contains("empty"))
+    }
+
+    @Test
+    fun `renders observability links when alert has links`() {
+        val factory = SlackAlertMessageFactory(SlackNotificationProperties())
+        val payload = factory.create(
+            alert = SlackAlert(
+                title = "Async failed",
+                message = "worker failed",
+                severity = SlackAlertSeverity.ERROR,
+                topic = "async.exception",
+                links = listOf(
+                    ObservabilityLink(
+                        id = "logs",
+                        label = "Logs by traceId",
+                        url = "https://grafana.example/explore?traceId=4bf92f3577b34da6a3ce929d0e0e4736",
+                        kind = ObservabilityLinkKind.LOGS,
+                    ),
+                ),
+            ),
+        )
+
+        val body = mapper.writeValueAsString(payload)
+
+        assertTrue(body.contains("Links:"))
+        assertTrue(body.contains("<https://grafana.example/explore?traceId=4bf92f3577b34da6a3ce929d0e0e4736|Logs by traceId>"))
+        assertEquals(
+            "Links: <https://grafana.example/explore?traceId=4bf92f3577b34da6a3ce929d0e0e4736|Logs by traceId>",
+            payload.blocks[2].elements.single().text,
+        )
+        assertTrue(payload.blocks[3].elements.single().text.startsWith("occurredAt="))
     }
 }
