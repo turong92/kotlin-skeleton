@@ -5,3 +5,4 @@ dev.sumin.skeleton.common.enumcode.CodeEnumAutoConfiguration
 dev.sumin.skeleton.common.web.WebPolicyAutoConfiguration
 dev.sumin.skeleton.common.http.OutboundHttpAutoConfiguration
 dev.sumin.skeleton.common.openapi.PlatformOpenApiAutoConfiguration
+dev.sumin.skeleton.common.observability.ObservabilityLinkAutoConfiguration
