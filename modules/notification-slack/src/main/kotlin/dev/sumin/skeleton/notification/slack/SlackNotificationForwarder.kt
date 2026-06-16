@@ -7,6 +7,7 @@ import dev.sumin.skeleton.notification.NotificationSeverity
 import dev.sumin.skeleton.notification.NotificationSubscriber
 import dev.sumin.skeleton.notification.NotificationSubscription
 import dev.sumin.skeleton.notification.NotificationSubscriptionRegistry
+import org.slf4j.LoggerFactory
 
 class SlackNotificationForwarder(
     private val sender: SlackAlertSender,
@@ -14,6 +15,8 @@ class SlackNotificationForwarder(
     subscriptionRegistry: NotificationSubscriptionRegistry?,
     private val linkResolver: ObservabilityLinkResolver = ObservabilityLinkResolver { emptyList() },
 ) : AutoCloseable {
+    private val log = LoggerFactory.getLogger(javaClass)
+
     private val subscription: NotificationSubscription? =
         if (properties.notificationEvents) {
             subscriptionRegistry?.subscribe(subscriber = NotificationSubscriber { event -> forward(event) })
@@ -23,15 +26,16 @@ class SlackNotificationForwarder(
 
     private fun forward(event: NotificationEvent) {
         val fields = event.fields()
-        val links = linkResolver.resolve(
-            ObservabilityContext.fromMdc(
-                fields + mapOf(
-                    "topic" to event.topic,
-                    "type" to event.type,
-                    "route" to event.topic,
-                ),
+        val linkContext = ObservabilityContext.fromMdc(
+            fields + mapOf(
+                "topic" to event.topic,
+                "type" to event.type,
+                "route" to event.topic,
             ),
         )
+        val links = runCatching { linkResolver.resolve(linkContext) }
+            .onFailure { error -> log.warn("Slack observability link resolution failed: {}", error.message) }
+            .getOrElse { emptyList() }
 
         sender.send(
             SlackAlert(

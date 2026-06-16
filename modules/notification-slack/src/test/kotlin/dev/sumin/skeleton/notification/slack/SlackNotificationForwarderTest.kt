@@ -10,6 +10,7 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import org.slf4j.MDC
 
 class SlackNotificationForwarderTest {
@@ -35,6 +36,7 @@ class SlackNotificationForwarderTest {
     fun `forwards notification event as Slack alert`() {
         val registry = RecordingSubscriptionRegistry()
         val sender = RecordingSlackAlertSender()
+        val linkResolver = RecordingObservabilityLinkResolver()
         MDC.put(TraceIdFilter.MDC_KEY, "4bf92f3577b34da6a3ce929d0e0e4736")
         MDC.put(TraceIdFilter.MDC_SPAN_ID_KEY, "00f067aa0ba902b7")
 
@@ -42,7 +44,7 @@ class SlackNotificationForwarderTest {
             sender = sender,
             properties = SlackNotificationProperties(notificationEvents = true),
             subscriptionRegistry = registry,
-            linkResolver = RecordingObservabilityLinkResolver(),
+            linkResolver = linkResolver,
         )
 
         registry.subscriber?.onNotification(
@@ -69,6 +71,39 @@ class SlackNotificationForwarderTest {
         assertEquals(1, alert.links.size)
         assertEquals("run", alert.links.single().id)
         assertEquals("https://ops.example/runs/run-1", alert.links.single().url)
+        val linkContext = linkResolver.contexts.single()
+        assertEquals("payment", linkContext.value("topic"))
+        assertEquals("payment.failed", linkContext.value("type"))
+        assertEquals("payment", linkContext.value("route"))
+        assertEquals("run-1", linkContext.value("runId"))
+    }
+
+    @Test
+    fun `forwards notification event without links when resolver fails`() {
+        val registry = RecordingSubscriptionRegistry()
+        val sender = RecordingSlackAlertSender()
+
+        SlackNotificationForwarder(
+            sender = sender,
+            properties = SlackNotificationProperties(notificationEvents = true),
+            subscriptionRegistry = registry,
+            linkResolver = ThrowingObservabilityLinkResolver(),
+        )
+
+        registry.subscriber?.onNotification(
+            NotificationEvent(
+                topic = "payment",
+                type = "payment.failed",
+                severity = NotificationSeverity.ERROR,
+                title = "Payment failed",
+                message = "approve failed",
+                payload = mapOf("runId" to "run-1"),
+            ),
+        )
+
+        val alert = sender.alerts.single()
+        assertEquals("Payment failed", alert.title)
+        assertTrue(alert.links.isEmpty())
     }
 
     private class RecordingSubscriptionRegistry : NotificationSubscriptionRegistry {
@@ -96,10 +131,13 @@ class SlackNotificationForwarderTest {
     }
 
     private class RecordingObservabilityLinkResolver : dev.sumin.skeleton.common.observability.ObservabilityLinkResolver {
+        val contexts = mutableListOf<dev.sumin.skeleton.common.observability.ObservabilityContext>()
+
         override fun resolve(
             context: dev.sumin.skeleton.common.observability.ObservabilityContext,
-        ): List<dev.sumin.skeleton.common.observability.ObservabilityLink> =
-            listOfNotNull(
+        ): List<dev.sumin.skeleton.common.observability.ObservabilityLink> {
+            contexts += context
+            return listOfNotNull(
                 context.value("runId")?.let { runId ->
                     dev.sumin.skeleton.common.observability.ObservabilityLink(
                         id = "run",
@@ -109,5 +147,13 @@ class SlackNotificationForwarderTest {
                     )
                 },
             )
+        }
+    }
+
+    private class ThrowingObservabilityLinkResolver : dev.sumin.skeleton.common.observability.ObservabilityLinkResolver {
+        override fun resolve(
+            context: dev.sumin.skeleton.common.observability.ObservabilityContext,
+        ): List<dev.sumin.skeleton.common.observability.ObservabilityLink> =
+            error("resolver failed")
     }
 }

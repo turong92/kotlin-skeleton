@@ -46,14 +46,15 @@ class SlackExceptionAspect(
             runCatching { fields.putAll(contributor.contribute(context)) }
                 .onFailure { error -> log.warn("Slack alert contributor failed: {}", error.message) }
         }
-        val links = linkResolver.resolve(
-            ObservabilityContext.fromMdc(
-                fields + mapOf(
-                    "route" to route,
-                    "method" to fields["method"],
-                ),
+        val linkContext = ObservabilityContext.fromMdc(
+            fields + mapOf(
+                "route" to route,
+                "method" to fields["method"],
             ),
         )
+        val links = runCatching { linkResolver.resolve(linkContext) }
+            .onFailure { error -> log.warn("Slack observability link resolution failed: {}", error.message) }
+            .getOrElse { emptyList() }
 
         runCatching {
             sender.send(
