@@ -135,6 +135,17 @@ class ApiResponseEnvelopeSupportTest {
     }
 
     @Test
+    fun `uses generated response schema payload ref when available`() {
+        val schema = ApiResponseEnvelopeSchemas.operationSchema(
+            envelope = ResolvedApiResponseEnvelope(ApiEnvelopeType.VALUE, SamplePayload::class.java),
+            generatedResponseSchema = Schema<Any>().`$ref`("#/components/schemas/DataResponseCustomPayload"),
+        )
+
+        assertRefProperty(schema, "value", "CustomPayload")
+        assertRefProperty(schema, "meta", "ResponseMeta")
+    }
+
+    @Test
     fun `registers stable component schema shapes`() {
         val schemas = ApiResponseEnvelopeSchemas.componentSchemas()
 

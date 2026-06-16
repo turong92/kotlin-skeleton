@@ -86,11 +86,14 @@ class OpenApiDocumentationIntegrationTest {
         val meSecurity = JsonPath.read<List<Map<String, Any?>>>(docs, "$.paths['/api/v1/auth/me'].get.security")
         assertTrue(meSecurity.any { it.containsKey("bearerAuth") })
 
-        val socialLoginSchemaRef = JsonPath.read<String>(
-            docs,
-            "$.paths['/api/v1/auth/social/{provider}/login'].post.responses['200'].content['application/json'].schema['\$ref']",
+        val socialLoginEnvelope = responseSchema(docs, "/api/v1/auth/social/{provider}/login", "post", "200")
+        val socialLoginProperties = properties(socialLoginEnvelope)
+        assertTrue(socialLoginProperties.containsKey("value"))
+        assertTrue(socialLoginProperties.containsKey("meta"))
+        assertEquals(
+            "#/components/schemas/AuthTokenResponse",
+            (socialLoginProperties["value"] as Map<*, *>)["\$ref"],
         )
-        assertTrue(socialLoginSchemaRef.contains("DataResponse"))
 
         val createdItemEnvelope = responseSchema(docs, "/api/v1/examples/items", "post", "201")
         val createdItemProperties = properties(createdItemEnvelope)

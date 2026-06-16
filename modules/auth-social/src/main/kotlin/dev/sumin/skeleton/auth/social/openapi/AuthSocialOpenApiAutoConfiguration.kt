@@ -1,5 +1,9 @@
 package dev.sumin.skeleton.auth.social.openapi
 
+import dev.sumin.skeleton.auth.api.AuthTokenResponse
+import dev.sumin.skeleton.common.openapi.ApiEnvelopeType
+import dev.sumin.skeleton.common.openapi.ApiResponseEnvelopeSchemas
+import dev.sumin.skeleton.common.openapi.ResolvedApiResponseEnvelope
 import io.swagger.v3.oas.models.Components
 import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.oas.models.Operation
@@ -68,7 +72,18 @@ class AuthSocialOpenApiAutoConfiguration {
             )
             .responses(
                 ApiResponses()
-                    .addApiResponse("200", jsonResponse("OK", "#/components/schemas/DataResponseAuthTokenResponse"))
+                    .addApiResponse(
+                        "200",
+                        jsonResponse(
+                            "OK",
+                            ApiResponseEnvelopeSchemas.operationSchema(
+                                ResolvedApiResponseEnvelope(
+                                    type = ApiEnvelopeType.VALUE,
+                                    payloadClass = AuthTokenResponse::class.java,
+                                ),
+                            ),
+                        ),
+                    )
                     .addApiResponse("400", jsonResponse("Bad request", "#/components/schemas/ApiError"))
                     .addApiResponse("404", jsonResponse("Resource not found", "#/components/schemas/ApiError"))
                     .addApiResponse("500", jsonResponse("Internal server error", "#/components/schemas/ApiError")),
@@ -101,12 +116,15 @@ class AuthSocialOpenApiAutoConfiguration {
             .required(listOf("authorizationCode"))
 
     private fun jsonResponse(description: String, schemaRef: String): ApiResponse =
+        jsonResponse(description, Schema<Any>().`$ref`(schemaRef))
+
+    private fun jsonResponse(description: String, schema: Schema<Any>): ApiResponse =
         ApiResponse()
             .description(description)
             .content(
                 Content().addMediaType(
                     "application/json",
-                    MediaType().schema(Schema<Any>().`$ref`(schemaRef)),
+                    MediaType().schema(schema),
                 ),
             )
 }

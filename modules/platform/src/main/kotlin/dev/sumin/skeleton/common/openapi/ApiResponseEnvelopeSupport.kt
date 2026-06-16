@@ -85,13 +85,16 @@ object ApiResponseEnvelopeSchemas {
             "CursorMeta" to cursorMetaSchema(),
         )
 
-    fun operationSchema(envelope: ResolvedApiResponseEnvelope): Schema<Any> =
+    fun operationSchema(
+        envelope: ResolvedApiResponseEnvelope,
+        generatedResponseSchema: Schema<*>? = null,
+    ): Schema<Any> =
         when (envelope.type) {
             ApiEnvelopeType.BASIC -> basicSchema()
-            ApiEnvelopeType.VALUE -> dataSchema(payloadRef(envelope))
-            ApiEnvelopeType.LIST -> listSchema(payloadRef(envelope))
-            ApiEnvelopeType.PAGE -> pageSchema(payloadRef(envelope))
-            ApiEnvelopeType.CURSOR -> cursorSchema(payloadRef(envelope))
+            ApiEnvelopeType.VALUE -> dataSchema(payloadSchema(envelope, generatedResponseSchema))
+            ApiEnvelopeType.LIST -> listSchema(payloadSchema(envelope, generatedResponseSchema))
+            ApiEnvelopeType.PAGE -> pageSchema(payloadSchema(envelope, generatedResponseSchema))
+            ApiEnvelopeType.CURSOR -> cursorSchema(payloadSchema(envelope, generatedResponseSchema))
         }
 
     private fun basicSchema(): Schema<Any> =
@@ -137,10 +140,64 @@ object ApiResponseEnvelopeSchemas {
             .addProperty("hasNext", io.swagger.v3.oas.models.media.BooleanSchema())
             .required(listOf("hasNext"))
 
+    private fun payloadSchema(
+        envelope: ResolvedApiResponseEnvelope,
+        generatedResponseSchema: Schema<*>?,
+    ): Schema<Any> =
+        generatedPayloadSchema(envelope, generatedResponseSchema)
+            ?: payloadRef(envelope)
+
+    @Suppress("UNCHECKED_CAST")
+    private fun generatedPayloadSchema(
+        envelope: ResolvedApiResponseEnvelope,
+        generatedResponseSchema: Schema<*>?,
+    ): Schema<Any>? {
+        generatedResponseSchema ?: return null
+        return when (envelope.type) {
+            ApiEnvelopeType.BASIC -> null
+            ApiEnvelopeType.VALUE ->
+                generatedResponseSchema.properties?.get("value") as? Schema<Any>
+                    ?: generatedPayloadRef(envelope, generatedResponseSchema)
+            ApiEnvelopeType.LIST,
+            ApiEnvelopeType.PAGE,
+            ApiEnvelopeType.CURSOR ->
+                (generatedResponseSchema.properties?.get("values") as? ArraySchema)?.items as? Schema<Any>
+                    ?: generatedPayloadRef(envelope, generatedResponseSchema)
+        }
+    }
+
+    private fun generatedPayloadRef(
+        envelope: ResolvedApiResponseEnvelope,
+        generatedResponseSchema: Schema<*>,
+    ): Schema<Any>? {
+        val wrapperName = generatedResponseSchema.`$ref`
+            ?.substringAfterLast("/")
+            ?: return null
+        val wrapperPrefix = when (envelope.type) {
+            ApiEnvelopeType.BASIC -> return null
+            ApiEnvelopeType.VALUE -> "DataResponse"
+            ApiEnvelopeType.LIST -> "ListResponse"
+            ApiEnvelopeType.PAGE -> "PageResponse"
+            ApiEnvelopeType.CURSOR -> "CursorResponse"
+        }
+        val payloadName = wrapperName
+            .removePrefix(wrapperPrefix)
+            .takeIf { it != wrapperName && it.isNotBlank() }
+            ?: return null
+        return ref(payloadName)
+    }
+
     private fun payloadRef(envelope: ResolvedApiResponseEnvelope): Schema<Any> =
         envelope.payloadClass
-            ?.let { ref(it.simpleName) }
+            ?.let { ref(componentName(it)) }
             ?: error("Payload class is required for ${envelope.type}")
+
+    private fun componentName(payloadClass: Class<*>): String =
+        payloadClass
+            .getAnnotation(io.swagger.v3.oas.annotations.media.Schema::class.java)
+            ?.name
+            ?.takeIf { it.isNotBlank() }
+            ?: payloadClass.simpleName
 
     private fun ref(name: String): Schema<Any> =
         Schema<Any>().`$ref`("#/components/schemas/$name")

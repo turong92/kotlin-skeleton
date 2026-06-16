@@ -126,10 +126,9 @@ class PlatformOpenApiAutoConfiguration {
         }
         val response = successResponse() ?: return
         val content = response.content ?: Content().also { response.content = it }
-        content.addMediaType(
-            "application/json",
-            MediaType().schema(ApiResponseEnvelopeSchemas.operationSchema(envelope)),
-        )
+        val mediaType = content["application/json"] ?: content["*/*"] ?: MediaType()
+        mediaType.schema(ApiResponseEnvelopeSchemas.operationSchema(envelope, mediaType.schema))
+        content.addMediaType("application/json", mediaType)
         content.remove("*/*")
     }
 

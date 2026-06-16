@@ -31,7 +31,7 @@ For ambiguous signatures, use the single override annotation:
     type = ApiEnvelopeType.PAGE,
     value = OrderResponse::class,
 )
-fun searchOrders(): ResponseEntity<PageResponse<OrderResponse>>
+fun searchOrders(): Any
 ```
 
 Prefer normal wrapper return types first. Use `@ApiResponseEnvelope` only when
