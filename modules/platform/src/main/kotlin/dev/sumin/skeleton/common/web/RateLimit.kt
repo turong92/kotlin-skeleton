@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.common.web
 
 import dev.sumin.skeleton.common.ApiError
+import dev.sumin.skeleton.common.PlatformErrorCode
 import dev.sumin.skeleton.common.TraceIdFilter
 import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
@@ -123,9 +124,10 @@ class RateLimitFilter(
         objectMapper.writeValue(
             response.outputStream,
             ApiError(
-                title = "Too many requests",
-                status = HttpStatus.TOO_MANY_REQUESTS.value(),
-                detail = "Rate limit exceeded",
+                code = PlatformErrorCode.TOO_MANY_REQUESTS.code,
+                title = PlatformErrorCode.TOO_MANY_REQUESTS.title,
+                status = PlatformErrorCode.TOO_MANY_REQUESTS.status.value(),
+                detail = PlatformErrorCode.TOO_MANY_REQUESTS.defaultDetail,
                 traceId = MDC.get(TraceIdFilter.MDC_KEY),
                 spanId = MDC.get(TraceIdFilter.MDC_SPAN_ID_KEY),
             ),

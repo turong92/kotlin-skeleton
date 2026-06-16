@@ -35,6 +35,7 @@ class AuthControllerIntegrationTest {
             status { isUnauthorized() }
             content { contentTypeCompatibleWith(MediaType.APPLICATION_JSON) }
             jsonPath("$.status") { value(401) }
+            jsonPath("$.code") { value("COMMON.UNAUTHORIZED") }
             jsonPath("$.title") { isNotEmpty() }
             jsonPath("$.traceId") { value(traceId) }
             jsonPath("$.spanId") { isNotEmpty() }
@@ -73,6 +74,7 @@ class AuthControllerIntegrationTest {
             status { isBadRequest() }
             content { contentTypeCompatibleWith(MediaType.APPLICATION_JSON) }
             jsonPath("$.status") { value(400) }
+            jsonPath("$.code") { value("COMMON.VALIDATION_FAILED") }
             jsonPath("$.title") { value("Validation failed") }
             jsonPath("$.detail") { value("Request body validation failed") }
             jsonPath("$.traceId") { isNotEmpty() }
@@ -93,8 +95,27 @@ class AuthControllerIntegrationTest {
             status { isBadRequest() }
             content { contentTypeCompatibleWith(MediaType.APPLICATION_JSON) }
             jsonPath("$.status") { value(400) }
+            jsonPath("$.code") { value("COMMON.VALIDATION_FAILED") }
             jsonPath("$.title") { value("Validation failed") }
             jsonPath("$.errors[?(@.field == 'identifier')].code") { value(hasItem("RequiredLoginIdentifier")) }
+        }
+    }
+
+    @Test
+    fun `POST login with wrong password returns stable auth error code`() {
+        mockMvc.post("/api/v1/auth/login") {
+            contentType = MediaType.APPLICATION_JSON
+            accept = MediaType.APPLICATION_JSON
+            content = """{"email":"user@example.com","password":"wrong-password"}"""
+        }.andExpect {
+            status { isUnauthorized() }
+            content { contentTypeCompatibleWith(MediaType.APPLICATION_JSON) }
+            jsonPath("$.status") { value(401) }
+            jsonPath("$.code") { value("AUTH.INVALID_CREDENTIALS") }
+            jsonPath("$.title") { value("Invalid credentials") }
+            jsonPath("$.detail") { value("Invalid credentials") }
+            jsonPath("$.traceId") { isNotEmpty() }
+            jsonPath("$.spanId") { isNotEmpty() }
         }
     }
 

@@ -1,8 +1,9 @@
 package dev.sumin.skeleton.common.http
 
 import dev.sumin.skeleton.common.ApplicationException
+import dev.sumin.skeleton.common.ErrorCode
+import dev.sumin.skeleton.common.PlatformErrorCode
 import java.net.URI
-import org.springframework.http.HttpStatus
 
 open class ExternalHttpException(
     message: String,
@@ -12,10 +13,17 @@ open class ExternalHttpException(
     val upstreamStatus: Int?,
     val retryable: Boolean,
     val providerTraceId: String? = null,
-    status: HttpStatus,
-    title: String,
+    errorCode: ErrorCode,
+    detail: String? = message,
+    data: Any? = null,
     cause: Throwable? = null,
-) : ApplicationException(message = message, status = status, title = title, cause = cause)
+) : ApplicationException(
+    message = message,
+    errorCode = errorCode,
+    detail = detail,
+    data = data,
+    cause = cause,
+)
 
 class ExternalHttpStatusException(
     clientName: String,
@@ -32,8 +40,7 @@ class ExternalHttpStatusException(
     upstreamStatus = upstreamStatus,
     retryable = upstreamStatus >= 500 || upstreamStatus == 429,
     providerTraceId = providerTraceId,
-    status = HttpStatus.BAD_GATEWAY,
-    title = "External service error",
+    errorCode = PlatformErrorCode.EXTERNAL_SERVICE_ERROR,
 )
 
 class ExternalHttpTimeoutException(
@@ -48,8 +55,7 @@ class ExternalHttpTimeoutException(
     uri = uri,
     upstreamStatus = null,
     retryable = true,
-    status = HttpStatus.GATEWAY_TIMEOUT,
-    title = "External service timeout",
+    errorCode = PlatformErrorCode.EXTERNAL_SERVICE_TIMEOUT,
     cause = cause,
 )
 
@@ -65,7 +71,6 @@ class ExternalHttpNetworkException(
     uri = uri,
     upstreamStatus = null,
     retryable = true,
-    status = HttpStatus.BAD_GATEWAY,
-    title = "External service network error",
+    errorCode = PlatformErrorCode.EXTERNAL_SERVICE_ERROR,
     cause = cause,
 )

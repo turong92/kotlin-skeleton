@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.idempotency
 
 import dev.sumin.skeleton.common.ApiError
+import dev.sumin.skeleton.common.PlatformErrorCode
 import dev.sumin.skeleton.common.TraceIdFilter
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
@@ -120,6 +121,7 @@ class IdempotencyHandlerInterceptor(
         objectMapper.writeValue(
             response.outputStream,
             ApiError(
+                code = PlatformErrorCode.IDEMPOTENCY_ERROR.code,
                 title = title,
                 status = status.value(),
                 detail = detail,

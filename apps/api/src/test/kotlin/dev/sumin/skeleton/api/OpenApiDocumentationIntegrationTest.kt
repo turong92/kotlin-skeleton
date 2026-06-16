@@ -4,6 +4,7 @@ import com.jayway.jsonpath.JsonPath
 import dev.sumin.skeleton.TestcontainersConfiguration
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
@@ -34,6 +35,12 @@ class OpenApiDocumentationIntegrationTest {
         assertEquals("0.1.0", JsonPath.read(docs, "$.info.version"))
 
         assertEquals("object", JsonPath.read(docs, "$.components.schemas.ApiError.type"))
+        val apiErrorProperties = JsonPath.read<Map<String, Any?>>(docs, "$.components.schemas.ApiError.properties")
+        assertFalse(apiErrorProperties.containsKey("type"))
+        assertEquals("string", JsonPath.read(docs, "$.components.schemas.ApiError.properties.code.type"))
+        assertEquals("object", JsonPath.read(docs, "$.components.schemas.ApiError.properties.data.type"))
+        val apiErrorRequired = JsonPath.read<List<String>>(docs, "$.components.schemas.ApiError.required")
+        assertTrue(apiErrorRequired.contains("code"))
         assertEquals("object", JsonPath.read(docs, "$.components.schemas.ResponseMeta.type"))
         assertEquals("object", JsonPath.read(docs, "$.components.schemas.PaginationMeta.type"))
         assertEquals("object", JsonPath.read(docs, "$.components.schemas.JsonDocument.type"))

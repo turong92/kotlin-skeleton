@@ -19,7 +19,27 @@ import org.springframework.http.HttpStatus
  */
 open class ApplicationException(
     message: String,
-    val status: HttpStatus,
-    val title: String = status.reasonPhrase,
+    val errorCode: ErrorCode,
+    val detail: String? = message,
+    val data: Any? = null,
     cause: Throwable? = null,
-) : RuntimeException(message, cause)
+) : RuntimeException(message, cause) {
+    val status: HttpStatus = errorCode.status
+    val title: String = errorCode.title
+
+    constructor(
+        message: String,
+        status: HttpStatus,
+        title: String = status.reasonPhrase,
+        cause: Throwable? = null,
+    ) : this(
+        message = message,
+        errorCode = SimpleErrorCode(
+                code = "HTTP.${status.name}",
+                status = status,
+                title = title,
+            ),
+            detail = message,
+        cause = cause,
+    )
+}

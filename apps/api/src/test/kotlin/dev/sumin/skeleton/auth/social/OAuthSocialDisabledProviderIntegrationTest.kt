@@ -39,6 +39,7 @@ class OAuthSocialDisabledProviderIntegrationTest {
             status { isNotFound() }
             content { contentTypeCompatibleWith(MediaType.APPLICATION_JSON) }
             jsonPath("$.status") { value(404) }
+            jsonPath("$.code") { value("AUTH_SOCIAL.PROVIDER_NOT_FOUND") }
             jsonPath("$.title") { value("OAuth provider not found") }
             jsonPath("$.traceId") { isNotEmpty() }
             jsonPath("$.spanId") { isNotEmpty() }

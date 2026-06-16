@@ -148,14 +148,15 @@ class PlatformOpenApiAutoConfiguration {
 
     private fun apiErrorSchema(): Schema<Any> =
         ObjectSchema()
-            .description("Standard error response with trace/span fields.")
-            .addProperty("type", StringSchema().example("about:blank"))
+            .description("Standard error response with stable code and trace/span fields.")
+            .addProperty("code", StringSchema().example("AUTH.INVALID_CREDENTIALS"))
             .addProperty("title", StringSchema().example("Unauthorized"))
             .addProperty("status", IntegerSchema().example(401))
             .addProperty("detail", StringSchema().example("Invalid credentials"))
             .addProperty("traceId", StringSchema().pattern("^[0-9a-f]{32}$"))
             .addProperty("spanId", StringSchema().pattern("^[0-9a-f]{16}$"))
             .addProperty("timestamp", StringSchema().format("date-time"))
+            .addProperty("data", ObjectSchema().description("Optional machine-readable error context."))
             .addProperty(
                 "errors",
                 ArraySchema().items(
@@ -165,7 +166,7 @@ class PlatformOpenApiAutoConfiguration {
                         .addProperty("message", StringSchema().example("email format invalid")),
                 ),
             )
-            .required(listOf("title", "status", "timestamp"))
+            .required(listOf("code", "title", "status", "timestamp"))
 
     private fun responseMetaSchema(): Schema<Any> =
         ObjectSchema()

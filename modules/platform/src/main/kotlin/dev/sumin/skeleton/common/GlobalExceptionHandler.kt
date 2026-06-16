@@ -32,10 +32,8 @@ class GlobalExceptionHandler {
             )
         }
         return ResponseEntity.badRequest().body(
-            ApiError(
-                title = "Validation failed",
-                status = HttpStatus.BAD_REQUEST.value(),
-                detail = "Request body validation failed",
+            apiError(
+                errorCode = PlatformErrorCode.VALIDATION_FAILED,
                 traceId = currentTraceId(),
                 spanId = currentSpanId(),
                 errors = fieldErrors,
@@ -46,9 +44,8 @@ class GlobalExceptionHandler {
     @ExceptionHandler(HandlerMethodValidationException::class)
     fun handleParamValidation(ex: HandlerMethodValidationException): ResponseEntity<ApiError> =
         ResponseEntity.badRequest().body(
-            ApiError(
-                title = "Parameter validation failed",
-                status = HttpStatus.BAD_REQUEST.value(),
+            apiError(
+                errorCode = PlatformErrorCode.PARAMETER_VALIDATION_FAILED,
                 detail = ex.message,
                 traceId = currentTraceId(),
                 spanId = currentSpanId(),
@@ -58,10 +55,8 @@ class GlobalExceptionHandler {
     @ExceptionHandler(HttpMessageNotReadableException::class)
     fun handleMalformedJson(ex: HttpMessageNotReadableException): ResponseEntity<ApiError> =
         ResponseEntity.badRequest().body(
-            ApiError(
-                title = "Malformed request body",
-                status = HttpStatus.BAD_REQUEST.value(),
-                detail = ex.mostSpecificCause.message,
+            apiError(
+                errorCode = PlatformErrorCode.MALFORMED_REQUEST,
                 traceId = currentTraceId(),
                 spanId = currentSpanId(),
             ),
@@ -70,10 +65,8 @@ class GlobalExceptionHandler {
     @ExceptionHandler(NoResourceFoundException::class)
     fun handleNotFound(ex: NoResourceFoundException): ResponseEntity<ApiError> =
         ResponseEntity.status(HttpStatus.NOT_FOUND).body(
-            ApiError(
-                title = "Not found",
-                status = HttpStatus.NOT_FOUND.value(),
-                detail = ex.message,
+            apiError(
+                errorCode = PlatformErrorCode.NOT_FOUND,
                 traceId = currentTraceId(),
                 spanId = currentSpanId(),
             ),
@@ -83,30 +76,62 @@ class GlobalExceptionHandler {
     fun handleApplication(ex: ApplicationException): ResponseEntity<ApiError> {
         log.warn("Application exception: {}", ex.message)
         return ResponseEntity.status(ex.status).body(
-            ApiError(
-                title = ex.title,
-                status = ex.status.value(),
-                detail = ex.message,
+            apiError(
+                errorCode = ex.errorCode,
+                detail = ex.detail,
                 traceId = currentTraceId(),
                 spanId = currentSpanId(),
+                data = ex.data,
             ),
         )
     }
 
     @ExceptionHandler(Exception::class)
     fun handleUnknown(ex: Exception): ResponseEntity<ApiError> {
+        if (ex.isDataIntegrityViolation()) {
+            log.warn("Data integrity violation", ex)
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(
+                apiError(
+                    errorCode = PlatformErrorCode.DATA_INTEGRITY_VIOLATION,
+                    traceId = currentTraceId(),
+                    spanId = currentSpanId(),
+                ),
+            )
+        }
+
         log.error("Unhandled exception", ex)
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
-            ApiError(
-                title = "Internal server error",
-                status = HttpStatus.INTERNAL_SERVER_ERROR.value(),
-                detail = "An unexpected error occurred. Use traceId for investigation.",
+            apiError(
+                errorCode = PlatformErrorCode.INTERNAL_SERVER_ERROR,
                 traceId = currentTraceId(),
                 spanId = currentSpanId(),
             ),
         )
     }
 
+    private fun apiError(
+        errorCode: ErrorCode,
+        traceId: String?,
+        spanId: String?,
+        detail: String? = errorCode.defaultDetail,
+        errors: List<ApiError.FieldError>? = null,
+        data: Any? = null,
+    ): ApiError =
+        ApiError(
+            code = errorCode.code,
+            title = errorCode.title,
+            status = errorCode.status.value(),
+            detail = detail ?: errorCode.defaultDetail,
+            traceId = traceId,
+            spanId = spanId,
+            errors = errors,
+            data = data,
+        )
+
     private fun currentTraceId(): String? = MDC.get(TraceIdFilter.MDC_KEY)
     private fun currentSpanId(): String? = MDC.get(TraceIdFilter.MDC_SPAN_ID_KEY)
+
+    private fun Throwable.isDataIntegrityViolation(): Boolean =
+        generateSequence(this as Throwable?) { it.cause }
+            .any { it.javaClass.name == "org.springframework.dao.DataIntegrityViolationException" }
 }

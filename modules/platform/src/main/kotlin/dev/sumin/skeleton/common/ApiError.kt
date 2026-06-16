@@ -5,13 +5,12 @@ import java.time.Instant
 /**
  * 모든 에러 응답의 공통 포맷.
  *
- * RFC 7807 (Problem Details for HTTP APIs) 변형 + traceId/spanId/timestamp 추가.
- * 프론트엔드의 `ApiError` 타입과 1:1 매칭.
+ * code/status/detail + traceId/spanId/timestamp 기반의 API 에러 계약.
  *
  * 예:
  * ```json
  * {
- *   "type": "about:blank",
+ *   "code": "COMMON.VALIDATION_FAILED",
  *   "title": "Validation failed",
  *   "status": 400,
  *   "detail": "email format invalid",
@@ -23,7 +22,7 @@ import java.time.Instant
  * ```
  */
 data class ApiError(
-    val type: String = "about:blank",
+    val code: String,
     val title: String,
     val status: Int,
     val detail: String? = null,
@@ -31,6 +30,7 @@ data class ApiError(
     val spanId: String? = null,
     val timestamp: String = Instant.now().toString(),
     val errors: List<FieldError>? = null,
+    val data: Any? = null,
 ) {
     data class FieldError(
         val field: String,

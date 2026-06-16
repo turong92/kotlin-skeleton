@@ -344,7 +344,7 @@ docker compose up -d
   - 삭제/토글/명령 완료: `@NoContentOperation` + `Response.noContent()` → `204 No Content`
 - 페이지 요청은 `@Valid @ParameterObject @ModelAttribute pageQuery: PageQuery` 를 기본으로 쓴다. 기본값은 `page=0`, `size=20`, 최대 `size=100` 이다.
 - `meta` 에는 현재 요청의 `traceId`, `spanId`, `timestamp` 가 들어간다.
-- 에러 응답은 기존 `ApiError` shape를 유지한다.
+- 에러 응답은 `ApiError` shape를 사용하고, `code` 는 `AUTH.INVALID_CREDENTIALS` 같은 안정적인 namespaced string 으로 내려간다. 자세한 규칙은 [docs/errors.md](docs/errors.md)를 본다.
 - 요청 DTO는 Jakarta Bean Validation constraint 를 사용한다. Validation 실패는 `400 Validation failed` 와 `errors[]` 로 응답한다.
   - 예: `{ "field": "email", "code": "Email", "message": "must be a well-formed email address" }`
 - `/api/v1/examples/*` 는 REST operation contract 샘플이다. 실제 프로젝트에서는 같은 패턴을 복사한 뒤 삭제하거나 도메인 예제로 교체한다.

@@ -103,6 +103,7 @@ class OAuthSocialAuthControllerIntegrationTest {
             status { isBadGateway() }
             content { contentTypeCompatibleWith(MediaType.APPLICATION_JSON) }
             jsonPath("$.status") { value(502) }
+            jsonPath("$.code") { value("AUTH_SOCIAL.PROVIDER_GATEWAY_ERROR") }
             jsonPath("$.title") { value("OAuth provider request failed") }
             jsonPath("$.traceId") { isNotEmpty() }
             jsonPath("$.spanId") { isNotEmpty() }
@@ -119,6 +120,7 @@ class OAuthSocialAuthControllerIntegrationTest {
             status { isConflict() }
             content { contentTypeCompatibleWith(MediaType.APPLICATION_JSON) }
             jsonPath("$.status") { value(409) }
+            jsonPath("$.code") { value("AUTH_SOCIAL.ACCOUNT_LINK_NOT_FOUND") }
             jsonPath("$.title") { value("OAuth account is not linked") }
             jsonPath("$.traceId") { isNotEmpty() }
             jsonPath("$.spanId") { isNotEmpty() }

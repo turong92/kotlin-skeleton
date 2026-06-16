@@ -3,22 +3,19 @@ package dev.sumin.skeleton.payment
 import dev.sumin.skeleton.common.ApplicationException
 import dev.sumin.skeleton.common.http.ExternalHttpException
 import java.net.URI
-import org.springframework.http.HttpStatus
 
 class PaymentProviderNotFoundException(
     providerId: String,
 ) : ApplicationException(
     message = "Payment provider not found or disabled: $providerId",
-    status = HttpStatus.BAD_REQUEST,
-    title = "Payment provider not found",
+    errorCode = PaymentErrorCode.PROVIDER_NOT_FOUND,
 )
 
 class PaymentRoutingException(
     message: String,
 ) : ApplicationException(
     message = message,
-    status = HttpStatus.BAD_REQUEST,
-    title = "Payment provider routing failed",
+    errorCode = PaymentErrorCode.ROUTING_FAILED,
 )
 
 data class PaymentProviderError(
@@ -46,7 +43,17 @@ class PaymentProviderException(
     uri = uri,
     upstreamStatus = providerError.upstreamStatus,
     retryable = providerError.retryable,
-    status = HttpStatus.BAD_GATEWAY,
-    title = "Payment provider error",
+    errorCode = PaymentErrorCode.PROVIDER_ERROR,
+    data = providerError.toSafeData(),
     cause = cause,
 )
+
+private fun PaymentProviderError.toSafeData(): Map<String, Any?> =
+    mapOf(
+        "provider" to provider,
+        "providerCode" to code,
+        "providerMessage" to message,
+        "providerTrace" to trace,
+        "upstreamStatus" to upstreamStatus,
+        "retryable" to retryable,
+    )

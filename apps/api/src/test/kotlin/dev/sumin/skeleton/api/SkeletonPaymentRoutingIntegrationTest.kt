@@ -61,6 +61,25 @@ class SkeletonPaymentRoutingIntegrationTest {
         }
     }
 
+    @Test
+    fun `payment route endpoint returns stable payment error code when provider is unknown`() {
+        val token = loginAccessToken()
+
+        mockMvc.get("/api/v1/skeleton/payments/route") {
+            header("Authorization", "Bearer $token")
+            param("provider", "unknown-provider")
+            accept = MediaType.APPLICATION_JSON
+        }.andExpect {
+            status { isBadRequest() }
+            content { contentTypeCompatibleWith(MediaType.APPLICATION_JSON) }
+            jsonPath("$.status") { value(400) }
+            jsonPath("$.code") { value("PAYMENT.PROVIDER_NOT_FOUND") }
+            jsonPath("$.title") { value("Payment provider not found") }
+            jsonPath("$.traceId") { isNotEmpty() }
+            jsonPath("$.spanId") { isNotEmpty() }
+        }
+    }
+
     private fun loginAccessToken(): String {
         val response = mockMvc.post("/api/v1/auth/login") {
             contentType = MediaType.APPLICATION_JSON
