@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.api
 
 import dev.sumin.skeleton.auth.jwt.JwtTokenService
+import dev.sumin.skeleton.auth.principal.CurrentPrincipal
 import dev.sumin.skeleton.auth.social.oauth.OAuthSocialLoginService
 import dev.sumin.skeleton.async.AsyncContextTaskDecorator
 import dev.sumin.skeleton.async.AsyncMdcKeys
@@ -41,6 +42,7 @@ import org.springframework.beans.factory.ListableBeanFactory
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.core.env.Environment
 import org.springframework.http.MediaType
+import org.springframework.security.core.Authentication
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.GetMapping
@@ -557,7 +559,7 @@ class SkeletonModuleController(
     private fun <T> withProbeMdc(block: () -> T): T {
         val previousRunId = MDC.get(AsyncMdcKeys.RUN_ID)
         val previousAccountId = MDC.get(AsyncMdcKeys.ACCOUNT_ID)
-        val accountName = SecurityContextHolder.getContext().authentication?.name?.toString()
+        val accountName = currentAccountId(SecurityContextHolder.getContext().authentication)
 
         if (previousRunId == null) {
             MDC.put(AsyncMdcKeys.RUN_ID, "probe-${UUID.randomUUID()}")
@@ -584,4 +586,12 @@ class SkeletonModuleController(
             MDC.put(key, previousValue)
         }
     }
+
+    private fun currentAccountId(authentication: Authentication?): String? =
+        when (val principal = authentication?.principal) {
+            is CurrentPrincipal -> principal.accountId
+            is String -> principal.takeIf { it.isNotBlank() && it != "anonymousUser" }
+            null -> null
+            else -> authentication.name?.takeIf { it.isNotBlank() }
+        }
 }

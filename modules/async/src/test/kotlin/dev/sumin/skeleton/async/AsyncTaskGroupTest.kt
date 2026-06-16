@@ -1,15 +1,30 @@
 package dev.sumin.skeleton.async
 
+import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
+import dev.sumin.skeleton.common.TraceIdFilter
+import dev.sumin.skeleton.common.logging.SkeletonLoggers
 import java.time.Duration
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeoutException
+import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import org.slf4j.LoggerFactory
+import org.slf4j.MDC
 
 class AsyncTaskGroupTest {
+    @AfterTest
+    fun tearDown() {
+        MDC.clear()
+    }
+
     @Test
     fun `waitAll collects named successes failures and duration`() {
         val success = CompletableFuture.completedFuture("ok")
@@ -63,6 +78,66 @@ class AsyncTaskGroupTest {
         assertEquals(2, exception.suppressed.size)
     }
 
+    @Test
+    fun `waitAllAndLog writes non null async context into summary and failure logs`() {
+        MDC.put(TraceIdFilter.MDC_KEY, "4bf92f3577b34da6a3ce929d0e0e4736")
+        MDC.put(TraceIdFilter.MDC_SPAN_ID_KEY, "00f067aa0ba902b7")
+        MDC.put(AsyncMdcKeys.RUN_ID, "run-log")
+        MDC.put(AsyncMdcKeys.ACCOUNT_ID, "acc-log")
+
+        captureLogger(SkeletonLoggers.ASYNC).use { captured ->
+            AsyncTaskGroup.waitAllAndLog(
+                tasks = mapOf(
+                    "good" to CompletableFuture.completedFuture("ok"),
+                    "bad" to failedFuture(IllegalArgumentException("broken")),
+                ),
+                title = "content sync",
+            )
+
+            val messages = captured.events.map { it.formattedMessage }
+            assertTrue(
+                messages.any {
+                    it.contains("content sync completed") &&
+                        it.contains("traceId=4bf92f3577b34da6a3ce929d0e0e4736") &&
+                        it.contains("spanId=00f067aa0ba902b7") &&
+                        it.contains("runId=run-log") &&
+                        it.contains("accountId=acc-log")
+                },
+            )
+            assertTrue(messages.any { it.contains("content sync task failed: bad") })
+            assertFalse(messages.any { it.contains("parentSpanId=null") })
+        }
+    }
+
     private fun failedFuture(error: Throwable): CompletableFuture<String> =
         CompletableFuture<String>().also { it.completeExceptionally(error) }
+
+    private fun captureLogger(loggerName: String): CapturedLogger {
+        val logger = LoggerFactory.getLogger(loggerName) as Logger
+        val previousLevel = logger.level
+        val previousAdditive = logger.isAdditive
+        logger.level = Level.INFO
+        logger.isAdditive = false
+        val appender = ListAppender<ILoggingEvent>()
+        appender.start()
+        logger.addAppender(appender)
+        return CapturedLogger(logger, appender, previousLevel, previousAdditive)
+    }
+
+    private class CapturedLogger(
+        private val logger: Logger,
+        private val appender: ListAppender<ILoggingEvent>,
+        private val previousLevel: Level?,
+        private val previousAdditive: Boolean,
+    ) : AutoCloseable {
+        val events: List<ILoggingEvent>
+            get() = appender.list
+
+        override fun close() {
+            logger.detachAppender(appender)
+            logger.level = previousLevel
+            logger.isAdditive = previousAdditive
+            appender.stop()
+        }
+    }
 }

@@ -1,12 +1,14 @@
 package dev.sumin.skeleton.async
 
 import dev.sumin.skeleton.common.logging.SkeletonLoggers
+import dev.sumin.skeleton.common.TraceIdFilter
 import java.time.Duration
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletionException
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeUnit
 import org.slf4j.Logger
+import org.slf4j.MDC
 
 data class AsyncTaskFailure(
     val name: String,
@@ -25,16 +27,18 @@ data class AsyncTaskGroupResult(
         logger: Logger = SkeletonLoggers.async(),
         title: String = "Async task group",
     ) {
+        val context = asyncLogContextSuffix()
         logger.info(
-            "{} completed in {}ms | total={}, success={}, failed={}",
+            "{} completed in {}ms | total={}, success={}, failed={}{}",
             title,
             durationMillis,
             total,
             succeeded.size,
             failed.size,
+            context,
         )
         failed.forEach { failure ->
-            logger.error("{} task failed: {}", title, failure.name, failure.error)
+            logger.error("{} task failed: {}{}", title, failure.name, context, failure.error)
         }
     }
 
@@ -58,6 +62,25 @@ class AsyncTaskGroupException(
         failed.forEach { failure -> addSuppressed(failure.error) }
     }
 }
+
+private fun asyncLogContextSuffix(): String {
+    val entries = listOfNotNull(
+        mdcEntry("traceId", TraceIdFilter.MDC_KEY),
+        mdcEntry("spanId", TraceIdFilter.MDC_SPAN_ID_KEY),
+        mdcEntry("parentSpanId", TraceIdFilter.MDC_PARENT_SPAN_ID_KEY),
+        mdcEntry("runId", AsyncMdcKeys.RUN_ID),
+        mdcEntry("accountId", AsyncMdcKeys.ACCOUNT_ID),
+    )
+    return if (entries.isEmpty()) "" else entries.joinToString(prefix = " | ", separator = " ")
+}
+
+private fun mdcEntry(
+    label: String,
+    key: String,
+): String? =
+    MDC.get(key)
+        ?.takeIf { it.isNotBlank() }
+        ?.let { "$label=$it" }
 
 object AsyncTaskGroup {
     fun waitAll(

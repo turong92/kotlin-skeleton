@@ -60,7 +60,9 @@ result.throwIfFailures()
 ```
 
 The summary is written to `skeleton.debug.async` by default, and each failed
-task is logged with its task name and original exception.
+task is logged with its task name and original exception. When MDC has
+`traceId`, `spanId`, `parentSpanId`, `runId`, or `accountId`, those values are
+included in the log line; blank or missing values are omitted.
 
 ## Workbench Probe
 

@@ -21,7 +21,8 @@ logging:
 - `skeleton.debug.auth`: authentication and emergency access diagnostics.
 - `skeleton.debug.payment`: payment routing/provider diagnostics.
 - `skeleton.debug.sql`: reserved for SQL/persistence diagnostics; keep `OFF` unless needed.
-- `skeleton.debug.async`: async task-group summaries and failed task details.
+- `skeleton.debug.async`: async task-group summaries and failed task details,
+  including non-null trace/span/run/account MDC context.
 
 Use class loggers for implementation details:
 

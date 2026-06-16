@@ -8,8 +8,11 @@ import java.net.URI
 import org.hamcrest.Matchers.hasItem
 import org.hamcrest.Matchers.startsWith
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.extension.ExtendWith
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.test.system.CapturedOutput
+import org.springframework.boot.test.system.OutputCaptureExtension
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
@@ -23,6 +26,7 @@ import kotlin.test.assertTrue
 @SpringBootTest
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration::class)
+@ExtendWith(OutputCaptureExtension::class)
 class SkeletonModuleCompositionIntegrationTest {
 
     @Autowired
@@ -62,8 +66,9 @@ class SkeletonModuleCompositionIntegrationTest {
     }
 
     @Test
-    fun `module smoke endpoints exercise reusable module contracts`() {
+    fun `module smoke endpoints exercise reusable module contracts`(output: CapturedOutput) {
         val token = loginAccessToken()
+        val fixedTraceId = "4bf92f3577b34da6a3ce929d0e0e4736"
 
         mockMvc.get("/api/v1/skeleton/redis/key") {
             header("Authorization", "Bearer $token")
@@ -121,15 +126,22 @@ class SkeletonModuleCompositionIntegrationTest {
 
         mockMvc.get("/api/v1/skeleton/async/probe") {
             header("Authorization", "Bearer $token")
+            header("traceparent", "00-$fixedTraceId-00f067aa0ba902b7-01")
             accept = MediaType.APPLICATION_JSON
         }.andExpect {
             status { isOk() }
             jsonPath("$.value.taskGroup.total") { value(1) }
             jsonPath("$.value.taskGroup.succeeded[0]") { value("context-propagation") }
-            jsonPath("$.value.task.traceId") { isNotEmpty() }
-            jsonPath("$.value.task.runId") { isNotEmpty() }
+            jsonPath("$.value.task.traceId") { value(fixedTraceId) }
+            jsonPath("$.value.task.runId") { value(startsWith("probe-")) }
+            jsonPath("$.value.task.accountId") { value("acc_user") }
             jsonPath("$.value.task.threadName") { value(startsWith("skeleton-async-")) }
         }
+
+        assertTrue(output.all.contains("skeleton async probe completed"))
+        assertTrue(output.all.contains("traceId=$fixedTraceId"))
+        assertTrue(output.all.contains("runId=probe-"))
+        assertTrue(output.all.contains("accountId=acc_user"))
     }
 
     private fun loginAccessToken(): String {
