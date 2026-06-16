@@ -192,9 +192,50 @@ class ObservabilityLinkResolverTest {
                 "skeleton.observability.links.templates.logs.url=https://logs.example/{unknownField}",
             )
             .run { context ->
-                assertFailsWith<IllegalStateException> {
+                val exception = assertFailsWith<IllegalStateException> {
                     context.getBean(ObservabilityLinkResolver::class.java)
                 }
+                val message = rootCauseMessage(exception)
+                assertTrue(message.contains("logs"))
+                assertTrue(message.contains("unknownField"))
+            }
+    }
+
+    @Test
+    fun `fails startup for malformed underscore placeholders when enabled`() {
+        contextRunner
+            .withPropertyValues(
+                "skeleton.observability.links.enabled=true",
+                "skeleton.observability.links.templates.tenant.label=Broken",
+                "skeleton.observability.links.templates.tenant.kind=LOGS",
+                "skeleton.observability.links.templates.tenant.url=https://logs.example/{tenant_id}",
+            )
+            .run { context ->
+                val exception = assertFailsWith<IllegalStateException> {
+                    context.getBean(ObservabilityLinkResolver::class.java)
+                }
+                val message = rootCauseMessage(exception)
+                assertTrue(message.contains("tenant"))
+                assertTrue(message.contains("tenant_id"))
+            }
+    }
+
+    @Test
+    fun `fails startup for malformed dashed placeholders when enabled`() {
+        contextRunner
+            .withPropertyValues(
+                "skeleton.observability.links.enabled=true",
+                "skeleton.observability.links.templates.trace.label=Broken",
+                "skeleton.observability.links.templates.trace.kind=TRACE",
+                "skeleton.observability.links.templates.trace.url=https://traces.example/{trace-id}",
+            )
+            .run { context ->
+                val exception = assertFailsWith<IllegalStateException> {
+                    context.getBean(ObservabilityLinkResolver::class.java)
+                }
+                val message = rootCauseMessage(exception)
+                assertTrue(message.contains("trace"))
+                assertTrue(message.contains("trace-id"))
             }
     }
 
@@ -209,9 +250,12 @@ class ObservabilityLinkResolverTest {
                 "skeleton.observability.links.templates.logs.required-fields[0]=unknownField",
             )
             .run { context ->
-                assertFailsWith<IllegalStateException> {
+                val exception = assertFailsWith<IllegalStateException> {
                     context.getBean(ObservabilityLinkResolver::class.java)
                 }
+                val message = rootCauseMessage(exception)
+                assertTrue(message.contains("logs"))
+                assertTrue(message.contains("unknownField"))
             }
     }
 
@@ -234,4 +278,7 @@ class ObservabilityLinkResolverTest {
                 assertEquals(customResolver, context.getBean(ObservabilityLinkResolver::class.java))
             }
     }
+
+    private fun rootCauseMessage(exception: Throwable): String =
+        generateSequence(exception) { it.cause }.last().message.orEmpty()
 }

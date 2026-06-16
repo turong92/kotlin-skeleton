@@ -6,7 +6,8 @@ import java.nio.charset.StandardCharsets
 class DefaultObservabilityLinkResolver(
     private val properties: ObservabilityLinkProperties,
 ) : ObservabilityLinkResolver {
-    private val placeholderRegex = Regex("\\{([A-Za-z][A-Za-z0-9]*)}")
+    private val placeholderTokenRegex = Regex("\\{([^{}]+)}")
+    private val placeholderNameRegex = Regex("[A-Za-z][A-Za-z0-9]*")
     private val allowedFields = ObservabilityContext.knownFields + properties.customFields
 
     init {
@@ -34,7 +35,15 @@ class DefaultObservabilityLinkResolver(
 
     private fun validateTemplates() {
         properties.templates.forEach { (id, template) ->
-            val fields = placeholders(template.url) + template.requiredFields
+            val placeholderTokens = placeholderTokens(template.url)
+            val malformedPlaceholders = placeholderTokens.filterNot { placeholderNameRegex.matches(it) }.toSet()
+            check(malformedPlaceholders.isEmpty()) {
+                "Malformed observability link placeholders for template '$id': " +
+                    "${malformedPlaceholders.joinToString(", ")}. " +
+                    "Placeholder names must match ${placeholderNameRegex.pattern}"
+            }
+
+            val fields = placeholderTokens + template.requiredFields
             val unknownFields = fields.filterNot { it in allowedFields }.toSet()
             check(unknownFields.isEmpty()) {
                 "Unknown observability link fields for template '$id': ${unknownFields.joinToString(", ")}"
@@ -43,13 +52,16 @@ class DefaultObservabilityLinkResolver(
     }
 
     private fun placeholders(template: String): Set<String> =
-        placeholderRegex.findAll(template).map { match -> match.groupValues[1] }.toSet()
+        placeholderTokens(template).filter { placeholderNameRegex.matches(it) }.toSet()
+
+    private fun placeholderTokens(template: String): Set<String> =
+        placeholderTokenRegex.findAll(template).map { match -> match.groupValues[1] }.toSet()
 
     private fun expand(
         template: String,
         context: ObservabilityContext,
     ): String =
-        placeholderRegex.replace(template) { match ->
+        placeholderTokenRegex.replace(template) { match ->
             encode(context.value(match.groupValues[1]).orEmpty())
         }
 
