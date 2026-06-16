@@ -1,8 +1,13 @@
 package dev.sumin.skeleton.common.http
 
+import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import dev.sumin.skeleton.common.TraceIdFilter
+import dev.sumin.skeleton.common.logging.SkeletonLoggers
 import java.net.InetSocketAddress
 import java.time.Duration
 import java.util.Collections
@@ -15,6 +20,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import org.slf4j.MDC
+import org.slf4j.LoggerFactory
 import org.junit.jupiter.api.extension.ExtendWith
 import org.springframework.boot.test.system.CapturedOutput
 import org.springframework.boot.test.system.OutputCaptureExtension
@@ -197,6 +203,16 @@ class ExternalHttpClientTest {
     }
 
     @Test
+    fun `external http completion logs use stable external http debug category`() {
+        captureLogger(SkeletonLoggers.EXTERNAL_HTTP).use { captured ->
+            client.get("test", "/methods/get", EchoResponse::class.java).block()
+
+            val messages = captured.events.map { it.formattedMessage }
+            assertTrue(messages.any { it.startsWith("External HTTP GET test /methods/get") })
+        }
+    }
+
+    @Test
     fun `upstream error maps to status exception`() {
         val exception = assertFailsWith<ExternalHttpStatusException> {
             client.get("test", "/error-with-trace", EchoResponse::class.java).block()
@@ -280,4 +296,32 @@ class ExternalHttpClientTest {
         val headers: Map<String, List<String>>,
         val body: String,
     )
+
+    private fun captureLogger(loggerName: String): CapturedLogger {
+        val logger = LoggerFactory.getLogger(loggerName) as Logger
+        val previousLevel = logger.level
+        val previousAdditive = logger.isAdditive
+        logger.level = Level.INFO
+        val appender = ListAppender<ILoggingEvent>()
+        appender.start()
+        logger.addAppender(appender)
+        return CapturedLogger(logger, appender, previousLevel, previousAdditive)
+    }
+
+    private class CapturedLogger(
+        private val logger: Logger,
+        private val appender: ListAppender<ILoggingEvent>,
+        private val previousLevel: Level?,
+        private val previousAdditive: Boolean,
+    ) : AutoCloseable {
+        val events: List<ILoggingEvent>
+            get() = appender.list
+
+        override fun close() {
+            logger.detachAppender(appender)
+            logger.level = previousLevel
+            logger.isAdditive = previousAdditive
+            appender.stop()
+        }
+    }
 }

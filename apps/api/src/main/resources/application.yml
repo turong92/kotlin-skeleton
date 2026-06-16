@@ -31,6 +31,11 @@ springdoc:
 logging:
   level:
     org.flywaydb.core.internal.database.base.Database: ERROR
+    skeleton.debug.request: INFO
+    skeleton.debug.external-http: INFO
+    skeleton.debug.auth: INFO
+    skeleton.debug.payment: INFO
+    skeleton.debug.sql: OFF
   pattern:
     correlation: "%clr(%X{traceContext:-}){faded} "
 

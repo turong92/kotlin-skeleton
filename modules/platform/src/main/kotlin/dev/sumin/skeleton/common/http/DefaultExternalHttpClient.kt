@@ -1,10 +1,10 @@
 package dev.sumin.skeleton.common.http
 
+import dev.sumin.skeleton.common.logging.SkeletonLoggers
 import dev.sumin.skeleton.common.logging.SensitiveValueRedactor
 import io.netty.channel.ChannelOption
 import java.net.URI
 import java.util.concurrent.ConcurrentHashMap
-import org.slf4j.LoggerFactory
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpMethod
 import org.springframework.http.MediaType
@@ -25,7 +25,7 @@ class DefaultExternalHttpClient(
     private val traceExtractor: ExternalHttpTraceExtractor = DefaultExternalHttpTraceExtractor(),
     redactor: SensitiveValueRedactor = SensitiveValueRedactor(),
 ) : ExternalHttpClient {
-    private val log = LoggerFactory.getLogger(javaClass)
+    private val log = SkeletonLoggers.externalHttp()
     private val filters = ExternalHttpFilters(properties, log, redactor)
     private val clients = ConcurrentHashMap<String, WebClient>()
 

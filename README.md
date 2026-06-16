@@ -42,6 +42,7 @@ Use modules as capability choices:
 
 - `apps/api` composes the runnable sample application and exercises module wiring. Real services can delete its `/api/v1/examples/*` and `/api/v1/skeleton/*` controllers after choosing their own module set.
 - `modules/platform` is the shared foundation for most apps. It also contributes default OpenAPI metadata, standard response/error schemas, web policy defaults, outbound HTTP client scaffolding, and trace header documentation.
+  See `docs/logging.md` for stable `skeleton.debug.*` logger categories.
 - `modules/auth` is included when the app needs authentication. Its default beans are Spring Boot auto-configuration defaults, so an app can replace `AuthAccountRepository`, `SecurityFilterChain`, token service, or filters with its own beans. It also contributes JWT bearer security metadata to OpenAPI.
 - `modules/auth-social` is included when the app needs social login. Its default beans are also auto-configuration defaults, so account links, provisioning policy, and the social auth handler can be replaced. It also contributes the social-login endpoint to OpenAPI.
 - `modules/auth-social-google`, `modules/auth-social-kakao`, and `modules/auth-social-naver` are optional provider clients. Add only the provider modules an application actually needs.
