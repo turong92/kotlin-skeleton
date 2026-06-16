@@ -17,6 +17,7 @@ modules/
   auth-social-google  # optional Google OAuth provider client
   auth-social-kakao   # optional Kakao OAuth provider client
   auth-social-naver   # optional Naver OAuth provider client
+  async              # optional context-propagating @Async executor and task groups
   config-aws-ssm      # optional AWS SSM Parameter Store property loading
   event-kafka         # optional Kafka event publishing adapter
   idempotency          # optional Idempotency-Key support for command endpoints
@@ -46,6 +47,7 @@ Use modules as capability choices:
 - `modules/auth` is included when the app needs authentication. Its default beans are Spring Boot auto-configuration defaults, so an app can replace `AuthAccountRepository`, `SecurityFilterChain`, token service, or filters with its own beans. It also contributes JWT bearer security metadata to OpenAPI.
 - `modules/auth-social` is included when the app needs social login. Its default beans are also auto-configuration defaults, so account links, provisioning policy, and the social auth handler can be replaced. It also contributes the social-login endpoint to OpenAPI.
 - `modules/auth-social-google`, `modules/auth-social-kakao`, and `modules/auth-social-naver` are optional provider clients. Add only the provider modules an application actually needs.
+- `modules/async` is included when app/background work needs MDC and SecurityContext propagation across `@Async` or `CompletableFuture` work. It contributes `skeletonAsyncTaskExecutor`, `AsyncContextTaskDecorator`, and `AsyncTaskGroup`. See `docs/async.md`.
 - `modules/idempotency` is included when command endpoints need `Idempotency-Key` protection. It contributes the `@IdempotentOperation` annotation, request fingerprinting, replay headers, an in-memory default store, and OpenAPI header documentation.
 - `modules/crypto` is included when the app needs recoverable AES-GCM text encryption for persisted or transported secrets. It provides key-id envelopes, URL-safe opaque tokens, and opt-in persistence converters; redaction still handles logs and alerts.
 - `modules/notification` is included when the app needs server-side notification publishing. `modules/notification-sse`, `modules/notification-websocket`, and `modules/notification-slack` add delivery/alert channels.
@@ -63,6 +65,7 @@ Fine-grained details such as JWT, password login, OAuth, or dev login live as pa
 - `POST /api/v1/skeleton/storage/validate` proves storage file validation wiring.
 - `GET /api/v1/skeleton/storage/public-url?key=images/cat.png` proves the configured storage public URL resolver without requiring a product endpoint.
 - `POST /api/v1/skeleton/notifications` publishes a provider-neutral notification event so SSE/Slack/WebSocket delivery modules can subscribe.
+- `GET /api/v1/skeleton/async/probe` proves trace/run/account MDC propagation into the async executor.
 
 These endpoints require auth by default. They are development/workbench affordances, not product APIs.
 

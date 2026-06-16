@@ -9,6 +9,7 @@ dependencies {
     implementation(project(":modules:auth-social-google"))
     implementation(project(":modules:auth-social-kakao"))
     implementation(project(":modules:auth-social-naver"))
+    implementation(project(":modules:async"))
     implementation(project(":modules:config-aws-ssm"))
     implementation(project(":modules:crypto"))
     implementation(project(":modules:event-kafka"))
@@ -37,6 +38,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("org.flywaydb:flyway-mysql")
+    implementation("org.springframework.security:spring-security-core")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("tools.jackson.module:jackson-module-kotlin")
 

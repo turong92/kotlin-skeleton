@@ -16,6 +16,7 @@ object SkeletonLoggers {
     const val AUTH = "skeleton.debug.auth"
     const val PAYMENT = "skeleton.debug.payment"
     const val SQL = "skeleton.debug.sql"
+    const val ASYNC = "skeleton.debug.async"
 
     fun logger(name: String): Logger = LoggerFactory.getLogger(name)
 
@@ -28,4 +29,6 @@ object SkeletonLoggers {
     fun payment(): Logger = logger(PAYMENT)
 
     fun sql(): Logger = logger(SQL)
+
+    fun async(): Logger = logger(ASYNC)
 }

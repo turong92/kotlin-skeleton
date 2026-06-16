@@ -82,6 +82,7 @@ work.
 | Config/secrets | `config-aws-ssm` | Done | Auto from profile/runtime context | Real AWS profile/role smoke run when SSM is available |
 | Crypto | `crypto` | Done | Optional by dependency; passive without keys and fail-fast for invalid configured keys | Public asset URL codec integration only if storage modules need it |
 | JSON | `json` | Done | Optional by dependency; apps can expose `JsonDocument` directly | Add more concrete versioned DTO examples as provider modules need them |
+| Async | `async` | Done | Optional by dependency; enabled by default when included | Optional annotation-based async exception bridge to notification modules |
 | Notification | `notification`, `notification-sse`, `notification-slack`, `notification-websocket` | Done | Channels opt in | Async exception hook, WebSocket auth docs, operational alert links |
 | Idempotency | `idempotency` | Done | Optional by dependency | More sample endpoint patterns |
 | Persistence audit and JPA operations | `persistence-jpa`, `persistence-jdbc` | Done | Optional by dependency | Add Querydsl module later only if needed |

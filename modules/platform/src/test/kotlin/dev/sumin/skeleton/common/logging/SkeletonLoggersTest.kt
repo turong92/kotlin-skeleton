@@ -11,11 +11,13 @@ class SkeletonLoggersTest {
         assertEquals("skeleton.debug.auth", SkeletonLoggers.AUTH)
         assertEquals("skeleton.debug.payment", SkeletonLoggers.PAYMENT)
         assertEquals("skeleton.debug.sql", SkeletonLoggers.SQL)
+        assertEquals("skeleton.debug.async", SkeletonLoggers.ASYNC)
     }
 
     @Test
     fun `debug logger factory returns named logger`() {
         assertEquals(SkeletonLoggers.REQUEST, SkeletonLoggers.logger(SkeletonLoggers.REQUEST).name)
         assertEquals(SkeletonLoggers.EXTERNAL_HTTP, SkeletonLoggers.externalHttp().name)
+        assertEquals(SkeletonLoggers.ASYNC, SkeletonLoggers.async().name)
     }
 }

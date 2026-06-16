@@ -13,6 +13,7 @@ logging:
     skeleton.debug.auth: INFO
     skeleton.debug.payment: INFO
     skeleton.debug.sql: OFF
+    skeleton.debug.async: INFO
 ```
 
 - `skeleton.debug.request`: inbound HTTP start/end lines from `RequestLoggingFilter`.
@@ -20,6 +21,7 @@ logging:
 - `skeleton.debug.auth`: authentication and emergency access diagnostics.
 - `skeleton.debug.payment`: payment routing/provider diagnostics.
 - `skeleton.debug.sql`: reserved for SQL/persistence diagnostics; keep `OFF` unless needed.
+- `skeleton.debug.async`: async task-group summaries and failed task details.
 
 Use class loggers for implementation details:
 

@@ -6,6 +6,7 @@ import dev.sumin.skeleton.notification.websocket.NotificationWebSocketTokenVerif
 import dev.sumin.skeleton.storage.StoragePublicUrlResolver
 import java.net.URI
 import org.hamcrest.Matchers.hasItem
+import org.hamcrest.Matchers.startsWith
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
@@ -44,6 +45,7 @@ class SkeletonModuleCompositionIntegrationTest {
             status { isOk() }
             content { contentTypeCompatibleWith(MediaType.APPLICATION_JSON) }
             jsonPath("$.values[?(@.id == 'platform')].status") { value(hasItem("ACTIVE")) }
+            jsonPath("$.values[?(@.id == 'async')].status") { value(hasItem("ACTIVE")) }
             jsonPath("$.values[?(@.id == 'json')].status") { value(hasItem("ACTIVE")) }
             jsonPath("$.values[?(@.id == 'auth')].status") { value(hasItem("ACTIVE")) }
             jsonPath("$.values[?(@.id == 'redis-core')].status") { value(hasItem("ACTIVE")) }
@@ -115,6 +117,18 @@ class SkeletonModuleCompositionIntegrationTest {
             jsonPath("$.value.provider") { value("toss") }
             jsonPath("$.value.available") { value(false) }
             jsonPath("$.value.source") { value("configuration") }
+        }
+
+        mockMvc.get("/api/v1/skeleton/async/probe") {
+            header("Authorization", "Bearer $token")
+            accept = MediaType.APPLICATION_JSON
+        }.andExpect {
+            status { isOk() }
+            jsonPath("$.value.taskGroup.total") { value(1) }
+            jsonPath("$.value.taskGroup.succeeded[0]") { value("context-propagation") }
+            jsonPath("$.value.task.traceId") { isNotEmpty() }
+            jsonPath("$.value.task.runId") { isNotEmpty() }
+            jsonPath("$.value.task.threadName") { value(startsWith("skeleton-async-")) }
         }
     }
 

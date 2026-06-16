@@ -2,7 +2,11 @@ package dev.sumin.skeleton.api
 
 import dev.sumin.skeleton.auth.jwt.JwtTokenService
 import dev.sumin.skeleton.auth.social.oauth.OAuthSocialLoginService
+import dev.sumin.skeleton.async.AsyncContextTaskDecorator
+import dev.sumin.skeleton.async.AsyncMdcKeys
+import dev.sumin.skeleton.async.AsyncTaskGroup
 import dev.sumin.skeleton.common.Response
+import dev.sumin.skeleton.common.TraceIdFilter
 import dev.sumin.skeleton.common.web.RateLimitStore
 import dev.sumin.skeleton.event.kafka.KafkaEventPublisher
 import dev.sumin.skeleton.json.JsonCodec
@@ -29,10 +33,15 @@ import dev.sumin.skeleton.storage.s3.S3PresignedStorageService
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.PositiveOrZero
+import java.util.UUID
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.Executor
+import org.slf4j.MDC
 import org.springframework.beans.factory.ListableBeanFactory
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.core.env.Environment
 import org.springframework.http.MediaType
+import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PostMapping
@@ -102,6 +111,25 @@ data class SkeletonNotificationPublishResponse(
     val topic: String,
     val type: String,
     val deliveredSubscribers: Int,
+)
+
+data class SkeletonAsyncProbeResponse(
+    val taskGroup: SkeletonAsyncTaskGroupResponse,
+    val task: SkeletonAsyncProbeTaskResponse,
+)
+
+data class SkeletonAsyncTaskGroupResponse(
+    val total: Int,
+    val succeeded: List<String>,
+    val failed: List<String>,
+    val durationMillis: Long,
+)
+
+data class SkeletonAsyncProbeTaskResponse(
+    val traceId: String?,
+    val runId: String?,
+    val accountId: String?,
+    val threadName: String,
 )
 
 /**
@@ -198,8 +226,41 @@ class SkeletonModuleController(
                 type = event.type,
                 deliveredSubscribers = result.deliveredSubscribers,
             ),
-        )
-    }
+            )
+        }
+
+    @GetMapping("/async/probe")
+    fun asyncProbe() =
+        withProbeMdc {
+            val executor = beanFactory.getBean("skeletonAsyncTaskExecutor", Executor::class.java)
+            val task = CompletableFuture.supplyAsync(
+                {
+                    SkeletonAsyncProbeTaskResponse(
+                        traceId = MDC.get(TraceIdFilter.MDC_KEY),
+                        runId = MDC.get(AsyncMdcKeys.RUN_ID),
+                        accountId = MDC.get(AsyncMdcKeys.ACCOUNT_ID),
+                        threadName = Thread.currentThread().name,
+                    )
+                },
+                executor,
+            )
+            val group = AsyncTaskGroup.waitAllAndLog(
+                tasks = mapOf("context-propagation" to task),
+                title = "skeleton async probe",
+            )
+
+            Response.ok(
+                SkeletonAsyncProbeResponse(
+                    taskGroup = SkeletonAsyncTaskGroupResponse(
+                        total = group.total,
+                        succeeded = group.succeeded,
+                        failed = group.failed.map { it.name },
+                        durationMillis = group.durationMillis,
+                    ),
+                    task = task.join(),
+                ),
+            )
+        }
 
     private fun moduleCatalog(): List<SkeletonModuleResponse> =
         listOf(
@@ -218,6 +279,14 @@ class SkeletonModuleController(
                 configPrefix = "n/a",
                 beans = beanNames(JsonCodec::class.java),
                 note = "JsonDocument, versioned JSON envelopes, migrations, DB converters, REST and OpenAPI schemas.",
+            ),
+            module(
+                id = "async",
+                group = "foundation",
+                status = activeWhenBeanPresent(AsyncContextTaskDecorator::class.java),
+                configPrefix = "skeleton.async",
+                beans = beanNames(AsyncContextTaskDecorator::class.java) + beanNameIfPresent("skeletonAsyncTaskExecutor"),
+                note = "Context-propagating @Async executor and named CompletableFuture task group summaries.",
             ),
             module(
                 id = "auth",
@@ -476,9 +545,43 @@ class SkeletonModuleController(
     private fun <T> beanNames(type: Class<T>): List<String> =
         beanFactory.getBeanNamesForType(type).toList().sorted()
 
+    private fun beanNameIfPresent(beanName: String): List<String> =
+        if (beanFactory.containsBean(beanName)) listOf(beanName) else emptyList()
+
     private fun booleanProperty(
         name: String,
         defaultValue: Boolean,
     ): Boolean =
         environment.getProperty(name)?.toBooleanStrictOrNull() ?: defaultValue
+
+    private fun <T> withProbeMdc(block: () -> T): T {
+        val previousRunId = MDC.get(AsyncMdcKeys.RUN_ID)
+        val previousAccountId = MDC.get(AsyncMdcKeys.ACCOUNT_ID)
+        val accountName = SecurityContextHolder.getContext().authentication?.name?.toString()
+
+        if (previousRunId == null) {
+            MDC.put(AsyncMdcKeys.RUN_ID, "probe-${UUID.randomUUID()}")
+        }
+        if (previousAccountId == null && accountName != null) {
+            MDC.put(AsyncMdcKeys.ACCOUNT_ID, accountName)
+        }
+
+        return try {
+            block()
+        } finally {
+            restoreMdc(AsyncMdcKeys.RUN_ID, previousRunId)
+            restoreMdc(AsyncMdcKeys.ACCOUNT_ID, previousAccountId)
+        }
+    }
+
+    private fun restoreMdc(
+        key: String,
+        previousValue: String?,
+    ) {
+        if (previousValue == null) {
+            MDC.remove(key)
+        } else {
+            MDC.put(key, previousValue)
+        }
+    }
 }
