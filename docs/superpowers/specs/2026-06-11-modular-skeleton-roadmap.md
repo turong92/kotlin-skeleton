@@ -448,7 +448,7 @@ Acceptance:
   response timeout is not enough.
 - [x] Add a standard vendor trace-id extractor hook for outbound HTTP clients.
 - [x] Add redaction utilities shared by logging and Slack alert modules.
-- [ ] Add OpenAPI helpers for enum descriptions and response wrapper schemas.
+- [x] Add OpenAPI helpers for enum descriptions and response wrapper schemas.
 
 ## Next Batch Queue
 
