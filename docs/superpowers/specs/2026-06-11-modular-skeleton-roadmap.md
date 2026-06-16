@@ -114,7 +114,7 @@ Absorb:
 - [x] `@SlackExceptionNotify` concept for sync exception notification.
 - [ ] Optional async exception hook if it can be integrated cleanly.
 - [x] Trace fields: `traceId`, `spanId`, `parentSpanId` when MDC has them.
-- [ ] Optional Grafana/Loki URL.
+- [x] Optional Grafana/Loki URL.
 - [x] Context contributor API for account, user, tenant, plan, route, or
   domain-specific fields.
 - [x] Topic/severity based routing instead of old hard-coded flags like

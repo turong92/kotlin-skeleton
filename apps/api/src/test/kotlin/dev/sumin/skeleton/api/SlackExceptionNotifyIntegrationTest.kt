@@ -28,6 +28,11 @@ import org.springframework.web.bind.annotation.RestController
     properties = [
         "skeleton.notification.slack.enabled=true",
         "skeleton.notification.slack.webhook-url=https://hooks.slack.example/test",
+        "skeleton.observability.links.enabled=true",
+        "skeleton.observability.links.templates.logs.label=Logs by traceId",
+        "skeleton.observability.links.templates.logs.kind=LOGS",
+        "skeleton.observability.links.templates.logs.url=https://logs.example/trace/{traceId}",
+        "skeleton.observability.links.templates.logs.required-fields[0]=traceId",
     ],
 )
 @AutoConfigureMockMvc
@@ -58,6 +63,10 @@ class SlackExceptionNotifyIntegrationTest {
         assertEquals(result.response.getHeader(TraceIdFilter.HEADER_TRACE_ID), alert.trace.traceId)
         assertEquals(result.response.getHeader(TraceIdFilter.HEADER_SPAN_ID), alert.trace.spanId)
         assertTrue(alert.trace.traceId?.matches(Regex("[0-9a-f]{32}")) == true)
+        assertEquals(1, alert.links.size)
+        assertEquals("logs", alert.links.single().id)
+        assertEquals("Logs by traceId", alert.links.single().label)
+        assertEquals("https://logs.example/trace/${alert.trace.traceId}", alert.links.single().url)
     }
 
     @TestConfiguration(proxyBeanMethods = false)
