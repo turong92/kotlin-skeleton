@@ -1,8 +1,10 @@
 package dev.sumin.skeleton.common.enumcode
 
+import org.springdoc.core.customizers.GlobalOperationCustomizer
 import org.springdoc.core.customizers.OpenApiCustomizer
 import org.springframework.boot.jackson.autoconfigure.JacksonAutoConfiguration
 import org.springframework.boot.autoconfigure.AutoConfiguration
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.context.ApplicationContext
@@ -35,6 +37,16 @@ class CodeEnumAutoConfiguration {
     @Bean
     @ConditionalOnClass(OpenApiCustomizer::class)
     @ConditionalOnMissingBean(name = ["codeEnumOpenApiCustomizer"])
-    fun codeEnumOpenApiCustomizer(applicationContext: ApplicationContext): OpenApiCustomizer =
+    fun codeEnumOpenApiCustomizer(applicationContext: ApplicationContext): CodeEnumOpenApiCustomizer =
         CodeEnumOpenApiCustomizer(applicationContext)
+
+    @Bean
+    @ConditionalOnClass(GlobalOperationCustomizer::class)
+    @ConditionalOnBean(CodeEnumOpenApiCustomizer::class)
+    @ConditionalOnMissingBean(name = ["codeEnumOperationCustomizer"])
+    fun codeEnumOperationCustomizer(customizer: CodeEnumOpenApiCustomizer): GlobalOperationCustomizer =
+        GlobalOperationCustomizer { operation, handlerMethod ->
+            customizer.customiseOperation(operation, handlerMethod)
+            operation
+        }
 }

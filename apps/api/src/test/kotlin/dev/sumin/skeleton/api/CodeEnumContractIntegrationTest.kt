@@ -61,6 +61,23 @@ class CodeEnumContractIntegrationTest {
     }
 
     @Test
+    fun `string code enum can be read from path and returned as code plus descriptor`() {
+        val token = loginAccessToken()
+
+        mockMvc.get("/api/v1/skeleton/enums/tone/calm") {
+            header("Authorization", "Bearer $token")
+            accept = MediaType.APPLICATION_JSON
+        }.andExpect {
+            status { isOk() }
+            jsonPath("$.value.tone") { value("calm") }
+            jsonPath("$.value.toneInfo.code") { value("calm") }
+            jsonPath("$.value.toneInfo.name") { value("CALM") }
+            jsonPath("$.value.toneInfo.label") { value("Calm") }
+            jsonPath("$.value.toneInfo.description") { value("Low urgency.") }
+        }
+    }
+
+    @Test
     fun `OpenAPI describes code enum fields with code name and label`() {
         val docs = mockMvc.get("/api/v1/docs") {
             accept = MediaType.APPLICATION_JSON
@@ -81,13 +98,58 @@ class CodeEnumContractIntegrationTest {
             JsonPath.read(docs, "$.components.schemas.SkeletonCodeEnumRequest.properties.status.type"),
         )
         assertEquals(
-            "integer",
-            JsonPath.read(docs, "$.paths['/api/v1/skeleton/enums/status'].get.parameters[0].schema.type"),
+            listOf(10, 20, 90),
+            JsonPath.read(docs, "$.components.schemas.SkeletonCodeEnumRequest.properties.status.enum"),
         )
         assertEquals(
             listOf(10, 20, 90),
-            JsonPath.read(docs, "$.paths['/api/v1/skeleton/enums/status'].get.parameters[0].schema.enum"),
+            JsonPath.read(docs, "$.components.schemas.SkeletonCodeEnumResponse.properties.status.enum"),
         )
+        assertEquals(
+            "string",
+            JsonPath.read(docs, "$.components.schemas.SkeletonToneResponse.properties.tone.type"),
+        )
+        assertEquals(
+            listOf("calm", "loud"),
+            JsonPath.read(docs, "$.components.schemas.SkeletonToneResponse.properties.tone.enum"),
+        )
+        val toneDescription = JsonPath.read<String>(
+            docs,
+            "$.components.schemas.SkeletonToneResponse.properties.tone.description",
+        )
+        assertTrue(toneDescription.contains("{code: calm, name: CALM, label: Calm, description: Low urgency.}"))
+        val statusParameterSchema = parameterSchema(
+            docs,
+            "/api/v1/skeleton/enums/status",
+            "get",
+            "status",
+            "query",
+        )
+        assertEquals(
+            "integer",
+            statusParameterSchema["type"],
+        )
+        assertEquals(
+            listOf(10, 20, 90),
+            statusParameterSchema["enum"],
+        )
+        val toneParameterSchema = parameterSchema(
+            docs,
+            "/api/v1/skeleton/enums/tone/{tone}",
+            "get",
+            "tone",
+            "path",
+        )
+        assertEquals(
+            listOf("calm", "loud"),
+            toneParameterSchema["enum"],
+        )
+        assertEquals(
+            "string",
+            toneParameterSchema["type"],
+        )
+        val toneParameterDescription = toneParameterSchema["description"] as String
+        assertTrue(toneParameterDescription.contains("{code: calm, name: CALM, label: Calm, description: Low urgency.}"))
     }
 
     private fun loginAccessToken(): String {
@@ -100,5 +162,18 @@ class CodeEnumContractIntegrationTest {
         }.andReturn().response.contentAsString
 
         return JsonPath.read(response, "$.value.accessToken")
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun parameterSchema(
+        docs: String,
+        path: String,
+        method: String,
+        name: String,
+        location: String,
+    ): Map<String, Any?> {
+        val parameters = JsonPath.read<List<Map<String, Any?>>>(docs, "$.paths['$path'].$method.parameters")
+        val parameter = parameters.first { it["name"] == name && it["in"] == location }
+        return parameter["schema"] as Map<String, Any?>
     }
 }
