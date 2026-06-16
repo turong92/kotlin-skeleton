@@ -33,6 +33,8 @@ skeleton:
 
 Template values are URL-encoded. Templates are skipped when required fields are
 missing. Unknown placeholders fail startup when links are enabled.
+For service-specific payload keys, add camelCase names to `custom-fields`
+before using them in templates.
 
 ## Slack Alerts
 

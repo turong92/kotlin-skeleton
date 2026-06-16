@@ -11,8 +11,8 @@ data class SlackAlert(
     val route: String? = null,
     val fields: Map<String, String?> = emptyMap(),
     val trace: SlackTraceContext = SlackTraceContext.empty(),
-    val links: List<ObservabilityLink> = emptyList(),
     val occurredAt: Instant = Instant.now(),
+    val links: List<ObservabilityLink> = emptyList(),
 )
 
 enum class SlackAlertSeverity {

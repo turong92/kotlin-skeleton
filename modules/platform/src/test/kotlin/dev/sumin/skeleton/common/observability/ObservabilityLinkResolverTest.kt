@@ -240,6 +240,31 @@ class ObservabilityLinkResolverTest {
     }
 
     @Test
+    fun `fails startup for empty or unbalanced placeholders when enabled`() {
+        listOf(
+            "https://logs.example/{traceId" to "{traceId",
+            "https://logs.example/{}" to "{}",
+            "https://logs.example/{traceId}}" to "}",
+        ).forEachIndexed { index, (url, expectedToken) ->
+            contextRunner
+                .withPropertyValues(
+                    "skeleton.observability.links.enabled=true",
+                    "skeleton.observability.links.templates.malformed$index.label=Broken",
+                    "skeleton.observability.links.templates.malformed$index.kind=LOGS",
+                    "skeleton.observability.links.templates.malformed$index.url=$url",
+                )
+                .run { context ->
+                    val exception = assertFailsWith<IllegalStateException> {
+                        context.getBean(ObservabilityLinkResolver::class.java)
+                    }
+                    val message = rootCauseMessage(exception)
+                    assertTrue(message.contains("malformed$index"))
+                    assertTrue(message.contains(expectedToken))
+                }
+        }
+    }
+
+    @Test
     fun `fails startup for unknown required fields when enabled`() {
         contextRunner
             .withPropertyValues(

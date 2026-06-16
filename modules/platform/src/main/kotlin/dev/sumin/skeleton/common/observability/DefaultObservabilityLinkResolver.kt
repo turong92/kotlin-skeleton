@@ -35,7 +35,7 @@ class DefaultObservabilityLinkResolver(
 
     private fun validateTemplates() {
         properties.templates.forEach { (id, template) ->
-            val placeholderTokens = placeholderTokens(template.url)
+            val placeholderTokens = placeholderTokens(template.url, id)
             val malformedPlaceholders = placeholderTokens.filterNot { placeholderNameRegex.matches(it) }.toSet()
             check(malformedPlaceholders.isEmpty()) {
                 "Malformed observability link placeholders for template '$id': " +
@@ -54,8 +54,47 @@ class DefaultObservabilityLinkResolver(
     private fun placeholders(template: String): Set<String> =
         placeholderTokens(template).filter { placeholderNameRegex.matches(it) }.toSet()
 
-    private fun placeholderTokens(template: String): Set<String> =
-        placeholderTokenRegex.findAll(template).map { match -> match.groupValues[1] }.toSet()
+    private fun placeholderTokens(
+        template: String,
+        templateId: String? = null,
+    ): Set<String> {
+        val tokens = mutableSetOf<String>()
+        var index = 0
+        while (index < template.length) {
+            when (template[index]) {
+                '{' -> {
+                    val closeIndex = template.indexOf('}', startIndex = index + 1)
+                    check(closeIndex >= 0) {
+                        malformedPlaceholderMessage(templateId, template.substring(index))
+                    }
+
+                    val token = template.substring(index + 1, closeIndex)
+                    check(token.isNotEmpty()) {
+                        malformedPlaceholderMessage(templateId, "{}")
+                    }
+
+                    tokens += token
+                    index = closeIndex + 1
+                }
+                '}' -> error(malformedPlaceholderMessage(templateId, "}"))
+                else -> index += 1
+            }
+        }
+        return tokens
+    }
+
+    private fun malformedPlaceholderMessage(
+        templateId: String?,
+        placeholder: String,
+    ): String =
+        buildString {
+            append("Malformed observability link placeholders")
+            if (templateId != null) append(" for template '$templateId'")
+            append(": ")
+            append(placeholder)
+            append(". Placeholder names must match ")
+            append(placeholderNameRegex.pattern)
+        }
 
     private fun expand(
         template: String,

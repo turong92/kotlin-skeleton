@@ -2,6 +2,7 @@ package dev.sumin.skeleton.notification.slack
 
 import dev.sumin.skeleton.common.observability.ObservabilityLink
 import dev.sumin.skeleton.common.observability.ObservabilityLinkKind
+import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -82,5 +83,24 @@ class SlackAlertMessageFactoryTest {
             payload.blocks[2].elements.single().text,
         )
         assertTrue(payload.blocks[3].elements.single().text.startsWith("occurredAt="))
+    }
+
+    @Test
+    fun `keeps occurredAt positional constructor compatibility`() {
+        val occurredAt = Instant.parse("2026-06-16T00:00:00Z")
+
+        val alert = SlackAlert(
+            "Async failed",
+            "worker failed",
+            SlackAlertSeverity.WARNING,
+            "async.exception",
+            null,
+            emptyMap(),
+            SlackTraceContext.empty(),
+            occurredAt,
+        )
+
+        assertEquals(occurredAt, alert.occurredAt)
+        assertTrue(alert.links.isEmpty())
     }
 }
