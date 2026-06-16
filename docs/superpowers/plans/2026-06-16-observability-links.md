@@ -431,7 +431,7 @@ fun `renders observability links when alert has links`() {
     val body = mapper.writeValueAsString(payload)
 
     assertTrue(body.contains("Links:"))
-    assertTrue(body.contains("&lt;https://grafana.example/explore?traceId=4bf92f3577b34da6a3ce929d0e0e4736|Logs by traceId&gt;"))
+    assertTrue(body.contains("<https://grafana.example/explore?traceId=4bf92f3577b34da6a3ce929d0e0e4736|Logs by traceId>"))
 }
 ```
 
@@ -531,6 +531,8 @@ Add this helper inside `SlackAlertMessageFactory`:
     private fun dev.sumin.skeleton.common.observability.ObservabilityLink.toSlackLink(): String =
         "<${escape(url)}|${escape(label)}>"
 ```
+
+Keep the surrounding `<` and `>` unescaped so Slack can render the text as a clickable mrkdwn link. Escape only the URL and label values inside the link.
 
 - [ ] **Step 5: Run the Slack message test to verify it passes**
 
