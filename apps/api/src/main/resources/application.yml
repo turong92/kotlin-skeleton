@@ -96,6 +96,9 @@ skeleton:
       multipart-part: ${SKELETON_STORAGE_S3_PRESIGN_MULTIPART_PART:15m}
     public-url:
       base-url: ${SKELETON_STORAGE_S3_PUBLIC_URL_BASE_URL:}
+      strategy: ${SKELETON_STORAGE_S3_PUBLIC_URL_STRATEGY:RAW}
+      token-path-prefix: ${SKELETON_STORAGE_S3_PUBLIC_URL_TOKEN_PATH_PREFIX:/c}
+      token-purpose: ${SKELETON_STORAGE_S3_PUBLIC_URL_TOKEN_PURPOSE:storage-public-url}
   event-kafka:
     enabled: ${SKELETON_EVENT_KAFKA_ENABLED:false}
     environment: ${SKELETON_EVENT_KAFKA_ENVIRONMENT:local}

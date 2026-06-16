@@ -23,6 +23,8 @@ import dev.sumin.skeleton.redis.lock.DistributedLockExecutor
 import dev.sumin.skeleton.scheduler.SkeletonScheduledTaskRegistrar
 import dev.sumin.skeleton.storage.StorageFileCandidate
 import dev.sumin.skeleton.storage.StorageFileValidator
+import dev.sumin.skeleton.storage.ObjectKey
+import dev.sumin.skeleton.storage.StoragePublicUrlResolver
 import dev.sumin.skeleton.storage.s3.S3PresignedStorageService
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
@@ -78,6 +80,12 @@ data class SkeletonStorageValidationErrorResponse(
     val message: String,
 )
 
+data class SkeletonStoragePublicUrlResponse(
+    val key: String,
+    val publicUrl: String?,
+    val available: Boolean,
+)
+
 data class SkeletonNotificationPublishRequest(
     @field:NotBlank
     val topic: String,
@@ -108,6 +116,7 @@ class SkeletonModuleController(
     private val beanFactory: ListableBeanFactory,
     private val redisKeyPrefixer: ObjectProvider<RedisKeyPrefixer>,
     private val storageFileValidator: ObjectProvider<StorageFileValidator>,
+    private val storagePublicUrlResolver: ObjectProvider<StoragePublicUrlResolver>,
     private val notificationPublisher: ObjectProvider<NotificationPublisher>,
 ) {
     @GetMapping("/modules")
@@ -148,6 +157,21 @@ class SkeletonModuleController(
                             message = error.message,
                         )
                     },
+                ),
+            )
+        }
+
+    @GetMapping("/storage/public-url")
+    fun storagePublicUrl(
+        @RequestParam key: String,
+    ) = storagePublicUrlResolver.getIfAvailable { StoragePublicUrlResolver.NONE }
+        .publicUrl(ObjectKey(key))
+        .let { publicUrl ->
+            Response.ok(
+                SkeletonStoragePublicUrlResponse(
+                    key = key,
+                    publicUrl = publicUrl?.toString(),
+                    available = publicUrl != null,
                 ),
             )
         }

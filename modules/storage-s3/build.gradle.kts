@@ -1,4 +1,5 @@
 dependencies {
+    implementation(project(":modules:crypto"))
     implementation(project(":modules:storage"))
     implementation(platform("software.amazon.awssdk:bom:2.46.8"))
 

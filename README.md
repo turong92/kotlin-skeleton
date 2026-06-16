@@ -46,7 +46,7 @@ Use modules as capability choices:
 - `modules/auth-social` is included when the app needs social login. Its default beans are also auto-configuration defaults, so account links, provisioning policy, and the social auth handler can be replaced. It also contributes the social-login endpoint to OpenAPI.
 - `modules/auth-social-google`, `modules/auth-social-kakao`, and `modules/auth-social-naver` are optional provider clients. Add only the provider modules an application actually needs.
 - `modules/idempotency` is included when command endpoints need `Idempotency-Key` protection. It contributes the `@IdempotentOperation` annotation, request fingerprinting, replay headers, an in-memory default store, and OpenAPI header documentation.
-- `modules/crypto` is included when the app needs recoverable AES-GCM text encryption for persisted or transported secrets. It provides key-id envelopes and opt-in persistence converters; redaction still handles logs and alerts.
+- `modules/crypto` is included when the app needs recoverable AES-GCM text encryption for persisted or transported secrets. It provides key-id envelopes, URL-safe opaque tokens, and opt-in persistence converters; redaction still handles logs and alerts.
 - `modules/notification` is included when the app needs server-side notification publishing. `modules/notification-sse`, `modules/notification-websocket`, and `modules/notification-slack` add delivery/alert channels.
 - `modules:redis-*`, `modules:storage-*`, `modules:payment-*`, `modules:event-kafka`, and `modules:scheduler` are optional capability bundles. `apps/api` includes them to prove they can coexist, while YAML keeps infrastructure-backed features disabled unless explicitly enabled.
 - `modules/persistence-jpa` and `modules/persistence-jdbc` are optional persistence adapters. Both use the same platform audit-time contract while keeping JPA/JDBC annotations and lifecycle behavior inside the selected persistence module.
@@ -60,6 +60,7 @@ Fine-grained details such as JWT, password login, OAuth, or dev login live as pa
 - `GET /api/v1/skeleton/modules` returns the current module catalog as a standard list response.
 - `GET /api/v1/skeleton/redis/key?value=orders:1` proves `redis-core` key prefixing works without pinging Redis.
 - `POST /api/v1/skeleton/storage/validate` proves storage file validation wiring.
+- `GET /api/v1/skeleton/storage/public-url?key=images/cat.png` proves the configured storage public URL resolver without requiring a product endpoint.
 - `POST /api/v1/skeleton/notifications` publishes a provider-neutral notification event so SSE/Slack/WebSocket delivery modules can subscribe.
 
 These endpoints require auth by default. They are development/workbench affordances, not product APIs.

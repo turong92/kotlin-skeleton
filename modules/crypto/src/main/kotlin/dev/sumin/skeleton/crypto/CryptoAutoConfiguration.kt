@@ -32,4 +32,10 @@ class CryptoAutoConfiguration {
     @ConditionalOnMissingBean
     fun encryptedStringReadingConverter(textEncryptor: TextEncryptor): EncryptedStringReadingConverter =
         EncryptedStringReadingConverter(textEncryptor)
+
+    @Bean
+    @ConditionalOnBean(TextEncryptor::class)
+    @ConditionalOnMissingBean
+    fun opaqueUrlTokenCodec(textEncryptor: TextEncryptor): OpaqueUrlTokenCodec =
+        OpaqueUrlTokenCodec(textEncryptor)
 }

@@ -27,5 +27,13 @@ data class S3StorageProperties(
 
     data class PublicUrl(
         val baseUrl: String = "",
+        val strategy: PublicUrlStrategy = PublicUrlStrategy.RAW,
+        val tokenPathPrefix: String = "/c",
+        val tokenPurpose: String = "storage-public-url",
     )
+
+    enum class PublicUrlStrategy {
+        RAW,
+        OPAQUE,
+    }
 }

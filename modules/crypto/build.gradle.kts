@@ -2,6 +2,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot")
     implementation("org.springframework.boot:spring-boot-autoconfigure")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
+    implementation("tools.jackson.module:jackson-module-kotlin")
 
     compileOnly("jakarta.persistence:jakarta.persistence-api")
     compileOnly("org.springframework.data:spring-data-commons")

@@ -1,12 +1,17 @@
 package dev.sumin.skeleton.storage.s3
 
+import dev.sumin.skeleton.crypto.AesGcmKey
+import dev.sumin.skeleton.crypto.AesGcmTextEncryptor
+import dev.sumin.skeleton.crypto.OpaqueUrlTokenCodec
 import dev.sumin.skeleton.storage.ObjectKey
 import dev.sumin.skeleton.storage.PresignedStorage
 import dev.sumin.skeleton.storage.StoragePublicUrlResolver
 import java.net.URI
+import java.util.Base64
 import java.util.function.Supplier
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.assertj.core.api.Assertions.assertThat
@@ -54,6 +59,32 @@ class S3StorageAutoConfigurationTest {
     }
 
     @Test
+    fun `creates opaque public url resolver when strategy is opaque`() {
+        val codec = opaqueTokenCodec()
+
+        contextRunner
+            .withBean(OpaqueUrlTokenCodec::class.java, Supplier { codec })
+            .withPropertyValues(
+                "skeleton.storage-s3.bucket=app-uploads",
+                "skeleton.storage-s3.region=us-east-1",
+                "skeleton.storage-s3.public-url.base-url=https://cdn.example.com",
+                "skeleton.storage-s3.public-url.strategy=opaque",
+                "skeleton.storage-s3.public-url.token-path-prefix=/c",
+            )
+            .run { context ->
+                val resolver = context.getBean(StoragePublicUrlResolver::class.java)
+                val url = assertNotNull(resolver.publicUrl(ObjectKey("images/cat.png")))
+
+                assertTrue(url.toString().startsWith("https://cdn.example.com/c/"))
+                assertTrue(url.path.removePrefix("/c/").none { it == '/' || it == '+' || it == '=' })
+
+                val payload = codec.decode(url.path.removePrefix("/c/"), expectedPurpose = "storage-public-url")
+                assertEquals("images/cat.png", payload.value)
+                assertEquals("s3", payload.metadata["provider"])
+            }
+    }
+
+    @Test
     fun `does not create storage service without bucket`() {
         contextRunner
             .withPropertyValues("skeleton.storage-s3.region=us-east-1")
@@ -78,5 +109,18 @@ class S3StorageAutoConfigurationTest {
                 assertThat(context.getBean(StoragePublicUrlResolver::class.java)).isSameAs(resolver)
                 assertNull(context.getBean(S3StorageProperties::class.java).endpointOverride)
             }
+    }
+
+    private fun opaqueTokenCodec(): OpaqueUrlTokenCodec =
+        OpaqueUrlTokenCodec(
+            AesGcmTextEncryptor(
+                primaryKeyId = "local",
+                keys = mapOf("local" to AesGcmKey.fromBase64(key(1))),
+            ),
+        )
+
+    private fun key(seed: Int): String {
+        val bytes = ByteArray(32) { index -> (seed + index).toByte() }
+        return Base64.getEncoder().encodeToString(bytes)
     }
 }

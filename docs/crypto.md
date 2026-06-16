@@ -39,6 +39,34 @@ Ciphertext format:
 aes-gcm:v1:<keyId>:<base64url(iv + ciphertext + tag)>
 ```
 
+## Opaque URL Tokens
+
+`OpaqueUrlTokenCodec` creates URL-safe path tokens for cases where public routes
+should not expose raw IDs or object keys. The token payload contains:
+
+- `value`: route target, object key, or other app-owned reference.
+- `purpose`: a required purpose such as `frontend-route` or
+  `storage-public-url`.
+- `expiresAt`: optional expiry checked during decoding.
+- `metadata`: optional string metadata for routing hints.
+
+Example:
+
+```kotlin
+val token = codec.encode(
+    OpaqueUrlTokenPayload(
+        value = "contents/video-1/master.m3u8",
+        purpose = "storage-public-url",
+        expiresAt = Instant.now().plusSeconds(600),
+    ),
+)
+
+val payload = codec.decode(token, expectedPurpose = "storage-public-url")
+```
+
+Opaque tokens hide URL shape. They do not replace authorization, CDN signed
+URLs, signed cookies, or backend permission checks.
+
 ## Service Usage
 
 ```kotlin
@@ -92,5 +120,8 @@ configuration.
   provider. Do not commit them.
 - Encryption is not a substitute for redaction. Decrypted values can still leak
   through logs unless log/alert boundaries redact them.
+- Opaque URL tokens are not a substitute for access control. Use them with
+  private origins, permission checks, and expiring CDN/backend access where the
+  content is not public.
 - Use hashing, not encryption, when the application never needs to recover the
   original value.

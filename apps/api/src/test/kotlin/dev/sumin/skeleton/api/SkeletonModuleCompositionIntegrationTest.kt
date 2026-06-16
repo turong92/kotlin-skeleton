@@ -3,11 +3,15 @@ package dev.sumin.skeleton.api
 import com.jayway.jsonpath.JsonPath
 import dev.sumin.skeleton.TestcontainersConfiguration
 import dev.sumin.skeleton.notification.websocket.NotificationWebSocketTokenVerifier
+import dev.sumin.skeleton.storage.StoragePublicUrlResolver
+import java.net.URI
 import org.hamcrest.Matchers.hasItem
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
+import org.springframework.boot.test.context.TestConfiguration
+import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
 import org.springframework.test.web.servlet.MockMvc
@@ -79,6 +83,17 @@ class SkeletonModuleCompositionIntegrationTest {
             jsonPath("$.value.errors.length()") { value(0) }
         }
 
+        mockMvc.get("/api/v1/skeleton/storage/public-url") {
+            header("Authorization", "Bearer $token")
+            param("key", "images/cat.png")
+            accept = MediaType.APPLICATION_JSON
+        }.andExpect {
+            status { isOk() }
+            jsonPath("$.value.key") { value("images/cat.png") }
+            jsonPath("$.value.available") { value(true) }
+            jsonPath("$.value.publicUrl") { value("https://cdn.example.test/images/cat.png") }
+        }
+
         mockMvc.post("/api/v1/skeleton/notifications") {
             header("Authorization", "Bearer $token")
             contentType = MediaType.APPLICATION_JSON
@@ -115,5 +130,12 @@ class SkeletonModuleCompositionIntegrationTest {
         val token = JsonPath.read<String>(response, "$.value.accessToken")
         assertTrue(token.isNotBlank())
         return token
+    }
+
+    @TestConfiguration
+    class StoragePublicUrlTestConfiguration {
+        @Bean
+        fun testStoragePublicUrlResolver(): StoragePublicUrlResolver =
+            StoragePublicUrlResolver { key -> URI.create("https://cdn.example.test/${key.value}") }
     }
 }

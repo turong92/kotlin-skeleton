@@ -87,7 +87,7 @@ work.
 | Persistence audit and JPA operations | `persistence-jpa`, `persistence-jdbc` | Done | Optional by dependency | Add Querydsl module later only if needed |
 | Redis | `redis-core`, `redis-lock`, `redis-cache`, `redis-rate-limit` | Done | Core is passive; feature modules own fail policy | Testcontainers concurrency/infra proofs and per-route rate-limit override |
 | Scheduler | `scheduler` | Done | Disabled unless configured by app/profile | Redis lock bridge sample and notification failure bridge |
-| Storage | `storage`, `storage-s3` | Done | S3 disabled until configured | LocalStack or real AWS smoke run when credentials exist |
+| Storage | `storage`, `storage-s3` | Done | S3 disabled until configured; public URLs can be raw or opaque | LocalStack or real AWS smoke run when credentials exist |
 | Events | `event-kafka` | Done | Producer-only; disabled sender can log/no-op | Add `event-kafka-consumer` only when consumer conventions are needed |
 | Payment | `payment`, `payment-toss`, `payment-stripe` | Done | Providers disabled until secrets/config exist | Provider routing samples, alerts, response headers/vendor trace hooks |
 | Composition app | `apps:api` | Done | Runnable workbench | Add FE/workbench wiring and more smoke endpoints as modules mature |

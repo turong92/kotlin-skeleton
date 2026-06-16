@@ -34,6 +34,7 @@ class CryptoAutoConfigurationTest {
                 assertEquals("secret", encryptor.decrypt(cipherText))
                 assertTrue(context.containsBean("encryptedStringWritingConverter"))
                 assertTrue(context.containsBean("encryptedStringReadingConverter"))
+                assertTrue(context.containsBean("opaqueUrlTokenCodec"))
             }
     }
 

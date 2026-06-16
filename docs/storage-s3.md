@@ -25,6 +25,9 @@ skeleton:
       profile: skeleton-dev
     public-url:
       base-url: https://cdn.example.com/uploads
+      strategy: RAW
+      token-path-prefix: /c
+      token-purpose: storage-public-url
     presign:
       upload: 10m
       download: 10m
@@ -59,6 +62,35 @@ val listed = storage.list(ListObjectsRequest(prefix = "avatars/", maxKeys = 100)
 Result DTOs include the object key, ETag/version when the provider returns them,
 and `publicUrl` when a resolver is configured.
 
+## Public URL Strategies
+
+`public-url.strategy=RAW` keeps the existing behavior:
+
+```text
+https://cdn.example.com/uploads/images/cat.png
+```
+
+`public-url.strategy=OPAQUE` emits a URL-safe encrypted token instead of the raw
+object key:
+
+```text
+https://cdn.example.com/c/<opaque-token>
+```
+
+OPAQUE requires `modules:crypto` to create an `OpaqueUrlTokenCodec` bean, so a
+valid `skeleton.crypto.keys.*` configuration must exist. The token payload stores
+the object key with purpose `storage-public-url` by default.
+
+Opaque URLs are for URL shape privacy and routing indirection. They are not a
+security boundary by themselves. For private content, keep S3 private, connect
+CloudFront to S3 through Origin Access Control, and use CloudFront signed URLs or
+signed cookies when clients should access content through the CDN.
+
+CloudFront Function rewrite can still be used by a project-specific edge layer:
+the function reads `/c/<opaque-token>` and rewrites to the resolved origin key.
+Keep that as an opt-in deployment artifact because edge secret management and
+rotation policy are environment-specific.
+
 ## Presigned Operations
 
 Use presigned uploads when a browser or mobile client should send bytes directly
@@ -80,5 +112,6 @@ start, part presign, complete, and abort as stable DTOs.
 ## Testing Posture
 
 The current tests prove presign, multipart, metadata, delete, upload, copy, move,
-and list without contacting AWS. A real AWS or LocalStack smoke run is still the
-right final check for a service that enables this module in an environment.
+list, and public URL strategy selection without contacting AWS. A real AWS or
+LocalStack smoke run is still the right final check for a service that enables
+this module in an environment.
