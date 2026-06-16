@@ -1,9 +1,12 @@
 package dev.sumin.skeleton.api
 
+import dev.sumin.skeleton.common.CursorResponse
 import dev.sumin.skeleton.common.PageQuery
 import dev.sumin.skeleton.common.PageResponse
 import dev.sumin.skeleton.common.Response
 import dev.sumin.skeleton.common.openapi.AcceptedOperation
+import dev.sumin.skeleton.common.openapi.ApiEnvelopeType
+import dev.sumin.skeleton.common.openapi.ApiResponseEnvelope
 import dev.sumin.skeleton.common.openapi.CreatedOperation
 import dev.sumin.skeleton.common.openapi.NoContentOperation
 import dev.sumin.skeleton.idempotency.IdempotentOperation
@@ -89,6 +92,21 @@ class OperationExampleController {
             pagination = pageQuery.toPagination(totalElements = items.size.toLong()),
         )
     }
+
+    @GetMapping("/items/cursor")
+    fun cursorItems(): CursorResponse<ExampleItemResponse> =
+        Response.cursor(
+            values = exampleItems().take(2),
+            nextCursor = "item-3",
+        )
+
+    @GetMapping("/items/annotated")
+    @ApiResponseEnvelope(
+        type = ApiEnvelopeType.LIST,
+        value = ExampleItemResponse::class,
+    )
+    fun annotatedItems(): Any =
+        Response.ok(values = exampleItems().take(2))
 
     private fun exampleItems(): List<ExampleItemResponse> =
         (1..5).map { index ->

@@ -40,6 +40,9 @@ class PlatformOpenApiAutoConfiguration {
             components.addSchemas("ApiError", apiErrorSchema())
             components.addSchemas("ResponseMeta", responseMetaSchema())
             components.addSchemas("PaginationMeta", paginationMetaSchema())
+            ApiResponseEnvelopeSchemas.componentSchemas().forEach { (name, schema) ->
+                components.addSchemas(name, schema)
+            }
         }
 
     @Bean
@@ -62,6 +65,7 @@ class PlatformOpenApiAutoConfiguration {
             )
             operation.addStandardErrorResponses()
             operation.applyStandardOperationResponse(handlerMethod)
+            operation.applyResponseEnvelope(handlerMethod)
             operation.normalizeJsonResponseContent()
             operation
         }
@@ -113,6 +117,27 @@ class PlatformOpenApiAutoConfiguration {
                 currentResponses.putIfAbsent("204", ApiResponse().description("No content"))
             }
         }
+    }
+
+    private fun Operation.applyResponseEnvelope(handlerMethod: HandlerMethod) {
+        val envelope = ApiResponseEnvelopeResolver.resolve(handlerMethod.method) ?: return
+        if (handlerMethod.hasMethodAnnotation(NoContentOperation::class.java)) {
+            return
+        }
+        val response = successResponse() ?: return
+        val content = response.content ?: Content().also { response.content = it }
+        content.addMediaType(
+            "application/json",
+            MediaType().schema(ApiResponseEnvelopeSchemas.operationSchema(envelope)),
+        )
+        content.remove("*/*")
+    }
+
+    private fun Operation.successResponse(): ApiResponse? {
+        val currentResponses = responses ?: return null
+        return listOf("200", "201", "202")
+            .firstNotNullOfOrNull { code -> currentResponses[code] }
+            ?: currentResponses.entries.firstOrNull { (code, _) -> code.startsWith("2") }?.value
     }
 
     private fun Operation.moveResponse(
