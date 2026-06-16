@@ -17,7 +17,12 @@ import reactor.core.publisher.Mono
 
 class NotificationSlackAutoConfigurationTest {
     private val contextRunner = ApplicationContextRunner()
-        .withConfiguration(AutoConfigurations.of(NotificationSlackAutoConfiguration::class.java))
+        .withConfiguration(
+            AutoConfigurations.of(
+                dev.sumin.skeleton.common.observability.ObservabilityLinkAutoConfiguration::class.java,
+                NotificationSlackAutoConfiguration::class.java,
+            ),
+        )
         .withBean(ExternalHttpClient::class.java, Supplier { NoopExternalHttpClient() })
         .withBean(NotificationSubscriptionRegistry::class.java, Supplier { NoopSubscriptionRegistry() })
 
@@ -29,6 +34,7 @@ class NotificationSlackAutoConfigurationTest {
             assertEquals(1, context.getBeansOfType(SlackAlertSender::class.java).size)
             assertEquals(1, context.getBeansOfType(SlackExceptionAspect::class.java).size)
             assertEquals(1, context.getBeansOfType(SlackNotificationForwarder::class.java).size)
+            assertEquals(1, context.getBeansOfType(dev.sumin.skeleton.common.observability.ObservabilityLinkResolver::class.java).size)
         }
     }
 

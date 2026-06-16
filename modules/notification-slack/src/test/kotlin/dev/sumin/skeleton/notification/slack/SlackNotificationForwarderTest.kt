@@ -42,6 +42,7 @@ class SlackNotificationForwarderTest {
             sender = sender,
             properties = SlackNotificationProperties(notificationEvents = true),
             subscriptionRegistry = registry,
+            linkResolver = RecordingObservabilityLinkResolver(),
         )
 
         registry.subscriber?.onNotification(
@@ -51,7 +52,7 @@ class SlackNotificationForwarderTest {
                 severity = NotificationSeverity.ERROR,
                 title = "Payment failed",
                 message = "approve failed",
-                payload = mapOf("orderId" to "order-1", "nullable" to null),
+                payload = mapOf("orderId" to "order-1", "runId" to "run-1", "nullable" to null),
             ),
         )
 
@@ -65,6 +66,9 @@ class SlackNotificationForwarderTest {
         assertEquals("payment.failed", alert.fields["type"])
         assertEquals("4bf92f3577b34da6a3ce929d0e0e4736", alert.trace.traceId)
         assertEquals("00f067aa0ba902b7", alert.trace.spanId)
+        assertEquals(1, alert.links.size)
+        assertEquals("run", alert.links.single().id)
+        assertEquals("https://ops.example/runs/run-1", alert.links.single().url)
     }
 
     private class RecordingSubscriptionRegistry : NotificationSubscriptionRegistry {
@@ -89,5 +93,21 @@ class SlackNotificationForwarderTest {
         override fun send(alert: SlackAlert) {
             alerts += alert
         }
+    }
+
+    private class RecordingObservabilityLinkResolver : dev.sumin.skeleton.common.observability.ObservabilityLinkResolver {
+        override fun resolve(
+            context: dev.sumin.skeleton.common.observability.ObservabilityContext,
+        ): List<dev.sumin.skeleton.common.observability.ObservabilityLink> =
+            listOfNotNull(
+                context.value("runId")?.let { runId ->
+                    dev.sumin.skeleton.common.observability.ObservabilityLink(
+                        id = "run",
+                        label = "Run",
+                        url = "https://ops.example/runs/$runId",
+                        kind = dev.sumin.skeleton.common.observability.ObservabilityLinkKind.RUN,
+                    )
+                },
+            )
     }
 }

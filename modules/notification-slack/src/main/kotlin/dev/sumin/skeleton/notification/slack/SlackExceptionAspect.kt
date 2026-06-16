@@ -1,5 +1,7 @@
 package dev.sumin.skeleton.notification.slack
 
+import dev.sumin.skeleton.common.observability.ObservabilityContext
+import dev.sumin.skeleton.common.observability.ObservabilityLinkResolver
 import org.aspectj.lang.JoinPoint
 import org.aspectj.lang.annotation.AfterThrowing
 import org.aspectj.lang.annotation.Aspect
@@ -11,6 +13,7 @@ class SlackExceptionAspect(
     private val sender: SlackAlertSender,
     private val contributors: List<SlackAlertContextContributor>,
     private val properties: SlackNotificationProperties,
+    private val linkResolver: ObservabilityLinkResolver = ObservabilityLinkResolver { emptyList() },
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -43,6 +46,14 @@ class SlackExceptionAspect(
             runCatching { fields.putAll(contributor.contribute(context)) }
                 .onFailure { error -> log.warn("Slack alert contributor failed: {}", error.message) }
         }
+        val links = linkResolver.resolve(
+            ObservabilityContext.fromMdc(
+                fields + mapOf(
+                    "route" to route,
+                    "method" to fields["method"],
+                ),
+            ),
+        )
 
         runCatching {
             sender.send(
@@ -54,6 +65,7 @@ class SlackExceptionAspect(
                     route = route,
                     fields = fields,
                     trace = trace,
+                    links = links,
                 ),
             )
         }.onFailure { error ->

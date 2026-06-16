@@ -4,6 +4,8 @@ import dev.sumin.skeleton.common.http.ExternalHttpClient
 import dev.sumin.skeleton.common.http.OutboundHttpAutoConfiguration
 import dev.sumin.skeleton.common.logging.RedactionAutoConfiguration
 import dev.sumin.skeleton.common.logging.SensitiveValueRedactor
+import dev.sumin.skeleton.common.observability.ObservabilityLinkAutoConfiguration
+import dev.sumin.skeleton.common.observability.ObservabilityLinkResolver
 import dev.sumin.skeleton.notification.NotificationAutoConfiguration
 import dev.sumin.skeleton.notification.NotificationSubscriptionRegistry
 import org.springframework.beans.factory.ObjectProvider
@@ -17,6 +19,7 @@ import org.springframework.context.annotation.Bean
         RedactionAutoConfiguration::class,
         OutboundHttpAutoConfiguration::class,
         NotificationAutoConfiguration::class,
+        ObservabilityLinkAutoConfiguration::class,
     ],
 )
 @EnableConfigurationProperties(SlackNotificationProperties::class)
@@ -47,8 +50,14 @@ class NotificationSlackAutoConfiguration {
         sender: SlackAlertSender,
         properties: SlackNotificationProperties,
         subscriptionRegistry: ObjectProvider<NotificationSubscriptionRegistry>,
+        linkResolver: ObjectProvider<ObservabilityLinkResolver>,
     ): SlackNotificationForwarder =
-        SlackNotificationForwarder(sender, properties, subscriptionRegistry.ifAvailable)
+        SlackNotificationForwarder(
+            sender = sender,
+            properties = properties,
+            subscriptionRegistry = subscriptionRegistry.ifAvailable,
+            linkResolver = linkResolver.getIfAvailable { ObservabilityLinkResolver { emptyList() } },
+        )
 
     @Bean
     @ConditionalOnMissingBean
@@ -56,6 +65,12 @@ class NotificationSlackAutoConfiguration {
         sender: SlackAlertSender,
         contributors: List<SlackAlertContextContributor>,
         properties: SlackNotificationProperties,
+        linkResolver: ObjectProvider<ObservabilityLinkResolver>,
     ): SlackExceptionAspect =
-        SlackExceptionAspect(sender, contributors, properties)
+        SlackExceptionAspect(
+            sender = sender,
+            contributors = contributors,
+            properties = properties,
+            linkResolver = linkResolver.getIfAvailable { ObservabilityLinkResolver { emptyList() } },
+        )
 }

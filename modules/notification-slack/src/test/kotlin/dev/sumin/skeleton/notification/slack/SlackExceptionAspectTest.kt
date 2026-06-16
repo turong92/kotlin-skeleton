@@ -27,6 +27,7 @@ class SlackExceptionAspectTest {
                 SlackAlertContextContributor { mapOf("accountId" to "account-1") },
             ),
             properties = SlackNotificationProperties(defaultTopic = "operations"),
+            linkResolver = RecordingObservabilityLinkResolver(),
         )
         val method = Fixture::class.java.getDeclaredMethod("notifyPayment", String::class.java)
         val annotation = method.getAnnotation(SlackExceptionNotify::class.java)
@@ -49,6 +50,9 @@ class SlackExceptionAspectTest {
         assertEquals("Fixture.notifyPayment", alert.fields["method"])
         assertEquals("4bf92f3577b34da6a3ce929d0e0e4736", alert.trace.traceId)
         assertEquals("00f067aa0ba902b7", alert.trace.spanId)
+        assertEquals(1, alert.links.size)
+        assertEquals("logs", alert.links.single().id)
+        assertEquals("https://logs.example/trace/4bf92f3577b34da6a3ce929d0e0e4736", alert.links.single().url)
     }
 
     @Test
@@ -76,6 +80,20 @@ class SlackExceptionAspectTest {
         override fun send(alert: SlackAlert) {
             alerts += alert
         }
+    }
+
+    private class RecordingObservabilityLinkResolver : dev.sumin.skeleton.common.observability.ObservabilityLinkResolver {
+        override fun resolve(
+            context: dev.sumin.skeleton.common.observability.ObservabilityContext,
+        ): List<dev.sumin.skeleton.common.observability.ObservabilityLink> =
+            listOf(
+                dev.sumin.skeleton.common.observability.ObservabilityLink(
+                    id = "logs",
+                    label = "Logs",
+                    url = "https://logs.example/trace/${context.value("traceId")}",
+                    kind = dev.sumin.skeleton.common.observability.ObservabilityLinkKind.LOGS,
+                ),
+            )
     }
 
     private class RecordingJoinPoint(

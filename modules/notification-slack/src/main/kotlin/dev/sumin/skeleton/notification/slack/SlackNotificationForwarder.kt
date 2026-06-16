@@ -1,5 +1,7 @@
 package dev.sumin.skeleton.notification.slack
 
+import dev.sumin.skeleton.common.observability.ObservabilityContext
+import dev.sumin.skeleton.common.observability.ObservabilityLinkResolver
 import dev.sumin.skeleton.notification.NotificationEvent
 import dev.sumin.skeleton.notification.NotificationSeverity
 import dev.sumin.skeleton.notification.NotificationSubscriber
@@ -10,6 +12,7 @@ class SlackNotificationForwarder(
     private val sender: SlackAlertSender,
     private val properties: SlackNotificationProperties,
     subscriptionRegistry: NotificationSubscriptionRegistry?,
+    private val linkResolver: ObservabilityLinkResolver = ObservabilityLinkResolver { emptyList() },
 ) : AutoCloseable {
     private val subscription: NotificationSubscription? =
         if (properties.notificationEvents) {
@@ -19,6 +22,17 @@ class SlackNotificationForwarder(
         }
 
     private fun forward(event: NotificationEvent) {
+        val fields = event.fields()
+        val links = linkResolver.resolve(
+            ObservabilityContext.fromMdc(
+                fields + mapOf(
+                    "topic" to event.topic,
+                    "type" to event.type,
+                    "route" to event.topic,
+                ),
+            ),
+        )
+
         sender.send(
             SlackAlert(
                 title = event.title ?: event.type,
@@ -26,8 +40,9 @@ class SlackNotificationForwarder(
                 severity = event.severity.toSlackSeverity(),
                 topic = event.topic,
                 route = event.topic,
-                fields = event.fields(),
+                fields = fields,
                 trace = SlackTraceContexts.current(),
+                links = links,
                 occurredAt = event.createdAt,
             ),
         )
