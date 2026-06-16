@@ -40,6 +40,22 @@ class CodeEnumOpenApiCustomizerTest {
     }
 
     @Test
+    fun `matches custom named dto component schemas`() {
+        val statusSchema = StringSchema()._enum(listOf("CREATED", "PAID"))
+        val docs = OpenAPI().components(
+            Components().addSchemas(
+                "CustomNamedDto",
+                ObjectSchema().addProperty("status", statusSchema),
+            ),
+        )
+
+        customNamedControllerCustomizer().customise(docs)
+
+        assertEquals("integer", statusSchema.type)
+        assertEquals(listOf<Any>(10, 20), statusSchema.enum)
+    }
+
+    @Test
     fun `operation parameter mutation uses actual handler method parameter type`() {
         val operation = Operation().addParametersItem(
             PathParameter()
@@ -69,10 +85,22 @@ class CodeEnumOpenApiCustomizerTest {
         return CodeEnumOpenApiCustomizer(context)
     }
 
+    private fun customNamedControllerCustomizer(): CodeEnumOpenApiCustomizer {
+        val context = GenericApplicationContext()
+        context.registerBeanDefinition("customNamedController", RootBeanDefinition(CustomNamedController::class.java))
+        context.refresh()
+        return CodeEnumOpenApiCustomizer(context)
+    }
+
     private fun method(name: String) =
         SampleController::class.java.declaredMethods.single { it.name == name }
 
     data class SampleDto(
+        val status: SampleStatus,
+    )
+
+    @io.swagger.v3.oas.annotations.media.Schema(name = "CustomNamedDto")
+    data class CustomNamedDto(
         val status: SampleStatus,
     )
 
@@ -103,5 +131,12 @@ class CodeEnumOpenApiCustomizerTest {
         fun tone(
             @PathVariable("tone") tone: SampleTone,
         ): SampleDto = error("not called")
+    }
+
+    @Suppress("unused")
+    @RestController
+    private class CustomNamedController {
+        @GetMapping("/custom")
+        fun custom(): CustomNamedDto = error("not called")
     }
 }

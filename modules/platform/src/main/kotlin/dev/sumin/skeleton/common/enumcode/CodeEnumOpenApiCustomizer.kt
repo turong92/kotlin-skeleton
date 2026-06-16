@@ -117,7 +117,7 @@ class CodeEnumOpenApiCustomizer(
         if (clazz.isPrimitive || clazz.isEnum || clazz.isInterface || clazz.isAnnotation) {
             return
         }
-        result.putIfAbsent(clazz.simpleName, clazz)
+        result.putIfAbsent(schemaName(clazz), clazz)
     }
 
     private fun applyCodeEnumDescriptions(
@@ -176,4 +176,11 @@ class CodeEnumOpenApiCustomizer(
     ): String =
         listOfNotNull(current?.takeIf { it.isNotBlank() }, codeEnumDescription)
             .joinToString("\n\n")
+
+    private fun schemaName(clazz: Class<*>): String =
+        clazz
+            .getAnnotation(io.swagger.v3.oas.annotations.media.Schema::class.java)
+            ?.name
+            ?.takeIf { it.isNotBlank() }
+            ?: clazz.simpleName
 }
