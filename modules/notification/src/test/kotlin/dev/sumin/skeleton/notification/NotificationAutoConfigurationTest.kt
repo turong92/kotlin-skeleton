@@ -15,6 +15,8 @@ class NotificationAutoConfigurationTest {
             assertEquals(1, context.getBeansOfType(NotificationBroker::class.java).size)
             assertEquals(1, context.getBeansOfType(NotificationPublisher::class.java).size)
             assertEquals(1, context.getBeansOfType(NotificationSubscriptionRegistry::class.java).size)
+            assertEquals(1, context.getBeansOfType(NotificationInboxRepository::class.java).size)
+            assertEquals(1, context.getBeansOfType(NotificationRecipientResolver::class.java).size)
         }
     }
 }

@@ -164,6 +164,31 @@ class OpenApiDocumentationIntegrationTest {
             JsonPath.read(docs, "$.paths['/api/v1/skeleton/notifications'].post.summary"),
         )
 
+        val notificationInboxEnvelope = responseSchema(docs, "/api/v1/notifications", "get", "200")
+        val notificationInboxProperties = properties(notificationInboxEnvelope)
+        assertTrue(notificationInboxProperties.containsKey("values"))
+        assertTrue(notificationInboxProperties.containsKey("pagination"))
+        assertTrue(notificationInboxProperties.containsKey("meta"))
+        assertEquals(
+            "#/components/schemas/NotificationInboxItemResponse",
+            ((notificationInboxProperties["values"] as Map<*, *>)["items"] as Map<*, *>)["\$ref"],
+        )
+        val notificationParameters = JsonPath.read<List<Map<String, Any?>>>(
+            docs,
+            "$.paths['/api/v1/notifications'].get.parameters",
+        )
+        assertTrue(notificationParameters.any { it["name"] == "page" && it["in"] == "query" })
+        assertTrue(notificationParameters.any { it["name"] == "size" && it["in"] == "query" })
+        assertTrue(notificationParameters.any { it["name"] == "unreadOnly" && it["in"] == "query" })
+        assertTrue(notificationParameters.any { it["name"] == "topic" && it["in"] == "query" })
+        val notificationReadEnvelope = responseSchema(docs, "/api/v1/notifications/{eventId}/read", "patch", "200")
+        val notificationReadProperties = properties(notificationReadEnvelope)
+        assertTrue(notificationReadProperties.containsKey("value"))
+        assertEquals(
+            "#/components/schemas/NotificationReadResponse",
+            (notificationReadProperties["value"] as Map<*, *>)["\$ref"],
+        )
+
         val itemListParameters = JsonPath.read<List<Map<String, Any?>>>(docs, "$.paths['/api/v1/examples/items'].get.parameters")
         assertTrue(itemListParameters.any { it["name"] == "page" && it["in"] == "query" })
         assertTrue(itemListParameters.any { it["name"] == "size" && it["in"] == "query" })

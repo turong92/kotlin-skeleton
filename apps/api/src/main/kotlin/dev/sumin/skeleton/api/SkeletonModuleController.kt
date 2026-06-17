@@ -13,6 +13,7 @@ import dev.sumin.skeleton.common.web.RateLimitStore
 import dev.sumin.skeleton.event.kafka.KafkaEventPublisher
 import dev.sumin.skeleton.json.JsonCodec
 import dev.sumin.skeleton.notification.NotificationEvent
+import dev.sumin.skeleton.notification.NotificationInboxRepository
 import dev.sumin.skeleton.notification.NotificationPublisher
 import dev.sumin.skeleton.notification.NotificationSeverity
 import dev.sumin.skeleton.notification.sse.NotificationSseService
@@ -105,6 +106,7 @@ data class SkeletonNotificationPublishRequest(
     val topic: String,
     @field:NotBlank
     val type: String,
+    val recipientIds: Set<String> = emptySet(),
     val severity: NotificationSeverity = NotificationSeverity.INFO,
     val title: String? = null,
     val message: String? = null,
@@ -115,6 +117,7 @@ data class SkeletonNotificationPublishResponse(
     val eventId: String,
     val topic: String,
     val type: String,
+    val recipientIds: Set<String>,
     val deliveredSubscribers: Int,
 )
 
@@ -224,6 +227,7 @@ class SkeletonModuleController(
     ) = NotificationEvent(
         topic = request.topic,
         type = request.type,
+        recipientIds = request.recipientIds,
         severity = request.severity,
         title = request.title,
         message = request.message,
@@ -235,6 +239,7 @@ class SkeletonModuleController(
                 eventId = result.eventId,
                 topic = event.topic,
                 type = event.type,
+                recipientIds = event.recipientIds,
                 deliveredSubscribers = result.deliveredSubscribers,
             ),
         )
@@ -406,7 +411,9 @@ class SkeletonModuleController(
                 group = "notification",
                 status = activeWhenBeanPresent(NotificationPublisher::class.java),
                 configPrefix = "skeleton.notification",
-                beans = beanNames(NotificationPublisher::class.java),
+                beans = beanNames(NotificationPublisher::class.java) +
+                    beanNames(NotificationInboxRepository::class.java),
+                note = "Broker, publisher, inbox repository contract, recipient resolver, and in-memory read-state default.",
             ),
             toggleModule(
                 id = "notification-sse",

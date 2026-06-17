@@ -7,7 +7,20 @@ import org.springframework.context.annotation.Bean
 @AutoConfiguration
 class NotificationAutoConfiguration {
     @Bean
+    @ConditionalOnMissingBean(NotificationRecipientResolver::class)
+    fun notificationRecipientResolver(): NotificationRecipientResolver =
+        DefaultNotificationRecipientResolver()
+
+    @Bean
+    @ConditionalOnMissingBean(NotificationInboxRepository::class)
+    fun notificationInboxRepository(): NotificationInboxRepository =
+        InMemoryNotificationInboxRepository()
+
+    @Bean
     @ConditionalOnMissingBean(NotificationBroker::class)
-    fun notificationBroker(): NotificationBroker =
-        InMemoryNotificationBroker()
+    fun notificationBroker(
+        notificationInboxRepository: NotificationInboxRepository,
+        notificationRecipientResolver: NotificationRecipientResolver,
+    ): NotificationBroker =
+        InMemoryNotificationBroker(notificationInboxRepository, notificationRecipientResolver)
 }

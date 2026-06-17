@@ -4,10 +4,14 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
-class InMemoryNotificationBroker : NotificationBroker {
+class InMemoryNotificationBroker(
+    private val inboxRepository: NotificationInboxRepository = NoopNotificationInboxRepository,
+    private val recipientResolver: NotificationRecipientResolver = DefaultNotificationRecipientResolver(),
+) : NotificationBroker {
     private val subscriptions = ConcurrentHashMap<String, BrokerSubscription>()
 
     override fun publish(event: NotificationEvent): NotificationPublishResult {
+        inboxRepository.save(event, recipientResolver.resolveRecipients(event))
         var delivered = 0
         subscriptions.values.forEach { subscription ->
             if (subscription.matches(event.topic)) {
