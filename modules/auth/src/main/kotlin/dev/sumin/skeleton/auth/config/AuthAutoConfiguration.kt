@@ -11,6 +11,7 @@ import dev.sumin.skeleton.auth.security.DevLoginAuthenticationFilter
 import dev.sumin.skeleton.auth.security.JwtAuthenticationFilter
 import dev.sumin.skeleton.common.web.PublicEndpointContributor
 import dev.sumin.skeleton.common.web.PublicEndpointRegistry
+import jakarta.servlet.DispatcherType
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.ApplicationRunner
 import org.springframework.boot.autoconfigure.AutoConfiguration
@@ -142,6 +143,7 @@ class AuthAutoConfiguration {
                 }
             }
             .authorizeHttpRequests { authorize ->
+                authorize.dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
                 val registry = publicEndpointRegistry.getIfAvailable { PublicEndpointRegistry.default() }
                 registry.methodSpecificEndpoints.forEach { endpoint ->
                     authorize.requestMatchers(endpoint.method, endpoint.pattern).permitAll()

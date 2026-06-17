@@ -3,7 +3,6 @@ package dev.sumin.skeleton.notification.sse
 import dev.sumin.skeleton.notification.NotificationEvent
 import dev.sumin.skeleton.notification.NotificationSubscription
 import dev.sumin.skeleton.notification.NotificationSubscriptionRegistry
-import java.io.IOException
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
@@ -45,7 +44,7 @@ class NotificationSseService(
                     .name(event.type)
                     .data(event),
             )
-        } catch (ex: IOException) {
+        } catch (ex: Exception) {
             completeWithError(ex)
         }
     }
@@ -57,7 +56,7 @@ class NotificationSseService(
                     .name("connected")
                     .data(NotificationSseConnectedEvent(topics = topics)),
             )
-        } catch (ex: IOException) {
+        } catch (ex: Exception) {
             completeWithError(ex)
         }
     }

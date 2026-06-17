@@ -11,8 +11,13 @@ class InMemoryNotificationBroker : NotificationBroker {
         var delivered = 0
         subscriptions.values.forEach { subscription ->
             if (subscription.matches(event.topic)) {
-                subscription.subscriber.onNotification(event)
-                delivered += 1
+                runCatching {
+                    subscription.subscriber.onNotification(event)
+                }.onSuccess {
+                    delivered += 1
+                }.onFailure {
+                    subscription.close()
+                }
             }
         }
         return NotificationPublishResult(eventId = event.id, deliveredSubscribers = delivered)

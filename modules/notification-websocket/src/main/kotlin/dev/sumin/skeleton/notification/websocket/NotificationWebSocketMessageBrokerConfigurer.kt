@@ -10,6 +10,7 @@ import org.springframework.web.socket.config.annotation.WebSocketTransportRegist
 
 class NotificationWebSocketMessageBrokerConfigurer(
     private val properties: NotificationWebSocketProperties,
+    private val traceInterceptor: NotificationWebSocketTraceInterceptor,
     private val authenticationInterceptor: NotificationWebSocketAuthenticationInterceptor,
     private val heartbeatTaskScheduler: TaskScheduler,
 ) : WebSocketMessageBrokerConfigurer {
@@ -40,7 +41,7 @@ class NotificationWebSocketMessageBrokerConfigurer(
     }
 
     override fun configureClientInboundChannel(registration: ChannelRegistration) {
-        registration.interceptors(authenticationInterceptor)
+        registration.interceptors(traceInterceptor, authenticationInterceptor)
         registration.applyExecutor(properties.inboundChannel)
     }
 

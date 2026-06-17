@@ -3,6 +3,7 @@ package dev.sumin.skeleton.notification.sse
 import dev.sumin.skeleton.notification.NotificationSubscriber
 import dev.sumin.skeleton.notification.NotificationSubscription
 import dev.sumin.skeleton.notification.NotificationSubscriptionRegistry
+import dev.sumin.skeleton.notification.NotificationEvent
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -36,6 +37,22 @@ class NotificationSseServiceTest {
         service.connect(emptyList())
 
         assertEquals(emptySet(), registry.subscription.topics)
+    }
+
+    @Test
+    fun `send failure from stale emitter does not propagate to publisher`() {
+        val registry = RecordingSubscriptionRegistry()
+        val service = NotificationSseService(
+            subscriptionRegistry = registry,
+            properties = NotificationSseProperties(),
+        )
+
+        val emitter = service.connect(listOf("demo"))
+        emitter.complete()
+
+        registry.subscriber.onNotification(NotificationEvent(topic = "demo", type = "smoke"))
+
+        assertTrue(registry.subscription.closed)
     }
 
     private class RecordingSubscriptionRegistry : NotificationSubscriptionRegistry {

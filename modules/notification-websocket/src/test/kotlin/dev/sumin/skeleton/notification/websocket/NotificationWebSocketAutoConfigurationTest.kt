@@ -36,6 +36,7 @@ class NotificationWebSocketAutoConfigurationTest {
         contextRunner.run { context ->
             assertEquals(1, context.getBeansOfType(NotificationWebSocketProperties::class.java).size)
             assertEquals(1, context.getBeansOfType(NotificationWebSocketAuthenticationInterceptor::class.java).size)
+            assertEquals(1, context.getBeansOfType(NotificationWebSocketTraceInterceptor::class.java).size)
             assertEquals(1, context.getBeansOfType(NotificationWebSocketDestinationResolver::class.java).size)
             assertEquals(1, context.getBeansOfType(NotificationWebSocketBridge::class.java).size)
             assertEquals(1, context.getBeansOfType(WebSocketMessageBrokerConfigurer::class.java).size)

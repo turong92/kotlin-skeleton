@@ -56,6 +56,26 @@ class InMemoryNotificationBrokerTest {
     }
 
     @Test
+    fun `failing subscriber is closed and does not prevent other deliveries`() {
+        val broker = InMemoryNotificationBroker()
+        var attempts = 0
+        val received = mutableListOf<NotificationEvent>()
+        broker.subscribe(topics = setOf("orders")) {
+            attempts += 1
+            throw IllegalStateException("subscriber disconnected")
+        }
+        broker.subscribe(topics = setOf("orders")) { event -> received += event }
+
+        val first = broker.publish(NotificationEvent(topic = "orders", type = "created"))
+        val second = broker.publish(NotificationEvent(topic = "orders", type = "updated"))
+
+        assertEquals(1, first.deliveredSubscribers)
+        assertEquals(1, second.deliveredSubscribers)
+        assertEquals(1, attempts)
+        assertEquals(listOf("created", "updated"), received.map { it.type })
+    }
+
+    @Test
     fun `event requires non blank topic and type`() {
         assertFailsWith<IllegalArgumentException> {
             NotificationEvent(topic = " ", type = "created")

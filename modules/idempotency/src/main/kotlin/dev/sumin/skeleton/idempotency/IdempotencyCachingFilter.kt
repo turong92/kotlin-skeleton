@@ -15,11 +15,12 @@ class IdempotencyCachingFilter(
         response: HttpServletResponse,
         filterChain: FilterChain,
     ) {
-        val requestToUse = if (shouldCacheRequest(request)) {
-            CachedBodyHttpServletRequest(request)
-        } else {
-            request
+        if (!shouldCacheRequest(request)) {
+            filterChain.doFilter(request, response)
+            return
         }
+
+        val requestToUse = CachedBodyHttpServletRequest(request)
         val responseToUse = ContentCachingResponseWrapper(response)
 
         try {

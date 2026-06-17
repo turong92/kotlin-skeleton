@@ -43,6 +43,11 @@ class NotificationWebSocketAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
+    fun notificationWebSocketTraceInterceptor(): NotificationWebSocketTraceInterceptor =
+        NotificationWebSocketTraceInterceptor()
+
+    @Bean
+    @ConditionalOnMissingBean
     fun notificationWebSocketDestinationResolver(
         properties: NotificationWebSocketProperties,
     ): NotificationWebSocketDestinationResolver =
@@ -101,11 +106,13 @@ class NotificationWebSocketBrokerConfiguration {
     @ConditionalOnMissingBean(name = ["notificationWebSocketMessageBrokerConfigurer"])
     fun notificationWebSocketMessageBrokerConfigurer(
         properties: NotificationWebSocketProperties,
+        traceInterceptor: NotificationWebSocketTraceInterceptor,
         authenticationInterceptor: NotificationWebSocketAuthenticationInterceptor,
         notificationWebSocketHeartbeatTaskScheduler: ThreadPoolTaskScheduler,
     ): WebSocketMessageBrokerConfigurer =
         NotificationWebSocketMessageBrokerConfigurer(
             properties = properties,
+            traceInterceptor = traceInterceptor,
             authenticationInterceptor = authenticationInterceptor,
             heartbeatTaskScheduler = notificationWebSocketHeartbeatTaskScheduler,
         )
