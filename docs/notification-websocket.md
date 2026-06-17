@@ -86,40 +86,64 @@ If `event.payload.userId` is present, it also publishes to:
 
 Clients subscribe through Spring's user prefix as `/user/queue/notifications`.
 
-## Smoke Flow
+## Workbench Smoke Flow
 
-1. Start `apps/api` with WebSocket enabled.
-2. Get a JWT from `POST /api/v1/auth/login`.
-3. Open a STOMP WebSocket connection to `/ws/notifications`.
-4. Subscribe to `/topic/notifications/demo` and `/user/queue/notifications`.
-5. Publish a smoke event:
+Start the backend from the Kotlin skeleton repository.
 
-```http
-POST /api/v1/skeleton/notifications
-Authorization: Bearer <access-token>
-Content-Type: application/json
+Default proxy-friendly port:
 
-{
-  "topic": "demo",
-  "type": "frontend-websocket-smoke",
-  "severity": "INFO",
-  "title": "WebSocket smoke",
-  "message": "React skeleton WebSocket ping",
-  "payload": {
-    "source": "react-skeleton",
-    "userId": "acc_user"
-  }
-}
+```bash
+SPRING_PROFILES_ACTIVE=local \
+SKELETON_CONFIG_AWS_SSM_FAIL_FAST=false \
+SKELETON_REDIS_LOCK_ENABLED=false \
+SKELETON_NOTIFICATION_WEBSOCKET_ENABLED=true \
+SKELETON_NOTIFICATION_WEBSOCKET_AUTH_ENABLED=true \
+./gradlew :apps:api:bootRun
 ```
 
-Expected result:
+Alternative backend port when 8080 is occupied:
 
-- `/topic/notifications/demo` receives the event.
-- `/user/queue/notifications` receives the same event when the connected JWT
-  subject is `acc_user`.
+```bash
+SPRING_PROFILES_ACTIVE=local \
+SERVER_PORT=18080 \
+SKELETON_CONFIG_AWS_SSM_FAIL_FAST=false \
+SKELETON_REDIS_LOCK_ENABLED=false \
+SKELETON_NOTIFICATION_WEBSOCKET_ENABLED=true \
+SKELETON_NOTIFICATION_WEBSOCKET_AUTH_ENABLED=true \
+./gradlew :apps:api:bootRun
+```
 
-The React skeleton workbench exposes the same flow in the Realtime panel:
+Start the frontend from the React skeleton repository.
 
-- `ws`: connect and subscribe.
-- `publish`: publish a `demo` notification with `payload.userId`.
-- The latest WebSocket messages appear under the WebSocket event log.
+With the backend on 8080:
+
+```bash
+pnpm dev -- --host 127.0.0.1 --port 5173
+```
+
+With the backend on 18080:
+
+```bash
+VITE_API_BASE_URL=http://localhost:18080/api/v1 \
+pnpm dev -- --host 127.0.0.1 --port 5174
+```
+
+In the workbench:
+
+1. Run `auth.login` and capture the bearer token.
+2. Open `sse`; this may use bearer token or dev-login headers.
+3. Open `ws`; this requires the bearer token because STOMP `CONNECT` uses JWT
+   verification.
+4. Click `notify` to publish a topic event for SSE.
+5. Click WebSocket `publish` after `ws` is open to publish a topic and
+   user-targeted event.
+6. Use the exchange log `traceId` to search backend logs for the same flow.
+
+Expected results:
+
+- `POST /api/v1/skeleton/notifications` returns
+  `ApiValueResponse<SkeletonNotificationPublishResponse>`.
+- The SSE panel receives the event for topic `demo`.
+- The WebSocket panel receives the event on `/topic/notifications/demo`.
+- If the payload `userId` matches the JWT subject, the WebSocket user
+  subscription can also receive the event on `/user/queue/notifications`.

@@ -65,6 +65,7 @@ Fine-grained details such as JWT, password login, OAuth, or dev login live as pa
 - `POST /api/v1/skeleton/storage/validate` proves storage file validation wiring.
 - `GET /api/v1/skeleton/storage/public-url?key=images/cat.png` proves the configured storage public URL resolver without requiring a product endpoint.
 - `POST /api/v1/skeleton/notifications` publishes a provider-neutral notification event so SSE/Slack/WebSocket delivery modules can subscribe.
+- Realtime notification workbench: `docs/notification-websocket.md` shows how to run `apps/api` with SSE/WebSocket enabled and verify it from `react-skeleton`.
 - `GET /api/v1/skeleton/async/probe` proves trace/run/account MDC propagation into the async executor.
 
 These endpoints require auth by default. They are development/workbench affordances, not product APIs.
