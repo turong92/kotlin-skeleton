@@ -32,6 +32,8 @@ import dev.sumin.skeleton.storage.StorageFileValidator
 import dev.sumin.skeleton.storage.ObjectKey
 import dev.sumin.skeleton.storage.StoragePublicUrlResolver
 import dev.sumin.skeleton.storage.s3.S3PresignedStorageService
+import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.responses.ApiResponse as OpenApiResponse
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.PositiveOrZero
@@ -208,6 +210,11 @@ class SkeletonModuleController(
             )
         }
 
+    @Operation(
+        summary = "Publish skeleton notification smoke event",
+        description = "Publishes a notification through the composed notification module so SSE, WebSocket, Slack, or other subscribers can verify delivery.",
+    )
+    @OpenApiResponse(responseCode = "200", description = "Published notification event")
     @PostMapping(
         "/notifications",
         consumes = [MediaType.APPLICATION_JSON_VALUE],

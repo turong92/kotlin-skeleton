@@ -33,7 +33,7 @@ import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.post
 import kotlin.test.assertTrue
 
-@SpringBootTest
+@SpringBootTest(properties = ["skeleton.notification.slack.notification-events=false"])
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration::class)
 @ExtendWith(OutputCaptureExtension::class)
@@ -78,6 +78,7 @@ class SkeletonModuleCompositionIntegrationTest {
             jsonPath("$.values[?(@.id == 'persistence-jdbc')].status") { value(hasItem("ACTIVE")) }
             jsonPath("$.values[?(@.id == 'notification')].status") { value(hasItem("ACTIVE")) }
             jsonPath("$.values[?(@.id == 'notification-sse')].status") { value(hasItem("ACTIVE")) }
+            jsonPath("$.values[?(@.id == 'notification-websocket')].status") { value(hasItem("DISABLED")) }
             jsonPath("$.values[?(@.id == 'storage-s3')].status") { value(hasItem("DISABLED")) }
             jsonPath("$.values[?(@.id == 'payment-toss')].status") { value(hasItem("DISABLED")) }
             jsonPath("$.values[?(@.id == 'event-kafka')].status") { value(hasItem("ACTIVE")) }
@@ -197,6 +198,54 @@ class SkeletonModuleCompositionIntegrationTest {
         assertTrue(asyncFailureEvent.payload["traceId"] == fixedTraceId)
         assertTrue(asyncFailureEvent.payload["runId"].toString().startsWith("probe-"))
         assertTrue(asyncFailureEvent.payload["accountId"] == "acc_user")
+    }
+
+    @Test
+    fun `notification smoke endpoint publishes demo event to subscribers`() {
+        val token = loginAccessToken()
+        val events = Collections.synchronizedList(mutableListOf<NotificationEvent>())
+        val latch = CountDownLatch(1)
+
+        notificationSubscriptionRegistry.subscribe(
+            topics = setOf("demo"),
+            subscriber = NotificationSubscriber { event ->
+                events += event
+                latch.countDown()
+            },
+        ).use {
+            mockMvc.post("/api/v1/skeleton/notifications") {
+                header("Authorization", "Bearer $token")
+                contentType = MediaType.APPLICATION_JSON
+                accept = MediaType.APPLICATION_JSON
+                content = """
+                    {
+                      "topic": "demo",
+                      "type": "frontend-smoke",
+                      "severity": "INFO",
+                      "title": "Frontend smoke",
+                      "message": "React skeleton workbench ping",
+                      "payload": {
+                        "source": "react-skeleton",
+                        "userId": "acc_user"
+                      }
+                    }
+                """.trimIndent()
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.value.topic") { value("demo") }
+                jsonPath("$.value.type") { value("frontend-smoke") }
+                jsonPath("$.value.deliveredSubscribers") { value(1) }
+                jsonPath("$.meta.traceId") { isNotEmpty() }
+            }
+
+            assertTrue(latch.await(3, TimeUnit.SECONDS))
+        }
+
+        val event = events.single()
+        assertTrue(event.topic == "demo")
+        assertTrue(event.type == "frontend-smoke")
+        assertTrue(event.payload["source"] == "react-skeleton")
+        assertTrue(event.payload["userId"] == "acc_user")
     }
 
     private fun loginAccessToken(): String {

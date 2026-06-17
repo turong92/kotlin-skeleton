@@ -144,6 +144,26 @@ class OpenApiDocumentationIntegrationTest {
             JsonPath.read(docs, "$.paths['/api/v1/skeleton/json/versioned'].get.summary"),
         )
 
+        val notificationEnvelope = responseSchema(docs, "/api/v1/skeleton/notifications", "post", "200")
+        val notificationProperties = properties(notificationEnvelope)
+        assertTrue(notificationProperties.containsKey("value"))
+        assertTrue(notificationProperties.containsKey("meta"))
+        assertEquals(
+            "#/components/schemas/SkeletonNotificationPublishResponse",
+            (notificationProperties["value"] as Map<*, *>)["\$ref"],
+        )
+        assertEquals(
+            "#/components/schemas/SkeletonNotificationPublishRequest",
+            JsonPath.read(
+                docs,
+                "$.paths['/api/v1/skeleton/notifications'].post.requestBody.content['application/json'].schema['\$ref']",
+            ),
+        )
+        assertEquals(
+            "Publish skeleton notification smoke event",
+            JsonPath.read(docs, "$.paths['/api/v1/skeleton/notifications'].post.summary"),
+        )
+
         val itemListParameters = JsonPath.read<List<Map<String, Any?>>>(docs, "$.paths['/api/v1/examples/items'].get.parameters")
         assertTrue(itemListParameters.any { it["name"] == "page" && it["in"] == "query" })
         assertTrue(itemListParameters.any { it["name"] == "size" && it["in"] == "query" })
