@@ -118,8 +118,13 @@ Start the frontend from the React skeleton repository.
 With the backend on 8080:
 
 ```bash
+VITE_API_BASE_URL=http://localhost:8080/api/v1 \
 pnpm dev -- --host 127.0.0.1 --port 5173
 ```
+
+Set `VITE_API_BASE_URL` even when the backend uses 8080 so REST, SSE, and
+WebSocket derive from the same backend origin. The Vite proxy only covers
+`/api/v1/*`; it does not proxy `/ws/notifications`.
 
 With the backend on 18080:
 
