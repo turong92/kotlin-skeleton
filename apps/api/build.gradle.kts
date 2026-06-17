@@ -16,6 +16,7 @@ dependencies {
     implementation(project(":modules:idempotency"))
     implementation(project(":modules:json"))
     implementation(project(":modules:notification-slack"))
+    implementation(project(":modules:notification-jdbc"))
     implementation(project(":modules:notification-sse"))
     implementation(project(":modules:notification-websocket"))
     implementation(project(":modules:payment"))

@@ -16,6 +16,7 @@ import dev.sumin.skeleton.notification.NotificationEvent
 import dev.sumin.skeleton.notification.NotificationInboxRepository
 import dev.sumin.skeleton.notification.NotificationPublisher
 import dev.sumin.skeleton.notification.NotificationSeverity
+import dev.sumin.skeleton.notification.jdbc.JdbcNotificationInboxRepository
 import dev.sumin.skeleton.notification.sse.NotificationSseService
 import dev.sumin.skeleton.notification.slack.SlackAlertSender
 import dev.sumin.skeleton.notification.websocket.NotificationWebSocketBridge
@@ -414,6 +415,15 @@ class SkeletonModuleController(
                 beans = beanNames(NotificationPublisher::class.java) +
                     beanNames(NotificationInboxRepository::class.java),
                 note = "Broker, publisher, inbox repository contract, recipient resolver, and in-memory read-state default.",
+            ),
+            module(
+                id = "notification-jdbc",
+                group = "notification",
+                status = activeWhenBeanPresent(JdbcNotificationInboxRepository::class.java),
+                configPrefix = "n/a",
+                requiredInfrastructure = listOf("DataSource and Flyway migration when included"),
+                beans = beanNames(JdbcNotificationInboxRepository::class.java),
+                note = "JDBC-backed notification inbox repository and read-state persistence.",
             ),
             toggleModule(
                 id = "notification-sse",

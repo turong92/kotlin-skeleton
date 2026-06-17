@@ -4,8 +4,10 @@ import com.jayway.jsonpath.JsonPath
 import dev.sumin.skeleton.TestcontainersConfiguration
 import dev.sumin.skeleton.async.notification.AsyncNotificationExceptionHandler
 import dev.sumin.skeleton.notification.NotificationEvent
+import dev.sumin.skeleton.notification.NotificationInboxRepository
 import dev.sumin.skeleton.notification.NotificationSubscriber
 import dev.sumin.skeleton.notification.NotificationSubscriptionRegistry
+import dev.sumin.skeleton.notification.jdbc.JdbcNotificationInboxRepository
 import dev.sumin.skeleton.notification.websocket.NotificationWebSocketTokenVerifier
 import dev.sumin.skeleton.storage.StoragePublicUrlResolver
 import java.net.URI
@@ -49,6 +51,9 @@ class SkeletonModuleCompositionIntegrationTest {
     private lateinit var notificationSubscriptionRegistry: NotificationSubscriptionRegistry
 
     @Autowired
+    private lateinit var notificationInboxRepository: NotificationInboxRepository
+
+    @Autowired
     private lateinit var asyncExceptionHandlers: List<AsyncUncaughtExceptionHandler>
 
     @Autowired
@@ -57,6 +62,11 @@ class SkeletonModuleCompositionIntegrationTest {
     @Test
     fun `module composition wires websocket token verifier from auth jwt`() {
         assertTrue(webSocketTokenVerifiers.isNotEmpty())
+    }
+
+    @Test
+    fun `module composition wires jdbc notification inbox repository`() {
+        assertTrue(notificationInboxRepository is JdbcNotificationInboxRepository)
     }
 
     @Test
@@ -77,6 +87,7 @@ class SkeletonModuleCompositionIntegrationTest {
             jsonPath("$.values[?(@.id == 'persistence-jpa')].status") { value(hasItem("ACTIVE")) }
             jsonPath("$.values[?(@.id == 'persistence-jdbc')].status") { value(hasItem("ACTIVE")) }
             jsonPath("$.values[?(@.id == 'notification')].status") { value(hasItem("ACTIVE")) }
+            jsonPath("$.values[?(@.id == 'notification-jdbc')].status") { value(hasItem("ACTIVE")) }
             jsonPath("$.values[?(@.id == 'notification-sse')].status") { value(hasItem("ACTIVE")) }
             jsonPath("$.values[?(@.id == 'notification-websocket')].status") { value(hasItem("DISABLED")) }
             jsonPath("$.values[?(@.id == 'storage-s3')].status") { value(hasItem("DISABLED")) }
