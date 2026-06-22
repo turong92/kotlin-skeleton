@@ -3,6 +3,8 @@ package dev.sumin.skeleton.api
 import com.jayway.jsonpath.JsonPath
 import dev.sumin.skeleton.TestcontainersConfiguration
 import dev.sumin.skeleton.async.notification.AsyncNotificationExceptionHandler
+import dev.sumin.skeleton.event.kafka.KafkaEventPublisher
+import dev.sumin.skeleton.event.outbox.jdbc.OutboxKafkaEventPublisher
 import dev.sumin.skeleton.notification.NotificationEvent
 import dev.sumin.skeleton.notification.NotificationInboxRepository
 import dev.sumin.skeleton.notification.NotificationSubscriber
@@ -54,6 +56,9 @@ class SkeletonModuleCompositionIntegrationTest {
     private lateinit var notificationInboxRepository: NotificationInboxRepository
 
     @Autowired
+    private lateinit var kafkaEventPublisher: KafkaEventPublisher
+
+    @Autowired
     private lateinit var asyncExceptionHandlers: List<AsyncUncaughtExceptionHandler>
 
     @Autowired
@@ -67,6 +72,11 @@ class SkeletonModuleCompositionIntegrationTest {
     @Test
     fun `module composition wires jdbc notification inbox repository`() {
         assertTrue(notificationInboxRepository is JdbcNotificationInboxRepository)
+    }
+
+    @Test
+    fun `module composition wires jdbc outbox kafka event publisher`() {
+        assertTrue(kafkaEventPublisher is OutboxKafkaEventPublisher)
     }
 
     @Test
@@ -93,6 +103,7 @@ class SkeletonModuleCompositionIntegrationTest {
             jsonPath("$.values[?(@.id == 'storage-s3')].status") { value(hasItem("DISABLED")) }
             jsonPath("$.values[?(@.id == 'payment-toss')].status") { value(hasItem("DISABLED")) }
             jsonPath("$.values[?(@.id == 'event-kafka')].status") { value(hasItem("ACTIVE")) }
+            jsonPath("$.values[?(@.id == 'event-outbox-jdbc')].status") { value(hasItem("ACTIVE")) }
             jsonPath("$.meta.traceId") { isNotEmpty() }
         }
     }

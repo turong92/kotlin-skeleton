@@ -1,0 +1,22 @@
+create table if not exists skeleton_event_outbox (
+    id varchar(128) not null,
+    event_id varchar(128) not null,
+    topic varchar(255) not null,
+    type varchar(255) not null,
+    partition_key varchar(255),
+    payload_json text not null,
+    headers_json text not null,
+    status varchar(32) not null,
+    attempts integer not null,
+    available_at datetime(6) not null,
+    event_created_at datetime(6) not null,
+    published_at datetime(6),
+    failed_at datetime(6),
+    last_error varchar(2000),
+    created_at datetime(6) not null,
+    updated_at datetime(6) not null,
+    primary key (id),
+    unique key uk_skeleton_event_outbox_event_id (event_id),
+    index idx_skeleton_event_outbox_due (status, available_at, created_at),
+    index idx_skeleton_event_outbox_topic_type (topic, type, created_at)
+);

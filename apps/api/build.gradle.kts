@@ -13,6 +13,7 @@ dependencies {
     implementation(project(":modules:config-aws-ssm"))
     implementation(project(":modules:crypto"))
     implementation(project(":modules:event-kafka"))
+    implementation(project(":modules:event-outbox-jdbc"))
     implementation(project(":modules:idempotency"))
     implementation(project(":modules:json"))
     implementation(project(":modules:notification-slack"))
