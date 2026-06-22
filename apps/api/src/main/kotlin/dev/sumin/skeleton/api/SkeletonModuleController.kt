@@ -11,8 +11,6 @@ import dev.sumin.skeleton.common.Response
 import dev.sumin.skeleton.common.TraceIdFilter
 import dev.sumin.skeleton.common.web.RateLimitStore
 import dev.sumin.skeleton.event.kafka.KafkaEventPublisher
-import dev.sumin.skeleton.event.outbox.jdbc.OutboxEventDispatcher
-import dev.sumin.skeleton.event.outbox.jdbc.OutboxKafkaEventPublisher
 import dev.sumin.skeleton.json.JsonCodec
 import dev.sumin.skeleton.notification.NotificationEvent
 import dev.sumin.skeleton.notification.NotificationInboxRepository
@@ -502,15 +500,6 @@ class SkeletonModuleController(
                 requiredInfrastructure = listOf("KafkaOperations bean when skeleton.event-kafka.enabled=true"),
                 beans = beanNames(KafkaEventPublisher::class.java),
                 note = "Disabled publishing uses a logging sender so app composition still starts.",
-            ),
-            module(
-                id = "event-outbox-jdbc",
-                group = "event",
-                status = activeWhenBeanPresent(OutboxEventDispatcher::class.java),
-                configPrefix = "skeleton.event-outbox-jdbc",
-                requiredInfrastructure = listOf("DataSource and Flyway migration when included"),
-                beans = beanNames(OutboxEventDispatcher::class.java) + beanNames(OutboxKafkaEventPublisher::class.java),
-                note = "Replaces KafkaEventPublisher with a JDBC transactional outbox publisher and retryable dispatcher.",
             ),
             toggleModule(
                 id = "scheduler",
