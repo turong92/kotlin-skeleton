@@ -1,4 +1,5 @@
 dependencies {
+    implementation(project(":modules:platform"))
     implementation(project(":modules:redis-core"))
 
     implementation("org.springframework.boot:spring-boot-autoconfigure")

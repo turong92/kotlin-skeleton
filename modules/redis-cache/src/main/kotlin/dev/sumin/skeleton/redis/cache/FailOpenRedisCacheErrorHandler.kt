@@ -1,18 +1,21 @@
 package dev.sumin.skeleton.redis.cache
 
+import dev.sumin.skeleton.common.failure.FailureBoundary
+import dev.sumin.skeleton.common.failure.FailurePolicy
 import org.slf4j.LoggerFactory
 import org.springframework.cache.Cache
 import org.springframework.cache.interceptor.CacheErrorHandler
 
 class FailOpenRedisCacheErrorHandler : CacheErrorHandler {
     private val log = LoggerFactory.getLogger(javaClass)
+    private val failures = FailureBoundary(log)
 
     override fun handleCacheGetError(
         exception: RuntimeException,
         cache: Cache,
         key: Any,
     ) {
-        log.warn("Ignoring Redis cache get failure for cache={} key={}", cache.name, key, exception)
+        continueAfterCacheFailure("redis.cache.get", exception, cacheContext(cache, key))
     }
 
     override fun handleCachePutError(
@@ -21,7 +24,7 @@ class FailOpenRedisCacheErrorHandler : CacheErrorHandler {
         key: Any,
         value: Any?,
     ) {
-        log.warn("Ignoring Redis cache put failure for cache={} key={}", cache.name, key, exception)
+        continueAfterCacheFailure("redis.cache.put", exception, cacheContext(cache, key))
     }
 
     override fun handleCacheEvictError(
@@ -29,13 +32,37 @@ class FailOpenRedisCacheErrorHandler : CacheErrorHandler {
         cache: Cache,
         key: Any,
     ) {
-        log.warn("Ignoring Redis cache evict failure for cache={} key={}", cache.name, key, exception)
+        continueAfterCacheFailure("redis.cache.evict", exception, cacheContext(cache, key))
     }
 
     override fun handleCacheClearError(
         exception: RuntimeException,
         cache: Cache,
     ) {
-        log.warn("Ignoring Redis cache clear failure for cache={}", cache.name, exception)
+        continueAfterCacheFailure("redis.cache.clear", exception, mapOf("cache" to cache.name))
     }
+
+    private fun continueAfterCacheFailure(
+        operation: String,
+        exception: RuntimeException,
+        context: Map<String, Any?>,
+    ) {
+        failures.run(
+            operation = operation,
+            policy = FailurePolicy.LOG_AND_CONTINUE,
+            context = context,
+            fallback = {},
+        ) {
+            throw exception
+        }
+    }
+
+    private fun cacheContext(
+        cache: Cache,
+        key: Any,
+    ): Map<String, Any?> =
+        mapOf(
+            "cache" to cache.name,
+            "key" to key,
+        )
 }

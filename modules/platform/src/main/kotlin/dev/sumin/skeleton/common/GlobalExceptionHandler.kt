@@ -74,7 +74,11 @@ class GlobalExceptionHandler {
 
     @ExceptionHandler(ApplicationException::class)
     fun handleApplication(ex: ApplicationException): ResponseEntity<ApiError> {
-        log.warn("Application exception: {}", ex.message)
+        if (ex.status.is5xxServerError) {
+            log.error("Application exception: {}", ex.message, ex)
+        } else {
+            log.warn("Application exception: {}", ex.message)
+        }
         return ResponseEntity.status(ex.status).body(
             apiError(
                 errorCode = ex.errorCode,
