@@ -35,6 +35,7 @@ modules/
   redis-cache         # optional Redis cache manager defaults
   redis-rate-limit    # optional Redis-backed rate-limit store
   scheduler           # optional annotation-driven scheduler
+  time                # optional global-time capability: viewer zone/locale, ZonedMoment, dual formatting, country -> zone
   storage             # optional storage contracts and file validation
   storage-s3          # optional S3 presigned storage adapter
 ```
@@ -52,7 +53,8 @@ Use modules as capability choices:
 - `modules/crypto` is included when the app needs recoverable AES-GCM text encryption for persisted or transported secrets. It provides key-id envelopes, URL-safe opaque tokens, and opt-in persistence converters; redaction still handles logs and alerts.
 - `modules/notification` is included when the app needs server-side notification publishing. `modules/notification-sse`, `modules/notification-websocket`, and `modules/notification-slack` add delivery/alert channels.
 - `modules:redis-*`, `modules:storage-*`, `modules:payment-*`, `modules:event-kafka`, and `modules:scheduler` are optional capability bundles. `apps/api` includes them to prove they can coexist, while YAML keeps infrastructure-backed features disabled unless explicitly enabled.
-- `modules/persistence-jpa` and `modules/persistence-jdbc` are optional persistence adapters. Both use the same platform audit-time contract while keeping JPA/JDBC annotations and lifecycle behavior inside the selected persistence module.
+- `modules/persistence-jpa` and `modules/persistence-jdbc` are optional persistence adapters. Both use the same platform audit-time contract while keeping JPA/JDBC annotations and lifecycle behavior inside the selected persistence module. `persistence-jdbc` also forces the DB session to UTC (Hikari driver properties, no URL parameters needed) and pins `Instant` / `LocalDate` / `LocalDateTime` round-trips so they do not depend on the JVM default time zone. See `docs/time.md`.
+- `modules/time` is included when the app shows times to people in different time zones or stores scheduled local times (deadlines, event starts). It provides `TimeContext` (viewer zone/locale: account preference → `X-Time-Zone` / `Accept-Language` → default), `ZonedMoment` (local time + zone as the source of truth, derived instant), `TimeFormatter.dual`, and `CountryTimeZones`. See `docs/time.md`.
 
 Fine-grained details such as JWT, password login, OAuth, or dev login live as packages inside their capability modules unless they grow into provider-level integrations.
 

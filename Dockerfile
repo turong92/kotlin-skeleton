@@ -1,5 +1,5 @@
-# 빌드 스테이지
-FROM gradle:8.11-jdk21-alpine AS builder
+# 빌드 스테이지 — wrapper 가 gradle-wrapper.properties 의 Gradle 을 받아 쓴다
+FROM eclipse-temurin:21-jdk-alpine AS builder
 WORKDIR /app
 COPY . .
 RUN ./gradlew :apps:api:bootJar --no-daemon

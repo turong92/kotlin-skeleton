@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `modules/time`: global-time capability — `TimeContext` (account preference → `X-Time-Zone`/`Accept-Language` → `skeleton.time.default-*`), `ZonedMoment` (local time + IANA zone as source of truth, derived `at`; DST gap/overlap policy documented and tested), `TimeFormatter.dual` (event zone + viewer zone, `GMT+9`-style labels), `CountryTimeZones` generated from tzdata `zone.tab` with representative defaults for multi-zone countries, `UserTimePreferences` SPI. 12 tests
+- `modules/persistence-jdbc`: `JdbcTimeZoneEnvironmentPostProcessor` forces the MySQL session to UTC via Hikari driver properties (`connectionTimeZone`, `forceConnectionTimeZoneToSession`), and `UtcInstantConversions` writes `Instant`/`LocalDate`/`LocalDateTime` as `JdbcValue` literals and reads `LocalDateTime` as UTC — measured against Connector/J: it converts `Timestamp`/`Date` parameters by the JVM zone but returns `DATETIME` as a wall-clock `LocalDateTime`, so a non-UTC JVM shifted instants by hours and moved `LocalDate` by a day. `apps/api` proves the round trip with the JVM default zone set to `Asia/Seoul`
+- `docs/time.md`: the three temporal kinds and how to store/format each
+
+### Changed
+- `apps/api` datasource URL no longer needs `connectionTimeZone`/`forceConnectionTimeZoneToSession` parameters
+- Testcontainers MySQL pinned to `mysql:8.4` (was `mysql:latest`, i.e. 9.x) to match `docker-compose.yml`
+- Dockerfile builder image `gradle:8.11` → `eclipse-temurin:21-jdk` (the wrapper downloads Gradle anyway; the image tag was misleading); `.dockerignore` added
 - Springdoc OpenAPI UI: `/api/v1/docs`, `/api/v1/docs/ui`
 - `HelloControllerIntegrationTest`: `X-Request-Id` → `X-Trace-Id` 전파, 표준 `ApiError`, 요청 로그 traceId 흐름 검증
 - W3C `traceparent` 기반 trace context: traceId는 전체 플로우로 승계, 각 BE 요청은 새 spanId 생성

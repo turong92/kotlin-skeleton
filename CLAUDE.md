@@ -14,7 +14,8 @@ Kotlin + Spring Boot 백엔드 토이 프로젝트의 공개 출발점.
 - `modules/notification` owns provider-neutral notification contracts and the local broker default.
 - `modules/notification-sse` owns optional Spring MVC server-sent event delivery.
 - `modules/persistence-jpa` owns optional JPA audit timestamp mapping and lifecycle callbacks.
-- `modules/persistence-jdbc` owns optional Spring Data JDBC audit timestamp mapping and callbacks.
+- `modules/persistence-jdbc` owns optional Spring Data JDBC audit timestamp mapping and callbacks, plus DB-session UTC and JVM-zone-independent `Instant`/`LocalDate`/`LocalDateTime` conversions.
+- `modules/time` owns viewer time zone/locale resolution, `ZonedMoment` (scheduled local time), human-readable dual formatting, and country → time zone lookup. Three temporal kinds: `Instant` (facts), `LocalDate` (calendar dates, never converted), `ZonedMoment` (future local times). Never use `ZoneId.systemDefault()`, `TIMESTAMP` columns, or bare `LocalDateTime` for instants.
 - Keep provider/vendor integrations out of `platform`.
 
 ## 패키지 구조 (AI 참조용)

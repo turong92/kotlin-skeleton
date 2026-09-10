@@ -1,0 +1,2 @@
+org.springframework.boot.env.EnvironmentPostProcessor=\
+dev.sumin.skeleton.persistence.jdbc.JdbcTimeZoneEnvironmentPostProcessor
