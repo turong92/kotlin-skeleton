@@ -42,6 +42,8 @@ class RedisLockAutoConfigurationTest {
     @Test
     fun `fails startup when startup check fails`() {
         contextRunner
+            // 실제 Redis 연결을 시도하지 않도록 클라이언트를 주입한다 — 없으면 Redis 가 없는 CI 에선 클라이언트 생성이 먼저 실패해 다른 예외가 난다
+            .withBean(RedissonClient::class.java, Supplier { RedissonClientProxy.create() })
             .withBean(
                 RedisLockBackendVerifier::class.java,
                 Supplier { RedisLockBackendVerifier { throw RedisLockBackendException("redis unavailable") } },
