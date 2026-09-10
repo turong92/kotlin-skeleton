@@ -1,0 +1,5 @@
+spring:
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:db/skeleton-jooq-schema.sql   # 코드 생성에 쓴 같은 DDL 로 테스트 DB 를 만든다 (Flyway 없이)

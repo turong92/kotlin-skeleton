@@ -37,6 +37,8 @@ import software.amazon.awssdk.services.s3.model.CopyObjectResponse
 import software.amazon.awssdk.services.s3.model.CreateMultipartUploadRequest as AwsCreateMultipartUploadRequest
 import software.amazon.awssdk.services.s3.model.CreateMultipartUploadResponse
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest
+import software.amazon.awssdk.services.s3.model.DeleteObjectsResponse
+import software.amazon.awssdk.services.s3.model.DeleteObjectsRequest
 import software.amazon.awssdk.services.s3.model.DeleteObjectResponse
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest
 import software.amazon.awssdk.services.s3.model.HeadObjectResponse
@@ -66,6 +68,33 @@ class S3PresignedStorageServiceTest {
     @AfterTest
     fun closePresigner() {
         presigner.close()
+    }
+
+    @Test
+    fun `upload passes cache-control and content-disposition through to S3 (R2 static assets)`() {
+        service.upload(
+            UploadObjectRequest(
+                key = ObjectKey("pages/abc/index.html"),
+                content = "<html/>".toByteArray(),
+                contentType = "text/html; charset=utf-8",
+                cacheControl = "public, max-age=31536000, immutable",
+                contentDisposition = "inline",
+            ),
+        )
+        val put = recordingClient.putObjectRequests.last()
+        assertEquals("public, max-age=31536000, immutable", put.cacheControl())
+        assertEquals("inline", put.contentDisposition())
+        assertEquals("text/html; charset=utf-8", put.contentType())
+    }
+
+    @Test
+    fun `deleteAll batches keys into DeleteObjects requests of at most 1000`() {
+        val keys = (1..1500).map { ObjectKey("photos/$it.webp") }
+        service.deleteAll(keys + keys.first())
+        assertEquals(2, recordingClient.deleteObjectsRequests.size)
+        assertEquals(1000, recordingClient.deleteObjectsRequests[0].delete().objects().size)
+        assertEquals(500, recordingClient.deleteObjectsRequests[1].delete().objects().size)
+        assertTrue(recordingClient.deleteObjectRequests.isEmpty())
     }
 
     @Test
@@ -200,6 +229,7 @@ class S3PresignedStorageServiceTest {
         val headObjectRequests = mutableListOf<HeadObjectRequest>()
         val listObjectRequests = mutableListOf<ListObjectsV2Request>()
         val deleteObjectRequests = mutableListOf<DeleteObjectRequest>()
+        val deleteObjectsRequests = mutableListOf<DeleteObjectsRequest>()
         var abortMultipartUploadCount = 0
         var lastPutBody: ByteArray? = null
 
@@ -212,6 +242,10 @@ class S3PresignedStorageServiceTest {
 
         override fun invoke(proxy: Any, method: Method, args: Array<out Any>?): Any? =
             when (method.name) {
+                "deleteObjects" -> {
+                    deleteObjectsRequests += args?.first() as DeleteObjectsRequest
+                    DeleteObjectsResponse.builder().build()
+                }
                 "putObject" -> {
                     val request = args?.first() as PutObjectRequest
                     val body = args?.getOrNull(1) as? RequestBody

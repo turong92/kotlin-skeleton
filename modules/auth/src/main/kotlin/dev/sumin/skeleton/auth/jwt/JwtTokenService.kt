@@ -65,8 +65,10 @@ class JwtTokenService(
 
     fun authenticate(token: String): CurrentPrincipal? = try {
         val jwt = decoder.decode(token)
+        // Spring Security 7.1: subject 가 nullable — sub 없는 토큰은 인증 실패
+        val subject = jwt.subject ?: return null
         CurrentPrincipal(
-            accountId = jwt.subject,
+            accountId = subject,
             username = jwt.getClaimAsString("username"),
             email = jwt.getClaimAsString("email"),
             roles = jwt.getClaimAsStringList("roles")?.toSet() ?: emptySet(),

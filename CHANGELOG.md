@@ -7,7 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Spring Boot 4.0.5 → **4.1.1**, Kotlin 2.2.21 → **2.3.21** (Boot-managed: jOOQ 3.21.7, MySQL Connector/J 9.7.0, Testcontainers 2.0.5, Spring Security 7.1.1). One source change: `JwtTokenService` treats a missing `sub` claim as authentication failure (subject is nullable in Spring Security 7.1)
+- `storage-s3`: static key-pair credentials (`credentials.access-key-id` / `secret-access-key`) for R2/MinIO with fail-fast on half-specified pairs; `region: auto` supported; `UploadObjectRequest.cacheControl` / `contentDisposition` passed to `PutObject`; `StorageService.deleteAll` (S3: `DeleteObjects` in batches of 1000). `docs/storage-s3.md` R2 section
+
 ### Added
+- `modules/persistence-jooq`: jOOQ with code generation from a DDL file (`DDLDatabase`, no DB at build), `UtcInstantConverter` (`*_at` → `Instant`, UTC-fixed), `JooqAuditRecordListener`, UTC session defaults; Testcontainers MySQL test with JVM zone forced to Seoul. `docs/persistence-jooq.md`
+- `modules/job-queue-jdbc`: MySQL table retry queue — `JobQueue.enqueue`, `JobHandler` by type, `FOR UPDATE SKIP LOCKED` claiming, exponential backoff, `max-attempts` → DEAD, `PermanentJobFailureException`, stale RUNNING recovery, no Redis; 6 Testcontainers tests. `docs/job-queue-jdbc.md`
+- `modules/notification-mail`: SMTP `MailSender` on top of `spring.mail.*`, off by default. `docs/notification-mail.md`
+- `modules/captcha-turnstile`: `TurnstileVerifier` via platform outbound HTTP, hostname/action checks, off by default. `docs/captcha-turnstile.md`
+- Schema without Flyway: `spring.flyway.enabled=false` + `spring.sql.init.mode=always` + `schema.sql`, proven by `SchemaSqlInitIntegrationTest`; migration path back to Flyway in `docs/schema-management.md`
+- HTML pages next to the API: `apps/api` `PagesController` + page-scoped `HtmlPageErrorAdvice` + `PublicEndpointContributor`, proven by `HtmlPageCoexistenceIntegrationTest` (public `text/html`, HTML errors instead of JSON envelope, `/api/**` still protected)
+- `scripts/rename-skeleton.sh`: rewrites root package, `skeleton.*` config prefix, `SKELETON_*` env placeholders and `Skeleton*` class/file names; `docs/minimal-composition.md` with a generated module → config-prefix table and the no-Redis defaults (rate limit, idempotency, scheduler lock)
 - `modules/time`: global-time capability — `TimeContext` (account preference → `X-Time-Zone`/`Accept-Language` → `skeleton.time.default-*`), `ZonedMoment` (local time + IANA zone as source of truth, derived `at`; DST gap/overlap policy documented and tested), `TimeFormatter.dual` (event zone + viewer zone, `GMT+9`-style labels), `CountryTimeZones` generated from tzdata `zone.tab` with representative defaults for multi-zone countries, `UserTimePreferences` SPI. 12 tests
 - `modules/persistence-jdbc`: `JdbcTimeZoneEnvironmentPostProcessor` forces the MySQL session to UTC via Hikari driver properties (`connectionTimeZone`, `forceConnectionTimeZoneToSession`), and `UtcInstantConversions` writes `Instant`/`LocalDate`/`LocalDateTime` as `JdbcValue` literals and reads `LocalDateTime` as UTC — measured against Connector/J: it converts `Timestamp`/`Date` parameters by the JVM zone but returns `DATETIME` as a wall-clock `LocalDateTime`, so a non-UTC JVM shifted instants by hours and moved `LocalDate` by a day. `apps/api` proves the round trip with the JVM default zone set to `Asia/Seoul`
 - `docs/time.md`: the three temporal kinds and how to store/format each

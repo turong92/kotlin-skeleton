@@ -123,4 +123,31 @@ class S3StorageAutoConfigurationTest {
         val bytes = ByteArray(32) { index -> (seed + index).toByte() }
         return Base64.getEncoder().encodeToString(bytes)
     }
+
+    @Test
+    fun `static key pair credentials and region auto work for R2 style endpoints`() {
+        contextRunner
+            .withPropertyValues(
+                "skeleton.storage-s3.bucket=ovation",
+                "skeleton.storage-s3.region=auto",
+                "skeleton.storage-s3.endpoint-override=https://account.r2.cloudflarestorage.com",
+                "skeleton.storage-s3.path-style-access-enabled=true",
+                "skeleton.storage-s3.credentials.access-key-id=r2-key",
+                "skeleton.storage-s3.credentials.secret-access-key=r2-secret",
+            )
+            .run { context ->
+                assertThat(context).hasSingleBean(S3Client::class.java)
+                val client = context.getBean(S3Client::class.java)
+                assertEquals("auto", client.serviceClientConfiguration().region().id())
+                val identity = client.serviceClientConfiguration().credentialsProvider().resolveIdentity().join()
+                assertEquals("r2-key", identity.accessKeyId())
+            }
+    }
+
+    @Test
+    fun `half-specified key pair fails fast`() {
+        contextRunner
+            .withPropertyValues("skeleton.storage-s3.bucket=b", "skeleton.storage-s3.credentials.access-key-id=only-key")
+            .run { context -> assertThat(context).hasFailed() }
+    }
 }

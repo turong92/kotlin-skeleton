@@ -8,6 +8,10 @@ data class UploadObjectRequest(
     val content: ByteArray,
     val contentType: String? = null,
     val metadata: Map<String, String> = emptyMap(),
+    /** 예: `public, max-age=31536000, immutable` — CDN/R2 에 올리는 정적 산출물용 */
+    val cacheControl: String? = null,
+    /** 예: `inline; filename="a.webp"` */
+    val contentDisposition: String? = null,
 ) {
     init {
         require(content.isNotEmpty()) { "Upload content must not be empty." }

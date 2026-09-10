@@ -15,8 +15,14 @@ data class S3StorageProperties(
     val presign: Presign = Presign(),
     val publicUrl: PublicUrl = PublicUrl(),
 ) {
+    /**
+     * 우선순위: accessKeyId+secretAccessKey(정적 키 쌍, R2/MinIO) → profile(~/.aws) → AWS 기본 체인.
+     * R2: `region: auto`, `endpoint-override: https://<account>.r2.cloudflarestorage.com`, `path-style-access-enabled: true`
+     */
     data class Credentials(
         val profile: String = "",
+        val accessKeyId: String = "",
+        val secretAccessKey: String = "",
     )
 
     data class Presign(

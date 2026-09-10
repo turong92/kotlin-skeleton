@@ -27,6 +27,11 @@ interface StorageService {
 
     fun delete(key: ObjectKey)
 
+    /** 여러 키를 한 번에 삭제 (표시본 + 원본 등). 기본은 하나씩, S3 구현은 DeleteObjects 로 묶는다 */
+    fun deleteAll(keys: Collection<ObjectKey>) {
+        keys.forEach(::delete)
+    }
+
     fun publicUrl(key: ObjectKey): URI? = null
 }
 

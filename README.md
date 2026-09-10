@@ -25,11 +25,13 @@ modules/
   notification-slack   # optional Slack webhook alerts and exception notices
   notification-sse     # optional server-to-web SSE notification delivery
   notification-websocket # optional STOMP/WebSocket notification delivery
+  notification-mail    # optional SMTP sending (spring.mail.* + skeleton.notification-mail.*)
   payment             # optional provider-neutral payment contracts
   payment-toss        # optional Toss payment provider
   payment-stripe      # optional Stripe payment provider
   persistence-jpa      # optional JPA audit timestamp support
-  persistence-jdbc     # optional Spring Data JDBC audit timestamp support
+  persistence-jdbc     # optional Spring Data JDBC audit timestamp support (+ UTC-safe time types)
+  persistence-jooq     # optional jOOQ with DDL-file code generation (no DB at build), UTC Instant converter, audit listener
   redis-core          # optional Redis connection, templates, key prefixing
   redis-lock          # optional Redis-backed distributed locks
   redis-cache         # optional Redis cache manager defaults
@@ -37,7 +39,9 @@ modules/
   scheduler           # optional annotation-driven scheduler
   time                # optional global-time capability: viewer zone/locale, ZonedMoment, dual formatting, country -> zone
   storage             # optional storage contracts and file validation
-  storage-s3          # optional S3 presigned storage adapter
+  storage-s3          # optional S3/R2 storage adapter (presigned + server-side put, cache headers, batch delete)
+  job-queue-jdbc      # optional MySQL-table retry queue (FOR UPDATE SKIP LOCKED, backoff, dead-letter) — no Redis
+  captcha-turnstile   # optional Cloudflare Turnstile token verification
 ```
 
 Use modules as capability choices:
@@ -54,6 +58,11 @@ Use modules as capability choices:
 - `modules/notification` is included when the app needs server-side notification publishing. `modules/notification-sse`, `modules/notification-websocket`, and `modules/notification-slack` add delivery/alert channels.
 - `modules:redis-*`, `modules:storage-*`, `modules:payment-*`, `modules:event-kafka`, and `modules:scheduler` are optional capability bundles. `apps/api` includes them to prove they can coexist, while YAML keeps infrastructure-backed features disabled unless explicitly enabled.
 - `modules/persistence-jpa` and `modules/persistence-jdbc` are optional persistence adapters. Both use the same platform audit-time contract while keeping JPA/JDBC annotations and lifecycle behavior inside the selected persistence module. `persistence-jdbc` also forces the DB session to UTC (Hikari driver properties, no URL parameters needed) and pins `Instant` / `LocalDate` / `LocalDateTime` round-trips so they do not depend on the JVM default time zone. See `docs/time.md`.
+- `modules/persistence-jooq` is the jOOQ alternative: code is generated from a DDL file with `DDLDatabase`, so builds need no database. See `docs/persistence-jooq.md`. Schema without Flyway: `docs/schema-management.md`.
+- `modules/job-queue-jdbc` is included when work must be retried durably without Redis. See `docs/job-queue-jdbc.md`.
+- `modules/notification-mail` (`docs/notification-mail.md`) and `modules/captcha-turnstile` (`docs/captcha-turnstile.md`) are off by default and only appear when their properties are set.
+- HTML pages next to the API: see `apps/api` `api/pages/PagesController.kt` — public endpoints via `PublicEndpointContributor`, HTML error handling via a page-scoped `@ControllerAdvice`; rate limiting is `/api/**` only by default.
+- Starting a new project from this skeleton: `scripts/rename-skeleton.sh` + `docs/minimal-composition.md`.
 - `modules/time` is included when the app shows times to people in different time zones or stores scheduled local times (deadlines, event starts). It provides `TimeContext` (viewer zone/locale: account preference → `X-Time-Zone` / `Accept-Language` → default), `ZonedMoment` (local time + zone as the source of truth, derived instant), `TimeFormatter.dual`, and `CountryTimeZones`. See `docs/time.md`.
 
 Fine-grained details such as JWT, password login, OAuth, or dev login live as packages inside their capability modules unless they grow into provider-level integrations.

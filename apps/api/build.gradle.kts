@@ -32,6 +32,9 @@ dependencies {
     implementation(project(":modules:storage"))
     implementation(project(":modules:storage-s3"))
     implementation(project(":modules:time"))
+    implementation(project(":modules:job-queue-jdbc"))
+    implementation(project(":modules:notification-mail"))
+    implementation(project(":modules:captcha-turnstile"))
 
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3")

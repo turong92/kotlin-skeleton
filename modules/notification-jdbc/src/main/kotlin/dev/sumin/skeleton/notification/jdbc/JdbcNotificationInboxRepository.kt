@@ -10,6 +10,8 @@ import dev.sumin.skeleton.notification.NotificationSeverity
 import java.sql.ResultSet
 import java.sql.Timestamp
 import java.time.Instant
+import java.time.LocalDateTime
+import java.time.ZoneOffset
 import org.springframework.dao.DuplicateKeyException
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
@@ -190,12 +192,12 @@ class JdbcNotificationInboxRepository(
             title = getString("title"),
             message = getString("message"),
             payload = readPayload(getString("payload_json")),
-            createdAt = getTimestamp("event_created_at").toInstant(),
+            createdAt = getUtcInstant("event_created_at")!!,
         )
         return NotificationInboxRecord(
             recipientId = getString("recipient_id"),
             event = event,
-            readAt = getTimestamp("read_at")?.toInstant(),
+            readAt = getUtcInstant("read_at"),
         )
     }
 
@@ -210,6 +212,10 @@ class JdbcNotificationInboxRepository(
                 value?.toString()?.trim()?.takeIf { it.isNotBlank() }
             }
 
+    /** DATETIME 리터럴 = UTC 벽시계 (persistence-jdbc 규약). JVM 기본 시간대와 무관 */
     private fun Instant.toTimestamp(): Timestamp =
-        Timestamp.from(this)
+        Timestamp.valueOf(LocalDateTime.ofInstant(this, ZoneOffset.UTC))
+
+    private fun java.sql.ResultSet.getUtcInstant(column: String): Instant? =
+        getObject(column, LocalDateTime::class.java)?.toInstant(ZoneOffset.UTC)
 }

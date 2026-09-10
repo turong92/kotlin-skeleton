@@ -15,6 +15,12 @@ Kotlin + Spring Boot 백엔드 토이 프로젝트의 공개 출발점.
 - `modules/notification-sse` owns optional Spring MVC server-sent event delivery.
 - `modules/persistence-jpa` owns optional JPA audit timestamp mapping and lifecycle callbacks.
 - `modules/persistence-jdbc` owns optional Spring Data JDBC audit timestamp mapping and callbacks, plus DB-session UTC and JVM-zone-independent `Instant`/`LocalDate`/`LocalDateTime` conversions.
+- `modules/persistence-jooq` owns the jOOQ variant: DDL-file code generation (`DDLDatabase`), `UtcInstantConverter` for `*_at` columns, `JooqAuditRecordListener`.
+- `modules/job-queue-jdbc` owns the MySQL retry queue (`skeleton_jobs`, `JobQueue`/`JobHandler`, `FOR UPDATE SKIP LOCKED`, backoff, DEAD). Handlers must be idempotent.
+- `modules/notification-mail` owns SMTP sending (`MailSender`), off unless `skeleton.notification-mail.enabled` and `spring.mail.host` are set.
+- `modules/captcha-turnstile` owns Cloudflare Turnstile verification (`TurnstileVerifier`), off unless enabled.
+- Schema management modes (Flyway or `schema.sql` via `spring.sql.init`) are documented in `docs/schema-management.md`; module tables ship Flyway files with date versions (`V2026MMDDnn__`).
+- New project from the skeleton: `scripts/rename-skeleton.sh <package> <prefix> <ClassPrefix>` then `./gradlew build`; module picking in `docs/minimal-composition.md`.
 - `modules/time` owns viewer time zone/locale resolution, `ZonedMoment` (scheduled local time), human-readable dual formatting, and country → time zone lookup. Three temporal kinds: `Instant` (facts), `LocalDate` (calendar dates, never converted), `ZonedMoment` (future local times). Never use `ZoneId.systemDefault()`, `TIMESTAMP` columns, or bare `LocalDateTime` for instants.
 - Keep provider/vendor integrations out of `platform`.
 

@@ -9,7 +9,9 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean
 import org.springframework.beans.factory.ObjectProvider
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider
 import software.amazon.awssdk.auth.credentials.ProfileCredentialsProvider
 import software.amazon.awssdk.regions.Region
@@ -94,12 +96,17 @@ class S3StorageAutoConfiguration {
             publicUrlResolver = storagePublicUrlResolver,
         )
 
-    private fun credentialsProvider(properties: S3StorageProperties): AwsCredentialsProvider =
-        if (properties.credentials.profile.isBlank()) {
-            DefaultCredentialsProvider.builder().build()
-        } else {
-            ProfileCredentialsProvider.create(properties.credentials.profile)
+    private fun credentialsProvider(properties: S3StorageProperties): AwsCredentialsProvider {
+        val c = properties.credentials
+        return when {
+            c.accessKeyId.isNotBlank() && c.secretAccessKey.isNotBlank() ->
+                StaticCredentialsProvider.create(AwsBasicCredentials.create(c.accessKeyId, c.secretAccessKey))
+            c.accessKeyId.isNotBlank() || c.secretAccessKey.isNotBlank() ->
+                throw IllegalStateException("skeleton.storage-s3.credentials: access-key-id and secret-access-key must be set together.")
+            c.profile.isNotBlank() -> ProfileCredentialsProvider.create(c.profile)
+            else -> DefaultCredentialsProvider.builder().build()
         }
+    }
 
     private fun s3Configuration(properties: S3StorageProperties): S3Configuration =
         S3Configuration.builder()

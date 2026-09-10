@@ -29,6 +29,9 @@ import software.amazon.awssdk.services.s3.model.CompleteMultipartUploadRequest a
 import software.amazon.awssdk.services.s3.model.CopyObjectRequest as AwsCopyObjectRequest
 import software.amazon.awssdk.services.s3.model.CreateMultipartUploadRequest
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest
+import software.amazon.awssdk.services.s3.model.ObjectIdentifier
+import software.amazon.awssdk.services.s3.model.DeleteObjectsRequest
+import software.amazon.awssdk.services.s3.model.Delete
 import software.amazon.awssdk.services.s3.model.GetObjectRequest
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Request
@@ -63,6 +66,8 @@ class S3PresignedStorageService(
             .key(request.key.value)
             .apply {
                 request.contentType?.let { contentType(it) }
+                request.cacheControl?.let { cacheControl(it) }
+                request.contentDisposition?.let { contentDisposition(it) }
                 if (request.metadata.isNotEmpty()) {
                     metadata(request.metadata)
                 }
@@ -262,6 +267,19 @@ class S3PresignedStorageService(
                 throw error
             }
         }
+
+    /** DeleteObjects 는 요청당 1000개 제한 → 묶어서 보낸다 */
+    override fun deleteAll(keys: Collection<ObjectKey>) {
+        keys.distinct().chunked(1000).forEach { chunk ->
+            val objects = chunk.map { ObjectIdentifier.builder().key(it.value).build() }
+            s3Client.deleteObjects(
+                DeleteObjectsRequest.builder()
+                    .bucket(bucket)
+                    .delete(Delete.builder().objects(objects).quiet(true).build())
+                    .build(),
+            )
+        }
+    }
 
     override fun delete(key: ObjectKey) {
         s3Client.deleteObject(

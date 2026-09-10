@@ -115,3 +115,37 @@ The current tests prove presign, multipart, metadata, delete, upload, copy, move
 list, and public URL strategy selection without contacting AWS. A real AWS or
 LocalStack smoke run is still the right final check for a service that enables
 this module in an environment.
+
+
+## Cloudflare R2
+
+R2 is S3-compatible; only credentials, region and endpoint differ:
+
+```yaml
+skeleton:
+  storage-s3:
+    bucket: ovation
+    region: auto
+    endpoint-override: https://<account-id>.r2.cloudflarestorage.com
+    path-style-access-enabled: true
+    credentials:
+      access-key-id: ${R2_ACCESS_KEY_ID}
+      secret-access-key: ${R2_SECRET_ACCESS_KEY}
+    public-url:
+      base-url: https://cdn.example.com      # custom domain or r2.dev
+```
+
+Credential precedence: static key pair → `credentials.profile` → AWS default chain. Setting only one
+half of the key pair fails fast at startup.
+
+Server-side upload of rendered pages/images with cache headers:
+
+```kotlin
+storage.upload(UploadObjectRequest(
+    key = ObjectKey("pages/$slug/index.html"),
+    content = html.toByteArray(),
+    contentType = "text/html; charset=utf-8",
+    cacheControl = "public, max-age=31536000, immutable",
+))
+storage.deleteAll(listOf(ObjectKey("photos/$id.webp"), ObjectKey("photos/$id-orig.jpg")))  // one DeleteObjects call per 1000 keys
+```
