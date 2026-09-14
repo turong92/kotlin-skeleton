@@ -12,7 +12,9 @@ create table if not exists skeleton_notification_inbox (
     read_at datetime(6),
     created_at datetime(6) not null,
     updated_at datetime(6) not null,
-    primary key (recipient_id, event_id),
+    primary key (recipient_id, event_id)
+    -- 인라인 index 는 jOOQ DDLDatabase 가 못 읽는다 → [jooq ignore] 마커 (설명: modules/job-queue-jdbc 의 마이그레이션)
+    /* [jooq ignore start] */,
     index idx_skeleton_notification_inbox_recipient_read_created (
         recipient_id,
         read_at,
@@ -23,4 +25,5 @@ create table if not exists skeleton_notification_inbox (
         topic,
         event_created_at
     )
+    /* [jooq ignore stop] */
 );

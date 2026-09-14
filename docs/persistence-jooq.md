@@ -31,6 +31,7 @@ jooq {
                     property { key = "sort"; value = "semantic" }
                     property { key = "unqualifiedSchema"; value = "none" }
                     property { key = "defaultNameCase"; value = "lower" }
+                    property { key = "parseIgnoreComments"; value = "true" }   // skips /* [jooq ignore start] */ … /* [jooq ignore stop] */
                 }
                 forcedTypes {
                     forcedType {
@@ -52,6 +53,29 @@ tasks.named("compileJava") { dependsOn("jooqCodegen") }
 
 `schema.sql` rules for the parser: standard DDL only — no `engine=`, `charset=`, `collate` clauses
 (keep those in a separate MySQL-only file if you need them, or apply them by `alter table` later).
+
+**Inline indexes.** MySQL's `create table (…, index idx_x (a, b))` is not standard DDL and the parser rejects
+the whole file ("Your SQL string could not be parsed"). Moving the index to a separate `create index` is not
+an option either: MySQL 8.4 has no `create index if not exists`, so a `schema.sql` that runs on every boot
+would fail the second time. Keep the inline index and hide it from the parser with jOOQ's ignore markers,
+putting the preceding comma inside the ignored span so the parser never sees `not null,)`:
+
+```sql
+create table if not exists skeleton_jobs (
+    …,
+    updated_at datetime(6) not null
+    /* [jooq ignore start] */,
+    index idx_skeleton_jobs_claim (status, next_run_at),
+    index idx_skeleton_jobs_running (status, locked_at)
+    /* [jooq ignore stop] */
+);
+```
+
+MySQL and Spring's `ScriptUtils` treat the markers as plain block comments and run the index clauses;
+`DDLDatabase` skips them only when `parseIgnoreComments=true` is set (above). The module migrations
+(`job-queue-jdbc`, `notification-jdbc`) already carry these markers, so they can be copied into `schema.sql`
+verbatim — `modules/persistence-jooq` generates code from them on every build to prove it, and `apps/api`
+`SchemaSqlInitIntegrationTest` runs such a `schema.sql` twice against MySQL and checks the indexes exist.
 The same file is what `spring.sql.init.mode=always` runs at boot in the no-Flyway mode
 (`docs/schema-management.md`), so codegen and runtime schema never drift.
 

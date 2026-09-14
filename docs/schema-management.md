@@ -28,14 +28,18 @@ Rules for `schema.sql` in this mode:
 
 - Every statement must be idempotent: `create table if not exists …`, `create index` guarded, etc.
   It runs on every boot.
-- Copy the module migrations you depend on into `schema.sql` (e.g. `skeleton_jobs` from
+- Copy the module migrations you depend on into `schema.sql` verbatim (e.g. `skeleton_jobs` from
   `modules/job-queue-jdbc/src/main/resources/db/migration/`). Module jars still contain the Flyway
-  file, but nothing runs it in this mode.
+  file, but nothing runs it in this mode. Their inline `index` clauses sit between
+  `/* [jooq ignore start] */ … /* [jooq ignore stop] */` markers: MySQL and `spring.sql.init` run them
+  as normal SQL, while jOOQ codegen (`docs/persistence-jooq.md`, `parseIgnoreComments=true`) skips them —
+  the same `schema.sql` serves both.
 - You may remove the two flyway dependencies from `apps/api/build.gradle.kts`; leaving them is harmless
   when `spring.flyway.enabled=false`.
 
 Proof: `apps/api` `SchemaSqlInitIntegrationTest` boots with these properties against Testcontainers MySQL
-and verifies the table exists and `flyway_schema_history` does not.
+and verifies the table exists and `flyway_schema_history` does not; a second test copies the `skeleton_jobs`
+migration into that `schema.sql`, checks both indexes were created and re-runs the script to prove it is idempotent.
 
 ## Moving from Mode B to Flyway later
 

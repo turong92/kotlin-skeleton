@@ -28,7 +28,11 @@ jooq {
             database {
                 name = "org.jooq.meta.extensions.ddl.DDLDatabase"
                 properties {
-                    property { key = "scripts"; value = "src/main/resources/db/skeleton-jooq-schema.sql" }
+                    // build/module-ddl 디렉토리 = 이 모듈의 예시 DDL + 다른 모듈의 Flyway 마이그레이션 (collectModuleDdl 이 모은다).
+                    // 앱이 schema.sql 로 복사해 쓰는 파일들이 DDLDatabase 로 파싱되는지를 빌드마다 증명한다. 디렉토리는 sort 순으로 읽힌다
+                    property { key = "scripts"; value = "build/module-ddl" }
+                    // MySQL 인라인 index 절은 /* [jooq ignore start] */ … /* [jooq ignore stop] */ 로 감싸 두었고, 이 속성이 있어야 건너뛴다
+                    property { key = "parseIgnoreComments"; value = "true" }
                     property { key = "sort"; value = "semantic" }
                     property { key = "unqualifiedSchema"; value = "none" }
                     property { key = "defaultNameCase"; value = "lower" }   // MySQL(리눅스)은 테이블명 대소문자 구분 → 소문자로 생성
@@ -49,6 +53,17 @@ jooq {
             }
         }
     }
+}
+
+val collectModuleDdl by tasks.registering(Copy::class) {
+    from("src/main/resources/db") { include("skeleton-jooq-schema.sql") }
+    from("../job-queue-jdbc/src/main/resources/db/migration")
+    from("../notification-jdbc/src/main/resources/db/migration")
+    into(layout.buildDirectory.dir("module-ddl"))
+}
+tasks.named("jooqCodegen") {
+    dependsOn(collectModuleDdl)
+    inputs.dir(layout.buildDirectory.dir("module-ddl"))
 }
 
 sourceSets.main {
