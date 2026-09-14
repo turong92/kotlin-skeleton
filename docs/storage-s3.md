@@ -32,6 +32,7 @@ skeleton:
       upload: 10m
       download: 10m
       multipart-part: 15m
+      # endpoint-override: http://localhost:8333   # only when browsers cannot reach the server's endpoint (see "Local container")
 ```
 
 If `bucket` is missing, the S3 client and presigner can exist but the
@@ -137,6 +138,28 @@ skeleton:
 
 Credential precedence: static key pair → `credentials.profile` → AWS default chain. Setting only one
 half of the key pair fails fast at startup.
+
+## Local container (SeaweedFS, MinIO)
+
+In a compose network the server reaches the S3 container by service name, but a presigned URL signed
+for that host is useless to a browser on the host machine — SigV4 signs the `Host` header, so the URL
+cannot be rewritten after the fact. Give the presigner its own endpoint; everything else stays shared:
+
+```yaml
+skeleton:
+  storage-s3:
+    bucket: ovation
+    region: us-east-1
+    endpoint-override: http://s3:8333            # server → S3 (compose service name)
+    path-style-access-enabled: true
+    credentials:
+      access-key-id: ${S3_ACCESS_KEY_ID}
+      secret-access-key: ${S3_SECRET_ACCESS_KEY}
+    presign:
+      endpoint-override: http://localhost:8333   # browser → S3 (published port); unset = same as endpoint-override
+```
+
+R2 and real AWS need no `presign.endpoint-override`: the server and the browser use the same address.
 
 Server-side upload of rendered pages/images with cache headers:
 

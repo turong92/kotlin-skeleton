@@ -49,7 +49,8 @@ class S3StorageAutoConfiguration {
             .credentialsProvider(credentialsProvider(properties))
             .serviceConfiguration(s3Configuration(properties))
 
-        properties.endpointOverride?.let { builder.endpointOverride(it) }
+        // presign URL 은 클라이언트(브라우저)가 여는 주소이므로 서버→S3 주소와 다를 수 있다 (presign.endpoint-override 가 우선)
+        (properties.presign.endpointOverride ?: properties.endpointOverride)?.let { builder.endpointOverride(it) }
 
         return builder.build()
     }
