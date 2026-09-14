@@ -88,7 +88,13 @@ scripts/rename-skeleton.sh dev.sumin.ovation ovation Ovation
 ./gradlew build
 ```
 
-Rewrites the root package (`dev.sumin.skeleton` → `dev.sumin.ovation`), config prefix (`skeleton.*` →
-`ovation.*`), env-var placeholders (`SKELETON_*` → `OVATION_*`), and class/file names (`Skeleton*` →
-`Ovation*`), including `META-INF/spring/*.imports`. Verified by running the script on a copy of this repo
-and building it.
+Rewrites the root package (`dev.sumin.skeleton` → `dev.sumin.ovation`, also the slash form in resource paths and scripts), config prefix (`skeleton.*` → `ovation.*`,
+including the YAML root key `skeleton:`), env-var placeholders (`SKELETON_*` → `OVATION_*`, `.env.example` too),
+class/file names (`Skeleton*` → `Ovation*`, bean names `skeleton*` → `ovation*`), and name strings (`kotlin-skeleton`
+→ `ovation` for `spring.application.name`, JWT issuer, Redis key prefix, SSM paths, OpenAPI title; `skeleton-*` →
+`ovation-*` for thread-name prefixes, the Jackson module, Kafka headers, the AWS profile, `skeleton-jooq-schema.sql`).
+It ends with a leftover scan and fails if any `skeleton` trace remains — a build cannot catch a leftover `skeleton:`
+YAML root key, which silently disables every `ovation.*` setting in that file. Left alone on purpose: the
+`skeleton_jobs` table (bound to module SQL), the sample API paths `/api/v1/skeleton/**` (the react-skeleton
+workbench calls them), and `kotlin-skeleton` in Markdown titles. Verified by running the script on a copy of this
+repo and building it.

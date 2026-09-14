@@ -27,7 +27,7 @@ object CountryTimeZones {
     val countries: Set<String> get() = table.keys
 
     private fun load(): Map<String, List<ZoneId>> {
-        val stream = javaClass.getResourceAsStream("/dev/sumin/skeleton/time/country-zones.tsv")
+        val stream = javaClass.getResourceAsStream("country-zones.tsv") // 클래스와 같은 패키지 경로의 리소스: 패키지를 옮기면 같이 따라온다 (rename-skeleton.sh)
             ?: error("country-zones.tsv missing from classpath")
         val known = ZoneId.getAvailableZoneIds()
         val skipped = mutableListOf<String>()
