@@ -28,6 +28,11 @@ dependencies {
 Keep only those lines in `settings.gradle.kts` `include(...)` as well; delete the module directories you
 do not include (or leave them — unincluded directories are ignored by Gradle).
 
+Your app may live in any package (`dev.sumin.app1`, `com.acme.shop`): modules register their own controllers,
+filters and advice through `AutoConfiguration.imports`, never through your component scan. `apps/api`
+`ModuleSelfRegistrationIntegrationTest` boots the modules under a root configuration that scans nothing to keep it
+that way.
+
 ## 2. Delete the settings of modules you dropped
 
 Each module owns exactly one configuration prefix. Remove the matching block from `application*.yml`.

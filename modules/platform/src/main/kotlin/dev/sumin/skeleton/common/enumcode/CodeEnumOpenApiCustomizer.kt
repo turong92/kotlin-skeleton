@@ -111,13 +111,26 @@ class CodeEnumOpenApiCustomizer(
         clazz: Class<*>,
         result: MutableMap<String, Class<*>>,
     ) {
-        if (!clazz.name.startsWith("dev.sumin.skeleton")) {
+        if (clazz.isPrimitive || clazz.isEnum || clazz.isInterface || clazz.isAnnotation || clazz.isArray) {
             return
         }
-        if (clazz.isPrimitive || clazz.isEnum || clazz.isInterface || clazz.isAnnotation) {
+        if (isFrameworkType(clazz)) {
             return
         }
         result.putIfAbsent(schemaName(clazz), clazz)
+    }
+
+    /**
+     * Only application DTOs are walked for code-enum fields. Anything from the JDK (bootstrap class
+     * loader), Kotlin's stdlib, Spring or Jackson is skipped. Deliberately not a package allow-list:
+     * the consuming app may live in any package.
+     */
+    private fun isFrameworkType(clazz: Class<*>): Boolean =
+        clazz.classLoader == null ||
+            FRAMEWORK_PACKAGE_PREFIXES.any { clazz.name.startsWith(it) }
+
+    private companion object {
+        val FRAMEWORK_PACKAGE_PREFIXES = listOf("java.", "javax.", "jakarta.", "kotlin.", "org.springframework.", "tools.jackson.", "com.fasterxml.")
     }
 
     private fun applyCodeEnumDescriptions(

@@ -3,6 +3,7 @@ package dev.sumin.skeleton.auth.config
 import dev.sumin.skeleton.auth.account.AuthAccount
 import dev.sumin.skeleton.auth.account.AuthAccountRepository
 import dev.sumin.skeleton.auth.account.InMemoryAuthAccountRepository
+import dev.sumin.skeleton.auth.api.AuthController
 import dev.sumin.skeleton.auth.api.AuthTokenResponseFactory
 import dev.sumin.skeleton.auth.jwt.JwtTokenService
 import dev.sumin.skeleton.auth.security.AuthErrorWriter
@@ -67,6 +68,15 @@ class AuthAutoConfiguration {
     @ConditionalOnMissingBean
     fun authTokenResponseFactory(jwtTokenService: JwtTokenService): AuthTokenResponseFactory =
         AuthTokenResponseFactory(jwtTokenService)
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun authController(
+        accountRepository: AuthAccountRepository,
+        passwordEncoder: PasswordEncoder,
+        authTokenResponseFactory: AuthTokenResponseFactory,
+    ): AuthController =
+        AuthController(accountRepository, passwordEncoder, authTokenResponseFactory)
 
     @Bean
     fun authStartupValidation(properties: AuthProperties, environment: Environment): ApplicationRunner =
