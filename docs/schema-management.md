@@ -37,6 +37,12 @@ when anywhere in the repository — app, modules, test resources:
 - two files in the same vendor share a version;
 - a source folder with both vendor folders has a migration in one and not the other.
 
+The walk does not enter `build`, `.gradle`, `.git`, `.kotlin`, `node_modules`, `out`, `.claude`, or any directory
+below the root that has its own `.git` entry (a nested git worktree or repository — e.g. Claude Code's
+`.claude/worktrees/<name>/`). Those hold copies of the same migrations and would otherwise fail the build with
+"duplicate version". The Gradle test inputs in `modules/migration-flyway/build.gradle.kts` exclude the main ones
+(`build`, `node_modules`, `.claude`, `.git`) so those copies do not invalidate the test either.
+
 ### outOfOrder — the app's choice (`apps/api` turns it on)
 
 The skeleton modules do not change Flyway's defaults; usage choices like this live in the app's `application.yml`
@@ -65,6 +71,39 @@ them.
 Guard (`modules:migration`, tool-agnostic): `skeleton.migration.clean-on-validation-error=true`, `spring.flyway.clean-disabled=false` or `spring.liquibase.drop-first=true` outside
 `skeleton.migration.clean-allowed-profiles` (default `local`) fails startup before the database is touched.
 No active profile counts as `default`, which is not allowed.
+
+The guard is an `EnvironmentPostProcessor`, so it runs before any bean exists. An app that adds its own startup
+guard on top (e.g. "stage/prod never allow clean, whatever the allowed profiles say") must also run before the
+`Flyway` bean — `FlywayMigrationInitializer`, which needs `Flyway`, runs `migrate()` (and the local clean strategy)
+when it is created, and with no ordering Spring may create both first (Ovation measured jOOQ → Flyway being created before its
+`DeployGuards` bean, so the guard fired only after clean had wiped the database). Either:
+
+- make the app guard an `EnvironmentPostProcessor` too (registered in `META-INF/spring.factories`) when it only
+  reads the `Environment`; or
+- keep it a bean and make every `Flyway` bean depend on it with a **static** `BeanFactoryPostProcessor`
+  (what Ovation does, verified by an `ApplicationContextRunner` test that registers a Flyway configuration first and
+  asserts the guard fails startup before the Flyway bean is created):
+
+```kotlin
+@Configuration(proxyBeanMethods = false)
+class DeployGuardsConfiguration {
+    @Bean // the bean name is the method name — FlywayAfterDeployGuards refers to it
+    fun deployGuardsChecked(/* inputs */): Any { /* throw when clean is on in stage/prod */ return Any() }
+
+    companion object {
+        @JvmStatic
+        @Bean
+        fun flywayAfterDeployGuards(): BeanFactoryPostProcessor = FlywayAfterDeployGuards()
+    }
+}
+
+// org.springframework.boot.autoconfigure.AbstractDependsOnBeanFactoryPostProcessor
+private class FlywayAfterDeployGuards : AbstractDependsOnBeanFactoryPostProcessor(Flyway::class.java, "deployGuardsChecked")
+```
+
+`@DependsOn` on the guard does not help (it orders the guard after its own dependencies, not Flyway after the
+guard), and a guard inside a custom `FlywayMigrationStrategy` would replace the skeleton's local clean strategy
+(`@ConditionalOnMissingBean`).
 
 ## Mode B — `schema.sql` only (no migration tool yet)
 

@@ -2,10 +2,13 @@ package dev.sumin.skeleton.migration.flyway
 
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.attribute.PosixFilePermissions
 import kotlin.io.path.createDirectories
+import kotlin.io.path.setPosixFilePermissions
 import kotlin.io.path.writeText
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import org.junit.jupiter.api.Assumptions.assumeFalse
 import org.junit.jupiter.api.Test
 
 class MigrationFileRulesTest {
@@ -66,5 +69,45 @@ class MigrationFileRulesTest {
             "modules/a/src/main/resources/db/migration/postgresql/README.md",
         )
         assertEquals(emptyList(), MigrationFileRules.violations(root))
+    }
+
+    @Test
+    fun `nested worktree or repository with its own git entry is not walked`() {
+        val root = repo(
+            ".git",
+            "apps/api/src/main/resources/db/migration/postgresql/V20261001000000__a.sql",
+            // 레포 안에 둔 다른 워크트리 (.git 파일) — 같은 마이그레이션 사본 + 옛 규칙 파일
+            "other-checkout/.git",
+            "other-checkout/apps/api/src/main/resources/db/migration/postgresql/V20261001000000__a.sql",
+            "other-checkout/apps/api/src/main/resources/db/migration/V1__init.sql",
+        )
+        assertEquals(emptyList(), MigrationFileRules.violations(root))
+    }
+
+    @Test
+    fun `claude worktrees folder is not walked`() {
+        val root = repo(
+            "apps/api/src/main/resources/db/migration/postgresql/V20261001000000__a.sql",
+            ".claude/worktrees/x/apps/api/src/main/resources/db/migration/postgresql/V20261001000000__a.sql",
+            ".claude/worktrees/x/apps/api/src/main/resources/db/migration/V1__init.sql",
+        )
+        assertEquals(emptyList(), MigrationFileRules.violations(root))
+    }
+
+    @Test
+    fun `skipped directories are not descended`() {
+        val root = repo(
+            "apps/api/src/main/resources/db/migration/postgresql/V20261001000000__a.sql",
+            "apps/web/node_modules/pkg/index.js",
+        )
+        // node_modules 안의 읽을 수 없는 폴더 — node_modules 로 들어가 훑으면 AccessDeniedException 으로 깨진다
+        val inside = root.resolve("apps/web/node_modules/pkg")
+        inside.setPosixFilePermissions(PosixFilePermissions.fromString("---------"))
+        try {
+            assumeFalse(Files.isReadable(inside), "root 로 돌면 권한이 안 막혀 이 테스트가 아무것도 증명하지 못한다")
+            assertEquals(emptyList(), MigrationFileRules.violations(root))
+        } finally {
+            inside.setPosixFilePermissions(PosixFilePermissions.fromString("rwx------"))
+        }
     }
 }

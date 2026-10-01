@@ -139,6 +139,44 @@ database {
 **9. 동작 수정.** notification-jdbc 가 같은 알림을 같은 트랜잭션에서 두 번 저장하면 PG 에서 트랜잭션이 깨지던 문제
 (`DuplicateKeyException` 삼키기) → `insertIgnore`. 두 DB 테스트(`saving the same event twice inside one transaction…`)로 고정.
 
+### 이식 안내 — 마이그레이션 규칙 검사 범위 · 앱 기동 규칙 순서 (2026-10-01, Ovation 이식에서 발견)
+
+`9593d55` 를 이미 옮긴 앱이 따라 하면 된다. 아래 두 가지 모두 Ovation(`7161171` · `0440714`)에서 먼저 고치고 확인한 것.
+
+**1. `MigrationFileRules` 가 레포 안 워크트리 · 레포 · `node_modules` 를 훑지 않게.** `9593d55` 는 `Files.walk` 로 루트 아래를 다
+훑고 나서 경로에 `build` 등이 있는지 걸렀다. 그래서 (가) 레포 안에 다른 git 워크트리가 있으면 — Claude Code 가 만드는
+`.claude/worktrees/<이름>/` 등 — 그 안의 마이그레이션 사본이 「duplicate version」으로 `./gradlew build` 를 깨고,
+(나) `node_modules` 안에 읽을 수 없는 폴더가 있으면 `AccessDeniedException` 으로 깨진다.
+
+| 파일 | 바꿀 것 |
+|---|---|
+| `modules/migration-flyway/…/MigrationFileRules.kt` | `Files.walk` → `Files.walkFileTree` (`sqlFiles(root)`). `preVisitDirectory` 에서 루트가 아니고 (`SKIP_DIRS` 에 있거나 `dir/.git` 이 있으면) `SKIP_SUBTREE` — 들어가지도 않는다. `SKIP_DIRS` 에 `.claude` 추가 |
+| `modules/migration-flyway/build.gradle.kts` | `tasks.test` 입력 `fileTree` 의 `exclude` 에 주요 건너뛸 곳을: `"**/build/**", "**/node_modules/**", ".claude/**", "**/.git/**"` |
+| `MigrationFileRulesTest` | 테스트 셋 추가: 중첩 `.git` 이 있는 폴더 · `.claude/worktrees` 는 훑지 않음, `node_modules` 안 읽기 금지 폴더로 들어가지 않음 |
+
+**2. 앱이 따로 둔 기동 규칙은 Flyway 빈보다 먼저.** 스켈레톤 가드(`MigrationCleanGuardEnvironmentPostProcessor`)는
+`EnvironmentPostProcessor` 라 빈보다 먼저 돈다 — 코드 변경 없음. 하지만 앱이 그 위에 **보통 빈**으로 기동 규칙을 더하면
+(예: Ovation `DeployGuards` — stage · prod 에선 허용 프로필과 무관하게 clean 설정 거부) Spring 이 Flyway 빈을 먼저 만들 수
+있고, 그러면 Flyway 빈을 받는 `FlywayMigrationInitializer` 의 `migrate()`(로컬 clean 전략 포함)가 DB 를 지운 **뒤에야** 규칙이 기동을 막는다
+(Ovation 실측: jOOQ → Flyway 가 먼저 생성). 둘 중 하나:
+
+- 규칙이 `Environment` 만 읽으면 `EnvironmentPostProcessor` 로 만든다 (`META-INF/spring.factories`).
+- 빈으로 두려면 static `BeanFactoryPostProcessor` 로 모든 `Flyway` 빈이 규칙 빈에 기대게 한다 (Ovation 방식,
+  `ApplicationContextRunner` 에 Flyway 설정을 먼저 등록하고 「규칙으로 기동 실패 + Flyway 빈 미생성」을 확인하는 테스트로 고정):
+
+```kotlin
+companion object {
+    @JvmStatic
+    @Bean
+    fun flywayAfterDeployGuards(): BeanFactoryPostProcessor = FlywayAfterDeployGuards()
+}
+private class FlywayAfterDeployGuards :
+    AbstractDependsOnBeanFactoryPostProcessor(Flyway::class.java, "deployGuardsChecked")   // 규칙 빈 이름 = @Bean 메서드 이름
+```
+
+규칙 빈에 `@DependsOn` 을 붙이는 건 반대 방향이라 소용없고, 자체 `FlywayMigrationStrategy` 에 넣으면 스켈레톤 로컬 clean
+전략(`@ConditionalOnMissingBean`)을 대체해 버린다. `docs/schema-management.md` 「Guard」 절.
+
 
 ### Changed
 - Spring Boot 4.0.5 → **4.1.1**, Kotlin 2.2.21 → **2.3.21** (Boot-managed: jOOQ 3.21.7, MySQL Connector/J 9.7.0, Testcontainers 2.0.5, Spring Security 7.1.1). One source change: `JwtTokenService` treats a missing `sub` claim as authentication failure (subject is nullable in Spring Security 7.1)

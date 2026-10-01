@@ -17,7 +17,10 @@ dependencies {
 }
 
 tasks.test {
-    // RepositoryMigrationsTest 가 레포 전체의 db/migration 을 훑는다
+    // RepositoryMigrationsTest 가 레포 전체의 db/migration 을 훑는다 — MigrationFileRules 가 건너뛰는 주요 폴더는 입력에서도 뺀다
     systemProperty("skeleton.repoRoot", rootDir.absolutePath)
-    inputs.files(fileTree(rootDir) { include("**/src/*/resources/db/migration/**"); exclude("**/build/**") })
+    inputs.files(fileTree(rootDir) {
+        include("**/src/*/resources/db/migration/**")
+        exclude("**/build/**", "**/node_modules/**", ".claude/**", "**/.git/**")
+    })
 }
