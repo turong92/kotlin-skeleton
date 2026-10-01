@@ -1,2 +1,2 @@
 dev.sumin.skeleton.persistence.jdbc.JdbcAuditAutoConfiguration
-dev.sumin.skeleton.persistence.jdbc.JdbcUtcAutoConfiguration
+dev.sumin.skeleton.persistence.jdbc.SqlDialectAutoConfiguration

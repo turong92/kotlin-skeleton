@@ -1,2 +1,0 @@
-org.springframework.boot.env.EnvironmentPostProcessor=\
-dev.sumin.skeleton.persistence.jooq.JooqTimeZoneEnvironmentPostProcessor

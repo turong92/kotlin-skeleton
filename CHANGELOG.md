@@ -7,6 +7,139 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 이식 안내 — PostgreSQL 기본 + 방언 조립식 + Flyway 충돌 방지 (2026-10-01)
+
+하위 앱(rename-skeleton 으로 찍은 레포)이 위에서 아래로 따라 하면 된다. 설계: `docs/superpowers/specs/2026-10-01-postgresql-flyway-design.md`.
+
+**0. 기준.** 마지막 MySQL 전용 커밋은 `5cf377b`. MySQL 로 남을 앱은 1 단계에서 `db-mysql` 을 끼우면 동작이 같다.
+아래 경로 · 이름은 스켈레톤 기준(`dev.sumin.skeleton`, `skeleton.*`) — 하위 앱은 자기 접두사로 읽는다.
+
+**1. 모듈 조립 (`apps/<app>/build.gradle.kts`).**
+
+```kotlin
+implementation(project(":modules:db-postgresql"))     // 또는 :modules:db-mysql — 정확히 하나
+implementation(project(":modules:migration-flyway"))   // 공통 :modules:migration 을 api 로 끌고 온다
+implementation("org.springframework.boot:spring-boot-starter-flyway")
+// 삭제: implementation("org.flywaydb:flyway-mysql"), runtimeOnly("com.mysql:mysql-connector-j")  — 방언 모듈이 가져온다
+// 테스트: testcontainers-mysql → testImplementation("org.testcontainers:testcontainers-postgresql")
+```
+
+`settings.gradle.kts` 에 `include(":modules:db-postgresql")`, `include(":modules:db-mysql")`, `include(":modules:migration")`, `include(":modules:migration-flyway")`.
+방언 모듈이 없거나 둘이거나 연결된 DB 와 다르면 `SqlDialectVerifier` 가 원인을 적고 기동을 실패시킨다.
+
+**2. 새 파일 · 옮긴 파일 · 지운 파일.**
+
+| 모듈 | 파일 | 비고 |
+|---|---|---|
+| persistence-jdbc | `SqlDialect.kt`, `SqlDialectVerifier.kt`, `SqlDialectAutoConfiguration.kt` | 새 파일. imports 에 `SqlDialectAutoConfiguration` |
+| persistence-jdbc | `JdbcUtcAutoConfiguration.kt`, `META-INF/spring.factories` | **삭제** (MySQL 전용 → db-mysql) |
+| db-postgresql (새 모듈) | `PostgresSqlDialect.kt`, `PostgresTimeConversions.kt`, `PostgresDialectAutoConfiguration.kt`, imports | 패키지 `…persistence.postgresql` |
+| db-mysql (새 모듈) | `MySqlSqlDialect.kt`, `MySqlDialectAutoConfiguration.kt`, imports, `spring.factories` | 패키지 `…persistence.mysql` |
+| db-mysql | `MySqlTimeConversions.kt` ← persistence-jdbc `UtcInstantConversions.kt` | object 이름만 바뀜 |
+| db-mysql | `MySqlTimeZoneEnvironmentPostProcessor.kt` ← persistence-jdbc `JdbcTimeZoneEnvironmentPostProcessor.kt` | property source `skeleton-db-mysql-defaults` |
+| persistence-jooq | `JooqTimeZoneEnvironmentPostProcessor.kt`, `META-INF/spring.factories` | **삭제** (같은 MySQL 세션 강제 — db-mysql 이 한다) |
+| persistence-jooq | `db/skeleton-jooq-schema.sql` → `db/jooq-probe-mysql.sql`, 새 `db/jooq-probe-postgresql.sql` | 예시 DDL |
+| migration (새 모듈, 공통) | `MigrationProperties`(`skeleton.migration`), `MigrationCleanGuardEnvironmentPostProcessor` (Flyway clean · Liquibase drop-first 포함 가드) | 패키지 `…migration` |
+| migration-flyway (새 모듈, Flyway 구현) | `CleanOnValidationErrorMigrationStrategy`, `MigrationFlywayAutoConfiguration`, `MigrationFileRules` + `RepositoryMigrationsTest` | 패키지 `…migration.flyway`, `api(project(":modules:migration"))` |
+| job-queue-jdbc | `JdbcJobRepository(jdbc, transactions, dialect: SqlDialect)` | 생성자 인자 추가, 생성 키는 `update(keys, "id")` |
+| notification-jdbc | `JdbcNotificationInboxRepository(jdbc, jsonCodec, dialect: SqlDialect)` | 중복 삽입 = `SqlDialect.insertIgnore` |
+| 루트 `build.gradle.kts` | `dbTestModules` 묶음 등록, `newMigration` 작업 | §6 · §7 |
+
+경계: `migration` 에는 도구와 무관한 것만 둔다 (설정 `skeleton.migration`, DB 를 지우는 설정의 프로필 가드). 파일 규칙 검사(`MigrationFileRules` — 위치 · 방언 폴더 짝 · 중복 · 타임스탬프)와 `newMigration` 도 개념상 공통이지만 지금은 Flyway 하나뿐이라 `migration-flyway` · 루트 Gradle 에 두고, `migration-liquibase` 가 생길 때 공통으로 끌어올린다. outOfOrder · baseline · repair 는 Flyway 전용.
+
+**3. 설정 · 속성.**
+
+| 키 | 값 | 어디서 |
+|---|---|---|
+| `spring.datasource.url` | `jdbc:postgresql://localhost:5432/app` (쿼리 파라미터 없음) | 앱 yml, `.env.example` |
+| `spring.flyway.locations` | `classpath:db/migration/{vendor}` | 앱 yml — **필수** (모듈이 방언별 폴더를 씀) |
+| `spring.flyway.out-of-order` | `true` | 앱 yml — 선택 (apps/api 의 취향. 스켈레톤 모듈은 Flyway 기본값을 바꾸지 않는다) |
+| `spring.flyway.validate-migration-naming` | `true` | 앱 yml — 선택 |
+| `skeleton.migration.clean-on-validation-error` | 기본 `false`, `application-local.yml` 에서 `true` | 새 속성 |
+| `skeleton.migration.clean-allowed-profiles` | 기본 `[local]` | 새 속성 |
+| Gradle `-Pskeleton.jooq.dialect` | `postgresql`(기본) \| `mysql` | persistence-jooq 코드 생성 |
+| (삭제) Hikari `connectionTimeZone`, `forceConnectionTimeZoneToSession`, `preserveInstants` | — | db-mysql 을 끼울 때만 자동으로 들어간다 |
+
+docker-compose: `postgres:18` 서비스(`127.0.0.1:5432`, 볼륨 `/var/lib/postgresql`), `mysql:8.4` 는 `profiles: [mysql]`.
+
+**4. 새 시간 규칙.** "SQL 파라미터는 `Instant` 대신 UTC `LocalDateTime`" 은 **폐기**. 두 DB 에 공통으로 맞는 바인딩 타입이 없다
+(실측 2026-10-01, JVM 서울, `2026-03-01T00:30:00Z`):
+
+| 바인딩 | PG `timestamptz` | MySQL `datetime(6)` |
+|---|---|---|
+| UTC `OffsetDateTime` / `Timestamp.from` | 정확 | JVM 벽시계(09:30)로 저장 |
+| `Instant` | 드라이버 거부 | — |
+| UTC `LocalDateTime` | **−9h** | 정확 |
+
+- JdbcClient / NamedParameterJdbcTemplate: 쓰기 `dialect.instantParam(instant)`, 읽기 `dialect.readInstant(rs, "col")`. `Instant` · `Timestamp` · `LocalDateTime` 을 직접 바인딩하지 않는다.
+- Spring Data JDBC: 방언 모듈이 `JdbcCustomConversions` 를 등록 (자체 빈을 만들면 `PostgresTimeConversions.all` / `MySqlTimeConversions.all` 포함).
+- 칼럼: 시점 `timestamptz`, 달력 날짜 `date`, 벽시계(`ZonedMoment.local`) `timestamp`. `docs/time.md`.
+
+**5. jOOQ 코드 생성 (`apps/<app>/build.gradle.kts`, PG).** `docs/persistence-jooq.md` 전문.
+
+```kotlin
+database {
+    name = "org.jooq.meta.extensions.ddl.DDLDatabase"
+    properties {
+        property { key = "scripts"; value = "src/main/resources/db/migration/postgresql" }
+        property { key = "sort"; value = "flyway" }
+        property { key = "unqualifiedSchema"; value = "none" }
+        property { key = "defaultNameCase"; value = "lower" }
+    }
+    forcedTypes {
+        forcedType { name = "INSTANT"; includeExpression = "(?i:.*_at)"; includeTypes = "(?i:timestamp.*with.*time.*zone)" }
+    }
+}
+```
+
+`UtcInstantConverter` · `parseIgnoreComments` 는 MySQL 경로용 (`parseIgnoreComments` 는 PG 에 켜 둬도 무해 — persistence-jooq 는 방언과 무관하게 켠다). `jsonb` 는 jOOQ 에서 `JSON` 으로 생성된다.
+여러 폴더를 합칠 땐 `scripts` 에 쉼표 목록이 안 되므로 `Sync` 작업으로 한 디렉토리에 모은다 (persistence-jooq `collectModuleDdl`).
+
+**6. Flyway — 버전 · outOfOrder · clean · 가드.** `docs/schema-management.md` 전문.
+
+- 위치 · 이름: `src/main/resources/db/migration/<vendor>/V<UTC yyyyMMddHHmmss>__<snake_case>.sql`. 만들기: `./gradlew newMigration -Pname=add_x [-Pmodule=apps/api] [-Pvendor=postgresql]`.
+- 검사: `modules/migration-flyway` `RepositoryMigrationsTest` 가 `./gradlew build` 에서 형식 · vendor 폴더 · 레포 전체 중복 버전 · 두 vendor 짝 불일치를 막는다 (`tasks.test { systemProperty("skeleton.repoRoot", rootDir.absolutePath) }`).
+- outOfOrder 는 앱의 선택 — apps/api 는 모든 환경 `true` 로 yml 에 적는다 (모듈은 기본값을 안 바꿈). 켠다면 규칙: **마이그레이션은 서로 독립 — 다른 브랜치의 미적용 마이그레이션에 기대지 않는다.**
+- 로컬 clean: `local` 프로필에서 `skeleton.migration.clean-on-validation-error=true` 면 체크섬 불일치 · 적용 파일 사라짐(최신 적용분보다 이른 것)일 때 clean 후 재적용. 미적용(pending) 파일, 앱의 `ignore-migration-patterns`(기본 `*:future` — 다른 브랜치가 적용한 더 늦은 파일)에 걸리는 것은 밀지 않는다. 앱이 `out-of-order=true` 로 돈다는 전제 (Flyway 12.4 에 `cleanOnValidationError` 가 없어 `FlywayMigrationStrategy` 로 구현).
+- 가드 (`migration` 공통 모듈): 허용 프로필 밖에서 위 옵션, `spring.flyway.clean-disabled=false`, `spring.liquibase.drop-first=true` 중 하나라도 켜지면 기동 실패 (활성 프로필 없음 = `default`, 허용 안 됨).
+- **재명명** (이미 MySQL 에 적용된 DB 는 이력과 어긋난다 → 새 DB 로 시작하거나 `flyway_schema_history` 를 손으로 맞춘다):
+
+| 전 | 후 |
+|---|---|
+| job-queue `db/migration/V2026091001__skeleton_jobs.sql` | `db/migration/{postgresql,mysql}/V20260910010000__skeleton_jobs.sql` |
+| notification `db/migration/V2026061701__notification_inbox.sql` | `db/migration/{postgresql,mysql}/V20260617010000__skeleton_notification_inbox.sql` |
+| 앱 `db/migration/V1__init.sql` (주석뿐) | 삭제 |
+| 앱 테스트 `db/migration/V9000__utc_probe.sql` | `db/migration/postgresql/V20260101000000__utc_probe.sql` |
+
+**7. Testcontainers.** `org.testcontainers.postgresql.PostgreSQLContainer(DockerImageName.parse("postgres:18"))`, 의존성 `testcontainers-postgresql`.
+방언을 타는 모듈(job-queue-jdbc, notification-jdbc)은 루트 `dbTestModules` 로 `postgresTest` · `mysqlTest` 두 묶음을 갖는다 —
+공통 소스 `src/dbTest/{kotlin,resources}`, 묶음별 `src/<suite>/kotlin` (컨테이너 정의), 둘 다 `check` 에 걸림. 한 묶음엔 방언 모듈 하나만.
+
+**8. MySQL → PostgreSQL SQL 차이 (하위 앱이 다시 써야 할 것).**
+
+| MySQL | PostgreSQL |
+|---|---|
+| `insert … on duplicate key update c = values(c)` | `insert … on conflict (key) do update set c = excluded.c` |
+| 중복 무시 (`insert ignore`, 예외 잡아 삼키기) | `on conflict (key) do nothing` = `SqlDialect.insertIgnore`. **예외 삼키기 금지** — PG 는 실패한 문장이 트랜잭션 전체를 abort |
+| `LAST_INSERT_ID()`, `GeneratedKeyHolder` 그대로 | `returning id` 또는 `update(keys, "id")` (키 칼럼 지정 안 하면 모든 칼럼이 키로 온다) |
+| `datetime(6)` | 시점 `timestamptz`, 벽시계 `timestamp` |
+| `bigint auto_increment` | `bigint generated by default as identity` |
+| `engine=`, `charset=`, `collate` | 삭제 |
+| `create table (…, index idx (a, b))` | `create index if not exists idx on t (a, b)` |
+| `bigint unsigned` | `bigint` (+ 필요하면 `check (x >= 0)`) |
+| 식별자 대소문자 | 따옴표 없으면 소문자로 접힘 — 대문자 이름은 `"Name"` 으로만 |
+| `update/delete … limit n` | `where id in (select id … limit n)` |
+| `json` | `jsonb` (jOOQ 생성 타입은 `JSON`) |
+| `tinyint(1)` | `boolean` |
+| `ifnull(a, b)` | `coalesce(a, b)` |
+| `concat(a, b)` | 되지만 `a || b` 권장 (null 이면 결과 null 주의) |
+| `@@session.time_zone`, `database()` | `show timezone`, `current_schema()` |
+| `information_schema.statistics` (인덱스) | `pg_indexes` |
+
+**9. 동작 수정.** notification-jdbc 가 같은 알림을 같은 트랜잭션에서 두 번 저장하면 PG 에서 트랜잭션이 깨지던 문제
+(`DuplicateKeyException` 삼키기) → `insertIgnore`. 두 DB 테스트(`saving the same event twice inside one transaction…`)로 고정.
+
+
 ### Changed
 - Spring Boot 4.0.5 → **4.1.1**, Kotlin 2.2.21 → **2.3.21** (Boot-managed: jOOQ 3.21.7, MySQL Connector/J 9.7.0, Testcontainers 2.0.5, Spring Security 7.1.1). One source change: `JwtTokenService` treats a missing `sub` claim as authentication failure (subject is nullable in Spring Security 7.1)
 - `storage-s3`: static key-pair credentials (`credentials.access-key-id` / `secret-access-key`) for R2/MinIO with fail-fast on half-specified pairs; `region: auto` supported; `UploadObjectRequest.cacheControl` / `contentDisposition` passed to `PutObject`; `StorageService.deleteAll` (S3: `DeleteObjects` in batches of 1000). `docs/storage-s3.md` R2 section

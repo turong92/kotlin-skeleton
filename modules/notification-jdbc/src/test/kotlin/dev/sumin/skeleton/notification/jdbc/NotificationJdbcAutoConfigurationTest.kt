@@ -3,6 +3,7 @@ package dev.sumin.skeleton.notification.jdbc
 import dev.sumin.skeleton.json.JsonAutoConfiguration
 import dev.sumin.skeleton.notification.NotificationAutoConfiguration
 import dev.sumin.skeleton.notification.NotificationInboxRepository
+import dev.sumin.skeleton.persistence.jdbc.SqlDialect
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -26,6 +27,7 @@ class NotificationJdbcAutoConfigurationTest {
                 .setType(EmbeddedDatabaseType.H2)
                 .build()
         })
+        .withBean(SqlDialect::class.java, { FakeDialect("h2") })
 
     @Test
     fun `creates jdbc inbox repository before notification core fallback`() {
@@ -36,4 +38,10 @@ class NotificationJdbcAutoConfigurationTest {
             assertIs<JdbcNotificationInboxRepository>(repositories.values.single())
         }
     }
+}
+
+private class FakeDialect(override val vendor: String) : SqlDialect {
+    override fun instantParam(value: java.time.Instant?): Any? = value
+    override fun readInstant(rs: java.sql.ResultSet, column: String): java.time.Instant? = null
+    override fun insertIgnore(table: String, columns: List<String>, conflictColumns: List<String>) = ""
 }

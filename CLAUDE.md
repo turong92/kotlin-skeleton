@@ -14,12 +14,16 @@ Kotlin + Spring Boot 백엔드 토이 프로젝트의 공개 출발점.
 - `modules/notification` owns provider-neutral notification contracts and the local broker default.
 - `modules/notification-sse` owns optional Spring MVC server-sent event delivery.
 - `modules/persistence-jpa` owns optional JPA audit timestamp mapping and lifecycle callbacks.
-- `modules/persistence-jdbc` owns optional Spring Data JDBC audit timestamp mapping and callbacks, plus DB-session UTC and JVM-zone-independent `Instant`/`LocalDate`/`LocalDateTime` conversions.
-- `modules/persistence-jooq` owns the jOOQ variant: DDL-file code generation (`DDLDatabase`), `UtcInstantConverter` for `*_at` columns, `JooqAuditRecordListener`.
-- `modules/job-queue-jdbc` owns the MySQL retry queue (`skeleton_jobs`, `JobQueue`/`JobHandler`, `FOR UPDATE SKIP LOCKED`, backoff, DEAD). Handlers must be idempotent.
+- `modules/persistence-jdbc` owns optional Spring Data JDBC audit timestamp mapping and callbacks, and the `SqlDialect` strategy + `SqlDialectVerifier` (exactly one dialect module, matching the connected DB).
+- `modules/db-postgresql` (default) / `modules/db-mysql` are the dialect modules — an app assembles exactly one. They bring the driver, Flyway database support, `SqlDialect` (instant binding, insert-ignore) and Data JDBC time conversions; `db-mysql` also forces the MySQL session to UTC.
+- Skeleton modules provide mechanisms, not usage choices: they do not change framework defaults (e.g. Flyway `out-of-order`). Choices are explicit overrides in the app's `application.yml` (`apps/api` sets `spring.flyway.locations`/`out-of-order`/`validate-migration-naming`). 스켈레톤 모듈은 Flyway 기본값을 바꾸지 않는다.
+- `modules/migration` (common, tool-agnostic) owns `skeleton.migration` and the guard that fails startup when a DB-wiping setting (`skeleton.migration.clean-on-validation-error`, `spring.flyway.clean-disabled=false`, `spring.liquibase.drop-first=true`) is on outside `skeleton.migration.clean-allowed-profiles`.
+- `modules/migration-flyway` (Flyway implementation, depends on `migration`) owns the opt-in local clean strategy and `MigrationFileRules` (`RepositoryMigrationsTest` fails the build on bad names, duplicate versions, unpaired vendor folders).
+- `modules/persistence-jooq` owns the jOOQ variant: code generation from Flyway migration folders (`DDLDatabase`, `-Pskeleton.jooq.dialect`, PG `*_at` → `INSTANT`, MySQL `UtcInstantConverter`), `JooqAuditRecordListener`.
+- `modules/job-queue-jdbc` owns the DB-table retry queue (PostgreSQL / MySQL) (`skeleton_jobs`, `JobQueue`/`JobHandler`, `FOR UPDATE SKIP LOCKED`, backoff, DEAD). Handlers must be idempotent.
 - `modules/notification-mail` owns SMTP sending (`MailSender`), off unless `skeleton.notification-mail.enabled` and `spring.mail.host` are set.
 - `modules/captcha-turnstile` owns Cloudflare Turnstile verification (`TurnstileVerifier`), off unless enabled.
-- Schema management modes (Flyway or `schema.sql` via `spring.sql.init`) are documented in `docs/schema-management.md`; module tables ship Flyway files with date versions (`V2026MMDDnn__`).
+- Schema management modes (Flyway or `schema.sql` via `spring.sql.init`) are documented in `docs/schema-management.md`; every migration is `db/migration/<vendor>/V<UTC yyyyMMddHHmmss>__<snake_case>.sql`, created with `./gradlew newMigration -Pname=…`; module DB tests run twice (`postgresTest`, `mysqlTest` over `src/dbTest`).
 - New project from the skeleton: `scripts/rename-skeleton.sh <package> <prefix> <ClassPrefix>` then `./gradlew build`; module picking in `docs/minimal-composition.md`.
 - `modules/time` owns viewer time zone/locale resolution, `ZonedMoment` (scheduled local time), human-readable dual formatting, and country → time zone lookup. Three temporal kinds: `Instant` (facts), `LocalDate` (calendar dates, never converted), `ZonedMoment` (future local times). Never use `ZoneId.systemDefault()`, `TIMESTAMP` columns, or bare `LocalDateTime` for instants.
 - Keep provider/vendor integrations out of `platform`.
@@ -143,10 +147,10 @@ modules/persistence-jdbc/src/main/kotlin/dev/sumin/skeleton/persistence/jdbc/
   - 생성/비동기/204 명세는 `@CreatedOperation`, `@AcceptedOperation`, `@NoContentOperation` 으로 표준화한다.
   - 중복 실행 방지가 필요한 command endpoint 는 `@IdempotentOperation` 을 붙인다. OpenAPI 에 required `Idempotency-Key` header 와 `409` 응답이 자동 추가된다.
   - 엔드포인트 의미 설명이 필요할 때만 `@Operation`, 필드 의미가 필요할 때만 `@Schema` 를 추가한다.
-- **스키마 변경**: `apps/api/src/main/resources/db/migration/V{n}__{desc}.sql` — Flyway 마이그레이션만
+- **스키마 변경**: `./gradlew newMigration -Pname=<snake_case>` → `apps/api/src/main/resources/db/migration/postgresql/V<UTC 14자리>__<name>.sql`. 공유 환경에 나간 파일은 고치지 않는다 (docs/schema-management.md)
 - **시간/DB timestamp**:
-  - 일반 timestamp 는 Kotlin `Instant`, DB `DATETIME(6)` UTC, API ISO-8601 `...Z` 를 표준으로 한다.
-  - `TimeProvider` 는 기본 auto-configuration 으로 제공되며 MySQL `DATETIME(6)` 에 맞게 microsecond precision 으로 truncate 한다.
+  - 일반 timestamp 는 Kotlin `Instant`, DB PG `timestamptz` (MySQL `datetime(6)` UTC), API ISO-8601 `...Z` 를 표준으로 한다. JdbcClient 시각 파라미터는 `SqlDialect.instantParam` / `readInstant` 로만.
+  - `TimeProvider` 는 기본 auto-configuration 으로 제공되며 DB 마이크로초(PG `timestamptz`, MySQL `datetime(6)`)에 맞게 microsecond precision 으로 truncate 한다.
   - 공통 계약은 `BaseAuditTimestamps`; JPA/JDBC 구현체 이름은 각 모듈 안에서 `AuditTimestamps` 로 둔다.
   - JPA 앱은 `modules/persistence-jpa` 의 `AuditTimestamps` 또는 `BaseJpaEntity` 를 사용한다.
   - JDBC 앱은 `modules/persistence-jdbc` 의 `AuditTimestamps` 와 `JdbcAuditable` 을 사용한다.
@@ -219,7 +223,7 @@ modules/persistence-jdbc/src/main/kotlin/dev/sumin/skeleton/persistence/jdbc/
 ## 작업 원칙
 
 - **Kotlin idiomatic**: data class, scope function (`let`/`apply`/`also`), null 안전성 활용
-- **테스트**: Testcontainers로 실 MySQL 띄워 Flyway 마이그레이션 포함 검증
+- **테스트**: Testcontainers로 실 PostgreSQL(`postgres:18`) 띄워 Flyway 마이그레이션 포함 검증. 방언을 타는 모듈은 MySQL 묶음도 돈다
 - **새 기능 추가 시**:
   1. `apps/api` 에 컨트롤러 + DTO
   2. 앱 고유 비즈니스 로직은 `apps/api` 안의 `domain/` 패키지에 둔다 (필요 시)
@@ -230,7 +234,7 @@ modules/persistence-jdbc/src/main/kotlin/dev/sumin/skeleton/persistence/jdbc/
   7. 인증 계약과 로그인 흐름은 `modules/auth` 에 둔다
   8. 외부 API 연동은 `ExternalHttpClient` 기반으로 만들고, provider/vendor 별 mapper/customizer 만 추가한다
   9. 기능 모듈이 endpoint/route 를 자동 등록하면 같은 모듈의 `openapi/` 에 명세 기여도 같이 둔다
-  10. DB 스키마 바뀌면 `apps/api/src/main/resources/db/migration/V{n}__.sql`
+  10. DB 스키마 바뀌면 `./gradlew newMigration -Pname=<snake_case>` (→ `db/migration/postgresql/V<UTC 14자리>__<name>.sql`)
   11. entity audit 이 필요하면 선택한 persistence 모듈의 `AuditTimestamps` 를 사용하고, core/platform 에 JPA/JDBC annotation 을 직접 추가하지 않는다.
 
 ## 변경 이력

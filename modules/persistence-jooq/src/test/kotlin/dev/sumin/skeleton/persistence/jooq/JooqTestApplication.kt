@@ -4,7 +4,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection
 import org.springframework.context.annotation.Bean
-import org.testcontainers.mysql.MySQLContainer
+import org.testcontainers.postgresql.PostgreSQLContainer
 import org.testcontainers.utility.DockerImageName
 
 @SpringBootApplication
@@ -14,5 +14,5 @@ class JooqTestApplication
 class JooqTestcontainers {
     @Bean
     @ServiceConnection
-    fun mysql(): MySQLContainer = MySQLContainer(DockerImageName.parse("mysql:8.4"))
+    fun db(): PostgreSQLContainer = PostgreSQLContainer(DockerImageName.parse("postgres:18"))
 }

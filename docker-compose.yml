@@ -1,6 +1,19 @@
 services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: app
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: dev
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql
+
+  # db-mysql 모듈로 조립한 앱용: --profile mysql
   mysql:
     image: mysql:8.4
+    profiles: [mysql]
     environment:
       MYSQL_ROOT_PASSWORD: dev-root
       MYSQL_DATABASE: app
@@ -14,13 +27,14 @@ services:
   app:
     build: .
     depends_on:
-      - mysql
+      - postgres
     environment:
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/app
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/app
       SPRING_DATASOURCE_USERNAME: app
       SPRING_DATASOURCE_PASSWORD: dev
     ports:
       - "8080:8080"
 
 volumes:
+  postgres-data:
   mysql-data:

@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/app?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true}
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/app}
     username: ${SPRING_DATASOURCE_USERNAME:app}
     password: ${SPRING_DATASOURCE_PASSWORD:dev}
   flyway:
@@ -10,6 +10,8 @@ server:
   port: ${SERVER_PORT:8080}
 
 skeleton:
+  migration:
+    clean-on-validation-error: true   # 로컬 전용: 고친 미배포 마이그레이션은 DB 를 밀고 다시 깐다 (local 밖에서 켜면 기동 실패)
   config:
     aws:
       ssm:

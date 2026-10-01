@@ -12,7 +12,7 @@ import org.springframework.context.annotation.Bean
 /**
  * `modules:persistence-jooq` 진입점. Boot 의 jOOQ 자동설정(DSLContext) 위에
  * - audit 리스너(created_at/updated_at 자동)
- * 를 [DefaultConfigurationCustomizer] 로 얹는다. UTC 세션은 [JooqTimeZoneEnvironmentPostProcessor].
+ * 를 [DefaultConfigurationCustomizer] 로 얹는다. 시각 바인딩은 방언 모듈(db-postgresql / db-mysql)과 코드 생성 forcedType.
  */
 @AutoConfiguration
 @ConditionalOnClass(name = ["org.jooq.DSLContext"])

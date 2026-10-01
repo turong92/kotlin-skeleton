@@ -30,7 +30,11 @@ modules/
   payment-toss        # optional Toss payment provider
   payment-stripe      # optional Stripe payment provider
   persistence-jpa      # optional JPA audit timestamp support
-  persistence-jdbc     # optional Spring Data JDBC audit timestamp support (+ UTC-safe time types)
+  persistence-jdbc     # optional Spring Data JDBC audit timestamp support + SqlDialect strategy
+  db-postgresql        # dialect module (default): driver, Flyway support, SqlDialect, time conversions
+  db-mysql             # dialect module (alternative) — an app assembles exactly one db-* module
+  migration            # common: skeleton.migration, guard against DB-wiping settings outside allowed profiles
+  migration-flyway     # Flyway implementation: opt-in local clean, V<UTC 14 digits> naming check (no Flyway defaults changed)
   persistence-jooq     # optional jOOQ with DDL-file code generation (no DB at build), UTC Instant converter, audit listener
   redis-core          # optional Redis connection, templates, key prefixing
   redis-lock          # optional Redis-backed distributed locks
@@ -40,7 +44,7 @@ modules/
   time                # optional global-time capability: viewer zone/locale, ZonedMoment, dual formatting, country -> zone
   storage             # optional storage contracts and file validation
   storage-s3          # optional S3/R2 storage adapter (presigned + server-side put, cache headers, batch delete)
-  job-queue-jdbc      # optional MySQL-table retry queue (FOR UPDATE SKIP LOCKED, backoff, dead-letter) — no Redis
+  job-queue-jdbc      # optional DB-table retry queue (FOR UPDATE SKIP LOCKED, backoff, dead-letter) — no Redis
   captcha-turnstile   # optional Cloudflare Turnstile token verification
 ```
 
@@ -57,8 +61,8 @@ Use modules as capability choices:
 - `modules/crypto` is included when the app needs recoverable AES-GCM text encryption for persisted or transported secrets. It provides key-id envelopes, URL-safe opaque tokens, and opt-in persistence converters; redaction still handles logs and alerts.
 - `modules/notification` is included when the app needs server-side notification publishing. `modules/notification-sse`, `modules/notification-websocket`, and `modules/notification-slack` add delivery/alert channels.
 - `modules:redis-*`, `modules:storage-*`, `modules:payment-*`, `modules:event-kafka`, and `modules:scheduler` are optional capability bundles. `apps/api` includes them to prove they can coexist, while YAML keeps infrastructure-backed features disabled unless explicitly enabled.
-- `modules/persistence-jpa` and `modules/persistence-jdbc` are optional persistence adapters. Both use the same platform audit-time contract while keeping JPA/JDBC annotations and lifecycle behavior inside the selected persistence module. `persistence-jdbc` also forces the DB session to UTC (Hikari driver properties, no URL parameters needed) and pins `Instant` / `LocalDate` / `LocalDateTime` round-trips so they do not depend on the JVM default time zone. See `docs/time.md`.
-- `modules/persistence-jooq` is the jOOQ alternative: code is generated from a DDL file with `DDLDatabase`, so builds need no database. See `docs/persistence-jooq.md`. Schema without Flyway: `docs/schema-management.md`.
+- `modules/persistence-jpa` and `modules/persistence-jdbc` are optional persistence adapters. Both use the same platform audit-time contract while keeping JPA/JDBC annotations and lifecycle behavior inside the selected persistence module. Instants are bound through `SqlDialect` from the dialect module the app assembles (`db-postgresql` default, `db-mysql` also forces the MySQL session to UTC); see `docs/time.md`.
+- `modules/persistence-jooq` is the jOOQ alternative: code is generated from the Flyway migration folder with `DDLDatabase`, so builds need no database. See `docs/persistence-jooq.md`. Schema without Flyway: `docs/schema-management.md`.
 - `modules/job-queue-jdbc` is included when work must be retried durably without Redis. See `docs/job-queue-jdbc.md`.
 - `modules/notification-mail` (`docs/notification-mail.md`) and `modules/captcha-turnstile` (`docs/captcha-turnstile.md`) are off by default and only appear when their properties are set.
 - HTML pages next to the API: see `apps/api` `api/pages/PagesController.kt` — public endpoints via `PublicEndpointContributor`, HTML error handling via a page-scoped `@ControllerAdvice`; rate limiting is `/api/**` only by default.
@@ -258,7 +262,7 @@ fun createOrder(
 
 `modules/platform` defines the shared time contract:
 
-- `TimeProvider` is auto-configured by default and returns UTC `Instant` values truncated to microsecond precision for MySQL `DATETIME(6)`.
+- `TimeProvider` is auto-configured by default and returns UTC `Instant` values truncated to microsecond precision (PostgreSQL `timestamptz`, MySQL `datetime(6)`).
 - `BaseAuditTimestamps` is the persistence-neutral contract for `createdAt`, `updatedAt`, and optional `deletedAt`.
 - General event timestamps use `Instant`, are stored as UTC, and are serialized as ISO-8601 `...Z` values.
 
@@ -321,8 +325,8 @@ data class OrderEntity(
 
 - Kotlin 2.2 / JDK 21
 - Spring Boot 4.0
-- Spring Data JDBC + Flyway
-- MySQL 8.4
+- Spring Data JDBC + Flyway (UTC timestamp versions, `docs/schema-management.md`)
+- PostgreSQL 18 (default, `modules:db-postgresql`) or MySQL 8.4 (`modules:db-mysql`)
 - Spring MVC server + WebClient outbound client
 - Gradle (Kotlin DSL)
 
@@ -330,7 +334,7 @@ data class OrderEntity(
 
 ```bash
 # 로컬 DB만 띄우기
-docker compose up -d mysql
+docker compose up -d postgres
 
 # 앱 실행 (호스트 JDK 사용)
 ./gradlew bootRun

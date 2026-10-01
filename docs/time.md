@@ -1,19 +1,19 @@
 # Time — three temporal kinds
 
-`modules/time` + `modules/persistence-jdbc`. The rule that prevents most global-service time bugs is to
+`modules/time` + a dialect module (`modules/db-postgresql` or `modules/db-mysql`). The rule that prevents most global-service time bugs is to
 classify every value into one of three kinds and never mix them.
 
-| Kind | Type | DB column | Examples | Convert to viewer zone? |
-|---|---|---|---|---|
-| Something that happened | `Instant` | `DATETIME(6)` (UTC) | `createdAt`, paid at, sent at | yes |
-| Calendar date | `LocalDate` | `DATE` | birthday, anniversary | **never** (March 5 stays March 5 in Brazil) |
-| Scheduled local time | `ZonedMoment(local, zone, at)` | `xxx_local DATETIME(6)`, `xxx_zone VARCHAR(50)`, `xxx_at DATETIME(6)` | deadline, event start | show both event zone and viewer zone |
+| Kind | Type | PostgreSQL column | MySQL column | Examples | Convert to viewer zone? |
+|---|---|---|---|---|---|
+| Something that happened | `Instant` | `timestamptz` | `datetime(6)` (UTC literal) | `createdAt`, paid at, sent at | yes |
+| Calendar date | `LocalDate` | `date` | `date` | birthday, anniversary | **never** (March 5 stays March 5 in Brazil) |
+| Scheduled local time | `ZonedMoment(local, zone, at)` | `xxx_local timestamp`, `xxx_zone varchar(50)`, `xxx_at timestamptz` | `xxx_local datetime(6)`, `xxx_zone varchar(50)`, `xxx_at datetime(6)` | deadline, event start | show both event zone and viewer zone |
 
 Why `ZonedMoment` instead of an `Instant` for future times: if the region changes its DST/offset rules
 (Mexico 2022, Egypt 2023, Kazakhstan 2024) an `Instant` no longer means "21:00 local". `local + zone` is the
 source of truth; `at` is derived for sorting/scheduling and can be recomputed (`recompute()`).
 
-Forbidden: `TIMESTAMP` columns (2038, session conversion), bare `LocalDateTime` for instants,
+Forbidden: MySQL `TIMESTAMP` columns (2038, session conversion), PG `timestamp` (without time zone) for instants, bare `LocalDateTime` for instants,
 `ZoneId.systemDefault()`, `new Date('YYYY-MM-DD')` on the frontend.
 
 ## Viewer zone and locale
@@ -62,13 +62,30 @@ python3 modules/time/scripts/gen-country-zones.py /usr/share/zoneinfo/zone.tab \
 The JDK's own tzdata decides zone rules; zones unknown to the running JDK are skipped with a warning.
 Updating rules means updating the JDK image.
 
-## DB session UTC (persistence-jdbc)
+## Binding instants in SQL (SqlDialect)
 
-`JdbcTimeZoneEnvironmentPostProcessor` sets Hikari `data-source-properties` `connectionTimeZone=UTC` and
-`forceConnectionTimeZoneToSession=true`, so `NOW()` and stored literals are UTC regardless of JVM or DB
-defaults. `UtcInstantConversions` passes `Instant` (as UTC `LocalDateTime`), `LocalDate`, and
-`LocalDateTime` to JDBC as `JdbcValue` literals and interprets `DATETIME` reads as UTC.
-`apps/api` `UtcRoundTripIntegrationTest` runs with the JVM default zone forced to `Asia/Seoul`.
+There is no JDBC type that round-trips an `Instant` correctly on both databases (measured 2026-10-01, JVM
+`Asia/Seoul`, value `2026-03-01T00:30:00Z`):
+
+| Bound as | PostgreSQL `timestamptz` (pgjdbc 42.7) | MySQL `datetime(6)` (Connector/J 9.7) |
+|---|---|---|
+| UTC `OffsetDateTime` | correct | stored as JVM wall clock `09:30` |
+| `Timestamp.from(instant)` | correct | stored as JVM wall clock `09:30` |
+| `Instant` | rejected by the driver | — |
+| UTC `LocalDateTime` | **−9 h** (read in the session zone) | correct (`00:30`) |
+
+So the binding lives in the dialect module the app assembles (`SqlDialect`, `modules/persistence-jdbc`):
+
+- **JdbcClient / NamedParameterJdbcTemplate**: bind `dialect.instantParam(instant)`, read
+  `dialect.readInstant(rs, "column")`. Never bind `Instant`, `Timestamp` or `LocalDateTime` for an instant yourself.
+- **Spring Data JDBC**: nothing to do — `db-postgresql` registers `PostgresTimeConversions`, `db-mysql`
+  registers `MySqlTimeConversions` (if you declare your own `JdbcCustomConversions`, include them).
+- **jOOQ**: generated `*_at` fields are `Instant` (`docs/persistence-jooq.md`).
+- `db-mysql` additionally forces the MySQL session to UTC (`MySqlTimeZoneEnvironmentPostProcessor`:
+  `connectionTimeZone=UTC`, `forceConnectionTimeZoneToSession=true`, `preserveInstants=false`).
+
+`apps/api` `UtcRoundTripIntegrationTest` (PostgreSQL) and the `db-postgresql` / `db-mysql` round-trip tests run
+with the JVM default zone forced to `Asia/Seoul` and assert the UTC value stored in the database.
 
 Frontend counterpart: react-skeleton `src/lib/time` (`formatInstant`, `formatDate`, `formatDual`,
 `toZonedMoment`, `createServerClock`, `defaultZoneOf`).

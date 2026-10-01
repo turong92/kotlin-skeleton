@@ -18,7 +18,7 @@ import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
 
 /**
- * DB 없이 생성한 코드(DDLDatabase) 로 실제 MySQL(Testcontainers) 에 읽고 쓴다.
+ * DB 없이 생성한 코드(DDLDatabase) 로 실제 PostgreSQL(Testcontainers) 에 읽고 쓴다.
  * - *_at 컬럼은 Instant 로 생성됐고 JVM 이 서울이어도 UTC 리터럴로 왕복
  * - created_at/updated_at 은 리스너가 채움
  */
@@ -51,9 +51,11 @@ class JooqIntegrationTest {
         assertEquals(NOW, loaded.createdAt)
         assertEquals(NOW, loaded.updatedAt)
 
-        val raw = dsl.fetchValue("select concat(happened_at, '|', local_wall, '|', created_at) from jooq_probe where id = ?", record.id) as String
-        assertEquals("2026-03-01 12:00:00.123456|2026-10-05 21:00:00.000000|2026-09-10 00:00:00.000000", raw)
-        assertEquals("+00:00", dsl.fetchValue("select @@session.time_zone") as String)
+        val raw = dsl.fetchValue(
+            "select (happened_at at time zone 'UTC')::text || '|' || local_wall::text || '|' || (created_at at time zone 'UTC')::text from jooq_probe where id = ?",
+            record.id,
+        ) as String
+        assertEquals("2026-03-01 12:00:00.123456|2026-10-05 21:00:00|2026-09-10 00:00:00", raw)
     }
 
     companion object {

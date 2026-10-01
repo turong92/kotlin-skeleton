@@ -7,18 +7,16 @@ import dev.sumin.skeleton.notification.NotificationInboxQuery
 import dev.sumin.skeleton.notification.NotificationInboxRecord
 import dev.sumin.skeleton.notification.NotificationInboxRepository
 import dev.sumin.skeleton.notification.NotificationSeverity
+import dev.sumin.skeleton.persistence.jdbc.SqlDialect
 import java.sql.ResultSet
-import java.sql.Timestamp
 import java.time.Instant
-import java.time.LocalDateTime
-import java.time.ZoneOffset
-import org.springframework.dao.DuplicateKeyException
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
 
 class JdbcNotificationInboxRepository(
     private val jdbc: NamedParameterJdbcTemplate,
     private val jsonCodec: JsonCodec,
+    private val dialect: SqlDialect,
 ) : NotificationInboxRepository {
     override fun save(
         event: NotificationEvent,
@@ -76,7 +74,7 @@ class JdbcNotificationInboxRepository(
             MapSqlParameterSource()
                 .addValue("recipientId", recipientId.trim())
                 .addValue("eventId", eventId.trim())
-                .addValue("readAt", readAt.toTimestamp()),
+                .addValue("readAt", dialect.instantParam(readAt)),
         )
         return findOne(recipientId.trim(), eventId.trim())
     }
@@ -95,63 +93,27 @@ class JdbcNotificationInboxRepository(
             """.trimIndent(),
             MapSqlParameterSource()
                 .addValue("recipientId", recipientId.trim())
-                .addValue("readAt", readAt.toTimestamp()),
+                .addValue("readAt", dialect.instantParam(readAt)),
         )
 
-    private fun insertIfAbsent(
-        event: NotificationEvent,
-        recipientId: String,
-    ) {
+    private fun insertIfAbsent(event: NotificationEvent, recipientId: String) {
         val now = Instant.now()
-        runCatching {
-            jdbc.update(
-                """
-                insert into skeleton_notification_inbox (
-                    recipient_id,
-                    event_id,
-                    topic,
-                    type,
-                    severity,
-                    title,
-                    message,
-                    payload_json,
-                    recipient_ids_json,
-                    event_created_at,
-                    read_at,
-                    created_at,
-                    updated_at
-                ) values (
-                    :recipientId,
-                    :eventId,
-                    :topic,
-                    :type,
-                    :severity,
-                    :title,
-                    :message,
-                    :payloadJson,
-                    :recipientIdsJson,
-                    :eventCreatedAt,
-                    null,
-                    :now,
-                    :now
-                )
-                """.trimIndent(),
-                MapSqlParameterSource()
-                    .addValue("recipientId", recipientId)
-                    .addValue("eventId", event.id)
-                    .addValue("topic", event.topic)
-                    .addValue("type", event.type)
-                    .addValue("severity", event.severity.name)
-                    .addValue("title", event.title)
-                    .addValue("message", event.message)
-                    .addValue("payloadJson", jsonCodec.canonicalString(jsonCodec.toDocument(event.payload)))
-                    .addValue("recipientIdsJson", jsonCodec.canonicalString(jsonCodec.toDocument(event.recipientIds)))
-                    .addValue("eventCreatedAt", event.createdAt.toTimestamp())
-                    .addValue("now", now.toTimestamp()),
-            )
-        }.onFailure { error ->
-            if (error !is DuplicateKeyException) throw error
-        }
+        jdbc.update(
+            dialect.insertIgnore(TABLE, INSERT_COLUMNS, listOf("recipient_id", "event_id")),
+            MapSqlParameterSource()
+                .addValue("recipient_id", recipientId)
+                .addValue("event_id", event.id)
+                .addValue("topic", event.topic)
+                .addValue("type", event.type)
+                .addValue("severity", event.severity.name)
+                .addValue("title", event.title)
+                .addValue("message", event.message)
+                .addValue("payload_json", jsonCodec.canonicalString(jsonCodec.toDocument(event.payload)))
+                .addValue("recipient_ids_json", jsonCodec.canonicalString(jsonCodec.toDocument(event.recipientIds)))
+                .addValue("event_created_at", dialect.instantParam(event.createdAt))
+                .addValue("created_at", dialect.instantParam(now))
+                .addValue("updated_at", dialect.instantParam(now)),
+        )
     }
 
     private fun findOne(
@@ -192,12 +154,12 @@ class JdbcNotificationInboxRepository(
             title = getString("title"),
             message = getString("message"),
             payload = readPayload(getString("payload_json")),
-            createdAt = getUtcInstant("event_created_at")!!,
+            createdAt = dialect.readInstant(this, "event_created_at")!!,
         )
         return NotificationInboxRecord(
             recipientId = getString("recipient_id"),
             event = event,
-            readAt = getUtcInstant("read_at"),
+            readAt = dialect.readInstant(this, "read_at"),
         )
     }
 
@@ -212,10 +174,13 @@ class JdbcNotificationInboxRepository(
                 value?.toString()?.trim()?.takeIf { it.isNotBlank() }
             }
 
-    /** DATETIME 리터럴 = UTC 벽시계 (persistence-jdbc 규약). JVM 기본 시간대와 무관 */
-    private fun Instant.toTimestamp(): Timestamp =
-        Timestamp.valueOf(LocalDateTime.ofInstant(this, ZoneOffset.UTC))
+    private companion object {
+        const val TABLE = "skeleton_notification_inbox"
 
-    private fun java.sql.ResultSet.getUtcInstant(column: String): Instant? =
-        getObject(column, LocalDateTime::class.java)?.toInstant(ZoneOffset.UTC)
+        /** read_at 은 빼서 칼럼 기본값(null) — PG 는 타입 없는 null 파라미터를 추론하지 못할 수 있다 */
+        val INSERT_COLUMNS = listOf(
+            "recipient_id", "event_id", "topic", "type", "severity", "title", "message",
+            "payload_json", "recipient_ids_json", "event_created_at", "created_at", "updated_at",
+        )
+    }
 }

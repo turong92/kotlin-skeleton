@@ -7,7 +7,7 @@ import kotlin.test.assertEquals
 
 class BaseAuditTimestampsTest {
     @Test
-    fun `time provider truncates instants to MySQL DATETIME microsecond precision`() {
+    fun `time provider truncates instants to DB microsecond precision (MySQL datetime(6), PG timestamptz)`() {
         val raw = Instant.parse("2026-06-09T01:02:03.123456789Z")
         val provider = TimeProvider.fixed(raw)
 

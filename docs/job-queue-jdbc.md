@@ -1,4 +1,4 @@
-# job-queue-jdbc — MySQL table retry queue (no Redis)
+# job-queue-jdbc — database table retry queue (no Redis)
 
 For retries and state transitions that must survive restarts (translation retries, media processing,
 outbound calls). One table, `FOR UPDATE SKIP LOCKED` claiming, exponential backoff, dead-lettering.
@@ -16,8 +16,10 @@ skeleton:
     stale-lock-timeout: 10m   # RUNNING older than this is returned to PENDING (worker died)
 ```
 
-Schema: `modules/job-queue-jdbc/src/main/resources/db/migration/V2026091001__skeleton_jobs.sql`
-(applied by Flyway automatically; copy into `schema.sql` in the no-Flyway mode).
+Schema: `modules/job-queue-jdbc/src/main/resources/db/migration/<vendor>/V20260910010000__skeleton_jobs.sql`
+(`postgresql` and `mysql`; Flyway picks the right one through `classpath:db/migration/{vendor}`; copy it into
+`schema.sql` in the no-Flyway mode). The app must assemble exactly one dialect module (`modules:db-postgresql`
+or `modules:db-mysql`) — instants are bound through its `SqlDialect`.
 
 ## Enqueue
 
@@ -55,5 +57,5 @@ class TranslateCardHandler(private val json: ObjectMapper) : JobHandler {
 
 Handlers run **outside** the claim transaction so long jobs do not hold row locks.
 
-Tested against MySQL 8.4 (Testcontainers): claim ordering, backoff arithmetic, DEAD transitions,
+Tested against PostgreSQL 18 and MySQL 8.4 (Testcontainers, `postgresTest` / `mysqlTest` suites over the same `src/dbTest` sources): claim ordering, backoff arithmetic, DEAD transitions,
 two workers claiming the same batch without overlap, stale-lock recovery.

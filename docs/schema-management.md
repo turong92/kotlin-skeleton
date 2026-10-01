@@ -1,14 +1,70 @@
 # Schema management — with or without Flyway
 
-`apps/api` ships with Flyway (`spring-boot-starter-flyway` + `flyway-mysql`) and `db/migration/V1__init.sql`.
-Both modes are supported and tested.
+`apps/api` ships with Flyway (`spring-boot-starter-flyway`, the dialect's Flyway support comes from
+`modules:db-postgresql` / `modules:db-mysql`) and `modules:migration-flyway` (on top of the tool-agnostic `modules:migration`: clean guard, opt-in local clean,
+naming check). Both modes below are supported and tested.
 
 ## Mode A — Flyway (default)
 
-Versioned SQL under `src/main/resources/db/migration/V{n}__{desc}.sql`. Module-owned tables ship their own
-migrations inside the module jar (`notification-jdbc`, `job-queue-jdbc`, …) and are picked up because
-Flyway scans `classpath:db/migration` recursively across jars. Modules use date-based versions
-(`V2026091001__…`) so they never collide with app versions `V1…V999`.
+### Where migrations live
+
+```
+src/main/resources/db/migration/<vendor>/V<yyyyMMddHHmmss UTC>__<snake_case>.sql      vendor = postgresql | mysql
+```
+
+`spring.flyway.locations=classpath:db/migration/{vendor}` — set by the app (`apps/api` `application.yml`); required
+because modules ship one folder per database (without it Flyway scans both and fails on the other dialect's SQL). Boot fills `{vendor}` from the connected database, so the app's migrations and
+every module's migrations (`job-queue-jdbc`, `notification-jdbc`, …) merge on one path and the folder for the
+other database is never read. A module that supports both databases ships both folders with the same version
+and name.
+
+### Naming: UTC timestamps, generated
+
+Versions are UTC timestamps to the second — two branches or worktrees adding a migration at the same time no
+longer fight over `V25`. Do not type the timestamp by hand:
+
+```bash
+./gradlew newMigration -Pname=add_artist_country                       # apps/api, every vendor folder it has
+./gradlew newMigration -Pname=add_x -Pmodule=modules/job-queue-jdbc    # both postgresql and mysql, same version
+./gradlew newMigration -Pname=add_x -Pvendor=postgresql
+```
+
+`./gradlew build` fails (`modules:migration-flyway` `RepositoryMigrationsTest`, rules in `MigrationFileRules`)
+when anywhere in the repository — app, modules, test resources:
+
+- a file under `db/migration/` is not in a `<vendor>/` folder, or its name does not match
+  `V<14 digits>__<snake_case>.sql`, or the 14 digits are not a real UTC date-time;
+- two files in the same vendor share a version;
+- a source folder with both vendor folders has a migration in one and not the other.
+
+### outOfOrder — the app's choice (`apps/api` turns it on)
+
+The skeleton modules do not change Flyway's defaults; usage choices like this live in the app's `application.yml`
+as explicit overrides. `apps/api` sets `spring.flyway.out-of-order=true` (all environments) and
+`spring.flyway.validate-migration-naming=true`, and a derived app keeps or drops them. Why `apps/api` turns it on: with timestamps, a
+branch merged late legitimately brings a file whose timestamp is older than migrations already applied in
+dev/stage/prod. Without outOfOrder that file either fails validation or never runs.
+
+The price is one rule: **migrations are independent.** A migration may not rely on another branch's migration
+that has not been applied yet — write it so that it works whichever of the two runs first
+(`add column if not exists`, `create index if not exists`, no reliance on a column another open branch adds).
+
+### Two branches touching the same table
+
+Each branch writes its own independent migration. If they conflict after merging (same column, incompatible
+types), do not edit either file once it has reached a shared environment — add a new migration that reconciles
+them.
+
+### When you may edit a migration
+
+| The migration has been applied to… | Do |
+|---|---|
+| only your local database | Edit it. Run with the `local` profile: `skeleton.migration.clean-on-validation-error=true` (set in `application-local.yml`) wipes the local database when validation fails (checksum mismatch, or an applied file older than the newest local one is missing — e.g. after switching to a branch without it) and re-applies everything. New pending files, and applied files newer than anything local (`*:future`, another branch's work), never trigger the wipe. Assumes the app runs with `out-of-order=true` (as `apps/api` does): with it off, a late-merged older file makes `migrate()` itself fail, and the strategy wipes. |
+| any shared environment (dev, stage, prod) | Never edit. Add a new migration. |
+
+Guard (`modules:migration`, tool-agnostic): `skeleton.migration.clean-on-validation-error=true`, `spring.flyway.clean-disabled=false` or `spring.liquibase.drop-first=true` outside
+`skeleton.migration.clean-allowed-profiles` (default `local`) fails startup before the database is touched.
+No active profile counts as `default`, which is not allowed.
 
 ## Mode B — `schema.sql` only (no migration tool yet)
 
@@ -26,25 +82,24 @@ spring:
 
 Rules for `schema.sql` in this mode:
 
-- Every statement must be idempotent: `create table if not exists …`, `create index` guarded, etc.
+- Every statement must be idempotent: `create table if not exists …`, `create index if not exists …`.
   It runs on every boot.
 - Copy the module migrations you depend on into `schema.sql` verbatim (e.g. `skeleton_jobs` from
-  `modules/job-queue-jdbc/src/main/resources/db/migration/`). Module jars still contain the Flyway
-  file, but nothing runs it in this mode. Their inline `index` clauses sit between
-  `/* [jooq ignore start] */ … /* [jooq ignore stop] */` markers: MySQL and `spring.sql.init` run them
-  as normal SQL, while jOOQ codegen (`docs/persistence-jooq.md`, `parseIgnoreComments=true`) skips them —
-  the same `schema.sql` serves both.
-- You may remove the two flyway dependencies from `apps/api/build.gradle.kts`; leaving them is harmless
-  when `spring.flyway.enabled=false`.
+  `modules/job-queue-jdbc/src/main/resources/db/migration/postgresql/`). Module jars still contain the Flyway
+  file, but nothing runs it in this mode. On MySQL (`db/migration/mysql/`) the inline `index` clauses sit
+  between `/* [jooq ignore start] */ … /* [jooq ignore stop] */` markers so the same file also feeds jOOQ codegen
+  (`docs/persistence-jooq.md`); MySQL 8.4 has no `create index if not exists`.
+- You may remove the flyway dependencies from the app; leaving them is harmless when `spring.flyway.enabled=false`.
 
-Proof: `apps/api` `SchemaSqlInitIntegrationTest` boots with these properties against Testcontainers MySQL
-and verifies the table exists and `flyway_schema_history` does not; a second test copies the `skeleton_jobs`
-migration into that `schema.sql`, checks both indexes were created and re-runs the script to prove it is idempotent.
+Proof: `apps/api` `SchemaSqlInitIntegrationTest` boots with these properties against Testcontainers PostgreSQL
+and verifies the table exists and `flyway_schema_history` does not; a second test checks the copied
+`skeleton_jobs` indexes exist and re-runs the script to prove it is idempotent.
 
 ## Moving from Mode B to Flyway later
 
-1. Take the current `schema.sql` verbatim as `db/migration/V1__init.sql`.
-2. Set `spring.flyway.enabled=true`, `spring.flyway.baseline-on-migrate=true`, `baseline-version=1`
-   (existing databases are marked as already at V1; empty databases run V1).
+1. `./gradlew newMigration -Pname=init` and paste the current `schema.sql` into it.
+2. Set `spring.flyway.enabled=true`, `spring.flyway.baseline-on-migrate=true` and
+   `spring.flyway.baseline-version=<that file's 14-digit version>` (existing databases are marked as already
+   at that version; empty databases run it).
 3. Remove `spring.sql.init.mode` and delete `schema.sql`.
-4. From now on every change is a new `V{n}__…sql`; never edit applied files.
+4. From now on every change is a new file from `newMigration`; never edit applied files.

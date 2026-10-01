@@ -7,7 +7,8 @@
 # 바꾸는 것
 #   dev.sumin.skeleton   → <root-package>        (Kotlin 패키지, 디렉토리, AutoConfiguration.imports, spring.factories, persistence.xml, 문서)
 #   dev/sumin/skeleton   → <root-package 경로>   (리소스 경로 문자열, 스크립트의 파일 경로)
-#   skeleton.<key>       → <config-prefix>.<key>  (application*.yml, @ConfigurationProperties, 로거 이름 skeleton.debug.*)
+#   skeleton.<key>       → <config-prefix>.<key>  (application*.yml, @ConfigurationProperties, 로거 이름 skeleton.debug.*,
+#                                                  Gradle -Pskeleton.<key> — 'P' 뒤라 단어 경계가 없어 따로 잡는다)
 #   skeleton:            → <config-prefix>:       (YAML 계층 표기의 루트 키 — 점 표기와 달리 빌드로는 안 잡히고 설정이 조용히 무시된다)
 #   SKELETON_<ENV>       → <CONFIG_PREFIX>_<ENV>  (yml 의 환경변수 자리표시자, .env.example)
 #   Skeleton<Name>       → <ClassPrefix><Name>    (클래스·파일 이름)
@@ -54,6 +55,7 @@ files | while read -r f; do
     ${kotlin_rule}
     s/^(\\s*)skeleton:(\\s*)\$/\${1}${PREFIX}:\${2}/;
     s/\\bskeleton\\.(?=[a-z])/${PREFIX}./g;
+    s/-Pskeleton\\./-P${PREFIX}./g;
     s/\\bskeleton-(?=[a-z])/${PREFIX}-/g;
     s/Composable Kotlin backend skeleton API/${CLASS} API/g;
     s/\\bSkeleton(?=[A-Z])/${CLASS}/g;
@@ -85,7 +87,7 @@ done
 leftovers="$(files | xargs perl -ne '
   next if /skeleton_jobs|\/skeleton\//;                       # 의도적으로 남기는 것
   next if $ARGV =~ /\.md$/ && /kotlin-skeleton/;               # 문서 제목
-  print "$ARGV:$.: $_" if /dev\.sumin\.skeleton|dev\/sumin\/skeleton|\bSKELETON_|^\s*skeleton:\s*$|\bskeleton\.[a-z]|\bskeleton-[a-z]|\bSkeleton[A-Z]|\bskeleton[A-Z]|\bkotlin-skeleton\b/;
+  print "$ARGV:$.: $_" if /dev\.sumin\.skeleton|dev\/sumin\/skeleton|\bSKELETON_|^\s*skeleton:\s*$|\bskeleton\.[a-z]|-Pskeleton\.|\bskeleton-[a-z]|\bSkeleton[A-Z]|\bskeleton[A-Z]|\bkotlin-skeleton\b/;
   close ARGV if eof;
 ' || true)"
 if [ -n "$leftovers" ]; then

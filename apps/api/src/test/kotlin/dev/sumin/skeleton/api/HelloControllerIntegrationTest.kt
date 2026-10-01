@@ -25,7 +25,7 @@ import kotlin.test.assertTrue
 /**
  * `/api/v1/hello` 통합 테스트.
  *
- * - Testcontainers 가 실제 MySQL 컨테이너 띄움 (Flyway 마이그레이션 포함 검증)
+ * - Testcontainers 가 실제 PostgreSQL 컨테이너 띄움 (Flyway 마이그레이션 포함 검증)
  * - MockMvc 로 HTTP 레이어까지 왕복
  * - traceId 전파 검증: W3C traceparent 헤더를 보내면 traceId 를 승계하는지
  *

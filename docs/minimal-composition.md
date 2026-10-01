@@ -12,16 +12,18 @@ Everything depends on `platform`. Everything else is optional. A typical small s
 dependencies {
     implementation(project(":modules:platform"))
     implementation(project(":modules:auth"))              // JWT, dev-login, break-glass
-    implementation(project(":modules:persistence-jdbc"))  // audit timestamps + UTC-safe time types
+    implementation(project(":modules:db-postgresql"))     // exactly one db-* module: driver, Flyway support, SqlDialect
+    implementation(project(":modules:migration-flyway"))  // + common migration: clean guard, opt-in local clean, naming check
+    implementation(project(":modules:persistence-jdbc"))  // audit timestamps
     implementation(project(":modules:time"))              // viewer zone/locale, ZonedMoment
-    implementation(project(":modules:job-queue-jdbc"))    // MySQL retry queue (no Redis)
+    implementation(project(":modules:job-queue-jdbc"))    // DB retry queue (no Redis)
     implementation(project(":modules:storage-s3"))        // R2 / S3
     implementation(project(":modules:scheduler"))         // annotation-driven jobs (Noop lock by default)
 
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-data-jdbc")
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
-    runtimeOnly("com.mysql:mysql-connector-j")
+    implementation("org.springframework.boot:spring-boot-starter-flyway")
 }
 ```
 
@@ -49,6 +51,7 @@ configured to require keys, so keep the file honest.
 | `crypto` | `skeleton.crypto` |
 | `event-kafka` | `skeleton.event-kafka` |
 | `job-queue-jdbc` | `skeleton.job-queue` |
+| `migration` (+ `migration-flyway`) | `skeleton.migration` |
 | `notification-mail` | `skeleton.notification-mail` |
 | `notification-slack` | `skeleton.notification.slack` |
 | `notification-sse` | `skeleton.notification.sse` |
@@ -77,7 +80,7 @@ configured to require keys, so keep the file honest.
 | Rate limit (`skeleton.web.rate-limit`) | `InMemoryFixedWindowRateLimitStore` (per instance) | `redis-rate-limit` |
 | Idempotency | `InMemoryIdempotencyStore` (per instance) | (Redis store: bring your own `IdempotencyStore`) |
 | Scheduler lock | `NoopSkeletonScheduledLockManager` — runs locally, fine for a single instance | `redis-lock` |
-| Retry queue | `job-queue-jdbc` — MySQL `FOR UPDATE SKIP LOCKED`, safe with several instances | — |
+| Retry queue | `job-queue-jdbc` — `FOR UPDATE SKIP LOCKED` (PostgreSQL / MySQL), safe with several instances | — |
 | Notifications | in-memory broker | `notification-jdbc`, `-sse`, `-websocket`, `-slack`, `-mail` |
 | Events | `event-kafka` off unless enabled | — |
 
