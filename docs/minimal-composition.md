@@ -1,43 +1,73 @@
 # Minimal composition — picking a few modules
 
-`apps/api` deliberately includes **every** module to prove they coexist, so its `application.yml` carries
-settings for all of them. A real service keeps only what it needs. This page is the recipe.
+Two apps ship with the skeleton:
 
-## 1. Pick modules
+| App | What it is | Modules |
+|---|---|---|
+| `apps/api` | the **starter** — the minimal recipe below, built and booted by its own tests | `platform`, `auth`, `persistence-jdbc`, `db-postgresql`, `migration-flyway`, `time` |
+| `apps/workbench` | the **demo** — every module together, with sample endpoints under `/api/v1/skeleton/**` | all of them |
 
-Everything depends on `platform`. Everything else is optional. A typical small service:
+A real service starts from `apps/api` and keeps only what it needs. This page is the recipe.
+
+## 1. Start from the starter, add a module = one dependency line
+
+`apps/api/build.gradle.kts` is the recipe:
 
 ```kotlin
 // apps/<app>/build.gradle.kts
 dependencies {
     implementation(project(":modules:platform"))
     implementation(project(":modules:auth"))              // JWT, dev-login, break-glass
+    implementation(project(":modules:persistence-jdbc"))  // audit timestamps, SqlDialect
     implementation(project(":modules:db-postgresql"))     // exactly one db-* module: driver, Flyway support, SqlDialect
     implementation(project(":modules:migration-flyway"))  // + common migration: clean guard, opt-in local clean, naming check
-    implementation(project(":modules:persistence-jdbc"))  // audit timestamps
     implementation(project(":modules:time"))              // viewer zone/locale, ZonedMoment
-    implementation(project(":modules:job-queue-jdbc"))    // DB retry queue (no Redis)
-    implementation(project(":modules:storage-s3"))        // R2 / S3
-    implementation(project(":modules:scheduler"))         // annotation-driven jobs (Noop lock by default)
 
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-data-jdbc")
-    implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("org.springframework.boot:spring-boot-starter-flyway")
+    implementation("org.springframework.boot:spring-boot-starter-webmvc")
 }
 ```
 
-Keep only those lines in `settings.gradle.kts` `include(...)` as well; delete the module directories you
-do not include (or leave them — unincluded directories are ignored by Gradle).
+Need more? Add the line, and a yml block only if you want to change something (modules ship their defaults):
 
-Your app may live in any package (`dev.sumin.app1`, `com.acme.shop`): modules register their own controllers,
-filters and advice through `AutoConfiguration.imports`, never through your component scan. `apps/api`
-`ModuleSelfRegistrationIntegrationTest` boots the modules under a root configuration that scans nothing to keep it
-that way.
+```kotlin
+    implementation(project(":modules:job-queue-jdbc"))    // DB retry queue (no Redis)
+    implementation(project(":modules:storage-s3"))        // R2 / S3 — brings :modules:storage along (api dependency)
+    implementation(project(":modules:scheduler"))         // annotation-driven jobs (Noop lock by default)
+    implementation(project(":modules:notification-sse"))  // brings :modules:notification along
+```
+
+```yaml
+skeleton:
+  storage-s3:
+    enabled: true
+    bucket: my-bucket
+```
+
+Adapter modules expose the contract they implement with `api(project(...))`, so one line is enough:
+`payment-toss`/`payment-stripe` → `payment`, `notification-jdbc`/`-sse`/`-slack`/`-websocket` → `notification`,
+`storage-s3` → `storage`, `auth-social` → `auth`, `auth-social-google`/`-kakao`/`-naver` → `auth-social`,
+`redis-lock`/`-cache`/`-rate-limit` → `redis-core`. You never edit a module to compose it.
+
+Keep only the modules you use in `settings.gradle.kts` `include(...)` as well; delete the module directories you
+do not include (or leave them — unincluded directories are ignored by Gradle). `apps/workbench` can be deleted once
+you no longer need it (the React skeleton's workbench UI is its only client).
+
+**Your app lives in a sub-package of the root** (`dev.sumin.skeleton.app.api`, after the rename `dev.sumin.ovation.app.api`)
+so `@SpringBootApplication` scans only your code. Modules are never component-scanned: each registers its
+controllers, filters and advice through its `AutoConfiguration` (`META-INF/spring/…AutoConfiguration.imports`), and a
+module switched off by `skeleton.<module>.enabled=false` leaves no stray bean behind. Two tests keep it that way:
+`modules/platform` `ModuleRegistrationRulesTest` (no `@Component`/`@Configuration` on module `main` classes; MVC handler
+markers only when an autoconfiguration `@Bean` registers the class) and `apps/workbench` `ModuleDisabledIntegrationTest`.
+
+What the starter proves: `apps/api` tests boot the context with only these modules — no Redis, Kafka, S3, mail or JPA on
+the classpath — serve `GET /api/v1/hello`, log in with the seed user and return the standard 404 `ApiError`.
 
 ## 2. Delete the settings of modules you dropped
 
-Each module owns exactly one configuration prefix. Remove the matching block from `application*.yml`.
+The starter's yml carries no module blocks. If you started from `apps/workbench` instead, each module owns exactly one configuration prefix: remove the matching block from `application*.yml`.
 Unknown `skeleton.*` keys are ignored by Spring Boot, but `skeleton.config.validation` (platform) can be
 configured to require keys, so keep the file honest.
 

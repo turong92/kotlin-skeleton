@@ -11,7 +11,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean
-import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.Import
 import org.springframework.messaging.simp.SimpMessagingTemplate
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler
@@ -84,7 +83,7 @@ class NotificationWebSocketAutoConfiguration {
         )
 }
 
-@Configuration(proxyBeanMethods = false)
+// @Configuration 이 아니다: 위 AutoConfiguration 의 @Import 로만 들어온다 (스캔 대상 스테레오타입 금지)
 @EnableWebSocketMessageBroker
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 @ConditionalOnProperty(

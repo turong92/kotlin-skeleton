@@ -84,7 +84,7 @@ So the binding lives in the dialect module the app assembles (`SqlDialect`, `mod
 - `db-mysql` additionally forces the MySQL session to UTC (`MySqlTimeZoneEnvironmentPostProcessor`:
   `connectionTimeZone=UTC`, `forceConnectionTimeZoneToSession=true`, `preserveInstants=false`).
 
-`apps/api` `UtcRoundTripIntegrationTest` (PostgreSQL) and the `db-postgresql` / `db-mysql` round-trip tests run
+`apps/workbench` `UtcRoundTripIntegrationTest` (PostgreSQL) and the `db-postgresql` / `db-mysql` round-trip tests run
 with the JVM default zone forced to `Asia/Seoul` and assert the UTC value stored in the database.
 
 Frontend counterpart: react-skeleton `src/lib/time` (`formatInstant`, `formatDate`, `formatDual`,

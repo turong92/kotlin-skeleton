@@ -12,7 +12,7 @@ The skeleton standard profiles are:
 Run local without SSM:
 
 ```bash
-SPRING_PROFILES_ACTIVE=local ./gradlew :apps:api:bootRun
+SPRING_PROFILES_ACTIVE=local ./gradlew :apps:workbench:bootRun
 ```
 
 Run with `.env.local`:
@@ -22,7 +22,7 @@ cp .env.example .env.local
 set -a
 source .env.local
 set +a
-./gradlew :apps:api:bootRun
+./gradlew :apps:workbench:bootRun
 ```
 
 `.env.local` is ignored by git. Spring Boot does not load `.env.local` by file
@@ -35,7 +35,7 @@ Run dev locally with explicit values:
 SPRING_PROFILES_ACTIVE=dev \
 JWT_SECRET=dev-test-secret-change-me-32-bytes \
 SPRING_DATASOURCE_PASSWORD=dev-db-password \
-./gradlew :apps:api:bootRun
+./gradlew :apps:workbench:bootRun
 ```
 
 Run prod locally for reproduction:
@@ -46,7 +46,7 @@ JWT_SECRET=prod-secret-from-secure-source \
 SPRING_DATASOURCE_URL=jdbc:mysql://prod-db:3306/app?connectionTimeZone=UTC\&forceConnectionTimeZoneToSession=true \
 SPRING_DATASOURCE_USERNAME=app \
 SPRING_DATASOURCE_PASSWORD=prod-password-from-secure-source \
-./gradlew :apps:api:bootRun
+./gradlew :apps:workbench:bootRun
 ```
 
 Real production values should come from the runtime environment or an external

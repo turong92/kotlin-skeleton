@@ -6,7 +6,6 @@ import jakarta.servlet.http.HttpServletResponse
 import org.slf4j.MDC
 import org.springframework.core.Ordered
 import org.springframework.core.annotation.Order
-import org.springframework.stereotype.Component
 import org.springframework.web.filter.OncePerRequestFilter
 import java.util.UUID
 
@@ -19,7 +18,6 @@ import java.util.UUID
  * - 응답 헤더 `traceparent`, `X-Trace-Id`, `X-Span-Id`로 현재 서버 span 반환
  * - 다운스트림 처리(컨트롤러, [GlobalExceptionHandler], [RequestLoggingFilter])가 MDC를 참조
  */
-@Component
 @Order(Ordered.HIGHEST_PRECEDENCE)
 class TraceIdFilter : OncePerRequestFilter() {
     override fun doFilterInternal(

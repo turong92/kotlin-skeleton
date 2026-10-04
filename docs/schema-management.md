@@ -130,7 +130,7 @@ Rules for `schema.sql` in this mode:
   (`docs/persistence-jooq.md`); MySQL 8.4 has no `create index if not exists`.
 - You may remove the flyway dependencies from the app; leaving them is harmless when `spring.flyway.enabled=false`.
 
-Proof: `apps/api` `SchemaSqlInitIntegrationTest` boots with these properties against Testcontainers PostgreSQL
+Proof: `apps/workbench` `SchemaSqlInitIntegrationTest` boots with these properties against Testcontainers PostgreSQL
 and verifies the table exists and `flyway_schema_history` does not; a second test checks the copied
 `skeleton_jobs` indexes exist and re-runs the script to prove it is idempotent.
 

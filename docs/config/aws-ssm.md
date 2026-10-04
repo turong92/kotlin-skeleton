@@ -44,7 +44,7 @@ Local dev SSM run:
 aws sso login --profile skeleton-dev
 AWS_PROFILE=skeleton-dev \
 SPRING_PROFILES_ACTIVE=local \
-./gradlew :apps:api:bootRun
+./gradlew :apps:workbench:bootRun
 ```
 
 Local dev-profile reproduction:
@@ -53,7 +53,7 @@ Local dev-profile reproduction:
 aws sso login --profile skeleton-dev
 AWS_PROFILE=skeleton-dev \
 SPRING_PROFILES_ACTIVE=dev \
-./gradlew :apps:api:bootRun
+./gradlew :apps:workbench:bootRun
 ```
 
 Local prod reproduction:
@@ -62,7 +62,7 @@ Local prod reproduction:
 aws sso login --profile skeleton-prod-readonly
 AWS_PROFILE=skeleton-prod-readonly \
 SPRING_PROFILES_ACTIVE=prod \
-./gradlew :apps:api:bootRun
+./gradlew :apps:workbench:bootRun
 ```
 
 When SSM is enabled and credentials are missing, startup should fail with an

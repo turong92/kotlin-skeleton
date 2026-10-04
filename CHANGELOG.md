@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 이식 안내 — 스타터 / 워크벤치 분리 + 모듈은 스캔되지 않는다 (2026-10-05)
+
+하위 앱(rename-skeleton 으로 찍은 레포)이 위에서 아래로 따라 하면 된다. 경로 · 패키지는 스켈레톤 기준 — 하위 앱은 자기 접두사로 읽는다.
+
+**0. 무엇이 바뀌었나.** `apps/api` 는 이제 **스타터**(최소 조립, 모듈 7개)이고, 이전 `apps/api` 전체(모든 모듈 + 샘플 컨트롤러 + 통합 테스트)는 `apps/workbench` 로 갔다.
+앱은 루트의 하위 패키지(`…app.api`, `…app.workbench`)로 옮겨 `@SpringBootApplication` 이 모듈 패키지를 스캔하지 않는다. 모듈은 빈을 AutoConfiguration 으로만 등록한다.
+REST 경로 · 응답 모양은 그대로다 (`/api/v1/skeleton/**` — react-skeleton 워크벤치 UI 계약).
+
+**1. 앱 패키지를 루트 하위로.** `@SpringBootApplication` 클래스와 앱 코드를 `dev.sumin.skeleton.app.<앱>` (rename 후 `<root>.app.<앱>`) 아래로 옮긴다.
+루트 패키지에 두면 앱이 모듈 패키지까지 스캔한다. 하위 앱 중 `apps/api` 를 그대로 쓰는 쪽은 클래스 이동만 하면 되고, 모듈 쪽 수정은 없다.
+
+```
+dev/sumin/skeleton/KotlinSkeletonApplication.kt  →  dev/sumin/skeleton/app/api/ApiApplication.kt   (이름은 자유)
+dev/sumin/skeleton/api/*                         →  dev/sumin/skeleton/app/api/*
+src/test/.../dev/sumin/skeleton/**                →  src/test/.../dev/sumin/skeleton/app/api/**      (@SpringBootTest 는 테스트 패키지에서 위로 올라가며 @SpringBootApplication 을 찾는다)
+```
+
+**2. 스타터와 워크벤치 중 무엇을 따를지.** 기능이 몇 개인 서비스는 `apps/api` 를 출발점으로 두고 필요한 모듈을 한 줄씩 얹는다 (`docs/minimal-composition.md`).
+모든 모듈을 계속 얹는 앱(데모)은 이전 `apps/api` 가 `apps/workbench` 로 옮겨졌으니 이름만 바꾼다. `settings.gradle.kts` 에 `include(":apps:workbench")`, Dockerfile · `docker-compose.yml` 은 계속 `:apps:api` (스타터)를 빌드한다.
+`./gradlew newMigration` 의 기본 모듈은 계속 `apps/api`.
+
+**3. 모듈 쪽에서 바뀐 것 (복사해 갱신하는 디렉토리 단위).**
+
+| 모듈 | 변경 |
+|---|---|
+| `platform` | `TraceIdFilter`, `RequestLoggingFilter` 의 `@Component` 제거 — `PlatformWebAutoConfiguration` 의 `@Bean` 으로만 등록. `GlobalExceptionHandler` 는 `@RestControllerAdvice` 유지(Spring MVC 가 애너테이션으로만 찾는다) + 같은 `@Bean`. `ModuleRegistrationRulesTest` 추가(모든 모듈 `main` 소스 검사, `build.gradle.kts` 의 `tasks.test` 블록 포함) |
+| `notification-websocket` | `NotificationWebSocketBrokerConfiguration` 의 `@Configuration` 제거 — AutoConfiguration 의 `@Import` 로만 들어온다 |
+| `db-postgresql`, `db-mysql` | 중첩 `DataJdbcConversions` 의 `@Configuration` 제거 (`@Bean` 메서드가 있는 중첩 클래스는 AutoConfiguration 이 그대로 처리) |
+| `auth`, `notification-sse` | 컨트롤러는 `@RestController` 유지(MVC 핸들러 표지는 대체할 수 없다 — 클래스 레벨 `@RequestMapping` 만으로는 404). 이미 AutoConfiguration 의 `@Bean` 으로 등록돼 있고, 테스트가 그것을 강제한다 |
+
+**4. 어댑터 모듈이 계약 모듈을 `api` 로 노출한다.** 의존성 한 줄이면 된다. 앱 `build.gradle.kts` 에서 중복된 줄을 지워도 컴파일된다 (남겨도 무해).
+`payment-toss`/`-stripe` → `payment`, `notification-jdbc`/`-sse`/`-slack`/`-websocket` → `notification`, `storage-s3` → `storage`, `auth-social` → `auth`,
+`auth-social-google`/`-kakao`/`-naver` → `auth-social`, `redis-lock`/`-cache`/`-rate-limit` → `redis-core`.
+
+**5. 확인.** `./gradlew build` 와 `scripts/rename-skeleton.sh dev.sumin.ovation ovation Ovation` 후 `./gradlew build` 를 복사본에서 돌려 통과를 확인했다.
+`skeleton.notification.sse.enabled=false` 처럼 모듈을 끄면 이제 기동이 깨지지 않는다 (`apps/workbench` `ModuleDisabledIntegrationTest`).
+
 ### 이식 안내 — PostgreSQL 기본 + 방언 조립식 + Flyway 충돌 방지 (2026-10-01)
 
 하위 앱(rename-skeleton 으로 찍은 레포)이 위에서 아래로 따라 하면 된다. 설계: `docs/superpowers/specs/2026-10-01-postgresql-flyway-design.md`.

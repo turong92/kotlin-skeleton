@@ -1,6 +1,7 @@
 rootProject.name = "kotlin-skeleton"
 
 include(":apps:api")
+include(":apps:workbench")
 include(":modules:platform")
 include(":modules:auth")
 include(":modules:auth-social")

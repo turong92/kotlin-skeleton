@@ -40,7 +40,7 @@ Authorization:Bearer <access-token>
 ^@
 ```
 
-`apps/api` wires `JwtTokenService` to `NotificationWebSocketTokenVerifier` when
+`apps/workbench` wires `JwtTokenService` to `NotificationWebSocketTokenVerifier` when
 both `auth` and `notification-websocket` are present. The resulting WebSocket
 `Principal.name` is the JWT subject, which is the account id.
 
@@ -98,7 +98,7 @@ SKELETON_CONFIG_AWS_SSM_FAIL_FAST=false \
 SKELETON_REDIS_LOCK_ENABLED=false \
 SKELETON_NOTIFICATION_WEBSOCKET_ENABLED=true \
 SKELETON_NOTIFICATION_WEBSOCKET_AUTH_ENABLED=true \
-./gradlew :apps:api:bootRun
+./gradlew :apps:workbench:bootRun
 ```
 
 Alternative backend port when 8080 is occupied:
@@ -110,7 +110,7 @@ SKELETON_CONFIG_AWS_SSM_FAIL_FAST=false \
 SKELETON_REDIS_LOCK_ENABLED=false \
 SKELETON_NOTIFICATION_WEBSOCKET_ENABLED=true \
 SKELETON_NOTIFICATION_WEBSOCKET_AUTH_ENABLED=true \
-./gradlew :apps:api:bootRun
+./gradlew :apps:workbench:bootRun
 ```
 
 Start the frontend from the React skeleton repository.

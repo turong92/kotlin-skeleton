@@ -35,7 +35,7 @@ cp .env.example .env.local
 set -a
 source .env.local
 set +a
-SPRING_PROFILES_ACTIVE=local ./gradlew :apps:api:bootRun
+SPRING_PROFILES_ACTIVE=local ./gradlew :apps:workbench:bootRun
 ```
 
 `.env.local` is ignored by git. Spring Boot does not auto-read `.env.local` by

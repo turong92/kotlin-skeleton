@@ -6,7 +6,6 @@ import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.core.Ordered
 import org.springframework.core.annotation.Order
-import org.springframework.stereotype.Component
 import org.springframework.web.filter.OncePerRequestFilter
 
 /**
@@ -18,7 +17,6 @@ import org.springframework.web.filter.OncePerRequestFilter
  * - 두 라인이 같은 traceId로 묶여서 grep 가능
  * - [TraceIdFilter] 다음에 실행되도록 `HIGHEST_PRECEDENCE + 10`
  */
-@Component
 @Order(Ordered.HIGHEST_PRECEDENCE + 10)
 class RequestLoggingFilter : OncePerRequestFilter() {
     private val log = SkeletonLoggers.request()

@@ -8,7 +8,8 @@ This skeleton uses coarse-grained Gradle modules.
 
 ```text
 apps/
-  api                 # executable Spring Boot composition/workbench app
+  api                 # STARTER: minimal runnable app (platform, auth, JDBC + PostgreSQL + Flyway, time). Copy this to start a project
+  workbench           # DEMO: every module together + sample endpoints under /api/v1/skeleton/** (the react-skeleton workbench UI calls it)
 
 modules/
   platform            # web, errors, trace/logging, shared infrastructure
@@ -50,7 +51,9 @@ modules/
 
 Use modules as capability choices:
 
-- `apps/api` composes the runnable sample application and exercises module wiring. Real services can delete its `/api/v1/examples/*` and `/api/v1/skeleton/*` controllers after choosing their own module set.
+- `apps/api` is the **starter**: the smallest composition that builds and boots (`platform`, `auth`, `persistence-jdbc`, `db-postgresql`, `migration-flyway`, `time`), one `HelloController`, a short `application.yml`. A real service starts here and adds one dependency line per module it needs (`docs/minimal-composition.md`).
+- `apps/workbench` is the **demo**: it depends on every module, keeps the sample controllers (`/api/v1/examples/*`, `/api/v1/skeleton/*`) and the integration tests that prove the modules coexist. Nothing is copied from it into a product; it is also the backend of the `react-skeleton` workbench UI.
+- Modules are never reached through component scan. Both apps live in a sub-package of the root (`dev.sumin.skeleton.app.api`, `dev.sumin.skeleton.app.workbench`), so `@SpringBootApplication` scans only app code, and every module registers its beans through its `AutoConfiguration`. A module's controllers/filters/advice therefore need no app-side wiring, and `skeleton.<module>.enabled=false` removes the module cleanly.
 - `modules/platform` is the shared foundation for most apps. It also contributes default OpenAPI metadata, standard response/error schemas, web policy defaults, outbound HTTP client scaffolding, and trace header documentation.
   See `docs/logging.md` for stable `skeleton.debug.*` logger categories.
 - `modules/auth` is included when the app needs authentication. Its default beans are Spring Boot auto-configuration defaults, so an app can replace `AuthAccountRepository`, `SecurityFilterChain`, token service, or filters with its own beans. It also contributes JWT bearer security metadata to OpenAPI.
@@ -60,27 +63,46 @@ Use modules as capability choices:
 - `modules/idempotency` is included when command endpoints need `Idempotency-Key` protection. It contributes the `@IdempotentOperation` annotation, request fingerprinting, replay headers, an in-memory default store, and OpenAPI header documentation.
 - `modules/crypto` is included when the app needs recoverable AES-GCM text encryption for persisted or transported secrets. It provides key-id envelopes, URL-safe opaque tokens, and opt-in persistence converters; redaction still handles logs and alerts.
 - `modules/notification` is included when the app needs server-side notification publishing. `modules/notification-sse`, `modules/notification-websocket`, and `modules/notification-slack` add delivery/alert channels.
-- `modules:redis-*`, `modules:storage-*`, `modules:payment-*`, `modules:event-kafka`, and `modules:scheduler` are optional capability bundles. `apps/api` includes them to prove they can coexist, while YAML keeps infrastructure-backed features disabled unless explicitly enabled.
+- `modules:redis-*`, `modules:storage-*`, `modules:payment-*`, `modules:event-kafka`, and `modules:scheduler` are optional capability bundles. `apps/workbench` includes them to prove they can coexist, while YAML keeps infrastructure-backed features disabled unless explicitly enabled.
 - `modules/persistence-jpa` and `modules/persistence-jdbc` are optional persistence adapters. Both use the same platform audit-time contract while keeping JPA/JDBC annotations and lifecycle behavior inside the selected persistence module. Instants are bound through `SqlDialect` from the dialect module the app assembles (`db-postgresql` default, `db-mysql` also forces the MySQL session to UTC); see `docs/time.md`.
 - `modules/persistence-jooq` is the jOOQ alternative: code is generated from the Flyway migration folder with `DDLDatabase`, so builds need no database. See `docs/persistence-jooq.md`. Schema without Flyway: `docs/schema-management.md`.
 - `modules/job-queue-jdbc` is included when work must be retried durably without Redis. See `docs/job-queue-jdbc.md`.
 - `modules/notification-mail` (`docs/notification-mail.md`) and `modules/captcha-turnstile` (`docs/captcha-turnstile.md`) are off by default and only appear when their properties are set.
-- HTML pages next to the API: see `apps/api` `api/pages/PagesController.kt` — public endpoints via `PublicEndpointContributor`, HTML error handling via a page-scoped `@ControllerAdvice`; rate limiting is `/api/**` only by default.
+- HTML pages next to the API: see `apps/workbench` `api/pages/PagesController.kt` — public endpoints via `PublicEndpointContributor`, HTML error handling via a page-scoped `@ControllerAdvice`; rate limiting is `/api/**` only by default.
 - Starting a new project from this skeleton: `scripts/rename-skeleton.sh` + `docs/minimal-composition.md`.
 - `modules/time` is included when the app shows times to people in different time zones or stores scheduled local times (deadlines, event starts). It provides `TimeContext` (viewer zone/locale: account preference → `X-Time-Zone` / `Accept-Language` → default), `ZonedMoment` (local time + zone as the source of truth, derived instant), `TimeFormatter.dual`, and `CountryTimeZones`. See `docs/time.md`.
 
 Fine-grained details such as JWT, password login, OAuth, or dev login live as packages inside their capability modules unless they grow into provider-level integrations.
 
+## Quick start (starter)
+
+```bash
+docker compose up -d postgres            # PostgreSQL 18 on 127.0.0.1:5432 (db/user app, password dev)
+./gradlew :apps:api:bootRun --args='--spring.profiles.active=local'
+curl -s localhost:8080/api/v1/hello
+curl -s localhost:8080/api/v1/auth/login -H 'Content-Type: application/json' -d '{"email":"user@example.com","password":"password"}'
+./gradlew build                          # everything: all modules, both apps (Testcontainers needs Docker)
+```
+
+`docker compose up --build` builds `:apps:api` (the starter) into the image. To start a project of your own, copy the repo, run `scripts/rename-skeleton.sh dev.sumin.ovation ovation Ovation`, delete the modules and `apps/workbench` you do not need, and follow `docs/minimal-composition.md`.
+
 ## Composition Workbench
 
-`apps/api` is the backend module assembly workbench. It intentionally depends on the skeleton capability modules, then uses properties to decide which runtime integrations are active.
+`apps/workbench` is the backend module assembly workbench (the demo; the starter is `apps/api`). Run it for the React skeleton's workbench UI:
+
+```bash
+docker compose up -d postgres
+./gradlew :apps:workbench:bootRun   # port 8080 — stop the starter first. Without a profile no Redis/Kafka/S3 is needed (the local profile turns redis-lock on)
+```
+
+It intentionally depends on the skeleton capability modules, then uses properties to decide which runtime integrations are active. It intentionally depends on the skeleton capability modules, then uses properties to decide which runtime integrations are active.
 
 - `GET /api/v1/skeleton/modules` returns the current module catalog as a standard list response.
 - `GET /api/v1/skeleton/redis/key?value=orders:1` proves `redis-core` key prefixing works without pinging Redis.
 - `POST /api/v1/skeleton/storage/validate` proves storage file validation wiring.
 - `GET /api/v1/skeleton/storage/public-url?key=images/cat.png` proves the configured storage public URL resolver without requiring a product endpoint.
 - `POST /api/v1/skeleton/notifications` publishes a provider-neutral notification event so SSE/Slack/WebSocket delivery modules can subscribe.
-- Realtime notification workbench: `docs/notification-websocket.md` shows how to run `apps/api` with SSE/WebSocket enabled and verify it from `react-skeleton`.
+- Realtime notification workbench: `docs/notification-websocket.md` shows how to run `apps/workbench` with SSE/WebSocket enabled and verify it from `react-skeleton`.
 - `GET /api/v1/skeleton/async/probe` proves trace/run/account MDC propagation into the async executor.
 
 These endpoints require auth by default. They are development/workbench affordances, not product APIs.

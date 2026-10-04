@@ -4,7 +4,11 @@ Kotlin + Spring Boot 백엔드 토이 프로젝트의 공개 출발점.
 
 ## Backend Module Layout
 
-- `apps/api` is the only executable Spring Boot application.
+- Two executable Spring Boot applications, both in a sub-package of the root so `@SpringBootApplication` scans only app code (`dev.sumin.skeleton.app.api`, `dev.sumin.skeleton.app.workbench`):
+  - `apps/api` is the **starter**: the minimal composition (`platform`, `auth`, `persistence-jdbc`, `db-postgresql`, `migration-flyway`, `time`) with one `HelloController`. New projects start here; its tests are the proof that a small composition boots without Redis/Kafka/S3/mail.
+  - `apps/workbench` is the **demo**: every module plus the sample controllers under `/api/v1/skeleton/**` and `/api/v1/examples/**` (the react-skeleton workbench UI calls them — do not change paths or shapes) and the integration tests proving the modules coexist.
+- Modules are never reached through component scan. A module registers every bean through its `AutoConfiguration` (`META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`); no `@Component`/`@Service`/`@Configuration` on module `main` classes. Only the MVC handler markers (`@RestController`, `@RestControllerAdvice`) remain — Spring MVC finds handlers only through them — and each is registered by an autoconfiguration `@Bean` with `@ConditionalOnMissingBean`. `ModuleRegistrationRulesTest` (platform) enforces both rules over every `modules/*/src/main`.
+- Adding a module to an app is one dependency line (`implementation(project(":modules:x"))`) plus an optional yml block; adapters expose their contract with `api(project(...))` (`payment-toss` → `payment`, `notification-*` → `notification`, `storage-s3` → `storage`, `auth-social*` → `auth`/`auth-social`, `redis-*` → `redis-core`). Never edit module internals to compose.
 - `modules/platform` owns shared web/error/observability code.
 - `modules/auth` owns authentication contracts and future login flows.
 - `modules/auth-social` owns optional provider-neutral social-login contracts and endpoint routing.
@@ -16,7 +20,7 @@ Kotlin + Spring Boot 백엔드 토이 프로젝트의 공개 출발점.
 - `modules/persistence-jpa` owns optional JPA audit timestamp mapping and lifecycle callbacks.
 - `modules/persistence-jdbc` owns optional Spring Data JDBC audit timestamp mapping and callbacks, and the `SqlDialect` strategy + `SqlDialectVerifier` (exactly one dialect module, matching the connected DB).
 - `modules/db-postgresql` (default) / `modules/db-mysql` are the dialect modules — an app assembles exactly one. They bring the driver, Flyway database support, `SqlDialect` (instant binding, insert-ignore) and Data JDBC time conversions; `db-mysql` also forces the MySQL session to UTC.
-- Skeleton modules provide mechanisms, not usage choices: they do not change framework defaults (e.g. Flyway `out-of-order`). Choices are explicit overrides in the app's `application.yml` (`apps/api` sets `spring.flyway.locations`/`out-of-order`/`validate-migration-naming`). 스켈레톤 모듈은 Flyway 기본값을 바꾸지 않는다.
+- Skeleton modules provide mechanisms, not usage choices: they do not change framework defaults (e.g. Flyway `out-of-order`). Choices are explicit overrides in the app's `application.yml` (`apps/api` and `apps/workbench` set `spring.flyway.locations`/`out-of-order`/`validate-migration-naming`). 스켈레톤 모듈은 Flyway 기본값을 바꾸지 않는다.
 - `modules/migration` (common, tool-agnostic) owns `skeleton.migration` and the guard that fails startup when a DB-wiping setting (`skeleton.migration.clean-on-validation-error`, `spring.flyway.clean-disabled=false`, `spring.liquibase.drop-first=true`) is on outside `skeleton.migration.clean-allowed-profiles`.
 - `modules/migration-flyway` (Flyway implementation, depends on `migration`) owns the opt-in local clean strategy and `MigrationFileRules` (`RepositoryMigrationsTest` fails the build on bad names, duplicate versions, unpaired vendor folders).
 - `modules/persistence-jooq` owns the jOOQ variant: code generation from Flyway migration folders (`DDLDatabase`, `-Pskeleton.jooq.dialect`, PG `*_at` → `INSTANT`, MySQL `UtcInstantConverter`), `JooqAuditRecordListener`.
@@ -31,9 +35,13 @@ Kotlin + Spring Boot 백엔드 토이 프로젝트의 공개 출발점.
 ## 패키지 구조 (AI 참조용)
 
 ```
-apps/api/src/main/kotlin/dev/sumin/skeleton/
-├── KotlinSkeletonApplication.kt   # 엔트리 포인트 (수정 거의 없음)
-└── api/                           # @RestController + 요청/응답 DTO
+apps/api/src/main/kotlin/dev/sumin/skeleton/app/api/        # 스타터 (새 프로젝트의 출발점)
+├── ApiApplication.kt              # 엔트리 포인트 — 루트의 하위 패키지라 모듈 패키지를 스캔하지 않는다
+└── HelloController.kt             # 샘플. 앱 컨트롤러/DTO 는 이 패키지 아래에
+
+apps/workbench/src/main/kotlin/dev/sumin/skeleton/app/workbench/   # 데모: 모든 모듈 + 샘플 엔드포인트
+├── WorkbenchApplication.kt
+└── api/                           # /api/v1/skeleton/**, /api/v1/examples/** 샘플 (react-skeleton 워크벤치 계약)
     ├── HelloController.kt
     └── OperationExampleController.kt # REST operation contract 샘플
 
@@ -108,8 +116,8 @@ modules/persistence-jdbc/src/main/kotlin/dev/sumin/skeleton/persistence/jdbc/
 ```
 
 **경계 책임:**
-- `apps/api` 는 실행 앱 조립과 HTTP 변환만. 비즈니스 로직 금지. 서비스 호출.
-- 앱 고유 `domain/`, `infra/`, `config/` 패키지는 필요할 때 `apps/api` 안에 둔다.
+- `apps/api` 는 실행 앱 조립과 HTTP 변환만. 비즈니스 로직 금지. 서비스 호출. (`apps/workbench` 는 데모 — 제품 코드를 넣지 않는다.)
+- 앱 고유 `domain/`, `infra/`, `config/` 패키지는 필요할 때 `apps/api` 의 `app.api` 하위 패키지로 둔다.
 - `modules/platform` 은 web/error/observability 공통 기반만 담당한다.
 - `modules/auth` 는 인증 계약과 향후 로그인 흐름을 담당한다.
 - `modules/auth-social` 은 선택형 소셜 로그인 공통 흐름을 담당한다. 실제 provider 구현은 `modules/auth-social-google|kakao|naver` 같은 선택 Gradle 모듈로 둔다.
@@ -209,7 +217,7 @@ modules/persistence-jdbc/src/main/kotlin/dev/sumin/skeleton/persistence/jdbc/
   - Optional provider modules: `modules/auth-social-google`, `modules/auth-social-kakao`, `modules/auth-social-naver`
   - Endpoint: `POST /api/v1/auth/social/{provider}/login`
   - Frontend obtains provider authorization code; backend exchanges code through enabled provider
-  - Add only the provider module the app needs; `apps/api` does not have to carry all providers
+  - Add only the provider module the app needs; `apps/api` (the starter) carries none, only `apps/workbench` carries all
   - `provider + providerUserId` maps to internal `accountId`
   - JWT response shape is the same as password login
   - roles are always loaded from `AuthAccountRepository`
@@ -225,7 +233,7 @@ modules/persistence-jdbc/src/main/kotlin/dev/sumin/skeleton/persistence/jdbc/
 - **Kotlin idiomatic**: data class, scope function (`let`/`apply`/`also`), null 안전성 활용
 - **테스트**: Testcontainers로 실 PostgreSQL(`postgres:18`) 띄워 Flyway 마이그레이션 포함 검증. 방언을 타는 모듈은 MySQL 묶음도 돈다
 - **새 기능 추가 시**:
-  1. `apps/api` 에 컨트롤러 + DTO
+  1. `apps/api` 에 컨트롤러 + DTO (`dev.sumin.skeleton.app.api` 하위 — 앱 클래스 패키지 밖에 두면 스캔되지 않는다)
   2. 앱 고유 비즈니스 로직은 `apps/api` 안의 `domain/` 패키지에 둔다 (필요 시)
   3. 앱 고유 DB/외부 연동은 `apps/api` 안의 `infra/` 패키지에 둔다 (필요 시)
   4. 요청 DTO에 Bean Validation constraint 를 붙이고 integration test 로 `ApiError.errors[]` 를 확인한다

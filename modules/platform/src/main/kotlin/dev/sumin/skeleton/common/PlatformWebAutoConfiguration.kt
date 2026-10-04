@@ -6,9 +6,9 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplicat
 import org.springframework.context.annotation.Bean
 
 /**
- * Registers the platform's request-scoped web beans so that a consuming app does not have to
- * component-scan `dev.sumin.skeleton`. The classes keep their stereotype annotations for apps that
- * do scan; in that case the scanned bean wins and these definitions back off.
+ * Registers the platform's request-scoped web beans. A consuming app never component-scans module
+ * packages. The filters carry no stereotype annotation; the exception advice keeps `@RestControllerAdvice`
+ * because Spring MVC finds advice only through that annotation, and is registered here as a `@Bean`.
  */
 @AutoConfiguration
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)

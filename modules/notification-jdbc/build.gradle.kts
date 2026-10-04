@@ -1,5 +1,5 @@
 dependencies {
-    implementation(project(":modules:notification"))
+    api(project(":modules:notification"))   // 계약 타입이 이 모듈의 공개 API 에 나온다 — 의존성 한 줄로 충분하게
     implementation(project(":modules:json"))
     implementation(project(":modules:persistence-jdbc"))
 

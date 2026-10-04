@@ -93,7 +93,7 @@ off. If it only needs custom failure routing, prefer defining an
 
 ## Workbench Probe
 
-`apps/api` exposes `GET /api/v1/skeleton/async/probe` to prove the module is
+`apps/workbench` exposes `GET /api/v1/skeleton/async/probe` to prove the module is
 assembled. It submits one task to `skeletonAsyncTaskExecutor` and returns the
 trace/run/account values observed from the executor thread.
 
