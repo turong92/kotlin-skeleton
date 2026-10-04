@@ -9,7 +9,8 @@ import org.springframework.context.annotation.Configuration
 import org.springframework.data.jdbc.core.convert.JdbcCustomConversions
 
 /** `modules:db-mysql` 을 끼우면 SqlDialect = MySQL, 세션 UTC 강제는 [MySqlTimeZoneEnvironmentPostProcessor]. */
-@AutoConfiguration
+// jdbcCustomConversions 가 Boot 의 Data JDBC 자동설정(같은 @ConditionalOnMissingBean)보다 먼저 등록돼야 한다 — 이름 순서에 기대지 않고 명시
+@AutoConfiguration(beforeName = ["org.springframework.boot.data.jdbc.autoconfigure.DataJdbcRepositoriesAutoConfiguration"])
 class MySqlDialectAutoConfiguration {
     @Bean
     fun mySqlSqlDialect(): SqlDialect = MySqlSqlDialect()

@@ -323,8 +323,8 @@ data class OrderEntity(
 
 ## 스택
 
-- Kotlin 2.2 / JDK 21
-- Spring Boot 4.0
+- Kotlin 2.3.21 / JDK 21
+- Spring Boot 4.1.1
 - Spring Data JDBC + Flyway (UTC timestamp versions, `docs/schema-management.md`)
 - PostgreSQL 18 (default, `modules:db-postgresql`) or MySQL 8.4 (`modules:db-mysql`)
 - Spring MVC server + WebClient outbound client

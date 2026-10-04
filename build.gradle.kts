@@ -85,7 +85,7 @@ configure(subprojects.filter { it.path in dbTestModules }) {
 // ./gradlew newMigration -Pname=add_x [-Pmodule=apps/api] [-Pvendor=postgresql]
 // 지금 UTC 시각으로 V<yyyyMMddHHmmss>__<name>.sql 을 만든다. -Pvendor 를 빼면 그 모듈에 있는 vendor 폴더 전부에 같은 버전으로.
 tasks.register("newMigration") {
-    group = "skeleton"
+    group = "migration"
     description = "Creates a timestamped Flyway migration (UTC yyyyMMddHHmmss)."
     doLast {
         val name = providers.gradleProperty("name").orNull ?: error("-Pname=<snake_case> is required")

@@ -9,7 +9,8 @@ import org.springframework.context.annotation.Configuration
 import org.springframework.data.jdbc.core.convert.JdbcCustomConversions
 
 /** `modules:db-postgresql` 을 끼우면 SqlDialect = PostgreSQL. 다른 db-* 모듈과 같이 끼우면 SqlDialectVerifier 가 기동을 막는다. */
-@AutoConfiguration
+// jdbcCustomConversions 가 Boot 의 Data JDBC 자동설정(같은 @ConditionalOnMissingBean)보다 먼저 등록돼야 한다 — 이름 순서에 기대지 않고 명시
+@AutoConfiguration(beforeName = ["org.springframework.boot.data.jdbc.autoconfigure.DataJdbcRepositoriesAutoConfiguration"])
 class PostgresDialectAutoConfiguration {
     @Bean
     fun postgresSqlDialect(): SqlDialect = PostgresSqlDialect()
