@@ -1,7 +1,10 @@
-# storage — 업로드 파일 검증 규칙 (저장소 구현은 storage-s3).
+# storage — 업로드 파일 검증 규칙 + 업로드 HTTP 엔드포인트 (저장소 구현은 storage-s3).
 skeleton:
   storage:
     validation:
       max-size-bytes: 9223372036854775807   # 파일 크기 상한 (바이트). 기본은 제한 없음(Long.MAX) — 예: 10485760
       allowed-content-types: []             # 비우면 모든 Content-Type 허용
       allowed-extensions: []                # 비우면 모든 확장자 허용
+    web:
+      enabled: true                         # false 면 /api/v1/storage 엔드포인트를 등록하지 않는다 (PresignedStorage 빈 = 버킷 설정이 있을 때만 등록)
+      key-prefix: uploads                   # 서버가 정하는 키: <key-prefix>/<계정 id>/<uuid>/<파일 이름>

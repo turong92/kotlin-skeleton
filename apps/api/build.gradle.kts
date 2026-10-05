@@ -16,6 +16,10 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-jdbc")
     implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
+    // 컨트롤러를 쓰는 데 필요한 것 — 모듈의 implementation 의존은 앱 컴파일에 보이지 않는다: @Valid · Authentication(호출자) · @Operation(OpenAPI)
+    implementation("org.springframework.boot:spring-boot-starter-validation")
+    implementation("org.springframework.security:spring-security-core")
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-api:3.0.3")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("tools.jackson.module:jackson-module-kotlin")
 

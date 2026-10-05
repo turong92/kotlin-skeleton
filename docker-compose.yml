@@ -1,3 +1,5 @@
+# 컨테이너 · 볼륨 이름의 접두사 — 폴더 이름(api · web 처럼 흔한 이름)에 기대면 다른 프로젝트와 섞인다. new-project.sh 가 새 이름으로 바꾼다
+name: kotlin-skeleton
 services:
   postgres:
     image: postgres:18
@@ -9,6 +11,10 @@ services:
       - "127.0.0.1:5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "app", "-d", "app"]
+      interval: 2s
+      retries: 30
 
   # db-mysql 모듈로 조립한 앱용: --profile mysql
   mysql:
@@ -51,6 +57,42 @@ services:
       - "127.0.0.1:1025:1025"
       - "127.0.0.1:8025:8025"
 
+  # storage-s3 모듈로 조립한 앱의 로컬 S3 (R2 대역, SeaweedFS). scripts/dev.sh 가 올린다 (손으로는 --profile s3 로 s3 를 띄우고 s3-init 을 한 번 돌린다).
+  # 서버 → http://localhost:8333, 브라우저 직접 업로드 → 같은 주소. 키 dev / dev-secret, 버킷 app.
+  # 설정은 application-local.yml (new-project.sh 가 storage-s3 를 고르면 붙인다 — docs/storage-s3.md "Local container")
+  s3:
+    image: chrislusf/seaweedfs:4.47
+    profiles: [s3]
+    command: server -dir=/data -s3 -s3.config=/etc/seaweedfs/s3.json -master.volumeSizeLimitMB=256
+    configs:
+      - source: s3-identity
+        target: /etc/seaweedfs/s3.json
+    ports:
+      - "127.0.0.1:8333:8333"
+    volumes:
+      - s3-data:/data
+
+  # 버킷과 CORS(브라우저가 직접 PUT — ETag 노출)를 만들고 끝나는 1회성 작업. 이미 있으면 그대로 둔다. 로컬 전용(127.0.0.1 에만 열림)이라 origin 은 *
+  # (SeaweedFS 는 `http://localhost:*` 같은 포트 와일드카드를 받지 않는다 — 실측: 프리플라이트 403)
+  s3-init:
+    image: amazon/aws-cli:2.31.0
+    profiles: [s3]
+    depends_on: [s3]
+    environment:
+      AWS_ACCESS_KEY_ID: dev
+      AWS_SECRET_ACCESS_KEY: dev-secret
+      AWS_REGION: us-east-1
+      AWS_ENDPOINT_URL: http://s3:8333
+    configs:
+      - source: s3-cors
+        target: /etc/cors.json
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        i=0; until aws s3api list-buckets >/dev/null 2>&1; do i=$$((i+1)); [ $$i -ge 60 ] && echo "s3 가 60초 안에 안 떴다" && exit 1; sleep 1; done
+        aws s3api head-bucket --bucket app 2>/dev/null || aws s3api create-bucket --bucket app
+        aws s3api put-bucket-cors --bucket app --cors-configuration file:///etc/cors.json
+
   app:
     build: .
     depends_on:
@@ -62,7 +104,16 @@ services:
     ports:
       - "8080:8080"
 
+configs:
+  s3-identity:
+    content: |
+      {"identities":[{"name":"dev","credentials":[{"accessKey":"dev","secretKey":"dev-secret"}],"actions":["Admin","Read","Write","List","Tagging"]}]}
+  s3-cors:
+    content: |
+      {"CORSRules":[{"AllowedOrigins":["*"],"AllowedMethods":["GET","PUT","HEAD"],"AllowedHeaders":["*"],"ExposeHeaders":["ETag"],"MaxAgeSeconds":600}]}
+
 volumes:
   postgres-data:
   mysql-data:
   redis-data:
+  s3-data:

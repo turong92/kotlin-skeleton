@@ -38,6 +38,16 @@ skeleton:
 If `bucket` is missing, the S3 client and presigner can exist but the
 `PresignedStorage` bean is not created.
 
+## HTTP endpoints for browsers (`modules:storage`)
+
+With a bucket configured (`PresignedStorage` bean exists), a servlet app with Spring Security gets `/api/v1/storage/*` from `modules:storage`
+(`StorageController`, authenticated, OpenAPI-documented): `POST /validate`, `/presign`, `/presign-download`, `/multipart/start|part|complete|abort`.
+The server picks the key — `<skeleton.storage.web.key-prefix>/<account id>/<uuid>/<file name>` — and only accepts keys under the caller's own prefix
+(someone else's key is `404 STORAGE.OBJECT_NOT_FOUND`). Uploads must pass `StorageFileValidator` (`skeleton.storage.validation.*`); a rejected file is
+`400 STORAGE.FILE_REJECTED` with the reasons in `data.errors`. `skeleton.storage.web.enabled=false` removes the controller (an app that wants its own
+paths or ownership rules registers its own `StorageController` bean or controller). The React counterpart is `@skeleton/storage` (`createStorageApi(apiClient)`).
+Without a bucket there is no `PresignedStorage` and therefore no endpoint (404) — set `skeleton.storage-s3.bucket` first.
+
 ## Direct Object Operations
 
 ```kotlin
@@ -146,6 +156,12 @@ Credential precedence: static key pair → `credentials.profile` → AWS default
 half of the key pair fails fast at startup.
 
 ## Local container (SeaweedFS, MinIO)
+
+`docker-compose.yml` ships a ready one: `s3` (SeaweedFS, profile `s3`, `127.0.0.1:8333`, key `dev` / `dev-secret`) and `s3-init` (creates bucket `app`
+and the CORS rule a browser's direct PUT needs: origin `*` — the store only listens on 127.0.0.1, and SeaweedFS rejects port wildcards like `http://localhost:*` (preflight 403) — `PUT`/`GET`/`HEAD`, `ExposeHeaders: ETag`). `scripts/dev.sh` starts both,
+and `scripts/new-project.sh --modules storage-s3` appends the matching `application-local.yml` block (bucket `app`, `endpoint-override: http://localhost:8333`).
+The browser and the server are both on the host here, so no `presign.endpoint-override` is needed. The rest of this section is for the case where the server
+runs inside the compose network.
 
 In a compose network the server reaches the S3 container by service name, but a presigned URL signed
 for that host is useless to a browser on the host machine — SigV4 signs the `Host` header, so the URL

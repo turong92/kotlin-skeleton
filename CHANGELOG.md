@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 새 프로젝트 드릴 — 모듈이 받은편지함 · 업로드 HTTP 를 연다 · 한 줄 로컬 실행 (2026-10-05)
+
+`new-project.sh` 로 찍은 풀스택(job-queue-jdbc · notification-jdbc · notification-sse · storage-s3 · scheduler + 프론트 realtime · notifications · storage)을 브라우저에서 눌러 보며 막힌 곳을 고쳤다.
+
+- **받은편지함 엔드포인트가 `modules/notification` 으로 옮겨 왔다** (워크벤치의 `NotificationInboxController` 삭제): `GET /api/v1/notifications` · `PATCH …/{eventId}/read` · `PATCH …/read-all`. 서블릿 웹 앱 + Spring Security 가 있을 때만 `NotificationInboxWebAutoConfiguration` 이 등록한다(`@ConditionalOnMissingBean`, `skeleton.notification.inbox.enabled=false` 로 끔). 호출자는 `Authentication.name`, 남의 알림은 404, 인증 없으면 401. **`notification` 이 이제 `platform` 에 의존한다** (envelope · 에러 · 페이지). 기존 앱이 같은 경로의 자기 컨트롤러를 두었다면 `inbox.enabled=false` 를 준다 — **동작이 바뀌는 변경**
+- **업로드 엔드포인트가 `modules/storage` 에 생겼다**: `POST /api/v1/storage/validate` · `/presign` · `/presign-download` · `/multipart/start|part|complete|abort`. `PresignedStorage` 빈(= 버킷 설정)이 있을 때만 등록(`StorageWebAutoConfiguration`), 인증 필수, 키는 서버가 `<key-prefix>/<계정 id>/<uuid>/<파일 이름>` 으로 정하고 남의 접두사 키는 404(`STORAGE.OBJECT_NOT_FOUND`), 검증 거절은 400 `STORAGE.FILE_REJECTED`(`data.errors`). 설정 `skeleton.storage.web.enabled` · `key-prefix`. `storage` 도 `platform` 에 의존한다
+- `auth`: `AuthPrincipalAuthentication.getName()` 이 계정 id 를 돌려준다(기본 구현은 `toString()` 이었다) — 다른 모듈이 auth 에 의존하지 않고 호출자를 가리키는 값
+- **스타터가 컨트롤러를 쓰는 데 필요한 의존을 가진다**: `apps/api` 에 `spring-boot-starter-validation` · `spring-security-core` · `springdoc-openapi-starter-webmvc-api` — 모듈의 `implementation` 의존은 앱 컴파일에 보이지 않아 `@Valid` · `Authentication` · `@Operation` 이 "Unresolved reference" 였다 (`ControllerAuthoringClasspathTest`)
+- **로컬 S3**: compose 에 `s3`(SeaweedFS, profile `s3`)와 `s3-init`(버킷 `app` + 브라우저 직접 PUT 용 CORS) 추가, postgres 에 healthcheck. `new-project.sh --modules storage-s3` 는 `application-local.yml` 에 로컬 S3 설정을 붙인다 (storage-s3 문서는 SeaweedFS 를 권하면서 compose 에는 없었다)
+- **`scripts/dev.sh`**: 한 줄 로컬 실행 — DB(+ S3) 컨테이너 → (옆 `../web` 이 있으면 `pnpm dev`) → `bootRun --spring.profiles.active=local`, `down` 으로 내림. 새 프로젝트는 `<작업 폴더>/api` · `<작업 폴더>/web` 으로 나란히 둔다
+- `scripts/new-project.sh`: 레포 안에서 `../내-프로젝트` 처럼 상대 경로로 부르면 "target must be outside the skeleton repo" 로 거부되던 것을 고쳤다(경로를 정리한 뒤 비교). 같은 수정이 react-skeleton 에도 있다. compose 에 `name:`(새 이름)이 들어가 컨테이너 · 볼륨이 폴더 이름(`api`)에 기대지 않는다
+- 결제(`payment`): 컨트롤러를 모듈로 올리지 않았다 — 금액 검증이 앱의 주문 저장소에 있어서다. 열려면 필요한 계약은 `docs/modules/payment.md` "왜 HTTP 엔드포인트가 없나"
+
 ### 모듈 캡슐화 마무리 — 선택 의존 · 모듈별 한 쪽 문서 (2026-10-05)
 
 - **`storage-s3` → `crypto` 가 컴파일 전용(`compileOnly`)이 됐다.** 평범한 S3/R2 앱은 `crypto` 를 런타임에 받지 않는다 (`runtimeClasspath` 에서 사라짐). OPAQUE 공개 URL 은 새 `S3OpaquePublicUrlAutoConfiguration`(`@ConditionalOnClass` 로 crypto 가 있을 때만)이 등록하고, `crypto` 없이 OPAQUE 를 요청하면 `:modules:crypto` 를 짚는 메시지로 시작에 실패한다. OPAQUE 를 쓰는 앱은 `implementation(project(":modules:crypto"))` 한 줄을 더한다 — **OPAQUE 를 쓰던 앱이 받는 동작 변경**. `src/noCryptoTest`(crypto 가 정말 없는 클래스패스) 묶음이 `check` 에 걸린다. `new-project.sh` 는 compileOnly 의존의 소스는 따라오게 하되 앱 런타임에는 넣지 않고 그렇게 안내한다.

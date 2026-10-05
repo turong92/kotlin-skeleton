@@ -1,6 +1,5 @@
-package dev.sumin.skeleton.app.workbench.api
+package dev.sumin.skeleton.notification.web
 
-import dev.sumin.skeleton.auth.principal.CurrentPrincipal
 import dev.sumin.skeleton.common.ApplicationException
 import dev.sumin.skeleton.common.PageQuery
 import dev.sumin.skeleton.common.PageResponse
@@ -12,6 +11,7 @@ import dev.sumin.skeleton.notification.NotificationInboxRecord
 import dev.sumin.skeleton.notification.NotificationInboxRepository
 import dev.sumin.skeleton.notification.NotificationSeverity
 import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import java.time.Instant
 import org.springdoc.core.annotations.ParameterObject
@@ -49,9 +49,15 @@ data class NotificationReadAllResponse(
     val updated: Int,
 )
 
+/**
+ * 호출자의 알림 받은편지함 — 호출자는 `Authentication.name`(auth 모듈에서는 계정 id)이다.
+ * 인증 없는 호출은 401. 다른 사람의 알림은 읽음 처리할 수 없다(없는 것과 같은 404).
+ * 이 클래스는 [NotificationInboxWebAutoConfiguration] 이 등록한다 (`skeleton.notification.inbox.enabled=false` 로 끈다).
+ */
 @Validated
 @RestController
 @RequestMapping("/api/v1/notifications")
+@Tag(name = "Notifications")
 class NotificationInboxController(
     private val inboxRepository: NotificationInboxRepository,
 ) {
@@ -59,13 +65,10 @@ class NotificationInboxController(
         summary = "List my notifications",
         description = "Returns the current principal's notification inbox with page metadata.",
     )
-    @ApiResponseEnvelope(
-        type = ApiEnvelopeType.PAGE,
-        value = NotificationInboxItemResponse::class,
-    )
+    @ApiResponseEnvelope(type = ApiEnvelopeType.PAGE, value = NotificationInboxItemResponse::class)
     @GetMapping
     fun list(
-        authentication: Authentication,
+        authentication: Authentication?,
         @Valid @ParameterObject @ModelAttribute pageQuery: PageQuery,
         @RequestParam(required = false) unreadOnly: Boolean?,
         @RequestParam(required = false) topic: String?,
@@ -76,7 +79,7 @@ class NotificationInboxController(
             unreadOnly = unreadOnly ?: false,
             topic = topic,
         )
-        val page = inboxRepository.findByRecipient(authentication.accountId(), query)
+        val page = inboxRepository.findByRecipient(authentication.recipientId(), query)
         return Response.ok(
             values = page.values.map { it.toResponse() },
             pagination = pageQuery.toPagination(page.totalElements),
@@ -84,37 +87,22 @@ class NotificationInboxController(
     }
 
     @Operation(summary = "Mark notification read")
-    @ApiResponseEnvelope(
-        type = ApiEnvelopeType.VALUE,
-        value = NotificationReadResponse::class,
-    )
+    @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = NotificationReadResponse::class)
     @PatchMapping("/{eventId}/read")
     fun markRead(
-        authentication: Authentication,
+        authentication: Authentication?,
         @PathVariable eventId: String,
-    ) = inboxRepository.markRead(authentication.accountId(), eventId)
+    ) = inboxRepository.markRead(authentication.recipientId(), eventId)
         ?.let { record ->
-            Response.ok(
-                NotificationReadResponse(
-                    eventId = record.event.id,
-                    readAt = requireNotNull(record.readAt),
-                ),
-            )
+            Response.ok(NotificationReadResponse(eventId = record.event.id, readAt = requireNotNull(record.readAt)))
         }
         ?: throw NotificationNotFoundException(eventId)
 
     @Operation(summary = "Mark all notifications read")
-    @ApiResponseEnvelope(
-        type = ApiEnvelopeType.VALUE,
-        value = NotificationReadAllResponse::class,
-    )
+    @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = NotificationReadAllResponse::class)
     @PatchMapping("/read-all")
-    fun markAllRead(authentication: Authentication) =
-        Response.ok(
-            NotificationReadAllResponse(
-                updated = inboxRepository.markAllRead(authentication.accountId()),
-            ),
-        )
+    fun markAllRead(authentication: Authentication?) =
+        Response.ok(NotificationReadAllResponse(updated = inboxRepository.markAllRead(authentication.recipientId())))
 
     private fun NotificationInboxRecord.toResponse(): NotificationInboxItemResponse =
         NotificationInboxItemResponse(
@@ -131,8 +119,9 @@ class NotificationInboxController(
             readAt = readAt,
         )
 
-    private fun Authentication.accountId(): String =
-        (principal as CurrentPrincipal).accountId
+    private fun Authentication?.recipientId(): String =
+        this?.takeIf { it.isAuthenticated }?.name
+            ?: throw ApplicationException("Authentication required", HttpStatus.UNAUTHORIZED, "Authentication required")
 }
 
 class NotificationNotFoundException(eventId: String) : ApplicationException(

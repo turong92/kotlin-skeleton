@@ -25,7 +25,7 @@
 # 소스 레포와 <target-dir> 밖에는 아무것도 쓰지 않는다. macOS bash 3.2 와 GNU 에서 돈다 (연관 배열 · mapfile 을 쓰지 않는다).
 set -euo pipefail
 
-SRC="$(cd "$(dirname "$0")/.." && pwd)"
+SRC="$(cd "$(dirname "$0")/.." && pwd -P)"
 
 usage() {
   cat <<'EOF'
@@ -106,6 +106,13 @@ fi
 
 case "$TARGET_ARG" in /*) TARGET="$TARGET_ARG" ;; *) TARGET="$PWD/$TARGET_ARG" ;; esac
 TARGET="${TARGET%/}"
+# `../내-프로젝트` · 심볼릭 링크를 정리한다 — 안 하면 레포 안에서 부른 `../x` 가 "레포 안" 으로 오인된다 (아직 없는 끝 구간은 그대로 붙인다)
+normalize_path() {
+  local p="$1" d b
+  d="$(dirname "$p")"; b="$(basename "$p")"
+  if [ -d "$d" ]; then printf '%s/%s' "$(cd "$d" && pwd -P)" "$b"; else printf '%s/%s' "$(normalize_path "$d")" "$b"; fi
+}
+[ -z "$TARGET" ] || TARGET="$(normalize_path "$TARGET")"
 [ -n "$TARGET" ] || die_usage "target must not be /"
 [ ! -e "$TARGET" ] || die_usage "target already exists: $TARGET"
 case "$TARGET/" in "$SRC"/*) die_usage "target must be outside the skeleton repo ($SRC): $TARGET" ;; esac
@@ -283,6 +290,11 @@ EOF2
   } >> "$APP_YML"
 fi
 
+# ---------------------------------------------------------------------------------------------------- 로컬 S3 (storage-s3 를 고르면 local 프로필이 compose 의 S3 에 붙는다)
+if in_list storage-s3 "$SELECTED_SORTED"; then
+  sed "s/^skeleton:/$PREFIX:/" "$SRC/scripts/new-project.d/application-local-storage-s3.yml" >> apps/api/src/main/resources/application-local.yml
+fi
+
 # ---------------------------------------------------------------------------------------------------- 끝
 trap - EXIT
 DB_SERVICE="$([ "$DB" = mysql ] && echo mysql || echo postgres)"
@@ -295,8 +307,8 @@ next:
   cd $TARGET
   git init && git add -A && git commit -m "Initial commit (from the skeleton: $(printf '%s\n' "$SELECTED_SORTED" | wc -l | tr -d ' ') modules)"
   ./gradlew build                                  # Docker 가 필요하다 (Testcontainers)
-  docker compose up -d $DB_SERVICE                     # 로컬 DB
-  ./gradlew :apps:api:bootRun --args='--spring.profiles.active=local'
+  scripts/dev.sh                                    # 로컬 한 줄 실행: $DB_SERVICE$(in_list storage-s3 "$SELECTED_SORTED" && echo " + s3") 컨테이너 → 백엔드 (../web 이 있으면 프론트도)
+  # 손으로: docker compose up -d $DB_SERVICE && ./gradlew :apps:api:bootRun --args='--spring.profiles.active=local'
 module 하나 더: apps/api/build.gradle.kts 에 implementation(project(":modules:<m>")) 한 줄 (모듈이 없으면 이 도구를 다시 쓰지 말고 스켈레톤에서 디렉토리를 복사한 뒤 settings.gradle.kts 에 include).
 설정이 필요하면 docs/config/modules/<m>.yml 에서 바꿀 키만 apps/api application.yml 로 옮긴다. 환경변수는 .env.example 의 [모듈] 구역.
 EOF

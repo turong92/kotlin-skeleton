@@ -6,14 +6,14 @@
 | 항목 | 내용 |
 |---|---|
 | 의존성 한 줄 | `implementation(project(":modules:storage-s3"))` |
-| 함께 오는 모듈 | `storage` |
+| 함께 오는 모듈 | `platform`, `storage` |
 | 컴파일 전용 | `crypto` |
 | 설정 접두사 | `skeleton.storage-s3` — [docs/config/modules/storage-s3.yml](../config/modules/storage-s3.yml) |
 | 기본 동작 | 켜짐. 버킷이 없으면 클라이언트만 있고 `PresignedStorage` 빈은 없다. |
 | 부팅에 필요한 것 | 없음. 버킷(R2 · MinIO 는 endpoint · 키도)은 저장소를 쓸 때 필요하다. `public-url.strategy=OPAQUE` 는 앱이 `:modules:crypto` 와 `skeleton.crypto.keys` 를 더하지 않으면 시작에 실패하고 메시지가 그 모듈을 짚는다. |
 | 교체 지점 | `S3Client`, `S3Presigner`, `StoragePublicUrlResolver`, `PresignedStorage` |
 | 마이그레이션 | 없음 |
-| 프론트 짝 | 없음 |
+| 프론트 짝 | `@skeleton/storage` |
 | 테스트 | `modules/storage-s3/src/test`, `modules/storage-s3/src/noCryptoTest` (`crypto` 가 클래스패스에 없을 때(RAW 동작 · OPAQUE 실패 메시지)) |
 
 자세히: [S3 저장소 상세](../storage-s3.md)

@@ -1,1 +1,2 @@
 dev.sumin.skeleton.storage.StorageAutoConfiguration
+dev.sumin.skeleton.storage.web.StorageWebAutoConfiguration

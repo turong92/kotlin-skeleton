@@ -1,0 +1,13 @@
+
+---
+# storage-s3 (new-project.sh 가 붙인다): compose 의 로컬 S3(SeaweedFS, profile s3 — scripts/dev.sh 가 올린다)에 붙는 local 프로필 설정.
+# 서버와 브라우저가 같은 주소(localhost:8333)라 presign.endpoint-override 는 필요 없다. 운영(R2 · S3)은 환경변수로 따로 정한다.
+skeleton:
+  storage-s3:
+    bucket: app
+    region: us-east-1
+    endpoint-override: http://localhost:8333
+    path-style-access-enabled: true
+    credentials:
+      access-key-id: dev
+      secret-access-key: dev-secret

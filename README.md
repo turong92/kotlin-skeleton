@@ -84,6 +84,8 @@ Fine-grained details such as JWT, password login, OAuth, or dev login live as pa
 
 ## Quick start (starter)
 
+Full stack in one line (stamped project with the React skeleton's project next to it as `../web`): `scripts/dev.sh` — containers (PostgreSQL, and the local S3 when `storage-s3` is in) → backend → `../web`'s `pnpm dev`. Details in the react-skeleton README "백엔드와 나란히". Piece by piece:
+
 ```bash
 docker compose up -d postgres            # PostgreSQL 18 on 127.0.0.1:5432 (db/user app, password dev)
 ./gradlew :apps:api:bootRun --args='--spring.profiles.active=local'
@@ -138,7 +140,7 @@ It intentionally depends on the skeleton capability modules, then uses propertie
 - `GET /api/v1/skeleton/redis/key?value=orders:1` proves `redis-core` key prefixing works without pinging Redis.
 - `POST /api/v1/skeleton/storage/validate` proves storage file validation wiring.
 - `GET /api/v1/skeleton/storage/public-url?key=images/cat.png` proves the configured storage public URL resolver without requiring a product endpoint.
-- `POST /api/v1/skeleton/notifications` publishes a provider-neutral notification event so SSE/Slack/WebSocket delivery modules can subscribe.
+- `POST /api/v1/skeleton/notifications` publishes a provider-neutral notification event so SSE/Slack/WebSocket delivery modules can subscribe. (The recipient's inbox endpoints, `/api/v1/notifications`, are not a workbench sample any more — `modules/notification` opens them for every app; so does `modules/storage` for `/api/v1/storage`.)
 - Realtime notification workbench: `docs/notification-websocket.md` shows how to run `apps/workbench` with SSE/WebSocket enabled and verify it from `react-skeleton`.
 - `GET /api/v1/skeleton/async/probe` proves trace/run/account MDC propagation into the async executor.
 

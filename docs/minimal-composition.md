@@ -99,6 +99,7 @@ fails when this table and the prefixes found in module code differ.
 | `idempotency` | `skeleton.idempotency` |
 | `job-queue-jdbc` | `skeleton.job-queue` |
 | `migration` | `skeleton.migration` |
+| `notification` | `skeleton.notification.inbox` |
 | `notification-mail` | `skeleton.notification-mail` |
 | `notification-slack` | `skeleton.notification.slack` |
 | `notification-sse` | `skeleton.notification.sse` |

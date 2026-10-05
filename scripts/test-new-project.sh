@@ -58,6 +58,10 @@ expect_exit 2 "--modules 에 방언 모듈을 넣으면 --db 를 쓰라며 exit 
 expect_exit 2 "--with-workbench 는 PostgreSQL 전용이라 --db mysql 과 같이 못 쓴다" bash "$SCRIPT" "$TMP/x5" dev.sumin.ovation ovation Ovation --with-workbench --db mysql
 expect_exit 2 "대상이 소스 레포 안이면 exit 2" bash "$SCRIPT" "$SRC/stamped-inside" dev.sumin.ovation ovation Ovation
 [ ! -e "$SRC/stamped-inside" ] && pass "레포 안에는 아무것도 만들지 않는다" || { fail "레포 안에 만들었다"; rm -rf "$SRC/stamped-inside"; }
+# 레포 안에서 `../내-프로젝트` 로 부르는 것이 가장 흔한 첫 시도다 — 경로를 정리하지 않으면 "레포 안" 으로 오인된다
+REL="$(python3 -c 'import os,sys; print(os.path.relpath(sys.argv[1], sys.argv[2]))' "$TMP/relative-target" "$SRC")"
+expect_exit 0 "레포 안에서 ../ 로 레포 밖(\$REL)을 가리키면 찍힌다" bash -c "cd '$SRC' && bash scripts/new-project.sh '$REL' dev.sumin.ovation ovation Ovation"
+check "상대 경로 대상이 실제 레포 밖에 만들어졌다" test -f "$TMP/relative-target/settings.gradle.kts"
 
 echo "== 2. 기본값만"
 MARKER="$TMP/marker"; touch "$MARKER"; sleep 1
@@ -80,6 +84,10 @@ check "rootProject.name 이 바뀐다" has_line 'rootProject.name = "ovation"' "
 check "패키지가 바뀐다" test -f "$A/apps/api/src/main/kotlin/dev/sumin/ovation/app/api/ApiApplication.kt"
 check "starter 테스트의 부재 단언은 그대로 (모듈을 더하지 않았다)" has_line 'software.amazon.awssdk.services.s3.S3Client' "$A/apps/api/src/test/kotlin/dev/sumin/ovation/app/api/StarterCompositionIntegrationTest.kt"
 check "application.yml 에 모듈 블록 구역이 없다 (--modules 를 안 줬다)" lacks_line 'new-project: module config blocks' "$A/apps/api/src/main/resources/application.yml"
+check "로컬 한 줄 실행 스크립트가 따라온다 (scripts/dev.sh — 문법 검사 통과)" bash -c "test -x '$A/scripts/dev.sh' && bash -n '$A/scripts/dev.sh'"
+check "compose 에 로컬 S3(profile s3)와 버킷 준비 서비스가 있다 — 프론트 업로드를 시험하는 데 필요하다" bash -c "grep -q '^  s3:' '$A/docker-compose.yml' && grep -q '^  s3-init:' '$A/docker-compose.yml' && grep -q 'profiles: \\[s3\\]' '$A/docker-compose.yml'"
+check "compose 프로젝트 이름이 새 이름이다 — 폴더 이름(api)을 쓰면 다른 프로젝트의 컨테이너 · 볼륨과 섞인다" has_line '^name: ovation$' "$A/docker-compose.yml"
+check "storage-s3 를 고르지 않으면 application-local.yml 에 S3 설정이 붙지 않는다" lacks_line 'storage-s3' "$A/apps/api/src/main/resources/application-local.yml"
 check "소스 레포는 건드리지 않는다" bash -c "[ -z \"\$(find '$SRC' -newer '$MARKER' -type f -not -path '*/build/*' -not -path '*/.gradle/*' -not -path '*/.kotlin/*' -not -path '*/.git/*' -not -path '*/node_modules/*' 2>/dev/null | head -1)\" ]"
 
 echo "== 3. --modules job-queue-jdbc,notification-mail,storage-s3,scheduler"
@@ -101,6 +109,9 @@ check "storage-s3 블록이 들어 있다" has_line '^#     bucket: ""' "$B/apps
 check "블록을 붙인 yml 이 여전히 유효하다 (주석뿐이라 키가 늘지 않는다)" bash -c "! grep -E '^[a-z]' '$B/apps/api/src/main/resources/application.yml' | sort | uniq -d | grep -q ."
 check "starter 테스트의 부재 단언에서 S3 · 메일이 빠진다" bash -c "! grep -q 'awssdk.services.s3.S3Client\|jakarta.mail.Session' '$B/apps/api/src/test/kotlin/dev/sumin/ovation/app/api/StarterCompositionIntegrationTest.kt'"
 check "starter 테스트의 부재 단언에서 나머지(Redis · Kafka · JPA)는 남는다" bash -c "grep -q 'RedisTemplate' '$B/apps/api/src/test/kotlin/dev/sumin/ovation/app/api/StarterCompositionIntegrationTest.kt'"
+check "storage-s3 를 고르면 application-local.yml 에 로컬 S3 설정(버킷 · 엔드포인트 · 키)이 새 접두사로 붙는다" bash -c "grep -q '^ovation:' '$B/apps/api/src/main/resources/application-local.yml' && grep -q 'endpoint-override: http://localhost:8333' '$B/apps/api/src/main/resources/application-local.yml' && grep -q 'bucket: app' '$B/apps/api/src/main/resources/application-local.yml'"
+check "붙은 application-local.yml 에 skeleton 흔적이 없다" bash -c "! grep -qi 'skeleton' '$B/apps/api/src/main/resources/application-local.yml'"
+check "dev.sh 는 S3 를 쓰는 조합에서 s3 서비스를 같이 올린다" has_line 'storage-s3' "$B/scripts/dev.sh"
 check "persistence-jooq 가 없으니 그 모듈이 읽던 형제 폴더 문제도 없다" test ! -e "$B/modules/persistence-jooq"
 
 echo "== 4. --db mysql --modules job-queue-jdbc"

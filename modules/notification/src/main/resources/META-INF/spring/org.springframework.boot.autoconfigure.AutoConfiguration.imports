@@ -1,1 +1,2 @@
 dev.sumin.skeleton.notification.NotificationAutoConfiguration
+dev.sumin.skeleton.notification.web.NotificationInboxWebAutoConfiguration

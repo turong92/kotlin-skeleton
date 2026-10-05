@@ -16,6 +16,9 @@ class AuthPrincipalAuthentication(
     override fun getCredentials(): Any? = null
 
     override fun getPrincipal(): CurrentPrincipal = currentPrincipal
+
+    // 다른 모듈이 auth 에 의존하지 않고 호출자를 가리키는 값 — 계정 id (기본 구현은 toString 이다)
+    override fun getName(): String = currentPrincipal.accountId
 }
 
 private fun Set<String>.toAuthorities(): Collection<GrantedAuthority> =

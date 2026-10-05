@@ -13,7 +13,7 @@
 | 부팅에 필요한 것 | `DataSource` 와 `db-*` 모듈 하나, 그리고 이 모듈의 마이그레이션이 적용된 스키마. |
 | 교체 지점 | `NotificationInboxRepository` |
 | 마이그레이션 | `modules/notification-jdbc/src/main/resources/db/migration/postgresql`, `modules/notification-jdbc/src/main/resources/db/migration/mysql` |
-| 프론트 짝 | 없음 |
+| 프론트 짝 | `@skeleton/notifications` |
 | 테스트 | `modules/notification-jdbc/src/test`, `modules/notification-jdbc/src/dbTest` (PostgreSQL · MySQL 컨테이너로 두 번 돈다 (`postgresTest`, `mysqlTest`)) |
 
 자세히: [스키마 관리](../schema-management.md)
