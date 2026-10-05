@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.board.jdbc
 
 import dev.sumin.skeleton.board.Board
+import dev.sumin.skeleton.board.BoardErasureRepository
 import dev.sumin.skeleton.board.BoardRepository
 import dev.sumin.skeleton.board.Comment
 import dev.sumin.skeleton.board.CommentRepository
@@ -361,5 +362,18 @@ class JdbcReactionRepository(
 
     private fun bump(target: ReactionTarget, id: Long, delta: Int) {
         if (delta != 0) jdbc.update("update ${table(target)} set reaction_count = reaction_count + :delta where id = :id", mapOf("delta" to delta, "id" to id))
+    }
+}
+
+/**
+ * 계정 삭제: 글 · 댓글의 작성자와 반응의 계정을 [tombstone] 으로 바꾼다. 행은 남고(대화 맥락) 카운터는 그대로다 — 반응은 (대상, 계정, 종류) 가 키인데
+ * 톰스톤은 계정마다 하나라 같은 대상에서 겹치지 않는다. 이미 바뀐 행은 조건에 걸리지 않으므로 다시 불러도 안전하다.
+ */
+class JdbcBoardErasureRepository(private val jdbc: NamedParameterJdbcTemplate) : BoardErasureRepository {
+    override fun anonymizeAuthor(accountId: String, tombstone: String): Int {
+        val p = mapOf("a" to accountId, "t" to tombstone)
+        return jdbc.update("update skeleton_board_posts set author_id = :t where author_id = :a", p) +
+            jdbc.update("update skeleton_board_comments set author_id = :t where author_id = :a", p) +
+            jdbc.update("update skeleton_board_reactions set account_id = :t where account_id = :a", p)
     }
 }

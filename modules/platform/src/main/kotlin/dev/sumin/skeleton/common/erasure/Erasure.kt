@@ -1,4 +1,4 @@
-package dev.sumin.skeleton.account.erasure
+package dev.sumin.skeleton.common.erasure
 
 import java.security.MessageDigest
 import java.util.HexFormat
@@ -11,7 +11,7 @@ data class ErasureRequest(
 )
 
 /**
- * 계정이 완전히 지워질 때(삭제 유예가 끝난 뒤) 불리는 고리 — 빈으로 등록하면 [dev.sumin.skeleton.account.AccountPurgeService] 가 모아 부른다.
+ * 계정이 완전히 지워질 때(삭제 유예가 끝난 뒤) 불리는 고리 — 빈으로 등록하면 `account` 의 `AccountPurgeService` 가 모아 부른다.
  * board(작성자를 "삭제된 사용자" 로) · notification-jdbc(받은편지함 삭제) 처럼 계정 id 를 들고 있는 모듈이 구현한다.
  * **멱등**이어야 한다 — 하나라도 던지면 그 계정은 지워지지 않고 다음 주기에 모든 고리가 다시 불린다.
  */

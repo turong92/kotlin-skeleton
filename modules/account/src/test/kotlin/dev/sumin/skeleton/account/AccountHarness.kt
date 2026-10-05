@@ -80,7 +80,7 @@ class AccountHarness(
     val authRepository = AccountAuthRepository(core)
     val passwords = PasswordService(core)
     val emailChange = EmailChangeService(core)
-    val erasers = java.util.concurrent.CopyOnWriteArrayList<dev.sumin.skeleton.account.erasure.AccountErasureListener>()
+    val erasers = java.util.concurrent.CopyOnWriteArrayList<dev.sumin.skeleton.common.erasure.AccountErasureListener>()
     val deletion = DeletionService(core)
     val purge = AccountPurgeService(core) { erasers.toList() }
     val admin = AdminService(core)

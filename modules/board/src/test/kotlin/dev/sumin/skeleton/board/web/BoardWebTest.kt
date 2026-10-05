@@ -5,6 +5,7 @@ import dev.sumin.skeleton.board.FakeStore
 import dev.sumin.skeleton.boardtest.BoardWebTestApplication
 import dev.sumin.skeleton.boardtest.FakeBoardRepositories
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import org.hamcrest.Matchers.hasSize
 import org.junit.jupiter.api.BeforeEach
 import org.springframework.beans.factory.annotation.Autowired
@@ -287,6 +288,19 @@ class BoardWebTest {
         call(get("/api/v1/boards")).andExpect(status().isUnauthorized)
         call(get("/api/v1/boards/config")).andExpect(status().isUnauthorized)
         call(post("/api/v1/boards/general/posts").idem().json("""{"title":"a","body":"b"}""")).andExpect(status().isUnauthorized)
+    }
+
+    @Test
+    fun `an author whose account was erased shows as a deleted user, others do not`() {
+        val gone = TestingAuthenticationToken("deleted:0a1b2c3d4e5f6071", "n/a", "ROLE_USER")
+        val goneId = newPost(gone)
+        val liveId = newPost(user)
+        call(get("/api/v1/boards/general/posts/$goneId"), user).andExpect(jsonPath("$.value.authorDeleted").value(true))
+        call(get("/api/v1/boards/general/posts/$liveId"), user).andExpect(jsonPath("$.value.authorDeleted").value(false))
+        call(get("/api/v1/boards/general/posts"), user).andExpect(jsonPath("$.values[?(@.id==$goneId)].authorDeleted").value(true))
+        val commentId = newComment(liveId, gone)
+        call(get("/api/v1/boards/general/posts/$liveId/comments"), user).andExpect(jsonPath("$.values[0].authorDeleted").value(true))
+        assertEquals(true, commentId > 0)
     }
 }
 

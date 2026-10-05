@@ -7,7 +7,7 @@ import dev.sumin.skeleton.account.abuse.CaptchaGate
 import dev.sumin.skeleton.account.abuse.ExecutorAccountTaskRunner
 import dev.sumin.skeleton.account.abuse.LoginRecorder
 import dev.sumin.skeleton.account.abuse.LoginThrottle
-import dev.sumin.skeleton.account.erasure.AccountErasureListener
+import dev.sumin.skeleton.common.erasure.AccountErasureListener
 import dev.sumin.skeleton.account.events.AccountEventListener
 import dev.sumin.skeleton.account.events.AccountEventPublisher
 import dev.sumin.skeleton.account.events.DefaultAccountEventPublisher

@@ -1,9 +1,9 @@
 package dev.sumin.skeleton.account
 
 import dev.sumin.skeleton.account.abuse.RateLimitedException
-import dev.sumin.skeleton.account.erasure.AccountErasureListener
-import dev.sumin.skeleton.account.erasure.AccountTombstone
-import dev.sumin.skeleton.account.erasure.ErasureRequest
+import dev.sumin.skeleton.common.erasure.AccountErasureListener
+import dev.sumin.skeleton.common.erasure.AccountTombstone
+import dev.sumin.skeleton.common.erasure.ErasureRequest
 import dev.sumin.skeleton.account.events.AccountEventType
 import dev.sumin.skeleton.account.mail.AccountMail
 import dev.sumin.skeleton.account.mail.MailKind

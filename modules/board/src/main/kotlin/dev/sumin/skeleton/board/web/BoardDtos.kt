@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.board.web
 
+import dev.sumin.skeleton.board.BoardAuthors
 import com.fasterxml.jackson.annotation.JsonInclude
 import dev.sumin.skeleton.board.Board
 import dev.sumin.skeleton.board.BoardConfigView
@@ -40,6 +41,8 @@ data class PostSummaryResponse(
     val attachmentCount: Int,
     val createdAt: Instant,
     val updatedAt: Instant,
+    /** 작성자의 계정이 지워졌다 — 화면은 이름 대신 "삭제된 사용자" 를 보인다 */
+    val authorDeleted: Boolean = BoardAuthors.isDeleted(authorId),
 )
 
 data class PostDetailResponse(
@@ -59,6 +62,8 @@ data class PostDetailResponse(
     val attachmentCount: Int,
     val createdAt: Instant,
     val updatedAt: Instant,
+    /** 작성자의 계정이 지워졌다 — 화면은 이름 대신 "삭제된 사용자" 를 보인다 */
+    val authorDeleted: Boolean = BoardAuthors.isDeleted(authorId),
 )
 
 /** 목록의 한 줄이면 replies 가 있다 (최상위: 모든 자손 작성 순 평평하게, 답글: 빈 배열). 한 댓글만 돌려주는 응답에는 replies 가 없다. */
@@ -79,6 +84,8 @@ data class CommentResponse(
     val createdAt: Instant,
     val updatedAt: Instant,
     val replies: List<CommentResponse>? = null,
+    /** 작성자의 계정이 지워졌다 — 화면은 이름 대신 "삭제된 사용자" 를 보인다 */
+    val authorDeleted: Boolean = BoardAuthors.isDeleted(authorId),
 )
 
 data class ReactionStateResponse(val counts: Map<String, Long>, val myReactions: Set<String>)

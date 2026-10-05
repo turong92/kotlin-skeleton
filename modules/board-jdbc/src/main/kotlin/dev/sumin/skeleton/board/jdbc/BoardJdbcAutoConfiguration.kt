@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.board.jdbc
 
 import dev.sumin.skeleton.board.BoardAutoConfiguration
+import dev.sumin.skeleton.board.BoardErasureRepository
 import dev.sumin.skeleton.board.BoardRepository
 import dev.sumin.skeleton.board.CommentRepository
 import dev.sumin.skeleton.board.PostRepository
@@ -50,4 +51,8 @@ class BoardJdbcAutoConfiguration {
     @ConditionalOnMissingBean(ReactionRepository::class)
     fun jdbcReactionRepository(dataSource: DataSource, transactionManager: PlatformTransactionManager, dialect: SqlDialect): ReactionRepository =
         JdbcReactionRepository(NamedParameterJdbcTemplate(dataSource), TransactionTemplate(transactionManager), dialect)
+
+    @Bean
+    @ConditionalOnMissingBean(BoardErasureRepository::class)
+    fun jdbcBoardErasureRepository(dataSource: DataSource): BoardErasureRepository = JdbcBoardErasureRepository(NamedParameterJdbcTemplate(dataSource))
 }

@@ -1,5 +1,6 @@
 dependencies {
     api(project(":modules:notification"))   // 계약 타입이 이 모듈의 공개 API 에 나온다 — 의존성 한 줄로 충분하게
+    implementation(project(":modules:platform"))   // AccountErasureListener — 계정이 지워질 때 받은편지함을 지우는 공용 계약 (account 모듈은 몰라도 된다)
     implementation(project(":modules:json"))
     implementation(project(":modules:persistence-jdbc"))
 

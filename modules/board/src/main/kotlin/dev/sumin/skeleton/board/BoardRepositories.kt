@@ -62,3 +62,19 @@ interface ReactionRepository {
     /** 쿼리 한 번 — 대상 id → 내가 누른 종류들 */
     fun mine(target: ReactionTarget, targetIds: Collection<Long>, accountId: String): Map<Long, Set<String>>
 }
+
+/**
+ * 계정이 지워질 때 그 계정의 글 · 댓글 작성자와 반응의 계정을 [tombstone] 으로 바꾼다 (행은 남는다 — 대화의 맥락 · 카운터를 지키려고).
+ * 별도 포트라서 기존 저장소 구현은 영향이 없다. `board-jdbc` 가 구현하고, 앱이 자기 저장소를 둘 때는 이것도 구현하면 계정 삭제가 board 데이터까지 닿는다.
+ */
+interface BoardErasureRepository {
+    /** 바꾼 행 수. **멱등** — 다시 불러도 같은 결과 (이미 바뀐 행은 대상이 아니다) */
+    fun anonymizeAuthor(accountId: String, tombstone: String): Int
+}
+
+/** 지워진 계정의 작성자 값은 이 접두사로 시작한다 (계정 모듈의 `AccountTombstone` 과 같은 약속 — 모듈끼리 서로의 타입을 모르게 문자열 규칙으로 맞춘다) */
+object BoardAuthors {
+    const val DELETED_PREFIX = "deleted:"
+
+    fun isDeleted(authorId: String?): Boolean = authorId != null && authorId.startsWith(DELETED_PREFIX)
+}
