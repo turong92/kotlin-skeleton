@@ -10,6 +10,7 @@ import dev.sumin.skeleton.auth.security.AuthErrorWriter
 import dev.sumin.skeleton.auth.security.BreakGlassAuthenticationFilter
 import dev.sumin.skeleton.auth.security.DevLoginAuthenticationFilter
 import dev.sumin.skeleton.auth.security.JwtAuthenticationFilter
+import dev.sumin.skeleton.common.deploy.DeployContext
 import dev.sumin.skeleton.common.web.PublicEndpointContributor
 import dev.sumin.skeleton.common.web.PublicEndpointRegistry
 import jakarta.servlet.DispatcherType
@@ -63,7 +64,7 @@ class AuthAutoConfiguration {
     @ConditionalOnMissingBean
     fun jwtTokenService(properties: AuthProperties, environment: Environment): JwtTokenService {
         // 빈 키는 SecretKeySpec 이 더 모호한 오류로 던지므로, 보호 프로필의 잘못된 비밀은 여기서 이름 붙은 메시지로 먼저 막는다
-        AuthStartupValidator.validateJwtSecret(properties, environment.activeProfiles.toSet())
+        AuthStartupValidator.validateJwtSecret(properties, DeployContext.from(environment))
         return JwtTokenService(properties.jwt)
     }
 
@@ -81,6 +82,12 @@ class AuthAutoConfiguration {
     ): AuthController =
         AuthController(accountRepository, passwordEncoder, authTokenResponseFactory)
 
+    /** 같은 규칙을 DeployGuard 로 내놓는다 — 플랫폼의 기동 요약에 보이고, `skeleton.env` 로도 보호된다 */
+    @Bean
+    @ConditionalOnMissingBean
+    fun authDeployGuard(properties: AuthProperties, accountRepository: ObjectProvider<AuthAccountRepository>): AuthDeployGuard =
+        AuthDeployGuard(properties) { accountRepository.getIfUnique() }
+
     @Bean
     fun authStartupValidation(
         properties: AuthProperties,
@@ -89,7 +96,7 @@ class AuthAutoConfiguration {
     ): SmartInitializingSingleton =
         // 모든 싱글턴이 만들어진 직후(컨텍스트 refresh 안)에 돈다 — 실패하면 컨텍스트가 뜨지 않는다
         SmartInitializingSingleton {
-            AuthStartupValidator.validate(properties, environment.activeProfiles.toSet(), accountRepository.getIfUnique())
+            AuthStartupValidator.validate(properties, DeployContext.from(environment), accountRepository.getIfUnique())
         }
 
     @Bean

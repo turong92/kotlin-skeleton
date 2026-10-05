@@ -10,8 +10,8 @@
 | 컴파일 전용 | 없음 |
 | 설정 접두사 | `skeleton.auth` — [docs/config/modules/auth.yml](../config/modules/auth.yml) |
 | 기본 동작 | 켜짐. |
-| 부팅에 필요한 것 | `local` · `dev` · `test` · 프로필 없음: 없음. `prod` · `staging`(`skeleton.auth.protected-profiles`): `skeleton.auth.jwt.secret` 32바이트 이상과 앱의 `AuthAccountRepository` 빈이 없으면 시작에 실패한다. |
-| 교체 지점 | `AuthAccountRepository`, `PasswordEncoder`, `JwtTokenService`, `AuthTokenResponseFactory`, `AuthErrorWriter`, `SecurityFilterChain` |
+| 부팅에 필요한 것 | `local` · `dev` · `test` · 프로필 없음: 없음. `prod` · `staging`(`skeleton.auth.protected-profiles`): `skeleton.auth.jwt.secret` 32바이트 이상과 앱의 `AuthAccountRepository` 빈이 없으면 시작에 실패한다. `skeleton.env=stage|prod`(옵트인 — [배포](../deploy.md))이면 프로필 없이도 같다. 규칙은 `DeployGuard`(`auth`)로도 보인다. |
+| 교체 지점 | `AuthAccountRepository`, `PasswordEncoder`, `JwtTokenService`, `AuthTokenResponseFactory`, `AuthErrorWriter`, `SecurityFilterChain`, `AuthDeployGuard` |
 | 마이그레이션 | 없음 |
 | 프론트 짝 | `@skeleton/auth` |
 | 테스트 | `modules/auth/src/test` |

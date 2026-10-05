@@ -1,6 +1,8 @@
 // 마이그레이션 공통 (도구 무관): 설정 skeleton.migration, DB 를 지울 수 있는 설정의 프로필 가드.
 // 도구별 구현은 migration-flyway (나중에 migration-liquibase) 가 이 모듈 위에 얹는다
 dependencies {
+    implementation(project(":modules:platform"))   // DeployGuard · DeployContext — 가드 규칙이 이 계약으로 선다
+    implementation("org.springframework.boot:spring-boot-autoconfigure")
     implementation("org.springframework.boot:spring-boot")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
 

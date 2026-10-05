@@ -6,7 +6,7 @@ Flyway 의 `out-of-order` 같은 사용법 선택은 앱 yml 이 정한다.
 | 항목 | 내용 |
 |---|---|
 | 의존성 한 줄 | `implementation(project(":modules:migration-flyway"))` |
-| 함께 오는 모듈 | `migration` |
+| 함께 오는 모듈 | `migration`, `platform` |
 | 컴파일 전용 | 없음 |
 | 설정 접두사 | 없음 |
 | 기본 동작 | 켜짐. |

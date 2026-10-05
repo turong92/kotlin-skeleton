@@ -2,68 +2,73 @@ package dev.sumin.skeleton.auth.config
 
 import dev.sumin.skeleton.auth.account.AuthAccountRepository
 import dev.sumin.skeleton.auth.account.SeedAuthAccountRepository
+import dev.sumin.skeleton.common.deploy.DeployContext
+import dev.sumin.skeleton.common.deploy.DeployFinding
+import dev.sumin.skeleton.common.deploy.DeployGuardViolationException
 
 /**
  * 보호 프로필(기본 prod · staging, `skeleton.auth.protected-profiles`)에서 안전하지 않은 인증 구성이면 기동을 막는다.
  * local · dev · test · 프로필 없음은 그대로 동작한다 (스타터의 테스트가 시드 사용자에 기댄다).
+ * `skeleton.env` 를 stage · prod 로 정했다면 프로필과 상관없이 같은 규칙이 선다 (옵트인 — 정하지 않으면 이전과 같다).
+ *
+ * 규칙은 [problems] 한 곳에 있고, [AuthDeployGuard] 가 그것을 DeployGuard 로 내놓는다. 던지는 예외는 [DeployGuardViolationException]
+ * (IllegalStateException) — 문제가 하나면 메시지는 예전과 같다.
  */
 object AuthStartupValidator {
     /** HS256 은 256비트(32바이트) 이상의 키를 요구한다 (RFC 7518 §3.2). */
     const val MIN_JWT_SECRET_BYTES = 32
 
-    fun validate(properties: AuthProperties, activeProfiles: Set<String>, accountRepository: AuthAccountRepository? = null) {
-        val protectedProfileActive = isProtected(properties, activeProfiles)
+    private const val GUARD = "auth"
 
-        if (properties.devLogin.enabled && protectedProfileActive) {
-            throw IllegalStateException("Dev login cannot be enabled in prod or staging")
-        }
+    fun validate(properties: AuthProperties, activeProfiles: Set<String>, accountRepository: AuthAccountRepository? = null) =
+        validate(properties, DeployContext(null, activeProfiles), accountRepository)
 
-        validateJwtSecret(properties, activeProfiles)
-
-        if (protectedProfileActive && accountRepository is SeedAuthAccountRepository) {
-            throw IllegalStateException(
-                "The built-in in-memory AuthAccountRepository seeds user/password and admin/password accounts and " +
-                    "cannot be used with the active protected profile(s) ${protectedActive(properties, activeProfiles)}. " +
-                    "Register your own AuthAccountRepository bean.",
-            )
-        }
-
-        if (!properties.breakGlass.enabled) {
-            return
-        }
-
-        if (properties.breakGlass.secret.isBlank()) {
-            throw IllegalStateException("Break-glass secret is required when break-glass login is enabled")
-        }
-
-        if (protectedProfileActive && properties.breakGlass.allowedAccountIds.none { it.isNotBlank() }) {
-            throw IllegalStateException("Break-glass allowed account ids are required in prod or staging")
-        }
+    fun validate(properties: AuthProperties, context: DeployContext, accountRepository: AuthAccountRepository? = null) {
+        val problems = problems(properties, context, accountRepository)
+        if (problems.isNotEmpty()) throw DeployGuardViolationException(problems.map { DeployFinding(GUARD, it) })
     }
 
     /** JWT 비밀만 따로 본다 — `JwtTokenService` 를 만들기 전에 이름 붙은 메시지로 막으려고 AutoConfiguration 이 먼저 부른다. */
-    fun validateJwtSecret(properties: AuthProperties, activeProfiles: Set<String>) {
-        if (!isProtected(properties, activeProfiles)) {
-            return
+    fun validateJwtSecret(properties: AuthProperties, activeProfiles: Set<String>) =
+        validateJwtSecret(properties, DeployContext(null, activeProfiles))
+
+    fun validateJwtSecret(properties: AuthProperties, context: DeployContext) {
+        val problem = jwtSecretProblem(properties, context) ?: return
+        throw DeployGuardViolationException(listOf(DeployFinding(GUARD, problem)))
+    }
+
+    /** 이 환경에서 서면 안 되는 인증 구성 전부 (메시지에 비밀 값은 없다 — 속성 · 빈 이름만) */
+    fun problems(properties: AuthProperties, context: DeployContext, accountRepository: AuthAccountRepository? = null): List<String> =
+        buildList {
+            val protectedNow = context.protectedBy(properties.protectedProfiles)
+            if (properties.devLogin.enabled && protectedNow) add("Dev login cannot be enabled in prod or staging")
+            jwtSecretProblem(properties, context)?.let(::add)
+            if (protectedNow && accountRepository is SeedAuthAccountRepository) {
+                add(
+                    "The built-in in-memory AuthAccountRepository seeds user/password and admin/password accounts and " +
+                        "cannot be used with the active protected profile(s) ${context.protectedBecause(properties.protectedProfiles)}. " +
+                        "Register your own AuthAccountRepository bean.",
+                )
+            }
+            if (properties.breakGlass.enabled) {
+                if (properties.breakGlass.secret.isBlank()) add("Break-glass secret is required when break-glass login is enabled")
+                if (protectedNow && properties.breakGlass.allowedAccountIds.none { it.isNotBlank() }) {
+                    add("Break-glass allowed account ids are required in prod or staging")
+                }
+            }
         }
 
+    private fun jwtSecretProblem(properties: AuthProperties, context: DeployContext): String? {
+        if (!context.protectedBy(properties.protectedProfiles)) return null
         val secret = properties.jwt.secret
-        val profiles = protectedActive(properties, activeProfiles)
-        val problem = when {
+        val reason = when {
             secret.isBlank() -> "is blank"
             secret == AuthProperties.Jwt.DEFAULT_SECRET -> "is the built-in development default"
             secret.toByteArray(Charsets.UTF_8).size < MIN_JWT_SECRET_BYTES -> "is shorter than $MIN_JWT_SECRET_BYTES bytes (required by HS256)"
-            else -> return
+            else -> return null
         }
-        throw IllegalStateException(
-            "skeleton.auth.jwt.secret $problem, which is not allowed with the active protected profile(s) $profiles. " +
-                "Set skeleton.auth.jwt.secret (env JWT_SECRET) to a random secret of at least $MIN_JWT_SECRET_BYTES bytes.",
-        )
+        return "skeleton.auth.jwt.secret $reason, which is not allowed with the active protected profile(s) " +
+            "${context.protectedBecause(properties.protectedProfiles)}. " +
+            "Set skeleton.auth.jwt.secret (env JWT_SECRET) to a random secret of at least $MIN_JWT_SECRET_BYTES bytes."
     }
-
-    private fun isProtected(properties: AuthProperties, activeProfiles: Set<String>): Boolean =
-        protectedActive(properties, activeProfiles).isNotEmpty()
-
-    private fun protectedActive(properties: AuthProperties, activeProfiles: Set<String>): List<String> =
-        activeProfiles.filter { it in properties.protectedProfiles }.sorted()
 }

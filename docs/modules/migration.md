@@ -1,12 +1,12 @@
 # migration
 
-도구에 중립인 마이그레이션 공통 규칙이다: DB 를 지우는 설정(`clean-on-validation-error`, `spring.flyway.clean-disabled=false`, `spring.liquibase.drop-first=true`)이 허용 프로필 밖에서 켜지면 시작을 막는 가드.
+도구에 중립인 마이그레이션 공통 규칙이다: DB 를 지우는 설정(`clean-on-validation-error`, `spring.flyway.clean-disabled=false`, `spring.liquibase.drop-first=true`)이 허용 프로필 밖에서 켜지면 시작을 막는 가드(`DeployGuard` 로도 보인다 — [배포](../deploy.md)).
 Flyway 쪽 구현은 `migration-flyway` 가 맡는다. Flyway 기본값은 바꾸지 않는다.
 
 | 항목 | 내용 |
 |---|---|
 | 의존성 한 줄 | `implementation(project(":modules:migration"))` |
-| 함께 오는 모듈 | 없음 |
+| 함께 오는 모듈 | `platform` |
 | 컴파일 전용 | 없음 |
 | 설정 접두사 | `skeleton.migration` — [docs/config/modules/migration.yml](../config/modules/migration.yml) |
 | 기본 동작 | 켜짐 (가드). |

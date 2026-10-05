@@ -1,8 +1,9 @@
 package dev.sumin.skeleton.migration
 
+import dev.sumin.skeleton.common.deploy.DeployContext
+import dev.sumin.skeleton.common.deploy.DeployFinding
+import dev.sumin.skeleton.common.deploy.DeployGuardViolationException
 import org.springframework.boot.SpringApplication
-import org.springframework.boot.context.properties.bind.Bindable
-import org.springframework.boot.context.properties.bind.Binder
 import org.springframework.boot.env.EnvironmentPostProcessor
 import org.springframework.core.Ordered
 import org.springframework.core.env.ConfigurableEnvironment
@@ -22,26 +23,7 @@ class MigrationCleanGuardEnvironmentPostProcessor : EnvironmentPostProcessor, Or
     }
 
     private fun guard(environment: ConfigurableEnvironment) {
-        val binder = Binder.get(environment)
-        // 생성자 바인딩(데이터 클래스)은 kotlin-reflect 없이 실패하므로 키를 하나씩 읽는다 — 기본값은 MigrationProperties 와 같게
-        val defaults = MigrationProperties()
-        val cleanOnValidationError = binder.bind("skeleton.migration.clean-on-validation-error", Boolean::class.javaObjectType)
-            .orElse(null) ?: defaults.cleanOnValidationError
-        val allowedProfiles = binder.bind("skeleton.migration.clean-allowed-profiles", Bindable.listOf(String::class.java))
-            .orElse(null) ?: defaults.cleanAllowedProfiles
-        val flywayCleanEnabled = (binder.bind("spring.flyway.clean-disabled", Boolean::class.javaObjectType).orElse(null) ?: true).not()
-        val liquibaseDropFirst = binder.bind("spring.liquibase.drop-first", Boolean::class.javaObjectType).orElse(null) ?: false
-        val active = environment.activeProfiles.toSet()
-        if (active.any { it in allowedProfiles }) return
-        val offending = buildList {
-            if (cleanOnValidationError) add("skeleton.migration.clean-on-validation-error=true")
-            if (flywayCleanEnabled) add("spring.flyway.clean-disabled=false")
-            if (liquibaseDropFirst) add("spring.liquibase.drop-first=true")
-        }
-        check(offending.isEmpty()) {
-            "${offending.joinToString()} can wipe the database and is only allowed in profiles " +
-                "$allowedProfiles (skeleton.migration.clean-allowed-profiles); active profiles: " +
-                active.ifEmpty { setOf("default") }
-        }
+        val problems = MigrationCleanGuardRules.problems(environment, DeployContext.from(environment))
+        if (problems.isNotEmpty()) throw DeployGuardViolationException(problems.map { DeployFinding("migration-clean", it) })
     }
 }
