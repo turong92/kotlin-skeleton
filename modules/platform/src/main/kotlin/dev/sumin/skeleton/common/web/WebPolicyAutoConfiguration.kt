@@ -1,5 +1,9 @@
 package dev.sumin.skeleton.common.web
 
+import dev.sumin.skeleton.common.time.TimeProvider
+import dev.sumin.skeleton.common.time.asClock
+import java.time.Clock
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
@@ -19,6 +23,7 @@ import tools.jackson.databind.ObjectMapper
 @AutoConfiguration
 @EnableConfigurationProperties(WebProperties::class)
 class WebPolicyAutoConfiguration {
+    private val log = LoggerFactory.getLogger(javaClass)
 
     @Bean
     @ConditionalOnMissingBean
@@ -27,6 +32,28 @@ class WebPolicyAutoConfiguration {
         contributors: ObjectProvider<PublicEndpointContributor>,
     ): PublicEndpointRegistry =
         PublicEndpointRegistry.from(properties, contributors.orderedStream().toList())
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun clientIps(properties: WebProperties): ClientIps =
+        ClientIps(properties.clientIp).also { log.info("Client IP: {}", it.describe()) }
+            .also {
+                if (!it.configured && properties.forwardedHeaders.enabled) {
+                    log.warn(
+                        "skeleton.web.client-ip.mode is not set: rate limit / idempotency keys use remoteAddr, and ForwardedHeaderFilter " +
+                            "lets any caller choose it with X-Forwarded-For. Set mode=direct (no proxy) or proxy / cloudflare (behind one).",
+                    )
+                }
+            }
+
+    /** `ForwardedHeaderFilter` 가 `remoteAddr` 를 덮어쓰기 **전에** 클라이언트를 풀어 둔다 — mode 를 정했을 때만 */
+    @Bean
+    @ConditionalOnMissingBean(name = ["clientIpFilterRegistration"])
+    @ConditionalOnProperty(prefix = "skeleton.web.client-ip", name = ["mode"])
+    fun clientIpFilterRegistration(clientIps: ClientIps): FilterRegistrationBean<ClientIpFilter> =
+        FilterRegistrationBean(ClientIpFilter(clientIps)).apply {
+            order = Ordered.HIGHEST_PRECEDENCE
+        }
 
     @Bean
     @ConditionalOnMissingBean(name = ["forwardedHeaderFilterRegistration"])
@@ -84,14 +111,14 @@ class WebPolicyAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     @ConditionalOnProperty(prefix = "skeleton.web.rate-limit", name = ["enabled"], havingValue = "true")
-    fun rateLimitKeyResolver(): RateLimitKeyResolver =
-        ClientIpRateLimitKeyResolver()
+    fun rateLimitKeyResolver(clientIps: ClientIps): RateLimitKeyResolver =
+        ClientIpRateLimitKeyResolver(clientIps)
 
     @Bean
     @ConditionalOnMissingBean
     @ConditionalOnProperty(prefix = "skeleton.web.rate-limit", name = ["enabled"], havingValue = "true")
-    fun rateLimitStore(): RateLimitStore =
-        InMemoryFixedWindowRateLimitStore()
+    fun rateLimitStore(timeProvider: ObjectProvider<TimeProvider>): RateLimitStore =
+        InMemoryFixedWindowRateLimitStore(timeProvider.getIfAvailable()?.asClock() ?: Clock.systemUTC())
 
     @Bean
     @ConditionalOnMissingBean(name = ["rateLimitFilterRegistration"])

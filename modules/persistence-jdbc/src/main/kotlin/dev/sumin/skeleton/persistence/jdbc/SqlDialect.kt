@@ -23,6 +23,7 @@ interface SqlDialect {
     /**
      * 충돌(기본 키 · 유니크)하면 아무것도 하지 않는 insert. 파라미터 이름은 칼럼 이름과 같다 (`:recipient_id`).
      * 예외를 잡아 삼키는 방식은 PG 에서 트랜잭션 전체를 abort 시키므로 쓰지 않는다.
+     * **돌려주는 갱신 행 수로 넣었는지 판정하지 않는다** — MySQL 구현(`on duplicate key update`)은 이미 있는 행에도 1 을 돌려준다 (실측, alert-jdbc).
      */
     fun insertIgnore(table: String, columns: List<String>, conflictColumns: List<String>): String
 }

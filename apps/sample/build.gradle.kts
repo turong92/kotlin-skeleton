@@ -20,6 +20,7 @@ dependencies {
     implementation(project(":modules:job-queue-jdbc"))     // 내보내기 같은 오래 걸리는 일 (재시도 큐)
     implementation(project(":modules:board"))              // 게시판: 글 · 대댓글 · 종류가 있는 반응 (/api/v1/boards). 댓글 알림은 위 notification 이 있어서 켜진다
     implementation(project(":modules:board-jdbc"))         // 게시판 저장소 (board 는 저장소를 모른다)
+    implementation(project(":modules:alert-jdbc"))         // 주인 경보 (+ alert) — 5xx 몰림 · 죽은 작업을 Discord 웹훅으로. 웹훅 주소가 없으면 아무것도 안 보낸다
 
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-data-jdbc")

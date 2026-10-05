@@ -124,6 +124,17 @@ class S3PresignedStorageServiceTest {
     }
 
     @Test
+    fun `a presigned upload can sign Cache-Control so the browser must send it (immutable static assets)`() {
+        val cache = "public, max-age=31536000, immutable"
+        val signed = service.presignUpload(PresignedUploadRequest(key = ObjectKey("img/a.png"), contentType = "image/png", cacheControl = cache))
+        val unsigned = service.presignUpload(PresignedUploadRequest(key = ObjectKey("img/a.png"), contentType = "image/png"))
+
+        assertEquals(cache, signed.headers.mapKeys { it.key.lowercase() }["cache-control"])
+        assertThat(java.net.URLDecoder.decode(signed.url.query, Charsets.UTF_8)).contains("cache-control")
+        assertThat(unsigned.headers.keys.map { it.lowercase() }).doesNotContain("cache-control")
+    }
+
+    @Test
     fun `starts presigns completes and aborts multipart uploads`() {
         val started = service.startMultipartUpload(
             StartMultipartUploadRequest(

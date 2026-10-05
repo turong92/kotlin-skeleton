@@ -33,6 +33,18 @@ enum class PlatformErrorCode(
         title = "Malformed request body",
         defaultDetail = "Request body is malformed.",
     ),
+    METHOD_NOT_ALLOWED(
+        code = "COMMON.METHOD_NOT_ALLOWED",
+        status = HttpStatus.METHOD_NOT_ALLOWED,
+        title = "Method not allowed",
+        defaultDetail = "This route does not support the request method.",
+    ),
+    UNSUPPORTED_MEDIA_TYPE(
+        code = "COMMON.UNSUPPORTED_MEDIA_TYPE",
+        status = HttpStatus.UNSUPPORTED_MEDIA_TYPE,
+        title = "Unsupported media type",
+        defaultDetail = "This route does not accept the request body's content type.",
+    ),
     NOT_FOUND(
         code = "COMMON.NOT_FOUND",
         status = HttpStatus.NOT_FOUND,

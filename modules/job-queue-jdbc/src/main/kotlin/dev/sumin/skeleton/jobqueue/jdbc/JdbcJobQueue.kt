@@ -7,10 +7,11 @@ class JdbcJobQueue(
     private val repository: JdbcJobRepository,
     private val properties: JobQueueProperties,
     private val timeProvider: TimeProvider,
+    private val propagator: JobContextPropagator = MdcJobContextPropagator(properties.propagatedMdcKeys),
 ) : JobQueue {
     override fun enqueue(type: String, payloadJson: String, runAt: Instant?, maxAttempts: Int?): Long {
         require(type.isNotBlank()) { "Job type must not be blank." }
         val now = timeProvider.now()
-        return repository.insert(type, payloadJson, runAt ?: now, maxAttempts ?: properties.maxAttempts, now)
+        return repository.insert(type, payloadJson, runAt ?: now, maxAttempts ?: properties.maxAttempts, now, propagator.capture())
     }
 }

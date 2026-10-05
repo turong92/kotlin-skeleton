@@ -29,6 +29,10 @@ springdoc:
 skeleton:
   job-queue:
     poll-interval: 1s                 # 내보내기가 몇 초 안에 끝나 보이도록 (모듈 기본값은 2s)
+    retention:
+      enabled: true                   # 끝난 작업 줄이 쌓이지 않게 (모듈 기본은 꺼짐 — 보관 정책은 앱이 정한다)
+  alert:
+    webhook-url: ${ALERT_WEBHOOK_URL:}  # 비우면 꺼진다 — 주소(Discord 웹훅)가 있을 때만 5xx 몰림 · 죽은 작업 · 기동 실패를 알린다 (docs/alert.md)
   storage:
     validation:                       # 첨부 규칙 — 서버가 presign 전에 검사한다 (프론트도 같은 규칙을 미리 보여 준다)
       max-size-bytes: 5242880         # 5 MB

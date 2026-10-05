@@ -16,6 +16,6 @@
 | 프론트 짝 | `@skeleton/api-client` |
 | 테스트 | `modules/platform/src/test` |
 
-자세히: [설정 키 설명](../configuration.md) · [에러 계약](../errors.md) · [외부 HTTP](../external-http.md) · [로깅](../logging.md) · [관측 링크](../observability-links.md) · [OpenAPI](../openapi.md)
+자세히: [설정 키 설명](../configuration.md) · [클라이언트 IP](../client-ip.md) · [에러 계약](../errors.md) · [외부 HTTP](../external-http.md) · [로깅](../logging.md) · [관측 링크](../observability-links.md) · [OpenAPI](../openapi.md)
 
 [모듈 색인](README.md) · [최소 구성 가이드](../minimal-composition.md)

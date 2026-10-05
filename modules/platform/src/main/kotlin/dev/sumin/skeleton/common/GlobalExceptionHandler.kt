@@ -5,7 +5,11 @@ import org.slf4j.MDC
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.http.converter.HttpMessageNotReadableException
+import org.springframework.web.HttpMediaTypeNotAcceptableException
+import org.springframework.web.HttpMediaTypeNotSupportedException
+import org.springframework.web.HttpRequestMethodNotSupportedException
 import org.springframework.web.bind.MethodArgumentNotValidException
+import org.springframework.web.bind.MissingServletRequestParameterException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
 import org.springframework.web.method.annotation.HandlerMethodValidationException
@@ -65,6 +69,49 @@ class GlobalExceptionHandler {
                 errors = listOf(ApiError.FieldError(field = ex.name, code = "TypeMismatch", message = "Invalid value")),
             ),
         )
+
+    /** 필수 쿼리 파라미터가 아예 빠진 경우 — 값이 잘못된 경우와 같은 코드로 답하고 파라미터 이름을 알려 준다 */
+    @ExceptionHandler(MissingServletRequestParameterException::class)
+    fun handleMissingParameter(ex: MissingServletRequestParameterException): ResponseEntity<ApiError> =
+        ResponseEntity.badRequest().body(
+            apiError(
+                errorCode = PlatformErrorCode.PARAMETER_VALIDATION_FAILED,
+                detail = "Parameter '${ex.parameterName}' is required.",
+                traceId = currentTraceId(),
+                spanId = currentSpanId(),
+                errors = listOf(ApiError.FieldError(field = ex.parameterName, code = "Missing", message = "Required")),
+            ),
+        )
+
+    /** 없는 메서드 — 공개 주소에 GET 한 번으로 ERROR 로그 · 500 이 나지 않게. 허용 메서드는 `Allow` 헤더로 */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException::class)
+    fun handleMethodNotSupported(ex: HttpRequestMethodNotSupportedException): ResponseEntity<ApiError> {
+        val response = ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
+        ex.supportedHttpMethods?.takeIf { it.isNotEmpty() }?.let { response.allow(*it.toTypedArray()) }
+        return response.body(
+            apiError(
+                errorCode = PlatformErrorCode.METHOD_NOT_ALLOWED,
+                traceId = currentTraceId(),
+                spanId = currentSpanId(),
+            ),
+        )
+    }
+
+    /** `consumes` 가 받지 않는 본문 형식 — 클라이언트 잘못이라 500 이 아니라 415 */
+    @ExceptionHandler(HttpMediaTypeNotSupportedException::class)
+    fun handleUnsupportedMediaType(ex: HttpMediaTypeNotSupportedException): ResponseEntity<ApiError> =
+        ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE).body(
+            apiError(
+                errorCode = PlatformErrorCode.UNSUPPORTED_MEDIA_TYPE,
+                traceId = currentTraceId(),
+                spanId = currentSpanId(),
+            ),
+        )
+
+    /** 클라이언트가 받을 수 있는 형식을 못 준다 — JSON 본문을 쓰면 그것도 못 받으니 본문 없이 406 */
+    @ExceptionHandler(HttpMediaTypeNotAcceptableException::class)
+    fun handleNotAcceptable(ex: HttpMediaTypeNotAcceptableException): ResponseEntity<Void> =
+        ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE).build()
 
     @ExceptionHandler(HttpMessageNotReadableException::class)
     fun handleMalformedJson(ex: HttpMessageNotReadableException): ResponseEntity<ApiError> =

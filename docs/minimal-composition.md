@@ -91,6 +91,10 @@ fails when this table and the prefixes found in module code differ.
 |---|---|
 | `async` | `skeleton.async` |
 | `async-notification` | `skeleton.async-notification` |
+| `alert` | `skeleton.alert` |
+| `alert-jdbc` | `skeleton.alert-jdbc` |
+| `alert` | wired (logs only); sends nothing until `skeleton.alert.webhook-url` is set | nothing | a Discord-compatible webhook URL, internet |
+| `alert-jdbc` | yes | a `DataSource` + one `db-*` module (+ its migration, as above) | — |
 | `auth` | `skeleton.auth` |
 | `auth-social` | `skeleton.auth-social` |
 | `board` | `skeleton.board` |

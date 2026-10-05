@@ -39,6 +39,10 @@ interceptors.
 - `PAYMENT.*`: provider-neutral payment errors. Vendor codes are nested under
   `data.providerCode`, not promoted to the top-level `code`.
 
+Wrong calls from clients are answered by the handler, never as 500: `405 COMMON.METHOD_NOT_ALLOWED` (with an `Allow` header),
+`415 COMMON.UNSUPPORTED_MEDIA_TYPE`, `406` (empty body — the client cannot read JSON either) and `400 COMMON.PARAMETER_VALIDATION_FAILED`
+with `errors[{field, code: "Missing"}]` for a missing required query parameter.
+
 `COMMON.DATA_INTEGRITY_VIOLATION` is reserved for sanitized persistence
 constraint conflicts. Keep raw database/vendor messages in logs, traces, or
 secure operational notifications instead of returning them to clients.
