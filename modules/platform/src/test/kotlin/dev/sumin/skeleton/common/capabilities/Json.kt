@@ -18,7 +18,7 @@ internal object Json {
 internal fun Any?.obj(): Map<String, Any?> = this as Map<String, Any?>
 
 @Suppress("UNCHECKED_CAST")
-internal fun Any?.arr(): List<Any?> = this as List<Any?>
+internal fun Any?.arr(): List<Any?> = (this as? List<Any?>).orEmpty()   // 없는 칸(stamped 에는 examples 가 없다)은 빈 목록
 
 internal fun Any?.strings(): List<String> = (this as? List<*>)?.map { it as String }.orEmpty()
 

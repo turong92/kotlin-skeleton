@@ -211,6 +211,8 @@ cd "$TARGET"
 
 # 새 프로젝트에는 찍어내는 도구가 필요 없다 (CI 워크플로가 그 도구를 시험한다)
 rm -rf scripts/new-project.sh scripts/test-new-project.sh scripts/new-project.d .github/workflows/new-project.yml docs/new-project-recipe.md
+# 카탈로그 가드가 정말 무는지 보는 시험은 스켈레톤의 모든 모듈을 전제한다 (찍은 프로젝트에는 CapabilitiesCatalogTest 만 남는다)
+rm -f modules/platform/src/test/kotlin/dev/sumin/skeleton/common/capabilities/CapabilitiesGuardsTest.kt
 
 # ---------------------------------------------------------------------------------------------------- 지우기
 [ "$WITH_WORKBENCH" = 1 ] || { rm -rf apps/workbench; perl -ni -e 'print unless /^include\(":apps:workbench"\)\s*$/' settings.gradle.kts; }
