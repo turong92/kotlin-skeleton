@@ -1,0 +1,70 @@
+# account — 계정 수명주기: 이메일+비밀번호 가입 · 이메일 확인 · 재설정 · 변경 · 로그인 수단(소셜 · 매직 링크) · 삭제 · 운영자 도구.
+# 사용 방식을 정하는 값(관리자 HTTP · 소셜 가입 · 병합 · 시드 계정 · 첫 관리자 · 메일 링크 로그)은 전부 꺼진 채 시작한다 — 앱이 자기 yml 에서 명시적으로 켠다.
+skeleton:
+  account:
+    default-roles: [USER]              # 가입할 때 계정에 주는 역할
+    sign-up:
+      enabled: true                    # false 면 가입을 닫는다 (ACCOUNT.SIGN_UP_CLOSED) — 초대 · 시드 계정만 쓰는 서비스
+      email-verification: true         # true: 확인 뒤에야 로그인, 가입 응답은 늘 같은 202. false: 바로 ACTIVE 이고 중복 이메일이 409 로 드러난다
+      per-ip: 10                       # 같은 IP 가 창 안에 보낼 수 있는 가입 요청 수
+      per-ip-window: 1h
+    password:
+      min-length: 10
+      max-bytes: 72                    # UTF-8 바이트 상한 — bcrypt 가 72바이트까지만 읽는다 (argon2 로 바꾸면 늘려도 된다)
+      require-letter: true
+      require-digit: true
+      require-symbol: false
+      forbid-email-local-part: true    # 비밀번호가 이메일 앞부분을 포함하면 거부
+      deny-common: true                # 내장 흔한 비밀번호 목록 거부 (네트워크 호출 없음). 유출 조회는 BreachedPasswordCheck 빈으로
+      encoder: bcrypt                  # bcrypt | argon2 (argon2 는 BouncyCastle bcprov 가 클래스패스에 있어야 한다). 옛 해시는 로그인 때 새 방식으로 올라간다
+      bcrypt-strength: 10
+    verification:
+      ttl: 24h                         # 인증 링크 유효 시간
+      per-email: 3                     # 한 이메일에 창 안에 보낼 인증 · "이미 계정이 있어요" 메일 수 — 넘으면 조용히
+      per-email-window: 1h
+    reset:
+      ttl: 30m                         # 재설정 링크 유효 시간
+      per-email: 3
+      per-email-window: 1h
+      per-ip: 10                       # 같은 IP 의 재설정 요청 수 (넘으면 429)
+      per-ip-window: 1h
+    email-change:
+      ttl: 30m
+      per-account: 5                   # 한 계정의 이메일 변경 · 삭제 확인 요청 수
+      per-account-window: 1h
+    deletion:
+      grace: 30d                       # 삭제 요청 뒤 이 기간이 지나야 데이터를 지운다 (그 안에는 관리자가 복구)
+      purge-interval: 1h               # 유예가 끝난 계정을 지우는 주기. 0 이면 주기 실행 없음
+      purge-batch: 50
+      confirmation-ttl: 30m            # 비밀번호 없는 계정의 삭제 확인 링크 유효 시간
+    login:
+      throttle-enabled: true           # 로그인 시도 제한 (시도 전부를 센다 — 없는 계정도 같게)
+      per-ip: 30                       # 창 안에 한 IP 가 시도할 수 있는 수
+      per-account: 10                  # 창 안에 한 식별자(이메일 등)에 시도할 수 있는 수
+      window: 10m
+    mail:
+      link-base-url: ""                # 메일 링크의 앞부분(프론트 주소). 비면 stage · prod 의 DeployGuard 가 문제로 본다
+      verify-path: /verify-email
+      reset-path: /reset-password
+      email-change-path: /confirm-email-change
+      delete-path: /confirm-delete
+      magic-link-path: /magic-link
+      default-locale: en               # 계정 로케일이 없거나 지원하지 않을 때 메일 언어 (ko · en 내장)
+      subject-prefix: ""               # 제목 앞 서비스 이름 (예: "[Ovation]")
+      log-links: OFF                   # 메일 모듈이 없을 때 링크(토큰 포함)를 로그에 남길까: AUTO(보호 환경이 아니면) | ON | OFF — 보호 환경에서 ON 은 DeployGuard 문제
+    admin:
+      enabled: false                   # true 면 /api/v1/admin/accounts (목록 · 정지 · 역할) 를 연다
+      role: ADMIN                      # 이 역할이 있는 호출자만. 첫 관리자 부트스트랩이 주는 역할이기도 하다
+    bootstrap:
+      admin-email: ""                  # 이 이메일이 처음으로 확인되고 활성 ADMIN 이 아직 없으면 ADMIN 역할을 준다 (비밀번호 기본값 없음)
+    social:
+      sign-up: false                   # true 면 연결된 적 없는 소셜 계정이 첫 로그인에 계정을 만든다
+      merge-on-verified-email: false   # true 면 제공자가 확인한 이메일이 확인된 기존 계정과 같을 때만 병합. 기본은 409 ACCOUNT.SOCIAL_EMAIL_CONFLICT
+    seed:
+      accounts: []                     # 로컬 · e2e 시드 — 예: [{ id: acc_user, email: user@example.com, password: password, roles: [], display-name: User }]. stage · prod 에서는 DeployGuard 문제
+    captcha:
+      required: false                  # true 면 가입 · 재설정 · 재전송 · 매직 링크 요청에 캡차 토큰을 요구한다 (captcha-turnstile 필요)
+    audit:
+      enabled: false                   # true 면 account-jdbc 가 모든 계정 이벤트를 skeleton_account_audit 에 쓴다
+    http:
+      enabled: true                    # false 면 컨트롤러를 등록하지 않는다 (앱이 자기 컨트롤러를 둘 때)

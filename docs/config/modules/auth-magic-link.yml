@@ -1,0 +1,11 @@
+# auth-magic-link — 메일로 보낸 한 번 쓰는 링크로 로그인. 계정 모듈 위에 수단 하나(magic_link)를 얹는다.
+skeleton:
+  auth-magic-link:
+    ttl: 15m                           # 링크 유효 시간 — 한 번 쓰면 곧바로 죽는다
+    sign-up: false                     # true 면 링크를 처음 쓰는 이메일에 계정을 만든다 (메일함 증명이 곧 가입). 기본은 이미 있는 계정으로만
+    per-email: 3                       # 한 이메일에 창 안에 보낼 수 있는 링크 수 — 넘으면 조용히
+    per-email-window: 1h
+    per-ip: 10                         # 같은 IP 의 요청 수 (넘으면 429)
+    per-ip-window: 1h
+    http:
+      enabled: true                    # false 면 /api/v1/auth/magic-link/request · redeem 를 등록하지 않는다

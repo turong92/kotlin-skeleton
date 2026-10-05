@@ -8,6 +8,11 @@
 |---|---|---|
 | `platform` | 공용 웹 기반: 표준 응답·에러 봉투, 예외 처리, trace id, 요청 로깅, CORS · rate limit 정책, 외부 HTTP 클라이언트, 시각 제공자 | [platform](platform.md) |
 | `auth` | JWT 로그인 · dev-login · break-glass 와 SecurityFilterChain | [auth](auth.md) |
+| `auth-session` | 리프레시 토큰(회전 · 재사용 탐지) · 세션 목록 · 로그아웃 | [auth-session](auth-session.md) |
+| `auth-session-jdbc` | 세션 · 리프레시 토큰 저장소 (PostgreSQL · MySQL) | [auth-session-jdbc](auth-session-jdbc.md) |
+| `account` | 계정 수명주기: 가입 · 이메일 확인 · 재설정 · 변경 · 로그인 수단 · 삭제 · 운영자 도구 | [account](account.md) |
+| `account-jdbc` | 계정 · 로그인 수단 · 토큰 · 감사 저장소 (PostgreSQL · MySQL) | [account-jdbc](account-jdbc.md) |
+| `auth-magic-link` | 메일 링크 로그인 (같은 계정에 얹는 로그인 수단) | [auth-magic-link](auth-magic-link.md) |
 | `auth-social` | 제공자 중립 소셜 로그인 계약과 엔드포인트 | [auth-social](auth-social.md) |
 | `auth-social-google` | Google OAuth 제공자 | [auth-social-google](auth-social-google.md) |
 | `auth-social-kakao` | Kakao OAuth 제공자 | [auth-social-kakao](auth-social-kakao.md) |

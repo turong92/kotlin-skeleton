@@ -43,7 +43,7 @@ class AccountSeeder(private val core: AccountCore) : ApplicationRunner {
             if (core.accounts.findByEmail(email) != null) return@forEach
             val now = core.time.now()
             val account = Account(
-                id = core.newAccountId(), email = email, emailVerified = true, status = AccountStatus.ACTIVE,
+                id = seed.id?.trim()?.takeIf { it.isNotEmpty() } ?: core.newAccountId(), email = email, emailVerified = true, status = AccountStatus.ACTIVE,
                 roles = core.props.defaultRoles + seed.roles, displayName = ProfileRules.displayName(seed.displayName), locale = ProfileRules.locale(seed.locale),
                 timeZone = null, createdAt = now, updatedAt = now,
             )

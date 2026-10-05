@@ -143,6 +143,8 @@ data class AccountProperties(
     )
 
     data class SeedAccount(
+        /** 고정 계정 id — e2e 픽스처 · 업로드 키(`uploads/<id>/…`)가 안정되도록. 비우면 무작위 id */
+        val id: String? = null,
         val email: String,
         val password: String,
         val roles: Set<String> = emptySet(),

@@ -48,7 +48,7 @@ class AccountDeployGuardTest {
     fun `logging links, seed accounts, an unmet captcha requirement and a bad bootstrap address are problems`() {
         val props = goodProps.copy(
             mail = goodProps.mail.copy(logLinks = AccountProperties.Mail.LogLinks.ON),
-            seed = AccountProperties.Seed(listOf(AccountProperties.SeedAccount("admin@example.com", "password"))),
+            seed = AccountProperties.Seed(listOf(AccountProperties.SeedAccount(email = "admin@example.com", password = "password"))),
             captcha = AccountProperties.Captcha(required = true),
             bootstrap = AccountProperties.Bootstrap(adminEmail = "not-an-email"),
         )
@@ -63,7 +63,7 @@ class AccountDeployGuardTest {
 
     @Test
     fun `messages name properties and modules, never values`() {
-        val props = goodProps.copy(seed = AccountProperties.Seed(listOf(AccountProperties.SeedAccount("admin@example.com", "SeedPassw0rd!"))))
+        val props = goodProps.copy(seed = AccountProperties.Seed(listOf(AccountProperties.SeedAccount(email = "admin@example.com", password = "SeedPassw0rd!"))))
         val text = guard(props).problems(prod).joinToString() + guard(props).warnings(prod).joinToString()
         assertTrue("SeedPassw0rd" !in text && "admin@example.com" !in text && "app.example.com" !in text)
     }

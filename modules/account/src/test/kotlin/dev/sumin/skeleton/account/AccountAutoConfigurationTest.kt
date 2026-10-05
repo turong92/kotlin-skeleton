@@ -100,7 +100,7 @@ class AccountAutoConfigurationTest {
     @Test
     fun `seed accounts are created once, verified and active, with the roles asked for`() {
         runner.withPropertyValues(
-            "skeleton.account.seed.accounts[0].email=Mod@Example.com", "skeleton.account.seed.accounts[0].password=password-1234",
+            "skeleton.account.seed.accounts[0].id=acc_moderator", "skeleton.account.seed.accounts[0].email=Mod@Example.com", "skeleton.account.seed.accounts[0].password=password-1234",
             "skeleton.account.seed.accounts[0].roles[0]=MODERATOR", "skeleton.account.seed.accounts[0].display-name=Moderator",
         ).run { ctx ->
             val seeder = ctx.getBean(AccountSeeder::class.java)
@@ -108,6 +108,7 @@ class AccountAutoConfigurationTest {
             val repo = ctx.getBean(AccountRepository::class.java)
             assertEquals(1, repo.search(null, null, 0, 10).total)
             val account = repo.findByEmail("mod@example.com")!!
+            assertEquals("acc_moderator", account.id, "a fixed id keeps e2e fixtures stable")
             assertEquals(AccountStatus.ACTIVE, account.status)
             assertTrue(account.emailVerified)
             assertEquals(setOf("USER", "MODERATOR"), account.roles)

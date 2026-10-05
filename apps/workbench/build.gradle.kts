@@ -33,6 +33,9 @@ dependencies {
     implementation(project(":modules:captcha-turnstile"))
     implementation(project(":modules:board"))
     implementation(project(":modules:board-jdbc"))
+    implementation(project(":modules:account-jdbc"))        // + account — 클래스패스에 있어 설정 스니펫이 바인딩된다. 자동설정은 application.yml 에서 꺼 둔다 (아래 참고)
+    implementation(project(":modules:auth-session-jdbc"))   // + auth-session
+    implementation(project(":modules:auth-magic-link"))
     implementation(project(":modules:db-postgresql"))
     implementation(project(":modules:migration-flyway"))
 

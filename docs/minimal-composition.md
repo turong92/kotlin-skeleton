@@ -95,7 +95,10 @@ fails when this table and the prefixes found in module code differ.
 | `alert-jdbc` | `skeleton.alert-jdbc` |
 | `alert` | wired (logs only); sends nothing until `skeleton.alert.webhook-url` is set | nothing | a Discord-compatible webhook URL, internet |
 | `alert-jdbc` | yes | a `DataSource` + one `db-*` module (+ its migration, as above) | — |
+| `account` | `skeleton.account` |
 | `auth` | `skeleton.auth` |
+| `auth-magic-link` | `skeleton.auth-magic-link` |
+| `auth-session` | `skeleton.auth-session` |
 | `auth-social` | `skeleton.auth-social` |
 | `board` | `skeleton.board` |
 | `captcha-turnstile` | `skeleton.captcha-turnstile` |
@@ -141,6 +144,11 @@ test proving a context with only that module (and its declared dependencies) boo
 |---|---|---|---|
 | `platform` | yes | nothing | — |
 | `auth` | yes | nothing in `local` / `dev` / `test` / no profile; in `prod` / `staging` (`skeleton.auth.protected-profiles`): `skeleton.auth.jwt.secret` ≥ 32 bytes and your own `AuthAccountRepository` bean | — |
+| `auth-session` | yes (in-memory sessions) | nothing in `local` / `dev` / `test`; in `prod` / `staging` / `skeleton.env=stage\|prod`: a non-memory `SessionStore` — `auth-session-jdbc` | — |
+| `auth-session-jdbc` | yes | a `DataSource` + one `db-*` module (+ its migration `skeleton_auth_sessions`, as above) | — |
+| `account` | yes (HTTP `/api/v1/account/**`, sign-up open, in-memory store, mail only logged) | nothing in `local` / `dev` / `test`; in protected envs: `account-jdbc`, a mail sender (`notification-mail`) and `skeleton.account.mail.link-base-url` — `DeployGuard` `account` names what is missing | `notification-mail` (mail), `captcha-turnstile` (captcha), `alert` (brute-force alerts), `idempotency`, `auth-social` (social sign-in/linking), `job-queue-jdbc` (purge job) — all optional, all compile-only |
+| `account-jdbc` | yes | a `DataSource` + one `db-*` module (+ its migration `skeleton_accounts`, as above) | — |
+| `auth-magic-link` | yes (sign-in closed to unknown addresses) | `account` (declared dependency) | a mail path to deliver the link |
 | `auth-social` | yes (no provider until enabled) | nothing | provider keys |
 | `auth-social-google` / `-kakao` / `-naver` | off until `skeleton.auth-social.providers.<x>.enabled=true` | nothing | client id / secret |
 | `async` | yes | nothing | — |
@@ -193,6 +201,7 @@ with an ambiguous injection — it now owns a `skeletonTaskScheduler`. The other
 | Retry queue | `job-queue-jdbc` — `FOR UPDATE SKIP LOCKED` (PostgreSQL / MySQL), safe with several instances | — |
 | Notifications | in-memory broker | `notification-jdbc`, `-sse`, `-websocket`, `-slack`, `-mail` |
 | Boards (posts · nested comments · typed reactions) | none — there is no in-memory board | `board` + `board-jdbc` |
+| Accounts (sign-up · verification · reset · sessions) | in-memory accounts + log-only mail for local/tests (guarded out of stage · prod) | `account` + `account-jdbc`, `auth-session` + `auth-session-jdbc`, `notification-mail`, `auth-magic-link` |
 | Events | `event-kafka` off unless enabled | — |
 
 ## 5. Start a project: one command
