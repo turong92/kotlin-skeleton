@@ -20,7 +20,8 @@
 #   3. --modules 로 요청한 모듈마다 apps/api/build.gradle.kts 에 implementation(project(":modules:<m>")) 한 줄을 더하고,
 #      docs/config/modules/<m>.yml 을 apps/api application.yml 끝의 표시된 구역에 주석으로 붙인다.
 #   4. --db mysql: db-postgresql → db-mysql, datasource URL, compose 서비스, Testcontainers 설정, 첫 마이그레이션 폴더를 MySQL 로 바꾼다.
-#   5. 마지막에 scripts/rename-skeleton.sh 를 대상 안에서 돌린다 (잔여 흔적이 있으면 실패).
+#   5. capabilities.json 을 고른 모듈 · 앱만 남기도록 걸러 stamped 모드로 쓰고(빠진 것은 stampedFrom 으로 스켈레톤을 가리킨다),
+#      마지막에 scripts/rename-skeleton.sh 를 대상 안에서 돌린다 (잔여 흔적이 있으면 실패 · 카탈로그 생성물 docs/capabilities.md · llms.txt 도 새 이름으로 다시 만든다).
 #
 # 종료 코드: 0 성공 / 1 도중 실패(대상이 남는다) / 2 인자 오류(아무것도 만들지 않는다).
 # 소스 레포와 <target-dir> 밖에는 아무것도 쓰지 않는다. macOS bash 3.2 와 GNU 에서 돈다 (연관 배열 · mapfile 을 쓰지 않는다).
@@ -31,7 +32,7 @@ SRC="$(cd "$(dirname "$0")/.." && pwd -P)"
 usage() {
   cat <<'EOF'
 usage: scripts/new-project.sh <target-dir> <root-package> <config-prefix> <ClassPrefix>
-                              [--modules a,b,c] [--db postgresql|mysql] [--with-workbench] [--with-sample]
+                              [--modules a,b,c] [--db postgresql|mysql] [--with-workbench] [--with-sample] [--dry-run]
 
   <target-dir>     새로 만들 디렉토리 (이미 있으면 거부)
   <root-package>   예: dev.sumin.ovation
@@ -41,6 +42,7 @@ usage: scripts/new-project.sh <target-dir> <root-package> <config-prefix> <Class
   --db             postgresql(기본) | mysql
   --with-workbench apps/workbench(모든 모듈 데모)도 남긴다 — 모든 모듈이 남고 PostgreSQL 전용
   --with-sample    apps/sample(제품 모양 예시 앱 "Notes" — 새 기능을 어떻게 얹는지 보는 정본)도 남긴다 — 그 앱의 모듈이 더해지고 PostgreSQL 전용
+  --dry-run        고른 모듈과 따라온 이유만 보이고 아무것도 만들지 않는다
 EOF
 }
 
@@ -68,6 +70,7 @@ MODULES_ARG=""
 DB="postgresql"
 WITH_WORKBENCH=0
 WITH_SAMPLE=0
+DRY_RUN=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --modules) [ $# -ge 2 ] || die_usage "--modules needs a value"; MODULES_ARG="$2"; shift 2 ;;
@@ -76,6 +79,7 @@ while [ $# -gt 0 ]; do
     --db=*) DB="${1#--db=}"; shift ;;
     --with-workbench) WITH_WORKBENCH=1; shift ;;
     --with-sample) WITH_SAMPLE=1; shift ;;
+    --dry-run) DRY_RUN=1; shift ;;
     -h|--help) usage; exit 0 ;;
     --*) die_usage "unknown option: $1" ;;
     *) POSITIONAL+=("$1"); shift ;;
@@ -191,6 +195,9 @@ echo "  modules ($(printf '%s\n' "$SELECTED_SORTED" | wc -l | tr -d ' ')): $(pri
 printf '%s' "$REASONS" | sed 's/^/  /'
 [ -z "$NOTES" ] || printf '%s\n' "$NOTES" | sed 's/^/  note: /'
 
+# --dry-run: 위의 계획(고른 모듈 · 따라온 이유)만 보이고 아무것도 쓰지 않는다 (capabilities.json 의 조각 검사가 쓴다)
+[ "$DRY_RUN" = 0 ] || { echo "(dry run — nothing written)"; exit 0; }
+
 # ---------------------------------------------------------------------------------------------------- 복사
 mkdir -p "$TARGET"
 trap 'rc=$?; if [ $rc -ne 0 ]; then echo "✗ failed (exit $rc) — $TARGET is left as is for inspection" >&2; fi' EXIT
@@ -203,7 +210,7 @@ export COPYFILE_DISABLE=1   # macOS tar 가 ._* 파일을 만들지 않게
 cd "$TARGET"
 
 # 새 프로젝트에는 찍어내는 도구가 필요 없다 (CI 워크플로가 그 도구를 시험한다)
-rm -rf scripts/new-project.sh scripts/test-new-project.sh scripts/new-project.d .github/workflows/new-project.yml
+rm -rf scripts/new-project.sh scripts/test-new-project.sh scripts/new-project.d .github/workflows/new-project.yml docs/new-project-recipe.md
 
 # ---------------------------------------------------------------------------------------------------- 지우기
 [ "$WITH_WORKBENCH" = 1 ] || { rm -rf apps/workbench; perl -ni -e 'print unless /^include\(":apps:workbench"\)\s*$/' settings.gradle.kts; }
@@ -286,6 +293,12 @@ if [ -n "$ADD_LIST" ]; then
     my @add = map { "    implementation(project(\":modules:$_\"))\n" } split(/ /, $ENV{ADD_MODULES});
     splice(@l, $last + 1, 0, @add);
     open(my $out, ">", $f) or die; print $out @l; close $out;' apps/api/build.gradle.kts
+fi
+
+# ---------------------------------------------------------------------------------------------------- 기능 카탈로그 (고른 모듈 · 앱만 남긴다 — 생성물은 rename 이 새 이름으로 다시 만든다)
+if [ -f capabilities.json ] && [ -f scripts/build-capabilities.pl ]; then
+  CAT_APPS="api"; [ "$WITH_WORKBENCH" = 0 ] || CAT_APPS="$CAT_APPS workbench"; [ "$WITH_SAMPLE" = 0 ] || CAT_APPS="$CAT_APPS sample"
+  perl "$SRC/scripts/new-project.d/stamp-capabilities.pl" --selected "$(printf '%s ' $SELECTED_SORTED)" --apps "$CAT_APPS" --db "$DB"
 fi
 
 # ---------------------------------------------------------------------------------------------------- rename

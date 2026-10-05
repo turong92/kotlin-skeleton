@@ -1,0 +1,2294 @@
+{
+  "$schema": "docs/capabilities.schema.json",
+  "schemaVersion": 1,
+  "mode": "skeleton",
+  "name": "kotlin-skeleton",
+  "summary": "Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 모듈만 골라 한 줄로 찍어 가는 부품 모음(모듈 하나 = 의존성 한 줄). 프런트는 형제 레포 react-skeleton.",
+  "siblings": {
+    "frontend": {
+      "repo": "react-skeleton",
+      "catalog": "capabilities.json",
+      "llms": "llms.txt",
+      "recipe": "docs/new-project-recipe.md",
+      "usage": "scripts/new-project.sh <target-dir> <name> [--packages a,b,c] [--ssr] [--without-storybook] [--with-workbench] [--with-sample] [--scope @acme]"
+    }
+  },
+  "starterModules": ["auth", "db-postgresql", "migration", "migration-flyway", "persistence-jdbc", "platform", "time"],
+  "newProject": {
+    "script": "scripts/new-project.sh",
+    "usage": "scripts/new-project.sh <target-dir> <root-package> <config-prefix> <ClassPrefix> [--modules a,b,c] [--db postgresql|mysql] [--with-workbench] [--with-sample] [--dry-run]",
+    "positional": ["target-dir", "root-package", "config-prefix", "ClassPrefix"],
+    "flags": ["--modules", "--db", "--with-workbench", "--with-sample", "--dry-run"]
+  },
+  "guides": [
+    {
+      "path": "docs/new-project-recipe.md",
+      "summary": "제품 한 문단 → 고를 것 → new-project.sh 명령 → 설정 · 비밀 → scripts/dev.sh → 검증 → deploy/app.yaml, 작업 예 3개(커뮤니티 · 유료 SaaS · 콘텐츠 SSR)"
+    },
+    {
+      "path": "docs/minimal-composition.md",
+      "summary": "스타터에서 모듈 한 줄씩 더하는 법 · 모듈별 「부팅에 필요한 것」 표 · new-project.sh 가 하는 일"
+    },
+    {
+      "path": "docs/modules/README.md",
+      "summary": "모듈 색인 — 모듈마다 같은 틀의 한 쪽 문서(의존성 한 줄 · 설정 접두사 · 부팅에 필요한 것 · 교체 지점 · 프런트 짝)"
+    },
+    {
+      "path": "docs/deploy.md",
+      "summary": "홈서버 배포 계약 — 이미지 하나 + deploy/app.yaml 선언, 모듈별 비밀과 빠졌을 때의 동작(§7)"
+    },
+    {
+      "path": "README.md",
+      "summary": "레포 개요 · 새 프로젝트 3단계"
+    },
+    {
+      "path": "CLAUDE.md",
+      "summary": "에이전트 규칙(모듈 규칙 · 문서 가드 · 패키지 구조)"
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "alert",
+      "kind": "module",
+      "module": "alert",
+      "path": "modules/alert",
+      "status": "stable",
+      "summary": "주인 경보 — 5xx 몰림 · 기동 실패 · 죽은 작업을 Discord 호환 웹훅(+ 선택적 메일)으로 알린다. 에러 수집(Sentry)의 답.",
+      "starter": false,
+      "newProjectFlag": "--modules alert",
+      "autoIncludes": ["job-queue-jdbc", "notification-mail"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": ["job-queue-jdbc", "notification-mail"]
+      },
+      "config": {
+        "prefixes": ["skeleton.alert"],
+        "snippet": "docs/config/modules/alert.yml"
+      },
+      "basePaths": [],
+      "secrets": [
+        {
+          "env": ["<P>_ALERT_WEBHOOK_URL"],
+          "whenMissing": "경보가 로그로만 남는다 (기동은 된다)"
+        }
+      ],
+      "docs": ["docs/modules/alert.md", "docs/alert.md"],
+      "frontend": null,
+      "notFor": [
+        "Sentry 같은 에러 수집 · 스택 모음이 아니다 — 주인이 먼저 알아야 하는 일만 보낸다",
+        "사용자에게 가는 알림은 notification",
+        "웹훅 주소가 없으면 로그만 남긴다(기동은 된다)"
+      ],
+      "keywords": {
+        "ko": ["경보", "주인 알림", "에러 알림", "장애 알림", "디스코드 알림", "에러 수집", "5xx 알림"],
+        "en": [
+          "owner alert",
+          "error reporting",
+          "discord webhook",
+          "incident alert",
+          "5xx alert",
+          "sentry alternative"
+        ]
+      }
+    },
+    {
+      "id": "alert-jdbc",
+      "kind": "module",
+      "module": "alert-jdbc",
+      "path": "modules/alert-jdbc",
+      "status": "stable",
+      "summary": "경보 기록을 DB 에 두어 여러 인스턴스 · 재시작을 가로질러 같은 경보를 접는다 (PostgreSQL · MySQL).",
+      "starter": false,
+      "newProjectFlag": "--modules alert-jdbc",
+      "autoIncludes": ["alert", "job-queue-jdbc", "notification-mail"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": ["skeleton.alert-jdbc"],
+        "snippet": "docs/config/modules/alert-jdbc.yml"
+      },
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/alert-jdbc.md"],
+      "frontend": null,
+      "notFor": ["단일 인스턴스면 alert 의 메모리 저장소로 충분하다", "DataSource · db-* 모듈과 이 모듈의 마이그레이션이 적용된 스키마가 필요하다"],
+      "keywords": {
+        "ko": ["경보 기록", "경보 중복 접기", "경보 DB"],
+        "en": ["alert ledger", "alert dedupe", "alert database"]
+      }
+    },
+    {
+      "id": "async",
+      "kind": "module",
+      "module": "async",
+      "path": "modules/async",
+      "status": "stable",
+      "summary": "@Async · CompletableFuture 작업이 호출 스레드의 trace id · MDC · 보안 컨텍스트를 이어받는 실행기와 작업 그룹.",
+      "starter": false,
+      "newProjectFlag": "--modules async",
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": ["skeleton.async"],
+        "snippet": "docs/config/modules/async.yml"
+      },
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/async.md", "docs/async.md"],
+      "frontend": null,
+      "notFor": ["재시도 · 영속이 필요한 작업은 job-queue-jdbc — 이 모듈은 프로세스 안 실행기다"],
+      "keywords": {
+        "ko": ["비동기", "백그라운드 작업", "스레드 풀", "@Async", "작업 그룹"],
+        "en": ["async", "background task", "thread pool", "mdc propagation", "completable future"]
+      }
+    },
+    {
+      "id": "async-notification",
+      "kind": "module",
+      "module": "async-notification",
+      "path": "modules/async-notification",
+      "status": "stable",
+      "summary": "비동기 작업에서 처리되지 않은 예외를 알림(notification)으로 흘려 보낸다.",
+      "starter": false,
+      "newProjectFlag": "--modules async-notification",
+      "autoIncludes": ["async", "notification"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": ["skeleton.async-notification"],
+        "snippet": "docs/config/modules/async-notification.yml"
+      },
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/async-notification.md"],
+      "frontend": null,
+      "notFor": ["알림을 어디로 보낼지는 notification-* 모듈이 정한다", "주인에게 가는 경보는 alert"],
+      "keywords": {
+        "ko": ["비동기 예외 알림", "백그라운드 오류 알림", "비동기 에러"],
+        "en": ["async exception alert", "background error notification", "uncaught async exception"]
+      }
+    },
+    {
+      "id": "auth",
+      "kind": "module",
+      "module": "auth",
+      "path": "modules/auth",
+      "status": "stable",
+      "summary": "로그인 — 비밀번호 로그인 · JWT 발급/검증 · 로컬 dev-login · 비상용 break-glass · SecurityFilterChain (계정 저장소는 앱이 정한다).",
+      "starter": true,
+      "newProjectFlag": null,
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": ["skeleton.auth"],
+        "snippet": "docs/config/modules/auth.yml"
+      },
+      "basePaths": ["/api/v1/auth"],
+      "secrets": [
+        {
+          "env": ["JWT_SECRET", "<P>_AUTH_JWT_SECRET"],
+          "whenMissing": "보호 환경(<P>_ENV=stage|prod · 프로필 prod|staging)에서 기동 실패: 비었음 / 내장 기본값 / 32바이트 미만",
+          "platformProvided": true
+        },
+        {
+          "env": ["<P>_AUTH_BREAK_GLASS_SECRET", "<P>_AUTH_BREAK_GLASS_ALLOWED_ACCOUNT_IDS"],
+          "whenMissing": "break-glass 를 켰을 때만 — 비밀이 비면 기동 실패, 허용 계정이 비면 stage|prod 에서 기동 실패"
+        }
+      ],
+      "docs": ["docs/modules/auth.md", "docs/deploy.md"],
+      "frontend": {
+        "capabilities": ["auth"],
+        "newProjectFlag": null,
+        "packages": ["@skeleton/auth"]
+      },
+      "notFor": [
+        "회원가입 · 비밀번호 재설정 · 계정 DB 저장은 이 모듈이 아니다 — 앱이 AuthAccountRepository 를 구현한다(내장은 로컬 시드 계정뿐이고 prod · staging 에서는 기동을 거부한다)",
+        "소셜 로그인은 auth-social"
+      ],
+      "keywords": {
+        "ko": ["로그인", "로그아웃", "인증", "토큰", "JWT", "권한", "관리자 로그인", "비상 접근"],
+        "en": ["login", "authentication", "jwt", "token", "dev login", "break glass", "security"]
+      }
+    },
+    {
+      "id": "auth-social",
+      "kind": "module",
+      "module": "auth-social",
+      "path": "modules/auth-social",
+      "status": "stable",
+      "summary": "소셜 로그인의 제공자 중립 계약 — POST /api/v1/auth/social/{provider}/login 라우팅 · 계정 연결 · 가입 정책 (제공자는 google · kakao · naver 모듈).",
+      "starter": false,
+      "newProjectFlag": "--modules auth-social",
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [["auth-social-google", "auth-social-kakao", "auth-social-naver"]],
+        "optional": []
+      },
+      "config": {
+        "prefixes": ["skeleton.auth-social"],
+        "snippet": "docs/config/modules/auth-social.yml"
+      },
+      "basePaths": ["/api/v1/auth/social"],
+      "secrets": [],
+      "docs": ["docs/modules/auth-social.md"],
+      "frontend": {
+        "capabilities": ["social-login"],
+        "newProjectFlag": null,
+        "packages": ["@skeleton/auth"]
+      },
+      "notFor": [
+        "제공자 모듈(auth-social-google | -kakao | -naver) 없이는 로그인할 수 있는 제공자가 없다",
+        "계정 연결 저장소는 메모리 기본(재시작하면 사라진다) · 가입 정책은 이미 연결된 계정만 통과 — 영속 저장과 자동 가입은 앱이 OAuthAccountLinkRepository · OAuthAccountProvisioningPolicy 로 구현한다",
+        "로그인 버튼 · 콜백 화면은 프런트 몫"
+      ],
+      "keywords": {
+        "ko": ["소셜 로그인", "간편 로그인", "구글 로그인", "카카오 로그인", "네이버 로그인", "OAuth", "계정 연결"],
+        "en": ["social login", "oauth", "sign in with google", "kakao login", "naver login", "account linking"]
+      }
+    },
+    {
+      "id": "auth-social-google",
+      "kind": "module",
+      "module": "auth-social-google",
+      "path": "modules/auth-social-google",
+      "status": "stable",
+      "summary": "구글 OAuth 제공자 — 토큰 교환 · 프로필 조회 클라이언트를 소셜 로그인의 제공자로 등록한다(클라이언트 id · secret 만 있으면 된다).",
+      "starter": false,
+      "newProjectFlag": "--modules auth-social-google",
+      "autoIncludes": ["auth-social"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": [],
+        "snippet": null,
+        "note": "별도 접두사 없음 — auth-social 의 providers.google 아래"
+      },
+      "basePaths": [],
+      "secrets": [
+        {
+          "env": [
+            "<P>_AUTH_SOCIAL_PROVIDERS_GOOGLE_ENABLED=true",
+            "<P>_AUTH_SOCIAL_PROVIDERS_GOOGLE_CLIENT_ID",
+            "<P>_AUTH_SOCIAL_PROVIDERS_GOOGLE_CLIENT_SECRET"
+          ],
+          "whenMissing": "켰는데 id · secret 이 비면 기동 실패 (client id/secret must not be blank)"
+        }
+      ],
+      "docs": ["docs/modules/auth-social-google.md"],
+      "frontend": {
+        "capabilities": ["social-login"],
+        "newProjectFlag": null,
+        "packages": ["@skeleton/auth"]
+      },
+      "notFor": [
+        "auth-social 없이는 쓰지 않는다(따라온다)",
+        "로그인 버튼 · 콜백 화면은 프런트 몫",
+        "설정은 auth-social 블록의 providers.google 아래에 둔다"
+      ],
+      "keywords": {
+        "ko": ["구글 로그인", "구글 소셜 로그인", "소셜 로그인"],
+        "en": ["google login", "google oauth", "social login"]
+      }
+    },
+    {
+      "id": "auth-social-kakao",
+      "kind": "module",
+      "module": "auth-social-kakao",
+      "path": "modules/auth-social-kakao",
+      "status": "stable",
+      "summary": "카카오 OAuth 제공자 — 토큰 교환 · 프로필 조회 클라이언트를 소셜 로그인의 제공자로 등록한다(클라이언트 id · secret 만 있으면 된다).",
+      "starter": false,
+      "newProjectFlag": "--modules auth-social-kakao",
+      "autoIncludes": ["auth-social"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": [],
+        "snippet": null,
+        "note": "별도 접두사 없음 — auth-social 의 providers.kakao 아래"
+      },
+      "basePaths": [],
+      "secrets": [
+        {
+          "env": [
+            "<P>_AUTH_SOCIAL_PROVIDERS_KAKAO_ENABLED=true",
+            "<P>_AUTH_SOCIAL_PROVIDERS_KAKAO_CLIENT_ID",
+            "<P>_AUTH_SOCIAL_PROVIDERS_KAKAO_CLIENT_SECRET"
+          ],
+          "whenMissing": "켰는데 id · secret 이 비면 기동 실패 (client id/secret must not be blank)"
+        }
+      ],
+      "docs": ["docs/modules/auth-social-kakao.md"],
+      "frontend": {
+        "capabilities": ["social-login"],
+        "newProjectFlag": null,
+        "packages": ["@skeleton/auth"]
+      },
+      "notFor": [
+        "auth-social 없이는 쓰지 않는다(따라온다)",
+        "로그인 버튼 · 콜백 화면은 프런트 몫",
+        "설정은 auth-social 블록의 providers.kakao 아래에 둔다"
+      ],
+      "keywords": {
+        "ko": ["카카오 로그인", "카카오 소셜 로그인", "소셜 로그인"],
+        "en": ["kakao login", "kakao oauth", "social login"]
+      }
+    },
+    {
+      "id": "auth-social-naver",
+      "kind": "module",
+      "module": "auth-social-naver",
+      "path": "modules/auth-social-naver",
+      "status": "stable",
+      "summary": "네이버 OAuth 제공자 — 토큰 교환 · 프로필 조회 클라이언트를 소셜 로그인의 제공자로 등록한다(클라이언트 id · secret 만 있으면 된다).",
+      "starter": false,
+      "newProjectFlag": "--modules auth-social-naver",
+      "autoIncludes": ["auth-social"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": [],
+        "snippet": null,
+        "note": "별도 접두사 없음 — auth-social 의 providers.naver 아래"
+      },
+      "basePaths": [],
+      "secrets": [
+        {
+          "env": [
+            "<P>_AUTH_SOCIAL_PROVIDERS_NAVER_ENABLED=true",
+            "<P>_AUTH_SOCIAL_PROVIDERS_NAVER_CLIENT_ID",
+            "<P>_AUTH_SOCIAL_PROVIDERS_NAVER_CLIENT_SECRET"
+          ],
+          "whenMissing": "켰는데 id · secret 이 비면 기동 실패 (client id/secret must not be blank)"
+        }
+      ],
+      "docs": ["docs/modules/auth-social-naver.md"],
+      "frontend": {
+        "capabilities": ["social-login"],
+        "newProjectFlag": null,
+        "packages": ["@skeleton/auth"]
+      },
+      "notFor": [
+        "auth-social 없이는 쓰지 않는다(따라온다)",
+        "로그인 버튼 · 콜백 화면은 프런트 몫",
+        "설정은 auth-social 블록의 providers.naver 아래에 둔다"
+      ],
+      "keywords": {
+        "ko": ["네이버 로그인", "네이버 소셜 로그인", "소셜 로그인"],
+        "en": ["naver login", "naver oauth", "social login"]
+      }
+    },
+    {
+      "id": "board",
+      "kind": "module",
+      "module": "board",
+      "path": "modules/board",
+      "status": "stable",
+      "summary": "게시판 — 글 · 중첩 댓글(대댓글) · 설정으로 늘리는 반응(좋아요 · 공감 …) · 운영자 숨김/고정 · 댓글 알림, HTTP /api/v1/boards 까지.",
+      "starter": false,
+      "newProjectFlag": "--modules board,board-jdbc",
+      "autoIncludes": ["idempotency", "notification"],
+      "needs": {
+        "requires": ["board-jdbc"],
+        "oneOf": [],
+        "optional": ["idempotency", "notification"]
+      },
+      "config": {
+        "prefixes": ["skeleton.board"],
+        "snippet": "docs/config/modules/board.yml"
+      },
+      "basePaths": ["/api/v1/boards"],
+      "secrets": [],
+      "docs": ["docs/modules/board.md"],
+      "frontend": {
+        "capabilities": ["board"],
+        "newProjectFlag": "--packages board",
+        "packages": ["@skeleton/board"]
+      },
+      "notFor": [
+        "board 는 저장소를 모른다 — board-jdbc 를 같이 고른다(없으면 시작에 실패한다)",
+        "채팅 · 피드 · 실시간 대화가 아니다 — 글 + 댓글 트리 모델",
+        "게시판 코드(게시판 만들기)는 seed-boards 설정이나 운영자 API"
+      ],
+      "keywords": {
+        "ko": ["게시판", "커뮤니티", "글쓰기", "댓글", "대댓글", "공감", "좋아요", "반응", "운영자 숨김", "공지 고정"],
+        "en": ["board", "forum", "community", "post", "comment", "reply", "reaction", "like", "moderation"]
+      }
+    },
+    {
+      "id": "board-jdbc",
+      "kind": "module",
+      "module": "board-jdbc",
+      "path": "modules/board-jdbc",
+      "status": "stable",
+      "summary": "게시판 저장소 — PostgreSQL · MySQL 로 board 의 저장 포트 네 개를 구현한다(skeleton_board* 테이블 · 원자적 카운터).",
+      "starter": false,
+      "newProjectFlag": "--modules board-jdbc",
+      "autoIncludes": ["board", "idempotency", "notification"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/board-jdbc.md"],
+      "frontend": {
+        "capabilities": ["board"],
+        "newProjectFlag": "--packages board",
+        "packages": ["@skeleton/board"]
+      },
+      "notFor": ["board 없이는 쓰지 않는다(따라온다)", "다른 DB(JPA · jOOQ)로 저장하려면 board 의 저장 포트 네 개를 앱이 구현한다"],
+      "keywords": {
+        "ko": ["게시판 저장소", "게시판 DB"],
+        "en": ["board storage", "board repository", "board database"]
+      }
+    },
+    {
+      "id": "captcha-turnstile",
+      "kind": "module",
+      "module": "captcha-turnstile",
+      "path": "modules/captcha-turnstile",
+      "status": "stable",
+      "summary": "봇 방지 — Cloudflare Turnstile 토큰을 서버에서 검증한다(TurnstileVerifier).",
+      "starter": false,
+      "newProjectFlag": "--modules captcha-turnstile",
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": ["skeleton.captcha-turnstile"],
+        "snippet": "docs/config/modules/captcha-turnstile.yml"
+      },
+      "basePaths": [],
+      "secrets": [
+        {
+          "env": ["<P>_CAPTCHA_TURNSTILE_ENABLED=true", "<P>_CAPTCHA_TURNSTILE_SECRET_KEY"],
+          "whenMissing": "검증기 빈이 없다 — 기동은 되고, 주입받는 곳이 있으면 그 빈 이름으로 실패"
+        }
+      ],
+      "docs": ["docs/modules/captcha-turnstile.md", "docs/captcha-turnstile.md"],
+      "frontend": {
+        "capabilities": ["captcha-turnstile"],
+        "newProjectFlag": "--packages captcha-turnstile",
+        "packages": ["@skeleton/captcha-turnstile"]
+      },
+      "notFor": ["검증만 한다 — 화면의 위젯은 프런트(@skeleton/captcha-turnstile)", "켜기 전에는 검증기 빈이 없다"],
+      "keywords": {
+        "ko": ["캡차", "봇 방지", "스팸 방지", "로봇 확인", "가입 폼 보호"],
+        "en": ["captcha", "turnstile", "bot protection", "spam protection", "cloudflare turnstile"]
+      }
+    },
+    {
+      "id": "config-aws-ssm",
+      "kind": "module",
+      "module": "config-aws-ssm",
+      "path": "modules/config-aws-ssm",
+      "status": "experimental",
+      "summary": "AWS SSM Parameter Store 의 값을 시작할 때 스프링 프로퍼티로 불러온다.",
+      "starter": false,
+      "newProjectFlag": "--modules config-aws-ssm",
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": [],
+        "snippet": "docs/config/modules/config-aws-ssm.yml"
+      },
+      "basePaths": [],
+      "secrets": [
+        {
+          "env": ["AWS_PROFILE", "AWS 자격 증명(표준 AWS 환경변수)"],
+          "whenMissing": "고르지 않는다 — paths 를 정하면 부팅에서 자격 증명을 찾는다(fail-fast 설정에 따라 기동 실패)"
+        }
+      ],
+      "docs": ["docs/modules/config-aws-ssm.md"],
+      "frontend": null,
+      "notFor": ["홈서버 배포에는 AWS 가 없다 — 고르지 않는다(deploy.md)", "paths 를 정하면 부팅에서 AWS 자격 증명을 찾는다"],
+      "keywords": {
+        "ko": ["AWS 설정", "파라미터 스토어", "SSM", "비밀 불러오기"],
+        "en": ["aws ssm", "parameter store", "remote config", "aws secrets"]
+      }
+    },
+    {
+      "id": "crypto",
+      "kind": "module",
+      "module": "crypto",
+      "path": "modules/crypto",
+      "status": "stable",
+      "summary": "AES-GCM 텍스트 암호화 · 키 회전용 키 id 봉투 · URL 에 안전한 불투명 토큰 · 선택적 영속 변환기.",
+      "starter": false,
+      "newProjectFlag": "--modules crypto",
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": ["skeleton.crypto"],
+        "snippet": "docs/config/modules/crypto.yml"
+      },
+      "basePaths": [],
+      "secrets": [
+        {
+          "env": ["<P>_CRYPTO_PRIMARY_KEY_ID", "<P>_CRYPTO_KEYS_<ID>(base64 AES 키)"],
+          "whenMissing": "키가 없으면 암호화 빈이 없다"
+        }
+      ],
+      "docs": ["docs/modules/crypto.md", "docs/crypto.md"],
+      "frontend": null,
+      "notFor": ["비밀번호 해시가 아니다(복호화할 수 있는 값용)", "키가 없으면 암호화 빈이 없다"],
+      "keywords": {
+        "ko": ["암호화", "복호화", "비밀 저장", "불투명 URL", "키 회전"],
+        "en": ["encryption", "aes gcm", "opaque token", "key rotation", "encrypt at rest"]
+      }
+    },
+    {
+      "id": "db-mysql",
+      "kind": "module",
+      "module": "db-mysql",
+      "path": "modules/db-mysql",
+      "status": "stable",
+      "summary": "MySQL 방언 — 드라이버 · Flyway MySQL 지원 · SqlDialect · Data JDBC 시간 변환, 세션을 UTC 로 고정한다.",
+      "starter": false,
+      "newProjectFlag": "--db mysql",
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/db-mysql.md"],
+      "frontend": null,
+      "notFor": [
+        "--modules 가 아니라 --db mysql 로 고른다(스타터의 db-postgresql 을 바꾼다)",
+        "--with-sample · --with-workbench 와 함께 쓸 수 없다(PostgreSQL 전용)"
+      ],
+      "keywords": {
+        "ko": ["MySQL", "마이SQL", "DB 변경", "MySQL 로 바꾸기"],
+        "en": ["mysql", "mariadb", "use mysql", "switch database"]
+      }
+    },
+    {
+      "id": "db-postgresql",
+      "kind": "module",
+      "module": "db-postgresql",
+      "path": "modules/db-postgresql",
+      "status": "stable",
+      "summary": "PostgreSQL 방언(기본) — 드라이버 · Flyway PostgreSQL 지원 · SqlDialect · Data JDBC 시간 변환.",
+      "starter": true,
+      "newProjectFlag": null,
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/db-postgresql.md"],
+      "frontend": null,
+      "notFor": ["db-* 중 정확히 하나만 — MySQL 이면 --db mysql"],
+      "keywords": {
+        "ko": ["PostgreSQL", "포스트그레스", "DB 방언", "데이터베이스"],
+        "en": ["postgresql", "postgres", "database dialect", "database"]
+      }
+    },
+    {
+      "id": "event-kafka",
+      "kind": "module",
+      "module": "event-kafka",
+      "path": "modules/event-kafka",
+      "status": "experimental",
+      "summary": "이벤트를 Kafka 로 발행하는 KafkaEventPublisher 와 키 · 메시지 · 직렬화 전략(켜기 전에는 로그만 남긴다).",
+      "starter": false,
+      "newProjectFlag": "--modules event-kafka",
+      "autoIncludes": ["json"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": ["skeleton.event-kafka"],
+        "snippet": "docs/config/modules/event-kafka.yml"
+      },
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/event-kafka.md"],
+      "frontend": null,
+      "notFor": ["소비(consumer)는 없다 — 발행만", "작은 프로젝트의 재시도 큐는 job-queue-jdbc 가 더 가볍다(브로커 불필요)"],
+      "keywords": {
+        "ko": ["카프카", "이벤트 발행", "메시지 큐", "이벤트 스트림"],
+        "en": ["kafka", "event publishing", "message broker", "event stream"]
+      }
+    },
+    {
+      "id": "idempotency",
+      "kind": "module",
+      "module": "idempotency",
+      "path": "modules/idempotency",
+      "status": "stable",
+      "summary": "Idempotency-Key 헤더로 명령 요청(결제 · 생성)의 중복 실행을 막고 첫 응답을 재생한다.",
+      "starter": false,
+      "newProjectFlag": "--modules idempotency",
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": ["skeleton.idempotency"],
+        "snippet": "docs/config/modules/idempotency.yml"
+      },
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/idempotency.md"],
+      "frontend": null,
+      "notFor": ["기본 저장소는 인메모리(인스턴스별) — 여러 인스턴스면 앱이 IdempotencyStore 를 대체한다"],
+      "keywords": {
+        "ko": ["멱등", "중복 요청 방지", "두 번 눌러도 한 번", "멱등 키", "중복 결제 방지"],
+        "en": ["idempotency", "idempotency key", "duplicate request", "replay response"]
+      }
+    },
+    {
+      "id": "job-queue-jdbc",
+      "kind": "module",
+      "module": "job-queue-jdbc",
+      "path": "modules/job-queue-jdbc",
+      "status": "stable",
+      "summary": "DB 테이블 기반 재시도 작업 큐 — 백오프 · DEAD 처리 · FOR UPDATE SKIP LOCKED, Redis 없이 여러 인스턴스에서 안전.",
+      "starter": false,
+      "newProjectFlag": "--modules job-queue-jdbc",
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": ["skeleton.job-queue"],
+        "snippet": "docs/config/modules/job-queue-jdbc.yml"
+      },
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/job-queue-jdbc.md", "docs/job-queue-jdbc.md"],
+      "frontend": null,
+      "notFor": [
+        "핸들러는 멱등이어야 한다(재시도된다)",
+        "DataSource · db-* 모듈과 이 모듈의 마이그레이션이 적용된 스키마가 필요하다",
+        "메시지 브로커가 아니다(대량 스트림은 event-kafka)"
+      ],
+      "keywords": {
+        "ko": ["작업 큐", "백그라운드 작업", "재시도", "비동기 작업", "내보내기 작업", "잡 큐"],
+        "en": ["job queue", "background job", "retry", "dead letter", "task queue"]
+      }
+    },
+    {
+      "id": "json",
+      "kind": "module",
+      "module": "json",
+      "path": "modules/json",
+      "status": "stable",
+      "summary": "JsonCodec · 임의 JSON 을 담는 JsonDocument · 버전 있는 페이로드 · JPA/JDBC 변환기.",
+      "starter": false,
+      "newProjectFlag": "--modules json",
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/json.md", "docs/json.md"],
+      "frontend": null,
+      "notFor": ["일반 DTO 직렬화는 스프링 기본(Jackson)으로 충분하다 — 저장되는 JSON 의 버전 관리용"],
+      "keywords": {
+        "ko": ["JSON", "JSON 칼럼", "버전 있는 페이로드", "직렬화"],
+        "en": ["json", "json column", "versioned payload", "serialization"]
+      }
+    },
+    {
+      "id": "migration",
+      "kind": "module",
+      "module": "migration",
+      "path": "modules/migration",
+      "status": "stable",
+      "summary": "마이그레이션 공통 규칙 — DB 를 지우는 설정이 허용 프로필 밖에서 켜지면 시작을 막는 가드(도구 중립).",
+      "starter": true,
+      "newProjectFlag": null,
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": ["skeleton.migration"],
+        "snippet": "docs/config/modules/migration.yml"
+      },
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/migration.md", "docs/schema-management.md"],
+      "frontend": null,
+      "notFor": [
+        "Flyway 구현은 migration-flyway(스타터가 이미 가진다)",
+        "스키마를 직접 만들어 주지 않는다 — newMigration 태스크 · docs/schema-management.md"
+      ],
+      "keywords": {
+        "ko": ["마이그레이션 가드", "DB 초기화 방지", "스키마 보호"],
+        "en": ["migration guard", "prevent db wipe", "schema safety"]
+      }
+    },
+    {
+      "id": "migration-flyway",
+      "kind": "module",
+      "module": "migration-flyway",
+      "path": "modules/migration-flyway",
+      "status": "stable",
+      "summary": "Flyway 구현 — 로컬 clean 옵트인 · 마이그레이션 파일 이름 규칙(V<UTC 14자리>__snake_case.sql) 검사.",
+      "starter": true,
+      "newProjectFlag": null,
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/migration-flyway.md", "docs/schema-management.md"],
+      "frontend": null,
+      "notFor": ["Flyway 기본값을 바꾸지 않는다 — out-of-order 같은 선택은 앱 yml 의 명시적 override"],
+      "keywords": {
+        "ko": ["Flyway", "마이그레이션", "DB 스키마 버전", "스키마 변경"],
+        "en": ["flyway", "database migration", "schema migration", "schema version"]
+      }
+    },
+    {
+      "id": "notification",
+      "kind": "module",
+      "module": "notification",
+      "path": "modules/notification",
+      "status": "stable",
+      "summary": "알림 계약 · 수신자 해석 · 인메모리 브로커 + 로그인한 사람의 받은편지함 HTTP(/api/v1/notifications: 목록 · 읽음 · 모두 읽음).",
+      "starter": false,
+      "newProjectFlag": "--modules notification",
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": ["skeleton.notification.inbox"],
+        "snippet": "docs/config/modules/notification.yml"
+      },
+      "basePaths": ["/api/v1/notifications"],
+      "secrets": [],
+      "docs": ["docs/modules/notification.md"],
+      "frontend": {
+        "capabilities": ["notifications"],
+        "newProjectFlag": "--packages notifications",
+        "packages": ["@skeleton/notifications"]
+      },
+      "notFor": [
+        "영속은 notification-jdbc, 실시간 전달은 notification-sse | -websocket, 메일은 notification-mail — 어댑터를 따로 고른다",
+        "기본 브로커는 프로세스 안에서만 전달한다",
+        "알림을 만드는 쪽(NotificationPublisher.publish)은 앱 코드가 부른다"
+      ],
+      "keywords": {
+        "ko": ["알림", "알림 목록", "받은편지함", "안 읽은 알림", "알림 읽음", "알림 보내기"],
+        "en": ["notification", "inbox", "unread", "mark as read", "publish notification"]
+      }
+    },
+    {
+      "id": "notification-jdbc",
+      "kind": "module",
+      "module": "notification-jdbc",
+      "path": "modules/notification-jdbc",
+      "status": "stable",
+      "summary": "알림 받은편지함을 DB 테이블에 저장한다(skeleton_notification_inbox).",
+      "starter": false,
+      "newProjectFlag": "--modules notification-jdbc",
+      "autoIncludes": ["json", "notification"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/notification-jdbc.md"],
+      "frontend": {
+        "capabilities": ["notifications"],
+        "newProjectFlag": "--packages notifications",
+        "packages": ["@skeleton/notifications"]
+      },
+      "notFor": ["notification 없이는 쓰지 않는다(따라온다)", "DataSource · db-* 모듈과 마이그레이션이 적용된 스키마가 필요하다"],
+      "keywords": {
+        "ko": ["알림 저장", "알림 DB", "알림 기록 유지"],
+        "en": ["notification storage", "persist notifications", "inbox database"]
+      }
+    },
+    {
+      "id": "notification-mail",
+      "kind": "module",
+      "module": "notification-mail",
+      "path": "modules/notification-mail",
+      "status": "stable",
+      "summary": "SMTP 로 메일을 보내는 MailSender (spring.mail.* 위에).",
+      "starter": false,
+      "newProjectFlag": "--modules notification-mail",
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": ["skeleton.notification-mail"],
+        "snippet": "docs/config/modules/notification-mail.yml"
+      },
+      "basePaths": [],
+      "secrets": [
+        {
+          "env": [
+            "<P>_NOTIFICATION_MAIL_ENABLED=true",
+            "<P>_NOTIFICATION_MAIL_FROM",
+            "SPRING_MAIL_HOST",
+            "SPRING_MAIL_USERNAME",
+            "SPRING_MAIL_PASSWORD"
+          ],
+          "whenMissing": "host · from 이 비면 발송기 빈이 없다 · 비밀번호가 틀리면 첫 발송에서 실패"
+        }
+      ],
+      "docs": ["docs/modules/notification-mail.md", "docs/notification-mail.md"],
+      "frontend": null,
+      "notFor": ["수신 · 템플릿 엔진 · 메일 서비스(SES 등) 연동은 없다 — SMTP 만", "host · from 을 정하기 전에는 꺼져 있다"],
+      "keywords": {
+        "ko": ["메일 발송", "이메일 보내기", "SMTP", "메일"],
+        "en": ["send email", "smtp", "mail sender", "email"]
+      }
+    },
+    {
+      "id": "notification-slack",
+      "kind": "module",
+      "module": "notification-slack",
+      "path": "modules/notification-slack",
+      "status": "stable",
+      "summary": "알림과 @SlackException 예외 알림을 Slack 웹훅으로 보낸다.",
+      "starter": false,
+      "newProjectFlag": "--modules notification-slack",
+      "autoIncludes": ["notification"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": ["skeleton.notification.slack"],
+        "snippet": "docs/config/modules/notification-slack.yml"
+      },
+      "basePaths": [],
+      "secrets": [
+        {
+          "env": ["<P>_NOTIFICATION_SLACK_ENABLED=true", "<P>_NOTIFICATION_SLACK_WEBHOOK_URL"],
+          "whenMissing": "아무것도 보내지 않는다"
+        }
+      ],
+      "docs": ["docs/modules/notification-slack.md"],
+      "frontend": null,
+      "notFor": ["Discord 로 가는 주인 경보는 alert", "웹훅 URL 이 없으면 아무것도 보내지 않는다"],
+      "keywords": {
+        "ko": ["슬랙 알림", "슬랙", "예외 알림"],
+        "en": ["slack notification", "slack webhook", "exception alert"]
+      }
+    },
+    {
+      "id": "notification-sse",
+      "kind": "module",
+      "module": "notification-sse",
+      "path": "modules/notification-sse",
+      "status": "stable",
+      "summary": "알림을 Server-Sent Events 로 브라우저에 실시간 전달한다(GET /api/v1/notifications/sse) — 받는 사람이 정해진 알림은 그 사람에게만.",
+      "starter": false,
+      "newProjectFlag": "--modules notification-sse",
+      "autoIncludes": ["notification"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": ["skeleton.notification.sse"],
+        "snippet": "docs/config/modules/notification-sse.yml"
+      },
+      "basePaths": ["/api/v1/notifications/sse"],
+      "secrets": [],
+      "docs": ["docs/modules/notification-sse.md"],
+      "frontend": {
+        "capabilities": ["realtime", "live-notifications"],
+        "newProjectFlag": "--packages realtime",
+        "packages": ["@skeleton/realtime"]
+      },
+      "notFor": [
+        "notification 없이는 쓰지 않는다(따라온다)",
+        "서블릿 웹 앱용 — WebFlux 앱이 아니다",
+        "양방향 통신은 notification-websocket",
+        "인스턴스가 여러 개면 인프로세스 브로커라 다른 인스턴스의 알림을 못 받는다"
+      ],
+      "keywords": {
+        "ko": ["실시간 알림", "SSE", "알림 즉시 표시", "푸시 알림", "서버 푸시"],
+        "en": ["realtime notification", "sse", "server-sent events", "push notification"]
+      }
+    },
+    {
+      "id": "notification-websocket",
+      "kind": "module",
+      "module": "notification-websocket",
+      "path": "modules/notification-websocket",
+      "status": "stable",
+      "summary": "알림을 STOMP over WebSocket(/ws/notifications)으로 전달한다 — 인증 · trace 인터셉터 · 하트비트를 갖춘 인프로세스 브로커.",
+      "starter": false,
+      "newProjectFlag": "--modules notification-websocket",
+      "autoIncludes": ["notification"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": ["skeleton.notification-websocket"],
+        "snippet": "docs/config/modules/notification-websocket.yml"
+      },
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/notification-websocket.md", "docs/notification-websocket.md"],
+      "frontend": {
+        "capabilities": ["realtime", "live-notifications"],
+        "newProjectFlag": "--packages realtime",
+        "packages": ["@skeleton/realtime"]
+      },
+      "notFor": [
+        "notification 없이는 쓰지 않는다(따라온다)",
+        "authentication.enabled=true 가 되기 전까지 엔드포인트는 열려 있다",
+        "단방향 알림이면 notification-sse 가 더 단순하다",
+        "인스턴스가 여러 개면 인프로세스 브로커"
+      ],
+      "keywords": {
+        "ko": ["웹소켓", "실시간 알림", "양방향 통신", "STOMP"],
+        "en": ["websocket", "stomp", "realtime notification", "two-way"]
+      }
+    },
+    {
+      "id": "payment",
+      "kind": "module",
+      "module": "payment",
+      "path": "modules/payment",
+      "status": "experimental",
+      "summary": "결제 계약 — PaymentService · PaymentProviderRouter(제공자는 payment-toss | payment-stripe). 모듈이 HTTP 를 열지 않는다.",
+      "starter": false,
+      "newProjectFlag": "--modules payment",
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [["payment-toss", "payment-stripe"]],
+        "optional": []
+      },
+      "config": {
+        "prefixes": ["skeleton.payment"],
+        "snippet": "docs/config/modules/payment.yml"
+      },
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/payment.md"],
+      "frontend": {
+        "capabilities": ["payment"],
+        "newProjectFlag": "--packages payment",
+        "packages": ["@skeleton/payment"]
+      },
+      "notFor": [
+        "HTTP 엔드포인트가 없다 — 주문 · 금액 검증 · 성공/실패 리다이렉트 컨트롤러는 앱 코드(금액 검증 없는 확정 엔드포인트를 기본값으로 만들지 않으려고)",
+        "구독 · 정기 결제 관리는 없다",
+        "제공자 모듈 없이는 결제할 수 없다"
+      ],
+      "keywords": {
+        "ko": ["결제", "결제 승인", "환불", "결제 취소", "유료"],
+        "en": ["payment", "checkout", "refund", "payment confirm", "paid"]
+      }
+    },
+    {
+      "id": "payment-stripe",
+      "kind": "module",
+      "module": "payment-stripe",
+      "path": "modules/payment-stripe",
+      "status": "experimental",
+      "summary": "Stripe 결제 제공자 — 결제 승인 · 취소를 payment 의 제공자로 구현한다.",
+      "starter": false,
+      "newProjectFlag": "--modules payment-stripe",
+      "autoIncludes": ["payment"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": ["skeleton.payment-stripe"],
+        "snippet": "docs/config/modules/payment-stripe.yml"
+      },
+      "basePaths": [],
+      "secrets": [
+        {
+          "env": ["<P>_PAYMENT_STRIPE_ENABLED=true", "<P>_PAYMENT_STRIPE_SECRET_KEY"],
+          "whenMissing": "제공자 빈이 없다 — 결제 라우팅이 그 제공자를 못 찾는다"
+        }
+      ],
+      "docs": ["docs/modules/payment-stripe.md"],
+      "frontend": {
+        "capabilities": ["payment"],
+        "newProjectFlag": "--packages payment",
+        "packages": ["@skeleton/payment"]
+      },
+      "notFor": ["payment 없이는 쓰지 않는다(따라온다)", "웹훅 서명 검증 · 주문 처리는 앱 코드", "프런트 패키지는 Stripe 리다이렉트 변환이 없다(토스만)"],
+      "keywords": {
+        "ko": ["스트라이프 결제", "해외 결제", "카드 결제"],
+        "en": ["stripe", "stripe payments", "card payment", "international payment"]
+      }
+    },
+    {
+      "id": "payment-toss",
+      "kind": "module",
+      "module": "payment-toss",
+      "path": "modules/payment-toss",
+      "status": "experimental",
+      "summary": "Toss 결제 제공자 — 결제 승인 · 취소를 payment 의 제공자로 구현한다.",
+      "starter": false,
+      "newProjectFlag": "--modules payment-toss",
+      "autoIncludes": ["payment"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": ["skeleton.payment-toss"],
+        "snippet": "docs/config/modules/payment-toss.yml"
+      },
+      "basePaths": [],
+      "secrets": [
+        {
+          "env": ["<P>_PAYMENT_TOSS_ENABLED=true", "<P>_PAYMENT_TOSS_SECRET_KEY"],
+          "whenMissing": "제공자 빈이 없다 — 결제 라우팅이 그 제공자를 못 찾는다"
+        }
+      ],
+      "docs": ["docs/modules/payment-toss.md"],
+      "frontend": {
+        "capabilities": ["payment"],
+        "newProjectFlag": "--packages payment",
+        "packages": ["@skeleton/payment"]
+      },
+      "notFor": ["payment 없이는 쓰지 않는다(따라온다)", "웹훅 서명 검증 · 주문 처리는 앱 코드"],
+      "keywords": {
+        "ko": ["토스 결제", "토스페이먼츠", "카드 결제", "간편 결제"],
+        "en": ["toss payments", "toss", "card payment"]
+      }
+    },
+    {
+      "id": "persistence-jdbc",
+      "kind": "module",
+      "module": "persistence-jdbc",
+      "path": "modules/persistence-jdbc",
+      "status": "stable",
+      "summary": "Spring Data JDBC 의 audit 타임스탬프 콜백과 DB 방언 전략(SqlDialect · SqlDialectVerifier).",
+      "starter": true,
+      "newProjectFlag": null,
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/persistence-jdbc.md"],
+      "frontend": null,
+      "notFor": ["JPA · jOOQ 와 병행하지 않는다 — 하나를 고른다(persistence-jpa | persistence-jooq)"],
+      "keywords": {
+        "ko": ["JDBC", "Data JDBC", "audit 시각", "생성일 수정일", "DB 접근"],
+        "en": ["jdbc", "spring data jdbc", "audit timestamps", "created at updated at"]
+      }
+    },
+    {
+      "id": "persistence-jooq",
+      "kind": "module",
+      "module": "persistence-jooq",
+      "path": "modules/persistence-jooq",
+      "status": "stable",
+      "summary": "jOOQ 연결 — audit 리스너 · MySQL UTC Instant 변환기, DDL 파일에서 코드 생성(빌드에 DB 불필요).",
+      "starter": false,
+      "newProjectFlag": "--modules persistence-jooq",
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/persistence-jooq.md", "docs/persistence-jooq.md"],
+      "frontend": null,
+      "notFor": ["main 에는 런타임 부품뿐 — 코드 생성 레시피는 docs/persistence-jooq.md", "JPA · Data JDBC 와 병행하지 않는다"],
+      "keywords": {
+        "ko": ["jOOQ", "타입 안전 SQL", "쿼리 빌더"],
+        "en": ["jooq", "type-safe sql", "query builder", "code generation"]
+      }
+    },
+    {
+      "id": "persistence-jpa",
+      "kind": "module",
+      "module": "persistence-jpa",
+      "path": "modules/persistence-jpa",
+      "status": "stable",
+      "summary": "JPA 엔티티의 created_at · updated_at 자동 채움과 부분 수정 · fetch graph 도우미.",
+      "starter": false,
+      "newProjectFlag": "--modules persistence-jpa",
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/persistence-jpa.md", "docs/persistence-jpa.md"],
+      "frontend": null,
+      "notFor": ["JDBC · jOOQ 와 병행하지 않는다 — 하나를 고른다", "JPA 스타터와 DataSource 가 필요하다"],
+      "keywords": {
+        "ko": ["JPA", "하이버네이트", "엔티티 audit", "ORM"],
+        "en": ["jpa", "hibernate", "entity audit", "orm"]
+      }
+    },
+    {
+      "id": "platform",
+      "kind": "module",
+      "module": "platform",
+      "path": "modules/platform",
+      "status": "stable",
+      "summary": "모든 모듈의 공용 기반 — 표준 응답/에러 봉투 · 전역 예외 처리 · trace id · 요청 로깅 · CORS · rate limit · 외부 HTTP 클라이언트 · OpenAPI · 배포 가드.",
+      "starter": true,
+      "newProjectFlag": null,
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": [
+          "skeleton.config.validation",
+          "skeleton.deploy",
+          "skeleton.http",
+          "skeleton.observability.links",
+          "skeleton.openapi",
+          "skeleton.redaction",
+          "skeleton.web"
+        ],
+        "snippet": "docs/config/modules/platform.yml"
+      },
+      "basePaths": [],
+      "secrets": [],
+      "docs": [
+        "docs/modules/platform.md",
+        "docs/errors.md",
+        "docs/logging.md",
+        "docs/openapi.md",
+        "docs/external-http.md",
+        "docs/client-ip.md",
+        "docs/configuration.md",
+        "docs/observability-links.md",
+        "docs/deploy.md"
+      ],
+      "frontend": {
+        "capabilities": ["api-client"],
+        "newProjectFlag": null,
+        "packages": ["@skeleton/api-client"]
+      },
+      "notFor": ["벤더 연동(결제 · 메일 · 저장소 · 소셜 로그인)은 여기에 없다 — 각 모듈", "스타터가 이미 가진다 — 따로 켜는 줄이 없다"],
+      "keywords": {
+        "ko": ["에러 응답", "표준 응답", "예외 처리", "요청 로깅", "트레이스", "CORS", "요청 제한", "외부 API 호출", "스웨거", "배포 가드"],
+        "en": [
+          "error response",
+          "exception handling",
+          "request logging",
+          "trace id",
+          "cors",
+          "rate limit",
+          "http client",
+          "openapi",
+          "swagger",
+          "deploy guard"
+        ]
+      }
+    },
+    {
+      "id": "redis-cache",
+      "kind": "module",
+      "module": "redis-cache",
+      "path": "modules/redis-cache",
+      "status": "stable",
+      "summary": "이름 있는 Redis 캐시(TTL · 접두사) · 안정적인 키 생성기 · 캐시 오류 정책(기본 FAIL_OPEN).",
+      "starter": false,
+      "newProjectFlag": "--modules redis-cache",
+      "autoIncludes": ["redis-core"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": ["skeleton.redis-cache"],
+        "snippet": "docs/config/modules/redis-cache.yml"
+      },
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/redis-cache.md"],
+      "frontend": null,
+      "notFor": ["redis-core 없이는 쓰지 않는다(따라온다)", "Redis 서버가 필요하다(없어도 앱은 뜨고 캐시는 건너뛴다)"],
+      "keywords": {
+        "ko": ["캐시", "Redis 캐시", "캐싱", "응답 캐시"],
+        "en": ["cache", "redis cache", "caching", "ttl"]
+      }
+    },
+    {
+      "id": "redis-core",
+      "kind": "module",
+      "module": "redis-core",
+      "path": "modules/redis-core",
+      "status": "stable",
+      "summary": "Redis 연결 · StringRedisTemplate · JSON 템플릿 · 키 접두사 — 다른 redis-* 모듈의 바탕.",
+      "starter": false,
+      "newProjectFlag": "--modules redis-core",
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": ["skeleton.redis"],
+        "snippet": "docs/config/modules/redis-core.yml"
+      },
+      "basePaths": [],
+      "secrets": [
+        {
+          "env": [
+            "<P>_REDIS_HOST",
+            "<P>_REDIS_PORT",
+            "<P>_REDIS_SSL_ENABLED",
+            "<P>_REDIS_KEY_PREFIX",
+            "<P>_REDIS_PASSWORD"
+          ],
+          "whenMissing": "배포 선언의 redis: true 면 플랫폼이 넣는다 — redis: false 인데 redis-* 를 쓰면 첫 명령에서 실패",
+          "platformProvided": true
+        }
+      ],
+      "docs": ["docs/modules/redis-core.md"],
+      "frontend": null,
+      "notFor": ["연결은 지연이라 Redis 가 없어도 앱은 뜬다 — 첫 명령에서 실패", "배포 선언에 redis: true 를 두면 플랫폼이 접속 정보를 넣는다"],
+      "keywords": {
+        "ko": ["Redis", "레디스", "키 접두사"],
+        "en": ["redis", "redis connection", "key prefix"]
+      }
+    },
+    {
+      "id": "redis-lock",
+      "kind": "module",
+      "module": "redis-lock",
+      "path": "modules/redis-lock",
+      "status": "stable",
+      "summary": "Redisson 기반 분산 락 — @DistributedLock 어노테이션과 락 실행기.",
+      "starter": false,
+      "newProjectFlag": "--modules redis-lock",
+      "autoIncludes": ["redis-core"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": ["skeleton.redis-lock"],
+        "snippet": "docs/config/modules/redis-lock.yml"
+      },
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/redis-lock.md"],
+      "frontend": null,
+      "notFor": [
+        "redis-core 없이는 쓰지 않는다(따라온다)",
+        "Redis 서버가 없으면 @DistributedLock 이 즉시 실패한다",
+        "단일 인스턴스 스케줄러는 락 없이 된다(scheduler 의 no-op 락)"
+      ],
+      "keywords": {
+        "ko": ["분산 락", "락", "동시 실행 방지", "중복 실행 방지"],
+        "en": ["distributed lock", "lock", "mutex", "redisson"]
+      }
+    },
+    {
+      "id": "redis-rate-limit",
+      "kind": "module",
+      "module": "redis-rate-limit",
+      "path": "modules/redis-rate-limit",
+      "status": "stable",
+      "summary": "platform 의 rate limit 저장소를 Redis 고정 윈도 카운터로 바꾼다(여러 인스턴스에서 한도 공유).",
+      "starter": false,
+      "newProjectFlag": "--modules redis-rate-limit",
+      "autoIncludes": ["redis-core"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": ["skeleton.redis-rate-limit"],
+        "snippet": "docs/config/modules/redis-rate-limit.yml"
+      },
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/redis-rate-limit.md"],
+      "frontend": null,
+      "notFor": ["skeleton.web.rate-limit.enabled=true 일 때만 쓰인다", "단일 인스턴스면 platform 의 인메모리 저장소로 충분하다"],
+      "keywords": {
+        "ko": ["요청 제한", "속도 제한", "API 호출 제한", "도배 방지"],
+        "en": ["rate limit", "throttling", "request limit", "redis rate limit"]
+      }
+    },
+    {
+      "id": "scheduler",
+      "kind": "module",
+      "module": "scheduler",
+      "path": "modules/scheduler",
+      "status": "stable",
+      "summary": "어노테이션 기반 스케줄러 — 실행 가드 · 락 매니저 · 실패 핸들러(기본 락은 no-op, 단일 인스턴스용).",
+      "starter": false,
+      "newProjectFlag": "--modules scheduler",
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": ["skeleton.scheduler"],
+        "snippet": "docs/config/modules/scheduler.yml"
+      },
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/scheduler.md"],
+      "frontend": null,
+      "notFor": ["여러 인스턴스에서 한 번만 돌리려면 redis-lock 같은 락 매니저로 바꾼다", "재시도 · 영속 큐가 아니다(job-queue-jdbc)"],
+      "keywords": {
+        "ko": ["스케줄러", "정기 작업", "크론", "주기 실행", "배치"],
+        "en": ["scheduler", "cron", "scheduled job", "periodic task", "batch"]
+      }
+    },
+    {
+      "id": "storage",
+      "kind": "module",
+      "module": "storage",
+      "path": "modules/storage",
+      "status": "stable",
+      "summary": "저장소 계약(ObjectStorage · PresignedStorage) · 파일 크기/확장자/content-type 검증 + 브라우저 직접 업로드 HTTP(/api/v1/storage: presign · 멀티파트).",
+      "starter": false,
+      "newProjectFlag": "--modules storage,storage-s3",
+      "autoIncludes": ["crypto"],
+      "needs": {
+        "requires": ["storage-s3"],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": ["skeleton.storage"],
+        "snippet": "docs/config/modules/storage.yml"
+      },
+      "basePaths": ["/api/v1/storage"],
+      "secrets": [],
+      "docs": ["docs/modules/storage.md"],
+      "frontend": {
+        "capabilities": ["storage"],
+        "newProjectFlag": "--packages storage",
+        "packages": ["@skeleton/storage"]
+      },
+      "notFor": [
+        "실제 저장소는 어댑터(storage-s3)가 구현한다 — 함께 고른다",
+        "PresignedStorage 빈이 있어야(= 버킷 설정) HTTP 길이 열린다",
+        "이미지 변환 · 썸네일은 없다"
+      ],
+      "keywords": {
+        "ko": ["파일 업로드", "이미지 업로드", "첨부파일", "프리사인", "파일 검증"],
+        "en": ["file upload", "image upload", "attachment", "presigned url", "multipart upload"]
+      }
+    },
+    {
+      "id": "storage-s3",
+      "kind": "module",
+      "module": "storage-s3",
+      "path": "modules/storage-s3",
+      "status": "stable",
+      "summary": "S3 호환 저장소(AWS S3 · Cloudflare R2 · MinIO) — presign PUT/GET · 멀티파트 · 복사 · 일괄 삭제, 공개 URL RAW | OPAQUE.",
+      "starter": false,
+      "newProjectFlag": "--modules storage-s3",
+      "autoIncludes": ["crypto", "storage"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": ["crypto"]
+      },
+      "config": {
+        "prefixes": ["skeleton.storage-s3"],
+        "snippet": "docs/config/modules/storage-s3.yml"
+      },
+      "basePaths": [],
+      "secrets": [
+        {
+          "env": [
+            "<P>_STORAGE_S3_BUCKET",
+            "<P>_STORAGE_S3_ENDPOINT_OVERRIDE",
+            "<P>_STORAGE_S3_CREDENTIALS_ACCESS_KEY_ID",
+            "<P>_STORAGE_S3_CREDENTIALS_SECRET_ACCESS_KEY"
+          ],
+          "whenMissing": "버킷이 비면 저장소 빈이 없다 · 키가 비면 AWS 기본 자격 증명 체인으로 가서 첫 사용에서 실패(기동은 된다)"
+        }
+      ],
+      "docs": ["docs/modules/storage-s3.md", "docs/storage-s3.md"],
+      "frontend": {
+        "capabilities": ["storage"],
+        "newProjectFlag": "--packages storage",
+        "packages": ["@skeleton/storage"]
+      },
+      "notFor": [
+        "storage 없이는 쓰지 않는다(따라온다)",
+        "OPAQUE 공개 URL 만 crypto 가 필요하다(컴파일 전용 — 앱이 crypto 를 더해야 한다)",
+        "버킷이 없으면 클라이언트만 있고 저장소 빈은 없다"
+      ],
+      "keywords": {
+        "ko": ["S3", "R2", "클라우드 스토리지", "파일 저장소", "이미지 저장"],
+        "en": ["s3", "r2", "cloudflare r2", "minio", "object storage"]
+      }
+    },
+    {
+      "id": "time",
+      "kind": "module",
+      "module": "time",
+      "path": "modules/time",
+      "status": "stable",
+      "summary": "글로벌 시간 — 요청마다 뷰어 시간대 · 로케일 · ZonedMoment(미래 현지 시각) · 사람이 읽는 이중 포맷 · 국가 → 시간대.",
+      "starter": true,
+      "newProjectFlag": null,
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": ["skeleton.time"],
+        "snippet": "docs/config/modules/time.yml"
+      },
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/time.md", "docs/time.md"],
+      "frontend": {
+        "capabilities": ["time"],
+        "newProjectFlag": null,
+        "packages": ["@skeleton/time"]
+      },
+      "notFor": [
+        "Instant · LocalDate · ZonedMoment 를 구분하는 규칙 — ZoneId.systemDefault() · TIMESTAMP 칼럼 · 맨 LocalDateTime 은 쓰지 않는다(docs/time.md)",
+        "스타터가 이미 가진다"
+      ],
+      "keywords": {
+        "ko": ["시간대", "타임존", "날짜 표시", "현지 시간", "예약 시각", "글로벌"],
+        "en": ["timezone", "time zone", "locale", "zoned moment", "date format", "global time"]
+      }
+    },
+    {
+      "id": "app-api",
+      "kind": "app",
+      "module": null,
+      "path": "apps/api",
+      "status": "stable",
+      "summary": "스타터 — 새 프로젝트가 복사해 시작하는 최소 조립(platform · auth · persistence-jdbc · db-postgresql · migration-flyway · time)과 HelloController 하나. Redis · Kafka · S3 · 메일 없이 부팅한다.",
+      "starter": true,
+      "newProjectFlag": null,
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": ["/api/v1"],
+      "secrets": [],
+      "docs": ["docs/minimal-composition.md"],
+      "frontend": {
+        "capabilities": ["app-starter", "app-starter-ssr"],
+        "newProjectFlag": null,
+        "packages": []
+      },
+      "notFor": ["모든 모듈을 보여 주는 데모가 아니다(apps/workbench)", "제품 코드는 모듈 내부가 아니라 앱 패키지(루트 패키지의 app.api 하위)에 둔다"],
+      "keywords": {
+        "ko": ["스타터", "시작 템플릿", "새 앱", "최소 구성", "기본 앱"],
+        "en": ["starter", "boilerplate", "minimal app", "new app", "template"]
+      }
+    },
+    {
+      "id": "app-sample",
+      "kind": "app",
+      "module": null,
+      "path": "apps/sample",
+      "status": "stable",
+      "summary": "참조 앱 Notes — 로그인한 사람이 첨부 있는 노트를 관리하는 제품 모양의 작은 앱(스타터 + idempotency · notification-jdbc/sse · storage-s3 · job-queue-jdbc · board · alert-jdbc). 새 기능은 이 앱의 한 조각을 따라 한다.",
+      "starter": false,
+      "newProjectFlag": "--with-sample",
+      "autoIncludes": [
+        "alert",
+        "alert-jdbc",
+        "board",
+        "board-jdbc",
+        "crypto",
+        "idempotency",
+        "job-queue-jdbc",
+        "json",
+        "notification",
+        "notification-jdbc",
+        "notification-mail",
+        "notification-sse",
+        "storage",
+        "storage-s3"
+      ],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": ["/api/v1/notes"],
+      "secrets": [],
+      "docs": ["docs/sample.md"],
+      "frontend": {
+        "capabilities": ["app-sample"],
+        "newProjectFlag": "--with-sample",
+        "packages": []
+      },
+      "notFor": ["복사 대상이 아니라 따라 하는 참조 — 쓰지 않을 기능은 지운다", "PostgreSQL 전용이다(--db mysql 과 함께 쓸 수 없다)"],
+      "keywords": {
+        "ko": ["참조 앱", "예제 앱", "샘플", "노트 앱", "제품 모양 예시"],
+        "en": ["sample app", "reference app", "example", "notes app"]
+      }
+    },
+    {
+      "id": "app-workbench",
+      "kind": "app",
+      "module": null,
+      "path": "apps/workbench",
+      "status": "stable",
+      "summary": "데모 — 모든 모듈을 함께 얹고 샘플 엔드포인트(/api/v1/skeleton · /api/v1/examples)와 통합 테스트로 모듈이 공존함을 증명한다(react-skeleton 워크벤치 화면의 백엔드).",
+      "starter": false,
+      "newProjectFlag": "--with-workbench",
+      "autoIncludes": [
+        "alert",
+        "alert-jdbc",
+        "async",
+        "async-notification",
+        "auth-social",
+        "auth-social-google",
+        "auth-social-kakao",
+        "auth-social-naver",
+        "board",
+        "board-jdbc",
+        "captcha-turnstile",
+        "config-aws-ssm",
+        "crypto",
+        "db-mysql",
+        "event-kafka",
+        "idempotency",
+        "job-queue-jdbc",
+        "json",
+        "notification",
+        "notification-jdbc",
+        "notification-mail",
+        "notification-slack",
+        "notification-sse",
+        "notification-websocket",
+        "payment",
+        "payment-stripe",
+        "payment-toss",
+        "persistence-jooq",
+        "persistence-jpa",
+        "redis-cache",
+        "redis-core",
+        "redis-lock",
+        "redis-rate-limit",
+        "scheduler",
+        "storage",
+        "storage-s3"
+      ],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [
+        "/api/v1",
+        "/api/v1/examples",
+        "/api/v1/skeleton",
+        "/api/v1/skeleton/enums",
+        "/api/v1/skeleton/json",
+        "/api/v1/skeleton/payments",
+        "/api/v1/skeleton/polymorphic/contents"
+      ],
+      "secrets": [],
+      "docs": ["docs/minimal-composition.md", "docs/modules/README.md"],
+      "frontend": {
+        "capabilities": ["app-workbench"],
+        "newProjectFlag": "--with-workbench",
+        "packages": []
+      },
+      "notFor": [
+        "제품에 복사하지 않는다",
+        "모든 모듈이 남고 PostgreSQL 전용이다(--db mysql 과 함께 쓸 수 없다)",
+        "Dockerfile 이 이 앱의 이미지 빌드를 거부한다"
+      ],
+      "keywords": {
+        "ko": ["워크벤치", "모듈 데모", "전체 모듈", "모든 모듈 함께"],
+        "en": ["workbench", "demo", "all modules", "module smoke test"]
+      }
+    },
+    {
+      "id": "script-build-capabilities",
+      "kind": "script",
+      "module": null,
+      "path": "scripts/build-capabilities.pl",
+      "status": "stable",
+      "summary": "capabilities.json 에서 docs/capabilities.md · llms.txt 를 생성하고(--check 로 어긋남 검사) 카탈로그를 정본 형식으로 정리한다.",
+      "starter": false,
+      "newProjectFlag": null,
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/capabilities.md", "README.md"],
+      "frontend": null,
+      "notFor": ["항목 검증(레포의 실제와 맞는가)은 modules/platform 의 Capabilities*Test — 이 스크립트는 생성만 한다"],
+      "keywords": {
+        "ko": ["기능 카탈로그", "카탈로그 생성", "카탈로그 점검", "기능 목록"],
+        "en": ["capabilities catalog", "generate docs", "catalog check", "llms.txt"]
+      }
+    },
+    {
+      "id": "script-dev",
+      "kind": "script",
+      "module": null,
+      "path": "scripts/dev.sh",
+      "status": "stable",
+      "summary": "로컬 풀스택 한 줄 실행 — DB(+ 로컬 S3) 컨테이너를 올리고 백엔드를 띄운다. 옆의 ../web 프런트가 있으면 같이 띄운다.",
+      "starter": false,
+      "newProjectFlag": null,
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/minimal-composition.md"],
+      "frontend": null,
+      "notFor": ["로컬 개발용이다 — 운영 배포는 deploy/app.yaml 선언(docs/deploy.md)", "Docker 가 필요하다"],
+      "keywords": {
+        "ko": ["로컬 실행", "개발 서버", "한 줄 실행", "DB 띄우기"],
+        "en": ["run locally", "dev server", "local stack", "start database"]
+      }
+    },
+    {
+      "id": "script-dev-sample",
+      "kind": "script",
+      "module": null,
+      "path": "scripts/dev-sample.sh",
+      "status": "stable",
+      "summary": "샘플 앱 Notes 풀스택 한 줄 실행 — DB + 로컬 S3 → 백엔드(apps/sample) → 짝 프런트(react-skeleton 의 apps/sample).",
+      "starter": false,
+      "newProjectFlag": null,
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/sample.md"],
+      "frontend": null,
+      "notFor": ["--with-sample 로 찍은 프로젝트에서만 남는다", "얇은 래퍼다 — 하는 일은 scripts/dev.sh"],
+      "keywords": {
+        "ko": ["샘플 실행", "노트 앱 실행"],
+        "en": ["run sample", "notes app"]
+      }
+    },
+    {
+      "id": "script-new-project",
+      "kind": "script",
+      "module": null,
+      "path": "scripts/new-project.sh",
+      "status": "stable",
+      "summary": "새 프로젝트 한 줄 찍기 — 이 레포를 복사해 고른 모듈 · 앱만 남기고, 이름 · 접두사를 바꾸고, 배포 선언 · 설정 블록 · 이 카탈로그를 걸러 다시 쓴다(--dry-run 은 고른 모듈과 따라온 이유만 보인다).",
+      "starter": false,
+      "newProjectFlag": null,
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/minimal-composition.md", "docs/new-project-recipe.md"],
+      "frontend": null,
+      "notFor": [
+        "찍은 프로젝트에는 따라가지 않는다(스켈레톤 도구)",
+        "기존 프로젝트에 모듈을 더하는 도구가 아니다 — apps/api 에 의존 한 줄",
+        "프런트는 react-skeleton 의 같은 이름 스크립트"
+      ],
+      "keywords": {
+        "ko": ["새 프로젝트", "프로젝트 만들기", "찍어내기", "스캐폴딩", "프로젝트 시작"],
+        "en": ["new project", "scaffold", "stamp", "template", "project generator"]
+      }
+    },
+    {
+      "id": "script-rename-skeleton",
+      "kind": "script",
+      "module": null,
+      "path": "scripts/rename-skeleton.sh",
+      "status": "stable",
+      "summary": "패키지 · 설정 접두사 · 클래스 이름 · 환경변수 접두사를 한 번에 바꾸는 스크립트(GitHub Template 로 만든 뒤 이름만 바꿀 때) — 끝에 남은 흔적을 검사하고 이 카탈로그를 다시 만든다.",
+      "starter": false,
+      "newProjectFlag": null,
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/minimal-composition.md"],
+      "frontend": null,
+      "notFor": [
+        "모듈을 고르지 않는다 — 모듈 가지치기까지 하는 것은 new-project.sh",
+        "샘플 API 경로 /api/v1/skeleton 과 skeleton_jobs 테이블 이름은 바꾸지 않는다"
+      ],
+      "keywords": {
+        "ko": ["이름 바꾸기", "리네임", "패키지 변경", "템플릿 이름 바꾸기"],
+        "en": ["rename", "change package", "rename template", "project name"]
+      }
+    },
+    {
+      "id": "script-sample-e2e-backend",
+      "kind": "script",
+      "module": null,
+      "path": "scripts/sample-e2e-backend.sh",
+      "status": "stable",
+      "summary": "샘플 앱 백엔드를 e2e 테스트용으로 올리고 내리는 비대화형 스크립트(react-skeleton 의 Playwright e2e 가 부른다).",
+      "starter": false,
+      "newProjectFlag": null,
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/sample.md"],
+      "frontend": null,
+      "notFor": ["--with-sample 로 찍은 프로젝트에서만 남는다", "자기 개발 컨테이너와 섞이지 않게 전용 compose 프로젝트 이름을 쓴다"],
+      "keywords": {
+        "ko": ["e2e 백엔드", "e2e 테스트용 서버"],
+        "en": ["e2e backend", "playwright backend"]
+      }
+    },
+    {
+      "id": "script-test-deploy-contract",
+      "kind": "script",
+      "module": null,
+      "path": "scripts/test-deploy-contract.sh",
+      "status": "stable",
+      "summary": "홈서버 배포 계약(docs/deploy.md)을 진짜 컨테이너로 증명한다 — 이미지 빌드 · 헬스체크 · 0.0.0.0 · stdout 로그 · 보호 환경 가드 실패 화면.",
+      "starter": false,
+      "newProjectFlag": null,
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/deploy.md"],
+      "frontend": null,
+      "notFor": ["Docker 가 필요하다", "배포 자체를 하지 않는다 — 계약을 지키는지 증명만 한다"],
+      "keywords": {
+        "ko": ["배포 검증", "배포 계약 테스트", "컨테이너 검증"],
+        "en": ["deploy contract test", "container check", "image verification"]
+      }
+    },
+    {
+      "id": "script-test-new-project",
+      "kind": "script",
+      "module": null,
+      "path": "scripts/test-new-project.sh",
+      "status": "stable",
+      "summary": "new-project.sh 의 테스트 — 빠른 검사(./gradlew check 가 부른다)와 --full(여러 조합과 레시피의 예제 명령을 정말 찍어 ./gradlew build).",
+      "starter": false,
+      "newProjectFlag": null,
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/minimal-composition.md", "docs/new-project-recipe.md"],
+      "frontend": null,
+      "notFor": ["--full 은 Docker(Testcontainers)가 필요하고 수 분~수십 분 걸린다", "찍은 프로젝트에는 따라가지 않는다"],
+      "keywords": {
+        "ko": ["찍기 테스트", "조합 검증", "스캐폴딩 테스트"],
+        "en": ["stamp test", "combination test", "scaffold test"]
+      }
+    }
+  ],
+  "decisions": [
+    {
+      "frontend": {
+        "capabilities": ["auth"],
+        "flag": null
+      },
+      "oneOf": [],
+      "need": "로그인 (이메일 · 비밀번호) · JWT · 로그인한 사람만 보는 API",
+      "modules": ["auth"],
+      "flag": null,
+      "byHand": "스타터에 기본 포함. 회원가입 · 비밀번호 재설정 · 계정 DB 저장은 없다 — 앱이 AuthAccountRepository 를 구현한다(내장은 로컬 시드 계정뿐, prod · staging 에서는 기동을 거부한다). 운영에는 JWT_SECRET(32바이트 이상)."
+    },
+    {
+      "frontend": {
+        "capabilities": ["social-login"],
+        "flag": null
+      },
+      "oneOf": [["auth-social-google", "auth-social-kakao", "auth-social-naver"]],
+      "need": "소셜 로그인 (구글 · 카카오 · 네이버)",
+      "modules": ["auth-social"],
+      "flag": "--modules auth-social,auth-social-google",
+      "byHand": "제공자 enabled · client-id · client-secret · redirect-uri(비밀은 환경변수). 계정 연결 저장(OAuthAccountLinkRepository)과 가입 정책(OAuthAccountProvisioningPolicy)은 앱이 구현한다 — 기본은 메모리 저장 · 이미 연결된 계정만 통과. 로그인 버튼 · /auth/callback 화면은 프런트."
+    },
+    {
+      "frontend": {
+        "capabilities": ["board"],
+        "flag": "--packages board"
+      },
+      "oneOf": [],
+      "need": "게시판 · 글쓰기 · 댓글 · 대댓글 · 공감(반응)",
+      "modules": ["board", "board-jdbc"],
+      "flag": "--modules board,board-jdbc",
+      "byHand": "게시판 코드 만들기(skeleton.board.seed-boards 설정이나 운영자 API) · 반응 종류(skeleton.board.reaction.types) · 운영자 역할(MODERATOR). notification 을 같이 고르면 댓글 알림이 기본으로 켜진다. 목록 · 상세 · 글쓰기 화면은 프런트."
+    },
+    {
+      "frontend": {
+        "capabilities": ["notifications"],
+        "flag": "--packages notifications"
+      },
+      "oneOf": [],
+      "need": "알림 (종 · 목록 · 안 읽은 수)",
+      "modules": ["notification", "notification-jdbc"],
+      "flag": "--modules notification,notification-jdbc",
+      "byHand": "알림을 만드는 쪽(NotificationPublisher.publish)은 앱 코드 — 받는 사람은 NotificationEvent.recipientIds. 프런트에서는 NotificationBell 배치와 알림 API 인스턴스."
+    },
+    {
+      "frontend": {
+        "capabilities": ["live-notifications"],
+        "flag": "--packages notifications,realtime"
+      },
+      "oneOf": [["notification-sse", "notification-websocket"]],
+      "need": "알림이 새로고침 없이 즉시 뜬다 (실시간)",
+      "modules": ["notification", "notification-jdbc"],
+      "flag": "--modules notification,notification-jdbc,notification-sse",
+      "byHand": "SSE(단방향, 더 단순) 또는 WebSocket(양방향) 중 고른다. 둘 다 프로세스 안 브로커라 인스턴스가 여럿이면 다른 인스턴스의 알림을 못 받는다. 프런트 연결 훅."
+    },
+    {
+      "frontend": {
+        "capabilities": ["storage"],
+        "flag": "--packages storage"
+      },
+      "oneOf": [],
+      "need": "파일 업로드 (이미지 · 첨부)",
+      "modules": ["storage", "storage-s3"],
+      "flag": "--modules storage,storage-s3",
+      "byHand": "버킷 · 키(환경변수), 업로드 규칙(skeleton.storage.validation — 확장자 · 크기), 업로드한 파일 키를 도메인에 저장하는 코드(앱). 로컬 개발은 compose 의 S3 를 scripts/dev.sh 가 올린다."
+    },
+    {
+      "frontend": {
+        "capabilities": ["payment"],
+        "flag": "--packages payment"
+      },
+      "oneOf": [["payment-toss", "payment-stripe"]],
+      "need": "결제 (토스 · 스트라이프)",
+      "modules": ["payment"],
+      "flag": "--modules payment,payment-toss",
+      "byHand": "HTTP 엔드포인트가 없다 — 주문 · 금액 검증 컨트롤러 · 성공/실패 리다이렉트 처리 · 웹훅 서명 검증을 앱이 쓴다(PaymentService.confirm 은 받은 금액을 그대로 넘긴다). enabled=true + secret-key(환경변수). 중복 결제 방지에는 idempotency."
+    },
+    {
+      "frontend": {
+        "capabilities": ["captcha-turnstile"],
+        "flag": "--packages captcha-turnstile"
+      },
+      "oneOf": [],
+      "need": "봇 방지 (캡차)",
+      "modules": ["captcha-turnstile"],
+      "flag": "--modules captcha-turnstile",
+      "byHand": "가입 · 로그인 요청에서 TurnstileVerifier 로 토큰을 검증하는 코드(앱)와 enabled=true + secret-key(환경변수)."
+    },
+    {
+      "frontend": null,
+      "oneOf": [],
+      "need": "메일 보내기 (SMTP)",
+      "modules": ["notification-mail"],
+      "flag": "--modules notification-mail",
+      "byHand": "SMTP 환경변수(host · username · password · from)와 메일 본문 · 템플릿(앱)."
+    },
+    {
+      "frontend": null,
+      "oneOf": [],
+      "need": "슬랙으로 알림",
+      "modules": ["notification-slack"],
+      "flag": "--modules notification-slack",
+      "byHand": "웹훅 URL(환경변수)과 보낼 알림 종류(앱)."
+    },
+    {
+      "frontend": null,
+      "oneOf": [],
+      "need": "주인 경보 (에러 · 장애를 Discord 로)",
+      "modules": ["alert"],
+      "flag": "--modules alert",
+      "byHand": "웹훅 주소(환경변수 <P>_ALERT_WEBHOOK_URL) — 없으면 로그만 남는다. 앱 고유 경보는 AlertKind 를 구현해 OwnerAlerts.emit 으로 보낸다."
+    },
+    {
+      "frontend": null,
+      "oneOf": [],
+      "need": "여러 인스턴스에서 같은 경보를 한 번만",
+      "modules": ["alert", "alert-jdbc"],
+      "flag": "--modules alert,alert-jdbc",
+      "byHand": "alert 의 설정에 더해 DB 스키마(마이그레이션이 적용된 postgres · mysql). 단일 인스턴스면 alert 만으로 충분하다."
+    },
+    {
+      "frontend": null,
+      "oneOf": [],
+      "need": "작업 큐 · 백그라운드 재시도 (Redis 없이)",
+      "modules": ["job-queue-jdbc"],
+      "flag": "--modules job-queue-jdbc",
+      "byHand": "JobHandler 구현(멱등이어야 한다 — 재시도된다), 작업 넣기(JobQueue), DB 마이그레이션 적용(spring.flyway.locations)."
+    },
+    {
+      "frontend": null,
+      "oneOf": [],
+      "need": "정기 작업 (크론 · 스케줄러)",
+      "modules": ["scheduler"],
+      "flag": "--modules scheduler",
+      "byHand": "@Scheduled 작업 코드(앱). 여러 인스턴스에서 한 번만 돌리려면 redis-lock 의 락 매니저로 바꾼다."
+    },
+    {
+      "frontend": null,
+      "oneOf": [],
+      "need": "캐시 (Redis)",
+      "modules": ["redis-cache"],
+      "flag": "--modules redis-cache",
+      "byHand": "Redis 서버(배포 선언 redis: true), 캐시 이름 · TTL 설정, 캐시를 거는 코드(앱). Redis 가 죽어도 FAIL_OPEN 으로 원본을 읽는다."
+    },
+    {
+      "frontend": null,
+      "oneOf": [],
+      "need": "분산 락 · 중복 실행 방지",
+      "modules": ["redis-lock"],
+      "flag": "--modules redis-lock",
+      "byHand": "@DistributedLock 을 거는 코드(앱)와 Redis 서버(배포 선언 redis: true). Redis 가 없으면 락에서 즉시 실패한다."
+    },
+    {
+      "frontend": null,
+      "oneOf": [],
+      "need": "요청 제한 · 도배 방지 (여러 인스턴스)",
+      "modules": ["redis-rate-limit"],
+      "flag": "--modules redis-rate-limit",
+      "byHand": "skeleton.web.rate-limit.enabled=true 로 켠다. 단일 인스턴스면 모듈 없이 platform 의 인메모리 저장소로 충분하다."
+    },
+    {
+      "frontend": null,
+      "oneOf": [],
+      "need": "중복 요청 방지 (멱등 키)",
+      "modules": ["idempotency"],
+      "flag": "--modules idempotency",
+      "byHand": "명령 엔드포인트에 @IdempotentOperation. 저장소는 인메모리(인스턴스별) — 여러 인스턴스면 IdempotencyStore 를 앱이 구현한다."
+    },
+    {
+      "frontend": null,
+      "oneOf": [],
+      "need": "데이터 암호화 · 불투명 URL 토큰",
+      "modules": ["crypto"],
+      "flag": "--modules crypto",
+      "byHand": "키 설정(환경변수 <P>_CRYPTO_PRIMARY_KEY_ID · <P>_CRYPTO_KEYS_<ID>)과 암호화할 필드 선택(앱)."
+    },
+    {
+      "frontend": null,
+      "oneOf": [],
+      "need": "@Async · 백그라운드 작업에서 trace id 유지",
+      "modules": ["async"],
+      "flag": "--modules async",
+      "byHand": "스레드 풀 크기 설정과 @Async 를 거는 코드(앱)."
+    },
+    {
+      "frontend": null,
+      "oneOf": [],
+      "need": "Kafka 로 이벤트 발행",
+      "modules": ["event-kafka"],
+      "flag": "--modules event-kafka",
+      "byHand": "브로커 주소 · KafkaOperations 빈 · enabled=true. 소비(consumer)는 없다."
+    },
+    {
+      "frontend": null,
+      "oneOf": [],
+      "need": "MySQL 로 쓰기 (기본은 PostgreSQL)",
+      "modules": ["db-mysql"],
+      "flag": "--db mysql",
+      "byHand": "--modules 가 아니라 --db mysql 로 고른다. --with-sample · --with-workbench 와 함께 쓸 수 없다(PostgreSQL 전용)."
+    },
+    {
+      "frontend": null,
+      "oneOf": [["persistence-jpa", "persistence-jooq"]],
+      "need": "JPA 또는 jOOQ 로 DB 접근 (기본은 Data JDBC)",
+      "modules": [],
+      "flag": "--modules persistence-jpa",
+      "byHand": "하나만 고른다 — JDBC · JPA · jOOQ 를 병행하지 않는다. jOOQ 는 DDL 파일에서 코드를 생성한다(docs/persistence-jooq.md)."
+    },
+    {
+      "frontend": {
+        "capabilities": ["api-client"],
+        "flag": null
+      },
+      "oneOf": [],
+      "need": "에러 응답 · 표준 응답 · 요청 로깅 · OpenAPI · 외부 API 호출",
+      "modules": ["platform"],
+      "flag": null,
+      "byHand": "스타터에 기본 포함 — 따로 켤 것이 없다. 컨트롤러는 DataResponse/ApiError 규칙을 쓴다(docs/errors.md · docs/openapi.md)."
+    },
+    {
+      "frontend": {
+        "capabilities": ["time"],
+        "flag": null
+      },
+      "oneOf": [],
+      "need": "시간대 · 날짜 표시 · 예약 시각 (글로벌)",
+      "modules": ["time"],
+      "flag": null,
+      "byHand": "스타터에 기본 포함. Instant · LocalDate · ZonedMoment 를 구분한다 — ZoneId.systemDefault() · TIMESTAMP 칼럼은 쓰지 않는다(docs/time.md)."
+    },
+    {
+      "frontend": {
+        "capabilities": ["app-sample"],
+        "flag": "--with-sample"
+      },
+      "oneOf": [],
+      "need": "참조 앱을 같이 가져가서 보고 따라 하기",
+      "modules": ["app-sample"],
+      "flag": "--with-sample",
+      "byHand": "샘플은 참조다 — 쓰지 않을 기능은 지운다. 짝 프런트는 react-skeleton 의 apps/sample. PostgreSQL 전용."
+    },
+    {
+      "frontend": {
+        "capabilities": ["app-workbench"],
+        "flag": "--with-workbench"
+      },
+      "oneOf": [],
+      "need": "모든 모듈을 한 번에 눌러 보는 데모",
+      "modules": ["app-workbench"],
+      "flag": "--with-workbench",
+      "byHand": "복사 대상이 아니다 — 모듈을 눈으로 확인하는 용도. PostgreSQL 전용."
+    },
+    {
+      "frontend": {
+        "capabilities": ["i18n"],
+        "flag": "--packages i18n"
+      },
+      "oneOf": [],
+      "need": "다국어 (한국어 · 영어 전환)",
+      "modules": [],
+      "flag": null,
+      "byHand": "백엔드 모듈은 필요 없다 — 문구 사전은 프런트. 서버가 뷰어 로케일 · 시간대를 알아야 하면 time(스타터에 기본 포함)."
+    },
+    {
+      "frontend": {
+        "capabilities": ["landing-page", "pricing-page", "legal-documents", "cookie-consent", "error-pages"],
+        "flag": "--packages marketing"
+      },
+      "oneOf": [],
+      "need": "랜딩 · 요금제 · 약관 · 쿠키 동의 · 404 페이지",
+      "modules": [],
+      "flag": null,
+      "byHand": "백엔드는 할 일이 없다(정적 공개 화면). 요금제 선택 이후의 결제 연결은 payment 행."
+    },
+    {
+      "frontend": {
+        "capabilities": ["seo", "app-starter-ssr"],
+        "flag": "--packages seo --ssr"
+      },
+      "oneOf": [],
+      "need": "검색 노출 · 링크 미리보기 · 서버 렌더링",
+      "modules": [],
+      "flag": null,
+      "byHand": "백엔드는 할 일이 없다. SSR 앱은 배포 선언이 따로 필요하다 — deploy/app.yaml 의 web: 은 정적 파일 서빙뿐(docs/deploy.md §8)."
+    },
+    {
+      "frontend": {
+        "capabilities": ["theme", "tokens", "ui", "screen-patterns"],
+        "flag": null
+      },
+      "oneOf": [],
+      "need": "다크 모드 · 디자인 토큰 · 화면 부품 · 대시보드/목록/폼 화면 틀",
+      "modules": [],
+      "flag": null,
+      "byHand": "백엔드는 할 일이 없다 — react-skeleton 에 기본 포함."
+    }
+  ],
+  "examples": [
+    {
+      "id": "community",
+      "modules": [
+        "auth-social",
+        "auth-social-google",
+        "board",
+        "board-jdbc",
+        "notification",
+        "notification-jdbc",
+        "notification-sse"
+      ],
+      "title": "커뮤니티 사이트 — 소셜 로그인 · 게시판(댓글 · 공감) · 실시간 알림 · 다국어 · 랜딩",
+      "product": "관심사가 같은 사람들이 모이는 커뮤니티. 비로그인 방문자는 랜딩을 보고, 구글 · 카카오로 가입해 글을 쓰고 댓글 · 공감을 주고받으며, 내 글에 댓글이 달리면 알림이 바로 뜬다. 화면은 한국어 · 영어.",
+      "extraFlags": [],
+      "target": "~/work/community/api",
+      "package": "dev.example.community",
+      "prefix": "community",
+      "classPrefix": "Community",
+      "frontendCapabilities": [
+        "social-login",
+        "board",
+        "live-notifications",
+        "i18n",
+        "landing-page",
+        "seo",
+        "legal-documents",
+        "cookie-consent"
+      ],
+      "frontendCommand": "scripts/new-project.sh ~/work/community/web community --packages board,notifications,realtime,i18n,marketing,seo --with-sample"
+    },
+    {
+      "id": "saas",
+      "modules": ["payment", "payment-toss", "notification", "notification-jdbc", "captcha-turnstile"],
+      "title": "유료 SaaS 대시보드 — 로그인 · 대시보드/목록/설정 · 요금제 · 결제 · 알림",
+      "product": "월 구독으로 쓰는 업무 도구. 로그인 후 대시보드 · 목록 · 상세 · 설정 화면이 있고, 요금제 페이지에서 플랜을 골라 토스로 결제하며, 가입 폼은 봇을 막고, 결제 · 작업 완료 알림을 받는다.",
+      "extraFlags": ["--db mysql"],
+      "target": "~/work/saas/api",
+      "package": "dev.example.saas",
+      "prefix": "saas",
+      "classPrefix": "Saas",
+      "frontendCapabilities": ["auth", "screen-patterns", "pricing-page", "payment", "notifications", "captcha-turnstile"],
+      "frontendCommand": "scripts/new-project.sh ~/work/saas/web saas --packages marketing,payment,notifications,captcha-turnstile --scope @acme"
+    },
+    {
+      "id": "content-ssr",
+      "modules": [],
+      "title": "콘텐츠 · 랜딩 사이트 (서버 렌더링) — 검색에 노출되는 소개 · 요금 · 약관 사이트",
+      "product": "제품 소개 · 요금제 · 약관을 보여 주는 공개 사이트. 검색 결과와 링크 미리보기가 중요해 서버가 첫 HTML 을 그리고, 한국어 · 영어, 쿠키 동의 배너, 404 화면이 있다. 로그인 · 데이터 입력은 없다.",
+      "extraFlags": [],
+      "target": "~/work/site/api",
+      "package": "dev.example.site",
+      "prefix": "site",
+      "classPrefix": "Site",
+      "frontendCapabilities": [
+        "app-starter-ssr",
+        "landing-page",
+        "pricing-page",
+        "legal-documents",
+        "cookie-consent",
+        "error-pages",
+        "i18n"
+      ],
+      "frontendCommand": "scripts/new-project.sh ~/work/site/web site --packages marketing,i18n --ssr"
+    }
+  ]
+}

@@ -85,6 +85,9 @@ find . -type f -name 'skeleton-*' -not -path '*/build/*' -not -path './.git/*' |
   mv "$f" "$(dirname "$f")/${PREFIX}-${f##*/skeleton-}"
 done
 
+# 3.5 기능 카탈로그(capabilities.json · docs/capabilities.md · llms.txt)를 새 이름으로 다시 만든다 (생성기가 없는 프로젝트는 건너뛴다)
+if [ -f scripts/build-capabilities.pl ] && [ -f capabilities.json ]; then perl scripts/build-capabilities.pl >/dev/null; fi
+
 # 4. 검증: 남은 흔적이 있으면 실패. 빌드는 이걸 못 잡는다 (예: YAML 루트 키가 skeleton: 이면 설정이 조용히 무시된다)
 leftovers="$(files | xargs perl -ne '
   next if /skeleton_jobs|\/skeleton\//;                       # 의도적으로 남기는 것

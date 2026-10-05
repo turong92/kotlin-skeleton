@@ -23,4 +23,10 @@ tasks.test {
     // ConfigPrefixDocumentationTest 는 문서의 접두사 표를 코드와 맞춰 본다
     inputs.file(rootDir.resolve("docs/minimal-composition.md"))
     inputs.dir(rootDir.resolve("docs/config/modules")).optional()
+    // Capabilities*Test 는 capabilities.json 을 모듈 · 앱 · 문서 · 배포 선언과 맞춰 본다
+    inputs.files(fileTree(rootDir) {
+        include("capabilities.json", "llms.txt", "docs/capabilities*", "docs/new-project-recipe.md", "docs/deploy.md", "scripts/build-capabilities.pl")
+        include("apps/*/build.gradle.kts", "apps/*/src/main/**/*.kt")
+        exclude("**/build/**")
+    })
 }
