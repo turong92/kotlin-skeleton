@@ -40,6 +40,8 @@
 | `event-kafka` | Kafka 이벤트 발행 어댑터 | [event-kafka](event-kafka.md) |
 | `job-queue-jdbc` | DB 테이블 재시도 큐 (Redis 없음) | [job-queue-jdbc](job-queue-jdbc.md) |
 | `notification-mail` | SMTP 메일 발송 | [notification-mail](notification-mail.md) |
+| `alert` | 주인 경보 — 5xx 몰림 · 기동 실패 · 죽은 작업을 Discord 웹훅(+메일)으로 (에러 수집의 답) | [alert](alert.md) |
+| `alert-jdbc` | 경보 기록을 DB 에 두어 여러 인스턴스를 가로질러 접기 | [alert-jdbc](alert-jdbc.md) |
 | `captcha-turnstile` | Cloudflare Turnstile 토큰 검증 | [captcha-turnstile](captcha-turnstile.md) |
 | `db-postgresql` | PostgreSQL 방언 모듈 (db-* 중 정확히 하나) | [db-postgresql](db-postgresql.md) |
 | `db-mysql` | MySQL 방언 모듈 (db-* 중 정확히 하나) | [db-mysql](db-mysql.md) |

@@ -55,6 +55,8 @@ modules/
   storage-s3          # optional S3/R2 storage adapter (presigned + server-side put, cache headers, batch delete)
   job-queue-jdbc      # optional DB-table retry queue (FOR UPDATE SKIP LOCKED, backoff, dead-letter) — no Redis
   captcha-turnstile   # optional Cloudflare Turnstile token verification
+  alert               # optional owner alerts (Discord-style webhook, optional mail): 5xx surge, startup failure, dead job; the error-reporting answer (no Sentry)
+  alert-jdbc          # optional DB ledger for alert: fold repeats across instances and restarts (PostgreSQL / MySQL)
 ```
 
 Use modules as capability choices:
@@ -75,6 +77,7 @@ Use modules as capability choices:
 - `modules/persistence-jpa` and `modules/persistence-jdbc` are optional persistence adapters. Both use the same platform audit-time contract while keeping JPA/JDBC annotations and lifecycle behavior inside the selected persistence module. Instants are bound through `SqlDialect` from the dialect module the app assembles (`db-postgresql` default, `db-mysql` also forces the MySQL session to UTC); see `docs/time.md`.
 - `modules/persistence-jooq` is the jOOQ alternative: code is generated from the Flyway migration folder with `DDLDatabase`, so builds need no database. See `docs/persistence-jooq.md`. Schema without Flyway: `docs/schema-management.md`.
 - `modules/job-queue-jdbc` is included when work must be retried durably without Redis. See `docs/job-queue-jdbc.md`.
+- `modules/alert` (+ `alert-jdbc`) tells the owner when production breaks — off until `skeleton.alert.webhook-url` is set. See `docs/alert.md`.
 - `modules/notification-mail` (`docs/notification-mail.md`) and `modules/captcha-turnstile` (`docs/captcha-turnstile.md`) are off by default and only appear when their properties are set.
 - HTML pages next to the API: see `apps/workbench` `api/pages/PagesController.kt` — public endpoints via `PublicEndpointContributor`, HTML error handling via a page-scoped `@ControllerAdvice`; rate limiting is `/api/**` only by default.
 - Starting a new project from this skeleton: `scripts/rename-skeleton.sh` + `docs/minimal-composition.md`.

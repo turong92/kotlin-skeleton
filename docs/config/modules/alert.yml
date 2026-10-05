@@ -1,0 +1,18 @@
+# alert — 주인 경보: Discord 호환 웹훅(+ 메일). 웹훅 주소가 없으면 꺼진다 (OwnerAlerts 는 로그만 남긴다).
+skeleton:
+  alert:
+    enabled: true                  # false 면 모듈이 빈을 만들지 않는다
+    webhook-url: ""                # 비밀 — 환경변수로. 비우면 채널 · 5xx 필터 · 죽은 작업 고리가 없다 (예: ${ALERT_WEBHOOK_URL:})
+    mail-to: ""                    # 쉼표로 여럿. notification-mail 의 MailSender 가 있을 때만 두 번째 채널
+    environment: ""                # 글머리 [환경] — 비우면 첫 활성 프로필
+    webhook-timeout: 5s
+    intervals: {}                  # 종류 이름 → 같은 (종류 · 키)를 접는 최소 간격 (예: job-dead: 2h)
+    surge:
+      threshold: 20                # 5xx 가 이 수 이상이면
+      window: 1m                   # 이 창 안에서 경보
+    startup-failure:
+      enabled: true                # 컨텍스트가 못 떴을 때 웹훅으로 직접 한 번
+      skip-profiles: [local]       # 이 프로필이 활성이면 알리지 않는다
+    delivery:
+      attempts: 3                  # 채널 하나의 보내기 시도 횟수
+      backoff: 2s                  # 시도 사이 대기 (곱절로)

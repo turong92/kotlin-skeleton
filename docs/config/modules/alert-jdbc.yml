@@ -1,0 +1,8 @@
+# alert-jdbc — 경보 기록을 DB(skeleton_alerts)에 둔다.
+skeleton:
+  alert-jdbc:
+    enabled: true                  # false 면 메모리 저장소로 돌아간다
+    retention:
+      enabled: false               # true 면 기록하는 호출이 오래된 줄을 지운다 (기본 꺼짐 — 보관 정책은 앱이 정한다)
+      keep: 90d                    # 마지막으로 온 지 이만큼 지난 줄
+      interval: 6h                 # 정리를 도는 간격

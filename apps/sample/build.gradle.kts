@@ -18,6 +18,7 @@ dependencies {
     implementation(project(":modules:notification-sse"))   // 실시간 전달 (/api/v1/notifications/sse)
     implementation(project(":modules:storage-s3"))         // 첨부 업로드 (+ storage: /api/v1/storage)
     implementation(project(":modules:job-queue-jdbc"))     // 내보내기 같은 오래 걸리는 일 (재시도 큐)
+    implementation(project(":modules:alert-jdbc"))         // 주인 경보 (+ alert) — 5xx 몰림 · 죽은 작업을 Discord 웹훅으로. 웹훅 주소가 없으면 아무것도 안 보낸다
 
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-data-jdbc")

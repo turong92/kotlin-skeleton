@@ -8,7 +8,7 @@
 # --full 은 CI 의 별도 워크플로(.github/workflows/new-project.yml)가 돈다. 조합:
 #   1. 기본값만
 #   2. --modules job-queue-jdbc,notification-mail,storage-s3,scheduler
-#   3. --db mysql --modules job-queue-jdbc
+#   3. --db mysql --modules job-queue-jdbc,alert-jdbc   (주인 경보 + 그 DB 기록을 MySQL 로 — compileOnly 연동 모듈이 닫힘에 따라온다)
 #   4. --modules persistence-jooq,job-queue-jdbc,notification-jdbc   (jOOQ 코드 생성이 형제 모듈 마이그레이션을 파싱한다)
 #   5. --with-sample   (제품 모양 예시 앱 apps/sample 이 남고, 그 앱의 모듈이 닫힘에 더해진다)
 # macOS bash 3.2 와 GNU bash 에서 돈다. 임시 디렉토리는 끝나면 지운다 (KEEP=1 이면 남긴다).
@@ -123,9 +123,14 @@ check "dev.sh 는 소스 레포(두 DB 모듈이 다 있다)에서도 스타터 
 check "dev.sh APP=sample 은 postgres + s3" bash -c "[ \"\$(DEV_DRY_RUN=1 APP=sample bash -c 'cd \"$SRC\" && bash scripts/dev.sh' 2>&1 | tail -1)\" = 'infra: postgres s3=1 app=sample' ]"
 check "persistence-jooq 가 없으니 그 모듈이 읽던 형제 폴더 문제도 없다" test ! -e "$B/modules/persistence-jooq"
 
-echo "== 4. --db mysql --modules job-queue-jdbc"
+echo "== 4. --db mysql --modules job-queue-jdbc,alert-jdbc"
 C="$TMP/c"
-expect_exit 0 "조합 3 을 찍는다" stamp "$C" --db mysql --modules job-queue-jdbc
+expect_exit 0 "조합 3 을 찍는다" stamp "$C" --db mysql --modules job-queue-jdbc,alert-jdbc
+for m in alert alert-jdbc job-queue-jdbc notification-mail; do
+  check "alert-jdbc 를 고르면 $m 이 따라온다 (alert · 컴파일 전용 연동 모듈의 닫힘)" bash -c "grep -q 'include(\":modules:$m\")' '$C/settings.gradle.kts' && test -d '$C/modules/$m'"
+done
+check "alert-jdbc 의 MySQL 마이그레이션이 남고 PostgreSQL 것은 앱 클래스패스 밖이다" bash -c "ls '$C/modules/alert-jdbc/src/main/resources/db/migration/mysql/' | grep -q skeleton_alerts"
+check "dbTestModules 에 alert-jdbc 가 들어간다" has_line 'val dbTestModules = setOf\(":modules:job-queue-jdbc", ":modules:alert-jdbc"\)' "$C/build.gradle.kts"
 check "db-postgresql 모듈이 사라지고 db-mysql 이 들어온다" bash -c "grep -q 'include(\":modules:db-mysql\")' '$C/settings.gradle.kts' && ! grep -q 'db-postgresql' '$C/settings.gradle.kts' && test ! -e '$C/modules/db-postgresql'"
 check "dev.sh 는 mysql 조합에서 mysql 컨테이너를 고른다" bash -c "[ \"\$(DEV_DRY_RUN=1 bash -c 'cd \"$C\" && bash scripts/dev.sh' 2>&1 | tail -1)\" = 'infra: mysql s3=0 app=api' ]"
 check "apps/api 가 db-mysql 을 쓴다" bash -c "grep -q 'project(\":modules:db-mysql\")' '$C/apps/api/build.gradle.kts' && ! grep -q 'project(\":modules:db-postgresql\")\|testcontainers-postgresql' '$C/apps/api/build.gradle.kts'"
@@ -157,7 +162,7 @@ expect_exit 0 "persistence-jooq + 형제 마이그레이션 모듈을 찍는다"
 echo "== 7. --with-sample (샘플 앱 \"Notes\" 은 요청할 때만 남는다)"
 G="$TMP/g"
 expect_exit 0 "조합 5 를 찍는다 (rename 잔여 검사 포함)" stamp "$G" --with-sample
-want=":apps:api :apps:sample :modules:auth :modules:crypto :modules:db-postgresql :modules:idempotency :modules:job-queue-jdbc :modules:json :modules:migration :modules:migration-flyway :modules:notification :modules:notification-jdbc :modules:notification-sse :modules:persistence-jdbc :modules:platform :modules:storage :modules:storage-s3 :modules:time"
+want=":apps:api :apps:sample :modules:alert :modules:alert-jdbc :modules:auth :modules:crypto :modules:db-postgresql :modules:idempotency :modules:job-queue-jdbc :modules:json :modules:migration :modules:migration-flyway :modules:notification :modules:notification-jdbc :modules:notification-mail :modules:notification-sse :modules:persistence-jdbc :modules:platform :modules:storage :modules:storage-s3 :modules:time"
 got="$(includes "$G/settings.gradle.kts")"
 [ "$got" = "$want" ] && pass "settings.gradle.kts 는 스타터 + 샘플 앱의 모듈과 그 닫힘을 포함한다" || fail "settings includes: [$got] expected [$want]"
 check "샘플 앱 소스가 새 패키지로 옮겨진다" test -f "$G/apps/sample/src/main/kotlin/dev/sumin/ovation/app/sample/SampleApplication.kt"
@@ -166,7 +171,7 @@ check "샘플 문서 · 실행 스크립트가 남고 안내 문서의 표식 �
 check "스타터 apps/api 는 그대로다 — 샘플 앱의 모듈을 얹지 않는다" bash -c "! grep -q 'storage-s3\|notification\|idempotency' '$G/apps/api/build.gradle.kts'"
 check "스타터 테스트의 부재 단언(S3 클라이언트)은 그대로다 — 스타터 클래스패스에는 여전히 없다" has_line 'software.amazon.awssdk.services.s3.S3Client' "$G/apps/api/src/test/kotlin/dev/sumin/ovation/app/api/StarterCompositionIntegrationTest.kt"
 check "스타터 설정에 샘플 모듈의 설정 블록이 붙지 않는다" lacks_line 'new-project: module config blocks' "$G/apps/api/src/main/resources/application.yml"
-check "dbTestModules 에 샘플이 쓰는 DB 모듈이 들어간다" has_line 'val dbTestModules = setOf\(":modules:job-queue-jdbc", ":modules:notification-jdbc"\)' "$G/build.gradle.kts"
+check "dbTestModules 에 샘플이 쓰는 DB 모듈이 들어간다" has_line 'val dbTestModules = setOf\(":modules:job-queue-jdbc", ":modules:notification-jdbc", ":modules:alert-jdbc"\)' "$G/build.gradle.kts"
 check "dev.sh 는 APP=sample 을 알고 문법 검사를 통과한다" bash -c "grep -q 'APP' '$G/scripts/dev.sh' && bash -n '$G/scripts/dev.sh' && bash -n '$G/scripts/dev-sample.sh' && bash -n '$G/scripts/sample-e2e-backend.sh'"
 
 if [ "$MODE" = "--full" ]; then

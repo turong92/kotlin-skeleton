@@ -92,6 +92,8 @@ fails when this table and the prefixes found in module code differ.
 | `async-notification` | `skeleton.async-notification` |
 | `auth` | `skeleton.auth` |
 | `auth-social` | `skeleton.auth-social` |
+| `alert` | `skeleton.alert` |
+| `alert-jdbc` | `skeleton.alert-jdbc` |
 | `captcha-turnstile` | `skeleton.captcha-turnstile` |
 | `config-aws-ssm` | `skeleton.config.aws.ssm` |
 | `crypto` | `skeleton.crypto` |
@@ -137,6 +139,8 @@ test proving a context with only that module (and its declared dependencies) boo
 | `auth-social` | yes (no provider until enabled) | nothing | provider keys |
 | `auth-social-google` / `-kakao` / `-naver` | off until `skeleton.auth-social.providers.<x>.enabled=true` | nothing | client id / secret |
 | `async` | yes | nothing | — |
+| `alert` | wired (logs only); sends nothing until `skeleton.alert.webhook-url` is set | nothing | a Discord-compatible webhook URL, internet |
+| `alert-jdbc` | yes | a `DataSource` + one `db-*` module (+ its migration, as above) | — |
 | `async-notification` | yes | `notification` (declared dependency) | — |
 | `captcha-turnstile` | off until `enabled=true` + `secret-key` | nothing | Turnstile secret, internet |
 | `config-aws-ssm` | loads only once `paths` are set (dev / staging / prod) or `credential-profile` is set | nothing | AWS credentials when it loads (`fail-fast` decides) |

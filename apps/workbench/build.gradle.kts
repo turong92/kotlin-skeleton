@@ -29,6 +29,7 @@ dependencies {
     implementation(project(":modules:time"))
     implementation(project(":modules:job-queue-jdbc"))
     implementation(project(":modules:notification-mail"))
+    implementation(project(":modules:alert-jdbc"))   // + alert (api)
     implementation(project(":modules:captcha-turnstile"))
     implementation(project(":modules:db-postgresql"))
     implementation(project(":modules:migration-flyway"))

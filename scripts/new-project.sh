@@ -221,7 +221,7 @@ EOF
 
 # 루트 build.gradle.kts: DB 통합 테스트 묶음 (선택된 모듈 · 선택된 방언만)
 DB_TEST_MODULES=""
-for m in job-queue-jdbc notification-jdbc; do
+for m in job-queue-jdbc notification-jdbc alert-jdbc; do
   in_list "$m" "$SELECTED_SORTED" && DB_TEST_MODULES="${DB_TEST_MODULES:+$DB_TEST_MODULES, }\":modules:$m\""
 done
 if [ -z "$DB_TEST_MODULES" ]; then NEW_SET='emptySet<String>()'; else NEW_SET="setOf($DB_TEST_MODULES)"; fi
