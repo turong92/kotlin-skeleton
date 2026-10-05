@@ -11,16 +11,22 @@ import io.swagger.v3.oas.models.responses.ApiResponses
 import io.swagger.v3.oas.models.security.SecurityRequirement
 import io.swagger.v3.oas.models.security.SecurityScheme
 import org.springdoc.core.customizers.OpenApiCustomizer
+import dev.sumin.skeleton.common.web.PublicEndpointRegistry
+import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
 import org.springframework.context.annotation.Bean
+import org.springframework.util.AntPathMatcher
 
 @AutoConfiguration
 @ConditionalOnClass(OpenAPI::class, OpenApiCustomizer::class)
 class AuthOpenApiAutoConfiguration {
     @Bean
-    fun authOpenApiCustomizer(): OpenApiCustomizer =
+    fun authOpenApiCustomizer(publicEndpoints: ObjectProvider<PublicEndpointRegistry>): OpenApiCustomizer =
         OpenApiCustomizer { openApi ->
+            // 모듈이 공개 경로로 등록한 곳(가입 · 확인 · 재설정 …)에는 bearer 요구를 붙이지 않는다 — 문서가 "로그인이 필요하다" 고 거짓말하지 않게
+            val registry = publicEndpoints.getIfAvailable()
+            val matcher = AntPathMatcher()
             val components = openApi.components ?: Components().also { openApi.components = it }
             components.addSecuritySchemes(
                 BEARER_AUTH,
@@ -35,7 +41,11 @@ class AuthOpenApiAutoConfiguration {
                 if (!path.requiresBearerAuth()) {
                     return@forEach
                 }
-                pathItem.readOperations().forEach { operation ->
+                pathItem.readOperationsMap().forEach { (method, operation) ->
+                    val public = registry?.endpoints.orEmpty().any { endpoint ->
+                        (endpoint.method == null || endpoint.method!!.name() == method.name) && matcher.match(endpoint.pattern, path)
+                    }
+                    if (public) return@forEach
                     operation.addBearerAuth()
                     operation.addAuthErrorResponses()
                 }
