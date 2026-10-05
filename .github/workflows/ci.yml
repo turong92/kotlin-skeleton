@@ -14,4 +14,5 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
       - uses: gradle/actions/setup-gradle@v4
+      - run: perl scripts/build-capabilities.pl --check   # 기능 카탈로그 생성물이 최신인가(빠른 실패) — 전체 가드는 ./gradlew build 의 Capabilities*Test
       - run: ./gradlew build

@@ -6,7 +6,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤. 새 API 프로젝트 시작점.
 
 - **들어 있는 것**: 골라 쓰는 모듈들(웹 기반 · 인증 · DB · 알림 · 저장소 · 결제 · Redis · 스케줄러 …), 스타터 앱 `apps/api`, 모든 모듈을 합친 데모 `apps/workbench`. 모듈마다 한 쪽짜리 문서: [`docs/modules/`](docs/modules/README.md).
 - **규칙**: 모듈 하나 = 의존성 한 줄 (`implementation(project(":modules:x"))`). 모듈은 메커니즘만 주고 프레임워크 기본값을 바꾸지 않는다 — 선택은 앱 yml 이 하고, 모듈 내부는 고치지 않는다.
-1. **고른다** — [모듈 색인](docs/modules/README.md)에서 필요한 모듈을 찾고, 문서의 "부팅에 필요한 것" 을 확인한다.
+1. **고른다** — LLM · 사람 모두 먼저 [`llms.txt`](llms.txt)(결정표: 필요한 것 → 모듈 · `new-project.sh` 조각)를 읽는다. 전체 목록은 [`docs/capabilities.md`](docs/capabilities.md)(정본 `capabilities.json`), 제품 한 문단에서 돌아가는 서버까지의 순서와 작업 예는 [`docs/new-project-recipe.md`](docs/new-project-recipe.md). 그다음 [모듈 색인](docs/modules/README.md)에서 필요한 모듈을 확인하고, 문서의 "부팅에 필요한 것" 을 확인한다.
 2. **찍는다** — `scripts/new-project.sh <dir> <package> <prefix> <ClassPrefix> --modules a,b` (복사 · 모듈 가지치기 · rename 을 한 번에; 규칙은 [docs/minimal-composition.md](docs/minimal-composition.md) §5).
 3. **돌린다** — `cd <dir> && ./gradlew build`, 로컬 실행은 compose 로 DB 를 띄운 뒤 `./gradlew :apps:api:bootRun --args='--spring.profiles.active=local'`. 모듈이 더 필요하면 `apps/api/build.gradle.kts` 에 한 줄.
 

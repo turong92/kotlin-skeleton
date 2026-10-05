@@ -206,6 +206,8 @@ scripts/new-project.sh ~/work/ovation dev.sumin.ovation ovation Ovation --db mys
 scripts/new-project.sh ~/work/ovation dev.sumin.ovation ovation Ovation --modules board,board-jdbc
 ```
 
+Add `--dry-run` to see the chosen modules and why each is in without writing anything. Which modules to choose for a product (decision table, worked examples): `llms.txt` · `docs/capabilities.md` · `docs/new-project-recipe.md`.
+
 It copies the repo (without `build`, `.gradle`, `.kotlin`, `.git`, `.superpowers`, `.claude`, `.env`), keeps `apps/api`, and drops `apps/workbench`
 unless `--with-workbench`. Then:
 
