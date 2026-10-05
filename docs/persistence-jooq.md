@@ -11,6 +11,11 @@ What it gives you:
 - `JooqAuditRecordListener` — fills `created_at` / `updated_at` on insert/update when the record has them
 - a working Gradle recipe that generates code **from the Flyway migration folder** with `DDLDatabase`, so the build needs no DB
 
+The module's `main` holds only the runtime pieces (`JooqAutoConfiguration`, `JooqAuditRecordListener`, `UtcInstantConverter`). The probe
+schema (`src/test/resources/db/jooq-probe-*.sql`) and the classes generated from it live in the **test** source set: they prove that the recipe
+and the sibling modules' migrations parse under `DDLDatabase`, and never ship in the module jar. The module depends on no other module
+(the PostgreSQL driver is a test runtime dependency, not `db-postgresql`).
+
 ## App recipe
 
 ```kotlin
@@ -55,7 +60,7 @@ tasks.named("compileJava") { dependsOn("jooqCodegen") }
 Module tables you query with jOOQ (`skeleton_jobs`, `skeleton_notification_inbox`) live in the module jars, not in
 your folder: add `src/main/resources/db/migration/postgresql` of those modules to `scripts` (comma-separated
 paths are not supported — collect them into one build directory with a `Sync` task first, as
-`modules/persistence-jooq/build.gradle.kts` `collectModuleDdl` does), or skip them if you only use the module API.
+`modules/persistence-jooq/build.gradle.kts` `collectModuleDdl` does — it also reads the sibling `job-queue-jdbc` / `notification-jdbc` migration folders when they exist, as a test-only input), or skip them if you only use the module API.
 
 Measured with jOOQ 3.21.7 (2026-10-01): identity columns, `timestamptz`, `jsonb`, partial indexes (`where`),
 `comment on`, `alter table … add column if not exists` and Flyway ordering across files all parse. `jsonb`
@@ -116,3 +121,6 @@ The same file is what `spring.sql.init.mode=always` runs at boot in the no-Flywa
 `modules/persistence-jooq` `JooqIntegrationTest`: Testcontainers PostgreSQL 18, schema applied with
 `spring.sql.init` from the same DDL used for codegen, JVM default zone forced to Seoul, asserts raw
 column literals and round-tripped values.
+
+`JooqModuleLayoutTest` (no Docker) keeps `main` clean: the probe DDL and generated classes must not be in the main output, and the sibling
+module tables (`skeleton_jobs`, `skeleton_notification_inbox`) must have been generated whenever those modules are present.

@@ -24,7 +24,7 @@ import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignReques
 
 class S3StorageAutoConfigurationTest {
     private val contextRunner = ApplicationContextRunner()
-        .withConfiguration(AutoConfigurations.of(S3StorageAutoConfiguration::class.java))
+        .withConfiguration(AutoConfigurations.of(S3StorageAutoConfiguration::class.java, S3OpaquePublicUrlAutoConfiguration::class.java))
 
     @Test
     fun `does not create s3 beans when disabled`() {

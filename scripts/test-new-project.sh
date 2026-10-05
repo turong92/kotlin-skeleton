@@ -3,12 +3,13 @@
 #
 #   scripts/test-new-project.sh            # 빠른 검사 (기본, 수 초~수십 초): 인자 검증 · 모듈 닫힘 · 파일 가지치기 · rename 잔여 검사
 #   scripts/test-new-project.sh --quick    # 위와 같다 (./gradlew check 가 부른다)
-#   scripts/test-new-project.sh --full     # 위 + 세 조합을 임시 디렉토리에 찍어 각각 ./gradlew build (Docker/Testcontainers 필요, 순차, 수 분)
+#   scripts/test-new-project.sh --full     # 위 + 네 조합을 임시 디렉토리에 찍어 각각 ./gradlew build (Docker/Testcontainers 필요, 순차, 수 분)
 #
 # --full 은 CI 의 별도 워크플로(.github/workflows/new-project.yml)가 돈다. 조합:
 #   1. 기본값만
 #   2. --modules job-queue-jdbc,notification-mail,storage-s3,scheduler
 #   3. --db mysql --modules job-queue-jdbc
+#   4. --modules persistence-jooq,job-queue-jdbc,notification-jdbc   (jOOQ 코드 생성이 형제 모듈 마이그레이션을 파싱한다)
 # macOS bash 3.2 와 GNU bash 에서 돈다. 임시 디렉토리는 끝나면 지운다 (KEEP=1 이면 남긴다).
 set -euo pipefail
 
@@ -70,6 +71,9 @@ got="$(includes "$A/settings.gradle.kts")"
 check "선택되지 않은 모듈 디렉토리가 없다 (redis-core)" test ! -e "$A/modules/redis-core"
 check "선택되지 않은 모듈의 설정 블록도 없다" test ! -e "$A/docs/config/modules/redis-core.yml"
 check "선택된 모듈의 설정 블록은 남는다 (time)" test -f "$A/docs/config/modules/time.yml"
+check "선택되지 않은 모듈의 문서 쪽(docs/modules)도 없다 (redis-core)" test ! -e "$A/docs/modules/redis-core.md"
+check "선택된 모듈의 문서 쪽은 남는다 (time)" test -f "$A/docs/modules/time.md"
+check "모듈 색인에서 지운 모듈의 행이 빠지고 남은 모듈의 행은 남는다" bash -c "! grep -q '](redis-core.md)' '$A/docs/modules/README.md' && ! grep -q '](async.md)' '$A/docs/modules/README.md' && grep -q '](time.md)' '$A/docs/modules/README.md' && grep -q '](auth.md)' '$A/docs/modules/README.md'"
 check "dbTestModules 가 비어 있다" has_line 'val dbTestModules = emptySet<String>\(\)' "$A/build.gradle.kts"
 check "새 프로젝트에는 new-project 도구가 따라오지 않는다" bash -c "! ls '$A/scripts/new-project.sh' '$A/scripts/test-new-project.sh' '$A/.github/workflows/new-project.yml' 2>/dev/null | grep -q ."
 check "rootProject.name 이 바뀐다" has_line 'rootProject.name = "ovation"' "$A/settings.gradle.kts"
@@ -81,6 +85,7 @@ check "소스 레포는 건드리지 않는다" bash -c "[ -z \"\$(find '$SRC' -
 echo "== 3. --modules job-queue-jdbc,notification-mail,storage-s3,scheduler"
 B="$TMP/b"
 expect_exit 0 "조합 2 를 찍는다" stamp "$B" --modules job-queue-jdbc,notification-mail,storage-s3,scheduler
+echo "$LAST_OUTPUT" | grep -q 'crypto (compile-only for storage-s3' && pass "crypto 는 storage-s3 의 컴파일 전용 의존으로 안내된다 (런타임 전이 없음)" || fail "crypto 가 컴파일 전용이라는 안내가 없다"
 for m in job-queue-jdbc notification-mail storage-s3 scheduler storage crypto; do
   check "모듈 $m 이 포함된다 (요청했거나 닫힘으로 따라왔다)" bash -c "grep -q 'include(\":modules:$m\")' '$B/settings.gradle.kts' && test -d '$B/modules/$m'"
 done
@@ -117,12 +122,16 @@ D="$TMP/d"
 expect_exit 0 "중복 · 공백이 있는 --modules" stamp "$D" --modules "scheduler, scheduler,storage-s3"
 check "중복 요청은 한 줄만 더한다" bash -c "[ \"\$(grep -c 'modules:scheduler' '$D/apps/api/build.gradle.kts')\" = 1 ]"
 
-echo "== 6. persistence-jooq (테스트가 db-postgresql 을 요구한다)"
+echo "== 6. persistence-jooq (다른 모듈에 기대지 않는다: 방언 모듈도 테스트용으로 끌고 오지 않는다)"
 E="$TMP/e"
-expect_exit 0 "persistence-jooq 를 찍는다" stamp "$E" --modules persistence-jooq
+expect_exit 0 "persistence-jooq 를 MySQL 로 찍는다" stamp "$E" --db mysql --modules persistence-jooq
 JOOQ_OUTPUT="$LAST_OUTPUT"
 check "persistence-jooq 가 포함된다" bash -c "grep -q 'include(\":modules:persistence-jooq\")' '$E/settings.gradle.kts'"
-echo "$JOOQ_OUTPUT" | grep -q 'tests of persistence-jooq need db-postgresql' && pass "테스트용 의존이 안내에 적힌다" || fail "테스트용 의존 안내가 없다"
+check "MySQL 조합에 db-postgresql 이 따라오지 않는다" bash -c "! grep -q 'db-postgresql' '$E/settings.gradle.kts' && test ! -e '$E/modules/db-postgresql'"
+echo "$JOOQ_OUTPUT" | grep -q 'tests of persistence-jooq need' && fail "persistence-jooq 테스트가 다른 모듈을 요구한다고 안내한다" || pass "테스트용 모듈 의존 안내가 없다"
+check "main 에는 예시 DDL 이 없다 (src/test/resources 에 있다)" bash -c "test ! -e '$E/modules/persistence-jooq/src/main/resources/db' && test -f '$E/modules/persistence-jooq/src/test/resources/db/jooq-probe-postgresql.sql'"
+F="$TMP/f"
+expect_exit 0 "persistence-jooq + 형제 마이그레이션 모듈을 찍는다" stamp "$F" --modules persistence-jooq,job-queue-jdbc,notification-jdbc
 
 if [ "$MODE" = "--full" ]; then
   echo "== 7. 조합마다 ./gradlew build (순차)"
@@ -141,6 +150,7 @@ if [ "$MODE" = "--full" ]; then
   build_composition "$A" "1-defaults"
   build_composition "$B" "2-modules"
   build_composition "$C" "3-mysql"
+  build_composition "$F" "4-jooq"
 fi
 
 echo

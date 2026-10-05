@@ -1,5 +1,5 @@
 name: new-project
-# scripts/new-project.sh 로 세 조합을 찍어 각각 ./gradlew build (Docker/Testcontainers 필요 — ubuntu-latest 에 있다). 순차로 돈다.
+# scripts/new-project.sh 로 네 조합을 찍어 각각 ./gradlew build (Docker/Testcontainers 필요 — ubuntu-latest 에 있다). 순차로 돈다.
 on:
   push:
     branches: [main]

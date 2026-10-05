@@ -15,9 +15,11 @@ tasks.test {
     // ModuleRegistrationRulesTest 가 모든 모듈의 main 소스를 훑는다 — 다른 모듈 소스가 바뀌면 이 테스트도 다시 돈다
     systemProperty("skeleton.repoRoot", rootDir.absolutePath)
     inputs.files(fileTree(rootDir) {
-        include("modules/*/src/main/**/*.kt")
+        include("modules/*/src/main/**/*.kt", "modules/*/src/main/resources/**/*.sql", "modules/*/build.gradle.kts", "settings.gradle.kts")
         exclude("**/build/**")
     })
+    // ModuleDocumentationTest 는 docs/modules/<module>.md 를 코드와 맞춰 본다
+    inputs.files(fileTree(rootDir.resolve("docs/modules")))
     // ConfigPrefixDocumentationTest 는 문서의 접두사 표를 코드와 맞춰 본다
     inputs.file(rootDir.resolve("docs/minimal-composition.md"))
     inputs.dir(rootDir.resolve("docs/config/modules")).optional()

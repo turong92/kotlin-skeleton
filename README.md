@@ -2,6 +2,14 @@
 
 Kotlin + Spring Boot 백엔드 스켈레톤. 새 API 프로젝트 시작점.
 
+## 무엇이 들어 있나 / 새 프로젝트 3단계
+
+- **들어 있는 것**: 골라 쓰는 모듈들(웹 기반 · 인증 · DB · 알림 · 저장소 · 결제 · Redis · 스케줄러 …), 스타터 앱 `apps/api`, 모든 모듈을 합친 데모 `apps/workbench`. 모듈마다 한 쪽짜리 문서: [`docs/modules/`](docs/modules/README.md).
+- **규칙**: 모듈 하나 = 의존성 한 줄 (`implementation(project(":modules:x"))`). 모듈은 메커니즘만 주고 프레임워크 기본값을 바꾸지 않는다 — 선택은 앱 yml 이 하고, 모듈 내부는 고치지 않는다.
+1. **고른다** — [모듈 색인](docs/modules/README.md)에서 필요한 모듈을 찾고, 문서의 "부팅에 필요한 것" 을 확인한다.
+2. **찍는다** — `scripts/new-project.sh <dir> <package> <prefix> <ClassPrefix> --modules a,b` (복사 · 모듈 가지치기 · rename 을 한 번에; 규칙은 [docs/minimal-composition.md](docs/minimal-composition.md) §5).
+3. **돌린다** — `cd <dir> && ./gradlew build`, 로컬 실행은 compose 로 DB 를 띄운 뒤 `./gradlew :apps:api:bootRun --args='--spring.profiles.active=local'`. 모듈이 더 필요하면 `apps/api/build.gradle.kts` 에 한 줄.
+
 ## Module Layout
 
 This skeleton uses coarse-grained Gradle modules.
@@ -107,11 +115,11 @@ scripts/new-project.sh ~/work/ovation dev.sumin.ovation ovation Ovation \
 scripts/new-project.sh ~/work/ovation dev.sumin.ovation ovation Ovation --db mysql --modules job-queue-jdbc
 ```
 
-- 모듈은 스타터의 모듈 + `--modules` 를 모듈끼리의 `project(":modules:x")` 의존으로 **닫은** 집합이다 (`storage-s3` → `storage`, `crypto`). 테스트에만 필요한 모듈 의존도 따라오고 이유가 출력된다. 모르는 모듈 이름이면 유효한 목록과 함께 exit 2.
-- 고르지 않은 모듈은 디렉토리, `settings.gradle.kts` include, `docs/config/modules/<m>.yml`, 루트 `dbTestModules`, 스타터 테스트의 부재 단언에서 모두 빠진다. `--with-workbench` 는 워크벤치가 모든 모듈을 쓰므로 모든 모듈이 남고 PostgreSQL 전용이다.
+- 모듈은 스타터의 모듈 + `--modules` 를 모듈끼리의 `project(":modules:x")` 의존으로 **닫은** 집합이다 (`storage-s3` → `storage`; `crypto` 는 컴파일 전용이라 소스만 따라오고 앱의 런타임에는 없다). 테스트에만 필요한 모듈 의존도 따라오고 이유가 출력된다. 모르는 모듈 이름이면 유효한 목록과 함께 exit 2.
+- 고르지 않은 모듈은 디렉토리, `settings.gradle.kts` include, `docs/config/modules/<m>.yml`, `docs/modules/<m>.md`(와 색인 행), 루트 `dbTestModules`, 스타터 테스트의 부재 단언에서 모두 빠진다. `--with-workbench` 는 워크벤치가 모든 모듈을 쓰므로 모든 모듈이 남고 PostgreSQL 전용이다.
 - `--modules` 로 요청한 모듈은 `apps/api/build.gradle.kts` 에 `implementation(project(":modules:<m>"))` 한 줄이 생기고, `docs/config/modules/<m>.yml` 이 `apps/api/src/main/resources/application.yml` 끝의 `new-project: module config blocks` 구역에 **주석으로** 붙는다. 모듈은 기본값으로 동작하니 바꿀 키만 주석을 풀어 위 설정에 합친다.
 - 끝에 `scripts/rename-skeleton.sh` 가 돌고 잔여 흔적이 있으면 실패한다. 대상 디렉토리 밖에는 아무것도 쓰지 않고, 대상이 이미 있으면 거부한다.
-- 시험: `scripts/test-new-project.sh` (빠른 검사 — `./gradlew check` 가 돈다) / `--full` (세 조합을 찍어 각각 `./gradlew build`, Docker 필요 — `.github/workflows/new-project.yml`).
+- 시험: `scripts/test-new-project.sh` (빠른 검사 — `./gradlew check` 가 돈다) / `--full` (네 조합을 찍어 각각 `./gradlew build`, Docker 필요 — `.github/workflows/new-project.yml`).
 
 수동으로 하려면: 레포를 복사해 `scripts/rename-skeleton.sh dev.sumin.ovation ovation Ovation`, 쓰지 않는 모듈과 `apps/workbench` 를 지우고 `docs/minimal-composition.md` 를 따른다.
 

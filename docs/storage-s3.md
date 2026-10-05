@@ -71,6 +71,12 @@ and `publicUrl` when a resolver is configured.
 https://cdn.example.com/uploads/images/cat.png
 ```
 
+`public-url.strategy=OPAQUE` needs the `crypto` module: `storage-s3` depends on it only at compile time (`compileOnly`), so an app that
+wants plain S3/R2 does not receive `crypto`. Add `implementation(project(":modules:crypto"))` and `skeleton.crypto.keys` to use OPAQUE; without
+`crypto` on the classpath, requesting OPAQUE fails at startup with a message naming `:modules:crypto`
+(`modules/storage-s3/src/noCryptoTest` runs the module with `crypto` really absent). The opaque resolver is registered by its own
+`S3OpaquePublicUrlAutoConfiguration`, which applies only when the codec class is present.
+
 `public-url.strategy=OPAQUE` emits a URL-safe encrypted token instead of the raw
 object key:
 

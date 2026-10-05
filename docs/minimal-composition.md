@@ -10,6 +10,10 @@ Two apps ship with the skeleton:
 A real service starts from `apps/api` and keeps only what it needs. This page is the recipe. To stamp a project in one command
 (copy, pick modules, rename): `scripts/new-project.sh` — see §5.
 
+Each module has a one-page doc with the same template (dependency line, what comes along, config prefix, default on/off, what it needs to boot,
+override points, migrations, frontend counterpart, tests): [`docs/modules/README.md`](modules/README.md).
+`modules/platform` `ModuleDocumentationTest` fails the build when a page and the code disagree.
+
 ## 1. Start from the starter, add a module = one dependency line
 
 `apps/api/build.gradle.kts` is the recipe:
@@ -194,14 +198,16 @@ It copies the repo (without `build`, `.gradle`, `.kotlin`, `.git`, `.superpowers
 unless `--with-workbench`. Then:
 
 1. **Module set** = the starter's modules + `--modules`, closed over `project(":modules:x")` dependencies read from each module's
-   `build.gradle.kts` (`api` · `implementation` · `runtimeOnly`; for example `storage-s3` pulls `storage` and `crypto`, `migration-flyway` pulls
-   `migration`). A `testImplementation(project(...))` is followed too, because that module's tests would not compile without it — the script prints
-   `note: tests of persistence-jooq need db-postgresql`. Every step prints why a module is in.
+   `build.gradle.kts` (`api` · `implementation` · `runtimeOnly`; for example `storage-s3` pulls `storage`, `migration-flyway` pulls
+   `migration`). A `compileOnly(project(...))` is followed too — the source must compile — but it stays off the app's runtime classpath
+   (`storage-s3` → `crypto`: the script prints `crypto (compile-only for storage-s3, not on its runtime classpath)`). A `testImplementation(project(...))`
+   is followed because that module's tests would not compile without it (no module has one today). Every step prints why a module is in.
 2. **Unselected modules are removed** everywhere they are referenced: the directory, `docs/config/modules/<m>.yml`, the `settings.gradle.kts` include,
    the root `dbTestModules` set, the `postgresTest` / `mysqlTest` suite of a dialect that is gone (and `src/<suite>/` folders), and the classes the
    starter's "optional integrations are absent" test asserts for modules you did select (`S3Client` for `storage-s3`, `jakarta.mail.Session` for
-   `notification-mail`, `RedisTemplate` for `redis-*`, …). `persistence-jooq` reads sibling `job-queue-jdbc` / `notification-jdbc` migration folders by
-   path; Gradle ignores a missing `from` directory, so the code generation simply has no module DDL to add when those modules were not selected.
+   `notification-mail`, `RedisTemplate` for `redis-*`, …). `persistence-jooq` generates its *test* classes from its own probe DDL plus the sibling `job-queue-jdbc` / `notification-jdbc` migration folders
+   (test input only); Gradle ignores a missing `from` directory, so the code generation simply has no module DDL to add when those modules were not selected.
+   The per-module pages `docs/modules/<m>.md` (and their index row) of removed modules are deleted too.
 3. **`--modules` names** get one `implementation(project(":modules:<m>"))` line in `apps/api/build.gradle.kts`, and their
    `docs/config/modules/<m>.yml` is appended, commented, to a marked section at the end of `apps/api/.../application.yml` (modules that come
    along through the closure and have a block are appended too). The blocks are appended after the rename so their root key already is your prefix.
@@ -212,8 +218,9 @@ unless `--with-workbench`. Then:
 
 Invalid input exits 2 and creates nothing: unknown module (the message lists the valid ones), target exists or lies inside the skeleton repo,
 unknown option, `--db` other than `postgresql` / `mysql`, a `db-*` name in `--modules`. The script writes only inside the target and runs on
-macOS bash 3.2 and GNU bash. `scripts/test-new-project.sh` tests it (`--quick` runs inside `./gradlew check`; `--full` stamps three compositions —
-defaults; `--modules job-queue-jdbc,notification-mail,storage-s3,scheduler`; `--db mysql --modules job-queue-jdbc` — and runs `./gradlew build` in each,
+macOS bash 3.2 and GNU bash. `scripts/test-new-project.sh` tests it (`--quick` runs inside `./gradlew check`; `--full` stamps four compositions —
+defaults; `--modules job-queue-jdbc,notification-mail,storage-s3,scheduler`; `--db mysql --modules job-queue-jdbc`;
+`--modules persistence-jooq,job-queue-jdbc,notification-jdbc` — and runs `./gradlew build` in each,
 needing Docker; CI: `.github/workflows/new-project.yml`).
 
 ### Rename only

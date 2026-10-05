@@ -1,6 +1,5 @@
 package dev.sumin.skeleton.storage.s3
 
-import dev.sumin.skeleton.crypto.OpaqueUrlTokenCodec
 import dev.sumin.skeleton.storage.PresignedStorage
 import dev.sumin.skeleton.storage.StoragePublicUrlResolver
 import org.springframework.boot.autoconfigure.AutoConfiguration
@@ -8,7 +7,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean
-import org.springframework.beans.factory.ObjectProvider
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider
@@ -55,26 +53,19 @@ class S3StorageAutoConfiguration {
         return builder.build()
     }
 
+    // OPAQUE 는 crypto 가 있을 때 S3OpaquePublicUrlAutoConfiguration 이 먼저 등록한다. 여기까지 왔다면 crypto 가 클래스패스에 없다.
     @Bean
     @ConditionalOnMissingBean
-    fun storagePublicUrlResolver(
-        properties: S3StorageProperties,
-        opaqueUrlTokenCodec: ObjectProvider<OpaqueUrlTokenCodec>,
-    ): StoragePublicUrlResolver =
+    fun storagePublicUrlResolver(properties: S3StorageProperties): StoragePublicUrlResolver =
         when {
             properties.publicUrl.baseUrl.isBlank() -> StoragePublicUrlResolver.NONE
             properties.publicUrl.strategy == S3StorageProperties.PublicUrlStrategy.RAW ->
                 BaseUrlStoragePublicUrlResolver(properties.publicUrl.baseUrl)
-            properties.publicUrl.strategy == S3StorageProperties.PublicUrlStrategy.OPAQUE -> {
-                val codec = opaqueUrlTokenCodec.getIfAvailable()
-                    ?: throw IllegalStateException("Opaque storage public URLs require an OpaqueUrlTokenCodec bean.")
-                OpaqueStoragePublicUrlResolver(
-                    baseUrl = properties.publicUrl.baseUrl,
-                    tokenPathPrefix = properties.publicUrl.tokenPathPrefix,
-                    tokenPurpose = properties.publicUrl.tokenPurpose,
-                    tokenCodec = codec,
+            properties.publicUrl.strategy == S3StorageProperties.PublicUrlStrategy.OPAQUE ->
+                throw IllegalStateException(
+                    "skeleton.storage-s3.public-url.strategy=OPAQUE needs the crypto module: " +
+                        "add implementation(project(\":modules:crypto\")) and configure skeleton.crypto.keys.",
                 )
-            }
             else -> error("Unsupported storage public URL strategy '${properties.publicUrl.strategy}'.")
         }
 

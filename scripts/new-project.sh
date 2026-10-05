@@ -14,7 +14,7 @@
 #      (워크벤치는 모든 모듈을 쓰므로 그 경우 모든 모듈이 남고 PostgreSQL 전용이다).
 #   2. 모듈 = 스타터의 모듈 + --modules, 모듈끼리의 project(":modules:x") 의존(api · implementation · runtimeOnly)으로 닫는다.
 #      테스트에만 쓰는 모듈 의존(testImplementation)도 테스트가 컴파일되려면 필요하므로 따라온다 — 따라온 이유를 출력한다.
-#      고르지 않은 모듈은 디렉토리 · docs/config/modules/<m>.yml · settings.gradle.kts include 를 지우고,
+#      고르지 않은 모듈은 디렉토리 · docs/config/modules/<m>.yml · docs/modules/<m>.md (와 색인 행) · settings.gradle.kts include 를 지우고,
 #      루트 build.gradle.kts 의 dbTestModules / dbSuites, 스타터 테스트의 "부재 단언"에서도 뺀다.
 #   3. --modules 로 요청한 모듈마다 apps/api/build.gradle.kts 에 implementation(project(":modules:<m>")) 한 줄을 더하고,
 #      docs/config/modules/<m>.yml 을 apps/api application.yml 끝의 표시된 구역에 주석으로 붙인다.
@@ -54,9 +54,10 @@ valid_modules() { # 소스 레포의 모듈 이름들 (정렬)
 
 in_list() { printf '%s\n' "$2" | grep -Fxq -- "$1"; }
 
-# project_deps <build.gradle.kts>  →  "main <module>" | "test <module>" 줄들 (// 주석은 뺀다)
+# project_deps <build.gradle.kts>  →  "main <module>" | "compile <module>" | "test <module>" 줄들 (// 주석은 뺀다)
+# compile = compileOnly: 컴파일에만 필요하고 런타임 전이는 없다 (예: storage-s3 → crypto). 소스는 따라오지만 앱의 런타임 클래스패스에는 안 들어간다.
 project_deps() {
-  perl -ne 's#//.*##; while (/\b(api|implementation|runtimeOnly|compileOnly|testImplementation|testRuntimeOnly)\(project\(":modules:([a-z0-9-]+)"\)\)/g) { my ($cfg, $mod) = ($1, $2); print(($cfg =~ /^test/ ? "test" : "main"), " $mod\n") }' "$1"
+  perl -ne 's#//.*##; while (/\b(api|implementation|runtimeOnly|compileOnly|testImplementation|testRuntimeOnly)\(project\(":modules:([a-z0-9-]+)"\)\)/g) { my ($cfg, $mod) = ($1, $2); print(($cfg =~ /^test/ ? "test" : $cfg eq "compileOnly" ? "compile" : "main"), " $mod\n") }' "$1"
 }
 
 # ---------------------------------------------------------------------------------------------------- 인자
@@ -132,7 +133,10 @@ close() {
         fi
         if ! in_list "$dep" "$CLOSED"; then
           CLOSED="$CLOSED"$'\n'"$dep"
-          REASONS="$REASONS  + $dep ($([ "$kind" = test ] && echo "needed by the tests of $m" || echo "needed by $m"))"$'\n'
+          local why="needed by $m"
+          [ "$kind" = test ] && why="needed by the tests of $m"
+          [ "$kind" = compile ] && why="compile-only for $m, not on its runtime classpath"
+          REASONS="$REASONS  + $dep ($why)"$'\n'
           changed=1
         fi
       done <<EOF
@@ -178,8 +182,9 @@ rm -rf scripts/new-project.sh scripts/test-new-project.sh scripts/new-project.d 
 [ "$WITH_WORKBENCH" = 1 ] || { rm -rf apps/workbench; perl -ni -e 'print unless /^include\(":apps:workbench"\)\s*$/' settings.gradle.kts; }
 while IFS= read -r m; do
   [ -n "$m" ] || continue
-  rm -rf "modules/$m" "docs/config/modules/$m.yml"
+  rm -rf "modules/$m" "docs/config/modules/$m.yml" "docs/modules/$m.md"
   M="$m" perl -ni -e 'print unless /^include\(":modules:\Q$ENV{M}\E"\)\s*$/' settings.gradle.kts
+  [ ! -f docs/modules/README.md ] || M="$m" perl -ni -e 'print unless /\]\(\Q$ENV{M}\E\.md\)/' docs/modules/README.md
 done <<EOF
 $REMOVED
 EOF

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 모듈 캡슐화 마무리 — 선택 의존 · 모듈별 한 쪽 문서 (2026-10-05)
+
+- **`storage-s3` → `crypto` 가 컴파일 전용(`compileOnly`)이 됐다.** 평범한 S3/R2 앱은 `crypto` 를 런타임에 받지 않는다 (`runtimeClasspath` 에서 사라짐). OPAQUE 공개 URL 은 새 `S3OpaquePublicUrlAutoConfiguration`(`@ConditionalOnClass` 로 crypto 가 있을 때만)이 등록하고, `crypto` 없이 OPAQUE 를 요청하면 `:modules:crypto` 를 짚는 메시지로 시작에 실패한다. OPAQUE 를 쓰는 앱은 `implementation(project(":modules:crypto"))` 한 줄을 더한다 — **OPAQUE 를 쓰던 앱이 받는 동작 변경**. `src/noCryptoTest`(crypto 가 정말 없는 클래스패스) 묶음이 `check` 에 걸린다. `new-project.sh` 는 compileOnly 의존의 소스는 따라오게 하되 앱 런타임에는 넣지 않고 그렇게 안내한다.
+- **`persistence-jooq` 의 `main` 은 런타임 부품만.** 예시 DDL(`jooq-probe-*.sql`)과 거기서 생성한 클래스는 test 소스 세트로 옮겼다 (jar 에 더는 안 들어간다). 형제 모듈 마이그레이션을 읽는 입력도 테스트 전용이다. `testImplementation(project(":modules:db-postgresql"))` 를 없애고 PostgreSQL 드라이버만 테스트 런타임에 둔다 — `--db mysql --modules persistence-jooq` 가 더는 `db-postgresql` 을 끌고 오지 않는다. `JooqModuleLayoutTest`(Docker 불필요)가 이를 지킨다.
+- **`event-kafka` / `notification-jdbc` → `json` 은 그대로.** 둘 다 `JsonCodec` 을 쓰고, `json` 이 더하는 웹 스택은 없다 (webflux · validation · springdoc 은 `platform` 이 이미 가져오고 두 모듈 모두 `platform` 을 거친다 — `dependencyInsight` 로 확인). 비용은 `platform` 의 것이며 `docs/modules/` 에 적었다.
+- **모듈마다 `docs/modules/<module>.md` 한 쪽** + 색인 `docs/modules/README.md`. `modules/platform` `ModuleDocumentationTest` 가 문서와 코드(설정 접두사 · 교체 지점 타입 · 의존성 · 경로 · 색인)의 어긋남을 빌드에서 막는다. `new-project.sh` 는 가지친 모듈의 문서와 색인 행도 지운다. `scripts/test-new-project.sh --full` 에 jOOQ 조합이 늘었다 (네 조합).
+
 ### 이식 안내 — 한 줄로 찍는 프로젝트 · 설정 캡슐화 · 인증 안전 기동 (2026-10-05)
 
 하위 앱(rename-skeleton 으로 찍은 레포)이 위에서 아래로 따라 하면 된다. 새 프로젝트는 이제 `scripts/new-project.sh` 한 줄이다 (README "새 프로젝트 시작", `docs/minimal-composition.md` §5).
