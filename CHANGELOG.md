@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 홈서버 배포 계약 · 배포 가드 (2026-10-06)
+
+앱을 **이미지 하나 + 선언 한 장**으로 내놓는다. 운영용 compose · Caddyfile · cloudflared · 백업 선언은 두지 않는다(플랫폼이 선언에서 만든다). 전체: `docs/deploy.md`.
+
+- **`Dockerfile`**: `ARG APP=api|sample` (워크벤치는 모든 모듈 데모라 빌드를 거부한다), 런타임은 busybox `wget` 이 있는 alpine 그대로(플랫폼 헬스체크 `wget -S -q -O /dev/null http://localhost:<port><health>`), 0.0.0.0:8080, stdout 로깅. `scripts/test-deploy-contract.sh` 가 앱마다 이미지를 빌드해 **계약의 환경변수만** 주어 일회용 postgres 와 띄우고 컨테이너 안 wget 헬스체크 · 다른 컨테이너에서의 도달(0.0.0.0) · 로그 stdout · 쓰지 않는 모듈 설정 비요구 · 보호 환경 가드 실패 화면을 증명한다(CI `.github/workflows/deploy-contract.yml`).
+- **`deploy/app.yaml`** (배포 선언 템플릿): "tag 를 올리는 것이 배포", 선택한 모듈이 요구하는 환경변수와 빠졌을 때의 동작. `new-project.sh` 가 name · image(`OWNER` 는 직접) · `env_prefix` · `db` · `redis`(redis 모듈을 골랐으면 true)를 채우고 고르지 않은 모듈의 설명을 지운다. `rename-skeleton.sh` 는 `env_prefix: SKELETON`(밑줄이 없어 기존 규칙이 못 잡던 것)도 바꾼다.
+- **`.github/workflows/image.yml`**: `v*` 태그 푸시에서만 GHCR 이미지를 `v<버전>` · `sha-<커밋>` 불변 태그로 올린다(latest 없음, 이미 있는 태그는 덮어쓰지 않고 실패). 스켈레톤 레포(GitHub 템플릿)에서는 `is_template` 조건으로 돌지 않는다 — 스켈레톤의 버전 태그가 앱 이미지를 publish 하지 않게.
+- **배포 가드 SPI (`platform` · `common/deploy`)**: `DeployGuard`(`problems()` 는 기동 실패 · `warnings()` 는 로그, 메시지는 환경변수 · 속성 이름만), `DeployGuardRunner`(모든 빈이 만들어진 직후), `DeployGuardFailureAnalyzer`(읽을 수 있는 실패 화면), 기동 로그 요약(액추에이터 없이 가드 목록). 스위치 `skeleton.env`=`local|stage|prod`(환경변수 `SKELETON_ENV`, 찍으면 `<PREFIX>_ENV`)는 **옵트인** — 비우면 중립이고 스프링 프로필을 건드리지 않는다. 모르는 값은 기동 실패(값은 싣지 않는다), `skeleton.deploy.require-env=true` 면 빈 값도 실패, 스위치와 프로필 `prod` 가 어긋나면 경고. 설정 접두사 `skeleton.deploy`(platform).
+- **기존 가드를 SPI 로 접었다(규칙 그대로)**: `auth` — `AuthStartupValidator.problems` 한 곳에 규칙이 있고 `AuthDeployGuard` 가 내놓는다(던지는 예외는 `DeployGuardViolationException` ⊂ `IllegalStateException`, 문제가 하나면 메시지는 예전과 같고, 이제 문제를 모두 나열한다). 스위치가 stage · prod 면 프로필 없이도 같은 규칙. `migration` — 규칙은 `MigrationCleanGuardRules`, DB 에 닿기 전 차단은 그대로 `EnvironmentPostProcessor`, 가드 빈(`migration-clean`)은 목록에 같은 규칙을 보인다. `migration` 이 `platform` 에 의존한다.
+- **환경변수 접두사 증명**: `RedisEnvironmentVariablesTest`(`SKELETON_REDIS_HOST/PORT/SSL_ENABLED/KEY_PREFIX/PASSWORD`) · `RedisLockEnvironmentVariablesTest`(`…_REDIS_LOCK_ENABLED=false`)가 진짜 `systemEnvironment` 속성 원본 모양으로 바인딩을 본다 — 찍은 프로젝트에서는 rename 이 접두사를 바꿔 같은 테스트가 `<PREFIX>_REDIS_*` 로 돈다(`test-new-project.sh --full` 조합 7). `ProdRedisSslEnvironmentTest`: 워크벤치 prod 프로필의 `redis.ssl.enabled: true` 를 `<PREFIX>_REDIS_SSL_ENABLED=false` 가 이긴다.
+- **`JWT_SECRET` 별칭**: `apps/api` · `apps/sample` yml 이 `skeleton.auth.jwt.secret: ${JWT_SECRET:<개발용 기본값>}` 을 읽는다(워크벤치와 같다) — 배포 선언의 `secrets: [JWT_SECRET]` 이 그대로 닿는다. 개발용 기본값은 보호 환경에서 여전히 기동 실패다.
+- 문서: `docs/deploy.md`, `docs/modules/platform.md` · `migration.md`, `docs/config/modules/platform.yml`(`skeleton.deploy`), README · CLAUDE.md.
+
 ### Ovation 하드닝 이식 (2026-10-06)
 
 Ovation 이 운영 설계(`hardening-design`)로 고친 것 중 범용인 것을 스켈레톤에 옮겼다. 각 항목은 고치기 전에 실패하는 테스트로 문제를 먼저 보였다.

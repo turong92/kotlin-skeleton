@@ -1,0 +1,49 @@
+# 홈서버 배포 선언 한 장 (docs/deploy.md). 플랫폼이 이 파일에서 컨테이너 · 네트워크 · DB · Redis · Caddy 사이트를 만든다.
+# 홈서버 레포의 infra/apps/<name>.yaml 로 복사해 쓴다. 이 프로젝트에는 compose · Caddyfile · cloudflared · 백업 선언을 두지 않는다 (플랫폼이 만든다).
+#
+# ★ tag 를 올리는 것이 배포다.
+#   1) git tag v0.1.1 && git push origin v0.1.1      → .github/workflows/image.yml 이 ghcr.io 에 이미지를 올린다 (v0.1.1 · sha-<커밋>)
+#   2) 이 파일의 tag 를 v0.1.1 로 올려 플랫폼에 적용한다  → 컨테이너가 그 이미지로 교체된다
+#   tag 는 불변이다 — latest 를 쓰지 않는다. 롤백 = tag 를 이전 값으로 되돌리는 것.
+#
+# 이 선언은 apps/api(스타터) 기준이다. apps/sample 은 health 가 /health 이고 빌드 인자가 다르다 (docs/deploy.md).
+
+name: kotlin-skeleton            # ^[a-z][a-z0-9-]{1,19}$ — 컨테이너 · DB · 파일 이름의 어근
+image: ghcr.io/OWNER/kotlin-skeleton-api   # OWNER 를 GitHub 계정 · 조직(소문자)으로 바꾼다 — 안 바꾸면 플랫폼이 거부한다. 태그는 여기에 쓰지 않는다
+tag: v0.1.0                      # 불변 태그 (v* 태그를 푸시하면 같은 이름의 이미지가 생긴다)
+port: 8080                       # 컨테이너 포트. 0.0.0.0 에서 듣는다. 호스트 포트는 열지 않는다
+health: /actuator/health         # 컨테이너 안에서 `wget -S -q -O /dev/null http://localhost:8080<health>` — 2xx · 401 · 403 이면 살아 있음
+env_prefix: SKELETON             # 이 앱의 환경변수 접두사 = 설정 접두사의 대문자 (새 프로젝트로 찍을 때 프로젝트의 접두사로 바뀐다)
+
+# 도메인이 없으면 내부 전용이다. 공개하려면:
+# domain: kotlin-skeleton.example.com
+# 같은 호스트에서 정적 프론트를 서빙하려면 web 과 api_prefix 를 함께 쓴다 — web 은 프론트 빌드 산출물 디렉토리 이름과 같아야 한다 (react-skeleton: dist)
+# web: dist
+api_prefix: /api/v1              # web 이 있을 때 이 경로만 백엔드로 간다
+
+db: postgres                     # postgres | mysql | none — 플랫폼이 SPRING_DATASOURCE_URL / _USERNAME / _PASSWORD 를 넣는다 (앱 접두사가 붙은 DB 변수는 없다)
+redis: false                     # true 면 <ENV_PREFIX>_REDIS_HOST / _PORT / _SSL_ENABLED / _KEY_PREFIX / _PASSWORD 를 넣는다 · false 면 <ENV_PREFIX>_REDIS_LOCK_ENABLED=false 하나만
+
+# 플랫폼이 무작위 값을 만들어 환경변수로 넣는 비밀 (이름만 적는다). 서드파티 키(결제 · SMTP · R2 …)는 이 목록으로 만들 수 없다 — docs/deploy.md "모듈별 비밀"
+secrets:
+  - JWT_SECRET                   # [auth] 빠지면 SKELETON_ENV=stage|prod · 프로필 prod|staging 에서 기동 실패: "skeleton.auth.jwt.secret is blank / built-in default / shorter than 32 bytes"
+#
+# 선택한 모듈이 요구하는 환경변수 — 값은 플랫폼 밖에서 정한다. 빠졌을 때의 동작 (모듈이 없으면 줄이 지워진다)
+#   [auth] SKELETON_AUTH_BREAK_GLASS_SECRET · _ALLOWED_ACCOUNT_IDS   break-glass 를 켰을 때만 — 비밀이 비면 기동 실패, 허용 계정이 비면 stage|prod 에서 기동 실패
+#   [auth-social-google] SKELETON_AUTH_SOCIAL_PROVIDERS_GOOGLE_CLIENT_ID · _CLIENT_SECRET   _ENABLED=true 인데 비면 기동 실패 (client id/secret must not be blank)
+#   [auth-social-kakao] SKELETON_AUTH_SOCIAL_PROVIDERS_KAKAO_CLIENT_ID · _CLIENT_SECRET     _ENABLED=true 인데 비면 기동 실패
+#   [auth-social-naver] SKELETON_AUTH_SOCIAL_PROVIDERS_NAVER_CLIENT_ID · _CLIENT_SECRET     _ENABLED=true 인데 비면 기동 실패
+#   [captcha-turnstile] SKELETON_CAPTCHA_TURNSTILE_ENABLED=true · SKELETON_CAPTCHA_TURNSTILE_SECRET_KEY   비면 검증기 빈이 없다 (기동은 된다, 검증기를 주입받는 곳이 있으면 그 이름으로 기동 실패)
+#   [payment-toss] SKELETON_PAYMENT_TOSS_ENABLED=true · SKELETON_PAYMENT_TOSS_SECRET_KEY   비면 제공자 빈이 없다 (결제 라우팅이 그 제공자를 못 찾는다)
+#   [payment-stripe] SKELETON_PAYMENT_STRIPE_ENABLED=true · SKELETON_PAYMENT_STRIPE_SECRET_KEY   비면 제공자 빈이 없다
+#   [storage-s3] SKELETON_STORAGE_S3_BUCKET · _ENDPOINT_OVERRIDE · _CREDENTIALS_ACCESS_KEY_ID · _CREDENTIALS_SECRET_ACCESS_KEY   버킷이 비면 저장소 빈이 없다 · 키가 비면 AWS 기본 자격 증명 체인으로 가서 첫 사용에서 실패 (기동은 된다)
+#   [notification-mail] SKELETON_NOTIFICATION_MAIL_ENABLED=true · _FROM · SPRING_MAIL_HOST · SPRING_MAIL_USERNAME · SPRING_MAIL_PASSWORD   host · from 이 비면 발송기 빈이 없다 · 비밀번호가 틀리면 첫 발송에서 실패
+#   [notification-slack] SKELETON_NOTIFICATION_SLACK_ENABLED=true · SKELETON_NOTIFICATION_SLACK_WEBHOOK_URL   비면 아무것도 보내지 않는다
+#   [alert] SKELETON_ALERT_WEBHOOK_URL   비면 경보가 로그로만 남는다 (기동은 된다)
+#   [crypto] SKELETON_CRYPTO_PRIMARY_KEY_ID · SKELETON_CRYPTO_KEYS_<ID> (base64 AES 키)   키가 없으면 암호화 빈이 없다
+#   [config-aws-ssm] AWS_PROFILE · AWS 자격 증명   홈서버에는 AWS 가 없다 — 이 모듈은 고르지 않는다 (paths 를 정하면 부팅에서 자격 증명을 찾는다)
+#   [redis-core] 플랫폼이 <ENV_PREFIX>_REDIS_* 를 넣는다 (redis: true) — 직접 정하지 않는다
+
+env:
+  SKELETON_ENV: prod             # 배포 가드 스위치 (local | stage | prod). 가드가 stage|prod 규칙을 켠다 — docs/deploy.md
+  SPRING_PROFILES_ACTIVE: prod   # 스프링 프로필은 따로 정한다 (스위치가 프로필을 켜지는 않는다). 스타터의 내장 시드 계정은 prod 에서 거부된다 — 첫 배포 전에 AuthAccountRepository 빈을 둔다

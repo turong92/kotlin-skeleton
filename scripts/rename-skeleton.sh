@@ -10,7 +10,8 @@
 #   skeleton.<key>       → <config-prefix>.<key>  (application*.yml, @ConfigurationProperties, 로거 이름 skeleton.debug.*,
 #                                                  Gradle -Pskeleton.<key> — 'P' 뒤라 단어 경계가 없어 따로 잡는다)
 #   skeleton:            → <config-prefix>:       (YAML 계층 표기의 루트 키 — 점 표기와 달리 빌드로는 안 잡히고 설정이 조용히 무시된다)
-#   SKELETON_<ENV>       → <CONFIG_PREFIX>_<ENV>  (yml 의 환경변수 자리표시자, .env.example)
+#   SKELETON_<ENV>       → <CONFIG_PREFIX>_<ENV>  (yml 의 환경변수 자리표시자, .env.example, Redis · 배포 스위치 환경변수 이름)
+#   env_prefix: SKELETON → env_prefix: <CONFIG_PREFIX>  (deploy/app.yaml — 밑줄이 없어 위 규칙이 못 잡는다. 플랫폼이 <PREFIX>_REDIS_* 를 넣는 접두사)
 #   Skeleton<Name>       → <ClassPrefix><Name>    (클래스·파일 이름)
 #   skeleton<Name>       → <classPrefix><Name>    (빈 이름 등 lowerCamel: skeletonCorsConfigurationSource)
 #   kotlin-skeleton      → <config-prefix>        (spring.application.name, JWT issuer, Redis key prefix, SSM 경로, OpenAPI title — .md 제외)
@@ -52,6 +53,7 @@ files | while read -r f; do
     s/dev\\.sumin\\.skeleton/${PKG}/g;
     s#\\bdev/sumin/skeleton\\b#${PKG_DIR}#g;
     s/\\bSKELETON_/${ENVPREFIX}_/g;
+    s/^(env_prefix:\\s*)SKELETON\\b/\${1}${ENVPREFIX}/;
     ${kotlin_rule}
     s/^(\\s*)skeleton:(\\s*)\$/\${1}${PREFIX}:\${2}/;
     s/\\bskeleton\\.(?=[a-z])/${PREFIX}./g;

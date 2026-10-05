@@ -295,6 +295,24 @@ else
   echo "✗ scripts/rename-skeleton.sh is missing" >&2; exit 1
 fi
 
+# ---------------------------------------------------------------------------------------------------- 배포 선언 (deploy/app.yaml, docs/deploy.md)
+# name · image · env_prefix 는 rename 이 이미 새 접두사로 바꿨다. 여기서는 DB · Redis 를 고른 모듈에 맞추고, 쓰지 않는 모듈의 비밀 설명을 지운다.
+if [ -f deploy/app.yaml ]; then
+  DECL_DB=postgres; [ "$DB" != mysql ] || DECL_DB=mysql
+  DECL_REDIS=false; ! printf '%s\n' "$API_SORTED" | grep -q '^redis-' || DECL_REDIS=true
+  DECL_DB="$DECL_DB" DECL_REDIS="$DECL_REDIS" perl -pi -e 's/^db: postgres\b/db: $ENV{DECL_DB}/; s/^redis: false\b/redis: $ENV{DECL_REDIS}/' deploy/app.yaml
+  # "#   [<module>] …" 줄은 그 모듈이 apps/api 에 있을 때만 남긴다
+  while IFS= read -r m; do
+    [ -n "$m" ] || continue
+    M="$m" perl -ni -e 'print unless /^#\s+\[\Q$ENV{M}\E\]/' deploy/app.yaml
+  done <<EOF3
+$(grep -o '^#   \[[a-z0-9-]*\]' deploy/app.yaml | sed 's/^#   \[\(.*\)\]$/\1/' | sort -u | while IFS= read -r t; do in_list "$t" "$API_SORTED" || echo "$t"; done)
+EOF3
+  if [ "${#PREFIX}" -lt 2 ] || [ "${#PREFIX}" -gt 20 ]; then
+    echo "  note: deploy/app.yaml name '$PREFIX' must be 2-20 characters (^[a-z][a-z0-9-]{1,19}\$) for the platform - shorten it there" >&2
+  fi
+fi
+
 # ---------------------------------------------------------------------------------------------------- 설정 블록 (rename 뒤에 붙인다: 주석 속 `skeleton:` 루트 키는 rename 이 못 잡는다)
 APP_YML=apps/api/src/main/resources/application.yml
 BLOCK_MODULES=""
@@ -343,6 +361,7 @@ next:
   ./gradlew build                                  # Docker 가 필요하다 (Testcontainers)
   scripts/dev.sh                                    # 로컬 한 줄 실행: $DB_SERVICE$(in_list storage-s3 "$SELECTED_SORTED" && echo " + s3") 컨테이너 → 백엔드 (../web 이 있으면 프론트도)
 $SAMPLE_HINT  # 손으로: docker compose up -d $DB_SERVICE && ./gradlew :apps:api:bootRun --args='--spring.profiles.active=local'
+배포: deploy/app.yaml 의 image(OWNER)를 채우고 docs/deploy.md 를 읽는다 — v* 태그 푸시가 이미지를 올리고(.github/workflows/image.yml), 선언의 tag 를 올리는 것이 배포다.
 module 하나 더: apps/api/build.gradle.kts 에 implementation(project(":modules:<m>")) 한 줄 (모듈이 없으면 이 도구를 다시 쓰지 말고 스켈레톤에서 디렉토리를 복사한 뒤 settings.gradle.kts 에 include).
 설정이 필요하면 docs/config/modules/<m>.yml 에서 바꿀 키만 apps/api application.yml 로 옮긴다. 환경변수는 .env.example 의 [모듈] 구역.
 EOF

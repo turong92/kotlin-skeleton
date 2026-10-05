@@ -1,0 +1,18 @@
+name: deploy-contract
+# 이미지가 홈서버 배포 계약(docs/deploy.md)을 지키는지 진짜 컨테이너로 증명한다: scripts/test-deploy-contract.sh
+# (계약의 환경변수만으로 기동 · 컨테이너 안 wget 헬스체크 · 0.0.0.0 · stdout 로그 · 쓰지 않는 모듈 설정을 요구하지 않음 · 보호 환경 가드).
+# Dockerfile · 앱 설정 · 가드가 바뀌면 돈다. Docker 는 ubuntu-latest 에 있다.
+on:
+  push:
+    branches: [main]
+    paths: ['Dockerfile', 'apps/**', 'modules/platform/**', 'modules/auth/**', 'modules/migration/**', 'scripts/test-deploy-contract.sh', 'deploy/**', 'build.gradle.kts', 'settings.gradle.kts', '.github/workflows/deploy-contract.yml']
+  pull_request:
+    paths: ['Dockerfile', 'apps/**', 'modules/platform/**', 'modules/auth/**', 'modules/migration/**', 'scripts/test-deploy-contract.sh', 'deploy/**', 'build.gradle.kts', 'settings.gradle.kts', '.github/workflows/deploy-contract.yml']
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/test-deploy-contract.sh

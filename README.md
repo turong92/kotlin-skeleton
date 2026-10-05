@@ -99,7 +99,7 @@ curl -s localhost:8080/api/v1/auth/login -H 'Content-Type: application/json' -d 
 ./gradlew build                          # everything: all modules, both apps (Testcontainers needs Docker)
 ```
 
-`docker compose up --build` builds `:apps:api` (the starter) into the image. Optional infrastructure for the modules that need it sits behind compose profiles and does not start with a plain `docker compose up`: `--profile redis` (redis-*), `--profile kafka` (event-kafka), `--profile mail` (notification-mail, Mailpit UI on :8025), `--profile mysql` (db-mysql). Per-module environment variables are in the commented sections of `.env.example`.
+`docker compose up --build` builds `:apps:api` (the starter) into the image. The same `Dockerfile` is the deployable image of the homeserver deploy contract (`APP=api|sample`, wget healthcheck, stdout logs): see [docs/deploy.md](docs/deploy.md). Optional infrastructure for the modules that need it sits behind compose profiles and does not start with a plain `docker compose up`: `--profile redis` (redis-*), `--profile kafka` (event-kafka), `--profile mail` (notification-mail, Mailpit UI on :8025), `--profile mysql` (db-mysql). Per-module environment variables are in the commented sections of `.env.example`.
 
 ## 새 프로젝트 시작
 
@@ -127,6 +127,8 @@ scripts/new-project.sh ~/work/ovation dev.sumin.ovation ovation Ovation --db mys
 - `--modules` 로 요청한 모듈은 `apps/api/build.gradle.kts` 에 `implementation(project(":modules:<m>"))` 한 줄이 생기고, `docs/config/modules/<m>.yml` 이 `apps/api/src/main/resources/application.yml` 끝의 `new-project: module config blocks` 구역에 **주석으로** 붙는다. 모듈은 기본값으로 동작하니 바꿀 키만 주석을 풀어 위 설정에 합친다.
 - 끝에 `scripts/rename-skeleton.sh` 가 돌고 잔여 흔적이 있으면 실패한다. 대상 디렉토리 밖에는 아무것도 쓰지 않고, 대상이 이미 있으면 거부한다.
 - 시험: `scripts/test-new-project.sh` (빠른 검사 — `./gradlew check` 가 돈다) / `--full` (네 조합을 찍어 각각 `./gradlew build`, Docker 필요 — `.github/workflows/new-project.yml`).
+
+- 찍힌 프로젝트에는 배포 선언 `deploy/app.yaml`(이름 · 이미지 · `env_prefix` · DB · Redis 를 채운다), GHCR 이미지 워크플로(`v*` 태그 → `ghcr.io/<owner>/<name>-api:v…` · `sha-…`, latest 없음), 계약 증명 `scripts/test-deploy-contract.sh` 가 따라온다 — **[배포 계약 · 배포 가드 · 모듈별 비밀: docs/deploy.md](docs/deploy.md)**.
 
 수동으로 하려면: 레포를 복사해 `scripts/rename-skeleton.sh dev.sumin.ovation ovation Ovation`, 쓰지 않는 모듈과 `apps/workbench` 를 지우고 `docs/minimal-composition.md` 를 따른다.
 
@@ -221,10 +223,12 @@ The built-in defaults are for development: the JWT secret `dev-local-jwt-secret-
 
 | Rule | Fails when | Fix |
 | --- | --- | --- |
-| JWT secret | `skeleton.auth.jwt.secret` is blank, the built-in default, or shorter than 32 bytes (HS256) | set `skeleton.auth.jwt.secret` (env `JWT_SECRET`) to a random value of at least 32 bytes |
+| JWT secret | `skeleton.auth.jwt.secret` is blank, the built-in default, or shorter than 32 bytes (HS256) | set `skeleton.auth.jwt.secret` (env `JWT_SECRET` or `SKELETON_AUTH_JWT_SECRET`) to a random value of at least 32 bytes |
 | Account store | the built-in in-memory `AuthAccountRepository` (seeds `user/password`, `admin/password`) is the one in use | register your own `AuthAccountRepository` bean |
 | Dev login | `skeleton.auth.dev-login.enabled=true` | leave it off |
 | Break-glass | enabled without a secret, or without `allowed-account-ids` | set both |
+
+Setting `skeleton.env=stage|prod` (env `SKELETON_ENV`, opt-in — see [docs/deploy.md](docs/deploy.md)) applies the same rules without a profile; the rules are `DeployGuard` beans listed in a startup log summary.
 
 `local`, `dev`, `test` and no profile keep working unchanged (the starter's tests log in with the seed user). To protect other profile names, set `skeleton.auth.protected-profiles`. A starter run with `--spring.profiles.active=prod` will not boot until you add an `AuthAccountRepository` — that is the point.
 

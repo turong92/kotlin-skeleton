@@ -3,7 +3,7 @@
 #
 #   scripts/test-new-project.sh            # 빠른 검사 (기본, 수 초~수십 초): 인자 검증 · 모듈 닫힘 · 파일 가지치기 · rename 잔여 검사
 #   scripts/test-new-project.sh --quick    # 위와 같다 (./gradlew check 가 부른다)
-#   scripts/test-new-project.sh --full     # 위 + 여섯 조합을 임시 디렉토리에 찍어 각각 ./gradlew build (Docker/Testcontainers 필요, 순차, 수 분)
+#   scripts/test-new-project.sh --full     # 위 + 일곱 조합을 임시 디렉토리에 찍어 각각 ./gradlew build (Docker/Testcontainers 필요, 순차, 수 분)
 #
 # --full 은 CI 의 별도 워크플로(.github/workflows/new-project.yml)가 돈다. 조합:
 #   1. 기본값만
@@ -12,6 +12,7 @@
 #   4. --modules persistence-jooq,job-queue-jdbc,notification-jdbc   (jOOQ 코드 생성이 형제 모듈 마이그레이션을 파싱한다)
 #   5. --with-sample   (제품 모양 예시 앱 apps/sample 이 남고, 그 앱의 모듈이 닫힘에 더해진다)
 #   6. --modules board,board-jdbc   (게시판: board 의 compileOnly 의존 notification · idempotency 가 소스로 따라오고, board-jdbc 의 dbTest 가 두 DB 로 돈다)
+#   7. --modules redis-core,redis-lock   (Redis 환경변수 테스트가 프로젝트 접두사로 찍혀 돈다 — 배포 계약의 <ENV_PREFIX>_REDIS_*)
 # macOS bash 3.2 와 GNU bash 에서 돈다. 임시 디렉토리는 끝나면 지운다 (KEEP=1 이면 남긴다).
 set -euo pipefail
 
@@ -94,6 +95,16 @@ check "로컬 한 줄 실행 스크립트가 따라온다 (scripts/dev.sh — �
 check "compose 에 로컬 S3(profile s3)와 버킷 준비 서비스가 있다 — 프론트 업로드를 시험하는 데 필요하다" bash -c "grep -q '^  s3:' '$A/docker-compose.yml' && grep -q '^  s3-init:' '$A/docker-compose.yml' && grep -q 'profiles: \\[s3\\]' '$A/docker-compose.yml'"
 check "compose 프로젝트 이름이 새 이름이다 — 폴더 이름(api)을 쓰면 다른 프로젝트의 컨테이너 · 볼륨과 섞인다" has_line '^name: ovation$' "$A/docker-compose.yml"
 check "storage-s3 를 고르지 않으면 application-local.yml 에 S3 설정이 붙지 않는다" lacks_line 'storage-s3' "$A/apps/api/src/main/resources/application-local.yml"
+check "배포 선언이 따라오고 name · image · env_prefix 가 새 접두사다 (deploy/app.yaml)" bash -c "grep -Eq '^name: ovation( |\$)' '$A/deploy/app.yaml' && grep -q '^image: ghcr.io/OWNER/ovation-api' '$A/deploy/app.yaml' && grep -q '^env_prefix: OVATION' '$A/deploy/app.yaml'"
+check "배포 선언의 DB · Redis 는 고른 모듈을 따른다 (postgres · redis false)" bash -c "grep -q '^db: postgres' '$A/deploy/app.yaml' && grep -q '^redis: false' '$A/deploy/app.yaml'"
+check "배포 선언에 skeleton · SKELETON 흔적이 없다 (스위치 이름은 OVATION_ENV)" bash -c "! grep -i 'skeleton' '$A/deploy/app.yaml' | grep -v 'react-skeleton' | grep -q . && grep -q 'OVATION_ENV: prod' '$A/deploy/app.yaml'"
+check "배포 선언에서 고르지 않은 모듈의 비밀 설명이 지워진다 (storage-s3 · payment-toss), 쓰는 모듈(auth)은 남는다" bash -c "! grep -q '\[storage-s3\]\|\[payment-toss\]\|\[redis-core\]' '$A/deploy/app.yaml' && grep -q '\[auth\]' '$A/deploy/app.yaml'"
+check "배포 선언은 compose · Caddyfile · cloudflared · 백업을 만들지 않는다 (플랫폼 몫)" bash -c "test ! -e '$A/deploy/docker-compose.yml' && test ! -e '$A/deploy/Caddyfile' && test ! -e '$A/deploy/cloudflared' && ls '$A/deploy' | grep -qx 'app.yaml' && [ \"\$(ls '$A/deploy' | wc -l | tr -d ' ')\" = 1 ]"
+check "이미지 워크플로가 따라오고 v* 태그 푸시만 트리거한다 (브랜치 푸시 없음 · latest 없음)" bash -c "grep -q \"tags: \\['v\\*'\\]\" '$A/.github/workflows/image.yml' && ! grep -q 'branches' '$A/.github/workflows/image.yml' && ! grep -q ':latest' '$A/.github/workflows/image.yml'"
+check "이미지 워크플로의 이름과 선언의 image 가 같은 어근이다 (<prefix>-api)" bash -c "grep -q -- '-api' '$A/.github/workflows/image.yml' && grep -q 'ovation-api' '$A/deploy/app.yaml'"
+check "계약 테스트 스크립트와 그 CI 가 따라온다 (문법 검사 통과)" bash -c "test -x '$A/scripts/test-deploy-contract.sh' && bash -n '$A/scripts/test-deploy-contract.sh' && test -f '$A/.github/workflows/deploy-contract.yml'"
+check "Dockerfile 은 APP 인자를 받는다 (api 가 기본)" has_line '^ARG APP=api' "$A/Dockerfile"
+check "배포 가드 · Redis 환경변수 테스트가 새 접두사로 찍힌다 — 접두사가 따라간다" bash -c "grep -rq 'skeleton.env\|ovation.env' '$A/modules/platform/src/test' && ! grep -rq 'SKELETON_' '$A/modules/platform/src/test' '$A/modules/auth/src/test'"
 check "소스 레포는 건드리지 않는다" bash -c "[ -z \"\$(find '$SRC' -newer '$MARKER' -type f -not -path '*/build/*' -not -path '*/.gradle/*' -not -path '*/.kotlin/*' -not -path '*/.git/*' -not -path '*/node_modules/*' 2>/dev/null | head -1)\" ]"
 
 echo "== 3. --modules job-queue-jdbc,notification-mail,storage-s3,scheduler"
@@ -123,6 +134,7 @@ check "dev.sh 는 기본 조합에서 s3 를 올리지 않는다" bash -c "[ \"\
 check "dev.sh 는 소스 레포(두 DB 모듈이 다 있다)에서도 스타터 apps/api 에 postgres 를 고른다 — 폴더 존재로 고르면 mysql 이 된다" bash -c "[ \"\$(DEV_DRY_RUN=1 bash -c 'cd \"$SRC\" && bash scripts/dev.sh' 2>&1 | tail -1)\" = 'infra: postgres s3=0 app=api' ]"
 check "dev.sh APP=sample 은 postgres + s3" bash -c "[ \"\$(DEV_DRY_RUN=1 APP=sample bash -c 'cd \"$SRC\" && bash scripts/dev.sh' 2>&1 | tail -1)\" = 'infra: postgres s3=1 app=sample' ]"
 check "persistence-jooq 가 없으니 그 모듈이 읽던 형제 폴더 문제도 없다" test ! -e "$B/modules/persistence-jooq"
+check "배포 선언에 고른 모듈(storage-s3 · notification-mail)의 비밀 설명이 남고 고르지 않은 모듈(payment-toss)은 없다" bash -c "grep -q '\[storage-s3\] OVATION_STORAGE_S3_BUCKET' '$B/deploy/app.yaml' && grep -q '\[notification-mail\]' '$B/deploy/app.yaml' && ! grep -q '\[payment-toss\]' '$B/deploy/app.yaml'"
 
 echo "== 4. --db mysql --modules job-queue-jdbc,alert-jdbc"
 C="$TMP/c"
@@ -132,6 +144,7 @@ for m in alert alert-jdbc job-queue-jdbc notification-mail; do
 done
 check "alert-jdbc 의 MySQL 마이그레이션이 남고 PostgreSQL 것은 앱 클래스패스 밖이다" bash -c "ls '$C/modules/alert-jdbc/src/main/resources/db/migration/mysql/' | grep -q skeleton_alerts"
 check "dbTestModules 에 alert-jdbc 가 들어간다" has_line 'val dbTestModules = setOf\(":modules:alert-jdbc", ":modules:job-queue-jdbc"\)' "$C/build.gradle.kts"
+check "--db mysql 이면 배포 선언의 db 가 mysql 이다" has_line '^db: mysql' "$C/deploy/app.yaml"
 check "db-postgresql 모듈이 사라지고 db-mysql 이 들어온다" bash -c "grep -q 'include(\":modules:db-mysql\")' '$C/settings.gradle.kts' && ! grep -q 'db-postgresql' '$C/settings.gradle.kts' && test ! -e '$C/modules/db-postgresql'"
 check "dev.sh 는 mysql 조합에서 mysql 컨테이너를 고른다" bash -c "[ \"\$(DEV_DRY_RUN=1 bash -c 'cd \"$C\" && bash scripts/dev.sh' 2>&1 | tail -1)\" = 'infra: mysql s3=0 app=api' ]"
 check "apps/api 가 db-mysql 을 쓴다" bash -c "grep -q 'project(\":modules:db-mysql\")' '$C/apps/api/build.gradle.kts' && ! grep -q 'project(\":modules:db-postgresql\")\|testcontainers-postgresql' '$C/apps/api/build.gradle.kts'"
@@ -193,8 +206,16 @@ I="$TMP/i"
 expect_exit 0 "board 만 요청하면 찍히되 board-jdbc 를 더하라고 알려 준다" stamp "$I" --modules board
 echo "$LAST_OUTPUT" | grep -q 'board has no storage of its own' && pass "저장소 없음 안내가 나온다" || fail "board 만 요청했는데 board-jdbc 안내가 없다"
 
+echo "== 9. --modules redis-core,redis-lock (Redis 환경변수 이름이 프로젝트 접두사를 따라간다 — 배포 계약)"
+J="$TMP/j"
+expect_exit 0 "redis 조합을 찍는다" stamp "$J" --modules redis-core,redis-lock
+check "배포 선언의 redis 가 true 다 (redis 모듈을 골랐다)" has_line '^redis: true' "$J/deploy/app.yaml"
+check "Redis 환경변수 테스트가 프로젝트 접두사(OVATION_REDIS_*)로 찍힌다" bash -c "grep -q 'OVATION_REDIS_SSL_ENABLED' '$J/modules/redis-core/src/test/kotlin/dev/sumin/ovation/redis/core/RedisEnvironmentVariablesTest.kt' && grep -q 'OVATION_REDIS_LOCK_ENABLED' '$J/modules/redis-lock/src/test/kotlin/dev/sumin/ovation/redis/lock/RedisLockEnvironmentVariablesTest.kt'"
+check "찍은 Redis 테스트에 SKELETON_ 이름이 남지 않는다" bash -c "! grep -rq 'SKELETON_' '$J/modules/redis-core/src/test' '$J/modules/redis-lock/src/test'"
+check "배포 선언에 redis-core 안내가 남는다" has_line '\[redis-core\]' "$J/deploy/app.yaml"
+
 if [ "$MODE" = "--full" ]; then
-  echo "== 9. 조합마다 ./gradlew build (순차)"
+  echo "== 10. 조합마다 ./gradlew build (순차)"
   build_composition() { # build_composition <dir> <이름>
     local dir="$1" name="$2" started ended
     started="$(date +%s)"
@@ -213,6 +234,7 @@ if [ "$MODE" = "--full" ]; then
   build_composition "$F" "4-jooq"
   build_composition "$G" "5-sample"
   build_composition "$H" "6-board"
+  build_composition "$J" "7-redis"
 fi
 
 echo
