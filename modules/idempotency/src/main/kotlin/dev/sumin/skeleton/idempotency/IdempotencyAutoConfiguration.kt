@@ -1,10 +1,12 @@
 package dev.sumin.skeleton.idempotency
 
+import dev.sumin.skeleton.common.web.ClientIps
 import io.swagger.v3.oas.models.Operation
 import io.swagger.v3.oas.models.media.StringSchema
 import io.swagger.v3.oas.models.parameters.HeaderParameter
 import io.swagger.v3.oas.models.responses.ApiResponse
 import org.springdoc.core.customizers.GlobalOperationCustomizer
+import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
@@ -33,8 +35,8 @@ class IdempotencyAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    fun idempotencyScopeResolver(): IdempotencyScopeResolver =
-        PrincipalIdempotencyScopeResolver()
+    fun idempotencyScopeResolver(clientIps: ObjectProvider<ClientIps>): IdempotencyScopeResolver =
+        PrincipalIdempotencyScopeResolver(clientIps.getIfAvailable { ClientIps() })
 
     @Bean
     @ConditionalOnMissingBean

@@ -5,6 +5,8 @@ import dev.sumin.skeleton.common.web.RateLimitStore
 import dev.sumin.skeleton.common.web.WebPolicyAutoConfiguration
 import dev.sumin.skeleton.redis.core.RedisCoreAutoConfiguration
 import dev.sumin.skeleton.redis.core.RedisKeyPrefixer
+import dev.sumin.skeleton.common.web.ClientIps
+import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
@@ -56,6 +58,6 @@ class RedisRateLimitAutoConfiguration {
         havingValue = "true",
         matchIfMissing = true,
     )
-    fun rateLimitKeyResolver(): RateLimitKeyResolver =
-        PrincipalAwareRateLimitKeyResolver()
+    fun rateLimitKeyResolver(clientIps: ObjectProvider<ClientIps>): RateLimitKeyResolver =
+        PrincipalAwareRateLimitKeyResolver(clientIps.getIfAvailable { ClientIps() })
 }

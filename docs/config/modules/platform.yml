@@ -21,6 +21,9 @@ skeleton:
       exposed-headers: [Location, Idempotency-Key, Idempotency-Replayed, traceparent, X-Trace-Id, X-Span-Id]
       allow-credentials: false
       max-age: 1h
+    client-ip:
+      # mode: proxy                           # direct | proxy | cloudflare. 비우면 지금까지처럼 remoteAddr 그대로 — ForwardedHeaderFilter 가 X-Forwarded-For 로 덮어써 직접 붙은 호출자가 IP 를 고른다 (docs/client-ip.md)
+      trusted-proxies: ["127.0.0.0/8", "::1/128"]   # 전달 헤더를 믿을 피어 CIDR
     rate-limit:
       enabled: false                           # 요청 속도 제한 (기본 저장소는 인메모리, 공유하려면 redis-rate-limit)
       path-pattern: /api/**

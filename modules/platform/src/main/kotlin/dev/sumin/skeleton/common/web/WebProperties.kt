@@ -10,6 +10,7 @@ data class WebProperties(
     val securityHeaders: SecurityHeaders = SecurityHeaders(),
     val cors: Cors = Cors(),
     val rateLimit: RateLimit = RateLimit(),
+    val clientIp: ClientIp = ClientIp(),
 ) {
     data class PublicEndpointProperties(
         val method: String? = null,
@@ -62,6 +63,16 @@ data class WebProperties(
         ),
         val allowCredentials: Boolean = false,
         val maxAge: Duration = Duration.ofHours(1),
+    )
+
+    /**
+     * 실제 클라이언트 IP 규칙 ([ClientIps]). **mode 를 정하지 않으면 지금까지처럼 `remoteAddr` 그대로** — 켜져 있는 `ForwardedHeaderFilter` 가
+     * `X-Forwarded-For` 로 그 값을 덮어쓰므로 직접 붙은 호출자가 자기 IP(= 한도 키)를 고를 수 있다. 공개 서비스는 mode 를 명시한다.
+     */
+    data class ClientIp(
+        val mode: ClientIpMode? = null,
+        /** 전달 헤더를 믿을 피어 CIDR (같은 호스트의 cloudflared · 리버스 프록시 = 루프백이 기본) */
+        val trustedProxies: List<String> = listOf("127.0.0.0/8", "::1/128"),
     )
 
     data class RateLimit(

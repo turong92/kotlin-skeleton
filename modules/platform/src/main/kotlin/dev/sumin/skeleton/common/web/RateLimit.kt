@@ -97,9 +97,10 @@ class InMemoryFixedWindowRateLimitStore(
     }
 }
 
-class ClientIpRateLimitKeyResolver : RateLimitKeyResolver {
-    override fun resolve(request: HttpServletRequest): String =
-        request.remoteAddr ?: "unknown"
+class ClientIpRateLimitKeyResolver(
+    private val clientIps: ClientIps = ClientIps(),
+) : RateLimitKeyResolver {
+    override fun resolve(request: HttpServletRequest): String = clientIps.of(request).limitKey
 }
 
 class RateLimitFilter(
