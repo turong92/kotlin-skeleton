@@ -11,7 +11,7 @@
 | 설정 접두사 | 없음 |
 | 기본 동작 | 켜짐. `DataSource` 가 있으면 저장소 네 개를 등록한다 (앱이 같은 타입의 빈을 두면 그쪽이 쓰인다). |
 | 부팅에 필요한 것 | `DataSource` 와 `db-*` 모듈 하나, 그리고 이 모듈의 마이그레이션이 적용된 스키마 (`spring.flyway.locations: classpath:db/migration/{vendor}`). |
-| 교체 지점 | `BoardRepository`, `PostRepository`, `CommentRepository`, `ReactionRepository` |
+| 교체 지점 | `BoardRepository`, `PostRepository`, `CommentRepository`, `ReactionRepository`, `BoardErasureRepository` |
 | 마이그레이션 | `modules/board-jdbc/src/main/resources/db/migration/postgresql`, `modules/board-jdbc/src/main/resources/db/migration/mysql` |
 | 프론트 짝 | `@skeleton/board` |
 | 테스트 | `modules/board-jdbc/src/test`, `modules/board-jdbc/src/dbTest` (PostgreSQL · MySQL 컨테이너로 두 번 돈다 (`postgresTest`, `mysqlTest`) — 병렬 반응 · 병렬 댓글 카운터 · N+1 없는 목록 · 검색 이스케이프) |

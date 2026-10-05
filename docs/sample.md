@@ -6,7 +6,7 @@
 
 | 이 화면/기능이 필요하면 | 이 샘플에서 쓴 모듈 |
 |---|---|
-| 로그인 · JWT | `auth`(데모 계정 3 개 — `SampleAccounts.kt`: `user@example.com`(USER), `admin@example.com`(USER, ADMIN), **`moderator@example.com`(USER, MODERATOR)** — 비밀번호는 모두 `password`) |
+| 로그인 · JWT · 가입 · 세션 · 탈퇴 | `auth` + `account-jdbc`(진짜 계정 — 가입 · 이메일 확인 · 재설정 · 삭제) + `auth-session-jdbc`(리프레시 토큰) + `auth-magic-link` + `notification-mail`(메일은 로컬에서 compose `mail` 프로필의 mailpit `http://localhost:8025`). 로컬 · 시험 시드 계정 3 개 — `application-local.yml` / `src/test/resources/test-seeds.yml` 의 `skeleton.account.seed.accounts`: `user@example.com`(`acc_user`), `admin@example.com`(`acc_admin`, ADMIN), **`moderator@example.com`(`acc_moderator`, MODERATOR)** — 비밀번호는 모두 `password`. 흐름 전체는 `AccountJourneyIntegrationTest` · [계정 수명주기](accounts.md) |
 | 표준 응답 · 에러 · 검증 · 페이지 | `platform` |
 | 두 번 눌러도 한 번 만들기 | `idempotency` (`@IdempotentOperation`) |
 | 알림 받은편지함 + 실시간 | `notification` + `notification-jdbc` + `notification-sse` |
@@ -38,7 +38,7 @@
 
 ## 게시판 (`/api/v1/boards`)
 
-노트와 별개로 `board` + `board-jdbc` 두 줄을 더한 데모다 — 이 앱 코드는 한 줄도 더하지 않았고 **설정(`application.yml`)과 계정(`SampleAccounts.kt`)만** 이 앱의 선택이다:
+노트와 별개로 `board` + `board-jdbc` 두 줄을 더한 데모다 — 이 앱 코드는 한 줄도 더하지 않았고 **설정(`application.yml`)과 시드 계정(`application-local.yml`)만** 이 앱의 선택이다:
 
 - `skeleton.board.reaction.types: [LIKE, DISLIKE, EMPATHY]` — 모듈 기본은 `[LIKE, DISLIKE]`. 공감(`EMPATHY`)은 이 한 줄이 전부다 (코드 · 스키마 변경 없음). `GET /api/v1/boards/config` 가 프론트에 종류를 알려 준다.
 - `skeleton.board.seed-boards` — 기동할 때 `general`(General) 게시판을 만든다.

@@ -30,6 +30,10 @@ secrets:
 #
 # 선택한 모듈이 요구하는 환경변수 — 값은 플랫폼 밖에서 정한다. 빠졌을 때의 동작 (모듈이 없으면 줄이 지워진다)
 #   [auth] SKELETON_AUTH_BREAK_GLASS_SECRET · _ALLOWED_ACCOUNT_IDS   break-glass 를 켰을 때만 — 비밀이 비면 기동 실패, 허용 계정이 비면 stage|prod 에서 기동 실패
+#   [account] SKELETON_ACCOUNT_MAIL_LINK_BASE_URL   메일 링크가 여는 프론트 주소 (예: https://app.example.com) — 비면 SKELETON_ENV=stage|prod 에서 기동 실패. 선택: SKELETON_ACCOUNT_BOOTSTRAP_ADMIN_EMAIL (이 이메일이 확인되면 ADMIN)
+#       메일 발송기(notification-mail)가 없으면 가입 · 재설정 링크를 보낼 수 없어 같은 가드가 막는다 — 이 스타터에서 서비스를 열려면 --modules notification-mail 을 고르고 아래 [notification-mail] 변수를 넣는다
+#       시드 계정(skeleton.account.seed.accounts)과 SKELETON_ACCOUNT_MAIL_LOG_LINKS=ON 은 보호 환경에서 기동 실패 (로컬 · 시험 전용)
+#   [auth-session] 설정만 — 보호 환경에서 메모리 세션 저장소 · 비보안 쿠키는 기동 실패 (스타터는 auth-session-jdbc 라 통과)
 #   [auth-social-google] SKELETON_AUTH_SOCIAL_PROVIDERS_GOOGLE_CLIENT_ID · _CLIENT_SECRET   _ENABLED=true 인데 비면 기동 실패 (client id/secret must not be blank)
 #   [auth-social-kakao] SKELETON_AUTH_SOCIAL_PROVIDERS_KAKAO_CLIENT_ID · _CLIENT_SECRET     _ENABLED=true 인데 비면 기동 실패
 #   [auth-social-naver] SKELETON_AUTH_SOCIAL_PROVIDERS_NAVER_CLIENT_ID · _CLIENT_SECRET     _ENABLED=true 인데 비면 기동 실패
@@ -46,4 +50,4 @@ secrets:
 
 env:
   SKELETON_ENV: prod             # 배포 가드 스위치 (local | stage | prod). 가드가 stage|prod 규칙을 켠다 — docs/deploy.md
-  SPRING_PROFILES_ACTIVE: prod   # 스프링 프로필은 따로 정한다 (스위치가 프로필을 켜지는 않는다). 스타터의 내장 시드 계정은 prod 에서 거부된다 — 첫 배포 전에 AuthAccountRepository 빈을 둔다
+  SPRING_PROFILES_ACTIVE: prod   # 스프링 프로필은 따로 정한다 (스위치가 프로필을 켜지는 않는다). 계정은 DB(account-jdbc)에 있다 — 시드 계정은 로컬 프로필 전용이라 prod 에는 없다

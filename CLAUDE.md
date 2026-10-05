@@ -5,7 +5,7 @@ Kotlin + Spring Boot 백엔드 토이 프로젝트의 공개 출발점.
 ## Backend Module Layout
 
 - Two executable Spring Boot applications, both in a sub-package of the root so `@SpringBootApplication` scans only app code (`dev.sumin.skeleton.app.api`, `dev.sumin.skeleton.app.workbench`):
-  - `apps/api` is the **starter**: the minimal composition (`platform`, `auth`, `persistence-jdbc`, `db-postgresql`, `migration-flyway`, `time`) with one `HelloController`. New projects start here; its tests are the proof that a small composition boots without Redis/Kafka/S3/mail.
+  - `apps/api` is the **starter**: the minimal composition with real accounts (`platform`, `auth`, `account-jdbc`, `auth-session-jdbc`, `persistence-jdbc`, `db-postgresql`, `migration-flyway`, `time`) with one `HelloController`. New projects start here; its tests are the proof that a small composition boots without Redis/Kafka/S3/mail.
   - `apps/workbench` is the **demo**: every module plus the sample controllers under `/api/v1/skeleton/**` and `/api/v1/examples/**` (the react-skeleton workbench UI calls them — do not change paths or shapes) and the integration tests proving the modules coexist.
 <!-- sample:start -->
   - `apps/sample` is the **worked example** ("Notes": a signed-in user manages notes with attachments): the starter plus `idempotency`, `notification-jdbc`/`-sse`, `storage-s3`, `job-queue-jdbc`, `board`/`board-jdbc` (the demo accounts include a `MODERATOR`) and one small domain. It is a product-shaped slice to copy from — see "새 기능의 정본 예시" below. `scripts/new-project.sh` leaves it out unless `--with-sample`.
@@ -17,6 +17,9 @@ Kotlin + Spring Boot 백엔드 토이 프로젝트의 공개 출발점.
 - A module may depend on another module only when it uses its types: `api(...)` when those types appear in its public API, `implementation(...)` otherwise, `compileOnly(...)` for an optional integration (`storage-s3` → `crypto`: only the OPAQUE public URL needs it; registered by its own `@ConditionalOnClass` autoconfiguration, covered by `src/noCryptoTest` with `crypto` really off the classpath). Never `testImplementation(project(...))` of a sibling — a test dependency on another module would be dragged into stamped projects.
 - `modules/platform` owns shared web/error/observability code.
 - `modules/auth` owns authentication contracts and future login flows.
+- `modules/auth-session` (+ `-jdbc`) owns refresh tokens (opaque, hashed at rest, rotated on every use, reuse closes the whole session), the session list and logout; it depends on `auth` only. Body delivery by default, cookie delivery opt-in (CSRF header). Contract types `LoginSessionIssuer`/`SessionRevoker` live in `auth`.
+- `modules/account` (+ `account-jdbc`) owns the account lifecycle: accounts, **identities** (one row per sign-in method — `password`, each social provider, `magic_link`; `method` is a string, `SignInMethod` SPI), email+password sign-up with verification, reset/change, email change (new address verified first), social linking (never auto-merged on an unverified email), deletion (re-auth → grace → purge; other modules erase through `AccountErasureListener` in `platform`), login throttling, `AccountEvent*`, admin tools, first-admin bootstrap, ko/en mail templates. It implements `AuthAccountRepository`, so `auth` logs in with real accounts. `docs/accounts.md` has the flows, the "add a sign-in method" steps and the threat model with the test that covers each row.
+- `modules/auth-magic-link` owns email-link sign-in as one more `SignInMethod` over the same one-time-token machinery.
 - `modules/auth-social` owns optional provider-neutral social-login contracts and endpoint routing.
 - `modules/auth-social-google`, `modules/auth-social-kakao`, and `modules/auth-social-naver` own optional provider-specific OAuth HTTP clients.
 - `modules/idempotency` owns optional `Idempotency-Key` command endpoint protection.
@@ -192,6 +195,7 @@ modules/persistence-jdbc/src/main/kotlin/dev/sumin/skeleton/persistence/jdbc/
   - 서버 내부 알림 발행은 `NotificationPublisher` 를 사용한다.
   - 웹 전달이 필요할 때만 `modules/notification-sse` 를 앱에 추가한다.
   - SSE endpoint 는 `/api/v1/notifications/sse`, 기본은 인증 필요. public open 이 필요할 때만 `skeleton.notification.sse.public-endpoint=true`.
+- **계정**: 가입 · 이메일 확인 · 재설정 · 세션 · 삭제는 `modules/account`·`auth-session` (스타터에 들어 있다). 시드 계정은 `skeleton.account.seed.accounts` — **로컬 프로필과 시험에서만** (stage · prod 에서는 기동 실패). 비밀번호 · 토큰을 담는 요청/응답 DTO 는 `toString` 을 가린다 (Spring MVC 가 DEBUG 에서 본문을 찍는다). 자세한 것: `docs/accounts.md`.
 - **인증**: `modules/auth` 기본값은 Spring Boot auto-configuration 으로 제공. 실제 앱에서 `AuthAccountRepository`, `SecurityFilterChain`, `JwtTokenService`, 필터 bean을 정의하면 기본값을 대체할 수 있다.
 
 ## traceId 흐름 (디버깅용 핵심)

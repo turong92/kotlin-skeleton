@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 계정 수명주기 — account · auth-session · auth-magic-link (2026-10-06)
+
+도메인과 메일 설정만 바꿔 켜기만 해도 가입 · 로그인 · 비밀번호 찾기 · 세션 관리 · 탈퇴가 있는 서비스 구색이 나온다. 전체: `docs/accounts.md` (흐름 · 새 로그인 수단 더하기 · 위협 모델과 각 행을 덮는 시험 · HTTP 계약).
+
+- **새 모듈**: `account`(+`account-jdbc`) · `auth-session`(+`auth-session-jdbc`) · `auth-magic-link`. 선택 통합은 `account` 의 `compileOnly`(`notification-mail` · `captcha-turnstile` · `alert` · `idempotency` · `auth-social` · `job-queue-jdbc`)이고 `noOptionalTest` 가 없는 클래스패스를 증명한다.
+- **로그인 수단 추상화**: 계정 하나에 `identities` 행(`method` 문자열 + `subject`) — 비밀번호 · 각 소셜 제공자 · 매직 링크가 같은 표의 행이다. `SignInMethod` 빈 + `AccountSignInService.signIn` 이면 새 수단이 스키마 · 계정 모듈 변경 없이 붙는다. 소셜은 제공자가 확인한 이메일만 믿고 기본은 병합하지 않는다(`409 ACCOUNT.SOCIAL_EMAIL_CONFLICT`); 마지막 수단은 못 뗀다.
+- **가입 · 확인 · 재설정 · 변경**: 응답은 계정 유무와 무관(늘 202), 조회 · 토큰 · 메일은 요청 스레드 밖. 한 번 쓰는 링크는 해시만 저장 · 원자적 소비 · 용도 구분. 이메일 변경은 새 주소 확인 전엔 불변(옛 주소에 알림). 비밀번호는 델리게이팅 인코더(기본 bcrypt, 로그인 때 업그레이드, argon2 opt-in), 정책 설정 가능 + 유출 확인 선택 고리(`BreachedPasswordCheck`, 기본은 네트워크 호출 없음).
+- **세션**: 리프레시 토큰 회전 + 재사용 탐지(가족 철회) · 기기 · IP · 마지막 사용 목록 · 철회 · 로그아웃. 전달 기본 body(CSRF 면 없음), cookie 는 opt-in(HttpOnly · Secure · SameSite=Strict + 헤더). 액세스 토큰은 그대로 JWT(`sid` 클레임 추가).
+- **삭제**: 다시 인증 → 유예(30일) → 지우기(주기 또는 `job-queue-jdbc` 잡). 다른 모듈은 platform 의 `AccountErasureListener` 로 — **board**(작성자 → "삭제된 사용자", `authorDeleted`) · **notification-jdbc**(받은편지함). 데이터 내보내기는 `AccountDataExporter` 인터페이스만.
+- **남용 대응**: 로그인 시도 제한(IP · 식별자, 없는 계정도 같게) · 캡차 고리(`captcha-turnstile`) · `AccountEvent*` 와 감사 표(선택) · `alert` 경보(제한 · 리프레시 재사용) · 운영자 도구(정지 · 역할, 선택 HTTP) · 안전한 첫 관리자(확인된 이메일 + ADMIN 부재일 때만).
+- **`auth` 확장(선택 고리, 단독 사용은 그대로)**: `LoginHooks` · `LoginSessionIssuer` · `SessionRevoker` · `AuthAccount.loginBlock` · 계정이 없어도 해시 비교 한 번 · `upgradePasswordHash`. `AuthTokenResponse` 에 `refreshToken` · `refreshExpiresAt` · `sessionId`(있을 때만).
+- **비밀이 로그에**: 비밀번호 · 토큰을 담은 요청/응답 DTO · `Identity` · `AuthAccount` 의 `toString` 을 가렸다 (실측: Spring MVC 가 DEBUG · TRACE 에서 요청 본문을 `toString` 으로 찍는다) — `PasswordLoginRequest` 포함.
+- **배포 가드**: `account` · `auth-session` 이 `DeployGuard` 를 낸다 — 메모리 저장소 · 메일 길 없음 · 링크 주소 비어 있음 · 링크 로그 · 시드 계정 · 비보안 쿠키는 stage · prod 에서 기동 실패. `skeleton.env` 는 그대로 옵트인.
+- **조립**: `apps/api`(스타터)에 `account-jdbc` · `auth-session-jdbc` — 가입 · 로그인 · 새로고침 · 삭제가 기본으로 돈다(메일은 `--modules notification-mail`). 시드 계정(user · admin · moderator)은 `skeleton.account.seed.accounts` 로 로컬 프로필 · 시험에서만. `apps/sample` 은 진짜 가입 · 로그인 · 메일(compose `mail` 프로필) · 매직 링크 · 삭제까지 + 전 구간 통합 시험. `apps/workbench` 는 시드 인증을 그대로 두고 새 모듈의 자동설정을 끈다(문서 스니펫 · 클래스패스 시험은 유지).
+- **실측으로 잡은 것**: PostgreSQL 은 `(:p is null or id <> :p)` 의 타입 없는 null 매개변수를 못 정한다(`revokeAll` — 새로 쓴 DB 시험이 먼저 빨갰다); MySQL 의 기본 정렬은 대소문자를 구분하지 않아 로그인 수단 `subject` 는 `utf8mb4_bin`; 로그인 한도가 같은 컨텍스트에서 매 시험마다 로그인하는 통합 시험을 스스로 막았다(시험 · 로컬 e2e 는 한도를 넉넉히 설정).
+- 문서: `docs/accounts.md`, `docs/modules/{account,account-jdbc,auth-session,auth-session-jdbc,auth-magic-link}.md`, `docs/config/modules/{account,auth-session,auth-magic-link}.yml`, `docs/deploy.md` · `deploy/app.yaml`(비밀 · 가드), `docs/errors.md`, `docs/minimal-composition.md`.
+
 ### 홈서버 배포 계약 · 배포 가드 (2026-10-06)
 
 앱을 **이미지 하나 + 선언 한 장**으로 내놓는다. 운영용 compose · Caddyfile · cloudflared · 백업 선언은 두지 않는다(플랫폼이 선언에서 만든다). 전체: `docs/deploy.md`.

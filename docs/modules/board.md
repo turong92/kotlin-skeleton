@@ -20,6 +20,9 @@ HTTP 는 `skeleton.board.http.base-path`(기본 `/api/v1/boards`)에 열린다 (
 `status`(운영자) · `mine=true`(내 글 — 임시저장 포함) 목록 필터, 에러 코드는 `BOARD.*` ([에러 표](../errors.md)에 같은 모양): `NOT_FOUND` · `POST_NOT_FOUND` · `COMMENT_NOT_FOUND` 404 ·
 `FORBIDDEN` 403 · `REACTION_TYPE_INVALID` · `CONTENT_INVALID` 400 · `COMMENT_TOO_DEEP` 422 · `POST_NOT_COMMENTABLE` · `CODE_TAKEN` 409 · `RATE_LIMITED` 429.
 
+**계정 삭제**: `account` 가 계정을 지울 때(platform 의 `AccountErasureListener`) 글 · 댓글 작성자와 반응의 계정이 계정마다 하나인 톰스톤(`deleted:<해시>`)으로 바뀐다 — 행 · 카운터는 남고 응답에 `authorDeleted: true` 가 실려 화면이 "삭제된 사용자" 를 보인다.
+앱이 자기 저장소를 두면 `BoardErasureRepository` 도 구현한다.
+
 | 항목 | 내용 |
 |---|---|
 | 의존성 한 줄 | `implementation(project(":modules:board"))` |
@@ -28,7 +31,7 @@ HTTP 는 `skeleton.board.http.base-path`(기본 `/api/v1/boards`)에 열린다 (
 | 설정 접두사 | `skeleton.board` — [docs/config/modules/board.yml](../config/modules/board.yml) |
 | 기본 동작 | 켜짐. 게시판은 `seed-boards` 로 심거나 운영자가 만든다 — 아무것도 심지 않으면 비어 있다. 반응은 LIKE · DISLIKE, SINGLE 모드. 알림 · 한도는 없는 것과 같다. |
 | 부팅에 필요한 것 | 저장소 포트 네 개(`BoardRepository` · `PostRepository` · `CommentRepository` · `ReactionRepository`) — `board-jdbc` 가 내거나 앱이 직접 구현한다. 없으면 시작이 실패하고 메시지가 빠진 빈 이름을 적는다. |
-| 교체 지점 | `BoardPolicy`, `BoardRateLimiter`, `BoardNotifier`, `BoardNotificationFormatter`, `BoardRepository`, `PostRepository`, `CommentRepository`, `ReactionRepository`, `BoardController`, `PostController`, `CommentController` |
+| 교체 지점 | `BoardErasureRepository`, `BoardPolicy`, `BoardRateLimiter`, `BoardNotifier`, `BoardNotificationFormatter`, `BoardRepository`, `PostRepository`, `CommentRepository`, `ReactionRepository`, `BoardController`, `PostController`, `CommentController` |
 | 마이그레이션 | 없음 (스키마는 `board-jdbc`) |
 | 프론트 짝 | `@skeleton/board` |
 | 테스트 | `modules/board/src/test`, `modules/board/src/noOptionalTest` (`notification` · `idempotency` 가 클래스패스에 없을 때) |

@@ -161,6 +161,8 @@ class StorageDeployGuard(private val properties: StorageProperties) : DeployGuar
 |---|---|---|
 | auth | `JWT_SECRET` (별칭) 또는 `<P>_AUTH_JWT_SECRET` — **선언의 `secrets:`** | 보호 환경(`<P>_ENV=stage\|prod` · 프로필 `prod\|staging`)에서 **기동 실패**: 비었음 / 내장 기본값 / 32바이트 미만 |
 | auth | `<P>_AUTH_BREAK_GLASS_SECRET` · `_ALLOWED_ACCOUNT_IDS` (break-glass 를 켰을 때만) | 비밀이 비면 기동 실패 · 허용 계정이 비면 보호 환경에서 기동 실패 |
+| account | `<P>_ACCOUNT_MAIL_LINK_BASE_URL` (메일 링크가 여는 프론트 주소 — 비밀 아님, 선언의 `env:` 에 적어도 된다) · 선택 `<P>_ACCOUNT_BOOTSTRAP_ADMIN_EMAIL` | 보호 환경에서 **기동 실패** (`DeployGuard` `account`): 주소가 비었음 · 메모리 계정 저장소(`account-jdbc` 를 얹는다) · 메일 발송 길 없음(`notification-mail`) · 시드 계정 · 링크 로그 켬. 첫 관리자 이메일은 확인된 로그인 때 ADMIN 을 준다 |
+| auth-session | (없음 — 설정만) | 보호 환경에서 메모리 세션 저장소(`auth-session-jdbc` 를 얹는다) · 쿠키 전달인데 `cookie.secure=false` 면 기동 실패 |
 | auth-social-google / -kakao / -naver | `<P>_AUTH_SOCIAL_PROVIDERS_<X>_ENABLED=true` · `_CLIENT_ID` · `_CLIENT_SECRET` | 켰는데 비면 기동 실패 (`client id/secret must not be blank`) |
 | captcha-turnstile | `<P>_CAPTCHA_TURNSTILE_ENABLED=true` · `_SECRET_KEY` | 검증기 빈이 없다 — 기동은 되고, 주입받는 곳이 있으면 그 빈 이름으로 실패 |
 | payment-toss / -stripe | `<P>_PAYMENT_<X>_ENABLED=true` · `_SECRET_KEY` | 제공자 빈이 없다 — 결제 라우팅이 그 제공자를 못 찾는다 |

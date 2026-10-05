@@ -23,12 +23,9 @@ skeleton:
       # 벤더 중립 환경변수 별칭 — 배포 선언의 secrets: [JWT_SECRET] 이 여기로 들어온다 (SKELETON_AUTH_JWT_SECRET 도 그대로 먹는다). 기본값은 개발용이라 prod · staging · SKELETON_ENV=stage|prod 에서는 기동 실패
       secret: ${JWT_SECRET:dev-local-jwt-secret-change-me-32-bytes}
 
-  account:
-    mail:
-      # 메일 링크가 여는 프론트 주소. 비면 stage · prod 에서 기동 실패 — 배포 선언의 env 에 APP_BASE_URL 을 넣는다 (docs/accounts.md)
-      link-base-url: ${APP_BASE_URL:}
 
-# 운영에서는 환경변수로 바꾼다: skeleton.auth.jwt.secret ← JWT_SECRET (또는 SKELETON_AUTH_JWT_SECRET), spring.datasource.* ← SPRING_DATASOURCE_*, skeleton.account.mail.link-base-url ← APP_BASE_URL
+# 운영에서는 환경변수로 바꾼다: skeleton.auth.jwt.secret ← JWT_SECRET (또는 SKELETON_AUTH_JWT_SECRET), spring.datasource.* ← SPRING_DATASOURCE_*
+# 계정 메일 링크가 여는 프론트 주소: skeleton.account.mail.link-base-url ← <PREFIX>_ACCOUNT_MAIL_LINK_BASE_URL (비면 stage · prod 에서 기동 실패 — docs/accounts.md)
 # 배포 환경 스위치: SKELETON_ENV=local|stage|prod (비우면 스위치 없음 — 프로필만 본다). docs/deploy.md
 # prod · staging 프로필은 기본 JWT 비밀(32바이트 미만 · 내장 기본값 · 빈 값)과 내장 시드 계정(user/password)으로 뜨지 않는다 —
 # 비밀을 정하고 AuthAccountRepository 빈을 둔다 (README "Protected profiles")

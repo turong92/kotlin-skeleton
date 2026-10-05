@@ -4,7 +4,7 @@ Two apps ship with the skeleton:
 
 | App | What it is | Modules |
 |---|---|---|
-| `apps/api` | the **starter** — the minimal recipe below, built and booted by its own tests | `platform`, `auth`, `persistence-jdbc`, `db-postgresql`, `migration-flyway`, `time` |
+| `apps/api` | the **starter** — the minimal recipe below, built and booted by its own tests | `platform`, `auth`, `account-jdbc`, `auth-session-jdbc`, `persistence-jdbc`, `db-postgresql`, `migration-flyway`, `time` |
 | `apps/workbench` | the **demo** — every module together, with sample endpoints under `/api/v1/skeleton/**` | all of them |
 
 A real service starts from `apps/api` and keeps only what it needs. This page is the recipe. To stamp a project in one command
@@ -23,6 +23,8 @@ override points, migrations, frontend counterpart, tests): [`docs/modules/README
 dependencies {
     implementation(project(":modules:platform"))
     implementation(project(":modules:auth"))              // JWT, dev-login, break-glass
+    implementation(project(":modules:account-jdbc"))      // real accounts: sign-up, email verification, reset, deletion (+ account)
+    implementation(project(":modules:auth-session-jdbc")) // refresh tokens, session list (+ auth-session)
     implementation(project(":modules:persistence-jdbc"))  // audit timestamps, SqlDialect
     implementation(project(":modules:db-postgresql"))     // exactly one db-* module: driver, Flyway support, SqlDialect
     implementation(project(":modules:migration-flyway"))  // + common migration: clean guard, opt-in local clean, naming check
@@ -69,7 +71,8 @@ module switched off by `skeleton.<module>.enabled=false` leaves no stray bean be
 markers only when an autoconfiguration `@Bean` registers the class) and `apps/workbench` `ModuleDisabledIntegrationTest`.
 
 What the starter proves: `apps/api` tests boot the context with only these modules — no Redis, Kafka, S3, mail or JPA on
-the classpath — serve `GET /api/v1/hello`, log in with the seed user and return the standard 404 `ApiError`.
+the classpath — serve `GET /api/v1/hello`, log in with the seed user, run the whole account journey (sign up → verify → log in → refresh → change password → sessions → delete) and return the standard 404 `ApiError`.
+Mail is the one thing the starter does not carry: add `--modules notification-mail` (and `skeleton.account.mail.link-base-url`) before opening it to users — `DeployGuard` `account` refuses to start a protected env that cannot deliver its links.
 
 ## 2. Settings: copy a block, delete a block
 
