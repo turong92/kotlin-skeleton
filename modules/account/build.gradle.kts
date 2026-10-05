@@ -29,6 +29,7 @@ dependencies {
     testImplementation(project(":modules:alert"))
     testImplementation(project(":modules:idempotency"))
     testImplementation(project(":modules:auth-social"))
+    testImplementation(project(":modules:job-queue-jdbc"))
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("org.springframework.security:spring-security-test")
     testImplementation("org.assertj:assertj-core")

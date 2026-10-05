@@ -71,6 +71,8 @@ class AccountPurgeService(
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
+    private companion object { val TOKEN_RETENTION: java.time.Duration = java.time.Duration.ofDays(1) }
+
     /** 이번에 지운 계정 수 */
     fun purgeDue(): Int {
         val due = core.accounts.dueForPurge(core.time.now(), core.props.deletion.purgeBatch)
@@ -88,6 +90,7 @@ class AccountPurgeService(
                 core.events.publish(AccountEventType.ACCOUNT_PURGED, account.id)
             }
         }
+        core.tokens.sweep(TOKEN_RETENTION)   // 지난 한 번 쓰는 토큰 줄도 같이 청소
         return purged
     }
 }

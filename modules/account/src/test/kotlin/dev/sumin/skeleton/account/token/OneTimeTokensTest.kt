@@ -99,4 +99,15 @@ class OneTimeTokensTest {
         val raw = tokens.issue(TokenPurposes.EMAIL_CHANGE, "acc_1", "acc_1", Duration.ofHours(1), payload = "new@example.com")
         assertEquals("new@example.com", tokens.consume(TokenPurposes.EMAIL_CHANGE, raw)?.payload)
     }
+
+    @Test
+    fun `sweep forgets tokens that expired long ago and keeps the rest`() {
+        val old = tokens.issue(TokenPurposes.PASSWORD_RESET, "a@example.com", "acc_1", Duration.ofMinutes(30))
+        time.advance(Duration.ofDays(3))
+        val fresh = tokens.issue(TokenPurposes.PASSWORD_RESET, "b@example.com", "acc_2", Duration.ofMinutes(30))
+        assertEquals(1, tokens.sweep(Duration.ofDays(1)))
+        assertEquals(1, store.hashes().size)
+        assertNull(tokens.consume(TokenPurposes.PASSWORD_RESET, old))
+        assertNotNull(tokens.consume(TokenPurposes.PASSWORD_RESET, fresh))
+    }
 }

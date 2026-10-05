@@ -5,3 +5,4 @@ dev.sumin.skeleton.account.abuse.AccountCaptchaAutoConfiguration
 dev.sumin.skeleton.account.abuse.AccountAlertAutoConfiguration
 dev.sumin.skeleton.account.social.AccountSocialAutoConfiguration
 dev.sumin.skeleton.account.social.AccountSocialWebAutoConfiguration
+dev.sumin.skeleton.account.AccountPurgeJobAutoConfiguration

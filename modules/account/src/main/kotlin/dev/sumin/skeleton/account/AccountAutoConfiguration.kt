@@ -242,8 +242,13 @@ class AccountAutoConfiguration {
 
     @Bean(initMethod = "start", destroyMethod = "close")
     @ConditionalOnMissingBean(name = ["accountPurgeScheduler"])
-    fun accountPurgeScheduler(properties: AccountProperties, purge: AccountPurgeService): AccountPurgeScheduler =
-        AccountPurgeScheduler(properties.deletion.purgeInterval) { purge.purgeDue() }
+    fun accountPurgeScheduler(properties: AccountProperties, dispatch: AccountPurgeDispatch): AccountPurgeScheduler =
+        AccountPurgeScheduler(properties.deletion.purgeInterval, dispatch)
+
+    /** 주기마다 직접 지운다 — `job-queue-jdbc` 가 있으면 [AccountPurgeJobAutoConfiguration] 이 잡 넣기로 바꾼다 */
+    @Bean
+    @ConditionalOnMissingBean(AccountPurgeDispatch::class)
+    fun accountPurgeDispatch(purge: AccountPurgeService): AccountPurgeDispatch = AccountPurgeDispatch { purge.purgeDue() }
 
     @Bean
     @ConditionalOnMissingBean

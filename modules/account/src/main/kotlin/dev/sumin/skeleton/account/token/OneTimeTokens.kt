@@ -84,6 +84,9 @@ class OneTimeTokens(
         return store.consume(hash(raw), purpose, time.now())?.grant()
     }
 
+    /** 만료된 지 [retention] 이 지난 토큰 줄을 지운다 (청소 — 지운 수를 돌려준다) */
+    fun sweep(retention: Duration): Int = store.purgeExpired(time.now().minus(retention))
+
     private fun lookup(raw: String): TokenRow? = if (plausible(raw)) store.find(hash(raw)) else null
 
     private fun plausible(raw: String) = raw.length in 20..MAX_LENGTH && raw.all { it.isLetterOrDigit() || it == '-' || it == '_' }
