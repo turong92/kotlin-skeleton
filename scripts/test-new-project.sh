@@ -229,6 +229,7 @@ check "MySQL 로 찍으면 db-mysql 이 스타터 항목이고 db-postgresql 항
 check "샘플로 찍으면 app-sample 항목과 그 스크립트(dev-sample)가 남고 기본값으로는 없다" bash -c "has_path '$G' apps/sample && has_path '$G' scripts/dev-sample.sh && ! has_path '$A' apps/sample"
 check "찍은 프로젝트에는 레시피 · 스켈레톤 도구가 없다 (new-project-recipe.md · new-project 스크립트 항목)" bash -c "test ! -e '$A/docs/new-project-recipe.md' && ! grep -q 'script-new-project' '$A/capabilities.json'"
 check "찍은 프로젝트에 카탈로그 생성기는 남는다 (scripts/build-capabilities.pl)" test -f "$A/scripts/build-capabilities.pl"
+check "고른 모듈은 찍은 카탈로그의 starterModules 에 들어간다 — 찍은 apps/api 가 이미 가진 모듈이다 (job-queue-jdbc · storage-s3 · crypto)" bash -c "perl -0ne 'exit(/\"starterModules\": \\[[^]]*job-queue-jdbc[^]]*storage-s3/s ? 0 : 1)' '$B/capabilities.json' && perl -0ne 'exit(/\"id\": \"job-queue-jdbc\",[^}]*\"starter\": true/s ? 0 : 1)' '$B/capabilities.json'"
 check "rename-skeleton.sh 의 이름은 rename 이 바꾸지 않는다 — 카탈로그와 문서가 실제 파일 이름을 가리킨다" bash -c "test -f '$A/scripts/rename-skeleton.sh' && has_path '$A' scripts/rename-skeleton.sh && grep -q 'scripts/rename-skeleton.sh' '$A/docs/minimal-composition.md'"
 check "찍은 프로젝트에는 가드가 무는지 보는 CapabilitiesGuardsTest 가 없다 (스켈레톤의 모든 모듈을 전제한다) — 카탈로그 가드(CapabilitiesCatalogTest)는 남는다" bash -c "test -z \"\$(find '$A' -name CapabilitiesGuardsTest.kt)\" && test -n \"\$(find '$A' -name CapabilitiesCatalogTest.kt)\""
 

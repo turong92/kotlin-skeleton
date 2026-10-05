@@ -6,7 +6,7 @@
 #
 # 하는 일: 안 고른 모듈 · 앱 항목을 지우고(요약은 stampedFrom.omitted 로 남겨 스켈레톤을 가리킨다), 남은 항목의 참조(autoIncludes · needs)에서 지운 것을 뺀다.
 # 조각 · 결정표의 명령은 스켈레톤에서나 쓰는 것이라 지운다(newProjectFlag · decisions[].flag → null, examples · newProject 삭제).
-# 모든 항목이 남은 결정표 줄만 남긴다. MySQL 이면 스타터의 db-postgresql 을 db-mysql 로 바꾼다.
+# 모든 항목이 남은 결정표 줄만 남긴다. starterModules · starter 는 찍은 apps/api 의 의존 닫힘으로 다시 계산한다(고른 모듈이 들어가고, MySQL 이면 db-mysql).
 use strict;
 use warnings;
 use utf8;
@@ -24,8 +24,28 @@ require './scripts/build-capabilities.pl';   # load_catalog · canonical_text ·
 my $cat = main::load_catalog('.');
 die "이미 stamped 카탈로그다\n" if $cat->{mode} eq 'stamped';
 
-my @starter = map { ($db eq 'mysql' && $_ eq 'db-postgresql') ? 'db-mysql' : $_ } @{ $cat->{starterModules} };
-my %starter = map { $_ => 1 } @starter;
+# 찍은 프로젝트의 「스타터」 = 찍은 apps/api 가 이미 가진 모듈(스타터 + --modules, 의존으로 닫힌 것 · MySQL 이면 db-mysql). 빌드 파일에서 읽는다.
+sub project_deps {
+  my ($file) = @_;
+  open(my $fh, '<:encoding(UTF-8)', $file) or return ();
+  my @out;
+  while (my $line = <$fh>) {
+    $line =~ s{//.*}{};
+    while ($line =~ /\b(api|implementation|runtimeOnly|compileOnly|testImplementation|testRuntimeOnly)\(project\(":modules:([a-z0-9-]+)"\)\)/g) { push @out, [ $1, $2 ]; }
+  }
+  close($fh);
+  return @out;
+}
+my %starter;
+{
+  my @queue = map { $_->[1] } grep { $_->[0] !~ /^test|^compileOnly$/ } project_deps('apps/api/build.gradle.kts');
+  while (@queue) {
+    my $m = shift @queue;
+    next if $starter{$m}++;
+    push @queue, map { $_->[1] } project_deps("modules/$m/build.gradle.kts");   # 모듈끼리는 모든 종류의 의존을 따라간다(new-project.sh 의 닫힘과 같다)
+  }
+}
+my @starter = sort keys %starter;
 
 my (@kept, @omitted);
 for my $e (@{ $cat->{capabilities} }) {
