@@ -10,5 +10,12 @@ skeleton:
       initial: 30s                 # 첫 실패 후 대기
       multiplier: 2.0              # 실패마다 곱하는 배수
       max: 1h                      # 대기 상한
-    stale-lock-timeout: 10m        # RUNNING 인 채로 이 시간이 지나면 워커가 죽은 것으로 보고 PENDING 으로 되돌린다
+    stale-lock-timeout: 10m        # RUNNING 인 채로 이 시간이 지나면 워커가 죽은 것으로 보고 PENDING 으로 되돌린다 (시도를 다 썼으면 DEAD)
+    propagated-mdc-keys: [traceId] # 넣는 쪽 MDC 에서 작업 줄(log_context)로 옮겨 워커 로그에 복원할 키. 비우면 문맥을 싣지 않는다
+    retention:
+      enabled: false               # true 면 워커가 끝난 줄을 보관 기간 뒤 지운다 (기본 꺼짐 — 보관 정책은 앱이 정한다)
+      done: 14d                    # DONE 줄 보관 (updated_at 기준)
+      dead: 90d                    # DEAD 줄 보관
+      batch-size: 1000             # 한 번에 지우는 줄 수
+      interval: 1h                 # 정리를 도는 간격
     worker-id: ""                  # 워커 식별자 (비우면 hostname + 랜덤)

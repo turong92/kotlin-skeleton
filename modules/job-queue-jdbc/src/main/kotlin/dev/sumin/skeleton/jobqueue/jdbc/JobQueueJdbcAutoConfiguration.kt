@@ -31,9 +31,23 @@ class JobQueueJdbcAutoConfiguration {
         JdbcJobRepository(jdbc, TransactionTemplate(transactionManager), dialect)
 
     @Bean
+    @ConditionalOnMissingBean
+    fun jobContextPropagator(properties: JobQueueProperties): JobContextPropagator = MdcJobContextPropagator(properties.propagatedMdcKeys)
+
+    @Bean
     @ConditionalOnMissingBean(JobQueue::class)
-    fun jdbcJobQueue(repository: JdbcJobRepository, properties: JobQueueProperties, timeProvider: ObjectProvider<TimeProvider>): JobQueue =
-        JdbcJobQueue(repository, properties, timeProvider.getIfAvailable { TimeProvider.systemUtc() })
+    fun jdbcJobQueue(
+        repository: JdbcJobRepository,
+        properties: JobQueueProperties,
+        timeProvider: ObjectProvider<TimeProvider>,
+        propagator: JobContextPropagator,
+    ): JobQueue = JdbcJobQueue(repository, properties, timeProvider.getIfAvailable { TimeProvider.systemUtc() }, propagator)
+
+    @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnProperty(prefix = "skeleton.job-queue.retention", name = ["enabled"], havingValue = "true")
+    fun jobRetention(repository: JdbcJobRepository, properties: JobQueueProperties, timeProvider: ObjectProvider<TimeProvider>) =
+        JobRetention(repository, properties.retention, timeProvider.getIfAvailable { TimeProvider.systemUtc() })
 
     @Bean(initMethod = "start", destroyMethod = "stop")
     @ConditionalOnMissingBean
@@ -43,5 +57,11 @@ class JobQueueJdbcAutoConfiguration {
         handlers: ObjectProvider<JobHandler>,
         properties: JobQueueProperties,
         timeProvider: ObjectProvider<TimeProvider>,
-    ) = JobQueueWorker(repository, handlers.orderedStream().toList(), properties, timeProvider.getIfAvailable { TimeProvider.systemUtc() })
+        propagator: JobContextPropagator,
+        deadListeners: ObjectProvider<JobDeadListener>,
+        retention: ObjectProvider<JobRetention>,
+    ) = JobQueueWorker(
+        repository, handlers.orderedStream().toList(), properties, timeProvider.getIfAvailable { TimeProvider.systemUtc() },
+        propagator, deadListeners.orderedStream().toList(), retention.getIfAvailable(),
+    )
 }

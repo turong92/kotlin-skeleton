@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Ovation 하드닝 이식 (2026-10-06)
+
+Ovation 이 운영 설계(`hardening-design`)로 고친 것 중 범용인 것을 스켈레톤에 옮겼다. 각 항목은 고치기 전에 실패하는 테스트로 문제를 먼저 보였다.
+
+- **`job-queue-jdbc` — 정확성 수정 3건 (동작이 바뀌는 변경)**: (1) `markDone`/`markRetry`/`markDead` 가 이제 `status='RUNNING' and locked_by and attempts` 가 내 청구와 같을 때만 반영된다 — 스테일 복구로 남에게 넘어간 잡을 옛 워커가 늦게 덮어쓰던 것을 막는다(시그니처에 `workerId`·`attempts` 가 늘고 `Boolean` 을 돌려준다). (2) 묶음 안의 잡은 차례가 올 때 `renew` 로 임대를 새로 잡고, 이미 남에게 넘어갔으면 돌리지 않는다 — 묶음이 한 `locked_at` 을 공유해 뒤 잡이 두 번 도는 문제. (3) 스테일 복구가 시도를 다 쓴 잡(`attempts >= max_attempts`)은 PENDING 이 아니라 DEAD 로 보낸다 — 워커를 죽이는 독 작업이 영영 되살아나지 않게. `recoverStale` 은 `StaleRecovery(recovered, dead)` 를 돌려주고, `UPDATE … RETURNING` 대신 한 트랜잭션의 select 후 update 라 MySQL 에서도 같다
+- **`job-queue-jdbc` — 새 기능**: `JobDeadListener` 고리(재시도 소진 · 영구 실패 · 처리기 없음 · 멈춘 채 소진), `skeleton_jobs.log_context` 칼럼(양 방언 마이그레이션 `V20261005175044`)과 `JobContextPropagator` — `skeleton.job-queue.propagated-mdc-keys`(기본 `[traceId]`)의 MDC 값이 잡 줄에 실려 워커가 돌리는 동안 복원되고 `jobId`/`jobKind` 가 붙는다, `skeleton.job-queue.retention.*` — DONE/DEAD 줄 정리(**기본 꺼짐**: 줄 삭제는 보관 정책이라 앱이 고른다). 두 방언 모두 `postgresTest`/`mysqlTest` 로 검증
+
 ### 샘플 앱 "Notes" — 새 기능을 어떻게 얹는지 보여 주는 제품 모양 예시 (2026-10-05)
 
 - **`apps/sample`**(Gradle `:apps:sample`): 로그인한 사람이 노트(제목 · 본문 · 상태 · 고정 · 첨부 1개)를 관리한다. 스타터 + `idempotency` · `notification-jdbc`/`-sse` · `storage-s3` · `job-queue-jdbc` + 도메인 하나. REST `/api/v1/notes`(멱등 생성 · 목록 검색/필터/페이지 · 요약 · 통째 교체 · 삭제 · 내보내기 202), 검증 에러는 `errors[].field`, 소유자 아닌 접근은 404 `NOTES.NOT_FOUND`, 만들기/수정/삭제/내보내기 완료가 받은편지함 + SSE 알림(토픽 `notes`), 내보내기는 잡이 마크다운을 저장소에 올린다. 통합 테스트 29개(진짜 PostgreSQL · 보안 체인, 저장소만 메모리). 파일 단위 설명과 조립 순서: `docs/sample.md`, 에이전트 안내: CLAUDE.md "새 기능의 정본 예시"
