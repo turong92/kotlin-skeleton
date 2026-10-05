@@ -1,0 +1,6 @@
+# time — 요청별 시간대 · 로케일 해석 (ZonedMoment).
+skeleton:
+  time:
+    default-zone: Asia/Seoul       # 아무 정보도 없을 때의 시간대
+    default-locale: ko-KR          # 아무 정보도 없을 때의 로케일
+    zone-header: X-Time-Zone       # 프론트가 시간대를 실어 보내는 헤더

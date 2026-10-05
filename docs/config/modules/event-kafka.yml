@@ -1,0 +1,9 @@
+# event-kafka — 도메인 이벤트를 Kafka 로 내보낸다. 꺼져 있으면 로깅 전송기만 쓴다 (Kafka 없이 뜬다).
+skeleton:
+  event-kafka:
+    enabled: false                                 # true 면 KafkaOperations<String, ByteArray> 빈이 있어야 한다
+    environment: local                             # 토픽 접두사 "<environment>." 에 쓰인다
+    # topic-prefix:                                # 미설정: "<environment>.". 빈 문자열이면 접두사 없음
+    producer:
+      enabled: true                                # false 면 발행 리스너를 만들지 않는다
+      partition-key-strategy: EXPLICIT_OR_EVENT_ID # NONE | EVENT_ID | EVENT_TYPE | TOPIC | EXPLICIT_OR_EVENT_ID

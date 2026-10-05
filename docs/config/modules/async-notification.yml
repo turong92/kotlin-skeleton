@@ -1,0 +1,7 @@
+# async-notification — @Async 예외를 알림(notification)으로 흘려보낸다. async + notification 이 함께 있어야 한다.
+skeleton:
+  async-notification:
+    enabled: true                  # false 면 비동기 예외를 알림으로 보내지 않는다
+    topic: async.exception         # 알림 topic
+    type: async-exception          # 알림 type
+    title: Async task failed       # 알림 제목

@@ -50,7 +50,9 @@ class AwsSsmEnvironmentPostProcessor : EnvironmentPostProcessor, Ordered {
     ): Boolean {
         properties.enabled?.let { return it }
         if (properties.credentialProfile.isNotBlank()) return true
-        return environment.activeProfiles.any { profile -> profile in AUTO_ENABLED_PROFILES }
+        // 프로필만으로 켜지는 경우는 경로가 설정돼 있어야 한다 — 모듈만 얹은 앱이 dev/staging/prod 에서 기동을 못 하면 안 된다
+        return properties.paths.any { it.isNotBlank() } &&
+            environment.activeProfiles.any { profile -> profile in AUTO_ENABLED_PROFILES }
     }
 
     private fun loadProperties(
@@ -136,7 +138,7 @@ class AwsSsmEnvironmentPostProcessor : EnvironmentPostProcessor, Ordered {
             append(credentialProfile)
             append(" SPRING_PROFILES_ACTIVE=")
             append(profile)
-            appendLine(" ./gradlew :apps:api:bootRun")
+            appendLine(" <the command that starts your application>")
         }.trimEnd()
     }
 

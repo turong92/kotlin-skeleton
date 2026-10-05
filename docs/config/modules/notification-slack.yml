@@ -1,0 +1,16 @@
+# notification-slack — Slack 웹훅 알림 + 예외 알림. 접두사는 skeleton.notification.slack (점).
+skeleton:
+  notification:
+    slack:
+      enabled: false                 # true 면 웹훅 전송기를 만든다 (webhook-url 도 필요)
+      client-name: slack             # 외부 HTTP 클라이언트 이름 (skeleton.http.clients.<이름>)
+      # webhook-url:                 # 기본 웹훅 URL (미설정)
+      default-topic: operations      # 라우트를 못 찾을 때 쓰는 topic
+      # username:                    # 메시지 발신자 이름 (미설정)
+      # icon-emoji:                  # 메시지 아이콘 (미설정)
+      minimum-severity: WARNING      # INFO | SUCCESS | WARNING | ERROR — 이 이상만 보낸다
+      timeout: 2s                    # 호출 타임아웃
+      retry-attempts: 1              # 재시도 횟수
+      routes: {}                     # topic → { webhook-url, topic, minimum-severity, username, icon-emoji }
+      notification-events: true      # notification 이벤트를 Slack 으로 전달
+      exception-alerts: true         # 처리되지 않은 예외를 Slack 으로 전달

@@ -56,3 +56,9 @@ dependencies {
     testImplementation("org.testcontainers:testcontainers-postgresql")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
+
+tasks.test {
+    // ModuleConfigSnippetsTest 는 docs/config/modules/*.yml 이 모듈의 @ConfigurationProperties 기본값과 같은지 본다
+    systemProperty("skeleton.repoRoot", rootDir.absolutePath)
+    inputs.dir(rootDir.resolve("docs/config/modules")).optional()
+}

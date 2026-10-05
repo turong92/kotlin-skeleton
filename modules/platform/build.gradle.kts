@@ -18,4 +18,7 @@ tasks.test {
         include("modules/*/src/main/**/*.kt")
         exclude("**/build/**")
     })
+    // ConfigPrefixDocumentationTest 는 문서의 접두사 표를 코드와 맞춰 본다
+    inputs.file(rootDir.resolve("docs/minimal-composition.md"))
+    inputs.dir(rootDir.resolve("docs/config/modules")).optional()
 }

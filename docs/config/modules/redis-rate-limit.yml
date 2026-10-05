@@ -1,0 +1,7 @@
+# redis-rate-limit — skeleton.web.rate-limit 의 저장소를 Redis 로 바꾼다 (인스턴스 사이 공유). Redis 연결은 redis-core.
+# skeleton.web.rate-limit.enabled=true 일 때만 쓰인다 (platform.yml). 켜 둬도 Redis 없이 뜬다.
+skeleton:
+  redis-rate-limit:
+    enabled: true                  # false 면 인메모리 저장소(인스턴스별)를 그대로 쓴다
+    failure-policy: FAIL_OPEN      # FAIL_OPEN: Redis 오류 시 요청 허용 | FAIL_CLOSED: 거부
+    key-namespace: default         # Redis 키의 네임스페이스

@@ -1,0 +1,13 @@
+# payment-stripe — Stripe 제공자. 기본 꺼짐.
+skeleton:
+  payment-stripe:
+    enabled: false                                                  # true + secret-key 면 제공자 빈이 생긴다
+    provider-id: stripe                                             # 라우팅에서 쓰는 ID
+    client-name: payment-stripe                                     # 외부 HTTP 클라이언트 이름
+    secret-key: ""                                                  # Stripe 시크릿 키 (env 로 넘긴다)
+    base-url: https://api.stripe.com                                # API 호스트
+    confirm-path: /v1/payment_intents/{paymentIntentId}/confirm     # 승인 경로
+    cancel-path: /v1/payment_intents/{paymentIntentId}/cancel       # 취소 경로
+    refund-path: /v1/refunds                                        # 환불 경로
+    supported-currencies: []                                        # 비우면 통화로 라우팅하지 않는다
+    supported-countries: []                                         # 비우면 국가로 라우팅하지 않는다

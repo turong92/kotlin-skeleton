@@ -1,0 +1,39 @@
+# notification-websocket — STOMP WebSocket 알림. 외부 브로커 없이 인프로세스 심플 브로커로 뜬다.
+skeleton:
+  notification-websocket:
+    enabled: true                              # false 면 모듈이 빈을 만들지 않는다
+    endpoint:
+      path: /ws/notifications                  # 연결 경로
+      allowed-origin-patterns: ["*"]           # 허용 Origin 패턴 — 운영에서는 좁힌다
+      sock-js-enabled: false                   # SockJS 폴백
+    broker:
+      application-destination-prefixes: [/app] # 클라이언트 → 서버 목적지 접두사
+      simple-broker-destination-prefixes: [/topic, /queue]   # 심플 브로커 목적지 접두사
+      user-destination-prefix: /user           # 사용자 지정 목적지 접두사
+      notification-destination-prefix: /topic/notifications  # topic 알림 목적지
+      user-notification-destination: /queue/notifications    # 사용자 알림 목적지
+      user-id-payload-key: userId              # 페이로드에서 사용자 ID 를 읽는 키
+      bridge-enabled: true                     # notification → WebSocket 브리지
+      bridge-topics: []                        # 브리지할 topic (비우면 전부)
+    authentication:
+      enabled: false                           # true 면 CONNECT 때 토큰을 검증한다 (NotificationWebSocketTokenVerifier)
+      authorization-header: Authorization      # 토큰을 읽는 헤더
+      bearer-prefix: "Bearer "                 # 헤더 값 접두사
+      token-header: access_token               # STOMP 헤더로 받을 때의 이름
+    heartbeat:
+      server-interval: 10s                     # 서버 → 클라이언트 하트비트
+      client-interval: 10s                     # 클라이언트 → 서버 하트비트
+    inbound-channel:
+      core-pool-size: 1                        # 인바운드 채널 스레드 수
+      max-pool-size: 4
+      queue-capacity: 100
+      keep-alive: 60s
+    outbound-channel:
+      core-pool-size: 1                        # 아웃바운드 채널 스레드 수
+      max-pool-size: 4
+      queue-capacity: 100
+      keep-alive: 60s
+    transport:
+      message-size-limit: 64KB                 # 메시지 크기 상한
+      send-buffer-size-limit: 512KB            # 세션당 전송 버퍼 상한
+      send-time-limit: 10s                     # 전송 제한 시간

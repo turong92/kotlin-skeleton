@@ -1,0 +1,5 @@
+# crypto — AES-GCM 텍스트 암호화 · 불투명 URL 토큰. 키가 하나도 없으면 암호화 빈을 만들지 않는다.
+skeleton:
+  crypto:
+    primary-key-id: local            # 새로 암호화할 때 쓰는 키 ID (keys 안에 있어야 한다)
+    keys: {}                         # 키 ID → base64 AES 키. 예: { local: ${CRYPTO_KEY_LOCAL}, previous: ${CRYPTO_KEY_PREVIOUS:} } (회전 시 이전 키를 남긴다)

@@ -21,7 +21,7 @@ class RedisLockPropertiesTest {
             val properties = context.getBean(RedisLockProperties::class.java)
 
             assertThat(properties.enabled).isTrue()
-            assertThat(properties.startupCheck.enabled).isTrue()
+            assertThat(properties.startupCheck.enabled).isFalse()
             assertThat(properties.startupCheck.key).isEqualTo("__redis_lock_startup_check")
             assertThat(properties.retry.attempts).isEqualTo(3)
             assertThat(properties.retry.backoff).isEqualTo(Duration.ofMillis(200))
@@ -35,7 +35,7 @@ class RedisLockPropertiesTest {
     fun `binds redis lock overrides`() {
         contextRunner
             .withPropertyValues(
-                "skeleton.redis-lock.startup-check.enabled=false",
+                "skeleton.redis-lock.startup-check.enabled=true",
                 "skeleton.redis-lock.startup-check.key=custom-health",
                 "skeleton.redis-lock.retry.attempts=5",
                 "skeleton.redis-lock.retry.backoff=75ms",
@@ -46,7 +46,7 @@ class RedisLockPropertiesTest {
             .run { context ->
                 val properties = context.getBean(RedisLockProperties::class.java)
 
-                assertThat(properties.startupCheck.enabled).isFalse()
+                assertThat(properties.startupCheck.enabled).isTrue()
                 assertThat(properties.startupCheck.key).isEqualTo("custom-health")
                 assertThat(properties.retry.attempts).isEqualTo(5)
                 assertThat(properties.retry.backoff).isEqualTo(Duration.ofMillis(75))

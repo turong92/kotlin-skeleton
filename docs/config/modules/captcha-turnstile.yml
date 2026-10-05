@@ -1,0 +1,9 @@
+# captcha-turnstile — Cloudflare Turnstile 검증. 꺼져 있으면 TurnstileVerifier 빈이 없다 (앱은 ObjectProvider 로 받는다).
+skeleton:
+  captcha-turnstile:
+    enabled: false                                                         # true + secret-key 면 검증기가 생긴다
+    secret-key: ""                                                         # Turnstile 시크릿 (env 로 넘긴다)
+    siteverify-url: https://challenges.cloudflare.com/turnstile/v0/siteverify   # 검증 API
+    timeout: 5s                                                            # 검증 호출 타임아웃
+    expected-hostname: ""                                                  # 응답 hostname 이 다르면 실패 (비우면 검사 안 함)
+    expected-action: ""                                                    # 응답 action 이 다르면 실패 (비우면 검사 안 함)

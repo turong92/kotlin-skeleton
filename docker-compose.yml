@@ -24,6 +24,33 @@ services:
     volumes:
       - mysql-data:/var/lib/mysql
 
+  # 아래 세 서비스는 해당 모듈을 얹은 앱용이다. `docker compose up` 만으로는 뜨지 않는다 — 필요한 것만 프로필로 켠다:
+  #   docker compose --profile redis up -d        (redis-core · redis-lock · redis-cache · redis-rate-limit)
+  #   docker compose --profile kafka --profile mail up -d
+  redis:
+    image: redis:7
+    profiles: [redis]
+    command: ["redis-server", "--appendonly", "yes"]   # AOF — 보조 큐로 쓸 때 영속성
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis-data:/data
+
+  # event-kafka 모듈용 단일 노드 (KRaft). 앱은 localhost:9092 로 붙는다
+  kafka:
+    image: apache/kafka:3.9.1
+    profiles: [kafka]
+    ports:
+      - "127.0.0.1:9092:9092"
+
+  # notification-mail 모듈용 개발 SMTP: 앱 → localhost:1025, 받은 메일은 http://localhost:8025
+  mail:
+    image: axllent/mailpit:v1.21
+    profiles: [mail]
+    ports:
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
+
   app:
     build: .
     depends_on:
@@ -38,3 +65,4 @@ services:
 volumes:
   postgres-data:
   mysql-data:
+  redis-data:

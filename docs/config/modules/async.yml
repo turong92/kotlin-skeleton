@@ -1,0 +1,10 @@
+# async — @Async 실행기. 모듈을 얹으면 이 값 그대로 켜진다. 바꿀 키만 앱 yml 에 복사한다.
+skeleton:
+  async:
+    enabled: true                              # false 면 모듈이 빈을 만들지 않는다
+    core-pool-size: 4                          # 기본 스레드 수
+    max-pool-size: 16                          # 큐가 차면 이 수까지 늘린다
+    queue-capacity: 100                        # 대기 큐 크기
+    thread-name-prefix: skeleton-async-        # 스레드 이름 접두사 (로그에서 구분)
+    await-termination-seconds: 20              # 종료 때 남은 작업을 기다리는 시간(초)
+    wait-for-tasks-to-complete-on-shutdown: true   # 종료 때 진행 중인 작업을 끝까지 기다린다

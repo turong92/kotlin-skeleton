@@ -28,7 +28,7 @@ Kotlin + Spring Boot 백엔드 토이 프로젝트의 공개 출발점.
 - `modules/notification-mail` owns SMTP sending (`MailSender`), off unless `skeleton.notification-mail.enabled` and `spring.mail.host` are set.
 - `modules/captcha-turnstile` owns Cloudflare Turnstile verification (`TurnstileVerifier`), off unless enabled.
 - Schema management modes (Flyway or `schema.sql` via `spring.sql.init`) are documented in `docs/schema-management.md`; every migration is `db/migration/<vendor>/V<UTC yyyyMMddHHmmss>__<snake_case>.sql`, created with `./gradlew newMigration -Pname=…`; module DB tests run twice (`postgresTest`, `mysqlTest` over `src/dbTest`).
-- New project from the skeleton: `scripts/rename-skeleton.sh <package> <prefix> <ClassPrefix>` then `./gradlew build`; module picking in `docs/minimal-composition.md`.
+- New project from the skeleton: `scripts/new-project.sh <target> <package> <prefix> <ClassPrefix> [--modules a,b] [--db postgresql|mysql]` (copy, pick modules closed over `project(":modules:x")` deps, rename, then `./gradlew build`); the rules and a per-module "requires to boot" table are in `docs/minimal-composition.md`. Rename only: `scripts/rename-skeleton.sh`. A module's keys and defaults: `docs/config/modules/<module>.yml` — an app yml carries only values that differ from module defaults.
 - `modules/time` owns viewer time zone/locale resolution, `ZonedMoment` (scheduled local time), human-readable dual formatting, and country → time zone lookup. Three temporal kinds: `Instant` (facts), `LocalDate` (calendar dates, never converted), `ZonedMoment` (future local times). Never use `ZoneId.systemDefault()`, `TIMESTAMP` columns, or bare `LocalDateTime` for instants.
 - Keep provider/vendor integrations out of `platform`.
 
@@ -207,6 +207,10 @@ modules/persistence-jdbc/src/main/kotlin/dev/sumin/skeleton/persistence/jdbc/
   - `skeleton.auth.dev-login.enabled=true` + `local`/`dev` profile 에서만 동작
   - `X-Dev-Account-Id`, `X-Dev-Username`, `X-Dev-Email` 로 실제 계정 선택
   - roles 관련 헤더는 읽지 않는다. 권한은 항상 `AuthAccountRepository` 기준
+- 보호 프로필(`skeleton.auth.protected-profiles`, 기본 `prod`·`staging`)에서는 안전하지 않은 구성으로 기동이 실패한다 (메시지가 속성 · 빈 이름을 적는다):
+  - `skeleton.auth.jwt.secret` 이 비었거나 · 내장 기본값이거나 · 32바이트 미만 (`JwtTokenService` 생성 전에 막는다)
+  - 내장 메모리 `AuthAccountRepository`(시드 계정)가 쓰이는 중 — 앱이 자기 `AuthAccountRepository` 빈을 둔다
+  - local/dev/test/프로필 없음은 그대로다 (스타터 테스트가 시드 사용자에 기댄다)
 - break-glass:
   - `skeleton.auth.break-glass.enabled=true`
   - `X-Break-Glass-Secret`, `X-Break-Glass-Reason`, `X-Break-Glass-Account-Id` 필요

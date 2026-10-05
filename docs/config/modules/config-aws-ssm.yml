@@ -1,0 +1,11 @@
+# config-aws-ssm — AWS SSM Parameter Store 를 설정 소스로 읽는다.
+# 아래는 AwsSsmProperties 의 값이다. paths 가 비어 있으면 dev · staging · prod 에서도 아무것도 읽지 않는다 (경로를 정하면 그때부터 읽는다).
+skeleton:
+  config:
+    aws:
+      ssm:
+        # enabled:                       # 미설정: credential-profile 이 있거나 (dev|staging|prod 프로필 + paths) 이면 켜진다. false 면 항상 끈다
+        region: ap-northeast-2           # SSM 리전
+        credential-profile: ""           # AWS CLI 프로필 이름 (있으면 local 에서도 읽는다)
+        fail-fast: true                  # 읽기 실패 시 기동 중단 (false 면 경고만)
+        paths: []                        # 읽을 경로 목록, 뒤에 오는 경로가 앞을 덮는다. {profile} 치환 가능. 예: [/my-app/{profile}/common/]

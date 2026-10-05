@@ -10,10 +10,14 @@ Applications that use SSM add:
 implementation(project(":modules:config-aws-ssm"))
 ```
 
-When the SSM module is on the classpath, it loads automatically for:
+When the SSM module is on the classpath, it loads once it is configured:
 
 - `local` with `AWS_PROFILE` or `skeleton.config.aws.ssm.credential-profile`
-- `dev`, `staging`, and `prod`
+- `dev`, `staging`, and `prod` **with `skeleton.config.aws.ssm.paths` set**
+
+Adding the module without any `paths` (and without a credential profile) loads nothing and never fails the boot; an explicit
+`skeleton.config.aws.ssm.enabled=true` with empty `paths` is a misconfiguration and fails fast.
+Every key and default: `docs/config/modules/config-aws-ssm.yml`.
 
 `skeleton.config.aws.ssm.enabled=false` is only an explicit escape hatch for an
 application that includes the module but intentionally does not want SSM.

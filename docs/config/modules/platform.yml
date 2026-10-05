@@ -1,0 +1,57 @@
+# platform — 웹 정책 · 외부 HTTP · 로깅 마스킹 · OpenAPI · 설정 검증 · 관측 링크. platform 은 모든 앱이 얹는다.
+# 여러 접두사를 한 파일에 담았다 — 바꿀 블록만 복사한다.
+skeleton:
+  web:
+    public-endpoints: []                       # 인증 없이 여는 경로 [{ method: GET, path: /health-check }]. 모듈은 PublicEndpointContributor 로 더한다
+    forwarded-headers:
+      enabled: true                            # X-Forwarded-* 헤더 해석
+    security-headers:
+      enabled: true                            # 보안 응답 헤더
+      content-security-policy: ""              # 비우면 CSP 헤더를 보내지 않는다
+      hsts:
+        enabled: true                          # Strict-Transport-Security
+        max-age: 31536000                      # 초 (1년)
+        include-sub-domains: true
+    cors:
+      enabled: false                           # 앱이 프론트 Origin 을 정해 켠다
+      path-pattern: /api/**                    # CORS 를 적용할 경로
+      allowed-origin-patterns: ["http://localhost:[*]", "http://127.0.0.1:[*]"]
+      allowed-methods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
+      allowed-headers: [Authorization, Content-Type, Idempotency-Key, traceparent, X-Request-Id, X-Trace-Id, X-Dev-Account-Id, X-Dev-Username, X-Dev-Email, X-Break-Glass-Account-Id, X-Break-Glass-Reason, X-Break-Glass-Secret]
+      exposed-headers: [Location, Idempotency-Key, Idempotency-Replayed, traceparent, X-Trace-Id, X-Span-Id]
+      allow-credentials: false
+      max-age: 1h
+    rate-limit:
+      enabled: false                           # 요청 속도 제한 (기본 저장소는 인메모리, 공유하려면 redis-rate-limit)
+      path-pattern: /api/**
+      capacity: 60                             # 창(window) 안에 허용하는 요청 수
+      window: 1m
+  http:
+    default-connect-timeout: 2s                # 외부 HTTP 기본 연결 타임아웃
+    default-response-timeout: 5s               # 외부 HTTP 기본 응답 타임아웃
+    max-in-memory-size: 2MB                    # 응답 본문 메모리 상한
+    vendor-trace-headers: [X-Provider-Trace-Id, X-Request-Id, X-Correlation-Id, X-Amzn-Trace-Id, Stripe-Request-Id, Request-Id]   # 벤더 추적 ID 로 기록할 응답 헤더
+    logging:
+      enabled: true                            # 외부 호출 로그
+      include-query: false
+      include-headers: false
+      include-body: false
+    clients: {}                                # 이름 → { base-url, connect-timeout, response-timeout, default-headers, vendor-trace-headers }
+  redaction:
+    replacement: "[REDACTED]"                  # 마스킹 대체 문자열
+    additional-sensitive-names: []             # 기본 민감 이름(password, secret, token …)에 더할 이름
+  openapi:
+    title: kotlin-skeleton API                 # API 문서 제목
+    version: 0.1.0
+    description: Composable Kotlin backend skeleton API
+  config:
+    validation:
+      enabled: true                            # 필수 설정 검증
+      fail-fast: true                          # 누락이면 기동 실패 (false 면 경고)
+      dummy-markers: [change-me, dummy, dev-local, local-secret]   # 값에 이 문자열이 있으면 더미로 본다
+      requirements: []                         # 프로필별 필수 설정 목록 — docs/config/required-config.yml 참고
+  observability:
+    links:
+      enabled: false                           # 알림 · 에러 응답에 로그/트레이스 링크를 붙인다
+      custom-fields: []                        # 템플릿에서 쓸 추가 필드
+      templates: {}                            # 이름 → { label, kind: LOGS|TRACE|RUN|PROVIDER|CUSTOM, url, required-fields }

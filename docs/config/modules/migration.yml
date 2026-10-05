@@ -1,0 +1,5 @@
+# migration (+ migration-flyway) — 스키마 마이그레이션 공통 설정. Flyway 자체 설정은 spring.flyway.* (docs/schema-management.md).
+skeleton:
+  migration:
+    clean-on-validation-error: false   # true 면 검증 실패 때 DB 를 지우고 다시 migrate. clean-allowed-profiles 밖에서 켜면 기동 실패 (보통 application-local.yml 에서만 true)
+    clean-allowed-profiles: [local]    # clean 을 허용하는 프로필

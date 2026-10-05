@@ -1,0 +1,1 @@
+-- init (mysql). 스타터의 첫 마이그레이션 자리. 지우고 ./gradlew newMigration -Pname=<snake_case> 로 시작해도 된다 (docs/schema-management.md)

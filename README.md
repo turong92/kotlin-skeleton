@@ -63,7 +63,7 @@ Use modules as capability choices:
 - `modules/idempotency` is included when command endpoints need `Idempotency-Key` protection. It contributes the `@IdempotentOperation` annotation, request fingerprinting, replay headers, an in-memory default store, and OpenAPI header documentation.
 - `modules/crypto` is included when the app needs recoverable AES-GCM text encryption for persisted or transported secrets. It provides key-id envelopes, URL-safe opaque tokens, and opt-in persistence converters; redaction still handles logs and alerts.
 - `modules/notification` is included when the app needs server-side notification publishing. `modules/notification-sse`, `modules/notification-websocket`, and `modules/notification-slack` add delivery/alert channels.
-- `modules:redis-*`, `modules:storage-*`, `modules:payment-*`, `modules:event-kafka`, and `modules:scheduler` are optional capability bundles. `apps/workbench` includes them to prove they can coexist, while YAML keeps infrastructure-backed features disabled unless explicitly enabled.
+- `modules:redis-*`, `modules:storage-*`, `modules:payment-*`, `modules:event-kafka`, and `modules:scheduler` are optional capability bundles. `apps/workbench` includes them to prove they can coexist. Each boots without configuration and without its infrastructure (a test per module proves it); features that need keys or servers are enabled by setting them.
 - `modules/persistence-jpa` and `modules/persistence-jdbc` are optional persistence adapters. Both use the same platform audit-time contract while keeping JPA/JDBC annotations and lifecycle behavior inside the selected persistence module. Instants are bound through `SqlDialect` from the dialect module the app assembles (`db-postgresql` default, `db-mysql` also forces the MySQL session to UTC); see `docs/time.md`.
 - `modules/persistence-jooq` is the jOOQ alternative: code is generated from the Flyway migration folder with `DDLDatabase`, so builds need no database. See `docs/persistence-jooq.md`. Schema without Flyway: `docs/schema-management.md`.
 - `modules/job-queue-jdbc` is included when work must be retried durably without Redis. See `docs/job-queue-jdbc.md`.
@@ -84,7 +84,36 @@ curl -s localhost:8080/api/v1/auth/login -H 'Content-Type: application/json' -d 
 ./gradlew build                          # everything: all modules, both apps (Testcontainers needs Docker)
 ```
 
-`docker compose up --build` builds `:apps:api` (the starter) into the image. To start a project of your own, copy the repo, run `scripts/rename-skeleton.sh dev.sumin.ovation ovation Ovation`, delete the modules and `apps/workbench` you do not need, and follow `docs/minimal-composition.md`.
+`docker compose up --build` builds `:apps:api` (the starter) into the image. Optional infrastructure for the modules that need it sits behind compose profiles and does not start with a plain `docker compose up`: `--profile redis` (redis-*), `--profile kafka` (event-kafka), `--profile mail` (notification-mail, Mailpit UI on :8025), `--profile mysql` (db-mysql). Per-module environment variables are in the commented sections of `.env.example`.
+
+## 새 프로젝트 시작
+
+한 줄이면 된다. 이 레포를 새 디렉토리로 복사하고, 고른 모듈만 남기고, 패키지 · 설정 접두사 · 클래스 접두사를 바꾼다.
+
+```bash
+scripts/new-project.sh <target-dir> <root-package> <config-prefix> <ClassPrefix> \
+    [--modules a,b,c] [--db postgresql|mysql] [--with-workbench]
+```
+
+```bash
+# 스타터 그대로 (platform, auth, persistence-jdbc, db-postgresql, migration-flyway, time)
+scripts/new-project.sh ~/work/ovation dev.sumin.ovation ovation Ovation
+
+# 모듈 더하기 — 한 모듈 = 의존성 한 줄 + (바꿀 때만) 설정 몇 줄
+scripts/new-project.sh ~/work/ovation dev.sumin.ovation ovation Ovation \
+    --modules job-queue-jdbc,notification-mail,storage-s3,scheduler
+
+# MySQL 로: db-mysql, datasource URL, compose, Testcontainers, 첫 마이그레이션 폴더까지 바뀐다
+scripts/new-project.sh ~/work/ovation dev.sumin.ovation ovation Ovation --db mysql --modules job-queue-jdbc
+```
+
+- 모듈은 스타터의 모듈 + `--modules` 를 모듈끼리의 `project(":modules:x")` 의존으로 **닫은** 집합이다 (`storage-s3` → `storage`, `crypto`). 테스트에만 필요한 모듈 의존도 따라오고 이유가 출력된다. 모르는 모듈 이름이면 유효한 목록과 함께 exit 2.
+- 고르지 않은 모듈은 디렉토리, `settings.gradle.kts` include, `docs/config/modules/<m>.yml`, 루트 `dbTestModules`, 스타터 테스트의 부재 단언에서 모두 빠진다. `--with-workbench` 는 워크벤치가 모든 모듈을 쓰므로 모든 모듈이 남고 PostgreSQL 전용이다.
+- `--modules` 로 요청한 모듈은 `apps/api/build.gradle.kts` 에 `implementation(project(":modules:<m>"))` 한 줄이 생기고, `docs/config/modules/<m>.yml` 이 `apps/api/src/main/resources/application.yml` 끝의 `new-project: module config blocks` 구역에 **주석으로** 붙는다. 모듈은 기본값으로 동작하니 바꿀 키만 주석을 풀어 위 설정에 합친다.
+- 끝에 `scripts/rename-skeleton.sh` 가 돌고 잔여 흔적이 있으면 실패한다. 대상 디렉토리 밖에는 아무것도 쓰지 않고, 대상이 이미 있으면 거부한다.
+- 시험: `scripts/test-new-project.sh` (빠른 검사 — `./gradlew check` 가 돈다) / `--full` (세 조합을 찍어 각각 `./gradlew build`, Docker 필요 — `.github/workflows/new-project.yml`).
+
+수동으로 하려면: 레포를 복사해 `scripts/rename-skeleton.sh dev.sumin.ovation ovation Ovation`, 쓰지 않는 모듈과 `apps/workbench` 를 지우고 `docs/minimal-composition.md` 를 따른다.
 
 ## Composition Workbench
 
@@ -107,7 +136,7 @@ It intentionally depends on the skeleton capability modules, then uses propertie
 
 These endpoints require auth by default. They are development/workbench affordances, not product APIs.
 
-Default `application.yml` keeps Redis lock, Redis cache, Redis rate-limit, scheduler, S3, provider payment modules, and WebSocket disabled so the sample app can start without external infrastructure. Profile-specific YAML can enable stricter behavior. For example, `application-local.yml`, `application-dev.yml`, and `application-prod.yml` enable `redis-lock` by default, so selecting that profile requires a reachable Redis backend unless overridden for tests.
+Adding a module turns it on, except where it would fail or hang boot without external infrastructure or required config — those degrade safely or stay off until configured (`docs/minimal-composition.md` §3 lists what each module needs to boot). The workbench `application*.yml` therefore carries only the values that differ from module defaults: rate limiting keeps the in-memory store, WebSocket stays off (it adds a notification subscriber), provider payment modules need keys. The `local`, `dev`, `staging` and `prod` profiles turn the Redis lock startup check on (`skeleton.redis-lock.startup-check.enabled`), so those profiles need a reachable Redis unless overridden for tests.
 
 ## Auth Capability
 
@@ -157,6 +186,19 @@ skeleton:
 ```
 
 Requests must include `X-Break-Glass-Secret`, `X-Break-Glass-Reason`, and `X-Break-Glass-Account-Id`. In `prod` and `staging`, startup validation requires a nonblank secret and allowlist. Keep YAML thin; inject secrets through environment variables.
+
+### Protected profiles — what refuses to boot
+
+The built-in defaults are for development: the JWT secret `dev-local-jwt-secret-change-me-32-bytes` and the seed accounts above. When any active profile is in `skeleton.auth.protected-profiles` (default `prod`, `staging`), startup fails with a message naming what to set if:
+
+| Rule | Fails when | Fix |
+| --- | --- | --- |
+| JWT secret | `skeleton.auth.jwt.secret` is blank, the built-in default, or shorter than 32 bytes (HS256) | set `skeleton.auth.jwt.secret` (env `JWT_SECRET`) to a random value of at least 32 bytes |
+| Account store | the built-in in-memory `AuthAccountRepository` (seeds `user/password`, `admin/password`) is the one in use | register your own `AuthAccountRepository` bean |
+| Dev login | `skeleton.auth.dev-login.enabled=true` | leave it off |
+| Break-glass | enabled without a secret, or without `allowed-account-ids` | set both |
+
+`local`, `dev`, `test` and no profile keep working unchanged (the starter's tests log in with the seed user). To protect other profile names, set `skeleton.auth.protected-profiles`. A starter run with `--spring.profiles.active=prod` will not boot until you add an `AuthAccountRepository` — that is the point.
 
 ## Auth Social Capability
 

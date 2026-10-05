@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 이식 안내 — 한 줄로 찍는 프로젝트 · 설정 캡슐화 · 인증 안전 기동 (2026-10-05)
+
+하위 앱(rename-skeleton 으로 찍은 레포)이 위에서 아래로 따라 하면 된다. 새 프로젝트는 이제 `scripts/new-project.sh` 한 줄이다 (README "새 프로젝트 시작", `docs/minimal-composition.md` §5).
+
+**A. 인증은 보호 프로필에서 안전하지 않게 뜨지 않는다 (`modules/auth`) — 동작이 바뀌는 변경.**
+`skeleton.auth.protected-profiles`(기본 `[prod, staging]`) 중 하나가 활성이면 기동이 실패한다 (메시지가 손볼 속성 · 빈 이름을 적는다):
+(a) `skeleton.auth.jwt.secret` 이 비었거나, 내장 기본값(`dev-local-jwt-secret-change-me-32-bytes`)이거나, 32바이트(HS256)보다 짧다 — `JwtTokenService` 가 만들어지기 전에 막는다.
+(b) 내장 메모리 `AuthAccountRepository`(시드 `user/password`, `admin/password`)가 쓰인다 — 앱이 자기 `AuthAccountRepository` 빈을 둔다.
+`local` · `dev` · `test` · 프로필 없음은 그대로다. 검증은 `ApplicationRunner` 에서 `SmartInitializingSingleton` 으로 옮겨 컨텍스트 refresh 안에서 실패한다 (컨텍스트 러너로 시험된다).
+`prod`/`staging` 으로 도는 앱은 `AuthAccountRepository` 빈이 없으면 뜨지 않는다. `apps/workbench` 의 `BreakGlassIntegrationTest`(prod 프로필)는 자기 저장소를 넣도록 고쳤다.
+
+**B1. 앱 yml 은 모듈 기본값과 다른 값만.** `apps/workbench` `application*.yml` 400줄 → 203줄. 기본값을 되풀이하던 `${SKELETON_X:기본값}` 자리표시자는 없앴다 — 느슨한 바인딩이 같은 환경변수 이름을 이미 준다.
+달라진 환경변수 이름: `SKELETON_NOTIFICATION_WEBSOCKET_AUTH_ENABLED` → `SKELETON_NOTIFICATION_WEBSOCKET_AUTHENTICATION_ENABLED`, `SKELETON_NOTIFICATION_WEBSOCKET_SOCKJS_ENABLED` → `…_ENDPOINT_SOCK_JS_ENABLED`,
+`…_TOPIC_PREFIX` / `…_USER_DESTINATION` / `…_BRIDGE_ENABLED` → `…_BROKER_NOTIFICATION_DESTINATION_PREFIX` / `…_BROKER_USER_NOTIFICATION_DESTINATION` / `…_BROKER_BRIDGE_ENABLED`, `SKELETON_PAYMENT_*_ROUTE_ENABLED` 는 `skeleton.payment.providers.<id>.enabled` 의 느슨한 이름, 벤더 표준 이름(`JWT_SECRET`, `AWS_PROFILE`, `TOSS_PAYMENTS_SECRET_KEY`, `STRIPE_SECRET_KEY`, …)은 그대로 별칭이 남아 있다.
+모듈마다 **모든 키 + 기본값 + 한 줄 설명**을 `docs/config/modules/<module>.yml` 에 두었다 (27개) — 필요한 블록만 복사한다. `apps/workbench` `ModuleConfigSnippetsTest` 가 각 파일의 키가 모듈 `@ConfigurationProperties` 에 바인딩되고 값이 기본값과 같은지, 속성이 빠지지 않았는지 본다.
+
+**B2. 모듈을 얹으면 켜진다 — 인프라 · 필수 설정 없이 못 뜨는 것만 예외.** 규칙과 모듈별 "뜨는 데 필요한 것" 표는 `docs/minimal-composition.md` §3. 감사 결과:
+- `redis-lock`: 기동 때 Redis 에 붙던 것(Redisson 즉시 시작 + 기본 켜진 시작 점검)을 **지연 연결**로, 시작 점검은 **옵트인**(`skeleton.redis-lock.startup-check.enabled`, 기본 `false` — 운영에서는 켠다). 락을 끄지 않으므로 `@DistributedLock` 이 조용히 무시되지 않는다 (Redis 가 없으면 첫 사용 때 크게 실패). 워크벤치의 `local` · `dev` · `staging` · `prod` yml 은 점검을 켠다.
+- `config-aws-ssm`: `dev` · `staging` · `prod` 에서 `paths` 가 비어 있으면 "SSM is enabled but paths is empty" 로 기동이 실패하던 것을, `paths`(또는 `credential-profile`)가 설정돼야 읽도록 바꿨다. 명시적 `enabled=true` + 빈 `paths` 는 그대로 실패. 실패 안내는 더 이상 `./gradlew :apps:api:bootRun` 을 적지 않는다.
+- `scheduler`: `skeletonTaskScheduler` 가 아무 `TaskScheduler` 빈이 있으면 물러나서, `notification-websocket`(TaskScheduler 둘)과 함께 얹으면 레지스트라 주입이 모호해져 기동이 실패했다. 이제 이름(`skeletonTaskScheduler`)으로만 물러난다 — 앱이 스케줄러를 바꾸려면 **같은 이름의 빈**을 둔다 (이름 없는 `TaskScheduler` 빈으로는 더 이상 대체되지 않는다).
+- 이미 안전하게 degrade 하던 `redis-core` · `redis-cache`(FAIL_OPEN) · `redis-rate-limit`(FAIL_OPEN) · `storage-s3`(버킷이 없으면 저장소 빈 없음) · `notification-websocket` · `event-kafka`(로깅 전송기) · `notification-mail` · `captcha-turnstile` · `payment-*` · `notification-slack` 는 동작을 안 바꿨다. 모듈마다 "모듈 + 선언된 의존만, 설정 없음, 인프라 없음" 컨텍스트가 뜬다는 `*BootWithoutConfigurationTest` 를 더했다. 워크벤치는 `redis-rate-limit`(인메모리 저장소 시험)과 `notification-websocket`(구독자가 늘어난다)만 끈 채 둔다.
+- 주의: `notification-websocket` 은 얹으면 켜지고 엔드포인트(`/ws/notifications`, 허용 Origin `*`)는 `authentication.enabled=true` 전까지 열려 있다 — 기본값은 바꾸지 않았다.
+
+**B3. 설정 접두사 표** (`docs/minimal-composition.md` §2) 에 빠져 있던 `skeleton.idempotency` · `skeleton.openapi` · `skeleton.config.aws.ssm` · `skeleton.migration` 을 채웠고, `modules/platform` `ConfigPrefixDocumentationTest` 가 `@ConfigurationProperties` 접두사 + `Binder` 로 읽는 접두사와 표를 비교한다 (표에 있어도 디렉토리가 없는 모듈은 건너뛰므로 모듈을 덜어 낸 프로젝트에서도 통과). 접두사 이름은 하나도 바꾸지 않았다.
+
+**C. `scripts/new-project.sh <target-dir> <root-package> <config-prefix> <ClassPrefix> [--modules a,b,c] [--db postgresql|mysql] [--with-workbench]`.**
+복사 → 모듈 닫힘(`project(":modules:x")` 의존) → 안 고른 모듈 · 설정 블록 · settings include · `dbTestModules` · 스타터 테스트의 부재 단언 정리 → `--modules` 의존성 한 줄 + `application.yml` 끝의 주석 설정 블록 → (`--db mysql`) 방언 · URL · compose · Testcontainers · 첫 마이그레이션 → `rename-skeleton.sh`.
+검증: `scripts/test-new-project.sh` (`--quick` 은 `./gradlew check` 에 걸려 있고, `--full` 은 세 조합을 찍어 각각 `./gradlew build` — `.github/workflows/new-project.yml`).
+`docker-compose.yml` 에 `profiles:` 뒤의 선택 서비스 `redis` · `kafka` · `mail`(Mailpit)을 더했다 (`docker compose up` 만으로는 뜨지 않는다). `.env.example` 은 모듈별 주석 구역으로 다시 짰다.
+`./gradlew check` 의 루트 `base` 플러그인 + `newProjectChecks` 작업이 새로 생겼다.
+
 ### 이식 안내 — 스타터 / 워크벤치 분리 + 모듈은 스캔되지 않는다 (2026-10-05)
 
 하위 앱(rename-skeleton 으로 찍은 레포)이 위에서 아래로 따라 하면 된다. 경로 · 패키지는 스켈레톤 기준 — 하위 앱은 자기 접두사로 읽는다.

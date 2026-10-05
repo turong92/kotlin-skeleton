@@ -1,0 +1,11 @@
+# notification-mail — SMTP 메일 전송기. SMTP 서버는 Spring 표준 spring.mail.* 로 정한다. 기본 꺼짐 (비밀이 없으면 통합이 죽는 대신 빠진다).
+skeleton:
+  notification-mail:
+    enabled: false                 # true + spring.mail.host + from 이면 SmtpMailSender 가 생긴다
+    from: ""                       # 발신자. 예: "My App <no-reply@example.com>"
+# spring:
+#   mail:
+#     host: smtp.example.com
+#     port: 587
+#     username: ${SMTP_USERNAME}
+#     password: ${SMTP_PASSWORD}

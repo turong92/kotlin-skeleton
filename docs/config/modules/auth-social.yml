@@ -1,0 +1,15 @@
+# auth-social — 소셜 로그인. 제공자는 auth-social-google / -kakao / -naver 모듈이 맡고, 여기서는 제공자별로 켠다.
+# providers 는 맵이라 기본값이 비어 있다 — 쓰는 제공자만 아래 예시를 복사한다.
+skeleton:
+  auth-social:
+    providers: {}
+#    google:                         # 제공자 이름: google | kakao | naver
+#      enabled: false                # true 로 켜야 이 제공자 클라이언트가 만들어진다
+#      client-id: ""                 # OAuth 클라이언트 ID
+#      client-secret: ""             # OAuth 클라이언트 시크릿
+#      redirect-uri:                 # 프론트가 쓰는 redirect URI (미설정)
+#      api-base-url:                 # 제공자 API 호스트 재정의 (테스트 · 프록시용, 미설정)
+#      token-base-url:               # 토큰 호스트 재정의 (미설정)
+#      profile-base-url:             # 프로필 호스트 재정의 (미설정)
+#      token-path:                   # 토큰 경로 재정의 (미설정)
+#      profile-path:                 # 프로필 경로 재정의 (미설정)

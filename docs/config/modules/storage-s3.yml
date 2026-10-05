@@ -1,0 +1,22 @@
+# storage-s3 — S3 / R2 / MinIO presigned 저장소. 켜 둬도 버킷 없이 뜬다 (bucket 을 정하면 저장소 빈이 생긴다).
+skeleton:
+  storage-s3:
+    enabled: true                  # false 면 모듈이 빈을 만들지 않는다
+    bucket: ""                     # 버킷 이름 — 정해야 PresignedStorage 빈이 생긴다
+    region: ap-northeast-2         # R2 는 auto
+    # endpoint-override:           # 서버가 S3 에 붙는 주소 (R2: https://<account>.r2.cloudflarestorage.com, MinIO: http://s3:8333) (미설정)
+    path-style-access-enabled: false   # R2 · MinIO 는 true
+    credentials:
+      profile: ""                  # ~/.aws 프로필
+      access-key-id: ""            # 정적 키 쌍 (R2 · MinIO) — secret-access-key 와 함께
+      secret-access-key: ""        # 비우면 profile → AWS 기본 체인 순
+    presign:
+      upload: 10m                  # 업로드 URL 유효 시간
+      download: 10m                # 다운로드 URL 유효 시간
+      multipart-part: 15m          # 멀티파트 파트 URL 유효 시간
+      # endpoint-override:         # presign URL 에만 쓰는 주소 (브라우저가 서버와 다른 호스트로 붙을 때) (미설정)
+    public-url:
+      base-url: ""                 # 공개 URL 의 기준 (CDN 주소). 비우면 공개 URL 없음
+      strategy: RAW                # RAW: 기준 URL + 키 | OPAQUE: 암호화 토큰 경로 (crypto 필요)
+      token-path-prefix: /c        # OPAQUE 토큰 경로 접두사
+      token-purpose: storage-public-url   # OPAQUE 토큰의 용도 라벨

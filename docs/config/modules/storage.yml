@@ -1,0 +1,7 @@
+# storage — 업로드 파일 검증 규칙 (저장소 구현은 storage-s3).
+skeleton:
+  storage:
+    validation:
+      max-size-bytes: 9223372036854775807   # 파일 크기 상한 (바이트). 기본은 제한 없음(Long.MAX) — 예: 10485760
+      allowed-content-types: []             # 비우면 모든 Content-Type 허용
+      allowed-extensions: []                # 비우면 모든 확장자 허용

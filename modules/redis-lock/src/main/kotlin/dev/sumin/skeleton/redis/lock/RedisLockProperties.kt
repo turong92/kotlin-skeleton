@@ -10,8 +10,9 @@ data class RedisLockProperties(
     val retry: Retry = Retry(),
     val redisson: Redisson = Redisson(),
 ) {
+    /** 기동 때 Redis 를 찔러 본다. 꺼 두면 연결은 첫 락 사용 때 일어난다(Redis 없이도 앱이 뜬다). 운영에서는 켠다. */
     data class StartupCheck(
-        val enabled: Boolean = true,
+        val enabled: Boolean = false,
         val key: String = "__redis_lock_startup_check",
     )
 

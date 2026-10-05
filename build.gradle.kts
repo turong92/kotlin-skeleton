@@ -4,6 +4,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.springframework.boot.gradle.plugin.SpringBootPlugin
 
 plugins {
+    base   // 루트에도 check · build 라이프사이클 (아래 newProjectChecks 를 건다)
     kotlin("jvm") version "2.3.21" apply false
     kotlin("plugin.spring") version "2.3.21" apply false
     id("org.springframework.boot") version "4.1.1" apply false
@@ -105,4 +106,25 @@ tasks.register("newMigration") {
             println("created ${file.relativeTo(rootDir)}")
         }
     }
+}
+
+// scripts/new-project.sh 의 빠른 검사: 인자 검증 · 모듈 닫힘 · 파일 가지치기 · rename 잔여 검사 (Gradle 을 부르지 않는다).
+// 세 조합을 실제로 찍어 각각 ./gradlew build 하는 `scripts/test-new-project.sh --full` 은 CI 워크플로(.github/workflows/new-project.yml)가 돈다.
+// 찍어 낸 프로젝트에는 이 도구가 없으므로 스크립트가 있을 때만 건다.
+if (file("scripts/test-new-project.sh").isFile) {
+    val newProjectChecks by tasks.registering(Exec::class) {
+        group = "verification"
+        description = "Runs scripts/test-new-project.sh --quick."
+        commandLine("bash", "scripts/test-new-project.sh", "--quick")
+        inputs.files(fileTree("scripts") { exclude("**/build/**") })
+        inputs.files(fileTree(rootDir) {
+            include("modules/*/build.gradle.kts", "apps/*/build.gradle.kts", "settings.gradle.kts", "build.gradle.kts")
+            include("docs/config/modules/*.yml", "docker-compose.yml", ".env.example")
+            include("apps/api/src/**")
+        })
+        val marker = layout.buildDirectory.file("new-project-checks.ok")
+        outputs.file(marker)
+        doLast { marker.get().asFile.apply { parentFile.mkdirs(); writeText("ok\n") } }
+    }
+    tasks.named("check") { dependsOn(newProjectChecks) }
 }

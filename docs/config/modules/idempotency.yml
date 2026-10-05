@@ -1,0 +1,6 @@
+# idempotency — Idempotency-Key 헤더로 중복 요청을 같은 응답으로 돌려준다. 기본 저장소는 인메모리(인스턴스별).
+skeleton:
+  idempotency:
+    enabled: true                              # false 면 모듈이 빈을 만들지 않는다
+    ttl: 24h                                   # 저장한 응답을 유지하는 시간
+    cached-methods: [POST, PUT, PATCH, DELETE] # 이 HTTP 메서드만 멱등 처리한다

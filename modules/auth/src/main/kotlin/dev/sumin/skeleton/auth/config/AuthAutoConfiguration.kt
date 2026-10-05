@@ -2,7 +2,7 @@ package dev.sumin.skeleton.auth.config
 
 import dev.sumin.skeleton.auth.account.AuthAccount
 import dev.sumin.skeleton.auth.account.AuthAccountRepository
-import dev.sumin.skeleton.auth.account.InMemoryAuthAccountRepository
+import dev.sumin.skeleton.auth.account.SeedAuthAccountRepository
 import dev.sumin.skeleton.auth.api.AuthController
 import dev.sumin.skeleton.auth.api.AuthTokenResponseFactory
 import dev.sumin.skeleton.auth.jwt.JwtTokenService
@@ -14,7 +14,7 @@ import dev.sumin.skeleton.common.web.PublicEndpointContributor
 import dev.sumin.skeleton.common.web.PublicEndpointRegistry
 import jakarta.servlet.DispatcherType
 import org.springframework.beans.factory.ObjectProvider
-import org.springframework.boot.ApplicationRunner
+import org.springframework.beans.factory.SmartInitializingSingleton
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
@@ -40,7 +40,7 @@ class AuthAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(AuthAccountRepository::class)
     fun authAccountRepository(passwordEncoder: PasswordEncoder): AuthAccountRepository =
-        InMemoryAuthAccountRepository(
+        SeedAuthAccountRepository(
             listOf(
                 AuthAccount(
                     accountId = "acc_user",
@@ -61,8 +61,11 @@ class AuthAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    fun jwtTokenService(properties: AuthProperties): JwtTokenService =
-        JwtTokenService(properties.jwt)
+    fun jwtTokenService(properties: AuthProperties, environment: Environment): JwtTokenService {
+        // 빈 키는 SecretKeySpec 이 더 모호한 오류로 던지므로, 보호 프로필의 잘못된 비밀은 여기서 이름 붙은 메시지로 먼저 막는다
+        AuthStartupValidator.validateJwtSecret(properties, environment.activeProfiles.toSet())
+        return JwtTokenService(properties.jwt)
+    }
 
     @Bean
     @ConditionalOnMissingBean
@@ -79,9 +82,14 @@ class AuthAutoConfiguration {
         AuthController(accountRepository, passwordEncoder, authTokenResponseFactory)
 
     @Bean
-    fun authStartupValidation(properties: AuthProperties, environment: Environment): ApplicationRunner =
-        ApplicationRunner {
-            AuthStartupValidator.validate(properties, environment.activeProfiles.toSet())
+    fun authStartupValidation(
+        properties: AuthProperties,
+        environment: Environment,
+        accountRepository: ObjectProvider<AuthAccountRepository>,
+    ): SmartInitializingSingleton =
+        // 모든 싱글턴이 만들어진 직후(컨텍스트 refresh 안)에 돈다 — 실패하면 컨텍스트가 뜨지 않는다
+        SmartInitializingSingleton {
+            AuthStartupValidator.validate(properties, environment.activeProfiles.toSet(), accountRepository.getIfUnique())
         }
 
     @Bean

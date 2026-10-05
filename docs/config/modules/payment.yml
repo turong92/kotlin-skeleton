@@ -1,0 +1,9 @@
+# payment — 결제 제공자 라우팅. 제공자 구현은 payment-toss / payment-stripe.
+skeleton:
+  payment:
+    # default-provider:            # 미설정: 경로가 안 맞을 때 쓸 제공자 ID (제공자가 하나뿐이면 그것)
+    providers: {}                  # 제공자 ID → { enabled, currencies, countries } — 제공자 기본 지원 범위를 덮어쓴다
+#     toss:
+#       enabled: true              # false 면 라우팅에서 뺀다
+#       currencies: [KRW]          # 이 통화만 이 제공자로
+#       countries: [KR]            # 이 국가만 이 제공자로

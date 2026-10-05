@@ -1,0 +1,12 @@
+# payment-toss — 토스페이먼츠 제공자. 기본 꺼짐.
+skeleton:
+  payment-toss:
+    enabled: false                                  # true + secret-key 면 제공자 빈이 생긴다
+    provider-id: toss                               # 라우팅에서 쓰는 ID
+    client-name: payment-toss                       # 외부 HTTP 클라이언트 이름
+    secret-key: ""                                  # 토스 시크릿 키 (env 로 넘긴다)
+    base-url: https://api.tosspayments.com          # API 호스트
+    confirm-path: /v1/payments/confirm              # 승인 경로
+    cancel-path: /v1/payments/{paymentKey}/cancel   # 취소 경로
+    supported-currencies: [KRW]                     # 이 통화는 이 제공자로 라우팅
+    supported-countries: [KR]                       # 이 국가는 이 제공자로 라우팅

@@ -169,6 +169,44 @@ class AwsSsmEnvironmentPostProcessorTest {
     }
 
     @Test
+    fun `failure guidance does not name a specific app or build tool`() {
+        val environment = environment(
+            "skeleton.config.aws.ssm.credential-profile" to "skeleton-dev",
+            "skeleton.config.aws.ssm.paths[0]" to "/kotlin-skeleton/dev/api/",
+            "spring.profiles.active" to "dev",
+        )
+        val error = assertFailsWith<AwsSsmConfigException> {
+            AwsSsmEnvironmentPostProcessor(SsmParameterClientFactory { ThrowingSsmParameterClient("no credentials") })
+                .postProcessEnvironment(environment, SpringApplication())
+        }
+
+        assertThat(error.message.orEmpty()).doesNotContain("apps:", "bootRun", "gradlew")
+    }
+
+    @Test
+    fun `module on the classpath without any paths configured does not break startup in a protected profile`() {
+        listOf("dev", "staging", "prod").forEach { profile ->
+            val environment = environment("spring.profiles.active" to profile)
+            val factory = SsmParameterClientFactory { throw AssertionError("no SSM client may be created when nothing is configured") }
+
+            AwsSsmEnvironmentPostProcessor(factory).postProcessEnvironment(environment, SpringApplication())
+        }
+    }
+
+    @Test
+    fun `explicitly enabled without paths still fails fast`() {
+        val environment = environment(
+            "skeleton.config.aws.ssm.enabled" to "true",
+            "spring.profiles.active" to "dev",
+        )
+
+        assertFailsWith<AwsSsmConfigException> {
+            AwsSsmEnvironmentPostProcessor(SsmParameterClientFactory { RecordingSsmParameterClient(emptyMap()) })
+                .postProcessEnvironment(environment, SpringApplication())
+        }
+    }
+
+    @Test
     fun `fail fast false keeps startup going when ssm load fails`() {
         val environment = environment(
             "skeleton.config.aws.ssm.fail-fast" to "false",

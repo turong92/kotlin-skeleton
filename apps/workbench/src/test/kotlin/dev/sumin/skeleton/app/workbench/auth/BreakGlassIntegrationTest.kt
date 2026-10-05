@@ -2,6 +2,9 @@ package dev.sumin.skeleton.app.workbench.auth
 
 import com.jayway.jsonpath.JsonPath
 import dev.sumin.skeleton.app.workbench.TestcontainersConfiguration
+import dev.sumin.skeleton.auth.account.AuthAccount
+import dev.sumin.skeleton.auth.account.AuthAccountRepository
+import dev.sumin.skeleton.auth.account.InMemoryAuthAccountRepository
 import org.hamcrest.Matchers.contains
 import org.hamcrest.Matchers.hasItem
 import org.hamcrest.Matchers.not
@@ -9,8 +12,11 @@ import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
+import org.springframework.boot.test.context.TestConfiguration
+import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
+import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.post
@@ -28,8 +34,32 @@ import org.springframework.test.web.servlet.post
     ],
 )
 @AutoConfigureMockMvc
-@Import(TestcontainersConfiguration::class)
+@Import(TestcontainersConfiguration::class, BreakGlassIntegrationTest.OwnAccounts::class)
 class BreakGlassIntegrationTest {
+
+    // prod 프로필에서는 내장 시드 계정 저장소로 기동하지 않는다 (auth 모듈 검증) — 앱이 자기 저장소를 둔다
+    @TestConfiguration(proxyBeanMethods = false)
+    class OwnAccounts {
+        @Bean
+        fun authAccountRepository(passwordEncoder: PasswordEncoder): AuthAccountRepository = InMemoryAuthAccountRepository(
+            listOf(
+                AuthAccount(
+                    accountId = "acc_admin",
+                    username = "admin",
+                    email = "admin@example.com",
+                    passwordHash = requireNotNull(passwordEncoder.encode("password")),
+                    roles = setOf("USER", "ADMIN"),
+                ),
+                AuthAccount(
+                    accountId = "acc_user",
+                    username = "user",
+                    email = "user@example.com",
+                    passwordHash = requireNotNull(passwordEncoder.encode("password")),
+                    roles = setOf("USER"),
+                ),
+            ),
+        )
+    }
 
     @Autowired
     private lateinit var mockMvc: MockMvc

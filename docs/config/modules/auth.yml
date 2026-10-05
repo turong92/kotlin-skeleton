@@ -1,0 +1,14 @@
+# auth — JWT 로그인 · dev-login · break-glass. prod · staging 에서는 기본 JWT 비밀과 내장 시드 계정으로 기동하지 않는다.
+skeleton:
+  auth:
+    jwt:
+      issuer: kotlin-skeleton                                  # 토큰 발급자(iss)
+      secret: dev-local-jwt-secret-change-me-32-bytes          # HS256 비밀. 보호 프로필에서는 직접 정한 32바이트 이상 값이어야 한다 (env JWT_SECRET 으로 넘긴다)
+      access-token-ttl: 15m                                    # 액세스 토큰 유효 시간
+    dev-login:
+      enabled: false                                           # 개발용 헤더 로그인 (local · dev 에서만 동작, 보호 프로필에서 켜면 기동 실패)
+    break-glass:
+      enabled: false                                           # 비상 접근 헤더 로그인
+      secret: ""                                               # 켜면 필수
+      allowed-account-ids: []                                  # 보호 프로필에서 켜면 필수
+    protected-profiles: [prod, staging]                        # 안전하지 않은 구성(기본 비밀 · 시드 계정 저장소)을 거부하는 프로필

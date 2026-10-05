@@ -1,0 +1,14 @@
+# job-queue-jdbc — DB 재시도 큐 (FOR UPDATE SKIP LOCKED). 접두사는 모듈 이름과 달리 job-queue.
+skeleton:
+  job-queue:
+    enabled: true                  # false 면 모듈이 빈을 만들지 않는다
+    worker-enabled: true           # false 면 enqueue 만 되고 워커는 돌지 않는다 (테스트 · 배치 전용 인스턴스)
+    poll-interval: 2s              # 워커가 큐를 보는 간격
+    batch-size: 10                 # 한 번에 가져오는 작업 수
+    max-attempts: 10               # 최대 시도 횟수
+    backoff:
+      initial: 30s                 # 첫 실패 후 대기
+      multiplier: 2.0              # 실패마다 곱하는 배수
+      max: 1h                      # 대기 상한
+    stale-lock-timeout: 10m        # RUNNING 인 채로 이 시간이 지나면 워커가 죽은 것으로 보고 PENDING 으로 되돌린다
+    worker-id: ""                  # 워커 식별자 (비우면 hostname + 랜덤)

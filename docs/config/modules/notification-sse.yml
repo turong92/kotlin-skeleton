@@ -1,0 +1,7 @@
+# notification-sse — Server-Sent Events 로 알림 구독. 접두사는 skeleton.notification.sse (점).
+skeleton:
+  notification:
+    sse:
+      enabled: true                # false 면 모듈이 빈을 만들지 않는다
+      timeout: 30m                 # SSE 연결 유지 시간
+      public-endpoint: false       # true 면 구독 엔드포인트를 인증 없이 연다

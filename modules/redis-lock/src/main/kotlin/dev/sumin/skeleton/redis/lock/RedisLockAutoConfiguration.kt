@@ -29,7 +29,8 @@ class RedisLockAutoConfiguration {
         redisProperties: RedisCoreProperties,
         lockProperties: RedisLockProperties,
     ): RedissonClient {
-        val config = Config()
+        // 연결은 첫 사용 때 — Redis 가 없어도 기동한다. 기동 때 확인하려면 startup-check.enabled=true (그때 연결한다)
+        val config = Config().setLazyInitialization(true)
         val singleServer = config.useSingleServer()
         val protocol = if (redisProperties.ssl.enabled) "rediss" else "redis"
 

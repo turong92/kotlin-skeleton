@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.scheduler
 
 import org.springframework.beans.factory.ObjectProvider
+import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
@@ -20,8 +21,10 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler
     matchIfMissing = true,
 )
 class SkeletonSchedulerAutoConfiguration {
+    // 이름으로 비켜난다 — 다른 모듈(notification-websocket 등)이 TaskScheduler 빈을 만들어 둬도 이 모듈의 스케줄러는 항상 있고,
+    // 앱이 바꾸려면 같은 이름(skeletonTaskScheduler)의 빈을 둔다
     @Bean
-    @ConditionalOnMissingBean
+    @ConditionalOnMissingBean(name = ["skeletonTaskScheduler"])
     fun skeletonTaskScheduler(properties: SkeletonSchedulerProperties): TaskScheduler =
         ThreadPoolTaskScheduler().apply {
             poolSize = properties.poolSize.coerceAtLeast(1)
@@ -57,7 +60,7 @@ class SkeletonSchedulerAutoConfiguration {
     @ConditionalOnMissingBean
     fun skeletonScheduledTaskRegistrar(
         applicationContext: ConfigurableApplicationContext,
-        taskScheduler: TaskScheduler,
+        @Qualifier("skeletonTaskScheduler") taskScheduler: TaskScheduler,
         scheduleResolver: SkeletonScheduleResolver,
         executionGuard: SkeletonSchedulerExecutionGuard,
         lockManager: SkeletonScheduledLockManager,

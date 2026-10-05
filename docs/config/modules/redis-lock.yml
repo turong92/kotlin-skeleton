@@ -1,0 +1,14 @@
+# redis-lock — @DistributedLock (Redisson). Redis 연결은 redis-core(skeleton.redis). 켜 둬도 Redis 없이 뜬다 (연결은 첫 락 사용 때).
+skeleton:
+  redis-lock:
+    enabled: true                  # false 면 모듈이 빈을 만들지 않는다 (@DistributedLock 이 동작하지 않는다)
+    startup-check:
+      enabled: false               # true 면 기동 때 Redis 를 확인해 안 되면 기동 실패 (운영에서 켠다)
+      key: __redis_lock_startup_check   # 확인에 쓰는 키
+    retry:
+      attempts: 3                  # 락 획득 재시도 횟수
+      backoff: 200ms               # 재시도 간격
+    redisson:
+      retry-attempts: 3            # Redisson 명령 재시도
+      retry-interval: 1500ms
+      timeout: 3s

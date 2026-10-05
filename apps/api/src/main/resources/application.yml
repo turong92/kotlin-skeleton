@@ -18,3 +18,5 @@ springdoc:
     path: /api/v1/docs
 
 # 운영에서는 환경변수로 바꾼다: skeleton.auth.jwt.secret ← SKELETON_AUTH_JWT_SECRET, spring.datasource.* ← SPRING_DATASOURCE_*
+# prod · staging 프로필은 기본 JWT 비밀(32바이트 미만 · 내장 기본값 · 빈 값)과 내장 시드 계정(user/password)으로 뜨지 않는다 —
+# 비밀을 정하고 AuthAccountRepository 빈을 둔다 (README "Protected profiles")

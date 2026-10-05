@@ -68,7 +68,7 @@ class SkeletonScheduledTaskRegistrarTest {
 
         val contextRunner: ApplicationContextRunner = ApplicationContextRunner()
             .withConfiguration(AutoConfigurations.of(SkeletonSchedulerAutoConfiguration::class.java))
-            .withBean(TaskScheduler::class.java, Supplier { scheduler })
+            .withBean("skeletonTaskScheduler", TaskScheduler::class.java, Supplier { scheduler })   // 같은 이름의 빈이 기본 스케줄러를 대체한다
             .withBean(SkeletonScheduledLockManager::class.java, Supplier { lockManager })
             .withBean(SkeletonScheduledFailureHandler::class.java, Supplier { failureHandler })
             .withBean(SampleScheduledBean::class.java, Supplier { SampleScheduledBean() })

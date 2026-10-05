@@ -1,0 +1,14 @@
+# scheduler — @SkeletonScheduled. 켜 둬도 인프라가 필요 없다 (기본 락은 단일 인스턴스용 Noop, 다중 인스턴스는 redis-lock).
+skeleton:
+  scheduler:
+    enabled: true                  # false 면 모듈이 빈을 만들지 않는다
+    zone: UTC                      # 기본 시간대 (cron 해석). time-zone 과 같이 쓰면 같은 값이어야 한다
+    time-zone: ""                  # zone 의 별칭 — 둘 중 하나만 쓴다
+    pool-size: 2                   # 스케줄러 스레드 수
+    shutdown-await-termination: 10s   # 종료 때 실행 중인 작업을 기다리는 시간
+    local-execution:
+      enabled: true                # false 면 local 프로필에서 작업을 돌리지 않는다
+      allowed-profiles: []         # 비어 있지 않으면 이 프로필에서만 실행
+      blocked-profiles: []         # 이 프로필에서는 실행하지 않는다
+    locking:
+      enabled: true                # 락 매니저를 거친다 (lock-key 가 있는 작업)
