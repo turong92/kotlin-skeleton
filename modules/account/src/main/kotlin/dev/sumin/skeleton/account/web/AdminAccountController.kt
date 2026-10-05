@@ -1,0 +1,90 @@
+package dev.sumin.skeleton.account.web
+
+import dev.sumin.skeleton.account.Account
+import dev.sumin.skeleton.account.AccountStatus
+import dev.sumin.skeleton.account.AdminService
+import dev.sumin.skeleton.common.DataResponse
+import dev.sumin.skeleton.common.PageQuery
+import dev.sumin.skeleton.common.PageResponse
+import dev.sumin.skeleton.common.PaginationMeta
+import dev.sumin.skeleton.common.Response
+import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.tags.Tag
+import jakarta.validation.Valid
+import org.springframework.http.ResponseEntity
+import org.springframework.security.core.Authentication
+import org.springframework.web.bind.annotation.DeleteMapping
+import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PathVariable
+import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.PutMapping
+import org.springframework.web.bind.annotation.RequestBody
+import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
+import org.springframework.web.bind.annotation.RestController
+
+/** 운영자 계정 관리 — `skeleton.account.admin.enabled=true` 일 때만, 호출자는 `skeleton.account.admin.role`(기본 ADMIN) 이 있어야 한다. [AccountWebAutoConfiguration] 이 등록한다. */
+@RestController
+@RequestMapping("/api/v1/admin/accounts")
+@Tag(name = "Account admin")
+class AdminAccountController(private val callers: AccountCallers, private val admin: AdminService) {
+    @Operation(summary = "Search accounts by email fragment and status")
+    @GetMapping
+    fun search(
+        authentication: Authentication?,
+        @RequestParam(required = false) email: String?,
+        @RequestParam(required = false) status: AccountStatus?,
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "20") size: Int,
+    ): PageResponse<AdminAccountResponse> {
+        callers.requireAdmin(authentication)
+        val result = admin.search(email, status, page, size)
+        val pageIndex = page.coerceAtLeast(0)
+        val pageSize = size.coerceIn(1, 100)
+        return Response.ok(result.items.map { it.toAdmin() }, PaginationMeta.of(pageIndex, pageSize, result.total))
+    }
+
+    @Operation(summary = "One account")
+    @GetMapping("/{id}")
+    fun get(authentication: Authentication?, @PathVariable id: String): DataResponse<AdminAccountResponse> {
+        callers.requireAdmin(authentication)
+        return Response.ok(admin.get(id).toAdmin())
+    }
+
+    @Operation(summary = "Suspend (signs the account out of every session)")
+    @PostMapping("/{id}/suspend")
+    fun suspend(authentication: Authentication?, @PathVariable id: String, @Valid @RequestBody(required = false) request: SuspendRequest?): ResponseEntity<Void> {
+        admin.suspend(callers.requireAdmin(authentication).accountId, id, request?.reason)
+        return Response.noContent()
+    }
+
+    @Operation(summary = "Unsuspend")
+    @PostMapping("/{id}/unsuspend")
+    fun unsuspend(authentication: Authentication?, @PathVariable id: String): ResponseEntity<Void> {
+        admin.unsuspend(callers.requireAdmin(authentication).accountId, id)
+        return Response.noContent()
+    }
+
+    @Operation(summary = "Undo a deletion inside the grace period")
+    @PostMapping("/{id}/restore")
+    fun restore(authentication: Authentication?, @PathVariable id: String): ResponseEntity<Void> {
+        admin.restore(callers.requireAdmin(authentication).accountId, id)
+        return Response.noContent()
+    }
+
+    @Operation(summary = "Grant a role")
+    @PutMapping("/{id}/roles/{role}")
+    fun grant(authentication: Authentication?, @PathVariable id: String, @PathVariable role: String): ResponseEntity<Void> {
+        admin.grantRole(callers.requireAdmin(authentication).accountId, id, role)
+        return Response.noContent()
+    }
+
+    @Operation(summary = "Revoke a role (409 ACCOUNT.LAST_ADMIN for the last administrator)")
+    @DeleteMapping("/{id}/roles/{role}")
+    fun revoke(authentication: Authentication?, @PathVariable id: String, @PathVariable role: String): ResponseEntity<Void> {
+        admin.revokeRole(callers.requireAdmin(authentication).accountId, id, role)
+        return Response.noContent()
+    }
+
+    private fun Account.toAdmin() = AdminAccountResponse(id, email, status.name, roles, displayName, createdAt, lastLoginAt, suspendedReason, purgeAfter)
+}

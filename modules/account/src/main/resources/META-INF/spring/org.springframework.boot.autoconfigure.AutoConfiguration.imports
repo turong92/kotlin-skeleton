@@ -1,0 +1,2 @@
+dev.sumin.skeleton.account.AccountAutoConfiguration
+dev.sumin.skeleton.account.web.AccountWebAutoConfiguration
