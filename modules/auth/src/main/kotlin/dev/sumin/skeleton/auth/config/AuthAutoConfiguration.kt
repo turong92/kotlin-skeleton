@@ -6,6 +6,10 @@ import dev.sumin.skeleton.auth.account.SeedAuthAccountRepository
 import dev.sumin.skeleton.auth.api.AuthController
 import dev.sumin.skeleton.auth.api.AuthTokenResponseFactory
 import dev.sumin.skeleton.auth.jwt.JwtTokenService
+import dev.sumin.skeleton.auth.login.LoginHooks
+import dev.sumin.skeleton.auth.login.PasswordLoginService
+import dev.sumin.skeleton.auth.session.LoginSessionIssuer
+import dev.sumin.skeleton.common.web.ClientIps
 import dev.sumin.skeleton.auth.security.AuthErrorWriter
 import dev.sumin.skeleton.auth.security.BreakGlassAuthenticationFilter
 import dev.sumin.skeleton.auth.security.DevLoginAuthenticationFilter
@@ -70,17 +74,23 @@ class AuthAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    fun authTokenResponseFactory(jwtTokenService: JwtTokenService): AuthTokenResponseFactory =
-        AuthTokenResponseFactory(jwtTokenService)
+    fun authTokenResponseFactory(jwtTokenService: JwtTokenService, sessions: ObjectProvider<LoginSessionIssuer>): AuthTokenResponseFactory =
+        AuthTokenResponseFactory(jwtTokenService) { sessions.getIfAvailable() }
 
     @Bean
     @ConditionalOnMissingBean
-    fun authController(
+    fun passwordLoginService(
         accountRepository: AuthAccountRepository,
         passwordEncoder: PasswordEncoder,
         authTokenResponseFactory: AuthTokenResponseFactory,
-    ): AuthController =
-        AuthController(accountRepository, passwordEncoder, authTokenResponseFactory)
+        hooks: ObjectProvider<LoginHooks>,
+    ): PasswordLoginService =
+        PasswordLoginService(accountRepository, passwordEncoder, authTokenResponseFactory) { hooks.orderedStream().toList() }
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun authController(loginService: PasswordLoginService, clientIps: ObjectProvider<ClientIps>): AuthController =
+        AuthController(loginService, clientIps.getIfAvailable { ClientIps() })
 
     /** 같은 규칙을 DeployGuard 로 내놓는다 — 플랫폼의 기동 요약에 보이고, `skeleton.env` 로도 보호된다 */
     @Bean

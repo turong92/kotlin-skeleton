@@ -55,6 +55,7 @@ class JwtTokenService(
             .claim("roles", principal.roles.toList())
         principal.username?.let { claimsBuilder.claim("username", it) }
         principal.email?.let { claimsBuilder.claim("email", it) }
+        principal.sessionId?.let { claimsBuilder.claim("sid", it) }
 
         val claims = claimsBuilder.build()
         val header = JwsHeader.with(MacAlgorithm.HS256).build()
@@ -72,6 +73,7 @@ class JwtTokenService(
             username = jwt.getClaimAsString("username"),
             email = jwt.getClaimAsString("email"),
             roles = jwt.getClaimAsStringList("roles")?.toSet() ?: emptySet(),
+            sessionId = jwt.getClaimAsString("sid"),
         )
     } catch (_: JwtException) {
         null

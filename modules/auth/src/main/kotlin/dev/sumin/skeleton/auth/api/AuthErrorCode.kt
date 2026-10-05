@@ -15,4 +15,22 @@ enum class AuthErrorCode(
         title = "Invalid credentials",
         defaultDetail = "Invalid credentials",
     ),
+    EMAIL_NOT_VERIFIED(
+        code = "AUTH.EMAIL_NOT_VERIFIED",
+        status = HttpStatus.FORBIDDEN,
+        title = "Email not verified",
+        defaultDetail = "Verify your email address before signing in",
+    ),
+    ACCOUNT_SUSPENDED(
+        code = "AUTH.ACCOUNT_SUSPENDED",
+        status = HttpStatus.FORBIDDEN,
+        title = "Account suspended",
+        defaultDetail = "This account is suspended",
+    ),
+    TOO_MANY_ATTEMPTS(
+        code = "AUTH.TOO_MANY_ATTEMPTS",
+        status = HttpStatus.TOO_MANY_REQUESTS,
+        title = "Too many sign-in attempts",
+        defaultDetail = "Too many sign-in attempts. Try again later",
+    ),
 }

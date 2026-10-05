@@ -81,4 +81,12 @@ class JwtTokenServiceTest {
 
         assertNull(service.authenticate("not-a-jwt"))
     }
+
+    @Test
+    fun `session id survives the token round trip`() {
+        val service = JwtTokenService(properties, clock)
+        val principal = CurrentPrincipal(accountId = "acc_user", roles = setOf("USER"), sessionId = "ses_42")
+
+        assertEquals("ses_42", service.authenticate(service.issue(principal).accessToken)?.sessionId)
+    }
 }
