@@ -56,6 +56,9 @@ skeleton:
       fail-fast: true                          # 누락이면 기동 실패 (false 면 경고)
       dummy-markers: [change-me, dummy, dev-local, local-secret]   # 값에 이 문자열이 있으면 더미로 본다
       requirements: []                         # 프로필별 필수 설정 목록 — docs/config/required-config.yml 참고
+  # 배포 환경 스위치 skeleton.env (환경변수 SKELETON_ENV = local | stage | prod) 는 이 접두사 밖의 키 하나다 — 비우면 스위치 없음 (docs/deploy.md)
+  deploy:
+    require-env: false                         # true 면 skeleton.env 가 비었을 때 기동 실패 (기본은 옵트인 — 비워도 뜬다)
   observability:
     links:
       enabled: false                           # 알림 · 에러 응답에 로그/트레이스 링크를 붙인다

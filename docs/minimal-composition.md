@@ -114,6 +114,7 @@ fails when this table and the prefixes found in module code differ.
 | `payment-stripe` | `skeleton.payment-stripe` |
 | `payment-toss` | `skeleton.payment-toss` |
 | `platform` | `skeleton.config.validation` |
+| `platform` | `skeleton.deploy` |
 | `platform` | `skeleton.http` |
 | `platform` | `skeleton.observability.links` |
 | `platform` | `skeleton.openapi` |

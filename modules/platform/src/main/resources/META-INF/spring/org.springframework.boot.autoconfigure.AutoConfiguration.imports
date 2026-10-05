@@ -7,3 +7,4 @@ dev.sumin.skeleton.common.http.OutboundHttpAutoConfiguration
 dev.sumin.skeleton.common.openapi.PlatformOpenApiAutoConfiguration
 dev.sumin.skeleton.common.observability.ObservabilityLinkAutoConfiguration
 dev.sumin.skeleton.common.PlatformWebAutoConfiguration
+dev.sumin.skeleton.common.deploy.DeployGuardAutoConfiguration
