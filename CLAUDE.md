@@ -7,6 +7,9 @@ Kotlin + Spring Boot 백엔드 토이 프로젝트의 공개 출발점.
 - Two executable Spring Boot applications, both in a sub-package of the root so `@SpringBootApplication` scans only app code (`dev.sumin.skeleton.app.api`, `dev.sumin.skeleton.app.workbench`):
   - `apps/api` is the **starter**: the minimal composition (`platform`, `auth`, `persistence-jdbc`, `db-postgresql`, `migration-flyway`, `time`) with one `HelloController`. New projects start here; its tests are the proof that a small composition boots without Redis/Kafka/S3/mail.
   - `apps/workbench` is the **demo**: every module plus the sample controllers under `/api/v1/skeleton/**` and `/api/v1/examples/**` (the react-skeleton workbench UI calls them — do not change paths or shapes) and the integration tests proving the modules coexist.
+<!-- sample:start -->
+  - `apps/sample` is the **worked example** ("Notes": a signed-in user manages notes with attachments): the starter plus `idempotency`, `notification-jdbc`/`-sse`, `storage-s3`, `job-queue-jdbc` and one small domain. It is a product-shaped slice to copy from — see "새 기능의 정본 예시" below. `scripts/new-project.sh` leaves it out unless `--with-sample`.
+<!-- sample:end -->
 - Modules are never reached through component scan. A module registers every bean through its `AutoConfiguration` (`META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`); no `@Component`/`@Service`/`@Configuration` on module `main` classes. Only the MVC handler markers (`@RestController`, `@RestControllerAdvice`) remain — Spring MVC finds handlers only through them — and each is registered by an autoconfiguration `@Bean` with `@ConditionalOnMissingBean`. `ModuleRegistrationRulesTest` (platform) enforces both rules over every `modules/*/src/main`.
 - Modules may open **opt-in HTTP contracts** when the frontend packages need them and nothing app-specific is involved: `notification` → `/api/v1/notifications` (inbox), `storage` → `/api/v1/storage` (presign/validate/multipart). They are `@RestController`s registered by an `AutoConfiguration` `@Bean` (`@ConditionalOnMissingBean`, servlet web app + `Authentication` on the classpath, `skeleton.<module>.…enabled=false` removes them), identify the caller by `Authentication.name` (auth: the account id) so they do not depend on `auth`, and refuse anonymous calls. Keep paths in sync with the react-skeleton packages' defaults. `payment` stays without one (see `docs/modules/payment.md`).
 - Adding a module to an app is one dependency line (`implementation(project(":modules:x"))`) plus an optional yml block; adapters expose their contract with `api(project(...))` (`payment-toss` → `payment`, `notification-*` → `notification`, `storage-s3` → `storage`, `auth-social*` → `auth`/`auth-social`, `redis-*` → `redis-core`). Never edit module internals to compose.
@@ -251,6 +254,30 @@ modules/persistence-jdbc/src/main/kotlin/dev/sumin/skeleton/persistence/jdbc/
   9. 기능 모듈이 endpoint/route 를 자동 등록하면 같은 모듈의 `openapi/` 에 명세 기여도 같이 둔다
   10. DB 스키마 바뀌면 `./gradlew newMigration -Pname=<snake_case>` (→ `db/migration/postgresql/V<UTC 14자리>__<name>.sql`)
   11. entity audit 이 필요하면 선택한 persistence 모듈의 `AuditTimestamps` 를 사용하고, core/platform 에 JPA/JDBC annotation 을 직접 추가하지 않는다.
+
+<!-- sample:start -->
+## 새 기능의 정본 예시 — `apps/sample` (에이전트 필독)
+
+새 기능(엔드포인트 + 저장 + 알림 + 비동기 작업)을 만들 때는 **처음부터 짜지 말고 `apps/sample` 의 `notes` 조각을 따라 한다.** 순서와 파일별 설명은 `docs/sample.md` 의 "이 기능 조각은 이렇게 조립됐다" (1 마이그레이션 → 2 엔티티 → 3 저장소 → 4 서비스 → 5 DTO·검증 → 6 컨트롤러 → 7 알림 → 8 잡 → 9 설정 → 10 테스트).
+
+```
+apps/sample/src/main/kotlin/dev/sumin/skeleton/app/sample/
+├── SampleApplication.kt            # 루트의 하위 패키지 — 모듈은 AutoConfiguration 으로만 붙는다
+└── notes/
+    ├── Note.kt                     # Spring Data JDBC 엔티티 (JdbcAuditable + AuditTimestamps)
+    ├── NoteRepository.kt           # 소유자 조건 + 한 쿼리 검색
+    ├── NoteService.kt              # 규칙 · 트랜잭션 (알림 · 잡 · 첨부 정리)
+    ├── NoteController.kt           # HTTP 변환만 — /api/v1/notes
+    ├── NoteDtos.kt · OwnAttachmentKey.kt · NoteErrors.kt   # 검증 · 구조 규칙 제약 · NOTES.* 에러 코드
+    ├── NoteNotifier.kt             # NotificationPublisher → 받은편지함 + SSE (계약은 파일 맨 위)
+    └── NoteExportJobHandler.kt     # job-queue-jdbc 핸들러 (멱등)
+```
+
+- 이 앱이 하는 선택(잡 폴링 · 첨부 규칙)은 앱 `application.yml` 에, 모듈은 메커니즘만 — 모듈 내부를 고쳐서 맞추지 않는다.
+- 응답 · 에러 · 페이지 · 멱등 · 검증 에러 모양과 테스트 모양(진짜 PostgreSQL + 보안 체인, 저장소만 메모리)은 샘플 테스트(`apps/sample/src/test/…/notes/`)를 본다.
+- 프론트 쪽 짝은 react-skeleton 의 `apps/sample`(Storybook Patterns 로 조립한 화면 · TanStack Query 훅) — 같은 `/api/v1/notes` 계약이다. 백엔드 조각을 바꾸면 그쪽 계약 문서도 함께 본다.
+- 로컬 전체 실행 `scripts/dev-sample.sh`, e2e 용 `scripts/sample-e2e-backend.sh start|stop`.
+<!-- sample:end -->
 
 ## 변경 이력
 

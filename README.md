@@ -125,6 +125,19 @@ scripts/new-project.sh ~/work/ovation dev.sumin.ovation ovation Ovation --db mys
 
 수동으로 하려면: 레포를 복사해 `scripts/rename-skeleton.sh dev.sumin.ovation ovation Ovation`, 쓰지 않는 모듈과 `apps/workbench` 를 지우고 `docs/minimal-composition.md` 를 따른다.
 
+<!-- sample:start -->
+## 샘플 앱 — 새 기능을 어떻게 얹는지 (`apps/sample`)
+
+"무엇을 받는 건가" 를 한눈에 보려면 `apps/sample` 을 본다: 로그인한 사람이 **노트**(첨부 · 고정 · 상태)를 관리하는 제품 모양의 작은 앱이다 — 스타터에 모듈 몇 줄(`idempotency` · `notification-jdbc/sse` · `storage-s3` · `job-queue-jdbc`)과 도메인 하나만 얹었다.
+REST 엔드포인트 · 알림(받은편지함 + SSE) · 첨부 업로드 · 내보내기 잡 · 검증 에러 · 멱등 생성 · 소유자 확인과 그 통합 테스트까지 한 조각이 어떤 순서로 조립됐는지 [`docs/sample.md`](docs/sample.md)에 파일 단위로 적었다.
+
+```bash
+scripts/dev-sample.sh      # DB + 로컬 S3 → 백엔드(apps/sample) → 옆 ../react-skeleton/apps/sample  (user@example.com / password)
+```
+
+짝 프론트(react-skeleton `apps/sample`)가 같은 계약으로 화면을 만든다. 샘플은 `scripts/new-project.sh` 로 찍을 때 **기본으로 빠진다** — 같이 보고 싶으면 `--with-sample`.
+
+<!-- sample:end -->
 ## Composition Workbench
 
 `apps/workbench` is the backend module assembly workbench (the demo; the starter is `apps/api`). Run it for the React skeleton's workbench UI:

@@ -1,0 +1,36 @@
+# 샘플 앱 "Notes": 모듈 기본값과 다른 값만 적는다 — 모듈은 기본값을 바꾸지 않고, 선택은 여기서 한다 (docs/sample.md).
+spring:
+  application:
+    name: kotlin-skeleton
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:${DB_PORT:5432}/app}  # 시각 바인딩은 modules:db-postgresql (SqlDialect)
+    username: ${SPRING_DATASOURCE_USERNAME:app}
+    password: ${SPRING_DATASOURCE_PASSWORD:dev}
+  flyway:
+    # 이 앱의 선택 (docs/schema-management.md)
+    locations: classpath:db/migration/{vendor}   # 방언별 폴더. 모듈(job-queue-jdbc · notification-jdbc) 마이그레이션이 합류한다
+    out-of-order: true                           # UTC 타임스탬프 버전 — 늦게 합쳐진 이른 시각 파일도 적용
+    validate-migration-naming: true
+
+server:
+  port: ${SERVER_PORT:8080}
+
+management:
+  endpoints:
+    web:
+      base-path: /          # GET /health (platform 이 공개 경로로 연다)
+      exposure:
+        include: health, info
+
+springdoc:
+  api-docs:
+    path: /api/v1/docs
+
+skeleton:
+  job-queue:
+    poll-interval: 1s                 # 내보내기가 몇 초 안에 끝나 보이도록 (모듈 기본값은 2s)
+  storage:
+    validation:                       # 첨부 규칙 — 서버가 presign 전에 검사한다 (프론트도 같은 규칙을 미리 보여 준다)
+      max-size-bytes: 5242880         # 5 MB
+      allowed-content-types: [image/png, image/jpeg, image/gif, image/webp, application/pdf, text/plain]
+      allowed-extensions: [png, jpg, jpeg, gif, webp, pdf, txt]

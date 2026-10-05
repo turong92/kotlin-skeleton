@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 샘플 앱 "Notes" — 새 기능을 어떻게 얹는지 보여 주는 제품 모양 예시 (2026-10-05)
+
+- **`apps/sample`**(Gradle `:apps:sample`): 로그인한 사람이 노트(제목 · 본문 · 상태 · 고정 · 첨부 1개)를 관리한다. 스타터 + `idempotency` · `notification-jdbc`/`-sse` · `storage-s3` · `job-queue-jdbc` + 도메인 하나. REST `/api/v1/notes`(멱등 생성 · 목록 검색/필터/페이지 · 요약 · 통째 교체 · 삭제 · 내보내기 202), 검증 에러는 `errors[].field`, 소유자 아닌 접근은 404 `NOTES.NOT_FOUND`, 만들기/수정/삭제/내보내기 완료가 받은편지함 + SSE 알림(토픽 `notes`), 내보내기는 잡이 마크다운을 저장소에 올린다. 통합 테스트 29개(진짜 PostgreSQL · 보안 체인, 저장소만 메모리). 파일 단위 설명과 조립 순서: `docs/sample.md`, 에이전트 안내: CLAUDE.md "새 기능의 정본 예시"
+- **`scripts/new-project.sh` 는 샘플을 기본으로 넣지 않는다**: `--with-sample` 일 때만 `apps/sample` · `docs/sample.md` · 실행 스크립트 · 안내 문서의 샘플 구역이 남고, 샘플이 쓰는 모듈이 닫힘에 더해진다(PostgreSQL 전용 — `--db mysql` 과 같이 못 쓴다). `test-new-project.sh` 에 `--with-sample` 조합(`--full` 5번째)과 기본 조합의 부재 단언이 늘었다
+- **로컬 실행**: `scripts/dev.sh` 가 `APP=sample` 을 받는다 · `scripts/dev-sample.sh`(DB + S3 → 백엔드 → `../react-skeleton/apps/sample`) · `scripts/sample-e2e-backend.sh start|stop`(전용 compose 프로젝트로 깨끗한 DB, `/health` UP 이면 `READY` 출력). compose 의 호스트 포트가 `DB_PORT`(5432) · `S3_PORT`(8333) 로 바뀐다 — 샘플 앱 yml 도 같은 이름을 읽는다
+- **`scripts/dev.sh` 는 앱의 `build.gradle.kts` 로 올릴 인프라를 고른다**: 이전에는 `modules/db-mysql` 폴더가 있으면 MySQL 을 올렸는데, 스켈레톤 레포는 두 DB 모듈이 다 있어 PostgreSQL 앱(`apps/api` · `apps/sample`)에도 MySQL 컨테이너를 올렸다. 이제 앱이 `implementation(project(":modules:db-mysql"))` · `…:storage-s3` 를 적었는지로 정한다(주석에 적힌 이름은 세지 않는다). `DEV_DRY_RUN=1` 은 무엇을 올릴지만 찍고 끝낸다 — `test-new-project.sh` 가 그것으로 확인한다
+- **`notification-sse`: 받는 사람이 정해진 알림은 그 사람의 연결에만 흐른다 — 동작이 바뀌는 변경.** 이전에는 토픽만 맞으면 모든 연결이 모든 알림(제목 · payload · `recipientIds` 포함)을 받았다. 이제 `recipientIds` 가 비어 있지 않은 이벤트는 연결한 호출자(`Principal.name`)가 거기 있을 때만 전달되고, 받는 사람이 없는 이벤트(전체 공지)는 모두에게 간다. 인증 없는 연결(`public-endpoint=true`)은 후자만 받는다
+- **`platform`: 값을 타입으로 바꿀 수 없는 요청은 500 이 아니라 400**: `?status=NOPE` · `?page=abc` 같은 `MethodArgumentTypeMismatchException` 이 `COMMON.PARAMETER_VALIDATION_FAILED` + `errors[{field, code: TypeMismatch}]` 가 된다
+
 ### 새 프로젝트 드릴 — 모듈이 받은편지함 · 업로드 HTTP 를 연다 · 한 줄 로컬 실행 (2026-10-05)
 
 `new-project.sh` 로 찍은 풀스택(job-queue-jdbc · notification-jdbc · notification-sse · storage-s3 · scheduler + 프론트 realtime · notifications · storage)을 브라우저에서 눌러 보며 막힌 곳을 고쳤다.

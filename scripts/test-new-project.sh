@@ -3,13 +3,14 @@
 #
 #   scripts/test-new-project.sh            # 빠른 검사 (기본, 수 초~수십 초): 인자 검증 · 모듈 닫힘 · 파일 가지치기 · rename 잔여 검사
 #   scripts/test-new-project.sh --quick    # 위와 같다 (./gradlew check 가 부른다)
-#   scripts/test-new-project.sh --full     # 위 + 네 조합을 임시 디렉토리에 찍어 각각 ./gradlew build (Docker/Testcontainers 필요, 순차, 수 분)
+#   scripts/test-new-project.sh --full     # 위 + 다섯 조합을 임시 디렉토리에 찍어 각각 ./gradlew build (Docker/Testcontainers 필요, 순차, 수 분)
 #
 # --full 은 CI 의 별도 워크플로(.github/workflows/new-project.yml)가 돈다. 조합:
 #   1. 기본값만
 #   2. --modules job-queue-jdbc,notification-mail,storage-s3,scheduler
 #   3. --db mysql --modules job-queue-jdbc
 #   4. --modules persistence-jooq,job-queue-jdbc,notification-jdbc   (jOOQ 코드 생성이 형제 모듈 마이그레이션을 파싱한다)
+#   5. --with-sample   (제품 모양 예시 앱 apps/sample 이 남고, 그 앱의 모듈이 닫힘에 더해진다)
 # macOS bash 3.2 와 GNU bash 에서 돈다. 임시 디렉토리는 끝나면 지운다 (KEEP=1 이면 남긴다).
 set -euo pipefail
 
@@ -30,7 +31,7 @@ check() { # check "<설명>" <명령...>  — 명령이 성공하면 통과
 }
 has_line() { grep -Eq -- "$1" "$2"; }
 lacks_line() { ! grep -Eq -- "$1" "$2"; }
-includes() { { grep -o 'include(":[a-z:-]*")' "$1" || true; } | sed -E 's/include\("(.*)"\)/\1/' | sort | tr '\n' ' ' | sed 's/ $//'; }
+includes() { { grep -o 'include(":[a-z0-9:-]*")' "$1" || true; } | sed -E 's/include\("(.*)"\)/\1/' | sort | tr '\n' ' ' | sed 's/ $//'; }
 
 expect_exit() { # expect_exit <기대 종료코드> "<설명>" <명령...>
   local want="$1" what="$2"; shift 2
@@ -56,6 +57,7 @@ expect_exit 2 "--db 는 postgresql | mysql" bash "$SCRIPT" "$TMP/x2" dev.sumin.o
 expect_exit 2 "알 수 없는 옵션은 exit 2" bash "$SCRIPT" "$TMP/x3" dev.sumin.ovation ovation Ovation --nope
 expect_exit 2 "--modules 에 방언 모듈을 넣으면 --db 를 쓰라며 exit 2" bash "$SCRIPT" "$TMP/x4" dev.sumin.ovation ovation Ovation --modules db-mysql
 expect_exit 2 "--with-workbench 는 PostgreSQL 전용이라 --db mysql 과 같이 못 쓴다" bash "$SCRIPT" "$TMP/x5" dev.sumin.ovation ovation Ovation --with-workbench --db mysql
+expect_exit 2 "--with-sample 은 PostgreSQL 전용이라 --db mysql 과 같이 못 쓴다" bash "$SCRIPT" "$TMP/x6" dev.sumin.ovation ovation Ovation --with-sample --db mysql
 expect_exit 2 "대상이 소스 레포 안이면 exit 2" bash "$SCRIPT" "$SRC/stamped-inside" dev.sumin.ovation ovation Ovation
 [ ! -e "$SRC/stamped-inside" ] && pass "레포 안에는 아무것도 만들지 않는다" || { fail "레포 안에 만들었다"; rm -rf "$SRC/stamped-inside"; }
 # 레포 안에서 `../내-프로젝트` 로 부르는 것이 가장 흔한 첫 시도다 — 경로를 정리하지 않으면 "레포 안" 으로 오인된다
@@ -72,6 +74,9 @@ check "build · .gradle · .git · .claude · .superpowers 는 복사하지 않�
 want=":apps:api :modules:auth :modules:db-postgresql :modules:migration :modules:migration-flyway :modules:persistence-jdbc :modules:platform :modules:time"
 got="$(includes "$A/settings.gradle.kts")"
 [ "$got" = "$want" ] && pass "settings.gradle.kts 는 스타터 모듈과 그 닫힘만 포함한다" || fail "settings includes: [$got] expected [$want]"
+check "샘플 앱은 기본으로 빠진다 (apps/sample · 그 문서 · 그 실행 스크립트)" bash -c "test ! -e '$A/apps/sample' && test ! -e '$A/docs/sample.md' && test ! -e '$A/scripts/dev-sample.sh' && test ! -e '$A/scripts/sample-e2e-backend.sh'"
+check "안내 문서(CLAUDE.md · README.md)에 샘플 구역과 표식이 남지 않는다" bash -c "! grep -q 'apps/sample\|sample:start\|sample:end' '$A/CLAUDE.md' '$A/README.md'"
+check "샘플 앱만 쓰는 모듈은 기본 조합에 없다 (idempotency · notification-sse · storage-s3)" bash -c "! grep -q 'idempotency\|notification-sse\|storage-s3' '$A/settings.gradle.kts'"
 check "선택되지 않은 모듈 디렉토리가 없다 (redis-core)" test ! -e "$A/modules/redis-core"
 check "선택되지 않은 모듈의 설정 블록도 없다" test ! -e "$A/docs/config/modules/redis-core.yml"
 check "선택된 모듈의 설정 블록은 남는다 (time)" test -f "$A/docs/config/modules/time.yml"
@@ -112,12 +117,17 @@ check "starter 테스트의 부재 단언에서 나머지(Redis · Kafka · JPA)
 check "storage-s3 를 고르면 application-local.yml 에 로컬 S3 설정(버킷 · 엔드포인트 · 키)이 새 접두사로 붙는다" bash -c "grep -q '^ovation:' '$B/apps/api/src/main/resources/application-local.yml' && grep -q 'endpoint-override: http://localhost:8333' '$B/apps/api/src/main/resources/application-local.yml' && grep -q 'bucket: app' '$B/apps/api/src/main/resources/application-local.yml'"
 check "붙은 application-local.yml 에 skeleton 흔적이 없다" bash -c "! grep -qi 'skeleton' '$B/apps/api/src/main/resources/application-local.yml'"
 check "dev.sh 는 S3 를 쓰는 조합에서 s3 서비스를 같이 올린다" has_line 'storage-s3' "$B/scripts/dev.sh"
+check "dev.sh 는 앱이 쓰는 모듈로 인프라를 정한다 — storage-s3 를 고른 조합은 postgres + s3" bash -c "[ \"\$(DEV_DRY_RUN=1 APP=api bash -c 'cd \"$B\" && bash scripts/dev.sh' 2>&1 | tail -1)\" = 'infra: postgres s3=1 app=api' ]"
+check "dev.sh 는 기본 조합에서 s3 를 올리지 않는다" bash -c "[ \"\$(DEV_DRY_RUN=1 bash -c 'cd \"$A\" && bash scripts/dev.sh' 2>&1 | tail -1)\" = 'infra: postgres s3=0 app=api' ]"
+check "dev.sh 는 소스 레포(두 DB 모듈이 다 있다)에서도 스타터 apps/api 에 postgres 를 고른다 — 폴더 존재로 고르면 mysql 이 된다" bash -c "[ \"\$(DEV_DRY_RUN=1 bash -c 'cd \"$SRC\" && bash scripts/dev.sh' 2>&1 | tail -1)\" = 'infra: postgres s3=0 app=api' ]"
+check "dev.sh APP=sample 은 postgres + s3" bash -c "[ \"\$(DEV_DRY_RUN=1 APP=sample bash -c 'cd \"$SRC\" && bash scripts/dev.sh' 2>&1 | tail -1)\" = 'infra: postgres s3=1 app=sample' ]"
 check "persistence-jooq 가 없으니 그 모듈이 읽던 형제 폴더 문제도 없다" test ! -e "$B/modules/persistence-jooq"
 
 echo "== 4. --db mysql --modules job-queue-jdbc"
 C="$TMP/c"
 expect_exit 0 "조합 3 을 찍는다" stamp "$C" --db mysql --modules job-queue-jdbc
 check "db-postgresql 모듈이 사라지고 db-mysql 이 들어온다" bash -c "grep -q 'include(\":modules:db-mysql\")' '$C/settings.gradle.kts' && ! grep -q 'db-postgresql' '$C/settings.gradle.kts' && test ! -e '$C/modules/db-postgresql'"
+check "dev.sh 는 mysql 조합에서 mysql 컨테이너를 고른다" bash -c "[ \"\$(DEV_DRY_RUN=1 bash -c 'cd \"$C\" && bash scripts/dev.sh' 2>&1 | tail -1)\" = 'infra: mysql s3=0 app=api' ]"
 check "apps/api 가 db-mysql 을 쓴다" bash -c "grep -q 'project(\":modules:db-mysql\")' '$C/apps/api/build.gradle.kts' && ! grep -q 'project(\":modules:db-postgresql\")\|testcontainers-postgresql' '$C/apps/api/build.gradle.kts'"
 check "apps/api 테스트 컨테이너가 MySQL 이다" has_line 'MySQLContainer' "$C/apps/api/src/test/kotlin/dev/sumin/ovation/app/api/TestcontainersConfiguration.kt"
 check "datasource URL 이 MySQL 이다" has_line 'jdbc:mysql://localhost:3306/app' "$C/apps/api/src/main/resources/application.yml"
@@ -144,8 +154,23 @@ check "main 에는 예시 DDL 이 없다 (src/test/resources 에 있다)" bash -
 F="$TMP/f"
 expect_exit 0 "persistence-jooq + 형제 마이그레이션 모듈을 찍는다" stamp "$F" --modules persistence-jooq,job-queue-jdbc,notification-jdbc
 
+echo "== 7. --with-sample (샘플 앱 \"Notes\" 은 요청할 때만 남는다)"
+G="$TMP/g"
+expect_exit 0 "조합 5 를 찍는다 (rename 잔여 검사 포함)" stamp "$G" --with-sample
+want=":apps:api :apps:sample :modules:auth :modules:crypto :modules:db-postgresql :modules:idempotency :modules:job-queue-jdbc :modules:json :modules:migration :modules:migration-flyway :modules:notification :modules:notification-jdbc :modules:notification-sse :modules:persistence-jdbc :modules:platform :modules:storage :modules:storage-s3 :modules:time"
+got="$(includes "$G/settings.gradle.kts")"
+[ "$got" = "$want" ] && pass "settings.gradle.kts 는 스타터 + 샘플 앱의 모듈과 그 닫힘을 포함한다" || fail "settings includes: [$got] expected [$want]"
+check "샘플 앱 소스가 새 패키지로 옮겨진다" test -f "$G/apps/sample/src/main/kotlin/dev/sumin/ovation/app/sample/SampleApplication.kt"
+check "샘플 앱의 설정 루트 키가 새 접두사다 (ovation:) — skeleton: 이 남으면 설정이 조용히 무시된다" bash -c "grep -q '^ovation:' '$G/apps/sample/src/main/resources/application.yml' && ! grep -q '^skeleton:' '$G/apps/sample/src/main/resources/application.yml' '$G/apps/sample/src/main/resources/application-local.yml'"
+check "샘플 문서 · 실행 스크립트가 남고 안내 문서의 표식 줄만 지워진다" bash -c "test -f '$G/docs/sample.md' && test -x '$G/scripts/dev-sample.sh' && test -x '$G/scripts/sample-e2e-backend.sh' && grep -q 'apps/sample' '$G/CLAUDE.md' && ! grep -q 'sample:start\|sample:end' '$G/CLAUDE.md' '$G/README.md'"
+check "스타터 apps/api 는 그대로다 — 샘플 앱의 모듈을 얹지 않는다" bash -c "! grep -q 'storage-s3\|notification\|idempotency' '$G/apps/api/build.gradle.kts'"
+check "스타터 테스트의 부재 단언(S3 클라이언트)은 그대로다 — 스타터 클래스패스에는 여전히 없다" has_line 'software.amazon.awssdk.services.s3.S3Client' "$G/apps/api/src/test/kotlin/dev/sumin/ovation/app/api/StarterCompositionIntegrationTest.kt"
+check "스타터 설정에 샘플 모듈의 설정 블록이 붙지 않는다" lacks_line 'new-project: module config blocks' "$G/apps/api/src/main/resources/application.yml"
+check "dbTestModules 에 샘플이 쓰는 DB 모듈이 들어간다" has_line 'val dbTestModules = setOf\(":modules:job-queue-jdbc", ":modules:notification-jdbc"\)' "$G/build.gradle.kts"
+check "dev.sh 는 APP=sample 을 알고 문법 검사를 통과한다" bash -c "grep -q 'APP' '$G/scripts/dev.sh' && bash -n '$G/scripts/dev.sh' && bash -n '$G/scripts/dev-sample.sh' && bash -n '$G/scripts/sample-e2e-backend.sh'"
+
 if [ "$MODE" = "--full" ]; then
-  echo "== 7. 조합마다 ./gradlew build (순차)"
+  echo "== 8. 조합마다 ./gradlew build (순차)"
   build_composition() { # build_composition <dir> <이름>
     local dir="$1" name="$2" started ended
     started="$(date +%s)"
@@ -162,6 +187,7 @@ if [ "$MODE" = "--full" ]; then
   build_composition "$B" "2-modules"
   build_composition "$C" "3-mysql"
   build_composition "$F" "4-jooq"
+  build_composition "$G" "5-sample"
 fi
 
 echo

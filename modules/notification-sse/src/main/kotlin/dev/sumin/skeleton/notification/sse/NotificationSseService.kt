@@ -12,7 +12,11 @@ class NotificationSseService(
     private val subscriptionRegistry: NotificationSubscriptionRegistry,
     private val properties: NotificationSseProperties,
 ) {
-    fun connect(topics: Collection<String>): SseEmitter {
+    /**
+     * [recipientId] 는 연결한 호출자(`Principal.name`)다. 받는 사람이 정해진 알림(`recipientIds` 가 비어 있지 않음)은
+     * 그 사람에게만 흘리고, 받는 사람이 없는 알림(전체 공지)은 모두에게 흘린다. 인증 없는 연결(공개 엔드포인트)은 후자만 받는다.
+     */
+    fun connect(topics: Collection<String>, recipientId: String? = null): SseEmitter {
         val normalizedTopics = topics.mapNotNullTo(linkedSetOf()) { topic ->
             topic.trim().takeIf { it.isNotBlank() }
         }
@@ -21,7 +25,7 @@ class NotificationSseService(
             subscriptionRef.get()?.close()
         }
         val subscription = subscriptionRegistry.subscribe(normalizedTopics) { event ->
-            emitter.sendNotification(event)
+            if (isVisibleTo(event, recipientId)) emitter.sendNotification(event)
         }
         subscriptionRef.set(subscription)
 
@@ -34,6 +38,11 @@ class NotificationSseService(
 
         emitter.sendConnectedEvent(normalizedTopics)
         return emitter
+    }
+
+    companion object {
+        fun isVisibleTo(event: NotificationEvent, recipientId: String?): Boolean =
+            event.recipientIds.isEmpty() || (recipientId != null && recipientId in event.recipientIds)
     }
 
     private fun SseEmitter.sendNotification(event: NotificationEvent) {

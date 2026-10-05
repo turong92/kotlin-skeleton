@@ -2,7 +2,7 @@
 # 새 프로젝트 한 줄 찍어내기: 복사 → 모듈 고르기 → (선택) DB 바꾸기 → 의존성 · 설정 블록 더하기 → rename.
 #
 #   scripts/new-project.sh <target-dir> <root-package> <config-prefix> <ClassPrefix> \
-#       [--modules a,b,c] [--db postgresql|mysql] [--with-workbench]
+#       [--modules a,b,c] [--db postgresql|mysql] [--with-workbench] [--with-sample]
 #
 #   예) scripts/new-project.sh ~/work/ovation dev.sumin.ovation ovation Ovation
 #       scripts/new-project.sh ~/work/ovation dev.sumin.ovation ovation Ovation --modules job-queue-jdbc,storage-s3,scheduler
@@ -12,6 +12,7 @@
 #   1. 이 레포를 <target-dir> 로 복사한다 (build · .gradle · .kotlin · .git · .superpowers · .claude · node_modules · .env 제외).
 #      apps/api(스타터)는 남기고 apps/workbench 는 --with-workbench 일 때만 남긴다
 #      (워크벤치는 모든 모듈을 쓰므로 그 경우 모든 모듈이 남고 PostgreSQL 전용이다).
+#      apps/sample(제품 모양 예시 "Notes", docs/sample.md)은 기본으로 **빠진다** — --with-sample 일 때만 남고, 그 앱이 쓰는 모듈이 닫힘에 더해진다(PostgreSQL 전용).
 #   2. 모듈 = 스타터의 모듈 + --modules, 모듈끼리의 project(":modules:x") 의존(api · implementation · runtimeOnly)으로 닫는다.
 #      테스트에만 쓰는 모듈 의존(testImplementation)도 테스트가 컴파일되려면 필요하므로 따라온다 — 따라온 이유를 출력한다.
 #      고르지 않은 모듈은 디렉토리 · docs/config/modules/<m>.yml · docs/modules/<m>.md (와 색인 행) · settings.gradle.kts include 를 지우고,
@@ -30,7 +31,7 @@ SRC="$(cd "$(dirname "$0")/.." && pwd -P)"
 usage() {
   cat <<'EOF'
 usage: scripts/new-project.sh <target-dir> <root-package> <config-prefix> <ClassPrefix>
-                              [--modules a,b,c] [--db postgresql|mysql] [--with-workbench]
+                              [--modules a,b,c] [--db postgresql|mysql] [--with-workbench] [--with-sample]
 
   <target-dir>     새로 만들 디렉토리 (이미 있으면 거부)
   <root-package>   예: dev.sumin.ovation
@@ -39,6 +40,7 @@ usage: scripts/new-project.sh <target-dir> <root-package> <config-prefix> <Class
   --modules        스타터에 더할 모듈, 쉼표로 구분 (예: job-queue-jdbc,notification-mail,storage-s3,scheduler)
   --db             postgresql(기본) | mysql
   --with-workbench apps/workbench(모든 모듈 데모)도 남긴다 — 모든 모듈이 남고 PostgreSQL 전용
+  --with-sample    apps/sample(제품 모양 예시 앱 "Notes" — 새 기능을 어떻게 얹는지 보는 정본)도 남긴다 — 그 앱의 모듈이 더해지고 PostgreSQL 전용
 EOF
 }
 
@@ -65,6 +67,7 @@ POSITIONAL=()
 MODULES_ARG=""
 DB="postgresql"
 WITH_WORKBENCH=0
+WITH_SAMPLE=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --modules) [ $# -ge 2 ] || die_usage "--modules needs a value"; MODULES_ARG="$2"; shift 2 ;;
@@ -72,6 +75,7 @@ while [ $# -gt 0 ]; do
     --db) [ $# -ge 2 ] || die_usage "--db needs a value"; DB="$2"; shift 2 ;;
     --db=*) DB="${1#--db=}"; shift ;;
     --with-workbench) WITH_WORKBENCH=1; shift ;;
+    --with-sample) WITH_SAMPLE=1; shift ;;
     -h|--help) usage; exit 0 ;;
     --*) die_usage "unknown option: $1" ;;
     *) POSITIONAL+=("$1"); shift ;;
@@ -104,6 +108,10 @@ $(printf '%s' "$MODULES_ARG" | tr ',' '\n')
 EOF
 fi
 
+if [ "$WITH_SAMPLE" = 1 ] && [ "$DB" = mysql ]; then
+  die_usage "--with-sample is PostgreSQL-only (the sample's migration and queries are PostgreSQL); drop --db mysql or --with-sample"
+fi
+
 case "$TARGET_ARG" in /*) TARGET="$TARGET_ARG" ;; *) TARGET="$PWD/$TARGET_ARG" ;; esac
 TARGET="${TARGET%/}"
 # `../내-프로젝트` · 심볼릭 링크를 정리한다 — 안 하면 레포 안에서 부른 `../x` 가 "레포 안" 으로 오인된다 (아직 없는 끝 구간은 그대로 붙인다)
@@ -123,6 +131,9 @@ STARTER="$(project_deps "$SRC/apps/api/build.gradle.kts" | awk '$1 == "main" { p
 if [ "$DB" = mysql ]; then
   STARTER="$(printf '%s\n' "$STARTER" | sed 's/^db-postgresql$/db-mysql/')"
 fi
+
+SAMPLE_DEPS=""
+[ "$WITH_SAMPLE" = 0 ] || SAMPLE_DEPS="$(project_deps "$SRC/apps/sample/build.gradle.kts" | awk '$1 == "main" { print $2 }')"
 
 NOTES=""
 # close <시작 모듈 목록>  →  전역 CLOSED (줄 목록), REASONS (추가 이유), NOTES (테스트용 의존 안내)
@@ -153,19 +164,23 @@ EOF
   done
 }
 
+# BASE = 스타터만 · API_SELECTED = 스타터 + 요청(apps/api 의 클래스패스) · SELECTED = 거기에 샘플 앱이 쓰는 모듈까지(디렉토리로 남는 전부)
 if [ "$WITH_WORKBENCH" = 1 ]; then
   SELECTED="$ALL_MODULES"
   BASE="$ALL_MODULES"
+  API_SELECTED="$ALL_MODULES"
   REASONS="  (--with-workbench keeps every module)"$'\n'
 else
   close "$STARTER"; BASE="$CLOSED"
-  close "$(printf '%s\n%s' "$STARTER" "$REQUESTED" | grep -v '^$')"; SELECTED="$CLOSED"
+  close "$(printf '%s\n%s' "$STARTER" "$REQUESTED" | grep -v '^$')"; API_SELECTED="$CLOSED"
+  close "$(printf '%s\n%s\n%s' "$STARTER" "$REQUESTED" "$SAMPLE_DEPS" | grep -v '^$')"; SELECTED="$CLOSED"
 fi
 SELECTED_SORTED="$(printf '%s\n' "$SELECTED" | sort -u)"
+API_SORTED="$(printf '%s\n' "$API_SELECTED" | sort -u)"
 REMOVED="$(comm -23 <(printf '%s\n' "$ALL_MODULES") <(printf '%s\n' "$SELECTED_SORTED"))"
 
 echo "→ $TARGET"
-echo "  package $PKG, prefix $PREFIX, class prefix $CLASS, db $DB$([ "$WITH_WORKBENCH" = 1 ] && echo ', with workbench')"
+echo "  package $PKG, prefix $PREFIX, class prefix $CLASS, db $DB$([ "$WITH_WORKBENCH" = 1 ] && echo ', with workbench')$([ "$WITH_SAMPLE" = 1 ] && echo ', with sample')"
 echo "  modules ($(printf '%s\n' "$SELECTED_SORTED" | wc -l | tr -d ' ')): $(printf '%s\n' "$SELECTED_SORTED" | tr '\n' ' ')"
 [ -z "$REQUESTED" ] || echo "  requested: $(printf '%s\n' "$REQUESTED" | tr '\n' ' ')"
 printf '%s' "$REASONS" | sed 's/^/  /'
@@ -187,6 +202,14 @@ rm -rf scripts/new-project.sh scripts/test-new-project.sh scripts/new-project.d 
 
 # ---------------------------------------------------------------------------------------------------- 지우기
 [ "$WITH_WORKBENCH" = 1 ] || { rm -rf apps/workbench; perl -ni -e 'print unless /^include\(":apps:workbench"\)\s*$/' settings.gradle.kts; }
+# 샘플 앱은 기본으로 빠진다 — 앱 · 그 문서 · 실행 스크립트 · 안내 문서의 샘플 구역(<!-- sample:start --> … <!-- sample:end -->)까지. --with-sample 이면 표식 줄만 지운다
+if [ "$WITH_SAMPLE" = 1 ]; then
+  for f in CLAUDE.md README.md; do [ ! -f "$f" ] || perl -ni -e 'print unless /^<!-- sample:(start|end) -->\s*$/' "$f"; done
+else
+  rm -rf apps/sample docs/sample.md scripts/dev-sample.sh scripts/sample-e2e-backend.sh
+  perl -ni -e 'print unless /^include\(":apps:sample"\)\s*$/' settings.gradle.kts
+  for f in CLAUDE.md README.md; do [ ! -f "$f" ] || perl -0pi -e 's/<!-- sample:start -->.*?<!-- sample:end -->\n?//gs' "$f"; done
+fi
 while IFS= read -r m; do
   [ -n "$m" ] || continue
   rm -rf "modules/$m" "docs/config/modules/$m.yml" "docs/modules/$m.md"
@@ -209,11 +232,12 @@ in_list db-mysql "$SELECTED_SORTED" || { perl -ni -e 'print unless /^\s*"mysqlTe
 # 스타터 테스트의 "부재 단언": 선택한 모듈이 가져오는 클래스는 더 이상 없어야 하는 것이 아니다
 STARTER_TEST="$(ls apps/api/src/test/kotlin/dev/sumin/skeleton/app/api/StarterCompositionIntegrationTest.kt)"
 drop_absent() { CLS="$1" perl -ni -e 'print unless /"\Q$ENV{CLS}\E",/' "$STARTER_TEST"; }
-in_list storage-s3 "$SELECTED_SORTED" && drop_absent software.amazon.awssdk.services.s3.S3Client
-in_list notification-mail "$SELECTED_SORTED" && drop_absent jakarta.mail.Session
-in_list persistence-jpa "$SELECTED_SORTED" && drop_absent jakarta.persistence.EntityManager
-in_list event-kafka "$SELECTED_SORTED" && drop_absent org.apache.kafka.clients.producer.KafkaProducer
-if printf '%s\n' "$SELECTED_SORTED" | grep -q '^redis-'; then
+# (apps/api 의 클래스패스 기준이다 — 샘플 앱만 쓰는 모듈은 스타터 클래스패스에 없으니 부재 단언을 그대로 둔다)
+in_list storage-s3 "$API_SORTED" && drop_absent software.amazon.awssdk.services.s3.S3Client
+in_list notification-mail "$API_SORTED" && drop_absent jakarta.mail.Session
+in_list persistence-jpa "$API_SORTED" && drop_absent jakarta.persistence.EntityManager
+in_list event-kafka "$API_SORTED" && drop_absent org.apache.kafka.clients.producer.KafkaProducer
+if printf '%s\n' "$API_SORTED" | grep -q '^redis-'; then
   drop_absent org.springframework.data.redis.core.RedisTemplate
   perl -ni -e 'print unless /containsBean\("redisConnectionFactory"\)/' "$STARTER_TEST"
 fi
@@ -272,7 +296,7 @@ while IFS= read -r m; do
   [ -f "docs/config/modules/$m.yml" ] || continue
   BLOCK_MODULES="${BLOCK_MODULES:+$BLOCK_MODULES$'\n'}$m"
 done <<EOF
-$(printf '%s\n' "$REQUESTED"; printf '%s\n' "$SELECTED" | while IFS= read -r s; do in_list "$s" "$BASE" || in_list "$s" "$REQUESTED" || echo "$s"; done)
+$(printf '%s\n' "$REQUESTED"; printf '%s\n' "$API_SELECTED" | while IFS= read -r s; do in_list "$s" "$BASE" || in_list "$s" "$REQUESTED" || echo "$s"; done)
 EOF
 if [ -n "$BLOCK_MODULES" ] && [ "$WITH_WORKBENCH" != 1 ]; then
   {
@@ -291,13 +315,16 @@ EOF2
 fi
 
 # ---------------------------------------------------------------------------------------------------- 로컬 S3 (storage-s3 를 고르면 local 프로필이 compose 의 S3 에 붙는다)
-if in_list storage-s3 "$SELECTED_SORTED"; then
+if in_list storage-s3 "$API_SORTED"; then
   sed "s/^skeleton:/$PREFIX:/" "$SRC/scripts/new-project.d/application-local-storage-s3.yml" >> apps/api/src/main/resources/application-local.yml
 fi
 
 # ---------------------------------------------------------------------------------------------------- 끝
 trap - EXIT
 DB_SERVICE="$([ "$DB" = mysql ] && echo mysql || echo postgres)"
+SAMPLE_HINT=""
+[ "$WITH_SAMPLE" = 0 ] || SAMPLE_HINT="  APP=sample scripts/dev.sh                         # 샘플 앱(Notes) — docs/sample.md. 짝 프론트는 react-skeleton 에서 --with-sample 로 찍어 ../web 에 둔다
+"
 cat <<EOF
 
 ✓ $TARGET
@@ -308,7 +335,7 @@ next:
   git init && git add -A && git commit -m "Initial commit (from the skeleton: $(printf '%s\n' "$SELECTED_SORTED" | wc -l | tr -d ' ') modules)"
   ./gradlew build                                  # Docker 가 필요하다 (Testcontainers)
   scripts/dev.sh                                    # 로컬 한 줄 실행: $DB_SERVICE$(in_list storage-s3 "$SELECTED_SORTED" && echo " + s3") 컨테이너 → 백엔드 (../web 이 있으면 프론트도)
-  # 손으로: docker compose up -d $DB_SERVICE && ./gradlew :apps:api:bootRun --args='--spring.profiles.active=local'
+$SAMPLE_HINT  # 손으로: docker compose up -d $DB_SERVICE && ./gradlew :apps:api:bootRun --args='--spring.profiles.active=local'
 module 하나 더: apps/api/build.gradle.kts 에 implementation(project(":modules:<m>")) 한 줄 (모듈이 없으면 이 도구를 다시 쓰지 말고 스켈레톤에서 디렉토리를 복사한 뒤 settings.gradle.kts 에 include).
 설정이 필요하면 docs/config/modules/<m>.yml 에서 바꿀 키만 apps/api application.yml 로 옮긴다. 환경변수는 .env.example 의 [모듈] 구역.
 EOF

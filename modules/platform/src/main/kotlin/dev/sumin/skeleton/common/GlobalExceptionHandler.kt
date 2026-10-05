@@ -9,6 +9,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
 import org.springframework.web.method.annotation.HandlerMethodValidationException
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException
 import org.springframework.web.servlet.resource.NoResourceFoundException
 
 /**
@@ -49,6 +50,19 @@ class GlobalExceptionHandler {
                 detail = ex.message,
                 traceId = currentTraceId(),
                 spanId = currentSpanId(),
+            ),
+        )
+
+    /** `?status=NOPE` · `?page=abc` 처럼 값을 타입으로 바꿀 수 없는 요청 — 클라이언트 잘못이라 500 이 아니라 400 이다 */
+    @ExceptionHandler(MethodArgumentTypeMismatchException::class)
+    fun handleTypeMismatch(ex: MethodArgumentTypeMismatchException): ResponseEntity<ApiError> =
+        ResponseEntity.badRequest().body(
+            apiError(
+                errorCode = PlatformErrorCode.PARAMETER_VALIDATION_FAILED,
+                detail = "Parameter '${ex.name}' has an invalid value.",
+                traceId = currentTraceId(),
+                spanId = currentSpanId(),
+                errors = listOf(ApiError.FieldError(field = ex.name, code = "TypeMismatch", message = "Invalid value")),
             ),
         )
 

@@ -1,0 +1,12 @@
+# 로컬 프로필: compose 의 S3(SeaweedFS, profile s3 — scripts/dev.sh 가 올린다)에 붙는다. 서버와 브라우저가 같은 주소(localhost:S3_PORT)다.
+skeleton:
+  migration:
+    clean-on-validation-error: true   # 로컬 전용: 고친 미배포 마이그레이션은 DB 를 밀고 다시 깐다 (local 밖에서 켜면 기동 실패)
+  storage-s3:
+    bucket: app
+    region: us-east-1
+    endpoint-override: http://localhost:${S3_PORT:8333}
+    path-style-access-enabled: true
+    credentials:
+      access-key-id: dev
+      secret-access-key: dev-secret

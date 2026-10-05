@@ -6,6 +6,7 @@ import dev.sumin.skeleton.notification.NotificationSubscriptionRegistry
 import dev.sumin.skeleton.notification.NotificationEvent
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class NotificationSseServiceTest {
@@ -53,6 +54,28 @@ class NotificationSseServiceTest {
         registry.subscriber.onNotification(NotificationEvent(topic = "demo", type = "smoke"))
 
         assertTrue(registry.subscription.closed)
+    }
+
+    @Test
+    fun `an event addressed to someone else is not visible to the caller, an event for the caller or for everyone is`() {
+        val forA = NotificationEvent(topic = "notes", type = "t", recipientIds = setOf("a"))
+        val forEveryone = NotificationEvent(topic = "notes", type = "t")
+
+        assertTrue(NotificationSseService.isVisibleTo(forA, "a"))
+        assertFalse(NotificationSseService.isVisibleTo(forA, "b"))
+        assertFalse(NotificationSseService.isVisibleTo(forA, null))
+        assertTrue(NotificationSseService.isVisibleTo(forEveryone, "b"))
+        assertTrue(NotificationSseService.isVisibleTo(forEveryone, null))
+    }
+
+    @Test
+    fun `connect accepts the caller so recipient-addressed events can be filtered`() {
+        val registry = RecordingSubscriptionRegistry()
+        val service = NotificationSseService(registry, NotificationSseProperties())
+
+        service.connect(listOf("notes"), recipientId = "a")
+
+        assertEquals(setOf("notes"), registry.subscription.topics)
     }
 
     private class RecordingSubscriptionRegistry : NotificationSubscriptionRegistry {

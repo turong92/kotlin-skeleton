@@ -8,7 +8,7 @@ services:
       POSTGRES_USER: app
       POSTGRES_PASSWORD: dev
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:${DB_PORT:-5432}:5432"   # 다른 포트로 띄우려면 DB_PORT=15432 (샘플 앱 yml 도 같은 이름을 읽는다)
     volumes:
       - postgres-data:/var/lib/postgresql
     healthcheck:
@@ -68,7 +68,7 @@ services:
       - source: s3-identity
         target: /etc/seaweedfs/s3.json
     ports:
-      - "127.0.0.1:8333:8333"
+      - "127.0.0.1:${S3_PORT:-8333}:8333"   # 다른 포트면 S3_PORT=18333 (서버 → 이 주소 · 브라우저 직접 업로드도 같은 주소라 서버 설정도 같은 값이어야 한다)
     volumes:
       - s3-data:/data
 
