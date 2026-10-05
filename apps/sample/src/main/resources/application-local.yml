@@ -1,5 +1,23 @@
 # 로컬 프로필: compose 의 S3(SeaweedFS, profile s3 — scripts/dev.sh 가 올린다)에 붙는다. 서버와 브라우저가 같은 주소(localhost:S3_PORT)다.
+spring:
+  mail:                                   # compose 의 mail 프로필(mailpit): SMTP localhost:1025, 받은 메일 http://localhost:8025
+    host: localhost
+    port: ${MAIL_SMTP_PORT:1025}
 skeleton:
+  notification-mail:
+    enabled: true
+    from: "Notes <no-reply@notes.local>"
+  account:
+    mail:
+      link-base-url: http://localhost:5173   # react-skeleton 개발 서버 (apps/sample)
+    login:
+      per-account: 200                       # e2e(Playwright)가 같은 시드 계정으로 자주 로그인한다 — 로컬에서만 한도를 넉넉히
+      per-ip: 500
+    seed:
+      accounts:                              # 로컬 · e2e 시드 — 고정 id 로 픽스처 · 업로드 키가 안정된다. 비밀번호는 모두 password
+        - { id: acc_user, email: user@example.com, password: password, display-name: User }
+        - { id: acc_admin, email: admin@example.com, password: password, roles: [ADMIN], display-name: Admin }
+        - { id: acc_moderator, email: moderator@example.com, password: password, roles: [MODERATOR], display-name: Moderator }
   migration:
     clean-on-validation-error: true   # 로컬 전용: 고친 미배포 마이그레이션은 DB 를 밀고 다시 깐다 (local 밖에서 켜면 기동 실패)
   storage-s3:

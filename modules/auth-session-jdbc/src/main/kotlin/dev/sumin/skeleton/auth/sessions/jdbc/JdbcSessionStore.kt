@@ -70,13 +70,12 @@ class JdbcSessionStore(
             MapSqlParameterSource().addValue("now", dialect.instantParam(now)).addValue("reason", reason).addValue("id", sessionId),
         ) == 1
 
-    override fun revokeAll(accountId: String, exceptSessionId: String?, now: Instant, reason: String): Int =
-        jdbc.update(
-            "update skeleton_auth_sessions set revoked_at = :now, revoked_reason = :reason " +
-                "where account_id = :account and revoked_at is null and (:except is null or id <> :except)",
-            MapSqlParameterSource().addValue("now", dialect.instantParam(now)).addValue("reason", reason)
-                .addValue("account", accountId).addValue("except", exceptSessionId),
-        )
+    override fun revokeAll(accountId: String, exceptSessionId: String?, now: Instant, reason: String): Int {
+        // `(:except is null or id <> :except)` 는 PostgreSQL 이 타입 없는 null 매개변수를 못 정해 실패한다 — 문장을 둘로 나눈다
+        val p = MapSqlParameterSource().addValue("now", dialect.instantParam(now)).addValue("reason", reason).addValue("account", accountId)
+        val sql = "update skeleton_auth_sessions set revoked_at = :now, revoked_reason = :reason where account_id = :account and revoked_at is null"
+        return if (exceptSessionId == null) jdbc.update(sql, p) else jdbc.update("$sql and id <> :except", p.addValue("except", exceptSessionId))
+    }
 
     override fun listActive(accountId: String, now: Instant, idleCutoff: Instant): List<SessionRecord> =
         jdbc.query(

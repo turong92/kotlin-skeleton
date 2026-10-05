@@ -7,6 +7,8 @@ plugins {
 dependencies {
     implementation(project(":modules:platform"))
     implementation(project(":modules:auth"))
+    implementation(project(":modules:account-jdbc"))       // 계정 (+ account): 가입 · 이메일 확인 · 재설정 · 삭제 — auth 가 진짜 계정으로 로그인한다
+    implementation(project(":modules:auth-session-jdbc"))  // 리프레시 토큰 · 세션 목록 (+ auth-session). 메일은 --modules notification-mail (docs/accounts.md)
     implementation(project(":modules:persistence-jdbc"))
     implementation(project(":modules:db-postgresql"))      // 방언은 정확히 하나 (MySQL 이면 :modules:db-mysql)
     implementation(project(":modules:migration-flyway"))   // 공통 :modules:migration 은 api 로 따라온다

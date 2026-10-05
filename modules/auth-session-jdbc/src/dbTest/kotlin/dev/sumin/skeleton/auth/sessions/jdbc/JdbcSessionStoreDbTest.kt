@@ -72,6 +72,14 @@ class JdbcSessionStoreDbTest {
     }
 
     @Test
+    fun `revokeAll without an exception revokes every open session of the account and only that account`() {
+        store.create(session("ses_a"), "a".repeat(64)); store.create(session("ses_b"), "b".repeat(64)); store.create(session("ses_c", account = "acc_2"), "c".repeat(64))
+        assertEquals(2, store.revokeAll("acc_1", null, now, "ALL"))
+        assertTrue(store.find("ses_a")!!.revokedAt != null && store.find("ses_b")!!.revokedAt != null)
+        assertNull(store.find("ses_c")!!.revokedAt)
+    }
+
+    @Test
     fun `listActive hides revoked expired and idle sessions, newest first`() {
         store.create(session("ses_old", at = now.minus(Duration.ofDays(40))), "o".repeat(64))
         store.create(session("ses_a", at = now), "a".repeat(64))

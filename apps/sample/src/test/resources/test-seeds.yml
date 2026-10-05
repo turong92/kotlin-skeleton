@@ -1,0 +1,13 @@
+# 시험용 시드 계정 — local 프로필을 켜지 않고 @SpringBootTest(properties = ["spring.config.import=classpath:test-seeds.yml"]) 로 가져온다
+skeleton:
+  account:
+    password:
+      bcrypt-strength: 4     # 시험에서는 해시를 싸게
+    login:
+      per-account: 1000      # 같은 컨텍스트에서 시험마다 로그인한다 — 운영 기본(10분에 10번)이면 시험이 스스로를 막는다
+      per-ip: 1000
+    seed:
+      accounts:
+        - { id: acc_user, email: user@example.com, password: password }
+        - { id: acc_admin, email: admin@example.com, password: password, roles: [ADMIN] }
+        - { id: acc_moderator, email: moderator@example.com, password: password, roles: [MODERATOR] }

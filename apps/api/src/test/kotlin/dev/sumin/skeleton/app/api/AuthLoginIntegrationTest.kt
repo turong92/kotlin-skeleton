@@ -10,7 +10,7 @@ import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.post
 
-@SpringBootTest
+@SpringBootTest(properties = ["spring.config.import=classpath:test-seeds.yml"])
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration::class)
 class AuthLoginIntegrationTest {

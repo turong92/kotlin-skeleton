@@ -25,7 +25,7 @@ import org.springframework.test.web.servlet.put
  * 샘플 앱 통합 테스트의 바탕 — 진짜 PostgreSQL(Testcontainers) · 진짜 보안 체인 · 진짜 Flyway, 저장소만 메모리다.
  * 같은 설정이라 컨텍스트는 한 번만 뜬다. 매 테스트 전에 notes · 받은편지함 · 잡을 비운다.
  */
-@SpringBootTest(properties = ["skeleton.job-queue.poll-interval=200ms"])
+@SpringBootTest(properties = ["skeleton.job-queue.poll-interval=200ms", "spring.config.import=classpath:test-seeds.yml"])
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration::class, SampleIntegrationTest.FakeStorageConfiguration::class)
 abstract class SampleIntegrationTest {

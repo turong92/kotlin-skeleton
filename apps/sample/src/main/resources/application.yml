@@ -30,6 +30,14 @@ skeleton:
   auth:
     jwt:
       secret: ${JWT_SECRET:dev-local-jwt-secret-change-me-32-bytes}   # 배포 선언의 secrets: [JWT_SECRET] 별칭. 기본값(개발용)으로는 prod · staging · SKELETON_ENV=stage|prod 에서 기동 실패 (docs/deploy.md)
+  account:
+    mail:
+      link-base-url: ${APP_BASE_URL:}     # 메일 링크가 여는 프론트 주소. 비면 stage · prod 에서 기동 실패 (docs/accounts.md)
+      default-locale: ko
+    admin:
+      enabled: true                       # 운영자 계정 도구(/api/v1/admin/accounts) — 이 앱의 선택. ADMIN 역할이 필요하다
+  auth-magic-link:
+    sign-up: true                         # 메일함을 증명하면 가입까지 끝나는 앱 — 이 앱의 선택 (모듈 기본은 이미 있는 계정으로만)
   job-queue:
     poll-interval: 1s                 # 내보내기가 몇 초 안에 끝나 보이도록 (모듈 기본값은 2s)
     retention:

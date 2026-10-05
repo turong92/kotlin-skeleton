@@ -1,0 +1,9 @@
+# 시험용 시드 계정 — @SpringBootTest(properties = ["spring.config.import=classpath:test-seeds.yml"]) 로 가져온다 (local 프로필을 켜지 않고도)
+skeleton:
+  account:
+    password:
+      bcrypt-strength: 4     # 시험에서는 해시를 싸게
+    seed:
+      accounts:
+        - { id: acc_user, email: user@example.com, password: password }
+        - { id: acc_admin, email: admin@example.com, password: password, roles: [ADMIN] }
