@@ -1,5 +1,8 @@
 package dev.sumin.skeleton.common.web
 
+import dev.sumin.skeleton.common.time.TimeProvider
+import dev.sumin.skeleton.common.time.asClock
+import java.time.Clock
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
@@ -90,8 +93,8 @@ class WebPolicyAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     @ConditionalOnProperty(prefix = "skeleton.web.rate-limit", name = ["enabled"], havingValue = "true")
-    fun rateLimitStore(): RateLimitStore =
-        InMemoryFixedWindowRateLimitStore()
+    fun rateLimitStore(timeProvider: ObjectProvider<TimeProvider>): RateLimitStore =
+        InMemoryFixedWindowRateLimitStore(timeProvider.getIfAvailable()?.asClock() ?: Clock.systemUTC())
 
     @Bean
     @ConditionalOnMissingBean(name = ["rateLimitFilterRegistration"])

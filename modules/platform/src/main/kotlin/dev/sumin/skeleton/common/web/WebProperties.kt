@@ -44,6 +44,7 @@ data class WebProperties(
             "traceparent",
             "X-Request-Id",
             "X-Trace-Id",
+            "X-Time-Zone", // react-skeleton api-client 가 모든 요청에 붙인다 (modules/time 의 zone-header 기본값)
             "X-Dev-Account-Id",
             "X-Dev-Username",
             "X-Dev-Email",

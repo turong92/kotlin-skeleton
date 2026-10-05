@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  출력 끝 로그 마스킹을 켜는 logback 조각. 앱의 logback-spring.xml 이 Boot 기본값 다음에 include 한다:
+
+    <configuration>
+        <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+        <include resource="dev/sumin/skeleton/logging/logback-masking.xml"/>
+        <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+        <root level="INFO"><appender-ref ref="CONSOLE"/></root>
+    </configuration>
+
+  메시지(%m)와 스택(%wEx)의 변환기를 가림막 버전으로 바꾼다. 구조 로그(JSON)는 application.yml 에
+  logging.structured.json.customizer: dev.sumin.skeleton.common.logging.MaskingStructuredLoggingCustomizer 를 둔다.
+  규칙은 skeleton.redaction.output.* — docs/logging.md
+-->
+<included>
+    <conversionRule conversionWord="m" class="dev.sumin.skeleton.common.logging.MaskingMessageConverter"/>
+    <conversionRule conversionWord="msg" class="dev.sumin.skeleton.common.logging.MaskingMessageConverter"/>
+    <conversionRule conversionWord="message" class="dev.sumin.skeleton.common.logging.MaskingMessageConverter"/>
+    <conversionRule conversionWord="wEx" class="dev.sumin.skeleton.common.logging.MaskingThrowableConverter"/>
+</included>

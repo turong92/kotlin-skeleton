@@ -17,7 +17,7 @@ skeleton:
       path-pattern: /api/**                    # CORS 를 적용할 경로
       allowed-origin-patterns: ["http://localhost:[*]", "http://127.0.0.1:[*]"]
       allowed-methods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
-      allowed-headers: [Authorization, Content-Type, Idempotency-Key, traceparent, X-Request-Id, X-Trace-Id, X-Dev-Account-Id, X-Dev-Username, X-Dev-Email, X-Break-Glass-Account-Id, X-Break-Glass-Reason, X-Break-Glass-Secret]
+      allowed-headers: [Authorization, Content-Type, Idempotency-Key, traceparent, X-Request-Id, X-Trace-Id, X-Time-Zone, X-Dev-Account-Id, X-Dev-Username, X-Dev-Email, X-Break-Glass-Account-Id, X-Break-Glass-Reason, X-Break-Glass-Secret]
       exposed-headers: [Location, Idempotency-Key, Idempotency-Replayed, traceparent, X-Trace-Id, X-Span-Id]
       allow-credentials: false
       max-age: 1h
@@ -40,6 +40,9 @@ skeleton:
   redaction:
     replacement: "[REDACTED]"                  # 마스킹 대체 문자열
     additional-sensitive-names: []             # 기본 민감 이름(password, secret, token …)에 더할 이름
+    output:                                    # 출력 끝 로그 마스킹 — 앱이 logback 조각을 include 했을 때만 적용 (docs/logging.md)
+      patterns: []                             # 기본 규칙(Authorization · Bearer · JWT · token/secret/password 쌍)에 더하는 정규식. 이름 있는 그룹 (?<value>…) 이 있으면 그 부분만 가린다
+      mask-emails: false                       # true 면 이메일을 a***@d***.com 으로
   openapi:
     title: kotlin-skeleton API                 # API 문서 제목
     version: 0.1.0

@@ -13,6 +13,12 @@ Ovation 이 운영 설계(`hardening-design`)로 고친 것 중 범용인 것을
 
 - **`job-queue-jdbc` — 정확성 수정 3건 (동작이 바뀌는 변경)**: (1) `markDone`/`markRetry`/`markDead` 가 이제 `status='RUNNING' and locked_by and attempts` 가 내 청구와 같을 때만 반영된다 — 스테일 복구로 남에게 넘어간 잡을 옛 워커가 늦게 덮어쓰던 것을 막는다(시그니처에 `workerId`·`attempts` 가 늘고 `Boolean` 을 돌려준다). (2) 묶음 안의 잡은 차례가 올 때 `renew` 로 임대를 새로 잡고, 이미 남에게 넘어갔으면 돌리지 않는다 — 묶음이 한 `locked_at` 을 공유해 뒤 잡이 두 번 도는 문제. (3) 스테일 복구가 시도를 다 쓴 잡(`attempts >= max_attempts`)은 PENDING 이 아니라 DEAD 로 보낸다 — 워커를 죽이는 독 작업이 영영 되살아나지 않게. `recoverStale` 은 `StaleRecovery(recovered, dead)` 를 돌려주고, `UPDATE … RETURNING` 대신 한 트랜잭션의 select 후 update 라 MySQL 에서도 같다
 - **`job-queue-jdbc` — 새 기능**: `JobDeadListener` 고리(재시도 소진 · 영구 실패 · 처리기 없음 · 멈춘 채 소진), `skeleton_jobs.log_context` 칼럼(양 방언 마이그레이션 `V20261005175044`)과 `JobContextPropagator` — `skeleton.job-queue.propagated-mdc-keys`(기본 `[traceId]`)의 MDC 값이 잡 줄에 실려 워커가 돌리는 동안 복원되고 `jobId`/`jobKind` 가 붙는다, `skeleton.job-queue.retention.*` — DONE/DEAD 줄 정리(**기본 꺼짐**: 줄 삭제는 보관 정책이라 앱이 고른다). 두 방언 모두 `postgresTest`/`mysqlTest` 로 검증
+- **`platform` — 클라이언트 실수가 500 이 아니다**: 없는 메서드는 `405 COMMON.METHOD_NOT_ALLOWED`(+`Allow` 헤더), 받지 않는 본문 형식은 `415 COMMON.UNSUPPORTED_MEDIA_TYPE`, 못 주는 `Accept` 는 본문 없는 `406`(이전엔 ERROR 로그를 남겼다), 빠진 필수 쿼리 파라미터는 `400 COMMON.PARAMETER_VALIDATION_FAILED`(`errors[].code=Missing`). **동작이 바뀌는 변경**(405/415 가 `COMMON.INTERNAL_SERVER_ERROR` 500 이었다)
+- **`platform` — 인메모리 rate limit 저장소 수정**: 청소가 **호출한 쪽의 창 길이**로 남의 카운터를 판단해, 짧은 창으로 부른 호출이 긴 창 카운터를 지우고 한도를 우회시켰다. 카운터마다 자기 창의 끝을 들고 청소는 초당 한 번, `sweep(now)` · `size()` 추가. 기본 저장소는 `TimeProvider` 시계를 본다
+- **`platform` — `TimeProvider.asClock()`**: `Clock` 을 받는 코드가 같은 시계를 보게 하는 다리(UTC 고정)
+- **`platform` — CORS 기본 `allowed-headers` 에 `X-Time-Zone`**: 프론트 api-client 가 모든 요청에 붙이는 헤더(`modules/time` 의 `zone-header` 기본값)라, 이전 기본값으로는 CORS 를 켜자마자 preflight 가 막혔다. CORS 는 기본 꺼짐이고 목록을 덮어쓴 앱은 영향 없다
+- **`platform` — 출력 끝 로그 마스킹 `LogMasker` (opt-in)**: logback 변환기(`%m` · `%wEx`)와 구조 로그 커스터마이저가 완성된 줄에서 Authorization/Cookie 헤더 줄 · `Bearer …` · JWT 모양 · token/secret/password/apikey 쌍을 지운다. **앱이 `logback-masking.xml` 조각을 include 해야 켜진다**(기본 동작 불변). `skeleton.redaction.output.patterns`(앱 정규식, `(?<value>…)` 그룹만 가리기) · `mask-emails`(기본 false). 사용법 `docs/logging.md`
+- **`storage` · `storage-s3` — `PresignedUploadRequest.cacheControl`**: presign 업로드가 `Cache-Control` 을 서명에 넣는다(정적 자산 immutable 캐시). 기본 null = 서명 안 함
 
 ### 샘플 앱 "Notes" — 새 기능을 어떻게 얹는지 보여 주는 제품 모양 예시 (2026-10-05)
 

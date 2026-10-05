@@ -123,6 +123,9 @@ val url = storage.presignUpload(
 )
 ```
 
+Set `cacheControl = "public, max-age=31536000, immutable"` on the request to sign the `Cache-Control` header (it appears in
+`PresignedUrl.headers`; the browser must send exactly that value). Unset (the default) signs nothing.
+
 Use multipart when large files need resumable part uploads. The skeleton exposes
 start, part presign, complete, and abort as stable DTOs.
 

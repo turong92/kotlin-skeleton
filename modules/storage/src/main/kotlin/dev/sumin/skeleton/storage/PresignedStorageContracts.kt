@@ -10,12 +10,15 @@ data class PresignedUploadRequest(
     val contentLength: Long? = null,
     val expiresIn: Duration? = null,
     val metadata: Map<String, String> = emptyMap(),
+    /** 서명에 넣는 `Cache-Control` — 브라우저가 이 값을 그대로 보내야 업로드가 통과한다 (정적 자산의 immutable 캐시 등). null 이면 서명하지 않는다 */
+    val cacheControl: String? = null,
 ) {
     init {
         contentType?.let { require(it.isNotBlank()) { "Content type must not be blank." } }
         contentLength?.let { require(it >= 0) { "Content length must not be negative." } }
         expiresIn?.let(::requirePositiveDuration)
         requireMetadata(metadata)
+        cacheControl?.let { require(it.isNotBlank()) { "Cache control must not be blank." } }
     }
 }
 

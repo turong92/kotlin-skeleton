@@ -36,10 +36,15 @@ interface RateLimitStore {
     ): RateLimitDecision
 }
 
+/**
+ * 단일 인스턴스용 고정 창 카운터. 카운터마다 **자기 창의 끝**을 들고 있어, 다른 창 길이로 부른 호출이 남의 카운터를 일찍 지우지 않는다.
+ * 만료된 창은 호출 중에 초당 한 번 걸러 내고, 조용한 서버에서도 쌓이지 않게 [sweep] 을 스케줄러에서 불러도 된다.
+ */
 class InMemoryFixedWindowRateLimitStore(
     private val clock: Clock = Clock.systemUTC(),
 ) : RateLimitStore {
     private val counters = ConcurrentHashMap<String, WindowCounter>()
+    private var lastSweepMillis = Long.MIN_VALUE
 
     @Synchronized
     override fun consume(
@@ -51,32 +56,45 @@ class InMemoryFixedWindowRateLimitStore(
         val effectiveWindowMillis = windowMillis.coerceAtLeast(1)
         val currentMillis = now.toEpochMilli()
         val windowStart = (currentMillis / effectiveWindowMillis) * effectiveWindowMillis
+        val windowEnd = windowStart + effectiveWindowMillis
         val counterKey = "$key:$windowStart"
         val counter = counters.compute(counterKey) { _, current ->
-            when {
-                current == null -> WindowCounter(windowStart = windowStart, count = 1)
-                else -> current.copy(count = current.count + 1)
-            }
-        } ?: WindowCounter(windowStart = windowStart, count = 1)
-        val resetAt = Instant.ofEpochMilli(windowStart + effectiveWindowMillis)
-        val remaining = (capacity - counter.count).coerceAtLeast(0)
-
-        counters.entries.removeIf { (_, value) ->
-            value.windowStart + effectiveWindowMillis < clock.millis()
-        }
-
+            current?.copy(count = current.count + 1) ?: WindowCounter(windowEnd = windowEnd, count = 1)
+        }!!
+        sweepIfDue(currentMillis)
         return RateLimitDecision(
             allowed = counter.count <= capacity,
             limit = capacity,
-            remaining = remaining,
-            resetAt = resetAt,
+            remaining = (capacity - counter.count).coerceAtLeast(0),
+            resetAt = Instant.ofEpochMilli(windowEnd),
         )
     }
 
+    /** 끝난 창의 카운터를 지우고 지운 수를 돌려준다. [now] 를 생략하면 생성자의 시계 */
+    @Synchronized
+    fun sweep(now: Instant = clock.instant()): Int {
+        val before = counters.size
+        val nowMillis = now.toEpochMilli()
+        counters.entries.removeIf { (_, value) -> value.windowEnd <= nowMillis }
+        lastSweepMillis = nowMillis
+        return before - counters.size
+    }
+
+    /** 지금 들고 있는 카운터 수 (테스트 · 점검용) */
+    fun size(): Int = counters.size
+
+    private fun sweepIfDue(nowMillis: Long) {
+        if (nowMillis - lastSweepMillis >= SWEEP_INTERVAL_MILLIS) sweep(Instant.ofEpochMilli(nowMillis))
+    }
+
     private data class WindowCounter(
-        val windowStart: Long,
+        val windowEnd: Long,
         val count: Int,
     )
+
+    private companion object {
+        const val SWEEP_INTERVAL_MILLIS = 1_000L
+    }
 }
 
 class ClientIpRateLimitKeyResolver : RateLimitKeyResolver {

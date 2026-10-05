@@ -147,6 +147,7 @@ class S3PresignedStorageService(
             .apply {
                 request.contentType?.let { contentType(it) }
                 request.contentLength?.let { contentLength(it) }
+                request.cacheControl?.let { cacheControl(it) }
                 if (request.metadata.isNotEmpty()) {
                     metadata(request.metadata)
                 }
