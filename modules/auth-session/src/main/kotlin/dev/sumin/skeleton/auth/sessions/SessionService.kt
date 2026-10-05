@@ -1,0 +1,110 @@
+package dev.sumin.skeleton.auth.sessions
+
+import dev.sumin.skeleton.auth.session.OpenedSession
+import dev.sumin.skeleton.common.time.TimeProvider
+import java.security.MessageDigest
+import java.security.SecureRandom
+import java.time.Instant
+import java.util.Base64
+import java.util.HexFormat
+
+/**
+ * 세션 · 리프레시 토큰 규칙 한 곳. 토큰은 불투명 난수(`r1.` + 256비트 base64url)이고 저장소에는 SHA-256 해시만 간다.
+ * 새로고침은 매번 새 토큰을 내고 옛 토큰을 쓴 것으로 표시한다 — 쓴 토큰이 다시 오면 세션 전체를 닫는다(재사용 탐지).
+ * 두 요청이 같은 토큰으로 동시에 와도 [SessionStore.markTokenUsed] 의 원자성이 한 쪽만 통과시킨다.
+ *
+ * [onEvent] 는 `REUSE_DETECTED sid=…` 처럼 한 줄 문자열 알림이다 (계정 모듈이 이벤트로 바꾼다). 토큰은 어디에도 싣지 않는다.
+ */
+class SessionService(
+    private val store: SessionStore,
+    private val properties: AuthSessionProperties,
+    private val time: TimeProvider = TimeProvider.systemUtc(),
+    private val onEvent: (String) -> Unit = {},
+) {
+    private val random = SecureRandom()
+
+    fun open(accountId: String, client: SessionClient): OpenedSession {
+        val now = time.now()
+        evictOverflow(accountId, now)
+        val id = "ses_" + HexFormat.of().formatHex(ByteArray(16).also(random::nextBytes))
+        val token = newToken()
+        store.create(
+            SessionRecord(
+                id = id, accountId = accountId, deviceName = client.deviceName?.take(80), userAgent = client.userAgent?.take(255),
+                ip = client.ip?.take(64), createdAt = now, lastUsedAt = now, expiresAt = now.plus(properties.absoluteTtl),
+            ),
+            hash(token),
+        )
+        return OpenedSession(id, token, now.plus(properties.absoluteTtl))
+    }
+
+    fun refresh(rawToken: String, client: SessionClient): RefreshResult {
+        val now = time.now()
+        if (!rawToken.startsWith(PREFIX) || rawToken.length > MAX_TOKEN) throw RefreshInvalidException()
+        val oldHash = hash(rawToken)
+        val token = store.findToken(oldHash) ?: throw RefreshInvalidException()
+        val session = store.find(token.sessionId) ?: throw RefreshInvalidException()
+        if (!isLive(session, now)) throw RefreshInvalidException()
+
+        var usedAt = token.usedAt
+        if (usedAt == null && !store.markTokenUsed(oldHash, now)) {
+            // 같은 토큰을 동시에 낸 다른 요청이 먼저 썼다 — 그쪽이 쓴 시각을 다시 읽어 아래 재사용 규칙으로
+            usedAt = store.findToken(oldHash)?.usedAt ?: now
+        }
+        if (usedAt != null && !(properties.reuseGrace.toMillis() > 0 && !usedAt.plus(properties.reuseGrace).isBefore(now))) {
+            store.revoke(session.id, now, "REUSE")
+            onEvent("REUSE_DETECTED sid=${session.id} account=${session.accountId}")
+            throw RefreshReusedException()
+        }
+
+        val next = newToken()
+        store.addToken(session.id, hash(next), now)
+        store.touch(session.id, now, client.ip, client.userAgent)
+        store.pruneUsedTokens(session.id, now.minus(properties.reuseMemory))
+        return RefreshResult(session.accountId, OpenedSession(session.id, next, session.expiresAt))
+    }
+
+    /** 토큰 하나로 그 세션을 닫는다. 모르는 토큰 · 이미 닫힌 세션도 조용히 (로그아웃은 멱등) */
+    fun logout(rawToken: String) {
+        if (!rawToken.startsWith(PREFIX) || rawToken.length > MAX_TOKEN) return
+        val token = store.findToken(hash(rawToken)) ?: return
+        store.revoke(token.sessionId, time.now(), "LOGOUT")
+    }
+
+    fun list(accountId: String, currentSessionId: String?): List<SessionView> {
+        val now = time.now()
+        return store.listActive(accountId, now, now.minus(properties.idleTtl)).map {
+            SessionView(it.id, it.deviceName, it.userAgent, it.ip, it.createdAt, it.lastUsedAt, it.id == currentSessionId)
+        }
+    }
+
+    /** 내 세션만 닫는다. 남의 세션 · 없는 세션은 똑같이 SESSION_NOT_FOUND — 존재를 더듬지 못하게 */
+    fun revoke(accountId: String, sessionId: String) {
+        val session = store.find(sessionId)
+        if (session == null || session.accountId != accountId || !store.revoke(sessionId, time.now(), "REVOKED")) throw SessionNotFoundException()
+        onEvent("SESSION_REVOKED sid=$sessionId account=$accountId")
+    }
+
+    fun revokeAll(accountId: String, exceptSessionId: String?, reason: String = "REVOKED_ALL") {
+        val n = store.revokeAll(accountId, exceptSessionId, time.now(), reason)
+        if (n > 0) onEvent("SESSIONS_REVOKED count=$n account=$accountId reason=$reason")
+    }
+
+    private fun isLive(s: SessionRecord, now: Instant): Boolean =
+        s.revokedAt == null && s.expiresAt.isAfter(now) && s.lastUsedAt.plus(properties.idleTtl).isAfter(now)
+
+    private fun evictOverflow(accountId: String, now: Instant) {
+        val live = store.listActive(accountId, now, now.minus(properties.idleTtl))
+        val overflow = live.size - (properties.maxSessionsPerAccount - 1)
+        if (overflow > 0) live.sortedBy { it.createdAt }.take(overflow).forEach { store.revoke(it.id, now, "EVICTED") }
+    }
+
+    private fun newToken(): String = PREFIX + Base64.getUrlEncoder().withoutPadding().encodeToString(ByteArray(32).also(random::nextBytes))
+
+    companion object {
+        const val PREFIX = "r1."
+        private const val MAX_TOKEN = 128
+
+        fun hash(token: String): String = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(token.toByteArray(Charsets.UTF_8)))
+    }
+}
