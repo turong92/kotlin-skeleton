@@ -1,0 +1,2 @@
+dev.sumin.skeleton.auth.magiclink.MagicLinkAutoConfiguration
+dev.sumin.skeleton.auth.magiclink.MagicLinkWebAutoConfiguration
