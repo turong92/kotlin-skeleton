@@ -14,7 +14,7 @@
 | 교체 지점 | `JobQueue` |
 | 마이그레이션 | `modules/job-queue-jdbc/src/main/resources/db/migration/postgresql`, `modules/job-queue-jdbc/src/main/resources/db/migration/mysql` |
 | 프론트 짝 | 없음 |
-| 테스트 | `modules/job-queue-jdbc/src/test`, `modules/job-queue-jdbc/src/dbTest` (PostgreSQL · MySQL 컨테이너로 두 번 돈다 (`postgresTest`, `mysqlTest`)) |
+| 테스트 | `modules/job-queue-jdbc/src/dbTest` (PostgreSQL · MySQL 컨테이너로 두 번 돈다 (`postgresTest`, `mysqlTest`)) |
 
 자세히: [재시도 큐 상세](../job-queue-jdbc.md) · [스키마 관리](../schema-management.md)
 
