@@ -204,7 +204,7 @@ sub render_md {
     my $ids = @{ $d->{modules} } ? join(' + ', map { code($_) } @{ $d->{modules} }) : '(백엔드 모듈 없음)';
     for my $g (@{ $d->{oneOf} }) { $ids .= ' + (' . join(' \| ', map { code($_) } @$g) . ')'; }
     my $kf = defined $d->{flag} ? code($d->{flag}) : '(덧붙일 것 없음)';
-    for my $g (@{ $d->{oneOf} }) { $kf .= ' — ' . join(' \| ', map { code($_) } @$g) . ' 중 하나 이상 고른다'; }
+    for my $g (@{ $d->{oneOf} }) { $kf .= ' — ' . join(' | ', map { code($_) } @$g) . ' 중 하나 이상 고른다'; }   # 아래 cell() 이 | 를 이스케이프한다
     my $ff = $d->{frontend} ? (defined $d->{frontend}{flag} ? code($d->{frontend}{flag}) : '(기본 포함)') . ($d->{frontend}{capabilities} && @{ $d->{frontend}{capabilities} } ? ' — react `' . join('` `', @{ $d->{frontend}{capabilities} }) . '`' : '') : '(프런트 없음)';
     $out .= $stamped
       ? '| ' . join(' | ', cell($d->{need}), $ids, cell($ff), cell($d->{byHand})) . " |\n"
@@ -243,10 +243,13 @@ sub render_md {
     $out .= "- 종류 · 상태: $e->{kind} · $e->{status} — 위치 " . code($e->{path}) . "\n";
     $out .= "- 켜는 법: " . backend_fragment($e, $stamped) . "\n";
     $out .= "- 의존 한 줄: " . code('implementation(project(":modules:' . $e->{module} . '"))') . "\n" if $e->{kind} eq 'module';
-    $out .= "- 자동으로 따라온다: " . codes(@{ $e->{autoIncludes} }) . "\n" if @{ $e->{autoIncludes} };
+    my %optional = map { $_ => 1 } @{ $e->{needs}{optional} };
+    my @auto_runtime = grep { !$optional{$_} } @{ $e->{autoIncludes} };
+    my @auto_compile = grep { $optional{$_} } @{ $e->{autoIncludes} };
+    $out .= "- 자동으로 따라온다: " . codes(@auto_runtime) . "\n" if @auto_runtime;
+    $out .= "- 소스만 따라온다(컴파일 전용 — 런타임 클래스패스에는 없다. 쓰려면 apps/api 에 의존 한 줄을 더한다): " . codes(@auto_compile) . "\n" if @auto_compile;
     $out .= "- 함께 골라야 한다: " . codes(@{ $e->{needs}{requires} }) . "\n" if @{ $e->{needs}{requires} };
     for my $g (@{ $e->{needs}{oneOf} }) { $out .= "- 하나 이상 고른다: " . join(' | ', map { code($_) } @$g) . "\n"; }
-    $out .= "- 있으면 더 좋다(컴파일 전용 연동, 없어도 동작): " . codes(@{ $e->{needs}{optional} }) . "\n" if @{ $e->{needs}{optional} };
     if ($e->{config}) {
       my @c = @{ $e->{config}{prefixes} };
       my $line = @c ? '설정 접두사 ' . codes(@c) : '설정 접두사 없음';

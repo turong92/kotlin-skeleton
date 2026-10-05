@@ -417,6 +417,13 @@ internal object CapabilitiesGuards {
                 val got = theirs[id]
                 if (got != null && want != got) problems += "예 '$id' 의 frontendCommand 가 react-skeleton 레시피의 react-stamp 블록과 다르다.\n    여기: $want\n    그쪽: $got"
             }
+            val theirKotlin = Regex("""<!-- kotlin-stamp: ([a-z0-9-]+) -->\s*```bash\n(.*?)\n```""", RegexOption.DOT_MATCHES_ALL).findAll(reactRecipeText)
+                .associate { it.groupValues[1] to it.groupValues[2].trim() }
+            examples.forEach { ex ->
+                val id = ex["id"] as String
+                val got = theirKotlin[id]
+                if (got != null && got != exampleCommand(ex)) problems += "예 '$id' 의 kotlin 명령이 react-skeleton 레시피의 kotlin-stamp 블록과 다르다.\n    여기: ${exampleCommand(ex)}\n    그쪽: $got"
+            }
         }
         blocks.keys.filter { id -> examples.none { it["id"] == id } }.forEach { problems += "레시피의 kotlin-stamp '$it' 에 해당하는 examples 항목이 없다" }
         if ("react-skeleton" !in recipeText || "new-project-recipe.md" !in recipeText) problems += "레시피에 짝 레포(react-skeleton)의 new-project-recipe.md 로 가는 링크가 없다"

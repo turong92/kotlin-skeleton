@@ -25,12 +25,12 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | 필요한 것 | 고를 것(id) | kotlin `new-project.sh` 조각 | react `new-project.sh` 조각 | 그래도 손으로 써야 하는 것 |
 |---|---|---|---|---|
 | 로그인 (이메일 · 비밀번호) · JWT · 로그인한 사람만 보는 API | `auth` | (덧붙일 것 없음) | (기본 포함) — react `auth` | 스타터에 기본 포함. 회원가입 · 비밀번호 재설정 · 계정 DB 저장은 없다 — 앱이 AuthAccountRepository 를 구현한다(내장은 로컬 시드 계정뿐, prod · staging 에서는 기동을 거부한다). 운영에는 JWT_SECRET(32바이트 이상). |
-| 소셜 로그인 (구글 · 카카오 · 네이버) | `auth-social` + (`auth-social-google` \| `auth-social-kakao` \| `auth-social-naver`) | `--modules auth-social,auth-social-google` — `auth-social-google` \\| `auth-social-kakao` \\| `auth-social-naver` 중 하나 이상 고른다 | (기본 포함) — react `social-login` | 제공자 enabled · client-id · client-secret · redirect-uri(비밀은 환경변수). 계정 연결 저장(OAuthAccountLinkRepository)과 가입 정책(OAuthAccountProvisioningPolicy)은 앱이 구현한다 — 기본은 메모리 저장 · 이미 연결된 계정만 통과. 로그인 버튼 · /auth/callback 화면은 프런트. |
+| 소셜 로그인 (구글 · 카카오 · 네이버) | `auth-social` + (`auth-social-google` \| `auth-social-kakao` \| `auth-social-naver`) | `--modules auth-social,auth-social-google` — `auth-social-google` \| `auth-social-kakao` \| `auth-social-naver` 중 하나 이상 고른다 | (기본 포함) — react `social-login` | 제공자 enabled · client-id · client-secret · redirect-uri(비밀은 환경변수). 계정 연결 저장(OAuthAccountLinkRepository)과 가입 정책(OAuthAccountProvisioningPolicy)은 앱이 구현한다 — 기본은 메모리 저장 · 이미 연결된 계정만 통과. 로그인 버튼 · /auth/callback 화면은 프런트. |
 | 게시판 · 글쓰기 · 댓글 · 대댓글 · 공감(반응) | `board` + `board-jdbc` | `--modules board,board-jdbc` | `--packages board` — react `board` | 게시판 코드 만들기(skeleton.board.seed-boards 설정이나 운영자 API) · 반응 종류(skeleton.board.reaction.types) · 운영자 역할(MODERATOR). notification 을 같이 고르면 댓글 알림이 기본으로 켜진다. 목록 · 상세 · 글쓰기 화면은 프런트. |
 | 알림 (종 · 목록 · 안 읽은 수) | `notification` + `notification-jdbc` | `--modules notification,notification-jdbc` | `--packages notifications` — react `notifications` | 알림을 만드는 쪽(NotificationPublisher.publish)은 앱 코드 — 받는 사람은 NotificationEvent.recipientIds. 프런트에서는 NotificationBell 배치와 알림 API 인스턴스. |
-| 알림이 새로고침 없이 즉시 뜬다 (실시간) | `notification` + `notification-jdbc` + (`notification-sse` \| `notification-websocket`) | `--modules notification,notification-jdbc,notification-sse` — `notification-sse` \\| `notification-websocket` 중 하나 이상 고른다 | `--packages notifications,realtime` — react `live-notifications` | SSE(단방향, 더 단순) 또는 WebSocket(양방향) 중 고른다. 둘 다 프로세스 안 브로커라 인스턴스가 여럿이면 다른 인스턴스의 알림을 못 받는다. 프런트 연결 훅. |
+| 알림이 새로고침 없이 즉시 뜬다 (실시간) | `notification` + `notification-jdbc` + (`notification-sse` \| `notification-websocket`) | `--modules notification,notification-jdbc,notification-sse` — `notification-sse` \| `notification-websocket` 중 하나 이상 고른다 | `--packages notifications,realtime` — react `live-notifications` | SSE(단방향, 더 단순) 또는 WebSocket(양방향) 중 고른다. 둘 다 프로세스 안 브로커라 인스턴스가 여럿이면 다른 인스턴스의 알림을 못 받는다. 프런트 연결 훅. |
 | 파일 업로드 (이미지 · 첨부) | `storage` + `storage-s3` | `--modules storage,storage-s3` | `--packages storage` — react `storage` | 버킷 · 키(환경변수), 업로드 규칙(skeleton.storage.validation — 확장자 · 크기), 업로드한 파일 키를 도메인에 저장하는 코드(앱). 로컬 개발은 compose 의 S3 를 scripts/dev.sh 가 올린다. |
-| 결제 (토스 · 스트라이프) | `payment` + (`payment-toss` \| `payment-stripe`) | `--modules payment,payment-toss` — `payment-toss` \\| `payment-stripe` 중 하나 이상 고른다 | `--packages payment` — react `payment` | HTTP 엔드포인트가 없다 — 주문 · 금액 검증 컨트롤러 · 성공/실패 리다이렉트 처리 · 웹훅 서명 검증을 앱이 쓴다(PaymentService.confirm 은 받은 금액을 그대로 넘긴다). enabled=true + secret-key(환경변수). 중복 결제 방지에는 idempotency. |
+| 결제 (토스 · 스트라이프) | `payment` + (`payment-toss` \| `payment-stripe`) | `--modules payment,payment-toss` — `payment-toss` \| `payment-stripe` 중 하나 이상 고른다 | `--packages payment` — react `payment` | HTTP 엔드포인트가 없다 — 주문 · 금액 검증 컨트롤러 · 성공/실패 리다이렉트 처리 · 웹훅 서명 검증을 앱이 쓴다(PaymentService.confirm 은 받은 금액을 그대로 넘긴다). enabled=true + secret-key(환경변수). 중복 결제 방지에는 idempotency. |
 | 봇 방지 (캡차) | `captcha-turnstile` | `--modules captcha-turnstile` | `--packages captcha-turnstile` — react `captcha-turnstile` | 가입 · 로그인 요청에서 TurnstileVerifier 로 토큰을 검증하는 코드(앱)와 enabled=true + secret-key(환경변수). |
 | 메일 보내기 (SMTP) | `notification-mail` | `--modules notification-mail` | (프런트 없음) | SMTP 환경변수(host · username · password · from)와 메일 본문 · 템플릿(앱). |
 | 슬랙으로 알림 | `notification-slack` | `--modules notification-slack` | (프런트 없음) | 웹훅 URL(환경변수)과 보낼 알림 종류(앱). |
@@ -46,7 +46,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | @Async · 백그라운드 작업에서 trace id 유지 | `async` | `--modules async` | (프런트 없음) | 스레드 풀 크기 설정과 @Async 를 거는 코드(앱). |
 | Kafka 로 이벤트 발행 | `event-kafka` | `--modules event-kafka` | (프런트 없음) | 브로커 주소 · KafkaOperations 빈 · enabled=true. 소비(consumer)는 없다. |
 | MySQL 로 쓰기 (기본은 PostgreSQL) | `db-mysql` | `--db mysql` | (프런트 없음) | --modules 가 아니라 --db mysql 로 고른다. --with-sample · --with-workbench 와 함께 쓸 수 없다(PostgreSQL 전용). |
-| JPA 또는 jOOQ 로 DB 접근 (기본은 Data JDBC) | (백엔드 모듈 없음) + (`persistence-jpa` \| `persistence-jooq`) | `--modules persistence-jpa` — `persistence-jpa` \\| `persistence-jooq` 중 하나 이상 고른다 | (프런트 없음) | 하나만 고른다 — JDBC · JPA · jOOQ 를 병행하지 않는다. jOOQ 는 DDL 파일에서 코드를 생성한다(docs/persistence-jooq.md). |
+| JPA 또는 jOOQ 로 DB 접근 (기본은 Data JDBC) | (백엔드 모듈 없음) + (`persistence-jpa` \| `persistence-jooq`) | `--modules persistence-jpa` — `persistence-jpa` \| `persistence-jooq` 중 하나 이상 고른다 | (프런트 없음) | 하나만 고른다 — JDBC · JPA · jOOQ 를 병행하지 않는다. jOOQ 는 DDL 파일에서 코드를 생성한다(docs/persistence-jooq.md). |
 | 에러 응답 · 표준 응답 · 요청 로깅 · OpenAPI · 외부 API 호출 | `platform` | (덧붙일 것 없음) | (기본 포함) — react `api-client` | 스타터에 기본 포함 — 따로 켤 것이 없다. 컨트롤러는 DataResponse/ApiError 규칙을 쓴다(docs/errors.md · docs/openapi.md). |
 | 시간대 · 날짜 표시 · 예약 시각 (글로벌) | `time` | (덧붙일 것 없음) | (기본 포함) — react `time` | 스타터에 기본 포함. Instant · LocalDate · ZonedMoment 를 구분한다 — ZoneId.systemDefault() · TIMESTAMP 칼럼은 쓰지 않는다(docs/time.md). |
 | 참조 앱을 같이 가져가서 보고 따라 하기 | `app-sample` | `--with-sample` | `--with-sample` — react `app-sample` | 샘플은 참조다 — 쓰지 않을 기능은 지운다. 짝 프런트는 react-skeleton 의 apps/sample. PostgreSQL 전용. |
@@ -162,8 +162,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 종류 · 상태: module · stable — 위치 `modules/alert`
 - 켜는 법: `--modules alert`
 - 의존 한 줄: `implementation(project(":modules:alert"))`
-- 자동으로 따라온다: `job-queue-jdbc`, `notification-mail`
-- 있으면 더 좋다(컴파일 전용 연동, 없어도 동작): `job-queue-jdbc`, `notification-mail`
+- 소스만 따라온다(컴파일 전용 — 런타임 클래스패스에는 없다. 쓰려면 apps/api 에 의존 한 줄을 더한다): `job-queue-jdbc`, `notification-mail`
 - 설정 접두사 `skeleton.alert` — 키와 기본값 `docs/config/modules/alert.yml`
 - 비밀 · 환경변수: `<P>_ALERT_WEBHOOK_URL` — 빠지면: 경보가 로그로만 남는다 (기동은 된다)
 - 문서: `docs/modules/alert.md`, `docs/alert.md`
@@ -295,9 +294,8 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 종류 · 상태: module · stable — 위치 `modules/board`
 - 켜는 법: `--modules board,board-jdbc`
 - 의존 한 줄: `implementation(project(":modules:board"))`
-- 자동으로 따라온다: `idempotency`, `notification`
+- 소스만 따라온다(컴파일 전용 — 런타임 클래스패스에는 없다. 쓰려면 apps/api 에 의존 한 줄을 더한다): `idempotency`, `notification`
 - 함께 골라야 한다: `board-jdbc`
-- 있으면 더 좋다(컴파일 전용 연동, 없어도 동작): `idempotency`, `notification`
 - 설정 접두사 `skeleton.board` — 키와 기본값 `docs/config/modules/board.yml`
 - HTTP 경로: `/api/v1/boards`
 - 문서: `docs/modules/board.md`
@@ -717,8 +715,8 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 종류 · 상태: module · stable — 위치 `modules/storage-s3`
 - 켜는 법: `--modules storage-s3`
 - 의존 한 줄: `implementation(project(":modules:storage-s3"))`
-- 자동으로 따라온다: `crypto`, `storage`
-- 있으면 더 좋다(컴파일 전용 연동, 없어도 동작): `crypto`
+- 자동으로 따라온다: `storage`
+- 소스만 따라온다(컴파일 전용 — 런타임 클래스패스에는 없다. 쓰려면 apps/api 에 의존 한 줄을 더한다): `crypto`
 - 설정 접두사 `skeleton.storage-s3` — 키와 기본값 `docs/config/modules/storage-s3.yml`
 - 비밀 · 환경변수: `<P>_STORAGE_S3_BUCKET`, `<P>_STORAGE_S3_ENDPOINT_OVERRIDE`, `<P>_STORAGE_S3_CREDENTIALS_ACCESS_KEY_ID`, `<P>_STORAGE_S3_CREDENTIALS_SECRET_ACCESS_KEY` — 빠지면: 버킷이 비면 저장소 빈이 없다 · 키가 비면 AWS 기본 자격 증명 체인으로 가서 첫 사용에서 실패(기동은 된다)
 - 문서: `docs/modules/storage-s3.md`, `docs/storage-s3.md`

@@ -238,6 +238,19 @@ class CapabilitiesGuardsTest {
         assertEquals(emptyList(), CapabilitiesGuards.recipe(catalog(examples = listOf(ex)), own, null))
     }
 
+    @Test
+    fun `a kotlin command in the sibling recipe that differs from the example fails`() {
+        val ex = linkedMapOf<String, Any?>(
+            "id" to "community", "title" to "t", "product" to "p", "modules" to listOf("board", "board-jdbc"), "extraFlags" to emptyList<String>(),
+            "target" to "~/work/community/api", "package" to "dev.example.community", "prefix" to "community", "classPrefix" to "Community",
+            "frontendCapabilities" to emptyList<String>(), "frontendCommand" to "scripts/new-project.sh ~/work/community/web community --packages board",
+        )
+        val own = "<!-- kotlin-stamp: community -->\n\n```bash\n${CapabilitiesGuards.exampleCommand(ex)}\n```\n 짝: react-skeleton new-project-recipe.md"
+        val theirs = "<!-- react-stamp: community -->\n\n```bash\n${ex["frontendCommand"]}\n```\n<!-- kotlin-stamp: community -->\n\n```bash\nscripts/new-project.sh ~/work/community/api dev.example.community community Community --modules board\n```\n"
+        val text = problemsText(CapabilitiesGuards.recipe(catalog(examples = listOf(ex)), own, theirs))
+        assertTrue("community" in text && "react-skeleton 레시피의 kotlin-stamp" in text, text)
+    }
+
     // --- 10. 짝 레포 ---------------------------------------------------------------------------------------------------
 
     private fun fakeReact(): Path {
