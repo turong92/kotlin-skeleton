@@ -27,6 +27,9 @@ springdoc:
     path: /api/v1/docs
 
 skeleton:
+  auth:
+    jwt:
+      secret: ${JWT_SECRET:dev-local-jwt-secret-change-me-32-bytes}   # 배포 선언의 secrets: [JWT_SECRET] 별칭. 기본값(개발용)으로는 prod · staging · SKELETON_ENV=stage|prod 에서 기동 실패 (docs/deploy.md)
   job-queue:
     poll-interval: 1s                 # 내보내기가 몇 초 안에 끝나 보이도록 (모듈 기본값은 2s)
     retention:

@@ -17,7 +17,7 @@ skeleton:
   redis:
     key-prefix: kotlin-skeleton:prod
     ssl:
-      enabled: true
+      enabled: true   # 관리형 Redis 전제. 사설 네트워크의 평문 Redis(홈서버 배포)는 환경변수 SKELETON_REDIS_SSL_ENABLED=false — 환경변수가 이 값을 이긴다 (ProdRedisSslEnvironmentTest)
   redis-lock:
     startup-check:
       enabled: true
