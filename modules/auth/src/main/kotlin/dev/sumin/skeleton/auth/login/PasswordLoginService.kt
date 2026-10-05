@@ -39,14 +39,14 @@ class PasswordLoginService(
             else -> { safeMatches(password, dummyHash); false }
         }
         if (!matched || account == null) {
-            active.forEach { it.onFailure(attempt, if (account == null) LoginFailure.UNKNOWN_ACCOUNT else LoginFailure.BAD_PASSWORD) }
+            active.forEach { it.onFailure(attempt, if (account == null) LoginFailure.UNKNOWN_ACCOUNT else LoginFailure.BAD_PASSWORD, account) }
             throw InvalidCredentialsException()
         }
 
         val response = try {
             tokenResponses.issue(account)
         } catch (blocked: AccountBlockedException) {
-            active.forEach { it.onFailure(attempt, LoginFailure.BLOCKED) }
+            active.forEach { it.onFailure(attempt, LoginFailure.BLOCKED, account) }
             throw blocked
         }
         if (passwordEncoder.upgradeEncoding(account.passwordHash)) {

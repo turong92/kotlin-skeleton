@@ -70,7 +70,7 @@ class AccountHarness(
     val tokens = OneTimeTokens(tokenStore, time)
     val publisher = DefaultAccountEventPublisher({ time.now() }) { listOf(events) }
     private val limitStore = dev.sumin.skeleton.common.web.InMemoryFixedWindowRateLimitStore()
-    val bootstrap = AdminBootstrap(props.bootstrap, { repo }, { publisher }, time)
+    val bootstrap = AdminBootstrap(props.bootstrap, props.admin.role, { repo }, { publisher }, time)
     val core = AccountCore(
         repo, props, time, publisher, hasher, policy, tokens, mailer, AccountLinks(props.mail), tasks,
         AccountRateLimits({ limitStore }, time),
@@ -80,6 +80,11 @@ class AccountHarness(
     val authRepository = AccountAuthRepository(core)
     val passwords = PasswordService(core)
     val emailChange = EmailChangeService(core)
+    val erasers = java.util.concurrent.CopyOnWriteArrayList<dev.sumin.skeleton.account.erasure.AccountErasureListener>()
+    val deletion = DeletionService(core)
+    val purge = AccountPurgeService(core) { erasers.toList() }
+    val admin = AdminService(core)
+    val profile = ProfileService(core, dev.sumin.skeleton.account.signin.SignInMethodRegistry(listOf(dev.sumin.skeleton.account.signin.PasswordSignInMethod())))
 
     fun signUp(email: String = "ann@example.com", password: String = "tangerine-42-moon", ip: String? = "203.0.113.1", captchaToken: String? = null, locale: String? = null) =
         registration.signUp(SignUpCommand(email, password, "Ann", locale, "Asia/Seoul", ip, captchaToken))

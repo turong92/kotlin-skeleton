@@ -121,14 +121,13 @@ data class AccountProperties(
     data class Admin(
         /** true 면 관리자 엔드포인트(`/api/v1/admin/accounts` 아래 목록 · 정지 · 역할)를 연다 */
         val enabled: Boolean = false,
-        /** 이 역할을 가진 호출자만 (ROLE_ 없이) */
+        /** 이 역할을 가진 호출자만 (ROLE_ 없이). 첫 관리자 부트스트랩이 주는 역할이기도 하다 */
         val role: String = "ADMIN",
     )
 
     data class Bootstrap(
         /** 이 이메일이 처음으로 **확인된** 로그인(또는 확인)에 성공했고 ADMIN 이 아직 한 명도 없으면 ADMIN 역할을 준다. 비밀번호 기본값은 없다 */
         val adminEmail: String = "",
-        val adminRole: String = "ADMIN",
     )
 
     data class Social(

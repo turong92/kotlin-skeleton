@@ -40,7 +40,7 @@ class PasswordLoginServiceTest {
         val events = CopyOnWriteArrayList<String>()
         var deny: ApplicationException? = null
         override fun beforeAttempt(attempt: LoginAttempt) { events += "before:${attempt.identifier}:${attempt.clientIp}"; deny?.let { throw it } }
-        override fun onFailure(attempt: LoginAttempt, reason: LoginFailure) { events += "failure:$reason" }
+        override fun onFailure(attempt: LoginAttempt, reason: LoginFailure, account: AuthAccount?) { events += "failure:$reason:${account?.accountId}" }
         override fun onSuccess(attempt: LoginAttempt, account: AuthAccount) { events += "success:${account.accountId}" }
     }
 
@@ -78,8 +78,8 @@ class PasswordLoginServiceTest {
         assertEquals(
             listOf(
                 "before:email:ann@example.com:9.9.9.9", "success:acc_1",
-                "before:email:ann@example.com:9.9.9.9", "failure:BAD_PASSWORD",
-                "before:email:who@example.com:9.9.9.9", "failure:UNKNOWN_ACCOUNT",
+                "before:email:ann@example.com:9.9.9.9", "failure:BAD_PASSWORD:acc_1",
+                "before:email:who@example.com:9.9.9.9", "failure:UNKNOWN_ACCOUNT:null",
             ),
             hooks.events.toList(),
         )
@@ -99,7 +99,7 @@ class PasswordLoginServiceTest {
         repo.accounts[0] = repo.accounts[0].copy(loginBlock = LoginBlock.EMAIL_NOT_VERIFIED)
         val blocked = assertFailsWith<ApplicationException> { service.login(request(), null) }
         assertEquals(AuthErrorCode.EMAIL_NOT_VERIFIED, blocked.errorCode)
-        assertTrue("failure:BLOCKED" in hooks.events)
+        assertTrue("failure:BLOCKED:acc_1" in hooks.events)
         assertFailsWith<InvalidCredentialsException> { service.login(request(password = "nope"), null) }
     }
 

@@ -17,7 +17,8 @@ enum class LoginFailure { UNKNOWN_ACCOUNT, BAD_PASSWORD, BLOCKED }
 interface LoginHooks {
     fun beforeAttempt(attempt: LoginAttempt) {}
 
-    fun onFailure(attempt: LoginAttempt, reason: LoginFailure) {}
+    /** [account] 는 계정을 찾았을 때만(잘못된 비밀번호 · 막힌 계정) — 없는 계정이면 null */
+    fun onFailure(attempt: LoginAttempt, reason: LoginFailure, account: AuthAccount?) {}
 
     fun onSuccess(attempt: LoginAttempt, account: AuthAccount) {}
 }

@@ -11,6 +11,7 @@ import dev.sumin.skeleton.common.time.TimeProvider
  */
 class AdminBootstrap(
     private val props: AccountProperties.Bootstrap,
+    private val adminRole: String,
     private val accounts: () -> AccountRepository,
     private val events: () -> AccountEventPublisher,
     private val time: TimeProvider,
@@ -20,8 +21,8 @@ class AdminBootstrap(
         if (!account.emailVerified || account.status != AccountStatus.ACTIVE) return
         if (account.email != Emails.normalize(props.adminEmail)) return
         val repo = accounts()
-        if (repo.countActiveWithRole(props.adminRole) > 0) return
-        if (repo.grantRole(account.id, props.adminRole, time.now())) {
+        if (repo.countActiveWithRole(adminRole) > 0) return
+        if (repo.grantRole(account.id, adminRole, time.now())) {
             events().publish(AccountEventType.ADMIN_BOOTSTRAPPED, account.id)
         }
     }
