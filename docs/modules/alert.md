@@ -16,6 +16,6 @@
 | 프론트 짝 | 없음 |
 | 테스트 | `modules/alert/src/test`, `modules/alert/src/noOptionalTest` |
 
-자세히: [주인 경보 상세](../alert.md) · [alert-jdbc](alert-jdbc.md)
+자세히: [주인 경보 상세](../alert.md) · DB 기록은 `alert-jdbc` 모듈 (모듈 색인)
 
 [모듈 색인](README.md) · [최소 구성 가이드](../minimal-composition.md)

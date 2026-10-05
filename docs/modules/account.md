@@ -35,6 +35,6 @@
 | 프론트 짝 | `@skeleton/auth` |
 | 테스트 | `modules/account/src/test`, `modules/account/src/noOptionalTest` (선택 통합이 클래스패스에 없을 때) |
 
-자세히: [계정 수명주기 · 위협 모델](../accounts.md) · [auth](auth.md) · [account-jdbc](account-jdbc.md) · [auth-session](auth-session.md) · [auth-magic-link](auth-magic-link.md)
+자세히: [계정 수명주기 · 위협 모델](../accounts.md) · [auth](auth.md) · [account-jdbc](account-jdbc.md) · [auth-session](auth-session.md) · 메일 링크 로그인은 `auth-magic-link` 모듈 (모듈 색인)
 
 [모듈 색인](README.md) · [최소 구성 가이드](../minimal-composition.md)
