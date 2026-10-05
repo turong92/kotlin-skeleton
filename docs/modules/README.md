@@ -21,6 +21,8 @@
 | `notification-slack` | Slack 웹훅 알림 · 예외 알림 | [notification-slack](notification-slack.md) |
 | `storage` | 저장소 계약 · 파일 검증 | [storage](storage.md) |
 | `storage-s3` | S3 / R2 저장소 (presign · 서버 업로드) | [storage-s3](storage-s3.md) |
+| `board` | 게시판: 글 · 댓글 트리(대댓글) · 설정으로 늘리는 반응 종류, 운영자 숨김 · 고정, 댓글 알림 | [board](board.md) |
+| `board-jdbc` | 게시판 저장소 (PostgreSQL · MySQL) | [board-jdbc](board-jdbc.md) |
 | `payment` | 결제 계약 · 제공자 라우팅 | [payment](payment.md) |
 | `payment-toss` | Toss 결제 제공자 | [payment-toss](payment-toss.md) |
 | `payment-stripe` | Stripe 결제 제공자 | [payment-stripe](payment-stripe.md) |

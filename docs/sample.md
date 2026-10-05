@@ -6,12 +6,13 @@
 
 | 이 화면/기능이 필요하면 | 이 샘플에서 쓴 모듈 |
 |---|---|
-| 로그인 · JWT | `auth`(시드 계정 `user@example.com` / `password`, 관리자 `admin@example.com` / `password`) |
+| 로그인 · JWT | `auth`(데모 계정 3 개 — `SampleAccounts.kt`: `user@example.com`(USER), `admin@example.com`(USER, ADMIN), **`moderator@example.com`(USER, MODERATOR)** — 비밀번호는 모두 `password`) |
 | 표준 응답 · 에러 · 검증 · 페이지 | `platform` |
 | 두 번 눌러도 한 번 만들기 | `idempotency` (`@IdempotentOperation`) |
 | 알림 받은편지함 + 실시간 | `notification` + `notification-jdbc` + `notification-sse` |
 | 첨부 업로드 (브라우저가 S3 로 직접) | `storage` + `storage-s3` |
 | 오래 걸리는 일(내보내기) | `job-queue-jdbc` |
+| 게시판(글 · 대댓글 · 공감 같은 반응 종류) | `board` + `board-jdbc` (아래 "게시판") |
 | DB · 마이그레이션 · 시간 | `persistence-jdbc` · `db-postgresql` · `migration-flyway` · `time` |
 
 ## 엔드포인트
@@ -34,6 +35,17 @@
 검증 실패는 400 `COMMON.VALIDATION_FAILED` + `errors: [{field, code, message}]` — `field` 는 JSON 속성 이름이다. 알 수 없는 `status` 값이나 `?status=NOPE` 는 400.
 알림: 토픽 `notes`, 타입 `NOTE_CREATED | NOTE_UPDATED | NOTE_DELETED | NOTE_EXPORTED`, `payload.noteId`(딥링크) · `payload.noteTitle`. 받는 사람은 노트 주인뿐이다(SSE 도 그 사람에게만 흐른다).
 첨부 규칙(앱의 선택, `application.yml`): png · jpg · gif · webp · pdf · txt, 5 MB 이하. 첨부 키는 `uploads/<내 계정 id>/…` 아래여야 한다(아니면 `errors[attachmentKey]`).
+
+## 게시판 (`/api/v1/boards`)
+
+노트와 별개로 `board` + `board-jdbc` 두 줄을 더한 데모다 — 이 앱 코드는 한 줄도 더하지 않았고 **설정(`application.yml`)과 계정(`SampleAccounts.kt`)만** 이 앱의 선택이다:
+
+- `skeleton.board.reaction.types: [LIKE, DISLIKE, EMPATHY]` — 모듈 기본은 `[LIKE, DISLIKE]`. 공감(`EMPATHY`)은 이 한 줄이 전부다 (코드 · 스키마 변경 없음). `GET /api/v1/boards/config` 가 프론트에 종류를 알려 준다.
+- `skeleton.board.seed-boards` — 기동할 때 `general`(General) 게시판을 만든다.
+- 운영자: `moderator@example.com` / `password` (`MODERATOR` 역할 — `skeleton.board.moderator-role` 의 기본). 글 숨기기 · 고정 · 남의 글/댓글 삭제 · 게시판 만들기. 일반 사용자는 `user@example.com` · `admin@example.com`.
+- 댓글 알림: 내 글에 댓글이 달리면 토픽 `board`, 타입 `comment.created`(답글은 `comment.replied`)가 받은편지함 · SSE 로 온다 — `notification` 이 클래스패스에 있어서 켜진 것이다.
+- 글 · 댓글 만들기는 `Idempotency-Key` 필수 (`idempotency` 가 있어서).
+- 경로 · 모양 · 에러 코드 · 결정 근거: [board](modules/board.md). 통합 테스트: `apps/sample/src/test/…/board/BoardIntegrationTest.kt`.
 
 ## 돌려 보기
 

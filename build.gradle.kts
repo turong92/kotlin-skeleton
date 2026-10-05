@@ -52,7 +52,7 @@ configure(subprojects.filter { it.buildFile.isFile }) {
 
 // DB 통합 테스트를 PostgreSQL · MySQL 두 벌로 돈다. 같은 테스트 소스(src/dbTest), 묶음마다 방언 모듈 하나만 끼운다
 // (실제 앱처럼 db-* 모듈은 정확히 하나여야 하므로 한 클래스패스에 둘을 넣지 않는다)
-val dbTestModules = setOf(":modules:job-queue-jdbc", ":modules:notification-jdbc")
+val dbTestModules = setOf(":modules:job-queue-jdbc", ":modules:notification-jdbc", ":modules:board-jdbc")
 val dbSuites = mapOf(
     "postgresTest" to (":modules:db-postgresql" to "org.testcontainers:testcontainers-postgresql"),
     "mysqlTest" to (":modules:db-mysql" to "org.testcontainers:testcontainers-mysql"),

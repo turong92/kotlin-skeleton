@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 게시판 모듈 `board` + `board-jdbc` — 글 · 대댓글 · 설정으로 늘리는 반응 (2026-10-05)
+
+- **`modules/board`**(계약 · 서비스 · 정책 · HTTP · 설정 `skeleton.board`)와 **`modules/board-jdbc`**(PostgreSQL · MySQL 저장소 + 방언별 마이그레이션 `V20261005142218__skeleton_board.sql`, 테이블 `skeleton_boards` · `skeleton_board_posts` · `…_post_attachments` · `…_comments` · `…_reactions`). `notification`/`notification-jdbc` 와 같은 분리 — `board` 는 저장소를 모르므로 `--modules board,board-jdbc` 로 둘 다 적는다 (`board` 만 적으면 `new-project.sh` 가 알려 주고, 저장소 포트가 없으면 시작이 실패한다). 메모리 구현은 두지 않았다.
+- **HTTP `/api/v1/boards`**(`skeleton.board.http.base-path`, `http.enabled=false` 로 끈다, 익명 읽기는 `http.allow-anonymous-read`): 설정 보고 `GET /config` · 게시판 · 글(목록 `sort=latest|reactions|comments` · `q` · `reaction=<코드>` 정렬 · 고정 글 먼저, 상세, 쓰기 · 고치기 · 소프트 삭제, 운영자 `moderation`) · 댓글(최상위만 페이지 + **모든 자손을 `root_id` 한 쿼리로** 평평하게) · 반응. 에러 `BOARD.*` 10 개. 계약은 react-skeleton `@skeleton/board` 와 같다.
+- **반응은 문자열 코드** `skeleton.board.reaction.types`(기본 `[LIKE, DISLIKE]`) — 종류를 늘리는 데 코드 · 스키마 변경이 없다. `mode: SINGLE`(계정당 하나, 바꾸면 교체) | `PER_TYPE`. 유니크 키 `(target_type, target_id, account_id, reaction_type)` 하나로 두 모드를 다 돌린다. **동시성**: 모든 반응 변경이 대상 행을 `FOR UPDATE` 로 먼저 잠근다 — 같은 계정의 동시 LIKE · DISLIKE 가 둘 다 들어가거나(PG 중복 키) 교착(MySQL)이 나는 것을 `JdbcConcurrencyDbTest` 가 두 DB 에서 40 스레드로 확인하고, 잠금을 빼면 실패한다. 카운터(`comment_count` · `reaction_count` · `view_count`)는 같은 트랜잭션의 `x = x + :delta`, 종류별 개수는 쪽마다 `GROUP BY` 한 번. 잠금 순서는 글 → 댓글 하나.
+- **댓글 트리**: `parent_id` + `root_id` + `depth`, `max-comment-depth` 기본 2(넘으면 422 `BOARD.COMMENT_TOO_DEEP`). 지우기 · 숨기기는 소프트 — 스레드 모양이 남고 본문만 `null`. 목록은 N+1 이 없다(행이 3 개든 30 개든 SQL 문장 수가 같다 — `JdbcQueryCountDbTest`).
+- **권한**: `BoardPolicy`(기본: 작성자 · `skeleton.board.moderator-role`=`MODERATOR`), 내용 규칙(길이 · 제어문자 · 방향 덮어쓰기 문자 제거, **HTML 은 해석하지 않는다**), `BoardRateLimiter`(`rate-limit.enabled`, platform 의 `RateLimitStore` — redis-rate-limit 이 있으면 Redis).
+- **선택 통합(컴파일 전용)**: `notification` 이 있으면 내 글에 댓글 · 내 댓글에 답글이 달릴 때 알림(`BoardNotificationFormatter` 로 문구 교체), `idempotency` 가 있으면 글 · 댓글 만들기에 `Idempotency-Key` 필수. `modules/board/src/noOptionalTest` 가 둘 다 클래스패스에 없을 때를 증명한다.
+- **샘플 앱**: `board` + `board-jdbc` 를 더하고 `reaction.types: [LIKE, DISLIKE, EMPATHY]` · `seed-boards: general` 만 설정했다. 데모 계정에 `moderator@example.com`(`MODERATOR`) — `SampleAccounts.kt`. 통합 테스트 `BoardIntegrationTest`. 워크벤치도 두 모듈을 얹는다.
+- **`new-project.sh`**: `src/dbTest` 가 있는 모듈은 모두 `dbTestModules` 에 넣는다(이전에는 두 이름을 하드코딩). `test-new-project.sh` 에 `--modules board,board-jdbc` 조합(`--full` 6번째). `ModuleDocumentationTest` 의 프론트 짝 목록에 `@skeleton/board`.
+- 문서: `docs/modules/board.md`("Decisions and rejected alternatives": 모듈 분리 · 깊이 · 반응 유니크 키 · 카운터 · 소프트 삭제 · 알림 · 검색), `board-jdbc.md`, `docs/config/modules/board.yml`, 최소 구성 가이드 표.
+
 ### 샘플 앱 "Notes" — 새 기능을 어떻게 얹는지 보여 주는 제품 모양 예시 (2026-10-05)
 
 - **`apps/sample`**(Gradle `:apps:sample`): 로그인한 사람이 노트(제목 · 본문 · 상태 · 고정 · 첨부 1개)를 관리한다. 스타터 + `idempotency` · `notification-jdbc`/`-sse` · `storage-s3` · `job-queue-jdbc` + 도메인 하나. REST `/api/v1/notes`(멱등 생성 · 목록 검색/필터/페이지 · 요약 · 통째 교체 · 삭제 · 내보내기 202), 검증 에러는 `errors[].field`, 소유자 아닌 접근은 404 `NOTES.NOT_FOUND`, 만들기/수정/삭제/내보내기 완료가 받은편지함 + SSE 알림(토픽 `notes`), 내보내기는 잡이 마크다운을 저장소에 올린다. 통합 테스트 29개(진짜 PostgreSQL · 보안 체인, 저장소만 메모리). 파일 단위 설명과 조립 순서: `docs/sample.md`, 에이전트 안내: CLAUDE.md "새 기능의 정본 예시"

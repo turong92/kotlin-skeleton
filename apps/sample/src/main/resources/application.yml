@@ -34,3 +34,10 @@ skeleton:
       max-size-bytes: 5242880         # 5 MB
       allowed-content-types: [image/png, image/jpeg, image/gif, image/webp, application/pdf, text/plain]
       allowed-extensions: [png, jpg, jpeg, gif, webp, pdf, txt]
+  board:
+    reaction:
+      types: [LIKE, DISLIKE, EMPATHY]   # 이 앱이 더한 종류 — 모듈 기본은 [LIKE, DISLIKE]. 코드 · 스키마 변경 없이 여기에만 적는다
+    seed-boards:                        # 기동할 때 없으면 만드는 게시판
+      - code: general
+        name: General
+        description: 자유 게시판

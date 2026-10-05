@@ -1,0 +1,3 @@
+dev.sumin.skeleton.board.BoardAutoConfiguration
+dev.sumin.skeleton.board.notification.BoardNotificationAutoConfiguration
+dev.sumin.skeleton.board.web.BoardWebAutoConfiguration

@@ -179,6 +179,11 @@ SELECTED_SORTED="$(printf '%s\n' "$SELECTED" | sort -u)"
 API_SORTED="$(printf '%s\n' "$API_SELECTED" | sort -u)"
 REMOVED="$(comm -23 <(printf '%s\n' "$ALL_MODULES") <(printf '%s\n' "$SELECTED_SORTED"))"
 
+# board 는 저장소를 모른다 (board-jdbc 가 포트를 구현한다) — 둘 다 적지 않았다면 알려 준다
+if in_list board "$SELECTED_SORTED" && ! in_list board-jdbc "$SELECTED_SORTED"; then
+  NOTES="${NOTES:+$NOTES$'\n'}board has no storage of its own: add board-jdbc too (--modules board,board-jdbc) unless you implement its four repository ports yourself — without them the app fails to start"
+fi
+
 echo "→ $TARGET"
 echo "  package $PKG, prefix $PREFIX, class prefix $CLASS, db $DB$([ "$WITH_WORKBENCH" = 1 ] && echo ', with workbench')$([ "$WITH_SAMPLE" = 1 ] && echo ', with sample')"
 echo "  modules ($(printf '%s\n' "$SELECTED_SORTED" | wc -l | tr -d ' ')): $(printf '%s\n' "$SELECTED_SORTED" | tr '\n' ' ')"
@@ -221,8 +226,10 @@ EOF
 
 # 루트 build.gradle.kts: DB 통합 테스트 묶음 (선택된 모듈 · 선택된 방언만)
 DB_TEST_MODULES=""
-for m in job-queue-jdbc notification-jdbc; do
-  in_list "$m" "$SELECTED_SORTED" && DB_TEST_MODULES="${DB_TEST_MODULES:+$DB_TEST_MODULES, }\":modules:$m\""
+for d in modules/*/src/dbTest; do   # src/dbTest 가 있는 (= PostgreSQL · MySQL 두 벌로 도는) 남은 모듈 전부
+  [ -d "$d" ] || continue
+  m="${d#modules/}"; m="${m%/src/dbTest}"
+  DB_TEST_MODULES="${DB_TEST_MODULES:+$DB_TEST_MODULES, }\":modules:$m\""
 done
 if [ -z "$DB_TEST_MODULES" ]; then NEW_SET='emptySet<String>()'; else NEW_SET="setOf($DB_TEST_MODULES)"; fi
 NEW="val dbTestModules = $NEW_SET" perl -pi -e 's/^val dbTestModules = .*$/$ENV{NEW}/' build.gradle.kts

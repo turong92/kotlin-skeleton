@@ -3,7 +3,7 @@
 #
 #   scripts/test-new-project.sh            # 빠른 검사 (기본, 수 초~수십 초): 인자 검증 · 모듈 닫힘 · 파일 가지치기 · rename 잔여 검사
 #   scripts/test-new-project.sh --quick    # 위와 같다 (./gradlew check 가 부른다)
-#   scripts/test-new-project.sh --full     # 위 + 다섯 조합을 임시 디렉토리에 찍어 각각 ./gradlew build (Docker/Testcontainers 필요, 순차, 수 분)
+#   scripts/test-new-project.sh --full     # 위 + 여섯 조합을 임시 디렉토리에 찍어 각각 ./gradlew build (Docker/Testcontainers 필요, 순차, 수 분)
 #
 # --full 은 CI 의 별도 워크플로(.github/workflows/new-project.yml)가 돈다. 조합:
 #   1. 기본값만
@@ -11,6 +11,7 @@
 #   3. --db mysql --modules job-queue-jdbc
 #   4. --modules persistence-jooq,job-queue-jdbc,notification-jdbc   (jOOQ 코드 생성이 형제 모듈 마이그레이션을 파싱한다)
 #   5. --with-sample   (제품 모양 예시 앱 apps/sample 이 남고, 그 앱의 모듈이 닫힘에 더해진다)
+#   6. --modules board,board-jdbc   (게시판: board 의 compileOnly 의존 notification · idempotency 가 소스로 따라오고, board-jdbc 의 dbTest 가 두 DB 로 돈다)
 # macOS bash 3.2 와 GNU bash 에서 돈다. 임시 디렉토리는 끝나면 지운다 (KEEP=1 이면 남긴다).
 set -euo pipefail
 
@@ -157,7 +158,7 @@ expect_exit 0 "persistence-jooq + 형제 마이그레이션 모듈을 찍는다"
 echo "== 7. --with-sample (샘플 앱 \"Notes\" 은 요청할 때만 남는다)"
 G="$TMP/g"
 expect_exit 0 "조합 5 를 찍는다 (rename 잔여 검사 포함)" stamp "$G" --with-sample
-want=":apps:api :apps:sample :modules:auth :modules:crypto :modules:db-postgresql :modules:idempotency :modules:job-queue-jdbc :modules:json :modules:migration :modules:migration-flyway :modules:notification :modules:notification-jdbc :modules:notification-sse :modules:persistence-jdbc :modules:platform :modules:storage :modules:storage-s3 :modules:time"
+want=":apps:api :apps:sample :modules:auth :modules:board :modules:board-jdbc :modules:crypto :modules:db-postgresql :modules:idempotency :modules:job-queue-jdbc :modules:json :modules:migration :modules:migration-flyway :modules:notification :modules:notification-jdbc :modules:notification-sse :modules:persistence-jdbc :modules:platform :modules:storage :modules:storage-s3 :modules:time"
 got="$(includes "$G/settings.gradle.kts")"
 [ "$got" = "$want" ] && pass "settings.gradle.kts 는 스타터 + 샘플 앱의 모듈과 그 닫힘을 포함한다" || fail "settings includes: [$got] expected [$want]"
 check "샘플 앱 소스가 새 패키지로 옮겨진다" test -f "$G/apps/sample/src/main/kotlin/dev/sumin/ovation/app/sample/SampleApplication.kt"
@@ -166,11 +167,29 @@ check "샘플 문서 · 실행 스크립트가 남고 안내 문서의 표식 �
 check "스타터 apps/api 는 그대로다 — 샘플 앱의 모듈을 얹지 않는다" bash -c "! grep -q 'storage-s3\|notification\|idempotency' '$G/apps/api/build.gradle.kts'"
 check "스타터 테스트의 부재 단언(S3 클라이언트)은 그대로다 — 스타터 클래스패스에는 여전히 없다" has_line 'software.amazon.awssdk.services.s3.S3Client' "$G/apps/api/src/test/kotlin/dev/sumin/ovation/app/api/StarterCompositionIntegrationTest.kt"
 check "스타터 설정에 샘플 모듈의 설정 블록이 붙지 않는다" lacks_line 'new-project: module config blocks' "$G/apps/api/src/main/resources/application.yml"
-check "dbTestModules 에 샘플이 쓰는 DB 모듈이 들어간다" has_line 'val dbTestModules = setOf\(":modules:job-queue-jdbc", ":modules:notification-jdbc"\)' "$G/build.gradle.kts"
+check "dbTestModules 에 샘플이 쓰는 DB 모듈이 들어간다" has_line 'val dbTestModules = setOf\(":modules:board-jdbc", ":modules:job-queue-jdbc", ":modules:notification-jdbc"\)' "$G/build.gradle.kts"
 check "dev.sh 는 APP=sample 을 알고 문법 검사를 통과한다" bash -c "grep -q 'APP' '$G/scripts/dev.sh' && bash -n '$G/scripts/dev.sh' && bash -n '$G/scripts/dev-sample.sh' && bash -n '$G/scripts/sample-e2e-backend.sh'"
 
+echo "== 8. --modules board,board-jdbc (게시판 — board 는 저장소를 모르고 board-jdbc 가 포트를 구현한다)"
+H="$TMP/h"
+expect_exit 0 "조합 6 을 찍는다 (rename 잔여 검사 포함)" stamp "$H" --modules board,board-jdbc
+echo "$LAST_OUTPUT" | grep -q 'notification (compile-only for board' && pass "notification 은 board 의 컴파일 전용 의존으로 안내된다 (런타임 전이 없음)" || fail "notification 이 컴파일 전용이라는 안내가 없다"
+for m in board board-jdbc notification idempotency; do
+  check "모듈 $m 이 포함된다 (요청했거나 닫힘으로 따라왔다)" bash -c "grep -q 'include(\":modules:$m\")' '$H/settings.gradle.kts' && test -d '$H/modules/$m'"
+done
+for m in board board-jdbc; do
+  check "apps/api 의존성에 $m 한 줄이 생긴다" has_line "implementation\\(project\\(\":modules:$m\"\\)\\)" "$H/apps/api/build.gradle.kts"
+done
+check "닫힘으로 따라온 컴파일 전용 모듈은 앱 의존성에 줄을 더하지 않는다 (notification · idempotency)" bash -c "! grep -q 'modules:notification\|modules:idempotency' '$H/apps/api/build.gradle.kts'"
+check "dbTestModules 에 board-jdbc 가 들어간다 (src/dbTest 가 있는 모듈 전부)" has_line 'val dbTestModules = setOf\(":modules:board-jdbc"\)' "$H/build.gradle.kts"
+check "게시판 문서 쪽과 설정 블록이 남고 새 접두사로 붙는다" bash -c "test -f '$H/docs/modules/board.md' && test -f '$H/docs/modules/board-jdbc.md' && grep -q '^# ovation.board\|^#   board:' '$H/apps/api/src/main/resources/application.yml' && grep -q 'ovation.board' '$H/modules/board/src/main/kotlin/dev/sumin/ovation/board/BoardProperties.kt'"
+check "찍은 프로젝트에 skeleton 이름 흔적이 없다 (BoardController 경로 속성 포함)" bash -c "! grep -rq 'skeleton\.board' '$H/modules/board/src/main'"
+I="$TMP/i"
+expect_exit 0 "board 만 요청하면 찍히되 board-jdbc 를 더하라고 알려 준다" stamp "$I" --modules board
+echo "$LAST_OUTPUT" | grep -q 'board has no storage of its own' && pass "저장소 없음 안내가 나온다" || fail "board 만 요청했는데 board-jdbc 안내가 없다"
+
 if [ "$MODE" = "--full" ]; then
-  echo "== 8. 조합마다 ./gradlew build (순차)"
+  echo "== 9. 조합마다 ./gradlew build (순차)"
   build_composition() { # build_composition <dir> <이름>
     local dir="$1" name="$2" started ended
     started="$(date +%s)"
@@ -188,6 +207,7 @@ if [ "$MODE" = "--full" ]; then
   build_composition "$C" "3-mysql"
   build_composition "$F" "4-jooq"
   build_composition "$G" "5-sample"
+  build_composition "$H" "6-board"
 fi
 
 echo

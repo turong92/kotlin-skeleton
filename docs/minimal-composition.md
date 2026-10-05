@@ -54,7 +54,8 @@ skeleton:
 Adapter modules expose the contract they implement with `api(project(...))`, so one line is enough:
 `payment-toss`/`payment-stripe` → `payment`, `notification-jdbc`/`-sse`/`-slack`/`-websocket` → `notification`,
 `storage-s3` → `storage`, `auth-social` → `auth`, `auth-social-google`/`-kakao`/`-naver` → `auth-social`,
-`redis-lock`/`-cache`/`-rate-limit` → `redis-core`. You never edit a module to compose it.
+`redis-lock`/`-cache`/`-rate-limit` → `redis-core`, `board-jdbc` → `board`. You never edit a module to compose it.
+`board` alone has no storage — name `board-jdbc` too (`--modules board,board-jdbc`); `board` never depends on its adapter, as `notification` does not on `notification-jdbc`.
 
 Keep only the modules you use in `settings.gradle.kts` `include(...)` as well; delete the module directories you
 do not include (or leave them — unincluded directories are ignored by Gradle). `apps/workbench` can be deleted once
@@ -92,6 +93,7 @@ fails when this table and the prefixes found in module code differ.
 | `async-notification` | `skeleton.async-notification` |
 | `auth` | `skeleton.auth` |
 | `auth-social` | `skeleton.auth-social` |
+| `board` | `skeleton.board` |
 | `captcha-turnstile` | `skeleton.captcha-turnstile` |
 | `config-aws-ssm` | `skeleton.config.aws.ssm` |
 | `crypto` | `skeleton.crypto` |
@@ -138,6 +140,8 @@ test proving a context with only that module (and its declared dependencies) boo
 | `auth-social-google` / `-kakao` / `-naver` | off until `skeleton.auth-social.providers.<x>.enabled=true` | nothing | client id / secret |
 | `async` | yes | nothing | — |
 | `async-notification` | yes | `notification` (declared dependency) | — |
+| `board` | yes (HTTP `/api/v1/boards`; no board exists until you seed or create one) | a `BoardRepository` · `PostRepository` · `CommentRepository` · `ReactionRepository` set — `board-jdbc` provides it, or write your own; startup fails naming the missing bean | `notification` (comment alerts), `idempotency` (`Idempotency-Key` on create), a `RateLimitStore` (rate limit) — all optional, all compile-only |
+| `board-jdbc` | yes | a `DataSource` + one `db-*` module (+ its migration `skeleton_board`, as above) | — |
 | `captcha-turnstile` | off until `enabled=true` + `secret-key` | nothing | Turnstile secret, internet |
 | `config-aws-ssm` | loads only once `paths` are set (dev / staging / prod) or `credential-profile` is set | nothing | AWS credentials when it loads (`fail-fast` decides) |
 | `crypto` | beans only when `skeleton.crypto.keys` has a key | nothing | AES keys |
@@ -183,6 +187,7 @@ with an ambiguous injection — it now owns a `skeletonTaskScheduler`. The other
 | Scheduler lock | `NoopSkeletonScheduledLockManager` — runs locally, fine for a single instance | `redis-lock` |
 | Retry queue | `job-queue-jdbc` — `FOR UPDATE SKIP LOCKED` (PostgreSQL / MySQL), safe with several instances | — |
 | Notifications | in-memory broker | `notification-jdbc`, `-sse`, `-websocket`, `-slack`, `-mail` |
+| Boards (posts · nested comments · typed reactions) | none — there is no in-memory board | `board` + `board-jdbc` |
 | Events | `event-kafka` off unless enabled | — |
 
 ## 5. Start a project: one command
@@ -193,6 +198,7 @@ scripts/new-project.sh <target-dir> <root-package> <config-prefix> <ClassPrefix>
 
 scripts/new-project.sh ~/work/ovation dev.sumin.ovation ovation Ovation --modules job-queue-jdbc,notification-mail,storage-s3,scheduler
 scripts/new-project.sh ~/work/ovation dev.sumin.ovation ovation Ovation --db mysql --modules job-queue-jdbc
+scripts/new-project.sh ~/work/ovation dev.sumin.ovation ovation Ovation --modules board,board-jdbc
 ```
 
 It copies the repo (without `build`, `.gradle`, `.kotlin`, `.git`, `.superpowers`, `.claude`, `.env`), keeps `apps/api`, and drops `apps/workbench`
@@ -219,9 +225,9 @@ unless `--with-workbench`. Then:
 
 Invalid input exits 2 and creates nothing: unknown module (the message lists the valid ones), target exists or lies inside the skeleton repo,
 unknown option, `--db` other than `postgresql` / `mysql`, a `db-*` name in `--modules`. The script writes only inside the target and runs on
-macOS bash 3.2 and GNU bash. `scripts/test-new-project.sh` tests it (`--quick` runs inside `./gradlew check`; `--full` stamps four compositions —
+macOS bash 3.2 and GNU bash. `scripts/test-new-project.sh` tests it (`--quick` runs inside `./gradlew check`; `--full` stamps these compositions —
 defaults; `--modules job-queue-jdbc,notification-mail,storage-s3,scheduler`; `--db mysql --modules job-queue-jdbc`;
-`--modules persistence-jooq,job-queue-jdbc,notification-jdbc` — and runs `./gradlew build` in each,
+`--modules persistence-jooq,job-queue-jdbc,notification-jdbc`; `--modules board,board-jdbc`; `--with-sample` — and runs `./gradlew build` in each,
 needing Docker; CI: `.github/workflows/new-project.yml`).
 
 ### Rename only

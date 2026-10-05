@@ -30,6 +30,8 @@ dependencies {
     implementation(project(":modules:job-queue-jdbc"))
     implementation(project(":modules:notification-mail"))
     implementation(project(":modules:captcha-turnstile"))
+    implementation(project(":modules:board"))
+    implementation(project(":modules:board-jdbc"))
     implementation(project(":modules:db-postgresql"))
     implementation(project(":modules:migration-flyway"))
 

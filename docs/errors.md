@@ -34,6 +34,8 @@ interceptors.
 - `COMMON.*`: platform and generic web errors.
 - `AUTH.*`: password/JWT/authentication errors.
 - `AUTH_SOCIAL.*`: OAuth/social login errors.
+- `BOARD.*`: the `board` module — `NOT_FOUND`, `POST_NOT_FOUND`, `COMMENT_NOT_FOUND` (404), `FORBIDDEN` (403),
+  `REACTION_TYPE_INVALID`, `CONTENT_INVALID` (400), `COMMENT_TOO_DEEP` (422), `POST_NOT_COMMENTABLE`, `CODE_TAKEN` (409), `RATE_LIMITED` (429).
 - `PAYMENT.*`: provider-neutral payment errors. Vendor codes are nested under
   `data.providerCode`, not promoted to the top-level `code`.
 

@@ -54,6 +54,8 @@ modules/
   storage             # optional storage contracts and file validation
   storage-s3          # optional S3/R2 storage adapter (presigned + server-side put, cache headers, batch delete)
   job-queue-jdbc      # optional DB-table retry queue (FOR UPDATE SKIP LOCKED, backoff, dead-letter) — no Redis
+  board               # optional board: posts, nested comments, reaction types set by config (no schema change), moderation — storage in board-jdbc (list both)
+  board-jdbc          # PostgreSQL / MySQL storage for board
   captcha-turnstile   # optional Cloudflare Turnstile token verification
 ```
 

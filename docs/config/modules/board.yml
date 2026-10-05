@@ -1,0 +1,26 @@
+# board — 게시판 (글 · 댓글 트리 · 종류가 있는 반응). 저장소는 board-jdbc 가 맡고 설정 접두사는 이것 하나다.
+skeleton:
+  board:
+    moderator-role: MODERATOR      # 운영자 역할 이름 (ROLE_ 없이). 숨기기 · 고정 · 남의 글/댓글 지우기 · 게시판 만들기
+    max-comment-depth: 2           # 댓글 깊이 상한 (최상위 = 0 → 댓글 · 대댓글 · 대대댓글). 더 깊으면 422 BOARD.COMMENT_TOO_DEEP
+    title-max-length: 200          # 글 제목 (글자 수, 255 이하 — 칼럼이 varchar(255))
+    body-max-length: 20000         # 글 본문
+    comment-max-length: 2000       # 댓글 본문
+    max-attachments: 10            # 글 하나의 첨부 키 수
+    excerpt-length: 140            # 목록의 본문 미리보기 길이
+    max-page-size: 100             # 목록 한 페이지 상한 (platform PageQuery 상한 100 과 둘 중 작은 값)
+    seed-boards: []                # 기동할 때 없으면 만드는 게시판 — 예: [{ code: general, name: General, description: 자유 게시판 }]
+    reaction:
+      types: [LIKE, DISLIKE]       # 허용하는 반응 종류 코드 (대문자 · 숫자 · _). 늘리려면 여기에 적기만 하면 된다 — 예: [LIKE, EMPATHY, SAD]
+      mode: SINGLE                 # SINGLE: 대상 하나에 계정당 반응 하나(바꾸면 교체) | PER_TYPE: 종류마다 하나씩 여러 종류 함께
+    http:
+      enabled: true                # false 면 컨트롤러를 등록하지 않는다 (서블릿 웹 앱 + Spring Security 가 있을 때만 등록)
+      base-path: /api/v1/boards    # 프론트 @skeleton/board 의 basePath 와 맞춘다
+      allow-anonymous-read: false  # true 면 GET 은 로그인 없이 (쓰기는 항상 로그인)
+    rate-limit:
+      enabled: false               # 켜면 글 · 댓글 · 반응 쓰기에 계정별 한도 (platform RateLimitStore — redis-rate-limit 이 있으면 Redis)
+      capacity: 30                 # 창 안에서 허용하는 쓰기 횟수 (동작별 · 계정별)
+      window: 1m                   # 고정 창 길이
+    notification:
+      enabled: true                # notification 모듈이 있을 때 댓글 · 답글 알림을 보낸다 (false 면 안 보낸다)
+      topic: board                 # 알림 토픽
