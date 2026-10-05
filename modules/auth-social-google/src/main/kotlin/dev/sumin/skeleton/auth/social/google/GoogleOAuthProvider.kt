@@ -40,6 +40,7 @@ class GoogleOAuthProvider(
             email = profile.email,
             username = profile.email ?: profile.sub,
             displayName = profile.name,
+            emailVerified = profile.emailVerified == true,
         )
     }
 
@@ -90,6 +91,8 @@ class GoogleOAuthProvider(
     data class GoogleUserInfoResponse(
         val sub: String,
         val email: String? = null,
+        @JsonProperty("email_verified")
+        val emailVerified: Boolean? = null,
         val name: String? = null,
     )
 

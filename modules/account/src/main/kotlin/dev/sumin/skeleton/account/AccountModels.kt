@@ -53,7 +53,10 @@ data class Identity(
     val metadata: String? = null,
     val createdAt: Instant,
     val lastUsedAt: Instant? = null,
-)
+) {
+    // 비밀번호 해시가 로그에 찍히지 않게
+    override fun toString() = "Identity(id=$id, accountId=$accountId, method=$method, verified=$verified, secret=${if (secret == null) "none" else "<redacted>"})"
+}
 
 /** 부분 수정 — null 인 필드는 바꾸지 않는다 (지우기는 별도 플래그) */
 data class AccountPatch(

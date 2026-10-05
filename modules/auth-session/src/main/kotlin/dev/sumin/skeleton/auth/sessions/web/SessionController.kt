@@ -33,7 +33,9 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 
-data class RefreshRequest(@field:Size(max = 128) val refreshToken: String? = null)
+data class RefreshRequest(@field:Size(max = 128) val refreshToken: String? = null) {
+    override fun toString() = "RefreshRequest(refreshToken=<redacted>)"
+}
 
 /** 리프레시 · 로그아웃 · 세션 목록. HTTP 변환만 — 규칙은 [SessionService]. [dev.sumin.skeleton.auth.sessions.AuthSessionAutoConfiguration] 이 등록한다. */
 @RestController

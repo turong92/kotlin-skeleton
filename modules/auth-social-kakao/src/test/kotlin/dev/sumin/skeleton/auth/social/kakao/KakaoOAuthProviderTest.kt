@@ -64,6 +64,7 @@ class KakaoOAuthProviderTest {
         assertEquals("kakao@example.com", profile.email)
         assertEquals("kakao@example.com", profile.username)
         assertEquals("Kakao User", profile.displayName)
+        assertEquals(true, profile.emailVerified)
 
         val tokenRequest = requests.first()
         assertEquals("POST", tokenRequest.method)
@@ -89,7 +90,7 @@ class KakaoOAuthProviderTest {
             "/oauth/token" -> exchange.respond(200, """{"access_token":"kakao-access-token","token_type":"Bearer"}""")
             "/v2/user/me" -> exchange.respond(
                 200,
-                """{"id":12345,"kakao_account":{"email":"kakao@example.com","profile":{"nickname":"Kakao User"}}}""",
+                """{"id":12345,"kakao_account":{"email":"kakao@example.com","is_email_verified":true,"profile":{"nickname":"Kakao User"}}}""",
             )
             else -> exchange.respond(404, """{"message":"not found"}""")
         }

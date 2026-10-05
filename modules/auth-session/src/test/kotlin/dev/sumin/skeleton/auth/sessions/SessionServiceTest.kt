@@ -181,3 +181,11 @@ class SessionServiceTest {
         assertTrue(store.tokenHashes().size <= 2, "used tokens older than reuse-memory must be pruned, got ${store.tokenHashes().size}")
     }
 }
+
+class RefreshRequestToStringTest {
+    @Test
+    fun `the refresh token never prints`() {
+        val text = dev.sumin.skeleton.auth.sessions.web.RefreshRequest("r1.SECRET-TOKEN-VALUE").toString()
+        assertFalse("SECRET-TOKEN-VALUE" in text, text)
+    }
+}

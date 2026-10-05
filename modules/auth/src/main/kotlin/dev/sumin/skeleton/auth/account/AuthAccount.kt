@@ -11,7 +11,10 @@ data class AuthAccount(
     val passwordHash: String,
     val roles: Set<String>,
     val loginBlock: LoginBlock? = null,
-)
+) {
+    // 비밀번호 해시가 로그에 찍히지 않게
+    override fun toString() = "AuthAccount(accountId=$accountId, roles=$roles, loginBlock=$loginBlock, passwordHash=<redacted>)"
+}
 
 /** 계정은 있지만 지금은 로그인할 수 없는 이유 */
 enum class LoginBlock { EMAIL_NOT_VERIFIED, SUSPENDED }

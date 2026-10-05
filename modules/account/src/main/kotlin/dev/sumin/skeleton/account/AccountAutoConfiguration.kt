@@ -29,6 +29,7 @@ import dev.sumin.skeleton.account.signin.IdentityService
 import dev.sumin.skeleton.account.signin.PasswordSignInMethod
 import dev.sumin.skeleton.account.signin.SignInMethod
 import dev.sumin.skeleton.account.signin.SignInMethodRegistry
+import dev.sumin.skeleton.account.signin.SignInMethodSource
 import dev.sumin.skeleton.account.token.InMemoryOneTimeTokenStore
 import dev.sumin.skeleton.account.token.OneTimeTokenStore
 import dev.sumin.skeleton.account.token.OneTimeTokens
@@ -203,7 +204,8 @@ class AccountAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    fun signInMethodRegistry(methods: ObjectProvider<SignInMethod>): SignInMethodRegistry = SignInMethodRegistry(methods.orderedStream().toList())
+    fun signInMethodRegistry(methods: ObjectProvider<SignInMethod>, sources: ObjectProvider<SignInMethodSource>): SignInMethodRegistry =
+        SignInMethodRegistry(methods.orderedStream().toList() + sources.orderedStream().toList().flatMap { it.methods() })
 
     @Bean
     @ConditionalOnMissingBean

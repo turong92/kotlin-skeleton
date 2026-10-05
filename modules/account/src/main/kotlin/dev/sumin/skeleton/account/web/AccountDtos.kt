@@ -5,6 +5,8 @@ import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
 import java.time.Instant
 
+// 비밀번호 · 토큰을 담는 요청은 toString 을 가린다 — Spring MVC 가 DEBUG · TRACE 에서 요청 본문을 toString 으로 찍는다 (SecretsStayOutOfToStringTest)
+
 data class SignUpRequest(
     @field:NotBlank @field:Email @field:Size(max = 254) val email: String?,
     @field:NotBlank @field:Size(max = 128) val password: String?,
@@ -12,29 +14,39 @@ data class SignUpRequest(
     @field:Size(max = 35) val locale: String? = null,
     @field:Size(max = 64) val timeZone: String? = null,
     @field:Size(max = 2048) val captchaToken: String? = null,
-)
+) {
+    override fun toString() = "SignUpRequest(email=<redacted>, password=<redacted>)"
+}
 
 data class EmailRequest(
     @field:NotBlank @field:Email @field:Size(max = 254) val email: String?,
     @field:Size(max = 2048) val captchaToken: String? = null,
 )
 
-data class TokenRequest(@field:NotBlank @field:Size(max = 128) val token: String?)
+data class TokenRequest(@field:NotBlank @field:Size(max = 128) val token: String?) {
+    override fun toString() = "TokenRequest(token=<redacted>)"
+}
 
 data class ResetPasswordRequest(
     @field:NotBlank @field:Size(max = 128) val token: String?,
     @field:NotBlank @field:Size(max = 128) val newPassword: String?,
-)
+) {
+    override fun toString() = "ResetPasswordRequest(token=<redacted>, newPassword=<redacted>)"
+}
 
 data class ChangePasswordRequest(
     @field:Size(max = 128) val currentPassword: String? = null,
     @field:NotBlank @field:Size(max = 128) val newPassword: String?,
-)
+) {
+    override fun toString() = "ChangePasswordRequest(currentPassword=<redacted>, newPassword=<redacted>)"
+}
 
 data class ChangeEmailRequest(
     @field:NotBlank @field:Email @field:Size(max = 254) val newEmail: String?,
     @field:Size(max = 128) val currentPassword: String? = null,
-)
+) {
+    override fun toString() = "ChangeEmailRequest(newEmail=<redacted>, currentPassword=<redacted>)"
+}
 
 data class UpdateProfileRequest(
     @field:Size(min = 1, max = 60) val displayName: String? = null,
@@ -45,7 +57,9 @@ data class UpdateProfileRequest(
 data class DeleteAccountRequest(
     @field:Size(max = 128) val currentPassword: String? = null,
     @field:Size(max = 128) val confirmationToken: String? = null,
-)
+) {
+    override fun toString() = "DeleteAccountRequest(currentPassword=<redacted>, confirmationToken=<redacted>)"
+}
 
 data class SuspendRequest(@field:Size(max = 200) val reason: String? = null)
 

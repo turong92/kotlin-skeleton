@@ -66,6 +66,7 @@ class GoogleOAuthProviderTest {
         assertEquals("google@example.com", profile.email)
         assertEquals("google@example.com", profile.username)
         assertEquals("Google User", profile.displayName)
+        assertEquals(true, profile.emailVerified, "email_verified from userinfo is carried so account linking can trust the address")
 
         val tokenRequest = requests.first()
         assertEquals("POST", tokenRequest.method)
@@ -113,7 +114,7 @@ class GoogleOAuthProviderTest {
             }
             "/userinfo" -> exchange.respond(
                 200,
-                """{"sub":"google-sub-1","email":"google@example.com","name":"Google User","picture":"https://example.com/google.png"}""",
+                """{"sub":"google-sub-1","email":"google@example.com","email_verified":true,"name":"Google User","picture":"https://example.com/google.png"}""",
             )
             else -> exchange.respond(404, """{"message":"not found"}""")
         }

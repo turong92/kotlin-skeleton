@@ -32,7 +32,10 @@ data class PasswordLoginRequest(
     @field:NotBlank
     @field:Size(max = 128)
     val password: String? = null,
-)
+) {
+    // Spring MVC 가 DEBUG · TRACE 에서 요청 본문을 toString 으로 찍는다 — 비밀번호가 로그에 남지 않게
+    override fun toString() = "PasswordLoginRequest(identifier=<redacted>, password=<redacted>)"
+}
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 data class AuthTokenResponse(
@@ -44,7 +47,10 @@ data class AuthTokenResponse(
     val refreshToken: String? = null,
     val refreshExpiresAt: Instant? = null,
     val sessionId: String? = null,
-)
+) {
+    // 응답 본문도 DEBUG 에서 toString 으로 찍힐 수 있다 — 토큰이 로그에 남지 않게
+    override fun toString() = "AuthTokenResponse(principal=${principal.accountId}, expiresAt=$expiresAt, accessToken=<redacted>, refreshToken=${if (refreshToken == null) "none" else "<redacted>"})"
+}
 
 class InvalidCredentialsException : ApplicationException(
     message = "Invalid credentials",

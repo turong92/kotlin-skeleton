@@ -1,2 +1,7 @@
 dev.sumin.skeleton.account.AccountAutoConfiguration
 dev.sumin.skeleton.account.web.AccountWebAutoConfiguration
+dev.sumin.skeleton.account.mail.AccountMailAutoConfiguration
+dev.sumin.skeleton.account.abuse.AccountCaptchaAutoConfiguration
+dev.sumin.skeleton.account.abuse.AccountAlertAutoConfiguration
+dev.sumin.skeleton.account.social.AccountSocialAutoConfiguration
+dev.sumin.skeleton.account.social.AccountSocialWebAutoConfiguration

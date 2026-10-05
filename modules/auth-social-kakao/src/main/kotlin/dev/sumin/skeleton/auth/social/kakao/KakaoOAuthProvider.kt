@@ -43,6 +43,7 @@ class KakaoOAuthProvider(
             email = email,
             username = email ?: providerUserId,
             displayName = nickname,
+            emailVerified = profile.kakaoAccount?.emailVerified == true,
         )
     }
 
@@ -98,6 +99,8 @@ class KakaoOAuthProvider(
 
     data class KakaoAccount(
         val email: String? = null,
+        @JsonProperty("is_email_verified")
+        val emailVerified: Boolean? = null,
         val profile: KakaoProfile? = null,
     )
 

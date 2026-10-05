@@ -1,0 +1,47 @@
+package dev.sumin.skeleton.account.web
+
+import dev.sumin.skeleton.account.social.LinkSocialRequest
+import dev.sumin.skeleton.auth.api.AuthTokenResponse
+import dev.sumin.skeleton.auth.api.PasswordLoginRequest
+import dev.sumin.skeleton.auth.principal.CurrentPrincipal
+import java.time.Instant
+import kotlin.test.Test
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+
+/**
+ * Spring MVC logs handler arguments and bodies with `toString()` at DEBUG/TRACE (实测: `Read "application/json" to [SignUpRequest(... password=...)]`).
+ * A request or response that carries a secret must never print it — otherwise turning the log level up leaks passwords and one-time tokens.
+ */
+class SecretsStayOutOfToStringTest {
+    private val secret = "S3cr3t-Value-123"
+
+    private fun assertHidden(value: Any) {
+        val text = value.toString()
+        assertFalse(secret in text, "${value.javaClass.simpleName}.toString() leaked a secret: $text")
+        assertTrue(value.javaClass.simpleName in text, "toString should still say what it is")
+    }
+
+    @Test
+    fun `account request bodies hide passwords and tokens`() {
+        assertHidden(SignUpRequest("a@b.co", secret))
+        assertHidden(ResetPasswordRequest(secret, secret))
+        assertHidden(TokenRequest(secret))
+        assertHidden(ChangePasswordRequest(secret, secret))
+        assertHidden(ChangeEmailRequest("a@b.co", secret))
+        assertHidden(DeleteAccountRequest(secret, secret))
+        assertHidden(LinkSocialRequest(secret))
+    }
+
+    @Test
+    fun `the login request and the token response hide credentials`() {
+        assertHidden(PasswordLoginRequest(email = "a@b.co", password = secret))
+        assertHidden(AuthTokenResponse(secret, expiresAt = Instant.EPOCH, principal = CurrentPrincipal("acc_1"), refreshToken = secret))
+    }
+
+    @Test
+    fun `stored identities and auth accounts hide password hashes`() {
+        assertHidden(dev.sumin.skeleton.account.Identity("idn_1", "acc_1", "password", "a@b.co", true, secret = secret, createdAt = Instant.EPOCH))
+        assertHidden(dev.sumin.skeleton.auth.account.AuthAccount("acc_1", "a@b.co", "a@b.co", secret, setOf("USER")))
+    }
+}

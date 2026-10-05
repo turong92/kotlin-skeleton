@@ -40,6 +40,11 @@ class PasswordSignInMethod : SignInMethod {
     override val exposesSubject: Boolean = true
 }
 
+/** 빈 하나가 여러 수단을 한꺼번에 내놓을 때 (제공자 목록에서 소셜 수단을 만드는 `account` 의 소셜 연동) — 레지스트리가 모아 같은 규칙으로 검사한다 */
+fun interface SignInMethodSource {
+    fun methods(): List<SignInMethod>
+}
+
 class SignInMethodRegistry(methods: List<SignInMethod>) {
     private val byCode: Map<String, SignInMethod>
 
