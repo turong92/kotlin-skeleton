@@ -102,11 +102,18 @@ sealed interface CodeCheck {
 class Challenges(private val store: ChallengeStore, private val hasher: CodeHasher, private val time: TimeProvider) {
     private val random = SecureRandom()
 
+    private companion object {
+        /** 어떤 입력의 HMAC(64자리 16진수)과도 길이가 달라 [CodeHasher.matches] 가 절대 참이 되지 않는다 */
+        const val DEAD_HASH = ""
+    }
+
     fun open(
         purpose: String, subject: String, ttl: Duration, maxAttempts: Int, accountId: String? = null, sessionId: String? = null,
         payload: String? = null, secret: String? = null, ip: String? = null, withHandle: Boolean = false,
         /** false 면 저장하지 않는다 — 한도를 넘은 가입 시도가 같은 모양의 응답을 받되 아무것도 남기지 않게 */
         store: Boolean = true,
+        /** true 면 **아무 코드로도 맞지 않는** 줄을 저장한다 — 한도를 넘은 이메일 변경이 같은 모양의 상태(대기 중 · 남은 시도)를 보이되 추측으로도 이길 수 없게 */
+        dead: Boolean = false,
     ): Opened {
         val now = time.now()
         val handle = if (withHandle) Base64.getUrlEncoder().withoutPadding().encodeToString(ByteArray(32).also(random::nextBytes)) else null
@@ -114,7 +121,7 @@ class Challenges(private val store: ChallengeStore, private val hasher: CodeHash
         val code = "%06d".format(random.nextInt(1_000_000))
         // 세션 코드는 (용도, 주인) 하나만 열려 있다 — 새 요청이 옛 코드를 닫는다. 가입 시도는 같은 주소에 여럿이 함께 있다 (서로 덮어쓰지 않는다)
         if (store && !withHandle) this.store.deleteBySubject(purpose, subject)
-        val row = ChallengeRow(id, purpose, subject, accountId, sessionId, payload, secret, hasher.hash(id, code), maxAttempts, 0, now, now.plus(ttl), now, ip)
+        val row = ChallengeRow(id, purpose, subject, accountId, sessionId, payload, secret, if (dead) DEAD_HASH else hasher.hash(id, code), maxAttempts, 0, now, now.plus(ttl), now, ip)
         if (store) this.store.insert(row)
         return Opened(handle, code, row)
     }

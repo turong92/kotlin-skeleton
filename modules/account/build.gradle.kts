@@ -25,6 +25,7 @@ dependencies {
 
     // 시험용 — compileOnly 와 같은 모듈 (board 의 notification 과 같다). 일반 test 는 선택 통합을 얹고, noOptionalTest 가 없는 쪽을 증명한다
     testImplementation(project(":modules:notification-mail"))
+    testImplementation("org.springframework.boot:spring-boot-starter-mail")   // SmtpMailSender 의 발송 실패 경로(제목을 로그에 남긴다)를 실제로 태우는 시험
     testImplementation(project(":modules:captcha-turnstile"))
     testImplementation(project(":modules:alert"))
     testImplementation(project(":modules:idempotency"))

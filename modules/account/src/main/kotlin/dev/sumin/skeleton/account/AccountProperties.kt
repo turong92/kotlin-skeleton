@@ -81,7 +81,14 @@ data class AccountProperties(
         /** 같은 IP 가 창 안에 보낼 수 있는 코드 입력 수 (넘으면 429) */
         val attemptsPerIp: Int = 30,
         val attemptsWindow: Duration = Duration.ofHours(1),
-    )
+        /**
+         * 한 이메일 주소의 코드를 창 안에 **통틀어** 몇 번까지 추측해 볼 수 있나 — 가입 시도 · 이메일 변경 챌린지 · 어느 계정에서든 같은 주소면 하나의 셈이다.
+         * 기본 40 = 열 수 있는 시도 5 × 추측 5 + 재전송(메일 예산) 3 × 추측 5 (docs/accounts.md 무차별 대입 계산). 넘으면 429
+         */
+        val guessesPerEmail: Int = 40,
+    ) {
+        init { require(guessesPerEmail >= 1) { "skeleton.account.verification.guesses-per-email must be >= 1" } }
+    }
 
     data class Reset(
         val ttl: Duration = Duration.ofMinutes(30),

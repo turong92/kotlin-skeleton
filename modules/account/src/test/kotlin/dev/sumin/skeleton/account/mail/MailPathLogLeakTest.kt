@@ -8,7 +8,9 @@ import dev.sumin.skeleton.account.AccountProperties
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import dev.sumin.skeleton.notification.mail.SmtpMailSender
 import org.slf4j.LoggerFactory
+import org.springframework.mail.javamail.JavaMailSenderImpl
 
 /** 위협 표 "비밀번호 · 토큰이 로그에" — 실제 `TemplatedAccountMailer` + `LogOnlyMailTransport` 길로 보낸 메일이 로그에 링크 · 토큰 · 주소를 남기지 않는다 */
 class MailPathLogLeakTest {
@@ -43,5 +45,62 @@ class MailPathLogLeakTest {
     @Test
     fun `links appear in the log only when explicitly switched on`() {
         assertEquals(true, capture(showLinks = true).any { token in it })
+    }
+
+    // ---- the code and the link never reach a log line through the REAL mailer path, for every mail kind that carries one
+
+    private val code = "739518"
+    private val secrets = listOf(code, token, "reset-password", "magic-link")
+    private val carriers = mapOf(
+        MailKind.VERIFY_CODE to AccountMail(MailKind.VERIFY_CODE, "victim.person@example.com", "ko", vars = mapOf("code" to code, "minutes" to "10")),
+        MailKind.EMAIL_CHANGE_CODE to AccountMail(MailKind.EMAIL_CHANGE_CODE, "victim.person@example.com", "en", vars = mapOf("code" to code, "minutes" to "30")),
+        MailKind.REAUTH_CODE to AccountMail(MailKind.REAUTH_CODE, "victim.person@example.com", "ko", vars = mapOf("code" to code, "minutes" to "30")),
+        MailKind.DELETE_CODE to AccountMail(MailKind.DELETE_CODE, "victim.person@example.com", "en", vars = mapOf("code" to code, "minutes" to "30")),
+        MailKind.PASSWORD_RESET to AccountMail(MailKind.PASSWORD_RESET, "victim.person@example.com", "ko", link, mapOf("minutes" to "30")),
+        MailKind.MAGIC_LINK to AccountMail(MailKind.MAGIC_LINK, "victim.person@example.com", "en", "https://app.example.com/magic-link?token=$token", mapOf("minutes" to "15")),
+    )
+
+    private fun logged(transport: (AccountProperties.Mail) -> AccountMailTransport, mail: AccountMail): List<String> {
+        val appender = ListAppender<ILoggingEvent>().apply { start() }
+        val root = LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME) as Logger
+        val old = root.level
+        root.addAppender(appender); root.level = Level.TRACE
+        try {
+            val props = AccountProperties.Mail(linkBaseUrl = "https://app.example.com")
+            TemplatedAccountMailer(DefaultAccountMailTemplates(props), transport(props), props).send(mail)
+        } finally {
+            root.detachAppender(appender); root.level = old
+        }
+        return appender.list.flatMap { listOfNotNull(it.formattedMessage, it.throwableProxy?.message) }
+    }
+
+    @Test
+    fun `no mail kind that carries a code or a link leaves it in a log line - protected-env transport (links hidden)`() {
+        MailKind.entries.filter { it in carriers }.forEach { kind ->
+            val lines = logged({ LogOnlyMailTransport(showLinks = false) }, carriers.getValue(kind))
+            assertTrue(lines.isNotEmpty(), "$kind must log something")
+            secrets.forEach { secret -> assertTrue(lines.none { secret in it }, "$kind leaked '$secret' into: $lines") }
+        }
+    }
+
+    @Test
+    fun `no mail kind leaves the code or link in a log line when the SMTP sender FAILS (it logs the subject)`() {
+        val failing = object : JavaMailSenderImpl() {
+            override fun doSend(mimeMessages: Array<out jakarta.mail.internet.MimeMessage>, originalMessages: Array<out Any>?) { throw IllegalStateException("smtp down") }
+        }
+        carriers.forEach { (kind, mail) ->
+            val lines = logged({ MailSenderTransport(SmtpMailSender(failing, "no-reply@example.com")) }, mail)
+            assertTrue(lines.any { "Mail send failed" in it }, "$kind: the failure path must have run: $lines")
+            secrets.forEach { secret -> assertTrue(lines.none { secret in it }, "$kind leaked '$secret' into: $lines") }
+        }
+    }
+
+    @Test
+    fun `no template, ko or en, puts a code or a link in the SUBJECT`() {
+        val templates = DefaultAccountMailTemplates(AccountProperties.Mail())
+        for (kind in MailKind.entries) for (lang in listOf("ko", "en")) {
+            val subject = templates.render(kind, lang, mapOf("code" to code, "minutes" to "10", "days" to "30", "method" to "google"), link).subject
+            assertTrue(code !in subject && token !in subject && "https://" !in subject, "$kind/$lang subject carries a secret: $subject")
+        }
     }
 }

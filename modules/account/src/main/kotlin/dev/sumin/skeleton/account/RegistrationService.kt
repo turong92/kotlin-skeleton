@@ -59,8 +59,8 @@ class RegistrationService(private val core: AccountCore) {
         if (!p.signUp.emailVerification) return SignUpOutcome(createVerified(email, hash, cmd))
 
         val v = p.verification
-        val mayOpen = core.limits.acquire("signup:email", email, v.signUpAttemptsPerEmail, v.perEmailWindow).allowed
-        val mayMail = withinEmailBudget(email)
+        val mayOpen = core.mayOpenCodeFor(email)
+        val mayMail = core.mayMailCodeTo(email)
         val profile = json.writeValueAsString(
             mapOf("displayName" to ProfileRules.displayName(cmd.displayName), "locale" to ProfileRules.locale(cmd.locale), "timeZone" to ProfileRules.timeZone(cmd.timeZone)),
         )
@@ -105,6 +105,8 @@ class RegistrationService(private val core: AccountCore) {
             if (!a.allowed) throw RateLimitedException(a.retryAfterSeconds)
         }
         val id = core.challenges.idOf(signUpId) ?: throw AccountException(AccountErrorCode.CODE_EXPIRED)
+        // 이 주소의 코드를 맞춰 보는 총량(가입 시도 · 이메일 변경 어느 쪽이든) — 시도를 깎기 전에 센다. 모르는 시도는 센 것이 없다
+        core.challenges.find(id)?.takeIf { it.purpose == ChallengePurposes.SIGN_UP }?.let { core.spendGuess(it.subject) }
         val row = when (val checked = core.challenges.check(id, code)) {
             is CodeCheck.Ok -> checked.row
             is CodeCheck.Wrong -> throw if (checked.attemptsLeft <= 0) AccountException(AccountErrorCode.CODE_EXPIRED) else CodeInvalidException(checked.attemptsLeft)
@@ -171,11 +173,8 @@ class RegistrationService(private val core: AccountCore) {
         core.mailer.send(AccountMail(MailKind.VERIFY_CODE, email, locale, vars = mapOf("code" to code, "minutes" to minutes)))
     }
 
-    /** 한 주소에 인증 코드 · "이미 계정이 있어요" 메일이 창 안에 몇 통까지 — 남의 주소로 메일 폭탄을 못 보내게. 넘으면 조용히 */
-    private fun withinEmailBudget(email: String): Boolean {
-        val v = core.props.verification
-        return core.limits.acquire("verification:email", email, v.perEmail, v.perEmailWindow).allowed
-    }
+    /** 한 주소에 인증 코드 · "이미 계정이 있어요" 메일이 창 안에 몇 통까지 — 남의 주소로 메일 폭탄을 못 보내게. 넘으면 조용히. 이메일 변경의 대상 주소와 **같은 버킷** */
+    private fun withinEmailBudget(email: String): Boolean = core.mayMailCodeTo(email)
 
     private fun newAccount(email: String, displayName: String?, locale: String?, timeZone: String?, unverified: Boolean): Account {
         val now = core.time.now()

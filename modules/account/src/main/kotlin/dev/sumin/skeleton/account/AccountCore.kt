@@ -61,6 +61,27 @@ class AccountCore(
         }
     }
 
+    /**
+     * **한 이메일 주소**에 걸리는 코드 예산 — 가입 시도 · 이메일 변경(대상 주소)이 **같은 버킷**을 쓴다. 계정을 몇 개 만들든, 어느 길로 오든 한 메일함에 대한 총량이 하나다.
+     * ([mayOpenCodeFor]: 추측할 수 있는 챌린지를 새로 열어도 되나 · [mayMailCodeTo]: 그 주소로 코드 · "이미 계정이 있어요" 메일을 또 보내도 되나 · [spendGuess]: 추측 한 번)
+     */
+    fun mayOpenCodeFor(email: String): Boolean {
+        val v = props.verification
+        return limits.acquire("signup:email", email, v.signUpAttemptsPerEmail, v.perEmailWindow).allowed
+    }
+
+    fun mayMailCodeTo(email: String): Boolean {
+        val v = props.verification
+        return limits.acquire("verification:email", email, v.perEmail, v.perEmailWindow).allowed
+    }
+
+    /** 이 주소의 코드를 맞춰 보는 한 번 — 창 안의 총 추측 수가 [AccountProperties.Verification.guessesPerEmail] 를 넘으면 429 (시도를 깎기 **전에** 부른다) */
+    fun spendGuess(email: String) {
+        val v = props.verification
+        val a = limits.acquire("guess:email", email, v.guessesPerEmail, v.perEmailWindow)
+        if (!a.allowed) throw dev.sumin.skeleton.account.abuse.RateLimitedException(a.retryAfterSeconds)
+    }
+
     /** 새 로그인 수단이 붙었다고 계정 주소에 알린다 (내가 한 일이 아니면 알아채도록) */
     fun notifyIdentityLinked(accountId: String, method: String) {
         val account = accounts.findById(accountId) ?: return

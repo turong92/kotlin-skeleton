@@ -28,21 +28,33 @@ class EmailChangeService(private val core: AccountCore) {
         proof.commit()
 
         // 대기 중인 변경은 요청 스레드에서 저장한다 — 202 직후의 `GET /me` 가 `pendingEmail` 을 바로 보여 준다.
-        // 새 주소가 남의 것이든 아니든 똑같이 저장한다(요청자에게 보이는 상태가 주소의 사용 여부를 알려 주지 않게). 남의 주소로는 코드가 어디로도 가지 않는다.
+        // 새 주소가 남의 것이든 아니든, 그 주소의 예산이 남았든 아니든 똑같이 저장한다(요청자에게 보이는 상태가 그것을 알려 주지 않게). 남의 주소 · 예산을 넘은 주소로는 코드가 어디로도 가지 않고,
+        // 예산을 넘은 챌린지는 **어떤 코드로도 이길 수 없는 줄**이다 (추측해서 이기면 메일함 증명 없이 주소가 넘어간다).
+        // 예산은 가입과 **같은 주소별 버킷**이다 — 계정을 몇 개 만들든 한 메일함에 걸리는 추측 · 메일의 총량이 하나다 (docs/accounts.md)
+        val mayOpen = core.mayOpenCodeFor(target)
+        val mayMail = core.mayMailCodeTo(target)
         val opened = core.challenges.open(
-            ChallengePurposes.EMAIL_CHANGE, account.id, c.ttl, core.props.verification.maxAttempts, accountId = account.id, sessionId = sessionId, payload = target,
+            ChallengePurposes.EMAIL_CHANGE, account.id, c.ttl, core.props.verification.maxAttempts, accountId = account.id, sessionId = sessionId, payload = target, dead = !mayOpen,
         )
         core.tasks.run("email-change-request") {
             // 옛 주소 알림은 새 주소가 쓰이는 중이든 아니든 똑같이 간다 — 로그인한 사용자의 받은편지함이 "그 주소는 가입돼 있다" 를 알려 주지 않게
             oldEmail?.let { core.mailer.send(AccountMail(MailKind.EMAIL_CHANGE_REQUESTED_NOTICE, it, account.locale)) }
-            if (target == oldEmail || core.accountByEmail(target) != null) return@run
+            if (target == oldEmail || core.accountByEmail(target) != null || !mayOpen || !mayMail) return@run
             core.mailer.send(AccountMail(MailKind.EMAIL_CHANGE_CODE, target, account.locale, vars = mapOf("code" to opened.code, "minutes" to c.ttl.toMinutes().toString())))
             core.events.publish(AccountEventType.EMAIL_CHANGE_REQUESTED, account.id)
         }
     }
 
     /** 새 주소로 간 코드를 **요청한 세션에서** 입력한다. 틀리면 [CodeInvalidException], 없음 · 만료 · 소진 · 다른 세션이면 CODE_EXPIRED, 그 사이 주소를 남이 가져갔으면 EMAIL_TAKEN */
-    fun confirm(accountId: String, sessionId: String?, code: String) {
+    fun confirm(accountId: String, sessionId: String?, code: String, ip: String? = null, ipKey: String? = ip) {
+        // 코드 입력도 가입의 코드 입력과 **같은 IP 버킷** · 같은 주소 버킷이다 — 시도를 깎기 전에 센다
+        ipKey?.let {
+            val v = core.props.verification
+            val a = core.limits.acquire("verify:ip", it, v.attemptsPerIp, v.attemptsWindow)
+            if (!a.allowed) throw RateLimitedException(a.retryAfterSeconds)
+        }
+        val open = core.challenges.findOpen(ChallengePurposes.EMAIL_CHANGE, accountId) ?: throw AccountException(AccountErrorCode.CODE_EXPIRED)
+        if (open.sessionId == sessionId) open.payload?.let(core::spendGuess)
         val row = when (val checked = core.challenges.checkOpen(ChallengePurposes.EMAIL_CHANGE, accountId, code, sessionId)) {
             is CodeCheck.Ok -> checked.row
             is CodeCheck.Wrong -> throw if (checked.attemptsLeft <= 0) AccountException(AccountErrorCode.CODE_EXPIRED) else CodeInvalidException(checked.attemptsLeft)
@@ -63,6 +75,6 @@ class EmailChangeService(private val core: AccountCore) {
         core.accounts.findById(account.id)?.let { core.closeSensitiveLinks(it, oldEmail) }
         oldEmail?.let { core.mailer.send(AccountMail(MailKind.EMAIL_CHANGED_NOTICE, it, account.locale)) }
         core.events.publish(AccountEventType.EMAIL_CHANGED, account.id)
-        core.accounts.findById(account.id)?.let(core.bootstrap::afterVerified)
+        // 첫 관리자 부트스트랩은 여기서 일어나지 않는다 — 가입 확인 · 비밀번호 재설정 · 소셜 · 매직 링크 로그인으로 메일함을 증명한 계정에만 (docs/accounts.md)
     }
 }
