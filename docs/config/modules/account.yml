@@ -30,6 +30,7 @@ skeleton:
       per-ip-window: 1h
       attempts-per-ip: 30              # 같은 IP 의 코드 입력 수 (넘으면 429)
       attempts-window: 1h
+      guesses-per-email: 40            # 한 주소의 코드를 창 안에 통틀어 맞춰 볼 수 있는 횟수 — 가입 시도 · 이메일 변경(어느 계정이든)이 한 셈. 넘으면 429. 기본 = (5 + 3) × 5
     reset:
       ttl: 30m                         # 재설정 링크 유효 시간
       per-email: 3

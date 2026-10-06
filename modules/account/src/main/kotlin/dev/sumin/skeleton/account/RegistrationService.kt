@@ -123,13 +123,20 @@ class RegistrationService(private val core: AccountCore) {
         core.challenges.deleteBySubject(ChallengePurposes.SIGN_UP, email)
         core.closeSensitiveLinks(account)
         if (existed) core.sessions()?.revokeAll(account.id, null)   // 새 계정에는 닫을 세션이 없다
-        val now = core.time.now()
-        core.accounts.update(account.id, AccountPatch(lastLoginAt = now), now)
         core.events.publish(AccountEventType.EMAIL_VERIFIED, account.id, ip, mapOf("method" to "sign_up_code"))
-        core.events.publish(AccountEventType.LOGIN_SUCCESS, account.id, ip, mapOf("method" to SignInMethods.PASSWORD))
         val fresh = core.accounts.findById(account.id) ?: throw AccountException(AccountErrorCode.CODE_EXPIRED)
         core.bootstrap.afterVerified(fresh)
         return AccountAuthRepository(core).toAuth(core.accounts.findById(account.id) ?: fresh) ?: throw AccountException(AccountErrorCode.CODE_EXPIRED)
+    }
+
+    /**
+     * 코드로 가입한 사람의 로그인을 **토큰이 발급된 뒤에** 기록한다 — [verifyEmail] 의 결과로 토큰 발급이 막히면(정지 · 삭제) 성공 로그인으로 남지 않는다.
+     * 호출자(컨트롤러)가 `AuthTokenResponseFactory.issue` 가 던지지 않은 다음에 부른다.
+     */
+    fun recordSignIn(accountId: String, ip: String?) {
+        val now = core.time.now()
+        core.accounts.update(accountId, AccountPatch(lastLoginAt = now), now)
+        core.events.publish(AccountEventType.LOGIN_SUCCESS, accountId, ip, mapOf("method" to SignInMethods.PASSWORD))
     }
 
     /** (계정, 이미 있던 계정이었나) */

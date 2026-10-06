@@ -5,6 +5,12 @@ import dev.sumin.skeleton.account.signin.AccountSignInService
 import dev.sumin.skeleton.account.signin.PasswordSignInMethod
 import dev.sumin.skeleton.account.signin.SignInMethod
 import dev.sumin.skeleton.account.signin.SignInMethodRegistry
+import dev.sumin.skeleton.account.social.AccountSocialReauthVerifier
+import dev.sumin.skeleton.auth.social.config.AuthSocialProperties
+import dev.sumin.skeleton.auth.social.oauth.OAuthInvalidAuthorizationCodeException
+import dev.sumin.skeleton.auth.social.oauth.OAuthProvider
+import dev.sumin.skeleton.auth.social.oauth.OAuthProviderRegistry
+import dev.sumin.skeleton.auth.social.oauth.OAuthUserProfile
 import dev.sumin.skeleton.common.ApplicationException
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -17,10 +23,23 @@ class SocialReauthTest {
     private object Google : SignInMethod { override val code = "google" }
     private object Naver : SignInMethod { override val code = "naver" }
 
-    private val verifier = SocialReauthVerifier { accountId, proof -> accountId == "acc_n" && proof.provider == "naver" && proof.authorizationCode == "fresh-good-code" }
-    private val h = AccountHarness(socialReauth = verifier)
+    /** 실제 제공자처럼 인가 코드는 **한 번만** 통한다. `good-own` 은 이 계정에 연결된 제공자 계정(naver-user-1)의 것, 다른 `good-…` 은 연결되지 않은 제공자 계정의 것 */
+    private class OneShotProvider(override val providerId: String) : OAuthProvider {
+        private val spent = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+        override fun fetchProfile(authorizationCode: String, redirectUri: String?): OAuthUserProfile {
+            if (!authorizationCode.startsWith("good") || !spent.add(authorizationCode)) throw OAuthInvalidAuthorizationCodeException(providerId)
+            return OAuthUserProfile(providerId, if (authorizationCode == "good-own") "naver-user-1" else "naver-someone-else", null, null, null)
+        }
+    }
+
+    private lateinit var verifier: SocialReauthVerifier
+    private val h = AccountHarness(socialReauth = SocialReauthVerifier { accountId, proof -> verifier.verify(accountId, proof) })
+    init {
+        val naver = OneShotProvider("naver")
+        verifier = AccountSocialReauthVerifier(OAuthProviderRegistry(listOf(naver), AuthSocialProperties(providers = mapOf("naver" to AuthSocialProperties.Provider(enabled = true)))), h.core)
+    }
     private val ses = "ses_1"
-    private val good = ReauthInput(social = SocialReauth("naver", "fresh-good-code", "https://app/cb"))
+    private val good = ReauthInput(social = SocialReauth("naver", "good-own", "https://app/cb"))
     private val registry = SignInMethodRegistry(listOf(PasswordSignInMethod(), Google, Naver))
     private fun code(block: () -> Unit) = assertFailsWith<ApplicationException> { block() }.errorCode.code
 
@@ -35,19 +54,27 @@ class SocialReauthTest {
     fun `changing the email of an account that has none needs a fresh code of a linked provider`() {
         emailless()
         assertEquals("ACCOUNT.REAUTH_REQUIRED", code { h.emailChange.request("acc_n", "new@example.com", ReauthInput(), ses) })
-        assertEquals("ACCOUNT.REAUTH_FAILED", code { h.emailChange.request("acc_n", "new@example.com", ReauthInput(social = SocialReauth("naver", "stolen-or-wrong")), ses) })
+        assertEquals("ACCOUNT.REAUTH_FAILED", code { h.emailChange.request("acc_n", "new@example.com", ReauthInput(social = SocialReauth("naver", "bad-or-stolen")), ses) })
         assertEquals(0, h.mailer.of(MailKind.EMAIL_CHANGE_CODE).size)
         h.emailChange.request("acc_n", "new@example.com", good, ses)
         assertEquals("new@example.com", h.mailer.of(MailKind.EMAIL_CHANGE_CODE).single().to)
     }
 
     @Test
-    fun `a code that proves a provider account of someone else does not count`() {
+    fun `a code that proves a provider account of someone else does not count - the REAL ownership check runs`() {
         emailless()
-        val other = AccountHarness(socialReauth = { accountId, _ -> accountId == "acc_someone_else" })
-        val now = other.time.now()
-        other.repo.insert(Account("acc_n", null, false, AccountStatus.ACTIVE, setOf("USER"), null, null, null, now, now), emptyList())
-        assertEquals("ACCOUNT.REAUTH_FAILED", assertFailsWith<ApplicationException> { other.emailChange.request("acc_n", "new@example.com", good, ses) }.errorCode.code)
+        val now = h.time.now()   // the provider account "naver-someone-else" really exists - it is linked to ANOTHER account
+        h.repo.insert(Account("acc_other", null, false, AccountStatus.ACTIVE, setOf("USER"), null, null, null, now, now), listOf(Identity("idn_o", "acc_other", "naver", "naver-someone-else", true, createdAt = now)))
+        assertEquals("ACCOUNT.REAUTH_FAILED", code { h.emailChange.request("acc_n", "new@example.com", ReauthInput(social = SocialReauth("naver", "good-someone-else")), ses) })
+        assertEquals(0, h.mailer.of(MailKind.EMAIL_CHANGE_CODE).size)
+    }
+
+    @Test
+    fun `a provider authorization code is single use - replaying the very code that just proved the account is rejected`() {
+        emailless()
+        h.emailChange.request("acc_n", "new@example.com", good, ses)
+        assertEquals("ACCOUNT.REAUTH_FAILED", code { h.emailChange.request("acc_n", "other@example.com", good, ses) }, "the same code a second time")
+        assertEquals(1, h.mailer.of(MailKind.EMAIL_CHANGE_CODE).size)
     }
 
     @Test
@@ -62,7 +89,7 @@ class SocialReauthTest {
     fun `an account without an address can delete itself with the same proof`() {
         emailless()
         assertEquals("ACCOUNT.REAUTH_REQUIRED", code { h.deletion.delete("acc_n", ReauthInput(), ses) })
-        assertEquals("ACCOUNT.REAUTH_FAILED", code { h.deletion.delete("acc_n", ReauthInput(social = SocialReauth("naver", "wrong")), ses) })
+        assertEquals("ACCOUNT.REAUTH_FAILED", code { h.deletion.delete("acc_n", ReauthInput(social = SocialReauth("naver", "bad-code")), ses) })
         val purgeAfter = h.deletion.delete("acc_n", good, ses)
         assertEquals(AccountStatus.DELETED, h.repo.findById("acc_n")!!.status)
         assertNotNull(purgeAfter)

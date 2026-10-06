@@ -160,6 +160,17 @@ class RegistrationServiceTest {
     }
 
     @Test
+    fun `a hash upgrade that lost a race with a password reset or proof does not bring the old password back`() {
+        val a = h.activeAccount()
+        val verified = h.repo.findIdentity("password", "ann@example.com")!!.secret!!   // what the login verified
+        h.repo.updateIdentitySecret(h.repo.findIdentity("password", "ann@example.com")!!.id, "{bcrypt}owner-reset-password")   // a reset lands in between
+        h.authRepository.upgradePasswordHash(a.id, "{bcrypt}upgraded-old-password", verified)
+        assertEquals("{bcrypt}owner-reset-password", h.repo.findIdentity("password", "ann@example.com")!!.secret, "the stored hash was no longer the verified one")
+        h.authRepository.upgradePasswordHash(a.id, "{bcrypt}upgraded-owner", "{bcrypt}owner-reset-password")
+        assertEquals("{bcrypt}upgraded-owner", h.repo.findIdentity("password", "ann@example.com")!!.secret, "and it still upgrades when nothing changed")
+    }
+
+    @Test
     fun `resend is capped per IP like forgot, loudly, and other IPs are not affected`() {
         repeat(10) { h.registration.resendVerification("x".repeat(43), "198.51.100.9", null) }
         assertFailsWith<RateLimitedException> { h.registration.resendVerification("x".repeat(43), "198.51.100.9", null) }

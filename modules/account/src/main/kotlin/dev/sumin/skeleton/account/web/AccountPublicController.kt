@@ -68,7 +68,12 @@ class AccountPublicController(
     )
     @PostMapping("/auth/verify-email")
     fun verifyEmail(@Valid @RequestBody request: VerifyEmailRequest, http: HttpServletRequest): DataResponse<AuthTokenResponse> =
-        clientIps.of(http).let { Response.ok(tokens().issue(registration.verifyEmail(request.signUpId!!, request.code!!, it.ip, it.limitKey))) }
+        clientIps.of(http).let { client ->
+            val account = registration.verifyEmail(request.signUpId!!, request.code!!, client.ip, client.limitKey)
+            val tokens = tokens().issue(account)   // 막힌 계정(정지 · 삭제)은 여기서 던진다 — 성공 로그인으로 기록하지 않는다
+            registration.recordSignIn(account.accountId, client.ip)
+            Response.ok(tokens)
+        }
 
     @Operation(summary = "Ask for a password-reset mail (always 202)")
     @PostMapping("/account/password/forgot")

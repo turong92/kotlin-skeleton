@@ -99,8 +99,13 @@ sealed interface CodeCheck {
  * 6자리 숫자 코드 챌린지 장치 — 가입 확인 · 이메일 변경 · 다시 인증 · 삭제 확인이 같이 쓴다. 코드는 암호학적 난수(`SecureRandom.nextInt(10^6)`, 균등)이고
  * 저장소에는 키 달린 해시만 간다. 한 챌린지의 추측은 [open] 의 `maxAttempts` 번이 전부이고 매번 저장소가 원자적으로 깎는다.
  */
-class Challenges(private val store: ChallengeStore, private val hasher: CodeHasher, private val time: TimeProvider) {
-    private val random = SecureRandom()
+class Challenges(
+    private val store: ChallengeStore,
+    private val hasher: CodeHasher,
+    private val time: TimeProvider,
+    /** 코드 · 핸들 · id 의 난수원 — 기본은 SecureRandom. 시험이 값을 정해 넣어 **코드가 `nextInt(10^6)` 그대로**임을 구조로 보인다 */
+    private val random: java.util.random.RandomGenerator = SecureRandom(),
+) {
 
     private companion object {
         /** 어떤 입력의 HMAC(64자리 16진수)과도 길이가 달라 [CodeHasher.matches] 가 절대 참이 되지 않는다 */
@@ -118,7 +123,7 @@ class Challenges(private val store: ChallengeStore, private val hasher: CodeHash
         val now = time.now()
         val handle = if (withHandle) Base64.getUrlEncoder().withoutPadding().encodeToString(ByteArray(32).also(random::nextBytes)) else null
         val id = handle?.let(::hashOf) ?: HexFormat.of().formatHex(ByteArray(16).also(random::nextBytes))
-        val code = "%06d".format(random.nextInt(1_000_000))
+        val code = "%06d".format(java.util.Locale.ROOT, random.nextInt(1_000_000))
         // 세션 코드는 (용도, 주인) 하나만 열려 있다 — 새 요청이 옛 코드를 닫는다. 가입 시도는 같은 주소에 여럿이 함께 있다 (서로 덮어쓰지 않는다)
         if (store && !withHandle) this.store.deleteBySubject(purpose, subject)
         val row = ChallengeRow(id, purpose, subject, accountId, sessionId, payload, secret, if (dead) DEAD_HASH else hasher.hash(id, code), maxAttempts, 0, now, now.plus(ttl), now, ip)
@@ -133,8 +138,10 @@ class Challenges(private val store: ChallengeStore, private val hasher: CodeHash
     fun findOpen(purpose: String, subject: String): ChallengeRow? = store.findOpen(purpose, subject, time.now())
 
     fun check(id: String, code: String, sessionId: String? = null): CodeCheck {
+        // 세션에 묶인 챌린지는 **시도를 깎기 전에** 세션을 본다 — 같은 계정의 다른 세션(훔친 토큰)이 주인의 시도를 소모하지 못하게
+        store.find(id)?.let { if (it.sessionId != null && it.sessionId != sessionId) return CodeCheck.Gone }
         val row = store.spendAttempt(id, time.now()) ?: return CodeCheck.Gone
-        if (row.sessionId != null && row.sessionId != sessionId) return CodeCheck.Gone
+        if (row.sessionId != null && row.sessionId != sessionId) return CodeCheck.Gone   // 읽은 뒤 다른 챌린지로 바뀐 틈 — 그래도 맞지 않는다
         return if (hasher.matches(row.codeHash, id, code)) CodeCheck.Ok(row) else CodeCheck.Wrong(row.attemptsLeft)
     }
 
@@ -147,7 +154,7 @@ class Challenges(private val store: ChallengeStore, private val hasher: CodeHash
 
     fun reissue(id: String, ttl: Duration, maxAttempts: Int, cooldown: Duration, maxResends: Int): String? {
         val now = time.now()
-        val code = "%06d".format(random.nextInt(1_000_000))
+        val code = "%06d".format(java.util.Locale.ROOT, random.nextInt(1_000_000))
         return if (store.replaceCode(id, hasher.hash(id, code), now.plus(ttl), now, now.minus(cooldown), maxResends, maxAttempts)) code else null
     }
 

@@ -171,8 +171,9 @@ class InMemoryAccountRepository : AccountRepository {
         return RemoveIdentityResult.REMOVED
     }
 
-    @Synchronized override fun updateIdentitySecret(identityId: String, secret: String?): Boolean {
+    @Synchronized override fun updateIdentitySecret(identityId: String, secret: String?, expectedSecret: String?): Boolean {
         val i = identities[identityId] ?: return false
+        if (expectedSecret != null && i.secret != expectedSecret) return false
         identities[identityId] = i.copy(secret = secret)
         return true
     }

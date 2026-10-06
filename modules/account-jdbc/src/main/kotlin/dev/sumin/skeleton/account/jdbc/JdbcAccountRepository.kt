@@ -284,8 +284,11 @@ class JdbcAccountRepository(
             RemoveIdentityResult.REMOVED
         } ?: RemoveIdentityResult.NOT_FOUND
 
-    override fun updateIdentitySecret(identityId: String, secret: String?): Boolean =
-        jdbc.update("update skeleton_account_identities set secret = :s where id = :id", MapSqlParameterSource().addValue("s", secret).addValue("id", identityId)) == 1
+    override fun updateIdentitySecret(identityId: String, secret: String?, expectedSecret: String?): Boolean =
+        jdbc.update(
+            "update skeleton_account_identities set secret = :s where id = :id" + (if (expectedSecret != null) " and secret = :old" else ""),
+            MapSqlParameterSource().addValue("s", secret).addValue("id", identityId).addValue("old", expectedSecret),
+        ) == 1
 
     override fun touchIdentity(identityId: String, now: Instant) {
         jdbc.update("update skeleton_account_identities set last_used_at = :now where id = :id", MapSqlParameterSource().addValue("now", dialect.instantParam(now)).addValue("id", identityId))

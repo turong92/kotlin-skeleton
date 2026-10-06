@@ -50,7 +50,7 @@ class PasswordLoginService(
             throw blocked
         }
         if (accounts.storesUpgradedPasswordHash && passwordEncoder.upgradeEncoding(account.passwordHash)) {
-            passwordEncoder.encode(password)?.let { accounts.upgradePasswordHash(account.accountId, it) }
+            passwordEncoder.encode(password)?.let { accounts.upgradePasswordHash(account.accountId, it, account.passwordHash) }
         }
         active.forEach { it.onSuccess(attempt, account) }
         return response

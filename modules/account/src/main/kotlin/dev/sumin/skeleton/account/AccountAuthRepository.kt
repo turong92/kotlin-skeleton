@@ -42,6 +42,11 @@ class AccountAuthRepository(private val core: AccountCore) : AuthAccountReposito
 
     override val storesUpgradedPasswordHash: Boolean = true
 
+    override fun upgradePasswordHash(accountId: String, newHash: String, oldHash: String) {
+        val email = core.accounts.findById(accountId)?.email ?: return
+        core.accounts.findIdentity(SignInMethods.PASSWORD, email)?.let { core.accounts.updateIdentitySecret(it.id, newHash, expectedSecret = oldHash) }
+    }
+
     override fun upgradePasswordHash(accountId: String, newHash: String) {
         val email = core.accounts.findById(accountId)?.email ?: return
         core.accounts.findIdentity(SignInMethods.PASSWORD, email)?.let { core.accounts.updateIdentitySecret(it.id, newHash) }

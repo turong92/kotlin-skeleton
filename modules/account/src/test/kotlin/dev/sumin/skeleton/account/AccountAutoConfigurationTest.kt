@@ -42,6 +42,24 @@ class AccountAutoConfigurationTest {
         }
     }
 
+    @Test
+    fun `the code hash key is derived from the JWT secret with the account-code prefix - not the bare secret, not a constant`() {
+        fun hashUnder(secret: String): String {
+            var hash = ""
+            runner
+                .withBean(dev.sumin.skeleton.auth.config.AuthProperties::class.java, java.util.function.Supplier { dev.sumin.skeleton.auth.config.AuthProperties(jwt = dev.sumin.skeleton.auth.config.AuthProperties.Jwt(secret = secret)) })
+                .run { ctx -> hash = ctx.getBean(dev.sumin.skeleton.account.challenge.CodeHasher::class.java).hash("challenge-1", "123456") }
+            return hash
+        }
+        val a = hashUnder("jwt-secret-A-0123456789abcdef0123456789")
+        val b = hashUnder("jwt-secret-B-0123456789abcdef0123456789")
+        val derived = dev.sumin.skeleton.account.challenge.CodeHasher(("account-code/" + "jwt-secret-A-0123456789abcdef0123456789").toByteArray()).hash("challenge-1", "123456")
+        val bare = dev.sumin.skeleton.account.challenge.CodeHasher("jwt-secret-A-0123456789abcdef0123456789".toByteArray()).hash("challenge-1", "123456")
+        assertEquals(derived, a, "key = \"account-code/\" + jwt.secret")
+        assertTrue(a != b, "another secret, another hash")
+        assertTrue(a != bare, "the JWT secret itself is never used as a key for another purpose")
+    }
+
     @Configuration(proxyBeanMethods = false)
     class AppRepo {
         @Bean fun repo(): AccountRepository = object : AccountRepository by InMemoryAccountRepository() {}

@@ -185,7 +185,8 @@ interface AccountRepository {
      */
     fun removeIdentityUnlessLast(accountId: String, identityId: String, credentialMethods: Collection<String>): RemoveIdentityResult
 
-    fun updateIdentitySecret(identityId: String, secret: String?): Boolean
+    /** [expectedSecret] 가 null 이 아니면 저장된 값이 그것과 같을 때만 (`where id = :id and secret = :old`) — 해시 업그레이드가 뒤늦게 옛 비밀번호를 되살리지 못하게 */
+    fun updateIdentitySecret(identityId: String, secret: String?, expectedSecret: String? = null): Boolean
 
     fun touchIdentity(identityId: String, now: Instant)
 }

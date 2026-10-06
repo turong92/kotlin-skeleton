@@ -81,6 +81,27 @@ class EmailChangeServiceTest {
     }
 
     @Test
+    fun `a thief session hammering the confirm endpoint cannot use up the owner's attempts`() {
+        val a = h.activeAccount()
+        h.emailChange.request(a.id, "new@example.com", pw, ses)
+        repeat(8) { assertEquals("ACCOUNT.CODE_EXPIRED", code { h.emailChange.confirm(a.id, "ses_thief", "000000") }) }
+        assertEquals(mapOf("attemptsLeft" to 4), err { h.emailChange.confirm(a.id, ses, wrong()) }.data, "the owner still has all five")
+        h.emailChange.confirm(a.id, ses, codeSent())
+        assertEquals("new@example.com", h.repo.findById(a.id)!!.email)
+    }
+
+    @Test
+    fun `decision - one open code per account and purpose, so another session's request replaces it (a rate-limited nuisance, never a way in)`() {
+        val a = h.activeAccount()
+        h.emailChange.request(a.id, "new@example.com", pw, ses)
+        val first = codeSent()
+        h.emailChange.request(a.id, "other@example.com", pw, "ses_second")
+        assertEquals("ACCOUNT.CODE_EXPIRED", code { h.emailChange.confirm(a.id, ses, first) }, "the first session's code was replaced by the second request")
+        h.emailChange.confirm(a.id, "ses_second", codeSent())
+        assertEquals("other@example.com", h.repo.findById(a.id)!!.email)
+    }
+
+    @Test
     fun `the current password is required when the account has one`() {
         val a = h.activeAccount()
         assertEquals("ACCOUNT.CURRENT_PASSWORD_INVALID", code { h.emailChange.request(a.id, "new@example.com", ReauthInput("wrong-password-1"), ses) })

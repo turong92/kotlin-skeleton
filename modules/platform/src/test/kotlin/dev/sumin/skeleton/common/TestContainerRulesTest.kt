@@ -60,6 +60,46 @@ class TestContainerRulesTest {
     }
 
     @Test
+    fun `no test source starts a container per test instance - it is held by a static (companion or object) or by lazy`() {
+        val violations = testSources(repoRoot).flatMap { file ->
+            perInstanceContainerViolations(file.readText()).map { "${repoRoot.relativize(file)}:$it" }
+        }
+        assertEquals(emptyList(), violations, "JUnit 은 테스트 메서드마다 새 인스턴스를 만든다 — 인스턴스 필드의 컨테이너는 메서드마다 하나씩 뜬다. companion object · object · by lazy 로 JVM(또는 클래스) 하나에 하나만")
+    }
+
+    @Test
+    fun `the per-instance rule recognises an instance-field container and lets the static shapes through`() {
+        val instanceField = """
+            class FooDbTest {
+                private val db = PostgreSQLContainer(DockerImageName.parse("postgres:18")).also { it.start() }
+            }
+        """.trimIndent()
+        val companion = """
+            class FooDbTest {
+                companion object {
+                    val db = PostgreSQLContainer(DockerImageName.parse("postgres:18"))
+                }
+            }
+        """.trimIndent()
+        val lazyHolder = """
+            class FooDbTest {
+                private val container: PostgreSQLContainer by lazy {
+                    PostgreSQLContainer(DockerImageName.parse("postgres:18")).also { it.start() }
+                }
+            }
+        """.trimIndent()
+        val topLevelObject = """
+            object DbTestDatabase {
+                private val container = PostgreSQLContainer(DockerImageName.parse("postgres:18")).also { it.start() }
+            }
+        """.trimIndent()
+        assertTrue(perInstanceContainerViolations(instanceField).isNotEmpty(), "instance field")
+        assertEquals(emptyList(), perInstanceContainerViolations(companion))
+        assertEquals(emptyList(), perInstanceContainerViolations(lazyHolder))
+        assertEquals(emptyList(), perInstanceContainerViolations(topLevelObject))
+    }
+
+    @Test
     fun `the scan reaches every test source set of the apps and modules`() {
         val names = testSources(repoRoot).map { repoRoot.relativize(it).toString() }
         assertTrue(names.any { it.startsWith("apps/api/src/test/") && it.endsWith("TestcontainersConfiguration.kt") }, "apps/api test sources")
@@ -92,5 +132,18 @@ class TestContainerRulesTest {
             hits += (joined.substring(0, match.range.first).count { it == '\n' } + 1) to "@Bean returning a container"
         }
         return hits.distinct()
+    }
+
+    /** 컨테이너 생성(`XxxContainer(`)이 static 보관자(companion object · object · by lazy) 밖에 있는 줄 번호 */
+    private fun perInstanceContainerViolations(source: String): List<Int> {
+        val lines = source.lines().map { line -> if (line.trim().startsWith("//") || line.trim().startsWith("*")) "" else line.substringBefore(" // ") }
+        val construction = Regex("""(?<![\w.])[A-Z]\w*Container(<[^>]*>)?\s*\(""")
+        return lines.indices.filter { i ->
+            construction.containsMatchIn(lines[i]) && !lines[i].contains("fun ") && run {
+                val near = lines.subList(maxOf(0, i - 2), i + 1).joinToString(" ")
+                val before = lines.subList(0, i).joinToString("\n")
+                "by lazy" !in near && !Regex("""\b(companion\s+)?object\b""").containsMatchIn(before)
+            }
+        }.map { it + 1 }
     }
 }

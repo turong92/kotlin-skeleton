@@ -32,10 +32,11 @@ class PasswordLoginServiceTest {
 
     private class Repo(val accounts: MutableList<AuthAccount>) : AuthAccountRepository {
         val upgrades = mutableListOf<Pair<String, String>>()
+        val oldHashes = mutableListOf<String>()
         override fun findBy(identifier: AccountIdentifier): AuthAccount? =
             accounts.firstOrNull { it.accountId == identifier.accountId || it.email == identifier.email || it.username == identifier.username }
         override val storesUpgradedPasswordHash: Boolean = true
-        override fun upgradePasswordHash(accountId: String, newHash: String) { upgrades += accountId to newHash }
+        override fun upgradePasswordHash(accountId: String, newHash: String, oldHash: String) { upgrades += accountId to newHash; oldHashes += oldHash }
     }
 
     /** 자기 저장소를 가진 `auth` 만 쓰는 앱 — 새 해시를 받을 길이 없다 */
@@ -116,6 +117,7 @@ class PasswordLoginServiceTest {
         service.login(request(), null)
         assertEquals(1, repo.upgrades.size)
         assertEquals("acc_1", repo.upgrades.single().first)
+        assertEquals(listOf(hash), repo.oldHashes, "the upgrade is conditional on the hash this login verified")
         assertTrue(encoder.matches("correct-horse", repo.upgrades.single().second))
     }
 

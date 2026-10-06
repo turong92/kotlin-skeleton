@@ -33,6 +33,50 @@ class ChallengesTest {
     }
 
     @Test
+    fun `the code is exactly the generator's nextInt(1_000_000) - no modulo, no other draw - so every value from 000000 to 999999 is equally likely`() {
+        val bounds = mutableListOf<Int>()
+        val drawn = ArrayDeque(listOf(0, 7, 999_999, 123_456))
+        val fake = object : java.util.random.RandomGenerator {
+            override fun nextLong(): Long = error("a code must not be derived from a raw 64-bit draw (modulo bias)")
+            override fun nextInt(): Int = error("a code must not be derived from a raw 32-bit draw (modulo bias)")
+            override fun nextInt(bound: Int): Int { bounds += bound; return drawn.removeFirst() }
+            override fun nextBytes(bytes: ByteArray) { bytes.fill(1) }
+        }
+        val seeded = Challenges(InMemoryChallengeStore(), CodeHasher(key), time, fake)
+        val codes = (1..4).map { seeded.open(ChallengePurposes.REAUTH, "acc_1", ttl, 5, accountId = "acc_1").code }
+        assertEquals(listOf("000000", "000007", "999999", "123456"), codes)
+        assertEquals(List(4) { 1_000_000 }, bounds, "exactly one bounded draw per code, bound = 10^6")
+    }
+
+    @Test
+    fun `statistical sanity - the real generator fills the ten leading-digit buckets evenly`() {
+        val buckets = IntArray(10)
+        repeat(100_000) { buckets[open(withHandle = false, subject = "s${it % 7}").code[0] - '0']++ }
+        assertTrue(buckets.all { it in 9_200..10_800 }, "expected ~10000 per bucket (8-sigma band), got ${buckets.toList()}")
+    }
+
+    @Test
+    fun `the code is six ASCII digits whatever the JVM's default locale (Arabic-Indic and Devanagari digits would never match the 6-digit pattern)`() {
+        val old = java.util.Locale.getDefault()
+        try {
+            for (tag in listOf("ar-SA-u-nu-arab", "hi-IN-u-nu-deva", "fa-IR")) {
+                java.util.Locale.setDefault(java.util.Locale.forLanguageTag(tag))
+                val first = open().also { assertTrue(it.code.matches(Regex("^[0-9]{6}$")), "$tag: ${it.code}") }
+                val reissued = challenges.reissue(first.row.id, ttl, 5, Duration.ZERO, 3)
+                assertTrue(reissued == null || reissued.matches(Regex("^[0-9]{6}$")), "$tag reissue: $reissued")
+            }
+        } finally { java.util.Locale.setDefault(old) }
+    }
+
+    @Test
+    fun `another session's guesses are refused BEFORE an attempt is spent - they cannot exhaust the owner's code`() {
+        val o = open(ChallengePurposes.EMAIL_CHANGE, "acc_1", withHandle = false, sessionId = "ses_owner")
+        repeat(8) { assertEquals(CodeCheck.Gone, challenges.check(o.row.id, "000000", "ses_other")) }
+        assertEquals(5, store.find(o.row.id)!!.attemptsLeft, "no attempt was spent by the wrong session")
+        assertTrue(challenges.check(o.row.id, o.code, "ses_owner") is CodeCheck.Ok)
+    }
+
+    @Test
     fun `only a keyed hash of the code is stored, never the code or the handle`() {
         val o = open()
         val row = store.find(o.row.id)!!

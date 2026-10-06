@@ -170,4 +170,13 @@ class JdbcMailboxProofDbTest {
             }
         }
     }
+
+    @Test
+    fun `a conditional secret update writes only while the stored hash is still the expected one`() {
+        squatted()
+        assertFalse(repo.updateIdentitySecret("idn_pw", "{bcrypt}upgraded", expectedSecret = "{bcrypt}something-else"))
+        assertEquals("{bcrypt}squatter", repo.findIdentity("password", "victim@example.com")!!.secret)
+        assertTrue(repo.updateIdentitySecret("idn_pw", "{bcrypt}upgraded", expectedSecret = "{bcrypt}squatter"))
+        assertEquals("{bcrypt}upgraded", repo.findIdentity("password", "victim@example.com")!!.secret)
+    }
 }
