@@ -19,6 +19,7 @@ import dev.sumin.skeleton.auth.social.oauth.OAuthProviderGatewayException
 import dev.sumin.skeleton.auth.social.oauth.OAuthProviderNotFoundException
 import dev.sumin.skeleton.auth.social.oauth.OAuthProviderRegistry
 import dev.sumin.skeleton.auth.social.oauth.OAuthUserProfile
+import dev.sumin.skeleton.auth.social.oauth.codeExchange
 
 /** 소셜 제공자 하나 = 로그인 수단 하나. 코드는 제공자 id(`google` · `kakao` …), 주체는 제공자의 사용자 id (화면에 내보내지 않는다) */
 class SocialSignInMethod(override val code: String) : SignInMethod
@@ -51,15 +52,17 @@ class SocialLinkService(private val registry: OAuthProviderRegistry, private val
      * 연결은 **다시 인증**이 필요하다 (현재 비밀번호, 없으면 메일로 받은 6자리 코드, 주소가 없으면 소셜 인가 코드) — 프론트가 OAuth `state` 를 확인하지 않아도
      * 공격자의 인가 코드가 피해자 계정에 붙는 일(로그인 CSRF)이 비밀번호 · 메일함 없이는 일어나지 않게 서버가 막는 쪽이다.
      */
-    fun link(accountId: String, providerId: String, authorizationCode: String, redirectUri: String?, input: ReauthInput = ReauthInput(), sessionId: String? = null): IdentityView {
+    fun link(accountId: String, providerId: String, authorizationCode: String, redirectUri: String?, input: ReauthInput = ReauthInput(), sessionId: String? = null, codeVerifier: String? = null, nonce: String? = null): IdentityView {
         val provider = registry.findEnabled(providerId) ?: throw OAuthProviderNotFoundException(providerId)
+        // PKCE · nonce 전제는 다시 인증을 쓰기 **전**에 본다 — 틀려도 제공자의 한 번 쓰는 코드와 6자리 코드가 타지 않아 같은 것으로 다시 시도할 수 있다
+        val exchange = provider.codeExchange(authorizationCode, redirectUri, codeVerifier, nonce)
         val account = core.accounts.findById(accountId) ?: throw AccountException(AccountErrorCode.NOT_FOUND)
         val limit = core.props.emailChange
         val allowance = core.limits.acquire("social-link:account", accountId, limit.perAccount, limit.perAccountWindow)
         if (!allowance.allowed) throw RateLimitedException(allowance.retryAfterSeconds)
         val proof = reauth.check(account, input, sessionId)
         val profile = try {
-            provider.fetchProfile(authorizationCode, redirectUri)
+            provider.fetchProfile(exchange)
         } catch (ex: OAuthInvalidAuthorizationCodeException) {
             throw ex
         } catch (ex: RuntimeException) {

@@ -10,10 +10,9 @@ class OAuthProviderRegistry(
 
     fun findEnabled(providerId: String): OAuthProvider? {
         val normalized = providerId.normalizeProviderId()
-        if (properties.providers[normalized]?.enabled != true) {
-            return null
-        }
-        return providersById[normalized]
+        val provider = providersById[normalized] ?: return null
+        if (provider.autoEnabled || properties.providers[normalized]?.enabled == true) return provider
+        return null
     }
 
     private fun String.normalizeProviderId(): String = trim().lowercase()

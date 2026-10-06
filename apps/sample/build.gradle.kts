@@ -27,6 +27,8 @@ dependencies {
     implementation(project(":modules:auth-social-google")) // 소셜 로그인 — 꺼진 채 시작한다: 제공자마다 SKELETON_AUTH_SOCIAL_PROVIDERS_<X>_ENABLED=true + client id/secret (docs/real-provider-setup.md)
     implementation(project(":modules:auth-social-kakao"))
     implementation(project(":modules:auth-social-naver"))
+    implementation(project(":modules:auth-social-oidc"))   // 범용 OpenID Connect (LINE 프리셋 포함)
+    implementation(project(":modules:auth-social-x"))      // X(Twitter) OAuth 2.0 + PKCE
     implementation(project(":modules:notification-mail")) // 계정 메일(인증 · 재설정 · 매직 링크). 로컬은 compose mail 프로필(mailpit)이 받는다
     implementation(project(":modules:alert-jdbc"))         // 주인 경보 (+ alert) — 5xx 몰림 · 죽은 작업을 Discord 웹훅으로. 웹훅 주소가 없으면 아무것도 안 보낸다
 

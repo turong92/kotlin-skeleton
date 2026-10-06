@@ -29,6 +29,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | 비밀번호 없이 이메일 링크로 로그인 (매직링크) | `auth-magic-link` | `--modules auth-magic-link` | (기본 포함) — react `magic-link-login` | 스타터의 account 위에 얹는다. 링크 메일을 실제로 보내려면 notification-mail. 모르는 주소의 가입까지 허용하려면 skeleton.auth-magic-link.sign-up=true(모듈 기본은 이미 있는 계정으로만). 링크 도착 화면은 프런트. |
 | 관리자 회원 관리 (목록 · 정지 · 역할 · 삭제 복구) | `account` | (덧붙일 것 없음) | (기본 포함) — react `account-admin` | 스타터의 account 에 있다 — skeleton.account.admin.enabled=true 로 켜고(기본 꺼짐) 첫 관리자는 skeleton.account.bootstrap.admin-email 로 정한다(확인된 이메일 + ADMIN 이 아직 없을 때만). 관리자 권한은 매 호출 저장소의 계정으로 확인한다. 표 화면은 프런트 @skeleton/auth/admin. |
 | 소셜 로그인 (구글 · 카카오 · 네이버) | `auth-social` + (`auth-social-google` \| `auth-social-kakao` \| `auth-social-naver`) | `--modules auth-social,auth-social-google` — `auth-social-google` \| `auth-social-kakao` \| `auth-social-naver` 중 하나 이상 고른다 | (기본 포함) — react `social-login` | 제공자 enabled · client-id · client-secret · redirect-uri(비밀은 환경변수). 계정 연결 저장(OAuthAccountLinkRepository)과 가입 정책(OAuthAccountProvisioningPolicy)은 앱이 구현한다 — 기본은 메모리 저장 · 이미 연결된 계정만 통과. 로그인 버튼 · /auth/callback 화면은 프런트. |
+| 글로벌 소셜 로그인: LINE · X · 그 외 OIDC | `auth-social` + (`auth-social-oidc` \| `auth-social-x`) | `--modules auth-social,auth-social-google,auth-social-oidc,auth-social-x` — `auth-social-oidc` \| `auth-social-x` 중 하나 이상 고른다 | (기본 포함) — react `social-login` | LINE 은 auth-social-oidc 의 프리셋(client-id · client-secret 만), X 는 auth-social-x, Microsoft 같은 OIDC 제공자는 auth-social-oidc 의 providers.<코드> 에 issuer · client-id · client-secret. client-id 를 적은 제공자만 켜지고 GET /auth/methods 에 나온다(PKCE · nonce · 인가 URL 포함). LINE · X 는 이메일이 없거나 확인되지 않아 주소 없는 계정이 될 수 있다(docs/accounts.md). 콘솔 설정과 redirect URI 는 docs/modules/auth-social-oidc.md · auth-social-x.md. |
 | 게시판 · 글쓰기 · 댓글 · 대댓글 · 공감(반응) | `board` + `board-jdbc` | `--modules board,board-jdbc` | `--packages board` — react `board` | 게시판 코드 만들기(skeleton.board.seed-boards 설정이나 운영자 API) · 반응 종류(skeleton.board.reaction.types) · 운영자 역할(MODERATOR). notification 을 같이 고르면 댓글 알림이 기본으로 켜진다. 목록 · 상세 · 글쓰기 화면은 프런트. |
 | 알림 (종 · 목록 · 안 읽은 수) | `notification` + `notification-jdbc` | `--modules notification,notification-jdbc` | `--packages notifications` — react `notifications` | 알림을 만드는 쪽(NotificationPublisher.publish)은 앱 코드 — 받는 사람은 NotificationEvent.recipientIds. 프런트에서는 NotificationBell 배치와 알림 API 인스턴스. |
 | 알림이 새로고침 없이 즉시 뜬다 (실시간) | `notification` + `notification-jdbc` + (`notification-sse` \| `notification-websocket`) | `--modules notification,notification-jdbc,notification-sse` — `notification-sse` \| `notification-websocket` 중 하나 이상 고른다 | `--packages notifications,realtime` — react `live-notifications` | SSE(단방향, 더 단순) 또는 WebSocket(양방향) 중 고른다. 둘 다 프로세스 안 브로커라 인스턴스가 여럿이면 다른 인스턴스의 알림을 못 받는다. 프런트 연결 훅. |
@@ -80,6 +81,8 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `auth-social-google` | 구글 OAuth 제공자 — 토큰 교환 · 프로필 조회 클라이언트를 소셜 로그인의 제공자로 등록한다(클라이언트 id · secret 만 있으면 된다). | `--modules auth-social-google` | 구글 로그인, 구글 소셜 로그인, 소셜 로그인 / google login, google oauth, social login | `@skeleton/auth` |
 | `auth-social-kakao` | 카카오 OAuth 제공자 — 토큰 교환 · 프로필 조회 클라이언트를 소셜 로그인의 제공자로 등록한다(클라이언트 id · secret 만 있으면 된다). | `--modules auth-social-kakao` | 카카오 로그인, 카카오 소셜 로그인, 소셜 로그인 / kakao login, kakao oauth, social login | `@skeleton/auth` |
 | `auth-social-naver` | 네이버 OAuth 제공자 — 토큰 교환 · 프로필 조회 클라이언트를 소셜 로그인의 제공자로 등록한다(클라이언트 id · secret 만 있으면 된다). | `--modules auth-social-naver` | 네이버 로그인, 네이버 소셜 로그인, 소셜 로그인 / naver login, naver oauth, social login | `@skeleton/auth` |
+| `auth-social-oidc` | 범용 OpenID Connect 소셜 로그인 제공자 — 속성만으로 제공자를 여러 개 더한다(discovery · JWKS 키 교체 · ID 토큰 검증 · PKCE · nonce · LINE 프리셋). client-id 를 적은 제공자만 켜진다. | `--modules auth-social-oidc` | 라인 로그인, LINE 로그인, OIDC, OpenID Connect, 글로벌 소셜 로그인, 마이크로소프트 로그인, 소셜 로그인 / line login, openid connect, oidc, microsoft login, social login, global social login | `@skeleton/auth` |
+| `auth-social-x` | X(Twitter) 로그인 제공자 — OAuth 2.0 Authorization Code + PKCE(필수), 기밀 클라이언트(Basic), GET /2/users/me. client-id 를 적으면 켜진다. | `--modules auth-social-x` | X 로그인, 엑스 로그인, 트위터 로그인, 글로벌 소셜 로그인, 소셜 로그인 / x login, twitter login, sign in with x, social login, global social login | `@skeleton/auth` |
 | `board` | 게시판 — 글 · 중첩 댓글(대댓글) · 설정으로 늘리는 반응(좋아요 · 공감 …) · 운영자 숨김/고정 · 댓글 알림, HTTP /api/v1/boards 까지. | `--modules board,board-jdbc` | 게시판, 커뮤니티, 글쓰기, 댓글, 대댓글, 공감, 좋아요, 반응, 운영자 숨김, 공지 고정 / board, forum, community, post, comment, reply, reaction, like, moderation | `@skeleton/board` |
 | `board-jdbc` | 게시판 저장소 — PostgreSQL · MySQL 로 board 의 저장 포트 네 개를 구현한다(skeleton_board* 테이블 · 원자적 카운터). | `--modules board-jdbc` | 게시판 저장소, 게시판 DB / board storage, board repository, board database | `@skeleton/board` |
 | `captcha-turnstile` | 봇 방지 — Cloudflare Turnstile 토큰을 서버에서 검증한다(TurnstileVerifier). | 스타터(apps/api)에 기본 포함 | 캡차, 봇 방지, 스팸 방지, 로봇 확인, 가입 폼 보호 / captcha, turnstile, bot protection, spam protection, cloudflare turnstile | `@skeleton/captcha-turnstile` |
@@ -370,6 +373,36 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 로그인 버튼 · 콜백 화면은 프런트 몫
   - 설정은 auth-social 블록의 providers.naver 아래에 둔다
 - 키워드: 네이버 로그인, 네이버 소셜 로그인, 소셜 로그인 / naver login, naver oauth, social login
+
+### `auth-social-oidc` — 범용 OpenID Connect 소셜 로그인 제공자 — 속성만으로 제공자를 여러 개 더한다(discovery · JWKS 키 교체 · ID 토큰 검증 · PKCE · nonce · LINE 프리셋). client-id 를 적은 제공자만 켜진다.
+
+- 종류 · 상태: module · stable — 위치 `modules/auth-social-oidc`
+- 켜는 법: `--modules auth-social-oidc`
+- 의존 한 줄: `implementation(project(":modules:auth-social-oidc"))`
+- 설정 접두사 `skeleton.auth-social-oidc` — 키와 기본값 `docs/config/modules/auth-social-oidc.yml`
+- 비밀 · 환경변수: `<P>_AUTH_SOCIAL_OIDC_PROVIDERS_LINE_CLIENT_ID`, `<P>_AUTH_SOCIAL_OIDC_PROVIDERS_LINE_CLIENT_SECRET` — 빠지면: client id 가 비면 그 제공자는 없는 것(아무 일도 없다). id 만 있고 secret 이 비면 기동 실패 (client-secret must not be blank). 다른 제공자 코드는 <P>_AUTH_SOCIAL_OIDC_PROVIDERS_<코드>_… 로 같은 형태
+- 문서: `docs/modules/auth-social-oidc.md`
+- 짝 프런트(react-skeleton): 항목 `social-login` · 패키지 `@skeleton/auth` · 조각 기본 포함(덧붙일 것 없음)
+- 쓰지 않는 경우:
+  - auth-social 없이는 쓰지 않는다(따라온다)
+  - OIDC 가 아닌 순수 OAuth 2.0 제공자(X 는 auth-social-x, Kakao · Naver 는 각자 모듈)
+  - 로그인 버튼 · 콜백 화면은 프런트 몫
+- 키워드: 라인 로그인, LINE 로그인, OIDC, OpenID Connect, 글로벌 소셜 로그인, 마이크로소프트 로그인, 소셜 로그인 / line login, openid connect, oidc, microsoft login, social login, global social login
+
+### `auth-social-x` — X(Twitter) 로그인 제공자 — OAuth 2.0 Authorization Code + PKCE(필수), 기밀 클라이언트(Basic), GET /2/users/me. client-id 를 적으면 켜진다.
+
+- 종류 · 상태: module · stable — 위치 `modules/auth-social-x`
+- 켜는 법: `--modules auth-social-x`
+- 의존 한 줄: `implementation(project(":modules:auth-social-x"))`
+- 설정 접두사 `skeleton.auth-social-x` — 키와 기본값 `docs/config/modules/auth-social-x.yml`
+- 비밀 · 환경변수: `<P>_AUTH_SOCIAL_X_CLIENT_ID`, `<P>_AUTH_SOCIAL_X_CLIENT_SECRET` — 빠지면: client id 가 비면 제공자는 없는 것(아무 일도 없다). id 만 있고 secret 이 비면 기동 실패 (client-secret must not be blank)
+- 문서: `docs/modules/auth-social-x.md`
+- 짝 프런트(react-skeleton): 항목 `social-login` · 패키지 `@skeleton/auth` · 조각 기본 포함(덧붙일 것 없음)
+- 쓰지 않는 경우:
+  - auth-social 없이는 쓰지 않는다(따라온다)
+  - 공개 클라이언트(client secret 없는 SPA · 네이티브 앱 유형)의 X 앱 — 이 모듈은 기밀 클라이언트(Basic)만 쓴다
+  - X API 의 티어 · 요금 조건은 X 정책 (확인 필요 — docs/modules/auth-social-x.md)
+- 키워드: X 로그인, 엑스 로그인, 트위터 로그인, 글로벌 소셜 로그인, 소셜 로그인 / x login, twitter login, sign in with x, social login, global social login
 
 ### `board` — 게시판 — 글 · 중첩 댓글(대댓글) · 설정으로 늘리는 반응(좋아요 · 공감 …) · 운영자 숨김/고정 · 댓글 알림, HTTP /api/v1/boards 까지.
 
@@ -866,7 +899,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 - 종류 · 상태: app · stable — 위치 `apps/sample`
 - 켜는 법: `--with-sample`
-- 자동으로 따라온다: `alert-jdbc`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `board`, `board-jdbc`, `crypto`, `json`, `notification`, `notification-jdbc`, `notification-sse`, `storage`, `storage-s3`
+- 자동으로 따라온다: `alert-jdbc`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `board`, `board-jdbc`, `crypto`, `json`, `notification`, `notification-jdbc`, `notification-sse`, `storage`, `storage-s3`
 - HTTP 경로: `/api/v1/notes`
 - 문서: `docs/sample.md`
 - 짝 프런트(react-skeleton): 항목 `app-sample` · 조각 `--with-sample`
@@ -879,7 +912,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 - 종류 · 상태: app · stable — 위치 `apps/workbench`
 - 켜는 법: `--with-workbench`
-- 자동으로 따라온다: `alert-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `board`, `board-jdbc`, `config-aws-ssm`, `crypto`, `db-mysql`, `event-kafka`, `json`, `notification`, `notification-jdbc`, `notification-slack`, `notification-sse`, `notification-websocket`, `payment`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `scheduler`, `storage`, `storage-s3`
+- 자동으로 따라온다: `alert-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `board`, `board-jdbc`, `config-aws-ssm`, `crypto`, `db-mysql`, `event-kafka`, `json`, `notification`, `notification-jdbc`, `notification-slack`, `notification-sse`, `notification-websocket`, `payment`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `scheduler`, `storage`, `storage-s3`
 - HTTP 경로: `/api/v1`, `/api/v1/examples`, `/api/v1/skeleton`, `/api/v1/skeleton/enums`, `/api/v1/skeleton/json`, `/api/v1/skeleton/payments`, `/api/v1/skeleton/polymorphic/contents`
 - 문서: `docs/minimal-composition.md`, `docs/modules/README.md`
 - 짝 프런트(react-skeleton): 항목 `app-workbench` · 조각 `--with-workbench`

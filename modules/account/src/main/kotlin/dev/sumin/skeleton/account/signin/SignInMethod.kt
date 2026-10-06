@@ -63,5 +63,5 @@ class SignInMethodRegistry(methods: List<SignInMethod>) {
 
     fun credentialCodes(): Set<String> = byCode.values.filter { it.countsAsCredential }.map { it.code }.toSet()
 
-    private companion object { val CODE = Regex("^[a-z][a-z0-9_]{1,31}$") }
+    private companion object { val CODE = Regex("^[a-z][a-z0-9_]{0,31}$") }
 }

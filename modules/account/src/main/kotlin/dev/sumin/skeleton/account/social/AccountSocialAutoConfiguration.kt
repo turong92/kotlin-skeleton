@@ -64,7 +64,14 @@ class AccountSocialWebAutoConfiguration {
         dev.sumin.skeleton.account.web.SocialMethodsSource {
             providers.orderedStream().toList().filter { registry.findEnabled(it.providerId) != null }.map {
                 val p = props.getIfAvailable()?.providers?.get(it.providerId.trim().lowercase())
-                dev.sumin.skeleton.account.web.SocialMethodView(it.providerId.trim().lowercase(), p?.clientId?.takeIf { c -> c.isNotBlank() }, p?.redirectUri)
+                dev.sumin.skeleton.account.web.SocialMethodView(
+                    provider = it.providerId.trim().lowercase(),
+                    clientId = it.publicClientId?.takeIf { c -> c.isNotBlank() } ?: p?.clientId?.takeIf { c -> c.isNotBlank() },
+                    redirectUri = it.publicRedirectUri ?: p?.redirectUri,
+                    pkce = it.pkce.name,
+                    nonce = it.nonce.name,
+                    authorize = it.authorize?.let { a -> dev.sumin.skeleton.account.web.SocialAuthorizeView(a.url, a.scopes, a.params) },
+                )
             }
         }
 

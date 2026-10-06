@@ -113,6 +113,14 @@ class AuthSocialOpenApiAutoConfiguration {
                 "redirectUri",
                 StringSchema().description("Redirect URI used by the frontend authorization flow."),
             )
+            .addProperty(
+                "codeVerifier",
+                StringSchema().description("PKCE (S256) code verifier of this authorization attempt: required when GET /auth/methods says pkce=REQUIRED."),
+            )
+            .addProperty(
+                "nonce",
+                StringSchema().description("The nonce of the authorization request: required when GET /auth/methods says nonce=REQUIRED."),
+            )
             .required(listOf("authorizationCode"))
 
     private fun jsonResponse(description: String, schemaRef: String): ApiResponse =

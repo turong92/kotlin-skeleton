@@ -1,0 +1,32 @@
+# auth-social-oidc — 범용 OpenID Connect 제공자. 맵의 키가 제공자 코드이고 그대로 로그인 경로(/auth/social/<코드>/login)가 된다.
+# client-id 가 비어 있으면 그 제공자는 없는 것이다 — 아무 빈도 만들지 않고 네트워크도 부르지 않는다. 한 모듈 인스턴스가 여러 제공자를 낸다.
+skeleton:
+  auth-social-oidc:
+    discovery-cache-ttl: 24h             # discovery 문서를 다시 받기 전까지 (실패하면 옛 문서를 계속 쓴다)
+    jwks-cache-ttl: 1h                   # 서명 키(JWKS)를 다시 받기 전까지
+    jwks-refresh-cooldown: 30s           # 모르는 kid 때문에 JWKS 를 다시 받는 일의 최소 간격 (키 교체는 따라가고 가짜 kid 로는 못 두드린다)
+    clock-skew: 60s                      # ID 토큰 exp · nbf 에서 봐주는 시계 어긋남
+    providers: {}
+#      line:                             # 프리셋(LINE Login v2.1) — client-id · client-secret 만 있으면 된다
+#        client-id: ""                   # LINE Developers 콘솔의 Channel ID. 비우면 이 제공자는 없다
+#        client-secret: ""               # Channel secret (운영자 비밀). 웹 로그인의 ID 토큰(HS256)을 이 값으로 검증한다
+#        redirect-uri:                   # 프론트의 콜백 주소 (콘솔의 Callback URL 과 글자 하나까지 같아야 한다)
+#        scopes: [openid, profile]       # 이메일은 콘솔에서 "OpenID Connect > Email address permission" 승인 후 [openid, profile, email]
+#      microsoft:                        # 프리셋이 없는 제공자 — issuer 로 discovery
+#        issuer: https://login.microsoftonline.com/<tenant>/v2.0
+#        client-id: ""
+#        client-secret: ""
+#        # preset:                       # 프리셋 이름을 빌릴 때 (현재 line)
+#        # authorization-endpoint:       # 아래 셋을 모두 적으면 discovery 를 하지 않는다 (issuer 는 그래도 ID 토큰 iss 검사에 쓴다)
+#        # token-endpoint:
+#        # jwks-uri:
+#        # userinfo-endpoint:
+#        # scopes: [openid, profile, email]
+#        # pkce: SUPPORTED               # REQUIRED | SUPPORTED | UNSUPPORTED (일반 기본 SUPPORTED, LINE 프리셋 REQUIRED)
+#        # nonce: SUPPORTED              # REQUIRED | SUPPORTED | UNSUPPORTED (일반 기본 SUPPORTED, LINE 프리셋 REQUIRED)
+#        # token-endpoint-auth: BASIC    # BASIC | POST | NONE (일반 기본 BASIC, LINE 프리셋 POST)
+#        # id-token-algorithms: [RS256]  # 받을 서명 알고리즘. HS256 은 client secret 으로 검증 (일반 기본 RS256, LINE 프리셋 HS256 · ES256)
+#        # userinfo: FALLBACK            # NEVER | FALLBACK(이메일 · 이름이 ID 토큰에 없을 때) | ALWAYS
+#        # email-trust: CLAIM            # CLAIM(email_verified 클레임) | NEVER(항상 미확인 — LINE 프리셋) | ALWAYS(제공자가 보증한다고 문서가 말할 때만)
+#        # claims: { subject: sub, email: email, email-verified: email_verified, name: name, picture: picture }
+#        # authorize-params: {}          # 인가 URL 에 그대로 붙일 고정 파라미터

@@ -63,6 +63,8 @@ skeleton:
       enabled: true                       # 운영자 계정 도구(/api/v1/admin/accounts) — 이 앱의 선택. ADMIN 역할이 필요하다
   auth-magic-link:
     sign-up: true                         # 메일함을 증명하면 가입까지 끝나는 앱 — 이 앱의 선택 (모듈 기본은 이미 있는 계정으로만)
+  # 글로벌 소셜 로그인 (google · LINE · X): client id 를 환경변수로 줄 때만 GET /auth/methods 에 나타난다 — 비어 있으면 아무것도 바뀌지 않는다.
+  #   LINE: <PREFIX>_AUTH_SOCIAL_OIDC_PROVIDERS_LINE_CLIENT_ID / _CLIENT_SECRET   X: <PREFIX>_AUTH_SOCIAL_X_CLIENT_ID / _CLIENT_SECRET   (docs/modules/auth-social-oidc.md · auth-social-x.md)
   job-queue:
     poll-interval: 1s                 # 내보내기가 몇 초 안에 끝나 보이도록 (모듈 기본값은 2s)
     retention:

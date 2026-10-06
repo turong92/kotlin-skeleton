@@ -2,7 +2,10 @@ package dev.sumin.skeleton.auth.social.google
 
 import com.fasterxml.jackson.annotation.JsonProperty
 import dev.sumin.skeleton.auth.social.config.AuthSocialProperties
+import dev.sumin.skeleton.auth.social.oauth.OAuthAuthorizeInfo
+import dev.sumin.skeleton.auth.social.oauth.OAuthCodeExchange
 import dev.sumin.skeleton.auth.social.oauth.OAuthInvalidAuthorizationCodeException
+import dev.sumin.skeleton.auth.social.oauth.PkceMode
 import dev.sumin.skeleton.auth.social.oauth.OAuthProvider
 import dev.sumin.skeleton.auth.social.oauth.OAuthTokenErrorLog
 import dev.sumin.skeleton.auth.social.oauth.OAuthUserProfile
@@ -21,8 +24,21 @@ class GoogleOAuthProvider(
         require(properties.clientSecret.isNotBlank()) { "Google OAuth clientSecret must not be blank" }
     }
 
-    override fun fetchProfile(authorizationCode: String, redirectUri: String?): OAuthUserProfile {
-        val token = exchangeToken(authorizationCode, redirectUri)
+    /** Google 은 웹 서버 앱에서도 `code_verifier` 를 받는다 — 있으면 보낸다 (client secret 은 그대로 필요). 근거: docs/modules/auth-social-google.md (확인 필요 표시) */
+    override val pkce: PkceMode = PkceMode.SUPPORTED
+    override val publicClientId: String get() = properties.clientId
+    override val publicRedirectUri: String? get() = properties.redirectUri
+    override val authorize = OAuthAuthorizeInfo(
+        url = "https://accounts.google.com/o/oauth2/v2/auth",
+        scopes = listOf("openid", "email", "profile"),
+        params = mapOf("response_type" to "code"),
+    )
+
+    override fun fetchProfile(authorizationCode: String, redirectUri: String?): OAuthUserProfile =
+        fetchProfile(OAuthCodeExchange(authorizationCode, redirectUri))
+
+    override fun fetchProfile(exchange: OAuthCodeExchange): OAuthUserProfile {
+        val token = exchangeToken(exchange.authorizationCode, exchange.redirectUri, exchange.codeVerifier)
         val profile = requireNotNull(
             httpClient.get(
                 clientName = PROFILE_CLIENT_NAME,
@@ -42,19 +58,21 @@ class GoogleOAuthProvider(
             username = profile.email ?: profile.sub,
             displayName = profile.name,
             emailVerified = profile.emailVerified == true,
+            avatarUrl = profile.picture?.takeIf { it.startsWith("https://") },
         )
     }
 
     private fun exchangeToken(
         authorizationCode: String,
         redirectUri: String?,
+        codeVerifier: String?,
     ): GoogleTokenResponse =
         try {
             requireNotNull(
                 httpClient.postForm(
                     clientName = TOKEN_CLIENT_NAME,
                     path = properties.tokenPath ?: DEFAULT_TOKEN_PATH,
-                    form = tokenForm(authorizationCode, redirectUri),
+                    form = tokenForm(authorizationCode, redirectUri, codeVerifier),
                     responseType = GoogleTokenResponse::class.java,
                 ) {
                     baseUrl(properties.tokenBaseUrl ?: DEFAULT_TOKEN_BASE_URL)
@@ -72,6 +90,7 @@ class GoogleOAuthProvider(
     private fun tokenForm(
         authorizationCode: String,
         redirectUri: String?,
+        codeVerifier: String?,
     ): Map<String, String> =
         linkedMapOf(
             "grant_type" to "authorization_code",
@@ -83,6 +102,7 @@ class GoogleOAuthProvider(
             if (!effectiveRedirectUri.isNullOrBlank()) {
                 put("redirect_uri", effectiveRedirectUri)
             }
+            if (!codeVerifier.isNullOrBlank()) put("code_verifier", codeVerifier)
         }
 
     data class GoogleTokenResponse(
@@ -96,6 +116,7 @@ class GoogleOAuthProvider(
         @JsonProperty("email_verified")
         val emailVerified: Boolean? = null,
         val name: String? = null,
+        val picture: String? = null,
     )
 
     private companion object {

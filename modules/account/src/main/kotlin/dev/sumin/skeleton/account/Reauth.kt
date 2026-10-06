@@ -7,8 +7,8 @@ import dev.sumin.skeleton.account.mail.AccountMail
 import dev.sumin.skeleton.account.mail.MailKind
 
 /** 이메일이 없는 계정의 다시 인증 — **지금 새로 받은** 인가 코드 하나. 이미 이 계정에 연결된 제공자의 것이어야 한다 */
-data class SocialReauth(val provider: String, val authorizationCode: String, val redirectUri: String? = null) {
-    override fun toString() = "SocialReauth(provider=$provider, authorizationCode=<redacted>)"
+data class SocialReauth(val provider: String, val authorizationCode: String, val redirectUri: String? = null, val codeVerifier: String? = null, val nonce: String? = null) {
+    override fun toString() = "SocialReauth(provider=$provider, authorizationCode=<redacted>, codeVerifier=<redacted>)"
 }
 
 /** 소셜 다시 인증을 확인하는 고리 — `auth-social` 이 있을 때 [dev.sumin.skeleton.account.social.AccountSocialAutoConfiguration] 이 내놓는다 */

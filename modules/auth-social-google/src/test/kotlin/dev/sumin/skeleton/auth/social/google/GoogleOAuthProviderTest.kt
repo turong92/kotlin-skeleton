@@ -72,6 +72,7 @@ class GoogleOAuthProviderTest {
         assertEquals("google@example.com", profile.email)
         assertEquals("google@example.com", profile.username)
         assertEquals("Google User", profile.displayName)
+        assertEquals("https://example.com/google.png", profile.avatarUrl)
         assertEquals(true, profile.emailVerified, "email_verified from userinfo is carried so account linking can trust the address")
 
         val tokenRequest = requests.first()
@@ -92,6 +93,22 @@ class GoogleOAuthProviderTest {
         assertEquals("GET", profileRequest.method)
         assertEquals("/userinfo", profileRequest.path)
         assertEquals("Bearer google-access-token", profileRequest.headers["authorization"]?.single())
+    }
+
+    @Test
+    fun `google supports PKCE - the verifier is forwarded as code_verifier and the frontend learns the authorize endpoint`() {
+        assertEquals(dev.sumin.skeleton.auth.social.oauth.PkceMode.SUPPORTED, provider.pkce)
+        assertEquals("https://accounts.google.com/o/oauth2/v2/auth", provider.authorize?.url)
+        assertEquals(listOf("openid", "email", "profile"), provider.authorize?.scopes)
+        assertEquals("google-client", provider.publicClientId)
+
+        val verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
+        provider.fetchProfile(dev.sumin.skeleton.auth.social.oauth.OAuthCodeExchange("google-code", null, verifier))
+        assertEquals(verifier, requests.first().formBody()["code_verifier"])
+
+        requests.clear()
+        provider.fetchProfile(dev.sumin.skeleton.auth.social.oauth.OAuthCodeExchange("google-code", null, null))
+        assertEquals(false, requests.first().formBody().containsKey("code_verifier"), "SUPPORTED: no verifier, none sent")
     }
 
     @Test
