@@ -14,8 +14,8 @@ import dev.sumin.skeleton.account.token.TokenPurposes
  * 모든 세션을 닫고 · 이메일을 확인된 것으로 처리하고 · 주인에게 알린다. [change] 는 현재 비밀번호를 요구하고(없는 계정은 이메일 확인이 요구) 다른 세션만 닫는다.
  */
 class PasswordService(private val core: AccountCore) {
-    fun forgot(email: String, ip: String?, captchaToken: String?) {
-        ip?.let {
+    fun forgot(email: String, ip: String?, captchaToken: String?, ipKey: String? = ip) {
+        ipKey?.let {
             val r = core.props.reset
             val a = core.limits.acquire("forgot:ip", it, r.perIp, r.perIpWindow)
             if (!a.allowed) throw RateLimitedException(a.retryAfterSeconds)

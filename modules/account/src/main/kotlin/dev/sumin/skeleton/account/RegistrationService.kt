@@ -19,6 +19,8 @@ data class SignUpCommand(
     val timeZone: String?,
     val ip: String?,
     val captchaToken: String?,
+    /** 한도 키 — `ClientIps….limitKey`(IPv6 는 /64). [ip] 는 감사 · 캡차용 전체 주소 */
+    val ipKey: String? = ip,
 ) {
     override fun toString() = "SignUpCommand(email=<redacted>, password=<redacted>)"
 }
@@ -45,7 +47,7 @@ class RegistrationService(private val core: AccountCore) {
     fun signUp(cmd: SignUpCommand): SignUpOutcome {
         val p = core.props
         if (!p.signUp.enabled) throw AccountException(AccountErrorCode.SIGN_UP_CLOSED)
-        cmd.ip?.let {
+        cmd.ipKey?.let {
             val a = core.limits.acquire("signup:ip", it, p.signUp.perIp, p.signUp.perIpWindow)
             if (!a.allowed) throw RateLimitedException(a.retryAfterSeconds)
         }
@@ -98,9 +100,9 @@ class RegistrationService(private val core: AccountCore) {
      * 맞으면 **이 시도의 비밀번호로** 계정을 만들고(그 주소에 계정이 이미 있으면 만들지 않는다) 같은 주소의 다른 시도를 모두 버리고 로그인할 계정을 돌려준다.
      * 없음 · 만료 · 소진 · 이미 쓴 시도 · 그 사이 주소를 가져간 계정은 모두 [AccountErrorCode.CODE_EXPIRED] 하나다.
      */
-    fun verifyEmail(signUpId: String, code: String, ip: String?): AuthAccount {
+    fun verifyEmail(signUpId: String, code: String, ip: String?, ipKey: String? = ip): AuthAccount {
         val v = core.props.verification
-        ip?.let {
+        ipKey?.let {
             val a = core.limits.acquire("verify:ip", it, v.attemptsPerIp, v.attemptsWindow)
             if (!a.allowed) throw RateLimitedException(a.retryAfterSeconds)
         }
@@ -150,8 +152,8 @@ class RegistrationService(private val core: AccountCore) {
     }
 
     /** 항상 같은 응답 — 시도 조회 · 메일은 뒤에서, 쿨다운 · 재전송 한도 · 주소별 예산을 넘으면 조용히 */
-    fun resendVerification(signUpId: String, ip: String?, captchaToken: String?) {
-        ip?.let {
+    fun resendVerification(signUpId: String, ip: String?, captchaToken: String?, ipKey: String? = ip) {
+        ipKey?.let {
             val v = core.props.verification
             val a = core.limits.acquire("resend:ip", it, v.perIp, v.perIpWindow)
             if (!a.allowed) throw RateLimitedException(a.retryAfterSeconds)

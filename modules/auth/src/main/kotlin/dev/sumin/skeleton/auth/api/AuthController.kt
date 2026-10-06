@@ -68,7 +68,7 @@ class AuthController(
         @Valid @RequestBody request: PasswordLoginRequest,
         httpRequest: HttpServletRequest,
     ): DataResponse<AuthTokenResponse> =
-        Response.ok(loginService.login(request, clientIps.of(httpRequest).ip))
+        clientIps.of(httpRequest).let { Response.ok(loginService.login(request, it.ip, it.limitKey)) }
 
     @GetMapping("/me")
     fun me(authentication: Authentication): DataResponse<CurrentPrincipal> =

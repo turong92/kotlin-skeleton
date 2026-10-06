@@ -13,9 +13,11 @@ import dev.sumin.skeleton.common.DataResponse
 import dev.sumin.skeleton.common.ListResponse
 import dev.sumin.skeleton.common.Response
 import dev.sumin.skeleton.common.openapi.AcceptedOperation
+import dev.sumin.skeleton.common.web.ClientIps
 import dev.sumin.skeleton.idempotency.IdempotentOperation
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
+import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -41,6 +43,7 @@ class AccountController(
     private val identities: IdentityService,
     private val deletion: DeletionService,
     private val reauth: Reauth,
+    private val clientIps: ClientIps = ClientIps(),
 ) {
     @Operation(summary = "My profile, roles and sign-in methods")
     @GetMapping("/me")
@@ -80,9 +83,10 @@ class AccountController(
         description = "400 ACCOUNT.CODE_INVALID (data.attemptsLeft), 410 ACCOUNT.CODE_EXPIRED, 409 ACCOUNT.EMAIL_TAKEN.",
     )
     @PostMapping("/email/change/confirm")
-    fun confirmEmailChange(authentication: Authentication?, @Valid @RequestBody request: CodeRequest): ResponseEntity<Void> {
+    fun confirmEmailChange(authentication: Authentication?, @Valid @RequestBody request: CodeRequest, http: HttpServletRequest): ResponseEntity<Void> {
         val caller = callers.require(authentication)
-        emailChange.confirm(caller.accountId, caller.sessionId, request.code!!)
+        val client = clientIps.of(http)
+        emailChange.confirm(caller.accountId, caller.sessionId, request.code!!, client.ip, client.limitKey)
         return Response.noContent()
     }
 

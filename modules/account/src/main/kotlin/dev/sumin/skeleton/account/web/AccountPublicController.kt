@@ -46,8 +46,9 @@ class AccountPublicController(
     @PostMapping("/account/sign-up")
     @AcceptedOperation
     fun signUp(@Valid @RequestBody request: SignUpRequest, http: HttpServletRequest): ResponseEntity<DataResponse<SignUpResponse>> {
+        val client = clientIps.of(http)
         val outcome = registration.signUp(
-            SignUpCommand(request.email!!, request.password!!, request.displayName, request.locale, request.timeZone, clientIps.of(http).ip, request.captchaToken),
+            SignUpCommand(request.email!!, request.password!!, request.displayName, request.locale, request.timeZone, client.ip, request.captchaToken, client.limitKey),
         )
         val http202 = if (outcome.status == SignUpStatus.CREATED) HttpStatus.CREATED else HttpStatus.ACCEPTED
         return ResponseEntity.status(http202).body(Response.ok(SignUpResponse(outcome.status.name, outcome.signUpId)))
@@ -57,7 +58,7 @@ class AccountPublicController(
     @PostMapping("/account/verification/resend")
     @AcceptedOperation
     fun resend(@Valid @RequestBody request: ResendRequest, http: HttpServletRequest): ResponseEntity<DataResponse<StatusResponse>> {
-        registration.resendVerification(request.signUpId!!, clientIps.of(http).ip, request.captchaToken)
+        clientIps.of(http).let { registration.resendVerification(request.signUpId!!, it.ip, request.captchaToken, it.limitKey) }
         return accepted("ACCEPTED")
     }
 
@@ -67,13 +68,13 @@ class AccountPublicController(
     )
     @PostMapping("/auth/verify-email")
     fun verifyEmail(@Valid @RequestBody request: VerifyEmailRequest, http: HttpServletRequest): DataResponse<AuthTokenResponse> =
-        Response.ok(tokens().issue(registration.verifyEmail(request.signUpId!!, request.code!!, clientIps.of(http).ip)))
+        clientIps.of(http).let { Response.ok(tokens().issue(registration.verifyEmail(request.signUpId!!, request.code!!, it.ip, it.limitKey))) }
 
     @Operation(summary = "Ask for a password-reset mail (always 202)")
     @PostMapping("/account/password/forgot")
     @AcceptedOperation
     fun forgot(@Valid @RequestBody request: EmailRequest, http: HttpServletRequest): ResponseEntity<DataResponse<StatusResponse>> {
-        passwords.forgot(request.email!!, clientIps.of(http).ip, request.captchaToken)
+        clientIps.of(http).let { passwords.forgot(request.email!!, it.ip, request.captchaToken, it.limitKey) }
         return accepted("ACCEPTED")
     }
 

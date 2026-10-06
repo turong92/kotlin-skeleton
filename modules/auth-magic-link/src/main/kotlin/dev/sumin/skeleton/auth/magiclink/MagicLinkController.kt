@@ -38,7 +38,7 @@ class MagicLinkController(
     @PostMapping("/request")
     @AcceptedOperation
     fun request(@Valid @RequestBody body: EmailRequest, http: HttpServletRequest): ResponseEntity<DataResponse<StatusResponse>> {
-        service.request(body.email!!, clientIps.of(http).ip, body.captchaToken)
+        clientIps.of(http).let { service.request(body.email!!, it.ip, body.captchaToken, it.limitKey) }
         return Response.accepted(StatusResponse("SENT"))
     }
 

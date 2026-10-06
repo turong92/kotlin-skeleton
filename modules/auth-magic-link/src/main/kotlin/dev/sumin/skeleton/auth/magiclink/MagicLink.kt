@@ -56,8 +56,8 @@ class MagicLinkService(
     private val signIn: AccountSignInService,
     private val props: MagicLinkProperties,
 ) {
-    fun request(email: String, ip: String?, captchaToken: String?) {
-        ip?.let {
+    fun request(email: String, ip: String?, captchaToken: String?, ipKey: String? = ip) {
+        ipKey?.let {
             val a = core.limits.acquire("magic-link:ip", it, props.perIp, props.perIpWindow)
             if (!a.allowed) throw RateLimitedException(a.retryAfterSeconds)
         }

@@ -56,7 +56,8 @@ class AccountWebAutoConfiguration {
         identities: IdentityService,
         deletion: DeletionService,
         reauth: Reauth,
-    ): AccountController = AccountController(callers, profile, passwords, emailChange, identities, deletion, reauth)
+        clientIps: ObjectProvider<ClientIps>,
+    ): AccountController = AccountController(callers, profile, passwords, emailChange, identities, deletion, reauth, clientIps.getIfAvailable { ClientIps() })
 
     @Bean
     @ConditionalOnMissingBean

@@ -24,7 +24,7 @@ class LoginThrottle(private val core: AccountCore) : LoginHooks {
     override fun beforeAttempt(attempt: LoginAttempt) {
         val login = core.props.login
         if (!login.throttleEnabled) return
-        attempt.clientIp?.let { check("login:ip", it, login.perIp, "ip", attempt) }
+        attempt.limitKey?.let { check("login:ip", it, login.perIp, "ip", attempt) }
         check("login:id", bucketOf(attempt.identifier), login.perAccount, "identifier", attempt)
     }
 

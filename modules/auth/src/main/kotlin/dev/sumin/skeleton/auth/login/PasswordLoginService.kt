@@ -21,13 +21,13 @@ class PasswordLoginService(
 ) {
     private val dummyHash: String by lazy { requireNotNull(passwordEncoder.encode("skeleton-timing-equalizer")) }
 
-    fun login(request: PasswordLoginRequest, clientIp: String?): AuthTokenResponse {
+    fun login(request: PasswordLoginRequest, clientIp: String?, limitKey: String? = clientIp): AuthTokenResponse {
         val identifier = try {
             AccountIdentifier.from(request.accountId, request.username, request.email)
         } catch (_: IllegalArgumentException) {
             throw InvalidCredentialsException()
         }
-        val attempt = LoginAttempt(key(identifier), clientIp)
+        val attempt = LoginAttempt(key(identifier), clientIp, limitKey)
         val active = hooks()
         active.forEach { it.beforeAttempt(attempt) }
 

@@ -6,7 +6,13 @@ import dev.sumin.skeleton.auth.account.AuthAccount
  * 비밀번호 로그인 시도 하나. [identifier] 는 정규화된 입력(`email:a@b.c` · `username:x` · `accountId:y`) — 계정이 있든 없든 같은 모양이라
  * 한도 키로 써도 계정 존재 여부가 드러나지 않는다.
  */
-data class LoginAttempt(val identifier: String, val clientIp: String?)
+data class LoginAttempt(
+    val identifier: String,
+    /** 감사 · 이벤트용 전체 주소 */
+    val clientIp: String?,
+    /** 한도 키 — `ClientIps….limitKey`(IPv6 는 /64) */
+    val limitKey: String? = clientIp,
+)
 
 enum class LoginFailure { UNKNOWN_ACCOUNT, BAD_PASSWORD, BLOCKED }
 
