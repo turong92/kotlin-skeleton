@@ -9,6 +9,7 @@ dependencies {
     implementation(project(":modules:auth"))
     implementation(project(":modules:account-jdbc"))       // 계정 (+ account): 가입 · 이메일 확인 · 재설정 · 삭제 — auth 가 진짜 계정으로 로그인한다
     implementation(project(":modules:auth-session-jdbc"))  // 리프레시 토큰 · 세션 목록 (+ auth-session). 메일 · 매직 링크는 docs/accounts.md
+    implementation(project(":modules:legal-jdbc"))         // 약관 · 개인정보 처리방침 + 가입 동의 기록 + 재동의 (+ legal). 문서는 모듈의 TEMPLATE — prod 로 뜨기 전에 자기 문서로 바꾼다 (docs/legal.md)
     implementation(project(":modules:persistence-jdbc"))
     implementation(project(":modules:db-postgresql"))      // 방언은 정확히 하나 (MySQL 이면 :modules:db-mysql)
     implementation(project(":modules:migration-flyway"))   // 공통 :modules:migration 은 api 로 따라온다

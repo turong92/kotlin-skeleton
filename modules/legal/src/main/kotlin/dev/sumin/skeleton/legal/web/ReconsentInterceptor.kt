@@ -7,6 +7,7 @@ import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.security.core.Authentication
 import org.springframework.security.core.context.SecurityContextHolder
+import org.springframework.web.method.HandlerMethod
 import org.springframework.web.servlet.HandlerInterceptor
 
 /**
@@ -15,6 +16,7 @@ import org.springframework.web.servlet.HandlerInterceptor
  */
 class ReconsentInterceptor(private val service: ConsentService, private val callers: LegalCallers) : HandlerInterceptor {
     override fun preHandle(request: HttpServletRequest, response: HttpServletResponse, handler: Any): Boolean {
+        if (handler !is HandlerMethod) return true   // 없는 경로(404) · 정적 자원은 지키지 않는다 — 실제 엔드포인트만
         val authentication = (request.userPrincipal as? Authentication) ?: SecurityContextHolder.getContext().authentication
         val subject = callers.resolve(authentication) ?: return true
         val missing = service.requireCurrent(subject)

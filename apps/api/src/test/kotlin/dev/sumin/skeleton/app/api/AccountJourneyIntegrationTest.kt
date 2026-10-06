@@ -52,7 +52,7 @@ class AccountJourneyIntegrationTest {
     @Test
     fun `sign up, verify, log in, refresh, change password, list sessions, delete`() {
         val email = "journey-${System.nanoTime()}@example.com"
-        val signUp = json("/api/v1/account/sign-up", """{"email":"$email","password":"tangerine-42-moon"}""").andExpect { status { isAccepted() } }.andReturn().response.contentAsString
+        val signUp = json("/api/v1/account/sign-up", """{"email":"$email","password":"tangerine-42-moon","consents":[{"type":"terms","version":"template-1"},{"type":"privacy","version":"template-1"}]}""").andExpect { status { isAccepted() } }.andReturn().response.contentAsString
         json("/api/v1/auth/login", """{"email":"$email","password":"tangerine-42-moon"}""").andExpect { status { isUnauthorized() } }   // no account until the code is entered
         val verified = json("/api/v1/auth/verify-email", """{"signUpId":"${JsonPath.read<String>(signUp, "$.value.signUpId")}","code":"${codeOf("VERIFY_CODE", email)}"}""").andExpect { status { isOk() } }.andReturn().response.contentAsString
         assertTrue(JsonPath.read<String>(verified, "$.value.refreshToken").startsWith("r1."), "the verifying browser is signed in at once")
@@ -79,7 +79,7 @@ class AccountJourneyIntegrationTest {
     }
 
     private fun registered(email: String, password: String = "tangerine-42-moon"): String {
-        val signUp = json("/api/v1/account/sign-up", """{"email":"$email","password":"$password"}""").andExpect { status { isAccepted() } }.andReturn().response.contentAsString
+        val signUp = json("/api/v1/account/sign-up", """{"email":"$email","password":"$password","consents":[{"type":"terms","version":"template-1"},{"type":"privacy","version":"template-1"}]}""").andExpect { status { isAccepted() } }.andReturn().response.contentAsString
         json("/api/v1/auth/verify-email", """{"signUpId":"${JsonPath.read<String>(signUp, "$.value.signUpId")}","code":"${codeOf("VERIFY_CODE", email)}"}""").andExpect { status { isOk() } }
         return email
     }

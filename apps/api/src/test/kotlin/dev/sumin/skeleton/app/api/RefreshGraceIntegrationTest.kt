@@ -38,9 +38,9 @@ class RefreshGraceIntegrationTest {
     @Test
     fun `a refresh whose response was lost is retried with the same token and gets the same successor`() {
         val email = "lost-${System.nanoTime()}@example.com"
-        val signUp = json("/api/v1/account/sign-up", """{"email":"$email","password":"tangerine-42-moon"}""").andReturn().response.contentAsString
+        val signUp = json("/api/v1/account/sign-up", """{"email":"$email","password":"tangerine-42-moon","consents":[{"type":"terms","version":"template-1"},{"type":"privacy","version":"template-1"}]}""").andReturn().response.contentAsString
         json("/api/v1/auth/verify-email", """{"signUpId":"${JsonPath.read<String>(signUp, "$.value.signUpId")}","code":"${mails.sent.last { it.kind.name == "VERIFY_CODE" }.vars.getValue("code")}"}""")
-        val first = JsonPath.read<String>(json("/api/v1/auth/login", """{"email":"$email","password":"tangerine-42-moon"}""").andReturn().response.contentAsString, "$.value.refreshToken")
+        val first = JsonPath.read<String>(json("/api/v1/auth/login", """{"email":"$email","password":"tangerine-42-moon","consents":[{"type":"terms","version":"template-1"},{"type":"privacy","version":"template-1"}]}""").andReturn().response.contentAsString, "$.value.refreshToken")
         val lost = JsonPath.read<String>(json("/api/v1/auth/refresh", """{"refreshToken":"$first"}""").andExpect { status { isOk() } }.andReturn().response.contentAsString, "$.value.refreshToken")
         val retry = JsonPath.read<String>(json("/api/v1/auth/refresh", """{"refreshToken":"$first"}""").andExpect { status { isOk() } }.andReturn().response.contentAsString, "$.value.refreshToken")
         assertEquals(lost, retry)

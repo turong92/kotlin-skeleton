@@ -112,8 +112,8 @@ class LegalCatalog(
     }
 
     /** 지금 내줄 수 있는 판(현재 · 다음)의 원문이 쓰는 자리표시 중 설정에 없는 사실 */
-    fun missingFacts(now: Instant): Set<String> =
-        types.flatMap { listOfNotNull(current(it, now), next(it, now)) }
+    fun missingFacts(now: Instant, includeTemplates: Boolean = true): Set<String> =
+        types.flatMap { listOfNotNull(current(it, now), next(it, now)) }.filter { includeTemplates || !it.meta.template }
             .flatMap { v -> v.sources.values.flatMap { LegalText.placeholders(it) } }
             .filter { it !in rules.facts }.toCollection(linkedSetOf())
 

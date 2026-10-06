@@ -86,6 +86,14 @@ class LegalDeployGuardTest {
     }
 
     @Test
+    fun `the placeholders of a template are examples, so their missing facts are not the guard's business`() {
+        val g = guard(v("terms", status = DocumentStatus.DRAFT, template = true, text = "# T\n\n{{company-name}}"), acknowledge = true)
+        assertEquals(emptyList(), g.problems(prod))
+        assertTrue(g.warnings(prod).none { it.contains("company-name") }, g.warnings(prod).toString())
+        assertTrue(g.warnings(local).none { it.contains("company-name") })
+    }
+
+    @Test
     fun `the guard has a name for the startup summary`() {
         assertEquals("legal", guard(v("terms")).name)
     }

@@ -77,6 +77,11 @@ class ReconsentWebTest {
     }
 
     @Test
+    fun `a route that does not exist stays a 404 - the filter only guards real endpoints`() {
+        call(get("/api/v1/no-such-route"), user).andExpect(status().isNotFound).andExpect(jsonPath("$.code").value("COMMON.NOT_FOUND"))
+    }
+
+    @Test
     fun `anonymous requests are not the filter's business`() {
         call(get("/api/v1/things")).andExpect(status().isOk)
     }
