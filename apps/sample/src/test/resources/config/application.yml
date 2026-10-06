@@ -4,3 +4,7 @@ spring:
   datasource:
     hikari:
       minimum-idle: 1
+skeleton:
+  legal:
+    reconsent:
+      enabled: false   # notes · board 시험은 시드 계정으로 보호된 엔드포인트를 부른다 — 동의는 이 시험들의 주제가 아니다. 재동의 흐름은 LegalJourneyIntegrationTest 가 켜서 시험한다

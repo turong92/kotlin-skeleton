@@ -1,0 +1,71 @@
+{
+  "documents": [
+    {
+      "type": "terms",
+      "versions": [
+        {
+          "version": "v1",
+          "status": "REVIEWED",
+          "effectiveFrom": "2026-01-01T00:00:00Z",
+          "locales": [
+            "ko",
+            "en"
+          ],
+          "sha256": {
+            "ko": "f3ae4710f032ed8917e65c4056eb84f11c179f883fac56f037d5bb43b155b07d",
+            "en": "d9b86e6b21d2603018ceaaa2b11b3b2b4014a064593127f1d03292bcf7738e2f"
+          }
+        },
+        {
+          "version": "v2",
+          "status": "REVIEWED",
+          "effectiveFrom": "2026-10-08T00:00:00Z",
+          "locales": [
+            "ko",
+            "en"
+          ],
+          "sha256": {
+            "ko": "942f351280d42f3e2d2bd1ac591a45a58f30f829528bbfa56b7127abcbbcb8e5",
+            "en": "5cb0254ace38d8097a3b06bd8f269dfa995daea16222ae5b4b61c49d340e8d4f"
+          }
+        }
+      ]
+    },
+    {
+      "type": "privacy",
+      "versions": [
+        {
+          "version": "v1",
+          "status": "REVIEWED",
+          "effectiveFrom": "2026-01-01T00:00:00Z",
+          "locales": [
+            "ko",
+            "en"
+          ],
+          "sha256": {
+            "ko": "f1bce4e5cb9faefb32d6754da7556f9f1f4a11cae6c1d8e4479a8dfeb1a99df9",
+            "en": "228bdbeb407871787e5eaec56b472dd29c10f92336d4003f4c6dbb4e94a513e3"
+          }
+        }
+      ]
+    },
+    {
+      "type": "marketing",
+      "versions": [
+        {
+          "version": "v1",
+          "status": "REVIEWED",
+          "effectiveFrom": "2026-01-01T00:00:00Z",
+          "locales": [
+            "ko",
+            "en"
+          ],
+          "sha256": {
+            "ko": "d8b82d87975d987c62deffcc6eac8fac62b3bd3350598a51e5eab94593ad1459",
+            "en": "c4e36b37fdad810122adc28e3d201ed24cf209b8ca2de3c9ff8cf4f95c0bc579"
+          }
+        }
+      ]
+    }
+  ]
+}

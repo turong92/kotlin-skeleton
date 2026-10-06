@@ -64,7 +64,7 @@ class AccountJourneyIntegrationTest {
         val first = "tangerine-42-moon"
         val second = "a-brand-new-pass-7"
 
-        val signUp = post("/api/v1/account/sign-up", """{"email":"$email","password":"$first","displayName":"Journey","locale":"ko"}""").andExpect { status { isAccepted() } }.andReturn().response.contentAsString
+        val signUp = post("/api/v1/account/sign-up", """{"email":"$email","password":"$first","displayName":"Journey","locale":"ko","consents":[{"type":"terms","version":"sample-1"},{"type":"privacy","version":"sample-1"}]}""").andExpect { status { isAccepted() } }.andReturn().response.contentAsString
         // no account exists until the code is entered
         post("/api/v1/auth/login", """{"email":"$email","password":"$first"}""").andExpect { status { isUnauthorized() }; jsonPath("$.code") { value("AUTH.INVALID_CREDENTIALS") } }
         val verified = post("/api/v1/auth/verify-email", """{"signUpId":"${field(signUp, "$.value.signUpId")}","code":"${codeOf(MailKind.VERIFY_CODE, email)}"}""").andExpect { status { isOk() } }.andReturn().response.contentAsString

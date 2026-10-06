@@ -21,6 +21,9 @@ skeleton:
         - { id: acc_user, email: user@example.com, password: password, display-name: User }
         - { id: acc_admin, email: admin@example.com, password: password, roles: [ADMIN], display-name: Admin }
         - { id: acc_moderator, email: moderator@example.com, password: password, roles: [MODERATOR], display-name: Moderator }
+  legal:
+    reconsent:
+      enabled: false                    # 로컬 전용: 시드 계정은 가입 화면을 거치지 않아 동의 기록이 없다 — 켜 둔 채로는 e2e(Playwright)가 403 이다. 동의 흐름을 시험하려면 true (docs/legal.md)
   migration:
     clean-on-validation-error: true   # 로컬 전용: 고친 미배포 마이그레이션은 DB 를 밀고 다시 깐다 (local 밖에서 켜면 기동 실패)
   storage-s3:

@@ -1,0 +1,11 @@
+{
+  "_comment": "이 앱(Notes)의 약관 · 개인정보 처리방침 · 마케팅 동의. 본문은 <종류>/<판>.<언어>.md. 지금은 TEMPLATE(예시 문안)이라 status=DRAFT · template=true — stage/prod 에서는 DeployGuard 가 막는다. 실제 문서로 바꾸는 법: docs/legal.md ('앱이 prod 전에 채워야 하는 것'). 새 판은 versions 끝에 더한다(발행된 판은 고치지 않는다).",
+  "documents": [
+    { "type": "terms", "versions": [
+      { "version": "sample-1", "status": "DRAFT", "template": true, "effectiveFrom": "2026-01-01T00:00:00Z", "locales": ["ko", "en"] } ] },
+    { "type": "privacy", "versions": [
+      { "version": "sample-1", "status": "DRAFT", "template": true, "effectiveFrom": "2026-01-01T00:00:00Z", "locales": ["ko", "en"] } ] },
+    { "type": "marketing", "versions": [
+      { "version": "sample-1", "status": "DRAFT", "template": true, "effectiveFrom": "2026-01-01T00:00:00Z", "locales": ["ko", "en"] } ] }
+  ]
+}
