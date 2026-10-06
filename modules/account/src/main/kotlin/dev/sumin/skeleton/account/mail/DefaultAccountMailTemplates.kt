@@ -3,36 +3,53 @@ package dev.sumin.skeleton.account.mail
 import dev.sumin.skeleton.account.AccountProperties
 
 /**
- * 내장 ko · en 문구. 계정 로케일로 고르고, 모르는 로케일은 `skeleton.account.mail.default-locale`. 변수 값은 HTML 에서 이스케이프한다.
+ * 내장 ko · en 문구 + 내장 HTML 틀([DefaultAccountMailLayout]). 계정 로케일로 고르고, 모르는 로케일은 `skeleton.account.mail.default-locale`.
+ * HTML 은 text 의 대체 본문(multipart) — 값은 틀이 이스케이프한다. 코드 메일(가입 · 이메일 변경 · 다시 인증 · 삭제)은 코드를 큰 블록으로 보인다.
  * **제목에는 코드 · 링크를 넣지 않는다** — 제목은 로그에 남는다(`LogOnlyMailTransport` · 발송 실패 때의 `SmtpMailSender`), 본문은 남지 않는다.
+ * 앱이 틀만 바꾸려면 [AccountMailLayout] 빈, 문구까지 바꾸려면 [AccountMailTemplates] 빈.
  */
-class DefaultAccountMailTemplates(private val props: AccountProperties.Mail) : AccountMailTemplates {
+class DefaultAccountMailTemplates(
+    private val props: AccountProperties.Mail,
+    private val layout: AccountMailLayout = DefaultAccountMailLayout(props.brand),
+) : AccountMailTemplates {
+    /** 코드 메일의 [lines] 는 `[코드를 알리는 문장, 설명, 알리지 말라는 경고]` 순서 — text 는 그대로, HTML 은 첫 줄을 코드 블록으로 바꾸고 마지막 줄을 경고로 보인다 */
     private data class Copy(val subject: String, val lines: List<String>, val action: String?)
 
     override fun render(kind: MailKind, locale: String?, vars: Map<String, String>, link: String?): RenderedMail {
         val lang = pickLocale(locale, props.defaultLocale)
         val copy = (if (lang == "ko") KO else EN).getValue(kind)
-        fun fill(s: String) = vars.entries.fold(s) { acc, (k, v) -> acc.replace("{$k}", v) }
+        // 한 번에 치환한다 — 값 안의 {이름} 이 다시 풀리지 않는다
+        fun fill(s: String) = PLACEHOLDER.replace(s) { m -> vars[m.groupValues[1]] ?: m.value }
         val lines = copy.lines.map(::fill)
+        val subject = fill(copy.subject).replace(CONTROL, " ").trim()
+        val brandName = props.brand.serviceName.replace(CONTROL, " ").trim()
         val text = buildString {
             lines.forEach { append(it).append("\n\n") }
             if (link != null) append(link).append("\n\n")
             append(if (lang == "ko") FOOTER_KO else FOOTER_EN)
+            if (brandName.isNotEmpty()) append("\n").append(brandName)
+            props.brand.footer.replace(CONTROL, " ").trim().takeIf { it.isNotEmpty() }?.let { append("\n").append(it) }
         }
-        val html = buildString {
-            append("<div style=\"font-family:sans-serif;line-height:1.5\">")
-            lines.forEach { append("<p>").append(escape(it)).append("</p>") }
-            if (link != null) append("<p><a href=\"").append(escape(link)).append("\">").append(escape(copy.action ?: link)).append("</a></p>")
-            append("<p style=\"color:#666;font-size:12px\">").append(escape(if (lang == "ko") FOOTER_KO else FOOTER_EN)).append("</p></div>")
-        }
-        return RenderedMail(fill(copy.subject), text.trimEnd(), html)
+        val isCode = kind in CODE_KINDS
+        val body = if (isCode) lines.drop(1).dropLast(1) else lines
+        val page = MailPage(
+            lang = lang,
+            heading = subject,
+            preheader = body.firstOrNull().orEmpty().take(110),
+            paragraphs = body,
+            code = if (isCode) vars["code"] else null,
+            warning = if (isCode) lines.last() else null,
+            button = if (link != null) MailButton(copy.action ?: link, link) else null,
+        )
+        return RenderedMail(subject, text.trimEnd(), layout.wrap(page))
     }
 
-    private fun escape(s: String) = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
-
     private companion object {
+        val PLACEHOLDER = Regex("\\{(\\w+)}")
+        val CONTROL = Regex("[\\u0000-\\u001f\\u2028\\u2029]+")
+        val CODE_KINDS = setOf(MailKind.VERIFY_CODE, MailKind.EMAIL_CHANGE_CODE, MailKind.REAUTH_CODE, MailKind.DELETE_CODE)
         const val FOOTER_EN = "If you did not request this, you can ignore this email."
-        const val FOOTER_KO = "직접 요청하지 않았다면 이 메일을 무시해 주세요."
+        const val FOOTER_KO = "요청하지 않았다면 무시하세요."
 
         val EN = mapOf(
             MailKind.VERIFY_CODE to Copy("Your verification code", listOf("Your verification code is {code}.", "Enter it in the sign-up page to finish creating your account. It works {minutes} minutes and only for the page that asked for it.", "Never tell this code to anyone, not even to us."), null),

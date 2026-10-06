@@ -1,0 +1,9 @@
+subject: Your account is scheduled for deletion
+
+Your account will be deleted after 30 days. Until then it cannot be used to sign in.
+
+If this was a mistake, contact support before then.
+
+If you did not request this, you can ignore this email.
+Notes
+Notes Inc. · Seoul

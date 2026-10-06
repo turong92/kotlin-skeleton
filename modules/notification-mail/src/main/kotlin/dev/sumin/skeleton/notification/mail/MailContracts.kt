@@ -11,6 +11,8 @@ data class MailMessage(
     init {
         require(to.isNotEmpty()) { "Mail recipients must not be empty." }
         require(subject.isNotBlank()) { "Mail subject must not be blank." }
+        // 헤더에 들어가는 값에 줄바꿈이 있으면 헤더 주입이다 (Bcc: 를 끼워 넣는다) — 값을 고치지 않고 거부한다
+        require(to.none(::hasLineBreak) && !hasLineBreak(subject) && replyTo?.let(::hasLineBreak) != true) { "Mail recipients, subject and reply-to must not contain line breaks." }
     }
 }
 
@@ -20,3 +22,5 @@ data class MailSendResult(val accepted: Boolean, val detail: String? = null)
 fun interface MailSender {
     fun send(message: MailMessage): MailSendResult
 }
+
+private fun hasLineBreak(value: String) = value.any { it == '\r' || it == '\n' }

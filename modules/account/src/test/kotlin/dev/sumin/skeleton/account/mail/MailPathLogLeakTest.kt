@@ -103,4 +103,24 @@ class MailPathLogLeakTest {
             assertTrue(code !in subject && token !in subject && "https://" !in subject, "$kind/$lang subject carries a secret: $subject")
         }
     }
+
+    @Test
+    fun `the html part carries the code or link yet reaches no log line - hidden-links transport and failing SMTP`() {
+        var htmlSeen: String? = null
+        MailKind.entries.filter { it in carriers }.forEach { kind ->
+            val recording = { p: AccountProperties.Mail -> AccountMailTransport { to, subject, text, html -> htmlSeen = html; LogOnlyMailTransport(false).send(to, subject, text, html) } }
+            val lines = logged(recording, carriers.getValue(kind))
+            val html = requireNotNull(htmlSeen) { "$kind: the HTML part must exist for this test to mean anything" }
+            assertTrue(secrets.any { it in html.replace("&amp;", "&") }, "$kind: html carries its code or link")
+            secrets.forEach { secret -> assertTrue(lines.none { secret in it }, "$kind leaked '$secret' (html part) into: $lines") }
+            assertTrue(lines.none { "<html" in it || "<table" in it }, "$kind: the html body itself is never logged")
+        }
+        val failing = object : JavaMailSenderImpl() {
+            override fun doSend(mimeMessages: Array<out jakarta.mail.internet.MimeMessage>, originalMessages: Array<out Any>?) { throw IllegalStateException("smtp down") }
+        }
+        carriers.forEach { (kind, mail) ->
+            val lines = logged({ MailSenderTransport(SmtpMailSender(failing, "no-reply@example.com")) }, mail)
+            assertTrue(lines.none { "<html" in it || "<table" in it }, "$kind: failure path logged the html: $lines")
+        }
+    }
 }

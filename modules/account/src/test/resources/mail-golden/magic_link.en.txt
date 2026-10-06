@@ -1,0 +1,9 @@
+subject: Your sign-in link
+
+Use this link to sign in. It works once and expires in 10 minutes.
+
+https://app.example.com/magic-link?token=Zq9-fixedTokenForGoldenFiles_0123456789
+
+If you did not request this, you can ignore this email.
+Notes
+Notes Inc. · Seoul

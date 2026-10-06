@@ -13,6 +13,12 @@ import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.time.Duration
 import java.util.Collections
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
+import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
+import org.slf4j.LoggerFactory
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -95,6 +101,20 @@ class GoogleOAuthProviderTest {
         }
     }
 
+    @Test
+    fun `a rejected token exchange tells the operator which error the provider gave (never the secret or the code)`() {
+        val appender = ListAppender<ILoggingEvent>().apply { start() }
+        val logger = LoggerFactory.getLogger("dev.sumin.skeleton.auth.social") as Logger
+        logger.addAppender(appender)
+        try {
+            assertFailsWith<OAuthInvalidAuthorizationCodeException> { provider.fetchProfile("mismatch-code", redirectUri = null) }
+        } finally { logger.detachAppender(appender) }
+        val line = appender.list.map { it.formattedMessage }.single { "rejected" in it }
+        assertTrue(line.contains("status=400"), line)
+        assertTrue(line.contains("redirect_uri_mismatch"), line)
+        assertTrue(!line.contains("google-secret") && !line.contains("mismatch-code"), line)
+    }
+
     private fun handle(exchange: HttpExchange) {
         val body = exchange.requestBody.bufferedReader().use { it.readText() }
         requests += RecordedRequest(
@@ -106,7 +126,9 @@ class GoogleOAuthProviderTest {
 
         when (exchange.requestURI.path) {
             "/token" -> {
-                if (body.contains("code=invalid-code")) {
+                if (body.contains("code=mismatch-code")) {
+                    exchange.respond(400, """{"error":"redirect_uri_mismatch","error_description":"Bad Request"}""")
+                } else if (body.contains("code=invalid-code")) {
                     exchange.respond(400, """{"error":"invalid_grant"}""")
                 } else {
                     exchange.respond(200, """{"access_token":"google-access-token","token_type":"Bearer","expires_in":3600}""")

@@ -12,6 +12,13 @@ import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.time.Duration
 import java.util.Collections
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
+import dev.sumin.skeleton.auth.social.oauth.OAuthInvalidAuthorizationCodeException
+import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
+import org.slf4j.LoggerFactory
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -96,6 +103,20 @@ class KakaoOAuthProviderTest {
         assertEquals(false, provider.fetchProfile("kakao-code", redirectUri = null).emailVerified)
     }
 
+    @Test
+    fun `a rejected token exchange tells the operator which error the provider gave (never the secret or the code)`() {
+        val appender = ListAppender<ILoggingEvent>().apply { start() }
+        val logger = LoggerFactory.getLogger("dev.sumin.skeleton.auth.social") as Logger
+        logger.addAppender(appender)
+        try {
+            assertFailsWith<OAuthInvalidAuthorizationCodeException> { provider.fetchProfile("mismatch-code", redirectUri = null) }
+        } finally { logger.detachAppender(appender) }
+        val line = appender.list.map { it.formattedMessage }.single { "rejected" in it }
+        assertTrue(line.contains("status=400"), line)
+        assertTrue(line.contains("KOE303"), line)
+        assertTrue(!line.contains("kakao-secret") && !line.contains("mismatch-code"), line)
+    }
+
     private fun handle(exchange: HttpExchange) {
         val body = exchange.requestBody.bufferedReader().use { it.readText() }
         requests += RecordedRequest(
@@ -106,7 +127,7 @@ class KakaoOAuthProviderTest {
         )
 
         when (exchange.requestURI.path) {
-            "/oauth/token" -> exchange.respond(200, """{"access_token":"kakao-access-token","token_type":"Bearer"}""")
+            "/oauth/token" -> if (body.contains("code=mismatch-code")) exchange.respond(400, """{"error":"invalid_grant","error_description":"redirect_uri mismatch.","error_code":"KOE303"}""") else exchange.respond(200, """{"access_token":"kakao-access-token","token_type":"Bearer"}""")
             "/v2/user/me" -> exchange.respond(
                 200,
                 profileJson,

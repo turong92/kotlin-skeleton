@@ -58,3 +58,15 @@ testing {
     }
 }
 tasks.named("check") { dependsOn("noOptionalTest") }
+
+// 메일 미리보기: build/mail-preview/*.html 을 만든다 (docs/modules/account.md · docs/real-provider-setup.md)
+tasks.register<Test>("mailPreview") {
+    description = "Writes build/mail-preview/*.html for every account mail (ko, en)"
+    group = "verification"
+    val test = tasks.named<Test>("test").get()
+    testClassesDirs = test.testClassesDirs
+    classpath = test.classpath
+    useJUnitPlatform()
+    filter { includeTestsMatching("*MailPreviewTest") }
+    outputs.upToDateWhen { false }
+}

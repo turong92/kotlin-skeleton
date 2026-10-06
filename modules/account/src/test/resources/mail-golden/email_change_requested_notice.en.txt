@@ -1,0 +1,9 @@
+subject: Email change requested
+
+A change of your account email was requested. Nothing changes until the new address is confirmed.
+
+If this was not you, change your password now.
+
+If you did not request this, you can ignore this email.
+Notes
+Notes Inc. · Seoul

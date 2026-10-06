@@ -133,8 +133,25 @@ data class AccountProperties(
         val subjectPrefix: String = "",
         /** 메일 발송 모듈이 없을 때 링크를 로그에 남길지: AUTO(보호 환경이 아니면 남김) | ON | OFF. 링크에는 토큰이 있으므로 보호 환경에서 ON 은 DeployGuard 문제 */
         val logLinks: LogLinks = LogLinks.OFF,
+        /** false 면 HTML 대체 본문 없이 텍스트만 보낸다 (어떤 [dev.sumin.skeleton.account.mail.AccountMailTemplates] 든) */
+        val htmlEnabled: Boolean = true,
+        /** 내장 HTML 틀의 브랜드 — 설정만으로 바꾼다. 틀 자체를 바꾸려면 `AccountMailLayout` 빈 */
+        val brand: Brand = Brand(),
     ) {
         enum class LogLinks { AUTO, ON, OFF }
+
+        data class Brand(
+            /** 머리글 · 바닥글에 쓰는 서비스 이름. 비면 이름 없이 그린다 */
+            val serviceName: String = "",
+            /** 머리글 로고 — https 주소만 쓴다 (아니면 무시). 비면 글자만 (외부 자원 없음) */
+            val logoUrl: String = "",
+            /** 버튼 · 머리글 띠 색 — `#rgb` / `#rrggbb` 만 (아니면 기본값) */
+            val accentColor: String = "#2563eb",
+            /** 바닥글의 문의 주소 (이메일 모양일 때만) */
+            val supportAddress: String = "",
+            /** 바닥글에 덧붙일 한 줄 (예: 회사 이름 · 주소) */
+            val footer: String = "",
+        )
     }
 
     data class Admin(

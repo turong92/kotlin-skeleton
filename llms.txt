@@ -128,6 +128,7 @@
 - app-sample: 참조 앱 Notes — 로그인한 사람이 첨부 있는 노트를 관리하는 제품… [참조 앱, 예제 앱]
 - app-workbench: 데모 — 모든 모듈을 함께 얹고 샘플… [워크벤치, 모듈 데모]
 - script-build-capabilities: capabilities.json 에서… [기능 카탈로그, 카탈로그 생성]
+- script-check-real-providers: 진짜 소셜 로그인 · 진짜 메일 시험 전 점검 [소셜 로그인 점검, 메일 발송 점검]
 - script-dev: 로컬 풀스택 한 줄 실행 — DB(+ 로컬 S3) [로컬 실행, 개발 서버]
 - script-dev-sample: 샘플 앱 Notes 풀스택 한 줄 실행 — DB + 로컬 S3 →… [샘플 실행, 노트 앱 실행]
 - script-new-project: 새 프로젝트 한 줄 찍기 [새 프로젝트, 프로젝트 만들기]
