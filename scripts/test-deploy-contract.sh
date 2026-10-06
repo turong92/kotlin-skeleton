@@ -124,13 +124,13 @@ for APP in $(echo "$APPS" | tr ',' ' '); do
   docker exec "$C" sh -c 'command -v wget' >/dev/null 2>&1 && pass "이미지에 wget 이 있다" || fail "이미지에 wget 이 없다"
   if [ "$CODE" = 200 ]; then pass "/health 는 인증 없이 200 이다 (401 이 아니다)"; else fail "/health 가 200 이 아니다: $CODE"; fi
   BODY="$(docker exec "$C" sh -c "wget -q -O - http://localhost:$PORT$HEALTH" 2>/dev/null)"
-  if echo "$BODY" | grep -q '"status":"UP"' && ! echo "$BODY" | grep -q 'components\|details'; then pass "본문은 status UP 뿐이다 (세부 정보 없음)"; else fail "health 본문이 이상하다: $BODY"; fi
+  if grep -q '"status":"UP"' <<<"$BODY" && ! grep -q 'components\|details' <<<"$BODY"; then pass "본문은 status UP 뿐이다 (세부 정보 없음)"; else fail "health 본문이 이상하다: $BODY"; fi
   # 0.0.0.0 — 다른 컨테이너가 이름으로 닿고, 듣는 소켓이 루프백이 아니다
   OTHER="$(docker run --rm --network "$NET" alpine:3 sh -c "wget -S -q -O /dev/null http://app-$APP:$PORT$HEALTH 2>&1 | sed -n 's|^ *HTTP/1\\.[01] \\([0-9][0-9][0-9]\\).*|\\1|p' | head -1")"
   case "$OTHER" in 2??|401|403) pass "같은 네트워크의 다른 컨테이너가 app-$APP:$PORT 에 닿는다 ($OTHER)" ;; *) fail "다른 컨테이너에서 닿지 않는다 (0.0.0.0 이 아니다?): '$OTHER'" ;; esac
   LISTEN="$(docker exec "$C" sh -c "netstat -tln 2>/dev/null | grep ':$PORT '" || true)"
   note "듣는 소켓: $(echo "$LISTEN" | head -1)"
-  if echo "$LISTEN" | grep -Eq '(0\.0\.0\.0|:::|\*)[:.]?'"$PORT"; then pass "0.0.0.0:$PORT (모든 인터페이스)에서 듣는다"; else fail "듣는 소켓이 모든 인터페이스가 아니다: $LISTEN"; fi
+  if grep -Eq '(0\.0\.0\.0|:::|\*)[:.]?'"$PORT" <<<"$LISTEN"; then pass "0.0.0.0:$PORT (모든 인터페이스)에서 듣는다"; else fail "듣는 소켓이 모든 인터페이스가 아니다: $LISTEN"; fi
   [ -z "$(docker port "$C")" ] && pass "호스트 포트를 열지 않았다 (플랫폼이 네트워크로만 잇는다)" || fail "호스트 포트가 열려 있다"
 
   # stdout 로깅

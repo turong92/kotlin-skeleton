@@ -56,7 +56,8 @@ valid_modules() { # 소스 레포의 모듈 이름들 (정렬)
   done | sort
 }
 
-in_list() { printf '%s\n' "$2" | grep -Fxq -- "$1"; }
+# 파이프가 아니라 here-string — pipefail 에서 grep -q 가 먼저 끝나면 앞쪽이 SIGPIPE(141)로 죽어 "없다" 로 오판한다(드물게, 목록이 길 때)
+in_list() { grep -Fxq -- "$1" <<<"$2"; }
 
 # project_deps <build.gradle.kts>  →  "main <module>" | "compile <module>" | "test <module>" 줄들 (// 주석은 뺀다)
 # compile = compileOnly: 컴파일에만 필요하고 런타임 전이는 없다 (예: storage-s3 → crypto). 소스는 따라오지만 앱의 런타임 클래스패스에는 안 들어간다.
@@ -88,9 +89,9 @@ done
 [ "${#POSITIONAL[@]}" -eq 4 ] || die_usage "expected 4 arguments (<target-dir> <root-package> <config-prefix> <ClassPrefix>), got ${#POSITIONAL[@]}"
 TARGET_ARG="${POSITIONAL[0]}"; PKG="${POSITIONAL[1]}"; PREFIX="${POSITIONAL[2]}"; CLASS="${POSITIONAL[3]}"
 
-echo "$PKG" | grep -Eq '^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$' || die_usage "root package must look like dev.sumin.ovation: $PKG"
-echo "$PREFIX" | grep -Eq '^[a-z][a-z0-9-]*$' || die_usage "config prefix must be lower-case letters, digits, hyphens: $PREFIX"
-echo "$CLASS" | grep -Eq '^[A-Z][A-Za-z0-9]*$' || die_usage "class prefix must look like Ovation: $CLASS"
+grep -Eq '^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$' <<<"$PKG" || die_usage "root package must look like dev.sumin.ovation: $PKG"
+grep -Eq '^[a-z][a-z0-9-]*$' <<<"$PREFIX" || die_usage "config prefix must be lower-case letters, digits, hyphens: $PREFIX"
+grep -Eq '^[A-Z][A-Za-z0-9]*$' <<<"$CLASS" || die_usage "class prefix must look like Ovation: $CLASS"
 case "$DB" in postgresql|mysql) ;; *) die_usage "--db must be postgresql or mysql: $DB" ;; esac
 if [ "$WITH_WORKBENCH" = 1 ] && [ "$DB" = mysql ]; then
   die_usage "--with-workbench is PostgreSQL-only (the workbench depends on db-postgresql); drop --db mysql or --with-workbench"
@@ -253,7 +254,7 @@ in_list storage-s3 "$API_SORTED" && drop_absent software.amazon.awssdk.services.
 in_list notification-mail "$API_SORTED" && drop_absent jakarta.mail.Session
 in_list persistence-jpa "$API_SORTED" && drop_absent jakarta.persistence.EntityManager
 in_list event-kafka "$API_SORTED" && drop_absent org.apache.kafka.clients.producer.KafkaProducer
-if printf '%s\n' "$API_SORTED" | grep -q '^redis-'; then
+if grep -q '^redis-' <<<"$API_SORTED"; then
   drop_absent org.springframework.data.redis.core.RedisTemplate
   perl -ni -e 'print unless /containsBean\("redisConnectionFactory"\)/' "$STARTER_TEST"
 fi
@@ -314,7 +315,7 @@ fi
 # name · image · env_prefix 는 rename 이 이미 새 접두사로 바꿨다. 여기서는 DB · Redis 를 고른 모듈에 맞추고, 쓰지 않는 모듈의 비밀 설명을 지운다.
 if [ -f deploy/app.yaml ]; then
   DECL_DB=postgres; [ "$DB" != mysql ] || DECL_DB=mysql
-  DECL_REDIS=false; ! printf '%s\n' "$API_SORTED" | grep -q '^redis-' || DECL_REDIS=true
+  DECL_REDIS=false; ! grep -q '^redis-' <<<"$API_SORTED" || DECL_REDIS=true
   DECL_DB="$DECL_DB" DECL_REDIS="$DECL_REDIS" perl -pi -e 's/^db: postgres\b/db: $ENV{DECL_DB}/; s/^redis: false\b/redis: $ENV{DECL_REDIS}/' deploy/app.yaml
   # "#   [<module>] …" 줄은 그 모듈이 apps/api 에 있을 때만 남긴다
   while IFS= read -r m; do

@@ -50,9 +50,11 @@ stamp() { # stamp <dir> <옵션...>  — 항상 같은 이름으로 찍는다
 }
 
 echo "== 1. 인자 검증"
+# set -o pipefail 에서 `값 | grep -q` 는 grep 이 먼저 끝나면 앞쪽이 SIGPIPE 로 죽어 가끔 거짓 실패한다(unknown module 오판이 실제로 났다) — here-string 을 쓴다
+check "스크립트에 값을 파이프로 grep -q 에 넘기는 곳이 없다 (here-string 을 쓴다)" bash -c "! grep -nE '(echo|printf)[^|]*[|] *grep -[a-zA-Z]*q' '$SRC/scripts/new-project.sh' '$SRC/scripts/test-new-project.sh' '$SRC/scripts/test-deploy-contract.sh'"
 expect_exit 2 "인자 없이 부르면 사용법과 함께 exit 2" bash "$SCRIPT"
 expect_exit 2 "없는 모듈은 exit 2" bash "$SCRIPT" "$TMP/x1" dev.sumin.ovation ovation Ovation --modules no-such-module
-echo "$LAST_OUTPUT" | grep -q "job-queue-jdbc" && pass "없는 모듈 오류가 유효한 모듈 목록을 보여 준다" || fail "유효한 모듈 목록이 없다: $LAST_OUTPUT"
+grep -q "job-queue-jdbc" <<<"$LAST_OUTPUT" && pass "없는 모듈 오류가 유효한 모듈 목록을 보여 준다" || fail "유효한 모듈 목록이 없다: $LAST_OUTPUT"
 [ ! -e "$TMP/x1" ] && pass "검증 실패는 아무것도 만들지 않는다" || fail "검증 실패인데 $TMP/x1 이 생겼다"
 mkdir "$TMP/exists"
 expect_exit 2 "대상 디렉토리가 이미 있으면 exit 2" bash "$SCRIPT" "$TMP/exists" dev.sumin.ovation ovation Ovation
@@ -112,7 +114,7 @@ check "소스 레포는 건드리지 않는다" bash -c "[ -z \"\$(find '$SRC' -
 echo "== 3. --modules job-queue-jdbc,notification-mail,storage-s3,scheduler"
 B="$TMP/b"
 expect_exit 0 "조합 2 를 찍는다" stamp "$B" --modules job-queue-jdbc,notification-mail,storage-s3,scheduler
-echo "$LAST_OUTPUT" | grep -q 'crypto (compile-only for storage-s3' && pass "crypto 는 storage-s3 의 컴파일 전용 의존으로 안내된다 (런타임 전이 없음)" || fail "crypto 가 컴파일 전용이라는 안내가 없다"
+grep -q 'crypto (compile-only for storage-s3' <<<"$LAST_OUTPUT" && pass "crypto 는 storage-s3 의 컴파일 전용 의존으로 안내된다 (런타임 전이 없음)" || fail "crypto 가 컴파일 전용이라는 안내가 없다"
 for m in job-queue-jdbc notification-mail storage-s3 scheduler storage crypto; do
   check "모듈 $m 이 포함된다 (요청했거나 닫힘으로 따라왔다)" bash -c "grep -q 'include(\":modules:$m\")' '$B/settings.gradle.kts' && test -d '$B/modules/$m'"
 done
@@ -170,7 +172,7 @@ expect_exit 0 "persistence-jooq 를 MySQL 로 찍는다" stamp "$E" --db mysql -
 JOOQ_OUTPUT="$LAST_OUTPUT"
 check "persistence-jooq 가 포함된다" bash -c "grep -q 'include(\":modules:persistence-jooq\")' '$E/settings.gradle.kts'"
 check "MySQL 조합에 db-postgresql 이 따라오지 않는다" bash -c "! grep -q 'db-postgresql' '$E/settings.gradle.kts' && test ! -e '$E/modules/db-postgresql'"
-echo "$JOOQ_OUTPUT" | grep -q 'tests of persistence-jooq need' && fail "persistence-jooq 테스트가 다른 모듈을 요구한다고 안내한다" || pass "테스트용 모듈 의존 안내가 없다"
+grep -q 'tests of persistence-jooq need' <<<"$JOOQ_OUTPUT" && fail "persistence-jooq 테스트가 다른 모듈을 요구한다고 안내한다" || pass "테스트용 모듈 의존 안내가 없다"
 check "main 에는 예시 DDL 이 없다 (src/test/resources 에 있다)" bash -c "test ! -e '$E/modules/persistence-jooq/src/main/resources/db' && test -f '$E/modules/persistence-jooq/src/test/resources/db/jooq-probe-postgresql.sql'"
 F="$TMP/f"
 expect_exit 0 "persistence-jooq + 형제 마이그레이션 모듈을 찍는다" stamp "$F" --modules persistence-jooq,job-queue-jdbc,notification-jdbc
@@ -193,7 +195,7 @@ check "dev.sh 는 APP=sample 을 알고 문법 검사를 통과한다" bash -c "
 echo "== 8. --modules board,board-jdbc (게시판 — board 는 저장소를 모르고 board-jdbc 가 포트를 구현한다)"
 H="$TMP/h"
 expect_exit 0 "조합 6 을 찍는다 (rename 잔여 검사 포함)" stamp "$H" --modules board,board-jdbc
-echo "$LAST_OUTPUT" | grep -q 'notification (compile-only for board' && pass "notification 은 board 의 컴파일 전용 의존으로 안내된다 (런타임 전이 없음)" || fail "notification 이 컴파일 전용이라는 안내가 없다"
+grep -q 'notification (compile-only for board' <<<"$LAST_OUTPUT" && pass "notification 은 board 의 컴파일 전용 의존으로 안내된다 (런타임 전이 없음)" || fail "notification 이 컴파일 전용이라는 안내가 없다"
 for m in board board-jdbc notification idempotency; do
   check "모듈 $m 이 포함된다 (요청했거나 닫힘으로 따라왔다)" bash -c "grep -q 'include(\":modules:$m\")' '$H/settings.gradle.kts' && test -d '$H/modules/$m'"
 done
@@ -206,7 +208,7 @@ check "게시판 문서 쪽과 설정 블록이 남고 새 접두사로 붙는�
 check "찍은 프로젝트에 skeleton 이름 흔적이 없다 (BoardController 경로 속성 포함)" bash -c "! grep -rq 'skeleton\.board' '$H/modules/board/src/main'"
 I="$TMP/i"
 expect_exit 0 "board 만 요청하면 찍히되 board-jdbc 를 더하라고 알려 준다" stamp "$I" --modules board
-echo "$LAST_OUTPUT" | grep -q 'board has no storage of its own' && pass "저장소 없음 안내가 나온다" || fail "board 만 요청했는데 board-jdbc 안내가 없다"
+grep -q 'board has no storage of its own' <<<"$LAST_OUTPUT" && pass "저장소 없음 안내가 나온다" || fail "board 만 요청했는데 board-jdbc 안내가 없다"
 
 echo "== 9. --modules redis-core,redis-lock (Redis 환경변수 이름이 프로젝트 접두사를 따라간다 — 배포 계약)"
 J="$TMP/j"
