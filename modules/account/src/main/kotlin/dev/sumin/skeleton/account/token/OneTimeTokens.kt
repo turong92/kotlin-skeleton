@@ -49,6 +49,9 @@ interface OneTimeTokenStore {
      */
     fun consume(hash: String, purpose: String, now: Instant): TokenRow?
 
+    /** 같은 (용도, 주인)의 쓸 수 있는(안 쓰고 · 만료 전인) 가장 최근 토큰 — 없으면 null */
+    fun findOpen(purpose: String, subject: String, now: Instant): TokenRow?
+
     /** 같은 (용도, 주인)의 아직 안 쓴 토큰을 닫는다 */
     fun invalidateOpen(purpose: String, subject: String, now: Instant): Int
 
@@ -77,6 +80,9 @@ class OneTimeTokens(
 
     /** 같은 (용도, [subject]) 의 아직 안 쓴 토큰을 모두 닫는다 — 비밀번호가 바뀌었거나 메일함이 다른 길로 증명됐을 때, 그 전에 나간 링크가 살아 있지 않게 */
     fun invalidate(purpose: String, subject: String): Int = store.invalidateOpen(purpose, subject, time.now())
+
+    /** (용도, [subject]) 의 열린 토큰이 밝혀 주는 것 — 원문 없이 (이메일 변경이 "새 주소 확인 대기" 를 보이는 데 쓴다) */
+    fun pending(purpose: String, subject: String): TokenGrant? = store.findOpen(purpose, subject, time.now())?.grant()
 
     /** 쓰지 않고 유효한지만 본다 (정책 검사 뒤에 쓰려고 — 정책 실패가 토큰을 태우지 않게) */
     fun peek(purpose: String, raw: String): TokenGrant? {
@@ -123,6 +129,9 @@ class InMemoryOneTimeTokenStore : OneTimeTokenStore {
         rows[hash] = row.copy(consumedAt = now)
         return row
     }
+
+    @Synchronized override fun findOpen(purpose: String, subject: String, now: Instant): TokenRow? =
+        rows.values.filter { it.purpose == purpose && it.subject == subject && it.consumedAt == null && it.expiresAt.isAfter(now) }.maxByOrNull { it.createdAt }
 
     @Synchronized override fun invalidateOpen(purpose: String, subject: String, now: Instant): Int {
         var n = 0

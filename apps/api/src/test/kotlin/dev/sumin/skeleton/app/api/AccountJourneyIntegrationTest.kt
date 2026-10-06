@@ -23,7 +23,7 @@ import org.springframework.test.web.servlet.post
  * 스타터가 "켜기만 해도 서비스 구색" 이라는 증거 — 가입 → 이메일 확인 → 로그인 → 새로고침 → 비밀번호 변경 → 세션 → 삭제가 이 최소 조립(메일 모듈 없음)에서 돈다.
  * 메일은 기록해 두었다가 링크의 토큰만 꺼내 쓴다 (진짜 메일 길은 `notification-mail` 이고 이 스타터에는 없다).
  */
-@SpringBootTest(properties = ["skeleton.account.password.bcrypt-strength=4", "skeleton.account.mail.link-base-url=https://app.example.com"])
+@SpringBootTest(properties = ["skeleton.auth-session.reuse-grace=0s", "skeleton.account.password.bcrypt-strength=4", "skeleton.account.mail.link-base-url=https://app.example.com"])
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration::class, AccountJourneyIntegrationTest.Mails::class)
 class AccountJourneyIntegrationTest {

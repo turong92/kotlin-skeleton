@@ -5,14 +5,17 @@
 #   scripts/sample-e2e-backend.sh stop     # 앱 프로세스를 끄고 컨테이너 · 볼륨을 지운다 (깨끗한 DB 로 다시 시작)
 #   scripts/sample-e2e-backend.sh status   # 떠 있으면 0
 #
-# 환경변수: SERVER_PORT(기본 8080) · DB_PORT(5432) · S3_PORT(8333) · E2E_COMPOSE_PROJECT(kotlin-skeleton-sample-e2e).
+# 환경변수: SERVER_PORT(기본 8080) · DB_PORT(5432) · S3_PORT(8333) · MAIL_SMTP_PORT(1025) · MAIL_HTTP_PORT(8025) · E2E_COMPOSE_PROJECT(kotlin-skeleton-sample-e2e).
+# 메일 수신기(mailpit, compose 의 mail 프로필)도 함께 올린다 — 앱은 localhost:$MAIL_SMTP_PORT 로 보내고, 받은 메일은 http://localhost:$MAIL_HTTP_PORT (UI) ·
+#   GET http://localhost:$MAIL_HTTP_PORT/api/v1/messages (JSON), 한 통: /api/v1/message/<ID>, 비우기: DELETE /api/v1/messages — 프런트 e2e 는 자기 mailpit 을 띄우지 말고 이것을 쓴다 (같은 포트 · 같은 API).
+#   프런트가 다른 포트를 쓰고 싶으면 MAIL_SMTP_PORT · MAIL_HTTP_PORT 를 넘긴다 (앱과 수신기가 같은 값을 쓴다).
 # 자기 개발 컨테이너(kotlin-skeleton)와 섞이지 않게 전용 compose 프로젝트 이름을 쓴다. 로그: build/sample-e2e/backend.log
 # 시작에 성공하면 마지막 줄이 `READY http://localhost:<SERVER_PORT>` 다. 이 환경처럼 직접 서버가 막힌 곳에서는 `MARINA_DIRECT=1 scripts/sample-e2e-backend.sh start`.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-SERVER_PORT="${SERVER_PORT:-8080}"; DB_PORT="${DB_PORT:-5432}"; S3_PORT="${S3_PORT:-8333}"
-export SERVER_PORT DB_PORT S3_PORT
+SERVER_PORT="${SERVER_PORT:-8080}"; DB_PORT="${DB_PORT:-5432}"; S3_PORT="${S3_PORT:-8333}"; MAIL_SMTP_PORT="${MAIL_SMTP_PORT:-1025}"; MAIL_HTTP_PORT="${MAIL_HTTP_PORT:-8025}"
+export SERVER_PORT DB_PORT S3_PORT MAIL_SMTP_PORT MAIL_HTTP_PORT
 export COMPOSE_PROJECT_NAME="${E2E_COMPOSE_PROJECT:-kotlin-skeleton-sample-e2e}"
 OUT=build/sample-e2e; PID_FILE="$OUT/backend.pid"; LOG="$OUT/backend.log"
 
@@ -25,7 +28,7 @@ stop() {
     running && kill -9 "$(cat "$PID_FILE")" 2>/dev/null || true
   fi
   rm -f "$PID_FILE"
-  docker compose --profile s3 down -v --remove-orphans >/dev/null 2>&1 || true
+  docker compose --profile s3 --profile mail down -v --remove-orphans >/dev/null 2>&1 || true
   echo "STOPPED"
 }
 
@@ -37,13 +40,16 @@ case "${1:-}" in
     docker compose up -d --wait postgres
     docker compose --profile s3 up -d s3
     docker compose --profile s3 run --rm s3-init >/dev/null
+    docker compose --profile mail up -d mail
+    for _ in $(seq 1 30); do curl -fsS "http://localhost:$MAIL_HTTP_PORT/api/v1/info" >/dev/null 2>&1 && break; sleep 1; done
+    curl -fsS "http://localhost:$MAIL_HTTP_PORT/api/v1/info" >/dev/null || { echo "✗ 메일 수신기(mailpit)가 $MAIL_HTTP_PORT 에서 뜨지 않았다" >&2; exit 1; }
     ./gradlew :apps:sample:bootJar -q --console=plain
     JAR="$(ls apps/sample/build/libs/*.jar | grep -v -- '-plain.jar' | head -1)"
     nohup java -jar "$JAR" --spring.profiles.active=local > "$LOG" 2>&1 &
     echo $! > "$PID_FILE"
     for _ in $(seq 1 120); do
       running || { echo "✗ 앱이 먼저 종료됐다" >&2; tail -30 "$LOG" >&2; exit 1; }
-      curl -fsS "http://localhost:$SERVER_PORT/health" 2>/dev/null | grep -q '"UP"' && { trap - EXIT; echo "READY http://localhost:$SERVER_PORT"; exit 0; }
+      curl -fsS "http://localhost:$SERVER_PORT/health" 2>/dev/null | grep -q '"UP"' && { trap - EXIT; echo "MAIL smtp=localhost:$MAIL_SMTP_PORT api=http://localhost:$MAIL_HTTP_PORT/api/v1"; echo "READY http://localhost:$SERVER_PORT"; exit 0; }
       sleep 1
     done
     echo "✗ 120초 안에 /health 가 UP 이 되지 않았다" >&2; tail -30 "$LOG" >&2; exit 1 ;;

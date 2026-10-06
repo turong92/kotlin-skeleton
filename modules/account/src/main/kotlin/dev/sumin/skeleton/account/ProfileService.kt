@@ -5,6 +5,7 @@ import dev.sumin.skeleton.account.signin.IdentityView
 import dev.sumin.skeleton.account.signin.SignInMethodRegistry
 import dev.sumin.skeleton.common.ApplicationException
 import dev.sumin.skeleton.common.PlatformErrorCode
+import dev.sumin.skeleton.account.token.TokenPurposes
 import java.time.Instant
 
 data class MeView(
@@ -19,6 +20,9 @@ data class MeView(
     val createdAt: Instant,
     val hasPassword: Boolean,
     val methods: List<IdentityView>,
+    /** 이메일 변경을 요청했고 새 주소의 확인을 기다리는 중이면 그 주소와 링크 만료 시각 (아니면 null) */
+    val pendingEmail: String? = null,
+    val pendingEmailExpiresAt: Instant? = null,
 )
 
 data class ProfileChange(val displayName: String? = null, val locale: String? = null, val timeZone: String? = null)
@@ -30,9 +34,11 @@ class ProfileService(private val core: AccountCore, registry: SignInMethodRegist
     fun me(accountId: String): MeView {
         val a = core.accounts.findById(accountId) ?: throw AccountException(AccountErrorCode.NOT_FOUND)
         val methods = identities.list(accountId)
+        val pending = core.tokens.pending(TokenPurposes.EMAIL_CHANGE, accountId)
         return MeView(
             a.id, a.email, a.emailVerified, a.displayName, a.locale, a.timeZone, a.roles, a.status, a.createdAt,
             hasPassword = methods.any { it.method == SignInMethods.PASSWORD }, methods = methods,
+            pendingEmail = pending?.payload, pendingEmailExpiresAt = pending?.expiresAt,
         )
     }
 

@@ -14,6 +14,9 @@
 #   5. 로그가 stdout 으로만 나오는지 (docker logs 에 있고, 컨테이너 안에 새 로그 파일이 없다)
 #   6. 쓰지 않는 모듈의 설정을 요구하지 않는다 (AWS 자격 증명 따위를 찾으며 죽지 않는다)
 #   7. 보호 환경(SPRING_PROFILES_ACTIVE=prod / SKELETON_ENV=prod)에서는 안전하지 않은 구성이 읽을 수 있는 가드 메시지와 함께 stdout 으로 실패하고 값은 새지 않는다
+#   8. 정직한 헬스: GET /health 는 인증 없이 200 {"status":"UP"} 뿐이고, DB 컨테이너를 멈추면 503, 다시 올리면 200
+#   9. (메일 모듈이 있는 앱 = sample) 시험 배포 조합(docs/deploy.md §10) — JWT 비밀 · 메일 발송 길 · 링크 주소 · 첫 관리자 + 플랫폼이 넣는 모양 그대로의
+#      <PREFIX>_WEB_CLIENT_IP_MODE(대문자) / _TRUSTED_PROXIES(실제 도커 네트워크 CIDR 하나)를 주면 SKELETON_ENV=prod 로 **실제로 뜬다**. 하나씩 빼면 가드가 그 이름을 말하며 실패한다
 #
 # Docker 가 필요하다. marina 가 도커를 가로채는 기계에서는 `MARINA_DIRECT=1 scripts/test-deploy-contract.sh`.
 # 만든 컨테이너 · 네트워크 · 이미지는 끝나면 지운다 (KEEP=1 이면 전부, KEEP_IMAGES=1 이면 이미지만 남긴다 — `--reuse` 와 함께 쓰면 반복이 빠르다). 종료 코드: 0 전부 통과 / 1 실패 / 2 인자 오류.
@@ -61,13 +64,15 @@ cleanup() {
 }
 trap cleanup EXIT
 
-health_path() { case "$1" in sample) echo /health ;; *) echo /actuator/health ;; esac; }   # sample 은 management base-path 가 / 다
+health_path() { echo /health; }   # 두 앱 모두 management base-path 가 / 다 — 인증 없이 앱 + DB 가 떠 있을 때만 200, 아니면 503 (docs/deploy.md §3)
 
 # 플랫폼 헬스체크와 같은 문장 (2xx · 401 · 403 = 살아 있음)
 health_cmd() { # <health path>
   printf '%s' "S=\$(wget -S -q -O /dev/null http://localhost:$PORT$1 2>&1 | sed -n 's|^ *HTTP/1\\.[01] \\([0-9][0-9][0-9]\\).*|\\1|p' | head -1); case \"\$S\" in 2??|401|403) exit 0;; *) exit 1;; esac"
 }
 health_status() { docker exec "$1" sh -c "wget -S -q -O /dev/null http://localhost:$PORT$2 2>&1 | sed -n 's|^ *HTTP/1\\.[01] \\([0-9][0-9][0-9]\\).*|\\1|p' | head -1"; }
+
+health_is() { [ "$(health_status "$1" "$2")" = "$3" ]; }   # <컨테이너> <경로> <기대 코드>
 
 wait_for() { # <timeout s> <명령...> — 성공할 때까지 1초 간격
   local limit="$1" i=0; shift
@@ -117,6 +122,14 @@ for APP in $(echo "$APPS" | tr ',' ' '); do
   note "응답 코드: ${CODE:-없음}"
   case "$CODE" in 2??|401|403) pass "응답 코드가 2xx · 401 · 403 중 하나다 ($CODE)" ;; *) fail "응답 코드가 살아 있음이 아니다: $CODE" ;; esac
   docker exec "$C" sh -c 'command -v wget' >/dev/null 2>&1 && pass "이미지에 wget 이 있다" || fail "이미지에 wget 이 없다"
+  if [ "$CODE" = 200 ]; then pass "/health 는 인증 없이 200 이다 (401 이 아니다)"; else fail "/health 가 200 이 아니다: $CODE"; fi
+  BODY="$(docker exec "$C" sh -c "wget -q -O - http://localhost:$PORT$HEALTH" 2>/dev/null)"
+  if echo "$BODY" | grep -q '"status":"UP"' && ! echo "$BODY" | grep -q 'components\|details'; then pass "본문은 status UP 뿐이다 (세부 정보 없음)"; else fail "health 본문이 이상하다: $BODY"; fi
+  docker stop "$PG" >/dev/null
+  if wait_for 60 health_is "$C" "$HEALTH" 503; then pass "DB 컨테이너를 멈추면 /health 가 503 이다 (죽은 앱이 살아 있다고 나오지 않는다)"; else fail "DB 를 멈췄는데 /health 가 503 이 되지 않았다: $(health_status "$C" "$HEALTH")"; fi
+  docker start "$PG" >/dev/null
+  if wait_for 90 docker exec "$PG" pg_isready -h 127.0.0.1 -U app -d app; then pass "DB 를 다시 올렸다"; else fail "DB 가 다시 뜨지 않는다"; fi
+  if wait_for 90 health_is "$C" "$HEALTH" 200; then pass "DB 가 돌아오면 /health 가 다시 200 이다"; else fail "DB 복구 뒤에도 /health 가 200 이 아니다: $(health_status "$C" "$HEALTH")"; fi
 
   # 0.0.0.0 — 다른 컨테이너가 이름으로 닿고, 듣는 소켓이 루프백이 아니다
   OTHER="$(docker run --rm --network "$NET" alpine:3 sh -c "wget -S -q -O /dev/null http://app-$APP:$PORT$HEALTH 2>&1 | sed -n 's|^ *HTTP/1\\.[01] \\([0-9][0-9][0-9]\\).*|\\1|p' | head -1")"
@@ -171,6 +184,74 @@ for APP in $(echo "$APPS" | tr ',' ' '); do
     fail "SKELETON_ENV=prod 인데 기동이 막히지 않았다"; docker logs "$C" 2>&1 | tail -10
   fi
   docker rm -f "$C" >/dev/null
+
+  echo "-- C2. JWT 비밀만 있고 계정 가드가 요구하는 것은 없다 — 가드가 빠진 것을 이름으로 말한다"
+  C="$RUN-$APP-env2"; CONTAINERS="$CONTAINERS $C"
+  C2JWT="$(head -c 36 /dev/urandom | base64 | tr -d '\n=')"
+  # shellcheck disable=SC2046
+  docker run -d --name "$C" --network "$NET" $(contract_env) -e SKELETON_ENV=prod -e "JWT_SECRET=$C2JWT" "$IMG" >/dev/null
+  if wait_for 120 stopped "$C"; then
+    LOGS="$(docker logs "$C" 2>&1)"
+    if echo "$LOGS" | grep -q 'skeleton.web.client-ip.mode'; then pass "클라이언트 IP mode 미설정이 가드 메시지에 있다 (IP 한도 우회 방지)"; else fail "client-ip 가드 메시지가 없다"; echo "$LOGS" | tail -12; fi
+    if echo "$LOGS" | grep -q 'mail transport'; then pass "메일 발송 길 없음이 가드 메시지에 있다"; else note "(메일 모듈이 있는 앱 — 메일 메시지 없음)"; fi
+    if echo "$LOGS" | grep -q "$C2JWT"; then fail "실패 화면에 JWT 비밀이 새었다"; else pass "실패 화면에 비밀 값이 없다"; fi
+  else
+    fail "JWT 만 있는데 기동이 막히지 않았다 (client-ip · 메일 가드)"; docker logs "$C" 2>&1 | tail -10
+  fi
+  docker rm -f "$C" >/dev/null
+
+  echo "-- C3. JWT_SECRET 이 선언의 secrets 에서 빠진 배포 (빈 값) — Empty key 크래시가 아니라 이름 붙은 가드 메시지"
+  C="$RUN-$APP-nojwt"; CONTAINERS="$CONTAINERS $C"
+  # shellcheck disable=SC2046
+  docker run -d --name "$C" --network "$NET" $(contract_env) -e JWT_SECRET= "$IMG" >/dev/null
+  if wait_for 120 stopped "$C"; then
+    LOGS="$(docker logs "$C" 2>&1)"
+    if echo "$LOGS" | grep -q 'Empty key'; then fail "서명기가 Empty key 로 죽었다 (가드 메시지가 아니다)"; else pass "Empty key 크래시가 아니다"; fi
+    if echo "$LOGS" | grep -q 'JWT_SECRET'; then pass "메시지가 환경변수 이름(JWT_SECRET)을 말한다"; else fail "JWT_SECRET 이름이 메시지에 없다"; echo "$LOGS" | tail -10; fi
+  else
+    fail "빈 JWT 비밀인데 기동이 막히지 않았다"
+  fi
+  docker rm -f "$C" >/dev/null
+
+  if [ "$APP" = sample ]; then   # 메일 모듈(notification-mail)이 있는 앱 — 시험 배포 조합이 실제로 뜬다
+    echo "-- D. 시험 배포 조합 (docs/deploy.md §10) — SKELETON_ENV=prod 로 실제로 뜬다"
+    SUBNET="$(docker network inspect "$NET" -f '{{(index .IPAM.Config 0).Subnet}}')"
+    JWT="$(head -c 36 /dev/urandom | base64 | tr -d '\n=')"
+    base_d_env() {   # $1 = nomail 이면 메일 발송 길을 뺀다
+      printf '%s\n' -e SKELETON_ENV=prod -e SPRING_PROFILES_ACTIVE=prod -e "JWT_SECRET=$JWT" \
+        -e SKELETON_ACCOUNT_MAIL_LINK_BASE_URL=https://app.example.com -e SKELETON_ACCOUNT_BOOTSTRAP_ADMIN_EMAIL=boss@example.com
+      [ "${1:-}" = nomail ] || printf '%s\n' -e SKELETON_NOTIFICATION_MAIL_ENABLED=true -e SKELETON_NOTIFICATION_MAIL_FROM=no-reply@example.com -e SPRING_MAIL_HOST=mail-relay.invalid
+    }
+    C="$RUN-$APP-d"; CONTAINERS="$CONTAINERS $C"
+    # 플랫폼이 넣는 모양 그대로: 대문자 mode + CIDR 하나
+    # shellcheck disable=SC2046
+    docker run -d --name "$C" --network "$NET" $(contract_env) $(base_d_env) -e SKELETON_WEB_CLIENT_IP_MODE=PROXY -e "SKELETON_WEB_CLIENT_IP_TRUSTED_PROXIES=$SUBNET" "$IMG" >/dev/null
+    if wait_for 180 health_is "$C" "$HEALTH" 200; then
+      pass "SKELETON_ENV=prod 에서 가드를 모두 통과해 뜬다 (/health 200)"
+      LOGS="$(docker logs "$C" 2>&1)"
+      if echo "$LOGS" | grep -qi 'Client IP: proxy'; then pass "<PREFIX>_WEB_CLIENT_IP_MODE · _TRUSTED_PROXIES 가 바인딩된다 ($(echo "$LOGS" | grep 'Client IP:' | head -1 | sed 's/^.*Client IP:/Client IP:/'))"; else fail "client-ip 환경변수가 바인딩되지 않았다"; fi
+      if echo "$LOGS" | grep -q 'deploy guards: env=prod'; then pass "가드 요약에 env=prod"; else fail "가드 요약이 env=prod 가 아니다"; fi
+    else
+      fail "시험 배포 조합이 뜨지 않는다"; docker logs "$C" 2>&1 | tail -25
+    fi
+    docker rm -f "$C" >/dev/null
+
+    C="$RUN-$APP-d1"; CONTAINERS="$CONTAINERS $C"   # client-ip 를 빼면
+    # shellcheck disable=SC2046
+    docker run -d --name "$C" --network "$NET" $(contract_env) $(base_d_env) "$IMG" >/dev/null
+    if wait_for 120 stopped "$C"; then
+      if docker logs "$C" 2>&1 | grep -q 'skeleton.web.client-ip.mode'; then pass "client-ip 를 빼면 가드가 그 이름을 말하며 실패한다"; else fail "client-ip 를 뺀 실패에 그 이름이 없다"; fi
+    else fail "client-ip 를 뺐는데 기동이 막히지 않았다"; fi
+    docker rm -f "$C" >/dev/null
+
+    C="$RUN-$APP-d2"; CONTAINERS="$CONTAINERS $C"   # 메일을 빼면
+    # shellcheck disable=SC2046
+    docker run -d --name "$C" --network "$NET" $(contract_env) $(base_d_env nomail) -e SKELETON_WEB_CLIENT_IP_MODE=PROXY -e "SKELETON_WEB_CLIENT_IP_TRUSTED_PROXIES=$SUBNET" "$IMG" >/dev/null
+    if wait_for 120 stopped "$C"; then
+      if docker logs "$C" 2>&1 | grep -q 'mail transport'; then pass "메일 발송 길을 빼면 가드가 말하며 실패한다"; else fail "메일을 뺀 실패에 mail transport 메시지가 없다"; fi
+    else fail "메일을 뺐는데 기동이 막히지 않았다"; fi
+    docker rm -f "$C" >/dev/null
+  fi
 done
 
 echo

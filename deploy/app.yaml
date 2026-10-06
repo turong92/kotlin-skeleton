@@ -1,52 +1,70 @@
 # 홈서버 배포 선언 한 장 (docs/deploy.md). 플랫폼이 이 파일에서 컨테이너 · 네트워크 · DB · Redis · Caddy 사이트를 만든다.
 # 홈서버 레포의 infra/apps/<name>.yaml 로 복사해 쓴다. 이 프로젝트에는 compose · Caddyfile · cloudflared · 백업 선언을 두지 않는다 (플랫폼이 만든다).
 #
-# ★ tag 를 올리는 것이 배포다.
-#   1) git tag v0.1.1 && git push origin v0.1.1      → .github/workflows/image.yml 이 ghcr.io 에 이미지를 올린다 (v0.1.1 · sha-<커밋>)
+# ★ GHCR 는 쓰지 않는다. 홈서버 앱은 홈서버에서 로컬로 빌드하고(`docker build -t <app>:<tag> .`) 선언은 `image_local: true` 로 그 이미지를 쓴다.
+#   1) 홈서버에서:  docker build -t kotlin-skeleton:v0.1.1 .          (샘플이면 --build-arg APP=sample)
 #   2) 이 파일의 tag 를 v0.1.1 로 올려 플랫폼에 적용한다  → 컨테이너가 그 이미지로 교체된다
 #   tag 는 불변이다 — latest 를 쓰지 않는다. 롤백 = tag 를 이전 값으로 되돌리는 것.
+#   (.github/workflows/image.yml 은 보류 — workflow_dispatch 로만 돈다. docs/deploy.md §6)
 #
-# 이 선언은 apps/api(스타터) 기준이다. apps/sample 은 health 가 /health 이고 빌드 인자가 다르다 (docs/deploy.md).
+# 이 선언은 apps/api(스타터) 기준이다. apps/sample 은 빌드 인자가 다르다 (docs/deploy.md). 클라이언트 IP 환경변수는 플랫폼이 넣는다 — 선언 env: 에 쓰지 않는다.
 
 name: kotlin-skeleton            # ^[a-z][a-z0-9-]{1,19}$ — 컨테이너 · DB · 파일 이름의 어근
-image: ghcr.io/OWNER/kotlin-skeleton-api   # OWNER 를 GitHub 계정 · 조직(소문자)으로 바꾼다 — 안 바꾸면 플랫폼이 거부한다. 태그는 여기에 쓰지 않는다
-tag: v0.1.0                      # 불변 태그 (v* 태그를 푸시하면 같은 이름의 이미지가 생긴다)
+image: kotlin-skeleton           # 로컬에서 빌드한 이미지 이름 (docker build -t kotlin-skeleton:<tag>). 태그는 여기에 쓰지 않는다
+image_local: true                # 레지스트리에서 당기지 않는다 — 호스트의 로컬 이미지를 쓴다
+tag: v0.1.0                      # 불변 태그 (docker build -t kotlin-skeleton:v0.1.0)
 port: 8080                       # 컨테이너 포트. 0.0.0.0 에서 듣는다. 호스트 포트는 열지 않는다
-health: /actuator/health         # 컨테이너 안에서 `wget -S -q -O /dev/null http://localhost:8080<health>` — 2xx · 401 · 403 이면 살아 있음
+health: /health                  # 컨테이너 안에서 `wget -S -q -O /dev/null http://localhost:8080<health>` — 2xx · 401 · 403 이면 살아 있음. /health 는 인증 없이 앱 + DB 가 떠 있을 때만 200, 아니면 503 (세부 정보 없음)
 env_prefix: SKELETON             # 이 앱의 환경변수 접두사 = 설정 접두사의 대문자 (새 프로젝트로 찍을 때 프로젝트의 접두사로 바뀐다)
 
 # 도메인이 없으면 내부 전용이다. 공개하려면:
 # domain: kotlin-skeleton.example.com
 # 같은 호스트에서 정적 프론트를 서빙하려면 web 과 api_prefix 를 함께 쓴다 — web 은 프론트 빌드 산출물 디렉토리 이름과 같아야 한다 (react-skeleton: dist)
-# web: dist
+# web: dist                     # 프론트 번들은 홈서버의 data/apps/<name>/<web> 에 손으로 복사한다 (워크플로 없음 — docs/deploy.md §8)
 api_prefix: /api/v1              # web 이 있을 때 이 경로만 백엔드로 간다
 
 db: postgres                     # postgres | mysql | none — 플랫폼이 SPRING_DATASOURCE_URL / _USERNAME / _PASSWORD 를 넣는다 (앱 접두사가 붙은 DB 변수는 없다)
 redis: false                     # true 면 <ENV_PREFIX>_REDIS_HOST / _PORT / _SSL_ENABLED / _KEY_PREFIX / _PASSWORD 를 넣는다 · false 면 <ENV_PREFIX>_REDIS_LOCK_ENABLED=false 하나만
 
-# 플랫폼이 무작위 값을 만들어 환경변수로 넣는 비밀 (이름만 적는다). 서드파티 키(결제 · SMTP · R2 …)는 이 목록으로 만들 수 없다 — docs/deploy.md "모듈별 비밀"
+# ★ 이 앱이 요구하는 비밀 이름 목록 — 여기 적힌 이름만 컨테이너에 주입된다 (빠지면 앱이 못 뜬다: 예) JWT_SECRET 이 없으면 서명기가 "Empty key" 로 죽고, 가드가 이름을 말한다).
+#   - 값이 무작위여도 되는 것(JWT_SECRET): 플랫폼이 48자 무작위 값을 만들어 넣는다. 선언에 이름만 적는다.
+#   - 운영자가 정하는 것(결제 키 · SMTP 비밀번호 · OAuth client secret · S3/R2 키 · 웹훅 URL): 이름을 여기에 **적고**, 값은 홈서버의 data/secrets/<name>.local.env (0600, git 밖, 백업됨)에
+#     `NAME=값` 으로 적는다. 그 파일에 있는 이름은 그 값이 쓰이고 나머지는 무작위 값이 만들어진다 — 파일에 없는 운영자 비밀은 **무작위 쓰레기 값이 들어가 첫 사용에서 실패한다**.
+#     .local.env 에 적었는데 이 목록에 없는 이름은 plan 이 거부한다. 쓰지 않는 모듈의 줄은 지운다 (new-project.sh 가 고르지 않은 모듈의 줄을 지운다).
 secrets:
-  - JWT_SECRET                   # [auth] 빠지면 SKELETON_ENV=stage|prod · 프로필 prod|staging 에서 기동 실패: "skeleton.auth.jwt.secret is blank / built-in default / shorter than 32 bytes"
+  - JWT_SECRET                   # [auth] 무작위로 충분. 빠지면 기동 실패: "skeleton.auth.jwt.secret is blank / built-in default / shorter than 32 bytes"
+  - SKELETON_AUTH_SOCIAL_PROVIDERS_GOOGLE_CLIENT_SECRET   # [auth-social-google] 운영자 (.local.env) — CLIENT_ID · ENABLED=true 는 env:
+  - SKELETON_AUTH_SOCIAL_PROVIDERS_KAKAO_CLIENT_SECRET    # [auth-social-kakao] 운영자 (.local.env)
+  - SKELETON_AUTH_SOCIAL_PROVIDERS_NAVER_CLIENT_SECRET    # [auth-social-naver] 운영자 (.local.env)
+  - SKELETON_CAPTCHA_TURNSTILE_SECRET_KEY                 # [captcha-turnstile] 운영자 (.local.env)
+  - SKELETON_PAYMENT_TOSS_SECRET_KEY                      # [payment-toss] 운영자 (.local.env)
+  - SKELETON_PAYMENT_STRIPE_SECRET_KEY                    # [payment-stripe] 운영자 (.local.env)
+  - SKELETON_STORAGE_S3_CREDENTIALS_ACCESS_KEY_ID         # [storage-s3] 운영자 (.local.env)
+  - SKELETON_STORAGE_S3_CREDENTIALS_SECRET_ACCESS_KEY     # [storage-s3] 운영자 (.local.env)
+  - SPRING_MAIL_PASSWORD                                  # [notification-mail] 운영자 (.local.env) — 인증 없는 릴레이면 이 줄을 지운다
+  - SKELETON_NOTIFICATION_SLACK_WEBHOOK_URL               # [notification-slack] 운영자 (.local.env)
+  - SKELETON_ALERT_WEBHOOK_URL                            # [alert] 운영자 (.local.env) — 안 쓰면 이 줄을 지운다 (없으면 경보는 로그로만)
 #
-# 선택한 모듈이 요구하는 환경변수 — 값은 플랫폼 밖에서 정한다. 빠졌을 때의 동작 (모듈이 없으면 줄이 지워진다)
-#   [auth] SKELETON_AUTH_BREAK_GLASS_SECRET · _ALLOWED_ACCOUNT_IDS   break-glass 를 켰을 때만 — 비밀이 비면 기동 실패, 허용 계정이 비면 stage|prod 에서 기동 실패
-#   [account] SKELETON_ACCOUNT_MAIL_LINK_BASE_URL   메일 링크가 여는 프론트 주소 (예: https://app.example.com) — 비면 SKELETON_ENV=stage|prod 에서 기동 실패. 선택: SKELETON_ACCOUNT_BOOTSTRAP_ADMIN_EMAIL (이 이메일이 확인되면 ADMIN)
-#       메일 발송기(notification-mail)가 없으면 가입 · 재설정 링크를 보낼 수 없어 같은 가드가 막는다 — 이 스타터에서 서비스를 열려면 --modules notification-mail 을 고르고 아래 [notification-mail] 변수를 넣는다
+# 선택한 모듈이 요구하는 환경변수 — 빠졌을 때의 동작 (모듈이 없으면 줄이 지워진다). 비밀이 아닌 값은 아래 env: 에, 비밀은 위 secrets: + .local.env
+#   [auth] SKELETON_AUTH_BREAK_GLASS_SECRET · _ALLOWED_ACCOUNT_IDS   break-glass 를 켰을 때만 (비밀 — 운영자, secrets: 에 이름을 더한다) — 비밀이 비면 기동 실패, 허용 계정이 비면 stage|prod 에서 기동 실패
+#   [account] SKELETON_ACCOUNT_MAIL_LINK_BASE_URL   (env:) 메일 링크가 여는 프론트 주소 (예: https://app.example.com) — 비면 SKELETON_ENV=stage|prod 에서 기동 실패. 선택: SKELETON_ACCOUNT_BOOTSTRAP_ADMIN_EMAIL (이 이메일이 확인되면 ADMIN)
+#       메일 발송기(notification-mail)가 없으면 가입 · 재설정 링크를 보낼 수 없어 같은 가드가 막는다 — 이 스타터에서 서비스를 열려면 --modules notification-mail 을 고르고 [notification-mail] 변수를 넣는다
 #       시드 계정(skeleton.account.seed.accounts)과 SKELETON_ACCOUNT_MAIL_LOG_LINKS=ON 은 보호 환경에서 기동 실패 (로컬 · 시험 전용)
+#       클라이언트 IP(SKELETON_WEB_CLIENT_IP_MODE · _TRUSTED_PROXIES)는 플랫폼이 넣는다 — 예약 이름이라 선언 env: 에 쓰면 plan 이 거부한다 (docs/deploy.md §3)
 #   [auth-session] 설정만 — 보호 환경에서 메모리 세션 저장소 · 비보안 쿠키는 기동 실패 (스타터는 auth-session-jdbc 라 통과)
-#   [auth-social-google] SKELETON_AUTH_SOCIAL_PROVIDERS_GOOGLE_CLIENT_ID · _CLIENT_SECRET   _ENABLED=true 인데 비면 기동 실패 (client id/secret must not be blank)
-#   [auth-social-kakao] SKELETON_AUTH_SOCIAL_PROVIDERS_KAKAO_CLIENT_ID · _CLIENT_SECRET     _ENABLED=true 인데 비면 기동 실패
-#   [auth-social-naver] SKELETON_AUTH_SOCIAL_PROVIDERS_NAVER_CLIENT_ID · _CLIENT_SECRET     _ENABLED=true 인데 비면 기동 실패
-#   [captcha-turnstile] SKELETON_CAPTCHA_TURNSTILE_ENABLED=true · SKELETON_CAPTCHA_TURNSTILE_SECRET_KEY   비면 검증기 빈이 없다 (기동은 된다, 검증기를 주입받는 곳이 있으면 그 이름으로 기동 실패)
-#   [payment-toss] SKELETON_PAYMENT_TOSS_ENABLED=true · SKELETON_PAYMENT_TOSS_SECRET_KEY   비면 제공자 빈이 없다 (결제 라우팅이 그 제공자를 못 찾는다)
-#   [payment-stripe] SKELETON_PAYMENT_STRIPE_ENABLED=true · SKELETON_PAYMENT_STRIPE_SECRET_KEY   비면 제공자 빈이 없다
-#   [storage-s3] SKELETON_STORAGE_S3_BUCKET · _ENDPOINT_OVERRIDE · _CREDENTIALS_ACCESS_KEY_ID · _CREDENTIALS_SECRET_ACCESS_KEY   버킷이 비면 저장소 빈이 없다 · 키가 비면 AWS 기본 자격 증명 체인으로 가서 첫 사용에서 실패 (기동은 된다)
-#   [notification-mail] SKELETON_NOTIFICATION_MAIL_ENABLED=true · _FROM · SPRING_MAIL_HOST · SPRING_MAIL_USERNAME · SPRING_MAIL_PASSWORD   host · from 이 비면 발송기 빈이 없다 · 비밀번호가 틀리면 첫 발송에서 실패
-#   [notification-slack] SKELETON_NOTIFICATION_SLACK_ENABLED=true · SKELETON_NOTIFICATION_SLACK_WEBHOOK_URL   비면 아무것도 보내지 않는다
-#   [alert] SKELETON_ALERT_WEBHOOK_URL   비면 경보가 로그로만 남는다 (기동은 된다)
-#   [crypto] SKELETON_CRYPTO_PRIMARY_KEY_ID · SKELETON_CRYPTO_KEYS_<ID> (base64 AES 키)   키가 없으면 암호화 빈이 없다
+#   [auth-social-google] (env:) SKELETON_AUTH_SOCIAL_PROVIDERS_GOOGLE_ENABLED=true · _CLIENT_ID   켰는데 client id/secret 이 비면 기동 실패
+#   [auth-social-kakao] (env:) SKELETON_AUTH_SOCIAL_PROVIDERS_KAKAO_ENABLED=true · _CLIENT_ID     켰는데 비면 기동 실패
+#   [auth-social-naver] (env:) SKELETON_AUTH_SOCIAL_PROVIDERS_NAVER_ENABLED=true · _CLIENT_ID     켰는데 비면 기동 실패
+#   [captcha-turnstile] (env:) SKELETON_CAPTCHA_TURNSTILE_ENABLED=true   비밀(secret key)이 비면 검증기 빈이 없다 (기동은 된다)
+#   [payment-toss] (env:) SKELETON_PAYMENT_TOSS_ENABLED=true   비밀이 비면 제공자 빈이 없다 (결제 라우팅이 그 제공자를 못 찾는다)
+#   [payment-stripe] (env:) SKELETON_PAYMENT_STRIPE_ENABLED=true   비밀이 비면 제공자 빈이 없다
+#   [storage-s3] (env:) SKELETON_STORAGE_S3_BUCKET · _ENDPOINT_OVERRIDE   버킷이 비면 저장소 빈이 없다 · 키가 비면 AWS 기본 자격 증명 체인으로 가서 첫 사용에서 실패 (기동은 된다)
+#   [notification-mail] (env:) SKELETON_NOTIFICATION_MAIL_ENABLED=true · _FROM · SPRING_MAIL_HOST · SPRING_MAIL_USERNAME   host · from 이 비면 발송기 빈이 없다 · 비밀번호가 틀리면 첫 발송에서 실패
+#   [notification-slack] (env:) SKELETON_NOTIFICATION_SLACK_ENABLED=true   웹훅 URL 이 비면 아무것도 보내지 않는다
+#   [alert] 웹훅 URL 이 비면 경보가 로그로만 남는다 (기동은 된다)
+#   [crypto] SKELETON_CRYPTO_PRIMARY_KEY_ID (env:) · SKELETON_CRYPTO_KEYS_<ID> (base64 AES 키 — 운영자 비밀, secrets: 에 그 이름을 더한다)   키가 없으면 암호화 빈이 없다
 #   [config-aws-ssm] AWS_PROFILE · AWS 자격 증명   홈서버에는 AWS 가 없다 — 이 모듈은 고르지 않는다 (paths 를 정하면 부팅에서 자격 증명을 찾는다)
-#   [redis-core] 플랫폼이 <ENV_PREFIX>_REDIS_* 를 넣는다 (redis: true) — 직접 정하지 않는다
+#   [redis-core] 플랫폼이 <ENV_PREFIX>_REDIS_* 를 넣는다 (redis: true) — 직접 정하지 않는다 (_REDIS_SSL_ENABLED · _REDIS_LOCK_ENABLED 도 예약 이름)
 
 env:
   SKELETON_ENV: prod             # 배포 가드 스위치 (local | stage | prod). 가드가 stage|prod 규칙을 켠다 — docs/deploy.md

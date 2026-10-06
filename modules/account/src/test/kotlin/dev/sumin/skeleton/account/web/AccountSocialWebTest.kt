@@ -49,6 +49,21 @@ class AccountSocialWebTest {
     }
 
     @Test
+    fun `the public methods listing says what the frontend can offer - cache friendly, no secrets, nothing about any account`() {
+        val r = mvc.perform(get("/api/v1/auth/methods")).andExpect(status().isOk)
+            .andExpect(jsonPath("$.value.methods[0]").value("password"))
+            .andExpect(jsonPath("$.value.signUp.password").value(true))
+            .andExpect(jsonPath("$.value.signUp.emailVerification").value(true))
+            .andExpect(jsonPath("$.value.signUp.social").value(true))
+            .andExpect(jsonPath("$.value.captchaRequired").value(false))
+            .andExpect(jsonPath("$.value.social[0].provider").value("fakeidp"))
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().string("Cache-Control", org.hamcrest.Matchers.containsString("max-age")))
+            .andReturn()
+        val body = r.response.contentAsString
+        assertEquals(false, listOf("secret", "clientSecret", "password\":\"", "@").any { it in body }, body)
+    }
+
+    @Test
     fun `a first social sign-in creates an account and the next one finds it`() {
         val first = social("c-new").andExpect(status().isOk).andReturn()
         val second = social("c-new").andExpect(status().isOk).andReturn()

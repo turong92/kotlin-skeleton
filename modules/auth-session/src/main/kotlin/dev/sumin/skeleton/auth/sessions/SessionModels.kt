@@ -69,6 +69,7 @@ interface SessionStore {
     /** 아직 안 쓴 토큰이면 [now] 로 쓴 것으로 표시하고 true, 이미 썼거나 없으면 false (원자적) */
     fun markTokenUsed(hash: String, now: Instant): Boolean
 
+    /** 새 토큰 행 — **멱등**: 같은 해시가 이미 있으면 아무것도 하지 않는다 (유예 안의 재제시가 같은 후속 토큰을 다시 넣는다) */
     fun addToken(sessionId: String, hash: String, now: Instant)
 
     fun find(sessionId: String): SessionRecord?

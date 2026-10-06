@@ -210,4 +210,15 @@ class AuthStartupValidatorTest {
             )
         }
     }
+
+    @Test
+    fun `a blank JWT secret is a named guard problem in every environment - not an Empty key crash from the signer`() {
+        val blank = AuthProperties(jwt = AuthProperties.Jwt(secret = ""))
+        val unprotected = dev.sumin.skeleton.common.deploy.DeployContext(null, emptySet())
+        val problems = AuthStartupValidator.problems(blank, unprotected)
+        assertContains(problems.joinToString(), "JWT_SECRET")
+        val failure = assertFailsWith<dev.sumin.skeleton.common.deploy.DeployGuardViolationException> { AuthStartupValidator.validateJwtSecret(blank, unprotected) }
+        assertContains(failure.message.orEmpty(), "skeleton.auth.jwt.secret")
+        assertContains(failure.message.orEmpty(), "secrets")   // tells the deployer the declaration's secrets: list must name it
+    }
 }

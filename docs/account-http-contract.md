@@ -42,6 +42,7 @@ Audience: the frontend agent (react-skeleton `@skeleton/auth` additions). Backen
 - **Rotation**: every `/auth/refresh` returns a NEW refresh token; the old one is dead. Presenting a dead one again (reuse) revokes that session (the refresh-token family of that login) and emits an audit/alert event and returns `401 AUTH.REFRESH_REUSED`. Two tabs refreshing at once: the loser gets `401 AUTH.REFRESH_REUSED`
   only if it presents a token that was already rotated more than the grace window ago (`skeleton.auth-session.reuse-grace`, default `0s`);
   the client should serialize refreshes (single-flight) and, on `AUTH.REFRESH_REUSED`/`AUTH.REFRESH_INVALID`, sign out.
+  **Lost response (the page navigated away while `/auth/refresh` was in flight)**: apps/api and apps/sample set `reuse-grace: 10s` — presenting the immediately previous token again within 10 s returns the SAME successor token (idempotent rotation: no second token, no revoked session). After the grace the replay is treated as theft. Do not rely on more than a few seconds; the module default is `0s`.
 
 ## 2. Sign-up and email verification
 
@@ -83,6 +84,10 @@ Mail link: `<link-base-url>/magic-link?token=<token>` (15 min, single use).
 Req `{ "token" }` -> `200` AuthTokenResponse (creates the account on first use if `skeleton.auth-magic-link.sign-up=true`; marks the email verified).
 `410 ACCOUNT.TOKEN_INVALID` (also: an address without an account while sign-up is closed); `403 AUTH.ACCOUNT_SUSPENDED`. Redeeming on a still-unverified account discards the password someone set at sign-up and closes that account's sessions (password login then fails with `401 AUTH.INVALID_CREDENTIALS` until a password is reset or set).
 
+### GET /api/v1/auth/methods  (public, no auth; `Cache-Control: public, max-age=300`; the same answer for everyone)
+`200 { "value": { "methods": ["password", "magic_link"], "signUp": { "password": true, "emailVerification": true, "social": true }, "social": [ { "provider": "google", "clientId": "…"|null, "redirectUri": "…"|null } ], "captchaRequired": false, "refreshDelivery": "body"|"cookie"|null } }`
+`methods` lists the non-social methods the backend registered (`password` first); `social` the enabled providers with the PUBLIC values needed to start the redirect (the client id is in the authorization URL anyway; no secret, no account data); `refreshDelivery` is null when `auth-session` is not installed. Use it instead of hand-synced env vars.
+
 ## 4. Sessions (module `auth-session`)
 
 ### POST /api/v1/auth/refresh  (public; credential = refresh token)
@@ -115,7 +120,7 @@ Effect: all OTHER sessions revoked; "password changed" mail; pending email-chang
 ### GET /api/v1/account/me
 `{ "value": { "id", "email", "emailVerified", "displayName", "locale", "timeZone", "roles": [], "status": "ACTIVE", "createdAt",
 "methods": [ { "id": "idn_...", "method": "password|magic_link|google|kakao|naver|...", "subject": "a@b.c|null", "verified": true, "createdAt", "lastUsedAt", "removable": true } ],
-"hasPassword": true } }` (`subject` is shown for email-like methods only; social subjects are not exposed).
+"hasPassword": true, "pendingEmail": "new@b.c" | null, "pendingEmailExpiresAt": "...Z" | null } }` (`subject` is shown for email-like methods only; social subjects are not exposed). `pendingEmail`/`pendingEmailExpiresAt` are set while an email change waits for the new address' confirmation (until confirmed, superseded or expired) — use them to restore the "check the new address" state after a reload. A change to an address that belongs to someone else shows nothing pending (no oracle).
 ### PATCH /api/v1/account/me — Req any of `{ displayName (1..60), locale (syntactically valid BCP-47 tag, no allowed list), timeZone (IANA) }` -> `200` same as GET. `400 COMMON.VALIDATION_FAILED`.
 ### POST /api/v1/account/email/change **[idem]** — Req `{ "newEmail", "currentPassword"? }` (password required when the account has one) -> `202 { "value": { "status": "VERIFICATION_SENT" } }`.
 Mail to the NEW address with `<link-base-url>/confirm-email-change?token=...` (30 min). The email does not change until confirmed. If the new address belongs to
@@ -193,6 +198,7 @@ Unverified login -> 403 AUTH.EMAIL_NOT_VERIFIED -> POST verification/resend(202)
 **Delete**: password account: POST delete{currentPassword}(202) -> sign out locally. Passwordless: POST delete/confirmation(202) -> mail -> `/confirm-delete?token` -> POST delete{confirmationToken}(202).
 
 ## Changelog
+- FINAL-2b: `GET /auth/methods`; `me.pendingEmail`/`pendingEmailExpiresAt`; 10 s refresh reuse grace with idempotent rotation (apps); social merge on a verified provider email is ON in apps/api and apps/sample (see accounts.md): the user is signed in to the existing account (200) instead of `409 ACCOUNT.SOCIAL_EMAIL_CONFLICT`, and the account address gets a notice mail; with merging off (module default) the 409 stays.
 - FINAL-2 (security review): `maxBytes` (not `maxLength`); `POST /account/reauth/confirmation` + `confirmationToken` on email change / first password / social link, `currentPassword` on social link, `403 ACCOUNT.REAUTH_REQUIRED`; resend `429`; magic link redeems for existing accounts with sign-up closed; a mailbox proof discards an unproven sign-up password; the old address is told of every email-change request; unlink revokes other sessions; admin list paging validated and admin role re-checked on the stored account; login bucket per address; OAuth `state` requirement written down.
 - DRAFT-1: initial contract (pre-implementation).
 - FINAL-1: reconciled with the code — cookie name `skeleton_refresh`, `X-Device-Name` header (no body field), IP-limit 429 on forgot/magic-link, email-change to a taken address sends nothing, `[idem]` commands, 201 `CREATED` sign-up when verification is off, admin response shapes, extra error codes.

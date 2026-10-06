@@ -34,6 +34,12 @@ class JdbcOneTimeTokenStore(private val jdbc: NamedParameterJdbcTemplate, privat
         return if (won) find(hash) else null
     }
 
+    override fun findOpen(purpose: String, subject: String, now: Instant): TokenRow? =
+        jdbc.query(
+            "select * from skeleton_account_tokens where purpose = :p and subject = :s and consumed_at is null and expires_at > :now order by created_at desc limit 1",
+            MapSqlParameterSource().addValue("p", purpose).addValue("s", subject).addValue("now", dialect.instantParam(now)),
+        ) { rs, _ -> rs.row() }.firstOrNull()
+
     override fun invalidateOpen(purpose: String, subject: String, now: Instant): Int =
         jdbc.update(
             "update skeleton_account_tokens set consumed_at = :now where purpose = :p and subject = :s and consumed_at is null",

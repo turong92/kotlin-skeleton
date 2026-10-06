@@ -97,14 +97,35 @@ class SessionServiceTest {
     }
 
     @Test
-    fun `within the reuse grace the loser of a race may mint again, after it the reuse kills the family`() {
-        val s = service(AuthSessionProperties(reuseGrace = Duration.ofSeconds(5)))
+    fun `lost response - inside the grace the immediately previous token returns the SAME successor, so the client simply gets what it lost`() {
+        val s = service(AuthSessionProperties(reuseGrace = Duration.ofSeconds(10)))
         val first = s.open(account.accountId, client)
-        s.refresh(first.refreshToken!!, client)
-        time.advance(Duration.ofSeconds(2))
-        s.refresh(first.refreshToken!!, client)          // tab two, same old token, inside the grace
-        time.advance(Duration.ofSeconds(10))
+        val lost = s.refresh(first.refreshToken!!, client)          // the browser navigated away: this response never arrived
+        time.advance(Duration.ofSeconds(3))
+        val retry = s.refresh(first.refreshToken!!, client)         // the next page presents the old token again
+        assertEquals(lost.session.refreshToken, retry.session.refreshToken, "idempotent rotation: no second live token, no revoked family")
+        assertEquals(1, store.tokenHashes().count { it != SessionService.hash(first.refreshToken!!) }, "exactly one successor exists")
+        s.refresh(retry.session.refreshToken!!, client)             // and it works
+        assertTrue(events.none { it.type == SessionEventType.REFRESH_REUSE_DETECTED })
+    }
+
+    @Test
+    fun `theft - after the grace the same replay still kills the session, and a thief inside the grace gains nothing the victim lacks`() {
+        val s = service(AuthSessionProperties(reuseGrace = Duration.ofSeconds(10)))
+        val first = s.open(account.accountId, client)
+        val victim = s.refresh(first.refreshToken!!, client)
+        time.advance(Duration.ofSeconds(11))
         assertEquals("AUTH.REFRESH_REUSED", code { s.refresh(first.refreshToken!!, client) })
+        assertEquals("AUTH.REFRESH_INVALID", code { s.refresh(victim.session.refreshToken!!, client) })
+        assertTrue(events.any { it.type == SessionEventType.REFRESH_REUSE_DETECTED })
+    }
+
+    @Test
+    fun `the successor cannot be derived from a stolen old token alone - it depends on a server key`() {
+        val a = SessionService(InMemorySessionStore(), AuthSessionProperties(), time, "key-one-key-one-key-one-key-one!".toByteArray())
+        val b = SessionService(InMemorySessionStore(), AuthSessionProperties(), time, "key-two-key-two-key-two-key-two!".toByteArray())
+        assertTrue(a.successorOf("r1.same-old-token") != b.successorOf("r1.same-old-token"))
+        assertEquals(a.successorOf("r1.same-old-token"), a.successorOf("r1.same-old-token"))
     }
 
     @Test

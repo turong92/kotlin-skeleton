@@ -59,8 +59,12 @@ object AuthStartupValidator {
         }
 
     private fun jwtSecretProblem(properties: AuthProperties, context: DeployContext): String? {
-        if (!context.protectedBy(properties.protectedProfiles)) return null
         val secret = properties.jwt.secret
+        // 빈 비밀은 어떤 환경에서도 서명기가 "Empty key" 로 죽는다 — 보호 환경이 아니어도 이름 붙은 메시지로 막는다 (배포라면 선언의 secrets 에 JWT_SECRET 이 빠진 것)
+        if (secret.isBlank() && !context.protectedBy(properties.protectedProfiles)) {
+            return "skeleton.auth.jwt.secret is blank, so no token can be signed. Set skeleton.auth.jwt.secret (env JWT_SECRET) — in a deployment declaration list JWT_SECRET under secrets: so the platform generates it."
+        }
+        if (!context.protectedBy(properties.protectedProfiles)) return null
         val reason = when {
             secret.isBlank() -> "is blank"
             secret == AuthProperties.Jwt.DEFAULT_SECRET -> "is the built-in development default"
@@ -69,6 +73,6 @@ object AuthStartupValidator {
         }
         return "skeleton.auth.jwt.secret $reason, which is not allowed with the active protected profile(s) " +
             "${context.protectedBecause(properties.protectedProfiles)}. " +
-            "Set skeleton.auth.jwt.secret (env JWT_SECRET) to a random secret of at least $MIN_JWT_SECRET_BYTES bytes."
+            "Set skeleton.auth.jwt.secret (env JWT_SECRET) to a random secret of at least $MIN_JWT_SECRET_BYTES bytes (deployment: list JWT_SECRET under secrets: in the declaration)."
     }
 }

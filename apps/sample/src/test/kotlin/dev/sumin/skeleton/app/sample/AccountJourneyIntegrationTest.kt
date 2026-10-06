@@ -29,7 +29,7 @@ import org.springframework.test.web.servlet.post
  * 가입 → 이메일 확인 → 로그인 → 새로고침(회전 · 재사용 탐지) → 비밀번호 변경 → 세션 목록 → 삭제 → (유예가 끝난 뒤) 지우기까지, 진짜 PostgreSQL · 보안 체인 · 모듈들과 함께.
  * 삭제된 계정의 게시판 글은 "삭제된 사용자" 로 남는다 (board 의 AccountErasureListener).
  */
-@SpringBootTest(properties = ["spring.config.import=classpath:test-seeds.yml", "skeleton.account.mail.link-base-url=https://app.example.com"])
+@SpringBootTest(properties = ["spring.config.import=classpath:test-seeds.yml", "skeleton.account.mail.link-base-url=https://app.example.com", "skeleton.auth-session.reuse-grace=0s"])
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration::class, AccountJourneyIntegrationTest.Mails::class, AccountJourneyIntegrationTest.Storage::class)
 class AccountJourneyIntegrationTest {

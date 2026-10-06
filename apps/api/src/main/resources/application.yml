@@ -12,12 +12,27 @@ spring:
     out-of-order: true                           # UTC 타임스탬프 버전 — 늦게 합쳐진 이른 시각 파일도 적용
     validate-migration-naming: true
 
+# 컨테이너 헬스체크용 정직한 신호 — GET /health (인증 없이, 앱 + DB 가 떠 있을 때만 200 {"status":"UP"}, 아니면 503, 세부 정보 없음).
+# 이 앱의 선택이다 (모듈 기본값이 아니다): 액추에이터 base-path 를 / 로 두고 health · info 만 연다. 나머지 액추에이터는 열지 않는다. docs/deploy.md §3
+management:
+  endpoints:
+    web:
+      base-path: /
+      exposure:
+        include: health, info
+
 # API 스펙 JSON: /api/v1/docs (springdoc 은 platform 이 가져온다. Swagger UI 가 필요하면 springdoc-openapi-starter-webmvc-ui 를 얹는다)
 springdoc:
   api-docs:
     path: /api/v1/docs
 
 skeleton:
+  auth-session:
+    reuse-grace: 10s                      # 이 앱의 선택: 응답을 잃은 브라우저(페이지 이동 중 refresh)의 재시도는 같은 후속 토큰을 받는다 — 세션이 죽지 않는다. 지나서 옛 토큰을 내밀면 탈취로 보고 세션을 닫는다 (docs/accounts.md)
+  account:
+    social:
+      sign-up: true                   # 이 앱의 선택: 소셜 로그인이 계정을 만든다 (제공자 모듈을 얹을 때만 의미가 있다)
+      merge-on-verified-email: true   # 이 앱의 선택: 제공자가 확인한 같은 이메일이면 기존 계정에 연결 + 알림 메일 (모듈 기본은 병합 없이 409 — docs/accounts.md)
   auth:
     jwt:
       # 벤더 중립 환경변수 별칭 — 배포 선언의 secrets: [JWT_SECRET] 이 여기로 들어온다 (SKELETON_AUTH_JWT_SECRET 도 그대로 먹는다). 기본값은 개발용이라 prod · staging · SKELETON_ENV=stage|prod 에서는 기동 실패

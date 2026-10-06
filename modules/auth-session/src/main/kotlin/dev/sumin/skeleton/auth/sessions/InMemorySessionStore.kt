@@ -23,7 +23,7 @@ class InMemorySessionStore : SessionStore {
     }
 
     @Synchronized override fun addToken(sessionId: String, hash: String, now: Instant) {
-        tokens[hash] = Tok(sessionId, null)
+        tokens.putIfAbsent(hash, Tok(sessionId, null))
     }
 
     @Synchronized override fun find(sessionId: String): SessionRecord? = sessions[sessionId]

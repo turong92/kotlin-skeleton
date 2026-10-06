@@ -86,8 +86,8 @@ class AccountSignInService(private val core: AccountCore, val registry: SignInMe
             if (owner.status == AccountStatus.DELETED) return null
             // 이미 있는 계정에 붙는 것은 가입이 아니다 — 메일함 증명 수단은 `sign-up=false` 여도 기존 계정으로 들어온다.
             // 소셜 병합은 가입 허용을 따르고(충돌 알림도 가입 시도의 일부), 둘 다 아니면 새로 만들지도 붙이지도 않는다
-            val attach = method.provesEmail ||
-                (proof.allowSignUp && core.props.social.mergeOnVerifiedEmail && proof.emailVerified && owner.emailVerified)
+            // 소셜 병합: 제공자가 확인한 이메일(+ 정확 일치)이면. 기존 계정의 이메일이 미확인이면 제공자의 확인이 메일함 증명이라 위 [discardUnprovenPassword] 가 돈다
+            val attach = method.provesEmail || (proof.allowSignUp && core.props.social.mergeOnVerifiedEmail && proof.emailVerified)
             if (attach) return attachIdentity(owner, method, subject, proof) ?: raced(method, subject)
             if (!proof.allowSignUp) return null
             throw AccountException(AccountErrorCode.SOCIAL_EMAIL_CONFLICT)

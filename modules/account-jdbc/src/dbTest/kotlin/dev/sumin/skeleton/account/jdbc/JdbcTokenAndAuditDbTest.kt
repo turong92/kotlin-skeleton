@@ -52,6 +52,18 @@ class JdbcTokenAndAuditDbTest {
     }
 
     @Test
+    fun `the open token of a purpose and owner is found with its payload, and not once spent or expired`() {
+        val raw = tokens.issue(TokenPurposes.EMAIL_CHANGE, "acc_1", "acc_1", Duration.ofMinutes(30), payload = "new@example.com")
+        val open = tokens.pending(TokenPurposes.EMAIL_CHANGE, "acc_1")!!
+        assertEquals("new@example.com", open.payload)
+        assertEquals(now.plus(Duration.ofMinutes(30)), open.expiresAt)
+        assertNull(tokens.pending(TokenPurposes.EMAIL_CHANGE, "acc_2"))
+        assertNull(OneTimeTokens(AccountDb.tokens, TimeProvider.fixed(now.plus(Duration.ofMinutes(31)))).pending(TokenPurposes.EMAIL_CHANGE, "acc_1"))
+        tokens.consume(TokenPurposes.EMAIL_CHANGE, raw)
+        assertNull(tokens.pending(TokenPurposes.EMAIL_CHANGE, "acc_1"))
+    }
+
+    @Test
     fun `audit rows keep the type, account, ip and a short detail`() {
         AccountDb.audit.on(AccountEvent(AccountEventType.LOGIN_FAILURE, null, now, "203.0.113.4", mapOf("reason" to "BAD_PASSWORD", "id" to "abc")))
         AccountDb.audit.on(AccountEvent(AccountEventType.PASSWORD_CHANGED, "acc_1", now, null, emptyMap()))

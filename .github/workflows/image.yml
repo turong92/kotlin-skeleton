@@ -1,14 +1,15 @@
 name: image
-# 배포 이미지를 GHCR 에 올린다 (docs/deploy.md). 홈서버 플랫폼은 deploy/app.yaml 의 tag 로 이 이미지를 당긴다.
-#
-# 트리거는 v* 태그 푸시 **하나뿐**이다 — 브랜치 푸시 · PR 은 이미지를 올리지 않는다.
-#   · 불변 태그만 만든다: v<버전> 과 sha-<커밋>. latest 는 만들지 않는다 (플랫폼도 latest 를 거부한다).
-#   · 이미 있는 태그는 덮어쓰지 않는다 (같은 태그를 다시 푸시하면 실패 — 태그는 불변이다).
-#   · 스켈레톤 레포 자체는 템플릿 레포(is_template)라 이 잡이 아예 돌지 않는다: 스켈레톤의 v1.x 버전 태그가 앱 이미지를 publish 하지 않는다.
-#     이 레포로 만든 프로젝트(Use this template / scripts/new-project.sh)는 템플릿이 아니라 v* 태그마다 돈다.
+# 보류(on hold) — 홈서버 앱은 GHCR 를 쓰지 않고 홈서버에서 `docker build -t <app>:<tag> .` 로 로컬 빌드한다 (docs/deploy.md §1 · §6).
+# 이 워크플로는 나중에 레지스트리를 쓰게 될 때를 위해 남겨 두고, **수동 실행(workflow_dispatch)으로만** 돈다 — 태그 푸시 · 브랜치 푸시 · PR 은 아무것도 올리지 않는다.
+#   · 불변 태그만 만든다: 입력한 v<버전> 과 sha-<커밋>. latest 는 만들지 않는다. 이미 있는 태그는 덮어쓰지 않는다.
+#   · 스켈레톤 레포 자체는 템플릿 레포(is_template)라 이 잡이 돌지 않는다.
 on:
-  push:
-    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'immutable image tag, vMAJOR.MINOR.PATCH[-suffix]'
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -27,12 +28,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          TAG="${GITHUB_REF_NAME}"
+          TAG="${{ inputs.tag }}"
           [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "tag '$TAG' is not vMAJOR.MINOR.PATCH[-suffix]"; exit 1; }
           NAME="$(sed -n 's/^name:[[:space:]]*\([a-z0-9-]*\).*/\1/p' deploy/app.yaml | head -1)"
           [ -n "$NAME" ] || { echo "deploy/app.yaml has no name:"; exit 1; }
           OWNER="$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
-          IMAGE="ghcr.io/${OWNER}/${NAME}-api"
+          IMAGE="ghcr.io/${OWNER}/${NAME}"
           echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "sha_tag=sha-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"

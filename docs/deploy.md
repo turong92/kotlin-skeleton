@@ -6,14 +6,16 @@
 
 | 만드는 쪽 | 하는 일 |
 |---|---|
-| 이 레포 | 계약을 지키는 `Dockerfile` · `deploy/app.yaml`(선언) · GHCR 이미지 워크플로 · 배포 가드 · 계약 증명 스크립트 |
+| 이 레포 | 계약을 지키는 `Dockerfile` · `deploy/app.yaml`(선언) · 배포 가드 · 계약 증명 스크립트 (GHCR 워크플로는 보류 — §6) |
 | 플랫폼(홈서버 레포 `infra/modules/app-docker`) | 선언을 읽어 컨테이너 · DB · Redis · 비밀 · Caddy · 터널을 만든다 |
 
-## 1. 배포 흐름 — tag 를 올리는 것이 배포다
+## 1. 배포 흐름 — 로컬 빌드, tag 를 올리는 것이 배포다
+
+**GHCR 는 쓰지 않는다.** 홈서버 앱은 홈서버에서 로컬로 빌드하고, 선언은 `image_local: true` 로 그 이미지를 쓴다.
 
 ```
-git tag v0.1.1 && git push origin v0.1.1     # .github/workflows/image.yml → ghcr.io/<owner>/<name>-api:v0.1.1 · :sha-<커밋 12자>
-deploy/app.yaml 의 tag: v0.1.1 로 올려 플랫폼에 적용   # 컨테이너가 그 이미지로 교체된다
+docker build -t <name>:v0.1.1 .                       # 홈서버에서 (샘플이면 --build-arg APP=sample)
+deploy/app.yaml 의 tag: v0.1.1 로 올려 플랫폼에 적용      # 컨테이너가 그 로컬 이미지로 교체된다
 ```
 
 태그는 불변이다 — `latest` 는 만들지도 쓰지도 않는다. 롤백은 `tag` 를 이전 값으로 되돌리는 것이다.
@@ -22,10 +24,11 @@ deploy/app.yaml 의 tag: v0.1.1 로 올려 플랫폼에 적용   # 컨테이너�
 
 ```yaml
 name: ovation              # ^[a-z][a-z0-9-]{1,19}$
-image: ghcr.io/<owner>/ovation-api
+image: ovation             # 로컬 빌드 이름 (docker build -t ovation:v0.1.0 .)
+image_local: true          # 레지스트리에서 당기지 않는다
 tag: v0.1.0                # 불변 태그
 port: 8080
-health: /actuator/health
+health: /health
 env_prefix: OVATION        # ^[A-Z][A-Z0-9_]*$ — 프로젝트의 설정 접두사의 대문자
 api_prefix: /api/v1
 db: postgres               # postgres | mysql | none
@@ -38,7 +41,7 @@ env: { OVATION_ENV: prod, SPRING_PROFILES_ACTIVE: prod }
 
 | 칸 | 찍을 때 |
 |---|---|
-| `name` · `image` | `<config-prefix>` · `ghcr.io/OWNER/<config-prefix>-api` — **`OWNER` 는 직접 채운다**(소문자 계정 · 조직). 안 채우면 플랫폼의 image 검사가 거부해 조용히 틀린 곳에서 당기지 않는다 |
+| `name` · `image` · `image_local` | `<config-prefix>` · `<config-prefix>` · `true` (로컬 빌드 이미지) |
 | `env_prefix` | 설정 접두사의 대문자 (`my-app` → `MY_APP`) |
 | `db` | `--db mysql` 이면 `mysql`, 아니면 `postgres` |
 | `redis` | `redis-*` 모듈을 골랐으면 `true` |
@@ -68,15 +71,29 @@ MARINA_DIRECT=1 scripts/test-deploy-contract.sh                # apps/api · app
 MARINA_DIRECT=1 scripts/test-deploy-contract.sh --apps api --reuse
 ```
 
+### 클라이언트 IP — 플랫폼이 넣는 환경변수
+
+Caddy 가 `X-Forwarded-For` 를 덧붙이고 `CF-Connecting-IP` 를 넘기므로 앱의 소켓 피어는 **Caddy 컨테이너**다. 그래서 `skeleton.web.client-ip.mode` 를 정해야 IP 한도(로그인 · 가입 · 재설정 · 매직 링크)가 의미를 갖는다 — 안 정하면 stage · prod 에서 계정 가드가 기동을 막는다.
+
+**플랫폼이 넣어 준다** (홈서버 `infra/modules/app-docker/app.tf`): `<ENV_PREFIX>_WEB_CLIENT_IP_MODE` = 선언에 `domain` 이 있으면 `CLOUDFLARE`, 없으면 `PROXY`, `<ENV_PREFIX>_WEB_CLIENT_IP_TRUSTED_PROXIES` = 앱이 붙은 도커 네트워크의 CIDR 하나(읽지 못하면 `127.0.0.1/32`).
+**예약 이름이라 선언의 `env:` · `secrets:` 에 쓰면 plan 이 거부한다** — 그래서 `deploy/app.yaml` 에는 없다 (`_REDIS_SSL_ENABLED` · `_REDIS_LOCK_ENABLED` 도 같다).
+스켈레톤은 대문자 mode 와 CIDR 하나를 그대로 바인딩하고 계정 가드가 그것으로 통과한다 (`ClientIpEnvironmentVariablesTest`), `test-deploy-contract.sh` 의 D 단계가 플랫폼처럼 그 두 변수를 줘서 실제 컨테이너로 증명한다. 규칙 자체는 `docs/client-ip.md`.
+
+### 헬스체크 — 정직한 `/health`
+
+플랫폼은 컨테이너 안에서 `wget` 으로 `health` 경로를 읽고 2xx · 401 · 403 을 "살아 있음" 으로 본다. 인증이 모든 경로를 막는 앱의 `/actuator/health` 는 DB 가 죽어도 401 이라 **죽은 앱도 살아 있다고 나온다**.
+그래서 두 앱 모두 `management.endpoints.web.base-path: /` + `exposure.include: health, info` 로 `GET /health` 를 연다 (platform 이 `/health` · `/info` 를 공개 경로로 둔다): 인증 없이, 앱과 DataSource 가 떠 있을 때만 `200 {"status":"UP"}`, DB 가 죽으면 `503`, **세부 정보 없음**. 나머지 액추에이터는 열지 않는다 (`HealthEndpointIntegrationTest`).
+이것은 **앱의 선택**이다 (모듈 기본값이 아니라 `application.yml`) — 이 방식으로 배포하지 않는 앱은 영향이 없다. `test-deploy-contract.sh` 가 정상일 때 200, DB 컨테이너를 멈추면 비 2xx 임을 확인한다. 선언의 `health: /health`.
+
 ### 어느 앱을 배포하나
 
 | 앱 | 빌드 | `health` | 비고 |
 |---|---|---|---|
-| `apps/api` (스타터) | `docker build -t … .` | `/actuator/health` | 인증이 모든 경로를 막으므로 헬스는 401 — 계약상 "살아 있음" |
-| `apps/sample` | `docker build --build-arg APP=sample -t … .` | `/health` | management base-path 가 `/` 라 공개 경로로 열린다 (200) |
+| `apps/api` (스타터) | `docker build -t … .` | `/health` | 인증 없이 앱 + DB 가 떠 있을 때만 200 (위 "헬스체크") |
+| `apps/sample` | `docker build --build-arg APP=sample -t … .` | `/health` | 같다 |
 | `apps/workbench` | 거부 | — | 모든 모듈 데모: AWS SSM · S3 · Kafka 설정을 요구한다. 배포 대상이 아니다 |
 
-이미지 워크플로는 `APP=api` 로 빌드한다. 샘플을 배포하려면 워크플로의 `build-args` 와 선언의 `health` 를 바꾼다.
+(보류된 이미지 워크플로는 `APP=api` 로 빌드한다 — §6.)
 
 ## 4. 배포 환경 스위치와 배포 가드
 
@@ -142,35 +159,46 @@ class StorageDeployGuard(private val properties: StorageProperties) : DeployGuar
 - 접두사가 틀리면(`env_prefix` 가 프로젝트의 설정 접두사와 다르면) 변수는 아무 데도 닿지 않고 조용히 무시된다 — 그래서 `env_prefix` 는 `new-project.sh` 가 채운다.
 - 환경변수 이름 규칙: 점은 밑줄, 대시는 밑줄 또는 삭제(`skeleton.redis-lock.enabled` ← `SKELETON_REDIS_LOCK_ENABLED` 도 `SKELETON_REDISLOCK_ENABLED` 도 받는다).
 
-## 6. GHCR 이미지 워크플로 `.github/workflows/image.yml`
+## 6. GHCR 이미지 워크플로 `.github/workflows/image.yml` — 보류 (on hold)
 
-- **트리거는 `v*` 태그 푸시 하나뿐** — 브랜치 푸시 · PR 은 이미지를 올리지 않는다. 올라가는 태그는 `v<버전>` 과 `sha-<커밋 12자>` 두 개, **`latest` 는 없다**.
-- 태그 모양(`vMAJOR.MINOR.PATCH[-suffix]`)을 검사하고, **이미 있는 태그는 덮어쓰지 않고 실패한다** (불변).
-- 이미지 이름은 `ghcr.io/<소유자(소문자)>/<선언의 name>-api` — 선언의 `image:` 와 같아야 한다.
-- **스켈레톤 레포 자체에서는 아예 돌지 않는다**: 잡 조건 `github.event.repository.is_template != true` — 이 레포는 GitHub 템플릿이고, 스켈레톤의 버전 태그(`v1.x`, CHANGELOG)는 앱 릴리스가 아니라서 그 태그가 앱 이미지를 publish 하면 안 된다. "태그일 때만" 으로 충분하지 않은 이유다.
-  `Use this template` · `new-project.sh` 로 만든 프로젝트는 템플릿이 아니라서 `v*` 태그마다 돈다.
+홈서버는 GHCR 를 쓰지 않는다 (§1). 이 워크플로는 나중에 레지스트리를 쓰게 될 때를 위해 남겨 두며 **수동 실행(`workflow_dispatch`, 입력 `tag`)으로만** 돈다 — 태그 푸시 · 브랜치 푸시 · PR 은 아무것도 올리지 않는다.
+
+- 올라가는 태그는 입력한 `v<버전>` 과 `sha-<커밋 12자>` 두 개, **`latest` 는 없다**. 태그 모양(`vMAJOR.MINOR.PATCH[-suffix]`)을 검사하고, **이미 있는 태그는 덮어쓰지 않고 실패한다** (불변).
+- 이미지 이름은 `ghcr.io/<소유자(소문자)>/<선언의 name>`.
+- **스켈레톤 레포 자체에서는 돌지 않는다**: 잡 조건 `github.event.repository.is_template != true`.
 - 권한은 `packages: write` 뿐이다 (`GITHUB_TOKEN`). 패키지를 홈서버가 당기려면 패키지를 공개로 두거나 플랫폼에 읽기 토큰을 둔다 (플랫폼 몫).
 
 ## 7. 모듈별 비밀과 빠졌을 때의 동작
 
-`secrets:` 는 **플랫폼이 무작위 값을 만들어 넣는** 비밀이다. 그래서 이 목록에는 무작위여도 되는 것(JWT 비밀)만 넣는다.
-서드파티가 주는 키(결제 · SMTP · R2 · OAuth)는 값을 사람이 정하므로 이 목록으로 만들 수 없다 — 선언의 `env:` 에 값을 적으면 평문이다. 어떻게 넣을지는 플랫폼과 정할 일이다 (§9 질문).
-`<P>` = `env_prefix`.
+### 이 앱이 요구하는 비밀 이름 목록 — `secrets:` 에 반드시
+
+**선언의 `secrets:` 에 이름이 있어야 컨테이너에 주입된다.** 스타터(+ 고른 모듈)의 목록은 `deploy/app.yaml` 의 `secrets:` 에 이미 들어 있다 (`new-project.sh` 가 고르지 않은 모듈의 줄을 지운다). 이름이 빠지면 앱이 못 뜬다 —
+예: `JWT_SECRET` 이 빠지면 서명기가 `IllegalArgumentException: Empty key` 로 죽던 것을 이제 가드가 **`skeleton.auth.jwt.secret is blank … (env JWT_SECRET) … list JWT_SECRET under secrets:`** 로 말한다 (보호 환경이 아니어도).
+
+비밀은 두 종류다 (`<P>` = `env_prefix`):
+
+| 종류 | 어떻게 | 예 |
+|---|---|---|
+| **무작위로 충분** | `secrets:` 에 이름만 — 플랫폼이 48자 무작위 값을 만든다 | `JWT_SECRET` |
+| **운영자가 정한다** | `secrets:` 에 이름을 **적고**, 값은 홈서버의 `data/secrets/<name>.local.env` (0600, git 밖, 백업됨)에 `NAME=값` 으로 적는다 | 결제 키 · SMTP 비밀번호 · OAuth client secret · S3/R2 키 · 알림 웹훅 URL |
+
+`.local.env` 에 있는 이름은 그 값이 쓰이고 나머지는 무작위로 만들어진다. **`.local.env` 에 적었는데 `secrets:` 에 없는 이름은 plan 이 거부한다.** 반대로 `secrets:` 에 적은 운영자 비밀을 `.local.env` 에 안 적으면 **무작위 쓰레기 값**이 들어가 첫 사용에서 실패한다 — 쓰지 않을 줄은 지운다.
+비밀이 아닌 설정(`_ENABLED=true` · `_CLIENT_ID` · `SPRING_MAIL_HOST` · 링크 주소)은 `env:` 에 적는다. 같은 이름을 `env:` 와 `secrets:` 에 동시에 쓸 수 없다.
 
 | 모듈 | 환경변수 | 빠지면 |
 |---|---|---|
-| auth | `JWT_SECRET` (별칭) 또는 `<P>_AUTH_JWT_SECRET` — **선언의 `secrets:`** | 보호 환경(`<P>_ENV=stage\|prod` · 프로필 `prod\|staging`)에서 **기동 실패**: 비었음 / 내장 기본값 / 32바이트 미만 |
-| auth | `<P>_AUTH_BREAK_GLASS_SECRET` · `_ALLOWED_ACCOUNT_IDS` (break-glass 를 켰을 때만) | 비밀이 비면 기동 실패 · 허용 계정이 비면 보호 환경에서 기동 실패 |
+| auth | `JWT_SECRET` (별칭) 또는 `<P>_AUTH_JWT_SECRET` — **선언의 `secrets:` (무작위로 충분)** | 보호 환경(`<P>_ENV=stage\|prod` · 프로필 `prod\|staging`)에서 **기동 실패**: 비었음 / 내장 기본값 / 32바이트 미만 |
+| auth | `<P>_AUTH_BREAK_GLASS_SECRET` (**운영자** — `secrets:` + `.local.env`) · `_ALLOWED_ACCOUNT_IDS` (env:) (break-glass 를 켰을 때만) | 비밀이 비면 기동 실패 · 허용 계정이 비면 보호 환경에서 기동 실패 |
 | account | `<P>_ACCOUNT_MAIL_LINK_BASE_URL` (메일 링크가 여는 프론트 주소 — 비밀 아님, 선언의 `env:` 에 적어도 된다) · 선택 `<P>_ACCOUNT_BOOTSTRAP_ADMIN_EMAIL` | 보호 환경에서 **기동 실패** (`DeployGuard` `account`): 주소가 비었음 · 메모리 계정 저장소(`account-jdbc` 를 얹는다) · 메일 발송 길 없음(`notification-mail`) · 시드 계정 · 링크 로그 켬. 첫 관리자 이메일은 확인된 로그인 때 ADMIN 을 준다 |
 | auth-session | (없음 — 설정만) | 보호 환경에서 메모리 세션 저장소(`auth-session-jdbc` 를 얹는다) · 쿠키 전달인데 `cookie.secure=false` 면 기동 실패 |
-| auth-social-google / -kakao / -naver | `<P>_AUTH_SOCIAL_PROVIDERS_<X>_ENABLED=true` · `_CLIENT_ID` · `_CLIENT_SECRET` | 켰는데 비면 기동 실패 (`client id/secret must not be blank`) |
-| captcha-turnstile | `<P>_CAPTCHA_TURNSTILE_ENABLED=true` · `_SECRET_KEY` | 검증기 빈이 없다 — 기동은 되고, 주입받는 곳이 있으면 그 빈 이름으로 실패 |
-| payment-toss / -stripe | `<P>_PAYMENT_<X>_ENABLED=true` · `_SECRET_KEY` | 제공자 빈이 없다 — 결제 라우팅이 그 제공자를 못 찾는다 |
-| storage-s3 | `<P>_STORAGE_S3_BUCKET` · `_ENDPOINT_OVERRIDE` · `_CREDENTIALS_ACCESS_KEY_ID` · `_CREDENTIALS_SECRET_ACCESS_KEY` | 버킷이 비면 저장소 빈이 없다. 키가 비면 AWS 기본 자격 증명 체인으로 가 **첫 사용에서** 실패(기동은 된다) |
-| notification-mail | `<P>_NOTIFICATION_MAIL_ENABLED=true` · `_FROM` · `SPRING_MAIL_HOST` · `_USERNAME` · `_PASSWORD` | host · from 이 비면 발송기 빈이 없다. 비밀번호가 틀리면 첫 발송에서 실패 |
-| notification-slack | `<P>_NOTIFICATION_SLACK_ENABLED=true` · `_WEBHOOK_URL` | 아무것도 보내지 않는다 |
-| alert | `<P>_ALERT_WEBHOOK_URL` | 경보가 로그로만 남는다 (기동은 된다) |
-| crypto | `<P>_CRYPTO_PRIMARY_KEY_ID` · `<P>_CRYPTO_KEYS_<ID>` (base64 AES 키) | 키가 없으면 암호화 빈이 없다 |
+| auth-social-google / -kakao / -naver | `<P>_AUTH_SOCIAL_PROVIDERS_<X>_ENABLED=true` · `_CLIENT_ID` (env:) · `_CLIENT_SECRET` (**운영자**) | 켰는데 비면 기동 실패 (`client id/secret must not be blank`) |
+| captcha-turnstile | `<P>_CAPTCHA_TURNSTILE_ENABLED=true` (env:) · `_SECRET_KEY` (**운영자**) | 검증기 빈이 없다 — 기동은 되고, 주입받는 곳이 있으면 그 빈 이름으로 실패 |
+| payment-toss / -stripe | `<P>_PAYMENT_<X>_ENABLED=true` (env:) · `_SECRET_KEY` (**운영자**) | 제공자 빈이 없다 — 결제 라우팅이 그 제공자를 못 찾는다 |
+| storage-s3 | `<P>_STORAGE_S3_BUCKET` · `_ENDPOINT_OVERRIDE` (env:) · `_CREDENTIALS_ACCESS_KEY_ID` · `_CREDENTIALS_SECRET_ACCESS_KEY` (**운영자**) | 버킷이 비면 저장소 빈이 없다. 키가 비면 AWS 기본 자격 증명 체인으로 가 **첫 사용에서** 실패(기동은 된다) |
+| notification-mail | `<P>_NOTIFICATION_MAIL_ENABLED=true` · `_FROM` · `SPRING_MAIL_HOST` · `_USERNAME` (env:) · `SPRING_MAIL_PASSWORD` (**운영자**, 인증 없는 릴레이면 필요 없다) | host · from 이 비면 발송기 빈이 없다. 비밀번호가 틀리면 첫 발송에서 실패 |
+| notification-slack | `<P>_NOTIFICATION_SLACK_ENABLED=true` (env:) · `_WEBHOOK_URL` (**운영자**) | 아무것도 보내지 않는다 |
+| alert | `<P>_ALERT_WEBHOOK_URL` (**운영자**, 선택) | 경보가 로그로만 남는다 (기동은 된다) |
+| crypto | `<P>_CRYPTO_PRIMARY_KEY_ID` (env:) · `<P>_CRYPTO_KEYS_<ID>` (base64 AES 키 — **운영자**, `secrets:` 에 그 이름을 더한다) | 키가 없으면 암호화 빈이 없다 |
 | redis-* | 플랫폼이 `<P>_REDIS_*` 를 넣는다 (`redis: true`) | §5 |
 | config-aws-ssm | AWS 자격 증명 | **고르지 않는다** — 홈서버에는 AWS 가 없고, `paths` 를 정하면 부팅에서 자격 증명을 찾는다 |
 
@@ -180,12 +208,33 @@ class StorageDeployGuard(private val properties: StorageProperties) : DeployGuar
 Caddy 가 `<api_prefix>/*` 만 백엔드로 보내고 나머지는 `data/apps/<name>/<web>` 의 정적 번들을 서빙한다 (`/index.html` 폴백 — SPA).
 
 - **프론트 빌드 산출물 디렉토리 이름이 `web:` 과 같아야 한다.** react-skeleton(Vite)의 기본은 `dist`.
-- 번들을 그 디렉토리에 놓는 일은 플랫폼 밖이다 (플랫폼 문서 참고).
+- **번들은 홈서버의 `data/apps/<name>/<web>` 에 손으로 복사한다** (예: `rsync -a dist/ <홈서버>:~/homeserver/data/apps/<name>/dist/`). 워크플로는 없다.
 - 같은 origin 이라 CORS 는 필요 없다. 백엔드 경로는 `api_prefix`(`/api/v1`) 밑에 있어야 한다 — 그 밖의 경로는 정적 번들로 간다 (`apps/sample` 의 `/health` 처럼 prefix 밖인 경로는 도메인으로 닿지 않고, 컨테이너 안 헬스체크로만 쓰인다).
 - **SSR(서버 렌더링) 프론트는 이 선언으로 안 된다** — `web:` 은 정적 파일 서빙뿐이다. SSR 은 자기 선언(자기 이미지 · 포트)이 따로 필요하다.
 
 ## 9. 알려진 한계 · 플랫폼에 묻는 것
 
-- 서드파티 비밀을 넣는 길이 선언에 없다 (§7). `secrets:` 는 무작위 값만 만든다.
-- 스타터의 내장 시드 계정은 `prod` 에서 거부된다 — 첫 배포 전에 앱이 자기 `AuthAccountRepository` 빈을 둬야 한다 (일부러 그렇다).
-- 플랫폼의 이름 검증은 `<ENV_PREFIX>_REDIS_*` 만 막고 `_REDIS_SSL_ENABLED` · `_REDIS_LOCK_ENABLED` 는 선언 `env:` 에 쓰도록 둔다 — 같은 이름을 쓰면 주입이 뒤에서 덮는다.
+- 운영자 비밀은 `data/secrets/<name>.local.env` 로 넣는다 (§7). `secrets:` 에 적고 파일에 안 적으면 무작위 값이 들어간다.
+- `<ENV_PREFIX>_WEB_CLIENT_IP_MODE` · `_TRUSTED_PROXIES` 는 플랫폼이 넣는다 (§3).
+- 계정(`account`)이 `AuthAccountRepository` 를 대신하므로 스타터는 내장 시드 계정 없이 prod 에서 뜬다 (시드 계정은 로컬 프로필 전용 — 보호 환경에서는 기동 실패).
+- 예약 이름(플랫폼이 넣는다 — 선언 `env:` · `secrets:` 에 쓰면 plan 이 거부): `SPRING_DATASOURCE_*`, `<ENV_PREFIX>_REDIS_*` (`_REDIS_SSL_ENABLED` · `_REDIS_LOCK_ENABLED` 포함), `<ENV_PREFIX>_WEB_CLIENT_IP_MODE` · `_WEB_CLIENT_IP_TRUSTED_PROXIES`.
+
+## 10. 시험 배포 — 스타터를 홈서버에서 한 번 띄워 보기
+
+계정이 생겼으므로 `SKELETON_ENV=prod` 로 뜨려면 가드가 요구하는 것을 모두 줘야 한다. 홈서버에서 스모크로 띄우는 정확한 조합 (`<P>` = `env_prefix`):
+
+| 무엇 | 어떻게 | 가드가 막는 경우 |
+|---|---|---|
+| 모듈 | 스타터에 `--modules notification-mail` (메일 발송 길). 샘플은 이미 있다 | 메일 발송 길 없음 → 기동 실패 (`account` 가드) |
+| 비밀 목록 | 선언의 `secrets: [JWT_SECRET]` (기본으로 들어 있다 — 무작위로 충분) | 이름이 빠지면 `skeleton.auth.jwt.secret is blank … list JWT_SECRET under secrets:` 로 기동 실패 |
+| 메일 | env: `<P>_NOTIFICATION_MAIL_ENABLED=true` · `_FROM=no-reply@…` · `SPRING_MAIL_HOST=<릴레이>`. 인증이 있으면 `SPRING_MAIL_PASSWORD` 를 `secrets:` + `.local.env` 로 | host · from 이 비면 발송기 빈이 없어 위와 같다 |
+| 메일 링크 주소 | env: `<P>_ACCOUNT_MAIL_LINK_BASE_URL=https://<프론트 origin>` | 비면 기동 실패 |
+| 클라이언트 IP | **넣지 않는다 — 플랫폼이 넣는다** (`PROXY`/`CLOUDFLARE` + 네트워크 CIDR) | 플랫폼이 안 넣으면(구버전) mode 없음 → 기동 실패 |
+| 첫 관리자 | env: `<P>_ACCOUNT_BOOTSTRAP_ADMIN_EMAIL=<내 이메일>` (선택 — 그 주소가 가입 · 확인하면 ADMIN. 샘플은 관리자 API 가 켜져 있어 없으면 경고) | (경고만) |
+| 스위치 · 프로필 | env: `<P>_ENV=prod` · `SPRING_PROFILES_ACTIVE=prod` (기본으로 들어 있다) | — |
+| 저장소 | `db: postgres` (플랫폼이 `SPRING_DATASOURCE_*` 를 넣는다). 계정 · 세션 저장소는 JDBC 라 통과 | 메모리 저장소 → 기동 실패 |
+| 시드 계정 | 넣지 않는다 (로컬 전용) | 있으면 기동 실패 |
+
+`scripts/test-deploy-contract.sh` 의 **D 단계**가 apps/sample(= 스타터 + `notification-mail` …) 이미지를 이 조합 + **플랫폼이 넣는 클라이언트 IP 두 변수**(대문자 mode · 실제 도커 네트워크 CIDR 하나)로 `SKELETON_ENV=prod` 에 띄워 헬스체크 · 가드 요약을 확인하고,
+하나씩 빼면(클라이언트 IP · 메일) 가드가 그 이름을 말하며 실패함을 확인한다. 스타터(apps/api)는 메일 모듈이 없으므로 C2 단계가 "메일 발송 길 · client-ip 를 요구하며 실패" 를 확인한다.
+첫 로그인 확인: 가입 → (메일이 릴레이로 간다) 확인 링크 → 그 주소가 `BOOTSTRAP_ADMIN_EMAIL` 이면 ADMIN.

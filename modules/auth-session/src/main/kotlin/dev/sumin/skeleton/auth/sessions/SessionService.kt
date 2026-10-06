@@ -9,6 +9,8 @@ import java.security.SecureRandom
 import java.time.Instant
 import java.util.Base64
 import java.util.HexFormat
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
 
 /**
  * 세션 · 리프레시 토큰 규칙 한 곳. 토큰은 불투명 난수(`r1.` + 256비트 base64url)이고 저장소에는 SHA-256 해시만 간다.
@@ -23,9 +25,12 @@ class SessionService(
     private val store: SessionStore,
     private val properties: AuthSessionProperties,
     private val time: TimeProvider = TimeProvider.systemUtc(),
+    /** 회전의 후속 토큰을 만드는 서버 키 — 같은 옛 토큰은 같은 후속 토큰을 낳지만 옛 토큰만으로는 계산할 수 없다. 인스턴스끼리 같아야 한다 (자동설정이 JWT 비밀에서 만든다) */
+    tokenKey: ByteArray = ByteArray(32).also { SecureRandom().nextBytes(it) },
     private val onEvent: (SessionEvent) -> Unit = {},
 ) {
     private val random = SecureRandom()
+    private val rotationKey = SecretKeySpec(tokenKey, "HmacSHA256")
 
     fun open(accountId: String, client: SessionClient): OpenedSession {
         val now = time.now()
@@ -55,14 +60,15 @@ class SessionService(
             // 같은 토큰을 동시에 낸 다른 요청이 먼저 썼다 — 그쪽이 쓴 시각을 다시 읽어 아래 재사용 규칙으로
             usedAt = store.findToken(oldHash)?.usedAt ?: now
         }
+        // 유예 안의 재제시(응답을 잃은 브라우저 · 동시 새로고침)는 **같은 후속 토큰**을 돌려준다 — 새 토큰을 또 찍어 갈래를 만들지도, 세션을 닫지도 않는다
         if (usedAt != null && !(properties.reuseGrace.toMillis() > 0 && !usedAt.plus(properties.reuseGrace).isBefore(now))) {
             store.revoke(session.id, now, "REUSE")
             onEvent(SessionEvent(SessionEventType.REFRESH_REUSE_DETECTED, session.accountId, session.id, ip = client.ip))
             throw RefreshReusedException()
         }
 
-        val next = newToken()
-        store.addToken(session.id, hash(next), now)
+        val next = successorOf(rawToken)
+        store.addToken(session.id, hash(next), now)   // 멱등 — 같은 후속 토큰이 이미 있으면 그대로
         store.touch(session.id, now, client.ip, client.userAgent)
         properties.reuseMemory?.let { store.pruneUsedTokens(session.id, now.minus(it)) }
         return RefreshResult(session.accountId, OpenedSession(session.id, next, session.expiresAt))
@@ -101,6 +107,12 @@ class SessionService(
         val live = store.listActive(accountId, now, now.minus(properties.idleTtl))
         val overflow = live.size - (properties.maxSessionsPerAccount - 1)
         if (overflow > 0) live.sortedBy { it.createdAt }.take(overflow).forEach { store.revoke(it.id, now, "EVICTED") }
+    }
+
+    /** 옛 토큰 → 후속 토큰 (HMAC, 결정적). 옛 토큰의 해시가 아니라 원문으로 계산하므로 DB 만으로는 만들 수 없다 */
+    fun successorOf(oldRawToken: String): String {
+        val mac = Mac.getInstance("HmacSHA256").apply { init(rotationKey) }
+        return PREFIX + Base64.getUrlEncoder().withoutPadding().encodeToString(mac.doFinal(("rotate\n" + oldRawToken).toByteArray(Charsets.UTF_8)))
     }
 
     private fun newToken(): String = PREFIX + Base64.getUrlEncoder().withoutPadding().encodeToString(ByteArray(32).also(random::nextBytes))

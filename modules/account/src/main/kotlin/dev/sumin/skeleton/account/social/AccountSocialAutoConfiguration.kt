@@ -51,6 +51,17 @@ class AccountSocialAutoConfiguration {
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 @ConditionalOnProperty(prefix = "skeleton.account.http", name = ["enabled"], havingValue = "true", matchIfMissing = true)
 class AccountSocialWebAutoConfiguration {
+    /** 켜진 제공자 목록 — 프론트가 로그인 버튼과 인가 URL 을 환경변수 없이 만든다 (client id 는 공개 값) */
+    @Bean
+    @ConditionalOnMissingBean(name = ["socialMethodsSource"])
+    fun socialMethodsSource(providers: ObjectProvider<dev.sumin.skeleton.auth.social.oauth.OAuthProvider>, registry: OAuthProviderRegistry, props: ObjectProvider<dev.sumin.skeleton.auth.social.config.AuthSocialProperties>): dev.sumin.skeleton.account.web.SocialMethodsSource =
+        dev.sumin.skeleton.account.web.SocialMethodsSource {
+            providers.orderedStream().toList().filter { registry.findEnabled(it.providerId) != null }.map {
+                val p = props.getIfAvailable()?.providers?.get(it.providerId.trim().lowercase())
+                dev.sumin.skeleton.account.web.SocialMethodView(it.providerId.trim().lowercase(), p?.clientId?.takeIf { c -> c.isNotBlank() }, p?.redirectUri)
+            }
+        }
+
     @Bean
     @ConditionalOnMissingBean
     fun socialLinkService(registry: OAuthProviderRegistry, identities: IdentityService, core: AccountCore): SocialLinkService = SocialLinkService(registry, identities, core)

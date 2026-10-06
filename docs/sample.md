@@ -55,7 +55,7 @@ APP=sample scripts/dev.sh    # 백엔드(+프론트 WEB_DIR)만 같은 방식으
 ./gradlew :apps:sample:test  # 통합 테스트 (Docker 필요)
 ```
 
-포트가 겹치면 `SERVER_PORT` · `DB_PORT` · `S3_PORT` 환경변수로 바꾼다(compose 와 앱 yml 이 같은 이름을 읽는다). e2e 용 비대화형 시작/종료는 `scripts/sample-e2e-backend.sh start|stop`
+포트가 겹치면 `SERVER_PORT` · `DB_PORT` · `S3_PORT` · `MAIL_SMTP_PORT`(1025) · `MAIL_HTTP_PORT`(8025) 환경변수로 바꾼다(compose 와 앱 yml 이 같은 이름을 읽는다). e2e 용 비대화형 시작/종료는 `scripts/sample-e2e-backend.sh start|stop` — **메일 수신기(mailpit)도 함께 올린다**: 앱은 `localhost:$MAIL_SMTP_PORT` 로 보내고 받은 메일은 `http://localhost:$MAIL_HTTP_PORT/api/v1/messages`(JSON, 한 통 `/api/v1/message/<ID>`, 비우기 `DELETE /api/v1/messages`)로 읽는다 — 프런트 e2e 는 자기 mailpit 을 띄우지 않고 이것을 쓴다
 (전용 compose 프로젝트 · 깨끗한 DB, `/health` 가 UP 일 때 `READY http://localhost:<포트>` 를 찍는다).
 
 ## 이 기능 조각은 이렇게 조립됐다 (새 기능을 만들 때 이 순서로)

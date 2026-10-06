@@ -112,4 +112,31 @@ class EmailChangeServiceTest {
         assertEquals(1, h.mailer.of(MailKind.EMAIL_CHANGE_CONFIRM).size)
         assertEquals("ACCOUNT.REAUTH_FAILED", code { h.emailChange.request("acc_s", "u@example.com", null, proof) }, "the confirmation is single use")
     }
+
+    @Test
+    fun `me exposes the pending change and its expiry until it is confirmed, superseded or expired - so the check-the-new-address state survives a reload`() {
+        val a = h.activeAccount()
+        assertNull(h.profile.me(a.id).pendingEmail)
+        h.emailChange.request(a.id, "new@example.com", "tangerine-42-moon")
+        val me = h.profile.me(a.id)
+        assertEquals("new@example.com", me.pendingEmail)
+        assertEquals(h.time.now().plus(Duration.ofMinutes(30)), me.pendingEmailExpiresAt)
+
+        h.emailChange.request(a.id, "newer@example.com", "tangerine-42-moon")
+        assertEquals("newer@example.com", h.profile.me(a.id).pendingEmail)
+        h.time.advance(Duration.ofMinutes(31))
+        assertNull(h.profile.me(a.id).pendingEmail, "an expired link is no longer pending")
+
+        h.emailChange.request(a.id, "third@example.com", "tangerine-42-moon")
+        h.emailChange.confirm(confirmToken())
+        assertNull(h.profile.me(a.id).pendingEmail)
+    }
+
+    @Test
+    fun `a taken target address leaves nothing pending - the state does not reveal that the address exists`() {
+        val a = h.activeAccount()
+        h.activeAccount("bob@example.com")
+        h.emailChange.request(a.id, "bob@example.com", "tangerine-42-moon")
+        assertNull(h.profile.me(a.id).pendingEmail)
+    }
 }

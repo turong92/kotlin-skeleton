@@ -38,7 +38,13 @@ class AuthSessionAutoConfiguration {
         properties: AuthSessionProperties,
         time: ObjectProvider<TimeProvider>,
         listeners: ObjectProvider<SessionEventListener>,
-    ): SessionService = SessionService(store, properties, time.getIfAvailable { TimeProvider.systemUtc() }, SessionEventDispatch { listeners.orderedStream().toList() })
+        auth: ObjectProvider<AuthProperties>,
+    ): SessionService = SessionService(
+        store, properties, time.getIfAvailable { TimeProvider.systemUtc() },
+        // 인스턴스끼리 같은 키 — JWT 비밀에서 용도 접두사를 붙여 만든다 (비밀 자체를 다른 용도에 쓰지 않는다)
+        ("session-rotation/" + auth.getIfAvailable { AuthProperties() }.jwt.secret).toByteArray(Charsets.UTF_8),
+        SessionEventDispatch { listeners.orderedStream().toList() },
+    )
 
     /** 기본 듣는 쪽 — 재사용 탐지는 WARN 한 줄(세션 · 계정 id 만, 토큰 없음). 앱이 같은 이름의 빈을 두면 물러난다 */
     @Bean
@@ -59,6 +65,11 @@ class AuthSessionAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(name = ["sessionErasureListener"])
     fun sessionErasureListener(store: SessionStore): AccountErasureListener = SessionErasureListener(store)
+
+    @Bean
+    @ConditionalOnMissingBean(name = ["refreshDeliveryInfo"])
+    fun refreshDeliveryInfo(properties: AuthSessionProperties): dev.sumin.skeleton.auth.session.RefreshDeliveryInfo =
+        object : dev.sumin.skeleton.auth.session.RefreshDeliveryInfo { override val mode = properties.delivery.name.lowercase() }
 
     @Bean
     @ConditionalOnMissingBean

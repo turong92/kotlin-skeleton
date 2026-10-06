@@ -139,7 +139,10 @@ data class AccountProperties(
     data class Social(
         /** true 면 연결된 적 없는 소셜 계정이 첫 로그인에 계정을 만든다 (제공자가 이메일을 확인해 줬을 때만 이메일을 저장) */
         val signUp: Boolean = false,
-        /** true 면 제공자가 확인한 이메일이 **이미 확인된** 기존 계정 이메일과 같을 때 그 계정에 붙인다. 기본은 병합 없이 409 ACCOUNT.SOCIAL_EMAIL_CONFLICT */
+        /**
+         * true 면 제공자가 **확인한** 이메일(Kakao: 확인 + 유효, Naver: 없음)이 기존 계정 이메일과 글자 그대로 같을 때 그 계정에 붙인다 — 계정 주소에 알림 메일 + 이벤트.
+         * 기존 계정이 미확인이면 제공자의 확인이 메일함 증명이라 가입 때의 미확인 비밀번호를 버린다. 기본은 병합 없이 409 ACCOUNT.SOCIAL_EMAIL_CONFLICT
+         */
         val mergeOnVerifiedEmail: Boolean = false,
     )
 

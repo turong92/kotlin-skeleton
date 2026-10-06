@@ -60,6 +60,20 @@ class AccountWebAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
+    fun authMethodsController(
+        registry: dev.sumin.skeleton.account.signin.SignInMethodRegistry,
+        properties: AccountProperties,
+        captcha: dev.sumin.skeleton.account.abuse.CaptchaGate,
+        social: ObjectProvider<SocialMethodsSource>,
+        delivery: ObjectProvider<dev.sumin.skeleton.auth.session.RefreshDeliveryInfo>,
+    ): AuthMethodsController = AuthMethodsController(
+        registry, properties, captcha,
+        { social.getIfAvailable()?.enabled().orEmpty() },
+        { delivery.getIfAvailable()?.mode },
+    )
+
+    @Bean
+    @ConditionalOnMissingBean
     @ConditionalOnProperty(prefix = "skeleton.account.admin", name = ["enabled"], havingValue = "true")
     fun adminAccountController(callers: AccountCallers, admin: AdminService): AdminAccountController = AdminAccountController(callers, admin)
 
@@ -74,5 +88,6 @@ class AccountWebAutoConfiguration {
             registry.add("POST", "/api/v1/account/password/reset")
             registry.add("GET", "/api/v1/account/password/policy")
             registry.add("POST", "/api/v1/auth/confirm-email-change")
+            registry.add("GET", "/api/v1/auth/methods")
         }
 }

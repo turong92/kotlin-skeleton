@@ -45,7 +45,9 @@ class JdbcSessionStore(
             MapSqlParameterSource().addValue("now", dialect.instantParam(now)).addValue("h", hash),
         ) == 1
 
-    override fun addToken(sessionId: String, hash: String, now: Instant) = insertToken(sessionId, hash, now)
+    override fun addToken(sessionId: String, hash: String, now: Instant) {
+        try { insertToken(sessionId, hash, now) } catch (_: org.springframework.dao.DuplicateKeyException) { /* 이미 있다 — 멱등 */ }
+    }
 
     private fun insertToken(sessionId: String, hash: String, now: Instant) {
         jdbc.update(

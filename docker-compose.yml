@@ -54,8 +54,8 @@ services:
     image: axllent/mailpit:v1.21
     profiles: [mail]
     ports:
-      - "127.0.0.1:1025:1025"
-      - "127.0.0.1:8025:8025"
+      - "127.0.0.1:${MAIL_SMTP_PORT:-1025}:1025"   # 앱은 MAIL_SMTP_PORT 를 읽는다 (apps/sample 의 application-local.yml)
+      - "127.0.0.1:${MAIL_HTTP_PORT:-8025}:8025"   # 받은 메일 UI · API (e2e 는 GET /api/v1/messages 로 링크를 꺼낸다)
 
   # storage-s3 모듈로 조립한 앱의 로컬 S3 (R2 대역, SeaweedFS). scripts/dev.sh 가 올린다 (손으로는 --profile s3 로 s3 를 띄우고 s3-init 을 한 번 돌린다).
   # 서버 → http://localhost:8333, 브라우저 직접 업로드 → 같은 주소. 키 dev / dev-secret, 버킷 app.

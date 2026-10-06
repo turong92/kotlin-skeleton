@@ -111,15 +111,39 @@ class SignInServiceTest {
     }
 
     @Test
-    fun `merging is opt-in and still needs both emails verified`() {
+    fun `merging is opt-in, needs the provider's verified email, tells the account's address and records an event`() {
         val merge = harness(AccountProperties.Social(signUp = true, mergeOnVerifiedEmail = true))
         val existing = merge.activeAccount("ann@example.com")
+        merge.mailer.sent.clear()
         assertEquals(existing.id, merge.service().signIn(proof())!!.accountId)
         assertEquals(setOf("password", "google"), merge.repo.identitiesOf(existing.id).map { it.method }.toSet())
+        assertEquals("ann@example.com", merge.mailer.of(dev.sumin.skeleton.account.mail.MailKind.IDENTITY_LINKED_NOTICE).single().to)
+        assertTrue(merge.events.all.any { it.type == AccountEventType.IDENTITY_LINKED && it.detail["auto"] == "true" })
 
-        val unverified = harness(AccountProperties.Social(signUp = true, mergeOnVerifiedEmail = true))
-        unverified.signUp("ann@example.com")   // pending: the address was never proven by its owner
-        assertEquals("ACCOUNT.SOCIAL_EMAIL_CONFLICT", code { unverified.service().signIn(proof()) })
+        // a provider that does not vouch for the email never merges (and does not even conflict - no oracle)
+        val unverifiedProvider = harness(AccountProperties.Social(signUp = true, mergeOnVerifiedEmail = true))
+        val owner = unverifiedProvider.activeAccount("ann@example.com")
+        val created = unverifiedProvider.service().signIn(proof(subject = "k-2", method = "kakao", verified = false))!!
+        assertTrue(created.accountId != owner.id)
+    }
+
+    @Test
+    fun `merging into an UNVERIFIED account is a mailbox proof - the unproven sign-up password is discarded and sessions closed (C1 rule)`() {
+        val merge = harness(AccountProperties.Social(signUp = true, mergeOnVerifiedEmail = true))
+        merge.signUp("ann@example.com", password = "attacker-chosen-42")
+        val planted = merge.repo.findByEmail("ann@example.com")!!
+        val auth = merge.service().signIn(proof())!!
+        assertEquals(planted.id, auth.accountId)
+        assertEquals("", merge.authRepository.findBy(dev.sumin.skeleton.auth.account.AccountIdentifier(email = "ann@example.com"))!!.passwordHash)
+        assertTrue(merge.revoker.calls.any { it.first == planted.id })
+        assertTrue(merge.repo.findById(planted.id)!!.emailVerified)
+    }
+
+    @Test
+    fun `with merging off (the module default) a verified provider email is still a conflict, as before`() {
+        val h = harness()
+        h.activeAccount("ann@example.com")
+        assertEquals("ACCOUNT.SOCIAL_EMAIL_CONFLICT", code { h.service().signIn(proof()) })
     }
 
     @Test
