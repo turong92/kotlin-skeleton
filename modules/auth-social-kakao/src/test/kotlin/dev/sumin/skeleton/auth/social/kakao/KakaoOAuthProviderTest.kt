@@ -77,6 +77,25 @@ class KakaoOAuthProviderTest {
         assertEquals("Bearer kakao-access-token", profileRequest.headers["authorization"]?.single())
     }
 
+    @Volatile private var profileJson = """{"id":12345,"kakao_account":{"email":"kakao@example.com","is_email_valid":true,"is_email_verified":true,"profile":{"nickname":"Kakao User"}}}"""
+
+    private fun profileWith(account: String) { profileJson = """{"id":12345,"kakao_account":{"email":"kakao@example.com",$account,"profile":{"nickname":"Kakao User"}}}""" }
+
+    @Test
+    fun `an email Kakao says is verified but no longer valid is not a verified email (a former holder of the address)`() {
+        profileWith(""""is_email_valid":false,"is_email_verified":true""")
+        val profile = provider.fetchProfile("kakao-code", redirectUri = null)
+        assertEquals(false, profile.emailVerified, "a lapsed address must not be trusted: it can be squatted or merged into an account")
+    }
+
+    @Test
+    fun `verified without any validity flag, or valid but unverified, is not verified either`() {
+        profileWith(""""is_email_verified":true""")
+        assertEquals(false, provider.fetchProfile("kakao-code", redirectUri = null).emailVerified)
+        profileWith(""""is_email_valid":true,"is_email_verified":false""")
+        assertEquals(false, provider.fetchProfile("kakao-code", redirectUri = null).emailVerified)
+    }
+
     private fun handle(exchange: HttpExchange) {
         val body = exchange.requestBody.bufferedReader().use { it.readText() }
         requests += RecordedRequest(
@@ -90,7 +109,7 @@ class KakaoOAuthProviderTest {
             "/oauth/token" -> exchange.respond(200, """{"access_token":"kakao-access-token","token_type":"Bearer"}""")
             "/v2/user/me" -> exchange.respond(
                 200,
-                """{"id":12345,"kakao_account":{"email":"kakao@example.com","is_email_verified":true,"profile":{"nickname":"Kakao User"}}}""",
+                profileJson,
             )
             else -> exchange.respond(404, """{"message":"not found"}""")
         }

@@ -43,7 +43,8 @@ class KakaoOAuthProvider(
             email = email,
             username = email ?: providerUserId,
             displayName = nickname,
-            emailVerified = profile.kakaoAccount?.emailVerified == true,
+            // Kakao: 다른 카카오계정으로 넘어가 만료된 주소는 is_email_verified=true · is_email_valid=false 로 온다 — 옛 보유자의 "확인됨" 을 믿지 않는다
+            emailVerified = profile.kakaoAccount?.emailValid == true && profile.kakaoAccount.emailVerified == true,
         )
     }
 
@@ -99,6 +100,8 @@ class KakaoOAuthProvider(
 
     data class KakaoAccount(
         val email: String? = null,
+        @JsonProperty("is_email_valid")
+        val emailValid: Boolean? = null,
         @JsonProperty("is_email_verified")
         val emailVerified: Boolean? = null,
         val profile: KakaoProfile? = null,
