@@ -125,12 +125,6 @@ for APP in $(echo "$APPS" | tr ',' ' '); do
   if [ "$CODE" = 200 ]; then pass "/health 는 인증 없이 200 이다 (401 이 아니다)"; else fail "/health 가 200 이 아니다: $CODE"; fi
   BODY="$(docker exec "$C" sh -c "wget -q -O - http://localhost:$PORT$HEALTH" 2>/dev/null)"
   if echo "$BODY" | grep -q '"status":"UP"' && ! echo "$BODY" | grep -q 'components\|details'; then pass "본문은 status UP 뿐이다 (세부 정보 없음)"; else fail "health 본문이 이상하다: $BODY"; fi
-  docker stop "$PG" >/dev/null
-  if wait_for 60 health_is "$C" "$HEALTH" 503; then pass "DB 컨테이너를 멈추면 /health 가 503 이다 (죽은 앱이 살아 있다고 나오지 않는다)"; else fail "DB 를 멈췄는데 /health 가 503 이 되지 않았다: $(health_status "$C" "$HEALTH")"; fi
-  docker start "$PG" >/dev/null
-  if wait_for 90 docker exec "$PG" pg_isready -h 127.0.0.1 -U app -d app; then pass "DB 를 다시 올렸다"; else fail "DB 가 다시 뜨지 않는다"; fi
-  if wait_for 90 health_is "$C" "$HEALTH" 200; then pass "DB 가 돌아오면 /health 가 다시 200 이다"; else fail "DB 복구 뒤에도 /health 가 200 이 아니다: $(health_status "$C" "$HEALTH")"; fi
-
   # 0.0.0.0 — 다른 컨테이너가 이름으로 닿고, 듣는 소켓이 루프백이 아니다
   OTHER="$(docker run --rm --network "$NET" alpine:3 sh -c "wget -S -q -O /dev/null http://app-$APP:$PORT$HEALTH 2>&1 | sed -n 's|^ *HTTP/1\\.[01] \\([0-9][0-9][0-9]\\).*|\\1|p' | head -1")"
   case "$OTHER" in 2??|401|403) pass "같은 네트워크의 다른 컨테이너가 app-$APP:$PORT 에 닿는다 ($OTHER)" ;; *) fail "다른 컨테이너에서 닿지 않는다 (0.0.0.0 이 아니다?): '$OTHER'" ;; esac
@@ -153,6 +147,13 @@ for APP in $(echo "$APPS" | tr ',' ' '); do
     pass "쓰지 않는 모듈의 설정을 요구하지 않는다 (자격 증명 · 설정 요구 로그 없음)"
   fi
   echo "$LOGS" | grep -q 'deploy guards:' && pass "기동 로그에 배포 가드 요약이 있다: $(echo "$LOGS" | grep 'deploy guards:' | head -1 | sed 's/^.*deploy guards:/deploy guards:/')" || fail "기동 로그에 배포 가드 요약이 없다"
+  # 정직한 헬스 — 마지막에 한다 (DB 를 멈추면 로그가 오류로 넘친다)
+  docker stop "$PG" >/dev/null
+  if wait_for 60 health_is "$C" "$HEALTH" 503; then pass "DB 컨테이너를 멈추면 /health 가 503 이다 (죽은 앱이 살아 있다고 나오지 않는다)"; else fail "DB 를 멈췄는데 /health 가 503 이 되지 않았다: $(health_status "$C" "$HEALTH")"; fi
+  docker start "$PG" >/dev/null
+  if wait_for 90 docker exec "$PG" pg_isready -h 127.0.0.1 -U app -d app; then pass "DB 를 다시 올렸다"; else fail "DB 가 다시 뜨지 않는다"; fi
+  if wait_for 90 health_is "$C" "$HEALTH" 200; then pass "DB 가 돌아오면 /health 가 다시 200 이다"; else fail "DB 복구 뒤에도 /health 가 200 이 아니다: $(health_status "$C" "$HEALTH")"; fi
+
   docker rm -f "$C" >/dev/null
 
   echo "-- B. 보호 프로필(prod) — 안전하지 않은 구성이면 읽을 수 있는 메시지로 stdout 에서 실패한다"
