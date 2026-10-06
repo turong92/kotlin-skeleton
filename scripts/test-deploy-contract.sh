@@ -135,18 +135,18 @@ for APP in $(echo "$APPS" | tr ',' ' '); do
 
   # stdout 로깅
   LOGS="$(docker logs "$C" 2>&1)"
-  [ -n "$LOGS" ] && echo "$LOGS" | grep -q 'Started' && pass "로그가 docker logs(stdout)에 나온다 ('Started …')" || fail "docker logs 에 기동 로그가 없다"
+  [ -n "$LOGS" ] && grep -q 'Started' <<<"$LOGS" && pass "로그가 docker logs(stdout)에 나온다 ('Started …')" || fail "docker logs 에 기동 로그가 없다"
   NEWLOGS="$(docker diff "$C" | grep -Ei '\.log' || true)"
   [ -z "$NEWLOGS" ] && pass "컨테이너 안에 새 로그 파일이 생기지 않는다" || fail "로그 파일이 생겼다: $NEWLOGS"
-  echo "$LOGS" | grep -Eqi 'traceId=' && pass "로그 줄에 traceId 가 붙는다 (스켈레톤 로그 형식)" || note "(traceId 형식은 확인하지 못했다 — 요청이 아직 없다)"
+  grep -Eqi 'traceId=' <<<"$LOGS" && pass "로그 줄에 traceId 가 붙는다 (스켈레톤 로그 형식)" || note "(traceId 형식은 확인하지 못했다 — 요청이 아직 없다)"
 
   # 쓰지 않는 모듈의 설정을 요구하지 않는다
-  if echo "$LOGS" | grep -Eqi 'credential|SdkClientException|aws.*(profile|region).*(missing|not)|Unable to load'; then
-    fail "AWS 자격 증명 따위를 찾은 흔적이 로그에 있다"; echo "$LOGS" | grep -Ei 'credential|SdkClient|Unable to load' | head -3
+  if grep -Eqi 'credential|SdkClientException|aws.*(profile|region).*(missing|not)|Unable to load' <<<"$LOGS"; then
+    fail "AWS 자격 증명 따위를 찾은 흔적이 로그에 있다"; grep -Ei 'credential|SdkClient|Unable to load' <<<"$LOGS" | head -3
   else
     pass "쓰지 않는 모듈의 설정을 요구하지 않는다 (자격 증명 · 설정 요구 로그 없음)"
   fi
-  echo "$LOGS" | grep -q 'deploy guards:' && pass "기동 로그에 배포 가드 요약이 있다: $(echo "$LOGS" | grep 'deploy guards:' | head -1 | sed 's/^.*deploy guards:/deploy guards:/')" || fail "기동 로그에 배포 가드 요약이 없다"
+  grep -q 'deploy guards:' <<<"$LOGS" && pass "기동 로그에 배포 가드 요약이 있다: $(echo "$LOGS" | grep 'deploy guards:' | head -1 | sed 's/^.*deploy guards:/deploy guards:/')" || fail "기동 로그에 배포 가드 요약이 없다"
   # 정직한 헬스 — 마지막에 한다 (DB 를 멈추면 로그가 오류로 넘친다)
   docker stop "$PG" >/dev/null
   if wait_for 60 health_is "$C" "$HEALTH" 503; then pass "DB 컨테이너를 멈추면 /health 가 503 이다 (죽은 앱이 살아 있다고 나오지 않는다)"; else fail "DB 를 멈췄는데 /health 가 503 이 되지 않았다: $(health_status "$C" "$HEALTH")"; fi
@@ -164,9 +164,9 @@ for APP in $(echo "$APPS" | tr ',' ' '); do
     EXIT="$(docker inspect -f '{{.State.ExitCode}}' "$C")"
     [ "$EXIT" != 0 ] && pass "프로필 prod 에 기본 비밀로는 기동이 실패한다 (exit $EXIT)" || fail "기동이 실패해야 하는데 exit 0"
     LOGS="$(docker logs "$C" 2>&1)"
-    echo "$LOGS" | grep -q 'skeleton.auth.jwt.secret' && pass "실패 메시지가 설정 이름을 말한다 (skeleton.auth.jwt.secret)" || { fail "실패 메시지에 설정 이름이 없다"; echo "$LOGS" | tail -15; }
-    echo "$LOGS" | grep -q 'dev-local-jwt-secret' && fail "실패 화면에 비밀 값이 새었다" || pass "실패 화면에 비밀 값이 없다"
-    echo "$LOGS" | grep -Eqi 'credential|SdkClient' && fail "AWS 자격 증명 요구로 죽었다" || pass "실패 원인이 AWS 설정이 아니다"
+    grep -q 'skeleton.auth.jwt.secret' <<<"$LOGS" && pass "실패 메시지가 설정 이름을 말한다 (skeleton.auth.jwt.secret)" || { fail "실패 메시지에 설정 이름이 없다"; echo "$LOGS" | tail -15; }
+    grep -q 'dev-local-jwt-secret' <<<"$LOGS" && fail "실패 화면에 비밀 값이 새었다" || pass "실패 화면에 비밀 값이 없다"
+    grep -Eqi 'credential|SdkClient' <<<"$LOGS" && fail "AWS 자격 증명 요구로 죽었다" || pass "실패 원인이 AWS 설정이 아니다"
   else
     fail "prod 프로필인데 기동이 막히지 않았다"; docker logs "$C" 2>&1 | tail -10
   fi
@@ -178,8 +178,8 @@ for APP in $(echo "$APPS" | tr ',' ' '); do
   docker run -d --name "$C" --network "$NET" $(contract_env) -e SKELETON_ENV=prod "$IMG" >/dev/null
   if wait_for 120 stopped "$C"; then
     LOGS="$(docker logs "$C" 2>&1)"
-    echo "$LOGS" | grep -q 'skeleton.env=prod' && pass "SKELETON_ENV=prod 만으로 기동이 막히고 이유에 skeleton.env=prod 가 보인다" || { fail "스위치가 보호로 이어지지 않았다"; echo "$LOGS" | tail -12; }
-    echo "$LOGS" | grep -q 'APPLICATION FAILED TO START' && pass "스택 트레이스 대신 FailureAnalyzer 화면이다" || fail "FailureAnalyzer 화면이 아니다"
+    grep -q 'skeleton.env=prod' <<<"$LOGS" && pass "SKELETON_ENV=prod 만으로 기동이 막히고 이유에 skeleton.env=prod 가 보인다" || { fail "스위치가 보호로 이어지지 않았다"; echo "$LOGS" | tail -12; }
+    grep -q 'APPLICATION FAILED TO START' <<<"$LOGS" && pass "스택 트레이스 대신 FailureAnalyzer 화면이다" || fail "FailureAnalyzer 화면이 아니다"
     echo "$LOGS" | sed -n '/APPLICATION FAILED TO START/,$p' | head -16 | sed 's/^/    | /'
   else
     fail "SKELETON_ENV=prod 인데 기동이 막히지 않았다"; docker logs "$C" 2>&1 | tail -10
@@ -193,9 +193,9 @@ for APP in $(echo "$APPS" | tr ',' ' '); do
   docker run -d --name "$C" --network "$NET" $(contract_env) -e SKELETON_ENV=prod -e "JWT_SECRET=$C2JWT" "$IMG" >/dev/null
   if wait_for 120 stopped "$C"; then
     LOGS="$(docker logs "$C" 2>&1)"
-    if echo "$LOGS" | grep -q 'skeleton.web.client-ip.mode'; then pass "클라이언트 IP mode 미설정이 가드 메시지에 있다 (IP 한도 우회 방지)"; else fail "client-ip 가드 메시지가 없다"; echo "$LOGS" | tail -12; fi
-    if echo "$LOGS" | grep -q 'mail transport'; then pass "메일 발송 길 없음이 가드 메시지에 있다"; else note "(메일 모듈이 있는 앱 — 메일 메시지 없음)"; fi
-    if echo "$LOGS" | grep -q "$C2JWT"; then fail "실패 화면에 JWT 비밀이 새었다"; else pass "실패 화면에 비밀 값이 없다"; fi
+    if grep -q 'skeleton.web.client-ip.mode' <<<"$LOGS"; then pass "클라이언트 IP mode 미설정이 가드 메시지에 있다 (IP 한도 우회 방지)"; else fail "client-ip 가드 메시지가 없다"; echo "$LOGS" | tail -12; fi
+    if grep -q 'mail transport' <<<"$LOGS"; then pass "메일 발송 길 없음이 가드 메시지에 있다"; else note "(메일 모듈이 있는 앱 — 메일 메시지 없음)"; fi
+    if grep -q "$C2JWT" <<<"$LOGS"; then fail "실패 화면에 JWT 비밀이 새었다"; else pass "실패 화면에 비밀 값이 없다"; fi
   else
     fail "JWT 만 있는데 기동이 막히지 않았다 (client-ip · 메일 가드)"; docker logs "$C" 2>&1 | tail -10
   fi
@@ -207,8 +207,8 @@ for APP in $(echo "$APPS" | tr ',' ' '); do
   docker run -d --name "$C" --network "$NET" $(contract_env) -e JWT_SECRET= "$IMG" >/dev/null
   if wait_for 120 stopped "$C"; then
     LOGS="$(docker logs "$C" 2>&1)"
-    if echo "$LOGS" | grep -q 'Empty key'; then fail "서명기가 Empty key 로 죽었다 (가드 메시지가 아니다)"; else pass "Empty key 크래시가 아니다"; fi
-    if echo "$LOGS" | grep -q 'JWT_SECRET'; then pass "메시지가 환경변수 이름(JWT_SECRET)을 말한다"; else fail "JWT_SECRET 이름이 메시지에 없다"; echo "$LOGS" | tail -10; fi
+    if grep -q 'Empty key' <<<"$LOGS"; then fail "서명기가 Empty key 로 죽었다 (가드 메시지가 아니다)"; else pass "Empty key 크래시가 아니다"; fi
+    if grep -q 'JWT_SECRET' <<<"$LOGS"; then pass "메시지가 환경변수 이름(JWT_SECRET)을 말한다"; else fail "JWT_SECRET 이름이 메시지에 없다"; echo "$LOGS" | tail -10; fi
   else
     fail "빈 JWT 비밀인데 기동이 막히지 않았다"
   fi
@@ -230,8 +230,8 @@ for APP in $(echo "$APPS" | tr ',' ' '); do
     if wait_for 180 health_is "$C" "$HEALTH" 200; then
       pass "SKELETON_ENV=prod 에서 가드를 모두 통과해 뜬다 (/health 200)"
       LOGS="$(docker logs "$C" 2>&1)"
-      if echo "$LOGS" | grep -qi 'Client IP: proxy'; then pass "<PREFIX>_WEB_CLIENT_IP_MODE · _TRUSTED_PROXIES 가 바인딩된다 ($(echo "$LOGS" | grep 'Client IP:' | head -1 | sed 's/^.*Client IP:/Client IP:/'))"; else fail "client-ip 환경변수가 바인딩되지 않았다"; fi
-      if echo "$LOGS" | grep -q 'deploy guards: env=prod'; then pass "가드 요약에 env=prod"; else fail "가드 요약이 env=prod 가 아니다"; fi
+      if grep -qi 'Client IP: proxy' <<<"$LOGS"; then pass "<PREFIX>_WEB_CLIENT_IP_MODE · _TRUSTED_PROXIES 가 바인딩된다 ($(echo "$LOGS" | grep 'Client IP:' | head -1 | sed 's/^.*Client IP:/Client IP:/'))"; else fail "client-ip 환경변수가 바인딩되지 않았다"; fi
+      if grep -q 'deploy guards: env=prod' <<<"$LOGS"; then pass "가드 요약에 env=prod"; else fail "가드 요약이 env=prod 가 아니다"; fi
     else
       fail "시험 배포 조합이 뜨지 않는다"; docker logs "$C" 2>&1 | tail -25
     fi
@@ -241,7 +241,8 @@ for APP in $(echo "$APPS" | tr ',' ' '); do
     # shellcheck disable=SC2046
     docker run -d --name "$C" --network "$NET" $(contract_env) $(base_d_env) "$IMG" >/dev/null
     if wait_for 120 stopped "$C"; then
-      if docker logs "$C" 2>&1 | grep -q 'skeleton.web.client-ip.mode'; then pass "client-ip 를 빼면 가드가 그 이름을 말하며 실패한다"; else fail "client-ip 를 뺀 실패에 그 이름이 없다"; fi
+      LOGS="$(docker logs "$C" 2>&1)"   # 변수에 담아 grep (파이프 + pipefail 은 grep -q 가 일찍 닫으면 거짓 실패한다)
+      if grep -q 'skeleton.web.client-ip.mode' <<<"$LOGS"; then pass "client-ip 를 빼면 가드가 그 이름을 말하며 실패한다"; else fail "client-ip 를 뺀 실패에 그 이름이 없다"; fi
     else fail "client-ip 를 뺐는데 기동이 막히지 않았다"; fi
     docker rm -f "$C" >/dev/null
 
@@ -249,7 +250,8 @@ for APP in $(echo "$APPS" | tr ',' ' '); do
     # shellcheck disable=SC2046
     docker run -d --name "$C" --network "$NET" $(contract_env) $(base_d_env nomail) -e SKELETON_WEB_CLIENT_IP_MODE=PROXY -e "SKELETON_WEB_CLIENT_IP_TRUSTED_PROXIES=$SUBNET" "$IMG" >/dev/null
     if wait_for 120 stopped "$C"; then
-      if docker logs "$C" 2>&1 | grep -q 'mail transport'; then pass "메일 발송 길을 빼면 가드가 말하며 실패한다"; else fail "메일을 뺀 실패에 mail transport 메시지가 없다"; fi
+      LOGS="$(docker logs "$C" 2>&1)"
+      if grep -q 'mail transport' <<<"$LOGS"; then pass "메일 발송 길을 빼면 가드가 말하며 실패한다"; else fail "메일을 뺀 실패에 mail transport 메시지가 없다"; fi
     else fail "메일을 뺐는데 기동이 막히지 않았다"; fi
     docker rm -f "$C" >/dev/null
   fi
