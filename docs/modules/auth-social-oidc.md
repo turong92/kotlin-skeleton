@@ -51,6 +51,11 @@ skeleton:
 - **`sub` 의 안정성**: LINE 의 user ID 는 **LINE Provider(콘솔의 묶음) 단위**로 같다 — 같은 Provider 아래 채널(LINE Login · Messaging API)끼리는 같고, **다른 Provider 의 채널에서는 같은 사람의 값이 다르다**([문서](https://developers.line.biz/en/docs/messaging-api/getting-user-ids/)). 결과: 채널을 같은 Provider 안에서 바꾸는 것은 안전하지만, **다른 Provider 로 옮기거나 새 Provider 로 채널을 다시 만들면 모든 사용자가 새 로그인 수단(새 계정)이 된다.** 처음부터 채널을 만들 Provider 를 정하고 바꾸지 않는다. (작업 지시의 "채널 단위" 는 문서상 "Provider 단위" 가 정확하다.)
 - 로그인 코드 수명 10분 · 한 번 쓰기 (LINE 문서).
 
+## 환경변수로 설정할 때 (Map 값이라 별칭이 필요하다)
+`providers.<코드>.*` 는 Map 값이라 스프링의 느슨한 바인딩만으로는 `SKELETON_AUTH_SOCIAL_OIDC_PROVIDERS_LINE_CLIENT_ID` 가 묶이지 않는다(`_` 가 모두 칸 구분이 된다 — `OidcEnvironmentVariablesTest` 가 진짜 `systemEnvironment` 모양으로 증명). 그래서 `OidcEnvironmentAliasPostProcessor`(`spring.factories`)가
+`SKELETON_AUTH_SOCIAL_OIDC_PROVIDERS_<코드>_<키>` 를 `skeleton.auth-social-oidc.providers.<코드 소문자>.<키: 소문자, _ 는 ->` 로 다시 적는다 (`auth-social` 의 `AuthSocialEnvironmentAliasPostProcessor` 와 같은 규칙).
+**코드는 한 단어(영문 · 숫자)**여야 한다 — `line-jp` 같은 여러 단어 코드는 환경변수로 쓸 수 없으니 yml 로. 중첩은 `…_CLAIMS_EMAIL_VERIFIED` → `claims.email-verified` 만 지원하고 `authorize-params` 같은 맵 키는 yml 로. 값이 빈 변수는 건너뛴다.
+
 ## 콘솔 체크리스트 (LINE)
 1. [LINE Developers Console](https://developers.line.biz/console/) → Provider 를 만든다(위 `sub` 주의) → **LINE Login** 채널 생성(App type: **Web app**).
 2. Basic settings 의 **Channel ID**(= `client-id`), **Channel secret**(= `client-secret`, 운영자 비밀 — `docs/deploy.md` §7).
@@ -59,7 +64,7 @@ skeleton:
    - 배포: `https://<도메인>/auth/callback`
 4. (선택) Basic settings > OpenID Connect > **Email address permission** 신청 → 승인 뒤 `scopes` 에 `email`.
 5. 채널 상태: 개발 중(Developing) 에는 채널 관리자 · 테스터만 로그인된다 — 공개하려면 **Published** 로 바꾼다.
-6. 앱 설정: `<P>_AUTH_SOCIAL_OIDC_PROVIDERS_LINE_CLIENT_ID`(env:) · `…_CLIENT_SECRET`(운영자), `…_REDIRECT_URI`. 프론트가 `GET /auth/methods` 의 `line` 항목으로 인가 URL 을 만든다 ([계약](../account-http-contract.md) "FINAL-3 + social PKCE").
+6. 앱 설정 — 환경변수 이름(실측: 진짜 환경변수로 apps/sample 을 띄워 `/auth/methods` 에 `line` 이 `clientId` 와 함께 나옴): `SKELETON_AUTH_SOCIAL_OIDC_PROVIDERS_LINE_CLIENT_ID`(env:) · `…_LINE_CLIENT_SECRET`(운영자) · `…_LINE_REDIRECT_URI`(env:) · `…_LINE_SCOPES=openid,profile,email`(콘솔 이메일 승인 뒤). (`<P>_` 는 배포 플랫폼의 접두 규칙, 스켈레톤 기본 `SKELETON_`.) 프론트가 `GET /auth/methods` 의 `line` 항목으로 인가 URL 을 만든다 ([계약](../account-http-contract.md) "FINAL-3 + social PKCE").
 
 | 항목 | 내용 |
 |---|---|

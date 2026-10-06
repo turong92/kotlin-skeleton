@@ -18,12 +18,12 @@
 1. [developer.x.com](https://developer.x.com/en/portal/dashboard) → **Project** 와 그 안의 **App** 을 만든다.
 2. App 의 **User authentication settings** → **OAuth 2.0** 켬 → **Type of App: Web App, Automated App or Bot** (= 기밀 클라이언트; "Native App / Single page App" 은 공개 클라이언트라 Client Secret 이 없다 — 이 모듈은 쓰지 않는다).
 3. **Callback URI / Redirect URL** 에 정확히 아래를 등록한다 (정확 일치 검증 — 문서):
-   - 로컬: `http://127.0.0.1:5173/auth/callback` (X 가 `localhost` 대신 `127.0.0.1` 을 요구하는지는 **확인 필요**; 프론트 개발 서버를 `127.0.0.1` 로 열어 쓴다)
+   - 로컬: `http://127.0.0.1:<포트>/auth/callback` (예 `http://127.0.0.1:5173/auth/callback`) — **X 는 `localhost` 를 거부한다**(운영 측 확인). 프론트 개발 서버를 `127.0.0.1` 로 열어 쓰고 `redirect-uri` 도 같은 값으로 둔다. 이 모듈은 redirect URI 를 정규화하지 않고 글자 그대로 X 에 보낸다(`XOAuthProviderTest`)
    - 배포: `https://<도메인>/auth/callback`
    - **Website URL** 도 필수다.
 4. **Keys and tokens** 에서 **OAuth 2.0 Client ID** (= `client-id`) 와 **Client Secret** (= `client-secret`, 운영자 비밀) — **OAuth 1.0a 의 API Key/Secret 이 아니다.**
 5. (선택, 이메일) 앱 설정에서 이메일 요청 권한을 켜고 개인정보처리방침 · 약관 URL 을 넣은 뒤 `request-email: true`.
-6. 앱 설정: `<P>_AUTH_SOCIAL_X_CLIENT_ID`(env:) · `<P>_AUTH_SOCIAL_X_CLIENT_SECRET`(운영자) · `<P>_AUTH_SOCIAL_X_REDIRECT_URI`.
+6. 앱 설정 — 환경변수 이름(실측: 진짜 환경변수로 apps/sample 을 띄워 `/auth/methods` 에 `x` 가 `clientId` 와 함께 나옴): `SKELETON_AUTH_SOCIAL_X_CLIENT_ID`(env:) · `SKELETON_AUTH_SOCIAL_X_CLIENT_SECRET`(운영자) · `SKELETON_AUTH_SOCIAL_X_REDIRECT_URI`(env:) · 선택 `SKELETON_AUTH_SOCIAL_X_REQUEST_EMAIL=true`. X 설정은 Map 이 아니라 평범한 속성 클래스라 별칭 없이 그대로 묶인다(`XEnvironmentVariablesTest`).
 
 | 항목 | 내용 |
 |---|---|

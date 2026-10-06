@@ -115,6 +115,14 @@ class XOAuthProviderTest {
     }
 
     @Test
+    fun `the redirect URI reaches X byte for byte - a local 127_0_0_1 callback is never rewritten to localhost`() {
+        issue("c-local")
+        provider().fetchProfile(OAuthCodeExchange("c-local", "http://127.0.0.1:5173/auth/callback", verifier, null))
+        val form = requests.first { it.path == "/2/oauth2/token" }.body.split("&").associate { val p = it.split("=", limit = 2); p[0] to URLDecoder.decode(p[1], StandardCharsets.UTF_8) }
+        assertEquals("http://127.0.0.1:5173/auth/callback", form["redirect_uri"])
+    }
+
+    @Test
     fun `X declares PKCE required, no nonce, and tells the frontend its authorize endpoint and scopes`() {
         val p = provider()
         assertEquals(PkceMode.REQUIRED, p.pkce)

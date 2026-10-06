@@ -302,7 +302,7 @@ Rules (server-enforced, evaluated by the target provider's mode, BEFORE the prov
 - `codeVerifier` present but not 43-128 chars of `[A-Za-z0-9-._~]` -> `400 AUTH.SOCIAL_PKCE_FAILED` (validated whenever present, in every mode).
 - `pkce = SUPPORTED`: forwarded to the provider when present, optional. `pkce = UNSUPPORTED`: ignored, never forwarded.
 - `nonce = REQUIRED` and none (or malformed: not 8-256 printable ASCII without spaces) -> `400 AUTH.SOCIAL_NONCE_FAILED`. `SUPPORTED`: checked against the provider's ID token when present. `UNSUPPORTED`: ignored.
-- A verifier that does not match the challenge of the authorization request is detected by the provider, not by us: it answers `invalid_grant` and the backend answers `401 AUTH_SOCIAL.INVALID_AUTHORIZATION_CODE` (indistinguishable from a wrong or already used code; for `socialReauth` it is `400 ACCOUNT.REAUTH_FAILED`). When the provider's error text names the verifier, the backend answers `400 AUTH.SOCIAL_PKCE_FAILED` instead.
+- A verifier that does not match the challenge of the authorization request is detected by the provider, not by us: it answers `invalid_grant` and the backend answers `401 AUTH_SOCIAL.INVALID_AUTHORIZATION_CODE` (indistinguishable from a wrong or already used code; for `socialReauth` it is `400 ACCOUNT.REAUTH_FAILED`). When the provider (LINE, X, any OIDC provider; not Google, Kakao, Naver) error text names the verifier, the backend answers `400 AUTH.SOCIAL_PKCE_FAILED` instead.
 - For `socialReauth` a missing/malformed verifier or nonce is `400 AUTH.SOCIAL_PKCE_FAILED` / `AUTH.SOCIAL_NONCE_FAILED` (a client bug), not `ACCOUNT.REAUTH_FAILED`.
 
 ### D. Errors added
