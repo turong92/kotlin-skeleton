@@ -25,9 +25,9 @@
 ## 필요한 것 → 고를 것 (결정표)
 
 - 로그인 (이메일 · 비밀번호) · JWT · 로그인한 사람만 보는 API [auth] → kotlin 덧붙일 것 없음 · react 기본 포함 — 손으로: 스타터에 기본 포함 — 회원가입 · 비밀번호 재설정 · 계정 DB 저장 · 세션은 아래 「회원가입 · 계정…
-- 회원가입 · 이메일 인증 · 비밀번호 재설정 · 이메일 변경 · 계정 설정 · 탈퇴 · 로그인 세션 관리 [account, account-jdbc, auth-session, auth-session-jdbc] → kotlin 덧붙일 것 없음 · react `--packages auth` — 손으로: 스타터에 기본 포함(account-jdbc · auth-session-jdbc).
-- 비밀번호 없이 이메일 링크로 로그인 (매직링크) [auth-magic-link] → kotlin `--modules auth-magic-link` · react `--packages auth` — 손으로: 스타터의 account 위에 얹는다.
-- 관리자 회원 관리 (목록 · 정지 · 역할 · 삭제 복구) [account] → kotlin 덧붙일 것 없음 · react `--packages auth` — 손으로: 스타터의 account 에 있다 — skeleton.account.admin.enabled=true 로…
+- 회원가입 · 이메일 인증 · 비밀번호 재설정 · 이메일 변경 · 계정 설정 · 탈퇴 · 로그인 세션 관리 [account, account-jdbc, auth-session, auth-session-jdbc] → kotlin 덧붙일 것 없음 · react 기본 포함 — 손으로: 스타터에 기본 포함(account-jdbc · auth-session-jdbc).
+- 비밀번호 없이 이메일 링크로 로그인 (매직링크) [auth-magic-link] → kotlin `--modules auth-magic-link` · react 기본 포함 — 손으로: 스타터의 account 위에 얹는다.
+- 관리자 회원 관리 (목록 · 정지 · 역할 · 삭제 복구) [account] → kotlin 덧붙일 것 없음 · react 기본 포함 — 손으로: 스타터의 account 에 있다 — skeleton.account.admin.enabled=true 로…
 - 소셜 로그인 (구글 · 카카오 · 네이버) [auth-social] → kotlin `--modules auth-social,auth-social-google` (auth-social-google | auth-social-kakao | auth-social-naver 중 하나 이상 고른다) · react 기본 포함 — 손으로: 제공자 enabled · client-id · client-secret · redirect-uri(비밀은…
 - 게시판 · 글쓰기 · 댓글 · 대댓글 · 공감(반응) [board, board-jdbc] → kotlin `--modules board,board-jdbc` · react `--packages board` — 손으로: 게시판 코드 만들기(skeleton.board.seed-boards 설정이나 운영자 API)
 - 알림 (종 · 목록 · 안 읽은 수) [notification, notification-jdbc] → kotlin `--modules notification,notification-jdbc` · react `--packages notifications` — 손으로: 알림을 만드는 쪽(NotificationPublisher.publish)은 앱 코드 — 받는 사람은…
@@ -62,10 +62,10 @@
 ## 작업 예 (두 레포의 명령 — 순서 · 설정 · 검증 · 배포는 docs/new-project-recipe.md)
 
 - 커뮤니티 사이트 — 소셜 로그인 · 게시판(댓글 · 공감) · 실시간 알림 · 다국어 · 랜딩
-  - kotlin: `scripts/new-project.sh ~/work/community/api dev.example.community community Community --modules auth-social,auth-social-google,board,board-jdbc,notification,notification-jdbc,notification-sse`
+  - kotlin: `scripts/new-project.sh ~/work/community/api dev.example.community community Community --modules auth-social-google,board,board-jdbc,notification,notification-jdbc,notification-sse`
   - react: `scripts/new-project.sh ~/work/community/web community --packages board,notifications,realtime,i18n,marketing,seo --with-sample`
 - 유료 SaaS 대시보드 — 로그인 · 대시보드/목록/설정 · 요금제 · 결제 · 알림
-  - kotlin: `scripts/new-project.sh ~/work/saas/api dev.example.saas saas Saas --modules payment,payment-toss,notification,notification-jdbc,captcha-turnstile --db mysql`
+  - kotlin: `scripts/new-project.sh ~/work/saas/api dev.example.saas saas Saas --modules payment,payment-toss,notification,notification-jdbc --db mysql`
   - react: `scripts/new-project.sh ~/work/saas/web saas --packages marketing,payment,notifications,captcha-turnstile --scope @acme`
 - 콘텐츠 · 랜딩 사이트 (서버 렌더링) — 검색에 노출되는 소개 · 요금 · 약관 사이트
   - kotlin: `scripts/new-project.sh ~/work/site/api dev.example.site site Site`

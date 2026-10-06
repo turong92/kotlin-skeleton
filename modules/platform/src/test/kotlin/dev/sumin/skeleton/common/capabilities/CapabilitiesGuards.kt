@@ -394,6 +394,13 @@ internal object CapabilitiesGuards {
             ex["extraFlags"].strings().forEach { append(" $it") }
         }
 
+    /** `--modules a,b,c` 에서 스타터 모듈을 뺀다(남는 게 없으면 플래그째 뺀다) — 명령을 의미로 비교하려는 것 */
+    private fun withoutStarterModules(command: String, starter: Set<String>): String =
+        Regex("""--modules (\S+)""").replace(command) { m ->
+            val kept = m.groupValues[1].split(",").filter { it !in starter }
+            if (kept.isEmpty()) "" else "--modules ${kept.joinToString(",")}"
+        }.replace(Regex("\\s+"), " ").trim()
+
     fun recipe(catalog: Map<String, Any?>, recipeText: String?, reactRecipeText: String? = null): List<String> {
         val examples = catalog["examples"].arr().map { it.obj() }
         if (examples.isEmpty() && recipeText == null) return emptyList()
@@ -408,6 +415,7 @@ internal object CapabilitiesGuards {
             if (got == null) problems += "레시피에 '<!-- kotlin-stamp: $id -->' 블록이 없다 — 명령: $want"
             else if (got != want) problems += "레시피 예 '$id' 의 명령이 카탈로그와 다르다.\n    레시피: $got\n    카탈로그: $want"
         }
+        val starter = catalog["starterModules"].strings().toSet()
         if (reactRecipeText != null) {
             val theirs = Regex("""<!-- react-stamp: ([a-z0-9-]+) -->\s*```bash\n(.*?)\n```""", RegexOption.DOT_MATCHES_ALL).findAll(reactRecipeText)
                 .associate { it.groupValues[1] to it.groupValues[2].trim() }
@@ -422,7 +430,8 @@ internal object CapabilitiesGuards {
             examples.forEach { ex ->
                 val id = ex["id"] as String
                 val got = theirKotlin[id]
-                if (got != null && got != exampleCommand(ex)) problems += "예 '$id' 의 kotlin 명령이 react-skeleton 레시피의 kotlin-stamp 블록과 다르다.\n    여기: ${exampleCommand(ex)}\n    그쪽: $got"
+                // 스타터 모듈은 늘 들어 있으므로 --modules 에 적어도 · 안 적어도 같은 명령이다 — 짝 레포의 옛 복사본이 적어 둔 것을 허용한다
+                if (got != null && withoutStarterModules(got, starter) != withoutStarterModules(exampleCommand(ex), starter)) problems += "예 '$id' 의 kotlin 명령이 react-skeleton 레시피의 kotlin-stamp 블록과 다르다.\n    여기: ${exampleCommand(ex)}\n    그쪽: $got"
             }
         }
         blocks.keys.filter { id -> examples.none { it["id"] == id } }.forEach { problems += "레시피의 kotlin-stamp '$it' 에 해당하는 examples 항목이 없다" }

@@ -100,12 +100,12 @@ perl scripts/build-capabilities.pl --check                                      
 
 > 관심사가 같은 사람들이 모이는 커뮤니티. 비로그인 방문자는 랜딩을 보고, 구글 · 카카오로 가입해 글을 쓰고 댓글 · 공감을 주고받으며, 내 글에 댓글이 달리면 알림이 바로 뜬다. 화면은 한국어 · 영어.
 
-고르기(백엔드): `auth`(스타터) · `auth-social` + 제공자 `auth-social-google`(카카오가 필요하면 `auth-social-kakao` 도) · `board` + `board-jdbc` · `notification` + `notification-jdbc` + `notification-sse`. 다국어 · 랜딩 · 약관 · 쿠키 동의는 프런트만의 일이다(백엔드 모듈 없음 — react 레시피).
+고르기(백엔드): `auth` · `auth-social`(둘 다 스타터 — 고를 것은 제공자) `auth-social-google`(카카오가 필요하면 `auth-social-kakao` 도) · `board` + `board-jdbc` · `notification` + `notification-jdbc` + `notification-sse`. 다국어 · 랜딩 · 약관 · 쿠키 동의는 프런트만의 일이다(백엔드 모듈 없음 — react 레시피).
 
 <!-- kotlin-stamp: community -->
 
 ```bash
-scripts/new-project.sh ~/work/community/api dev.example.community community Community --modules auth-social,auth-social-google,board,board-jdbc,notification,notification-jdbc,notification-sse
+scripts/new-project.sh ~/work/community/api dev.example.community community Community --modules auth-social-google,board,board-jdbc,notification,notification-jdbc,notification-sse
 ```
 
 그다음:
@@ -125,12 +125,12 @@ scripts/dev.sh
 
 > 월 구독으로 쓰는 업무 도구. 로그인 후 대시보드 · 목록 · 상세 · 설정 화면이 있고, 요금제 페이지에서 플랜을 골라 토스로 결제하며, 가입 폼은 봇을 막고, 결제 · 작업 완료 알림을 받는다.
 
-고르기(백엔드): `auth`(스타터) · `payment` + `payment-toss` · `notification` + `notification-jdbc` · `captcha-turnstile`. DB 는 MySQL 로 둔다(`--db mysql`).
+고르기(백엔드): `auth`(스타터) · `payment` + `payment-toss` · `notification` + `notification-jdbc`; `captcha-turnstile` 은 스타터에 들어 있어 켜기만 한다(SAAS_CAPTCHA_TURNSTILE_*). DB 는 MySQL 로 둔다(`--db mysql`).
 
 <!-- kotlin-stamp: saas -->
 
 ```bash
-scripts/new-project.sh ~/work/saas/api dev.example.saas saas Saas --modules payment,payment-toss,notification,notification-jdbc,captcha-turnstile --db mysql
+scripts/new-project.sh ~/work/saas/api dev.example.saas saas Saas --modules payment,payment-toss,notification,notification-jdbc --db mysql
 ```
 
 그다음:

@@ -167,7 +167,11 @@
       "basePaths": [],
       "secrets": [],
       "docs": ["docs/modules/account-jdbc.md"],
-      "frontend": null,
+      "frontend": {
+        "capabilities": ["account-lifecycle"],
+        "newProjectFlag": null,
+        "packages": ["@skeleton/auth"]
+      },
       "notFor": [
         "account 없이 단독으로는 의미가 없다 — account 의 포트 구현이다",
         "다른 DB 는 AccountRepository · OneTimeTokenStore 를 앱이 직접 구현한다"
@@ -420,7 +424,7 @@
       ],
       "docs": ["docs/modules/auth-session.md"],
       "frontend": {
-        "capabilities": ["auth", "session-refresh"],
+        "capabilities": ["auth", "account-lifecycle", "session-refresh"],
         "newProjectFlag": null,
         "packages": ["@skeleton/auth"]
       },
@@ -460,7 +464,11 @@
       "basePaths": [],
       "secrets": [],
       "docs": ["docs/modules/auth-session-jdbc.md"],
-      "frontend": null,
+      "frontend": {
+        "capabilities": ["session-refresh"],
+        "newProjectFlag": null,
+        "packages": ["@skeleton/auth"]
+      },
       "notFor": ["auth-session 없이 단독으로는 의미가 없다", "다른 DB 는 SessionStore 를 앱이 직접 구현한다"],
       "keywords": {
         "ko": ["세션 저장", "세션 DB", "리프레시 토큰 저장"],
@@ -2176,7 +2184,7 @@
     {
       "frontend": {
         "capabilities": ["auth", "account-lifecycle"],
-        "flag": "--packages auth"
+        "flag": null
       },
       "oneOf": [],
       "need": "회원가입 · 이메일 인증 · 비밀번호 재설정 · 이메일 변경 · 계정 설정 · 탈퇴 · 로그인 세션 관리",
@@ -2187,7 +2195,7 @@
     {
       "frontend": {
         "capabilities": ["magic-link-login"],
-        "flag": "--packages auth"
+        "flag": null
       },
       "oneOf": [],
       "need": "비밀번호 없이 이메일 링크로 로그인 (매직링크)",
@@ -2198,7 +2206,7 @@
     {
       "frontend": {
         "capabilities": ["account-admin"],
-        "flag": "--packages auth"
+        "flag": null
       },
       "oneOf": [],
       "need": "관리자 회원 관리 (목록 · 정지 · 역할 · 삭제 복구)",
@@ -2496,7 +2504,6 @@
     {
       "id": "community",
       "modules": [
-        "auth-social",
         "auth-social-google",
         "board",
         "board-jdbc",
@@ -2526,7 +2533,7 @@
     },
     {
       "id": "saas",
-      "modules": ["payment", "payment-toss", "notification", "notification-jdbc", "captcha-turnstile"],
+      "modules": ["payment", "payment-toss", "notification", "notification-jdbc"],
       "title": "유료 SaaS 대시보드 — 로그인 · 대시보드/목록/설정 · 요금제 · 결제 · 알림",
       "product": "월 구독으로 쓰는 업무 도구. 로그인 후 대시보드 · 목록 · 상세 · 설정 화면이 있고, 요금제 페이지에서 플랜을 골라 토스로 결제하며, 가입 폼은 봇을 막고, 결제 · 작업 완료 알림을 받는다.",
       "extraFlags": ["--db mysql"],
