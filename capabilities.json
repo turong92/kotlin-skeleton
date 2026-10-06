@@ -101,7 +101,7 @@
           "whenMissing": "선택 — 이 이메일이 확인되면 ADMIN 을 준다. 없으면 관리자 API 를 켠 앱은 경고"
         },
         {
-          "env": ["<P>_WEB_CLIENT_IP_MODE", "<P>_WEB_CLIENT_IP_TRUSTED_PROXIES"],
+          "env": ["<P>_CLIENT_IP_MODE", "<P>_CLIENT_IP_TRUSTED_PROXIES"],
           "whenMissing": "홈서버 플랫폼이 넣는다(예약 이름). 안 정해지면 보호 환경에서 기동 실패 — IP 한도가 X-Forwarded-For 로 풀린다",
           "platformProvided": true
         }

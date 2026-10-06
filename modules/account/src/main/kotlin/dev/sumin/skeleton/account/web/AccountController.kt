@@ -66,7 +66,7 @@ class AccountController(
         summary = "Ask to change the account email; a 6-digit code goes to the NEW address and nothing changes until it is entered in this session (202)",
         description = "Re-authenticate with currentPassword, or confirmationCode (account without a password), or socialReauth (account without an address).",
     )
-    @IdempotentOperation(ignoredBodyFields = ["currentPassword", "confirmationCode", "socialReauth"])
+    @IdempotentOperation(ignoredBodyFields = ["currentPassword", "confirmationCode", "socialReauth"], cacheClientErrors = false)
     @PostMapping("/email/change")
     @AcceptedOperation
     fun changeEmail(authentication: Authentication?, @Valid @RequestBody request: ChangeEmailRequest): ResponseEntity<DataResponse<StatusResponse>> {
@@ -123,7 +123,7 @@ class AccountController(
         summary = "Delete the account (re-authenticate with the password, the mailed code, or - for an account without an address - a fresh social code)",
         description = "Sign-in is blocked at once; the data is erased after skeleton.account.deletion.grace.",
     )
-    @IdempotentOperation(ignoredBodyFields = ["currentPassword", "confirmationCode", "socialReauth"])
+    @IdempotentOperation(ignoredBodyFields = ["currentPassword", "confirmationCode", "socialReauth"], cacheClientErrors = false)
     @PostMapping("/delete")
     @AcceptedOperation
     fun delete(authentication: Authentication?, @Valid @RequestBody request: DeleteAccountRequest): ResponseEntity<DataResponse<DeletionResponse>> {

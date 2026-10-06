@@ -9,7 +9,7 @@
 | 함께 오는 모듈 | `platform` |
 | 컴파일 전용 | 없음 |
 | 설정 접두사 | `skeleton.idempotency` — [docs/config/modules/idempotency.yml](../config/modules/idempotency.yml) |
-| 기본 동작 | 켜짐 (인메모리 저장소). |
+| 기본 동작 | 켜짐 (인메모리 저장소). 응답은 상태와 상관없이 키에 묶어 재생한다 — `@IdempotentOperation(cacheClientErrors = false)` 인 명령(비밀번호 · 코드를 싣는 계정 명령)은 4xx 를 묶지 않고 예약을 푼다(`IdempotencyStore.release`). |
 | 부팅에 필요한 것 | 없음. |
 | 교체 지점 | `IdempotencyStore`, `IdempotencyScopeResolver` |
 | 마이그레이션 | 없음 |

@@ -50,7 +50,7 @@ secrets:
 #   [account] SKELETON_ACCOUNT_MAIL_LINK_BASE_URL   (env:) 메일 링크가 여는 프론트 주소 (예: https://app.example.com) — 비면 SKELETON_ENV=stage|prod 에서 기동 실패. 선택: SKELETON_ACCOUNT_BOOTSTRAP_ADMIN_EMAIL (이 이메일이 확인되면 ADMIN)
 #       메일 발송기(notification-mail)가 없으면 가입 · 재설정 링크를 보낼 수 없어 같은 가드가 막는다 — 이 스타터에서 서비스를 열려면 --modules notification-mail 을 고르고 [notification-mail] 변수를 넣는다
 #       시드 계정(skeleton.account.seed.accounts)과 SKELETON_ACCOUNT_MAIL_LOG_LINKS=ON 은 보호 환경에서 기동 실패 (로컬 · 시험 전용)
-#       클라이언트 IP(SKELETON_WEB_CLIENT_IP_MODE · _TRUSTED_PROXIES)는 플랫폼이 넣는다 — 예약 이름이라 선언 env: 에 쓰면 plan 이 거부한다 (docs/deploy.md §3)
+#       클라이언트 IP(SKELETON_CLIENT_IP_MODE=cloudflare|proxy · SKELETON_CLIENT_IP_TRUSTED_PROXIES=<CIDR,…> — `WEB_` 없음)는 플랫폼이 넣는다 — 예약 이름이라 선언 env: 에 쓰면 plan 이 거부한다 (docs/deploy.md §3)
 #   [auth-session] 설정만 — 보호 환경에서 메모리 세션 저장소 · 비보안 쿠키는 기동 실패 (스타터는 auth-session-jdbc 라 통과)
 #   [auth-social-google] (env:) SKELETON_AUTH_SOCIAL_PROVIDERS_GOOGLE_ENABLED=true · _CLIENT_ID   켰는데 client id/secret 이 비면 기동 실패
 #   [auth-social-kakao] (env:) SKELETON_AUTH_SOCIAL_PROVIDERS_KAKAO_ENABLED=true · _CLIENT_ID     켰는데 비면 기동 실패

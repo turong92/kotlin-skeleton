@@ -53,7 +53,7 @@ class IdempotencyHandlerInterceptor(
 
         return when (val reservation = store.reserve(idempotencyRequest)) {
             is IdempotencyReservation.Started -> {
-                request.setAttribute(IdempotencyAttributes.CONTEXT, IdempotencyContext(scopedKey = scopedKey))
+                request.setAttribute(IdempotencyAttributes.CONTEXT, IdempotencyContext(scopedKey = scopedKey, cacheClientErrors = operation.cacheClientErrors))
                 response.setHeader(IdempotencyHeaders.IDEMPOTENCY_KEY, rawKey)
                 response.setHeader(IdempotencyHeaders.IDEMPOTENCY_REPLAYED, "false")
                 true

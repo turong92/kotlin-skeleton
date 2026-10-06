@@ -44,6 +44,11 @@ class InMemoryIdempotencyStore(
         )
     }
 
+    @Synchronized
+    override fun release(scopedKey: String) {
+        entries.remove(scopedKey)
+    }
+
     private fun purgeExpiredEntries() {
         val now = clock.instant()
         entries.entries.removeIf { (_, entry) -> !entry.expiresAt.isAfter(now) }

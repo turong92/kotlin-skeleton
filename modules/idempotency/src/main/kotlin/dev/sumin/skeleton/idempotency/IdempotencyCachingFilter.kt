@@ -39,6 +39,10 @@ class IdempotencyCachingFilter(
         response: ContentCachingResponseWrapper,
     ) {
         val context = request.getAttribute(IdempotencyAttributes.CONTEXT) as? IdempotencyContext ?: return
+        if (!context.cacheClientErrors && response.status in 400..499) {
+            store.release(context.scopedKey)
+            return
+        }
 
         store.complete(
             scopedKey = context.scopedKey,

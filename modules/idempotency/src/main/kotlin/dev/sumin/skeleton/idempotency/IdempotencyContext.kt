@@ -2,6 +2,7 @@ package dev.sumin.skeleton.idempotency
 
 data class IdempotencyContext(
     val scopedKey: String,
+    val cacheClientErrors: Boolean = true,
 )
 
 object IdempotencyAttributes {

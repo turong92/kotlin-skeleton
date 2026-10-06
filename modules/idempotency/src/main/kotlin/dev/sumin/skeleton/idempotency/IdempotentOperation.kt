@@ -7,4 +7,11 @@ package dev.sumin.skeleton.idempotency
  */
 @Target(AnnotationTarget.FUNCTION)
 @Retention(AnnotationRetention.RUNTIME)
-annotation class IdempotentOperation(val ignoredBodyFields: Array<String> = [])
+annotation class IdempotentOperation(
+    val ignoredBodyFields: Array<String> = [],
+    /**
+     * false 면 **4xx 응답은 키에 묶어 두지 않는다**(예약을 풀어 같은 키의 다음 요청이 새로 실행된다). 비밀번호 · 코드를 싣는 명령은 오타 한 번이 그 키에 박히면 안 된다 —
+     * 인증 실패는 부작용이 없어 다시 실행해도 안전하고, 재생이 막는 것은 "같은 키로 맞는 비밀번호" 뿐이다. 성공(2xx)은 그대로 재생한다.
+     */
+    val cacheClientErrors: Boolean = true,
+)

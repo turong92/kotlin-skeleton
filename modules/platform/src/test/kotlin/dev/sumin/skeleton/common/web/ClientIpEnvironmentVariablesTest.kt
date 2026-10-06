@@ -7,8 +7,9 @@ import org.springframework.boot.context.properties.bind.Binder
 import org.springframework.core.env.SystemEnvironmentPropertySource
 
 /**
- * 홈서버 플랫폼이 넣는 `<ENV_PREFIX>_WEB_CLIENT_IP_MODE` · `<ENV_PREFIX>_WEB_CLIENT_IP_TRUSTED_PROXIES` 가 진짜 환경변수 모양으로 `web.client-ip.*` 에 묶인다
- * (docs/deploy.md §5). 신뢰 프록시는 도커 네트워크 CIDR 이라 선언에 박지 않고 배포가 넣는다.
+ * 프로퍼티 `web.client-ip.*` 의 **느슨한 바인딩 이름**(`<ENV_PREFIX>_WEB_CLIENT_IP_MODE` · `_TRUSTED_PROXIES`)이 진짜 환경변수 모양으로 묶인다.
+ * 주의: 홈서버 플랫폼이 실제로 넣는 이름은 `WEB_` 이 없는 `<ENV_PREFIX>_CLIENT_IP_MODE` · `_CLIENT_IP_TRUSTED_PROXIES`(소문자 값, 쉼표 목록)이고 그 이름은 각 앱의
+ * `application.yml` 별칭이 받는다 — 그 증거는 앱의 `ClientIpPlatformEnvTest` 다 (docs/deploy.md §3). 이 파일은 긴 이름이 계속 먹는다는 것만 지킨다.
  */
 class ClientIpEnvironmentVariablesTest {
     private fun bind(path: String, vararg env: Pair<String, String>): WebProperties.ClientIp {
@@ -34,14 +35,12 @@ class ClientIpEnvironmentVariablesTest {
     }
 
     @Test
-    fun `exactly what the homeserver platform injects - upper-case mode and one CIDR - binds and satisfies the guard's configured check`() {
+    fun `the long relaxed-binding name with an upper-case mode and one CIDR binds and satisfies the guard's configured check`() {
         for (mode in listOf("PROXY", "CLOUDFLARE")) {
             val p = bind("skeleton.web.client-ip", "SKELETON_WEB_CLIENT_IP_MODE" to mode, "SKELETON_WEB_CLIENT_IP_TRUSTED_PROXIES" to "172.18.0.0/16")
             assertEquals(ClientIpMode.valueOf(mode), p.mode)
             assertEquals(listOf("172.18.0.0/16"), p.trustedProxies)
             assertTrue(ClientIps(p).configured)
         }
-        // the platform's fallback when it cannot read the network
-        assertTrue(ClientIps(bind("skeleton.web.client-ip", "SKELETON_WEB_CLIENT_IP_MODE" to "PROXY", "SKELETON_WEB_CLIENT_IP_TRUSTED_PROXIES" to "127.0.0.1/32")).configured)
     }
 }

@@ -35,7 +35,8 @@ class AccountPublicController(
     private val passwords: PasswordService,
     private val policy: PasswordPolicy,
     private val clientIps: ClientIps,
-    private val tokens: AuthTokenResponseFactory,
+    /** 로그인 토큰을 내는 곳 — 코드 확인이 곧 로그인이다. 늦게 찾는다 (`auth` 의 자동설정이 만든다) */
+    private val tokens: () -> AuthTokenResponseFactory,
 ) {
     @Operation(
         summary = "Sign up with email and password",
@@ -66,7 +67,7 @@ class AccountPublicController(
     )
     @PostMapping("/auth/verify-email")
     fun verifyEmail(@Valid @RequestBody request: VerifyEmailRequest, http: HttpServletRequest): DataResponse<AuthTokenResponse> =
-        Response.ok(tokens.issue(registration.verifyEmail(request.signUpId!!, request.code!!, clientIps.of(http).ip)))
+        Response.ok(tokens().issue(registration.verifyEmail(request.signUpId!!, request.code!!, clientIps.of(http).ip)))
 
     @Operation(summary = "Ask for a password-reset mail (always 202)")
     @PostMapping("/account/password/forgot")

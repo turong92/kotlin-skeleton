@@ -16,7 +16,7 @@
 #   7. 보호 환경(SPRING_PROFILES_ACTIVE=prod / SKELETON_ENV=prod)에서는 안전하지 않은 구성이 읽을 수 있는 가드 메시지와 함께 stdout 으로 실패하고 값은 새지 않는다
 #   8. 정직한 헬스: GET /health 는 인증 없이 200 {"status":"UP"} 뿐이고, DB 컨테이너를 멈추면 503, 다시 올리면 200
 #   9. (메일 모듈이 있는 앱 = sample) 시험 배포 조합(docs/deploy.md §10) — JWT 비밀 · 메일 발송 길 · 링크 주소 · 첫 관리자 + 플랫폼이 넣는 모양 그대로의
-#      <PREFIX>_WEB_CLIENT_IP_MODE(대문자) / _TRUSTED_PROXIES(실제 도커 네트워크 CIDR 하나)를 주면 SKELETON_ENV=prod 로 **실제로 뜬다**. 하나씩 빼면 가드가 그 이름을 말하며 실패한다
+#      <PREFIX>_CLIENT_IP_MODE(소문자) / _TRUSTED_PROXIES(실제 도커 네트워크 CIDR + 하나 더, 쉼표로 이어)를 주면 SKELETON_ENV=prod 로 **실제로 뜬다**. 하나씩 빼면 가드가 그 이름을 말하며 실패한다
 #
 # Docker 가 필요하다. marina 가 도커를 가로채는 기계에서는 `MARINA_DIRECT=1 scripts/test-deploy-contract.sh`.
 # 만든 컨테이너 · 네트워크 · 이미지는 끝나면 지운다 (KEEP=1 이면 전부, KEEP_IMAGES=1 이면 이미지만 남긴다 — `--reuse` 와 함께 쓰면 반복이 빠르다). 종료 코드: 0 전부 통과 / 1 실패 / 2 인자 오류.
@@ -224,13 +224,15 @@ for APP in $(echo "$APPS" | tr ',' ' '); do
       [ "${1:-}" = nomail ] || printf '%s\n' -e SKELETON_NOTIFICATION_MAIL_ENABLED=true -e SKELETON_NOTIFICATION_MAIL_FROM=no-reply@example.com -e SPRING_MAIL_HOST=mail-relay.invalid
     }
     C="$RUN-$APP-d"; CONTAINERS="$CONTAINERS $C"
-    # 플랫폼이 넣는 모양 그대로: 대문자 mode + CIDR 하나
+    # 플랫폼이 넣는 이름 · 모양 그대로 (홈서버 infra/modules/app-docker/app.tf — client_ip_env):
+    #   "${var.app.env_prefix}_CLIENT_IP_MODE=${local.has_domain ? "cloudflare" : "proxy"}"      (WEB_ 없음 · 소문자)
+    #   "${var.app.env_prefix}_CLIENT_IP_TRUSTED_PROXIES=${local.web_trusted_proxies}"          (join(",", local.web_subnets) — 쉼표로 이은 CIDR)
     # shellcheck disable=SC2046
-    docker run -d --name "$C" --network "$NET" $(contract_env) $(base_d_env) -e SKELETON_WEB_CLIENT_IP_MODE=PROXY -e "SKELETON_WEB_CLIENT_IP_TRUSTED_PROXIES=$SUBNET" "$IMG" >/dev/null
+    docker run -d --name "$C" --network "$NET" $(contract_env) $(base_d_env) -e SKELETON_CLIENT_IP_MODE=proxy -e "SKELETON_CLIENT_IP_TRUSTED_PROXIES=$SUBNET,10.99.0.0/16" "$IMG" >/dev/null
     if wait_for 180 health_is "$C" "$HEALTH" 200; then
       pass "SKELETON_ENV=prod 에서 가드를 모두 통과해 뜬다 (/health 200)"
       LOGS="$(docker logs "$C" 2>&1)"
-      if grep -qi 'Client IP: proxy' <<<"$LOGS"; then pass "<PREFIX>_WEB_CLIENT_IP_MODE · _TRUSTED_PROXIES 가 바인딩된다 ($(echo "$LOGS" | grep 'Client IP:' | head -1 | sed 's/^.*Client IP:/Client IP:/'))"; else fail "client-ip 환경변수가 바인딩되지 않았다"; fi
+      if grep -qi 'Client IP: proxy' <<<"$LOGS"; then pass "<PREFIX>_CLIENT_IP_MODE · _TRUSTED_PROXIES(플랫폼이 넣는 이름 · 소문자 · 쉼표 목록)가 바인딩된다 ($(echo "$LOGS" | grep 'Client IP:' | head -1 | sed 's/^.*Client IP:/Client IP:/'))"; else fail "client-ip 환경변수가 바인딩되지 않았다"; fi
       if grep -q 'deploy guards: env=prod' <<<"$LOGS"; then pass "가드 요약에 env=prod"; else fail "가드 요약이 env=prod 가 아니다"; fi
     else
       fail "시험 배포 조합이 뜨지 않는다"; docker logs "$C" 2>&1 | tail -25
@@ -248,7 +250,7 @@ for APP in $(echo "$APPS" | tr ',' ' '); do
 
     C="$RUN-$APP-d2"; CONTAINERS="$CONTAINERS $C"   # 메일을 빼면
     # shellcheck disable=SC2046
-    docker run -d --name "$C" --network "$NET" $(contract_env) $(base_d_env nomail) -e SKELETON_WEB_CLIENT_IP_MODE=PROXY -e "SKELETON_WEB_CLIENT_IP_TRUSTED_PROXIES=$SUBNET" "$IMG" >/dev/null
+    docker run -d --name "$C" --network "$NET" $(contract_env) $(base_d_env nomail) -e SKELETON_CLIENT_IP_MODE=proxy -e "SKELETON_CLIENT_IP_TRUSTED_PROXIES=$SUBNET,10.99.0.0/16" "$IMG" >/dev/null
     if wait_for 120 stopped "$C"; then
       LOGS="$(docker logs "$C" 2>&1)"
       if grep -q 'mail transport' <<<"$LOGS"; then pass "메일 발송 길을 빼면 가드가 말하며 실패한다"; else fail "메일을 뺀 실패에 mail transport 메시지가 없다"; fi

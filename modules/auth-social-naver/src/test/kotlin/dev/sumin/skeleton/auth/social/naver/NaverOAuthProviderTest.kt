@@ -62,6 +62,7 @@ class NaverOAuthProviderTest {
         assertEquals("naver", profile.provider)
         assertEquals("naver-id-1", profile.providerUserId)
         assertEquals("naver@example.com", profile.email)
+        assertEquals(false, profile.emailVerified, "Naver does not vouch for the address (docs/accounts.md): it is never stored as the account email and never merges")
         assertEquals("naver@example.com", profile.username)
         assertEquals("Naver User", profile.displayName)
 

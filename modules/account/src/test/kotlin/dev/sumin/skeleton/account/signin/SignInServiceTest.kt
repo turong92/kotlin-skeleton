@@ -129,6 +129,16 @@ class SignInServiceTest {
     }
 
     @Test
+    fun `a provider that never vouches for the email (Naver) neither merges nor conflicts, even with merging on - and its account has no address`() {
+        val merge = harness(AccountProperties.Social(signUp = true, mergeOnVerifiedEmail = true))
+        val owner = merge.activeAccount("ann@example.com")
+        val auth = merge.service().signIn(proof("kakao", "naver-like-1", "ann@example.com", verified = false))!!
+        assertTrue(auth.accountId != owner.id)
+        assertNull(merge.repo.findById(auth.accountId)!!.email)
+        assertEquals(setOf("password"), merge.repo.identitiesOf(owner.id).map { it.method }.toSet())
+    }
+
+    @Test
     fun `merging into an UNVERIFIED account is a mailbox proof - the unproven sign-up password is discarded and sessions closed (C1 rule)`() {
         val merge = harness(AccountProperties.Social(signUp = true, mergeOnVerifiedEmail = true), emailVerification = false)
         merge.signUp("ann@example.com", password = "attacker-chosen-42")

@@ -11,7 +11,7 @@
 | 설정 접두사 | 없음 (감사 기록을 켜는 키는 `account` 의 접두사 아래 `audit` 항목) |
 | 기본 동작 | 켜짐. 감사 기록은 꺼져 있다. |
 | 부팅에 필요한 것 | `DataSource` 와 `db-*` 모듈 하나, 그리고 이 모듈의 마이그레이션이 적용된 스키마. |
-| 교체 지점 | `JdbcAccountRepository`, `JdbcOneTimeTokenStore` |
+| 교체 지점 | `JdbcAccountRepository`, `JdbcOneTimeTokenStore`, `JdbcChallengeStore` |
 | 마이그레이션 | `modules/account-jdbc/src/main/resources/db/migration/postgresql`, `modules/account-jdbc/src/main/resources/db/migration/mysql` |
 | 프론트 짝 | `@skeleton/auth` |
 | 테스트 | `modules/account-jdbc/src/dbTest` (PostgreSQL · MySQL 컨테이너로 두 번 돈다 (`postgresTest`, `mysqlTest`)) |

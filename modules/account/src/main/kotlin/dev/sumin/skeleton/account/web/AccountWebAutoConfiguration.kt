@@ -43,8 +43,8 @@ class AccountWebAutoConfiguration {
         passwords: PasswordService,
         policy: PasswordPolicy,
         clientIps: ObjectProvider<ClientIps>,
-        tokens: dev.sumin.skeleton.auth.api.AuthTokenResponseFactory,
-    ): AccountPublicController = AccountPublicController(registration, passwords, policy, clientIps.getIfAvailable { ClientIps() }, tokens)
+        tokens: ObjectProvider<dev.sumin.skeleton.auth.api.AuthTokenResponseFactory>,
+    ): AccountPublicController = AccountPublicController(registration, passwords, policy, clientIps.getIfAvailable { ClientIps() }) { tokens.getObject() }
 
     @Bean
     @ConditionalOnMissingBean

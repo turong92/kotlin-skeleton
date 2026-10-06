@@ -30,4 +30,7 @@ interface IdempotencyStore {
         scopedKey: String,
         response: StoredIdempotencyResponse,
     )
+
+    /** 예약을 푼다 — 같은 키의 다음 요청이 새로 시작된다 ([IdempotentOperation.cacheClientErrors] 가 false 인 명령의 4xx) */
+    fun release(scopedKey: String)
 }

@@ -1,8 +1,47 @@
 # Account lifecycle — HTTP contract (kotlin-skeleton backend)
 
-Status: FINAL-2 (matches the implemented code after the security review; the integration tests `apps/sample` AccountJourneyIntegrationTest and `modules/account` AccountWebTest / SessionBodyDeliveryWebTest exercise every flow below).
+Status: **FINAL-3** (matches the implemented code after the second security review; the integration tests `apps/api` / `apps/sample` AccountJourneyIntegrationTest and `modules/account` AccountWebTest / AccountSocialWebTest / SessionBodyDeliveryWebTest exercise every flow below).
 Audience: the frontend agent (react-skeleton `@skeleton/auth` additions). Backend modules: `account`, `account-jdbc`,
 `auth-session`, `auth-session-jdbc`, `auth-magic-link` (+ extensions of `auth`, `auth-social`).
+
+## FINAL-3 change list (before -> after)
+
+| # | Endpoint | Before | After |
+|---|---|---|---|
+| 1 | `POST /account/sign-up` | 202 `{status}` ; PENDING account row + mailed link | 202 `{ status:"VERIFICATION_SENT", signUpId:"<opaque 43 chars>" }`. **No account exists yet.** The same answer for new / already-in-flight / already-registered address. Mail = 6-digit code (never a link). `verification=false` mode unchanged (201 `{status:"CREATED"}` / 409 EMAIL_TAKEN, no signUpId) |
+| 2 | `POST /auth/verify-email` | `{token}` -> 200 `{status:"VERIFIED"}` (no login) | `{ signUpId, code }` -> **200 AuthTokenResponse (signed in at once, same shape as login; header `X-Device-Name` honoured)**. Creates the account with the password typed in THIS sign-up attempt. Errors: `400 ACCOUNT.CODE_INVALID` `data:{attemptsLeft:n}` (wrong code; n counts down 4..1); `410 ACCOUNT.CODE_EXPIRED` (unknown id, expired (10 min), attempts exhausted (5), already used, or the address got registered meanwhile — ONE body: restart sign-up or resend); `429 ACCOUNT.RATE_LIMITED`. `400 COMMON.VALIDATION_FAILED` (code not 6 digits). |
+| 3 | `POST /account/verification/resend` | `{email, captchaToken?}` | `{ signUpId, captchaToken? }` -> always 202 `{status:"ACCEPTED"}`. New code for the SAME attempt (expiry +10 min, attempts back to 5); silently ignored inside the 30 s cooldown, after 3 resends, when expired, or over the per-address mail budget. `429` only for the client IP limit. |
+| 4 | `POST /account/email/change` | link mailed to NEW address | Same request body plus the re-auth fields below. 202 `{status:"VERIFICATION_SENT"}`. A **6-digit code** is mailed to the NEW address (taken address: nothing sent, same 202, same `pendingEmail`). Old address still gets the notice. |
+| 5 | `POST /account/email/change/confirm` | (did not exist) | **auth.** `{ code }` -> `204`. Bound to the session that requested. `400 ACCOUNT.CODE_INVALID {attemptsLeft}`, `410 ACCOUNT.CODE_EXPIRED` (none open / expired / exhausted / other session), `409 ACCOUNT.EMAIL_TAKEN`. Effect: email switched, all OTHER sessions revoked (the confirming session stays signed in). |
+| 6 | `POST /auth/confirm-email-change` | public link endpoint | **REMOVED** — no such endpoint any more; no mailed email-change link exists. |
+| 7 | `POST /account/reauth/confirmation` | mailed one-time link | mails a **6-digit code** to the account address (bound to account + session, 30 min, 5 attempts; a new request replaces the open one). 202 always; nothing for an account without address. |
+| 8 | field `confirmationToken` (email change, first password `password/change`, social link, delete) | token from the mailed link | **renamed `confirmationCode`** (the 6 digits). Wrong -> `400 ACCOUNT.CODE_INVALID {attemptsLeft}`; none open / expired / exhausted / other session -> `410 ACCOUNT.CODE_EXPIRED`; missing while required -> `403 ACCOUNT.REAUTH_REQUIRED` (unchanged). `ACCOUNT.REAUTH_FAILED` is now only for a failed social re-auth / delete proof. |
+| 9 | `POST /account/delete/confirmation` + `POST /account/delete` | link token | code mailed (bound to account + session); `delete` body `{ currentPassword?, confirmationCode?, socialReauth? }` |
+| 10 | `DELETE /account/identities/{id}` | no body, no re-auth | **optional JSON body `{ currentPassword?, confirmationCode?, socialReauth? }`, re-auth REQUIRED** (same rule as social link): password account -> `currentPassword` (`400 CURRENT_PASSWORD_INVALID`); passwordless with address -> `confirmationCode` (`403 REAUTH_REQUIRED` / `400 CODE_INVALID` / `410 CODE_EXPIRED`); no address -> `socialReauth`. |
+| 11 | accounts WITHOUT an email (Naver, unverified-provider sign-ups) | exempt from re-auth, could not delete | field **`socialReauth: { provider, authorizationCode, redirectUri? }`** accepted on email change, social link, unlink, delete: a FRESH authorization code of a provider already linked to this account. Missing -> `403 ACCOUNT.REAUTH_REQUIRED`; code of another account / invalid -> `400 ACCOUNT.REAUTH_FAILED`; provider error -> existing `502`-class social errors. Account deletion is therefore possible for them. Frontend: run the provider consent again (same redirect as login), pass the code here. |
+| 12 | `POST /account/identities/social/{provider}` | `confirmationToken` | `confirmationCode` / `socialReauth` as above |
+| 13 | password reset, magic link | link | **unchanged (links)**: no session exists in those flows |
+| 14 | `AUTH.EMAIL_NOT_VERIFIED` on login | seen for fresh sign-ups | practically never: unverified accounts no longer exist in the default mode (code kept) |
+
+New error codes: `ACCOUNT.CODE_INVALID` 400 (`data.attemptsLeft`), `ACCOUNT.CODE_EXPIRED` 410. Removed from the flows above: `ACCOUNT.TOKEN_INVALID` stays for reset / magic link only.
+
+### Codes vs links
+- **Codes** (a signed-in or same-browser session exists and the code is entered there): sign-up verification, email change, re-auth for passwordless accounts, delete confirmation.
+- **Links** (no session exists / user may open the mail on another device): password reset, magic-link sign-in.
+- Mail templates: ko/en; code mails say "ignore if you did not request this / never tell anyone this code".
+| 15 | `POST /auth/refresh` | `401`s only | adds **`429 AUTH.TOO_MANY_REFRESHES`** (`Retry-After`, `data.retryAfterSeconds`): one session may rotate at most 30 times per 10 minutes. The session is NOT revoked — do not sign out; wait and retry (single-flight already does one refresh per 15 min). |
+| 16 | `POST /account/password/change` | field `confirmationToken` | field **`confirmationCode`** (6 digits) |
+| 17 | `GET /account/me` `pendingEmail` | code-less link state | unchanged shape; it now means "a code was mailed to that address and waits for `POST /account/email/change/confirm`" |
+
+Corrections to the draft that was sent earlier: the 429 and field-rename rows (15, 16) are new; everything else matches it. Names the frontend already built against are kept: `signUpId`, `verifySignUpCode({signUpId, code})` (tokens on success), `ACCOUNT.CODE_INVALID` + `data.attemptsLeft`, `ACCOUNT.CODE_EXPIRED`, `resendSignUpCode({signUpId})`, `confirmationCode`, `socialReauth`, `unlinkIdentity(id, reauth)`, `confirmEmailChangeCode`. **Differences:** unlink is `DELETE /account/identities/{id}` with an optional JSON body (not a new path); email-change confirmation is `POST /account/email/change/confirm`.
+
+### Answers the frontend asked for (each is a tested contract)
+1. **`POST /auth/logout` with a rotated-out (previous) refresh token closes the session** (the token is looked up by hash whether or not it was already used) — `SessionServiceTest` "logging out with a rotated-out refresh token still closes the session…". The pruning of old rows is NOT used for bounding (rows are bounded by the rotation rate limit instead), so a previous token is always still known.
+2. **Social link checks the re-auth proof BEFORE exchanging the authorization code with the provider** (a wrong password / missing / wrong code never calls the provider, so the single-use provider code is not burned and the frontend may retry with the same code) — `SocialLinkServiceTest` "the re-authentication proof is checked BEFORE the authorization code is exchanged…". The proof is then spent before the identity is linked (one code authorizes one link).
+3. **The re-auth proof is bound server-side to the account and to the session** (`sid` of the access token; the code is rejected with `410 ACCOUNT.CODE_EXPIRED` from another session or another account) and expires after 30 min / 5 guesses. It is **not** bound to a specific action (a `reauth/confirmation` code works for email change, first password, social link and unlink — one use); the delete code is separate (`delete/confirmation`). If the app runs without `auth-session` there is no `sid` and the binding is to the account only.
+4. **Nothing in the backend relies on `Referer`.** The cookie-mode CSRF guard checks the `X-Requested-With: fetch` header (a custom header forces a CORS preflight), plus SameSite=Strict and the CORS allow-list; **the backend does not check `Origin` itself** (CORS does for browsers) — so `Referrer-Policy: no-referrer` is safe, and nothing requires the frontend to send `Origin`.
+5. **PKCE (`code_challenge` / `codeVerifier`, `AUTH.SOCIAL_PKCE_FAILED`, `pkce` in `GET /auth/methods`): deferred.** It touches every provider module (token requests in `auth-social-google/kakao/naver`), the methods listing and both endpoints, and the provider-side support has to be verified per provider; it did not fit this round without cutting the account fixes. Until then the OAuth `state` check (section 7) is the login-CSRF defence.
+
 
 ## 0. Conventions (platform, unchanged)
 
@@ -44,32 +83,35 @@ Audience: the frontend agent (react-skeleton `@skeleton/auth` additions). Backen
   the client should serialize refreshes (single-flight) and, on `AUTH.REFRESH_REUSED`/`AUTH.REFRESH_INVALID`, sign out.
   **Lost response (the page navigated away while `/auth/refresh` was in flight)**: apps/api and apps/sample set `reuse-grace: 10s` — presenting the immediately previous token again within 10 s returns the SAME successor token (idempotent rotation: no second token, no revoked session). After the grace the replay is treated as theft. Do not rely on more than a few seconds; the module default is `0s`.
 
-## 2. Sign-up and email verification
+## 2. Sign-up and email verification (by a 6-digit code bound to the sign-up attempt)
+
+A sign-up creates an **attempt**, not an account: (attempt id, email, the password typed in THIS attempt, code). Nothing about the account's credentials is stored until a code is verified.
+The code goes only to the mailbox; the attempt id (`signUpId`) only to the browser that signed up. Several attempts for one address coexist and never overwrite each other.
 
 ### POST /api/v1/account/sign-up  (public)
 Req: `{ "email": "a@b.c", "password": "...", "displayName"?: "Ann", "locale"?: "ko", "timeZone"?: "Asia/Seoul", "captchaToken"?: "..." }`
-Res: **always `202`** `{ "value": { "status": "VERIFICATION_SENT" } }` — identical whether the email is new, already registered, or throttled.
-(An existing address receives a "you already have an account" mail instead. With `skeleton.account.sign-up.email-verification=false` the app accepts the
-enumeration trade-off: new -> `201 {status:"CREATED"}` and the account is active at once; existing -> `409 ACCOUNT.EMAIL_TAKEN`.)
-Errors: `400 ACCOUNT.PASSWORD_POLICY` (`data: { violations: ["TOO_SHORT", ...] }`), `400 COMMON.VALIDATION_FAILED`, `400 ACCOUNT.CAPTCHA_FAILED`,
-`403 ACCOUNT.SIGN_UP_CLOSED` (when `sign-up.enabled=false`), `429 ACCOUNT.RATE_LIMITED`.
-
-### POST /api/v1/account/verification/resend  (public)
-Req `{ "email", "captchaToken"? }` -> **always `202 {status:"ACCEPTED"}`** (silent when unknown / already verified / over the per-email limit, default 3 per hour). `429 ACCOUNT.RATE_LIMITED` when the client IP itself is over its limit (10 per hour). Sign-up and resend share that per-address budget.
+Res: **always `202`** `{ "value": { "status": "VERIFICATION_SENT", "signUpId": "<43 chars, opaque>" } }` — identical in shape whether the address is new, has another attempt in flight, or is already registered
+(a registered address receives an "already registered" mail instead of a code, and entering codes for that attempt behaves like wrong guesses on a new address). Keep `signUpId` in memory/sessionStorage for the next step.
+With `skeleton.account.sign-up.email-verification=false` the app accepts the enumeration trade-off: new -> `201 {status:"CREATED"}` (no `signUpId`; the account is active at once), existing -> `409 ACCOUNT.EMAIL_TAKEN`.
+Errors: `400 ACCOUNT.PASSWORD_POLICY` (`data: { violations: ["TOO_SHORT", ...] }`), `400 COMMON.VALIDATION_FAILED`, `400 ACCOUNT.CAPTCHA_FAILED`, `403 ACCOUNT.SIGN_UP_CLOSED`, `429 ACCOUNT.RATE_LIMITED`.
+Mail: a 6-digit code (valid 10 minutes) — **no link**.
 
 ### POST /api/v1/auth/verify-email  (public)
-Req `{ "token": "<from mail link>" }` -> `200 { "value": { "status": "VERIFIED" } }` (does not log in).
-`410 ACCOUNT.TOKEN_INVALID` for unknown / expired / already-used (one body, no distinction). Single use: two concurrent calls -> one 200, one 410.
-The account row exists as soon as the `202` is answered (a lost mail is recovered with resend). The link is bound to the sign-up password it was issued for; if the mailbox owner signs in by magic link / social first, the unproven sign-up password is discarded and the link no longer works.
-Mail link shape: `<link-base-url>/verify-email?token=<token>`; opening it must NOT call the API by itself — the page posts on a button / on mount
-of the SPA route (mail scanners prefetch GETs, they do not run the SPA's POST).
+Req `{ "signUpId": "...", "code": "123456" }` (`code` must be exactly 6 digits, else `400 COMMON.VALIDATION_FAILED`)
+Res `200` **AuthTokenResponse** (section 1) — the account is created with the password typed in this attempt, the email is verified, and the browser is **signed in at once** (header `X-Device-Name` honoured as on login; no separate login call).
+Errors: `400 ACCOUNT.CODE_INVALID` `data: { attemptsLeft: n }` (wrong code; 5 guesses per code — n goes 4, 3, 2, 1; the 5th wrong guess answers 410), `410 ACCOUNT.CODE_EXPIRED` (ONE body for: unknown id, expired after 10 min, guesses used up, already used, address taken meanwhile — restart the sign-up or resend), `429 ACCOUNT.RATE_LIMITED` (per IP, 30 code entries per hour).
+
+### POST /api/v1/account/verification/resend  (public)
+Req `{ "signUpId": "...", "captchaToken"?: "..." }` -> **always `202 {status:"ACCEPTED"}`**: a new code for the SAME attempt (expiry restarts, guesses back to 5). Silently ignored inside the 30 s cooldown, after 3 resends, for an unknown/expired attempt, or over the per-address mail budget (3 mails per hour, shared with sign-up). `429 ACCOUNT.RATE_LIMITED` only when the client IP is over its limit (10 per hour).
+
+Brute-force bound (docs/accounts.md): at most ~40 guesses per address per hour -> <= 0.004 %.
 
 ## 3. Login (existing endpoint, extended)
 
 ### POST /api/v1/auth/login  (public)
 Req unchanged: one of `accountId | username | email` + `password` (optional header `X-Device-Name`). `username` of an account created here equals its email.
 Res `200` AuthTokenResponse. Errors: `401 AUTH.INVALID_CREDENTIALS` (unknown account, wrong password, deleted account — same body and comparable
-timing), `403 AUTH.EMAIL_NOT_VERIFIED` (correct password, address not verified: offer "resend"), `403 AUTH.ACCOUNT_SUSPENDED` (correct password),
+timing), `403 AUTH.EMAIL_NOT_VERIFIED` (only for legacy unverified accounts; fresh sign-ups have no account until verified — a login before verification is `401 AUTH.INVALID_CREDENTIALS`), `403 AUTH.ACCOUNT_SUSPENDED` (correct password),
 `429 AUTH.TOO_MANY_ATTEMPTS` (`Retry-After`; per client IP and per address — `email`, `username` and `accountId` of one account share one bucket — also for unknown identifiers).
 
 ### POST /api/v1/auth/social/{provider}/login  (existing, public)
@@ -82,7 +124,7 @@ Req `{ "email", "captchaToken"? }` -> **always `202`** `{ "value": { "status": "
 Mail link: `<link-base-url>/magic-link?token=<token>` (15 min, single use).
 ### POST /api/v1/auth/magic-link/redeem  (public)
 Req `{ "token" }` -> `200` AuthTokenResponse (creates the account on first use if `skeleton.auth-magic-link.sign-up=true`; marks the email verified).
-`410 ACCOUNT.TOKEN_INVALID` (also: an address without an account while sign-up is closed); `403 AUTH.ACCOUNT_SUSPENDED`. Redeeming on a still-unverified account discards the password someone set at sign-up and closes that account's sessions (password login then fails with `401 AUTH.INVALID_CREDENTIALS` until a password is reset or set).
+`410 ACCOUNT.TOKEN_INVALID` (also: an address without an account while sign-up is closed); `403 AUTH.ACCOUNT_SUSPENDED`. Redeeming on a still-unverified account (verification-off apps only) removes every sign-in method someone else planted and closes that account's sessions and open codes (password login then fails with `401 AUTH.INVALID_CREDENTIALS` until a password is reset or set).
 
 ### GET /api/v1/auth/methods  (public, no auth; `Cache-Control: public, max-age=300`; the same answer for everyone)
 `200 { "value": { "methods": ["password", "magic_link"], "signUp": { "password": true, "emailVerification": true, "social": true }, "social": [ { "provider": "google", "clientId": "…"|null, "redirectUri": "…"|null } ], "captchaRequired": false, "refreshDelivery": "body"|"cookie"|null } }`
@@ -93,8 +135,8 @@ Req `{ "token" }` -> `200` AuthTokenResponse (creates the account on first use i
 ### POST /api/v1/auth/refresh  (public; credential = refresh token)
 Req `{ "refreshToken": "r1...." }` (body mode) | cookie (cookie mode). Res `200` AuthTokenResponse with a rotated refresh token.
 Errors: `401 AUTH.REFRESH_INVALID` (unknown/expired/revoked), `401 AUTH.REFRESH_REUSED` (rotated-away token replayed -> family revoked),
-`403 AUTH.ACCOUNT_SUSPENDED`. Roles in the new access token are the account's CURRENT roles.
-### POST /api/v1/auth/logout  (public; idempotent) -> always `204`. Req `{ "refreshToken"? }` / cookie. Revokes that session; clears the cookie.
+`403 AUTH.ACCOUNT_SUSPENDED`, `429 AUTH.TOO_MANY_REFRESHES` (this session rotated more than 30 times in 10 minutes; `Retry-After`; the session stays valid — do not sign out). Roles in the new access token are the account's CURRENT roles.
+### POST /api/v1/auth/logout  (public; idempotent) -> always `204`. Req `{ "refreshToken"? }` / cookie. Revokes that session (also when the token presented was already rotated away — a client that lost the rotation race can still sign out); clears the cookie.
 ### GET /api/v1/auth/sessions  (auth)
 `200 { "values": [ { "id": "ses_...", "deviceName": "Pixel", "userAgent": "...", "ip": "203.0.113.7", "createdAt", "lastUsedAt", "current": true } ] }`
 (`ip` is the ClientIps-resolved address recorded at issue/last refresh; `current` = the session of the presented access token.)
@@ -108,11 +150,11 @@ Access tokens already issued live until `expiresAt` (<= 15 min) after a revoke; 
 No enumeration: the request thread only validates, rate-limits (per IP, per email; silent over limit) and enqueues; lookup + token + mail run off-thread.
 Mail link: `<link-base-url>/reset-password?token=<token>` (30 min, single use, a new request invalidates older ones).
 ### POST /api/v1/account/password/reset  (public) — Req `{ "token", "newPassword" }` -> `204`; `410 ACCOUNT.TOKEN_INVALID`; `400 ACCOUNT.PASSWORD_POLICY`.
-Effect: password replaced (hash upgraded to current encoder), ALL sessions revoked, pending sensitive links invalidated, email marked verified (the mailbox was proven), "password changed" mail sent.
+Effect: password replaced (hash upgraded to current encoder), ALL sessions revoked, open codes and links invalidated, email marked verified (the mailbox was proven; in verification-off apps every sign-in method planted by a stranger is removed), "password changed" mail sent.
 ### POST /api/v1/account/password/change  (auth) — Req `{ "currentPassword", "newPassword" }` -> `204`.
-`currentPassword` is required when the account has a password. A social/magic-link-only account SETs a first password with `confirmationToken` (from `POST /account/reauth/confirmation`, below) instead; email must be verified. Missing token -> `403 ACCOUNT.REAUTH_REQUIRED`, wrong/used/foreign token -> `400 ACCOUNT.REAUTH_FAILED`.
+`currentPassword` is required when the account has a password. A social/magic-link-only account SETs a first password with `confirmationCode` (the 6 digits from `POST /account/reauth/confirmation`, below) instead; email must be verified. Missing code -> `403 ACCOUNT.REAUTH_REQUIRED`, wrong -> `400 ACCOUNT.CODE_INVALID` (`data.attemptsLeft`), none open / expired / used up / other session -> `410 ACCOUNT.CODE_EXPIRED`.
 Errors: `400 ACCOUNT.CURRENT_PASSWORD_INVALID` (deliberately 400, not 401/403: the client must not treat it as "session expired"), `400 ACCOUNT.PASSWORD_POLICY`.
-Effect: all OTHER sessions revoked; "password changed" mail; pending email-change / delete-confirmation / reauth / magic links are invalidated. `429 ACCOUNT.RATE_LIMITED` (per account).
+Effect: all OTHER sessions revoked; "password changed" mail; open email-change / delete / reauth codes and magic links are invalidated. `429 ACCOUNT.RATE_LIMITED` (per account).
 ### GET /api/v1/account/password/policy  (public) -> `{ "value": { "minLength": 10, "maxBytes": 72, "requireLetter": true, "requireDigit": true, "requireSymbol": false, "forbidEmailLocalPart": true } }` (to render hints; the limit is UTF-8 BYTES, not characters — the code name is `maxBytes`).
 
 ## 6. Profile, email change (auth)
@@ -122,30 +164,33 @@ Effect: all OTHER sessions revoked; "password changed" mail; pending email-chang
 "methods": [ { "id": "idn_...", "method": "password|magic_link|google|kakao|naver|...", "subject": "a@b.c|null", "verified": true, "createdAt", "lastUsedAt", "removable": true } ],
 "hasPassword": true, "pendingEmail": "new@b.c" | null, "pendingEmailExpiresAt": "...Z" | null } }` (`subject` is shown for email-like methods only; social subjects are not exposed). `pendingEmail`/`pendingEmailExpiresAt` are set while an email change waits for the new address' confirmation (until confirmed, superseded or expired) — use them to restore the "check the new address" state after a reload. A change to an address that belongs to someone else shows nothing pending (no oracle).
 ### PATCH /api/v1/account/me — Req any of `{ displayName (1..60), locale (syntactically valid BCP-47 tag, no allowed list), timeZone (IANA) }` -> `200` same as GET. `400 COMMON.VALIDATION_FAILED`.
-### POST /api/v1/account/email/change **[idem]** — Req `{ "newEmail", "currentPassword"? }` (password required when the account has one) -> `202 { "value": { "status": "VERIFICATION_SENT" } }`.
-Mail to the NEW address with `<link-base-url>/confirm-email-change?token=...` (30 min). The email does not change until confirmed. The pending change is stored before the `202` is returned: an immediate `GET /account/me` shows `pendingEmail` (only the mails are deferred). If the new address belongs to
-someone else the answer is still `202`, `pendingEmail` is shown the same way, and no link is sent (the state never reveals whether the address is taken). The OLD address gets a "change requested" mail now in BOTH cases and a "changed" mail on confirmation.
-### POST /api/v1/auth/confirm-email-change  (public; the token is the credential) — Req `{ "token" }` -> `204`; `410 ACCOUNT.TOKEN_INVALID`; `409 ACCOUNT.EMAIL_TAKEN` (taken in between).
-Effect: email switched, ALL sessions revoked (including the one that confirmed — sign in again). `429 ACCOUNT.RATE_LIMITED` on the request (per account).
+### POST /api/v1/account/email/change **[idem]** — Req `{ "newEmail", "currentPassword"?, "confirmationCode"?, "socialReauth"? }` -> `202 { "value": { "status": "VERIFICATION_SENT" } }`.
+Re-authentication (server enforced): `currentPassword` when the account has a password (`400 ACCOUNT.CURRENT_PASSWORD_INVALID`); otherwise, with an address, `confirmationCode` from `POST /account/reauth/confirmation` (`403 REAUTH_REQUIRED` / `400 CODE_INVALID` / `410 CODE_EXPIRED`); an account WITHOUT an address uses `socialReauth` (below).
+A **6-digit code** is mailed to the NEW address (valid 30 min, 5 guesses, bound to the requesting session). Nothing changes until it is entered. The pending change is stored before the `202` is returned: an immediate `GET /account/me` shows `pendingEmail`. If the new address belongs to someone else the answer is still `202`, `pendingEmail` shows the same, and no code is sent (entering codes counts down like a wrong guess). The OLD address gets a "change requested" mail in BOTH cases and a "changed" mail on confirmation.
+`4xx` answers to this call are **not** stored under the `Idempotency-Key` (a mistyped password does not stick to the key); a `2xx` is replayed.
+### POST /api/v1/account/email/change/confirm  (auth) — Req `{ "code": "123456" }` -> `204`.
+Must be the session that requested it. `400 ACCOUNT.CODE_INVALID` (`data.attemptsLeft`), `410 ACCOUNT.CODE_EXPIRED` (none open, expired, used up, other session), `409 ACCOUNT.EMAIL_TAKEN` (taken in between). Effect: email switched, the OTHER sessions revoked (the confirming session stays signed in; its token still carries the old email claim until the next refresh), open reauth / delete codes and the old address's magic links are closed. `429 ACCOUNT.RATE_LIMITED` on the request (per account).
+(`POST /auth/confirm-email-change` no longer exists.)
 
 ## 7. Sign-in methods and social linking (auth)
 
 ### GET /api/v1/account/identities -> `{ "values": [ ...same objects as me.methods ] }`
-### POST /api/v1/account/identities/social/{provider} — Req `{ "authorizationCode", "redirectUri"?, "currentPassword"?, "confirmationToken"? }` -> `201 { value: identity }` and a notice mail to the account address.
-**Re-authentication is required** (server-enforced): `currentPassword` when the account has a password (`400 ACCOUNT.CURRENT_PASSWORD_INVALID`), otherwise `confirmationToken` (`403 ACCOUNT.REAUTH_REQUIRED` / `400 ACCOUNT.REAUTH_FAILED`). This is the server's defence if a callback page forgets the state check; it does not replace it:
+### POST /api/v1/account/identities/social/{provider} — Req `{ "authorizationCode", "redirectUri"?, "currentPassword"?, "confirmationCode"?, "socialReauth"? }` -> `201 { value: identity }` and a notice mail to the account address.
+**Re-authentication is required** (server-enforced, checked BEFORE the provider code is exchanged, spent before linking): `currentPassword` when the account has a password (`400 ACCOUNT.CURRENT_PASSWORD_INVALID`); otherwise `confirmationCode` (`403 ACCOUNT.REAUTH_REQUIRED` / `400 ACCOUNT.CODE_INVALID` / `410 ACCOUNT.CODE_EXPIRED`); an account without an address: `socialReauth`.
+**`socialReauth`: `{ "provider": "naver", "authorizationCode": "...", "redirectUri"?: "..." }`** — a FRESH authorization code of a provider that is already linked to THIS account (run the provider consent again, same redirect as login). A code of another account's provider identity, an unlinked provider, or a refused code -> `400 ACCOUNT.REAUTH_FAILED`; missing -> `403 ACCOUNT.REAUTH_REQUIRED`. Provider outages surface as the existing social gateway error. It is accepted only for accounts that have no email (Naver, sign-ups whose provider did not vouch for the address).
 **The frontend MUST generate a random OAuth `state` before redirecting to the provider, keep it (sessionStorage) and refuse the callback when the returned `state` does not match — for login AND for linking.** The server cannot see `state`; without the check a victim's browser can be made to submit the attacker's authorization code.
-`409 ACCOUNT.IDENTITY_TAKEN` (that provider account belongs to another account), `404 AUTH_SOCIAL.PROVIDER_NOT_FOUND`, `409 ACCOUNT.IDENTITY_EXISTS` (already linked).
+`409 ACCOUNT.IDENTITY_TAKEN`, `404 AUTH_SOCIAL.PROVIDER_NOT_FOUND`, `409 ACCOUNT.IDENTITY_EXISTS`.
 ### POST /api/v1/account/reauth/confirmation (auth) -> `202 { value: { status: "ACCEPTED" } }`
-Mails a one-time link `<link-base-url>/confirm-reauth?token=` (30 min) to the account address; the page hands the token to the action it was for (`confirmationToken` above). Same answer with no address. `429 ACCOUNT.RATE_LIMITED` (5 per hour per account).
+Mails a **6-digit code** to the account address (valid 30 min, 5 guesses, usable only by this session, a new request replaces the open one). Use it as `confirmationCode` for email change, first password, social link and unlink. Same answer with no address. `429 ACCOUNT.RATE_LIMITED` (5 per hour per account).
 
-### DELETE /api/v1/account/identities/{id} -> `204` (the account's OTHER sessions are revoked); `409 ACCOUNT.LAST_SIGN_IN_METHOD`; `404 ACCOUNT.IDENTITY_NOT_FOUND`.
-(The password identity is removed with this too. Removing it is allowed only while another sign-in method remains.)
+### DELETE /api/v1/account/identities/{id} — optional JSON body `{ "currentPassword"?, "confirmationCode"?, "socialReauth"? }` -> `204` (the account's OTHER sessions are revoked); `409 ACCOUNT.LAST_SIGN_IN_METHOD`; `404 ACCOUNT.IDENTITY_NOT_FOUND`.
+**Re-authentication is required** (same proof rules as social link; an absent body gets the error that fits the account: `400 CURRENT_PASSWORD_INVALID` / `403 REAUTH_REQUIRED`). The password identity is removed with this too, allowed only while another sign-in method remains.
 
 ## 8. Deleting the account (auth)
 
-### POST /api/v1/account/delete/confirmation — (for accounts WITHOUT a password) mails a one-time confirmation link `<link-base-url>/confirm-delete?token=` -> `202`.
-### POST /api/v1/account/delete **[idem]** — Req `{ "currentPassword"? , "confirmationToken"? }` (exactly one: password if the account has one, else the mailed token) -> `202 { "value": { "status": "DELETION_SCHEDULED", "purgeAfter": "2026-11-05T..Z" } }`.
-Wrong credential -> `400 ACCOUNT.REAUTH_FAILED`; the only ADMIN -> `409 ACCOUNT.LAST_ADMIN`. Calling again while already deleted returns the same `purgeAfter`.
+### POST /api/v1/account/delete/confirmation — (for accounts WITHOUT a password) mails a **6-digit code** (valid 30 min, 5 guesses, this session only) -> `202`. Nothing is sent to an account without an address (use `socialReauth`).
+### POST /api/v1/account/delete **[idem]** — Req `{ "currentPassword"?, "confirmationCode"?, "socialReauth"? }` (the proof that fits the account: password; else the mailed code; an account without an address: `socialReauth`) -> `202 { "value": { "status": "DELETION_SCHEDULED", "purgeAfter": "2026-11-05T..Z" } }`.
+Wrong password / wrong social proof -> `400 ACCOUNT.REAUTH_FAILED`; missing -> `403 ACCOUNT.REAUTH_REQUIRED`; wrong code -> `400 ACCOUNT.CODE_INVALID`, none/expired -> `410 ACCOUNT.CODE_EXPIRED`; the only ADMIN -> `409 ACCOUNT.LAST_ADMIN`. Calling again while already deleted returns the same `purgeAfter`. `4xx` answers are not stored under the `Idempotency-Key`.
 Effect: status DELETED (cannot sign in, sessions revoked, identities frozen); after `skeleton.account.deletion.grace` (default `30d`) the purge job
 runs every `AccountErasureListener` (board: author shown as deleted user; notification inbox deleted) and removes the account. Admin may `restore` within the grace.
 Data export: no endpoint; `AccountDataExporter` is an interface only (not wired).
@@ -169,12 +214,15 @@ Data export: no endpoint; `AccountDataExporter` is an interface only (not wired)
 | AUTH.REFRESH_REUSED | 401 | rotated-away refresh token replayed (family revoked) |
 | AUTH.SESSION_NOT_FOUND | 404 | revoke of a session that is not yours / does not exist |
 | AUTH.CSRF_HEADER_REQUIRED | 403 | cookie mode refresh / logout without `X-Requested-With` |
-| ACCOUNT.TOKEN_INVALID | 410 | one-time token unknown / expired / used |
+| ACCOUNT.TOKEN_INVALID | 410 | one-time **link** token unknown / expired / used (password reset, magic link) |
+| ACCOUNT.CODE_INVALID | 400 | wrong 6-digit code (`data.attemptsLeft`) — sign-up, email change, re-auth, delete |
+| ACCOUNT.CODE_EXPIRED | 410 | code unknown / expired / used up / other session / sign-up address taken meanwhile |
+| AUTH.TOO_MANY_REFRESHES | 429 | one session refreshed more than 30 times in 10 min (session stays valid) |
 | ACCOUNT.PASSWORD_POLICY | 400 | password rejected (`data.violations`) |
 | ACCOUNT.CURRENT_PASSWORD_INVALID | 400 | change password / email with wrong current password |
-| ACCOUNT.REAUTH_FAILED | 400 | deletion confirmation wrong |
+| ACCOUNT.REAUTH_FAILED | 400 | delete with a wrong password, or a failed `socialReauth` |
 | ACCOUNT.CAPTCHA_FAILED | 400 | captcha rejected (only with `skeleton.account.captcha.required=true`; fails closed if no verifier) |
-| ACCOUNT.REAUTH_REQUIRED | 403 | passwordless account did an email change / first password / social link without `confirmationToken` |
+| ACCOUNT.REAUTH_REQUIRED | 403 | passwordless account did an email change / first password / social link / unlink / delete without `confirmationCode` (or an address-less account without `socialReauth`) |
 | ACCOUNT.EMAIL_TAKEN | 409 | (verification disabled) sign-up / confirm-email-change collision |
 | ACCOUNT.SIGN_UP_CLOSED | 403 | `sign-up.enabled=false` |
 | ACCOUNT.SOCIAL_EMAIL_CONFLICT | 409 | social email matches an existing account |
@@ -188,16 +236,19 @@ Data export: no endpoint; `AccountDataExporter` is an interface only (not wired)
 
 ## 11. Flows (sequence lists)
 
-**Sign up + verify + login**: POST sign-up(202) -> mail(verify link) -> user opens `/verify-email?token` (SPA) -> POST verify-email(200) -> POST login(200 + tokens) -> store tokens.
-Unverified login -> 403 AUTH.EMAIL_NOT_VERIFIED -> POST verification/resend(202).
-**Silent refresh**: on 401 from API -> (single-flight) POST refresh{refreshToken} -> 200 new pair -> retry once; 401 AUTH.REFRESH_* -> clear tokens, go to login.
-**Forgot**: POST forgot(202) -> mail -> `/reset-password?token` -> POST reset{token,newPassword}(204) -> go to login (all sessions are gone).
+**Sign up + verify**: POST sign-up(202 + signUpId) -> mail(6-digit code) -> user types the code -> POST verify-email{signUpId, code}(200 + tokens, signed in). Wrong code -> 400 CODE_INVALID (show attemptsLeft); 410 CODE_EXPIRED -> back to the sign-up form; "send again" -> POST verification/resend{signUpId}(202).
+**Silent refresh**: on 401 from API -> (single-flight) POST refresh{refreshToken} -> 200 new pair -> retry once; 401 AUTH.REFRESH_* -> clear tokens, go to login; 429 AUTH.TOO_MANY_REFRESHES -> wait Retry-After, keep the session.
+**Forgot**: POST forgot(202) -> mail link -> `/reset-password?token` -> POST reset{token,newPassword}(204) -> go to login (all sessions are gone).
 **Change password**: POST change(204) -> keep using the current session; other devices are signed out.
-**Magic link**: POST magic-link/request(202) -> mail -> `/magic-link?token` -> POST redeem(200 tokens).
-**Link Google**: (logged in) provider consent -> POST identities/social/google{code}(201) -> GET identities.
-**Delete**: password account: POST delete{currentPassword}(202) -> sign out locally. Passwordless: POST delete/confirmation(202) -> mail -> `/confirm-delete?token` -> POST delete{confirmationToken}(202).
+**Magic link**: POST magic-link/request(202) -> mail link -> `/magic-link?token` -> POST redeem(200 tokens).
+**Change email**: POST email/change{newEmail, proof}(202) -> code mailed to the NEW address -> POST email/change/confirm{code}(204), in the same signed-in session.
+**Passwordless action (change email / first password / link / unlink)**: POST reauth/confirmation(202) -> code mailed -> the action with `confirmationCode`.
+**Address-less account (Naver ...) doing the same**: run the provider consent again -> the action with `socialReauth{provider, authorizationCode, redirectUri?}`.
+**Link Google**: (logged in) provider consent -> POST identities/social/google{code, proof}(201) -> GET identities.
+**Delete**: password account: POST delete{currentPassword}(202) -> sign out locally. Passwordless: POST delete/confirmation(202) -> code mailed -> POST delete{confirmationCode}(202). Address-less: POST delete{socialReauth}(202).
 
 ## Changelog
+- FINAL-3 (second security review): sign-up creates an attempt (`signUpId`) and mails a 6-digit code; `verify-email` takes `{signUpId, code}` and signs in; resend takes `{signUpId}`; email change, re-auth and delete confirmation are codes entered in the signed-in session (`POST /account/email/change/confirm`; `POST /auth/confirm-email-change` removed); `confirmationToken` renamed `confirmationCode`; `socialReauth` for accounts without an address (email change, link, unlink, delete); unlink needs re-authentication (`DELETE /account/identities/{id}` + optional body); new codes `ACCOUNT.CODE_INVALID` / `ACCOUNT.CODE_EXPIRED` / `AUTH.TOO_MANY_REFRESHES`; 4xx of `email/change` and `delete` are not stored under the Idempotency-Key. See the change list at the top.
 - FINAL-2b: `GET /auth/methods`; `me.pendingEmail`/`pendingEmailExpiresAt`; 10 s refresh reuse grace with idempotent rotation (apps); social merge on a verified provider email is ON in apps/api and apps/sample (see accounts.md): the user is signed in to the existing account (200) instead of `409 ACCOUNT.SOCIAL_EMAIL_CONFLICT`, and the account address gets a notice mail; with merging off (module default) the 409 stays.
 - FINAL-2 (security review): `maxBytes` (not `maxLength`); `POST /account/reauth/confirmation` + `confirmationToken` on email change / first password / social link, `currentPassword` on social link, `403 ACCOUNT.REAUTH_REQUIRED`; resend `429`; magic link redeems for existing accounts with sign-up closed; a mailbox proof discards an unproven sign-up password; the old address is told of every email-change request; unlink revokes other sessions; admin list paging validated and admin role re-checked on the stored account; login bucket per address; OAuth `state` requirement written down.
 - DRAFT-1: initial contract (pre-implementation).

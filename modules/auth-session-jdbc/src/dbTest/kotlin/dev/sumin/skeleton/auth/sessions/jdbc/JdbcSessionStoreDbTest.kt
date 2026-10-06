@@ -125,4 +125,27 @@ class JdbcSessionStoreDbTest {
         assertEquals(1, outcomes.count { it.isSuccess })
         assertTrue(outcomes.filter { it.isFailure }.all { (it.exceptionOrNull() as ApplicationException).errorCode.code.startsWith("AUTH.REFRESH_") })
     }
+
+    @Test
+    fun `inside the reuse grace sixteen simultaneous refreshes of one token all get the SAME successor, the session survives, and one more after the grace is theft`() {
+        val time = object : TimeProvider { var at = Instant.now(); override fun now() = at }
+        val service = SessionService(store, AuthSessionProperties(reuseGrace = Duration.ofSeconds(10)), time, ByteArray(32) { 5 })
+        val client = SessionClient("203.0.113.5", "UA", null)
+        val opened = service.open("acc_1", client)
+        val pool = Executors.newFixedThreadPool(16)
+        val go = CountDownLatch(1)
+        val results = (1..16).map { pool.submit<Result<String>> { go.await(); runCatching { service.refresh(opened.refreshToken!!, client).session.refreshToken!! } } }
+        go.countDown()
+        val outcomes = results.map { it.get() }
+        pool.shutdown()
+        assertEquals(16, outcomes.count { it.isSuccess }, outcomes.filter { it.isFailure }.toString())
+        assertEquals(1, outcomes.map { it.getOrThrow() }.toSet().size, "one successor - no fork of the token chain")
+        assertTrue(store.find(opened.sessionId)!!.revokedAt == null)
+        assertEquals(2, SessionDb.jdbc.queryForObject("select count(*) from skeleton_auth_refresh_tokens where session_id = :s", mapOf("s" to opened.sessionId), Int::class.java), "the first token and exactly one successor")
+
+        time.at = time.at.plusSeconds(11)
+        val e = kotlin.test.assertFailsWith<ApplicationException> { service.refresh(opened.refreshToken!!, client) }
+        assertEquals("AUTH.REFRESH_REUSED", e.errorCode.code)
+        assertTrue(store.find(opened.sessionId)!!.revokedAt != null, "after the grace a replay revokes the session")
+    }
 }

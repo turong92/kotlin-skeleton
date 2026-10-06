@@ -16,7 +16,7 @@
 | 함께 오는 모듈 | `platform`, `auth` |
 | 컴파일 전용 | 없음 |
 | 설정 접두사 | `skeleton.auth-session` — [docs/config/modules/auth-session.yml](../config/modules/auth-session.yml) |
-| 기본 동작 | 켜짐. body 전달, 절대 30일 · 유휴 14일, 유예 없음, 저장은 메모리(로컬) — 운영은 `auth-session-jdbc`. |
+| 기본 동작 | 켜짐. body 전달, 절대 30일 · 유휴 14일, 유예 없음, 세션당 회전 한도 10분에 30번(넘으면 `429 AUTH.TOO_MANY_REFRESHES` — 토큰 행 수의 상한), 저장은 메모리(로컬) — 운영은 `auth-session-jdbc`. |
 | 부팅에 필요한 것 | 로컬 · 시험: 없음. stage · prod: 메모리 저장소가 아닌 `SessionStore`(`auth-session-jdbc`) · 쿠키 전달이면 `cookie.secure=true` — 아니면 `DeployGuard`(`auth-session`)가 막는다. |
 | 교체 지점 | `SessionStore`, `SessionService`, `RefreshTokenDelivery`, `SessionClients`, `LoginSessionIssuer`, `SessionRevoker`, `SessionController`, `AuthSessionDeployGuard` |
 | 마이그레이션 | 없음 (스키마는 `auth-session-jdbc`) |

@@ -75,9 +75,19 @@ MARINA_DIRECT=1 scripts/test-deploy-contract.sh --apps api --reuse
 
 Caddy 가 `X-Forwarded-For` 를 덧붙이고 `CF-Connecting-IP` 를 넘기므로 앱의 소켓 피어는 **Caddy 컨테이너**다. 그래서 `skeleton.web.client-ip.mode` 를 정해야 IP 한도(로그인 · 가입 · 재설정 · 매직 링크)가 의미를 갖는다 — 안 정하면 stage · prod 에서 계정 가드가 기동을 막는다.
 
-**플랫폼이 넣어 준다** (홈서버 `infra/modules/app-docker/app.tf`): `<ENV_PREFIX>_WEB_CLIENT_IP_MODE` = 선언에 `domain` 이 있으면 `CLOUDFLARE`, 없으면 `PROXY`, `<ENV_PREFIX>_WEB_CLIENT_IP_TRUSTED_PROXIES` = 앱이 붙은 도커 네트워크의 CIDR 하나(읽지 못하면 `127.0.0.1/32`).
+**플랫폼이 넣어 준다** (홈서버 `infra/modules/app-docker/app.tf` 의 `client_ip_env` — 그대로 옮긴다):
+
+```
+"${var.app.env_prefix}_CLIENT_IP_MODE=${local.has_domain ? "cloudflare" : "proxy"}"
+"${var.app.env_prefix}_CLIENT_IP_TRUSTED_PROXIES=${local.web_trusted_proxies}"      # join(",", local.web_subnets) — 앱이 붙은 도커 네트워크의 CIDR 들, 쉼표로 이어
+```
+
+즉 이름에 **`WEB_` 이 없고**(`SKELETON_CLIENT_IP_MODE`), 값은 **소문자**(`cloudflare` · `proxy`), 신뢰 프록시는 **쉼표로 이은 CIDR 목록**이다. 대체 값은 없다 — 네트워크를 읽지 못하면 플랫폼 plan 이 실패한다.
 **예약 이름이라 선언의 `env:` · `secrets:` 에 쓰면 plan 이 거부한다** — 그래서 `deploy/app.yaml` 에는 없다 (`_REDIS_SSL_ENABLED` · `_REDIS_LOCK_ENABLED` 도 같다).
-스켈레톤은 대문자 mode 와 CIDR 하나를 그대로 바인딩하고 계정 가드가 그것으로 통과한다 (`ClientIpEnvironmentVariablesTest`), `test-deploy-contract.sh` 의 D 단계가 플랫폼처럼 그 두 변수를 줘서 실제 컨테이너로 증명한다. 규칙 자체는 `docs/client-ip.md`.
+프로퍼티는 `skeleton.web.client-ip.*` 라서 Spring 의 기본 환경변수 이름은 `SKELETON_WEB_CLIENT_IP_*` 이다 — 플랫폼 이름으로 닿게 하려고 `apps/api` · `apps/sample` 의 `application.yml` 이 별칭을 둔다
+(`mode: ${SKELETON_CLIENT_IP_MODE:}` · `trusted-proxies: ${SKELETON_CLIENT_IP_TRUSTED_PROXIES:}`; `scripts/new-project.sh` 의 이름 바꾸기가 `SKELETON_` → `<PREFIX>_` 로 같이 바꾼다). 긴 이름(`…_WEB_CLIENT_IP_*`)도 느슨한 바인딩으로 그대로 먹는다.
+증거: 앱의 `ClientIpPlatformEnvTest`(플랫폼 이름 · 값 모양으로 바인딩 + 홈서버 체크아웃이 이 레포 위에 있으면 `app.tf` 를 읽어 이름이 같은지 맞춰 본다 — 없으면 건너뜀)와 `test-deploy-contract.sh` 의 D 단계(그 두 변수를 줘서 실제 컨테이너로 `SKELETON_ENV=prod` 가 뜨는지).
+규칙 자체와 플랫폼 쪽 남은 문제(도커 대역 전체 신뢰 · 터널 밖 `CF-Connecting-IP`)는 `docs/client-ip.md`.
 
 ### 헬스체크 — 정직한 `/health`
 
@@ -215,9 +225,9 @@ Caddy 가 `<api_prefix>/*` 만 백엔드로 보내고 나머지는 `data/apps/<n
 ## 9. 알려진 한계 · 플랫폼에 묻는 것
 
 - 운영자 비밀은 `data/secrets/<name>.local.env` 로 넣는다 (§7). `secrets:` 에 적고 파일에 안 적으면 무작위 값이 들어간다.
-- `<ENV_PREFIX>_WEB_CLIENT_IP_MODE` · `_TRUSTED_PROXIES` 는 플랫폼이 넣는다 (§3).
+- `<ENV_PREFIX>_CLIENT_IP_MODE` · `_CLIENT_IP_TRUSTED_PROXIES` 는 플랫폼이 넣는다 (§3).
 - 계정(`account`)이 `AuthAccountRepository` 를 대신하므로 스타터는 내장 시드 계정 없이 prod 에서 뜬다 (시드 계정은 로컬 프로필 전용 — 보호 환경에서는 기동 실패).
-- 예약 이름(플랫폼이 넣는다 — 선언 `env:` · `secrets:` 에 쓰면 plan 이 거부): `SPRING_DATASOURCE_*`, `<ENV_PREFIX>_REDIS_*` (`_REDIS_SSL_ENABLED` · `_REDIS_LOCK_ENABLED` 포함), `<ENV_PREFIX>_WEB_CLIENT_IP_MODE` · `_WEB_CLIENT_IP_TRUSTED_PROXIES`.
+- 예약 이름(플랫폼이 넣는다 — 선언 `env:` · `secrets:` 에 쓰면 plan 이 거부): `SPRING_DATASOURCE_*`, `<ENV_PREFIX>_REDIS_*` (`_REDIS_SSL_ENABLED` · `_REDIS_LOCK_ENABLED` 포함), `<ENV_PREFIX>_CLIENT_IP_MODE` · `_CLIENT_IP_TRUSTED_PROXIES`.
 
 ## 10. 시험 배포 — 스타터를 홈서버에서 한 번 띄워 보기
 

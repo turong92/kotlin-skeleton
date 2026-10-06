@@ -43,3 +43,18 @@ Code that still reads `request.remoteAddr` after the filter chain sees the rewri
 The three skeleton call sites go through it: platform `ClientIpRateLimitKeyResolver`, `redis-rate-limit`
 `PrincipalAwareRateLimitKeyResolver` (`ip:<limitKey>`), `idempotency` `PrincipalIdempotencyScopeResolver` (`anonymous:<limitKey>`).
 Replace the `ClientIps` bean to change the rule for all of them.
+
+## Platform-side items (not fixable in the app)
+
+These came out of the second security review; they are the homeserver platform's to change.
+
+1. **The trusted range is the whole docker subnet.** The platform injects `<PREFIX>_CLIENT_IP_TRUSTED_PROXIES` = the subnet(s) of the docker network the app shares with Caddy
+   (`join(",", local.web_subnets)`). Any other container on that `web` network is a "trusted proxy" for this app and can choose the client address it reports
+   (`X-Forwarded-For`, or `CF-Connecting-IP` in `cloudflare` mode). The app cannot tell Caddy from a neighbour inside one subnet. Fix on the platform: give each app a network that only Caddy
+   and that app join, or trust Caddy's fixed address (`/32`) instead of the subnet.
+2. **`CF-Connecting-IP` is believed in `cloudflare` mode whenever the peer is trusted - including requests that did not come through the tunnel.** The platform Caddy site is a bare
+   `reverse_proxy` (reviewer's reading of the platform's `caddy.tf`; that file is not in the checkout this was written against, so it is **not re-verified here**): a client that reaches Caddy off-tunnel (tailnet, LAN, a published port) can send its own `CF-Connecting-IP` and Caddy forwards it, so
+   every per-IP limit can be rotated by that client. Fix on the platform: on every listener that is **not** the cloudflared tunnel, strip the header
+   (`header_up -CF-Connecting-IP`), or only accept it from the tunnel listener.
+3. The names the platform injects are `<PREFIX>_CLIENT_IP_MODE` / `<PREFIX>_CLIENT_IP_TRUSTED_PROXIES` (no `WEB_`, lower-case values, comma separated CIDRs) - see `docs/deploy.md` section 3.
+   The apps alias them in `application.yml`; `ClientIpPlatformEnvTest` fails when `infra/modules/app-docker/app.tf` (if the homeserver checkout is above this repo) and the apps drift apart.

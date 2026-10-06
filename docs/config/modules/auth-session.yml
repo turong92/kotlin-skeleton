@@ -5,6 +5,9 @@ skeleton:
     absolute-ttl: 30d                  # 로그인 뒤 이 시간이 지나면 새로고침해도 끝난다
     idle-ttl: 14d                      # 마지막 새로고침 뒤 이 시간 안 쓰면 끝난다
     # reuse-memory: 24h               # 비우면(기본) 쓴 토큰을 세션이 끝날 때까지 기억한다. 정하면 그 시간만큼만 — 지나면 도둑이 먼저 쓴 토큰의 재사용이 탐지되지 않는다
+    rotation:
+      max-per-window: 30               # 세션 하나가 창 안에 새로고침(회전)할 수 있는 횟수 — 토큰 행 수의 상한. 넘으면 429 AUTH.TOO_MANY_REFRESHES (세션은 그대로). 0 이면 끔
+      window: 10m
     reuse-grace: 0s                    # 같은 옛 토큰을 이 시간 안에 한 번 더 내밀면(탭 두 개 동시 새로고침) 재사용으로 치지 않는다. 0 이면 유예 없음
     max-sessions-per-account: 20       # 넘으면 가장 오래된 세션부터 닫는다
     cookie:

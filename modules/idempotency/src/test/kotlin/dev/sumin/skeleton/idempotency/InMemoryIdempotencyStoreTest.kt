@@ -63,4 +63,16 @@ class InMemoryIdempotencyStoreTest {
 
         assertIs<IdempotencyReservation.Conflict>(store.reserve(second))
     }
+
+    @Test
+    fun `release frees the key so the next request starts fresh instead of replaying or being in progress`() {
+        val store = InMemoryIdempotencyStore()
+        val request = IdempotencyRequest("user-1:key-1", "key-1", "fingerprint-1", Instant.parse("2099-06-09T00:05:00Z"))
+        store.reserve(request)
+        store.release(request.scopedKey)
+        assertIs<IdempotencyReservation.Started>(store.reserve(request.copy(fingerprint = "fingerprint-2")))
+        store.complete(request.scopedKey, StoredIdempotencyResponse(202, null, emptyMap(), ByteArray(0)))
+        store.release(request.scopedKey)
+        assertIs<IdempotencyReservation.Started>(store.reserve(request))
+    }
 }

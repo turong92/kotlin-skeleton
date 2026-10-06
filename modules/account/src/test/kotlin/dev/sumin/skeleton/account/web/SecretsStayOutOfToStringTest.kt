@@ -28,13 +28,23 @@ class SecretsStayOutOfToStringTest {
         assertHidden(ResetPasswordRequest(secret, secret))
         assertHidden(TokenRequest(secret))
         assertHidden(ChangePasswordRequest(secret, secret))
-        assertHidden(ChangeEmailRequest("a@b.co", secret))
-        assertHidden(DeleteAccountRequest(secret, secret))
-        assertHidden(LinkSocialRequest(secret))
+        assertHidden(ChangeEmailRequest("a@b.co", secret, secret, SocialReauthRequest("kakao", secret)))
+        assertHidden(DeleteAccountRequest(secret, secret, SocialReauthRequest("kakao", secret)))
+        assertHidden(ReauthRequest(secret, secret, SocialReauthRequest("kakao", secret)))
+        assertHidden(SocialReauthRequest("kakao", secret))
+        assertHidden(VerifyEmailRequest(secret, secret))
+        assertHidden(ResendRequest(secret))
+        assertHidden(CodeRequest(secret))
+        assertHidden(SignUpResponse("VERIFICATION_SENT", secret))
+        assertHidden(LinkSocialRequest(secret, null, secret, secret, SocialReauthRequest("kakao", secret)))
     }
 
     @Test
     fun `commands, sessions and seed accounts hide secrets too`() {
+        assertHidden(dev.sumin.skeleton.account.ReauthInput(secret, secret, dev.sumin.skeleton.account.SocialReauth("kakao", secret)))
+        assertHidden(dev.sumin.skeleton.account.SocialReauth("kakao", secret))
+        assertHidden(dev.sumin.skeleton.account.MailboxProof(setOf("idn_1"), secret))
+        assertHidden(dev.sumin.skeleton.account.challenge.ChallengeRow("id", "sign_up", "a@b.co", null, null, null, secret, "hash", 5, 0, Instant.EPOCH, Instant.EPOCH, Instant.EPOCH, null))
         assertHidden(dev.sumin.skeleton.account.SignUpCommand("a@b.co", secret, null, null, null, null, null))
         assertHidden(dev.sumin.skeleton.auth.session.OpenedSession("ses_1", secret, Instant.EPOCH))
         assertHidden(dev.sumin.skeleton.account.AccountProperties.SeedAccount(email = "a@b.co", password = secret))
