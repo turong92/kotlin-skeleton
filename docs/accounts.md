@@ -66,31 +66,38 @@ skeleton:
 | 같은 `(method, subject)` 가 이미 있다 | 그 계정으로 로그인 |
 | 소셜 · 제공자가 **확인한** 이메일이 기존 계정과 같다 | 기본: **병합 없이** `409 ACCOUNT.SOCIAL_EMAIL_CONFLICT` — 기존 방법으로 로그인해 설정에서 연결한다. `social.merge-on-verified-email=true` 여도 **양쪽 이메일이 모두 확인된** 경우만 |
 | 소셜 · 제공자가 확인하지 **않은** 이메일 | 이메일을 없는 것으로 친다 — 저장하지 않고(남의 주소 선점 방지) 충돌도 알리지 않는다(주소 존재 조회 방지) |
-| 매직 링크(메일함 증명) · 같은 이메일의 기존 계정 | 그 계정에 붙는다 + 이메일 확인으로 친다 (메일함 주인은 어차피 비밀번호 재설정으로 들어올 수 있다) |
+| 매직 링크(메일함 증명) · 같은 이메일의 기존 계정 | 그 계정에 붙는다(`sign-up=false` 여도 — 가입이 아니다) + 이메일 확인으로 친다. 계정이 **미확인**이었다면 가입 때 정해진 비밀번호(메일함 주인이 정한 것이 아니다)는 **버리고** 세션 · 인증 링크를 닫는다 (사전 탈취 방어) |
 | 마지막 "들어오는 길" 을 떼려 한다 | `409 ACCOUNT.LAST_SIGN_IN_METHOD` (원자적 — 동시 해제 둘이 다 성공하지 않는다) |
+
+## 이메일 정규화 (한 곳)
+
+`Emails.normalize` = 앞뒤 공백 제거 → 유니코드 NFC → 소문자(`Locale.ROOT`). 점 · `+태그` 제거나 NFKC · IDN 변환은 **하지 않는다** (같게 보면 남의 주소를 같다고 말하게 된다). 저장 · 조회 · 한도 키 · 토큰 주인 · 메일 수신자가 모두 이 값이고, 같은 주소인지는 DB 정렬에 맡기지 않고 `AccountCore.accountByEmail` 이 **저장된 글자와 글자 그대로** 비교한다. MySQL 은 `email` · 토큰 `subject` 열도 `utf8mb4_bin` 이다 (기본 정렬은 악센트 · 대소문자를 같게 본다). 메일은 늘 계정에 **저장된** 주소로 간다.
 
 ## 위협 모델 — 각 항목을 덮는 시험
 
 | 위협 | 막는 법 | 덮는 시험 |
 |---|---|---|
 | **계정 열거 (응답)** | 가입 · 재설정 · 재전송 · 매직 링크 요청은 계정 유무와 무관하게 같은 `202` 본문. 있는 주소 가입은 "이미 계정이 있어요" 메일 | `AccountWebTest` `sign-up answers 202 identically…` · `forgot is 202 and identical…`, `MagicLinkWebTest` `request is 202 with the same body…`, `MagicLinkSignUpClosedWebTest` |
-| **계정 열거 (시간)** | 요청 스레드는 검사 · 한도 · 해시 한 번만 하고 조회 · 토큰 · 메일은 뒤에서. 로그인은 계정이 없어도 해시 비교 한 번 | `AccountResponseLevelSecurityTest` `sign-up, forgot and resend answer without waiting for mail…`, `RegistrationServiceTest` `the request thread never touches the account store…`, `PasswordServiceTest` `forgot never touches the stores on the request thread…`, `PasswordLoginServiceTest` `unknown account still costs one hash comparison…` |
+| **계정 열거 (시간)** | 요청 스레드는 검사 · 한도 · 해시 한 번 · (가입은) 저장소 호출 한 번을 새 주소든 있는 주소든 똑같이 하고 토큰 · 메일은 뒤에서. 로그인은 계정이 없어도 해시 비교 한 번 | `AccountResponseLevelSecurityTest` `sign-up, forgot and resend answer without waiting for mail…`, `RegistrationServiceTest` `the request thread stores the account itself - one identical repository call…`, `PasswordServiceTest` `forgot never touches the stores on the request thread…`, `PasswordLoginServiceTest` `unknown account still costs one hash comparison…` |
 | **열거 (잠금 오라클)** | 로그인 한도는 입력 식별자를 계정이 있든 없든 똑같이 센다 | `LoginControlsTest` `the eleventh attempt on one identifier… whether or not the account exists` |
-| **무차별 대입** | IP 당 · 식별자당 시도 수 제한(429 + `Retry-After`), 현재 비밀번호 추측도 계정당 제한, 경보 | `LoginControlsTest`, `AccountWebTest` `login attempts are throttled…`, `PasswordServiceTest` `guessing the current password…` |
-| **메일 폭탄** | 주소당 · IP 당 한도 (넘으면 조용히/429) | `RegistrationServiceTest` `resend is capped per address…`, `PasswordServiceTest` `forgot is capped…`, `MagicLinkWebTest` `requests are capped…` |
+| **무차별 대입** | IP 당 · 주소당(`email` · `username` · `accountId` 한 버킷) 시도 수 제한(429 + `Retry-After`), 현재 비밀번호 추측도 계정당 제한, 경보. **IP 출처**: `skeleton.web.client-ip.mode` 를 정해야 한다 — 안 정하면 `X-Forwarded-For` 로 한도가 풀리므로 stage · prod 가드가 기동을 막는다 | `LoginControlsTest`, `EmailNormalizationTest` `the login limit key is one per address…`, `AccountDeployGuardTest` `without a client IP mode…`, `AccountWebTest` `login attempts are throttled…`, `PasswordServiceTest` `guessing the current password…` |
+| **메일 폭탄** | 주소당 · IP 당 한도 (넘으면 조용히/429). 알려진 대가: 한 주소의 시간당 예산(3)이 차면 제3자가 그 주소의 인증 · 재설정 · 매직 링크를 막을 수 있다 — 캡차(`captcha.required`)를 권고 | `RegistrationServiceTest` `resend is capped per IP like forgot…` · `resend is capped per address…`, `PasswordServiceTest` `forgot is capped…`, `MagicLinkWebTest` `requests are capped…` |
 | **링크 토큰 탈취 · 추측** | 256비트 난수, **해시만 저장**, 한 번만, 용도 구분(인증 링크로 재설정 불가), 만료, 새 링크가 옛 링크를 닫음 | `OneTimeTokensTest`, `JdbcTokenAndAuditDbTest`, `PasswordServiceTest` `a verification link cannot reset a password`, `MagicLinkWebTest` `a link for another purpose…` |
 | **링크 이중 사용 (경쟁)** | 소비는 원자적 조건부 UPDATE | `OneTimeTokensTest` `sixteen threads…`, `RegistrationServiceTest` `sixteen concurrent verifications…`, `PasswordServiceTest` `sixteen concurrent resets…`, `MagicLinkWebTest` `sixteen simultaneous redemptions…` (+ PostgreSQL · MySQL `JdbcTokenAndAuditDbTest`) |
 | **링크 미리 열기(보안 검사기)** | 열기는 GET, 바꾸는 것은 프론트의 POST | 설계 (정책 실패가 링크를 태우지 않는 시험: `PasswordServiceTest` `a policy failure leaves the link usable`) |
-| **리프레시 토큰 탈취 · 재사용** | 불투명 · 해시 저장 · **매번 회전** · 쓴 토큰이 다시 오면 세션 전체 종료 + 경보 | `SessionServiceTest` `replaying a rotated-away token…`, `sixteen threads presenting the same token…`, `SessionBodyDeliveryWebTest` `refresh is public, rotates…`, `JdbcSessionStoreDbTest` (두 DB) |
-| **세션 고정** | 세션 id · 리프레시 토큰은 항상 서버가 새로 만든다(클라이언트가 정하는 값 없음), 로그인마다 새 세션. 비밀번호 재설정 · 변경 · 이메일 변경은 세션을 닫는다 | `SessionBodyDeliveryWebTest` `login carries a refresh token, a session id…`, `PasswordServiceTest` `reset replaces the password, signs every session out…`, `EmailChangeServiceTest` `confirming switches the address… signs everyone out…` |
+| **리프레시 토큰 탈취 · 재사용** | 불투명 · 해시 저장 · **매번 회전** · 쓴 토큰은 **세션이 끝날 때까지** 기억 · 다시 오면 그 세션 종료 + `REFRESH_REUSE_DETECTED` 이벤트(WARN 로그 · 감사 · 주인 경보) | `SessionServiceTest` `replaying a rotated-away token…`, `SessionReuseMemoryTest`, `SessionBodyDeliveryWebTest` `reuse reaches the listeners…`, `SessionEventBridgeTest` (세션 → 계정 이벤트 → 경보), apps/api `AccountJourneyIntegrationTest` `a replayed refresh token reaches the account event stream…`, `sixteen threads presenting the same token…`, `SessionBodyDeliveryWebTest` `refresh is public, rotates…`, `JdbcSessionStoreDbTest` (두 DB) |
+| **세션 고정** | 세션 id · 리프레시 토큰은 항상 서버가 새로 만든다(클라이언트가 정하는 값 없음), 로그인마다 새 세션. 비밀번호 재설정 · 변경 · 이메일 변경 · 수단 해제는 세션을 닫는다 | apps/api `AccountJourneyIntegrationTest` `a password reset kills every refresh token for real…` · `a password change signs the other devices out…` · `an email change confirmation signs every session out…` (진짜 `SessionRevokerAdapter` + JDBC 저장소), `SessionBodyDeliveryWebTest` `login carries a refresh token, a session id…`, `PasswordServiceTest` `reset replaces the password, signs every session out…`, `EmailChangeServiceTest` `confirming switches the address… signs everyone out…` |
 | **CSRF** | 기본 body 전달은 쿠키가 없다. cookie 모드는 HttpOnly · Secure · SameSite=Strict · `Path=/api/v1/auth` + 커스텀 헤더 요구. 액세스 토큰은 `Authorization` 헤더 | `SessionCookieDeliveryWebTest` (헤더 없으면 403, body 토큰 무시, 쿠키 속성) |
 | **정지 · 삭제 뒤 토큰** | 새로고침 즉시 거부, 세션 즉시 철회. **이미 낸 액세스 토큰은 만료(≤15분)까지 산다** — 알려진 한계 | `SessionBodyDeliveryWebTest` `a suspended or deleted account cannot refresh`, `DeletionAndAdminTest` |
-| **이메일 변경 탈취** | 새 주소 확인 전엔 불변 · 비밀번호 요구 · 옛 주소에 요청 · 변경 알림 · 변경 시 세션 종료 · 계정당 한도 | `EmailChangeServiceTest` |
+| **이메일 변경 탈취** | 새 주소 확인 전엔 불변 · 비밀번호(없는 계정은 메일함 확인 링크) 요구 · 옛 주소에 요청 · 변경 알림(새 주소가 쓰이는 중이어도 똑같이) · **비밀번호를 바꾸면 열린 변경 링크가 죽는다** · 변경 시 세션 종료 · 계정당 한도 | `EmailChangeServiceTest`, `ReauthTest` |
+| **사전 탈취 (미확인 가입 비밀번호)** | 메일함이 다른 길(매직 링크 · 확인된 소셜)로 증명되면 미확인 비밀번호를 버리고 세션 · 링크를 닫는다. 인증 링크는 발급 때의 비밀번호에 묶인다 | `SignInServiceTest` `pre-hijack - …` · `a verification link activates only the password it was issued for` |
+| **유사 주소 (악센트 · 대소문자)** | 정규화 한 곳 + 글자 그대로 비교 + MySQL `utf8mb4_bin` | `EmailNormalizationTest`, `EmailExactMatchDbTest` (두 DB) |
+| **소셜 연결 탈취 (로그인 CSRF)** | 연결은 다시 인증(현재 비밀번호 · 메일함 링크) + 계정에 알림 메일 + 프론트가 OAuth `state` 를 확인해야 한다 (계약 문서 §7) | `AccountSocialWebTest` `linking needs the current password…` · `an account without a password links only after the mailbox confirmation…` |
 | **소셜 병합 탈취** | 확인된 이메일만 믿고 기본은 병합하지 않는다 (위 표) | `SignInServiceTest` `a verified provider email that matches…` · `merging is opt-in…` · `a provider email that is not verified is ignored…`, `AccountSocialWebTest` |
-| **비밀번호 · 토큰이 로그에** | 서비스는 안 남기고, 요청/응답 DTO · 저장 행 `toString` 은 가린다(Spring MVC 가 DEBUG/TRACE 에서 본문을 `toString` 으로 찍는다 — 실측). 기본 `LogMasker` 는 `token=` 쌍도 가린다 | `AccountResponseLevelSecurityTest` `no one-time token or password ever reaches the log…`, `SecretsStayOutOfToStringTest` |
-| **권한 상승 · 관리자 사고** | 첫 관리자는 확인된 이메일 + ADMIN 이 아직 없을 때만, 마지막 ADMIN 은 정지 · 회수 · 삭제 불가, 자기 정지 불가, 비밀번호 기본값 없음, 시드 계정은 stage · prod 에서 기동 실패 | `RegistrationServiceTest` (bootstrap), `DeletionAndAdminTest`, `AccountDeployGuardTest` |
+| **비밀번호 · 토큰이 로그에** | 서비스는 안 남기고, 요청/응답 DTO · 저장 행 `toString` 은 가린다(Spring MVC 가 DEBUG/TRACE 에서 본문을 `toString` 으로 찍는다 — 실측). 기본 `LogMasker` 는 `token=` 쌍도 가린다 | `AccountResponseLevelSecurityTest` `no one-time token or password ever reaches the log…`, `MailPathLogLeakTest` (진짜 메일러 · 전달 길), `SecretsStayOutOfToStringTest` (요청 · 응답 · `SignUpCommand` · `OpenedSession` · 시드 계정) |
+| **권한 상승 · 관리자 사고** | 관리자 권한은 **매 호출 저장소의 계정**(ACTIVE + 역할)으로 확인 — 낡은 토큰으로 못 한다. 첫 관리자는 확인된 이메일 + ADMIN 이 아직 없을 때만, 마지막 ADMIN 은 정지 · 회수 · 삭제 불가(저장소가 원자적으로 판정 — 동시에 서로를 정지해도 0 이 안 된다), 자기 정지 불가, 비밀번호 기본값 없음, 시드 계정은 stage · prod 에서 기동 실패 | `RegistrationServiceTest` (bootstrap), `DeletionAndAdminTest` `two administrators suspending…`, `AccountCallersTest`, `JdbcAccountRepositoryDbTest` `two administrators demoting…` (두 DB), `AccountDeployGuardTest` |
 | **로그인 잠금 DoS** | 시도 전부를 세므로 공격자가 남의 식별자를 10분 동안 잠글 수 있다 — **수용한 대가** (실패만 세려면 잠김 상태를 저장해야 하고 그것이 존재 오라클이 된다). 창 · 횟수는 설정 | `LoginControlsTest` |
-| **삭제 뒤 남는 데이터** | 유예 뒤 모든 `AccountErasureListener` 가 성공해야 계정 행을 지운다(하나라도 실패하면 다음 주기에 재시도) | `DeletionAndAdminTest` `purge waits for the grace…` · `a failing listener keeps the account…`, `JdbcErasureDbTest`, `NotificationInboxErasureDbTest` |
+| **삭제 뒤 남는 데이터** | 유예 뒤 모든 `AccountErasureListener` 가 성공해야 계정 행을 지운다(하나라도 실패하면 다음 주기에 재시도) | `DeletionAndAdminTest` `purge waits for the grace…` · `a failing listener keeps the account…`, `JdbcErasureDbTest`, `NotificationInboxErasureDbTest`, `SessionMaintenanceTest` · `JdbcSessionStoreDbTest` `erasing an account deletes its sessions…` (세션 행 — IP · UA — 도 지운다). 감사 표에는 계정 id · IP 가 `audit.enabled` 일 때 남는다 — 보존 기간은 앱이 정한다 |
 
 ## 삭제 · 지우기 · 내보내기
 
@@ -110,7 +117,7 @@ skeleton:
 
 ## 배포 가드 (`skeleton.env=stage|prod` 또는 auth 의 보호 프로필)
 
-기동이 막히는 것: 메모리 계정 · 토큰 저장소 · 메모리 세션 저장소 · 메일 발송 길 없음 · `mail.link-base-url` 비어 있음 · `mail.log-links=ON` · 시드 계정 · 캡차를 필수로 했는데 검증기 없음 · 쿠키 전달인데 `cookie.secure=false` · 잘못된 부트스트랩 이메일. 경고: 가입이 열려 있는데 캡차 없음 · 로그인 제한 끔 · 이메일 확인 끔.
+기동이 막히는 것: `skeleton.web.client-ip.mode` 미설정 · 메모리 계정 · 토큰 저장소 · 메모리 세션 저장소 · 메일 발송 길 없음 · `mail.link-base-url` 비어 있음 · `mail.log-links=ON` · 시드 계정 · 캡차를 필수로 했는데 검증기 없음 · 쿠키 전달인데 `cookie.secure=false` · 잘못된 부트스트랩 이메일. 경고: 가입이 열려 있는데 캡차 없음 · 로그인 제한 끔 · 이메일 확인 끔.
 
 ## HTTP 계약
 
@@ -121,6 +128,6 @@ skeleton:
 - **bcrypt(기본) vs argon2**: 추가 의존이 없고 해시가 메모리를 쓰지 않아 로그인 폭주 때 메모리 DoS 면이 작다. argon2id 는 opt-in(`password.encoder=argon2` + BouncyCastle). 델리게이팅 인코더라 `{bcrypt}` 접두사로 저장되고 옛 접두사 없는 bcrypt 도 검증되며 로그인 때 새 방식으로 올라간다.
 - **리프레시 전달 기본 body**: 쿠키가 없어 CSRF 면이 없고 react `api-client` 가 바로 쓴다. 대가는 XSS 가 토큰을 읽을 수 있다는 것 — 회전 · 재사용 탐지 · 짧은 액세스 토큰이 피해를 줄인다. 쿠키가 더 낫다고 판단하면 `delivery: COOKIE`.
 - **로그인 한도는 시도 전부**를 센다 (위 위협 표).
-- **뒤로 넘기는 일(가입 · 재설정 · 메일)은 프로세스 안의 작은 풀**이다 — 재시작하면 처리 못 한 일이 사라지고 사용자가 다시 요청한다. 내구성이 필요하면 `AccountTaskRunner` 빈으로 잡 큐에 넣는다.
-- **액세스 토큰은 상태 없는 JWT** — 정지 · 역할 변경은 최대 15분 늦게 반영된다 (새로고침은 즉시 현재 역할).
+- **뒤로 넘기는 일(메일 · 재설정 조회)은 프로세스 안의 작은 풀**이다 — 종료 때는 기다려 마치고 넘치면 부른 스레드가 하지만, 비정상 종료로 처리 못 한 메일은 사라지고 사용자가 다시 요청한다(재전송). **가입 계정 행은 요청 스레드가 저장한다**(202 를 받은 가입은 사라지지 않는다). 내구성이 더 필요하면 `AccountTaskRunner` 빈으로 잡 큐에 넣는다.
+- **액세스 토큰은 상태 없는 JWT** — 정지 · 역할 변경은 일반 API 에는 최대 15분 늦게 반영된다 (새로고침은 즉시 현재 역할). **관리자 API 는 매 호출 저장소를 다시 읽는다.**
 - **`username` = 이메일** (이 모듈이 만든 계정에는 따로 사용자 이름이 없다).

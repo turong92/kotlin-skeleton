@@ -4,7 +4,7 @@ skeleton:
     delivery: BODY                     # BODY: 응답 JSON 으로 주고 본문으로 받는다 | COOKIE: HttpOnly 쿠키 (refresh · logout 이 CSRF 헤더를 요구)
     absolute-ttl: 30d                  # 로그인 뒤 이 시간이 지나면 새로고침해도 끝난다
     idle-ttl: 14d                      # 마지막 새로고침 뒤 이 시간 안 쓰면 끝난다
-    reuse-memory: 24h                  # 쓴 토큰을 이 시간 기억한다 — 그 안에 다시 내밀면 재사용(탈취 의심)으로 세션 전체를 닫는다
+    # reuse-memory: 24h               # 비우면(기본) 쓴 토큰을 세션이 끝날 때까지 기억한다. 정하면 그 시간만큼만 — 지나면 도둑이 먼저 쓴 토큰의 재사용이 탐지되지 않는다
     reuse-grace: 0s                    # 같은 옛 토큰을 이 시간 안에 한 번 더 내밀면(탭 두 개 동시 새로고침) 재사용으로 치지 않는다. 0 이면 유예 없음
     max-sessions-per-account: 20       # 넘으면 가장 오래된 세션부터 닫는다
     cookie:
@@ -13,5 +13,8 @@ skeleton:
       same-site: Strict
       path: /api/v1/auth
       csrf-header: X-Requested-With    # COOKIE 전달에서 refresh · logout 이 요구하는 헤더 (값 fetch)
+    purge:
+      interval: 1h                     # 끝난 세션 행을 지우는 주기 (0 이면 끔)
+      retention: 7d                    # 끝난 뒤 이 기간이 지난 세션 행을 지운다
     http:
       enabled: true                    # false 면 /api/v1/auth/refresh · logout · sessions 를 등록하지 않는다
