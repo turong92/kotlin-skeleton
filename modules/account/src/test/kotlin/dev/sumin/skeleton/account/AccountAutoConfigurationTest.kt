@@ -56,6 +56,19 @@ class AccountAutoConfigurationTest {
     }
 
     @Configuration(proxyBeanMethods = false)
+    class AppListener {
+        @Bean fun appEvents(): AccountEventListener = AccountEventListener { }
+    }
+
+    @Test
+    fun `an app's own event listener does not silence the default log line - it backs off by name only`() {
+        runner.withUserConfiguration(AppListener::class.java).run { ctx ->
+            assertTrue(ctx.containsBean("loggingAccountEventListener"), "registering any listener (audit, an app's own) made the default log line vanish")
+            assertEquals(2, ctx.getBeansOfType(AccountEventListener::class.java).size)
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
     class FakeMail {
         val sent = mutableListOf<MailMessage>()
         @Bean fun mailSender(): MailSender = MailSender { sent += it; MailSendResult(true) }

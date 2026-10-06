@@ -294,4 +294,34 @@ class RegistrationServiceTest {
         assertFailsWith<RateLimitedException> { h.registration.resendVerification("u11@example.com", "198.51.100.9", null) }
         h.registration.resendVerification("other@example.com", "198.51.100.10", null)
     }
+
+    @Test
+    fun `captcha required=false never calls the verifier even when one exists`() {
+        var calls = 0
+        val optional = AccountHarness(captcha = AccountCaptcha { _, _, _ -> calls++; false }, captchaRequired = false)
+        optional.signUp()
+        assertEquals(0, calls)
+        assertNotNull(optional.repo.findByEmail("ann@example.com"))
+    }
+
+    @Test
+    fun `captcha required=true without a verifier fails closed instead of letting everything through`() {
+        val closed = AccountHarness(captcha = null, captchaRequired = true)
+        assertEquals("ACCOUNT.CAPTCHA_FAILED", assertFailsWith<ApplicationException> { closed.signUp() }.errorCode.code)
+        assertNull(closed.repo.findByEmail("ann@example.com"))
+    }
+
+    @Test
+    fun `the cheap per-IP limit runs before the captcha - a flood costs no external verification calls`() {
+        var calls = 0
+        val g = AccountHarness(captcha = AccountCaptcha { _, _, _ -> calls++; true })
+        repeat(10) { g.signUp("u$it@example.com", ip = "198.51.100.9", captchaToken = "ok") }
+        assertEquals(10, calls)
+        repeat(5) { assertFailsWith<RateLimitedException> { g.signUp("x$it@example.com", ip = "198.51.100.9", captchaToken = "ok") } }
+        assertEquals(10, calls, "requests over the IP limit must not reach the captcha verifier")
+        repeat(10) { g.registration.resendVerification("r$it@example.com", "198.51.100.77", "ok") }
+        val before = calls
+        assertFailsWith<RateLimitedException> { g.registration.resendVerification("r11@example.com", "198.51.100.77", "ok") }
+        assertEquals(before, calls)
+    }
 }

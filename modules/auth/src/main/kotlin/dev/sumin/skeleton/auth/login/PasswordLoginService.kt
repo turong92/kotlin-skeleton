@@ -49,7 +49,7 @@ class PasswordLoginService(
             active.forEach { it.onFailure(attempt, LoginFailure.BLOCKED, account) }
             throw blocked
         }
-        if (passwordEncoder.upgradeEncoding(account.passwordHash)) {
+        if (accounts.storesUpgradedPasswordHash && passwordEncoder.upgradeEncoding(account.passwordHash)) {
             passwordEncoder.encode(password)?.let { accounts.upgradePasswordHash(account.accountId, it) }
         }
         active.forEach { it.onSuccess(attempt, account) }

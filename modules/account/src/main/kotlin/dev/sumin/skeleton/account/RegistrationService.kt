@@ -32,11 +32,11 @@ class RegistrationService(private val core: AccountCore) {
     fun signUp(cmd: SignUpCommand): SignUpStatus {
         val p = core.props
         if (!p.signUp.enabled) throw AccountException(AccountErrorCode.SIGN_UP_CLOSED)
-        core.captcha.check(cmd.captchaToken, cmd.ip, "sign_up")
         cmd.ip?.let {
             val a = core.limits.acquire("signup:ip", it, p.signUp.perIp, p.signUp.perIpWindow)
             if (!a.allowed) throw RateLimitedException(a.retryAfterSeconds)
         }
+        core.captcha.check(cmd.captchaToken, cmd.ip, "sign_up")
         val email = Emails.normalize(cmd.email)
         if (!Emails.plausible(email)) throw ApplicationException("Invalid email", PlatformErrorCode.VALIDATION_FAILED)
         val violations = core.policy.check(cmd.password, email)
@@ -90,12 +90,12 @@ class RegistrationService(private val core: AccountCore) {
 
     /** 항상 같은 응답 — 주소 조회 · 메일은 뒤에서, 한도를 넘으면 조용히 */
     fun resendVerification(email: String, ip: String?, captchaToken: String?) {
-        core.captcha.check(captchaToken, ip, "resend_verification")
         ip?.let {
             val v = core.props.verification
             val a = core.limits.acquire("resend:ip", it, v.perIp, v.perIpWindow)
             if (!a.allowed) throw RateLimitedException(a.retryAfterSeconds)
         }
+        core.captcha.check(captchaToken, ip, "resend_verification")
         val normalized = Emails.normalize(email)
         core.tasks.run("resend-verification") {
             val account = core.accountByEmail(normalized)

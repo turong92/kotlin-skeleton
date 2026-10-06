@@ -125,10 +125,11 @@ class AccountAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    fun captchaGate(captcha: ObjectProvider<AccountCaptcha>): CaptchaGate = CaptchaGate(captcha.getIfAvailable())
+    fun captchaGate(captcha: ObjectProvider<AccountCaptcha>, properties: AccountProperties): CaptchaGate = CaptchaGate(captcha.getIfAvailable(), properties.captcha.required)
 
+    /** 기본 로그 한 줄 — 이름으로만 물러난다: 앱의 리스너 · 감사 리스너가 있어도 이 줄은 남는다 */
     @Bean
-    @ConditionalOnMissingBean
+    @ConditionalOnMissingBean(name = ["loggingAccountEventListener"])
     fun loggingAccountEventListener(): AccountEventListener = LoggingAccountEventListener()
 
     @Bean

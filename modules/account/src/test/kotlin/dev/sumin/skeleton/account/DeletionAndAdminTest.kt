@@ -193,6 +193,41 @@ class DeletionAndAdminTest {
     }
 
     @Test
+    fun `granting a role to a deleted account is not found, like every other admin action on it`() {
+        val admin = admin()
+        val gone = h.activeAccount("gone@example.com")
+        h.deletion.delete(gone.id, "tangerine-42-moon", null)
+        assertEquals("ACCOUNT.NOT_FOUND", code { h.admin.grantRole(admin.id, gone.id, "ADMIN") })
+        assertTrue("ADMIN" !in h.repo.findById(gone.id)!!.roles)
+    }
+
+    @Test
+    fun `two administrators suspending or demoting each other at once never leave zero administrators`() {
+        repeat(40) { round ->
+            val x = AccountHarness()
+            val a = x.activeAccount("a$round@example.com"); val b = x.activeAccount("b$round@example.com")
+            x.repo.grantRole(a.id, "ADMIN", x.time.now()); x.repo.grantRole(b.id, "ADMIN", x.time.now())
+            val pool = java.util.concurrent.Executors.newFixedThreadPool(2)
+            val go = java.util.concurrent.CountDownLatch(1)
+            val suspend = round % 2 == 0
+            val jobs = listOf(a.id to b.id, b.id to a.id).map { (actor, target) ->
+                pool.submit { go.await(); runCatching { if (suspend) x.admin.suspend(actor, target, null) else x.admin.revokeRole(actor, target, "ADMIN") } }
+            }
+            go.countDown(); jobs.forEach { it.get() }; pool.shutdown()
+            assertEquals(1L, x.repo.countActiveWithRole("ADMIN"), "round $round: the last-administrator check was a read followed by a write")
+        }
+    }
+
+    @Test
+    fun `restoring after the grace ended is refused even before the purge job has run - purge and restore cannot both win`() {
+        val a = h.activeAccount()
+        h.deletion.delete(a.id, "tangerine-42-moon", null)
+        h.time.advance(Duration.ofDays(31))
+        assertEquals("ACCOUNT.NOT_FOUND", code { h.admin.restore("acc_admin", a.id) })
+        assertEquals(AccountStatus.DELETED, h.repo.findById(a.id)!!.status)
+    }
+
+    @Test
     fun `search filters by email fragment and status`() {
         admin(); h.activeAccount("ann@example.com"); h.signUp("pending@example.com")
         assertEquals(1, h.admin.search("ann", null, 0, 10).total)

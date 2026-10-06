@@ -37,13 +37,13 @@ class DeletionService(private val core: AccountCore) {
         if (account.status == AccountStatus.DELETED) return account.purgeAfter ?: core.time.now()
         reauthenticate(account, currentPassword, confirmationToken)
 
-        val adminRole = core.props.admin.role
-        if (adminRole in account.roles && account.status == AccountStatus.ACTIVE && core.accounts.countActiveWithRole(adminRole) <= 1) {
-            throw AccountException(AccountErrorCode.LAST_ADMIN)
-        }
         val now = core.time.now()
         val purgeAfter = now.plus(core.props.deletion.grace)
-        core.accounts.update(accountId, AccountPatch(status = AccountStatus.DELETED, deletedAt = now, purgeAfter = purgeAfter), now)
+        when (core.accounts.updateUnlessLast(accountId, AccountPatch(status = AccountStatus.DELETED, deletedAt = now, purgeAfter = purgeAfter), now, core.props.admin.role)) {
+            GuardedResult.LAST -> throw AccountException(AccountErrorCode.LAST_ADMIN)
+            GuardedResult.NOT_FOUND -> throw AccountException(AccountErrorCode.NOT_FOUND)
+            GuardedResult.DONE -> Unit
+        }
         core.sessions()?.revokeAll(accountId, null)
         account.email?.let { core.mailer.send(AccountMail(MailKind.DELETION_SCHEDULED, it, account.locale, vars = mapOf("days" to core.props.deletion.grace.toDays().toString()))) }
         core.events.publish(AccountEventType.DELETION_SCHEDULED, accountId, detail = mapOf("purgeAfter" to purgeAfter.toString()))
@@ -78,6 +78,10 @@ class AccountPurgeService(
         val due = core.accounts.dueForPurge(core.time.now(), core.props.deletion.purgeBatch)
         var purged = 0
         for (account in due) {
+            // 다시 읽어 아직 지울 계정인지 확인하고 (그 사이 되살려졌으면 건너뛴다), 지울 때도 저장소가 조건으로 한 번 더 막는다
+            val now = core.time.now()
+            val current = core.accounts.findById(account.id)
+            if (current == null || current.status != AccountStatus.DELETED || current.purgeAfter?.isAfter(now) != false) continue
             val request = ErasureRequest(account.id, AccountTombstone.of(account.id))
             val failed = listeners().firstOrNull { listener ->
                 try { listener.erase(request); false } catch (e: Exception) {
@@ -85,7 +89,7 @@ class AccountPurgeService(
                 }
             }
             if (failed != null) continue
-            if (core.accounts.purge(account.id)) {
+            if (core.accounts.purge(account.id, now)) {
                 purged++
                 core.events.publish(AccountEventType.ACCOUNT_PURGED, account.id)
             }

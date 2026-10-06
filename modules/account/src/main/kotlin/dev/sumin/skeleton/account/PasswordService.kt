@@ -15,12 +15,12 @@ import dev.sumin.skeleton.account.token.TokenPurposes
  */
 class PasswordService(private val core: AccountCore) {
     fun forgot(email: String, ip: String?, captchaToken: String?) {
-        core.captcha.check(captchaToken, ip, "forgot_password")
         ip?.let {
             val r = core.props.reset
             val a = core.limits.acquire("forgot:ip", it, r.perIp, r.perIpWindow)
             if (!a.allowed) throw RateLimitedException(a.retryAfterSeconds)
         }
+        core.captcha.check(captchaToken, ip, "forgot_password")
         val normalized = Emails.normalize(email)
         core.tasks.run("password-forgot") { sendResetLink(normalized, ip) }
     }

@@ -50,6 +50,7 @@ class AccountHarness(
     ),
     tasks: AccountTaskRunner = AccountTaskRunner.DIRECT,
     captcha: AccountCaptcha? = null,
+    captchaRequired: Boolean = captcha != null,
     breached: BreachedPasswordCheck? = null,
     /** 저장소를 바꿔 끼운다 (예: 악센트 · 대소문자를 같게 보는 DB 정렬을 흉내 낸 것) — 호출 기록 프록시가 이것을 감싼다 */
     storage: AccountRepository? = null,
@@ -76,7 +77,7 @@ class AccountHarness(
     val core = AccountCore(
         repo, props, time, publisher, hasher, policy, tokens, mailer, AccountLinks(props.mail), tasks,
         AccountRateLimits({ limitStore }, time),
-        CaptchaGate(captcha), { revoker }, bootstrap,
+        CaptchaGate(captcha, captchaRequired), { revoker }, bootstrap,
     )
     val registration = RegistrationService(core)
     val authRepository = AccountAuthRepository(core)

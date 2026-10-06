@@ -45,7 +45,9 @@ data class AuthSessionProperties(
         val path: String = "/api/v1/auth",
         /** cookie 전달에서 refresh · logout 이 요구하는 요청 헤더 이름 (값 `fetch`). 다른 출처의 폼 · img 요청은 이 헤더를 못 붙인다 */
         val csrfHeader: String = "X-Requested-With",
-    )
+    ) {
+        init { require(sameSite.lowercase() in setOf("strict", "lax", "none")) { "skeleton.auth-session.cookie.same-site must be Strict, Lax or None" } }
+    }
 
     data class Purge(
         /** 끝난 세션을 지우는 주기. 0 이면 주기 청소를 하지 않는다 (앱이 `SessionPurge.runOnce` 를 직접 부를 때) */

@@ -32,6 +32,14 @@ class SessionIssuanceTest {
     }
 
     @Test
+    fun `without an issuer the JSON is byte-for-byte what auth-only apps always sent - no sessionId, no refresh fields`() {
+        val json = tools.jackson.module.kotlin.jacksonMapperBuilder().build().writeValueAsString(AuthTokenResponseFactory(jwt).issue(account))
+        assertEquals(false, "sessionId" in json || "refreshToken" in json || "refreshExpiresAt" in json, json)
+        val principal = tools.jackson.module.kotlin.jacksonMapperBuilder().build().writeValueAsString(dev.sumin.skeleton.auth.principal.CurrentPrincipal("acc_1", "ann", "ann@example.com", setOf("USER")))
+        assertEquals("""{"accountId":"acc_1","username":"ann","email":"ann@example.com","roles":["USER"]}""", principal)
+    }
+
+    @Test
     fun `an issuer's session id rides in the jwt and the refresh token in the response`() {
         val response = AuthTokenResponseFactory(jwt) { issuer }.issue(account)
         assertEquals("ses_1", response.sessionId)

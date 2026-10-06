@@ -158,7 +158,7 @@ data class AccountProperties(
     )
 
     data class Captcha(
-        /** true 면 가입 · 재설정 · 인증 재전송 · 매직 링크 요청에 캡차 토큰을 요구한다 — 검증기(captcha-turnstile)가 없으면 stage · prod 가드가 문제로 본다 */
+        /** true 면 가입 · 재설정 · 인증 재전송 · 매직 링크 요청이 캡차 검증을 통과해야 한다 (검증기 `captcha-turnstile` 필요 — 없으면 요청이 실패로 닫히고 stage · prod 가드가 기동을 막는다). false(기본)면 검증기가 있어도 부르지 않는다 */
         val required: Boolean = false,
     )
 

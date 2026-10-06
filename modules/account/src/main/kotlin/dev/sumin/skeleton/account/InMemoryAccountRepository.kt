@@ -87,9 +87,34 @@ class InMemoryAccountRepository : AccountRepository {
     @Synchronized override fun dueForPurge(now: Instant, limit: Int): List<Account> =
         accounts.values.filter { it.status == AccountStatus.DELETED && it.purgeAfter != null && !it.purgeAfter.isAfter(now) }.sortedBy { it.purgeAfter }.take(limit)
 
-    @Synchronized override fun purge(id: String): Boolean {
+    @Synchronized override fun purge(id: String, now: Instant): Boolean {
+        val a = accounts[id] ?: return false
+        if (a.status != AccountStatus.DELETED || a.purgeAfter == null || a.purgeAfter.isAfter(now)) return false
         identities.values.removeIf { it.accountId == id }
         return accounts.remove(id) != null
+    }
+
+    @Synchronized override fun restore(id: String, status: AccountStatus, now: Instant): Boolean {
+        val a = accounts[id] ?: return false
+        if (a.status != AccountStatus.DELETED || a.purgeAfter == null || !a.purgeAfter.isAfter(now)) return false
+        accounts[id] = a.copy(status = status, deletedAt = null, purgeAfter = null, updatedAt = now)
+        return true
+    }
+
+    @Synchronized override fun updateUnlessLast(id: String, patch: AccountPatch, now: Instant, guardRole: String): GuardedResult {
+        val a = accounts[id] ?: return GuardedResult.NOT_FOUND
+        val leavesActive = patch.status != null && patch.status != AccountStatus.ACTIVE
+        if (leavesActive && a.status == AccountStatus.ACTIVE && guardRole in a.roles && countActiveWithRole(guardRole) <= 1) return GuardedResult.LAST
+        update(id, patch, now)
+        return GuardedResult.DONE
+    }
+
+    @Synchronized override fun revokeRoleUnlessLast(id: String, role: String, now: Instant): GuardedResult {
+        val a = accounts[id] ?: return GuardedResult.NOT_FOUND
+        if (role !in a.roles) return GuardedResult.NOT_FOUND
+        if (a.status == AccountStatus.ACTIVE && countActiveWithRole(role) <= 1) return GuardedResult.LAST
+        revokeRole(id, role, now)
+        return GuardedResult.DONE
     }
 
     @Synchronized override fun addIdentity(identity: Identity): Boolean {

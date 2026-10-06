@@ -78,6 +78,9 @@ enum class ChangeEmailResult { CHANGED, TAKEN, NOT_FOUND }
 
 enum class RemoveIdentityResult { REMOVED, NOT_FOUND, LAST }
 
+/** 마지막 관리자 보호 연산의 결과 — [DONE] 적용됨 · [LAST] 마지막 ACTIVE 보유자라 하지 않음 · [NOT_FOUND] 없는 계정(이거나 그 역할이 없음) */
+enum class GuardedResult { DONE, LAST, NOT_FOUND }
+
 /**
  * 계정 저장소 포트 — `account-jdbc` 가 PostgreSQL · MySQL 로 구현하고, 메모리 구현([InMemoryAccountRepository])이 로컬 · 시험 기본이다.
  * 구현은 아래 원자성을 지킨다 (둘 이상의 행을 건드리는 연산은 한 트랜잭션):
@@ -113,8 +116,20 @@ interface AccountRepository {
     /** 삭제 유예가 [now] 까지 끝난 계정 */
     fun dueForPurge(now: Instant, limit: Int): List<Account>
 
-    /** 계정과 그 수단 · 역할을 지운다 */
-    fun purge(id: String): Boolean
+    /**
+     * [patch] 를 적용하되, [guardRole] 의 **마지막 ACTIVE 보유자**를 ACTIVE 밖으로 옮기는 변경이면 하지 않는다([GuardedResult.LAST]).
+     * 보유자 수를 읽고 쓰는 것이 **원자적**이어야 한다 — 두 관리자가 서로를 동시에 정지 · 삭제해 관리자가 0 이 되지 않게 (보유자 행 락 · 한 트랜잭션).
+     */
+    fun updateUnlessLast(id: String, patch: AccountPatch, now: Instant, guardRole: String): GuardedResult
+
+    /** [role] 을 회수하되 그 역할의 마지막 ACTIVE 보유자면 하지 않는다 — [updateUnlessLast] 와 같은 원자성 */
+    fun revokeRoleUnlessLast(id: String, role: String, now: Instant): GuardedResult
+
+    /** 삭제 유예가 **아직 안 끝난** DELETED 계정을 [status] 로 되살린다 (한 문장 조건부 갱신 — [purge] 와 동시에 둘 다 이기지 못한다). 되살렸으면 true */
+    fun restore(id: String, status: AccountStatus, now: Instant): Boolean
+
+    /** 계정과 그 수단 · 역할을 지운다 — **DELETED 이고 유예가 [now] 까지 끝난 계정만** (되살려진 계정을 지우지 않게). 지웠으면 true */
+    fun purge(id: String, now: Instant): Boolean
 
     // ---- identities
 

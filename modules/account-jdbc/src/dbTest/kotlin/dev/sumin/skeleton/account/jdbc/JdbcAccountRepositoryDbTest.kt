@@ -4,6 +4,7 @@ import dev.sumin.skeleton.account.Account
 import dev.sumin.skeleton.account.AccountPatch
 import dev.sumin.skeleton.account.AccountStatus
 import dev.sumin.skeleton.account.ChangeEmailResult
+import dev.sumin.skeleton.account.GuardedResult
 import dev.sumin.skeleton.account.Identity
 import dev.sumin.skeleton.account.RemoveIdentityResult
 import java.time.Duration
@@ -153,7 +154,7 @@ class JdbcAccountRepositoryDbTest {
         repo.update("acc_1", AccountPatch(status = AccountStatus.DELETED, deletedAt = now, purgeAfter = now.plus(Duration.ofDays(30))), now)
         assertEquals(emptyList(), repo.dueForPurge(now.plus(Duration.ofDays(29)), 10).map { it.id })
         assertEquals(listOf("acc_1"), repo.dueForPurge(now.plus(Duration.ofDays(31)), 10).map { it.id })
-        assertTrue(repo.purge("acc_1"))
+        assertTrue(repo.purge("acc_1", now.plus(Duration.ofDays(31))))
         assertNull(repo.findById("acc_1"))
         assertNull(repo.findIdentity("password", "ann@example.com"))
         assertEquals(0, AccountDb.jdbc.queryForObject("select count(*) from skeleton_account_roles", emptyMap<String, Any>(), Int::class.java))
@@ -190,5 +191,41 @@ class JdbcAccountRepositoryDbTest {
         assertFalse(repo.removeIdentity("acc_1", "idn_2"))
         assertTrue(repo.addIdentity(identity("idn_3", method = "kakao", subject = "k-1")))
         assertFalse(repo.addIdentity(identity("idn_4", method = "kakao", subject = "k-1")))
+    }
+
+    @Test
+    fun `purge only removes a deleted account whose grace is over, restore only reopens one whose grace is not over`() {
+        repo.insert(account(), listOf(identity("idn_1")))
+        assertFalse(repo.purge("acc_1", now.plus(Duration.ofDays(99))), "an ACTIVE account must never be purged (a restore won the race)")
+        assertNotNull(repo.findById("acc_1"))
+
+        repo.update("acc_1", AccountPatch(status = AccountStatus.DELETED, deletedAt = now, purgeAfter = now.plus(Duration.ofDays(30))), now)
+        assertFalse(repo.purge("acc_1", now.plus(Duration.ofDays(29))), "inside the grace nothing is purged")
+        assertFalse(repo.restore("acc_1", AccountStatus.ACTIVE, now.plus(Duration.ofDays(31))), "after the grace nothing is restored")
+        assertTrue(repo.restore("acc_1", AccountStatus.ACTIVE, now.plus(Duration.ofDays(29))))
+        assertEquals(AccountStatus.ACTIVE, repo.findById("acc_1")!!.status)
+        assertNull(repo.findById("acc_1")!!.purgeAfter)
+    }
+
+    @Test
+    fun `two administrators demoting or suspending each other at once leave one - the guard locks the holders`() {
+        repeat(12) { round ->
+            AccountDb.clean()
+            repo.insert(account("acc_a", "a@example.com", roles = setOf("USER", "ADMIN")), listOf(identity("idn_a", "acc_a", subject = "a@example.com")))
+            repo.insert(account("acc_b", "b@example.com", roles = setOf("USER", "ADMIN")), listOf(identity("idn_b", "acc_b", subject = "b@example.com")))
+            val pool = Executors.newFixedThreadPool(2)
+            val go = CountDownLatch(1)
+            val futures = listOf("acc_a" to "acc_b", "acc_b" to "acc_a").map { (_, target) ->
+                pool.submit<GuardedResult> {
+                    go.await()
+                    if (round % 2 == 0) repo.updateUnlessLast(target, AccountPatch(status = AccountStatus.SUSPENDED), now, "ADMIN") else repo.revokeRoleUnlessLast(target, "ADMIN", now)
+                }
+            }
+            go.countDown()
+            val results = futures.map { it.get() }
+            pool.shutdown()
+            assertEquals(1L, repo.countActiveWithRole("ADMIN"), "round $round: $results")
+            assertEquals(1, results.count { it == GuardedResult.DONE }, results.toString())
+        }
     }
 }

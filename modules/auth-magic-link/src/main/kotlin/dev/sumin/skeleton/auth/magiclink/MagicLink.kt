@@ -57,11 +57,11 @@ class MagicLinkService(
     private val props: MagicLinkProperties,
 ) {
     fun request(email: String, ip: String?, captchaToken: String?) {
-        core.captcha.check(captchaToken, ip, "magic_link")
         ip?.let {
             val a = core.limits.acquire("magic-link:ip", it, props.perIp, props.perIpWindow)
             if (!a.allowed) throw RateLimitedException(a.retryAfterSeconds)
         }
+        core.captcha.check(captchaToken, ip, "magic_link")
         val normalized = Emails.normalize(email)
         core.tasks.run("magic-link-request") {
             val account = core.accountByEmail(normalized)

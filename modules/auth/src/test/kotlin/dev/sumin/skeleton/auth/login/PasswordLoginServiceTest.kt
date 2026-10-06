@@ -24,7 +24,8 @@ class PasswordLoginServiceTest {
     private class CountingEncoder(private val delegate: PasswordEncoder = BCryptPasswordEncoder(4)) : PasswordEncoder {
         var matches = 0
         var upgradeAnswer = false
-        override fun encode(raw: CharSequence?): String? = delegate.encode(raw)
+        var encodes = 0
+        override fun encode(raw: CharSequence?): String? { encodes++; return delegate.encode(raw) }
         override fun matches(raw: CharSequence?, encoded: String?): Boolean { matches++; return delegate.matches(raw, encoded) }
         override fun upgradeEncoding(encoded: String?): Boolean = upgradeAnswer
     }
@@ -33,7 +34,13 @@ class PasswordLoginServiceTest {
         val upgrades = mutableListOf<Pair<String, String>>()
         override fun findBy(identifier: AccountIdentifier): AuthAccount? =
             accounts.firstOrNull { it.accountId == identifier.accountId || it.email == identifier.email || it.username == identifier.username }
+        override val storesUpgradedPasswordHash: Boolean = true
         override fun upgradePasswordHash(accountId: String, newHash: String) { upgrades += accountId to newHash }
+    }
+
+    /** 자기 저장소를 가진 `auth` 만 쓰는 앱 — 새 해시를 받을 길이 없다 */
+    private class OwnRepo(val accounts: MutableList<AuthAccount>) : AuthAccountRepository {
+        override fun findBy(identifier: AccountIdentifier): AuthAccount? = accounts.firstOrNull { it.email == identifier.email }
     }
 
     private class RecordingHooks : LoginHooks {
@@ -121,5 +128,14 @@ class PasswordLoginServiceTest {
     @Test
     fun `a password longer than bcrypt can take is just a wrong password`() {
         assertFailsWith<InvalidCredentialsException> { service.login(request(password = "x".repeat(200)), null) }
+    }
+
+    @Test
+    fun `a repository that cannot store a new hash is not made to compute one on every login`() {
+        encoder.upgradeAnswer = true
+        val own = PasswordLoginService(OwnRepo(mutableListOf(AuthAccount("acc_1", "ann@example.com", "ann@example.com", hash, setOf("USER")))), encoder, AuthTokenResponseFactory(jwt))
+        val before = encoder.encodes
+        repeat(3) { own.login(request(), null) }
+        assertEquals(0, encoder.encodes - before, "a bcrypt hash computed and thrown away on every login")
     }
 }

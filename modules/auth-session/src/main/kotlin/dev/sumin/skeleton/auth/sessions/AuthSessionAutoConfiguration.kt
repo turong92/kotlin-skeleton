@@ -3,6 +3,7 @@ package dev.sumin.skeleton.auth.sessions
 import dev.sumin.skeleton.auth.account.AuthAccountRepository
 import dev.sumin.skeleton.auth.api.AuthTokenResponseFactory
 import dev.sumin.skeleton.auth.config.AuthAutoConfiguration
+import dev.sumin.skeleton.auth.config.AuthProperties
 import dev.sumin.skeleton.auth.session.LoginSessionIssuer
 import dev.sumin.skeleton.auth.session.SessionEventListener
 import dev.sumin.skeleton.auth.session.SessionRevoker
@@ -79,8 +80,8 @@ class AuthSessionAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    fun authSessionDeployGuard(properties: AuthSessionProperties, store: ObjectProvider<SessionStore>): AuthSessionDeployGuard =
-        AuthSessionDeployGuard(properties) { store.getIfUnique() }
+    fun authSessionDeployGuard(properties: AuthSessionProperties, auth: ObjectProvider<AuthProperties>, store: ObjectProvider<SessionStore>): AuthSessionDeployGuard =
+        AuthSessionDeployGuard(properties, auth.getIfAvailable { AuthProperties() }.protectedProfiles) { store.getIfUnique() }
 
     @Bean
     @ConditionalOnMissingBean(name = ["authSessionPublicEndpointContributor"])

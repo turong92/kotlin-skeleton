@@ -64,13 +64,18 @@ fun interface AccountCaptcha {
     fun verify(token: String?, ip: String?, action: String): Boolean
 }
 
-class CaptchaGate(private val captcha: AccountCaptcha?) {
-    /** 검증기가 있는데 실패하면 ACCOUNT.CAPTCHA_FAILED (토큰이 없어도 같다 — 계정 상태와 무관) */
+/**
+ * `skeleton.account.captcha.required` 가 정한다: false(기본)면 검증기가 있어도 부르지 않는다(외부 호출 없음), true 면 모든 요청이 검증을 통과해야 하고
+ * **검증기가 없으면 실패로 닫힌다**(통과시키지 않는다 — stage · prod 가드도 같은 이유로 기동을 막는다). 통과하지 못하면 ACCOUNT.CAPTCHA_FAILED (토큰이 없어도 같다).
+ * 서비스는 값싼 IP 한도를 **먼저** 검사한 뒤 이것을 부른다 — 폭주가 외부 검증 호출을 요청 수만큼 만들지 않게.
+ */
+class CaptchaGate(private val captcha: AccountCaptcha?, private val required: Boolean = captcha != null) {
     fun check(token: String?, ip: String?, action: String) {
-        if (captcha != null && !captcha.verify(token, ip, action)) throw AccountException(AccountErrorCode.CAPTCHA_FAILED)
+        if (!required) return
+        if (captcha == null || !captcha.verify(token, ip, action)) throw AccountException(AccountErrorCode.CAPTCHA_FAILED)
     }
 
-    val active: Boolean get() = captcha != null
+    val active: Boolean get() = required && captcha != null
 }
 
 /**

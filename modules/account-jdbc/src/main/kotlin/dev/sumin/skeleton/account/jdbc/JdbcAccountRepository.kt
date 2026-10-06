@@ -6,6 +6,7 @@ import dev.sumin.skeleton.account.AccountPatch
 import dev.sumin.skeleton.account.AccountRepository
 import dev.sumin.skeleton.account.AccountStatus
 import dev.sumin.skeleton.account.ChangeEmailResult
+import dev.sumin.skeleton.account.GuardedResult
 import dev.sumin.skeleton.account.Identity
 import dev.sumin.skeleton.account.RemoveIdentityResult
 import dev.sumin.skeleton.persistence.jdbc.SqlDialect
@@ -148,7 +149,45 @@ class JdbcAccountRepository(
             ) { rs, _ -> rs.account(emptySet()) },
         )
 
-    override fun purge(id: String): Boolean = jdbc.update("delete from skeleton_accounts where id = :id", mapOf("id" to id)) == 1
+    override fun purge(id: String, now: Instant): Boolean =
+        jdbc.update(
+            "delete from skeleton_accounts where id = :id and status = 'DELETED' and purge_after is not null and purge_after <= :now",
+            MapSqlParameterSource().addValue("id", id).addValue("now", dialect.instantParam(now)),
+        ) == 1
+
+    override fun restore(id: String, status: AccountStatus, now: Instant): Boolean =
+        jdbc.update(
+            "update skeleton_accounts set status = :status, deleted_at = null, purge_after = null, updated_at = :now " +
+                "where id = :id and status = 'DELETED' and purge_after is not null and purge_after > :now",
+            MapSqlParameterSource().addValue("id", id).addValue("status", status.name).addValue("now", dialect.instantParam(now)),
+        ) == 1
+
+    override fun updateUnlessLast(id: String, patch: AccountPatch, now: Instant, guardRole: String): GuardedResult =
+        tx.execute {
+            val holders = lockActiveHolders(guardRole)
+            if (jdbc.query("select id from skeleton_accounts where id = :id", mapOf("id" to id)) { rs, _ -> rs.getString(1) }.isEmpty()) return@execute GuardedResult.NOT_FOUND
+            val leavesActive = patch.status != null && patch.status != AccountStatus.ACTIVE
+            if (leavesActive && id in holders && holders.size <= 1) return@execute GuardedResult.LAST
+            update(id, patch, now)
+            GuardedResult.DONE
+        } ?: GuardedResult.NOT_FOUND
+
+    override fun revokeRoleUnlessLast(id: String, role: String, now: Instant): GuardedResult =
+        tx.execute {
+            val holders = lockActiveHolders(role)
+            val has = jdbc.queryForObject("select count(*) from skeleton_account_roles where account_id = :a and role = :r", mapOf("a" to id, "r" to role), Int::class.java) ?: 0
+            if (has == 0) return@execute GuardedResult.NOT_FOUND
+            if (id in holders && holders.size <= 1) return@execute GuardedResult.LAST
+            jdbc.update("delete from skeleton_account_roles where account_id = :a and role = :r", mapOf("a" to id, "r" to role))
+            GuardedResult.DONE
+        } ?: GuardedResult.NOT_FOUND
+
+    /** [role] 의 ACTIVE 보유자 행을 id 순서로 잠근다 — 보호 연산끼리 같은 순서로 잠가 교착 없이 줄 세운다 */
+    private fun lockActiveHolders(role: String): Set<String> =
+        jdbc.query(
+            "select a.id from skeleton_accounts a join skeleton_account_roles r on r.account_id = a.id where r.role = :role and a.status = 'ACTIVE' order by a.id for update",
+            mapOf("role" to role),
+        ) { rs, _ -> rs.getString(1) }.toSet()
 
     // ---- identities
 
