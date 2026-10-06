@@ -1,6 +1,10 @@
 package dev.sumin.skeleton.account.social
 
 import dev.sumin.skeleton.account.AccountCore
+import dev.sumin.skeleton.account.AccountErrorCode
+import dev.sumin.skeleton.account.AccountException
+import dev.sumin.skeleton.account.Reauth
+import dev.sumin.skeleton.account.abuse.RateLimitedException
 import dev.sumin.skeleton.account.AccountProperties
 import dev.sumin.skeleton.account.signin.AccountSignInService
 import dev.sumin.skeleton.account.signin.IdentityService
@@ -39,9 +43,20 @@ class AccountOAuthProvisioningPolicy(private val signIn: AccountSignInService, p
 }
 
 /** 로그인한 계정이 제공자 계정을 자기 로그인 수단으로 붙인다 — 코드 교환은 로그인과 같은 제공자 클라이언트를 쓴다 */
-class SocialLinkService(private val registry: OAuthProviderRegistry, private val identities: IdentityService) {
-    fun link(accountId: String, providerId: String, authorizationCode: String, redirectUri: String?): IdentityView {
+class SocialLinkService(private val registry: OAuthProviderRegistry, private val identities: IdentityService, private val core: AccountCore) {
+    private val reauth = Reauth(core)
+
+    /**
+     * 연결은 **다시 인증**이 필요하다 (현재 비밀번호, 없으면 메일함 확인 링크) — 프론트가 OAuth `state` 를 확인하지 않아도
+     * 공격자의 인가 코드가 피해자 계정에 붙는 일(로그인 CSRF)이 비밀번호 · 메일함 없이는 일어나지 않게 서버가 막는 쪽이다.
+     */
+    fun link(accountId: String, providerId: String, authorizationCode: String, redirectUri: String?, currentPassword: String? = null, confirmationToken: String? = null): IdentityView {
         val provider = registry.findEnabled(providerId) ?: throw OAuthProviderNotFoundException(providerId)
+        val account = core.accounts.findById(accountId) ?: throw AccountException(AccountErrorCode.NOT_FOUND)
+        val limit = core.props.emailChange
+        val allowance = core.limits.acquire("social-link:account", accountId, limit.perAccount, limit.perAccountWindow)
+        if (!allowance.allowed) throw RateLimitedException(allowance.retryAfterSeconds)
+        val proof = reauth.check(account, currentPassword, confirmationToken)
         val profile = try {
             provider.fetchProfile(authorizationCode, redirectUri)
         } catch (ex: OAuthInvalidAuthorizationCodeException) {
@@ -49,6 +64,8 @@ class SocialLinkService(private val registry: OAuthProviderRegistry, private val
         } catch (ex: RuntimeException) {
             throw OAuthProviderGatewayException(provider.providerId, ex)
         }
-        return identities.link(accountId, provider.providerId.trim().lowercase(), profile.providerUserId, verified = true)
+        val view = identities.link(accountId, provider.providerId.trim().lowercase(), profile.providerUserId, verified = true)
+        proof.commit()
+        return view
     }
 }

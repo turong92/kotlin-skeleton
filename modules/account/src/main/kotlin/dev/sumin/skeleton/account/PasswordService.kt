@@ -49,12 +49,13 @@ class PasswordService(private val core: AccountCore) {
         storePassword(account, core.hasher.hash(newPassword))
         core.accounts.markEmailVerified(account.id, core.time.now())
         core.sessions()?.revokeAll(account.id, null)
+        core.closeSensitiveLinks(account)
         notifyChanged(account)
         core.events.publish(AccountEventType.PASSWORD_RESET, account.id)
         core.accounts.findById(account.id)?.let(core.bootstrap::afterVerified)
     }
 
-    fun change(accountId: String, currentPassword: String?, newPassword: String, currentSessionId: String?) {
+    fun change(accountId: String, currentPassword: String?, newPassword: String, currentSessionId: String?, confirmationToken: String? = null) {
         val account = core.accounts.findById(accountId) ?: throw AccountException(AccountErrorCode.NOT_FOUND)
         // 탈취된 세션으로 현재 비밀번호를 추측하지 못하게 — 맞든 틀리든 시도 수로 센다
         val login = core.props.login
@@ -63,16 +64,16 @@ class PasswordService(private val core: AccountCore) {
 
         val email = account.email
         val identity = email?.let { core.accounts.findIdentity(SignInMethods.PASSWORD, it) }
-        if (identity?.secret != null) {
-            if (currentPassword == null || !core.hasher.matches(currentPassword, identity.secret!!)) throw AccountException(AccountErrorCode.CURRENT_PASSWORD_INVALID)
-        } else if (!account.emailVerified || email == null) {
-            throw AccountException(AccountErrorCode.PASSWORD_REQUIRED)
-        }
+        if (identity?.secret == null && (!account.emailVerified || email == null)) throw AccountException(AccountErrorCode.PASSWORD_REQUIRED)
+        // 비밀번호가 있으면 현재 비밀번호, 없으면(첫 비밀번호) 메일함 확인 — 15분짜리 액세스 토큰이 영구 자격이 되지 않게
+        val proof = Reauth(core).check(account, currentPassword, confirmationToken)
         val violations = core.policy.check(newPassword, email)
         if (violations.isNotEmpty()) throw PasswordPolicyException(violations)
+        proof.commit()
 
         storePassword(account, core.hasher.hash(newPassword))
         core.sessions()?.revokeAll(account.id, currentSessionId)
+        core.closeSensitiveLinks(account)
         notifyChanged(account)
         core.events.publish(AccountEventType.PASSWORD_CHANGED, account.id)
     }

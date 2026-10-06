@@ -41,6 +41,8 @@ class DefaultAccountMailTemplates(private val props: AccountProperties.Mail) : A
             MailKind.EMAIL_CHANGED_NOTICE to Copy("Your account email was changed", listOf("The email address of your account was changed. You will no longer receive account mail here.", "If this was not you, contact support immediately."), null),
             MailKind.MAGIC_LINK to Copy("Your sign-in link", listOf("Use this link to sign in. It works once and expires in {minutes} minutes."), "Sign in"),
             MailKind.DELETE_CONFIRM to Copy("Confirm account deletion", listOf("Confirm to schedule the deletion of your account.", "This link works once and expires in {minutes} minutes."), "Confirm deletion"),
+            MailKind.REAUTH_CONFIRM to Copy("Confirm it is you", listOf("Confirm to continue with a security-sensitive change to your account (new email, first password or a new sign-in method).", "This link works once and expires in {minutes} minutes."), "Confirm"),
+            MailKind.IDENTITY_LINKED_NOTICE to Copy("A sign-in method was added", listOf("A new way to sign in to your account was added: {method}.", "If this was not you, change your password and remove it in your account settings now."), null),
             MailKind.DELETION_SCHEDULED to Copy("Your account is scheduled for deletion", listOf("Your account will be deleted after {days} days. Until then it cannot be used to sign in.", "If this was a mistake, contact support before then."), null),
         )
 
@@ -54,6 +56,8 @@ class DefaultAccountMailTemplates(private val props: AccountProperties.Mail) : A
             MailKind.EMAIL_CHANGED_NOTICE to Copy("계정 이메일이 바뀌었어요", listOf("계정의 이메일 주소가 바뀌었어요. 이제 이 주소로는 계정 메일이 오지 않아요.", "본인이 아니라면 바로 문의해 주세요."), null),
             MailKind.MAGIC_LINK to Copy("로그인 링크예요", listOf("이 링크로 로그인하세요. 한 번만 쓸 수 있고 {minutes}분 뒤에 만료돼요."), "로그인"),
             MailKind.DELETE_CONFIRM to Copy("계정 삭제를 확인해 주세요", listOf("확인하면 계정 삭제가 예약돼요.", "이 링크는 한 번만 쓸 수 있고 {minutes}분 뒤에 만료돼요."), "삭제 확인"),
+            MailKind.REAUTH_CONFIRM to Copy("본인 확인이 필요해요", listOf("계정의 보안에 민감한 변경(새 이메일 · 첫 비밀번호 · 새 로그인 수단)을 계속하려면 확인해 주세요.", "이 링크는 한 번만 쓸 수 있고 {minutes}분 뒤에 만료돼요."), "확인하기"),
+            MailKind.IDENTITY_LINKED_NOTICE to Copy("로그인 수단이 추가됐어요", listOf("계정에 새 로그인 수단이 추가됐어요: {method}.", "본인이 아니라면 지금 비밀번호를 바꾸고 계정 설정에서 그 수단을 지워 주세요."), null),
             MailKind.DELETION_SCHEDULED to Copy("계정 삭제가 예약됐어요", listOf("{days}일 뒤에 계정이 삭제돼요. 그 전까지는 로그인할 수 없어요.", "실수였다면 그 전에 문의해 주세요."), null),
         )
     }

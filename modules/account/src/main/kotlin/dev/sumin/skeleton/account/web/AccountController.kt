@@ -6,6 +6,7 @@ import dev.sumin.skeleton.account.MeView
 import dev.sumin.skeleton.account.PasswordService
 import dev.sumin.skeleton.account.ProfileChange
 import dev.sumin.skeleton.account.ProfileService
+import dev.sumin.skeleton.account.Reauth
 import dev.sumin.skeleton.account.signin.IdentityService
 import dev.sumin.skeleton.account.signin.IdentityView
 import dev.sumin.skeleton.common.DataResponse
@@ -38,6 +39,7 @@ class AccountController(
     private val emailChange: EmailChangeService,
     private val identities: IdentityService,
     private val deletion: DeletionService,
+    private val reauth: Reauth,
 ) {
     @Operation(summary = "My profile, roles and sign-in methods")
     @GetMapping("/me")
@@ -55,7 +57,7 @@ class AccountController(
     @PostMapping("/password/change")
     fun changePassword(authentication: Authentication?, @Valid @RequestBody request: ChangePasswordRequest): ResponseEntity<Void> {
         val caller = callers.require(authentication)
-        passwords.change(caller.accountId, request.currentPassword, request.newPassword!!, caller.sessionId)
+        passwords.change(caller.accountId, request.currentPassword, request.newPassword!!, caller.sessionId, request.confirmationToken)
         return Response.noContent()
     }
 
@@ -63,8 +65,15 @@ class AccountController(
     @IdempotentOperation
     @PostMapping("/email/change")
     fun changeEmail(authentication: Authentication?, @Valid @RequestBody request: ChangeEmailRequest): ResponseEntity<DataResponse<StatusResponse>> {
-        emailChange.request(callers.require(authentication).accountId, request.newEmail!!, request.currentPassword)
+        emailChange.request(callers.require(authentication).accountId, request.newEmail!!, request.currentPassword, request.confirmationToken)
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(Response.ok(StatusResponse("VERIFICATION_SENT")))
+    }
+
+    @Operation(summary = "Mail a one-time confirmation link that re-authenticates an account that has no password (for email change, first password, social link)")
+    @PostMapping("/reauth/confirmation")
+    fun reauthConfirmation(authentication: Authentication?): ResponseEntity<DataResponse<StatusResponse>> {
+        reauth.requestConfirmation(callers.require(authentication).accountId)
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(Response.ok(StatusResponse("ACCEPTED")))
     }
 
     @Operation(summary = "Sign-in methods linked to this account")

@@ -108,6 +108,8 @@ data class AccountProperties(
         val emailChangePath: String = "/confirm-email-change",
         val deletePath: String = "/confirm-delete",
         val magicLinkPath: String = "/magic-link",
+        /** 비밀번호 없는 계정의 민감한 일(이메일 변경 · 첫 비밀번호 · 소셜 연결) 확인 링크 */
+        val reauthPath: String = "/confirm-reauth",
         /** 계정 로케일이 없거나 지원하지 않을 때 쓰는 메일 언어 (ko · en 이 내장) */
         val defaultLocale: String = "en",
         /** 제목 앞에 붙는 서비스 이름 (예: [Ovation]) */

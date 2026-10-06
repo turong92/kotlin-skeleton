@@ -53,7 +53,7 @@ class AccountSocialAutoConfiguration {
 class AccountSocialWebAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
-    fun socialLinkService(registry: OAuthProviderRegistry, identities: IdentityService): SocialLinkService = SocialLinkService(registry, identities)
+    fun socialLinkService(registry: OAuthProviderRegistry, identities: IdentityService, core: AccountCore): SocialLinkService = SocialLinkService(registry, identities, core)
 
     @Bean
     @ConditionalOnMissingBean

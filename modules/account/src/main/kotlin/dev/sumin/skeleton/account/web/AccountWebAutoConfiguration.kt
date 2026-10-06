@@ -2,11 +2,13 @@ package dev.sumin.skeleton.account.web
 
 import dev.sumin.skeleton.account.AccountAutoConfiguration
 import dev.sumin.skeleton.account.AccountProperties
+import dev.sumin.skeleton.account.AccountRepository
 import dev.sumin.skeleton.account.AdminService
 import dev.sumin.skeleton.account.DeletionService
 import dev.sumin.skeleton.account.EmailChangeService
 import dev.sumin.skeleton.account.PasswordService
 import dev.sumin.skeleton.account.ProfileService
+import dev.sumin.skeleton.account.Reauth
 import dev.sumin.skeleton.account.RegistrationService
 import dev.sumin.skeleton.account.password.PasswordPolicy
 import dev.sumin.skeleton.account.signin.IdentityService
@@ -32,7 +34,7 @@ import org.springframework.context.annotation.Bean
 class AccountWebAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
-    fun accountCallers(properties: AccountProperties): AccountCallers = AccountCallers(properties.admin)
+    fun accountCallers(properties: AccountProperties, accounts: ObjectProvider<AccountRepository>): AccountCallers = AccountCallers(properties.admin) { accounts.getObject() }
 
     @Bean
     @ConditionalOnMissingBean
@@ -53,7 +55,8 @@ class AccountWebAutoConfiguration {
         emailChange: EmailChangeService,
         identities: IdentityService,
         deletion: DeletionService,
-    ): AccountController = AccountController(callers, profile, passwords, emailChange, identities, deletion)
+        reauth: Reauth,
+    ): AccountController = AccountController(callers, profile, passwords, emailChange, identities, deletion, reauth)
 
     @Bean
     @ConditionalOnMissingBean

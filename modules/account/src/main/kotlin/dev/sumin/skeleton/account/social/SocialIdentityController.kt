@@ -21,8 +21,12 @@ import org.springframework.web.bind.annotation.RestController
 data class LinkSocialRequest(
     @field:NotBlank @field:Size(max = 2048) val authorizationCode: String?,
     @field:Size(max = 2048) val redirectUri: String? = null,
+    /** 비밀번호가 있는 계정의 다시 인증 */
+    @field:Size(max = 128) val currentPassword: String? = null,
+    /** 비밀번호가 없는 계정의 다시 인증 — `POST /account/reauth/confirmation` 으로 메일 받은 링크의 토큰 */
+    @field:Size(max = 128) val confirmationToken: String? = null,
 ) {
-    override fun toString() = "LinkSocialRequest(authorizationCode=<redacted>)"
+    override fun toString() = "LinkSocialRequest(authorizationCode=<redacted>, currentPassword=<redacted>, confirmationToken=<redacted>)"
 }
 
 /** 소셜 제공자 계정을 지금 로그인한 계정에 붙인다. [AccountSocialAutoConfiguration] 이 auth-social 이 있을 때만 등록한다 */
@@ -33,7 +37,7 @@ class SocialIdentityController(private val callers: AccountCallers, private val 
     @Operation(summary = "Link a social provider account to the signed-in account (409 ACCOUNT.IDENTITY_TAKEN when it belongs to another account)")
     @PostMapping("/{provider}")
     fun link(authentication: Authentication?, @PathVariable provider: String, @Valid @RequestBody request: LinkSocialRequest): ResponseEntity<DataResponse<IdentityView>> {
-        val view = links.link(callers.require(authentication).accountId, provider, request.authorizationCode!!, request.redirectUri)
+        val view = links.link(callers.require(authentication).accountId, provider, request.authorizationCode!!, request.redirectUri, request.currentPassword, request.confirmationToken)
         return ResponseEntity.status(HttpStatus.CREATED).body(Response.ok(view))
     }
 }

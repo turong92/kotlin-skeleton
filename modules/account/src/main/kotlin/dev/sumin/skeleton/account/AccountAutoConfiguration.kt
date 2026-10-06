@@ -187,6 +187,10 @@ class AccountAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
+    fun reauth(core: AccountCore): Reauth = Reauth(core)
+
+    @Bean
+    @ConditionalOnMissingBean
     fun deletionService(core: AccountCore): DeletionService = DeletionService(core)
 
     @Bean

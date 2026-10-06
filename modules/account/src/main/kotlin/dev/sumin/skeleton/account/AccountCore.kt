@@ -5,6 +5,9 @@ import dev.sumin.skeleton.account.abuse.AccountTaskRunner
 import dev.sumin.skeleton.account.abuse.CaptchaGate
 import dev.sumin.skeleton.account.events.AccountEventPublisher
 import dev.sumin.skeleton.account.mail.AccountLinks
+import dev.sumin.skeleton.account.mail.AccountMail
+import dev.sumin.skeleton.account.mail.MailKind
+import dev.sumin.skeleton.account.token.TokenPurposes
 import dev.sumin.skeleton.account.mail.AccountMailer
 import dev.sumin.skeleton.account.password.PasswordHasher
 import dev.sumin.skeleton.account.password.PasswordPolicy
@@ -40,6 +43,24 @@ class AccountCore(
      * [email] 은 이미 [Emails.normalize] 를 거친 값이어야 한다.
      */
     fun accountByEmail(email: String): Account? = accounts.findByEmail(email)?.takeIf { it.email == email }
+
+    /**
+     * 비밀번호가 바뀐 계정의 **그 전에 나간 민감한 링크**를 모두 닫는다 — 이메일 변경 · 삭제 확인 · 다시 인증 · 매직 링크.
+     * (탈취한 세션으로 요청해 둔 링크가, 주인이 비밀번호를 바꾼 뒤에도 살아 있으면 주소가 넘어간다)
+     */
+    fun closeSensitiveLinks(account: Account) {
+        tokens.invalidate(TokenPurposes.EMAIL_CHANGE, account.id)
+        tokens.invalidate(TokenPurposes.DELETE_CONFIRM, account.id)
+        tokens.invalidate(TokenPurposes.REAUTH, account.id)
+        account.email?.let { tokens.invalidate(TokenPurposes.MAGIC_LINK, it) }
+    }
+
+    /** 새 로그인 수단이 붙었다고 계정 주소에 알린다 (내가 한 일이 아니면 알아채도록) */
+    fun notifyIdentityLinked(accountId: String, method: String) {
+        val account = accounts.findById(accountId) ?: return
+        val email = account.email ?: return
+        mailer.send(AccountMail(MailKind.IDENTITY_LINKED_NOTICE, email, account.locale, vars = mapOf("method" to method)))
+    }
 
     fun newAccountId(): String = "acc_" + randomHex()
 

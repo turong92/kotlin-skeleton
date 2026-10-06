@@ -37,15 +37,19 @@ data class ResetPasswordRequest(
 data class ChangePasswordRequest(
     @field:Size(max = 128) val currentPassword: String? = null,
     @field:NotBlank @field:Size(max = 128) val newPassword: String?,
+    /** 비밀번호 없는 계정이 첫 비밀번호를 정할 때 — `POST /account/reauth/confirmation` 으로 메일 받은 링크의 토큰 */
+    @field:Size(max = 128) val confirmationToken: String? = null,
 ) {
-    override fun toString() = "ChangePasswordRequest(currentPassword=<redacted>, newPassword=<redacted>)"
+    override fun toString() = "ChangePasswordRequest(currentPassword=<redacted>, newPassword=<redacted>, confirmationToken=<redacted>)"
 }
 
 data class ChangeEmailRequest(
     @field:NotBlank @field:Email @field:Size(max = 254) val newEmail: String?,
     @field:Size(max = 128) val currentPassword: String? = null,
+    /** 비밀번호 없는 계정 — `POST /account/reauth/confirmation` 으로 메일 받은 링크의 토큰 */
+    @field:Size(max = 128) val confirmationToken: String? = null,
 ) {
-    override fun toString() = "ChangeEmailRequest(newEmail=<redacted>, currentPassword=<redacted>)"
+    override fun toString() = "ChangeEmailRequest(newEmail=<redacted>, currentPassword=<redacted>, confirmationToken=<redacted>)"
 }
 
 data class UpdateProfileRequest(

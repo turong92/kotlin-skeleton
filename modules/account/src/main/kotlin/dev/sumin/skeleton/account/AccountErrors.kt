@@ -13,6 +13,7 @@ enum class AccountErrorCode(
     TOKEN_INVALID("ACCOUNT.TOKEN_INVALID", HttpStatus.GONE, "Link is invalid or expired"),
     PASSWORD_POLICY("ACCOUNT.PASSWORD_POLICY", HttpStatus.BAD_REQUEST, "Password does not meet the policy"),
     CURRENT_PASSWORD_INVALID("ACCOUNT.CURRENT_PASSWORD_INVALID", HttpStatus.BAD_REQUEST, "Current password is wrong"),
+    REAUTH_REQUIRED("ACCOUNT.REAUTH_REQUIRED", HttpStatus.FORBIDDEN, "Confirm by email first"),
     REAUTH_FAILED("ACCOUNT.REAUTH_FAILED", HttpStatus.BAD_REQUEST, "Confirmation failed"),
     CAPTCHA_FAILED("ACCOUNT.CAPTCHA_FAILED", HttpStatus.BAD_REQUEST, "Captcha verification failed"),
     EMAIL_TAKEN("ACCOUNT.EMAIL_TAKEN", HttpStatus.CONFLICT, "Email already in use"),

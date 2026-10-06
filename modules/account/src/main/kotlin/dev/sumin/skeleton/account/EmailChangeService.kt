@@ -14,25 +14,25 @@ import dev.sumin.skeleton.common.PlatformErrorCode
  * 새 주소가 남의 것이어도 응답은 같고 아무것도 보내지 않는다 (주소가 쓰이고 있는지 알려 주지 않는다).
  */
 class EmailChangeService(private val core: AccountCore) {
-    fun request(accountId: String, newEmail: String, currentPassword: String?) {
+    fun request(accountId: String, newEmail: String, currentPassword: String?, confirmationToken: String? = null) {
         val account = core.accounts.findById(accountId) ?: throw AccountException(AccountErrorCode.NOT_FOUND)
         val c = core.props.emailChange
         val a = core.limits.acquire("email-change:account", accountId, c.perAccount, c.perAccountWindow)
         if (!a.allowed) throw RateLimitedException(a.retryAfterSeconds)
 
         val oldEmail = account.email
-        val identity = oldEmail?.let { core.accounts.findIdentity(SignInMethods.PASSWORD, it) }
-        if (identity?.secret != null && (currentPassword == null || !core.hasher.matches(currentPassword, identity.secret!!))) {
-            throw AccountException(AccountErrorCode.CURRENT_PASSWORD_INVALID)
-        }
+        // 비밀번호가 있으면 현재 비밀번호, 없으면 옛 주소의 메일함 확인 (주소가 아예 없는 계정은 면제 — 확인할 메일함이 없다)
+        val proof = Reauth(core).check(account, currentPassword, confirmationToken)
         val target = Emails.normalize(newEmail)
         if (!Emails.plausible(target)) throw ApplicationException("Invalid email", PlatformErrorCode.VALIDATION_FAILED)
+        proof.commit()
 
         core.tasks.run("email-change-request") {
+            // 옛 주소 알림은 새 주소가 쓰이는 중이든 아니든 똑같이 간다 — 로그인한 사용자의 받은편지함이 "그 주소는 가입돼 있다" 를 알려 주지 않게
+            oldEmail?.let { core.mailer.send(AccountMail(MailKind.EMAIL_CHANGE_REQUESTED_NOTICE, it, account.locale)) }
             if (target == oldEmail || core.accountByEmail(target) != null) return@run
             val raw = core.tokens.issue(TokenPurposes.EMAIL_CHANGE, account.id, account.id, c.ttl, payload = target)
             core.mailer.send(AccountMail(MailKind.EMAIL_CHANGE_CONFIRM, target, account.locale, core.links.emailChange(raw), mapOf("minutes" to c.ttl.toMinutes().toString())))
-            oldEmail?.let { core.mailer.send(AccountMail(MailKind.EMAIL_CHANGE_REQUESTED_NOTICE, it, account.locale)) }
             core.events.publish(AccountEventType.EMAIL_CHANGE_REQUESTED, account.id)
         }
     }

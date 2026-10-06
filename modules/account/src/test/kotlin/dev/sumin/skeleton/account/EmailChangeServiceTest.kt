@@ -55,12 +55,13 @@ class EmailChangeServiceTest {
     }
 
     @Test
-    fun `an address that belongs to someone else is answered the same and mailed nothing`() {
+    fun `an address that belongs to someone else is answered the same - no link goes to it, the old address is told exactly as for any request`() {
         val a = h.activeAccount()
         h.activeAccount("bob@example.com")
         h.mailer.sent.clear()
         h.emailChange.request(a.id, "bob@example.com", "tangerine-42-moon")
-        assertEquals(0, h.mailer.sent.size)
+        assertEquals(0, h.mailer.of(MailKind.EMAIL_CHANGE_CONFIRM).size, "nothing is mailed to the taken address")
+        assertEquals(listOf("ann@example.com"), h.mailer.of(MailKind.EMAIL_CHANGE_REQUESTED_NOTICE).map { it.to }, "the signed-in user's own inbox must not tell whether the address is taken")
     }
 
     @Test
@@ -98,10 +99,17 @@ class EmailChangeServiceTest {
     }
 
     @Test
-    fun `an account without a password changes its address without one`() {
+    fun `an account without a password needs a mailbox confirmation to change its address`() {
         val now = h.time.now()
         h.repo.insert(Account("acc_s", "s@example.com", true, AccountStatus.ACTIVE, setOf("USER"), null, null, null, now, now), emptyList())
-        h.emailChange.request("acc_s", "t@example.com", null)
+        assertEquals("ACCOUNT.REAUTH_REQUIRED", code { h.emailChange.request("acc_s", "t@example.com", null) })
+        assertEquals("ACCOUNT.REAUTH_FAILED", code { h.emailChange.request("acc_s", "t@example.com", null, "garbage-garbage-garbage-garbage") })
+        assertEquals(0, h.mailer.of(MailKind.EMAIL_CHANGE_CONFIRM).size)
+
+        h.reauth.requestConfirmation("acc_s")
+        val proof = h.mailer.tokenOf(h.mailer.of(MailKind.REAUTH_CONFIRM).single())
+        h.emailChange.request("acc_s", "t@example.com", null, proof)
         assertEquals(1, h.mailer.of(MailKind.EMAIL_CHANGE_CONFIRM).size)
+        assertEquals("ACCOUNT.REAUTH_FAILED", code { h.emailChange.request("acc_s", "u@example.com", null, proof) }, "the confirmation is single use")
     }
 }

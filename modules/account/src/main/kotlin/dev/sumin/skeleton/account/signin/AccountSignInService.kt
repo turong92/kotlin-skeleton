@@ -100,6 +100,7 @@ class AccountSignInService(private val core: AccountCore, val registry: SignInMe
         val identity = Identity(core.newIdentityId(), owner.id, method.code, subject, verified = true, createdAt = core.time.now())
         if (!core.accounts.addIdentity(identity)) return null
         core.events.publish(AccountEventType.IDENTITY_LINKED, owner.id, proof.ip, mapOf("method" to method.code, "auto" to "true"))
+        core.notifyIdentityLinked(owner.id, method.code)
         return owner
     }
 

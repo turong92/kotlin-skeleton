@@ -8,7 +8,7 @@ import org.slf4j.LoggerFactory
 
 enum class MailKind {
     VERIFY_EMAIL, ALREADY_REGISTERED, PASSWORD_RESET, PASSWORD_CHANGED, EMAIL_CHANGE_CONFIRM,
-    EMAIL_CHANGE_REQUESTED_NOTICE, EMAIL_CHANGED_NOTICE, MAGIC_LINK, DELETE_CONFIRM, DELETION_SCHEDULED,
+    EMAIL_CHANGE_REQUESTED_NOTICE, EMAIL_CHANGED_NOTICE, MAGIC_LINK, DELETE_CONFIRM, DELETION_SCHEDULED, REAUTH_CONFIRM, IDENTITY_LINKED_NOTICE,
 }
 
 /** 보낼 메일 한 통의 의미 — 문구는 [AccountMailTemplates] 가 고른다. [link] 에 토큰이 들어 있다 (이 객체를 로그에 싣지 않는다 — toString 은 가려 둔다) */
@@ -46,6 +46,7 @@ class AccountLinks(private val props: AccountProperties.Mail) {
     fun emailChange(token: String) = build(props.emailChangePath, token)
     fun delete(token: String) = build(props.deletePath, token)
     fun magicLink(token: String) = build(props.magicLinkPath, token)
+    fun reauth(token: String) = build(props.reauthPath, token)
 
     private fun build(path: String, token: String): String =
         props.linkBaseUrl.trimEnd('/') + path + "?token=" + URLEncoder.encode(token, StandardCharsets.UTF_8)

@@ -45,6 +45,7 @@ class IdentityService(private val core: AccountCore, private val registry: SignI
             throw AccountException(if (owner?.accountId == accountId) AccountErrorCode.IDENTITY_EXISTS else AccountErrorCode.IDENTITY_TAKEN)
         }
         core.events.publish(AccountEventType.IDENTITY_LINKED, accountId, detail = mapOf("method" to methodCode))
+        core.notifyIdentityLinked(accountId, methodCode)
         return list(accountId).first { it.id == identity.id }
     }
 

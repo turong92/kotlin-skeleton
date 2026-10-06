@@ -37,6 +37,7 @@ class AccountSocialWebTest {
     @Autowired lateinit var mail: RecordingMailer
 
     private fun json(code: String) = """{"authorizationCode":"$code"}"""
+    private fun jsonWithPassword(code: String) = """{"authorizationCode":"$code","currentPassword":"tangerine-42-moon"}"""
     private fun social(code: String) = mvc.perform(post("/api/v1/auth/social/fakeidp/login").contentType(MediaType.APPLICATION_JSON).content(json(code)))
     private fun bearer(r: MvcResult) = "Bearer " + JsonPath.read<String>(r.response.contentAsString, "$.value.accessToken")
 
@@ -76,14 +77,14 @@ class AccountSocialWebTest {
     fun `a signed-in user links a provider, sees it listed, and a second account cannot take it`() {
         val me = passwordAccount("linker@example.com")
         val auth = bearer(me)
-        mvc.perform(post("/api/v1/account/identities/social/fakeidp").header("Authorization", auth).contentType(MediaType.APPLICATION_JSON).content(json("c-link")))
+        mvc.perform(post("/api/v1/account/identities/social/fakeidp").header("Authorization", auth).contentType(MediaType.APPLICATION_JSON).content(jsonWithPassword("c-link")))
             .andExpect(status().isCreated).andExpect(jsonPath("$.value.method").value("fakeidp"))
-        mvc.perform(post("/api/v1/account/identities/social/fakeidp").header("Authorization", auth).contentType(MediaType.APPLICATION_JSON).content(json("c-link")))
+        mvc.perform(post("/api/v1/account/identities/social/fakeidp").header("Authorization", auth).contentType(MediaType.APPLICATION_JSON).content(jsonWithPassword("c-link")))
             .andExpect(status().isConflict).andExpect(jsonPath("$.code").value("ACCOUNT.IDENTITY_EXISTS"))
         mvc.perform(get("/api/v1/account/identities").header("Authorization", auth)).andExpect(status().isOk).andExpect(jsonPath("$.values.length()").value(2))
 
         val other = bearer(passwordAccount("other-user@example.com"))
-        mvc.perform(post("/api/v1/account/identities/social/fakeidp").header("Authorization", other).contentType(MediaType.APPLICATION_JSON).content(json("c-link")))
+        mvc.perform(post("/api/v1/account/identities/social/fakeidp").header("Authorization", other).contentType(MediaType.APPLICATION_JSON).content(jsonWithPassword("c-link")))
             .andExpect(status().isConflict).andExpect(jsonPath("$.code").value("ACCOUNT.IDENTITY_TAKEN"))
 
         // social sign-in now reaches the linked account, and unlinking leaves the password
@@ -96,8 +97,41 @@ class AccountSocialWebTest {
     @Test
     fun `linking an unknown provider is the provider-not-found error and linking needs a login`() {
         val auth = bearer(passwordAccount("nolink@example.com"))
-        mvc.perform(post("/api/v1/account/identities/social/myspace").header("Authorization", auth).contentType(MediaType.APPLICATION_JSON).content(json("c-link")))
+        mvc.perform(post("/api/v1/account/identities/social/myspace").header("Authorization", auth).contentType(MediaType.APPLICATION_JSON).content(jsonWithPassword("c-link")))
             .andExpect(status().isNotFound).andExpect(jsonPath("$.code").value("AUTH_SOCIAL.PROVIDER_NOT_FOUND"))
         mvc.perform(post("/api/v1/account/identities/social/fakeidp").contentType(MediaType.APPLICATION_JSON).content(json("c-link"))).andExpect(status().isUnauthorized)
+    }
+
+    @Test
+    fun `linking needs the current password - a code obtained by someone else cannot be attached to my account (login CSRF)`() {
+        val auth = bearer(passwordAccount("csrf-victim@example.com"))
+        mvc.perform(post("/api/v1/account/identities/social/fakeidp").header("Authorization", auth).contentType(MediaType.APPLICATION_JSON).content(json("c-link")))
+            .andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("ACCOUNT.CURRENT_PASSWORD_INVALID"))
+        mvc.perform(post("/api/v1/account/identities/social/fakeidp").header("Authorization", auth).contentType(MediaType.APPLICATION_JSON).content("""{"authorizationCode":"c-link","currentPassword":"not-the-password-1"}"""))
+            .andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("ACCOUNT.CURRENT_PASSWORD_INVALID"))
+        mvc.perform(get("/api/v1/account/identities").header("Authorization", auth)).andExpect(jsonPath("$.values.length()").value(1))
+    }
+
+    @Test
+    fun `an account without a password links only after the mailbox confirmation, and the account's address is told`() {
+        val auth = bearer(social("c-new").andExpect(status().isOk).andReturn())   // a social-only account (no password)
+        mail.sent.clear()
+        mvc.perform(post("/api/v1/account/identities/social/fakeidp").header("Authorization", auth).contentType(MediaType.APPLICATION_JSON).content(json("c-link")))
+            .andExpect(status().isForbidden).andExpect(jsonPath("$.code").value("ACCOUNT.REAUTH_REQUIRED"))
+        mvc.perform(post("/api/v1/account/reauth/confirmation").header("Authorization", auth)).andExpect(status().isAccepted).andExpect(jsonPath("$.value.status").value("ACCEPTED"))
+        val token = mail.tokenOf(mail.of(MailKind.REAUTH_CONFIRM).single())
+        mvc.perform(post("/api/v1/account/identities/social/fakeidp").header("Authorization", auth).contentType(MediaType.APPLICATION_JSON).content("""{"authorizationCode":"c-link","confirmationToken":"garbage-garbage-garbage-garbage"}"""))
+            .andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("ACCOUNT.REAUTH_FAILED"))
+        // the confirmation passes (the account already has this provider, so the link itself is the 409 — proof that re-auth was accepted)
+        mvc.perform(post("/api/v1/account/identities/social/fakeidp").header("Authorization", auth).contentType(MediaType.APPLICATION_JSON).content("""{"authorizationCode":"c-link","confirmationToken":"$token"}"""))
+            .andExpect(status().isConflict).andExpect(jsonPath("$.code").value("ACCOUNT.IDENTITY_EXISTS"))
+    }
+
+    @Test
+    fun `a link by a password account mails a notice to the account address`() {
+        val auth = bearer(passwordAccount("notice-me@example.com"))
+        mail.sent.clear()
+        mvc.perform(post("/api/v1/account/identities/social/fakeidp").header("Authorization", auth).contentType(MediaType.APPLICATION_JSON).content(jsonWithPassword("c-other"))).andExpect(status().isCreated)
+        assertEquals("notice-me@example.com", mail.of(MailKind.IDENTITY_LINKED_NOTICE).single().to)
     }
 }

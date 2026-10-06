@@ -193,10 +193,15 @@ class PasswordServiceTest {
     }
 
     @Test
-    fun `an account without a password may set its first one without a current password, once the email is verified`() {
+    fun `an account without a password sets its first one only after a mailbox confirmation, once the email is verified`() {
         val now = h.time.now()
         h.repo.insert(Account("acc_s", "s@example.com", true, AccountStatus.ACTIVE, setOf("USER"), null, null, null, now, now), emptyList())
-        h.passwords.change("acc_s", null, "a-brand-new-pass-7", null)
+        assertEquals("ACCOUNT.REAUTH_REQUIRED", code { h.passwords.change("acc_s", null, "a-brand-new-pass-7", null) })
+        assertEquals("ACCOUNT.REAUTH_FAILED", code { h.passwords.change("acc_s", null, "a-brand-new-pass-7", null, "garbage-garbage-garbage-garbage") })
+        h.reauth.requestConfirmation("acc_s")
+        val proof = h.mailer.tokenOf(h.mailer.of(MailKind.REAUTH_CONFIRM).single())
+        assertEquals("ACCOUNT.PASSWORD_POLICY", code { h.passwords.change("acc_s", null, "weak", null, proof) })
+        h.passwords.change("acc_s", null, "a-brand-new-pass-7", null, proof)   // a policy failure did not burn the proof
         assertTrue(h.hasher.matches("a-brand-new-pass-7", h.repo.findIdentity("password", "s@example.com")!!.secret!!))
         assertTrue(h.repo.findIdentity("password", "s@example.com")!!.verified)
 
