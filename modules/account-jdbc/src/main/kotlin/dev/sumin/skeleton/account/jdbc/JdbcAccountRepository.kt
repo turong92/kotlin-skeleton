@@ -1,11 +1,13 @@
 package dev.sumin.skeleton.account.jdbc
 
 import dev.sumin.skeleton.account.Account
+import dev.sumin.skeleton.account.AddIdentityResult
 import dev.sumin.skeleton.account.AccountPage
 import dev.sumin.skeleton.account.AccountPatch
 import dev.sumin.skeleton.account.AccountRepository
 import dev.sumin.skeleton.account.AccountStatus
 import dev.sumin.skeleton.account.ChangeEmailResult
+import dev.sumin.skeleton.account.challenge.ChallengePurposes
 import dev.sumin.skeleton.account.GuardedResult
 import dev.sumin.skeleton.account.MailboxProof
 import dev.sumin.skeleton.account.SignInMethods
@@ -123,15 +125,22 @@ class JdbcAccountRepository(
                 MapSqlParameterSource().addValue("now", dialect.instantParam(now)).addValue("id", id),
             )
             jdbc.update("update skeleton_account_identities set verified = true where account_id = :id and subject = :email", mapOf("id" to id, "email" to email))
+            // 증명과 **같은 트랜잭션**에서 이 계정의 열린 코드(이메일 변경 · 다시 인증 · 삭제 확인)와 이 주소의 가입 시도를 닫는다 — 증명 커밋과 정리 사이에 증명 전의 코드가 쓰일 틈이 없다
+            jdbc.update(
+                "delete from skeleton_account_challenges where (account_id = :id and purpose in (:purposes)) or (purpose = :signUp and subject = :email)",
+                mapOf("id" to id, "email" to email, "signUp" to ChallengePurposes.SIGN_UP, "purposes" to listOf(ChallengePurposes.EMAIL_CHANGE, ChallengePurposes.REAUTH, ChallengePurposes.DELETE_CONFIRM)),
+            )
             true
         } ?: false
 
-    override fun changeEmail(id: String, newEmail: String, now: Instant): ChangeEmailResult =
+    override fun changeEmail(id: String, newEmail: String, now: Instant, expectEmailVerified: Boolean?): ChangeEmailResult =
         try {
             tx.execute {
-                val row = jdbc.query("select email from skeleton_accounts where id = :id for update", mapOf("id" to id)) { rs, _ -> rs.getString("email") }
+                val row = jdbc.query("select email, email_verified from skeleton_accounts where id = :id for update", mapOf("id" to id)) { rs, _ -> rs.getString("email") to rs.getBoolean("email_verified") }
                 if (row.isEmpty()) return@execute ChangeEmailResult.NOT_FOUND
-                val old = row.single()
+                // 계정 행 락 안에서 — 다시 인증이 본 확인 상태가 그 사이 메일함 증명으로 바뀌었다면 이 변경은 증명 **전에** 시작한 것이다
+                if (expectEmailVerified != null && row.single().second != expectEmailVerified) return@execute ChangeEmailResult.STALE
+                val old = row.single().first
                 jdbc.update(
                     "update skeleton_accounts set email = :new, email_verified = true, updated_at = :now where id = :id",
                     MapSqlParameterSource().addValue("new", newEmail).addValue("now", dialect.instantParam(now)).addValue("id", id),
@@ -224,6 +233,17 @@ class JdbcAccountRepository(
 
     override fun addIdentity(identity: Identity): Boolean =
         try { insertIdentity(identity); true } catch (_: DataIntegrityViolationException) { false }
+
+    override fun addIdentityIfEmailVerified(identity: Identity, expectEmailVerified: Boolean): AddIdentityResult =
+        try {
+            tx.execute {
+                // 계정 행 락을 먼저 — 메일함 증명 트랜잭션(같은 행 락)이 끝날 때까지 기다린 뒤 증명 뒤의 상태를 본다
+                val verified = jdbc.query("select email_verified from skeleton_accounts where id = :id for update", mapOf("id" to identity.accountId)) { rs, _ -> rs.getBoolean(1) }.firstOrNull()
+                if (verified != expectEmailVerified) AddIdentityResult.STALE else { insertIdentity(identity); AddIdentityResult.ADDED }
+            } ?: AddIdentityResult.STALE
+        } catch (_: DataIntegrityViolationException) {
+            AddIdentityResult.DUPLICATE
+        }
 
     private fun insertIdentity(i: Identity) {
         jdbc.update(

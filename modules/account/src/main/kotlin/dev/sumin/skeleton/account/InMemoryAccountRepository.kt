@@ -72,8 +72,9 @@ class InMemoryAccountRepository : AccountRepository {
         return markEmailVerified(id, now)
     }
 
-    @Synchronized override fun changeEmail(id: String, newEmail: String, now: Instant): ChangeEmailResult {
+    @Synchronized override fun changeEmail(id: String, newEmail: String, now: Instant, expectEmailVerified: Boolean?): ChangeEmailResult {
         val a = accounts[id] ?: return ChangeEmailResult.NOT_FOUND
+        if (expectEmailVerified != null && a.emailVerified != expectEmailVerified) return ChangeEmailResult.STALE
         if (accounts.values.any { it.id != id && it.email == newEmail }) return ChangeEmailResult.TAKEN
         val moving = identities.values.filter { it.accountId == id && it.subject == a.email }
         if (moving.any { m -> identities.values.any { it.id != m.id && it.method == m.method && it.subject == newEmail } }) return ChangeEmailResult.TAKEN
@@ -144,6 +145,10 @@ class InMemoryAccountRepository : AccountRepository {
         identities[identity.id] = identity
         return true
     }
+
+    @Synchronized override fun addIdentityIfEmailVerified(identity: Identity, expectEmailVerified: Boolean): AddIdentityResult =
+        if (accounts[identity.accountId]?.emailVerified != expectEmailVerified) AddIdentityResult.STALE
+        else if (addIdentity(identity)) AddIdentityResult.ADDED else AddIdentityResult.DUPLICATE
 
     @Synchronized override fun findIdentity(method: String, subject: String): Identity? = identities.values.firstOrNull { it.method == method && it.subject == subject }
 

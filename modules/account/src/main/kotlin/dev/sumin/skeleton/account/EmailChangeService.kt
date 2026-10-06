@@ -14,6 +14,17 @@ import dev.sumin.skeleton.common.PlatformErrorCode
  * 다시 인증(비밀번호 · 메일 코드 · 소셜 코드), 새 주소로 간 6자리 코드를 **요청한 세션에서** 입력, 옛 주소에는 요청 · 변경 두 번 알림이 간다.
  * 새 주소가 남의 것이어도 응답은 같고 아무것도 보내지 않는다 (주소가 쓰이고 있는지 알려 주지 않는다 — 그 요청의 코드는 누구도 모르므로 입력은 끝내 실패한다).
  */
+/**
+ * 이메일 변경 챌린지의 payload — `<다시 인증이 본 이메일 확인 상태 0|1>:<대상 주소>`. 확인 상태가 요청 때와 입력 때 다르면(그 사이 메일함이 증명됐다) 그 챌린지는 죽은 것이다.
+ */
+internal object EmailChangePayload {
+    fun encode(target: String, emailVerified: Boolean) = (if (emailVerified) "1:" else "0:") + target
+
+    fun target(payload: String) = payload.substringAfter(':')
+
+    fun verifiedSeen(payload: String) = payload.startsWith("1:")
+}
+
 class EmailChangeService(private val core: AccountCore) {
     fun request(accountId: String, newEmail: String, input: ReauthInput, sessionId: String?) {
         val account = core.accounts.findById(accountId) ?: throw AccountException(AccountErrorCode.NOT_FOUND)
@@ -34,7 +45,7 @@ class EmailChangeService(private val core: AccountCore) {
         val mayOpen = core.mayOpenCodeFor(target)
         val mayMail = core.mayMailCodeTo(target)
         val opened = core.challenges.open(
-            ChallengePurposes.EMAIL_CHANGE, account.id, c.ttl, core.props.verification.maxAttempts, accountId = account.id, sessionId = sessionId, payload = target, dead = !mayOpen,
+            ChallengePurposes.EMAIL_CHANGE, account.id, c.ttl, core.props.verification.maxAttempts, accountId = account.id, sessionId = sessionId, payload = EmailChangePayload.encode(target, account.emailVerified), dead = !mayOpen,
         )
         core.tasks.run("email-change-request") {
             // 옛 주소 알림은 새 주소가 쓰이는 중이든 아니든 똑같이 간다 — 로그인한 사용자의 받은편지함이 "그 주소는 가입돼 있다" 를 알려 주지 않게
@@ -53,21 +64,25 @@ class EmailChangeService(private val core: AccountCore) {
             val a = core.limits.acquire("verify:ip", it, v.attemptsPerIp, v.attemptsWindow)
             if (!a.allowed) throw RateLimitedException(a.retryAfterSeconds)
         }
+        // 계정을 **먼저** 읽는다 — 이 입력이 본 이메일 확인 상태. 이 뒤에 메일함 증명이 끼어들면 아래 changeEmail 이 계정 행 락 안에서 STALE 로 거른다
+        val account = core.accounts.findById(accountId) ?: throw AccountException(AccountErrorCode.CODE_EXPIRED)
         val open = core.challenges.findOpen(ChallengePurposes.EMAIL_CHANGE, accountId) ?: throw AccountException(AccountErrorCode.CODE_EXPIRED)
-        if (open.sessionId == sessionId) open.payload?.let(core::spendGuess)
+        if (open.sessionId == sessionId) open.payload?.let { core.spendGuess(EmailChangePayload.target(it)) }
         val row = when (val checked = core.challenges.checkOpen(ChallengePurposes.EMAIL_CHANGE, accountId, code, sessionId)) {
             is CodeCheck.Ok -> checked.row
             is CodeCheck.Wrong -> throw if (checked.attemptsLeft <= 0) AccountException(AccountErrorCode.CODE_EXPIRED) else CodeInvalidException(checked.attemptsLeft)
             CodeCheck.Gone -> throw AccountException(AccountErrorCode.CODE_EXPIRED)
         }
         if (!core.challenges.consume(row.id)) throw AccountException(AccountErrorCode.CODE_EXPIRED)
-        val newEmail = row.payload ?: throw AccountException(AccountErrorCode.CODE_EXPIRED)
-        val account = core.accounts.findById(accountId) ?: throw AccountException(AccountErrorCode.CODE_EXPIRED)
+        val payload = row.payload ?: throw AccountException(AccountErrorCode.CODE_EXPIRED)
+        val newEmail = EmailChangePayload.target(payload)
+        // 요청한 뒤 메일함이 증명됐다면(재설정 · 가입 코드) 그 요청은 증명 **전의** 계정에서 나온 것이다 — 증명 직후 정리(closeSensitiveLinks)가 닿기 전에도 못 쓴다
+        if (EmailChangePayload.verifiedSeen(payload) != account.emailVerified) throw AccountException(AccountErrorCode.CODE_EXPIRED)
         if (account.status != AccountStatus.ACTIVE && account.status != AccountStatus.PENDING_VERIFICATION) throw AccountException(AccountErrorCode.CODE_EXPIRED)
         val oldEmail = account.email
-        when (core.accounts.changeEmail(account.id, newEmail, core.time.now())) {
+        when (core.accounts.changeEmail(account.id, newEmail, core.time.now(), expectEmailVerified = account.emailVerified)) {
             ChangeEmailResult.TAKEN -> throw AccountException(AccountErrorCode.EMAIL_TAKEN)
-            ChangeEmailResult.NOT_FOUND -> throw AccountException(AccountErrorCode.CODE_EXPIRED)
+            ChangeEmailResult.NOT_FOUND, ChangeEmailResult.STALE -> throw AccountException(AccountErrorCode.CODE_EXPIRED)
             ChangeEmailResult.CHANGED -> Unit
         }
         // 확인한 이 세션은 남는다 (방금 메일함 · 비밀번호로 증명한 쪽) — 나머지는 닫는다. 그 전에 나간 코드 · 링크(옛 주소의 매직 링크 포함)도 함께

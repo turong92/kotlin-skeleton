@@ -2,6 +2,10 @@ package dev.sumin.skeleton.account.jdbc
 
 import dev.sumin.skeleton.account.Account
 import dev.sumin.skeleton.account.AccountStatus
+import dev.sumin.skeleton.account.AddIdentityResult
+import dev.sumin.skeleton.account.ChangeEmailResult
+import dev.sumin.skeleton.account.challenge.ChallengePurposes
+import dev.sumin.skeleton.account.challenge.ChallengeRow
 import dev.sumin.skeleton.account.Identity
 import dev.sumin.skeleton.account.MailboxProof
 import java.time.Instant
@@ -89,6 +93,81 @@ class JdbcMailboxProofDbTest {
             pool.shutdown()
             assertEquals("{bcrypt}owner", repo.findIdentity("password", "victim@example.com")!!.secret, "round $round")
             assertEquals(1, repo.identitiesOf("acc_1").size)
+        }
+    }
+
+    // ---- I5: writes that landed after the proof (they saw the account unverified)
+
+    private fun challenge(id: String, purpose: String, subject: String, accountId: String?) =
+        ChallengeRow(id, purpose, subject, accountId, null, null, null, "h", 5, 0, now, now.plusSeconds(600), now, null)
+
+    @Test
+    fun `an identity insert that saw the account unverified is refused once the mailbox was proven - and the proof's clean-up is not undone`() {
+        squatted()
+        assertTrue(repo.proveMailbox("acc_1", now, MailboxProof(keepIdentityIds = setOf("idn_pw"), passwordSecret = "{bcrypt}owner", newPasswordIdentityId = "idn_new")))
+        val late = Identity("idn_late", "acc_1", "kakao", "k-squatter", true, null, null, now)
+        assertEquals(AddIdentityResult.STALE, repo.addIdentityIfEmailVerified(late, expectEmailVerified = false))
+        assertNull(repo.findIdentity("kakao", "k-squatter"))
+        assertEquals(AddIdentityResult.ADDED, repo.addIdentityIfEmailVerified(late, expectEmailVerified = true), "a caller that saw the proven state may link")
+        assertEquals(AddIdentityResult.DUPLICATE, repo.addIdentityIfEmailVerified(late.copy(id = "idn_late2"), expectEmailVerified = true))
+        assertEquals(AddIdentityResult.STALE, repo.addIdentityIfEmailVerified(late.copy(id = "idn_x", accountId = "acc_nope"), expectEmailVerified = true), "no such account")
+    }
+
+    @Test
+    fun `an email change that saw the account unverified is refused once the mailbox was proven`() {
+        squatted()
+        assertTrue(repo.proveMailbox("acc_1", now, MailboxProof(keepIdentityIds = setOf("idn_pw"))))
+        assertEquals(ChangeEmailResult.STALE, repo.changeEmail("acc_1", "attacker@example.com", now, expectEmailVerified = false))
+        assertEquals("victim@example.com", repo.findById("acc_1")!!.email)
+        assertEquals(ChangeEmailResult.CHANGED, repo.changeEmail("acc_1", "owner-new@example.com", now, expectEmailVerified = true))
+    }
+
+    @Test
+    fun `the proof transaction also closes the account's open codes and the address's sign-up attempts`() {
+        squatted()
+        listOf(
+            challenge("c_change", ChallengePurposes.EMAIL_CHANGE, "acc_1", "acc_1"), challenge("c_reauth", ChallengePurposes.REAUTH, "acc_1", "acc_1"),
+            challenge("c_delete", ChallengePurposes.DELETE_CONFIRM, "acc_1", "acc_1"), challenge("c_signup", ChallengePurposes.SIGN_UP, "victim@example.com", null),
+            challenge("c_other_signup", ChallengePurposes.SIGN_UP, "someone-else@example.com", null),
+        ).forEach(AccountDb.challenges::insert)
+        assertTrue(repo.proveMailbox("acc_1", now, MailboxProof(keepIdentityIds = setOf("idn_pw"))))
+        assertEquals(listOf("c_other_signup"), listOf("c_change", "c_reauth", "c_delete", "c_signup", "c_other_signup").filter { AccountDb.challenges.find(it) != null })
+    }
+
+    @Test
+    fun `a late identity insert racing the mailbox proof never survives - either the proof deletes it or the row-locked check refuses it`() {
+        repeat(30) { round ->
+            AccountDb.clean()
+            squatted()
+            val pool = Executors.newFixedThreadPool(2)
+            val go = CountDownLatch(1)
+            val late = pool.submit<AddIdentityResult> { go.await(); repo.addIdentityIfEmailVerified(Identity("idn_late_$round", "acc_1", "kakao", "k-late-$round", true, null, null, now), expectEmailVerified = false) }
+            val proof = pool.submit<Boolean> { go.await(); repo.proveMailbox("acc_1", now, MailboxProof(keepIdentityIds = setOf("idn_pw"), passwordSecret = "{bcrypt}owner", newPasswordIdentityId = "idn_new_$round")) }
+            go.countDown()
+            late.get(); assertTrue(proof.get())
+            pool.shutdown()
+            assertNull(repo.findIdentity("kakao", "k-late-$round"), "round $round")
+            assertEquals(1, repo.identitiesOf("acc_1").size, "round $round")
+        }
+    }
+
+    @Test
+    fun `an email change racing the mailbox proof is either complete before it or refused after it - never half of each`() {
+        repeat(30) { round ->
+            AccountDb.clean()
+            squatted()
+            val pool = Executors.newFixedThreadPool(2)
+            val go = CountDownLatch(1)
+            val change = pool.submit<ChangeEmailResult> { go.await(); repo.changeEmail("acc_1", "attacker-$round@example.com", now, expectEmailVerified = false) }
+            val proof = pool.submit<Boolean> { go.await(); repo.proveMailbox("acc_1", now, MailboxProof(keepIdentityIds = setOf("idn_pw"))) }
+            go.countDown()
+            val result = change.get(); proof.get()
+            pool.shutdown()
+            when (result) {
+                ChangeEmailResult.CHANGED -> assertEquals("attacker-$round@example.com", repo.findById("acc_1")!!.email, "round $round")
+                ChangeEmailResult.STALE -> assertEquals("victim@example.com", repo.findById("acc_1")!!.email, "round $round")
+                else -> error("unexpected $result")
+            }
         }
     }
 }

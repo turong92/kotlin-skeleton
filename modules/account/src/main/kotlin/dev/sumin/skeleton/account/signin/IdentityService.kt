@@ -2,6 +2,7 @@ package dev.sumin.skeleton.account.signin
 
 import dev.sumin.skeleton.account.AccountCore
 import dev.sumin.skeleton.account.AccountErrorCode
+import dev.sumin.skeleton.account.AddIdentityResult
 import dev.sumin.skeleton.account.AccountException
 import dev.sumin.skeleton.account.Identity
 import dev.sumin.skeleton.account.Reauth
@@ -38,14 +39,24 @@ class IdentityService(private val core: AccountCore, private val registry: SignI
     }
 
     /** 수단 하나를 계정에 붙인다. 증명(코드 교환 등)은 호출자가 이미 마쳤다. 수단 하나당 계정에 하나 */
-    fun link(accountId: String, methodCode: String, subject: String, verified: Boolean, metadata: String? = null): IdentityView {
+    fun link(accountId: String, methodCode: String, subject: String, verified: Boolean, metadata: String? = null, expectEmailVerified: Boolean? = null): IdentityView {
         val method = registry.require(methodCode)
         val normalized = method.normalize(subject)
         if (core.accounts.identitiesOf(accountId).any { it.method == methodCode }) throw AccountException(AccountErrorCode.IDENTITY_EXISTS)
         val identity = Identity(core.newIdentityId(), accountId, methodCode, normalized, verified, metadata = metadata, createdAt = core.time.now())
-        if (!core.accounts.addIdentity(identity)) {
-            val owner = core.accounts.findIdentity(methodCode, normalized)
-            throw AccountException(if (owner?.accountId == accountId) AccountErrorCode.IDENTITY_EXISTS else AccountErrorCode.IDENTITY_TAKEN)
+        // [expectEmailVerified]: 다시 인증이 본 이메일 확인 상태 — 계정 행 락 안에서 같을 때만 붙인다 (그 사이 메일함이 증명됐다면 증명이 지운 수단이 되살아나지 않게)
+        val added = if (expectEmailVerified == null) {
+            if (core.accounts.addIdentity(identity)) AddIdentityResult.ADDED else AddIdentityResult.DUPLICATE
+        } else {
+            core.accounts.addIdentityIfEmailVerified(identity, expectEmailVerified)
+        }
+        when (added) {
+            AddIdentityResult.ADDED -> Unit
+            AddIdentityResult.STALE -> throw AccountException(AccountErrorCode.REAUTH_FAILED)
+            AddIdentityResult.DUPLICATE -> {
+                val owner = core.accounts.findIdentity(methodCode, normalized)
+                throw AccountException(if (owner?.accountId == accountId) AccountErrorCode.IDENTITY_EXISTS else AccountErrorCode.IDENTITY_TAKEN)
+            }
         }
         core.events.publish(AccountEventType.IDENTITY_LINKED, accountId, detail = mapOf("method" to methodCode))
         core.notifyIdentityLinked(accountId, methodCode)

@@ -67,6 +67,6 @@ class SocialLinkService(private val registry: OAuthProviderRegistry, private val
         }
         // 다시 인증은 **연결하기 전에** 태운다 — 같은 코드를 든 두 요청이 겹쳐도 하나만 연결한다
         proof.commit()
-        return identities.link(accountId, provider.providerId.trim().lowercase(), profile.providerUserId, verified = true)
+        return identities.link(accountId, provider.providerId.trim().lowercase(), profile.providerUserId, verified = true, expectEmailVerified = account.emailVerified)
     }
 }

@@ -74,7 +74,11 @@ data class AccountPatch(
 
 data class AccountPage(val items: List<Account>, val total: Long)
 
-enum class ChangeEmailResult { CHANGED, TAKEN, NOT_FOUND }
+/** [STALE]: 호출자가 본 계정의 이메일 확인 상태([AccountRepository.changeEmail] 의 `expectEmailVerified`)가 계정 행 락 안에서 이미 바뀌어 있다 — 그 사이 메일함이 증명됐다 */
+enum class ChangeEmailResult { CHANGED, TAKEN, NOT_FOUND, STALE }
+
+/** [AccountRepository.addIdentityIfEmailVerified] 의 결과 — [DUPLICATE]: (method, subject) 가 이미 있다 · [STALE]: 호출자가 본 이메일 확인 상태가 이미 바뀌었다 */
+enum class AddIdentityResult { ADDED, DUPLICATE, STALE }
 
 /**
  * [AccountRepository.proveMailbox] 에 넘기는 "메일함이 증명됐다" 의 내용.
@@ -123,7 +127,11 @@ interface AccountRepository {
      */
     fun proveMailbox(id: String, now: Instant, proof: MailboxProof): Boolean
 
-    fun changeEmail(id: String, newEmail: String, now: Instant): ChangeEmailResult
+    /**
+     * 계정 행 락 안에서 [expectEmailVerified] 가 지금의 `email_verified` 와 같을 때만 바꾼다(null 이면 검사 없음) — 다시 인증이 **그 값을 본 뒤** 메일함 증명이 끼어들었으면 [ChangeEmailResult.STALE]
+     * (증명 전에 시작한 요청이 증명 뒤에 주소를 가져가지 못하게)
+     */
+    fun changeEmail(id: String, newEmail: String, now: Instant, expectEmailVerified: Boolean? = null): ChangeEmailResult
 
     fun grantRole(id: String, role: String, now: Instant): Boolean
 
@@ -156,6 +164,12 @@ interface AccountRepository {
 
     /** (method, subject) 가 이미 있으면 false (유니크 위반) */
     fun addIdentity(identity: Identity): Boolean
+
+    /**
+     * [addIdentity] 인데 계정 행 락 안에서 `email_verified` 가 [expectEmailVerified] 와 같을 때만 — 다시 인증을 통과한 뒤 제공자 교환을 기다리는 사이 메일함이 증명됐다면,
+     * 증명이 지운 수단이 뒤늦게 되살아나지 않는다 ([AddIdentityResult.STALE])
+     */
+    fun addIdentityIfEmailVerified(identity: Identity, expectEmailVerified: Boolean): AddIdentityResult
 
     fun findIdentity(method: String, subject: String): Identity?
 

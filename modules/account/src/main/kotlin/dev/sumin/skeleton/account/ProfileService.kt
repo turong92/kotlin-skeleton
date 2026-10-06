@@ -38,7 +38,7 @@ class ProfileService(private val core: AccountCore, registry: SignInMethodRegist
         return MeView(
             a.id, a.email, a.emailVerified, a.displayName, a.locale, a.timeZone, a.roles, a.status, a.createdAt,
             hasPassword = methods.any { it.method == SignInMethods.PASSWORD }, methods = methods,
-            pendingEmail = pending?.payload, pendingEmailExpiresAt = pending?.expiresAt,
+            pendingEmail = pending?.payload?.let(EmailChangePayload::target), pendingEmailExpiresAt = pending?.expiresAt,
         )
     }
 
