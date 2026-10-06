@@ -66,6 +66,7 @@ class GoogleOAuthProviderTest {
         assertEquals("google@example.com", profile.email)
         assertEquals("google@example.com", profile.username)
         assertEquals("Google User", profile.displayName)
+        assertEquals("https://example.com/google.png", profile.avatarUrl)
         assertEquals(true, profile.emailVerified, "email_verified from userinfo is carried so account linking can trust the address")
 
         val tokenRequest = requests.first()

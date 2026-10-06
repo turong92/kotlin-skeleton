@@ -57,6 +57,7 @@ class GoogleOAuthProvider(
             username = profile.email ?: profile.sub,
             displayName = profile.name,
             emailVerified = profile.emailVerified == true,
+            avatarUrl = profile.picture?.takeIf { it.startsWith("https://") },
         )
     }
 
@@ -113,6 +114,7 @@ class GoogleOAuthProvider(
         @JsonProperty("email_verified")
         val emailVerified: Boolean? = null,
         val name: String? = null,
+        val picture: String? = null,
     )
 
     private companion object {
