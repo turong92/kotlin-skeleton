@@ -27,6 +27,9 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 
+// JUnit 은 시험마다 새 인스턴스를 만든다 — 돌아가는 주소의 번호는 클래스 밖(파일 수준)에 둔다
+private val nextTestIp = java.util.concurrent.atomic.AtomicInteger()
+
 @SpringBootTest(
     classes = [AccountWebTestApplication::class],
     properties = [
@@ -52,7 +55,8 @@ class AccountWebTest {
     private fun tokenOf(kind: MailKind) = mail.tokenOf(mail.of(kind).last())
     private fun unique() = "u${System.nanoTime()}@example.com"
 
-    private fun signUp(email: String, password: String = "tangerine-42-moon", ip: String = "198.51.100.${(1..250).random()}") =
+    // 기본 주소는 돌아가며 .100~.199 — 고정 주소(.77 등)와 겹치지 않는다(무작위는 가끔 한도가 찬 주소를 골랐다)
+    private fun signUp(email: String, password: String = "tangerine-42-moon", ip: String = "198.51.100.${100 + nextTestIp.getAndIncrement() % 100}") =
         mvc.perform(post("/api/v1/account/sign-up").with { it.remoteAddr = ip; it }.json("""{"email":"$email","password":"$password","displayName":"Ann","locale":"ko","timeZone":"Asia/Seoul"}"""))
 
     private fun login(email: String, password: String = "tangerine-42-moon", ip: String = "203.0.113.${(1..250).random()}") =

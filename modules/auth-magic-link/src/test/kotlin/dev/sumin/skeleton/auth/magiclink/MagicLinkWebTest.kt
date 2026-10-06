@@ -28,6 +28,9 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 
+// JUnit 은 시험마다 새 인스턴스를 만든다 — 돌아가는 주소의 번호는 클래스 밖(파일 수준)에 둔다
+private val nextTestIp = java.util.concurrent.atomic.AtomicInteger()
+
 @SpringBootTest(
     classes = [MagicLinkTestApplication::class],
     properties = [
@@ -47,7 +50,8 @@ class MagicLinkWebTest {
     @BeforeEach fun clear() { mails.sent.clear() }
 
     private fun json(s: String) = MediaType.APPLICATION_JSON to s
-    private fun request(email: String, ip: String = "198.51.100.${(1..250).random()}") =
+    // 기본 주소는 돌아가며 .100~.199 — 한도 시험이 쓰는 고정 주소(.9 · .200~)와 겹치지 않는다. 무작위(1..250)는 가끔 한도가 찬 .9 를 골라 메일이 없었다
+    private fun request(email: String, ip: String = "198.51.100.${100 + nextTestIp.getAndIncrement() % 100}") =
         mvc.perform(post("/api/v1/auth/magic-link/request").with { it.remoteAddr = ip; it }.contentType(MediaType.APPLICATION_JSON).content("""{"email":"$email"}"""))
     private fun redeem(token: String) =
         mvc.perform(post("/api/v1/auth/magic-link/redeem").contentType(MediaType.APPLICATION_JSON).content("""{"token":"$token"}"""))
