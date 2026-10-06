@@ -60,8 +60,10 @@ class TemplatedAccountMailer(
 
     override fun send(mail: AccountMail) {
         val rendered = templates.render(mail.kind, mail.locale, mail.vars, mail.link)
-        val subject = if (props.subjectPrefix.isBlank()) rendered.subject else "${props.subjectPrefix} ${rendered.subject}"
-        val accepted = try { transport.send(mail.to, subject, rendered.text, rendered.html) } catch (e: Exception) {
+        // 제목은 한 줄이다 — 접두사 · 템플릿이 줄바꿈을 끼워도 헤더가 되지 못한다
+        val subject = (if (props.subjectPrefix.isBlank()) rendered.subject else "${props.subjectPrefix} ${rendered.subject}").replace(Regex("[\\r\\n]+"), " ")
+        val html = if (props.htmlEnabled) rendered.html else null
+        val accepted = try { transport.send(mail.to, subject, rendered.text, html) } catch (e: Exception) {
             log.warn("account mail kind={} failed: {}", mail.kind, e.javaClass.simpleName); false
         }
         if (!accepted) log.warn("account mail kind={} was not accepted by the transport", mail.kind)

@@ -18,7 +18,9 @@ import dev.sumin.skeleton.account.events.AccountSessionEventListener
 import dev.sumin.skeleton.account.events.DefaultAccountEventPublisher
 import dev.sumin.skeleton.account.events.LoggingAccountEventListener
 import dev.sumin.skeleton.account.mail.AccountLinks
+import dev.sumin.skeleton.account.mail.AccountMailLayout
 import dev.sumin.skeleton.account.mail.AccountMailTemplates
+import dev.sumin.skeleton.account.mail.DefaultAccountMailLayout
 import dev.sumin.skeleton.account.mail.AccountMailTransport
 import dev.sumin.skeleton.account.mail.AccountMailer
 import dev.sumin.skeleton.account.mail.DefaultAccountMailTemplates
@@ -106,7 +108,11 @@ class AccountAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    fun accountMailTemplates(properties: AccountProperties): AccountMailTemplates = DefaultAccountMailTemplates(properties.mail)
+    fun accountMailLayout(properties: AccountProperties): AccountMailLayout = DefaultAccountMailLayout(properties.mail.brand)
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun accountMailTemplates(properties: AccountProperties, layout: AccountMailLayout): AccountMailTemplates = DefaultAccountMailTemplates(properties.mail, layout)
 
     @Bean
     @ConditionalOnMissingBean(AccountMailTransport::class)
@@ -125,6 +131,25 @@ class AccountAutoConfiguration {
     @ConditionalOnMissingBean(AccountMailer::class)
     fun accountMailer(templates: AccountMailTemplates, transport: AccountMailTransport, properties: AccountProperties): AccountMailer =
         TemplatedAccountMailer(templates, transport, properties.mail)
+
+    /** 기동 로그 한 줄 — 켜진 로그인 방법과 메일 길 (비밀 없음). 소셜 목록은 웹 자동설정이 빈을 둘 때만 있다 */
+    @Bean
+    @ConditionalOnMissingBean(name = ["accountStartupSummaryRunner"])
+    fun accountStartupSummaryRunner(
+        registry: SignInMethodRegistry,
+        transport: AccountMailTransport,
+        properties: AccountProperties,
+        environment: Environment,
+        social: ObjectProvider<dev.sumin.skeleton.account.web.SocialMethodsSource>,
+    ): org.springframework.boot.ApplicationRunner = org.springframework.boot.ApplicationRunner {
+        val host = environment.getProperty("spring.mail.host")?.takeIf { it.isNotBlank() }?.let { h -> h + (environment.getProperty("spring.mail.port")?.let { ":$it" } ?: "") }
+        org.slf4j.LoggerFactory.getLogger(AccountStartupSummary::class.java).info(
+            AccountStartupSummary.describe(
+                registry.all().map { it.code }, social.getIfAvailable()?.enabled().orEmpty(), transport, host,
+                environment.getProperty("skeleton.notification-mail.from")?.takeIf { it.isNotBlank() }, properties.mail,
+            ),
+        )
+    }
 
     @Bean
     @ConditionalOnMissingBean

@@ -31,10 +31,12 @@
 | 설정 접두사 | `skeleton.account` — [docs/config/modules/account.yml](../config/modules/account.yml) |
 | 기본 동작 | 켜짐. 가입 · 확인 · 재설정 · 변경 · 삭제 HTTP 와 로그인 시도 제한이 켜지고, 관리자 HTTP · 소셜 가입 · 병합 · 시드 계정 · 첫 관리자 · 링크 로그는 꺼져 있다. 저장은 메모리(로컬) — 운영은 `account-jdbc`. 메일 모듈이 없으면 보내지 않고 알린다. |
 | 부팅에 필요한 것 | 로컬 · 시험: 없음. stage · prod(`skeleton.env` 또는 auth 의 보호 프로필): 저장소 · 토큰 저장소 · 챌린지 저장소(`account-jdbc`), 메일 발송기(`notification-mail`), `skeleton.account.mail.link-base-url` — 없으면 `DeployGuard`(`account`)가 기동을 막고 시드 계정 · 링크 로그 켬도 막는다. |
-| 교체 지점 | `AccountRepository`, `OneTimeTokenStore`, `ChallengeStore`, `CodeHasher`, `SocialReauthVerifier`, `PasswordPolicy`, `BreachedPasswordCheck`, `PasswordEncoder`, `AccountMailTemplates`, `AccountMailTransport`, `AccountMailer`, `AccountTaskRunner`, `AccountCaptcha`, `AccountEventPublisher`, `AccountEventListener`, `SignInMethod`, `AccountCallers`, `AccountPublicController`, `AccountController`, `AdminAccountController`, `AccountDeployGuard` |
+| 교체 지점 | `AccountRepository`, `OneTimeTokenStore`, `ChallengeStore`, `CodeHasher`, `SocialReauthVerifier`, `PasswordPolicy`, `BreachedPasswordCheck`, `PasswordEncoder`, `AccountMailTemplates`, `AccountMailLayout`, `AccountMailTransport`, `AccountMailer`, `AccountTaskRunner`, `AccountCaptcha`, `AccountEventPublisher`, `AccountEventListener`, `SignInMethod`, `AccountCallers`, `AccountPublicController`, `AccountController`, `AdminAccountController`, `AccountDeployGuard` |
 | 마이그레이션 | 없음 (스키마는 `account-jdbc`) |
 | 프론트 짝 | `@skeleton/auth` |
 | 테스트 | `modules/account/src/test`, `modules/account/src/noOptionalTest` (선택 통합이 클래스패스에 없을 때) |
+
+**메일 모양**: 12종(가입 · 이메일 변경 · 다시 인증 · 삭제 코드, 이미 가입됨, 비밀번호 재설정 · 변경, 이메일 변경 요청 · 완료 알림, 매직 링크, 삭제 예약, 로그인 수단 추가)을 ko · en 으로, **text + HTML 대체 본문**(multipart)으로 보낸다. 코드 메일은 큰 고정폭 코드 블록, 링크 메일은 버튼 하나 + 원문 주소. 제목에는 코드 · 링크가 없다(로그에 남는다). 브랜드는 `skeleton.account.mail.brand.*`(서비스 이름 · 로고 https · 색 · 문의 주소 · 바닥글)로만 바꾸고, `html-enabled=false` 면 텍스트만 보낸다. 앱이 문구를 바꾸려면 `AccountMailTemplates` 빈, **틀만** 바꾸려면 `AccountMailLayout` 빈(`MailPage` 의 날것 값을 받아 스스로 이스케이프한다)을 둔다. 눈으로 보기: `./gradlew :modules:account:mailPreview` → `build/mail-preview/*.html`. 문구를 바꾸면 `UPDATE_GOLDEN=1 ./gradlew :modules:account:test --tests '*AccountMailGoldenTest'` 로 골든 파일을 다시 쓰고 diff 를 본다. 진짜 제공자 · 메일 시험: [real-provider-setup](../real-provider-setup.md).
 
 자세히: [계정 수명주기 · 위협 모델](../accounts.md) · [auth](auth.md) · [account-jdbc](account-jdbc.md) · [auth-session](auth-session.md) · 메일 링크 로그인은 `auth-magic-link` 모듈 (모듈 색인)
 

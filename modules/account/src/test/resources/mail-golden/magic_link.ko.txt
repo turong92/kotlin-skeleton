@@ -1,0 +1,9 @@
+subject: 로그인 링크예요
+
+이 링크로 로그인하세요. 한 번만 쓸 수 있고 10분 뒤에 만료돼요.
+
+https://app.example.com/magic-link?token=Zq9-fixedTokenForGoldenFiles_0123456789
+
+요청하지 않았다면 무시하세요.
+Notes
+Notes Inc. · Seoul

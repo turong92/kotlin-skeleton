@@ -1,0 +1,9 @@
+subject: A sign-in method was added
+
+A new way to sign in to your account was added: Google.
+
+If this was not you, change your password and remove it in your account settings now.
+
+If you did not request this, you can ignore this email.
+Notes
+Notes Inc. · Seoul
