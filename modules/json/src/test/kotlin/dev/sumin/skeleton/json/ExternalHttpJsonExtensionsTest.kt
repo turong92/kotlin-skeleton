@@ -31,7 +31,8 @@ class ExternalHttpJsonExtensionsTest {
         client = DefaultExternalHttpClient(
             webClientBuilder = WebClient.builder(),
             properties = OutboundHttpProperties(
-                defaultResponseTimeout = Duration.ofSeconds(2),
+                defaultConnectTimeout = Duration.ofSeconds(30),   // 부하가 큰 호스트에서도 같은 결과여야 한다
+                defaultResponseTimeout = Duration.ofSeconds(30),
                 clients = mapOf(
                     "json-provider" to OutboundHttpProperties.Client(
                         baseUrl = "http://localhost:${server.address.port}",

@@ -55,11 +55,11 @@ class RedisLockConcurrencyIntegrationTest {
             ) {
                 enteredActions.incrementAndGet()
                 firstStarted.countDown()
-                assertThat(releaseFirst.await(3, TimeUnit.SECONDS)).isTrue()
+                assertThat(releaseFirst.await(30, TimeUnit.SECONDS)).isTrue()
                 "first"
             }
         }
-        assertThat(firstStarted.await(3, TimeUnit.SECONDS)).isTrue()
+        assertThat(firstStarted.await(30, TimeUnit.SECONDS)).isTrue()
 
         val second = pool.submit<String?> {
             executor.execute(
@@ -75,9 +75,9 @@ class RedisLockConcurrencyIntegrationTest {
             }
         }
 
-        assertThat(second.get(3, TimeUnit.SECONDS)).isNull()
+        assertThat(second.get(30, TimeUnit.SECONDS)).isNull()
         releaseFirst.countDown()
-        assertThat(first.get(3, TimeUnit.SECONDS)).isEqualTo("first")
+        assertThat(first.get(30, TimeUnit.SECONDS)).isEqualTo("first")
         assertThat(enteredActions.get()).isEqualTo(1)
         pool.shutdownNow()
     }
@@ -99,7 +99,7 @@ class RedisLockConcurrencyIntegrationTest {
                         bothInside.countDown()
                     }
                     bothInside.countDown()
-                    assertThat(releaseBoth.await(3, TimeUnit.SECONDS)).isTrue()
+                    assertThat(releaseBoth.await(30, TimeUnit.SECONDS)).isTrue()
                     activeActions.decrementAndGet()
                     key
                 }
@@ -108,10 +108,10 @@ class RedisLockConcurrencyIntegrationTest {
         val first = submitLocked("test:lock:order:1")
         val second = submitLocked("test:lock:order:2")
 
-        assertThat(bothInside.await(3, TimeUnit.SECONDS)).isTrue()
+        assertThat(bothInside.await(30, TimeUnit.SECONDS)).isTrue()
         releaseBoth.countDown()
-        assertThat(first.get(3, TimeUnit.SECONDS)).isEqualTo("test:lock:order:1")
-        assertThat(second.get(3, TimeUnit.SECONDS)).isEqualTo("test:lock:order:2")
+        assertThat(first.get(30, TimeUnit.SECONDS)).isEqualTo("test:lock:order:1")
+        assertThat(second.get(30, TimeUnit.SECONDS)).isEqualTo("test:lock:order:2")
         pool.shutdownNow()
     }
 

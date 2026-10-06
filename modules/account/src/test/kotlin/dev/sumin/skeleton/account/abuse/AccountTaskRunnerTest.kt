@@ -14,7 +14,9 @@ class AccountTaskRunnerTest {
     fun `closing waits for the work already queued - a deploy does not throw away pending mail`() {
         val runner = ExecutorAccountTaskRunner(threads = 1, queue = 10)
         val done = AtomicBoolean(false)
-        runner.run("slow") { Thread.sleep(300); done.set(true) }
+        val started = CountDownLatch(1)
+        runner.run("slow") { started.countDown(); Thread.sleep(300); done.set(true) }   // 300ms 는 "닫을 때 아직 안 끝났다"를 위한 것 — 늦어져도 close 가 기다리므로 부하와 무관
+        assertTrue(started.await(30, TimeUnit.SECONDS))
         runner.close()
         assertTrue(done.get(), "shutdown() alone returns at once and the daemon thread dies with the JVM")
     }

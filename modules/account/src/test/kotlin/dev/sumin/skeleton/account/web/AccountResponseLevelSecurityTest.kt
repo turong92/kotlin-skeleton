@@ -10,6 +10,8 @@ import dev.sumin.skeleton.account.mail.AccountMailer
 import dev.sumin.skeleton.accounttest.AccountWebTestApplication
 import dev.sumin.skeleton.common.logging.LogMasker
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -25,12 +27,17 @@ import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 
-/** 메일이 느린(0.5초) 서비스 — 응답이 메일을 기다리면 계정이 있는 쪽이 눈에 띄게 느려진다 */
+/**
+ * 메일이 느린 서비스 — `hold` 가 걸려 있는 동안 메일이 나가지 않는다. 응답이 메일을 기다리면 요청이 끝나지 못하고(최대 30초),
+ * 응답이 메일을 기다리지 않으면 `hold` 와 무관하게 곧 끝난다. 고정 sleep · 벽시계 비교(부하에서 흔들린다)가 아니라 이 차이로 증명한다.
+ */
 @TestConfiguration(proxyBeanMethods = false)
 class SlowMailBeans {
     val sent = CopyOnWriteArrayList<AccountMail>()
 
-    @Bean fun slowMailer(): AccountMailer = AccountMailer { mail -> Thread.sleep(500); sent += mail }
+    @Volatile var hold: CountDownLatch? = null
+
+    @Bean fun slowMailer(): AccountMailer = AccountMailer { mail -> hold?.await(30, TimeUnit.SECONDS); sent += mail }
     @Bean fun slowMailRecorder(): CopyOnWriteArrayList<AccountMail> = sent
     @Bean fun realExecutor() = ExecutorAccountTaskRunner(threads = 4)
 }
@@ -44,6 +51,15 @@ class SlowMailBeans {
 class AccountResponseLevelSecurityTest {
     @Autowired lateinit var mvc: MockMvc
     @Autowired lateinit var sent: CopyOnWriteArrayList<AccountMail>
+    @Autowired lateinit var mails: SlowMailBeans
+
+    private fun awaitUntil(what: String, condition: () -> Boolean) {
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30)
+        while (!condition()) {
+            check(System.nanoTime() < deadline) { "timed out waiting for $what" }
+            Thread.sleep(10)
+        }
+    }
 
     private fun timed(path: String, body: String, ip: String): Pair<Int, Long> {
         val start = System.nanoTime()
@@ -54,9 +70,11 @@ class AccountResponseLevelSecurityTest {
     @Test
     fun `sign-up, forgot and resend answer without waiting for mail - a known address costs the same as an unknown one`() {
         val known = "known${System.nanoTime()}@example.com"
-        // create the account (the first call waits nothing; the mail is slow but off-thread)
+        val hold = CountDownLatch(1)
+        mails.hold = hold
+        try {
+        // create the account (the first call waits nothing; the mail is held off-thread)
         timed("/api/v1/account/sign-up", """{"email":"$known","password":"tangerine-42-moon"}""", "198.51.100.1")
-        Thread.sleep(800)
 
         val results = listOf(
             "sign-up known" to timed("/api/v1/account/sign-up", """{"email":"$known","password":"tangerine-42-moon"}""", "198.51.100.2"),
@@ -68,10 +86,14 @@ class AccountResponseLevelSecurityTest {
         )
         results.forEach { (name, r) ->
             assertEquals(202, r.first, name)
-            assertTrue(r.second < 400, "$name took ${r.second} ms — the response must not wait for the 500 ms mail")
+            assertTrue(r.second < 15_000, "$name took ${r.second} ms — the response must not wait for the held mail")
         }
         val gap = (results[0].second2() - results[1].second2()).let { kotlin.math.abs(it) }
-        assertTrue(gap < 300, "known/unknown sign-up differ by $gap ms")
+        assertTrue(gap < 15_000, "known/unknown sign-up differ by $gap ms")
+            } finally {
+            mails.hold = null
+            hold.countDown()
+        }
     }
 
     private fun Pair<String, Pair<Int, Long>>.second2() = second.second
@@ -88,9 +110,10 @@ class AccountResponseLevelSecurityTest {
         try {
             val email = "logs${System.nanoTime()}@example.com"
             timed("/api/v1/account/sign-up", """{"email":"$email","password":"tangerine-42-moon"}""", "198.51.100.20")
-            Thread.sleep(900)
+            awaitUntil("the verification mail") { sent.any { it.link != null } }
+            val before = sent.size
             timed("/api/v1/account/password/forgot", """{"email":"$email"}""", "198.51.100.21")
-            Thread.sleep(900)
+            awaitUntil("the reset mail") { sent.size > before }
             val tokens = sent.filter { it.link != null }.map { it.link!!.substringAfter("token=") }
             assertTrue(tokens.size >= 1, "expected at least the verification mail")
             val lines = appender.list.map { it.formattedMessage + " " + (it.throwableProxy?.message ?: "") }

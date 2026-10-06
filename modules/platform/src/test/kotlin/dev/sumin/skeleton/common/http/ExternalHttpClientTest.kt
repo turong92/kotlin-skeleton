@@ -11,6 +11,8 @@ import dev.sumin.skeleton.common.logging.SkeletonLoggers
 import java.net.InetSocketAddress
 import java.time.Duration
 import java.util.Collections
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -26,11 +28,15 @@ import org.springframework.boot.test.system.CapturedOutput
 import org.springframework.boot.test.system.OutputCaptureExtension
 import org.springframework.web.reactive.function.client.WebClient
 
+/** 부하가 큰 호스트(load 60~90)에서도 같은 결과여야 한다: 상한은 넉넉하게, 시간 초과 시험은 서버가 응답을 잡아 두는 방식으로. */
+private val GENEROUS: Duration = Duration.ofSeconds(30)
+
 @ExtendWith(OutputCaptureExtension::class)
 class ExternalHttpClientTest {
     private lateinit var server: HttpServer
     private lateinit var client: ExternalHttpClient
     private val requests = Collections.synchronizedList(mutableListOf<RecordedRequest>())
+    private val releaseSlow = CountDownLatch(1)
 
     @BeforeTest
     fun setUp() {
@@ -40,7 +46,8 @@ class ExternalHttpClientTest {
         client = DefaultExternalHttpClient(
             webClientBuilder = WebClient.builder(),
             properties = OutboundHttpProperties(
-                defaultResponseTimeout = Duration.ofSeconds(2),
+                defaultConnectTimeout = GENEROUS,
+                defaultResponseTimeout = GENEROUS,
                 clients = mapOf(
                     "test" to OutboundHttpProperties.Client(
                         baseUrl = "http://localhost:${server.address.port}",
@@ -55,6 +62,7 @@ class ExternalHttpClientTest {
     @AfterTest
     fun tearDown() {
         MDC.clear()
+        releaseSlow.countDown()
         server.stop(0)
     }
 
@@ -78,7 +86,7 @@ class ExternalHttpClientTest {
             uriVariable("id", "item-1")
             queryParam("expand", "customer")
             header("X-Test-Header", "custom")
-            timeout(Duration.ofSeconds(1))
+            timeout(GENEROUS)
         }.block()
 
         assertEquals("GET", response?.method)
@@ -179,7 +187,8 @@ class ExternalHttpClientTest {
         val queryLoggingClient = DefaultExternalHttpClient(
             webClientBuilder = WebClient.builder(),
             properties = OutboundHttpProperties(
-                defaultResponseTimeout = Duration.ofSeconds(2),
+                defaultConnectTimeout = GENEROUS,
+                defaultResponseTimeout = GENEROUS,
                 logging = OutboundHttpProperties.Logging(includeQuery = true),
                 clients = mapOf(
                     "test" to OutboundHttpProperties.Client(
@@ -226,10 +235,12 @@ class ExternalHttpClientTest {
 
     @Test
     fun `timeout maps to timeout exception`() {
+        // 서버가 응답을 잡아 두므로(releaseSlow 전까지) 시간 초과는 부하와 무관하게 반드시 난다 — 벽시계 시간을 단언하지 않고 예외 종류만 본다
         val timeoutClient = DefaultExternalHttpClient(
             webClientBuilder = WebClient.builder(),
             properties = OutboundHttpProperties(
-                defaultResponseTimeout = Duration.ofMillis(50),
+                defaultConnectTimeout = GENEROUS,
+                defaultResponseTimeout = Duration.ofMillis(250),
                 clients = mapOf(
                     "test" to OutboundHttpProperties.Client(
                         baseUrl = "http://localhost:${server.address.port}",
@@ -241,7 +252,7 @@ class ExternalHttpClientTest {
         )
 
         val exception = assertFailsWith<ExternalHttpTimeoutException> {
-            timeoutClient.get("test", "/slow", EchoResponse::class.java).block()
+            timeoutClient.get("test", "/slow", EchoResponse::class.java).block(GENEROUS)
         }
 
         assertEquals("test", exception.clientName)
@@ -264,8 +275,9 @@ class ExternalHttpClientTest {
                 exchange.respond(503, """{"message":"upstream unavailable"}""")
             }
             "/slow" -> {
-                Thread.sleep(300)
-                exchange.respond(200, """{"method":"${exchange.requestMethod}"}""")
+                // 시험이 끝날 때(tearDown)까지 응답을 잡아 둔다 — 고정 sleep 은 부하에서 클라이언트 시간 초과와 경주가 된다
+                releaseSlow.await(GENEROUS.toSeconds(), TimeUnit.SECONDS)
+                runCatching { exchange.respond(200, """{"method":"${exchange.requestMethod}"}""") }
             }
             "/with-headers" -> {
                 exchange.responseHeaders.add("X-Provider-Trace-Id", "provider-trace-123")
