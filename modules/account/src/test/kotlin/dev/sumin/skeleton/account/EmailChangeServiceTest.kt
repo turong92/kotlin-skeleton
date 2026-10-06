@@ -133,10 +133,25 @@ class EmailChangeServiceTest {
     }
 
     @Test
-    fun `a taken target address leaves nothing pending - the state does not reveal that the address exists`() {
-        val a = h.activeAccount()
-        h.activeAccount("bob@example.com")
-        h.emailChange.request(a.id, "bob@example.com", "tangerine-42-moon")
-        assertNull(h.profile.me(a.id).pendingEmail)
+    fun `the pending change is visible to the requester before the deferred mail task runs - and the same for an address that is taken`() {
+        val deferred = java.util.concurrent.CopyOnWriteArrayList<Runnable>()
+        var hold = false
+        val q = AccountHarness(tasks = { _, task -> if (hold) deferred += task else task.run() })
+        val a = q.activeAccount()
+        q.activeAccount("bob@example.com")
+        hold = true   // 이제부터 메일 일은 쌓아 두고 나중에 돌린다
+
+        q.emailChange.request(a.id, "free@example.com", "tangerine-42-moon")
+        assertEquals("free@example.com", q.profile.me(a.id).pendingEmail, "GET /me right after the 202 must show the pending change")
+        assertEquals(0, q.mailer.of(MailKind.EMAIL_CHANGE_CONFIRM).size, "only the mail stays deferred")
+
+        val freeView = q.profile.me(a.id)
+        q.emailChange.request(a.id, "bob@example.com", "tangerine-42-moon")
+        val takenView = q.profile.me(a.id)
+        assertEquals("bob@example.com", takenView.pendingEmail, "no enumeration oracle: a taken address looks pending too")
+        assertEquals(freeView.pendingEmailExpiresAt == null, takenView.pendingEmailExpiresAt == null)
+
+        deferred.forEach { it.run() }
+        assertEquals(listOf("free@example.com"), q.mailer.of(MailKind.EMAIL_CHANGE_CONFIRM).map { it.to }, "no link goes to the taken address")
     }
 }
