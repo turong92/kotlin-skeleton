@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security review of the account lifecycle (fixes before the first release)
+- **Pre-hijack closed**: a mailbox proof (magic link, verified social login) on an unverified account discards the password someone set at sign-up and closes sessions; verification links are bound to the password they were issued for.
+- **Exact-match emails**: one normalisation rule (`Emails.normalize`: trim, NFC, lower case), exact comparison after lookup, mail to the stored address, `utf8mb4_bin` on MySQL (`email`, token `subject`); MySQL migrations keep jOOQ-unparsable clauses in `[jooq ignore]` markers (enforced by `MigrationFileRules`).
+- **Sensitive actions re-authenticate**: email change, first password and social link need the current password or a mailed `confirmationToken` (`POST /account/reauth/confirmation`); a password change/reset kills pending sensitive links; the account is told of every link and email-change request; admin authorization re-reads the stored account.
+- **Sessions**: `SessionEvent`s are wired (reuse -> account event + WARN + alert), the used-token memory lasts as long as the session, ended sessions are purged and erased with the account; refresh `reuse-grace` gives idempotent rotation (apps set 10s).
+- **Deploy**: client IP mode guard (platform injects `<PREFIX>_WEB_CLIENT_IP_*`), honest `/health`, blank JWT secret is a named guard problem, local image + `secrets:`/`.local.env` documented, GHCR workflow on hold.
+- New: `GET /auth/methods`, `me.pendingEmail`, last-administrator guard is atomic, restore/purge exclusive, social merge on a verified provider email (apps opt in).
+- Capability catalog merged (`capabilities.json`, `llms.txt`) with entries for the account modules.
+
+
 ### 계정 수명주기 — account · auth-session · auth-magic-link (2026-10-06)
 
 도메인과 메일 설정만 바꿔 켜기만 해도 가입 · 로그인 · 비밀번호 찾기 · 세션 관리 · 탈퇴가 있는 서비스 구색이 나온다. 전체: `docs/accounts.md` (흐름 · 새 로그인 수단 더하기 · 위협 모델과 각 행을 덮는 시험 · HTTP 계약).

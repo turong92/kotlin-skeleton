@@ -134,7 +134,7 @@ scripts/new-project.sh ~/work/ovation dev.sumin.ovation ovation Ovation --db mys
 - 끝에 `scripts/rename-skeleton.sh` 가 돌고 잔여 흔적이 있으면 실패한다. 대상 디렉토리 밖에는 아무것도 쓰지 않고, 대상이 이미 있으면 거부한다.
 - 시험: `scripts/test-new-project.sh` (빠른 검사 — `./gradlew check` 가 돈다) / `--full` (네 조합을 찍어 각각 `./gradlew build`, Docker 필요 — `.github/workflows/new-project.yml`).
 
-- 찍힌 프로젝트에는 배포 선언 `deploy/app.yaml`(이름 · 이미지 · `env_prefix` · DB · Redis 를 채운다), GHCR 이미지 워크플로(`v*` 태그 → `ghcr.io/<owner>/<name>-api:v…` · `sha-…`, latest 없음), 계약 증명 `scripts/test-deploy-contract.sh` 가 따라온다 — **[배포 계약 · 배포 가드 · 모듈별 비밀: docs/deploy.md](docs/deploy.md)**.
+- 찍힌 프로젝트에는 배포 선언 `deploy/app.yaml`(이름 · 이미지 · `env_prefix` · DB · Redis 를 채운다), 로컬 빌드 이미지(`image_local: true`, GHCR 는 쓰지 않는다 — 이미지 워크플로는 수동 실행만 · 보류), 계약 증명 `scripts/test-deploy-contract.sh` 가 따라온다 — **[배포 계약 · 배포 가드 · 모듈별 비밀: docs/deploy.md](docs/deploy.md)**.
 
 수동으로 하려면: 레포를 복사해 `scripts/rename-skeleton.sh dev.sumin.ovation ovation Ovation`, 쓰지 않는 모듈과 `apps/workbench` 를 지우고 `docs/minimal-composition.md` 를 따른다.
 
