@@ -26,7 +26,8 @@ class IdempotencyHandlerInterceptor(
         handler: Any,
     ): Boolean {
         val handlerMethod = handler as? HandlerMethod ?: return true
-        if (handlerMethod.getMethodAnnotation(IdempotentOperation::class.java) == null) {
+        val operation = handlerMethod.getMethodAnnotation(IdempotentOperation::class.java)
+        if (operation == null) {
             return true
         }
 
@@ -46,7 +47,7 @@ class IdempotencyHandlerInterceptor(
         val idempotencyRequest = IdempotencyRequest(
             scopedKey = scopedKey,
             rawKey = rawKey,
-            fingerprint = IdempotencyFingerprint.calculate(request, cachedBody(request)),
+            fingerprint = IdempotencyFingerprint.calculate(request, cachedBody(request), operation.ignoredBodyFields.toSet(), objectMapper),
             expiresAt = clock.instant().plus(properties.ttl),
         )
 

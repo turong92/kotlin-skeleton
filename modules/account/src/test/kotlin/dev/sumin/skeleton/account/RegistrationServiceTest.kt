@@ -60,7 +60,7 @@ class RegistrationServiceTest {
     }
 
     @Test
-    fun `the request thread never touches the account store or the mailer - known and unknown addresses look identical`() {
+    fun `the request thread stores the account itself - one identical repository call for a known and an unknown address, and never the mailer`() {
         val queue = LinkedBlockingQueue<Runnable>()
         val deferred = AccountHarness(tasks = AccountTaskRunner { _, task -> queue.add(task) })
         val me = Thread.currentThread()
@@ -72,9 +72,31 @@ class RegistrationServiceTest {
         deferred.signUp("new@example.com")   // now it exists
         val knownCalls = deferred.callLog.by(me)
 
-        assertEquals(unknownCalls, knownCalls)
-        assertEquals(emptyList(), knownCalls, "no repository call may happen on the request thread")
-        assertEquals(0, deferred.mailer.sent.size - deferred.mailer.of(MailKind.VERIFY_EMAIL).size, "nothing but the first (deferred) mail so far")
+        assertEquals(unknownCalls, knownCalls, "what the request thread does must not depend on whether the address exists")
+        assertEquals(listOf("insert"), knownCalls)
+        assertEquals(1, deferred.mailer.sent.size, "only the first (deferred) mail so far - nothing is mailed on the request thread")
+    }
+
+    @Test
+    fun `an accepted sign-up exists even if every queued task is lost - the account is not in the queue, only the mail is`() {
+        val lost = AccountHarness(tasks = AccountTaskRunner { _, _ -> })   // a restart, a full queue: the background work vanishes
+        assertEquals(SignUpStatus.VERIFICATION_SENT, lost.signUp())
+        val account = lost.repo.findByEmail("ann@example.com")
+        assertNotNull(account, "202 was answered but the account row does not exist: the sign-up was silently lost")
+        assertEquals(AccountStatus.PENDING_VERIFICATION, account.status)
+        assertTrue(lost.hasher.matches("tangerine-42-moon", lost.repo.findIdentity("password", "ann@example.com")!!.secret!!))
+        assertEquals(0, lost.mailer.sent.size)
+    }
+
+    @Test
+    fun `a lost verification mail is recoverable by resend because the account is there`() {
+        var dropping = true
+        val flaky = AccountHarness(tasks = AccountTaskRunner { _, task -> if (!dropping) task.run() })
+        flaky.signUp()
+        dropping = false
+        flaky.registration.resendVerification("ann@example.com", "203.0.113.1", null)
+        flaky.verify()
+        assertEquals(AccountStatus.ACTIVE, flaky.repo.findByEmail("ann@example.com")!!.status)
     }
 
     @Test
@@ -264,5 +286,12 @@ class RegistrationServiceTest {
         val a = h.activeAccount()
         h.authRepository.upgradePasswordHash(a.id, "{bcrypt}newhash")
         assertEquals("{bcrypt}newhash", h.repo.findIdentity("password", "ann@example.com")!!.secret)
+    }
+
+    @Test
+    fun `resend is capped per IP like forgot, loudly, and other IPs are not affected`() {
+        repeat(10) { h.registration.resendVerification("u$it@example.com", "198.51.100.9", null) }
+        assertFailsWith<RateLimitedException> { h.registration.resendVerification("u11@example.com", "198.51.100.9", null) }
+        h.registration.resendVerification("other@example.com", "198.51.100.10", null)
     }
 }

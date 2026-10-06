@@ -74,9 +74,9 @@ class CaptchaGate(private val captcha: AccountCaptcha?) {
 }
 
 /**
- * 요청 스레드가 기다리지 않게 일을 뒤로 넘긴다 — 가입 · 재설정 · 재전송은 "있는지 찾고 → 토큰 → 메일" 을 여기서 하므로
- * 요청의 응답 시간이 계정 존재 여부와 무관하다. 기본 구현은 이 프로세스의 작은 풀이다 (재시작하면 처리 못 한 일은 사라진다 — 사용자는 다시 요청한다).
- * 내구성이 필요하면 앱이 같은 타입의 빈으로 job-queue 같은 곳에 넣는다.
+ * 요청 스레드가 기다리지 않게 일을 뒤로 넘긴다 — 재설정 · 재전송 · 가입 메일은 "있는지 찾고 → 토큰 → 메일" 을 여기서 하므로
+ * 요청의 응답 시간이 계정 존재 여부와 무관하다. 기본 구현은 이 프로세스의 작은 풀이다 (종료 때는 기다려 마치지만, 비정상 종료로 처리 못 한 일은 사라진다 —
+ * 사용자는 다시 요청한다. **계정 행 자체는 여기 있지 않다**: 가입은 요청 스레드에서 저장한다). 내구성이 필요하면 앱이 같은 타입의 빈으로 job-queue 같은 곳에 넣는다.
  */
 fun interface AccountTaskRunner {
     fun run(label: String, task: Runnable)
@@ -87,21 +87,35 @@ fun interface AccountTaskRunner {
     }
 }
 
-class ExecutorAccountTaskRunner(threads: Int = 2, queue: Int = 1000) : AccountTaskRunner, AutoCloseable {
+/**
+ * 이 프로세스의 작은 풀. 넘치면 **버리지 않고 부른 스레드가 직접 한다**(밀어내기) — 과부하일 때만 응답이 느려진다.
+ * 닫힐 때(배포 · 종료)는 대기 중인 일을 [shutdownWait] 동안 기다려 마친다 (데몬 스레드라서 그냥 두면 JVM 과 함께 사라진다).
+ */
+class ExecutorAccountTaskRunner(threads: Int = 2, queue: Int = 1000, private val shutdownWait: Duration = Duration.ofSeconds(10)) : AccountTaskRunner, AutoCloseable {
     private val log = LoggerFactory.getLogger(javaClass)
-    private val pool = ThreadPoolExecutor(threads, threads, 30, TimeUnit.SECONDS, LinkedBlockingQueue(queue)) { r ->
-        Thread(r, "account-task").apply { isDaemon = true }
-    }
+    private val pool = ThreadPoolExecutor(
+        threads, threads, 30, TimeUnit.SECONDS, LinkedBlockingQueue(queue),
+        { r -> Thread(r, "account-task").apply { isDaemon = true } },
+        ThreadPoolExecutor.CallerRunsPolicy(),
+    )
 
     override fun run(label: String, task: Runnable) {
+        val guarded = Runnable {
+            try { task.run() } catch (e: Exception) { log.warn("account task '{}' failed: {}", label, e.javaClass.simpleName) }
+        }
         try {
-            pool.execute {
-                try { task.run() } catch (e: Exception) { log.warn("account task '{}' failed: {}", label, e.javaClass.simpleName) }
-            }
+            pool.execute(guarded)
         } catch (_: RejectedExecutionException) {
-            log.warn("account task '{}' dropped: queue is full", label)
+            // 이미 닫는 중 — 마지막 한 건도 잃지 않게 이 스레드에서
+            guarded.run()
         }
     }
 
-    override fun close() { pool.shutdown() }
+    override fun close() {
+        pool.shutdown()
+        if (!pool.awaitTermination(shutdownWait.toMillis(), TimeUnit.MILLISECONDS)) {
+            val dropped = pool.shutdownNow().size
+            log.warn("account tasks did not finish within {}; {} queued task(s) were abandoned", shutdownWait, dropped)
+        }
+    }
 }

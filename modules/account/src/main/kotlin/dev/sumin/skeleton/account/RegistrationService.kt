@@ -24,8 +24,8 @@ enum class SignUpStatus { VERIFICATION_SENT, CREATED }
 /**
  * 이메일 + 비밀번호 가입과 이메일 확인.
  *
- * 응답으로 계정 존재 여부가 드러나지 않게, 요청 스레드는 **입력 검사 · 한도 · 캡차 · 비밀번호 해시 한 번**만 하고
- * (해시는 새 주소든 있는 주소든 똑같이 한다) 나머지 — 주소 조회 · 계정 만들기 · 토큰 · 메일 — 는 [AccountCore.tasks] 로 넘긴다.
+ * 응답으로 계정 존재 여부가 드러나지 않게, 요청 스레드는 **입력 검사 · 한도 · 캡차 · 비밀번호 해시 한 번 · 계정 저장 한 번**을 새 주소든 있는 주소든
+ * 똑같이 하고(유니크 키가 판정한다) 나머지 — 토큰 · 메일 — 는 [AccountCore.tasks] 로 넘긴다. 계정은 큐가 아니라 저장소에 있으므로 202 를 받은 가입이 사라지지 않는다.
  * 이미 있는 주소에는 "이미 계정이 있어요" 메일을 보낸다. 이메일 확인을 끈 앱(`sign-up.email-verification=false`)만 동기로 돌며 중복이 409 로 드러난다.
  */
 class RegistrationService(private val core: AccountCore) {
@@ -44,20 +44,19 @@ class RegistrationService(private val core: AccountCore) {
         val hash = core.hasher.hash(cmd.password)
 
         if (!p.signUp.emailVerification) return createVerified(email, hash, cmd)
-        core.tasks.run("sign-up") { completeSignUp(email, hash, cmd) }
-        return SignUpStatus.VERIFICATION_SENT
-    }
-
-    private fun completeSignUp(email: String, hash: String, cmd: SignUpCommand) {
-        val existing = core.accountByEmail(email)
-        if (existing != null) return notifyAlreadyRegistered(existing)
+        // 계정은 **요청 스레드에서** 저장한다 — 202 를 받은 가입이 재시작 · 큐 넘침으로 행 없이 사라지지 않게. 유니크 키가 판정하므로
+        // 새 주소든 있는 주소든 요청 스레드가 하는 일(저장소 호출 한 번)이 같다. 뒤로 가는 것은 메일뿐이고, 잃어도 재전송으로 복구된다
         val account = newAccount(email, cmd, AccountStatus.PENDING_VERIFICATION, verified = false)
-        if (!core.accounts.insert(account, listOf(passwordIdentity(account, email, hash, verified = false)))) {
-            // 같은 주소가 동시에 들어와 유니크 키가 한 쪽만 통과시켰다 — 진 쪽은 "있는 주소" 와 같게 다룬다
-            return core.accountByEmail(email)?.let(::notifyAlreadyRegistered) ?: Unit
+        val created = core.accounts.insert(account, listOf(passwordIdentity(account, email, hash, verified = false)))
+        core.tasks.run("sign-up") {
+            if (created) {
+                core.events.publish(AccountEventType.SIGN_UP, account.id, cmd.ip, mapOf("method" to SignInMethods.PASSWORD))
+                sendVerification(account)
+            } else {
+                core.accountByEmail(email)?.let(::notifyAlreadyRegistered)
+            }
         }
-        core.events.publish(AccountEventType.SIGN_UP, account.id, cmd.ip, mapOf("method" to SignInMethods.PASSWORD))
-        sendVerification(account)
+        return SignUpStatus.VERIFICATION_SENT
     }
 
     private fun createVerified(email: String, hash: String, cmd: SignUpCommand): SignUpStatus {
@@ -92,6 +91,11 @@ class RegistrationService(private val core: AccountCore) {
     /** 항상 같은 응답 — 주소 조회 · 메일은 뒤에서, 한도를 넘으면 조용히 */
     fun resendVerification(email: String, ip: String?, captchaToken: String?) {
         core.captcha.check(captchaToken, ip, "resend_verification")
+        ip?.let {
+            val v = core.props.verification
+            val a = core.limits.acquire("resend:ip", it, v.perIp, v.perIpWindow)
+            if (!a.allowed) throw RateLimitedException(a.retryAfterSeconds)
+        }
         val normalized = Emails.normalize(email)
         core.tasks.run("resend-verification") {
             val account = core.accountByEmail(normalized)

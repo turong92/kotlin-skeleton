@@ -66,6 +66,9 @@ data class AccountProperties(
         /** 한 이메일에 보낼 수 있는 인증 메일 수 (창 안) — 넘으면 조용히 안 보낸다 */
         val perEmail: Int = 3,
         val perEmailWindow: Duration = Duration.ofHours(1),
+        /** 같은 IP 가 창 안에 보낼 수 있는 인증 재전송 요청 수 (넘으면 429) */
+        val perIp: Int = 10,
+        val perIpWindow: Duration = Duration.ofHours(1),
     )
 
     data class Reset(

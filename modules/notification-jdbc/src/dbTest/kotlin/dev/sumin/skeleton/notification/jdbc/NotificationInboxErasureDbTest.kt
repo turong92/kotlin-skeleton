@@ -42,4 +42,19 @@ class NotificationInboxErasureDbTest {
         assertTrue("deleted:0123456789abcdef" in remaining.values.single().event.recipientIds)
         NotificationInboxErasureListener(jdbc).erase(ErasureRequest(gone, "deleted:0123456789abcdef"))   // idempotent
     }
+
+    @Test
+    fun `erasing acc_user leaves acc_user2 alone - only the whole quoted id is replaced`() {
+        val base = "acc_${UUID.randomUUID().toString().take(8)}"
+        val gone = base
+        val longer = base + "2"          // the erased id is a prefix of this recipient's id
+        val shared = event(setOf(gone, longer))
+        repository.save(shared, setOf(gone, longer))
+
+        NotificationInboxErasureListener(jdbc).erase(ErasureRequest(gone, "deleted:0123456789abcdef"))
+
+        val remaining = repository.findByRecipient(longer, NotificationInboxQuery(page = 0, size = 10)).values.single().event.recipientIds
+        assertTrue(longer in remaining, "the other recipient's id was mangled by a substring replace: $remaining")
+        assertTrue("deleted:0123456789abcdef" in remaining && gone !in remaining)
+    }
 }

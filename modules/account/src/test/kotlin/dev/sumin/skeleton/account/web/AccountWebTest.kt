@@ -142,6 +142,20 @@ class AccountWebTest {
     }
 
     @Test
+    fun `the stored idempotency fingerprint does not contain the password - the same key with another password is the same request, not a 409`() {
+        val email = registered()
+        val auth = bearer(login(email))
+        val key = java.util.UUID.randomUUID().toString()
+        val target = unique()
+        val first = mvc.perform(post("/api/v1/account/email/change").header("Authorization", auth).header("Idempotency-Key", key).json("""{"newEmail":"$target","currentPassword":"wrong-password-1"}"""))
+            .andExpect(status().isBadRequest).andReturn()
+        // a differing password used to change the fingerprint (and a body-derived unsalted hash of it sits in the idempotency store)
+        mvc.perform(post("/api/v1/account/email/change").header("Authorization", auth).header("Idempotency-Key", key).json("""{"newEmail":"$target","currentPassword":"another-wrong-pass-2"}"""))
+            .andExpect(status().isBadRequest).andExpect(header().string("X-Idempotency-Replayed", "true"))
+        assertEquals(400, first.response.status)
+    }
+
+    @Test
     fun `an email change is confirmed from the new address and moves the login`() {
         val email = registered()
         val newEmail = unique()

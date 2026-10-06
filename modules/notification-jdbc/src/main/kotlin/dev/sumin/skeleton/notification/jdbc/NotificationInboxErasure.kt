@@ -19,9 +19,13 @@ class NotificationInboxErasureListener(private val jdbc: NamedParameterJdbcTempl
 
     override fun erase(request: ErasureRequest) {
         jdbc.update("delete from skeleton_notification_inbox where recipient_id = :a", mapOf("a" to request.accountId))
+        // 따옴표까지 붙여 통째로 — `acc_user` 를 지울 때 `acc_user2` 의 앞부분이 바뀌지 않게 (수신자 목록은 JSON 문자열 배열이다)
         jdbc.update(
             "update skeleton_notification_inbox set recipient_ids_json = replace(recipient_ids_json, :a, :t) where recipient_ids_json like :pattern",
-            mapOf("a" to request.accountId, "t" to request.tombstone, "pattern" to "%" + request.accountId.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"),
+            mapOf(
+                "a" to "\"${request.accountId}\"", "t" to "\"${request.tombstone}\"",
+                "pattern" to "%\"" + request.accountId.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "\"%",
+            ),
         )
     }
 }

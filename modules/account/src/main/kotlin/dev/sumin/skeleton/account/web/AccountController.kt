@@ -62,7 +62,7 @@ class AccountController(
     }
 
     @Operation(summary = "Ask to change the account email; nothing changes until the new address confirms (202)")
-    @IdempotentOperation
+    @IdempotentOperation(ignoredBodyFields = ["currentPassword", "confirmationToken"])
     @PostMapping("/email/change")
     fun changeEmail(authentication: Authentication?, @Valid @RequestBody request: ChangeEmailRequest): ResponseEntity<DataResponse<StatusResponse>> {
         emailChange.request(callers.require(authentication).accountId, request.newEmail!!, request.currentPassword, request.confirmationToken)
@@ -98,7 +98,7 @@ class AccountController(
         summary = "Delete the account (re-authenticate with the password or the mailed confirmation token)",
         description = "Signs in is blocked at once; the data is erased after skeleton.account.deletion.grace.",
     )
-    @IdempotentOperation
+    @IdempotentOperation(ignoredBodyFields = ["currentPassword", "confirmationToken"])
     @PostMapping("/delete")
     fun delete(authentication: Authentication?, @Valid @RequestBody request: DeleteAccountRequest): ResponseEntity<DataResponse<DeletionResponse>> {
         val purgeAfter = deletion.delete(callers.require(authentication).accountId, request.currentPassword, request.confirmationToken)
