@@ -1,0 +1,10 @@
+{
+  "documents": [
+    { "type": "terms", "versions": [
+      { "version": "template-1", "status": "DRAFT", "template": true, "effectiveFrom": "2026-01-01T00:00:00Z", "locales": ["ko", "en"] } ] },
+    { "type": "privacy", "versions": [
+      { "version": "template-1", "status": "DRAFT", "template": true, "effectiveFrom": "2026-01-01T00:00:00Z", "locales": ["ko", "en"] } ] },
+    { "type": "marketing", "versions": [
+      { "version": "template-1", "status": "DRAFT", "template": true, "effectiveFrom": "2026-01-01T00:00:00Z", "locales": ["ko", "en"] } ] }
+  ]
+}

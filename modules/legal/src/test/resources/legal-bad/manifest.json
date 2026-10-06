@@ -1,0 +1,1 @@
+{ "documents": [ { "type": "terms", "versions": [ { "version": "v1", "status": "DRAFT", "effectiveFrom": "2026-01-01T00:00:00Z", "locales": ["ko"] } ] } ] }

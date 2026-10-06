@@ -1,0 +1,12 @@
+{
+  "documents": [
+    {
+      "type": "terms",
+      "versions": [
+        { "version": "2026-01-01", "status": "REVIEWED", "effectiveFrom": "2026-01-01T00:00:00Z", "locales": ["ko", "en"],
+          "sha256": { "ko": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "en": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" } },
+        { "version": "2026-12-01", "status": "DRAFT", "locales": ["ko"], "template": true }
+      ]
+    }
+  ]
+}
