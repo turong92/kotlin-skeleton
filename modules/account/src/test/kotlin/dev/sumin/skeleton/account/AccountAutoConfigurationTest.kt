@@ -147,4 +147,36 @@ class AccountAutoConfigurationTest {
             assertTrue(ctx.getBean(dev.sumin.skeleton.account.password.PasswordHasher::class.java).matches("password-1234", auth.passwordHash))
         }
     }
+
+    @Test
+    fun `a sign-up consent gate and an account transaction from another module reach the registration service`() {
+        val checked = java.util.concurrent.CopyOnWriteArrayList<List<dev.sumin.skeleton.common.consent.ConsentClaim>>()
+        val gate = object : dev.sumin.skeleton.common.consent.SignUpConsentGate {
+            override fun check(claims: List<dev.sumin.skeleton.common.consent.ConsentClaim>) { checked += claims }
+            override fun record(accountId: String, claims: List<dev.sumin.skeleton.common.consent.ConsentClaim>, context: dev.sumin.skeleton.common.consent.ConsentContext) = Unit
+        }
+        val ran = java.util.concurrent.atomic.AtomicInteger()
+        val tx = object : AccountTransaction {
+            override fun <T> run(block: () -> T): T { ran.incrementAndGet(); return block() }
+        }
+        runner.withBean(dev.sumin.skeleton.common.consent.SignUpConsentGate::class.java, java.util.function.Supplier { gate })
+            .withBean(AccountTransaction::class.java, java.util.function.Supplier { tx })
+            .run { ctx ->
+                val registration = ctx.getBean(RegistrationService::class.java)
+                val claim = dev.sumin.skeleton.common.consent.ConsentClaim("terms", "v1")
+                val outcome = registration.signUp(SignUpCommand("ann@example.com", "tangerine-42-moon", null, null, null, "203.0.113.1", null, consents = listOf(claim)))
+
+                assertEquals(listOf(listOf(claim)), checked)
+                assertEquals(0, ran.get(), "nothing is created before the code is entered")
+                assertNotNull(outcome.signUpId)
+            }
+    }
+
+    @Test
+    fun `without a gate bean the registration service ignores consents and the default transaction just runs the block`() {
+        runner.run { ctx ->
+            val claim = dev.sumin.skeleton.common.consent.ConsentClaim("terms", "v1")
+            ctx.getBean(RegistrationService::class.java).signUp(SignUpCommand("ann@example.com", "tangerine-42-moon", null, null, null, "203.0.113.1", null, consents = listOf(claim)))
+        }
+    }
 }

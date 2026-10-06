@@ -197,9 +197,12 @@ class AccountAutoConfiguration {
         bootstrap: AdminBootstrap,
         challenges: Challenges,
         socialReauth: ObjectProvider<SocialReauthVerifier>,
+        consents: ObjectProvider<dev.sumin.skeleton.common.consent.SignUpConsentGate>,
+        atomic: ObjectProvider<AccountTransaction>,
     ): AccountCore = AccountCore(
         accounts, properties, time.getIfAvailable { TimeProvider.systemUtc() }, events, hasher, policy, tokens, mailer, links, tasks, limits, captcha,
         { sessions.getIfAvailable() }, bootstrap, challenges, { socialReauth.getIfAvailable() },
+        { consents.getIfAvailable() }, atomic.getIfAvailable { AccountTransaction.NONE },
     )
 
     @Bean

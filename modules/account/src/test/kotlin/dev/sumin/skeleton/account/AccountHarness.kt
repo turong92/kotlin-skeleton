@@ -58,6 +58,8 @@ class AccountHarness(
     /** 저장소를 바꿔 끼운다 (예: 악센트 · 대소문자를 같게 보는 DB 정렬을 흉내 낸 것) — 호출 기록 프록시가 이것을 감싼다 */
     storage: AccountRepository? = null,
     socialReauth: SocialReauthVerifier? = null,
+    consents: dev.sumin.skeleton.common.consent.SignUpConsentGate? = null,
+    atomic: AccountTransaction = AccountTransaction.NONE,
 ) {
     val time = MutableTime()
     val callLog = CallLog()
@@ -83,7 +85,7 @@ class AccountHarness(
     val core = AccountCore(
         repo, props, time, publisher, hasher, policy, tokens, mailer, AccountLinks(props.mail), tasks,
         AccountRateLimits({ limitStore }, time),
-        CaptchaGate(captcha, captchaRequired), { revoker }, bootstrap, challenges, { socialReauth },
+        CaptchaGate(captcha, captchaRequired), { revoker }, bootstrap, challenges, { socialReauth }, { consents }, atomic,
     )
     val registration = RegistrationService(core)
     val authRepository = AccountAuthRepository(core)

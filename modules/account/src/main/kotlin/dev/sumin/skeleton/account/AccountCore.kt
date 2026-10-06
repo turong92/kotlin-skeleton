@@ -41,6 +41,10 @@ class AccountCore(
     val challenges: Challenges,
     /** 이메일 없는 계정의 소셜 다시 인증을 확인하는 고리 — `auth-social` 이 없으면 null */
     val socialReauth: () -> SocialReauthVerifier? = { null },
+    /** 가입에 약관 동의를 묶는 고리 — `legal` 이 없으면 null (그러면 동의를 다루지 않는다) */
+    val consents: () -> dev.sumin.skeleton.common.consent.SignUpConsentGate? = { null },
+    /** 계정 만들기와 동의 기록을 한 트랜잭션으로 묶는 곳 — `account-jdbc` 가 DB 트랜잭션으로 낸다 */
+    val atomic: AccountTransaction = AccountTransaction.NONE,
 ) {
     /**
      * 이메일로 계정 하나 — 저장소가 어떤 정렬 규칙으로 찾았든 **저장된 주소가 정규화된 입력과 글자 그대로 같을 때만** 돌려준다
@@ -96,6 +100,20 @@ class AccountCore(
     private fun randomHex() = HexFormat.of().formatHex(ByteArray(16).also(random::nextBytes))
 
     private companion object { val random = SecureRandom() }
+}
+
+/**
+ * 계정을 만드는 쓰기와 그와 함께 가야 하는 쓰기(약관 동의 기록)를 **한 트랜잭션**으로 묶는 고리. 저장소가 트랜잭션을 아는 모듈(`account-jdbc`)이 구현하고,
+ * 기본은 그냥 실행한다 (메모리 저장소는 되돌릴 것이 없다). [block] 이 던지면 안에서 한 쓰기는 모두 되돌려진다.
+ */
+interface AccountTransaction {
+    fun <T> run(block: () -> T): T
+
+    companion object {
+        val NONE: AccountTransaction = object : AccountTransaction {
+            override fun <T> run(block: () -> T): T = block()
+        }
+    }
 }
 
 /**

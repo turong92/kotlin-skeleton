@@ -1,6 +1,6 @@
 # Legal documents and consent — HTTP contract (kotlin-skeleton backend)
 
-Status: **DRAFT-1** (written before the code; the backend tests are written against this file. Anything the code has to change is listed in the change log at the bottom).
+Status: **DRAFT-2** (written before the code; the backend tests are written against this file; changes since DRAFT-1 are in the change log at the bottom).
 Audience: the frontend agent (react-skeleton `@skeleton/legal` / `@skeleton/auth` additions). Backend modules: `legal`, `legal-jdbc` (+ two small hooks in `account`).
 Background and the legal-versus-module split: [legal.md](legal.md). Account conventions (envelope, error body, tokens): [account-http-contract.md](account-http-contract.md) section 0 — unchanged here.
 
@@ -99,7 +99,7 @@ The consent is **bound to the sign-up attempt** and written only when that attem
 ### POST /api/v1/account/sign-up  (existing endpoint, one new optional field)
 Req: `{ email, password, displayName?, locale?, timeZone?, captchaToken?, "consents"?: [ { "type": "terms", "version": "2026-10-01", "locale": "ko" }, … ] }`
 
-- `consents` has the same item shape as `POST /legal/consents` (`locale` optional). List **every document the user ticked**: the required-at-sign-up ones (the form must not submit without them) and any optional ones (`marketing`).
+- `consents` has the same item shape as `POST /legal/consents` (`locale` optional, `type`/`version` ≤ 32 chars, `locale` ≤ 35), **at most 8 items** (more → `400 COMMON.VALIDATION_FAILED`). List **every document the user ticked**: the required-at-sign-up ones (the form must not submit without them) and any optional ones (`marketing`).
 - When the app has the `legal` module: the list is checked **before** anything is stored or mailed. Missing a required-at-sign-up type, or naming a stale / not-yet-effective version, or an unknown type → `400 LEGAL.CONSENT_REQUIRED` with
   `data: { "missing": [ { "type": "privacy", "version": "<version to agree to>", "reason": "NOT_AGREED" | "STALE" | "UNKNOWN" } ] }` (for `UNKNOWN`, `version` is `null`). Re-read `GET /documents`, show the new text, resubmit.
 - The check looks only at the request and the document set, never at the address, so the response for new / in-flight / already-registered addresses stays identical (the existing enumeration guarantees of section 2 of the account contract are unchanged). The error is only about documents.
@@ -108,7 +108,7 @@ Req: `{ email, password, displayName?, locale?, timeZone?, captchaToken?, "conse
 - Re-using the same `signUpId` / resend does not change the consents of the attempt; they are fixed when the attempt is opened.
 
 ### POST /api/v1/auth/verify-email  (existing, unchanged request)
-On success the account is created and the consents of the attempt are recorded (`source: "sign-up"`, the version and hash the user was shown at sign-up, the client IP of the verify call). If recording fails, the account is not created either (one transaction) and the call fails with a normal `5xx`; the code is spent — the user starts the sign-up again.
+On success the account is created and the consents of the attempt are recorded (`source: "sign-up"`, the version the user was shown at sign-up and the hash of that text, and the client IP and user agent of the **sign-up request** — where the boxes were ticked; the user agent is kept to its first 120 characters). If recording fails, the account is not created either (one transaction) and the call fails with a normal `5xx`; the code is spent — the user starts the sign-up again.
 
 ### First sign-in that creates the account (social, magic link)
 These paths create an account without a form of ours, so they have **no consent at creation**. Decision: the account is created and the sign-in succeeds, and the missing consents are collected **before the session is usable**:
@@ -162,3 +162,4 @@ Validation errors are the usual `400 COMMON.VALIDATION_FAILED` + `errors[]`.
 
 ## Change log
 - DRAFT-1: first version.
+- DRAFT-2: sign-up `consents` limited to 8 items; the recorded IP / user agent are those of the sign-up request (not the verify call), user agent cut to 120 characters.

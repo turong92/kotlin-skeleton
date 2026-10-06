@@ -21,8 +21,18 @@ data class SignUpCommand(
     val captchaToken: String?,
     /** 한도 키 — `ClientIps….limitKey`(IPv6 는 /64). [ip] 는 감사 · 캡차용 전체 주소 */
     val ipKey: String? = ip,
+    /** 가입자가 보고 동의한 문서 — `legal` 이 있을 때만 쓰인다 (없으면 무시) */
+    val consents: List<dev.sumin.skeleton.common.consent.ConsentClaim> = emptyList(),
+    /** 동의 기록에 남길 가입 요청의 User-Agent (앞 120 자) */
+    val userAgent: String? = null,
 ) {
     override fun toString() = "SignUpCommand(email=<redacted>, password=<redacted>)"
+
+    companion object {
+        /** 한 가입 시도가 실을 수 있는 동의 수 — 시도 행의 payload 열(2000 자)에 들어가는 크기로 묶는다 */
+        const val MAX_CONSENTS = 8
+        const val MAX_USER_AGENT = 120
+    }
 }
 
 enum class SignUpStatus { VERIFICATION_SENT, CREATED }
@@ -51,6 +61,10 @@ class RegistrationService(private val core: AccountCore) {
             val a = core.limits.acquire("signup:ip", it, p.signUp.perIp, p.signUp.perIpWindow)
             if (!a.allowed) throw RateLimitedException(a.retryAfterSeconds)
         }
+        // 동의는 요청 본문과 문서 집합만 본다(주소 · 계정을 보지 않는다) — 캡차보다 먼저, 새 주소든 있는 주소든 똑같이 거절한다
+        val gate = core.consents()
+        if (cmd.consents.size > SignUpCommand.MAX_CONSENTS) throw ApplicationException("Too many consents", PlatformErrorCode.VALIDATION_FAILED)
+        gate?.check(cmd.consents)
         core.captcha.check(cmd.captchaToken, cmd.ip, "sign_up")
         val email = Emails.normalize(cmd.email)
         if (!Emails.plausible(email)) throw ApplicationException("Invalid email", PlatformErrorCode.VALIDATION_FAILED)
@@ -64,7 +78,17 @@ class RegistrationService(private val core: AccountCore) {
         val mayOpen = core.mayOpenCodeFor(email)
         val mayMail = core.mayMailCodeTo(email)
         val profile = json.writeValueAsString(
-            mapOf("displayName" to ProfileRules.displayName(cmd.displayName), "locale" to ProfileRules.locale(cmd.locale), "timeZone" to ProfileRules.timeZone(cmd.timeZone)),
+            buildMap<String, Any?> {
+                put("displayName", ProfileRules.displayName(cmd.displayName))
+                put("locale", ProfileRules.locale(cmd.locale))
+                put("timeZone", ProfileRules.timeZone(cmd.timeZone))
+                // 동의는 이 시도에 묶여 시도와 함께 저장된다 — 확인될 때 계정과 같은 트랜잭션에서 기록한다 (고리가 없으면 싣지 않는다)
+                if (gate != null) {
+                    put("consents", cmd.consents.map { mapOf("type" to it.type, "version" to it.version, "locale" to it.locale) })
+                    put("consentIp", cmd.ip)
+                    put("consentUa", cmd.userAgent?.take(SignUpCommand.MAX_USER_AGENT))
+                }
+            },
         )
         // 한도를 넘은 주소의 시도는 저장하지 않는다 — 응답은 같고(그 시도는 어떤 코드로도 끝나지 않는다), 한 주소에 걸린 추측의 총량이 묶인다
         val opened = core.challenges.open(
@@ -81,7 +105,10 @@ class RegistrationService(private val core: AccountCore) {
     private fun createVerified(email: String, hash: String, cmd: SignUpCommand): SignUpStatus {
         if (core.accountByEmail(email) != null) throw AccountException(AccountErrorCode.EMAIL_TAKEN)
         val account = newAccount(email, ProfileRules.displayName(cmd.displayName), ProfileRules.locale(cmd.locale), ProfileRules.timeZone(cmd.timeZone), unverified = true)
-        if (!core.accounts.insert(account, listOf(passwordIdentity(account, email, hash, verified = false)))) throw AccountException(AccountErrorCode.EMAIL_TAKEN)
+        core.atomic.run {
+            if (!core.accounts.insert(account, listOf(passwordIdentity(account, email, hash, verified = false)))) throw AccountException(AccountErrorCode.EMAIL_TAKEN)
+            recordConsents(account.id, cmd.consents, cmd.ip, cmd.userAgent?.take(SignUpCommand.MAX_USER_AGENT))
+        }
         core.events.publish(AccountEventType.SIGN_UP, account.id, cmd.ip, mapOf("method" to SignInMethods.PASSWORD))
         return SignUpStatus.CREATED
     }
@@ -146,7 +173,10 @@ class RegistrationService(private val core: AccountCore) {
             val profile = payload?.let { runCatching { json.readValue(it, Map::class.java) }.getOrNull() }
             val account = newAccount(email, profile?.get("displayName") as String?, profile?.get("locale") as String?, profile?.get("timeZone") as String?, unverified = false)
             val identity = passwordIdentity(account, email, secret, verified = true)
-            if (!core.accounts.insert(account, listOf(identity))) throw AccountException(AccountErrorCode.CODE_EXPIRED)
+            core.atomic.run {
+                if (!core.accounts.insert(account, listOf(identity))) throw AccountException(AccountErrorCode.CODE_EXPIRED)
+                recordConsents(account.id, profile)
+            }
             core.events.publish(AccountEventType.SIGN_UP, account.id, detail = mapOf("method" to SignInMethods.PASSWORD))
             return account to false
         }
@@ -154,7 +184,11 @@ class RegistrationService(private val core: AccountCore) {
         if (existing.status == AccountStatus.DELETED || existing.emailVerified) throw AccountException(AccountErrorCode.CODE_EXPIRED)
         val keep = core.accounts.findIdentity(SignInMethods.PASSWORD, email)?.takeIf { it.accountId == existing.id }
         val proof = MailboxProof(keepIdentityIds = setOfNotNull(keep?.id), passwordSecret = secret, newPasswordIdentityId = core.newIdentityId())
-        if (!core.accounts.proveMailbox(existing.id, core.time.now(), proof)) throw AccountException(AccountErrorCode.CODE_EXPIRED)
+        val profile = payload?.let { runCatching { json.readValue(it, Map::class.java) }.getOrNull() }
+        core.atomic.run {
+            if (!core.accounts.proveMailbox(existing.id, core.time.now(), proof)) throw AccountException(AccountErrorCode.CODE_EXPIRED)
+            recordConsents(existing.id, profile)
+        }
         return existing to true
     }
 
@@ -176,6 +210,18 @@ class RegistrationService(private val core: AccountCore) {
             val existing = core.accountByEmail(row.subject)
             if (existing != null && taken(existing)) notifyAlreadyRegistered(existing, true) else sendCode(row.subject, code, null)
         }
+    }
+
+    /** 시도가 실어 온 동의를 기록한다 — 호출자는 [AccountTransaction] 안이다. 고리가 없으면 아무것도 하지 않는다 */
+    private fun recordConsents(accountId: String, profile: Map<*, *>?) {
+        val claims = (profile?.get("consents") as? List<*>).orEmpty().mapNotNull { raw ->
+            (raw as? Map<*, *>)?.let { dev.sumin.skeleton.common.consent.ConsentClaim(it["type"] as String, it["version"] as String, it["locale"] as String?) }
+        }
+        recordConsents(accountId, claims, profile?.get("consentIp") as String?, profile?.get("consentUa") as String?)
+    }
+
+    private fun recordConsents(accountId: String, claims: List<dev.sumin.skeleton.common.consent.ConsentClaim>, ip: String?, userAgent: String?) {
+        core.consents()?.record(accountId, claims, dev.sumin.skeleton.common.consent.ConsentContext(ip, userAgent))
     }
 
     private fun sendCode(email: String, code: String, locale: String?) {

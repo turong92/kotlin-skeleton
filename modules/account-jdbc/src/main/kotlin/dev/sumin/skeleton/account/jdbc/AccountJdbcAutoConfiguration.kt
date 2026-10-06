@@ -2,6 +2,7 @@ package dev.sumin.skeleton.account.jdbc
 
 import dev.sumin.skeleton.account.AccountAutoConfiguration
 import dev.sumin.skeleton.account.AccountRepository
+import dev.sumin.skeleton.account.AccountTransaction
 import dev.sumin.skeleton.account.challenge.ChallengeStore
 import dev.sumin.skeleton.account.events.AccountEventListener
 import dev.sumin.skeleton.account.token.OneTimeTokenStore
@@ -35,6 +36,11 @@ class AccountJdbcAutoConfiguration {
     @ConditionalOnMissingBean(AccountRepository::class)
     fun jdbcAccountRepository(dataSource: DataSource, transactionManager: PlatformTransactionManager, dialect: SqlDialect): AccountRepository =
         JdbcAccountRepository(NamedParameterJdbcTemplate(dataSource), TransactionTemplate(transactionManager), dialect)
+
+    /** 계정 만들기와 같이 가야 하는 쓰기(약관 동의 기록)를 한 DB 트랜잭션으로 묶는다 — 저장소들의 `TransactionTemplate` 이 이 트랜잭션에 합류한다 */
+    @Bean
+    @ConditionalOnMissingBean(AccountTransaction::class)
+    fun jdbcAccountTransaction(transactionManager: PlatformTransactionManager): AccountTransaction = JdbcAccountTransaction(transactionManager)
 
     @Bean
     @ConditionalOnMissingBean(OneTimeTokenStore::class)

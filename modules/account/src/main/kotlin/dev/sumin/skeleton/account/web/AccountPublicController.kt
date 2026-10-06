@@ -48,7 +48,10 @@ class AccountPublicController(
     fun signUp(@Valid @RequestBody request: SignUpRequest, http: HttpServletRequest): ResponseEntity<DataResponse<SignUpResponse>> {
         val client = clientIps.of(http)
         val outcome = registration.signUp(
-            SignUpCommand(request.email!!, request.password!!, request.displayName, request.locale, request.timeZone, client.ip, request.captchaToken, client.limitKey),
+            SignUpCommand(request.email!!, request.password!!, request.displayName, request.locale, request.timeZone, client.ip, request.captchaToken, client.limitKey,
+                consents = request.consents.orEmpty().map { dev.sumin.skeleton.common.consent.ConsentClaim(it.type!!, it.version!!, it.locale) },
+                userAgent = http.getHeader("User-Agent"),
+            ),
         )
         val http202 = if (outcome.status == SignUpStatus.CREATED) HttpStatus.CREATED else HttpStatus.ACCEPTED
         return ResponseEntity.status(http202).body(Response.ok(SignUpResponse(outcome.status.name, outcome.signUpId)))

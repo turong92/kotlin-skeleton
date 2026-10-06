@@ -16,9 +16,18 @@ data class SignUpRequest(
     @field:Size(max = 35) val locale: String? = null,
     @field:Size(max = 64) val timeZone: String? = null,
     @field:Size(max = 2048) val captchaToken: String? = null,
+    /** 가입자가 보고 동의한 약관 (`legal` 모듈이 있을 때만 쓰인다 — 없으면 무시) */
+    @field:Size(max = 8) @field:Valid val consents: List<SignUpConsentRequest>? = null,
 ) {
     override fun toString() = "SignUpRequest(email=<redacted>, password=<redacted>)"
 }
+
+/** 가입 요청의 약관 동의 한 건 — "이 판을 이 언어로 보고 동의한다" */
+data class SignUpConsentRequest(
+    @field:NotBlank @field:Size(max = 32) val type: String?,
+    @field:NotBlank @field:Size(max = 32) val version: String?,
+    @field:Size(max = 35) val locale: String? = null,
+)
 
 /** 가입 응답 — [signUpId] 는 코드 확인 · 재전송에 쓰는 불투명한 가입 시도 id (이메일 확인을 끈 앱에는 없다) */
 data class SignUpResponse(val status: String, val signUpId: String? = null) {
