@@ -1,0 +1,206 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "capabilities.schema.json",
+  "title": "capabilities.json",
+  "description": "LLM · 사람이 「새 프로젝트에 X, Y, Z 가 필요하다」를 받았을 때 백엔드에 무엇이 이미 있는지 찾는 단일 정본. docs/capabilities.md · llms.txt 는 여기서 생성된다(perl scripts/build-capabilities.pl). 검증은 modules/platform 의 Capabilities*Test. 짝 레포(react-skeleton)의 카탈로그와는 이쪽 entry 의 frontend.capabilities[] ↔ 그쪽 id, frontend.packages[] ↔ 그쪽 package, 그쪽 backend.modules[] ↔ 이쪽 module 로 만난다.",
+  "type": "object",
+  "required": ["schemaVersion", "mode", "name", "summary", "starterModules", "guides", "capabilities", "decisions"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": 1 },
+    "mode": {
+      "enum": ["skeleton", "stamped"],
+      "description": "skeleton = 스켈레톤 레포 자체(모든 모듈). stamped = new-project.sh 가 찍은 프로젝트 — 고른 모듈만 남고 stampedFrom 이 스켈레톤을 가리킨다."
+    },
+    "name": { "type": "string", "minLength": 1 },
+    "summary": { "type": "string", "minLength": 10 },
+    "siblings": {
+      "type": "object",
+      "description": "짝 레포. 프런트가 어디서 오는지.",
+      "required": ["frontend"],
+      "additionalProperties": false,
+      "properties": {
+        "frontend": {
+          "type": "object",
+          "required": ["repo", "catalog", "recipe"],
+          "additionalProperties": false,
+          "properties": {
+            "repo": { "type": "string" },
+            "catalog": { "type": "string", "description": "그 레포 안의 카탈로그 경로." },
+            "llms": { "type": "string" },
+            "usage": { "type": "string", "description": "그 레포 new-project.sh 의 사용법(그쪽 카탈로그의 newProject.react.usage 와 같아야 한다)." },
+            "recipe": { "type": "string", "description": "그 레포 안의 새 프로젝트 레시피 경로." }
+          }
+        }
+      }
+    },
+    "stampedFrom": {
+      "type": "object",
+      "description": "(stamped) 찍을 때 빠진 항목 — 스켈레톤에는 있다. 어느 스켈레톤인지는 생성기가 안다(scripts/build-capabilities.pl 의 ORIGIN).",
+      "required": ["omitted"],
+      "additionalProperties": false,
+      "properties": {
+        "omitted": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "summary"],
+            "additionalProperties": false,
+            "properties": { "id": { "type": "string" }, "summary": { "type": "string" } }
+          }
+        }
+      }
+    },
+    "starterModules": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "스타터(apps/api)가 이미 가진 모듈(의존으로 닫힌 것까지). --modules 조각에서 뺀다."
+    },
+    "newProject": {
+      "type": "object",
+      "required": ["script", "usage", "positional", "flags"],
+      "additionalProperties": false,
+      "properties": {
+        "script": { "type": "string" },
+        "usage": { "type": "string" },
+        "positional": { "type": "array", "items": { "type": "string" } },
+        "flags": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "guides": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "summary"],
+        "additionalProperties": false,
+        "properties": { "path": { "type": "string" }, "summary": { "type": "string" } }
+      }
+    },
+    "capabilities": { "type": "array", "items": { "$ref": "#/$defs/entry" } },
+    "decisions": { "type": "array", "items": { "$ref": "#/$defs/decision" } },
+    "examples": { "type": "array", "items": { "$ref": "#/$defs/example" } }
+  },
+  "$defs": {
+    "idList": { "type": "array", "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" } },
+    "entry": {
+      "type": "object",
+      "required": [
+        "id", "kind", "module", "path", "status", "summary", "starter", "newProjectFlag", "autoIncludes",
+        "needs", "config", "basePaths", "secrets", "docs", "frontend", "notFor", "keywords"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$", "description": "module 은 모듈 이름 그대로, app 은 app-<이름>, script 는 script-<이름>." },
+        "kind": { "enum": ["module", "app", "script"] },
+        "module": { "type": ["string", "null"], "description": "kind=module 일 때 modules/ 아래 디렉토리 이름, 아니면 null." },
+        "path": { "type": "string", "description": "레포 안의 위치(modules/x · apps/x · scripts/x)." },
+        "status": { "enum": ["stable", "experimental"], "description": "experimental = 실제 외부 서비스(결제사 · 브로커 · AWS)에 붙여 확인한 증거가 레포에 없다 — 쓰기 전에 직접 확인한다." },
+        "summary": { "type": "string", "minLength": 10, "description": "한 문장 — 쓰는 사람이 무엇을 얻는가." },
+        "starter": { "type": "boolean", "description": "스타터(apps/api)가 이미 가진다 — 켜는 줄이 필요 없다." },
+        "newProjectFlag": {
+          "type": ["string", "null"],
+          "description": "scripts/new-project.sh 에 덧붙이는 조각(예: --modules board,board-jdbc). 스타터에 있거나 도구면 null."
+        },
+        "autoIncludes": {
+          "$ref": "#/$defs/idList",
+          "description": "조각이 의존으로 끌고 오는 모듈(스타터 · 조각에 적은 것 제외). Gradle project 의존에서 계산한 값과 같아야 한다."
+        },
+        "needs": {
+          "type": "object",
+          "required": ["requires", "oneOf", "optional"],
+          "additionalProperties": false,
+          "properties": {
+            "requires": { "$ref": "#/$defs/idList", "description": "자동으로 오지 않지만 함께 골라야 동작하는 항목의 id." },
+            "oneOf": { "type": "array", "items": { "$ref": "#/$defs/idList" }, "description": "목록 중 하나 이상을 고른다." },
+            "optional": { "$ref": "#/$defs/idList", "description": "있으면 더 좋은 컴파일 전용 연동(없어도 동작)." }
+          }
+        },
+        "config": {
+          "type": ["object", "null"],
+          "required": ["prefixes", "snippet"],
+          "additionalProperties": false,
+          "properties": {
+            "prefixes": { "type": "array", "items": { "type": "string" }, "description": "모듈 코드의 @ConfigurationProperties 접두사 전부." },
+            "snippet": { "type": ["string", "null"], "description": "docs/config/modules/<모듈>.yml — 모든 키와 기본값." },
+            "note": { "type": "string" }
+          }
+        },
+        "basePaths": { "type": "array", "items": { "type": "string" }, "description": "이 항목의 코드가 여는 HTTP 경로(자리표시자 앞까지)." },
+        "secrets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["env", "whenMissing"],
+            "additionalProperties": false,
+            "properties": {
+              "env": { "type": "array", "minItems": 1, "items": { "type": "string" }, "description": "<P> = 배포 선언의 env_prefix." },
+              "whenMissing": { "type": "string", "minLength": 5 },
+              "platformProvided": { "type": "boolean", "description": "배포 플랫폼이 무작위 값을 만들어 넣는다(deploy/app.yaml 의 secrets)." }
+            }
+          }
+        },
+        "docs": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "frontend": {
+          "type": ["object", "null"],
+          "required": ["capabilities", "packages"],
+          "additionalProperties": false,
+          "properties": {
+            "capabilities": { "$ref": "#/$defs/idList", "description": "짝 레포 카탈로그의 id." },
+            "packages": { "type": "array", "items": { "type": "string" }, "description": "짝 레포의 패키지 이름(@skeleton/…)." },
+            "newProjectFlag": { "type": ["string", "null"], "description": "짝 레포 new-project.sh 의 조각(예: --packages board)." }
+          }
+        },
+        "notFor": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 5 } },
+        "keywords": {
+          "type": "object",
+          "required": ["ko", "en"],
+          "additionalProperties": false,
+          "properties": {
+            "ko": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+            "en": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } }
+          }
+        }
+      }
+    },
+    "decision": {
+      "type": "object",
+      "required": ["need", "modules", "oneOf", "flag", "frontend", "byHand"],
+      "additionalProperties": false,
+      "properties": {
+        "need": { "type": "string", "minLength": 3 },
+        "modules": { "$ref": "#/$defs/idList", "description": "고를 항목(entry id)." },
+        "oneOf": { "type": "array", "items": { "$ref": "#/$defs/idList" } },
+        "flag": { "type": ["string", "null"], "description": "백엔드 명령 조각. 스타터가 이미 하는 일이면 null." },
+        "frontend": {
+          "type": ["object", "null"],
+          "required": ["capabilities", "flag"],
+          "additionalProperties": false,
+          "properties": {
+            "capabilities": { "$ref": "#/$defs/idList" },
+            "flag": { "type": ["string", "null"] }
+          }
+        },
+        "byHand": { "type": "string", "minLength": 5, "description": "조각을 찍은 뒤에도 손으로 써야 하는 것." }
+      }
+    },
+    "example": {
+      "type": "object",
+      "required": ["id", "title", "product", "modules", "extraFlags", "target", "package", "prefix", "classPrefix", "frontendCapabilities", "frontendCommand"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+        "title": { "type": "string" },
+        "product": { "type": "string" },
+        "modules": { "type": "array", "items": { "type": "string" } },
+        "extraFlags": { "type": "array", "items": { "type": "string" } },
+        "target": { "type": "string" },
+        "package": { "type": "string" },
+        "prefix": { "type": "string" },
+        "classPrefix": { "type": "string" },
+        "frontendCapabilities": { "$ref": "#/$defs/idList" },
+        "frontendCommand": { "type": "string", "description": "짝 프런트(react-skeleton)의 같은 제품 명령 — 그쪽 레시피의 react-stamp 블록과 같아야 한다." }
+      }
+    }
+  }
+}

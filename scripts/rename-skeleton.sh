@@ -56,7 +56,7 @@ files | while read -r f; do
     s/^(env_prefix:\\s*)SKELETON\\b/\${1}${ENVPREFIX}/;
     ${kotlin_rule}
     s/^(\\s*)skeleton:(\\s*)\$/\${1}${PREFIX}:\${2}/;
-    s/\\bskeleton\\.(?=[a-z])/${PREFIX}./g;
+    s/(?<!rename-)\\bskeleton\\.(?=[a-z])/${PREFIX}./g;   # rename-skeleton.sh 는 스크립트 파일 이름이다 — 문서 · 카탈로그의 경로를 바꾸지 않는다
     s/-Pskeleton\\./-P${PREFIX}./g;
     s/\\bskeleton-(?=[a-z])/${PREFIX}-/g;
     s/Composable Kotlin backend skeleton API/${CLASS} API/g;
@@ -85,11 +85,14 @@ find . -type f -name 'skeleton-*' -not -path '*/build/*' -not -path './.git/*' |
   mv "$f" "$(dirname "$f")/${PREFIX}-${f##*/skeleton-}"
 done
 
+# 3.5 기능 카탈로그(capabilities.json · docs/capabilities.md · llms.txt)를 새 이름으로 다시 만든다 (생성기가 없는 프로젝트는 건너뛴다)
+if [ -f scripts/build-capabilities.pl ] && [ -f capabilities.json ]; then perl scripts/build-capabilities.pl >/dev/null; fi
+
 # 4. 검증: 남은 흔적이 있으면 실패. 빌드는 이걸 못 잡는다 (예: YAML 루트 키가 skeleton: 이면 설정이 조용히 무시된다)
 leftovers="$(files | xargs perl -ne '
   next if /skeleton_jobs|\/skeleton\//;                       # 의도적으로 남기는 것
   next if $ARGV =~ /\.md$/ && /kotlin-skeleton/;               # 문서 제목
-  print "$ARGV:$.: $_" if /dev\.sumin\.skeleton|dev\/sumin\/skeleton|\bSKELETON_|^\s*skeleton:\s*$|\bskeleton\.[a-z]|-Pskeleton\.|\bskeleton-[a-z]|\bSkeleton[A-Z]|\bskeleton[A-Z]|\bkotlin-skeleton\b/;
+  print "$ARGV:$.: $_" if /dev\.sumin\.skeleton|dev\/sumin\/skeleton|\bSKELETON_|^\s*skeleton:\s*$|(?<!rename-)\bskeleton\.[a-z]|-Pskeleton\.|\bskeleton-[a-z]|\bSkeleton[A-Z]|\bskeleton[A-Z]|\bkotlin-skeleton\b/;
   close ARGV if eof;
 ' || true)"
 if [ -n "$leftovers" ]; then

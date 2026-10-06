@@ -13,7 +13,7 @@
 | 부팅에 필요한 것 | 없음. 켤 때 secret key 와 인터넷이 필요하다. |
 | 교체 지점 | `StripePaymentProvider` |
 | 마이그레이션 | 없음 |
-| 프론트 짝 | 없음 |
+| 프론트 짝 | `@skeleton/payment` (토스 리다이렉트만 변환한다 — Stripe 는 앱이 처리) |
 | 테스트 | `modules/payment-stripe/src/test` |
 
 [모듈 색인](README.md) · [최소 구성 가이드](../minimal-composition.md)

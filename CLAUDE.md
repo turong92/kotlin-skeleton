@@ -2,6 +2,13 @@
 
 Kotlin + Spring Boot 백엔드 토이 프로젝트의 공개 출발점.
 
+## 기능 카탈로그 — 만들기 전에 먼저 읽는다
+
+- **무엇이든 새로 만들기 전에, 그리고 새 프로젝트를 세팅하기 전에 `llms.txt`(결정표 · 기능 한눈에)를 읽는다.** 필요하면 `capabilities.json`(정본) · `docs/capabilities.md`(결정표 · 항목 상세). 이미 준비된 모듈 · 앱 · 스크립트를 다시 만들지 않고, 필요한 모듈과 `new-project.sh` 조각을 거기서 고르기 위해서다. 새 프로젝트의 순서(제품 → 모듈 → 명령 → 설정 · 비밀 → `scripts/dev.sh` → 검증 → `deploy/app.yaml`, 작업 예 3개): 스켈레톤 레포의 `docs/new-project-recipe.md`(찍은 프로젝트에는 없다). 짝 프런트의 같은 문서는 형제 레포 react-skeleton.
+- `docs/capabilities.md` · `llms.txt` 는 `perl scripts/build-capabilities.pl`(`--check` 는 쓰지 않고 검사)이 `capabilities.json` 에서 만든다 — 손으로 고치지 않는다. 항목 모양: `docs/capabilities.schema.json`.
+- 모듈 · 앱 · 스크립트를 더하거나 지우면 `CapabilitiesCatalogTest`(`modules/platform`)가 실패하며 **붙일 객체를 그대로 보여 준다** → `capabilities.json` 의 `capabilities` 에 붙이고 `TODO`(요약 · 키워드 · 쓰지 않는 경우 · 비밀 · 짝 프런트)를 채운 뒤 `perl scripts/build-capabilities.pl`. 가드가 맞춰 보는 것: 항목 ↔ 모듈 · 앱, `newProjectFlag`(`new-project.sh --dry-run`)와 `autoIncludes`(Gradle 의존 닫힘), `config.prefixes`(`@ConfigurationProperties`), `basePaths`(컨트롤러), 문서 경로와 모듈 문서의 「프론트 짝」, `secrets`(docs/deploy.md §7), 레시피의 명령, 형제 레포가 옆에 있으면 패키지 · 항목 id.
+- `scripts/new-project.sh` 는 찍은 프로젝트의 `capabilities.json` 을 고른 모듈로 걸러 다시 쓰고(빠진 것은 `stampedFrom.omitted` 로 스켈레톤을 가리킨다) `llms.txt` · `docs/capabilities.md` 를 새 이름으로 다시 만든다.
+
 ## Backend Module Layout
 
 - Two executable Spring Boot applications, both in a sub-package of the root so `@SpringBootApplication` scans only app code (`dev.sumin.skeleton.app.api`, `dev.sumin.skeleton.app.workbench`):

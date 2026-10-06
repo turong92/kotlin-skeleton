@@ -3,7 +3,7 @@
 #
 #   scripts/test-new-project.sh            # 빠른 검사 (기본, 수 초~수십 초): 인자 검증 · 모듈 닫힘 · 파일 가지치기 · rename 잔여 검사
 #   scripts/test-new-project.sh --quick    # 위와 같다 (./gradlew check 가 부른다)
-#   scripts/test-new-project.sh --full     # 위 + 일곱 조합을 임시 디렉토리에 찍어 각각 ./gradlew build (Docker/Testcontainers 필요, 순차, 수 분)
+#   scripts/test-new-project.sh --full     # 위 + 열 조합을 임시 디렉토리에 찍어 각각 ./gradlew build (Docker/Testcontainers 필요, 순차, 수 분)
 #
 # --full 은 CI 의 별도 워크플로(.github/workflows/new-project.yml)가 돈다. 조합:
 #   1. 기본값만
@@ -13,6 +13,7 @@
 #   5. --with-sample   (제품 모양 예시 앱 apps/sample 이 남고, 그 앱의 모듈이 닫힘에 더해진다)
 #   6. --modules board,board-jdbc   (게시판: board 의 compileOnly 의존 notification · idempotency 가 소스로 따라오고, board-jdbc 의 dbTest 가 두 DB 로 돈다)
 #   7. --modules redis-core,redis-lock   (Redis 환경변수 테스트가 프로젝트 접두사로 찍혀 돈다 — 배포 계약의 <ENV_PREFIX>_REDIS_*)
+#   8. docs/new-project-recipe.md 의 작업 예 3개(<!-- kotlin-stamp: … --> 블록의 명령 그대로) — 커뮤니티 · 유료 SaaS(--db mysql) · 콘텐츠 SSR(스타터 그대로)
 # macOS bash 3.2 와 GNU bash 에서 돈다. 임시 디렉토리는 끝나면 지운다 (KEEP=1 이면 남긴다).
 set -euo pipefail
 
@@ -215,6 +216,40 @@ check "Redis 환경변수 테스트가 프로젝트 접두사(OVATION_REDIS_*)�
 check "찍은 Redis 테스트에 SKELETON_ 이름이 남지 않는다" bash -c "! grep -rq 'SKELETON_' '$J/modules/redis-core/src/test' '$J/modules/redis-lock/src/test'"
 check "배포 선언에 redis-core 안내가 남는다" has_line '\[redis-core\]' "$J/deploy/app.yaml"
 
+# has_path <프로젝트> <경로> — 그 프로젝트의 capabilities.json 에 남은 항목(path)이 있는가 (빠진 항목은 stampedFrom 에 id · summary 만 남는다)
+has_path() { grep -q "\"path\": \"$2\"" "$1/capabilities.json"; }
+export -f has_path 2>/dev/null || true
+echo "== 10. 카탈로그 — capabilities.json · llms.txt · docs/capabilities.md 가 찍은 프로젝트에 맞게 걸러진다"
+check "스켈레톤의 카탈로그 생성물이 최신이다 (perl scripts/build-capabilities.pl --check)" bash -c "cd '$SRC' && perl scripts/build-capabilities.pl --check"
+check "기본값으로 찍으면 카탈로그가 stamped 모드이고 스타터 모듈만 남는다 (board · payment 항목 없음)" bash -c "grep -q '\"mode\": \"stamped\"' '$A/capabilities.json' && has_path '$A' modules/time && ! has_path '$A' modules/board && ! has_path '$A' modules/payment"
+check "찍은 프로젝트의 카탈로그 생성물이 맞다 (--check)" bash -c "cd '$A' && perl scripts/build-capabilities.pl --check"
+check "찍은 프로젝트의 llms.txt 는 스켈레톤을 가리키고 빠진 모듈을 알려 준다 (이 프로젝트에 없는 것: board)" bash -c "grep -q 'kotlin-skeleton' '$A/llms.txt' && grep -q '이 프로젝트에 없는 것' '$A/llms.txt' && grep -q '^- board:' '$A/llms.txt'"
+check "게시판으로 찍으면 board · board-jdbc 항목이 남고 결정표에 게시판 줄이 있다" bash -c "has_path '$H' modules/board && has_path '$H' modules/board-jdbc && grep -q '게시판' '$H/llms.txt' && ! grep -q '^- 결제' '$H/llms.txt'"
+check "찍은 프로젝트의 설정 접두사가 새 이름이다 (ovation.board)" bash -c "grep -q '\"ovation.board\"' '$H/capabilities.json' && ! grep -q '\"skeleton\.board\"' '$H/capabilities.json'"
+check "MySQL 로 찍으면 db-mysql 이 스타터 항목이고 db-postgresql 항목은 없다" bash -c "has_path '$C' modules/db-mysql && ! has_path '$C' modules/db-postgresql && perl -0ne 'exit(/\"starterModules\": \\[[^]]*db-mysql/ ? 0 : 1)' '$C/capabilities.json'"
+check "샘플로 찍으면 app-sample 항목과 그 스크립트(dev-sample)가 남고 기본값으로는 없다" bash -c "has_path '$G' apps/sample && has_path '$G' scripts/dev-sample.sh && ! has_path '$A' apps/sample"
+check "찍은 프로젝트에는 레시피 · 스켈레톤 도구가 없다 (new-project-recipe.md · new-project 스크립트 항목)" bash -c "test ! -e '$A/docs/new-project-recipe.md' && ! grep -q 'script-new-project' '$A/capabilities.json'"
+check "찍은 프로젝트에 카탈로그 생성기는 남는다 (scripts/build-capabilities.pl)" test -f "$A/scripts/build-capabilities.pl"
+check "고른 모듈은 찍은 카탈로그의 starterModules 에 들어간다 — 찍은 apps/api 가 이미 가진 모듈이다 (job-queue-jdbc · storage-s3 · crypto)" bash -c "perl -0ne 'exit(/\"starterModules\": \\[[^]]*job-queue-jdbc[^]]*storage-s3/s ? 0 : 1)' '$B/capabilities.json' && perl -0ne 'exit(/\"id\": \"job-queue-jdbc\",[^}]*\"starter\": true/s ? 0 : 1)' '$B/capabilities.json'"
+check "rename-skeleton.sh 의 이름은 rename 이 바꾸지 않는다 — 카탈로그와 문서가 실제 파일 이름을 가리킨다" bash -c "test -f '$A/scripts/rename-skeleton.sh' && has_path '$A' scripts/rename-skeleton.sh && grep -q 'scripts/rename-skeleton.sh' '$A/docs/minimal-composition.md'"
+check "찍은 프로젝트에는 가드가 무는지 보는 CapabilitiesGuardsTest 가 없다 (스켈레톤의 모든 모듈을 전제한다) — 카탈로그 가드(CapabilitiesCatalogTest)는 남는다" bash -c "test -z \"\$(find '$A' -name CapabilitiesGuardsTest.kt)\" && test -n \"\$(find '$A' -name CapabilitiesCatalogTest.kt)\""
+
+echo "== 11. 레시피(docs/new-project-recipe.md)의 kotlin 명령을 받아들이고 찍는다"
+RECIPE_LIST="$TMP/recipe-commands.txt"
+perl -0ne 'while (/<!-- kotlin-stamp: ([a-z0-9-]+) -->\s*```bash\n(.*?)\n```/gs) { print "$1\t$2\n" }' "$SRC/docs/new-project-recipe.md" > "$RECIPE_LIST"
+[ "$(wc -l < "$RECIPE_LIST" | tr -d ' ')" -ge 3 ] && pass "레시피에 kotlin-stamp 예가 3개 이상 있다" || fail "레시피의 kotlin-stamp 예가 3개 미만이다"
+RECIPE_DIRS=""
+while IFS="$(printf '\t')" read -r rid rcmd; do
+  [ -n "$rid" ] || continue
+  # 'scripts/new-project.sh <target> <pkg> <prefix> <Class> [옵션...]' — 대상 경로만 임시 폴더로 바꿔 그대로 부른다
+  set -- $rcmd; shift 2   # 스크립트 경로 · 대상 경로를 뗀다 → <pkg> <prefix> <Class> [옵션...]
+  expect_exit 0 "레시피 예 $rid: --dry-run 이 받아들인다" bash "$SCRIPT" --dry-run "$TMP/recipe-dry-$rid" "$@"
+  [ ! -e "$TMP/recipe-dry-$rid" ] && pass "레시피 예 $rid: --dry-run 은 아무것도 만들지 않는다" || fail "레시피 예 $rid: --dry-run 이 폴더를 만들었다"
+  expect_exit 0 "레시피 예 $rid: 실제로 찍는다" bash "$SCRIPT" "$TMP/recipe-$rid" "$@"
+  check "레시피 예 $rid: 찍은 프로젝트의 카탈로그 생성물이 맞다" bash -c "cd '$TMP/recipe-$rid' && perl scripts/build-capabilities.pl --check"
+  RECIPE_DIRS="$RECIPE_DIRS $rid"
+done < "$RECIPE_LIST"
+
 if [ "$MODE" = "--full" ]; then
   echo "== 10. 조합마다 ./gradlew build (순차)"
   build_composition() { # build_composition <dir> <이름>
@@ -236,6 +271,9 @@ if [ "$MODE" = "--full" ]; then
   build_composition "$G" "5-sample"
   build_composition "$H" "6-board"
   build_composition "$J" "7-redis"
+  for rid in $RECIPE_DIRS; do   # 레시피의 작업 예 — 문서의 명령이 낡으면 여기서 깨진다
+    build_composition "$TMP/recipe-$rid" "recipe-$rid"
+  done
 fi
 
 echo

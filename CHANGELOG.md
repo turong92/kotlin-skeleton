@@ -398,6 +398,18 @@ private class FlywayAfterDeployGuards :
 - Added `modules/auth` as the authentication capability module foundation.
 - Kept the existing trace-aware `/api/v1/hello` behavior and integration tests.
 
+### 기능 카탈로그 — LLM 이 읽는 「이미 준비된 것」 목록 (2026-10-06)
+
+새 프로젝트를 시킬 때 에이전트가 무엇이 준비됐는지 찾아 알맞은 모듈 · 조각을 고르게 한다. react-skeleton 의 카탈로그와 모듈 이름 · 패키지 이름 · 항목 id 로 만난다.
+
+- **`capabilities.json`**(정본, 스키마 `docs/capabilities.schema.json`) — 모듈 43 · 앱 3 · 스크립트 8 항목: 요약 · 상태 · `newProjectFlag` · 자동으로 따라오는 모듈(`autoIncludes`, Gradle 의존에서 계산) · `needs` · 설정 접두사와 `docs/config/modules/*.yml` · HTTP 경로 · 비밀(`docs/deploy.md` §7 의 이름과 빠졌을 때의 동작) · 문서 · 짝 프런트(`frontend.capabilities` ↔ react 항목 id, `packages` ↔ react 패키지) · 쓰지 않는 경우 · 한국어/영어 키워드. 맨 위에 `starterModules` · `newProject` 인터페이스 · 결정표 `decisions` · 작업 예 `examples`.
+- **생성물**: `docs/capabilities.md`(결정표 + 전체 목록 + 항목 상세) · 루트 `llms.txt` — `perl scripts/build-capabilities.pl`(`--check` 는 검사만; perl core 모듈뿐, `new-project.sh` 와 같은 전제). `./gradlew check` 의 `CapabilitiesCatalogTest` 와 CI 가 최신 여부를 본다.
+- **가드**(`modules/platform` · `Capabilities*Test`): 모듈 · 앱 · 스크립트 ↔ 항목 양방향(**없으면 붙일 객체를 그대로 출력**), 스키마, `newProjectFlag` 를 `new-project.sh --dry-run` 이 받아들이는지 · `autoIncludes` 가 실제 의존 닫힘과 같은지, `config.prefixes` ↔ `@ConfigurationProperties`, `basePaths` ↔ 컨트롤러 · 함수형 라우트 매핑, 문서 경로 · 모듈 문서의 「프론트 짝」, `secrets` ↔ `docs/deploy.md` §7, 키워드(한/영) · `TODO` 잔여, 결정표 · 레시피 명령, 형제 react-skeleton 이 옆에 있으면 패키지 · 항목 id · 그쪽이 말하는 백엔드 모듈이 여기 있는지. 가드가 정말 무는지는 일부러 틀린 카탈로그를 먹이는 `CapabilitiesGuardsTest`.
+- **`docs/new-project-recipe.md`**: 제품 한 문단 → 고를 것 → 명령 → 설정 · 비밀 → `scripts/dev.sh` → 검증 → `deploy/app.yaml`, 작업 예 3개(커뮤니티 · 유료 SaaS(`--db mysql`) · 콘텐츠 SSR). 예의 명령은 카탈로그의 `examples` 에서 계산한 것이고 `scripts/test-new-project.sh` 가 `--dry-run` 으로 받아들이는지(빠른 검사), `--full` 이 실제로 찍어 `./gradlew build` 한다(조합 8~10). react-skeleton 의 레시피와 서로 링크한다.
+- **`scripts/new-project.sh`**: `--dry-run`(고른 모듈과 따라온 이유만 보이고 아무것도 쓰지 않는다). 찍은 프로젝트에는 `capabilities.json` 을 고른 모듈 · 앱만 남긴 stamped 모드로 걸러 쓰고(빠진 것은 `stampedFrom.omitted` 로 스켈레톤을 가리킨다) 생성물을 새 이름으로 다시 만든다. `rename-skeleton.sh` 는 끝에서 생성물을 다시 만든다.
+- **문서 어긋남 수정**: `docs/modules/payment*.md` · `captcha-turnstile.md` 가 「프론트 짝: 없음」 이라 했지만 `@skeleton/payment` · `@skeleton/captcha-turnstile` 이 있다 — 고쳤고 이제 모듈 문서의 「프론트 짝」 과 카탈로그가 어긋나면 빌드가 실패한다. `ModuleDocumentationTest` 의 알려진 패키지 목록도 갱신.
+- CLAUDE.md: 만들기 전에 `llms.txt` 부터 읽는다. README: 「고른다」 단계에 포인터.
+
 ## [1.1.1] - 2026-04-20
 
 ### Added

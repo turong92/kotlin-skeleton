@@ -13,7 +13,7 @@
 | 부팅에 필요한 것 | 없음. 제공자 모듈이 있어야 결제할 수 있다. |
 | 교체 지점 | `PaymentProviderRouter`, `PaymentService` |
 | 마이그레이션 | 없음 |
-| 프론트 짝 | 없음 |
+| 프론트 짝 | `@skeleton/payment` |
 | 테스트 | `modules/payment/src/test` |
 
 ## 왜 HTTP 엔드포인트가 없나 — 만들려면 필요한 것

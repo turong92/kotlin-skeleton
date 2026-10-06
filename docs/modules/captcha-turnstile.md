@@ -13,7 +13,7 @@ Cloudflare Turnstile 토큰을 서버에서 검증하는 `TurnstileVerifier` 를
 | 부팅에 필요한 것 | 없음. 켤 때 Turnstile secret 과 인터넷이 필요하다. |
 | 교체 지점 | `TurnstileVerifier` |
 | 마이그레이션 | 없음 |
-| 프론트 짝 | 없음 |
+| 프론트 짝 | `@skeleton/captcha-turnstile` |
 | 테스트 | `modules/captcha-turnstile/src/test` |
 
 자세히: [Turnstile 상세](../captcha-turnstile.md)
