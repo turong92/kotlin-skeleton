@@ -55,7 +55,7 @@ skeleton:
 
 Adapter modules expose the contract they implement with `api(project(...))`, so one line is enough:
 `payment-toss`/`payment-stripe` → `payment`, `notification-jdbc`/`-sse`/`-slack`/`-websocket` → `notification`,
-`storage-s3` → `storage`, `auth-social` → `auth`, `auth-social-google`/`-kakao`/`-naver` → `auth-social`,
+`storage-s3` → `storage`, `auth-social` → `auth`, `auth-social-google`/`-kakao`/`-naver`/`-oidc`/`-x` → `auth-social`,
 `redis-lock`/`-cache`/`-rate-limit` → `redis-core`, `board-jdbc` → `board`. You never edit a module to compose it.
 `board` alone has no storage — name `board-jdbc` too (`--modules board,board-jdbc`); `board` never depends on its adapter, as `notification` does not on `notification-jdbc`.
 
@@ -103,6 +103,8 @@ fails when this table and the prefixes found in module code differ.
 | `auth-magic-link` | `skeleton.auth-magic-link` |
 | `auth-session` | `skeleton.auth-session` |
 | `auth-social` | `skeleton.auth-social` |
+| `auth-social-oidc` | `skeleton.auth-social-oidc` |
+| `auth-social-x` | `skeleton.auth-social-x` |
 | `board` | `skeleton.board` |
 | `captcha-turnstile` | `skeleton.captcha-turnstile` |
 | `config-aws-ssm` | `skeleton.config.aws.ssm` |
@@ -155,6 +157,8 @@ test proving a context with only that module (and its declared dependencies) boo
 | `auth-magic-link` | yes (sign-in closed to unknown addresses) | `account` (declared dependency) | a mail path to deliver the link |
 | `auth-social` | yes (no provider until enabled) | nothing | provider keys |
 | `auth-social-google` / `-kakao` / `-naver` | off until `skeleton.auth-social.providers.<x>.enabled=true` | nothing | client id / secret |
+| `auth-social-oidc` | off until `skeleton.auth-social-oidc.providers.<code>.client-id` is set (LINE: code `line`, preset) | nothing | client id / secret per provider |
+| `auth-social-x` | off until `skeleton.auth-social-x.client-id` is set | nothing | client id / secret |
 | `async` | yes | nothing | — |
 | `async-notification` | yes | `notification` (declared dependency) | — |
 | `board` | yes (HTTP `/api/v1/boards`; no board exists until you seed or create one) | a `BoardRepository` · `PostRepository` · `CommentRepository` · `ReactionRepository` set — `board-jdbc` provides it, or write your own; startup fails naming the missing bean | `notification` (comment alerts), `idempotency` (`Idempotency-Key` on create), a `RateLimitStore` (rate limit) — all optional, all compile-only |

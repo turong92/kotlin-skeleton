@@ -7,7 +7,8 @@
 #   ENV_FILE=other.env scripts/check-real-providers.sh
 #
 # 끝날 때 ✗ 가 하나라도 있으면 종료 코드 1. 비밀 값은 출력하지 않는다 (client id 는 앞 6글자만).
-# 시험용: CHECK_GOOGLE_TOKEN_URL · CHECK_KAKAO_TOKEN_URL · CHECK_GOOGLE_DISCOVERY_URL 로 주소를 바꿀 수 있다.
+# 제공자: google · kakao · naver(…PROVIDERS_<X>_*) · LINE(SKELETON_AUTH_SOCIAL_OIDC_PROVIDERS_LINE_*) · X(SKELETON_AUTH_SOCIAL_X_*) — 이름 규칙은 docs/real-provider-setup.md §6.
+# 시험용: CHECK_GOOGLE_TOKEN_URL · CHECK_KAKAO_TOKEN_URL · CHECK_LINE_TOKEN_URL · CHECK_X_TOKEN_URL · CHECK_GOOGLE_DISCOVERY_URL · CHECK_LINE_DISCOVERY_URL 로 주소를 바꿀 수 있다.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
@@ -18,7 +19,7 @@ while [ $# -gt 0 ]; do
     --base-url) BASE_URL="${2:?--base-url <주소>}"; shift 2 ;;
     --env-file) ENV_FILE="${2:?--env-file <파일>}"; shift 2 ;;
     --self-test) exec bash scripts/check-real-providers.d/self-test.sh ;;
-    -h|--help) sed -n 2,11p "$0"; exit 0 ;;
+    -h|--help) sed -n 2,12p "$0"; exit 0 ;;
     *) echo "usage: $0 [--send-test-mail <주소>] [--base-url <주소>] [--env-file <파일>]" >&2; exit 2 ;;
   esac
 done
@@ -102,6 +103,53 @@ for X in GOOGLE KAKAO NAVER; do
     NAVER) note "naver: 서버 두드리기는 하지 않는다 (토큰 요청에 state 가 필요하다 — docs/real-provider-setup.md §3)" ;;
   esac
 done
+# --- LINE (auth-social-oidc 의 line 프리셋): client id 가 있으면 켜진다 (ENABLED 없음) --------------------------------------------------
+L=SKELETON_AUTH_SOCIAL_OIDC_PROVIDERS_LINE
+lcid="${SKELETON_AUTH_SOCIAL_OIDC_PROVIDERS_LINE_CLIENT_ID:-}"; lsec="${SKELETON_AUTH_SOCIAL_OIDC_PROVIDERS_LINE_CLIENT_SECRET:-}"; lred="${SKELETON_AUTH_SOCIAL_OIDC_PROVIDERS_LINE_REDIRECT_URI:-}"; lsc="${SKELETON_AUTH_SOCIAL_OIDC_PROVIDERS_LINE_SCOPES:-}"
+if [ -z "$lcid$lsec" ]; then note "line: 꺼짐 (${L}_CLIENT_ID 가 비어 있음)"
+else
+  ANY=1; echo " line"
+  [ -n "$lcid" ] && ok "line: CLIENT_ID 있음 ($(head6 "$lcid"))" || bad "line: CLIENT_ID 가 비었다 — 비밀만 있으면 제공자가 없다 (${L}_CLIENT_ID)"
+  [ -n "$lsec" ] && ok "line: CLIENT_SECRET 있음" || bad "line: CLIENT_SECRET 이 비었다 — 켜져 있으면 기동 실패 (${L}_CLIENT_SECRET)"
+  [ -z "$lcid" ] || { printf '%s' "$lcid" | grep -qE '^[0-9]{10}$' && ok "line: Channel ID 모양 (숫자 10자리)" || bad "line: CLIENT_ID 는 LINE Login 채널의 Channel ID(숫자 10자리)다 — 다른 값(Provider ID · Messaging API 채널)을 복사했나?"; }
+  [ -z "$lsec" ] || { printf '%s' "$lsec" | grep -qE '^[0-9a-f]{32}$' && ok "line: Channel secret 모양 (32자 16진수)" || note "line: Channel secret 이 32자 16진수가 아니다 — 모양이 달라졌을 수 있다, 확인 필요"; }
+  shape_redirect line "$lred"
+  case "$lsc" in *email*) note "line: SCOPES 에 email — 콘솔의 이메일 권한이 승인된 뒤에만 쓴다. 승인 전이면 LINE 이 인가를 거부할 수 있다 (확인 필요)" ;; esac
+  disc="${CHECK_LINE_DISCOVERY_URL:-https://access.line.me/.well-known/openid-configuration}"
+  d="$(curl -sS -m 10 "$disc" 2>&1 || true)"
+  te="$(printf '%s' "$d" | grep -oE '"token_endpoint"[^,]*' | sed -E 's/.*: *"([^"]*)"/\1/')"
+  [ "$te" = https://api.line.me/oauth2/v2.1/token ] && ok "line: 디스커버리의 token_endpoint = 프리셋이 쓰는 주소" || note "line: 디스커버리 token_endpoint='$te' (프리셋: https://api.line.me/oauth2/v2.1/token)"
+  if [ -n "$lcid" ] && [ -n "$lsec" ]; then
+    out="$(curl -sS -m 15 -X POST "${CHECK_LINE_TOKEN_URL:-https://api.line.me/oauth2/v2.1/token}" -H 'Content-Type: application/x-www-form-urlencoded' --data-urlencode grant_type=authorization_code --data-urlencode "client_id=$lcid" --data-urlencode "client_secret=$lsec" --data-urlencode "redirect_uri=${lred:-http://localhost:5173/auth/callback}" --data-urlencode code=check-real-providers-dummy-code --data-urlencode code_verifier=check-real-providers-dummy-verifier-0123456789abcdef -w '\n%{http_code}' 2>&1)"
+    # 실측(2026-10): LINE 은 틀린 client id/secret 에도 먼저 코드를 본다 — 가짜 코드에는 항상 invalid_grant 라서 키가 맞는지는 **이 두드림으로는 알 수 없다**. 서버에 닿는지만 본다
+    case "$(printf '%s' "$out" | sed '$d')" in
+      *invalid_client*) bad "line: client id 또는 secret 이 틀렸다 (invalid_client) — 콘솔에서 값을 다시 복사한다" ;;
+      *invalid_grant*) ok "line: 토큰 서버에 닿는다 (가짜 코드라 invalid_grant — 정상). 단 LINE 은 틀린 키에도 같은 답이라 **키가 맞는지는 진짜 로그인으로만 안다** (docs §7.2 #5)" ;;
+      *) if [ "$(printf '%s' "$out" | tail -n1)" = 000 ] || [ -z "$out" ]; then bad "line: 토큰 서버에 닿지 못했다 (네트워크): $(printf '%s' "$out" | head -c 120)"; else note "line: 해석하지 못한 응답 — $(printf '%s' "$out" | head -c 160)"; fi ;;
+    esac
+  fi
+fi
+
+# --- X (auth-social-x): client id 가 있으면 켜진다 ------------------------------------------------------------------------------------
+xcid="${SKELETON_AUTH_SOCIAL_X_CLIENT_ID:-}"; xsec="${SKELETON_AUTH_SOCIAL_X_CLIENT_SECRET:-}"; xred="${SKELETON_AUTH_SOCIAL_X_REDIRECT_URI:-}"
+if [ -z "$xcid$xsec" ]; then note "x: 꺼짐 (SKELETON_AUTH_SOCIAL_X_CLIENT_ID 가 비어 있음)"
+else
+  ANY=1; echo " x"
+  [ -n "$xcid" ] && ok "x: CLIENT_ID 있음 ($(head6 "$xcid"))" || bad "x: CLIENT_ID 가 비었다 — 비밀만 있으면 제공자가 없다 (SKELETON_AUTH_SOCIAL_X_CLIENT_ID)"
+  [ -n "$xsec" ] && ok "x: CLIENT_SECRET 있음" || bad "x: CLIENT_SECRET 이 비었다 — client id 만 있으면 기동 실패 (client-secret must not be blank)"
+  shape_redirect x "$xred"
+  case "$xred" in http://localhost*) bad "x: REDIRECT_URI 가 localhost 다 — X 는 로컬 콜백에 localhost 를 받지 않는다. http://127.0.0.1:5173/auth/callback 으로 쓰고 프런트도 127.0.0.1 로 연다" ;; esac
+  if [ -n "$xcid" ] && [ -n "$xsec" ]; then
+    out="$(curl -sS -m 15 -X POST "${CHECK_X_TOKEN_URL:-https://api.x.com/2/oauth2/token}" -u "$xcid:$xsec" -H 'Content-Type: application/x-www-form-urlencoded' --data-urlencode grant_type=authorization_code --data-urlencode code=check-real-providers-dummy-code --data-urlencode "redirect_uri=${xred:-http://127.0.0.1:5173/auth/callback}" --data-urlencode code_verifier=check-real-providers-dummy-verifier-0123456789abcdef -w '\n%{http_code}' 2>&1)"
+    body="$(printf '%s' "$out" | sed '$d')"; st="$(printf '%s' "$out" | tail -n1)"
+    # 실측(2026-10): 모르는 client id → 400 invalid_client "Value passed for the client id was invalid". 맞는 client 에 가짜 코드 → invalid_request/invalid_grant 로 거절된다고 문서가 말한다 (키가 맞는 쪽은 진짜 키로 확인 필요)
+    case "$body" in
+      *invalid_client*|*unauthorized_client*) bad "x: client id 또는 secret 이 틀렸다 ($(printf '%s' "$body" | grep -oE '"error"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1), HTTP $st) — OAuth 2.0 Client ID · Secret 인지 (OAuth 1.0a API Key 가 아닌지) 확인한다" ;;
+      *invalid_request*|*invalid_grant*) ok "x: 제공자가 client id/secret 을 받아들인 것으로 보인다 (가짜 코드라 거절 — 정상). 키가 맞는지의 최종 확인은 진짜 로그인 (확인 필요)" ;;
+      *) if [ "$st" = 000 ] || [ -z "$out" ]; then bad "x: 토큰 서버에 닿지 못했다 (네트워크): $(printf '%s' "$out" | head -c 120)"; else note "x: 해석하지 못한 응답 HTTP $st — $(printf '%s' "$body" | head -c 160)"; fi ;;
+    esac
+  fi
+fi
 [ "$ANY" = 1 ] || note "켜진 제공자가 없다 — 이 상태로 시작하면 오늘과 똑같이 소셜 버튼이 없다"
 
 echo; echo "== 떠 있는 백엔드 ($BASE_URL/api/v1/auth/methods)"
@@ -109,11 +157,15 @@ M="$(curl -sS -m 5 "$BASE_URL/api/v1/auth/methods" 2>/dev/null || true)"
 if [ -z "$M" ]; then
   note "백엔드가 떠 있지 않다 — scripts/dev-sample.sh 로 띄운 뒤 다시 실행하면 이 구역도 본다"
 else
-  for X in GOOGLE KAKAO NAVER; do
-    x="$(printf '%s' "$X" | tr 'A-Z' 'a-z')"; [ "$(val $X ENABLED)" = true ] || continue
+  for X in GOOGLE KAKAO NAVER LINE X; do
+    x="$(printf '%s' "$X" | tr 'A-Z' 'a-z')"
+    case "$X" in
+      LINE) [ -n "$lcid" ] || continue; red="$lred" ;;
+      X) [ -n "$xcid" ] || continue; red="$xred" ;;
+      *) [ "$(val $X ENABLED)" = true ] || continue; red="$(val $X REDIRECT_URI)" ;;
+    esac
     if printf '%s' "$M" | grep -q "\"provider\":\"$x\""; then
       ok "$x: /auth/methods 에 나온다"
-      red="$(val $X REDIRECT_URI)"
       [ -z "$red" ] || { printf '%s' "$M" | grep -qF "\"redirectUri\":\"$red\"" && ok "$x: redirectUri 가 환경 파일과 같다" || bad "$x: /auth/methods 의 redirectUri 가 환경 파일 값($red)과 다르다 — 백엔드를 다시 시작했나?"; }
     else bad "$x: 켰는데 /auth/methods 에 없다 — 백엔드를 이 환경 파일로 다시 시작해야 한다 (기동 로그 'account sign-in methods' 줄을 본다)"; fi
   done

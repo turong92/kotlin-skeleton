@@ -40,7 +40,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delet
  * 글로벌 소셜(LINE · X)을 진짜 계정 모듈 · PostgreSQL · 보안 체인 위에서, 가짜 제공자 서버(공식 문서 모양의 응답)와 함께:
  * PKCE · nonce 전제, 주소 없는 계정(LINE 이 이메일을 줘도 확인되지 않은 값은 없는 것) 가입 · 연결 · 해제 · 삭제, 같은 이메일의 기존 계정에 병합하지 않기.
  */
-@SpringBootTest(properties = ["spring.config.import=classpath:test-seeds.yml", "skeleton.account.mail.link-base-url=https://app.example.com", "skeleton.auth-session.reuse-grace=0s"])
+@SpringBootTest(properties = ["spring.config.import=classpath:test-seeds.yml", "skeleton.account.mail.link-base-url=https://app.example.com", "skeleton.auth-session.reuse-grace=0s", "skeleton.legal.reconsent.enabled=true"])
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration::class, GlobalSocialJourneyIntegrationTest.Beans::class)
 class GlobalSocialJourneyIntegrationTest {
@@ -195,7 +195,7 @@ class GlobalSocialJourneyIntegrationTest {
     @Test
     fun `a LINE email is never trusted - no merge into the password account with the same address, and the LINE account has no address`() {
         val email = "victim-${System.nanoTime()}@example.com"
-        val signUp = post("/api/v1/account/sign-up", """{"email":"$email","password":"tangerine-42-moon"}""").andExpect { status { isAccepted() } }.andReturn().response.contentAsString
+        val signUp = post("/api/v1/account/sign-up", """{"email":"$email","password":"tangerine-42-moon","consents":[{"type":"terms","version":"sample-1"},{"type":"privacy","version":"sample-1"}]}""").andExpect { status { isAccepted() } }.andReturn().response.contentAsString
         val verified = post("/api/v1/auth/verify-email", """{"signUpId":"${field(signUp, "$.value.signUpId")}","code":"${beans.sent.last { it.kind == MailKind.VERIFY_CODE && it.to == email }.vars.getValue("code")}"}""").andExpect { status { isOk() } }.andReturn().response.contentAsString
         val victimId = field(verified, "$.value.principal.accountId")
 
@@ -208,6 +208,7 @@ class GlobalSocialJourneyIntegrationTest {
     fun `an address-less LINE account lives the whole lifecycle - link X, unlink it, delete - re-authenticating with a fresh LINE consent each time`() {
         val signIn = lineLogin(lineCode("Ulife1")).andExpect { status { isOk() } }.andReturn().response.contentAsString
         val bearer = field(signIn, "$.value.accessToken")
+        agree(bearer)
         // the same LINE user signs in again to the same account
         assertEquals(field(signIn, "$.value.principal.accountId"), field(lineLogin(lineCode("Ulife1")).andReturn().response.contentAsString, "$.value.principal.accountId"))
 
@@ -225,6 +226,26 @@ class GlobalSocialJourneyIntegrationTest {
         val xId = JsonPath.read<List<String>>(identities, "$.values[?(@.method=='x')].id").single()
         mvc.perform(delete("/api/v1/account/identities/$xId").header("Authorization", "Bearer $bearer").contentType(MediaType.APPLICATION_JSON).content("""{"socialReauth":${lineReauth("Ulife1")}}""")).andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isNoContent)
         post("/api/v1/account/delete", """{"socialReauth":${lineReauth("Ulife1")}}""", bearer).andExpect { status { isAccepted() }; jsonPath("$.value.status") { value("DELETION_SCHEDULED") } }
+    }
+
+    /** 소셜로 처음 만든 계정의 첫 로그인 뒤 동의 화면이 하는 일 (docs/legal-http-contract.md "First sign-in that creates the account") */
+    private fun agree(bearer: String) = post(
+        "/api/v1/legal/consents", """{"consents":[{"type":"terms","version":"sample-1"},{"type":"privacy","version":"sample-1"}],"source":"first-sign-in"}""", bearer,
+    ).andExpect { status { isOk() }; jsonPath("$.value.blocked") { value(false) } }
+
+    @Test
+    fun `a first LINE or X sign-in creates an account that is blocked by legal consent until it agrees`() {
+        for (login in listOf({ lineLogin(lineCode("Ulegal1")) }, { xLogin(xCode("x-legal-1")) })) {
+            val bearer = field(login().andExpect { status { isOk() } }.andReturn().response.contentAsString, "$.value.accessToken")
+            mvc.get("/api/v1/notes") { header("Authorization", "Bearer $bearer") }.andExpect {
+                status { isForbidden() }
+                jsonPath("$.code") { value("LEGAL.RECONSENT_REQUIRED") }
+                jsonPath("$.data.missing.length()") { value(2) }
+            }
+            mvc.get("/api/v1/legal/consents/me") { header("Authorization", "Bearer $bearer") }.andExpect { status { isOk() }; jsonPath("$.value.blocked") { value(true) } }
+            agree(bearer)
+            mvc.get("/api/v1/notes") { header("Authorization", "Bearer $bearer") }.andExpect { status { isOk() } }
+        }
     }
 
     @Test

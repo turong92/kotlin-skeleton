@@ -53,7 +53,7 @@ skeleton:
 
 ## 환경변수로 설정할 때 (Map 값이라 별칭이 필요하다)
 `providers.<코드>.*` 는 Map 값이라 스프링의 느슨한 바인딩만으로는 `SKELETON_AUTH_SOCIAL_OIDC_PROVIDERS_LINE_CLIENT_ID` 가 묶이지 않는다(`_` 가 모두 칸 구분이 된다 — `OidcEnvironmentVariablesTest` 가 진짜 `systemEnvironment` 모양으로 증명). 그래서 `OidcEnvironmentAliasPostProcessor`(`spring.factories`)가
-`SKELETON_AUTH_SOCIAL_OIDC_PROVIDERS_<코드>_<키>` 를 `skeleton.auth-social-oidc.providers.<코드 소문자>.<키: 소문자, _ 는 ->` 로 다시 적는다 (`auth-social` 의 `AuthSocialEnvironmentAliasPostProcessor` 와 같은 규칙).
+`SKELETON_AUTH_SOCIAL_OIDC_PROVIDERS_<코드>_<키>` 를 `skeleton.auth-social-oidc.providers.<코드 소문자>.<키: 소문자, _ 는 ->` 로 다시 적는다 (`auth-social` 의 `ProviderEnvironmentAliases` — 모든 소셜 제공자에 하나인 규칙 — 을 쓴다; google · kakao · naver 는 `SKELETON_AUTH_SOCIAL_PROVIDERS_<제공자>_<키>`, X 는 평범한 속성 클래스라 `SKELETON_AUTH_SOCIAL_X_<키>` 가 그대로 묶인다).
 **코드는 한 단어(영문 · 숫자)**여야 한다 — `line-jp` 같은 여러 단어 코드는 환경변수로 쓸 수 없으니 yml 로. 중첩은 `…_CLAIMS_EMAIL_VERIFIED` → `claims.email-verified` 만 지원하고 `authorize-params` 같은 맵 키는 yml 로. 값이 빈 변수는 건너뛴다.
 
 ## 콘솔 체크리스트 (LINE)
@@ -62,6 +62,7 @@ skeleton:
 3. **LINE Login** 탭 → **Callback URL** 에 정확히 아래를 등록한다 (글자 하나까지 같아야 한다 — 쿼리 · 슬래시 포함). 로그인 요청의 `redirectUri` 가 인가 요청과 같아야 한다:
    - 로컬: `http://localhost:5173/auth/callback` (LINE 이 http localhost 를 허용하는지는 **확인 필요** — 안 되면 터널 주소의 https 로)
    - 배포: `https://<도메인>/auth/callback`
+   - **연결 · 해제 · 다시 인증용 콜백도 함께 등록한다**: `http://localhost:5173/account/link-callback` · `https://<도메인>/account/link-callback` (프론트의 `createSocialLinkFlow` 는 항상 `<origin>/account/link-callback` 을 쓴다)
 4. (선택) Basic settings > OpenID Connect > **Email address permission** 신청 → 승인 뒤 `scopes` 에 `email`.
 5. 채널 상태: 개발 중(Developing) 에는 채널 관리자 · 테스터만 로그인된다 — 공개하려면 **Published** 로 바꾼다.
 6. 앱 설정 — 환경변수 이름(실측: 진짜 환경변수로 apps/sample 을 띄워 `/auth/methods` 에 `line` 이 `clientId` 와 함께 나옴): `SKELETON_AUTH_SOCIAL_OIDC_PROVIDERS_LINE_CLIENT_ID`(env:) · `…_LINE_CLIENT_SECRET`(운영자) · `…_LINE_REDIRECT_URI`(env:) · `…_LINE_SCOPES=openid,profile,email`(콘솔 이메일 승인 뒤). (`<P>_` 는 배포 플랫폼의 접두 규칙, 스켈레톤 기본 `SKELETON_`.) 프론트가 `GET /auth/methods` 의 `line` 항목으로 인가 URL 을 만든다 ([계약](../account-http-contract.md) "FINAL-3 + social PKCE").

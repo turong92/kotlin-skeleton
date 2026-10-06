@@ -1,5 +1,8 @@
 package dev.sumin.skeleton.app.sample
 
+import dev.sumin.skeleton.account.mail.AccountMailTemplates
+import dev.sumin.skeleton.account.mail.MailKind
+import kotlin.test.assertTrue
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
@@ -14,12 +17,22 @@ import org.springframework.test.web.servlet.get
 @Import(TestcontainersConfiguration::class)
 class SocialDefaultsIntegrationTest {
     @Autowired lateinit var mvc: MockMvc
+    @Autowired lateinit var templates: AccountMailTemplates
 
     @Test
     fun `no social provider is offered until a client id is configured`() {
         mvc.get("/api/v1/auth/methods").andExpect {
             status { isOk() }
             jsonPath("$.value.social.length()") { value(0) }
+        }
+    }
+
+    @Test
+    fun `the sample sends its notice and code mails with an HTML part as well as text`() {
+        for (kind in listOf(MailKind.IDENTITY_LINKED_NOTICE, MailKind.PASSWORD_CHANGED, MailKind.VERIFY_CODE)) {
+            val mail = templates.render(kind, "ko", mapOf("code" to "123456", "method" to "x"), null)
+            assertTrue(mail.html != null && "<table" in mail.html!!, "$kind has an HTML alternative")
+            assertTrue(mail.text.isNotBlank())
         }
     }
 }

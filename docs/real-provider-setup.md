@@ -14,7 +14,7 @@
 | §6 | 환경변수 채우기 (로컬 · 홈서버) | 10분 |
 | §7 | 점검 스크립트 + 눌러 볼 순서 | 40분 |
 
-> **LINE · X 의 환경변수 이름과 모듈 쪽 설정**은 다른 브랜치(`feat/social-oidc-x`)가 정한다 — 이 문서의 해당 칸은 `모듈 문서 참조` 로 비워 두었다. 콘솔에서 만드는 준비(§2 · §3)는 코드와 무관하니 먼저 해 둔다.
+> **환경변수 이름은 한 규칙**이다(`docs/deploy.md` §7): Google · Kakao · Naver 는 `SKELETON_AUTH_SOCIAL_PROVIDERS_<제공자>_{ENABLED,CLIENT_ID,CLIENT_SECRET,REDIRECT_URI}`, LINE 은 `SKELETON_AUTH_SOCIAL_OIDC_PROVIDERS_LINE_{CLIENT_ID,CLIENT_SECRET,REDIRECT_URI,SCOPES}`, X 는 `SKELETON_AUTH_SOCIAL_X_{CLIENT_ID,CLIENT_SECRET,REDIRECT_URI,REQUEST_EMAIL}`. 진짜 환경변수만으로 `apps/sample` 을 띄워 셋이 `/auth/methods` 에 나오는 것은 `SocialEnvironmentOnlyBootTest` 가 증명한다. 콘솔에서 만드는 준비(§1 · §2 · §3)는 코드와 무관하니 먼저 해 둔다.
 
 ## 0. 이 프로젝트가 로그인에 쓰는 주소 (모든 제공자에 공통)
 
@@ -66,7 +66,7 @@
 
 ## 2. LINE Login 채널 (일본 사용자용)
 
-> 이 절은 **콘솔 준비만** 적는다. 백엔드 모듈과 환경변수 이름은 `모듈 문서 참조: docs/modules/auth-social-oidc.md`. 이 절의 사실은 LINE 공식 문서에서 읽었다: <https://developers.line.biz/en/docs/line-login/getting-started/> · <https://developers.line.biz/en/docs/line-login/integrate-line-login/>.
+> 이 절은 콘솔 준비와 환경변수를 적는다(모듈 쪽 설명: [auth-social-oidc](modules/auth-social-oidc.md) — LINE 프리셋). 이 절의 사실은 LINE 공식 문서에서 읽었다: <https://developers.line.biz/en/docs/line-login/getting-started/> · <https://developers.line.biz/en/docs/line-login/integrate-line-login/>.
 
 1. <https://developers.line.biz/console/> 에 LINE 계정(또는 비즈니스 계정)으로 로그인 → **Provider 만들기** (이름 = 서비스를 운영하는 주체 이름. 사용자 동의 화면에 보인다. 나중에 못 바꾸는 값이 있으니 신중히).
 2. 그 Provider 안에서 **Create a new channel → LINE Login**.
@@ -74,24 +74,31 @@
 3. **Basic settings 탭**: **Channel ID** (= client id), **Channel secret** (= client secret) 를 복사한다.
 4. **이메일 권한 신청 (중요)**: LINE 은 기본으로 **이메일을 주지 않는다.** Channel 의 **OpenID Connect → Email address permission → Apply** 에서 약관에 동의하고 **"이메일을 수집한다는 것과 용도를 설명하는 화면의 스크린샷"을 올려** 신청한다(스크린샷 요건은 검색으로 확인한 내용 — 콘솔 화면에서 다시 확인 `확인 필요`). 승인 전에는 `scope=openid profile email` 로 요청해도 이메일이 오지 않는다.
    - 이메일을 못 받는 계정은 이 스켈레톤에서 **"주소 없는 계정"**이 된다(§4 Kakao 설명과 같다): 로그인은 되지만 메일 코드로 다시 인증할 수 없어 제공자 재동의로 다시 인증한다.
-   - 참고: LINE 이 주는 이메일은 사용자가 LINE 에 등록한 주소이고, **LINE ID 토큰의 `email` 이 "확인된 주소"라는 보증이 있는지**는 공식 문서에서 찾지 못했다 → 모듈 쪽 결정(병합 허용 여부)은 `모듈 문서 참조`. `확인 필요`
+   - 참고: LINE 이 주는 이메일은 사용자가 LINE 에 등록한 주소이고, **LINE ID 토큰의 `email` 이 "확인된 주소"라는 보증이 있는지**는 공식 문서에서 찾지 못했다 → 모듈은 **LINE 이메일을 항상 미확인으로 친다**(`email-trust: NEVER` — 같은 이메일의 기존 계정에 병합하지 않고, LINE 계정은 주소 없는 계정이다). `확인 필요`
 5. **LINE Login 탭 → Callback URL**: 아래 두 개를 등록한다(여러 개 가능, 줄바꿈으로 구분).
    ```
-   http://localhost:5173/auth/callback        (로컬 시험 — LINE 이 http://localhost 를 받는지 콘솔에서 확인 필요)
+   http://localhost:5173/auth/callback        (로컬 시험 — LINE 이 http://localhost 를 받는지 콘솔에서 확인 필요. 안 받으면 터널 주소의 https 로)
    http://localhost:5173/account/link-callback
    https://<도메인>/auth/callback
    https://<도메인>/account/link-callback
    ```
 6. **채널 상태**: 처음은 **Developing** — 이 채널에서는 **Provider/채널의 Admin · Tester 역할을 가진 LINE 계정만** 로그인된다. **시험할 LINE 계정을 Roles(채널 → Roles 탭)에 Tester 로 추가**한다(테스터 추가에는 LINE 계정 연결이 필요하다). 서비스를 열 때 **Published** 로 바꾼다 — 되돌릴 수 없다.
-7. 환경변수: `모듈 문서 참조: docs/modules/auth-social-oidc.md` (client id = Channel ID, secret = Channel secret).
+7. 환경변수 (client id = Channel ID, secret = Channel secret):
+   ```bash
+   SKELETON_AUTH_SOCIAL_OIDC_PROVIDERS_LINE_CLIENT_ID=2001234567          # Channel ID  (env:)
+   SKELETON_AUTH_SOCIAL_OIDC_PROVIDERS_LINE_CLIENT_SECRET=...             # Channel secret (secrets:)
+   SKELETON_AUTH_SOCIAL_OIDC_PROVIDERS_LINE_REDIRECT_URI=http://localhost:5173/auth/callback
+   SKELETON_AUTH_SOCIAL_OIDC_PROVIDERS_LINE_SCOPES=openid,profile,email   # 콘솔의 이메일 권한이 승인된 뒤에만. 그 전에는 비워 둔다(기본 openid,profile)
+   ```
+   `client id` 만 있으면 켜진다(`ENABLED` 가 따로 없다). LINE 의 엔드포인트 · PKCE · nonce · ID 토큰 알고리즘(HS256/ES256)은 프리셋이 안다 — 적을 것이 없다. LINE 은 **PKCE · nonce 가 필수**이고, 프런트가 `GET /api/v1/auth/methods` 의 `pkce` · `nonce` · `authorize` 를 읽어 처리한다(react-skeleton `@skeleton/auth` 가 이미 한다).
 
 ## 3. X(Twitter) 개발자 앱
 
-> 콘솔 준비만. 백엔드 모듈 · 환경변수 이름: `모듈 문서 참조: docs/modules/auth-social-x.md`. 공식 문서: <https://docs.x.com/resources/fundamentals/developer-apps> · <https://docs.x.com/resources/fundamentals/authentication/oauth-2-0/user-access-token>.
+> 콘솔 준비와 환경변수(모듈 쪽 설명: [auth-social-x](modules/auth-social-x.md)). 공식 문서: <https://docs.x.com/resources/fundamentals/developer-apps> · <https://docs.x.com/resources/fundamentals/authentication/oauth-2-0/user-access-token>.
 
 **먼저 알아 둘 것 (놀라지 않도록)**
-- X 는 **OAuth 2.0 Authorization Code + PKCE** 를 쓴다: 인가 주소 `https://x.com/i/oauth2/authorize`, 토큰 주소 `https://api.x.com/2/oauth2/token`, scope `users.read tweet.read`(사용자 id · 이름을 읽는 `GET /2/users/me` 용). PKCE(`code_challenge`)는 **필수**다 — 이 레포의 PKCE 지원은 다른 브랜치가 만든다(`docs/account-http-contract.md` 가 "보류"로 적은 항목).
-- **X 는 이메일을 주지 않는다**(OAuth 2.0 의 일반 사용자 흐름에서 이 문서가 확인한 범위에서는 이메일 scope 가 없다 `확인 필요`). 그래서 X 로 만든 계정은 **"주소 없는 계정"**이다(→ Naver 와 같은 취급).
+- X 는 **OAuth 2.0 Authorization Code + PKCE** 를 쓴다: 인가 주소 `https://x.com/i/oauth2/authorize`, 토큰 주소 `https://api.x.com/2/oauth2/token`, scope `users.read tweet.read`(사용자 id · 이름을 읽는 `GET /2/users/me` 용). PKCE(`code_challenge`)는 **필수**다 — 이 레포가 지원한다(`/auth/methods` 의 `pkce: REQUIRED`, 프런트가 `code_verifier` 를 만들어 로그인 요청에 싣는다). **인가 코드는 발급 30초 안에 교환해야 한다** — 프런트는 콜백을 받자마자 백엔드를 부른다.
+- **X 는 기본으로 이메일을 주지 않는다.** 콘솔에서 앱의 이메일 요청 권한을 켜고 `SKELETON_AUTH_SOCIAL_X_REQUEST_EMAIL=true` 를 주면 `users.email` 을 요청해 `confirmed_email` 이 오지만, 그것이 "확인된 주소"인지는 문서가 보증하지 않아 **병합에 쓰지 않는다**(`확인 필요`). 그래서 X 로 만든 계정은 기본적으로 **"주소 없는 계정"**이다(→ Naver 와 같은 취급).
 - **API 요금**: X 는 2026-02 에 무료 · Basic · Pro 등급을 없애고 **사용량 기반(pay-per-use, 크레딧 선결제)** 으로 바꿨다고 보도되었다(읽기 요청 건당 과금 등). 로그인용 `users/me` 한두 번이 얼마인지, 시험 크레딧이 있는지는 **콘솔의 Billing 에서 확인 필요**. 요금표 근거는 비공식 블로그 몇 곳이라 신뢰도가 낮다.
 
 1. <https://console.x.com> 에 X 계정으로 로그인 → 개발자 약관 동의 → **Create App** (이름은 전체 X 에서 유일해야 한다. 용도 설명 입력).
@@ -110,7 +117,14 @@
    - **Website URL**: 서비스의 공개 주소(`https://<도메인>`) — 필수 칸이다.
    - **Organization name / URL, Terms of service, Privacy policy URL**: 공식 문서는 필수 여부를 적지 않았다 — 콘솔 화면에서 **칸이 있으면 채운다** (X 는 앱이 사용자에게 인가를 받을 때 이 링크를 동의 화면에 보인다. 서비스에 약관 · 개인정보처리방침 페이지가 이미 있어야 하는 이유다 — react-skeleton 의 약관 템플릿은 법적 효력이 없으니 실제 서비스는 직접 쓴다). `확인 필요`
 3. 저장하면 **Client ID** 와 **Client Secret** 이 한 번만 보인다 — 바로 복사한다. (분실하면 재발급.)
-4. 환경변수: `모듈 문서 참조: docs/modules/auth-social-x.md`.
+4. 환경변수 (Client ID = OAuth 2.0 Client ID — OAuth 1.0a 의 API Key 가 아니다):
+   ```bash
+   SKELETON_AUTH_SOCIAL_X_CLIENT_ID=...                                    # (env:)
+   SKELETON_AUTH_SOCIAL_X_CLIENT_SECRET=...                                # (secrets:)
+   SKELETON_AUTH_SOCIAL_X_REDIRECT_URI=http://127.0.0.1:5173/auth/callback # 로컬은 127.0.0.1 — 콘솔에 등록한 값과 글자까지 같게
+   # SKELETON_AUTH_SOCIAL_X_REQUEST_EMAIL=true                             # 선택 — 콘솔의 이메일 권한이 있을 때
+   ```
+   `client id` 만 있으면 켜진다. client id 만 있고 secret 이 없으면 기동이 실패한다(`client-secret must not be blank`).
 
 ## 4. (선택) Kakao · Naver — 오늘의 우선순위는 낮다
 
@@ -201,7 +215,15 @@ SKELETON_AUTH_SOCIAL_PROVIDERS_GOOGLE_ENABLED=true
 SKELETON_AUTH_SOCIAL_PROVIDERS_GOOGLE_CLIENT_ID=1234-abc.apps.googleusercontent.com
 SKELETON_AUTH_SOCIAL_PROVIDERS_GOOGLE_CLIENT_SECRET=GOCSPX-...
 SKELETON_AUTH_SOCIAL_PROVIDERS_GOOGLE_REDIRECT_URI=http://localhost:5173/auth/callback
-# --- LINE · X: 이름은 모듈 문서 참조 (docs/modules/auth-social-oidc.md · auth-social-x.md) ----
+# --- LINE (§2) — client id 만 있으면 켜진다 --------------------------------------
+SKELETON_AUTH_SOCIAL_OIDC_PROVIDERS_LINE_CLIENT_ID=2001234567
+SKELETON_AUTH_SOCIAL_OIDC_PROVIDERS_LINE_CLIENT_SECRET=...
+SKELETON_AUTH_SOCIAL_OIDC_PROVIDERS_LINE_REDIRECT_URI=http://localhost:5173/auth/callback
+# SKELETON_AUTH_SOCIAL_OIDC_PROVIDERS_LINE_SCOPES=openid,profile,email   # 콘솔의 이메일 권한 승인 뒤
+# --- X (§3) — 로컬은 127.0.0.1 로 연다 (프런트 http://127.0.0.1:5173) ----------------
+SKELETON_AUTH_SOCIAL_X_CLIENT_ID=...
+SKELETON_AUTH_SOCIAL_X_CLIENT_SECRET=...
+SKELETON_AUTH_SOCIAL_X_REDIRECT_URI=http://127.0.0.1:5173/auth/callback
 # --- Kakao (선택, §4) -------------------------------------------------------
 # SKELETON_AUTH_SOCIAL_PROVIDERS_KAKAO_ENABLED=true  (+ _CLIENT_ID · _CLIENT_SECRET · _REDIRECT_URI)
 # --- 메일 (§5) ---------------------------------------------------------------
@@ -231,7 +253,10 @@ SKELETON_ACCOUNT_MAIL_BRAND_SUPPORT_ADDRESS=support@<도메인>
 |---|---|
 | `<P>_AUTH_SOCIAL_PROVIDERS_GOOGLE_ENABLED=true` · `_CLIENT_ID` · `_REDIRECT_URI=https://<도메인>/auth/callback` | `env:` |
 | `<P>_AUTH_SOCIAL_PROVIDERS_GOOGLE_CLIENT_SECRET` | `secrets:` + `.local.env` |
-| LINE · X | `모듈 문서 참조` |
+| `<P>_AUTH_SOCIAL_OIDC_PROVIDERS_LINE_CLIENT_ID` · `_REDIRECT_URI=https://<도메인>/auth/callback` · (이메일 승인 뒤) `_SCOPES=openid,profile,email` | `env:` |
+| `<P>_AUTH_SOCIAL_OIDC_PROVIDERS_LINE_CLIENT_SECRET` | `secrets:` + `.local.env` |
+| `<P>_AUTH_SOCIAL_X_CLIENT_ID` · `_REDIRECT_URI=https://<도메인>/auth/callback` · (선택) `_REQUEST_EMAIL=true` | `env:` |
+| `<P>_AUTH_SOCIAL_X_CLIENT_SECRET` | `secrets:` + `.local.env` |
 | `<P>_NOTIFICATION_MAIL_ENABLED=true` · `<P>_NOTIFICATION_MAIL_FROM` · `SPRING_MAIL_HOST` · `SPRING_MAIL_PORT` · `SPRING_MAIL_USERNAME` · `SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH=true` · `…_STARTTLS_ENABLE=true` · `<P>_ACCOUNT_MAIL_LINK_BASE_URL=https://<도메인>` | `env:` |
 | `SPRING_MAIL_PASSWORD` | `secrets:` + `.local.env` |
 
@@ -265,7 +290,7 @@ scripts/check-real-providers.sh        # 백엔드가 뜬 뒤 다시: /auth/meth
 | 2 | **Google 새 계정**: 로그아웃 → "Google 로 계속" → 계정 선택(테스트 사용자) | 구글 화면(미확인 앱 경고 → 계속) → `/auth/callback` → 로그인됨. 계정 설정에 로그인 수단 `google` | `redirect_uri_mismatch`: 로그의 `error=` 줄 + 주소창의 redirect_uri 를 §1 목록과 글자 비교. `access_denied`: 테스트 사용자 목록 |
 | 3 | **Google, 같은 이메일의 비밀번호 계정이 이미 있음**: 1번으로 만든 계정의 Gmail 과 **같은 구글 계정**으로 로그아웃 상태에서 Google 로그인 | `merge-on-verified-email: true`(샘플의 선택) → 기존 계정에 연결되어 로그인 + **"로그인 수단이 추가됐어요" 알림 메일**이 도착한다. (설정이 꺼져 있으면 `409 ACCOUNT.SOCIAL_EMAIL_CONFLICT`) | 409 가 나오면 `email_verified` 가 false 인지 서버 로그/`/account/me` 확인 |
 | 4 | **연결 / 해제**: 계정 설정 → 로그인 수단 → LINE 연결(또는 다른 제공자) → 연결 해제 | 연결: 제공자 화면 후 `/account/link-callback` 으로 돌아와 목록에 추가(+알림 메일). 해제: 다시 인증(비밀번호 또는 메일 코드) 후 사라짐. **마지막 수단은 해제할 수 없다(409)** | 콜백이 로그인 화면으로 가면 연결용 URI(`/account/link-callback`)가 콘솔에 빠졌다 |
-| 5 | **LINE / X**: 각 제공자로 로그인 | 모듈 완성 후. LINE 은 이메일 권한 승인 전이면 **주소 없는 계정**이 된다(정상) · X 는 항상 주소 없는 계정 | 로그의 `social login token exchange rejected` 줄 |
+| 5 | **LINE / X**: 각 제공자로 로그인 | 소셜로 처음 만든 계정은 **약관 · 개인정보 동의 화면**을 거쳐야 쓸 수 있다(`403 LEGAL.RECONSENT_REQUIRED` → 동의 → 통과). LINE 은 이메일 권한 승인 전이면 **주소 없는 계정**이 된다(정상) · X 는 항상 주소 없는 계정 | 로그의 `social login token exchange rejected` 줄 |
 | 6 | **주소 없는 계정의 민감한 일**: X(또는 이메일 없는 LINE) 계정으로 계정 삭제를 눌러 본다 | 메일 코드 대신 **제공자 동의 화면을 다시 거치라**고 한다 → 돌아오면 삭제 예약 | `403 ACCOUNT.REAUTH_REQUIRED` 만 보이면 프런트가 `socialReauth` 를 안 실은 것 |
 | 7 | **(선택) Kakao**: 이메일 동의 켠 경우 / 끈 경우 둘 다 | 동의 O + 확인된 이메일 → 이메일 있는 계정. 동의 X → 주소 없는 계정(위 6 과 같은 취급) | `KOE…` 코드(로그) |
 | 8 | **매직 링크**: 로그아웃 → "이메일로 로그인" → 주소 입력 | 메일: 버튼 하나 + 원문 주소. 버튼 → 로그인됨(한 번만 쓸 수 있다: 같은 링크를 다시 열면 `410`) | 링크가 `localhost:5173` 이 아니면 `LINK_BASE_URL` |
@@ -277,15 +302,11 @@ scripts/check-real-providers.sh        # 백엔드가 뜬 뒤 다시: /auth/meth
 - `scripts/dev.sh down`(컨테이너). `.env.local` 의 비밀을 채팅 · 커밋에 붙이지 않는다. Google 의 클라이언트 보안 비밀이 새어 나갔다면 콘솔에서 **새 비밀을 만들고 옛것을 비활성화**한다.
 - 홈서버에 올릴 때는 §6.3 의 이름으로 `env:` · `secrets:` 를 채운다(`docs/deploy.md` §7).
 
-## 8. react-skeleton 에서 바뀌어야 할 것 (이 브랜치는 건드리지 않았다)
+## 8. react-skeleton 쪽 (이 레포는 건드리지 않는다)
 
-- **Google · Kakao · Naver(지금 있는 것): 바꿀 것 없음.** 버튼 · client id · 콜백은 `GET /auth/methods` 로 나오고, 로그인은 `entry.redirectUri ?? origin + /auth/callback`, 연결은 `origin + /account/link-callback` 이다.
-- **LINE · X 를 쓰려면** (`packages/auth/src/social.ts` 의 `PRESETS` 는 google · kakao · naver 만 안다):
-  1. `line` 프리셋 추가: authorize `https://access.line.me/oauth2/v2.1/authorize`, scope `openid profile email`(이메일 권한 승인 후).
-  2. `x` 프리셋 추가: authorize `https://x.com/i/oauth2/authorize`, scope `users.read tweet.read`, **PKCE**: `code_verifier` 를 만들어 `state` 기록(`sessionStorage`)에 묶고 `code_challenge`(`S256`)를 인가 주소에 싣고, 콜백 후 `socialLogin(provider, code, redirectUri, codeVerifier)` 로 백엔드에 넘긴다 — 백엔드 계약(`codeVerifier`)은 다른 브랜치가 정한다.
-  3. 로그인 화면의 제공자 라벨 · 아이콘(`line` · `x`), 한/영/일 사전(`ja` 는 아직 없다면 추가).
-  4. Kakao 의 선택 동의 이메일이 동의 화면에 안 보이면 프리셋에 `scope: 'account_email profile_nickname'` 를 준다(카카오 동작 `확인 필요`).
-  5. X 는 로컬에서 `127.0.0.1` 로 열어야 한다(`vite --host 127.0.0.1` 또는 접속 주소만 바꾸기).
+- **바꿀 것 없음.** 백엔드가 `GET /auth/methods` 로 제공자마다 `authorize`(주소 · scope · 고정 파라미터) · `pkce` · `nonce` 를 알려 주고, react-skeleton `@skeleton/auth` 가 그것으로 PKCE(`code_verifier` 보관 · `code_challenge`)와 `nonce` 를 처리한다. 콜백은 로그인 `entry.redirectUri ?? origin + /auth/callback`, 연결 · 다시 인증은 `origin + /account/link-callback` 이다(**두 주소를 제공자 콘솔에 모두 등록**).
+- X 는 로컬에서 `127.0.0.1` 로 열어야 한다(`vite --host 127.0.0.1` 또는 접속 주소만 바꾸기).
+- 알려진 프런트 한계(백엔드 쪽 사실): X 인가 코드는 **30초 안에** 교환해야 한다. X 를 "연결" 대상으로 쓰는데 다른 제공자의 재동의가 앞에 끼면 30초를 넘길 수 있다.
 - 프런트 환경변수 신규: 없음(`/auth/methods` 가 정한다).
 
 ## 9. 글로벌로 갈 때
@@ -307,7 +328,8 @@ scripts/check-real-providers.sh        # 백엔드가 뜬 뒤 다시: /auth/meth
 
 - 요금 · 무료 한도 · 샌드박스 규칙 전부(§5.3), X API 의 로그인용 최소 비용(§3), Cloudflare Email Service 의 베타 가격 · 한도.
 - Kakao: 이메일 선택 동의가 동의 화면에 기본으로 보이는지, 개인 개발자 비즈 앱 전환의 현재 절차 · 에러 코드표.
-- LINE: 이메일 권한 신청의 정확한 요건(스크린샷 요구는 검색 요약), `http://localhost` 콜백 허용 여부, ID 토큰 이메일의 "확인됨" 보증 여부.
-- X: 약관 · 개인정보 URL 의 필수 여부, 이메일이 정말 없는지.
+- LINE: 이메일 권한 신청의 정확한 요건(스크린샷 요구는 검색 요약), `http://localhost` 콜백 허용 여부, ID 토큰 이메일의 "확인됨" 보증 여부, 웹 로그인 ID 토큰의 실제 `alg`(문서는 HS256 — 모듈은 HS256 · ES256 을 모두 받는다).
+- X: 약관 · 개인정보 URL 의 필수 여부, `confirmed_email` 이 "확인된 주소"인지(모듈은 병합에 쓰지 않는다), API 등급 · 요금(로그인용 `users/me` 호출이 무료 등급에서 열려 있는지).
+- Google: 기밀(confidential) 웹 클라이언트에 PKCE 를 보내도 되는지(모듈은 `SUPPORTED` 로 보낸다, 미확인).
 - Naver: 토큰 요청의 `state` 요구(§4 경고).
 - **Google · Kakao 토큰 서버가 올바른 키에 `invalid_grant` 를 돌려주는지**는 실제 키가 있어야 확인된다. `scripts/check-real-providers.sh` 는 틀린 키에 `invalid_client`(HTTP 401)가 오는 것까지만 이 문서를 쓰며 실제 서버로 확인했다.

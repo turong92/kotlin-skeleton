@@ -195,6 +195,8 @@ class StorageDeployGuard(private val properties: StorageProperties) : DeployGuar
 `.local.env` 에 있는 이름은 그 값이 쓰이고 나머지는 무작위로 만들어진다. **`.local.env` 에 적었는데 `secrets:` 에 없는 이름은 plan 이 거부한다.** 반대로 `secrets:` 에 적은 운영자 비밀을 `.local.env` 에 안 적으면 **무작위 쓰레기 값**이 들어가 첫 사용에서 실패한다 — 쓰지 않을 줄은 지운다.
 비밀이 아닌 설정(`_ENABLED=true` · `_CLIENT_ID` · `SPRING_MAIL_HOST` · 링크 주소)은 `env:` 에 적는다. 같은 이름을 `env:` 와 `secrets:` 에 동시에 쓸 수 없다.
 
+> 소셜 제공자 환경변수 규칙은 하나다: Map 값 설정(`auth-social`, `auth-social-oidc`)은 `<P>_AUTH_SOCIAL_[OIDC_]PROVIDERS_<코드>_<키>`(코드는 한 단어, `ProviderEnvironmentAliases` 가 점 표기로 옮긴다), 제공자 하나짜리 `auth-social-x` 는 `<P>_AUTH_SOCIAL_X_<키>` 가 그대로 묶인다. 진짜 환경변수 모양으로 `SocialEnvironmentOnlyBootTest`(`apps/sample`)가 google · line · x 를 증명한다.
+
 | 모듈 | 환경변수 | 빠지면 |
 |---|---|---|
 | auth | `JWT_SECRET` (별칭) 또는 `<P>_AUTH_JWT_SECRET` — **선언의 `secrets:` (무작위로 충분)** | 보호 환경(`<P>_ENV=stage\|prod` · 프로필 `prod\|staging`)에서 **기동 실패**: 비었음 / 내장 기본값 / 32바이트 미만 |
