@@ -85,6 +85,6 @@ class LegalAutoConfiguration {
     }
 
     companion object {
-        const val TEMPLATE_LOCATION = "classpath:skeleton-legal/templates/"
+        const val TEMPLATE_LOCATION = "classpath:legal-templates/"
     }
 }
