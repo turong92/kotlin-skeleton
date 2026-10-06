@@ -1109,7 +1109,11 @@
       "basePaths": ["/api/v1/legal", "/api/v1/legal/admin", "/api/v1/legal/consents"],
       "secrets": [],
       "docs": ["docs/modules/legal.md", "docs/legal.md", "docs/legal-http-contract.md"],
-      "frontend": null,
+      "frontend": {
+        "capabilities": ["legal"],
+        "newProjectFlag": null,
+        "packages": ["@skeleton/legal"]
+      },
       "notFor": [
         "법률 자문이 아니다 — 문서 본문 · 검토 · 사실(회사 이름 · 연락처)은 앱의 몫 (docs/legal.md)",
         "legal 은 저장소를 모른다 — legal-jdbc 를 같이 고른다(없으면 시작에 실패한다)",
@@ -1149,7 +1153,11 @@
       "basePaths": [],
       "secrets": [],
       "docs": ["docs/modules/legal-jdbc.md"],
-      "frontend": null,
+      "frontend": {
+        "capabilities": ["legal"],
+        "newProjectFlag": null,
+        "packages": ["@skeleton/legal"]
+      },
       "notFor": [
         "legal 없이는 쓰지 않는다(따라온다)",
         "MySQL 은 트리거를 만드는 마이그레이션이 binlog 가 켜져 있으면 log_bin_trust_function_creators=1 이 필요하다",
@@ -2710,7 +2718,7 @@
     },
     {
       "frontend": {
-        "capabilities": ["legal-documents", "cookie-consent"],
+        "capabilities": ["legal"],
         "flag": null
       },
       "oneOf": [],

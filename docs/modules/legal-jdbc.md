@@ -14,7 +14,7 @@
 | 부팅에 필요한 것 | `DataSource` 와 `db-*` 모듈 하나, 그리고 이 모듈의 마이그레이션이 적용된 스키마 (`spring.flyway.locations: classpath:db/migration/{vendor}`). **MySQL**: 마이그레이션이 트리거를 만들므로 binlog 가 켜져 있으면 `log_bin_trust_function_creators=1`(또는 마이그레이션 계정에 `SUPER`)이 필요하다 — 없으면 Flyway 가 "You do not have the SUPER privilege and binary logging is enabled" 로 실패한다. |
 | 교체 지점 | `ConsentStore`, `LegalLedger` |
 | 마이그레이션 | `modules/legal-jdbc/src/main/resources/db/migration/postgresql`, `modules/legal-jdbc/src/main/resources/db/migration/mysql` |
-| 프론트 짝 | 없음 (HTTP 계약: [legal-http-contract.md](../legal-http-contract.md)) |
+| 프론트 짝 | `@skeleton/legal` (HTTP 계약: [legal-http-contract.md](../legal-http-contract.md)) |
 | 테스트 | `modules/legal-jdbc/src/dbTest` (PostgreSQL · MySQL 컨테이너로 두 번 돈다 (`postgresTest`, `mysqlTest`) — 트리거가 실제로 막는지 · 16 스레드 동시 기록이 한 줄 · 철회 경주에서 순번이 이어지는지 · 장부 못 박기 · 익명화 · 보관 기간 정리) |
 
 자세히: [스키마 관리](../schema-management.md)

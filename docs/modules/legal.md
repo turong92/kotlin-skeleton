@@ -28,7 +28,7 @@ HTTP 는 `skeleton.legal.http.base-path`(기본 `/api/v1/legal`)에 열린다 (�
 | 부팅에 필요한 것 | 저장소 포트 둘(`ConsentStore` · `LegalLedger`) — `legal-jdbc` 가 내거나 앱이 직접 구현한다. 없으면 시작이 실패하고 메시지가 빠진 빈 이름을 적는다. 문서: 앱의 `manifest.json` 또는 모듈의 TEMPLATE. 문서가 깨졌거나 발행된 판의 본문이 장부와 다르면 시작이 실패한다 |
 | 교체 지점 | `ConsentStore`, `LegalLedger`, `LegalCatalog`, `LegalRules`, `ConsentService`, `SignUpConsentGate`, `LegalCallers`, `LegalDocumentController`, `ConsentController`, `LegalAdminController` |
 | 마이그레이션 | 없음 (스키마는 `legal-jdbc`) |
-| 프론트 짝 | 없음 (HTTP 계약: [legal-http-contract.md](../legal-http-contract.md)) |
+| 프론트 짝 | `@skeleton/legal` (HTTP 계약: [legal-http-contract.md](../legal-http-contract.md)) |
 | 테스트 | `modules/legal/src/test`, `modules/legal/src/noOptionalTest` (`spring-security-core` 가 클래스패스에 없을 때) |
 
 ## 앱이 바꾸는 곳

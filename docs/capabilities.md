@@ -59,7 +59,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | 랜딩 · 요금제 · 약관 · 쿠키 동의 · 404 페이지 | (백엔드 모듈 없음) | (덧붙일 것 없음) | `--packages marketing` — react `landing-page` `pricing-page` `legal-documents` `cookie-consent` `error-pages` | 백엔드는 할 일이 없다(정적 공개 화면). 요금제 선택 이후의 결제 연결은 payment 행. |
 | 검색 노출 · 링크 미리보기 · 서버 렌더링 | (백엔드 모듈 없음) | (덧붙일 것 없음) | `--packages seo --ssr` — react `seo` `app-starter-ssr` | 백엔드는 할 일이 없다. SSR 앱은 배포 선언이 따로 필요하다 — deploy/app.yaml 의 web: 은 정적 파일 서빙뿐(docs/deploy.md §8). |
 | 다크 모드 · 디자인 토큰 · 화면 부품 · 대시보드/목록/폼 화면 틀 | (백엔드 모듈 없음) | (덧붙일 것 없음) | (기본 포함) — react `theme` `tokens` `ui` `screen-patterns` | 백엔드는 할 일이 없다 — react-skeleton 에 기본 포함. |
-| 이용약관 · 개인정보 처리방침 · 가입 동의 기록 · 새 판 재동의 · 마케팅 수신 동의(선택, 철회) | `legal` + `legal-jdbc` | (덧붙일 것 없음) | (기본 포함) — react `legal-documents` `cookie-consent` | 스타터에 기본 포함(legal-jdbc) — 문서는 모듈의 TEMPLATE(ko/en)이라 stage · prod 에서는 기동이 거부된다: src/main/resources/legal/ 에 자기 문서와 manifest.json 을 두고(검토 끝난 판은 REVIEWED + sha256), skeleton.legal.facts.* 를 채운다. 시험 배포는 <P>_LEGAL_ACKNOWLEDGE_TEMPLATE=true. MySQL 은 log_bin_trust_function_creators=1. 동의 화면 · 가입 폼 체크박스는 프런트(docs/legal-http-contract.md). |
+| 이용약관 · 개인정보 처리방침 · 가입 동의 기록 · 새 판 재동의 · 마케팅 수신 동의(선택, 철회) | `legal` + `legal-jdbc` | (덧붙일 것 없음) | (기본 포함) — react `legal` | 스타터에 기본 포함(legal-jdbc) — 문서는 모듈의 TEMPLATE(ko/en)이라 stage · prod 에서는 기동이 거부된다: src/main/resources/legal/ 에 자기 문서와 manifest.json 을 두고(검토 끝난 판은 REVIEWED + sha256), skeleton.legal.facts.* 를 채운다. 시험 배포는 <P>_LEGAL_ACKNOWLEDGE_TEMPLATE=true. MySQL 은 log_bin_trust_function_creators=1. 동의 화면 · 가입 폼 체크박스는 프런트(docs/legal-http-contract.md). |
 
 ## 전체 목록
 
@@ -94,8 +94,8 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `idempotency` | Idempotency-Key 헤더로 명령 요청(결제 · 생성)의 중복 실행을 막고 첫 응답을 재생한다. | 스타터(apps/api)에 기본 포함 | 멱등, 중복 요청 방지, 두 번 눌러도 한 번, 멱등 키, 중복 결제 방지 / idempotency, idempotency key, duplicate request, replay response | — |
 | `job-queue-jdbc` | DB 테이블 기반 재시도 작업 큐 — 백오프 · DEAD 처리 · FOR UPDATE SKIP LOCKED, Redis 없이 여러 인스턴스에서 안전. | 스타터(apps/api)에 기본 포함 | 작업 큐, 백그라운드 작업, 재시도, 비동기 작업, 내보내기 작업, 잡 큐 / job queue, background job, retry, dead letter, task queue | — |
 | `json` | JsonCodec · 임의 JSON 을 담는 JsonDocument · 버전 있는 페이로드 · JPA/JDBC 변환기. | `--modules json` | JSON, JSON 칼럼, 버전 있는 페이로드, 직렬화 / json, json column, versioned payload, serialization | — |
-| `legal` | 약관 · 개인정보 처리방침 · 동의 기록 — 종류 · 판(시행일 · DRAFT/REVIEWED) · 원문 해시를 못 박는 장부 · 가입 동의(코드 확인 때 계정과 같은 트랜잭션에 기록) · 선택 동의 철회 · 새 판 재동의(403) · 계정 삭제 때 익명화, HTTP /api/v1/legal 까지. 문서는 앱이 싣고 예시 TEMPLATE 은 prod 에서 막는다. | 스타터(apps/api)에 기본 포함 | 약관, 이용약관, 개인정보 처리방침, 동의, 재동의, 마케팅 수신 동의, 동의 기록, 약관 버전, 법적 문서, 동의 철회 / terms of service, privacy policy, consent, re-consent, marketing consent, consent record, document version, legal documents, withdraw consent | — |
-| `legal-jdbc` | 약관 · 동의 저장소 — PostgreSQL · MySQL 로 legal 의 저장 포트 둘(동의 사건 · 판 장부)을 구현한다(legal_consents · legal_document_versions, 트리거로 더하기만). | 스타터(apps/api)에 기본 포함 | 동의 저장소, 약관 DB / consent storage, consent repository, legal database | — |
+| `legal` | 약관 · 개인정보 처리방침 · 동의 기록 — 종류 · 판(시행일 · DRAFT/REVIEWED) · 원문 해시를 못 박는 장부 · 가입 동의(코드 확인 때 계정과 같은 트랜잭션에 기록) · 선택 동의 철회 · 새 판 재동의(403) · 계정 삭제 때 익명화, HTTP /api/v1/legal 까지. 문서는 앱이 싣고 예시 TEMPLATE 은 prod 에서 막는다. | 스타터(apps/api)에 기본 포함 | 약관, 이용약관, 개인정보 처리방침, 동의, 재동의, 마케팅 수신 동의, 동의 기록, 약관 버전, 법적 문서, 동의 철회 / terms of service, privacy policy, consent, re-consent, marketing consent, consent record, document version, legal documents, withdraw consent | `@skeleton/legal` |
+| `legal-jdbc` | 약관 · 동의 저장소 — PostgreSQL · MySQL 로 legal 의 저장 포트 둘(동의 사건 · 판 장부)을 구현한다(legal_consents · legal_document_versions, 트리거로 더하기만). | 스타터(apps/api)에 기본 포함 | 동의 저장소, 약관 DB / consent storage, consent repository, legal database | `@skeleton/legal` |
 | `migration` | 마이그레이션 공통 규칙 — DB 를 지우는 설정이 허용 프로필 밖에서 켜지면 시작을 막는 가드(도구 중립). | 스타터(apps/api)에 기본 포함 | 마이그레이션 가드, DB 초기화 방지, 스키마 보호 / migration guard, prevent db wipe, schema safety | — |
 | `migration-flyway` | Flyway 구현 — 로컬 clean 옵트인 · 마이그레이션 파일 이름 규칙(V<UTC 14자리>__snake_case.sql) 검사. | 스타터(apps/api)에 기본 포함 | Flyway, 마이그레이션, DB 스키마 버전, 스키마 변경 / flyway, database migration, schema migration, schema version | — |
 | `notification` | 알림 계약 · 수신자 해석 · 인메모리 브로커 + 로그인한 사람의 받은편지함 HTTP(/api/v1/notifications: 목록 · 읽음 · 모두 읽음). | `--modules notification` | 알림, 알림 목록, 받은편지함, 안 읽은 알림, 알림 읽음, 알림 보내기 / notification, inbox, unread, mark as read, publish notification | `@skeleton/notifications` |
@@ -551,6 +551,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 설정 접두사 `skeleton.legal` — 키와 기본값 `docs/config/modules/legal.yml`
 - HTTP 경로: `/api/v1/legal`, `/api/v1/legal/admin`, `/api/v1/legal/consents`
 - 문서: `docs/modules/legal.md`, `docs/legal.md`, `docs/legal-http-contract.md`
+- 짝 프런트(react-skeleton): 항목 `legal` · 패키지 `@skeleton/legal` · 조각 기본 포함(덧붙일 것 없음)
 - 쓰지 않는 경우:
   - 법률 자문이 아니다 — 문서 본문 · 검토 · 사실(회사 이름 · 연락처)은 앱의 몫 (docs/legal.md)
   - legal 은 저장소를 모른다 — legal-jdbc 를 같이 고른다(없으면 시작에 실패한다)
@@ -564,6 +565,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 의존 한 줄: `implementation(project(":modules:legal-jdbc"))`
 - 자동으로 따라온다: `legal`
 - 문서: `docs/modules/legal-jdbc.md`
+- 짝 프런트(react-skeleton): 항목 `legal` · 패키지 `@skeleton/legal` · 조각 기본 포함(덧붙일 것 없음)
 - 쓰지 않는 경우:
   - legal 없이는 쓰지 않는다(따라온다)
   - MySQL 은 트리거를 만드는 마이그레이션이 binlog 가 켜져 있으면 log_bin_trust_function_creators=1 이 필요하다
