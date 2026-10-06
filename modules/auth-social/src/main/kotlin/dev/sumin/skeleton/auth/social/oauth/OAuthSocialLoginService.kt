@@ -15,12 +15,16 @@ class OAuthSocialLoginService(
         providerId: String,
         authorizationCode: String,
         redirectUri: String?,
+        codeVerifier: String? = null,
+        nonce: String? = null,
     ): AuthTokenResponse {
         val provider = providerRegistry.findEnabled(providerId)
             ?: throw OAuthProviderNotFoundException(providerId)
+        // 제공자를 부르기 전에 PKCE · nonce 전제를 본다 — 틀리면 한 번 쓰는 인가 코드가 타지 않는다
+        val exchange = provider.codeExchange(authorizationCode, redirectUri, codeVerifier, nonce)
 
         val profile = try {
-            provider.fetchProfile(authorizationCode, redirectUri)
+            provider.fetchProfile(exchange)
         } catch (ex: OAuthInvalidAuthorizationCodeException) {
             throw ex
         } catch (ex: RuntimeException) {

@@ -89,6 +89,22 @@ class GoogleOAuthProviderTest {
     }
 
     @Test
+    fun `google supports PKCE - the verifier is forwarded as code_verifier and the frontend learns the authorize endpoint`() {
+        assertEquals(dev.sumin.skeleton.auth.social.oauth.PkceMode.SUPPORTED, provider.pkce)
+        assertEquals("https://accounts.google.com/o/oauth2/v2/auth", provider.authorize?.url)
+        assertEquals(listOf("openid", "email", "profile"), provider.authorize?.scopes)
+        assertEquals("google-client", provider.publicClientId)
+
+        val verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
+        provider.fetchProfile(dev.sumin.skeleton.auth.social.oauth.OAuthCodeExchange("google-code", null, verifier))
+        assertEquals(verifier, requests.first().formBody()["code_verifier"])
+
+        requests.clear()
+        provider.fetchProfile(dev.sumin.skeleton.auth.social.oauth.OAuthCodeExchange("google-code", null, null))
+        assertEquals(false, requests.first().formBody().containsKey("code_verifier"), "SUPPORTED: no verifier, none sent")
+    }
+
+    @Test
     fun `token error maps to invalid authorization code`() {
         assertFailsWith<OAuthInvalidAuthorizationCodeException> {
             provider.fetchProfile("invalid-code", redirectUri = null)

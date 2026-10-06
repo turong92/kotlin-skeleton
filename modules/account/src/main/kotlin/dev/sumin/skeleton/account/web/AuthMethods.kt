@@ -18,7 +18,19 @@ import org.springframework.web.bind.annotation.RestController
 data class SignUpOptions(val password: Boolean, val emailVerification: Boolean, val social: Boolean)
 
 /** 소셜 로그인을 시작하려면 프론트에 필요한 것 — 둘 다 비밀이 아니다 (client id 는 인가 URL 에 그대로 실린다) */
-data class SocialMethodView(val provider: String, val clientId: String?, val redirectUri: String?)
+data class SocialMethodView(
+    val provider: String,
+    val clientId: String?,
+    val redirectUri: String?,
+    /** `REQUIRED` | `SUPPORTED` | `UNSUPPORTED` — PKCE(S256): REQUIRED/SUPPORTED 면 인가 URL 에 `code_challenge` · `code_challenge_method=S256` 을 붙이고 로그인 요청에 `codeVerifier` 를 보낸다 */
+    val pkce: String = "UNSUPPORTED",
+    /** 같은 값 집합 — REQUIRED/SUPPORTED 면 인가 URL 에 `nonce` 를 붙이고 로그인 요청에 같은 `nonce` 를 보낸다 */
+    val nonce: String = "UNSUPPORTED",
+    /** 인가 URL 을 만드는 데 필요한 제공자 쪽 값. 모르는 제공자는 null (프론트가 자기 설정을 쓴다) */
+    val authorize: SocialAuthorizeView? = null,
+)
+
+data class SocialAuthorizeView(val url: String, val scopes: List<String>, val params: Map<String, String>)
 
 /** 이 백엔드가 지금 켜 둔 로그인 방법 — 프론트가 환경변수로 손으로 맞추지 않게. 계정 · 주소 정보는 없다 (모두에게 같은 답) */
 data class AuthMethodsView(

@@ -50,7 +50,7 @@ Corrections to the draft that was sent earlier: the 429 and field-rename rows (1
 2. **Social link checks the re-auth proof BEFORE exchanging the authorization code with the provider** (a wrong password / missing / wrong code never calls the provider, so the single-use provider code is not burned and the frontend may retry with the same code) — `SocialLinkServiceTest` "the re-authentication proof is checked BEFORE the authorization code is exchanged…". The proof is then spent before the identity is linked (one code authorizes one link).
 3. **The re-auth proof is bound server-side to the account and to the session** (`sid` of the access token; the code is rejected with `410 ACCOUNT.CODE_EXPIRED` from another session or another account) and expires after 30 min / 5 guesses. It is **not** bound to a specific action (a `reauth/confirmation` code works for email change, first password, social link and unlink — one use); the delete code is separate (`delete/confirmation`). If the app runs without `auth-session` there is no `sid` and the binding is to the account only.
 4. **Nothing in the backend relies on `Referer`.** The cookie-mode CSRF guard checks the `X-Requested-With: fetch` header (a custom header forces a CORS preflight), plus SameSite=Strict and the CORS allow-list; **the backend does not check `Origin` itself** (CORS does for browsers) — so `Referrer-Policy: no-referrer` is safe, and nothing requires the frontend to send `Origin`.
-5. **PKCE (`code_challenge` / `codeVerifier`, `AUTH.SOCIAL_PKCE_FAILED`, `pkce` in `GET /auth/methods`): deferred.** It touches every provider module (token requests in `auth-social-google/kakao/naver`), the methods listing and both endpoints, and the provider-side support has to be verified per provider; it did not fit this round without cutting the account fixes. Until then the OAuth `state` check (section 7) is the login-CSRF defence.
+5. **PKCE** (`code_challenge` / `codeVerifier`, `AUTH.SOCIAL_PKCE_FAILED`, `pkce` in `GET /auth/methods`): **implemented — see "FINAL-3 + social PKCE (addendum)" at the end of this file.** The OAuth `state` check (section 7) stays the first login-CSRF defence; PKCE is the second where the provider supports it.
 
 
 ## 0. Conventions (platform, unchanged)
@@ -263,3 +263,60 @@ Data export: no endpoint; `AccountDataExporter` is an interface only (not wired)
 - FINAL-2 (security review): `maxBytes` (not `maxLength`); `POST /account/reauth/confirmation` + `confirmationToken` on email change / first password / social link, `currentPassword` on social link, `403 ACCOUNT.REAUTH_REQUIRED`; resend `429`; magic link redeems for existing accounts with sign-up closed; a mailbox proof discards an unproven sign-up password; the old address is told of every email-change request; unlink revokes other sessions; admin list paging validated and admin role re-checked on the stored account; login bucket per address; OAuth `state` requirement written down.
 - DRAFT-1: initial contract (pre-implementation).
 - FINAL-1: reconciled with the code — cookie name `skeleton_refresh`, `X-Device-Name` header (no body field), IP-limit 429 on forgot/magic-link, email-change to a taken address sends nothing, `[idem]` commands, 201 `CREATED` sign-up when verification is off, admin response shapes, extra error codes.
+
+---
+
+## FINAL-3 + social PKCE (addendum)
+
+Audience: the frontend agent. Providers added with this addendum: `line`, `x` (and any provider configured in `auth-social-oidc`). Existing providers (`google`, `kakao`, `naver`) follow the same rules; their `pkce` is stated below. Nothing in FINAL-3 changes except the fields and errors listed here; every field below is **optional on the wire** (an old client keeps working against providers whose `pkce` is not `REQUIRED`).
+
+### A. `GET /api/v1/auth/methods` — `social[]` objects grow
+
+```
+"social": [ {
+  "provider": "line",                 // path segment for login / link / socialReauth; also the identity `method`
+  "clientId": "1234567890"|null,      // public
+  "redirectUri": "https://app.example.com/auth/callback/line"|null,   // the server's configured one; the frontend may use its own, but it MUST be byte-identical in the authorize URL and in `redirectUri` of the login request
+  "pkce":  "REQUIRED" | "SUPPORTED" | "UNSUPPORTED",
+  "nonce": "REQUIRED" | "SUPPORTED" | "UNSUPPORTED",
+  "authorize": { "url": "https://access.line.me/oauth2/v2.1/authorize", "scopes": ["openid","profile","email"], "params": { "response_type": "code" } } | null
+} ]
+```
+Provider values today: `google` pkce SUPPORTED nonce UNSUPPORTED; `line` (preset) pkce REQUIRED nonce REQUIRED; `x` pkce REQUIRED nonce UNSUPPORTED; `kakao` / `naver` pkce UNSUPPORTED nonce UNSUPPORTED, `authorize` null (keep the frontend's own settings for these two). Providers configured through `auth-social-oidc` default to pkce SUPPORTED nonce SUPPORTED unless the project says otherwise. A provider appears here only when the backend has it enabled (client id configured).
+
+### B. Building the authorize URL (frontend, per provider, from the object above)
+1. Generate per attempt and keep in `sessionStorage` until the callback: `state` (random, >= 16 bytes), `codeVerifier` (PKCE: 43-128 chars of `[A-Za-z0-9-._~]`, e.g. 32 random bytes base64url = 43 chars), `nonce` (random, 8-256 printable ASCII without spaces; base64url of 16+ random bytes) — the verifier and nonce are **per attempt**, never reused.
+2. `code_challenge = BASE64URL(SHA-256(ASCII(codeVerifier)))` (no padding). Method is always `S256` (the backend supports no `plain`).
+3. URL = `authorize.url` + `?` + `client_id`, `redirect_uri`, `scope` (the `authorize.scopes` joined by a single space), `state`, every entry of `authorize.params` (e.g. `response_type=code`), plus: if `pkce` is `REQUIRED` or `SUPPORTED`: `code_challenge`, `code_challenge_method=S256`; if `nonce` is `REQUIRED` or `SUPPORTED`: `nonce`. When `pkce` is `UNSUPPORTED` send neither (some providers reject unknown parameters). All values URL-encoded.
+4. On the callback: compare `state` first (reject on mismatch, do not call the backend), then **immediately** call the backend with the code — authorization codes are single use and short lived (LINE 10 minutes; **X 30 seconds**; others unspecified).
+
+### C. Request bodies — two new optional fields everywhere an authorization code is sent
+| Endpoint | New fields |
+|---|---|
+| `POST /api/v1/auth/social/{provider}/login` | `codeVerifier?`, `nonce?` next to `authorizationCode`, `redirectUri?` |
+| `POST /api/v1/account/identities/social/{provider}` (link) | `codeVerifier?`, `nonce?` (top level, next to `authorizationCode`) |
+| `socialReauth` object on email change, link, unlink, delete, reauth | `socialReauth: { provider, authorizationCode, redirectUri?, codeVerifier?, nonce? }` |
+
+Rules (server-enforced, evaluated by the target provider's mode, BEFORE the provider is called and BEFORE any re-authentication proof is spent — so a retry with the same authorization code and the same proof works after fixing the request):
+- `pkce = REQUIRED` and no `codeVerifier` -> `400 AUTH.SOCIAL_PKCE_FAILED`.
+- `codeVerifier` present but not 43-128 chars of `[A-Za-z0-9-._~]` -> `400 AUTH.SOCIAL_PKCE_FAILED` (validated whenever present, in every mode).
+- `pkce = SUPPORTED`: forwarded to the provider when present, optional. `pkce = UNSUPPORTED`: ignored, never forwarded.
+- `nonce = REQUIRED` and none (or malformed: not 8-256 printable ASCII without spaces) -> `400 AUTH.SOCIAL_NONCE_FAILED`. `SUPPORTED`: checked against the provider's ID token when present. `UNSUPPORTED`: ignored.
+- A verifier that does not match the challenge of the authorization request is detected by the provider, not by us: it answers `invalid_grant` and the backend answers `401 AUTH_SOCIAL.INVALID_AUTHORIZATION_CODE` (indistinguishable from a wrong or already used code; for `socialReauth` it is `400 ACCOUNT.REAUTH_FAILED`). When the provider's error text names the verifier, the backend answers `400 AUTH.SOCIAL_PKCE_FAILED` instead.
+- For `socialReauth` a missing/malformed verifier or nonce is `400 AUTH.SOCIAL_PKCE_FAILED` / `AUTH.SOCIAL_NONCE_FAILED` (a client bug), not `ACCOUNT.REAUTH_FAILED`.
+
+### D. Errors added
+| Code | Status | When |
+|---|---|---|
+| `AUTH.SOCIAL_PKCE_FAILED` | 400 | see C |
+| `AUTH.SOCIAL_NONCE_FAILED` | 400 | see C |
+| `AUTH.SOCIAL_ID_TOKEN_INVALID` | 401 | an OpenID Connect provider's ID token failed validation (signature, `iss`, `aud`, `exp`, `nonce`). Via `socialReauth` it is `400 ACCOUNT.REAUTH_FAILED` like any rejected proof. The reason is in the server log only |
+Unchanged: `401 AUTH_SOCIAL.INVALID_AUTHORIZATION_CODE` (provider refused the code: wrong, expired, used twice), `404 AUTH_SOCIAL.PROVIDER_NOT_FOUND` (not enabled), `502 AUTH_SOCIAL.PROVIDER_GATEWAY_ERROR` (provider down / rate limited / our client credentials rejected).
+
+### E. Address-less accounts (LINE, X, and any provider whose email is missing or not vouched for)
+- LINE: the email exists only with the `email` scope AND the console's email permission; even then LINE states no verification, so the backend treats it as **not verified**: the account is created **without an address** (same as Naver) and a LINE email never merges into an existing account. X: email only with the `users.email` scope and the app's email permission; treated as not verified. The flows of FINAL-3 apply as written: sign-up via social works (no address on the account), link/unlink/delete/email change need `socialReauth` with a FRESH code of an already linked provider — **and the PKCE `codeVerifier` of that fresh authorization request**.
+- The frontend runs the provider consent again for a `socialReauth`: new `state`, new `codeVerifier`, new `nonce`, new code.
+- Provider subject: LINE `sub` is stable per LINE **provider** (the console grouping), not per channel; moving the app to a channel under another provider yields different subjects, i.e. different identities (documented in `docs/modules/auth-social-oidc.md`). Subjects are never exposed in responses.
+
+### F. Frontend checklist
+`GET /auth/methods` -> per provider build the URL (B) -> callback: check `state` -> `POST .../login` with `{authorizationCode, redirectUri, codeVerifier, nonce}` (omit what the provider does not use) -> on `400 AUTH.SOCIAL_PKCE_FAILED` / `AUTH.SOCIAL_NONCE_FAILED` fix the request (it is a client bug, nothing was spent) -> `401 AUTH_SOCIAL.INVALID_AUTHORIZATION_CODE` / `AUTH.SOCIAL_ID_TOKEN_INVALID`: restart the consent. Remove the stored `state` / `codeVerifier` / `nonce` after the first use.

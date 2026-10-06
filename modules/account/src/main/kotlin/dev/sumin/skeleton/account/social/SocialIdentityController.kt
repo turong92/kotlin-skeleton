@@ -29,6 +29,9 @@ data class LinkSocialRequest(
     @field:Pattern(regexp = "^[0-9]{6}$") val confirmationCode: String? = null,
     /** 이메일이 없는 계정의 다시 인증 — 이미 연결된 제공자의 새 인가 코드 */
     @field:Valid val socialReauth: dev.sumin.skeleton.account.web.SocialReauthRequest? = null,
+    /** 연결할 제공자의 PKCE 검증기 · 인가 요청의 nonce (`GET /auth/methods` 의 `pkce` · `nonce`) */
+    @field:Size(max = 256) val codeVerifier: String? = null,
+    @field:Size(max = 256) val nonce: String? = null,
 ) {
     override fun toString() = "LinkSocialRequest(authorizationCode=<redacted>, <credentials redacted>)"
 }
@@ -46,6 +49,7 @@ class SocialIdentityController(private val callers: AccountCallers, private val 
         val view = links.link(
             caller.accountId, provider, request.authorizationCode!!, request.redirectUri,
             dev.sumin.skeleton.account.web.reauthOf(request.currentPassword, request.confirmationCode, request.socialReauth), caller.sessionId,
+            request.codeVerifier, request.nonce,
         )
         return ResponseEntity.status(HttpStatus.CREATED).body(Response.ok(view))
     }

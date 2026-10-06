@@ -61,10 +61,13 @@ data class SocialReauthRequest(
     @field:NotBlank @field:Size(max = 64) val provider: String?,
     @field:NotBlank @field:Size(max = 2048) val authorizationCode: String?,
     @field:Size(max = 2048) val redirectUri: String? = null,
+    /** PKCE(S256) 검증기와 인가 요청의 nonce — 제공자의 `pkce` · `nonce` (`GET /auth/methods`) 가 요구할 때 */
+    @field:Size(max = 256) val codeVerifier: String? = null,
+    @field:Size(max = 256) val nonce: String? = null,
 ) {
-    override fun toString() = "SocialReauthRequest(provider=$provider, authorizationCode=<redacted>)"
+    override fun toString() = "SocialReauthRequest(provider=$provider, authorizationCode=<redacted>, codeVerifier=<redacted>)"
 
-    fun toReauth() = dev.sumin.skeleton.account.SocialReauth(provider!!, authorizationCode!!, redirectUri)
+    fun toReauth() = dev.sumin.skeleton.account.SocialReauth(provider!!, authorizationCode!!, redirectUri, codeVerifier, nonce)
 }
 
 /** 다시 인증 증거 묶음 — 계정이 가진 것에 맞는 하나: 비밀번호 · 메일로 받은 6자리 코드 · (이메일 없는 계정) 소셜 코드 */
