@@ -9,15 +9,18 @@
 # 메일 수신기(mailpit, compose 의 mail 프로필)도 함께 올린다 — 앱은 localhost:$MAIL_SMTP_PORT 로 보내고, 받은 메일은 http://localhost:$MAIL_HTTP_PORT (UI) ·
 #   GET http://localhost:$MAIL_HTTP_PORT/api/v1/messages (JSON), 한 통: /api/v1/message/<ID>, 비우기: DELETE /api/v1/messages — 프런트 e2e 는 자기 mailpit 을 띄우지 말고 이것을 쓴다 (같은 포트 · 같은 API).
 #   프런트가 다른 포트를 쓰고 싶으면 MAIL_SMTP_PORT · MAIL_HTTP_PORT 를 넘긴다 (앱과 수신기가 같은 값을 쓴다).
-# 자기 개발 컨테이너(kotlin-skeleton)와 섞이지 않게 전용 compose 프로젝트 이름을 쓴다. 로그: build/sample-e2e/backend.log
+# 자기 개발 컨테이너(kotlin-skeleton)와 섞이지 않게 전용 compose 프로젝트 이름을 쓴다. 로그: build/sample-e2e/backend.log · 상태: build/sample-e2e/state.env (포트 · compose 프로젝트 — stop 이 읽는다)
 # 시작에 성공하면 마지막 줄이 `READY http://localhost:<SERVER_PORT>` 다. 이 환경처럼 직접 서버가 막힌 곳에서는 `MARINA_DIRECT=1 scripts/sample-e2e-backend.sh start`.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+OUT=build/sample-e2e; PID_FILE="$OUT/backend.pid"; LOG="$OUT/backend.log"; STATE="$OUT/state.env"
+# stop · status 는 start 가 쓴 포트 · compose 프로젝트 이름을 그대로 쓴다 — 같은 환경변수를 다시 넘기지 않아도 된다 (start 의 값이 항상 이긴다)
+case "${1:-}" in stop|status) if [ -f "$STATE" ]; then . "$STATE"; E2E_COMPOSE_PROJECT="$COMPOSE_PROJECT_NAME"; fi ;; esac
+
 SERVER_PORT="${SERVER_PORT:-8080}"; DB_PORT="${DB_PORT:-5432}"; S3_PORT="${S3_PORT:-8333}"; MAIL_SMTP_PORT="${MAIL_SMTP_PORT:-1025}"; MAIL_HTTP_PORT="${MAIL_HTTP_PORT:-8025}"
 export SERVER_PORT DB_PORT S3_PORT MAIL_SMTP_PORT MAIL_HTTP_PORT
 export COMPOSE_PROJECT_NAME="${E2E_COMPOSE_PROJECT:-kotlin-skeleton-sample-e2e}"
-OUT=build/sample-e2e; PID_FILE="$OUT/backend.pid"; LOG="$OUT/backend.log"
 
 running() { [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; }
 
@@ -27,7 +30,7 @@ stop() {
     for _ in $(seq 1 30); do running || break; sleep 1; done
     running && kill -9 "$(cat "$PID_FILE")" 2>/dev/null || true
   fi
-  rm -f "$PID_FILE"
+  rm -f "$PID_FILE" "$STATE"
   docker compose --profile s3 --profile mail down -v --remove-orphans >/dev/null 2>&1 || true
   echo "STOPPED"
 }
@@ -36,6 +39,8 @@ case "${1:-}" in
   start)
     running && { echo "이미 떠 있다 (pid $(cat "$PID_FILE"))" >&2; exit 1; }
     mkdir -p "$OUT"
+    # stop · status 가 다시 읽는 상태 (포트 · compose 프로젝트)
+    { for v in SERVER_PORT DB_PORT S3_PORT MAIL_SMTP_PORT MAIL_HTTP_PORT COMPOSE_PROJECT_NAME; do printf '%s=%q\n' "$v" "${!v}"; done; } > "$STATE"
     trap 'rc=$?; [ $rc -eq 0 ] || { echo "✗ 시작 실패 — 정리한다 (로그: $LOG)" >&2; stop >/dev/null; }' EXIT
     docker compose up -d --wait postgres
     docker compose --profile s3 up -d s3
@@ -45,7 +50,8 @@ case "${1:-}" in
     curl -fsS "http://localhost:$MAIL_HTTP_PORT/api/v1/info" >/dev/null || { echo "✗ 메일 수신기(mailpit)가 $MAIL_HTTP_PORT 에서 뜨지 않았다" >&2; exit 1; }
     ./gradlew :apps:sample:bootJar -q --console=plain
     JAR="$(ls apps/sample/build/libs/*.jar | grep -v -- '-plain.jar' | head -1)"
-    nohup java -jar "$JAR" --spring.profiles.active=local > "$LOG" 2>&1 &
+    # 자기 세션(프로세스 그룹)에서 띄운다 — 부른 쪽이 끝나며 자기 그룹을 죽여도 백엔드가 같이 죽지 않게. macOS 에는 setsid 명령이 없어 perl 로 한다 (exec 이라 $! 가 java 의 pid)
+    nohup perl -MPOSIX -e 'POSIX::setsid(); exec @ARGV' java -jar "$JAR" --spring.profiles.active=local > "$LOG" 2>&1 &
     echo $! > "$PID_FILE"
     for _ in $(seq 1 120); do
       running || { echo "✗ 앱이 먼저 종료됐다" >&2; tail -30 "$LOG" >&2; exit 1; }
