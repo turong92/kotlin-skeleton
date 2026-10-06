@@ -180,7 +180,7 @@ expect_exit 0 "persistence-jooq + 형제 마이그레이션 모듈을 찍는다"
 echo "== 7. --with-sample (샘플 앱 \"Notes\" 은 요청할 때만 남는다)"
 G="$TMP/g"
 expect_exit 0 "조합 5 를 찍는다 (rename 잔여 검사 포함)" stamp "$G" --with-sample
-want=":apps:api :apps:sample :modules:account :modules:account-jdbc :modules:alert :modules:alert-jdbc :modules:auth :modules:auth-magic-link :modules:auth-session :modules:auth-session-jdbc :modules:auth-social :modules:board :modules:board-jdbc :modules:captcha-turnstile :modules:crypto :modules:db-postgresql :modules:idempotency :modules:job-queue-jdbc :modules:json :modules:migration :modules:migration-flyway :modules:notification :modules:notification-jdbc :modules:notification-mail :modules:notification-sse :modules:persistence-jdbc :modules:platform :modules:storage :modules:storage-s3 :modules:time"
+want=":apps:api :apps:sample :modules:account :modules:account-jdbc :modules:alert :modules:alert-jdbc :modules:auth :modules:auth-magic-link :modules:auth-session :modules:auth-session-jdbc :modules:auth-social :modules:auth-social-google :modules:auth-social-oidc :modules:auth-social-x :modules:board :modules:board-jdbc :modules:captcha-turnstile :modules:crypto :modules:db-postgresql :modules:idempotency :modules:job-queue-jdbc :modules:json :modules:migration :modules:migration-flyway :modules:notification :modules:notification-jdbc :modules:notification-mail :modules:notification-sse :modules:persistence-jdbc :modules:platform :modules:storage :modules:storage-s3 :modules:time"
 got="$(includes "$G/settings.gradle.kts")"
 [ "$got" = "$want" ] && pass "settings.gradle.kts 는 스타터 + 샘플 앱의 모듈과 그 닫힘을 포함한다" || fail "settings includes: [$got] expected [$want]"
 check "샘플 앱 소스가 새 패키지로 옮겨진다" test -f "$G/apps/sample/src/main/kotlin/dev/sumin/ovation/app/sample/SampleApplication.kt"
@@ -191,6 +191,12 @@ check "스타터 테스트의 부재 단언(S3 클라이언트)은 그대로다 
 check "스타터 설정에 샘플 모듈의 설정 블록이 붙지 않는다" lacks_line 'new-project: module config blocks' "$G/apps/api/src/main/resources/application.yml"
 check "dbTestModules 에 샘플이 쓰는 DB 모듈이 들어간다" has_line 'val dbTestModules = setOf\(":modules:account-jdbc", ":modules:alert-jdbc", ":modules:auth-session-jdbc", ":modules:board-jdbc", ":modules:job-queue-jdbc", ":modules:notification-jdbc"\)' "$G/build.gradle.kts"
 check "dev.sh 는 APP=sample 을 알고 문법 검사를 통과한다" bash -c "grep -q 'APP' '$G/scripts/dev.sh' && bash -n '$G/scripts/dev.sh' && bash -n '$G/scripts/dev-sample.sh' && bash -n '$G/scripts/sample-e2e-backend.sh'"
+
+echo "== 7b. --modules auth-social-oidc,auth-social-x (글로벌 소셜: LINE · X · 그 외 OIDC)"
+SG="$TMP/sg"
+expect_exit 0 "글로벌 소셜 조합을 찍는다 (rename 잔여 검사 포함)" stamp "$SG" --modules auth-social-oidc,auth-social-x
+check "oidc · x 와 닫힘(auth-social)이 포함되고 고르지 않은 제공자(kakao)는 없다" bash -c "grep -q 'include(\":modules:auth-social-oidc\")' '$SG/settings.gradle.kts' && grep -q 'include(\":modules:auth-social-x\")' '$SG/settings.gradle.kts' && grep -q 'include(\":modules:auth-social\")' '$SG/settings.gradle.kts' && ! grep -q 'auth-social-kakao' '$SG/settings.gradle.kts'"
+check "두 모듈의 문서 쪽 · 설정 블록이 따라온다" bash -c "test -f '$SG/docs/modules/auth-social-oidc.md' && test -f '$SG/docs/modules/auth-social-x.md' && test -f '$SG/docs/config/modules/auth-social-oidc.yml' && test -f '$SG/docs/config/modules/auth-social-x.yml'"
 
 echo "== 8. --modules board,board-jdbc (게시판 — board 는 저장소를 모르고 board-jdbc 가 포트를 구현한다)"
 H="$TMP/h"

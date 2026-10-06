@@ -60,6 +60,20 @@ class OidcAutoConfigurationTest {
     }
 
     @Test
+    fun `an app can replace how providers are built - a custom OidcProviderFactory bean wins over the default`() {
+        val seen = mutableListOf<String>()
+        runner.withBean(OidcProviderFactory::class.java, Supplier {
+            OidcProviderFactory { code, provider, global, http, clock -> seen += code; OidcProviders.create(code, provider, global, http, clock) }
+        }).withPropertyValues(
+            "$p.line.client-id=2001234567", "$p.line.client-secret=0123456789abcdef0123456789abcdef",
+            "$p.line.authorization-endpoint=${idp.base}/authorize", "$p.line.token-endpoint=${idp.base}/token", "$p.line.jwks-uri=${idp.base}/jwks", "$p.line.issuer=${idp.issuer}",
+        ).run { ctx ->
+            assertEquals(1, ctx.getBeansOfType(OAuthProvider::class.java).size)
+            assertEquals(listOf("line"), seen)
+        }
+    }
+
+    @Test
     fun `an enabled provider whose discovery fails stops the application with a readable message`() {
         idp.discoveryStatus = 503
         runner.withPropertyValues("$p.microsoft.issuer=${idp.issuer}", "$p.microsoft.client-id=ms-client", "$p.microsoft.client-secret=ms-secret").run { ctx ->

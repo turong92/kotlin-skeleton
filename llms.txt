@@ -29,6 +29,7 @@
 - 비밀번호 없이 이메일 링크로 로그인 (매직링크) [auth-magic-link] → kotlin `--modules auth-magic-link` · react 기본 포함 — 손으로: 스타터의 account 위에 얹는다.
 - 관리자 회원 관리 (목록 · 정지 · 역할 · 삭제 복구) [account] → kotlin 덧붙일 것 없음 · react 기본 포함 — 손으로: 스타터의 account 에 있다 — skeleton.account.admin.enabled=true 로…
 - 소셜 로그인 (구글 · 카카오 · 네이버) [auth-social] → kotlin `--modules auth-social,auth-social-google` (auth-social-google | auth-social-kakao | auth-social-naver 중 하나 이상 고른다) · react 기본 포함 — 손으로: 제공자 enabled · client-id · client-secret · redirect-uri(비밀은…
+- 글로벌 소셜 로그인: LINE · X · 그 외 OIDC [auth-social] → kotlin `--modules auth-social,auth-social-google,auth-social-oidc,auth-social-x` (auth-social-oidc | auth-social-x 중 하나 이상 고른다) · react 기본 포함 — 손으로: LINE 은 auth-social-oidc 의 프리셋(client-id · client-secret 만),…
 - 게시판 · 글쓰기 · 댓글 · 대댓글 · 공감(반응) [board, board-jdbc] → kotlin `--modules board,board-jdbc` · react `--packages board` — 손으로: 게시판 코드 만들기(skeleton.board.seed-boards 설정이나 운영자 API)
 - 알림 (종 · 목록 · 안 읽은 수) [notification, notification-jdbc] → kotlin `--modules notification,notification-jdbc` · react `--packages notifications` — 손으로: 알림을 만드는 쪽(NotificationPublisher.publish)은 앱 코드 — 받는 사람은…
 - 알림이 새로고침 없이 즉시 뜬다 (실시간) [notification, notification-jdbc] → kotlin `--modules notification,notification-jdbc,notification-sse` (notification-sse | notification-websocket 중 하나 이상 고른다) · react `--packages notifications,realtime` — 손으로: SSE(단방향, 더 단순)
@@ -87,6 +88,8 @@
 - auth-social-google: 구글 OAuth 제공자 [구글 로그인, 구글 소셜 로그인]
 - auth-social-kakao: 카카오 OAuth 제공자 [카카오 로그인, 카카오 소셜 로그인]
 - auth-social-naver: 네이버 OAuth 제공자 [네이버 로그인, 네이버 소셜 로그인]
+- auth-social-oidc: 범용 OpenID Connect 소셜 로그인 제공자 — 속성만으로… [라인 로그인, LINE 로그인]
+- auth-social-x: X(Twitter) 로그인 제공자 — OAuth 2.0… [X 로그인, 엑스 로그인]
 - board: 게시판 — 글 · 중첩 댓글(대댓글) [게시판, 커뮤니티]
 - board-jdbc: 게시판 저장소 — PostgreSQL · MySQL 로 board 의… [게시판 저장소, 게시판 DB]
 - captcha-turnstile: 봇 방지 — Cloudflare Turnstile 토큰을 서버에서… [캡차, 봇 방지]

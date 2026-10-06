@@ -276,7 +276,7 @@ Audience: the frontend agent. Providers added with this addendum: `line`, `x` (a
 "social": [ {
   "provider": "line",                 // path segment for login / link / socialReauth; also the identity `method`
   "clientId": "1234567890"|null,      // public
-  "redirectUri": "https://app.example.com/auth/callback/line"|null,   // the server's configured one; the frontend may use its own, but it MUST be byte-identical in the authorize URL and in `redirectUri` of the login request
+  "redirectUri": "https://app.example.com/auth/callback"|null,   // the server's configured one; the frontend may use its own, but it MUST be byte-identical in the authorize URL and in `redirectUri` of the login request
   "pkce":  "REQUIRED" | "SUPPORTED" | "UNSUPPORTED",
   "nonce": "REQUIRED" | "SUPPORTED" | "UNSUPPORTED",
   "authorize": { "url": "https://access.line.me/oauth2/v2.1/authorize", "scopes": ["openid","profile","email"], "params": { "response_type": "code" } } | null

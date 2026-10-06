@@ -202,6 +202,8 @@ class StorageDeployGuard(private val properties: StorageProperties) : DeployGuar
 | account | `<P>_ACCOUNT_MAIL_LINK_BASE_URL` (메일 링크가 여는 프론트 주소 — 비밀 아님, 선언의 `env:` 에 적어도 된다) · 선택 `<P>_ACCOUNT_BOOTSTRAP_ADMIN_EMAIL` | 보호 환경에서 **기동 실패** (`DeployGuard` `account`): 주소가 비었음 · 메모리 계정 저장소(`account-jdbc` 를 얹는다) · 메일 발송 길 없음(`notification-mail`) · 시드 계정 · 링크 로그 켬. 첫 관리자 이메일은 확인된 로그인 때 ADMIN 을 준다 |
 | auth-session | (없음 — 설정만) | 보호 환경에서 메모리 세션 저장소(`auth-session-jdbc` 를 얹는다) · 쿠키 전달인데 `cookie.secure=false` 면 기동 실패 |
 | auth-social-google / -kakao / -naver | `<P>_AUTH_SOCIAL_PROVIDERS_<X>_ENABLED=true` · `_CLIENT_ID` (env:) · `_CLIENT_SECRET` (**운영자**) | 켰는데 비면 기동 실패 (`client id/secret must not be blank`) |
+| auth-social-oidc | `<P>_AUTH_SOCIAL_OIDC_PROVIDERS_<코드>_CLIENT_ID` (env:) · `_CLIENT_SECRET` (**운영자**) · `_REDIRECT_URI` (env:) — 예: `…_PROVIDERS_LINE_CLIENT_ID` | id 가 비면 그 제공자는 없다(아무 일도 없다). id 만 있고 secret 이 비면 기동 실패 (`client-secret must not be blank`) |
+| auth-social-x | `<P>_AUTH_SOCIAL_X_CLIENT_ID` (env:) · `_CLIENT_SECRET` (**운영자**) · `_REDIRECT_URI` (env:) | id 가 비면 제공자가 없다. id 만 있으면 기동 실패 (`client-secret must not be blank`) |
 | captcha-turnstile | `<P>_CAPTCHA_TURNSTILE_ENABLED=true` (env:) · `_SECRET_KEY` (**운영자**) | 검증기 빈이 없다 — 기동은 되고, 주입받는 곳이 있으면 그 빈 이름으로 실패 |
 | payment-toss / -stripe | `<P>_PAYMENT_<X>_ENABLED=true` (env:) · `_SECRET_KEY` (**운영자**) | 제공자 빈이 없다 — 결제 라우팅이 그 제공자를 못 찾는다 |
 | storage-s3 | `<P>_STORAGE_S3_BUCKET` · `_ENDPOINT_OVERRIDE` (env:) · `_CREDENTIALS_ACCESS_KEY_ID` · `_CREDENTIALS_SECRET_ACCESS_KEY` (**운영자**) | 버킷이 비면 저장소 빈이 없다. 키가 비면 AWS 기본 자격 증명 체인으로 가 **첫 사용에서** 실패(기동은 된다) |

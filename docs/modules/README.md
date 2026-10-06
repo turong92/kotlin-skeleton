@@ -17,6 +17,8 @@
 | `auth-social-google` | Google OAuth 제공자 | [auth-social-google](auth-social-google.md) |
 | `auth-social-kakao` | Kakao OAuth 제공자 | [auth-social-kakao](auth-social-kakao.md) |
 | `auth-social-naver` | Naver OAuth 제공자 | [auth-social-naver](auth-social-naver.md) |
+| `auth-social-oidc` | 범용 OpenID Connect 제공자 (속성으로 여러 개 · LINE 프리셋) | [auth-social-oidc](auth-social-oidc.md) |
+| `auth-social-x` | X(Twitter) OAuth 2.0 + PKCE 제공자 | [auth-social-x](auth-social-x.md) |
 | `async` | 컨텍스트(trace id · MDC)를 넘기는 @Async 실행기 | [async](async.md) |
 | `async-notification` | 비동기 예외를 알림으로 보낸다 | [async-notification](async-notification.md) |
 | `notification` | 알림 계약 · 수신자 해석 · 인메모리 브로커 | [notification](notification.md) |

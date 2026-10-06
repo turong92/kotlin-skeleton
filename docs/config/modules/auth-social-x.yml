@@ -1,0 +1,10 @@
+# auth-social-x — X(Twitter) OAuth 2.0 (Authorization Code + PKCE, 기밀 클라이언트). client-id 가 비어 있으면 제공자는 없다.
+skeleton:
+  auth-social-x:
+    client-id: ""                        # X 개발자 콘솔 앱의 OAuth 2.0 Client ID. 비우면 아무것도 만들지 않는다
+    client-secret: ""                    # 같은 앱의 Client Secret (운영자 비밀) — 토큰 엔드포인트에서 HTTP Basic 으로 보낸다
+    redirect-uri:                        # 프론트의 콜백 주소 (콘솔의 Callback URI 와 글자 하나까지 같아야 한다, 미설정)
+    request-email: false                 # true 면 users.email 스코프를 요청하고 confirmed_email 을 읽는다 (앱의 이메일 권한이 승인돼 있어야 값이 온다 — 없으면 주소 없는 계정)
+    trust-confirmed-email: false         # true 면 confirmed_email 을 "확인된 이메일" 로 쳐 계정 병합에 쓴다. 문서가 보증을 명시하지 않아 기본 false (확인 필요)
+    api-base-url: https://api.x.com      # 토큰 · users/me 호스트 (테스트 · 프록시용)
+    authorize-url: https://x.com/i/oauth2/authorize
