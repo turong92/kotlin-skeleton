@@ -129,14 +129,57 @@ class SignInServiceTest {
     }
 
     @Test
-    fun `a magic link proves the mailbox so it attaches to the existing account and verifies a pending one`() {
+    fun `a magic link proves the mailbox so it attaches to the existing account and verifies a pending one - without a password nobody proved`() {
         val h = harness()
         h.signUp("ann@example.com")
         val auth = h.service().signIn(proof("magic_link", "  Ann@Example.com ", "ann@example.com", true))!!
         val account = h.repo.findById(auth.accountId)!!
         assertEquals(AccountStatus.ACTIVE, account.status)
         assertTrue(account.emailVerified)
-        assertEquals(setOf("password", "magic_link"), h.repo.identitiesOf(account.id).map { it.method }.toSet())
+        // the password identity that came with the unverified sign-up was never proven by the mailbox owner: it must not survive the verification
+        assertEquals(setOf("magic_link"), h.repo.identitiesOf(account.id).map { it.method }.toSet())
+        assertEquals(1, h.repo.search(null, null, 0, 10).total)
+    }
+
+    @Test
+    fun `pre-hijack - a password planted on an unverified sign-up does not work after the victim signs in by magic link`() {
+        val h = harness()
+        h.signUp("victim@example.com", password = "attacker-chosen-42")   // the attacker, who does not own the mailbox
+        val planted = h.repo.findByEmail("victim@example.com")!!
+        val auth = h.service().signIn(proof("magic_link", "victim@example.com", "victim@example.com", true))!!   // the victim
+        assertEquals(planted.id, auth.accountId)
+        assertEquals("", h.authRepository.findBy(dev.sumin.skeleton.auth.account.AccountIdentifier(email = "victim@example.com"))!!.passwordHash, "the attacker's password must be gone")
+        assertTrue(h.revoker.calls.any { it.first == planted.id }, "sessions opened before the mailbox was proven are closed")
+    }
+
+    @Test
+    fun `pre-hijack - the planted sign-up's verification link cannot bring the attacker's password back`() {
+        val h = harness()
+        h.signUp("victim@example.com", password = "attacker-chosen-42")
+        val plantedLink = h.mailer.of(dev.sumin.skeleton.account.mail.MailKind.VERIFY_EMAIL).single()
+        h.service().signIn(proof("magic_link", "victim@example.com", "victim@example.com", true))
+        assertFailsWith<ApplicationException> { h.registration.verifyEmail(h.mailer.tokenOf(plantedLink)) }
+        assertEquals("", h.authRepository.findBy(dev.sumin.skeleton.auth.account.AccountIdentifier(email = "victim@example.com"))!!.passwordHash)
+    }
+
+    @Test
+    fun `a verification link activates only the password it was issued for`() {
+        val h = harness()
+        h.signUp("ann@example.com")
+        val link = h.mailer.of(dev.sumin.skeleton.account.mail.MailKind.VERIFY_EMAIL).single()
+        val identity = h.repo.findIdentity("password", "ann@example.com")!!
+        h.repo.updateIdentitySecret(identity.id, h.hasher.hash("someone-elses-pass-1"))   // the stored password is no longer the one this link was issued for
+        assertFailsWith<ApplicationException> { h.registration.verifyEmail(h.mailer.tokenOf(link)) }
+        assertEquals(AccountStatus.PENDING_VERIFICATION, h.repo.findByEmail("ann@example.com")!!.status)
+    }
+
+    @Test
+    fun `a magic link reaches an existing account even when it may not create one`() {
+        val h = harness()
+        val existing = h.activeAccount("ann@example.com")
+        val auth = assertNotNull(h.service().signIn(proof("magic_link", "ann@example.com", "ann@example.com", true, signUp = false)))
+        assertEquals(existing.id, auth.accountId)
+        assertNull(h.service().signIn(proof("magic_link", "nobody@example.com", "nobody@example.com", true, signUp = false)), "an unknown address is still not created")
         assertEquals(1, h.repo.search(null, null, 0, 10).total)
     }
 

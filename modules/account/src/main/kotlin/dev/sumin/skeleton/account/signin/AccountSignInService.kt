@@ -10,7 +10,9 @@ import dev.sumin.skeleton.account.AccountStatus
 import dev.sumin.skeleton.account.Emails
 import dev.sumin.skeleton.account.Identity
 import dev.sumin.skeleton.account.ProfileRules
+import dev.sumin.skeleton.account.SignInMethods
 import dev.sumin.skeleton.account.events.AccountEventType
+import dev.sumin.skeleton.account.token.TokenPurposes
 import dev.sumin.skeleton.auth.account.AuthAccount
 
 /**
@@ -56,6 +58,7 @@ class AccountSignInService(private val core: AccountCore, val registry: SignInMe
         // 메일함을 증명한 로그인(매직 링크, 제공자가 확인한 같은 이메일)은 이메일 확인으로 친다
         val proven = account.email != null && account.email == email && (method.provesEmail || proof.emailVerified)
         if (proven && !account.emailVerified) {
+            discardUnprovenPassword(account)
             core.accounts.markEmailVerified(account.id, now)
             core.events.publish(AccountEventType.EMAIL_VERIFIED, account.id, proof.ip, mapOf("method" to method.code))
         }
@@ -66,16 +69,30 @@ class AccountSignInService(private val core: AccountCore, val registry: SignInMe
         return auth.toAuth(core.accounts.findById(account.id) ?: fresh)
     }
 
+    /**
+     * 주소의 메일함이 방금 증명됐는데 그 계정의 이메일은 아직 미확인이었다. 그 계정의 비밀번호 수단은 **메일함 주인이 아닌 누군가**(가입 요청을 보낸 쪽)가
+     * 정한 것이라, 확인으로 함께 살려 두면 사전 탈취가 된다 — 미확인 비밀번호는 버리고, 그때 열려 있던 세션 · 인증 링크도 닫는다.
+     */
+    private fun discardUnprovenPassword(account: Account) {
+        val email = account.email ?: return
+        core.accounts.identitiesOf(account.id).filter { it.method == SignInMethods.PASSWORD && !it.verified }.forEach { core.accounts.removeIdentity(account.id, it.id) }
+        core.tokens.invalidate(TokenPurposes.VERIFY_EMAIL, email)
+        core.sessions()?.revokeAll(account.id, null)
+    }
+
     private fun resolveNew(method: SignInMethod, subject: String, email: String?, proof: SignInProof): Account? {
-        if (!proof.allowSignUp) return null
-        val owner = email?.let(core.accounts::findByEmail)
+        val owner = email?.let(core::accountByEmail)
         if (owner != null) {
             if (owner.status == AccountStatus.DELETED) return null
+            // 이미 있는 계정에 붙는 것은 가입이 아니다 — 메일함 증명 수단은 `sign-up=false` 여도 기존 계정으로 들어온다.
+            // 소셜 병합은 가입 허용을 따르고(충돌 알림도 가입 시도의 일부), 둘 다 아니면 새로 만들지도 붙이지도 않는다
             val attach = method.provesEmail ||
-                (core.props.social.mergeOnVerifiedEmail && proof.emailVerified && owner.emailVerified)
-            if (!attach) throw AccountException(AccountErrorCode.SOCIAL_EMAIL_CONFLICT)
-            return attachIdentity(owner, method, subject, proof) ?: raced(method, subject)
+                (proof.allowSignUp && core.props.social.mergeOnVerifiedEmail && proof.emailVerified && owner.emailVerified)
+            if (attach) return attachIdentity(owner, method, subject, proof) ?: raced(method, subject)
+            if (!proof.allowSignUp) return null
+            throw AccountException(AccountErrorCode.SOCIAL_EMAIL_CONFLICT)
         }
+        if (!proof.allowSignUp) return null
         return create(method, subject, email, proof) ?: raced(method, subject)
     }
 

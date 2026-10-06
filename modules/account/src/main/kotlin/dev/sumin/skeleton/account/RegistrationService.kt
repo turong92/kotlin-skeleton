@@ -4,6 +4,7 @@ import dev.sumin.skeleton.account.abuse.RateLimitedException
 import dev.sumin.skeleton.account.events.AccountEventType
 import dev.sumin.skeleton.account.mail.AccountMail
 import dev.sumin.skeleton.account.mail.MailKind
+import dev.sumin.skeleton.account.token.OneTimeTokens
 import dev.sumin.skeleton.account.token.TokenPurposes
 import dev.sumin.skeleton.common.ApplicationException
 import dev.sumin.skeleton.common.PlatformErrorCode
@@ -77,9 +78,12 @@ class RegistrationService(private val core: AccountCore) {
         val grant = core.tokens.consume(TokenPurposes.VERIFY_EMAIL, token) ?: throw AccountException(AccountErrorCode.TOKEN_INVALID)
         val account = grant.accountId?.let(core.accounts::findById)
         // 그 사이 이메일이 바뀌었거나 계정이 사라졌으면 이 링크는 더 이상 그 주소를 증명하지 않는다
-        if (account == null || account.email != grant.subject || !core.accounts.markEmailVerified(account.id, core.time.now())) {
+        if (account == null || account.email != grant.subject) throw AccountException(AccountErrorCode.TOKEN_INVALID)
+        // 링크는 발급 때의 가입 비밀번호에 묶여 있다 — 그 비밀번호가 아니면(다른 길로 바뀌었거나 지워졌으면) 이 클릭이 활성화할 것이 없다
+        if (grant.payload != null && grant.payload != core.accounts.findIdentity(SignInMethods.PASSWORD, grant.subject)?.secret?.let(OneTimeTokens::fingerprint)) {
             throw AccountException(AccountErrorCode.TOKEN_INVALID)
         }
+        if (!core.accounts.markEmailVerified(account.id, core.time.now())) throw AccountException(AccountErrorCode.TOKEN_INVALID)
         core.events.publish(AccountEventType.EMAIL_VERIFIED, account.id)
         core.accounts.findById(account.id)?.let(core.bootstrap::afterVerified)
     }
@@ -98,7 +102,8 @@ class RegistrationService(private val core: AccountCore) {
         val email = account.email ?: return
         if (!withinEmailBudget(email)) return
         val ttl = core.props.verification.ttl
-        val raw = core.tokens.issue(TokenPurposes.VERIFY_EMAIL, email, account.id, ttl)
+        val bound = core.accounts.findIdentity(SignInMethods.PASSWORD, email)?.secret?.let(OneTimeTokens::fingerprint)
+        val raw = core.tokens.issue(TokenPurposes.VERIFY_EMAIL, email, account.id, ttl, payload = bound)
         core.mailer.send(AccountMail(MailKind.VERIFY_EMAIL, email, account.locale, core.links.verify(raw), mapOf("hours" to ttl.toHours().toString())))
     }
 

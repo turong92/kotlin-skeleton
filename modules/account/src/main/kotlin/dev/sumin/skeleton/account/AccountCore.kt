@@ -33,6 +33,13 @@ class AccountCore(
     val sessions: () -> SessionRevoker?,
     val bootstrap: AdminBootstrap,
 ) {
+    /**
+     * 이메일로 계정 하나 — 저장소가 어떤 정렬 규칙으로 찾았든 **저장된 주소가 정규화된 입력과 글자 그대로 같을 때만** 돌려준다
+     * (대소문자 · 악센트를 같게 보는 DB 정렬이 `victim@gmäil.com` 으로 `victim@gmail.com` 계정을 내주지 못하게 — 이것이 마지막 방어선이다).
+     * [email] 은 이미 [Emails.normalize] 를 거친 값이어야 한다.
+     */
+    fun accountByEmail(email: String): Account? = accounts.findByEmail(email)?.takeIf { it.email == email }
+
     fun newAccountId(): String = "acc_" + randomHex()
 
     fun newIdentityId(): String = "idn_" + randomHex()

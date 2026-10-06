@@ -169,4 +169,18 @@ class MagicLinkSignUpClosedWebTest {
         val raw = tokens.issue(TokenPurposes.MAGIC_LINK, "ghost@example.com", null, Duration.ofMinutes(5))
         mvc.perform(post("/api/v1/auth/magic-link/redeem").contentType(MediaType.APPLICATION_JSON).content("""{"token":"$raw"}""")).andExpect(status().isGone)
     }
+
+    @Test
+    fun `with sign-up closed a link still signs an EXISTING account in (the default must not make magic link dead)`() {
+        mails.sent.clear()
+        val email = "existing${System.nanoTime()}@example.com"
+        mvc.perform(post("/api/v1/account/sign-up").contentType(MediaType.APPLICATION_JSON).content("""{"email":"$email","password":"tangerine-42-moon"}""")).andExpect(status().isAccepted)
+        val verify = mails.tokenOf(mails.sent.last { it.kind == MailKind.VERIFY_EMAIL })
+        mvc.perform(post("/api/v1/auth/verify-email").contentType(MediaType.APPLICATION_JSON).content("""{"token":"$verify"}""")).andExpect(status().isOk)
+        mails.sent.clear()
+        mvc.perform(post("/api/v1/auth/magic-link/request").contentType(MediaType.APPLICATION_JSON).content("""{"email":"$email"}""")).andExpect(status().isAccepted)
+        val link = mails.tokenOf(mails.sent.last { it.kind == MailKind.MAGIC_LINK })
+        mvc.perform(post("/api/v1/auth/magic-link/redeem").contentType(MediaType.APPLICATION_JSON).content("""{"token":"$link"}"""))
+            .andExpect(status().isOk).andExpect(jsonPath("$.value.principal.email").value(email))
+    }
 }
