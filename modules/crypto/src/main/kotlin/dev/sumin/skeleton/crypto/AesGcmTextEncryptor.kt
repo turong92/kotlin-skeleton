@@ -32,7 +32,7 @@ class AesGcmTextEncryptor(
 
     override fun decrypt(cipherText: String): String {
         val envelope = parseEnvelope(cipherText)
-        val payload = runCatching { Base64.getUrlDecoder().decode(envelope.payload) }
+        val payload = runCatching { CanonicalBase64Url.decode(envelope.payload) }
             .getOrElse { throw CryptoException("Encrypted text payload is not valid base64url.", it) }
         if (payload.size <= IV_BYTES) {
             throw CryptoException("Encrypted text payload is too short.")

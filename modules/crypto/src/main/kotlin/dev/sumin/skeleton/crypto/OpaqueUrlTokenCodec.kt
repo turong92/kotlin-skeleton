@@ -46,7 +46,7 @@ class OpaqueUrlTokenCodec(
         if (token.isBlank()) throw CryptoException("Opaque URL token must not be blank.")
 
         val cipherText = runCatching {
-            Base64.getUrlDecoder().decode(token).toString(StandardCharsets.UTF_8)
+            CanonicalBase64Url.decode(token).toString(StandardCharsets.UTF_8)
         }.getOrElse { throw CryptoException("Opaque URL token is not valid base64url.", it) }
 
         val payload = runCatching {
