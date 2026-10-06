@@ -160,11 +160,12 @@ class RegistrationService(private val core: AccountCore) {
         val id = core.challenges.idOf(signUpId)
         core.tasks.run("resend-verification") {
             val row = id?.let(core.challenges::find)?.takeIf { it.purpose == ChallengePurposes.SIGN_UP } ?: return@run
-            val existing = core.accountByEmail(row.subject)
-            if (existing != null && taken(existing)) return@run notifyAlreadyRegistered(existing, withinEmailBudget(row.subject))
+            // 확인된 계정이 있는 주소의 시도도 **똑같이 재발급**한다 (남은 추측 · 만료 · 쿨다운 · 재전송 횟수가 같게) — 달라지면 재전송 뒤의 틀린 코드 한 번으로 가입 여부를 알 수 있다. 다른 것은 메일의 종류뿐이다
             if (!withinEmailBudget(row.subject)) return@run
             val v = core.props.verification
-            core.challenges.reissue(row.id, v.codeTtl, v.maxAttempts, v.resendCooldown, v.maxResends)?.let { sendCode(row.subject, it, null) }
+            val code = core.challenges.reissue(row.id, v.codeTtl, v.maxAttempts, v.resendCooldown, v.maxResends) ?: return@run
+            val existing = core.accountByEmail(row.subject)
+            if (existing != null && taken(existing)) notifyAlreadyRegistered(existing, true) else sendCode(row.subject, code, null)
         }
     }
 
