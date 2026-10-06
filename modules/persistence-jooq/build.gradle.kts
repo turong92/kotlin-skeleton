@@ -31,7 +31,7 @@ require(jooqDialect in setOf("postgresql", "mysql")) { "skeleton.jooq.dialect mu
 // 예시 DDL + 형제 모듈의 Flyway 마이그레이션(같은 방언). 모듈 마이그레이션이 DDLDatabase 로 파싱되는지를 빌드마다 증명한다.
 // 형제 모듈이 없는 프로젝트(new-project.sh 가 가지친 경우)에서는 그 폴더가 없을 뿐이라 Sync 가 건너뛴다.
 // 테스트 전용 입력이다 — main 과 jar 는 이 폴더들을 읽지 않는다.
-val siblingMigrations = mapOf("job-queue-jdbc" to "skeleton_jobs", "notification-jdbc" to "skeleton_notification_inbox")   // 테이블 이름 (rename 이 바꾸지 않는다)
+val siblingMigrations = mapOf("job-queue-jdbc" to "skeleton_jobs", "notification-jdbc" to "skeleton_notification_inbox", "account-jdbc" to "skeleton_accounts", "auth-session-jdbc" to "skeleton_auth_sessions")   // 테이블 이름 (rename 이 바꾸지 않는다)
 val presentSiblings = siblingMigrations.filterKeys { file("../$it/src/main/resources/db/migration/$jooqDialect").isDirectory }
 val collectModuleDdl by tasks.registering(Sync::class) { // Sync: 지운 마이그레이션이 생성 입력에 남지 않게
     from("src/test/resources/db") { include("jooq-probe-$jooqDialect.sql") }

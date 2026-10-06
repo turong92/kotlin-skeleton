@@ -40,7 +40,7 @@ class AccountSeeder(private val core: AccountCore) : ApplicationRunner {
     fun seed() {
         core.props.seed.accounts.forEach { seed ->
             val email = Emails.normalize(seed.email)
-            if (core.accounts.findByEmail(email) != null) return@forEach
+            if (core.accountByEmail(email) != null) return@forEach
             val now = core.time.now()
             val account = Account(
                 id = seed.id?.trim()?.takeIf { it.isNotEmpty() } ?: core.newAccountId(), email = email, emailVerified = true, status = AccountStatus.ACTIVE,

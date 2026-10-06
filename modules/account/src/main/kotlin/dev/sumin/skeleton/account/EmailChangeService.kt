@@ -29,7 +29,7 @@ class EmailChangeService(private val core: AccountCore) {
         if (!Emails.plausible(target)) throw ApplicationException("Invalid email", PlatformErrorCode.VALIDATION_FAILED)
 
         core.tasks.run("email-change-request") {
-            if (target == oldEmail || core.accounts.findByEmail(target) != null) return@run
+            if (target == oldEmail || core.accountByEmail(target) != null) return@run
             val raw = core.tokens.issue(TokenPurposes.EMAIL_CHANGE, account.id, account.id, c.ttl, payload = target)
             core.mailer.send(AccountMail(MailKind.EMAIL_CHANGE_CONFIRM, target, account.locale, core.links.emailChange(raw), mapOf("minutes" to c.ttl.toMinutes().toString())))
             oldEmail?.let { core.mailer.send(AccountMail(MailKind.EMAIL_CHANGE_REQUESTED_NOTICE, it, account.locale)) }

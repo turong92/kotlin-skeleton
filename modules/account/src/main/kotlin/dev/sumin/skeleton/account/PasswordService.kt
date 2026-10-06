@@ -26,7 +26,7 @@ class PasswordService(private val core: AccountCore) {
     }
 
     private fun sendResetLink(email: String, ip: String?) {
-        val account = core.accounts.findByEmail(email) ?: return
+        val account = core.accountByEmail(email) ?: return
         if (account.status != AccountStatus.ACTIVE && account.status != AccountStatus.PENDING_VERIFICATION) return
         val r = core.props.reset
         if (!core.limits.acquire("reset:email", email, r.perEmail, r.perEmailWindow).allowed) return

@@ -49,29 +49,30 @@ class RegistrationService(private val core: AccountCore) {
     }
 
     private fun completeSignUp(email: String, hash: String, cmd: SignUpCommand) {
-        val existing = core.accounts.findByEmail(email)
-        if (existing != null) return notifyAlreadyRegistered(existing, email)
+        val existing = core.accountByEmail(email)
+        if (existing != null) return notifyAlreadyRegistered(existing)
         val account = newAccount(email, cmd, AccountStatus.PENDING_VERIFICATION, verified = false)
         if (!core.accounts.insert(account, listOf(passwordIdentity(account, email, hash, verified = false)))) {
             // 같은 주소가 동시에 들어와 유니크 키가 한 쪽만 통과시켰다 — 진 쪽은 "있는 주소" 와 같게 다룬다
-            return core.accounts.findByEmail(email)?.let { notifyAlreadyRegistered(it, email) } ?: Unit
+            return core.accountByEmail(email)?.let(::notifyAlreadyRegistered) ?: Unit
         }
         core.events.publish(AccountEventType.SIGN_UP, account.id, cmd.ip, mapOf("method" to SignInMethods.PASSWORD))
         sendVerification(account)
     }
 
     private fun createVerified(email: String, hash: String, cmd: SignUpCommand): SignUpStatus {
-        if (core.accounts.findByEmail(email) != null) throw AccountException(AccountErrorCode.EMAIL_TAKEN)
+        if (core.accountByEmail(email) != null) throw AccountException(AccountErrorCode.EMAIL_TAKEN)
         val account = newAccount(email, cmd, AccountStatus.ACTIVE, verified = false)
         if (!core.accounts.insert(account, listOf(passwordIdentity(account, email, hash, verified = false)))) throw AccountException(AccountErrorCode.EMAIL_TAKEN)
         core.events.publish(AccountEventType.SIGN_UP, account.id, cmd.ip, mapOf("method" to SignInMethods.PASSWORD))
         return SignUpStatus.CREATED
     }
 
-    private fun notifyAlreadyRegistered(existing: Account, email: String) {
+    private fun notifyAlreadyRegistered(existing: Account) {
+        val address = existing.email ?: return
         if (existing.status == AccountStatus.DELETED) return
-        if (!withinEmailBudget(email)) return
-        core.mailer.send(AccountMail(MailKind.ALREADY_REGISTERED, email, existing.locale))
+        if (!withinEmailBudget(address)) return
+        core.mailer.send(AccountMail(MailKind.ALREADY_REGISTERED, address, existing.locale))
     }
 
     fun verifyEmail(token: String) {
@@ -93,7 +94,7 @@ class RegistrationService(private val core: AccountCore) {
         core.captcha.check(captchaToken, ip, "resend_verification")
         val normalized = Emails.normalize(email)
         core.tasks.run("resend-verification") {
-            val account = core.accounts.findByEmail(normalized)
+            val account = core.accountByEmail(normalized)
             if (account != null && account.status == AccountStatus.PENDING_VERIFICATION) sendVerification(account)
         }
     }

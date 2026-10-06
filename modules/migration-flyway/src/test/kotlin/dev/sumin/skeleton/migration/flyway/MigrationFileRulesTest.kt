@@ -110,4 +110,21 @@ class MigrationFileRulesTest {
             inside.setPosixFilePermissions(PosixFilePermissions.fromString("rwx------"))
         }
     }
+
+    @Test
+    fun `mysql inline index, foreign key and collate sit inside jooq ignore markers`() {
+        val root = Files.createTempDirectory("repo")
+        fun mysql(name: String, sql: String) = root.resolve("modules/a/src/main/resources/db/migration/mysql/$name").also { it.parent.createDirectories(); it.writeText(sql) }
+        mysql("V20261001000001__bare_index.sql", "create table t (id int primary key,\n  a int,\n  index idx_t_a (a)\n);")
+        mysql("V20261001000002__bare_fk.sql", "create table t (id int primary key, a int,\n  foreign key (a) references u (id)\n);")
+        mysql("V20261001000003__bare_collate.sql", "create table t (id int primary key, a varchar(9) character set utf8mb4 collate utf8mb4_bin);")
+        mysql("V20261001000004__marked.sql", "create table t (id int primary key, a varchar(9) /* [jooq ignore start] */ collate utf8mb4_bin /* [jooq ignore stop] */\n  /* [jooq ignore start] */,\n  index idx_t_a (a),\n  foreign key (a) references u (id)\n  /* [jooq ignore stop] */\n);")
+        mysql("V20261001000005__commented.sql", "-- index idx_x (a) is in a comment, collate too\ncreate table t (id int primary key);")
+        val v = MigrationFileRules.violations(root).joinToString("\n")
+        assertTrue("bare_index" in v, v)
+        assertTrue("bare_fk" in v, v)
+        assertTrue("bare_collate" in v, v)
+        assertTrue("marked" !in v, v)
+        assertTrue("commented" !in v, v)
+    }
 }

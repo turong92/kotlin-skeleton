@@ -19,6 +19,8 @@ import kotlin.io.path.name
  * - 이름: V<UTC yyyyMMddHHmmss>__<snake_case>.sql, 시각은 실제로 존재하는 값
  * - 같은 vendor 안에서 버전은 레포 전체(앱 · 모듈 · 테스트 리소스)에서 하나
  * - 두 vendor 폴더를 가진 소스 디렉토리는 버전 · 이름이 짝을 이룬다
+ * - MySQL 파일의 인라인 `index` · `unique key` · `foreign key` · `collate` 는 `/* [jooq ignore start] */ … /* [jooq ignore stop] */` 안에 둔다
+ *   (jOOQ DDLDatabase 가 못 읽는 문법 — docs/schema-management.md · docs/persistence-jooq.md)
  *
  * 훑지 않는 곳 (들어가지도 않는다): [SKIP_DIRS](빌드 출력 · node_modules 등), `.claude`(Claude Code 워크트리),
  * 루트가 아닌데 `.git` 이 있는 디렉토리(레포 안의 다른 워크트리 · 레포 — 저마다 같은 마이그레이션 사본을 가져
@@ -56,6 +58,7 @@ object MigrationFileRules {
                 return@forEach
             }
             migrations += Migration(base, parts[0], version, parts[1], rel)
+            if (parts[0] == "mysql") jooqUnparsable(path)?.let { violations += "$rel: $it must sit between /* [jooq ignore start] */ and /* [jooq ignore stop] */" }
         }
         migrations.groupBy { it.vendor to it.version }.values.filter { it.size > 1 }.forEach { same ->
             violations += "duplicate version ${same.first().version} in ${same.first().vendor}: ${same.joinToString { it.display }}"
@@ -72,6 +75,20 @@ object MigrationFileRules {
             }
         }
         return violations.sorted()
+    }
+
+    private val IGNORED = Regex("""/\*\s*\[jooq ignore start]\s*\*/.*?/\*\s*\[jooq ignore stop]\s*\*/""", RegexOption.DOT_MATCHES_ALL)
+    private val BLOCK_COMMENT = Regex("""/\*.*?\*/""", RegexOption.DOT_MATCHES_ALL)
+    private val UNPARSABLE = listOf(
+        "inline index" to Regex("""(?im)^\s*(,\s*)?(unique\s+)?(index|key)\s+\w+\s*\("""),
+        "foreign key" to Regex("""(?im)^\s*(,\s*)?(constraint\s+\w+\s+)?foreign\s+key\b"""),
+        "collate" to Regex("""(?i)\bcollate\b"""),
+    )
+
+    /** 마커 · 주석을 걷어 낸 뒤에도 남은 jOOQ 가 못 읽는 문법의 이름, 없으면 null */
+    private fun jooqUnparsable(path: Path): String? {
+        val sql = Files.readString(path).replace(IGNORED, " ").replace(BLOCK_COMMENT, " ").lines().joinToString("\n") { it.substringBefore("--") }
+        return UNPARSABLE.firstOrNull { (_, regex) -> regex.containsMatchIn(sql) }?.first
     }
 
     private fun sqlFiles(root: Path): List<Path> {

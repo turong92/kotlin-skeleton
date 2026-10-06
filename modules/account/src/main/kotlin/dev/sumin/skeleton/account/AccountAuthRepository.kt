@@ -16,8 +16,8 @@ class AccountAuthRepository(private val core: AccountCore) : AuthAccountReposito
         val username = identifier.username
         val account = when {
             id != null -> core.accounts.findById(id)
-            email != null -> core.accounts.findByEmail(Emails.normalize(email))
-            username != null -> core.accounts.findByEmail(Emails.normalize(username))
+            email != null -> core.accountByEmail(Emails.normalize(email))
+            username != null -> core.accountByEmail(Emails.normalize(username))
             else -> null
         } ?: return null
         return toAuth(account)

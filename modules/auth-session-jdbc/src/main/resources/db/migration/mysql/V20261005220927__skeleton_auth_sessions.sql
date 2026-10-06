@@ -9,8 +9,10 @@ create table if not exists skeleton_auth_sessions (
     last_used_at    datetime(6)  not null,
     expires_at      datetime(6)  not null,
     revoked_at      datetime(6),
-    revoked_reason  varchar(40),
+    revoked_reason  varchar(40)
+    /* [jooq ignore start] */,
     index idx_skeleton_auth_sessions_account (account_id, created_at)
+    /* [jooq ignore stop] */
 );
 
 -- 세션 하나가 새로고침마다 토큰 행을 하나씩 얻는다. used_at 이 비어 있는 행이 "지금 쓸 수 있는 토큰", 채워진 행은 재사용 탐지용 기억이다
@@ -18,7 +20,9 @@ create table if not exists skeleton_auth_refresh_tokens (
     token_hash  varchar(64)  primary key,
     session_id  varchar(40)  not null,
     created_at  datetime(6)  not null,
-    used_at     datetime(6),
+    used_at     datetime(6)
+    /* [jooq ignore start] */,
     index idx_skeleton_auth_refresh_tokens_session (session_id, used_at),
     foreign key (session_id) references skeleton_auth_sessions (id) on delete cascade
+    /* [jooq ignore stop] */
 );

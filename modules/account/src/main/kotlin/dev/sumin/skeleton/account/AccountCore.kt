@@ -12,6 +12,7 @@ import dev.sumin.skeleton.account.token.OneTimeTokens
 import dev.sumin.skeleton.auth.session.SessionRevoker
 import dev.sumin.skeleton.common.time.TimeProvider
 import java.security.SecureRandom
+import java.text.Normalizer
 import java.util.HexFormat
 import java.util.Locale
 
@@ -49,9 +50,14 @@ class AccountCore(
     private companion object { val random = SecureRandom() }
 }
 
+/**
+ * 이메일 규칙 — **여기 한 곳**이다 (저장 · 조회 · 한도 키 · 토큰 주인 · 메일 수신자 모두 [normalize] 를 거친 값):
+ * 앞뒤 공백 제거 → 유니코드 NFC(결합 문자와 합성 문자를 같은 글자로) → 소문자(Locale.ROOT, 터키어 I 같은 로케일 의존 없음).
+ * 점 · `+태그` 제거나 NFKC·IDN punycode 변환은 하지 **않는다** — 그것은 메일함 주인의 영역이고, 같게 보면 남의 주소를 같다고 말하게 된다.
+ * 같은 주소인지는 DB 정렬에 맡기지 않고 [AccountCore.accountByEmail] 이 글자 그대로 비교한다 (MySQL 은 `utf8mb4_bin` 열도 함께).
+ */
 object Emails {
-    /** 비교 · 저장용: 앞뒤 공백 제거 + 소문자 (로케일 무관) */
-    fun normalize(raw: String): String = raw.trim().lowercase(Locale.ROOT)
+    fun normalize(raw: String): String = Normalizer.normalize(raw.trim(), Normalizer.Form.NFC).lowercase(Locale.ROOT)
 
     /** 아주 느슨한 모양 검사 — 진짜 검증은 메일이 닿는 것이다 */
     fun plausible(email: String): Boolean = email.length <= 254 && Regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$").matches(email)

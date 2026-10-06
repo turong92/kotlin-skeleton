@@ -51,11 +51,13 @@ class AccountHarness(
     tasks: AccountTaskRunner = AccountTaskRunner.DIRECT,
     captcha: AccountCaptcha? = null,
     breached: BreachedPasswordCheck? = null,
+    /** 저장소를 바꿔 끼운다 (예: 악센트 · 대소문자를 같게 보는 DB 정렬을 흉내 낸 것) — 호출 기록 프록시가 이것을 감싼다 */
+    storage: AccountRepository? = null,
 ) {
     val time = MutableTime()
     val callLog = CallLog()
     val repo: AccountRepository = run {
-        val real = InMemoryAccountRepository()
+        val real = storage ?: InMemoryAccountRepository()
         Proxy.newProxyInstance(javaClass.classLoader, arrayOf(AccountRepository::class.java)) { _, m, args ->
             callLog.calls += Thread.currentThread() to m.name
             try { m.invoke(real, *(args ?: emptyArray())) } catch (e: InvocationTargetException) { throw e.targetException }

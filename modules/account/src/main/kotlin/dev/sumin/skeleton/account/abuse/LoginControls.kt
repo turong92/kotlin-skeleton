@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.account.abuse
 
 import dev.sumin.skeleton.account.AccountCore
+import dev.sumin.skeleton.account.Emails
 import dev.sumin.skeleton.account.SignInMethods
 import dev.sumin.skeleton.account.events.AccountEventType
 import dev.sumin.skeleton.auth.account.AuthAccount
@@ -24,7 +25,22 @@ class LoginThrottle(private val core: AccountCore) : LoginHooks {
         val login = core.props.login
         if (!login.throttleEnabled) return
         attempt.clientIp?.let { check("login:ip", it, login.perIp, "ip", attempt) }
-        check("login:id", attempt.identifier.lowercase(), login.perAccount, "identifier", attempt)
+        check("login:id", bucketOf(attempt.identifier), login.perAccount, "identifier", attempt)
+    }
+
+    /**
+     * 한 계정은 한 버킷 — `email:` · `username:`(이 모듈에서 username 은 이메일이다)은 [Emails.normalize] 한 주소 하나로,
+     * `accountId:` 는 그 계정의 주소로 풀어 같은 버킷에 모은다 (입력 방식을 바꿔 한도를 2~3 배로 만들지 못하게).
+     * 없는 계정 id 는 자기 이름 그대로 — 결과가 응답에 드러나지 않는다.
+     */
+    private fun bucketOf(identifier: String): String {
+        val kind = identifier.substringBefore(':', "")
+        val value = identifier.substringAfter(':', identifier)
+        return when (kind) {
+            "email", "username" -> Emails.normalize(value)
+            "accountId" -> core.accounts.findById(value)?.email ?: "accountId:$value"
+            else -> Emails.normalize(identifier)
+        }
     }
 
     private fun check(scope: String, key: String, capacity: Int, label: String, attempt: LoginAttempt) {
