@@ -19,7 +19,7 @@ class DbTestcontainers {
 object SharedPostgres {
     private val container: PostgreSQLContainer by lazy {
         PostgreSQLContainer(DockerImageName.parse("postgres:18"))
-            .withCommand("postgres", "-c", "max_connections=500")
+            .withCommand("postgres", "-c", "max_connections=500", "-c", "fsync=off")
             .also { it.start() }
     }
     private val sequence = AtomicInteger()

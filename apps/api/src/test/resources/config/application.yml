@@ -1,0 +1,6 @@
+# 컨텍스트 여럿이 한 컨테이너를 나눠 쓴다(TestcontainersConfiguration) — 캐시에 살아 있는 컨텍스트마다 풀이 놀고 있는 연결을 들고 있지 않게 한다.
+# classpath:/config/ 라서 main 의 application.yml 을 가리지 않고 합쳐진다.
+spring:
+  datasource:
+    hikari:
+      minimum-idle: 1

@@ -24,9 +24,9 @@ class TestcontainersConfiguration {
 
 object SharedPostgres {
     private val container: PostgreSQLContainer by lazy {
-        // 컨텍스트 캐시에 살아 있는 컨텍스트마다 풀이 연결을 잡는다 — 기본 max_connections(100) 으로는 모자란다
+        // 컨텍스트 캐시에 살아 있는 컨텍스트마다 풀이 연결을 잡는다 — 기본 max_connections(100) 으로는 모자란다. fsync=off: 시험 DB 는 지켜야 할 내구성이 없다
         PostgreSQLContainer(DockerImageName.parse("postgres:18"))
-            .withCommand("postgres", "-c", "max_connections=500")
+            .withCommand("postgres", "-c", "max_connections=500", "-c", "fsync=off")
             .also { it.start() }
     }
     private val sequence = AtomicInteger()

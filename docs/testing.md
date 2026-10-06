@@ -9,7 +9,7 @@
 
 **하는 것** (정본: `apps/api/src/test/…/TestcontainersConfiguration.kt`):
 
-- `object SharedPostgres` (MySQL 이면 `SharedMySql`) — `by lazy` 로 컨테이너를 **JVM 에서 한 번만** 띄운다. `max_connections=500`: 살아 있는 컨텍스트마다 풀이 연결을 잡으므로 기본값(100 · 151)으로는 모자란다.
+- `object SharedPostgres` (MySQL 이면 `SharedMySql`) — `by lazy` 로 컨테이너를 **JVM 에서 한 번만** 띄운다. `max_connections=500`: 살아 있는 컨텍스트마다 풀이 연결을 잡으므로 기본값(100 · 151)으로는 모자란다. PostgreSQL 은 `fsync=off`(시험 DB 에 내구성은 필요 없고 부하에서 빠르다). 앱의 `src/test/resources/config/application.yml` 이 Hikari `minimum-idle: 1` 로 놀고 있는 연결을 줄인다(`config/` 라서 main 의 application.yml 을 가리지 않고 합쳐진다 — `src/test/resources/application.yml` 로 두면 가려진다).
 - 컨텍스트마다 `create database "ctx_<n>_<uuid>"` 로 **새 데이터베이스**를 만들고 `JdbcConnectionDetails` 빈으로 내보낸다 — 앱 코드는 그대로이고, 컨텍스트마다 Flyway 가 빈 데이터베이스에 처음부터 마이그레이션한다(격리는 컨테이너가 아니라 데이터베이스가 한다).
 - 그래서 컨테이너 수는 컨텍스트 수와 상관없이 **Gradle 테스트 포크(JVM) 당 DB 종류별 1 개**다. 이 레포는 포크 하나(`maxParallelForks` 기본 1)라 PostgreSQL 1 + MySQL 1(`mysqlTest` 는 별도 태스크). 포크를 늘리면 포크 수만큼.
 - `postgresTest` · `mysqlTest`(`src/dbTest` 를 공유하는 두 묶음)의 `DbTestcontainers`(`job-queue-jdbc` · `alert-jdbc`)와 `persistence-jooq` 도 같은 모양이다. `DbTestDatabase` 를 쓰는 모듈(account-jdbc · auth-session-jdbc · board-jdbc · notification-jdbc)은 처음부터 static 컨테이너 하나 + 데이터베이스 하나다.
