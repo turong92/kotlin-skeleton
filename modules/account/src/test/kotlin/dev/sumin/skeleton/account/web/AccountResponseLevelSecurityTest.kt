@@ -93,15 +93,14 @@ class AccountResponseLevelSecurityTest {
             assertEquals(202, r.first, name)
             assertTrue(r.second < 15_000, "$name took ${r.second} ms — the response must not wait for the held mail")
         }
-        val gap = (results[0].second2() - results[1].second2()).let { kotlin.math.abs(it) }
-        assertTrue(gap < 15_000, "known/unknown sign-up differ by $gap ms")
+        // (known/unknown 의 시간 차이를 따로 비교하지 않는다 — 위의 각 < 15 s 가 이미 포함하는 단정이라 실패할 수 없다.) 대신 메일이 **정말 붙들려 있었음**을 본다:
+        // 응답이 전부 나온 지금도 한 통도 나가지 않았다 — 응답이 메일을 기다리지 않았다는 증명이 빈 말이 아니게
+        assertTrue(sent.none { it.to == known }, "the mail to the known address must still be held while every response is already out")
             } finally {
             mails.hold = null
             hold.countDown()
         }
     }
-
-    private fun Pair<String, Pair<Int, Long>>.second2() = second.second
 
     // ---- tokens in logs
 
@@ -126,7 +125,9 @@ class AccountResponseLevelSecurityTest {
             assertTrue(tokens.isNotEmpty(), "expected the reset mail")
             val lines = appender.list.map { it.formattedMessage + " " + (it.throwableProxy?.message ?: "") }
             tokens.forEach { t -> assertTrue(lines.none { t in it }, "a one-time token was logged") }
-            assertTrue(lines.none { code in it }, "a sign-up code was logged")
+            // 6자리 숫자가 다른 숫자(시각 · 포트 · id)의 부분열로 우연히 같을 수 있다 — 코드는 **다른 글자에 붙지 않은 독립된 토큰**으로 찍혔을 때만 유출이다
+            val standalone = Regex("(?<![0-9A-Za-z])" + Regex.escape(code) + "(?![0-9A-Za-z])")
+            assertTrue(lines.none { standalone.containsMatchIn(it) }, "a sign-up code was logged")
             assertTrue(lines.none { signUpId in it }, "a sign-up id was logged by " + appender.list.filter { signUpId in it.formattedMessage }.map { it.loggerName + ": " + it.formattedMessage.take(200) })
             assertTrue(appender.list.none { "tangerine-42-moon" in it.formattedMessage }, "a password was logged by " + appender.list.filter { "tangerine-42-moon" in it.formattedMessage }.map { it.loggerName + ": " + it.formattedMessage.take(120) })
 

@@ -6,7 +6,6 @@ import dev.sumin.skeleton.account.AccountStatus
 import dev.sumin.skeleton.auth.principal.CurrentPrincipal
 import dev.sumin.skeleton.common.ApplicationException
 import dev.sumin.skeleton.common.PlatformErrorCode
-import jakarta.servlet.http.HttpServletRequest
 import org.springframework.security.authentication.AnonymousAuthenticationToken
 import org.springframework.security.core.Authentication
 
@@ -38,4 +37,3 @@ class AccountCallers(private val admin: AccountProperties.Admin, private val acc
     private fun forbidden() = ApplicationException("Administrator role required", PlatformErrorCode.FORBIDDEN)
 }
 
-internal fun clientIp(request: HttpServletRequest, clientIps: dev.sumin.skeleton.common.web.ClientIps): String = clientIps.of(request).ip

@@ -70,6 +70,6 @@ skeleton:
       - code: general
         name: General
         description: 자유 게시판
-# 클라이언트 IP (로그인 · 가입 · 재설정 · 매직 링크의 IP 한도 키): skeleton.web.client-ip.mode 는 **일부러 여기서 정하지 않는다** — 앞에 무엇이 있는지는 배포가 안다.
+# 클라이언트 IP (로그인 · 가입 · 재설정 · 매직 링크의 IP 한도 키): skeleton.web.client-ip.mode 의 **값은 배포가 정한다** — 앞에 무엇이 있는지는 배포가 안다. 위 `web.client-ip` 는 플랫폼이 넣는 이름(SKELETON_CLIENT_IP_MODE · _TRUSTED_PROXIES)의 별칭만 두고 기본은 비어 있다.
 # 로컬 프로필은 direct 로 명시한다(application-local.yml). 프록시 뒤 배포는 <PREFIX>_WEB_CLIENT_IP_MODE=proxy|cloudflare 와 <PREFIX>_WEB_CLIENT_IP_TRUSTED_PROXIES=<프록시 CIDR> 를 넣는다 — docs/client-ip.md · docs/deploy.md.
 # stage · prod 에서 정하지 않으면 계정 가드가 기동을 막는다 (X-Forwarded-For 로 IP 한도를 우회할 수 있다).

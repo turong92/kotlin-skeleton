@@ -26,7 +26,6 @@ class SecretsStayOutOfToStringTest {
     fun `account request bodies hide passwords and tokens`() {
         assertHidden(SignUpRequest("a@b.co", secret))
         assertHidden(ResetPasswordRequest(secret, secret))
-        assertHidden(TokenRequest(secret))
         assertHidden(ChangePasswordRequest(secret, secret))
         assertHidden(ChangeEmailRequest("a@b.co", secret, secret, SocialReauthRequest("kakao", secret)))
         assertHidden(DeleteAccountRequest(secret, secret, SocialReauthRequest("kakao", secret)))

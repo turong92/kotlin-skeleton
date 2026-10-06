@@ -18,7 +18,7 @@ object TokenPurposes {
 data class TokenRow(
     val hash: String,
     val purpose: String,
-    /** 이 용도 안에서 토큰의 주인을 가리키는 값 (인증 · 재설정 · 매직 링크: 이메일, 이메일 변경 · 삭제 확인: 계정 id) — 새 토큰이 같은 (용도, 주인)의 옛 토큰을 닫는다 */
+    /** 이 용도 안에서 토큰의 주인을 가리키는 값 (재설정 · 매직 링크: 이메일) — 새 토큰이 같은 (용도, 주인)의 옛 토큰을 닫는다 */
     val subject: String,
     val accountId: String?,
     val payload: String?,
@@ -54,7 +54,7 @@ interface OneTimeTokenStore {
 }
 
 /**
- * 이메일 인증 · 비밀번호 재설정 · 이메일 변경 · 매직 링크 · 삭제 확인이 **같이 쓰는** 한 번 쓰는 토큰 장치.
+ * 비밀번호 재설정 · 매직 링크가 **같이 쓰는** 한 번 쓰는 링크 토큰 장치 (코드로 하는 흐름은 [dev.sumin.skeleton.account.challenge.Challenges]).
  * 토큰은 256비트 난수이고 저장소에는 해시만 간다 — DB 가 새도 링크를 만들 수 없다. 로그에도 싣지 않는다.
  */
 class OneTimeTokens(
@@ -74,9 +74,6 @@ class OneTimeTokens(
 
     /** 같은 (용도, [subject]) 의 아직 안 쓴 토큰을 모두 닫는다 — 비밀번호가 바뀌었거나 메일함이 다른 길로 증명됐을 때, 그 전에 나간 링크가 살아 있지 않게 */
     fun invalidate(purpose: String, subject: String): Int = store.invalidateOpen(purpose, subject, time.now())
-
-    /** (용도, [subject]) 의 열린 토큰이 밝혀 주는 것 — 원문 없이 (이메일 변경이 "새 주소 확인 대기" 를 보이는 데 쓴다) */
-    fun pending(purpose: String, subject: String): TokenGrant? = store.findOpen(purpose, subject, time.now())?.grant()
 
     /** 쓰지 않고 유효한지만 본다 (정책 검사 뒤에 쓰려고 — 정책 실패가 토큰을 태우지 않게) */
     fun peek(purpose: String, raw: String): TokenGrant? {
@@ -101,9 +98,6 @@ class OneTimeTokens(
 
     companion object {
         private const val MAX_LENGTH = 128
-
-        /** 이메일 인증 링크가 어느 비밀번호용인지 묶는 지문 — 해시를 토큰 payload 에 그대로 두지 않는다 */
-        fun fingerprint(secret: String): String = hash(secret)
 
         fun hash(raw: String): String = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(raw.toByteArray(Charsets.UTF_8)))
     }

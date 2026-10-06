@@ -54,13 +54,13 @@ class JdbcTokenAndAuditDbTest {
     @Test
     fun `the open token of a purpose and owner is found with its payload, and not once spent or expired`() {
         val raw = tokens.issue(TokenPurposes.PASSWORD_RESET, "acc_1", "acc_1", Duration.ofMinutes(30), payload = "new@example.com")
-        val open = tokens.pending(TokenPurposes.PASSWORD_RESET, "acc_1")!!
+        val open = AccountDb.tokens.findOpen(TokenPurposes.PASSWORD_RESET, "acc_1", now)!!
         assertEquals("new@example.com", open.payload)
         assertEquals(now.plus(Duration.ofMinutes(30)), open.expiresAt)
-        assertNull(tokens.pending(TokenPurposes.PASSWORD_RESET, "acc_2"))
-        assertNull(OneTimeTokens(AccountDb.tokens, TimeProvider.fixed(now.plus(Duration.ofMinutes(31)))).pending(TokenPurposes.PASSWORD_RESET, "acc_1"))
+        assertNull(AccountDb.tokens.findOpen(TokenPurposes.PASSWORD_RESET, "acc_2", now))
+        assertNull(AccountDb.tokens.findOpen(TokenPurposes.PASSWORD_RESET, "acc_1", now.plus(Duration.ofMinutes(31))))
         tokens.consume(TokenPurposes.PASSWORD_RESET, raw)
-        assertNull(tokens.pending(TokenPurposes.PASSWORD_RESET, "acc_1"))
+        assertNull(AccountDb.tokens.findOpen(TokenPurposes.PASSWORD_RESET, "acc_1", now))
     }
 
     @Test

@@ -12,7 +12,7 @@ import java.time.Instant
 import org.slf4j.LoggerFactory
 
 /**
- * 계정 삭제 요청 — **다시 인증**해야 한다(비밀번호가 있으면 비밀번호, 없으면 메일로 받은 한 번 쓰는 확인 링크).
+ * 계정 삭제 요청 — **다시 인증**해야 한다(비밀번호가 있으면 비밀번호, 없으면 메일로 받은 6자리 코드 · 주소가 없으면 소셜 인가 코드).
  * 요청하면 곧바로 로그인이 막히고(DELETED, 세션 닫힘) 데이터는 `deletion.grace` 뒤에야 지워진다 ([AccountPurgeService]).
  * 그 사이 관리자는 복구할 수 있다.
  */

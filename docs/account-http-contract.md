@@ -25,6 +25,16 @@ Audience: the frontend agent (react-skeleton `@skeleton/auth` additions). Backen
 
 New error codes: `ACCOUNT.CODE_INVALID` 400 (`data.attemptsLeft`), `ACCOUNT.CODE_EXPIRED` 410. Removed from the flows above: `ACCOUNT.TOKEN_INVALID` stays for reset / magic link only.
 
+### FINAL-3 clarifications (2026-10-07 — no endpoint, field or error code added or removed; only behaviour under load / abuse)
+- `POST /account/email/change/confirm` can now answer **`429 ACCOUNT.RATE_LIMITED`** (`Retry-After`, `data.retryAfterSeconds`): per client IP (same bucket as `POST /auth/verify-email`, 30 / hour by default; IPv6 counts per /64) and per target address (all code guesses against one mailbox, sign-up and email change together, 40 / hour). A 429 spends no attempt and does not reveal anything about the address — show "try again later".
+- `POST /auth/verify-email` can also answer `429` for the per-address guess cap (it already did for the IP cap); the IP buckets of sign-up, resend, verify, forgot, magic link and login are keyed per IPv6 /64 now (IPv4 unchanged).
+- `POST /account/email/change` is still always `202`, also when the target address is over its code budget or belongs to someone else: `GET /account/me` shows the same `pendingEmail` / `pendingEmailExpiresAt`, entering a code counts down the same `attemptsLeft`, and such a request simply never receives a code. Treat "no code arrived" as the only signal.
+- `POST /account/email/change/confirm` answers `410 ACCOUNT.CODE_EXPIRED` also when the mailbox of the account was proven (password reset / sign-up code) after the change was requested - ask again.
+- A late social link (`POST /account/identities/social/{provider}`) whose re-authentication was overtaken by such a proof answers `400 ACCOUNT.REAUTH_FAILED` (existing code) and links nothing - retry from the start.
+- `POST /account/email/change` for an address that equals a bootstrap-admin address never grants ADMIN (only a sign-up code verification, a mailbox proof by reset / magic link / verified social, or an admin grant does).
+- Mail subjects no longer contain the 6-digit code (it is only in the body) - do not parse subjects.
+- Resend (`POST /account/verification/resend`) behaves identically (attempts reset, expiry +10 min, cooldown) whether or not a verified account owns the address; clients must not infer anything from `attemptsLeft` after a resend.
+
 ### Codes vs links
 - **Codes** (a signed-in or same-browser session exists and the code is entered there): sign-up verification, email change, re-auth for passwordless accounts, delete confirmation.
 - **Links** (no session exists / user may open the mail on another device): password reset, magic-link sign-in.

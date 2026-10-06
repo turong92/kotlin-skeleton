@@ -49,10 +49,6 @@ data class EmailRequest(
     @field:Size(max = 2048) val captchaToken: String? = null,
 )
 
-data class TokenRequest(@field:NotBlank @field:Size(max = 128) val token: String?) {
-    override fun toString() = "TokenRequest(token=<redacted>)"
-}
-
 data class ResetPasswordRequest(
     @field:NotBlank @field:Size(max = 128) val token: String?,
     @field:NotBlank @field:Size(max = 128) val newPassword: String?,
