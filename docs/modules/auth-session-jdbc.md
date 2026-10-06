@@ -1,6 +1,6 @@
 # auth-session-jdbc
 
-`auth-session` 의 저장을 DB 에 둔다 — `skeleton_auth_sessions`(기기 · IP · 마지막 사용 · 철회) 와 `skeleton_auth_refresh_tokens`(토큰 해시, `used_at` 이 비면 지금 쓸 수 있는 토큰).
+`auth-session` 의 저장을 DB 에 둔다 — `auth_sessions`(기기 · IP · 마지막 사용 · 철회) 와 `auth_refresh_tokens`(토큰 해시, `used_at` 이 비면 지금 쓸 수 있는 토큰).
 한 토큰을 두 번 쓰지 못하게 하는 것은 조건부 UPDATE 한 문장이다 — 16 스레드가 같은 토큰을 내밀어도 정확히 하나만 이긴다 (두 DB 에서 시험).
 
 | 항목 | 내용 |

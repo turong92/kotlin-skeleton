@@ -17,7 +17,7 @@ import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 
 /**
- * `skeleton.job-queue.enabled=false` 로 끈다. 스키마는 모듈 마이그레이션 `db/migration/<vendor>/V20260910010000__skeleton_jobs.sql`
+ * `skeleton.job-queue.enabled=false` 로 끈다. 스키마는 모듈 마이그레이션 `db/migration/<vendor>/V20260910010000__jobs.sql`
  * 을 앱의 `spring.flyway.locations=classpath:db/migration/{vendor}` 가 고른다. Flyway 를 안 쓰는 앱은 그 SQL 을 `schema.sql` 에 복사한다.
  */
 @AutoConfiguration(after = [JdbcClientAutoConfiguration::class, DataSourceTransactionManagerAutoConfiguration::class])

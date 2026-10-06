@@ -66,7 +66,7 @@ class NoteExportIntegrationTest : SampleIntegrationTest() {
         val jobId = jobs.enqueue("note-export", """{"noteId":"$gone","ownerId":"acc_user"}""")
 
         val status = await {
-            jdbc.sql("select status from skeleton_jobs where id = :id").param("id", jobId).query(String::class.java).single()
+            jdbc.sql("select status from jobs where id = :id").param("id", jobId).query(String::class.java).single()
                 .takeIf { it == "DONE" || it == "DEAD" }
         }
         assertEquals("DEAD", status)

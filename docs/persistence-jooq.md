@@ -57,7 +57,7 @@ tasks.named("compileKotlin") { dependsOn("jooqCodegen") }
 tasks.named("compileJava") { dependsOn("jooqCodegen") }
 ```
 
-Module tables you query with jOOQ (`skeleton_jobs`, `skeleton_notification_inbox`) live in the module jars, not in
+Module tables you query with jOOQ (`jobs`, `notification_inbox`) live in the module jars, not in
 your folder: add `src/main/resources/db/migration/postgresql` of those modules to `scripts` (comma-separated
 paths are not supported — collect them into one build directory with a `Sync` task first, as
 `modules/persistence-jooq/build.gradle.kts` `collectModuleDdl` does — it also reads the sibling `job-queue-jdbc` / `notification-jdbc` migration folders when they exist, as a test-only input), or skip them if you only use the module API.
@@ -91,12 +91,12 @@ would fail the second time. Keep the inline index and hide it from the parser wi
 putting the preceding comma inside the ignored span so the parser never sees `not null,)`:
 
 ```sql
-create table if not exists skeleton_jobs (
+create table if not exists jobs (
     …,
     updated_at datetime(6) not null
     /* [jooq ignore start] */,
-    index idx_skeleton_jobs_claim (status, next_run_at),
-    index idx_skeleton_jobs_running (status, locked_at)
+    index idx_jobs_claim (status, next_run_at),
+    index idx_jobs_running (status, locked_at)
     /* [jooq ignore stop] */
 );
 ```
@@ -123,4 +123,4 @@ The same file is what `spring.sql.init.mode=always` runs at boot in the no-Flywa
 column literals and round-tripped values.
 
 `JooqModuleLayoutTest` (no Docker) keeps `main` clean: the probe DDL and generated classes must not be in the main output, and the sibling
-module tables (`skeleton_jobs`, `skeleton_notification_inbox`) must have been generated whenever those modules are present.
+module tables (`jobs`, `notification_inbox`) must have been generated whenever those modules are present.

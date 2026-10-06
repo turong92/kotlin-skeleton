@@ -40,7 +40,7 @@ class JooqModuleLayoutTest {
         // build.gradle.kts 가 형제 모듈의 마이그레이션 폴더가 있을 때만 이 값을 채운다 (고르지 않은 모듈은 비어 있다)
         val expected = System.getProperty("skeleton.jooq.expectedModuleTables").orEmpty().split(',').filter { it.isNotBlank() }
         expected.forEach { table ->
-            val className = table.split('_').joinToString("") { it.replaceFirstChar(Char::uppercase) }   // skeleton_jobs → SkeletonJobs (jOOQ 기본 이름 규칙)
+            val className = table.split('_').joinToString("") { it.replaceFirstChar(Char::uppercase) }   // jobs → SkeletonJobs (jOOQ 기본 이름 규칙)
             assertTrue(
                 javaClass.classLoader.getResource("dev/sumin/skeleton/persistence/jooq/generated/tables/$className.class") != null,
                 "$table was not generated from its module migration",

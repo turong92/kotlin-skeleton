@@ -29,7 +29,7 @@ data class AlertRow(
 )
 
 /**
- * `skeleton_alerts` — (종류 · 키)마다 한 행. 접기 판정이 조건부 갱신(`update … where sent_at <= cutoff`)이라
+ * `alerts` — (종류 · 키)마다 한 행. 접기 판정이 조건부 갱신(`update … where sent_at <= cutoff`)이라
  * 여러 스레드 · 인스턴스가 동시에 와도 행 잠금이 줄을 세운다 — 보내기는 하나. `UPDATE … RETURNING` 이 MySQL 에 없어 갱신 뒤 같은 트랜잭션에서 읽는다.
  * 기록은 부르는 쪽 트랜잭션과 따로(REQUIRES_NEW) — 이 문장의 실패가 그쪽을 멈추지 않는다.
  */
@@ -59,7 +59,7 @@ class JdbcAlertStore(
             val existing = own.execute {
                 // MySQL 은 SET 을 왼쪽부터 평가한다: last_suppressed = suppressed_count 가 suppressed_count = 0 보다 앞이어야 옛 값
                 val won = jdbc.sql(
-                    """update skeleton_alerts
+                    """update alerts
                        set severity = :severity, title = :title, detail = :detail, occurred_at = :now, occurrences = occurrences + 1,
                            last_suppressed = suppressed_count, suppressed_count = 0, sent_at = :now
                        where kind = :kind and alert_key = :key and sent_at <= :cutoff""",
@@ -70,7 +70,7 @@ class JdbcAlertStore(
                     return@execute AlertRecorded(send = true, suppressedFolded = row.lastSuppressed, occurrences = row.occurrences)
                 }
                 val folded = jdbc.sql(
-                    """update skeleton_alerts
+                    """update alerts
                        set severity = :severity, title = :title, detail = :detail, occurred_at = :now,
                            occurrences = occurrences + 1, suppressed_count = suppressed_count + 1
                        where kind = :kind and alert_key = :key""",
@@ -82,7 +82,7 @@ class JdbcAlertStore(
             try {
                 own.execute {
                     jdbc.sql(
-                        """insert into skeleton_alerts (kind, alert_key, severity, title, detail, first_at, occurred_at, sent_at)
+                        """insert into alerts (kind, alert_key, severity, title, detail, first_at, occurred_at, sent_at)
                            values (:kind, :key, :severity, :title, :detail, :now, :now, :now)""",
                     ).param("kind", kind).param("key", key).param("severity", severity).param("title", title).param("detail", detail)
                         .param("now", dialect.instantParam(now)).update()
@@ -98,16 +98,16 @@ class JdbcAlertStore(
     private fun counters(kind: String, key: String): AlertRow = find(kind, key) ?: error("alert row vanished inside its own transaction: $kind")
 
     fun find(kind: String, key: String): AlertRow? =
-        jdbc.sql("select * from skeleton_alerts where kind = :kind and alert_key = :key").param("kind", kind).param("key", key)
+        jdbc.sql("select * from alerts where kind = :kind and alert_key = :key").param("kind", kind).param("key", key)
             .query(::map).optional().orElse(null)
 
     /** 가장 최근에 온 것부터 */
     fun recent(limit: Int): List<AlertRow> =
-        jdbc.sql("select * from skeleton_alerts order by occurred_at desc, id desc limit :limit").param("limit", limit).query(::map).list()
+        jdbc.sql("select * from alerts order by occurred_at desc, id desc limit :limit").param("limit", limit).query(::map).list()
 
     /** 마지막으로 온 때가 [before] 보다 오래된 줄을 지운다. 지운 수를 돌려준다 */
     fun purgeOlderThan(before: Instant): Int =
-        jdbc.sql("delete from skeleton_alerts where occurred_at < :before").param("before", dialect.instantParam(before)).update()
+        jdbc.sql("delete from alerts where occurred_at < :before").param("before", dialect.instantParam(before)).update()
 
     private fun purgeIfDue(now: Instant) {
         if (!retention.enabled) return

@@ -36,7 +36,7 @@ class JdbcSessionStoreDbTest {
     private val store = SessionDb.store
     private val now = Instant.parse("2026-10-06T00:00:00.123456Z")
 
-    @BeforeTest fun clean() { SessionDb.jdbc.update("delete from skeleton_auth_sessions", emptyMap<String, Any>()) }
+    @BeforeTest fun clean() { SessionDb.jdbc.update("delete from auth_sessions", emptyMap<String, Any>()) }
 
     private fun session(id: String = "ses_a", account: String = "acc_1", at: Instant = now) =
         SessionRecord(id, account, "Laptop", "UA", "203.0.113.1", at, at, at.plus(Duration.ofDays(30)))
@@ -141,7 +141,7 @@ class JdbcSessionStoreDbTest {
         assertEquals(16, outcomes.count { it.isSuccess }, outcomes.filter { it.isFailure }.toString())
         assertEquals(1, outcomes.map { it.getOrThrow() }.toSet().size, "one successor - no fork of the token chain")
         assertTrue(store.find(opened.sessionId)!!.revokedAt == null)
-        assertEquals(2, SessionDb.jdbc.queryForObject("select count(*) from skeleton_auth_refresh_tokens where session_id = :s", mapOf("s" to opened.sessionId), Int::class.java), "the first token and exactly one successor")
+        assertEquals(2, SessionDb.jdbc.queryForObject("select count(*) from auth_refresh_tokens where session_id = :s", mapOf("s" to opened.sessionId), Int::class.java), "the first token and exactly one successor")
 
         time.at = time.at.plusSeconds(11)
         val e = kotlin.test.assertFailsWith<ApplicationException> { service.refresh(opened.refreshToken!!, client) }

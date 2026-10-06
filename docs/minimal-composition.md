@@ -151,9 +151,9 @@ test proving a context with only that module (and its declared dependencies) boo
 | `platform` | yes | nothing | — |
 | `auth` | yes | nothing in `local` / `dev` / `test` / no profile; in `prod` / `staging` (`skeleton.auth.protected-profiles`): `skeleton.auth.jwt.secret` ≥ 32 bytes and your own `AuthAccountRepository` bean | — |
 | `auth-session` | yes (in-memory sessions) | nothing in `local` / `dev` / `test`; in `prod` / `staging` / `skeleton.env=stage\|prod`: a non-memory `SessionStore` — `auth-session-jdbc` | — |
-| `auth-session-jdbc` | yes | a `DataSource` + one `db-*` module (+ its migration `skeleton_auth_sessions`, as above) | — |
+| `auth-session-jdbc` | yes | a `DataSource` + one `db-*` module (+ its migration `auth_sessions`, as above) | — |
 | `account` | yes (HTTP `/api/v1/account/**`, sign-up open, in-memory store, mail only logged) | nothing in `local` / `dev` / `test`; in protected envs: `account-jdbc`, a mail sender (`notification-mail`) and `skeleton.account.mail.link-base-url` — `DeployGuard` `account` names what is missing | `notification-mail` (mail), `captcha-turnstile` (captcha), `alert` (brute-force alerts), `idempotency`, `auth-social` (social sign-in/linking), `job-queue-jdbc` (purge job) — all optional, all compile-only |
-| `account-jdbc` | yes | a `DataSource` + one `db-*` module (+ its migration `skeleton_accounts`, as above) | — |
+| `account-jdbc` | yes | a `DataSource` + one `db-*` module (+ its migration `accounts`, as above) | — |
 | `auth-magic-link` | yes (sign-in closed to unknown addresses) | `account` (declared dependency) | a mail path to deliver the link |
 | `auth-social` | yes (no provider until enabled) | nothing | provider keys |
 | `auth-social-google` / `-kakao` / `-naver` | off until `skeleton.auth-social.providers.<x>.enabled=true` | nothing | client id / secret |
@@ -162,7 +162,7 @@ test proving a context with only that module (and its declared dependencies) boo
 | `async` | yes | nothing | — |
 | `async-notification` | yes | `notification` (declared dependency) | — |
 | `board` | yes (HTTP `/api/v1/boards`; no board exists until you seed or create one) | a `BoardRepository` · `PostRepository` · `CommentRepository` · `ReactionRepository` set — `board-jdbc` provides it, or write your own; startup fails naming the missing bean | `notification` (comment alerts), `idempotency` (`Idempotency-Key` on create), a `RateLimitStore` (rate limit) — all optional, all compile-only |
-| `board-jdbc` | yes | a `DataSource` + one `db-*` module (+ its migration `skeleton_board`, as above) | — |
+| `board-jdbc` | yes | a `DataSource` + one `db-*` module (+ its migration `board`, as above) | — |
 | `legal` | yes (HTTP `/api/v1/legal`; the module's TEMPLATE documents until the app brings its own — stage · prod refuse them) | a `ConsentStore` · `LegalLedger` pair — `legal-jdbc` provides it, or write your own; startup fails naming the missing bean | `spring-security-core` (HTTP + re-consent filter; compile-only) |
 | `legal-jdbc` | yes | a `DataSource` + one `db-*` module (+ its migration `legal`; MySQL with binlog needs `log_bin_trust_function_creators=1` for its triggers) | — |
 | `captcha-turnstile` | off until `enabled=true` + `secret-key` | nothing | Turnstile secret, internet |
@@ -171,7 +171,7 @@ test proving a context with only that module (and its declared dependencies) boo
 | `db-postgresql` / `db-mysql` | yes — exactly one | a reachable database matching the dialect (`SqlDialectVerifier` names the mismatch) | — |
 | `event-kafka` | yes, as a logging sender | nothing | `enabled=true` + a `KafkaOperations` bean + Kafka |
 | `idempotency` | yes (in-memory store) | nothing | — |
-| `job-queue-jdbc` | yes | a `DataSource` + one `db-*` module (its `skeleton_jobs` migration is picked up by `spring.flyway.locations: classpath:db/migration/{vendor}`) | — |
+| `job-queue-jdbc` | yes | a `DataSource` + one `db-*` module (its `jobs` migration is picked up by `spring.flyway.locations: classpath:db/migration/{vendor}`) | — |
 | `json` | yes | nothing | — |
 | `migration` / `migration-flyway` | yes | Flyway on the classpath (`spring-boot-starter-flyway`) | — |
 | `notification` | yes (in-memory broker) | nothing | — |
@@ -270,7 +270,6 @@ class/file names (`Skeleton*` → `Ovation*`, bean names `skeleton*` → `ovatio
 → `ovation` for `spring.application.name`, JWT issuer, Redis key prefix, SSM paths, OpenAPI title; `skeleton-*` →
 `ovation-*` for thread-name prefixes, the Jackson module, Kafka headers, the AWS profile, `skeleton-jooq-schema.sql`).
 It ends with a leftover scan and fails if any `skeleton` trace remains — a build cannot catch a leftover `skeleton:`
-YAML root key, which silently disables every `ovation.*` setting in that file. Left alone on purpose: the
-`skeleton_jobs` table (bound to module SQL), the sample API paths `/api/v1/skeleton/**` (the react-skeleton
+YAML root key, which silently disables every `ovation.*` setting in that file. The leftover scan also fails on any `skeleton_` table / index / constraint name in SQL or Kotlin (module tables have no prefix — `docs/table-names.md`); the refresh cookie `skeleton_refresh` becomes `ovation_refresh`. Left alone on purpose: the sample API paths `/api/v1/skeleton/**` (the react-skeleton
 workbench calls them), and `kotlin-skeleton` in Markdown titles. Verified by running the script on a copy of this
 repo and building it.

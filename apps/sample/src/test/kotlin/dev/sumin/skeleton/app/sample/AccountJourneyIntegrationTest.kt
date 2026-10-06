@@ -99,9 +99,9 @@ class AccountJourneyIntegrationTest {
         post("/api/v1/auth/login", """{"email":"$email","password":"$second"}""").andExpect { status { isUnauthorized() } }
 
         // the grace period passes (we move the clock by rewriting purge_after), the purge runs every erasure listener
-        jdbc.sql("update skeleton_accounts set purge_after = now() - interval '1 minute' where id = :id").param("id", accountId).update()
+        jdbc.sql("update accounts set purge_after = now() - interval '1 minute' where id = :id").param("id", accountId).update()
         assertEquals(1, purge.purgeDue())
-        assertEquals(0, jdbc.sql("select count(*) from skeleton_accounts where id = :id").param("id", accountId).query(Long::class.java).single())
+        assertEquals(0, jdbc.sql("select count(*) from accounts where id = :id").param("id", accountId).query(Long::class.java).single())
 
         val admin = field(post("/api/v1/auth/login", """{"email":"admin@example.com","password":"password"}""").andReturn().response.contentAsString, "$.value.accessToken")
         mvc.get("/api/v1/boards/general/posts/$postId") { header("Authorization", "Bearer $admin") }.andExpect {

@@ -123,7 +123,7 @@ Rules for `schema.sql` in this mode:
 
 - Every statement must be idempotent: `create table if not exists …`, `create index if not exists …`.
   It runs on every boot.
-- Copy the module migrations you depend on into `schema.sql` verbatim (e.g. `skeleton_jobs` from
+- Copy the module migrations you depend on into `schema.sql` verbatim (e.g. `jobs` from
   `modules/job-queue-jdbc/src/main/resources/db/migration/postgresql/`). Module jars still contain the Flyway
   file, but nothing runs it in this mode. On MySQL (`db/migration/mysql/`) the inline `index` clauses sit
   between `/* [jooq ignore start] */ … /* [jooq ignore stop] */` markers so the same file also feeds jOOQ codegen
@@ -132,7 +132,7 @@ Rules for `schema.sql` in this mode:
 
 Proof: `apps/workbench` `SchemaSqlInitIntegrationTest` boots with these properties against Testcontainers PostgreSQL
 and verifies the table exists and `flyway_schema_history` does not; a second test checks the copied
-`skeleton_jobs` indexes exist and re-runs the script to prove it is idempotent.
+`jobs` indexes exist and re-runs the script to prove it is idempotent.
 
 ## Moving from Mode B to Flyway later
 

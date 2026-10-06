@@ -22,6 +22,8 @@ import kotlin.io.path.name
  * - MySQL 파일의 인라인 `index` · `unique key` · `foreign key` · `collate` 는 `/* [jooq ignore start] */ … /* [jooq ignore stop] */` 안에 둔다
  *   (jOOQ DDLDatabase 가 못 읽는 문법 — docs/schema-management.md · docs/persistence-jooq.md)
  *
+ * - 테이블 · 인덱스 · 제약 · 시퀀스 · 트리거 이름에 옛 모듈 접두사(`skeleton` + `_`)를 붙이지 않는다 — 이름이 겹치는 일은 각 프로젝트가 알아서 한다 (docs/table-names.md). 파일 이름의 설명도 같다.
+ *
  * 훑지 않는 곳 (들어가지도 않는다): [SKIP_DIRS](빌드 출력 · node_modules 등), `.claude`(Claude Code 워크트리),
  * 루트가 아닌데 `.git` 이 있는 디렉토리(레포 안의 다른 워크트리 · 레포 — 저마다 같은 마이그레이션 사본을 가져
  * 「같은 버전」으로 build 를 깬다).
@@ -31,6 +33,7 @@ object MigrationFileRules {
     val VENDORS = setOf("postgresql", "mysql")
     private val LOCATION = Regex("""^(.*/src/[^/]+/resources/db/migration)/(.+)$""")
     private val TIMESTAMP = DateTimeFormatter.ofPattern("uuuuMMddHHmmss").withResolverStyle(ResolverStyle.STRICT)
+    private val OLD_PREFIX = "skeleton" + "_"   // 이어 붙여 둔다: 이 파일 자체가 찍은 프로젝트의 rename 잔여 검사(skeleton + _ 식별자)에 걸리지 않게
     private val SKIP_DIRS = setOf("build", ".gradle", ".git", ".kotlin", "node_modules", "out", ".claude")
 
     private data class Migration(val base: String, val vendor: String, val version: String, val name: String, val display: String)
@@ -58,6 +61,10 @@ object MigrationFileRules {
                 return@forEach
             }
             migrations += Migration(base, parts[0], version, parts[1], rel)
+            if (OLD_PREFIX in parts[1]) violations += "$rel: the file name keeps the old module prefix '$OLD_PREFIX' (table names have none — docs/table-names.md)"
+            Regex("""[A-Za-z0-9_]*${Regex.escape(OLD_PREFIX)}[A-Za-z0-9_]*""").find(Files.readString(path))?.let {
+                violations += "$rel: '${it.value}' keeps the old module prefix '$OLD_PREFIX' — table / index / constraint names have no prefix (docs/table-names.md)"
+            }
             if (parts[0] == "mysql") jooqUnparsable(path)?.let { violations += "$rel: $it must sit between /* [jooq ignore start] */ and /* [jooq ignore stop] */" }
         }
         migrations.groupBy { it.vendor to it.version }.values.filter { it.size > 1 }.forEach { same ->

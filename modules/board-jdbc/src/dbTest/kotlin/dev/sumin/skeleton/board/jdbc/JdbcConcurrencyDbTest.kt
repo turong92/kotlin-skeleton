@@ -14,7 +14,7 @@ class JdbcConcurrencyDbTest {
     private val n = 40
 
     private fun reactionRows(table: String, id: Long): Long =
-        db.scalar("select count(*) from skeleton_board_reactions where target_type = :t and target_id = :id", "t" to table, "id" to id)
+        db.scalar("select count(*) from board_reactions where target_type = :t and target_id = :id", "t" to table, "id" to id)
 
     @Test
     fun `parallel reactions from different accounts are all counted`() {
@@ -63,7 +63,7 @@ class JdbcConcurrencyDbTest {
         val p = db.newPost(db.newBoard()).id
         parallel(n) { i -> db.comment(db.comments, p, author = "u$i") }
         assertEquals(n.toLong(), db.posts.find(p)!!.commentCount)
-        assertEquals(n.toLong(), db.scalar("select count(*) from skeleton_board_comments where post_id = :p", "p" to p))
+        assertEquals(n.toLong(), db.scalar("select count(*) from board_comments where post_id = :p", "p" to p))
     }
 
     @Test
@@ -78,7 +78,7 @@ class JdbcConcurrencyDbTest {
                 else -> db.comment(db.comments, p, author = "t$i")
             }
         }
-        val published = db.scalar("select count(*) from skeleton_board_comments where post_id = :p and status = 'PUBLISHED'", "p" to p)
+        val published = db.scalar("select count(*) from board_comments where post_id = :p and status = 'PUBLISHED'", "p" to p)
         assertEquals(published, db.posts.find(p)!!.commentCount)
         assertEquals(reactionRows("COMMENT", root.id), db.comments.find(root.id)!!.reactionCount)
     }

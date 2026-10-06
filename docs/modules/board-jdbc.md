@@ -1,6 +1,6 @@
 # board-jdbc
 
-`board` 의 저장소 포트 네 개(`BoardRepository` · `PostRepository` · `CommentRepository` · `ReactionRepository`)를 JDBC(PostgreSQL · MySQL)로 구현한다. 테이블 5 개: `skeleton_boards` · `skeleton_board_posts` · `skeleton_board_post_attachments` · `skeleton_board_comments` · `skeleton_board_reactions`.
+`board` 의 저장소 포트 네 개(`BoardRepository` · `PostRepository` · `CommentRepository` · `ReactionRepository`)를 JDBC(PostgreSQL · MySQL)로 구현한다. 테이블 5 개: `boards` · `board_posts` · `board_post_attachments` · `board_comments` · `board_reactions`.
 시각은 `SqlDialect` 로 바인딩한다. 카운터는 같은 트랜잭션의 원자적 UPDATE, 반응 변경은 대상 행을 먼저 잠근다 — 규칙과 근거는 [board](board.md) 의 "Decisions and rejected alternatives".
 
 | 항목 | 내용 |

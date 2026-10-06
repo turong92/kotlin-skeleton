@@ -785,7 +785,7 @@
       "module": "board-jdbc",
       "path": "modules/board-jdbc",
       "status": "stable",
-      "summary": "게시판 저장소 — PostgreSQL · MySQL 로 board 의 저장 포트 네 개를 구현한다(skeleton_board* 테이블 · 원자적 카운터).",
+      "summary": "게시판 저장소 — PostgreSQL · MySQL 로 board 의 저장 포트 네 개를 구현한다(boards · board_* 테이블 · 원자적 카운터).",
       "starter": false,
       "newProjectFlag": "--modules board-jdbc",
       "autoIncludes": ["board", "notification"],
@@ -1261,7 +1261,7 @@
       "module": "notification-jdbc",
       "path": "modules/notification-jdbc",
       "status": "stable",
-      "summary": "알림 받은편지함을 DB 테이블에 저장한다(skeleton_notification_inbox).",
+      "summary": "알림 받은편지함을 DB 테이블에 저장한다(notification_inbox).",
       "starter": false,
       "newProjectFlag": "--modules notification-jdbc",
       "autoIncludes": ["json", "notification"],
@@ -2279,10 +2279,7 @@
       "secrets": [],
       "docs": ["docs/minimal-composition.md"],
       "frontend": null,
-      "notFor": [
-        "모듈을 고르지 않는다 — 모듈 가지치기까지 하는 것은 new-project.sh",
-        "샘플 API 경로 /api/v1/skeleton 과 skeleton_jobs 테이블 이름은 바꾸지 않는다"
-      ],
+      "notFor": ["모듈을 고르지 않는다 — 모듈 가지치기까지 하는 것은 new-project.sh", "샘플 API 경로 /api/v1/skeleton 은 바꾸지 않는다"],
       "keywords": {
         "ko": ["이름 바꾸기", "리네임", "패키지 변경", "템플릿 이름 바꾸기"],
         "en": ["rename", "change package", "rename template", "project name"]

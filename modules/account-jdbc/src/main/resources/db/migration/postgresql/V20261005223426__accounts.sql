@@ -1,6 +1,6 @@
 -- modules:account-jdbc — 계정 · 로그인 수단(identities) · 역할 · 한 번 쓰는 토큰 · 감사 기록. 설계: docs/modules/account.md · docs/accounts.md
 -- 계정에는 로그인 수단이 없다 — 수단(비밀번호 · 소셜 · 매직 링크 …)은 identities 의 행이고 method 는 문자열 코드라서 새 수단이 스키마 변경 없이 들어온다.
-create table if not exists skeleton_accounts (
+create table if not exists accounts (
     id               varchar(40)  primary key,
     email            varchar(254) unique,                    -- 정규화(소문자). 없을 수 있다(이메일을 안 주는 소셜 가입) — 유니크는 NULL 을 여럿 허용한다
     email_verified   boolean      not null default false,
@@ -15,18 +15,18 @@ create table if not exists skeleton_accounts (
     deleted_at       timestamptz,
     purge_after      timestamptz                             -- 삭제 유예가 끝나 지워질 시각
 );
-create index if not exists idx_skeleton_accounts_due on skeleton_accounts (status, purge_after);
+create index if not exists idx_accounts_due on accounts (status, purge_after);
 
-create table if not exists skeleton_account_roles (
-    account_id varchar(40) not null references skeleton_accounts (id) on delete cascade,
+create table if not exists account_roles (
+    account_id varchar(40) not null references accounts (id) on delete cascade,
     role       varchar(40) not null,
     primary key (account_id, role)
 );
-create index if not exists idx_skeleton_account_roles_role on skeleton_account_roles (role);
+create index if not exists idx_account_roles_role on account_roles (role);
 
-create table if not exists skeleton_account_identities (
+create table if not exists account_identities (
     id           varchar(40)  primary key,
-    account_id   varchar(40)  not null references skeleton_accounts (id) on delete cascade,
+    account_id   varchar(40)  not null references accounts (id) on delete cascade,
     method       varchar(32)  not null,                      -- password | magic_link | google | kakao | ... (문자열 코드)
     subject      varchar(254) not null,                      -- 수단 안의 식별자: 이메일 · 제공자 사용자 id
     verified     boolean      not null default false,
@@ -34,12 +34,12 @@ create table if not exists skeleton_account_identities (
     metadata     varchar(2000),
     created_at   timestamptz  not null,
     last_used_at timestamptz,
-    constraint uq_skeleton_account_identities_subject unique (method, subject)
+    constraint uq_account_identities_subject unique (method, subject)
 );
-create index if not exists idx_skeleton_account_identities_account on skeleton_account_identities (account_id);
+create index if not exists idx_account_identities_account on account_identities (account_id);
 
 -- 이메일 인증 · 비밀번호 재설정 · 이메일 변경 · 매직 링크 · 삭제 확인이 같이 쓰는 한 번 쓰는 토큰. 원문은 저장하지 않는다 (SHA-256 hex 만)
-create table if not exists skeleton_account_tokens (
+create table if not exists account_tokens (
     token_hash  varchar(64)  primary key,
     purpose     varchar(32)  not null,
     subject     varchar(254) not null,                       -- 이 용도 안에서 토큰 주인 (이메일 또는 계정 id)
@@ -49,11 +49,11 @@ create table if not exists skeleton_account_tokens (
     expires_at  timestamptz  not null,
     consumed_at timestamptz
 );
-create index if not exists idx_skeleton_account_tokens_owner on skeleton_account_tokens (purpose, subject);
-create index if not exists idx_skeleton_account_tokens_expires on skeleton_account_tokens (expires_at);
+create index if not exists idx_account_tokens_owner on account_tokens (purpose, subject);
+create index if not exists idx_account_tokens_expires on account_tokens (expires_at);
 
 -- 인증 사건 기록 (skeleton.account.audit.enabled=true 일 때만 쓴다). 토큰 · 이메일 · 비밀번호는 싣지 않는다
-create table if not exists skeleton_account_audit (
+create table if not exists account_audit (
     id         bigint generated always as identity primary key,
     at         timestamptz  not null,
     type       varchar(40)  not null,
@@ -61,5 +61,5 @@ create table if not exists skeleton_account_audit (
     ip         varchar(64),
     detail     varchar(1000)
 );
-create index if not exists idx_skeleton_account_audit_account on skeleton_account_audit (account_id, at);
-create index if not exists idx_skeleton_account_audit_at on skeleton_account_audit (at);
+create index if not exists idx_account_audit_account on account_audit (account_id, at);
+create index if not exists idx_account_audit_at on account_audit (at);

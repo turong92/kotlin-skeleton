@@ -39,7 +39,7 @@ class JdbcAccountRepository(
             tx.executeWithoutResult {
                 jdbc.update(
                     """
-                    insert into skeleton_accounts (id, email, email_verified, status, display_name, locale, time_zone, created_at, updated_at, last_login_at, suspended_reason, deleted_at, purge_after)
+                    insert into accounts (id, email, email_verified, status, display_name, locale, time_zone, created_at, updated_at, last_login_at, suspended_reason, deleted_at, purge_after)
                     values (:id, :email, :verified, :status, :name, :locale, :tz, :created, :updated, :lastLogin, :suspended, :deleted, :purge)
                     """.trimIndent(),
                     MapSqlParameterSource().addValue("id", account.id).addValue("email", account.email).addValue("verified", account.emailVerified)
@@ -48,7 +48,7 @@ class JdbcAccountRepository(
                         .addValue("lastLogin", dialect.instantParam(account.lastLoginAt)).addValue("suspended", account.suspendedReason)
                         .addValue("deleted", dialect.instantParam(account.deletedAt)).addValue("purge", dialect.instantParam(account.purgeAfter)),
                 )
-                account.roles.forEach { jdbc.update("insert into skeleton_account_roles (account_id, role) values (:a, :r)", mapOf("a" to account.id, "r" to it)) }
+                account.roles.forEach { jdbc.update("insert into account_roles (account_id, role) values (:a, :r)", mapOf("a" to account.id, "r" to it)) }
                 identities.forEach(::insertIdentity)
             }
             true
@@ -56,13 +56,13 @@ class JdbcAccountRepository(
             false
         }
 
-    override fun findById(id: String): Account? = one("select * from skeleton_accounts where id = :v", id)
+    override fun findById(id: String): Account? = one("select * from accounts where id = :v", id)
 
-    override fun findByEmail(email: String): Account? = one("select * from skeleton_accounts where email = :v", email)
+    override fun findByEmail(email: String): Account? = one("select * from accounts where email = :v", email)
 
     override fun findByIdentity(method: String, subject: String): Account? =
         jdbc.query(
-            "select a.* from skeleton_accounts a join skeleton_account_identities i on i.account_id = a.id where i.method = :m and i.subject = :s",
+            "select a.* from accounts a join account_identities i on i.account_id = a.id where i.method = :m and i.subject = :s",
             mapOf("m" to method, "s" to subject),
         ) { rs, _ -> rs.account(emptySet()) }.firstOrNull()?.let { withRoles(listOf(it)).single() }
 
@@ -82,37 +82,37 @@ class JdbcAccountRepository(
             patch.deletedAt?.let { sets += "deleted_at = :deleted"; p.addValue("deleted", dialect.instantParam(it)) }
             patch.purgeAfter?.let { sets += "purge_after = :purge"; p.addValue("purge", dialect.instantParam(it)) }
         }
-        val n = jdbc.update("update skeleton_accounts set ${sets.joinToString(", ")} where id = :id", p)
+        val n = jdbc.update("update accounts set ${sets.joinToString(", ")} where id = :id", p)
         return if (n == 0) null else findById(id)
     }
 
     override fun markEmailVerified(id: String, now: Instant): Boolean =
         tx.execute {
-            val email = jdbc.query("select email from skeleton_accounts where id = :id for update", mapOf("id" to id)) { rs, _ -> rs.getString("email") }.firstOrNull()
+            val email = jdbc.query("select email from accounts where id = :id for update", mapOf("id" to id)) { rs, _ -> rs.getString("email") }.firstOrNull()
                 ?: return@execute false
             jdbc.update(
-                "update skeleton_accounts set email_verified = true, updated_at = :now, " +
+                "update accounts set email_verified = true, updated_at = :now, " +
                     "status = case when status = 'PENDING_VERIFICATION' then 'ACTIVE' else status end where id = :id",
                 MapSqlParameterSource().addValue("now", dialect.instantParam(now)).addValue("id", id),
             )
-            jdbc.update("update skeleton_account_identities set verified = true where account_id = :id and subject = :email", mapOf("id" to id, "email" to email))
+            jdbc.update("update account_identities set verified = true where account_id = :id and subject = :email", mapOf("id" to id, "email" to email))
             true
         } ?: false
 
     override fun proveMailbox(id: String, now: Instant, proof: MailboxProof): Boolean =
         tx.execute {
-            val row = jdbc.query("select email, email_verified from skeleton_accounts where id = :id for update", mapOf("id" to id)) { rs, _ -> rs.getString("email") to rs.getBoolean("email_verified") }.firstOrNull()
+            val row = jdbc.query("select email, email_verified from accounts where id = :id for update", mapOf("id" to id)) { rs, _ -> rs.getString("email") to rs.getBoolean("email_verified") }.firstOrNull()
                 ?: return@execute false
             val email = row.first ?: return@execute false
             if (!row.second) {
                 // 새 비밀번호를 정하면 옛 비밀번호 수단 행도 지운다(id 가 바뀐다) — 그 행의 id 를 들고 있던 남의 뒤늦은 갱신이 새 비밀번호를 덮지 못하게
                 val dropPassword = if (proof.passwordSecret != null) " or method = :pw" else ""
-                if (proof.keepIdentityIds.isEmpty()) jdbc.update("delete from skeleton_account_identities where account_id = :id", mapOf("id" to id))
-                else jdbc.update("delete from skeleton_account_identities where account_id = :id and (id not in (:keep)$dropPassword)", mapOf("id" to id, "keep" to proof.keepIdentityIds, "pw" to SignInMethods.PASSWORD))
+                if (proof.keepIdentityIds.isEmpty()) jdbc.update("delete from account_identities where account_id = :id", mapOf("id" to id))
+                else jdbc.update("delete from account_identities where account_id = :id and (id not in (:keep)$dropPassword)", mapOf("id" to id, "keep" to proof.keepIdentityIds, "pw" to SignInMethods.PASSWORD))
             }
             proof.passwordSecret?.let { secret ->
                 val updated = jdbc.update(
-                    "update skeleton_account_identities set secret = :s, verified = true where account_id = :id and method = :m and subject = :email",
+                    "update account_identities set secret = :s, verified = true where account_id = :id and method = :m and subject = :email",
                     mapOf("s" to secret, "id" to id, "m" to SignInMethods.PASSWORD, "email" to email),
                 )
                 if (updated == 0) {
@@ -120,14 +120,14 @@ class JdbcAccountRepository(
                 }
             }
             jdbc.update(
-                "update skeleton_accounts set email_verified = true, updated_at = :now, " +
+                "update accounts set email_verified = true, updated_at = :now, " +
                     "status = case when status = 'PENDING_VERIFICATION' then 'ACTIVE' else status end where id = :id",
                 MapSqlParameterSource().addValue("now", dialect.instantParam(now)).addValue("id", id),
             )
-            jdbc.update("update skeleton_account_identities set verified = true where account_id = :id and subject = :email", mapOf("id" to id, "email" to email))
+            jdbc.update("update account_identities set verified = true where account_id = :id and subject = :email", mapOf("id" to id, "email" to email))
             // 증명과 **같은 트랜잭션**에서 이 계정의 열린 코드(이메일 변경 · 다시 인증 · 삭제 확인)와 이 주소의 가입 시도를 닫는다 — 증명 커밋과 정리 사이에 증명 전의 코드가 쓰일 틈이 없다
             jdbc.update(
-                "delete from skeleton_account_challenges where (account_id = :id and purpose in (:purposes)) or (purpose = :signUp and subject = :email)",
+                "delete from account_challenges where (account_id = :id and purpose in (:purposes)) or (purpose = :signUp and subject = :email)",
                 mapOf("id" to id, "email" to email, "signUp" to ChallengePurposes.SIGN_UP, "purposes" to listOf(ChallengePurposes.EMAIL_CHANGE, ChallengePurposes.REAUTH, ChallengePurposes.DELETE_CONFIRM)),
             )
             true
@@ -136,17 +136,17 @@ class JdbcAccountRepository(
     override fun changeEmail(id: String, newEmail: String, now: Instant, expectEmailVerified: Boolean?): ChangeEmailResult =
         try {
             tx.execute {
-                val row = jdbc.query("select email, email_verified from skeleton_accounts where id = :id for update", mapOf("id" to id)) { rs, _ -> rs.getString("email") to rs.getBoolean("email_verified") }
+                val row = jdbc.query("select email, email_verified from accounts where id = :id for update", mapOf("id" to id)) { rs, _ -> rs.getString("email") to rs.getBoolean("email_verified") }
                 if (row.isEmpty()) return@execute ChangeEmailResult.NOT_FOUND
                 // 계정 행 락 안에서 — 다시 인증이 본 확인 상태가 그 사이 메일함 증명으로 바뀌었다면 이 변경은 증명 **전에** 시작한 것이다
                 if (expectEmailVerified != null && row.single().second != expectEmailVerified) return@execute ChangeEmailResult.STALE
                 val old = row.single().first
                 jdbc.update(
-                    "update skeleton_accounts set email = :new, email_verified = true, updated_at = :now where id = :id",
+                    "update accounts set email = :new, email_verified = true, updated_at = :now where id = :id",
                     MapSqlParameterSource().addValue("new", newEmail).addValue("now", dialect.instantParam(now)).addValue("id", id),
                 )
                 if (old != null) {
-                    jdbc.update("update skeleton_account_identities set subject = :new, verified = true where account_id = :id and subject = :old", mapOf("new" to newEmail, "id" to id, "old" to old))
+                    jdbc.update("update account_identities set subject = :new, verified = true where account_id = :id and subject = :old", mapOf("new" to newEmail, "id" to id, "old" to old))
                 }
                 ChangeEmailResult.CHANGED
             } ?: ChangeEmailResult.NOT_FOUND
@@ -156,17 +156,17 @@ class JdbcAccountRepository(
 
     override fun grantRole(id: String, role: String, now: Instant): Boolean =
         try {
-            jdbc.update("insert into skeleton_account_roles (account_id, role) values (:a, :r)", mapOf("a" to id, "r" to role)) == 1
+            jdbc.update("insert into account_roles (account_id, role) values (:a, :r)", mapOf("a" to id, "r" to role)) == 1
         } catch (_: DataIntegrityViolationException) {
             false   // 이미 있거나(PK) 계정이 없다(FK)
         }
 
     override fun revokeRole(id: String, role: String, now: Instant): Boolean =
-        jdbc.update("delete from skeleton_account_roles where account_id = :a and role = :r", mapOf("a" to id, "r" to role)) == 1
+        jdbc.update("delete from account_roles where account_id = :a and role = :r", mapOf("a" to id, "r" to role)) == 1
 
     override fun countActiveWithRole(role: String): Long =
         jdbc.queryForObject(
-            "select count(*) from skeleton_accounts a join skeleton_account_roles r on r.account_id = a.id where r.role = :role and a.status = 'ACTIVE'",
+            "select count(*) from accounts a join account_roles r on r.account_id = a.id where r.role = :role and a.status = 'ACTIVE'",
             mapOf("role" to role), Long::class.java,
         ) ?: 0
 
@@ -176,28 +176,28 @@ class JdbcAccountRepository(
         email?.let { where += "email like :pattern escape '!'"; p.addValue("pattern", "%" + it.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%") }
         status?.let { where += "status = :status"; p.addValue("status", it.name) }
         val clause = if (where.isEmpty()) "" else " where " + where.joinToString(" and ")
-        val total = jdbc.queryForObject("select count(*) from skeleton_accounts$clause", p, Long::class.java) ?: 0
-        val items = jdbc.query("select * from skeleton_accounts$clause order by created_at desc, id limit :limit offset :offset", p) { rs, _ -> rs.account(emptySet()) }
+        val total = jdbc.queryForObject("select count(*) from accounts$clause", p, Long::class.java) ?: 0
+        val items = jdbc.query("select * from accounts$clause order by created_at desc, id limit :limit offset :offset", p) { rs, _ -> rs.account(emptySet()) }
         return AccountPage(withRoles(items), total)
     }
 
     override fun dueForPurge(now: Instant, limit: Int): List<Account> =
         withRoles(
             jdbc.query(
-                "select * from skeleton_accounts where status = 'DELETED' and purge_after is not null and purge_after <= :now order by purge_after limit :limit",
+                "select * from accounts where status = 'DELETED' and purge_after is not null and purge_after <= :now order by purge_after limit :limit",
                 MapSqlParameterSource().addValue("now", dialect.instantParam(now)).addValue("limit", limit),
             ) { rs, _ -> rs.account(emptySet()) },
         )
 
     override fun purge(id: String, now: Instant): Boolean =
         jdbc.update(
-            "delete from skeleton_accounts where id = :id and status = 'DELETED' and purge_after is not null and purge_after <= :now",
+            "delete from accounts where id = :id and status = 'DELETED' and purge_after is not null and purge_after <= :now",
             MapSqlParameterSource().addValue("id", id).addValue("now", dialect.instantParam(now)),
         ) == 1
 
     override fun restore(id: String, status: AccountStatus, now: Instant): Boolean =
         jdbc.update(
-            "update skeleton_accounts set status = :status, deleted_at = null, purge_after = null, updated_at = :now " +
+            "update accounts set status = :status, deleted_at = null, purge_after = null, updated_at = :now " +
                 "where id = :id and status = 'DELETED' and purge_after is not null and purge_after > :now",
             MapSqlParameterSource().addValue("id", id).addValue("status", status.name).addValue("now", dialect.instantParam(now)),
         ) == 1
@@ -205,7 +205,7 @@ class JdbcAccountRepository(
     override fun updateUnlessLast(id: String, patch: AccountPatch, now: Instant, guardRole: String): GuardedResult =
         tx.execute {
             val holders = lockActiveHolders(guardRole)
-            if (jdbc.query("select id from skeleton_accounts where id = :id", mapOf("id" to id)) { rs, _ -> rs.getString(1) }.isEmpty()) return@execute GuardedResult.NOT_FOUND
+            if (jdbc.query("select id from accounts where id = :id", mapOf("id" to id)) { rs, _ -> rs.getString(1) }.isEmpty()) return@execute GuardedResult.NOT_FOUND
             val leavesActive = patch.status != null && patch.status != AccountStatus.ACTIVE
             if (leavesActive && id in holders && holders.size <= 1) return@execute GuardedResult.LAST
             update(id, patch, now)
@@ -215,17 +215,17 @@ class JdbcAccountRepository(
     override fun revokeRoleUnlessLast(id: String, role: String, now: Instant): GuardedResult =
         tx.execute {
             val holders = lockActiveHolders(role)
-            val has = jdbc.queryForObject("select count(*) from skeleton_account_roles where account_id = :a and role = :r", mapOf("a" to id, "r" to role), Int::class.java) ?: 0
+            val has = jdbc.queryForObject("select count(*) from account_roles where account_id = :a and role = :r", mapOf("a" to id, "r" to role), Int::class.java) ?: 0
             if (has == 0) return@execute GuardedResult.NOT_FOUND
             if (id in holders && holders.size <= 1) return@execute GuardedResult.LAST
-            jdbc.update("delete from skeleton_account_roles where account_id = :a and role = :r", mapOf("a" to id, "r" to role))
+            jdbc.update("delete from account_roles where account_id = :a and role = :r", mapOf("a" to id, "r" to role))
             GuardedResult.DONE
         } ?: GuardedResult.NOT_FOUND
 
     /** [role] 의 ACTIVE 보유자 행을 id 순서로 잠근다 — 보호 연산끼리 같은 순서로 잠가 교착 없이 줄 세운다 */
     private fun lockActiveHolders(role: String): Set<String> =
         jdbc.query(
-            "select a.id from skeleton_accounts a join skeleton_account_roles r on r.account_id = a.id where r.role = :role and a.status = 'ACTIVE' order by a.id for update",
+            "select a.id from accounts a join account_roles r on r.account_id = a.id where r.role = :role and a.status = 'ACTIVE' order by a.id for update",
             mapOf("role" to role),
         ) { rs, _ -> rs.getString(1) }.toSet()
 
@@ -238,7 +238,7 @@ class JdbcAccountRepository(
         try {
             tx.execute {
                 // 계정 행 락을 먼저 — 메일함 증명 트랜잭션(같은 행 락)이 끝날 때까지 기다린 뒤 증명 뒤의 상태를 본다
-                val verified = jdbc.query("select email_verified from skeleton_accounts where id = :id for update", mapOf("id" to identity.accountId)) { rs, _ -> rs.getBoolean(1) }.firstOrNull()
+                val verified = jdbc.query("select email_verified from accounts where id = :id for update", mapOf("id" to identity.accountId)) { rs, _ -> rs.getBoolean(1) }.firstOrNull()
                 if (verified != expectEmailVerified) AddIdentityResult.STALE else { insertIdentity(identity); AddIdentityResult.ADDED }
             } ?: AddIdentityResult.STALE
         } catch (_: DataIntegrityViolationException) {
@@ -248,7 +248,7 @@ class JdbcAccountRepository(
     private fun insertIdentity(i: Identity) {
         jdbc.update(
             """
-            insert into skeleton_account_identities (id, account_id, method, subject, verified, secret, metadata, created_at, last_used_at)
+            insert into account_identities (id, account_id, method, subject, verified, secret, metadata, created_at, last_used_at)
             values (:id, :account, :method, :subject, :verified, :secret, :metadata, :created, :lastUsed)
             """.trimIndent(),
             MapSqlParameterSource().addValue("id", i.id).addValue("account", i.accountId).addValue("method", i.method).addValue("subject", i.subject)
@@ -258,40 +258,40 @@ class JdbcAccountRepository(
     }
 
     override fun findIdentity(method: String, subject: String): Identity? =
-        jdbc.query("select * from skeleton_account_identities where method = :m and subject = :s", mapOf("m" to method, "s" to subject)) { rs, _ -> rs.identity() }.firstOrNull()
+        jdbc.query("select * from account_identities where method = :m and subject = :s", mapOf("m" to method, "s" to subject)) { rs, _ -> rs.identity() }.firstOrNull()
 
     override fun findIdentityById(id: String): Identity? =
-        jdbc.query("select * from skeleton_account_identities where id = :id", mapOf("id" to id)) { rs, _ -> rs.identity() }.firstOrNull()
+        jdbc.query("select * from account_identities where id = :id", mapOf("id" to id)) { rs, _ -> rs.identity() }.firstOrNull()
 
     override fun identitiesOf(accountId: String): List<Identity> =
-        jdbc.query("select * from skeleton_account_identities where account_id = :a order by created_at, id", mapOf("a" to accountId)) { rs, _ -> rs.identity() }
+        jdbc.query("select * from account_identities where account_id = :a order by created_at, id", mapOf("a" to accountId)) { rs, _ -> rs.identity() }
 
     override fun removeIdentity(accountId: String, identityId: String): Boolean =
-        jdbc.update("delete from skeleton_account_identities where id = :id and account_id = :a", mapOf("id" to identityId, "a" to accountId)) == 1
+        jdbc.update("delete from account_identities where id = :id and account_id = :a", mapOf("id" to identityId, "a" to accountId)) == 1
 
     override fun removeIdentityUnlessLast(accountId: String, identityId: String, credentialMethods: Collection<String>): RemoveIdentityResult =
         tx.execute {
             // 계정 행을 잠가 같은 계정의 동시 해제를 줄 세운다 — 둘 다 "다른 게 남아 있다" 고 보고 둘 다 지우는 일이 없다
-            if (jdbc.query("select id from skeleton_accounts where id = :a for update", mapOf("a" to accountId)) { rs, _ -> rs.getString(1) }.isEmpty()) return@execute RemoveIdentityResult.NOT_FOUND
-            val method = jdbc.query("select method from skeleton_account_identities where id = :id and account_id = :a", mapOf("id" to identityId, "a" to accountId)) { rs, _ -> rs.getString(1) }.firstOrNull()
+            if (jdbc.query("select id from accounts where id = :a for update", mapOf("a" to accountId)) { rs, _ -> rs.getString(1) }.isEmpty()) return@execute RemoveIdentityResult.NOT_FOUND
+            val method = jdbc.query("select method from account_identities where id = :id and account_id = :a", mapOf("id" to identityId, "a" to accountId)) { rs, _ -> rs.getString(1) }.firstOrNull()
                 ?: return@execute RemoveIdentityResult.NOT_FOUND
             val others = if (credentialMethods.isEmpty()) 0 else jdbc.queryForObject(
-                "select count(*) from skeleton_account_identities where account_id = :a and id <> :id and method in (:methods)",
+                "select count(*) from account_identities where account_id = :a and id <> :id and method in (:methods)",
                 mapOf("a" to accountId, "id" to identityId, "methods" to credentialMethods), Int::class.java,
             ) ?: 0
             if (method in credentialMethods && others == 0) return@execute RemoveIdentityResult.LAST
-            jdbc.update("delete from skeleton_account_identities where id = :id", mapOf("id" to identityId))
+            jdbc.update("delete from account_identities where id = :id", mapOf("id" to identityId))
             RemoveIdentityResult.REMOVED
         } ?: RemoveIdentityResult.NOT_FOUND
 
     override fun updateIdentitySecret(identityId: String, secret: String?, expectedSecret: String?): Boolean =
         jdbc.update(
-            "update skeleton_account_identities set secret = :s where id = :id" + (if (expectedSecret != null) " and secret = :old" else ""),
+            "update account_identities set secret = :s where id = :id" + (if (expectedSecret != null) " and secret = :old" else ""),
             MapSqlParameterSource().addValue("s", secret).addValue("id", identityId).addValue("old", expectedSecret),
         ) == 1
 
     override fun touchIdentity(identityId: String, now: Instant) {
-        jdbc.update("update skeleton_account_identities set last_used_at = :now where id = :id", MapSqlParameterSource().addValue("now", dialect.instantParam(now)).addValue("id", identityId))
+        jdbc.update("update account_identities set last_used_at = :now where id = :id", MapSqlParameterSource().addValue("now", dialect.instantParam(now)).addValue("id", identityId))
     }
 
     // ---- mapping
@@ -299,7 +299,7 @@ class JdbcAccountRepository(
     private fun withRoles(accounts: List<Account>): List<Account> {
         if (accounts.isEmpty()) return accounts
         val roles = HashMap<String, MutableSet<String>>()
-        jdbc.query("select account_id, role from skeleton_account_roles where account_id in (:ids)", mapOf("ids" to accounts.map { it.id })) { rs ->
+        jdbc.query("select account_id, role from account_roles where account_id in (:ids)", mapOf("ids" to accounts.map { it.id })) { rs ->
             roles.getOrPut(rs.getString("account_id")) { linkedSetOf() }.add(rs.getString("role"))
         }
         return accounts.map { it.copy(roles = roles[it.id] ?: emptySet()) }

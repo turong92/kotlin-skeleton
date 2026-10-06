@@ -39,9 +39,9 @@ class SchemaSqlInitIntegrationTest {
 
     @Test
     fun `모듈 마이그레이션을 복사한 schema_sql 은 인덱스까지 만들고 재실행해도 깨지지 않는다`() {
-        val indexes = jdbc.sql("select indexname from pg_indexes where schemaname = current_schema() and tablename = 'skeleton_jobs'")
+        val indexes = jdbc.sql("select indexname from pg_indexes where schemaname = current_schema() and tablename = 'jobs'")
             .query(String::class.java).list().toSet()
-        assertEquals(setOf("skeleton_jobs_pkey", "idx_skeleton_jobs_claim", "idx_skeleton_jobs_running"), indexes)
+        assertEquals(setOf("jobs_pkey", "idx_jobs_claim", "idx_jobs_running"), indexes)
         // Mode B 는 매 기동마다 schema.sql 을 다시 돌린다 — 두 번째 실행도 성공해야 한다
         ResourceDatabasePopulator(ClassPathResource("schema-sql-example/schema.sql")).execute(dataSource)
     }

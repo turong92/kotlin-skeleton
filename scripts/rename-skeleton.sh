@@ -18,7 +18,8 @@
 #   skeleton-<name>      → <config-prefix>-<name> (스레드 이름 접두사, Jackson 모듈 이름, Kafka 헤더, AWS 프로파일, 파일 이름 skeleton-*.sql)
 #   "Composable Kotlin backend skeleton API" → "<ClassPrefix> API" (OpenAPI description 기본값)
 #   rootProject.name     → <config-prefix>
-# 바꾸지 않는 것: 테이블 이름 skeleton_jobs (모듈 SQL 과 맞물림), 샘플 API 경로 /api/v1/skeleton/** (react-skeleton 워크벤치 계약),
+#   skeleton_refresh     → <config-prefix>_refresh  (리프레시 쿠키 기본 이름 — 테이블이 아니다. 테이블 이름에는 skeleton_ 접두사가 없다: docs/table-names.md)
+# 바꾸지 않는 것: 샘플 API 경로 /api/v1/skeleton/** (react-skeleton 워크벤치 계약),
 #   "kotlin-skeleton" 이 들어간 .md 문서 제목(수동), git 히스토리.
 # 끝나면 남은 흔적을 검사해 하나라도 있으면 exit 1. 그 다음 `./gradlew build` 로 확인한다. macOS/BSD sed 와 GNU sed 모두 동작.
 set -euo pipefail
@@ -58,6 +59,7 @@ files | while read -r f; do
     s/^(\\s*)skeleton:(\\s*)\$/\${1}${PREFIX}:\${2}/;
     s/(?<!rename-)\\bskeleton\\.(?=[a-z])/${PREFIX}./g;   # rename-skeleton.sh 는 스크립트 파일 이름이다 — 문서 · 카탈로그의 경로를 바꾸지 않는다
     s/-Pskeleton\\./-P${PREFIX}./g;
+    s/\\bskeleton_refresh\\b/${PREFIX}_refresh/g;
     s/\\bskeleton-(?=[a-z])/${PREFIX}-/g;
     s/Composable Kotlin backend skeleton API/${CLASS} API/g;
     s/\\bSkeleton(?=[A-Z])/${CLASS}/g;
@@ -90,9 +92,9 @@ if [ -f scripts/build-capabilities.pl ] && [ -f capabilities.json ]; then perl s
 
 # 4. 검증: 남은 흔적이 있으면 실패. 빌드는 이걸 못 잡는다 (예: YAML 루트 키가 skeleton: 이면 설정이 조용히 무시된다)
 leftovers="$(files | xargs perl -ne '
-  next if /skeleton_jobs|\/skeleton\//;                       # 의도적으로 남기는 것
+  next if /\/skeleton\//;                                       # 의도적으로 남기는 것 (샘플 API 경로 — 테이블 이름의 skeleton_ 예외는 없다)
   next if $ARGV =~ /\.md$/ && /kotlin-skeleton/;               # 문서 제목
-  print "$ARGV:$.: $_" if /dev\.sumin\.skeleton|dev\/sumin\/skeleton|\bSKELETON_|^\s*skeleton:\s*$|(?<!rename-)\bskeleton\.[a-z]|-Pskeleton\.|\bskeleton-[a-z]|\bSkeleton[A-Z]|\bskeleton[A-Z]|\bkotlin-skeleton\b/;
+  print "$ARGV:$.: $_" if ($ARGV =~ /\.(sql|kts?)$/ && /skeleton_[a-z]/) || /dev\.sumin\.skeleton|dev\/sumin\/skeleton|\bSKELETON_|^\s*skeleton:\s*$|(?<!rename-)\bskeleton\.[a-z]|-Pskeleton\.|\bskeleton-[a-z]|\bSkeleton[A-Z]|\bskeleton[A-Z]|\bkotlin-skeleton\b/;
   close ARGV if eof;
 ' || true)"
 if [ -n "$leftovers" ]; then

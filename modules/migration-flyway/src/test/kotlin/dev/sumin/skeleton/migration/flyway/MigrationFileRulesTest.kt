@@ -18,6 +18,31 @@ class MigrationFileRulesTest {
         return root
     }
 
+    private val prefix = "skeleton" + "_"   // 이 파일 자체가 찍은 프로젝트의 rename 잔여 검사에 걸리지 않게 이어 붙인다
+
+    private fun repoWithSql(path: String, sql: String): Path {
+        val root = Files.createTempDirectory("repo")
+        root.resolve(path).also { f -> f.parent.createDirectories(); f.writeText(sql) }
+        return root
+    }
+
+    @Test
+    fun `a table index or constraint name that keeps the old module prefix is a violation`() {
+        val dir = "modules/a/src/main/resources/db/migration/postgresql"
+        for (sql in listOf(
+            "create table ${prefix}jobs (id int);",
+            "create index idx_${prefix}jobs_claim on jobs (id);",
+            "create table jobs (id int, constraint uq_${prefix}jobs_id unique (id));",
+            "alter table jobs add column x int; -- see ${prefix}jobs",
+        )) {
+            val v = MigrationFileRules.violations(repoWithSql("$dir/V20261001000000__a.sql", sql))
+            assertEquals(1, v.size, "$sql -> $v")
+            assertTrue("prefix" in v.single(), v.single())
+        }
+        assertEquals(1, MigrationFileRules.violations(repoWithSql("$dir/V20261001000000__${prefix}a.sql", "select 1;")).size, "the description keeps the prefix too")
+        assertEquals(emptyList(), MigrationFileRules.violations(repoWithSql("$dir/V20261001000000__a.sql", "create table jobs (id int); create index idx_jobs_claim on jobs (id);")))
+    }
+
     @Test
     fun `clean repository has no violations`() {
         val root = repo(

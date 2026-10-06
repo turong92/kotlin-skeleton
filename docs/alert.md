@@ -10,7 +10,7 @@ OwnerAlerts.emit(kind, key, detail)         never throws into the business flow
    |  inside a transaction: after commit (rolled back = it did not happen); immediate=true: right away (failure alerts)
    v
 AlertStore.record(kind, key, ...)           one row per (kind, key); inside min-interval -> folded (suppressed++), else send
-   |  memory by default; alert-jdbc = skeleton_alerts, one conditional UPDATE decides, safe across instances
+   |  memory by default; alert-jdbc = alerts, one conditional UPDATE decides, safe across instances
    v
 AlertChannel(s)                             webhook (Discord JSON); mail if notification-mail's MailSender + mail-to
       each on its own virtual thread, 3 attempts with doubling backoff; one failing channel never blocks another
@@ -57,7 +57,7 @@ Override an interval from yml: `skeleton.alert.intervals.order-stuck: 1h` (any c
 ## alert-jdbc
 
 Add `implementation(project(":modules:alert-jdbc"))` (and a dialect module) to share the folding decision across instances and restarts and keep a list (`JdbcAlertStore.recent`).
-The table `skeleton_alerts` has one row per (kind, key): `occurrences`, `suppressed_count`, `last_suppressed`. The decision is one conditional
+The table `alerts` has one row per (kind, key): `occurrences`, `suppressed_count`, `last_suppressed`. The decision is one conditional
 `UPDATE ... WHERE sent_at <= cutoff`, so concurrent callers are ordered by the row lock and exactly one sends (proved with 8 threads on both PostgreSQL and MySQL).
 `skeleton.alert-jdbc.retention.*` deletes old rows; it is **off by default** (a retention policy is the app's choice).
 

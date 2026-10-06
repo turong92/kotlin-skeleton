@@ -35,7 +35,7 @@ class JdbcErasureDbTest {
         assertEquals(likesBefore.reactionCount, db.posts.find(theirs.id)!!.reactionCount, "the reaction count must not change")
         assertEquals(2L, db.reactions.counts(POST, listOf(theirs.id))[theirs.id]!!["LIKE"])
         assertEquals(emptySet(), db.reactions.mine(POST, listOf(theirs.id), "acc_gone")[theirs.id].orEmpty())
-        assertEquals(1L, db.scalar("select count(*) from skeleton_board_reactions where account_id = :a", "a" to tombstone) - db.scalar("select count(*) from skeleton_board_reactions where account_id = :a and target_type = 'COMMENT'", "a" to tombstone))
+        assertEquals(1L, db.scalar("select count(*) from board_reactions where account_id = :a", "a" to tombstone) - db.scalar("select count(*) from board_reactions where account_id = :a and target_type = 'COMMENT'", "a" to tombstone))
     }
 
     @Test

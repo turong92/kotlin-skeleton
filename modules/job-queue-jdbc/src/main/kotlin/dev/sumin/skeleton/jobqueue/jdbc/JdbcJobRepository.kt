@@ -8,7 +8,7 @@ import org.springframework.jdbc.support.GeneratedKeyHolder
 import org.springframework.transaction.support.TransactionTemplate
 
 /**
- * skeleton_jobs 접근. 시각은 SqlDialect 로 바인딩한다 (방언 모듈이 결정, JVM 시간대 무관).
+ * jobs 접근. 시각은 SqlDialect 로 바인딩한다 (방언 모듈이 결정, JVM 시간대 무관).
  *
  * claim 은 한 트랜잭션에서 `SELECT … FOR UPDATE SKIP LOCKED` → `UPDATE … RUNNING` 으로 잡아서,
  * 워커가 여러 개여도 같은 잡을 두 번 집지 않는다. Redis 락 불필요.
@@ -21,7 +21,7 @@ class JdbcJobRepository(
     fun insert(type: String, payloadJson: String, runAt: Instant, maxAttempts: Int, now: Instant, logContext: String? = null): Long {
         val keys = GeneratedKeyHolder()
         jdbc.sql(
-            """insert into skeleton_jobs
+            """insert into jobs
                (job_type, payload_json, status, attempts, max_attempts, next_run_at, created_at, updated_at, log_context)
                values (:type, :payload, 'PENDING', 0, :maxAttempts, :runAt, :now, :now, :logContext)""",
         )
@@ -35,7 +35,7 @@ class JdbcJobRepository(
     fun claim(workerId: String, limit: Int, now: Instant): List<Job> =
         transactions.execute {
             val ids = jdbc.sql(
-                """select id from skeleton_jobs
+                """select id from jobs
                    where status = 'PENDING' and next_run_at <= :now
                    order by next_run_at, id
                    limit :limit
@@ -43,11 +43,11 @@ class JdbcJobRepository(
             ).param("now", dialect.instantParam(now)).param("limit", limit).query(Long::class.java).list()
             if (ids.isEmpty()) return@execute emptyList()
             jdbc.sql(
-                """update skeleton_jobs
+                """update jobs
                    set status = 'RUNNING', locked_by = :worker, locked_at = :now, attempts = attempts + 1, updated_at = :now
                    where id in (:ids)""",
             ).param("worker", workerId).param("now", dialect.instantParam(now)).param("ids", ids).update()
-            jdbc.sql("select * from skeleton_jobs where id in (:ids) order by next_run_at, id")
+            jdbc.sql("select * from jobs where id in (:ids) order by next_run_at, id")
                 .param("ids", ids).query(::map).list()
         } ?: emptyList()
 
@@ -58,13 +58,13 @@ class JdbcJobRepository(
      */
     fun markDone(id: Long, workerId: String, attempts: Int, now: Instant): Boolean =
         jdbc.sql(
-            """update skeleton_jobs set status = 'DONE', locked_by = null, locked_at = null, updated_at = :now
+            """update jobs set status = 'DONE', locked_by = null, locked_at = null, updated_at = :now
                where id = :id and status = 'RUNNING' and locked_by = :worker and attempts = :attempts""",
         ).param("id", id).param("worker", workerId).param("attempts", attempts).param("now", dialect.instantParam(now)).update() > 0
 
     fun markRetry(id: Long, workerId: String, attempts: Int, nextRunAt: Instant, error: String, now: Instant): Boolean =
         jdbc.sql(
-            """update skeleton_jobs
+            """update jobs
                set status = 'PENDING', next_run_at = :next, last_error = :error, locked_by = null, locked_at = null, updated_at = :now
                where id = :id and status = 'RUNNING' and locked_by = :worker and attempts = :attempts""",
         ).param("id", id).param("worker", workerId).param("attempts", attempts)
@@ -72,7 +72,7 @@ class JdbcJobRepository(
 
     fun markDead(id: Long, workerId: String, attempts: Int, error: String, now: Instant): Boolean =
         jdbc.sql(
-            """update skeleton_jobs
+            """update jobs
                set status = 'DEAD', last_error = :error, locked_by = null, locked_at = null, updated_at = :now
                where id = :id and status = 'RUNNING' and locked_by = :worker and attempts = :attempts""",
         ).param("id", id).param("worker", workerId).param("attempts", attempts)
@@ -84,7 +84,7 @@ class JdbcJobRepository(
      */
     fun renew(id: Long, workerId: String, attempts: Int, now: Instant): Boolean =
         jdbc.sql(
-            """update skeleton_jobs set locked_at = :now, updated_at = :now
+            """update jobs set locked_at = :now, updated_at = :now
                where id = :id and status = 'RUNNING' and locked_by = :worker and attempts = :attempts""",
         ).param("id", id).param("worker", workerId).param("attempts", attempts).param("now", dialect.instantParam(now)).update() > 0
 
@@ -96,27 +96,27 @@ class JdbcJobRepository(
     fun recoverStale(lockedBefore: Instant, now: Instant): StaleRecovery =
         transactions.execute {
             val staleIds = jdbc.sql(
-                """select id from skeleton_jobs
+                """select id from jobs
                    where status = 'RUNNING' and locked_at < :before
                    order by id
                    for update skip locked""",
             ).param("before", dialect.instantParam(lockedBefore)).query(Long::class.java).list()
             if (staleIds.isEmpty()) return@execute StaleRecovery(0, emptyList())
-            val deadIds = jdbc.sql("select id from skeleton_jobs where id in (:ids) and attempts >= max_attempts")
+            val deadIds = jdbc.sql("select id from jobs where id in (:ids) and attempts >= max_attempts")
                 .param("ids", staleIds).query(Long::class.java).list()
             val dead = if (deadIds.isEmpty()) emptyList() else {
                 jdbc.sql(
-                    """update skeleton_jobs
+                    """update jobs
                        set status = 'DEAD', locked_by = null, locked_at = null, updated_at = :now,
                            last_error = coalesce(last_error, 'stale RUNNING job exhausted its attempts')
                        where id in (:ids)""",
                 ).param("now", dialect.instantParam(now)).param("ids", deadIds).update()
-                jdbc.sql("select * from skeleton_jobs where id in (:ids) order by id").param("ids", deadIds).query(::map).list()
+                jdbc.sql("select * from jobs where id in (:ids) order by id").param("ids", deadIds).query(::map).list()
             }
             val reviveIds = staleIds - deadIds.toSet()
             if (reviveIds.isNotEmpty()) {
                 jdbc.sql(
-                    """update skeleton_jobs
+                    """update jobs
                        set status = 'PENDING', locked_by = null, locked_at = null, updated_at = :now
                        where id in (:ids)""",
                 ).param("now", dialect.instantParam(now)).param("ids", reviveIds).update()
@@ -129,20 +129,20 @@ class JdbcJobRepository(
         var total = 0
         while (true) {
             val ids = jdbc.sql(
-                "select id from skeleton_jobs where status = :status and updated_at < :before order by id limit :limit",
+                "select id from jobs where status = :status and updated_at < :before order by id limit :limit",
             ).param("status", status.name).param("before", dialect.instantParam(before)).param("limit", batchSize)
                 .query(Long::class.java).list()
             if (ids.isEmpty()) return total
-            total += jdbc.sql("delete from skeleton_jobs where id in (:ids) and status = :status")
+            total += jdbc.sql("delete from jobs where id in (:ids) and status = :status")
                 .param("ids", ids).param("status", status.name).update()
         }
     }
 
     fun findById(id: Long): Job? =
-        jdbc.sql("select * from skeleton_jobs where id = :id").param("id", id).query(::map).optional().orElse(null)
+        jdbc.sql("select * from jobs where id = :id").param("id", id).query(::map).optional().orElse(null)
 
     fun countByStatus(status: JobStatus): Long =
-        jdbc.sql("select count(*) from skeleton_jobs where status = :status").param("status", status.name)
+        jdbc.sql("select count(*) from jobs where status = :status").param("status", status.name)
             .query(Long::class.java).single()
 
     private fun map(rs: ResultSet, @Suppress("UNUSED_PARAMETER") rowNum: Int): Job = Job(

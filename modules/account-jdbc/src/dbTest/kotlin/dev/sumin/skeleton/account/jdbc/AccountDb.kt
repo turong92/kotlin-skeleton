@@ -22,6 +22,6 @@ object AccountDb {
     val audit = JdbcAccountAuditListener(jdbc, DbTestDatabase.dialect)
 
     fun clean() {
-        listOf("skeleton_account_audit", "skeleton_account_challenges", "skeleton_account_tokens", "skeleton_accounts").forEach { jdbc.update("delete from $it", emptyMap<String, Any>()) }
+        listOf("account_audit", "account_challenges", "account_tokens", "accounts").forEach { jdbc.update("delete from $it", emptyMap<String, Any>()) }
     }
 }

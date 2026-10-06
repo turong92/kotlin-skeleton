@@ -1,6 +1,6 @@
 # notification-jdbc
 
-`NotificationInboxRepository` 를 JDBC 로 구현해 알림 인박스를 `skeleton_notification_inbox` 테이블에 저장한다.
+`NotificationInboxRepository` 를 JDBC 로 구현해 알림 인박스를 `notification_inbox` 테이블에 저장한다.
 페이로드는 `json` 의 `JsonCodec` 으로 직렬화한다. `json` 이 새로 끌고 오는 웹 스택은 없다: webflux · validation · springdoc 은 `platform` 이 이미 가져온다.
 
 **계정 삭제**: `account` 가 계정을 지울 때(platform 의 `AccountErasureListener`) 그 계정의 받은편지함 줄을 지우고, 같은 이벤트를 받은 다른 사람의 줄 안 수신자 목록에서 계정 id 를 톰스톤으로 바꾼다.

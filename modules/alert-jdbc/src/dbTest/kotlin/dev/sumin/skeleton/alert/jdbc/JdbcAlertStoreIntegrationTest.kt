@@ -51,7 +51,7 @@ class JdbcAlertStoreIntegrationTest {
 
     @BeforeEach
     fun clean() {
-        jdbc.sql("delete from skeleton_alerts").update()
+        jdbc.sql("delete from alerts").update()
         time.now = Instant.parse("2026-10-06T00:00:00Z")
     }
 

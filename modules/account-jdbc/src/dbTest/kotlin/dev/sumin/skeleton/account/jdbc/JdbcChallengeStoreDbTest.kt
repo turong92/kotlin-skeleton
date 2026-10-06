@@ -31,7 +31,7 @@ class JdbcChallengeStoreDbTest {
         val row: ChallengeRow = AccountDb.challenges.find(o.row.id)!!
         assertEquals(o.row, row)
         assertEquals(now.plus(ttl), row.expiresAt)
-        assertEquals(0, AccountDb.jdbc.queryForObject("select count(*) from skeleton_account_challenges where code_hash = :c or id = :c", mapOf("c" to o.code), Int::class.java))
+        assertEquals(0, AccountDb.jdbc.queryForObject("select count(*) from account_challenges where code_hash = :c or id = :c", mapOf("c" to o.code), Int::class.java))
     }
 
     @Test

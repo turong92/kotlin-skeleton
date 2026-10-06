@@ -52,7 +52,7 @@ class JdbcBoardRepository(private val jdbc: NamedParameterJdbcTemplate, private 
     override fun create(code: String, name: String, description: String?, now: Instant): Boolean =
         try {
             jdbc.update(
-                "insert into skeleton_boards (code, name, description, created_at) values (:code, :name, :description, :now)",
+                "insert into boards (code, name, description, created_at) values (:code, :name, :description, :now)",
                 MapSqlParameterSource().addValue("code", code).addValue("name", name).addValue("description", description)
                     .addValue("now", dialect.instantParam(now)),
             )
@@ -67,8 +67,8 @@ class JdbcBoardRepository(private val jdbc: NamedParameterJdbcTemplate, private 
     private companion object {
         const val SELECT = """
             select b.code, b.name, b.description, b.created_at, coalesce(c.cnt, 0) as post_count
-            from skeleton_boards b
-            left join (select board_code, count(*) as cnt from skeleton_board_posts where status = 'PUBLISHED' group by board_code) c
+            from boards b
+            left join (select board_code, count(*) as cnt from board_posts where status = 'PUBLISHED' group by board_code) c
                 on c.board_code = b.code
         """
     }
@@ -84,7 +84,7 @@ class JdbcPostRepository(
             val keys = GeneratedKeyHolder()
             jdbc.update(
                 """
-                insert into skeleton_board_posts
+                insert into board_posts
                     (board_code, author_id, title, body, status, pinned, view_count, comment_count, reaction_count, attachment_count, created_at, updated_at)
                 values (:board, :author, :title, :body, :status, :pinned, 0, 0, 0, :attachmentCount, :now, :now)
                 """.trimIndent(),
@@ -103,10 +103,10 @@ class JdbcPostRepository(
 
     override fun find(id: Long): Post? {
         val post = jdbc.query(
-            "select * from skeleton_board_posts where id = :id", mapOf("id" to id),
+            "select * from board_posts where id = :id", mapOf("id" to id),
         ) { rs, _ -> rs.post(emptyList()) }.firstOrNull() ?: return null
         val keys = jdbc.queryForList(
-            "select storage_key from skeleton_board_post_attachments where post_id = :id order by sort_order", mapOf("id" to id), String::class.java,
+            "select storage_key from board_post_attachments where post_id = :id order by sort_order", mapOf("id" to id), String::class.java,
         )
         return post.copy(attachments = keys.filterNotNull())
     }
@@ -120,7 +120,7 @@ class JdbcPostRepository(
         change.pinned?.let { sets += "pinned = :pinned"; params.addValue("pinned", it) }
         change.attachments?.let { sets += "attachment_count = :attachmentCount"; params.addValue("attachmentCount", it.size) }
         val updated = tx.execute {
-            val rows = jdbc.update("update skeleton_board_posts set ${sets.joinToString()} where id = :id", params)
+            val rows = jdbc.update("update board_posts set ${sets.joinToString()} where id = :id", params)
             if (rows > 0 && change.attachments != null) replaceAttachments(id, change.attachments!!)
             rows
         }!!
@@ -128,7 +128,7 @@ class JdbcPostRepository(
     }
 
     override fun incrementViews(id: Long) {
-        jdbc.update("update skeleton_board_posts set view_count = view_count + 1 where id = :id", mapOf("id" to id))
+        jdbc.update("update board_posts set view_count = view_count + 1 where id = :id", mapOf("id" to id))
     }
 
     override fun page(query: PostQuery): PageResult<PostListItem> {
@@ -144,19 +144,19 @@ class JdbcPostRepository(
         val order = when {
             query.reactionType != null -> {
                 params.addValue("reactionType", query.reactionType)
-                "(select count(*) from skeleton_board_reactions r where r.target_type = 'POST' and r.target_id = p.id and r.reaction_type = :reactionType) desc, "
+                "(select count(*) from board_reactions r where r.target_type = 'POST' and r.target_id = p.id and r.reaction_type = :reactionType) desc, "
             }
             query.sort == PostSort.REACTIONS -> "p.reaction_count desc, "
             query.sort == PostSort.COMMENTS -> "p.comment_count desc, "
             else -> ""
         }
-        val total = jdbc.queryForObject("select count(*) from skeleton_board_posts p where $where", params, Long::class.java) ?: 0L
+        val total = jdbc.queryForObject("select count(*) from board_posts p where $where", params, Long::class.java) ?: 0L
         params.addValue("excerpt", query.excerptLength).addValue("limit", query.size).addValue("offset", query.page * query.size)
         val rows = jdbc.query(
             """
             select p.id, p.board_code, p.author_id, p.title, left(p.body, :excerpt) as excerpt, p.status, p.pinned, p.view_count,
                    p.comment_count, p.reaction_count, p.attachment_count, p.created_at, p.updated_at
-            from skeleton_board_posts p
+            from board_posts p
             where $where
             order by p.pinned desc, $order p.created_at desc, p.id desc
             limit :limit offset :offset
@@ -174,10 +174,10 @@ class JdbcPostRepository(
     }
 
     private fun replaceAttachments(postId: Long, keys: List<String>) {
-        jdbc.update("delete from skeleton_board_post_attachments where post_id = :id", mapOf("id" to postId))
+        jdbc.update("delete from board_post_attachments where post_id = :id", mapOf("id" to postId))
         if (keys.isNotEmpty()) {
             jdbc.batchUpdate(
-                "insert into skeleton_board_post_attachments (post_id, sort_order, storage_key) values (:postId, :order, :key)",
+                "insert into board_post_attachments (post_id, sort_order, storage_key) values (:postId, :order, :key)",
                 keys.mapIndexed { i, key -> MapSqlParameterSource().addValue("postId", postId).addValue("order", i).addValue("key", key) }.toTypedArray(),
             )
         }
@@ -203,12 +203,12 @@ class JdbcCommentRepository(
     override fun insert(comment: NewComment): Comment? {
         val id = tx.execute {
             // 글 행을 먼저 잠그며 카운터를 올린다 (잠금 순서 규칙). 글이 없으면 0 행.
-            val bumped = jdbc.update("update skeleton_board_posts set comment_count = comment_count + 1 where id = :post", mapOf("post" to comment.postId))
+            val bumped = jdbc.update("update board_posts set comment_count = comment_count + 1 where id = :post", mapOf("post" to comment.postId))
             if (bumped == 0) return@execute null
             val keys = GeneratedKeyHolder()
             jdbc.update(
                 """
-                insert into skeleton_board_comments (post_id, parent_id, root_id, depth, author_id, body, status, reaction_count, created_at, updated_at)
+                insert into board_comments (post_id, parent_id, root_id, depth, author_id, body, status, reaction_count, created_at, updated_at)
                 values (:post, :parent, :root, :depth, :author, :body, 'PUBLISHED', 0, :now, :now)
                 """.trimIndent(),
                 MapSqlParameterSource().addValue("post", comment.postId).addValue("parent", comment.parentId, java.sql.Types.BIGINT)
@@ -223,11 +223,11 @@ class JdbcCommentRepository(
     }
 
     override fun find(id: Long): Comment? =
-        jdbc.query("select * from skeleton_board_comments where id = :id", mapOf("id" to id)) { rs, _ -> rs.comment() }.firstOrNull()
+        jdbc.query("select * from board_comments where id = :id", mapOf("id" to id)) { rs, _ -> rs.comment() }.firstOrNull()
 
     override fun updateBody(id: Long, body: String, now: Instant): Comment? {
         val rows = jdbc.update(
-            "update skeleton_board_comments set body = :body, updated_at = :now where id = :id",
+            "update board_comments set body = :body, updated_at = :now where id = :id",
             MapSqlParameterSource().addValue("id", id).addValue("body", body).addValue("now", dialect.instantParam(now)),
         )
         return if (rows == 0) null else find(id)
@@ -235,17 +235,17 @@ class JdbcCommentRepository(
 
     override fun setStatus(id: Long, status: CommentStatus, now: Instant): Comment? {
         tx.execute {
-            val postId = jdbc.queryForList("select post_id from skeleton_board_comments where id = :id", mapOf("id" to id), Long::class.java).firstOrNull()
+            val postId = jdbc.queryForList("select post_id from board_comments where id = :id", mapOf("id" to id), Long::class.java).firstOrNull()
                 ?: return@execute null
             // 잠금 순서: 글 → 댓글
-            jdbc.queryForList("select id from skeleton_board_posts where id = :post for update", mapOf("post" to postId), Long::class.java)
-            val old = jdbc.queryForObject("select status from skeleton_board_comments where id = :id for update", mapOf("id" to id), String::class.java)!!
+            jdbc.queryForList("select id from board_posts where id = :post for update", mapOf("post" to postId), Long::class.java)
+            val old = jdbc.queryForObject("select status from board_comments where id = :id for update", mapOf("id" to id), String::class.java)!!
             jdbc.update(
-                "update skeleton_board_comments set status = :status, updated_at = :now where id = :id",
+                "update board_comments set status = :status, updated_at = :now where id = :id",
                 MapSqlParameterSource().addValue("id", id).addValue("status", status.name).addValue("now", dialect.instantParam(now)),
             )
             val delta = (if (status == CommentStatus.PUBLISHED) 1 else 0) - (if (old == CommentStatus.PUBLISHED.name) 1 else 0)
-            if (delta != 0) jdbc.update("update skeleton_board_posts set comment_count = comment_count + :delta where id = :post", mapOf("delta" to delta, "post" to postId))
+            if (delta != 0) jdbc.update("update board_posts set comment_count = comment_count + :delta where id = :post", mapOf("delta" to delta, "post" to postId))
             Unit
         } ?: return null
         return find(id)
@@ -254,7 +254,7 @@ class JdbcCommentRepository(
     override fun rootPage(query: CommentRootQuery): PageResult<Comment> {
         val params = mapOf("post" to query.postId, "limit" to query.size, "offset" to query.page * query.size)
         val total = jdbc.queryForObject(
-            "select count(*) from skeleton_board_comments where post_id = :post and parent_id is null", params, Long::class.java,
+            "select count(*) from board_comments where post_id = :post and parent_id is null", params, Long::class.java,
         ) ?: 0L
         val order = when (query.sort) {
             CommentSort.OLDEST -> "created_at, id"
@@ -262,7 +262,7 @@ class JdbcCommentRepository(
             CommentSort.REACTIONS -> "reaction_count desc, created_at, id"
         }
         val rows = jdbc.query(
-            "select * from skeleton_board_comments where post_id = :post and parent_id is null order by $order limit :limit offset :offset",
+            "select * from board_comments where post_id = :post and parent_id is null order by $order limit :limit offset :offset",
             params,
         ) { rs, _ -> rs.comment() }
         return PageResult(rows, total)
@@ -272,7 +272,7 @@ class JdbcCommentRepository(
     override fun descendants(rootIds: Collection<Long>): List<Comment> =
         if (rootIds.isEmpty()) emptyList()
         else jdbc.query(
-            "select * from skeleton_board_comments where root_id in (:roots) order by created_at, id", mapOf("roots" to rootIds),
+            "select * from board_comments where root_id in (:roots) order by created_at, id", mapOf("roots" to rootIds),
         ) { rs, _ -> rs.comment() }
 
     private fun ResultSet.comment(): Comment {
@@ -301,14 +301,14 @@ class JdbcReactionRepository(
             if (!lock(target, targetId)) return@execute false
             val key = MapSqlParameterSource().addValue("t", target.name).addValue("id", targetId).addValue("who", accountId).addValue("type", type)
             val removed = if (mode == ReactionMode.SINGLE) {
-                jdbc.update("delete from skeleton_board_reactions where target_type = :t and target_id = :id and account_id = :who and reaction_type <> :type", key)
+                jdbc.update("delete from board_reactions where target_type = :t and target_id = :id and account_id = :who and reaction_type <> :type", key)
             } else 0
             val present = (jdbc.queryForObject(
-                "select count(*) from skeleton_board_reactions where target_type = :t and target_id = :id and account_id = :who and reaction_type = :type",
+                "select count(*) from board_reactions where target_type = :t and target_id = :id and account_id = :who and reaction_type = :type",
                 key, Long::class.java,
             ) ?: 0L) > 0
             val added = if (present) 0 else jdbc.update(
-                "insert into skeleton_board_reactions (target_type, target_id, account_id, reaction_type, created_at) values (:t, :id, :who, :type, :now)",
+                "insert into board_reactions (target_type, target_id, account_id, reaction_type, created_at) values (:t, :id, :who, :type, :now)",
                 key.addValue("now", dialect.instantParam(now)),
             )
             bump(target, targetId, added - removed)
@@ -320,7 +320,7 @@ class JdbcReactionRepository(
             if (!lock(target, targetId)) return@execute false
             val params = MapSqlParameterSource().addValue("t", target.name).addValue("id", targetId).addValue("who", accountId)
             val removed = jdbc.update(
-                "delete from skeleton_board_reactions where target_type = :t and target_id = :id and account_id = :who" +
+                "delete from board_reactions where target_type = :t and target_id = :id and account_id = :who" +
                     (if (type != null) " and reaction_type = :type" else ""),
                 if (type != null) params.addValue("type", type) else params,
             )
@@ -334,7 +334,7 @@ class JdbcReactionRepository(
             val result = linkedMapOf<Long, MutableMap<String, Long>>()
             jdbc.query(
                 """
-                select target_id, reaction_type, count(*) as cnt from skeleton_board_reactions
+                select target_id, reaction_type, count(*) as cnt from board_reactions
                 where target_type = :t and target_id in (:ids) group by target_id, reaction_type
                 """.trimIndent(),
                 mapOf("t" to target.name, "ids" to targetIds),
@@ -349,13 +349,13 @@ class JdbcReactionRepository(
         else {
             val result = linkedMapOf<Long, MutableSet<String>>()
             jdbc.query(
-                "select target_id, reaction_type from skeleton_board_reactions where target_type = :t and target_id in (:ids) and account_id = :who",
+                "select target_id, reaction_type from board_reactions where target_type = :t and target_id in (:ids) and account_id = :who",
                 mapOf("t" to target.name, "ids" to targetIds, "who" to accountId),
             ) { rs -> result.getOrPut(rs.getLong("target_id")) { linkedSetOf() } += rs.getString("reaction_type") }
             result
         }
 
-    private fun table(target: ReactionTarget) = if (target == ReactionTarget.POST) "skeleton_board_posts" else "skeleton_board_comments"
+    private fun table(target: ReactionTarget) = if (target == ReactionTarget.POST) "board_posts" else "board_comments"
 
     private fun lock(target: ReactionTarget, id: Long): Boolean =
         jdbc.queryForList("select id from ${table(target)} where id = :id for update", mapOf("id" to id), Long::class.java).isNotEmpty()
@@ -372,8 +372,8 @@ class JdbcReactionRepository(
 class JdbcBoardErasureRepository(private val jdbc: NamedParameterJdbcTemplate) : BoardErasureRepository {
     override fun anonymizeAuthor(accountId: String, tombstone: String): Int {
         val p = mapOf("a" to accountId, "t" to tombstone)
-        return jdbc.update("update skeleton_board_posts set author_id = :t where author_id = :a", p) +
-            jdbc.update("update skeleton_board_comments set author_id = :t where author_id = :a", p) +
-            jdbc.update("update skeleton_board_reactions set account_id = :t where account_id = :a", p)
+        return jdbc.update("update board_posts set author_id = :t where author_id = :a", p) +
+            jdbc.update("update board_comments set author_id = :t where author_id = :a", p) +
+            jdbc.update("update board_reactions set account_id = :t where account_id = :a", p)
     }
 }

@@ -40,14 +40,14 @@ class JdbcNotificationInboxRepository(
             .addValue("offset", query.offset())
 
         val total = jdbc.queryForObject(
-            "select count(*) from skeleton_notification_inbox $where",
+            "select count(*) from notification_inbox $where",
             parameters,
             Long::class.java,
         ) ?: 0L
         val values = jdbc.query(
             """
             select *
-            from skeleton_notification_inbox
+            from notification_inbox
             $where
             order by event_created_at desc, event_id desc
             limit :limit offset :offset
@@ -65,7 +65,7 @@ class JdbcNotificationInboxRepository(
     ): NotificationInboxRecord? {
         jdbc.update(
             """
-            update skeleton_notification_inbox
+            update notification_inbox
             set read_at = coalesce(read_at, :readAt),
                 updated_at = :readAt
             where recipient_id = :recipientId
@@ -85,7 +85,7 @@ class JdbcNotificationInboxRepository(
     ): Int =
         jdbc.update(
             """
-            update skeleton_notification_inbox
+            update notification_inbox
             set read_at = :readAt,
                 updated_at = :readAt
             where recipient_id = :recipientId
@@ -123,7 +123,7 @@ class JdbcNotificationInboxRepository(
         jdbc.query(
             """
             select *
-            from skeleton_notification_inbox
+            from notification_inbox
             where recipient_id = :recipientId
               and event_id = :eventId
             """.trimIndent(),
@@ -175,7 +175,7 @@ class JdbcNotificationInboxRepository(
             }
 
     private companion object {
-        const val TABLE = "skeleton_notification_inbox"
+        const val TABLE = "notification_inbox"
 
         /** read_at 은 빼서 칼럼 기본값(null) — PG 는 타입 없는 null 파라미터를 추론하지 못할 수 있다 */
         val INSERT_COLUMNS = listOf(

@@ -17,7 +17,7 @@ class JdbcReactionDbTest {
     private fun react(id: Long, who: String, type: String, mode: ReactionMode = ReactionMode.SINGLE) = reactions.react(POST, id, who, type, mode, T0)
 
     private fun rows(id: Long, who: String? = null) =
-        db.scalar("select count(*) from skeleton_board_reactions where target_type = 'POST' and target_id = :id" + (if (who != null) " and account_id = :who" else ""),
+        db.scalar("select count(*) from board_reactions where target_type = 'POST' and target_id = :id" + (if (who != null) " and account_id = :who" else ""),
             *listOfNotNull("id" to (id as Any), who?.let { "who" to (it as Any) }).toTypedArray())
 
     @Test
@@ -92,7 +92,7 @@ class JdbcReactionDbTest {
         react(p, "u1", "LIKE")
         val duplicate = runCatching {
             db.jdbc.update(
-                "insert into skeleton_board_reactions (target_type, target_id, account_id, reaction_type, created_at) values ('POST', :id, 'u1', 'LIKE', :at)",
+                "insert into board_reactions (target_type, target_id, account_id, reaction_type, created_at) values ('POST', :id, 'u1', 'LIKE', :at)",
                 mapOf("id" to p, "at" to DbTestDatabase.dialect.instantParam(T0)),
             )
         }

@@ -22,7 +22,7 @@ import org.springframework.transaction.support.TransactionTemplate
 
 /**
  * 계정 저장소 · 토큰 저장소를 JDBC(PostgreSQL · MySQL)로, 그리고 (켜면) 감사 기록을. 스키마는 모듈 마이그레이션
- * `db/migration/<vendor>/V20261005223426__skeleton_accounts.sql` 을 앱의 `spring.flyway.locations=classpath:db/migration/{vendor}` 가 고른다.
+ * `db/migration/<vendor>/V20261005223426__accounts.sql` 을 앱의 `spring.flyway.locations=classpath:db/migration/{vendor}` 가 고른다.
  * [AccountAutoConfiguration] 보다 먼저 평가해 메모리 기본이 물러난다. 감사는 `skeleton.account.audit.enabled=true` 일 때만 쓴다.
  */
 @AutoConfiguration(

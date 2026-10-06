@@ -157,7 +157,7 @@ class JdbcAccountRepositoryDbTest {
         assertTrue(repo.purge("acc_1", now.plus(Duration.ofDays(31))))
         assertNull(repo.findById("acc_1"))
         assertNull(repo.findIdentity("password", "ann@example.com"))
-        assertEquals(0, AccountDb.jdbc.queryForObject("select count(*) from skeleton_account_roles", emptyMap<String, Any>(), Int::class.java))
+        assertEquals(0, AccountDb.jdbc.queryForObject("select count(*) from account_roles", emptyMap<String, Any>(), Int::class.java))
     }
 
     @Test

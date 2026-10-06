@@ -1,6 +1,6 @@
 # account-jdbc
 
-`account` 의 저장을 DB 에 둔다 — `skeleton_accounts` · `skeleton_account_roles` · `skeleton_account_identities`(수단 한 줄 = `(method, subject)` 유일) · `skeleton_account_tokens`(한 번 쓰는 토큰, 해시만) · `skeleton_account_audit`(켜면).
+`account` 의 저장을 DB 에 둔다 — `accounts` · `account_roles` · `account_identities`(수단 한 줄 = `(method, subject)` 유일) · `account_tokens`(한 번 쓰는 토큰, 해시만) · `account_audit`(켜면).
 유일성은 일반 insert 의 **유니크 위반**으로 판정하고(`insertIgnore` 의 행 수는 MySQL 에서 믿을 수 없다), 토큰 소비는 조건부 UPDATE 한 문장, 마지막 수단 보호는 계정 행 락이다 — 둘 다 16 스레드 경쟁으로 두 DB 에서 시험한다.
 
 | 항목 | 내용 |

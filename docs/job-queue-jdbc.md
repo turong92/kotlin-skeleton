@@ -18,8 +18,8 @@ skeleton:
     retention: { enabled: false, done: 14d, dead: 90d }   # opt-in purge of finished rows
 ```
 
-Schema: `modules/job-queue-jdbc/src/main/resources/db/migration/<vendor>/V20260910010000__skeleton_jobs.sql` and
-`V20261005175044__skeleton_jobs_log_context.sql` (adds `log_context`; in the `schema.sql` mode on MySQL fold the column into your copy of the `create table` instead — MySQL 8.4 has no `add column if not exists`)
+Schema: `modules/job-queue-jdbc/src/main/resources/db/migration/<vendor>/V20260910010000__jobs.sql` and
+`V20261005175044__jobs_log_context.sql` (adds `log_context`; in the `schema.sql` mode on MySQL fold the column into your copy of the `create table` instead — MySQL 8.4 has no `add column if not exists`)
 (`postgresql` and `mysql`; Flyway picks the right one through `classpath:db/migration/{vendor}`; copy it into
 `schema.sql` in the no-Flyway mode). The app must assemble exactly one dialect module (`modules:db-postgresql`
 or `modules:db-mysql`) — instants are bound through its `SqlDialect`.
@@ -81,7 +81,7 @@ listener is logged and never stops the worker.
 ## Log context
 
 `enqueue` copies the MDC keys in `skeleton.job-queue.propagated-mdc-keys` (default `traceId`) into
-`skeleton_jobs.log_context`; while a handler runs the worker restores them and adds `jobId` / `jobKind`, so one `grep traceId=…`
+`jobs.log_context`; while a handler runs the worker restores them and adds `jobId` / `jobKind`, so one `grep traceId=…`
 follows a request into its background work. Set the list to `[]` to store nothing, or define a `JobContextPropagator`
 bean to carry something else.
 

@@ -6,7 +6,7 @@ import org.slf4j.MDC
 
 /**
  * 넣는 쪽의 문맥(로그 상관 값)을 작업 줄에 문자열로 실어 보내고, 워커가 돌릴 때 복원하는 고리. 모듈은 문맥이 무엇인지 모른다
- * (페이로드와 따로 `skeleton_jobs.log_context`). 기본 구현은 [MdcJobContextPropagator].
+ * (페이로드와 따로 `jobs.log_context`). 기본 구현은 [MdcJobContextPropagator].
  */
 interface JobContextPropagator {
     /** 지금 스레드의 문맥을 문자열로 — 없으면 null (칼럼이 빈다) */

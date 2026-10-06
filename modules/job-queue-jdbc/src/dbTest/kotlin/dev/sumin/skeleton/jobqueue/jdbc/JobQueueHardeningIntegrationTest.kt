@@ -72,7 +72,7 @@ class JobQueueHardeningIntegrationTest {
 
     @BeforeEach
     fun reset() {
-        jdbc.sql("delete from skeleton_jobs").update()
+        jdbc.sql("delete from jobs").update()
         time.now = Instant.parse("2026-10-01T00:00:00Z")
         scripted.handled.clear(); scripted.seenMdc.clear(); scripted.action = {}
         MDC.clear()
@@ -234,7 +234,7 @@ class JobQueueHardeningIntegrationTest {
     fun `보관 기간이 지난 DONE · DEAD 만 지우고 PENDING · RUNNING 과 최근 줄은 남긴다`() {
         fun insert(status: String, age: Duration): Long {
             val id = queue.enqueue("scripted", "{}")
-            jdbc.sql("update skeleton_jobs set status = :s, updated_at = :t where id = :id")
+            jdbc.sql("update jobs set status = :s, updated_at = :t where id = :id")
                 .param("s", status).param("id", id)
                 .param("t", dialect.instantParam(time.now.minus(age))).update()
             return id

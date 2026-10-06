@@ -78,6 +78,6 @@ skeleton:
     captcha:
       required: false                  # true 면 가입 · 재설정 · 재전송 · 매직 링크 요청에 캡차 토큰을 요구한다 (captcha-turnstile 필요)
     audit:
-      enabled: false                   # true 면 account-jdbc 가 모든 계정 이벤트를 skeleton_account_audit 에 쓴다
+      enabled: false                   # true 면 account-jdbc 가 모든 계정 이벤트를 account_audit 에 쓴다
     http:
       enabled: true                    # false 면 컨트롤러를 등록하지 않는다 (앱이 자기 컨트롤러를 둘 때)

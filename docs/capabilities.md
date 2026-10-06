@@ -84,7 +84,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `auth-social-oidc` | 범용 OpenID Connect 소셜 로그인 제공자 — 속성만으로 제공자를 여러 개 더한다(discovery · JWKS 키 교체 · ID 토큰 검증 · PKCE · nonce · LINE 프리셋). client-id 를 적은 제공자만 켜진다. | `--modules auth-social-oidc` | 라인 로그인, LINE 로그인, OIDC, OpenID Connect, 글로벌 소셜 로그인, 마이크로소프트 로그인, 소셜 로그인 / line login, openid connect, oidc, microsoft login, social login, global social login | `@skeleton/auth` |
 | `auth-social-x` | X(Twitter) 로그인 제공자 — OAuth 2.0 Authorization Code + PKCE(필수), 기밀 클라이언트(Basic), GET /2/users/me. client-id 를 적으면 켜진다. | `--modules auth-social-x` | X 로그인, 엑스 로그인, 트위터 로그인, 글로벌 소셜 로그인, 소셜 로그인 / x login, twitter login, sign in with x, social login, global social login | `@skeleton/auth` |
 | `board` | 게시판 — 글 · 중첩 댓글(대댓글) · 설정으로 늘리는 반응(좋아요 · 공감 …) · 운영자 숨김/고정 · 댓글 알림, HTTP /api/v1/boards 까지. | `--modules board,board-jdbc` | 게시판, 커뮤니티, 글쓰기, 댓글, 대댓글, 공감, 좋아요, 반응, 운영자 숨김, 공지 고정 / board, forum, community, post, comment, reply, reaction, like, moderation | `@skeleton/board` |
-| `board-jdbc` | 게시판 저장소 — PostgreSQL · MySQL 로 board 의 저장 포트 네 개를 구현한다(skeleton_board* 테이블 · 원자적 카운터). | `--modules board-jdbc` | 게시판 저장소, 게시판 DB / board storage, board repository, board database | `@skeleton/board` |
+| `board-jdbc` | 게시판 저장소 — PostgreSQL · MySQL 로 board 의 저장 포트 네 개를 구현한다(boards · board_* 테이블 · 원자적 카운터). | `--modules board-jdbc` | 게시판 저장소, 게시판 DB / board storage, board repository, board database | `@skeleton/board` |
 | `captcha-turnstile` | 봇 방지 — Cloudflare Turnstile 토큰을 서버에서 검증한다(TurnstileVerifier). | 스타터(apps/api)에 기본 포함 | 캡차, 봇 방지, 스팸 방지, 로봇 확인, 가입 폼 보호 / captcha, turnstile, bot protection, spam protection, cloudflare turnstile | `@skeleton/captcha-turnstile` |
 | `config-aws-ssm` | AWS SSM Parameter Store 의 값을 시작할 때 스프링 프로퍼티로 불러온다. | `--modules config-aws-ssm` | AWS 설정, 파라미터 스토어, SSM, 비밀 불러오기 / aws ssm, parameter store, remote config, aws secrets | — |
 | `crypto` | AES-GCM 텍스트 암호화 · 키 회전용 키 id 봉투 · URL 에 안전한 불투명 토큰 · 선택적 영속 변환기. | `--modules crypto` | 암호화, 복호화, 비밀 저장, 불투명 URL, 키 회전 / encryption, aes gcm, opaque token, key rotation, encrypt at rest | — |
@@ -99,7 +99,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `migration` | 마이그레이션 공통 규칙 — DB 를 지우는 설정이 허용 프로필 밖에서 켜지면 시작을 막는 가드(도구 중립). | 스타터(apps/api)에 기본 포함 | 마이그레이션 가드, DB 초기화 방지, 스키마 보호 / migration guard, prevent db wipe, schema safety | — |
 | `migration-flyway` | Flyway 구현 — 로컬 clean 옵트인 · 마이그레이션 파일 이름 규칙(V<UTC 14자리>__snake_case.sql) 검사. | 스타터(apps/api)에 기본 포함 | Flyway, 마이그레이션, DB 스키마 버전, 스키마 변경 / flyway, database migration, schema migration, schema version | — |
 | `notification` | 알림 계약 · 수신자 해석 · 인메모리 브로커 + 로그인한 사람의 받은편지함 HTTP(/api/v1/notifications: 목록 · 읽음 · 모두 읽음). | `--modules notification` | 알림, 알림 목록, 받은편지함, 안 읽은 알림, 알림 읽음, 알림 보내기 / notification, inbox, unread, mark as read, publish notification | `@skeleton/notifications` |
-| `notification-jdbc` | 알림 받은편지함을 DB 테이블에 저장한다(skeleton_notification_inbox). | `--modules notification-jdbc` | 알림 저장, 알림 DB, 알림 기록 유지 / notification storage, persist notifications, inbox database | `@skeleton/notifications` |
+| `notification-jdbc` | 알림 받은편지함을 DB 테이블에 저장한다(notification_inbox). | `--modules notification-jdbc` | 알림 저장, 알림 DB, 알림 기록 유지 / notification storage, persist notifications, inbox database | `@skeleton/notifications` |
 | `notification-mail` | SMTP 로 메일을 보내는 MailSender (spring.mail.* 위에). | 스타터(apps/api)에 기본 포함 | 메일 발송, 이메일 보내기, SMTP, 메일 / send email, smtp, mail sender, email | — |
 | `notification-slack` | 알림과 @SlackException 예외 알림을 Slack 웹훅으로 보낸다. | `--modules notification-slack` | 슬랙 알림, 슬랙, 예외 알림 / slack notification, slack webhook, exception alert | — |
 | `notification-sse` | 알림을 Server-Sent Events 로 브라우저에 실시간 전달한다(GET /api/v1/notifications/sse) — 받는 사람이 정해진 알림은 그 사람에게만. | `--modules notification-sse` | 실시간 알림, SSE, 알림 즉시 표시, 푸시 알림, 서버 푸시 / realtime notification, sse, server-sent events, push notification | `@skeleton/realtime` |
@@ -421,7 +421,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 게시판 코드(게시판 만들기)는 seed-boards 설정이나 운영자 API
 - 키워드: 게시판, 커뮤니티, 글쓰기, 댓글, 대댓글, 공감, 좋아요, 반응, 운영자 숨김, 공지 고정 / board, forum, community, post, comment, reply, reaction, like, moderation
 
-### `board-jdbc` — 게시판 저장소 — PostgreSQL · MySQL 로 board 의 저장 포트 네 개를 구현한다(skeleton_board* 테이블 · 원자적 카운터).
+### `board-jdbc` — 게시판 저장소 — PostgreSQL · MySQL 로 board 의 저장 포트 네 개를 구현한다(boards · board_* 테이블 · 원자적 카운터).
 
 - 종류 · 상태: module · stable — 위치 `modules/board-jdbc`
 - 켜는 법: `--modules board-jdbc`
@@ -607,7 +607,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 알림을 만드는 쪽(NotificationPublisher.publish)은 앱 코드가 부른다
 - 키워드: 알림, 알림 목록, 받은편지함, 안 읽은 알림, 알림 읽음, 알림 보내기 / notification, inbox, unread, mark as read, publish notification
 
-### `notification-jdbc` — 알림 받은편지함을 DB 테이블에 저장한다(skeleton_notification_inbox).
+### `notification-jdbc` — 알림 받은편지함을 DB 테이블에 저장한다(notification_inbox).
 
 - 종류 · 상태: module · stable — 위치 `modules/notification-jdbc`
 - 켜는 법: `--modules notification-jdbc`
@@ -979,7 +979,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 문서: `docs/minimal-composition.md`
 - 쓰지 않는 경우:
   - 모듈을 고르지 않는다 — 모듈 가지치기까지 하는 것은 new-project.sh
-  - 샘플 API 경로 /api/v1/skeleton 과 skeleton_jobs 테이블 이름은 바꾸지 않는다
+  - 샘플 API 경로 /api/v1/skeleton 은 바꾸지 않는다
 - 키워드: 이름 바꾸기, 리네임, 패키지 변경, 템플릿 이름 바꾸기 / rename, change package, rename template, project name
 
 ### `script-sample-e2e-backend` — 샘플 앱 백엔드를 e2e 테스트용으로 올리고 내리는 비대화형 스크립트(react-skeleton 의 Playwright e2e 가 부른다).

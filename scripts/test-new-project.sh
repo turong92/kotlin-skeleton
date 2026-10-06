@@ -88,6 +88,10 @@ check "샘플 앱만 쓰는 모듈은 기본 조합에 없다 (notification-sse 
 check "선택되지 않은 모듈 디렉토리가 없다 (redis-core)" test ! -e "$A/modules/redis-core"
 check "선택되지 않은 모듈의 설정 블록도 없다" test ! -e "$A/docs/config/modules/redis-core.yml"
 check "선택된 모듈의 설정 블록은 남는다 (time)" test -f "$A/docs/config/modules/time.yml"
+check "모듈 테이블 이름에 접두사가 없다 — 찍은 프로젝트에도 skeleton_ · ovation_ 테이블이 없다 (docs/table-names.md)" bash -c "grep -rhiE 'create table( if not exists)? +(skeleton|ovation)_' '$A/modules' --include=*.sql | grep -q . && exit 1; grep -rhiqE 'create table( if not exists)? +accounts' '$A/modules/account-jdbc/src/main/resources/db/migration/postgresql'"
+check "찍은 프로젝트의 SQL · Kotlin 에 skeleton_ 식별자가 남지 않는다 (리프레시 쿠키 이름은 ovation_refresh)" bash -c "! grep -rIlE 'skeleton_[a-z]' '$A' --include=*.sql --include=*.kt --include=*.kts | grep -q . && grep -rq 'ovation_refresh' '$A/modules/auth-session/src/main'"
+RL="$TMP/rl"; mkdir -p "$RL/modules/x/src/main/resources" && printf 'create table skeleton_leftover (id int);\n' > "$RL/modules/x/src/main/resources/V1__x.sql" && cp "$SRC/settings.gradle.kts" "$RL/settings.gradle.kts"
+expect_exit 1 "rename 잔여 검사는 남은 skeleton_ 테이블 이름을 잡아 실패한다" bash "$SRC/scripts/rename-skeleton.sh" dev.sumin.ovation ovation Ovation "$RL"
 check "선택되지 않은 모듈의 문서 쪽(docs/modules)도 없다 (redis-core)" test ! -e "$A/docs/modules/redis-core.md"
 check "선택된 모듈의 문서 쪽은 남는다 (time)" test -f "$A/docs/modules/time.md"
 check "모듈 색인에서 지운 모듈의 행이 빠지고 남은 모듈의 행은 남는다" bash -c "! grep -q '](redis-core.md)' '$A/docs/modules/README.md' && ! grep -q '](async.md)' '$A/docs/modules/README.md' && grep -q '](time.md)' '$A/docs/modules/README.md' && grep -q '](auth.md)' '$A/docs/modules/README.md'"
@@ -151,7 +155,7 @@ expect_exit 0 "조합 3 을 찍는다" stamp "$C" --db mysql --modules job-queue
 for m in alert alert-jdbc job-queue-jdbc notification-mail; do
   check "alert-jdbc 를 고르면 $m 이 따라온다 (alert · 컴파일 전용 연동 모듈의 닫힘)" bash -c "grep -q 'include(\":modules:$m\")' '$C/settings.gradle.kts' && test -d '$C/modules/$m'"
 done
-check "alert-jdbc 의 MySQL 마이그레이션이 남고 PostgreSQL 것은 앱 클래스패스 밖이다" bash -c "ls '$C/modules/alert-jdbc/src/main/resources/db/migration/mysql/' | grep -q skeleton_alerts"
+check "alert-jdbc 의 MySQL 마이그레이션이 남고 PostgreSQL 것은 앱 클래스패스 밖이다" bash -c "ls '$C/modules/alert-jdbc/src/main/resources/db/migration/mysql/' | grep -q alerts"
 check "dbTestModules 에 alert-jdbc 가 들어간다" has_line 'val dbTestModules = setOf\(":modules:account-jdbc", ":modules:alert-jdbc", ":modules:auth-session-jdbc", ":modules:job-queue-jdbc", ":modules:legal-jdbc"\)' "$C/build.gradle.kts"
 check "--db mysql 이면 배포 선언의 db 가 mysql 이다" has_line '^db: mysql' "$C/deploy/app.yaml"
 check "db-postgresql 모듈이 사라지고 db-mysql 이 들어온다" bash -c "grep -q 'include(\":modules:db-mysql\")' '$C/settings.gradle.kts' && ! grep -q 'db-postgresql' '$C/settings.gradle.kts' && test ! -e '$C/modules/db-postgresql'"

@@ -159,7 +159,7 @@ skeleton:
 
 ## 이벤트 · 감사 · 경보
 
-모든 인증 사건(가입 · 확인 · 로그인 성공/실패/제한 · 비밀번호 · 세션 · 연결/해제 · 정지 · 역할 · 삭제 · 지움)은 `AccountEventPublisher` → `AccountEventListener` 빈들로 간다 (기본: 한 줄 로그, 이메일 · 토큰 없음). `skeleton.account.audit.enabled=true` + `account-jdbc` 면 `skeleton_account_audit` 표에도 쓴다. `alert` 모듈이 있으면 로그인 시도 폭주 · 리프레시 토큰 재사용이 주인 경보로 간다.
+모든 인증 사건(가입 · 확인 · 로그인 성공/실패/제한 · 비밀번호 · 세션 · 연결/해제 · 정지 · 역할 · 삭제 · 지움)은 `AccountEventPublisher` → `AccountEventListener` 빈들로 간다 (기본: 한 줄 로그, 이메일 · 토큰 없음). `skeleton.account.audit.enabled=true` + `account-jdbc` 면 `account_audit` 표에도 쓴다. `alert` 모듈이 있으면 로그인 시도 폭주 · 리프레시 토큰 재사용이 주인 경보로 간다.
 
 ## 배포 가드 (`skeleton.env=stage|prod` 또는 auth 의 보호 프로필)
 

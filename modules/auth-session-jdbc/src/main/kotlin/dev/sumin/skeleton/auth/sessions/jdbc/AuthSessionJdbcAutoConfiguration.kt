@@ -16,7 +16,7 @@ import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 
 /**
- * 세션 저장소를 JDBC(PostgreSQL · MySQL)로. 스키마는 모듈 마이그레이션 `db/migration/<vendor>/V20261005220927__skeleton_auth_sessions.sql` 을
+ * 세션 저장소를 JDBC(PostgreSQL · MySQL)로. 스키마는 모듈 마이그레이션 `db/migration/<vendor>/V20261005220927__auth_sessions.sql` 을
  * 앱의 `spring.flyway.locations=classpath:db/migration/{vendor}` 가 고른다. [AuthSessionAutoConfiguration] 보다 먼저 평가해 메모리 기본이 물러난다.
  */
 @AutoConfiguration(

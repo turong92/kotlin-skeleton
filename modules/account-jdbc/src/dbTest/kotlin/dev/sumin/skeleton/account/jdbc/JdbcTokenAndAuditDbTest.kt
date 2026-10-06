@@ -25,7 +25,7 @@ class JdbcTokenAndAuditDbTest {
     @Test
     fun `a token is stored as a hash and a payload and spent once even under a 16-way race`() {
         val raw = tokens.issue(TokenPurposes.MAGIC_LINK, "ann@example.com", null, Duration.ofMinutes(15), payload = "p")
-        assertEquals(0, AccountDb.jdbc.queryForObject("select count(*) from skeleton_account_tokens where token_hash = :t", mapOf("t" to raw), Int::class.java))
+        assertEquals(0, AccountDb.jdbc.queryForObject("select count(*) from account_tokens where token_hash = :t", mapOf("t" to raw), Int::class.java))
         val pool = Executors.newFixedThreadPool(16)
         val go = CountDownLatch(1)
         val results = (1..16).map { pool.submit<Any?> { go.await(); tokens.consume(TokenPurposes.MAGIC_LINK, raw) } }
@@ -67,7 +67,7 @@ class JdbcTokenAndAuditDbTest {
     fun `audit rows keep the type, account, ip and a short detail`() {
         AccountDb.audit.on(AccountEvent(AccountEventType.LOGIN_FAILURE, null, now, "203.0.113.4", mapOf("reason" to "BAD_PASSWORD", "id" to "abc")))
         AccountDb.audit.on(AccountEvent(AccountEventType.PASSWORD_CHANGED, "acc_1", now, null, emptyMap()))
-        val rows = AccountDb.jdbc.queryForList("select type, account_id, ip, detail from skeleton_account_audit order by id", emptyMap<String, Any>())
+        val rows = AccountDb.jdbc.queryForList("select type, account_id, ip, detail from account_audit order by id", emptyMap<String, Any>())
         assertEquals(listOf("LOGIN_FAILURE", "PASSWORD_CHANGED"), rows.map { it["type"] })
         assertNull(rows[0]["account_id"])
         assertEquals("203.0.113.4", rows[0]["ip"])

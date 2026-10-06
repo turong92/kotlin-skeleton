@@ -20,7 +20,7 @@ import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 
 /**
- * 게시판 저장소 포트를 JDBC(PostgreSQL · MySQL)로 구현한다. 스키마는 모듈 마이그레이션 `db/migration/<vendor>/V20261005142218__skeleton_board.sql` 을
+ * 게시판 저장소 포트를 JDBC(PostgreSQL · MySQL)로 구현한다. 스키마는 모듈 마이그레이션 `db/migration/<vendor>/V20261005142218__board.sql` 을
  * 앱의 `spring.flyway.locations=classpath:db/migration/{vendor}` 가 고른다 (Flyway 를 안 쓰면 그 SQL 을 schema.sql 에 복사).
  * [BoardAutoConfiguration] 보다 먼저 평가해 앱이 자기 저장소를 두면 이쪽이 물러난다. SqlDialect 는 조건에 넣지 않는다 (방언 자동설정보다 먼저 평가된다 —
  * 존재는 SqlDialectVerifier 가 보장).

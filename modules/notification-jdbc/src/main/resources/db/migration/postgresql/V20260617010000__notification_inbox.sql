@@ -1,4 +1,4 @@
-create table if not exists skeleton_notification_inbox (
+create table if not exists notification_inbox (
     recipient_id       varchar(128)  not null,
     event_id           varchar(128)  not null,
     topic              varchar(128)  not null,
@@ -14,7 +14,7 @@ create table if not exists skeleton_notification_inbox (
     updated_at         timestamptz   not null,
     primary key (recipient_id, event_id)
 );
-create index if not exists idx_skeleton_notification_inbox_recipient_read_created
-    on skeleton_notification_inbox (recipient_id, read_at, event_created_at);
-create index if not exists idx_skeleton_notification_inbox_recipient_topic_created
-    on skeleton_notification_inbox (recipient_id, topic, event_created_at);
+create index if not exists idx_notification_inbox_recipient_read_created
+    on notification_inbox (recipient_id, read_at, event_created_at);
+create index if not exists idx_notification_inbox_recipient_topic_created
+    on notification_inbox (recipient_id, topic, event_created_at);

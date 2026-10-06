@@ -1,6 +1,6 @@
 # job-queue-jdbc
 
-`skeleton_jobs` 테이블 기반 재시도 큐다: `JobQueue` · `JobHandler`, `FOR UPDATE SKIP LOCKED`, 백오프, DEAD 처리. 여러 인스턴스에서 안전하다.
+`jobs` 테이블 기반 재시도 큐다: `JobQueue` · `JobHandler`, `FOR UPDATE SKIP LOCKED`, 백오프, DEAD 처리. 여러 인스턴스에서 안전하다.
 핸들러는 멱등이어야 한다.
 
 | 항목 | 내용 |

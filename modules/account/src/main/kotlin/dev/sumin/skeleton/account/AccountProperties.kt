@@ -199,7 +199,7 @@ data class AccountProperties(
     )
 
     data class Audit(
-        /** true 면 account-jdbc 가 모든 계정 이벤트를 `skeleton_account_audit` 표에 쓴다 (IP 포함, 토큰 · 이메일 없음) */
+        /** true 면 account-jdbc 가 모든 계정 이벤트를 `account_audit` 표에 쓴다 (IP 포함, 토큰 · 이메일 없음) */
         val enabled: Boolean = false,
     )
 
