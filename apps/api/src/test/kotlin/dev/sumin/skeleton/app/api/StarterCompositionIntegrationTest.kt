@@ -2,6 +2,7 @@ package dev.sumin.skeleton.app.api
 
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.ApplicationContext
 import org.springframework.context.annotation.Import
@@ -14,6 +15,7 @@ import kotlin.test.assertTrue
  * 누가 스타터에 모듈 하나를 얹다가 이 가정을 깨면 여기서 걸린다.
  */
 @SpringBootTest
+@AutoConfigureMockMvc   // MockMvc 가 없어도 되는 시험이지만, 있고 없고가 컨텍스트 캐시 키라 기본 컨텍스트를 같이 쓰려고 맞춘다
 @Import(TestcontainersConfiguration::class)
 class StarterCompositionIntegrationTest {
 

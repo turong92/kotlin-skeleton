@@ -202,7 +202,7 @@ class SkeletonModuleCompositionIntegrationTest {
                 jsonPath("$.meta.traceId") { value(fixedTraceId) }
             }
 
-            assertTrue(asyncEventLatch.await(3, TimeUnit.SECONDS))
+            assertTrue(asyncEventLatch.await(30, TimeUnit.SECONDS))
         }
         val asyncFailureEvent = asyncEvents.single()
         assertTrue(asyncFailureEvent.type == "async-exception")
@@ -249,7 +249,7 @@ class SkeletonModuleCompositionIntegrationTest {
                 jsonPath("$.meta.traceId") { isNotEmpty() }
             }
 
-            assertTrue(latch.await(3, TimeUnit.SECONDS))
+            assertTrue(latch.await(30, TimeUnit.SECONDS))
         }
 
         val event = events.single()

@@ -256,7 +256,7 @@ modules/persistence-jdbc/src/main/kotlin/dev/sumin/skeleton/persistence/jdbc/
 ## 작업 원칙
 
 - **Kotlin idiomatic**: data class, scope function (`let`/`apply`/`also`), null 안전성 활용
-- **테스트**: Testcontainers로 실 PostgreSQL(`postgres:18`) 띄워 Flyway 마이그레이션 포함 검증. 방언을 타는 모듈은 MySQL 묶음도 돈다
+- **테스트**: Testcontainers로 실 PostgreSQL(`postgres:18`) 띄워 Flyway 마이그레이션 포함 검증. 방언을 타는 모듈은 MySQL 묶음도 돈다. **컨테이너는 JVM 당 하나(static) + 컨텍스트마다 새 데이터베이스** — 테스트 설정에 `@Bean @ServiceConnection` 컨테이너를 두지 않는다(`TestContainerRulesTest` 가 막는다, 이유 · 정본: `docs/testing.md`)
 - **새 기능 추가 시**:
   1. `apps/api` 에 컨트롤러 + DTO (`dev.sumin.skeleton.app.api` 하위 — 앱 클래스 패키지 밖에 두면 스캔되지 않는다)
   2. 앱 고유 비즈니스 로직은 `apps/api` 안의 `domain/` 패키지에 둔다 (필요 시)
