@@ -247,6 +247,21 @@ class SessionServiceTest {
     }
 
     @Test
+    fun `a thief who fills the rotation window cannot shield the session - the owner presenting the old (used) token is REFRESH_REUSED and the family dies`() {
+        val s = limited(3)
+        val owner = s.open(account.accountId, client)
+        // the thief holds a stolen copy of the token and rotates until the window is full
+        var thief = s.refresh(owner.refreshToken!!, client).session
+        repeat(2) { thief = s.refresh(thief.refreshToken!!, client).session }
+        assertFailsWith<RefreshRateLimitedException> { s.refresh(thief.refreshToken!!, client) }   // window full
+        time.advance(Duration.ofMinutes(2))   // past the reuse grace, still inside the rotation window
+
+        assertEquals("AUTH.REFRESH_REUSED", code { s.refresh(owner.refreshToken!!, client) }, "a used token goes to the reuse rule, never to the limiter")
+        assertTrue(store.find(owner.sessionId)!!.revokedAt != null, "the family is revoked")
+        assertTrue(events.any { it.type == SessionEventType.REFRESH_REUSE_DETECTED })
+    }
+
+    @Test
     fun `logging out with a rotated-out refresh token still closes the session - a client that lost the rotation race can sign out`() {
         val s = service()
         val first = s.open(account.accountId, client)

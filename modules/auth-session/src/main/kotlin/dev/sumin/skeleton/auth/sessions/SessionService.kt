@@ -55,8 +55,9 @@ class SessionService(
         val token = store.findToken(oldHash) ?: throw RefreshInvalidException()
         val session = store.find(token.sessionId) ?: throw RefreshInvalidException()
         if (!isLive(session, now)) throw RefreshInvalidException()
-        // 회전마다 토큰 행이 하나 늘어 세션이 끝날 때까지 남는다 — 세션 하나가 창 안에 돌 수 있는 횟수를 묶어 행 수의 상한을 둔다 (유효한 토큰을 낸 세션에만 센다)
-        rotationLimiter.exceeded(session.id)?.let { throw RefreshRateLimitedException(it) }
+        // 회전마다 토큰 행이 하나 늘어 세션이 끝날 때까지 남는다 — 세션 하나가 창 안에 돌 수 있는 횟수를 묶어 행 수의 상한을 둔다 (유효한 토큰을 낸 세션에만 센다).
+        // **이미 쓴 토큰은 한도를 보지 않고** 바로 아래 재사용 규칙으로 간다 — 도둑이 창을 채워 놓고 주인의 옛 토큰을 429 로 덮을 수 없게 (그 경로는 행을 늘리지 않는다)
+        if (token.usedAt == null) rotationLimiter.exceeded(session.id)?.let { throw RefreshRateLimitedException(it) }
 
         var usedAt = token.usedAt
         if (usedAt == null && !store.markTokenUsed(oldHash, now)) {
