@@ -47,13 +47,15 @@ class AccountJourneyIntegrationTest {
         }
 
     private fun tokenOf(kind: String) = mails.sent.last { it.kind.name == kind }.link!!.substringAfter("token=")
+    private fun codeOf(kind: String, to: String) = mails.sent.last { it.kind.name == kind && it.to == to }.vars.getValue("code")
 
     @Test
     fun `sign up, verify, log in, refresh, change password, list sessions, delete`() {
         val email = "journey-${System.nanoTime()}@example.com"
-        json("/api/v1/account/sign-up", """{"email":"$email","password":"tangerine-42-moon"}""").andExpect { status { isAccepted() } }
-        json("/api/v1/auth/login", """{"email":"$email","password":"tangerine-42-moon"}""").andExpect { status { isForbidden() }; jsonPath("$.code") { value("AUTH.EMAIL_NOT_VERIFIED") } }
-        json("/api/v1/auth/verify-email", """{"token":"${tokenOf("VERIFY_EMAIL")}"}""").andExpect { status { isOk() } }
+        val signUp = json("/api/v1/account/sign-up", """{"email":"$email","password":"tangerine-42-moon"}""").andExpect { status { isAccepted() } }.andReturn().response.contentAsString
+        json("/api/v1/auth/login", """{"email":"$email","password":"tangerine-42-moon"}""").andExpect { status { isUnauthorized() } }   // no account until the code is entered
+        val verified = json("/api/v1/auth/verify-email", """{"signUpId":"${JsonPath.read<String>(signUp, "$.value.signUpId")}","code":"${codeOf("VERIFY_CODE", email)}"}""").andExpect { status { isOk() } }.andReturn().response.contentAsString
+        assertTrue(JsonPath.read<String>(verified, "$.value.refreshToken").startsWith("r1."), "the verifying browser is signed in at once")
 
         val login = json("/api/v1/auth/login", """{"email":"$email","password":"tangerine-42-moon"}""").andExpect { status { isOk() } }.andReturn().response.contentAsString
         val access = JsonPath.read<String>(login, "$.value.accessToken")
@@ -77,8 +79,8 @@ class AccountJourneyIntegrationTest {
     }
 
     private fun registered(email: String, password: String = "tangerine-42-moon"): String {
-        json("/api/v1/account/sign-up", """{"email":"$email","password":"$password"}""").andExpect { status { isAccepted() } }
-        json("/api/v1/auth/verify-email", """{"token":"${tokenOf("VERIFY_EMAIL")}"}""").andExpect { status { isOk() } }
+        val signUp = json("/api/v1/account/sign-up", """{"email":"$email","password":"$password"}""").andExpect { status { isAccepted() } }.andReturn().response.contentAsString
+        json("/api/v1/auth/verify-email", """{"signUpId":"${JsonPath.read<String>(signUp, "$.value.signUpId")}","code":"${codeOf("VERIFY_CODE", email)}"}""").andExpect { status { isOk() } }
         return email
     }
 
@@ -107,13 +109,16 @@ class AccountJourneyIntegrationTest {
     }
 
     @Test
-    fun `an email change confirmation signs every session out for real`() {
+    fun `an email change confirmation signs the OTHER sessions out for real and keeps the confirming one`() {
         val email = registered("emailchange-${System.nanoTime()}@example.com")
-        val login = loginAs(email)
-        val refresh = JsonPath.read<String>(login, "$.value.refreshToken")
-        json("/api/v1/account/email/change", """{"newEmail":"moved-${System.nanoTime()}@example.com","currentPassword":"tangerine-42-moon"}""", JsonPath.read<String>(login, "$.value.accessToken")).andExpect { status { isAccepted() } }
-        json("/api/v1/auth/confirm-email-change", """{"token":"${tokenOf("EMAIL_CHANGE_CONFIRM")}"}""").andExpect { status { isNoContent() } }
-        json("/api/v1/auth/refresh", """{"refreshToken":"$refresh"}""").andExpect { status { isUnauthorized() } }
+        val here = loginAs(email)
+        val other = JsonPath.read<String>(loginAs(email), "$.value.refreshToken")
+        val target = "moved-${System.nanoTime()}@example.com"
+        val access = JsonPath.read<String>(here, "$.value.accessToken")
+        json("/api/v1/account/email/change", """{"newEmail":"$target","currentPassword":"tangerine-42-moon"}""", access, mapOf("Idempotency-Key" to java.util.UUID.randomUUID().toString())).andExpect { status { isAccepted() } }
+        json("/api/v1/account/email/change/confirm", """{"code":"${codeOf("EMAIL_CHANGE_CODE", target)}"}""", access).andExpect { status { isNoContent() } }
+        json("/api/v1/auth/refresh", """{"refreshToken":"$other"}""").andExpect { status { isUnauthorized() } }
+        json("/api/v1/auth/refresh", """{"refreshToken":"${JsonPath.read<String>(here, "$.value.refreshToken")}"}""").andExpect { status { isOk() } }
     }
 
     @Test

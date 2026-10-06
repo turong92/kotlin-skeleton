@@ -206,6 +206,55 @@ class SessionServiceTest {
         repeat(5) { time.advance(Duration.ofHours(2)); token = s.refresh(token, client).session.refreshToken!! }
         assertTrue(store.tokenHashes().size <= 2, "used tokens older than reuse-memory must be pruned, got ${store.tokenHashes().size}")
     }
+
+    // ---- I5: bounded refresh-token rows
+
+    private fun limited(max: Int, window: Duration = Duration.ofMinutes(10)): SessionService {
+        val limits = dev.sumin.skeleton.common.web.InMemoryFixedWindowRateLimitStore()
+        val limiter = RotationLimiter { sessionId ->
+            val d = limits.consume("rotate:$sessionId", max, window.toMillis(), time.now())
+            if (d.allowed) null else (d.resetAt.epochSecond - time.now().epochSecond).coerceAtLeast(1)
+        }
+        return SessionService(store, AuthSessionProperties(), time, rotationLimiter = limiter) { events += it }
+    }
+
+    @Test
+    fun `a session can rotate only so often - a refresh loop cannot grow the token table without bound, and the session stays valid`() {
+        val s = limited(3)
+        var current = s.open(account.accountId, client)
+        repeat(3) { current = s.refresh(current.refreshToken!!, client).session }
+        val e = assertFailsWith<RefreshRateLimitedException> { s.refresh(current.refreshToken!!, client) }
+        assertEquals("AUTH.TOO_MANY_REFRESHES", e.errorCode.code)
+        assertTrue(e.retryAfterSeconds in 1..600)
+        repeat(50) { assertFailsWith<RefreshRateLimitedException> { s.refresh(current.refreshToken!!, client) } }
+        assertEquals(4, store.tokenHashes().size, "one row per allowed rotation plus the first: 1 + 3")
+        assertTrue(store.find(current.sessionId)!!.revokedAt == null, "rate limiting never signs the user out")
+
+        time.advance(Duration.ofMinutes(11))
+        current = s.refresh(current.refreshToken!!, client).session   // the same token works once the window has passed
+        assertEquals(5, store.tokenHashes().size)
+    }
+
+    @Test
+    fun `the rotation limit is per session and an unknown token spends nobody's allowance`() {
+        val s = limited(1)
+        val a = s.open(account.accountId, client)
+        val b = s.open(account.accountId, client)
+        repeat(20) { assertFailsWith<RefreshInvalidException> { s.refresh("r1.not-a-real-token-at-all-0000000000000000", client) } }
+        s.refresh(a.refreshToken!!, client)
+        s.refresh(b.refreshToken!!, client)   // b is not affected by a
+        assertFailsWith<RefreshRateLimitedException> { s.refresh(s.successorOf(a.refreshToken!!), client) }
+    }
+
+    @Test
+    fun `logging out with a rotated-out refresh token still closes the session - a client that lost the rotation race can sign out`() {
+        val s = service()
+        val first = s.open(account.accountId, client)
+        val second = s.refresh(first.refreshToken!!, client).session
+        s.logout(first.refreshToken!!)   // the previous, already used token
+        assertTrue(store.find(first.sessionId)!!.revokedAt != null)
+        assertFailsWith<RefreshInvalidException> { s.refresh(second.refreshToken!!, client) }
+    }
 }
 
 class SessionReuseMemoryTest {

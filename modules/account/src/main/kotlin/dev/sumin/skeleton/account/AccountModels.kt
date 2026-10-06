@@ -76,6 +76,19 @@ data class AccountPage(val items: List<Account>, val total: Long)
 
 enum class ChangeEmailResult { CHANGED, TAKEN, NOT_FOUND }
 
+/**
+ * [AccountRepository.proveMailbox] 에 넘기는 "메일함이 증명됐다" 의 내용.
+ * [keepIdentityIds]: 계정의 이메일이 **미확인이었다면** 이 id 들 말고 모든 로그인 수단을 지운다 (증명한 수단 · 방금 입력된 비밀번호의 수단만 남는다) — 이미 확인된 계정에서는 지우지 않는다.
+ * [passwordSecret]: null 이 아니면 비밀번호 수단(주체 = 계정 이메일)의 해시를 이것으로 바꾼다. 수단이 없으면 [newPasswordIdentityId] 로 만든다.
+ */
+data class MailboxProof(
+    val keepIdentityIds: Set<String> = emptySet(),
+    val passwordSecret: String? = null,
+    val newPasswordIdentityId: String? = null,
+) {
+    override fun toString() = "MailboxProof(keep=$keepIdentityIds, passwordSecret=${if (passwordSecret == null) "none" else "<redacted>"})"
+}
+
 enum class RemoveIdentityResult { REMOVED, NOT_FOUND, LAST }
 
 /** 마지막 관리자 보호 연산의 결과 — [DONE] 적용됨 · [LAST] 마지막 ACTIVE 보유자라 하지 않음 · [NOT_FOUND] 없는 계정(이거나 그 역할이 없음) */
@@ -101,6 +114,14 @@ interface AccountRepository {
     fun update(id: String, patch: AccountPatch, now: Instant): Account?
 
     fun markEmailVerified(id: String, now: Instant): Boolean
+
+    /**
+     * 계정의 메일함이 방금 증명됐다 — **한 트랜잭션**(계정 행 락)으로: ① 이메일이 미확인이었다면 [MailboxProof.keepIdentityIds] 밖의 로그인 수단을 모두 지운다
+     * (미확인 주소에 남이 심어 둔 비밀번호 · 소셜 연결이 메일함 주인의 증명으로 살아남지 않게) ② [MailboxProof.passwordSecret] 이 있으면 비밀번호 수단을 그 해시로
+     * ③ [markEmailVerified] 와 같은 확인 처리. 계정이 없거나 이메일이 없으면 false (아무것도 바꾸지 않는다).
+     * 같은 계정의 동시 연산(비밀번호 변경 …)과 줄 서므로, 지워진 수단에 뒤늦게 쓰는 쪽은 갱신 행 수 0 으로 진다.
+     */
+    fun proveMailbox(id: String, now: Instant, proof: MailboxProof): Boolean
 
     fun changeEmail(id: String, newEmail: String, now: Instant): ChangeEmailResult
 

@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.account
 
+import dev.sumin.skeleton.account.challenge.InMemoryChallengeStore
 import dev.sumin.skeleton.account.token.InMemoryOneTimeTokenStore
 import dev.sumin.skeleton.common.deploy.DeployContext
 import dev.sumin.skeleton.common.deploy.DeployGuard
@@ -17,10 +18,13 @@ class AccountDeployGuard(
     data class State(
         val repository: AccountRepository?,
         val tokenStore: Any?,
+        val challengeStore: Any?,
         val mailTransportIsLogOnly: Boolean,
         val captchaAvailable: Boolean,
         /** `skeleton.web.client-ip.mode` 가 정해졌나 (platform `ClientIps.configured`) */
         val clientIpModeConfigured: Boolean,
+        /** 메일함을 증명하는 로그인 수단(매직 링크 …)이 등록돼 있나 — [AccountProperties.Social.mergeOnVerifiedEmail] 과 함께 이메일 확인 끈 모드의 위험을 키운다 */
+        val mailboxProofMethod: Boolean = false,
     )
 
     override val name: String = "account"
@@ -30,6 +34,7 @@ class AccountDeployGuard(
         val s = state()
         if (s.repository is InMemoryAccountRepository) add("account uses the in-memory AccountRepository (every account vanishes on restart): add modules:account-jdbc or define your own AccountRepository bean")
         if (s.tokenStore is InMemoryOneTimeTokenStore) add("account uses the in-memory OneTimeTokenStore (emailed links stop working on restart and across instances): add modules:account-jdbc or define your own OneTimeTokenStore bean")
+        if (s.challengeStore is InMemoryChallengeStore) add("account uses the in-memory ChallengeStore (sign-up codes and email-change codes are lost on restart and not shared across instances): add modules:account-jdbc or define your own ChallengeStore bean")
         if (s.mailTransportIsLogOnly) add("account has no mail transport, so verification and reset links cannot be delivered: add modules:notification-mail (skeleton.notification-mail.enabled, from, spring.mail.host) or define an AccountMailTransport bean")
         // 비밀번호 찾기 · 인증 재전송은 늘 IP 별로 한도를 걸고(로그인 · 가입 · 매직 링크도 기본으로 건다) 그 키가 클라이언트 IP 다 —
         // mode 가 없으면 ForwardedHeaderFilter 가 X-Forwarded-For 로 remoteAddr 를 덮어써 호출자가 IP 를 고르고, 한도가 전부 풀린다
@@ -47,5 +52,10 @@ class AccountDeployGuard(
         if (props.signUp.enabled && !props.captcha.required) add("sign-up is open without a captcha (skeleton.account.captcha.required=false): bots can create accounts and mail strangers")
         if (props.admin.enabled && props.bootstrap.adminEmail.isBlank()) add("the admin API is enabled but no administrator can exist yet: set skeleton.account.bootstrap.admin-email or grant ADMIN another way")
         if (!props.signUp.emailVerification) add("sign-up works without email verification (skeleton.account.sign-up.email-verification=false): duplicate addresses are visible as 409")
+        // 확인 없는 가입은 남이 피해자 주소로 ACTIVE 계정을 만들어 둘 수 있다 — 주인이 메일함을 증명하면(매직 링크 · 병합된 소셜 · 재설정) 심어 둔 자격은 전부 지워지지만,
+        // 그 증명이 올 때까지 계정은 살아 있고 그 사이 쌓인 데이터는 주인의 것이 된다. 그래서 메일함 증명 경로가 열려 있는 조합은 따로 알린다
+        if (!props.signUp.emailVerification && (state().mailboxProofMethod || props.social.mergeOnVerifiedEmail)) {
+            add("email-verification=false together with a mailbox-proving sign-in (magic link) or skeleton.account.social.merge-on-verified-email: a stranger can hold an active account on the owner's address until the owner proves the mailbox - the proof wipes what the stranger planted, but turn email verification on unless the 409 trade-off is deliberate")
+        }
     }
 }

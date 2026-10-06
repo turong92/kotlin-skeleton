@@ -28,6 +28,8 @@ enum class AccountErrorCode(
     NOT_FOUND("ACCOUNT.NOT_FOUND", HttpStatus.NOT_FOUND, "Account not found"),
     RATE_LIMITED("ACCOUNT.RATE_LIMITED", HttpStatus.TOO_MANY_REQUESTS, "Too many requests"),
     METHOD_UNKNOWN("ACCOUNT.METHOD_UNKNOWN", HttpStatus.BAD_REQUEST, "Unknown sign-in method"),
+    CODE_INVALID("ACCOUNT.CODE_INVALID", HttpStatus.BAD_REQUEST, "The code is wrong"),
+    CODE_EXPIRED("ACCOUNT.CODE_EXPIRED", HttpStatus.GONE, "The code is expired or used up"),
     PASSWORD_REQUIRED("ACCOUNT.PASSWORD_REQUIRED", HttpStatus.BAD_REQUEST, "Verify your email before setting a password"),
 }
 
@@ -36,6 +38,11 @@ class AccountException(
     message: String = errorCode.title,
     data: Any? = null,
 ) : ApplicationException(message = message, errorCode = errorCode, data = data)
+
+/** 코드가 틀렸다 — 남은 시도가 `data.attemptsLeft` 로 나간다 */
+class CodeInvalidException(attemptsLeft: Int) : ApplicationException(
+    message = AccountErrorCode.CODE_INVALID.title, errorCode = AccountErrorCode.CODE_INVALID, data = mapOf("attemptsLeft" to attemptsLeft),
+)
 
 /** 정책 위반 코드 — HTTP 로는 `data.violations` 로 나간다 (프론트가 문구를 고른다) */
 enum class PasswordViolation { TOO_SHORT, TOO_LONG, NEEDS_LETTER, NEEDS_DIGIT, NEEDS_SYMBOL, CONTAINS_EMAIL, TOO_COMMON, BREACHED }

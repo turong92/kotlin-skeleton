@@ -55,7 +55,7 @@ class AccountJourneyIntegrationTest {
             headers.forEach { (k, v) -> header(k, v) }
         }
 
-    private fun tokenOf(kind: MailKind, to: String) = mails.sent.last { it.kind == kind && it.to == to }.link!!.substringAfter("token=")
+    private fun codeOf(kind: MailKind, to: String) = mails.sent.last { it.kind == kind && it.to == to }.vars.getValue("code")
     private fun field(json: String, path: String): String = JsonPath.read<Any>(json, path).toString()
 
     @Test
@@ -64,9 +64,11 @@ class AccountJourneyIntegrationTest {
         val first = "tangerine-42-moon"
         val second = "a-brand-new-pass-7"
 
-        post("/api/v1/account/sign-up", """{"email":"$email","password":"$first","displayName":"Journey","locale":"ko"}""").andExpect { status { isAccepted() } }
-        post("/api/v1/auth/login", """{"email":"$email","password":"$first"}""").andExpect { status { isForbidden() }; jsonPath("$.code") { value("AUTH.EMAIL_NOT_VERIFIED") } }
-        post("/api/v1/auth/verify-email", """{"token":"${tokenOf(MailKind.VERIFY_EMAIL, email)}"}""").andExpect { status { isOk() } }
+        val signUp = post("/api/v1/account/sign-up", """{"email":"$email","password":"$first","displayName":"Journey","locale":"ko"}""").andExpect { status { isAccepted() } }.andReturn().response.contentAsString
+        // no account exists until the code is entered
+        post("/api/v1/auth/login", """{"email":"$email","password":"$first"}""").andExpect { status { isUnauthorized() }; jsonPath("$.code") { value("AUTH.INVALID_CREDENTIALS") } }
+        val verified = post("/api/v1/auth/verify-email", """{"signUpId":"${field(signUp, "$.value.signUpId")}","code":"${codeOf(MailKind.VERIFY_CODE, email)}"}""").andExpect { status { isOk() } }.andReturn().response.contentAsString
+        assertTrue(field(verified, "$.value.accessToken").isNotBlank() && field(verified, "$.value.refreshToken").startsWith("r1."), "the verifying browser is signed in at once")
 
         val login = post("/api/v1/auth/login", """{"email":"$email","password":"$first"}""").andExpect { status { isOk() } }.andReturn().response.contentAsString
         val bearer = field(login, "$.value.accessToken")

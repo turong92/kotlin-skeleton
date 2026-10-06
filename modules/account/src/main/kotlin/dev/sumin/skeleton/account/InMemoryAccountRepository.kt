@@ -51,6 +51,27 @@ class InMemoryAccountRepository : AccountRepository {
         return true
     }
 
+    @Synchronized override fun proveMailbox(id: String, now: Instant, proof: MailboxProof): Boolean {
+        val a = accounts[id] ?: return false
+        val email = a.email ?: return false
+        // 미확인 계정에서는 새 비밀번호를 정하면 옛 비밀번호 수단 행도 지운다(id 가 바뀐다) — 그 행의 id 를 들고 있던 남의 뒤늦은 갱신이 새 비밀번호를 덮지 못하게
+        if (!a.emailVerified) {
+            identities.values.filter { it.accountId == id && (it.id !in proof.keepIdentityIds || (proof.passwordSecret != null && it.method == SignInMethods.PASSWORD)) }.forEach { identities.remove(it.id) }
+        }
+        proof.passwordSecret?.let { secret ->
+            val existing = identities.values.firstOrNull { it.accountId == id && it.method == SignInMethods.PASSWORD && it.subject == email }
+            if (existing != null) identities[existing.id] = existing.copy(secret = secret)
+            else {
+                val taken = identities.values.any { it.method == SignInMethods.PASSWORD && it.subject == email }
+                if (!taken) {
+                    val newId = requireNotNull(proof.newPasswordIdentityId) { "newPasswordIdentityId" }
+                    identities[newId] = Identity(newId, id, SignInMethods.PASSWORD, email, true, secret = secret, createdAt = now)
+                }
+            }
+        }
+        return markEmailVerified(id, now)
+    }
+
     @Synchronized override fun changeEmail(id: String, newEmail: String, now: Instant): ChangeEmailResult {
         val a = accounts[id] ?: return ChangeEmailResult.NOT_FOUND
         if (accounts.values.any { it.id != id && it.email == newEmail }) return ChangeEmailResult.TAKEN

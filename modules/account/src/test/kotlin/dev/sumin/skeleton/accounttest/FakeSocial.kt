@@ -15,6 +15,9 @@ class FakeOAuthProvider : OAuthProvider {
         "c-conflict" -> OAuthUserProfile("fakeidp", "sub-conflict", "taken@example.com", "taken@example.com", "Conflict", emailVerified = true)
         "c-other" -> OAuthUserProfile("fakeidp", "sub-other", "other@example.com", "other@example.com", "Other", emailVerified = true)
         "c-link" -> OAuthUserProfile("fakeidp", "sub-link", "link@example.com", "link@example.com", "Link", emailVerified = true)
+        "c-noemail-del" -> OAuthUserProfile("fakeidp", "sub-noemail-del", null, null, "No Mail Del", emailVerified = false)
+        "c-noemail-chg" -> OAuthUserProfile("fakeidp", "sub-noemail-chg", null, null, "No Mail Chg", emailVerified = false)
+        "c-third" -> OAuthUserProfile("fakeidp", "sub-third", "third@example.com", "third@example.com", "Third", emailVerified = true)
         else -> throw OAuthInvalidAuthorizationCodeException("fakeidp")
     }
 }

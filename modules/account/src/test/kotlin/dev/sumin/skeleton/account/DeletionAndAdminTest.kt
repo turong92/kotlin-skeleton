@@ -23,10 +23,10 @@ class DeletionAndAdminTest {
     @Test
     fun `deleting needs the password, schedules the purge after the grace, closes sessions and tells the owner`() {
         val a = h.activeAccount()
-        assertEquals("ACCOUNT.REAUTH_FAILED", code { h.deletion.delete(a.id, "wrong-password-1", null) })
+        assertEquals("ACCOUNT.REAUTH_FAILED", code { h.deletion.delete(a.id, ReauthInput("wrong-password-1"), null) })
         assertEquals(AccountStatus.ACTIVE, h.repo.findById(a.id)!!.status)
 
-        val scheduled = h.deletion.delete(a.id, "tangerine-42-moon", null)
+        val scheduled = h.deletion.delete(a.id, ReauthInput("tangerine-42-moon"), null)
         val after = h.repo.findById(a.id)!!
         assertEquals(AccountStatus.DELETED, after.status)
         assertEquals(h.time.now().plus(Duration.ofDays(30)), after.purgeAfter)
@@ -40,54 +40,65 @@ class DeletionAndAdminTest {
     @Test
     fun `deleting again is idempotent and does not extend the grace`() {
         val a = h.activeAccount()
-        val first = h.deletion.delete(a.id, "tangerine-42-moon", null)
+        val first = h.deletion.delete(a.id, ReauthInput("tangerine-42-moon"), null)
         h.time.advance(Duration.ofDays(3))
-        assertEquals(first, h.deletion.delete(a.id, "tangerine-42-moon", null))
+        assertEquals(first, h.deletion.delete(a.id, ReauthInput("tangerine-42-moon"), null))
     }
 
     @Test
-    fun `an account without a password confirms through a mailed one-time link instead`() {
+    fun `an account without a password confirms with a mailed six digit code entered in the same session`() {
         val now = h.time.now()
         h.repo.insert(Account("acc_s", "s@example.com", true, AccountStatus.ACTIVE, setOf("USER"), null, null, null, now, now), emptyList())
-        assertEquals("ACCOUNT.REAUTH_FAILED", code { h.deletion.delete("acc_s", null, null) })
-        assertEquals("ACCOUNT.REAUTH_FAILED", code { h.deletion.delete("acc_s", null, "garbage-garbage-garbage-garbage") })
+        assertEquals("ACCOUNT.REAUTH_REQUIRED", code { h.deletion.delete("acc_s", ReauthInput(), "ses_1") })
+        assertEquals("ACCOUNT.CODE_EXPIRED", code { h.deletion.delete("acc_s", ReauthInput(confirmationCode = "123456"), "ses_1") }, "no code was requested")
 
-        h.deletion.requestConfirmation("acc_s")
-        val token = h.mailer.tokenOf(h.mailer.of(MailKind.DELETE_CONFIRM).single())
-        h.deletion.delete("acc_s", null, token)
+        h.deletion.requestConfirmation("acc_s", "ses_1")
+        val mail = h.mailer.of(MailKind.DELETE_CODE).single()
+        assertEquals("s@example.com", mail.to)
+        assertNull(mail.link)
+        val sent = mail.vars.getValue("code")
+        val wrong = if (sent == "000000") "000001" else "000000"
+        val e = assertFailsWith<ApplicationException> { h.deletion.delete("acc_s", ReauthInput(confirmationCode = wrong), "ses_1") }
+        assertEquals("ACCOUNT.CODE_INVALID", e.errorCode.code)
+        assertEquals(mapOf("attemptsLeft" to 4), e.data)
+        assertEquals("ACCOUNT.CODE_EXPIRED", code { h.deletion.delete("acc_s", ReauthInput(confirmationCode = sent), "ses_other") }, "a code is bound to the session that asked for it")
+        h.deletion.requestConfirmation("acc_s", "ses_1")
+        val fresh = h.mailer.of(MailKind.DELETE_CODE).last().vars.getValue("code")
+        h.deletion.delete("acc_s", ReauthInput(confirmationCode = fresh), "ses_1")
         assertEquals(AccountStatus.DELETED, h.repo.findById("acc_s")!!.status)
         h.admin.restore("acc_admin", "acc_s")
-        assertEquals("ACCOUNT.REAUTH_FAILED", code { h.deletion.delete("acc_s", null, token) }, "the confirmation link is single use")
+        assertEquals("ACCOUNT.CODE_EXPIRED", code { h.deletion.delete("acc_s", ReauthInput(confirmationCode = fresh), "ses_1") }, "the code is single use")
     }
 
     @Test
-    fun `a confirmation link of another account does not authorize deletion`() {
+    fun `a delete code of another account does not authorize deletion`() {
         val now = h.time.now()
         h.repo.insert(Account("acc_a", "a@example.com", true, AccountStatus.ACTIVE, setOf("USER"), null, null, null, now, now), emptyList())
         h.repo.insert(Account("acc_b", "b@example.com", true, AccountStatus.ACTIVE, setOf("USER"), null, null, null, now, now), emptyList())
-        h.deletion.requestConfirmation("acc_a")
-        val token = h.mailer.tokenOf(h.mailer.of(MailKind.DELETE_CONFIRM).single())
-        assertEquals("ACCOUNT.REAUTH_FAILED", code { h.deletion.delete("acc_b", null, token) })
+        h.deletion.requestConfirmation("acc_a", "ses_1")
+        val sent = h.mailer.of(MailKind.DELETE_CODE).single().vars.getValue("code")
+        assertEquals("ACCOUNT.CODE_EXPIRED", code { h.deletion.delete("acc_b", ReauthInput(confirmationCode = sent), "ses_1") })
+        assertEquals(AccountStatus.ACTIVE, h.repo.findById("acc_b")!!.status)
     }
 
     @Test
     fun `the only administrator cannot delete themself`() {
         val a = h.activeAccount()
         h.repo.grantRole(a.id, "ADMIN", h.time.now())
-        assertEquals("ACCOUNT.LAST_ADMIN", code { h.deletion.delete(a.id, "tangerine-42-moon", null) })
+        assertEquals("ACCOUNT.LAST_ADMIN", code { h.deletion.delete(a.id, ReauthInput("tangerine-42-moon"), null) })
     }
 
     @Test
     fun `an admin restores a deleted account within the grace, not after the purge`() {
         val a = h.activeAccount()
-        h.deletion.delete(a.id, "tangerine-42-moon", null)
+        h.deletion.delete(a.id, ReauthInput("tangerine-42-moon"), null)
         h.admin.restore("acc_admin", a.id)
         val back = h.repo.findById(a.id)!!
         assertEquals(AccountStatus.ACTIVE, back.status)
         assertNull(back.purgeAfter)
         assertTrue(AccountEventType.ACCOUNT_RESTORED in h.events.types())
 
-        h.deletion.delete(a.id, "tangerine-42-moon", null)
+        h.deletion.delete(a.id, ReauthInput("tangerine-42-moon"), null)
         h.time.advance(Duration.ofDays(31))
         h.purge.purgeDue()
         assertEquals("ACCOUNT.NOT_FOUND", code { h.admin.restore("acc_admin", a.id) })
@@ -100,7 +111,7 @@ class DeletionAndAdminTest {
         val a = h.activeAccount()
         val seen = mutableListOf<ErasureRequest>()
         h.erasers += object : AccountErasureListener { override val name = "board"; override fun erase(request: ErasureRequest) { seen += request } }
-        h.deletion.delete(a.id, "tangerine-42-moon", null)
+        h.deletion.delete(a.id, ReauthInput("tangerine-42-moon"), null)
 
         h.time.advance(Duration.ofDays(29))
         assertEquals(0, h.purge.purgeDue())
@@ -124,7 +135,7 @@ class DeletionAndAdminTest {
         val calls = mutableListOf<String>()
         h.erasers += object : AccountErasureListener { override val name = "flaky"; override fun erase(request: ErasureRequest) { calls += "flaky"; if (broken) error("db down") } }
         h.erasers += object : AccountErasureListener { override val name = "notify"; override fun erase(request: ErasureRequest) { calls += "notify" } }
-        h.deletion.delete(a.id, "tangerine-42-moon", null)
+        h.deletion.delete(a.id, ReauthInput("tangerine-42-moon"), null)
         h.time.advance(Duration.ofDays(31))
 
         assertEquals(0, h.purge.purgeDue())
@@ -196,7 +207,7 @@ class DeletionAndAdminTest {
     fun `granting a role to a deleted account is not found, like every other admin action on it`() {
         val admin = admin()
         val gone = h.activeAccount("gone@example.com")
-        h.deletion.delete(gone.id, "tangerine-42-moon", null)
+        h.deletion.delete(gone.id, ReauthInput("tangerine-42-moon"), null)
         assertEquals("ACCOUNT.NOT_FOUND", code { h.admin.grantRole(admin.id, gone.id, "ADMIN") })
         assertTrue("ADMIN" !in h.repo.findById(gone.id)!!.roles)
     }
@@ -221,7 +232,7 @@ class DeletionAndAdminTest {
     @Test
     fun `restoring after the grace ended is refused even before the purge job has run - purge and restore cannot both win`() {
         val a = h.activeAccount()
-        h.deletion.delete(a.id, "tangerine-42-moon", null)
+        h.deletion.delete(a.id, ReauthInput("tangerine-42-moon"), null)
         h.time.advance(Duration.ofDays(31))
         assertEquals("ACCOUNT.NOT_FOUND", code { h.admin.restore("acc_admin", a.id) })
         assertEquals(AccountStatus.DELETED, h.repo.findById(a.id)!!.status)
@@ -229,7 +240,9 @@ class DeletionAndAdminTest {
 
     @Test
     fun `search filters by email fragment and status`() {
-        admin(); h.activeAccount("ann@example.com"); h.signUp("pending@example.com")
+        admin(); h.activeAccount("ann@example.com")
+        val now = h.time.now()
+        h.repo.insert(Account("acc_pending", "pending@example.com", false, AccountStatus.PENDING_VERIFICATION, setOf("USER"), null, null, null, now, now), emptyList())
         assertEquals(1, h.admin.search("ann", null, 0, 10).total)
         assertEquals(1, h.admin.search(null, AccountStatus.PENDING_VERIFICATION, 0, 10).total)
         assertEquals(3, h.admin.search(null, null, 0, 10).total)

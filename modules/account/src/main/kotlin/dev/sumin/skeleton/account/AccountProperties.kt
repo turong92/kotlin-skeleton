@@ -63,13 +63,24 @@ data class AccountProperties(
     }
 
     data class Verification(
-        val ttl: Duration = Duration.ofHours(24),
-        /** 한 이메일에 보낼 수 있는 인증 메일 수 (창 안) — 넘으면 조용히 안 보낸다 */
+        /** 가입 확인 코드(6자리)의 유효 시간 — 재전송하면 새로 시작한다 */
+        val codeTtl: Duration = Duration.ofMinutes(10),
+        /** 코드 하나(챌린지)에 허용하는 추측 수 — 다 쓰면 그 시도는 죽는다 (다시 가입하거나 재전송) */
+        val maxAttempts: Int = 5,
+        /** 한 가입 시도에서 새 코드를 다시 받을 수 있는 횟수 · 사이 간격 */
+        val maxResends: Int = 3,
+        val resendCooldown: Duration = Duration.ofSeconds(30),
+        /** 한 이메일에 보낼 수 있는 인증 코드 · "이미 계정이 있어요" 메일 수 (창 안) — 넘으면 조용히 안 보낸다 */
         val perEmail: Int = 3,
         val perEmailWindow: Duration = Duration.ofHours(1),
+        /** 한 이메일 주소로 창 안에 **열 수 있는 가입 시도** 수 — 넘으면 시도를 저장하지 않는다(응답은 같다). 주소 하나에 걸린 추측의 총량을 묶는 값 (docs/accounts.md 무차별 대입 계산) */
+        val signUpAttemptsPerEmail: Int = 5,
         /** 같은 IP 가 창 안에 보낼 수 있는 인증 재전송 요청 수 (넘으면 429) */
         val perIp: Int = 10,
         val perIpWindow: Duration = Duration.ofHours(1),
+        /** 같은 IP 가 창 안에 보낼 수 있는 코드 입력 수 (넘으면 429) */
+        val attemptsPerIp: Int = 30,
+        val attemptsWindow: Duration = Duration.ofHours(1),
     )
 
     data class Reset(
@@ -107,13 +118,8 @@ data class AccountProperties(
     data class Mail(
         /** 메일 링크의 앞부분 — 프론트 주소 (예: https://app.example.com). 비면 stage · prod 의 DeployGuard 가 문제로 본다 */
         val linkBaseUrl: String = "",
-        val verifyPath: String = "/verify-email",
         val resetPath: String = "/reset-password",
-        val emailChangePath: String = "/confirm-email-change",
-        val deletePath: String = "/confirm-delete",
         val magicLinkPath: String = "/magic-link",
-        /** 비밀번호 없는 계정의 민감한 일(이메일 변경 · 첫 비밀번호 · 소셜 연결) 확인 링크 */
-        val reauthPath: String = "/confirm-reauth",
         /** 계정 로케일이 없거나 지원하지 않을 때 쓰는 메일 언어 (ko · en 이 내장) */
         val defaultLocale: String = "en",
         /** 제목 앞에 붙는 서비스 이름 (예: [MyService]) */

@@ -4,6 +4,9 @@ import dev.sumin.skeleton.account.abuse.AccountCaptcha
 import dev.sumin.skeleton.account.abuse.AccountRateLimits
 import dev.sumin.skeleton.account.abuse.AccountTaskRunner
 import dev.sumin.skeleton.account.abuse.CaptchaGate
+import dev.sumin.skeleton.account.challenge.Challenges
+import dev.sumin.skeleton.account.challenge.CodeHasher
+import dev.sumin.skeleton.account.challenge.InMemoryChallengeStore
 import dev.sumin.skeleton.account.events.AccountEvent
 import dev.sumin.skeleton.account.events.AccountEventListener
 import dev.sumin.skeleton.account.events.DefaultAccountEventPublisher
@@ -54,6 +57,7 @@ class AccountHarness(
     breached: BreachedPasswordCheck? = null,
     /** 저장소를 바꿔 끼운다 (예: 악센트 · 대소문자를 같게 보는 DB 정렬을 흉내 낸 것) — 호출 기록 프록시가 이것을 감싼다 */
     storage: AccountRepository? = null,
+    socialReauth: SocialReauthVerifier? = null,
 ) {
     val time = MutableTime()
     val callLog = CallLog()
@@ -65,6 +69,8 @@ class AccountHarness(
         } as AccountRepository
     }
     val tokenStore = InMemoryOneTimeTokenStore()
+    val challengeStore = InMemoryChallengeStore()
+    val challenges = Challenges(challengeStore, CodeHasher(ByteArray(32) { 7 }), time)
     val mailer = RecordingMailer()
     val events = RecordingEvents()
     val revoker = RecordingRevoker()
@@ -77,7 +83,7 @@ class AccountHarness(
     val core = AccountCore(
         repo, props, time, publisher, hasher, policy, tokens, mailer, AccountLinks(props.mail), tasks,
         AccountRateLimits({ limitStore }, time),
-        CaptchaGate(captcha, captchaRequired), { revoker }, bootstrap,
+        CaptchaGate(captcha, captchaRequired), { revoker }, bootstrap, challenges, { socialReauth },
     )
     val registration = RegistrationService(core)
     val authRepository = AccountAuthRepository(core)
@@ -90,13 +96,19 @@ class AccountHarness(
     val admin = AdminService(core)
     val profile = ProfileService(core, dev.sumin.skeleton.account.signin.SignInMethodRegistry(listOf(dev.sumin.skeleton.account.signin.PasswordSignInMethod())))
 
-    fun signUp(email: String = "ann@example.com", password: String = "tangerine-42-moon", ip: String? = "203.0.113.1", captchaToken: String? = null, locale: String? = null) =
-        registration.signUp(SignUpCommand(email, password, "Ann", locale, "Asia/Seoul", ip, captchaToken))
+    /** 이메일별로 마지막 가입 id — [verify] · [resend] 가 쓴다 */
+    val signUpIds = java.util.concurrent.ConcurrentHashMap<String, String>()
 
-    fun verify(email: String = "ann@example.com") {
-        val mail = mailer.sent.last { it.kind == dev.sumin.skeleton.account.mail.MailKind.VERIFY_EMAIL && it.to == Emails.normalize(email) }
-        registration.verifyEmail(mailer.tokenOf(mail))
-    }
+    fun signUp(email: String = "ann@example.com", password: String = "tangerine-42-moon", ip: String? = "203.0.113.1", captchaToken: String? = null, locale: String? = null): SignUpOutcome =
+        registration.signUp(SignUpCommand(email, password, "Ann", locale, "Asia/Seoul", ip, captchaToken)).also { o -> o.signUpId?.let { signUpIds[Emails.normalize(email)] = it } }
+
+    /** 그 주소로 마지막에 나간 인증 코드 메일의 코드 */
+    fun lastCode(email: String = "ann@example.com"): String =
+        mailer.sent.last { it.kind == dev.sumin.skeleton.account.mail.MailKind.VERIFY_CODE && it.to == Emails.normalize(email) }.vars.getValue("code")
+
+    /** 마지막 가입 시도를 마지막 코드로 확인 — 가입이 끝나 계정이 생긴다 */
+    fun verify(email: String = "ann@example.com", ip: String? = "203.0.113.1") =
+        registration.verifyEmail(signUpIds.getValue(Emails.normalize(email)), lastCode(email), ip)
 
     /** 가입 + 확인까지 끝낸 계정 */
     fun activeAccount(email: String = "ann@example.com", password: String = "tangerine-42-moon"): Account {

@@ -18,9 +18,10 @@ object AccountDb {
     private val tx = TransactionTemplate(DataSourceTransactionManager(dataSource))
     val accounts = JdbcAccountRepository(jdbc, tx, DbTestDatabase.dialect)
     val tokens = JdbcOneTimeTokenStore(jdbc, DbTestDatabase.dialect)
+    val challenges = JdbcChallengeStore(jdbc, DbTestDatabase.dialect)
     val audit = JdbcAccountAuditListener(jdbc, DbTestDatabase.dialect)
 
     fun clean() {
-        listOf("skeleton_account_audit", "skeleton_account_tokens", "skeleton_accounts").forEach { jdbc.update("delete from $it", emptyMap<String, Any>()) }
+        listOf("skeleton_account_audit", "skeleton_account_challenges", "skeleton_account_tokens", "skeleton_accounts").forEach { jdbc.update("delete from $it", emptyMap<String, Any>()) }
     }
 }

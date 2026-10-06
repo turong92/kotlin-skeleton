@@ -2,6 +2,7 @@ package dev.sumin.skeleton.account.jdbc
 
 import dev.sumin.skeleton.account.AccountAutoConfiguration
 import dev.sumin.skeleton.account.AccountRepository
+import dev.sumin.skeleton.account.challenge.ChallengeStore
 import dev.sumin.skeleton.account.events.AccountEventListener
 import dev.sumin.skeleton.account.token.OneTimeTokenStore
 import dev.sumin.skeleton.persistence.jdbc.SqlDialect
@@ -38,6 +39,10 @@ class AccountJdbcAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(OneTimeTokenStore::class)
     fun jdbcOneTimeTokenStore(dataSource: DataSource, dialect: SqlDialect): OneTimeTokenStore = JdbcOneTimeTokenStore(NamedParameterJdbcTemplate(dataSource), dialect)
+
+    @Bean
+    @ConditionalOnMissingBean(ChallengeStore::class)
+    fun jdbcChallengeStore(dataSource: DataSource, dialect: SqlDialect): ChallengeStore = JdbcChallengeStore(NamedParameterJdbcTemplate(dataSource), dialect)
 
     @Bean
     @ConditionalOnMissingBean(name = ["jdbcAccountAuditListener"])

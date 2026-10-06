@@ -108,8 +108,8 @@ class MagicLinkWebTest {
 
     @Test
     fun `a link for another purpose cannot be redeemed here`() {
-        val verify = tokens.issue(TokenPurposes.VERIFY_EMAIL, "x@example.com", "acc_x", Duration.ofHours(1))
-        redeem(verify).andExpect(status().isGone)
+        val reset = tokens.issue(TokenPurposes.PASSWORD_RESET, "x@example.com", "acc_x", Duration.ofHours(1))
+        redeem(reset).andExpect(status().isGone)
     }
 
     @Test
@@ -178,9 +178,10 @@ class MagicLinkSignUpClosedWebTest {
     fun `with sign-up closed a link still signs an EXISTING account in (the default must not make magic link dead)`() {
         mails.sent.clear()
         val email = "existing${System.nanoTime()}@example.com"
-        mvc.perform(post("/api/v1/account/sign-up").contentType(MediaType.APPLICATION_JSON).content("""{"email":"$email","password":"tangerine-42-moon"}""")).andExpect(status().isAccepted)
-        val verify = mails.tokenOf(mails.sent.last { it.kind == MailKind.VERIFY_EMAIL })
-        mvc.perform(post("/api/v1/auth/verify-email").contentType(MediaType.APPLICATION_JSON).content("""{"token":"$verify"}""")).andExpect(status().isOk)
+        val signUp = mvc.perform(post("/api/v1/account/sign-up").contentType(MediaType.APPLICATION_JSON).content("""{"email":"$email","password":"tangerine-42-moon"}""")).andExpect(status().isAccepted).andReturn()
+        val signUpId = com.jayway.jsonpath.JsonPath.read<String>(signUp.response.contentAsString, "$.value.signUpId")
+        val code = mails.sent.last { it.kind == MailKind.VERIFY_CODE }.vars.getValue("code")
+        mvc.perform(post("/api/v1/auth/verify-email").contentType(MediaType.APPLICATION_JSON).content("""{"signUpId":"$signUpId","code":"$code"}""")).andExpect(status().isOk)
         mails.sent.clear()
         mvc.perform(post("/api/v1/auth/magic-link/request").contentType(MediaType.APPLICATION_JSON).content("""{"email":"$email"}""")).andExpect(status().isAccepted)
         val link = mails.tokenOf(mails.sent.last { it.kind == MailKind.MAGIC_LINK })

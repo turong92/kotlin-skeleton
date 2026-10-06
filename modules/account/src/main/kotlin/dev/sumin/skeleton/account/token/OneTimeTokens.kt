@@ -8,16 +8,10 @@ import java.time.Instant
 import java.util.Base64
 import java.util.HexFormat
 
-/** 한 번 쓰는 토큰의 용도 — 문자열이라 다른 모듈(매직 링크 …)이 자기 용도를 더한다. 용도가 다르면 같은 토큰이라도 쓸 수 없다 */
+/** 한 번 쓰는 **링크** 토큰의 용도 — 세션이 없는 흐름(비밀번호 재설정 · 매직 링크)만 링크다. 나머지(가입 확인 · 이메일 변경 · 다시 인증 · 삭제 확인)는 6자리 코드([dev.sumin.skeleton.account.challenge.Challenges]) */
 object TokenPurposes {
-    const val VERIFY_EMAIL = "verify_email"
     const val PASSWORD_RESET = "password_reset"
-    const val EMAIL_CHANGE = "email_change"
     const val MAGIC_LINK = "magic_link"
-    const val DELETE_CONFIRM = "delete_confirm"
-
-    /** 비밀번호 없는 계정이 민감한 일(이메일 변경 · 첫 비밀번호 · 소셜 연결)을 하기 전에 메일함으로 다시 인증한다 */
-    const val REAUTH = "reauth"
 }
 
 /** 저장소에 있는 토큰 한 줄. 원문이 아니라 SHA-256 [hash] 만 있다 */

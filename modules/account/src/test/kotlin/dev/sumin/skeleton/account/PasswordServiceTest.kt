@@ -118,10 +118,10 @@ class PasswordServiceTest {
     }
 
     @Test
-    fun `a verification link cannot reset a password`() {
+    fun `a magic link cannot reset a password`() {
         val a = h.activeAccount()
-        val verify = h.tokens.issue(TokenPurposes.VERIFY_EMAIL, a.email!!, a.id, Duration.ofHours(1))
-        assertEquals("ACCOUNT.TOKEN_INVALID", code { h.passwords.reset(verify, "a-brand-new-pass-7") })
+        val magic = h.tokens.issue(TokenPurposes.MAGIC_LINK, a.email!!, a.id, Duration.ofHours(1))
+        assertEquals("ACCOUNT.TOKEN_INVALID", code { h.passwords.reset(magic, "a-brand-new-pass-7") })
     }
 
     @Test
@@ -134,11 +134,13 @@ class PasswordServiceTest {
     }
 
     @Test
-    fun `resetting through the mailbox also proves the address - a pending account becomes active`() {
+    fun `resetting through the mailbox also proves the address - an unverified account becomes verified`() {
+        val h = AccountHarness(AccountProperties(signUp = AccountProperties.SignUp(emailVerification = false), mail = AccountProperties.Mail(linkBaseUrl = "https://x"), password = AccountProperties.Password(bcryptStrength = 4)))
         h.signUp()
+        assertEquals(false, h.repo.findByEmail("ann@example.com")!!.emailVerified)
         h.passwords.forgot("ann@example.com", "203.0.113.1", null)
-        h.passwords.reset(resetTokenFromMail(), "a-brand-new-pass-7")
-        assertEquals(AccountStatus.ACTIVE, h.repo.findByEmail("ann@example.com")!!.status)
+        h.passwords.reset(h.mailer.tokenOf(h.mailer.of(MailKind.PASSWORD_RESET).single()), "a-brand-new-pass-7")
+        assertEquals(true, h.repo.findByEmail("ann@example.com")!!.emailVerified)
     }
 
     @Test
@@ -197,11 +199,11 @@ class PasswordServiceTest {
         val now = h.time.now()
         h.repo.insert(Account("acc_s", "s@example.com", true, AccountStatus.ACTIVE, setOf("USER"), null, null, null, now, now), emptyList())
         assertEquals("ACCOUNT.REAUTH_REQUIRED", code { h.passwords.change("acc_s", null, "a-brand-new-pass-7", null) })
-        assertEquals("ACCOUNT.REAUTH_FAILED", code { h.passwords.change("acc_s", null, "a-brand-new-pass-7", null, "garbage-garbage-garbage-garbage") })
-        h.reauth.requestConfirmation("acc_s")
-        val proof = h.mailer.tokenOf(h.mailer.of(MailKind.REAUTH_CONFIRM).single())
-        assertEquals("ACCOUNT.PASSWORD_POLICY", code { h.passwords.change("acc_s", null, "weak", null, proof) })
-        h.passwords.change("acc_s", null, "a-brand-new-pass-7", null, proof)   // a policy failure did not burn the proof
+        assertEquals("ACCOUNT.CODE_EXPIRED", code { h.passwords.change("acc_s", null, "a-brand-new-pass-7", "ses_s", "123456") }, "no code was requested")
+        h.reauth.requestConfirmation("acc_s", "ses_s")
+        val proof = h.mailer.of(MailKind.REAUTH_CODE).single().vars.getValue("code")
+        assertEquals("ACCOUNT.PASSWORD_POLICY", code { h.passwords.change("acc_s", null, "weak", "ses_s", proof) })
+        h.passwords.change("acc_s", null, "a-brand-new-pass-7", "ses_s", proof)   // a policy failure did not burn the proof
         assertTrue(h.hasher.matches("a-brand-new-pass-7", h.repo.findIdentity("password", "s@example.com")!!.secret!!))
         assertTrue(h.repo.findIdentity("password", "s@example.com")!!.verified)
 

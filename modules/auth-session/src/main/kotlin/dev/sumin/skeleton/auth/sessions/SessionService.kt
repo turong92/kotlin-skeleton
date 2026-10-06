@@ -27,6 +27,7 @@ class SessionService(
     private val time: TimeProvider = TimeProvider.systemUtc(),
     /** 회전의 후속 토큰을 만드는 서버 키 — 같은 옛 토큰은 같은 후속 토큰을 낳지만 옛 토큰만으로는 계산할 수 없다. 인스턴스끼리 같아야 한다 (자동설정이 JWT 비밀에서 만든다) */
     tokenKey: ByteArray = ByteArray(32).also { SecureRandom().nextBytes(it) },
+    private val rotationLimiter: RotationLimiter = RotationLimiter.NONE,
     private val onEvent: (SessionEvent) -> Unit = {},
 ) {
     private val random = SecureRandom()
@@ -54,6 +55,8 @@ class SessionService(
         val token = store.findToken(oldHash) ?: throw RefreshInvalidException()
         val session = store.find(token.sessionId) ?: throw RefreshInvalidException()
         if (!isLive(session, now)) throw RefreshInvalidException()
+        // 회전마다 토큰 행이 하나 늘어 세션이 끝날 때까지 남는다 — 세션 하나가 창 안에 돌 수 있는 횟수를 묶어 행 수의 상한을 둔다 (유효한 토큰을 낸 세션에만 센다)
+        rotationLimiter.exceeded(session.id)?.let { throw RefreshRateLimitedException(it) }
 
         var usedAt = token.usedAt
         if (usedAt == null && !store.markTokenUsed(oldHash, now)) {

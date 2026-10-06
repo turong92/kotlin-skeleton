@@ -4,6 +4,9 @@ import dev.sumin.skeleton.account.AccountCore
 import dev.sumin.skeleton.account.AccountErrorCode
 import dev.sumin.skeleton.account.AccountException
 import dev.sumin.skeleton.account.Identity
+import dev.sumin.skeleton.account.Reauth
+import dev.sumin.skeleton.account.ReauthInput
+import dev.sumin.skeleton.account.abuse.RateLimitedException
 import dev.sumin.skeleton.account.RemoveIdentityResult
 import dev.sumin.skeleton.account.events.AccountEventType
 import java.time.Instant
@@ -50,10 +53,17 @@ class IdentityService(private val core: AccountCore, private val registry: SignI
     }
 
     /** 마지막 "들어오는 길" 은 지울 수 없다 — 저장소가 원자적으로 판정한다 */
-    fun unlink(accountId: String, identityId: String, currentSessionId: String? = null) {
+    fun unlink(accountId: String, identityId: String, currentSessionId: String? = null, input: ReauthInput = ReauthInput()) {
+        val account = core.accounts.findById(accountId) ?: throw AccountException(AccountErrorCode.NOT_FOUND)
         val identity = core.accounts.identitiesOf(accountId).firstOrNull { it.id == identityId } ?: throw AccountException(AccountErrorCode.IDENTITY_NOT_FOUND)
         val method = registry.find(identity.method)
         if (method?.userRemovable == false) throw AccountException(AccountErrorCode.LAST_SIGN_IN_METHOD)
+        // 훔친 액세스 토큰 하나로 주인의 로그인 수단을 떼어 내지 못하게 — 연결과 같은 다시 인증
+        val limit = core.props.emailChange
+        val allowance = core.limits.acquire("unlink:account", accountId, limit.perAccount, limit.perAccountWindow)
+        if (!allowance.allowed) throw RateLimitedException(allowance.retryAfterSeconds)
+        val proof = Reauth(core).check(account, input, currentSessionId)
+        proof.commit()   // 같은 코드로 겹친 두 요청이 둘 다 떼지 못하게 — 떼기 전에 태운다
         when (core.accounts.removeIdentityUnlessLast(accountId, identityId, registry.credentialCodes())) {
             RemoveIdentityResult.REMOVED -> {
                 // 그 수단으로 연 세션이 수단보다 오래 살지 않게 — 지금 쓰는 세션만 남기고 닫는다

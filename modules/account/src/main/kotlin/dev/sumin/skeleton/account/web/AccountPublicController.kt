@@ -1,11 +1,12 @@
 package dev.sumin.skeleton.account.web
 
-import dev.sumin.skeleton.account.EmailChangeService
 import dev.sumin.skeleton.account.PasswordService
 import dev.sumin.skeleton.account.RegistrationService
 import dev.sumin.skeleton.account.SignUpCommand
 import dev.sumin.skeleton.account.SignUpStatus
 import dev.sumin.skeleton.account.password.PasswordPolicy
+import dev.sumin.skeleton.auth.api.AuthTokenResponse
+import dev.sumin.skeleton.auth.api.AuthTokenResponseFactory
 import dev.sumin.skeleton.common.DataResponse
 import dev.sumin.skeleton.common.Response
 import dev.sumin.skeleton.common.openapi.AcceptedOperation
@@ -32,9 +33,9 @@ import org.springframework.web.bind.annotation.RestController
 class AccountPublicController(
     private val registration: RegistrationService,
     private val passwords: PasswordService,
-    private val emailChange: EmailChangeService,
     private val policy: PasswordPolicy,
     private val clientIps: ClientIps,
+    private val tokens: AuthTokenResponseFactory,
 ) {
     @Operation(
         summary = "Sign up with email and password",
@@ -43,28 +44,29 @@ class AccountPublicController(
     )
     @PostMapping("/account/sign-up")
     @AcceptedOperation
-    fun signUp(@Valid @RequestBody request: SignUpRequest, http: HttpServletRequest): ResponseEntity<DataResponse<StatusResponse>> {
-        val status = registration.signUp(
+    fun signUp(@Valid @RequestBody request: SignUpRequest, http: HttpServletRequest): ResponseEntity<DataResponse<SignUpResponse>> {
+        val outcome = registration.signUp(
             SignUpCommand(request.email!!, request.password!!, request.displayName, request.locale, request.timeZone, clientIps.of(http).ip, request.captchaToken),
         )
-        val http202 = if (status == SignUpStatus.CREATED) HttpStatus.CREATED else HttpStatus.ACCEPTED
-        return ResponseEntity.status(http202).body(Response.ok(StatusResponse(status.name)))
+        val http202 = if (outcome.status == SignUpStatus.CREATED) HttpStatus.CREATED else HttpStatus.ACCEPTED
+        return ResponseEntity.status(http202).body(Response.ok(SignUpResponse(outcome.status.name, outcome.signUpId)))
     }
 
-    @Operation(summary = "Resend the verification mail (always 202; silent when unknown, verified, or over the per-address limit)")
+    @Operation(summary = "Mail a new code for the same sign-up attempt (always 202; silent inside the cooldown, after the resend limit, when unknown or expired)")
     @PostMapping("/account/verification/resend")
     @AcceptedOperation
-    fun resend(@Valid @RequestBody request: EmailRequest, http: HttpServletRequest): ResponseEntity<DataResponse<StatusResponse>> {
-        registration.resendVerification(request.email!!, clientIps.of(http).ip, request.captchaToken)
+    fun resend(@Valid @RequestBody request: ResendRequest, http: HttpServletRequest): ResponseEntity<DataResponse<StatusResponse>> {
+        registration.resendVerification(request.signUpId!!, clientIps.of(http).ip, request.captchaToken)
         return accepted("ACCEPTED")
     }
 
-    @Operation(summary = "Confirm an email address with the link token (single use, 410 ACCOUNT.TOKEN_INVALID otherwise)")
+    @Operation(
+        summary = "Finish a sign-up with the 6-digit code mailed to the address; creates the account with the password typed in THIS attempt and signs in",
+        description = "400 ACCOUNT.CODE_INVALID (data.attemptsLeft) for a wrong code; 410 ACCOUNT.CODE_EXPIRED when the attempt is unknown, expired, used up or taken over by an existing account.",
+    )
     @PostMapping("/auth/verify-email")
-    fun verifyEmail(@Valid @RequestBody request: TokenRequest): DataResponse<StatusResponse> {
-        registration.verifyEmail(request.token!!)
-        return Response.ok(StatusResponse("VERIFIED"))
-    }
+    fun verifyEmail(@Valid @RequestBody request: VerifyEmailRequest, http: HttpServletRequest): DataResponse<AuthTokenResponse> =
+        Response.ok(tokens.issue(registration.verifyEmail(request.signUpId!!, request.code!!, clientIps.of(http).ip)))
 
     @Operation(summary = "Ask for a password-reset mail (always 202)")
     @PostMapping("/account/password/forgot")
@@ -86,13 +88,6 @@ class AccountPublicController(
     fun policy(): DataResponse<PasswordPolicyResponse> {
         val p = policy.describe()
         return Response.ok(PasswordPolicyResponse(p.minLength, p.maxBytes, p.requireLetter, p.requireDigit, p.requireSymbol, p.forbidEmailLocalPart))
-    }
-
-    @Operation(summary = "Confirm an email change with the link token sent to the new address")
-    @PostMapping("/auth/confirm-email-change")
-    fun confirmEmailChange(@Valid @RequestBody request: TokenRequest): ResponseEntity<Void> {
-        emailChange.confirm(request.token!!)
-        return Response.noContent()
     }
 
     private fun accepted(status: String) = Response.accepted(StatusResponse(status))

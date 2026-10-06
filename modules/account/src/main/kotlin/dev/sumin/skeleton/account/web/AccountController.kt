@@ -58,24 +58,40 @@ class AccountController(
     @PostMapping("/password/change")
     fun changePassword(authentication: Authentication?, @Valid @RequestBody request: ChangePasswordRequest): ResponseEntity<Void> {
         val caller = callers.require(authentication)
-        passwords.change(caller.accountId, request.currentPassword, request.newPassword!!, caller.sessionId, request.confirmationToken)
+        passwords.change(caller.accountId, request.currentPassword, request.newPassword!!, caller.sessionId, request.confirmationCode)
         return Response.noContent()
     }
 
-    @Operation(summary = "Ask to change the account email; nothing changes until the new address confirms (202)")
-    @IdempotentOperation(ignoredBodyFields = ["currentPassword", "confirmationToken"])
+    @Operation(
+        summary = "Ask to change the account email; a 6-digit code goes to the NEW address and nothing changes until it is entered in this session (202)",
+        description = "Re-authenticate with currentPassword, or confirmationCode (account without a password), or socialReauth (account without an address).",
+    )
+    @IdempotentOperation(ignoredBodyFields = ["currentPassword", "confirmationCode", "socialReauth"])
     @PostMapping("/email/change")
     @AcceptedOperation
     fun changeEmail(authentication: Authentication?, @Valid @RequestBody request: ChangeEmailRequest): ResponseEntity<DataResponse<StatusResponse>> {
-        emailChange.request(callers.require(authentication).accountId, request.newEmail!!, request.currentPassword, request.confirmationToken)
+        val caller = callers.require(authentication)
+        emailChange.request(caller.accountId, request.newEmail!!, reauthOf(request.currentPassword, request.confirmationCode, request.socialReauth), caller.sessionId)
         return Response.accepted(StatusResponse("VERIFICATION_SENT"))
     }
 
-    @Operation(summary = "Mail a one-time confirmation link that re-authenticates an account that has no password (for email change, first password, social link)")
+    @Operation(
+        summary = "Enter the code mailed to the new address (only in the session that asked); the email switches and the OTHER sessions are signed out",
+        description = "400 ACCOUNT.CODE_INVALID (data.attemptsLeft), 410 ACCOUNT.CODE_EXPIRED, 409 ACCOUNT.EMAIL_TAKEN.",
+    )
+    @PostMapping("/email/change/confirm")
+    fun confirmEmailChange(authentication: Authentication?, @Valid @RequestBody request: CodeRequest): ResponseEntity<Void> {
+        val caller = callers.require(authentication)
+        emailChange.confirm(caller.accountId, caller.sessionId, request.code!!)
+        return Response.noContent()
+    }
+
+    @Operation(summary = "Mail a 6-digit code that re-authenticates an account that has no password (for email change, first password, social link, unlink); only this session can use it")
     @PostMapping("/reauth/confirmation")
     @AcceptedOperation
     fun reauthConfirmation(authentication: Authentication?): ResponseEntity<DataResponse<StatusResponse>> {
-        reauth.requestConfirmation(callers.require(authentication).accountId)
+        val caller = callers.require(authentication)
+        reauth.requestConfirmation(caller.accountId, caller.sessionId)
         return Response.accepted(StatusResponse("ACCEPTED"))
     }
 
@@ -83,31 +99,36 @@ class AccountController(
     @GetMapping("/identities")
     fun identities(authentication: Authentication?): ListResponse<IdentityView> = Response.ok(identities.list(callers.require(authentication).accountId))
 
-    @Operation(summary = "Unlink a sign-in method (409 ACCOUNT.LAST_SIGN_IN_METHOD for the last one)")
+    @Operation(
+        summary = "Unlink a sign-in method (re-authentication required; 409 ACCOUNT.LAST_SIGN_IN_METHOD for the last one)",
+        description = "Optional JSON body { currentPassword?, confirmationCode?, socialReauth? } — the proof that fits the account.",
+    )
     @DeleteMapping("/identities/{id}")
-    fun unlink(authentication: Authentication?, @PathVariable id: String): ResponseEntity<Void> {
+    fun unlink(authentication: Authentication?, @PathVariable id: String, @Valid @RequestBody(required = false) request: ReauthRequest?): ResponseEntity<Void> {
         val caller = callers.require(authentication)
-        identities.unlink(caller.accountId, id, caller.sessionId)
+        identities.unlink(caller.accountId, id, caller.sessionId, reauthOf(request?.currentPassword, request?.confirmationCode, request?.socialReauth))
         return Response.noContent()
     }
 
-    @Operation(summary = "Mail a one-time confirmation link for deleting an account that has no password")
+    @Operation(summary = "Mail a 6-digit code for deleting an account that has no password; only this session can use it")
     @PostMapping("/delete/confirmation")
     @AcceptedOperation
     fun deletionConfirmation(authentication: Authentication?): ResponseEntity<DataResponse<StatusResponse>> {
-        deletion.requestConfirmation(callers.require(authentication).accountId)
+        val caller = callers.require(authentication)
+        deletion.requestConfirmation(caller.accountId, caller.sessionId)
         return Response.accepted(StatusResponse("ACCEPTED"))
     }
 
     @Operation(
-        summary = "Delete the account (re-authenticate with the password or the mailed confirmation token)",
-        description = "Signs in is blocked at once; the data is erased after skeleton.account.deletion.grace.",
+        summary = "Delete the account (re-authenticate with the password, the mailed code, or - for an account without an address - a fresh social code)",
+        description = "Sign-in is blocked at once; the data is erased after skeleton.account.deletion.grace.",
     )
-    @IdempotentOperation(ignoredBodyFields = ["currentPassword", "confirmationToken"])
+    @IdempotentOperation(ignoredBodyFields = ["currentPassword", "confirmationCode", "socialReauth"])
     @PostMapping("/delete")
     @AcceptedOperation
     fun delete(authentication: Authentication?, @Valid @RequestBody request: DeleteAccountRequest): ResponseEntity<DataResponse<DeletionResponse>> {
-        val purgeAfter = deletion.delete(callers.require(authentication).accountId, request.currentPassword, request.confirmationToken)
+        val caller = callers.require(authentication)
+        val purgeAfter = deletion.delete(caller.accountId, reauthOf(request.currentPassword, request.confirmationCode, request.socialReauth), caller.sessionId)
         return Response.accepted(DeletionResponse("DELETION_SCHEDULED", purgeAfter))
     }
 }

@@ -3,6 +3,8 @@ package dev.sumin.skeleton.account
 import dev.sumin.skeleton.account.abuse.AccountRateLimits
 import dev.sumin.skeleton.account.abuse.AccountTaskRunner
 import dev.sumin.skeleton.account.abuse.CaptchaGate
+import dev.sumin.skeleton.account.challenge.ChallengePurposes
+import dev.sumin.skeleton.account.challenge.Challenges
 import dev.sumin.skeleton.account.events.AccountEventPublisher
 import dev.sumin.skeleton.account.mail.AccountLinks
 import dev.sumin.skeleton.account.mail.AccountMail
@@ -36,6 +38,9 @@ class AccountCore(
     /** 세션을 닫는 곳 — `auth-session` 이 없으면 null (그러면 닫을 세션이 없다) */
     val sessions: () -> SessionRevoker?,
     val bootstrap: AdminBootstrap,
+    val challenges: Challenges,
+    /** 이메일 없는 계정의 소셜 다시 인증을 확인하는 고리 — `auth-social` 이 없으면 null */
+    val socialReauth: () -> SocialReauthVerifier? = { null },
 ) {
     /**
      * 이메일로 계정 하나 — 저장소가 어떤 정렬 규칙으로 찾았든 **저장된 주소가 정규화된 입력과 글자 그대로 같을 때만** 돌려준다
@@ -45,14 +50,15 @@ class AccountCore(
     fun accountByEmail(email: String): Account? = accounts.findByEmail(email)?.takeIf { it.email == email }
 
     /**
-     * 비밀번호가 바뀐 계정의 **그 전에 나간 민감한 링크**를 모두 닫는다 — 이메일 변경 · 삭제 확인 · 다시 인증 · 매직 링크.
-     * (탈취한 세션으로 요청해 둔 링크가, 주인이 비밀번호를 바꾼 뒤에도 살아 있으면 주소가 넘어간다)
+     * 비밀번호가 바뀌었거나 메일함이 증명된 계정의 **그 전에 나간 민감한 코드 · 링크**를 모두 닫는다 — 이메일 변경 · 삭제 확인 · 다시 인증 코드, 같은 주소의 가입 시도, 매직 링크.
+     * (탈취한 세션으로 요청해 둔 코드가, 주인이 비밀번호를 바꾼 뒤에도 살아 있으면 주소가 넘어간다). [alsoEmails]: 계정이 예전에 쓰던 주소(이메일 변경 뒤)도
      */
-    fun closeSensitiveLinks(account: Account) {
-        tokens.invalidate(TokenPurposes.EMAIL_CHANGE, account.id)
-        tokens.invalidate(TokenPurposes.DELETE_CONFIRM, account.id)
-        tokens.invalidate(TokenPurposes.REAUTH, account.id)
-        account.email?.let { tokens.invalidate(TokenPurposes.MAGIC_LINK, it) }
+    fun closeSensitiveLinks(account: Account, vararg alsoEmails: String?) {
+        challenges.deleteForAccount(account.id)
+        (listOf(account.email) + alsoEmails).filterNotNull().distinct().forEach {
+            tokens.invalidate(TokenPurposes.MAGIC_LINK, it)
+            challenges.deleteBySubject(ChallengePurposes.SIGN_UP, it)
+        }
     }
 
     /** 새 로그인 수단이 붙었다고 계정 주소에 알린다 (내가 한 일이 아니면 알아채도록) */

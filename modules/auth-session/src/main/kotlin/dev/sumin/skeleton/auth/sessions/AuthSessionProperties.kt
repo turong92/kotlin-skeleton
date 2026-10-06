@@ -29,6 +29,7 @@ data class AuthSessionProperties(
     val reuseGrace: Duration = Duration.ZERO,
     /** 계정 하나가 가질 수 있는 세션 수 — 넘으면 가장 오래된 세션부터 닫는다 */
     val maxSessionsPerAccount: Int = 20,
+    val rotation: Rotation = Rotation(),
     val cookie: Cookie = Cookie(),
     val http: Http = Http(),
     val purge: Purge = Purge(),
@@ -37,6 +38,15 @@ data class AuthSessionProperties(
         require(!absoluteTtl.isNegative && !absoluteTtl.isZero && !idleTtl.isNegative && !idleTtl.isZero) { "skeleton.auth-session.*-ttl must be > 0" }
         require(!reuseGrace.isNegative && reuseMemory?.isNegative != true) { "skeleton.auth-session.reuse-* must be >= 0" }
         require(maxSessionsPerAccount >= 1) { "skeleton.auth-session.max-sessions-per-account must be >= 1" }
+    }
+
+    /**
+     * 세션 하나가 창 안에 새로고침(회전)할 수 있는 횟수 — 회전마다 토큰 행이 하나 늘고(재사용 탐지 때문에 세션이 끝날 때까지 남는다) 로그인한 사용자가 `/auth/refresh` 를 돌리면
+     * 행이 무한히 쌓이므로 **행 수의 상한**이 이 값이다: 최대 `maxPerWindow × (세션 수명 ÷ window)`. 정상 클라이언트는 액세스 토큰 수명(15분)마다 한 번이다.
+     * 넘으면 429 AUTH.TOO_MANY_REFRESHES (세션은 그대로 — 로그아웃시키지 않는다). 0 이면 끈다.
+     */
+    data class Rotation(val maxPerWindow: Int = 30, val window: Duration = Duration.ofMinutes(10)) {
+        init { require(maxPerWindow >= 0 && !window.isNegative && !window.isZero) { "skeleton.auth-session.rotation.* must be >= 0 and window > 0" } }
     }
 
     enum class Delivery { BODY, COOKIE }

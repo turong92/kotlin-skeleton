@@ -39,12 +39,27 @@ class AuthSessionAutoConfiguration {
         time: ObjectProvider<TimeProvider>,
         listeners: ObjectProvider<SessionEventListener>,
         auth: ObjectProvider<AuthProperties>,
+        limits: ObjectProvider<dev.sumin.skeleton.common.web.RateLimitStore>,
     ): SessionService = SessionService(
         store, properties, time.getIfAvailable { TimeProvider.systemUtc() },
         // 인스턴스끼리 같은 키 — JWT 비밀에서 용도 접두사를 붙여 만든다 (비밀 자체를 다른 용도에 쓰지 않는다)
         ("session-rotation/" + auth.getIfAvailable { AuthProperties() }.jwt.secret).toByteArray(Charsets.UTF_8),
-        SessionEventDispatch { listeners.orderedStream().toList() },
+        rotationLimiter = rotationLimiter(properties.rotation, limits, time),
+        onEvent = SessionEventDispatch { listeners.orderedStream().toList() },
     )
+
+    private fun rotationLimiter(
+        rotation: AuthSessionProperties.Rotation, limits: ObjectProvider<dev.sumin.skeleton.common.web.RateLimitStore>, time: ObjectProvider<TimeProvider>,
+    ): RotationLimiter {
+        if (rotation.maxPerWindow == 0) return RotationLimiter.NONE
+        val fallback by lazy { dev.sumin.skeleton.common.web.InMemoryFixedWindowRateLimitStore() }
+        val clock = time.getIfAvailable { TimeProvider.systemUtc() }
+        return RotationLimiter { sessionId ->
+            val now = clock.now()
+            val d = limits.getIfAvailable { fallback }.consume("auth-session:rotate:$sessionId", rotation.maxPerWindow, rotation.window.toMillis(), now)
+            if (d.allowed) null else (d.resetAt.epochSecond - now.epochSecond).coerceAtLeast(1)
+        }
+    }
 
     /** 기본 듣는 쪽 — 재사용 탐지는 WARN 한 줄(세션 · 계정 id 만, 토큰 없음). 앱이 같은 이름의 빈을 두면 물러난다 */
     @Bean

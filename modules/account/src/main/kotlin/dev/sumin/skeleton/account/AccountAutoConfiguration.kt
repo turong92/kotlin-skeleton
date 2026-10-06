@@ -7,6 +7,10 @@ import dev.sumin.skeleton.account.abuse.CaptchaGate
 import dev.sumin.skeleton.account.abuse.ExecutorAccountTaskRunner
 import dev.sumin.skeleton.account.abuse.LoginRecorder
 import dev.sumin.skeleton.account.abuse.LoginThrottle
+import dev.sumin.skeleton.account.challenge.ChallengeStore
+import dev.sumin.skeleton.account.challenge.Challenges
+import dev.sumin.skeleton.account.challenge.CodeHasher
+import dev.sumin.skeleton.account.challenge.InMemoryChallengeStore
 import dev.sumin.skeleton.common.erasure.AccountErasureListener
 import dev.sumin.skeleton.account.events.AccountEventListener
 import dev.sumin.skeleton.account.events.AccountEventPublisher
@@ -72,6 +76,20 @@ class AccountAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(OneTimeTokenStore::class)
     fun inMemoryOneTimeTokenStore(): OneTimeTokenStore = InMemoryOneTimeTokenStore()
+
+    @Bean
+    @ConditionalOnMissingBean(ChallengeStore::class)
+    fun inMemoryChallengeStore(): ChallengeStore = InMemoryChallengeStore()
+
+    /** 코드 해시의 키 — JWT 비밀에서 용도 접두사를 붙여 만든다 (인스턴스끼리 같고, 비밀 자체를 다른 용도에 쓰지 않는다). 키가 바뀌면 진행 중인 코드는 죽는다 */
+    @Bean
+    @ConditionalOnMissingBean
+    fun codeHasher(auth: ObjectProvider<AuthProperties>): CodeHasher = CodeHasher(("account-code/" + auth.getIfAvailable { AuthProperties() }.jwt.secret).toByteArray(Charsets.UTF_8))
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun challenges(store: ChallengeStore, hasher: CodeHasher, time: ObjectProvider<TimeProvider>): Challenges =
+        Challenges(store, hasher, time.getIfAvailable { TimeProvider.systemUtc() })
 
     @Bean
     @ConditionalOnMissingBean(PasswordEncoder::class)
@@ -177,9 +195,11 @@ class AccountAutoConfiguration {
         captcha: CaptchaGate,
         sessions: ObjectProvider<SessionRevoker>,
         bootstrap: AdminBootstrap,
+        challenges: Challenges,
+        socialReauth: ObjectProvider<SocialReauthVerifier>,
     ): AccountCore = AccountCore(
         accounts, properties, time.getIfAvailable { TimeProvider.systemUtc() }, events, hasher, policy, tokens, mailer, links, tasks, limits, captcha,
-        { sessions.getIfAvailable() }, bootstrap,
+        { sessions.getIfAvailable() }, bootstrap, challenges, { socialReauth.getIfAvailable() },
     )
 
     @Bean
@@ -270,13 +290,16 @@ class AccountAutoConfiguration {
         auth: ObjectProvider<AuthProperties>,
         accounts: ObjectProvider<AccountRepository>,
         tokenStore: ObjectProvider<OneTimeTokenStore>,
+        challengeStore: ObjectProvider<ChallengeStore>,
         transport: ObjectProvider<AccountMailTransport>,
         captcha: ObjectProvider<AccountCaptcha>,
         clientIps: ObjectProvider<ClientIps>,
+        registry: ObjectProvider<SignInMethodRegistry>,
     ): AccountDeployGuard = AccountDeployGuard(properties, auth.getIfAvailable { AuthProperties() }.protectedProfiles) {
         AccountDeployGuard.State(
-            accounts.getIfUnique(), tokenStore.getIfUnique(), transport.getIfUnique() is LogOnlyMailTransport, captcha.getIfAvailable() != null,
+            accounts.getIfUnique(), tokenStore.getIfUnique(), challengeStore.getIfUnique(), transport.getIfUnique() is LogOnlyMailTransport, captcha.getIfAvailable() != null,
             clientIps.getIfAvailable { ClientIps() }.configured,
+            registry.getIfAvailable()?.all()?.any { it.provesEmail } == true,
         )
     }
 }

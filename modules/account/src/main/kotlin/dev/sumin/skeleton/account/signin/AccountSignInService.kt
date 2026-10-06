@@ -9,10 +9,10 @@ import dev.sumin.skeleton.account.AccountPatch
 import dev.sumin.skeleton.account.AccountStatus
 import dev.sumin.skeleton.account.Emails
 import dev.sumin.skeleton.account.Identity
+import dev.sumin.skeleton.account.MailboxProof
 import dev.sumin.skeleton.account.ProfileRules
 import dev.sumin.skeleton.account.SignInMethods
 import dev.sumin.skeleton.account.events.AccountEventType
-import dev.sumin.skeleton.account.token.TokenPurposes
 import dev.sumin.skeleton.auth.account.AuthAccount
 
 /**
@@ -58,8 +58,7 @@ class AccountSignInService(private val core: AccountCore, val registry: SignInMe
         // 메일함을 증명한 로그인(매직 링크, 제공자가 확인한 같은 이메일)은 이메일 확인으로 친다
         val proven = account.email != null && account.email == email && (method.provesEmail || proof.emailVerified)
         if (proven && !account.emailVerified) {
-            discardUnprovenPassword(account)
-            core.accounts.markEmailVerified(account.id, now)
+            proveMailbox(account, core.accounts.findIdentity(method.code, subject), now)
             core.events.publish(AccountEventType.EMAIL_VERIFIED, account.id, proof.ip, mapOf("method" to method.code))
         }
         core.accounts.update(account.id, AccountPatch(lastLoginAt = now), now)
@@ -70,13 +69,13 @@ class AccountSignInService(private val core: AccountCore, val registry: SignInMe
     }
 
     /**
-     * 주소의 메일함이 방금 증명됐는데 그 계정의 이메일은 아직 미확인이었다. 그 계정의 비밀번호 수단은 **메일함 주인이 아닌 누군가**(가입 요청을 보낸 쪽)가
-     * 정한 것이라, 확인으로 함께 살려 두면 사전 탈취가 된다 — 미확인 비밀번호는 버리고, 그때 열려 있던 세션 · 인증 링크도 닫는다.
+     * 주소의 메일함이 방금 증명됐는데 그 계정의 이메일은 아직 미확인이었다(이메일 확인을 끈 앱에서 남이 가입해 둔 계정). 그 계정에 붙어 있던 로그인 수단 · 열린 코드 · 링크 · 세션은
+     * **메일함 주인이 아닌 누군가**가 정한 것일 수 있다 — 증명한 수단 하나만 남기고 전부 버리고 확인 처리를 한 번의 저장소 연산으로 한 뒤(비밀번호 변경과 줄 선다),
+     * 열려 있던 코드 · 링크와 세션을 닫는다.
      */
-    private fun discardUnprovenPassword(account: Account) {
-        val email = account.email ?: return
-        core.accounts.identitiesOf(account.id).filter { it.method == SignInMethods.PASSWORD && !it.verified }.forEach { core.accounts.removeIdentity(account.id, it.id) }
-        core.tokens.invalidate(TokenPurposes.VERIFY_EMAIL, email)
+    private fun proveMailbox(account: Account, proving: Identity?, now: java.time.Instant) {
+        core.accounts.proveMailbox(account.id, now, MailboxProof(keepIdentityIds = setOfNotNull(proving?.id)))
+        core.closeSensitiveLinks(account)
         core.sessions()?.revokeAll(account.id, null)
     }
 

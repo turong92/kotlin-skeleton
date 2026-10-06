@@ -65,7 +65,9 @@ class EmailNormalizationTest {
         h.mailer.sent.clear()
         h.signUp("victim@gmäil.com")
         assertEquals(setOf("victim@gmäil.com"), h.mailer.sent.map { it.to }.toSet())
-        assertEquals(MailKind.VERIFY_EMAIL, h.mailer.sent.single().kind)
+        assertEquals(MailKind.VERIFY_CODE, h.mailer.sent.single().kind)
+        h.verify("victim@gmäil.com")
+        assertEquals(2, h.repo.search(null, null, 0, 10).total, "the look-alike address is its own account, the victim's is untouched")
     }
 
     @Test

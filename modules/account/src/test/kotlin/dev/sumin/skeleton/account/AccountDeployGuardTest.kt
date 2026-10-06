@@ -16,7 +16,7 @@ class AccountDeployGuardTest {
 
     private object RealRepo : AccountRepository by InMemoryAccountRepository()
     private object RealTokens
-    private val healthy = AccountDeployGuard.State(RealRepo, RealTokens, mailTransportIsLogOnly = false, captchaAvailable = true, clientIpModeConfigured = true)
+    private val healthy = AccountDeployGuard.State(RealRepo, RealTokens, RealTokens, mailTransportIsLogOnly = false, captchaAvailable = true, clientIpModeConfigured = true)
     private val goodProps = AccountProperties(mail = AccountProperties.Mail(linkBaseUrl = "https://app.example.com"))
     private fun guard(props: AccountProperties = goodProps, state: AccountDeployGuard.State = healthy) = AccountDeployGuard(props, listOf("prod", "staging")) { state }
 
@@ -27,12 +27,12 @@ class AccountDeployGuardTest {
 
     @Test
     fun `in-memory stores are problems in a protected env and in a protected profile, never in local or unset`() {
-        val mem = healthy.copy(repository = InMemoryAccountRepository(), tokenStore = InMemoryOneTimeTokenStore())
+        val mem = healthy.copy(repository = InMemoryAccountRepository(), tokenStore = InMemoryOneTimeTokenStore(), challengeStore = dev.sumin.skeleton.account.challenge.InMemoryChallengeStore())
         val messages = guard(state = mem).problems(prod)
-        assertEquals(2, messages.size)
-        assertTrue(messages.any { "AccountRepository" in it } && messages.any { "OneTimeTokenStore" in it })
-        assertEquals(2, guard(state = mem).problems(stage).size)
-        assertEquals(2, guard(state = mem).problems(prodProfile).size)
+        assertEquals(3, messages.size)
+        assertTrue(messages.any { "AccountRepository" in it } && messages.any { "OneTimeTokenStore" in it } && messages.any { "ChallengeStore" in it })
+        assertEquals(3, guard(state = mem).problems(stage).size)
+        assertEquals(3, guard(state = mem).problems(prodProfile).size)
         assertEquals(emptyList(), guard(state = mem).problems(local))
         assertEquals(emptyList(), guard(state = mem).problems(unset))
     }
@@ -66,6 +66,20 @@ class AccountDeployGuardTest {
         val props = goodProps.copy(seed = AccountProperties.Seed(listOf(AccountProperties.SeedAccount(email = "admin@example.com", password = "SeedPassw0rd!"))))
         val text = guard(props).problems(prod).joinToString() + guard(props).warnings(prod).joinToString()
         assertTrue("SeedPassw0rd" !in text && "admin@example.com" !in text && "app.example.com" !in text)
+    }
+
+    @Test
+    fun `no email verification together with a mailbox-proving method or social merging is called out - the squatter holds an active account until the owner proves the mailbox`() {
+        val noVerify = goodProps.copy(signUp = AccountProperties.SignUp(emailVerification = false))
+        val plain = guard(noVerify).warnings(prod)
+        assertTrue(plain.any { "email-verification=false" in it && "409" in it })
+        assertTrue(plain.none { "mailbox" in it }, "without a mailbox-proving method there is nothing to warn about beyond the 409")
+        val withMagic = guard(noVerify, healthy.copy(mailboxProofMethod = true)).warnings(prod)
+        assertTrue(withMagic.any { "mailbox" in it && "email-verification=false" in it }, withMagic.toString())
+        val withMerge = guard(noVerify.copy(social = AccountProperties.Social(signUp = true, mergeOnVerifiedEmail = true))).warnings(prod)
+        assertTrue(withMerge.any { "merge-on-verified-email" in it }, withMerge.toString())
+        assertEquals(emptyList(), guard(noVerify, healthy.copy(mailboxProofMethod = true)).problems(prod), "a warning, not a problem: the proof removes what was planted")
+        assertTrue(guard(goodProps, healthy.copy(mailboxProofMethod = true)).warnings(prod).none { "mailbox" in it })
     }
 
     @Test

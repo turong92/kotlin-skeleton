@@ -7,8 +7,10 @@ import java.util.Locale
 import org.slf4j.LoggerFactory
 
 enum class MailKind {
-    VERIFY_EMAIL, ALREADY_REGISTERED, PASSWORD_RESET, PASSWORD_CHANGED, EMAIL_CHANGE_CONFIRM,
-    EMAIL_CHANGE_REQUESTED_NOTICE, EMAIL_CHANGED_NOTICE, MAGIC_LINK, DELETE_CONFIRM, DELETION_SCHEDULED, REAUTH_CONFIRM, IDENTITY_LINKED_NOTICE,
+    /** 6자리 코드를 담은 메일 — 가입 확인 · 이메일 변경(새 주소) · 다시 인증 · 삭제 확인. 링크가 없다 */
+    VERIFY_CODE, EMAIL_CHANGE_CODE, REAUTH_CODE, DELETE_CODE,
+    ALREADY_REGISTERED, PASSWORD_RESET, PASSWORD_CHANGED,
+    EMAIL_CHANGE_REQUESTED_NOTICE, EMAIL_CHANGED_NOTICE, MAGIC_LINK, DELETION_SCHEDULED, IDENTITY_LINKED_NOTICE,
 }
 
 /** 보낼 메일 한 통의 의미 — 문구는 [AccountMailTemplates] 가 고른다. [link] 에 토큰이 들어 있다 (이 객체를 로그에 싣지 않는다 — toString 은 가려 둔다) */
@@ -40,13 +42,10 @@ fun interface AccountMailer {
     fun send(mail: AccountMail)
 }
 
+/** 링크로 가는 메일은 비밀번호 재설정 · 매직 링크 둘뿐이다 — 세션이 없는 흐름이라서. 나머지는 코드다 */
 class AccountLinks(private val props: AccountProperties.Mail) {
-    fun verify(token: String) = build(props.verifyPath, token)
     fun reset(token: String) = build(props.resetPath, token)
-    fun emailChange(token: String) = build(props.emailChangePath, token)
-    fun delete(token: String) = build(props.deletePath, token)
     fun magicLink(token: String) = build(props.magicLinkPath, token)
-    fun reauth(token: String) = build(props.reauthPath, token)
 
     private fun build(path: String, token: String): String =
         props.linkBaseUrl.trimEnd('/') + path + "?token=" + URLEncoder.encode(token, StandardCharsets.UTF_8)

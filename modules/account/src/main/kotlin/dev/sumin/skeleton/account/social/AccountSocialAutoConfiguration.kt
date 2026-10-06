@@ -2,6 +2,7 @@ package dev.sumin.skeleton.account.social
 
 import dev.sumin.skeleton.account.AccountAutoConfiguration
 import dev.sumin.skeleton.account.AccountCore
+import dev.sumin.skeleton.account.SocialReauthVerifier
 import dev.sumin.skeleton.account.AccountProperties
 import dev.sumin.skeleton.account.signin.AccountSignInService
 import dev.sumin.skeleton.account.signin.IdentityService
@@ -38,6 +39,11 @@ class AccountSocialAutoConfiguration {
     @ConditionalOnMissingBean(OAuthAccountProvisioningPolicy::class)
     fun accountOAuthProvisioningPolicy(signIn: AccountSignInService, properties: AccountProperties): OAuthAccountProvisioningPolicy =
         AccountOAuthProvisioningPolicy(signIn, properties.social)
+
+    /** 이메일이 없는 계정의 민감한 일을 연결된 제공자의 새 인가 코드로 다시 인증한다 ([dev.sumin.skeleton.account.Reauth]) */
+    @Bean
+    @ConditionalOnMissingBean(SocialReauthVerifier::class)
+    fun socialReauthVerifier(registry: OAuthProviderRegistry, core: AccountCore): SocialReauthVerifier = AccountSocialReauthVerifier(registry, core)
 
     /** 앱에 있는 `OAuthProvider` 마다 로그인 수단 하나 — 새 제공자 모듈을 더하면 이 코드는 그대로다 */
     @Bean

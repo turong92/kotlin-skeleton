@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.account
 
 import dev.sumin.skeleton.account.abuse.RateLimitedException
+import dev.sumin.skeleton.account.challenge.ChallengePurposes
 import dev.sumin.skeleton.account.mail.MailKind
 import dev.sumin.skeleton.account.token.TokenPurposes
 import dev.sumin.skeleton.common.ApplicationException
@@ -12,65 +13,78 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** I1 — 비밀번호를 바꾸면 그 전에 나간 민감한 링크가 죽고, 비밀번호 없는 계정의 민감한 일은 메일함으로 다시 인증한다 */
+/** 비밀번호를 바꾸면 그 전에 나간 민감한 코드 · 링크가 죽고, 비밀번호 없는 계정의 민감한 일은 메일 코드로 다시 인증한다 */
 class ReauthTest {
     private val h = AccountHarness()
+    private val ses = "ses_1"
     private fun code(block: () -> Unit) = assertFailsWith<ApplicationException> { block() }.errorCode.code
 
-    private fun attackerRequestsEmailChange(): String {
+    private fun attackerRequestsEmailChange(): Account {
         val a = h.activeAccount()
-        h.emailChange.request(a.id, "attacker@example.com", "tangerine-42-moon")   // a stolen session + a known password
-        return h.mailer.tokenOf(h.mailer.of(MailKind.EMAIL_CHANGE_CONFIRM).single())
+        h.emailChange.request(a.id, "attacker@example.com", ReauthInput("tangerine-42-moon"), ses)   // a stolen session + a known password
+        return a
     }
 
     @Test
-    fun `changing the password kills a pending email-change link`() {
-        val token = attackerRequestsEmailChange()
-        val a = h.repo.findByEmail("ann@example.com")!!
+    fun `changing the password kills a pending email-change code`() {
+        val a = attackerRequestsEmailChange()
+        val sent = h.mailer.of(MailKind.EMAIL_CHANGE_CODE).single().vars.getValue("code")
         h.passwords.change(a.id, "tangerine-42-moon", "a-brand-new-pass-7", null)   // the victim, warned by the old-address notice
-        assertEquals("ACCOUNT.TOKEN_INVALID", code { h.emailChange.confirm(token) })
+        assertEquals("ACCOUNT.CODE_EXPIRED", code { h.emailChange.confirm(a.id, ses, sent) })
         assertEquals("ann@example.com", h.repo.findById(a.id)!!.email)
     }
 
     @Test
-    fun `resetting the password kills pending email-change, delete-confirmation, reauth and magic links`() {
-        val token = attackerRequestsEmailChange()
-        val a = h.repo.findByEmail("ann@example.com")!!
-        h.deletion.requestConfirmation(a.id)
-        h.reauth.requestConfirmation(a.id)
+    fun `resetting the password kills pending email-change, delete and reauth codes and magic links`() {
+        val a = attackerRequestsEmailChange()
+        h.deletion.requestConfirmation(a.id, ses)
+        h.reauth.requestConfirmation(a.id, ses)
         val magic = h.tokens.issue(TokenPurposes.MAGIC_LINK, "ann@example.com", a.id, Duration.ofMinutes(15))
-        val delete = h.mailer.tokenOf(h.mailer.of(MailKind.DELETE_CONFIRM).single())
-        val reauth = h.mailer.tokenOf(h.mailer.of(MailKind.REAUTH_CONFIRM).single())
         h.passwords.forgot("ann@example.com", "203.0.113.1", null)
         h.passwords.reset(h.mailer.tokenOf(h.mailer.of(MailKind.PASSWORD_RESET).single()), "a-brand-new-pass-7")
 
-        assertNull(h.tokens.peek(TokenPurposes.EMAIL_CHANGE, token))
-        assertNull(h.tokens.peek(TokenPurposes.DELETE_CONFIRM, delete))
-        assertNull(h.tokens.peek(TokenPurposes.REAUTH, reauth))
+        assertNull(h.challenges.findOpen(ChallengePurposes.EMAIL_CHANGE, a.id))
+        assertNull(h.challenges.findOpen(ChallengePurposes.DELETE_CONFIRM, a.id))
+        assertNull(h.challenges.findOpen(ChallengePurposes.REAUTH, a.id))
         assertNull(h.tokens.peek(TokenPurposes.MAGIC_LINK, magic))
     }
 
     @Test
-    fun `a reauth confirmation is mailed to the account address with the reauth path and is capped per account`() {
+    fun `a reauth code is mailed to the account address as a code - not a link - and capped per account`() {
         val now = h.time.now()
         h.repo.insert(Account("acc_s", "s@example.com", true, AccountStatus.ACTIVE, setOf("USER"), null, null, null, now, now), emptyList())
-        h.reauth.requestConfirmation("acc_s")
-        val mail = h.mailer.of(MailKind.REAUTH_CONFIRM).single()
+        h.reauth.requestConfirmation("acc_s", ses)
+        val mail = h.mailer.of(MailKind.REAUTH_CODE).single()
         assertEquals("s@example.com", mail.to)
-        assertTrue(mail.link!!.startsWith("https://app.example.com/confirm-reauth?token="), mail.link)
-        repeat(4) { h.reauth.requestConfirmation("acc_s") }
-        assertFailsWith<RateLimitedException> { h.reauth.requestConfirmation("acc_s") }
+        assertNull(mail.link)
+        assertTrue(mail.vars.getValue("code").matches(Regex("\\d{6}")))
+        repeat(4) { h.reauth.requestConfirmation("acc_s", ses) }
+        assertFailsWith<RateLimitedException> { h.reauth.requestConfirmation("acc_s", ses) }
     }
 
     @Test
-    fun `a confirmation issued for one account proves nothing for another`() {
+    fun `a code issued for one account proves nothing for another and a failed attempt does not burn the owner's code`() {
         val now = h.time.now()
         h.repo.insert(Account("acc_a", "a@example.com", true, AccountStatus.ACTIVE, setOf("USER"), null, null, null, now, now), emptyList())
         h.repo.insert(Account("acc_b", "b@example.com", true, AccountStatus.ACTIVE, setOf("USER"), null, null, null, now, now), emptyList())
-        h.reauth.requestConfirmation("acc_a")
-        val token = h.mailer.tokenOf(h.mailer.of(MailKind.REAUTH_CONFIRM).single())
-        assertEquals("ACCOUNT.REAUTH_FAILED", code { h.emailChange.request("acc_b", "x@example.com", null, token) })
-        assertNotNull(h.tokens.peek(TokenPurposes.REAUTH, token), "a failed attempt by someone else does not burn the owner's link")
+        h.reauth.requestConfirmation("acc_a", ses)
+        val sent = h.mailer.of(MailKind.REAUTH_CODE).single().vars.getValue("code")
+        assertEquals("ACCOUNT.CODE_EXPIRED", code { h.emailChange.request("acc_b", "x@example.com", ReauthInput(confirmationCode = sent), ses) })
+        assertNotNull(h.challenges.findOpen(ChallengePurposes.REAUTH, "acc_a"), "the owner's code is still there")
+        h.emailChange.request("acc_a", "x@example.com", ReauthInput(confirmationCode = sent), ses)
+    }
+
+    @Test
+    fun `a code is worth five guesses, then it is dead`() {
+        val now = h.time.now()
+        h.repo.insert(Account("acc_a", "a@example.com", true, AccountStatus.ACTIVE, setOf("USER"), null, null, null, now, now), emptyList())
+        h.reauth.requestConfirmation("acc_a", ses)
+        val sent = h.mailer.of(MailKind.REAUTH_CODE).single().vars.getValue("code")
+        val wrong = if (sent == "000000") "000001" else "000000"
+        fun attempt(c: String) = code { h.passwords.change("acc_a", null, "a-brand-new-pass-7", ses, c) }
+        repeat(4) { assertEquals("ACCOUNT.CODE_INVALID", attempt(wrong)) }
+        assertEquals("ACCOUNT.CODE_EXPIRED", attempt(wrong))
+        assertEquals("ACCOUNT.CODE_EXPIRED", attempt(sent))
     }
 
     @Test

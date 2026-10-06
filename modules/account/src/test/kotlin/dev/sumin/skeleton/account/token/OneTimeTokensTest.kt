@@ -18,7 +18,7 @@ class OneTimeTokensTest {
 
     @Test
     fun `the store never sees the raw token, only a 64-char hash`() {
-        val raw = tokens.issue(TokenPurposes.VERIFY_EMAIL, "ann@example.com", "acc_1", Duration.ofHours(1))
+        val raw = tokens.issue(TokenPurposes.MAGIC_LINK, "ann@example.com", "acc_1", Duration.ofHours(1))
         assertEquals(1, store.hashes().size)
         assertEquals(64, store.hashes().single().length)
         assertTrue(store.hashes().none { it.contains(raw) || raw.contains(it) })
@@ -47,10 +47,10 @@ class OneTimeTokensTest {
 
     @Test
     fun `a token for one purpose cannot be spent for another, and the attempt does not burn it`() {
-        val raw = tokens.issue(TokenPurposes.VERIFY_EMAIL, "ann@example.com", "acc_1", Duration.ofHours(1))
+        val raw = tokens.issue(TokenPurposes.MAGIC_LINK, "ann@example.com", "acc_1", Duration.ofHours(1))
         assertNull(tokens.consume(TokenPurposes.PASSWORD_RESET, raw))
         assertNull(tokens.peek(TokenPurposes.PASSWORD_RESET, raw))
-        assertNotNull(tokens.consume(TokenPurposes.VERIFY_EMAIL, raw))
+        assertNotNull(tokens.consume(TokenPurposes.MAGIC_LINK, raw))
     }
 
     @Test
@@ -81,10 +81,10 @@ class OneTimeTokensTest {
     @Test
     fun `tokens for another subject or purpose are not touched by the invalidation`() {
         val other = tokens.issue(TokenPurposes.PASSWORD_RESET, "bob@example.com", "acc_2", Duration.ofHours(1))
-        val verify = tokens.issue(TokenPurposes.VERIFY_EMAIL, "ann@example.com", "acc_1", Duration.ofHours(1))
+        val verify = tokens.issue(TokenPurposes.MAGIC_LINK, "ann@example.com", "acc_1", Duration.ofHours(1))
         tokens.issue(TokenPurposes.PASSWORD_RESET, "ann@example.com", "acc_1", Duration.ofHours(1))
         assertNotNull(tokens.consume(TokenPurposes.PASSWORD_RESET, other))
-        assertNotNull(tokens.consume(TokenPurposes.VERIFY_EMAIL, verify))
+        assertNotNull(tokens.consume(TokenPurposes.MAGIC_LINK, verify))
     }
 
     @Test
@@ -96,8 +96,8 @@ class OneTimeTokensTest {
 
     @Test
     fun `payload travels with the token`() {
-        val raw = tokens.issue(TokenPurposes.EMAIL_CHANGE, "acc_1", "acc_1", Duration.ofHours(1), payload = "new@example.com")
-        assertEquals("new@example.com", tokens.consume(TokenPurposes.EMAIL_CHANGE, raw)?.payload)
+        val raw = tokens.issue(TokenPurposes.MAGIC_LINK, "acc_1", "acc_1", Duration.ofHours(1), payload = "new@example.com")
+        assertEquals("new@example.com", tokens.consume(TokenPurposes.MAGIC_LINK, raw)?.payload)
     }
 
     @Test

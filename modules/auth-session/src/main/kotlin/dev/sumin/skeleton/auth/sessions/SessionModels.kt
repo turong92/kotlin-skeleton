@@ -15,12 +15,26 @@ enum class AuthSessionErrorCode(
     REFRESH_INVALID("AUTH.REFRESH_INVALID", HttpStatus.UNAUTHORIZED, "Invalid refresh token", "The refresh token is unknown, expired or revoked"),
     REFRESH_REUSED("AUTH.REFRESH_REUSED", HttpStatus.UNAUTHORIZED, "Refresh token reused", "The refresh token was already used; the session was closed"),
     SESSION_NOT_FOUND("AUTH.SESSION_NOT_FOUND", HttpStatus.NOT_FOUND, "Session not found", "Session not found"),
+    TOO_MANY_REFRESHES("AUTH.TOO_MANY_REFRESHES", HttpStatus.TOO_MANY_REQUESTS, "Too many token refreshes", "This session refreshed too often; wait and retry. The session is still valid"),
     CSRF_HEADER_REQUIRED("AUTH.CSRF_HEADER_REQUIRED", HttpStatus.FORBIDDEN, "Request header required", "Cookie-based refresh needs the CSRF header"),
 }
 
 class RefreshInvalidException : ApplicationException("Refresh token is invalid", AuthSessionErrorCode.REFRESH_INVALID)
 
 class RefreshReusedException : ApplicationException("Refresh token was reused", AuthSessionErrorCode.REFRESH_REUSED)
+
+class RefreshRateLimitedException(val retryAfterSeconds: Long) : ApplicationException(
+    "Too many refreshes", AuthSessionErrorCode.TOO_MANY_REFRESHES, data = mapOf("retryAfterSeconds" to retryAfterSeconds),
+) {
+    init { (org.springframework.web.context.request.RequestContextHolder.getRequestAttributes() as? org.springframework.web.context.request.ServletRequestAttributes)?.response?.setHeader("Retry-After", retryAfterSeconds.toString()) }
+}
+
+/** 세션 하나의 회전 횟수 한도 — 넘었으면 다시 시도할 때까지의 초, 아니면 null */
+fun interface RotationLimiter {
+    fun exceeded(sessionId: String): Long?
+
+    companion object { val NONE = RotationLimiter { null } }
+}
 
 class SessionNotFoundException : ApplicationException("Session not found", AuthSessionErrorCode.SESSION_NOT_FOUND)
 

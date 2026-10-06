@@ -7,6 +7,8 @@ import dev.sumin.skeleton.account.AccountRepository
 import dev.sumin.skeleton.account.AccountStatus
 import dev.sumin.skeleton.account.ChangeEmailResult
 import dev.sumin.skeleton.account.GuardedResult
+import dev.sumin.skeleton.account.MailboxProof
+import dev.sumin.skeleton.account.SignInMethods
 import dev.sumin.skeleton.account.Identity
 import dev.sumin.skeleton.account.RemoveIdentityResult
 import dev.sumin.skeleton.persistence.jdbc.SqlDialect
@@ -86,6 +88,35 @@ class JdbcAccountRepository(
         tx.execute {
             val email = jdbc.query("select email from skeleton_accounts where id = :id for update", mapOf("id" to id)) { rs, _ -> rs.getString("email") }.firstOrNull()
                 ?: return@execute false
+            jdbc.update(
+                "update skeleton_accounts set email_verified = true, updated_at = :now, " +
+                    "status = case when status = 'PENDING_VERIFICATION' then 'ACTIVE' else status end where id = :id",
+                MapSqlParameterSource().addValue("now", dialect.instantParam(now)).addValue("id", id),
+            )
+            jdbc.update("update skeleton_account_identities set verified = true where account_id = :id and subject = :email", mapOf("id" to id, "email" to email))
+            true
+        } ?: false
+
+    override fun proveMailbox(id: String, now: Instant, proof: MailboxProof): Boolean =
+        tx.execute {
+            val row = jdbc.query("select email, email_verified from skeleton_accounts where id = :id for update", mapOf("id" to id)) { rs, _ -> rs.getString("email") to rs.getBoolean("email_verified") }.firstOrNull()
+                ?: return@execute false
+            val email = row.first ?: return@execute false
+            if (!row.second) {
+                // 새 비밀번호를 정하면 옛 비밀번호 수단 행도 지운다(id 가 바뀐다) — 그 행의 id 를 들고 있던 남의 뒤늦은 갱신이 새 비밀번호를 덮지 못하게
+                val dropPassword = if (proof.passwordSecret != null) " or method = :pw" else ""
+                if (proof.keepIdentityIds.isEmpty()) jdbc.update("delete from skeleton_account_identities where account_id = :id", mapOf("id" to id))
+                else jdbc.update("delete from skeleton_account_identities where account_id = :id and (id not in (:keep)$dropPassword)", mapOf("id" to id, "keep" to proof.keepIdentityIds, "pw" to SignInMethods.PASSWORD))
+            }
+            proof.passwordSecret?.let { secret ->
+                val updated = jdbc.update(
+                    "update skeleton_account_identities set secret = :s, verified = true where account_id = :id and method = :m and subject = :email",
+                    mapOf("s" to secret, "id" to id, "m" to SignInMethods.PASSWORD, "email" to email),
+                )
+                if (updated == 0) {
+                    insertIdentity(Identity(requireNotNull(proof.newPasswordIdentityId) { "newPasswordIdentityId" }, id, SignInMethods.PASSWORD, email, true, secret = secret, createdAt = now))
+                }
+            }
             jdbc.update(
                 "update skeleton_accounts set email_verified = true, updated_at = :now, " +
                     "status = case when status = 'PENDING_VERIFICATION' then 'ACTIVE' else status end where id = :id",

@@ -46,8 +46,10 @@ class PasswordService(private val core: AccountCore) {
         if (violations.isNotEmpty()) throw PasswordPolicyException(violations)
         core.tokens.consume(TokenPurposes.PASSWORD_RESET, token) ?: throw AccountException(AccountErrorCode.TOKEN_INVALID)
 
-        storePassword(account, core.hasher.hash(newPassword))
-        core.accounts.markEmailVerified(account.id, core.time.now())
+        // 메일함을 증명한 사람이 방금 새 비밀번호를 정했다 — 한 번의 저장소 연산으로: 비밀번호를 바꾸고, 주소가 미확인이었다면 남이 심은 다른 로그인 수단을 지우고, 확인 처리한다
+        val existing = core.accounts.findIdentity(SignInMethods.PASSWORD, account.email!!)?.takeIf { it.accountId == account.id }
+        val proof = MailboxProof(keepIdentityIds = setOfNotNull(existing?.id), passwordSecret = core.hasher.hash(newPassword), newPasswordIdentityId = core.newIdentityId())
+        if (!core.accounts.proveMailbox(account.id, core.time.now(), proof)) throw AccountException(AccountErrorCode.TOKEN_INVALID)
         core.sessions()?.revokeAll(account.id, null)
         core.closeSensitiveLinks(account)
         notifyChanged(account)
@@ -55,7 +57,7 @@ class PasswordService(private val core: AccountCore) {
         core.accounts.findById(account.id)?.let(core.bootstrap::afterVerified)
     }
 
-    fun change(accountId: String, currentPassword: String?, newPassword: String, currentSessionId: String?, confirmationToken: String? = null) {
+    fun change(accountId: String, currentPassword: String?, newPassword: String, currentSessionId: String?, confirmationCode: String? = null) {
         val account = core.accounts.findById(accountId) ?: throw AccountException(AccountErrorCode.NOT_FOUND)
         // 탈취된 세션으로 현재 비밀번호를 추측하지 못하게 — 맞든 틀리든 시도 수로 센다
         val login = core.props.login
@@ -66,24 +68,29 @@ class PasswordService(private val core: AccountCore) {
         val identity = email?.let { core.accounts.findIdentity(SignInMethods.PASSWORD, it) }
         if (identity?.secret == null && (!account.emailVerified || email == null)) throw AccountException(AccountErrorCode.PASSWORD_REQUIRED)
         // 비밀번호가 있으면 현재 비밀번호, 없으면(첫 비밀번호) 메일함 확인 — 15분짜리 액세스 토큰이 영구 자격이 되지 않게
-        val proof = Reauth(core).check(account, currentPassword, confirmationToken)
+        val proof = Reauth(core).check(account, ReauthInput(currentPassword, confirmationCode), currentSessionId)
         val violations = core.policy.check(newPassword, email)
         if (violations.isNotEmpty()) throw PasswordPolicyException(violations)
         proof.commit()
 
-        storePassword(account, core.hasher.hash(newPassword))
+        storePassword(account, core.hasher.hash(newPassword), replacing = identity?.takeIf { it.secret != null })
         core.sessions()?.revokeAll(account.id, currentSessionId)
         core.closeSensitiveLinks(account)
         notifyChanged(account)
         core.events.publish(AccountEventType.PASSWORD_CHANGED, account.id)
     }
 
-    /** 비밀번호 수단이 있으면 해시를 바꾸고, 없으면(소셜 · 매직 링크만 쓰던 계정) 새로 만든다 */
-    private fun storePassword(account: Account, hash: String) {
+    /**
+     * 다시 인증이 **그 비밀번호 수단**으로 이뤄졌다면([replacing]) 그 수단의 해시를 바꾼다 — 그 사이 메일함 증명이 수단을 지웠다면 갱신 행이 0 이라 요청이 실패한다(새로 만들지 않는다:
+     * 남이 정해 둔 비밀번호가 증명 뒤에 되살아나지 않게). 수단이 없던 계정(소셜 · 매직 링크만 쓰던)은 새로 만든다 — 메일 코드로 증명한 주인의 첫 비밀번호다.
+     */
+    private fun storePassword(account: Account, hash: String, replacing: Identity?) {
         val email = requireNotNull(account.email) { "password needs an email" }
-        val existing = core.accounts.findIdentity(SignInMethods.PASSWORD, email)
-        if (existing != null) core.accounts.updateIdentitySecret(existing.id, hash)
-        else core.accounts.addIdentity(Identity(core.newIdentityId(), account.id, SignInMethods.PASSWORD, email, verified = account.emailVerified, secret = hash, createdAt = core.time.now()))
+        if (replacing != null) {
+            if (!core.accounts.updateIdentitySecret(replacing.id, hash)) throw AccountException(AccountErrorCode.REAUTH_FAILED)
+        } else if (!core.accounts.addIdentity(Identity(core.newIdentityId(), account.id, SignInMethods.PASSWORD, email, verified = account.emailVerified, secret = hash, createdAt = core.time.now()))) {
+            throw AccountException(AccountErrorCode.REAUTH_FAILED)
+        }
     }
 
     private fun notifyChanged(account: Account) {

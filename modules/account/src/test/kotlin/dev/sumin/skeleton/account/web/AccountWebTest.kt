@@ -53,6 +53,8 @@ class AccountWebTest {
     private fun MockHttpServletRequestBuilder.json(body: String) = contentType(MediaType.APPLICATION_JSON).content(body)
     private fun bearer(r: MvcResult) = "Bearer " + JsonPath.read<String>(r.response.contentAsString, "$.value.accessToken")
     private fun tokenOf(kind: MailKind) = mail.tokenOf(mail.of(kind).last())
+    private fun codeOf(kind: MailKind) = mail.of(kind).last().vars.getValue("code")
+    private fun signUpIdOf(r: org.springframework.test.web.servlet.ResultActions) = JsonPath.read<String>(r.andReturn().response.contentAsString, "$.value.signUpId")
     private fun unique() = "u${System.nanoTime()}@example.com"
 
     // 기본 주소는 돌아가며 .100~.199 — 고정 주소(.77 등)와 겹치지 않는다(무작위는 가끔 한도가 찬 주소를 골랐다)
@@ -63,19 +65,23 @@ class AccountWebTest {
         mvc.perform(post("/api/v1/auth/login").with { it.remoteAddr = ip; it }.json("""{"email":"$email","password":"$password"}""")).andReturn()
 
     private fun registered(email: String = unique(), password: String = "tangerine-42-moon"): String {
-        signUp(email, password).andExpect(status().isAccepted)
-        mvc.perform(post("/api/v1/auth/verify-email").json("""{"token":"${tokenOf(MailKind.VERIFY_EMAIL)}"}""")).andExpect(status().isOk)
+        val id = signUpIdOf(signUp(email, password).andExpect(status().isAccepted))
+        mvc.perform(post("/api/v1/auth/verify-email").json("""{"signUpId":"$id","code":"${codeOf(MailKind.VERIFY_CODE)}"}""")).andExpect(status().isOk)
         return email
     }
 
     @Test
-    fun `sign-up answers 202 identically for a new and an existing address`() {
+    fun `sign-up answers 202 with an opaque attempt id identically for a new, an in-flight and a registered address`() {
         val email = unique()
-        val first = signUp(email).andExpect(status().isAccepted).andExpect(jsonPath("$.value.status").value("VERIFICATION_SENT")).andReturn()
-        val again = signUp(email).andExpect(status().isAccepted).andReturn()
-        fun body(r: MvcResult) = JsonPath.read<Map<String, Any>>(r.response.contentAsString, "$.value")
-        assertEquals(body(first), body(again))
-        assertEquals(1, mail.of(MailKind.VERIFY_EMAIL).size)
+        val first = signUp(email).andExpect(status().isAccepted).andExpect(jsonPath("$.value.status").value("VERIFICATION_SENT")).andExpect(jsonPath("$.value.signUpId").isString).andReturn()
+        val inFlight = signUp(email).andExpect(status().isAccepted).andReturn()
+        assertEquals(2, mail.of(MailKind.VERIFY_CODE).size, "an in-flight attempt does not block or overwrite another one: each gets its own code")
+        mvc.perform(post("/api/v1/auth/verify-email").json("""{"signUpId":"${JsonPath.read<String>(inFlight.response.contentAsString, "$.value.signUpId")}","code":"${codeOf(MailKind.VERIFY_CODE)}"}""")).andExpect(status().isOk)
+        mail.sent.clear()
+        val registered = signUp(email).andExpect(status().isAccepted).andReturn()
+        fun shape(r: MvcResult) = JsonPath.read<Map<String, Any>>(r.response.contentAsString, "$.value").let { it["status"] to (it["signUpId"] as String).length }
+        assertEquals(shape(first), shape(registered))
+        assertEquals(0, mail.of(MailKind.VERIFY_CODE).size, "a registered address gets no code")
         assertEquals(1, mail.of(MailKind.ALREADY_REGISTERED).size)
     }
 
@@ -89,26 +95,30 @@ class AccountWebTest {
     }
 
     @Test
-    fun `the full journey - sign up, blocked until verified, verify, log in, me`() {
+    fun `the full journey - sign up creates no account, the code creates it and signs in, me`() {
         val email = unique()
-        signUp(email).andExpect(status().isAccepted)
+        val id = signUpIdOf(signUp(email).andExpect(status().isAccepted))
         login(email).also {
-            assertEquals(403, it.response.status)
-            assertEquals("AUTH.EMAIL_NOT_VERIFIED", JsonPath.read<String>(it.response.contentAsString, "$.code"))
+            assertEquals(401, it.response.status, "there is no account yet - not even a pending one")
+            assertEquals("AUTH.INVALID_CREDENTIALS", JsonPath.read<String>(it.response.contentAsString, "$.code"))
         }
-        val token = tokenOf(MailKind.VERIFY_EMAIL)
-        mvc.perform(post("/api/v1/auth/verify-email").json("""{"token":"$token"}""")).andExpect(status().isOk).andExpect(jsonPath("$.value.status").value("VERIFIED"))
-        mvc.perform(post("/api/v1/auth/verify-email").json("""{"token":"$token"}""")).andExpect(status().isGone).andExpect(jsonPath("$.code").value("ACCOUNT.TOKEN_INVALID"))
+        val code = codeOf(MailKind.VERIFY_CODE)
+        val wrong = if (code == "000000") "000001" else "000000"
+        mvc.perform(post("/api/v1/auth/verify-email").json("""{"signUpId":"$id","code":"$wrong"}""")).andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.code").value("ACCOUNT.CODE_INVALID")).andExpect(jsonPath("$.data.attemptsLeft").value(4))
+        mvc.perform(post("/api/v1/auth/verify-email").json("""{"signUpId":"$id","code":"12345"}""")).andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("COMMON.VALIDATION_FAILED"))
+        val verified = mvc.perform(post("/api/v1/auth/verify-email").json("""{"signUpId":"$id","code":"$code"}""")).andExpect(status().isOk)
+            .andExpect(jsonPath("$.value.accessToken").isString).andExpect(jsonPath("$.value.principal.email").value(email)).andReturn()
+        mvc.perform(post("/api/v1/auth/verify-email").json("""{"signUpId":"$id","code":"$code"}""")).andExpect(status().isGone).andExpect(jsonPath("$.code").value("ACCOUNT.CODE_EXPIRED"))
 
-        val ok = login(email)
-        assertEquals(200, ok.response.status)
-        mvc.perform(get("/api/v1/account/me").header("Authorization", bearer(ok))).andExpect(status().isOk)
+        mvc.perform(get("/api/v1/account/me").header("Authorization", bearer(verified))).andExpect(status().isOk)
             .andExpect(jsonPath("$.value.email").value(email))
             .andExpect(jsonPath("$.value.emailVerified").value(true))
             .andExpect(jsonPath("$.value.hasPassword").value(true))
             .andExpect(jsonPath("$.value.roles[0]").value("USER"))
             .andExpect(jsonPath("$.value.locale").value("ko"))
             .andExpect(jsonPath("$.value.methods[0].method").value("password"))
+        assertEquals(200, login(email).response.status)
     }
 
     @Test
@@ -160,15 +170,23 @@ class AccountWebTest {
     }
 
     @Test
-    fun `an email change is confirmed from the new address and moves the login`() {
+    fun `an email change is confirmed with the code mailed to the new address, entered in the signed-in session, and moves the login`() {
         val email = registered()
         val newEmail = unique()
         val auth = bearer(login(email))
         mvc.perform(post("/api/v1/account/email/change").header("Authorization", auth).idem().json("""{"newEmail":"$newEmail","currentPassword":"tangerine-42-moon"}"""))
             .andExpect(status().isAccepted).andExpect(jsonPath("$.value.status").value("VERIFICATION_SENT"))
-        mvc.perform(post("/api/v1/auth/confirm-email-change").json("""{"token":"${tokenOf(MailKind.EMAIL_CHANGE_CONFIRM)}"}""")).andExpect(status().isNoContent)
+        assertEquals(newEmail, mail.of(MailKind.EMAIL_CHANGE_CODE).last().to)
+        val code = codeOf(MailKind.EMAIL_CHANGE_CODE)
+        mvc.perform(post("/api/v1/account/email/change/confirm").json("""{"code":"$code"}""")).andExpect(status().isUnauthorized)
+        val wrong = if (code == "000000") "000001" else "000000"
+        mvc.perform(post("/api/v1/account/email/change/confirm").header("Authorization", auth).json("""{"code":"$wrong"}""")).andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.code").value("ACCOUNT.CODE_INVALID")).andExpect(jsonPath("$.data.attemptsLeft").value(4))
+        mvc.perform(post("/api/v1/account/email/change/confirm").header("Authorization", auth).json("""{"code":"$code"}""")).andExpect(status().isNoContent)
         assertEquals(401, login(email).response.status)
         assertEquals(200, login(newEmail).response.status)
+        // the public link endpoint of the old contract is gone
+        mvc.perform(post("/api/v1/auth/confirm-email-change").json("""{"token":"x"}""")).andExpect(status().is4xxClientError).andExpect(jsonPath("$.code").value(org.hamcrest.Matchers.not("ACCOUNT.TOKEN_INVALID")))
     }
 
     @Test
@@ -180,7 +198,9 @@ class AccountWebTest {
         mvc.perform(patch("/api/v1/account/me").header("Authorization", auth).json("""{"timeZone":"Mars/Olympus"}""")).andExpect(status().isBadRequest)
 
         val id = JsonPath.read<String>(mvc.perform(get("/api/v1/account/identities").header("Authorization", auth)).andExpect(status().isOk).andReturn().response.contentAsString, "$.values[0].id")
-        mvc.perform(delete("/api/v1/account/identities/$id").header("Authorization", auth)).andExpect(status().isConflict)
+        mvc.perform(delete("/api/v1/account/identities/$id").header("Authorization", auth)).andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.code").value("ACCOUNT.CURRENT_PASSWORD_INVALID"))   // unlinking is a re-authenticated action
+        mvc.perform(delete("/api/v1/account/identities/$id").header("Authorization", auth).json("""{"currentPassword":"tangerine-42-moon"}""")).andExpect(status().isConflict)
             .andExpect(jsonPath("$.code").value("ACCOUNT.LAST_SIGN_IN_METHOD"))
     }
 

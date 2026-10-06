@@ -67,22 +67,27 @@ class AccountResponseLevelSecurityTest {
         return r.response.status to (System.nanoTime() - start) / 1_000_000
     }
 
+    private fun signUpId(path: String, body: String, ip: String): String {
+        val r = mvc.perform(post(path).with { it.remoteAddr = ip; it }.contentType(MediaType.APPLICATION_JSON).content(body)).andReturn().response
+        return JsonPath.read(r.contentAsString, "$.value.signUpId")
+    }
+
     @Test
     fun `sign-up, forgot and resend answer without waiting for mail - a known address costs the same as an unknown one`() {
         val known = "known${System.nanoTime()}@example.com"
         val hold = CountDownLatch(1)
         mails.hold = hold
         try {
-        // create the account (the first call waits nothing; the mail is held off-thread)
-        timed("/api/v1/account/sign-up", """{"email":"$known","password":"tangerine-42-moon"}""", "198.51.100.1")
+        // create the attempt (the first call waits nothing; the mail is held off-thread)
+        val firstId = signUpId("/api/v1/account/sign-up", """{"email":"$known","password":"tangerine-42-moon"}""", "198.51.100.1")
 
         val results = listOf(
             "sign-up known" to timed("/api/v1/account/sign-up", """{"email":"$known","password":"tangerine-42-moon"}""", "198.51.100.2"),
             "sign-up unknown" to timed("/api/v1/account/sign-up", """{"email":"unk${System.nanoTime()}@example.com","password":"tangerine-42-moon"}""", "198.51.100.3"),
             "forgot known" to timed("/api/v1/account/password/forgot", """{"email":"$known"}""", "198.51.100.4"),
             "forgot unknown" to timed("/api/v1/account/password/forgot", """{"email":"ghost${System.nanoTime()}@example.com"}""", "198.51.100.5"),
-            "resend known" to timed("/api/v1/account/verification/resend", """{"email":"$known"}""", "198.51.100.6"),
-            "resend unknown" to timed("/api/v1/account/verification/resend", """{"email":"ghost${System.nanoTime()}@example.com"}""", "198.51.100.7"),
+            "resend known" to timed("/api/v1/account/verification/resend", """{"signUpId":"$firstId"}""", "198.51.100.6"),
+            "resend unknown" to timed("/api/v1/account/verification/resend", """{"signUpId":"${"u".repeat(43)}"}""", "198.51.100.7"),
         )
         results.forEach { (name, r) ->
             assertEquals(202, r.first, name)
@@ -101,7 +106,7 @@ class AccountResponseLevelSecurityTest {
     // ---- tokens in logs
 
     @Test
-    fun `no one-time token or password ever reaches the log, and the default masker would hide a link anyway`() {
+    fun `no one-time token, code, sign-up id or password ever reaches the log, and the default masker would hide a link anyway`() {
         val appender = ListAppender<ILoggingEvent>().apply { start() }
         val root = LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME) as Logger
         root.addAppender(appender)
@@ -109,15 +114,20 @@ class AccountResponseLevelSecurityTest {
         root.level = ch.qos.logback.classic.Level.TRACE
         try {
             val email = "logs${System.nanoTime()}@example.com"
-            timed("/api/v1/account/sign-up", """{"email":"$email","password":"tangerine-42-moon"}""", "198.51.100.20")
-            awaitUntil("the verification mail") { sent.any { it.link != null } }
+            val signUpId = signUpId("/api/v1/account/sign-up", """{"email":"$email","password":"tangerine-42-moon"}""", "198.51.100.20")
+            awaitUntil("the verification code mail") { sent.any { it.vars.containsKey("code") && it.to == email } }
+            val code = sent.first { it.vars.containsKey("code") && it.to == email }.vars.getValue("code")
+            timed("/api/v1/auth/verify-email", """{"signUpId":"$signUpId","code":"${if (code == "000000") "000001" else "000000"}"}""", "198.51.100.22")
+            assertEquals(200, timed("/api/v1/auth/verify-email", """{"signUpId":"$signUpId","code":"$code"}""", "198.51.100.22").first)
             val before = sent.size
             timed("/api/v1/account/password/forgot", """{"email":"$email"}""", "198.51.100.21")
             awaitUntil("the reset mail") { sent.size > before }
             val tokens = sent.filter { it.link != null }.map { it.link!!.substringAfter("token=") }
-            assertTrue(tokens.size >= 1, "expected at least the verification mail")
+            assertTrue(tokens.isNotEmpty(), "expected the reset mail")
             val lines = appender.list.map { it.formattedMessage + " " + (it.throwableProxy?.message ?: "") }
             tokens.forEach { t -> assertTrue(lines.none { t in it }, "a one-time token was logged") }
+            assertTrue(lines.none { code in it }, "a sign-up code was logged")
+            assertTrue(lines.none { signUpId in it }, "a sign-up id was logged by " + appender.list.filter { signUpId in it.formattedMessage }.map { it.loggerName + ": " + it.formattedMessage.take(200) })
             assertTrue(appender.list.none { "tangerine-42-moon" in it.formattedMessage }, "a password was logged by " + appender.list.filter { "tangerine-42-moon" in it.formattedMessage }.map { it.loggerName + ": " + it.formattedMessage.take(120) })
 
             val link = sent.first { it.link != null }.link!!

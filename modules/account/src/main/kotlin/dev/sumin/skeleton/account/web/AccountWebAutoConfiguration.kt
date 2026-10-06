@@ -41,10 +41,10 @@ class AccountWebAutoConfiguration {
     fun accountPublicController(
         registration: RegistrationService,
         passwords: PasswordService,
-        emailChange: EmailChangeService,
         policy: PasswordPolicy,
         clientIps: ObjectProvider<ClientIps>,
-    ): AccountPublicController = AccountPublicController(registration, passwords, emailChange, policy, clientIps.getIfAvailable { ClientIps() })
+        tokens: dev.sumin.skeleton.auth.api.AuthTokenResponseFactory,
+    ): AccountPublicController = AccountPublicController(registration, passwords, policy, clientIps.getIfAvailable { ClientIps() }, tokens)
 
     @Bean
     @ConditionalOnMissingBean
@@ -87,7 +87,6 @@ class AccountWebAutoConfiguration {
             registry.add("POST", "/api/v1/account/password/forgot")
             registry.add("POST", "/api/v1/account/password/reset")
             registry.add("GET", "/api/v1/account/password/policy")
-            registry.add("POST", "/api/v1/auth/confirm-email-change")
             registry.add("GET", "/api/v1/auth/methods")
         }
 }

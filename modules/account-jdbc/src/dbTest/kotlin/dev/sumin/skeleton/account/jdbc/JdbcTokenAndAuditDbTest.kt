@@ -38,12 +38,12 @@ class JdbcTokenAndAuditDbTest {
 
     @Test
     fun `purpose mismatch does not burn the token, expiry and replacement behave`() {
-        val raw = tokens.issue(TokenPurposes.VERIFY_EMAIL, "ann@example.com", "acc_1", Duration.ofHours(1))
+        val raw = tokens.issue(TokenPurposes.MAGIC_LINK, "ann@example.com", "acc_1", Duration.ofHours(1))
         assertNull(tokens.consume(TokenPurposes.PASSWORD_RESET, raw))
-        assertNotNull(tokens.peek(TokenPurposes.VERIFY_EMAIL, raw))
-        val newer = tokens.issue(TokenPurposes.VERIFY_EMAIL, "ann@example.com", "acc_1", Duration.ofHours(1))
-        assertNull(tokens.consume(TokenPurposes.VERIFY_EMAIL, raw))
-        assertNotNull(tokens.consume(TokenPurposes.VERIFY_EMAIL, newer))
+        assertNotNull(tokens.peek(TokenPurposes.MAGIC_LINK, raw))
+        val newer = tokens.issue(TokenPurposes.MAGIC_LINK, "ann@example.com", "acc_1", Duration.ofHours(1))
+        assertNull(tokens.consume(TokenPurposes.MAGIC_LINK, raw))
+        assertNotNull(tokens.consume(TokenPurposes.MAGIC_LINK, newer))
 
         val late = OneTimeTokens(AccountDb.tokens, TimeProvider.fixed(now.plus(Duration.ofHours(2))))
         val expiring = tokens.issue(TokenPurposes.PASSWORD_RESET, "ann@example.com", "acc_1", Duration.ofMinutes(30))
@@ -53,14 +53,14 @@ class JdbcTokenAndAuditDbTest {
 
     @Test
     fun `the open token of a purpose and owner is found with its payload, and not once spent or expired`() {
-        val raw = tokens.issue(TokenPurposes.EMAIL_CHANGE, "acc_1", "acc_1", Duration.ofMinutes(30), payload = "new@example.com")
-        val open = tokens.pending(TokenPurposes.EMAIL_CHANGE, "acc_1")!!
+        val raw = tokens.issue(TokenPurposes.PASSWORD_RESET, "acc_1", "acc_1", Duration.ofMinutes(30), payload = "new@example.com")
+        val open = tokens.pending(TokenPurposes.PASSWORD_RESET, "acc_1")!!
         assertEquals("new@example.com", open.payload)
         assertEquals(now.plus(Duration.ofMinutes(30)), open.expiresAt)
-        assertNull(tokens.pending(TokenPurposes.EMAIL_CHANGE, "acc_2"))
-        assertNull(OneTimeTokens(AccountDb.tokens, TimeProvider.fixed(now.plus(Duration.ofMinutes(31)))).pending(TokenPurposes.EMAIL_CHANGE, "acc_1"))
-        tokens.consume(TokenPurposes.EMAIL_CHANGE, raw)
-        assertNull(tokens.pending(TokenPurposes.EMAIL_CHANGE, "acc_1"))
+        assertNull(tokens.pending(TokenPurposes.PASSWORD_RESET, "acc_2"))
+        assertNull(OneTimeTokens(AccountDb.tokens, TimeProvider.fixed(now.plus(Duration.ofMinutes(31)))).pending(TokenPurposes.PASSWORD_RESET, "acc_1"))
+        tokens.consume(TokenPurposes.PASSWORD_RESET, raw)
+        assertNull(tokens.pending(TokenPurposes.PASSWORD_RESET, "acc_1"))
     }
 
     @Test

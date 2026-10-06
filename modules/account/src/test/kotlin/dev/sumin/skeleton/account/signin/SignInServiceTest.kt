@@ -16,6 +16,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class SignInServiceTest {
+    private val PW = dev.sumin.skeleton.account.ReauthInput("tangerine-42-moon")
     private object Google : SignInMethod { override val code = "google"; override val userRemovable = true }
     private object Kakao : SignInMethod { override val code = "kakao" }
     private object Magic : SignInMethod {
@@ -26,9 +27,9 @@ class SignInServiceTest {
     }
     private object Locked : SignInMethod { override val code = "hardware_key"; override val userRemovable = false }
 
-    private fun harness(social: AccountProperties.Social = AccountProperties.Social(signUp = true), bootstrapEmail: String = "") = AccountHarness(
+    private fun harness(social: AccountProperties.Social = AccountProperties.Social(signUp = true), bootstrapEmail: String = "", emailVerification: Boolean = true) = AccountHarness(
         AccountProperties(
-            social = social, bootstrap = AccountProperties.Bootstrap(adminEmail = bootstrapEmail),
+            social = social, bootstrap = AccountProperties.Bootstrap(adminEmail = bootstrapEmail), signUp = AccountProperties.SignUp(emailVerification = emailVerification),
             mail = AccountProperties.Mail(linkBaseUrl = "https://x"), password = AccountProperties.Password(bcryptStrength = 4),
         ),
     )
@@ -129,7 +130,7 @@ class SignInServiceTest {
 
     @Test
     fun `merging into an UNVERIFIED account is a mailbox proof - the unproven sign-up password is discarded and sessions closed (C1 rule)`() {
-        val merge = harness(AccountProperties.Social(signUp = true, mergeOnVerifiedEmail = true))
+        val merge = harness(AccountProperties.Social(signUp = true, mergeOnVerifiedEmail = true), emailVerification = false)
         merge.signUp("ann@example.com", password = "attacker-chosen-42")
         val planted = merge.repo.findByEmail("ann@example.com")!!
         val auth = merge.service().signIn(proof())!!
@@ -153,8 +154,8 @@ class SignInServiceTest {
     }
 
     @Test
-    fun `a magic link proves the mailbox so it attaches to the existing account and verifies a pending one - without a password nobody proved`() {
-        val h = harness()
+    fun `a magic link proves the mailbox so it attaches to the existing account and verifies an unverified one - without a password nobody proved`() {
+        val h = harness(emailVerification = false)
         h.signUp("ann@example.com")
         val auth = h.service().signIn(proof("magic_link", "  Ann@Example.com ", "ann@example.com", true))!!
         val account = h.repo.findById(auth.accountId)!!
@@ -167,34 +168,13 @@ class SignInServiceTest {
 
     @Test
     fun `pre-hijack - a password planted on an unverified sign-up does not work after the victim signs in by magic link`() {
-        val h = harness()
+        val h = harness(emailVerification = false)
         h.signUp("victim@example.com", password = "attacker-chosen-42")   // the attacker, who does not own the mailbox
         val planted = h.repo.findByEmail("victim@example.com")!!
         val auth = h.service().signIn(proof("magic_link", "victim@example.com", "victim@example.com", true))!!   // the victim
         assertEquals(planted.id, auth.accountId)
         assertEquals("", h.authRepository.findBy(dev.sumin.skeleton.auth.account.AccountIdentifier(email = "victim@example.com"))!!.passwordHash, "the attacker's password must be gone")
         assertTrue(h.revoker.calls.any { it.first == planted.id }, "sessions opened before the mailbox was proven are closed")
-    }
-
-    @Test
-    fun `pre-hijack - the planted sign-up's verification link cannot bring the attacker's password back`() {
-        val h = harness()
-        h.signUp("victim@example.com", password = "attacker-chosen-42")
-        val plantedLink = h.mailer.of(dev.sumin.skeleton.account.mail.MailKind.VERIFY_EMAIL).single()
-        h.service().signIn(proof("magic_link", "victim@example.com", "victim@example.com", true))
-        assertFailsWith<ApplicationException> { h.registration.verifyEmail(h.mailer.tokenOf(plantedLink)) }
-        assertEquals("", h.authRepository.findBy(dev.sumin.skeleton.auth.account.AccountIdentifier(email = "victim@example.com"))!!.passwordHash)
-    }
-
-    @Test
-    fun `a verification link activates only the password it was issued for`() {
-        val h = harness()
-        h.signUp("ann@example.com")
-        val link = h.mailer.of(dev.sumin.skeleton.account.mail.MailKind.VERIFY_EMAIL).single()
-        val identity = h.repo.findIdentity("password", "ann@example.com")!!
-        h.repo.updateIdentitySecret(identity.id, h.hasher.hash("someone-elses-pass-1"))   // the stored password is no longer the one this link was issued for
-        assertFailsWith<ApplicationException> { h.registration.verifyEmail(h.mailer.tokenOf(link)) }
-        assertEquals(AccountStatus.PENDING_VERIFICATION, h.repo.findByEmail("ann@example.com")!!.status)
     }
 
     @Test
@@ -285,8 +265,8 @@ class SignInServiceTest {
         val views = h.service().identities.list(a.id)
         val google = views.first { it.method == "google" }
         val password = views.first { it.method == "password" }
-        h.service().identities.unlink(a.id, google.id)
-        assertEquals("ACCOUNT.LAST_SIGN_IN_METHOD", code { h.service().identities.unlink(a.id, password.id) })
+        h.service().identities.unlink(a.id, google.id, null, PW)
+        assertEquals("ACCOUNT.LAST_SIGN_IN_METHOD", code { h.service().identities.unlink(a.id, password.id, null, PW) })
         assertTrue(AccountEventType.IDENTITY_UNLINKED in h.events.types())
     }
 
@@ -295,7 +275,7 @@ class SignInServiceTest {
         val h = harness()
         val a = linked(h)
         val google = h.service().identities.list(a.id).first { it.method == "google" }
-        h.service().identities.unlink(a.id, google.id, "ses_current")
+        h.service().identities.unlink(a.id, google.id, "ses_current", PW)
         assertEquals(listOf<Pair<String, String?>>(a.id to "ses_current"), h.revoker.calls)
     }
 
@@ -305,8 +285,8 @@ class SignInServiceTest {
         val a = linked(h)
         val b = h.activeAccount("bob@example.com")
         val theirs = h.service().identities.list(a.id).first { it.method == "google" }
-        assertEquals("ACCOUNT.IDENTITY_NOT_FOUND", code { h.service().identities.unlink(b.id, theirs.id) })
-        assertEquals("ACCOUNT.IDENTITY_NOT_FOUND", code { h.service().identities.unlink(b.id, "idn_nope") })
+        assertEquals("ACCOUNT.IDENTITY_NOT_FOUND", code { h.service().identities.unlink(b.id, theirs.id, null, PW) })
+        assertEquals("ACCOUNT.IDENTITY_NOT_FOUND", code { h.service().identities.unlink(b.id, "idn_nope", null, PW) })
     }
 
     @Test
@@ -316,7 +296,7 @@ class SignInServiceTest {
         h.service().identities.link(a.id, "hardware_key", "key-1", true)
         val key = h.service().identities.list(a.id).first { it.method == "hardware_key" }
         assertEquals(false, key.removable)
-        assertEquals("ACCOUNT.LAST_SIGN_IN_METHOD", code { h.service().identities.unlink(a.id, key.id) })
+        assertEquals("ACCOUNT.LAST_SIGN_IN_METHOD", code { h.service().identities.unlink(a.id, key.id, null, PW) })
     }
 
     @Test
@@ -328,7 +308,7 @@ class SignInServiceTest {
             val ids = s.identities.list(a.id).map { it.id }
             val pool = Executors.newFixedThreadPool(2)
             val go = CountDownLatch(1)
-            val r = ids.map { id -> pool.submit<Result<Unit>> { go.await(); runCatching { s.identities.unlink(a.id, id) } } }
+            val r = ids.map { id -> pool.submit<Result<Unit>> { go.await(); runCatching { s.identities.unlink(a.id, id, null, PW) } } }
             go.countDown()
             val ok = r.count { it.get().isSuccess }
             pool.shutdown()

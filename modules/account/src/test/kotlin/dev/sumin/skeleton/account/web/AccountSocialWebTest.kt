@@ -43,8 +43,9 @@ class AccountSocialWebTest {
 
     private fun passwordAccount(email: String): MvcResult {
         mail.sent.clear()
-        mvc.perform(post("/api/v1/account/sign-up").contentType(MediaType.APPLICATION_JSON).content("""{"email":"$email","password":"tangerine-42-moon"}""")).andExpect(status().isAccepted)
-        mvc.perform(post("/api/v1/auth/verify-email").contentType(MediaType.APPLICATION_JSON).content("""{"token":"${mail.tokenOf(mail.of(MailKind.VERIFY_EMAIL).last())}"}""")).andExpect(status().isOk)
+        val signUp = mvc.perform(post("/api/v1/account/sign-up").contentType(MediaType.APPLICATION_JSON).content("""{"email":"$email","password":"tangerine-42-moon"}""")).andExpect(status().isAccepted).andReturn()
+        val id = JsonPath.read<String>(signUp.response.contentAsString, "$.value.signUpId")
+        mvc.perform(post("/api/v1/auth/verify-email").contentType(MediaType.APPLICATION_JSON).content("""{"signUpId":"$id","code":"${mail.of(MailKind.VERIFY_CODE).last().vars.getValue("code")}"}""")).andExpect(status().isOk)
         return mvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON).content("""{"email":"$email","password":"tangerine-42-moon"}""")).andExpect(status().isOk).andReturn()
     }
 
@@ -57,7 +58,7 @@ class AccountSocialWebTest {
             .andExpect(jsonPath("$.value.signUp.social").value(true))
             .andExpect(jsonPath("$.value.captchaRequired").value(false))
             .andExpect(jsonPath("$.value.social[0].provider").value("fakeidp"))
-            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().string("Cache-Control", org.hamcrest.Matchers.containsString("max-age")))
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().string("Cache-Control", "max-age=300, public"))
             .andReturn()
         val body = r.response.contentAsString
         assertEquals(false, listOf("secret", "clientSecret", "password\":\"", "@").any { it in body }, body)
@@ -105,7 +106,8 @@ class AccountSocialWebTest {
         // social sign-in now reaches the linked account, and unlinking leaves the password
         social("c-link").andExpect(status().isOk).andExpect(jsonPath("$.value.principal.email").value("linker@example.com"))
         val id = JsonPath.read<List<String>>(mvc.perform(get("/api/v1/account/identities").header("Authorization", auth)).andReturn().response.contentAsString, "$.values[?(@.method=='fakeidp')].id").first()
-        mvc.perform(delete("/api/v1/account/identities/$id").header("Authorization", auth)).andExpect(status().isNoContent)
+        mvc.perform(delete("/api/v1/account/identities/$id").header("Authorization", auth)).andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("ACCOUNT.CURRENT_PASSWORD_INVALID"))
+        mvc.perform(delete("/api/v1/account/identities/$id").header("Authorization", auth).contentType(MediaType.APPLICATION_JSON).content("""{"currentPassword":"tangerine-42-moon"}""")).andExpect(status().isNoContent)
         social("c-link").andExpect(status().isOk)   // c-link's email now belongs to nobody and sign-up is open: a fresh account, not the old one
     }
 
@@ -128,18 +130,47 @@ class AccountSocialWebTest {
     }
 
     @Test
-    fun `an account without a password links only after the mailbox confirmation, and the account's address is told`() {
+    fun `an account without a password links only after the mailed code, entered in the same session, and the account's address is told`() {
         val auth = bearer(social("c-new").andExpect(status().isOk).andReturn())   // a social-only account (no password)
         mail.sent.clear()
         mvc.perform(post("/api/v1/account/identities/social/fakeidp").header("Authorization", auth).contentType(MediaType.APPLICATION_JSON).content(json("c-link")))
             .andExpect(status().isForbidden).andExpect(jsonPath("$.code").value("ACCOUNT.REAUTH_REQUIRED"))
         mvc.perform(post("/api/v1/account/reauth/confirmation").header("Authorization", auth)).andExpect(status().isAccepted).andExpect(jsonPath("$.value.status").value("ACCEPTED"))
-        val token = mail.tokenOf(mail.of(MailKind.REAUTH_CONFIRM).single())
-        mvc.perform(post("/api/v1/account/identities/social/fakeidp").header("Authorization", auth).contentType(MediaType.APPLICATION_JSON).content("""{"authorizationCode":"c-link","confirmationToken":"garbage-garbage-garbage-garbage"}"""))
-            .andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("ACCOUNT.REAUTH_FAILED"))
-        // the confirmation passes (the account already has this provider, so the link itself is the 409 — proof that re-auth was accepted)
-        mvc.perform(post("/api/v1/account/identities/social/fakeidp").header("Authorization", auth).contentType(MediaType.APPLICATION_JSON).content("""{"authorizationCode":"c-link","confirmationToken":"$token"}"""))
+        val code = mail.of(MailKind.REAUTH_CODE).single().vars.getValue("code")
+        val wrong = if (code == "000000") "000001" else "000000"
+        mvc.perform(post("/api/v1/account/identities/social/fakeidp").header("Authorization", auth).contentType(MediaType.APPLICATION_JSON).content("""{"authorizationCode":"c-link","confirmationCode":"$wrong"}"""))
+            .andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("ACCOUNT.CODE_INVALID")).andExpect(jsonPath("$.data.attemptsLeft").value(4))
+        // the code passes (the account already has this provider, so the link itself is the 409 — proof that re-auth was accepted)
+        mvc.perform(post("/api/v1/account/identities/social/fakeidp").header("Authorization", auth).contentType(MediaType.APPLICATION_JSON).content("""{"authorizationCode":"c-link","confirmationCode":"$code"}"""))
             .andExpect(status().isConflict).andExpect(jsonPath("$.code").value("ACCOUNT.IDENTITY_EXISTS"))
+    }
+
+    @Test
+    fun `an account without an email (unverified provider address) re-authenticates with a fresh code of its own provider account - to delete itself too`() {
+        val auth = bearer(social("c-noemail-del").andExpect(status().isOk).andReturn())    // email = null: the provider did not vouch for the address
+        val own = """{"provider":"fakeidp","authorizationCode":"c-noemail-del"}"""
+        mvc.perform(post("/api/v1/account/delete").header("Authorization", auth).header("Idempotency-Key", java.util.UUID.randomUUID().toString()).contentType(MediaType.APPLICATION_JSON).content("{}"))
+            .andExpect(status().isForbidden).andExpect(jsonPath("$.code").value("ACCOUNT.REAUTH_REQUIRED"))
+        // a code that belongs to a provider account of ANOTHER account proves nothing
+        social("c-third").andExpect(status().isOk)
+        mvc.perform(post("/api/v1/account/delete").header("Authorization", auth).header("Idempotency-Key", java.util.UUID.randomUUID().toString()).contentType(MediaType.APPLICATION_JSON).content("""{"socialReauth":{"provider":"fakeidp","authorizationCode":"c-third"}}"""))
+            .andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("ACCOUNT.REAUTH_FAILED"))
+        mvc.perform(post("/api/v1/account/delete").header("Authorization", auth).header("Idempotency-Key", java.util.UUID.randomUUID().toString()).contentType(MediaType.APPLICATION_JSON).content("""{"socialReauth":{"provider":"fakeidp","authorizationCode":"garbage"}}"""))
+            .andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("ACCOUNT.REAUTH_FAILED"))
+        mvc.perform(post("/api/v1/account/delete").header("Authorization", auth).header("Idempotency-Key", java.util.UUID.randomUUID().toString()).contentType(MediaType.APPLICATION_JSON).content("""{"socialReauth":$own}"""))
+            .andExpect(status().isAccepted).andExpect(jsonPath("$.value.status").value("DELETION_SCHEDULED"))
+    }
+
+    @Test
+    fun `an account without an email also needs the fresh provider code to change its email or link another provider`() {
+        val auth = bearer(social("c-noemail-chg").andExpect(status().isOk).andReturn())
+        mvc.perform(post("/api/v1/account/email/change").header("Authorization", auth).header("Idempotency-Key", java.util.UUID.randomUUID().toString()).contentType(MediaType.APPLICATION_JSON).content("""{"newEmail":"first-address@example.com"}"""))
+            .andExpect(status().isForbidden).andExpect(jsonPath("$.code").value("ACCOUNT.REAUTH_REQUIRED"))
+        mvc.perform(post("/api/v1/account/email/change").header("Authorization", auth).header("Idempotency-Key", java.util.UUID.randomUUID().toString()).contentType(MediaType.APPLICATION_JSON).content("""{"newEmail":"first-address@example.com","socialReauth":{"provider":"fakeidp","authorizationCode":"c-noemail-chg"}}"""))
+            .andExpect(status().isAccepted)
+        assertEquals("first-address@example.com", mail.of(MailKind.EMAIL_CHANGE_CODE).last().to)
+        mvc.perform(post("/api/v1/account/identities/social/fakeidp").header("Authorization", auth).contentType(MediaType.APPLICATION_JSON).content("""{"authorizationCode":"c-link"}"""))
+            .andExpect(status().isForbidden).andExpect(jsonPath("$.code").value("ACCOUNT.REAUTH_REQUIRED"))
     }
 
     @Test
