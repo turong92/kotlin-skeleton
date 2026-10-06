@@ -127,8 +127,8 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | id | 요약 | 켜는 조각 | 키워드 (한국어 / 영어) | 짝 프런트 |
 |---|---|---|---|---|
 | `script-build-capabilities` | capabilities.json 에서 docs/capabilities.md · llms.txt 를 생성하고(--check 로 어긋남 검사) 카탈로그를 정본 형식으로 정리한다. | (도구 — 켜는 조각 없음) | 기능 카탈로그, 카탈로그 생성, 카탈로그 점검, 기능 목록 / capabilities catalog, generate docs, catalog check, llms.txt | — |
-| `script-dev` | 로컬 풀스택 한 줄 실행 — DB(+ 로컬 S3) 컨테이너를 올리고 백엔드를 띄운다. 옆의 ../web 프런트가 있으면 같이 띄운다. | (도구 — 켜는 조각 없음) | 로컬 실행, 개발 서버, 한 줄 실행, DB 띄우기 / run locally, dev server, local stack, start database | — |
 | `script-check-real-providers` | 진짜 소셜 로그인 · 진짜 메일 시험 전 점검 — .env.local 의 모양, 제공자 서버가 client id/secret 을 받아 주는지(가짜 코드로 한 번), 떠 있는 백엔드의 /auth/methods, SMTP 설정 · DNS(SPF/DMARC), 요청하면 시험 메일 한 통을 ✓/✗ 줄로 말한다. | (도구 — 켜는 조각 없음) | 소셜 로그인 점검, 메일 발송 점검, 구글 카카오 키 확인, 시험 메일 / check social login keys, smtp test mail, real provider readiness | — |
+| `script-dev` | 로컬 풀스택 한 줄 실행 — DB(+ 로컬 S3) 컨테이너를 올리고 백엔드를 띄운다. 옆의 ../web 프런트가 있으면 같이 띄운다. | (도구 — 켜는 조각 없음) | 로컬 실행, 개발 서버, 한 줄 실행, DB 띄우기 / run locally, dev server, local stack, start database | — |
 | `script-dev-sample` | 샘플 앱 Notes 풀스택 한 줄 실행 — DB + 로컬 S3 → 백엔드(apps/sample) → 짝 프런트(react-skeleton 의 apps/sample). | (도구 — 켜는 조각 없음) | 샘플 실행, 노트 앱 실행 / run sample, notes app | — |
 | `script-new-project` | 새 프로젝트 한 줄 찍기 — 이 레포를 복사해 고른 모듈 · 앱만 남기고, 이름 · 접두사를 바꾸고, 배포 선언 · 설정 블록 · 이 카탈로그를 걸러 다시 쓴다(--dry-run 은 고른 모듈과 따라온 이유만 보인다). | (도구 — 켜는 조각 없음) | 새 프로젝트, 프로젝트 만들기, 찍어내기, 스캐폴딩, 프로젝트 시작 / new project, scaffold, stamp, template, project generator | — |
 | `script-rename-skeleton` | 패키지 · 설정 접두사 · 클래스 이름 · 환경변수 접두사를 한 번에 바꾸는 스크립트(GitHub Template 로 만든 뒤 이름만 바꿀 때) — 끝에 남은 흔적을 검사하고 이 카탈로그를 다시 만든다. | (도구 — 켜는 조각 없음) | 이름 바꾸기, 리네임, 패키지 변경, 템플릿 이름 바꾸기 / rename, change package, rename template, project name | — |
@@ -867,16 +867,6 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 항목 검증(레포의 실제와 맞는가)은 modules/platform 의 Capabilities*Test — 이 스크립트는 생성만 한다
 - 키워드: 기능 카탈로그, 카탈로그 생성, 카탈로그 점검, 기능 목록 / capabilities catalog, generate docs, catalog check, llms.txt
 
-### `script-dev` — 로컬 풀스택 한 줄 실행 — DB(+ 로컬 S3) 컨테이너를 올리고 백엔드를 띄운다. 옆의 ../web 프런트가 있으면 같이 띄운다.
-
-- 종류 · 상태: script · stable — 위치 `scripts/dev.sh`
-- 켜는 법: (도구 — 켜는 조각 없음)
-- 문서: `docs/minimal-composition.md`
-- 쓰지 않는 경우:
-  - 로컬 개발용이다 — 운영 배포는 deploy/app.yaml 선언(docs/deploy.md)
-  - Docker 가 필요하다
-- 키워드: 로컬 실행, 개발 서버, 한 줄 실행, DB 띄우기 / run locally, dev server, local stack, start database
-
 ### `script-check-real-providers` — 진짜 소셜 로그인 · 진짜 메일 시험 전 점검 — .env.local 의 모양, 제공자 서버가 client id/secret 을 받아 주는지(가짜 코드로 한 번), 떠 있는 백엔드의 /auth/methods, SMTP 설정 · DNS(SPF/DMARC), 요청하면 시험 메일 한 통을 ✓/✗ 줄로 말한다.
 
 - 종류 · 상태: script · stable — 위치 `scripts/check-real-providers.sh`
@@ -886,6 +876,16 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 제공자 화면에서 사람이 동의를 누르는 구간은 확인하지 못한다 (docs/real-provider-setup.md 의 시험 순서)
   - 가짜 서버로 이 스크립트 자신을 시험하려면 --self-test
 - 키워드: 소셜 로그인 점검, 메일 발송 점검, 구글 카카오 키 확인, 시험 메일 / check social login keys, smtp test mail, real provider readiness
+
+### `script-dev` — 로컬 풀스택 한 줄 실행 — DB(+ 로컬 S3) 컨테이너를 올리고 백엔드를 띄운다. 옆의 ../web 프런트가 있으면 같이 띄운다.
+
+- 종류 · 상태: script · stable — 위치 `scripts/dev.sh`
+- 켜는 법: (도구 — 켜는 조각 없음)
+- 문서: `docs/minimal-composition.md`
+- 쓰지 않는 경우:
+  - 로컬 개발용이다 — 운영 배포는 deploy/app.yaml 선언(docs/deploy.md)
+  - Docker 가 필요하다
+- 키워드: 로컬 실행, 개발 서버, 한 줄 실행, DB 띄우기 / run locally, dev server, local stack, start database
 
 ### `script-dev-sample` — 샘플 앱 Notes 풀스택 한 줄 실행 — DB + 로컬 S3 → 백엔드(apps/sample) → 짝 프런트(react-skeleton 의 apps/sample).
 
