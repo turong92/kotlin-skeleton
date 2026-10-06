@@ -11,16 +11,16 @@ import org.springframework.core.env.SystemEnvironmentPropertySource
  * (docs/deploy.md §5). 신뢰 프록시는 도커 네트워크 CIDR 이라 선언에 박지 않고 배포가 넣는다.
  */
 class ClientIpEnvironmentVariablesTest {
-    private fun bind(prefix: String, vararg env: Pair<String, String>): WebProperties.ClientIp {
+    private fun bind(path: String, vararg env: Pair<String, String>): WebProperties.ClientIp {
         val source = SystemEnvironmentPropertySource("systemEnvironment", mapOf(*env))
         val environment = org.springframework.core.env.StandardEnvironment()
         environment.propertySources.addFirst(source)
-        return Binder.get(environment).bind("$prefix.web.client-ip", WebProperties.ClientIp::class.java).get()
+        return Binder.get(environment).bind(path, WebProperties.ClientIp::class.java).get()
     }
 
     @Test
     fun `mode and a comma separated proxy list bind from the environment`() {
-        val p = bind("skeleton", "SKELETON_WEB_CLIENT_IP_MODE" to "cloudflare", "SKELETON_WEB_CLIENT_IP_TRUSTED_PROXIES" to "172.18.0.0/16, 10.0.0.0/8")
+        val p = bind("skeleton.web.client-ip", "SKELETON_WEB_CLIENT_IP_MODE" to "cloudflare", "SKELETON_WEB_CLIENT_IP_TRUSTED_PROXIES" to "172.18.0.0/16, 10.0.0.0/8")
         assertEquals(ClientIpMode.CLOUDFLARE, p.mode)
         assertEquals(listOf("172.18.0.0/16", "10.0.0.0/8"), p.trustedProxies.map(String::trim))
         assertTrue(ClientIps(p).configured)
@@ -28,7 +28,7 @@ class ClientIpEnvironmentVariablesTest {
 
     @Test
     fun `a stamped project's prefix works the same way`() {
-        val p = bind("ovation", "OVATION_WEB_CLIENT_IP_MODE" to "proxy", "OVATION_WEB_CLIENT_IP_TRUSTED_PROXIES" to "172.18.0.0/16")
+        val p = bind("ovation.web.client-ip", "OVATION_WEB_CLIENT_IP_MODE" to "proxy", "OVATION_WEB_CLIENT_IP_TRUSTED_PROXIES" to "172.18.0.0/16")
         assertEquals(ClientIpMode.PROXY, p.mode)
         assertEquals(listOf("172.18.0.0/16"), p.trustedProxies)
     }
@@ -36,12 +36,12 @@ class ClientIpEnvironmentVariablesTest {
     @Test
     fun `exactly what the homeserver platform injects - upper-case mode and one CIDR - binds and satisfies the guard's configured check`() {
         for (mode in listOf("PROXY", "CLOUDFLARE")) {
-            val p = bind("skeleton", "SKELETON_WEB_CLIENT_IP_MODE" to mode, "SKELETON_WEB_CLIENT_IP_TRUSTED_PROXIES" to "172.18.0.0/16")
+            val p = bind("skeleton.web.client-ip", "SKELETON_WEB_CLIENT_IP_MODE" to mode, "SKELETON_WEB_CLIENT_IP_TRUSTED_PROXIES" to "172.18.0.0/16")
             assertEquals(ClientIpMode.valueOf(mode), p.mode)
             assertEquals(listOf("172.18.0.0/16"), p.trustedProxies)
             assertTrue(ClientIps(p).configured)
         }
         // the platform's fallback when it cannot read the network
-        assertTrue(ClientIps(bind("skeleton", "SKELETON_WEB_CLIENT_IP_MODE" to "PROXY", "SKELETON_WEB_CLIENT_IP_TRUSTED_PROXIES" to "127.0.0.1/32")).configured)
+        assertTrue(ClientIps(bind("skeleton.web.client-ip", "SKELETON_WEB_CLIENT_IP_MODE" to "PROXY", "SKELETON_WEB_CLIENT_IP_TRUSTED_PROXIES" to "127.0.0.1/32")).configured)
     }
 }
