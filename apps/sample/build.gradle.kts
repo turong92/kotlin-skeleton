@@ -11,6 +11,9 @@ dependencies {
     implementation(project(":modules:account-jdbc"))       // 진짜 계정: 가입 · 이메일 확인 · 재설정 · 삭제 (+ account). 시드 계정은 application-local.yml
     implementation(project(":modules:auth-session-jdbc"))  // 리프레시 토큰 · 세션 목록 (+ auth-session)
     implementation(project(":modules:auth-magic-link"))    // 메일 링크 로그인 — 같은 계정 위의 로그인 수단 하나
+    implementation(project(":modules:auth-social-google")) // 소셜 로그인 제공자들 — client id 를 설정한 것만 켜진다 (비어 있으면 아무것도 바뀌지 않는다)
+    implementation(project(":modules:auth-social-oidc"))   // 범용 OpenID Connect (LINE 프리셋 포함)
+    implementation(project(":modules:auth-social-x"))      // X(Twitter) OAuth 2.0 + PKCE
     implementation(project(":modules:persistence-jdbc"))
     implementation(project(":modules:db-postgresql"))      // 방언은 정확히 하나
     implementation(project(":modules:migration-flyway"))
