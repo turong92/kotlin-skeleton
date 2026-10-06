@@ -19,12 +19,13 @@ class HealthEndpointIntegrationTest {
     @Autowired lateinit var mvc: MockMvc
 
     @Test
-    fun `health is public, 200 UP and carries no details`() {
-        mvc.get("/health").andExpect {
-            status { isOk() }
-            jsonPath("$.status") { value("UP") }
-            jsonPath("$.components") { doesNotExist() }
-        }
+    fun `health is public, answers UP only when everything the app uses is up, and carries no details`() {
+        // 스타터는 앱 + DB 뿐이라 200 이다. 찍은 프로젝트가 Redis 같은 것을 더했는데 시험 환경에 없으면 정직하게 503 이다 — 어느 쪽이든 401 이 아니고 세부 정보는 없다
+        val result = mvc.get("/health").andReturn().response
+        val up = result.status == 200
+        kotlin.test.assertTrue(up || result.status == 503, "health must be 200 or 503, never 401: ${result.status}")
+        kotlin.test.assertTrue(result.contentAsString.contains(if (up) "\"status\":\"UP\"" else "\"status\":\"DOWN\""), result.contentAsString)
+        kotlin.test.assertFalse(result.contentAsString.contains("components") || result.contentAsString.contains("details"), result.contentAsString)
     }
 
     @Test
