@@ -12,7 +12,7 @@
 | 함께 오는 모듈 | `platform`, `auth` |
 | 컴파일 전용 | 없음 |
 | 설정 접두사 | `skeleton.auth-social` — [docs/config/modules/auth-social.yml](../config/modules/auth-social.yml) |
-| 기본 동작 | 켜짐. 제공자가 켜지기 전에는 로그인 가능한 제공자가 없다. |
+| 기본 동작 | 켜짐. 환경변수 `<P>_AUTH_SOCIAL_PROVIDERS_<X>_CLIENT_ID` 같은 이름은 `AuthSocialEnvironmentAliasPostProcessor` 가 점 표기 프로퍼티로 옮겨 준다(Map 값이라 스프링 느슨한 바인딩만으로는 묶이지 않는다). 토큰 교환 거절은 제공자 `error` 코드와 함께 로그에 남는다. 제공자가 켜지기 전에는 로그인 가능한 제공자가 없다. |
 | 부팅에 필요한 것 | 없음. |
 | 교체 지점 | `OAuthProviderRegistry`, `OAuthAccountLinkRepository`, `OAuthAccountProvisioningPolicy`, `OAuthSocialLoginService` |
 | 마이그레이션 | 없음 |

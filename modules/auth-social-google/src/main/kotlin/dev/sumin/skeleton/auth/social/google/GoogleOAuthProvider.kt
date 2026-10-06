@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty
 import dev.sumin.skeleton.auth.social.config.AuthSocialProperties
 import dev.sumin.skeleton.auth.social.oauth.OAuthInvalidAuthorizationCodeException
 import dev.sumin.skeleton.auth.social.oauth.OAuthProvider
+import dev.sumin.skeleton.auth.social.oauth.OAuthTokenErrorLog
 import dev.sumin.skeleton.auth.social.oauth.OAuthUserProfile
 import dev.sumin.skeleton.common.http.ExternalHttpClient
 import dev.sumin.skeleton.common.http.ExternalHttpStatusException
@@ -62,6 +63,7 @@ class GoogleOAuthProvider(
             )
         } catch (ex: ExternalHttpStatusException) {
             if (ex.upstreamStatus in 400..499) {
+                OAuthTokenErrorLog.rejected(providerId, ex.upstreamStatus ?: 0, ex.upstreamBody)
                 throw OAuthInvalidAuthorizationCodeException(providerId)
             }
             throw ex

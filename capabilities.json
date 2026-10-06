@@ -1849,6 +1849,9 @@
       "autoIncludes": [
         "alert-jdbc",
         "auth-magic-link",
+        "auth-social-google",
+        "auth-social-kakao",
+        "auth-social-naver",
         "board",
         "board-jdbc",
         "crypto",
@@ -1977,6 +1980,35 @@
       "keywords": {
         "ko": ["기능 카탈로그", "카탈로그 생성", "카탈로그 점검", "기능 목록"],
         "en": ["capabilities catalog", "generate docs", "catalog check", "llms.txt"]
+      }
+    },
+    {
+      "id": "script-check-real-providers",
+      "kind": "script",
+      "module": null,
+      "path": "scripts/check-real-providers.sh",
+      "status": "stable",
+      "summary": "진짜 소셜 로그인 · 진짜 메일 시험 전 점검 — .env.local 의 모양, 제공자 서버가 client id/secret 을 받아 주는지(가짜 코드로 한 번), 떠 있는 백엔드의 /auth/methods, SMTP 설정 · DNS(SPF/DMARC), 요청하면 시험 메일 한 통을 ✓/✗ 줄로 말한다.",
+      "starter": false,
+      "newProjectFlag": null,
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/real-provider-setup.md"],
+      "frontend": null,
+      "notFor": [
+        "제공자 화면에서 사람이 동의를 누르는 구간은 확인하지 못한다 (docs/real-provider-setup.md 의 시험 순서)",
+        "가짜 서버로 이 스크립트 자신을 시험하려면 --self-test"
+      ],
+      "keywords": {
+        "ko": ["소셜 로그인 점검", "메일 발송 점검", "구글 카카오 키 확인", "시험 메일"],
+        "en": ["check social login keys", "smtp test mail", "real provider readiness"]
       }
     },
     {
