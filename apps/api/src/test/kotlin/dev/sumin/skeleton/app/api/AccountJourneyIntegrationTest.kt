@@ -32,6 +32,8 @@ class AccountJourneyIntegrationTest {
         val sent = CopyOnWriteArrayList<AccountMail>()
         @Bean fun recordingMailer(): AccountMailer = AccountMailer { sent += it }
         @Bean fun directTasks(): AccountTaskRunner = AccountTaskRunner.DIRECT
+        val events = CopyOnWriteArrayList<dev.sumin.skeleton.account.events.AccountEvent>()
+        @Bean fun recordingEvents(): dev.sumin.skeleton.account.events.AccountEventListener = dev.sumin.skeleton.account.events.AccountEventListener { events += it }
     }
 
     @Autowired lateinit var mvc: MockMvc
@@ -72,5 +74,54 @@ class AccountJourneyIntegrationTest {
         json("/api/v1/account/delete", """{"currentPassword":"a-brand-new-pass-7"}""", auth).andExpect { status { isAccepted() }; jsonPath("$.value.status") { value("DELETION_SCHEDULED") } }
         json("/api/v1/auth/login", """{"email":"$email","password":"a-brand-new-pass-7"}""").andExpect { status { isUnauthorized() } }
         assertEquals(access.isNotBlank(), true)
+    }
+
+    private fun registered(email: String, password: String = "tangerine-42-moon"): String {
+        json("/api/v1/account/sign-up", """{"email":"$email","password":"$password"}""").andExpect { status { isAccepted() } }
+        json("/api/v1/auth/verify-email", """{"token":"${tokenOf("VERIFY_EMAIL")}"}""").andExpect { status { isOk() } }
+        return email
+    }
+
+    private fun loginAs(email: String, password: String = "tangerine-42-moon") =
+        json("/api/v1/auth/login", """{"email":"$email","password":"$password"}""").andExpect { status { isOk() } }.andReturn().response.contentAsString
+
+    @Test
+    fun `a password reset kills every refresh token for real - the SessionRevoker adapter and the JDBC store, not a recording stub`() {
+        val email = registered("reset-${System.nanoTime()}@example.com")
+        val device1 = JsonPath.read<String>(loginAs(email), "$.value.refreshToken")
+        val device2 = JsonPath.read<String>(loginAs(email), "$.value.refreshToken")
+        json("/api/v1/account/password/forgot", """{"email":"$email"}""").andExpect { status { isAccepted() } }
+        json("/api/v1/account/password/reset", """{"token":"${tokenOf("PASSWORD_RESET")}","newPassword":"a-brand-new-pass-7"}""").andExpect { status { isNoContent() } }
+        json("/api/v1/auth/refresh", """{"refreshToken":"$device1"}""").andExpect { status { isUnauthorized() }; jsonPath("$.code") { value("AUTH.REFRESH_INVALID") } }
+        json("/api/v1/auth/refresh", """{"refreshToken":"$device2"}""").andExpect { status { isUnauthorized() }; jsonPath("$.code") { value("AUTH.REFRESH_INVALID") } }
+    }
+
+    @Test
+    fun `a password change signs the other devices out for real and keeps the one that changed it`() {
+        val email = registered("change-${System.nanoTime()}@example.com")
+        val here = loginAs(email)
+        val other = JsonPath.read<String>(loginAs(email), "$.value.refreshToken")
+        json("/api/v1/account/password/change", """{"currentPassword":"tangerine-42-moon","newPassword":"a-brand-new-pass-7"}""", JsonPath.read<String>(here, "$.value.accessToken")).andExpect { status { isNoContent() } }
+        json("/api/v1/auth/refresh", """{"refreshToken":"$other"}""").andExpect { status { isUnauthorized() } }
+        json("/api/v1/auth/refresh", """{"refreshToken":"${JsonPath.read<String>(here, "$.value.refreshToken")}"}""").andExpect { status { isOk() } }
+    }
+
+    @Test
+    fun `an email change confirmation signs every session out for real`() {
+        val email = registered("emailchange-${System.nanoTime()}@example.com")
+        val login = loginAs(email)
+        val refresh = JsonPath.read<String>(login, "$.value.refreshToken")
+        json("/api/v1/account/email/change", """{"newEmail":"moved-${System.nanoTime()}@example.com","currentPassword":"tangerine-42-moon"}""", JsonPath.read<String>(login, "$.value.accessToken")).andExpect { status { isAccepted() } }
+        json("/api/v1/auth/confirm-email-change", """{"token":"${tokenOf("EMAIL_CHANGE_CONFIRM")}"}""").andExpect { status { isNoContent() } }
+        json("/api/v1/auth/refresh", """{"refreshToken":"$refresh"}""").andExpect { status { isUnauthorized() } }
+    }
+
+    @Test
+    fun `a replayed refresh token reaches the account event stream - the session module's detection is wired`() {
+        val email = registered("reuse-${System.nanoTime()}@example.com")
+        val first = JsonPath.read<String>(loginAs(email), "$.value.refreshToken")
+        json("/api/v1/auth/refresh", """{"refreshToken":"$first"}""").andExpect { status { isOk() } }
+        json("/api/v1/auth/refresh", """{"refreshToken":"$first"}""").andExpect { status { isUnauthorized() }; jsonPath("$.code") { value("AUTH.REFRESH_REUSED") } }
+        assertTrue(mails.events.any { it.type == dev.sumin.skeleton.account.events.AccountEventType.REFRESH_REUSE_DETECTED }, "no REFRESH_REUSE_DETECTED event: the detection leaves no trace")
     }
 }

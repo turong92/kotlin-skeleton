@@ -62,6 +62,13 @@ class InMemorySessionStore : SessionStore {
         return dead.size
     }
 
+    @Synchronized override fun eraseAccount(accountId: String): Int {
+        val mine = sessions.values.filter { it.accountId == accountId }.map { it.id }.toSet()
+        mine.forEach { sessions.remove(it) }
+        tokens.entries.removeIf { it.value.sessionId in mine }
+        return mine.size
+    }
+
     /** 시험용 — 저장된 토큰 해시 전부 (원문이 저장되지 않는다는 것을 보인다) */
     @Synchronized fun tokenHashes(): List<String> = tokens.keys.toList()
 }

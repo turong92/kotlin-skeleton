@@ -38,3 +38,13 @@ class MutableAccounts(private val encoder: PasswordEncoder) : AuthAccountReposit
 class SessionTestAccounts {
     @Bean fun mutableAccounts(encoder: PasswordEncoder): MutableAccounts = MutableAccounts(encoder)
 }
+
+class RecordingSessionEventListener : dev.sumin.skeleton.auth.session.SessionEventListener {
+    val events = java.util.concurrent.CopyOnWriteArrayList<dev.sumin.skeleton.auth.session.SessionEvent>()
+    override fun on(event: dev.sumin.skeleton.auth.session.SessionEvent) { events += event }
+}
+
+@TestConfiguration(proxyBeanMethods = false)
+class RecordingSessionEvents {
+    @Bean fun recordingSessionEventListener(): RecordingSessionEventListener = RecordingSessionEventListener()
+}

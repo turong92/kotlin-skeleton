@@ -88,4 +88,7 @@ interface SessionStore {
 
     /** 끝난 세션(철회됐거나 절대 수명이 지난 것 중 [before] 이전)과 그 토큰을 지운다 — 청소용 */
     fun purge(before: Instant): Int
+
+    /** 계정의 세션을 상태와 상관없이 전부, 토큰과 함께 지운다 (계정 삭제 — IP · UA 가 남지 않게). 지운 세션 수. 멱등 */
+    fun eraseAccount(accountId: String): Int
 }

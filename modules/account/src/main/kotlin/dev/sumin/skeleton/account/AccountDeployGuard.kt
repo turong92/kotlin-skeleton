@@ -19,6 +19,8 @@ class AccountDeployGuard(
         val tokenStore: Any?,
         val mailTransportIsLogOnly: Boolean,
         val captchaAvailable: Boolean,
+        /** `skeleton.web.client-ip.mode` 가 정해졌나 (platform `ClientIps.configured`) */
+        val clientIpModeConfigured: Boolean,
     )
 
     override val name: String = "account"
@@ -29,6 +31,9 @@ class AccountDeployGuard(
         if (s.repository is InMemoryAccountRepository) add("account uses the in-memory AccountRepository (every account vanishes on restart): add modules:account-jdbc or define your own AccountRepository bean")
         if (s.tokenStore is InMemoryOneTimeTokenStore) add("account uses the in-memory OneTimeTokenStore (emailed links stop working on restart and across instances): add modules:account-jdbc or define your own OneTimeTokenStore bean")
         if (s.mailTransportIsLogOnly) add("account has no mail transport, so verification and reset links cannot be delivered: add modules:notification-mail (skeleton.notification-mail.enabled, from, spring.mail.host) or define an AccountMailTransport bean")
+        // 비밀번호 찾기 · 인증 재전송은 늘 IP 별로 한도를 걸고(로그인 · 가입 · 매직 링크도 기본으로 건다) 그 키가 클라이언트 IP 다 —
+        // mode 가 없으면 ForwardedHeaderFilter 가 X-Forwarded-For 로 remoteAddr 를 덮어써 호출자가 IP 를 고르고, 한도가 전부 풀린다
+        if (!s.clientIpModeConfigured) add("skeleton.web.client-ip.mode is not set, so any caller can pick its own IP with X-Forwarded-For and every per-IP limit of sign-in, sign-up, reset and magic link is open: set it to direct, proxy or cloudflare (docs/client-ip.md)")
         if (props.mail.linkBaseUrl.isBlank()) add("skeleton.account.mail.link-base-url is empty: set the frontend origin the mailed links should open")
         if (props.mail.logLinks == AccountProperties.Mail.LogLinks.ON) add("skeleton.account.mail.log-links=ON writes one-time link tokens to the log: remove it outside local")
         if (props.seed.accounts.isNotEmpty()) add("skeleton.account.seed.accounts defines seed accounts (known passwords): remove them outside local")

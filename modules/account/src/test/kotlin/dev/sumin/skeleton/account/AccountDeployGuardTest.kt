@@ -16,7 +16,7 @@ class AccountDeployGuardTest {
 
     private object RealRepo : AccountRepository by InMemoryAccountRepository()
     private object RealTokens
-    private val healthy = AccountDeployGuard.State(RealRepo, RealTokens, mailTransportIsLogOnly = false, captchaAvailable = true)
+    private val healthy = AccountDeployGuard.State(RealRepo, RealTokens, mailTransportIsLogOnly = false, captchaAvailable = true, clientIpModeConfigured = true)
     private val goodProps = AccountProperties(mail = AccountProperties.Mail(linkBaseUrl = "https://app.example.com"))
     private fun guard(props: AccountProperties = goodProps, state: AccountDeployGuard.State = healthy) = AccountDeployGuard(props, listOf("prod", "staging")) { state }
 
@@ -73,5 +73,23 @@ class AccountDeployGuardTest {
         val w = guard().warnings(prod)
         assertTrue(w.any { "captcha" in it })
         assertEquals(emptyList(), guard().problems(prod))
+    }
+
+    @Test
+    fun `without a client IP mode the IP limits can be rotated by any caller - a problem in protected envs only`() {
+        val open = healthy.copy(clientIpModeConfigured = false)
+        val problems = guard(state = open).problems(prod)
+        assertEquals(1, problems.size, problems.toString())
+        assertTrue("skeleton.web.client-ip.mode" in problems.single() && "X-Forwarded-For" in problems.single(), problems.single())
+        assertEquals(1, guard(state = open).problems(prodProfile).size)
+        assertEquals(emptyList(), guard(state = open).problems(local))
+        assertEquals(emptyList(), guard(state = open).problems(unset))
+    }
+
+    @Test
+    fun `an app with every IP limit off has nothing to protect and is not forced to pick a mode`() {
+        val off = goodProps.copy(login = AccountProperties.Login(throttleEnabled = false), signUp = AccountProperties.SignUp(enabled = false))
+        // forgot-password and resend are always limited per IP, so the mode stays required: only the two optional limits are off here
+        assertTrue(guard(off, healthy.copy(clientIpModeConfigured = false)).problems(prod).any { "client-ip" in it })
     }
 }

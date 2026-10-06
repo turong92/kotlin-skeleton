@@ -21,8 +21,11 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 
 @SpringBootTest(classes = [SessionWebTestApplication::class])
 @AutoConfigureMockMvc
-@Import(SessionTestAccounts::class)
+@Import(SessionTestAccounts::class, dev.sumin.skeleton.sessionstest.RecordingSessionEvents::class)
+@org.junit.jupiter.api.extension.ExtendWith(org.springframework.boot.test.system.OutputCaptureExtension::class)
 class SessionBodyDeliveryWebTest : SessionWebTestBase() {
+    @org.springframework.beans.factory.annotation.Autowired lateinit var listener: dev.sumin.skeleton.sessionstest.RecordingSessionEventListener
+
     private fun refresh(token: String) =
         mvc.perform(post("/api/v1/auth/refresh").contentType(MediaType.APPLICATION_JSON).content("""{"refreshToken":"$token"}"""))
 
@@ -44,6 +47,18 @@ class SessionBodyDeliveryWebTest : SessionWebTestBase() {
 
         refresh(first).andExpect(status().isUnauthorized).andExpect(jsonPath("$.code").value("AUTH.REFRESH_REUSED"))
         refresh(second).andExpect(status().isUnauthorized).andExpect(jsonPath("$.code").value("AUTH.REFRESH_INVALID"))
+    }
+
+    @Test
+    fun `reuse reaches the listeners the app registered and leaves a WARN with no token in it`(output: org.springframework.boot.test.system.CapturedOutput) {
+        val first = login().str("$.value.refreshToken")!!
+        refresh(first).andExpect(status().isOk)
+        refresh(first).andExpect(status().isUnauthorized)
+        val seen = listener.events.filter { it.type == dev.sumin.skeleton.auth.session.SessionEventType.REFRESH_REUSE_DETECTED }
+        assertEquals(1, seen.size, "the real SessionService must publish to SessionEventListener beans")
+        assertEquals("acc_ann", seen.single().accountId)
+        val warn = output.all.lines().single { "refresh token reuse" in it }
+        assertEquals(true, "WARN" in warn && "acc_ann" in warn && first !in warn, warn)
     }
 
     @Test

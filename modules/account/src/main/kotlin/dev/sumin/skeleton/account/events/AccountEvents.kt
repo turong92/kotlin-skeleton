@@ -61,3 +61,23 @@ class LoggingAccountEventListener : AccountEventListener {
         log.info("account event type={} account={} ip={} detail={}", event.type, event.accountId ?: "-", event.ip ?: "-", event.detail)
     }
 }
+
+/**
+ * `auth-session` 의 [SessionEvent] 를 계정 이벤트로 잇는다 — 재사용 탐지가 감사 표 · 주인 경보 · 로그에 닿는 길이다.
+ * 세션 모듈이 없으면 이 빈은 아무도 부르지 않는다.
+ */
+class AccountSessionEventListener(private val events: AccountEventPublisher) : dev.sumin.skeleton.auth.session.SessionEventListener {
+    override fun on(event: dev.sumin.skeleton.auth.session.SessionEvent) {
+        val detail = buildMap {
+            event.sessionId?.let { put("session", it) }
+            if (event.count > 0) put("count", event.count.toString())
+            event.reason?.let { put("reason", it) }
+        }
+        val type = when (event.type) {
+            dev.sumin.skeleton.auth.session.SessionEventType.REFRESH_REUSE_DETECTED -> AccountEventType.REFRESH_REUSE_DETECTED
+            dev.sumin.skeleton.auth.session.SessionEventType.SESSION_REVOKED -> AccountEventType.SESSION_REVOKED
+            dev.sumin.skeleton.auth.session.SessionEventType.SESSIONS_REVOKED -> AccountEventType.SESSIONS_REVOKED
+        }
+        events.publish(type, event.accountId, event.ip, detail)
+    }
+}

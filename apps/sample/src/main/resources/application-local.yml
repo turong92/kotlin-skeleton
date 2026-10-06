@@ -4,6 +4,9 @@ spring:
     host: localhost
     port: ${MAIL_SMTP_PORT:1025}
 skeleton:
+  web:
+    client-ip:
+      mode: direct                           # 로컬은 앞에 프록시가 없다 — 헤더를 믿지 않고 소켓 주소가 클라이언트 (docs/client-ip.md)
   notification-mail:
     enabled: true
     from: "Notes <no-reply@notes.local>"

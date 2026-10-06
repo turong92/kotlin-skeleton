@@ -4,8 +4,10 @@ import dev.sumin.skeleton.auth.account.AuthAccountRepository
 import dev.sumin.skeleton.auth.api.AuthTokenResponseFactory
 import dev.sumin.skeleton.auth.config.AuthAutoConfiguration
 import dev.sumin.skeleton.auth.session.LoginSessionIssuer
+import dev.sumin.skeleton.auth.session.SessionEventListener
 import dev.sumin.skeleton.auth.session.SessionRevoker
 import dev.sumin.skeleton.auth.sessions.web.SessionController
+import dev.sumin.skeleton.common.erasure.AccountErasureListener
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.common.web.ClientIps
 import dev.sumin.skeleton.common.web.PublicEndpointContributor
@@ -30,8 +32,32 @@ class AuthSessionAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    fun sessionService(store: SessionStore, properties: AuthSessionProperties, time: ObjectProvider<TimeProvider>): SessionService =
-        SessionService(store, properties, time.getIfAvailable { TimeProvider.systemUtc() })
+    fun sessionService(
+        store: SessionStore,
+        properties: AuthSessionProperties,
+        time: ObjectProvider<TimeProvider>,
+        listeners: ObjectProvider<SessionEventListener>,
+    ): SessionService = SessionService(store, properties, time.getIfAvailable { TimeProvider.systemUtc() }, SessionEventDispatch { listeners.orderedStream().toList() })
+
+    /** 기본 듣는 쪽 — 재사용 탐지는 WARN 한 줄(세션 · 계정 id 만, 토큰 없음). 앱이 같은 이름의 빈을 두면 물러난다 */
+    @Bean
+    @ConditionalOnMissingBean(name = ["loggingSessionEventListener"])
+    fun loggingSessionEventListener(): SessionEventListener = LoggingSessionEventListener()
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun sessionPurge(store: SessionStore, properties: AuthSessionProperties, time: ObjectProvider<TimeProvider>): SessionPurge =
+        SessionPurge(store, time.getIfAvailable { TimeProvider.systemUtc() }, properties.purge)
+
+    /** 끝난 세션 행을 주기로 지운다 (`skeleton.auth-session.purge.interval`, 0 이면 끔) */
+    @Bean(initMethod = "start", destroyMethod = "close")
+    @ConditionalOnMissingBean(name = ["authSessionPurgeScheduler"])
+    fun authSessionPurgeScheduler(properties: AuthSessionProperties, purge: SessionPurge): SessionPurgeScheduler = SessionPurgeScheduler(properties.purge.interval, purge)
+
+    /** 계정 삭제가 끝나면 그 계정의 세션 행을 지운다 */
+    @Bean
+    @ConditionalOnMissingBean(name = ["sessionErasureListener"])
+    fun sessionErasureListener(store: SessionStore): AccountErasureListener = SessionErasureListener(store)
 
     @Bean
     @ConditionalOnMissingBean

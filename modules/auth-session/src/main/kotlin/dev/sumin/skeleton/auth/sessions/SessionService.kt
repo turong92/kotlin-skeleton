@@ -1,6 +1,8 @@
 package dev.sumin.skeleton.auth.sessions
 
 import dev.sumin.skeleton.auth.session.OpenedSession
+import dev.sumin.skeleton.auth.session.SessionEvent
+import dev.sumin.skeleton.auth.session.SessionEventType
 import dev.sumin.skeleton.common.time.TimeProvider
 import java.security.MessageDigest
 import java.security.SecureRandom
@@ -13,13 +15,15 @@ import java.util.HexFormat
  * 새로고침은 매번 새 토큰을 내고 옛 토큰을 쓴 것으로 표시한다 — 쓴 토큰이 다시 오면 세션 전체를 닫는다(재사용 탐지).
  * 두 요청이 같은 토큰으로 동시에 와도 [SessionStore.markTokenUsed] 의 원자성이 한 쪽만 통과시킨다.
  *
- * [onEvent] 는 `REUSE_DETECTED sid=…` 처럼 한 줄 문자열 알림이다 (계정 모듈이 이벤트로 바꾼다). 토큰은 어디에도 싣지 않는다.
+ * [onEvent] 로 재사용 탐지 · 세션 철회를 알린다 (자동설정이 `SessionEventListener` 빈들로 잇는다). 토큰은 어디에도 싣지 않는다.
+ * 쓴 토큰은 **세션이 살아 있는 동안** 기억한다 — 도둑이 먼저 쓰고 계속 돌려 쓰는 사이 주인이 며칠 뒤 돌아와도 재사용으로 잡히도록
+ * (`reuse-memory` 를 정하면 그 시간만큼만 기억한다: 표가 커지는 것을 막는 대신 그 창이 지나면 탐지가 안 된다).
  */
 class SessionService(
     private val store: SessionStore,
     private val properties: AuthSessionProperties,
     private val time: TimeProvider = TimeProvider.systemUtc(),
-    private val onEvent: (String) -> Unit = {},
+    private val onEvent: (SessionEvent) -> Unit = {},
 ) {
     private val random = SecureRandom()
 
@@ -53,14 +57,14 @@ class SessionService(
         }
         if (usedAt != null && !(properties.reuseGrace.toMillis() > 0 && !usedAt.plus(properties.reuseGrace).isBefore(now))) {
             store.revoke(session.id, now, "REUSE")
-            onEvent("REUSE_DETECTED sid=${session.id} account=${session.accountId}")
+            onEvent(SessionEvent(SessionEventType.REFRESH_REUSE_DETECTED, session.accountId, session.id, ip = client.ip))
             throw RefreshReusedException()
         }
 
         val next = newToken()
         store.addToken(session.id, hash(next), now)
         store.touch(session.id, now, client.ip, client.userAgent)
-        store.pruneUsedTokens(session.id, now.minus(properties.reuseMemory))
+        properties.reuseMemory?.let { store.pruneUsedTokens(session.id, now.minus(it)) }
         return RefreshResult(session.accountId, OpenedSession(session.id, next, session.expiresAt))
     }
 
@@ -82,12 +86,12 @@ class SessionService(
     fun revoke(accountId: String, sessionId: String) {
         val session = store.find(sessionId)
         if (session == null || session.accountId != accountId || !store.revoke(sessionId, time.now(), "REVOKED")) throw SessionNotFoundException()
-        onEvent("SESSION_REVOKED sid=$sessionId account=$accountId")
+        onEvent(SessionEvent(SessionEventType.SESSION_REVOKED, accountId, sessionId, count = 1))
     }
 
     fun revokeAll(accountId: String, exceptSessionId: String?, reason: String = "REVOKED_ALL") {
         val n = store.revokeAll(accountId, exceptSessionId, time.now(), reason)
-        if (n > 0) onEvent("SESSIONS_REVOKED count=$n account=$accountId reason=$reason")
+        if (n > 0) onEvent(SessionEvent(SessionEventType.SESSIONS_REVOKED, accountId, count = n, reason = reason))
     }
 
     private fun isLive(s: SessionRecord, now: Instant): Boolean =

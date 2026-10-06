@@ -97,6 +97,9 @@ class JdbcSessionStore(
             MapSqlParameterSource().addValue("b", dialect.instantParam(before)),
         )
 
+    /** 토큰은 FK `on delete cascade` 로 함께 지워진다 */
+    override fun eraseAccount(accountId: String): Int = jdbc.update("delete from skeleton_auth_sessions where account_id = :a", mapOf("a" to accountId))
+
     private fun ResultSet.session() = SessionRecord(
         id = getString("id"), accountId = getString("account_id"), deviceName = getString("device_name"), userAgent = getString("user_agent"),
         ip = getString("ip"), createdAt = dialect.readInstant(this, "created_at")!!, lastUsedAt = dialect.readInstant(this, "last_used_at")!!,

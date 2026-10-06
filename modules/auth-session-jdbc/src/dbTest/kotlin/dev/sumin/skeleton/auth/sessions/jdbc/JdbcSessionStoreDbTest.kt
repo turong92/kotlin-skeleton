@@ -101,6 +101,17 @@ class JdbcSessionStoreDbTest {
     }
 
     @Test
+    fun `erasing an account deletes its sessions - open, revoked or expired - and their tokens, and only its own`() {
+        store.create(session("ses_a"), "a".repeat(64)); store.create(session("ses_b"), "b".repeat(64)); store.create(session("ses_c", account = "acc_2"), "c".repeat(64))
+        store.revoke("ses_b", now, "R")
+        assertEquals(2, store.eraseAccount("acc_1"))
+        assertNull(store.find("ses_a")); assertNull(store.find("ses_b"))
+        assertNull(store.findToken("a".repeat(64)))
+        assertTrue(store.find("ses_c") != null && store.findToken("c".repeat(64)) != null)
+        assertEquals(0, store.eraseAccount("acc_1"), "erasure is idempotent")
+    }
+
+    @Test
     fun `the service on the real store spends a refresh token once under a 16-way race and rotates cleanly`() {
         val service = SessionService(store, AuthSessionProperties(), TimeProvider.systemUtc())
         val client = SessionClient("203.0.113.5", "UA", null)

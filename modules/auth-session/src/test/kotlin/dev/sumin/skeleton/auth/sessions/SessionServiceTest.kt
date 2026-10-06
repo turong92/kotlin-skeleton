@@ -1,6 +1,8 @@
 package dev.sumin.skeleton.auth.sessions
 
 import dev.sumin.skeleton.auth.account.AuthAccount
+import dev.sumin.skeleton.auth.session.SessionEvent
+import dev.sumin.skeleton.auth.session.SessionEventType
 import dev.sumin.skeleton.common.ApplicationException
 import dev.sumin.skeleton.common.time.TimeProvider
 import java.time.Duration
@@ -25,7 +27,7 @@ class SessionServiceTest {
     private val store = InMemorySessionStore()
     private val account = AuthAccount("acc_1", "ann", "ann@example.com", "", setOf("USER"))
     private val client = SessionClient(ip = "203.0.113.7", userAgent = "JUnit/1", deviceName = "Test laptop")
-    private val events = CopyOnWriteArrayList<String>()
+    private val events = CopyOnWriteArrayList<SessionEvent>()
 
     private fun service(props: AuthSessionProperties = AuthSessionProperties()) =
         SessionService(store, props, time) { events += it }
@@ -61,7 +63,10 @@ class SessionServiceTest {
 
         assertEquals("AUTH.REFRESH_REUSED", code { s.refresh(first.refreshToken!!, client) })
         assertEquals("AUTH.REFRESH_INVALID", code { s.refresh(second.session.refreshToken!!, client) })
-        assertTrue(events.any { it.startsWith("REUSE_DETECTED") })
+        val reuse = events.single { it.type == SessionEventType.REFRESH_REUSE_DETECTED }
+        assertEquals(account.accountId, reuse.accountId)
+        assertEquals(first.sessionId, reuse.sessionId)
+        assertEquals("203.0.113.7", reuse.ip)
         assertTrue(s.list(account.accountId, null).isEmpty())
     }
 
@@ -179,6 +184,42 @@ class SessionServiceTest {
         var token = s.open(account.accountId, client).refreshToken!!
         repeat(5) { time.advance(Duration.ofHours(2)); token = s.refresh(token, client).session.refreshToken!! }
         assertTrue(store.tokenHashes().size <= 2, "used tokens older than reuse-memory must be pruned, got ${store.tokenHashes().size}")
+    }
+}
+
+class SessionReuseMemoryTest {
+    private class MutableTime(var at: Instant = Instant.parse("2026-10-06T00:00:00Z")) : TimeProvider {
+        override fun now(): Instant = at
+        fun advance(d: Duration) { at = at.plus(d) }
+    }
+
+    private val time = MutableTime()
+    private val store = InMemorySessionStore()
+    private val client = SessionClient("203.0.113.7", "JUnit/1", null)
+    private val events = CopyOnWriteArrayList<SessionEvent>()
+    private val service = SessionService(store, AuthSessionProperties(), time) { events += it }
+
+    @Test
+    fun `a stolen token used first is still recognised as reuse when the victim comes back days later - the memory lasts as long as the session`() {
+        val victimToken = service.open("acc_1", client).refreshToken!!
+        val attacker1 = service.refresh(victimToken, client)                 // the thief goes first
+        time.advance(Duration.ofHours(25))
+        val attacker2 = service.refresh(attacker1.session.refreshToken!!, client)   // ... and keeps rotating, which used to prune the victim's token
+        time.advance(Duration.ofDays(3))
+        val ex = assertFailsWith<ApplicationException> { service.refresh(victimToken, client) }
+        assertEquals("AUTH.REFRESH_REUSED", ex.errorCode.code, "the old row was forgotten after reuse-memory, so the theft left no trace")
+        assertEquals("AUTH.REFRESH_INVALID", assertFailsWith<ApplicationException> { service.refresh(attacker2.session.refreshToken!!, client) }.errorCode.code, "the thief's session was closed")
+        assertTrue(events.any { it.type == SessionEventType.REFRESH_REUSE_DETECTED })
+    }
+
+    @Test
+    fun `revoking sessions reports them`() {
+        val a = service.open("acc_1", client)
+        service.open("acc_1", client)
+        service.revoke("acc_1", a.sessionId)
+        service.revokeAll("acc_1", null)
+        assertEquals(listOf(SessionEventType.SESSION_REVOKED, SessionEventType.SESSIONS_REVOKED), events.map { it.type })
+        assertEquals(1, events.last().count)
     }
 }
 

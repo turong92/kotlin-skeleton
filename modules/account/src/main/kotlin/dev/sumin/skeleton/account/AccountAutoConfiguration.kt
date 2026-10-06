@@ -10,6 +10,7 @@ import dev.sumin.skeleton.account.abuse.LoginThrottle
 import dev.sumin.skeleton.common.erasure.AccountErasureListener
 import dev.sumin.skeleton.account.events.AccountEventListener
 import dev.sumin.skeleton.account.events.AccountEventPublisher
+import dev.sumin.skeleton.account.events.AccountSessionEventListener
 import dev.sumin.skeleton.account.events.DefaultAccountEventPublisher
 import dev.sumin.skeleton.account.events.LoggingAccountEventListener
 import dev.sumin.skeleton.account.mail.AccountLinks
@@ -36,9 +37,11 @@ import dev.sumin.skeleton.account.token.OneTimeTokens
 import dev.sumin.skeleton.auth.account.AuthAccountRepository
 import dev.sumin.skeleton.auth.config.AuthAutoConfiguration
 import dev.sumin.skeleton.auth.config.AuthProperties
+import dev.sumin.skeleton.auth.session.SessionEventListener
 import dev.sumin.skeleton.auth.session.SessionRevoker
 import dev.sumin.skeleton.common.deploy.DeployContext
 import dev.sumin.skeleton.common.time.TimeProvider
+import dev.sumin.skeleton.common.web.ClientIps
 import dev.sumin.skeleton.common.web.InMemoryFixedWindowRateLimitStore
 import dev.sumin.skeleton.common.web.RateLimitStore
 import org.springframework.beans.factory.ObjectProvider
@@ -134,6 +137,11 @@ class AccountAutoConfiguration {
         val clock = time.getIfAvailable { TimeProvider.systemUtc() }
         return DefaultAccountEventPublisher({ clock.now() }) { listeners.orderedStream().toList() }
     }
+
+    /** `auth-session` 의 세션 사건(재사용 탐지 · 철회)을 계정 이벤트로 — 감사 표 · 경보 · 로그가 한 길을 쓴다 */
+    @Bean
+    @ConditionalOnMissingBean(name = ["accountSessionEventListener"])
+    fun accountSessionEventListener(events: AccountEventPublisher): SessionEventListener = AccountSessionEventListener(events)
 
     @Bean
     @ConditionalOnMissingBean
@@ -263,7 +271,11 @@ class AccountAutoConfiguration {
         tokenStore: ObjectProvider<OneTimeTokenStore>,
         transport: ObjectProvider<AccountMailTransport>,
         captcha: ObjectProvider<AccountCaptcha>,
+        clientIps: ObjectProvider<ClientIps>,
     ): AccountDeployGuard = AccountDeployGuard(properties, auth.getIfAvailable { AuthProperties() }.protectedProfiles) {
-        AccountDeployGuard.State(accounts.getIfUnique(), tokenStore.getIfUnique(), transport.getIfUnique() is LogOnlyMailTransport, captcha.getIfAvailable() != null)
+        AccountDeployGuard.State(
+            accounts.getIfUnique(), tokenStore.getIfUnique(), transport.getIfUnique() is LogOnlyMailTransport, captcha.getIfAvailable() != null,
+            clientIps.getIfAvailable { ClientIps() }.configured,
+        )
     }
 }
