@@ -33,7 +33,7 @@ class KakaoOAuthProviderTest {
 
     @BeforeTest
     fun setUp() {
-        server = HttpServer.create(InetSocketAddress(0), 0)
+        server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
         server.createContext("/") { exchange -> handle(exchange) }
         server.start()
         httpClient = DefaultExternalHttpClient(
@@ -49,8 +49,8 @@ class KakaoOAuthProviderTest {
                 clientId = "kakao-client",
                 clientSecret = "kakao-secret",
                 redirectUri = "https://app.example.com/oauth/kakao/callback",
-                tokenBaseUrl = "http://localhost:${server.address.port}",
-                profileBaseUrl = "http://localhost:${server.address.port}",
+                tokenBaseUrl = "http://127.0.0.1:${server.address.port}",
+                profileBaseUrl = "http://127.0.0.1:${server.address.port}",
                 tokenPath = "/oauth/token",
                 profilePath = "/v2/user/me",
             ),

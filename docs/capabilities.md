@@ -731,7 +731,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 종류 · 상태: module · stable — 위치 `modules/persistence-jdbc`
 - 켜는 법: 스타터(apps/api)에 기본 포함
 - 의존 한 줄: `implementation(project(":modules:persistence-jdbc"))`
-- 설정 접두사 `skeleton.persistence-jdbc` — 키와 기본값 `docs/config/modules/persistence-jdbc.yml`
+- 설정 접두사 `skeleton.persistence-jdbc.startup-wait` — 키와 기본값 `docs/config/modules/persistence-jdbc.yml`
 - 문서: `docs/modules/persistence-jdbc.md`
 - 쓰지 않는 경우:
   - JPA · jOOQ 와 병행하지 않는다 — 하나를 고른다(persistence-jpa | persistence-jooq)

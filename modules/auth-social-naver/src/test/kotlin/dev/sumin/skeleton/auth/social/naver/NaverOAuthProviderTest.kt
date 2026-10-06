@@ -26,7 +26,7 @@ class NaverOAuthProviderTest {
 
     @BeforeTest
     fun setUp() {
-        server = HttpServer.create(InetSocketAddress(0), 0)
+        server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
         server.createContext("/") { exchange -> handle(exchange) }
         server.start()
         httpClient = DefaultExternalHttpClient(
@@ -42,8 +42,8 @@ class NaverOAuthProviderTest {
                 clientId = "naver-client",
                 clientSecret = "naver-secret",
                 redirectUri = "https://app.example.com/oauth/naver/callback",
-                tokenBaseUrl = "http://localhost:${server.address.port}",
-                profileBaseUrl = "http://localhost:${server.address.port}",
+                tokenBaseUrl = "http://127.0.0.1:${server.address.port}",
+                profileBaseUrl = "http://127.0.0.1:${server.address.port}",
                 tokenPath = "/oauth2.0/token",
                 profilePath = "/v1/nid/me",
             ),

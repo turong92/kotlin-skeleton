@@ -23,6 +23,11 @@
 `@SpringBootTest(properties = …)`, `@Import`, `@MockitoBean`, `@AutoConfigureMockMvc` 의 유무가 모두 캐시 키다. 같은 설정이면 같은 컨텍스트를 재사용한다.
 `spring.test.context.cache.maxSize` 로 캐시 상한을 줄이면 컨텍스트(힙)는 줄지만 밀려난 컨텍스트를 다시 만드는 비용이 늘고, DB 컨테이너 수에는 영향이 없다 — 힙이 모자랄 때만 쓴다.
 
+## 한 대를 여럿이 쓸 때 가끔 죽던 시험 — 원인 둘 (둘 다 우리 쪽)
+
+- **시험 HTTP 서버는 127.0.0.1 에 묶는다.** `HttpServer.create(InetSocketAddress(0), 0)` 처럼 포트만 주면 와일드카드 주소에 묶이는데, macOS 에서는 **다른 프로세스가 같은 포트의 127.0.0.1 에 이미 듣고 있어도** 와일드카드 바인딩이 성공하고, `127.0.0.1` · `localhost` 로 오는 연결은 그 다른 프로세스로 간다 — `ExternalHttpClientTest` 가 `PrematureCloseException` · 엉뚱한 `404` 로 죽던 원인이다(같은 시험 모양을 CPU 부하 아래 반복: 와일드카드 9300 번 중 9 번 실패, `127.0.0.1` 6000 번 중 0 번; 포트 재사용은 0 번이라 풀 재사용 가설은 아니다). `TestServerRulesTest`(`modules/platform`)가 포트만 주는 바인딩을 막는다. URL 도 `http://127.0.0.1:<port>` 로.
+- **Ryuk 대기 120초.** Testcontainers 는 Ryuk 컨테이너가 뜨고 소켓이 열리기를 30초(`ryuk.container.timeout`) 기다리는데, 바쁜 호스트에서는 도커 쪽이 그보다 오래 걸린다(실측 `Container testcontainers/ryuk started in PT30.35S`) → 그 JVM 의 첫 DB 시험이 `ExceptionInInitializerError`(`RyukResourceReaper`), 나머지는 전부 `NoClassDefFoundError`(`recipe-community` 의 `notification-jdbc` 에서 34 개 중 34 개). 루트 `build.gradle.kts` 가 모든 Test 태스크에 `TESTCONTAINERS_RYUK_CONTAINER_TIMEOUT=120` 을 준다(`TestcontainersTimeoutsTest` 가 JVM 이 그 값을 받았는지 본다). 대기를 0 으로 줘서 같은 연쇄(`Could not connect to Ryuk` → 4 개 중 4 개 실패)를 만들어 확인했다. 그리고 `DbTestDatabase` 의 컨테이너는 `by lazy` 라 시작이 한 번 실패해도 객체 초기화가 영구히 망가지지 않는다.
+
 ## 시간에 기대지 않는 시험
 
 - 시간 초과를 보는 시험은 서버가 응답을 **잡아 둔다**(`CountDownLatch`) — 고정 `sleep` 은 부하에서 클라이언트 시간 초과와 경주가 된다. 예외 *종류*를 단언하고 벽시계 시간은 단언하지 않는다.

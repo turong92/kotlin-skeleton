@@ -1564,7 +1564,7 @@
         "optional": []
       },
       "config": {
-        "prefixes": ["skeleton.persistence-jdbc"],
+        "prefixes": ["skeleton.persistence-jdbc.startup-wait"],
         "snippet": "docs/config/modules/persistence-jdbc.yml"
       },
       "basePaths": [],

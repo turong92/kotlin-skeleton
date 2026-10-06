@@ -25,7 +25,7 @@ class ExternalHttpJsonExtensionsTest {
 
     @BeforeTest
     fun setUp() {
-        server = HttpServer.create(InetSocketAddress(0), 0)
+        server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
         server.createContext("/") { exchange -> handle(exchange) }
         server.start()
         client = DefaultExternalHttpClient(
@@ -35,7 +35,7 @@ class ExternalHttpJsonExtensionsTest {
                 defaultResponseTimeout = Duration.ofSeconds(30),
                 clients = mapOf(
                     "json-provider" to OutboundHttpProperties.Client(
-                        baseUrl = "http://localhost:${server.address.port}",
+                        baseUrl = "http://127.0.0.1:${server.address.port}",
                     ),
                 ),
             ),

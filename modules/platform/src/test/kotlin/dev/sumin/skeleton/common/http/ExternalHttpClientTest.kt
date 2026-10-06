@@ -28,6 +28,7 @@ import org.springframework.boot.test.system.CapturedOutput
 import org.springframework.boot.test.system.OutputCaptureExtension
 import org.springframework.web.reactive.function.client.WebClient
 
+/** 시험 서버는 127.0.0.1 에 묶는다 — 와일드카드(`InetSocketAddress(0)`)는 다른 프로세스의 127.0.0.1 리스너에 연결이 가로채일 수 있다 (TestServerRulesTest). */
 /** 부하가 큰 호스트(load 60~90)에서도 같은 결과여야 한다: 상한은 넉넉하게, 시간 초과 시험은 서버가 응답을 잡아 두는 방식으로. */
 private val GENEROUS: Duration = Duration.ofSeconds(30)
 
@@ -40,7 +41,7 @@ class ExternalHttpClientTest {
 
     @BeforeTest
     fun setUp() {
-        server = HttpServer.create(InetSocketAddress(0), 0)
+        server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
         server.createContext("/") { exchange -> handle(exchange) }
         server.start()
         client = DefaultExternalHttpClient(
@@ -50,7 +51,7 @@ class ExternalHttpClientTest {
                 defaultResponseTimeout = GENEROUS,
                 clients = mapOf(
                     "test" to OutboundHttpProperties.Client(
-                        baseUrl = "http://localhost:${server.address.port}",
+                        baseUrl = "http://127.0.0.1:${server.address.port}",
                     ),
                 ),
             ),
@@ -99,7 +100,7 @@ class ExternalHttpClientTest {
     @Test
     fun `per call manipulation can override base url`() {
         val response = client.get("dynamic", "/base-override", EchoResponse::class.java) {
-            baseUrl("http://localhost:${server.address.port}")
+            baseUrl("http://127.0.0.1:${server.address.port}")
         }.block()
 
         assertEquals("GET", response?.method)
@@ -192,7 +193,7 @@ class ExternalHttpClientTest {
                 logging = OutboundHttpProperties.Logging(includeQuery = true),
                 clients = mapOf(
                     "test" to OutboundHttpProperties.Client(
-                        baseUrl = "http://localhost:${server.address.port}",
+                        baseUrl = "http://127.0.0.1:${server.address.port}",
                     ),
                 ),
             ),
@@ -243,7 +244,7 @@ class ExternalHttpClientTest {
                 defaultResponseTimeout = Duration.ofMillis(250),
                 clients = mapOf(
                     "test" to OutboundHttpProperties.Client(
-                        baseUrl = "http://localhost:${server.address.port}",
+                        baseUrl = "http://127.0.0.1:${server.address.port}",
                     ),
                 ),
             ),

@@ -47,6 +47,9 @@ configure(subprojects.filter { it.buildFile.isFile }) {
 
     tasks.withType<Test>().configureEach {
         useJUnitPlatform()
+        // Testcontainers 의 Ryuk 대기 기본값은 30초인데, 바쁜 호스트(여러 세션이 같이 쓰는 맥)에서는 도커가 Ryuk 컨테이너를 올리고 포트를 여는 데만 30초가 넘게 걸린다(실측 PT30.35S).
+        // 그러면 그 JVM 의 첫 DB 시험이 ExceptionInInitializerError(RyukResourceReaper), 나머지는 NoClassDefFoundError 로 줄줄이 죽는다 — docs/testing.md
+        environment("TESTCONTAINERS_RYUK_CONTAINER_TIMEOUT", "120")
     }
 }
 

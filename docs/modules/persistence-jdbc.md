@@ -11,7 +11,7 @@ Spring Data JDBC 엔티티의 audit 타임스탬프 콜백과, DB 방언 전략 
 | 의존성 한 줄 | `implementation(project(":modules:persistence-jdbc"))` |
 | 함께 오는 모듈 | `platform` |
 | 컴파일 전용 | 없음 |
-| 설정 접두사 | `skeleton.persistence-jdbc` — [docs/config/modules/persistence-jdbc.yml](../config/modules/persistence-jdbc.yml) |
+| 설정 접두사 | `skeleton.persistence-jdbc.startup-wait` — [docs/config/modules/persistence-jdbc.yml](../config/modules/persistence-jdbc.yml) |
 | 기본 동작 | 켜짐. 첫 연결 기다리기는 꺼짐(`startup-wait.enabled`). |
 | 부팅에 필요한 것 | `DataSource` 와 `db-*` 모듈 하나. |
 | 교체 지점 | `JdbcAuditBeforeConvertCallback` |

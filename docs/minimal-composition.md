@@ -114,7 +114,7 @@ fails when this table and the prefixes found in module code differ.
 | `idempotency` | `skeleton.idempotency` |
 | `job-queue-jdbc` | `skeleton.job-queue` |
 | `migration` | `skeleton.migration` |
-| `persistence-jdbc` | `skeleton.persistence-jdbc` |
+| `persistence-jdbc` | `skeleton.persistence-jdbc.startup-wait` |
 | `notification` | `skeleton.notification.inbox` |
 | `notification-mail` | `skeleton.notification-mail` |
 | `notification-slack` | `skeleton.notification.slack` |
