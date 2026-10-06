@@ -8,7 +8,10 @@ data class OpenedSession(
     val sessionId: String,
     val refreshToken: String? = null,
     val refreshExpiresAt: Instant? = null,
-)
+) {
+    // 리프레시 토큰이 로그에 찍히지 않게
+    override fun toString() = "OpenedSession(sessionId=$sessionId, refreshToken=${if (refreshToken == null) "none" else "<redacted>"}, refreshExpiresAt=$refreshExpiresAt)"
+}
 
 /**
  * 로그인(비밀번호 · 소셜 · 매직 링크 …)이 성공해 액세스 토큰을 내기 직전에 세션을 연다. `auth-session` 이 구현하고,

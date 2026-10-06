@@ -8,6 +8,7 @@ import dev.sumin.skeleton.account.SignUpStatus
 import dev.sumin.skeleton.account.password.PasswordPolicy
 import dev.sumin.skeleton.common.DataResponse
 import dev.sumin.skeleton.common.Response
+import dev.sumin.skeleton.common.openapi.AcceptedOperation
 import dev.sumin.skeleton.common.web.ClientIps
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
@@ -41,6 +42,7 @@ class AccountPublicController(
             "With email verification switched off the answer is 201 CREATED and a duplicate is 409 ACCOUNT.EMAIL_TAKEN.",
     )
     @PostMapping("/account/sign-up")
+    @AcceptedOperation
     fun signUp(@Valid @RequestBody request: SignUpRequest, http: HttpServletRequest): ResponseEntity<DataResponse<StatusResponse>> {
         val status = registration.signUp(
             SignUpCommand(request.email!!, request.password!!, request.displayName, request.locale, request.timeZone, clientIps.of(http).ip, request.captchaToken),
@@ -51,6 +53,7 @@ class AccountPublicController(
 
     @Operation(summary = "Resend the verification mail (always 202; silent when unknown, verified, or over the per-address limit)")
     @PostMapping("/account/verification/resend")
+    @AcceptedOperation
     fun resend(@Valid @RequestBody request: EmailRequest, http: HttpServletRequest): ResponseEntity<DataResponse<StatusResponse>> {
         registration.resendVerification(request.email!!, clientIps.of(http).ip, request.captchaToken)
         return accepted("ACCEPTED")
@@ -65,6 +68,7 @@ class AccountPublicController(
 
     @Operation(summary = "Ask for a password-reset mail (always 202)")
     @PostMapping("/account/password/forgot")
+    @AcceptedOperation
     fun forgot(@Valid @RequestBody request: EmailRequest, http: HttpServletRequest): ResponseEntity<DataResponse<StatusResponse>> {
         passwords.forgot(request.email!!, clientIps.of(http).ip, request.captchaToken)
         return accepted("ACCEPTED")
@@ -91,5 +95,5 @@ class AccountPublicController(
         return Response.noContent()
     }
 
-    private fun accepted(status: String) = ResponseEntity.status(HttpStatus.ACCEPTED).body(Response.ok(StatusResponse(status)))
+    private fun accepted(status: String) = Response.accepted(StatusResponse(status))
 }

@@ -4,6 +4,7 @@ import dev.sumin.skeleton.account.signin.IdentityView
 import dev.sumin.skeleton.account.web.AccountCallers
 import dev.sumin.skeleton.common.DataResponse
 import dev.sumin.skeleton.common.Response
+import dev.sumin.skeleton.common.openapi.CreatedOperation
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
@@ -36,6 +37,7 @@ data class LinkSocialRequest(
 class SocialIdentityController(private val callers: AccountCallers, private val links: SocialLinkService) {
     @Operation(summary = "Link a social provider account to the signed-in account (409 ACCOUNT.IDENTITY_TAKEN when it belongs to another account)")
     @PostMapping("/{provider}")
+    @CreatedOperation
     fun link(authentication: Authentication?, @PathVariable provider: String, @Valid @RequestBody request: LinkSocialRequest): ResponseEntity<DataResponse<IdentityView>> {
         val view = links.link(callers.require(authentication).accountId, provider, request.authorizationCode!!, request.redirectUri, request.currentPassword, request.confirmationToken)
         return ResponseEntity.status(HttpStatus.CREATED).body(Response.ok(view))

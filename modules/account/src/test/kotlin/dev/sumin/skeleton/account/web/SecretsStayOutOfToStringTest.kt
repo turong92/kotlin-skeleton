@@ -34,6 +34,24 @@ class SecretsStayOutOfToStringTest {
     }
 
     @Test
+    fun `commands, sessions and seed accounts hide secrets too`() {
+        assertHidden(dev.sumin.skeleton.account.SignUpCommand("a@b.co", secret, null, null, null, null, null))
+        assertHidden(dev.sumin.skeleton.auth.session.OpenedSession("ses_1", secret, Instant.EPOCH))
+        assertHidden(dev.sumin.skeleton.account.AccountProperties.SeedAccount(email = "a@b.co", password = secret))
+    }
+
+    @Test
+    fun `account 202 and 201 answers are declared with the platform operation annotations so OpenAPI says 202 not 200`() {
+        fun annotated(type: Class<*>, name: String, annotation: Class<out Annotation>) = type.methods.single { it.name == name }.isAnnotationPresent(annotation)
+        val accepted = dev.sumin.skeleton.common.openapi.AcceptedOperation::class.java
+        assertTrue(annotated(AccountPublicController::class.java, "resend", accepted))
+        assertTrue(annotated(AccountPublicController::class.java, "forgot", accepted))
+        assertTrue(annotated(AccountController::class.java, "changeEmail", accepted))
+        assertTrue(annotated(AccountController::class.java, "delete", accepted))
+        assertTrue(annotated(dev.sumin.skeleton.account.social.SocialIdentityController::class.java, "link", dev.sumin.skeleton.common.openapi.CreatedOperation::class.java))
+    }
+
+    @Test
     fun `the login request and the token response hide credentials`() {
         assertHidden(PasswordLoginRequest(email = "a@b.co", password = secret))
         assertHidden(AuthTokenResponse(secret, expiresAt = Instant.EPOCH, principal = CurrentPrincipal("acc_1"), refreshToken = secret))

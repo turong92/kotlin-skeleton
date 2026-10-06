@@ -7,7 +7,6 @@ import com.jayway.jsonpath.JsonPath
 import dev.sumin.skeleton.account.abuse.ExecutorAccountTaskRunner
 import dev.sumin.skeleton.account.mail.AccountMail
 import dev.sumin.skeleton.account.mail.AccountMailer
-import dev.sumin.skeleton.account.mail.MailKind
 import dev.sumin.skeleton.accounttest.AccountWebTestApplication
 import dev.sumin.skeleton.common.logging.LogMasker
 import java.util.concurrent.CopyOnWriteArrayList
@@ -97,7 +96,6 @@ class AccountResponseLevelSecurityTest {
             val lines = appender.list.map { it.formattedMessage + " " + (it.throwableProxy?.message ?: "") }
             tokens.forEach { t -> assertTrue(lines.none { t in it }, "a one-time token was logged") }
             assertTrue(appender.list.none { "tangerine-42-moon" in it.formattedMessage }, "a password was logged by " + appender.list.filter { "tangerine-42-moon" in it.formattedMessage }.map { it.loggerName + ": " + it.formattedMessage.take(120) })
-            assertTrue(sent.none { MailKind.VERIFY_EMAIL != it.kind && false })
 
             val link = sent.first { it.link != null }.link!!
             assertTrue("token=" in link)

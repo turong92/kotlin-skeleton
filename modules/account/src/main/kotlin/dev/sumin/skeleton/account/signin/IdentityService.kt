@@ -50,12 +50,16 @@ class IdentityService(private val core: AccountCore, private val registry: SignI
     }
 
     /** 마지막 "들어오는 길" 은 지울 수 없다 — 저장소가 원자적으로 판정한다 */
-    fun unlink(accountId: String, identityId: String) {
+    fun unlink(accountId: String, identityId: String, currentSessionId: String? = null) {
         val identity = core.accounts.identitiesOf(accountId).firstOrNull { it.id == identityId } ?: throw AccountException(AccountErrorCode.IDENTITY_NOT_FOUND)
         val method = registry.find(identity.method)
         if (method?.userRemovable == false) throw AccountException(AccountErrorCode.LAST_SIGN_IN_METHOD)
         when (core.accounts.removeIdentityUnlessLast(accountId, identityId, registry.credentialCodes())) {
-            RemoveIdentityResult.REMOVED -> core.events.publish(AccountEventType.IDENTITY_UNLINKED, accountId, detail = mapOf("method" to identity.method))
+            RemoveIdentityResult.REMOVED -> {
+                // 그 수단으로 연 세션이 수단보다 오래 살지 않게 — 지금 쓰는 세션만 남기고 닫는다
+                core.sessions()?.revokeAll(accountId, currentSessionId)
+                core.events.publish(AccountEventType.IDENTITY_UNLINKED, accountId, detail = mapOf("method" to identity.method))
+            }
             RemoveIdentityResult.LAST -> throw AccountException(AccountErrorCode.LAST_SIGN_IN_METHOD)
             RemoveIdentityResult.NOT_FOUND -> throw AccountException(AccountErrorCode.IDENTITY_NOT_FOUND)
         }

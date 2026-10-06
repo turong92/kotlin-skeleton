@@ -9,6 +9,8 @@ import dev.sumin.skeleton.common.PageResponse
 import dev.sumin.skeleton.common.PaginationMeta
 import dev.sumin.skeleton.common.Response
 import io.swagger.v3.oas.annotations.Operation
+import org.springdoc.core.annotations.ParameterObject
+import org.springframework.web.bind.annotation.ModelAttribute
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import org.springframework.http.ResponseEntity
@@ -34,14 +36,11 @@ class AdminAccountController(private val callers: AccountCallers, private val ad
         authentication: Authentication?,
         @RequestParam(required = false) email: String?,
         @RequestParam(required = false) status: AccountStatus?,
-        @RequestParam(defaultValue = "0") page: Int,
-        @RequestParam(defaultValue = "20") size: Int,
+        @Valid @ParameterObject @ModelAttribute page: PageQuery,
     ): PageResponse<AdminAccountResponse> {
         callers.requireAdmin(authentication)
-        val result = admin.search(email, status, page, size)
-        val pageIndex = page.coerceAtLeast(0)
-        val pageSize = size.coerceIn(1, 100)
-        return Response.ok(result.items.map { it.toAdmin() }, PaginationMeta.of(pageIndex, pageSize, result.total))
+        val result = admin.search(email, status, page.page, page.size)
+        return Response.ok(result.items.map { it.toAdmin() }, page.toPagination(result.total))
     }
 
     @Operation(summary = "One account")

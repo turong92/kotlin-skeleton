@@ -79,4 +79,10 @@ class PasswordPolicyTest {
         assertEquals(72, d.maxBytes)
         assertTrue(d.requireLetter && d.requireDigit && !d.requireSymbol && d.forbidEmailLocalPart)
     }
+
+    @Test
+    fun `bcrypt with a byte limit above 72 fails at startup instead of a 500 on sign-up`() {
+        kotlin.test.assertFailsWith<IllegalArgumentException> { dev.sumin.skeleton.account.AccountProperties.Password(maxBytes = 100) }
+        dev.sumin.skeleton.account.AccountProperties.Password(maxBytes = 100, encoder = "argon2")
+    }
 }

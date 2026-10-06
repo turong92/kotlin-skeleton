@@ -6,6 +6,7 @@ import dev.sumin.skeleton.auth.api.AuthTokenResponse
 import dev.sumin.skeleton.auth.api.AuthTokenResponseFactory
 import dev.sumin.skeleton.common.DataResponse
 import dev.sumin.skeleton.common.Response
+import dev.sumin.skeleton.common.openapi.AcceptedOperation
 import dev.sumin.skeleton.common.web.ClientIps
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
@@ -35,9 +36,10 @@ class MagicLinkController(
 ) {
     @Operation(summary = "Mail a one-time sign-in link (always 202, whether or not the address has an account)")
     @PostMapping("/request")
+    @AcceptedOperation
     fun request(@Valid @RequestBody body: EmailRequest, http: HttpServletRequest): ResponseEntity<DataResponse<StatusResponse>> {
         service.request(body.email!!, clientIps.of(http).ip, body.captchaToken)
-        return ResponseEntity.status(HttpStatus.ACCEPTED).body(Response.ok(StatusResponse("SENT")))
+        return Response.accepted(StatusResponse("SENT"))
     }
 
     @Operation(summary = "Sign in with the link token (single use; 410 ACCOUNT.TOKEN_INVALID otherwise)")

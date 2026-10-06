@@ -17,7 +17,9 @@ data class SignUpCommand(
     val timeZone: String?,
     val ip: String?,
     val captchaToken: String?,
-)
+) {
+    override fun toString() = "SignUpCommand(email=<redacted>, password=<redacted>)"
+}
 
 enum class SignUpStatus { VERIFICATION_SENT, CREATED }
 

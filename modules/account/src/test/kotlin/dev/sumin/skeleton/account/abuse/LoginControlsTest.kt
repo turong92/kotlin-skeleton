@@ -48,10 +48,10 @@ class LoginControlsTest {
     }
 
     @Test
-    fun `identifiers are compared case-insensitively through the attempt key and never stored in clear`() {
-        // the key is hashed: the shared limit store must not hold an email
-        repeat(10) { throttle.beforeAttempt(attempt("email:ann@example.com")) }
-        assertFailsWith<ApplicationException> { throttle.beforeAttempt(attempt("email:ann@example.com")) }
+    fun `identifiers that differ only in case or spaces share one bucket`() {
+        repeat(5) { throttle.beforeAttempt(attempt("email:Ann@Example.com")) }
+        repeat(5) { throttle.beforeAttempt(attempt("email: ann@example.com ")) }
+        assertFailsWith<ApplicationException> { throttle.beforeAttempt(attempt("email:ANN@EXAMPLE.COM")) }
     }
 
     @Test

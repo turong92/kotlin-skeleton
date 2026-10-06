@@ -58,6 +58,7 @@ data class AccountProperties(
         init {
             require(minLength in 1..maxBytes) { "skeleton.account.password.min-length must be between 1 and max-bytes" }
             require(encoder == "bcrypt" || encoder == "argon2") { "skeleton.account.password.encoder must be bcrypt or argon2" }
+            require(encoder != "bcrypt" || maxBytes <= 72) { "skeleton.account.password.max-bytes above 72 needs encoder=argon2 (bcrypt reads at most 72 bytes)" }
         }
     }
 
@@ -115,7 +116,7 @@ data class AccountProperties(
         val reauthPath: String = "/confirm-reauth",
         /** 계정 로케일이 없거나 지원하지 않을 때 쓰는 메일 언어 (ko · en 이 내장) */
         val defaultLocale: String = "en",
-        /** 제목 앞에 붙는 서비스 이름 (예: [Ovation]) */
+        /** 제목 앞에 붙는 서비스 이름 (예: [MyService]) */
         val subjectPrefix: String = "",
         /** 메일 발송 모듈이 없을 때 링크를 로그에 남길지: AUTO(보호 환경이 아니면 남김) | ON | OFF. 링크에는 토큰이 있으므로 보호 환경에서 ON 은 DeployGuard 문제 */
         val logLinks: LogLinks = LogLinks.OFF,
@@ -155,7 +156,9 @@ data class AccountProperties(
         val roles: Set<String> = emptySet(),
         val displayName: String? = null,
         val locale: String? = null,
-    )
+    ) {
+        override fun toString() = "SeedAccount(id=$id, email=<redacted>, password=<redacted>, roles=$roles)"
+    }
 
     data class Captcha(
         /** true 면 가입 · 재설정 · 인증 재전송 · 매직 링크 요청이 캡차 검증을 통과해야 한다 (검증기 `captcha-turnstile` 필요 — 없으면 요청이 실패로 닫히고 stage · prod 가드가 기동을 막는다). false(기본)면 검증기가 있어도 부르지 않는다 */

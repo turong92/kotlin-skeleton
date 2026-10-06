@@ -12,6 +12,7 @@ import dev.sumin.skeleton.account.signin.IdentityView
 import dev.sumin.skeleton.common.DataResponse
 import dev.sumin.skeleton.common.ListResponse
 import dev.sumin.skeleton.common.Response
+import dev.sumin.skeleton.common.openapi.AcceptedOperation
 import dev.sumin.skeleton.idempotency.IdempotentOperation
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
@@ -64,16 +65,18 @@ class AccountController(
     @Operation(summary = "Ask to change the account email; nothing changes until the new address confirms (202)")
     @IdempotentOperation(ignoredBodyFields = ["currentPassword", "confirmationToken"])
     @PostMapping("/email/change")
+    @AcceptedOperation
     fun changeEmail(authentication: Authentication?, @Valid @RequestBody request: ChangeEmailRequest): ResponseEntity<DataResponse<StatusResponse>> {
         emailChange.request(callers.require(authentication).accountId, request.newEmail!!, request.currentPassword, request.confirmationToken)
-        return ResponseEntity.status(HttpStatus.ACCEPTED).body(Response.ok(StatusResponse("VERIFICATION_SENT")))
+        return Response.accepted(StatusResponse("VERIFICATION_SENT"))
     }
 
     @Operation(summary = "Mail a one-time confirmation link that re-authenticates an account that has no password (for email change, first password, social link)")
     @PostMapping("/reauth/confirmation")
+    @AcceptedOperation
     fun reauthConfirmation(authentication: Authentication?): ResponseEntity<DataResponse<StatusResponse>> {
         reauth.requestConfirmation(callers.require(authentication).accountId)
-        return ResponseEntity.status(HttpStatus.ACCEPTED).body(Response.ok(StatusResponse("ACCEPTED")))
+        return Response.accepted(StatusResponse("ACCEPTED"))
     }
 
     @Operation(summary = "Sign-in methods linked to this account")
@@ -83,15 +86,17 @@ class AccountController(
     @Operation(summary = "Unlink a sign-in method (409 ACCOUNT.LAST_SIGN_IN_METHOD for the last one)")
     @DeleteMapping("/identities/{id}")
     fun unlink(authentication: Authentication?, @PathVariable id: String): ResponseEntity<Void> {
-        identities.unlink(callers.require(authentication).accountId, id)
+        val caller = callers.require(authentication)
+        identities.unlink(caller.accountId, id, caller.sessionId)
         return Response.noContent()
     }
 
     @Operation(summary = "Mail a one-time confirmation link for deleting an account that has no password")
     @PostMapping("/delete/confirmation")
+    @AcceptedOperation
     fun deletionConfirmation(authentication: Authentication?): ResponseEntity<DataResponse<StatusResponse>> {
         deletion.requestConfirmation(callers.require(authentication).accountId)
-        return ResponseEntity.status(HttpStatus.ACCEPTED).body(Response.ok(StatusResponse("ACCEPTED")))
+        return Response.accepted(StatusResponse("ACCEPTED"))
     }
 
     @Operation(
@@ -100,8 +105,9 @@ class AccountController(
     )
     @IdempotentOperation(ignoredBodyFields = ["currentPassword", "confirmationToken"])
     @PostMapping("/delete")
+    @AcceptedOperation
     fun delete(authentication: Authentication?, @Valid @RequestBody request: DeleteAccountRequest): ResponseEntity<DataResponse<DeletionResponse>> {
         val purgeAfter = deletion.delete(callers.require(authentication).accountId, request.currentPassword, request.confirmationToken)
-        return ResponseEntity.status(HttpStatus.ACCEPTED).body(Response.ok(DeletionResponse("DELETION_SCHEDULED", purgeAfter)))
+        return Response.accepted(DeletionResponse("DELETION_SCHEDULED", purgeAfter))
     }
 }

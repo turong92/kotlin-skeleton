@@ -267,6 +267,15 @@ class SignInServiceTest {
     }
 
     @Test
+    fun `unlinking a sign-in method signs the account's other sessions out - sessions that method opened must not outlive it`() {
+        val h = harness()
+        val a = linked(h)
+        val google = h.service().identities.list(a.id).first { it.method == "google" }
+        h.service().identities.unlink(a.id, google.id, "ses_current")
+        assertEquals(listOf<Pair<String, String?>>(a.id to "ses_current"), h.revoker.calls)
+    }
+
+    @Test
     fun `removing someone else's identity looks like removing a missing one`() {
         val h = harness()
         val a = linked(h)

@@ -208,6 +208,9 @@ class AccountWebTest {
     fun `the configured bootstrap address becomes admin on its first verified sign-in and can run the admin API`() {
         val boss = registered("boss@example.com")
         val auth = bearer(login(boss))
+        // paging is validated like every other list, not silently clamped
+        mvc.perform(get("/api/v1/admin/accounts").param("size", "500").header("Authorization", auth)).andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("COMMON.VALIDATION_FAILED"))
+        mvc.perform(get("/api/v1/admin/accounts").param("page", "-1").header("Authorization", auth)).andExpect(status().isBadRequest)
         val victim = registered()
         val id = JsonPath.read<String>(
             mvc.perform(get("/api/v1/admin/accounts").param("email", victim).header("Authorization", auth)).andExpect(status().isOk).andReturn().response.contentAsString, "$.values[0].id",
