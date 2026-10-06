@@ -37,6 +37,7 @@ scripts/new-project.sh <target-dir> <root-package> <config-prefix> <ClassPrefix>
 ## 3. 채울 설정 · 비밀
 
 모듈은 켜자마자 기본값으로 뜬다. 값이 필요한 것만 채운다 — 찍은 프로젝트의 `apps/api/src/main/resources/application.yml` 끝에 고른 모듈의 설정 블록이 **주석으로** 붙어 있다(바꿀 키만 풀어 합친다). 키 전체와 기본값은 `docs/config/modules/<모듈>.yml`.
+**약관 · 개인정보 처리방침(`legal`)은 스타터에 들어 있다** — 모듈의 TEMPLATE 문서로 서므로 stage · prod 에서는 기동이 막힌다. 실사용자 전에 `src/main/resources/legal/`(자기 문서 + `manifest.json`)와 `skeleton.legal.facts.*` 를 채운다 (시험 배포만 `<PREFIX>_LEGAL_ACKNOWLEDGE_TEMPLATE=true`) — 체크리스트: `docs/legal.md`, 프런트 계약: `docs/legal-http-contract.md`.
 모든 키는 환경변수가 된다(`<접두사>.board.seed-boards` → `<PREFIX>_BOARD_SEED_BOARDS`). 서드파티가 주는 비밀은 yml 이 아니라 환경변수로만 넣는다.
 
 | 모듈 | 채울 것 (환경변수의 `<P>` = 설정 접두사의 대문자) | 비어 있으면 |

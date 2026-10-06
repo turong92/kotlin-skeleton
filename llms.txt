@@ -20,7 +20,7 @@
 - kotlin: `scripts/new-project.sh <target-dir> <root-package> <config-prefix> <ClassPrefix> [--modules a,b,c] [--db postgresql|mysql] [--with-workbench] [--with-sample] [--dry-run]`
 - react: `scripts/new-project.sh <target-dir> <name> [--packages a,b,c] [--ssr] [--without-storybook] [--with-workbench] [--with-sample] [--scope @acme]`  (react-skeleton 레포에서 실행)
 - 아래 기능 줄의 「→ kotlin / react」 조각을 합쳐 쓴다: `--modules` 는 하나로(쉼표) 합치고 다른 옵션은 덧붙인다. 의존으로 닫히는 모듈은 적지 않아도 따라온다. `--dry-run` 은 고른 모듈만 보인다. 완성된 예와 손으로 써야 하는 것: docs/new-project-recipe.md · docs/capabilities.md
-- 스타터(apps/api)에 이미 있어 조각에 적지 않는 모듈: `account`, `account-jdbc`, `alert`, `auth`, `auth-session`, `auth-session-jdbc`, `auth-social`, `captcha-turnstile`, `db-postgresql`, `idempotency`, `job-queue-jdbc`, `migration`, `migration-flyway`, `notification-mail`, `persistence-jdbc`, `platform`, `time`
+- 스타터(apps/api)에 이미 있어 조각에 적지 않는 모듈: `account`, `account-jdbc`, `alert`, `auth`, `auth-session`, `auth-session-jdbc`, `auth-social`, `captcha-turnstile`, `db-postgresql`, `idempotency`, `job-queue-jdbc`, `legal`, `legal-jdbc`, `migration`, `migration-flyway`, `notification-mail`, `persistence-jdbc`, `platform`, `time`
 
 ## 필요한 것 → 고를 것 (결정표)
 
@@ -58,6 +58,7 @@
 - 랜딩 · 요금제 · 약관 · 쿠키 동의 · 404 페이지 → kotlin 덧붙일 것 없음 · react `--packages marketing` — 손으로: 백엔드는 할 일이 없다(정적 공개 화면).
 - 검색 노출 · 링크 미리보기 · 서버 렌더링 → kotlin 덧붙일 것 없음 · react `--packages seo --ssr` — 손으로: 백엔드는 할 일이 없다.
 - 다크 모드 · 디자인 토큰 · 화면 부품 · 대시보드/목록/폼 화면 틀 → kotlin 덧붙일 것 없음 · react 기본 포함 — 손으로: 백엔드는 할 일이 없다
+- 이용약관 · 개인정보 처리방침 · 가입 동의 기록 · 새 판 재동의 · 마케팅 수신 동의(선택, 철회) [legal, legal-jdbc] → kotlin 덧붙일 것 없음 · react 기본 포함 — 손으로: 스타터에 기본 포함(legal-jdbc)
 
 ## 작업 예 (두 레포의 명령 — 순서 · 설정 · 검증 · 배포는 docs/new-project-recipe.md)
 
@@ -98,6 +99,8 @@
 - idempotency: Idempotency-Key 헤더로 명령 요청(결제 · 생성)의 중복… [멱등, 중복 요청 방지]
 - job-queue-jdbc: DB 테이블 기반 재시도 작업 큐 [작업 큐, 백그라운드 작업]
 - json: JsonCodec · 임의 JSON 을 담는 JsonDocument ·… [JSON, JSON 칼럼]
+- legal: 약관 · 개인정보 처리방침 · 동의 기록 — 종류 · 판(시행일 ·… [약관, 이용약관]
+- legal-jdbc: 약관 · 동의 저장소 — PostgreSQL · MySQL 로… [동의 저장소, 약관 DB]
 - migration: 마이그레이션 공통 규칙 [마이그레이션 가드, DB 초기화 방지]
 - migration-flyway: Flyway 구현 — 로컬 clean 옵트인 · 마이그레이션 파일 이름… [Flyway, 마이그레이션]
 - notification: 알림 계약 · 수신자 해석 · 인메모리 브로커 + 로그인한 사람의… [알림, 알림 목록]

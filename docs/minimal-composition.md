@@ -108,6 +108,7 @@ fails when this table and the prefixes found in module code differ.
 | `config-aws-ssm` | `skeleton.config.aws.ssm` |
 | `crypto` | `skeleton.crypto` |
 | `event-kafka` | `skeleton.event-kafka` |
+| `legal` | `skeleton.legal` |
 | `idempotency` | `skeleton.idempotency` |
 | `job-queue-jdbc` | `skeleton.job-queue` |
 | `migration` | `skeleton.migration` |
@@ -158,6 +159,8 @@ test proving a context with only that module (and its declared dependencies) boo
 | `async-notification` | yes | `notification` (declared dependency) | — |
 | `board` | yes (HTTP `/api/v1/boards`; no board exists until you seed or create one) | a `BoardRepository` · `PostRepository` · `CommentRepository` · `ReactionRepository` set — `board-jdbc` provides it, or write your own; startup fails naming the missing bean | `notification` (comment alerts), `idempotency` (`Idempotency-Key` on create), a `RateLimitStore` (rate limit) — all optional, all compile-only |
 | `board-jdbc` | yes | a `DataSource` + one `db-*` module (+ its migration `skeleton_board`, as above) | — |
+| `legal` | yes (HTTP `/api/v1/legal`; the module's TEMPLATE documents until the app brings its own — stage · prod refuse them) | a `ConsentStore` · `LegalLedger` pair — `legal-jdbc` provides it, or write your own; startup fails naming the missing bean | `spring-security-core` (HTTP + re-consent filter; compile-only) |
+| `legal-jdbc` | yes | a `DataSource` + one `db-*` module (+ its migration `legal`; MySQL with binlog needs `log_bin_trust_function_creators=1` for its triggers) | — |
 | `captcha-turnstile` | off until `enabled=true` + `secret-key` | nothing | Turnstile secret, internet |
 | `config-aws-ssm` | loads only once `paths` are set (dev / staging / prod) or `credential-profile` is set | nothing | AWS credentials when it loads (`fail-fast` decides) |
 | `crypto` | beans only when `skeleton.crypto.keys` has a key | nothing | AES keys |
@@ -205,6 +208,7 @@ with an ambiguous injection — it now owns a `skeletonTaskScheduler`. The other
 | Notifications | in-memory broker | `notification-jdbc`, `-sse`, `-websocket`, `-slack`, `-mail` |
 | Boards (posts · nested comments · typed reactions) | none — there is no in-memory board | `board` + `board-jdbc` |
 | Accounts (sign-up · verification · reset · sessions) | in-memory accounts + log-only mail for local/tests (guarded out of stage · prod) | `account` + `account-jdbc`, `auth-session` + `auth-session-jdbc`, `notification-mail`, `auth-magic-link` |
+| Legal documents · consent records | none — consent records are evidence, there is no in-memory store | `legal` + `legal-jdbc` (in the starter) |
 | Events | `event-kafka` off unless enabled | — |
 
 ## 5. Start a project: one command

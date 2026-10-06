@@ -15,6 +15,9 @@ spring:
       - dev.sumin.skeleton.account.abuse.AccountAlertAutoConfiguration
       - dev.sumin.skeleton.account.social.AccountSocialAutoConfiguration
       - dev.sumin.skeleton.account.social.AccountSocialWebAutoConfiguration
+      - dev.sumin.skeleton.legal.LegalAutoConfiguration
+      - dev.sumin.skeleton.legal.LegalWebAutoConfiguration
+      - dev.sumin.skeleton.legal.jdbc.LegalJdbcAutoConfiguration
       - dev.sumin.skeleton.account.jdbc.AccountJdbcAutoConfiguration
       - dev.sumin.skeleton.auth.sessions.AuthSessionAutoConfiguration
       - dev.sumin.skeleton.auth.sessions.jdbc.AuthSessionJdbcAutoConfiguration

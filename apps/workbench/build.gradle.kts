@@ -36,6 +36,7 @@ dependencies {
     implementation(project(":modules:account-jdbc"))        // + account — 클래스패스에 있어 설정 스니펫이 바인딩된다. 자동설정은 application.yml 에서 꺼 둔다 (아래 참고)
     implementation(project(":modules:auth-session-jdbc"))   // + auth-session
     implementation(project(":modules:auth-magic-link"))
+    implementation(project(":modules:legal-jdbc"))          // + legal — account 와 같이 클래스패스에만 둔다 (설정 스니펫 · 모듈 목록 시험). 자동설정은 application.yml 에서 꺼 둔다. 실제 흐름은 apps/sample
     implementation(project(":modules:db-postgresql"))
     implementation(project(":modules:migration-flyway"))
 

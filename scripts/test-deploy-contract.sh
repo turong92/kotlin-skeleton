@@ -220,7 +220,8 @@ for APP in $(echo "$APPS" | tr ',' ' '); do
     JWT="$(head -c 36 /dev/urandom | base64 | tr -d '\n=')"
     base_d_env() {   # $1 = nomail 이면 메일 발송 길을 뺀다
       printf '%s\n' -e SKELETON_ENV=prod -e SPRING_PROFILES_ACTIVE=prod -e "JWT_SECRET=$JWT" \
-        -e SKELETON_ACCOUNT_MAIL_LINK_BASE_URL=https://app.example.com -e SKELETON_ACCOUNT_BOOTSTRAP_ADMIN_EMAIL=boss@example.com
+        -e SKELETON_ACCOUNT_MAIL_LINK_BASE_URL=https://app.example.com -e SKELETON_ACCOUNT_BOOTSTRAP_ADMIN_EMAIL=boss@example.com \
+        -e SKELETON_LEGAL_ACKNOWLEDGE_TEMPLATE=true   # 약관 문서가 모듈의 TEMPLATE 인 시험 배포 — 일부러 허락 (docs/deploy.md §10, docs/legal.md)
       [ "${1:-}" = nomail ] || printf '%s\n' -e SKELETON_NOTIFICATION_MAIL_ENABLED=true -e SKELETON_NOTIFICATION_MAIL_FROM=no-reply@example.com -e SPRING_MAIL_HOST=mail-relay.invalid
     }
     C="$RUN-$APP-d"; CONTAINERS="$CONTAINERS $C"
@@ -246,6 +247,15 @@ for APP in $(echo "$APPS" | tr ',' ' '); do
       LOGS="$(docker logs "$C" 2>&1)"   # 변수에 담아 grep (파이프 + pipefail 은 grep -q 가 일찍 닫으면 거짓 실패한다)
       if grep -q 'skeleton.web.client-ip.mode' <<<"$LOGS"; then pass "client-ip 를 빼면 가드가 그 이름을 말하며 실패한다"; else fail "client-ip 를 뺀 실패에 그 이름이 없다"; fi
     else fail "client-ip 를 뺐는데 기동이 막히지 않았다"; fi
+    docker rm -f "$C" >/dev/null
+
+    C="$RUN-$APP-d3"; CONTAINERS="$CONTAINERS $C"   # TEMPLATE 허락을 빼면 — 예시 약관으로는 prod 가 뜨지 않는다
+    # shellcheck disable=SC2046
+    docker run -d --name "$C" --network "$NET" $(contract_env) $(base_d_env) -e SKELETON_LEGAL_ACKNOWLEDGE_TEMPLATE=false -e SKELETON_CLIENT_IP_MODE=proxy -e "SKELETON_CLIENT_IP_TRUSTED_PROXIES=$SUBNET,10.99.0.0/16" "$IMG" >/dev/null
+    if wait_for 120 stopped "$C"; then
+      LOGS="$(docker logs "$C" 2>&1)"
+      if grep -q 'skeleton.legal.acknowledge-template' <<<"$LOGS"; then pass "TEMPLATE 허락을 빼면 가드가 말하며 실패한다 (예시 약관 그대로는 prod 불가)"; else fail "TEMPLATE 허락을 뺀 실패에 skeleton.legal.acknowledge-template 가 없다"; echo "$LOGS" | tail -8; fi
+    else fail "TEMPLATE 허락을 뺐는데 기동이 막히지 않았다"; fi
     docker rm -f "$C" >/dev/null
 
     C="$RUN-$APP-d2"; CONTAINERS="$CONTAINERS $C"   # 메일을 빼면

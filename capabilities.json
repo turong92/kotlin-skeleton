@@ -25,6 +25,8 @@
     "db-postgresql",
     "idempotency",
     "job-queue-jdbc",
+    "legal",
+    "legal-jdbc",
     "migration",
     "migration-flyway",
     "notification-mail",
@@ -996,6 +998,79 @@
       "keywords": {
         "ko": ["JSON", "JSON 칼럼", "버전 있는 페이로드", "직렬화"],
         "en": ["json", "json column", "versioned payload", "serialization"]
+      }
+    },
+    {
+      "id": "legal",
+      "kind": "module",
+      "module": "legal",
+      "path": "modules/legal",
+      "status": "stable",
+      "summary": "약관 · 개인정보 처리방침 · 동의 기록 — 종류 · 판(시행일 · DRAFT/REVIEWED) · 원문 해시를 못 박는 장부 · 가입 동의(코드 확인 때 계정과 같은 트랜잭션에 기록) · 선택 동의 철회 · 새 판 재동의(403) · 계정 삭제 때 익명화, HTTP /api/v1/legal 까지. 문서는 앱이 싣고 예시 TEMPLATE 은 prod 에서 막는다.",
+      "starter": true,
+      "newProjectFlag": null,
+      "autoIncludes": [],
+      "needs": {
+        "requires": ["legal-jdbc"],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": ["skeleton.legal"],
+        "snippet": "docs/config/modules/legal.yml"
+      },
+      "basePaths": ["/api/v1/legal", "/api/v1/legal/admin", "/api/v1/legal/consents"],
+      "secrets": [],
+      "docs": ["docs/modules/legal.md", "docs/legal.md", "docs/legal-http-contract.md"],
+      "frontend": null,
+      "notFor": [
+        "법률 자문이 아니다 — 문서 본문 · 검토 · 사실(회사 이름 · 연락처)은 앱의 몫 (docs/legal.md)",
+        "legal 은 저장소를 모른다 — legal-jdbc 를 같이 고른다(없으면 시작에 실패한다)",
+        "쿠키 배너 · 마케팅 수신 동의 화면은 프런트 — 이 모듈은 기록 · 검사만 한다"
+      ],
+      "keywords": {
+        "ko": ["약관", "이용약관", "개인정보 처리방침", "동의", "재동의", "마케팅 수신 동의", "동의 기록", "약관 버전", "법적 문서", "동의 철회"],
+        "en": [
+          "terms of service",
+          "privacy policy",
+          "consent",
+          "re-consent",
+          "marketing consent",
+          "consent record",
+          "document version",
+          "legal documents",
+          "withdraw consent"
+        ]
+      }
+    },
+    {
+      "id": "legal-jdbc",
+      "kind": "module",
+      "module": "legal-jdbc",
+      "path": "modules/legal-jdbc",
+      "status": "stable",
+      "summary": "약관 · 동의 저장소 — PostgreSQL · MySQL 로 legal 의 저장 포트 둘(동의 사건 · 판 장부)을 구현한다(legal_consents · legal_document_versions, 트리거로 더하기만).",
+      "starter": true,
+      "newProjectFlag": null,
+      "autoIncludes": ["legal"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/legal-jdbc.md"],
+      "frontend": null,
+      "notFor": [
+        "legal 없이는 쓰지 않는다(따라온다)",
+        "MySQL 은 트리거를 만드는 마이그레이션이 binlog 가 켜져 있으면 log_bin_trust_function_creators=1 이 필요하다",
+        "다른 DB(JPA · jOOQ)로 저장하려면 legal 의 저장 포트 둘을 앱이 구현한다"
+      ],
+      "keywords": {
+        "ko": ["동의 저장소", "약관 DB"],
+        "en": ["consent storage", "consent repository", "legal database"]
       }
     },
     {
@@ -2498,6 +2573,17 @@
       "modules": [],
       "flag": null,
       "byHand": "백엔드는 할 일이 없다 — react-skeleton 에 기본 포함."
+    },
+    {
+      "frontend": {
+        "capabilities": ["legal-documents", "cookie-consent"],
+        "flag": null
+      },
+      "oneOf": [],
+      "need": "이용약관 · 개인정보 처리방침 · 가입 동의 기록 · 새 판 재동의 · 마케팅 수신 동의(선택, 철회)",
+      "modules": ["legal", "legal-jdbc"],
+      "flag": null,
+      "byHand": "스타터에 기본 포함(legal-jdbc) — 문서는 모듈의 TEMPLATE(ko/en)이라 stage · prod 에서는 기동이 거부된다: src/main/resources/legal/ 에 자기 문서와 manifest.json 을 두고(검토 끝난 판은 REVIEWED + sha256), skeleton.legal.facts.* 를 채운다. 시험 배포는 <P>_LEGAL_ACKNOWLEDGE_TEMPLATE=true. MySQL 은 log_bin_trust_function_creators=1. 동의 화면 · 가입 폼 체크박스는 프런트(docs/legal-http-contract.md)."
     }
   ],
   "examples": [

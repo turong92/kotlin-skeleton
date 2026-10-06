@@ -28,7 +28,7 @@ object SharedMySql {
     private val container: MySQLContainer by lazy {
         // 컨텍스트 캐시에 살아 있는 컨텍스트마다 풀이 연결을 잡는다 — 기본 max_connections(151) 으로는 모자란다
         MySQLContainer(DockerImageName.parse("mysql:8.4"))
-            .withCommand("--max-connections=500")
+            .withCommand("--max-connections=500", "--log-bin-trust-function-creators=1")   // legal-jdbc 의 마이그레이션이 트리거를 만든다 — binlog 가 켜진 MySQL 에서는 이 변수나 SUPER 가 필요하다 (docs/modules/legal-jdbc.md)
             .also { it.start() }
     }
     private val sequence = AtomicInteger()

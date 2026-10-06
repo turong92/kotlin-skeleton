@@ -68,4 +68,5 @@ secrets:
 
 env:
   SKELETON_ENV: prod             # 배포 가드 스위치 (local | stage | prod). 가드가 stage|prod 규칙을 켠다 — docs/deploy.md
+  # SKELETON_LEGAL_ACKNOWLEDGE_TEMPLATE: "true"   # 시험 배포만: 모듈의 예시(TEMPLATE) 약관을 일부러 허락한다. 실사용자 전에 src/main/resources/legal/ 의 자기 문서로 바꾸고 이 줄을 지운다 — 없으면 prod 가 legal 가드로 기동을 거부한다 (docs/legal.md)
   SPRING_PROFILES_ACTIVE: prod   # 스프링 프로필은 따로 정한다 (스위치가 프로필을 켜지는 않는다). 계정은 DB(account-jdbc)에 있다 — 시드 계정은 로컬 프로필 전용이라 prod 에는 없다

@@ -13,6 +13,7 @@
 #   5. --with-sample   (제품 모양 예시 앱 apps/sample 이 남고, 그 앱의 모듈이 닫힘에 더해진다)
 #   6. --modules board,board-jdbc   (게시판: board 의 compileOnly 의존 notification · idempotency 가 소스로 따라오고, board-jdbc 의 dbTest 가 두 DB 로 돈다)
 #   7. --modules redis-core,redis-lock   (Redis 환경변수 테스트가 프로젝트 접두사로 찍혀 돈다 — 배포 계약의 <ENV_PREFIX>_REDIS_*)
+#      (1 · 3 · 5 · 6 은 스타터의 약관 · 동의(legal-jdbc)를 함께 빌드한다 — 3 은 MySQL 트리거 마이그레이션, 5 는 앱 소유 문서 · 재동의 여정 시험)
 #   8. docs/new-project-recipe.md 의 작업 예 3개(<!-- kotlin-stamp: … --> 블록의 명령 그대로) — 커뮤니티 · 유료 SaaS(--db mysql) · 콘텐츠 SSR(스타터 그대로)
 # macOS bash 3.2 와 GNU bash 에서 돈다. 임시 디렉토리는 끝나면 지운다 (KEEP=1 이면 남긴다).
 set -euo pipefail
@@ -78,7 +79,7 @@ check "스타터 앱만 남는다 (apps/workbench 없음)" test -d "$A/apps/api"
 check "build · .gradle · .git · .claude · .superpowers 는 복사하지 않는다" bash -c "! ls -d '$A/build' '$A/.gradle' '$A/.git' '$A/.claude' '$A/.superpowers' '$A/.kotlin' 2>/dev/null | grep -q ."
 # 스타터에는 계정(account-jdbc · auth-session-jdbc)이 들어 있다 — 그 모듈들의 compileOnly 선택 통합(alert · auth-social · captcha-turnstile · idempotency · job-queue-jdbc · notification-mail)은
 # 소스가 따라오지만(컴파일에 필요) 앱의 런타임 클래스패스에는 없다
-want=":apps:api :modules:account :modules:account-jdbc :modules:alert :modules:auth :modules:auth-session :modules:auth-session-jdbc :modules:auth-social :modules:captcha-turnstile :modules:db-postgresql :modules:idempotency :modules:job-queue-jdbc :modules:migration :modules:migration-flyway :modules:notification-mail :modules:persistence-jdbc :modules:platform :modules:time"
+want=":apps:api :modules:account :modules:account-jdbc :modules:alert :modules:auth :modules:auth-session :modules:auth-session-jdbc :modules:auth-social :modules:captcha-turnstile :modules:db-postgresql :modules:idempotency :modules:job-queue-jdbc :modules:legal :modules:legal-jdbc :modules:migration :modules:migration-flyway :modules:notification-mail :modules:persistence-jdbc :modules:platform :modules:time"
 got="$(includes "$A/settings.gradle.kts")"
 [ "$got" = "$want" ] && pass "settings.gradle.kts 는 스타터 모듈과 그 닫힘만 포함한다" || fail "settings includes: [$got] expected [$want]"
 check "샘플 앱은 기본으로 빠진다 (apps/sample · 그 문서 · 그 실행 스크립트)" bash -c "test ! -e '$A/apps/sample' && test ! -e '$A/docs/sample.md' && test ! -e '$A/scripts/dev-sample.sh' && test ! -e '$A/scripts/sample-e2e-backend.sh'"
@@ -90,7 +91,10 @@ check "선택된 모듈의 설정 블록은 남는다 (time)" test -f "$A/docs/c
 check "선택되지 않은 모듈의 문서 쪽(docs/modules)도 없다 (redis-core)" test ! -e "$A/docs/modules/redis-core.md"
 check "선택된 모듈의 문서 쪽은 남는다 (time)" test -f "$A/docs/modules/time.md"
 check "모듈 색인에서 지운 모듈의 행이 빠지고 남은 모듈의 행은 남는다" bash -c "! grep -q '](redis-core.md)' '$A/docs/modules/README.md' && ! grep -q '](async.md)' '$A/docs/modules/README.md' && grep -q '](time.md)' '$A/docs/modules/README.md' && grep -q '](auth.md)' '$A/docs/modules/README.md'"
-check "dbTestModules 에는 스타터의 DB 모듈(계정 · 세션)과 compileOnly 로 따라온 job-queue-jdbc 가 든다" has_line 'val dbTestModules = setOf\(":modules:account-jdbc", ":modules:auth-session-jdbc", ":modules:job-queue-jdbc"\)' "$A/build.gradle.kts"
+check "dbTestModules 에는 스타터의 DB 모듈(계정 · 세션)과 compileOnly 로 따라온 job-queue-jdbc 가 든다" has_line 'val dbTestModules = setOf\(":modules:account-jdbc", ":modules:auth-session-jdbc", ":modules:job-queue-jdbc", ":modules:legal-jdbc"\)' "$A/build.gradle.kts"
+check "기본값으로 찍어도 약관 · 동의(legal-jdbc)가 스타터에 한 줄로 들어 있고 문서 · 계약이 남는다" bash -c "grep -q 'modules:legal-jdbc' '$A/apps/api/build.gradle.kts' && test -f '$A/docs/legal.md' && test -f '$A/docs/legal-http-contract.md' && test -f '$A/docs/modules/legal.md' && test -f '$A/modules/legal-jdbc/src/main/resources/db/migration/postgresql'/*legal.sql"
+check "찍은 스타터의 약관 시험은 새 패키지 · 접두사로 찍힌다 (skeleton 이름 · skeleton.legal 흔적 없음)" bash -c "! grep -rq 'dev.sumin.skeleton\\|skeleton\\.legal' '$A/modules/legal/src/main' '$A/apps/api/src' && grep -q 'ovation.legal' '$A/modules/legal/src/main/kotlin/dev/sumin/ovation/legal/LegalProperties.kt'"
+check "legal 의 TEMPLATE 문서(모듈 리소스)가 남고, 시험 배포 안내(ACKNOWLEDGE_TEMPLATE)가 배포 선언에 찍힌 접두사로 있다" bash -c "test -f '$A/modules/legal/src/main/resources/skeleton-legal/templates/manifest.json' && grep -q 'OVATION_LEGAL_ACKNOWLEDGE_TEMPLATE' '$A/deploy/app.yaml'"
 check "새 프로젝트에는 new-project 도구가 따라오지 않는다" bash -c "! ls '$A/scripts/new-project.sh' '$A/scripts/test-new-project.sh' '$A/.github/workflows/new-project.yml' 2>/dev/null | grep -q ."
 check "rootProject.name 이 바뀐다" has_line 'rootProject.name = "ovation"' "$A/settings.gradle.kts"
 check "패키지가 바뀐다" test -f "$A/apps/api/src/main/kotlin/dev/sumin/ovation/app/api/ApiApplication.kt"
@@ -123,7 +127,7 @@ for m in job-queue-jdbc notification-mail storage-s3 scheduler; do
   check "apps/api 의존성에 $m 한 줄이 생긴다" has_line "implementation\\(project\\(\":modules:$m\"\\)\\)" "$B/apps/api/build.gradle.kts"
 done
 check "닫힘으로 따라온 모듈은 앱 의존성에 줄을 더하지 않는다 (crypto)" lacks_line 'modules:crypto' "$B/apps/api/build.gradle.kts"
-check "dbTestModules 는 선택된 DB 모듈만 남는다" has_line 'val dbTestModules = setOf\(":modules:account-jdbc", ":modules:auth-session-jdbc", ":modules:job-queue-jdbc"\)' "$B/build.gradle.kts"
+check "dbTestModules 는 선택된 DB 모듈만 남는다" has_line 'val dbTestModules = setOf\(":modules:account-jdbc", ":modules:auth-session-jdbc", ":modules:job-queue-jdbc", ":modules:legal-jdbc"\)' "$B/build.gradle.kts"
 check "application.yml 에 표시된 모듈 블록 구역이 생긴다" has_line 'new-project: module config blocks' "$B/apps/api/src/main/resources/application.yml"
 check "블록은 주석이고 접두사가 새 이름이다" has_line '^# ovation:$' "$B/apps/api/src/main/resources/application.yml"
 check "storage-s3 블록이 들어 있다" has_line '^#     bucket: ""' "$B/apps/api/src/main/resources/application.yml"
@@ -147,7 +151,7 @@ for m in alert alert-jdbc job-queue-jdbc notification-mail; do
   check "alert-jdbc 를 고르면 $m 이 따라온다 (alert · 컴파일 전용 연동 모듈의 닫힘)" bash -c "grep -q 'include(\":modules:$m\")' '$C/settings.gradle.kts' && test -d '$C/modules/$m'"
 done
 check "alert-jdbc 의 MySQL 마이그레이션이 남고 PostgreSQL 것은 앱 클래스패스 밖이다" bash -c "ls '$C/modules/alert-jdbc/src/main/resources/db/migration/mysql/' | grep -q skeleton_alerts"
-check "dbTestModules 에 alert-jdbc 가 들어간다" has_line 'val dbTestModules = setOf\(":modules:account-jdbc", ":modules:alert-jdbc", ":modules:auth-session-jdbc", ":modules:job-queue-jdbc"\)' "$C/build.gradle.kts"
+check "dbTestModules 에 alert-jdbc 가 들어간다" has_line 'val dbTestModules = setOf\(":modules:account-jdbc", ":modules:alert-jdbc", ":modules:auth-session-jdbc", ":modules:job-queue-jdbc", ":modules:legal-jdbc"\)' "$C/build.gradle.kts"
 check "--db mysql 이면 배포 선언의 db 가 mysql 이다" has_line '^db: mysql' "$C/deploy/app.yaml"
 check "db-postgresql 모듈이 사라지고 db-mysql 이 들어온다" bash -c "grep -q 'include(\":modules:db-mysql\")' '$C/settings.gradle.kts' && ! grep -q 'db-postgresql' '$C/settings.gradle.kts' && test ! -e '$C/modules/db-postgresql'"
 check "dev.sh 는 mysql 조합에서 mysql 컨테이너를 고른다" bash -c "[ \"\$(DEV_DRY_RUN=1 bash -c 'cd \"$C\" && bash scripts/dev.sh' 2>&1 | tail -1)\" = 'infra: mysql s3=0 app=api' ]"
@@ -180,7 +184,7 @@ expect_exit 0 "persistence-jooq + 형제 마이그레이션 모듈을 찍는다"
 echo "== 7. --with-sample (샘플 앱 \"Notes\" 은 요청할 때만 남는다)"
 G="$TMP/g"
 expect_exit 0 "조합 5 를 찍는다 (rename 잔여 검사 포함)" stamp "$G" --with-sample
-want=":apps:api :apps:sample :modules:account :modules:account-jdbc :modules:alert :modules:alert-jdbc :modules:auth :modules:auth-magic-link :modules:auth-session :modules:auth-session-jdbc :modules:auth-social :modules:board :modules:board-jdbc :modules:captcha-turnstile :modules:crypto :modules:db-postgresql :modules:idempotency :modules:job-queue-jdbc :modules:json :modules:migration :modules:migration-flyway :modules:notification :modules:notification-jdbc :modules:notification-mail :modules:notification-sse :modules:persistence-jdbc :modules:platform :modules:storage :modules:storage-s3 :modules:time"
+want=":apps:api :apps:sample :modules:account :modules:account-jdbc :modules:alert :modules:alert-jdbc :modules:auth :modules:auth-magic-link :modules:auth-session :modules:auth-session-jdbc :modules:auth-social :modules:board :modules:board-jdbc :modules:captcha-turnstile :modules:crypto :modules:db-postgresql :modules:idempotency :modules:job-queue-jdbc :modules:json :modules:legal :modules:legal-jdbc :modules:migration :modules:migration-flyway :modules:notification :modules:notification-jdbc :modules:notification-mail :modules:notification-sse :modules:persistence-jdbc :modules:platform :modules:storage :modules:storage-s3 :modules:time"
 got="$(includes "$G/settings.gradle.kts")"
 [ "$got" = "$want" ] && pass "settings.gradle.kts 는 스타터 + 샘플 앱의 모듈과 그 닫힘을 포함한다" || fail "settings includes: [$got] expected [$want]"
 check "샘플 앱 소스가 새 패키지로 옮겨진다" test -f "$G/apps/sample/src/main/kotlin/dev/sumin/ovation/app/sample/SampleApplication.kt"
@@ -189,7 +193,7 @@ check "샘플 문서 · 실행 스크립트가 남고 안내 문서의 표식 �
 check "스타터 apps/api 는 그대로다 — 샘플 앱의 모듈을 얹지 않는다" bash -c "! grep -q 'storage-s3\|notification\|idempotency\|board\|magic-link' '$G/apps/api/build.gradle.kts'"
 check "스타터 테스트의 부재 단언(S3 클라이언트)은 그대로다 — 스타터 클래스패스에는 여전히 없다" has_line 'software.amazon.awssdk.services.s3.S3Client' "$G/apps/api/src/test/kotlin/dev/sumin/ovation/app/api/StarterCompositionIntegrationTest.kt"
 check "스타터 설정에 샘플 모듈의 설정 블록이 붙지 않는다" lacks_line 'new-project: module config blocks' "$G/apps/api/src/main/resources/application.yml"
-check "dbTestModules 에 샘플이 쓰는 DB 모듈이 들어간다" has_line 'val dbTestModules = setOf\(":modules:account-jdbc", ":modules:alert-jdbc", ":modules:auth-session-jdbc", ":modules:board-jdbc", ":modules:job-queue-jdbc", ":modules:notification-jdbc"\)' "$G/build.gradle.kts"
+check "dbTestModules 에 샘플이 쓰는 DB 모듈이 들어간다" has_line 'val dbTestModules = setOf\(":modules:account-jdbc", ":modules:alert-jdbc", ":modules:auth-session-jdbc", ":modules:board-jdbc", ":modules:job-queue-jdbc", ":modules:legal-jdbc", ":modules:notification-jdbc"\)' "$G/build.gradle.kts"
 check "dev.sh 는 APP=sample 을 알고 문법 검사를 통과한다" bash -c "grep -q 'APP' '$G/scripts/dev.sh' && bash -n '$G/scripts/dev.sh' && bash -n '$G/scripts/dev-sample.sh' && bash -n '$G/scripts/sample-e2e-backend.sh'"
 
 echo "== 8. --modules board,board-jdbc (게시판 — board 는 저장소를 모르고 board-jdbc 가 포트를 구현한다)"
@@ -203,7 +207,7 @@ for m in board board-jdbc; do
   check "apps/api 의존성에 $m 한 줄이 생긴다" has_line "implementation\\(project\\(\":modules:$m\"\\)\\)" "$H/apps/api/build.gradle.kts"
 done
 check "닫힘으로 따라온 컴파일 전용 모듈은 앱 의존성에 줄을 더하지 않는다 (notification · idempotency)" bash -c "! grep -q 'modules:notification\|modules:idempotency' '$H/apps/api/build.gradle.kts'"
-check "dbTestModules 에 board-jdbc 가 들어간다 (src/dbTest 가 있는 모듈 전부)" has_line 'val dbTestModules = setOf\(":modules:account-jdbc", ":modules:auth-session-jdbc", ":modules:board-jdbc", ":modules:job-queue-jdbc"\)' "$H/build.gradle.kts"
+check "dbTestModules 에 board-jdbc 가 들어간다 (src/dbTest 가 있는 모듈 전부)" has_line 'val dbTestModules = setOf\(":modules:account-jdbc", ":modules:auth-session-jdbc", ":modules:board-jdbc", ":modules:job-queue-jdbc", ":modules:legal-jdbc"\)' "$H/build.gradle.kts"
 check "게시판 문서 쪽과 설정 블록이 남고 새 접두사로 붙는다" bash -c "test -f '$H/docs/modules/board.md' && test -f '$H/docs/modules/board-jdbc.md' && grep -q '^# ovation.board\|^#   board:' '$H/apps/api/src/main/resources/application.yml' && grep -q 'ovation.board' '$H/modules/board/src/main/kotlin/dev/sumin/ovation/board/BoardProperties.kt'"
 check "찍은 프로젝트에 skeleton 이름 흔적이 없다 (BoardController 경로 속성 포함)" bash -c "! grep -rq 'skeleton\.board' '$H/modules/board/src/main'"
 I="$TMP/i"

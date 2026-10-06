@@ -99,7 +99,7 @@ A sign-up creates an **attempt**, not an account: (attempt id, email, the passwo
 The code goes only to the mailbox; the attempt id (`signUpId`) only to the browser that signed up. Several attempts for one address coexist and never overwrite each other.
 
 ### POST /api/v1/account/sign-up  (public)
-Req: `{ "email": "a@b.c", "password": "...", "displayName"?: "Ann", "locale"?: "ko", "timeZone"?: "Asia/Seoul", "captchaToken"?: "..." }`
+Req: `{ "email": "a@b.c", "password": "...", "displayName"?: "Ann", "locale"?: "ko", "timeZone"?: "Asia/Seoul", "captchaToken"?: "...", "consents"?: [{ "type", "version", "locale"? }] }` — `consents` (max 8) is used only when the app has the `legal` module: a missing / stale claim is `400 LEGAL.CONSENT_REQUIRED` (same for every address), the accepted claims are recorded when the code is verified, in the transaction that creates the account — see [legal-http-contract.md](legal-http-contract.md) section 3.
 Res: **always `202`** `{ "value": { "status": "VERIFICATION_SENT", "signUpId": "<43 chars, opaque>" } }` — identical in shape whether the address is new, has another attempt in flight, or is already registered
 (a registered address receives an "already registered" mail instead of a code, and entering codes for that attempt behaves like wrong guesses on a new address). Keep `signUpId` in memory/sessionStorage for the next step.
 With `skeleton.account.sign-up.email-verification=false` the app accepts the enumeration trade-off: new -> `201 {status:"CREATED"}` (no `signUpId`; the account is active at once), existing -> `409 ACCOUNT.EMAIL_TAKEN`.
