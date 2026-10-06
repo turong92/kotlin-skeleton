@@ -13,7 +13,25 @@
       "usage": "scripts/new-project.sh <target-dir> <name> [--packages a,b,c] [--ssr] [--without-storybook] [--with-workbench] [--with-sample] [--scope @acme]"
     }
   },
-  "starterModules": ["auth", "db-postgresql", "migration", "migration-flyway", "persistence-jdbc", "platform", "time"],
+  "starterModules": [
+    "account",
+    "account-jdbc",
+    "alert",
+    "auth",
+    "auth-session",
+    "auth-session-jdbc",
+    "auth-social",
+    "captcha-turnstile",
+    "db-postgresql",
+    "idempotency",
+    "job-queue-jdbc",
+    "migration",
+    "migration-flyway",
+    "notification-mail",
+    "persistence-jdbc",
+    "platform",
+    "time"
+  ],
   "newProject": {
     "script": "scripts/new-project.sh",
     "usage": "scripts/new-project.sh <target-dir> <root-package> <config-prefix> <ClassPrefix> [--modules a,b,c] [--db postgresql|mysql] [--with-workbench] [--with-sample] [--dry-run]",
@@ -48,14 +66,126 @@
   ],
   "capabilities": [
     {
+      "id": "account",
+      "kind": "module",
+      "module": "account",
+      "path": "modules/account",
+      "status": "experimental",
+      "summary": "계정 수명주기 — 이메일 · 비밀번호 가입과 이메일 확인, 비밀번호 재설정 · 변경, 이메일 변경, 소셜 연결(자동 병합 없음), 탈퇴(다시 인증 → 유예 → 삭제), 로그인 시도 제한, 관리자 도구, 첫 관리자, ko/en 메일 템플릿. auth 가 진짜 계정으로 로그인하게 한다.",
+      "starter": true,
+      "newProjectFlag": null,
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": ["alert", "auth-social", "captcha-turnstile", "idempotency", "job-queue-jdbc", "notification-mail"]
+      },
+      "config": {
+        "prefixes": ["skeleton.account"],
+        "snippet": "docs/config/modules/account.yml"
+      },
+      "basePaths": [
+        "/api/v1",
+        "/api/v1/account",
+        "/api/v1/account/identities/social",
+        "/api/v1/admin/accounts",
+        "/api/v1/auth"
+      ],
+      "secrets": [
+        {
+          "env": ["<P>_ACCOUNT_MAIL_LINK_BASE_URL"],
+          "whenMissing": "메일 링크가 여는 프론트 주소 — 비밀 아님(선언의 env:). 비면 보호 환경(<P>_ENV=stage|prod)에서 기동 실패"
+        },
+        {
+          "env": ["<P>_ACCOUNT_BOOTSTRAP_ADMIN_EMAIL"],
+          "whenMissing": "선택 — 이 이메일이 확인되면 ADMIN 을 준다. 없으면 관리자 API 를 켠 앱은 경고"
+        },
+        {
+          "env": ["<P>_WEB_CLIENT_IP_MODE", "<P>_WEB_CLIENT_IP_TRUSTED_PROXIES"],
+          "whenMissing": "홈서버 플랫폼이 넣는다(예약 이름). 안 정해지면 보호 환경에서 기동 실패 — IP 한도가 X-Forwarded-For 로 풀린다",
+          "platformProvided": true
+        }
+      ],
+      "docs": ["docs/modules/account.md"],
+      "frontend": {
+        "capabilities": ["auth", "account-lifecycle", "account-admin"],
+        "newProjectFlag": null,
+        "packages": ["@skeleton/auth"]
+      },
+      "notFor": [
+        "메일 발송 자체는 notification-mail — 보호 환경에서는 메일 발송 길(notification-mail 또는 AccountMailTransport 빈)이 없으면 기동을 거부한다",
+        "소셜 제공자 클라이언트는 auth-social-google | -kakao | -naver",
+        "리프레시 토큰 · 세션 목록은 auth-session, 링크 로그인은 auth-magic-link",
+        "소셜 로그인을 계정으로 이어 주는 것은 켜진 auth-social 과 skeleton.account.social.* 설정(모듈 기본은 가입 · 병합 모두 꺼짐)"
+      ],
+      "keywords": {
+        "ko": [
+          "회원가입",
+          "가입",
+          "이메일 인증",
+          "비밀번호 재설정",
+          "비밀번호 찾기",
+          "이메일 변경",
+          "계정 삭제",
+          "탈퇴",
+          "계정 관리",
+          "관리자 도구",
+          "계정 정지",
+          "프로필"
+        ],
+        "en": [
+          "sign up",
+          "registration",
+          "email verification",
+          "password reset",
+          "forgot password",
+          "change email",
+          "delete account",
+          "account management",
+          "admin tools",
+          "suspend account",
+          "profile"
+        ]
+      }
+    },
+    {
+      "id": "account-jdbc",
+      "kind": "module",
+      "module": "account-jdbc",
+      "path": "modules/account-jdbc",
+      "status": "experimental",
+      "summary": "account 의 저장소 · 토큰 · 감사 기록을 PostgreSQL · MySQL 로 — 스키마는 모듈 마이그레이션(MySQL 은 이메일을 utf8mb4_bin 으로 정확 일치). 보호 환경에서 메모리 저장소를 막는 가드를 통과하는 방법.",
+      "starter": true,
+      "newProjectFlag": null,
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/account-jdbc.md"],
+      "frontend": null,
+      "notFor": [
+        "account 없이 단독으로는 의미가 없다 — account 의 포트 구현이다",
+        "다른 DB 는 AccountRepository · OneTimeTokenStore 를 앱이 직접 구현한다"
+      ],
+      "keywords": {
+        "ko": ["계정 저장", "계정 DB", "회원 테이블", "계정 마이그레이션"],
+        "en": ["account storage", "accounts table", "account persistence", "account migration"]
+      }
+    },
+    {
       "id": "alert",
       "kind": "module",
       "module": "alert",
       "path": "modules/alert",
       "status": "stable",
       "summary": "주인 경보 — 5xx 몰림 · 기동 실패 · 죽은 작업을 Discord 호환 웹훅(+ 선택적 메일)으로 알린다. 에러 수집(Sentry)의 답.",
-      "starter": false,
-      "newProjectFlag": "--modules alert",
+      "starter": true,
+      "newProjectFlag": null,
       "autoIncludes": ["job-queue-jdbc", "notification-mail"],
       "needs": {
         "requires": [],
@@ -101,7 +231,7 @@
       "summary": "경보 기록을 DB 에 두어 여러 인스턴스 · 재시작을 가로질러 같은 경보를 접는다 (PostgreSQL · MySQL).",
       "starter": false,
       "newProjectFlag": "--modules alert-jdbc",
-      "autoIncludes": ["alert", "job-queue-jdbc", "notification-mail"],
+      "autoIncludes": [],
       "needs": {
         "requires": [],
         "oneOf": [],
@@ -217,12 +347,124 @@
         "packages": ["@skeleton/auth"]
       },
       "notFor": [
-        "회원가입 · 비밀번호 재설정 · 계정 DB 저장은 이 모듈이 아니다 — 앱이 AuthAccountRepository 를 구현한다(내장은 로컬 시드 계정뿐이고 prod · staging 에서는 기동을 거부한다)",
+        "회원가입 · 비밀번호 재설정 · 계정 DB 저장 · 세션은 account · auth-session 이다 — 스타터에 이미 들어 있다(auth 만 쓰는 앱은 AuthAccountRepository 를 직접 구현한다 — 내장은 로컬 시드 계정뿐이고 prod · staging 에서는 기동을 거부한다)",
         "소셜 로그인은 auth-social"
       ],
       "keywords": {
         "ko": ["로그인", "로그아웃", "인증", "토큰", "JWT", "권한", "관리자 로그인", "비상 접근"],
         "en": ["login", "authentication", "jwt", "token", "dev login", "break glass", "security"]
+      }
+    },
+    {
+      "id": "auth-magic-link",
+      "kind": "module",
+      "module": "auth-magic-link",
+      "path": "modules/auth-magic-link",
+      "status": "experimental",
+      "summary": "이메일로 받은 한 번 쓰는 링크로 로그인(비밀번호 없이) — 이미 있는 계정으로 들어오고(skeleton.auth-magic-link.sign-up 으로 가입도 허용), 미확인 계정에서는 가입 때의 미확인 비밀번호를 버린다.",
+      "starter": false,
+      "newProjectFlag": "--modules auth-magic-link",
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": ["skeleton.auth-magic-link"],
+        "snippet": "docs/config/modules/auth-magic-link.yml"
+      },
+      "basePaths": ["/api/v1/auth/magic-link"],
+      "secrets": [],
+      "docs": ["docs/modules/auth-magic-link.md"],
+      "frontend": {
+        "capabilities": ["magic-link-login"],
+        "newProjectFlag": null,
+        "packages": ["@skeleton/auth"]
+      },
+      "notFor": [
+        "메일을 실제로 보내려면 notification-mail 이 필요하다",
+        "비밀번호 로그인이 목적이면 필요 없다 — account 만으로 된다",
+        "링크를 열기만 해서는 로그인되지 않는다 — 프런트가 redeem 을 POST 한다"
+      ],
+      "keywords": {
+        "ko": ["매직링크", "링크 로그인", "비밀번호 없는 로그인", "이메일 로그인"],
+        "en": ["magic link", "passwordless", "email sign in", "link login"]
+      }
+    },
+    {
+      "id": "auth-session",
+      "kind": "module",
+      "module": "auth-session",
+      "path": "modules/auth-session",
+      "status": "experimental",
+      "summary": "로그인 세션 — 불투명한 리프레시 토큰(해시 저장 · 매번 회전 · 재사용 탐지 + 이벤트), 세션 목록 · 개별 로그아웃, body 전달(기본) 또는 HttpOnly 쿠키(CSRF 헤더). 끝난 세션 주기 청소와 계정 삭제 때 세션 행 삭제.",
+      "starter": true,
+      "newProjectFlag": null,
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": ["skeleton.auth-session"],
+        "snippet": "docs/config/modules/auth-session.yml"
+      },
+      "basePaths": ["/api/v1/auth"],
+      "secrets": [
+        {
+          "env": ["<P>_AUTH_SESSION_DELIVERY", "<P>_AUTH_SESSION_COOKIE_SECURE"],
+          "whenMissing": "설정만 — 비밀이 아니다. 보호 환경에서 메모리 세션 저장소(auth-session-jdbc 를 얹는다)나 쿠키 전달에 cookie.secure=false 면 기동 실패"
+        }
+      ],
+      "docs": ["docs/modules/auth-session.md"],
+      "frontend": {
+        "capabilities": ["auth", "session-refresh"],
+        "newProjectFlag": null,
+        "packages": ["@skeleton/auth"]
+      },
+      "notFor": [
+        "액세스 토큰(JWT) 발급은 auth — 이 모듈은 리프레시 · 세션이다",
+        "계정 저장은 account · account-jdbc",
+        "운영에서 메모리 세션 저장소는 기동 거부 — auth-session-jdbc 를 얹는다"
+      ],
+      "keywords": {
+        "ko": ["세션", "리프레시 토큰", "토큰 갱신", "로그인 유지", "기기 목록", "다른 기기 로그아웃"],
+        "en": [
+          "session",
+          "refresh token",
+          "token rotation",
+          "keep signed in",
+          "device list",
+          "sign out everywhere"
+        ]
+      }
+    },
+    {
+      "id": "auth-session-jdbc",
+      "kind": "module",
+      "module": "auth-session-jdbc",
+      "path": "modules/auth-session-jdbc",
+      "status": "experimental",
+      "summary": "auth-session 의 세션 · 리프레시 토큰 저장을 PostgreSQL · MySQL 로 — 한 토큰은 조건부 UPDATE 한 문장으로 한 번만 쓰이고, 인스턴스끼리 세션을 나눈다.",
+      "starter": true,
+      "newProjectFlag": null,
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/auth-session-jdbc.md"],
+      "frontend": null,
+      "notFor": ["auth-session 없이 단독으로는 의미가 없다", "다른 DB 는 SessionStore 를 앱이 직접 구현한다"],
+      "keywords": {
+        "ko": ["세션 저장", "세션 DB", "리프레시 토큰 저장"],
+        "en": ["session storage", "session table", "refresh token storage"]
       }
     },
     {
@@ -232,8 +474,8 @@
       "path": "modules/auth-social",
       "status": "stable",
       "summary": "소셜 로그인의 제공자 중립 계약 — POST /api/v1/auth/social/{provider}/login 라우팅 · 계정 연결 · 가입 정책 (제공자는 google · kakao · naver 모듈).",
-      "starter": false,
-      "newProjectFlag": "--modules auth-social",
+      "starter": true,
+      "newProjectFlag": null,
       "autoIncludes": [],
       "needs": {
         "requires": [],
@@ -271,7 +513,7 @@
       "summary": "구글 OAuth 제공자 — 토큰 교환 · 프로필 조회 클라이언트를 소셜 로그인의 제공자로 등록한다(클라이언트 id · secret 만 있으면 된다).",
       "starter": false,
       "newProjectFlag": "--modules auth-social-google",
-      "autoIncludes": ["auth-social"],
+      "autoIncludes": [],
       "needs": {
         "requires": [],
         "oneOf": [],
@@ -318,7 +560,7 @@
       "summary": "카카오 OAuth 제공자 — 토큰 교환 · 프로필 조회 클라이언트를 소셜 로그인의 제공자로 등록한다(클라이언트 id · secret 만 있으면 된다).",
       "starter": false,
       "newProjectFlag": "--modules auth-social-kakao",
-      "autoIncludes": ["auth-social"],
+      "autoIncludes": [],
       "needs": {
         "requires": [],
         "oneOf": [],
@@ -365,7 +607,7 @@
       "summary": "네이버 OAuth 제공자 — 토큰 교환 · 프로필 조회 클라이언트를 소셜 로그인의 제공자로 등록한다(클라이언트 id · secret 만 있으면 된다).",
       "starter": false,
       "newProjectFlag": "--modules auth-social-naver",
-      "autoIncludes": ["auth-social"],
+      "autoIncludes": [],
       "needs": {
         "requires": [],
         "oneOf": [],
@@ -412,7 +654,7 @@
       "summary": "게시판 — 글 · 중첩 댓글(대댓글) · 설정으로 늘리는 반응(좋아요 · 공감 …) · 운영자 숨김/고정 · 댓글 알림, HTTP /api/v1/boards 까지.",
       "starter": false,
       "newProjectFlag": "--modules board,board-jdbc",
-      "autoIncludes": ["idempotency", "notification"],
+      "autoIncludes": ["notification"],
       "needs": {
         "requires": ["board-jdbc"],
         "oneOf": [],
@@ -449,7 +691,7 @@
       "summary": "게시판 저장소 — PostgreSQL · MySQL 로 board 의 저장 포트 네 개를 구현한다(skeleton_board* 테이블 · 원자적 카운터).",
       "starter": false,
       "newProjectFlag": "--modules board-jdbc",
-      "autoIncludes": ["board", "idempotency", "notification"],
+      "autoIncludes": ["board", "notification"],
       "needs": {
         "requires": [],
         "oneOf": [],
@@ -477,8 +719,8 @@
       "path": "modules/captcha-turnstile",
       "status": "stable",
       "summary": "봇 방지 — Cloudflare Turnstile 토큰을 서버에서 검증한다(TurnstileVerifier).",
-      "starter": false,
-      "newProjectFlag": "--modules captcha-turnstile",
+      "starter": true,
+      "newProjectFlag": null,
       "autoIncludes": [],
       "needs": {
         "requires": [],
@@ -667,8 +909,8 @@
       "path": "modules/idempotency",
       "status": "stable",
       "summary": "Idempotency-Key 헤더로 명령 요청(결제 · 생성)의 중복 실행을 막고 첫 응답을 재생한다.",
-      "starter": false,
-      "newProjectFlag": "--modules idempotency",
+      "starter": true,
+      "newProjectFlag": null,
       "autoIncludes": [],
       "needs": {
         "requires": [],
@@ -696,8 +938,8 @@
       "path": "modules/job-queue-jdbc",
       "status": "stable",
       "summary": "DB 테이블 기반 재시도 작업 큐 — 백오프 · DEAD 처리 · FOR UPDATE SKIP LOCKED, Redis 없이 여러 인스턴스에서 안전.",
-      "starter": false,
-      "newProjectFlag": "--modules job-queue-jdbc",
+      "starter": true,
+      "newProjectFlag": null,
       "autoIncludes": [],
       "needs": {
         "requires": [],
@@ -880,8 +1122,8 @@
       "path": "modules/notification-mail",
       "status": "stable",
       "summary": "SMTP 로 메일을 보내는 MailSender (spring.mail.* 위에).",
-      "starter": false,
-      "newProjectFlag": "--modules notification-mail",
+      "starter": true,
+      "newProjectFlag": null,
       "autoIncludes": [],
       "needs": {
         "requires": [],
@@ -1597,17 +1839,14 @@
       "starter": false,
       "newProjectFlag": "--with-sample",
       "autoIncludes": [
-        "alert",
         "alert-jdbc",
+        "auth-magic-link",
         "board",
         "board-jdbc",
         "crypto",
-        "idempotency",
-        "job-queue-jdbc",
         "json",
         "notification",
         "notification-jdbc",
-        "notification-mail",
         "notification-sse",
         "storage",
         "storage-s3"
@@ -1642,27 +1881,22 @@
       "starter": false,
       "newProjectFlag": "--with-workbench",
       "autoIncludes": [
-        "alert",
         "alert-jdbc",
         "async",
         "async-notification",
-        "auth-social",
+        "auth-magic-link",
         "auth-social-google",
         "auth-social-kakao",
         "auth-social-naver",
         "board",
         "board-jdbc",
-        "captcha-turnstile",
         "config-aws-ssm",
         "crypto",
         "db-mysql",
         "event-kafka",
-        "idempotency",
-        "job-queue-jdbc",
         "json",
         "notification",
         "notification-jdbc",
-        "notification-mail",
         "notification-slack",
         "notification-sse",
         "notification-websocket",
@@ -1937,7 +2171,40 @@
       "need": "로그인 (이메일 · 비밀번호) · JWT · 로그인한 사람만 보는 API",
       "modules": ["auth"],
       "flag": null,
-      "byHand": "스타터에 기본 포함. 회원가입 · 비밀번호 재설정 · 계정 DB 저장은 없다 — 앱이 AuthAccountRepository 를 구현한다(내장은 로컬 시드 계정뿐, prod · staging 에서는 기동을 거부한다). 운영에는 JWT_SECRET(32바이트 이상)."
+      "byHand": "스타터에 기본 포함 — 회원가입 · 비밀번호 재설정 · 계정 DB 저장 · 세션은 아래 「회원가입 · 계정 관리」 행(account, 스타터에 들어 있다). 운영에는 JWT_SECRET(32바이트 이상, 배포 선언의 secrets: 에 이름)."
+    },
+    {
+      "frontend": {
+        "capabilities": ["auth", "account-lifecycle"],
+        "flag": "--packages auth"
+      },
+      "oneOf": [],
+      "need": "회원가입 · 이메일 인증 · 비밀번호 재설정 · 이메일 변경 · 계정 설정 · 탈퇴 · 로그인 세션 관리",
+      "modules": ["account", "account-jdbc", "auth-session", "auth-session-jdbc"],
+      "flag": null,
+      "byHand": "스타터에 기본 포함(account-jdbc · auth-session-jdbc). 운영에서 서려면 메일 발송 길(`--modules notification-mail` + SMTP 환경변수), JWT_SECRET, <P>_ACCOUNT_MAIL_LINK_BASE_URL, 클라이언트 IP 모드(홈서버 플랫폼이 넣는다)가 필요하다 — 없으면 DeployGuard 가 기동을 거부한다. 소셜 가입 · 병합과 refresh 유예는 앱 yml 의 선택. 가입 · 설정 화면은 프런트."
+    },
+    {
+      "frontend": {
+        "capabilities": ["magic-link-login"],
+        "flag": "--packages auth"
+      },
+      "oneOf": [],
+      "need": "비밀번호 없이 이메일 링크로 로그인 (매직링크)",
+      "modules": ["auth-magic-link"],
+      "flag": "--modules auth-magic-link",
+      "byHand": "스타터의 account 위에 얹는다. 링크 메일을 실제로 보내려면 notification-mail. 모르는 주소의 가입까지 허용하려면 skeleton.auth-magic-link.sign-up=true(모듈 기본은 이미 있는 계정으로만). 링크 도착 화면은 프런트."
+    },
+    {
+      "frontend": {
+        "capabilities": ["account-admin"],
+        "flag": "--packages auth"
+      },
+      "oneOf": [],
+      "need": "관리자 회원 관리 (목록 · 정지 · 역할 · 삭제 복구)",
+      "modules": ["account"],
+      "flag": null,
+      "byHand": "스타터의 account 에 있다 — skeleton.account.admin.enabled=true 로 켜고(기본 꺼짐) 첫 관리자는 skeleton.account.bootstrap.admin-email 로 정한다(확인된 이메일 + ADMIN 이 아직 없을 때만). 관리자 권한은 매 호출 저장소의 계정으로 확인한다. 표 화면은 프런트 @skeleton/auth/admin."
     },
     {
       "frontend": {
@@ -2245,6 +2512,7 @@
       "prefix": "community",
       "classPrefix": "Community",
       "frontendCapabilities": [
+        "account-lifecycle",
         "social-login",
         "board",
         "live-notifications",
@@ -2266,7 +2534,15 @@
       "package": "dev.example.saas",
       "prefix": "saas",
       "classPrefix": "Saas",
-      "frontendCapabilities": ["auth", "screen-patterns", "pricing-page", "payment", "notifications", "captcha-turnstile"],
+      "frontendCapabilities": [
+        "account-lifecycle",
+        "auth",
+        "screen-patterns",
+        "pricing-page",
+        "payment",
+        "notifications",
+        "captcha-turnstile"
+      ],
       "frontendCommand": "scripts/new-project.sh ~/work/saas/web saas --packages marketing,payment,notifications,captcha-turnstile --scope @acme"
     },
     {

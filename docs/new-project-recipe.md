@@ -41,7 +41,8 @@ scripts/new-project.sh <target-dir> <root-package> <config-prefix> <ClassPrefix>
 
 | 모듈 | 채울 것 (환경변수의 `<P>` = 설정 접두사의 대문자) | 비어 있으면 |
 |---|---|---|
-| `auth` | `JWT_SECRET`(32바이트 이상 · 배포 선언의 `secrets:` 가 만들어 넣는다), 운영용 `AuthAccountRepository` 빈(앱) | 보호 환경(`<P>_ENV=stage\|prod` · 프로필 `prod\|staging`)에서 **기동 실패** |
+| `auth` | `JWT_SECRET`(32바이트 이상 · 배포 선언의 `secrets:` 가 무작위로 만들어 넣는다 — 이름이 빠지면 가드가 `JWT_SECRET` 을 말하며 기동 실패) | 보호 환경(`<P>_ENV=stage\|prod` · 프로필 `prod\|staging`)에서 **기동 실패** |
+| `account`(스타터) | `<P>_ACCOUNT_MAIL_LINK_BASE_URL`(프론트 주소) · 메일 발송 길(`--modules notification-mail` + `<P>_NOTIFICATION_MAIL_ENABLED=true` · `_FROM` · `SPRING_MAIL_HOST`) · 선택 `<P>_ACCOUNT_BOOTSTRAP_ADMIN_EMAIL` · 클라이언트 IP 모드(`<P>_WEB_CLIENT_IP_MODE` · `_TRUSTED_PROXIES` — 홈서버 플랫폼이 넣는다) | 보호 환경에서 **기동 실패**(DeployGuard 가 이름을 나열한다) |
 | `auth-social-*` | `<P>_AUTH_SOCIAL_PROVIDERS_<X>_ENABLED=true` · `_CLIENT_ID` · `_CLIENT_SECRET` · `redirect-uri` | 켰는데 비면 기동 실패 |
 | `board` | `board.seed-boards`(게시판 코드) · `board.reaction.types`(반응 종류) | 게시판이 비어 있다 |
 | `payment-toss` / `-stripe` | `<P>_PAYMENT_<X>_ENABLED=true` · `_SECRET_KEY` | 제공자 빈이 없다 — 결제 라우팅 실패 |
@@ -69,7 +70,7 @@ cd ~/work/<이름>/api && scripts/dev.sh      # DB(+ 로컬 S3) 컨테이너 →
 scripts/dev.sh down                          # 컨테이너를 내린다(데이터 볼륨은 남는다)
 ```
 
-포트가 겹치면 `SERVER_PORT` · `DB_PORT` · `S3_PORT`. 프런트 없이 백엔드만이면 `WEB_DIR= scripts/dev.sh`. 로컬 시드 사용자는 `user@example.com` / `password`.
+포트가 겹치면 `SERVER_PORT` · `DB_PORT` · `S3_PORT`. 프런트 없이 백엔드만이면 `WEB_DIR= scripts/dev.sh`. 로컬 시드 사용자는 `user@example.com` / `password` (로컬 프로필 전용 — 계정은 스타터의 `account` 라 가입 · 이메일 확인 · 재설정이 이미 돈다).
 
 ## 6. 검증
 
@@ -118,7 +119,7 @@ scripts/dev.sh
 
 프런트: `scripts/new-project.sh ~/work/community/web community --packages board,notifications,realtime,i18n,marketing,seo --with-sample`(react-skeleton 에서 — 그쪽 레시피 예 1).
 
-손으로 써야 하는 것: 계정 저장(소셜 가입 후 사용자 만들기 — `OAuthAccountLinkRepository` · `OAuthAccountProvisioningPolicy` 구현, 기본은 메모리 저장 · 이미 연결된 계정만 통과)과 운영용 `AuthAccountRepository`, 게시판 코드 · 반응 종류(`community.board.seed-boards` · `reaction.types`), 운영자 계정에 `MODERATOR` 역할, 알림을 만드는 코드(`NotificationPublisher.publish` — 댓글 알림은 `board` 가 `notification` 이 있으면 기본으로 보낸다).
+손으로 써야 하는 것: 소셜 가입 · 병합 정책은 앱 yml 의 선택이다(`community.account.social.sign-up` · `merge-on-verified-email` — 스타터의 `account` 가 소셜을 계정으로 이어 주고, 병합은 제공자가 확인한 같은 이메일일 때만), 운영에서는 메일 발송 길(`notification-mail`)과 `COMMUNITY_ACCOUNT_MAIL_LINK_BASE_URL`, 게시판 코드 · 반응 종류(`community.board.seed-boards` · `reaction.types`), 운영자 계정에 `MODERATOR` 역할, 알림을 만드는 코드(`NotificationPublisher.publish` — 댓글 알림은 `board` 가 `notification` 이 있으면 기본으로 보낸다).
 
 ### 예 2. 유료 SaaS 대시보드 — 로그인 · 대시보드/목록/설정 · 요금제 · 결제 · 알림
 
@@ -142,7 +143,7 @@ scripts/dev.sh        # MySQL 컨테이너가 올라온다
 
 프런트: `scripts/new-project.sh ~/work/saas/web saas --packages marketing,payment,notifications,captcha-turnstile --scope @acme`(그쪽 레시피 예 2).
 
-손으로 써야 하는 것: **결제 HTTP** — 주문 · 금액 검증 컨트롤러와 성공/실패 리다이렉트 처리, 웹훅 서명 검증(`payment` 모듈은 HTTP 를 열지 않는다 — `PaymentService.confirm` 은 받은 금액을 그대로 넘기므로 서버의 주문 금액과 비교하는 코드가 앱에 있어야 한다. `docs/modules/payment.md`), 가입 · 로그인에서 `TurnstileVerifier` 호출, 알림을 만드는 코드, 운영용 `AuthAccountRepository`, 구독 · 요금제 도메인.
+손으로 써야 하는 것: **결제 HTTP** — 주문 · 금액 검증 컨트롤러와 성공/실패 리다이렉트 처리, 웹훅 서명 검증(`payment` 모듈은 HTTP 를 열지 않는다 — `PaymentService.confirm` 은 받은 금액을 그대로 넘기므로 서버의 주문 금액과 비교하는 코드가 앱에 있어야 한다. `docs/modules/payment.md`), 가입 · 로그인에서 `TurnstileVerifier` 호출, 알림을 만드는 코드, 구독 · 요금제 도메인(계정 · 가입 · 로그인은 스타터의 `account` — 캡차는 `saas.account.captcha.required=true`, 운영에서는 메일 발송 길).
 
 ### 예 3. 콘텐츠 · 랜딩 사이트 (서버 렌더링) — 검색에 노출되는 소개 · 요금 · 약관
 

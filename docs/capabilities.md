@@ -10,7 +10,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 - **무엇이 필요하다는 말을 받으면** 아래 결정표에서 그 말(키워드)을 찾아 id · 명령 조각을 고른다. 표에 없으면 「전체 목록」의 키워드 열을 훑는다. 만들기 전에 이미 있는지 먼저 본다.
 - 모듈 이름 = id. `자동으로 따라온다` 는 Gradle 의존으로 닫혀 같이 오는 모듈이라 `--modules` 에 적지 않아도 된다. `함께 골라야 한다` 는 자동으로 오지 않지만 없으면 동작하지 않는 짝이다.
-- 스타터(`apps/api`)에 이미 있는 모듈: `auth`, `db-postgresql`, `migration`, `migration-flyway`, `persistence-jdbc`, `platform`, `time` — 조각에서 뺀다.
+- 스타터(`apps/api`)에 이미 있는 모듈: `account`, `account-jdbc`, `alert`, `auth`, `auth-session`, `auth-session-jdbc`, `auth-social`, `captcha-turnstile`, `db-postgresql`, `idempotency`, `job-queue-jdbc`, `migration`, `migration-flyway`, `notification-mail`, `persistence-jdbc`, `platform`, `time` — 조각에서 뺀다.
 - 설정 키와 기본값은 `docs/config/modules/<모듈>.yml`, 모듈 한 쪽 문서는 `docs/modules/<모듈>.md`. 환경변수의 `<P>` 는 배포 선언의 `env_prefix`(설정 접두사의 대문자).
 
 ## new-project.sh 인터페이스
@@ -24,7 +24,10 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 | 필요한 것 | 고를 것(id) | kotlin `new-project.sh` 조각 | react `new-project.sh` 조각 | 그래도 손으로 써야 하는 것 |
 |---|---|---|---|---|
-| 로그인 (이메일 · 비밀번호) · JWT · 로그인한 사람만 보는 API | `auth` | (덧붙일 것 없음) | (기본 포함) — react `auth` | 스타터에 기본 포함. 회원가입 · 비밀번호 재설정 · 계정 DB 저장은 없다 — 앱이 AuthAccountRepository 를 구현한다(내장은 로컬 시드 계정뿐, prod · staging 에서는 기동을 거부한다). 운영에는 JWT_SECRET(32바이트 이상). |
+| 로그인 (이메일 · 비밀번호) · JWT · 로그인한 사람만 보는 API | `auth` | (덧붙일 것 없음) | (기본 포함) — react `auth` | 스타터에 기본 포함 — 회원가입 · 비밀번호 재설정 · 계정 DB 저장 · 세션은 아래 「회원가입 · 계정 관리」 행(account, 스타터에 들어 있다). 운영에는 JWT_SECRET(32바이트 이상, 배포 선언의 secrets: 에 이름). |
+| 회원가입 · 이메일 인증 · 비밀번호 재설정 · 이메일 변경 · 계정 설정 · 탈퇴 · 로그인 세션 관리 | `account` + `account-jdbc` + `auth-session` + `auth-session-jdbc` | (덧붙일 것 없음) | `--packages auth` — react `auth` `account-lifecycle` | 스타터에 기본 포함(account-jdbc · auth-session-jdbc). 운영에서 서려면 메일 발송 길(`--modules notification-mail` + SMTP 환경변수), JWT_SECRET, <P>_ACCOUNT_MAIL_LINK_BASE_URL, 클라이언트 IP 모드(홈서버 플랫폼이 넣는다)가 필요하다 — 없으면 DeployGuard 가 기동을 거부한다. 소셜 가입 · 병합과 refresh 유예는 앱 yml 의 선택. 가입 · 설정 화면은 프런트. |
+| 비밀번호 없이 이메일 링크로 로그인 (매직링크) | `auth-magic-link` | `--modules auth-magic-link` | `--packages auth` — react `magic-link-login` | 스타터의 account 위에 얹는다. 링크 메일을 실제로 보내려면 notification-mail. 모르는 주소의 가입까지 허용하려면 skeleton.auth-magic-link.sign-up=true(모듈 기본은 이미 있는 계정으로만). 링크 도착 화면은 프런트. |
+| 관리자 회원 관리 (목록 · 정지 · 역할 · 삭제 복구) | `account` | (덧붙일 것 없음) | `--packages auth` — react `account-admin` | 스타터의 account 에 있다 — skeleton.account.admin.enabled=true 로 켜고(기본 꺼짐) 첫 관리자는 skeleton.account.bootstrap.admin-email 로 정한다(확인된 이메일 + ADMIN 이 아직 없을 때만). 관리자 권한은 매 호출 저장소의 계정으로 확인한다. 표 화면은 프런트 @skeleton/auth/admin. |
 | 소셜 로그인 (구글 · 카카오 · 네이버) | `auth-social` + (`auth-social-google` \| `auth-social-kakao` \| `auth-social-naver`) | `--modules auth-social,auth-social-google` — `auth-social-google` \| `auth-social-kakao` \| `auth-social-naver` 중 하나 이상 고른다 | (기본 포함) — react `social-login` | 제공자 enabled · client-id · client-secret · redirect-uri(비밀은 환경변수). 계정 연결 저장(OAuthAccountLinkRepository)과 가입 정책(OAuthAccountProvisioningPolicy)은 앱이 구현한다 — 기본은 메모리 저장 · 이미 연결된 계정만 통과. 로그인 버튼 · /auth/callback 화면은 프런트. |
 | 게시판 · 글쓰기 · 댓글 · 대댓글 · 공감(반응) | `board` + `board-jdbc` | `--modules board,board-jdbc` | `--packages board` — react `board` | 게시판 코드 만들기(skeleton.board.seed-boards 설정이나 운영자 API) · 반응 종류(skeleton.board.reaction.types) · 운영자 역할(MODERATOR). notification 을 같이 고르면 댓글 알림이 기본으로 켜진다. 목록 · 상세 · 글쓰기 화면은 프런트. |
 | 알림 (종 · 목록 · 안 읽은 수) | `notification` + `notification-jdbc` | `--modules notification,notification-jdbc` | `--packages notifications` — react `notifications` | 알림을 만드는 쪽(NotificationPublisher.publish)은 앱 코드 — 받는 사람은 NotificationEvent.recipientIds. 프런트에서는 NotificationBell 배치와 알림 API 인스턴스. |
@@ -62,31 +65,36 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 | id | 요약 | 켜는 조각 | 키워드 (한국어 / 영어) | 짝 프런트 |
 |---|---|---|---|---|
-| `alert` | 주인 경보 — 5xx 몰림 · 기동 실패 · 죽은 작업을 Discord 호환 웹훅(+ 선택적 메일)으로 알린다. 에러 수집(Sentry)의 답. | `--modules alert` | 경보, 주인 알림, 에러 알림, 장애 알림, 디스코드 알림, 에러 수집, 5xx 알림 / owner alert, error reporting, discord webhook, incident alert, 5xx alert, sentry alternative | — |
+| `account` | 계정 수명주기 — 이메일 · 비밀번호 가입과 이메일 확인, 비밀번호 재설정 · 변경, 이메일 변경, 소셜 연결(자동 병합 없음), 탈퇴(다시 인증 → 유예 → 삭제), 로그인 시도 제한, 관리자 도구, 첫 관리자, ko/en 메일 템플릿. auth 가 진짜 계정으로 로그인하게 한다. | 스타터(apps/api)에 기본 포함 | 회원가입, 가입, 이메일 인증, 비밀번호 재설정, 비밀번호 찾기, 이메일 변경, 계정 삭제, 탈퇴, 계정 관리, 관리자 도구, 계정 정지, 프로필 / sign up, registration, email verification, password reset, forgot password, change email, delete account, account management, admin tools, suspend account, profile | `@skeleton/auth` |
+| `account-jdbc` | account 의 저장소 · 토큰 · 감사 기록을 PostgreSQL · MySQL 로 — 스키마는 모듈 마이그레이션(MySQL 은 이메일을 utf8mb4_bin 으로 정확 일치). 보호 환경에서 메모리 저장소를 막는 가드를 통과하는 방법. | 스타터(apps/api)에 기본 포함 | 계정 저장, 계정 DB, 회원 테이블, 계정 마이그레이션 / account storage, accounts table, account persistence, account migration | — |
+| `alert` | 주인 경보 — 5xx 몰림 · 기동 실패 · 죽은 작업을 Discord 호환 웹훅(+ 선택적 메일)으로 알린다. 에러 수집(Sentry)의 답. | 스타터(apps/api)에 기본 포함 | 경보, 주인 알림, 에러 알림, 장애 알림, 디스코드 알림, 에러 수집, 5xx 알림 / owner alert, error reporting, discord webhook, incident alert, 5xx alert, sentry alternative | — |
 | `alert-jdbc` | 경보 기록을 DB 에 두어 여러 인스턴스 · 재시작을 가로질러 같은 경보를 접는다 (PostgreSQL · MySQL). | `--modules alert-jdbc` | 경보 기록, 경보 중복 접기, 경보 DB / alert ledger, alert dedupe, alert database | — |
 | `async` | @Async · CompletableFuture 작업이 호출 스레드의 trace id · MDC · 보안 컨텍스트를 이어받는 실행기와 작업 그룹. | `--modules async` | 비동기, 백그라운드 작업, 스레드 풀, @Async, 작업 그룹 / async, background task, thread pool, mdc propagation, completable future | — |
 | `async-notification` | 비동기 작업에서 처리되지 않은 예외를 알림(notification)으로 흘려 보낸다. | `--modules async-notification` | 비동기 예외 알림, 백그라운드 오류 알림, 비동기 에러 / async exception alert, background error notification, uncaught async exception | — |
 | `auth` | 로그인 — 비밀번호 로그인 · JWT 발급/검증 · 로컬 dev-login · 비상용 break-glass · SecurityFilterChain (계정 저장소는 앱이 정한다). | 스타터(apps/api)에 기본 포함 | 로그인, 로그아웃, 인증, 토큰, JWT, 권한, 관리자 로그인, 비상 접근 / login, authentication, jwt, token, dev login, break glass, security | `@skeleton/auth` |
-| `auth-social` | 소셜 로그인의 제공자 중립 계약 — POST /api/v1/auth/social/{provider}/login 라우팅 · 계정 연결 · 가입 정책 (제공자는 google · kakao · naver 모듈). | `--modules auth-social` — `auth-social-google` \| `auth-social-kakao` \| `auth-social-naver` 중 하나 이상 고른다 | 소셜 로그인, 간편 로그인, 구글 로그인, 카카오 로그인, 네이버 로그인, OAuth, 계정 연결 / social login, oauth, sign in with google, kakao login, naver login, account linking | `@skeleton/auth` |
+| `auth-magic-link` | 이메일로 받은 한 번 쓰는 링크로 로그인(비밀번호 없이) — 이미 있는 계정으로 들어오고(skeleton.auth-magic-link.sign-up 으로 가입도 허용), 미확인 계정에서는 가입 때의 미확인 비밀번호를 버린다. | `--modules auth-magic-link` | 매직링크, 링크 로그인, 비밀번호 없는 로그인, 이메일 로그인 / magic link, passwordless, email sign in, link login | `@skeleton/auth` |
+| `auth-session` | 로그인 세션 — 불투명한 리프레시 토큰(해시 저장 · 매번 회전 · 재사용 탐지 + 이벤트), 세션 목록 · 개별 로그아웃, body 전달(기본) 또는 HttpOnly 쿠키(CSRF 헤더). 끝난 세션 주기 청소와 계정 삭제 때 세션 행 삭제. | 스타터(apps/api)에 기본 포함 | 세션, 리프레시 토큰, 토큰 갱신, 로그인 유지, 기기 목록, 다른 기기 로그아웃 / session, refresh token, token rotation, keep signed in, device list, sign out everywhere | `@skeleton/auth` |
+| `auth-session-jdbc` | auth-session 의 세션 · 리프레시 토큰 저장을 PostgreSQL · MySQL 로 — 한 토큰은 조건부 UPDATE 한 문장으로 한 번만 쓰이고, 인스턴스끼리 세션을 나눈다. | 스타터(apps/api)에 기본 포함 | 세션 저장, 세션 DB, 리프레시 토큰 저장 / session storage, session table, refresh token storage | — |
+| `auth-social` | 소셜 로그인의 제공자 중립 계약 — POST /api/v1/auth/social/{provider}/login 라우팅 · 계정 연결 · 가입 정책 (제공자는 google · kakao · naver 모듈). | 스타터(apps/api)에 기본 포함 | 소셜 로그인, 간편 로그인, 구글 로그인, 카카오 로그인, 네이버 로그인, OAuth, 계정 연결 / social login, oauth, sign in with google, kakao login, naver login, account linking | `@skeleton/auth` |
 | `auth-social-google` | 구글 OAuth 제공자 — 토큰 교환 · 프로필 조회 클라이언트를 소셜 로그인의 제공자로 등록한다(클라이언트 id · secret 만 있으면 된다). | `--modules auth-social-google` | 구글 로그인, 구글 소셜 로그인, 소셜 로그인 / google login, google oauth, social login | `@skeleton/auth` |
 | `auth-social-kakao` | 카카오 OAuth 제공자 — 토큰 교환 · 프로필 조회 클라이언트를 소셜 로그인의 제공자로 등록한다(클라이언트 id · secret 만 있으면 된다). | `--modules auth-social-kakao` | 카카오 로그인, 카카오 소셜 로그인, 소셜 로그인 / kakao login, kakao oauth, social login | `@skeleton/auth` |
 | `auth-social-naver` | 네이버 OAuth 제공자 — 토큰 교환 · 프로필 조회 클라이언트를 소셜 로그인의 제공자로 등록한다(클라이언트 id · secret 만 있으면 된다). | `--modules auth-social-naver` | 네이버 로그인, 네이버 소셜 로그인, 소셜 로그인 / naver login, naver oauth, social login | `@skeleton/auth` |
 | `board` | 게시판 — 글 · 중첩 댓글(대댓글) · 설정으로 늘리는 반응(좋아요 · 공감 …) · 운영자 숨김/고정 · 댓글 알림, HTTP /api/v1/boards 까지. | `--modules board,board-jdbc` | 게시판, 커뮤니티, 글쓰기, 댓글, 대댓글, 공감, 좋아요, 반응, 운영자 숨김, 공지 고정 / board, forum, community, post, comment, reply, reaction, like, moderation | `@skeleton/board` |
 | `board-jdbc` | 게시판 저장소 — PostgreSQL · MySQL 로 board 의 저장 포트 네 개를 구현한다(skeleton_board* 테이블 · 원자적 카운터). | `--modules board-jdbc` | 게시판 저장소, 게시판 DB / board storage, board repository, board database | `@skeleton/board` |
-| `captcha-turnstile` | 봇 방지 — Cloudflare Turnstile 토큰을 서버에서 검증한다(TurnstileVerifier). | `--modules captcha-turnstile` | 캡차, 봇 방지, 스팸 방지, 로봇 확인, 가입 폼 보호 / captcha, turnstile, bot protection, spam protection, cloudflare turnstile | `@skeleton/captcha-turnstile` |
+| `captcha-turnstile` | 봇 방지 — Cloudflare Turnstile 토큰을 서버에서 검증한다(TurnstileVerifier). | 스타터(apps/api)에 기본 포함 | 캡차, 봇 방지, 스팸 방지, 로봇 확인, 가입 폼 보호 / captcha, turnstile, bot protection, spam protection, cloudflare turnstile | `@skeleton/captcha-turnstile` |
 | `config-aws-ssm` | AWS SSM Parameter Store 의 값을 시작할 때 스프링 프로퍼티로 불러온다. | `--modules config-aws-ssm` | AWS 설정, 파라미터 스토어, SSM, 비밀 불러오기 / aws ssm, parameter store, remote config, aws secrets | — |
 | `crypto` | AES-GCM 텍스트 암호화 · 키 회전용 키 id 봉투 · URL 에 안전한 불투명 토큰 · 선택적 영속 변환기. | `--modules crypto` | 암호화, 복호화, 비밀 저장, 불투명 URL, 키 회전 / encryption, aes gcm, opaque token, key rotation, encrypt at rest | — |
 | `db-mysql` | MySQL 방언 — 드라이버 · Flyway MySQL 지원 · SqlDialect · Data JDBC 시간 변환, 세션을 UTC 로 고정한다. | `--db mysql` | MySQL, 마이SQL, DB 변경, MySQL 로 바꾸기 / mysql, mariadb, use mysql, switch database | — |
 | `db-postgresql` | PostgreSQL 방언(기본) — 드라이버 · Flyway PostgreSQL 지원 · SqlDialect · Data JDBC 시간 변환. | 스타터(apps/api)에 기본 포함 | PostgreSQL, 포스트그레스, DB 방언, 데이터베이스 / postgresql, postgres, database dialect, database | — |
 | `event-kafka` | 이벤트를 Kafka 로 발행하는 KafkaEventPublisher 와 키 · 메시지 · 직렬화 전략(켜기 전에는 로그만 남긴다). | `--modules event-kafka` | 카프카, 이벤트 발행, 메시지 큐, 이벤트 스트림 / kafka, event publishing, message broker, event stream | — |
-| `idempotency` | Idempotency-Key 헤더로 명령 요청(결제 · 생성)의 중복 실행을 막고 첫 응답을 재생한다. | `--modules idempotency` | 멱등, 중복 요청 방지, 두 번 눌러도 한 번, 멱등 키, 중복 결제 방지 / idempotency, idempotency key, duplicate request, replay response | — |
-| `job-queue-jdbc` | DB 테이블 기반 재시도 작업 큐 — 백오프 · DEAD 처리 · FOR UPDATE SKIP LOCKED, Redis 없이 여러 인스턴스에서 안전. | `--modules job-queue-jdbc` | 작업 큐, 백그라운드 작업, 재시도, 비동기 작업, 내보내기 작업, 잡 큐 / job queue, background job, retry, dead letter, task queue | — |
+| `idempotency` | Idempotency-Key 헤더로 명령 요청(결제 · 생성)의 중복 실행을 막고 첫 응답을 재생한다. | 스타터(apps/api)에 기본 포함 | 멱등, 중복 요청 방지, 두 번 눌러도 한 번, 멱등 키, 중복 결제 방지 / idempotency, idempotency key, duplicate request, replay response | — |
+| `job-queue-jdbc` | DB 테이블 기반 재시도 작업 큐 — 백오프 · DEAD 처리 · FOR UPDATE SKIP LOCKED, Redis 없이 여러 인스턴스에서 안전. | 스타터(apps/api)에 기본 포함 | 작업 큐, 백그라운드 작업, 재시도, 비동기 작업, 내보내기 작업, 잡 큐 / job queue, background job, retry, dead letter, task queue | — |
 | `json` | JsonCodec · 임의 JSON 을 담는 JsonDocument · 버전 있는 페이로드 · JPA/JDBC 변환기. | `--modules json` | JSON, JSON 칼럼, 버전 있는 페이로드, 직렬화 / json, json column, versioned payload, serialization | — |
 | `migration` | 마이그레이션 공통 규칙 — DB 를 지우는 설정이 허용 프로필 밖에서 켜지면 시작을 막는 가드(도구 중립). | 스타터(apps/api)에 기본 포함 | 마이그레이션 가드, DB 초기화 방지, 스키마 보호 / migration guard, prevent db wipe, schema safety | — |
 | `migration-flyway` | Flyway 구현 — 로컬 clean 옵트인 · 마이그레이션 파일 이름 규칙(V<UTC 14자리>__snake_case.sql) 검사. | 스타터(apps/api)에 기본 포함 | Flyway, 마이그레이션, DB 스키마 버전, 스키마 변경 / flyway, database migration, schema migration, schema version | — |
 | `notification` | 알림 계약 · 수신자 해석 · 인메모리 브로커 + 로그인한 사람의 받은편지함 HTTP(/api/v1/notifications: 목록 · 읽음 · 모두 읽음). | `--modules notification` | 알림, 알림 목록, 받은편지함, 안 읽은 알림, 알림 읽음, 알림 보내기 / notification, inbox, unread, mark as read, publish notification | `@skeleton/notifications` |
 | `notification-jdbc` | 알림 받은편지함을 DB 테이블에 저장한다(skeleton_notification_inbox). | `--modules notification-jdbc` | 알림 저장, 알림 DB, 알림 기록 유지 / notification storage, persist notifications, inbox database | `@skeleton/notifications` |
-| `notification-mail` | SMTP 로 메일을 보내는 MailSender (spring.mail.* 위에). | `--modules notification-mail` | 메일 발송, 이메일 보내기, SMTP, 메일 / send email, smtp, mail sender, email | — |
+| `notification-mail` | SMTP 로 메일을 보내는 MailSender (spring.mail.* 위에). | 스타터(apps/api)에 기본 포함 | 메일 발송, 이메일 보내기, SMTP, 메일 / send email, smtp, mail sender, email | — |
 | `notification-slack` | 알림과 @SlackException 예외 알림을 Slack 웹훅으로 보낸다. | `--modules notification-slack` | 슬랙 알림, 슬랙, 예외 알림 / slack notification, slack webhook, exception alert | — |
 | `notification-sse` | 알림을 Server-Sent Events 로 브라우저에 실시간 전달한다(GET /api/v1/notifications/sse) — 받는 사람이 정해진 알림은 그 사람에게만. | `--modules notification-sse` | 실시간 알림, SSE, 알림 즉시 표시, 푸시 알림, 서버 푸시 / realtime notification, sse, server-sent events, push notification | `@skeleton/realtime` |
 | `notification-websocket` | 알림을 STOMP over WebSocket(/ws/notifications)으로 전달한다 — 인증 · trace 인터셉터 · 하트비트를 갖춘 인프로세스 브로커. | `--modules notification-websocket` | 웹소켓, 실시간 알림, 양방향 통신, STOMP / websocket, stomp, realtime notification, two-way | `@skeleton/realtime` |
@@ -135,7 +143,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 - kotlin(이 레포): `scripts/new-project.sh ~/work/community/api dev.example.community community Community --modules auth-social,auth-social-google,board,board-jdbc,notification,notification-jdbc,notification-sse`
 - react: `scripts/new-project.sh ~/work/community/web community --packages board,notifications,realtime,i18n,marketing,seo --with-sample`
-- 짝 프런트 항목: `social-login`, `board`, `live-notifications`, `i18n`, `landing-page`, `seo`, `legal-documents`, `cookie-consent`
+- 짝 프런트 항목: `account-lifecycle`, `social-login`, `board`, `live-notifications`, `i18n`, `landing-page`, `seo`, `legal-documents`, `cookie-consent`
 
 ### 유료 SaaS 대시보드 — 로그인 · 대시보드/목록/설정 · 요금제 · 결제 · 알림
 
@@ -143,7 +151,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 - kotlin(이 레포): `scripts/new-project.sh ~/work/saas/api dev.example.saas saas Saas --modules payment,payment-toss,notification,notification-jdbc,captcha-turnstile --db mysql`
 - react: `scripts/new-project.sh ~/work/saas/web saas --packages marketing,payment,notifications,captcha-turnstile --scope @acme`
-- 짝 프런트 항목: `auth`, `screen-patterns`, `pricing-page`, `payment`, `notifications`, `captcha-turnstile`
+- 짝 프런트 항목: `account-lifecycle`, `auth`, `screen-patterns`, `pricing-page`, `payment`, `notifications`, `captcha-turnstile`
 
 ### 콘텐츠 · 랜딩 사이트 (서버 렌더링) — 검색에 노출되는 소개 · 요금 · 약관 사이트
 
@@ -157,10 +165,40 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 ## 항목 상세
 
+### `account` — 계정 수명주기 — 이메일 · 비밀번호 가입과 이메일 확인, 비밀번호 재설정 · 변경, 이메일 변경, 소셜 연결(자동 병합 없음), 탈퇴(다시 인증 → 유예 → 삭제), 로그인 시도 제한, 관리자 도구, 첫 관리자, ko/en 메일 템플릿. auth 가 진짜 계정으로 로그인하게 한다.
+
+- 종류 · 상태: module · experimental — 위치 `modules/account`
+- 켜는 법: 스타터(apps/api)에 기본 포함
+- 의존 한 줄: `implementation(project(":modules:account"))`
+- 설정 접두사 `skeleton.account` — 키와 기본값 `docs/config/modules/account.yml`
+- HTTP 경로: `/api/v1`, `/api/v1/account`, `/api/v1/account/identities/social`, `/api/v1/admin/accounts`, `/api/v1/auth`
+- 비밀 · 환경변수: `<P>_ACCOUNT_MAIL_LINK_BASE_URL` — 빠지면: 메일 링크가 여는 프론트 주소 — 비밀 아님(선언의 env:). 비면 보호 환경(<P>_ENV=stage|prod)에서 기동 실패
+- 비밀 · 환경변수: `<P>_ACCOUNT_BOOTSTRAP_ADMIN_EMAIL` — 빠지면: 선택 — 이 이메일이 확인되면 ADMIN 을 준다. 없으면 관리자 API 를 켠 앱은 경고
+- 비밀 · 환경변수: `<P>_WEB_CLIENT_IP_MODE`, `<P>_WEB_CLIENT_IP_TRUSTED_PROXIES` (배포 플랫폼이 만들어 넣는다) — 빠지면: 홈서버 플랫폼이 넣는다(예약 이름). 안 정해지면 보호 환경에서 기동 실패 — IP 한도가 X-Forwarded-For 로 풀린다
+- 문서: `docs/modules/account.md`
+- 짝 프런트(react-skeleton): 항목 `auth`, `account-lifecycle`, `account-admin` · 패키지 `@skeleton/auth` · 조각 기본 포함(덧붙일 것 없음)
+- 쓰지 않는 경우:
+  - 메일 발송 자체는 notification-mail — 보호 환경에서는 메일 발송 길(notification-mail 또는 AccountMailTransport 빈)이 없으면 기동을 거부한다
+  - 소셜 제공자 클라이언트는 auth-social-google | -kakao | -naver
+  - 리프레시 토큰 · 세션 목록은 auth-session, 링크 로그인은 auth-magic-link
+  - 소셜 로그인을 계정으로 이어 주는 것은 켜진 auth-social 과 skeleton.account.social.* 설정(모듈 기본은 가입 · 병합 모두 꺼짐)
+- 키워드: 회원가입, 가입, 이메일 인증, 비밀번호 재설정, 비밀번호 찾기, 이메일 변경, 계정 삭제, 탈퇴, 계정 관리, 관리자 도구, 계정 정지, 프로필 / sign up, registration, email verification, password reset, forgot password, change email, delete account, account management, admin tools, suspend account, profile
+
+### `account-jdbc` — account 의 저장소 · 토큰 · 감사 기록을 PostgreSQL · MySQL 로 — 스키마는 모듈 마이그레이션(MySQL 은 이메일을 utf8mb4_bin 으로 정확 일치). 보호 환경에서 메모리 저장소를 막는 가드를 통과하는 방법.
+
+- 종류 · 상태: module · experimental — 위치 `modules/account-jdbc`
+- 켜는 법: 스타터(apps/api)에 기본 포함
+- 의존 한 줄: `implementation(project(":modules:account-jdbc"))`
+- 문서: `docs/modules/account-jdbc.md`
+- 쓰지 않는 경우:
+  - account 없이 단독으로는 의미가 없다 — account 의 포트 구현이다
+  - 다른 DB 는 AccountRepository · OneTimeTokenStore 를 앱이 직접 구현한다
+- 키워드: 계정 저장, 계정 DB, 회원 테이블, 계정 마이그레이션 / account storage, accounts table, account persistence, account migration
+
 ### `alert` — 주인 경보 — 5xx 몰림 · 기동 실패 · 죽은 작업을 Discord 호환 웹훅(+ 선택적 메일)으로 알린다. 에러 수집(Sentry)의 답.
 
 - 종류 · 상태: module · stable — 위치 `modules/alert`
-- 켜는 법: `--modules alert`
+- 켜는 법: 스타터(apps/api)에 기본 포함
 - 의존 한 줄: `implementation(project(":modules:alert"))`
 - 소스만 따라온다(컴파일 전용 — 런타임 클래스패스에는 없다. 쓰려면 apps/api 에 의존 한 줄을 더한다): `job-queue-jdbc`, `notification-mail`
 - 설정 접두사 `skeleton.alert` — 키와 기본값 `docs/config/modules/alert.yml`
@@ -177,7 +215,6 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 종류 · 상태: module · stable — 위치 `modules/alert-jdbc`
 - 켜는 법: `--modules alert-jdbc`
 - 의존 한 줄: `implementation(project(":modules:alert-jdbc"))`
-- 자동으로 따라온다: `alert`, `job-queue-jdbc`, `notification-mail`
 - 설정 접두사 `skeleton.alert-jdbc` — 키와 기본값 `docs/config/modules/alert-jdbc.yml`
 - 문서: `docs/modules/alert-jdbc.md`
 - 쓰지 않는 경우:
@@ -221,14 +258,56 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 문서: `docs/modules/auth.md`, `docs/deploy.md`
 - 짝 프런트(react-skeleton): 항목 `auth` · 패키지 `@skeleton/auth` · 조각 기본 포함(덧붙일 것 없음)
 - 쓰지 않는 경우:
-  - 회원가입 · 비밀번호 재설정 · 계정 DB 저장은 이 모듈이 아니다 — 앱이 AuthAccountRepository 를 구현한다(내장은 로컬 시드 계정뿐이고 prod · staging 에서는 기동을 거부한다)
+  - 회원가입 · 비밀번호 재설정 · 계정 DB 저장 · 세션은 account · auth-session 이다 — 스타터에 이미 들어 있다(auth 만 쓰는 앱은 AuthAccountRepository 를 직접 구현한다 — 내장은 로컬 시드 계정뿐이고 prod · staging 에서는 기동을 거부한다)
   - 소셜 로그인은 auth-social
 - 키워드: 로그인, 로그아웃, 인증, 토큰, JWT, 권한, 관리자 로그인, 비상 접근 / login, authentication, jwt, token, dev login, break glass, security
+
+### `auth-magic-link` — 이메일로 받은 한 번 쓰는 링크로 로그인(비밀번호 없이) — 이미 있는 계정으로 들어오고(skeleton.auth-magic-link.sign-up 으로 가입도 허용), 미확인 계정에서는 가입 때의 미확인 비밀번호를 버린다.
+
+- 종류 · 상태: module · experimental — 위치 `modules/auth-magic-link`
+- 켜는 법: `--modules auth-magic-link`
+- 의존 한 줄: `implementation(project(":modules:auth-magic-link"))`
+- 설정 접두사 `skeleton.auth-magic-link` — 키와 기본값 `docs/config/modules/auth-magic-link.yml`
+- HTTP 경로: `/api/v1/auth/magic-link`
+- 문서: `docs/modules/auth-magic-link.md`
+- 짝 프런트(react-skeleton): 항목 `magic-link-login` · 패키지 `@skeleton/auth` · 조각 기본 포함(덧붙일 것 없음)
+- 쓰지 않는 경우:
+  - 메일을 실제로 보내려면 notification-mail 이 필요하다
+  - 비밀번호 로그인이 목적이면 필요 없다 — account 만으로 된다
+  - 링크를 열기만 해서는 로그인되지 않는다 — 프런트가 redeem 을 POST 한다
+- 키워드: 매직링크, 링크 로그인, 비밀번호 없는 로그인, 이메일 로그인 / magic link, passwordless, email sign in, link login
+
+### `auth-session` — 로그인 세션 — 불투명한 리프레시 토큰(해시 저장 · 매번 회전 · 재사용 탐지 + 이벤트), 세션 목록 · 개별 로그아웃, body 전달(기본) 또는 HttpOnly 쿠키(CSRF 헤더). 끝난 세션 주기 청소와 계정 삭제 때 세션 행 삭제.
+
+- 종류 · 상태: module · experimental — 위치 `modules/auth-session`
+- 켜는 법: 스타터(apps/api)에 기본 포함
+- 의존 한 줄: `implementation(project(":modules:auth-session"))`
+- 설정 접두사 `skeleton.auth-session` — 키와 기본값 `docs/config/modules/auth-session.yml`
+- HTTP 경로: `/api/v1/auth`
+- 비밀 · 환경변수: `<P>_AUTH_SESSION_DELIVERY`, `<P>_AUTH_SESSION_COOKIE_SECURE` — 빠지면: 설정만 — 비밀이 아니다. 보호 환경에서 메모리 세션 저장소(auth-session-jdbc 를 얹는다)나 쿠키 전달에 cookie.secure=false 면 기동 실패
+- 문서: `docs/modules/auth-session.md`
+- 짝 프런트(react-skeleton): 항목 `auth`, `session-refresh` · 패키지 `@skeleton/auth` · 조각 기본 포함(덧붙일 것 없음)
+- 쓰지 않는 경우:
+  - 액세스 토큰(JWT) 발급은 auth — 이 모듈은 리프레시 · 세션이다
+  - 계정 저장은 account · account-jdbc
+  - 운영에서 메모리 세션 저장소는 기동 거부 — auth-session-jdbc 를 얹는다
+- 키워드: 세션, 리프레시 토큰, 토큰 갱신, 로그인 유지, 기기 목록, 다른 기기 로그아웃 / session, refresh token, token rotation, keep signed in, device list, sign out everywhere
+
+### `auth-session-jdbc` — auth-session 의 세션 · 리프레시 토큰 저장을 PostgreSQL · MySQL 로 — 한 토큰은 조건부 UPDATE 한 문장으로 한 번만 쓰이고, 인스턴스끼리 세션을 나눈다.
+
+- 종류 · 상태: module · experimental — 위치 `modules/auth-session-jdbc`
+- 켜는 법: 스타터(apps/api)에 기본 포함
+- 의존 한 줄: `implementation(project(":modules:auth-session-jdbc"))`
+- 문서: `docs/modules/auth-session-jdbc.md`
+- 쓰지 않는 경우:
+  - auth-session 없이 단독으로는 의미가 없다
+  - 다른 DB 는 SessionStore 를 앱이 직접 구현한다
+- 키워드: 세션 저장, 세션 DB, 리프레시 토큰 저장 / session storage, session table, refresh token storage
 
 ### `auth-social` — 소셜 로그인의 제공자 중립 계약 — POST /api/v1/auth/social/{provider}/login 라우팅 · 계정 연결 · 가입 정책 (제공자는 google · kakao · naver 모듈).
 
 - 종류 · 상태: module · stable — 위치 `modules/auth-social`
-- 켜는 법: `--modules auth-social` — `auth-social-google` | `auth-social-kakao` | `auth-social-naver` 중 하나 이상 고른다
+- 켜는 법: 스타터(apps/api)에 기본 포함
 - 의존 한 줄: `implementation(project(":modules:auth-social"))`
 - 하나 이상 고른다: `auth-social-google` | `auth-social-kakao` | `auth-social-naver`
 - 설정 접두사 `skeleton.auth-social` — 키와 기본값 `docs/config/modules/auth-social.yml`
@@ -246,7 +325,6 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 종류 · 상태: module · stable — 위치 `modules/auth-social-google`
 - 켜는 법: `--modules auth-social-google`
 - 의존 한 줄: `implementation(project(":modules:auth-social-google"))`
-- 자동으로 따라온다: `auth-social`
 - 설정 접두사 없음 (별도 접두사 없음 — auth-social 의 providers.google 아래)
 - 비밀 · 환경변수: `<P>_AUTH_SOCIAL_PROVIDERS_GOOGLE_ENABLED=true`, `<P>_AUTH_SOCIAL_PROVIDERS_GOOGLE_CLIENT_ID`, `<P>_AUTH_SOCIAL_PROVIDERS_GOOGLE_CLIENT_SECRET` — 빠지면: 켰는데 id · secret 이 비면 기동 실패 (client id/secret must not be blank)
 - 문서: `docs/modules/auth-social-google.md`
@@ -262,7 +340,6 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 종류 · 상태: module · stable — 위치 `modules/auth-social-kakao`
 - 켜는 법: `--modules auth-social-kakao`
 - 의존 한 줄: `implementation(project(":modules:auth-social-kakao"))`
-- 자동으로 따라온다: `auth-social`
 - 설정 접두사 없음 (별도 접두사 없음 — auth-social 의 providers.kakao 아래)
 - 비밀 · 환경변수: `<P>_AUTH_SOCIAL_PROVIDERS_KAKAO_ENABLED=true`, `<P>_AUTH_SOCIAL_PROVIDERS_KAKAO_CLIENT_ID`, `<P>_AUTH_SOCIAL_PROVIDERS_KAKAO_CLIENT_SECRET` — 빠지면: 켰는데 id · secret 이 비면 기동 실패 (client id/secret must not be blank)
 - 문서: `docs/modules/auth-social-kakao.md`
@@ -278,7 +355,6 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 종류 · 상태: module · stable — 위치 `modules/auth-social-naver`
 - 켜는 법: `--modules auth-social-naver`
 - 의존 한 줄: `implementation(project(":modules:auth-social-naver"))`
-- 자동으로 따라온다: `auth-social`
 - 설정 접두사 없음 (별도 접두사 없음 — auth-social 의 providers.naver 아래)
 - 비밀 · 환경변수: `<P>_AUTH_SOCIAL_PROVIDERS_NAVER_ENABLED=true`, `<P>_AUTH_SOCIAL_PROVIDERS_NAVER_CLIENT_ID`, `<P>_AUTH_SOCIAL_PROVIDERS_NAVER_CLIENT_SECRET` — 빠지면: 켰는데 id · secret 이 비면 기동 실패 (client id/secret must not be blank)
 - 문서: `docs/modules/auth-social-naver.md`
@@ -294,7 +370,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 종류 · 상태: module · stable — 위치 `modules/board`
 - 켜는 법: `--modules board,board-jdbc`
 - 의존 한 줄: `implementation(project(":modules:board"))`
-- 소스만 따라온다(컴파일 전용 — 런타임 클래스패스에는 없다. 쓰려면 apps/api 에 의존 한 줄을 더한다): `idempotency`, `notification`
+- 소스만 따라온다(컴파일 전용 — 런타임 클래스패스에는 없다. 쓰려면 apps/api 에 의존 한 줄을 더한다): `notification`
 - 함께 골라야 한다: `board-jdbc`
 - 설정 접두사 `skeleton.board` — 키와 기본값 `docs/config/modules/board.yml`
 - HTTP 경로: `/api/v1/boards`
@@ -311,7 +387,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 종류 · 상태: module · stable — 위치 `modules/board-jdbc`
 - 켜는 법: `--modules board-jdbc`
 - 의존 한 줄: `implementation(project(":modules:board-jdbc"))`
-- 자동으로 따라온다: `board`, `idempotency`, `notification`
+- 자동으로 따라온다: `board`, `notification`
 - 문서: `docs/modules/board-jdbc.md`
 - 짝 프런트(react-skeleton): 항목 `board` · 패키지 `@skeleton/board` · 조각 `--packages board`
 - 쓰지 않는 경우:
@@ -322,7 +398,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 ### `captcha-turnstile` — 봇 방지 — Cloudflare Turnstile 토큰을 서버에서 검증한다(TurnstileVerifier).
 
 - 종류 · 상태: module · stable — 위치 `modules/captcha-turnstile`
-- 켜는 법: `--modules captcha-turnstile`
+- 켜는 법: 스타터(apps/api)에 기본 포함
 - 의존 한 줄: `implementation(project(":modules:captcha-turnstile"))`
 - 설정 접두사 `skeleton.captcha-turnstile` — 키와 기본값 `docs/config/modules/captcha-turnstile.yml`
 - 비밀 · 환경변수: `<P>_CAPTCHA_TURNSTILE_ENABLED=true`, `<P>_CAPTCHA_TURNSTILE_SECRET_KEY` — 빠지면: 검증기 빈이 없다 — 기동은 되고, 주입받는 곳이 있으면 그 빈 이름으로 실패
@@ -396,7 +472,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 ### `idempotency` — Idempotency-Key 헤더로 명령 요청(결제 · 생성)의 중복 실행을 막고 첫 응답을 재생한다.
 
 - 종류 · 상태: module · stable — 위치 `modules/idempotency`
-- 켜는 법: `--modules idempotency`
+- 켜는 법: 스타터(apps/api)에 기본 포함
 - 의존 한 줄: `implementation(project(":modules:idempotency"))`
 - 설정 접두사 `skeleton.idempotency` — 키와 기본값 `docs/config/modules/idempotency.yml`
 - 문서: `docs/modules/idempotency.md`
@@ -407,7 +483,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 ### `job-queue-jdbc` — DB 테이블 기반 재시도 작업 큐 — 백오프 · DEAD 처리 · FOR UPDATE SKIP LOCKED, Redis 없이 여러 인스턴스에서 안전.
 
 - 종류 · 상태: module · stable — 위치 `modules/job-queue-jdbc`
-- 켜는 법: `--modules job-queue-jdbc`
+- 켜는 법: 스타터(apps/api)에 기본 포함
 - 의존 한 줄: `implementation(project(":modules:job-queue-jdbc"))`
 - 설정 접두사 `skeleton.job-queue` — 키와 기본값 `docs/config/modules/job-queue-jdbc.yml`
 - 문서: `docs/modules/job-queue-jdbc.md`, `docs/job-queue-jdbc.md`
@@ -480,7 +556,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 ### `notification-mail` — SMTP 로 메일을 보내는 MailSender (spring.mail.* 위에).
 
 - 종류 · 상태: module · stable — 위치 `modules/notification-mail`
-- 켜는 법: `--modules notification-mail`
+- 켜는 법: 스타터(apps/api)에 기본 포함
 - 의존 한 줄: `implementation(project(":modules:notification-mail"))`
 - 설정 접두사 `skeleton.notification-mail` — 키와 기본값 `docs/config/modules/notification-mail.yml`
 - 비밀 · 환경변수: `<P>_NOTIFICATION_MAIL_ENABLED=true`, `<P>_NOTIFICATION_MAIL_FROM`, `SPRING_MAIL_HOST`, `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD` — 빠지면: host · from 이 비면 발송기 빈이 없다 · 비밀번호가 틀리면 첫 발송에서 실패
@@ -756,7 +832,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 - 종류 · 상태: app · stable — 위치 `apps/sample`
 - 켜는 법: `--with-sample`
-- 자동으로 따라온다: `alert`, `alert-jdbc`, `board`, `board-jdbc`, `crypto`, `idempotency`, `job-queue-jdbc`, `json`, `notification`, `notification-jdbc`, `notification-mail`, `notification-sse`, `storage`, `storage-s3`
+- 자동으로 따라온다: `alert-jdbc`, `auth-magic-link`, `board`, `board-jdbc`, `crypto`, `json`, `notification`, `notification-jdbc`, `notification-sse`, `storage`, `storage-s3`
 - HTTP 경로: `/api/v1/notes`
 - 문서: `docs/sample.md`
 - 짝 프런트(react-skeleton): 항목 `app-sample` · 조각 `--with-sample`
@@ -769,7 +845,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 - 종류 · 상태: app · stable — 위치 `apps/workbench`
 - 켜는 법: `--with-workbench`
-- 자동으로 따라온다: `alert`, `alert-jdbc`, `async`, `async-notification`, `auth-social`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `board`, `board-jdbc`, `captcha-turnstile`, `config-aws-ssm`, `crypto`, `db-mysql`, `event-kafka`, `idempotency`, `job-queue-jdbc`, `json`, `notification`, `notification-jdbc`, `notification-mail`, `notification-slack`, `notification-sse`, `notification-websocket`, `payment`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `scheduler`, `storage`, `storage-s3`
+- 자동으로 따라온다: `alert-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `board`, `board-jdbc`, `config-aws-ssm`, `crypto`, `db-mysql`, `event-kafka`, `json`, `notification`, `notification-jdbc`, `notification-slack`, `notification-sse`, `notification-websocket`, `payment`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `scheduler`, `storage`, `storage-s3`
 - HTTP 경로: `/api/v1`, `/api/v1/examples`, `/api/v1/skeleton`, `/api/v1/skeleton/enums`, `/api/v1/skeleton/json`, `/api/v1/skeleton/payments`, `/api/v1/skeleton/polymorphic/contents`
 - 문서: `docs/minimal-composition.md`, `docs/modules/README.md`
 - 짝 프런트(react-skeleton): 항목 `app-workbench` · 조각 `--with-workbench`

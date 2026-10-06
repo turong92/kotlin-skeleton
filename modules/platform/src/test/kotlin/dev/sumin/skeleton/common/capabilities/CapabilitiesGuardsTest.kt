@@ -88,7 +88,7 @@ class CapabilitiesGuardsTest {
     fun `wrong autoIncludes fails and prints what the closure really is`() {
         val e = entry("board", "newProjectFlag" to "--modules board,board-jdbc", "autoIncludes" to listOf("crypto"))
         val text = problemsText(CapabilitiesGuards.stampFlags(catalog(e), facts, runScript = false))
-        assertTrue("board" in text && "idempotency" in text && "notification" in text, text)
+        assertTrue("board" in text && "notification" in text, text)   // idempotency 는 이제 스타터(account 의 선택 통합)라 따라오는 모듈이 아니다
     }
 
     @Test

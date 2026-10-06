@@ -281,6 +281,19 @@ sub render_md {
 
 # ---------------------------------------------------------------------------------------------------- llms.txt
 
+# llms.txt 는 한눈에 읽히도록 줄인다 — 자세한 것은 docs/capabilities.md (전체 목록 · 항목 상세)
+sub brief {
+  my ($text, $max) = @_;
+  $text =~ s/\s+/ /g;
+  my $cut = $text;
+  if ($cut =~ /^(.{12,}?[.)])\s/) { $cut = $1; }
+  elsif ($cut =~ /^(.{12,}?) — /) { $cut = $1; }
+  return $cut if length($cut) <= $max;
+  $cut = substr($cut, 0, $max);
+  $cut =~ s/\s+\S*$//;
+  return "$cut…";
+}
+
 sub render_llms {
   my ($cat) = @_;
   my $stamped = $cat->{mode} eq 'stamped';
@@ -293,7 +306,7 @@ sub render_llms {
   $out .= "## 먼저 읽을 것\n\n";
   $out .= "- [capabilities.json](capabilities.json): 기능 카탈로그 정본(id · 요약 · 켜는 조각 · 따라오는 모듈 · 설정 접두사 · HTTP 경로 · 비밀 · 짝 프런트 · 쓰지 않는 경우 · 한국어/영어 키워드)\n";
   $out .= "- [docs/capabilities.md](docs/capabilities.md): 「필요한 것 → 고를 것」 결정표(명령 조각 포함)와 전체 목록 · 항목 상세\n";
-  for my $g (@{ $cat->{guides} }) { $out .= "- [$g->{path}]($g->{path}): $g->{summary}\n"; }
+  for my $g (@{ $cat->{guides} }) { $out .= "- [$g->{path}]($g->{path}): " . brief($g->{summary}, 50) . "\n"; }
   $out .= "\n";
 
   unless ($stamped) {
@@ -312,7 +325,7 @@ sub render_llms {
     push @parts, $kf if length $kf;
     push @parts, 'react ' . (defined $d->{frontend}{flag} ? "`$d->{frontend}{flag}`" : '기본 포함') if $d->{frontend};
     my $mods = @{ $d->{modules} } ? ' [' . join(', ', @{ $d->{modules} }) . ']' : '';
-    $out .= "- $d->{need}$mods → " . join(' · ', @parts) . " — 손으로: $d->{byHand}\n";
+    $out .= "- $d->{need}$mods → " . join(' · ', @parts) . " — 손으로: " . brief($d->{byHand}, 60) . "\n";
   }
   $out .= "\n";
 
@@ -324,11 +337,9 @@ sub render_llms {
     $out .= "\n";
   }
 
-  $out .= "## 기능 한눈에 (id: 요약 [키워드] → 켜는 조각)\n\n";
+  $out .= "## 기능 한눈에 (id: 요약 [키워드]) — 켜는 조각 · 상세는 docs/capabilities.md\n\n";
   for my $e (entries($cat)) {
-    my @frag = (($stamped ? '' : 'kotlin ') . backend_fragment($e, $stamped));
-    push @frag, 'react ' . frontend_fragment($e) if $e->{frontend} && !$stamped;
-    $out .= "- $e->{id}: $e->{summary} [" . kw($e, 'ko', 5) . '; ' . kw($e, 'en', 3) . "] → " . join(' · ', @frag) . "\n";
+    $out .= "- $e->{id}: " . brief($e->{summary}, 40) . " [" . kw($e, 'ko', 2) . "]\n";
   }
   if ($stamped && $cat->{stampedFrom} && @{ $cat->{stampedFrom}{omitted} }) {
     $out .= "\n## 이 프로젝트에 없는 것 (스켈레톤 레포에는 있다 — 필요하면 거기서 가져온다)\n\n";

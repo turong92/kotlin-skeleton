@@ -8,10 +8,10 @@
 
 - [capabilities.json](capabilities.json): 기능 카탈로그 정본(id · 요약 · 켜는 조각 · 따라오는 모듈 · 설정 접두사 · HTTP 경로 · 비밀 · 짝 프런트 · 쓰지 않는 경우 · 한국어/영어 키워드)
 - [docs/capabilities.md](docs/capabilities.md): 「필요한 것 → 고를 것」 결정표(명령 조각 포함)와 전체 목록 · 항목 상세
-- [docs/new-project-recipe.md](docs/new-project-recipe.md): 제품 한 문단 → 고를 것 → new-project.sh 명령 → 설정 · 비밀 → scripts/dev.sh → 검증 → deploy/app.yaml, 작업 예 3개(커뮤니티 · 유료 SaaS · 콘텐츠 SSR)
-- [docs/minimal-composition.md](docs/minimal-composition.md): 스타터에서 모듈 한 줄씩 더하는 법 · 모듈별 「부팅에 필요한 것」 표 · new-project.sh 가 하는 일
-- [docs/modules/README.md](docs/modules/README.md): 모듈 색인 — 모듈마다 같은 틀의 한 쪽 문서(의존성 한 줄 · 설정 접두사 · 부팅에 필요한 것 · 교체 지점 · 프런트 짝)
-- [docs/deploy.md](docs/deploy.md): 홈서버 배포 계약 — 이미지 하나 + deploy/app.yaml 선언, 모듈별 비밀과 빠졌을 때의 동작(§7)
+- [docs/new-project-recipe.md](docs/new-project-recipe.md): 제품 한 문단 → 고를 것 → new-project.sh 명령 → 설정 · 비밀 →…
+- [docs/minimal-composition.md](docs/minimal-composition.md): 스타터에서 모듈 한 줄씩 더하는 법 · 모듈별 「부팅에 필요한 것」 표 ·…
+- [docs/modules/README.md](docs/modules/README.md): 모듈 색인 — 모듈마다 같은 틀의 한 쪽 문서(의존성 한 줄 · 설정 접두사 · 부팅에…
+- [docs/deploy.md](docs/deploy.md): 홈서버 배포 계약 — 이미지 하나 + deploy/app.yaml 선언, 모듈별 비밀과…
 - [README.md](README.md): 레포 개요 · 새 프로젝트 3단계
 - [CLAUDE.md](CLAUDE.md): 에이전트 규칙(모듈 규칙 · 문서 가드 · 패키지 구조)
 
@@ -20,41 +20,44 @@
 - kotlin: `scripts/new-project.sh <target-dir> <root-package> <config-prefix> <ClassPrefix> [--modules a,b,c] [--db postgresql|mysql] [--with-workbench] [--with-sample] [--dry-run]`
 - react: `scripts/new-project.sh <target-dir> <name> [--packages a,b,c] [--ssr] [--without-storybook] [--with-workbench] [--with-sample] [--scope @acme]`  (react-skeleton 레포에서 실행)
 - 아래 기능 줄의 「→ kotlin / react」 조각을 합쳐 쓴다: `--modules` 는 하나로(쉼표) 합치고 다른 옵션은 덧붙인다. 의존으로 닫히는 모듈은 적지 않아도 따라온다. `--dry-run` 은 고른 모듈만 보인다. 완성된 예와 손으로 써야 하는 것: docs/new-project-recipe.md · docs/capabilities.md
-- 스타터(apps/api)에 이미 있어 조각에 적지 않는 모듈: `auth`, `db-postgresql`, `migration`, `migration-flyway`, `persistence-jdbc`, `platform`, `time`
+- 스타터(apps/api)에 이미 있어 조각에 적지 않는 모듈: `account`, `account-jdbc`, `alert`, `auth`, `auth-session`, `auth-session-jdbc`, `auth-social`, `captcha-turnstile`, `db-postgresql`, `idempotency`, `job-queue-jdbc`, `migration`, `migration-flyway`, `notification-mail`, `persistence-jdbc`, `platform`, `time`
 
 ## 필요한 것 → 고를 것 (결정표)
 
-- 로그인 (이메일 · 비밀번호) · JWT · 로그인한 사람만 보는 API [auth] → kotlin 덧붙일 것 없음 · react 기본 포함 — 손으로: 스타터에 기본 포함. 회원가입 · 비밀번호 재설정 · 계정 DB 저장은 없다 — 앱이 AuthAccountRepository 를 구현한다(내장은 로컬 시드 계정뿐, prod · staging 에서는 기동을 거부한다). 운영에는 JWT_SECRET(32바이트 이상).
-- 소셜 로그인 (구글 · 카카오 · 네이버) [auth-social] → kotlin `--modules auth-social,auth-social-google` (auth-social-google | auth-social-kakao | auth-social-naver 중 하나 이상 고른다) · react 기본 포함 — 손으로: 제공자 enabled · client-id · client-secret · redirect-uri(비밀은 환경변수). 계정 연결 저장(OAuthAccountLinkRepository)과 가입 정책(OAuthAccountProvisioningPolicy)은 앱이 구현한다 — 기본은 메모리 저장 · 이미 연결된 계정만 통과. 로그인 버튼 · /auth/callback 화면은 프런트.
-- 게시판 · 글쓰기 · 댓글 · 대댓글 · 공감(반응) [board, board-jdbc] → kotlin `--modules board,board-jdbc` · react `--packages board` — 손으로: 게시판 코드 만들기(skeleton.board.seed-boards 설정이나 운영자 API) · 반응 종류(skeleton.board.reaction.types) · 운영자 역할(MODERATOR). notification 을 같이 고르면 댓글 알림이 기본으로 켜진다. 목록 · 상세 · 글쓰기 화면은 프런트.
-- 알림 (종 · 목록 · 안 읽은 수) [notification, notification-jdbc] → kotlin `--modules notification,notification-jdbc` · react `--packages notifications` — 손으로: 알림을 만드는 쪽(NotificationPublisher.publish)은 앱 코드 — 받는 사람은 NotificationEvent.recipientIds. 프런트에서는 NotificationBell 배치와 알림 API 인스턴스.
-- 알림이 새로고침 없이 즉시 뜬다 (실시간) [notification, notification-jdbc] → kotlin `--modules notification,notification-jdbc,notification-sse` (notification-sse | notification-websocket 중 하나 이상 고른다) · react `--packages notifications,realtime` — 손으로: SSE(단방향, 더 단순) 또는 WebSocket(양방향) 중 고른다. 둘 다 프로세스 안 브로커라 인스턴스가 여럿이면 다른 인스턴스의 알림을 못 받는다. 프런트 연결 훅.
-- 파일 업로드 (이미지 · 첨부) [storage, storage-s3] → kotlin `--modules storage,storage-s3` · react `--packages storage` — 손으로: 버킷 · 키(환경변수), 업로드 규칙(skeleton.storage.validation — 확장자 · 크기), 업로드한 파일 키를 도메인에 저장하는 코드(앱). 로컬 개발은 compose 의 S3 를 scripts/dev.sh 가 올린다.
-- 결제 (토스 · 스트라이프) [payment] → kotlin `--modules payment,payment-toss` (payment-toss | payment-stripe 중 하나 이상 고른다) · react `--packages payment` — 손으로: HTTP 엔드포인트가 없다 — 주문 · 금액 검증 컨트롤러 · 성공/실패 리다이렉트 처리 · 웹훅 서명 검증을 앱이 쓴다(PaymentService.confirm 은 받은 금액을 그대로 넘긴다). enabled=true + secret-key(환경변수). 중복 결제 방지에는 idempotency.
-- 봇 방지 (캡차) [captcha-turnstile] → kotlin `--modules captcha-turnstile` · react `--packages captcha-turnstile` — 손으로: 가입 · 로그인 요청에서 TurnstileVerifier 로 토큰을 검증하는 코드(앱)와 enabled=true + secret-key(환경변수).
-- 메일 보내기 (SMTP) [notification-mail] → kotlin `--modules notification-mail` — 손으로: SMTP 환경변수(host · username · password · from)와 메일 본문 · 템플릿(앱).
+- 로그인 (이메일 · 비밀번호) · JWT · 로그인한 사람만 보는 API [auth] → kotlin 덧붙일 것 없음 · react 기본 포함 — 손으로: 스타터에 기본 포함 — 회원가입 · 비밀번호 재설정 · 계정 DB 저장 · 세션은 아래 「회원가입 · 계정…
+- 회원가입 · 이메일 인증 · 비밀번호 재설정 · 이메일 변경 · 계정 설정 · 탈퇴 · 로그인 세션 관리 [account, account-jdbc, auth-session, auth-session-jdbc] → kotlin 덧붙일 것 없음 · react `--packages auth` — 손으로: 스타터에 기본 포함(account-jdbc · auth-session-jdbc).
+- 비밀번호 없이 이메일 링크로 로그인 (매직링크) [auth-magic-link] → kotlin `--modules auth-magic-link` · react `--packages auth` — 손으로: 스타터의 account 위에 얹는다.
+- 관리자 회원 관리 (목록 · 정지 · 역할 · 삭제 복구) [account] → kotlin 덧붙일 것 없음 · react `--packages auth` — 손으로: 스타터의 account 에 있다 — skeleton.account.admin.enabled=true 로…
+- 소셜 로그인 (구글 · 카카오 · 네이버) [auth-social] → kotlin `--modules auth-social,auth-social-google` (auth-social-google | auth-social-kakao | auth-social-naver 중 하나 이상 고른다) · react 기본 포함 — 손으로: 제공자 enabled · client-id · client-secret · redirect-uri(비밀은…
+- 게시판 · 글쓰기 · 댓글 · 대댓글 · 공감(반응) [board, board-jdbc] → kotlin `--modules board,board-jdbc` · react `--packages board` — 손으로: 게시판 코드 만들기(skeleton.board.seed-boards 설정이나 운영자 API)
+- 알림 (종 · 목록 · 안 읽은 수) [notification, notification-jdbc] → kotlin `--modules notification,notification-jdbc` · react `--packages notifications` — 손으로: 알림을 만드는 쪽(NotificationPublisher.publish)은 앱 코드 — 받는 사람은…
+- 알림이 새로고침 없이 즉시 뜬다 (실시간) [notification, notification-jdbc] → kotlin `--modules notification,notification-jdbc,notification-sse` (notification-sse | notification-websocket 중 하나 이상 고른다) · react `--packages notifications,realtime` — 손으로: SSE(단방향, 더 단순)
+- 파일 업로드 (이미지 · 첨부) [storage, storage-s3] → kotlin `--modules storage,storage-s3` · react `--packages storage` — 손으로: 버킷 · 키(환경변수), 업로드 규칙(skeleton.storage.validation — 확장자 ·…
+- 결제 (토스 · 스트라이프) [payment] → kotlin `--modules payment,payment-toss` (payment-toss | payment-stripe 중 하나 이상 고른다) · react `--packages payment` — 손으로: HTTP 엔드포인트가 없다 — 주문 · 금액 검증 컨트롤러 · 성공/실패 리다이렉트 처리 · 웹훅 서명…
+- 봇 방지 (캡차) [captcha-turnstile] → kotlin `--modules captcha-turnstile` · react `--packages captcha-turnstile` — 손으로: 가입 · 로그인 요청에서 TurnstileVerifier 로 토큰을 검증하는 코드(앱)와…
+- 메일 보내기 (SMTP) [notification-mail] → kotlin `--modules notification-mail` — 손으로: SMTP 환경변수(host · username · password · from)와 메일 본문 ·…
 - 슬랙으로 알림 [notification-slack] → kotlin `--modules notification-slack` — 손으로: 웹훅 URL(환경변수)과 보낼 알림 종류(앱).
-- 주인 경보 (에러 · 장애를 Discord 로) [alert] → kotlin `--modules alert` — 손으로: 웹훅 주소(환경변수 <P>_ALERT_WEBHOOK_URL) — 없으면 로그만 남는다. 앱 고유 경보는 AlertKind 를 구현해 OwnerAlerts.emit 으로 보낸다.
-- 여러 인스턴스에서 같은 경보를 한 번만 [alert, alert-jdbc] → kotlin `--modules alert,alert-jdbc` — 손으로: alert 의 설정에 더해 DB 스키마(마이그레이션이 적용된 postgres · mysql). 단일 인스턴스면 alert 만으로 충분하다.
-- 작업 큐 · 백그라운드 재시도 (Redis 없이) [job-queue-jdbc] → kotlin `--modules job-queue-jdbc` — 손으로: JobHandler 구현(멱등이어야 한다 — 재시도된다), 작업 넣기(JobQueue), DB 마이그레이션 적용(spring.flyway.locations).
-- 정기 작업 (크론 · 스케줄러) [scheduler] → kotlin `--modules scheduler` — 손으로: @Scheduled 작업 코드(앱). 여러 인스턴스에서 한 번만 돌리려면 redis-lock 의 락 매니저로 바꾼다.
-- 캐시 (Redis) [redis-cache] → kotlin `--modules redis-cache` — 손으로: Redis 서버(배포 선언 redis: true), 캐시 이름 · TTL 설정, 캐시를 거는 코드(앱). Redis 가 죽어도 FAIL_OPEN 으로 원본을 읽는다.
-- 분산 락 · 중복 실행 방지 [redis-lock] → kotlin `--modules redis-lock` — 손으로: @DistributedLock 을 거는 코드(앱)와 Redis 서버(배포 선언 redis: true). Redis 가 없으면 락에서 즉시 실패한다.
-- 요청 제한 · 도배 방지 (여러 인스턴스) [redis-rate-limit] → kotlin `--modules redis-rate-limit` — 손으로: skeleton.web.rate-limit.enabled=true 로 켠다. 단일 인스턴스면 모듈 없이 platform 의 인메모리 저장소로 충분하다.
-- 중복 요청 방지 (멱등 키) [idempotency] → kotlin `--modules idempotency` — 손으로: 명령 엔드포인트에 @IdempotentOperation. 저장소는 인메모리(인스턴스별) — 여러 인스턴스면 IdempotencyStore 를 앱이 구현한다.
-- 데이터 암호화 · 불투명 URL 토큰 [crypto] → kotlin `--modules crypto` — 손으로: 키 설정(환경변수 <P>_CRYPTO_PRIMARY_KEY_ID · <P>_CRYPTO_KEYS_<ID>)과 암호화할 필드 선택(앱).
+- 주인 경보 (에러 · 장애를 Discord 로) [alert] → kotlin `--modules alert` — 손으로: 웹훅 주소(환경변수 <P>_ALERT_WEBHOOK_URL)
+- 여러 인스턴스에서 같은 경보를 한 번만 [alert, alert-jdbc] → kotlin `--modules alert,alert-jdbc` — 손으로: alert 의 설정에 더해 DB 스키마(마이그레이션이 적용된 postgres · mysql).
+- 작업 큐 · 백그라운드 재시도 (Redis 없이) [job-queue-jdbc] → kotlin `--modules job-queue-jdbc` — 손으로: JobHandler 구현(멱등이어야 한다
+- 정기 작업 (크론 · 스케줄러) [scheduler] → kotlin `--modules scheduler` — 손으로: @Scheduled 작업 코드(앱).
+- 캐시 (Redis) [redis-cache] → kotlin `--modules redis-cache` — 손으로: Redis 서버(배포 선언 redis: true), 캐시 이름 · TTL 설정, 캐시를 거는 코드(앱).
+- 분산 락 · 중복 실행 방지 [redis-lock] → kotlin `--modules redis-lock` — 손으로: @DistributedLock 을 거는 코드(앱)와 Redis 서버(배포 선언 redis: true).
+- 요청 제한 · 도배 방지 (여러 인스턴스) [redis-rate-limit] → kotlin `--modules redis-rate-limit` — 손으로: skeleton.web.rate-limit.enabled=true 로 켠다.
+- 중복 요청 방지 (멱등 키) [idempotency] → kotlin `--modules idempotency` — 손으로: 명령 엔드포인트에 @IdempotentOperation.
+- 데이터 암호화 · 불투명 URL 토큰 [crypto] → kotlin `--modules crypto` — 손으로: 키 설정(환경변수 <P>_CRYPTO_PRIMARY_KEY_ID ·…
 - @Async · 백그라운드 작업에서 trace id 유지 [async] → kotlin `--modules async` — 손으로: 스레드 풀 크기 설정과 @Async 를 거는 코드(앱).
-- Kafka 로 이벤트 발행 [event-kafka] → kotlin `--modules event-kafka` — 손으로: 브로커 주소 · KafkaOperations 빈 · enabled=true. 소비(consumer)는 없다.
-- MySQL 로 쓰기 (기본은 PostgreSQL) [db-mysql] → kotlin `--db mysql` — 손으로: --modules 가 아니라 --db mysql 로 고른다. --with-sample · --with-workbench 와 함께 쓸 수 없다(PostgreSQL 전용).
-- JPA 또는 jOOQ 로 DB 접근 (기본은 Data JDBC) → kotlin `--modules persistence-jpa` (persistence-jpa | persistence-jooq 중 하나 이상 고른다) — 손으로: 하나만 고른다 — JDBC · JPA · jOOQ 를 병행하지 않는다. jOOQ 는 DDL 파일에서 코드를 생성한다(docs/persistence-jooq.md).
-- 에러 응답 · 표준 응답 · 요청 로깅 · OpenAPI · 외부 API 호출 [platform] → kotlin 덧붙일 것 없음 · react 기본 포함 — 손으로: 스타터에 기본 포함 — 따로 켤 것이 없다. 컨트롤러는 DataResponse/ApiError 규칙을 쓴다(docs/errors.md · docs/openapi.md).
-- 시간대 · 날짜 표시 · 예약 시각 (글로벌) [time] → kotlin 덧붙일 것 없음 · react 기본 포함 — 손으로: 스타터에 기본 포함. Instant · LocalDate · ZonedMoment 를 구분한다 — ZoneId.systemDefault() · TIMESTAMP 칼럼은 쓰지 않는다(docs/time.md).
-- 참조 앱을 같이 가져가서 보고 따라 하기 [app-sample] → kotlin `--with-sample` · react `--with-sample` — 손으로: 샘플은 참조다 — 쓰지 않을 기능은 지운다. 짝 프런트는 react-skeleton 의 apps/sample. PostgreSQL 전용.
-- 모든 모듈을 한 번에 눌러 보는 데모 [app-workbench] → kotlin `--with-workbench` · react `--with-workbench` — 손으로: 복사 대상이 아니다 — 모듈을 눈으로 확인하는 용도. PostgreSQL 전용.
-- 다국어 (한국어 · 영어 전환) → kotlin 덧붙일 것 없음 · react `--packages i18n` — 손으로: 백엔드 모듈은 필요 없다 — 문구 사전은 프런트. 서버가 뷰어 로케일 · 시간대를 알아야 하면 time(스타터에 기본 포함).
-- 랜딩 · 요금제 · 약관 · 쿠키 동의 · 404 페이지 → kotlin 덧붙일 것 없음 · react `--packages marketing` — 손으로: 백엔드는 할 일이 없다(정적 공개 화면). 요금제 선택 이후의 결제 연결은 payment 행.
-- 검색 노출 · 링크 미리보기 · 서버 렌더링 → kotlin 덧붙일 것 없음 · react `--packages seo --ssr` — 손으로: 백엔드는 할 일이 없다. SSR 앱은 배포 선언이 따로 필요하다 — deploy/app.yaml 의 web: 은 정적 파일 서빙뿐(docs/deploy.md §8).
-- 다크 모드 · 디자인 토큰 · 화면 부품 · 대시보드/목록/폼 화면 틀 → kotlin 덧붙일 것 없음 · react 기본 포함 — 손으로: 백엔드는 할 일이 없다 — react-skeleton 에 기본 포함.
+- Kafka 로 이벤트 발행 [event-kafka] → kotlin `--modules event-kafka` — 손으로: 브로커 주소 · KafkaOperations 빈 · enabled=true.
+- MySQL 로 쓰기 (기본은 PostgreSQL) [db-mysql] → kotlin `--db mysql` — 손으로: --modules 가 아니라 --db mysql 로 고른다.
+- JPA 또는 jOOQ 로 DB 접근 (기본은 Data JDBC) → kotlin `--modules persistence-jpa` (persistence-jpa | persistence-jooq 중 하나 이상 고른다) — 손으로: 하나만 고른다 — JDBC · JPA · jOOQ 를 병행하지 않는다.
+- 에러 응답 · 표준 응답 · 요청 로깅 · OpenAPI · 외부 API 호출 [platform] → kotlin 덧붙일 것 없음 · react 기본 포함 — 손으로: 스타터에 기본 포함 — 따로 켤 것이 없다.
+- 시간대 · 날짜 표시 · 예약 시각 (글로벌) [time] → kotlin 덧붙일 것 없음 · react 기본 포함 — 손으로: 스타터에 기본 포함. Instant · LocalDate · ZonedMoment 를 구분한다 —…
+- 참조 앱을 같이 가져가서 보고 따라 하기 [app-sample] → kotlin `--with-sample` · react `--with-sample` — 손으로: 샘플은 참조다 — 쓰지 않을 기능은 지운다.
+- 모든 모듈을 한 번에 눌러 보는 데모 [app-workbench] → kotlin `--with-workbench` · react `--with-workbench` — 손으로: 복사 대상이 아니다 — 모듈을 눈으로 확인하는 용도.
+- 다국어 (한국어 · 영어 전환) → kotlin 덧붙일 것 없음 · react `--packages i18n` — 손으로: 백엔드 모듈은 필요 없다 — 문구 사전은 프런트.
+- 랜딩 · 요금제 · 약관 · 쿠키 동의 · 404 페이지 → kotlin 덧붙일 것 없음 · react `--packages marketing` — 손으로: 백엔드는 할 일이 없다(정적 공개 화면).
+- 검색 노출 · 링크 미리보기 · 서버 렌더링 → kotlin 덧붙일 것 없음 · react `--packages seo --ssr` — 손으로: 백엔드는 할 일이 없다.
+- 다크 모드 · 디자인 토큰 · 화면 부품 · 대시보드/목록/폼 화면 틀 → kotlin 덧붙일 것 없음 · react 기본 포함 — 손으로: 백엔드는 할 일이 없다
 
 ## 작업 예 (두 레포의 명령 — 순서 · 설정 · 검증 · 배포는 docs/new-project-recipe.md)
 
@@ -68,59 +71,64 @@
   - kotlin: `scripts/new-project.sh ~/work/site/api dev.example.site site Site`
   - react: `scripts/new-project.sh ~/work/site/web site --packages marketing,i18n --ssr`
 
-## 기능 한눈에 (id: 요약 [키워드] → 켜는 조각)
+## 기능 한눈에 (id: 요약 [키워드]) — 켜는 조각 · 상세는 docs/capabilities.md
 
-- alert: 주인 경보 — 5xx 몰림 · 기동 실패 · 죽은 작업을 Discord 호환 웹훅(+ 선택적 메일)으로 알린다. 에러 수집(Sentry)의 답. [경보, 주인 알림, 에러 알림, 장애 알림, 디스코드 알림; owner alert, error reporting, discord webhook] → kotlin `--modules alert`
-- alert-jdbc: 경보 기록을 DB 에 두어 여러 인스턴스 · 재시작을 가로질러 같은 경보를 접는다 (PostgreSQL · MySQL). [경보 기록, 경보 중복 접기, 경보 DB; alert ledger, alert dedupe, alert database] → kotlin `--modules alert-jdbc`
-- async: @Async · CompletableFuture 작업이 호출 스레드의 trace id · MDC · 보안 컨텍스트를 이어받는 실행기와 작업 그룹. [비동기, 백그라운드 작업, 스레드 풀, @Async, 작업 그룹; async, background task, thread pool] → kotlin `--modules async`
-- async-notification: 비동기 작업에서 처리되지 않은 예외를 알림(notification)으로 흘려 보낸다. [비동기 예외 알림, 백그라운드 오류 알림, 비동기 에러; async exception alert, background error notification, uncaught async exception] → kotlin `--modules async-notification`
-- auth: 로그인 — 비밀번호 로그인 · JWT 발급/검증 · 로컬 dev-login · 비상용 break-glass · SecurityFilterChain (계정 저장소는 앱이 정한다). [로그인, 로그아웃, 인증, 토큰, JWT; login, authentication, jwt] → kotlin 스타터(apps/api)에 기본 포함 · react 기본 포함(덧붙일 것 없음)
-- auth-social: 소셜 로그인의 제공자 중립 계약 — POST /api/v1/auth/social/{provider}/login 라우팅 · 계정 연결 · 가입 정책 (제공자는 google · kakao · naver 모듈). [소셜 로그인, 간편 로그인, 구글 로그인, 카카오 로그인, 네이버 로그인; social login, oauth, sign in with google] → kotlin `--modules auth-social` — `auth-social-google` | `auth-social-kakao` | `auth-social-naver` 중 하나 이상 고른다 · react 기본 포함(덧붙일 것 없음)
-- auth-social-google: 구글 OAuth 제공자 — 토큰 교환 · 프로필 조회 클라이언트를 소셜 로그인의 제공자로 등록한다(클라이언트 id · secret 만 있으면 된다). [구글 로그인, 구글 소셜 로그인, 소셜 로그인; google login, google oauth, social login] → kotlin `--modules auth-social-google` · react 기본 포함(덧붙일 것 없음)
-- auth-social-kakao: 카카오 OAuth 제공자 — 토큰 교환 · 프로필 조회 클라이언트를 소셜 로그인의 제공자로 등록한다(클라이언트 id · secret 만 있으면 된다). [카카오 로그인, 카카오 소셜 로그인, 소셜 로그인; kakao login, kakao oauth, social login] → kotlin `--modules auth-social-kakao` · react 기본 포함(덧붙일 것 없음)
-- auth-social-naver: 네이버 OAuth 제공자 — 토큰 교환 · 프로필 조회 클라이언트를 소셜 로그인의 제공자로 등록한다(클라이언트 id · secret 만 있으면 된다). [네이버 로그인, 네이버 소셜 로그인, 소셜 로그인; naver login, naver oauth, social login] → kotlin `--modules auth-social-naver` · react 기본 포함(덧붙일 것 없음)
-- board: 게시판 — 글 · 중첩 댓글(대댓글) · 설정으로 늘리는 반응(좋아요 · 공감 …) · 운영자 숨김/고정 · 댓글 알림, HTTP /api/v1/boards 까지. [게시판, 커뮤니티, 글쓰기, 댓글, 대댓글; board, forum, community] → kotlin `--modules board,board-jdbc` · react `--packages board`
-- board-jdbc: 게시판 저장소 — PostgreSQL · MySQL 로 board 의 저장 포트 네 개를 구현한다(skeleton_board* 테이블 · 원자적 카운터). [게시판 저장소, 게시판 DB; board storage, board repository, board database] → kotlin `--modules board-jdbc` · react `--packages board`
-- captcha-turnstile: 봇 방지 — Cloudflare Turnstile 토큰을 서버에서 검증한다(TurnstileVerifier). [캡차, 봇 방지, 스팸 방지, 로봇 확인, 가입 폼 보호; captcha, turnstile, bot protection] → kotlin `--modules captcha-turnstile` · react `--packages captcha-turnstile`
-- config-aws-ssm: AWS SSM Parameter Store 의 값을 시작할 때 스프링 프로퍼티로 불러온다. [AWS 설정, 파라미터 스토어, SSM, 비밀 불러오기; aws ssm, parameter store, remote config] → kotlin `--modules config-aws-ssm`
-- crypto: AES-GCM 텍스트 암호화 · 키 회전용 키 id 봉투 · URL 에 안전한 불투명 토큰 · 선택적 영속 변환기. [암호화, 복호화, 비밀 저장, 불투명 URL, 키 회전; encryption, aes gcm, opaque token] → kotlin `--modules crypto`
-- db-mysql: MySQL 방언 — 드라이버 · Flyway MySQL 지원 · SqlDialect · Data JDBC 시간 변환, 세션을 UTC 로 고정한다. [MySQL, 마이SQL, DB 변경, MySQL 로 바꾸기; mysql, mariadb, use mysql] → kotlin `--db mysql`
-- db-postgresql: PostgreSQL 방언(기본) — 드라이버 · Flyway PostgreSQL 지원 · SqlDialect · Data JDBC 시간 변환. [PostgreSQL, 포스트그레스, DB 방언, 데이터베이스; postgresql, postgres, database dialect] → kotlin 스타터(apps/api)에 기본 포함
-- event-kafka: 이벤트를 Kafka 로 발행하는 KafkaEventPublisher 와 키 · 메시지 · 직렬화 전략(켜기 전에는 로그만 남긴다). [카프카, 이벤트 발행, 메시지 큐, 이벤트 스트림; kafka, event publishing, message broker] → kotlin `--modules event-kafka`
-- idempotency: Idempotency-Key 헤더로 명령 요청(결제 · 생성)의 중복 실행을 막고 첫 응답을 재생한다. [멱등, 중복 요청 방지, 두 번 눌러도 한 번, 멱등 키, 중복 결제 방지; idempotency, idempotency key, duplicate request] → kotlin `--modules idempotency`
-- job-queue-jdbc: DB 테이블 기반 재시도 작업 큐 — 백오프 · DEAD 처리 · FOR UPDATE SKIP LOCKED, Redis 없이 여러 인스턴스에서 안전. [작업 큐, 백그라운드 작업, 재시도, 비동기 작업, 내보내기 작업; job queue, background job, retry] → kotlin `--modules job-queue-jdbc`
-- json: JsonCodec · 임의 JSON 을 담는 JsonDocument · 버전 있는 페이로드 · JPA/JDBC 변환기. [JSON, JSON 칼럼, 버전 있는 페이로드, 직렬화; json, json column, versioned payload] → kotlin `--modules json`
-- migration: 마이그레이션 공통 규칙 — DB 를 지우는 설정이 허용 프로필 밖에서 켜지면 시작을 막는 가드(도구 중립). [마이그레이션 가드, DB 초기화 방지, 스키마 보호; migration guard, prevent db wipe, schema safety] → kotlin 스타터(apps/api)에 기본 포함
-- migration-flyway: Flyway 구현 — 로컬 clean 옵트인 · 마이그레이션 파일 이름 규칙(V<UTC 14자리>__snake_case.sql) 검사. [Flyway, 마이그레이션, DB 스키마 버전, 스키마 변경; flyway, database migration, schema migration] → kotlin 스타터(apps/api)에 기본 포함
-- notification: 알림 계약 · 수신자 해석 · 인메모리 브로커 + 로그인한 사람의 받은편지함 HTTP(/api/v1/notifications: 목록 · 읽음 · 모두 읽음). [알림, 알림 목록, 받은편지함, 안 읽은 알림, 알림 읽음; notification, inbox, unread] → kotlin `--modules notification` · react `--packages notifications`
-- notification-jdbc: 알림 받은편지함을 DB 테이블에 저장한다(skeleton_notification_inbox). [알림 저장, 알림 DB, 알림 기록 유지; notification storage, persist notifications, inbox database] → kotlin `--modules notification-jdbc` · react `--packages notifications`
-- notification-mail: SMTP 로 메일을 보내는 MailSender (spring.mail.* 위에). [메일 발송, 이메일 보내기, SMTP, 메일; send email, smtp, mail sender] → kotlin `--modules notification-mail`
-- notification-slack: 알림과 @SlackException 예외 알림을 Slack 웹훅으로 보낸다. [슬랙 알림, 슬랙, 예외 알림; slack notification, slack webhook, exception alert] → kotlin `--modules notification-slack`
-- notification-sse: 알림을 Server-Sent Events 로 브라우저에 실시간 전달한다(GET /api/v1/notifications/sse) — 받는 사람이 정해진 알림은 그 사람에게만. [실시간 알림, SSE, 알림 즉시 표시, 푸시 알림, 서버 푸시; realtime notification, sse, server-sent events] → kotlin `--modules notification-sse` · react `--packages realtime`
-- notification-websocket: 알림을 STOMP over WebSocket(/ws/notifications)으로 전달한다 — 인증 · trace 인터셉터 · 하트비트를 갖춘 인프로세스 브로커. [웹소켓, 실시간 알림, 양방향 통신, STOMP; websocket, stomp, realtime notification] → kotlin `--modules notification-websocket` · react `--packages realtime`
-- payment: 결제 계약 — PaymentService · PaymentProviderRouter(제공자는 payment-toss | payment-stripe). 모듈이 HTTP 를 열지 않는다. [결제, 결제 승인, 환불, 결제 취소, 유료; payment, checkout, refund] → kotlin `--modules payment` — `payment-toss` | `payment-stripe` 중 하나 이상 고른다 · react `--packages payment`
-- payment-stripe: Stripe 결제 제공자 — 결제 승인 · 취소를 payment 의 제공자로 구현한다. [스트라이프 결제, 해외 결제, 카드 결제; stripe, stripe payments, card payment] → kotlin `--modules payment-stripe` · react `--packages payment`
-- payment-toss: Toss 결제 제공자 — 결제 승인 · 취소를 payment 의 제공자로 구현한다. [토스 결제, 토스페이먼츠, 카드 결제, 간편 결제; toss payments, toss, card payment] → kotlin `--modules payment-toss` · react `--packages payment`
-- persistence-jdbc: Spring Data JDBC 의 audit 타임스탬프 콜백과 DB 방언 전략(SqlDialect · SqlDialectVerifier). [JDBC, Data JDBC, audit 시각, 생성일 수정일, DB 접근; jdbc, spring data jdbc, audit timestamps] → kotlin 스타터(apps/api)에 기본 포함
-- persistence-jooq: jOOQ 연결 — audit 리스너 · MySQL UTC Instant 변환기, DDL 파일에서 코드 생성(빌드에 DB 불필요). [jOOQ, 타입 안전 SQL, 쿼리 빌더; jooq, type-safe sql, query builder] → kotlin `--modules persistence-jooq`
-- persistence-jpa: JPA 엔티티의 created_at · updated_at 자동 채움과 부분 수정 · fetch graph 도우미. [JPA, 하이버네이트, 엔티티 audit, ORM; jpa, hibernate, entity audit] → kotlin `--modules persistence-jpa`
-- platform: 모든 모듈의 공용 기반 — 표준 응답/에러 봉투 · 전역 예외 처리 · trace id · 요청 로깅 · CORS · rate limit · 외부 HTTP 클라이언트 · OpenAPI · 배포 가드. [에러 응답, 표준 응답, 예외 처리, 요청 로깅, 트레이스; error response, exception handling, request logging] → kotlin 스타터(apps/api)에 기본 포함 · react 기본 포함(덧붙일 것 없음)
-- redis-cache: 이름 있는 Redis 캐시(TTL · 접두사) · 안정적인 키 생성기 · 캐시 오류 정책(기본 FAIL_OPEN). [캐시, Redis 캐시, 캐싱, 응답 캐시; cache, redis cache, caching] → kotlin `--modules redis-cache`
-- redis-core: Redis 연결 · StringRedisTemplate · JSON 템플릿 · 키 접두사 — 다른 redis-* 모듈의 바탕. [Redis, 레디스, 키 접두사; redis, redis connection, key prefix] → kotlin `--modules redis-core`
-- redis-lock: Redisson 기반 분산 락 — @DistributedLock 어노테이션과 락 실행기. [분산 락, 락, 동시 실행 방지, 중복 실행 방지; distributed lock, lock, mutex] → kotlin `--modules redis-lock`
-- redis-rate-limit: platform 의 rate limit 저장소를 Redis 고정 윈도 카운터로 바꾼다(여러 인스턴스에서 한도 공유). [요청 제한, 속도 제한, API 호출 제한, 도배 방지; rate limit, throttling, request limit] → kotlin `--modules redis-rate-limit`
-- scheduler: 어노테이션 기반 스케줄러 — 실행 가드 · 락 매니저 · 실패 핸들러(기본 락은 no-op, 단일 인스턴스용). [스케줄러, 정기 작업, 크론, 주기 실행, 배치; scheduler, cron, scheduled job] → kotlin `--modules scheduler`
-- storage: 저장소 계약(ObjectStorage · PresignedStorage) · 파일 크기/확장자/content-type 검증 + 브라우저 직접 업로드 HTTP(/api/v1/storage: presign · 멀티파트). [파일 업로드, 이미지 업로드, 첨부파일, 프리사인, 파일 검증; file upload, image upload, attachment] → kotlin `--modules storage,storage-s3` · react `--packages storage`
-- storage-s3: S3 호환 저장소(AWS S3 · Cloudflare R2 · MinIO) — presign PUT/GET · 멀티파트 · 복사 · 일괄 삭제, 공개 URL RAW | OPAQUE. [S3, R2, 클라우드 스토리지, 파일 저장소, 이미지 저장; s3, r2, cloudflare r2] → kotlin `--modules storage-s3` · react `--packages storage`
-- time: 글로벌 시간 — 요청마다 뷰어 시간대 · 로케일 · ZonedMoment(미래 현지 시각) · 사람이 읽는 이중 포맷 · 국가 → 시간대. [시간대, 타임존, 날짜 표시, 현지 시간, 예약 시각; timezone, time zone, locale] → kotlin 스타터(apps/api)에 기본 포함 · react 기본 포함(덧붙일 것 없음)
-- app-api: 스타터 — 새 프로젝트가 복사해 시작하는 최소 조립(platform · auth · persistence-jdbc · db-postgresql · migration-flyway · time)과 HelloController 하나. Redis · Kafka · S3 · 메일 없이 부팅한다. [스타터, 시작 템플릿, 새 앱, 최소 구성, 기본 앱; starter, boilerplate, minimal app] → kotlin 스타터(apps/api)에 기본 포함 · react 기본 포함(덧붙일 것 없음)
-- app-sample: 참조 앱 Notes — 로그인한 사람이 첨부 있는 노트를 관리하는 제품 모양의 작은 앱(스타터 + idempotency · notification-jdbc/sse · storage-s3 · job-queue-jdbc · board · alert-jdbc). 새 기능은 이 앱의 한 조각을 따라 한다. [참조 앱, 예제 앱, 샘플, 노트 앱, 제품 모양 예시; sample app, reference app, example] → kotlin `--with-sample` · react `--with-sample`
-- app-workbench: 데모 — 모든 모듈을 함께 얹고 샘플 엔드포인트(/api/v1/skeleton · /api/v1/examples)와 통합 테스트로 모듈이 공존함을 증명한다(react-skeleton 워크벤치 화면의 백엔드). [워크벤치, 모듈 데모, 전체 모듈, 모든 모듈 함께; workbench, demo, all modules] → kotlin `--with-workbench` · react `--with-workbench`
-- script-build-capabilities: capabilities.json 에서 docs/capabilities.md · llms.txt 를 생성하고(--check 로 어긋남 검사) 카탈로그를 정본 형식으로 정리한다. [기능 카탈로그, 카탈로그 생성, 카탈로그 점검, 기능 목록; capabilities catalog, generate docs, catalog check] → kotlin (도구 — 켜는 조각 없음)
-- script-dev: 로컬 풀스택 한 줄 실행 — DB(+ 로컬 S3) 컨테이너를 올리고 백엔드를 띄운다. 옆의 ../web 프런트가 있으면 같이 띄운다. [로컬 실행, 개발 서버, 한 줄 실행, DB 띄우기; run locally, dev server, local stack] → kotlin (도구 — 켜는 조각 없음)
-- script-dev-sample: 샘플 앱 Notes 풀스택 한 줄 실행 — DB + 로컬 S3 → 백엔드(apps/sample) → 짝 프런트(react-skeleton 의 apps/sample). [샘플 실행, 노트 앱 실행; run sample, notes app] → kotlin (도구 — 켜는 조각 없음)
-- script-new-project: 새 프로젝트 한 줄 찍기 — 이 레포를 복사해 고른 모듈 · 앱만 남기고, 이름 · 접두사를 바꾸고, 배포 선언 · 설정 블록 · 이 카탈로그를 걸러 다시 쓴다(--dry-run 은 고른 모듈과 따라온 이유만 보인다). [새 프로젝트, 프로젝트 만들기, 찍어내기, 스캐폴딩, 프로젝트 시작; new project, scaffold, stamp] → kotlin (도구 — 켜는 조각 없음)
-- script-rename-skeleton: 패키지 · 설정 접두사 · 클래스 이름 · 환경변수 접두사를 한 번에 바꾸는 스크립트(GitHub Template 로 만든 뒤 이름만 바꿀 때) — 끝에 남은 흔적을 검사하고 이 카탈로그를 다시 만든다. [이름 바꾸기, 리네임, 패키지 변경, 템플릿 이름 바꾸기; rename, change package, rename template] → kotlin (도구 — 켜는 조각 없음)
-- script-sample-e2e-backend: 샘플 앱 백엔드를 e2e 테스트용으로 올리고 내리는 비대화형 스크립트(react-skeleton 의 Playwright e2e 가 부른다). [e2e 백엔드, e2e 테스트용 서버; e2e backend, playwright backend] → kotlin (도구 — 켜는 조각 없음)
-- script-test-deploy-contract: 홈서버 배포 계약(docs/deploy.md)을 진짜 컨테이너로 증명한다 — 이미지 빌드 · 헬스체크 · 0.0.0.0 · stdout 로그 · 보호 환경 가드 실패 화면. [배포 검증, 배포 계약 테스트, 컨테이너 검증; deploy contract test, container check, image verification] → kotlin (도구 — 켜는 조각 없음)
-- script-test-new-project: new-project.sh 의 테스트 — 빠른 검사(./gradlew check 가 부른다)와 --full(여러 조합과 레시피의 예제 명령을 정말 찍어 ./gradlew build). [찍기 테스트, 조합 검증, 스캐폴딩 테스트; stamp test, combination test, scaffold test] → kotlin (도구 — 켜는 조각 없음)
+- account: 계정 수명주기 — 이메일 · 비밀번호 가입과 이메일 확인, 비밀번호… [회원가입, 가입]
+- account-jdbc: account 의 저장소 · 토큰 · 감사 기록을 PostgreSQL… [계정 저장, 계정 DB]
+- alert: 주인 경보 — 5xx 몰림 · 기동 실패 · 죽은 작업을 Discord… [경보, 주인 알림]
+- alert-jdbc: 경보 기록을 DB 에 두어 여러 인스턴스 · 재시작을 가로질러 같은… [경보 기록, 경보 중복 접기]
+- async: @Async · CompletableFuture 작업이 호출 스레드의… [비동기, 백그라운드 작업]
+- async-notification: 비동기 작업에서 처리되지 않은 예외를 알림(notification)으로… [비동기 예외 알림, 백그라운드 오류 알림]
+- auth: 로그인 — 비밀번호 로그인 · JWT 발급/검증 · 로컬… [로그인, 로그아웃]
+- auth-magic-link: 이메일로 받은 한 번 쓰는 링크로 로그인(비밀번호 없이) [매직링크, 링크 로그인]
+- auth-session: 로그인 세션 — 불투명한 리프레시 토큰(해시 저장 · 매번 회전 ·… [세션, 리프레시 토큰]
+- auth-session-jdbc: auth-session 의 세션 · 리프레시 토큰 저장을… [세션 저장, 세션 DB]
+- auth-social: 소셜 로그인의 제공자 중립 계약 [소셜 로그인, 간편 로그인]
+- auth-social-google: 구글 OAuth 제공자 [구글 로그인, 구글 소셜 로그인]
+- auth-social-kakao: 카카오 OAuth 제공자 [카카오 로그인, 카카오 소셜 로그인]
+- auth-social-naver: 네이버 OAuth 제공자 [네이버 로그인, 네이버 소셜 로그인]
+- board: 게시판 — 글 · 중첩 댓글(대댓글) [게시판, 커뮤니티]
+- board-jdbc: 게시판 저장소 — PostgreSQL · MySQL 로 board 의… [게시판 저장소, 게시판 DB]
+- captcha-turnstile: 봇 방지 — Cloudflare Turnstile 토큰을 서버에서… [캡차, 봇 방지]
+- config-aws-ssm: AWS SSM Parameter Store 의 값을 시작할 때 스프링… [AWS 설정, 파라미터 스토어]
+- crypto: AES-GCM 텍스트 암호화 · 키 회전용 키 id 봉투 · URL 에… [암호화, 복호화]
+- db-mysql: MySQL 방언 — 드라이버 · Flyway MySQL 지원 ·… [MySQL, 마이SQL]
+- db-postgresql: PostgreSQL 방언(기본) [PostgreSQL, 포스트그레스]
+- event-kafka: 이벤트를 Kafka 로 발행하는 KafkaEventPublisher 와… [카프카, 이벤트 발행]
+- idempotency: Idempotency-Key 헤더로 명령 요청(결제 · 생성)의 중복… [멱등, 중복 요청 방지]
+- job-queue-jdbc: DB 테이블 기반 재시도 작업 큐 [작업 큐, 백그라운드 작업]
+- json: JsonCodec · 임의 JSON 을 담는 JsonDocument ·… [JSON, JSON 칼럼]
+- migration: 마이그레이션 공통 규칙 [마이그레이션 가드, DB 초기화 방지]
+- migration-flyway: Flyway 구현 — 로컬 clean 옵트인 · 마이그레이션 파일 이름… [Flyway, 마이그레이션]
+- notification: 알림 계약 · 수신자 해석 · 인메모리 브로커 + 로그인한 사람의… [알림, 알림 목록]
+- notification-jdbc: 알림 받은편지함을 DB 테이블에… [알림 저장, 알림 DB]
+- notification-mail: SMTP 로 메일을 보내는 MailSender… [메일 발송, 이메일 보내기]
+- notification-slack: 알림과 @SlackException 예외 알림을 Slack 웹훅으로… [슬랙 알림, 슬랙]
+- notification-sse: 알림을 Server-Sent Events 로 브라우저에 실시간… [실시간 알림, SSE]
+- notification-websocket: 알림을 STOMP over… [웹소켓, 실시간 알림]
+- payment: 결제 계약 — PaymentService ·… [결제, 결제 승인]
+- payment-stripe: Stripe 결제 제공자 [스트라이프 결제, 해외 결제]
+- payment-toss: Toss 결제 제공자 — 결제 승인 · 취소를 payment 의… [토스 결제, 토스페이먼츠]
+- persistence-jdbc: Spring Data JDBC 의 audit 타임스탬프 콜백과 DB… [JDBC, Data JDBC]
+- persistence-jooq: jOOQ 연결 — audit 리스너 · MySQL UTC Instant… [jOOQ, 타입 안전 SQL]
+- persistence-jpa: JPA 엔티티의 created_at · updated_at 자동 채움과… [JPA, 하이버네이트]
+- platform: 모든 모듈의 공용 기반 [에러 응답, 표준 응답]
+- redis-cache: 이름 있는 Redis 캐시(TTL · 접두사) [캐시, Redis 캐시]
+- redis-core: Redis 연결 · StringRedisTemplate · JSON… [Redis, 레디스]
+- redis-lock: Redisson 기반 분산 락 [분산 락, 락]
+- redis-rate-limit: platform 의 rate limit 저장소를 Redis 고정 윈도… [요청 제한, 속도 제한]
+- scheduler: 어노테이션 기반 스케줄러 [스케줄러, 정기 작업]
+- storage: 저장소 계약(ObjectStorage · PresignedStorage) [파일 업로드, 이미지 업로드]
+- storage-s3: S3 호환 저장소(AWS S3 · Cloudflare R2 ·… [S3, R2]
+- time: 글로벌 시간 — 요청마다 뷰어 시간대 · 로케일 ·… [시간대, 타임존]
+- app-api: 스타터 — 새 프로젝트가 복사해 시작하는 최소 조립(platform ·… [스타터, 시작 템플릿]
+- app-sample: 참조 앱 Notes — 로그인한 사람이 첨부 있는 노트를 관리하는 제품… [참조 앱, 예제 앱]
+- app-workbench: 데모 — 모든 모듈을 함께 얹고 샘플… [워크벤치, 모듈 데모]
+- script-build-capabilities: capabilities.json 에서… [기능 카탈로그, 카탈로그 생성]
+- script-dev: 로컬 풀스택 한 줄 실행 — DB(+ 로컬 S3) [로컬 실행, 개발 서버]
+- script-dev-sample: 샘플 앱 Notes 풀스택 한 줄 실행 — DB + 로컬 S3 →… [샘플 실행, 노트 앱 실행]
+- script-new-project: 새 프로젝트 한 줄 찍기 [새 프로젝트, 프로젝트 만들기]
+- script-rename-skeleton: 패키지 · 설정 접두사 · 클래스 이름 · 환경변수 접두사를 한 번에… [이름 바꾸기, 리네임]
+- script-sample-e2e-backend: 샘플 앱 백엔드를 e2e 테스트용으로 올리고 내리는 비대화형… [e2e 백엔드, e2e 테스트용 서버]
+- script-test-deploy-contract: 홈서버 배포 계약(docs/deploy.md)을 진짜 컨테이너로 증명한다 [배포 검증, 배포 계약 테스트]
+- script-test-new-project: new-project.sh 의 테스트 [찍기 테스트, 조합 검증]

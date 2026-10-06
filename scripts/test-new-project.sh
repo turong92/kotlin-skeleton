@@ -103,7 +103,7 @@ check "배포 선언의 DB · Redis 는 고른 모듈을 따른다 (postgres · 
 check "배포 선언에 skeleton · SKELETON 흔적이 없다 (스위치 이름은 OVATION_ENV)" bash -c "! grep -i 'skeleton' '$A/deploy/app.yaml' | grep -v 'react-skeleton' | grep -q . && grep -q 'OVATION_ENV: prod' '$A/deploy/app.yaml'"
 check "배포 선언에서 고르지 않은 모듈의 비밀 설명이 지워진다 (storage-s3 · payment-toss), 쓰는 모듈(auth)은 남는다" bash -c "! grep -q '\[storage-s3\]\|\[payment-toss\]\|\[redis-core\]' '$A/deploy/app.yaml' && grep -q '\[auth\]' '$A/deploy/app.yaml'"
 check "배포 선언은 compose · Caddyfile · cloudflared · 백업을 만들지 않는다 (플랫폼 몫)" bash -c "test ! -e '$A/deploy/docker-compose.yml' && test ! -e '$A/deploy/Caddyfile' && test ! -e '$A/deploy/cloudflared' && ls '$A/deploy' | grep -qx 'app.yaml' && [ \"\$(ls '$A/deploy' | wc -l | tr -d ' ')\" = 1 ]"
-check "이미지 워크플로는 보류 — 따라오지만 수동 실행(workflow_dispatch)만 트리거한다 (태그 · 브랜치 푸시 없음 · latest 없음)" bash -c "grep -q 'workflow_dispatch:' '$A/.github/workflows/image.yml' && ! grep -q 'tags:' '$A/.github/workflows/image.yml' && ! grep -q 'branches' '$A/.github/workflows/image.yml' && ! grep -q 'push:' '$A/.github/workflows/image.yml' && ! grep -q ':latest' '$A/.github/workflows/image.yml'"
+check "이미지 워크플로는 보류 — 따라오지만 수동 실행(workflow_dispatch)만 트리거한다 (태그 · 브랜치 푸시 없음 · latest 없음)" bash -c "grep -q 'workflow_dispatch:' '$A/.github/workflows/image.yml' && ! grep -q \"tags: \\['v\" '$A/.github/workflows/image.yml' && ! grep -q 'branches' '$A/.github/workflows/image.yml' && ! grep -Eq '^  push:' '$A/.github/workflows/image.yml' && ! grep -q ':latest' '$A/.github/workflows/image.yml'"
 check "계약 테스트 스크립트와 그 CI 가 따라온다 (문법 검사 통과)" bash -c "test -x '$A/scripts/test-deploy-contract.sh' && bash -n '$A/scripts/test-deploy-contract.sh' && test -f '$A/.github/workflows/deploy-contract.yml'"
 check "Dockerfile 은 APP 인자를 받는다 (api 가 기본)" has_line '^ARG APP=api' "$A/Dockerfile"
 check "배포 가드 · Redis 환경변수 테스트가 새 접두사로 찍힌다 — 접두사가 따라간다" bash -c "grep -rq 'skeleton.env\|ovation.env' '$A/modules/platform/src/test' && ! grep -rq 'SKELETON_' '$A/modules/platform/src/test' '$A/modules/auth/src/test'"
@@ -136,7 +136,7 @@ check "dev.sh 는 기본 조합에서 s3 를 올리지 않는다" bash -c "[ \"\
 check "dev.sh 는 소스 레포(두 DB 모듈이 다 있다)에서도 스타터 apps/api 에 postgres 를 고른다 — 폴더 존재로 고르면 mysql 이 된다" bash -c "[ \"\$(DEV_DRY_RUN=1 bash -c 'cd \"$SRC\" && bash scripts/dev.sh' 2>&1 | tail -1)\" = 'infra: postgres s3=0 app=api' ]"
 check "dev.sh APP=sample 은 postgres + s3" bash -c "[ \"\$(DEV_DRY_RUN=1 APP=sample bash -c 'cd \"$SRC\" && bash scripts/dev.sh' 2>&1 | tail -1)\" = 'infra: postgres s3=1 app=sample' ]"
 check "persistence-jooq 가 없으니 그 모듈이 읽던 형제 폴더 문제도 없다" test ! -e "$B/modules/persistence-jooq"
-check "배포 선언에 고른 모듈(storage-s3 · notification-mail)의 비밀 설명이 남고 고르지 않은 모듈(payment-toss)은 없다" bash -c "grep -q '\[storage-s3\] OVATION_STORAGE_S3_BUCKET' '$B/deploy/app.yaml' && grep -q '\[notification-mail\]' '$B/deploy/app.yaml' && ! grep -q '\[payment-toss\]' '$B/deploy/app.yaml'"
+check "배포 선언에 고른 모듈(storage-s3 · notification-mail)의 비밀 설명이 남고 고르지 않은 모듈(payment-toss)은 없다" bash -c "grep -q '\[storage-s3\] (env:) OVATION_STORAGE_S3_BUCKET' '$B/deploy/app.yaml' && grep -q '\[notification-mail\]' '$B/deploy/app.yaml' && ! grep -q '\[payment-toss\]' '$B/deploy/app.yaml'"
 
 echo "== 4. --db mysql --modules job-queue-jdbc,alert-jdbc"
 C="$TMP/c"
