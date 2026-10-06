@@ -95,6 +95,15 @@ Caddy 가 `X-Forwarded-For` 를 덧붙이고 `CF-Connecting-IP` 를 넘기므로
 그래서 두 앱 모두 `management.endpoints.web.base-path: /` + `exposure.include: health, info` 로 `GET /health` 를 연다 (platform 이 `/health` · `/info` 를 공개 경로로 둔다): 인증 없이, 앱과 DataSource 가 떠 있을 때만 `200 {"status":"UP"}`, DB 가 죽으면 `503`, **세부 정보 없음**. 나머지 액추에이터는 열지 않는다 (`HealthEndpointIntegrationTest`).
 이것은 **앱의 선택**이다 (모듈 기본값이 아니라 `application.yml`) — 이 방식으로 배포하지 않는 앱은 영향이 없다. `test-deploy-contract.sh` 가 정상일 때 200, DB 컨테이너를 멈추면 비 2xx 임을 확인한다. 선언의 `health: /health`.
 
+### DB 가 아직 안 떴을 때 — 시작 순서와 `startup-wait`
+
+실제 홈서버 배포에서 앱이 PostgreSQL 컨테이너의 **첫 초기화가 끝나기 전에** 떠서 `JdbcAggregateOperations` 빈 스택 트레이스로 죽었고, 컨테이너를 두 번 다시 시작하니 떴다. 막 만든 PostgreSQL 은 초기화하는 동안 임시 서버를 띄워 TCP 를 열지 않다가(연결 거부) 한 번 재시작한 뒤에야 받는다. 두 가지를 둔다:
+
+- **읽을 수 있는 실패** (`persistence-jdbc` 의 `DatabaseUnavailableFailureAnalyzer`, 항상 켜짐): 시작할 때 DB 에 못 닿으면 스택 트레이스 대신 `Cannot connect to the database at db:5432 during startup: connection refused …` 와 가능한 원인(DB 가 아직 시작 중 · `SPRING_DATASOURCE_URL` 틀림 · 망)을 말한다. **host:port 만** 말하고 사용자 · 비밀번호 · 쿼리는 읽지 않는다. 방언 모듈을 안 끼운 경우(`SqlDialectFailureAnalyzer`)와는 별개다.
+- **첫 연결 기다리기** (선택, 모듈 기본 **꺼짐**): `skeleton.persistence-jdbc.startup-wait.enabled=true` 면 컨텍스트가 시작하기 전에 `spring.datasource.url` 로 첫 연결이 될 때까지 `interval` 간격으로 `timeout` 동안 다시 시도한다. **`apps/api` · `apps/sample` 이 이 선택을 켠다**(`application.yml`: `timeout: 60s`, `interval: 2s`) — 앱이 DB 보다 먼저 떠도 재시작 없이 붙는다. `timeout` 안에 못 닿으면 위 메시지(+ "기다렸다")로 기동이 실패한다. 환경변수로 바꿀 때: `<P>_PERSISTENCEJDBC_STARTUPWAIT_ENABLED` · `_TIMEOUT` · `_INTERVAL`. 잘못된 비밀번호 같은 **기다려도 소용없는 실패는 바로 실패**한다. 시험은 `JdbcConnectionDetails` 로 연결을 정하므로 시험 설정(`src/test/resources/config/application.yml`)이 이 기다리기를 끈다.
+
+`scripts/test-deploy-contract.sh` 의 **A2** 가 증명한다: 앱 컨테이너를 DB 컨테이너가 **없는 채로** 먼저 띄우고(이름이 아직 풀리지 않는다) DB 를 늦게 올려도 앱이 재시작 없이 `/health` 200 에 이르는지, 그리고 DB 가 끝내 안 나타나면 호스트 · 포트를 말하는 메시지로 실패하고 비밀번호가 새지 않는지.
+
 ### 어느 앱을 배포하나
 
 | 앱 | 빌드 | `health` | 비고 |

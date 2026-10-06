@@ -15,6 +15,8 @@
 #   6. 쓰지 않는 모듈의 설정을 요구하지 않는다 (AWS 자격 증명 따위를 찾으며 죽지 않는다)
 #   7. 보호 환경(SPRING_PROFILES_ACTIVE=prod / SKELETON_ENV=prod)에서는 안전하지 않은 구성이 읽을 수 있는 가드 메시지와 함께 stdout 으로 실패하고 값은 새지 않는다
 #   8. 정직한 헬스: GET /health 는 인증 없이 200 {"status":"UP"} 뿐이고, DB 컨테이너를 멈추면 503, 다시 올리면 200
+#   8b. (A2) DB 보다 앱이 먼저 뜬다: DB 컨테이너가 없는 채로 앱을 먼저 띄우고 DB 를 늦게 올려도 앱이 재시작 없이 /health 200 에 이른다(startup-wait). DB 가 끝내 안 나타나면
+#      host:port · 원인 · 가능한 원인을 말하는 메시지로 실패하고 URL 의 비밀번호는 새지 않는다 (docs/deploy.md §3)
 #   9. (메일 모듈이 있는 앱 = sample) 시험 배포 조합(docs/deploy.md §10) — JWT 비밀 · 메일 발송 길 · 링크 주소 · 첫 관리자 + 플랫폼이 넣는 모양 그대로의
 #      <PREFIX>_CLIENT_IP_MODE(소문자) / _TRUSTED_PROXIES(실제 도커 네트워크 CIDR + 하나 더, 쉼표로 이어)를 주면 SKELETON_ENV=prod 로 **실제로 뜬다**. 하나씩 빼면 가드가 그 이름을 말하며 실패한다
 #
@@ -32,7 +34,7 @@ while [ $# -gt 0 ]; do
     --apps) [ $# -ge 2 ] || { echo "--apps needs a value" >&2; exit 2; }; APPS="$2"; shift 2 ;;
     --apps=*) APPS="${1#--apps=}"; shift ;;
     --reuse) REUSE=1; shift ;;
-    -h|--help) sed -n 2,22p "$0"; exit 0 ;;
+    -h|--help) sed -n 2,24p "$0"; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
 done
@@ -154,6 +156,53 @@ for APP in $(echo "$APPS" | tr ',' ' '); do
   if wait_for 90 docker exec "$PG" pg_isready -h 127.0.0.1 -U app -d app; then pass "DB 를 다시 올렸다"; else fail "DB 가 다시 뜨지 않는다"; fi
   if wait_for 90 health_is "$C" "$HEALTH" 200; then pass "DB 가 돌아오면 /health 가 다시 200 이다"; else fail "DB 복구 뒤에도 /health 가 200 이 아니다: $(health_status "$C" "$HEALTH")"; fi
 
+  docker rm -f "$C" >/dev/null
+
+  echo "-- A2. DB 보다 앱이 먼저 뜬다 (실제 배포에서 재시작을 두 번 해야 했던 경우) — 기다렸다가 재시작 없이 뜬다 / 끝내 안 나타나면 읽을 수 있는 메시지로 실패한다"
+  # (1) 앱 먼저: DB 컨테이너가 아직 없다 — 이름 late-db 가 풀리지 않는다. 그다음 DB 를 올리면 첫 초기화 동안 연결 거부 → 시작 중 구간을 지난다
+  LATE="$RUN-$APP-latepg"; C="$RUN-$APP-late"; CONTAINERS="$CONTAINERS $C $LATE"
+  docker run -d --name "$C" --network "$NET" -e "SPRING_DATASOURCE_URL=jdbc:postgresql://late-db:5432/app" -e SPRING_DATASOURCE_USERNAME=app -e SPRING_DATASOURCE_PASSWORD=late-test-pw "$IMG" >/dev/null
+  if wait_for 90 bash -c "docker logs '$C' 2>&1 | grep -q '\[startup-wait\] waiting for database late-db:5432'"; then pass "DB 가 없는 동안 앱이 기다린다는 줄이 나온다 ([startup-wait] waiting for database late-db:5432)"; else fail "기다린다는 로그가 없다"; docker logs "$C" 2>&1 | tail -15; fi
+  STARTED1="$(docker inspect -f '{{.State.StartedAt}}' "$C")"
+  docker run -d --name "$LATE" --network "$NET" --network-alias late-db -e POSTGRES_DB=app -e POSTGRES_USER=app -e POSTGRES_PASSWORD=late-test-pw postgres:18 >/dev/null
+  if wait_for 180 health_is "$C" "$HEALTH" 200; then pass "DB 가 늦게 올라온 뒤 앱이 /health 200 에 이른다 (기다린 뒤 붙었다)"; else
+    fail "DB 를 늦게 올렸는데 앱이 뜨지 않았다: $(health_status "$C" "$HEALTH")"; docker logs "$C" 2>&1 | tail -25
+  fi
+  if running "$C" && [ "$(docker inspect -f '{{.State.StartedAt}}' "$C")" = "$STARTED1" ]; then pass "앱 컨테이너는 한 번도 죽거나 재시작하지 않았다 (StartedAt 같음)"; else fail "앱 컨테이너가 죽었거나 다시 시작했다"; fi
+  LOGS="$(docker logs "$C" 2>&1)"
+  grep -q 'is reachable (attempt' <<<"$LOGS" && pass "로그에 '데이터베이스에 닿았다' 줄이 있다: $(grep 'is reachable' <<<"$LOGS" | head -1)" || fail "닿았다는 로그가 없다"
+  grep -q 'APPLICATION FAILED TO START\|JdbcAggregateOperations' <<<"$LOGS" && fail "기다리는 동안 기동 실패 화면 · 빈 스택 트레이스가 나왔다" || pass "기다리는 동안 기동 실패 화면 · 빈 스택 트레이스가 없다"
+  docker rm -f "$C" "$LATE" >/dev/null
+  # (2) 끝내 안 나타나는 DB — 짧은 timeout 으로 읽을 수 있는 메시지와 함께 실패한다. URL 에 비밀번호를 넣어 두고 새지 않는지도 본다
+  C="$RUN-$APP-nodb"; CONTAINERS="$CONTAINERS $C"
+  docker run -d --name "$C" --network "$NET" -e "SPRING_DATASOURCE_URL=jdbc:postgresql://nowhere-db:5432/app?user=leakme&password=leak-pw-123" \
+    -e SKELETON_PERSISTENCEJDBC_STARTUPWAIT_TIMEOUT=6s -e SKELETON_PERSISTENCEJDBC_STARTUPWAIT_INTERVAL=1s "$IMG" >/dev/null
+  if wait_for 120 stopped "$C"; then
+    EXIT="$(docker inspect -f '{{.State.ExitCode}}' "$C")"; LOGS="$(docker logs "$C" 2>&1)"
+    [ "$EXIT" != 0 ] && pass "DB 가 끝내 안 나타나면 기동이 실패한다 (exit $EXIT)" || fail "기동이 실패해야 하는데 exit 0"
+    grep -q 'APPLICATION FAILED TO START' <<<"$LOGS" && pass "스택 트레이스 대신 FailureAnalyzer 화면이다" || fail "FailureAnalyzer 화면이 아니다"
+    grep -q 'Cannot connect to the database at nowhere-db:5432' <<<"$LOGS" && pass "메시지가 host:port 를 말한다 (nowhere-db:5432)" || { fail "host:port 메시지가 없다"; echo "$LOGS" | tail -15; }
+    grep -q 'unknown host' <<<"$LOGS" && pass "원인을 말한다 (unknown host)" || fail "원인(unknown host)이 없다"
+    grep -q 'SPRING_DATASOURCE_URL' <<<"$LOGS" && grep -q 'still starting' <<<"$LOGS" && pass "가능한 원인(아직 시작 중 · SPRING_DATASOURCE_URL · 망)을 나열한다" || fail "가능한 원인 안내가 없다"
+    grep -q 'waited 6s' <<<"$LOGS" && pass "기다린 시간(6s)을 말한다" || fail "기다린 시간을 말하지 않는다"
+    grep -q 'leak-pw-123\|leakme' <<<"$LOGS" && fail "실패 화면에 URL 의 사용자 · 비밀번호가 새었다" || pass "실패 화면에 URL 의 사용자 · 비밀번호가 없다"
+    grep -q 'JdbcAggregateOperations' <<<"$LOGS" && fail "빈 스택 트레이스(JdbcAggregateOperations)가 남아 있다" || pass "JdbcAggregateOperations 스택 트레이스가 없다"
+    echo "$LOGS" | sed -n '/APPLICATION FAILED TO START/,$p' | head -12 | sed 's/^/    | /'
+  else
+    fail "DB 가 없는데 기동이 끝나지 않았다 (timeout 6s)"; docker logs "$C" 2>&1 | tail -10
+  fi
+  docker rm -f "$C" >/dev/null
+  # (3) 기다리기를 끈 앱(모듈 기본) — 빈 생성 중에 연결이 실패해도 JdbcAggregateOperations 스택 트레이스 대신 같은 읽을 수 있는 메시지가 나온다 (실제 배포에서 본 실패의 자리)
+  C="$RUN-$APP-nowait"; CONTAINERS="$CONTAINERS $C"
+  docker run -d --name "$C" --network "$NET" -e "SPRING_DATASOURCE_URL=jdbc:postgresql://nowhere-db:5432/app?user=leakme&password=leak-pw-123" -e SKELETON_PERSISTENCEJDBC_STARTUPWAIT_ENABLED=false "$IMG" >/dev/null
+  if wait_for 150 stopped "$C"; then
+    LOGS="$(docker logs "$C" 2>&1)"
+    grep -q 'Cannot connect to the database at nowhere-db:5432' <<<"$LOGS" && pass "기다리기를 끈 앱도 빈 생성 중 연결 실패를 host:port 메시지로 말한다" || { fail "기다리기를 끈 앱의 실패가 읽을 수 있는 메시지가 아니다"; echo "$LOGS" | tail -20; }
+    grep -q 'APPLICATION FAILED TO START' <<<"$LOGS" && grep -q 'waited' <<<"$LOGS" && fail "기다리기를 껐는데 기다렸다는 말이 있다" || pass "기다리기를 껐으면 기다리지 않는다 (기다렸다는 말 없음)"
+    grep -q 'leak-pw-123\|leakme' <<<"$LOGS" && fail "이 실패 화면에도 URL 의 비밀번호가 새었다" || pass "이 실패 화면에도 URL 의 사용자 · 비밀번호가 없다"
+  else
+    fail "DB 가 없는데 기동이 끝나지 않았다 (기다리기 끔)"; docker logs "$C" 2>&1 | tail -10
+  fi
   docker rm -f "$C" >/dev/null
 
   echo "-- B. 보호 프로필(prod) — 안전하지 않은 구성이면 읽을 수 있는 메시지로 stdout 에서 실패한다"

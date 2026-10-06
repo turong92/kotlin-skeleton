@@ -114,6 +114,7 @@ fails when this table and the prefixes found in module code differ.
 | `idempotency` | `skeleton.idempotency` |
 | `job-queue-jdbc` | `skeleton.job-queue` |
 | `migration` | `skeleton.migration` |
+| `persistence-jdbc` | `skeleton.persistence-jdbc` |
 | `notification` | `skeleton.notification.inbox` |
 | `notification-mail` | `skeleton.notification-mail` |
 | `notification-slack` | `skeleton.notification.slack` |
@@ -182,7 +183,7 @@ test proving a context with only that module (and its declared dependencies) boo
 | `notification-websocket` | yes (in-process simple broker; the endpoint is open until `authentication.enabled=true`) | a servlet web app | — |
 | `payment` | yes (routing only) | nothing | a provider module |
 | `payment-toss` / `payment-stripe` | off until `enabled=true` | nothing | secret key, internet |
-| `persistence-jdbc` | yes | a `DataSource` + one `db-*` module | — |
+| `persistence-jdbc` | yes (the optional first-connection wait is off) | a `DataSource` + one `db-*` module | — |
 | `persistence-jpa` | yes | a `DataSource` + JPA starter | — |
 | `persistence-jooq` | yes | a `DataSource` (code generation needs no database) | — |
 | `redis-core` | yes | nothing — the connection is lazy | a Redis server at first command |

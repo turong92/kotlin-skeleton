@@ -4,3 +4,7 @@ spring:
   datasource:
     hikari:
       minimum-idle: 1
+skeleton:
+  persistence-jdbc:
+    startup-wait:
+      enabled: false   # 시험의 연결은 TestcontainersConfiguration 의 JdbcConnectionDetails 가 정한다 — main 의 기본 URL(localhost:5432)을 기다리지 않는다

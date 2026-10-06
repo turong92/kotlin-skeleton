@@ -107,7 +107,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `payment` | 결제 계약 — PaymentService · PaymentProviderRouter(제공자는 payment-toss \| payment-stripe). 모듈이 HTTP 를 열지 않는다. | `--modules payment` — `payment-toss` \| `payment-stripe` 중 하나 이상 고른다 | 결제, 결제 승인, 환불, 결제 취소, 유료 / payment, checkout, refund, payment confirm, paid | `@skeleton/payment` |
 | `payment-stripe` | Stripe 결제 제공자 — 결제 승인 · 취소를 payment 의 제공자로 구현한다. | `--modules payment-stripe` | 스트라이프 결제, 해외 결제, 카드 결제 / stripe, stripe payments, card payment, international payment | `@skeleton/payment` |
 | `payment-toss` | Toss 결제 제공자 — 결제 승인 · 취소를 payment 의 제공자로 구현한다. | `--modules payment-toss` | 토스 결제, 토스페이먼츠, 카드 결제, 간편 결제 / toss payments, toss, card payment | `@skeleton/payment` |
-| `persistence-jdbc` | Spring Data JDBC 의 audit 타임스탬프 콜백과 DB 방언 전략(SqlDialect · SqlDialectVerifier). | 스타터(apps/api)에 기본 포함 | JDBC, Data JDBC, audit 시각, 생성일 수정일, DB 접근 / jdbc, spring data jdbc, audit timestamps, created at updated at | — |
+| `persistence-jdbc` | Spring Data JDBC 의 audit 타임스탬프 콜백과 DB 방언 전략(SqlDialect · SqlDialectVerifier), DB 에 못 닿는 기동 실패를 읽을 수 있는 메시지로 바꾸는 분석기와 첫 연결을 기다리는 선택 기능. | 스타터(apps/api)에 기본 포함 | JDBC, Data JDBC, audit 시각, 생성일 수정일, DB 접근 / jdbc, spring data jdbc, audit timestamps, created at updated at | — |
 | `persistence-jooq` | jOOQ 연결 — audit 리스너 · MySQL UTC Instant 변환기, DDL 파일에서 코드 생성(빌드에 DB 불필요). | `--modules persistence-jooq` | jOOQ, 타입 안전 SQL, 쿼리 빌더 / jooq, type-safe sql, query builder, code generation | — |
 | `persistence-jpa` | JPA 엔티티의 created_at · updated_at 자동 채움과 부분 수정 · fetch graph 도우미. | `--modules persistence-jpa` | JPA, 하이버네이트, 엔티티 audit, ORM / jpa, hibernate, entity audit, orm | — |
 | `platform` | 모든 모듈의 공용 기반 — 표준 응답/에러 봉투 · 전역 예외 처리 · trace id · 요청 로깅 · CORS · rate limit · 외부 HTTP 클라이언트 · OpenAPI · 배포 가드. | 스타터(apps/api)에 기본 포함 | 에러 응답, 표준 응답, 예외 처리, 요청 로깅, 트레이스, CORS, 요청 제한, 외부 API 호출, 스웨거, 배포 가드 / error response, exception handling, request logging, trace id, cors, rate limit, http client, openapi, swagger, deploy guard | `@skeleton/api-client` |
@@ -726,11 +726,12 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 웹훅 서명 검증 · 주문 처리는 앱 코드
 - 키워드: 토스 결제, 토스페이먼츠, 카드 결제, 간편 결제 / toss payments, toss, card payment
 
-### `persistence-jdbc` — Spring Data JDBC 의 audit 타임스탬프 콜백과 DB 방언 전략(SqlDialect · SqlDialectVerifier).
+### `persistence-jdbc` — Spring Data JDBC 의 audit 타임스탬프 콜백과 DB 방언 전략(SqlDialect · SqlDialectVerifier), DB 에 못 닿는 기동 실패를 읽을 수 있는 메시지로 바꾸는 분석기와 첫 연결을 기다리는 선택 기능.
 
 - 종류 · 상태: module · stable — 위치 `modules/persistence-jdbc`
 - 켜는 법: 스타터(apps/api)에 기본 포함
 - 의존 한 줄: `implementation(project(":modules:persistence-jdbc"))`
+- 설정 접두사 `skeleton.persistence-jdbc` — 키와 기본값 `docs/config/modules/persistence-jdbc.yml`
 - 문서: `docs/modules/persistence-jdbc.md`
 - 쓰지 않는 경우:
   - JPA · jOOQ 와 병행하지 않는다 — 하나를 고른다(persistence-jpa | persistence-jooq)

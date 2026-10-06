@@ -30,6 +30,11 @@ springdoc:
     path: /api/v1/docs
 
 skeleton:
+  persistence-jdbc:
+    startup-wait:                        # 이 앱의 선택(모듈 기본은 꺼짐): DB 컨테이너가 아직 초기화 중일 때 앱이 먼저 떠도 재시작 없이 붙는다 — docs/deploy.md §3
+      enabled: true
+      timeout: 60s                       # 안 되면 host:port 와 가능한 원인을 말하며 실패한다 (비밀번호는 말하지 않는다)
+      interval: 2s
   web:
     client-ip:
       # 플랫폼이 넣는 이름 그대로 받는다 — 홈서버 infra/modules/app-docker/app.tf 는 `<PREFIX>_CLIENT_IP_MODE=cloudflare|proxy` 와

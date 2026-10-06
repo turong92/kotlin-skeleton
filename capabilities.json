@@ -1554,7 +1554,7 @@
       "module": "persistence-jdbc",
       "path": "modules/persistence-jdbc",
       "status": "stable",
-      "summary": "Spring Data JDBC 의 audit 타임스탬프 콜백과 DB 방언 전략(SqlDialect · SqlDialectVerifier).",
+      "summary": "Spring Data JDBC 의 audit 타임스탬프 콜백과 DB 방언 전략(SqlDialect · SqlDialectVerifier), DB 에 못 닿는 기동 실패를 읽을 수 있는 메시지로 바꾸는 분석기와 첫 연결을 기다리는 선택 기능.",
       "starter": true,
       "newProjectFlag": null,
       "autoIncludes": [],
@@ -1563,7 +1563,10 @@
         "oneOf": [],
         "optional": []
       },
-      "config": null,
+      "config": {
+        "prefixes": ["skeleton.persistence-jdbc"],
+        "snippet": "docs/config/modules/persistence-jdbc.yml"
+      },
       "basePaths": [],
       "secrets": [],
       "docs": ["docs/modules/persistence-jdbc.md"],

@@ -1,2 +1,5 @@
 org.springframework.boot.diagnostics.FailureAnalyzer=\
-dev.sumin.skeleton.persistence.jdbc.SqlDialectFailureAnalyzer
+dev.sumin.skeleton.persistence.jdbc.SqlDialectFailureAnalyzer,\
+dev.sumin.skeleton.persistence.jdbc.DatabaseUnavailableFailureAnalyzer
+org.springframework.boot.env.EnvironmentPostProcessor=\
+dev.sumin.skeleton.persistence.jdbc.DatabaseStartupWaitPostProcessor

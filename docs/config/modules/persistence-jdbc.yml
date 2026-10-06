@@ -1,0 +1,7 @@
+# persistence-jdbc — 시작할 때 첫 DB 연결을 기다리는 선택 기능 (모듈 기본: 꺼짐 — 켜는 것은 앱의 선택, apps/api · apps/sample 이 켠다).
+skeleton:
+  persistence-jdbc:
+    startup-wait:
+      enabled: false        # true 면 컨텍스트가 시작하기 전에 spring.datasource.url 로 첫 연결이 될 때까지 다시 시도한다 (DB 컨테이너가 아직 초기화 중일 때 앱이 먼저 떠도 재시작 없이 붙는다)
+      timeout: 60s          # 이 시간 안에 안 되면 host:port 와 가능한 원인을 말하는 메시지로 기동 실패 (잘못된 비밀번호처럼 기다려도 소용없는 실패는 바로 실패)
+      interval: 1s          # 시도 사이 간격

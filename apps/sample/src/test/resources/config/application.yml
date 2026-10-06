@@ -5,6 +5,9 @@ spring:
     hikari:
       minimum-idle: 1
 skeleton:
+  persistence-jdbc:
+    startup-wait:
+      enabled: false   # 시험의 연결은 TestcontainersConfiguration 의 JdbcConnectionDetails 가 정한다 — main 의 기본 URL(localhost:5432)을 기다리지 않는다
   legal:
     reconsent:
       enabled: false   # notes · board 시험은 시드 계정으로 보호된 엔드포인트를 부른다 — 동의는 이 시험들의 주제가 아니다. 재동의 흐름은 LegalJourneyIntegrationTest 가 켜서 시험한다
