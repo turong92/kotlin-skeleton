@@ -35,9 +35,10 @@ class DisplayNameFlowsTest {
         reserved: List<String> = emptyList(),
         seeds: List<AccountProperties.SeedAccount> = emptyList(),
         emailVerification: Boolean = true,
+        changeLimit: Int = 10,
     ) = AccountHarness(
         AccountProperties(
-            displayName = AccountProperties.DisplayName(uniqueness, required, fallback, reserved),
+            displayName = AccountProperties.DisplayName(uniqueness, required, fallback, reserved, changeLimit = changeLimit),
             social = AccountProperties.Social(signUp = true), seed = AccountProperties.Seed(seeds),
             signUp = AccountProperties.SignUp(emailVerification = emailVerification),
             mail = AccountProperties.Mail(linkBaseUrl = "https://app.example.com"), password = AccountProperties.Password(bcryptStrength = 4),
@@ -160,6 +161,50 @@ class DisplayNameFlowsTest {
         assertEquals("Ann", h.signedUp("b@example.com", "Ann").displayName)
     }
 
+    // ---- I-5: a name clash at verification does not burn the attempt
+
+    @Test
+    fun `UNIQUE - a clash at verification keeps the attempt alive, the same code with another nickname finishes the sign-up`() {
+        val h = harness(Uniqueness.UNIQUE)
+        h.signedUp("a@example.com", "Ann")
+        h.signUp("b@example.com", displayName = "ann")
+        repeat(7) { assertEquals("ACCOUNT.DISPLAY_NAME_TAKEN", code { h.verify("b@example.com") }, "the code was right every time - more tries than max-attempts and still a 409, never CODE_EXPIRED") }
+        val wrong = assertFailsWith<CodeInvalidException> { h.registration.verifyEmail(h.signUpIds.getValue("b@example.com"), "000000".takeIf { it != h.lastCode("b@example.com") } ?: "000001", "203.0.113.1") }
+        assertEquals(AccountProperties.Verification().maxAttempts - 1, (wrong.data as Map<*, *>)["attemptsLeft"], "the attempts a correct code spent were given back, a wrong guess still costs one")
+        h.verify("b@example.com", displayName = "Bea")
+        assertEquals("Bea", h.repo.findByEmail("b@example.com")!!.displayName)
+    }
+
+    @Test
+    fun `a nickname sent with the verification replaces the one from the sign-up, is checked by the same rules and burns nothing when refused`() {
+        val h = harness(Uniqueness.UNIQUE, reserved = listOf("admin"))
+        h.signUp("b@example.com", displayName = "Bob")
+        val bad = assertFailsWith<FieldValidationException> { h.verify("b@example.com", displayName = "bad#name") }
+        assertEquals("Pattern", bad.fieldCode)
+        assertEquals("Reserved", assertFailsWith<FieldValidationException> { h.verify("b@example.com", displayName = "Admin") }.fieldCode)
+        h.verify("b@example.com", displayName = "  Robert  ")
+        assertEquals("Robert", h.repo.findByEmail("b@example.com")!!.displayName, "cleaned like any nickname, and it wins over the sign-up's")
+    }
+
+    // ---- S-5a: a limit on nickname changes
+
+    @Test
+    fun `changing the nickname is limited per account - a no-op and a refused name use none of it`() {
+        val h = harness(changeLimit = 3)
+        val a = h.signedUp("a@example.com", "Ann")
+        repeat(5) { h.profile.update(a.id, ProfileChange(displayName = "Ann")) }
+        repeat(5) { assertFailsWith<FieldValidationException> { h.profile.update(a.id, ProfileChange(displayName = "bad#name")) } }
+        listOf("Bea", "Cy", "Di").forEach { h.profile.update(a.id, ProfileChange(displayName = it)) }
+        val limited = assertFailsWith<ApplicationException> { h.profile.update(a.id, ProfileChange(displayName = "Ed")) }
+        assertEquals("ACCOUNT.RATE_LIMITED", limited.errorCode.code)
+        assertEquals("Di", h.profile.me(a.id).displayName)
+        h.profile.update(a.id, ProfileChange(locale = "en"))   // locale and time zone are not nicknames
+        h.time.advance(Duration.ofDays(1).plusSeconds(1))
+        assertEquals("Ed", h.profile.update(a.id, ProfileChange(displayName = "Ed")).displayName)
+        val other = h.signedUp("o@example.com", "Oz")
+        assertEquals("Pi", h.profile.update(other.id, ProfileChange(displayName = "Pi")).displayName, "the limit is per account")
+    }
+
     // ---- TAGGED
 
     @Test
@@ -173,7 +218,7 @@ class DisplayNameFlowsTest {
 
     @Test
     fun `TAGGED - changing the nickname draws a new tag, changing only its case keeps it`() {
-        val h = harness(Uniqueness.TAGGED)
+        val h = harness(Uniqueness.TAGGED, changeLimit = 0)   // 0 = no limit — this test renames 40 times
         val a = h.signedUp("a@example.com", "Ann")
         val kept = h.profile.update(a.id, ProfileChange(displayName = "ANN"))
         assertEquals("ANN", kept.displayName); assertEquals(a.displayTag, kept.displayTag)
@@ -260,6 +305,28 @@ class DisplayNameFlowsTest {
         assertEquals("Reserved", assertFailsWith<FieldValidationException> { h.profile.update(ann.id, ProfileChange(displayName = "운 영 자")) }.fieldCode)
         h.repo.grantRole(ann.id, "ADMIN", h.time.now())
         assertEquals("Admin", h.profile.update(ann.id, ProfileChange(displayName = "Admin")).displayName)
+    }
+
+    @Test
+    fun `a reserved word cannot get in as a provider name - it is dropped like a taken one`() {
+        listOf(Fallback.GENERATED to true, Fallback.NONE to false).forEach { (fallback, expectName) ->
+            val h = harness(reserved = listOf("admin", "운영자"), fallback = fallback)
+            val social = h.sso().signIn(proof("google", "g-1", "Ａdmin"))!!
+            val row = h.repo.findById(social.accountId)!!
+            if (expectName) assertTrue(Regex("^user-[0-9a-f]{6}$").matches(row.displayName!!), row.displayName) else assertNull(row.displayName)
+            val ok = h.sso().signIn(proof("google", "g-2", "Administrator"))!!
+            assertEquals("Administrator", h.repo.findById(ok.accountId)!!.displayName, "only the listed words, not their neighbours")
+        }
+    }
+
+    @Test
+    fun `UNIQUE - a name with an invisible variation selector is the same name as the plain one`() {
+        val h = harness(Uniqueness.UNIQUE)
+        h.signedUp("a@example.com", "수민")
+        assertEquals("ACCOUNT.DISPLAY_NAME_TAKEN", code { h.signUp("b@example.com", displayName = "수민\uFE0F"); h.verify("b@example.com") })
+        val c = h.signedUp("c@example.com", "Lee")
+        assertEquals("ACCOUNT.DISPLAY_NAME_TAKEN", code { h.profile.update(c.id, ProfileChange(displayName = "수민\uFE0F")) })
+        assertEquals("👩‍💻", h.signedUp("d@example.com", "👩‍💻").displayName, "an emoji sequence is a fine name")
     }
 
     @Test

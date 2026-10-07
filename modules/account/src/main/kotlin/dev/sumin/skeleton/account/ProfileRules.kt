@@ -6,9 +6,6 @@ import java.time.ZoneId
 object ProfileRules {
     private val LOCALE = Regex("^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8}){0,3}$")
 
-    /** 제공자 · 시드가 준 이름을 닉네임 규칙([DisplayNameRules])에 맞게 고친다 — 사람이 낸 값은 [DisplayNames.accept] 가 거절한다 */
-    fun displayName(raw: String?): String? = DisplayNameRules.sanitize(raw)
-
     fun locale(raw: String?): String? = raw?.trim()?.takeIf { LOCALE.matches(it) }
 
     fun timeZone(raw: String?): String? = raw?.trim()?.takeIf { it.isNotEmpty() }?.takeIf { runCatching { ZoneId.of(it) }.isSuccess }

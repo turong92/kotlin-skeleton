@@ -167,8 +167,10 @@ class RegistrationService(private val core: AccountCore) {
      * 맞으면 **이 시도의 비밀번호로** 계정을 만들고(그 주소에 계정이 이미 있으면 만들지 않는다) 같은 주소의 다른 시도를 모두 버리고 로그인할 계정을 돌려준다.
      * 없음 · 만료 · 소진 · 이미 쓴 시도 · 그 사이 주소를 가져간 계정은 모두 [AccountErrorCode.CODE_EXPIRED] 하나다.
      */
-    fun verifyEmail(signUpId: String, code: String, ip: String?, ipKey: String? = ip): AuthAccount {
+    fun verifyEmail(signUpId: String, code: String, ip: String?, ipKey: String? = ip, displayName: String? = null): AuthAccount {
         val v = core.props.verification
+        // 확인 때 새로 낸 닉네임 — 규칙에 걸리면 400 이고 **아무것도 쓰기 전에**(한도 · 시도 · 코드) 거절한다. 없으면 가입 요청의 닉네임을 쓴다
+        val chosenName = core.names.accept(displayName)
         ipKey?.let {
             val a = core.limits.acquire("verify:ip", it, v.attemptsPerIp, v.attemptsWindow)
             if (!a.allowed) throw RateLimitedException(a.retryAfterSeconds)
@@ -186,7 +188,13 @@ class RegistrationService(private val core: AccountCore) {
         if (!core.challenges.consume(row.id)) throw AccountException(AccountErrorCode.CODE_EXPIRED)
         val email = row.subject
         val secret = row.secret ?: throw AccountException(AccountErrorCode.CODE_EXPIRED)
-        val (account, existed) = createOrProve(email, secret, row.payload)
+        val (account, existed) = try {
+            createOrProve(email, secret, row.payload, chosenName)
+        } catch (e: AccountException) {
+            // 코드는 맞았다 — 닉네임이 겹쳤다고 시도를 태우지 않는다: 같은 가입 id · 코드로 다른 닉네임을 내 다시 확인할 수 있다 (맞는 코드를 아는 사람만 여기에 온다 — 추측 계산이 그대로다)
+            if (e.errorCode == AccountErrorCode.DISPLAY_NAME_TAKEN) core.challenges.reopen(row)
+            throw e
+        }
         core.challenges.deleteBySubject(ChallengePurposes.SIGN_UP, email)
         core.closeSensitiveLinks(account)
         if (existed) core.sessions()?.revokeAll(account.id, null)   // 새 계정에는 닫을 세션이 없다
@@ -211,17 +219,17 @@ class RegistrationService(private val core: AccountCore) {
     }
 
     /** (계정, 이미 있던 계정이었나) */
-    private fun createOrProve(email: String, secret: String, payload: String?): Pair<Account, Boolean> {
+    private fun createOrProve(email: String, secret: String, payload: String?, chosenName: String? = null): Pair<Account, Boolean> {
         val existing = core.accountByEmail(email)
         if (existing == null) {
             refuseIfBlocked(email)
             val profile = payload?.let { runCatching { json.readValue(it, Map::class.java) }.getOrNull() }
             val base = newAccount(email, profile?.get("locale") as String?, profile?.get("timeZone") as String?, unverified = false)
             val identity = passwordIdentity(base, email, secret, verified = true)
-            val result = core.insertNamed(base, listOf(identity), ProfileRules.displayName(profile?.get("displayName") as String?), strict = true) { account ->
+            val result = core.insertNamed(base, listOf(identity), chosenName ?: core.names.sanitize(profile?.get("displayName") as String?), strict = true) { account ->
                 insertWithConsents(account, identity) { recordConsents(account.id, profile) }
             }
-            // 코드는 이미 썼다 — 이름이 겹쳤으면 처음부터 다시(다른 닉네임으로) 가입해야 한다
+            // 이름이 겹쳤으면 [verifyEmail] 이 시도를 되살린다 — 다른 닉네임(`displayName`)으로 같은 코드를 다시 낸다
             when (result.outcome) {
                 AccountCore.NamedInsert.INSERTED -> Unit
                 AccountCore.NamedInsert.REFUSED -> throw AccountException(AccountErrorCode.CODE_EXPIRED)

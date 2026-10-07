@@ -53,6 +53,19 @@ class AccountAutoConfigurationTest {
     }
 
     @Test
+    fun `the nickname rules are a replaceable bean - the default is used until the app brings its own`() {
+        runner.run { ctx -> assertTrue(ctx.getBean(AccountCore::class.java).names.rules === DefaultDisplayNameRules) }
+        val mine = object : DisplayNameRules by DefaultDisplayNameRules {
+            override fun key(cleaned: String) = "mine:" + cleaned
+        }
+        runner.withBean(DisplayNameRules::class.java, java.util.function.Supplier { mine }).run { ctx ->
+            assertEquals(1, ctx.getBeansOfType(DisplayNameRules::class.java).size)
+            assertTrue(ctx.getBean(AccountCore::class.java).names.rules === mine)
+            assertEquals("mine:x", ctx.getBean(AccountCore::class.java).names.key("x"))
+        }
+    }
+
+    @Test
     fun `the display name settings bind from skeleton account display-name`() {
         runner.withPropertyValues(
             "skeleton.account.display-name.uniqueness=tagged", "skeleton.account.display-name.required-on-sign-up=true",

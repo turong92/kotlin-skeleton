@@ -244,11 +244,18 @@ class AccountAutoConfiguration {
         blocks: AccountBlocks,
         lease: AccountMaintenanceLease,
         magicLinks: ObjectProvider<MagicLinkIssuer>,
+        displayNameRules: DisplayNameRules,
     ): AccountCore = AccountCore(
         accounts, properties, time.getIfAvailable { TimeProvider.systemUtc() }, events, hasher, policy, tokens, mailer, links, tasks, limits, captcha,
         { sessions.getIfAvailable() }, bootstrap, challenges, { socialReauth.getIfAvailable() },
         { consents.getIfAvailable() }, atomic.getIfAvailable { AccountTransaction.NONE }, blocks, lease, { magicLinks.getIfAvailable() },
+        names = DisplayNames(properties.displayName, rules = displayNameRules),
     )
+
+    /** 닉네임 규칙 — 앱이 같은 타입의 빈을 두면 그것이 쓰인다 (가입 · 프로필 수정 · 제공자 이름 · 시드 · 비교용 키 모두) */
+    @Bean
+    @ConditionalOnMissingBean
+    fun displayNameRules(): DisplayNameRules = DefaultDisplayNameRules
 
     @Bean
     @ConditionalOnMissingBean

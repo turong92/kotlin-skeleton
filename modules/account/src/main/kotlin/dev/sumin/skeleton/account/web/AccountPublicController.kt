@@ -71,12 +71,13 @@ class AccountPublicController(
 
     @Operation(
         summary = "Finish a sign-up with the 6-digit code mailed to the address; creates the account with the password typed in THIS attempt and signs in",
-        description = "400 ACCOUNT.CODE_INVALID (data.attemptsLeft) for a wrong code; 410 ACCOUNT.CODE_EXPIRED when the attempt is unknown, expired, used up or taken over by an existing account.",
+        description = "400 ACCOUNT.CODE_INVALID (data.attemptsLeft) for a wrong code; 410 ACCOUNT.CODE_EXPIRED when the attempt is unknown, expired, used up or taken over by an existing account. " +
+            "Optional displayName replaces the sign-up's nickname (400 errors[].field=displayName when the rules refuse it); 409 ACCOUNT.DISPLAY_NAME_TAKEN does NOT use up the attempt - repeat with the same signUpId and code and another displayName.",
     )
     @PostMapping("/auth/verify-email")
     fun verifyEmail(@Valid @RequestBody request: VerifyEmailRequest, http: HttpServletRequest): DataResponse<AuthTokenResponse> =
         clientIps.of(http).let { client ->
-            val account = registration.verifyEmail(request.signUpId!!, request.code!!, client.ip, client.limitKey)
+            val account = registration.verifyEmail(request.signUpId!!, request.code!!, client.ip, client.limitKey, request.displayName)
             val tokens = tokens().issue(account)   // 막힌 계정(정지 · 삭제)은 여기서 던진다 — 성공 로그인으로 기록하지 않는다
             registration.recordSignIn(account.accountId, client.ip)
             Response.ok(tokens)

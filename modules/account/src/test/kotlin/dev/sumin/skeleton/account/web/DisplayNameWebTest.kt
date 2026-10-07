@@ -22,6 +22,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 
 private val ipCounter = AtomicInteger()
 
@@ -98,11 +99,51 @@ class DisplayNameWebTest {
         val takenName = nick()
         registered(takenName)
         val auth = registered(nick())
+        val before = mvc.perform(get("/api/v1/account/me").header("Authorization", auth)).andReturn().response.contentAsString
         mvc.perform(patch("/api/v1/account/me").header("Authorization", auth).json("""{"displayName":"$takenName","locale":"en"}"""))
             .andExpect(status().isConflict).andExpect(jsonPath("$.code").value("ACCOUNT.DISPLAY_NAME_TAKEN"))
         val me = mvc.perform(get("/api/v1/account/me").header("Authorization", auth)).andExpect(status().isOk).andExpect(jsonPath("$.value.displayName").isString).andReturn()
+        assertEquals(JsonPath.read<String>(before, "$.value.displayName"), JsonPath.read<String>(me.response.contentAsString, "$.value.displayName"), "the refused update left the nickname as it was")
+        assertEquals(JsonPath.read<String?>(before, "$.value.locale"), JsonPath.read<String?>(me.response.contentAsString, "$.value.locale"), "...and did not apply the locale sent with it")
+        assertNotEquals("en", JsonPath.read<String?>(me.response.contentAsString, "$.value.locale"))
         assertEquals(null, JsonPath.read<String?>(me.response.contentAsString, "$.value.displayTag"), "the key is present and null (the frontend reads string | null)")
         mvc.perform(patch("/api/v1/account/me").header("Authorization", auth).json("""{"displayName":"ADMIN"}"""))
             .andExpect(status().isBadRequest).andExpect(jsonPath("$.errors[0].field").value("displayName")).andExpect(jsonPath("$.errors[0].code").value("Reserved"))
+    }
+
+    @Test
+    fun `an empty nickname is Required on update and on sign-up, never a Size message that names the 120`() {
+        val auth = registered(nick())
+        mvc.perform(patch("/api/v1/account/me").header("Authorization", auth).json("""{"displayName":""}"""))
+            .andExpect(status().isBadRequest).andExpect(jsonPath("$.errors[0].field").value("displayName")).andExpect(jsonPath("$.errors[0].code").value("Required"))
+            .andExpect(jsonPath("$.errors[0].message").value("Display name is required"))
+        signUp(unique(), "").andExpect(status().isBadRequest).andExpect(jsonPath("$.errors[0].code").value("Required"))
+    }
+
+    @Test
+    fun `a body-sized nickname is a Size error with the rule's own words - 60 characters, not the 120 units of the request guard`() {
+        val auth = registered(nick())
+        val tooLong = "x".repeat(130)
+        val update = mvc.perform(patch("/api/v1/account/me").header("Authorization", auth).json("""{"displayName":"$tooLong"}""")).andExpect(status().isBadRequest).andReturn()
+        assertEquals("Size", JsonPath.read<String>(update.response.contentAsString, "$.errors[0].code"))
+        assertEquals("Display name must be 1 to 60 characters", JsonPath.read<String>(update.response.contentAsString, "$.errors[0].message"))
+        val signUp = signUp(unique(), tooLong).andExpect(status().isBadRequest).andReturn()
+        assertEquals("Display name must be 1 to 60 characters", JsonPath.read<String>(signUp.response.contentAsString, "$.errors[0].message"))
+    }
+
+    @Test
+    fun `verify accepts an optional displayName - a clash is a 409 that keeps the attempt, the same signUpId and code finish with another name`() {
+        val name = nick()
+        registered(name)
+        val second = signUp(unique(), name).andExpect(status().isAccepted)
+        val id = JsonPath.read<String>(second.andReturn().response.contentAsString, "$.value.signUpId")
+        val code = mail.of(MailKind.VERIFY_CODE).last().vars.getValue("code")
+        repeat(6) {
+            mvc.perform(post("/api/v1/auth/verify-email").json("""{"signUpId":"$id","code":"$code"}""")).andExpect(status().isConflict).andExpect(jsonPath("$.code").value("ACCOUNT.DISPLAY_NAME_TAKEN"))
+        }
+        mvc.perform(post("/api/v1/auth/verify-email").json("""{"signUpId":"$id","code":"$code","displayName":"ADMIN"}""")).andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.errors[0].field").value("displayName")).andExpect(jsonPath("$.errors[0].code").value("Reserved"))
+        val done = mvc.perform(post("/api/v1/auth/verify-email").json("""{"signUpId":"$id","code":"$code","displayName":"${nick()}"}""")).andExpect(status().isOk).andReturn()
+        mvc.perform(get("/api/v1/account/me").header("Authorization", bearer(done))).andExpect(jsonPath("$.value.displayName").isString)
     }
 }

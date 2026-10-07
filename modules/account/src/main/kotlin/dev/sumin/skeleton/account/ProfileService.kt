@@ -5,6 +5,7 @@ import dev.sumin.skeleton.account.signin.IdentityView
 import dev.sumin.skeleton.account.signin.SignInMethodRegistry
 import dev.sumin.skeleton.common.ApplicationException
 import dev.sumin.skeleton.common.PlatformErrorCode
+import dev.sumin.skeleton.account.abuse.RateLimitedException
 import dev.sumin.skeleton.account.challenge.ChallengePurposes
 import java.time.Instant
 
@@ -51,7 +52,14 @@ class ProfileService(private val core: AccountCore, registry: SignInMethodRegist
         val name = change.displayName?.let { core.names.accept(it, required = true, exemptReserved = core.props.admin.role in current.roles) }
         change.locale?.let { if (ProfileRules.locale(it) == null) invalid("locale") }
         change.timeZone?.let { if (ProfileRules.timeZone(it) == null) invalid("timeZone") }
-        // 이름이 겹치면 409 — 다른 필드를 바꾸기 전에
+        // 이름이 겹치면 409 — 다른 필드를 바꾸기 전에. 한도는 **값 검사를 통과한 실제 변경**만 센다 (같은 값 · 거절된 요청은 안 센다)
+        if (name != null && name != current.displayName) {
+            val limit = core.props.displayName
+            if (limit.changeLimit > 0) {
+                val allowance = core.limits.acquire("rename:account", accountId, limit.changeLimit, limit.changeWindow)
+                if (!allowance.allowed) throw RateLimitedException(allowance.retryAfterSeconds)
+            }
+        }
         if (name != null) rename(current, name)
         core.accounts.update(
             accountId,
@@ -66,7 +74,7 @@ class ProfileService(private val core: AccountCore, registry: SignInMethodRegist
      * (키, 꼬리표) 유니크가 겹치면 UNIQUE 는 409, TAGGED 는 [AccountCore.placeName] 이 다시 시도하고 키 안이 가득 차야 409.
      */
     private fun rename(current: Account, name: String) {
-        val key = DisplayNameRules.key(name)
+        val key = core.names.key(name)
         val now = core.time.now()
         val keep = key == current.displayNameKey && tagFitsMode(current.displayTag)
         val slot = if (keep) {

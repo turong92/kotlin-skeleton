@@ -166,7 +166,7 @@ class AccountCore(
                 val plain = base.copy(displayName = null, displayNameKey = null, displayTag = null)
                 return NamedInsertResult(if (write(plain)) NamedInsert.INSERTED else NamedInsert.REFUSED, plain)
             }
-            val key = DisplayNameRules.key(chosen)
+            val key = names.key(chosen)
             var stored: Account? = null
             val slot = placeName(key) { tag ->
                 val candidate = base.copy(displayName = chosen, displayNameKey = key, displayTag = tag)

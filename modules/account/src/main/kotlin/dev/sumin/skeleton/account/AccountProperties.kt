@@ -234,7 +234,12 @@ data class AccountProperties(
         val fallback: Fallback = Fallback.NONE,
         /** 거절할 닉네임(운영자 · 예약어, 대소문자 · 전각 · 띄어쓰기 · `_` 무시). 운영자 역할 계정과 시드는 예외. 기본은 빈 목록 */
         val reserved: List<String> = emptyList(),
+        /** 한 계정이 [changeWindow] 안에 닉네임을 **바꿀 수 있는** 횟수 (같은 값으로의 저장 · 규칙에 걸려 거절된 요청은 세지 않는다) — 넘으면 `429 ACCOUNT.RATE_LIMITED`. TAGGED 에서 꼬리표를 마음에 들 때까지 다시 뽑는 것을 막는다. 0 이면 한도 없음 */
+        val changeLimit: Int = 10,
+        val changeWindow: Duration = Duration.ofDays(1),
     ) {
+        init { require(changeLimit >= 0) { "skeleton.account.display-name.change-limit must be >= 0 (0 = no limit)" } }
+
         enum class Uniqueness { NONE, UNIQUE, TAGGED }
 
         enum class Fallback { NONE, GENERATED }

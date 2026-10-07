@@ -49,7 +49,7 @@ class AccountSeeder(private val core: AccountCore) : ApplicationRunner {
             )
             val identity = Identity(core.newIdentityId(), base.id, SignInMethods.PASSWORD, email, true, secret = core.hasher.hash(seed.password), createdAt = now)
             // 시드 이름은 운영자가 정한 값이라 예약어 검사를 하지 않는다 (규칙에 맞게만 고친다). 방식이 TAGGED 면 꼬리표가 붙는다
-            val placed = core.insertNamed(base, listOf(identity), ProfileRules.displayName(seed.displayName), strict = false) { core.accounts.insert(it, listOf(identity)) }
+            val placed = core.insertNamed(base, listOf(identity), core.names.sanitize(seed.displayName, exemptReserved = true), strict = false) { core.accounts.insert(it, listOf(identity)) }
             val account = placed.account
             if (placed.outcome == AccountCore.NamedInsert.INSERTED) {
                 log.info("seeded local account {} roles={}", account.id, account.roles)

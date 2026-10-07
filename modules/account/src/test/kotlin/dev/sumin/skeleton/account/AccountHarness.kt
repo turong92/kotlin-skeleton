@@ -117,8 +117,8 @@ class AccountHarness(
         mailer.sent.last { it.kind == dev.sumin.skeleton.account.mail.MailKind.VERIFY_CODE && it.to == Emails.normalize(email) }.vars.getValue("code")
 
     /** 마지막 가입 시도를 마지막 코드로 확인 — 가입이 끝나 계정이 생긴다 */
-    fun verify(email: String = "ann@example.com", ip: String? = "203.0.113.1") =
-        registration.verifyEmail(signUpIds.getValue(Emails.normalize(email)), lastCode(email), ip)
+    fun verify(email: String = "ann@example.com", ip: String? = "203.0.113.1", displayName: String? = null) =
+        registration.verifyEmail(signUpIds.getValue(Emails.normalize(email)), lastCode(email), ip, displayName = displayName)
 
     /** 가입 + 확인까지 끝낸 계정 */
     fun activeAccount(email: String = "ann@example.com", password: String = "tangerine-42-moon"): Account {

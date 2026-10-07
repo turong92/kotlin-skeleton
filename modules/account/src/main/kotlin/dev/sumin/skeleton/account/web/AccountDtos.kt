@@ -10,12 +10,15 @@ import java.time.Instant
 /** 닉네임 요청 본문의 거친 상한(UTF-16 단위 — 악의적으로 큰 본문만 거른다). 진짜 규칙(60 글자 = 코드 포인트)은 서비스의 `DisplayNameRules` 가 `errors[].field=displayName` 으로 거절한다 — 이모지는 두 단위라 60 이 아니라 120 */
 private const val DISPLAY_NAME_UNITS = 120
 
+/** 요청 본문 상한에 걸렸을 때의 문구 — 서비스 규칙([dev.sumin.skeleton.account.NameProblem.TOO_LONG])과 같은 말이다 (120 이라는 내부 단위를 드러내지 않는다) */
+private const val DISPLAY_NAME_SIZE_MESSAGE = "Display name must be 1 to 60 characters"
+
 // 비밀번호 · 토큰을 담는 요청은 toString 을 가린다 — Spring MVC 가 DEBUG · TRACE 에서 요청 본문을 toString 으로 찍는다 (SecretsStayOutOfToStringTest)
 
 data class SignUpRequest(
     @field:NotBlank @field:Email @field:Size(max = 254) val email: String?,
     @field:NotBlank @field:Size(max = 128) val password: String?,
-    @field:Size(max = DISPLAY_NAME_UNITS) val displayName: String? = null,
+    @field:Size(max = DISPLAY_NAME_UNITS, message = DISPLAY_NAME_SIZE_MESSAGE) val displayName: String? = null,
     @field:Size(max = 35) val locale: String? = null,
     @field:Size(max = 64) val timeZone: String? = null,
     @field:Size(max = 2048) val captchaToken: String? = null,
@@ -48,6 +51,8 @@ data class CancelDeletionRequest(@field:NotBlank @field:Size(max = 128) val rest
 data class VerifyEmailRequest(
     @field:NotBlank @field:Size(max = 128) val signUpId: String?,
     @field:NotBlank @field:Pattern(regexp = "^[0-9]{6}$") val code: String?,
+    /** 선택 — 가입 요청의 닉네임 대신 쓸 닉네임. `409 DISPLAY_NAME_TAKEN` 으로 막힌 사람이 같은 가입 id · 코드로 다른 닉네임을 내 다시 확인한다 (시도는 닫히지 않았다) */
+    @field:Size(max = DISPLAY_NAME_UNITS, message = DISPLAY_NAME_SIZE_MESSAGE) val displayName: String? = null,
 ) {
     override fun toString() = "VerifyEmailRequest(signUpId=<redacted>, code=<redacted>)"
 }
@@ -122,7 +127,8 @@ data class ReauthRequest(
 }
 
 data class UpdateProfileRequest(
-    @field:Size(min = 1, max = DISPLAY_NAME_UNITS) val displayName: String? = null,
+    /** 빈 문자열은 여기서 막지 않는다 — 서비스 규칙이 `Required` 로 거절한다 (Bean Validation 의 Size 문구가 먼저 나가지 않게) */
+    @field:Size(max = DISPLAY_NAME_UNITS, message = DISPLAY_NAME_SIZE_MESSAGE) val displayName: String? = null,
     @field:Size(max = 35) val locale: String? = null,
     @field:Size(max = 64) val timeZone: String? = null,
 )

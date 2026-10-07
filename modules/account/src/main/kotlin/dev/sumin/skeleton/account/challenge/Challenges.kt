@@ -152,6 +152,12 @@ class Challenges(
 
     fun consume(id: String): Boolean = store.delete(id)
 
+    /**
+     * [consume] 한 줄을 **되살린다** — 맞는 코드로 시도를 이겼지만 그 뒤 단계가 코드와 무관한 이유(닉네임 충돌)로 막혔을 때, 시도가 닫히지 않게.
+     * [row] 는 [check] 가 돌려준 줄(시도 하나가 깎인 뒤의 것) — 그 한 번을 돌려준다. 만료 · 재전송 횟수 · 남은 시도의 나머지는 그대로다.
+     */
+    fun reopen(row: ChallengeRow) = store.insert(row.copy(attemptsLeft = row.attemptsLeft + 1))
+
     fun reissue(id: String, ttl: Duration, maxAttempts: Int, cooldown: Duration, maxResends: Int): String? {
         val now = time.now()
         val code = "%06d".format(java.util.Locale.ROOT, random.nextInt(1_000_000))
