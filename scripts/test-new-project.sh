@@ -29,6 +29,14 @@ trap '[ "${KEEP:-0}" = 1 ] || rm -rf "$TMP"' EXIT
 FAILURES=0
 pass() { echo "  ✓ $1"; }
 fail() { echo "  ✗ $1"; FAILURES=$((FAILURES + 1)); }
+# 계약 스크립트의 두 함수만 떼어 불러 본다(스크립트 본문 · docker 는 실행하지 않는다) — 자기 자신을 부르는 재귀면 끝나지 않거나 비밀 줄이 없다
+deploy_env_shape() {
+  local fns; fns="$(grep -E '^(secret_env|contract_env)\(\)' "$1")" || return 1
+  ! grep -qE '^secret_env\(\).*\$\(secret_env' <<<"$fns" || return 1
+  [ "$(DBNAME=x bash -c "$fns; secret_env | wc -l | tr -d ' '")" = 2 ] || return 1
+  [ "$(DBNAME=x bash -c "$fns; contract_env" | grep -c '^-e$')" = 4 ] || return 1
+  DBNAME=x bash -c "$fns; contract_env" | grep -q '^[A-Z0-9_]*_STORAGE_WEB_KEY_SECRET=.\{32,\}'
+}
 check() { # check "<설명>" <명령...>  — 명령이 성공하면 통과
   local what="$1"; shift
   if "$@" >/dev/null 2>&1; then pass "$what"; else fail "$what"; fi
@@ -117,6 +125,7 @@ check "배포 선언에서 고르지 않은 모듈의 비밀 설명이 지워진
 check "배포 선언은 compose · Caddyfile · cloudflared · 백업을 만들지 않는다 (플랫폼 몫)" bash -c "test ! -e '$A/deploy/docker-compose.yml' && test ! -e '$A/deploy/Caddyfile' && test ! -e '$A/deploy/cloudflared' && ls '$A/deploy' | grep -qx 'app.yaml' && [ \"\$(ls '$A/deploy' | wc -l | tr -d ' ')\" = 1 ]"
 check "이미지 워크플로는 보류 — 따라오지만 수동 실행(workflow_dispatch)만 트리거한다 (태그 · 브랜치 푸시 없음 · latest 없음)" bash -c "grep -q 'workflow_dispatch:' '$A/.github/workflows/image.yml' && ! grep -q \"tags: \\['v\" '$A/.github/workflows/image.yml' && ! grep -q 'branches' '$A/.github/workflows/image.yml' && ! grep -Eq '^  push:' '$A/.github/workflows/image.yml' && ! grep -q ':latest' '$A/.github/workflows/image.yml'"
 check "계약 테스트 스크립트와 그 CI 가 따라온다 (문법 검사 통과)" bash -c "test -x '$A/scripts/test-deploy-contract.sh' && bash -n '$A/scripts/test-deploy-contract.sh' && test -f '$A/.github/workflows/deploy-contract.yml'"
+check "계약 스크립트의 secret_env / contract_env 는 자기를 부르지 않고 출력이 끝난다 (비밀 한 쌍, DB 세 쌍 + 비밀)" deploy_env_shape "$A/scripts/test-deploy-contract.sh"
 check "Dockerfile 은 APP 인자를 받는다 (api 가 기본)" has_line '^ARG APP=api' "$A/Dockerfile"
 check "배포 가드 · Redis 환경변수 테스트가 새 접두사로 찍힌다 — 접두사가 따라간다" bash -c "grep -rq 'skeleton.env\|ovation.env' '$A/modules/platform/src/test' && ! grep -rq 'SKELETON_' '$A/modules/platform/src/test' '$A/modules/auth/src/test'"
 check "소스 레포는 건드리지 않는다" bash -c "[ -z \"\$(find '$SRC' -newer '$MARKER' -type f -not -path '*/build/*' -not -path '*/.gradle/*' -not -path '*/.kotlin/*' -not -path '*/.git/*' -not -path '*/node_modules/*' 2>/dev/null | head -1)\" ]"
