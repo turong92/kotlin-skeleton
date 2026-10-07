@@ -850,6 +850,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 함께 골라야 한다: `storage-s3`
 - 설정 접두사 `skeleton.storage` — 키와 기본값 `docs/config/modules/storage.yml`
 - HTTP 경로: `/api/v1/storage`
+- 비밀 · 환경변수: `<P>_STORAGE_WEB_KEY_SECRET` — 빠지면: key-owner=OPAQUE 인데 비었거나 32자보다 짧으면 기동 실패 · 기본(ACCOUNT_ID)에서는 쓰지 않는다 · 무작위로 충분하지만 바꾸면 발급한 OPAQUE 키가 맞지 않게 된다
 - 문서: `docs/modules/storage.md`
 - 짝 프런트(react-skeleton): 항목 `storage` · 패키지 `@skeleton/storage` · 조각 `--packages storage`
 - 쓰지 않는 경우:

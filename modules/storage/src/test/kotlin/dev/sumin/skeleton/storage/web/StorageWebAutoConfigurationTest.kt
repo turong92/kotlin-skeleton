@@ -1,6 +1,8 @@
 package dev.sumin.skeleton.storage.web
 
 import dev.sumin.skeleton.storage.StorageAutoConfiguration
+import dev.sumin.skeleton.storage.StorageKeyOwnership
+import dev.sumin.skeleton.storage.StorageKeyScheme
 import dev.sumin.skeleton.storage.StorageProperties
 import dev.sumin.skeleton.storagetest.FakePresignedStorage
 import org.assertj.core.api.Assertions.assertThat
@@ -29,5 +31,31 @@ class StorageWebAutoConfigurationTest {
         runner.withBean(FakePresignedStorage::class.java, Supplier { FakePresignedStorage() })
             .withBean(StorageController::class.java, Supplier { StorageController(FakePresignedStorage(), dev.sumin.skeleton.storage.StorageFileValidator(dev.sumin.skeleton.storage.StorageFileValidationRule()), StorageProperties().web) })
             .run { context -> assertThat(context).hasSingleBean(StorageController::class.java) }
+    }
+
+    @Test
+    fun `a StorageKeyOwnership bean reflecting the key owner is registered even without a PresignedStorage`() {
+        runner.run { context -> assertThat(context).hasSingleBean(StorageKeyOwnership::class.java) }
+        runner.withPropertyValues("skeleton.storage.web.key-owner=OPAQUE", "skeleton.storage.web.key-secret=" + "s".repeat(40))
+            .run { context ->
+                val ownership = context.getBean(StorageKeyOwnership::class.java)
+                val key = StorageKeyScheme(context.getBean(StorageProperties::class.java).web).issue("acc_a", "f.png")
+                assertThat(ownership.owns("acc_a", key)).isTrue()
+                assertThat(ownership.owns("acc_b", key)).isFalse()
+            }
+    }
+
+    @Test
+    fun `an app StorageKeyOwnership replaces the default`() {
+        runner.withBean(StorageKeyOwnership::class.java, Supplier { StorageKeyOwnership { _, _ -> true } })
+            .run { context -> assertThat(context.getBean(StorageKeyOwnership::class.java).owns("x", "y")).isTrue() }
+    }
+
+    @Test
+    fun `opaque mode without a secret fails the startup`() {
+        runner.withPropertyValues("skeleton.storage.web.key-owner=OPAQUE")
+            .run { context -> assertThat(context).hasFailed() }
+        runner.withPropertyValues("skeleton.storage.web.key-owner=OPAQUE", "skeleton.storage.web.key-secret=short")
+            .run { context -> assertThat(context).hasFailed() }
     }
 }

@@ -1884,7 +1884,12 @@
         "snippet": "docs/config/modules/storage.yml"
       },
       "basePaths": ["/api/v1/storage"],
-      "secrets": [],
+      "secrets": [
+        {
+          "env": ["<P>_STORAGE_WEB_KEY_SECRET"],
+          "whenMissing": "key-owner=OPAQUE 인데 비었거나 32자보다 짧으면 기동 실패 · 기본(ACCOUNT_ID)에서는 쓰지 않는다 · 무작위로 충분하지만 바꾸면 발급한 OPAQUE 키가 맞지 않게 된다"
+        }
+      ],
       "docs": ["docs/modules/storage.md"],
       "frontend": {
         "capabilities": ["storage"],

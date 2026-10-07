@@ -116,3 +116,60 @@ class StorageWebDisabledTest {
             .andExpect(status().isNotFound)
     }
 }
+
+@SpringBootTest(
+    classes = [StorageWebTestApplication::class],
+    properties = [
+        "skeleton.storage.web.key-owner=OPAQUE",
+        "skeleton.storage.web.key-secret=0123456789abcdef0123456789abcdef-test",
+    ],
+)
+@AutoConfigureMockMvc
+class StorageWebOpaqueKeyTest {
+    @Autowired lateinit var mockMvc: MockMvc
+    @Autowired lateinit var storage: FakePresignedStorage
+
+    private fun caller(id: String) = TestingAuthenticationToken(id, "n/a", "ROLE_USER")
+
+    private fun postJson(path: String, body: String, accountId: String = "acc_a") =
+        mockMvc.perform(post(path).contentType(MediaType.APPLICATION_JSON).content(body).principal(caller(accountId)))
+
+    private fun issue(accountId: String = "acc_a"): String {
+        postJson("/api/v1/storage/presign", """{"fileName":"cat.png","contentType":"image/png","sizeBytes":5}""", accountId)
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.value.key").value(org.hamcrest.Matchers.matchesPattern("uploads/o/[0-9a-f-]{36}\\.[0-9a-f]{32}/cat\\.png")))
+        return storage.uploads.last().key.value
+    }
+
+    @Test
+    fun `presign issues an opaque key with no account id in it`() {
+        val key = issue()
+        assertTrue(!key.contains("acc_a"))
+    }
+
+    @Test
+    fun `the owner can use the key and another account gets the same 404 as for a missing key`() {
+        val key = issue()
+        postJson("/api/v1/storage/presign-download", """{"key":"$key"}""").andExpect(status().isOk)
+        postJson("/api/v1/storage/multipart/abort", """{"key":"$key","uploadId":"u"}""").andExpect(status().isOk)
+        postJson("/api/v1/storage/presign-download", """{"key":"$key"}""", "acc_b")
+            .andExpect(status().isNotFound)
+            .andExpect(jsonPath("$.code").value("STORAGE.OBJECT_NOT_FOUND"))
+    }
+
+    @Test
+    fun `a key with a tampered mac is 404`() {
+        val key = issue()
+        val seg = key.split('/')[2]
+        val bad = key.replace(seg, seg.dropLast(1) + (if (seg.last() == '0') '1' else '0'))
+        postJson("/api/v1/storage/presign-download", """{"key":"$bad"}""")
+            .andExpect(status().isNotFound)
+            .andExpect(jsonPath("$.code").value("STORAGE.OBJECT_NOT_FOUND"))
+    }
+
+    @Test
+    fun `an old account id key is still accepted for its owner`() {
+        postJson("/api/v1/storage/presign-download", """{"key":"uploads/acc_a/x/cat.png"}""").andExpect(status().isOk)
+        postJson("/api/v1/storage/presign-download", """{"key":"uploads/acc_a/x/cat.png"}""", "acc_b").andExpect(status().isNotFound)
+    }
+}

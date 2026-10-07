@@ -16,6 +16,7 @@ import dev.sumin.skeleton.storage.PresignedUploadRequest
 import dev.sumin.skeleton.storage.StartMultipartUploadRequest
 import dev.sumin.skeleton.storage.StorageFileCandidate
 import dev.sumin.skeleton.storage.StorageFileValidator
+import dev.sumin.skeleton.storage.StorageKeyScheme
 import dev.sumin.skeleton.storage.StorageWebProperties
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
@@ -24,7 +25,6 @@ import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotEmpty
 import java.time.Instant
-import java.util.UUID
 import org.springframework.http.HttpStatus
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.PostMapping
@@ -99,7 +99,7 @@ enum class StorageErrorCode(
  * 브라우저가 저장소로 직접 올리고 내려받는 길 — presign · 멀티파트 · 검증을 HTTP 로 연다.
  *
  * - 호출자는 `Authentication.name`(auth 모듈에서는 계정 id). 인증 없는 호출은 401.
- * - 키는 서버가 정한다: `<keyPrefix>/<호출자>/<uuid>/<파일 이름>`. 클라이언트가 보낸 키는 **자기 접두사 아래일 때만** 받는다
+ * - 키는 서버가 정한다: `<keyPrefix>/<호출자>/<uuid>/<파일 이름>` (`key-owner=OPAQUE` 면 `<keyPrefix>/o/<uuid>.<mac>/<파일 이름>` — [StorageKeyScheme]). 클라이언트가 보낸 키는 **자기 접두사 아래일 때만** 받는다
  *   (남의 키 · 접두사 밖은 없는 것과 같은 404).
  * - 업로드는 [StorageFileValidator] 를 통과해야 presign 한다(`STORAGE.FILE_REJECTED`, `data.errors` 에 사유).
  * - [dev.sumin.skeleton.storage.PresignedStorage] 빈이 있고(버킷 설정) `skeleton.storage.web.enabled` 가 꺼져 있지 않을 때
@@ -112,6 +112,7 @@ class StorageController(
     private val storage: PresignedStorage,
     private val validator: StorageFileValidator,
     private val web: StorageWebProperties,
+    private val keys: StorageKeyScheme = StorageKeyScheme(web),
 ) {
     @Operation(summary = "Check a file against the server's upload rules", description = "Never fails for a rejected file; answers valid=false with the reasons.")
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = StorageValidationResponse::class)
@@ -196,13 +197,11 @@ class StorageController(
     }
 
     private fun newKey(accountId: String, fileName: String): ObjectKey =
-        ObjectKey("${prefix(accountId)}${UUID.randomUUID()}/${safeFileName(fileName)}")
-
-    private fun prefix(accountId: String): String = "${web.keyPrefix.trim('/')}/$accountId/"
+        ObjectKey(keys.issue(accountId, safeFileName(fileName)))
 
     private fun ownedKey(accountId: String, raw: String): ObjectKey {
         val key = runCatching { ObjectKey(raw) }.getOrNull()
-        if (key == null || !key.value.startsWith(prefix(accountId))) {
+        if (key == null || !keys.owns(accountId, key.value)) {
             throw ApplicationException("Object not found: $raw", StorageErrorCode.OBJECT_NOT_FOUND)
         }
         return key

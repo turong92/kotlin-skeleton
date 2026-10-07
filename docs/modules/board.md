@@ -72,7 +72,7 @@ HTTP 는 `skeleton.board.http.base-path`(기본 `/api/v1/boards`)에 열린다 (
 - **수정에는 `authorId` 칸이 없다**(`PATCH` 본문의 모르는 칸은 조용히 무시된다). 운영자가 고쳐도, PUBLISHED ↔ DRAFT 를 오가도 `author_ref` 는 바뀌지 않는다.
 - 첨부: `AuthorIdentities` 가 있을 때 첨부 키에 **호출자 계정 id 가 들어 있으면** `400 BOARD.CONTENT_INVALID`(글 만들기 · 고치기 — 고칠 때는 **새로 붙는 키만** 본다: 글이 이미 가진 옛 키를 그대로 다시 보내면 통과). board 는 storage 를 모른 채 문자열 포함만 본다 — 계정 id 가 든 키가 공개 `attachments` 로 나가면 두 프로필의 글이 이어진다. 키에 계정 id 가 없게 만드는 쪽은 storage 의 몫이다.
 - 알림 payload 의 `authorId` 는 공개 id 다. 수신자(`recipientIds`)는 계정이다.
-- `BoardPolicy.canAttach` 의 기본 구현은 모든 키를 허용한다(접두사를 비교하지 않는다). 샘플 앱은 `BoardPolicy` 를 바꾸지 않는다.
+- `BoardPolicy.canAttach` 의 기본 구현은 모든 키를 허용한다(접두사를 비교하지 않는다). 샘플 앱은 아직 `BoardPolicy` 를 바꾸지 않는다 — `StorageKeyOwnership` 으로 켜는 것은 앱의 몫이다(아래 「앱이 바꾸는 곳」).
 - **알림 문구를 바꾸는 앱**(`BoardNotificationFormatter`): `notice.comment.authorId` 는 계정 id 다 — 문구에 넣으면 계정 id 가 **남의 편지함**에 영영 남는다. 작성자 id 가 필요하면 `notice.publicAuthorId`(필수 인자, 기본값 없음)를 쓴다.
 
 ## 반응 종류를 늘리는 법
@@ -83,7 +83,7 @@ HTTP 는 `skeleton.board.http.base-path`(기본 `/api/v1/boards`)에 열린다 (
 ## 앱이 바꾸는 곳
 
 - 누가 무엇을 하는지: `BoardPolicy` (기본: 작성자 · `moderator-role`). 상태 규칙(숨겨진 글엔 댓글 불가 등)은 서비스에 있다.
-- 첨부 키 검사: `BoardPolicy.canAttach` — 기본은 허용이다. 키 규칙은 앱의 저장소 설정이 안다. **`AuthorIdentities` 가 없을 때만** `storage` 의 키(`<접두사>/<계정 id>/…`)를 `startsWith` 한 줄로 막으면 된다. 있으면 키에 계정 id 가 없어야 하므로 `StorageKeyOwnership`(B4 에서 추가 예정)로 소유를 확인한다.
+- 첨부 키 검사: `BoardPolicy.canAttach` — 기본은 허용이다. 키 규칙은 앱의 저장소 설정이 안다. **`AuthorIdentities` 가 없을 때만** `storage` 의 키(`<접두사>/<계정 id>/…`)를 `startsWith` 한 줄로 막으면 된다. 있으면 키에 계정 id 가 없어야 하므로(`skeleton.storage.web.key-owner=OPAQUE`) `storage` 가 내는 `StorageKeyOwnership` 빈의 `owns(caller.accountId, key)` 로 소유를 확인한다 — `OPAQUE` 키는 접두사 비교가 안 되고, 이 빈은 `key-owner` 방식(옛 `ACCOUNT_ID` 꼴 포함)을 알아서 따른다. 예: `override fun canAttach(caller: BoardCaller, keys: List<String>) = keys.all { ownership.owns(caller.accountId, it) }` ([storage](storage.md)).
 - 글 · 댓글 텍스트: **HTML 은 해석하지 않는다.** 제어문자(줄바꿈 · 탭 제외) · 글자 방향 덮어쓰기 문자를 지우고 공백을 다듬어 저장하며, 그릴 때 클라이언트가 이스케이프한다.
 - 한도: `skeleton.board.rate-limit.enabled=true` 면 platform 의 `RateLimitStore`(redis-rate-limit 이 있으면 Redis)에 계정 · 동작별 고정 창. 한도 로직을 바꾸려면 `BoardRateLimiter`.
 - 알림 문구: `BoardNotificationFormatter` (제목 · 본문). 보내는 곳 자체는 `BoardNotifier`.

@@ -40,6 +40,7 @@ secrets:
   - SKELETON_CAPTCHA_TURNSTILE_SECRET_KEY                 # [captcha-turnstile] 운영자 (.local.env)
   - SKELETON_PAYMENT_TOSS_SECRET_KEY                      # [payment-toss] 운영자 (.local.env)
   - SKELETON_PAYMENT_STRIPE_SECRET_KEY                    # [payment-stripe] 운영자 (.local.env)
+  - SKELETON_STORAGE_WEB_KEY_SECRET                       # [storage] 무작위로 충분 — OPAQUE 첨부 키의 HMAC 키(key-owner=OPAQUE 일 때만 필요, 안 쓰면 이 줄을 지운다; 바꾸면 발급한 OPAQUE 키가 맞지 않게 된다)
   - SKELETON_STORAGE_S3_CREDENTIALS_ACCESS_KEY_ID         # [storage-s3] 운영자 (.local.env)
   - SKELETON_STORAGE_S3_CREDENTIALS_SECRET_ACCESS_KEY     # [storage-s3] 운영자 (.local.env)
   - SPRING_MAIL_PASSWORD                                  # [notification-mail] 운영자 (.local.env) — 인증 없는 릴레이면 이 줄을 지운다
@@ -59,6 +60,7 @@ secrets:
 #   [captcha-turnstile] (env:) SKELETON_CAPTCHA_TURNSTILE_ENABLED=true   비밀(secret key)이 비면 검증기 빈이 없다 (기동은 된다)
 #   [payment-toss] (env:) SKELETON_PAYMENT_TOSS_ENABLED=true   비밀이 비면 제공자 빈이 없다 (결제 라우팅이 그 제공자를 못 찾는다)
 #   [payment-stripe] (env:) SKELETON_PAYMENT_STRIPE_ENABLED=true   비밀이 비면 제공자 빈이 없다
+#   [storage] SKELETON_STORAGE_WEB_KEY_SECRET   key-owner=OPAQUE 인데 비었거나 32자보다 짧으면 기동 실패 (기본 ACCOUNT_ID 에서는 쓰지 않는다)
 #   [storage-s3] (env:) SKELETON_STORAGE_S3_BUCKET · _ENDPOINT_OVERRIDE   버킷이 비면 저장소 빈이 없다 · 키가 비면 AWS 기본 자격 증명 체인으로 가서 첫 사용에서 실패 (기동은 된다)
 #   [notification-mail] (env:) SKELETON_NOTIFICATION_MAIL_ENABLED=true · _FROM · SPRING_MAIL_HOST · SPRING_MAIL_USERNAME   host · from 이 비면 발송기 빈이 없다 · 비밀번호가 틀리면 첫 발송에서 실패
 #   [notification-slack] (env:) SKELETON_NOTIFICATION_SLACK_ENABLED=true   웹훅 URL 이 비면 아무것도 보내지 않는다

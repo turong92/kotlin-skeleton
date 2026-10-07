@@ -12,4 +12,9 @@ class StorageAutoConfiguration {
     @ConditionalOnMissingBean
     fun storageFileValidator(properties: StorageProperties): StorageFileValidator =
         StorageFileValidator(properties.validation)
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun storageKeyOwnership(properties: StorageProperties): StorageKeyOwnership =
+        StorageKeyScheme(properties.web)
 }
