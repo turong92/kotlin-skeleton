@@ -201,6 +201,56 @@ class JdbcErasureDbTest {
     }
 
     @Test
+    fun `claiming the erasure needs the same condition as erasing, can be repeated, and freezes the status against restore and status updates`() {
+        leaving("acc_wait", "w@example.com", purgeAfter = due)
+        assertFalse(repo.claimErasure("acc_wait", now), "grace not over")
+        assertFalse(repo.claimErasure("acc_missing", now))
+
+        leaving("acc_1", "c@example.com", purgeAfter = now.plusSeconds(1))
+        assertTrue(repo.claimErasure("acc_1", now.plusSeconds(5)))
+        assertTrue(repo.claimErasure("acc_1", now.plusSeconds(6)), "a retry after a failed listener claims again")
+        assertFalse(repo.restore("acc_1", AccountStatus.ACTIVE, now), "a clock that still sees the grace running cannot win any more")
+        assertNull(repo.update("acc_1", AccountPatch(status = AccountStatus.ACTIVE), now))
+        assertEquals(GuardedResult.NOT_FOUND, repo.updateUnlessLast("acc_1", AccountPatch(status = AccountStatus.SUSPENDED), now, "ADMIN"))
+        assertEquals("Ann Kim", repo.update("acc_1", AccountPatch(displayName = "Ann Kim"), now)!!.displayName, "plain profile writes are not a status change")
+        assertEquals(AccountStatus.DELETED, repo.findById("acc_1")!!.status)
+
+        assertTrue(repo.erase("acc_1", now.plusSeconds(10)))
+        assertEquals(AccountStatus.ERASED, repo.findById("acc_1")!!.status)
+        assertEquals(0, jdbc.queryForObject("select count(*) from accounts where erase_claimed_at is not null", emptyMap<String, Any>(), Int::class.java), "the claim mark goes with the erasure")
+    }
+
+    @Test
+    fun `an administrator's forced claim needs a suspended account and stops an unsuspend`() {
+        leaving("acc_1", "c@example.com")
+        jdbc.update("update accounts set status = 'SUSPENDED', deleted_at = null, purge_after = null where id = 'acc_1'", emptyMap<String, Any>())
+        assertFalse(repo.claimErasure("acc_1", now), "not forced: only a deleted account past its grace")
+        assertTrue(repo.claimErasure("acc_1", now, forced = true))
+        assertNull(repo.update("acc_1", AccountPatch(status = AccountStatus.ACTIVE, clearSuspendedReason = true), now))
+        assertEquals(AccountStatus.SUSPENDED, repo.findById("acc_1")!!.status)
+    }
+
+    @Test
+    fun `a claim racing a restore that reads a slower clock has exactly one winner, and the loser leaves no trace`() {
+        val pool = Executors.newFixedThreadPool(8)
+        try {
+            repeat(20) { round ->
+                val id = "acc_claim_$round"
+                leaving(id, "claim$round@example.com", purgeAfter = now.plusSeconds(1))
+                val go = CountDownLatch(1)
+                val restoreWon = AtomicInteger(); val claimWon = AtomicInteger()
+                val jobs = (1..4).map { pool.submit { go.await(); if (repo.restore(id, AccountStatus.ACTIVE, now)) restoreWon.incrementAndGet() } } +
+                    (1..4).map { pool.submit { go.await(); if (repo.claimErasure(id, now.plusSeconds(5))) claimWon.incrementAndGet() } }
+                go.countDown(); jobs.forEach { it.get() }
+                // 선점은 되살리기가 이기기 전에만 성공한다 · 되살리기는 선점 전에만 — 둘 중 하나, 그리고 그 하나가 끝까지 간다
+                assertTrue(restoreWon.get() == 1 && claimWon.get() == 0 || restoreWon.get() == 0 && claimWon.get() == 4, "round $round: restore=${restoreWon.get()} claim=${claimWon.get()}")
+                val status = repo.findById(id)!!.status
+                assertEquals(if (restoreWon.get() == 1) AccountStatus.ACTIVE else AccountStatus.DELETED, status)
+            }
+        } finally { pool.shutdown() }
+    }
+
+    @Test
     fun `the admin search leaves erased accounts out unless the status is asked for`() {
         leaving("acc_gone", "gone@example.com"); repo.erase("acc_gone", now)
         assertTrue(repo.insert(Account("acc_live", "live@example.com", true, AccountStatus.ACTIVE, setOf("USER"), null, null, null, now, now), emptyList()))

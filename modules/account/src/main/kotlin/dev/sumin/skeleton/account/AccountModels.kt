@@ -170,7 +170,14 @@ interface AccountRepository {
     /** [role] 을 회수하되 그 역할의 마지막 ACTIVE 보유자면 하지 않는다 — [updateUnlessLast] 와 같은 원자성 */
     fun revokeRoleUnlessLast(id: String, role: String, now: Instant): GuardedResult
 
-    /** 삭제 유예가 **아직 안 끝난** DELETED 계정을 [status] 로 되살린다 (한 문장 조건부 갱신 — [purge] 와 동시에 둘 다 이기지 못한다). 되살렸으면 true */
+    /**
+     * 지우기를 **선점**한다 — 리스너(다른 모듈의 지우기)를 부르기 **전에** 부른다. [purge] · [erase] 와 같은 조건(DELETED + 유예 끝남, [forced] 면 SUSPENDED)을 계정 행 락 안에서 보고
+     * 맞으면 선점 표시를 남기고 true. 선점된 계정은 [restore] 와 **상태를 바꾸는** [update] · [updateUnlessLast] 가 거절한다 — 유예 경계에서 시계가 어긋난 취소가 이겨서
+     * 계정은 ACTIVE 인데 board 톰스톤 · 받은편지함 삭제는 이미 실행된 상태가 되지 않게. 이미 선점한 계정에 다시 불러도 true (리스너가 실패해 다음 주기에 다시 한다). 조건이 안 맞으면 false.
+     */
+    fun claimErasure(id: String, now: Instant, forced: Boolean = false): Boolean
+
+    /** 삭제 유예가 **아직 안 끝난** DELETED 계정을 [status] 로 되살린다 (한 문장 조건부 갱신 — [purge] 와 동시에 둘 다 이기지 못한다; [claimErasure] 된 계정은 안 된다). 되살렸으면 true */
     fun restore(id: String, status: AccountStatus, now: Instant): Boolean
 
     /** 계정과 그 수단 · 역할을 지운다(`deletion.mode=DELETE`) — **DELETED 이고 유예가 [now] 까지 끝난 계정만** (되살려진 계정을 지우지 않게). 지웠으면 true */

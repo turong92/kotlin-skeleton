@@ -121,7 +121,9 @@ class AccountPurgeService(
         val current = core.accounts.findById(account.id)
         if (current == null || current.status != AccountStatus.DELETED || current.purgeAfter?.isAfter(now) != false) return false
         val keep = core.props.deletion.mode == AccountProperties.Deletion.Mode.ANONYMIZE
-        val request = ErasureRequest(account.id, AccountTombstone.of(account.id), accountKept = keep)
+        val request = ErasureRequest(account.id, AccountTombstone.of(account.id))
+        // 리스너를 부르기 **전에** 선점한다 — 유예 경계에서 취소가 이겨서 계정은 ACTIVE 인데 톰스톤 · 받은편지함 삭제가 이미 실행된 상태가 되지 않게 (선점되면 되살리기 · 상태 변경이 거절된다)
+        if (!core.accounts.claimErasure(account.id, now)) return false
         if (!runListeners(request)) return false
         core.closeSensitiveLinks(current)   // 저장소가 토큰을 같이 지우지 못하는 구현(메모리 · 앱 구현)을 위해
         val done = if (keep) core.accounts.erase(account.id, now) else core.accounts.purge(account.id, now)
@@ -139,7 +141,7 @@ class AccountPurgeService(
 
     /**
      * 운영자가 **정지된** 계정을 유예 없이 지운다 — 같은 고리들을 부르고, 이메일 · 로그인 수단의 재가입 차단(해시)을 남기고, 계정을 지운다(`deletion.mode` 대로).
-     * 정지가 아니면 [AccountErrorCode.NOT_SUSPENDED], 이미 지웠으면 [AccountErrorCode.ERASED]. 고리가 실패하면 예외 — 계정은 그대로이고 다시 부르면 된다 (멱등).
+     * 정지가 아니면 [AccountErrorCode.NOT_SUSPENDED], 이미 지웠으면 [AccountErrorCode.ERASED]. 고리가 실패하면 [AccountErrorCode.ERASURE_RETRY](503) — 계정은 정지 그대로이고 다시 부르면 된다 (멱등).
      */
     fun eraseSuspended(actorId: String, accountId: String, reason: String?): Boolean {
         if (actorId == accountId) throw AccountException(AccountErrorCode.SELF_ACTION_FORBIDDEN)
@@ -148,7 +150,9 @@ class AccountPurgeService(
         if (account.status != AccountStatus.SUSPENDED) throw AccountException(AccountErrorCode.NOT_SUSPENDED)
         val identities = core.accounts.identitiesOf(accountId)
         val keep = core.props.deletion.mode == AccountProperties.Deletion.Mode.ANONYMIZE
-        check(runListeners(ErasureRequest(accountId, AccountTombstone.of(accountId), accountKept = keep))) { "an erasure listener failed; the account was left as it was" }
+        // 선점 — 그 사이 다른 운영자가 정지를 풀었다면 이미 정지가 아니다. 선점한 뒤에는 정지 해제가 거절된다
+        if (!core.accounts.claimErasure(accountId, core.time.now(), forced = true)) throw AccountException(AccountErrorCode.NOT_SUSPENDED)
+        if (!runListeners(ErasureRequest(accountId, AccountTombstone.of(accountId)))) throw AccountException(AccountErrorCode.ERASURE_RETRY)
         core.blocks.add(account, identities, reason, actorId)   // 지우기 전에 — 지운 뒤에는 이메일 · 주체를 알 수 없다
         core.closeSensitiveLinks(account)
         val now = core.time.now()

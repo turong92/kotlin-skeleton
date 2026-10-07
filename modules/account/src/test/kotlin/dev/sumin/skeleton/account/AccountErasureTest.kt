@@ -136,17 +136,6 @@ class AccountErasureTest {
     }
 
     @Test
-    fun `the erasure request tells listeners whether the account row stays`() {
-        val seen = mutableListOf<ErasureRequest>()
-        for (mode in AccountProperties.Deletion.Mode.entries) {
-            val h = harness(mode)
-            h.erasers += object : AccountErasureListener { override val name = "x"; override fun erase(request: ErasureRequest) { seen += request } }
-            h.leave(); h.purge.purgeDue()
-        }
-        assertEquals(listOf(true, false), seen.map { it.accountKept })
-    }
-
-    @Test
     fun `purging twice is harmless - the second run finds nothing and calls no listener`() {
         val h = harness()
         var calls = 0

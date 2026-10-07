@@ -83,7 +83,8 @@ class JdbcAccountRepository(
             patch.purgeAfter?.let { sets += "purge_after = :purge"; p.addValue("purge", dialect.instantParam(it)) }
         }
         // ERASED 행에는 아무것도 다시 쓰지 않는다 — 지운 뒤 도착한 옛 토큰의 프로필 갱신 · 지우기와 겹친 정지 해제가 개인정보나 상태를 되살리지 못하게
-        val n = jdbc.update("update accounts set ${sets.joinToString(", ")} where id = :id and status <> 'ERASED'", p)
+        // 지우기를 선점한 계정([claimErasure])의 상태는 바꾸지 않는다
+        val n = jdbc.update("update accounts set ${sets.joinToString(", ")} where id = :id and status <> 'ERASED'" + if (patch.status != null) " and erase_claimed_at is null" else "", p)
         return if (n == 0) null else findById(id)
     }
 
@@ -212,7 +213,7 @@ class JdbcAccountRepository(
             scrub(id, email, now)
             jdbc.update(
                 "update accounts set email = null, email_verified = false, status = 'ERASED', display_name = null, locale = null, time_zone = null, " +
-                    "suspended_reason = null, last_login_at = null, purge_after = null, erased_at = :now, updated_at = :now where id = :id",
+                    "suspended_reason = null, last_login_at = null, purge_after = null, erase_claimed_at = null, erased_at = :now, updated_at = :now where id = :id",
                 p,
             )
             true
@@ -240,10 +241,16 @@ class JdbcAccountRepository(
         jdbc.update("update account_audit set ip = null, detail = null where account_id = :id", p)
     }
 
+    override fun claimErasure(id: String, now: Instant, forced: Boolean): Boolean =
+        tx.execute {
+            lockEligible(id, now, forced) ?: return@execute false
+            jdbc.update("update accounts set erase_claimed_at = :now where id = :id", MapSqlParameterSource().addValue("id", id).addValue("now", dialect.instantParam(now))) == 1
+        } ?: false
+
     override fun restore(id: String, status: AccountStatus, now: Instant): Boolean =
         jdbc.update(
             "update accounts set status = :status, deleted_at = null, purge_after = null, updated_at = :now " +
-                "where id = :id and status = 'DELETED' and purge_after is not null and purge_after > :now",
+                "where id = :id and status = 'DELETED' and purge_after is not null and purge_after > :now and erase_claimed_at is null",
             MapSqlParameterSource().addValue("id", id).addValue("status", status.name).addValue("now", dialect.instantParam(now)),
         ) == 1
 
@@ -253,8 +260,7 @@ class JdbcAccountRepository(
             if (jdbc.query("select id from accounts where id = :id and status <> 'ERASED'", mapOf("id" to id)) { rs, _ -> rs.getString(1) }.isEmpty()) return@execute GuardedResult.NOT_FOUND
             val leavesActive = patch.status != null && patch.status != AccountStatus.ACTIVE
             if (leavesActive && id in holders && holders.size <= 1) return@execute GuardedResult.LAST
-            update(id, patch, now)
-            GuardedResult.DONE
+            if (update(id, patch, now) == null) GuardedResult.NOT_FOUND else GuardedResult.DONE
         } ?: GuardedResult.NOT_FOUND
 
     override fun revokeRoleUnlessLast(id: String, role: String, now: Instant): GuardedResult =

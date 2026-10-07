@@ -17,7 +17,8 @@ create table if not exists accounts (
     suspended_reason varchar(200),
     deleted_at       datetime(6),
     purge_after      datetime(6),                            -- 삭제 유예가 끝나 지워질 시각
-    erased_at        datetime(6)                             -- 개인정보를 지운 시각 (ERASED). 이때 email · display_name · locale · time_zone · suspended_reason · last_login_at 은 NULL
+    erased_at        datetime(6),                            -- 개인정보를 지운 시각 (ERASED). 이때 email · display_name · locale · time_zone · suspended_reason · last_login_at 은 NULL
+    erase_claimed_at datetime(6)                             -- 지우기를 선점한 시각 — 선점된 계정은 되살리기 · 상태 변경이 안 된다 (리스너를 부르기 전에 잡는다)
     /* [jooq ignore start] */,
     index idx_accounts_due (status, purge_after)
     /* [jooq ignore stop] */

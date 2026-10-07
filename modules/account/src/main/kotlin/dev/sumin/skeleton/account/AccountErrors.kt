@@ -30,6 +30,7 @@ enum class AccountErrorCode(
     REGISTRATION_BLOCKED("ACCOUNT.REGISTRATION_BLOCKED", HttpStatus.FORBIDDEN, "This email or sign-in account cannot be used to register"),
     NOT_SUSPENDED("ACCOUNT.NOT_SUSPENDED", HttpStatus.CONFLICT, "Only a suspended account can be erased by an administrator"),
     ERASED("ACCOUNT.ERASED", HttpStatus.GONE, "The account was erased and cannot be used or restored"),
+    ERASURE_RETRY("ACCOUNT.ERASURE_RETRY", HttpStatus.SERVICE_UNAVAILABLE, "Erasing failed for now; the account was left as it was - try again"),
     RATE_LIMITED("ACCOUNT.RATE_LIMITED", HttpStatus.TOO_MANY_REQUESTS, "Too many requests"),
     METHOD_UNKNOWN("ACCOUNT.METHOD_UNKNOWN", HttpStatus.BAD_REQUEST, "Unknown sign-in method"),
     CODE_INVALID("ACCOUNT.CODE_INVALID", HttpStatus.BAD_REQUEST, "The code is wrong"),

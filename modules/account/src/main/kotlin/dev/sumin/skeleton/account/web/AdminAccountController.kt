@@ -1,6 +1,8 @@
 package dev.sumin.skeleton.account.web
 
 import dev.sumin.skeleton.account.Account
+import dev.sumin.skeleton.account.AccountErrorCode
+import dev.sumin.skeleton.account.AccountException
 import dev.sumin.skeleton.account.AccountStatus
 import dev.sumin.skeleton.account.AccountPurgeService
 import dev.sumin.skeleton.account.AdminService
@@ -74,11 +76,13 @@ class AdminAccountController(private val callers: AccountCallers, private val ad
 
     @Operation(
         summary = "Erase a SUSPENDED account at once (no grace): personal data goes, the row stays as ERASED, and a hash-only re-registration block is kept",
-        description = "409 ACCOUNT.NOT_SUSPENDED for any other status, 410 ACCOUNT.ERASED when it is already erased, 409 ACCOUNT.SELF_ACTION_FORBIDDEN for yourself.",
+        description = "409 ACCOUNT.NOT_SUSPENDED for any other status (also when it changed meanwhile), 410 ACCOUNT.ERASED when it is already erased, 409 ACCOUNT.SELF_ACTION_FORBIDDEN for yourself, " +
+            "503 ACCOUNT.ERASURE_RETRY when another module's erasure failed (the account is left as it was - call again).",
     )
     @PostMapping("/{id}/erase")
     fun erase(authentication: Authentication?, @PathVariable id: String, @Valid @RequestBody(required = false) request: AdminEraseRequest?): ResponseEntity<Void> {
-        purge.eraseSuspended(callers.requireAdmin(authentication).accountId, id, request?.reason)
+        // 지워지지 않았다면(그 사이 상태가 바뀜) 204 로 거짓말하지 않는다
+        if (!purge.eraseSuspended(callers.requireAdmin(authentication).accountId, id, request?.reason)) throw AccountException(AccountErrorCode.NOT_SUSPENDED)
         return Response.noContent()
     }
 

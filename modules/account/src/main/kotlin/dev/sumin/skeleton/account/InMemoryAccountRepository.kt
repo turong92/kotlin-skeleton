@@ -9,6 +9,7 @@ import java.time.Instant
 class InMemoryAccountRepository : AccountRepository {
     private val accounts = LinkedHashMap<String, Account>()
     private val identities = LinkedHashMap<String, Identity>()
+    private val claimed = HashSet<String>()   // 지우기를 선점한 계정 ([claimErasure])
 
     @Synchronized override fun insert(account: Account, identities: List<Identity>): Boolean {
         if (account.id in accounts) return false
@@ -28,6 +29,7 @@ class InMemoryAccountRepository : AccountRepository {
 
     @Synchronized override fun update(id: String, patch: AccountPatch, now: Instant): Account? {
         val a = accounts[id]?.takeIf { it.status != AccountStatus.ERASED } ?: return null   // 지운 행에는 아무것도 다시 쓰지 않는다
+        if (patch.status != null && id in claimed) return null                              // 지우기를 선점한 계정의 상태는 바꾸지 않는다
         val updated = a.copy(
             displayName = patch.displayName ?: a.displayName,
             locale = patch.locale ?: a.locale,
@@ -113,6 +115,7 @@ class InMemoryAccountRepository : AccountRepository {
         val a = accounts[id] ?: return false
         if (!eligible(a, now, forced)) return false
         identities.values.removeIf { it.accountId == id }
+        claimed.remove(id)
         return accounts.remove(id) != null
     }
 
@@ -123,6 +126,7 @@ class InMemoryAccountRepository : AccountRepository {
         val a = accounts[id] ?: return false
         if (!eligible(a, now, forced)) return false
         identities.values.removeIf { it.accountId == id }
+        claimed.remove(id)
         accounts[id] = a.copy(
             email = null, emailVerified = false, status = AccountStatus.ERASED, roles = emptySet(), displayName = null, locale = null, timeZone = null,
             lastLoginAt = null, suspendedReason = null, purgeAfter = null, erasedAt = now, updatedAt = now,
@@ -130,8 +134,16 @@ class InMemoryAccountRepository : AccountRepository {
         return true
     }
 
+    @Synchronized override fun claimErasure(id: String, now: Instant, forced: Boolean): Boolean {
+        val a = accounts[id] ?: return false
+        if (!eligible(a, now, forced)) return false
+        claimed += id
+        return true
+    }
+
     @Synchronized override fun restore(id: String, status: AccountStatus, now: Instant): Boolean {
         val a = accounts[id] ?: return false
+        if (id in claimed) return false
         if (a.status != AccountStatus.DELETED || a.purgeAfter == null || !a.purgeAfter.isAfter(now)) return false
         accounts[id] = a.copy(status = status, deletedAt = null, purgeAfter = null, updatedAt = now)
         return true
@@ -141,7 +153,7 @@ class InMemoryAccountRepository : AccountRepository {
         val a = accounts[id]?.takeIf { it.status != AccountStatus.ERASED } ?: return GuardedResult.NOT_FOUND
         val leavesActive = patch.status != null && patch.status != AccountStatus.ACTIVE
         if (leavesActive && a.status == AccountStatus.ACTIVE && guardRole in a.roles && countActiveWithRole(guardRole) <= 1) return GuardedResult.LAST
-        update(id, patch, now)
+        if (update(id, patch, now) == null) return GuardedResult.NOT_FOUND
         return GuardedResult.DONE
     }
 
