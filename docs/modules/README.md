@@ -30,6 +30,7 @@
 | `storage-s3` | S3 / R2 저장소 (presign · 서버 업로드) | [storage-s3](storage-s3.md) |
 | `board` | 게시판: 글 · 댓글 트리(대댓글) · 설정으로 늘리는 반응 종류, 운영자 숨김 · 고정, 댓글 알림 | [board](board.md) |
 | `board-jdbc` | 게시판 저장소 (PostgreSQL · MySQL) | [board-jdbc](board-jdbc.md) |
+| `author-profile` | 작성자 프로필: 한 계정이 닉네임 여러 개를 글 · 댓글마다 골라 쓴다 (서로 이어지지 않게), 첫 프로필 넘겨받기 | [author-profile](author-profile.md) |
 | `legal` | 약관 · 개인정보 처리방침 · 동의 기록: 판 · 시행일 · 해시 못 박기 · 가입 동의 · 철회 · 재동의 (문서는 앱이 싣는다, 예시 TEMPLATE 은 prod 에서 막는다) | [legal](legal.md) |
 | `legal-jdbc` | 약관 · 동의 저장소 (PostgreSQL · MySQL, 더하기만 하는 트리거) | [legal-jdbc](legal-jdbc.md) |
 | `payment` | 결제 계약 · 제공자 라우팅 | [payment](payment.md) |
