@@ -96,3 +96,9 @@ create table if not exists account_blocks (
     index idx_account_blocks_expires (expires_at)
     /* [jooq ignore stop] */
 );
+
+-- 주기 정리를 인스턴스 하나만 하게 하는 짧은 임대 (이름 하나에 한 줄). locked_until 이 지나면 누구나 가져간다
+create table if not exists account_locks (
+    name         varchar(64) primary key,
+    locked_until datetime(6) not null
+);

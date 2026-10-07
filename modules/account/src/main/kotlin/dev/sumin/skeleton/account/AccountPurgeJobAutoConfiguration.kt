@@ -24,7 +24,11 @@ class AccountPurgeJobHandler(private val purge: AccountPurgeService) : JobHandle
 class AccountPurgeJobAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(AccountPurgeDispatch::class)
-    fun accountPurgeJobDispatch(queue: JobQueue): AccountPurgeDispatch = AccountPurgeDispatch { queue.enqueue(AccountPurgeJobHandler.TYPE, "{}") }
+    fun accountPurgeJobDispatch(queue: JobQueue, lease: AccountMaintenanceLease, properties: AccountProperties): AccountPurgeDispatch {
+        // 인스턴스마다 틱이 돌므로 한 주기에 한 인스턴스만 잡을 넣는다 (임대 = 주기의 80% — 틱 위상이 달라도 한 주기에 하나)
+        val ttl = properties.deletion.purgeInterval.multipliedBy(8).dividedBy(10).coerceAtLeast(java.time.Duration.ofSeconds(1))
+        return AccountPurgeDispatch { if (lease.tryAcquire(MaintenanceLeases.PURGE_DISPATCH, ttl)) queue.enqueue(AccountPurgeJobHandler.TYPE, "{}") }
+    }
 
     @Bean
     @ConditionalOnMissingBean(name = ["accountPurgeJobHandler"])

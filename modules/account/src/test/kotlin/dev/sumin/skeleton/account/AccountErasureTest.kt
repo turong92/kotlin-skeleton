@@ -206,4 +206,41 @@ class AccountErasureTest {
         assertEquals(AccountStatus.ACTIVE, h.repo.findById(a.id)!!.status)
         assertEquals("ann@example.com", h.repo.findById(a.id)!!.email)
     }
+
+    @Test
+    fun `two overlapping purge runs do not both erase - the second one is skipped while the first holds the lease`() {
+        val h = harness()
+        h.leave()
+        val inside = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        var calls = 0
+        h.erasers += object : AccountErasureListener {
+            override val name = "slow"
+            override fun erase(request: ErasureRequest) { calls++; inside.countDown(); release.await() }
+        }
+        val first = java.util.concurrent.Executors.newSingleThreadExecutor()
+        try {
+            val running = first.submit<Int> { h.purge.purgeDue() }
+            inside.await()
+            assertEquals(0, h.purge.purgeDue(), "skipped: another run is in progress")
+            release.countDown()
+            assertEquals(1, running.get())
+            assertEquals(1, calls)
+            assertEquals(0, h.purge.purgeDue(), "the lease was released when the first run ended")
+        } finally { release.countDown(); first.shutdown() }
+    }
+
+    @Test
+    fun `expired codes and tokens stay for the configured retention and the cleanup then removes them - expiry itself is enforced when they are read`() {
+        val h = AccountHarness(AccountProperties(cleanup = AccountProperties.Cleanup(expiredRetention = Duration.ofDays(3)), password = AccountProperties.Password(bcryptStrength = 4)))
+        val raw = h.tokens.issue(dev.sumin.skeleton.account.token.TokenPurposes.PASSWORD_RESET, "x@example.com", null, Duration.ofMinutes(30))
+        val hash = dev.sumin.skeleton.account.token.OneTimeTokens.hash(raw)
+        h.time.advance(Duration.ofDays(2))
+        h.purge.purgeDue()
+        assertNotNull(h.tokenStore.find(hash), "inside the retention the row stays")
+        assertNull(h.tokens.consume(dev.sumin.skeleton.account.token.TokenPurposes.PASSWORD_RESET, raw), "but it can never be used: expiry is checked on read")
+        h.time.advance(Duration.ofDays(2))
+        h.purge.purgeDue()
+        assertNull(h.tokenStore.find(hash), "past the retention the cleanup removes it")
+    }
 }

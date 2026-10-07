@@ -92,8 +92,13 @@ class AccountPurgeService(
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
-    /** 이번에 정리한 계정 수 */
+    /** 이번에 정리한 계정 수. 다른 실행이 임대를 쥐고 있으면(여러 인스턴스 · 겹친 실행) 아무것도 하지 않고 0 */
     fun purgeDue(): Int {
+        if (!core.lease.tryAcquire(MaintenanceLeases.PURGE_RUN, MaintenanceLeases.RUN_TTL)) return 0
+        try { return purgeDueLocked() } finally { core.lease.release(MaintenanceLeases.PURGE_RUN) }
+    }
+
+    private fun purgeDueLocked(): Int {
         val due = core.accounts.dueForPurge(core.time.now(), core.props.deletion.purgeBatch)
         var purged = 0
         for (account in due) {

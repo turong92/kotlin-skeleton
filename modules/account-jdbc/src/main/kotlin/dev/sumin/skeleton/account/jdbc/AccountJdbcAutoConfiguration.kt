@@ -2,6 +2,9 @@ package dev.sumin.skeleton.account.jdbc
 
 import dev.sumin.skeleton.account.AccountAutoConfiguration
 import dev.sumin.skeleton.account.AccountBlockStore
+import dev.sumin.skeleton.account.AccountMaintenanceLease
+import dev.sumin.skeleton.common.time.TimeProvider
+import org.springframework.beans.factory.ObjectProvider
 import dev.sumin.skeleton.account.AccountRepository
 import dev.sumin.skeleton.account.AccountTransaction
 import dev.sumin.skeleton.account.challenge.ChallengeStore
@@ -50,6 +53,12 @@ class AccountJdbcAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(ChallengeStore::class)
     fun jdbcChallengeStore(dataSource: DataSource, dialect: SqlDialect): ChallengeStore = JdbcChallengeStore(NamedParameterJdbcTemplate(dataSource), dialect)
+
+    /** 여러 인스턴스 중 하나만 주기 정리를 하게 하는 DB 임대 — 인스턴스마다 잡이 쌓이지 않는다 */
+    @Bean
+    @ConditionalOnMissingBean(AccountMaintenanceLease::class)
+    fun jdbcAccountMaintenanceLease(dataSource: DataSource, dialect: SqlDialect, time: ObjectProvider<TimeProvider>): AccountMaintenanceLease =
+        JdbcAccountMaintenanceLease(NamedParameterJdbcTemplate(dataSource), dialect, time.getIfAvailable { TimeProvider.systemUtc() })
 
     @Bean
     @ConditionalOnMissingBean(AccountBlockStore::class)

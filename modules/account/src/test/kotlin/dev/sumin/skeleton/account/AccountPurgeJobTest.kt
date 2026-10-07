@@ -40,6 +40,15 @@ class AccountPurgeJobTest {
     }
 
     @Test
+    fun `several app instances ticking in the same interval pile up one job, not one each`() {
+        runner.withUserConfiguration(Queue::class.java).withPropertyValues("skeleton.account.deletion.purge-interval=1h").run { ctx ->
+            val dispatch = ctx.getBean(AccountPurgeDispatch::class.java)
+            repeat(5) { dispatch.dispatch() }   // five instances' ticks (they share the lease, which in production is a database row)
+            assertEquals(listOf("account-purge"), (ctx.getBean(JobQueue::class.java) as RecordingQueue).enqueued)
+        }
+    }
+
+    @Test
     fun `without a job queue the tick purges directly`() {
         runner.run { ctx ->
             assertTrue(ctx.getBeansOfType(JobHandler::class.java).isEmpty())

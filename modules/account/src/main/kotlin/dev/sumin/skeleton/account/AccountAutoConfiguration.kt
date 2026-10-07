@@ -88,6 +88,10 @@ class AccountAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnMissingBean(AccountMaintenanceLease::class)
+    fun inMemoryAccountMaintenanceLease(time: ObjectProvider<TimeProvider>): AccountMaintenanceLease = InMemoryAccountMaintenanceLease(time.getIfAvailable { TimeProvider.systemUtc() })
+
+    @Bean
     @ConditionalOnMissingBean(OneTimeTokenStore::class)
     fun inMemoryOneTimeTokenStore(): OneTimeTokenStore = InMemoryOneTimeTokenStore()
 
@@ -237,10 +241,11 @@ class AccountAutoConfiguration {
         consents: ObjectProvider<dev.sumin.skeleton.common.consent.SignUpConsentGate>,
         atomic: ObjectProvider<AccountTransaction>,
         blocks: AccountBlocks,
+        lease: AccountMaintenanceLease,
     ): AccountCore = AccountCore(
         accounts, properties, time.getIfAvailable { TimeProvider.systemUtc() }, events, hasher, policy, tokens, mailer, links, tasks, limits, captcha,
         { sessions.getIfAvailable() }, bootstrap, challenges, { socialReauth.getIfAvailable() },
-        { consents.getIfAvailable() }, atomic.getIfAvailable { AccountTransaction.NONE }, blocks,
+        { consents.getIfAvailable() }, atomic.getIfAvailable { AccountTransaction.NONE }, blocks, lease,
     )
 
     @Bean

@@ -77,3 +77,9 @@ create table if not exists account_blocks (
     account_id varchar(40)                                  -- 지워진(ERASED) 계정 행. FK 없음 — DELETE 모드에서도 남는다
 );
 create index if not exists idx_account_blocks_expires on account_blocks (expires_at);
+
+-- 주기 정리를 인스턴스 하나만 하게 하는 짧은 임대 (이름 하나에 한 줄). locked_until 이 지나면 누구나 가져간다
+create table if not exists account_locks (
+    name         varchar(64) primary key,
+    locked_until timestamptz not null
+);

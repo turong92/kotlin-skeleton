@@ -47,6 +47,8 @@ class AccountCore(
     val atomic: AccountTransaction = AccountTransaction.NONE,
     /** 운영자가 지운 정지 계정의 재가입 차단 */
     val blocks: AccountBlocks = AccountBlocks.local(time),
+    /** 주기 정리를 인스턴스 하나만 하게 하는 임대 */
+    val lease: AccountMaintenanceLease = InMemoryAccountMaintenanceLease(time),
 ) {
     /**
      * 이메일로 계정 하나 — 저장소가 어떤 정렬 규칙으로 찾았든 **저장된 주소가 정규화된 입력과 글자 그대로 같을 때만** 돌려준다
