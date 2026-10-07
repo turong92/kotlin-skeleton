@@ -196,27 +196,20 @@ class JdbcAccountRepository(
         )
 
     override fun purge(id: String, now: Instant, forced: Boolean): Boolean =
-        jdbc.update(
-            "delete from accounts where id = :id and " + (if (forced) "status = 'SUSPENDED'" else "status = 'DELETED' and purge_after is not null and purge_after <= :now"),
-            MapSqlParameterSource().addValue("id", id).addValue("now", dialect.instantParam(now)),
-        ) == 1
+        tx.execute {
+            val (email, _) = lockEligible(id, now, forced) ?: return@execute false
+            scrub(id, email, now)
+            // 로그인 수단 · 역할은 외래키로 같이 사라진다. 토큰 · 코드 · 감사 행은 외래키가 없어 [scrub] 가 지운 뒤다
+            jdbc.update("delete from accounts where id = :id", mapOf("id" to id)) == 1
+        } ?: false
 
     override fun erase(id: String, now: Instant, forced: Boolean): Boolean =
         tx.execute {
-            // 계정 행 락 안에서 조건을 다시 본다 — 되살리기(조건부 UPDATE)와 지우기 중 하나만 이긴다
-            val row = jdbc.query("select email, status, purge_after from accounts where id = :id for update", mapOf("id" to id)) { rs, _ ->
-                Triple(rs.getString("email"), rs.getString("status"), dialect.readInstant(rs, "purge_after"))
-            }.firstOrNull() ?: return@execute false
-            val (email, status, purgeAfter) = row
-            val eligible = if (forced) status == AccountStatus.SUSPENDED.name else status == AccountStatus.DELETED.name && purgeAfter != null && !purgeAfter.isAfter(now)
-            if (!eligible) return@execute false
-            val p = MapSqlParameterSource().addValue("id", id).addValue("email", email).addValue("now", dialect.instantParam(now))
+            val (email, _) = lockEligible(id, now, forced) ?: return@execute false
+            val p = MapSqlParameterSource().addValue("id", id).addValue("now", dialect.instantParam(now))
             jdbc.update("delete from account_roles where account_id = :id", p)
             jdbc.update("delete from account_identities where account_id = :id", p)
-            // 토큰은 주인(이메일)이 평문이다 — 계정 id 로 걸린 것과 그 주소로 걸린 것(재설정 · 매직 링크) 모두. 챌린지: 이메일 변경 · 다시 인증 · 삭제 확인 + 같은 주소의 가입 시도(IP 포함)
-            jdbc.update("delete from account_tokens where account_id = :id" + if (email != null) " or subject = :email" else "", p)
-            jdbc.update("delete from account_challenges where account_id = :id" + if (email != null) " or subject = :email" else "", p)
-            jdbc.update("update account_audit set ip = null, detail = null where account_id = :id", p)
+            scrub(id, email, now)
             jdbc.update(
                 "update accounts set email = null, email_verified = false, status = 'ERASED', display_name = null, locale = null, time_zone = null, " +
                     "suspended_reason = null, last_login_at = null, purge_after = null, erased_at = :now, updated_at = :now where id = :id",
@@ -224,6 +217,28 @@ class JdbcAccountRepository(
             )
             true
         } ?: false
+
+    /** 계정 행 락 안에서 지울 조건(DELETED + 유예 끝남 · [forced] 면 SUSPENDED)을 다시 본다 — 되살리기(조건부 UPDATE)와 지우기 중 하나만 이긴다. 맞으면 (이메일, 상태) */
+    private fun lockEligible(id: String, now: Instant, forced: Boolean): Pair<String?, String>? {
+        val row = jdbc.query("select email, status, purge_after from accounts where id = :id for update", mapOf("id" to id)) { rs, _ ->
+            Triple(rs.getString("email"), rs.getString("status"), dialect.readInstant(rs, "purge_after"))
+        }.firstOrNull() ?: return null
+        val (email, status, purgeAfter) = row
+        val eligible = if (forced) status == AccountStatus.SUSPENDED.name else status == AccountStatus.DELETED.name && purgeAfter != null && !purgeAfter.isAfter(now)
+        return if (eligible) email to status else null
+    }
+
+    /**
+     * 계정에 걸린 개인정보 중 **외래키로 따라 지워지지 않는 것** — [erase] 와 [purge](`DELETE` 모드 · 운영자 지우기) 가 같이 쓴다:
+     * 토큰은 주인(이메일)이 평문이다 — 계정 id 로 걸린 것과 그 주소로 걸린 것(재설정 · 매직 링크) 모두. 챌린지: 이메일 변경 · 다시 인증 · 삭제 확인 + 같은 주소의 가입 시도(IP 포함).
+     * 감사 행은 사건(종류 · 시각 · 계정 id)만 남기고 IP · 상세를 비운다 (계정 id 가 없는 줄은 이 사람의 것으로 가려낼 수 없어 그대로다).
+     */
+    private fun scrub(id: String, email: String?, now: Instant) {
+        val p = MapSqlParameterSource().addValue("id", id).addValue("email", email).addValue("now", dialect.instantParam(now))
+        jdbc.update("delete from account_tokens where account_id = :id" + if (email != null) " or subject = :email" else "", p)
+        jdbc.update("delete from account_challenges where account_id = :id" + if (email != null) " or subject = :email" else "", p)
+        jdbc.update("update account_audit set ip = null, detail = null where account_id = :id", p)
+    }
 
     override fun restore(id: String, status: AccountStatus, now: Instant): Boolean =
         jdbc.update(

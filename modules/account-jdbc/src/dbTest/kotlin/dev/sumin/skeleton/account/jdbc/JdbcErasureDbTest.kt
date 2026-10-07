@@ -83,18 +83,68 @@ class JdbcErasureDbTest {
         assertEquals("198.51.100.9", jdbc.queryForObject("select ip from account_audit where account_id = 'acc_other'", emptyMap<String, Any>(), String::class.java))
     }
 
+    /** 심은 값마다 지우기 전에 스캔이 **적어도 한 곳**에서 찾아야 한다 — 하나라도 못 찾으면 그 값의 "사라졌다" 는 아무것도 증명하지 못한다 */
+    private fun assertEveryValueIsSeen(planted: List<String>) {
+        planted.forEach { value ->
+            assertTrue(PlantedDataScan.find(jdbc, DbTestDatabase.vendor, listOf(value)).isNotEmpty(), "the scan must see '$value' before the erasure, or its absence afterwards proves nothing")
+        }
+    }
+
+    private fun plantEverythingPersonal() {
+        leaving()
+        token("h1", TokenPurposes.PASSWORD_RESET, "ann@example.com", "acc_1")
+        token("h2", TokenPurposes.MAGIC_LINK, "ann@example.com", null)
+        // 이메일을 바꾸기 전 옛 주소로 걸린 토큰 — 주인은 계정 id 다
+        token("h3", TokenPurposes.PASSWORD_RESET, "ann.old@example.com", "acc_1")
+        challenge("c1", ChallengePurposes.EMAIL_CHANGE, "acc_1", "acc_1", payload = "new-address@example.com", ip = "203.0.113.77")
+        challenge("c2", ChallengePurposes.SIGN_UP, "ann@example.com", null, ip = "203.0.113.77")
+        AccountDb.audit.on(AccountEvent(AccountEventType.LOGIN_SUCCESS, "acc_1", now, "203.0.113.77", mapOf("method" to "google")))
+    }
+
+    private val plantedValues = listOf("ann@example.com", "Ann Kim", "google-subject-acc_1", "203.0.113.77", "{bcrypt}hash", "ann.old@example.com", "new-address@example.com")
+
     @Test
     fun `after erasure no column of any table still holds the email, name, provider subject, IP or other planted personal values`() {
-        leaving()
-        challenge("c2", ChallengePurposes.SIGN_UP, "ann@example.com", null, ip = "203.0.113.77")
-        token("h1", TokenPurposes.PASSWORD_RESET, "ann@example.com", "acc_1")
-        AccountDb.audit.on(AccountEvent(AccountEventType.LOGIN_SUCCESS, "acc_1", now, "203.0.113.77", mapOf("method" to "google")))
-        val planted = listOf("ann@example.com", "Ann Kim", "google-subject-acc_1", "203.0.113.77", "{bcrypt}hash")
-        assertTrue(PlantedDataScan.find(jdbc, DbTestDatabase.vendor, planted).isNotEmpty(), "the scan must see the values before erasure, or it proves nothing")
+        plantEverythingPersonal()
+        assertEveryValueIsSeen(plantedValues)
 
         assertTrue(repo.erase("acc_1", now))
 
-        assertEquals(emptyList(), PlantedDataScan.find(jdbc, DbTestDatabase.vendor, planted))
+        assertEquals(emptyList(), PlantedDataScan.find(jdbc, DbTestDatabase.vendor, plantedValues))
+    }
+
+    @Test
+    fun `the DELETE mode purge leaves the same nothing behind - tokens, codes and the audit IP and detail go with the row`() {
+        plantEverythingPersonal()
+        assertEveryValueIsSeen(plantedValues)
+
+        assertTrue(repo.purge("acc_1", now))
+
+        assertNull(repo.findById("acc_1"))
+        assertEquals(emptyList(), PlantedDataScan.find(jdbc, DbTestDatabase.vendor, plantedValues))
+        val audit = jdbc.queryForList("select ip, detail from account_audit where account_id = 'acc_1'", emptyMap<String, Any>())
+        assertEquals(1, audit.size, "the event line stays (kind, time, account id)")
+        assertNull(audit.single()["ip"]); assertNull(audit.single()["detail"])
+    }
+
+    @Test
+    fun `a forced purge of a suspended account scrubs the same way, and a purge needs its condition`() {
+        plantEverythingPersonal()
+        jdbc.update("update accounts set status = 'SUSPENDED', deleted_at = null, purge_after = null where id = 'acc_1'", emptyMap<String, Any>())
+        assertFalse(repo.purge("acc_1", now), "not forced, not deleted: untouched")
+        assertEquals("ann@example.com", repo.findById("acc_1")!!.email)
+        assertEquals(3, jdbc.queryForObject("select count(*) from account_tokens", emptyMap<String, Any>(), Int::class.java))
+
+        assertTrue(repo.purge("acc_1", now, forced = true))
+        assertEquals(emptyList(), PlantedDataScan.find(jdbc, DbTestDatabase.vendor, plantedValues))
+    }
+
+    @Test
+    fun `audit lines that name no account cannot be attributed to the person and stay - the boundary of the erasure`() {
+        leaving()
+        AccountDb.audit.on(AccountEvent(AccountEventType.LOGIN_FAILURE, null, now, "198.51.100.200", emptyMap()))
+        assertTrue(repo.erase("acc_1", now))
+        assertEquals("198.51.100.200", jdbc.queryForObject("select ip from account_audit where account_id is null", emptyMap<String, Any>(), String::class.java))
     }
 
     @Test
