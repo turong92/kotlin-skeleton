@@ -6,6 +6,7 @@ class PostService(
     private val access: BoardAccess,
     private val posts: PostRepository,
     private val reactions: ReactionSupport,
+    private val authors: AuthorNames,
     private val policy: BoardPolicy,
     private val rules: BoardContentRules,
     private val properties: BoardProperties,
@@ -50,7 +51,8 @@ class PostService(
             ),
         )
         val states = reactions.states(ReactionTarget.POST, page.values.map { it.id }, caller)
-        return PageResult(page.values.map { PostSummaryView(it, states.getValue(it.id)) }, page.totalElements)
+        val names = authors.of(boardCode, page.values.map { it.authorId })
+        return PageResult(page.values.map { PostSummaryView(it, states.getValue(it.id), names[it.authorId]) }, page.totalElements)
     }
 
     fun update(caller: BoardCaller, boardCode: String, postId: Long, request: UpdatePost): PostDetailView {
@@ -93,7 +95,8 @@ class PostService(
         return null to setOf(status)
     }
 
-    private fun detail(caller: BoardCaller?, post: Post) = PostDetailView(post, reactions.state(ReactionTarget.POST, post.id, caller))
+    private fun detail(caller: BoardCaller?, post: Post) =
+        PostDetailView(post, reactions.state(ReactionTarget.POST, post.id, caller), authors.one(post.boardCode, post.authorId))
 
     private fun rateLimit(caller: BoardCaller) {
         if (!limiter.tryAcquire(caller.accountId, "post")) throw BoardException(BoardErrorCode.RATE_LIMITED, "Too many posts, slow down")

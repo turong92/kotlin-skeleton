@@ -44,6 +44,25 @@ class BoardAutoConfigurationTest {
     }
 
     @Test
+    fun `the author names use the platform directory bean when there is one and know nobody when there is not`() {
+        runner.withUserConfiguration(FakeRepositories::class.java).run { ctx ->
+            assertTrue(ctx.getBean(AuthorNames::class.java).of("general", listOf("acc_1")).isEmpty(), "no directory bean - no names, no failure")
+        }
+        val directory = dev.sumin.skeleton.common.author.AuthorDirectory { ids, _ -> ids.associateWith { dev.sumin.skeleton.common.author.AuthorCard("Nick") } }
+        runner.withUserConfiguration(FakeRepositories::class.java).withBean(dev.sumin.skeleton.common.author.AuthorDirectory::class.java, { directory }).run { ctx ->
+            assertEquals("Nick", ctx.getBean(AuthorNames::class.java).one("general", "acc_1")!!.name)
+        }
+    }
+
+    @Test
+    fun `an app AuthorNames bean replaces the default`() {
+        val mine = AuthorNames { dev.sumin.skeleton.common.author.AuthorDirectory.NONE }
+        runner.withUserConfiguration(FakeRepositories::class.java).withBean(AuthorNames::class.java, { mine }).run { ctx ->
+            assertTrue(ctx.getBean(AuthorNames::class.java) === mine)
+        }
+    }
+
+    @Test
     fun `without a repository the context fails and names the missing port`() {
         runner.run { ctx ->
             assertNotNull(ctx.startupFailure)

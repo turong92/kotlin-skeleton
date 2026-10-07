@@ -9,6 +9,8 @@ class ServiceHarness(
     val policy: BoardPolicy = DefaultBoardPolicy(),
     val limiter: BoardRateLimiter = NoopBoardRateLimiter,
     val notifier: BoardNotifier = NoopBoardNotifier,
+    /** 작성자 이름을 푸는 고리 — 기본은 이름을 모른다 */
+    val directory: dev.sumin.skeleton.common.author.AuthorDirectory = dev.sumin.skeleton.common.author.AuthorDirectory.NONE,
 ) {
     val store = FakeStore()
     private val boards = FakeBoardRepository(store)
@@ -19,9 +21,10 @@ class ServiceHarness(
     private val rules = BoardContentRules(props)
     private val access = BoardAccess(boards, posts, comments, policy)
     private val support = ReactionSupport(reactionRepo, props)
+    private val authors = AuthorNames { directory }
     val boardService = BoardService(boards, policy, props, time)
-    val postService = PostService(access, posts, support, policy, rules, props, limiter, time)
-    val commentService = CommentService(access, comments, support, policy, rules, props, limiter, notifier, time)
+    val postService = PostService(access, posts, support, authors, policy, rules, props, limiter, time)
+    val commentService = CommentService(access, comments, support, authors, policy, rules, props, limiter, notifier, time)
     val reactionService = ReactionService(access, comments, reactionRepo, support, policy, props, limiter, time)
 
     init { boardService.create(moderator, "general", "General", null) }

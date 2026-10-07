@@ -9,6 +9,8 @@ import dev.sumin.skeleton.board.CreatePost
 import dev.sumin.skeleton.board.NoopBoardNotifier
 import dev.sumin.skeleton.board.PostService
 import dev.sumin.skeleton.board.BoardService
+import dev.sumin.skeleton.common.author.AuthorCard
+import dev.sumin.skeleton.common.author.AuthorDirectory
 import dev.sumin.skeleton.notification.NotificationAutoConfiguration
 import dev.sumin.skeleton.notification.NotificationEvent
 import dev.sumin.skeleton.notification.NotificationSubscriptionRegistry
@@ -58,6 +60,21 @@ class BoardNotificationTest {
             assertEquals(post, (event.payload["postId"] as Number).toLong())
             assertEquals(root, (event.payload["commentId"] as Number).toLong())
             assertEquals("general", event.payload["boardCode"])
+            assertEquals("acc_commenter", event.payload["authorId"])
+            assertTrue(event.payload.containsKey("authorName"), "the key is always in the payload")
+            assertEquals(null, event.payload["authorName"], "no directory, no name")
+        }
+    }
+
+    @Test
+    fun `the payload carries the commenter's name when a directory knows it, the title wording stays`() {
+        runner.withBean(AuthorDirectory::class.java, { AuthorDirectory { ids, _ -> ids.associateWith { AuthorCard("Nick-$it", "0042") } } }).run { ctx ->
+            val events = capture(ctx)
+            scenario(ctx)
+            val event = events.single()
+            assertEquals("Nick-acc_commenter", event.payload["authorName"])
+            assertEquals("acc_commenter", event.payload["authorId"], "the id stays for apps that link to the profile")
+            assertTrue(event.title!!.startsWith("New comment on your post"))
         }
     }
 

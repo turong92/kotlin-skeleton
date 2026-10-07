@@ -53,6 +53,7 @@ class NotificationBoardNotifier(
                     "commentId" to notice.comment.id,
                     "parentId" to notice.parent?.id,
                     "authorId" to notice.comment.authorId,
+                    "authorName" to notice.authorName,
                 ),
             ),
         )

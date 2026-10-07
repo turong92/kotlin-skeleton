@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.board
 
+import dev.sumin.skeleton.common.author.AuthorDirectory
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.common.web.InMemoryFixedWindowRateLimitStore
 import dev.sumin.skeleton.common.web.RateLimitStore
@@ -45,6 +46,11 @@ class BoardAutoConfiguration {
     fun boardAccess(boards: BoardRepository, posts: PostRepository, comments: CommentRepository, policy: BoardPolicy): BoardAccess =
         BoardAccess(boards, posts, comments, policy)
 
+    /** 작성자 이름 조회 — platform 의 [AuthorDirectory] 빈이 있으면 그것(예: `account` 의 닉네임 · 앱이 만든 것), 없으면 이름 없음. 부를 때마다 찾는다 */
+    @Bean
+    @ConditionalOnMissingBean
+    fun authorNames(directories: ObjectProvider<AuthorDirectory>): AuthorNames = AuthorNames { directories.getIfAvailable { AuthorDirectory.NONE } }
+
     @Bean
     @ConditionalOnMissingBean
     fun reactionSupport(reactions: ReactionRepository, properties: BoardProperties): ReactionSupport =
@@ -61,12 +67,13 @@ class BoardAutoConfiguration {
         access: BoardAccess,
         posts: PostRepository,
         reactions: ReactionSupport,
+        authors: AuthorNames,
         policy: BoardPolicy,
         rules: BoardContentRules,
         properties: BoardProperties,
         limiter: BoardRateLimiter,
         time: ObjectProvider<TimeProvider>,
-    ): PostService = PostService(access, posts, reactions, policy, rules, properties, limiter, time.getIfAvailable { TimeProvider.systemUtc() })
+    ): PostService = PostService(access, posts, reactions, authors, policy, rules, properties, limiter, time.getIfAvailable { TimeProvider.systemUtc() })
 
     @Bean
     @ConditionalOnMissingBean
@@ -74,6 +81,7 @@ class BoardAutoConfiguration {
         access: BoardAccess,
         comments: CommentRepository,
         reactions: ReactionSupport,
+        authors: AuthorNames,
         policy: BoardPolicy,
         rules: BoardContentRules,
         properties: BoardProperties,
@@ -81,7 +89,7 @@ class BoardAutoConfiguration {
         notifier: BoardNotifier,
         time: ObjectProvider<TimeProvider>,
     ): CommentService =
-        CommentService(access, comments, reactions, policy, rules, properties, limiter, notifier, time.getIfAvailable { TimeProvider.systemUtc() })
+        CommentService(access, comments, reactions, authors, policy, rules, properties, limiter, notifier, time.getIfAvailable { TimeProvider.systemUtc() })
 
     @Bean
     @ConditionalOnMissingBean

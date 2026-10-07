@@ -11,6 +11,7 @@ class CommentService(
     private val access: BoardAccess,
     private val comments: CommentRepository,
     private val reactions: ReactionSupport,
+    private val authors: AuthorNames,
     private val policy: BoardPolicy,
     private val rules: BoardContentRules,
     private val properties: BoardProperties,
@@ -36,8 +37,9 @@ class CommentService(
         if (!limiter.tryAcquire(caller.accountId, "comment")) throw BoardException(BoardErrorCode.RATE_LIMITED, "Too many comments, slow down")
         val created = comments.insert(NewComment(post.id, parent?.id, parent?.rootId, depth, caller.accountId, text, time.now()))
             ?: throw BoardException(BoardErrorCode.POST_NOT_FOUND, "Post not found: $postId")
-        notify(post, created, parent)
-        return CommentView(created, created.body, reactions.state(ReactionTarget.COMMENT, created.id, caller), 0)
+        val author = authors.one(boardCode, caller.accountId)   // 응답과 알림이 한 번의 조회를 같이 쓴다
+        notify(post, created, parent, author?.name)
+        return CommentView(created, created.body, reactions.state(ReactionTarget.COMMENT, created.id, caller), 0, author = author)
     }
 
     fun list(caller: BoardCaller?, boardCode: String, postId: Long, page: Int, size: Int, sort: CommentSort): PageResult<CommentView> {
@@ -46,10 +48,11 @@ class CommentService(
         if (roots.values.isEmpty()) return PageResult(emptyList(), roots.totalElements)
         val descendants = comments.descendants(roots.values.map { it.id })
         val states = reactions.states(ReactionTarget.COMMENT, (roots.values + descendants).map { it.id }, caller)
+        val names = authors.of(boardCode, (roots.values + descendants).map { it.authorId })
         val childrenOf = descendants.groupBy { it.parentId }
         val repliesOf = descendants.groupBy { it.rootId }
         fun view(c: Comment, replies: List<CommentView>) =
-            CommentView(c, visibleBody(c), states.getValue(c.id), descendantCount(c.id, childrenOf), replies)
+            CommentView(c, visibleBody(c), states.getValue(c.id), descendantCount(c.id, childrenOf), replies, names[c.authorId])
         val threads = roots.values.map { root ->
             view(root, repliesOf[root.id].orEmpty().map { view(it, emptyList()) })
         }
@@ -61,7 +64,7 @@ class CommentService(
         val comment = access.comment(post, commentId)
         if (!policy.canEditComment(caller, comment)) throw BoardException(BoardErrorCode.FORBIDDEN, "Not allowed to edit comment $commentId")
         val updated = comments.updateBody(comment.id, rules.commentBody(body), time.now()) ?: notFound(commentId)
-        return single(caller, updated)
+        return single(caller, boardCode, updated)
     }
 
     fun delete(caller: BoardCaller, boardCode: String, postId: Long, commentId: Long) {
@@ -76,12 +79,15 @@ class CommentService(
         val post = access.post(caller, boardCode, postId)
         val comment = access.comment(post, commentId)
         val updated = comments.setStatus(comment.id, status, time.now()) ?: notFound(commentId)
-        return single(caller, updated)
+        return single(caller, boardCode, updated)
     }
 
-    private fun single(caller: BoardCaller, comment: Comment): CommentView {
+    private fun single(caller: BoardCaller, boardCode: String, comment: Comment): CommentView {
         val childrenOf = comments.descendants(listOf(comment.rootId)).groupBy { it.parentId }
-        return CommentView(comment, visibleBody(comment), reactions.state(ReactionTarget.COMMENT, comment.id, caller), descendantCount(comment.id, childrenOf))
+        return CommentView(
+            comment, visibleBody(comment), reactions.state(ReactionTarget.COMMENT, comment.id, caller), descendantCount(comment.id, childrenOf),
+            author = authors.one(boardCode, comment.authorId),
+        )
     }
 
     private fun visibleBody(c: Comment): String? = c.body.takeIf { c.status == CommentStatus.PUBLISHED }
@@ -90,11 +96,11 @@ class CommentService(
         childrenOf[id].orEmpty().sumOf { 1 + descendantCount(it.id, childrenOf) }
 
     /** 답글이면 부모 댓글의 작성자에게, 최상위 댓글이면 글 작성자에게 — 자기 자신에게는 보내지 않는다. 알림 실패는 댓글 작성을 막지 않는다. */
-    private fun notify(post: Post, comment: Comment, parent: Comment?) {
+    private fun notify(post: Post, comment: Comment, parent: Comment?, authorName: String?) {
         val recipient = parent?.authorId ?: post.authorId
         if (recipient == comment.authorId) return
         try {
-            notifier.commentCreated(BoardCommentNotice(recipient, post, comment, parent))
+            notifier.commentCreated(BoardCommentNotice(recipient, post, comment, parent, authorName))
         } catch (e: Exception) {
             log.warn("board comment notification failed (comment {}): {}", comment.id, e.toString())
         }

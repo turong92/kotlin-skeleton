@@ -43,6 +43,10 @@ data class PostSummaryResponse(
     val updatedAt: Instant,
     /** 작성자의 계정이 지워졌다 — 화면은 이름 대신 "삭제된 사용자" 를 보인다 */
     val authorDeleted: Boolean = BoardAuthors.isDeleted(authorId),
+    /** 닉네임 — 계정 모듈(또는 앱의 AuthorDirectory)이 모르거나 지워진 작성자면 null. 화면은 이름이 없으면 authorDeleted · authorId 로 대신한다 */
+    val authorName: String? = null,
+    /** 같은 닉네임을 구분하는 4자리 꼬리표 (없으면 null) */
+    val authorTag: String? = null,
 )
 
 data class PostDetailResponse(
@@ -64,6 +68,10 @@ data class PostDetailResponse(
     val updatedAt: Instant,
     /** 작성자의 계정이 지워졌다 — 화면은 이름 대신 "삭제된 사용자" 를 보인다 */
     val authorDeleted: Boolean = BoardAuthors.isDeleted(authorId),
+    /** 닉네임 — 계정 모듈(또는 앱의 AuthorDirectory)이 모르거나 지워진 작성자면 null. 화면은 이름이 없으면 authorDeleted · authorId 로 대신한다 */
+    val authorName: String? = null,
+    /** 같은 닉네임을 구분하는 4자리 꼬리표 (없으면 null) */
+    val authorTag: String? = null,
 )
 
 /** 목록의 한 줄이면 replies 가 있다 (최상위: 모든 자손 작성 순 평평하게, 답글: 빈 배열). 한 댓글만 돌려주는 응답에는 replies 가 없다. */
@@ -86,6 +94,10 @@ data class CommentResponse(
     val replies: List<CommentResponse>? = null,
     /** 작성자의 계정이 지워졌다 — 화면은 이름 대신 "삭제된 사용자" 를 보인다 */
     val authorDeleted: Boolean = BoardAuthors.isDeleted(authorId),
+    /** 닉네임 — 계정 모듈(또는 앱의 AuthorDirectory)이 모르거나 지워진 작성자면 null. 화면은 이름이 없으면 authorDeleted · authorId 로 대신한다 */
+    @get:JsonInclude(JsonInclude.Include.ALWAYS) val authorName: String? = null,
+    /** 같은 닉네임을 구분하는 4자리 꼬리표 (없으면 null) */
+    @get:JsonInclude(JsonInclude.Include.ALWAYS) val authorTag: String? = null,
 )
 
 data class ReactionStateResponse(val counts: Map<String, Long>, val myReactions: Set<String>)
@@ -125,6 +137,7 @@ internal fun PostSummaryView.toResponse() = with(item) {
     PostSummaryResponse(
         id, boardCode, authorId, title, excerpt, status, pinned, viewCount, commentCount,
         reactions.counts, reactions.myReactions, attachmentCount, createdAt, updatedAt,
+        authorName = author?.name, authorTag = author?.tag,
     )
 }
 
@@ -132,6 +145,7 @@ internal fun PostDetailView.toResponse(excerptLength: Int) = with(post) {
     PostDetailResponse(
         id, boardCode, authorId, title, body.take(excerptLength), body, attachments, status, pinned, viewCount, commentCount,
         reactions.counts, reactions.myReactions, attachments.size, createdAt, updatedAt,
+        authorName = author?.name, authorTag = author?.tag,
     )
 }
 
@@ -141,6 +155,7 @@ internal fun CommentView.toResponse(thread: Boolean = false): CommentResponse = 
         id, postId, parentId, rootId, depth, authorId, this@toResponse.body, status,
         reactions.counts, reactions.myReactions, replyCount, createdAt, updatedAt,
         replies = if (thread) replies.map { it.toResponse(thread = true) } else null,
+        authorName = author?.name, authorTag = author?.tag,
     )
 }
 
