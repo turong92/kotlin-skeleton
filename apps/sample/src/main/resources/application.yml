@@ -66,6 +66,12 @@ skeleton:
       default-locale: ko                  # 계정 로케일이 없을 때 메일 언어. 링크가 여는 프론트 주소는 환경변수 <PREFIX>_ACCOUNT_MAIL_LINK_BASE_URL (비면 stage · prod 에서 기동 실패)
     admin:
       enabled: true                       # 운영자 계정 도구(/api/v1/admin/accounts) — 이 앱의 선택. ADMIN 역할이 필요하다
+    display-name:                         # 게시판에 보이는 닉네임 — 이 앱의 선택들 (모듈 기본은 중복 허용 · 선택 · 자동 닉네임 없음 — docs/accounts.md "닉네임")
+      uniqueness: TAGGED                  # 같은 닉네임이어도 되고 서버가 4자리 꼬리표를 붙인다 (닉네임#0417). 바꾸면 꼬리표를 새로 뽑는다
+      required-on-sign-up: true           # 이메일 가입에는 닉네임이 필요하다 (400 · 필드 displayName). 소셜 · 매직 링크 가입은 아래 자동 닉네임이 채운다
+      fallback: GENERATED                 # 닉네임 없이 만들어지는 계정에 user-1a2b3c 를 준다 (이메일 앞부분은 쓰지 않는다)
+    deletion:
+      self-restore: true                  # 이 앱의 선택: 탈퇴 유예 중인 주인이 로그인하면 403 AUTH.ACCOUNT_DELETION_PENDING + 취소 토큰으로 스스로 탈퇴를 취소한다 (모듈 기본은 꺼짐 — 운영자만 복구, docs/accounts.md)
   auth-magic-link:
     sign-up: true                         # 메일함을 증명하면 가입까지 끝나는 앱 — 이 앱의 선택 (모듈 기본은 이미 있는 계정으로만)
   # 글로벌 소셜 로그인 (google · LINE · X): client id 를 환경변수로 줄 때만 GET /auth/methods 에 나타난다 — 비어 있으면 아무것도 바뀌지 않는다.

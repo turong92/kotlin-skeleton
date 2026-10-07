@@ -105,6 +105,11 @@ class AccountJourneyIntegrationTest {
                 .andExpect { status { isCreated() } }.andReturn().response.contentAsString, "$.value.id",
         ).toLong()
 
+        // the board shows the nickname, with the tag the TAGGED mode gave it (never the account id as a name)
+        val shown = mvc.get("/api/v1/boards/general/posts/$postId") { header("Authorization", "Bearer $me") }.andExpect { status { isOk() }; jsonPath("$.value.authorName") { value(displayName) } }.andReturn().response.contentAsString
+        assertTrue(Regex("^[0-9]{4}$").matches(field(shown, "$.value.authorTag")), "TAGGED gives the nickname a four digit tag")
+        mvc.get("/api/v1/account/me") { header("Authorization", "Bearer $me") }.andExpect { status { isOk() }; jsonPath("$.value.displayName") { value(displayName) }; jsonPath("$.value.displayTag") { value(field(shown, "$.value.authorTag")) } }
+
         post("/api/v1/account/password/change", """{"currentPassword":"$first","newPassword":"$second"}""", me).andExpect { status { isNoContent() } }
         mvc.get("/api/v1/auth/sessions") { header("Authorization", "Bearer $me") }.andExpect { status { isOk() }; jsonPath("$.values[?(@.current==true)]") { exists() } }
         assertTrue(bearer.isNotBlank())
@@ -118,20 +123,21 @@ class AccountJourneyIntegrationTest {
         post("/api/v1/account/email/change/confirm", """{"code":"${codeOf(MailKind.EMAIL_CHANGE_CODE, moved)}"}""", mover).andExpect { status { isNoContent() } }
 
         val auth = field(post("/api/v1/auth/login", """{"email":"$moved","password":"$second"}""").andReturn().response.contentAsString, "$.value.accessToken")
-        val planted = listOf(email, moved, displayName, userAgent)
+        val planted = listOf(email, moved, displayName, displayName.lowercase(), userAgent)   // lower case = the comparison key column
         planted.forEach { value -> assertTrue(leaks(listOf(value)).isNotEmpty(), "the scan must see '$value' before the erasure, or its absence afterwards proves nothing") }
         post("/api/v1/account/delete", """{"currentPassword":"$second"}""", auth, "Idempotency-Key" to UUID.randomUUID().toString())
             .andExpect { status { isAccepted() }; jsonPath("$.value.status") { value("DELETION_SCHEDULED") } }
-        post("/api/v1/auth/login", """{"email":"$moved","password":"$second"}""").andExpect { status { isUnauthorized() } }
+        // this app turns deletion.self-restore on: the owner who proves it is the owner is told the deletion is pending (403 + a cancel token) instead of 401
+        post("/api/v1/auth/login", """{"email":"$moved","password":"$second"}""").andExpect { status { isForbidden() }; jsonPath("$.code") { value("AUTH.ACCOUNT_DELETION_PENDING") } }
 
         // the grace period passes (we move the clock by rewriting purge_after), the purge runs every erasure listener
         jdbc.sql("update accounts set purge_after = now() - interval '1 minute' where id = :id").param("id", accountId).update()
         assertEquals(1, purge.purgeDue())
         // the row stays (so nothing that points at the account dangles) but is ERASED and holds nothing personal
-        val kept = jdbc.sql("select status, email, display_name, locale, time_zone, last_login_at, erased_at from accounts where id = :id").param("id", accountId).query { rs, _ ->
-            listOf(rs.getString("status"), rs.getString("email"), rs.getString("display_name"), rs.getString("locale"), rs.getString("time_zone"), rs.getObject("last_login_at"), rs.getObject("erased_at") != null)
+        val kept = jdbc.sql("select status, email, display_name, display_name_key, display_tag, locale, time_zone, last_login_at, erased_at from accounts where id = :id").param("id", accountId).query { rs, _ ->
+            listOf(rs.getString("status"), rs.getString("email"), rs.getString("display_name"), rs.getString("display_name_key"), rs.getString("display_tag"), rs.getString("locale"), rs.getString("time_zone"), rs.getObject("last_login_at"), rs.getObject("erased_at") != null)
         }.single()
-        assertEquals(listOf("ERASED", null, null, null, null, null, true), kept)
+        assertEquals(listOf("ERASED", null, null, null, null, null, null, null, true), kept)
         assertEquals(0, jdbc.sql("select count(*) from account_identities where account_id = :id").param("id", accountId).query(Long::class.java).single())
         assertEquals(0, jdbc.sql("select count(*) from account_roles where account_id = :id").param("id", accountId).query(Long::class.java).single())
         assertEquals(0, jdbc.sql("select count(*) from auth_sessions where account_id = :id").param("id", accountId).query(Long::class.java).single())
@@ -145,6 +151,8 @@ class AccountJourneyIntegrationTest {
         mvc.get("/api/v1/boards/general/posts/$postId") { header("Authorization", "Bearer $admin") }.andExpect {
             status { isOk() }
             jsonPath("$.value.authorDeleted") { value(true) }
+            jsonPath("$.value.authorName") { value(null) }
+            jsonPath("$.value.authorTag") { value(null) }
             jsonPath("$.value.title") { value("남길 글") }
         }
     }

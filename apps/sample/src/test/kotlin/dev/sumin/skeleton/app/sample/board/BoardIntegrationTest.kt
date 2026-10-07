@@ -54,6 +54,25 @@ class BoardIntegrationTest : SampleIntegrationTest() {
     }
 
     @Test
+    fun `the board shows the seeded nicknames with their tags - never an account id as a name`() {
+        val post = createPost(user)
+        commentId(other, post, "첫 댓글")
+        val userTag = mockMvc.get("/api/v1/account/me") { header("Authorization", "Bearer $user") }
+            .andExpect { status { isOk() }; jsonPath("$.value.displayName") { value("User") }; jsonPath("$.value.displayTag") { value(org.hamcrest.Matchers.matchesPattern("^[0-9]{4}$")) } }
+            .andReturn().let { JsonPath.read<String>(it.response.contentAsString, "$.value.displayTag") }
+        mockMvc.get("/api/v1/boards/general/posts") { header("Authorization", "Bearer $user") }
+            .andExpect { status { isOk() }; jsonPath("$.values[0].authorId") { value("acc_user") }; jsonPath("$.values[0].authorName") { value("User") }; jsonPath("$.values[0].authorTag") { value(userTag) } }
+        mockMvc.get("/api/v1/boards/general/posts/$post") { header("Authorization", "Bearer $user") }
+            .andExpect { status { isOk() }; jsonPath("$.value.authorName") { value("User") }; jsonPath("$.value.authorTag") { value(userTag) } }
+        mockMvc.get("/api/v1/boards/general/posts/$post/comments") { header("Authorization", "Bearer $user") }
+            .andExpect { status { isOk() }; jsonPath("$.values[0].authorName") { value("Admin") }; jsonPath("$.values[0].authorTag") { value(org.hamcrest.Matchers.matchesPattern("^[0-9]{4}$")) } }
+        assertEquals(
+            3, jdbc.sql("select count(*) from accounts where id in ('acc_user','acc_admin','acc_moderator') and display_tag ~ '^[0-9]{4}$' and display_name_key = lower(display_name)").query(Long::class.java).single().toInt(),
+            "TAGGED gave every seeded account a tag and its comparison key",
+        )
+    }
+
+    @Test
     fun `a post, a comment thread with a reply, and a reaction type that exists only in this app's yml`() {
         val post = createPost(user)
         val root = commentId(other, post, "좋은 글이네요")

@@ -195,7 +195,7 @@ class GlobalSocialJourneyIntegrationTest {
     @Test
     fun `a LINE email is never trusted - no merge into the password account with the same address, and the LINE account has no address`() {
         val email = "victim-${System.nanoTime()}@example.com"
-        val signUp = post("/api/v1/account/sign-up", """{"email":"$email","password":"tangerine-42-moon","consents":[{"type":"terms","version":"sample-1"},{"type":"privacy","version":"sample-1"}]}""").andExpect { status { isAccepted() } }.andReturn().response.contentAsString
+        val signUp = post("/api/v1/account/sign-up", """{"email":"$email","password":"tangerine-42-moon","displayName":"Victim","consents":[{"type":"terms","version":"sample-1"},{"type":"privacy","version":"sample-1"}]}""").andExpect { status { isAccepted() } }.andReturn().response.contentAsString
         val verified = post("/api/v1/auth/verify-email", """{"signUpId":"${field(signUp, "$.value.signUpId")}","code":"${beans.sent.last { it.kind == MailKind.VERIFY_CODE && it.to == email }.vars.getValue("code")}"}""").andExpect { status { isOk() } }.andReturn().response.contentAsString
         val victimId = field(verified, "$.value.principal.accountId")
 

@@ -8,6 +8,6 @@ skeleton:
       per-ip: 1000
     seed:
       accounts:
-        - { id: acc_user, email: user@example.com, password: password }
-        - { id: acc_admin, email: admin@example.com, password: password, roles: [ADMIN] }
-        - { id: acc_moderator, email: moderator@example.com, password: password, roles: [MODERATOR] }
+        - { id: acc_user, email: user@example.com, password: password, display-name: User }
+        - { id: acc_admin, email: admin@example.com, password: password, roles: [ADMIN], display-name: Admin }
+        - { id: acc_moderator, email: moderator@example.com, password: password, roles: [MODERATOR], display-name: Moderator }
