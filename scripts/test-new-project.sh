@@ -240,10 +240,10 @@ for m in author-profile author-profile-jdbc; do
   check "apps/api 의존성에 $m 한 줄이 생긴다" has_line "implementation\\(project\\(\":modules:$m\"\\)\\)" "$AP/apps/api/build.gradle.kts"
 done
 check "dbTestModules 에 author-profile-jdbc 가 들어간다 (src/dbTest 가 있는 모듈)" has_line '":modules:author-profile-jdbc"' "$AP/build.gradle.kts"
-check "문서 쪽과 설정 블록이 남고 새 접두사로 붙는다 (ovation.author-profile)" bash -c "test -f '$AP/docs/modules/author-profile.md' && test -f '$AP/docs/modules/author-profile-jdbc.md' && grep -q '^#   author-profile:' '$AP/apps/api/src/main/resources/application.yml' && grep -q 'ovation.author-profile' '$AP/modules/author-profile/src/main/kotlin/dev/sumin/ovation/authorprofile/AuthorProfileProperties.kt'"
-check "찍은 프로젝트에 skeleton 이름 흔적이 없다 (컨트롤러 경로 속성 포함)" bash -c "! grep -rq 'skeleton\.author-profile' '$AP/modules/author-profile/src/main' '$AP/modules/author-profile-jdbc/src/main'"
+check "두 모듈의 문서 쪽과 설정 블록이 남고 코드의 설정 접두사가 새 이름이다" bash -c "test -f '$AP/docs/modules/author-profile.md' && test -f '$AP/docs/modules/author-profile-jdbc.md' && grep -q '^#   author-profile:' '$AP/apps/api/src/main/resources/application.yml' && grep -q 'ovation.author-profile' '$AP/modules/author-profile/src/main/kotlin/dev/sumin/ovation/authorprofile/AuthorProfileProperties.kt'"
+check "두 모듈의 main 소스에 skeleton.author-profile 이름 흔적이 없다 (컨트롤러 경로 속성 포함)" bash -c "! grep -rq 'skeleton\.author-profile' '$AP/modules/author-profile/src/main' '$AP/modules/author-profile-jdbc/src/main'"
 check "카탈로그에 두 항목이 남고 접두사가 새 이름이다" bash -c "grep -q '\"path\": \"modules/author-profile\"' '$AP/capabilities.json' && grep -q '\"path\": \"modules/author-profile-jdbc\"' '$AP/capabilities.json' && grep -q '\"ovation.author-profile\"' '$AP/capabilities.json' && cd '$AP' && perl scripts/build-capabilities.pl --check"
-check "고르지 않으면 어디에도 없다 (기본값으로 찍은 프로젝트)" bash -c "! grep -q '\"path\": \"modules/author-profile\"' '$A/capabilities.json' && test ! -e '$A/modules/author-profile' && ! grep -rq 'author-profile' '$A/settings.gradle.kts' '$A/apps/api/build.gradle.kts'"
+check "고르지 않은 기본 프로젝트에는 모듈 · 문서 · 카탈로그 항목 · 설정 · 가지치기 뒤 깨질 링크가 없다" bash -c "test ! -e '$A/docs/modules/author-profile.md' && ! grep -rq '](.*modules/author-profile' '$A/docs/accounts.md' '$A/docs/errors.md' && ! grep -q '\"path\": \"modules/author-profile\"' '$A/capabilities.json' && test ! -e '$A/modules/author-profile' && ! grep -rq 'author-profile' '$A/settings.gradle.kts' '$A/apps/api/build.gradle.kts'"
 APN="$TMP/apn"
 expect_exit 0 "author-profile 만 요청하면 찍히되 author-profile-jdbc 를 더하라고 알려 준다" stamp "$APN" --modules author-profile
 grep -q 'author-profile has no storage of its own' <<<"$LAST_OUTPUT" && pass "저장소 없음 안내가 나온다" || fail "author-profile 만 요청했는데 author-profile-jdbc 안내가 없다"

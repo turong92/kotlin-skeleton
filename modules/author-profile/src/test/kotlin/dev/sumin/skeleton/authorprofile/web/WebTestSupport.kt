@@ -38,6 +38,9 @@ abstract class WebTestSupport {
 
     fun MockHttpServletRequestBuilder.json(body: String): MockHttpServletRequestBuilder = contentType(MediaType.APPLICATION_JSON).content(body)
 
+    /** 만들기는 @IdempotentOperation 이라 idempotency 모듈이 클래스패스에 있으면 Idempotency-Key 가 필수다 */
+    fun MockHttpServletRequestBuilder.idem(key: String = java.util.UUID.randomUUID().toString()): MockHttpServletRequestBuilder = header("Idempotency-Key", key)
+
     fun text(result: ResultActions): String = result.andReturn().response.contentAsString
 
     fun idOf(result: MvcResult): String = JsonPath.read(result.response.contentAsString, "$.value.id")

@@ -9,6 +9,8 @@ import dev.sumin.skeleton.common.Response
 import dev.sumin.skeleton.common.openapi.ApiEnvelopeType
 import dev.sumin.skeleton.common.openapi.ApiResponseEnvelope
 import dev.sumin.skeleton.common.openapi.CreatedOperation
+import dev.sumin.skeleton.common.openapi.NoContentOperation
+import dev.sumin.skeleton.idempotency.IdempotentOperation
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
 import org.springframework.http.ResponseEntity
@@ -26,7 +28,8 @@ import org.springframework.web.servlet.support.ServletUriComponentsBuilder
 /**
  * 내 작성자 프로필 HTTP — 변환만 한다. [AuthorProfileWebAutoConfiguration] 이 등록한다 (`skeleton.author-profile.http.enabled=false` 로 끈다).
  * 경로는 `skeleton.author-profile.http.base-path`(기본 `/api/v1/author-profiles`). 로그인이 필요하고 호출자는 `Authentication.name` 이다.
- * `Idempotency-Key` 는 이 모듈이 따로 다루지 않는다 — 앱이 `idempotency` 모듈을 끼우면 그 필터가 처리한다.
+ * 만들기(`POST`)에는 `@IdempotentOperation` 을 단다 — 앱이 `idempotency` 모듈을 끼우면 `Idempotency-Key` 가 **필수**가 되고 같은 키는 첫 응답을 재생한다
+ * (프론트가 네트워크 오류를 같은 키로 재시도하는 계약). 모듈이 없으면 이 애너테이션은 JVM 이 건너뛴다 (`compileOnly`, `src/noOptionalTest` 가 증명한다).
  */
 @RestController
 @RequestMapping("\${skeleton.author-profile.http.base-path:/api/v1/author-profiles}")
@@ -61,6 +64,7 @@ class AuthorProfileController(
         description = "400 with errors[].field=name (Required, Size, Pattern, Reserved); 409 AUTHOR_PROFILE.NAME_TAKEN or AUTHOR_PROFILE.LIMIT_REACHED; 429 AUTHOR_PROFILE.RATE_LIMITED (Retry-After).",
     )
     @CreatedOperation
+    @IdempotentOperation
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = AuthorProfileResponse::class)
     @PostMapping
     fun create(authentication: Authentication?, @RequestBody request: AuthorProfileNameRequest): ResponseEntity<DataResponse<AuthorProfileResponse>> {
@@ -81,6 +85,7 @@ class AuthorProfileController(
         summary = "Delete a profile (immediately, for good; its posts stay as a deleted user)",
         description = "A profile that is someone else's, missing or deleted is the same 404 AUTHOR_PROFILE.NOT_FOUND.",
     )
+    @NoContentOperation
     @DeleteMapping("/{id}")
     fun delete(authentication: Authentication?, @PathVariable id: String): ResponseEntity<Void> {
         service.delete(callers.accountId(authentication), id)

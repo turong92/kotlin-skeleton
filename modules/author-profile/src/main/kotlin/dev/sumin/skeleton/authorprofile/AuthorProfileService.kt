@@ -4,6 +4,7 @@ import dev.sumin.skeleton.account.AccountProperties.DisplayName.Uniqueness
 import dev.sumin.skeleton.account.AccountRepository
 import dev.sumin.skeleton.account.AccountStatus
 import dev.sumin.skeleton.account.DisplayNames
+import dev.sumin.skeleton.account.NameProblem
 import dev.sumin.skeleton.account.abuse.AccountRateLimits
 import dev.sumin.skeleton.account.abuse.RateLimitedException
 import dev.sumin.skeleton.common.FieldValidationException
@@ -175,7 +176,13 @@ class AuthorProfileService(
     private fun notFound() = AuthorProfileException(AuthorProfileErrorCode.NOT_FOUND)
 
     /** 닉네임과 같은 규칙으로 받는다 — 단 오류 칸 이름은 `name` (계정의 `displayName` 이 아니다). 예약어는 누구에게나 걸린다 */
-    private fun acceptName(raw: String?): String =
+    private fun acceptName(raw: String?): String {
+        // 거친 상한 — 큰 본문을 정규화 · 유니코드 검사에 태우기 전에 거절한다 (이름 규칙의 최대는 60 글자라 정상 입력은 여기에 닿지 않는다). 소유 확인 뒤에 부르는 쪽(rename)은 남의 id 에 이 오류를 내지 않는다
+        if (raw != null && raw.length > MAX_RAW_NAME) throw FieldValidationException(FIELD, NameProblem.TOO_LONG.fieldCode, NameProblem.TOO_LONG.message)
+        return acceptRules(raw)
+    }
+
+    private fun acceptRules(raw: String?): String =
         try {
             names.accept(raw, required = true)!!
         } catch (e: FieldValidationException) {
@@ -234,6 +241,9 @@ class AuthorProfileService(
     private companion object {
         private val log = LoggerFactory.getLogger(AuthorProfileService::class.java)
         const val FIELD = "name"
+
+        /** 이름 원문의 거친 길이 상한(UTF-16 코드 유닛) — 이름 규칙의 상한(60 글자)보다 한참 크다 */
+        const val MAX_RAW_NAME = 1000
 
         /** 무작위 꼬리표를 몇 번 시도하고 나서 빈 꼬리표를 직접 찾나 (계정의 닉네임과 같은 값) */
         const val TAG_TRIES = 8

@@ -220,7 +220,7 @@ select id, display_name from accounts where display_name regexp '[#@＃＠]' or 
 
 ## 작성자 프로필 (`author-profile`)
 
-한 계정이 글 · 댓글마다 다른 이름을 골라 쓰게 하는 선택 모듈이다 — 두 프로필이 같은 사람이라는 사실이 다른 사용자에게 드러나지 않는다. `account` 위에 얹히고(스키마 · `account` 코드 변경 없이 닉네임 규칙 · 예약어 · 겹침 방식 · 이름 바꾸기 한도 숫자를 그대로 따른다), 계정의 닉네임(`display_name`)은 본인 · 관리자 · 메일 인사말용 사적 라벨로 남는다. 모듈 페이지: [modules/author-profile.md](modules/author-profile.md) (HTTP `/api/v1/author-profiles` · 설정 · 탈퇴 · 넘겨받기 · 알려진 한계), 설계 · 위협 모델: `docs/superpowers/specs/2026-10-07-author-profiles-design.md`.
+한 계정이 글 · 댓글마다 다른 이름을 골라 쓰게 하는 선택 모듈이다 — 두 프로필이 같은 사람이라는 사실이 다른 사용자에게 드러나지 않는다. `account` 위에 얹히고(스키마 · `account` 코드 변경 없이 닉네임 규칙 · 예약어 · 겹침 방식 · 이름 바꾸기 한도 숫자를 그대로 따른다), 계정의 닉네임(`display_name`)은 본인 · 관리자 · 메일 인사말용 사적 라벨로 남는다. 모듈 페이지: `docs/modules/author-profile.md` (HTTP `/api/v1/author-profiles` · 설정 · 탈퇴 · 넘겨받기 · 알려진 한계), 설계 · 위협 모델: `docs/superpowers/specs/2026-10-07-author-profiles-design.md`.
 
 ## 삭제 · 지우기 · 내보내기
 
