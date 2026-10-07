@@ -94,8 +94,8 @@ class AccountPurgeService(
 
     /** 이번에 정리한 계정 수. 다른 실행이 임대를 쥐고 있으면(여러 인스턴스 · 겹친 실행) 아무것도 하지 않고 0 */
     fun purgeDue(): Int {
-        if (!core.lease.tryAcquire(MaintenanceLeases.PURGE_RUN, MaintenanceLeases.RUN_TTL)) return 0
-        try { return purgeDueLocked() } finally { core.lease.release(MaintenanceLeases.PURGE_RUN) }
+        val owner = core.lease.tryAcquire(MaintenanceLeases.PURGE_RUN, MaintenanceLeases.RUN_TTL) ?: return 0
+        try { return purgeDueLocked() } finally { core.lease.release(MaintenanceLeases.PURGE_RUN, owner) }
     }
 
     private fun purgeDueLocked(): Int {

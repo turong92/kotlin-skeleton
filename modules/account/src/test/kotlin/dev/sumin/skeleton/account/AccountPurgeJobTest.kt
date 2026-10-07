@@ -40,10 +40,10 @@ class AccountPurgeJobTest {
     }
 
     @Test
-    fun `several app instances ticking in the same interval pile up one job, not one each`() {
+    fun `repeated ticks inside one interval enqueue one job - the dispatch lease is held for the interval`() {
         runner.withUserConfiguration(Queue::class.java).withPropertyValues("skeleton.account.deletion.purge-interval=1h").run { ctx ->
             val dispatch = ctx.getBean(AccountPurgeDispatch::class.java)
-            repeat(5) { dispatch.dispatch() }   // five instances' ticks (they share the lease, which in production is a database row)
+            repeat(5) { dispatch.dispatch() }   // five ticks through ONE lease object; that several instances share one lease row is proven by JdbcAccountMaintenanceLeaseDbTest (32 threads, both DBs)
             assertEquals(listOf("account-purge"), (ctx.getBean(JobQueue::class.java) as RecordingQueue).enqueued)
         }
     }
