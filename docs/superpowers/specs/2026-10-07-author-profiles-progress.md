@@ -1,43 +1,56 @@
-# 작성자 프로필 — 진행 문서
+# 작성자 프로필 — 진행 문서 (최종)
 
 - 정본: 스펙 `2026-10-07-author-profiles-design.md`(같은 폴더) + 지휘 세션이 준 넘겨받기 프롬프트(주인 결정이 스펙과 다르면 프롬프트가 이긴다).
 - 앞 리드: 없음 (최초)
 - 워크트리: kotlin `projects/kotlin-skeleton-wt-profiles` (feat/author-profiles, 시작 e76e8e7) · react `projects/react-skeleton-wt-profiles` (feat/author-profiles, 시작 49a5ae3)
-- 커밋 허용(로컬만). push · merge 금지.
+- 커밋은 로컬만. push · main 병합은 하지 않았다(주인 허락 필요).
 
-## 지금 하는 일
-최종 독립 리뷰 지적 반영 중: 백엔드(af641 — Critical 1: test-deploy-contract secret_env 무한 재귀 포함), 프론트(a4e3e — Important 5). 이후 확인 리뷰 → 깨끗한 복사본 끝검사 → qa 화면 확인.
+## 상태: 작업 끝, 주인 확인 대기
 
 ## 작업 표
-| 키 | 내용 | 상태 | 커밋 | 리뷰 |
-|---|---|---|---|---|
-| B0 | 스펙 「정해야 할 것」 결정 반영 + 스펙 커밋 | 끝 | e3bd273 | 문서만, 리뷰 생략 |
-| B1 | platform SPI | 수정중 | a72b380 | 1회차 Minor 6 (문서·KDoc 은 B3 작업0 에서 수정) |
-| B2 | board-jdbc author_ref | 확인리뷰중 | 8cd3b54,ef17643 | 1회차 I2·M5 (멱등 DDL, 인덱스 (author_ref,author_id)) |
-| B3 | board 공개 id · 쓰기 규칙 | 확인리뷰중 | 96ba887,acd8269,f258752 | 1회차 Important 4 (I1 기본값 제거, I2 수정시 옛 첨부키, I3·I4 시험) |
-| B4 | storage OPAQUE | 수정2끝 | c4bef2c,a756dfc | 1회차 Important 4 (owns 경로탈출, 빈/컨트롤러 문서, 샘플 OwnedKeys→B8, 파일명 제거) |
-| B5 | author-profile(+jdbc) | B5a 구현중 | | (B5a 도메인·서비스 → B5b jdbc → B5c HTTP·문서·조립) |
-| B6 | 관리자 연결 조회 | 수정끝 | a3a28dc,d9b3bc5 | 1회차 Important 4 (감사 전제 경고·문서, scrub 한계 문서, 로그 traceId 문구, toString) |
-| B7 | 누출 스캔 · 계약 문서 · CHANGELOG | 수정중(B7 Important 8 + 최종리뷰 Critical 1·Important 2) | 10406df,9c585d4 | |
-| B8 | apps/sample 켜기 | 수정끝 | 8e7d8ad,f385341 | 1회차 Important 1 (test-deploy-contract A2 비밀 env) | | 포함할 것: OwnedKeys.isOwnedBy→StorageKeyOwnership.owns, docs/sample.md:37, NoteService.kt:66 attachmentName 폴백(OPAQUE 면 file.ext), 업그레이드 시험 author_ref null 단정 갱신 |
-| F1 | @skeleton/board | 3회차 소진 | acb9bdb,11d6215,3163f32,dff425c | 3회차 확인리뷰 Important 1 남음(I-3) | acb9bdb,11d6215 | 확인리뷰 Important 3 | acb9bdb(react) | 1회차 Important 6 (I1 deleted/pending 제외, I2 threadAuthorId 로딩 구분, I3 가짜서버 403, I4 aria-describedby, I5 시험 보강, I6 CHANGELOG) |
-| F2 | @skeleton/author-profile | 3회차 소진 | 79ee18b | 1회차 C1+I8 (name/tag nullable 계약 — B5 가 name:string|null, tag:string|null 을 줘야 함) | 79ee18b(react) | |
-| F3 | apps/sample 연결 + e2e | 리뷰끝(Important 0), e2e 71 passed | ...,c4ff3b0 | b63341e,68f55b5,34725fb,d55d6e5(react) | 1회차 Important 7 (첫프로필 자동생성 계약 반영·게이트·스캔 강화 등); e2e 는 B8 뒤 실행 |
-| F4 | 관리자 화면 (선택) | 대기 | | |
-| 끝검사 | 깨끗한 복사본 검증 · 독립 리뷰 · qa | 대기 | | |
+| 키 | 내용 | 커밋 (kotlin) | 리뷰 |
+|---|---|---|---|
+| B0 | 스펙 「정해야 할 것」 결정 반영 | e3bd273 | 문서만 |
+| B1 | platform SPI | a72b380, 96ba887 | 1회차 Minor 반영 |
+| B2 | board-jdbc `author_ref` | 8cd3b54, ef17643 | 1회차 Important 2 반영 → 확인 리뷰 통과 |
+| B3 | board 공개 id · 쓰기 규칙 | acd8269, f258752, 5aa2ac7 | Important 4 + 확인 Important 1 반영 |
+| B4 | storage OPAQUE 키 · `StorageKeyOwnership` | c4bef2c, a756dfc, 9c39c44 | Important 4 + 확인 Important 1 반영 |
+| B5 | `author-profile` + `-jdbc` (a 도메인 · b 어댑터 · c HTTP) | 3379292, d2fa550, 16db8c4, 6031c86, cd3468b, 7f8b492 | 각 조각 1회차 Important 반영 |
+| B6 | 관리자 연결 조회 + `AUTHOR_LINK_VIEWED` | a3a28dc, d9b3bc5 | Important 4 반영 |
+| B7 | 누출 스캔 · 계약 문서 · CHANGELOG | 10406df, 9c585d4, dbf2bed, 833c0b1, 79e88cf, c6d712b, 3bbc651 | B7 Important 8 + 최종 독립 리뷰(Critical 1, Important 2+5) 반영, 확인 리뷰 Important 0 |
+| B8 | `apps/sample` 에 켜기 | 8e7d8ad, f385341, 89efa87 | Important 1 + 끝검사 실패 2 반영 |
+| F1 | `@skeleton/board` | acb9bdb … (react) | 아래 |
+| F2 | `@skeleton/author-profile` | 79ee18b … (react) | 아래 |
+| F3 | `apps/sample` 연결 + e2e | b63341e … c4ff3b0 (react) | 아래 |
+| F4 | 관리자 화면 "프로필로 계정 찾기" | **만들지 않음**(스펙상 선택) | |
 
-## 스펙에서 벗어난 결정 / 실측 결과
-- B3 실측(Cache-Control 안전, PATCH 모르는 칸 무시, canAttach 접두사 비교 없음)은 스펙 §15 에 기록됨.
-- 행 종류 표기 pending:p<id>/pending:c<id>. authorId 64자 초과는 403.
-- M1 결정: AuthorIdentities 있고 author_ref NULL 이면 톰스톤 author_id 도 공개 id 는 pending:(스펙 §7.2 식 보강).
-- 로컬 전제: react `tests/capabilities.skeleton.test.ts` 의 kotlin main 대조 2건은 백엔드 병합 전까지 빨강(예상).
+react 커밋: acb9bdb, 79ee18b, 11d6215, 3163f32, dff425c, b63341e, 68f55b5, 34725fb, d55d6e5, c4ff3b0, 2f838b1, 56be27c, 9557612, 867d3d1, 011aa61 (HEAD).
 
-- 환경 사실: react `tests/capabilities.skeleton.test.ts` 와 kotlin `CapabilitiesCatalogTest` 의 형제 레포 대조는 react main 체크아웃을 보므로 병합 전에는 빨강(양쪽 새 항목 때문). 임시 복사본+심볼릭 링크로 통과 확인됨(B5c 보고).
-- B5b: 쓰기 트랜잭션(insertWithinCap, deleteByAccount)을 READ COMMITTED 로 연다(MySQL 교착 회피). 서비스가 비ACTIVE 계정에는 첫 프로필/새 프로필을 만들지 않음(탈퇴 순서).
-- 서버 계약 확정: 첫 프로필 자동 생성(GET /author-profiles, POST 가 먼저 보장), name/tag null 가능, Idempotency-Key 재생 지원(B5c 수정).
+## 검증 (깨끗한 복사본, 증거)
+- kotlin 89efa87 이전 HEAD 3bbc651: `./gradlew build --offline` exit 0 (시험 2448, 실패 0), `scripts/test-deploy-contract.sh` exit 0 (94 ✓), `scripts/test-new-project.sh --full` 4건 실패 → 89efa87 로 수정 → 재실행 exit 0 (✓ 200 / ✗ 0).
+- react 9557612: lint · typecheck · format:check · capabilities:check · build · test:stories(685) 통과, `pnpm e2e:sample` 71 passed | 10 skipped(설정에 따른 skip). `test-new-project.sh --full` 2건 실패 → 867d3d1 로 수정 → 재실행 exit 0 (191 ✓ / 0). 011aa61 에서 e2e 재실행 71 passed.
+- qa 화면 확인: 별도 포트의 실제 스택 — 데스크톱 6/8 항목 통과 + 키보드 통과, 좁은 화면 실패 2건 → 011aa61 로 수정 → 375/320px 재확인 통과. 스크린샷 · `captions.md`: `…/scratchpad/profiles/` .
+- 실패 없이 남은 예외: kotlin 단독 gradle 한 번이 Testcontainers Ryuk 접속 실패(환경) — `TESTCONTAINERS_RYUK_DISABLED=true` 로 통과.
 
-## 정해야 할 것
-- [B6] 연결 조회 감사 기록이 실패(DB 감사 꺼짐/insert 실패)해도 조회 응답이 나간다(기본 audit.enabled=false 면 INFO 로그 한 줄뿐). 선택지: (1) 현상 유지 + 기동 경고·문서 (추천 — 이번 구현) (2) 감사 기록 실패 시 조회도 실패(fail-closed, account-jdbc 감사 활성 필수) — 더 엄격하나 감사 저장소 장애가 관리자 업무를 막음.
-- [B6] 대상 계정이 지워지면 감사 행의 detail(by)이 scrub 되어 '누가 봤는지'가 사라짐(기존 account 이벤트와 같은 동작). 선택지: (1) 문서화한 한계로 둠 (추천) (2) 이 이벤트 종류만 scrub 에서 보존(account-jdbc 변경).
-- [F1/F2 수정 한도 소진] 3회차 확인리뷰에 Important 1건 남음 — 댓글 첫 로드 실패 상태에서 선택기가 기기 기억으로 자동 채운 뒤 재시도로 스레드 프로필이 뒤늦게 오면 확인 없이 다른 프로필로 쓰게 됨(packages/board/src/authorship.ts:68-74, packages/author-profile/src/AuthorPickerView.tsx:87-101). 추천 수정: 실패 상태는 잠그지 않되 자동 채움만 건너뜀(`threadFailed` 인자 추가). 선택지: (1) 한 바퀴 더 허용 (추천) — 범위 작고 실제 연결 누출 경로 (2) 알려진 한계로 문서화하고 둠. Minor(Esc preventDefault, defaultPrevented 분기 스토리, rename.reset 부작용, 낡은 주석 4곳, 스토리 200줄 초과)도 같이 남음.
-(없음)
+## 스펙에서 벗어난 결정 / 실측
+- storage OPAQUE 키는 클라이언트 파일 이름을 버리고 내장 허용 확장자만 남긴다(파일명이 두 프로필을 잇는 값이므로). 스펙 §7.8 에 기록.
+- AuthorIdentities 가 있고 `author_ref` 가 NULL 인 행은 톰스톤이어도 공개 id 가 `pending:p<id>`/`pending:c<id>` (스펙 §7.2 보강).
+- `pendingAccounts(limit, after)` 커서 추가. 첫 프로필은 GET 과 POST 가 먼저 보장하고(옛 글 넘겨받기 포함), 비ACTIVE 계정에는 새로 만들지 않는다. 만들기 한도는 표 기준으로 앵커 잠금 안에서 센다. 쓰기 트랜잭션은 READ COMMITTED.
+- POST 는 `Idempotency-Key` 재생을 지원(`@IdempotentOperation`).
+- 마이그레이션: 병합 전 내 새 V 파일(board_author_ref)을 한 번 재작성(`--rewrite`)했다 — 로컬에서 8cd3b54 판을 적용한 DB 는 체크섬 불일치 가능(`down -v`). 병합 뒤에는 해당 없음.
+- §15 실측 전부 스펙에 기록(Cache-Control 안전, PATCH 모르는 칸 무시, canAttach 실제 위치, 인덱스 실행 계획, AccountAutoConfiguration 보다 먼저 등록되는 순서 변이 확인).
+
+## 수정 회송 한도
+- 프론트 F1/F2/F3 와 백엔드 B7 은 단계별 3회차를 넘겼다. (1) 각 작업의 단계별 리뷰 3회 → 소진 뒤 최종 독립 리뷰가 새 지적을 냈고 최종 단계로 따로 3회까지 반영, (2) qa 의 좁은 화면 실패 2건(확인 리뷰 3회차 Important 와 같은 것)을 **예외로 1회 더** 고쳤다(011aa61). 이 예외를 보고에 명시한다.
+
+## 남은 Minor (반영하지 않음)
+- 프론트: Safari 에서 대화상자 opener 포커스 보정이 절반만(`open(event)` 없는 `ensure()` 경로), 스토리 파일 200줄 초과 몇 곳, 낭독기 실측 없음, 기기 기억이 "고른 것"을 저장(스펙 문구는 "쓴 것"), 키보드로 메뉴를 열면 선택된 항목이 아니라 첫 항목에 포커스.
+- 백엔드: MySQL 에서 만들기와 지우기가 겹칠 때 교착 가능성(추측, 앵커를 먼저 잠그는 `markDeleted` 로 줄일 수 있음), `insertWithinCap` 의 바깥 트랜잭션 합류 주석이 PostgreSQL REPEATABLE READ 에서는 틀림, 5초 알람이 자식 프로세스를 못 끊음, 관리자 erase 경로 스캔의 V1/V2 프로브 단정 보강, SPI KDoc 한 줄의 0행 의미, 어댑터 문서의 `RATE_LIMITED`·앵커 분리 설명, 같은 첨부 키를 두 프로필 글에 싣는 API 직접 호출 잔여 위험(스펙 §14 에 기록), 커밋 형식(작업공간 Git 규칙의 Co-Authored-By 금지와 하네스 지시의 충돌 — 주인이 정할 일).
+
+## 정해야 할 것 (주인)
+1. **`CLAUDE.md` 「Backend Module Layout」** 에 `author-profile`/`author-profile-jdbc` 두 줄과 opt-in HTTP 목록(`/api/v1/author-profiles`) 추가 — developer 는 CLAUDE.md 수정을 주인 승인 사항으로 보류함. (1) 허락하면 지휘 세션이 두 줄 추가 (추천) (2) 카탈로그(`capabilities.json`/`llms.txt`)만으로 충분하다고 보고 생략.
+2. **연결 조회 감사 기록 실패 시 정책**: 지금은 감사 저장 실패(또는 `account.audit.enabled=false`)여도 조회 응답이 나간다(기동 경고 + 문서). (1) 현상 유지 (추천 — 감사 저장소 장애가 관리자 업무를 막지 않음) (2) fail-closed.
+3. **대상 계정 삭제 시 감사 행의 `by` scrub**: 기존 account 이벤트와 같은 동작이라 "누가 봤는지"가 사라진다. (1) 문서화한 한계로 둠 (추천) (2) 이 종류만 scrub 에서 보존(account-jdbc 변경).
+4. **설정 화면의 「문의용 정보(계정 id + 복사)」 구역 제거**를 알고 있는지(화면 원칙에 맞춰 제거함). 필요하면 다른 문의 수단을 정해야 한다.
+5. **커밋 형식**: 작업공간 `AGENTS.md` 는 `Co-Authored-By` 금지·header 50자 권장인데 이 브랜치(와 main)는 하네스 지시대로 트레일러를 단다. 어느 쪽을 정본으로 할지.
+6. **병합 순서**: kotlin·react 두 브랜치는 서로 짝이다(e2e 와 카탈로그 형제 대조가 서로를 본다). 같이 병합해야 `CapabilitiesCatalogTest` 의 형제 검사와 react `tests/capabilities.skeleton.test.ts` 가 초록이 된다. Ovation 권고(첫 배포부터 켠다)는 CHANGELOG 에 적어 두었다.
