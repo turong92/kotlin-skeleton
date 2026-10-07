@@ -29,9 +29,13 @@ class MagicLinkAutoConfiguration {
     @ConditionalOnMissingBean
     fun magicLinkService(core: AccountCore, signIn: AccountSignInService, properties: MagicLinkProperties): MagicLinkService = MagicLinkService(core, signIn, properties)
 
-    /** `account` 의 "이미 계정이 있어요" 메일에 1회용 로그인 링크 한 줄을 더하는 고리 — 이 모듈이 있을 때만 있다 (`account` 는 이 모듈에 의존하지 않는다) */
+    /**
+     * `account` 의 "이미 계정이 있어요" 메일에 1회용 로그인 링크 한 줄을 더하는 고리 — 이 모듈이 있을 때만 있다 (`account` 는 이 모듈에 의존하지 않는다).
+     * 링크를 쓰는 엔드포인트(`http.enabled=false` 로 끈다)가 없으면 이 고리도 없다 — 쓸 수 없는 링크를 메일에 넣지 않는다.
+     */
     @Bean
     @ConditionalOnMissingBean(MagicLinkIssuer::class)
+    @ConditionalOnProperty(prefix = "skeleton.auth-magic-link.http", name = ["enabled"], havingValue = "true", matchIfMissing = true)
     fun magicLinkIssuer(service: MagicLinkService): MagicLinkIssuer = MagicLinkIssuer { service.issueFor(it) }
 }
 

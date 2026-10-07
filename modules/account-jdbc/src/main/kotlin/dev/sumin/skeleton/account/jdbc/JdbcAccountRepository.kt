@@ -221,7 +221,7 @@ class JdbcAccountRepository(
     override fun purge(id: String, now: Instant, forced: Boolean): Boolean =
         tx.execute {
             val (email, _) = lockEligible(id, now, forced) ?: return@execute false
-            scrub(id, email, now)
+            scrub(id, email)
             // 로그인 수단 · 역할은 외래키로 같이 사라진다. 토큰 · 코드 · 감사 행은 외래키가 없어 [scrub] 가 지운 뒤다
             jdbc.update("delete from accounts where id = :id", mapOf("id" to id)) == 1
         } ?: false
@@ -232,7 +232,7 @@ class JdbcAccountRepository(
             val p = MapSqlParameterSource().addValue("id", id).addValue("now", dialect.instantParam(now))
             jdbc.update("delete from account_roles where account_id = :id", p)
             jdbc.update("delete from account_identities where account_id = :id", p)
-            scrub(id, email, now)
+            scrub(id, email)
             jdbc.update(
                 "update accounts set email = null, email_verified = false, status = 'ERASED', display_name = null, display_name_key = null, display_tag = null, locale = null, time_zone = null, " +
                     "suspended_reason = null, last_login_at = null, purge_after = null, erase_claimed_at = null, erased_at = :now, updated_at = :now where id = :id",
@@ -256,8 +256,8 @@ class JdbcAccountRepository(
      * 토큰은 주인(이메일)이 평문이다 — 계정 id 로 걸린 것과 그 주소로 걸린 것(재설정 · 매직 링크) 모두. 챌린지: 이메일 변경 · 다시 인증 · 삭제 확인 + 같은 주소의 가입 시도(IP 포함).
      * 감사 행은 사건(종류 · 시각 · 계정 id)만 남기고 IP · 상세를 비운다 (계정 id 가 없는 줄은 이 사람의 것으로 가려낼 수 없어 그대로다).
      */
-    private fun scrub(id: String, email: String?, now: Instant) {
-        val p = MapSqlParameterSource().addValue("id", id).addValue("email", email).addValue("now", dialect.instantParam(now))
+    private fun scrub(id: String, email: String?) {
+        val p = MapSqlParameterSource().addValue("id", id).addValue("email", email)
         jdbc.update("delete from account_tokens where account_id = :id" + if (email != null) " or subject = :email" else "", p)
         jdbc.update("delete from account_challenges where account_id = :id" + if (email != null) " or subject = :email" else "", p)
         jdbc.update("update account_audit set ip = null, detail = null where account_id = :id", p)

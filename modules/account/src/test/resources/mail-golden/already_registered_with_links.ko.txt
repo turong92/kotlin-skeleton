@@ -11,8 +11,11 @@ subject: 이미 계정이 있어요
 로그인하러 가기:
 https://app.example.com/login
 
-비밀번호를 잊었다면 재설정을 요청해 주세요:
-https://app.example.com/forgot-password
+비밀번호가 기억나지 않으면 이 링크로 새로 정해 주세요 (한 번만 쓸 수 있고 30분 뒤에 만료돼요):
+https://app.example.com/reset-password?token=Zq9-fixedTokenForGoldenFiles_0123456789
+
+또는 이 일회용 링크로 바로 로그인하세요 (한 번만 쓸 수 있고 15분 뒤에 만료돼요):
+https://app.example.com/magic-link?token=Zq9-fixedTokenForGoldenFiles_0123456789
 
 요청하지 않았다면 무시하세요.
 Notes

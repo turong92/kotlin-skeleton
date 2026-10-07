@@ -131,6 +131,12 @@ class Challenges(
         return Opened(handle, code, row)
     }
 
+    /**
+     * 서버 비밀로 만든 결정적인 값 — 같은 ([label], [input]) 이면 늘 같고, 비밀 없이는 미리 알 수 없다. 모르는 가입 시도 id 에 **가짜 발급 시각**을 만들어 줄 때 쓴다 ([RegistrationService.resendVerification]).
+     * 0 이상의 Long (HMAC 앞 60비트).
+     */
+    fun pseudoRandom(label: String, input: String): Long = hasher.hash(label, input).take(15).toLong(16)
+
     fun idOf(handle: String): String? = if (handle.length in 20..128 && handle.all { it.isLetterOrDigit() || it == '-' || it == '_' }) hashOf(handle) else null
 
     fun find(id: String): ChallengeRow? = store.find(id)

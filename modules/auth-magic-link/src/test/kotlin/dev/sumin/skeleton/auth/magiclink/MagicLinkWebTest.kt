@@ -99,10 +99,13 @@ class MagicLinkWebTest {
     }
 
     @Test
-    fun `the already-registered mail of a sign-up carries a one-time sign-in link that really signs in, and the 202 stays the same`() {
+    fun `by default the already-registered mail issues no sign-in link and leaves the owner's open link alone, and the 202 stays the same`() {
         val email = unique()
         request(email)
-        redeem(lastToken()).andExpect(status().isOk)        // an account with the magic_link method exists now
+        val ownerLink = lastToken()                           // the owner asked for a link ...
+        redeem(ownerLink).andExpect(status().isOk)            // ... and an account with the magic_link method exists now
+        request(email)
+        val open = lastToken()                                // a fresh, still open link of the owner
         mails.sent.clear()
 
         fun signUp(address: String) = mvc.perform(
@@ -116,10 +119,8 @@ class MagicLinkWebTest {
         val mail = mails.sent.last { it.kind == MailKind.ALREADY_REGISTERED }
         assertEquals("magic_link", mail.vars["methods"])
         assertEquals("https://app.example.com/login", mail.vars["loginUrl"])
-        assertEquals("15", mail.vars["magicMinutes"])
-        val link = mail.vars.getValue("magicUrl")
-        assertTrue(link.startsWith("https://app.example.com/magic-link?token="), link)
-        redeem(link.substringAfter("token=")).andExpect(status().isOk).andExpect(jsonPath("$.value.principal.email").value(email))
+        assertEquals(null, mail.vars["magicUrl"]); assertEquals(null, mail.vars["resetUrl"])
+        assertNotNull(tokens.peek(TokenPurposes.MAGIC_LINK, open), "the owner's open sign-in link was not closed by someone else's sign-up request")
     }
 
     @Test

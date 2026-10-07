@@ -101,11 +101,11 @@ class RegistrationService(private val core: AccountCore) {
         )
         core.tasks.run("sign-up") {
             val existing = core.accountByEmail(email)
-            if (existing != null && taken(existing)) notifyAlreadyRegistered(existing, mayMail)
+            if (existing != null && taken(existing)) notifyAlreadyRegistered(existing, mayMail, credentialLinks = true)
             else if (mayMail && mayOpen) sendCode(email, opened.code, cmd.locale)
         }
         // 시간 값은 저장한(또는 한도 때문에 저장하지 않은) 시도 행에서 — 새 주소든 있는 주소든 메일이 나갔든 안 나갔든 같은 계산이다
-        return SignUpOutcome(SignUpStatus.VERIFICATION_SENT, opened.handle, opened.row.expiresAt, opened.row.lastSentAt.plus(v.resendCooldown))
+        return SignUpOutcome(SignUpStatus.VERIFICATION_SENT, opened.handle, opened.row.expiresAt, if (v.maxResends <= 0) null else opened.row.lastSentAt.plus(v.resendCooldown))
     }
 
     private fun createVerified(email: String, hash: String, cmd: SignUpCommand, name: String?): SignUpStatus {
@@ -141,25 +141,30 @@ class RegistrationService(private val core: AccountCore) {
     /** 확인된(또는 지워지는 중인) 계정이 가진 주소 — 코드로 가져갈 수 없다. 확인되지 않은 계정(이메일 확인을 나중에 켠 앱에 남은 것)은 코드로 메일함을 증명하면 이어받는다 */
     private fun taken(existing: Account) = existing.emailVerified || existing.status == AccountStatus.DELETED
 
-    private fun notifyAlreadyRegistered(existing: Account, allowed: Boolean) {
+    private fun notifyAlreadyRegistered(existing: Account, allowed: Boolean, credentialLinks: Boolean) {
         val address = existing.email ?: return
         if (existing.status == AccountStatus.DELETED || !allowed) return
-        core.mailer.send(AccountMail(MailKind.ALREADY_REGISTERED, address, existing.locale, vars = alreadyRegisteredVars(existing, address)))
+        core.mailer.send(AccountMail(MailKind.ALREADY_REGISTERED, address, existing.locale, vars = alreadyRegisteredVars(existing, credentialLinks)))
     }
 
     /**
-     * "이미 계정이 있어요" 메일의 다음 걸음: 로그인 페이지 · 가입 수단(코드 목록 — 문구는 템플릿이 로케일로) · 비밀번호 재설정 링크(재설정 요청과 같은 상태 규칙 · 주소별 한도 · 토큰) ·
-     * (`auth-magic-link` 가 있으면) 1회용 매직 링크. 정지된 계정에는 링크를 주지 않는다(박제). 뒤로 넘긴 일 안에서만 돈다 — 화면 응답은 계정이 있든 없든 같다.
+     * "이미 계정이 있어요" 메일의 다음 걸음: 로그인 페이지 · 가입 수단(코드 목록 — 문구는 템플릿이 로케일로) · "비밀번호를 잊었다면" 재설정 **요청 페이지** — 모두 **토큰 없는 링크**다.
+     * 이 메일은 **남이 넣은 요청**이 만든다 — 그래서 토큰을 만들지 않는 것이 기본이다 (주인이 방금 받은 재설정 링크를 닫지 못하고, 재설정 · 매직 링크 한도를 못 바닥낸다).
+     * `sign-up.existing-account-mail.include-credentials-links=true` 이고 [credentialLinks](최초 가입 요청; 재전송은 false)이면 재설정 링크 · (`auth-magic-link` 가 있으면) 매직 링크도 싣되
+     * **열린 토큰이 없을 때만** 새로 만든다. 정지된 계정에는 링크를 주지 않는다(박제). 뒤로 넘긴 일 안에서만 돈다 — 화면 응답은 계정이 있든 없든 같다.
      */
-    private fun alreadyRegisteredVars(existing: Account, address: String): Map<String, String> = buildMap {
+    private fun alreadyRegisteredVars(existing: Account, credentialLinks: Boolean): Map<String, String> = buildMap {
         core.links.login()?.let { put("loginUrl", it) }
         core.accounts.identitiesOf(existing.id).map { it.method }.distinct().takeIf { it.isNotEmpty() }?.let { put("methods", it.joinToString(",")) }
         if (existing.status == AccountStatus.SUSPENDED) return@buildMap
-        core.issueResetLink(existing)?.let {
-            put("resetUrl", it.url); put("resetMinutes", it.minutes.toString())
-            core.events.publish(AccountEventType.PASSWORD_RESET_REQUESTED, existing.id, detail = mapOf("via" to "already_registered"))
+        if (credentialLinks && core.props.signUp.existingAccountMail.includeCredentialsLinks) {
+            core.issueResetLink(existing, onlyIfNoneOpen = true)?.let {
+                put("resetUrl", it.url); put("resetMinutes", it.minutes.toString())
+                core.events.publish(AccountEventType.PASSWORD_RESET_REQUESTED, existing.id, detail = mapOf("via" to "already_registered"))
+            }
+            core.magicLinks()?.issue(existing)?.let { put("magicUrl", it.url); put("magicMinutes", it.minutes.toString()) }
         }
-        core.magicLinks()?.issue(existing)?.let { put("magicUrl", it.url); put("magicMinutes", it.minutes.toString()) }
+        if ("resetUrl" !in this) core.links.forgot()?.let { put("forgotUrl", it) }
     }
 
     /**
@@ -269,19 +274,40 @@ class RegistrationService(private val core: AccountCore) {
         core.captcha.check(captchaToken, ip, "resend_verification")
         val v = core.props.verification
         val id = core.challenges.idOf(signUpId)
-        val row = id?.let(core.challenges::find)?.takeIf { it.purpose == ChallengePurposes.SIGN_UP } ?: return core.codeWindow(v.codeTtl)
+        val row = id?.let(core.challenges::find)?.takeIf { it.purpose == ChallengePurposes.SIGN_UP } ?: return decoyWindow(signUpId)
         // 확인된 계정이 있는 주소의 시도도 **똑같이 재발급**한다 (남은 추측 · 만료 · 쿨다운 · 재전송 횟수가 같게) — 달라지면 재전송 뒤의 틀린 코드 한 번으로 가입 여부를 알 수 있다. 다른 것은 메일의 종류뿐이다
         val code = if (withinEmailBudget(row.subject)) core.challenges.reissue(row.id, v.codeTtl, v.maxAttempts, v.resendCooldown, v.maxResends) else null
         if (code == null) {
             val now = core.time.now()
+            // 재전송을 다 썼으면 더 올 것이 없다 — 만료 뒤에도 "지금"을 주면 눌러도 아무 일 없는 버튼이 살아 있다. null 로 알린다
+            if (row.resends >= v.maxResends) return CodeWindow(row.expiresAt, null)
             return CodeWindow(row.expiresAt, maxOf(now, row.lastSentAt.plus(v.resendCooldown)))
         }
         core.tasks.run("resend-verification") {
             val existing = core.accountByEmail(row.subject)
-            if (existing != null && taken(existing)) notifyAlreadyRegistered(existing, true) else sendCode(row.subject, code, null)
+            if (existing != null && taken(existing)) notifyAlreadyRegistered(existing, true, credentialLinks = false) else sendCode(row.subject, code, null)
         }
         val fresh = core.challenges.find(row.id) ?: return core.codeWindow(v.codeTtl)
-        return CodeWindow(fresh.expiresAt, fresh.lastSentAt.plus(v.resendCooldown))
+        return CodeWindow(fresh.expiresAt, if (fresh.resends >= v.maxResends) null else fresh.lastSentAt.plus(v.resendCooldown))
+    }
+
+    /**
+     * 모르는 · 이미 지워진 가입 시도 id 에 주는 **가짜 창** — 진짜 시도가 쿨다운 안에서 같은 값을 되풀이하듯 같은 id 에는 같은 값을 준다 (지금 시각을 그대로 주면 호출마다 값이 움직여 가짜가 드러난다).
+     * 가짜 발급 시각은 id 와 서버 비밀의 HMAC 로 정한 위상(쿨다운 안의 마이크로초)에서 쿨다운 간격으로 걷는다 — 같은 간격 안에서는 안정적이고, 간격이 지나면 다음 걸음으로 간다
+     * (진짜 시도가 재전송된 것처럼). 값의 모양은 진짜와 같다: 방금 보낸 코드의 만료 = 발급 + ttl, 다음 재전송 = 발급 + 쿨다운 (늘 지금 이후, 쿨다운 이내).
+     * 한계: 쿨다운이 지난 뒤 진짜 시도는 **호출한 그 순간**에 새로 발급되고 가짜는 자기 걸음에 따라 움직인다 — 이 차이로 가려내려면 진짜 시도 id 를 쥔 쪽이 정밀하게 시간을 재야 하고,
+     * 256비트 id 라 "id 가 있는지" 를 알아내는 가치는 거의 없다 (docs/accounts.md).
+     */
+    private fun decoyWindow(signUpId: String): CodeWindow {
+        val v = core.props.verification
+        val now = core.time.now()
+        val step = (v.resendCooldown.toNanos() / 1_000).coerceAtLeast(1)   // 마이크로초
+        val nowMicros = now.epochSecond * 1_000_000 + now.nano / 1_000
+        val phase = core.challenges.pseudoRandom("resend-decoy", signUpId) % step
+        val k = Math.floorDiv(nowMicros - phase, step)
+        val micros = phase + k * step
+        val issued = java.time.Instant.ofEpochSecond(Math.floorDiv(micros, 1_000_000L), Math.floorMod(micros, 1_000_000L) * 1_000)
+        return CodeWindow(issued.plus(v.codeTtl), if (v.maxResends <= 0) null else issued.plus(v.resendCooldown))
     }
 
     /** 시도가 실어 온 동의를 기록한다 — 호출자는 [AccountTransaction] 안이다. 고리가 없으면 아무것도 하지 않는다 */

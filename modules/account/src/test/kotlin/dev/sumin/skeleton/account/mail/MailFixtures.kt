@@ -10,8 +10,12 @@ internal object MailFixtures {
     )
     val vars = mapOf(
         "code" to "739518", "minutes" to "10", "days" to "30", "method" to "Google",
-        // "이미 계정이 있어요" — 로그인 페이지 · 가입 수단 · 재설정 링크 · 일회용 매직 링크
-        "loginUrl" to "https://app.example.com/login", "methods" to "google,password",
+        // "이미 계정이 있어요" 의 기본 — 로그인 페이지 · 가입 수단 · 비밀번호 재설정 **요청** 페이지 (토큰 없음)
+        "loginUrl" to "https://app.example.com/login", "methods" to "google,password", "forgotUrl" to "https://app.example.com/forgot-password",
+    )
+
+    /** `sign-up.existing-account-mail.include-credentials-links=true` 일 때의 "이미 계정이 있어요" — 재설정 링크 · 일회용 매직 링크가 토큰과 함께 간다 (요청 페이지 줄은 빠진다) */
+    val alreadyRegisteredWithLinks = vars - "forgotUrl" + mapOf(
         "resetUrl" to "https://app.example.com/reset-password?token=Zq9-fixedTokenForGoldenFiles_0123456789", "resetMinutes" to "30",
         "magicUrl" to "https://app.example.com/magic-link?token=Zq9-fixedTokenForGoldenFiles_0123456789", "magicMinutes" to "15",
     )

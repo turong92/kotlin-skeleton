@@ -34,6 +34,19 @@ class AlreadyRegisteredTemplateTest {
     }
 
     @Test
+    fun `without credential links the forgot-password page line is there, with them it gives way to the reset link`() {
+        val plain = mapOf("loginUrl" to "https://app.example.com/login", "methods" to "password", "forgotUrl" to "https://app.example.com/forgot-password")
+        val ko = templates.render(MailKind.ALREADY_REGISTERED, "ko", plain, null)
+        assertTrue("https://app.example.com/forgot-password" in ko.text && "비밀번호를 잊었다면" in ko.text, ko.text)
+        assertTrue("href=\"https://app.example.com/forgot-password\"" in ko.html!!)
+        val en = templates.render(MailKind.ALREADY_REGISTERED, "en", plain, null)
+        assertTrue("https://app.example.com/forgot-password" in en.text && "Forgot your password?" in en.text, en.text)
+        assertFalse("token" in en.text.lowercase(), "the page link carries no token")
+        val both = templates.render(MailKind.ALREADY_REGISTERED, "en", plain + full, null)
+        assertFalse("forgot-password" in both.text, "the reset link says it already - one line, not two")
+    }
+
+    @Test
     fun `lines whose values are missing are simply absent - no placeholder is ever printed`() {
         val r = templates.render(MailKind.ALREADY_REGISTERED, "en", mapOf("loginUrl" to "https://app.example.com/login", "methods" to "password"), null)
         assertTrue("https://app.example.com/login" in r.text)

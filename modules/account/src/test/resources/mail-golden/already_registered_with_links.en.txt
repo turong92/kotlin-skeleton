@@ -11,8 +11,11 @@ If it was you, sign in or use "Forgot password".
 Sign in:
 https://app.example.com/login
 
-Forgot your password? Request a reset here:
-https://app.example.com/forgot-password
+Forgot your password? Choose a new one with this link (works once, expires in 30 minutes):
+https://app.example.com/reset-password?token=Zq9-fixedTokenForGoldenFiles_0123456789
+
+Or sign in at once with this one-time link (works once, expires in 15 minutes):
+https://app.example.com/magic-link?token=Zq9-fixedTokenForGoldenFiles_0123456789
 
 If you did not request this, you can ignore this email.
 Notes

@@ -151,8 +151,13 @@ data class AccountBlockResponse(val id: Long, val kind: String, val reason: Stri
 
 data class StatusResponse(val status: String)
 
-/** 코드를 보낸 202 의 본문 — 카운트다운용 두 시각 (ISO-8601 instant). 메일을 실제로 보냈는지와 무관하게 같은 모양 · 같은 계산이다 (docs/account-http-contract.md) */
-data class CodeIssuedResponse(val status: String, val expiresAt: Instant, val resendAvailableAt: Instant) {
+/** 코드를 보낸 202 의 본문 — 카운트다운용 두 시각 (ISO-8601 instant; `resendAvailableAt` 이 null 이면 더 재전송할 수 없다). 메일을 실제로 보냈는지와 무관하게 같은 모양 · 같은 계산이다 (docs/account-http-contract.md) */
+data class CodeIssuedResponse(
+    val status: String,
+    val expiresAt: Instant,
+    /** `null` (the key stays) = this attempt cannot be re-sent any more — hide the resend button (docs/account-http-contract.md) */
+    @get:com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.ALWAYS) val resendAvailableAt: Instant?,
+) {
     companion object {
         fun of(status: String, w: dev.sumin.skeleton.account.CodeWindow) = CodeIssuedResponse(status, w.expiresAt, w.resendAvailableAt)
     }

@@ -72,6 +72,9 @@ class DefaultAccountMailTemplates(
                 val note = if (m == null) "" else if (ko) " (한 번만 쓸 수 있고 ${m}분 뒤에 만료돼요)" else " (works once, expires in $m minutes)"
                 add(MailAction((if (ko) "비밀번호가 기억나지 않으면 이 링크로 새로 정해 주세요" else "Forgot your password? Choose a new one with this link") + note + ":", MailButton(if (ko) "새 비밀번호 정하기" else "Choose a new password", url)))
             }
+            vars["forgotUrl"]?.takeIf { it.isNotBlank() && vars["resetUrl"].isNullOrBlank() }?.let { url ->
+                add(MailAction(if (ko) "비밀번호를 잊었다면 재설정을 요청해 주세요:" else "Forgot your password? Request a reset here:", MailButton(if (ko) "비밀번호 재설정 요청" else "Request a password reset", url)))
+            }
             vars["magicUrl"]?.takeIf { it.isNotBlank() }?.let { url ->
                 val m = valid(vars["magicMinutes"])
                 val note = if (m == null) "" else if (ko) " (한 번만 쓸 수 있고 ${m}분 뒤에 만료돼요)" else " (works once, expires in $m minutes)"

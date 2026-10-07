@@ -75,6 +75,9 @@ class OneTimeTokens(
         return raw
     }
 
+    /** 같은 (용도, [subject]) 의 쓸 수 있는(안 쓰고 · 만료 전인) 토큰이 있나 — 남의 요청이 주인이 연 링크를 [issue] 로 닫지 않게 먼저 본다 */
+    fun hasOpen(purpose: String, subject: String): Boolean = store.findOpen(purpose, subject, time.now()) != null
+
     /** 같은 (용도, [subject]) 의 아직 안 쓴 토큰을 모두 닫는다 — 비밀번호가 바뀌었거나 메일함이 다른 길로 증명됐을 때, 그 전에 나간 링크가 살아 있지 않게 */
     fun invalidate(purpose: String, subject: String): Int = store.invalidateOpen(purpose, subject, time.now())
 

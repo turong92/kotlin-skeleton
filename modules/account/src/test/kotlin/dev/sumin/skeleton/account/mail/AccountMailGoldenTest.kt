@@ -7,7 +7,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * 메일 13종 × ko · en 의 제목 · 텍스트 · HTML 을 골든 파일(`src/test/resources/mail-golden`)과 바이트 단위로 맞춘다.
+ * 메일 13종 × ko · en (+ "이미 계정이 있어요" 의 토큰 링크 변형)의 제목 · 텍스트 · HTML 을 골든 파일(`src/test/resources/mail-golden`)과 바이트 단위로 맞춘다.
  * 문구 · 틀을 일부러 바꿨다면 `UPDATE_GOLDEN=1 ./gradlew :modules:account:test --tests '*AccountMailGoldenTest'` 로 다시 쓰고 diff 를 눈으로 본다.
  */
 class AccountMailGoldenTest {
@@ -33,9 +33,19 @@ class AccountMailGoldenTest {
     }
 
     @Test
+    fun `the already-registered mail with credential links (the opt-in) matches its golden files`() {
+        for (lang in MailFixtures.langs) {
+            val r = templates.render(MailKind.ALREADY_REGISTERED, lang, MailFixtures.alreadyRegisteredWithLinks, null)
+            check("already_registered_with_links.$lang.txt", "subject: ${r.subject}\n\n${r.text}\n")
+            check("already_registered_with_links.$lang.html", r.html!! + "\n")
+        }
+    }
+
+    @Test
     fun `the golden directory holds exactly the files of the current kinds`() {
         if (update) return
-        val expected = MailKind.entries.flatMap { k -> MailFixtures.langs.flatMap { l -> listOf("${k.name.lowercase()}.$l.txt", "${k.name.lowercase()}.$l.html") } }.toSet()
+        val expected = MailKind.entries.flatMap { k -> MailFixtures.langs.flatMap { l -> listOf("${k.name.lowercase()}.$l.txt", "${k.name.lowercase()}.$l.html") } }.toSet() +
+            MailFixtures.langs.flatMap { l -> listOf("already_registered_with_links.$l.txt", "already_registered_with_links.$l.html") }
         assertEquals(expected, Files.list(dir).use { s -> s.map { it.fileName.toString() }.toList().toSet() })
     }
 }

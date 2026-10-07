@@ -41,7 +41,19 @@ data class AccountProperties(
         /** 같은 IP 가 창 안에 보낼 수 있는 가입 요청 수 */
         val perIp: Int = 10,
         val perIpWindow: Duration = Duration.ofHours(1),
-    )
+        /** 이미 계정이 있는 주소로 가입을 요청했을 때 나가는 "이미 계정이 있어요" 메일 */
+        val existingAccountMail: ExistingAccountMail = ExistingAccountMail(),
+    ) {
+        data class ExistingAccountMail(
+            /**
+             * false(기본): 메일에는 **토큰 없는 링크만** — 로그인 페이지 · 가입 수단 · 비밀번호 재설정 **요청** 페이지(`mail.forgot-path`). 남이 넣은 가입 요청이 주인의 재설정 링크를
+             * 무효화하거나 재설정 · 매직 링크 한도(`reset.per-email` · `auth-magic-link.per-email`)를 바닥낼 수 없다.
+             * true: 최초 가입 요청의 메일에 재설정 링크와 (`auth-magic-link` 가 있으면) 1회용 매직 링크도 싣는다 — 그 주소에 **열린 토큰이 없을 때만** 새로 만들고(열린 것을 닫지 않는다, 있으면 그 줄은 빠진다),
+             * 재전송(`/account/verification/resend`)은 토큰을 다시 만들지 않는다. 한계: 주인이 요청하지 않은 링크가 주인의 메일함에 한 번은 간다 (docs/accounts.md 위협 모델)
+             */
+            val includeCredentialsLinks: Boolean = false,
+        )
+    }
 
     data class Password(
         val minLength: Int = 10,
@@ -171,6 +183,8 @@ data class AccountProperties(
         val magicLinkPath: String = "/magic-link",
         /** "이미 계정이 있어요" 메일이 가리키는 프론트의 로그인 페이지 경로 (링크는 `link-base-url` + 이 경로, 토큰 없음) */
         val loginPath: String = "/login",
+        /** "이미 계정이 있어요" 메일의 "비밀번호를 잊었다면" 이 가리키는 프론트의 재설정 **요청** 페이지 경로 (토큰 없음 — 링크 토큰이 오는 [resetPath] 와 다르다). react-skeleton 견본의 `/forgot-password` */
+        val forgotPath: String = "/forgot-password",
         /** 계정 로케일이 없거나 지원하지 않을 때 쓰는 메일 언어 (ko · en 이 내장) */
         val defaultLocale: String = "en",
         /** 제목 앞에 붙는 서비스 이름 (예: [MyService]) */

@@ -80,11 +80,13 @@ class MagicLinkService(
 
     /**
      * "이미 계정이 있어요" 메일(가입 요청이 이미 있는 주소를 만났을 때)에 넣을 1회용 링크 — 링크 요청과 **같은 한도**(주소별 `per-email`)와 같은 토큰이다.
-     * 매직 링크를 받을 수 없는 계정(정지 · 탈퇴 · 주소 없음)이나 한도를 넘으면 null — 메일에서 그 줄이 빠진다. [MagicLinkIssuer] 로 `account` 가 부른다 (account 는 이 모듈을 모른다)
+     * 매직 링크를 받을 수 없는 계정(정지 · 탈퇴 · 주소 없음)이나 한도를 넘으면 null — 메일에서 그 줄이 빠진다. **열린 링크가 이미 있으면 새로 만들지 않는다**(null) —
+     * 남이 넣은 가입 요청이 주인이 방금 받은 링크를 닫거나 한도를 쓰지 못하게. [MagicLinkIssuer] 로 `account` 가 부른다 (account 는 이 모듈을 모른다)
      */
     fun issueFor(account: Account): IssuedLink? {
         val email = account.email ?: return null
         if (account.status != AccountStatus.ACTIVE && account.status != AccountStatus.PENDING_VERIFICATION) return null
+        if (core.tokens.hasOpen(TokenPurposes.MAGIC_LINK, email)) return null
         if (!core.limits.acquire("magic-link:email", email, props.perEmail, props.perEmailWindow).allowed) return null
         val raw = core.tokens.issue(TokenPurposes.MAGIC_LINK, email, account.id, props.ttl)
         core.events.publish(AccountEventType.MAGIC_LINK_REQUESTED, account.id, detail = mapOf("via" to "already_registered"))

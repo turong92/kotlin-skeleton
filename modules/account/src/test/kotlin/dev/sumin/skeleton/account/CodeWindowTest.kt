@@ -84,12 +84,38 @@ class CodeWindowTest {
     }
 
     @Test
-    fun `an unknown attempt id gets a plausible window like a real one - the answer reveals nothing about attempts or accounts`() {
+    fun `an unknown attempt id gets the same window on every call inside the cooldown, like a real attempt does - and nothing is mailed`() {
         val h = harness()
-        val w = h.registration.resendVerification("x".repeat(43), "203.0.113.1", null)
-        assertEquals(h.time.now().plus(ttl), w.expiresAt)
-        assertEquals(h.time.now().plus(cooldown), w.resendAvailableAt)
+        val first = h.registration.resendVerification("x".repeat(43), "203.0.113.1", null)
+        h.time.advance(Duration.ofSeconds(5))
+        val second = h.registration.resendVerification("x".repeat(43), "203.0.113.2", null)
+        assertEquals(first, second, "a window that moved with every call would tell a made-up id from a real one")
         assertEquals(0, h.mailer.sent.size)
+    }
+
+    @Test
+    fun `the window of an unknown id has the shape of a real one and is derived from the id`() {
+        val h = harness()
+        val windows = (1..20).map { h.registration.resendVerification("unknown-attempt-id-$it-".padEnd(43, 'x'), "203.0.113.$it", null) }
+        val now = h.time.now()
+        windows.forEach { w ->
+            val resend = w.resendAvailableAt!!
+            assertEquals(ttl.minus(cooldown), Duration.between(resend, w.expiresAt), "expiry - resend = ttl - cooldown, as for a code that was sent a moment ago")
+            assertTrue(resend.isAfter(now) && !resend.isAfter(now.plus(cooldown)), "the next resend is within one cooldown from now: $resend")
+        }
+        assertTrue(windows.toSet().size > 15, "different ids give different values (the sent-at time is derived from the id, not shared)")
+    }
+
+    @Test
+    fun `the decoy window of an unknown id steps on once the cooldown has passed, and a real attempt's window is not touched by any of this`() {
+        val h = harness()
+        val real = h.signUp("ann@example.com")
+        val before = h.registration.resendVerification("y".repeat(43), "203.0.113.1", null)
+        h.time.advance(cooldown.plusSeconds(1))
+        val after = h.registration.resendVerification("y".repeat(43), "203.0.113.1", null)
+        assertNotEquals(before, after, "after a cooldown the decoy has moved on, as a real attempt that was re-sent would")
+        h.time.advance(Duration.ofSeconds(-31))
+        assertEquals(real.expiresAt, h.registration.resendVerification(real.signUpId!!, "203.0.113.1", null).expiresAt)
     }
 
     @Test
@@ -100,9 +126,37 @@ class CodeWindowTest {
             val o = h.signUp(email, ip = ip)
             h.time.advance(Duration.ofSeconds(31))
             val w = h.registration.resendVerification(o.signUpId!!, ip, null)
-            return listOf(Duration.between(h.time.now(), w.expiresAt), Duration.between(h.time.now(), w.resendAvailableAt))
+            return listOf(Duration.between(h.time.now(), w.expiresAt), Duration.between(h.time.now(), w.resendAvailableAt!!))
         }
         assertEquals(window("free@example.com", "198.51.100.1"), window("taken@example.com", "198.51.100.2"))
+    }
+
+    @Test
+    fun `an attempt whose three resends are used up says so with a null resendAvailableAt - after expiry too, so the button can go`() {
+        val h = harness()
+        val o = h.signUp("ann@example.com")
+        repeat(2) {
+            h.time.advance(Duration.ofSeconds(31))
+            assertNotNull(h.registration.resendVerification(o.signUpId!!, "203.0.113.1", null).resendAvailableAt, "resend ${it + 1} of 3: another may follow")
+        }
+        h.time.advance(Duration.ofSeconds(31))
+        val last = h.registration.resendVerification(o.signUpId!!, "203.0.113.1", null)
+        assertEquals(h.time.now().plus(ttl), last.expiresAt, "the third resend still mailed a real code")
+        assertNull(last.resendAvailableAt, "...and it is the last one")
+        assertEquals(4, h.mailer.of(MailKind.VERIFY_CODE).size)
+
+        h.time.advance(ttl.plusSeconds(1))
+        val expired = h.registration.resendVerification(o.signUpId!!, "203.0.113.1", null)
+        assertTrue(expired.expiresAt.isBefore(h.time.now()), "the code is over")
+        assertNull(expired.resendAvailableAt, "nothing more can be sent: not 'now', which would keep a resend button alive that does nothing")
+        assertEquals(4, h.mailer.of(MailKind.VERIFY_CODE).size, "and nothing was mailed")
+    }
+
+    @Test
+    fun `with max-resends 0 the sign-up answer already says no resend will come`() {
+        val h = AccountHarness(AccountProperties(verification = AccountProperties.Verification(maxResends = 0), password = AccountProperties.Password(bcryptStrength = 4)))
+        val o = h.signUp("ann@example.com")
+        assertNotNull(o.expiresAt); assertNull(o.resendAvailableAt)
     }
 
     // ---- B3: expired attempts
