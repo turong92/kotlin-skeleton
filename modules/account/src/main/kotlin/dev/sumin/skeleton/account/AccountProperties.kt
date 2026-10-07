@@ -101,7 +101,8 @@ data class AccountProperties(
     )
 
     data class EmailChange(
-        val ttl: Duration = Duration.ofMinutes(30),
+        /** 이메일 변경(새 주소) · 본인 재확인 6자리 코드의 유효 시간 — 가입 코드([Verification.codeTtl])와 같은 10분 (6자리 코드는 모두 같다. 링크 토큰인 [Reset.ttl] 만 30분) */
+        val ttl: Duration = Duration.ofMinutes(10),
         val perAccount: Int = 5,
         val perAccountWindow: Duration = Duration.ofHours(1),
     )
@@ -112,8 +113,8 @@ data class AccountProperties(
         /** 유예가 끝난 계정을 지우는 주기. 0 이면 주기 실행을 안 한다 (앱이 AccountPurgeService 를 직접 부를 때) */
         val purgeInterval: Duration = Duration.ofHours(1),
         val purgeBatch: Int = 50,
-        /** 비밀번호가 없는 계정의 삭제 확인 메일 링크 유효 시간 */
-        val confirmationTtl: Duration = Duration.ofMinutes(30),
+        /** 비밀번호가 없는 계정의 삭제 확인 6자리 코드의 유효 시간 — 다른 6자리 코드와 같은 10분 */
+        val confirmationTtl: Duration = Duration.ofMinutes(10),
         /**
          * 유예가 끝난 뒤 계정을 어떻게 하나. ANONYMIZE(기본): 행(id · created_at)은 남기고 개인정보만 지운다 — 다른 표가 계정 id 를 들고 있어도 참조가 끊기지 않는다.
          * DELETE: 행까지 지운다 (앱이 계정 id 를 어디에도 남기지 않을 때)

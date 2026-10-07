@@ -139,7 +139,7 @@ class EmailChangeServiceTest {
         h.emailChange.request(a.id, "newer@example.com", pw, ses)
         val second = codeSent()
         if (first != second) assertEquals("ACCOUNT.CODE_INVALID", code { h.emailChange.confirm(a.id, ses, first) }, "the replaced code no longer works")
-        h.time.advance(Duration.ofMinutes(31))
+        h.time.advance(Duration.ofMinutes(11))
         assertEquals("ACCOUNT.CODE_EXPIRED", code { h.emailChange.confirm(a.id, ses, second) })
     }
 
@@ -181,11 +181,11 @@ class EmailChangeServiceTest {
         h.emailChange.request(a.id, "new@example.com", pw, ses)
         val me = h.profile.me(a.id)
         assertEquals("new@example.com", me.pendingEmail)
-        assertEquals(h.time.now().plus(Duration.ofMinutes(30)), me.pendingEmailExpiresAt)
+        assertEquals(h.time.now().plus(Duration.ofMinutes(10)), me.pendingEmailExpiresAt)
 
         h.emailChange.request(a.id, "newer@example.com", pw, ses)
         assertEquals("newer@example.com", h.profile.me(a.id).pendingEmail)
-        h.time.advance(Duration.ofMinutes(31))
+        h.time.advance(Duration.ofMinutes(11))
         assertNull(h.profile.me(a.id).pendingEmail, "an expired code is no longer pending")
 
         h.emailChange.request(a.id, "third@example.com", pw, ses)
