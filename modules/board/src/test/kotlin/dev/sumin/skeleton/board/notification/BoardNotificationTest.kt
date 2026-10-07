@@ -61,19 +61,19 @@ class BoardNotificationTest {
             assertEquals(root, (event.payload["commentId"] as Number).toLong())
             assertEquals("general", event.payload["boardCode"])
             assertEquals("acc_commenter", event.payload["authorId"])
-            assertTrue(event.payload.containsKey("authorName"), "the key is always in the payload")
-            assertEquals(null, event.payload["authorName"], "no directory, no name")
+            assertTrue(!event.payload.containsKey("authorName"), "a name in the payload would outlive the author's erasure inside the recipient's inbox")
         }
     }
 
     @Test
-    fun `the payload carries the commenter's name when a directory knows it, the title wording stays`() {
+    fun `even when a directory knows the commenter's name, neither the payload nor the wording carries it - only the id, the reader resolves the name`() {
         runner.withBean(AuthorDirectory::class.java, { AuthorDirectory { ids, _ -> ids.associateWith { AuthorCard("Nick-$it", "0042") } } }).run { ctx ->
             val events = capture(ctx)
             scenario(ctx)
             val event = events.single()
-            assertEquals("Nick-acc_commenter", event.payload["authorName"])
             assertEquals("acc_commenter", event.payload["authorId"], "the id stays for apps that link to the profile")
+            assertTrue(!event.payload.containsKey("authorName") && !event.payload.containsKey("authorTag"))
+            assertTrue(!event.toString().contains("Nick-"), "the name is nowhere in the event: $event")
             assertTrue(event.title!!.startsWith("New comment on your post"))
         }
     }

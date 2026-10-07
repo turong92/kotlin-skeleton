@@ -110,6 +110,16 @@ class AccountJourneyIntegrationTest {
         assertTrue(Regex("^[0-9]{4}$").matches(field(shown, "$.value.authorTag")), "TAGGED gives the nickname a four digit tag")
         mvc.get("/api/v1/account/me") { header("Authorization", "Bearer $me") }.andExpect { status { isOk() }; jsonPath("$.value.displayName") { value(displayName) }; jsonPath("$.value.displayTag") { value(field(shown, "$.value.authorTag")) } }
 
+        // the departing user also comments on SOMEONE ELSE's post: the comment alert lands in that person's inbox and must not keep the nickname once the author is gone
+        // (the other person's own browser: its session must not carry this test's user agent)
+        val admin0 = field(mvc.post("/api/v1/auth/login") { contentType = MediaType.APPLICATION_JSON; content = """{"email":"admin@example.com","password":"password"}""" }.andReturn().response.contentAsString, "$.value.accessToken")
+        val others = JsonPath.read<Number>(
+            post("/api/v1/boards/general/posts", """{"title":"운영자 글","body":"본문"}""", admin0, "Idempotency-Key" to UUID.randomUUID().toString()).andExpect { status { isCreated() } }.andReturn().response.contentAsString, "$.value.id",
+        ).toLong()
+        post("/api/v1/boards/general/posts/$others/comments", """{"body":"좋은 글이에요"}""", me, "Idempotency-Key" to UUID.randomUUID().toString()).andExpect { status { isCreated() } }
+        assertEquals(1L, jdbc.sql("select count(*) from notification_inbox where payload_json like :v").param("v", "%$accountId%").query(Long::class.java).single(), "the alert reached the other person's inbox (so the scan below is not vacuous)")
+        assertEquals(0L, jdbc.sql("select count(*) from notification_inbox where payload_json like :v").param("v", "%$displayName%").query(Long::class.java).single(), "the alert names the author by id only")
+
         post("/api/v1/account/password/change", """{"currentPassword":"$first","newPassword":"$second"}""", me).andExpect { status { isNoContent() } }
         mvc.get("/api/v1/auth/sessions") { header("Authorization", "Bearer $me") }.andExpect { status { isOk() }; jsonPath("$.values[?(@.current==true)]") { exists() } }
         assertTrue(bearer.isNotBlank())

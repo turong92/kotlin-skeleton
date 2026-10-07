@@ -23,7 +23,7 @@ HTTP 는 `skeleton.board.http.base-path`(기본 `/api/v1/boards`)에 열린다 (
 **작성자 이름**: 글 요약 · 글 상세 · 댓글 응답에는 `authorId`(그대로) · `authorDeleted` 와 함께 **`authorName: string | null`** · **`authorTag: string | null`**(4자리 숫자 문자열)이 실린다(키는 늘 있다). 이름은 platform 의 `AuthorDirectory` 가 준다 —
 `account` 가 있으면 그 닉네임 · 꼬리표(기본 구현), 앱이 같은 타입의 빈을 두면 그것(예: 돌판마다 다른 닉네임 — `AuthorContext(source="board", scope=<게시판 코드>)` 로 어느 게시판인지 안다), 아무것도 없으면 `null`. board 는 `account` 를 모르고 그 반대도 같다.
 **요청 하나에 조회 한 번**: 목록 · 스레드는 모든 작성자 id 를 모아(중복 제거) 한 번만 묻는다(`AuthorNamesTest` 가 호출 횟수를 센다) — 글마다 묻지 않는다. 지워진 작성자(톰스톤)는 묻지 않고 이름이 `null` + `authorDeleted: true`.
-고리가 던지거나 느려도 응답은 이름만 비워 나간다(경고 로그). 댓글 알림의 payload 에도 `authorName`(없으면 `null`)이 추가된다 — 제목 문구는 그대로(`BoardNotificationFormatter`).
+고리가 던지거나 느려도 응답은 이름만 비워 나간다(경고 로그). 댓글 알림의 payload 에는 **이름을 싣지 않는다**(`authorId` 만) — 받은편지함의 payload 는 작성자가 탈퇴(익명화)한 뒤에도 남의 편지함에 남으므로, 거기 적힌 닉네임은 지워지지 않는다. 알림 화면이 이름이 필요하면 **읽는 쪽이 `authorId` 로 푼다**(탈퇴한 작성자는 이름이 없다). 제목 문구는 그대로(`BoardNotificationFormatter`) — 앱이 문구에 이름을 넣으려면 `BoardCommentNotice.authorName` 을 쓸 수 있으나 그 문구도 같은 이유로 편지함에 남는다.
 
 **계정 삭제**: `account` 가 계정을 지울 때(platform 의 `AccountErasureListener`) 글 · 댓글 작성자와 반응의 계정이 계정마다 하나인 톰스톤(`deleted:<해시>`)으로 바뀐다 — 행 · 카운터는 남고 응답에 `authorDeleted: true` 가 실려 화면이 "삭제된 사용자" 를 보인다.
 앱이 자기 저장소를 두면 `BoardErasureRepository` 도 구현한다.
