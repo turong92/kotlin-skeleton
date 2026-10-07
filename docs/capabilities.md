@@ -181,6 +181,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - HTTP 경로: `/api/v1`, `/api/v1/account`, `/api/v1/account/identities/social`, `/api/v1/admin/accounts`, `/api/v1/auth`
 - 비밀 · 환경변수: `<P>_ACCOUNT_MAIL_LINK_BASE_URL` — 빠지면: 메일 링크가 여는 프론트 주소 — 비밀 아님(선언의 env:). 비면 보호 환경(<P>_ENV=stage|prod)에서 기동 실패
 - 비밀 · 환경변수: `<P>_ACCOUNT_BOOTSTRAP_ADMIN_EMAIL` — 빠지면: 선택 — 이 이메일이 확인되면 ADMIN 을 준다. 없으면 관리자 API 를 켠 앱은 경고
+- 비밀 · 환경변수: `<P>_ACCOUNT_BLOCKS_SECRET` — 빠지면: 재가입 차단 해시(HMAC)의 키 — 선언의 secrets: (무작위로 충분). 관리자 API 를 켠 앱만 필요하고 비면 JWT 비밀에서 파생돼 경고만 난다(JWT 비밀을 돌리면 차단이 풀린다)
 - 비밀 · 환경변수: `<P>_CLIENT_IP_MODE`, `<P>_CLIENT_IP_TRUSTED_PROXIES` (배포 플랫폼이 만들어 넣는다) — 빠지면: 홈서버 플랫폼이 넣는다(예약 이름). 안 정해지면 보호 환경에서 기동 실패 — IP 한도가 X-Forwarded-For 로 풀린다
 - 문서: `docs/modules/account.md`
 - 짝 프런트(react-skeleton): 항목 `auth`, `account-lifecycle`, `account-admin` · 패키지 `@skeleton/auth` · 조각 기본 포함(덧붙일 것 없음)

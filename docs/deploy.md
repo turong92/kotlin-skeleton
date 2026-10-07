@@ -198,7 +198,7 @@ class StorageDeployGuard(private val properties: StorageProperties) : DeployGuar
 
 | 종류 | 어떻게 | 예 |
 |---|---|---|
-| **무작위로 충분** | `secrets:` 에 이름만 — 플랫폼이 48자 무작위 값을 만든다 | `JWT_SECRET` |
+| **무작위로 충분** | `secrets:` 에 이름만 — 플랫폼이 48자 무작위 값을 만든다 | `JWT_SECRET` · `<P>_ACCOUNT_BLOCKS_SECRET` |
 | **운영자가 정한다** | `secrets:` 에 이름을 **적고**, 값은 홈서버의 `data/secrets/<name>.local.env` (0600, git 밖, 백업됨)에 `NAME=값` 으로 적는다 | 결제 키 · SMTP 비밀번호 · OAuth client secret · S3/R2 키 · 알림 웹훅 URL |
 
 `.local.env` 에 있는 이름은 그 값이 쓰이고 나머지는 무작위로 만들어진다. **`.local.env` 에 적었는데 `secrets:` 에 없는 이름은 plan 이 거부한다.** 반대로 `secrets:` 에 적은 운영자 비밀을 `.local.env` 에 안 적으면 **무작위 쓰레기 값**이 들어가 첫 사용에서 실패한다 — 쓰지 않을 줄은 지운다.
@@ -210,7 +210,7 @@ class StorageDeployGuard(private val properties: StorageProperties) : DeployGuar
 |---|---|---|
 | auth | `JWT_SECRET` (별칭) 또는 `<P>_AUTH_JWT_SECRET` — **선언의 `secrets:` (무작위로 충분)** | 보호 환경(`<P>_ENV=stage\|prod` · 프로필 `prod\|staging`)에서 **기동 실패**: 비었음 / 내장 기본값 / 32바이트 미만 |
 | auth | `<P>_AUTH_BREAK_GLASS_SECRET` (**운영자** — `secrets:` + `.local.env`) · `_ALLOWED_ACCOUNT_IDS` (env:) (break-glass 를 켰을 때만) | 비밀이 비면 기동 실패 · 허용 계정이 비면 보호 환경에서 기동 실패 |
-| account | `<P>_ACCOUNT_MAIL_LINK_BASE_URL` (메일 링크가 여는 프론트 주소 — 비밀 아님, 선언의 `env:` 에 적어도 된다) · 선택 `<P>_ACCOUNT_BOOTSTRAP_ADMIN_EMAIL` | 보호 환경에서 **기동 실패** (`DeployGuard` `account`): 주소가 비었음 · 메모리 계정 저장소(`account-jdbc` 를 얹는다) · 메일 발송 길 없음(`notification-mail`) · 시드 계정 · 링크 로그 켬. 첫 관리자 이메일은 확인된 로그인 때 ADMIN 을 준다 |
+| account | `<P>_ACCOUNT_MAIL_LINK_BASE_URL` (메일 링크가 여는 프론트 주소 — 비밀 아님, 선언의 `env:` 에 적어도 된다) · 선택 `<P>_ACCOUNT_BOOTSTRAP_ADMIN_EMAIL` · `<P>_ACCOUNT_BLOCKS_SECRET` (재가입 차단 해시의 키 — **선언의 `secrets:` (무작위로 충분)**, 관리자 API 를 켠 앱만 필요) | 보호 환경에서 **기동 실패** (`DeployGuard` `account`): 주소가 비었음 · 메모리 계정 저장소(`account-jdbc` 를 얹는다) · 메일 발송 길 없음(`notification-mail`) · 시드 계정 · 링크 로그 켬. 첫 관리자 이메일은 확인된 로그인 때 ADMIN 을 준다. `<P>_ACCOUNT_BLOCKS_SECRET` 이 비면(관리자 API 를 켠 앱) **경고**만 — 키가 JWT 비밀에서 파생되므로 **`JWT_SECRET` 을 돌리면 재가입 차단이 조용히 풀린다**. 차단 키를 따로 두면 JWT 비밀을 돌려도 차단이 유지되고, 이 키를 바꾸면 기존 차단이 맞지 않게 된다 |
 | auth-session | (없음 — 설정만) | 보호 환경에서 메모리 세션 저장소(`auth-session-jdbc` 를 얹는다) · 쿠키 전달인데 `cookie.secure=false` 면 기동 실패 |
 | auth-social-google / -kakao / -naver | `<P>_AUTH_SOCIAL_PROVIDERS_<X>_ENABLED=true` · `_CLIENT_ID` (env:) · `_CLIENT_SECRET` (**운영자**) | 켰는데 비면 기동 실패 (`client id/secret must not be blank`) |
 | auth-social-oidc | `<P>_AUTH_SOCIAL_OIDC_PROVIDERS_<코드>_CLIENT_ID` (env:) · `_CLIENT_SECRET` (**운영자**) · `_REDIRECT_URI` (env:) — 예: `…_PROVIDERS_LINE_CLIENT_ID` | id 가 비면 그 제공자는 없다(아무 일도 없다). id 만 있고 secret 이 비면 기동 실패 (`client-secret must not be blank`) |

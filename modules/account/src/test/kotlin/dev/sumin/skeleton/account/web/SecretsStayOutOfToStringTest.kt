@@ -47,6 +47,8 @@ class SecretsStayOutOfToStringTest {
         assertHidden(dev.sumin.skeleton.account.SignUpCommand("a@b.co", secret, null, null, null, null, null))
         assertHidden(dev.sumin.skeleton.auth.session.OpenedSession("ses_1", secret, Instant.EPOCH))
         assertHidden(dev.sumin.skeleton.account.AccountProperties.SeedAccount(email = "a@b.co", password = secret))
+        assertHidden(dev.sumin.skeleton.account.AccountProperties.Blocks(secret = secret))
+        assertHidden(dev.sumin.skeleton.account.AccountProperties(blocks = dev.sumin.skeleton.account.AccountProperties.Blocks(secret = secret)))
     }
 
     @Test

@@ -51,6 +51,10 @@ class AccountDeployGuard(
         if (!props.login.throttleEnabled) add("skeleton.account.login.throttle-enabled=false: sign-in brute force is not limited by this module")
         if (props.signUp.enabled && !props.captcha.required) add("sign-up is open without a captcha (skeleton.account.captcha.required=false): bots can create accounts and mail strangers")
         if (props.admin.enabled && props.bootstrap.adminEmail.isBlank()) add("the admin API is enabled but no administrator can exist yet: set skeleton.account.bootstrap.admin-email or grant ADMIN another way")
+        // 재가입 차단 해시의 키 — 비면 JWT 비밀에서 파생돼 JWT 비밀을 돌릴 때 차단이 조용히 풀린다. 차단은 관리자 지우기(관리자 API)로만 생기므로 그것을 켠 앱만 알린다 (문제가 아니라 경고 — 차단을 쓰지 않는 앱을 막지 않는다)
+        if (props.admin.enabled && props.blocks.secret.isBlank()) {
+            add("skeleton.account.blocks.secret is empty while the admin API can erase accounts: the re-registration block key is then derived from the JWT secret, so rotating the JWT secret silently lifts every block - set it (env <P>_ACCOUNT_BLOCKS_SECRET, declared under secrets:)")
+        }
         if (!props.signUp.emailVerification) add("sign-up works without email verification (skeleton.account.sign-up.email-verification=false): duplicate addresses are visible as 409")
         // 확인 없는 가입은 남이 피해자 주소로 ACTIVE 계정을 만들어 둘 수 있다 — 주인이 메일함을 증명하면(매직 링크 · 병합된 소셜 · 재설정) 심어 둔 자격은 전부 지워지지만,
         // 그 증명이 올 때까지 계정은 살아 있고 그 사이 쌓인 데이터는 주인의 것이 된다. 그래서 메일함 증명 경로가 열려 있는 조합은 따로 알린다

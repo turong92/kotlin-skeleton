@@ -103,6 +103,10 @@
           "whenMissing": "선택 — 이 이메일이 확인되면 ADMIN 을 준다. 없으면 관리자 API 를 켠 앱은 경고"
         },
         {
+          "env": ["<P>_ACCOUNT_BLOCKS_SECRET"],
+          "whenMissing": "재가입 차단 해시(HMAC)의 키 — 선언의 secrets: (무작위로 충분). 관리자 API 를 켠 앱만 필요하고 비면 JWT 비밀에서 파생돼 경고만 난다(JWT 비밀을 돌리면 차단이 풀린다)"
+        },
+        {
           "env": ["<P>_CLIENT_IP_MODE", "<P>_CLIENT_IP_TRUSTED_PROXIES"],
           "whenMissing": "홈서버 플랫폼이 넣는다(예약 이름). 안 정해지면 보호 환경에서 기동 실패 — IP 한도가 X-Forwarded-For 로 풀린다",
           "platformProvided": true

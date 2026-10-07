@@ -83,6 +83,18 @@ class AccountDeployGuardTest {
     }
 
     @Test
+    fun `an app that can erase accounts by an administrator but has no blocks secret is warned - the block key would come from the JWT secret`() {
+        val admin = goodProps.copy(admin = AccountProperties.Admin(enabled = true))
+        val warned = guard(admin).warnings(prod)
+        assertTrue(warned.any { "skeleton.account.blocks.secret" in it && "JWT" in it }, warned.toString())
+        assertEquals(emptyList(), guard(admin).problems(prod), "a warning, never a startup failure")
+        assertTrue(guard(admin.copy(blocks = AccountProperties.Blocks(secret = "a-long-random-block-secret"))).warnings(prod).none { "blocks.secret" in it })
+        assertTrue(guard(goodProps).warnings(prod).none { "blocks.secret" in it }, "no admin API: this app never creates a block, nothing to protect")
+        assertEquals(emptyList(), guard(admin).warnings(local), "protected environments only")
+        assertTrue(warned.none { "a-long-random" in it })
+    }
+
+    @Test
     fun `open sign-up without captcha is only a warning`() {
         val w = guard().warnings(prod)
         assertTrue(w.any { "captcha" in it })

@@ -141,7 +141,10 @@ data class AccountProperties(
          * 차단을 오래 둘 앱은 이 값을 따로 둔다 (바꾸면 기존 차단이 맞지 않는다)
          */
         val secret: String = "",
-    )
+    ) {
+        // 비밀이 로그 · 시작 요약에 찍히지 않게 (SeedAccount 처럼)
+        override fun toString() = "Blocks(retention=$retention, secret=${if (secret.isEmpty()) "none" else "<redacted>"})"
+    }
 
     data class Cleanup(
         /**

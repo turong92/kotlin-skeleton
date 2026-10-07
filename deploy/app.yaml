@@ -33,6 +33,7 @@ redis: false                     # true 면 <ENV_PREFIX>_REDIS_HOST / _PORT / _S
 #     .local.env 에 적었는데 이 목록에 없는 이름은 plan 이 거부한다. 쓰지 않는 모듈의 줄은 지운다 (new-project.sh 가 고르지 않은 모듈의 줄을 지운다).
 secrets:
   - JWT_SECRET                   # [auth] 무작위로 충분. 빠지면 기동 실패: "skeleton.auth.jwt.secret is blank / built-in default / shorter than 32 bytes"
+  - SKELETON_ACCOUNT_BLOCKS_SECRET                        # [account] 무작위로 충분 — 재가입 차단 해시(HMAC)의 키. 관리자 API 를 켠 앱만 필요 (안 쓰면 이 줄을 지운다; 비면 JWT 비밀에서 파생돼 JWT 비밀을 돌릴 때 차단이 풀린다)
   - SKELETON_AUTH_SOCIAL_PROVIDERS_GOOGLE_CLIENT_SECRET   # [auth-social-google] 운영자 (.local.env) — CLIENT_ID · ENABLED=true 는 env:
   - SKELETON_AUTH_SOCIAL_PROVIDERS_KAKAO_CLIENT_SECRET    # [auth-social-kakao] 운영자 (.local.env)
   - SKELETON_AUTH_SOCIAL_PROVIDERS_NAVER_CLIENT_SECRET    # [auth-social-naver] 운영자 (.local.env)
