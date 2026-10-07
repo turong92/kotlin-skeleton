@@ -28,8 +28,9 @@ class JdbcQueryCountDbTest {
     private val access = BoardAccess(db.boards, db.posts, db.comments, policy)
     private val support = ReactionSupport(db.reactions, props)
     private val time = TimeProvider.fixed(T0)
-    private val comments = CommentService(access, db.comments, support, policy, BoardContentRules(props), props, NoopBoardRateLimiter, NoopBoardNotifier, time)
-    private val posts = PostService(access, db.posts, support, policy, BoardContentRules(props), props, NoopBoardRateLimiter, time)
+    private val names = dev.sumin.skeleton.board.AuthorNames { dev.sumin.skeleton.common.author.AuthorDirectory.NONE }
+    private val comments = CommentService(access, db.comments, support, names, policy, BoardContentRules(props), props, NoopBoardRateLimiter, NoopBoardNotifier, time)
+    private val posts = PostService(access, db.posts, support, names, policy, BoardContentRules(props), props, NoopBoardRateLimiter, time)
     private val me = BoardCaller("viewer")
 
     private fun threadListingStatements(roots: Int): Int {
