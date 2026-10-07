@@ -79,6 +79,11 @@ class EmailChangeService(private val core: AccountCore) {
         // 요청한 뒤 메일함이 증명됐다면(재설정 · 가입 코드) 그 요청은 증명 **전의** 계정에서 나온 것이다 — 증명 직후 정리(closeSensitiveLinks)가 닿기 전에도 못 쓴다
         if (EmailChangePayload.verifiedSeen(payload) != account.emailVerified) throw AccountException(AccountErrorCode.CODE_EXPIRED)
         if (account.status != AccountStatus.ACTIVE && account.status != AccountStatus.PENDING_VERIFICATION) throw AccountException(AccountErrorCode.CODE_EXPIRED)
+        // 운영자가 지운 계정의 주소로는 바꿀 수 없다 — 메일함을 증명한 뒤에만 드러나는 거절이다 (요청 단계의 응답은 다른 주소와 같다)
+        if (core.blocks.blocked(newEmail)) {
+            core.events.publish(AccountEventType.REGISTRATION_BLOCKED, account.id, detail = mapOf("via" to "email_change"))
+            throw AccountException(AccountErrorCode.REGISTRATION_BLOCKED)
+        }
         val oldEmail = account.email
         when (core.accounts.changeEmail(account.id, newEmail, core.time.now(), expectEmailVerified = account.emailVerified)) {
             ChangeEmailResult.TAKEN -> throw AccountException(AccountErrorCode.EMAIL_TAKEN)

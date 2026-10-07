@@ -43,6 +43,11 @@ class IdentityService(private val core: AccountCore, private val registry: SignI
         val method = registry.require(methodCode)
         val normalized = method.normalize(subject)
         if (core.accounts.identitiesOf(accountId).any { it.method == methodCode }) throw AccountException(AccountErrorCode.IDENTITY_EXISTS)
+        // 운영자가 지운 계정의 제공자 주체 · 주소는 다른 계정에도 붙지 못한다 — 호출자가 제공자 계정을 이미 증명했으니 존재를 노출하지 않는다
+        if (core.blocks.blocked(null, methodCode, normalized)) {
+            core.events.publish(AccountEventType.REGISTRATION_BLOCKED, accountId, detail = mapOf("method" to methodCode, "via" to "link"))
+            throw AccountException(AccountErrorCode.REGISTRATION_BLOCKED)
+        }
         val identity = Identity(core.newIdentityId(), accountId, methodCode, normalized, verified, metadata = metadata, createdAt = core.time.now())
         // [expectEmailVerified]: 다시 인증이 본 이메일 확인 상태 — 계정 행 락 안에서 같을 때만 붙인다 (그 사이 메일함이 증명됐다면 증명이 지운 수단이 되살아나지 않게)
         val added = if (expectEmailVerified == null) {
