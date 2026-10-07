@@ -79,6 +79,20 @@ class BoardNotificationTest {
     }
 
     @Test
+    fun `with author identities the payload carries the public author id and never the commenter's account id`() {
+        runner.withBean(dev.sumin.skeleton.common.author.AuthorIdentities::class.java, { dev.sumin.skeleton.common.author.AuthorIdentities { _, id, _ -> id.startsWith("prf_") } }).run { ctx ->
+            val events = capture(ctx)
+            ctx.getBean(BoardService::class.java).create(mod, "general", "General", null)
+            val post = ctx.getBean(PostService::class.java).create(author, "general", CreatePost("My post title", "body", null, null, "prf_author1")).post.id
+            ctx.getBean(CommentService::class.java).create(commenter, "general", post, null, "nice post", "prf_commenter9")
+            val event = events.single()
+            assertEquals(setOf("acc_author"), event.recipientIds, "the recipient is still an account")
+            assertEquals("prf_commenter9", event.payload["authorId"])
+            assertTrue(!event.toString().contains("acc_commenter"), "no account id of the commenter anywhere in the event: $event")
+        }
+    }
+
+    @Test
     fun `a reply notifies the author of the comment it answers`() {
         runner.run { ctx ->
             val (post, root) = scenario(ctx)

@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.board
 
 import dev.sumin.skeleton.common.author.AuthorDirectory
+import dev.sumin.skeleton.common.author.AuthorIdentities
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.common.web.InMemoryFixedWindowRateLimitStore
 import dev.sumin.skeleton.common.web.RateLimitStore
@@ -51,6 +52,11 @@ class BoardAutoConfiguration {
     @ConditionalOnMissingBean
     fun authorNames(directories: ObjectProvider<AuthorDirectory>): AuthorNames = AuthorNames { directories.getIfAvailable { AuthorDirectory.NONE } }
 
+    /** 작성자 신원 고리 — platform 의 [AuthorIdentities] 빈이 있으면 쓰기 규칙 · 공개 작성자 id 가 켜진다 (스펙 §7). 없으면 이 기능 이전과 같다. 부를 때마다 찾는다 */
+    @Bean
+    @ConditionalOnMissingBean
+    fun boardAuthorRules(identities: ObjectProvider<AuthorIdentities>): BoardAuthorRules = BoardAuthorRules { identities.getIfAvailable() }
+
     @Bean
     @ConditionalOnMissingBean
     fun reactionSupport(reactions: ReactionRepository, properties: BoardProperties): ReactionSupport =
@@ -58,8 +64,13 @@ class BoardAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    fun boardService(boards: BoardRepository, policy: BoardPolicy, properties: BoardProperties, time: ObjectProvider<TimeProvider>): BoardService =
-        BoardService(boards, policy, properties, time.getIfAvailable { TimeProvider.systemUtc() })
+    fun boardService(
+        boards: BoardRepository,
+        policy: BoardPolicy,
+        properties: BoardProperties,
+        time: ObjectProvider<TimeProvider>,
+        authorRules: BoardAuthorRules,
+    ): BoardService = BoardService(boards, policy, properties, time.getIfAvailable { TimeProvider.systemUtc() }, authorRules)
 
     @Bean
     @ConditionalOnMissingBean
@@ -73,7 +84,9 @@ class BoardAutoConfiguration {
         properties: BoardProperties,
         limiter: BoardRateLimiter,
         time: ObjectProvider<TimeProvider>,
-    ): PostService = PostService(access, posts, reactions, authors, policy, rules, properties, limiter, time.getIfAvailable { TimeProvider.systemUtc() })
+        authorRules: BoardAuthorRules,
+    ): PostService =
+        PostService(access, posts, reactions, authors, policy, rules, properties, limiter, time.getIfAvailable { TimeProvider.systemUtc() }, authorRules)
 
     @Bean
     @ConditionalOnMissingBean
@@ -88,8 +101,9 @@ class BoardAutoConfiguration {
         limiter: BoardRateLimiter,
         notifier: BoardNotifier,
         time: ObjectProvider<TimeProvider>,
+        authorRules: BoardAuthorRules,
     ): CommentService =
-        CommentService(access, comments, reactions, authors, policy, rules, properties, limiter, notifier, time.getIfAvailable { TimeProvider.systemUtc() })
+        CommentService(access, comments, reactions, authors, policy, rules, properties, limiter, notifier, time.getIfAvailable { TimeProvider.systemUtc() }, authorRules)
 
     @Bean
     @ConditionalOnMissingBean

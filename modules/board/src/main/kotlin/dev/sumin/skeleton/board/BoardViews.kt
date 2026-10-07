@@ -4,13 +4,34 @@ import dev.sumin.skeleton.common.author.AuthorCard
 import dev.sumin.skeleton.common.author.AuthorDirectory
 
 /** 서비스가 돌려주는 읽기 모양 — 컨트롤러가 DTO 로 바꾼다. 반응 개수는 설정된 종류 전부를 (0 포함) 담는다. */
-data class PostSummaryView(val item: PostListItem, val reactions: ReactionState, val author: AuthorCard? = null)
+data class PostSummaryView(
+    val item: PostListItem,
+    val reactions: ReactionState,
+    /** 응답에 나가는 작성자 id ([BoardAuthors.publicId]) — 계정 id 가 아니다 */
+    val publicAuthorId: String,
+    /** author_id 가 톰스톤이거나 카드가 지워진 프로필이다 */
+    val authorDeleted: Boolean,
+    /** 호출자의 계정이 author_id 다 — 프로필 · 공개 id 와 무관하다 */
+    val mine: Boolean,
+    val author: AuthorCard? = null,
+)
 
-data class PostDetailView(val post: Post, val reactions: ReactionState, val author: AuthorCard? = null)
+data class PostDetailView(
+    val post: Post,
+    val reactions: ReactionState,
+    val publicAuthorId: String,
+    val authorDeleted: Boolean,
+    val mine: Boolean,
+    val author: AuthorCard? = null,
+)
 
 /** 최상위 댓글이면 [replies] 에 모든 자손이 작성 순으로 평평하게 들어 있다 (답글의 replies 는 항상 비어 있다). body 는 PUBLISHED 가 아니면 null. */
 data class CommentView(
     val comment: Comment,
+    /** 응답에 나가는 작성자 id ([BoardAuthors.publicId]) */
+    val publicAuthorId: String,
+    val authorDeleted: Boolean,
+    val mine: Boolean,
     val body: String?,
     val reactions: ReactionState,
     val replyCount: Int,
@@ -28,9 +49,11 @@ data class BoardConfigView(
     val commentMaxLength: Int,
     val maxPageSize: Int,
     val canModerate: Boolean,
+    /** [dev.sumin.skeleton.common.author.AuthorIdentities] 빈이 있다 — 글 · 댓글을 쓸 때 `authorId` 가 필수 */
+    val authorRequired: Boolean,
 )
 
-data class CreatePost(val title: String?, val body: String?, val attachments: List<String>?, val status: PostStatus?)
+data class CreatePost(val title: String?, val body: String?, val attachments: List<String>?, val status: PostStatus?, val authorId: String? = null)
 
 data class UpdatePost(val title: String?, val body: String?, val attachments: List<String>?, val status: PostStatus?)
 
@@ -45,7 +68,15 @@ data class PostListRequest(
 )
 
 /** 댓글이 달렸을 때 알림 받을 사람과 그 맥락. 보내는 쪽(notification 모듈)은 [BoardNotifier] 구현이 안다. */
-data class BoardCommentNotice(val recipientId: String, val post: Post, val comment: Comment, val parent: Comment?, val authorName: String? = null)
+data class BoardCommentNotice(
+    val recipientId: String,
+    val post: Post,
+    val comment: Comment,
+    val parent: Comment?,
+    /** 댓글 작성자의 공개 id ([BoardAuthors.publicId]) — 받는 사람의 편지함에 남으므로 계정 id 를 싣지 않는다 */
+    val publicAuthorId: String,
+    val authorName: String? = null,
+)
 
 fun interface BoardNotifier {
     fun commentCreated(notice: BoardCommentNotice)

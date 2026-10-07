@@ -367,11 +367,14 @@ F1 은 B3 의 계약만 정해지면 가짜 서버로 먼저 간다.
 ## 15. 구현 전에 실측할 것 (읽기만으로는 확정하지 못한 것)
 
 - 게시판 `GET` 응답의 `Cache-Control` — 익명 읽기를 켠 앱에서 `mine` · `myReactions` 가 든 응답이 Cloudflare 등 공유 캐시에 남지 않는지.
+  - 실측(B3): `apps/sample` 에 `skeleton.board.http.allow-anonymous-read=true` 를 켜고 보안 체인을 거쳐 `GET /boards/config` · `GET /boards/general/posts` 를 익명과 Bearer 로 불렀다 — 네 응답 모두 `Cache-Control: no-cache, no-store, max-age=0, must-revalidate` · `Pragma: no-cache` · `Expires: 0`(Spring Security 기본 헤더. board 는 아무 헤더도 달지 않고 `Vary` 도 없다). 공유 캐시에 남지 않으므로 코드는 바꾸지 않았다. 단 앱이 자기 `SecurityFilterChain` 으로 `headers.cacheControl` 을 끄면 이 보장이 사라진다 — 그때는 앱이 책임진다.
 - `author_ref is null` 조건이 PostgreSQL · MySQL 양쪽에서 새 인덱스를 타는지(실행 계획).
   - 실측: board_posts 2만 행(1% 가 NULL, `analyze` 뒤)에서 `author_ref is null` 의 `select distinct author_id … limit` · `count(*)` 는 PostgreSQL 18 이 `idx_board_posts_author_ref` Bitmap Index Scan(`enable_seqscan` 기본값 그대로), MySQL 은 `type=ref` 로 같은 인덱스를 탄다. 넘겨받기 `update … where author_id = :a and author_ref is null` 은 PostgreSQL 이 기존 `idx_board_posts_author` 를, MySQL 이 새 인덱스(range)를 고른다 — 둘 다 인덱스를 쓴다. 댓글 표는 같은 모양이라 따로 재지 않았다.
 - `author-profile` 의 `AuthorDirectory` 가 `account` 의 기본 구현보다 먼저 등록되는지(`@AutoConfiguration(before = …)`) — 컨텍스트 러너로.
 - `PATCH` 본문의 모르는 칸(`authorId`)이 조용히 무시되는지, 거절되는지(지금 Jackson 설정).
+  - 실측(B3): 조용히 무시된다 — `PATCH …/posts/{id}` 에 `{"title":"edited","authorId":"prf_u2"}` 를 보내면 `200`, 제목은 바뀌고 `authorId` 는 그대로다(`BoardAuthorIdentitiesWebTest`). 거절하지 않으므로 수정 요청에 `authorId` 를 실어 보내는 낡은 클라이언트도 깨지지 않고, 작성자는 바뀌지 않는다.
 - 앱(샘플)의 `BoardPolicy.canAttach` 가 지금 접두사 비교를 하는지 — 한다면 B4 에서 함께 바꾼다.
+  - 실측(B3): 하지 않는다 — 샘플 앱은 `BoardPolicy` 를 바꾸지 않아 `DefaultBoardPolicy.canAttach` 가 모든 키를 허용한다(`grep canAttach apps` 결과 없음). 접두사 비교는 문서(`docs/modules/board.md`)의 안내일 뿐이다. 바꾸는 것은 B4 · B8.
 
 ## 정해야 할 것 — 결정됨 (2026-10-07 주인)
 

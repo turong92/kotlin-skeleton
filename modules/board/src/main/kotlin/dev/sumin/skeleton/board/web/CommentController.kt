@@ -69,7 +69,7 @@ class CommentController(
     @IdempotentOperation
     @PostMapping
     fun create(authentication: Authentication?, @PathVariable code: String, @PathVariable postId: Long, @RequestBody request: CreateCommentRequest) =
-        service.create(callers.require(authentication), code, postId, request.parentId, request.body).toResponse().let { comment ->
+        service.create(callers.require(authentication), code, postId, request.parentId, request.body, request.authorId).toResponse().let { comment ->
             Response.created(ServletUriComponentsBuilder.fromCurrentRequest().path("/{id}").buildAndExpand(comment.id).toUri(), comment)
         }
 

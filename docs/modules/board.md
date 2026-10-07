@@ -7,7 +7,7 @@ HTTP 는 `skeleton.board.http.base-path`(기본 `/api/v1/boards`)에 열린다 (
 
 | 메서드 · 경로 | 하는 일 | 누가 |
 |---|---|---|
-| `GET /config` | 반응 종류 · 모드 · 깊이 상한 · 길이 상한 · `canModerate` | 로그인 |
+| `GET /config` | 반응 종류 · 모드 · 깊이 상한 · 길이 상한 · `canModerate` · `authorRequired` | 로그인 |
 | `GET /` · `GET /{code}` · `POST /` | 게시판 목록(글 수 포함) · 하나 · 만들기 | 로그인 · 로그인 · 운영자 |
 | `GET /{code}/posts?page&size&sort=latest\|reactions\|comments&q&reaction&status&mine` | 글 목록(페이지 envelope). 고정 글이 항상 먼저. `reaction=<코드>` 는 그 종류의 개수로 정렬. `q` 는 제목 · 본문 | 로그인 |
 | `GET /{code}/posts/{id}` | 글 상세 (호출마다 조회수 +1). 숨김 · 삭제 · 임시저장은 작성자 · 운영자 외에는 404 | 로그인 |
@@ -18,12 +18,12 @@ HTTP 는 `skeleton.board.http.base-path`(기본 `/api/v1/boards`)에 열린다 (
 | `PUT` · `DELETE /…/posts/{id}/reactions` · `…/comments/{cid}/reactions` | `{type}` 로 반응 · 떼기(`?type=` 없으면 내 반응 전부). 응답 `{counts, myReactions}` | 로그인 |
 
 `status`(운영자) · `mine=true`(내 글 — 임시저장 포함) 목록 필터, 에러 코드는 `BOARD.*` ([에러 표](../errors.md)에 같은 모양): `NOT_FOUND` · `POST_NOT_FOUND` · `COMMENT_NOT_FOUND` 404 ·
-`FORBIDDEN` 403 · `REACTION_TYPE_INVALID` · `CONTENT_INVALID` 400 · `COMMENT_TOO_DEEP` 422 · `POST_NOT_COMMENTABLE` · `CODE_TAKEN` 409 · `RATE_LIMITED` 429.
+`FORBIDDEN` · `AUTHOR_NOT_ALLOWED` 403 · `REACTION_TYPE_INVALID` · `CONTENT_INVALID` · `AUTHOR_REQUIRED` 400 · `COMMENT_TOO_DEEP` 422 · `POST_NOT_COMMENTABLE` · `CODE_TAKEN` 409 · `RATE_LIMITED` 429.
 
-**작성자 이름**: 글 요약 · 글 상세 · 댓글 응답에는 `authorId`(그대로) · `authorDeleted` 와 함께 **`authorName: string | null`** · **`authorTag: string | null`**(4자리 숫자 문자열)이 실린다(키는 늘 있다). 이름은 platform 의 `AuthorDirectory` 가 준다 —
+**작성자 이름**: 글 요약 · 글 상세 · 댓글 응답에는 `authorId`(공개 작성자 id — 아래 「공개 작성자 id」) · `authorDeleted` · `mine` 과 함께 **`authorName: string | null`** · **`authorTag: string | null`**(4자리 숫자 문자열)이 실린다(키는 늘 있다). 이름은 platform 의 `AuthorDirectory` 가 준다 —
 `account` 가 있으면 그 닉네임 · 꼬리표(기본 구현), 앱이 같은 타입의 빈을 두면 그것(예: 돌판마다 다른 닉네임 — `AuthorContext(source="board", scope=<게시판 코드>)` 로 어느 게시판인지 안다), 아무것도 없으면 `null`. board 는 `account` 를 모르고 그 반대도 같다.
 **요청 하나에 조회 한 번**: 목록 · 스레드는 모든 작성자 id 를 모아(중복 제거) 한 번만 묻는다(`AuthorNamesTest` 가 호출 횟수를 센다) — 글마다 묻지 않는다. 지워진 작성자(톰스톤)는 묻지 않고 이름이 `null` + `authorDeleted: true`.
-고리가 던지거나 느려도 응답은 이름만 비워 나간다(경고 로그). 댓글 알림의 payload 에는 **이름을 싣지 않는다**(`authorId` 만) — 받은편지함의 payload 는 작성자가 탈퇴(익명화)한 뒤에도 남의 편지함에 남으므로, 거기 적힌 닉네임은 지워지지 않는다. 알림 화면이 이름이 필요하면 **읽는 쪽이 `authorId` 로 푼다**(탈퇴한 작성자는 이름이 없다). 제목 문구는 그대로(`BoardNotificationFormatter`) — 앱이 문구에 이름을 넣으려면 `BoardCommentNotice.authorName` 을 쓸 수 있으나 그 문구도 같은 이유로 편지함에 남는다.
+고리가 던지거나 느려도 응답은 이름만 비워 나간다(경고 로그). 댓글 알림의 payload 에는 **이름을 싣지 않는다**(`authorId` — 공개 작성자 id — 만) — 받은편지함의 payload 는 작성자가 탈퇴(익명화)한 뒤에도 남의 편지함에 남으므로, 거기 적힌 닉네임은 지워지지 않는다. 알림 화면이 이름이 필요하면 **읽는 쪽이 `authorId` 로 푼다**(탈퇴한 작성자는 이름이 없다). 제목 문구는 그대로(`BoardNotificationFormatter`) — 앱이 문구에 이름을 넣으려면 `BoardCommentNotice.authorName` 을 쓸 수 있으나 그 문구도 같은 이유로 편지함에 남는다.
 
 **계정 삭제**: `account` 가 계정을 지울 때(platform 의 `AccountErasureListener`) 글 · 댓글 작성자와 반응의 계정이 계정마다 하나인 톰스톤(`deleted:<해시>`)으로 바뀐다 — 행 · 카운터는 남고 응답에 `authorDeleted: true` 가 실려 화면이 "삭제된 사용자" 를 보인다.
 앱이 자기 저장소를 두면 `BoardErasureRepository` 도 구현한다.
@@ -36,10 +36,43 @@ HTTP 는 `skeleton.board.http.base-path`(기본 `/api/v1/boards`)에 열린다 (
 | 설정 접두사 | `skeleton.board` — [docs/config/modules/board.yml](../config/modules/board.yml) |
 | 기본 동작 | 켜짐. 게시판은 `seed-boards` 로 심거나 운영자가 만든다 — 아무것도 심지 않으면 비어 있다. 반응은 LIKE · DISLIKE, SINGLE 모드. 알림 · 한도는 없는 것과 같다. |
 | 부팅에 필요한 것 | 저장소 포트 네 개(`BoardRepository` · `PostRepository` · `CommentRepository` · `ReactionRepository`) — `board-jdbc` 가 내거나 앱이 직접 구현한다. 없으면 시작이 실패하고 메시지가 빠진 빈 이름을 적는다. |
-| 교체 지점 | `BoardErasureRepository`, `BoardPolicy`, `BoardRateLimiter`, `BoardNotifier`, `BoardNotificationFormatter`, `AuthorDirectory`, `AuthorNames`, `BoardRepository`, `PostRepository`, `CommentRepository`, `ReactionRepository`, `BoardController`, `PostController`, `CommentController` |
+| 교체 지점 | `BoardErasureRepository`, `BoardPolicy`, `BoardRateLimiter`, `BoardNotifier`, `BoardNotificationFormatter`, `AuthorDirectory`, `AuthorNames`, `BoardAuthorRules`, `BoardRepository`, `PostRepository`, `CommentRepository`, `ReactionRepository`, `BoardController`, `PostController`, `CommentController` |
 | 마이그레이션 | 없음 (스키마는 `board-jdbc`) |
 | 프론트 짝 | `@skeleton/board` |
 | 테스트 | `modules/board/src/test`, `modules/board/src/noOptionalTest` (`notification` · `idempotency` 가 클래스패스에 없을 때) |
+
+## 공개 작성자 id · `mine` · 작성 프로필 (`AuthorIdentities`)
+
+한 사람이 여러 닉네임(프로필)을 갖고 글 · 댓글마다 골라 쓰는 앱을 위한 자리다 — 두 프로필이 같은 사람이라는 사실이 다른 사용자에게 드러나지 않게. board 는 프로필 모듈(`author-profile`)도 `account` 도 **모른다**: platform 의 `AuthorIdentities` 빈(이 계정이 이 작성자 id 로 써도 되는가) 하나가 있느냐로 켜진다.
+빈이 없으면 동작 · 응답은 이 기능 이전과 같다(덧붙는 키 `mine` · `authorRequired: false` 만 다르다). 설계 · 전수표: `docs/superpowers/specs/2026-10-07-author-profiles-design.md`.
+
+**공개 id 규칙은 `BoardAuthors.publicId` 한 곳**이고 응답 DTO(글 요약 · 상세 · 댓글) · 댓글 알림 payload · `AuthorNames` 조회가 모두 이것을 쓴다:
+
+```
+공개 id = author_ref
+          ?: author_id                    (AuthorIdentities 없음, 또는 author_id 가 톰스톤 `deleted:…`)
+          ?: "pending:<p|c><행 id>"        (AuthorIdentities 있음 + 아직 프로필로 넘겨받지 않은 옛 행 — `pending:p123` 글 · `pending:c45` 댓글)
+```
+
+- `AuthorIdentities` 가 있으면 계정 id(`author_id`)는 **어떤 응답에도 나가지 않는다.** 톰스톤 행은 `author_ref` 가 있으면 그것, 없는(옛) 행이면 톰스톤 값이 나간다. `pending:` · `deleted:` 는 `AuthorDirectory` 에 묻지 않는다(이름 없음).
+- `authorDeleted = author_id 가 톰스톤 || 카드.deleted`(디렉터리가 돌려준 카드가 지워진 프로필 — 그때 `authorName` 은 `null`).
+- **`mine: boolean`**(글 요약 · 상세 · 댓글, 목록 · 상세 · 한 댓글 응답 전부) = 호출자 != null && 호출자 계정 == `author_id`. **`AuthorIdentities` 유무와 무관하게 항상 실린다** — 프론트가 `accountId === authorId` 로 "내 글" 을 판단하던 것은 공개 id 가 프로필 id 가 되면 늘 거짓이다. 익명 · 운영자(작성자가 아닐 때)는 `false`.
+- `GET /config` 의 **`authorRequired`** = `AuthorIdentities` 빈 유무. 프론트는 이것으로 작성 프로필 선택기를 보인다.
+
+**쓰기 규칙**(글 · 댓글 생성 본문의 `authorId`):
+
+| `AuthorIdentities` | 본문 `authorId` | 결과 |
+|---|---|---|
+| 없음 | 없음 | 지금과 같다 — `author_ref = NULL` |
+| 없음 | 있음 | `403 BOARD.AUTHOR_NOT_ALLOWED` |
+| 있음 | 없음(빈 문자열 포함) | `400 BOARD.AUTHOR_REQUIRED` |
+| 있음 | 있음 | `allows(호출자 계정, authorId, AuthorContext("board", 게시판 코드))` 가 참이면 `author_ref = authorId`, 거짓이면 `403 BOARD.AUTHOR_NOT_ALLOWED` — 남의 · 없는 · 지워진 id 를 같은 문구로 답한다 |
+
+- `author_id` 는 언제나 호출자 계정 — 권한(`BoardPolicy`) · `mine=true` 목록 · 알림 수신자 · 자기 글 알림 생략 · 한도 · 반응은 지금처럼 **계정 기준**이다(프로필 A 로 쓴 글에 B 로 답해도 자기에게 알림이 가지 않는다).
+- **수정에는 `authorId` 칸이 없다**(`PATCH` 본문의 모르는 칸은 조용히 무시된다). 운영자가 고쳐도, PUBLISHED ↔ DRAFT 를 오가도 `author_ref` 는 바뀌지 않는다.
+- 첨부: `AuthorIdentities` 가 있을 때 첨부 키에 **호출자 계정 id 가 들어 있으면** `400 BOARD.CONTENT_INVALID`(글 만들기 · 고치기). board 는 storage 를 모른 채 문자열 포함만 본다 — 계정 id 가 든 키가 공개 `attachments` 로 나가면 두 프로필의 글이 이어진다. 키에 계정 id 가 없게 만드는 쪽은 storage 의 몫이다.
+- 알림 payload 의 `authorId` 는 공개 id 다. 수신자(`recipientIds`)는 계정이다.
+- `BoardPolicy.canAttach` 의 기본 구현은 모든 키를 허용한다(접두사를 비교하지 않는다). 샘플 앱은 `BoardPolicy` 를 바꾸지 않는다.
 
 ## 반응 종류를 늘리는 법
 

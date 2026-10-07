@@ -54,7 +54,7 @@ class MinimalRepositories {
 
     @Bean fun posts(): PostRepository = object : PostRepository {
         override fun insert(post: NewPost) =
-            Post(1, post.boardCode, post.authorId, post.title, post.body, post.status, false, 0, 0, 0, post.attachments, post.now, post.now)
+            Post(1, post.boardCode, post.authorId, post.title, post.body, post.status, false, 0, 0, 0, post.attachments, post.now, post.now, post.authorRef)
         override fun find(id: Long): Post? = null
         override fun update(id: Long, change: PostChange, now: Instant): Post? = null
         override fun incrementViews(id: Long) = Unit
@@ -100,6 +100,15 @@ class NoOptionalModulesTest {
     @Test
     fun `the notifier is the no-op default`() {
         assertEquals(NoopBoardNotifier, notifier)
+    }
+
+    @Test
+    fun `without the author SPI beans the config says authorRequired=false and a write without authorId works as before`() {
+        mvc.perform(get("/api/v1/boards/config").principal(user)).andExpect(jsonPath("$.value.authorRequired").value(false))
+        mvc.perform(post("/api/v1/boards/general/posts").principal(user).contentType(MediaType.APPLICATION_JSON).content("""{"title":"t","body":"b"}"""))
+            .andExpect(status().isCreated).andExpect(jsonPath("$.value.authorId").value("acc_user")).andExpect(jsonPath("$.value.mine").value(true))
+        mvc.perform(post("/api/v1/boards/general/posts").principal(user).contentType(MediaType.APPLICATION_JSON).content("""{"title":"t","body":"b","authorId":"prf_x"}"""))
+            .andExpect(status().isForbidden).andExpect(jsonPath("$.code").value("BOARD.AUTHOR_NOT_ALLOWED"))
     }
 
     @Test

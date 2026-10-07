@@ -19,6 +19,8 @@ enum class BoardErrorCode(
     CONTENT_INVALID("BOARD.CONTENT_INVALID", HttpStatus.BAD_REQUEST, "Invalid content"),
     POST_NOT_COMMENTABLE("BOARD.POST_NOT_COMMENTABLE", HttpStatus.CONFLICT, "Cannot comment here"),
     CODE_TAKEN("BOARD.CODE_TAKEN", HttpStatus.CONFLICT, "Board code already taken"),
+    AUTHOR_REQUIRED("BOARD.AUTHOR_REQUIRED", HttpStatus.BAD_REQUEST, "Author required"),
+    AUTHOR_NOT_ALLOWED("BOARD.AUTHOR_NOT_ALLOWED", HttpStatus.FORBIDDEN, "Author not allowed"),
     RATE_LIMITED("BOARD.RATE_LIMITED", HttpStatus.TOO_MANY_REQUESTS, "Too many requests"),
 }
 

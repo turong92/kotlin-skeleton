@@ -12,18 +12,21 @@ class PostService(
     private val properties: BoardProperties,
     private val limiter: BoardRateLimiter,
     private val time: TimeProvider,
+    private val authorRules: BoardAuthorRules = BoardAuthorRules { null },
 ) {
     fun create(caller: BoardCaller, boardCode: String, request: CreatePost): PostDetailView {
         val board = access.board(boardCode)
         if (!policy.canCreatePost(caller, board)) forbidden("Not allowed to post in $boardCode")
+        val authorRef = authorRules.authorRefFor(caller, request.authorId, boardCode)
         val status = request.status ?: PostStatus.PUBLISHED
         if (status !in WRITABLE_STATUSES) invalid("status must be DRAFT or PUBLISHED")
         val title = rules.title(request.title)
         val body = rules.postBody(request.body)
         val attachments = rules.attachments(request.attachments)
+        authorRules.rejectAccountIdKeys(caller, attachments)
         if (attachments.isNotEmpty() && !policy.canAttach(caller, attachments)) forbidden("Not allowed to attach these files")
         rateLimit(caller)
-        val post = posts.insert(NewPost(boardCode, caller.accountId, title, body, status, attachments, time.now()))
+        val post = posts.insert(NewPost(boardCode, caller.accountId, title, body, status, attachments, time.now(), authorRef))
         return detail(caller, post)
     }
 
@@ -51,8 +54,17 @@ class PostService(
             ),
         )
         val states = reactions.states(ReactionTarget.POST, page.values.map { it.id }, caller)
-        val names = authors.of(boardCode, page.values.map { it.authorId })
-        return PageResult(page.values.map { PostSummaryView(it, states.getValue(it.id), names[it.authorId]) }, page.totalElements)
+        val active = authorRules.active
+        val publicIds = page.values.associate { it.id to BoardAuthors.publicId(it.authorRef, it.authorId, BoardAuthors.POST_ROW, it.id, active) }
+        val names = authors.of(boardCode, publicIds.values)
+        return PageResult(
+            page.values.map {
+                val publicId = publicIds.getValue(it.id)
+                val card = names[publicId]
+                PostSummaryView(it, states.getValue(it.id), publicId, BoardAuthors.isDeleted(it.authorId) || card?.deleted == true, caller?.accountId == it.authorId, card)
+            },
+            page.totalElements,
+        )
     }
 
     fun update(caller: BoardCaller, boardCode: String, postId: Long, request: UpdatePost): PostDetailView {
@@ -60,6 +72,7 @@ class PostService(
         if (!policy.canEditPost(caller, post)) forbidden("Not allowed to edit post $postId")
         request.status?.let { if (it !in WRITABLE_STATUSES) invalid("status must be DRAFT or PUBLISHED (moderators use /moderation)") }
         val attachments = request.attachments?.let { rules.attachments(it) }
+        authorRules.rejectAccountIdKeys(caller, attachments.orEmpty())
         if (!attachments.isNullOrEmpty() && !policy.canAttach(caller, attachments)) forbidden("Not allowed to attach these files")
         val change = PostChange(
             title = request.title?.let { rules.title(it) },
@@ -95,8 +108,14 @@ class PostService(
         return null to setOf(status)
     }
 
-    private fun detail(caller: BoardCaller?, post: Post) =
-        PostDetailView(post, reactions.state(ReactionTarget.POST, post.id, caller), authors.one(post.boardCode, post.authorId))
+    private fun detail(caller: BoardCaller?, post: Post): PostDetailView {
+        val publicId = BoardAuthors.publicId(post.authorRef, post.authorId, BoardAuthors.POST_ROW, post.id, authorRules.active)
+        val card = authors.one(post.boardCode, publicId)
+        return PostDetailView(
+            post, reactions.state(ReactionTarget.POST, post.id, caller), publicId,
+            BoardAuthors.isDeleted(post.authorId) || card?.deleted == true, caller?.accountId == post.authorId, card,
+        )
+    }
 
     private fun rateLimit(caller: BoardCaller) {
         if (!limiter.tryAcquire(caller.accountId, "post")) throw BoardException(BoardErrorCode.RATE_LIMITED, "Too many posts, slow down")

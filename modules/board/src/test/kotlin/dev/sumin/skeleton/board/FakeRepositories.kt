@@ -37,7 +37,7 @@ class FakeBoardRepository(private val s: FakeStore) : BoardRepository {
 class FakePostRepository(private val s: FakeStore) : PostRepository {
     override fun insert(post: NewPost): Post = s.locked {
         val id = s.ids.incrementAndGet()
-        Post(id, post.boardCode, post.authorId, post.title, post.body, post.status, false, 0, 0, 0, post.attachments, post.now, post.now)
+        Post(id, post.boardCode, post.authorId, post.title, post.body, post.status, false, 0, 0, 0, post.attachments, post.now, post.now, post.authorRef)
             .also { s.posts[id] = it }
     }
 
@@ -68,7 +68,7 @@ class FakePostRepository(private val s: FakeStore) : PostRepository {
         val sorted = filtered.sortedWith(compareByDescending<Post> { it.pinned }.then(key).thenByDescending { it.createdAt }.thenByDescending { it.id })
         val rows = sorted.drop(query.page * query.size).take(query.size).map {
             PostListItem(it.id, it.boardCode, it.authorId, it.title, it.body.take(query.excerptLength), it.status, it.pinned, it.viewCount,
-                it.commentCount, it.reactionCount, it.attachments.size, it.createdAt, it.updatedAt)
+                it.commentCount, it.reactionCount, it.attachments.size, it.createdAt, it.updatedAt, it.authorRef)
         }
         PageResult(rows, filtered.size.toLong())
     }
@@ -80,7 +80,7 @@ class FakeCommentRepository(private val s: FakeStore) : CommentRepository {
         s.posts[post.id] = post.copy(commentCount = post.commentCount + 1)
         val id = s.ids.incrementAndGet()
         Comment(id, comment.postId, comment.parentId, comment.rootId ?: id, comment.depth, comment.authorId, comment.body,
-            CommentStatus.PUBLISHED, 0, comment.now, comment.now).also { s.comments[id] = it }
+            CommentStatus.PUBLISHED, 0, comment.now, comment.now, comment.authorRef).also { s.comments[id] = it }
     }
 
     override fun find(id: Long): Comment? = s.locked { s.comments[id] }

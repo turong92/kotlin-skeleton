@@ -75,6 +75,23 @@ class BoardWebTest {
     }
 
     @Test
+    fun `without an identities bean the responses only gain mine and authorRequired=false, and a sent authorId is refused`() {
+        call(get("/api/v1/boards/config"), user).andExpect(jsonPath("$.value.authorRequired").value(false))
+        val id = newPost()
+        call(get("/api/v1/boards/general/posts/$id"), user).andExpect(jsonPath("$.value.authorId").value("acc_user")).andExpect(jsonPath("$.value.mine").value(true))
+        call(get("/api/v1/boards/general/posts/$id"), third).andExpect(jsonPath("$.value.mine").value(false))
+        call(get("/api/v1/boards/general/posts"), user).andExpect(jsonPath("$.values[0].mine").value(true))
+        val c = newComment(id, third)
+        call(get("/api/v1/boards/general/posts/$id/comments"), third).andExpect(jsonPath("$.values[0].mine").value(true))
+        call(get("/api/v1/boards/general/posts/$id/comments"), user).andExpect(jsonPath("$.values[0].mine").value(false))
+        assertEquals(c, store.comments.keys.single())
+        call(post("/api/v1/boards/general/posts").idem().json("""{"title":"t","body":"b","authorId":"prf_x"}"""), user)
+            .andExpect(status().isForbidden).andExpect(jsonPath("$.code").value("BOARD.AUTHOR_NOT_ALLOWED"))
+        call(post("/api/v1/boards/general/posts/$id/comments").idem().json("""{"body":"b","authorId":"prf_x"}"""), user)
+            .andExpect(status().isForbidden).andExpect(jsonPath("$.code").value("BOARD.AUTHOR_NOT_ALLOWED"))
+    }
+
+    @Test
     fun `boards are listed with their published post count and fetched by code`() {
         newPost()
         newPost(body = """{"title":"d","body":"d","status":"DRAFT"}""")

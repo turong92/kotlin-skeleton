@@ -71,10 +71,3 @@ interface BoardErasureRepository {
     /** 바꾼 행 수. **멱등** — 다시 불러도 같은 결과 (이미 바뀐 행은 대상이 아니다) */
     fun anonymizeAuthor(accountId: String, tombstone: String): Int
 }
-
-/** 지워진 계정의 작성자 값은 이 접두사로 시작한다 (계정 모듈의 `AccountTombstone` 과 같은 약속 — 모듈끼리 서로의 타입을 모르게 문자열 규칙으로 맞춘다) */
-object BoardAuthors {
-    const val DELETED_PREFIX = "deleted:"
-
-    fun isDeleted(authorId: String?): Boolean = authorId != null && authorId.startsWith(DELETED_PREFIX)
-}

@@ -7,6 +7,7 @@ class BoardService(
     private val policy: BoardPolicy,
     private val properties: BoardProperties,
     private val time: TimeProvider,
+    private val authorRules: BoardAuthorRules = BoardAuthorRules { null },
 ) {
     fun config(caller: BoardCaller?): BoardConfigView =
         BoardConfigView(
@@ -18,6 +19,7 @@ class BoardService(
             commentMaxLength = properties.commentMaxLength,
             maxPageSize = properties.maxPageSize,
             canModerate = caller != null && policy.canModerate(caller),
+            authorRequired = authorRules.active,
         )
 
     fun list(): List<Board> = boards.findAll()

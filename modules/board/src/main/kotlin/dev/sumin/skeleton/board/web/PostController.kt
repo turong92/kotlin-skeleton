@@ -87,7 +87,7 @@ class PostController(
     @IdempotentOperation
     @PostMapping
     fun create(authentication: Authentication?, @PathVariable code: String, @RequestBody request: CreatePostRequest) =
-        service.create(callers.require(authentication), code, CreatePost(request.title, request.body, request.attachments, request.status))
+        service.create(callers.require(authentication), code, CreatePost(request.title, request.body, request.attachments, request.status, request.authorId))
             .toResponse(properties.excerptLength).let { post ->
                 Response.created(ServletUriComponentsBuilder.fromCurrentRequest().path("/{id}").buildAndExpand(post.id).toUri(), post)
             }

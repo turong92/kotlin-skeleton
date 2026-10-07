@@ -36,7 +36,7 @@ interceptors.
 - `ACCOUNT.*`: the `account` module — `TOKEN_INVALID` (410), `PASSWORD_POLICY` (400, `data.violations`), `CURRENT_PASSWORD_INVALID` · `REAUTH_FAILED` · `CAPTCHA_FAILED` · `METHOD_UNKNOWN` · `PASSWORD_REQUIRED` (400), `SIGN_UP_CLOSED` (403), `EMAIL_TAKEN` · `SOCIAL_EMAIL_CONFLICT` · `IDENTITY_TAKEN` · `IDENTITY_EXISTS` · `LAST_SIGN_IN_METHOD` · `LAST_ADMIN` · `SELF_ACTION_FORBIDDEN` (409), `NOT_FOUND` · `IDENTITY_NOT_FOUND` (404), `RATE_LIMITED` (429, `Retry-After`). Full table and meanings: [accounts.md](accounts.md).
 - `AUTH_SOCIAL.*`: OAuth/social login errors.
 - `BOARD.*`: the `board` module — `NOT_FOUND`, `POST_NOT_FOUND`, `COMMENT_NOT_FOUND` (404), `FORBIDDEN` (403),
-  `REACTION_TYPE_INVALID`, `CONTENT_INVALID` (400), `COMMENT_TOO_DEEP` (422), `POST_NOT_COMMENTABLE`, `CODE_TAKEN` (409), `RATE_LIMITED` (429).
+  `REACTION_TYPE_INVALID`, `CONTENT_INVALID`, `AUTHOR_REQUIRED` (400), `AUTHOR_NOT_ALLOWED` (403 — the same words for another account's, an unknown and a deleted author id), `COMMENT_TOO_DEEP` (422), `POST_NOT_COMMENTABLE`, `CODE_TAKEN` (409), `RATE_LIMITED` (429).
 - `PAYMENT.*`: provider-neutral payment errors. Vendor codes are nested under
   `data.providerCode`, not promoted to the top-level `code`.
 
