@@ -13,6 +13,11 @@ skeleton:
   account:
     mail:
       link-base-url: http://localhost:5173   # react-skeleton 개발 서버 (apps/sample)
+    sign-up:
+      per-ip: 500                            # 로컬은 모두가 같은 IP(localhost)다 — 가입 화면을 여러 번 시험해도 429 가 나지 않게 (모듈 기본 10/h)
+    verification:
+      per-ip: 500
+      attempts-per-ip: 500
     login:
       per-account: 200                       # e2e(Playwright)가 같은 시드 계정으로 자주 로그인한다 — 로컬에서만 한도를 넉넉히
       per-ip: 500
