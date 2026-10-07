@@ -92,6 +92,7 @@
 - auth-social-oidc: 범용 OpenID Connect 소셜 로그인 제공자 — 속성만으로… [라인 로그인, LINE 로그인]
 - auth-social-x: X(Twitter) 로그인 제공자 — OAuth 2.0… [X 로그인, 엑스 로그인]
 - author-profile: 작성자 프로필 — 한 계정이 닉네임(프로필)을 여러 개 만들어 글 ·… [작성자 프로필, 닉네임 여러 개]
+- author-profile-jdbc: 작성자 프로필 저장소 — PostgreSQL · MySQL 로… [작성자 프로필 저장소, 프로필 DB]
 - board: 게시판 — 글 · 중첩 댓글(대댓글) [게시판, 커뮤니티]
 - board-jdbc: 게시판 저장소 — PostgreSQL · MySQL 로 board 의… [게시판 저장소, 게시판 DB]
 - captcha-turnstile: 봇 방지 — Cloudflare Turnstile 토큰을 서버에서… [캡차, 봇 방지]

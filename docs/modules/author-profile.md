@@ -9,7 +9,7 @@
 - **첫 프로필**: 계정이 처음 갖는 프로필. 계정 이름 · 꼬리표를 한 번 복사하고(이름이 없으면 이름 없는 프로필), `adopt-on-startup`(기본 켜짐)이 `AuthorAdoptionListener`(예: `board-jdbc`)가 가진 옛 글을 여기로 넘겨받는다 — 계정 id 커서로 끝까지 훑어 못 옮기는 계정이 뒤 계정을 굶기지 않고, 계정별 예외는 삼키며, 계정 id · 프로필 id 쌍을 로그에 남기지 않는다. 목록 조회가 부르는 `ensureFirstProfile` 도 같은 넘겨받기를 그 계정에 한 번 해 본다(실행기를 끈 앱).
 - 탈퇴(`AccountErasureListener`)는 그 계정의 프로필 행을 모두 지운다. 글 쪽 `author_ref` 는 건드리지 않는다.
 - `AuthorDirectory` 는 `AccountAutoConfiguration` **보다 먼저** 등록된다 — `prf_` 가 아닌 id(아직 넘겨받지 않은 옛 행의 계정 id)는 `account` 의 기본 디렉터리에 그대로 넘긴다.
-- 저장소 포트(`AuthorProfileRepository`)는 `author-profile-jdbc` 가 구현한다. **메모리 구현은 없다** — 어댑터가 없으면 시작이 실패한다. HTTP(`/author-profiles`) · 관리자 연결 조회는 뒤따르는 조각이다(`http.*` · `admin.*` 키는 자리만 있다).
+- 저장소 포트(`AuthorProfileRepository`)는 [author-profile-jdbc](author-profile-jdbc.md) 가 구현한다 (`author-profile` 은 어댑터에 의존하지 않으므로 `--modules author-profile,author-profile-jdbc` 라고 둘 다 적는다). **메모리 구현은 없다** — 어댑터가 없으면 시작이 실패한다. HTTP(`/author-profiles`) · 관리자 연결 조회는 뒤따르는 조각이다(`http.*` · `admin.*` 키는 자리만 있다).
 
 | 항목 | 내용 |
 |---|---|
@@ -20,7 +20,7 @@
 | 기본 동작 | 켜짐. 계정당 프로필 5 개 · 30 일에 5 번 만들기, 기동할 때 옛 글 넘겨받기. 저장소 어댑터가 없으면 기동 실패. |
 | 부팅에 필요한 것 | `AuthorProfileRepository` 구현(`author-profile-jdbc`)과 `account` 의 부팅 조건. |
 | 교체 지점 | `AuthorProfileRepository`, `AuthorProfileService`, `AuthorIdentities`, `AuthorDirectory`, `authorProfileErasureListener`, `authorProfileAdoptionRunner` |
-| 마이그레이션 | 없음 |
+| 마이그레이션 | 없음 (스키마는 `author-profile-jdbc`) |
 | 프론트 짝 | 없음 (프론트 패키지 @skeleton/author-profile 은 뒤따르는 조각이다) |
 | 테스트 | `modules/author-profile/src/test` |
 

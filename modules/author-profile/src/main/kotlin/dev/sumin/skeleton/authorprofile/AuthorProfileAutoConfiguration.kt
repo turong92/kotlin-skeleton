@@ -27,7 +27,7 @@ import org.springframework.context.annotation.Bean
  * 이 설정이 먼저 빈을 둬야 프로필 디렉터리가 이긴다 (`prf_` 가 아닌 id 는 이 디렉터리가 `account` 의 기본 구현에 그대로 넘긴다). 모든 빈은 [ConditionalOnMissingBean] — 앱이 같은 타입을 두면 물러난다.
  * HTTP(`/author-profiles`)와 관리자 조회는 이 조각에 없다.
  */
-// afterName 의 클래스 이름은 author-profile-jdbc(B5b)의 실제 자동설정 클래스와 맞춰야 한다 — 지금은 약속한 이름일 뿐 그 클래스가 아직 없다
+// afterName 의 클래스 이름은 author-profile-jdbc 의 자동설정 클래스와 같아야 한다 (author-profile-jdbc 의 AuthorProfileJdbcAutoConfigurationTest 가 맞춰 본다)
 @AutoConfiguration(before = [AccountAutoConfiguration::class], afterName = ["dev.sumin.skeleton.authorprofile.jdbc.AuthorProfileJdbcAutoConfiguration"])
 @EnableConfigurationProperties(AuthorProfileProperties::class)
 class AuthorProfileAutoConfiguration {

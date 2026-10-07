@@ -752,12 +752,12 @@
       "module": "author-profile",
       "path": "modules/author-profile",
       "status": "experimental",
-      "summary": "작성자 프로필 — 한 계정이 닉네임(프로필)을 여러 개 만들어 글 · 댓글마다 골라 쓰고, 두 프로필이 같은 사람이라는 사실이 다른 사용자에게 드러나지 않게 한다(공개 작성자 id prf_…, 독립 꼬리표, 즉시 삭제, 옛 글을 첫 프로필로 넘겨받기). 도메인 · 서비스 · 디렉터리 · 신원 확인 · 탈퇴 고리까지이고 HTTP 와 저장소 어댑터(author-profile-jdbc)는 뒤따르는 조각이다.",
+      "summary": "작성자 프로필 — 한 계정이 닉네임(프로필)을 여러 개 만들어 글 · 댓글마다 골라 쓰고, 두 프로필이 같은 사람이라는 사실이 다른 사용자에게 드러나지 않게 한다(공개 작성자 id prf_…, 독립 꼬리표, 즉시 삭제, 옛 글을 첫 프로필로 넘겨받기). 도메인 · 서비스 · 디렉터리 · 신원 확인 · 탈퇴 고리까지이고 저장소는 author-profile-jdbc 가 맡는다(HTTP 는 뒤따르는 조각이다).",
       "starter": false,
-      "newProjectFlag": "--modules author-profile",
+      "newProjectFlag": "--modules author-profile,author-profile-jdbc",
       "autoIncludes": [],
       "needs": {
-        "requires": [],
+        "requires": ["author-profile-jdbc"],
         "oneOf": [],
         "optional": []
       },
@@ -770,13 +770,42 @@
       "docs": ["docs/modules/author-profile.md"],
       "frontend": null,
       "notFor": [
-        "저장소를 모른다 — 포트(AuthorProfileRepository)의 어댑터(author-profile-jdbc)가 있어야 뜬다(없으면 시작에 실패한다). 어댑터는 뒤따르는 조각이라 지금은 앱이 직접 구현해야 한다",
+        "저장소를 모른다 — author-profile-jdbc 를 같이 고른다(없으면 시작에 실패한다). 다른 DB(JPA · jOOQ)로 저장하려면 포트 AuthorProfileRepository 를 앱이 구현한다",
         "account 위에 얹힌 모듈이다 — account 없이 자기 AuthAccountRepository 만 쓰는 앱에는 맞지 않는다",
         "아바타 · 소개글 · 프로필 공개 페이지 · '이 프로필의 글 모아 보기'는 없다"
       ],
       "keywords": {
         "ko": ["작성자 프로필", "닉네임 여러 개", "부캐", "익명 프로필", "프로필 선택", "글마다 닉네임"],
         "en": ["author profile", "multiple nicknames", "pseudonym", "alias", "persona", "unlinkable identities"]
+      }
+    },
+    {
+      "id": "author-profile-jdbc",
+      "kind": "module",
+      "module": "author-profile-jdbc",
+      "path": "modules/author-profile-jdbc",
+      "status": "experimental",
+      "summary": "작성자 프로필 저장소 — PostgreSQL · MySQL 로 author-profile 의 저장 포트를 구현한다(author_profiles 표 · (이름 키, 꼬리표)와 첫 프로필 유니크 · 첫 프로필 줄을 잠그는 원자적 상한).",
+      "starter": false,
+      "newProjectFlag": "--modules author-profile-jdbc",
+      "autoIncludes": ["author-profile"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/author-profile-jdbc.md"],
+      "frontend": null,
+      "notFor": [
+        "author-profile 없이는 쓰지 않는다(따라온다)",
+        "다른 DB(JPA · jOOQ)로 저장하려면 author-profile 의 저장 포트(AuthorProfileRepository)를 앱이 구현한다"
+      ],
+      "keywords": {
+        "ko": ["작성자 프로필 저장소", "프로필 DB"],
+        "en": ["author profile storage", "author profile repository", "profile database"]
       }
     },
     {
@@ -2119,6 +2148,7 @@
         "auth-social-oidc",
         "auth-social-x",
         "author-profile",
+        "author-profile-jdbc",
         "board",
         "board-jdbc",
         "config-aws-ssm",
