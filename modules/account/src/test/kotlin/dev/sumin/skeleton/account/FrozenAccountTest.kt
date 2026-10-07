@@ -104,7 +104,10 @@ class FrozenAccountTest {
         val blocks = h.admin.listBlocks(0, 20)
         assertEquals(setOf("email", "identity"), blocks.items.map { it.kind }.toSet())
         assertEquals(2, blocks.total, "one for the address, one for the google subject (the password identity is the address)")
-        assertTrue(blocks.items.none { b -> listOf("ann@example.com", "g-ann").any { b.toString().contains(it) } }, "only hashes are kept")
+        // the STORED values, not a toString (which hides the hash anyway): every row is a 64-hex keyed hash, none of the fields holds a raw value, and the hash is the keyed one
+        assertTrue(blocks.items.all { it.hash.matches(Regex("[0-9a-f]{64}")) }, "only hashes are kept")
+        assertTrue(blocks.items.none { b -> listOf(b.hash, b.reason, b.createdBy, b.accountId).any { f -> f != null && listOf("ann@example.com", "g-ann").any { raw -> raw in f } } })
+        assertEquals(setOf(h.core.blocks.emailHash("ann@example.com"), h.core.blocks.identityHash("google", "g-ann")), blocks.items.map { it.hash }.toSet())
 
         // the sign-up REQUEST still looks like any other (202, same shape); only someone who proves the mailbox / provider identity is refused
         assertEquals(SignUpStatus.VERIFICATION_SENT, h.signUp("ann@example.com").status)

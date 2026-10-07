@@ -65,6 +65,13 @@ class AccountJourneyIntegrationTest {
         jdbc.sql("select table_name, column_name from information_schema.columns where table_schema = current_schema() and table_name not like 'flyway%'")
             .query { rs, _ -> rs.getString(1) to rs.getString(2) }.list()
 
+    /** 어느 표 · 어느 열에 [values] 가 하나라도 들어 있나 ("표.열 ~ 값") — 지우기 전에는 값마다 적어도 한 곳이 나와야 이 스캔이 뭔가를 본다는 증거다 */
+    private fun leaks(values: List<String>): List<String> = allColumns().flatMap { (table, column) ->
+        values.filter { value ->
+            jdbc.sql("select count(*) from \"$table\" where cast(\"$column\" as text) like :v").param("v", "%$value%").query(Long::class.java).single() > 0
+        }.map { "$table.$column ~ $it" }
+    }
+
     private fun codeOf(kind: MailKind, to: String) = mails.sent.last { it.kind == kind && it.to == to }.vars.getValue("code")
     private fun field(json: String, path: String): String = JsonPath.read<Any>(json, path).toString()
 
@@ -103,10 +110,19 @@ class AccountJourneyIntegrationTest {
         assertTrue(bearer.isNotBlank())
         mails.sent.first { it.kind == MailKind.PASSWORD_CHANGED && it.to == email }
 
-        val auth = field(post("/api/v1/auth/login", """{"email":"$email","password":"$second"}""").andReturn().response.contentAsString, "$.value.accessToken")
+        // the address changes (a reset link for the OLD address is still in the tokens table), so the erasure must also clear what was keyed by the old address
+        val moved = "moved-${System.nanoTime()}@example.com"
+        post("/api/v1/account/password/forgot", """{"email":"$email"}""").andExpect { status { isAccepted() } }
+        val mover = field(post("/api/v1/auth/login", """{"email":"$email","password":"$second"}""").andReturn().response.contentAsString, "$.value.accessToken")
+        post("/api/v1/account/email/change", """{"newEmail":"$moved","currentPassword":"$second"}""", mover, "Idempotency-Key" to UUID.randomUUID().toString()).andExpect { status { isAccepted() } }
+        post("/api/v1/account/email/change/confirm", """{"code":"${codeOf(MailKind.EMAIL_CHANGE_CODE, moved)}"}""", mover).andExpect { status { isNoContent() } }
+
+        val auth = field(post("/api/v1/auth/login", """{"email":"$moved","password":"$second"}""").andReturn().response.contentAsString, "$.value.accessToken")
+        val planted = listOf(email, moved, displayName, userAgent)
+        planted.forEach { value -> assertTrue(leaks(listOf(value)).isNotEmpty(), "the scan must see '$value' before the erasure, or its absence afterwards proves nothing") }
         post("/api/v1/account/delete", """{"currentPassword":"$second"}""", auth, "Idempotency-Key" to UUID.randomUUID().toString())
             .andExpect { status { isAccepted() }; jsonPath("$.value.status") { value("DELETION_SCHEDULED") } }
-        post("/api/v1/auth/login", """{"email":"$email","password":"$second"}""").andExpect { status { isUnauthorized() } }
+        post("/api/v1/auth/login", """{"email":"$moved","password":"$second"}""").andExpect { status { isUnauthorized() } }
 
         // the grace period passes (we move the clock by rewriting purge_after), the purge runs every erasure listener
         jdbc.sql("update accounts set purge_after = now() - interval '1 minute' where id = :id").param("id", accountId).update()
@@ -119,14 +135,10 @@ class AccountJourneyIntegrationTest {
         assertEquals(0, jdbc.sql("select count(*) from account_identities where account_id = :id").param("id", accountId).query(Long::class.java).single())
         assertEquals(0, jdbc.sql("select count(*) from account_roles where account_id = :id").param("id", accountId).query(Long::class.java).single())
         assertEquals(0, jdbc.sql("select count(*) from auth_sessions where account_id = :id").param("id", accountId).query(Long::class.java).single())
-        post("/api/v1/auth/login", """{"email":"$email","password":"$second"}""").andExpect { status { isUnauthorized() } }
+        post("/api/v1/auth/login", """{"email":"$moved","password":"$second"}""").andExpect { status { isUnauthorized() } }
 
         // the one-way guarantee across EVERY table of EVERY module in this app (accounts, sessions, consents, board, notifications, jobs, ...)
-        val leaks = allColumns().flatMap { (table, column) ->
-            listOf(email, displayName, userAgent).filter { value ->
-                jdbc.sql("select count(*) from \"$table\" where cast(\"$column\" as text) like :v").param("v", "%$value%").query(Long::class.java).single() > 0
-            }.map { "$table.$column ~ $it" }
-        }
+        val leaks = leaks(planted)
         assertEquals(emptyList(), leaks, "no personal value survives the erasure anywhere")
 
         val admin = field(post("/api/v1/auth/login", """{"email":"admin@example.com","password":"password"}""").andReturn().response.contentAsString, "$.value.accessToken")
