@@ -76,23 +76,31 @@
 
 ## 누출 스캔 시험과 검증 기록
 
-**연결 누출 스캔**(스펙 §12 1~7)은 `apps/sample` 의 `AuthorLinkLeakIntegrationTest` 다 — 진짜 PostgreSQL · 보안 체인에 board · account · author-profile · notification-jdbc · storage 가 다 끼워진 앱(`allow-anonymous-read=true`)에서 이 클래스만 돌린다: `./gradlew :apps:sample:test --tests '*AuthorLinkLeakIntegrationTest'`.
+**연결 누출 스캔**(스펙 §12 1~7)은 `apps/sample` 의 `AuthorLinkLeakIntegrationTest` 다 — 진짜 PostgreSQL · 보안 체인에 board · account · author-profile · notification-jdbc · storage 가 다 끼워진 앱(`allow-anonymous-read=true`)에서 이 클래스만 돌린다: `./gradlew :apps:sample:test --tests '*AuthorLinkLeakIntegrationTest'`. 시드는 `apps/sample/src/test/resources/leak-seeds.yml`, 코드는 `apps/sample/src/test/kotlin/.../leak/`.
+**이 스캔을 쓰는 앱**(작성자 프로필을 켜는 자기 앱): 이 폴더와 `leak-seeds.yml` 을 **자기 앱의 시험으로 옮기고**, 앱이 더한 표 · 읽기 경로를 추가한다 — `AuthorLinkColumns` 의 공개 / 비공개 표에 새 표의 열을, `LeakSweep` 에 새 읽기 경로를 적는다. 스켈레톤의 스캔은 샘플 앱의 경로만 안다.
 
-- 계정 X 가 프로필 A(첫 프로필) · B · C 를 만들고, A 로 글 · B 로 글(둘 다 OPAQUE 첨부), Y 의 글에 A 로 댓글 · B 로 자기 댓글에 답글 · B 로 Y 의 댓글에 답글 · C 로 댓글, 반응 몇 개. **계정 이름은 첫 프로필이 복사해 간 뒤에 바꾼다**(금지 값인 현재 계정 이름이 A 의 공개 이름과 달라야 스캔이 둘을 구별한다).
-- Y(일반 사용자)와 Z(비로그인)가 읽을 수 있는 경로 전부 — 게시판 · config · 글 목록(정렬 · 반응 정렬 · 검색 · 쪽 · `mine`) · 상세 · 댓글 스레드(정렬 셋) · 오류 응답 · Y 의 받은편지함 · Y 가 SSE 로 받을 이벤트(구독자로 받아 같은 JSON) · X 의 프로필 id 로 `PATCH`/`DELETE`/`GET`/글 쓰기를 찔러 본 응답(없는 id · 모양이 틀린 id · `pending:` 꼴과 함께 상태 · 본문 · 헤더가 하나로 같다). 본문과 헤더를 모아 **금지 값**(X 의 계정 id · 이메일 · `AccountTombstone.of` · 현재 계정 이름; 대소문자 · URL 인코딩 무시)이 없음을, 그리고 A · B · C 의 조각(응답 객체를 `authorId` 로 묶어 잎 값을 뽑는다)이 **값으로** 겹치지 않음을 단정한다 — 허용 목록은 게시판 코드 · 상태 · 반응 종류 · 알림 종류 · 두 조각이 놓인 같은 글(Y 의 것)의 구조(제목 · 글 번호 · 최상위 댓글 번호) · 개수 칸뿐이고 null · 불리언은 비교하지 않는다. 첨부 키는 마디(`uuid.mac`)마다 따로 본다(고정 접두사와 `file[.확장자]` 만 공통 허용).
-- **스캔이 값을 찾는다는 증명이 먼저다**: `LeakScanTest`(합성 응답에 심은 값 · 겹치는 값을 찾고 허용 값은 넘긴다)와 통합 시험 1번(X 가 `/account/me` 를 읽으면 같은 스캔 함수가 계정 id · 이메일 · 계정 이름을 잡고, 비공개 열 `board_posts.author_id` 에서 계정 id 를, 탈퇴 뒤 톰스톤을 잡는다). 매 단계에서 A · B 의 조각 · 알림 · 첨부 키가 실제로 스캔에 들어갔는지도 단정한다(빈 스캔이 통과로 보이지 않게).
-- **상태를 바꿔 반복**: 기준선 → B 프로필 삭제 → 관리자 정지 → 정지 해제 · X 탈퇴(삭제 요청 → 유예 지나기 → 지우기). 각 단계에서 `authorId` 는 늘 프로필 id 이고 A · B 가 서로 다르며(`deleted:` 값이 어떤 응답에도 없다), `authorDeleted` · `authorName` 이 맞게 나온다(삭제한 프로필 · 탈퇴 뒤 `true` · `null`, 정지는 아무 표시 없음).
-- **DB 열 분류(§12 7)**: `board*` · `notification*` · `author_profiles` 의 모든 열을 `information_schema` 에서 읽어 `AuthorLinkColumns` 의 공개 / 비공개 표와 맞춘다(분류되지 않은 열 · 표에만 있는 열이 있으면 실패). PostgreSQL 은 위 통합 시험의 컨텍스트에서(공개 열 — `author_ref` · 남의 편지함 payload 포함 — 의 값에서 금지 값 · 짝 스캔을 단계마다 다시), MySQL 은 `AuthorLinkColumnsMySqlTest`(Flyway 로 `db/migration/mysql` 만 끝까지 적용한 MySQL 컨테이너의 열 목록).
+- 계정 X 가 프로필 A(첫 프로필) · B · C 를 만들고, A 로 글 · 임시저장 글, B 로 글(둘 다 OPAQUE 첨부), Y 의 글에 A 로 댓글 · B 로 자기 댓글에 답글 · B 로 Y 의 댓글에 답글 · C 로 댓글, 반응 몇 개. **계정 이름은 첫 프로필이 복사해 간 뒤에 바꾼다**(금지 값인 현재 계정 이름이 A 의 공개 이름과 달라야 스캔이 둘을 구별한다). 켜기 전의 **옛 행**(`author_ref` 없는 글)도 SQL 로 하나 심는다.
+- 독자 셋이 **각자** 읽고 따로 스캔한다 — Y(일반 사용자), Z(비로그인), 운영자(`MODERATOR`: 숨김 · 임시저장 글, 글 · 댓글 숨김 / 복구 응답). 경로: 게시판 · config · 글 목록(정렬 · 반응 정렬 · 검색 · 쪽 · `mine` · `status`) · 상세 · 댓글 스레드(정렬 셋) · 오류 응답 · 반응 PUT/DELETE 응답 · Y 의 받은편지함 · Y 가 SSE 로 받을 이벤트(구독자로 받아 같은 JSON) · X 의 프로필 id 로 `PATCH`/`DELETE`/`GET`/글 쓰기를 찔러 본 응답(없는 id · 모양이 틀린 id · `pending:` 꼴과 함께 상태 · 본문 · 헤더가 하나로 같다) · 값 찾기(`q=<X 의 계정 id>` · `q=<X 의 이메일>` 은 0건, OpenAPI 문서 `/api/v1/docs` 본문도 같은 스캔). 본문과 헤더를 모아 **금지 값**(X 의 계정 id · 이메일 · `AccountTombstone.of` · 현재 계정 이름; 대소문자 · URL 인코딩 무시)이 없음을, 그리고 A · B · C · 옛 행의 조각(응답 객체를 `authorId` 로 묶어 잎 값을 뽑는다)이 **값으로** 겹치지 않음을 단정한다. 허용 목록은 게시판 코드 · 글 상태 · 반응 종류 · 알림 종류 · 두 조각이 놓인 같은 글(Y 의 것)의 제목 · 알림 제목뿐이고, 숫자는 **`종류.칸` 별**로만 허용한다(댓글의 `postId` = Y 의 글, `id` · `rootId` · `parentId` = 스레드 뿌리 댓글 둘; 개수 · 깊이 칸은 늘 허용; null · 불리언은 비교하지 않는다). 첨부 키는 `/` 마디를 다시 `.` 로 쪼개 `uuid` 와 `mac` 을 각각 비교한다(고정 접두사와 `file[.확장자]` 만 공통 허용).
+- **스캔이 값을 찾는다는 증명이 먼저다**: `LeakScanTest`(합성 응답에 심은 값 · 겹치는 값 · 한 마디만 같은 첨부 키를 **찾고** 허용 값은 넘긴다)와 통합 시험 1번(X 가 `/account/me` 를 읽으면 같은 스캔 함수가 계정 id · 이메일 · 계정 이름을 잡고, 비공개 열 `board_posts.author_id` 에서 계정 id 를, 탈퇴 뒤 톰스톤을 잡는다), 2번(허용 목록을 **비우면** 같은 진짜 응답에서 짝 스캔이 `general` · `PUBLISHED` · 글 번호를 공통 값으로 찾는다). 매 단계 · 독자마다 A · B 의 조각 · 알림 · 첨부 키 · C 와 옛 행의 조각이 실제로 스캔에 들어갔는지도 단정한다(빈 스캔이 통과로 보이지 않게).
+- **상태를 바꿔 반복**: 기준선 → B 프로필 삭제 → 관리자 정지 → 정지 해제 · 본인의 탈퇴 요청(**유예 중**: 프로필은 그대로 살아 있다) → 유예를 지나 지우기(`purgeDue`) → 둘째 계정 V 의 **관리자 지우기 경로**(정지 → `POST /admin/accounts/{id}/erase`, 두 프로필의 글이 서로 다른 `authorId` · `authorDeleted: true` · 이름 없음, V 의 값이 어디에도 없음). 각 단계에서 `authorId` 는 늘 프로필 id(옛 행은 `pending:p<번호>`)이고 A · B 가 서로 다르며(`deleted:` 값이 어떤 응답에도 없다), `authorDeleted` · `authorName` 이 맞게 나온다(삭제한 프로필 · 탈퇴 뒤 `true` · `null`, 정지 · 유예는 아무 표시 없음, 옛 행은 탈퇴 뒤에도 `pending` 이고 `authorDeleted` 만 `true`).
+- **DB 열 분류(§12 7)**: `board*` · `notification*` · `author_profile*` 의 모든 열을 `information_schema` 에서 읽어 `AuthorLinkColumns` 의 공개 / 비공개 표와 맞춘다(분류되지 않은 열 · 표에만 있는 열이 있으면 실패). PostgreSQL 은 위 통합 시험의 컨텍스트에서(공개 열 — `author_ref` · 남의 편지함 payload · 탈퇴 전의 `author_profiles` 행 포함 — 의 값에서 금지 값 · 짝 스캔을 단계마다 다시), MySQL 은 `AuthorLinkColumnsMySqlTest`(Flyway 로 `db/migration/mysql` 만 끝까지 적용한 MySQL 컨테이너의 열 목록).
 - 조립: 작성자 빈을 끼우지 않은 board(`modules/board` 의 `NoOptionalGoldenKeysTest`)의 응답 키가 작성자 프로필 이전(`e76e8e7`)과 같고 덧붙은 것이 `mine`(글 요약 · 상세 · 댓글) · `authorRequired`(config)뿐임을 키 집합으로 고정한다. 모듈을 끼우지 않은 `apps/api` 의 시험은 한 줄도 바뀌지 않는다.
 
-### 변이 확인 (손으로, 커밋하지 않고 원복) — 2026-10-08
+### 훑지 않은 경로 (정직하게)
 
-| # | 변이 | 결과 |
+실제 SSE 소켓(구독자로 받은 같은 이벤트 JSON 으로 대신한다) · `POST /storage/presign-download` 와 멀티파트 응답 · 액추에이터(`/health` 만 열려 있다) · 로그 · 브라우저 안의 상태 · 운영자 / DB 직접 접근 · MySQL 의 **값**(열 목록만 본다) · 통계적 상관(문체 · 시각 분포 · 글 길이). 값 찾기는 OpenAPI 문서와 `q=<계정 id | 이메일>` 검색 두 줄만 넣었다.
+
+### 변이 확인 (손으로, 커밋하지 않고 원복)
+
+기준 `9c585d4`(a · b · c, 2026-10-08)와 그 위의 B7 리뷰 반영(d, 같은 날).
+
+| # | 변이 (한 줄) | 결과 |
 |---|---|---|
-| (a) | `board` 의 `BoardDtos.kt` — 글 요약 · 상세 · 댓글 `toResponse` 가 공개 id(`publicAuthorId`) 대신 계정 id(`author_id`)를 `authorId` 로 내도록 | `AuthorLinkLeakIntegrationTest` 의 기준선 · B 삭제 · 정지 · 탈퇴 네 단계가 **"forbidden values in responses"** 로 실패(앞 셋은 `account id`, 탈퇴 뒤는 `tombstone` 이 읽기 응답 전체에서 잡힘). 열 분류 시험과 1번(양성 대조)은 통과 |
-| (b) | `board-jdbc` 의 `JdbcBoardErasureRepository.anonymizeAuthor` 가 톰스톤을 `author_id` 뿐 아니라 `author_ref` 에도 쓰도록(글 · 댓글) | **탈퇴 단계만** 같은 단정으로 실패(`tombstone` 값이 Y · Z 의 읽기 응답에 나옴). 기준선 · B 삭제 · 정지 단계는 통과 |
-| (c) | `board` 의 `BoardConfigResponse` 에 칸 하나(`sneaky`)를 더함 | `NoOptionalGoldenKeysTest` 실패(`e76e8e7` 키 + `authorRequired` 와 다른 집합) |
+| (a) | `board/web/BoardDtos.kt` — 글 요약 · 상세 · 댓글 `toResponse` 의 `publicAuthorId` 자리에 계정 id(`item.authorId` / `post.authorId` / `authorId`) | `AuthorLinkLeakIntegrationTest` 의 기준선 · B 삭제 · 정지 · 탈퇴 단계가 **"forbidden values in responses"** 로 실패(앞 셋은 `account id`, 탈퇴 뒤는 `tombstone`). 열 분류 시험과 1번(양성 대조)은 통과 |
+| (b) | `board-jdbc` `JdbcBoardErasureRepository.anonymizeAuthor` — `set author_id = :t` 를 `set author_id = :t, author_ref = :t` 로(글 · 댓글) | **탈퇴 단계만** 같은 단정으로 실패(`tombstone` 값이 Y · Z 의 읽기 응답에 나옴). 기준선 · B 삭제 · 정지 단계는 통과 |
+| (c) | `board/web/BoardDtos.kt` — `BoardConfigResponse` 에 `val sneaky: Boolean = false` 추가 | `NoOptionalGoldenKeysTest` 실패(`e76e8e7` 키 + `authorRequired` 와 다른 집합) |
+| (d) | `JdbcBoardErasureRepository.anonymizeAuthor` — 글 · 댓글 갱신에 `updated_at = timestamptz '2026-01-01 00:00:00+00'` 를 덧붙임(탈퇴가 모든 행의 `updated_at` 을 같은 시각으로) | **짝 스캔만** 잡는다 — 탈퇴 단계가 `values shared by prf_… and prf_…: [string 2026-01-01T00:00:00Z]` 로 실패하고, 금지 값 단정은 통과한 뒤였다. 나머지 단계는 통과 |
 
-세 변이 모두 원복했고(`git checkout`), 원복 뒤 같은 시험이 통과한다.
+네 변이 모두 원복했고(`git checkout`), 원복 뒤 같은 시험이 통과한다.
 
 [모듈 색인](README.md) · [최소 구성 가이드](../minimal-composition.md)

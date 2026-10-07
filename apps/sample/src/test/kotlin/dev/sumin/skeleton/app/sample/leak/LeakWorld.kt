@@ -21,6 +21,7 @@ class LeakWorld(private val http: LeakHttp, registry: NotificationSubscriptionRe
     val xToken: String
     val yToken: String
     val adminToken: String
+    val modToken: String
     val xAcc: String
     val yAcc: String
     val a: Profile
@@ -29,6 +30,7 @@ class LeakWorld(private val http: LeakHttp, registry: NotificationSubscriptionRe
     val yProfile: Profile
     var yPost = 0L; private set
     var postA = 0L; private set
+    var postDraft = 0L; private set   // A 의 임시저장 글 — 운영자만 읽는다
     var postB = 0L; private set
     var c0 = 0L; private set   // Y 의 댓글
     var c1 = 0L; private set   // A 의 댓글 (Y 의 글, 최상위)
@@ -49,6 +51,7 @@ class LeakWorld(private val http: LeakHttp, registry: NotificationSubscriptionRe
         xToken = login(xEmail).first
         yToken = login("yolanda.leak@example.com").first
         adminToken = login("admin.leak@example.com").first
+        modToken = login("mod.leak@example.com").first
         xAcc = login(xEmail).second
         yAcc = login("yolanda.leak@example.com").second
         yProfile = profiles(yToken).first()
@@ -61,6 +64,7 @@ class LeakWorld(private val http: LeakHttp, registry: NotificationSubscriptionRe
         c0 = createComment(yToken, yProfile, yPost, "Y 의 첫 댓글 $nonce")
         postA = createPost(xToken, a, "A post kiwi $nonce", "written as A", attach())
         postB = createPost(xToken, b, "B post kiwi $nonce", "written as B", attach())
+        postDraft = createPost(xToken, a, "A draft kiwi $nonce", "a draft of A", status = "DRAFT")
         c1 = createComment(xToken, a, yPost, "A 가 단 댓글 $nonce")
         c2 = createComment(xToken, b, yPost, "B 가 자기 댓글에 답글 $nonce", c1)
         c3 = createComment(xToken, b, yPost, "B 가 Y 에게 답글 $nonce", c0)
@@ -70,7 +74,7 @@ class LeakWorld(private val http: LeakHttp, registry: NotificationSubscriptionRe
         react(xToken, "posts/$yPost", "LIKE"); react(xToken, "posts/$yPost/comments/$c0", "EMPATHY")   // X 자신의 반응 — 계정 키 행
     }
 
-    private fun login(email: String): Pair<String, String> {
+    fun login(email: String): Pair<String, String> {
         val r = http.post("/api/v1/auth/login", null, """{"email":"$email","password":"password"}""", record = false).ok()
         return r.read<String>("$.value.accessToken") to r.read("$.value.principal.accountId")
     }
@@ -80,15 +84,19 @@ class LeakWorld(private val http: LeakHttp, registry: NotificationSubscriptionRe
     fun profiles(token: String): List<Profile> =
         http.get("/api/v1/author-profiles", token, record = false).ok().read<List<Map<String, Any?>>>("$.values").map { Profile(it["id"] as String, it["name"] as String?, it["tag"] as String?) }
 
-    private fun createProfile(name: String): Profile {
-        val r = http.post("/api/v1/author-profiles", xToken, """{"name":${json(name)}}""", record = false).ok()
+    private fun createProfile(name: String): Profile = newProfile(xToken, name)
+
+    /** [token] 계정의 새 프로필 (첫 프로필은 `profiles(token)` 이 보장한다) */
+    fun newProfile(token: String, name: String): Profile {
+        tick()
+        val r = http.post("/api/v1/author-profiles", token, """{"name":${json(name)}}""", record = false).ok()
         return Profile(r.read("$.value.id"), r.read("$.value.name"), r.read("$.value.tag"))
     }
 
     /** 꼬리표가 우연히 겹치면 (만분의 일) 짝 스캔이 거짓 양성을 낸다 — 이름을 바꿔 다시 추첨한다 */
     private fun distinctTags() {
         repeat(5) {
-            val tags = profiles(xToken).associate { it.id to it.tag }
+            val tags = profiles(xToken).filter { it.tag != null }.associate { it.id to it.tag }
             val dup = tags.entries.groupBy { it.value }.values.firstOrNull { it.size > 1 } ?: return
             val victim = dup.last().key
             val renamed = profiles(xToken).first { it.id == victim }.let { p -> http.patch("/api/v1/author-profiles/$victim", xToken, """{"name":${json(p.name + "x")}}""").ok() }
@@ -104,10 +112,11 @@ class LeakWorld(private val http: LeakHttp, registry: NotificationSubscriptionRe
 
     private fun tick() = Thread.sleep(4)   // 시각 값이 두 쓰기에서 우연히 같아지지 않게
 
-    fun createPost(token: String, author: Profile, title: String, body: String, attachments: List<String> = emptyList()): Long {
+    fun createPost(token: String, author: Profile, title: String, body: String, attachments: List<String> = emptyList(), status: String? = null): Long {
         tick()
         val files = attachments.joinToString(",", "[", "]") { json(it) }
-        return http.post("/api/v1/boards/general/posts", token, """{"title":${json(title)},"body":${json(body)},"authorId":"${author.id}","attachments":$files}""", record = false).ok().read<Number>("$.value.id").toLong()
+        val st = status?.let { ""","status":"$it"""" } ?: ""
+        return http.post("/api/v1/boards/general/posts", token, """{"title":${json(title)},"body":${json(body)},"authorId":"${author.id}","attachments":$files$st}""", record = false).ok().read<Number>("$.value.id").toLong()
     }
 
     fun createComment(token: String, author: Profile, post: Long, text: String, parent: Long? = null): Long {

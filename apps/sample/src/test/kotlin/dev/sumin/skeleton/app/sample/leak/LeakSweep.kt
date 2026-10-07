@@ -14,10 +14,14 @@ class LeakSweep(private val http: LeakHttp, private val w: LeakWorld, private va
     /** 두 작성자의 조각이 공유해도 되는 값 — 모두에게 같은 어휘와, 두 조각이 놓인 같은 글(Y 의 것)의 구조뿐 */
     val allow: LeakAllow by lazy {
         LeakAllow(
-            strings = setOf("general", "PUBLISHED", "LIKE", "DISLIKE", "EMPATHY", "board", "comment.created", "comment.replied", "INFO", w.yPostTitle, w.yAcc,
+            strings = setOf("general", "PUBLISHED", "HIDDEN", "DRAFT", "DELETED", "LIKE", "DISLIKE", "EMPATHY", "board", "comment.created", "comment.replied", "INFO", w.yPostTitle, w.yAcc,
                 "New comment on your post: ${w.yPostTitle}",   // 알림 제목: Y 의 글 제목이 들어간다 — 두 알림이 같은 글에 달렸다는 구조
             ),
-            structuralNumbers = setOf(w.yPost, w.c0, w.c1),
+            // 숫자는 종류.칸 별로만: 댓글이 놓인 글(Y 의 것)과, 자작 스레드의 뿌리(A 의 댓글 c1)와 Y 의 댓글(c0)이 답글의 parentId · rootId 로 보이는 구조
+            structuralNumbers = buildMap {
+                listOf("postId", "post_id").forEach { put("comment.$it", setOf(w.yPost)) }
+                listOf("id", "rootId", "parentId", "root_id", "parent_id").forEach { put("comment.$it", setOf(w.c0, w.c1)) }
+            },
         )
     }
 
@@ -33,6 +37,39 @@ class LeakSweep(private val http: LeakHttp, private val w: LeakWorld, private va
         listOf("oldest", "latest", "reactions").forEach { http.get("$base/posts/${w.yPost}/comments?sort=$it", token) }
         listOf("$base/posts/999999", "$base/posts/${w.yPost}/comments/999999", "$base/posts?sort=zzz", "/api/v1/boards/nope", "$base/posts/${w.yPost}/comments?sort=zzz").forEach { http.get(it, token) }
         http.get("/api/v1/author-profiles", token)   // 비로그인이면 401
+        return http.since(m)
+    }
+
+    /** 운영자(MODERATOR)가 읽는 경로 — 일반 읽기 + 숨김 · 임시저장 목록 + 숨김 · 복구 응답 (게시판 운영자도 연결을 보지 못해야 한다, 스펙 §3) */
+    fun moderatorReads(): List<Captured> {
+        val m = http.mark()
+        listOf("$base/posts?status=HIDDEN", "$base/posts?status=DRAFT", "$base/posts?status=DRAFT&sort=reactions", "$base/posts/${w.postDraft}").forEach { http.get(it, w.modToken) }
+        http.put("$base/posts/${w.postA}/moderation", w.modToken, """{"status":"HIDDEN","pinned":true}""")
+        http.get("$base/posts?status=HIDDEN", w.modToken)
+        http.put("$base/posts/${w.postA}/moderation", w.modToken, """{"status":"PUBLISHED","pinned":false}""")
+        http.put("$base/posts/${w.yPost}/comments/${w.c2}/moderation", w.modToken, """{"status":"HIDDEN"}""")
+        http.get("$base/posts/${w.yPost}/comments", w.modToken)
+        http.put("$base/posts/${w.yPost}/comments/${w.c2}/moderation", w.modToken, """{"status":"PUBLISHED"}""")
+        return http.since(m) + boardReads(w.modToken)
+    }
+
+    /** 반응을 누르고 거두는 응답 (개수와 `myReactions` 뿐이지만 헤더 · 오류까지 같은 스캔을 받는다) — 끝나면 처음 상태로 돌려 둔다 */
+    fun reactionWrites(): List<Captured> {
+        val m = http.mark()
+        http.put("$base/posts/${w.postA}/reactions", w.yToken, """{"type":"EMPATHY"}""")
+        http.delete("$base/posts/${w.postB}/reactions?type=LIKE", w.yToken)
+        http.put("$base/posts/${w.postB}/reactions", w.yToken, """{"type":"LIKE"}""")
+        http.put("$base/posts/${w.yPost}/comments/${w.c1}/reactions", w.yToken, """{"type":"LIKE"}""")
+        http.put("$base/posts/${w.postA}/reactions", w.yToken, """{"type":"SAD"}""")   // 오류 응답
+        return http.since(m)
+    }
+
+    /** 값 찾기 — X 의 계정 id · 이메일로 검색하면 0건이고, OpenAPI 문서에도 없다 (스캔이 문서 전체를 본다) */
+    fun valueSearches(token: String?): List<Captured> {
+        val m = http.mark()
+        http.get("$base/posts?q=${w.xAcc}", token)
+        http.get("$base/posts?q=${w.xEmail}", token)
+        http.get("/api/v1/docs", token)
         return http.since(m)
     }
 

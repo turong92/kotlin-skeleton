@@ -16,9 +16,9 @@ data class Leaf(val kind: String, val path: String, val value: Any) {
 /**
  * 두 작성자의 조각이 공유해도 되는 값 — 이 목록 **밖**의 공통 값은 두 프로필을 잇는 값으로 본다.
  * [strings]: 게시판 코드 · 상태 · 반응 종류 · 알림 종류처럼 모두에게 같은 어휘, 그리고 두 조각이 놓인 같은 글의 제목처럼 시험이 아는 구조 값.
- * [structuralNumbers]: 두 조각이 놓인 스레드의 글 번호 · 최상위 댓글 번호(답글의 parentId · rootId 로 보이는 구조). 개수 · 깊이 칸은 따로 늘 허용한다.
+ * [structuralNumbers]: 두 조각이 놓인 스레드의 구조 — **`종류.칸` 별로** 허용하는 값(예: `comment.postId` → Y 의 글 번호, `comment.rootId` · `comment.parentId` · `comment.id` → 스레드 뿌리 댓글 번호). 같은 숫자가 다른 칸에 있으면 허용이 아니다. 개수 · 깊이 칸은 따로 늘 허용한다.
  */
-data class LeakAllow(val strings: Set<String>, val structuralNumbers: Set<Long> = emptySet())
+data class LeakAllow(val strings: Set<String>, val structuralNumbers: Map<String, Set<Long>> = emptyMap())
 
 /** 작성자 id(공개 id)별로 모은 잎 값. 응답은 `authorId` 를 가진 객체마다 한 조각, 중첩된 답글은 자기 작성자의 조각이다 */
 class LeakPieces {
@@ -90,9 +90,14 @@ object LeakScan {
         }.map { ForbiddenHit(it.key, c.label) }
     }
 
-    private val COUNTER = Regex("(?i)count|depth|sort_?order|size|page")
-    private val FILE_TAIL = Regex("^file(\\.[a-z0-9]{1,8})?$")
-    private val OPAQUE_FIXED = setOf("uploads", "o")
+    /** 개수 · 깊이 칸 — 경로의 한 마디가 `…count` / `…counts`(반응 종류별 개수 맵 포함) 이거나 마지막 칸이 `depth` / `sort_order` */
+    private fun counterPath(path: String): Boolean {
+        val parts = path.split('.')
+        return parts.any { it.endsWith("count", ignoreCase = true) || it.endsWith("counts", ignoreCase = true) } || parts.last().let { it == "depth" || it == "sort_order" }
+    }
+
+    /** 첨부 키 마디를 다시 `.` 로 쪼갠 조각 중 누구에게나 같은 것 — 고정 접두사와 `file` · 알려진 확장자(최대 8자 소문자 영숫자). `uuid`(하이픈) · `mac`(32자) 는 여기에 안 걸린다 */
+    private val OPAQUE_FIXED = Regex("^(uploads|o|file(\\.[a-z0-9]{1,8})?|[a-z0-9]{1,8})$")
 
     /** 두 조각이 공유하는 값 (허용 목록 밖) — 사람이 읽는 줄. 비어 있어야 한다 */
     fun commonValues(a: List<Leaf>, b: List<Leaf>, allow: LeakAllow): List<String> {
@@ -100,10 +105,11 @@ object LeakScan {
         val aStrings = a.mapNotNull { it.value as? String }.toSet()
         val bStrings = b.mapNotNull { it.value as? String }.toSet()
         (aStrings intersect bStrings).filter { it !in allow.strings }.forEach { out += "string $it" }
-        // 첨부 키 같은 경로 꼴: 마디마다 따로 — 한 마디(uuid.mac)만 같아도 잇는다. 고정 접두사 · 알려진 확장자만 남은 파일 이름은 누구에게나 같다
-        fun segments(strings: Set<String>) = strings.filter { '/' in it }.flatMap { it.split('/') }.filter { it.isNotEmpty() }.toSet()
-        (segments(aStrings) intersect segments(bStrings)).filter { it !in allow.strings && it !in OPAQUE_FIXED && !FILE_TAIL.matches(it) }.forEach { out += "string $it" }
-        fun numbers(leaves: List<Leaf>) = leaves.filter { it.value is Number && !COUNTER.containsMatchIn(it.path) && it.value !in allow.structuralNumbers }.map { it.kind to it.value }.toSet()
+        // 첨부 키 같은 경로 꼴: 마디마다, 마디는 `.` 로도 쪼개서 따로 — `uuid` 나 `mac` 중 하나만 같아도 잇는다. 고정 접두사 · 알려진 확장자만 남은 파일 이름은 누구에게나 같다
+        fun segments(strings: Set<String>) = strings.filter { '/' in it }.flatMap { it.split('/') }.flatMap { listOf(it) + it.split('.') }.filter { it.isNotEmpty() }.toSet()
+        (segments(aStrings) intersect segments(bStrings)).filter { it !in allow.strings && !OPAQUE_FIXED.matches(it) }.forEach { out += "string $it" }
+        fun structural(l: Leaf) = (l.value as? Long) in allow.structuralNumbers["${l.kind}.${l.key}"].orEmpty()
+        fun numbers(leaves: List<Leaf>) = leaves.filter { it.value is Number && !counterPath(it.path) && !structural(it) }.map { it.kind to it.value }.toSet()
         (numbers(a) intersect numbers(b)).forEach { (kind, value) -> out += "number $kind $value" }
         return out.toList()
     }

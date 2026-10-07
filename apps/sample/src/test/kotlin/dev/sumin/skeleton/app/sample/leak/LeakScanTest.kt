@@ -26,7 +26,7 @@ class LeakScanTest {
         assertEquals(emptyList(), LeakScan.forbiddenHits(listOf(captured("""{"authorId":"prf_aaaa","authorName":"Bob"}""", mapOf("Cache-Control" to "no-store"))), forbidden))
     }
 
-    private val allow = LeakAllow(strings = setOf("general", "PUBLISHED", "LIKE"), structuralNumbers = setOf(7L))
+    private val allow = LeakAllow(strings = setOf("general", "PUBLISHED", "LIKE"), structuralNumbers = mapOf("comment.postId" to setOf(7L), "comment.rootId" to setOf(1L), "comment.parentId" to setOf(1L), "comment.id" to setOf(1L)))
 
     private fun pieces(vararg json: String) = LeakPieces().also { p -> json.forEach { p.addJson(it) } }
 
@@ -36,13 +36,23 @@ class LeakScanTest {
         val b = pieces("""{"values":[{"id":2,"authorId":"prf_b","boardCode":"general","status":"PUBLISHED","viewCount":3,"title":"t2","shared":"same-text","n":42,"attachments":["uploads/o/u2.mac2/file.png"],"mine":false,"authorName":null}]}""")
         val common = LeakScan.commonValues(a.of("prf_a"), b.of("prf_b"), allow)
         assertEquals(setOf("string same-text", "number post 42"), common.toSet(), common.toString())
+        // 숫자 허용은 종류.칸 별이다 — 같은 값이 허용되지 않은 칸에 있으면 잡힌다
+        val x = pieces("""{"values":[{"id":1,"postId":7,"parentId":null,"rootId":1,"depth":0,"authorId":"prf_x","views":9}]}""")
+        val y = pieces("""{"values":[{"id":2,"postId":7,"parentId":1,"rootId":1,"depth":1,"authorId":"prf_y","views":9}]}""")
+        assertEquals(listOf("number comment 9"), LeakScan.commonValues(x.of("prf_x"), y.of("prf_y"), allow), "postId / rootId / parentId / id of the thread are allowed, depth is a counter, an unlisted key is not")
 
-        val c = pieces("""{"values":[{"id":3,"authorId":"prf_c","attachments":["uploads/o/u3.sameMac/file.jpg"]}]}""")
-        val d = pieces("""{"values":[{"id":4,"authorId":"prf_d","attachments":["uploads/o/u4.sameMac/file.jpg"]}]}""")
-        assertTrue(LeakScan.commonValues(c.of("prf_c"), d.of("prf_d"), allow).isEmpty(), "different uuid.mac segments are different values")
-        val e = pieces("""{"values":[{"id":5,"authorId":"prf_e","attachments":["uploads/o/shared.mac/file.jpg"]}]}""")
-        val f = pieces("""{"values":[{"id":6,"authorId":"prf_f","attachments":["uploads/o/shared.mac/photo.png"]}]}""")
-        assertEquals(listOf("string shared.mac"), LeakScan.commonValues(e.of("prf_e"), f.of("prf_f"), allow))
+        val mac = "0123456789abcdef0123456789abcdef"
+        val uuidA = "11111111-1111-4111-8111-111111111111"
+        val uuidB = "22222222-2222-4222-8222-222222222222"
+        val c = pieces("""{"values":[{"id":3,"authorId":"prf_c","attachments":["uploads/o/$uuidA.$mac/file.jpg"]}]}""")
+        val d = pieces("""{"values":[{"id":4,"authorId":"prf_d","attachments":["uploads/o/$uuidB.${mac.reversed()}/file.jpg"]}]}""")
+        assertTrue(LeakScan.commonValues(c.of("prf_c"), d.of("prf_d"), allow).isEmpty(), "different uuid and mac, same file.jpg: nothing that ties them")
+        // 한 쪽만 같아도 잇는다: 같은 mac, 다른 uuid / 같은 uuid, 다른 mac (마디를 `.` 로 쪼개 비교한다)
+        val sameMac = pieces("""{"values":[{"id":5,"authorId":"prf_e","attachments":["uploads/o/$uuidA.$mac/file.png"]}]}""")
+        val otherUuid = pieces("""{"values":[{"id":6,"authorId":"prf_f","attachments":["uploads/o/$uuidB.$mac/photo.png"]}]}""")
+        assertEquals(listOf("string $mac"), LeakScan.commonValues(sameMac.of("prf_e"), otherUuid.of("prf_f"), allow))
+        val sameUuid = pieces("""{"values":[{"id":7,"authorId":"prf_g","attachments":["uploads/o/$uuidA.${mac.reversed()}/file.png"]}]}""")
+        assertEquals(listOf("string $uuidA"), LeakScan.commonValues(sameMac.of("prf_e"), sameUuid.of("prf_g"), allow))
     }
 
     @Test
@@ -50,7 +60,7 @@ class LeakScanTest {
         val p = pieces("""{"values":[{"id":1,"postId":7,"authorId":"prf_a","body":"root","replies":[{"id":2,"postId":7,"parentId":1,"authorId":"prf_b","body":"reply"}]}]}""")
         assertEquals(setOf("root"), p.of("prf_a").filter { it.key == "body" }.map { it.value }.toSet())
         assertEquals(setOf("reply"), p.of("prf_b").filter { it.key == "body" }.map { it.value }.toSet())
-        assertTrue(LeakScan.commonValues(p.of("prf_a"), p.of("prf_b"), allow.copy(structuralNumbers = setOf(7L, 1L))).isEmpty(), "thread structure (post id, root id) is not a link")
+        assertTrue(LeakScan.commonValues(p.of("prf_a"), p.of("prf_b"), allow).isEmpty(), "thread structure (post id, root id) is not a link")
     }
 
     @Test

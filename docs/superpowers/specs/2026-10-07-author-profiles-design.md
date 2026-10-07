@@ -308,10 +308,10 @@ create index if not exists idx_author_profiles_account on author_profiles (accou
 3. Y 와 Z 로 **읽을 수 있는 모든 경로**를 훑는다: 게시판 목록 · 글 목록(정렬 · 검색 · 반응 정렬 전부) · 글 상세 · 댓글 스레드 · config · Y 의 받은편지함 · X 의 프로필 경로 찔러 보기. 응답 본문과 헤더를 모은다.
 4. **금지 값**: X 의 계정 id · 이메일 · 계정 톰스톤(`AccountTombstone.of` — `author_ref` 없는 옛 행의 톰스톤도 `pending:` 으로 나가 응답에 없다) · 계정 이름이 어디에도 없다.
 5. **짝 스캔**: A 의 글 · 댓글 조각과 B 의 조각에서 모든 잎 값을 뽑아 교집합을 낸다. 허용 목록(게시판 코드 · 상태 · 개수 · 반응 종류 · 불리언) 밖의 공통 값이 있으면 실패 — "두 글을 잇는 값"을 이름이 아니라 **값으로** 찾는다.
-6. 같은 스캔을 상태를 바꿔 반복: B 삭제 뒤 → X 정지 뒤 → X 지우기 뒤(A · B 글의 `authorId` 가 서로 다르고 공통 `deleted:` 값이 없다).
+6. 같은 스캔을 상태를 바꿔 반복: B 삭제 뒤 → X 정지 뒤 → (정지를 풀고 본인이 삭제를 요청한) 유예 중 → X 지우기 뒤(A · B 글의 `authorId` 가 서로 다르고 공통 `deleted:` 값이 없다). 지우기는 두 경로를 다 본다: 본인 경로(삭제 요청 → 유예 → `purgeDue`)는 X 로, 관리자 경로(정지 → `POST /admin/accounts/{id}/erase`)는 둘째 계정으로 — 정지된 계정은 삭제를 요청할 수 없어 한 계정으로는 두 경로를 이을 수 없다.
 7. **DB 열 분류**: `board_*` · `notification_*` · `author_profiles` 의 모든 열을 `information_schema` 에서 읽어 "공개 / 비공개" 표와 맞춘다. 분류되지 않은 열이 생기면 실패(새 열이 조용히 계정 id 를 담지 못하게). 공개 열(`author_ref`, 남의 편지함 payload)에서 4 · 5 를 다시 본다. 두 방언.
 8. 변이 확인(한 번, 손으로): DTO 가 `author_id` 를 내도록 바꾸면 4 가, 톰스톤을 `author_ref` 에 쓰도록 바꾸면 6 이 실패하는지.
-   - 실측(B7, 2026-10-08): 둘 다 실패했다 — 기록은 `docs/modules/author-profile.md` 「누출 스캔 시험과 검증 기록」. 구현은 `apps/sample` 의 `AuthorLinkLeakIntegrationTest`(+ `LeakScanTest` · `AuthorLinkColumnsTest` · `AuthorLinkColumnsMySqlTest`), 조립(2b)은 board `NoOptionalGoldenKeysTest`. 스펙 이탈: 정지 뒤 탈퇴는 정지를 풀고 본인이 삭제 요청 → 유예 지나기 → 지우기 순서로 돈다(정지된 계정은 탈퇴를 요청할 수 없다); 짝 스캔은 개수 칸과 같은 글의 구조 값(글 번호 · 최상위 댓글 번호 · 제목)을 시험이 아는 값으로 허용한다.
+   - 실측(B7, 2026-10-08): 둘 다 실패했다 — 기록은 `docs/modules/author-profile.md` 「누출 스캔 시험과 검증 기록」. 구현은 `apps/sample` 의 `AuthorLinkLeakIntegrationTest`(+ `LeakScanTest` · `AuthorLinkColumnsTest` · `AuthorLinkColumnsMySqlTest`), 조립(2b)은 board `NoOptionalGoldenKeysTest`. 스펙 이탈: 짝 스캔은 개수 칸과 같은 글의 구조 값(제목, 숫자는 `종류.칸` 별로 글 번호 · 스레드 뿌리 댓글 번호)을 시험이 아는 값으로만 허용한다. 위 6 의 두 지우기 경로는 계정 둘로 나눠 본다. 훑지 않은 경로는 모듈 문서에 적었다.
 
 **그 밖**
 

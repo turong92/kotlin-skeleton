@@ -3,7 +3,7 @@ package dev.sumin.skeleton.app.sample.leak
 import org.springframework.jdbc.core.simple.JdbcClient
 
 /**
- * 스펙 §12 7 — `board*` · `notification*` · `author_profiles` 의 **모든 열**을 공개 / 비공개로 나눈 표. 새 열이 생기면 이 표에 적어야 시험이 통과한다
+ * 스펙 §12 7 — `board*` · `notification*` · `author_profile*` 의 **모든 열**을 공개 / 비공개로 나눈 표. 새 열이 생기면 이 표에 적어야 시험이 통과한다
  * (새 열이 조용히 계정 id 를 담지 못하게). 두 방언이 같은 표를 쓴다.
  *
  * - 비공개: 계정 id(또는 탈퇴 뒤 톰스톤)를 담을 수 있는 열 — 어떤 응답에도 나가지 않는다.
@@ -48,6 +48,6 @@ object AuthorLinkColumns {
     fun columnsOf(jdbc: JdbcClient, schemaExpr: String): Set<String> =
         jdbc.sql(
             "select table_name, column_name from information_schema.columns where table_schema = $schemaExpr " +
-                "and (table_name like 'board%' or table_name like 'notification%' or table_name = 'author_profiles')",
+                "and (table_name like 'board%' or table_name like 'notification%' or table_name like 'author_profile%')",
         ).query { rs, _ -> rs.getString(1).lowercase() + "." + rs.getString(2).lowercase() }.list().toSet()
 }
