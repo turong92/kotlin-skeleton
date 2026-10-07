@@ -62,6 +62,21 @@ class CleanOnValidationErrorMigrationStrategyTest {
         assertEquals(7, jdbc().sql("select id from c.t").query(Int::class.java).single())
     }
 
+    @Test
+    fun `with the clean option off (the local default) a changed migration stops startup, keeps the data and the analyzer says what to do`() {
+        val dir = Files.createTempDirectory("mig")
+        dir.resolve("V20261001000000__t.sql").writeText("create table d.t (id int);")
+        flyway(dir, "d").migrate()
+        jdbc().sql("insert into d.t values (5)").update()
+
+        dir.resolve("V20261001000000__t.sql").writeText("create table d.t (id int, v int);")
+        val failure = kotlin.test.assertFailsWith<org.flywaydb.core.api.exception.FlywayValidateException> { flyway(dir, "d").migrate() }
+
+        assertEquals(5, jdbc().sql("select id from d.t").query(Int::class.java).single())
+        val analysis = kotlin.test.assertNotNull(FlywayValidationFailureAnalyzer().analyze(RuntimeException("startup", failure)))
+        kotlin.test.assertTrue("checksum" in analysis.description.lowercase() && "docker compose down -v" in analysis.action.orEmpty(), "${analysis.description} / ${analysis.action}")
+    }
+
     companion object {
         val db = PostgreSQLContainer(DockerImageName.parse("postgres:18"))
 

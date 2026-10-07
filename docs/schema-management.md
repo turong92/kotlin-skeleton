@@ -61,12 +61,38 @@ Each branch writes its own independent migration. If they conflict after merging
 types), do not edit either file once it has reached a shared environment — add a new migration that reconciles
 them.
 
-### When you may edit a migration
+### When you may edit a migration — never, once it is locked
 
-| The migration has been applied to… | Do |
-|---|---|
-| only your local database | Edit it. Run with the `local` profile: `skeleton.migration.clean-on-validation-error=true` (set in `application-local.yml`) wipes the local database when validation fails (checksum mismatch, or an applied file older than the newest local one is missing — e.g. after switching to a branch without it) and re-applies everything. New pending files, and applied files newer than anything local (`*:future`, another branch's work), never trigger the wipe. Assumes the app runs with `out-of-order=true` (as `apps/api` does): with it off, a late-merged older file makes `migrate()` itself fail, and the strategy wipes. |
-| any shared environment (dev, stage, prod) | Never edit. Add a new migration. |
+`migrations.lock` (repository root) pins the sha256 of every Flyway migration the repository ships (apps and modules,
+both dialects, `src/main/resources` only). **The files in it are frozen from this commit on** (the next release tag
+carries the same lock): a locked file is never edited or deleted in place — the next change is a new `V` file.
+`modules:migration-flyway` `MigrationLockTest` (so `./gradlew build`, and CI) runs `perl scripts/migrations-lock.pl --check`:
+
+| What changed | Result | Do |
+|---|---|---|
+| a locked file's content changed, or the file is gone | fails: "이미 배포됐을 수 있는 마이그레이션은 고치지 않는다 — 새 V 파일을 추가하라" | undo the edit and add a new file: `./gradlew newMigration -Pname=<what>` |
+| a new file newer than every locked version of that dialect | fails until the lock adds it | `perl scripts/migrations-lock.pl` — it adds new files only and never touches an existing line |
+| a new file *between* locked versions (out-of-order) | fails with a separate message (the skeleton's own files are stacked in order; `outOfOrder` stays the app's choice) | take a fresh version with `newMigration` |
+| exception: a locked file that really never left your machine | — | `perl scripts/migrations-lock.pl --rewrite <path>` (changed hash, or the line of a deleted file), and write it in `CHANGELOG.md` |
+
+`perl scripts/migrations-lock.pl --regenerate` rebuilds the whole lock. It is for `scripts/new-project.sh`, which locks a
+freshly stamped project's own files (a derived project owns its lock from then on). Never use it to get past a failing check.
+
+`baseline` (first line of the lock) is the schema the upgrade test starts from: `MigrationUpgradeIntegrationTest`
+(`apps/sample`, PostgreSQL and MySQL, one shared container each) migrates a database to `target = baseline`, inserts
+representative rows for every module, migrates to the latest and asserts the rows are alive and (PostgreSQL) the
+repositories read and write them. So every new migration runs over existing data — one that adds a `NOT NULL` column
+without a default fails there. The baseline does not move when files are added; move it only together with the test's rows.
+
+#### Local databases
+
+The `local` profile no longer wipes your database. `skeleton.migration.clean-on-validation-error` is `false` in every
+app's `application-local.yml` (`apps/api`, `apps/sample`, `apps/workbench`); the module's setting still exists and still
+defaults to `false`. When an applied migration changed, startup fails with a short message (`FlywayValidationFailureAnalyzer`):
+undo the edit and add a new file, or — for a database you really can throw away — `docker compose down -v` and start again.
+For one run with the old wipe-and-reapply behaviour set `SKELETON_MIGRATION_CLEAN_ON_VALIDATION_ERROR=true` (it is still
+refused outside `skeleton.migration.clean-allowed-profiles`, default `local`). It assumes the app runs with `out-of-order=true`
+(as `apps/api` does): with it off, a late-merged older file makes `migrate()` itself fail and the strategy wipes.
 
 Guard (`modules:migration`, tool-agnostic): `skeleton.migration.clean-on-validation-error=true`, `spring.flyway.clean-disabled=false` or `spring.liquibase.drop-first=true` outside
 `skeleton.migration.clean-allowed-profiles` (default `local`) fails startup before the database is touched.

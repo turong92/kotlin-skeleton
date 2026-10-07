@@ -311,6 +311,12 @@ else
   echo "✗ scripts/rename-skeleton.sh is missing" >&2; exit 1
 fi
 
+# ---------------------------------------------------------------------------------------------------- 마이그레이션 잠금 (migrations.lock, docs/schema-management.md)
+# 스켈레톤의 잠금은 스켈레톤의 파일 · 해시다 — 빠진 모듈 · 다른 방언의 파일, rename 이 고친 내용은 이 프로젝트의 것이 아니다. 찍힌 파일 그대로를 이 프로젝트의 첫 기준선으로 새로 잠근다
+if [ -f migrations.lock ] && [ -f scripts/migrations-lock.pl ]; then
+  perl scripts/migrations-lock.pl --regenerate
+fi
+
 # ---------------------------------------------------------------------------------------------------- 배포 선언 (deploy/app.yaml, docs/deploy.md)
 # name · image · env_prefix 는 rename 이 이미 새 접두사로 바꿨다. 여기서는 DB · Redis 를 고른 모듈에 맞추고, 쓰지 않는 모듈의 비밀 설명을 지운다.
 if [ -f deploy/app.yaml ]; then

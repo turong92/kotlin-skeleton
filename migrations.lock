@@ -1,0 +1,25 @@
+# 동결된 Flyway 마이그레이션의 잠금 — 손으로 고치지 않는다. 설명: docs/schema-management.md 「When you may edit a migration」
+#   perl scripts/migrations-lock.pl --check    검사 (./gradlew build 가 MigrationLockTest 로 같은 검사를 한다)
+#   perl scripts/migrations-lock.pl            새 마이그레이션 파일을 잠금에 더한다
+# baseline = MigrationUpgradeIntegrationTest 가 "이 버전까지 migrate → 데이터 삽입 → 최신까지 migrate" 로 시작하는 기준선
+baseline 20261006174411
+apps/api/src/main/resources/db/migration/postgresql/V20261005000000__init.sql  3a8b00fe81e3f4fedecb001145f7623516aca058386dea43123773e3ade0858f
+apps/sample/src/main/resources/db/migration/postgresql/V20261005123626__create_notes.sql  2c3391210151aa5e3259e53ae50c719939e7b1630ad62733b939483a0b255d21
+modules/account-jdbc/src/main/resources/db/migration/mysql/V20261005223426__accounts.sql  e00bdfe96d2872906c53220311f00b308f28d361b03f79a38d75efac7223909d
+modules/account-jdbc/src/main/resources/db/migration/mysql/V20261006143346__account_challenges.sql  80a136f16cab2e16f70aa5bb0514e9f649d99286df09688f5b474723c1b4549a
+modules/account-jdbc/src/main/resources/db/migration/postgresql/V20261005223426__accounts.sql  5188b61f68424da3c7fcd7c7c8155f40f8bccd189d70f903a45a20edbe5622e5
+modules/account-jdbc/src/main/resources/db/migration/postgresql/V20261006143346__account_challenges.sql  e053dd21b30f4b4ec70587991d48396441008b2d5ba4a3929f73c10a8480edb8
+modules/alert-jdbc/src/main/resources/db/migration/mysql/V20261005181125__alerts.sql  b3d8bd625c6a4daaf87dd30c333f783b972d1a25d5d02b596014cce1f57bfdcb
+modules/alert-jdbc/src/main/resources/db/migration/postgresql/V20261005181125__alerts.sql  994e813bf6ae2156c9f3cceffc266ecd7c61a19fe46fc9be73b97df9885e2ef0
+modules/auth-session-jdbc/src/main/resources/db/migration/mysql/V20261005220927__auth_sessions.sql  eddaadd9bb7c991b04d52fef723041b5be5089be7298286a394e3751e3bf77fe
+modules/auth-session-jdbc/src/main/resources/db/migration/postgresql/V20261005220927__auth_sessions.sql  dea448844e14fb3524c3c80a22169b7b950c2bec6e331b5bb2d58808a76e6900
+modules/board-jdbc/src/main/resources/db/migration/mysql/V20261005142218__board.sql  45904a07183c29f167753f9b2719de284974e712dc556b94a43443a0e353b014
+modules/board-jdbc/src/main/resources/db/migration/postgresql/V20261005142218__board.sql  66b10507970570713d3bcad023eb39251d79ea25f4e6fc791ef90a6e47009a69
+modules/job-queue-jdbc/src/main/resources/db/migration/mysql/V20260910010000__jobs.sql  89e1390ba0c6b67b49d3f94505f90501bbf2567d1fdd8d1dc26e6048a35062b4
+modules/job-queue-jdbc/src/main/resources/db/migration/mysql/V20261005175044__jobs_log_context.sql  40138c4827a85031b38d78888aadcfbb7cf0f7fc4759bc19da6283cecb17b224
+modules/job-queue-jdbc/src/main/resources/db/migration/postgresql/V20260910010000__jobs.sql  675201c660c8c80bf6de4a8d318140791f0756669027b7dff433d135e156824b
+modules/job-queue-jdbc/src/main/resources/db/migration/postgresql/V20261005175044__jobs_log_context.sql  518b4c6c334c2524703ad5f1e683790667fbdeaeffe1d954dc15ff647532d62a
+modules/legal-jdbc/src/main/resources/db/migration/mysql/V20261006174411__legal.sql  5e712d197b1747918d2d9f53f070bbb1b72d498052a7f2b4d97a01ff7e6c88be
+modules/legal-jdbc/src/main/resources/db/migration/postgresql/V20261006174411__legal.sql  98aebec23fb00af4b290b563d59738874d4bf5d6dd3f352329fc63717cdbeaeb
+modules/notification-jdbc/src/main/resources/db/migration/mysql/V20260617010000__notification_inbox.sql  0e0307d238650a803f680514f2bb014ed4656bfbc7f2068b7019aee1049ff24e
+modules/notification-jdbc/src/main/resources/db/migration/postgresql/V20260617010000__notification_inbox.sql  0252d162d7fd28d1b701369e9e5ddfbc29172ed6d201693bd855b24b6672ce49

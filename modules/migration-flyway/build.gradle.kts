@@ -23,4 +23,6 @@ tasks.test {
         include("**/src/*/resources/db/migration/**")
         exclude("**/build/**", "**/node_modules/**", ".claude/**", "**/.git/**")
     })
+    // MigrationLockTest — 동결된 잠금과 그것을 검사하는 도구 (docs/schema-management.md)
+    inputs.files(rootDir.resolve("migrations.lock"), rootDir.resolve("scripts/migrations-lock.pl"))
 }

@@ -50,5 +50,9 @@ dependencies {
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
     testImplementation("org.testcontainers:testcontainers-junit-jupiter")
     testImplementation("org.testcontainers:testcontainers-postgresql")
+    // MigrationUpgrade 시험: MySQL 마이그레이션도 같은 방식으로 올려 본다 (앱 자체는 PostgreSQL — modules:db-mysql 은 끌어오지 않는다)
+    testImplementation("org.testcontainers:testcontainers-mysql")
+    testImplementation("org.flywaydb:flyway-mysql")
+    testRuntimeOnly("com.mysql:mysql-connector-j")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }

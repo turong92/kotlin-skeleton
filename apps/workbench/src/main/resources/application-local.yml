@@ -1,7 +1,7 @@
 # 모듈 기본값과 다른 값만 (공통은 application.yml)
 skeleton:
   migration:
-    clean-on-validation-error: true   # 로컬 전용: 고친 미배포 마이그레이션은 DB 를 밀고 다시 깐다 (local 밖에서 켜면 기동 실패)
+    clean-on-validation-error: false  # 동결된 마이그레이션(migrations.lock)은 로컬에서도 조용히 DB 를 지우지 않는다 — 검증 오류면 기동이 실패한다. 정말 버릴 로컬 DB 만: SKELETON_MIGRATION_CLEAN_ON_VALIDATION_ERROR=true (docs/schema-management.md)
   config:
     aws:
       ssm:

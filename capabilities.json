@@ -2245,6 +2245,35 @@
       }
     },
     {
+      "id": "script-migrations-lock",
+      "kind": "script",
+      "module": null,
+      "path": "scripts/migrations-lock.pl",
+      "status": "stable",
+      "summary": "동결된 Flyway 마이그레이션의 잠금(migrations.lock: 경로 + sha256 + 업그레이드 시험의 baseline)을 검사하고(--check) 새 파일만 더한다 — 기존 줄의 변경은 --rewrite <경로> 로만.",
+      "starter": false,
+      "newProjectFlag": null,
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/schema-management.md"],
+      "frontend": null,
+      "notFor": [
+        "이미 배포된 마이그레이션을 고치는 용도가 아니다 — 새 V 파일을 더한다 (./gradlew newMigration)",
+        "new-project.sh 가 찍은 프로젝트의 첫 잠금은 --regenerate 로 스스로 만든다 — 손으로 쓰지 않는다"
+      ],
+      "keywords": {
+        "ko": ["마이그레이션 잠금", "마이그레이션 동결", "체크섬 불일치", "마이그레이션 수정 금지"],
+        "en": ["migration lock", "frozen migrations", "flyway checksum", "migrations.lock"]
+      }
+    },
+    {
       "id": "script-new-project",
       "kind": "script",
       "module": null,

@@ -134,6 +134,7 @@
 - script-check-real-providers: 진짜 소셜 로그인 · 진짜 메일 시험 전 점검 [소셜 로그인 점검, 메일 발송 점검]
 - script-dev: 로컬 풀스택 한 줄 실행 — DB(+ 로컬 S3) [로컬 실행, 개발 서버]
 - script-dev-sample: 샘플 앱 Notes 풀스택 한 줄 실행 — DB + 로컬 S3 →… [샘플 실행, 노트 앱 실행]
+- script-migrations-lock: 동결된 Flyway 마이그레이션의 잠금(migrations.lock:… [마이그레이션 잠금, 마이그레이션 동결]
 - script-new-project: 새 프로젝트 한 줄 찍기 [새 프로젝트, 프로젝트 만들기]
 - script-rename-skeleton: 패키지 · 설정 접두사 · 클래스 이름 · 환경변수 접두사를 한 번에… [이름 바꾸기, 리네임]
 - script-sample-e2e-backend: 샘플 앱 백엔드를 e2e 테스트용으로 올리고 내리는 비대화형… [e2e 백엔드, e2e 테스트용 서버]

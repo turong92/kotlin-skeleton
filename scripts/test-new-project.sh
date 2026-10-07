@@ -75,6 +75,7 @@ echo "== 2. 기본값만"
 MARKER="$TMP/marker"; touch "$MARKER"; sleep 1
 A="$TMP/a"
 expect_exit 0 "기본 조합을 찍는다 (rename 잔여 검사 포함)" stamp "$A"
+check "찍은 프로젝트의 마이그레이션 잠금이 맞다 (migrations-lock.pl --check) — 기본 조합" bash -c "cd '$A' && perl scripts/migrations-lock.pl --check"
 check "스타터 앱만 남는다 (apps/workbench 없음)" test -d "$A/apps/api" -a ! -e "$A/apps/workbench"
 check "build · .gradle · .git · .claude · .superpowers 는 복사하지 않는다" bash -c "! ls -d '$A/build' '$A/.gradle' '$A/.git' '$A/.claude' '$A/.superpowers' '$A/.kotlin' 2>/dev/null | grep -q ."
 # 스타터에는 계정(account-jdbc · auth-session-jdbc)이 들어 있다 — 그 모듈들의 compileOnly 선택 통합(alert · auth-social · captcha-turnstile · idempotency · job-queue-jdbc · notification-mail)은
@@ -164,6 +165,10 @@ check "apps/api 가 db-mysql 을 쓴다" bash -c "grep -q 'project(\":modules:db
 check "apps/api 테스트 컨테이너가 MySQL 이다" has_line 'MySQLContainer' "$C/apps/api/src/test/kotlin/dev/sumin/ovation/app/api/TestcontainersConfiguration.kt"
 check "datasource URL 이 MySQL 이다" has_line 'jdbc:mysql://localhost:3306/app' "$C/apps/api/src/main/resources/application.yml"
 check "첫 마이그레이션이 mysql 폴더에 있다" test -f "$C/apps/api/src/main/resources/db/migration/mysql/V20261005000000__init.sql"
+# 마이그레이션 잠금 — 찍힌 프로젝트는 자기 파일로 잠금을 새로 만든다: 빠진 모듈 · 다른 방언의 줄은 없고 모든 파일이 잠겨 있다 (docs/schema-management.md)
+check "찍은 프로젝트(mysql)의 마이그레이션 잠금이 맞다 (migrations-lock.pl --check)" bash -c "cd '$C' && perl scripts/migrations-lock.pl --check"
+check "mysql 잠금에 앱의 mysql init 이 있고 앱의 postgresql 줄은 없다 (모듈은 두 방언 폴더를 다 싣는다)" bash -c "grep -q 'apps/api/src/main/resources/db/migration/mysql/V20261005000000__init.sql' '$C/migrations.lock' && ! grep -q 'apps/api/.*/postgresql/' '$C/migrations.lock'"
+check "mysql 잠금에 고르지 않은 모듈(board-jdbc)의 줄이 없다" bash -c "! grep -q 'board-jdbc' '$C/migrations.lock'"
 check "postgresql 마이그레이션 폴더는 앱에서 사라진다" test ! -e "$C/apps/api/src/main/resources/db/migration/postgresql"
 check "루트 DB 테스트 묶음은 mysqlTest 만 남는다" bash -c "grep -q '\"mysqlTest\" to' '$C/build.gradle.kts' && ! grep -q '\"postgresTest\" to' '$C/build.gradle.kts'"
 check "postgres 전용 테스트 소스는 지워진다" test ! -e "$C/modules/job-queue-jdbc/src/postgresTest"

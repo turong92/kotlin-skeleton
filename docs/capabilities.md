@@ -136,6 +136,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `script-check-real-providers` | 진짜 소셜 로그인 · 진짜 메일 시험 전 점검 — .env.local 의 모양, 제공자 서버가 client id/secret 을 받아 주는지(가짜 코드로 한 번), 떠 있는 백엔드의 /auth/methods, SMTP 설정 · DNS(SPF/DMARC), 요청하면 시험 메일 한 통을 ✓/✗ 줄로 말한다. | (도구 — 켜는 조각 없음) | 소셜 로그인 점검, 메일 발송 점검, 구글 카카오 키 확인, 시험 메일 / check social login keys, smtp test mail, real provider readiness | — |
 | `script-dev` | 로컬 풀스택 한 줄 실행 — DB(+ 로컬 S3) 컨테이너를 올리고 백엔드를 띄운다. 옆의 ../web 프런트가 있으면 같이 띄운다. | (도구 — 켜는 조각 없음) | 로컬 실행, 개발 서버, 한 줄 실행, DB 띄우기 / run locally, dev server, local stack, start database | — |
 | `script-dev-sample` | 샘플 앱 Notes 풀스택 한 줄 실행 — DB + 로컬 S3 → 백엔드(apps/sample) → 짝 프런트(react-skeleton 의 apps/sample). | (도구 — 켜는 조각 없음) | 샘플 실행, 노트 앱 실행 / run sample, notes app | — |
+| `script-migrations-lock` | 동결된 Flyway 마이그레이션의 잠금(migrations.lock: 경로 + sha256 + 업그레이드 시험의 baseline)을 검사하고(--check) 새 파일만 더한다 — 기존 줄의 변경은 --rewrite <경로> 로만. | (도구 — 켜는 조각 없음) | 마이그레이션 잠금, 마이그레이션 동결, 체크섬 불일치, 마이그레이션 수정 금지 / migration lock, frozen migrations, flyway checksum, migrations.lock | — |
 | `script-new-project` | 새 프로젝트 한 줄 찍기 — 이 레포를 복사해 고른 모듈 · 앱만 남기고, 이름 · 접두사를 바꾸고, 배포 선언 · 설정 블록 · 이 카탈로그를 걸러 다시 쓴다(--dry-run 은 고른 모듈과 따라온 이유만 보인다). | (도구 — 켜는 조각 없음) | 새 프로젝트, 프로젝트 만들기, 찍어내기, 스캐폴딩, 프로젝트 시작 / new project, scaffold, stamp, template, project generator | — |
 | `script-rename-skeleton` | 패키지 · 설정 접두사 · 클래스 이름 · 환경변수 접두사를 한 번에 바꾸는 스크립트(GitHub Template 로 만든 뒤 이름만 바꿀 때) — 끝에 남은 흔적을 검사하고 이 카탈로그를 다시 만든다. | (도구 — 켜는 조각 없음) | 이름 바꾸기, 리네임, 패키지 변경, 템플릿 이름 바꾸기 / rename, change package, rename template, project name | — |
 | `script-sample-e2e-backend` | 샘플 앱 백엔드를 e2e 테스트용으로 올리고 내리는 비대화형 스크립트(react-skeleton 의 Playwright e2e 가 부른다). | (도구 — 켜는 조각 없음) | e2e 백엔드, e2e 테스트용 서버 / e2e backend, playwright backend | — |
@@ -964,6 +965,16 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - --with-sample 로 찍은 프로젝트에서만 남는다
   - 얇은 래퍼다 — 하는 일은 scripts/dev.sh
 - 키워드: 샘플 실행, 노트 앱 실행 / run sample, notes app
+
+### `script-migrations-lock` — 동결된 Flyway 마이그레이션의 잠금(migrations.lock: 경로 + sha256 + 업그레이드 시험의 baseline)을 검사하고(--check) 새 파일만 더한다 — 기존 줄의 변경은 --rewrite <경로> 로만.
+
+- 종류 · 상태: script · stable — 위치 `scripts/migrations-lock.pl`
+- 켜는 법: (도구 — 켜는 조각 없음)
+- 문서: `docs/schema-management.md`
+- 쓰지 않는 경우:
+  - 이미 배포된 마이그레이션을 고치는 용도가 아니다 — 새 V 파일을 더한다 (./gradlew newMigration)
+  - new-project.sh 가 찍은 프로젝트의 첫 잠금은 --regenerate 로 스스로 만든다 — 손으로 쓰지 않는다
+- 키워드: 마이그레이션 잠금, 마이그레이션 동결, 체크섬 불일치, 마이그레이션 수정 금지 / migration lock, frozen migrations, flyway checksum, migrations.lock
 
 ### `script-new-project` — 새 프로젝트 한 줄 찍기 — 이 레포를 복사해 고른 모듈 · 앱만 남기고, 이름 · 접두사를 바꾸고, 배포 선언 · 설정 블록 · 이 카탈로그를 걸러 다시 쓴다(--dry-run 은 고른 모듈과 따라온 이유만 보인다).
 
