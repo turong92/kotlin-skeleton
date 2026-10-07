@@ -283,7 +283,9 @@ class RegistrationService(private val core: AccountCore) {
             val now = core.time.now()
             // 재전송을 다 썼으면 더 올 것이 없다 — 만료 뒤에도 "지금"을 주면 눌러도 아무 일 없는 버튼이 살아 있다. null 로 알린다
             if (row.resends >= v.maxResends) return CodeWindow(row.expiresAt, null)
-            return CodeWindow(row.expiresAt, maxOf(now, row.lastSentAt.plus(v.resendCooldown)))
+            // 쿨다운이 지났는데도 안 나갔다면 주소별 메일 예산(`verification.per-email` — 첫 메일 포함)이 바닥난 것이다. 예산은 코드의 수명보다 늦게 돌아오니 이 시도에는 더 올 것이 없다 — 같은 null
+            val next = row.lastSentAt.plus(v.resendCooldown)
+            return CodeWindow(row.expiresAt, if (now.isBefore(next)) next else null)
         }
         core.tasks.run("resend-verification") {
             val existing = core.accountByEmail(row.subject)
