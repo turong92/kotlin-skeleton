@@ -96,7 +96,8 @@ class JdbcAuthorProfileRepositoryDbTest {
         val few = List(50) { "prf_x$it" } + a.id
         assertEquals(1, ProfileDb.dataSource.count { assertEquals(setOf(a.id), repository.findAll(few).keys) })
         val many = List(2500) { "prf_y$it" } + a.id
-        assertEquals(setOf(a.id), repository.findAll(many).keys)
+        // 2501 개 → 500 개씩 6 덩어리 = 쿼리 6 번 (행 수와 무관)
+        assertEquals(6, ProfileDb.dataSource.count { assertEquals(setOf(a.id), repository.findAll(many).keys) })
     }
 
     @Test
@@ -274,5 +275,32 @@ class JdbcAuthorProfileRepositoryDbTest {
         assertEquals(1, ProfileDb.rows(keep))
         // 지운 뒤에는 첫 프로필 자리도 비어 다시 만들 수 있다 (새 계정으로 가입한 것과 같다)
         assertTrue(repository.insert(profile(acc, primary = true)))
+    }
+
+    @Test
+    fun `an id that differs only in case is not the row - find and findAll answer exactly`() {
+        val acc = account()
+        val p = profile(acc, primary = true, id = "prf_ab" + java.util.UUID.randomUUID().toString().replace("-", "").take(30))
+        repository.insert(p)
+        val variant = "prf_" + p.id.removePrefix("prf_").uppercase()
+        assertTrue(variant != p.id)
+        assertNull(repository.find(variant))
+        assertEquals(emptyMap(), repository.findAll(listOf(variant)))
+        assertEquals(setOf(p.id), repository.findAll(listOf(variant, p.id)).keys)
+        // 서비스 쪽 신원 확인도 같은 false (id 모양은 prf_ 로 시작하게 둔 변형)
+        val identities = dev.sumin.skeleton.authorprofile.AuthorProfileIdentities(repository)
+        val context = dev.sumin.skeleton.common.author.AuthorContext("board")
+        assertTrue(identities.allows(acc, p.id, context))
+        assertFalse(identities.allows(acc, variant, context))
+    }
+
+    @Test
+    fun `insertWithinCap and insert agree on who inserted - a clash from another account never counts as ours`() {
+        val key = "mine${System.nanoTime()}"
+        val a = account(); val b = account()
+        repository.insert(profile(a, primary = true)); repository.insert(profile(b, primary = true))
+        assertEquals(CapInsert.INSERTED, repository.insertWithinCap(profile(a, key = key, tag = "0001"), 5))
+        assertEquals(CapInsert.NAME_TAKEN, repository.insertWithinCap(profile(b, key = key, tag = "0001"), 5))
+        assertEquals(1, ProfileDb.rows(b))
     }
 }

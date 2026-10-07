@@ -384,10 +384,48 @@ class AuthorProfileServiceTest {
     }
 
     @Test
-    fun `an account in its deletion grace or suspended still gets its profile`() {
+    fun `only an ACTIVE account gets a first profile row or a new profile - others are NOT_FOUND and nothing is written`() {
         val h = Harness()
-        h.account("acc_1", "Moon", "0001", status = dev.sumin.skeleton.account.AccountStatus.SUSPENDED)
+        listOf(
+            dev.sumin.skeleton.account.AccountStatus.SUSPENDED, dev.sumin.skeleton.account.AccountStatus.DELETED,
+            dev.sumin.skeleton.account.AccountStatus.PENDING_VERIFICATION, dev.sumin.skeleton.account.AccountStatus.ERASED,
+        ).forEachIndexed { i, status ->
+            val id = "acc_$i"
+            h.account(id, "Moon$i", "0001", status = status)
+            assertEquals(AuthorProfileErrorCode.NOT_FOUND, h.failure { h.service.ensureFirstProfile(id) }.errorCode, "$status")
+            assertEquals(AuthorProfileErrorCode.NOT_FOUND, h.failure { h.service.ensureFirstProfileRow(id) }.errorCode, "$status")
+            assertEquals(AuthorProfileErrorCode.NOT_FOUND, h.failure { h.service.create(id, "Fresh$i") }.errorCode, "$status")
+        }
+        assertTrue(h.repository.all().isEmpty())
+    }
+
+    @Test
+    fun `a suspended account that already has its first profile can still read it - but cannot create`() {
+        val h = Harness()
+        h.account("acc_1", "Moon", "0001")
+        h.service.ensureFirstProfile("acc_1")
+        h.accounts.update("acc_1", dev.sumin.skeleton.account.AccountPatch(status = dev.sumin.skeleton.account.AccountStatus.SUSPENDED), T0)
         assertEquals("Moon", h.service.ensureFirstProfile("acc_1").name)
+        assertEquals(1, h.service.list("acc_1").size)
+        assertEquals(AuthorProfileErrorCode.NOT_FOUND, h.failure { h.service.create("acc_1", "Second") }.errorCode)
+        assertEquals(1, h.repository.all().size)
+    }
+
+    @Test
+    fun `a non-active account's old rows are not adopted by the list-time guarantee`() {
+        val calls = mutableListOf<String>()
+        val h = Harness(adoptionListeners = mutableListOf(object : dev.sumin.skeleton.common.author.AuthorAdoptionListener {
+            override val name = "probe"
+            override fun pendingAccounts(limit: Int, after: String?) = emptyList<String>()
+            override fun adopt(accountId: String, authorId: String): Int { calls += accountId; return 0 }
+        }))
+        h.account("acc_1", "Moon", "0001")
+        h.service.ensureFirstProfile("acc_1")
+        assertEquals(listOf("acc_1"), calls)
+        calls.clear()
+        h.accounts.update("acc_1", dev.sumin.skeleton.account.AccountPatch(status = dev.sumin.skeleton.account.AccountStatus.SUSPENDED), T0)
+        h.service.ensureFirstProfile("acc_1")
+        assertTrue(calls.isEmpty())
     }
 
     @Test

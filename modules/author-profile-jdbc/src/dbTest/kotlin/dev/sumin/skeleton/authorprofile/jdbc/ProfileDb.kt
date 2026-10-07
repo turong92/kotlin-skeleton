@@ -55,7 +55,9 @@ object ProfileDb {
 
     val dataSource = CountingDataSource(raw)
     val jdbc = NamedParameterJdbcTemplate(dataSource)
-    val repository = JdbcAuthorProfileRepository(jdbc, TransactionTemplate(DataSourceTransactionManager(dataSource)), DbTestDatabase.dialect)
+    /** 바깥 트랜잭션을 여는 시험이 쓴다 — 저장소의 TransactionTemplate 은 같은 관리자라 여기에 합류한다 */
+    val tx = TransactionTemplate(DataSourceTransactionManager(dataSource))
+    val repository = JdbcAuthorProfileRepository(jdbc, tx, DbTestDatabase.dialect)
 
     private val sequence = AtomicInteger()
 

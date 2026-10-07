@@ -20,6 +20,8 @@ import org.slf4j.LoggerFactory
  *
  * 남의 · 없는 · 지워진 프로필 id 는 모두 같은 [AuthorProfileErrorCode.NOT_FOUND] 다.
  * 계정 id 와 프로필 id 의 쌍은 로그에 남기지 않는다.
+ *
+ * **저장소 주의**: [AuthorProfileRepository.rename] 은 바깥 트랜잭션 없이 불러야 한다 — 이름이 겹치면(`TAKEN`) PostgreSQL 은 그 트랜잭션 전체를 abort 시킨다. 이 서비스는 트랜잭션을 열지 않는다.
  */
 class AuthorProfileService(
     private val repository: AuthorProfileRepository,
@@ -38,10 +40,11 @@ class AuthorProfileService(
      * 새 프로필. 순서: 이름 규칙(어긋나면 `400` 필드 `name`, 아무것도 세지 않는다) → 첫 프로필 줄 보장([ensureFirstProfile]: 상한 검사가 잠글 줄이 늘 먼저 있게)
      * → 개수 상한(`409 LIMIT_REACHED`) → 만들기 한도(`429`, 표 기준) → 꼬리표 추첨 · 상한과 함께 원자적 저장([AuthorProfileRepository.insertWithinCap], `409 NAME_TAKEN`).
      * 꼬리표는 이 프로필 하나만의 독립 추첨이다 — 계정 · 형제 프로필에서 파생하지 않는다. 같은 키의 **아직 넘겨받지 않은** 옛 작성자 꼬리표도 피한다.
-     * 개수 상한에는 첫 프로필(지우지 않았다면)도 들어간다.
+     * 개수 상한에는 첫 프로필(지우지 않았다면)도 들어간다. **ACTIVE 가 아닌 계정**(정지 · 삭제 유예 · 지우기 선점 · 지워짐)은 [AuthorProfileErrorCode.NOT_FOUND] 다 — 새 줄을 만들지 않는다.
      */
     fun create(accountId: String, rawName: String?): AuthorProfile {
         val name = acceptName(rawName)
+        requireActive(accountId)
         ensureFirstProfile(accountId)
         val max = properties.maxPerAccount
         if (repository.countActive(accountId) >= max) throw AuthorProfileException(AuthorProfileErrorCode.LIMIT_REACHED)
@@ -108,6 +111,7 @@ class AuthorProfileService(
     fun ensureFirstProfile(accountId: String): AuthorProfile {
         val first = ensureFirstProfileRow(accountId)
         if (first.adoptedAt != null) return first
+        if (!isActive(accountId)) return first   // 읽기는 허용하지만 옛 글을 옮기지는 않는다 (탈퇴 순서: 선점 → 고리 → 지움)
         var moved = false
         for (listener in adoptionListeners()) {
             try {
@@ -124,12 +128,13 @@ class AuthorProfileService(
      * 첫 프로필 **줄**만 보장한다 (옛 행은 옮기지 않는다). 만들 때 계정 이름 · 꼬리표를 **한 번 복사**하고 이후 따로 간다:
      * 꼬리표가 겹치거나 현재 방식에 맞지 않으면 새로 추첨하고, 이름 자리를 못 잡으면(UNIQUE 에서 이미 쓰는 이름 · 꼬리표가 가득 참) **이름 없는 첫 프로필**로 떨어진다 —
      * 첫 프로필이 없으면 넘겨받을 곳이 없어 옛 글이 영영 `pending:` 에 머물기 때문이다. 이름 없는 계정도 이름 없는 첫 프로필이다.
-     * 개수 상한 · 만들기 한도를 쓰지 않는다 (사용자가 만든 것이 아니다). 모르는 · 지워진(ERASED) 계정은 [AuthorProfileErrorCode.NOT_FOUND].
+     * 개수 상한 · 만들기 한도를 쓰지 않는다 (사용자가 만든 것이 아니다). **줄이 이미 있으면 계정 상태와 상관없이 그것을 돌려준다**(정지 계정의 읽기). 줄을 **새로 넣는 것**은 계정이 ACTIVE 일 때만이다 —
+     * 모르는 · ACTIVE 가 아닌(정지 · 삭제 유예 · 지우기 선점 · ERASED) 계정은 [AuthorProfileErrorCode.NOT_FOUND]. 탈퇴는 선점(claim) → 고리 → 지움 순이라 고리가 돈 뒤에는 계정이 ACTIVE 가 아니므로 지워진 줄이 되살아나지 않는다.
      * `primary_of` 유니크와 insert-ignore 라서 인스턴스 여럿이 동시에 불러도 하나다.
      */
     fun ensureFirstProfileRow(accountId: String): AuthorProfile {
         repository.findPrimary(accountId)?.let { return it }
-        val account = accounts().findById(accountId)?.takeIf { it.status != AccountStatus.ERASED } ?: throw notFound()
+        val account = accounts().findById(accountId)?.takeIf { it.status == AccountStatus.ACTIVE } ?: throw notFound()
         val name = account.displayName
         val key = name?.let { account.displayNameKey ?: names.key(it) }
         val now = time.now()
@@ -155,7 +160,14 @@ class AuthorProfileService(
         repository.markAdopted(accountId, time.now())
     }
 
+    /** 새 프로필 줄을 가질 수 있는 계정인가 (ACTIVE 만). 넘겨받기 실행기가 비ACTIVE 계정을 건너뛰는 데 쓴다 */
+    fun isActive(accountId: String): Boolean = accounts().findById(accountId)?.status == AccountStatus.ACTIVE
+
     // ---- 내부 ----
+
+    private fun requireActive(accountId: String) {
+        if (!isActive(accountId)) throw notFound()
+    }
 
     private fun ownLiving(accountId: String, id: String): AuthorProfile =
         repository.find(id)?.takeIf { it.accountId == accountId && it.status == AuthorProfileStatus.ACTIVE } ?: throw notFound()

@@ -4,7 +4,7 @@ import dev.sumin.skeleton.common.author.AuthorAdoptionListener
 import org.slf4j.LoggerFactory
 
 /**
- * 넘겨받기 실행기 — 모든 [AuthorAdoptionListener] 의 `pendingAccounts` 를 **계정 id 커서**로 끝까지 훑으며 계정마다 첫 프로필 줄을 보장하고([AuthorProfileService.ensureFirstProfileRow])
+ * 넘겨받기 실행기 — 모든 [AuthorAdoptionListener] 의 `pendingAccounts` 를 **계정 id 커서**로 끝까지 훑으며 ACTIVE 계정마다 첫 프로필 줄을 보장하고([AuthorProfileService.ensureFirstProfileRow])
  * `adopt(계정, 프로필 id)` 로 옛 행을 옮긴 뒤 첫 프로필의 `adopted_at` 을 채운다 (스펙 §7.4).
  *
  * 계약 ([AuthorAdoptionListener] KDoc): 커서는 한 번 본 계정을 그 실행에서 다시 보지 않고 항상 앞으로 간다 — 던지거나 0 을 돌려주는(못 옮기는) 계정이
@@ -45,6 +45,8 @@ class AuthorAdoption(
                 break
             }
             for (accountId in pending) {
+                // ACTIVE 가 아닌 계정(정지 · 삭제 유예 · 지우기 선점 · 지워짐)은 건너뛴다 — 탈퇴 고리가 지운 줄을 되살리지 않게. 계정이 다시 ACTIVE 가 되면 다음 기동 · 목록 조회가 옮긴다
+                if (!service.isActive(accountId)) continue
                 val n = try {
                     listener.adopt(accountId, service.ensureFirstProfileRow(accountId).id)
                 } catch (e: Exception) {

@@ -10,12 +10,13 @@
 | `(name_key, tag)` 유니크 | 둘 중 하나라도 NULL 이면 겹치지 않는다 (NULL 은 서로 다르다 — 두 방언 공통, 시험으로 확인). 지운 프로필은 둘 다 NULL 이라 꼬리표가 풀린다. MySQL `name_key` 는 `utf8mb4_bin` — 악센트 · 대소문자만 다른 키는 다른 키다 (같음의 기준은 `DisplayNameRules` 가 정한다) |
 | `primary_of` 유니크 | 계정의 첫 프로필이면 계정 id, 아니면 NULL → 계정당 하나. 부분 인덱스가 필요 없어 두 방언이 같다. 지워도 자리가 남아 첫 프로필을 두 번 만들 수 없다 |
 | `insert` (첫 프로필) | 충돌하면 아무것도 하지 않는 insert. PostgreSQL `on conflict do nothing`(대상을 적지 않는다 — `primary_of` 든 `(name_key, tag)` 든 같은 길), MySQL `SqlDialect.insertIgnore`(`on duplicate key update id = id`). **넣었는지는 갱신 행 수가 아니라 id 로 다시 읽어 판정**한다 (MySQL 은 이미 있는 행에도 1 을 돌려준다). 어느 쪽이 겹쳤는지는 알리지 않는다 |
-| `insertWithinCap` (만든 프로필) | 한 트랜잭션: 계정의 **첫 프로필 줄을 `for update` 로 잠그고**(지워졌어도) → 살아 있는 줄 수를 세고 → 상한이면 `LIMIT_REACHED`(이름 겹침과 겹쳐도 이쪽이 먼저) → 아니면 위의 insert-ignore, 안 들어갔으면 `NAME_TAKEN`. 같은 계정의 동시 요청이 이 잠금에서 줄을 서 상한을 넘지 못한다. 잠그는 줄이 계정당 하나라 교착이 없다. 첫 프로필 줄이 없으면 `IllegalStateException`(부르는 쪽이 먼저 보장한다) |
-| `rename` | 이름 · 키 · 꼬리표를 한 문장으로. 주인 계정 + `ACTIVE` 조건 — 남의 · 없는 · 지워진 줄은 `NOT_FOUND`. `(name_key, tag)` 충돌은 `TAKEN`(바뀐 것 없음). 바깥 트랜잭션 없이 부른다 (PostgreSQL 은 실패한 문장이 트랜잭션을 망가뜨린다) |
+| `insertWithinCap` (만든 프로필) | 한 트랜잭션: 계정의 **첫 프로필 줄을 `for update` 로 잠그고**(지워졌어도) → 살아 있는 줄 수를 세고 → 상한이면 `LIMIT_REACHED`(이름 겹침과 겹쳐도 이쪽이 먼저) → 아니면 위의 insert-ignore, 안 들어갔으면 `NAME_TAKEN`. 같은 계정의 동시 요청이 이 잠금에서 줄을 서 상한을 넘지 못한다. 개수도 **잠금 읽기**(`select … for update`)로 세어 바깥 `@Transactional` 에 합류해도 최신 커밋을 본다. 같은 계정의 만들기끼리는 잠그는 줄이 하나라 교착이 없다. 자기 트랜잭션은 **READ COMMITTED** 로 연다 — MySQL 반복 읽기에서는 `account_id` 범위 잠금 읽기가 이웃 계정과 틈 잠금으로 교착한다(실측); 바깥 트랜잭션에 합류하면 바깥의 격리 수준이 그대로다. 첫 프로필 줄이 없으면 `IllegalStateException`(부르는 쪽이 먼저 보장한다) |
+| `rename` | 이름 · 키 · 꼬리표를 한 문장으로. 주인 계정 + `ACTIVE` 조건 — 남의 · 없는 · 지워진 줄은 `NOT_FOUND`. `(name_key, tag)` 충돌은 `TAKEN`(바뀐 것 없음). **바깥 트랜잭션 없이 부른다** — 이름이 겹치면(`TAKEN`) PostgreSQL 은 그 트랜잭션 전체를 abort 시킨다 |
 | `markDeleted` | `status=DELETED`, 이름 · 키 · 꼬리표 NULL, `deleted_at`. `primary_of` 는 그대로. 글 · 댓글 쪽 행은 건드리지 않는다 |
 | `markAdopted` | `adopted_at` 이 비어 있을 때만 채운다 |
 | `countCreatedSince` | `primary_of is null` 인 줄, **지워진 것 포함**, `created_at >= since`. 만들기 한도의 근거 — 표에서 세므로 재시작 · 인스턴스 여럿에도 같다 |
-| `deleteByAccount` | 탈퇴 고리 — 지워진 줄까지 전부. 멱등 |
+| `deleteByAccount` | 탈퇴 고리 — 한 트랜잭션에서 첫 프로필(앵커) 줄을 `for update` 로 먼저 잠근 뒤 지워진 줄까지 전부 지운다(앵커가 없으면 그냥 지움). 멱등. 탈퇴는 선점(claim) → 고리 → 지움 순이라, 고리가 돈 뒤에는 계정이 ACTIVE 가 아니고 `author-profile` 서비스가 ACTIVE 가 아닌 계정에는 첫 프로필 줄도 새 프로필도 만들지 않는다 (지워진 줄이 되살아나지 않는다) |
+| `find` · `findAll` | 요청 id 와 **정확히 같은** id 의 줄만 (Java 비교). MySQL 기본 정렬은 id 의 대소문자 · 악센트를 같게 봐서 변형 id 가 남의 줄에 닿는다 — 마이그레이션은 바꾸지 않고 읽는 쪽에서 거른다 |
 | `findAll` | `where id in (…)` 쿼리 한 번 (500 개씩 덩어리) |
 
 **인덱스**: `(account_id, status)` — 살아 있는 프로필 목록 · 개수 · 상한 세기. 만들기 한도 세기(`account_id` + `primary_of is null` + `created_at`)는 이 인덱스로 계정의 줄만 훑는다 (계정당 줄 수는 상한 · 만들기 한도가 막아 한 자리라서 `(account_id, created_at)` 를 따로 두지 않는다). `(name_key, tag)` 유니크의 앞 열이 `tagsOf` · `primariesByKey` 를, `primary_of` 유니크가 `findPrimary` 와 잠금을 받는다.

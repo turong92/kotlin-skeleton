@@ -8,6 +8,8 @@ import java.time.Instant
  *  - **유니크는 DB 가 가른다** — 먼저 읽고 넣는 방식으로 판정하지 않는다. (`name_key`, `tag`) 는 둘 다 NULL 이 아닐 때만 겹침이다(NULL 은 서로 겹치지 않는다),
  *    `primary_of` 는 계정당 하나다. [insert] 는 둘 중 어느 쪽이 겹쳤는지 알리지 않고 false 를 돌려준다(부르는 쪽이 [findPrimary] 로 가른다).
  *  - 쓰기는 **주인 계정과 상태**를 조건에 건다 — 남의 · 없는 · 지워진 프로필은 같은 결과(false · [RenameResult.NOT_FOUND])다. 어느 쪽인지 구별해 알리지 않는다.
+ *  - [find] · [findAll] 은 요청한 id 와 **정확히 같은** id 의 줄만 돌려준다 (대소문자 · 악센트만 다른 id 는 없는 id). 정렬이 id 를 느슨하게 비교하는 DB(MySQL 기본)에서도 변형 id 로 남의 줄에 닿지 못하게.
+ *  - **트랜잭션**: [insertWithinCap] 은 바깥 트랜잭션에 합류해도 맞다(개수를 잠금 읽기로 센다). [rename] 은 바깥 트랜잭션 없이 불러야 한다 — 이름이 겹치면(`TAKEN`) PostgreSQL 은 그 트랜잭션 전체를 abort 시킨다.
  *  - 이 모듈은 계정 id 와 프로필 id 쌍을 로그에 남기지 않는다 — 구현도 쌍을 평소 로그(INFO 이하)에 찍지 않는다.
  */
 interface AuthorProfileRepository {
@@ -46,7 +48,7 @@ interface AuthorProfileRepository {
     /**
      * **사용자가 만든** 프로필(`primary_of` 가 NULL)을 상한 검사와 **함께, 원자적으로** 넣는다. 구현 계약(B5b):
      *  - 한 트랜잭션에서 그 계정의 **첫 프로필 줄을 잠그고**(`select … where primary_of = :account for update`) → 살아 있는 줄 수를 세고 → [maxActive] 이상이면 [CapInsert.LIMIT_REACHED] →
-     *    아니면 넣는다. 같은 계정의 동시 요청이 이 잠금에서 줄을 서므로 상한을 넘지 못한다. 부르는 쪽([AuthorProfileService.create])이 먼저 첫 프로필 줄을 보장한다 — 줄이 없으면 구현은 잠글 것이 없으니 던져도 된다.
+     *    아니면 넣는다. 같은 계정의 동시 요청이 이 잠금에서 줄을 서므로 상한을 넘지 못한다(같은 계정의 만들기끼리는 잠그는 줄이 하나라 교착이 없다). 개수는 잠금 읽기로 세어 바깥 트랜잭션의 낡은 스냅샷을 보지 않는다. 부르는 쪽([AuthorProfileService.create])이 먼저 첫 프로필 줄을 보장한다 — 줄이 없으면 구현은 잠글 것이 없으니 던져도 된다.
      *  - (키, 꼬리표) 유니크에 걸리면 [CapInsert.NAME_TAKEN] (아무것도 바뀌지 않는다). 상한과 겹침이 함께 해당하면 [CapInsert.LIMIT_REACHED] 가 먼저다.
      *    PostgreSQL 은 실패한 INSERT 가 트랜잭션을 망가뜨리므로 `on conflict do nothing` 으로 판정한다.
      *  - 첫 프로필 줄은 지워졌어도(DELETED) 잠금 대상이다.
@@ -68,7 +70,7 @@ interface AuthorProfileRepository {
     /** 계정의 첫 프로필이 옛 글을 넘겨받았다고 표시한다 — `adopted_at` 이 비어 있을 때만 [now] 로 채운다(이미 있으면 그대로, false) */
     fun markAdopted(accountId: String, now: Instant): Boolean
 
-    /** 탈퇴 — 계정의 프로필 행을 **모두** 지운다(지워진 것 포함: 형제 관계가 DB 에도 남지 않는다). 지운 줄 수. 멱등 */
+    /** 탈퇴 — 계정의 프로필 행을 **모두** 지운다(지워진 것 포함: 형제 관계가 DB 에도 남지 않는다). 첫 프로필(앵커) 줄을 먼저 잠근 뒤 지운다(없으면 그냥 지운다). 지운 줄 수. 멱등 */
     fun deleteByAccount(accountId: String): Int
 }
 

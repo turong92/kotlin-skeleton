@@ -190,4 +190,21 @@ class AuthorAdoptionTest {
             logger.level = previous
         }
     }
+
+    @Test
+    fun `accounts that are not ACTIVE are skipped - no first profile row, no adopt call`() {
+        val h = Harness()
+        h.account("acc_1", "A", "0001")
+        h.account("acc_2", "B", "0002", status = dev.sumin.skeleton.account.AccountStatus.SUSPENDED)
+        h.account("acc_3", "C", "0003", status = dev.sumin.skeleton.account.AccountStatus.DELETED)
+        h.account("acc_4", "D", "0004", status = dev.sumin.skeleton.account.AccountStatus.ERASED)
+        val listener = FakeListener("board", mapOf("acc_1" to 1, "acc_2" to 1, "acc_3" to 1, "acc_4" to 1))
+
+        val moved = AuthorAdoption({ listOf(listener) }, h.service, batchSize = 10).run()
+
+        assertEquals(1, moved)
+        assertEquals(setOf("acc_1"), listener.adopted.keys)
+        assertEquals(1, listener.adoptCalls)
+        assertEquals(setOf("acc_1"), h.repository.all().map { it.accountId }.toSet())
+    }
 }
