@@ -38,7 +38,7 @@ class AdminService(private val core: AccountCore) {
             val purgeAfter = maxOf(target.purgeAfter ?: now, now.plus(core.props.deletion.grace))
             core.accounts.update(targetId, AccountPatch(status = AccountStatus.DELETED, purgeAfter = purgeAfter, clearSuspendedReason = true), now)
         } else {
-            core.accounts.update(targetId, AccountPatch(status = reopenedStatus(target), clearSuspendedReason = true), now)
+            core.accounts.update(targetId, AccountPatch(status = core.reopenedStatus(target), clearSuspendedReason = true), now)
         }
         core.events.publish(AccountEventType.ACCOUNT_UNSUSPENDED, targetId, detail = mapOf("by" to actorId))
     }
@@ -48,7 +48,7 @@ class AdminService(private val core: AccountCore) {
         val target = live(targetId)
         if (target.status != AccountStatus.DELETED) throw AccountException(AccountErrorCode.NOT_FOUND)
         // 유예가 끝났으면 되살릴 수 없다 — 지우기와 되살리기 중 하나만 이긴다 (저장소가 한 문장으로 판정한다)
-        if (!core.accounts.restore(targetId, reopenedStatus(target), core.time.now())) throw AccountException(AccountErrorCode.NOT_FOUND)
+        if (!core.accounts.restore(targetId, core.reopenedStatus(target), core.time.now())) throw AccountException(AccountErrorCode.NOT_FOUND)
         core.events.publish(AccountEventType.ACCOUNT_RESTORED, targetId, detail = mapOf("by" to actorId))
     }
 
@@ -79,8 +79,6 @@ class AdminService(private val core: AccountCore) {
         }
         if (revoked) core.events.publish(AccountEventType.ROLE_REVOKED, targetId, detail = mapOf("role" to role, "by" to actorId))
     }
-
-    private fun reopenedStatus(a: Account) = if (a.emailVerified || a.email == null) AccountStatus.ACTIVE else AccountStatus.PENDING_VERIFICATION
 
     private fun validRole(role: String) {
         if (!ROLE.matches(role)) throw ApplicationException("Invalid role name", PlatformErrorCode.VALIDATION_FAILED)

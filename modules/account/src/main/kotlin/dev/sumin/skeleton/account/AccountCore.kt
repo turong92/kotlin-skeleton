@@ -97,6 +97,13 @@ class AccountCore(
         mailer.send(AccountMail(MailKind.IDENTITY_LINKED_NOTICE, email, account.locale, vars = mapOf("method" to method)))
     }
 
+    /**
+     * 탈퇴 취소 · 운영자 복구 · 정지 해제로 **되살아날 때의 상태**: 확인된(또는 주소가 없는) 계정은 ACTIVE, 확인 전 계정은 PENDING_VERIFICATION —
+     * 단 `sign-up.email-verification=false` 인 앱에는 확인 단계가 없다(가입한 계정이 곧 ACTIVE)이므로 늘 ACTIVE 다 (그렇지 않으면 ACTIVE 였던 계정이 확인할 길 없는 상태로 되살아난다)
+     */
+    fun reopenedStatus(a: Account): AccountStatus =
+        if (!props.signUp.emailVerification || a.emailVerified || a.email == null) AccountStatus.ACTIVE else AccountStatus.PENDING_VERIFICATION
+
     fun newAccountId(): String = "acc_" + randomHex()
 
     fun newIdentityId(): String = "idn_" + randomHex()

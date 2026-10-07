@@ -72,7 +72,7 @@ class DeletionService(private val core: AccountCore) {
         val grant = core.tokens.consume(TokenPurposes.DELETION_RESTORE, restoreToken) ?: throw AccountException(AccountErrorCode.TOKEN_INVALID)
         val account = grant.accountId?.let(core.accounts::findById) ?: throw AccountException(AccountErrorCode.TOKEN_INVALID)
         val now = core.time.now()
-        val reopened = if (account.emailVerified || account.email == null) AccountStatus.ACTIVE else AccountStatus.PENDING_VERIFICATION
+        val reopened = core.reopenedStatus(account)
         // 조건부 갱신 한 문장: DELETED 이고 유예가 안 끝났을 때만 — 정지 · 지움과 동시에 둘 다 이기지 못한다
         if (!core.accounts.restore(account.id, reopened, now)) throw AccountException(AccountErrorCode.TOKEN_INVALID)
         account.email?.let { core.mailer.send(AccountMail(MailKind.DELETION_CANCELLED, it, account.locale)) }

@@ -13,7 +13,6 @@ import dev.sumin.skeleton.auth.account.AccountIdentifier
 import dev.sumin.skeleton.auth.account.LoginBlock
 import dev.sumin.skeleton.common.ApplicationException
 import java.time.Duration
-import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -26,8 +25,9 @@ class SelfRestoreTest {
     private val PW = ReauthInput("tangerine-42-moon")
     private object Google : SignInMethod { override val code = "google"; override val userRemovable = true }
 
-    private fun harness(selfRestore: Boolean = true, ttl: Duration = Duration.ofMinutes(15)) = AccountHarness(
+    private fun harness(selfRestore: Boolean = true, ttl: Duration = Duration.ofMinutes(15), emailVerification: Boolean = true) = AccountHarness(
         AccountProperties(
+            signUp = AccountProperties.SignUp(emailVerification = emailVerification),
             deletion = AccountProperties.Deletion(selfRestore = selfRestore, selfRestoreTtl = ttl), social = AccountProperties.Social(signUp = true),
             mail = AccountProperties.Mail(linkBaseUrl = "https://app.example.com"), password = AccountProperties.Password(bcryptStrength = 4),
         ),
@@ -81,6 +81,32 @@ class SelfRestoreTest {
         val second = h.stateOf()!!.blockData!!().token()
         assertEquals("ACCOUNT.TOKEN_INVALID", code { h.deletion.cancel(first, null) })
         h.deletion.cancel(second, null)
+    }
+
+    @Test
+    fun `with email verification switched off the account comes back ACTIVE - it was ACTIVE before, never PENDING_VERIFICATION`() {
+        val h = harness(emailVerification = false)
+        h.signUp()
+        val a = h.repo.findByEmail("ann@example.com")!!
+        assertEquals(AccountStatus.ACTIVE, a.status)
+        assertEquals(false, a.emailVerified, "no verification step exists in this mode")
+        h.deletion.delete(a.id, PW, null)
+        h.deletion.cancel(h.stateOf()!!.blockData!!().token(), null)
+        assertEquals(AccountStatus.ACTIVE, h.repo.findById(a.id)!!.status)
+
+        // an operator's restore and the end of a suspension reopen the same way
+        h.deletion.delete(a.id, PW, null)
+        h.admin.restore("acc_admin", a.id)
+        assertEquals(AccountStatus.ACTIVE, h.repo.findById(a.id)!!.status)
+    }
+
+    @Test
+    fun `with email verification on, an unverified account still returns to PENDING_VERIFICATION`() {
+        val h = harness()
+        val unproven = Account("acc_u", "unproven@example.com", false, AccountStatus.DELETED, setOf("USER"), null, null, null, h.time.now(), h.time.now(), deletedAt = h.time.now(), purgeAfter = h.time.now().plus(Duration.ofDays(30)))
+        h.repo.insert(unproven, listOf(Identity("idn_u", "acc_u", "password", "unproven@example.com", false, secret = "x", createdAt = h.time.now())))
+        h.admin.restore("acc_admin", "acc_u")
+        assertEquals(AccountStatus.PENDING_VERIFICATION, h.repo.findById("acc_u")!!.status)
     }
 
     @Test
@@ -144,11 +170,11 @@ class SelfRestoreTest {
         h.repo.addIdentity(Identity(h.core.newIdentityId(), a.id, "google", "g-ann", true, createdAt = h.time.now()))
         h.deletion.delete(a.id, PW, null)
         val before = h.repo.search(null, null, 0, 50).total
+        val loginsBefore = h.events.types().count { it == AccountEventType.LOGIN_SUCCESS }
         val auth = assertNotNull(AccountSignInService(h.core, SignInMethodRegistry(listOf(PasswordSignInMethod(), Google))).signIn(SignInProof("google", "g-ann", null, false, "Ann", "ko", "203.0.113.1", true)))
         assertEquals(LoginBlock.DELETION_PENDING, auth.loginBlock)
         assertEquals(before, h.repo.search(null, null, 0, 50).total)
         assertNull(h.repo.findById(a.id)!!.lastLoginAt)
-        assertTrue(AccountEventType.LOGIN_SUCCESS !in h.events.types().drop(2), "a pending-deletion sign-in is not a successful login")
-        assertEquals(Instant.EPOCH.isBefore(h.time.now()), true)
+        assertEquals(loginsBefore, h.events.types().count { it == AccountEventType.LOGIN_SUCCESS }, "a pending-deletion sign-in is not a successful login")
     }
 }
