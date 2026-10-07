@@ -7,7 +7,7 @@ create table if not exists accounts (
     -- collate 는 jOOQ DDLDatabase 가 못 읽는 절이라 마커로 가린다 (docs/persistence-jooq.md) — 코드 생성 타입은 그대로 varchar
     email            varchar(254) /* [jooq ignore start] */ character set utf8mb4 collate utf8mb4_bin /* [jooq ignore stop] */ unique,
     email_verified   boolean      not null default false,
-    status           varchar(24)  not null,                  -- ACTIVE | PENDING_VERIFICATION | SUSPENDED | DELETED
+    status           varchar(24)  not null,                  -- ACTIVE | PENDING_VERIFICATION | SUSPENDED | DELETED (유예, 복구 가능) | ERASED (개인정보를 지운 뒤 행만 남음)
     display_name     varchar(60),
     locale           varchar(35),
     time_zone        varchar(64),
@@ -16,7 +16,8 @@ create table if not exists accounts (
     last_login_at    datetime(6),
     suspended_reason varchar(200),
     deleted_at       datetime(6),
-    purge_after      datetime(6)                             -- 삭제 유예가 끝나 지워질 시각
+    purge_after      datetime(6),                            -- 삭제 유예가 끝나 지워질 시각
+    erased_at        datetime(6)                             -- 개인정보를 지운 시각 (ERASED). 이때 email · display_name · locale · time_zone · suspended_reason · last_login_at 은 NULL
     /* [jooq ignore start] */,
     index idx_accounts_due (status, purge_after)
     /* [jooq ignore stop] */

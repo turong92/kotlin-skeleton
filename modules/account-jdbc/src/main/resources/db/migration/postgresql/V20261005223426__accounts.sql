@@ -4,7 +4,7 @@ create table if not exists accounts (
     id               varchar(40)  primary key,
     email            varchar(254) unique,                    -- 정규화(소문자). 없을 수 있다(이메일을 안 주는 소셜 가입) — 유니크는 NULL 을 여럿 허용한다
     email_verified   boolean      not null default false,
-    status           varchar(24)  not null,                  -- ACTIVE | PENDING_VERIFICATION | SUSPENDED | DELETED
+    status           varchar(24)  not null,                  -- ACTIVE | PENDING_VERIFICATION | SUSPENDED | DELETED (유예, 복구 가능) | ERASED (개인정보를 지운 뒤 행만 남음)
     display_name     varchar(60),
     locale           varchar(35),
     time_zone        varchar(64),
@@ -13,7 +13,8 @@ create table if not exists accounts (
     last_login_at    timestamptz,
     suspended_reason varchar(200),
     deleted_at       timestamptz,
-    purge_after      timestamptz                             -- 삭제 유예가 끝나 지워질 시각
+    purge_after      timestamptz,                            -- 삭제 유예가 끝나 지워질 시각
+    erased_at        timestamptz                             -- 개인정보를 지운 시각 (ERASED). 이때 email · display_name · locale · time_zone · suspended_reason · last_login_at 은 NULL
 );
 create index if not exists idx_accounts_due on accounts (status, purge_after);
 

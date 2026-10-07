@@ -39,14 +39,14 @@ class JdbcAccountRepository(
             tx.executeWithoutResult {
                 jdbc.update(
                     """
-                    insert into accounts (id, email, email_verified, status, display_name, locale, time_zone, created_at, updated_at, last_login_at, suspended_reason, deleted_at, purge_after)
-                    values (:id, :email, :verified, :status, :name, :locale, :tz, :created, :updated, :lastLogin, :suspended, :deleted, :purge)
+                    insert into accounts (id, email, email_verified, status, display_name, locale, time_zone, created_at, updated_at, last_login_at, suspended_reason, deleted_at, purge_after, erased_at)
+                    values (:id, :email, :verified, :status, :name, :locale, :tz, :created, :updated, :lastLogin, :suspended, :deleted, :purge, :erased)
                     """.trimIndent(),
                     MapSqlParameterSource().addValue("id", account.id).addValue("email", account.email).addValue("verified", account.emailVerified)
                         .addValue("status", account.status.name).addValue("name", account.displayName).addValue("locale", account.locale).addValue("tz", account.timeZone)
                         .addValue("created", dialect.instantParam(account.createdAt)).addValue("updated", dialect.instantParam(account.updatedAt))
                         .addValue("lastLogin", dialect.instantParam(account.lastLoginAt)).addValue("suspended", account.suspendedReason)
-                        .addValue("deleted", dialect.instantParam(account.deletedAt)).addValue("purge", dialect.instantParam(account.purgeAfter)),
+                        .addValue("deleted", dialect.instantParam(account.deletedAt)).addValue("purge", dialect.instantParam(account.purgeAfter)).addValue("erased", dialect.instantParam(account.erasedAt)),
                 )
                 account.roles.forEach { jdbc.update("insert into account_roles (account_id, role) values (:a, :r)", mapOf("a" to account.id, "r" to it)) }
                 identities.forEach(::insertIdentity)
@@ -156,9 +156,14 @@ class JdbcAccountRepository(
 
     override fun grantRole(id: String, role: String, now: Instant): Boolean =
         try {
-            jdbc.update("insert into account_roles (account_id, role) values (:a, :r)", mapOf("a" to id, "r" to role)) == 1
+            tx.execute {
+                // 계정 행을 잠가 지우기와 줄 세운다 — 지운 뒤에 역할이 뒤늦게 붙지 않는다
+                val status = jdbc.query("select status from accounts where id = :id for update", mapOf("id" to id)) { rs, _ -> rs.getString(1) }.firstOrNull()
+                if (status == null || status == AccountStatus.ERASED.name) false
+                else jdbc.update("insert into account_roles (account_id, role) values (:a, :r)", mapOf("a" to id, "r" to role)) == 1
+            } ?: false
         } catch (_: DataIntegrityViolationException) {
-            false   // 이미 있거나(PK) 계정이 없다(FK)
+            false   // 이미 있다(PK)
         }
 
     override fun revokeRole(id: String, role: String, now: Instant): Boolean =
@@ -174,7 +179,7 @@ class JdbcAccountRepository(
         val where = mutableListOf<String>()
         val p = MapSqlParameterSource().addValue("limit", size).addValue("offset", page.toLong() * size)
         email?.let { where += "email like :pattern escape '!'"; p.addValue("pattern", "%" + it.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%") }
-        status?.let { where += "status = :status"; p.addValue("status", it.name) }
+        if (status == null) where += "status <> 'ERASED'" else { where += "status = :status"; p.addValue("status", status.name) }
         val clause = if (where.isEmpty()) "" else " where " + where.joinToString(" and ")
         val total = jdbc.queryForObject("select count(*) from accounts$clause", p, Long::class.java) ?: 0
         val items = jdbc.query("select * from accounts$clause order by created_at desc, id limit :limit offset :offset", p) { rs, _ -> rs.account(emptySet()) }
@@ -194,6 +199,29 @@ class JdbcAccountRepository(
             "delete from accounts where id = :id and status = 'DELETED' and purge_after is not null and purge_after <= :now",
             MapSqlParameterSource().addValue("id", id).addValue("now", dialect.instantParam(now)),
         ) == 1
+
+    override fun erase(id: String, now: Instant): Boolean =
+        tx.execute {
+            // 계정 행 락 안에서 조건을 다시 본다 — 되살리기(조건부 UPDATE)와 지우기 중 하나만 이긴다
+            val row = jdbc.query("select email, status, purge_after from accounts where id = :id for update", mapOf("id" to id)) { rs, _ ->
+                Triple(rs.getString("email"), rs.getString("status"), dialect.readInstant(rs, "purge_after"))
+            }.firstOrNull() ?: return@execute false
+            val (email, status, purgeAfter) = row
+            if (status != AccountStatus.DELETED.name || purgeAfter == null || purgeAfter.isAfter(now)) return@execute false
+            val p = MapSqlParameterSource().addValue("id", id).addValue("email", email).addValue("now", dialect.instantParam(now))
+            jdbc.update("delete from account_roles where account_id = :id", p)
+            jdbc.update("delete from account_identities where account_id = :id", p)
+            // 토큰은 주인(이메일)이 평문이다 — 계정 id 로 걸린 것과 그 주소로 걸린 것(재설정 · 매직 링크) 모두. 챌린지: 이메일 변경 · 다시 인증 · 삭제 확인 + 같은 주소의 가입 시도(IP 포함)
+            jdbc.update("delete from account_tokens where account_id = :id" + if (email != null) " or subject = :email" else "", p)
+            jdbc.update("delete from account_challenges where account_id = :id" + if (email != null) " or subject = :email" else "", p)
+            jdbc.update("update account_audit set ip = null, detail = null where account_id = :id", p)
+            jdbc.update(
+                "update accounts set email = null, email_verified = false, status = 'ERASED', display_name = null, locale = null, time_zone = null, " +
+                    "suspended_reason = null, last_login_at = null, purge_after = null, erased_at = :now, updated_at = :now where id = :id",
+                p,
+            )
+            true
+        } ?: false
 
     override fun restore(id: String, status: AccountStatus, now: Instant): Boolean =
         jdbc.update(
@@ -310,6 +338,7 @@ class JdbcAccountRepository(
         displayName = getString("display_name"), locale = getString("locale"), timeZone = getString("time_zone"),
         createdAt = dialect.readInstant(this, "created_at")!!, updatedAt = dialect.readInstant(this, "updated_at")!!, lastLoginAt = dialect.readInstant(this, "last_login_at"),
         suspendedReason = getString("suspended_reason"), deletedAt = dialect.readInstant(this, "deleted_at"), purgeAfter = dialect.readInstant(this, "purge_after"),
+        erasedAt = dialect.readInstant(this, "erased_at"),
     )
 
     private fun ResultSet.identity() = Identity(
