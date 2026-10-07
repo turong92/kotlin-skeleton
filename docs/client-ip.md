@@ -33,6 +33,7 @@ Headers are only read when the socket peer is inside `trusted-proxies`. A Cloudf
 
 The rate-limit key (`ClientAddress.limitKey`) is the address, and for IPv6 the `/64` prefix — rotating addresses inside one
 subnet is one client. `ClientAddress.ip` is the exact address (audit logs, captcha `remoteip`).
+IPv6 text is always the **canonical compressed form** (RFC 5952: `::1`, `2001:db8::5`, key `2001:db8:1:2::/64`) — never the servlet container's expanded `0:0:0:0:0:0:0:1` — so the session list, audit rows and limit keys agree. Rows stored by an earlier build keep the old text.
 
 ## How it works
 

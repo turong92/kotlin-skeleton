@@ -8,6 +8,8 @@ skeleton:
       email-verification: true         # true: 확인 뒤에야 로그인, 가입 응답은 늘 같은 202. false: 바로 ACTIVE 이고 중복 이메일이 409 로 드러난다
       per-ip: 10                       # 같은 IP 가 창 안에 보낼 수 있는 가입 요청 수
       per-ip-window: 1h
+      existing-account-mail:
+        include-credentials-links: false  # false: "이미 계정이 있어요" 메일에 토큰 없는 링크만(로그인 · 재설정 요청 페이지). true: 최초 요청에 재설정 · 매직 링크도 — 열린 토큰이 없을 때만 (docs/accounts.md)
     password:
       min-length: 10
       max-bytes: 72                    # UTF-8 바이트 상한 — bcrypt 가 72바이트까지만 읽는다 (argon2 로 바꾸면 늘려도 된다)
@@ -64,6 +66,7 @@ skeleton:
       reset-path: /reset-password      # 링크로 가는 메일은 재설정 · 매직 링크 둘뿐이다 (나머지는 코드)
       magic-link-path: /magic-link
       login-path: /login               # "이미 계정이 있어요" 메일이 가리키는 프론트 로그인 페이지 (link-base-url + 이 경로, 토큰 없음)
+      forgot-path: /forgot-password    # 같은 메일의 "비밀번호를 잊었다면" 이 가리키는 재설정 **요청** 페이지 (토큰 없음 — 링크 토큰이 오는 reset-path 와 다르다. react-skeleton 견본의 경로)
       default-locale: en               # 계정 로케일이 없거나 지원하지 않을 때 메일 언어 (ko · en 내장)
       subject-prefix: ""               # 제목 앞 서비스 이름 (예: "[MyService]")
       html-enabled: true               # false 면 HTML 대체 본문 없이 텍스트만 보낸다 (어떤 AccountMailTemplates 든)
@@ -86,7 +89,9 @@ skeleton:
       uniqueness: NONE                 # NONE 중복 허용 | UNIQUE 같은 닉네임(NFKC · 소문자 키)은 하나만 — 409 ACCOUNT.DISPLAY_NAME_TAKEN | TAGGED 중복 허용 + 4자리 꼬리표(닉네임#0417). 스키마는 방식과 무관 — 이미 계정이 있는 DB 에서 바꾸는 법은 docs/accounts.md
       required-on-sign-up: false       # true 면 이메일 가입 요청에 닉네임이 없을 때 400 (필드 displayName · 코드 Required) — 주소가 있든 없든 같은 응답
       fallback: NONE                   # GENERATED 면 닉네임 없이 만들어지는 계정(소셜 · 매직 링크 · 이름 없는 가입)에 user-1a2b3c (무작위 · 이메일 앞부분은 쓰지 않는다)
-      reserved: []                     # 거절할 닉네임(운영자 · 예약어) — 대소문자 · 전각 · 띄어쓰기 · _ 무시. 운영자 역할 계정 · 시드는 예외. 예: [admin, administrator, 운영자]
+      reserved: []                     # 거절할 닉네임(운영자 · 예약어) — 대소문자 · 전각 · 띄어쓰기 · _ 무시. 운영자 역할 계정 · 시드는 예외. 소셜 제공자가 준 이름도 걸린다(버리고 fallback). 예: [admin, administrator, 운영자]
+      change-limit: 10                 # 한 계정이 change-window 안에 닉네임을 바꿀 수 있는 횟수 (넘으면 429 ACCOUNT.RATE_LIMITED). 0 = 한도 없음
+      change-window: 1d
     seed:
       accounts: []                     # 로컬 · e2e 시드 — 예: [{ id: acc_user, email: user@example.com, password: password, roles: [], display-name: User }]. stage · prod 에서는 DeployGuard 문제
     captcha:

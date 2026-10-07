@@ -35,6 +35,20 @@ class JdbcChallengeStoreDbTest {
     }
 
     @Test
+    fun `a consumed attempt can be reopened with the spent guess given back - the nickname clash at verification does not burn the attempt`() {
+        val o = challenges.open(ChallengePurposes.SIGN_UP, "ann@example.com", ttl, 5, payload = """{"displayName":"Ann"}""", secret = "{bcrypt}x", withHandle = true)
+        val ok = challenges.check(o.row.id, o.code) as CodeCheck.Ok
+        assertEquals(4, ok.row.attemptsLeft)
+        assertTrue(challenges.consume(o.row.id))
+        assertNull(AccountDb.challenges.find(o.row.id))
+        challenges.reopen(ok.row)
+        val back = AccountDb.challenges.find(o.row.id)!!
+        assertEquals(5, back.attemptsLeft, "the right code's guess was given back")
+        assertEquals(o.row.expiresAt, back.expiresAt); assertEquals("{bcrypt}x", back.secret); assertEquals("""{"displayName":"Ann"}""", back.payload)
+        assertTrue(challenges.check(o.row.id, o.code) is CodeCheck.Ok, "the same code works again")
+    }
+
+    @Test
     fun `sixty-four concurrent wrong guesses spend exactly the five allowed attempts`() {
         val o = challenges.open(ChallengePurposes.SIGN_UP, "ann@example.com", ttl, 5, withHandle = true)
         val wrong = if (o.code == "000000") "000001" else "000000"
