@@ -76,6 +76,18 @@ class AccountAutoConfiguration {
     fun inMemoryAccountRepository(): AccountRepository = InMemoryAccountRepository()
 
     @Bean
+    @ConditionalOnMissingBean(AccountBlockStore::class)
+    fun inMemoryAccountBlockStore(): AccountBlockStore = InMemoryAccountBlockStore()
+
+    /** 재가입 차단 해시의 키 — `blocks.secret`, 비면 JWT 비밀에서 파생 (바뀌면 기존 차단이 맞지 않는다: docs/accounts.md) */
+    @Bean
+    @ConditionalOnMissingBean
+    fun accountBlocks(store: AccountBlockStore, properties: AccountProperties, auth: ObjectProvider<AuthProperties>, time: ObjectProvider<TimeProvider>): AccountBlocks {
+        val secret = properties.blocks.secret.ifBlank { "account-block/" + auth.getIfAvailable { AuthProperties() }.jwt.secret }
+        return AccountBlocks(store, secret.toByteArray(Charsets.UTF_8), properties.blocks.retention, time.getIfAvailable { TimeProvider.systemUtc() })
+    }
+
+    @Bean
     @ConditionalOnMissingBean(OneTimeTokenStore::class)
     fun inMemoryOneTimeTokenStore(): OneTimeTokenStore = InMemoryOneTimeTokenStore()
 
@@ -224,10 +236,11 @@ class AccountAutoConfiguration {
         socialReauth: ObjectProvider<SocialReauthVerifier>,
         consents: ObjectProvider<dev.sumin.skeleton.common.consent.SignUpConsentGate>,
         atomic: ObjectProvider<AccountTransaction>,
+        blocks: AccountBlocks,
     ): AccountCore = AccountCore(
         accounts, properties, time.getIfAvailable { TimeProvider.systemUtc() }, events, hasher, policy, tokens, mailer, links, tasks, limits, captcha,
         { sessions.getIfAvailable() }, bootstrap, challenges, { socialReauth.getIfAvailable() },
-        { consents.getIfAvailable() }, atomic.getIfAvailable { AccountTransaction.NONE },
+        { consents.getIfAvailable() }, atomic.getIfAvailable { AccountTransaction.NONE }, blocks,
     )
 
     @Bean

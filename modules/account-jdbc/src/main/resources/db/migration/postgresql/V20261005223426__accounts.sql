@@ -64,3 +64,16 @@ create table if not exists account_audit (
 );
 create index if not exists idx_account_audit_account on account_audit (account_id, at);
 create index if not exists idx_account_audit_at on account_audit (at);
+
+-- 운영자가 정지한 계정을 지울 때 남기는 재가입 차단. **해시만** 있다 (서버 비밀의 HMAC-SHA256 — 이메일 · 제공자 주체 원문은 어디에도 없다). 개인정보 보존이므로 처리방침에 적는다 (docs/accounts.md)
+create table if not exists account_blocks (
+    id         bigint generated always as identity primary key,
+    kind       varchar(16)  not null,                       -- email | identity
+    hash       varchar(64)  not null unique,
+    reason     varchar(200),
+    created_at timestamptz  not null,
+    expires_at timestamptz,                                          -- NULL = 운영자가 지울 때까지
+    created_by varchar(40),
+    account_id varchar(40)                                  -- 지워진(ERASED) 계정 행. FK 없음 — DELETE 모드에서도 남는다
+);
+create index if not exists idx_account_blocks_expires on account_blocks (expires_at);

@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.account.jdbc
 
 import dev.sumin.skeleton.account.AccountAutoConfiguration
+import dev.sumin.skeleton.account.AccountBlockStore
 import dev.sumin.skeleton.account.AccountRepository
 import dev.sumin.skeleton.account.AccountTransaction
 import dev.sumin.skeleton.account.challenge.ChallengeStore
@@ -49,6 +50,10 @@ class AccountJdbcAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(ChallengeStore::class)
     fun jdbcChallengeStore(dataSource: DataSource, dialect: SqlDialect): ChallengeStore = JdbcChallengeStore(NamedParameterJdbcTemplate(dataSource), dialect)
+
+    @Bean
+    @ConditionalOnMissingBean(AccountBlockStore::class)
+    fun jdbcAccountBlockStore(dataSource: DataSource, dialect: SqlDialect): AccountBlockStore = JdbcAccountBlockStore(NamedParameterJdbcTemplate(dataSource), dialect)
 
     @Bean
     @ConditionalOnMissingBean(name = ["jdbcAccountAuditListener"])

@@ -20,8 +20,9 @@ object AccountDb {
     val tokens = JdbcOneTimeTokenStore(jdbc, DbTestDatabase.dialect)
     val challenges = JdbcChallengeStore(jdbc, DbTestDatabase.dialect)
     val audit = JdbcAccountAuditListener(jdbc, DbTestDatabase.dialect)
+    val blocks = JdbcAccountBlockStore(jdbc, DbTestDatabase.dialect)
 
     fun clean() {
-        listOf("account_audit", "account_challenges", "account_tokens", "accounts").forEach { jdbc.update("delete from $it", emptyMap<String, Any>()) }
+        listOf("account_audit", "account_challenges", "account_tokens", "account_blocks", "accounts").forEach { jdbc.update("delete from $it", emptyMap<String, Any>()) }
     }
 }

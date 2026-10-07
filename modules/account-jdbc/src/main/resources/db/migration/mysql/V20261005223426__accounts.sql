@@ -81,3 +81,18 @@ create table if not exists account_audit (
     index idx_account_audit_at (at)
     /* [jooq ignore stop] */
 );
+
+-- 운영자가 정지한 계정을 지울 때 남기는 재가입 차단. **해시만** 있다 (서버 비밀의 HMAC-SHA256 — 이메일 · 제공자 주체 원문은 어디에도 없다). 개인정보 보존이므로 처리방침에 적는다 (docs/accounts.md)
+create table if not exists account_blocks (
+    id         bigint auto_increment primary key,
+    kind       varchar(16)  not null,                       -- email | identity
+    hash       varchar(64)  not null unique,
+    reason     varchar(200),
+    created_at datetime(6)  not null,
+    expires_at datetime(6),                                          -- NULL = 운영자가 지울 때까지
+    created_by varchar(40),
+    account_id varchar(40)                                  -- 지워진(ERASED) 계정 행. FK 없음 — DELETE 모드에서도 남는다
+    /* [jooq ignore start] */,
+    index idx_account_blocks_expires (expires_at)
+    /* [jooq ignore stop] */
+);

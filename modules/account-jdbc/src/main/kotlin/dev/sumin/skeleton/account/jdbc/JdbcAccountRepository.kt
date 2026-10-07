@@ -194,20 +194,21 @@ class JdbcAccountRepository(
             ) { rs, _ -> rs.account(emptySet()) },
         )
 
-    override fun purge(id: String, now: Instant): Boolean =
+    override fun purge(id: String, now: Instant, forced: Boolean): Boolean =
         jdbc.update(
-            "delete from accounts where id = :id and status = 'DELETED' and purge_after is not null and purge_after <= :now",
+            "delete from accounts where id = :id and " + (if (forced) "status = 'SUSPENDED'" else "status = 'DELETED' and purge_after is not null and purge_after <= :now"),
             MapSqlParameterSource().addValue("id", id).addValue("now", dialect.instantParam(now)),
         ) == 1
 
-    override fun erase(id: String, now: Instant): Boolean =
+    override fun erase(id: String, now: Instant, forced: Boolean): Boolean =
         tx.execute {
             // 계정 행 락 안에서 조건을 다시 본다 — 되살리기(조건부 UPDATE)와 지우기 중 하나만 이긴다
             val row = jdbc.query("select email, status, purge_after from accounts where id = :id for update", mapOf("id" to id)) { rs, _ ->
                 Triple(rs.getString("email"), rs.getString("status"), dialect.readInstant(rs, "purge_after"))
             }.firstOrNull() ?: return@execute false
             val (email, status, purgeAfter) = row
-            if (status != AccountStatus.DELETED.name || purgeAfter == null || purgeAfter.isAfter(now)) return@execute false
+            val eligible = if (forced) status == AccountStatus.SUSPENDED.name else status == AccountStatus.DELETED.name && purgeAfter != null && !purgeAfter.isAfter(now)
+            if (!eligible) return@execute false
             val p = MapSqlParameterSource().addValue("id", id).addValue("email", email).addValue("now", dialect.instantParam(now))
             jdbc.update("delete from account_roles where account_id = :id", p)
             jdbc.update("delete from account_identities where account_id = :id", p)
