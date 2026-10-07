@@ -76,7 +76,7 @@ class AccountWebAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     @ConditionalOnProperty(prefix = "skeleton.account.admin", name = ["enabled"], havingValue = "true")
-    fun adminAccountController(callers: AccountCallers, admin: AdminService): AdminAccountController = AdminAccountController(callers, admin)
+    fun adminAccountController(callers: AccountCallers, admin: AdminService, purge: dev.sumin.skeleton.account.AccountPurgeService): AdminAccountController = AdminAccountController(callers, admin, purge)
 
     @Bean
     @ConditionalOnMissingBean(name = ["accountPublicEndpointContributor"])

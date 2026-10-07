@@ -127,6 +127,12 @@ data class DeleteAccountRequest(
 
 data class SuspendRequest(@field:Size(max = 200) val reason: String? = null)
 
+/** 운영자 지우기의 사유 — 차단 줄에 남는다 (개인정보를 적지 않는다) */
+data class AdminEraseRequest(@field:Size(max = 200) val reason: String? = null)
+
+/** 재가입 차단 한 줄 — 해시 · 이메일 · 제공자 주체는 나가지 않는다 */
+data class AccountBlockResponse(val id: Long, val kind: String, val reason: String?, val createdAt: Instant, val expiresAt: Instant?, val createdBy: String?, val accountId: String?)
+
 data class StatusResponse(val status: String)
 
 data class PasswordPolicyResponse(
@@ -150,4 +156,6 @@ data class AdminAccountResponse(
     val lastLoginAt: Instant?,
     val suspendedReason: String?,
     val purgeAfter: Instant?,
+    /** 개인정보를 지운 시각 (status=ERASED) */
+    val erasedAt: Instant? = null,
 )

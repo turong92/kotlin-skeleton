@@ -234,10 +234,17 @@ class AccountWebTest {
 
     // ---- admin
 
+    /** 부트스트랩 관리자 — 클래스의 시험들이 한 컨텍스트를 나눠 쓰므로 이미 가입했으면 로그인만 한다 */
+    private fun bossAuth(): String {
+        val first = login("boss@example.com")
+        if (first.response.status == 200) return bearer(first)
+        registered("boss@example.com")
+        return bearer(login("boss@example.com"))
+    }
+
     @Test
     fun `the configured bootstrap address becomes admin on its first verified sign-in and can run the admin API`() {
-        val boss = registered("boss@example.com")
-        val auth = bearer(login(boss))
+        val auth = bossAuth()
         // paging is validated like every other list, not silently clamped
         mvc.perform(get("/api/v1/admin/accounts").param("size", "500").header("Authorization", auth)).andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("COMMON.VALIDATION_FAILED"))
         mvc.perform(get("/api/v1/admin/accounts").param("page", "-1").header("Authorization", auth)).andExpect(status().isBadRequest)
@@ -253,6 +260,38 @@ class AccountWebTest {
         assertEquals(200, login(victim).response.status)
         mvc.perform(put("/api/v1/admin/accounts/$id/roles/MODERATOR").header("Authorization", auth)).andExpect(status().isNoContent)
         assertTrue(JsonPath.read<List<String>>(login(victim).response.contentAsString, "$.value.principal.roles").contains("MODERATOR"))
+    }
+
+    @Test
+    fun `an admin erases a suspended account, sees it as ERASED without personal data, and lists and lifts the hash-only blocks`() {
+        val auth = bossAuth()
+        val victim = registered()
+        val id = JsonPath.read<String>(mvc.perform(get("/api/v1/admin/accounts").param("email", victim).header("Authorization", auth)).andReturn().response.contentAsString, "$.values[0].id")
+        mvc.perform(post("/api/v1/admin/accounts/$id/erase").header("Authorization", auth).json("""{"reason":"fraud-ring"}""")).andExpect(status().isConflict).andExpect(jsonPath("$.code").value("ACCOUNT.NOT_SUSPENDED"))
+        mvc.perform(post("/api/v1/admin/accounts/$id/suspend").header("Authorization", auth).json("""{"reason":"abuse"}""")).andExpect(status().isNoContent)
+        mvc.perform(post("/api/v1/admin/accounts/$id/erase").header("Authorization", auth).json("""{"reason":"fraud-ring"}""")).andExpect(status().isNoContent)
+
+        mvc.perform(get("/api/v1/admin/accounts/$id").header("Authorization", auth)).andExpect(status().isOk)
+            .andExpect(jsonPath("$.value.status").value("ERASED")).andExpect(jsonPath("$.value.email").doesNotExist()).andExpect(jsonPath("$.value.displayName").doesNotExist())
+        mvc.perform(get("/api/v1/admin/accounts").param("status", "ERASED").header("Authorization", auth)).andExpect(jsonPath("$.values[?(@.id=='$id')]").isNotEmpty)
+        mvc.perform(get("/api/v1/admin/accounts").header("Authorization", auth)).andExpect(jsonPath("$.values[?(@.id=='$id')]").isEmpty)
+        mvc.perform(post("/api/v1/admin/accounts/$id/restore").header("Authorization", auth)).andExpect(status().isGone).andExpect(jsonPath("$.code").value("ACCOUNT.ERASED"))
+        mvc.perform(post("/api/v1/admin/accounts/$id/erase").header("Authorization", auth).json("{}")).andExpect(status().isGone)
+
+        val listed = mvc.perform(get("/api/v1/admin/accounts/blocks").header("Authorization", auth)).andExpect(status().isOk).andReturn().response.contentAsString
+        val mine = JsonPath.read<List<Map<String, Any?>>>(listed, "$.values[?(@.reason=='fraud-ring')]")
+        assertEquals(1, mine.size)
+        assertEquals("email", mine.single()["kind"])
+        assertTrue(!listed.contains(victim) && !listed.contains("hash"), "the list never carries the address or the hash")
+
+        // the sign-up request answers as always; only the mailbox proof is refused
+        val signUpId = signUpIdOf(signUp(victim).andExpect(status().isAccepted))
+        mvc.perform(post("/api/v1/auth/verify-email").json("""{"signUpId":"$signUpId","code":"${codeOf(MailKind.VERIFY_CODE)}"}""")).andExpect(status().isForbidden).andExpect(jsonPath("$.code").value("ACCOUNT.REGISTRATION_BLOCKED"))
+
+        mvc.perform(delete("/api/v1/admin/accounts/blocks/${mine.single()["id"]}").header("Authorization", auth)).andExpect(status().isNoContent)
+        mvc.perform(delete("/api/v1/admin/accounts/blocks/${mine.single()["id"]}").header("Authorization", auth)).andExpect(status().isNotFound)
+        val again = signUpIdOf(signUp(victim).andExpect(status().isAccepted))
+        mvc.perform(post("/api/v1/auth/verify-email").json("""{"signUpId":"$again","code":"${codeOf(MailKind.VERIFY_CODE)}"}""")).andExpect(status().isOk)
     }
 
     @Test

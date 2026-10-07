@@ -2,6 +2,7 @@ package dev.sumin.skeleton.account.web
 
 import dev.sumin.skeleton.account.Account
 import dev.sumin.skeleton.account.AccountStatus
+import dev.sumin.skeleton.account.AccountPurgeService
 import dev.sumin.skeleton.account.AdminService
 import dev.sumin.skeleton.common.DataResponse
 import dev.sumin.skeleton.common.PageQuery
@@ -29,7 +30,7 @@ import org.springframework.web.bind.annotation.RestController
 @RestController
 @RequestMapping("/api/v1/admin/accounts")
 @Tag(name = "Account admin")
-class AdminAccountController(private val callers: AccountCallers, private val admin: AdminService) {
+class AdminAccountController(private val callers: AccountCallers, private val admin: AdminService, private val purge: AccountPurgeService) {
     @Operation(summary = "Search accounts by email fragment and status")
     @GetMapping
     fun search(
@@ -71,6 +72,31 @@ class AdminAccountController(private val callers: AccountCallers, private val ad
         return Response.noContent()
     }
 
+    @Operation(
+        summary = "Erase a SUSPENDED account at once (no grace): personal data goes, the row stays as ERASED, and a hash-only re-registration block is kept",
+        description = "409 ACCOUNT.NOT_SUSPENDED for any other status, 410 ACCOUNT.ERASED when it is already erased, 409 ACCOUNT.SELF_ACTION_FORBIDDEN for yourself.",
+    )
+    @PostMapping("/{id}/erase")
+    fun erase(authentication: Authentication?, @PathVariable id: String, @Valid @RequestBody(required = false) request: AdminEraseRequest?): ResponseEntity<Void> {
+        purge.eraseSuspended(callers.requireAdmin(authentication).accountId, id, request?.reason)
+        return Response.noContent()
+    }
+
+    @Operation(summary = "Re-registration blocks left by administrator erasures (hash only; newest first)")
+    @GetMapping("/blocks")
+    fun blocks(authentication: Authentication?, @Valid @ParameterObject @ModelAttribute page: PageQuery): PageResponse<AccountBlockResponse> {
+        callers.requireAdmin(authentication)
+        val result = admin.listBlocks(page.page, page.size)
+        return Response.ok(result.items.map { AccountBlockResponse(it.id, it.kind, it.reason, it.createdAt, it.expiresAt, it.createdBy, it.accountId) }, page.toPagination(result.total))
+    }
+
+    @Operation(summary = "Lift a re-registration block (404 when it is gone)")
+    @DeleteMapping("/blocks/{blockId}")
+    fun removeBlock(authentication: Authentication?, @PathVariable blockId: Long): ResponseEntity<Void> {
+        admin.removeBlock(callers.requireAdmin(authentication).accountId, blockId)
+        return Response.noContent()
+    }
+
     @Operation(summary = "Grant a role")
     @PutMapping("/{id}/roles/{role}")
     fun grant(authentication: Authentication?, @PathVariable id: String, @PathVariable role: String): ResponseEntity<Void> {
@@ -85,5 +111,5 @@ class AdminAccountController(private val callers: AccountCallers, private val ad
         return Response.noContent()
     }
 
-    private fun Account.toAdmin() = AdminAccountResponse(id, email, status.name, roles, displayName, createdAt, lastLoginAt, suspendedReason, purgeAfter)
+    private fun Account.toAdmin() = AdminAccountResponse(id, email, status.name, roles, displayName, createdAt, lastLoginAt, suspendedReason, purgeAfter, erasedAt)
 }
