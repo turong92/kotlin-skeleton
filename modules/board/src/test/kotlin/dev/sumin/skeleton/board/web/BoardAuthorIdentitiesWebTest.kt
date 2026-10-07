@@ -11,6 +11,9 @@ import dev.sumin.skeleton.boardtest.BoardWebTestApplication
 import dev.sumin.skeleton.boardtest.FakeBoardRepositories
 import dev.sumin.skeleton.common.author.AuthorIdentities
 import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
@@ -83,7 +86,7 @@ class BoardAuthorIdentitiesWebTest {
         call(get("/api/v1/boards/general/posts"), third).andExpect(jsonPath("$.values[0].authorId").value("prf_u1")).andExpect(jsonPath("$.values[0].mine").value(false))
         call(get("/api/v1/boards/general/posts"), user).andExpect(jsonPath("$.values[0].mine").value(true))
         val everything = call(get("/api/v1/boards/general/posts/$id"), third).andReturn().response.contentAsString
-        kotlin.test.assertFalse(everything.contains("acc_user"), everything)
+        assertFalse(everything.contains("acc_user"), everything)
     }
 
     @Test
@@ -119,7 +122,7 @@ class BoardAuthorIdentitiesWebTest {
             store.comments[id] = Comment(id, own, null, id, 0, "acc_legacy", "c", CommentStatus.PUBLISHED, 0, T0, T0)
         }
         val bodies = mutableListOf<String>()
-        fun grab(r: ResultActions) = bodies.add(r.andReturn().response.contentAsString)
+        fun grab(r: ResultActions) = bodies.add(r.andExpect(status().is2xxSuccessful).andReturn().response.contentAsString)
         grab(call(get("/api/v1/boards/general/posts").param("size", "50"), third))
         for (id in listOf(own, legacyPost, goneNoRef, goneRef)) grab(call(get("/api/v1/boards/general/posts/$id"), third))
         grab(call(get("/api/v1/boards/general/posts/$own/comments"), third))
@@ -129,11 +132,11 @@ class BoardAuthorIdentitiesWebTest {
         grab(call(get("/api/v1/boards/general/posts").param("mine", "true"), user))
         // 이 시험이 정직하게 보는 것: 어떤 응답에도 계정 id(acc_)나 톰스톤(deleted:)이 없고, 옛 행은 pending: 으로 나간다
         val all = bodies.joinToString("\n")
-        kotlin.test.assertFalse(all.contains("acc_"), all)
-        kotlin.test.assertFalse(all.contains("deleted:"), all)
-        kotlin.test.assertTrue(all.contains("pending:p$legacyPost") && all.contains("pending:p$goneNoRef") && all.contains("prf_old2"), all)
-        kotlin.test.assertTrue(JsonPath.read<List<Boolean>>(bodies[0], "$.values[?(@.id==$goneNoRef)].authorDeleted").single())
-        kotlin.test.assertTrue(legacyComment in store.comments)
+        assertFalse(all.contains("acc_"), all)
+        assertFalse(all.contains("deleted:"), all)
+        assertTrue(all.contains("pending:p$legacyPost") && all.contains("pending:p$goneNoRef") && all.contains("prf_old2"), all)
+        assertTrue(JsonPath.read<List<Boolean>>(bodies[0], "$.values[?(@.id==$goneNoRef)].authorDeleted").single())
+        assertTrue(all.contains("pending:c$legacyComment"), "the legacy comment must be in a response as pending")
     }
 
     @Test
@@ -147,7 +150,7 @@ class BoardAuthorIdentitiesWebTest {
     fun `the author_ref is stored while the account stays private - author_id is the caller`() {
         val id = idOf(writePost("prf_u1").andReturn())
         val row = store.posts.getValue(id)
-        kotlin.test.assertEquals("prf_u1", row.authorRef)
-        kotlin.test.assertEquals("acc_user", row.authorId)
+        assertEquals("prf_u1", row.authorRef)
+        assertEquals("acc_user", row.authorId)
     }
 }

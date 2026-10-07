@@ -4,6 +4,8 @@
 `board_posts` · `board_comments` 의 `author_ref`(공개 작성자 id, NULL = 이 기능 이전의 행 — 공개 id 는 `author_id`)는 마이그레이션 `V20261007150825__board_author_ref` 가 더한다. 그 열을 채우는 `AuthorAdoptionListener`(이름 `board`)도 이 모듈이 구현한다: `pendingAccounts` 는 `author_ref is null` 이고 톰스톤(`deleted:`)이 아닌 행의 계정 id, `adopt` 는 그 계정의 NULL 행만 채운다(멱등). 탈퇴 고리는 `author_ref` 를 건드리지 않는다.
 시각은 `SqlDialect` 로 바인딩한다. 카운터는 같은 트랜잭션의 원자적 UPDATE, 반응 변경은 대상 행을 먼저 잠근다 — 규칙과 근거는 [board](board.md) 의 "Decisions and rejected alternatives".
 
+**스키마 관리**: Flyway 가 모듈 마이그레이션을 적용한다. `schema.sql` 모드(MySQL)에서는 `V20261007150825__board_author_ref.sql` 의 `alter table … add column` 을 복사하지 말고 `create table` 사본에 `author_ref` 열과 인덱스를 접어 넣는다 — MySQL 8.4 에는 `add column if not exists` 가 없어 두 번째 기동에서 실패한다 ([job-queue-jdbc](job-queue-jdbc.md) 의 같은 주의).
+
 | 항목 | 내용 |
 |---|---|
 | 의존성 한 줄 | `implementation(project(":modules:board-jdbc"))` |
