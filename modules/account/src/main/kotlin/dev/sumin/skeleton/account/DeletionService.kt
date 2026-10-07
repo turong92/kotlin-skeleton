@@ -20,6 +20,7 @@ class DeletionService(private val core: AccountCore) {
     /** 비밀번호가 없는 계정이 쓸 6자리 확인 코드를 메일로 보낸다 — 요청한 세션에서만 쓸 수 있다 (주소가 없으면 조용히) */
     fun requestConfirmation(accountId: String, sessionId: String?) {
         val account = core.accounts.findById(accountId) ?: throw AccountException(AccountErrorCode.NOT_FOUND)
+        if (account.status == AccountStatus.SUSPENDED) throw AccountException(AccountErrorCode.SUSPENDED_CANNOT_DELETE)
         val c = core.props.deletion
         val e = core.props.emailChange
         val a = core.limits.acquire("delete-confirmation:account", accountId, e.perAccount, e.perAccountWindow)
@@ -35,6 +36,7 @@ class DeletionService(private val core: AccountCore) {
     fun delete(accountId: String, input: ReauthInput, sessionId: String?): Instant {
         val account = core.accounts.findById(accountId) ?: throw AccountException(AccountErrorCode.NOT_FOUND)
         if (account.status == AccountStatus.DELETED) return account.purgeAfter ?: core.time.now()
+        if (account.status == AccountStatus.SUSPENDED) throw AccountException(AccountErrorCode.SUSPENDED_CANNOT_DELETE)   // 정지는 박제 — 탈퇴로 빠져나가지 못한다
         val login = core.props.login
         val allowance = core.limits.acquire("reauth:account", account.id, login.perAccount, login.window)
         if (!allowance.allowed) throw RateLimitedException(allowance.retryAfterSeconds)
@@ -78,6 +80,7 @@ class AccountPurgeService(
             }
         }
         val retention = core.props.cleanup.expiredRetention
+        core.blocks.sweep()   // 만료된 재가입 차단
         core.tokens.sweep(retention)   // 지난 한 번 쓰는 토큰 · 코드 줄도 같이 청소
         core.challenges.sweep(retention)
         return purged
@@ -90,15 +93,41 @@ class AccountPurgeService(
         if (current == null || current.status != AccountStatus.DELETED || current.purgeAfter?.isAfter(now) != false) return false
         val keep = core.props.deletion.mode == AccountProperties.Deletion.Mode.ANONYMIZE
         val request = ErasureRequest(account.id, AccountTombstone.of(account.id), accountKept = keep)
-        val failed = listeners().firstOrNull { listener ->
-            try { listener.erase(request); false } catch (e: Exception) {
-                log.warn("erasure listener '{}' failed for an account; it stays for the next run: {}", listener.name, e.javaClass.simpleName); true
-            }
-        }
-        if (failed != null) return false
+        if (!runListeners(request)) return false
         core.closeSensitiveLinks(current)   // 저장소가 토큰을 같이 지우지 못하는 구현(메모리 · 앱 구현)을 위해
         val done = if (keep) core.accounts.erase(account.id, now) else core.accounts.purge(account.id, now)
         if (done) core.events.publish(AccountEventType.ACCOUNT_PURGED, account.id)
+        return done
+    }
+
+    /** 모든 고리를 부른다 — 하나라도 실패하면 false (나머지는 부르지 않는다) */
+    private fun runListeners(request: ErasureRequest): Boolean =
+        listeners().firstOrNull { listener ->
+            try { listener.erase(request); false } catch (e: Exception) {
+                log.warn("erasure listener '{}' failed for an account; it stays for the next run: {}", listener.name, e.javaClass.simpleName); true
+            }
+        } == null
+
+    /**
+     * 운영자가 **정지된** 계정을 유예 없이 지운다 — 같은 고리들을 부르고, 이메일 · 로그인 수단의 재가입 차단(해시)을 남기고, 계정을 지운다(`deletion.mode` 대로).
+     * 정지가 아니면 [AccountErrorCode.NOT_SUSPENDED], 이미 지웠으면 [AccountErrorCode.ERASED]. 고리가 실패하면 예외 — 계정은 그대로이고 다시 부르면 된다 (멱등).
+     */
+    fun eraseSuspended(actorId: String, accountId: String, reason: String?): Boolean {
+        if (actorId == accountId) throw AccountException(AccountErrorCode.SELF_ACTION_FORBIDDEN)
+        val account = core.accounts.findById(accountId) ?: throw AccountException(AccountErrorCode.NOT_FOUND)
+        if (account.status == AccountStatus.ERASED) throw AccountException(AccountErrorCode.ERASED)
+        if (account.status != AccountStatus.SUSPENDED) throw AccountException(AccountErrorCode.NOT_SUSPENDED)
+        val identities = core.accounts.identitiesOf(accountId)
+        val keep = core.props.deletion.mode == AccountProperties.Deletion.Mode.ANONYMIZE
+        check(runListeners(ErasureRequest(accountId, AccountTombstone.of(accountId), accountKept = keep))) { "an erasure listener failed; the account was left as it was" }
+        core.blocks.add(account, identities, reason, actorId)   // 지우기 전에 — 지운 뒤에는 이메일 · 주체를 알 수 없다
+        core.closeSensitiveLinks(account)
+        val now = core.time.now()
+        val done = if (keep) core.accounts.erase(accountId, now, forced = true) else core.accounts.purge(accountId, now, forced = true)
+        if (done) {
+            core.events.publish(AccountEventType.ACCOUNT_ERASED_BY_ADMIN, accountId, detail = mapOf("by" to actorId))
+            core.events.publish(AccountEventType.REGISTRATION_BLOCK_ADDED, accountId, detail = mapOf("by" to actorId))
+        }
         return done
     }
 }

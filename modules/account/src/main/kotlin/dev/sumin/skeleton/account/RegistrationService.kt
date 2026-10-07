@@ -103,7 +103,7 @@ class RegistrationService(private val core: AccountCore) {
     }
 
     private fun createVerified(email: String, hash: String, cmd: SignUpCommand): SignUpStatus {
-        if (core.accountByEmail(email) != null) throw AccountException(AccountErrorCode.EMAIL_TAKEN)
+        if (core.accountByEmail(email) != null || core.blocks.blocked(email)) throw AccountException(AccountErrorCode.EMAIL_TAKEN)   // 차단도 "이미 있는 주소" 와 같은 응답 — 메일함 증명이 없는 길이다
         val account = newAccount(email, ProfileRules.displayName(cmd.displayName), ProfileRules.locale(cmd.locale), ProfileRules.timeZone(cmd.timeZone), unverified = true)
         core.atomic.run {
             if (!core.accounts.insert(account, listOf(passwordIdentity(account, email, hash, verified = false)))) throw AccountException(AccountErrorCode.EMAIL_TAKEN)
@@ -166,10 +166,15 @@ class RegistrationService(private val core: AccountCore) {
         core.events.publish(AccountEventType.LOGIN_SUCCESS, accountId, ip, mapOf("method" to SignInMethods.PASSWORD))
     }
 
+    private fun refuseIfBlocked(email: String) {
+        if (core.blocks.blocked(email)) { core.events.publish(AccountEventType.REGISTRATION_BLOCKED); throw AccountException(AccountErrorCode.REGISTRATION_BLOCKED) }
+    }
+
     /** (계정, 이미 있던 계정이었나) */
     private fun createOrProve(email: String, secret: String, payload: String?): Pair<Account, Boolean> {
         val existing = core.accountByEmail(email)
         if (existing == null) {
+            refuseIfBlocked(email)
             val profile = payload?.let { runCatching { json.readValue(it, Map::class.java) }.getOrNull() }
             val account = newAccount(email, profile?.get("displayName") as String?, profile?.get("locale") as String?, profile?.get("timeZone") as String?, unverified = false)
             val identity = passwordIdentity(account, email, secret, verified = true)
@@ -182,6 +187,8 @@ class RegistrationService(private val core: AccountCore) {
         }
         // 이메일 확인을 나중에 켠 앱에 남은 미확인 계정 — 메일함이 증명됐으니 그 자격은 이 시도의 비밀번호 하나만 남는다. 확인된 계정은 건드리지 않는다
         if (existing.status == AccountStatus.DELETED || existing.emailVerified) throw AccountException(AccountErrorCode.CODE_EXPIRED)
+        // 정지된 계정은 박제다 — 메일함을 증명했어도 그 계정의 자격을 갈아 끼워 이어받을 수 없다 (증명한 사람에게만 드러나는 거절)
+        if (existing.status == AccountStatus.SUSPENDED) { core.events.publish(AccountEventType.REGISTRATION_BLOCKED, existing.id); throw AccountException(AccountErrorCode.REGISTRATION_BLOCKED) }
         val keep = core.accounts.findIdentity(SignInMethods.PASSWORD, email)?.takeIf { it.accountId == existing.id }
         val proof = MailboxProof(keepIdentityIds = setOfNotNull(keep?.id), passwordSecret = secret, newPasswordIdentityId = core.newIdentityId())
         val profile = payload?.let { runCatching { json.readValue(it, Map::class.java) }.getOrNull() }

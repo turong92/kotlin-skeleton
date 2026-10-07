@@ -109,16 +109,19 @@ class InMemoryAccountRepository : AccountRepository {
     @Synchronized override fun dueForPurge(now: Instant, limit: Int): List<Account> =
         accounts.values.filter { it.status == AccountStatus.DELETED && it.purgeAfter != null && !it.purgeAfter.isAfter(now) }.sortedBy { it.purgeAfter }.take(limit)
 
-    @Synchronized override fun purge(id: String, now: Instant): Boolean {
+    @Synchronized override fun purge(id: String, now: Instant, forced: Boolean): Boolean {
         val a = accounts[id] ?: return false
-        if (a.status != AccountStatus.DELETED || a.purgeAfter == null || a.purgeAfter.isAfter(now)) return false
+        if (!eligible(a, now, forced)) return false
         identities.values.removeIf { it.accountId == id }
         return accounts.remove(id) != null
     }
 
-    @Synchronized override fun erase(id: String, now: Instant): Boolean {
+    private fun eligible(a: Account, now: Instant, forced: Boolean) =
+        if (forced) a.status == AccountStatus.SUSPENDED else a.status == AccountStatus.DELETED && a.purgeAfter != null && !a.purgeAfter.isAfter(now)
+
+    @Synchronized override fun erase(id: String, now: Instant, forced: Boolean): Boolean {
         val a = accounts[id] ?: return false
-        if (a.status != AccountStatus.DELETED || a.purgeAfter == null || a.purgeAfter.isAfter(now)) return false
+        if (!eligible(a, now, forced)) return false
         identities.values.removeIf { it.accountId == id }
         accounts[id] = a.copy(
             email = null, emailVerified = false, status = AccountStatus.ERASED, roles = emptySet(), displayName = null, locale = null, timeZone = null,

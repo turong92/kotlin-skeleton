@@ -104,6 +104,11 @@ class AccountSignInService(private val core: AccountCore, val registry: SignInMe
     }
 
     private fun create(method: SignInMethod, subject: String, email: String?, proof: SignInProof): Account? {
+        // 운영자가 지운 정지 계정의 이메일 · 제공자 주체 — 증명된 이메일 / 제공자 계정만 여기까지 온다 (증명한 사람에게만 드러나는 거절)
+        if (core.blocks.blocked(email, method.code, subject)) {
+            core.events.publish(AccountEventType.REGISTRATION_BLOCKED, ip = proof.ip, detail = mapOf("method" to method.code))
+            throw AccountException(AccountErrorCode.REGISTRATION_BLOCKED)
+        }
         val now = core.time.now()
         val account = Account(
             id = core.newAccountId(), email = email, emailVerified = email != null, status = AccountStatus.ACTIVE, roles = core.props.defaultRoles,

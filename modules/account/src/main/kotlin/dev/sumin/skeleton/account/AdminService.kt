@@ -18,8 +18,7 @@ class AdminService(private val core: AccountCore) {
 
     fun suspend(actorId: String, targetId: String, reason: String?) {
         if (actorId == targetId) throw AccountException(AccountErrorCode.SELF_ACTION_FORBIDDEN)
-        val target = live(targetId)
-        if (target.status == AccountStatus.DELETED) throw AccountException(AccountErrorCode.NOT_FOUND)
+        val target = live(targetId)   // 탈퇴 유예 중인 계정도 정지할 수 있다 — 유예가 끝나도 지워지지 않고 박제된다
         if (target.status == AccountStatus.SUSPENDED) return
         when (core.accounts.updateUnlessLast(targetId, AccountPatch(status = AccountStatus.SUSPENDED, suspendedReason = reason?.take(200)), core.time.now(), adminRole)) {
             GuardedResult.LAST -> throw AccountException(AccountErrorCode.LAST_ADMIN)
@@ -33,7 +32,14 @@ class AdminService(private val core: AccountCore) {
     fun unsuspend(actorId: String, targetId: String) {
         val target = get(targetId)
         if (target.status != AccountStatus.SUSPENDED) return
-        core.accounts.update(targetId, AccountPatch(status = reopenedStatus(target), clearSuspendedReason = true), core.time.now())
+        val now = core.time.now()
+        if (target.deletedAt != null) {
+            // 탈퇴하려던 계정이 정지됐었다 — 정지를 풀면 탈퇴가 이어진다. 유예는 새로 (잘못된 정지였다면 그 사이 복구할 수 있게)
+            val purgeAfter = maxOf(target.purgeAfter ?: now, now.plus(core.props.deletion.grace))
+            core.accounts.update(targetId, AccountPatch(status = AccountStatus.DELETED, purgeAfter = purgeAfter, clearSuspendedReason = true), now)
+        } else {
+            core.accounts.update(targetId, AccountPatch(status = reopenedStatus(target), clearSuspendedReason = true), now)
+        }
         core.events.publish(AccountEventType.ACCOUNT_UNSUSPENDED, targetId, detail = mapOf("by" to actorId))
     }
 
@@ -44,6 +50,13 @@ class AdminService(private val core: AccountCore) {
         // 유예가 끝났으면 되살릴 수 없다 — 지우기와 되살리기 중 하나만 이긴다 (저장소가 한 문장으로 판정한다)
         if (!core.accounts.restore(targetId, reopenedStatus(target), core.time.now())) throw AccountException(AccountErrorCode.NOT_FOUND)
         core.events.publish(AccountEventType.ACCOUNT_RESTORED, targetId, detail = mapOf("by" to actorId))
+    }
+
+    fun listBlocks(page: Int, size: Int): AccountBlockPage = core.blocks.list(page, size)
+
+    fun removeBlock(actorId: String, blockId: Long) {
+        if (!core.blocks.remove(blockId)) throw AccountException(AccountErrorCode.NOT_FOUND)
+        core.events.publish(AccountEventType.REGISTRATION_BLOCK_REMOVED, null, detail = mapOf("by" to actorId, "block" to blockId.toString()))
     }
 
     fun grantRole(actorId: String, targetId: String, role: String) {

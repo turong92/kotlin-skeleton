@@ -45,6 +45,8 @@ class AccountCore(
     val consents: () -> dev.sumin.skeleton.common.consent.SignUpConsentGate? = { null },
     /** 계정 만들기와 동의 기록을 한 트랜잭션으로 묶는 곳 — `account-jdbc` 가 DB 트랜잭션으로 낸다 */
     val atomic: AccountTransaction = AccountTransaction.NONE,
+    /** 운영자가 지운 정지 계정의 재가입 차단 */
+    val blocks: AccountBlocks = AccountBlocks.local(time),
 ) {
     /**
      * 이메일로 계정 하나 — 저장소가 어떤 정렬 규칙으로 찾았든 **저장된 주소가 정규화된 입력과 글자 그대로 같을 때만** 돌려준다

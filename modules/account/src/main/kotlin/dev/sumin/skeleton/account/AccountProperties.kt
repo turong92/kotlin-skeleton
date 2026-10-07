@@ -18,6 +18,7 @@ data class AccountProperties(
     val emailChange: EmailChange = EmailChange(),
     val deletion: Deletion = Deletion(),
     val cleanup: Cleanup = Cleanup(),
+    val blocks: Blocks = Blocks(),
     val login: Login = Login(),
     val mail: Mail = Mail(),
     val admin: Admin = Admin(),
@@ -121,6 +122,19 @@ data class AccountProperties(
     ) {
         enum class Mode { ANONYMIZE, DELETE }
     }
+
+    data class Blocks(
+        /**
+         * 운영자가 정지한 계정을 지울 때 남기는 재가입 차단(해시)을 얼마나 두나. 0(기본) = 운영자가 지울 때까지.
+         * 개인정보 보존이므로 앱의 개인정보 처리방침에 적어야 한다 (docs/accounts.md)
+         */
+        val retention: Duration = Duration.ZERO,
+        /**
+         * 차단 해시(HMAC)의 서버 비밀. 비면 JWT 비밀에서 용도 접두사로 파생한다 — 그러면 JWT 비밀을 돌릴 때 차단이 조용히 풀리므로
+         * 차단을 오래 둘 앱은 이 값을 따로 둔다 (바꾸면 기존 차단이 맞지 않는다)
+         */
+        val secret: String = "",
+    )
 
     data class Cleanup(
         /**

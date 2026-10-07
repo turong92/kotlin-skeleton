@@ -86,6 +86,7 @@ class AccountHarness(
         repo, props, time, publisher, hasher, policy, tokens, mailer, AccountLinks(props.mail), tasks,
         AccountRateLimits({ limitStore }, time),
         CaptchaGate(captcha, captchaRequired), { revoker }, bootstrap, challenges, { socialReauth }, { consents }, atomic,
+        AccountBlocks.local(time, props.blocks.retention),
     )
     val registration = RegistrationService(core)
     val authRepository = AccountAuthRepository(core)
