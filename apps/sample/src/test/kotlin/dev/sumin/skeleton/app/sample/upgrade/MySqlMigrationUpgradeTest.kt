@@ -33,8 +33,8 @@ class MySqlMigrationUpgradeTest {
         val atBaseline = jdbc.sql("select count(*) from flyway_schema_history where success = 1").query(Long::class.java).single()
 
         val migrated = Flyway.configure().dataSource(dataSource).locations(*locations.toTypedArray()).load().migrate()
-        // 지금은 기준선 == 최신이라 0건 — 앞으로 새 V 파일이 생기면 여기서 그 파일들이 기존 데이터 위에서 돈다
-        assertTrue(migrated.migrationsExecuted >= 0)
+        // 기준선 뒤의 새 V 파일(board_author_ref 등)이 기존 데이터 위에서 돈다 — 적어도 하나는 실행돼야 한다
+        assertTrue(migrated.migrationsExecuted >= 1, "no migration ran after the baseline")
         val failed = jdbc.sql("select count(*) from flyway_schema_history where success = 0").query(Long::class.java).single()
         assertEquals(0L, failed)
         assertTrue(jdbc.sql("select count(*) from flyway_schema_history where success = 1").query(Long::class.java).single() >= atBaseline)
@@ -45,6 +45,8 @@ class MySqlMigrationUpgradeTest {
         assertEquals("upgrade@example.com", jdbc.sql("select email from accounts where id = 'acc_upgrade'").query(String::class.java).single())
         assertEquals("Before the upgrade", jdbc.sql("select title from board_posts where board_code = 'upgrade'").query(String::class.java).single())
         assertEquals("a comment on the baseline schema", jdbc.sql("select body from board_comments where author_id = 'acc_upgrade'").query(String::class.java).single())
+        assertEquals(0L, jdbc.sql("select count(*) from board_posts where author_id = 'acc_upgrade' and author_ref is not null").query(Long::class.java).single(), "baseline posts have no author_ref")
+        assertEquals(0L, jdbc.sql("select count(*) from board_comments where author_id = 'acc_upgrade' and author_ref is not null").query(Long::class.java).single(), "baseline comments have no author_ref")
         assertEquals("v1", jdbc.sql("select version from legal_consents where subject_id = 'acc_upgrade'").query(String::class.java).single())
         assertEquals("{\"k\": \"v\"}".replace(" ", ""), jdbc.sql("select payload_json from notification_inbox where event_id = 'evt_upgrade'").query(String::class.java).single().replace(" ", ""))
     }

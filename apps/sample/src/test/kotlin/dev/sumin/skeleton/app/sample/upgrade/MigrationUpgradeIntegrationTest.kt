@@ -17,6 +17,7 @@ import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.jdbc.autoconfigure.JdbcConnectionDetails
@@ -29,7 +30,7 @@ import org.springframework.jdbc.core.simple.JdbcClient
 /**
  * 업그레이드 시험 (PostgreSQL, 모든 모듈의 마이그레이션이 한 DB 에): 기준선 스키마(`migrations.lock` 의 baseline)에 모듈별 대표 행을 넣고 →
  * 앱이 뜨며(= Flyway 가 최신까지 migrate) → 행이 살아 있고 모듈의 저장소 코드가 그 행을 읽고 쓴다.
- * 지금은 기준선 == 최신이라 두 번째 migrate 가 0건이어도 통과한다. 새 V 파일이 더해지면 자동으로 이 데이터 위에서 검증된다 (docs/schema-management.md).
+ * 기준선 뒤에 더해진 V 파일(예: board_author_ref)은 이 데이터 위에서 돈다 — 새 V 파일이 생기면 자동으로 검증된다 (docs/schema-management.md).
  */
 @SpringBootTest(properties = ["skeleton.job-queue.poll-interval=200ms", "spring.config.import=classpath:test-seeds.yml"])
 @Import(MigrationUpgradeIntegrationTest.BaselineDatabase::class, SampleIntegrationTest.FakeStorageConfiguration::class)
@@ -104,6 +105,9 @@ class MigrationUpgradeIntegrationTest {
     fun `board - the baseline post is readable, takes a new comment and keeps its reaction`() {
         val postId = jdbc.sql("select id from board_posts where board_code = 'upgrade'").query(Long::class.java).single()
         assertEquals("Before the upgrade", assertNotNull(posts.find(postId)).title)
+        assertNull(assertNotNull(posts.find(postId)).authorRef, "a baseline post has no author_ref")
+        val baselineComment = jdbc.sql("select id from board_comments where post_id = :p and author_id = 'acc_upgrade'").param("p", postId).query(Long::class.java).single()
+        assertNull(assertNotNull(comments.find(baselineComment)).authorRef, "a baseline comment has no author_ref")
         val added = assertNotNull(comments.insert(NewComment(postId, null, null, 0, "acc_upgrade", "after the upgrade", now)))
         assertEquals("after the upgrade", assertNotNull(comments.find(added.id)).body)
         assertEquals(mapOf("LIKE" to 1L), reactions.counts(ReactionTarget.POST, listOf(postId))[postId])

@@ -138,10 +138,10 @@ interface AuthorAdoptionListener {
 **`board-jdbc`** — `V<UTC>__board_author_ref.sql` (`./gradlew newMigration -Pname=board_author_ref -Pmodule=modules/board-jdbc`, 잠금은 `perl scripts/migrations-lock.pl`)
 
 ```sql
-alter table board_posts    add column author_ref varchar(64);   -- 공개 작성자 id. NULL = 이 기능 이전의 행 (공개 id = author_id)
-alter table board_comments add column author_ref varchar(64);
-create index idx_board_posts_author_ref    on board_posts (author_ref);     -- "아직 안 옮긴 행이 있나"(is null)를 싸게
-create index idx_board_comments_author_ref on board_comments (author_ref);
+alter table board_posts    add column if not exists author_ref varchar(64);   -- 공개 작성자 id. NULL = 이 기능 이전의 행 (공개 id = author_id). MySQL 판은 `if not exists` 없이 (8.4 에 없다)
+alter table board_comments add column if not exists author_ref varchar(64);
+create index if not exists idx_board_posts_author_ref    on board_posts (author_ref, author_id);     -- 넘겨받기: (author_ref is null → author_id) 목록 · (author_ref is null and author_id = 계정)
+create index if not exists idx_board_comments_author_ref on board_comments (author_ref, author_id);  -- 댓글 표에는 author_id 인덱스가 없다 — 열 하나짜리로는 켠 직후(전부 NULL)에 못 쓴다
 ```
 
 `author_id`(계정 id, 탈퇴 뒤에는 톰스톤)의 뜻은 그대로다. `board_reactions` 는 바뀌지 않는다. 열이 NULL 허용이라 `MigrationUpgradeIntegrationTest` 의 기준선 데이터 위에서 그대로 돈다.
@@ -369,7 +369,8 @@ F1 은 B3 의 계약만 정해지면 가짜 서버로 먼저 간다.
 - 게시판 `GET` 응답의 `Cache-Control` — 익명 읽기를 켠 앱에서 `mine` · `myReactions` 가 든 응답이 Cloudflare 등 공유 캐시에 남지 않는지.
   - 실측(B3): `apps/sample` 에 `skeleton.board.http.allow-anonymous-read=true` 를 켜고 보안 체인을 거쳐 `GET /boards/config` · `GET /boards/general/posts` 를 익명과 Bearer 로 불렀다 — 네 응답 모두 `Cache-Control: no-cache, no-store, max-age=0, must-revalidate` · `Pragma: no-cache` · `Expires: 0`(Spring Security 기본 헤더. board 는 아무 헤더도 달지 않고 `Vary` 도 없다). 공유 캐시에 남지 않으므로 코드는 바꾸지 않았다. 단 앱이 자기 `SecurityFilterChain` 으로 `headers.cacheControl` 을 끄면 이 보장이 사라진다 — 그때는 앱이 책임진다.
 - `author_ref is null` 조건이 PostgreSQL · MySQL 양쪽에서 새 인덱스를 타는지(실행 계획).
-  - 실측: board_posts 2만 행(1% 가 NULL, `analyze` 뒤)에서 `author_ref is null` 의 `select distinct author_id … limit` · `count(*)` 는 PostgreSQL 18 이 `idx_board_posts_author_ref` Bitmap Index Scan(`enable_seqscan` 기본값 그대로), MySQL 은 `type=ref` 로 같은 인덱스를 탄다. 넘겨받기 `update … where author_id = :a and author_ref is null` 은 PostgreSQL 이 기존 `idx_board_posts_author` 를, MySQL 이 새 인덱스(range)를 고른다 — 둘 다 인덱스를 쓴다. 댓글 표는 같은 모양이라 따로 재지 않았다.
+  - 실측(1): board_posts 2만 행(1% 가 NULL, `analyze` 뒤)에서 `author_ref is null` 의 `select distinct author_id … limit` · `count(*)` 는 PostgreSQL 18 이 단일 열 인덱스를 Bitmap Index Scan 으로(`enable_seqscan` 기본값 그대로), MySQL 이 `type=ref` 로 탄다.
+  - 실측(2, 최종 인덱스 `(author_ref, author_id)`): 글 · 댓글 각 2만 행, 전부 NULL, 계정 300개. 댓글 `update … where author_id = :a and author_ref is null` 은 PostgreSQL 이 `idx_board_comments_author_ref` Bitmap Index Scan(`Index Cond: author_ref IS NULL AND author_id = …`), MySQL 이 `type=range` 로 같은 인덱스를 탄다. 글 `update` 는 MySQL 이 새 인덱스(range)를, PostgreSQL 이 기존 `idx_board_posts_author`(Filter: author_ref IS NULL)를 고른다. 전부 NULL 일 때 `pendingAccounts`(두 표 union)는 PostgreSQL 이 두 표를 Seq Scan 한다 — 전 행이 대상이라 맞는 계획이다. MySQL 은 두 표를 새 인덱스(covering, `Using index`)로 읽는다. 전부 NULL 이 아닌 보통 상태(실측 1)에서는 인덱스를 탄다.
 - `author-profile` 의 `AuthorDirectory` 가 `account` 의 기본 구현보다 먼저 등록되는지(`@AutoConfiguration(before = …)`) — 컨텍스트 러너로.
 - `PATCH` 본문의 모르는 칸(`authorId`)이 조용히 무시되는지, 거절되는지(지금 Jackson 설정).
   - 실측(B3): 조용히 무시된다 — `PATCH …/posts/{id}` 에 `{"title":"edited","authorId":"prf_u2"}` 를 보내면 `200`, 제목은 바뀌고 `authorId` 는 그대로다(`BoardAuthorIdentitiesWebTest`). 거절하지 않으므로 수정 요청에 `authorId` 를 실어 보내는 낡은 클라이언트도 깨지지 않고, 작성자는 바뀌지 않는다.

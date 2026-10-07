@@ -56,6 +56,18 @@ class BoardJdbcAutoConfigurationTest {
     }
 
     @Test
+    fun `a listener of another module does not push the board one out - the app replaces it by bean name only`() {
+        val other = object : dev.sumin.skeleton.common.author.AuthorAdoptionListener {
+            override val name = "other"
+            override fun pendingAccounts(limit: Int) = emptyList<String>()
+            override fun adopt(accountId: String, authorId: String) = 0
+        }
+        runner.withBean("otherModuleAdoption", dev.sumin.skeleton.common.author.AuthorAdoptionListener::class.java, { other }).run { ctx ->
+            assertEquals(setOf("board", "other"), ctx.getBeansOfType(dev.sumin.skeleton.common.author.AuthorAdoptionListener::class.java).values.map { it.name }.toSet())
+        }
+    }
+
+    @Test
     fun `an app repository replaces the JDBC one`() {
         val own = object : PostRepository by JdbcPostRepository(
             org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate(dataSource),

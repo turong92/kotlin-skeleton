@@ -28,6 +28,7 @@ class JdbcAuthorRefDbTest {
         assertNull(db.posts.find(legacy.id)!!.authorRef)
         assertEquals("prf_aaa", db.posts.find(own.id)!!.authorRef)
         val listed = db.posts.page(PostQuery(board, 0, 10, PostSort.LATEST)).values.associate { it.id to it.authorRef }
+        assertTrue(legacy.id in listed && own.id in listed, "both posts must be listed before their author_ref is compared")
         assertNull(listed[legacy.id])
         assertEquals("prf_aaa", listed[own.id])
 
@@ -47,6 +48,14 @@ class JdbcAuthorRefDbTest {
         val adopted = account()
         val gone = BoardAuthors.DELETED_PREFIX + "0123456789abcdef"
         val p = db.newPost(board, author = postOnly)
+        val many = account()
+        val first = "acc_ord1_" + UUID.randomUUID().toString().replace("-", "")
+        val second = "acc_ord2_" + UUID.randomUUID().toString().replace("-", "")
+        db.newPost(board, author = many)
+        db.newPost(board, author = many)
+        db.comment(db.comments, p.id, author = many)
+        db.newPost(board, author = second)
+        db.newPost(board, author = first)
         db.newPost(board, author = gone)
         db.posts.insert(NewPost(board, adopted, "t", "b", PostStatus.PUBLISHED, emptyList(), T0, authorRef = "prf_x"))
         db.comment(db.comments, p.id, author = commentOnly)
@@ -58,7 +67,9 @@ class JdbcAuthorRefDbTest {
         assertFalse(adopted in pending)
         assertFalse(pending.any { it.startsWith(BoardAuthors.DELETED_PREFIX) })
         assertEquals(pending.size, pending.toSet().size, "distinct")
-        assertTrue(adoption.pendingAccounts(1).size <= 1)
+        assertEquals(1, pending.count { it == many }, "an account with two posts and a comment is listed once")
+        assertEquals(listOf(first, second), pending.filter { it == first || it == second }, "ordered by author_id")
+        assertEquals(1, adoption.pendingAccounts(1).size, "limit caps the list")
     }
 
     @Test
