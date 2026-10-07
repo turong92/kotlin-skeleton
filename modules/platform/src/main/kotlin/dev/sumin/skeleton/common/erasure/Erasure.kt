@@ -8,6 +8,11 @@ data class ErasureRequest(
     val accountId: String,
     /** 이 계정 자리에 남길 값 — 글 작성자 같은 칸을 이 값으로 바꾼다 ([AccountTombstone]). 계정 id 를 담지 않으므로 되돌릴 수 없다 */
     val tombstone: String,
+    /**
+     * true: 계정 행은 남는다(`deletion.mode=ANONYMIZE`) — 이 계정 id 로 이어진 줄을 지우지 않고 개인정보만 지워도 참조가 유지된다.
+     * false: 행이 지워진다 — 계정 id 를 들고 있는 줄은 이 요청에서 지우거나 [tombstone] 으로 바꿔야 한다
+     */
+    val accountKept: Boolean = false,
 )
 
 /**

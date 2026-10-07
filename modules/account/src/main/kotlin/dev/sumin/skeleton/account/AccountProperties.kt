@@ -17,6 +17,7 @@ data class AccountProperties(
     val reset: Reset = Reset(),
     val emailChange: EmailChange = EmailChange(),
     val deletion: Deletion = Deletion(),
+    val cleanup: Cleanup = Cleanup(),
     val login: Login = Login(),
     val mail: Mail = Mail(),
     val admin: Admin = Admin(),
@@ -112,6 +113,21 @@ data class AccountProperties(
         val purgeBatch: Int = 50,
         /** 비밀번호가 없는 계정의 삭제 확인 메일 링크 유효 시간 */
         val confirmationTtl: Duration = Duration.ofMinutes(30),
+        /**
+         * 유예가 끝난 뒤 계정을 어떻게 하나. ANONYMIZE(기본): 행(id · created_at)은 남기고 개인정보만 지운다 — 다른 표가 계정 id 를 들고 있어도 참조가 끊기지 않는다.
+         * DELETE: 행까지 지운다 (앱이 계정 id 를 어디에도 남기지 않을 때)
+         */
+        val mode: Mode = Mode.ANONYMIZE,
+    ) {
+        enum class Mode { ANONYMIZE, DELETE }
+    }
+
+    data class Cleanup(
+        /**
+         * 만료된 한 번 쓰는 코드 · 토큰 · 가입 시도 줄을 만료 뒤 얼마나 두었다가 지우나 — 주기 정리(`deletion.purge-interval`)가 지운다.
+         * 만료는 **읽을 때** 검사하므로 정리가 늦어도(또는 0 이어도) 만료된 코드가 쓰이지는 않는다. 이 값은 표가 무한히 쌓이지 않게 하는 청소 기준일 뿐이다
+         */
+        val expiredRetention: Duration = Duration.ofDays(1),
     )
 
     data class Login(

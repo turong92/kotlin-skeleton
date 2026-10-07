@@ -65,7 +65,7 @@ class MagicLinkService(
         val normalized = Emails.normalize(email)
         core.tasks.run("magic-link-request") {
             val account = core.accountByEmail(normalized)
-            if (account?.status == AccountStatus.DELETED) return@run
+            if (account?.status?.departed == true) return@run
             if (account == null && !props.signUp) return@run
             if (!core.limits.acquire("magic-link:email", normalized, props.perEmail, props.perEmailWindow).allowed) return@run
             val raw = core.tokens.issue(TokenPurposes.MAGIC_LINK, normalized, account?.id, props.ttl)

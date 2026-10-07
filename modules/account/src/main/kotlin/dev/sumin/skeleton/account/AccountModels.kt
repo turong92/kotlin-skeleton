@@ -12,8 +12,18 @@ enum class AccountStatus {
     /** 운영자가 막았다 — 세션이 닫히고 로그인 · 새로고침이 AUTH.ACCOUNT_SUSPENDED */
     SUSPENDED,
 
-    /** 삭제 요청됨(유예 기간) 또는 이미 지워짐. 로그인할 수 없고 존재하지 않는 계정처럼 보인다 */
+    /** 삭제 요청됨(유예 기간, 복구할 수 있다). 로그인할 수 없고 존재하지 않는 계정처럼 보인다 */
     DELETED,
+
+    /**
+     * 유예가 끝나 **개인정보가 지워진** 계정 — 행(id · created_at)만 남아 다른 표의 참조가 끊기지 않는다. 마지막 상태다:
+     * 로그인 · 복구 · 역할 부여 · 이메일로 찾기가 모두 안 된다 (`skeleton.account.deletion.mode=ANONYMIZE`, 기본)
+     */
+    ERASED,
+    ;
+
+    /** 탈퇴한 계정(유예 중이거나 이미 지워짐) — 존재하지 않는 계정처럼 다룬다 */
+    val departed: Boolean get() = this == DELETED || this == ERASED
 }
 
 /**
@@ -36,6 +46,8 @@ data class Account(
     val deletedAt: Instant? = null,
     /** 삭제 유예가 끝나 지워질 시각 (DELETED 일 때) */
     val purgeAfter: Instant? = null,
+    /** 개인정보를 지운 시각 (ERASED 일 때) */
+    val erasedAt: Instant? = null,
 )
 
 /**
@@ -133,6 +145,7 @@ interface AccountRepository {
      */
     fun changeEmail(id: String, newEmail: String, now: Instant, expectEmailVerified: Boolean? = null): ChangeEmailResult
 
+    /** ERASED 계정에는 주지 않는다(false) — 지운 뒤 역할이 되살아나지 않게 */
     fun grantRole(id: String, role: String, now: Instant): Boolean
 
     fun revokeRole(id: String, role: String, now: Instant): Boolean
@@ -140,6 +153,7 @@ interface AccountRepository {
     /** [role] 을 가진 ACTIVE 계정 수 — 마지막 관리자 보호 · 첫 관리자 부트스트랩 */
     fun countActiveWithRole(role: String): Long
 
+    /** [status] 가 null 이면 ERASED 를 뺀 모두 (지워진 계정은 `status=ERASED` 로 명시했을 때만) */
     fun search(email: String?, status: AccountStatus?, page: Int, size: Int): AccountPage
 
     /** 삭제 유예가 [now] 까지 끝난 계정 */
@@ -157,8 +171,15 @@ interface AccountRepository {
     /** 삭제 유예가 **아직 안 끝난** DELETED 계정을 [status] 로 되살린다 (한 문장 조건부 갱신 — [purge] 와 동시에 둘 다 이기지 못한다). 되살렸으면 true */
     fun restore(id: String, status: AccountStatus, now: Instant): Boolean
 
-    /** 계정과 그 수단 · 역할을 지운다 — **DELETED 이고 유예가 [now] 까지 끝난 계정만** (되살려진 계정을 지우지 않게). 지웠으면 true */
+    /** 계정과 그 수단 · 역할을 지운다(`deletion.mode=DELETE`) — **DELETED 이고 유예가 [now] 까지 끝난 계정만** (되살려진 계정을 지우지 않게). 지웠으면 true */
     fun purge(id: String, now: Instant): Boolean
+
+    /**
+     * 행은 남기고 개인정보만 지운다(`deletion.mode=ANONYMIZE`) — [purge] 와 같은 조건(DELETED + 유예 끝남)에서 **한 트랜잭션**으로:
+     * 이메일 · 이름 · 로케일 · 시간대 · 정지 사유 · 마지막 로그인을 비우고 `status=ERASED`, `erased_at=now`; 로그인 수단(비밀번호 해시 · 제공자 주체) · 역할을 지우고,
+     * 그 계정의 한 번 쓰는 토큰 · 코드 · 이메일 변경 대기를 지우고, 감사 행의 IP · 상세를 비운다. 조건이 안 맞으면(되살려졌거나 이미 지움) 아무것도 바꾸지 않고 false
+     */
+    fun erase(id: String, now: Instant): Boolean
 
     // ---- identities
 

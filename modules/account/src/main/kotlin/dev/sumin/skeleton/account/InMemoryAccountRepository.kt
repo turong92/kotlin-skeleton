@@ -85,7 +85,7 @@ class InMemoryAccountRepository : AccountRepository {
 
     @Synchronized override fun grantRole(id: String, role: String, now: Instant): Boolean {
         val a = accounts[id] ?: return false
-        if (role in a.roles) return false
+        if (role in a.roles || a.status == AccountStatus.ERASED) return false
         accounts[id] = a.copy(roles = a.roles + role, updatedAt = now)
         return true
     }
@@ -101,7 +101,7 @@ class InMemoryAccountRepository : AccountRepository {
         accounts.values.count { it.status == AccountStatus.ACTIVE && role in it.roles }.toLong()
 
     @Synchronized override fun search(email: String?, status: AccountStatus?, page: Int, size: Int): AccountPage {
-        val all = accounts.values.filter { (email == null || it.email?.contains(email.lowercase()) == true) && (status == null || it.status == status) }
+        val all = accounts.values.filter { (email == null || it.email?.contains(email.lowercase()) == true) && (if (status == null) it.status != AccountStatus.ERASED else it.status == status) }
             .sortedWith(compareByDescending<Account> { it.createdAt }.thenBy { it.id })
         return AccountPage(all.drop(page * size).take(size), all.size.toLong())
     }
@@ -114,6 +114,17 @@ class InMemoryAccountRepository : AccountRepository {
         if (a.status != AccountStatus.DELETED || a.purgeAfter == null || a.purgeAfter.isAfter(now)) return false
         identities.values.removeIf { it.accountId == id }
         return accounts.remove(id) != null
+    }
+
+    @Synchronized override fun erase(id: String, now: Instant): Boolean {
+        val a = accounts[id] ?: return false
+        if (a.status != AccountStatus.DELETED || a.purgeAfter == null || a.purgeAfter.isAfter(now)) return false
+        identities.values.removeIf { it.accountId == id }
+        accounts[id] = a.copy(
+            email = null, emailVerified = false, status = AccountStatus.ERASED, roles = emptySet(), displayName = null, locale = null, timeZone = null,
+            lastLoginAt = null, suspendedReason = null, purgeAfter = null, erasedAt = now, updatedAt = now,
+        )
+        return true
     }
 
     @Synchronized override fun restore(id: String, status: AccountStatus, now: Instant): Boolean {

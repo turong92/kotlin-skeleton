@@ -26,6 +26,7 @@ enum class AccountErrorCode(
     LAST_ADMIN("ACCOUNT.LAST_ADMIN", HttpStatus.CONFLICT, "Cannot remove the last administrator"),
     SELF_ACTION_FORBIDDEN("ACCOUNT.SELF_ACTION_FORBIDDEN", HttpStatus.CONFLICT, "You cannot do this to your own account"),
     NOT_FOUND("ACCOUNT.NOT_FOUND", HttpStatus.NOT_FOUND, "Account not found"),
+    ERASED("ACCOUNT.ERASED", HttpStatus.GONE, "The account was erased and cannot be used or restored"),
     RATE_LIMITED("ACCOUNT.RATE_LIMITED", HttpStatus.TOO_MANY_REQUESTS, "Too many requests"),
     METHOD_UNKNOWN("ACCOUNT.METHOD_UNKNOWN", HttpStatus.BAD_REQUEST, "Unknown sign-in method"),
     CODE_INVALID("ACCOUNT.CODE_INVALID", HttpStatus.BAD_REQUEST, "The code is wrong"),

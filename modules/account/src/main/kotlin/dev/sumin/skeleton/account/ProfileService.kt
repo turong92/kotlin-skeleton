@@ -32,7 +32,7 @@ class ProfileService(private val core: AccountCore, registry: SignInMethodRegist
     private val identities = IdentityService(core, registry)
 
     fun me(accountId: String): MeView {
-        val a = core.accounts.findById(accountId) ?: throw AccountException(AccountErrorCode.NOT_FOUND)
+        val a = core.accounts.findById(accountId)?.takeIf { it.status != AccountStatus.ERASED } ?: throw AccountException(AccountErrorCode.NOT_FOUND)
         val methods = identities.list(accountId)
         val pending = core.challenges.findOpen(ChallengePurposes.EMAIL_CHANGE, accountId)
         return MeView(

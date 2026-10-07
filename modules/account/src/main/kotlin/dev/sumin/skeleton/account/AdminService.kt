@@ -13,9 +13,12 @@ class AdminService(private val core: AccountCore) {
 
     fun get(id: String): Account = core.accounts.findById(id) ?: throw AccountException(AccountErrorCode.NOT_FOUND)
 
+    /** 지워진 계정에는 아무것도 못 한다 (읽기만) — 없는 계정(404)과 구별되는 410 으로 */
+    private fun live(id: String): Account = get(id).also { if (it.status == AccountStatus.ERASED) throw AccountException(AccountErrorCode.ERASED) }
+
     fun suspend(actorId: String, targetId: String, reason: String?) {
         if (actorId == targetId) throw AccountException(AccountErrorCode.SELF_ACTION_FORBIDDEN)
-        val target = get(targetId)
+        val target = live(targetId)
         if (target.status == AccountStatus.DELETED) throw AccountException(AccountErrorCode.NOT_FOUND)
         if (target.status == AccountStatus.SUSPENDED) return
         when (core.accounts.updateUnlessLast(targetId, AccountPatch(status = AccountStatus.SUSPENDED, suspendedReason = reason?.take(200)), core.time.now(), adminRole)) {
@@ -36,7 +39,7 @@ class AdminService(private val core: AccountCore) {
 
     /** 삭제 유예 안의 계정을 되살린다. 이미 지워졌으면(행이 없다) NOT_FOUND */
     fun restore(actorId: String, targetId: String) {
-        val target = get(targetId)
+        val target = live(targetId)
         if (target.status != AccountStatus.DELETED) throw AccountException(AccountErrorCode.NOT_FOUND)
         // 유예가 끝났으면 되살릴 수 없다 — 지우기와 되살리기 중 하나만 이긴다 (저장소가 한 문장으로 판정한다)
         if (!core.accounts.restore(targetId, reopenedStatus(target), core.time.now())) throw AccountException(AccountErrorCode.NOT_FOUND)
@@ -45,7 +48,7 @@ class AdminService(private val core: AccountCore) {
 
     fun grantRole(actorId: String, targetId: String, role: String) {
         validRole(role)
-        if (get(targetId).status == AccountStatus.DELETED) throw AccountException(AccountErrorCode.NOT_FOUND)
+        if (live(targetId).status == AccountStatus.DELETED) throw AccountException(AccountErrorCode.NOT_FOUND)
         if (core.accounts.grantRole(targetId, role, core.time.now())) core.events.publish(AccountEventType.ROLE_GRANTED, targetId, detail = mapOf("role" to role, "by" to actorId))
     }
 

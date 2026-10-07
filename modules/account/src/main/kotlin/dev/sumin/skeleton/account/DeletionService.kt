@@ -56,8 +56,9 @@ class DeletionService(private val core: AccountCore) {
 }
 
 /**
- * 삭제 유예가 끝난 계정을 지운다. 계정 id 를 들고 있는 모듈들의 [AccountErasureListener] 를 **모두** 부른 뒤에야 계정 행을 지운다 —
- * 하나라도 실패하면 그 계정은 그대로 두고(반쯤 지워진 상태를 만들지 않는다) 다음 주기에 다시 한다.
+ * 삭제 유예가 끝난 계정을 정리한다 (`deletion.mode`: ANONYMIZE = 행을 남기고 개인정보만 지움 · DELETE = 행까지 지움).
+ * 계정 id 를 들고 있는 모듈들의 [AccountErasureListener] 를 **모두** 부른 뒤에야 계정을 건드린다 —
+ * 하나라도 실패하면 그 계정은 그대로 두고(반쯤 지워진 상태를 만들지 않는다) 다음 주기에 다시 한다. 한 계정의 실패가 같은 묶음의 다른 계정을 막지 않는다.
  */
 class AccountPurgeService(
     private val core: AccountCore,
@@ -65,31 +66,39 @@ class AccountPurgeService(
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
-    private companion object { val TOKEN_RETENTION: java.time.Duration = java.time.Duration.ofDays(1) }
-
-    /** 이번에 지운 계정 수 */
+    /** 이번에 정리한 계정 수 */
     fun purgeDue(): Int {
         val due = core.accounts.dueForPurge(core.time.now(), core.props.deletion.purgeBatch)
         var purged = 0
         for (account in due) {
-            // 다시 읽어 아직 지울 계정인지 확인하고 (그 사이 되살려졌으면 건너뛴다), 지울 때도 저장소가 조건으로 한 번 더 막는다
-            val now = core.time.now()
-            val current = core.accounts.findById(account.id)
-            if (current == null || current.status != AccountStatus.DELETED || current.purgeAfter?.isAfter(now) != false) continue
-            val request = ErasureRequest(account.id, AccountTombstone.of(account.id))
-            val failed = listeners().firstOrNull { listener ->
-                try { listener.erase(request); false } catch (e: Exception) {
-                    log.warn("erasure listener '{}' failed for an account; it stays for the next run: {}", listener.name, e.javaClass.simpleName); true
-                }
-            }
-            if (failed != null) continue
-            if (core.accounts.purge(account.id, now)) {
-                purged++
-                core.events.publish(AccountEventType.ACCOUNT_PURGED, account.id)
+            try {
+                if (purgeOne(account)) purged++
+            } catch (e: Exception) {
+                log.warn("purging an account failed; it stays for the next run: {}", e.javaClass.simpleName)
             }
         }
-        core.tokens.sweep(TOKEN_RETENTION)   // 지난 한 번 쓰는 토큰 · 코드 줄도 같이 청소
-        core.challenges.sweep(TOKEN_RETENTION)
+        val retention = core.props.cleanup.expiredRetention
+        core.tokens.sweep(retention)   // 지난 한 번 쓰는 토큰 · 코드 줄도 같이 청소
+        core.challenges.sweep(retention)
         return purged
+    }
+
+    private fun purgeOne(account: Account): Boolean {
+        // 다시 읽어 아직 지울 계정인지 확인하고 (그 사이 되살려졌으면 건너뛴다), 지울 때도 저장소가 조건으로 한 번 더 막는다
+        val now = core.time.now()
+        val current = core.accounts.findById(account.id)
+        if (current == null || current.status != AccountStatus.DELETED || current.purgeAfter?.isAfter(now) != false) return false
+        val keep = core.props.deletion.mode == AccountProperties.Deletion.Mode.ANONYMIZE
+        val request = ErasureRequest(account.id, AccountTombstone.of(account.id), accountKept = keep)
+        val failed = listeners().firstOrNull { listener ->
+            try { listener.erase(request); false } catch (e: Exception) {
+                log.warn("erasure listener '{}' failed for an account; it stays for the next run: {}", listener.name, e.javaClass.simpleName); true
+            }
+        }
+        if (failed != null) return false
+        core.closeSensitiveLinks(current)   // 저장소가 토큰을 같이 지우지 못하는 구현(메모리 · 앱 구현)을 위해
+        val done = if (keep) core.accounts.erase(account.id, now) else core.accounts.purge(account.id, now)
+        if (done) core.events.publish(AccountEventType.ACCOUNT_PURGED, account.id)
+        return done
     }
 }

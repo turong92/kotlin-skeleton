@@ -101,13 +101,13 @@ class DeletionAndAdminTest {
         h.deletion.delete(a.id, ReauthInput("tangerine-42-moon"), null)
         h.time.advance(Duration.ofDays(31))
         h.purge.purgeDue()
-        assertEquals("ACCOUNT.NOT_FOUND", code { h.admin.restore("acc_admin", a.id) })
+        assertEquals("ACCOUNT.ERASED", code { h.admin.restore("acc_admin", a.id) })
     }
 
     // ---- purge + erasure
 
     @Test
-    fun `purge waits for the grace, runs every erasure listener with a tombstone, then removes the account`() {
+    fun `purge waits for the grace, runs every erasure listener with a tombstone, then erases the account's personal data`() {
         val a = h.activeAccount()
         val seen = mutableListOf<ErasureRequest>()
         h.erasers += object : AccountErasureListener { override val name = "board"; override fun erase(request: ErasureRequest) { seen += request } }
@@ -119,7 +119,7 @@ class DeletionAndAdminTest {
 
         h.time.advance(Duration.ofDays(2))
         assertEquals(1, h.purge.purgeDue())
-        assertNull(h.repo.findById(a.id))
+        assertEquals(AccountStatus.ERASED, h.repo.findById(a.id)!!.status)
         assertNull(h.repo.findIdentity("password", "ann@example.com"))
         assertEquals(listOf(a.id), seen.map { it.accountId })
         assertEquals(AccountTombstone.of(a.id), seen.single().tombstone)
@@ -142,7 +142,7 @@ class DeletionAndAdminTest {
         assertNotNull(h.repo.findById(a.id), "must stay so the erasure can be retried")
         broken = false
         assertEquals(1, h.purge.purgeDue())
-        assertNull(h.repo.findById(a.id))
+        assertEquals(AccountStatus.ERASED, h.repo.findById(a.id)!!.status)
         assertTrue(calls.count { it == "flaky" } == 2)
     }
 

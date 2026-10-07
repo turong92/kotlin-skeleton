@@ -24,7 +24,7 @@ class AccountAuthRepository(private val core: AccountCore) : AuthAccountReposito
     }
 
     fun toAuth(account: Account): AuthAccount? {
-        if (account.status == AccountStatus.DELETED) return null
+        if (account.status.departed) return null
         val hash = account.email?.let { core.accounts.findIdentity(SignInMethods.PASSWORD, it)?.secret }.orEmpty()
         return AuthAccount(
             accountId = account.id,
