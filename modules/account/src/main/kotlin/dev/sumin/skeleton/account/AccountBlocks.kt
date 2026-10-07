@@ -111,8 +111,8 @@ class AccountBlocks(
         const val IDENTITY = "identity"
         private val EMAIL_METHODS = setOf(SignInMethods.PASSWORD, SignInMethods.MAGIC_LINK)
 
-        /** 로컬 · 시험용 — 메모리 저장소와 고정 키 */
+        /** 로컬 · 시험용 — 메모리 저장소와 **인스턴스마다 무작위인 키** (코드에 박힌 키는 없다; 메모리 저장소는 재시작하면 비므로 키가 재시작을 넘길 이유도 없다) */
         fun local(time: TimeProvider, retention: Duration = Duration.ZERO) =
-            AccountBlocks(InMemoryAccountBlockStore(), "local-test-key".toByteArray(), retention, time)
+            AccountBlocks(InMemoryAccountBlockStore(), ByteArray(32).also { java.security.SecureRandom().nextBytes(it) }, retention, time)
     }
 }
