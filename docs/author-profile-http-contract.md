@@ -50,7 +50,7 @@ The caller's living profiles, oldest first. Creates the first profile if there i
 Body `{ "name": "Minsu" }`. Needs the `Idempotency-Key` header when the app has the `idempotency` module (section 4).
 `201`, `Location` = the absolute URL `…/api/v1/author-profiles/{id}` (there is no `GET /{id}`; the body already is the profile), body `{ "value": { id, name, tag, createdAt } }` (same four keys).
 Errors: section 3. The tag is drawn independently for this profile — it is **not** the account's tag and not a sibling's.
-A caller with no profile yet who `POST`s gets the first profile created implicitly (counted in the limits) — avoid it by calling `GET /` first.
+A caller with no profile yet who `POST`s gets the first profile created implicitly as well — it counts toward `maxPerAccount` but not toward the create limit (which counts only profiles the user made). Avoid the surprise by calling `GET /` first.
 
 ### PATCH /{id}
 Body `{ "name": "New name" }` → `200` `{ "value": { id, name, tag, createdAt } }`. **Past posts show the new name at once** (names are looked up when a post is read). The tag stays when the comparison key of the name stays (only case or width changed), otherwise a new tag is drawn. Sending the **same name** again returns the profile unchanged and does not spend the rename limit. The same errors as `POST`, plus the rename limit (section 3). `{id}` that is not the caller's living profile → `404 AUTHOR_PROFILE.NOT_FOUND`; this is checked **before** the name, so a wrong id with a bad name is also that `404`.
@@ -70,7 +70,7 @@ Body shape as in `docs/account-http-contract.md` section 0. Field errors: `400 C
 | 400 | … `Reserved` | POST, PATCH | a reserved word (`skeleton.account.display-name.reserved`) | field error |
 | 400 | `COMMON.IDEMPOTENCY_ERROR` | POST | the app has the `idempotency` module and the header is missing / malformed | frontend bug |
 | 401 | `AUTH.*` | all | no or expired token | normal sign-in handling |
-| 404 | `AUTHOR_PROFILE.NOT_FOUND` | PATCH, DELETE; GET and POST for a non-active account without profiles | not the caller's / missing / deleted / malformed id | refresh the list |
+| 404 | `AUTHOR_PROFILE.NOT_FOUND` | PATCH, DELETE; **POST for any non-active account (suspended, deletion pending — even one that has profiles)**; GET for a non-active account that never had a profile | not the caller's / missing / deleted / malformed id | refresh the list |
 | 409 | `AUTHOR_PROFILE.NAME_TAKEN` | POST, PATCH | the app runs `uniqueness: UNIQUE` (or `TAGGED` with all 9999 tags of the name used) and somebody holds the name | field error "taken" |
 | 409 | `AUTHOR_PROFILE.LIMIT_REACHED` | POST | the caller already has `maxPerAccount` living profiles | "delete one first" |
 | 429 | `AUTHOR_PROFILE.RATE_LIMITED` | POST (create limit), PATCH (rename limit) | too many creations (`create-limit`, default 5 per 30 days — **deleted profiles count**) or renames (the account's nickname-change allowance, default 10 per day, **all profiles together**) | show "try again later" |

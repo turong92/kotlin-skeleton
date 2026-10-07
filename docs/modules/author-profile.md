@@ -64,7 +64,7 @@
 
 ## 탈퇴 · 넘겨받기 · 연결 차단 요약
 
-- **탈퇴**: 계정이 지워질 때 `AccountErasureListener` 고리가 그 계정의 프로필 행을 모두 **지운다**(형제 관계가 DB 에도 남지 않는다). 글 쪽(`board`)의 `author_ref` 는 건드리지 않아 프로필마다 다른 id 가 남고 `authorDeleted` 는 글의 `author_id` 톰스톤에서 나온다.
+- **탈퇴**: 계정이 지워질 때 `AccountErasureListener` 고리가 그 계정의 프로필 행을 모두 **지운다**(형제 관계가 `author_profiles` 표에는 남지 않는다 — board 의 `author_ref` 는 프로필마다 다른 id 로 남는다). 글 쪽(`board`)의 `author_ref` 는 건드리지 않아 프로필마다 다른 id 가 남고 `authorDeleted` 는 글의 `author_id` 톰스톤에서 나온다.
 - **넘겨받기**: 이미 글이 있는 DB 에서 켜면 기동 실행기(`adopt-on-startup`)가 `AuthorAdoptionListener`(예: `board-jdbc`)가 가진 옛 행을 계정의 첫 프로필로 옮긴다. 실행기를 끈 앱·실행 사이의 틈은 `GET /`(목록 조회)가 그 계정에 한 번 더 해 본다. 옮기기 전의 행은 `board` 가 `pending:…` 로 내보낸다(이름 없음, 계정 id 없음).
 - **연결 차단**: 프로필 id(`prf_` + 무작위 128비트)는 계정 id 에서 파생하지 않고, 꼬리표는 프로필마다 독립 추첨이며, 응답 · 알림 · 로그에 계정 id 와 프로필 id 의 쌍이 실리지 않는다. 지우기는 글을 다른 프로필로 옮기지 않는다. 단 `local`/`dev` 프로필의 DevLogin · RequestLogging 로그는 (계정, 경로의 프로필 id)를 함께 찍는다 — 운영에서는 아니다.
 

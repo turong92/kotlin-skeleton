@@ -220,7 +220,7 @@ select id, display_name from accounts where display_name regexp '[#@＃＠]' or 
 
 ## 작성자 프로필 (`author-profile`)
 
-한 계정이 글 · 댓글마다 다른 이름을 골라 쓰게 하는 선택 모듈이다 — 두 프로필이 같은 사람이라는 사실이 다른 사용자에게 드러나지 않는다. `account` 위에 얹히고(스키마 · `account` 코드 변경 없이 닉네임 규칙 · 예약어 · 겹침 방식 · 이름 바꾸기 한도 숫자를 그대로 따른다), 계정의 닉네임(`display_name`)은 본인 · 관리자 · 메일 인사말용 사적 라벨로 남는다. 모듈 페이지: `docs/modules/author-profile.md` (HTTP `/api/v1/author-profiles` · 설정 · 탈퇴 · 넘겨받기 · 알려진 한계 · 누출 스캔 시험과 변이 확인 기록), 프론트가 읽는 계약: `docs/author-profile-http-contract.md`, 설계 · 위협 모델: `docs/superpowers/specs/2026-10-07-author-profiles-design.md`.
+한 계정이 글 · 댓글마다 다른 이름을 골라 쓰게 하는 선택 모듈이다 — 두 프로필이 같은 사람이라는 사실이 다른 사용자에게 드러나지 않는다. `account` 위에 얹히고(스키마 · `account` 코드 변경 없이 닉네임 규칙 · 예약어 · 겹침 방식 · 이름 바꾸기 한도 숫자를 그대로 따른다), 계정의 닉네임(`display_name`)은 본인 · 관리자 · 메일 인사말용 사적 라벨로 남는다. 모듈 페이지: `docs/modules/author-profile.md` (HTTP `/api/v1/author-profiles` · 설정 · 탈퇴 · 넘겨받기 · 알려진 한계 · 누출 스캔 시험과 변이 확인 기록), 프론트가 읽는 계약: `docs/author-profile-http-contract.md`(이 모듈을 고른 프로젝트에만 남는다), 설계 · 위협 모델: `docs/superpowers/specs/2026-10-07-author-profiles-design.md`.
 
 - **계정 쪽에서 바뀌는 것은 하나뿐이다**: `AccountEventType.AUTHOR_LINK_VIEWED`(관리자가 프로필 ↔ 계정 연결을 조회했다 — `author-profile.admin.enabled` 일 때만, 대상 계정 + `by`, 프로필 id 는 싣지 않는다). 마이그레이션 · `GET`/`PATCH /account/me` · 가입 · 로그인은 그대로다. 끼우지 않은 앱(`apps/api`)은 한 줄도 다르지 않다.
 - **계정 닉네임(`display_name`)은 사적 라벨이 된다**: 첫 프로필이 만들어질 때 계정 이름 · 꼬리표를 **한 번 복사**하고 그 뒤로는 따로 간다. 게시판에 보이는 이름은 프로필의 것이고, `PATCH /account/me` 로 계정 이름을 바꿔도 프로필은 바뀌지 않는다. 닉네임 규칙 · 예약어 · 겹침 방식(`UNIQUE`/`TAGGED`) · 이름 바꾸기 한도 숫자는 이 문서 「닉네임」 의 것을 그대로 쓴다(프로필 이름 바꾸기 카운터는 계정 닉네임 변경과 따로, 모든 프로필 합산). 한도(만들기 · 개수 상한)는 모두 **계정 기준**이다 — 프로필을 바꿔 한도를 피할 수 없다.

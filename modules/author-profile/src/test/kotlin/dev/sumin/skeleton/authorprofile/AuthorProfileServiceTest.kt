@@ -36,12 +36,15 @@ class AuthorProfileServiceTest {
     }
 
     @Test
-    fun `profile ids are random - two profiles share nothing derived from the account or each other`() {
-        val h = Harness()
-        val a = h.service.create("acc_1", "A")
-        val b = h.service.create("acc_1", "B")
-        assertNotEquals(a.id, b.id)
-        assertTrue(listOf(a.id, b.id).none { it.contains("acc_1") })
+    fun `profile ids are random - prf_ and 32 hex digits, no shared prefix, nothing derived from the account or each other`() {
+        val h = Harness(properties = AuthorProfileProperties(maxPerAccount = 40, createLimit = 0))
+        val ids = (1..30).map { h.service.create("acc_1", "N$it").id } + h.service.create("acc_2", "Other").id
+        assertTrue(ids.all { Regex("prf_[0-9a-f]{32}").matches(it) }, ids.toString())
+        assertEquals(ids.size, ids.toSet().size)
+        assertTrue(ids.none { it.contains("acc_") }, "nothing of the account id")
+        // 앞자리(8 hex)가 서로 겹치지 않는다 — 시각 · 순번 같은 단조 증가나 고정 접두사가 없다 (128 비트 무작위면 31 개의 앞 32 비트가 겹칠 확률은 무시할 만하다)
+        assertEquals(ids.size, ids.map { it.substring(4, 12) }.toSet().size, "no shared leading digits: $ids")
+        assertNotEquals(ids.sorted(), ids, "ids are not handed out in increasing order")
     }
 
     @Test

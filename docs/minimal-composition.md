@@ -106,7 +106,6 @@ fails when this table and the prefixes found in module code differ.
 | `auth-social-oidc` | `skeleton.auth-social-oidc` |
 | `auth-social-x` | `skeleton.auth-social-x` |
 | `author-profile` | `skeleton.author-profile` |
-| `author-profile-jdbc` | yes | a `DataSource` + one `db-*` module (+ its migration `author_profiles`, as above) | — |
 | `board` | `skeleton.board` |
 | `captcha-turnstile` | `skeleton.captcha-turnstile` |
 | `config-aws-ssm` | `skeleton.config.aws.ssm` |
@@ -167,6 +166,7 @@ test proving a context with only that module (and its declared dependencies) boo
 | `board` | yes (HTTP `/api/v1/boards`; no board exists until you seed or create one) | a `BoardRepository` · `PostRepository` · `CommentRepository` · `ReactionRepository` set — `board-jdbc` provides it, or write your own; startup fails naming the missing bean | `notification` (comment alerts), `idempotency` (`Idempotency-Key` on create), a `RateLimitStore` (rate limit) — all optional, all compile-only |
 | `board-jdbc` | yes | a `DataSource` + one `db-*` module (+ its migration `board`, as above) | — |
 | `author-profile` | yes (HTTP `/api/v1/author-profiles`, login required; adopts old rows at startup) | `account` (declared dependency) and an `AuthorProfileRepository` — `author-profile-jdbc` provides it, or write your own; startup fails naming the missing bean | an `AuthorAdoptionListener` (e.g. `board-jdbc`) for old rows, `idempotency` (`Idempotency-Key` on create; compile-only) |
+| `author-profile-jdbc` | yes | a `DataSource` + one `db-*` module (+ its migration `author_profiles`, as above) | — |
 | `legal` | yes (HTTP `/api/v1/legal`; the module's TEMPLATE documents until the app brings its own — stage · prod refuse them) | a `ConsentStore` · `LegalLedger` pair — `legal-jdbc` provides it, or write your own; startup fails naming the missing bean | `spring-security-core` (HTTP + re-consent filter; compile-only) |
 | `legal-jdbc` | yes | a `DataSource` + one `db-*` module (+ its migration `legal`; MySQL with binlog needs `log_bin_trust_function_creators=1` for its triggers) | — |
 | `captcha-turnstile` | off until `enabled=true` + `secret-key` | nothing | Turnstile secret, internet |

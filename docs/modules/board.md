@@ -44,7 +44,7 @@ HTTP 는 `skeleton.board.http.base-path`(기본 `/api/v1/boards`)에 열린다 (
 ## 공개 작성자 id · `mine` · 작성 프로필 (`AuthorIdentities`)
 
 한 사람이 여러 닉네임(프로필)을 갖고 글 · 댓글마다 골라 쓰는 앱을 위한 자리다 — 두 프로필이 같은 사람이라는 사실이 다른 사용자에게 드러나지 않게. board 는 프로필 모듈(`author-profile`)도 `account` 도 **모른다**: platform 의 `AuthorIdentities` 빈(이 계정이 이 작성자 id 로 써도 되는가) 하나가 있느냐로 켜진다.
-빈이 없으면 동작 · 응답은 이 기능 이전과 같다(덧붙는 키 `mine` · `authorRequired: false` 만 다르다). 설계 · 전수표: `docs/superpowers/specs/2026-10-07-author-profiles-design.md`. 프론트가 읽는 계약(쓰기 `authorId` · `mine` · 오류 코드 · 알림 payload · 화면 규칙): `docs/author-profile-http-contract.md` §5, 누출 스캔 시험: `apps/sample` 의 `AuthorLinkLeakIntegrationTest`(`docs/modules/author-profile.md` 「누출 스캔 시험과 검증 기록」).
+빈이 없으면 동작 · 응답은 이 기능 이전과 같다(덧붙는 키 `mine` · `authorRequired: false` 만 다르다). 설계 · 전수표: `docs/superpowers/specs/2026-10-07-author-profiles-design.md`. 프론트가 읽는 계약(쓰기 `authorId` · `mine` · 오류 코드 · 알림 payload · 화면 규칙): `docs/author-profile-http-contract.md` §5(`author-profile` 을 고른 프로젝트에만 남는다), 누출 스캔 시험: `apps/sample` 의 `AuthorLinkLeakIntegrationTest`(`docs/modules/author-profile.md` 「누출 스캔 시험과 검증 기록」).
 
 **공개 id 규칙은 `BoardAuthors.publicId` 한 곳**이고 응답 DTO(글 요약 · 상세 · 댓글) · 댓글 알림 payload · `AuthorNames` 조회가 모두 이것을 쓴다:
 
@@ -70,8 +70,9 @@ HTTP 는 `skeleton.board.http.base-path`(기본 `/api/v1/boards`)에 열린다 (
 
 - `author_id` 는 언제나 호출자 계정 — 권한(`BoardPolicy`) · `mine=true` 목록 · 알림 수신자 · 자기 글 알림 생략 · 한도 · 반응은 지금처럼 **계정 기준**이다(프로필 A 로 쓴 글에 B 로 답해도 자기에게 알림이 가지 않는다).
 - **수정에는 `authorId` 칸이 없다**(`PATCH` 본문의 모르는 칸은 조용히 무시된다). 운영자가 고쳐도, PUBLISHED ↔ DRAFT 를 오가도 `author_ref` 는 바뀌지 않는다.
-- 첨부: `AuthorIdentities` 가 있을 때 첨부 키에 **호출자 계정 id 가 들어 있으면** `400 BOARD.CONTENT_INVALID`(글 만들기 · 고치기 — 고칠 때는 **새로 붙는 키만** 본다: 글이 이미 가진 옛 키를 그대로 다시 보내면 통과). board 는 storage 를 모른 채 문자열 포함만 본다 — 계정 id 가 든 키가 공개 `attachments` 로 나가면 두 프로필의 글이 이어진다. 키에 계정 id 가 없게 만드는 쪽은 storage 의 몫이다.
+- 첨부: `AuthorIdentities` 가 있을 때 첨부 키에 **호출자 계정 id 가 들어 있으면** `400 BOARD.CONTENT_INVALID`(글 만들기 · 고치기 — 고칠 때는 **새로 붙는 키만** 본다: 글이 이미 가진 옛 키를 그대로 다시 보내면 통과). board 는 storage 를 모른 채 문자열 포함만 본다 — 계정 id 가 든 키가 공개 `attachments` 로 나가면 두 프로필의 글이 이어진다. 키에 계정 id 가 없게 만드는 쪽은 storage 의 몫이다. 이 막기는 **계정 id 가 충분히 길고 고유해야** 뜻이 있다(`acc_` + 무작위 128비트 같은 것; 짧거나 흔한 id 는 다른 키의 일부와 우연히 겹쳐 정상 키를 거절하거나 놓친다). **잔여 위험**: 같은 `OPAQUE` 첨부 키를 API 직접 호출로 두 프로필의 글에 모두 실으면 키 값이 같아 이어진다(서버는 키를 한 글에만 쓰게 막지 않는다) — 화면이 글마다 새로 올린 키를 쓰는 한 생기지 않는다.
 - 알림 payload 의 `authorId` 는 공개 id 다. 수신자(`recipientIds`)는 계정이다.
+- **자기 저장소(`PostRepository` · `CommentRepository`)를 두는 앱**은 `authorRef` 를 쓰기에 저장하고 읽기마다 돌려줘야 하고(`Post` · `PostListItem` · `Comment` · `NewPost` · `NewComment` 의 마지막 칸), 작성자 프로필을 켜는 앱이면 옛 행을 넘겨받도록 `AuthorAdoptionListener`(`pendingAccounts(limit, after)` · `adopt`)도 제공해야 한다 — 없으면 켜기 전의 글이 영영 `pending:` 으로 남는다. `board-jdbc` 가 두 가지를 이미 한다.
 - `BoardPolicy.canAttach` 의 기본 구현은 모든 키를 허용한다(접두사를 비교하지 않는다). 샘플 앱은 아직 `BoardPolicy` 를 바꾸지 않는다 — `StorageKeyOwnership` 으로 켜는 것은 앱의 몫이다(아래 「앱이 바꾸는 곳」).
 - **알림 문구를 바꾸는 앱**(`BoardNotificationFormatter`): `notice.comment.authorId` 는 계정 id 다 — 문구에 넣으면 계정 id 가 **남의 편지함**에 영영 남는다. 작성자 id 가 필요하면 `notice.publicAuthorId`(필수 인자, 기본값 없음)를 쓴다.
 

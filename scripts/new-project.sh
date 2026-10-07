@@ -233,6 +233,7 @@ fi
 while IFS= read -r m; do
   [ -n "$m" ] || continue
   rm -rf "modules/$m" "docs/config/modules/$m.yml" "docs/modules/$m.md"
+  [ "$m" != author-profile ] || rm -f docs/author-profile-http-contract.md   # 프론트 계약 문서는 모듈을 고른 프로젝트에만 남는다
   M="$m" perl -ni -e 'print unless /^include\(":modules:\Q$ENV{M}\E"\)\s*$/' settings.gradle.kts
   [ ! -f docs/modules/README.md ] || M="$m" perl -ni -e 'print unless /\]\(\Q$ENV{M}\E\.md\)/' docs/modules/README.md
 done <<EOF

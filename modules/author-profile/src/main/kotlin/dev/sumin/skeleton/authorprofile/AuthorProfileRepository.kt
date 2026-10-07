@@ -75,7 +75,7 @@ interface AuthorProfileRepository {
     /** 계정의 첫 프로필이 옛 글을 넘겨받았다고 표시한다 — `adopted_at` 이 비어 있을 때만 [now] 로 채운다(이미 있으면 그대로, false) */
     fun markAdopted(accountId: String, now: Instant): Boolean
 
-    /** 탈퇴 — 계정의 프로필 행을 **모두** 지운다(지워진 것 포함: 형제 관계가 DB 에도 남지 않는다). 첫 프로필(앵커) 줄을 먼저 잠근 뒤 지운다(없으면 그냥 지운다). 지운 줄 수. 멱등 */
+    /** 탈퇴 — 계정의 프로필 행을 **모두** 지운다(지워진 것 포함: 형제 관계가 `author_profiles` 표에는 남지 않는다(글 쪽 `author_ref` 는 프로필마다 다른 id 로 남는다)). 첫 프로필(앵커) 줄을 먼저 잠근 뒤 지운다(없으면 그냥 지운다). 지운 줄 수. 멱등 */
     fun deleteByAccount(accountId: String): Int
 }
 

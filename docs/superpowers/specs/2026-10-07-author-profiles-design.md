@@ -108,7 +108,7 @@ fun interface AuthorIdentities {
 interface AuthorAdoptionListener {
     val name: String
     /** 아직 옮기지 않은 행을 가진 계정 id (지워진 계정 제외) */
-    fun pendingAccounts(limit: Int): List<String>
+    fun pendingAccounts(limit: Int, after: String? = null): List<String>   // 구현이 정한 순서로 after 다음부터. 실행기는 돌려받은 마지막 계정을 다음 after 로 쓴다
     fun adopt(accountId: String, authorId: String): Int
 }
 ```
@@ -212,7 +212,7 @@ create index if not exists idx_author_profiles_account on author_profiles (accou
 
 ### 7.5 계정 탈퇴 · 정지
 
-- 탈퇴(지우기): `author-profile` 의 고리가 그 계정의 프로필 행을 **지운다**(형제 관계가 DB 에도 남지 않는다). board 의 고리는 지금 SQL 그대로 `author_id` 와 반응의 계정만 톰스톤으로 바꾼다 — `author_ref` 는 손대지 않으므로 프로필마다 다른 id 가 남고, `authorDeleted` 는 `author_id` 에서 나온다. 고리 순서에 기대지 않는다.
+- 탈퇴(지우기): `author-profile` 의 고리가 그 계정의 프로필 행을 **지운다**(형제 관계가 `author_profiles` 표에는 남지 않는다 — 글 쪽 `author_ref` 는 프로필마다 다른 id 로 남는다). board 의 고리는 지금 SQL 그대로 `author_id` 와 반응의 계정만 톰스톤으로 바꾼다 — `author_ref` 는 손대지 않으므로 프로필마다 다른 id 가 남고, `authorDeleted` 는 `author_id` 에서 나온다. 고리 순서에 기대지 않는다.
 - 유예 중(`DELETED`) · 정지(`SUSPENDED`): 프로필 카드는 그대로, 공개 표시 없음. 정지된 계정은 지금처럼 로그인 · 쓰기가 막힌다.
 
 ### 7.6 자작(같은 스레드에서 프로필을 바꿔 답하기)
@@ -371,6 +371,8 @@ F1 은 B3 의 계약만 정해지면 가짜 서버로 먼저 간다.
   - `local` · `dev` 프로필의 DevLogin · RequestLogging 로그는 (계정, 경로의 프로필 id) 쌍을 함께 찍는다 — 운영(`stage` · `prod`)은 아니다. 로그는 신뢰 영역(§3)이라 수용한다.
   - 이름 바꾸기 한도의 카운터는 기본 메모리 `RateLimitStore` 라 인스턴스마다 · 재시작마다 센다 — 내구성 있는 저장소가 필요하다(연결과는 무관, 한도 정확도).
   - `OPAQUE` 첨부 키는 파일 이름을 버리지만 **알려진 확장자**(`png` · `jpg` · `pdf` …)는 남는다 — 같은 확장자의 첨부끼리는 이 마디가 같다(누구에게나 같은 값이라 잇는 값은 아니지만 파일 종류 습관은 보인다).
+  - 정지 · 삭제 유예 · 지우는 중인 계정의 **옛 행**(`author_ref` 없음)은 넘겨받기가 ACTIVE 가 아닌 계정을 건너뛰므로 계정이 다시 ACTIVE 가 될 때까지 `pending:p<번호>` 로 나간다(이름 없음, 계정 id 없음 — 연결은 드러나지 않는다).
+  - 같은 `OPAQUE` 첨부 키를 API 직접 호출로 두 프로필의 글에 모두 실으면 값이 같아 이어진다(서버가 한 키를 한 글에만 쓰게 막지 않는다; 화면이 글마다 새로 올리면 생기지 않는다).
   - 값 스캔(§12)은 **같은 값**을 찾는다 — 문체 · 시각 분포 · 글 길이 같은 통계적 상관과, 읽기 경로가 아닌 곳(운영자 · DB · 서버 로그 · 브라우저 안의 상태)은 보지 못한다.
 - 관리자 연결 조회(§7.9): ① 대상 계정이 지워지면 그 계정의 감사 행에서 `by` 가 scrub 으로 사라진다 ② 같은 `traceId` 로 요청 줄(프로필 id)과 감사 줄(대상 계정)을 이으면 조회한 프로필 하나와 계정이 이어진다 — 로그는 신뢰 영역(§3) ③ 기록 실패는 warn 로그만 남고 조회는 나간다(주인 결정 대기).
 
