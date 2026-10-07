@@ -1,7 +1,10 @@
 package dev.sumin.skeleton.auth.magiclink
 
 import com.jayway.jsonpath.JsonPath
+import dev.sumin.skeleton.account.Account
 import dev.sumin.skeleton.account.AccountPatch
+import dev.sumin.skeleton.account.Identity
+import dev.sumin.skeleton.account.SignInMethods
 import dev.sumin.skeleton.account.AccountRepository
 import dev.sumin.skeleton.account.AccountStatus
 import dev.sumin.skeleton.account.mail.MailKind
@@ -61,5 +64,41 @@ class MagicLinkSelfRestoreWebTest {
         assertEquals("AUTH.ACCOUNT_DELETION_PENDING", JsonPath.read<String>(denied, "$.code"))
         assertTrue(JsonPath.read<String>(denied, "$.data.restoreToken").length >= 20)
         assertEquals(AccountStatus.DELETED, accounts.findById(id)!!.status)
+    }
+
+    /** 비밀번호로 가입해 매직 링크 수단이 없는 계정 */
+    private fun passwordOnlyAccount(email: String): String {
+        val now = time.now()
+        val id = "acc_${System.nanoTime()}"
+        assertTrue(
+            accounts.insert(
+                Account(id, email, true, AccountStatus.ACTIVE, setOf("USER"), null, null, null, now, now),
+                listOf(Identity("idn_$id", id, SignInMethods.PASSWORD, email, true, secret = "{noop}x", createdAt = now)),
+            ),
+        )
+        return id
+    }
+
+    @Test
+    fun `a password-only account in its grace reaches the pending state by magic link - no 410, no method attached`() {
+        val email = "pw${System.nanoTime()}@example.com"
+        val id = passwordOnlyAccount(email)
+        accounts.update(id, AccountPatch(status = AccountStatus.DELETED, deletedAt = time.now(), purgeAfter = time.now().plus(Duration.ofDays(30))), time.now())
+
+        request(email).andExpect(status().isAccepted)
+        val denied = redeem(lastToken()).andExpect(status().isForbidden).andReturn().response.contentAsString
+        assertEquals("AUTH.ACCOUNT_DELETION_PENDING", JsonPath.read<String>(denied, "$.code"))
+        assertTrue(JsonPath.read<String>(denied, "$.data.restoreToken").length >= 20)
+        assertEquals(setOf(SignInMethods.PASSWORD), accounts.identitiesOf(id).map { it.method }.toSet())
+    }
+
+    @Test
+    fun `no link is mailed for an account whose grace has already ended`() {
+        val email = "late${System.nanoTime()}@example.com"
+        val id = passwordOnlyAccount(email)
+        accounts.update(id, AccountPatch(status = AccountStatus.DELETED, deletedAt = time.now().minus(Duration.ofDays(31)), purgeAfter = time.now().minus(Duration.ofDays(1))), time.now())
+
+        request(email).andExpect(status().isAccepted)
+        assertEquals(0, mails.sent.count { it.kind == MailKind.MAGIC_LINK })
     }
 }

@@ -65,7 +65,9 @@ class MagicLinkService(
         val normalized = Emails.normalize(email)
         core.tasks.run("magic-link-request") {
             val account = core.accountByEmail(normalized)
-            if (account?.status?.departed == true && !(account.status == AccountStatus.DELETED && core.props.deletion.selfRestore)) return@run
+            // 탈퇴 유예 중인 주인에게만 보낸다(`deletion.self-restore`) — 유예가 이미 끝난 계정은 로그인할 수 없으니 링크를 보내지 않는다
+            val restorable = account?.status == AccountStatus.DELETED && core.props.deletion.selfRestore && account.purgeAfter?.isAfter(core.time.now()) == true
+            if (account?.status?.departed == true && !restorable) return@run
             if (account == null && !props.signUp) return@run
             if (!core.limits.acquire("magic-link:email", normalized, props.perEmail, props.perEmailWindow).allowed) return@run
             val raw = core.tokens.issue(TokenPurposes.MAGIC_LINK, normalized, account?.id, props.ttl)

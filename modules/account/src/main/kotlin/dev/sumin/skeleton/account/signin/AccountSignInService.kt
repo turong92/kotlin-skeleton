@@ -55,6 +55,8 @@ class AccountSignInService(private val core: AccountCore, val registry: SignInMe
         // 탈퇴 대기 계정의 주인이 증명에 성공했다 — 세션 · 로그인 기록 없이 "탈퇴 대기" 상태만 (`deletion.self-restore`). 아니면 없는 계정처럼
         if (account.status == AccountStatus.DELETED && core.props.deletion.selfRestore) return auth.toAuth(account)
         if (account.status.departed) return null
+        // 정지는 박제 — 아무것도 붙이지도 · 기록하지도 않고 정지 상태만 돌려준다 (호출자가 토큰 발급에서 AUTH.ACCOUNT_SUSPENDED 로 거절한다)
+        if (account.status == AccountStatus.SUSPENDED) return auth.toAuth(account)
 
         val now = core.time.now()
         existing?.let { core.accounts.touchIdentity(it.id, now) } ?: core.accounts.findIdentity(method.code, subject)?.let { core.accounts.touchIdentity(it.id, now) }
@@ -85,12 +87,17 @@ class AccountSignInService(private val core: AccountCore, val registry: SignInMe
     private fun resolveNew(method: SignInMethod, subject: String, email: String?, proof: SignInProof): Account? {
         val owner = email?.let(core::accountByEmail)
         if (owner != null) {
+            // 탈퇴 유예 중인 주인이 메일함을 증명했다 — 수단을 붙이지 않고 그대로 돌려주면 [signIn] 이 "탈퇴 대기" 상태를 낸다 (비밀번호로 가입해 매직 링크 수단이 없던 계정도)
+            if (owner.status == AccountStatus.DELETED && core.props.deletion.selfRestore && method.provesEmail) return owner
             if (owner.status.departed) return null
             // 이미 있는 계정에 붙는 것은 가입이 아니다 — 메일함 증명 수단은 `sign-up=false` 여도 기존 계정으로 들어온다.
             // 소셜 병합은 가입 허용을 따르고(충돌 알림도 가입 시도의 일부), 둘 다 아니면 새로 만들지도 붙이지도 않는다
             // 소셜 병합: 제공자가 확인한 이메일(+ 정확 일치)이면. 기존 계정의 이메일이 미확인이면 제공자의 확인이 메일함 증명이라 위 [discardUnprovenPassword] 가 돈다
             val attach = method.provesEmail || (proof.allowSignUp && core.props.social.mergeOnVerifiedEmail && proof.emailVerified)
-            if (attach) return attachIdentity(owner, method, subject, proof) ?: raced(method, subject)
+            if (attach) {
+                if (owner.status == AccountStatus.SUSPENDED) return owner   // 정지된 주인에게는 수단을 붙이지 않는다 — 정지 상태만 돌려준다
+                return attachIdentity(owner, method, subject, proof) ?: raced(method, subject)
+            }
             if (!proof.allowSignUp) return null
             throw AccountException(AccountErrorCode.SOCIAL_EMAIL_CONFLICT)
         }
