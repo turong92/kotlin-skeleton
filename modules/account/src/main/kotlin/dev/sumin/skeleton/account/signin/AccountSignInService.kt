@@ -51,7 +51,10 @@ class AccountSignInService(private val core: AccountCore, val registry: SignInMe
 
         val existing = core.accounts.findIdentity(method.code, subject)
         val account = if (existing != null) core.accounts.findById(existing.accountId) else resolveNew(method, subject, email, proof)
-        if (account == null || account.status.departed) return null
+        if (account == null) return null
+        // 탈퇴 대기 계정의 주인이 증명에 성공했다 — 세션 · 로그인 기록 없이 "탈퇴 대기" 상태만 (`deletion.self-restore`). 아니면 없는 계정처럼
+        if (account.status == AccountStatus.DELETED && core.props.deletion.selfRestore) return auth.toAuth(account)
+        if (account.status.departed) return null
 
         val now = core.time.now()
         existing?.let { core.accounts.touchIdentity(it.id, now) } ?: core.accounts.findIdentity(method.code, subject)?.let { core.accounts.touchIdentity(it.id, now) }

@@ -35,6 +35,10 @@ data class SignUpResponse(val status: String, val signUpId: String? = null) {
     override fun toString() = "SignUpResponse(status=$status, signUpId=${if (signUpId == null) "none" else "<redacted>"})"
 }
 
+data class CancelDeletionRequest(@field:NotBlank @field:Size(max = 128) val restoreToken: String?) {
+    override fun toString() = "CancelDeletionRequest(restoreToken=<redacted>)"
+}
+
 data class VerifyEmailRequest(
     @field:NotBlank @field:Size(max = 128) val signUpId: String?,
     @field:NotBlank @field:Pattern(regexp = "^[0-9]{6}$") val code: String?,

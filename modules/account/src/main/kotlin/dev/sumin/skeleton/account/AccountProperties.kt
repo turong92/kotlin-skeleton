@@ -119,6 +119,13 @@ data class AccountProperties(
          * DELETE: 행까지 지운다 (앱이 계정 id 를 어디에도 남기지 않을 때)
          */
         val mode: Mode = Mode.ANONYMIZE,
+        /**
+         * true: 탈퇴 유예 중인 주인이 로그인(비밀번호 · 매직 링크 · 소셜)에 **성공**하면 세션 대신 `403 AUTH.ACCOUNT_DELETION_PENDING`(purgeAfter · 취소 토큰)을 받고
+         * `POST /account/delete/cancel` 로 탈퇴를 취소한다. 기본 false(= 이 기능 이전과 같다): 탈퇴한 계정은 존재하지 않는 계정처럼 보이고 복구는 운영자만 한다
+         */
+        val selfRestore: Boolean = false,
+        /** 취소 토큰의 유효 시간 — 로그인 성공 직후 "탈퇴를 취소할까요?" 화면에서 쓰는 짧은 시간 */
+        val selfRestoreTtl: Duration = Duration.ofMinutes(15),
     ) {
         enum class Mode { ANONYMIZE, DELETE }
     }

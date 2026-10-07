@@ -8,6 +8,7 @@ import dev.sumin.skeleton.common.erasure.ErasureRequest
 import dev.sumin.skeleton.account.events.AccountEventType
 import dev.sumin.skeleton.account.mail.AccountMail
 import dev.sumin.skeleton.account.mail.MailKind
+import dev.sumin.skeleton.account.token.TokenPurposes
 import java.time.Instant
 import org.slf4j.LoggerFactory
 
@@ -54,6 +55,29 @@ class DeletionService(private val core: AccountCore) {
         account.email?.let { core.mailer.send(AccountMail(MailKind.DELETION_SCHEDULED, it, account.locale, vars = mapOf("days" to core.props.deletion.grace.toDays().toString()))) }
         core.events.publish(AccountEventType.DELETION_SCHEDULED, accountId, detail = mapOf("purgeAfter" to purgeAfter.toString()))
         return purgeAfter
+    }
+
+    /**
+     * 탈퇴 취소 (`deletion.self-restore`) — 로그인에 성공한 주인이 받은 한 번 쓰는 토큰으로 계정을 ACTIVE(미확인 이메일이면 PENDING_VERIFICATION)로 되돌린다.
+     * 토큰이 없거나 · 만료 · 이미 씀 · 다른 용도 · 유예가 끝남 · 그 사이 정지됨이면 모두 [AccountErrorCode.TOKEN_INVALID] 하나다. 주소당 시도 수를 센다.
+     * 돌려받은 [AuthAccount] 로 호출자가 보통 토큰을 발급한다.
+     */
+    fun cancel(restoreToken: String, ip: String?, ipKey: String? = ip): dev.sumin.skeleton.auth.account.AuthAccount {
+        ipKey?.let {
+            val l = core.props.login
+            val a = core.limits.acquire("delete-cancel:ip", it, l.perIp, l.window)
+            if (!a.allowed) throw RateLimitedException(a.retryAfterSeconds)
+        }
+        if (!core.props.deletion.selfRestore) throw AccountException(AccountErrorCode.TOKEN_INVALID)
+        val grant = core.tokens.consume(TokenPurposes.DELETION_RESTORE, restoreToken) ?: throw AccountException(AccountErrorCode.TOKEN_INVALID)
+        val account = grant.accountId?.let(core.accounts::findById) ?: throw AccountException(AccountErrorCode.TOKEN_INVALID)
+        val now = core.time.now()
+        val reopened = if (account.emailVerified || account.email == null) AccountStatus.ACTIVE else AccountStatus.PENDING_VERIFICATION
+        // 조건부 갱신 한 문장: DELETED 이고 유예가 안 끝났을 때만 — 정지 · 지움과 동시에 둘 다 이기지 못한다
+        if (!core.accounts.restore(account.id, reopened, now)) throw AccountException(AccountErrorCode.TOKEN_INVALID)
+        account.email?.let { core.mailer.send(AccountMail(MailKind.DELETION_CANCELLED, it, account.locale)) }
+        core.events.publish(AccountEventType.DELETION_CANCELLED, account.id, ip)
+        return AccountAuthRepository(core).toAuth(core.accounts.findById(account.id) ?: account) ?: throw AccountException(AccountErrorCode.TOKEN_INVALID)
     }
 }
 

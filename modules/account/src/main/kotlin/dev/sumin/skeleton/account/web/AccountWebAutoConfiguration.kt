@@ -42,9 +42,10 @@ class AccountWebAutoConfiguration {
         registration: RegistrationService,
         passwords: PasswordService,
         policy: PasswordPolicy,
+        deletion: DeletionService,
         clientIps: ObjectProvider<ClientIps>,
         tokens: ObjectProvider<dev.sumin.skeleton.auth.api.AuthTokenResponseFactory>,
-    ): AccountPublicController = AccountPublicController(registration, passwords, policy, clientIps.getIfAvailable { ClientIps() }) { tokens.getObject() }
+    ): AccountPublicController = AccountPublicController(registration, passwords, policy, deletion, clientIps.getIfAvailable { ClientIps() }) { tokens.getObject() }
 
     @Bean
     @ConditionalOnMissingBean
@@ -85,6 +86,7 @@ class AccountWebAutoConfiguration {
             registry.add("POST", "/api/v1/account/sign-up")
             registry.add("POST", "/api/v1/account/verification/resend")
             registry.add("POST", "/api/v1/auth/verify-email")
+            registry.add("POST", "/api/v1/account/delete/cancel")
             registry.add("POST", "/api/v1/account/password/forgot")
             registry.add("POST", "/api/v1/account/password/reset")
             registry.add("GET", "/api/v1/account/password/policy")

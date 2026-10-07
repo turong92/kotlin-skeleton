@@ -1,0 +1,9 @@
+subject: Your account deletion was cancelled
+
+The deletion of your account was cancelled and the account is active again.
+
+If this was not you, change your password now.
+
+If you did not request this, you can ignore this email.
+Notes
+Notes Inc. · Seoul

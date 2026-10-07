@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.account
 
+import dev.sumin.skeleton.account.token.TokenPurposes
 import dev.sumin.skeleton.auth.account.AccountIdentifier
 import dev.sumin.skeleton.auth.account.AuthAccount
 import dev.sumin.skeleton.auth.account.AuthAccountRepository
@@ -24,7 +25,8 @@ class AccountAuthRepository(private val core: AccountCore) : AuthAccountReposito
     }
 
     fun toAuth(account: Account): AuthAccount? {
-        if (account.status.departed) return null
+        val pending = pendingDeletion(account)
+        if (account.status.departed && !pending) return null
         val hash = account.email?.let { core.accounts.findIdentity(SignInMethods.PASSWORD, it)?.secret }.orEmpty()
         return AuthAccount(
             accountId = account.id,
@@ -35,9 +37,20 @@ class AccountAuthRepository(private val core: AccountCore) : AuthAccountReposito
             loginBlock = when (account.status) {
                 AccountStatus.PENDING_VERIFICATION -> LoginBlock.EMAIL_NOT_VERIFIED
                 AccountStatus.SUSPENDED -> LoginBlock.SUSPENDED
-                else -> null
+                else -> if (pending) LoginBlock.DELETION_PENDING else null
             },
+            blockData = if (pending) ({ restoreState(account) }) else null,
         )
+    }
+
+    /** 탈퇴 유예가 아직 안 끝난 DELETED 계정이고 `deletion.self-restore` 가 켜져 있나 */
+    private fun pendingDeletion(account: Account) =
+        core.props.deletion.selfRestore && account.status == AccountStatus.DELETED && account.purgeAfter?.isAfter(core.time.now()) == true
+
+    /** 로그인에 성공해 토큰을 내려던 순간에만 부른다 — 새 취소 토큰이 이전 것을 닫는다 */
+    private fun restoreState(account: Account): Map<String, Any?> {
+        val raw = core.tokens.issue(TokenPurposes.DELETION_RESTORE, account.id, account.id, core.props.deletion.selfRestoreTtl)
+        return mapOf("purgeAfter" to account.purgeAfter, "restoreToken" to raw, "restoreTokenExpiresAt" to core.time.now().plus(core.props.deletion.selfRestoreTtl))
     }
 
     override val storesUpgradedPasswordHash: Boolean = true

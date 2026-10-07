@@ -64,6 +64,7 @@ class DefaultAccountMailTemplates(
             MailKind.MAGIC_LINK to Copy("Your sign-in link", listOf("Use this link to sign in. It works once and expires in {minutes} minutes."), "Sign in"),
             MailKind.IDENTITY_LINKED_NOTICE to Copy("A sign-in method was added", listOf("A new way to sign in to your account was added: {method}.", "If this was not you, change your password and remove it in your account settings now."), null),
             MailKind.DELETION_SCHEDULED to Copy("Your account is scheduled for deletion", listOf("Your account will be deleted after {days} days. Until then it cannot be used to sign in.", "If this was a mistake, contact support before then."), null),
+            MailKind.DELETION_CANCELLED to Copy("Your account deletion was cancelled", listOf("The deletion of your account was cancelled and the account is active again.", "If this was not you, change your password now."), null),
         )
 
         val KO = mapOf(
@@ -79,6 +80,7 @@ class DefaultAccountMailTemplates(
             MailKind.MAGIC_LINK to Copy("로그인 링크예요", listOf("이 링크로 로그인하세요. 한 번만 쓸 수 있고 {minutes}분 뒤에 만료돼요."), "로그인"),
             MailKind.IDENTITY_LINKED_NOTICE to Copy("로그인 수단이 추가됐어요", listOf("계정에 새 로그인 수단이 추가됐어요: {method}.", "본인이 아니라면 지금 비밀번호를 바꾸고 계정 설정에서 그 수단을 지워 주세요."), null),
             MailKind.DELETION_SCHEDULED to Copy("계정 삭제가 예약됐어요", listOf("{days}일 뒤에 계정이 삭제돼요. 그 전까지는 로그인할 수 없어요.", "실수였다면 그 전에 문의해 주세요."), null),
+            MailKind.DELETION_CANCELLED to Copy("계정 삭제가 취소됐어요", listOf("계정 삭제가 취소돼서 계정을 다시 쓸 수 있어요.", "본인이 아니라면 지금 비밀번호를 바꿔 주세요."), null),
         )
     }
 }

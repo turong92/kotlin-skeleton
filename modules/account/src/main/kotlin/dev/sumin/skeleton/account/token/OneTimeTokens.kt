@@ -12,6 +12,9 @@ import java.util.HexFormat
 object TokenPurposes {
     const val PASSWORD_RESET = "password_reset"
     const val MAGIC_LINK = "magic_link"
+
+    /** 탈퇴 대기 계정의 주인이 로그인에 성공했을 때만 나가는 취소 토큰 — `POST /account/delete/cancel` 말고는 아무 데도 쓸 수 없다 */
+    const val DELETION_RESTORE = "deletion_restore"
 }
 
 /** 저장소에 있는 토큰 한 줄. 원문이 아니라 SHA-256 [hash] 만 있다 */

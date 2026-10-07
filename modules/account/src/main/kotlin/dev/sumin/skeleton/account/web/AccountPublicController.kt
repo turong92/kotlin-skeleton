@@ -34,6 +34,7 @@ class AccountPublicController(
     private val registration: RegistrationService,
     private val passwords: PasswordService,
     private val policy: PasswordPolicy,
+    private val deletion: dev.sumin.skeleton.account.DeletionService,
     private val clientIps: ClientIps,
     /** 로그인 토큰을 내는 곳 — 코드 확인이 곧 로그인이다. 늦게 찾는다 (`auth` 의 자동설정이 만든다) */
     private val tokens: () -> AuthTokenResponseFactory,
@@ -76,6 +77,19 @@ class AccountPublicController(
             val tokens = tokens().issue(account)   // 막힌 계정(정지 · 삭제)은 여기서 던진다 — 성공 로그인으로 기록하지 않는다
             registration.recordSignIn(account.accountId, client.ip)
             Response.ok(tokens)
+        }
+
+    @Operation(
+        summary = "Cancel a pending account deletion with the restore token that a successful sign-in returned (403 AUTH.ACCOUNT_DELETION_PENDING data.restoreToken); signs in",
+        description = "Needs skeleton.account.deletion.self-restore=true. 410 ACCOUNT.TOKEN_INVALID for an unknown, used, expired or foreign token, a lapsed grace or a suspended account; 429 when tried too often.",
+    )
+    @PostMapping("/account/delete/cancel")
+    fun cancelDeletion(@Valid @RequestBody request: CancelDeletionRequest, http: HttpServletRequest): DataResponse<AuthTokenResponse> =
+        clientIps.of(http).let { client ->
+            val account = deletion.cancel(request.restoreToken!!, client.ip, client.limitKey)
+            val response = tokens().issue(account)
+            registration.recordSignIn(account.accountId, client.ip)
+            Response.ok(response)
         }
 
     @Operation(summary = "Ask for a password-reset mail (always 202)")

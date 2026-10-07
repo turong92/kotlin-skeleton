@@ -27,6 +27,12 @@ enum class AuthErrorCode(
         title = "Account suspended",
         defaultDetail = "This account is suspended",
     ),
+    ACCOUNT_DELETION_PENDING(
+        code = "AUTH.ACCOUNT_DELETION_PENDING",
+        status = HttpStatus.FORBIDDEN,
+        title = "Account deletion pending",
+        defaultDetail = "This account is scheduled for deletion. It can be restored until the deletion date",
+    ),
     TOO_MANY_ATTEMPTS(
         code = "AUTH.TOO_MANY_ATTEMPTS",
         status = HttpStatus.TOO_MANY_REQUESTS,
