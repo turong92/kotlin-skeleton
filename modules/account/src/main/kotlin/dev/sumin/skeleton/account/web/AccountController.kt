@@ -49,7 +49,10 @@ class AccountController(
     @GetMapping("/me")
     fun me(authentication: Authentication?): DataResponse<MeView> = Response.ok(profile.me(callers.require(authentication).accountId))
 
-    @Operation(summary = "Update display name, locale or time zone")
+    @Operation(
+        summary = "Update display name, locale or time zone",
+        description = "400 with errors[].field=displayName for a name the rules refuse (Size, Pattern, Reserved); 409 ACCOUNT.DISPLAY_NAME_TAKEN when the display-name mode forbids the clash. A refused update changes nothing.",
+    )
     @PatchMapping("/me")
     fun update(authentication: Authentication?, @Valid @RequestBody request: UpdateProfileRequest): DataResponse<MeView> =
         Response.ok(profile.update(callers.require(authentication).accountId, ProfileChange(request.displayName, request.locale, request.timeZone)))

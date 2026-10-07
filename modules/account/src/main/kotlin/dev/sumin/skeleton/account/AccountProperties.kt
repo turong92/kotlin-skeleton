@@ -25,6 +25,7 @@ data class AccountProperties(
     val bootstrap: Bootstrap = Bootstrap(),
     val social: Social = Social(),
     val seed: Seed = Seed(),
+    val displayName: DisplayName = DisplayName(),
     val captcha: Captcha = Captcha(),
     val audit: Audit = Audit(),
     val http: Http = Http(),
@@ -218,6 +219,26 @@ data class AccountProperties(
          */
         val mergeOnVerifiedEmail: Boolean = false,
     )
+
+    /** 닉네임(`display-name`) — 모듈은 메커니즘만, 사용 방식(중복 허용 · 필수 · 자동 닉네임)은 앱이 정한다. 기본은 이 기능 이전과 같다(중복 허용 · 선택 · 자동 닉네임 없음) */
+    data class DisplayName(
+        /**
+         * NONE(기본): 중복 허용, 꼬리표 없음. UNIQUE: 비교용 키(NFKC · 소문자)가 같은 닉네임은 하나만 — 충돌은 `409 ACCOUNT.DISPLAY_NAME_TAKEN`.
+         * TAGGED: 중복 허용 + 서버가 4자리 꼬리표(`0001`..`9999`)를 붙여 `닉네임#0417` 로 구분한다 — 닉네임을 바꾸면 꼬리표를 새로 뽑는다.
+         * 스키마는 방식과 무관하다 — 이미 계정이 있는 DB 에서 바꾸는 법: docs/accounts.md "닉네임"
+         */
+        val uniqueness: Uniqueness = Uniqueness.NONE,
+        /** true 면 이메일 가입 요청에 닉네임이 없을 때 `400`(필드 `displayName`) — 계정이 있든 없든 같은 응답 */
+        val requiredOnSignUp: Boolean = false,
+        /** GENERATED: 닉네임 없이 만들어지는 계정(소셜 · 매직 링크 · 닉네임 없는 가입)에 `user-1a2b3c` 를 준다. 이메일 앞부분은 쓰지 않는다 */
+        val fallback: Fallback = Fallback.NONE,
+        /** 거절할 닉네임(운영자 · 예약어, 대소문자 · 전각 · 띄어쓰기 · `_` 무시). 운영자 역할 계정과 시드는 예외. 기본은 빈 목록 */
+        val reserved: List<String> = emptyList(),
+    ) {
+        enum class Uniqueness { NONE, UNIQUE, TAGGED }
+
+        enum class Fallback { NONE, GENERATED }
+    }
 
     data class Seed(
         /** 로컬 · e2e 용 시드 계정 — 기동 때 없으면 만든다. stage · prod 에서 하나라도 있으면 DeployGuard 문제 */

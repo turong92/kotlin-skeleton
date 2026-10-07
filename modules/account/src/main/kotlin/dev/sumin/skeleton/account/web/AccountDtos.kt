@@ -166,6 +166,8 @@ data class AdminAccountResponse(
     val status: String,
     val roles: Set<String>,
     val displayName: String?,
+    /** 같은 닉네임을 구분하는 4자리 꼬리표 (`uniqueness=TAGGED` 일 때만) */
+    val displayTag: String?,
     val createdAt: Instant,
     val lastLoginAt: Instant?,
     val suspendedReason: String?,

@@ -43,6 +43,38 @@ class AccountAutoConfigurationTest {
     }
 
     @Test
+    fun `the module offers the author directory and an app bean of the same type replaces it`() {
+        runner.run { ctx -> assertTrue(ctx.getBean(dev.sumin.skeleton.common.author.AuthorDirectory::class.java) is AccountAuthorDirectory) }
+        val mine = dev.sumin.skeleton.common.author.AuthorDirectory { ids, _ -> ids.associateWith { dev.sumin.skeleton.common.author.AuthorCard("fan-$it") } }
+        runner.withBean(dev.sumin.skeleton.common.author.AuthorDirectory::class.java, java.util.function.Supplier { mine }).run { ctx ->
+            assertEquals(1, ctx.getBeansOfType(dev.sumin.skeleton.common.author.AuthorDirectory::class.java).size)
+            assertTrue(ctx.getBean(dev.sumin.skeleton.common.author.AuthorDirectory::class.java) === mine)
+        }
+    }
+
+    @Test
+    fun `the display name settings bind from skeleton account display-name`() {
+        runner.withPropertyValues(
+            "skeleton.account.display-name.uniqueness=tagged", "skeleton.account.display-name.required-on-sign-up=true",
+            "skeleton.account.display-name.fallback=generated", "skeleton.account.display-name.reserved=admin,운영자",
+        ).run { ctx ->
+            val d = ctx.getBean(AccountProperties::class.java).displayName
+            assertEquals(AccountProperties.DisplayName.Uniqueness.TAGGED, d.uniqueness)
+            assertTrue(d.requiredOnSignUp)
+            assertEquals(AccountProperties.DisplayName.Fallback.GENERATED, d.fallback)
+            assertEquals(listOf("admin", "운영자"), d.reserved)
+        }
+        runner.run { ctx ->
+            val d = ctx.getBean(AccountProperties::class.java).displayName
+            assertEquals(AccountProperties.DisplayName(), d)
+            assertEquals(AccountProperties.DisplayName.Uniqueness.NONE, d.uniqueness, "neutral defaults: nothing about nicknames changes unless the app asks")
+            assertFalse(d.requiredOnSignUp)
+            assertEquals(AccountProperties.DisplayName.Fallback.NONE, d.fallback)
+            assertTrue(d.reserved.isEmpty())
+        }
+    }
+
+    @Test
     fun `the code hash key is derived from the JWT secret with the account-code prefix - not the bare secret, not a constant`() {
         fun hashUnder(secret: String): String {
             var hash = ""

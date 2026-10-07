@@ -42,13 +42,16 @@ class AccountSeeder(private val core: AccountCore) : ApplicationRunner {
             val email = Emails.normalize(seed.email)
             if (core.accountByEmail(email) != null) return@forEach
             val now = core.time.now()
-            val account = Account(
+            val base = Account(
                 id = seed.id?.trim()?.takeIf { it.isNotEmpty() } ?: core.newAccountId(), email = email, emailVerified = true, status = AccountStatus.ACTIVE,
-                roles = core.props.defaultRoles + seed.roles, displayName = ProfileRules.displayName(seed.displayName), locale = ProfileRules.locale(seed.locale),
+                roles = core.props.defaultRoles + seed.roles, displayName = null, locale = ProfileRules.locale(seed.locale),
                 timeZone = null, createdAt = now, updatedAt = now,
             )
-            val identity = Identity(core.newIdentityId(), account.id, SignInMethods.PASSWORD, email, true, secret = core.hasher.hash(seed.password), createdAt = now)
-            if (core.accounts.insert(account, listOf(identity))) {
+            val identity = Identity(core.newIdentityId(), base.id, SignInMethods.PASSWORD, email, true, secret = core.hasher.hash(seed.password), createdAt = now)
+            // 시드 이름은 운영자가 정한 값이라 예약어 검사를 하지 않는다 (규칙에 맞게만 고친다). 방식이 TAGGED 면 꼬리표가 붙는다
+            val placed = core.insertNamed(base, listOf(identity), ProfileRules.displayName(seed.displayName), strict = false) { core.accounts.insert(it, listOf(identity)) }
+            val account = placed.account
+            if (placed.outcome == AccountCore.NamedInsert.INSERTED) {
                 log.info("seeded local account {} roles={}", account.id, account.roles)
                 core.events.publish(AccountEventType.SIGN_UP, account.id, detail = mapOf("method" to SignInMethods.PASSWORD, "seed" to "true"))
             }

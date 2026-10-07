@@ -120,12 +120,14 @@ class AccountSignInService(private val core: AccountCore, val registry: SignInMe
             throw AccountException(AccountErrorCode.REGISTRATION_BLOCKED)
         }
         val now = core.time.now()
-        val account = Account(
+        val base = Account(
             id = core.newAccountId(), email = email, emailVerified = email != null, status = AccountStatus.ACTIVE, roles = core.props.defaultRoles,
-            displayName = ProfileRules.displayName(proof.displayName), locale = ProfileRules.locale(proof.locale), timeZone = null, createdAt = now, updatedAt = now,
+            displayName = null, locale = ProfileRules.locale(proof.locale), timeZone = null, createdAt = now, updatedAt = now,
         )
-        val identity = Identity(core.newIdentityId(), account.id, method.code, subject, verified = true, createdAt = now)
-        if (!core.accounts.insert(account, listOf(identity))) return null
+        val identity = Identity(core.newIdentityId(), base.id, method.code, subject, verified = true, createdAt = now)
+        // 제공자가 준 이름은 규칙에 맞게 고쳐 쓰고, 겹쳐서(UNIQUE) 못 쓰면 버린다 — 가입을 막지 않는다 (자동 닉네임이 켜져 있으면 그것이 채운다)
+        val account = core.insertNamed(base, listOf(identity), ProfileRules.displayName(proof.displayName), strict = false) { core.accounts.insert(it, listOf(identity)) }
+            .takeIf { it.outcome == AccountCore.NamedInsert.INSERTED }?.account ?: return null
         core.events.publish(AccountEventType.SIGN_UP, account.id, proof.ip, mapOf("method" to method.code))
         return account
     }

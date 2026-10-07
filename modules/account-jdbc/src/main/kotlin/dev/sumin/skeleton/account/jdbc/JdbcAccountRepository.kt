@@ -1,6 +1,8 @@
 package dev.sumin.skeleton.account.jdbc
 
 import dev.sumin.skeleton.account.Account
+import dev.sumin.skeleton.account.AccountName
+import dev.sumin.skeleton.account.SetNameResult
 import dev.sumin.skeleton.account.AddIdentityResult
 import dev.sumin.skeleton.account.AccountPage
 import dev.sumin.skeleton.account.AccountPatch
@@ -39,11 +41,11 @@ class JdbcAccountRepository(
             tx.executeWithoutResult {
                 jdbc.update(
                     """
-                    insert into accounts (id, email, email_verified, status, display_name, locale, time_zone, created_at, updated_at, last_login_at, suspended_reason, deleted_at, purge_after, erased_at)
-                    values (:id, :email, :verified, :status, :name, :locale, :tz, :created, :updated, :lastLogin, :suspended, :deleted, :purge, :erased)
+                    insert into accounts (id, email, email_verified, status, display_name, display_name_key, display_tag, locale, time_zone, created_at, updated_at, last_login_at, suspended_reason, deleted_at, purge_after, erased_at)
+                    values (:id, :email, :verified, :status, :name, :nameKey, :tag, :locale, :tz, :created, :updated, :lastLogin, :suspended, :deleted, :purge, :erased)
                     """.trimIndent(),
                     MapSqlParameterSource().addValue("id", account.id).addValue("email", account.email).addValue("verified", account.emailVerified)
-                        .addValue("status", account.status.name).addValue("name", account.displayName).addValue("locale", account.locale).addValue("tz", account.timeZone)
+                        .addValue("status", account.status.name).addValue("name", account.displayName).addValue("nameKey", account.displayNameKey).addValue("tag", account.displayTag).addValue("locale", account.locale).addValue("tz", account.timeZone)
                         .addValue("created", dialect.instantParam(account.createdAt)).addValue("updated", dialect.instantParam(account.updatedAt))
                         .addValue("lastLogin", dialect.instantParam(account.lastLoginAt)).addValue("suspended", account.suspendedReason)
                         .addValue("deleted", dialect.instantParam(account.deletedAt)).addValue("purge", dialect.instantParam(account.purgeAfter)).addValue("erased", dialect.instantParam(account.erasedAt)),
@@ -72,7 +74,6 @@ class JdbcAccountRepository(
     override fun update(id: String, patch: AccountPatch, now: Instant): Account? {
         val sets = mutableListOf("updated_at = :now")
         val p = MapSqlParameterSource().addValue("id", id).addValue("now", dialect.instantParam(now))
-        patch.displayName?.let { sets += "display_name = :displayName"; p.addValue("displayName", it) }
         patch.locale?.let { sets += "locale = :locale"; p.addValue("locale", it) }
         patch.timeZone?.let { sets += "time_zone = :tz"; p.addValue("tz", it) }
         patch.status?.let { sets += "status = :status"; p.addValue("status", it.name) }
@@ -87,6 +88,27 @@ class JdbcAccountRepository(
         val n = jdbc.update("update accounts set ${sets.joinToString(", ")} where id = :id and status <> 'ERASED'" + if (patch.status != null) " and erase_claimed_at is null" else "", p)
         return if (n == 0) null else findById(id)
     }
+
+    override fun setDisplayName(id: String, name: String, key: String, tag: String?, now: Instant): SetNameResult =
+        try {
+            val n = jdbc.update(
+                "update accounts set display_name = :name, display_name_key = :key, display_tag = :tag, updated_at = :now where id = :id and status <> 'ERASED'",
+                MapSqlParameterSource().addValue("name", name).addValue("key", key).addValue("tag", tag).addValue("now", dialect.instantParam(now)).addValue("id", id),
+            )
+            if (n == 0) SetNameResult.NOT_FOUND else SetNameResult.DONE
+        } catch (_: DuplicateKeyException) {
+            SetNameResult.TAKEN
+        }
+
+    override fun namesOf(ids: Collection<String>): Map<String, AccountName> =
+        ids.toSet().chunked(NAMES_PER_STATEMENT).flatMap { chunk ->
+            jdbc.query("select id, status, display_name, display_tag from accounts where id in (:ids)", mapOf("ids" to chunk)) { rs, _ ->
+                AccountName(rs.getString("id"), AccountStatus.valueOf(rs.getString("status")), rs.getString("display_name"), rs.getString("display_tag"))
+            }
+        }.associateBy { it.id }
+
+    override fun displayTagsOf(key: String): Set<String> =
+        jdbc.query("select display_tag from accounts where display_name_key = :key and display_tag is not null", mapOf("key" to key)) { rs, _ -> rs.getString("display_tag") }.toSet()
 
     override fun markEmailVerified(id: String, now: Instant): Boolean =
         tx.execute {
@@ -212,7 +234,7 @@ class JdbcAccountRepository(
             jdbc.update("delete from account_identities where account_id = :id", p)
             scrub(id, email, now)
             jdbc.update(
-                "update accounts set email = null, email_verified = false, status = 'ERASED', display_name = null, locale = null, time_zone = null, " +
+                "update accounts set email = null, email_verified = false, status = 'ERASED', display_name = null, display_name_key = null, display_tag = null, locale = null, time_zone = null, " +
                     "suspended_reason = null, last_login_at = null, purge_after = null, erase_claimed_at = null, erased_at = :now, updated_at = :now where id = :id",
                 p,
             )
@@ -364,7 +386,7 @@ class JdbcAccountRepository(
 
     private fun ResultSet.account(roles: Set<String>) = Account(
         id = getString("id"), email = getString("email"), emailVerified = getBoolean("email_verified"), status = AccountStatus.valueOf(getString("status")), roles = roles,
-        displayName = getString("display_name"), locale = getString("locale"), timeZone = getString("time_zone"),
+        displayName = getString("display_name"), displayNameKey = getString("display_name_key"), displayTag = getString("display_tag"), locale = getString("locale"), timeZone = getString("time_zone"),
         createdAt = dialect.readInstant(this, "created_at")!!, updatedAt = dialect.readInstant(this, "updated_at")!!, lastLoginAt = dialect.readInstant(this, "last_login_at"),
         suspendedReason = getString("suspended_reason"), deletedAt = dialect.readInstant(this, "deleted_at"), purgeAfter = dialect.readInstant(this, "purge_after"),
         erasedAt = dialect.readInstant(this, "erased_at"),
@@ -374,4 +396,9 @@ class JdbcAccountRepository(
         id = getString("id"), accountId = getString("account_id"), method = getString("method"), subject = getString("subject"), verified = getBoolean("verified"),
         secret = getString("secret"), metadata = getString("metadata"), createdAt = dialect.readInstant(this, "created_at")!!, lastUsedAt = dialect.readInstant(this, "last_used_at"),
     )
+
+    private companion object {
+        /** `in (…)` 한 문장에 싣는 id 수 — 보통은 한 문장이고, 아주 큰 스레드만 덩어리로 나눈다 (PostgreSQL 바인드 한도 32767) */
+        const val NAMES_PER_STATEMENT = 2000
+    }
 }

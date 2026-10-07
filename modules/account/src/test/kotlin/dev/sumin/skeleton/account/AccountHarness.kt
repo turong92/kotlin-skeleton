@@ -62,6 +62,8 @@ class AccountHarness(
     atomic: AccountTransaction = AccountTransaction.NONE,
     /** 매직 링크 수단(`auth-magic-link`)이 있을 때만 있는 고리 — "이미 계정이 있어요" 메일의 1회용 로그인 링크 */
     magicLinks: MagicLinkIssuer? = null,
+    /** 꼬리표 · 자동 닉네임의 난수 — 시험이 고정하려고 */
+    random: java.util.random.RandomGenerator = java.security.SecureRandom(),
 ) {
     val time = MutableTime()
     val callLog = CallLog()
@@ -88,7 +90,7 @@ class AccountHarness(
         repo, props, time, publisher, hasher, policy, tokens, mailer, AccountLinks(props.mail), tasks,
         AccountRateLimits({ limitStore }, time),
         CaptchaGate(captcha, captchaRequired), { revoker }, bootstrap, challenges, { socialReauth }, { consents }, atomic,
-        AccountBlocks.local(time, props.blocks.retention), magicLinks = { magicLinks },
+        AccountBlocks.local(time, props.blocks.retention), magicLinks = { magicLinks }, names = DisplayNames(props.displayName, random),
     )
     val registration = RegistrationService(core)
     val authRepository = AccountAuthRepository(core)
@@ -104,8 +106,11 @@ class AccountHarness(
     /** 이메일별로 마지막 가입 id — [verify] · [resend] 가 쓴다 */
     val signUpIds = java.util.concurrent.ConcurrentHashMap<String, String>()
 
-    fun signUp(email: String = "ann@example.com", password: String = "tangerine-42-moon", ip: String? = "203.0.113.1", captchaToken: String? = null, locale: String? = null): SignUpOutcome =
-        registration.signUp(SignUpCommand(email, password, "Ann", locale, "Asia/Seoul", ip, captchaToken)).also { o -> o.signUpId?.let { signUpIds[Emails.normalize(email)] = it } }
+    fun signUp(
+        email: String = "ann@example.com", password: String = "tangerine-42-moon", ip: String? = "203.0.113.1", captchaToken: String? = null, locale: String? = null,
+        displayName: String? = "Ann",
+    ): SignUpOutcome =
+        registration.signUp(SignUpCommand(email, password, displayName, locale, "Asia/Seoul", ip, captchaToken)).also { o -> o.signUpId?.let { signUpIds[Emails.normalize(email)] = it } }
 
     /** 그 주소로 마지막에 나간 인증 코드 메일의 코드 */
     fun lastCode(email: String = "ann@example.com"): String =

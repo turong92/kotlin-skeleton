@@ -39,11 +39,12 @@ class ErasedRowStaysErasedTest {
     fun `the repository itself refuses to update an erased row, whoever asks`() {
         val h = harness()
         val a = h.erased()
-        assertNull(h.repo.update(a.id, AccountPatch(displayName = "Mallory", locale = "en", timeZone = "UTC", status = AccountStatus.ACTIVE), h.time.now()))
+        assertNull(h.repo.update(a.id, AccountPatch(locale = "en", timeZone = "UTC", status = AccountStatus.ACTIVE), h.time.now()))
+        assertEquals(SetNameResult.NOT_FOUND, h.repo.setDisplayName(a.id, "Mallory", "mallory", "0001", h.time.now()), "a name cannot be written onto an erased row either")
         assertEquals(GuardedResult.NOT_FOUND, h.repo.updateUnlessLast(a.id, AccountPatch(status = AccountStatus.ACTIVE), h.time.now(), "ADMIN"))
         val row = h.repo.findById(a.id)!!
         assertEquals(AccountStatus.ERASED, row.status)
-        assertNull(row.displayName); assertNull(row.locale); assertNull(row.timeZone)
+        assertNull(row.displayName); assertNull(row.displayNameKey); assertNull(row.displayTag); assertNull(row.locale); assertNull(row.timeZone)
     }
 
     @Test

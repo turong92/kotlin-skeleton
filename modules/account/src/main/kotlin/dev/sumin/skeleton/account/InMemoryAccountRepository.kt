@@ -15,6 +15,7 @@ class InMemoryAccountRepository : AccountRepository {
         if (account.id in accounts) return false
         if (account.email != null && accounts.values.any { it.email == account.email }) return false
         if (identities.any { n -> this.identities.values.any { it.method == n.method && it.subject == n.subject } }) return false
+        if (nameClash(account.id, account.displayNameKey, account.displayTag)) return false
         accounts[account.id] = account
         identities.forEach { this.identities[it.id] = it }
         return true
@@ -31,7 +32,6 @@ class InMemoryAccountRepository : AccountRepository {
         val a = accounts[id]?.takeIf { it.status != AccountStatus.ERASED } ?: return null   // 지운 행에는 아무것도 다시 쓰지 않는다
         if (patch.status != null && id in claimed) return null                              // 지우기를 선점한 계정의 상태는 바꾸지 않는다
         val updated = a.copy(
-            displayName = patch.displayName ?: a.displayName,
             locale = patch.locale ?: a.locale,
             timeZone = patch.timeZone ?: a.timeZone,
             status = patch.status ?: a.status,
@@ -44,6 +44,23 @@ class InMemoryAccountRepository : AccountRepository {
         accounts[id] = updated
         return updated
     }
+
+    /** (키, 꼬리표) 유니크 — 둘 중 하나라도 null 이면 겹치지 않는다 (SQL 의 NULL 은 서로 다르다) */
+    private fun nameClash(id: String, key: String?, tag: String?): Boolean =
+        key != null && tag != null && accounts.values.any { it.id != id && it.displayNameKey == key && it.displayTag == tag }
+
+    @Synchronized override fun setDisplayName(id: String, name: String, key: String, tag: String?, now: Instant): SetNameResult {
+        val a = accounts[id]?.takeIf { it.status != AccountStatus.ERASED } ?: return SetNameResult.NOT_FOUND
+        if (nameClash(id, key, tag)) return SetNameResult.TAKEN
+        accounts[id] = a.copy(displayName = name, displayNameKey = key, displayTag = tag, updatedAt = now)
+        return SetNameResult.DONE
+    }
+
+    @Synchronized override fun namesOf(ids: Collection<String>): Map<String, AccountName> =
+        ids.toSet().mapNotNull { accounts[it] }.associate { it.id to AccountName(it.id, it.status, it.displayName, it.displayTag) }
+
+    @Synchronized override fun displayTagsOf(key: String): Set<String> =
+        accounts.values.filter { it.displayNameKey == key }.mapNotNullTo(HashSet()) { it.displayTag }
 
     @Synchronized override fun markEmailVerified(id: String, now: Instant): Boolean {
         val a = accounts[id] ?: return false
@@ -128,7 +145,7 @@ class InMemoryAccountRepository : AccountRepository {
         identities.values.removeIf { it.accountId == id }
         claimed.remove(id)
         accounts[id] = a.copy(
-            email = null, emailVerified = false, status = AccountStatus.ERASED, roles = emptySet(), displayName = null, locale = null, timeZone = null,
+            email = null, emailVerified = false, status = AccountStatus.ERASED, roles = emptySet(), displayName = null, displayNameKey = null, displayTag = null, locale = null, timeZone = null,
             lastLoginAt = null, suspendedReason = null, purgeAfter = null, erasedAt = now, updatedAt = now,
         )
         return true

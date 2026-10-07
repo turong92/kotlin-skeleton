@@ -48,7 +48,14 @@ data class Account(
     val purgeAfter: Instant? = null,
     /** 개인정보를 지운 시각 (ERASED 일 때) */
     val erasedAt: Instant? = null,
-)
+    /** [displayName] 의 비교용 키([DisplayNameRules.key]) — 닉네임이 있으면 언제나 저장한다. 지워지면(ERASED) 같이 비워진다 */
+    val displayNameKey: String? = null,
+    /** 닉네임 방식이 정하는 꼬리표: NONE 은 null, UNIQUE 는 [DisplayNames.NO_TAG], TAGGED 는 `0001`..`9999`. 응답에는 [DisplayNames.visibleTag] 로 나간다 */
+    val displayTag: String? = null,
+) {
+    /** 화면에 보일 꼬리표 (없거나 UNIQUE 의 고정값이면 null) */
+    val visibleTag: String? get() = DisplayNames.visibleTag(displayTag)
+}
 
 /**
  * 계정에 붙은 로그인 수단 한 줄. [method] 는 문자열 코드(`password` · `magic_link` · `google` …) — 새 수단이 스키마 변경 없이 같은 표에 들어온다.
@@ -72,7 +79,6 @@ data class Identity(
 
 /** 부분 수정 — null 인 필드는 바꾸지 않는다 (지우기는 별도 플래그) */
 data class AccountPatch(
-    val displayName: String? = null,
     val locale: String? = null,
     val timeZone: String? = null,
     val status: AccountStatus? = null,
@@ -85,6 +91,12 @@ data class AccountPatch(
 )
 
 data class AccountPage(val items: List<Account>, val total: Long)
+
+/** [AccountRepository.setDisplayName] 의 결과 — [TAKEN]: (키, 꼬리표) 유니크가 막았다 · [NOT_FOUND]: 없거나 지워진(ERASED) 계정 */
+enum class SetNameResult { DONE, TAKEN, NOT_FOUND }
+
+/** 이름 조회용 가벼운 줄 ([AccountRepository.namesOf]) — 역할 · 이메일 같은 것은 읽지 않는다 */
+data class AccountName(val id: String, val status: AccountStatus, val displayName: String?, val displayTag: String?)
 
 /** [STALE]: 호출자가 본 계정의 이메일 확인 상태([AccountRepository.changeEmail] 의 `expectEmailVerified`)가 계정 행 락 안에서 이미 바뀌어 있다 — 그 사이 메일함이 증명됐다 */
 enum class ChangeEmailResult { CHANGED, TAKEN, NOT_FOUND, STALE }
@@ -113,7 +125,8 @@ enum class GuardedResult { DONE, LAST, NOT_FOUND }
 /**
  * 계정 저장소 포트 — `account-jdbc` 가 PostgreSQL · MySQL 로 구현하고, 메모리 구현([InMemoryAccountRepository])이 로컬 · 시험 기본이다.
  * 구현은 아래 원자성을 지킨다 (둘 이상의 행을 건드리는 연산은 한 트랜잭션):
- *  - [insert]: 계정 + 첫 로그인 수단들. 이메일이나 (method, subject) 가 겹치면 **유니크 위반으로** false — 먼저 조회해 보고 넣는 방식으로 판정하지 않는다
+ *  - [insert]: 계정 + 첫 로그인 수단들. 이메일이나 (method, subject) 나 (닉네임 키, 꼬리표) 가 겹치면 **유니크 위반으로** false — 먼저 조회해 보고 넣는 방식으로 판정하지 않는다
+ *    (어느 쪽이 겹쳤는지는 알려 주지 않는다 — 부르는 쪽이 이메일 · 수단을 다시 조회해 가른다)
  *  - [markEmailVerified]: 계정의 emailVerified, PENDING_VERIFICATION → ACTIVE, 이메일 계열 수단의 verified 를 함께
  *  - [changeEmail]: 계정 이메일과 이메일 계열 수단(password · magic_link)의 subject 를 함께. 겹치면 TAKEN
  *  - **ERASED 행에는 아무것도 쓰지 않는다**: [update] · [updateUnlessLast] · [changeEmail] · [addIdentity] · [addIdentityIfEmailVerified] · [grantRole] 는 그 행에 대해 조건(`status <> 'ERASED'`)으로 거절한다
@@ -130,6 +143,18 @@ interface AccountRepository {
     fun findByIdentity(method: String, subject: String): Account?
 
     fun update(id: String, patch: AccountPatch, now: Instant): Account?
+
+    /**
+     * 닉네임 · 비교용 키 · 꼬리표를 **함께** 바꾼다 (한 문장). (키, 꼬리표) 유니크에 걸리면 [SetNameResult.TAKEN] — 아무것도 바뀌지 않는다.
+     * **ERASED 행에는 쓰지 않는다**([SetNameResult.NOT_FOUND]). 꼬리표가 null 이면 비운다(NONE)
+     */
+    fun setDisplayName(id: String, name: String, key: String, tag: String?, now: Instant): SetNameResult
+
+    /** 계정 id → 이름 줄 — **쿼리 한 번**(`where id in (…)`, 아주 많으면 덩어리로). 없는 id 는 결과에 없다 */
+    fun namesOf(ids: Collection<String>): Map<String, AccountName>
+
+    /** 비교용 [key] 가 이미 쓰고 있는 꼬리표들 — TAGGED 가 무작위 시도로 못 찾았을 때의 마지막 길 */
+    fun displayTagsOf(key: String): Set<String>
 
     fun markEmailVerified(id: String, now: Instant): Boolean
 

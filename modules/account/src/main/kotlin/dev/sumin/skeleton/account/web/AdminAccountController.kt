@@ -115,5 +115,5 @@ class AdminAccountController(private val callers: AccountCallers, private val ad
         return Response.noContent()
     }
 
-    private fun Account.toAdmin() = AdminAccountResponse(id, email, status.name, roles, displayName, createdAt, lastLoginAt, suspendedReason, purgeAfter, erasedAt)
+    private fun Account.toAdmin() = AdminAccountResponse(id, email, status.name, roles, displayName, visibleTag, createdAt, lastLoginAt, suspendedReason, purgeAfter, erasedAt)
 }

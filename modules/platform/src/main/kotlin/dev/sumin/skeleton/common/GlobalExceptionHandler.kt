@@ -146,6 +146,7 @@ class GlobalExceptionHandler {
                 detail = ex.detail,
                 traceId = currentTraceId(),
                 spanId = currentSpanId(),
+                errors = (ex as? FieldValidationException)?.let { listOf(ApiError.FieldError(it.field, it.fieldCode, it.message)) },
                 data = ex.data,
             ),
         )

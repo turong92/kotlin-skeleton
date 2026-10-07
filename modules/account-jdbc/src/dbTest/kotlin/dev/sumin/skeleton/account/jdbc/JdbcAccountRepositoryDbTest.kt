@@ -114,15 +114,15 @@ class JdbcAccountRepositoryDbTest {
     fun `partial updates leave other fields alone and deletion fields can be cleared`() {
         repo.insert(account(), listOf(identity("idn_1")))
         val later = now.plus(Duration.ofHours(1))
-        repo.update("acc_1", AccountPatch(displayName = "Ann B", status = AccountStatus.DELETED, deletedAt = later, purgeAfter = later.plus(Duration.ofDays(30)), lastLoginAt = later), later)
+        repo.update("acc_1", AccountPatch(locale = "en", status = AccountStatus.DELETED, deletedAt = later, purgeAfter = later.plus(Duration.ofDays(30)), lastLoginAt = later), later)
         val a = repo.findById("acc_1")!!
-        assertEquals("Ann B", a.displayName)
-        assertEquals("ko", a.locale)
+        assertEquals("Ann", a.displayName)
+        assertEquals("en", a.locale)
         assertEquals(later.plus(Duration.ofDays(30)), a.purgeAfter)
         repo.update("acc_1", AccountPatch(status = AccountStatus.ACTIVE, clearDeletion = true), later)
         assertNull(repo.findById("acc_1")!!.purgeAfter)
         assertNull(repo.findById("acc_1")!!.deletedAt)
-        assertNull(repo.update("acc_nope", AccountPatch(displayName = "x"), later))
+        assertNull(repo.update("acc_nope", AccountPatch(locale = "x"), later))
     }
 
     @Test

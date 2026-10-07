@@ -17,6 +17,7 @@ enum class AccountErrorCode(
     REAUTH_FAILED("ACCOUNT.REAUTH_FAILED", HttpStatus.BAD_REQUEST, "Confirmation failed"),
     CAPTCHA_FAILED("ACCOUNT.CAPTCHA_FAILED", HttpStatus.BAD_REQUEST, "Captcha verification failed"),
     EMAIL_TAKEN("ACCOUNT.EMAIL_TAKEN", HttpStatus.CONFLICT, "Email already in use"),
+    DISPLAY_NAME_TAKEN("ACCOUNT.DISPLAY_NAME_TAKEN", HttpStatus.CONFLICT, "Display name already in use"),
     SIGN_UP_CLOSED("ACCOUNT.SIGN_UP_CLOSED", HttpStatus.FORBIDDEN, "Sign-up is closed"),
     SOCIAL_EMAIL_CONFLICT("ACCOUNT.SOCIAL_EMAIL_CONFLICT", HttpStatus.CONFLICT, "An account with this email already exists"),
     IDENTITY_TAKEN("ACCOUNT.IDENTITY_TAKEN", HttpStatus.CONFLICT, "This sign-in method belongs to another account"),

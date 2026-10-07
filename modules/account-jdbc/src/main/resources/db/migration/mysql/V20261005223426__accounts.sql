@@ -9,6 +9,9 @@ create table if not exists accounts (
     email_verified   boolean      not null default false,
     status           varchar(24)  not null,                  -- ACTIVE | PENDING_VERIFICATION | SUSPENDED | DELETED (유예, 복구 가능) | ERASED (개인정보를 지운 뒤 행만 남음)
     display_name     varchar(60),
+    -- 닉네임의 비교용 키 (NFKC · 소문자). 닉네임이 있으면 방식과 무관하게 언제나 저장 — 방식을 바꿔도 다시 계산하지 않는다. 이진 정렬(이메일과 같은 이유 · 같은 마커)
+    display_name_key varchar(255) /* [jooq ignore start] */ character set utf8mb4 collate utf8mb4_bin /* [jooq ignore stop] */,
+    display_tag      char(4),                                -- 꼬리표: NONE 은 NULL · UNIQUE 는 '0000' 고정 · TAGGED 는 '0001'..'9999'. (키, 꼬리표) 유니크 — NULL 은 서로 겹치지 않는다
     locale           varchar(35),
     time_zone        varchar(64),
     created_at       datetime(6)  not null,
@@ -17,8 +20,9 @@ create table if not exists accounts (
     suspended_reason varchar(200),
     deleted_at       datetime(6),
     purge_after      datetime(6),                            -- 삭제 유예가 끝나 지워질 시각
-    erased_at        datetime(6),                            -- 개인정보를 지운 시각 (ERASED). 이때 email · display_name · locale · time_zone · suspended_reason · last_login_at 은 NULL
-    erase_claimed_at datetime(6)                             -- 지우기를 선점한 시각 — 선점된 계정은 되살리기 · 상태 변경이 안 된다 (리스너를 부르기 전에 잡는다)
+    erased_at        datetime(6),                            -- 개인정보를 지운 시각 (ERASED). 이때 email · display_name · display_name_key · display_tag · locale · time_zone · suspended_reason · last_login_at 은 NULL
+    erase_claimed_at datetime(6),                            -- 지우기를 선점한 시각 — 선점된 계정은 되살리기 · 상태 변경이 안 된다 (리스너를 부르기 전에 잡는다)
+    constraint uq_accounts_display_name unique (display_name_key, display_tag)
     /* [jooq ignore start] */,
     index idx_accounts_due (status, purge_after)
     /* [jooq ignore stop] */

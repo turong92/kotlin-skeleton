@@ -51,6 +51,8 @@ class AccountCore(
     val lease: AccountMaintenanceLease = InMemoryAccountMaintenanceLease(time),
     /** 1회용 매직 링크를 만드는 고리 — `auth-magic-link` 가 없으면 null ("이미 계정이 있어요" 메일에서 그 줄이 빠진다) */
     val magicLinks: () -> MagicLinkIssuer? = { null },
+    /** 닉네임 규칙 · 꼬리표 · 자동 닉네임 */
+    val names: DisplayNames = DisplayNames(props.displayName),
 ) {
     /**
      * 이메일로 계정 하나 — 저장소가 어떤 정렬 규칙으로 찾았든 **저장된 주소가 정규화된 입력과 글자 그대로 같을 때만** 돌려준다
@@ -125,13 +127,81 @@ class AccountCore(
     fun reopenedStatus(a: Account): AccountStatus =
         if (!props.signUp.emailVerification || a.emailVerified || a.email == null) AccountStatus.ACTIVE else AccountStatus.PENDING_VERIFICATION
 
+    /** [placeName] 한 번의 시도 결과 — [STORED] 저장됨 · [CLASH] (키, 꼬리표) 유니크에 걸림 · [REFUSED] 닉네임과 상관없는 이유(이메일 · 수단 · 계정 없음) */
+    enum class Slot { STORED, CLASH, REFUSED }
+
+    /**
+     * 닉네임 [key] 에 꼬리표를 붙여 [attempt] 로 저장해 본다. NONE 은 꼬리표 없이 한 번, UNIQUE 는 고정 꼬리표로 한 번(겹치면 [Slot.CLASH]),
+     * TAGGED 는 무작위 꼬리표를 몇 번 시도하고 그래도 겹치면 키 안의 빈 꼬리표를 직접 찾는다 — 빈 것이 없으면(9999 명) [Slot.CLASH].
+     * 경합은 유니크 제약이 가르고 여기서는 다시 시도한다 (먼저 읽고 쓰지 않는다).
+     */
+    fun placeName(key: String, attempt: (String?) -> Slot): Slot {
+        val tagged = names.uniqueness == AccountProperties.DisplayName.Uniqueness.TAGGED
+        repeat(if (tagged) TAG_TRIES else 1) {
+            val r = attempt(names.tagCandidate())
+            if (r != Slot.CLASH) return r
+        }
+        if (!tagged) return Slot.CLASH
+        val tag = names.freeTag(accounts.displayTagsOf(key)) ?: return Slot.CLASH
+        return attempt(tag)
+    }
+
+    enum class NamedInsert { INSERTED, REFUSED, NAME_TAKEN }
+
+    data class NamedInsertResult(val outcome: NamedInsert, val account: Account)
+
+    /**
+     * [base] (닉네임 · 키 · 꼬리표는 비어 있다) 를 닉네임을 붙여 저장한다 — [write] 가 실제 저장(트랜잭션 · 동의 기록 포함)이고 **키가 겹치면 false** 를 돌려준다.
+     * [requested] 가 없으면 `fallback=GENERATED` 일 때 자동 닉네임 · 아니면 이름 없이. UNIQUE 에서 자동 닉네임이 겹치면 새로 뽑는다.
+     * [requested] 가 겹치면: [strict](사람이 낸 닉네임)면 [NamedInsert.NAME_TAKEN], 아니면(제공자 · 시드가 준 이름) 이름을 버리고 자동 닉네임 · 이름 없이 계속한다.
+     * [NamedInsert.REFUSED] 는 이메일 · 로그인 수단이 이미 있다는 뜻 — 닉네임과 무관하다.
+     */
+    fun insertNamed(base: Account, identities: List<Identity>, requested: String?, strict: Boolean, write: (Account) -> Boolean): NamedInsertResult {
+        var name = requested
+        var generatedTries = 0
+        val generate = names.config.fallback == AccountProperties.DisplayName.Fallback.GENERATED
+        while (true) {
+            val chosen = name ?: if (generate && generatedTries < GENERATED_TRIES) names.generated() else null
+            if (chosen == null) {
+                val plain = base.copy(displayName = null, displayNameKey = null, displayTag = null)
+                return NamedInsertResult(if (write(plain)) NamedInsert.INSERTED else NamedInsert.REFUSED, plain)
+            }
+            val key = DisplayNameRules.key(chosen)
+            var stored: Account? = null
+            val slot = placeName(key) { tag ->
+                val candidate = base.copy(displayName = chosen, displayNameKey = key, displayTag = tag)
+                when {
+                    write(candidate) -> { stored = candidate; Slot.STORED }
+                    names.uniqueness == AccountProperties.DisplayName.Uniqueness.NONE || refusedForOtherReason(base, identities) -> Slot.REFUSED
+                    else -> Slot.CLASH
+                }
+            }
+            when (slot) {
+                Slot.STORED -> return NamedInsertResult(NamedInsert.INSERTED, stored!!)
+                Slot.REFUSED -> return NamedInsertResult(NamedInsert.REFUSED, base)
+                Slot.CLASH -> if (name != null) { if (strict) return NamedInsertResult(NamedInsert.NAME_TAKEN, base); name = null } else generatedTries++
+            }
+        }
+    }
+
+    private fun refusedForOtherReason(base: Account, identities: List<Identity>): Boolean =
+        accounts.findById(base.id) != null || base.email?.let { accounts.findByEmail(it) } != null || identities.any { accounts.findIdentity(it.method, it.subject) != null }
+
     fun newAccountId(): String = "acc_" + randomHex()
 
     fun newIdentityId(): String = "idn_" + randomHex()
 
     private fun randomHex() = HexFormat.of().formatHex(ByteArray(16).also(random::nextBytes))
 
-    private companion object { val random = SecureRandom() }
+    private companion object {
+        val random = SecureRandom()
+
+        /** 무작위 꼬리표를 몇 번 시도하고 나서 빈 꼬리표를 직접 찾나 */
+        const val TAG_TRIES = 8
+
+        /** 자동 닉네임이 UNIQUE 에서 겹칠 때 새로 뽑는 횟수 — 넘으면 이름 없이 (여섯 자리 16진수는 사실상 겹치지 않는다) */
+        const val GENERATED_TRIES = 10
+    }
 }
 
 /**

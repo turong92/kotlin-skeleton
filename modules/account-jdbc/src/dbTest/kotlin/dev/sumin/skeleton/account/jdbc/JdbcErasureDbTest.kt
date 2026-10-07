@@ -188,7 +188,7 @@ class JdbcErasureDbTest {
     fun `nothing is written to an erased row - profile, status, email and sign-in methods are refused by the repository`() {
         leaving()
         assertTrue(repo.erase("acc_1", now))
-        assertNull(repo.update("acc_1", AccountPatch(displayName = "Mallory", locale = "en", timeZone = "UTC", status = AccountStatus.ACTIVE), now.plusSeconds(5)))
+        assertNull(repo.update("acc_1", AccountPatch(locale = "en", timeZone = "UTC", status = AccountStatus.ACTIVE), now.plusSeconds(5)))
         assertEquals(GuardedResult.NOT_FOUND, repo.updateUnlessLast("acc_1", AccountPatch(status = AccountStatus.ACTIVE, clearSuspendedReason = true), now.plusSeconds(5), "ADMIN"))
         assertEquals(ChangeEmailResult.NOT_FOUND, repo.changeEmail("acc_1", "mallory@example.com", now.plusSeconds(5)))
         assertFalse(repo.addIdentity(Identity("idn_late", "acc_1", "google", "late-subject", true, null, null, now)))
@@ -212,7 +212,7 @@ class JdbcErasureDbTest {
         assertFalse(repo.restore("acc_1", AccountStatus.ACTIVE, now), "a clock that still sees the grace running cannot win any more")
         assertNull(repo.update("acc_1", AccountPatch(status = AccountStatus.ACTIVE), now))
         assertEquals(GuardedResult.NOT_FOUND, repo.updateUnlessLast("acc_1", AccountPatch(status = AccountStatus.SUSPENDED), now, "ADMIN"))
-        assertEquals("Ann Kim", repo.update("acc_1", AccountPatch(displayName = "Ann Kim"), now)!!.displayName, "plain profile writes are not a status change")
+        assertEquals("ko", repo.update("acc_1", AccountPatch(locale = "ko"), now)!!.locale, "plain profile writes are not a status change")
         assertEquals(AccountStatus.DELETED, repo.findById("acc_1")!!.status)
 
         assertTrue(repo.erase("acc_1", now.plusSeconds(10)))

@@ -11,6 +11,7 @@ import dev.sumin.skeleton.account.challenge.ChallengeStore
 import dev.sumin.skeleton.account.challenge.Challenges
 import dev.sumin.skeleton.account.challenge.CodeHasher
 import dev.sumin.skeleton.account.challenge.InMemoryChallengeStore
+import dev.sumin.skeleton.common.author.AuthorDirectory
 import dev.sumin.skeleton.common.erasure.AccountErasureListener
 import dev.sumin.skeleton.account.events.AccountEventListener
 import dev.sumin.skeleton.account.events.AccountEventPublisher
@@ -298,6 +299,14 @@ class AccountAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     fun profileService(core: AccountCore, registry: SignInMethodRegistry): ProfileService = ProfileService(core, registry)
+
+    /**
+     * 작성자 이름 조회의 기본 구현 — 닉네임 · 꼬리표를 `board` 같은 모듈에 내준다 (그쪽은 이 모듈을 모른다: [AuthorDirectory]).
+     * 앱이 같은 타입의 빈을 두면 물러난다 (예: 돌판마다 다른 닉네임). `board` 가 없으면 아무도 부르지 않는다.
+     */
+    @Bean
+    @ConditionalOnMissingBean(AuthorDirectory::class)
+    fun accountAuthorDirectory(accounts: AccountRepository): AuthorDirectory = AccountAuthorDirectory(accounts)
 
     /** `auth` 의 로그인이 진짜 계정으로 돌게 한다 — 앱이 자기 `AuthAccountRepository` 를 두면 물러난다 */
     @Bean

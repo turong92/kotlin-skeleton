@@ -43,3 +43,10 @@ open class ApplicationException(
         cause = cause,
     )
 }
+
+/**
+ * 서비스 규칙이 한 입력 필드를 거절했다 — Bean Validation 실패와 같은 모양의 `400 COMMON.VALIDATION_FAILED` + `errors[{field, code, message}]` 로 나간다.
+ * [fieldCode] 는 프론트가 문구를 고르는 코드 (`Required` · `Size` · `Pattern` 처럼 Bean Validation 의 이름을 따른다).
+ */
+class FieldValidationException(val field: String, val fieldCode: String, message: String) :
+    ApplicationException(message = message, errorCode = PlatformErrorCode.VALIDATION_FAILED)
