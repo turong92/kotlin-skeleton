@@ -43,8 +43,8 @@ class SocialEnvironmentOnlyBootTest {
         val ctx = SpringApplicationBuilder(SampleApplication::class.java, TestcontainersConfiguration::class.java)
             .environment(environment)
             .web(WebApplicationType.SERVLET)
-            .properties("server.port=0", "spring.config.import=classpath:test-seeds.yml")
-            .run()
+            .properties("spring.config.import=classpath:test-seeds.yml")
+            .run("--server.port=0")   // 기본 속성으로 주면 application.yml 의 ${SERVER_PORT:8080} 이 이겨 8080 을 잡는다 — 명령줄 인자가 이긴다
         ctx.use {
             val port = ctx.environment.getProperty("local.server.port")
             val body = HttpClient.newHttpClient().send(HttpRequest.newBuilder(URI("http://127.0.0.1:$port/api/v1/auth/methods")).build(), HttpResponse.BodyHandlers.ofString())
