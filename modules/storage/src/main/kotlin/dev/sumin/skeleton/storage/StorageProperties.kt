@@ -28,6 +28,10 @@ data class StorageWebProperties(
         }
     }
 
+    /** 비밀은 로그 · 오류 메시지에 나오지 않는다 */
+    override fun toString(): String =
+        "StorageWebProperties(enabled=$enabled, keyPrefix=$keyPrefix, keyOwner=$keyOwner, keySecret=${if (keySecret.isEmpty()) "" else "****"})"
+
     companion object {
         const val MIN_KEY_SECRET_LENGTH = 32
     }

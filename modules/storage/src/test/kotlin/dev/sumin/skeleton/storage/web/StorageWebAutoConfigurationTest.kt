@@ -54,8 +54,15 @@ class StorageWebAutoConfigurationTest {
     @Test
     fun `opaque mode without a secret fails the startup`() {
         runner.withPropertyValues("skeleton.storage.web.key-owner=OPAQUE")
-            .run { context -> assertThat(context).hasFailed() }
-        runner.withPropertyValues("skeleton.storage.web.key-owner=OPAQUE", "skeleton.storage.web.key-secret=short")
-            .run { context -> assertThat(context).hasFailed() }
+            .run { context ->
+                assertThat(context).hasFailed()
+                assertThat(context.startupFailure).hasStackTraceContaining("skeleton.storage.web.key-secret")
+            }
+        runner.withPropertyValues("skeleton.storage.web.key-owner=OPAQUE", "skeleton.storage.web.key-secret=tooshort-value")
+            .run { context ->
+                assertThat(context).hasFailed()
+                assertThat(context.startupFailure).hasStackTraceContaining("skeleton.storage.web.key-secret")
+                assertThat(context.startupFailure!!.stackTraceToString()).doesNotContain("tooshort-value")
+            }
     }
 }

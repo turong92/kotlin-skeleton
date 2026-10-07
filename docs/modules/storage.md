@@ -8,9 +8,11 @@
 키는 서버가 `<key-prefix>/<계정 id>/<uuid>/<파일 이름>` 으로 정하고, 클라이언트가 보낸 키는 자기 접두사 아래일 때만 받는다(남의 키는 404 `STORAGE.OBJECT_NOT_FOUND`). 업로드는 `StorageFileValidator` 를 통과해야 하고 거절은 400 `STORAGE.FILE_REJECTED`(`data.errors` 에 사유).
 
 **키 소유 방식 `skeleton.storage.web.key-owner`** — `ACCOUNT_ID`(기본, 위 꼴) | `OPAQUE`. `OPAQUE` 는 키가 `<key-prefix>/o/<uuid>.<mac>/<파일 이름>` 이라 키만 봐서는 계정 id 를 알 수 없고, 업로드마다 uuid 가 달라 같은 계정의 첨부끼리도 키로 이어지지 않는다(작성자 프로필을 쓰는 앱 — [board](board.md) · `author-profile`). `mac` 은 `HMAC-SHA256(key-secret, 계정 id + "\n" + uuid)` 의 앞 32자(hex)이고, 소유 확인은 다시 계산해 상수시간으로 비교한다(DB 없음).
-`key-secret` 은 `OPAQUE` 일 때 32자 이상이어야 하고(비었거나 짧으면 기동 실패), 비밀이라 환경변수 `<P>_STORAGE_WEB_KEY_SECRET` 로 넣는다([deploy.md §7](../deploy.md)). 비밀을 바꾸면 이미 발급한 `OPAQUE` 키는 소유 확인에서 떨어진다. `ACCOUNT_ID` 꼴의 옛 키는 어느 방식에서나 지금처럼 소유가 확인되고, 남의 키 · 맞지 않는 `mac` 은 없는 키와 같은 404 다.
+`key-secret` 은 `OPAQUE` 일 때 32자 이상이어야 하고(비었거나 짧으면 기동 실패), 비밀이라 환경변수 `<P>_STORAGE_WEB_KEY_SECRET` 로 넣는다([deploy.md §7](../deploy.md)). 비밀을 바꾸면 이미 발급한 `OPAQUE` 키는 소유 확인에서 떨어진다. `ACCOUNT_ID` 꼴의 옛 키는 어느 방식에서나 지금처럼 소유가 확인되고, 남의 키 · 맞지 않는 `mac` 은 없는 키와 같은 404 다. 유효한 키가 아니거나(`..` · 제어문자) 접두사 뒤가 비어 있어도 소유가 아니다.
+**`o` 규칙**: `OPAQUE` 에서는 `<key-prefix>/o/` 로 시작하는 키를 `mac` 으로만 판정한다 — 그래서 계정 id 가 `o` 인 계정의 옛 `ACCOUNT_ID` 꼴 키(`uploads/o/…`)는 `OPAQUE` 에서 소유로 인정되지 않는다(`o` 를 계정 id 로 쓰지 않는다). 기본 방식에서는 이 예외가 없다.
+**파일 이름**: `OPAQUE` 키에서는 클라이언트가 보낸 파일 이름이 사라지고 짧은 영숫자 확장자만 남는다(`file.<ext>`, 확장자가 없거나 이상하면 `file`) — 파일 이름이 두 프로필의 첨부를 잇는 값이 되기 때문이다. 원래 이름이 필요하면 앱이 별도 열에 저장한다. 기본 방식은 지금처럼 정리한 원래 이름을 쓴다.
 
-**`StorageKeyOwnership`** — `owns(accountId, key): Boolean`. 모듈이 현재 `key-owner` 방식에 맞는 빈을 내고(`@ConditionalOnMissingBean` — 앱이 같은 타입의 빈을 두면 그것이 쓰인다), 업로드 HTTP 가 꺼져 있거나 저장소 빈이 없어도 등록된다. 앱의 첨부 검사가 접두사 비교 대신 이것을 쓴다:
+**`StorageKeyOwnership`** — `owns(accountId, key): Boolean`. 모듈이 현재 `key-owner` 방식에 맞는 빈을 내고(`@ConditionalOnMissingBean` — 앱이 같은 타입의 빈을 두면 그것이 쓰인다. 단 업로드 HTTP 의 발급 · 확인은 이 빈을 보지 않고 `StorageController` 가 직접 정한다), 업로드 HTTP 가 꺼져 있거나 저장소 빈이 없어도 등록된다. 앱의 첨부 검사가 접두사 비교 대신 이것을 쓴다:
 
 ```kotlin
 class AppBoardPolicy(private val keys: StorageKeyOwnership) : BoardPolicy by DefaultBoardPolicy() {
@@ -28,7 +30,7 @@ class AppBoardPolicy(private val keys: StorageKeyOwnership) : BoardPolicy by Def
 | 설정 접두사 | `skeleton.storage` — [docs/config/modules/storage.yml](../config/modules/storage.yml) |
 | 기본 동작 | 켜짐. |
 | 부팅에 필요한 것 | 없음. |
-| 교체 지점 | `StorageFileValidator`, `StorageController` |
+| 교체 지점 | `StorageFileValidator`, `StorageController`, `StorageKeyOwnership` (앱의 첨부 검사용 — 업로드 HTTP 의 발급 · 확인은 이 빈을 보지 않는다. 그쪽을 바꾸려면 `StorageController` 를 교체) |
 | 마이그레이션 | 없음 |
 | 프론트 짝 | `@skeleton/storage` |
 | 테스트 | `modules/storage/src/test` |

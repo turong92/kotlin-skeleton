@@ -24,9 +24,21 @@ class StorageKeySchemeTest {
     @Test
     fun `opaque mode issues prefix o uuid dot mac file without the account id`() {
         val key = opaque.issue(account, "cat.png")
-        assertTrue(Regex("uploads/o/[0-9a-f-]{36}\\.[0-9a-f]{32}/cat\\.png").matches(key), key)
+        assertTrue(Regex("uploads/o/[0-9a-f-]{36}\\.[0-9a-f]{32}/file\\.png").matches(key), key)
         assertFalse(key.contains(account))
         assertTrue(opaque.owns(account, key))
+    }
+
+    @Test
+    fun `opaque mode drops the client file name and keeps only a safe short extension`() {
+        assertTrue(opaque.issue(account, "my holiday photo.JPG").endsWith("/file.jpg"))
+        assertTrue(opaque.issue(account, "archive.tar.gz").endsWith("/file.gz"))
+        assertTrue(opaque.issue(account, "README").endsWith("/file"))
+        assertTrue(opaque.issue(account, "weird.ex_t!").endsWith("/file"))
+        assertTrue(opaque.issue(account, "long.abcdefghijklmnop").endsWith("/file"))
+        assertTrue(opaque.issue(account, "trailing.").endsWith("/file"))
+        assertFalse(opaque.issue(account, "private-name.png").contains("private-name"))
+        assertTrue(plain.issue(account, "private-name.png").endsWith("/private-name.png"))
     }
 
     @Test
@@ -75,6 +87,30 @@ class StorageKeySchemeTest {
     fun `an account named o cannot claim opaque keys through the old prefix`() {
         val key = opaque.issue(account, "cat.png")
         assertFalse(opaque.owns("o", key))
+        assertFalse(opaque.owns("o", "uploads/o/x/f"), "everything under prefix/o/ is judged by the mac only")
+    }
+
+    @Test
+    fun `the o account exclusion applies to opaque mode only`() {
+        assertTrue(plain.owns("o", "uploads/o/x/f.png"))
+        assertFalse(plain.owns("acc_b", "uploads/o/x/f.png"))
+    }
+
+    @Test
+    fun `a key that is not a valid object key or has nothing after the prefix is not owned`() {
+        val mine = opaque.issue(account, "cat.png")
+        val other = opaque.issue("acc_other", "cat.png")
+        val myseg = mine.split('/')[2]
+        val otherseg = other.split('/')[2]
+        assertFalse(opaque.owns(account, "uploads/$account/../acc_b/x"))
+        assertFalse(opaque.owns(account, "uploads/o/$myseg/../$otherseg/f"))
+        assertFalse(opaque.owns(account, "$mine/../../x"))
+        assertFalse(opaque.owns(account, "uploads/$account/"))
+        assertFalse(opaque.owns(account, "uploads/o/$myseg/"))
+        assertFalse(opaque.owns(account, "uploads/$account/x/\\y"))
+        assertFalse(opaque.owns(account, " uploads/$account/x"))
+        assertFalse(plain.owns(account, "uploads/$account/"))
+        assertFalse(plain.owns(account, "uploads/$account/./x"))
     }
 
     @Test
@@ -95,7 +131,8 @@ class StorageKeySchemeTest {
         assertFailsWith<IllegalArgumentException> { StorageWebProperties(keyOwner = StorageKeyOwner.OPAQUE) }
         val e = assertFailsWith<IllegalArgumentException> { StorageWebProperties(keyOwner = StorageKeyOwner.OPAQUE, keySecret = "short") }
         assertTrue(e.message!!.contains("skeleton.storage.web.key-secret"))
-        assertFalse(e.message!!.contains("short\""), "the value is never echoed")
+        assertFalse(e.message!!.contains("short"), "the value is never echoed")
+        assertFalse(StorageWebProperties(keyOwner = StorageKeyOwner.OPAQUE, keySecret = "s3cr3t-".repeat(6)).toString().contains("s3cr3t"))
         StorageWebProperties(keyOwner = StorageKeyOwner.OPAQUE, keySecret = "x".repeat(32))
         StorageWebProperties()
     }

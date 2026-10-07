@@ -228,7 +228,8 @@ create index if not exists idx_author_profiles_account on author_profiles (accou
 
 ### 7.8 첨부 키 (`storage`)
 
-- `storage` 웹 설정에 `key-owner: ACCOUNT_ID`(기본, 지금 동작) | `OPAQUE` 를 더한다. `OPAQUE` 의 키: `<prefix>/o/<uuid>.<mac>/<파일>`, `mac = HMAC-SHA256(서버 비밀, 계정 id + "\n" + uuid)` 앞 32자. 소유 확인은 다시 계산해 비교한다 — DB 가 필요 없고, 업로드마다 값이 달라 **같은 프로필의 첨부끼리도 이어지지 않는다.** `ACCOUNT_ID` 꼴의 옛 키는 어느 방식에서나 지금처럼 확인된다.
+- `storage` 웹 설정에 `key-owner: ACCOUNT_ID`(기본, 지금 동작) | `OPAQUE` 를 더한다. `OPAQUE` 의 키: `<prefix>/o/<uuid>.<mac>/<파일>`, `mac = HMAC-SHA256(서버 비밀, 계정 id + "\n" + uuid)` 앞 32자. 소유 확인은 다시 계산해 비교한다 — DB 가 필요 없고, 업로드마다 값이 달라 **같은 프로필의 첨부끼리도 이어지지 않는다.** `ACCOUNT_ID` 꼴의 옛 키는 어느 방식에서나 지금처럼 확인된다(유효한 `ObjectKey` 가 아니거나 접두사 뒤가 비면 아니다. `<prefix>/o/` 로 시작하는 키는 `OPAQUE` 에서 mac 으로만 판정한다).
+- **스펙 이탈(B4 수정): `OPAQUE` 키에서는 클라이언트 파일 이름을 버리고 짧은 영숫자 확장자만 남긴다**(`file.<ext>`, 없거나 이상하면 `file`). 이유: 파일 이름이 두 프로필의 첨부를 잇는 값이 된다(같은 이름 · 같은 카메라 파일 번호). 원래 이름이 필요하면 앱이 별도 열에 저장한다. `ACCOUNT_ID` 방식은 지금과 같다.
 - 앱의 `BoardPolicy.canAttach` 가 접두사 비교 대신 쓸 `StorageKeyOwnership.owns(accountId, key)` 빈을 함께 낸다.
 - board 쪽 안전망은 §7.1 의 막기(storage 를 모른 채 "키에 내 계정 id 가 있나"만 본다).
 - 버린 것: 키에 프로필 id 를 넣기 — 올린 뒤 프로필을 바꿔 쓰면 A 의 키가 B 의 글에 실린다.
@@ -360,6 +361,7 @@ F1 은 B3 의 계약만 정해지면 가짜 서버로 먼저 간다.
 - 문체 · 활동 시간대 · 관심사 같은 행동 상관.
 - 계정 탈퇴 · 정지 때 여러 프로필이 같은 때에 사라지거나 조용해진다(§4 19).
 - 켜기 전부터 쓰던 사람의 첫 프로필 ↔ 옛 계정 id (§11).
+- `OPAQUE` 키에서 원래 파일 이름은 사라진다(§7.8) — 앱이 보여 줄 이름이 필요하면 따로 저장하는데, 그 이름이 공개되면 거기서 다시 이어진다.
 - 첨부 파일 **내용**(사진의 EXIF · 위치 · 기기 정보) — 업로드 때 지우는 것은 앱의 몫.
 - 본인 화면: 여러 프로필의 글에 한꺼번에 뜨는 수정 단추, 한 편지함에 모이는 알림.
 - 사용자가 스스로 두 프로필에 같은 이름을 붙이는 것.
@@ -375,7 +377,7 @@ F1 은 B3 의 계약만 정해지면 가짜 서버로 먼저 간다.
 - `PATCH` 본문의 모르는 칸(`authorId`)이 조용히 무시되는지, 거절되는지(지금 Jackson 설정).
   - 실측(B3): 조용히 무시된다 — `PATCH …/posts/{id}` 에 `{"title":"edited","authorId":"prf_u2"}` 를 보내면 `200`, 제목은 바뀌고 `authorId` 는 그대로다(`BoardAuthorIdentitiesWebTest`). 거절하지 않으므로 수정 요청에 `authorId` 를 실어 보내는 낡은 클라이언트도 깨지지 않고, 작성자는 바뀌지 않는다.
 - 앱(샘플)의 `BoardPolicy.canAttach` 가 지금 접두사 비교를 하는지 — 한다면 B4 에서 함께 바꾼다.
-  - 실측(B3): 하지 않는다 — 샘플 앱은 `BoardPolicy` 를 바꾸지 않아 `DefaultBoardPolicy.canAttach` 가 모든 키를 허용한다(`grep canAttach apps` 결과 없음). 접두사 비교는 문서(`docs/modules/board.md`)의 안내일 뿐이다. 바꾸는 것은 B4 · B8.
+  - 실측(B3, B4 수정 1회차에서 정정): `BoardPolicy.canAttach` 는 샘플이 바꾸지 않아 `DefaultBoardPolicy` 가 모든 키를 허용한다. 그러나 샘플 Notes 의 `@OwnAttachmentKey` → `OwnedKeys.isOwnedBy`(`apps/sample/…/notes/OwnAttachmentKey.kt:34-43`)가 접두사 비교(`<key-prefix>/<계정 id>/` + `..` 거절)를 하고, `docs/sample.md:37` 도 그렇게 안내한다. 이번 커밋(B4)에서는 샘플 코드를 바꾸지 않았다 — B8 에서 `StorageKeyOwnership.owns` 로 바꾼다.
 
 ## 정해야 할 것 — 결정됨 (2026-10-07 주인)
 

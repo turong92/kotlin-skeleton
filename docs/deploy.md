@@ -217,7 +217,7 @@ class StorageDeployGuard(private val properties: StorageProperties) : DeployGuar
 | auth-social-x | `<P>_AUTH_SOCIAL_X_CLIENT_ID` (env:) · `_CLIENT_SECRET` (**운영자**) · `_REDIRECT_URI` (env:) | id 가 비면 제공자가 없다. id 만 있으면 기동 실패 (`client-secret must not be blank`) |
 | captcha-turnstile | `<P>_CAPTCHA_TURNSTILE_ENABLED=true` (env:) · `_SECRET_KEY` (**운영자**) | 검증기 빈이 없다 — 기동은 되고, 주입받는 곳이 있으면 그 빈 이름으로 실패 |
 | payment-toss / -stripe | `<P>_PAYMENT_<X>_ENABLED=true` (env:) · `_SECRET_KEY` (**운영자**) | 제공자 빈이 없다 — 결제 라우팅이 그 제공자를 못 찾는다 |
-| storage | `<P>_STORAGE_WEB_KEY_SECRET` — **선언의 `secrets:` (무작위로 충분)**, `skeleton.storage.web.key-owner=OPAQUE`(작성자 프로필 앱의 첨부 키)일 때만 필요 | `OPAQUE` 인데 비었거나 32자보다 짧으면 **기동 실패**(`key-secret must be at least 32 characters`). 기본(`ACCOUNT_ID`)에서는 읽지 않는다. 바꾸면 이미 발급한 `OPAQUE` 키가 소유 확인에서 떨어진다(옛 `ACCOUNT_ID` 꼴 키는 그대로) |
+| storage | `<P>_STORAGE_WEB_KEY_SECRET` — **선언의 `secrets:` (무작위로 충분)**, `skeleton.storage.web.key-owner=OPAQUE`(작성자 프로필 앱의 첨부 키)일 때만 필요 | `OPAQUE` 인데 비었거나 32자보다 짧으면 **기동 실패**(`key-secret must be at least 32 characters`). 기본(`ACCOUNT_ID`)에서는 읽지 않는다. 바꾸면 이미 발급한 `OPAQUE` 키가 소유 확인에서 떨어진다(옛 `ACCOUNT_ID` 꼴 키는 그대로) — **서버를 옮길 때 이 값을 반드시 들고 간다** |
 | storage-s3 | `<P>_STORAGE_S3_BUCKET` · `_ENDPOINT_OVERRIDE` (env:) · `_CREDENTIALS_ACCESS_KEY_ID` · `_CREDENTIALS_SECRET_ACCESS_KEY` (**운영자**) | 버킷이 비면 저장소 빈이 없다. 키가 비면 AWS 기본 자격 증명 체인으로 가 **첫 사용에서** 실패(기동은 된다) |
 | notification-mail | `<P>_NOTIFICATION_MAIL_ENABLED=true` · `_FROM` · `SPRING_MAIL_HOST` · `_USERNAME` (env:) · `SPRING_MAIL_PASSWORD` (**운영자**, 인증 없는 릴레이면 필요 없다) | host · from 이 비면 발송기 빈이 없다. 비밀번호가 틀리면 첫 발송에서 실패 |
 | notification-slack | `<P>_NOTIFICATION_SLACK_ENABLED=true` (env:) · `_WEBHOOK_URL` (**운영자**) | 아무것도 보내지 않는다 |

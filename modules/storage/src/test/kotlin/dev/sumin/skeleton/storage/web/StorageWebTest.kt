@@ -137,7 +137,7 @@ class StorageWebOpaqueKeyTest {
     private fun issue(accountId: String = "acc_a"): String {
         postJson("/api/v1/storage/presign", """{"fileName":"cat.png","contentType":"image/png","sizeBytes":5}""", accountId)
             .andExpect(status().isOk)
-            .andExpect(jsonPath("$.value.key").value(org.hamcrest.Matchers.matchesPattern("uploads/o/[0-9a-f-]{36}\\.[0-9a-f]{32}/cat\\.png")))
+            .andExpect(jsonPath("$.value.key").value(org.hamcrest.Matchers.matchesPattern("uploads/o/[0-9a-f-]{36}\\.[0-9a-f]{32}/file\\.png")))
         return storage.uploads.last().key.value
     }
 
