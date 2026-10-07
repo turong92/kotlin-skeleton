@@ -46,6 +46,6 @@ class PrincipalAwareRateLimitKeyResolverTest {
         val direct = PrincipalAwareRateLimitKeyResolver(ClientIps(WebProperties.ClientIp(mode = ClientIpMode.DIRECT)))
         val request = MockHttpServletRequest().apply { remoteAddr = "2001:db8:1:2:aaaa::1" }
 
-        assertThat(direct.resolve(request)).isEqualTo("ip:2001:db8:1:2:0:0:0:0/64")
+        assertThat(direct.resolve(request)).isEqualTo("ip:2001:db8:1:2::/64")
     }
 }

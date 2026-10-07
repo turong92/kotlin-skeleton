@@ -46,7 +46,7 @@ class ClientIpsTest {
     @Test
     fun `cloudflare mode takes CF-Connecting-IP from a trusted proxy peer`() {
         assertEquals("198.51.100.20", cloudflare.of(request("127.0.0.1", xff = "9.9.9.9, 198.51.100.20", cf = "198.51.100.20")).ip)
-        assertEquals("2001:db8:0:0:0:0:0:5", cloudflare.of(request("::1", cf = "2001:db8::5")).ip)
+        assertEquals("2001:db8::5", cloudflare.of(request("::1", cf = "2001:db8::5")).ip)
     }
 
     @Test
@@ -74,7 +74,7 @@ class ClientIpsTest {
     @Test
     fun `ports and brackets are stripped`() {
         assertEquals("198.51.100.20", proxy.of(request("127.0.0.1", xff = "198.51.100.20:5555")).ip)
-        assertEquals("2001:db8:0:0:0:0:0:1", proxy.of(request("127.0.0.1", xff = "[2001:db8::1]:443")).ip)
+        assertEquals("2001:db8::1", proxy.of(request("127.0.0.1", xff = "[2001:db8::1]:443")).ip)
     }
 
     @Test
@@ -82,8 +82,29 @@ class ClientIpsTest {
         val a = direct.of(request("2001:db8:1:2:aaaa::1"))
         val b = direct.of(request("2001:db8:1:2:bbbb::9"))
         assertEquals(a.limitKey, b.limitKey)
-        assertEquals("2001:db8:1:2:0:0:0:0/64", a.limitKey)
-        assertEquals("2001:db8:1:2:aaaa:0:0:1", a.ip)
+        assertEquals("2001:db8:1:2::/64", a.limitKey)
+        assertEquals("2001:db8:1:2:aaaa::1", a.ip)
+    }
+
+    @Test
+    fun `an IPv6 address is reported in its canonical compressed form - the servlet container's expanded 0-0-0-1 never reaches a session list, a limit key or an audit row`() {
+        val unset = ClientIps()
+        assertEquals("::1", unset.of(request("0:0:0:0:0:0:0:1")).ip)
+        assertEquals("::1", unset.of(request("0:0:0:0:0:0:0:1")).limitKey)
+        assertEquals("::1", direct.of(request("0:0:0:0:0:0:0:1")).ip)
+        assertEquals("::/64", direct.of(request("0:0:0:0:0:0:0:1")).limitKey)
+        assertEquals("2001:db8::5", direct.of(request("2001:0db8:0000:0000:0000:0000:0000:0005")).ip)
+        assertEquals("2001:db8::5", unset.of(request("2001:0DB8::5")).ip, "lower case, no leading zeros")
+    }
+
+    @Test
+    fun `the compression follows RFC 5952 - the longest run of zero groups, the first on a tie, never a single group, IPv4-mapped is an IPv4 address`() {
+        assertEquals("2001:db8:0:1:1:1:1:1", direct.of(request("2001:db8:0:1:1:1:1:1")).ip, "one zero group is written out")
+        assertEquals("2001:0:0:1::1", direct.of(request("2001:0:0:1:0:0:0:1")).ip, "the longer run wins")
+        assertEquals("2001::1:0:0:1:0", direct.of(request("2001:0:0:1:0:0:1:0")).ip, "two runs of the same length: the first is compressed")
+        assertEquals("1::", direct.of(request("1:0:0:0:0:0:0:0")).ip)
+        assertEquals("1.2.3.4", direct.of(request("::ffff:1.2.3.4")).ip)
+        assertEquals("fe80::1", direct.of(request("fe80:0:0:0:0:0:0:1")).ip)
     }
 
     @Test

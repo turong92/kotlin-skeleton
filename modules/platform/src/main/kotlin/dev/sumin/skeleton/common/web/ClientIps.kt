@@ -77,11 +77,12 @@ class ClientIps(props: WebProperties.ClientIp = WebProperties.ClientIp()) {
 
     private fun trusted(ip: InetAddress) = proxies.any { it.contains(ip) }
 
-    private fun raw(value: String?): ClientAddress = (value ?: "unknown").take(64).let { ClientAddress(it, it) }
+    /** 모드가 없거나 주소 글자가 아닐 때 — IP 글자면 정규 표기로, 아니면 그대로(최대 64자) */
+    private fun raw(value: String?): ClientAddress = ((literal(value)?.let(::canonical)) ?: (value ?: "unknown").take(64)).let { ClientAddress(it, it) }
 
     private fun address(ip: InetAddress): ClientAddress {
-        val text = ip.hostAddress
-        val key = if (ip is Inet6Address) InetAddress.getByAddress(ip.address.copyOf(8) + ByteArray(8)).hostAddress + "/64" else text
+        val text = canonical(ip)
+        val key = if (ip is Inet6Address) canonical(InetAddress.getByAddress(ip.address.copyOf(8) + ByteArray(8))) + "/64" else text
         return ClientAddress(text, key)
     }
 
@@ -121,6 +122,28 @@ class ClientIps(props: WebProperties.ClientIp = WebProperties.ClientIp()) {
         private val IPV4 = Regex("^\\d{1,3}(\\.\\d{1,3}){3}$")
         private val IPV4_PORT = Regex("^(\\d{1,3}(\\.\\d{1,3}){3}):\\d{1,5}$")
         private val IPV6 = Regex("^[0-9A-Fa-f:.]*:[0-9A-Fa-f:.]*$")
+
+        /**
+         * 사람이 읽는 정규 표기 (RFC 5952) — IPv4 는 점 표기, IPv6 는 소문자 · 앞자리 0 없이 · **가장 긴** 0 그룹 연속(둘 이상, 같으면 앞쪽)을 `::` 로.
+         * 서블릿 컨테이너(Tomcat)가 주는 `0:0:0:0:0:0:0:1` 같은 풀어 쓴 꼴이 세션 목록 · 한도 키 · 감사 기록에 그대로 나가지 않게 — 저장 · 응답 · 한도가 **같은 표기**를 쓰도록 이 한 곳에서 만든다.
+         */
+        fun canonical(ip: InetAddress): String {
+            if (ip !is Inet6Address) return ip.hostAddress
+            val groups = IntArray(8) { ((ip.address[it * 2].toInt() and 0xFF) shl 8) or (ip.address[it * 2 + 1].toInt() and 0xFF) }
+            var bestStart = -1; var bestLen = 0
+            var i = 0
+            while (i < 8) {
+                if (groups[i] != 0) { i++; continue }
+                var j = i
+                while (j < 8 && groups[j] == 0) j++
+                if (j - i > bestLen) { bestStart = i; bestLen = j - i }
+                i = j
+            }
+            if (bestLen < 2) return groups.joinToString(":") { Integer.toHexString(it) }
+            val head = groups.take(bestStart).joinToString(":") { Integer.toHexString(it) }
+            val tail = groups.drop(bestStart + bestLen).joinToString(":") { Integer.toHexString(it) }
+            return "$head::$tail"
+        }
 
         /** IP 글자만 주소로 — 이름이면 null(조회하지 않는다). `1.2.3.4:80` · `[::1]:443` 의 포트는 뗀다 */
         fun literal(value: String?): InetAddress? {

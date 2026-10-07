@@ -60,6 +60,12 @@ class RegistrationService(private val core: AccountCore) {
     fun signUp(cmd: SignUpCommand): SignUpOutcome {
         val p = core.props
         if (!p.signUp.enabled) throw AccountException(AccountErrorCode.SIGN_UP_CLOSED)
+        // 형식만 보는 검사(닉네임 규칙 · 주소 모양)는 한도 **앞**이다 — 시도도 메일도 외부 호출도 만들지 않는 요청이 IP 당 한도를 쓰지 않게 (공용 주소 뒤에서 몇 번 틀린 사람이 남의 가입을 막지 않게).
+        // 둘 다 요청 본문만 본다(주소 · 계정을 읽지 않는다) — 새 주소든 있는 주소든 같은 시점에 같은 400. 이름이 이미 쓰였는지는 여기서 알리지 않는다 (확인을 끝낼 때의 409)
+        val name = core.names.accept(cmd.displayName, required = p.displayName.requiredOnSignUp)
+        val email = Emails.normalize(cmd.email)
+        if (!Emails.plausible(email)) throw ApplicationException("Invalid email", PlatformErrorCode.VALIDATION_FAILED)
+        // 한도가 지키는 것 — 동의 조회 · 캡차 호출 · 비밀번호 정책(유출 조회가 외부일 수 있다) · 해시 · 시도 저장 · 메일 — 은 이 뒤다
         cmd.ipKey?.let {
             val a = core.limits.acquire("signup:ip", it, p.signUp.perIp, p.signUp.perIpWindow)
             if (!a.allowed) throw RateLimitedException(a.retryAfterSeconds)
@@ -68,11 +74,7 @@ class RegistrationService(private val core: AccountCore) {
         val gate = core.consents()
         if (cmd.consents.size > SignUpCommand.MAX_CONSENTS) throw ApplicationException("Too many consents", PlatformErrorCode.VALIDATION_FAILED)
         gate?.check(cmd.consents)
-        // 닉네임도 요청 본문만 본다(주소 · 계정을 읽지 않는다) — 새 주소든 있는 주소든 같은 시점에 같은 400. 이름이 이미 쓰였는지는 여기서 알리지 않는다 (확인을 끝낼 때의 409)
-        val name = core.names.accept(cmd.displayName, required = p.displayName.requiredOnSignUp)
         core.captcha.check(cmd.captchaToken, cmd.ip, "sign_up")
-        val email = Emails.normalize(cmd.email)
-        if (!Emails.plausible(email)) throw ApplicationException("Invalid email", PlatformErrorCode.VALIDATION_FAILED)
         val violations = core.policy.check(cmd.password, email)
         if (violations.isNotEmpty()) throw PasswordPolicyException(violations)
         val hash = core.hasher.hash(cmd.password)

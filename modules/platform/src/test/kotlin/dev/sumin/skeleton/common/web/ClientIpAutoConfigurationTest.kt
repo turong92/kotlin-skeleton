@@ -39,7 +39,7 @@ class ClientIpAutoConfigurationTest {
     fun `the default rate limit key resolver goes through ClientIps (IPv6 limit key is a 64-bit prefix once a mode is set)`() {
         runner.withPropertyValues("skeleton.web.rate-limit.enabled=true", "skeleton.web.client-ip.mode=direct").run { context ->
             val key = context.getBean(RateLimitKeyResolver::class.java).resolve(MockHttpServletRequest().apply { remoteAddr = "2001:db8:1:2:aaaa::1" })
-            assertEquals("2001:db8:1:2:0:0:0:0/64", key)
+            assertEquals("2001:db8:1:2::/64", key)
         }
     }
 
