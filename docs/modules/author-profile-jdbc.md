@@ -32,7 +32,7 @@
 | 부팅에 필요한 것 | `DataSource` 와 `db-*` 모듈 하나, 그리고 이 모듈의 마이그레이션이 적용된 스키마 (`spring.flyway.locations: classpath:db/migration/{vendor}`). |
 | 교체 지점 | `AuthorProfileRepository` (`@ConditionalOnMissingBean`) |
 | 마이그레이션 | `modules/author-profile-jdbc/src/main/resources/db/migration/postgresql`, `modules/author-profile-jdbc/src/main/resources/db/migration/mysql` |
-| 프론트 짝 | 없음 |
+| 프론트 짝 | `@skeleton/author-profile` |
 | 테스트 | `modules/author-profile-jdbc/src/test`, `modules/author-profile-jdbc/src/dbTest` (PostgreSQL · MySQL 컨테이너로 두 번 돈다 (`postgresTest`, `mysqlTest`) — `(name_key, tag)` · `primary_of` 유니크를 16 스레드 경합으로 · 상한보다 많은 스레드가 상한을 못 넘김 · 탈퇴 고리 멱등 · 고리 뒤 `ensureFirstProfile` 이 지워진 계정에 첫 프로필을 못 만듦) |
 
 [모듈 색인](README.md) · [최소 구성 가이드](../minimal-composition.md)

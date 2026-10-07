@@ -5,7 +5,7 @@ spring:
     name: kotlin-skeleton
   autoconfigure:
     # 워크벤치는 시드 계정(user · admin) 기반 인증을 보여 주고 react-skeleton 워크벤치 UI 의 계약(경로 · 모양)을 지킨다. 계정 수명주기(account · auth-session · auth-magic-link)는
-    # 클래스패스에 있지만(문서 스니펫 · 모듈 목록 시험) 여기서는 켜지 않는다 — 실제 가입 · 로그인 · 세션 흐름은 apps/sample 이 보여 준다 (docs/accounts.md).
+    # 클래스패스에 있지만(문서 스니펫 · 모듈 목록 시험) 여기서는 켜지 않는다 (작성자 프로필 author-profile 도 account 위에 얹힌 모듈이라 같다 — 켜면 board 가 AuthorIdentities 를 보고 authorId 를 필수로 하므로 워크벤치 샘플 게시판 계약이 바뀐다) — 실제 가입 · 로그인 · 세션 흐름은 apps/sample 이 보여 준다 (docs/accounts.md).
     exclude:
       - dev.sumin.skeleton.account.AccountAutoConfiguration
       - dev.sumin.skeleton.account.AccountPurgeJobAutoConfiguration
@@ -23,6 +23,9 @@ spring:
       - dev.sumin.skeleton.auth.sessions.jdbc.AuthSessionJdbcAutoConfiguration
       - dev.sumin.skeleton.auth.magiclink.MagicLinkAutoConfiguration
       - dev.sumin.skeleton.auth.magiclink.MagicLinkWebAutoConfiguration
+      - dev.sumin.skeleton.authorprofile.AuthorProfileAutoConfiguration
+      - dev.sumin.skeleton.authorprofile.web.AuthorProfileWebAutoConfiguration
+      - dev.sumin.skeleton.authorprofile.jdbc.AuthorProfileJdbcAutoConfiguration
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/app}  # 시각 바인딩은 modules:db-postgresql (SqlDialect)
     username: ${SPRING_DATASOURCE_USERNAME:app}

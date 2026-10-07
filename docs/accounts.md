@@ -218,6 +218,10 @@ select id, display_name from accounts where display_name regexp '[#@＃＠]' or 
 
 **위협 · 개인정보**: 닉네임은 공개 정보다(게시판에 보인다) — `UNIQUE` 의 `409` 와 응답의 이름은 비밀이 아니다. 계정이 있는지는 닉네임으로도 알 수 없다(요청 단계는 같은 202). 자동 닉네임은 이메일 · 계정 id · 시각에서 만들지 않는다(무작위). 탈퇴한 계정의 이름 · 키 · 꼬리표는 지워진다 — `AccountJourneyIntegrationTest` 의 전체 표 스캔(`display_name_key` 의 소문자 값 포함)이 본다.
 
+## 작성자 프로필 (`author-profile`)
+
+한 계정이 글 · 댓글마다 다른 이름을 골라 쓰게 하는 선택 모듈이다 — 두 프로필이 같은 사람이라는 사실이 다른 사용자에게 드러나지 않는다. `account` 위에 얹히고(스키마 · `account` 코드 변경 없이 닉네임 규칙 · 예약어 · 겹침 방식 · 이름 바꾸기 한도 숫자를 그대로 따른다), 계정의 닉네임(`display_name`)은 본인 · 관리자 · 메일 인사말용 사적 라벨로 남는다. 모듈 페이지: [modules/author-profile.md](modules/author-profile.md) (HTTP `/api/v1/author-profiles` · 설정 · 탈퇴 · 넘겨받기 · 알려진 한계), 설계 · 위협 모델: `docs/superpowers/specs/2026-10-07-author-profiles-design.md`.
+
 ## 삭제 · 지우기 · 내보내기
 
 ### 삭제 수명주기

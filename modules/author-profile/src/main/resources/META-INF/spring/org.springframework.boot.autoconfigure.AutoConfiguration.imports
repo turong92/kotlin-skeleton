@@ -1,1 +1,2 @@
 dev.sumin.skeleton.authorprofile.AuthorProfileAutoConfiguration
+dev.sumin.skeleton.authorprofile.web.AuthorProfileWebAutoConfiguration

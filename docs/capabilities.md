@@ -83,8 +83,8 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `auth-social-naver` | 네이버 OAuth 제공자 — 토큰 교환 · 프로필 조회 클라이언트를 소셜 로그인의 제공자로 등록한다(클라이언트 id · secret 만 있으면 된다). | `--modules auth-social-naver` | 네이버 로그인, 네이버 소셜 로그인, 소셜 로그인 / naver login, naver oauth, social login | `@skeleton/auth` |
 | `auth-social-oidc` | 범용 OpenID Connect 소셜 로그인 제공자 — 속성만으로 제공자를 여러 개 더한다(discovery · JWKS 키 교체 · ID 토큰 검증 · PKCE · nonce · LINE 프리셋). client-id 를 적은 제공자만 켜진다. | `--modules auth-social-oidc` | 라인 로그인, LINE 로그인, OIDC, OpenID Connect, 글로벌 소셜 로그인, 마이크로소프트 로그인, 소셜 로그인 / line login, openid connect, oidc, microsoft login, social login, global social login | `@skeleton/auth` |
 | `auth-social-x` | X(Twitter) 로그인 제공자 — OAuth 2.0 Authorization Code + PKCE(필수), 기밀 클라이언트(Basic), GET /2/users/me. client-id 를 적으면 켜진다. | `--modules auth-social-x` | X 로그인, 엑스 로그인, 트위터 로그인, 글로벌 소셜 로그인, 소셜 로그인 / x login, twitter login, sign in with x, social login, global social login | `@skeleton/auth` |
-| `author-profile` | 작성자 프로필 — 한 계정이 닉네임(프로필)을 여러 개 만들어 글 · 댓글마다 골라 쓰고, 두 프로필이 같은 사람이라는 사실이 다른 사용자에게 드러나지 않게 한다(공개 작성자 id prf_…, 독립 꼬리표, 즉시 삭제, 옛 글을 첫 프로필로 넘겨받기). 도메인 · 서비스 · 디렉터리 · 신원 확인 · 탈퇴 고리까지이고 저장소는 author-profile-jdbc 가 맡는다(HTTP 는 뒤따르는 조각이다). | `--modules author-profile,author-profile-jdbc` | 작성자 프로필, 닉네임 여러 개, 부캐, 익명 프로필, 프로필 선택, 글마다 닉네임 / author profile, multiple nicknames, pseudonym, alias, persona, unlinkable identities | — |
-| `author-profile-jdbc` | 작성자 프로필 저장소 — PostgreSQL · MySQL 로 author-profile 의 저장 포트를 구현한다(author_profiles 표 · (이름 키, 꼬리표)와 첫 프로필 유니크 · 첫 프로필 줄을 잠그는 원자적 상한). | `--modules author-profile-jdbc` | 작성자 프로필 저장소, 프로필 DB / author profile storage, author profile repository, profile database | — |
+| `author-profile` | 작성자 프로필 — 한 계정이 닉네임(프로필)을 여러 개 만들어 글 · 댓글마다 골라 쓰고, 두 프로필이 같은 사람이라는 사실이 다른 사용자에게 드러나지 않게 한다(공개 작성자 id prf_…, 독립 꼬리표, 즉시 삭제, 옛 글을 첫 프로필로 넘겨받기). 도메인 · 서비스 · 디렉터리 · 신원 확인 · 탈퇴 고리 · 내 프로필 HTTP(/api/v1/author-profiles: config · 목록 · 만들기 · 이름 바꾸기 · 지우기)까지이고 저장소는 author-profile-jdbc 가 맡는다. | `--modules author-profile,author-profile-jdbc` | 작성자 프로필, 닉네임 여러 개, 부캐, 익명 프로필, 프로필 선택, 글마다 닉네임 / author profile, multiple nicknames, pseudonym, alias, persona, unlinkable identities | `@skeleton/author-profile` |
+| `author-profile-jdbc` | 작성자 프로필 저장소 — PostgreSQL · MySQL 로 author-profile 의 저장 포트를 구현한다(author_profiles 표 · (이름 키, 꼬리표)와 첫 프로필 유니크 · 첫 프로필 줄을 잠그는 원자적 상한). | `--modules author-profile-jdbc` | 작성자 프로필 저장소, 프로필 DB / author profile storage, author profile repository, profile database | `@skeleton/author-profile` |
 | `board` | 게시판 — 글 · 중첩 댓글(대댓글) · 설정으로 늘리는 반응(좋아요 · 공감 …) · 운영자 숨김/고정 · 댓글 알림 · 작성자 닉네임(authorName · authorTag, AuthorDirectory 로 요청당 한 번 조회), HTTP /api/v1/boards 까지. | `--modules board,board-jdbc` | 게시판, 커뮤니티, 글쓰기, 댓글, 대댓글, 공감, 좋아요, 반응, 운영자 숨김, 공지 고정 / board, forum, community, post, comment, reply, reaction, like, moderation | `@skeleton/board` |
 | `board-jdbc` | 게시판 저장소 — PostgreSQL · MySQL 로 board 의 저장 포트 네 개를 구현한다(boards · board_* 테이블 · 원자적 카운터). | `--modules board-jdbc` | 게시판 저장소, 게시판 DB / board storage, board repository, board database | `@skeleton/board` |
 | `captcha-turnstile` | 봇 방지 — Cloudflare Turnstile 토큰을 서버에서 검증한다(TurnstileVerifier). | 스타터(apps/api)에 기본 포함 | 캡차, 봇 방지, 스팸 방지, 로봇 확인, 가입 폼 보호 / captcha, turnstile, bot protection, spam protection, cloudflare turnstile | `@skeleton/captcha-turnstile` |
@@ -408,14 +408,16 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - X API 의 티어 · 요금 조건은 X 정책 (확인 필요 — docs/modules/auth-social-x.md)
 - 키워드: X 로그인, 엑스 로그인, 트위터 로그인, 글로벌 소셜 로그인, 소셜 로그인 / x login, twitter login, sign in with x, social login, global social login
 
-### `author-profile` — 작성자 프로필 — 한 계정이 닉네임(프로필)을 여러 개 만들어 글 · 댓글마다 골라 쓰고, 두 프로필이 같은 사람이라는 사실이 다른 사용자에게 드러나지 않게 한다(공개 작성자 id prf_…, 독립 꼬리표, 즉시 삭제, 옛 글을 첫 프로필로 넘겨받기). 도메인 · 서비스 · 디렉터리 · 신원 확인 · 탈퇴 고리까지이고 저장소는 author-profile-jdbc 가 맡는다(HTTP 는 뒤따르는 조각이다).
+### `author-profile` — 작성자 프로필 — 한 계정이 닉네임(프로필)을 여러 개 만들어 글 · 댓글마다 골라 쓰고, 두 프로필이 같은 사람이라는 사실이 다른 사용자에게 드러나지 않게 한다(공개 작성자 id prf_…, 독립 꼬리표, 즉시 삭제, 옛 글을 첫 프로필로 넘겨받기). 도메인 · 서비스 · 디렉터리 · 신원 확인 · 탈퇴 고리 · 내 프로필 HTTP(/api/v1/author-profiles: config · 목록 · 만들기 · 이름 바꾸기 · 지우기)까지이고 저장소는 author-profile-jdbc 가 맡는다.
 
 - 종류 · 상태: module · experimental — 위치 `modules/author-profile`
 - 켜는 법: `--modules author-profile,author-profile-jdbc`
 - 의존 한 줄: `implementation(project(":modules:author-profile"))`
 - 함께 골라야 한다: `author-profile-jdbc`
 - 설정 접두사 `skeleton.author-profile` — 키와 기본값 `docs/config/modules/author-profile.yml`
+- HTTP 경로: `/api/v1/author-profiles`
 - 문서: `docs/modules/author-profile.md`
+- 짝 프런트(react-skeleton): 항목 `author-profile` · 패키지 `@skeleton/author-profile` · 조각 `--packages author-profile`
 - 쓰지 않는 경우:
   - 저장소를 모른다 — author-profile-jdbc 를 같이 고른다(없으면 시작에 실패한다). 다른 DB(JPA · jOOQ)로 저장하려면 포트 AuthorProfileRepository 를 앱이 구현한다
   - account 위에 얹힌 모듈이다 — account 없이 자기 AuthAccountRepository 만 쓰는 앱에는 맞지 않는다
@@ -429,6 +431,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 의존 한 줄: `implementation(project(":modules:author-profile-jdbc"))`
 - 자동으로 따라온다: `author-profile`
 - 문서: `docs/modules/author-profile-jdbc.md`
+- 짝 프런트(react-skeleton): 항목 `author-profile` · 패키지 `@skeleton/author-profile` · 조각 `--packages author-profile`
 - 쓰지 않는 경우:
   - author-profile 없이는 쓰지 않는다(따라온다)
   - 다른 DB(JPA · jOOQ)로 저장하려면 author-profile 의 저장 포트(AuthorProfileRepository)를 앱이 구현한다

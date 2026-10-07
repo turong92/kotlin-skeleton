@@ -5,9 +5,14 @@ dependencies {
     api(project(":modules:account"))
 
     implementation("org.springframework.boot:spring-boot-starter")
-    implementation("org.springframework.boot:spring-boot-starter-webmvc")   // HttpStatus (오류 코드) · 뒤따를 HTTP 조각
+    implementation("org.springframework.boot:spring-boot-starter-webmvc")   // HttpStatus (오류 코드) · HTTP 엔드포인트
+    implementation("org.springframework.boot:spring-boot-starter-security")   // Authentication (호출자) — account 와 auth-magic-link 가 같이 쓴다
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-api:3.0.3")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
+    implementation("tools.jackson.module:jackson-module-kotlin")
 
+    testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
+    testImplementation("org.springframework.security:spring-security-test")
     testImplementation("org.assertj:assertj-core")
     testImplementation("org.springframework.boot:spring-boot-test")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")

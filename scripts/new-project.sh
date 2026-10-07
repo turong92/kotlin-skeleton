@@ -189,6 +189,11 @@ if in_list board "$SELECTED_SORTED" && ! in_list board-jdbc "$SELECTED_SORTED"; 
   NOTES="${NOTES:+$NOTES$'\n'}board has no storage of its own: add board-jdbc too (--modules board,board-jdbc) unless you implement its four repository ports yourself — without them the app fails to start"
 fi
 
+# author-profile 도 저장소를 모른다 (author-profile-jdbc 가 포트를 구현한다)
+if in_list author-profile "$SELECTED_SORTED" && ! in_list author-profile-jdbc "$SELECTED_SORTED"; then
+  NOTES="${NOTES:+$NOTES$'\n'}author-profile has no storage of its own: add author-profile-jdbc too (--modules author-profile,author-profile-jdbc) unless you implement its AuthorProfileRepository port yourself — without it the app fails to start"
+fi
+
 echo "→ $TARGET"
 echo "  package $PKG, prefix $PREFIX, class prefix $CLASS, db $DB$([ "$WITH_WORKBENCH" = 1 ] && echo ', with workbench')$([ "$WITH_SAMPLE" = 1 ] && echo ', with sample')"
 echo "  modules ($(printf '%s\n' "$SELECTED_SORTED" | wc -l | tr -d ' ')): $(printf '%s\n' "$SELECTED_SORTED" | tr '\n' ' ')"

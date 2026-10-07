@@ -6,7 +6,7 @@ skeleton:
     create-window: 30d
     adopt-on-startup: true             # 기동할 때 옛 글(공개 작성자 id 없는 행)을 계정의 첫 프로필로 넘겨받는다
     http:
-      enabled: true                    # (아직 동작 없음 — 엔드포인트는 뒤따르는 조각) false 면 /author-profiles 엔드포인트를 등록하지 않는다
-      base-path: /api/v1/author-profiles   # (아직 동작 없음)
+      enabled: true                    # false 면 /author-profiles 엔드포인트를 등록하지 않는다 (서비스 · 디렉터리는 그대로)
+      base-path: /api/v1/author-profiles
     admin:
       enabled: false                   # (아직 동작 없음) 관리자의 프로필 ↔ 계정 연결 조회 엔드포인트 (기본 꺼짐, 호출마다 감사 이벤트)
