@@ -1,0 +1,14 @@
+# 연결 누출 스캔(AuthorLinkLeakIntegrationTest)의 시드 — 관찰자 Y 는 평범한 사용자, X 는 프로필 여럿을 쓸 계정, 정지 · 탈퇴 시험용 관리자 하나.
+# test-seeds.yml 과 같은 시험용 설정을 따로 가진다 (목록은 합쳐지지 않고 통째로 바뀐다)
+skeleton:
+  account:
+    password:
+      bcrypt-strength: 4
+    login:
+      per-account: 1000
+      per-ip: 1000
+    seed:
+      accounts:
+        - { id: acc_leak_x, email: xavier.leak@example.com, password: password, display-name: Xavier }
+        - { id: acc_leak_y, email: yolanda.leak@example.com, password: password, display-name: Yolanda }
+        - { id: acc_leak_admin, email: admin.leak@example.com, password: password, roles: [ADMIN], display-name: Overseer }
