@@ -6,6 +6,7 @@ import dev.sumin.skeleton.board.BoardRepository
 import dev.sumin.skeleton.board.CommentRepository
 import dev.sumin.skeleton.board.PostRepository
 import dev.sumin.skeleton.board.ReactionRepository
+import dev.sumin.skeleton.common.author.AuthorAdoptionListener
 import dev.sumin.skeleton.persistence.jdbc.SqlDialect
 import javax.sql.DataSource
 import org.springframework.boot.autoconfigure.AutoConfiguration
@@ -55,4 +56,8 @@ class BoardJdbcAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(BoardErasureRepository::class)
     fun jdbcBoardErasureRepository(dataSource: DataSource): BoardErasureRepository = JdbcBoardErasureRepository(NamedParameterJdbcTemplate(dataSource))
+
+    @Bean
+    @ConditionalOnMissingBean(name = ["boardAuthorAdoptionListener"])   // 고리는 모듈마다 하나씩 있어 타입이 아니라 이름으로 비킨다 (BoardAccountErasureListener 와 같다)
+    fun boardAuthorAdoptionListener(dataSource: DataSource): AuthorAdoptionListener = JdbcBoardAuthorAdoption(NamedParameterJdbcTemplate(dataSource))
 }

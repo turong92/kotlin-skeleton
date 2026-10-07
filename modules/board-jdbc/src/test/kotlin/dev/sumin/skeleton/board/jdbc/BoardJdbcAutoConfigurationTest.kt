@@ -39,6 +39,23 @@ class BoardJdbcAutoConfigurationTest {
     }
 
     @Test
+    fun `the author adoption listener is registered as board and an app bean replaces it`() {
+        runner.run { ctx ->
+            val listener = ctx.getBean(dev.sumin.skeleton.common.author.AuthorAdoptionListener::class.java)
+            assertIs<JdbcBoardAuthorAdoption>(listener)
+            assertEquals("board", listener.name)
+        }
+        val own = object : dev.sumin.skeleton.common.author.AuthorAdoptionListener {
+            override val name = "own"
+            override fun pendingAccounts(limit: Int) = emptyList<String>()
+            override fun adopt(accountId: String, authorId: String) = 0
+        }
+        runner.withBean("boardAuthorAdoptionListener", dev.sumin.skeleton.common.author.AuthorAdoptionListener::class.java, { own }).run { ctx ->
+            assertEquals(own, ctx.getBean(dev.sumin.skeleton.common.author.AuthorAdoptionListener::class.java))
+        }
+    }
+
+    @Test
     fun `an app repository replaces the JDBC one`() {
         val own = object : PostRepository by JdbcPostRepository(
             org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate(dataSource),

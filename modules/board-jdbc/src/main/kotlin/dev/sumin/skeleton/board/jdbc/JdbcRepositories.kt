@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.board.jdbc
 
 import dev.sumin.skeleton.board.Board
+import dev.sumin.skeleton.board.BoardAuthors
 import dev.sumin.skeleton.board.BoardErasureRepository
 import dev.sumin.skeleton.board.BoardRepository
 import dev.sumin.skeleton.board.Comment
@@ -21,6 +22,7 @@ import dev.sumin.skeleton.board.PostStatus
 import dev.sumin.skeleton.board.ReactionMode
 import dev.sumin.skeleton.board.ReactionRepository
 import dev.sumin.skeleton.board.ReactionTarget
+import dev.sumin.skeleton.common.author.AuthorAdoptionListener
 import dev.sumin.skeleton.persistence.jdbc.SqlDialect
 import java.sql.ResultSet
 import java.time.Instant
@@ -85,10 +87,10 @@ class JdbcPostRepository(
             jdbc.update(
                 """
                 insert into board_posts
-                    (board_code, author_id, title, body, status, pinned, view_count, comment_count, reaction_count, attachment_count, created_at, updated_at)
-                values (:board, :author, :title, :body, :status, :pinned, 0, 0, 0, :attachmentCount, :now, :now)
+                    (board_code, author_id, author_ref, title, body, status, pinned, view_count, comment_count, reaction_count, attachment_count, created_at, updated_at)
+                values (:board, :author, :authorRef, :title, :body, :status, :pinned, 0, 0, 0, :attachmentCount, :now, :now)
                 """.trimIndent(),
-                MapSqlParameterSource().addValue("board", post.boardCode).addValue("author", post.authorId).addValue("title", post.title)
+                MapSqlParameterSource().addValue("board", post.boardCode).addValue("author", post.authorId).addValue("authorRef", post.authorRef).addValue("title", post.title)
                     .addValue("body", post.body).addValue("status", post.status.name).addValue("pinned", false)
                     .addValue("attachmentCount", post.attachments.size).addValue("now", dialect.instantParam(post.now)),
                 keys,
@@ -154,7 +156,7 @@ class JdbcPostRepository(
         params.addValue("excerpt", query.excerptLength).addValue("limit", query.size).addValue("offset", query.page * query.size)
         val rows = jdbc.query(
             """
-            select p.id, p.board_code, p.author_id, p.title, left(p.body, :excerpt) as excerpt, p.status, p.pinned, p.view_count,
+            select p.id, p.board_code, p.author_id, p.author_ref, p.title, left(p.body, :excerpt) as excerpt, p.status, p.pinned, p.view_count,
                    p.comment_count, p.reaction_count, p.attachment_count, p.created_at, p.updated_at
             from board_posts p
             where $where
@@ -164,7 +166,7 @@ class JdbcPostRepository(
             params,
         ) { rs, _ ->
             PostListItem(
-                id = rs.getLong("id"), boardCode = rs.getString("board_code"), authorId = rs.getString("author_id"), title = rs.getString("title"),
+                id = rs.getLong("id"), boardCode = rs.getString("board_code"), authorId = rs.getString("author_id"), authorRef = rs.getString("author_ref"), title = rs.getString("title"),
                 excerpt = rs.getString("excerpt"), status = PostStatus.valueOf(rs.getString("status")), pinned = rs.getBoolean("pinned"),
                 viewCount = rs.getLong("view_count"), commentCount = rs.getLong("comment_count"), reactionCount = rs.getLong("reaction_count"),
                 attachmentCount = rs.getInt("attachment_count"), createdAt = rs.instant(dialect, "created_at"), updatedAt = rs.instant(dialect, "updated_at"),
@@ -185,7 +187,7 @@ class JdbcPostRepository(
 
     private fun ResultSet.post(attachments: List<String>) =
         Post(
-            id = getLong("id"), boardCode = getString("board_code"), authorId = getString("author_id"), title = getString("title"), body = getString("body"),
+            id = getLong("id"), boardCode = getString("board_code"), authorId = getString("author_id"), authorRef = getString("author_ref"), title = getString("title"), body = getString("body"),
             status = PostStatus.valueOf(getString("status")), pinned = getBoolean("pinned"), viewCount = getLong("view_count"),
             commentCount = getLong("comment_count"), reactionCount = getLong("reaction_count"), attachments = attachments,
             createdAt = instant(dialect, "created_at"), updatedAt = instant(dialect, "updated_at"),
@@ -208,11 +210,12 @@ class JdbcCommentRepository(
             val keys = GeneratedKeyHolder()
             jdbc.update(
                 """
-                insert into board_comments (post_id, parent_id, root_id, depth, author_id, body, status, reaction_count, created_at, updated_at)
-                values (:post, :parent, :root, :depth, :author, :body, 'PUBLISHED', 0, :now, :now)
+                insert into board_comments (post_id, parent_id, root_id, depth, author_id, author_ref, body, status, reaction_count, created_at, updated_at)
+                values (:post, :parent, :root, :depth, :author, :authorRef, :body, 'PUBLISHED', 0, :now, :now)
                 """.trimIndent(),
                 MapSqlParameterSource().addValue("post", comment.postId).addValue("parent", comment.parentId, java.sql.Types.BIGINT)
                     .addValue("root", comment.rootId, java.sql.Types.BIGINT).addValue("depth", comment.depth).addValue("author", comment.authorId)
+                    .addValue("authorRef", comment.authorRef)
                     .addValue("body", comment.body).addValue("now", dialect.instantParam(comment.now)),
                 keys,
                 arrayOf("id"),
@@ -281,6 +284,7 @@ class JdbcCommentRepository(
         val root = getLong("root_id").takeUnless { wasNull() }
         return Comment(
             id = id, postId = getLong("post_id"), parentId = parent, rootId = root ?: id, depth = getInt("depth"), authorId = getString("author_id"),
+            authorRef = getString("author_ref"),
             body = getString("body"), status = CommentStatus.valueOf(getString("status")), reactionCount = getLong("reaction_count"),
             createdAt = instant(dialect, "created_at"), updatedAt = instant(dialect, "updated_at"),
         )
@@ -375,5 +379,34 @@ class JdbcBoardErasureRepository(private val jdbc: NamedParameterJdbcTemplate) :
         return jdbc.update("update board_posts set author_id = :t where author_id = :a", p) +
             jdbc.update("update board_comments set author_id = :t where author_id = :a", p) +
             jdbc.update("update board_reactions set account_id = :t where account_id = :a", p)
+    }
+}
+
+/**
+ * 넘겨받기: `author_ref` 가 비어 있는 옛 행(공개 작성자 id = 계정 id)을 계정의 첫 프로필 id 로 옮긴다. 톰스톤(`deleted:`) 행은 대상이 아니고,
+ * 이미 값이 있는 행은 조건에 걸리지 않으므로 다시 불러도 같다. 탈퇴 고리([JdbcBoardErasureRepository])는 `author_ref` 를 건드리지 않는다.
+ */
+class JdbcBoardAuthorAdoption(private val jdbc: NamedParameterJdbcTemplate) : AuthorAdoptionListener {
+    override val name: String = "board"
+
+    override fun pendingAccounts(limit: Int): List<String> =
+        jdbc.queryForList(
+            """
+            select author_id from (
+                select author_id from board_posts where author_ref is null and author_id not like :tombstone escape '!'
+                union
+                select author_id from board_comments where author_ref is null and author_id not like :tombstone escape '!'
+            ) pending
+            order by author_id
+            limit :limit
+            """.trimIndent(),
+            mapOf("tombstone" to escapeLike(BoardAuthors.DELETED_PREFIX) + "%", "limit" to limit),
+            String::class.java,
+        ).filterNotNull()
+
+    override fun adopt(accountId: String, authorId: String): Int {
+        val p = mapOf("a" to accountId, "ref" to authorId)
+        return jdbc.update("update board_posts set author_ref = :ref where author_id = :a and author_ref is null", p) +
+            jdbc.update("update board_comments set author_ref = :ref where author_id = :a and author_ref is null", p)
     }
 }

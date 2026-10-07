@@ -368,6 +368,7 @@ F1 은 B3 의 계약만 정해지면 가짜 서버로 먼저 간다.
 
 - 게시판 `GET` 응답의 `Cache-Control` — 익명 읽기를 켠 앱에서 `mine` · `myReactions` 가 든 응답이 Cloudflare 등 공유 캐시에 남지 않는지.
 - `author_ref is null` 조건이 PostgreSQL · MySQL 양쪽에서 새 인덱스를 타는지(실행 계획).
+  - 실측: board_posts 2만 행(1% 가 NULL, `analyze` 뒤)에서 `author_ref is null` 의 `select distinct author_id … limit` · `count(*)` 는 PostgreSQL 18 이 `idx_board_posts_author_ref` Bitmap Index Scan(`enable_seqscan` 기본값 그대로), MySQL 은 `type=ref` 로 같은 인덱스를 탄다. 넘겨받기 `update … where author_id = :a and author_ref is null` 은 PostgreSQL 이 기존 `idx_board_posts_author` 를, MySQL 이 새 인덱스(range)를 고른다 — 둘 다 인덱스를 쓴다. 댓글 표는 같은 모양이라 따로 재지 않았다.
 - `author-profile` 의 `AuthorDirectory` 가 `account` 의 기본 구현보다 먼저 등록되는지(`@AutoConfiguration(before = …)`) — 컨텍스트 러너로.
 - `PATCH` 본문의 모르는 칸(`authorId`)이 조용히 무시되는지, 거절되는지(지금 Jackson 설정).
 - 앱(샘플)의 `BoardPolicy.canAttach` 가 지금 접두사 비교를 하는지 — 한다면 B4 에서 함께 바꾼다.

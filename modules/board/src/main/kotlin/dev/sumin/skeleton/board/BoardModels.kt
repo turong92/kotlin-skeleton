@@ -46,6 +46,8 @@ data class Post(
     val attachments: List<String>,
     val createdAt: Instant,
     val updatedAt: Instant,
+    /** 공개 작성자 id. null = 이 기능 이전의 행 (공개 id = authorId) */
+    val authorRef: String? = null,
 )
 
 /** 목록용 — 본문 대신 앞부분(excerpt)과 첨부 개수만. */
@@ -63,6 +65,8 @@ data class PostListItem(
     val attachmentCount: Int,
     val createdAt: Instant,
     val updatedAt: Instant,
+    /** 공개 작성자 id. null = 이 기능 이전의 행 (공개 id = authorId) */
+    val authorRef: String? = null,
 )
 
 data class Comment(
@@ -78,6 +82,8 @@ data class Comment(
     val reactionCount: Long,
     val createdAt: Instant,
     val updatedAt: Instant,
+    /** 공개 작성자 id. null = 이 기능 이전의 행 (공개 id = authorId) */
+    val authorRef: String? = null,
 )
 
 data class ReactionCounts(val counts: Map<String, Long>)
@@ -94,6 +100,8 @@ data class NewPost(
     val status: PostStatus,
     val attachments: List<String>,
     val now: Instant,
+    /** 공개 작성자 id. null = 이 기능 이전의 행 (공개 id = authorId) */
+    val authorRef: String? = null,
 )
 
 /** null 인 칸은 바꾸지 않는다. */
@@ -113,6 +121,8 @@ data class NewComment(
     val authorId: String,
     val body: String,
     val now: Instant,
+    /** 공개 작성자 id. null = 이 기능 이전의 행 (공개 id = authorId) */
+    val authorRef: String? = null,
 )
 
 data class PostQuery(
