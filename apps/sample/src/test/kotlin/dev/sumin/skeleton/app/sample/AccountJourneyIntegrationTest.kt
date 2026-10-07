@@ -52,8 +52,18 @@ class AccountJourneyIntegrationTest {
         mvc.post(path) {
             contentType = MediaType.APPLICATION_JSON; content = body
             bearer?.let { header("Authorization", "Bearer $it") }
+            header("User-Agent", userAgent)
             headers.forEach { (k, v) -> header(k, v) }
         }
+
+    /** 이 시험만의 UA · 이름 · 이메일 — 지운 뒤 어느 표에도 남지 않아야 한다 */
+    private val tag = System.nanoTime()
+    private val userAgent = "JourneyBrowser/9.9-$tag"
+    private val displayName = "Journey$tag"
+
+    private fun allColumns(): List<Pair<String, String>> =
+        jdbc.sql("select table_name, column_name from information_schema.columns where table_schema = current_schema() and table_name not like 'flyway%'")
+            .query { rs, _ -> rs.getString(1) to rs.getString(2) }.list()
 
     private fun codeOf(kind: MailKind, to: String) = mails.sent.last { it.kind == kind && it.to == to }.vars.getValue("code")
     private fun field(json: String, path: String): String = JsonPath.read<Any>(json, path).toString()
@@ -64,7 +74,7 @@ class AccountJourneyIntegrationTest {
         val first = "tangerine-42-moon"
         val second = "a-brand-new-pass-7"
 
-        val signUp = post("/api/v1/account/sign-up", """{"email":"$email","password":"$first","displayName":"Journey","locale":"ko","consents":[{"type":"terms","version":"sample-1"},{"type":"privacy","version":"sample-1"}]}""").andExpect { status { isAccepted() } }.andReturn().response.contentAsString
+        val signUp = post("/api/v1/account/sign-up", """{"email":"$email","password":"$first","displayName":"$displayName","locale":"ko","consents":[{"type":"terms","version":"sample-1"},{"type":"privacy","version":"sample-1"}]}""").andExpect { status { isAccepted() } }.andReturn().response.contentAsString
         // no account exists until the code is entered
         post("/api/v1/auth/login", """{"email":"$email","password":"$first"}""").andExpect { status { isUnauthorized() }; jsonPath("$.code") { value("AUTH.INVALID_CREDENTIALS") } }
         val verified = post("/api/v1/auth/verify-email", """{"signUpId":"${field(signUp, "$.value.signUpId")}","code":"${codeOf(MailKind.VERIFY_CODE, email)}"}""").andExpect { status { isOk() } }.andReturn().response.contentAsString
@@ -101,7 +111,23 @@ class AccountJourneyIntegrationTest {
         // the grace period passes (we move the clock by rewriting purge_after), the purge runs every erasure listener
         jdbc.sql("update accounts set purge_after = now() - interval '1 minute' where id = :id").param("id", accountId).update()
         assertEquals(1, purge.purgeDue())
-        assertEquals(0, jdbc.sql("select count(*) from accounts where id = :id").param("id", accountId).query(Long::class.java).single())
+        // the row stays (so nothing that points at the account dangles) but is ERASED and holds nothing personal
+        val kept = jdbc.sql("select status, email, display_name, locale, time_zone, last_login_at, erased_at from accounts where id = :id").param("id", accountId).query { rs, _ ->
+            listOf(rs.getString("status"), rs.getString("email"), rs.getString("display_name"), rs.getString("locale"), rs.getString("time_zone"), rs.getObject("last_login_at"), rs.getObject("erased_at") != null)
+        }.single()
+        assertEquals(listOf("ERASED", null, null, null, null, null, true), kept)
+        assertEquals(0, jdbc.sql("select count(*) from account_identities where account_id = :id").param("id", accountId).query(Long::class.java).single())
+        assertEquals(0, jdbc.sql("select count(*) from account_roles where account_id = :id").param("id", accountId).query(Long::class.java).single())
+        assertEquals(0, jdbc.sql("select count(*) from auth_sessions where account_id = :id").param("id", accountId).query(Long::class.java).single())
+        post("/api/v1/auth/login", """{"email":"$email","password":"$second"}""").andExpect { status { isUnauthorized() } }
+
+        // the one-way guarantee across EVERY table of EVERY module in this app (accounts, sessions, consents, board, notifications, jobs, ...)
+        val leaks = allColumns().flatMap { (table, column) ->
+            listOf(email, displayName, userAgent).filter { value ->
+                jdbc.sql("select count(*) from \"$table\" where cast(\"$column\" as text) like :v").param("v", "%$value%").query(Long::class.java).single() > 0
+            }.map { "$table.$column ~ $it" }
+        }
+        assertEquals(emptyList(), leaks, "no personal value survives the erasure anywhere")
 
         val admin = field(post("/api/v1/auth/login", """{"email":"admin@example.com","password":"password"}""").andReturn().response.contentAsString, "$.value.accessToken")
         mvc.get("/api/v1/boards/general/posts/$postId") { header("Authorization", "Bearer $admin") }.andExpect {
