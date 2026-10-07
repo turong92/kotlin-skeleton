@@ -69,7 +69,7 @@ skeleton:
     display-name:                         # 게시판에 보이는 닉네임 — 이 앱의 선택들 (모듈 기본은 중복 허용 · 선택 · 자동 닉네임 없음 — docs/accounts.md "닉네임")
       uniqueness: TAGGED                  # 같은 닉네임이어도 되고 서버가 4자리 꼬리표를 붙인다 (닉네임#0417). 바꾸면 꼬리표를 새로 뽑는다
       required-on-sign-up: true           # 이메일 가입에는 닉네임이 필요하다 (400 · 필드 displayName). 소셜 · 매직 링크 가입은 아래 자동 닉네임이 채운다
-      fallback: GENERATED                 # 닉네임 없이 만들어지는 계정에 user-1a2b3c 를 준다 (이메일 앞부분은 쓰지 않는다)
+      fallback: NONE                      # 닉네임 없이 만들어지는 계정(매직 링크 가입 · 이름을 안 주는 제공자)은 이름 없이 두고 프론트가 「닉네임 정하기」로 받는다. 자동 닉네임(user-1a2b3c)을 주려면 GENERATED
     deletion:
       self-restore: true                  # 이 앱의 선택: 탈퇴 유예 중인 주인이 로그인하면 403 AUTH.ACCOUNT_DELETION_PENDING + 취소 토큰으로 스스로 탈퇴를 취소한다 (모듈 기본은 꺼짐 — 운영자만 복구, docs/accounts.md)
   auth-magic-link:
