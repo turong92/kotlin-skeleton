@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.board
 
+import dev.sumin.skeleton.common.author.AuthorCard
 import dev.sumin.skeleton.common.time.TimeProvider
 import org.slf4j.LoggerFactory
 
@@ -18,7 +19,7 @@ class CommentService(
     private val limiter: BoardRateLimiter,
     private val notifier: BoardNotifier,
     private val time: TimeProvider,
-    private val authorRules: BoardAuthorRules = BoardAuthorRules { null },
+    private val authorRules: BoardAuthorRules,
 ) {
     private val log = LoggerFactory.getLogger(CommentService::class.java)
 
@@ -99,7 +100,7 @@ class CommentService(
     private fun publicId(c: Comment, active: Boolean) = BoardAuthors.publicId(c.authorRef, c.authorId, BoardAuthors.COMMENT_ROW, c.id, active)
 
     private fun view(
-        caller: BoardCaller?, c: Comment, publicId: String, card: dev.sumin.skeleton.common.author.AuthorCard?, body: String?,
+        caller: BoardCaller?, c: Comment, publicId: String, card: AuthorCard?, body: String?,
         state: ReactionState, replyCount: Int, replies: List<CommentView> = emptyList(),
     ) = CommentView(c, publicId, BoardAuthors.isDeleted(c.authorId) || card?.deleted == true, caller?.accountId == c.authorId, body, state, replyCount, replies, card)
 

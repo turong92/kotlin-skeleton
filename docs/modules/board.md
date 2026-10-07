@@ -50,11 +50,11 @@ HTTP 는 `skeleton.board.http.base-path`(기본 `/api/v1/boards`)에 열린다 (
 
 ```
 공개 id = author_ref
-          ?: author_id                    (AuthorIdentities 없음, 또는 author_id 가 톰스톤 `deleted:…`)
+          ?: author_id                    (AuthorIdentities 없음)
           ?: "pending:<p|c><행 id>"        (AuthorIdentities 있음 + 아직 프로필로 넘겨받지 않은 옛 행 — `pending:p123` 글 · `pending:c45` 댓글)
 ```
 
-- `AuthorIdentities` 가 있으면 계정 id(`author_id`)는 **어떤 응답에도 나가지 않는다.** 톰스톤 행은 `author_ref` 가 있으면 그것, 없는(옛) 행이면 톰스톤 값이 나간다. `pending:` · `deleted:` 는 `AuthorDirectory` 에 묻지 않는다(이름 없음).
+- `AuthorIdentities` 가 있으면 `author_id`(계정 id · 톰스톤)는 **어떤 응답에도 나가지 않는다.** `author_ref` 가 없는 옛 행은 톰스톤이어도 `pending:` 이다 — 화면 손실은 없다(`authorDeleted` 는 `author_id` 에서 따로 계산해 `true`). 빈이 없을 때만 톰스톤 값이 그대로 나간다(지금과 같다). `pending:` 과 톰스톤은 `AuthorDirectory` 에 묻지 않는다(platform 의 약속: 계정 톰스톤은 넘기지 않는다. 지워진 **프로필** id 는 넘겨도 되고 카드 `deleted=true` 로 답한다).
 - `authorDeleted = author_id 가 톰스톤 || 카드.deleted`(디렉터리가 돌려준 카드가 지워진 프로필 — 그때 `authorName` 은 `null`).
 - **`mine: boolean`**(글 요약 · 상세 · 댓글, 목록 · 상세 · 한 댓글 응답 전부) = 호출자 != null && 호출자 계정 == `author_id`. **`AuthorIdentities` 유무와 무관하게 항상 실린다** — 프론트가 `accountId === authorId` 로 "내 글" 을 판단하던 것은 공개 id 가 프로필 id 가 되면 늘 거짓이다. 익명 · 운영자(작성자가 아닐 때)는 `false`.
 - `GET /config` 의 **`authorRequired`** = `AuthorIdentities` 빈 유무. 프론트는 이것으로 작성 프로필 선택기를 보인다.
@@ -70,9 +70,10 @@ HTTP 는 `skeleton.board.http.base-path`(기본 `/api/v1/boards`)에 열린다 (
 
 - `author_id` 는 언제나 호출자 계정 — 권한(`BoardPolicy`) · `mine=true` 목록 · 알림 수신자 · 자기 글 알림 생략 · 한도 · 반응은 지금처럼 **계정 기준**이다(프로필 A 로 쓴 글에 B 로 답해도 자기에게 알림이 가지 않는다).
 - **수정에는 `authorId` 칸이 없다**(`PATCH` 본문의 모르는 칸은 조용히 무시된다). 운영자가 고쳐도, PUBLISHED ↔ DRAFT 를 오가도 `author_ref` 는 바뀌지 않는다.
-- 첨부: `AuthorIdentities` 가 있을 때 첨부 키에 **호출자 계정 id 가 들어 있으면** `400 BOARD.CONTENT_INVALID`(글 만들기 · 고치기). board 는 storage 를 모른 채 문자열 포함만 본다 — 계정 id 가 든 키가 공개 `attachments` 로 나가면 두 프로필의 글이 이어진다. 키에 계정 id 가 없게 만드는 쪽은 storage 의 몫이다.
+- 첨부: `AuthorIdentities` 가 있을 때 첨부 키에 **호출자 계정 id 가 들어 있으면** `400 BOARD.CONTENT_INVALID`(글 만들기 · 고치기 — 고칠 때는 **새로 붙는 키만** 본다: 글이 이미 가진 옛 키를 그대로 다시 보내면 통과). board 는 storage 를 모른 채 문자열 포함만 본다 — 계정 id 가 든 키가 공개 `attachments` 로 나가면 두 프로필의 글이 이어진다. 키에 계정 id 가 없게 만드는 쪽은 storage 의 몫이다.
 - 알림 payload 의 `authorId` 는 공개 id 다. 수신자(`recipientIds`)는 계정이다.
 - `BoardPolicy.canAttach` 의 기본 구현은 모든 키를 허용한다(접두사를 비교하지 않는다). 샘플 앱은 `BoardPolicy` 를 바꾸지 않는다.
+- **알림 문구를 바꾸는 앱**(`BoardNotificationFormatter`): `notice.comment.authorId` 는 계정 id 다 — 문구에 넣으면 계정 id 가 **남의 편지함**에 영영 남는다. 작성자 id 가 필요하면 `notice.publicAuthorId`(필수 인자, 기본값 없음)를 쓴다.
 
 ## 반응 종류를 늘리는 법
 
@@ -82,7 +83,7 @@ HTTP 는 `skeleton.board.http.base-path`(기본 `/api/v1/boards`)에 열린다 (
 ## 앱이 바꾸는 곳
 
 - 누가 무엇을 하는지: `BoardPolicy` (기본: 작성자 · `moderator-role`). 상태 규칙(숨겨진 글엔 댓글 불가 등)은 서비스에 있다.
-- 첨부 키 검사: `BoardPolicy.canAttach` — 기본은 허용이다. 키 규칙은 앱의 저장소 설정이 안다 (`storage` 의 키는 `<접두사>/<계정 id>/…` 라 `startsWith` 한 줄로 막을 수 있다).
+- 첨부 키 검사: `BoardPolicy.canAttach` — 기본은 허용이다. 키 규칙은 앱의 저장소 설정이 안다. **`AuthorIdentities` 가 없을 때만** `storage` 의 키(`<접두사>/<계정 id>/…`)를 `startsWith` 한 줄로 막으면 된다. 있으면 키에 계정 id 가 없어야 하므로 `StorageKeyOwnership`(B4 에서 추가 예정)로 소유를 확인한다.
 - 글 · 댓글 텍스트: **HTML 은 해석하지 않는다.** 제어문자(줄바꿈 · 탭 제외) · 글자 방향 덮어쓰기 문자를 지우고 공백을 다듬어 저장하며, 그릴 때 클라이언트가 이스케이프한다.
 - 한도: `skeleton.board.rate-limit.enabled=true` 면 platform 의 `RateLimitStore`(redis-rate-limit 이 있으면 Redis)에 계정 · 동작별 고정 창. 한도 로직을 바꾸려면 `BoardRateLimiter`.
 - 알림 문구: `BoardNotificationFormatter` (제목 · 본문). 보내는 곳 자체는 `BoardNotifier`.

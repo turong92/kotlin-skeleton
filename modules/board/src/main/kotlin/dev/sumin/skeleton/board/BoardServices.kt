@@ -7,7 +7,7 @@ class BoardService(
     private val policy: BoardPolicy,
     private val properties: BoardProperties,
     private val time: TimeProvider,
-    private val authorRules: BoardAuthorRules = BoardAuthorRules { null },
+    private val authorRules: BoardAuthorRules,
 ) {
     fun config(caller: BoardCaller?): BoardConfigView =
         BoardConfigView(

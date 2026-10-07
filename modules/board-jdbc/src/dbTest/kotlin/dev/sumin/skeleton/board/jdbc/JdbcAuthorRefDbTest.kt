@@ -1,8 +1,12 @@
 package dev.sumin.skeleton.board.jdbc
 
 import dev.sumin.skeleton.board.BoardAuthors
+import dev.sumin.skeleton.board.CommentRootQuery
+import dev.sumin.skeleton.board.CommentSort
+import dev.sumin.skeleton.board.CommentStatus
 import dev.sumin.skeleton.board.NewComment
 import dev.sumin.skeleton.board.NewPost
+import dev.sumin.skeleton.board.PostChange
 import dev.sumin.skeleton.board.PostQuery
 import dev.sumin.skeleton.board.PostSort
 import dev.sumin.skeleton.board.PostStatus
@@ -36,7 +40,7 @@ class JdbcAuthorRefDbTest {
         val c1 = db.comments.insert(NewComment(own.id, null, null, 0, "acc_x", "c", T0, authorRef = "prf_bbb"))!!
         assertNull(db.comments.find(c0.id)!!.authorRef)
         assertEquals("prf_bbb", db.comments.find(c1.id)!!.authorRef)
-        val roots = db.comments.rootPage(dev.sumin.skeleton.board.CommentRootQuery(own.id, 0, 10, dev.sumin.skeleton.board.CommentSort.OLDEST)).values
+        val roots = db.comments.rootPage(CommentRootQuery(own.id, 0, 10, CommentSort.OLDEST)).values
         assertEquals(setOf<String?>(null, "prf_bbb"), roots.map { it.authorRef }.toSet())
     }
 
@@ -103,5 +107,26 @@ class JdbcAuthorRefDbTest {
         assertEquals("deleted:feedfeedfeedfeed", db.posts.find(post.id)!!.authorId)
         assertEquals("prf_keep", db.posts.find(post.id)!!.authorRef)
         assertEquals("prf_keep2", db.comments.find(c.id)!!.authorRef)
+    }
+
+    @Test
+    fun `editing and status changes leave author_ref alone - post edit, PUBLISHED to DRAFT and back, pin, comment edit and status`() {
+        val board = db.newBoard()
+        val me = account()
+        val post = db.posts.insert(NewPost(board, me, "t", "b", PostStatus.PUBLISHED, emptyList(), T0, authorRef = "prf_keep"))
+        db.posts.update(post.id, PostChange(title = "new", body = "new body", attachments = listOf("k/1.png")), T0.plusSeconds(1))
+        assertEquals("prf_keep", db.posts.find(post.id)!!.authorRef)
+        db.posts.update(post.id, PostChange(status = PostStatus.DRAFT), T0.plusSeconds(2))
+        assertEquals("prf_keep", db.posts.find(post.id)!!.authorRef)
+        db.posts.update(post.id, PostChange(status = PostStatus.PUBLISHED, pinned = true), T0.plusSeconds(3))
+        assertEquals("prf_keep", db.posts.find(post.id)!!.authorRef)
+
+        val c = db.comments.insert(NewComment(post.id, null, null, 0, me, "c", T0, authorRef = "prf_c"))!!
+        db.comments.updateBody(c.id, "edited", T0.plusSeconds(4))
+        assertEquals("prf_c", db.comments.find(c.id)!!.authorRef)
+        db.comments.setStatus(c.id, CommentStatus.HIDDEN, T0.plusSeconds(5))
+        db.comments.setStatus(c.id, CommentStatus.PUBLISHED, T0.plusSeconds(6))
+        assertEquals("prf_c", db.comments.find(c.id)!!.authorRef)
+        assertEquals(me, db.comments.find(c.id)!!.authorId)
     }
 }

@@ -1,5 +1,7 @@
 package dev.sumin.skeleton.board
 
+import dev.sumin.skeleton.common.author.AuthorDirectory
+import dev.sumin.skeleton.common.author.AuthorIdentities
 import dev.sumin.skeleton.common.time.TimeProvider
 import kotlin.test.assertFailsWith
 
@@ -10,9 +12,11 @@ class ServiceHarness(
     val limiter: BoardRateLimiter = NoopBoardRateLimiter,
     val notifier: BoardNotifier = NoopBoardNotifier,
     /** 작성자 이름을 푸는 고리 — 기본은 이름을 모른다 */
-    val directory: dev.sumin.skeleton.common.author.AuthorDirectory = dev.sumin.skeleton.common.author.AuthorDirectory.NONE,
+    val directory: AuthorDirectory = AuthorDirectory.NONE,
     /** 작성자 신원 고리 — 기본은 없음(이 기능 이전의 동작) */
-    val identities: dev.sumin.skeleton.common.author.AuthorIdentities? = null,
+    val identities: AuthorIdentities? = null,
+    /** 댓글 저장소를 감싼다 — 저장소가 author_ref 를 남기지 않는 경우 같은 것을 흉내 낸다 */
+    wrapComments: (CommentRepository) -> CommentRepository = { it },
 ) {
     val store = FakeStore()
     private val boards = FakeBoardRepository(store)
@@ -27,7 +31,7 @@ class ServiceHarness(
     private val authorRules = BoardAuthorRules { identities }
     val boardService = BoardService(boards, policy, props, time, authorRules)
     val postService = PostService(access, posts, support, authors, policy, rules, props, limiter, time, authorRules)
-    val commentService = CommentService(access, comments, support, authors, policy, rules, props, limiter, notifier, time, authorRules)
+    val commentService = CommentService(access, wrapComments(comments), support, authors, policy, rules, props, limiter, notifier, time, authorRules)
     val reactionService = ReactionService(access, comments, reactionRepo, support, policy, props, limiter, time)
 
     init { boardService.create(moderator, "general", "General", null) }

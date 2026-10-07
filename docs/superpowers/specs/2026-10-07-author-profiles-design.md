@@ -185,7 +185,7 @@ create index if not exists idx_author_profiles_account on author_profiles (accou
 
 ```
 공개 id = author_ref
-          ?: author_id            (AuthorIdentities 없음, 또는 author_id 가 톰스톤)
+          ?: author_id            (AuthorIdentities 없음)
           ?: "pending:<행 종류><행 id>"   (AuthorIdentities 있음 + 아직 넘겨받지 않은 행 — 계정 id 를 내지 않는다)
 ```
 
@@ -305,7 +305,7 @@ create index if not exists idx_author_profiles_account on author_profiles (accou
 1. 계정 X 가 프로필 A · B 를 만든다. 관찰자 계정 Y, 비로그인 Z.
 2. X 가 A 로 글 · B 로 글, Y 의 글에 A 로 댓글 · B 로 답글, 첨부가 있는 글을 각각, 반응 몇 개.
 3. Y 와 Z 로 **읽을 수 있는 모든 경로**를 훑는다: 게시판 목록 · 글 목록(정렬 · 검색 · 반응 정렬 전부) · 글 상세 · 댓글 스레드 · config · Y 의 받은편지함 · X 의 프로필 경로 찔러 보기. 응답 본문과 헤더를 모은다.
-4. **금지 값**: X 의 계정 id · 이메일 · 계정 톰스톤(`AccountTombstone.of`) · 계정 이름이 어디에도 없다.
+4. **금지 값**: X 의 계정 id · 이메일 · 계정 톰스톤(`AccountTombstone.of` — `author_ref` 없는 옛 행의 톰스톤도 `pending:` 으로 나가 응답에 없다) · 계정 이름이 어디에도 없다.
 5. **짝 스캔**: A 의 글 · 댓글 조각과 B 의 조각에서 모든 잎 값을 뽑아 교집합을 낸다. 허용 목록(게시판 코드 · 상태 · 개수 · 반응 종류 · 불리언) 밖의 공통 값이 있으면 실패 — "두 글을 잇는 값"을 이름이 아니라 **값으로** 찾는다.
 6. 같은 스캔을 상태를 바꿔 반복: B 삭제 뒤 → X 정지 뒤 → X 지우기 뒤(A · B 글의 `authorId` 가 서로 다르고 공통 `deleted:` 값이 없다).
 7. **DB 열 분류**: `board_*` · `notification_*` · `author_profiles` 의 모든 열을 `information_schema` 에서 읽어 "공개 / 비공개" 표와 맞춘다. 분류되지 않은 열이 생기면 실패(새 열이 조용히 계정 id 를 담지 못하게). 공개 열(`author_ref`, 남의 편지함 payload)에서 4 · 5 를 다시 본다. 두 방언.

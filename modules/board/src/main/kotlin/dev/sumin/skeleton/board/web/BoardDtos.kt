@@ -50,7 +50,7 @@ data class PostSummaryResponse(
     /** 같은 닉네임을 구분하는 4자리 꼬리표 (없으면 null) */
     val authorTag: String? = null,
     /** 호출자의 계정이 쓴 글이다 (프로필과 무관 · 익명은 항상 false) — 수정 · 삭제 단추는 이것으로 판단한다 */
-    val mine: Boolean = false,
+    val mine: Boolean,
 )
 
 data class PostDetailResponse(
@@ -78,7 +78,7 @@ data class PostDetailResponse(
     /** 같은 닉네임을 구분하는 4자리 꼬리표 (없으면 null) */
     val authorTag: String? = null,
     /** 호출자의 계정이 쓴 글이다 (프로필과 무관 · 익명은 항상 false) — 수정 · 삭제 단추는 이것으로 판단한다 */
-    val mine: Boolean = false,
+    val mine: Boolean,
 )
 
 /** 목록의 한 줄이면 replies 가 있다 (최상위: 모든 자손 작성 순 평평하게, 답글: 빈 배열). 한 댓글만 돌려주는 응답에는 replies 가 없다. */
@@ -107,7 +107,7 @@ data class CommentResponse(
     /** 같은 닉네임을 구분하는 4자리 꼬리표 (없으면 null) */
     @get:JsonInclude(JsonInclude.Include.ALWAYS) val authorTag: String? = null,
     /** 호출자의 계정이 쓴 댓글이다 (프로필과 무관 · 익명은 항상 false) */
-    val mine: Boolean = false,
+    val mine: Boolean,
 )
 
 data class ReactionStateResponse(val counts: Map<String, Long>, val myReactions: Set<String>)

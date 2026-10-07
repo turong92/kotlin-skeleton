@@ -11,6 +11,7 @@ import dev.sumin.skeleton.board.PostService
 import dev.sumin.skeleton.board.BoardService
 import dev.sumin.skeleton.common.author.AuthorCard
 import dev.sumin.skeleton.common.author.AuthorDirectory
+import dev.sumin.skeleton.common.author.AuthorIdentities
 import dev.sumin.skeleton.notification.NotificationAutoConfiguration
 import dev.sumin.skeleton.notification.NotificationEvent
 import dev.sumin.skeleton.notification.NotificationSubscriptionRegistry
@@ -80,7 +81,7 @@ class BoardNotificationTest {
 
     @Test
     fun `with author identities the payload carries the public author id and never the commenter's account id`() {
-        runner.withBean(dev.sumin.skeleton.common.author.AuthorIdentities::class.java, { dev.sumin.skeleton.common.author.AuthorIdentities { _, id, _ -> id.startsWith("prf_") } }).run { ctx ->
+        runner.withBean(AuthorIdentities::class.java, { AuthorIdentities { _, id, _ -> id.startsWith("prf_") } }).run { ctx ->
             val events = capture(ctx)
             ctx.getBean(BoardService::class.java).create(mod, "general", "General", null)
             val post = ctx.getBean(PostService::class.java).create(author, "general", CreatePost("My post title", "body", null, null, "prf_author1")).post.id

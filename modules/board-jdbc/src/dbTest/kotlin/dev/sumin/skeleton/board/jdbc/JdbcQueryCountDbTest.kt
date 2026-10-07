@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.board.jdbc
 
 import dev.sumin.skeleton.board.BoardAccess
+import dev.sumin.skeleton.board.BoardAuthorRules
 import dev.sumin.skeleton.board.BoardCaller
 import dev.sumin.skeleton.board.BoardContentRules
 import dev.sumin.skeleton.board.BoardProperties
@@ -29,8 +30,8 @@ class JdbcQueryCountDbTest {
     private val support = ReactionSupport(db.reactions, props)
     private val time = TimeProvider.fixed(T0)
     private val names = dev.sumin.skeleton.board.AuthorNames { dev.sumin.skeleton.common.author.AuthorDirectory.NONE }
-    private val comments = CommentService(access, db.comments, support, names, policy, BoardContentRules(props), props, NoopBoardRateLimiter, NoopBoardNotifier, time)
-    private val posts = PostService(access, db.posts, support, names, policy, BoardContentRules(props), props, NoopBoardRateLimiter, time)
+    private val comments = CommentService(access, db.comments, support, names, policy, BoardContentRules(props), props, NoopBoardRateLimiter, NoopBoardNotifier, time, BoardAuthorRules { null })
+    private val posts = PostService(access, db.posts, support, names, policy, BoardContentRules(props), props, NoopBoardRateLimiter, time, BoardAuthorRules { null })
     private val me = BoardCaller("viewer")
 
     private fun threadListingStatements(roots: Int): Int {

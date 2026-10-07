@@ -8,11 +8,11 @@ import dev.sumin.skeleton.common.author.AuthorIdentities
  *
  * ```
  * 공개 id = author_ref
- *           ?: author_id                 (AuthorIdentities 없음, 또는 author_id 가 톰스톤)
- *           ?: "pending:<행 종류><행 id>"   (AuthorIdentities 있음 + 아직 넘겨받지 않은 행 — 계정 id 를 내지 않는다)
+ *           ?: author_id                 (AuthorIdentities 없음)
+ *           ?: "pending:<행 종류><행 id>"   (AuthorIdentities 있음 + 아직 넘겨받지 않은 행 — 계정 id · 톰스톤을 내지 않는다)
  * ```
  *
- * [AuthorIdentities] 가 있으면 계정 id(`author_id`)는 어떤 응답에도 나가지 않는다 (톰스톤은 계정 id 가 아니다 — 옛 행의 톰스톤은 그 값 그대로 나간다).
+ * [AuthorIdentities] 가 있으면 `author_id`(계정 id 또는 톰스톤)는 어떤 응답에도 나가지 않는다. `authorDeleted` 는 `author_id` 에서 따로 계산한다.
  */
 object BoardAuthors {
     /** 지워진 계정의 작성자 값은 이 접두사로 시작한다 (계정 모듈의 `AccountTombstone` 과 같은 약속 — 모듈끼리 서로의 타입을 모르게 문자열 규칙으로 맞춘다) */
@@ -31,7 +31,7 @@ object BoardAuthors {
     /** [identitiesPresent] = [AuthorIdentities] 빈이 있는가. [rowKind] 는 [POST_ROW] · [COMMENT_ROW] */
     fun publicId(authorRef: String?, authorId: String, rowKind: Char, rowId: Long, identitiesPresent: Boolean): String = when {
         authorRef != null -> authorRef
-        !identitiesPresent || isDeleted(authorId) -> authorId
+        !identitiesPresent -> authorId
         else -> "$PENDING_PREFIX$rowKind$rowId"
     }
 }

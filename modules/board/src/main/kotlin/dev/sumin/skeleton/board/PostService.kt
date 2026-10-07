@@ -12,7 +12,7 @@ class PostService(
     private val properties: BoardProperties,
     private val limiter: BoardRateLimiter,
     private val time: TimeProvider,
-    private val authorRules: BoardAuthorRules = BoardAuthorRules { null },
+    private val authorRules: BoardAuthorRules,
 ) {
     fun create(caller: BoardCaller, boardCode: String, request: CreatePost): PostDetailView {
         val board = access.board(boardCode)
@@ -72,7 +72,7 @@ class PostService(
         if (!policy.canEditPost(caller, post)) forbidden("Not allowed to edit post $postId")
         request.status?.let { if (it !in WRITABLE_STATUSES) invalid("status must be DRAFT or PUBLISHED (moderators use /moderation)") }
         val attachments = request.attachments?.let { rules.attachments(it) }
-        authorRules.rejectAccountIdKeys(caller, attachments.orEmpty())
+        authorRules.rejectAccountIdKeys(caller, attachments.orEmpty().filterNot { it in post.attachments })   // 옛 키를 그대로 다시 보낸 수정은 통과 — 새로 붙는 키만 본다
         if (!attachments.isNullOrEmpty() && !policy.canAttach(caller, attachments)) forbidden("Not allowed to attach these files")
         val change = PostChange(
             title = request.title?.let { rules.title(it) },

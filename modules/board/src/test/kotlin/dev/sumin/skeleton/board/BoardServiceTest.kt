@@ -9,7 +9,7 @@ import kotlin.test.assertTrue
 class BoardServiceTest {
     private val store = FakeStore()
     private fun service(props: BoardProperties = BoardProperties()) =
-        BoardService(FakeBoardRepository(store), DefaultBoardPolicy(), props, TimeProvider.fixed(T0))
+        BoardService(FakeBoardRepository(store), DefaultBoardPolicy(), props, TimeProvider.fixed(T0), BoardAuthorRules { null })
 
     private fun failure(block: () -> Unit): BoardErrorCode = assertFailsWith<BoardException> { block() }.errorCode as BoardErrorCode
 

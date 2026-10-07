@@ -79,6 +79,14 @@ class BoardWebTest {
         call(get("/api/v1/boards/config"), user).andExpect(jsonPath("$.value.authorRequired").value(false))
         val id = newPost()
         call(get("/api/v1/boards/general/posts/$id"), user).andExpect(jsonPath("$.value.authorId").value("acc_user")).andExpect(jsonPath("$.value.mine").value(true))
+        val keys = JsonPath.read<Map<String, Any?>>(call(get("/api/v1/boards/general/posts/$id"), user).andReturn().response.contentAsString, "$.value").keys
+        assertEquals(
+            setOf(
+                "id", "boardCode", "authorId", "title", "excerpt", "body", "attachments", "status", "pinned", "viewCount", "commentCount", "reactionCounts",
+                "myReactions", "attachmentCount", "createdAt", "updatedAt", "authorDeleted", "authorName", "authorTag", "mine",
+            ),
+            keys, "before this feature plus mine only",
+        )
         call(get("/api/v1/boards/general/posts/$id"), third).andExpect(jsonPath("$.value.mine").value(false))
         call(get("/api/v1/boards/general/posts"), user).andExpect(jsonPath("$.values[0].mine").value(true))
         val c = newComment(id, third)
@@ -86,7 +94,7 @@ class BoardWebTest {
         call(get("/api/v1/boards/general/posts/$id/comments"), user).andExpect(jsonPath("$.values[0].mine").value(false))
         assertEquals(c, store.comments.keys.single())
         call(post("/api/v1/boards/general/posts").idem().json("""{"title":"t","body":"b","authorId":"prf_x"}"""), user)
-            .andExpect(status().isForbidden).andExpect(jsonPath("$.code").value("BOARD.AUTHOR_NOT_ALLOWED"))
+            .andExpect(status().isForbidden).andExpect(jsonPath("$.code").value("BOARD.AUTHOR_NOT_ALLOWED")).andExpect(jsonPath("$.detail").value("Not allowed to write as this author"))
         call(post("/api/v1/boards/general/posts/$id/comments").idem().json("""{"body":"b","authorId":"prf_x"}"""), user)
             .andExpect(status().isForbidden).andExpect(jsonPath("$.code").value("BOARD.AUTHOR_NOT_ALLOWED"))
     }

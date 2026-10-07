@@ -1,7 +1,12 @@
 package dev.sumin.skeleton.board.web
 
 import com.jayway.jsonpath.JsonPath
+import dev.sumin.skeleton.board.Comment
+import dev.sumin.skeleton.board.CommentStatus
 import dev.sumin.skeleton.board.FakeStore
+import dev.sumin.skeleton.board.Post
+import dev.sumin.skeleton.board.PostStatus
+import dev.sumin.skeleton.board.T0
 import dev.sumin.skeleton.boardtest.BoardWebTestApplication
 import dev.sumin.skeleton.boardtest.FakeBoardRepositories
 import dev.sumin.skeleton.common.author.AuthorIdentities
@@ -91,6 +96,44 @@ class BoardAuthorIdentitiesWebTest {
             .andExpect(jsonPath("$.value.authorId").value("prf_t1")).andExpect(jsonPath("$.value.mine").value(true))
         call(get(url), user).andExpect(jsonPath("$.values[0].authorId").value("prf_t1")).andExpect(jsonPath("$.values[0].mine").value(false))
         call(get(url), third).andExpect(jsonPath("$.values[0].mine").value(true))
+    }
+
+    @Test
+    fun `the refusal wording is the same as without the SPI bean`() {
+        writePost("prf_x").andExpect(status().isForbidden).andExpect(jsonPath("$.detail").value("Not allowed to write as this author"))
+    }
+
+    @Test
+    fun `no response body - list, detail, comments, create, PATCH - holds an account id or a tombstone, pending rows included`() {
+        val own = idOf(writePost("prf_u1").andReturn())
+        val legacyPost = store.ids.incrementAndGet().also { id ->
+            store.posts[id] = Post(id, "general", "acc_legacy", "old", "b", PostStatus.PUBLISHED, false, 0, 0, 0, emptyList(), T0, T0)
+        }
+        val goneNoRef = store.ids.incrementAndGet().also { id ->
+            store.posts[id] = Post(id, "general", "deleted:aaaaaaaaaaaaaaaa", "gone", "b", PostStatus.PUBLISHED, false, 0, 0, 0, emptyList(), T0, T0)
+        }
+        val goneRef = store.ids.incrementAndGet().also { id ->
+            store.posts[id] = Post(id, "general", "deleted:bbbbbbbbbbbbbbbb", "gone2", "b", PostStatus.PUBLISHED, false, 0, 0, 0, emptyList(), T0, T0, "prf_old2")
+        }
+        val legacyComment = store.ids.incrementAndGet().also { id ->
+            store.comments[id] = Comment(id, own, null, id, 0, "acc_legacy", "c", CommentStatus.PUBLISHED, 0, T0, T0)
+        }
+        val bodies = mutableListOf<String>()
+        fun grab(r: ResultActions) = bodies.add(r.andReturn().response.contentAsString)
+        grab(call(get("/api/v1/boards/general/posts").param("size", "50"), third))
+        for (id in listOf(own, legacyPost, goneNoRef, goneRef)) grab(call(get("/api/v1/boards/general/posts/$id"), third))
+        grab(call(get("/api/v1/boards/general/posts/$own/comments"), third))
+        grab(call(post("/api/v1/boards/general/posts/$own/comments").idem().json("""{"body":"hi","authorId":"prf_t1"}"""), third))
+        grab(call(post("/api/v1/boards/general/posts").idem().json("""{"title":"n","body":"b","authorId":"prf_u2"}"""), user))
+        grab(call(patch("/api/v1/boards/general/posts/$own").json("""{"title":"edited"}"""), user))
+        grab(call(get("/api/v1/boards/general/posts").param("mine", "true"), user))
+        // 이 시험이 정직하게 보는 것: 어떤 응답에도 계정 id(acc_)나 톰스톤(deleted:)이 없고, 옛 행은 pending: 으로 나간다
+        val all = bodies.joinToString("\n")
+        kotlin.test.assertFalse(all.contains("acc_"), all)
+        kotlin.test.assertFalse(all.contains("deleted:"), all)
+        kotlin.test.assertTrue(all.contains("pending:p$legacyPost") && all.contains("pending:p$goneNoRef") && all.contains("prf_old2"), all)
+        kotlin.test.assertTrue(JsonPath.read<List<Boolean>>(bodies[0], "$.values[?(@.id==$goneNoRef)].authorDeleted").single())
+        kotlin.test.assertTrue(legacyComment in store.comments)
     }
 
     @Test
