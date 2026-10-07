@@ -89,7 +89,7 @@ private object NoRepository : AuthorProfileRepository {
     override fun primariesByKey(key: String) = nope()
     override fun countCreatedSince(accountId: String, since: java.time.Instant) = nope()
     override fun insert(profile: dev.sumin.skeleton.authorprofile.AuthorProfile) = nope()
-    override fun insertWithinCap(profile: dev.sumin.skeleton.authorprofile.AuthorProfile, maxActive: Int): CapInsert = nope()
+    override fun insertWithinCap(profile: dev.sumin.skeleton.authorprofile.AuthorProfile, maxActive: Int, createLimit: Int, since: java.time.Instant?): CapInsert = nope()
     override fun rename(id: String, accountId: String, name: String, key: String, tag: String?, now: java.time.Instant): RenameResult = nope()
     override fun markDeleted(id: String, accountId: String, now: java.time.Instant) = nope()
     override fun markAdopted(accountId: String, now: java.time.Instant) = nope()

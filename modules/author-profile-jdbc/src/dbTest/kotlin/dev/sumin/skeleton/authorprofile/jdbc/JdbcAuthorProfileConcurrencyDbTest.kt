@@ -45,6 +45,35 @@ class JdbcAuthorProfileConcurrencyDbTest {
     }
 
     @Test
+    fun `more threads than the create limit never push an account past it - deleted rows count, rows before the window and the first profile do not`() {
+        repeat(3) { round ->
+            val acc = account()
+            assertTrue(repository.insert(profile(acc, primary = true)))   // 첫 프로필은 세지 않는다
+            val since = ProfileDb.T0.minusSeconds(3600)
+            assertEquals(CapInsert.INSERTED, repository.insertWithinCap(profile(acc, at = since.minusSeconds(60)), 99, 3, since), "older than the window: not counted")
+            val gone = profile(acc)
+            assertEquals(CapInsert.INSERTED, repository.insertWithinCap(gone, 99, 3, since))
+            repository.markDeleted(gone.id, acc, ProfileDb.T0)   // 지운 것도 센다
+            val results = parallel(20) { repository.insertWithinCap(profile(acc), 99, 3, since) }
+            assertEquals(2, results.count { it == CapInsert.INSERTED }, "round $round: 1 deleted + 2 = limit 3")
+            assertEquals(18, results.count { it == CapInsert.RATE_LIMITED })
+            assertEquals(3, repository.countCreatedSince(acc, since))
+        }
+    }
+
+    @Test
+    fun `the cap is checked before the create limit and no limit means unlimited`() {
+        val acc = account()
+        assertTrue(repository.insert(profile(acc, primary = true)))
+        val since = ProfileDb.T0.minusSeconds(3600)
+        assertEquals(CapInsert.INSERTED, repository.insertWithinCap(profile(acc), 2, 1, since))
+        assertEquals(CapInsert.LIMIT_REACHED, repository.insertWithinCap(profile(acc), 2, 1, since), "cap first")
+        assertEquals(CapInsert.RATE_LIMITED, repository.insertWithinCap(profile(acc), 9, 1, since))
+        assertEquals(CapInsert.INSERTED, repository.insertWithinCap(profile(acc), 9, 0, since), "createLimit 0: no limit")
+        assertEquals(CapInsert.INSERTED, repository.insertWithinCap(profile(acc), 9, 1, null), "no window: no limit")
+    }
+
+    @Test
     fun `the cap counts a deleted-then-recreated slot correctly under contention`() {
         val acc = account()
         repository.insert(profile(acc, primary = true))

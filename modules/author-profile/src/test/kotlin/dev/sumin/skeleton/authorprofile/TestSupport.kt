@@ -46,8 +46,9 @@ class FakeAuthorProfileRepository : AuthorProfileRepository {
         rows.values.count { it.accountId == accountId && it.primaryOf == null && it.createdAt >= since }
 
     /** 가짜는 상한 검사와 삽입을 한 락 안에서 한다 — jdbc 는 첫 프로필 줄을 잠근다 */
-    @Synchronized override fun insertWithinCap(profile: AuthorProfile, maxActive: Int): CapInsert {
+    @Synchronized override fun insertWithinCap(profile: AuthorProfile, maxActive: Int, createLimit: Int, since: Instant?): CapInsert {
         if (countActive(profile.accountId) >= maxActive) return CapInsert.LIMIT_REACHED
+        if (createLimit > 0 && since != null && countCreatedSince(profile.accountId, since) >= createLimit) return CapInsert.RATE_LIMITED
         if (profile.id in rows || clash(profile)) return CapInsert.NAME_TAKEN
         rows[profile.id] = profile
         return CapInsert.INSERTED

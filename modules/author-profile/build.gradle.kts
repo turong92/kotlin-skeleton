@@ -14,6 +14,7 @@ dependencies {
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("tools.jackson.module:jackson-module-kotlin")
 
+    testImplementation(project(":modules:alert"))   // 경보 리스너가 감사로 치지 않는지 보는 시험 (account 의 compileOnly 와 같은 모듈)
     testImplementation(project(":modules:idempotency"))   // 같은 키 재생 시험 (compileOnly 와 같은 모듈)
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("org.springframework.security:spring-security-test")

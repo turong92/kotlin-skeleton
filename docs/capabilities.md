@@ -422,6 +422,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 저장소를 모른다 — author-profile-jdbc 를 같이 고른다(없으면 시작에 실패한다). 다른 DB(JPA · jOOQ)로 저장하려면 포트 AuthorProfileRepository 를 앱이 구현한다
   - account 위에 얹힌 모듈이다 — account 없이 자기 AuthAccountRepository 만 쓰는 앱에는 맞지 않는다
   - 아바타 · 소개글 · 프로필 공개 페이지 · '이 프로필의 글 모아 보기'는 없다
+  - storage(첨부)를 함께 쓰면 키에 계정 id 가 들어 두 프로필의 글이 이어진다 — skeleton.storage.web.key-owner: OPAQUE 와 비밀 <P>_STORAGE_WEB_KEY_SECRET(32자 이상, 선언의 secrets:)이 필요하다(docs/modules/author-profile.md)
 - 키워드: 작성자 프로필, 닉네임 여러 개, 부캐, 익명 프로필, 프로필 선택, 글마다 닉네임 / author profile, multiple nicknames, pseudonym, alias, persona, unlinkable identities
 
 ### `author-profile-jdbc` — 작성자 프로필 저장소 — PostgreSQL · MySQL 로 author-profile 의 저장 포트를 구현한다(author_profiles 표 · (이름 키, 꼬리표)와 첫 프로필 유니크 · 첫 프로필 줄을 잠그는 원자적 상한).

@@ -120,7 +120,7 @@ scripts/dev.sh
 
 프런트: `scripts/new-project.sh ~/work/community/web community --packages board,notifications,realtime,i18n,marketing,seo --with-sample`(react-skeleton 에서 — 그쪽 레시피 예 1).
 
-손으로 써야 하는 것: 소셜 가입 · 병합 정책은 앱 yml 의 선택이다(`community.account.social.sign-up` · `merge-on-verified-email` — 스타터의 `account` 가 소셜을 계정으로 이어 주고, 병합은 제공자가 확인한 같은 이메일일 때만), 운영에서는 메일 발송 길(`notification-mail`)과 `COMMUNITY_ACCOUNT_MAIL_LINK_BASE_URL`, 게시판 코드 · 반응 종류(`community.board.seed-boards` · `reaction.types`), 운영자 계정에 `MODERATOR` 역할, 알림을 만드는 코드(`NotificationPublisher.publish` — 댓글 알림은 `board` 가 `notification` 이 있으면 기본으로 보낸다).
+손으로 써야 하는 것(작성자마다 닉네임을 여러 개 고르게 하려면 `author-profile` + `author-profile-jdbc` 를 더하고, 첨부(`storage-s3`)도 쓰면 `<접두사>.storage.web.key-owner: OPAQUE` 와 비밀 `COMMUNITY_STORAGE_WEB_KEY_SECRET`(32자 이상)이 필요하다 — 그 모듈 페이지): 소셜 가입 · 병합 정책은 앱 yml 의 선택이다(`community.account.social.sign-up` · `merge-on-verified-email` — 스타터의 `account` 가 소셜을 계정으로 이어 주고, 병합은 제공자가 확인한 같은 이메일일 때만), 운영에서는 메일 발송 길(`notification-mail`)과 `COMMUNITY_ACCOUNT_MAIL_LINK_BASE_URL`, 게시판 코드 · 반응 종류(`community.board.seed-boards` · `reaction.types`), 운영자 계정에 `MODERATOR` 역할, 알림을 만드는 코드(`NotificationPublisher.publish` — 댓글 알림은 `board` 가 `notification` 이 있으면 기본으로 보낸다).
 
 ### 예 2. 유료 SaaS 대시보드 — 로그인 · 대시보드/목록/설정 · 요금제 · 결제 · 알림
 

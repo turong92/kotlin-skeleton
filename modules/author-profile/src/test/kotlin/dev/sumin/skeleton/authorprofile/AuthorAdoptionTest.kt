@@ -207,4 +207,34 @@ class AuthorAdoptionTest {
         assertEquals(1, listener.adoptCalls)
         assertEquals(setOf("acc_1"), h.repository.all().map { it.accountId }.toSet())
     }
+
+    @Test
+    fun `a list call marks adopted_at even when the listener moved nothing, so the next list does not call the listener again - and a failing listener keeps it open`() {
+        val h = harnessWithAccounts("acc_1")
+        val quiet = FakeListener("board", emptyMap())
+        h.adoptionListeners += quiet
+        h.service.ensureFirstProfile("acc_1")
+        assertNotNull(h.repository.findPrimary("acc_1")!!.adoptedAt, "0 rows is still done")
+        val calls = quiet.adoptCalls
+        h.service.ensureFirstProfile("acc_1")
+        assertEquals(calls, quiet.adoptCalls, "no board UPDATE on every GET for an account with nothing to adopt")
+
+        val h2 = harnessWithAccounts("acc_2")
+        val failing = FakeListener("board", mapOf("acc_2" to 1), fail = setOf("acc_2"))
+        h2.adoptionListeners += failing
+        h2.service.ensureFirstProfile("acc_2")
+        assertEquals(null, h2.repository.findPrimary("acc_2")!!.adoptedAt, "a listener that threw leaves it open for the next call")
+    }
+
+    @Test
+    fun `a failing activity lookup of one account is swallowed like any per-account failure`() {
+        val h = harnessWithAccounts("acc_1", "acc_2", "acc_3")
+        val flaky = object : dev.sumin.skeleton.account.AccountRepository by h.accounts {
+            override fun findById(id: String) = if (id == "acc_2") error("lookup failed for $id") else h.accounts.findById(id)
+        }
+        val service = AuthorProfileService(h.repository, { flaky }, h.names, h.limits, h.properties, h.time)
+        val listener = FakeListener("board", mapOf("acc_1" to 1, "acc_2" to 1, "acc_3" to 1))
+        assertEquals(2, AuthorAdoption({ listOf(listener) }, service).run(), "acc_1 and acc_3 moved; the run did not stop at acc_2")
+        assertEquals(setOf("acc_1", "acc_3"), listener.adopted.keys)
+    }
 }

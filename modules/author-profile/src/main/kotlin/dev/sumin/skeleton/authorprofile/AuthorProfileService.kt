@@ -50,15 +50,15 @@ class AuthorProfileService(
         val max = properties.maxPerAccount
         if (repository.countActive(accountId) >= max) throw AuthorProfileException(AuthorProfileErrorCode.LIMIT_REACHED)
         val now = time.now()
-        if (properties.createLimit > 0 && repository.countCreatedSince(accountId, now.minus(properties.createWindow)) >= properties.createLimit) {
-            throw RateLimitedException(properties.createWindow.seconds.coerceAtLeast(1), AuthorProfileErrorCode.RATE_LIMITED)
-        }
+        val since = now.minus(properties.createWindow)
+        // 빠른 거절 — 동시 요청이 함께 통과해도 insertWithinCap 이 잠금 안에서 같은 한도를 다시 센다
+        if (properties.createLimit > 0 && repository.countCreatedSince(accountId, since) >= properties.createLimit) throw createRateLimited()
         val key = names.key(name)
         var outcome = CapInsert.NAME_TAKEN
         var stored: AuthorProfile? = null
         place(key, avoid = avoidTags(key)) { tag ->
             val candidate = AuthorProfile(AuthorProfileIds.newId(), accountId, null, name, key, tag, AuthorProfileStatus.ACTIVE, null, now, now, null)
-            outcome = repository.insertWithinCap(candidate, max)
+            outcome = repository.insertWithinCap(candidate, max, properties.createLimit, since)
             if (outcome == CapInsert.INSERTED) stored = candidate
             outcome != CapInsert.NAME_TAKEN
         }
@@ -66,6 +66,7 @@ class AuthorProfileService(
             CapInsert.INSERTED -> stored!!
             CapInsert.LIMIT_REACHED -> throw AuthorProfileException(AuthorProfileErrorCode.LIMIT_REACHED)
             CapInsert.NAME_TAKEN -> throw AuthorProfileException(AuthorProfileErrorCode.NAME_TAKEN)
+            CapInsert.RATE_LIMITED -> throw createRateLimited()
         }
     }
 
@@ -101,27 +102,32 @@ class AuthorProfileService(
 
     /** 즉시 지운다 — 되돌릴 수 없다. 글 · 댓글은 그대로 남고 디렉터리가 `deleted` 카드를 돌려줄 뿐이다. 다른 프로필로 옮기지 않는다 */
     fun delete(accountId: String, id: String) {
+        // 정확히 같은 id 의 살아 있는 내 줄만 — 대소문자만 다른 변형 id 가 (MySQL 의 느슨한 비교로) 남의 줄에 닿지 못하게 rename 처럼 먼저 읽어 거른다
+        ownLiving(accountId, id)
         if (!repository.markDeleted(id, accountId, time.now())) throw notFound()
     }
 
     /**
      * 계정의 첫 프로필을 보장하고 돌려준다 (이미 있으면 — 지워졌어도 — 그것) **그리고 그 계정의 옛 행을 넘겨받는다**: 아직 `adopted_at` 이 비었으면
-     * 모든 `AuthorAdoptionListener.adopt` 를 불러 본다 (실행기를 끈 앱의 옛 글이 목록 조회 때 넘어간다 — 스펙 §7.4-3). 구현이 던지면 삼키고(종류만 로그) 다음 기회에 한다.
+     * 모든 `AuthorAdoptionListener.adopt` 를 불러 보고, 하나도 던지지 않았으면(0 행이어도) `adopted_at` 을 채운다 (실행기를 끈 앱의 옛 글이 목록 조회 때 넘어간다 — 스펙 §7.4-3). 구현이 던지면 삼키고(종류만 로그) 다음 기회에 한다.
      * 실행기는 이것 대신 [ensureFirstProfileRow] 를 쓴다(옮긴 행 수를 직접 세려고).
      */
     fun ensureFirstProfile(accountId: String): AuthorProfile {
         val first = ensureFirstProfileRow(accountId)
         if (first.adoptedAt != null) return first
         if (!isActive(accountId)) return first   // 읽기는 허용하지만 옛 글을 옮기지는 않는다 (탈퇴 순서: 선점 → 고리 → 지움)
-        var moved = false
-        for (listener in adoptionListeners()) {
+        val listeners = adoptionListeners()
+        var allDone = true
+        for (listener in listeners) {
             try {
-                if (listener.adopt(accountId, first.id) > 0) moved = true
+                listener.adopt(accountId, first.id)   // 0 행이어도 끝난 것이다 — 더 옮길 옛 행이 없다
             } catch (e: Exception) {
+                allDone = false
                 log.warn("author profile: adoption listener '{}' failed for one account ({}); retried on the next call", listener.name, e.javaClass.simpleName)
             }
         }
-        if (moved) markAdopted(accountId)
+        // 모든 리스너가 예외 없이 끝나면(0 행이어도) 표시한다 — 안 그러면 옛 글이 없는 계정의 GET 마다 board UPDATE 가 영구히 돈다
+        if (allDone && listeners.isNotEmpty()) markAdopted(accountId)
         return repository.findPrimary(accountId) ?: first
     }
 
@@ -172,6 +178,8 @@ class AuthorProfileService(
 
     private fun ownLiving(accountId: String, id: String): AuthorProfile =
         repository.find(id)?.takeIf { it.accountId == accountId && it.status == AuthorProfileStatus.ACTIVE } ?: throw notFound()
+
+    private fun createRateLimited() = RateLimitedException(properties.createWindow.seconds.coerceAtLeast(1), AuthorProfileErrorCode.RATE_LIMITED)
 
     private fun notFound() = AuthorProfileException(AuthorProfileErrorCode.NOT_FOUND)
 

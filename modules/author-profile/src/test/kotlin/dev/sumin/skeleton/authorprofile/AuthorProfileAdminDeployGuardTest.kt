@@ -1,6 +1,8 @@
 package dev.sumin.skeleton.authorprofile
 
+import dev.sumin.skeleton.account.abuse.AlertingAccountEventListener
 import dev.sumin.skeleton.account.events.AccountEvent
+import dev.sumin.skeleton.alert.OwnerAlerts
 import dev.sumin.skeleton.account.events.AccountEventListener
 import dev.sumin.skeleton.account.events.LoggingAccountEventListener
 import dev.sumin.skeleton.common.deploy.DeployContext
@@ -25,6 +27,13 @@ class AuthorProfileAdminDeployGuardTest {
         assertEquals(1, warnings.size)
         assertTrue("skeleton.account.audit.enabled" in warnings.single() && "AUTHOR_LINK_VIEWED" in warnings.single(), warnings.single())
         assertEquals(emptyList(), g.problems(prod))
+    }
+
+    @Test
+    fun `the alert listener drops AUTHOR_LINK_VIEWED so log plus alert (the sample's mix with audit off) still warns, and a real listener next to them does not`() {
+        val alerting = AlertingAccountEventListener(OwnerAlerts.NONE)
+        assertEquals(1, guard(LoggingAccountEventListener(), alerting).warnings(prod).size)
+        assertEquals(emptyList(), guard(LoggingAccountEventListener(), alerting, durable).warnings(prod))
     }
 
     @Test

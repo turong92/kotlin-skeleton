@@ -7,6 +7,7 @@
 - **한도**: 개수 상한은 살아 있는 프로필 수(첫 프로필 포함)이고 상한 검사와 저장은 한 번에 원자적이다. **만들기 한도**는 표에서 센다(지운 것 포함, 실패한 시도는 세지 않는다 — 재시작 · 인스턴스 여럿에도 같다). **이름 바꾸기 한도**는 계정의 `display-name.change-limit`/`change-window` 숫자를 모든 프로필 합산으로 쓰되 계정 닉네임 변경과는 **따로** 센다(프로필 전용 카운터) — `AccountRateLimits` 를 쓰므로 인스턴스가 여럿이면 내구성 있는 `RateLimitStore`(예: `redis-rate-limit`)가 필요하다.
 - **지우기**는 즉시이고 되돌릴 수 없다 — 글은 "삭제된 사용자"로 남고 다른 프로필로 옮기지 않는다. 남의 · 없는 · 지워진 프로필 id 는 모두 같은 `AUTHOR_PROFILE.NOT_FOUND` 이고, `AuthorIdentities.allows` 도 같은 false 다.
 - **첫 프로필**: 계정이 처음 갖는 프로필. 계정 이름 · 꼬리표를 한 번 복사하고(이름이 없으면 이름 없는 프로필), `adopt-on-startup`(기본 켜짐)이 `AuthorAdoptionListener`(예: `board-jdbc`)가 가진 옛 글을 여기로 넘겨받는다 — 계정 id 커서로 끝까지 훑어 못 옮기는 계정이 뒤 계정을 굶기지 않고, 계정별 예외는 삼키며, 계정 id · 프로필 id 쌍을 로그에 남기지 않는다. 목록 조회가 부르는 `ensureFirstProfile` 도 같은 넘겨받기를 그 계정에 한 번 해 본다(실행기를 끈 앱).
+- **첨부(`storage`)를 함께 쓰면** 기본 키(`<prefix>/<계정 id>/…`)가 공개 `attachments` 로 나가 두 프로필의 글을 잇는다 — `skeleton.storage.web.key-owner: OPAQUE` 로 바꾸고 비밀 `<P>_STORAGE_WEB_KEY_SECRET`(32자 이상, 배포 선언의 `secrets:`; 비면 기동 실패)을 준다. board 는 계정 id 가 든 새 첨부 키를 `400 BOARD.CONTENT_INVALID` 로 거절하는 안전망만 갖는다(`apps/sample` 이 이 선택을 켠다).
 - 탈퇴(`AccountErasureListener`)는 그 계정의 프로필 행을 모두 지운다. 글 쪽 `author_ref` 는 건드리지 않는다.
 - `AuthorDirectory` 는 `AccountAutoConfiguration` **보다 먼저** 등록된다 — `prf_` 가 아닌 id(아직 넘겨받지 않은 옛 행의 계정 id)는 `account` 의 기본 디렉터리에 그대로 넘긴다.
 - 저장소 포트(`AuthorProfileRepository`)는 [author-profile-jdbc](author-profile-jdbc.md) 가 구현한다 (`author-profile` 은 어댑터에 의존하지 않으므로 `--modules author-profile,author-profile-jdbc` 라고 둘 다 적는다). **메모리 구현은 없다** — 어댑터가 없으면 시작이 실패한다.

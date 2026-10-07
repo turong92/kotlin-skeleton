@@ -114,6 +114,37 @@ class AuthorProfileServiceTest {
     }
 
     @Test
+    fun `the create limit is enforced inside insertWithinCap too - concurrent requests that all passed the quick pre-check cannot get past it`() {
+        val h = Harness(properties = AuthorProfileProperties(maxPerAccount = 9, createLimit = 2, createWindow = Duration.ofDays(30)))
+        // 사전 검사가 낡은 값(0)을 본 것처럼 — 동시 요청이 모두 빠른 거절을 통과한 상황
+        val blind = object : AuthorProfileRepository by h.repository {
+            override fun countCreatedSince(accountId: String, since: java.time.Instant) = 0
+        }
+        val service = AuthorProfileService(blind, { h.accounts }, h.names, h.limits, h.properties, h.time)
+        service.create("acc_1", "A"); service.create("acc_1", "B")
+        val e = assertFailsWith<RateLimitedException> { service.create("acc_1", "C") }
+        assertEquals(AuthorProfileErrorCode.RATE_LIMITED, e.errorCode)
+        assertEquals(2, h.made("acc_1").size, "the third was refused by the repository, not stored")
+    }
+
+    @Test
+    fun `deleting reads the exact own living row first, so a store that matches ids loosely cannot delete through a variant id`() {
+        val h = Harness()
+        val p = h.service.create("acc_1", "A")
+        val loose = object : AuthorProfileRepository by h.repository {
+            override fun markDeleted(id: String, accountId: String, now: java.time.Instant): Boolean {
+                val row = h.repository.all().firstOrNull { it.id.equals(id, ignoreCase = true) && it.accountId == accountId } ?: return false
+                return h.repository.markDeleted(row.id, accountId, now)
+            }
+        }
+        val service = AuthorProfileService(loose, { h.accounts }, h.names, h.limits, h.properties, h.time)
+        val variant = p.id.uppercase().replaceFirst("PRF_", "prf_")
+        assertNotEquals(p.id, variant)
+        assertEquals(AuthorProfileErrorCode.NOT_FOUND, assertFailsWith<AuthorProfileException> { service.delete("acc_1", variant) }.errorCode)
+        assertEquals(AuthorProfileStatus.ACTIVE, h.repository.find(p.id)!!.status)
+    }
+
+    @Test
     fun `create-limit 0 means no limit`() {
         val h = Harness(properties = AuthorProfileProperties(maxPerAccount = 2, createLimit = 0))
         repeat(10) { i -> val p = h.service.create("acc_1", "n$i"); h.service.delete("acc_1", p.id) }

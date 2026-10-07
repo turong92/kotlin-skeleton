@@ -87,7 +87,7 @@ class JdbcAuthorProfileRepository(
         return insertIgnoring(profile)
     }
 
-    override fun insertWithinCap(profile: AuthorProfile, maxActive: Int): CapInsert {
+    override fun insertWithinCap(profile: AuthorProfile, maxActive: Int, createLimit: Int, since: Instant?): CapInsert {
         require(profile.primaryOf == null) { "insertWithinCap is for user-made profiles (primary_of is null); use insert" }
         return tx.execute {
             // 그 계정의 첫 프로필 줄(지워졌어도)을 잠근다 — 같은 계정의 동시 요청이 여기서 줄을 선다. 센 값은 잠금을 잡은 뒤의 것이어야 한다
@@ -97,8 +97,18 @@ class JdbcAuthorProfileRepository(
             val active = jdbc.queryForList(
                 "select id from author_profiles where account_id = :account and status = 'ACTIVE' for update", mapOf("account" to profile.accountId), String::class.java,
             ).size
+            // 만들기 한도도 잠금을 잡은 뒤에 센다 — 서비스의 사전 검사는 빠른 거절일 뿐이고 동시 요청은 여기서 줄을 선다 (지워진 줄 포함, 첫 프로필 제외)
+            val created = if (createLimit > 0 && since != null) {
+                jdbc.queryForList(
+                    "select id from author_profiles where account_id = :account and primary_of is null and created_at >= :since for update",
+                    MapSqlParameterSource().addValue("account", profile.accountId).addValue("since", dialect.instantParam(since)), String::class.java,
+                ).size
+            } else {
+                0
+            }
             when {
                 active >= maxActive -> CapInsert.LIMIT_REACHED
+                createLimit > 0 && since != null && created >= createLimit -> CapInsert.RATE_LIMITED
                 insertIgnoring(profile) -> CapInsert.INSERTED
                 else -> CapInsert.NAME_TAKEN
             }

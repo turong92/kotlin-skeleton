@@ -39,27 +39,27 @@ class AuthorAdoption(
                 break
             }
             if (pending.isEmpty()) break
-            val last = pending.max()
-            if (after != null && last <= after) {
+            // 커서는 돌려받은 목록의 마지막 계정이고 전진 여부는 같음으로만 판정한다 — 구현의 정렬(콜레이션)이 Kotlin 의 문자열 순서와 달라도 맞다
+            val last = pending.last()
+            if (after != null && last == after) {
                 log.warn("author adoption: listener '{}' ignored the cursor; stopping it for this start", listener.name)
                 break
             }
             for (accountId in pending) {
                 // ACTIVE 가 아닌 계정(정지 · 삭제 유예 · 지우기 선점 · 지워짐)은 건너뛴다 — 탈퇴 고리가 지운 줄을 되살리지 않게. 계정이 다시 ACTIVE 가 되면 다음 기동 · 목록 조회가 옮긴다
-                if (!service.isActive(accountId)) continue
                 val n = try {
+                    // 판정(isActive)도 같은 try 안이다 — 계정 하나의 조회 실패가 실행 전체를 멈추지 않는다
+                    if (!service.isActive(accountId)) continue
                     listener.adopt(accountId, service.ensureFirstProfileRow(accountId).id)
                 } catch (e: Exception) {
                     failed++
                     log.warn("author adoption: listener '{}' failed for one account ({}); it will be retried at the next start", listener.name, e.javaClass.simpleName)
                     continue
                 }
-                if (n > 0) {
-                    moved += n
-                    // 행은 이미 옮겼다 — 표시만 못 해도 옮긴 것으로 센다(adopted_at 은 GET 때 다시 채워진다)
-                    try { service.markAdopted(accountId) } catch (e: Exception) {
-                        log.warn("author adoption: listener '{}' could not record adopted_at for one account ({})", listener.name, e.javaClass.simpleName)
-                    }
+                moved += n
+                // 행은 이미 옮겼다(또는 옮길 것이 없었다) — 표시만 못 해도 옮긴 것으로 센다(adopted_at 은 GET 때 다시 채워진다)
+                try { service.markAdopted(accountId) } catch (e: Exception) {
+                    log.warn("author adoption: listener '{}' could not record adopted_at for one account ({})", listener.name, e.javaClass.simpleName)
                 }
             }
             after = last
