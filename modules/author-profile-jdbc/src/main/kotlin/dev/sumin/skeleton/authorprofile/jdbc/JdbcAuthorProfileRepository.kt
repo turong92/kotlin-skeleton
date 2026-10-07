@@ -60,6 +60,9 @@ class JdbcAuthorProfileRepository(
     override fun findActive(accountId: String): List<AuthorProfile> =
         jdbc.query("$SELECT where account_id = :account and status = 'ACTIVE' order by created_at, id", mapOf("account" to accountId)) { rs, _ -> rs.profile() }
 
+    override fun findAllOf(accountId: String): List<AuthorProfile> =
+        jdbc.query("$SELECT where account_id = :account order by created_at, id", mapOf("account" to accountId)) { rs, _ -> rs.profile() }
+
     override fun countActive(accountId: String): Int = countActiveOf(accountId)
 
     override fun findPrimary(accountId: String): AuthorProfile? =

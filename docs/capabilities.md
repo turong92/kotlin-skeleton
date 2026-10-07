@@ -415,7 +415,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 의존 한 줄: `implementation(project(":modules:author-profile"))`
 - 함께 골라야 한다: `author-profile-jdbc`
 - 설정 접두사 `skeleton.author-profile` — 키와 기본값 `docs/config/modules/author-profile.yml`
-- HTTP 경로: `/api/v1/author-profiles`
+- HTTP 경로: `/api/v1/admin/author-profiles`, `/api/v1/author-profiles`
 - 문서: `docs/modules/author-profile.md`
 - 짝 프런트(react-skeleton): 항목 `author-profile` · 패키지 `@skeleton/author-profile` · 조각 `--packages author-profile`
 - 쓰지 않는 경우:

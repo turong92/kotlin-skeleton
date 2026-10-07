@@ -29,6 +29,9 @@ class FakeAuthorProfileRepository : AuthorProfileRepository {
     @Synchronized override fun findActive(accountId: String): List<AuthorProfile> =
         rows.values.filter { it.accountId == accountId && it.status == AuthorProfileStatus.ACTIVE }.sortedWith(compareBy({ it.createdAt }, { it.id }))
 
+    @Synchronized override fun findAllOf(accountId: String): List<AuthorProfile> =
+        rows.values.filter { it.accountId == accountId }.sortedWith(compareBy({ it.createdAt }, { it.id }))
+
     @Synchronized override fun countActive(accountId: String): Int = findActive(accountId).size
 
     @Synchronized override fun findPrimary(accountId: String): AuthorProfile? = rows.values.firstOrNull { it.primaryOf == accountId }

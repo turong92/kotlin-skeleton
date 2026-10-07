@@ -22,6 +22,9 @@ interface AuthorProfileRepository {
     /** 계정의 살아 있는(ACTIVE) 프로필, 만든 순(같으면 id 순) */
     fun findActive(accountId: String): List<AuthorProfile>
 
+    /** 계정의 프로필 **전부**(지워진 것 포함), 만든 순(같으면 id 순) — 관리자의 연결 조회 전용이다 */
+    fun findAllOf(accountId: String): List<AuthorProfile>
+
     fun countActive(accountId: String): Int
 
     /** 계정의 첫 프로필([AuthorProfile.primaryOf] = 계정 id) — 지워졌어도 돌려준다. 없으면 null */

@@ -765,7 +765,7 @@
         "prefixes": ["skeleton.author-profile"],
         "snippet": "docs/config/modules/author-profile.yml"
       },
-      "basePaths": ["/api/v1/author-profiles"],
+      "basePaths": ["/api/v1/admin/author-profiles", "/api/v1/author-profiles"],
       "secrets": [],
       "docs": ["docs/modules/author-profile.md"],
       "frontend": {

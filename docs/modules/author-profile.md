@@ -9,7 +9,7 @@
 - **첫 프로필**: 계정이 처음 갖는 프로필. 계정 이름 · 꼬리표를 한 번 복사하고(이름이 없으면 이름 없는 프로필), `adopt-on-startup`(기본 켜짐)이 `AuthorAdoptionListener`(예: `board-jdbc`)가 가진 옛 글을 여기로 넘겨받는다 — 계정 id 커서로 끝까지 훑어 못 옮기는 계정이 뒤 계정을 굶기지 않고, 계정별 예외는 삼키며, 계정 id · 프로필 id 쌍을 로그에 남기지 않는다. 목록 조회가 부르는 `ensureFirstProfile` 도 같은 넘겨받기를 그 계정에 한 번 해 본다(실행기를 끈 앱).
 - 탈퇴(`AccountErasureListener`)는 그 계정의 프로필 행을 모두 지운다. 글 쪽 `author_ref` 는 건드리지 않는다.
 - `AuthorDirectory` 는 `AccountAutoConfiguration` **보다 먼저** 등록된다 — `prf_` 가 아닌 id(아직 넘겨받지 않은 옛 행의 계정 id)는 `account` 의 기본 디렉터리에 그대로 넘긴다.
-- 저장소 포트(`AuthorProfileRepository`)는 [author-profile-jdbc](author-profile-jdbc.md) 가 구현한다 (`author-profile` 은 어댑터에 의존하지 않으므로 `--modules author-profile,author-profile-jdbc` 라고 둘 다 적는다). **메모리 구현은 없다** — 어댑터가 없으면 시작이 실패한다. 관리자 연결 조회는 뒤따르는 조각이다(`admin.enabled` 키는 자리만 있고 동작하지 않는다).
+- 저장소 포트(`AuthorProfileRepository`)는 [author-profile-jdbc](author-profile-jdbc.md) 가 구현한다 (`author-profile` 은 어댑터에 의존하지 않으므로 `--modules author-profile,author-profile-jdbc` 라고 둘 다 적는다). **메모리 구현은 없다** — 어댑터가 없으면 시작이 실패한다.
 
 | 항목 | 내용 |
 |---|---|
@@ -17,9 +17,9 @@
 | 함께 오는 모듈 | `platform`, `account`, `auth` |
 | 컴파일 전용 | `idempotency` |
 | 설정 접두사 | `skeleton.author-profile` — [docs/config/modules/author-profile.yml](../config/modules/author-profile.yml) |
-| 기본 동작 | 켜짐. 계정당 프로필 5 개 · 30 일에 5 번 만들기, 기동할 때 옛 글 넘겨받기, HTTP `/api/v1/author-profiles`(로그인 필요). 저장소 어댑터가 없으면 기동 실패. |
+| 기본 동작 | 켜짐. 계정당 프로필 5 개 · 30 일에 5 번 만들기, 기동할 때 옛 글 넘겨받기, HTTP `/api/v1/author-profiles`(로그인 필요), 관리자 연결 조회는 꺼짐(`admin.enabled`). 저장소 어댑터가 없으면 기동 실패. |
 | 부팅에 필요한 것 | `AuthorProfileRepository` 구현(`author-profile-jdbc`)과 `account` 의 부팅 조건. |
-| 교체 지점 | `AuthorProfileRepository`, `AuthorProfileService`, `AuthorIdentities`, `AuthorDirectory`, `authorProfileErasureListener`, `authorProfileAdoptionRunner`, `AuthorProfileController`, `AuthorProfileCallers` |
+| 교체 지점 | `AuthorProfileRepository`, `AuthorProfileService`, `AuthorIdentities`, `AuthorDirectory`, `authorProfileErasureListener`, `authorProfileAdoptionRunner`, `AuthorProfileController`, `AuthorProfileCallers`, `AuthorLinkLookup`, `AuthorProfileAdminController` |
 | 마이그레이션 | 없음 (스키마는 `author-profile-jdbc`) |
 | 프론트 짝 | `@skeleton/author-profile` |
 | 테스트 | `modules/author-profile/src/test`, `modules/author-profile/src/noOptionalTest` (`idempotency` 가 클래스패스에 없을 때) |
@@ -41,6 +41,21 @@
 남의 · 없는 · 지워진 · 모양이 틀린 id 는 모두 **같은 `404 AUTHOR_PROFILE.NOT_FOUND`**(상태 · 문구 · 본문 · 헤더가 같다 — 존재 여부를 알려 주지 않는다. 남의 id 에 잘못된 이름을 보내도 `400` 이 아니라 같은 `404`).
 **만들기(`POST`)는 `@IdempotentOperation`** 이다 — 앱이 `idempotency` 모듈을 끼우면 `Idempotency-Key` 헤더가 **필수**(없으면 `400 COMMON.IDEMPOTENCY_ERROR`)이고 같은 키의 두 번째 요청은 프로필을 또 만들지 않고 첫 응답을 재생한다(프론트가 네트워크 오류를 같은 키로 재시도하는 계약). 모듈이 없으면 애너테이션은 JVM 이 건너뛰고 키 없이 만들어진다(`idempotency` 는 `compileOnly`, `src/noOptionalTest` 가 증명). 이름 바꾸기 · 지우기는 멱등 표시가 없다. 프론트가 읽는 정본 계약 문서(`docs/author-profile-http-contract.md`)는 뒤따른다.
 
+## 관리자 연결 조회 (`skeleton.author-profile.admin.enabled`, 기본 꺼짐)
+
+프로필 ↔ 계정 연결을 **관리자만** 볼 수 있는 별도 엔드포인트다(설계 §7.9). 기본 꺼짐 — 켜지 않으면 컨트롤러 빈도 경로도 없다(사용자용 `http.enabled` 와 따로 켜고 끈다). 서블릿 웹 앱 + Spring Security 에서만 등록된다.
+
+| 메서드 · 경로 | 하는 일 |
+|---|---|
+| `GET /api/v1/admin/author-profiles/{id}` | 그 프로필의 계정과 그 계정의 프로필들 |
+| `GET /api/v1/admin/author-profiles?accountId=` | 계정의 프로필들 (`accountId` 가 없으면 `400`) |
+
+- 응답 `{ value: { accountId, profiles: [{ id, name, tag, status, createdAt, updatedAt, deletedAt }] } }` — 만든 순, **지워진 것 포함**(`status` `DELETED`: `name` · `tag` 는 null, `deletedAt` 있음). 계정 이메일은 싣지 않는다 — 필요하면 `GET /api/v1/admin/accounts/{id}`(account 의 관리자 조회).
+- **권한**: `AccountCallers.requireAdmin` — `skeleton.account.admin.role`(기본 `ADMIN`)만, 매 호출 저장소의 계정 역할 · 상태를 다시 읽는다(토큰의 역할은 힌트). `MODERATOR` · 일반 사용자 · 정지된 관리자 `403`, 익명 `401`. 게시판 운영자는 연결을 보지 못한다(글 숨김 · 삭제는 연결 없이 되고, 계정 제재는 관리자의 일).
+- **감사**: 성공한 호출마다 `AccountEventType.AUTHOR_LINK_VIEWED` 를 낸다 — 대상 계정 id, `detail = { by: <관리자 계정 id> }`. **detail 에도 로그 한 줄에도 프로필 id 가 없다**(기본 로거는 `account=<대상> detail={by=…}` 만 찍는다). 이 이벤트는 계정 이벤트 한 종류가 늘어난 것이 `account` 의 유일한 변경이다 — `account_audit.type` 은 `varchar(40)` 문자열이라(제약 · enum 열 없음) 마이그레이션은 없다.
+- **없는 대상**: 없는 프로필 id · 없는 계정 id 는 `404 AUTHOR_PROFILE.NOT_FOUND`(관리자에게는 구별해도 되는 선택 — 이 코드가 둘 다 쓰인다) 이고 **이벤트를 남기지 않는다** — 헛짚은 조회가 감사 표에 존재 여부의 흔적을 남기지 않게. 계정은 있는데 프로필이 없으면 `200` + 빈 목록이고 감사는 남는다.
+- 요청 경로의 프로필 id 는 일반 요청 로그(`RequestLoggingFilter`)에 남는다 — 관리자 계정이 아니라 대상 계정과의 쌍은 로그 어디에도 없다.
+
 ## 탈퇴 · 넘겨받기 · 연결 차단 요약
 
 - **탈퇴**: 계정이 지워질 때 `AccountErasureListener` 고리가 그 계정의 프로필 행을 모두 **지운다**(형제 관계가 DB 에도 남지 않는다). 글 쪽(`board`)의 `author_ref` 는 건드리지 않아 프로필마다 다른 id 가 남고 `authorDeleted` 는 글의 `author_id` 톰스톤에서 나온다.
@@ -51,7 +66,6 @@
 
 - 만들기 한도(`create-limit`)를 넘었을 때의 `Retry-After` / `data.retryAfterSeconds` 는 **창 전체 길이**(`create-window`, 기본 30 일 = `2592000`)다 — 표에서 센 횟수라 "가장 오래된 만들기가 창 밖으로 나가는 시각"까지 정확히 계산하지 않는다. 프론트는 정확한 대기 시간이 아니라 "한동안"으로 보인다.
 - 이름 바꾸기 한도는 계정의 `display-name.change-limit`/`change-window` **숫자만** 쓰고 카운터는 계정 닉네임 변경과 **따로** 센다(프로필 전용, 모든 프로필 합산). 카운터가 `AccountRateLimits`(= `RateLimitStore`)에 있으므로 인스턴스가 여럿이거나 재시작에도 지켜야 하면 내구성 있는 `RateLimitStore`(예: `redis-rate-limit`)가 필요하다 — 기본 메모리 저장소는 인스턴스마다 · 재시작마다 센다.
-- 관리자 연결 조회(`admin.enabled`)는 아직 동작하지 않는다.
 - **ACTIVE 가 아닌 계정**(정지 · 삭제 유예 · 지우는 중): 새 프로필 줄을 만들지 않는다 — `POST` 는 `404 AUTHOR_PROFILE.NOT_FOUND`. `GET /` 은 **이미 프로필이 있으면 읽을 수 있다**(정지 계정도 자기 목록을 본다)지만 옛 글을 옮기지는 않고, 프로필이 한 번도 없던 계정이 정지된 뒤 부르면 첫 프로필을 새로 만들 수 없어 같은 `404` 다.
 
 [모듈 색인](README.md) · [최소 구성 가이드](../minimal-composition.md)

@@ -82,6 +82,7 @@ private object NoRepository : AuthorProfileRepository {
     override fun find(id: String) = nope()
     override fun findAll(ids: Collection<String>) = nope()
     override fun findActive(accountId: String) = nope()
+    override fun findAllOf(accountId: String) = nope()
     override fun countActive(accountId: String) = nope()
     override fun findPrimary(accountId: String) = nope()
     override fun tagsOf(key: String) = nope()

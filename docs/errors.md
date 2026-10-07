@@ -37,7 +37,7 @@ interceptors.
 - `AUTH_SOCIAL.*`: OAuth/social login errors.
 - `BOARD.*`: the `board` module — `NOT_FOUND`, `POST_NOT_FOUND`, `COMMENT_NOT_FOUND` (404), `FORBIDDEN` (403),
   `REACTION_TYPE_INVALID`, `CONTENT_INVALID`, `AUTHOR_REQUIRED` (400), `AUTHOR_NOT_ALLOWED` (403 — the same words for another account's, an unknown and a deleted author id), `COMMENT_TOO_DEEP` (422), `POST_NOT_COMMENTABLE`, `CODE_TAKEN` (409), `RATE_LIMITED` (429).
-- `AUTHOR_PROFILE.*`: the `author-profile` module — `NAME_TAKEN` · `LIMIT_REACHED` (409), `RATE_LIMITED` (429, `Retry-After` and `data.retryAfterSeconds`, same shape as `ACCOUNT.RATE_LIMITED`), `NOT_FOUND` (404 — the same words for another account's, a missing and a deleted profile id). A bad name is `COMMON.VALIDATION_FAILED` with field `name` and the nickname codes (`Required` · `Size` · `Pattern` · `Reserved`). See `docs/modules/author-profile.md`.
+- `AUTHOR_PROFILE.*`: the `author-profile` module — `NAME_TAKEN` · `LIMIT_REACHED` (409), `RATE_LIMITED` (429, `Retry-After` and `data.retryAfterSeconds`, same shape as `ACCOUNT.RATE_LIMITED`), `NOT_FOUND` (404 — the same words for another account's, a missing and a deleted profile id; the administrator link lookup uses it too for an unknown profile or account id). A bad name is `COMMON.VALIDATION_FAILED` with field `name` and the nickname codes (`Required` · `Size` · `Pattern` · `Reserved`). See `docs/modules/author-profile.md`.
 - `PAYMENT.*`: provider-neutral payment errors. Vendor codes are nested under
   `data.providerCode`, not promoted to the top-level `code`.
 

@@ -89,6 +89,24 @@ class JdbcAuthorProfileRepositoryDbTest {
     }
 
     @Test
+    fun `findAllOf lists every row of the account - deleted included, oldest first - and nobody else's`() {
+        val acc = account()
+        val first = profile(acc, primary = true, at = T0)
+        val second = profile(acc, at = T0.plusSeconds(1))
+        val third = profile(acc, at = T0.plusSeconds(2))
+        repository.insert(first)
+        repository.insertWithinCap(second, 5)
+        repository.insertWithinCap(third, 5)
+        repository.markDeleted(second.id, acc, T0.plusSeconds(3))
+        repository.insert(profile(account(), primary = true))
+        val all = repository.findAllOf(acc)
+        assertEquals(listOf(first.id, second.id, third.id), all.map { it.id })
+        assertEquals(listOf(AuthorProfileStatus.ACTIVE, AuthorProfileStatus.DELETED, AuthorProfileStatus.ACTIVE), all.map { it.status })
+        assertNotNull(all[1].deletedAt)
+        assertEquals(emptyList(), repository.findAllOf("acc_nobody"))
+    }
+
+    @Test
     fun `findAll is one query for a normal list and chunks a huge one`() {
         val acc = account()
         val a = profile(acc, primary = true)
