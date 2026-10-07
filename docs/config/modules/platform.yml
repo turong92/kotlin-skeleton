@@ -18,7 +18,7 @@ skeleton:
       allowed-origin-patterns: ["http://localhost:[*]", "http://127.0.0.1:[*]"]
       allowed-methods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
       allowed-headers: [Authorization, Content-Type, Idempotency-Key, traceparent, X-Request-Id, X-Trace-Id, X-Time-Zone, X-Dev-Account-Id, X-Dev-Username, X-Dev-Email, X-Break-Glass-Account-Id, X-Break-Glass-Reason, X-Break-Glass-Secret]
-      exposed-headers: [Location, Idempotency-Key, Idempotency-Replayed, traceparent, X-Trace-Id, X-Span-Id]
+      exposed-headers: [Location, Idempotency-Key, Idempotency-Replayed, traceparent, X-Trace-Id, X-Span-Id, Date]   # Date: 서버 시각 (프론트 카운트다운 보정)
       allow-credentials: false
       max-age: 1h
     client-ip:

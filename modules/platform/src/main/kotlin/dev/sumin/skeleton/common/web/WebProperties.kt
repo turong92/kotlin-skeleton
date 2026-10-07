@@ -60,6 +60,7 @@ data class WebProperties(
             "traceparent",
             "X-Trace-Id",
             "X-Span-Id",
+            "Date", // 서버 시각 — CORS 로 떨어진 프론트가 expiresAt · resendAvailableAt 카운트다운을 서버 시계에 맞춘다 (CORS 안전 목록이 아니라 노출해야 읽힌다)
         ),
         val allowCredentials: Boolean = false,
         val maxAge: Duration = Duration.ofHours(1),

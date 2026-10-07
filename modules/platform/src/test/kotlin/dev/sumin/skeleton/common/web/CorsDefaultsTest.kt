@@ -18,4 +18,15 @@ class CorsDefaultsTest {
 
         assertEquals(listOf("X-Time-Zone", "traceparent", "Idempotency-Key", "Authorization"), allowed)
     }
+
+    /** 서버 시각 — CORS 로 떨어진 프론트가 `Date` 응답 헤더로 카운트다운(`expiresAt` · `resendAvailableAt`)을 서버 시계에 맞춘다. `Date` 는 CORS 안전 목록이 아니라 노출해야 읽힌다 */
+    @Test
+    fun `default CORS exposes the Date header so a cross-origin frontend can read the server clock`() {
+        val source = WebPolicyAutoConfiguration().corsConfigurationSource(WebProperties(cors = WebProperties.Cors(enabled = true)))
+        val request = MockHttpServletRequest("GET", "/api/v1/account/sign-up").apply { requestURI = "/api/v1/account/sign-up" }
+        val configuration = assertNotNull((source as UrlBasedCorsConfigurationSource).getCorsConfiguration(request))
+
+        assertEquals(true, configuration.exposedHeaders!!.any { it.equals("Date", ignoreCase = true) }, configuration.exposedHeaders.toString())
+        assertEquals(true, configuration.exposedHeaders!!.contains("traceparent"), "the existing ones stay")
+    }
 }
