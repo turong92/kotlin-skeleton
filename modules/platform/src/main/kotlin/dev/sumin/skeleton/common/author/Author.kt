@@ -24,5 +24,31 @@ fun interface AuthorDirectory {
  */
 data class AuthorContext(val source: String, val scope: String? = null)
 
-/** 화면에 보일 작성자. [name] 이 없으면 이름 없음, [tag] 는 같은 이름을 구분하는 4자리 꼬리표(없을 수 있다) */
-data class AuthorCard(val name: String?, val tag: String? = null)
+/**
+ * 화면에 보일 작성자. [name] 이 없으면 이름 없음, [tag] 는 같은 이름을 구분하는 4자리 꼬리표(없을 수 있다),
+ * [deleted] 는 지워진 프로필(기본 false — 기존 구현은 그대로 컴파일된다)
+ */
+data class AuthorCard(val name: String?, val tag: String? = null, val deleted: Boolean = false)
+
+/**
+ * 이 계정이 이 공개 작성자 id 로 써도 되는가 — 글을 쓰는 모듈이 쓰기 직전에 묻는다.
+ * 빈이 없으면 공개 작성자 id 는 계정 id 다(이 기능 이전의 동작). 구현은 없는 id · 남의 id · 지워진 id 를 구별하지 않고 false 를 돌려준다.
+ */
+fun interface AuthorIdentities {
+    fun allows(accountId: String, authorId: String, context: AuthorContext): Boolean
+}
+
+/**
+ * 공개 작성자 id 없이 저장된 옛 행을 계정의 첫 프로필로 옮긴다 — 글을 들고 있는 모듈이 구현한다
+ * ([dev.sumin.skeleton.common.erasure.AccountErasureListener] 와 같은 방식). 멱등이다.
+ */
+interface AuthorAdoptionListener {
+    /** 이 구현의 이름(로그 · 진행 표시용) */
+    val name: String
+
+    /** 아직 옮기지 않은 행을 가진 계정 id (지워진 계정 제외), 최대 [limit] 개 */
+    fun pendingAccounts(limit: Int): List<String>
+
+    /** [accountId] 의 옛 행을 공개 작성자 id [authorId] 로 옮기고 옮긴 행 수를 돌려준다. 이미 옮겼으면 0 */
+    fun adopt(accountId: String, authorId: String): Int
+}
