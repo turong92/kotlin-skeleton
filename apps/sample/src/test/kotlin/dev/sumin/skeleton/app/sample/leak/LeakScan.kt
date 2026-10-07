@@ -90,14 +90,29 @@ object LeakScan {
         }.map { ForbiddenHit(it.key, c.label) }
     }
 
-    /** 개수 · 깊이 칸 — 경로의 한 마디가 `…count` / `…counts`(반응 종류별 개수 맵 포함) 이거나 마지막 칸이 `depth` / `sort_order` */
+    /** 개수 · 깊이 칸 — 경로의 한 마디가 `…Count` / `…Counts` / `…_count` 로 **정확히** 끝나거나(`discount` 같은 우연은 아니다) 마지막 칸이 `depth` / `sort_order` */
     private fun counterPath(path: String): Boolean {
         val parts = path.split('.')
-        return parts.any { it.endsWith("count", ignoreCase = true) || it.endsWith("counts", ignoreCase = true) } || parts.last().let { it == "depth" || it == "sort_order" }
+        fun counter(seg: String) = seg == "count" || seg == "counts" || seg.endsWith("Count") || seg.endsWith("Counts") || seg.endsWith("_count") || seg.endsWith("_counts")
+        return parts.any(::counter) || parts.last().let { it == "depth" || it == "sort_order" }
     }
 
-    /** 첨부 키 마디를 다시 `.` 로 쪼갠 조각 중 누구에게나 같은 것 — 고정 접두사와 `file` · 알려진 확장자(최대 8자 소문자 영숫자). `uuid`(하이픈) · `mac`(32자) 는 여기에 안 걸린다 */
-    private val OPAQUE_FIXED = Regex("^(uploads|o|file(\\.[a-z0-9]{1,8})?|[a-z0-9]{1,8})$")
+    private val EXTENSION = Regex("^[a-z0-9]{1,8}$")
+
+    /**
+     * 첨부 키 같은 경로 꼴 문자열의 조각 — `/` 마디마다, 마디는 `.` 로도 쪼갠다(`uuid` 와 `mac` 을 각각 본다). 누구에게나 같은 조각은 뺀다:
+     * 맨 앞 고정 접두사(`uploads` · `o`), 마지막 마디의 `file` 과 그 **확장자 자리**(점 뒤, 소문자 영숫자 8자 이하) — 가운데 마디의 짧은 조각은 빼지 않는다.
+     */
+    private fun pathTokens(strings: Set<String>): Set<String> = strings.filter { '/' in it }.flatMap { value ->
+        val parts = value.split('/').filter { it.isNotEmpty() }
+        parts.flatMapIndexed { i, part ->
+            val last = i == parts.lastIndex
+            val pieces = part.split('.')
+            val fixed = { piece: String, at: Int -> (!last && piece in setOf("uploads", "o")) || (last && (piece == "file" || (at > 0 && EXTENSION.matches(piece)))) }
+            val whole = if (last && part.matches(Regex("file(\\.[a-z0-9]{1,8})?")) || (!last && part in setOf("uploads", "o"))) emptyList() else listOf(part)
+            whole + pieces.filterIndexed { at, piece -> !fixed(piece, at) }
+        }
+    }.toSet()
 
     /** 두 조각이 공유하는 값 (허용 목록 밖) — 사람이 읽는 줄. 비어 있어야 한다 */
     fun commonValues(a: List<Leaf>, b: List<Leaf>, allow: LeakAllow): List<String> {
@@ -106,8 +121,7 @@ object LeakScan {
         val bStrings = b.mapNotNull { it.value as? String }.toSet()
         (aStrings intersect bStrings).filter { it !in allow.strings }.forEach { out += "string $it" }
         // 첨부 키 같은 경로 꼴: 마디마다, 마디는 `.` 로도 쪼개서 따로 — `uuid` 나 `mac` 중 하나만 같아도 잇는다. 고정 접두사 · 알려진 확장자만 남은 파일 이름은 누구에게나 같다
-        fun segments(strings: Set<String>) = strings.filter { '/' in it }.flatMap { it.split('/') }.flatMap { listOf(it) + it.split('.') }.filter { it.isNotEmpty() }.toSet()
-        (segments(aStrings) intersect segments(bStrings)).filter { it !in allow.strings && !OPAQUE_FIXED.matches(it) }.forEach { out += "string $it" }
+        (pathTokens(aStrings) intersect pathTokens(bStrings)).filter { it !in allow.strings }.forEach { out += "string $it" }
         fun structural(l: Leaf) = (l.value as? Long) in allow.structuralNumbers["${l.kind}.${l.key}"].orEmpty()
         fun numbers(leaves: List<Leaf>) = leaves.filter { it.value is Number && !counterPath(it.path) && !structural(it) }.map { it.kind to it.value }.toSet()
         (numbers(a) intersect numbers(b)).forEach { (kind, value) -> out += "number $kind $value" }

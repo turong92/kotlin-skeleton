@@ -94,7 +94,7 @@ class JdbcErasureOrderDbTest {
     fun `deleteByAccount takes the first-profile row lock first - it waits for a transaction that holds it`() {
         val acc = account()
         repository.insert(ProfileDb.profile(acc, primary = true))
-        repository.insertWithinCap(ProfileDb.profile(acc), 5)
+        repository.insertWithinCap(ProfileDb.profile(acc), 5, 0, null)
         val holding = java.util.concurrent.CountDownLatch(1)
         val release = java.util.concurrent.CountDownLatch(1)
         val pool = java.util.concurrent.Executors.newFixedThreadPool(2)

@@ -79,7 +79,7 @@ class JdbcAuthorProfileRepositoryDbTest {
         val a = profile(acc, primary = true)
         val b = profile(acc)
         repository.insert(a)
-        repository.insertWithinCap(b, 5)
+        repository.insertWithinCap(b, 5, 0, null)
         repository.markDeleted(b.id, acc, T0.plusSeconds(1))
         assertNull(repository.find("prf_missing"))
         val found = repository.findAll(listOf(a.id, b.id, "prf_missing"))
@@ -95,8 +95,8 @@ class JdbcAuthorProfileRepositoryDbTest {
         val second = profile(acc, at = T0.plusSeconds(1))
         val third = profile(acc, at = T0.plusSeconds(2))
         repository.insert(first)
-        repository.insertWithinCap(second, 5)
-        repository.insertWithinCap(third, 5)
+        repository.insertWithinCap(second, 5, 0, null)
+        repository.insertWithinCap(third, 5, 0, null)
         repository.markDeleted(second.id, acc, T0.plusSeconds(3))
         repository.insert(profile(account(), primary = true))
         val all = repository.findAllOf(acc)
@@ -127,7 +127,7 @@ class JdbcAuthorProfileRepositoryDbTest {
         val tie2 = profile(acc, at = T0.plusSeconds(2), id = "prf_a-$acc")
         val gone = profile(acc, at = T0.plusSeconds(3))
         repository.insert(first)
-        listOf(late, tie1, tie2, gone).forEach { repository.insertWithinCap(it, 10) }
+        listOf(late, tie1, tie2, gone).forEach { repository.insertWithinCap(it, 10, 0, null) }
         repository.markDeleted(gone.id, acc, T0.plusSeconds(9))
         assertEquals(listOf(first.id, tie2.id, tie1.id, late.id), repository.findActive(acc).map { it.id })
         assertEquals(4, repository.countActive(acc))
@@ -156,7 +156,7 @@ class JdbcAuthorProfileRepositoryDbTest {
         val c = profile(front.accountId, key = key, tag = "0003")   // 첫 프로필이 아닌 줄 — 꼬리표는 쓰지만 primariesByKey 에는 없다
         val other = profile(account(), primary = true, key = "$key-other", tag = "0004")
         listOf(a, b, front, other).forEach { assertTrue(repository.insert(it)) }
-        assertEquals(CapInsert.INSERTED, repository.insertWithinCap(c, 9))
+        assertEquals(CapInsert.INSERTED, repository.insertWithinCap(c, 9, 0, null))
         assertEquals(setOf("0001", "0002", "0003"), repository.tagsOf(key))
         assertEquals(setOf(a.id, b.id), repository.primariesByKey(key).map { it.id }.toSet())
         // 지우면 꼬리표가 풀리고 키 조회에서 빠진다
@@ -195,7 +195,7 @@ class JdbcAuthorProfileRepositoryDbTest {
         val acc = account()
         val p = profile(acc, primary = true)
         val gone = profile(acc)
-        repository.insert(p); repository.insertWithinCap(gone, 5)
+        repository.insert(p); repository.insertWithinCap(gone, 5, 0, null)
         repository.markDeleted(gone.id, acc, T0)
         assertEquals(RenameResult.NOT_FOUND, repository.rename(p.id, account(), "X", "x${p.id}", "0001", T0))
         assertEquals(RenameResult.NOT_FOUND, repository.rename("prf_missing", acc, "X", "x", "0001", T0))
@@ -219,7 +219,7 @@ class JdbcAuthorProfileRepositoryDbTest {
         assertEquals(acc, back.primaryOf)
         // 같은 이름 · 꼬리표로 다시 만들 수 있다
         val again = profile(acc, key = key, tag = "0005")
-        assertEquals(CapInsert.INSERTED, repository.insertWithinCap(again, 5))
+        assertEquals(CapInsert.INSERTED, repository.insertWithinCap(again, 5, 0, null))
         // 지워진 첫 프로필 자리는 남아 첫 프로필을 두 번 만들 수 없다
         assertFalse(repository.insert(profile(acc, primary = true)))
     }
@@ -254,10 +254,10 @@ class JdbcAuthorProfileRepositoryDbTest {
         val old = profile(acc, at = T0.minus(Duration.ofDays(40)))
         val edge = profile(acc, at = T0)
         val recent = profile(acc, at = T0.plusSeconds(10))
-        listOf(old, edge, recent).forEach { repository.insertWithinCap(it, 9) }
+        listOf(old, edge, recent).forEach { repository.insertWithinCap(it, 9, 0, null) }
         val neighbour = account()
         repository.insert(profile(neighbour, primary = true))
-        repository.insertWithinCap(profile(neighbour, at = T0.plusSeconds(10)), 9)
+        repository.insertWithinCap(profile(neighbour, at = T0.plusSeconds(10)), 9, 0, null)
         repository.markDeleted(recent.id, acc, T0.plusSeconds(11))
         assertEquals(2, repository.countCreatedSince(acc, T0), "edge (>=) and the deleted recent count; the old one and the first do not")
         assertEquals(3, repository.countCreatedSince(acc, T0.minus(Duration.ofDays(60))))
@@ -270,8 +270,8 @@ class JdbcAuthorProfileRepositoryDbTest {
         val acc = account()
         val key = "ck${System.nanoTime()}"
         repository.insert(profile(acc, primary = true, key = "first-$key", tag = "0001"))
-        assertEquals(CapInsert.INSERTED, repository.insertWithinCap(profile(acc, key = key, tag = "0001"), 9))
-        assertEquals(CapInsert.NAME_TAKEN, repository.insertWithinCap(profile(acc, key = key, tag = "0001"), 9))
+        assertEquals(CapInsert.INSERTED, repository.insertWithinCap(profile(acc, key = key, tag = "0001"), 9, 0, null))
+        assertEquals(CapInsert.NAME_TAKEN, repository.insertWithinCap(profile(acc, key = key, tag = "0001"), 9, 0, null))
         assertEquals(1, repository.countCreatedSince(acc, T0.minusSeconds(1)))
     }
 
@@ -281,8 +281,8 @@ class JdbcAuthorProfileRepositoryDbTest {
         val keep = account()
         repository.insert(profile(acc, primary = true))
         val gone = profile(acc)
-        repository.insertWithinCap(gone, 9)
-        repository.insertWithinCap(profile(acc), 9)
+        repository.insertWithinCap(gone, 9, 0, null)
+        repository.insertWithinCap(profile(acc), 9, 0, null)
         repository.markDeleted(gone.id, acc, T0)
         repository.insert(profile(keep, primary = true))
         assertEquals(3, repository.deleteByAccount(acc))
@@ -317,8 +317,8 @@ class JdbcAuthorProfileRepositoryDbTest {
         val key = "mine${System.nanoTime()}"
         val a = account(); val b = account()
         repository.insert(profile(a, primary = true)); repository.insert(profile(b, primary = true))
-        assertEquals(CapInsert.INSERTED, repository.insertWithinCap(profile(a, key = key, tag = "0001"), 5))
-        assertEquals(CapInsert.NAME_TAKEN, repository.insertWithinCap(profile(b, key = key, tag = "0001"), 5))
+        assertEquals(CapInsert.INSERTED, repository.insertWithinCap(profile(a, key = key, tag = "0001"), 5, 0, null))
+        assertEquals(CapInsert.NAME_TAKEN, repository.insertWithinCap(profile(b, key = key, tag = "0001"), 5, 0, null))
         assertEquals(1, ProfileDb.rows(b))
     }
 }

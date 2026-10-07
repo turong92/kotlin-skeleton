@@ -37,9 +37,9 @@ class LeakScanTest {
         val common = LeakScan.commonValues(a.of("prf_a"), b.of("prf_b"), allow)
         assertEquals(setOf("string same-text", "number post 42"), common.toSet(), common.toString())
         // 숫자 허용은 종류.칸 별이다 — 같은 값이 허용되지 않은 칸에 있으면 잡힌다
-        val x = pieces("""{"values":[{"id":1,"postId":7,"parentId":null,"rootId":1,"depth":0,"authorId":"prf_x","views":9}]}""")
-        val y = pieces("""{"values":[{"id":2,"postId":7,"parentId":1,"rootId":1,"depth":1,"authorId":"prf_y","views":9}]}""")
-        assertEquals(listOf("number comment 9"), LeakScan.commonValues(x.of("prf_x"), y.of("prf_y"), allow), "postId / rootId / parentId / id of the thread are allowed, depth is a counter, an unlisted key is not")
+        val x = pieces("""{"values":[{"id":1,"postId":7,"parentId":null,"rootId":1,"depth":0,"authorId":"prf_x","views":7}]}""")
+        val y = pieces("""{"values":[{"id":2,"postId":7,"parentId":1,"rootId":1,"depth":1,"authorId":"prf_y","views":7}]}""")
+        assertEquals(listOf("number comment 7"), LeakScan.commonValues(x.of("prf_x"), y.of("prf_y"), allow), "7 is an allowed value of comment.postId, but `views` is not an allowed field: a global value allowance would hide it")
 
         val mac = "0123456789abcdef0123456789abcdef"
         val uuidA = "11111111-1111-4111-8111-111111111111"
@@ -51,6 +51,9 @@ class LeakScanTest {
         val sameMac = pieces("""{"values":[{"id":5,"authorId":"prf_e","attachments":["uploads/o/$uuidA.$mac/file.png"]}]}""")
         val otherUuid = pieces("""{"values":[{"id":6,"authorId":"prf_f","attachments":["uploads/o/$uuidB.$mac/photo.png"]}]}""")
         assertEquals(listOf("string $mac"), LeakScan.commonValues(sameMac.of("prf_e"), otherUuid.of("prf_f"), allow))
+        val shortA = pieces("""{"values":[{"id":8,"authorId":"prf_h","attachments":["uploads/o/abc/def/file.png"]}]}""")
+        val shortB = pieces("""{"values":[{"id":9,"authorId":"prf_i","attachments":["uploads/o/abc/xyz/photo.png"]}]}""")
+        assertEquals(listOf("string abc"), LeakScan.commonValues(shortA.of("prf_h"), shortB.of("prf_i"), allow), "a short shared middle segment is a link; only the extension slot of the last segment is exempt")
         val sameUuid = pieces("""{"values":[{"id":7,"authorId":"prf_g","attachments":["uploads/o/$uuidA.${mac.reversed()}/file.png"]}]}""")
         assertEquals(listOf("string $uuidA"), LeakScan.commonValues(sameMac.of("prf_e"), sameUuid.of("prf_g"), allow))
     }

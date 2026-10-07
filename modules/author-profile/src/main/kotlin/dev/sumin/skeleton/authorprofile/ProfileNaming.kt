@@ -73,7 +73,6 @@ internal class ProfileNaming(
         return attempt(tag)
     }
 
-
     private companion object {
         const val FIELD = "name"
 

@@ -52,13 +52,13 @@ interface AuthorProfileRepository {
      * **사용자가 만든** 프로필(`primary_of` 가 NULL)을 상한 검사와 **함께, 원자적으로** 넣는다. 구현 계약(B5b):
      *  - 한 트랜잭션에서 그 계정의 **첫 프로필 줄을 잠그고**(`select … where primary_of = :account for update`) → 살아 있는 줄 수를 세고 → [maxActive] 이상이면 [CapInsert.LIMIT_REACHED] →
      *    아니면 넣는다. 같은 계정의 동시 요청이 이 잠금에서 줄을 서므로 상한을 넘지 못한다(같은 계정의 만들기끼리는 잠그는 줄이 하나라 교착이 없다). 개수는 잠금 읽기로 세어 바깥 트랜잭션의 낡은 스냅샷을 보지 않는다. 부르는 쪽([AuthorProfileService.create])이 먼저 첫 프로필 줄을 보장한다 — 줄이 없으면 구현은 잠글 것이 없으니 던져도 된다.
-     *  - **만들기 한도도 같은 잠금 안에서** 센다: [createLimit] > 0 이고 [since] 가 있으면 그 계정의 [countCreatedSince] 와 같은 줄 수(첫 프로필 제외, 지워진 것 포함, 잠금 읽기)가
-     *    [createLimit] 이상일 때 [CapInsert.RATE_LIMITED] — 동시 요청이 사전 검사(서비스의 빠른 거절)를 함께 통과해도 한도를 넘지 못한다. 순서는 상한 → 한도 → 겹침이다.
+     *  - **만들기 한도도 같은 잠금 안에서** 센다: [createLimit] > 0 이고 [since] 가 있으면 그 계정의 [countCreatedSince] 와 같은 줄 수(첫 프로필 제외, 지워진 것 포함)를 같은 잠금 읽기로 세어
+     *    [createLimit] 이상이면 [CapInsert.RATE_LIMITED] (한도를 안 쓰려면 createLimit = 0 이나 since = null 을 **명시해서** 넘긴다) — 동시 요청이 사전 검사(서비스의 빠른 거절)를 함께 통과해도 한도를 넘지 못한다. 순서는 상한 → 한도 → 겹침이다.
      *  - (키, 꼬리표) 유니크에 걸리면 [CapInsert.NAME_TAKEN] (아무것도 바뀌지 않는다). 상한과 겹침이 함께 해당하면 [CapInsert.LIMIT_REACHED] 가 먼저다.
      *    PostgreSQL 은 실패한 INSERT 가 트랜잭션을 망가뜨리므로 `on conflict do nothing` 으로 판정한다.
      *  - 첫 프로필 줄은 지워졌어도(DELETED) 잠금 대상이다.
      */
-    fun insertWithinCap(profile: AuthorProfile, maxActive: Int, createLimit: Int = 0, since: Instant? = null): CapInsert
+    fun insertWithinCap(profile: AuthorProfile, maxActive: Int, createLimit: Int, since: Instant?): CapInsert
 
     /**
      * 살아 있는 [accountId] 의 프로필 [id] 의 이름 · 키 · 꼬리표를 **함께**(한 문장) 바꾼다. [tag] 가 null 이면 비운다(NONE).

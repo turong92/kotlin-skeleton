@@ -59,10 +59,8 @@ class JdbcAuthorProfileRepository(
 
     override fun findActive(accountId: String): List<AuthorProfile> =
         jdbc.query("$SELECT where account_id = :account and status = 'ACTIVE' order by created_at, id", mapOf("account" to accountId)) { rs, _ -> rs.profile() }
-
     override fun findAllOf(accountId: String): List<AuthorProfile> =
         jdbc.query("$SELECT where account_id = :account order by created_at, id", mapOf("account" to accountId)) { rs, _ -> rs.profile() }
-
     override fun countActive(accountId: String): Int = countActiveOf(accountId)
 
     override fun findPrimary(accountId: String): AuthorProfile? =
@@ -90,22 +88,15 @@ class JdbcAuthorProfileRepository(
     override fun insertWithinCap(profile: AuthorProfile, maxActive: Int, createLimit: Int, since: Instant?): CapInsert {
         require(profile.primaryOf == null) { "insertWithinCap is for user-made profiles (primary_of is null); use insert" }
         return tx.execute {
-            // 그 계정의 첫 프로필 줄(지워졌어도)을 잠근다 — 같은 계정의 동시 요청이 여기서 줄을 선다. 센 값은 잠금을 잡은 뒤의 것이어야 한다
+            // ① 첫 프로필 줄(지워졌어도)을 잠가 같은 계정의 동시 요청을 줄 세우고, ② 그 다음 문장으로 계정의 줄 전부를 잠금 읽기해 상한 · 만들기 한도를 센다(바깥 트랜잭션의 낡은 스냅샷을 안 본다).
+            // 한 문장으로 합치면 안 된다: PostgreSQL 의 `for update` 는 기다리는 동안 커밋된 새 줄을 돌려주지 않는다(문장 스냅샷) — 앵커 잠금 뒤의 새 문장이어야 한다
             val locked = jdbc.queryForList("select id from author_profiles where primary_of = :account for update", mapOf("account" to profile.accountId), String::class.java)
             check(locked.isNotEmpty()) { "the account has no first profile row to lock - ensure it before insertWithinCap" }
-            // 개수도 **잠금 읽기**로 센다: 바깥 트랜잭션(@Transactional)에 합류해 이미 스냅샷을 잡은 MySQL 반복 읽기에서도 최신 커밋을 보게 한다 (일반 읽기는 낡은 스냅샷을 본다)
-            val active = jdbc.queryForList(
-                "select id from author_profiles where account_id = :account and status = 'ACTIVE' for update", mapOf("account" to profile.accountId), String::class.java,
-            ).size
-            // 만들기 한도도 잠금을 잡은 뒤에 센다 — 서비스의 사전 검사는 빠른 거절일 뿐이고 동시 요청은 여기서 줄을 선다 (지워진 줄 포함, 첫 프로필 제외)
-            val created = if (createLimit > 0 && since != null) {
-                jdbc.queryForList(
-                    "select id from author_profiles where account_id = :account and primary_of is null and created_at >= :since for update",
-                    MapSqlParameterSource().addValue("account", profile.accountId).addValue("since", dialect.instantParam(since)), String::class.java,
-                ).size
-            } else {
-                0
-            }
+            val rows = jdbc.query(
+                "select status, primary_of, created_at from author_profiles where account_id = :account for update", mapOf("account" to profile.accountId),
+            ) { rs, _ -> Triple(rs.getString("status"), rs.getString("primary_of"), dialect.readInstant(rs, "created_at")) }
+            val active = rows.count { it.first == "ACTIVE" }
+            val created = if (since == null) 0 else rows.count { it.second == null && it.third != null && !it.third!!.isBefore(since) }
             when {
                 active >= maxActive -> CapInsert.LIMIT_REACHED
                 createLimit > 0 && since != null && created >= createLimit -> CapInsert.RATE_LIMITED
@@ -127,8 +118,7 @@ class JdbcAuthorProfileRepository(
             return RenameResult.TAKEN
         }
         if (changed > 0) return RenameResult.DONE
-        // Connector/J 기본값(useAffectedRows=false)은 바뀐 행이 아니라 **조건에 맞은** 행 수를 돌려주므로 0 이면 보통 NOT_FOUND 다. 그래도 드라이버 설정(useAffectedRows=true)이 바뀌어
-        // 값이 그대로인 갱신이 0 이 될 때 DONE 을 NOT_FOUND 로 잘못 알리지 않게 있는 줄인지 한 번 더 본다
+        // Connector/J 는 보통 조건에 맞은 행 수를 돌려주지만 useAffectedRows=true 면 값이 같은 갱신이 0 이 된다 — DONE 을 NOT_FOUND 로 잘못 알리지 않게 있는 줄인지 한 번 더 본다
         return if (ownLiving(id, accountId)) RenameResult.DONE else RenameResult.NOT_FOUND
     }
 

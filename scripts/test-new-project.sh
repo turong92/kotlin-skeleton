@@ -31,11 +31,17 @@ pass() { echo "  ✓ $1"; }
 fail() { echo "  ✗ $1"; FAILURES=$((FAILURES + 1)); }
 # 계약 스크립트의 두 함수만 떼어 불러 본다(스크립트 본문 · docker 는 실행하지 않는다) — 자기 자신을 부르는 재귀면 끝나지 않거나 비밀 줄이 없다
 deploy_env_shape() {
-  local fns; fns="$(grep -E '^(secret_env|contract_env)\(\)' "$1")" || return 1
-  ! grep -qE '^secret_env\(\).*\$\(secret_env' <<<"$fns" || return 1
-  [ "$(DBNAME=x bash -c "$fns; secret_env | wc -l | tr -d ' '")" = 2 ] || return 1
-  [ "$(DBNAME=x bash -c "$fns; contract_env" | grep -c '^-e$')" = 4 ] || return 1
-  DBNAME=x bash -c "$fns; contract_env" | grep -q '^[A-Z0-9_]*_STORAGE_WEB_KEY_SECRET=.\{32,\}'
+  local fns line name body; fns="$(grep -E '^(secret_env|contract_env)\(\)' "$1")" || return 1
+  # 어느 함수든 자기 이름을 본문에 담으면(재귀) 실패 — 실행하기 전에 읽어서 가른다
+  while IFS= read -r line; do
+    name="${line%%()*}"; body="${line#*()}"
+    case "$body" in *"$name"*) return 1 ;; esac
+  done <<<"$fns"
+  # 그래도 실행은 5초 알람 안에서만 한다 (스크립트 본문 · docker 는 실행하지 않는다)
+  run() { perl -e 'alarm 5; exec @ARGV' bash -c "$fns; $1"; }
+  [ "$(DBNAME=x run 'secret_env | wc -l | tr -d " "')" = 2 ] || return 1
+  [ "$(DBNAME=x run contract_env | grep -c '^-e$')" = 4 ] || return 1
+  DBNAME=x run contract_env | grep -q '^[A-Z0-9_]*_STORAGE_WEB_KEY_SECRET=.\{32,\}'
 }
 check() { # check "<설명>" <명령...>  — 명령이 성공하면 통과
   local what="$1"; shift

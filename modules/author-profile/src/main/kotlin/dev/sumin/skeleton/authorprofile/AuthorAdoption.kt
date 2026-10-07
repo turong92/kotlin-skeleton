@@ -7,8 +7,8 @@ import org.slf4j.LoggerFactory
  * 넘겨받기 실행기 — 모든 [AuthorAdoptionListener] 의 `pendingAccounts` 를 **계정 id 커서**로 끝까지 훑으며 ACTIVE 계정마다 첫 프로필 줄을 보장하고([AuthorProfileService.ensureFirstProfileRow])
  * `adopt(계정, 프로필 id)` 로 옛 행을 옮긴 뒤 첫 프로필의 `adopted_at` 을 채운다 (스펙 §7.4).
  *
- * 계약 ([AuthorAdoptionListener] KDoc): 커서는 한 번 본 계정을 그 실행에서 다시 보지 않고 항상 앞으로 간다 — 던지거나 0 을 돌려주는(못 옮기는) 계정이
- * 뒤 계정을 굶기지 않고, 실행은 반드시 끝난다. 계정별 예외는 **삼키고** 그 계정은 다음 기동 때 다시 한다. 멱등이다 — 인스턴스 여럿이 동시에 돌아도 같다
+ * 계약 ([AuthorAdoptionListener] KDoc): 커서는 돌려받은 목록의 마지막 계정이고, 한 번 본 계정은 그 실행에서 다시 처리하지 않는다 — 던지는 계정이
+ * 뒤 계정을 굶기지 않고, 실행은 반드시 끝난다. `adopt` 가 0 을 돌려주면 "옮길 것이 없었다"(이미 옮겼거나 대상이 아님)이고 예외 없이 끝난 것이라 `adopted_at` 을 채운다. 계정별 예외는 **삼키고** 그 계정은 다음 기동 때 다시 한다. 멱등이다 — 인스턴스 여럿이 동시에 돌아도 같다
  * (첫 프로필은 `primary_of` 유니크, `adopt` 는 `author_ref is null` 조건). 커서를 무시하는 구현(앞서 본 계정을 또 돌려줌)은 그 구현만 거기서 멈춘다.
  *
  * 로그: 구현 이름과 개수 · 예외 **종류**만 남긴다. 계정 id · 프로필 id 쌍은 물론 예외 메시지(SQL 에 id 가 실릴 수 있다)와 스택도 평소 로그에 남기지 않는다.
@@ -31,6 +31,7 @@ class AuthorAdoption(
         var moved = 0
         var failed = 0
         var after: String? = null
+        val seen = HashSet<String>()   // 이 구현에서 이 실행이 본 계정 — 종료 보장용 (실행 한 번의 길이만큼만 산다)
         while (true) {
             val pending = try {
                 listener.pendingAccounts(batchSize, after)
@@ -39,13 +40,14 @@ class AuthorAdoption(
                 break
             }
             if (pending.isEmpty()) break
-            // 커서는 돌려받은 목록의 마지막 계정이고 전진 여부는 같음으로만 판정한다 — 구현의 정렬(콜레이션)이 Kotlin 의 문자열 순서와 달라도 맞다
-            val last = pending.last()
-            if (after != null && last == after) {
+            // 커서는 돌려받은 목록의 마지막 계정이다. 종료는 정렬 가정 없이 보장한다: 이 실행에서 처음 보는 계정이 하나도 없으면(커서를 무시했거나 돌고 있다) 그 구현을 멈춘다
+            val fresh = pending.filter { seen.add(it) }
+            if (fresh.isEmpty()) {
                 log.warn("author adoption: listener '{}' ignored the cursor; stopping it for this start", listener.name)
                 break
             }
-            for (accountId in pending) {
+            val last = pending.last()
+            for (accountId in fresh) {
                 // ACTIVE 가 아닌 계정(정지 · 삭제 유예 · 지우기 선점 · 지워짐)은 건너뛴다 — 탈퇴 고리가 지운 줄을 되살리지 않게. 계정이 다시 ACTIVE 가 되면 다음 기동 · 목록 조회가 옮긴다
                 val n = try {
                     // 판정(isActive)도 같은 try 안이다 — 계정 하나의 조회 실패가 실행 전체를 멈추지 않는다

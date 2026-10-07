@@ -10,6 +10,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
+import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.MethodOrderer
 import org.junit.jupiter.api.Order
 import org.junit.jupiter.api.TestInstance
@@ -54,11 +55,15 @@ class AuthorLinkLeakIntegrationTest {
     private val sweep by lazy { LeakSweep(http, w, mapper) }
 
     /** X 의 **옛 행**(공개 작성자 id 가 없던 때의 글) — 켜기 전부터 있던 행. 어디에서도 `pending:p<번호>` 로만 나가야 한다 */
-    private val plantedPost: Long by lazy {
-        jdbc.sql(
+    private var plantedPost = 0L
+
+    @BeforeAll
+    fun plantTheOldRow() {
+        plantedPost = jdbc.sql(
             "insert into board_posts (board_code, author_id, title, body, status, created_at, updated_at) values ('general', :x, :t, 'written before the module', 'PUBLISHED', now(), now()) returning id",
         ).param("x", w.xAcc).param("t", "Old row ${w.nonce}").query(Long::class.java).single()
     }
+
     private val plantedOwner get() = "pending:p$plantedPost"
 
     private fun labels(vararg c: Captured, forbidden: Map<String, String> = w.forbidden) = LeakScan.forbiddenHits(c.toList(), forbidden).map { it.label }.toSet()
@@ -131,6 +136,10 @@ class AuthorLinkLeakIntegrationTest {
         val y = sweep.boardReads(w.yToken) + sweep.observerOnly() + sweep.reactionWrites() + sweep.valueSearches(w.yToken)
         val z = sweep.boardReads(null) + sweep.valueSearches(null)
         val mod = sweep.moderatorReads()
+        // 운영자로 정말 읽었다: 임시저장 목록 · 숨김 · 복구가 200 이고 A 의 임시저장 글(제목 `A draft kiwi …`)이 A 의 조각에 들어 있다
+        mod.filter { it.label.contains("status=DRAFT") || it.label.contains("/moderation") || it.label.endsWith("/posts/${w.postDraft}") }
+            .also { assertTrue(it.size >= 6, "$phase: the moderator calls were made") }.forEach { assertEquals(200, it.status, "$phase: moderator ${it.label}") }
+        assertTrue(sweep.boardPieces(mod).of(w.a.id).any { it.value == "A draft kiwi ${w.nonce}" }, "$phase: the moderator's reads carry A's draft in A's piece")
         z.filter { it.label.contains("/posts") && !it.label.contains("999999") && !it.label.contains("zzz") && !it.label.contains("mine=true") && !it.label.contains("q=${w.xAcc}") && !it.label.contains("q=${w.xEmail}") }
             .forEach { assertEquals(200, it.status, "$phase: Z reads ${it.label}") }
         assertEquals(401, z.first { it.label.endsWith("/api/v1/author-profiles") }.status, "$phase: Z has no profile list")
@@ -145,8 +154,10 @@ class AuthorLinkLeakIntegrationTest {
         assertPublicColumnsClean(phase, profileRows)
     }
 
-    /** 스펙 §12 7: 공개 열 전체에서 금지 값 · 짝 스캔 — author_ref · 남의 편지함 payload · 프로필 표(탈퇴 전)를 포함한다 */
-    private fun assertPublicColumnsClean(phase: String, profileRows: Boolean) {
+    private class PublicColumns(val seen: List<Captured>, val board: LeakPieces, val notice: LeakPieces, val profiles: LeakPieces)
+
+    /** 공개 열 전부의 값 (열마다 하나의 [Captured]) 과 작성자별 조각 — `author_ref` · 남의 편지함 payload · `author_profiles` 행 */
+    private fun readPublicColumns(): PublicColumns {
         val seen = mutableListOf<Captured>()
         val board = LeakPieces()
         val notice = LeakPieces()
@@ -164,6 +175,13 @@ class AuthorLinkLeakIntegrationTest {
                 }
             }
         }
+        return PublicColumns(seen, board, notice, profiles)
+    }
+
+    /** 스펙 §12 7: 공개 열 전체에서 금지 값 · 짝 스캔 — author_ref · 남의 편지함 payload · 프로필 표(탈퇴 전)를 포함한다 */
+    private fun assertPublicColumnsClean(phase: String, profileRows: Boolean) {
+        val cols = readPublicColumns()
+        val seen = cols.seen; val board = cols.board; val notice = cols.notice; val profiles = cols.profiles
         assertEquals(emptyList(), LeakScan.forbiddenHits(seen, w.forbidden), "$phase: forbidden values in public columns")
         listOf(w.a, w.b).forEach { assertEquals(setOf("post", "comment"), board.of(it.id).map { l -> l.kind }.toSet(), "$phase: ${it.id} has rows in the public columns") }
         assertTrue(board.of(w.c.id).isNotEmpty(), "$phase: C's comment row is in the public columns")
@@ -245,16 +263,26 @@ class AuthorLinkLeakIntegrationTest {
     @Order(8)
     fun `the other erase path - an administrator erases a suspended account - leaves no tie either`() {
         val (vToken, vAcc) = w.login("vera.leak@example.com")
-        val v1 = w.profiles(vToken).first()
+        val v1 = w.profiles(vToken).first()   // 첫 프로필이 계정 이름(Vera)을 복사해 간 뒤에 계정 이름을 바꾼다 — 바뀐 이름이 금지 값이다
+        val vName = "Vera${w.nonce}"
+        http.patch("/api/v1/account/me", vToken, """{"displayName":"$vName"}""").ok()
         val v2 = w.newProfile(vToken, "Vee${w.nonce}")
         val p1 = w.createPost(vToken, v1, "V one ${w.nonce}", "as V1")
         val p2 = w.createPost(vToken, v2, "V two ${w.nonce}", "as V2")
         w.createComment(vToken, v1, w.yPost, "V1 comment ${w.nonce}")
         http.post("/api/v1/admin/accounts/$vAcc/suspend", w.adminToken, "{}").also { assertEquals(204, it.status) }
         http.post("/api/v1/admin/accounts/$vAcc/erase", w.adminToken, "{}").also { assertEquals(204, it.status) }
-        val forbidden = mapOf("account id" to vAcc, "email" to "vera.leak@example.com", "tombstone" to AccountTombstone.of(vAcc), "account name" to "Vera")
-        val reads = sweep.boardReads(w.yToken) + sweep.boardReads(null) + sweep.moderatorReads()
-        assertEquals(emptyList(), LeakScan.forbiddenHits(reads, forbidden), "nothing of V in what readers get")
+        val forbidden = mapOf("account id" to vAcc, "email" to "vera.leak@example.com", "tombstone" to AccountTombstone.of(vAcc), "account name" to vName)
+        val reads = sweep.boardReads(w.yToken) + sweep.observerOnly() + sweep.boardReads(null) + sweep.moderatorReads()
+        val all = reads + sweep.sseEventsForY()
+        assertEquals(emptyList(), LeakScan.forbiddenHits(all, forbidden), "nothing of V in what readers get (board, inbox, SSE, probes)")
+        val board = sweep.boardPieces(reads)
+        assertTrue(board.of(v1.id).map { it.kind }.toSet() == setOf("post", "comment") && board.of(v2.id).isNotEmpty(), "V1's and V2's pieces were scanned")
+        assertEquals(emptyList(), LeakScan.commonValues(board.of(v1.id), board.of(v2.id), sweep.allow), "no value ties V1 and V2")
+        val cols = readPublicColumns()
+        assertEquals(emptyList(), LeakScan.forbiddenHits(cols.seen, forbidden), "nothing of V in the public columns")
+        assertEquals(emptyList(), LeakScan.commonValues(cols.board.of(v1.id), cols.board.of(v2.id), sweep.allow), "no value ties V1 and V2 in author_ref rows")
+        assertTrue(cols.notice.of(v1.id).isNotEmpty(), "V1's notice is in Y's inbox rows")
         for (token in listOf(w.yToken, null)) {
             val s1 = http.get("/api/v1/boards/general/posts/$p1", token, record = false).ok()
             val s2 = http.get("/api/v1/boards/general/posts/$p2", token, record = false).ok()

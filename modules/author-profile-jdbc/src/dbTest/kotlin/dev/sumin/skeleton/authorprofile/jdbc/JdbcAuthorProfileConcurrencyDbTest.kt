@@ -37,7 +37,7 @@ class JdbcAuthorProfileConcurrencyDbTest {
             val acc = account()
             assertTrue(repository.insert(profile(acc, primary = true)))
             val cap = 4
-            val results = parallel(20) { repository.insertWithinCap(profile(acc), cap) }
+            val results = parallel(20) { repository.insertWithinCap(profile(acc), cap, 0, null) }
             assertEquals(cap - 1, results.count { it == CapInsert.INSERTED }, "round $round: first profile + 3 = cap")
             assertEquals(20 - (cap - 1), results.count { it == CapInsert.LIMIT_REACHED })
             assertEquals(cap, repository.countActive(acc))
@@ -77,9 +77,9 @@ class JdbcAuthorProfileConcurrencyDbTest {
     fun `the cap counts a deleted-then-recreated slot correctly under contention`() {
         val acc = account()
         repository.insert(profile(acc, primary = true))
-        val extras = List(2) { profile(acc).also { p -> assertEquals(CapInsert.INSERTED, repository.insertWithinCap(p, 3)) } }
+        val extras = List(2) { profile(acc).also { p -> assertEquals(CapInsert.INSERTED, repository.insertWithinCap(p, 3, 0, null)) } }
         repository.markDeleted(extras[0].id, acc, ProfileDb.T0)   // 한 자리가 난다
-        val results = parallel(10) { repository.insertWithinCap(profile(acc), 3) }
+        val results = parallel(10) { repository.insertWithinCap(profile(acc), 3, 0, null) }
         assertEquals(1, results.count { it == CapInsert.INSERTED })
         assertEquals(3, repository.countActive(acc))
     }
@@ -89,7 +89,7 @@ class JdbcAuthorProfileConcurrencyDbTest {
         val acc = account()
         repository.insert(profile(acc, primary = true))
         val key = "same${System.nanoTime()}"
-        val results = parallel(12) { repository.insertWithinCap(profile(acc, key = key, tag = "0001"), 5) }
+        val results = parallel(12) { repository.insertWithinCap(profile(acc, key = key, tag = "0001"), 5, 0, null) }
         assertEquals(1, results.count { it == CapInsert.INSERTED })
         assertEquals(11, results.count { it == CapInsert.NAME_TAKEN })
     }
@@ -97,7 +97,8 @@ class JdbcAuthorProfileConcurrencyDbTest {
     @Test
     fun `different accounts do not wait for or limit each other`() {
         val accounts = List(12) { account().also { a -> repository.insert(profile(a, primary = true)) } }
-        val results = parallel(12) { repository.insertWithinCap(profile(accounts[it]), 2) }
+        val since = ProfileDb.T0.minusSeconds(3600)
+        val results = parallel(12) { repository.insertWithinCap(profile(accounts[it]), 2, 3, since) }   // 계정마다 한도 3 — 서로의 줄을 세지 않는다
         assertTrue(results.all { it == CapInsert.INSERTED })
     }
 
@@ -108,8 +109,8 @@ class JdbcAuthorProfileConcurrencyDbTest {
         repository.insert(profile(holder, primary = true, key = key, tag = "0001"))
         val acc = account()
         repository.insert(profile(acc, primary = true))
-        assertEquals(CapInsert.LIMIT_REACHED, repository.insertWithinCap(profile(acc, key = key, tag = "0001"), 1))
-        assertEquals(CapInsert.NAME_TAKEN, repository.insertWithinCap(profile(acc, key = key, tag = "0001"), 2))
+        assertEquals(CapInsert.LIMIT_REACHED, repository.insertWithinCap(profile(acc, key = key, tag = "0001"), 1, 0, null))
+        assertEquals(CapInsert.NAME_TAKEN, repository.insertWithinCap(profile(acc, key = key, tag = "0001"), 2, 0, null))
     }
 
     @Test
@@ -117,8 +118,8 @@ class JdbcAuthorProfileConcurrencyDbTest {
         val acc = account()
         repository.insert(profile(acc, primary = true))
         repository.markDeleted(repository.findPrimary(acc)!!.id, acc, ProfileDb.T0)
-        assertEquals(CapInsert.INSERTED, repository.insertWithinCap(profile(acc), 2))
-        assertFailsWith<IllegalStateException> { repository.insertWithinCap(profile(account()), 2) }
+        assertEquals(CapInsert.INSERTED, repository.insertWithinCap(profile(acc), 2, 0, null))
+        assertFailsWith<IllegalStateException> { repository.insertWithinCap(profile(account()), 2, 0, null) }
     }
 
     @Test
@@ -126,7 +127,7 @@ class JdbcAuthorProfileConcurrencyDbTest {
         repeat(3) { round ->
             val key = "dup${System.nanoTime()}"
             val accounts = List(12) { account().also { a -> repository.insert(profile(a, primary = true)) } }
-            val results = parallel(12) { repository.insertWithinCap(profile(accounts[it], key = key, tag = "0001"), 5) }
+            val results = parallel(12) { repository.insertWithinCap(profile(accounts[it], key = key, tag = "0001"), 5, 3, ProfileDb.T0.minusSeconds(3600)) }
             assertEquals(1, results.count { it == CapInsert.INSERTED }, "round $round")
             assertEquals(11, results.count { it == CapInsert.NAME_TAKEN }, "round $round")
         }
@@ -148,7 +149,7 @@ class JdbcAuthorProfileConcurrencyDbTest {
                 }
             }
             holding.await()
-            val other = pool.submit<CapInsert> { repository.insertWithinCap(profile(b), 3) }
+            val other = pool.submit<CapInsert> { repository.insertWithinCap(profile(b), 3, 3, ProfileDb.T0.minusSeconds(3600)) }
             assertEquals(CapInsert.INSERTED, other.get(10, java.util.concurrent.TimeUnit.SECONDS))
             release.countDown()
             holder.get()
@@ -164,8 +165,9 @@ class JdbcAuthorProfileConcurrencyDbTest {
         repository.insert(profile(acc, primary = true))
         ProfileDb.tx.execute {
             assertEquals(1, repository.countActive(acc))   // 바깥 트랜잭션이 읽기 스냅샷을 잡는다 (MySQL 반복 읽기)
-            assertEquals(CapInsert.INSERTED, parallel(1) { repository.insertWithinCap(profile(acc), 2) }.single())   // 다른 연결이 커밋한다
-            assertEquals(CapInsert.LIMIT_REACHED, repository.insertWithinCap(profile(acc), 2), "the cap counts with a locking read, not the stale snapshot")
+            assertEquals(CapInsert.INSERTED, parallel(1) { repository.insertWithinCap(profile(acc), 2, 0, null) }.single())   // 다른 연결이 커밋한다
+            assertEquals(CapInsert.LIMIT_REACHED, repository.insertWithinCap(profile(acc), 2, 0, null), "the cap counts with a locking read, not the stale snapshot")
+            assertEquals(CapInsert.RATE_LIMITED, repository.insertWithinCap(profile(acc), 9, 1, ProfileDb.T0.minusSeconds(3600)), "so does the create limit - the row another connection committed counts")
         }
         assertEquals(2, repository.countActive(acc))
     }
@@ -175,9 +177,9 @@ class JdbcAuthorProfileConcurrencyDbTest {
         val acc = account()
         repository.insert(profile(acc, primary = true))
         val p = profile(acc)
-        runCatching { ProfileDb.tx.execute { repository.insertWithinCap(p, 5); error("boom") } }
+        runCatching { ProfileDb.tx.execute { repository.insertWithinCap(p, 5, 0, null); error("boom") } }
         assertNull(repository.find(p.id))
-        ProfileDb.tx.execute { assertEquals(CapInsert.INSERTED, repository.insertWithinCap(p, 5)) }
+        ProfileDb.tx.execute { assertEquals(CapInsert.INSERTED, repository.insertWithinCap(p, 5, 0, null)) }
         assertEquals(p, repository.find(p.id))
     }
 }

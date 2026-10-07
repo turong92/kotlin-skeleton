@@ -22,6 +22,7 @@ class AuthorAdoptionTest {
         private val stuck: Set<String> = emptySet(),
         private val failPending: Boolean = false,
         private val ignoreCursor: Boolean = false,
+        private val order: Comparator<String> = naturalOrder(),
     ) : AuthorAdoptionListener {
         val pending = LinkedHashMap(rows)
         val adopted = LinkedHashMap<String, String>()
@@ -31,7 +32,8 @@ class AuthorAdoptionTest {
         override fun pendingAccounts(limit: Int, after: String?): List<String> {
             cursors += after
             if (failPending) error("pending failed for acc_secret")
-            return pending.filterValues { it > 0 }.keys.sorted().filter { ignoreCursor || after == null || it > after }.take(limit)
+            val ordered = pending.filterValues { it > 0 }.keys.sortedWith(order)
+            return ordered.filter { ignoreCursor || after == null || order.compare(it, after) > 0 }.take(limit)
         }
 
         override fun adopt(accountId: String, authorId: String): Int {
@@ -236,5 +238,26 @@ class AuthorAdoptionTest {
         val listener = FakeListener("board", mapOf("acc_1" to 1, "acc_2" to 1, "acc_3" to 1))
         assertEquals(2, AuthorAdoption({ listOf(listener) }, service).run(), "acc_1 and acc_3 moved; the run did not stop at acc_2")
         assertEquals(setOf("acc_1", "acc_3"), listener.adopted.keys)
+    }
+
+    @Test
+    fun `the cursor is the last returned account - a store that orders case-insensitively moves all three with a batch of one`() {
+        val h = harnessWithAccounts("acc_a", "acc_B", "acc_c")
+        val listener = FakeListener("board", mapOf("acc_a" to 1, "acc_B" to 1, "acc_c" to 1), order = String.CASE_INSENSITIVE_ORDER)
+        assertEquals(3, AuthorAdoption({ listOf(listener) }, h.service, batchSize = 1).run(), "'acc_B' < 'acc_a' in Kotlin's order, but the store's order decides the walk")
+        assertEquals(setOf("acc_a", "acc_B", "acc_c"), listener.adopted.keys)
+    }
+
+    @Test
+    fun `a listener that alternates between accounts it already returned is stopped by the seen set`() {
+        val h = harnessWithAccounts("acc_1", "acc_2")
+        val cycling = object : dev.sumin.skeleton.common.author.AuthorAdoptionListener {
+            override val name = "cycling"
+            var calls = 0
+            override fun pendingAccounts(limit: Int, after: String?): List<String> = listOf(if (calls++ % 2 == 0) "acc_1" else "acc_2").let { if (calls > 2) listOf("acc_1") else it }
+            override fun adopt(accountId: String, authorId: String) = 0
+        }
+        AuthorAdoption({ listOf(cycling) }, h.service, batchSize = 1).run()
+        assertEquals(3, cycling.calls, "acc_1, acc_2, then acc_1 again: nothing new, so it stops instead of looping")
     }
 }
