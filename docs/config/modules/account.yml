@@ -82,6 +82,11 @@ skeleton:
     social:
       sign-up: false                   # true 면 연결된 적 없는 소셜 계정이 첫 로그인에 계정을 만든다
       merge-on-verified-email: false   # true 면 제공자가 확인한 이메일이 확인된 기존 계정과 같을 때만 병합. 기본은 409 ACCOUNT.SOCIAL_EMAIL_CONFLICT
+    display-name:                      # 닉네임 — 게시판에 보이는 이름 (docs/accounts.md "닉네임"). 기본은 이 기능 이전과 같다
+      uniqueness: NONE                 # NONE 중복 허용 | UNIQUE 같은 닉네임(NFKC · 소문자 키)은 하나만 — 409 ACCOUNT.DISPLAY_NAME_TAKEN | TAGGED 중복 허용 + 4자리 꼬리표(닉네임#0417). 스키마는 방식과 무관 — 이미 계정이 있는 DB 에서 바꾸는 법은 docs/accounts.md
+      required-on-sign-up: false       # true 면 이메일 가입 요청에 닉네임이 없을 때 400 (필드 displayName · 코드 Required) — 주소가 있든 없든 같은 응답
+      fallback: NONE                   # GENERATED 면 닉네임 없이 만들어지는 계정(소셜 · 매직 링크 · 이름 없는 가입)에 user-1a2b3c (무작위 · 이메일 앞부분은 쓰지 않는다)
+      reserved: []                     # 거절할 닉네임(운영자 · 예약어) — 대소문자 · 전각 · 띄어쓰기 · _ 무시. 운영자 역할 계정 · 시드는 예외. 예: [admin, administrator, 운영자]
     seed:
       accounts: []                     # 로컬 · e2e 시드 — 예: [{ id: acc_user, email: user@example.com, password: password, roles: [], display-name: User }]. stage · prod 에서는 DeployGuard 문제
     captcha:

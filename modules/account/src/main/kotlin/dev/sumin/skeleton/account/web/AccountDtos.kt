@@ -7,12 +7,15 @@ import jakarta.validation.constraints.Pattern
 import jakarta.validation.constraints.Size
 import java.time.Instant
 
+/** 닉네임 요청 본문의 거친 상한(UTF-16 단위 — 악의적으로 큰 본문만 거른다). 진짜 규칙(60 글자 = 코드 포인트)은 서비스의 `DisplayNameRules` 가 `errors[].field=displayName` 으로 거절한다 — 이모지는 두 단위라 60 이 아니라 120 */
+private const val DISPLAY_NAME_UNITS = 120
+
 // 비밀번호 · 토큰을 담는 요청은 toString 을 가린다 — Spring MVC 가 DEBUG · TRACE 에서 요청 본문을 toString 으로 찍는다 (SecretsStayOutOfToStringTest)
 
 data class SignUpRequest(
     @field:NotBlank @field:Email @field:Size(max = 254) val email: String?,
     @field:NotBlank @field:Size(max = 128) val password: String?,
-    @field:Size(max = 60) val displayName: String? = null,
+    @field:Size(max = DISPLAY_NAME_UNITS) val displayName: String? = null,
     @field:Size(max = 35) val locale: String? = null,
     @field:Size(max = 64) val timeZone: String? = null,
     @field:Size(max = 2048) val captchaToken: String? = null,
@@ -119,7 +122,7 @@ data class ReauthRequest(
 }
 
 data class UpdateProfileRequest(
-    @field:Size(min = 1, max = 60) val displayName: String? = null,
+    @field:Size(min = 1, max = DISPLAY_NAME_UNITS) val displayName: String? = null,
     @field:Size(max = 35) val locale: String? = null,
     @field:Size(max = 64) val timeZone: String? = null,
 )

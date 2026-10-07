@@ -153,6 +153,46 @@ skeleton:
 | **탈퇴 취소 토큰 오남용** | 취소 토큰은 로그인 **성공 뒤에만** 만들어지고(조회만으로는 만들지 않는다) 한 번 쓰고 · 15분 뒤 죽고 · 새로 만들면 이전 것이 죽고 · 다른 용도로는 못 쓰고 · 정지되면 못 쓴다. 주소당 시도 수를 센다 | `SelfRestoreTest` ×14, `SelfRestoreWebTest`, `MagicLinkSelfRestoreWebTest` (비밀번호로 가입해 매직 링크 수단이 없는 계정도 유예 중 매직 링크로 취소 · 유예가 끝난 계정에는 링크를 보내지 않는다) |
 | **여러 인스턴스의 중복 정리** | 정리는 짧은 임대(`account_locks`)를 쥔 하나만 돈다. 해제는 **가져간 쪽의 소유 표가 맞을 때만** — 일 도중 만료돼 다른 인스턴스가 가져갔다면 늦게 끝난 옛 보유자의 해제가 그 임대를 풀지 못한다. 잡 큐가 있으면 주기마다 한 인스턴스만 잡을 넣는다 | `AccountErasureTest` `two overlapping purge runs…`, `AccountPurgeJobTest` `repeated ticks inside one interval…`, `AccountMaintenanceLeaseTest`, `JdbcAccountMaintenanceLeaseDbTest` (두 DB, 32 스레드 + 소유 표) |
 
+## 닉네임 (`skeleton.account.display-name.*`)
+
+게시판 · 댓글에 계정 id(`acc_…`) 대신 사람이 읽는 이름이 보이게 하는 부분이다. 모듈은 메커니즘만 내고, 어떤 방식을 쓸지는 앱의 `application.yml` 이 정한다 — 기본은 이 기능 이전과 같다(중복 허용 · 선택 · 자동 닉네임 없음).
+
+| 키 | 기본 | 뜻 |
+|---|---|---|
+| `uniqueness` | `NONE` | `NONE` 중복 허용 · `UNIQUE` 비교용 키가 같은 닉네임은 하나만(`409 ACCOUNT.DISPLAY_NAME_TAKEN`) · `TAGGED` 중복 허용 + 서버가 4자리 꼬리표를 붙인다(`닉네임#0417`) |
+| `required-on-sign-up` | `false` | `true` 면 이메일 가입 요청에 닉네임이 없을 때 `400` (필드 `displayName`, 코드 `Required`) |
+| `fallback` | `NONE` | `GENERATED` 면 닉네임 없이 만들어지는 계정(소셜 · 매직 링크 · 이름 없는 가입)에 `user-1a2b3c` — 무작위 6자리 16진수. **이메일 앞부분은 쓰지 않는다**(개인정보) |
+| `reserved` | `[]` | 거절할 닉네임(운영자 · 예약어 …). 대소문자 · 전각 · 띄어쓰기 · `_` 를 무시하고 비교한다. 운영자 역할 계정과 시드는 예외. 기본은 꺼짐 — 사칭 방지의 최소선이다 |
+
+**규칙**(`DisplayNameRules` — 가입 · 프로필 수정 · 제공자 이름 · 시드가 모두 거친다): 앞뒤 공백 제거 · 연속 공백 한 칸 · 1..60 글자(코드 포인트) · 제어 문자 · 줄바꿈 · 보이지 않는 문자(zero-width · 방향 제어 · 한글 채움 문자 · 점자 빈칸 …) 거부 · `#` · `@`(전각 포함) 거부(꼬리표 · 멘션과 헷갈린다) · `deleted:` 접두 거부(탈퇴한 작성자 톰스톤과 같은 모양) · 보이는 글자가 하나도 없는 이름 거부. 사람이 낸 값은 **거절**(400 필드 오류)하고, 소셜 제공자 · 시드가 준 값은 **고쳐 쓴다**(가입을 막을 수 없다 — 글자를 떨구고, 맞출 수 없으면 이름 없음).
+**비교용 키**(`accounts.display_name_key`): NFKC(전각 · 반각 · 호환 문자 · 결합 문자) → 소문자 → NFKC. `Ann` · `ANN` · `Ａｎｎ` 가 같다. 키릴 `а` 와 라틴 `a` 같은 **동형 문자까지 같게 보지는 않는다** — 스푸핑 방지가 목적이면 앱이 `reserved` 와 운영 모니터링을 더한다.
+
+**저장 — 스키마는 방식과 무관하다.** `accounts` 에는 `display_name_key varchar(255)` · `display_tag char(4)` 와 유니크 `(display_name_key, display_tag)` 가 **언제나** 있고, 방식은 무엇을 저장하느냐로만 갈린다. 키는 닉네임이 있으면 방식과 무관하게 저장한다(방식을 나중에 바꿔도 다시 계산하지 않는다). 유니크 키에서 NULL 은 서로 겹치지 않는다(PostgreSQL · MySQL 둘 다 — `JdbcDisplayNameDbTest`):
+
+| 방식 | `display_tag` | 효과 |
+|---|---|---|
+| `NONE` | `NULL` | 유니크에 안 걸린다 — 같은 닉네임 여럿 |
+| `UNIQUE` | `'0000'` 고정 | 키 하나에 하나. `0000` 은 "꼬리표 아님" 표시라 응답의 `displayTag` 는 `null` |
+| `TAGGED` | `'0001'`..`'9999'` | 키 안에서 겹치지 않는 무작위 꼬리표 |
+
+- **언제 확인하나**: 프로필 수정(`PATCH /account/me`)과 **가입 확인을 끝낼 때**(`POST /auth/verify-email` — 계정이 만들어지는 순간). 가입 **요청**(202)은 닉네임이 쓰였는지 알리지 않는다 — 닉네임이 쓰였는지는 게시판에 보이는 공개 정보라 확인 시점의 `409` 는 괜찮지만, 계정 존재 여부는 여전히 어느 응답에도 드러나지 않는다. 필수 · 형식 검사(`400`)는 요청 본문만 보고, 주소가 있든 없든 **같은 시점 · 같은 응답**이다 (`DisplayNameFlowsTest` · `DisplayNameWebTest`). 확인 때의 `409` 는 코드를 이미 썼으므로 다른 닉네임으로 처음부터 다시 가입한다.
+- **TAGGED**: 새 닉네임마다 키 안에서 무작위 꼬리표를 뽑는다. 겹치면(경합 포함 — 먼저 읽고 쓰지 않고 유니크 제약이 가른다) 다시 뽑고, 몇 번 겹치면 키 안의 빈 꼬리표를 직접 찾고(`displayTagsOf`), 9999 개가 다 차면 `409 DISPLAY_NAME_TAKEN`. 닉네임을 **바꾸면** 꼬리표를 새로 뽑는다 — 키가 그대로(대소문자 · 전각만 바뀜)면 지킨다.
+- **탈퇴와 닉네임**: 유예 중(`DELETED`)에는 키 · 꼬리표가 **잡혀 있다**(주인이 돌아올 수 있다). 지워지면(`ERASED`) 이름 · 키 · 꼬리표가 모두 NULL 이 되어 풀린다. `ERASED` 행에는 닉네임을 쓰지 않는다(저장소가 거절).
+- **작성자 이름 조회**: board 같은 모듈은 이 모듈을 모른 채 platform 의 `AuthorDirectory` 로 이름을 묻는다. 기본 구현(`AccountAuthorDirectory`, `@ConditionalOnMissingBean`)은 닉네임 · 꼬리표를 `where id in (…)` **한 번**으로 준다. 상태별: `ACTIVE` · 유예 중(`DELETED`) · `SUSPENDED` 는 행이 살아 있으니 **이름 그대로**(유예 중인 주인은 돌아올 수 있고, 정지된 계정의 글을 누가 썼는지 숨기면 운영자도 읽기 어렵다), `ERASED` 는 이름 없음(board 쪽은 이미 톰스톤). 돌판(팬덤)마다 다른 닉네임처럼 범위별 이름이 필요한 앱은 같은 타입의 빈을 두면 기본 구현이 물러난다 — `AuthorContext(source="board", scope=<게시판 코드>)` 로 어느 게시판에서 묻는지 알 수 있다.
+
+**방식을 바꿀 때 (이미 계정이 있는 DB)** — 아무것도 안 하면 안전하지만 옛 계정은 새 방식의 보호를 못 받는다. 먼저 중복을 본다: `select display_name_key, count(*) from accounts where display_name_key is not null group by 1 having count(*) > 1`.
+
+| 바꿈 | 아무것도 안 하면 | 옛 계정까지 적용하려면 |
+|---|---|---|
+| `NONE` → `UNIQUE` | 옛 닉네임은 `display_tag` 가 NULL 이라 유니크에 안 잡힌다 — 새 사람이 옛 사람의 이름을 쓸 수 있다 | 중복을 먼저 고친(운영자가 이름을 바꾼) 뒤 `update accounts set display_tag = '0000' where display_name_key is not null and display_tag is null` — 중복이 남아 있으면 유니크 위반으로 **실패**한다(그것이 점검이다) |
+| `NONE` → `TAGGED` | 옛 계정은 꼬리표 없이 보이고 새 계정만 꼬리표를 받는다. 충돌은 없다 | PostgreSQL: `update accounts a set display_tag = lpad(r.n::text, 4, '0') from (select id, row_number() over (partition by display_name_key order by created_at, id) n from accounts where display_name_key is not null and display_tag is null) r where a.id = r.id` · MySQL 8: `update accounts a join (…같은 select…) r on r.id = a.id set a.display_tag = lpad(r.n, 4, '0')` (같은 키가 9999 를 넘으면 안 된다) |
+| `UNIQUE` → `TAGGED` | `'0000'` 인 옛 계정은 꼬리표 없이 보이고 새 계정은 꼬리표를 받는다 | 위 `TAGGED` 백필을 `display_tag = '0000'` 에 대해 |
+| `TAGGED` → `UNIQUE` / `NONE` | 이미 꼬리표를 가진 계정은 꼬리표가 계속 보인다. `UNIQUE` 는 옛 `닉네임#0417` 과 새 `닉네임` 을 같은 이름으로 보지 않는다 | `TAGGED` → `UNIQUE` 는 겹치는 이름을 먼저 정리한 뒤 `update accounts set display_tag = '0000' where display_name_key is not null`. 꼬리표를 걷어내려면 `update accounts set display_tag = null` (`NONE`) |
+
+**닉네임 열이 없던 DB**(이 기능 이전의 `accounts` 마이그레이션을 이미 적용한 DB — 파일을 제자리에서 고쳤다): `flyway repair` 로는 열이 생기지 않는다. `alter table accounts add column display_name_key varchar(255), add column display_tag char(4), add constraint uq_accounts_display_name unique (display_name_key, display_tag)`(MySQL 은 키 열을 `character set utf8mb4 collate utf8mb4_bin` 으로) 를 직접 돌리고, 이름이 있는 계정의 키를 채운다: `update accounts set display_name_key = lower(display_name) where display_name is not null` — SQL 의 `lower` 는 NFKC 가 아니라서 **전각 · 호환 문자가 든 이름은 키가 달라** `UNIQUE` 의 비교에서 빠진다(그 계정이 이름을 바꾸면 바로잡힌다). 새로 만든 DB 와 stamped 프로젝트의 새 마이그레이션에는 필요 없다.
+
+**위협 · 개인정보**: 닉네임은 공개 정보다(게시판에 보인다) — `UNIQUE` 의 `409` 와 응답의 이름은 비밀이 아니다. 계정이 있는지는 닉네임으로도 알 수 없다(요청 단계는 같은 202). 자동 닉네임은 이메일 · 계정 id · 시각에서 만들지 않는다(무작위). 탈퇴한 계정의 이름 · 키 · 꼬리표는 지워진다 — `AccountJourneyIntegrationTest` 의 전체 표 스캔(`display_name_key` 의 소문자 값 포함)이 본다.
+
 ## 삭제 · 지우기 · 내보내기
 
 ### 삭제 수명주기
@@ -172,7 +212,7 @@ skeleton:
 
 | 남는 것 | 지워지는 것 |
 |---|---|
-| `accounts.id`, `created_at`, `status=ERASED`, `erased_at`, `deleted_at`(탈퇴를 요청한 시각), `updated_at`(= 지운 시각), `email_verified=false` | `email`(→ NULL, 유니크 키에서 풀려 같은 주소가 새로 가입한다 — 두 DB 시험), `display_name`, `locale`, `time_zone`, `suspended_reason`, `last_login_at`, `purge_after` |
+| `accounts.id`, `created_at`, `status=ERASED`, `erased_at`, `deleted_at`(탈퇴를 요청한 시각), `updated_at`(= 지운 시각), `email_verified=false` | `email`(→ NULL, 유니크 키에서 풀려 같은 주소가 새로 가입한다 — 두 DB 시험), `display_name` · `display_name_key` · `display_tag`(→ NULL, 닉네임도 풀린다), `locale`, `time_zone`, `suspended_reason`, `last_login_at`, `purge_after` |
 | `account_audit` 의 **사건 줄**(종류 · 시각 · 계정 id) | 같은 계정 줄의 `ip` · `detail` (→ NULL). 다른 계정 줄은 그대로 |
 | (운영자 지우기만) `account_blocks` 의 해시 | 로그인 수단 전부(비밀번호 해시 · 제공자 주체 · 매직 링크), 역할, `account_tokens`(계정 id 로 걸린 것 + 그 주소가 주인인 것), `account_challenges`(계정 id · 그 주소의 가입 시도 — IP 포함), 이메일 변경 대기 |
 | 각 모듈이 정한 것: board 는 작성자를 `deleted:<해시>` 로, legal 은 동의 기록의 사람을 지우고 증거는 남김(`erasure.mode`) | auth-session 의 세션 · 리프레시 토큰(IP · UA · 기기 이름), notification-jdbc 의 받은편지함 |

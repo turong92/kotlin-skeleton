@@ -67,8 +67,8 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 | id | 요약 | 켜는 조각 | 키워드 (한국어 / 영어) | 짝 프런트 |
 |---|---|---|---|---|
-| `account` | 계정 수명주기 — 이메일 · 비밀번호 가입과 이메일 확인, 비밀번호 재설정 · 변경, 이메일 변경, 소셜 연결(자동 병합 없음), 탈퇴(다시 인증 → 유예 → 개인정보만 지우고 행은 ERASED 로 남김, 탈퇴 취소, 정지는 박제 + 해시 재가입 차단), 로그인 시도 제한, 관리자 도구, 첫 관리자, ko/en 메일 템플릿. auth 가 진짜 계정으로 로그인하게 한다. | 스타터(apps/api)에 기본 포함 | 회원가입, 가입, 이메일 인증, 비밀번호 재설정, 비밀번호 찾기, 이메일 변경, 계정 삭제, 탈퇴, 계정 관리, 관리자 도구, 계정 정지, 프로필 / sign up, registration, email verification, password reset, forgot password, change email, delete account, account management, admin tools, suspend account, profile | `@skeleton/auth` |
-| `account-jdbc` | account 의 저장소 · 토큰 · 감사 기록을 PostgreSQL · MySQL 로 — 스키마는 모듈 마이그레이션(MySQL 은 이메일을 utf8mb4_bin 으로 정확 일치). 보호 환경에서 메모리 저장소를 막는 가드를 통과하는 방법. | 스타터(apps/api)에 기본 포함 | 계정 저장, 계정 DB, 회원 테이블, 계정 마이그레이션 / account storage, accounts table, account persistence, account migration | `@skeleton/auth` |
+| `account` | 계정 수명주기 — 이메일 · 비밀번호 가입과 이메일 확인, 비밀번호 재설정 · 변경, 이메일 변경, 소셜 연결(자동 병합 없음), 탈퇴(다시 인증 → 유예 → 개인정보만 지우고 행은 ERASED 로 남김, 탈퇴 취소, 정지는 박제 + 해시 재가입 차단), 닉네임(중복 허용 · 유일 · 꼬리표 `닉네임#0417` 방식 · 필수 · 자동 닉네임 · 예약어, 작성자 이름 조회 AuthorDirectory 기본 구현), 로그인 시도 제한, 관리자 도구, 첫 관리자, ko/en 메일 템플릿. auth 가 진짜 계정으로 로그인하게 한다. | 스타터(apps/api)에 기본 포함 | 회원가입, 가입, 이메일 인증, 비밀번호 재설정, 비밀번호 찾기, 이메일 변경, 계정 삭제, 탈퇴, 계정 관리, 관리자 도구, 계정 정지, 프로필 / sign up, registration, email verification, password reset, forgot password, change email, delete account, account management, admin tools, suspend account, profile | `@skeleton/auth` |
+| `account-jdbc` | account 의 저장소 · 토큰 · 감사 기록을 PostgreSQL · MySQL 로 — 스키마는 모듈 마이그레이션(MySQL 은 이메일 · 닉네임 키를 utf8mb4_bin 으로 정확 일치, 닉네임 방식 셋을 유니크 (키, 꼬리표) 하나로). 보호 환경에서 메모리 저장소를 막는 가드를 통과하는 방법. | 스타터(apps/api)에 기본 포함 | 계정 저장, 계정 DB, 회원 테이블, 계정 마이그레이션 / account storage, accounts table, account persistence, account migration | `@skeleton/auth` |
 | `alert` | 주인 경보 — 5xx 몰림 · 기동 실패 · 죽은 작업을 Discord 호환 웹훅(+ 선택적 메일)으로 알린다. 에러 수집(Sentry)의 답. | 스타터(apps/api)에 기본 포함 | 경보, 주인 알림, 에러 알림, 장애 알림, 디스코드 알림, 에러 수집, 5xx 알림 / owner alert, error reporting, discord webhook, incident alert, 5xx alert, sentry alternative | — |
 | `alert-jdbc` | 경보 기록을 DB 에 두어 여러 인스턴스 · 재시작을 가로질러 같은 경보를 접는다 (PostgreSQL · MySQL). | `--modules alert-jdbc` | 경보 기록, 경보 중복 접기, 경보 DB / alert ledger, alert dedupe, alert database | — |
 | `async` | @Async · CompletableFuture 작업이 호출 스레드의 trace id · MDC · 보안 컨텍스트를 이어받는 실행기와 작업 그룹. | `--modules async` | 비동기, 백그라운드 작업, 스레드 풀, @Async, 작업 그룹 / async, background task, thread pool, mdc propagation, completable future | — |
@@ -83,7 +83,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `auth-social-naver` | 네이버 OAuth 제공자 — 토큰 교환 · 프로필 조회 클라이언트를 소셜 로그인의 제공자로 등록한다(클라이언트 id · secret 만 있으면 된다). | `--modules auth-social-naver` | 네이버 로그인, 네이버 소셜 로그인, 소셜 로그인 / naver login, naver oauth, social login | `@skeleton/auth` |
 | `auth-social-oidc` | 범용 OpenID Connect 소셜 로그인 제공자 — 속성만으로 제공자를 여러 개 더한다(discovery · JWKS 키 교체 · ID 토큰 검증 · PKCE · nonce · LINE 프리셋). client-id 를 적은 제공자만 켜진다. | `--modules auth-social-oidc` | 라인 로그인, LINE 로그인, OIDC, OpenID Connect, 글로벌 소셜 로그인, 마이크로소프트 로그인, 소셜 로그인 / line login, openid connect, oidc, microsoft login, social login, global social login | `@skeleton/auth` |
 | `auth-social-x` | X(Twitter) 로그인 제공자 — OAuth 2.0 Authorization Code + PKCE(필수), 기밀 클라이언트(Basic), GET /2/users/me. client-id 를 적으면 켜진다. | `--modules auth-social-x` | X 로그인, 엑스 로그인, 트위터 로그인, 글로벌 소셜 로그인, 소셜 로그인 / x login, twitter login, sign in with x, social login, global social login | `@skeleton/auth` |
-| `board` | 게시판 — 글 · 중첩 댓글(대댓글) · 설정으로 늘리는 반응(좋아요 · 공감 …) · 운영자 숨김/고정 · 댓글 알림, HTTP /api/v1/boards 까지. | `--modules board,board-jdbc` | 게시판, 커뮤니티, 글쓰기, 댓글, 대댓글, 공감, 좋아요, 반응, 운영자 숨김, 공지 고정 / board, forum, community, post, comment, reply, reaction, like, moderation | `@skeleton/board` |
+| `board` | 게시판 — 글 · 중첩 댓글(대댓글) · 설정으로 늘리는 반응(좋아요 · 공감 …) · 운영자 숨김/고정 · 댓글 알림 · 작성자 닉네임(authorName · authorTag, AuthorDirectory 로 요청당 한 번 조회), HTTP /api/v1/boards 까지. | `--modules board,board-jdbc` | 게시판, 커뮤니티, 글쓰기, 댓글, 대댓글, 공감, 좋아요, 반응, 운영자 숨김, 공지 고정 / board, forum, community, post, comment, reply, reaction, like, moderation | `@skeleton/board` |
 | `board-jdbc` | 게시판 저장소 — PostgreSQL · MySQL 로 board 의 저장 포트 네 개를 구현한다(boards · board_* 테이블 · 원자적 카운터). | `--modules board-jdbc` | 게시판 저장소, 게시판 DB / board storage, board repository, board database | `@skeleton/board` |
 | `captcha-turnstile` | 봇 방지 — Cloudflare Turnstile 토큰을 서버에서 검증한다(TurnstileVerifier). | 스타터(apps/api)에 기본 포함 | 캡차, 봇 방지, 스팸 방지, 로봇 확인, 가입 폼 보호 / captcha, turnstile, bot protection, spam protection, cloudflare turnstile | `@skeleton/captcha-turnstile` |
 | `config-aws-ssm` | AWS SSM Parameter Store 의 값을 시작할 때 스프링 프로퍼티로 불러온다. | `--modules config-aws-ssm` | AWS 설정, 파라미터 스토어, SSM, 비밀 불러오기 / aws ssm, parameter store, remote config, aws secrets | — |
@@ -110,7 +110,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `persistence-jdbc` | Spring Data JDBC 의 audit 타임스탬프 콜백과 DB 방언 전략(SqlDialect · SqlDialectVerifier), DB 에 못 닿는 기동 실패를 읽을 수 있는 메시지로 바꾸는 분석기와 첫 연결을 기다리는 선택 기능. | 스타터(apps/api)에 기본 포함 | JDBC, Data JDBC, audit 시각, 생성일 수정일, DB 접근 / jdbc, spring data jdbc, audit timestamps, created at updated at | — |
 | `persistence-jooq` | jOOQ 연결 — audit 리스너 · MySQL UTC Instant 변환기, DDL 파일에서 코드 생성(빌드에 DB 불필요). | `--modules persistence-jooq` | jOOQ, 타입 안전 SQL, 쿼리 빌더 / jooq, type-safe sql, query builder, code generation | — |
 | `persistence-jpa` | JPA 엔티티의 created_at · updated_at 자동 채움과 부분 수정 · fetch graph 도우미. | `--modules persistence-jpa` | JPA, 하이버네이트, 엔티티 audit, ORM / jpa, hibernate, entity audit, orm | — |
-| `platform` | 모든 모듈의 공용 기반 — 표준 응답/에러 봉투 · 전역 예외 처리 · trace id · 요청 로깅 · CORS · rate limit · 외부 HTTP 클라이언트 · OpenAPI · 배포 가드. | 스타터(apps/api)에 기본 포함 | 에러 응답, 표준 응답, 예외 처리, 요청 로깅, 트레이스, CORS, 요청 제한, 외부 API 호출, 스웨거, 배포 가드 / error response, exception handling, request logging, trace id, cors, rate limit, http client, openapi, swagger, deploy guard | `@skeleton/api-client` |
+| `platform` | 모든 모듈의 공용 기반 — 표준 응답/에러 봉투 · 전역 예외 처리(필드 오류 FieldValidationException) · 모듈끼리 만나는 계약(AuthorDirectory · AccountErasureListener) · trace id · 요청 로깅 · CORS · rate limit · 외부 HTTP 클라이언트 · OpenAPI · 배포 가드. | 스타터(apps/api)에 기본 포함 | 에러 응답, 표준 응답, 예외 처리, 요청 로깅, 트레이스, CORS, 요청 제한, 외부 API 호출, 스웨거, 배포 가드 / error response, exception handling, request logging, trace id, cors, rate limit, http client, openapi, swagger, deploy guard | `@skeleton/api-client` |
 | `redis-cache` | 이름 있는 Redis 캐시(TTL · 접두사) · 안정적인 키 생성기 · 캐시 오류 정책(기본 FAIL_OPEN). | `--modules redis-cache` | 캐시, Redis 캐시, 캐싱, 응답 캐시 / cache, redis cache, caching, ttl | — |
 | `redis-core` | Redis 연결 · StringRedisTemplate · JSON 템플릿 · 키 접두사 — 다른 redis-* 모듈의 바탕. | `--modules redis-core` | Redis, 레디스, 키 접두사 / redis, redis connection, key prefix | — |
 | `redis-lock` | Redisson 기반 분산 락 — @DistributedLock 어노테이션과 락 실행기. | `--modules redis-lock` | 분산 락, 락, 동시 실행 방지, 중복 실행 방지 / distributed lock, lock, mutex, redisson | — |
@@ -172,7 +172,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 ## 항목 상세
 
-### `account` — 계정 수명주기 — 이메일 · 비밀번호 가입과 이메일 확인, 비밀번호 재설정 · 변경, 이메일 변경, 소셜 연결(자동 병합 없음), 탈퇴(다시 인증 → 유예 → 개인정보만 지우고 행은 ERASED 로 남김, 탈퇴 취소, 정지는 박제 + 해시 재가입 차단), 로그인 시도 제한, 관리자 도구, 첫 관리자, ko/en 메일 템플릿. auth 가 진짜 계정으로 로그인하게 한다.
+### `account` — 계정 수명주기 — 이메일 · 비밀번호 가입과 이메일 확인, 비밀번호 재설정 · 변경, 이메일 변경, 소셜 연결(자동 병합 없음), 탈퇴(다시 인증 → 유예 → 개인정보만 지우고 행은 ERASED 로 남김, 탈퇴 취소, 정지는 박제 + 해시 재가입 차단), 닉네임(중복 허용 · 유일 · 꼬리표 `닉네임#0417` 방식 · 필수 · 자동 닉네임 · 예약어, 작성자 이름 조회 AuthorDirectory 기본 구현), 로그인 시도 제한, 관리자 도구, 첫 관리자, ko/en 메일 템플릿. auth 가 진짜 계정으로 로그인하게 한다.
 
 - 종류 · 상태: module · experimental — 위치 `modules/account`
 - 켜는 법: 스타터(apps/api)에 기본 포함
@@ -192,7 +192,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 소셜 로그인을 계정으로 이어 주는 것은 켜진 auth-social 과 skeleton.account.social.* 설정(모듈 기본은 가입 · 병합 모두 꺼짐)
 - 키워드: 회원가입, 가입, 이메일 인증, 비밀번호 재설정, 비밀번호 찾기, 이메일 변경, 계정 삭제, 탈퇴, 계정 관리, 관리자 도구, 계정 정지, 프로필 / sign up, registration, email verification, password reset, forgot password, change email, delete account, account management, admin tools, suspend account, profile
 
-### `account-jdbc` — account 의 저장소 · 토큰 · 감사 기록을 PostgreSQL · MySQL 로 — 스키마는 모듈 마이그레이션(MySQL 은 이메일을 utf8mb4_bin 으로 정확 일치). 보호 환경에서 메모리 저장소를 막는 가드를 통과하는 방법.
+### `account-jdbc` — account 의 저장소 · 토큰 · 감사 기록을 PostgreSQL · MySQL 로 — 스키마는 모듈 마이그레이션(MySQL 은 이메일 · 닉네임 키를 utf8mb4_bin 으로 정확 일치, 닉네임 방식 셋을 유니크 (키, 꼬리표) 하나로). 보호 환경에서 메모리 저장소를 막는 가드를 통과하는 방법.
 
 - 종류 · 상태: module · experimental — 위치 `modules/account-jdbc`
 - 켜는 법: 스타터(apps/api)에 기본 포함
@@ -405,7 +405,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - X API 의 티어 · 요금 조건은 X 정책 (확인 필요 — docs/modules/auth-social-x.md)
 - 키워드: X 로그인, 엑스 로그인, 트위터 로그인, 글로벌 소셜 로그인, 소셜 로그인 / x login, twitter login, sign in with x, social login, global social login
 
-### `board` — 게시판 — 글 · 중첩 댓글(대댓글) · 설정으로 늘리는 반응(좋아요 · 공감 …) · 운영자 숨김/고정 · 댓글 알림, HTTP /api/v1/boards 까지.
+### `board` — 게시판 — 글 · 중첩 댓글(대댓글) · 설정으로 늘리는 반응(좋아요 · 공감 …) · 운영자 숨김/고정 · 댓글 알림 · 작성자 닉네임(authorName · authorTag, AuthorDirectory 로 요청당 한 번 조회), HTTP /api/v1/boards 까지.
 
 - 종류 · 상태: module · stable — 위치 `modules/board`
 - 켜는 법: `--modules board,board-jdbc`
@@ -762,7 +762,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - JPA 스타터와 DataSource 가 필요하다
 - 키워드: JPA, 하이버네이트, 엔티티 audit, ORM / jpa, hibernate, entity audit, orm
 
-### `platform` — 모든 모듈의 공용 기반 — 표준 응답/에러 봉투 · 전역 예외 처리 · trace id · 요청 로깅 · CORS · rate limit · 외부 HTTP 클라이언트 · OpenAPI · 배포 가드.
+### `platform` — 모든 모듈의 공용 기반 — 표준 응답/에러 봉투 · 전역 예외 처리(필드 오류 FieldValidationException) · 모듈끼리 만나는 계약(AuthorDirectory · AccountErasureListener) · trace id · 요청 로깅 · CORS · rate limit · 외부 HTTP 클라이언트 · OpenAPI · 배포 가드.
 
 - 종류 · 상태: module · stable — 위치 `modules/platform`
 - 켜는 법: 스타터(apps/api)에 기본 포함

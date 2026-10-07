@@ -15,12 +15,16 @@
 | `POST /api/v1/account/password/forgot` · `…/reset` · `GET …/policy` | 재설정 메일(늘 202) · 새 비밀번호(모든 세션 종료) · 정책 힌트 | 공개 |
 | `POST /api/v1/account/password/change` | 현재 비밀번호 필요(없는 계정은 첫 비밀번호 설정). 다른 세션 종료 | 로그인 |
 | `POST /api/v1/account/email/change` · `POST /api/v1/account/email/change/confirm` | 새 주소로 코드(202) · 같은 세션에서 코드 입력하면 바뀜(옛 주소에 알림) | 로그인 |
-| `GET` · `PATCH /api/v1/account/me` | 프로필(이름 · 로케일 · 시간대) · 로그인 수단 목록 | 로그인 |
+| `GET` · `PATCH /api/v1/account/me` | 프로필(닉네임 · 꼬리표 `displayTag` · 로케일 · 시간대) · 로그인 수단 목록. 닉네임이 겹치면 `409 ACCOUNT.DISPLAY_NAME_TAKEN` (`uniqueness=UNIQUE`) | 로그인 |
 | `GET /api/v1/account/identities` · `DELETE …/{id}` · `POST …/social/{provider}` | 수단 목록 · 해제(다시 인증, 마지막은 409) · 소셜 연결(`auth-social` 이 있을 때) | 로그인 |
 | `POST /api/v1/account/reauth/confirmation` | 비밀번호 없는 계정의 다시 인증 코드(6자리, 이 세션에서만) | 로그인 |
 | `POST /api/v1/account/delete/confirmation` · `POST /api/v1/account/delete` | 삭제 확인 코드(비밀번호 없는 계정) · 삭제 예약(202, 다시 인증). 정지된 계정은 403 | 로그인 |
 | `POST /api/v1/account/delete/cancel` | 탈퇴 대기 중 로그인 성공 뒤 받은 취소 토큰으로 탈퇴 취소 → 로그인 응답 (`deletion.self-restore=true` 일 때) | 공개 |
 | `/api/v1/admin/accounts` … | 목록(지워진 계정은 `status=ERASED` 로만) · 정지 · 복구 · 역할 부여/회수 · 정지 계정 즉시 지우기(`/{id}/erase`) · 재가입 차단 목록 · 해제(`/blocks`) (`skeleton.account.admin.enabled=true`) | 관리자 역할 |
+
+**닉네임**(`skeleton.account.display-name.*`): `uniqueness`(`NONE` 기본 · `UNIQUE` · `TAGGED` 꼬리표) · `required-on-sign-up` · `fallback`(`GENERATED` → `user-1a2b3c`) · `reserved`. 규칙(`DisplayNameRules`: 1..60자 · 보이지 않는 문자 · `#` `@` · `deleted:` 거부 · NFKC+소문자 비교 키)은 가입 · 프로필 수정 · 제공자 이름이 모두 거친다.
+스키마(`accounts.display_name_key` · `display_tag` · 유니크 `(키, 꼬리표)`)는 방식과 무관하다 — 방식을 바꾸는 법 · 탈퇴 때의 풀림: [docs/accounts.md](../accounts.md) "닉네임".
+**작성자 이름**: 기본 구현 `AccountAuthorDirectory`(platform 의 `AuthorDirectory`, `@ConditionalOnMissingBean`)가 닉네임 · 꼬리표를 쿼리 한 번으로 board 같은 모듈에 낸다 — board 는 이 모듈을 모르고 이 모듈도 board 를 모른다. 앱이 같은 타입의 빈을 두면 물러난다(돌판마다 다른 닉네임 등).
 
 에러 코드는 `ACCOUNT.*` · `AUTH.*` (표: [docs/accounts.md](../accounts.md)). 계약 전체: 같은 문서의 "HTTP 계약".
 
@@ -32,7 +36,7 @@
 | 설정 접두사 | `skeleton.account` — [docs/config/modules/account.yml](../config/modules/account.yml) |
 | 기본 동작 | 켜짐. 가입 · 확인 · 재설정 · 변경 · 삭제 HTTP 와 로그인 시도 제한이 켜지고, 관리자 HTTP · 소셜 가입 · 병합 · 시드 계정 · 첫 관리자 · 링크 로그는 꺼져 있다. 저장은 메모리(로컬) — 운영은 `account-jdbc`. 메일 모듈이 없으면 보내지 않고 알린다. |
 | 부팅에 필요한 것 | 로컬 · 시험: 없음. stage · prod(`skeleton.env` 또는 auth 의 보호 프로필): 저장소 · 토큰 저장소 · 챌린지 저장소(`account-jdbc`), 메일 발송기(`notification-mail`), `skeleton.account.mail.link-base-url` — 없으면 `DeployGuard`(`account`)가 기동을 막고 시드 계정 · 링크 로그 켬도 막는다. |
-| 교체 지점 | `AccountRepository`, `OneTimeTokenStore`, `ChallengeStore`, `CodeHasher`, `SocialReauthVerifier`, `PasswordPolicy`, `BreachedPasswordCheck`, `PasswordEncoder`, `AccountMailTemplates`, `AccountMailLayout`, `AccountMailTransport`, `AccountMailer`, `AccountTaskRunner`, `AccountCaptcha`, `AccountEventPublisher`, `AccountEventListener`, `SignInMethod`, `AccountTransaction`, `AccountBlockStore`, `AccountBlocks`, `AccountMaintenanceLease`, `MagicLinkIssuer`, `AccountCallers`, `AccountPublicController`, `AccountController`, `AdminAccountController`, `AccountDeployGuard` |
+| 교체 지점 | `AccountRepository`, `OneTimeTokenStore`, `ChallengeStore`, `CodeHasher`, `SocialReauthVerifier`, `PasswordPolicy`, `BreachedPasswordCheck`, `PasswordEncoder`, `AccountMailTemplates`, `AccountMailLayout`, `AccountMailTransport`, `AccountMailer`, `AccountTaskRunner`, `AccountCaptcha`, `AccountEventPublisher`, `AccountEventListener`, `SignInMethod`, `AccountTransaction`, `AccountBlockStore`, `AccountBlocks`, `AccountMaintenanceLease`, `MagicLinkIssuer`, `AuthorDirectory`, `AccountCallers`, `AccountPublicController`, `AccountController`, `AdminAccountController`, `AccountDeployGuard` |
 | 마이그레이션 | 없음 (스키마는 `account-jdbc`) |
 | 프론트 짝 | `@skeleton/auth` |
 | 테스트 | `modules/account/src/test`, `modules/account/src/noOptionalTest` (선택 통합이 클래스패스에 없을 때) |

@@ -118,7 +118,7 @@
 - persistence-jdbc: Spring Data JDBC 의 audit 타임스탬프 콜백과 DB… [JDBC, Data JDBC]
 - persistence-jooq: jOOQ 연결 — audit 리스너 · MySQL UTC Instant… [jOOQ, 타입 안전 SQL]
 - persistence-jpa: JPA 엔티티의 created_at · updated_at 자동 채움과… [JPA, 하이버네이트]
-- platform: 모든 모듈의 공용 기반 [에러 응답, 표준 응답]
+- platform: 모든 모듈의 공용 기반 — 표준 응답/에러 봉투 · 전역 예외… [에러 응답, 표준 응답]
 - redis-cache: 이름 있는 Redis 캐시(TTL · 접두사) [캐시, Redis 캐시]
 - redis-core: Redis 연결 · StringRedisTemplate · JSON… [Redis, 레디스]
 - redis-lock: Redisson 기반 분산 락 [분산 락, 락]

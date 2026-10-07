@@ -75,6 +75,16 @@ class DisplayNameTaggedWebTest {
     }
 
     @Test
+    fun `the length rule counts characters not UTF-16 units - forty emoji fit, sixty-one letters do not, on both sign-up and profile update`() {
+        val auth = register("e${System.nanoTime()}@example.com", "😀".repeat(40))
+        mvc.perform(get("/api/v1/account/me").header("Authorization", auth)).andExpect(status().isOk).andExpect(jsonPath("$.value.displayName").value("😀".repeat(40)))
+        mvc.perform(patch("/api/v1/account/me").header("Authorization", auth).json("""{"displayName":"${"x".repeat(61)}"}"""))
+            .andExpect(status().isBadRequest).andExpect(jsonPath("$.errors[0].field").value("displayName")).andExpect(jsonPath("$.errors[0].code").value("Size"))
+        mvc.perform(post("/api/v1/account/sign-up").with { it.remoteAddr = "198.51.100.77"; it }.json("""{"email":"long${System.nanoTime()}@example.com","password":"tangerine-42-moon","displayName":"${"x".repeat(61)}"}"""))
+            .andExpect(status().isBadRequest).andExpect(jsonPath("$.errors[0].field").value("displayName")).andExpect(jsonPath("$.errors[0].code").value("Size"))
+    }
+
+    @Test
     fun `the admin view shows the tag too`() {
         val boss = register("boss@example.com", "Boss")
         val victim = "v${System.nanoTime()}@example.com"
