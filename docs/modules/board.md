@@ -44,7 +44,7 @@ HTTP 는 `skeleton.board.http.base-path`(기본 `/api/v1/boards`)에 열린다 (
 ## 공개 작성자 id · `mine` · 작성 프로필 (`AuthorIdentities`)
 
 한 사람이 여러 닉네임(프로필)을 갖고 글 · 댓글마다 골라 쓰는 앱을 위한 자리다 — 두 프로필이 같은 사람이라는 사실이 다른 사용자에게 드러나지 않게. board 는 프로필 모듈(`author-profile`)도 `account` 도 **모른다**: platform 의 `AuthorIdentities` 빈(이 계정이 이 작성자 id 로 써도 되는가) 하나가 있느냐로 켜진다.
-빈이 없으면 동작 · 응답은 이 기능 이전과 같다(덧붙는 키 `mine` · `authorRequired: false` 만 다르다). 설계 · 전수표: `docs/superpowers/specs/2026-10-07-author-profiles-design.md`.
+빈이 없으면 동작 · 응답은 이 기능 이전과 같다(덧붙는 키 `mine` · `authorRequired: false` 만 다르다). 설계 · 전수표: `docs/superpowers/specs/2026-10-07-author-profiles-design.md`. 프론트가 읽는 계약(쓰기 `authorId` · `mine` · 오류 코드 · 알림 payload · 화면 규칙): `docs/author-profile-http-contract.md` §5, 누출 스캔 시험: `apps/sample` 의 `AuthorLinkLeakIntegrationTest`(`docs/modules/author-profile.md` 「누출 스캔 시험과 검증 기록」).
 
 **공개 id 규칙은 `BoardAuthors.publicId` 한 곳**이고 응답 DTO(글 요약 · 상세 · 댓글) · 댓글 알림 payload · `AuthorNames` 조회가 모두 이것을 쓴다:
 

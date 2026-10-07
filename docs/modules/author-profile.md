@@ -39,7 +39,7 @@
 
 오류: `400` 필드 `name`(코드는 닉네임과 같다: `Required` · `Size` · `Pattern` · `Reserved`, `COMMON.VALIDATION_FAILED`) · `409 AUTHOR_PROFILE.NAME_TAKEN` · `409 AUTHOR_PROFILE.LIMIT_REACHED` · `429 AUTHOR_PROFILE.RATE_LIMITED`(`Retry-After` 헤더와 `data.retryAfterSeconds` — 계정의 `RATE_LIMITED` 와 같은 모양) ·
 남의 · 없는 · 지워진 · 모양이 틀린 id 는 모두 **같은 `404 AUTHOR_PROFILE.NOT_FOUND`**(상태 · 문구 · 본문 · 헤더가 같다 — 존재 여부를 알려 주지 않는다. 남의 id 에 잘못된 이름을 보내도 `400` 이 아니라 같은 `404`).
-**만들기(`POST`)는 `@IdempotentOperation`** 이다 — 앱이 `idempotency` 모듈을 끼우면 `Idempotency-Key` 헤더가 **필수**(없으면 `400 COMMON.IDEMPOTENCY_ERROR`)이고 같은 키의 두 번째 요청은 프로필을 또 만들지 않고 첫 응답을 재생한다(프론트가 네트워크 오류를 같은 키로 재시도하는 계약). 모듈이 없으면 애너테이션은 JVM 이 건너뛰고 키 없이 만들어진다(`idempotency` 는 `compileOnly`, `src/noOptionalTest` 가 증명). 이름 바꾸기 · 지우기는 멱등 표시가 없다. 프론트가 읽는 정본 계약 문서(`docs/author-profile-http-contract.md`)는 뒤따른다.
+**만들기(`POST`)는 `@IdempotentOperation`** 이다 — 앱이 `idempotency` 모듈을 끼우면 `Idempotency-Key` 헤더가 **필수**(없으면 `400 COMMON.IDEMPOTENCY_ERROR`)이고 같은 키의 두 번째 요청은 프로필을 또 만들지 않고 첫 응답을 재생한다(프론트가 네트워크 오류를 같은 키로 재시도하는 계약). 모듈이 없으면 애너테이션은 JVM 이 건너뛰고 키 없이 만들어진다(`idempotency` 는 `compileOnly`, `src/noOptionalTest` 가 증명). 이름 바꾸기 · 지우기는 멱등 표시가 없다. 프론트가 읽는 정본 계약 문서: `docs/author-profile-http-contract.md`(모든 엔드포인트의 요청/응답 JSON · 오류 코드 표 · `Idempotency-Key` · 첫 프로필 · board 쪽 변화 · 관리자 조회).
 
 ## 관리자 연결 조회 (`skeleton.author-profile.admin.enabled`, 기본 꺼짐)
 
@@ -72,5 +72,26 @@
 - 만들기 한도(`create-limit`)를 넘었을 때의 `Retry-After` / `data.retryAfterSeconds` 는 **창 전체 길이**(`create-window`, 기본 30 일 = `2592000`)다 — 표에서 센 횟수라 "가장 오래된 만들기가 창 밖으로 나가는 시각"까지 정확히 계산하지 않는다. 프론트는 정확한 대기 시간이 아니라 "한동안"으로 보인다.
 - 이름 바꾸기 한도는 계정의 `display-name.change-limit`/`change-window` **숫자만** 쓰고 카운터는 계정 닉네임 변경과 **따로** 센다(프로필 전용, 모든 프로필 합산). 카운터가 `AccountRateLimits`(= `RateLimitStore`)에 있으므로 인스턴스가 여럿이거나 재시작에도 지켜야 하면 내구성 있는 `RateLimitStore`(예: `redis-rate-limit`)가 필요하다 — 기본 메모리 저장소는 인스턴스마다 · 재시작마다 센다.
 - **ACTIVE 가 아닌 계정**(정지 · 삭제 유예 · 지우는 중): 새 프로필 줄을 만들지 않는다 — `POST` 는 `404 AUTHOR_PROFILE.NOT_FOUND`. `GET /` 은 **이미 프로필이 있으면 읽을 수 있다**(정지 계정도 자기 목록을 본다)지만 옛 글을 옮기지는 않고, 프로필이 한 번도 없던 계정이 정지된 뒤 부르면 첫 프로필을 새로 만들 수 없어 같은 `404` 다.
+
+## 누출 스캔 시험과 검증 기록
+
+**연결 누출 스캔**(스펙 §12 1~7)은 `apps/sample` 의 `AuthorLinkLeakIntegrationTest` 다 — 진짜 PostgreSQL · 보안 체인에 board · account · author-profile · notification-jdbc · storage 가 다 끼워진 앱(`allow-anonymous-read=true`)에서 이 클래스만 돌린다: `./gradlew :apps:sample:test --tests '*AuthorLinkLeakIntegrationTest'`.
+
+- 계정 X 가 프로필 A(첫 프로필) · B · C 를 만들고, A 로 글 · B 로 글(둘 다 OPAQUE 첨부), Y 의 글에 A 로 댓글 · B 로 자기 댓글에 답글 · B 로 Y 의 댓글에 답글 · C 로 댓글, 반응 몇 개. **계정 이름은 첫 프로필이 복사해 간 뒤에 바꾼다**(금지 값인 현재 계정 이름이 A 의 공개 이름과 달라야 스캔이 둘을 구별한다).
+- Y(일반 사용자)와 Z(비로그인)가 읽을 수 있는 경로 전부 — 게시판 · config · 글 목록(정렬 · 반응 정렬 · 검색 · 쪽 · `mine`) · 상세 · 댓글 스레드(정렬 셋) · 오류 응답 · Y 의 받은편지함 · Y 가 SSE 로 받을 이벤트(구독자로 받아 같은 JSON) · X 의 프로필 id 로 `PATCH`/`DELETE`/`GET`/글 쓰기를 찔러 본 응답(없는 id · 모양이 틀린 id · `pending:` 꼴과 함께 상태 · 본문 · 헤더가 하나로 같다). 본문과 헤더를 모아 **금지 값**(X 의 계정 id · 이메일 · `AccountTombstone.of` · 현재 계정 이름; 대소문자 · URL 인코딩 무시)이 없음을, 그리고 A · B · C 의 조각(응답 객체를 `authorId` 로 묶어 잎 값을 뽑는다)이 **값으로** 겹치지 않음을 단정한다 — 허용 목록은 게시판 코드 · 상태 · 반응 종류 · 알림 종류 · 두 조각이 놓인 같은 글(Y 의 것)의 구조(제목 · 글 번호 · 최상위 댓글 번호) · 개수 칸뿐이고 null · 불리언은 비교하지 않는다. 첨부 키는 마디(`uuid.mac`)마다 따로 본다(고정 접두사와 `file[.확장자]` 만 공통 허용).
+- **스캔이 값을 찾는다는 증명이 먼저다**: `LeakScanTest`(합성 응답에 심은 값 · 겹치는 값을 찾고 허용 값은 넘긴다)와 통합 시험 1번(X 가 `/account/me` 를 읽으면 같은 스캔 함수가 계정 id · 이메일 · 계정 이름을 잡고, 비공개 열 `board_posts.author_id` 에서 계정 id 를, 탈퇴 뒤 톰스톤을 잡는다). 매 단계에서 A · B 의 조각 · 알림 · 첨부 키가 실제로 스캔에 들어갔는지도 단정한다(빈 스캔이 통과로 보이지 않게).
+- **상태를 바꿔 반복**: 기준선 → B 프로필 삭제 → 관리자 정지 → 정지 해제 · X 탈퇴(삭제 요청 → 유예 지나기 → 지우기). 각 단계에서 `authorId` 는 늘 프로필 id 이고 A · B 가 서로 다르며(`deleted:` 값이 어떤 응답에도 없다), `authorDeleted` · `authorName` 이 맞게 나온다(삭제한 프로필 · 탈퇴 뒤 `true` · `null`, 정지는 아무 표시 없음).
+- **DB 열 분류(§12 7)**: `board*` · `notification*` · `author_profiles` 의 모든 열을 `information_schema` 에서 읽어 `AuthorLinkColumns` 의 공개 / 비공개 표와 맞춘다(분류되지 않은 열 · 표에만 있는 열이 있으면 실패). PostgreSQL 은 위 통합 시험의 컨텍스트에서(공개 열 — `author_ref` · 남의 편지함 payload 포함 — 의 값에서 금지 값 · 짝 스캔을 단계마다 다시), MySQL 은 `AuthorLinkColumnsMySqlTest`(Flyway 로 `db/migration/mysql` 만 끝까지 적용한 MySQL 컨테이너의 열 목록).
+- 조립: 작성자 빈을 끼우지 않은 board(`modules/board` 의 `NoOptionalGoldenKeysTest`)의 응답 키가 작성자 프로필 이전(`e76e8e7`)과 같고 덧붙은 것이 `mine`(글 요약 · 상세 · 댓글) · `authorRequired`(config)뿐임을 키 집합으로 고정한다. 모듈을 끼우지 않은 `apps/api` 의 시험은 한 줄도 바뀌지 않는다.
+
+### 변이 확인 (손으로, 커밋하지 않고 원복) — 2026-10-08
+
+| # | 변이 | 결과 |
+|---|---|---|
+| (a) | `board` 의 `BoardDtos.kt` — 글 요약 · 상세 · 댓글 `toResponse` 가 공개 id(`publicAuthorId`) 대신 계정 id(`author_id`)를 `authorId` 로 내도록 | `AuthorLinkLeakIntegrationTest` 의 기준선 · B 삭제 · 정지 · 탈퇴 네 단계가 **"forbidden values in responses"** 로 실패(앞 셋은 `account id`, 탈퇴 뒤는 `tombstone` 이 읽기 응답 전체에서 잡힘). 열 분류 시험과 1번(양성 대조)은 통과 |
+| (b) | `board-jdbc` 의 `JdbcBoardErasureRepository.anonymizeAuthor` 가 톰스톤을 `author_id` 뿐 아니라 `author_ref` 에도 쓰도록(글 · 댓글) | **탈퇴 단계만** 같은 단정으로 실패(`tombstone` 값이 Y · Z 의 읽기 응답에 나옴). 기준선 · B 삭제 · 정지 단계는 통과 |
+| (c) | `board` 의 `BoardConfigResponse` 에 칸 하나(`sneaky`)를 더함 | `NoOptionalGoldenKeysTest` 실패(`e76e8e7` 키 + `authorRequired` 와 다른 집합) |
+
+세 변이 모두 원복했고(`git checkout`), 원복 뒤 같은 시험이 통과한다.
 
 [모듈 색인](README.md) · [최소 구성 가이드](../minimal-composition.md)

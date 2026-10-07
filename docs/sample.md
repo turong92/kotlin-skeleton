@@ -57,6 +57,7 @@
 - **시드 계정에 프로필을 만들어 둘 필요가 없다** — 첫 프로필은 계정 닉네임을 한 번 복사해 만들어진다: 옛 글이 있는 계정은 기동 때(`adopt-on-startup`), 없는 계정은 첫 `GET /api/v1/author-profiles` 때. 그래서 `application-local.yml` 의 시드 계정은 그대로이고, 프론트는 쓰기 전에 목록을 한 번 읽으면 된다.
 - 이미 글이 있는 DB 에서 켜면 기동 때 옛 글 · 댓글이 계정의 첫 프로필로 넘겨받혀 같은 이름으로 보인다 — 증거: `MigrationUpgradeIntegrationTest`(기준선 데이터 → 최신 마이그레이션 → 기동 → 게시판 읽기 경로 `GET /boards/upgrade/posts/{id}` 에서 옛 글이 첫 프로필 이름 · `prf_` 작성자 id 로 보인다).
 - **첨부 키에 계정 id 가 없다** — `skeleton.storage.web.key-owner: OPAQUE`(위 첨부 규칙). 비밀 `skeleton.storage.web.key-secret`(32자 이상)은 환경변수 `SKELETON_STORAGE_WEB_KEY_SECRET`(배포 선언의 `secrets:` — deploy/app.yaml 의 `[storage]` 줄, [deploy.md §7](deploy.md))로 받고 **기본값이 없다**: 비었으면 기동 실패. 로컬 · e2e 는 `application-local.yml` 에, 시험은 `src/test/resources/config/application.yml` 에 고정 더미 값이 있다 — **더미 비밀은 `local` 프로필 · 시험 전용**이다(같은 파일의 시드 계정이 stage/prod 에서 기동 가드에 막히므로 운영으로 새지 않는다). 게시판은 글 첨부 키에 호출자 계정 id 가 들어 있으면 `400 BOARD.CONTENT_INVALID` 로 막는다(옛 키 안전망).
+- 계약: `docs/author-profile-http-contract.md`. 누출 스캔: `AuthorLinkLeakIntegrationTest`(Y · Z 가 읽는 모든 경로에 X 의 값이 없고 프로필끼리 값으로 겹치지 않음 — 삭제 · 정지 · 탈퇴 뒤에도, 시드는 `src/test/resources/leak-seeds.yml`) · `AuthorLinkColumnsMySqlTest`(MySQL 열 분류).
 - 통합 시험: `BoardIntegrationTest`(쓰기 계약 · 읽는 사람 응답에 계정 id 없음 · 첨부 키), `NoteCrudIntegrationTest`(OPAQUE 키가 노트 첨부로 통과 · 남의 키 · 위조 mac), `AccountJourneyIntegrationTest`(탈퇴 뒤 글이 "삭제된 사용자").
 
 ## 돌려 보기

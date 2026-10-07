@@ -767,7 +767,7 @@
       },
       "basePaths": ["/api/v1/admin/author-profiles", "/api/v1/author-profiles"],
       "secrets": [],
-      "docs": ["docs/modules/author-profile.md"],
+      "docs": ["docs/modules/author-profile.md", "docs/author-profile-http-contract.md"],
       "frontend": {
         "capabilities": ["author-profile"],
         "newProjectFlag": "--packages author-profile",
