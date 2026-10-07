@@ -231,6 +231,17 @@ class JdbcErasureDbTest {
     }
 
     @Test
+    fun `releasing a claim lets the status change again - and an erased row has nothing to release`() {
+        leaving("acc_1", "c@example.com")
+        jdbc.update("update accounts set status = 'SUSPENDED', deleted_at = null, purge_after = null where id = 'acc_1'", emptyMap<String, Any>())
+        assertFalse(repo.releaseErasureClaim("acc_1"), "nothing was claimed")
+        assertTrue(repo.claimErasure("acc_1", now, forced = true))
+        assertTrue(repo.releaseErasureClaim("acc_1"))
+        assertFalse(repo.releaseErasureClaim("acc_1"), "already released")
+        assertEquals(AccountStatus.ACTIVE, repo.update("acc_1", AccountPatch(status = AccountStatus.ACTIVE, clearSuspendedReason = true), now)!!.status)
+    }
+
+    @Test
     fun `a claim racing a restore that reads a slower clock has exactly one winner, and the loser leaves no trace`() {
         val pool = Executors.newFixedThreadPool(8)
         try {

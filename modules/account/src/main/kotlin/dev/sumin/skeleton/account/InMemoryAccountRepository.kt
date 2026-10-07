@@ -158,6 +158,8 @@ class InMemoryAccountRepository : AccountRepository {
         return true
     }
 
+    @Synchronized override fun releaseErasureClaim(id: String): Boolean = accounts[id]?.status != AccountStatus.ERASED && claimed.remove(id)
+
     @Synchronized override fun restore(id: String, status: AccountStatus, now: Instant): Boolean {
         val a = accounts[id] ?: return false
         if (id in claimed) return false

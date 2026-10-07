@@ -133,24 +133,33 @@ class AccountPurgeService(
         val request = ErasureRequest(account.id, AccountTombstone.of(account.id))
         // 리스너를 부르기 **전에** 선점한다 — 유예 경계에서 취소가 이겨서 계정은 ACTIVE 인데 톰스톤 · 받은편지함 삭제가 이미 실행된 상태가 되지 않게 (선점되면 되살리기 · 상태 변경이 거절된다)
         if (!core.accounts.claimErasure(account.id, now)) return false
-        if (!runListeners(request)) return false
+        if (runListeners(request).failed) return false
         core.closeSensitiveLinks(current)   // 저장소가 토큰을 같이 지우지 못하는 구현(메모리 · 앱 구현)을 위해
         val done = if (keep) core.accounts.erase(account.id, now) else core.accounts.purge(account.id, now)
         if (done) core.events.publish(AccountEventType.ACCOUNT_PURGED, account.id)
         return done
     }
 
-    /** 모든 고리를 부른다 — 하나라도 실패하면 false (나머지는 부르지 않는다) */
-    private fun runListeners(request: ErasureRequest): Boolean =
-        listeners().firstOrNull { listener ->
-            try { listener.erase(request); false } catch (e: Exception) {
-                log.warn("erasure listener '{}' failed for an account; it stays for the next run: {}", listener.name, e.javaClass.simpleName); true
+    /** [runListeners] 의 결과 — [succeeded]: 실패 전에 끝난 고리 수 · [failed]: 하나가 실패해 멈췄다 */
+    private class ListenerRun(val succeeded: Int, val failed: Boolean)
+
+    /** 고리를 차례로 부른다 — 하나가 실패하면 거기서 멈춘다 (나머지는 부르지 않는다). 고리는 멱등이다 — 다시 부르면 처음부터 다시 돈다 */
+    private fun runListeners(request: ErasureRequest): ListenerRun {
+        var succeeded = 0
+        for (listener in listeners()) {
+            try { listener.erase(request); succeeded++ } catch (e: Exception) {
+                log.warn("erasure listener '{}' failed for an account; it stays for the next run: {}", listener.name, e.javaClass.simpleName)
+                return ListenerRun(succeeded, failed = true)
             }
-        } == null
+        }
+        return ListenerRun(succeeded, failed = false)
+    }
 
     /**
      * 운영자가 **정지된** 계정을 유예 없이 지운다 — 같은 고리들을 부르고, 이메일 · 로그인 수단의 재가입 차단(해시)을 남기고, 계정을 지운다(`deletion.mode` 대로).
      * 정지가 아니면 [AccountErrorCode.NOT_SUSPENDED], 이미 지웠으면 [AccountErrorCode.ERASED]. 고리가 실패하면 [AccountErrorCode.ERASURE_RETRY](503) — 계정은 정지 그대로이고 다시 부르면 된다 (멱등).
+     * 실패한 고리 **앞에서 성공한 고리가 없으면** 선점을 되돌린다(아무것도 지워지지 않았다 — 정지 해제가 그대로 된다). 일부가 성공한 뒤 실패했으면 선점을 **유지**한다:
+     * 이미 지워진 것이 있으니 정지를 풀 수 없고([AccountErrorCode.ERASURE_IN_PROGRESS], 409) 같은 지우기 호출을 다시 불러 끝낸다 — 선점은 정지 상태에서 다시 잡히고 고리는 처음부터 다시 돈다.
      */
     fun eraseSuspended(actorId: String, accountId: String, reason: String?): Boolean {
         if (actorId == accountId) throw AccountException(AccountErrorCode.SELF_ACTION_FORBIDDEN)
@@ -161,7 +170,11 @@ class AccountPurgeService(
         val keep = core.props.deletion.mode == AccountProperties.Deletion.Mode.ANONYMIZE
         // 선점 — 그 사이 다른 운영자가 정지를 풀었다면 이미 정지가 아니다. 선점한 뒤에는 정지 해제가 거절된다
         if (!core.accounts.claimErasure(accountId, core.time.now(), forced = true)) throw AccountException(AccountErrorCode.NOT_SUSPENDED)
-        if (!runListeners(ErasureRequest(accountId, AccountTombstone.of(accountId)))) throw AccountException(AccountErrorCode.ERASURE_RETRY)
+        val run = runListeners(ErasureRequest(accountId, AccountTombstone.of(accountId)))
+        if (run.failed) {
+            if (run.succeeded == 0) core.accounts.releaseErasureClaim(accountId)   // 아무것도 지워지지 않았다 — 선점이 남아 정지 해제를 영영 막지 않게
+            throw AccountException(AccountErrorCode.ERASURE_RETRY)
+        }
         core.blocks.add(account, identities, reason, actorId)   // 지우기 전에 — 지운 뒤에는 이메일 · 주체를 알 수 없다
         core.closeSensitiveLinks(account)
         val now = core.time.now()

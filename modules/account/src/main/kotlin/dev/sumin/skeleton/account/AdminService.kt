@@ -22,7 +22,7 @@ class AdminService(private val core: AccountCore) {
         if (target.status == AccountStatus.SUSPENDED) return
         when (core.accounts.updateUnlessLast(targetId, AccountPatch(status = AccountStatus.SUSPENDED, suspendedReason = reason?.take(200)), core.time.now(), adminRole)) {
             GuardedResult.LAST -> throw AccountException(AccountErrorCode.LAST_ADMIN)
-            GuardedResult.NOT_FOUND -> throw AccountException(AccountErrorCode.NOT_FOUND)
+            GuardedResult.NOT_FOUND -> throw notApplied(targetId)
             GuardedResult.DONE -> Unit
         }
         core.sessions()?.revokeAll(targetId, null)
@@ -33,13 +33,15 @@ class AdminService(private val core: AccountCore) {
         val target = get(targetId)
         if (target.status != AccountStatus.SUSPENDED) return
         val now = core.time.now()
-        if (target.deletedAt != null) {
+        // 저장소가 거절하면(지우기를 선점했거나 그 사이 지워졌다) 풀리지 않았다 — 204 도 이벤트도 내지 않는다
+        val applied = if (target.deletedAt != null) {
             // 탈퇴하려던 계정이 정지됐었다 — 정지를 풀면 탈퇴가 이어진다. 유예는 새로 (잘못된 정지였다면 그 사이 복구할 수 있게)
             val purgeAfter = maxOf(target.purgeAfter ?: now, now.plus(core.props.deletion.grace))
             core.accounts.update(targetId, AccountPatch(status = AccountStatus.DELETED, purgeAfter = purgeAfter, clearSuspendedReason = true), now)
         } else {
             core.accounts.update(targetId, AccountPatch(status = core.reopenedStatus(target), clearSuspendedReason = true), now)
         }
+        if (applied == null) throw notApplied(targetId)
         core.events.publish(AccountEventType.ACCOUNT_UNSUSPENDED, targetId, detail = mapOf("by" to actorId))
     }
 
@@ -79,6 +81,15 @@ class AdminService(private val core: AccountCore) {
         }
         if (revoked) core.events.publish(AccountEventType.ROLE_REVOKED, targetId, detail = mapOf("role" to role, "by" to actorId))
     }
+
+    /** 저장소가 상태 변경을 거절했다 — 지우기가 선점했거나(409, 지우기를 다시 부르면 끝난다) 이미 지워졌거나(410) 계정이 없다(404) */
+    private fun notApplied(id: String): AccountException = AccountException(
+        when (core.accounts.findById(id)?.status) {
+            null -> AccountErrorCode.NOT_FOUND
+            AccountStatus.ERASED -> AccountErrorCode.ERASED
+            else -> AccountErrorCode.ERASURE_IN_PROGRESS
+        },
+    )
 
     private fun validRole(role: String) {
         if (!ROLE.matches(role)) throw ApplicationException("Invalid role name", PlatformErrorCode.VALIDATION_FAILED)

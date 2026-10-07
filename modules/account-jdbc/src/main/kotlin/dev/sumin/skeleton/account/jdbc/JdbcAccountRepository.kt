@@ -269,6 +269,9 @@ class JdbcAccountRepository(
             jdbc.update("update accounts set erase_claimed_at = :now where id = :id", MapSqlParameterSource().addValue("id", id).addValue("now", dialect.instantParam(now))) == 1
         } ?: false
 
+    override fun releaseErasureClaim(id: String): Boolean =
+        jdbc.update("update accounts set erase_claimed_at = null where id = :id and status <> 'ERASED' and erase_claimed_at is not null", mapOf("id" to id)) == 1
+
     override fun restore(id: String, status: AccountStatus, now: Instant): Boolean =
         jdbc.update(
             "update accounts set status = :status, deleted_at = null, purge_after = null, updated_at = :now " +

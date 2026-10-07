@@ -202,6 +202,12 @@ interface AccountRepository {
      */
     fun claimErasure(id: String, now: Instant, forced: Boolean = false): Boolean
 
+    /**
+     * [claimErasure] 의 선점을 되돌린다 — 운영자 지우기에서 **리스너가 하나도 성공하기 전에** 실패했을 때 (아무것도 지워지지 않았으니 정지 해제 · 되살리기가 다시 가능해야 한다).
+     * ERASED 가 아니고 선점돼 있었으면 true. 기본 구현은 아무것도 하지 않는다(false) — 앱이 저장소를 직접 구현했다면 선점 표시를 지우도록 덮어쓴다
+     */
+    fun releaseErasureClaim(id: String): Boolean = false
+
     /** 삭제 유예가 **아직 안 끝난** DELETED 계정을 [status] 로 되살린다 (한 문장 조건부 갱신 — [purge] 와 동시에 둘 다 이기지 못한다; [claimErasure] 된 계정은 안 된다). 되살렸으면 true */
     fun restore(id: String, status: AccountStatus, now: Instant): Boolean
 

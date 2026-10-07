@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.account
 
+import dev.sumin.skeleton.account.events.AccountEventType
 import dev.sumin.skeleton.common.ApplicationException
 import dev.sumin.skeleton.common.erasure.AccountErasureListener
 import dev.sumin.skeleton.common.erasure.ErasureRequest
@@ -105,5 +106,54 @@ class ErasureClaimTest {
         broken = false
         assertTrue(h.purge.eraseSuspended(admin.id, a.id, "fraud"))
         assertEquals(AccountStatus.ERASED, h.repo.findById(a.id)!!.status)
+    }
+
+    private fun AccountHarness.suspendedVictim(): Pair<Account, Account> {
+        val admin = activeAccount("admin@example.com").also { repo.grantRole(it.id, "ADMIN", time.now()) }
+        val a = activeAccount("ann@example.com")
+        this.admin.suspend(admin.id, a.id, "fraud")
+        return admin to a
+    }
+
+    @Test
+    fun `an erase whose FIRST listener fails gives the claim back - the account can be unsuspended afterwards`() {
+        val h = harness()
+        val (admin, a) = h.suspendedVictim()
+        h.erasers += object : AccountErasureListener { override val name = "down"; override fun erase(request: ErasureRequest) = error("db down") }
+        assertFailsWith<ApplicationException> { h.purge.eraseSuspended(admin.id, a.id, "fraud") }
+        h.events.all.clear()
+        h.admin.unsuspend(admin.id, a.id)
+        assertEquals(AccountStatus.ACTIVE, h.repo.findById(a.id)!!.status, "no listener had run, so nothing was lost and the account is not stuck")
+        assertTrue(AccountEventType.ACCOUNT_UNSUSPENDED in h.events.types())
+    }
+
+    @Test
+    fun `an erase that failed AFTER a listener succeeded keeps the claim - unsuspend is a 409 with no event, and repeating the erase finishes it`() {
+        val h = harness()
+        val (admin, a) = h.suspendedVictim()
+        var ranFirst = 0
+        var broken = true
+        h.erasers += object : AccountErasureListener { override val name = "first"; override fun erase(request: ErasureRequest) { ranFirst++ } }
+        h.erasers += object : AccountErasureListener { override val name = "flaky"; override fun erase(request: ErasureRequest) { if (broken) error("db down") } }
+        assertFailsWith<ApplicationException> { h.purge.eraseSuspended(admin.id, a.id, "fraud") }
+        h.events.all.clear()
+        val refused = assertFailsWith<ApplicationException> { h.admin.unsuspend(admin.id, a.id) }
+        assertEquals("ACCOUNT.ERASURE_IN_PROGRESS", refused.errorCode.code)
+        assertTrue(AccountEventType.ACCOUNT_UNSUSPENDED !in h.events.types(), "a refused unsuspend announces nothing")
+        assertEquals(AccountStatus.SUSPENDED, h.repo.findById(a.id)!!.status)
+        broken = false
+        assertTrue(h.purge.eraseSuspended(admin.id, a.id, "fraud"), "the same call resumes: listeners are idempotent and run again")
+        assertEquals(2, ranFirst)
+        assertEquals(AccountStatus.ERASED, h.repo.findById(a.id)!!.status)
+    }
+
+    @Test
+    fun `suspending an account whose purge has claimed it is a 409, not a silent 404`() {
+        val h = harness()
+        val admin = h.activeAccount("admin@example.com").also { h.repo.grantRole(it.id, "ADMIN", h.time.now()) }
+        val a = h.leave()
+        h.repo.claimErasure(a.id, h.time.now())
+        val refused = assertFailsWith<ApplicationException> { h.admin.suspend(admin.id, a.id, "x") }
+        assertEquals("ACCOUNT.ERASURE_IN_PROGRESS", refused.errorCode.code)
     }
 }
