@@ -10,6 +10,7 @@ fun interface AuthorDirectory {
     /**
      * [ids] 의 이름을 **한 번에** 돌려준다 — 호출하는 쪽은 요청 하나에 한 번만 부른다(목록 · 스레드 전체의 작성자를 모아서). 모르는 id 는 결과에 없어도 된다.
      * 구현은 느리거나 던질 수 있다는 전제로 부르는 쪽이 감싼다. 지워진 작성자(톰스톤)는 넘기지 않는다.
+ * 계정 톰스톤(`deleted:…`)은 넘기지 않는다. 지워진 **프로필**은 넘겨도 되고 카드 `deleted=true` 로 답한다(그때 [AuthorCard.name] 은 null).
      */
     fun resolve(ids: Collection<String>, context: AuthorContext): Map<String, AuthorCard>
 
@@ -46,7 +47,11 @@ interface AuthorAdoptionListener {
     /** 이 구현의 이름(로그 · 진행 표시용) */
     val name: String
 
-    /** 아직 옮기지 않은 행을 가진 계정 id (지워진 계정 제외), 최대 [limit] 개 */
+    /**
+     * 아직 옮기지 않은 행을 가진 계정 id (지워진 계정 제외), **앞쪽부터** 최대 [limit] 개.
+     * 실행기 계약: 한 바퀴에 진행(`adopt` 가 1 이상)이 없으면 실행기는 그 바퀴에서 멈춘다 — 던지거나 0 을 돌려주는 계정이
+     * 뒤 계정을 굶기지 않게, 계정별 예외는 삼키고 로그를 남기며 다음 기동 때 다시 한다.
+     */
     fun pendingAccounts(limit: Int): List<String>
 
     /** [accountId] 의 옛 행을 공개 작성자 id [authorId] 로 옮기고 옮긴 행 수를 돌려준다. 이미 옮겼으면 0 */
