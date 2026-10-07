@@ -10,8 +10,8 @@
 
 | 메서드 · 경로 | 하는 일 | 누가 |
 |---|---|---|
-| `POST /api/v1/account/sign-up` | 가입 시도 — **늘 202 + `signUpId`** (있는 주소여도 같은 응답, 계정은 아직 없다) | 공개 |
-| `POST /api/v1/account/verification/resend` · `POST /api/v1/auth/verify-email` | 같은 시도의 새 코드 · `{signUpId, code}` 로 확인 — 계정을 만들고 **로그인(토큰)** | 공개 |
+| `POST /api/v1/account/sign-up` | 가입 시도 — **늘 202 + `signUpId` + `expiresAt` · `resendAvailableAt`**(카운트다운용 — 있는 주소여도 · 메일이 안 나가도 같은 응답, 계정은 아직 없다) | 공개 |
+| `POST /api/v1/account/verification/resend` · `POST /api/v1/auth/verify-email` | 같은 시도의 새 코드(만료된 시도도 되살린다 · 응답에 `expiresAt` · `resendAvailableAt`) · `{signUpId, code}` 로 확인 — 계정을 만들고 **로그인(토큰)** | 공개 |
 | `POST /api/v1/account/password/forgot` · `…/reset` · `GET …/policy` | 재설정 메일(늘 202) · 새 비밀번호(모든 세션 종료) · 정책 힌트 | 공개 |
 | `POST /api/v1/account/password/change` | 현재 비밀번호 필요(없는 계정은 첫 비밀번호 설정). 다른 세션 종료 | 로그인 |
 | `POST /api/v1/account/email/change` · `POST /api/v1/account/email/change/confirm` | 새 주소로 코드(202) · 같은 세션에서 코드 입력하면 바뀜(옛 주소에 알림) | 로그인 |
@@ -32,7 +32,7 @@
 | 설정 접두사 | `skeleton.account` — [docs/config/modules/account.yml](../config/modules/account.yml) |
 | 기본 동작 | 켜짐. 가입 · 확인 · 재설정 · 변경 · 삭제 HTTP 와 로그인 시도 제한이 켜지고, 관리자 HTTP · 소셜 가입 · 병합 · 시드 계정 · 첫 관리자 · 링크 로그는 꺼져 있다. 저장은 메모리(로컬) — 운영은 `account-jdbc`. 메일 모듈이 없으면 보내지 않고 알린다. |
 | 부팅에 필요한 것 | 로컬 · 시험: 없음. stage · prod(`skeleton.env` 또는 auth 의 보호 프로필): 저장소 · 토큰 저장소 · 챌린지 저장소(`account-jdbc`), 메일 발송기(`notification-mail`), `skeleton.account.mail.link-base-url` — 없으면 `DeployGuard`(`account`)가 기동을 막고 시드 계정 · 링크 로그 켬도 막는다. |
-| 교체 지점 | `AccountRepository`, `OneTimeTokenStore`, `ChallengeStore`, `CodeHasher`, `SocialReauthVerifier`, `PasswordPolicy`, `BreachedPasswordCheck`, `PasswordEncoder`, `AccountMailTemplates`, `AccountMailLayout`, `AccountMailTransport`, `AccountMailer`, `AccountTaskRunner`, `AccountCaptcha`, `AccountEventPublisher`, `AccountEventListener`, `SignInMethod`, `AccountTransaction`, `AccountCallers`, `AccountPublicController`, `AccountController`, `AdminAccountController`, `AccountDeployGuard` |
+| 교체 지점 | `AccountRepository`, `OneTimeTokenStore`, `ChallengeStore`, `CodeHasher`, `SocialReauthVerifier`, `PasswordPolicy`, `BreachedPasswordCheck`, `PasswordEncoder`, `AccountMailTemplates`, `AccountMailLayout`, `AccountMailTransport`, `AccountMailer`, `AccountTaskRunner`, `AccountCaptcha`, `AccountEventPublisher`, `AccountEventListener`, `SignInMethod`, `AccountTransaction`, `AccountBlockStore`, `AccountBlocks`, `AccountMaintenanceLease`, `MagicLinkIssuer`, `AccountCallers`, `AccountPublicController`, `AccountController`, `AdminAccountController`, `AccountDeployGuard` |
 | 마이그레이션 | 없음 (스키마는 `account-jdbc`) |
 | 프론트 짝 | `@skeleton/auth` |
 | 테스트 | `modules/account/src/test`, `modules/account/src/noOptionalTest` (선택 통합이 클래스패스에 없을 때) |

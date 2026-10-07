@@ -187,7 +187,8 @@ interface AccountRepository {
      * 행은 남기고 개인정보만 지운다(`deletion.mode=ANONYMIZE`) — [purge] 와 같은 조건(DELETED + 유예 끝남)에서 **한 트랜잭션**으로:
      * 이메일 · 이름 · 로케일 · 시간대 · 정지 사유 · 마지막 로그인을 비우고 `status=ERASED`, `erased_at=now`; 로그인 수단(비밀번호 해시 · 제공자 주체) · 역할을 지우고,
      * 그 계정의 한 번 쓰는 토큰 · 코드 · 이메일 변경 대기를 지우고, 감사 행의 IP · 상세를 비운다. 조건이 안 맞으면(되살려졌거나 이미 지움) 아무것도 바꾸지 않고 false.
-     * [forced] (운영자가 정지한 계정을 지울 때): 조건이 DELETED + 유예 끝남 대신 **SUSPENDED** 다 — [purge] 도 같다
+     * [forced] (운영자가 정지한 계정을 지울 때): 조건이 DELETED + 유예 끝남 대신 **SUSPENDED** 다 — [purge] 도 같다.
+     * **JDBC 구현은 토큰 · 챌린지 · 감사 표를 이 저장소가 직접(같은 트랜잭션에서) 지운다** — `OneTimeTokenStore` · `ChallengeStore` 를 앱이 바꿨다면 자기 `erase` · `purge` 에서 자기 표를 같이 지운다 (못 지운 줄은 서비스의 `closeSensitiveLinks` + 만료 청소가 마지막 방어)
      */
     fun erase(id: String, now: Instant, forced: Boolean = false): Boolean
 

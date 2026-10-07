@@ -63,6 +63,7 @@ skeleton:
       link-base-url: ""                # 메일 링크의 앞부분(프론트 주소). 비면 stage · prod 의 DeployGuard 가 문제로 본다
       reset-path: /reset-password      # 링크로 가는 메일은 재설정 · 매직 링크 둘뿐이다 (나머지는 코드)
       magic-link-path: /magic-link
+      login-path: /login               # "이미 계정이 있어요" 메일이 가리키는 프론트 로그인 페이지 (link-base-url + 이 경로, 토큰 없음)
       default-locale: en               # 계정 로케일이 없거나 지원하지 않을 때 메일 언어 (ko · en 내장)
       subject-prefix: ""               # 제목 앞 서비스 이름 (예: "[MyService]")
       html-enabled: true               # false 면 HTML 대체 본문 없이 텍스트만 보낸다 (어떤 AccountMailTemplates 든)
