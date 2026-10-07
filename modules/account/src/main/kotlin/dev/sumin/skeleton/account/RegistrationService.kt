@@ -160,10 +160,10 @@ class RegistrationService(private val core: AccountCore) {
      * 코드로 가입한 사람의 로그인을 **토큰이 발급된 뒤에** 기록한다 — [verifyEmail] 의 결과로 토큰 발급이 막히면(정지 · 삭제) 성공 로그인으로 남지 않는다.
      * 호출자(컨트롤러)가 `AuthTokenResponseFactory.issue` 가 던지지 않은 다음에 부른다.
      */
-    fun recordSignIn(accountId: String, ip: String?) {
+    fun recordSignIn(accountId: String, ip: String?, method: String = SignInMethods.PASSWORD) {
         val now = core.time.now()
         core.accounts.update(accountId, AccountPatch(lastLoginAt = now), now)
-        core.events.publish(AccountEventType.LOGIN_SUCCESS, accountId, ip, mapOf("method" to SignInMethods.PASSWORD))
+        core.events.publish(AccountEventType.LOGIN_SUCCESS, accountId, ip, mapOf("method" to method))
     }
 
     private fun refuseIfBlocked(email: String) {

@@ -53,7 +53,7 @@ class AccountSignInService(private val core: AccountCore, val registry: SignInMe
         val account = if (existing != null) core.accounts.findById(existing.accountId) else resolveNew(method, subject, email, proof)
         if (account == null) return null
         // 탈퇴 대기 계정의 주인이 증명에 성공했다 — 세션 · 로그인 기록 없이 "탈퇴 대기" 상태만 (`deletion.self-restore`). 아니면 없는 계정처럼
-        if (account.status == AccountStatus.DELETED && core.props.deletion.selfRestore) return auth.toAuth(account)
+        if (account.status == AccountStatus.DELETED && core.props.deletion.selfRestore) return auth.toAuth(account, method.code)
         if (account.status.departed) return null
         // 정지는 박제 — 아무것도 붙이지도 · 기록하지도 않고 정지 상태만 돌려준다 (호출자가 토큰 발급에서 AUTH.ACCOUNT_SUSPENDED 로 거절한다)
         if (account.status == AccountStatus.SUSPENDED) return auth.toAuth(account)

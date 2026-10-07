@@ -24,7 +24,8 @@ class AccountAuthRepository(private val core: AccountCore) : AuthAccountReposito
         return toAuth(account)
     }
 
-    fun toAuth(account: Account): AuthAccount? {
+    /** [via]: 로그인에 성공한 수단 코드 — 탈퇴 취소 토큰에 실려 취소 뒤 로그인 기록이 실제 수단을 적게 한다 (모르면 비밀번호 로그인 길이다) */
+    fun toAuth(account: Account, via: String = SignInMethods.PASSWORD): AuthAccount? {
         val pending = pendingDeletion(account)
         if (account.status.departed && !pending) return null
         val hash = account.email?.let { core.accounts.findIdentity(SignInMethods.PASSWORD, it)?.secret }.orEmpty()
@@ -39,7 +40,7 @@ class AccountAuthRepository(private val core: AccountCore) : AuthAccountReposito
                 AccountStatus.SUSPENDED -> LoginBlock.SUSPENDED
                 else -> if (pending) LoginBlock.DELETION_PENDING else null
             },
-            blockData = if (pending) ({ restoreState(account) }) else null,
+            blockData = if (pending) ({ restoreState(account, via) }) else null,
         )
     }
 
@@ -48,8 +49,8 @@ class AccountAuthRepository(private val core: AccountCore) : AuthAccountReposito
         core.props.deletion.selfRestore && account.status == AccountStatus.DELETED && account.purgeAfter?.isAfter(core.time.now()) == true
 
     /** 로그인에 성공해 토큰을 내려던 순간에만 부른다 — 새 취소 토큰이 이전 것을 닫는다 */
-    private fun restoreState(account: Account): Map<String, Any?> {
-        val raw = core.tokens.issue(TokenPurposes.DELETION_RESTORE, account.id, account.id, core.props.deletion.selfRestoreTtl)
+    private fun restoreState(account: Account, via: String): Map<String, Any?> {
+        val raw = core.tokens.issue(TokenPurposes.DELETION_RESTORE, account.id, account.id, core.props.deletion.selfRestoreTtl, payload = via)
         return mapOf("purgeAfter" to account.purgeAfter, "restoreToken" to raw, "restoreTokenExpiresAt" to core.time.now().plus(core.props.deletion.selfRestoreTtl))
     }
 

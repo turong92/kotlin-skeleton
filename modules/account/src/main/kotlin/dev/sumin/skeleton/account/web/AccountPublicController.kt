@@ -86,9 +86,9 @@ class AccountPublicController(
     @PostMapping("/account/delete/cancel")
     fun cancelDeletion(@Valid @RequestBody request: CancelDeletionRequest, http: HttpServletRequest): DataResponse<AuthTokenResponse> =
         clientIps.of(http).let { client ->
-            val account = deletion.cancel(request.restoreToken!!, client.ip, client.limitKey)
-            val response = tokens().issue(account)
-            registration.recordSignIn(account.accountId, client.ip)
+            val cancelled = deletion.cancelWithMethod(request.restoreToken!!, client.ip, client.limitKey)
+            val response = tokens().issue(cancelled.auth)
+            registration.recordSignIn(cancelled.auth.accountId, client.ip, cancelled.method)   // 취소를 낳은 로그인의 실제 수단
             Response.ok(response)
         }
 

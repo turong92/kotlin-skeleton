@@ -74,6 +74,21 @@ class SelfRestoreTest {
     }
 
     @Test
+    fun `the cancel reports the sign-in method that earned the restore token - the login it records is not always a password`() {
+        val h = harness()
+        val a = h.pending()
+        val viaPassword = h.stateOf()!!.blockData!!().token()
+        assertEquals("password", h.deletion.cancelWithMethod(viaPassword, null).method)
+
+        h.deletion.delete(a.id, PW, null)
+        h.repo.addIdentity(Identity(h.core.newIdentityId(), a.id, "google", "g-ann", true, createdAt = h.time.now()))
+        val social = assertNotNull(AccountSignInService(h.core, SignInMethodRegistry(listOf(PasswordSignInMethod(), Google))).signIn(SignInProof("google", "g-ann", null, false, "Ann", "ko", "203.0.113.1", true)))
+        val cancelled = h.deletion.cancelWithMethod(social.blockData!!().token(), null)
+        assertEquals("google", cancelled.method)
+        assertEquals(a.id, cancelled.auth.accountId)
+    }
+
+    @Test
     fun `asking for the state again replaces the earlier token - only the newest works`() {
         val h = harness()
         h.pending()
