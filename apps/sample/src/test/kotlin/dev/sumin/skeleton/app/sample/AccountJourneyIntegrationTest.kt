@@ -100,8 +100,10 @@ class AccountJourneyIntegrationTest {
         // a post that must survive the deletion
         val relogin = post("/api/v1/auth/login", """{"email":"$email","password":"$first"}""").andReturn().response.contentAsString
         val me = field(relogin, "$.value.accessToken")
+        // 작성자 프로필이 켜진 앱: 쓰기에는 내 프로필 id 가 필요하다 — 첫 프로필은 GET 이 보장하고 계정 이름을 복사해 갖는다
+        val profileId = field(mvc.get("/api/v1/author-profiles") { header("Authorization", "Bearer $me") }.andExpect { status { isOk() } }.andReturn().response.contentAsString, "$.values[0].id")
         val postId = JsonPath.read<Number>(
-            post("/api/v1/boards/general/posts", """{"title":"남길 글","body":"본문"}""", me, "Idempotency-Key" to UUID.randomUUID().toString())
+            post("/api/v1/boards/general/posts", """{"title":"남길 글","body":"본문","authorId":"$profileId"}""", me, "Idempotency-Key" to UUID.randomUUID().toString())
                 .andExpect { status { isCreated() } }.andReturn().response.contentAsString, "$.value.id",
         ).toLong()
 
@@ -114,10 +116,11 @@ class AccountJourneyIntegrationTest {
         // (the other person's own browser: its session must not carry this test's user agent)
         val admin0 = field(mvc.post("/api/v1/auth/login") { contentType = MediaType.APPLICATION_JSON; content = """{"email":"admin@example.com","password":"password"}""" }.andReturn().response.contentAsString, "$.value.accessToken")
         val others = JsonPath.read<Number>(
-            post("/api/v1/boards/general/posts", """{"title":"운영자 글","body":"본문"}""", admin0, "Idempotency-Key" to UUID.randomUUID().toString()).andExpect { status { isCreated() } }.andReturn().response.contentAsString, "$.value.id",
+            post("/api/v1/boards/general/posts", """{"title":"운영자 글","body":"본문","authorId":"${field(mvc.get("/api/v1/author-profiles") { header("Authorization", "Bearer $admin0") }.andReturn().response.contentAsString, "$.values[0].id")}"}""", admin0, "Idempotency-Key" to UUID.randomUUID().toString()).andExpect { status { isCreated() } }.andReturn().response.contentAsString, "$.value.id",
         ).toLong()
-        post("/api/v1/boards/general/posts/$others/comments", """{"body":"좋은 글이에요"}""", me, "Idempotency-Key" to UUID.randomUUID().toString()).andExpect { status { isCreated() } }
-        assertEquals(1L, jdbc.sql("select count(*) from notification_inbox where payload_json like :v").param("v", "%$accountId%").query(Long::class.java).single(), "the alert reached the other person's inbox (so the scan below is not vacuous)")
+        post("/api/v1/boards/general/posts/$others/comments", """{"body":"좋은 글이에요","authorId":"$profileId"}""", me, "Idempotency-Key" to UUID.randomUUID().toString()).andExpect { status { isCreated() } }
+        assertEquals(1L, jdbc.sql("select count(*) from notification_inbox where payload_json like :v").param("v", "%$profileId%").query(Long::class.java).single(), "the alert reached the other person's inbox, naming the author by profile id (so the scan below is not vacuous)")
+        assertEquals(0L, jdbc.sql("select count(*) from notification_inbox where payload_json like :v").param("v", "%$accountId%").query(Long::class.java).single(), "the alert never carries the account id")
         assertEquals(0L, jdbc.sql("select count(*) from notification_inbox where payload_json like :v").param("v", "%$displayName%").query(Long::class.java).single(), "the alert names the author by id only")
 
         post("/api/v1/account/password/change", """{"currentPassword":"$first","newPassword":"$second"}""", me).andExpect { status { isNoContent() } }

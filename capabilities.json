@@ -2095,7 +2095,7 @@
       "module": null,
       "path": "apps/sample",
       "status": "stable",
-      "summary": "참조 앱 Notes — 로그인한 사람이 첨부 있는 노트를 관리하는 제품 모양의 작은 앱(스타터 + idempotency · notification-jdbc/sse · storage-s3 · job-queue-jdbc · board · alert-jdbc). 새 기능은 이 앱의 한 조각을 따라 한다.",
+      "summary": "참조 앱 Notes — 로그인한 사람이 첨부 있는 노트를 관리하는 제품 모양의 작은 앱(스타터 + idempotency · notification-jdbc/sse · storage-s3 · job-queue-jdbc · board · author-profile · alert-jdbc). 새 기능은 이 앱의 한 조각을 따라 한다.",
       "starter": false,
       "newProjectFlag": "--with-sample",
       "autoIncludes": [
@@ -2106,6 +2106,8 @@
         "auth-social-naver",
         "auth-social-oidc",
         "auth-social-x",
+        "author-profile",
+        "author-profile-jdbc",
         "board",
         "board-jdbc",
         "crypto",

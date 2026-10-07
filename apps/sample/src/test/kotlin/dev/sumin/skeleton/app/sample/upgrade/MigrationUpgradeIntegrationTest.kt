@@ -8,6 +8,8 @@ import dev.sumin.skeleton.board.NewComment
 import dev.sumin.skeleton.board.PostRepository
 import dev.sumin.skeleton.board.ReactionRepository
 import dev.sumin.skeleton.board.ReactionTarget
+import dev.sumin.skeleton.common.author.AuthorContext
+import dev.sumin.skeleton.common.author.AuthorDirectory
 import dev.sumin.skeleton.legal.ConsentAction
 import dev.sumin.skeleton.legal.ConsentStore
 import dev.sumin.skeleton.legal.NewConsentEvent
@@ -17,7 +19,6 @@ import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.jdbc.autoconfigure.JdbcConnectionDetails
@@ -30,7 +31,8 @@ import org.springframework.jdbc.core.simple.JdbcClient
 /**
  * 업그레이드 시험 (PostgreSQL, 모든 모듈의 마이그레이션이 한 DB 에): 기준선 스키마(`migrations.lock` 의 baseline)에 모듈별 대표 행을 넣고 →
  * 앱이 뜨며(= Flyway 가 최신까지 migrate) → 행이 살아 있고 모듈의 저장소 코드가 그 행을 읽고 쓴다.
- * 기준선 뒤에 더해진 V 파일(예: board_author_ref)은 이 데이터 위에서 돈다 — 새 V 파일이 생기면 자동으로 검증된다 (docs/schema-management.md).
+ * 기준선 뒤에 더해진 V 파일(예: board_author_ref · author_profiles)은 이 데이터 위에서 돈다 — 새 V 파일이 생기면 자동으로 검증된다 (docs/schema-management.md).
+ * 앱은 작성자 프로필을 켠 채 뜨므로 기동 뒤에는 옛 글이 첫 프로필로 넘겨받혀 이름이 보인다.
  */
 @SpringBootTest(properties = ["skeleton.job-queue.poll-interval=200ms", "spring.config.import=classpath:test-seeds.yml"])
 @Import(MigrationUpgradeIntegrationTest.BaselineDatabase::class, SampleIntegrationTest.FakeStorageConfiguration::class)
@@ -54,6 +56,7 @@ class MigrationUpgradeIntegrationTest {
     @Autowired lateinit var comments: CommentRepository
     @Autowired lateinit var reactions: ReactionRepository
     @Autowired lateinit var inbox: NotificationInboxRepository
+    @Autowired lateinit var authors: AuthorDirectory
 
     private val now = Instant.parse("2026-10-07T00:00:00Z")
 
@@ -105,9 +108,15 @@ class MigrationUpgradeIntegrationTest {
     fun `board - the baseline post is readable, takes a new comment and keeps its reaction`() {
         val postId = jdbc.sql("select id from board_posts where board_code = 'upgrade'").query(Long::class.java).single()
         assertEquals("Before the upgrade", assertNotNull(posts.find(postId)).title)
-        assertNull(assertNotNull(posts.find(postId)).authorRef, "a baseline post has no author_ref")
+        // 마이그레이션이 만든 author_ref 는 비어 있었지만(MySqlMigrationUpgradeTest 가 그 순간을 본다) 이 앱은 author-profile 을 켜고 떴다 —
+        // 기동 실행기(adopt-on-startup)가 옛 글 · 댓글을 계정의 첫 프로필로 넘겨받았고, 그 프로필이 계정 이름을 한 번 복사해 갖는다 (스펙 §7.4 · §12 조립 줄)
+        val ref = assertNotNull(assertNotNull(posts.find(postId)).authorRef, "adopt-on-startup gave the baseline post a first profile")
+        assertTrue(ref.startsWith("prf_"), ref)
+        val card = assertNotNull(authors.resolve(listOf(ref), AuthorContext("board", "upgrade"))[ref], "the old post shows under the first profile")
+        assertEquals("Upgrader", card.name, "the first profile copied the account name")
+        assertTrue(Regex("[0-9]{4}").matches(card.tag.orEmpty()) && !card.deleted, card.toString())   // 기준선 꼬리표 0000 은 자리표시라 프로필이 새로 뽑는다 — 값은 정하지 않는다
         val baselineComment = jdbc.sql("select id from board_comments where post_id = :p and author_id = 'acc_upgrade'").param("p", postId).query(Long::class.java).single()
-        assertNull(assertNotNull(comments.find(baselineComment)).authorRef, "a baseline comment has no author_ref")
+        assertEquals(ref, assertNotNull(comments.find(baselineComment)).authorRef, "the baseline comment went to the same first profile")
         val added = assertNotNull(comments.insert(NewComment(postId, null, null, 0, "acc_upgrade", "after the upgrade", now)))
         assertEquals("after the upgrade", assertNotNull(comments.find(added.id)).body)
         assertEquals(mapOf("LIKE" to 1L), reactions.counts(ReactionTarget.POST, listOf(postId))[postId])

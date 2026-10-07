@@ -24,6 +24,8 @@ dependencies {
     implementation(project(":modules:job-queue-jdbc"))     // 내보내기 같은 오래 걸리는 일 (재시도 큐)
     implementation(project(":modules:board"))              // 게시판: 글 · 대댓글 · 종류가 있는 반응 (/api/v1/boards). 댓글 알림은 위 notification 이 있어서 켜진다
     implementation(project(":modules:board-jdbc"))         // 게시판 저장소 (board 는 저장소를 모른다)
+    implementation(project(":modules:author-profile"))     // 작성자 프로필: 한 계정이 닉네임을 여러 개 만들어 글 · 댓글마다 골라 쓴다 (+ /api/v1/author-profiles). board 가 이것을 보고 공개 작성자 id 를 prf_… 로 낸다 — docs/modules/author-profile.md
+    implementation(project(":modules:author-profile-jdbc")) // 프로필 저장소 (author-profile 은 저장소를 모른다)
     implementation(project(":modules:auth-social-google")) // 소셜 로그인 — 꺼진 채 시작한다: 제공자마다 SKELETON_AUTH_SOCIAL_PROVIDERS_<X>_ENABLED=true + client id/secret (docs/real-provider-setup.md)
     implementation(project(":modules:auth-social-kakao"))
     implementation(project(":modules:auth-social-naver"))

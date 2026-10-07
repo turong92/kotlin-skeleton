@@ -5,6 +5,8 @@ import dev.sumin.skeleton.app.sample.notes.SampleIntegrationTest
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import org.hamcrest.Matchers.hasItem
 import org.hamcrest.Matchers.hasSize
 import org.springframework.http.MediaType
@@ -18,18 +20,26 @@ import org.springframework.test.web.servlet.put
 class BoardIntegrationTest : SampleIntegrationTest() {
     private lateinit var moderator: String
 
+    /** 이 호출자의 첫 프로필 id(prf_…) — `GET /author-profiles` 가 첫 프로필을 보장한다. 쓰기에는 이것을 `authorId` 로 보낸다 (작성자 프로필이 켜진 앱의 계약) */
+    private fun profileOf(token: String): String =
+        mockMvc.get("/api/v1/author-profiles") { header("Authorization", "Bearer $token") }
+            .andExpect { status { isOk() } }.andReturn().let { JsonPath.read<String>(it.response.contentAsString, "$.values[0].id") }
 
+    private fun createPost(token: String, title: String = "첫 글", body: String = "안녕하세요", authorId: String? = profileOf(token)): Long =
+        postRaw(token, """{"title":${json(title)},"body":${json(body)}${authorId?.let { ""","authorId":"$it"""" } ?: ""}}""")
+            .andExpect { status { isCreated() } }.andReturn().let { JsonPath.read<Number>(it.response.contentAsString, "$.value.id").toLong() }
 
-    private fun createPost(token: String, title: String = "첫 글", body: String = "안녕하세요"): Long =
+    private fun postRaw(token: String, bodyJson: String): ResultActionsDsl =
         mockMvc.post("/api/v1/boards/general/posts") {
             header("Authorization", "Bearer $token"); header("Idempotency-Key", UUID.randomUUID().toString())
-            contentType = MediaType.APPLICATION_JSON; content = """{"title":${json(title)},"body":${json(body)}}"""
-        }.andExpect { status { isCreated() } }.andReturn().let { JsonPath.read<Number>(it.response.contentAsString, "$.value.id").toLong() }
+            contentType = MediaType.APPLICATION_JSON; content = bodyJson
+        }
 
-    private fun comment(token: String, post: Long, text: String, parent: Long? = null): ResultActionsDsl =
+    private fun comment(token: String, post: Long, text: String, parent: Long? = null, authorId: String? = profileOf(token)): ResultActionsDsl =
         mockMvc.post("/api/v1/boards/general/posts/$post/comments") {
             header("Authorization", "Bearer $token"); header("Idempotency-Key", UUID.randomUUID().toString())
-            contentType = MediaType.APPLICATION_JSON; content = """{"body":${json(text)}${parent?.let { ""","parentId":$it""" } ?: ""}}"""
+            contentType = MediaType.APPLICATION_JSON
+            content = """{"body":${json(text)}${parent?.let { ""","parentId":$it""" } ?: ""}${authorId?.let { ""","authorId":"$it"""" } ?: ""}}"""
         }
 
     private fun commentId(token: String, post: Long, text: String, parent: Long? = null): Long =
@@ -49,21 +59,24 @@ class BoardIntegrationTest : SampleIntegrationTest() {
             jsonPath("$.value.reactionTypes") { value(org.hamcrest.Matchers.contains("LIKE", "DISLIKE", "EMPATHY")) }
             jsonPath("$.value.reactionMode") { value("SINGLE") }
             jsonPath("$.value.canModerate") { value(false) }
+            jsonPath("$.value.authorRequired") { value(true) }   // author-profile 이 AuthorIdentities 를 내므로 쓰기에 authorId 가 필수다
         }
         mockMvc.get("/api/v1/boards/config") { header("Authorization", "Bearer $moderator") }.andExpect { jsonPath("$.value.canModerate") { value(true) } }
     }
 
     @Test
-    fun `the board shows the seeded nicknames with their tags - never an account id as a name`() {
+    fun `the board shows the seeded nicknames with their tags and a public profile id - never the account id`() {
         val post = createPost(user)
         commentId(other, post, "첫 댓글")
         val userTag = mockMvc.get("/api/v1/account/me") { header("Authorization", "Bearer $user") }
             .andExpect { status { isOk() }; jsonPath("$.value.displayName") { value("User") }; jsonPath("$.value.displayTag") { value(org.hamcrest.Matchers.matchesPattern("^[0-9]{4}$")) } }
             .andReturn().let { JsonPath.read<String>(it.response.contentAsString, "$.value.displayTag") }
         mockMvc.get("/api/v1/boards/general/posts") { header("Authorization", "Bearer $user") }
-            .andExpect { status { isOk() }; jsonPath("$.values[0].authorId") { value("acc_user") }; jsonPath("$.values[0].authorName") { value("User") }; jsonPath("$.values[0].authorTag") { value(userTag) } }
+            .andExpect { status { isOk() }; jsonPath("$.values[0].authorId") { value(profileOf(user)) }; jsonPath("$.values[0].authorName") { value("User") }; jsonPath("$.values[0].authorTag") { value(userTag) }; jsonPath("$.values[0].mine") { value(true) } }
         mockMvc.get("/api/v1/boards/general/posts/$post") { header("Authorization", "Bearer $user") }
             .andExpect { status { isOk() }; jsonPath("$.value.authorName") { value("User") }; jsonPath("$.value.authorTag") { value(userTag) } }
+        mockMvc.get("/api/v1/boards/general/posts/$post") { header("Authorization", "Bearer $other") }.andExpect { jsonPath("$.value.mine") { value(false) } }
+        assertTrue(!profileOf(user).startsWith("acc_") && profileOf(user).startsWith("prf_"), "the public author id is a profile id")
         mockMvc.get("/api/v1/boards/general/posts/$post/comments") { header("Authorization", "Bearer $user") }
             .andExpect { status { isOk() }; jsonPath("$.values[0].authorName") { value("Admin") }; jsonPath("$.values[0].authorTag") { value(org.hamcrest.Matchers.matchesPattern("^[0-9]{4}$")) } }
         assertEquals(
@@ -119,14 +132,41 @@ class BoardIntegrationTest : SampleIntegrationTest() {
 
     @Test
     fun `creating needs an Idempotency-Key and the same key does not create twice`() {
-        mockMvc.post("/api/v1/boards/general/posts") { header("Authorization", "Bearer $user"); contentType = MediaType.APPLICATION_JSON; content = """{"title":"a","body":"b"}""" }
+        val me = profileOf(user)
+        mockMvc.post("/api/v1/boards/general/posts") { header("Authorization", "Bearer $user"); contentType = MediaType.APPLICATION_JSON; content = """{"title":"a","body":"b","authorId":"$me"}""" }
             .andExpect { status { isBadRequest() }; jsonPath("$.code") { value("COMMON.IDEMPOTENCY_ERROR") } }
         val key = UUID.randomUUID().toString()
         repeat(2) {
-            mockMvc.post("/api/v1/boards/general/posts") { header("Authorization", "Bearer $user"); header("Idempotency-Key", key); contentType = MediaType.APPLICATION_JSON; content = """{"title":"한 번만","body":"b"}""" }
+            mockMvc.post("/api/v1/boards/general/posts") { header("Authorization", "Bearer $user"); header("Idempotency-Key", key); contentType = MediaType.APPLICATION_JSON; content = """{"title":"한 번만","body":"b","authorId":"$me"}""" }
                 .andExpect { status { isCreated() } }
         }
         mockMvc.get("/api/v1/boards/general/posts?q=한 번만") { header("Authorization", "Bearer $user") }.andExpect { jsonPath("$.pagination.totalElements") { value(1) } }
+    }
+
+    @Test
+    fun `writing needs an authorId of your own profile and the account id never appears in what other people read`() {
+        postRaw(user, """{"title":"a","body":"b"}""").andExpect { status { isBadRequest() }; jsonPath("$.code") { value("BOARD.AUTHOR_REQUIRED") } }
+        postRaw(user, """{"title":"a","body":"b","authorId":"${profileOf(other)}"}""").andExpect { status { isForbidden() }; jsonPath("$.code") { value("BOARD.AUTHOR_NOT_ALLOWED") } }
+        val post = createPost(user, title = "연결 안 되는 글")
+        commentId(other, post, "남이 단 댓글")
+        val seen = listOf(
+            "/api/v1/boards/general/posts", "/api/v1/boards/general/posts/$post", "/api/v1/boards/general/posts/$post/comments", "/api/v1/boards/config",
+        ).joinToString("\n") { mockMvc.get(it) { header("Authorization", "Bearer $other") }.andReturn().response.contentAsString }
+        assertFalse("acc_user" in seen, "no account id of the author in a reader's responses")
+        assertFalse("user@example.com" in seen)
+    }
+
+    @Test
+    fun `an attachment key that carries the caller's account id is refused, an opaque one is accepted`() {
+        val own = "uploads/acc_user/${UUID.randomUUID()}/cat.png"
+        postRaw(user, """{"title":"a","body":"b","authorId":"${profileOf(user)}","attachments":["$own"]}""")
+            .andExpect { status { isBadRequest() }; jsonPath("$.code") { value("BOARD.CONTENT_INVALID") } }
+        val opaque = mockMvc.post("/api/v1/storage/presign") {
+            header("Authorization", "Bearer $user"); contentType = MediaType.APPLICATION_JSON
+            content = """{"fileName":"cat.png","contentType":"image/png","sizeBytes":1024}"""
+        }.andExpect { status { isOk() } }.andReturn().let { JsonPath.read<String>(it.response.contentAsString, "$.value.key") }
+        assertTrue(opaque.startsWith("uploads/o/") && "acc_user" !in opaque, opaque)
+        postRaw(user, """{"title":"a","body":"b","authorId":"${profileOf(user)}","attachments":["$opaque"]}""").andExpect { status { isCreated() } }
     }
 
     @Test

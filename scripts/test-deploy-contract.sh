@@ -93,9 +93,9 @@ docker run -d --name "$PG" --network "$NET" --network-alias db \
 if wait_for 90 docker exec "$PG" pg_isready -h 127.0.0.1 -U app -d app; then pass "postgres 가 받는다"; else fail "postgres 가 뜨지 않는다"; docker logs "$PG" 2>&1 | tail -5; exit 1; fi
 sleep 2   # 초기화 직후 재시작 구간을 넘긴다
 
-# 계약의 환경변수만 — 스프링 프로필 · 앱 접두사 DB 변수 · 비밀 없음. 앱마다 새 데이터베이스(앱의 마이그레이션이 서로 섞이면 Flyway 검증이 실패한다)
+# 계약의 환경변수만 — 스프링 프로필 · 앱 접두사 DB 변수 · 비밀은 (선언의 secrets: 에서 플랫폼이 무작위로 채우는) 첨부 키 비밀 하나뿐이다: 샘플 앱은 key-owner=OPAQUE 라 없으면 기동하지 않는다. 앱마다 새 데이터베이스(앱의 마이그레이션이 서로 섞이면 Flyway 검증이 실패한다)
 DBNAME=app
-contract_env() { printf '%s\n' "-e" "SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/$DBNAME" "-e" "SPRING_DATASOURCE_USERNAME=app" "-e" "SPRING_DATASOURCE_PASSWORD=contract-test-pw"; }
+contract_env() { printf '%s\n' "-e" "SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/$DBNAME" "-e" "SPRING_DATASOURCE_USERNAME=app" "-e" "SPRING_DATASOURCE_PASSWORD=contract-test-pw" "-e" "SKELETON_STORAGE_WEB_KEY_SECRET=contract-test-storage-key-secret-0123456789"; }
 
 for APP in $(echo "$APPS" | tr ',' ' '); do
   IMG="skeleton-contract-$APP:test"

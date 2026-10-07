@@ -83,10 +83,15 @@ skeleton:
   alert:
     webhook-url: ${ALERT_WEBHOOK_URL:}  # 비우면 꺼진다 — 주소(Discord 웹훅)가 있을 때만 5xx 몰림 · 죽은 작업 · 기동 실패를 알린다 (docs/alert.md)
   storage:
+    web:
+      key-owner: OPAQUE                 # 이 앱의 선택: 첨부 키에 계정 id 가 없다 — 작성자 프로필(author-profile)이 글 · 댓글 첨부 키로 두 프로필을 잇지 못하게 (모듈 기본은 ACCOUNT_ID). 키 모양 · 파일 이름 규칙: docs/modules/storage.md
+      # key-secret(OPAQUE 키의 HMAC 비밀, 32자 이상)은 여기 쓰지 않는다 — 환경변수 SKELETON_STORAGE_WEB_KEY_SECRET (선언의 secrets: · deploy/app.yaml 의 [storage] 줄 · docs/deploy.md §7).
+      # 비었거나 짧으면 기동 실패. 로컬 · e2e 는 application-local.yml, 시험은 test config/application.yml 이 고정 더미 값을 둔다
     validation:                       # 첨부 규칙 — 서버가 presign 전에 검사한다 (프론트도 같은 규칙을 미리 보여 준다)
       max-size-bytes: 5242880         # 5 MB
       allowed-content-types: [image/png, image/jpeg, image/gif, image/webp, application/pdf, text/plain]
       allowed-extensions: [png, jpg, jpeg, gif, webp, pdf, txt]
+  # author-profile(build.gradle.kts 의 두 줄): 이 앱은 모듈 기본 그대로 쓴다 — 계정당 5개 · adopt-on-startup 켜짐 · 이름 규칙은 위 account.display-name (docs/modules/author-profile.md)
   board:
     reaction:
       types: [LIKE, DISLIKE, EMPATHY]   # 이 앱이 더한 종류 — 모듈 기본은 [LIKE, DISLIKE]. 코드 · 스키마 변경 없이 여기에만 적는다

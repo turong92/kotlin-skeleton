@@ -150,6 +150,32 @@ class NoteCrudIntegrationTest : SampleIntegrationTest() {
     }
 
     @Test
+    fun `an opaque upload key from the storage module is accepted as the caller's own, and nobody else's`() {
+        val id = createdId(user)
+        val presigned = mockMvc.post("/api/v1/storage/presign") {
+            header("Authorization", "Bearer $user"); contentType = MediaType.APPLICATION_JSON
+            content = """{"fileName":"고양이 사진.png","contentType":"image/png","sizeBytes":1024}"""
+        }.andExpect { status { isOk() } }.andReturn().readString("$.value.key")
+        kotlin.test.assertTrue(presigned.startsWith("uploads/o/") && "acc_user" !in presigned, "key-owner=OPAQUE: $presigned")
+
+        // 파일 이름은 키에서 사라진다 — 표시 이름은 클라이언트가 보낸 attachmentName 을 노트가 저장한다
+        putNote(user, id, """{"title":"사진","body":"","status":"ACTIVE","pinned":false,"attachmentKey":"$presigned","attachmentName":"고양이 사진.png"}""").andExpect {
+            status { isOk() }
+            jsonPath("$.value.attachmentKey") { value(presigned) }
+            jsonPath("$.value.attachmentName") { value("고양이 사진.png") }
+        }
+        putNote(other, createdId(other), """{"title":"사진","body":"","status":"ACTIVE","pinned":false,"attachmentKey":"$presigned","attachmentName":"x.png"}""").andExpect {
+            status { isBadRequest() }
+            jsonPath("$.errors[0].field") { value("attachmentKey") }
+        }
+        val forged = presigned.replaceAfterLast('/', "file.png").replace(Regex("\\.[0-9a-f]{32}/"), "." + "0".repeat(32) + "/")
+        putNote(user, id, """{"title":"사진","body":"","status":"ACTIVE","pinned":false,"attachmentKey":"$forged","attachmentName":"x.png"}""").andExpect {
+            status { isBadRequest() }
+            jsonPath("$.errors[0].field") { value("attachmentKey") }
+        }
+    }
+
+    @Test
     fun `removing or replacing the attachment deletes the stored object, deleting the note too`() {
         val id = createdId(user)
         val first = "uploads/acc_user/${UUID.randomUUID()}/a.txt"
