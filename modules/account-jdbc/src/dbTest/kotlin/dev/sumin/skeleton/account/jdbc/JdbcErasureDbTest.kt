@@ -1,7 +1,11 @@
 package dev.sumin.skeleton.account.jdbc
 
 import dev.sumin.skeleton.account.Account
+import dev.sumin.skeleton.account.AccountPatch
 import dev.sumin.skeleton.account.AccountStatus
+import dev.sumin.skeleton.account.AddIdentityResult
+import dev.sumin.skeleton.account.ChangeEmailResult
+import dev.sumin.skeleton.account.GuardedResult
 import dev.sumin.skeleton.account.Identity
 import dev.sumin.skeleton.account.challenge.ChallengePurposes
 import dev.sumin.skeleton.account.challenge.ChallengeRow
@@ -128,6 +132,22 @@ class JdbcErasureDbTest {
         assertFalse(repo.restore("acc_1", AccountStatus.ACTIVE, now.minusSeconds(3600)))
         assertFalse(repo.grantRole("acc_1", "ADMIN", now))
         assertTrue(repo.findById("acc_1")!!.roles.isEmpty())
+    }
+
+    @Test
+    fun `nothing is written to an erased row - profile, status, email and sign-in methods are refused by the repository`() {
+        leaving()
+        assertTrue(repo.erase("acc_1", now))
+        assertNull(repo.update("acc_1", AccountPatch(displayName = "Mallory", locale = "en", timeZone = "UTC", status = AccountStatus.ACTIVE), now.plusSeconds(5)))
+        assertEquals(GuardedResult.NOT_FOUND, repo.updateUnlessLast("acc_1", AccountPatch(status = AccountStatus.ACTIVE, clearSuspendedReason = true), now.plusSeconds(5), "ADMIN"))
+        assertEquals(ChangeEmailResult.NOT_FOUND, repo.changeEmail("acc_1", "mallory@example.com", now.plusSeconds(5)))
+        assertFalse(repo.addIdentity(Identity("idn_late", "acc_1", "google", "late-subject", true, null, null, now)))
+        assertEquals(AddIdentityResult.STALE, repo.addIdentityIfEmailVerified(Identity("idn_late2", "acc_1", "google", "late-subject-2", true, null, null, now), expectEmailVerified = false))
+        val row = repo.findById("acc_1")!!
+        assertEquals(AccountStatus.ERASED, row.status)
+        assertNull(row.email); assertNull(row.displayName); assertNull(row.locale); assertNull(row.timeZone)
+        assertEquals(now, row.updatedAt)
+        assertTrue(repo.identitiesOf("acc_1").isEmpty())
     }
 
     @Test

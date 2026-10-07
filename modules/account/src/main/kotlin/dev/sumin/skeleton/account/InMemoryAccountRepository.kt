@@ -27,7 +27,7 @@ class InMemoryAccountRepository : AccountRepository {
         identities.values.firstOrNull { it.method == method && it.subject == subject }?.let { accounts[it.accountId] }
 
     @Synchronized override fun update(id: String, patch: AccountPatch, now: Instant): Account? {
-        val a = accounts[id] ?: return null
+        val a = accounts[id]?.takeIf { it.status != AccountStatus.ERASED } ?: return null   // 지운 행에는 아무것도 다시 쓰지 않는다
         val updated = a.copy(
             displayName = patch.displayName ?: a.displayName,
             locale = patch.locale ?: a.locale,
@@ -73,7 +73,7 @@ class InMemoryAccountRepository : AccountRepository {
     }
 
     @Synchronized override fun changeEmail(id: String, newEmail: String, now: Instant, expectEmailVerified: Boolean?): ChangeEmailResult {
-        val a = accounts[id] ?: return ChangeEmailResult.NOT_FOUND
+        val a = accounts[id]?.takeIf { it.status != AccountStatus.ERASED } ?: return ChangeEmailResult.NOT_FOUND
         if (expectEmailVerified != null && a.emailVerified != expectEmailVerified) return ChangeEmailResult.STALE
         if (accounts.values.any { it.id != id && it.email == newEmail }) return ChangeEmailResult.TAKEN
         val moving = identities.values.filter { it.accountId == id && it.subject == a.email }
@@ -138,7 +138,7 @@ class InMemoryAccountRepository : AccountRepository {
     }
 
     @Synchronized override fun updateUnlessLast(id: String, patch: AccountPatch, now: Instant, guardRole: String): GuardedResult {
-        val a = accounts[id] ?: return GuardedResult.NOT_FOUND
+        val a = accounts[id]?.takeIf { it.status != AccountStatus.ERASED } ?: return GuardedResult.NOT_FOUND
         val leavesActive = patch.status != null && patch.status != AccountStatus.ACTIVE
         if (leavesActive && a.status == AccountStatus.ACTIVE && guardRole in a.roles && countActiveWithRole(guardRole) <= 1) return GuardedResult.LAST
         update(id, patch, now)
@@ -154,14 +154,14 @@ class InMemoryAccountRepository : AccountRepository {
     }
 
     @Synchronized override fun addIdentity(identity: Identity): Boolean {
-        if (identity.accountId !in accounts) return false
+        if (accounts[identity.accountId]?.status.let { it == null || it == AccountStatus.ERASED }) return false
         if (identities.values.any { it.method == identity.method && it.subject == identity.subject }) return false
         identities[identity.id] = identity
         return true
     }
 
     @Synchronized override fun addIdentityIfEmailVerified(identity: Identity, expectEmailVerified: Boolean): AddIdentityResult =
-        if (accounts[identity.accountId]?.emailVerified != expectEmailVerified) AddIdentityResult.STALE
+        if (accounts[identity.accountId]?.takeIf { it.status != AccountStatus.ERASED }?.emailVerified != expectEmailVerified) AddIdentityResult.STALE
         else if (addIdentity(identity)) AddIdentityResult.ADDED else AddIdentityResult.DUPLICATE
 
     @Synchronized override fun findIdentity(method: String, subject: String): Identity? = identities.values.firstOrNull { it.method == method && it.subject == subject }

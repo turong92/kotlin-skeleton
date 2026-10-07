@@ -43,6 +43,8 @@ class ProfileService(private val core: AccountCore, registry: SignInMethodRegist
     }
 
     fun update(accountId: String, change: ProfileChange): MeView {
+        // 지운 계정의 옛 액세스 토큰으로는 아무것도 쓰지 못한다 — 저장소도 같은 조건으로 막는다(검사와 쓰기 사이 틈)
+        if (core.accounts.findById(accountId)?.status.let { it == null || it == AccountStatus.ERASED }) throw AccountException(AccountErrorCode.NOT_FOUND)
         change.displayName?.let { if (it.trim().isEmpty() || it.trim().length > ProfileRules.MAX_DISPLAY_NAME) invalid("displayName") }
         change.locale?.let { if (ProfileRules.locale(it) == null) invalid("locale") }
         change.timeZone?.let { if (ProfileRules.timeZone(it) == null) invalid("timeZone") }

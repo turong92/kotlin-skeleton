@@ -45,6 +45,7 @@ private val nextTestIp = java.util.concurrent.atomic.AtomicInteger()
 class AccountWebTest {
     @Autowired lateinit var mvc: MockMvc
     @Autowired lateinit var mail: RecordingMailer
+    @Autowired lateinit var accounts: dev.sumin.skeleton.account.AccountRepository
 
     @BeforeEach fun clear() { mail.sent.clear() }
 
@@ -292,6 +293,22 @@ class AccountWebTest {
         mvc.perform(delete("/api/v1/admin/accounts/blocks/${mine.single()["id"]}").header("Authorization", auth)).andExpect(status().isNotFound)
         val again = signUpIdOf(signUp(victim).andExpect(status().isAccepted))
         mvc.perform(post("/api/v1/auth/verify-email").json("""{"signUpId":"$again","code":"${codeOf(MailKind.VERIFY_CODE)}"}""")).andExpect(status().isOk)
+    }
+
+    @Test
+    fun `after an administrator erased the account, the owner's still-valid access token cannot write a profile into the erased row`() {
+        val auth = bossAuth()
+        val victim = registered()
+        val old = bearer(login(victim))   // minted before the erasure; a JWT stays valid until it expires
+        val id = JsonPath.read<String>(mvc.perform(get("/api/v1/admin/accounts").param("email", victim).header("Authorization", auth)).andReturn().response.contentAsString, "$.values[0].id")
+        mvc.perform(post("/api/v1/admin/accounts/$id/suspend").header("Authorization", auth).json("{}")).andExpect(status().isNoContent)
+        mvc.perform(post("/api/v1/admin/accounts/$id/erase").header("Authorization", auth).json("{}")).andExpect(status().isNoContent)
+
+        mvc.perform(patch("/api/v1/account/me").header("Authorization", old).json("""{"displayName":"Mallory","locale":"en","timeZone":"UTC"}"""))
+            .andExpect(status().isNotFound).andExpect(jsonPath("$.code").value("ACCOUNT.NOT_FOUND"))
+        val row = accounts.findById(id)!!
+        assertEquals(dev.sumin.skeleton.account.AccountStatus.ERASED, row.status)
+        assertEquals(null, row.displayName); assertEquals(null, row.locale); assertEquals(null, row.timeZone)
     }
 
     @Test

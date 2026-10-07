@@ -116,6 +116,8 @@ enum class GuardedResult { DONE, LAST, NOT_FOUND }
  *  - [insert]: 계정 + 첫 로그인 수단들. 이메일이나 (method, subject) 가 겹치면 **유니크 위반으로** false — 먼저 조회해 보고 넣는 방식으로 판정하지 않는다
  *  - [markEmailVerified]: 계정의 emailVerified, PENDING_VERIFICATION → ACTIVE, 이메일 계열 수단의 verified 를 함께
  *  - [changeEmail]: 계정 이메일과 이메일 계열 수단(password · magic_link)의 subject 를 함께. 겹치면 TAKEN
+ *  - **ERASED 행에는 아무것도 쓰지 않는다**: [update] · [updateUnlessLast] · [changeEmail] · [addIdentity] · [addIdentityIfEmailVerified] · [grantRole] 는 그 행에 대해 조건(`status <> 'ERASED'`)으로 거절한다
+ *    (지운 뒤 도착한 옛 액세스 토큰의 프로필 갱신, 지우기와 겹친 정지 해제가 개인정보 · 상태를 되살리지 못하게 — 서비스의 사전 검사와 별개로 저장소가 막는다)
  */
 interface AccountRepository {
     fun insert(account: Account, identities: List<Identity>): Boolean

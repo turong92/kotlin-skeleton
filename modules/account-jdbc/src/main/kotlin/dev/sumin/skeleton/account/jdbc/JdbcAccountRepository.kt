@@ -82,7 +82,8 @@ class JdbcAccountRepository(
             patch.deletedAt?.let { sets += "deleted_at = :deleted"; p.addValue("deleted", dialect.instantParam(it)) }
             patch.purgeAfter?.let { sets += "purge_after = :purge"; p.addValue("purge", dialect.instantParam(it)) }
         }
-        val n = jdbc.update("update accounts set ${sets.joinToString(", ")} where id = :id", p)
+        // ERASED 행에는 아무것도 다시 쓰지 않는다 — 지운 뒤 도착한 옛 토큰의 프로필 갱신 · 지우기와 겹친 정지 해제가 개인정보나 상태를 되살리지 못하게
+        val n = jdbc.update("update accounts set ${sets.joinToString(", ")} where id = :id and status <> 'ERASED'", p)
         return if (n == 0) null else findById(id)
     }
 
@@ -136,7 +137,7 @@ class JdbcAccountRepository(
     override fun changeEmail(id: String, newEmail: String, now: Instant, expectEmailVerified: Boolean?): ChangeEmailResult =
         try {
             tx.execute {
-                val row = jdbc.query("select email, email_verified from accounts where id = :id for update", mapOf("id" to id)) { rs, _ -> rs.getString("email") to rs.getBoolean("email_verified") }
+                val row = jdbc.query("select email, email_verified from accounts where id = :id and status <> 'ERASED' for update", mapOf("id" to id)) { rs, _ -> rs.getString("email") to rs.getBoolean("email_verified") }
                 if (row.isEmpty()) return@execute ChangeEmailResult.NOT_FOUND
                 // 계정 행 락 안에서 — 다시 인증이 본 확인 상태가 그 사이 메일함 증명으로 바뀌었다면 이 변경은 증명 **전에** 시작한 것이다
                 if (expectEmailVerified != null && row.single().second != expectEmailVerified) return@execute ChangeEmailResult.STALE
@@ -234,7 +235,7 @@ class JdbcAccountRepository(
     override fun updateUnlessLast(id: String, patch: AccountPatch, now: Instant, guardRole: String): GuardedResult =
         tx.execute {
             val holders = lockActiveHolders(guardRole)
-            if (jdbc.query("select id from accounts where id = :id", mapOf("id" to id)) { rs, _ -> rs.getString(1) }.isEmpty()) return@execute GuardedResult.NOT_FOUND
+            if (jdbc.query("select id from accounts where id = :id and status <> 'ERASED'", mapOf("id" to id)) { rs, _ -> rs.getString(1) }.isEmpty()) return@execute GuardedResult.NOT_FOUND
             val leavesActive = patch.status != null && patch.status != AccountStatus.ACTIVE
             if (leavesActive && id in holders && holders.size <= 1) return@execute GuardedResult.LAST
             update(id, patch, now)
@@ -261,13 +262,19 @@ class JdbcAccountRepository(
     // ---- identities
 
     override fun addIdentity(identity: Identity): Boolean =
-        try { insertIdentity(identity); true } catch (_: DataIntegrityViolationException) { false }
+        try {
+            tx.execute {
+                // 계정 행 락 안에서 — 지우기와 줄 서고, 지운 행에는 수단이 붙지 않는다
+                val status = jdbc.query("select status from accounts where id = :id for update", mapOf("id" to identity.accountId)) { rs, _ -> rs.getString(1) }.firstOrNull()
+                if (status == null || status == AccountStatus.ERASED.name) false else { insertIdentity(identity); true }
+            } ?: false
+        } catch (_: DataIntegrityViolationException) { false }
 
     override fun addIdentityIfEmailVerified(identity: Identity, expectEmailVerified: Boolean): AddIdentityResult =
         try {
             tx.execute {
                 // 계정 행 락을 먼저 — 메일함 증명 트랜잭션(같은 행 락)이 끝날 때까지 기다린 뒤 증명 뒤의 상태를 본다
-                val verified = jdbc.query("select email_verified from accounts where id = :id for update", mapOf("id" to identity.accountId)) { rs, _ -> rs.getBoolean(1) }.firstOrNull()
+                val verified = jdbc.query("select email_verified from accounts where id = :id and status <> 'ERASED' for update", mapOf("id" to identity.accountId)) { rs, _ -> rs.getBoolean(1) }.firstOrNull()
                 if (verified != expectEmailVerified) AddIdentityResult.STALE else { insertIdentity(identity); AddIdentityResult.ADDED }
             } ?: AddIdentityResult.STALE
         } catch (_: DataIntegrityViolationException) {
