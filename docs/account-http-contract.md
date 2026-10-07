@@ -200,16 +200,37 @@ Mails a **6-digit code** to the account address (valid 30 min, 5 guesses, usable
 
 ### POST /api/v1/account/delete/confirmation — (for accounts WITHOUT a password) mails a **6-digit code** (valid 30 min, 5 guesses, this session only) -> `202`. Nothing is sent to an account without an address (use `socialReauth`).
 ### POST /api/v1/account/delete **[idem]** — Req `{ "currentPassword"?, "confirmationCode"?, "socialReauth"? }` (the proof that fits the account: password; else the mailed code; an account without an address: `socialReauth`) -> `202 { "value": { "status": "DELETION_SCHEDULED", "purgeAfter": "2026-11-05T..Z" } }`.
+A SUSPENDED account cannot delete itself -> `403 ACCOUNT.SUSPENDED_CANNOT_DELETE` (also for `delete/confirmation`).
 Wrong password / wrong social proof -> `400 ACCOUNT.REAUTH_FAILED`; missing -> `403 ACCOUNT.REAUTH_REQUIRED`; wrong code -> `400 ACCOUNT.CODE_INVALID`, none/expired -> `410 ACCOUNT.CODE_EXPIRED`; the only ADMIN -> `409 ACCOUNT.LAST_ADMIN`. Calling again while already deleted returns the same `purgeAfter`. `4xx` answers are not stored under the `Idempotency-Key`.
 Effect: status DELETED (cannot sign in, sessions revoked, identities frozen); after `skeleton.account.deletion.grace` (default `30d`) the purge job
-runs every `AccountErasureListener` (board: author shown as deleted user; notification inbox deleted) and removes the account. Admin may `restore` within the grace.
+runs every `AccountErasureListener` (board: author shown as deleted user; notification inbox deleted) and then, by `skeleton.account.deletion.mode`:
+`ANONYMIZE` (default) keeps the row with status **`ERASED`** (id + created_at only; email, name, locale, time zone, sign-in methods, roles, tokens, codes and the IP/detail of audit rows are gone) —
+`DELETE` removes the row. Admin may `restore` within the grace; an erased account is never restorable (`410 ACCOUNT.ERASED`). The same email can sign up again and gets a **new** account id; the same provider subject signing in gets a new account too.
+`me` of an erased account -> `404 ACCOUNT.NOT_FOUND`.
+
+### Self-service cancel of a pending deletion — only with `skeleton.account.deletion.self-restore=true` (default `false`)
+Frontend flow for a "탈퇴를 취소할까요?" screen:
+1. The owner signs in with ANY valid method (password `POST /auth/login`, magic link `POST /auth/magic-link/redeem`, social login) while the account is DELETED and the grace is not over.
+   A wrong password / unknown code is the usual `401 AUTH.INVALID_CREDENTIALS` (nothing about the account is revealed). A **correct** proof does NOT open a session; it answers
+   `403 { "code": "AUTH.ACCOUNT_DELETION_PENDING", "data": { "purgeAfter": "2026-11-05T..Z", "restoreToken": "<opaque>", "restoreTokenExpiresAt": "..Z" } }`.
+   No `accessToken` / `refreshToken`, no login is recorded. Not given for SUSPENDED accounts (they get `403 AUTH.ACCOUNT_SUSPENDED`) nor after the grace (`401`).
+2. Show "삭제 예정일 = purgeAfter — 취소할까요?". On yes: `POST /api/v1/account/delete/cancel` (public) Req `{ "restoreToken": "<token>" }` ->
+   `200 { "value": <AuthTokenResponse> }` — exactly the login response: the account is ACTIVE again, tokens are issued, a notice mail is sent (`DELETION_CANCELLED`), the event `DELETION_CANCELLED` is published.
+   On no: just drop the token (it dies after `skeleton.account.deletion.self-restore-ttl`, default `15m`; asking for the state again — signing in again — replaces it).
+3. Errors: `410 ACCOUNT.TOKEN_INVALID` (unknown, used, expired, made for anything else, the grace ended, or the account got suspended meanwhile — start again from the sign-in), `400 COMMON.VALIDATION_FAILED` (no token), `429 ACCOUNT.RATE_LIMITED` (per client address, same budget as login).
+The token is single-use, works only for this endpoint and is created only AFTER a successful authentication. With the setting off, `delete/cancel` answers `410 ACCOUNT.TOKEN_INVALID` and a deleted account signs in as `401` like before.
 Data export: no endpoint; `AccountDataExporter` is an interface only (not wired).
 
 ## 9. Admin (module `account`, `skeleton.account.admin.enabled=true`; role `skeleton.account.admin.role`, default `ADMIN`; others -> `403 COMMON.FORBIDDEN`; the role is checked against the stored account on every call, so a suspended or demoted admin is refused even with an unexpired token)
 
-- `GET /api/v1/admin/accounts?email=&status=&page=0&size=20` (`page>=0`, `1<=size<=100`, else `400 COMMON.VALIDATION_FAILED`) -> page envelope `{ values: [...], pagination, meta }` of `{ id, email, status, roles, displayName, createdAt, lastLoginAt, suspendedReason, purgeAfter }`
-- `GET /api/v1/admin/accounts/{id}` -> `{ value: <same fields> }`
-- `POST /api/v1/admin/accounts/{id}/suspend` `{ "reason"? }` -> `204` (sessions revoked) ; `POST .../unsuspend` -> `204`; `POST .../restore` (undo deletion within grace) -> `204`
+- `GET /api/v1/admin/accounts?email=&status=&page=0&size=20` (`page>=0`, `1<=size<=100`, else `400 COMMON.VALIDATION_FAILED`) -> page envelope `{ values: [...], pagination, meta }` of `{ id, email, status, roles, displayName, createdAt, lastLoginAt, suspendedReason, purgeAfter, erasedAt }`.
+  `status` is one of `ACTIVE | PENDING_VERIFICATION | SUSPENDED | DELETED | ERASED`. **Without `status`, `ERASED` accounts are left out**; `?status=ERASED` lists them — an erased row has `email`, `displayName`, `lastLoginAt`, `suspendedReason`, `purgeAfter` all `null` and `roles: []`, `erasedAt` set.
+- `GET /api/v1/admin/accounts/{id}` -> `{ value: <same fields> }` (an erased account is still readable by id)
+- `POST /api/v1/admin/accounts/{id}/suspend` `{ "reason"? }` -> `204` (sessions revoked; an account in its deletion grace can be suspended too — it is then NOT erased when the grace ends) ; `POST .../unsuspend` -> `204` (an account that was leaving returns to DELETED with a fresh grace); `POST .../restore` (undo deletion within grace) -> `204`.
+  `410 ACCOUNT.ERASED` for restore / suspend / grant on an erased account (it cannot be restored, ever); `404 ACCOUNT.NOT_FOUND` for restore of an account that is not DELETED.
+- `POST /api/v1/admin/accounts/{id}/erase` `{ "reason"? }` -> `204` — erase a **SUSPENDED** account at once (no grace): same erasure as the purge job (`deletion.mode`) plus **re-registration blocks** (below). `409 ACCOUNT.NOT_SUSPENDED` for any other status, `410 ACCOUNT.ERASED` when already erased, `409 ACCOUNT.SELF_ACTION_FORBIDDEN` for yourself.
+- `GET /api/v1/admin/accounts/blocks?page=0&size=20` -> page of `{ id, kind: "email"|"identity", reason, createdAt, expiresAt, createdBy, accountId }` (newest first; **no hash, no address**); `DELETE /api/v1/admin/accounts/blocks/{id}` -> `204` / `404 ACCOUNT.NOT_FOUND`.
+  A block makes `verify-email` (sign-up code), magic-link redeem and social sign-in for that email / provider account answer `403 ACCOUNT.REGISTRATION_BLOCKED`; the sign-up REQUEST itself still answers the same `202` (so existence and blocks cannot be probed without proving the mailbox / provider account). With `sign-up.email-verification=false` a blocked address answers like a taken one (`409 ACCOUNT.EMAIL_TAKEN`).
 - `PUT /api/v1/admin/accounts/{id}/roles/{role}` (grant) / `DELETE ...` (revoke) -> `204`. `409 ACCOUNT.LAST_ADMIN` when revoking/suspending the last ADMIN; `409 ACCOUNT.SELF_ACTION_FORBIDDEN` for suspending yourself.
 
 ## 10. Error code table
@@ -219,12 +240,13 @@ Data export: no endpoint; `AccountDataExporter` is an interface only (not wired)
 | AUTH.INVALID_CREDENTIALS | 401 | login: unknown / wrong / deleted |
 | AUTH.EMAIL_NOT_VERIFIED | 403 | login with right password, unverified email |
 | AUTH.ACCOUNT_SUSPENDED | 403 | login / refresh / magic link for a suspended account |
+| AUTH.ACCOUNT_DELETION_PENDING | 403 | (`deletion.self-restore=true`) correct sign-in of an account in its deletion grace — `data.purgeAfter`, `data.restoreToken`; see §8 |
 | AUTH.TOO_MANY_ATTEMPTS | 429 | login throttle |
 | AUTH.REFRESH_INVALID | 401 | refresh token unknown/expired/revoked |
 | AUTH.REFRESH_REUSED | 401 | rotated-away refresh token replayed (family revoked) |
 | AUTH.SESSION_NOT_FOUND | 404 | revoke of a session that is not yours / does not exist |
 | AUTH.CSRF_HEADER_REQUIRED | 403 | cookie mode refresh / logout without `X-Requested-With` |
-| ACCOUNT.TOKEN_INVALID | 410 | one-time **link** token unknown / expired / used (password reset, magic link) |
+| ACCOUNT.TOKEN_INVALID | 410 | one-time **link** token unknown / expired / used (password reset, magic link, deletion restore token) |
 | ACCOUNT.CODE_INVALID | 400 | wrong 6-digit code (`data.attemptsLeft`) — sign-up, email change, re-auth, delete |
 | ACCOUNT.CODE_EXPIRED | 410 | code unknown / expired / used up / other session / sign-up address taken meanwhile |
 | AUTH.TOO_MANY_REFRESHES | 429 | one session refreshed more than 30 times in 10 min (session stays valid) |
@@ -239,7 +261,11 @@ Data export: no endpoint; `AccountDataExporter` is an interface only (not wired)
 | ACCOUNT.IDENTITY_TAKEN / IDENTITY_EXISTS / IDENTITY_NOT_FOUND | 409/409/404 | linking |
 | ACCOUNT.LAST_SIGN_IN_METHOD | 409 | unlink the last method |
 | ACCOUNT.LAST_ADMIN / SELF_ACTION_FORBIDDEN | 409 | admin guards |
-| ACCOUNT.NOT_FOUND | 404 | admin target missing |
+| ACCOUNT.NOT_FOUND | 404 | admin target missing; `me` / restore of a row that is gone or not DELETED |
+| ACCOUNT.ERASED | 410 | admin restore / suspend / grant / erase on an erased account |
+| ACCOUNT.SUSPENDED_CANNOT_DELETE | 403 | a suspended account asked to delete itself |
+| ACCOUNT.NOT_SUSPENDED | 409 | admin erase of an account that is not SUSPENDED |
+| ACCOUNT.REGISTRATION_BLOCKED | 403 | a proven mailbox / provider account is on the re-registration block list (or belongs to a suspended unproven account) |
 | ACCOUNT.RATE_LIMITED | 429 | per-IP (sign-up, resend, forgot, magic link) or per-account (email change, password change, delete, delete confirmation, reauth confirmation, social link) throttle; per-address limits on resend / forgot / magic link are silent |
 | ACCOUNT.PASSWORD_REQUIRED | 400 | set-first-password / change with no password identity while the email is unverified |
 | ACCOUNT.METHOD_UNKNOWN | 400 | linking an unknown sign-in method code |

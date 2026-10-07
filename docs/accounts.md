@@ -45,7 +45,7 @@ skeleton:
 **이메일 변경**: `POST email/change`(다시 인증) → **새 주소로 6자리 코드**(옛 주소에는 알림) → **같은 세션에서** `POST email/change/confirm {code}` → 바뀜(다른 세션은 닫힌다).
 **매직 링크**: `POST magic-link/request`(늘 202) → 메일 링크 → `POST magic-link/redeem` → 토큰.
 **소셜 연결 · 해제**: 로그인한 채 `POST identities/social/{provider}` · `DELETE identities/{id}` — 둘 다 다시 인증이 필요하다. 마지막 수단은 못 뗀다.
-**삭제**: 다시 인증(비밀번호 · 메일 코드 · 이메일 없는 계정은 소셜 코드) → `202 {purgeAfter}` → 즉시 로그인 불가 · 세션 종료 → 유예(30일) 뒤 `AccountErasureListener` 들이 지우고 계정 행 삭제.
+**삭제**: 다시 인증(비밀번호 · 메일 코드 · 이메일 없는 계정은 소셜 코드) → `202 {purgeAfter}` → 즉시 로그인 불가 · 세션 종료 → 유예(30일) 뒤 `AccountErasureListener` 들이 지우고 **개인정보를 지운다 — 계정 행은 `ERASED` 로 남는다**(`deletion.mode`, 아래 "삭제 수명주기"). 정지된 계정은 삭제를 요청할 수 없다. 유예 중 로그인에 성공하면(`deletion.self-restore`) 탈퇴를 직접 취소할 수 있다.
 
 ### 코드 vs 링크 — 어디에 무엇을 쓰고 왜
 
@@ -143,12 +143,56 @@ skeleton:
 | **비밀번호 · 토큰 · 코드가 로그에** | 서비스는 안 남기고, 요청/응답 DTO · 저장 행 `toString` 은 가린다(Spring MVC 가 DEBUG/TRACE 에서 본문 · 응답 객체를 `toString` 으로 찍는다 — 실측: 가입 id 가 응답 객체 로그로 샌 것을 잡았다). 기본 `LogMasker` 는 `token=` 쌍도 가린다 | `AccountResponseLevelSecurityTest` `no one-time token, code, sign-up id or password ever reaches the log…`, `MailPathLogLeakTest`, `SecretsStayOutOfToStringTest` |
 | **권한 상승 · 관리자 사고** | 관리자 권한은 **매 호출 저장소의 계정**(ACTIVE + 역할)으로 확인 — 낡은 토큰으로 못 한다. 첫 관리자는 확인된 이메일 + ADMIN 이 아직 없을 때만, 마지막 ADMIN 은 정지 · 회수 · 삭제 불가(저장소가 원자적으로 판정 — 동시에 서로를 정지해도 0 이 안 된다), 자기 정지 불가, 비밀번호 기본값 없음, 시드 계정은 stage · prod 에서 기동 실패 | `RegistrationServiceTest` (bootstrap), `DeletionAndAdminTest` `two administrators suspending…`, `AccountCallersTest`, `JdbcAccountRepositoryDbTest` `two administrators demoting…` (두 DB), `AccountDeployGuardTest` |
 | **로그인 잠금 DoS** | 시도 전부를 세므로 공격자가 남의 식별자를 10분 동안 잠글 수 있다 — **수용한 대가** (실패만 세려면 잠김 상태를 저장해야 하고 그것이 존재 오라클이 된다). 창 · 횟수는 설정 | `LoginControlsTest` |
-| **삭제 뒤 남는 데이터** | 유예 뒤 모든 `AccountErasureListener` 가 성공해야 계정 행을 지운다(하나라도 실패하면 다음 주기에 재시도). 가입 시도 · 코드 행은 만료 뒤 같은 청소가 지운다 | `DeletionAndAdminTest` `purge waits for the grace…` · `a failing listener keeps the account…`, `AccountPurgeJobTest`, `JdbcChallengeStoreDbTest` `…the sweep`, `JdbcErasureDbTest`, `NotificationInboxErasureDbTest`, `SessionMaintenanceTest` · `JdbcSessionStoreDbTest` `erasing an account deletes its sessions…`. 감사 표에는 계정 id · IP 가 `audit.enabled` 일 때 남는다 — 보존 기간은 앱이 정한다 |
+| **삭제 뒤 남는 데이터** | 유예 뒤 모든 `AccountErasureListener` 가 성공해야 계정을 정리한다(하나라도 실패하면 다음 주기에 재시도, 한 계정의 실패가 같은 묶음의 다른 계정을 막지 않는다). 기본(`ANONYMIZE`)은 행을 `ERASED` 로 남기고 **개인정보 열 · 로그인 수단 · 역할 · 토큰 · 코드 · 감사 행의 IP · 상세**를 한 트랜잭션으로 지운다. 가입 시도 · 코드 행은 만료 뒤 같은 청소가 지운다 | `AccountErasureTest` (13+), `JdbcErasureDbTest` ×2 DB — 특히 `after erasure no column of any table still holds…` (모든 표 · 모든 열을 훑는 `PlantedDataScan`), `AccountJourneyIntegrationTest` (board · notification · sessions · consents 까지 모든 모듈 표), `DeletionAndAdminTest`, `AccountPurgeJobTest`, `NotificationInboxErasureDbTest`, `SessionMaintenanceTest` |
+| **탈퇴 직후의 늦은 복구 · 지우기 경주** | 되살리기와 지우기는 둘 다 `status = 'DELETED'` 조건부이고 지우기는 계정 행 락 안에서 조건을 다시 본다 — 하나만 이긴다 | `JdbcErasureDbTest` `a restore racing the erasure at the end of the grace has exactly one winner` (두 DB) |
+| **정지로 탈퇴해 빠져나가기** | 정지된 계정은 삭제를 요청할 수 없고(`ACCOUNT.SUSPENDED_CANNOT_DELETE`), 탈퇴 유예 중에 정지되면 유예가 끝나도 지워지지 않는다. 로그인 수단이 남아 같은 이메일 · 제공자 주체로 다시 가입할 수 없다. 운영자가 지울 때는 해시만 남는 재가입 차단이 생긴다 (아래) | `FrozenAccountTest` ×9, `JdbcAccountBlockDbTest` ×4 (두 DB), `AccountWebTest` `an admin erases a suspended account…` |
+| **탈퇴 취소 토큰 오남용** | 취소 토큰은 로그인 **성공 뒤에만** 만들어지고(조회만으로는 만들지 않는다) 한 번 쓰고 · 15분 뒤 죽고 · 새로 만들면 이전 것이 죽고 · 다른 용도로는 못 쓰고 · 정지되면 못 쓴다. 주소당 시도 수를 센다 | `SelfRestoreTest` ×10, `SelfRestoreWebTest`, `MagicLinkSelfRestoreWebTest` |
+| **여러 인스턴스의 중복 정리** | 정리는 짧은 임대(`account_locks`)를 쥔 하나만 돈다. 잡 큐가 있으면 주기마다 한 인스턴스만 잡을 넣는다 | `AccountErasureTest` `two overlapping purge runs…`, `AccountPurgeJobTest` `several app instances…`, `JdbcAccountMaintenanceLeaseDbTest` (두 DB, 32 스레드) |
 
 ## 삭제 · 지우기 · 내보내기
 
-- 삭제 요청: 다시 인증(비밀번호 · 메일 코드 · 이메일 없는 계정은 소셜 코드) → `DELETED`(로그인 불가 · 세션 종료 · 존재하지 않는 계정처럼 보임) → `deletion.grace`(기본 30일) 동안 관리자가 `restore` 가능 → 주기 실행(`purge-interval`, `job-queue-jdbc` 가 있으면 잡 `account-purge`)이 지운다.
-- 지울 때 `AccountErasureListener`(platform 의 공용 계약)가 모두 불린다. 구현: **board** (글 · 댓글 작성자와 반응의 계정을 `deleted:<해시>` 톰스톤으로 — 행 · 카운터는 남고 응답에 `authorDeleted: true`), **notification-jdbc** (받은편지함 줄 삭제 + 다른 수신자 줄 안의 계정 id 를 톰스톤으로). 모듈마다 자기 데이터를 지우고 · 모든 고리는 **멱등**이어야 한다.
+### 삭제 수명주기
+
+```
+ ACTIVE ──삭제 요청(다시 인증)──▶ DELETED ─────── grace(30d) 끝 + 주기 정리 ───────▶ ERASED   (deletion.mode=ANONYMIZE, 기본: 행은 남고 개인정보만 지움)
+   ▲   ▲                          │  │                                           └▶ (행 없음) (deletion.mode=DELETE)
+   │   └── 관리자 restore ────────┘  └─ self-restore(로그인 성공 + 취소 토큰) ─▶ ACTIVE
+   │
+   └─ 관리자 정지 ─▶ SUSPENDED ──정지 해제──▶ ACTIVE  (탈퇴 대기 중에 정지됐다면 DELETED 로 돌아가 탈퇴가 이어진다 — 유예는 새로)
+                        └────── 관리자 erase (유예 없이, 재가입 차단 해시를 남김) ──▶ ERASED
+```
+
+- **왜 `ANONYMIZE` 가 기본인가**: 주인의 결정 — 개인정보만 지우고 계정 행은 남긴다. 다른 표(앱의 주문 · 결제 · 감사 …)가 `accounts.id` 를 들고 있어도 참조가 끊기지 않고, `DELETE` 처럼 행을 지우려다 연결고리를 놓칠 일이 없다. 두 모드 모두 안전하지만 `ANONYMIZE` 가 **되돌릴 수 없는 실수가 없는** 쪽이다(`DELETE` 는 `restrict` 외래키가 있는 앱에서 정리가 실패할 수 있다). 계정 id 를 어디에도 남기지 않을 앱만 `DELETE` 를 고른다.
+- **`ERASED` 는 마지막 상태다**: 로그인 · 복구(`410 ACCOUNT.ERASED`) · 역할 부여 · 이메일로 찾기 · `me` 가 모두 안 된다. 같은 이메일로 새로 가입하면 **새 계정 id** 를 받는다(지운 행을 쓰지 않는다). 같은 제공자 주체의 소셜 로그인도 새 계정이다(로그인 수단 행이 없다). 관리자 목록은 기본으로 `ERASED` 를 빼고 `?status=ERASED` 로만 보이며 개인정보 열은 없다.
+- **남는 것 / 지워지는 것 (`ANONYMIZE`)**
+
+| 남는 것 | 지워지는 것 |
+|---|---|
+| `accounts.id`, `created_at`, `status=ERASED`, `erased_at`, `deleted_at`(탈퇴를 요청한 시각), `updated_at`(= 지운 시각), `email_verified=false` | `email`(→ NULL, 유니크 키에서 풀려 같은 주소가 새로 가입한다 — 두 DB 시험), `display_name`, `locale`, `time_zone`, `suspended_reason`, `last_login_at`, `purge_after` |
+| `account_audit` 의 **사건 줄**(종류 · 시각 · 계정 id) | 같은 계정 줄의 `ip` · `detail` (→ NULL). 다른 계정 줄은 그대로 |
+| (운영자 지우기만) `account_blocks` 의 해시 | 로그인 수단 전부(비밀번호 해시 · 제공자 주체 · 매직 링크), 역할, `account_tokens`(계정 id 로 걸린 것 + 그 주소가 주인인 것), `account_challenges`(계정 id · 그 주소의 가입 시도 — IP 포함), 이메일 변경 대기 |
+| 각 모듈이 정한 것: board 는 작성자를 `deleted:<해시>` 로, legal 은 동의 기록의 사람을 지우고 증거는 남김(`erasure.mode`) | auth-session 의 세션 · 리프레시 토큰(IP · UA · 기기 이름), notification-jdbc 의 받은편지함 |
+
+- 정리는 **계정 하나당 한 트랜잭션**이다(`AccountRepository.erase`: 계정 행 락 → 조건 재확인 → 위 표의 행들 → 계정 갱신). 다른 모듈의 고리는 그 앞에서 **모두** 불리고, 하나라도 실패하면 계정은 `DELETED` 그대로 다음 주기에 다시 한다 — 고리는 멱등이어야 한다. `ErasureRequest.accountKept` 는 행이 남는지(`ANONYMIZE`) 알려 준다.
+- 한 번에 `deletion.purge-batch`(50) 개까지, 여러 인스턴스는 `account_locks` 임대를 쥔 하나만 정리한다 (잡 큐가 있으면 주기마다 한 인스턴스만 잡 `account-purge` 를 넣는다).
+- **만료된 코드 · 토큰 청소**: `cleanup.expired-retention`(기본 1d) 이 지난 줄을 같은 주기 정리가 지운다. **만료는 읽을 때 검사**하므로 정리가 늦거나 꺼져 있어도 만료된 코드가 쓰이지는 않는다 — 이 값은 표가 쌓이지 않게 하는 청소 기준일 뿐이다.
+
+### 정지는 박제다
+
+- 정지된 계정은 탈퇴를 요청할 수 없다(`403 ACCOUNT.SUSPENDED_CANNOT_DELETE`). 탈퇴 유예 중에 정지되면 유예가 끝나도 **지워지지 않고** 막힌 채 남는다 — 관리자가 정지를 풀면 탈퇴가 이어지고(유예는 새로 시작), 명시적으로 `POST /admin/accounts/{id}/erase` 하면 지워진다.
+- 로그인 수단 행이 남으므로 같은 이메일 · 같은 제공자 주체로 새 계정을 만들 수 없다 — 소셜 로그인은 같은 계정의 `AUTH.ACCOUNT_SUSPENDED`, 코드로 가입한 미확인 정지 계정을 메일함 증명으로 이어받는 길은 `403 ACCOUNT.REGISTRATION_BLOCKED`.
+- **운영자가 정지 계정을 지우면** 재가입 차단이 남는다: 이메일과 각 제공자 주체의 **HMAC-SHA256 해시**(서버 비밀 `blocks.secret`)만 `account_blocks` 에 사유 · 시각 · 만료와 함께 둔다 — 원문은 어디에도 없다. 가입 **요청**은 늘 같은 202(존재 · 차단 여부가 드러나지 않는다), **메일함을 증명한 사람**(코드 확인 · 매직 링크) 또는 **제공자 계정을 증명한 사람**(소셜)만 `403 ACCOUNT.REGISTRATION_BLOCKED` 를 본다(이메일 확인을 끈 앱의 가입은 "이미 있는 주소" 와 같은 `409 EMAIL_TAKEN`). 보존은 `blocks.retention`(기본 `0` = 운영자가 지울 때까지), 관리자가 `GET/DELETE /admin/accounts/blocks` 로 보고 푼다.
+- ⚠ **개인정보 처리방침에 적을 것(앱의 몫)**: ① 탈퇴 뒤에도 계정 id · 가입 시각 · 탈퇴 시각 · 감사 사건(IP 없이)이 남는다 ② 운영자가 이용 제한 중인 계정을 지우면 재가입을 막으려고 이메일 · 로그인 계정의 **되돌릴 수 없는 해시**를 `blocks.retention`(기본 무기한) 동안 보관한다 ③ 앱이 쓰는 다른 표(주문 · 결제 …)의 보존은 앱이 정한다. 차단 해시의 키(`blocks.secret`)를 바꾸면 기존 차단이 맞지 않으므로 오래 둘 앱은 JWT 비밀과 별개로 둔다.
+
+### 탈퇴 취소 (`deletion.self-restore`)
+
+- 기본 `false` — 이전과 같다(탈퇴한 계정은 존재하지 않는 계정처럼 보이고 복구는 운영자만). 스켈레톤은 사용 방식을 정하는 값을 켜 둔 채 내놓지 않는다(`outOfOrder` 등과 같은 원칙). **많은 서비스가 쓰는 방식이라 권장**하지만 로그인 응답이 하나 늘어나므로(프론트의 "탈퇴를 취소할까요?" 화면) 앱이 yml 에서 켠다.
+- 켜면: 유예 중인 계정의 주인이 **올바른 방법으로 로그인에 성공**하면(비밀번호 · 매직 링크 · 소셜) 세션을 만들지 않고 `403 AUTH.ACCOUNT_DELETION_PENDING` + `data.purgeAfter` · `data.restoreToken`(15분, 한 번) 을 준다. 틀린 비밀번호는 일반 `401` 이다(존재 여부가 새지 않는다). 프론트가 `POST /account/delete/cancel {restoreToken}` 을 부르면 계정이 되살아나고 보통 로그인 응답(토큰)이 온다 + 안내 메일 + `DELETION_CANCELLED` 이벤트. **정지된 계정은 해당 없음**(`AUTH.ACCOUNT_SUSPENDED`).
+- 계약: `docs/account-http-contract.md` §8.
+
+### 지우는 고리 · 내보내기
+
+- 지울 때 `AccountErasureListener`(platform 의 공용 계약)가 모두 불린다. 구현: **board** (글 · 댓글 작성자와 반응의 계정을 `deleted:<해시>` 톰스톤으로 — 행 · 카운터는 남고 응답에 `authorDeleted: true`), **notification-jdbc** (받은편지함 줄 삭제 + 다른 수신자 줄 안의 계정 id 를 톰스톤으로), **auth-session** (세션 · 리프레시 토큰 행), **legal** (동의 기록의 사람을 지우고 증거는 남김 — `erasure.mode: ANONYMIZE|DELETE`). 모듈마다 자기 데이터를 지우고 · 모든 고리는 **멱등**이어야 한다.
 - **한계**: 다른 사람의 알림 본문에 삭제된 사람의 글 내용이 있으면 그것은 알림을 만든 모듈의 몫이다. `storage` 의 업로드는 이 구현에 없다 (앱이 고리를 구현한다).
 - **데이터 내보내기**: `AccountDataExporter` 인터페이스만 있다 (엔드포인트 · 기본 구현 없음 — 법적 요구에 맞춰 앱이 구현).
 
@@ -177,6 +221,7 @@ skeleton:
 - **뒤로 넘기는 일(메일 · 재설정 조회)은 프로세스 안의 작은 풀**이다 — 종료 때는 기다려 마치고 넘치면 부른 스레드가 하지만, 비정상 종료로 처리 못 한 메일은 사라지고 사용자가 다시 요청한다(재전송). **가입 계정 행은 요청 스레드가 저장한다**(202 를 받은 가입은 사라지지 않는다). 내구성이 더 필요하면 `AccountTaskRunner` 빈으로 잡 큐에 넣는다.
 - **액세스 토큰은 상태 없는 JWT** — 정지 · 역할 변경은 일반 API 에는 최대 15분 늦게 반영된다 (새로고침은 즉시 현재 역할). **관리자 API 는 매 호출 저장소를 다시 읽는다.**
 - **`username` = 이메일** (이 모듈이 만든 계정에는 따로 사용자 이름이 없다).
+- **탈퇴 뒤 기본은 `ANONYMIZE`** (개인정보만 지우고 행은 `ERASED` 로 — 주인의 결정: "연결고리가 끊기면 안 된다"). `DELETE` 로 바꾸면 행까지 지운다. **정지는 박제**(탈퇴로 못 빠져나가고, 운영자가 지우면 해시 차단이 남는다). **탈퇴 취소(`self-restore`)는 기본 꺼짐**(스켈레톤은 사용 방식을 정하지 않는다) — 앱이 켠다.
 
 ## 약관 동의 (`legal` 모듈이 있을 때)
 

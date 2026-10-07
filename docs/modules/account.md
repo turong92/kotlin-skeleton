@@ -18,8 +18,9 @@
 | `GET` · `PATCH /api/v1/account/me` | 프로필(이름 · 로케일 · 시간대) · 로그인 수단 목록 | 로그인 |
 | `GET /api/v1/account/identities` · `DELETE …/{id}` · `POST …/social/{provider}` | 수단 목록 · 해제(다시 인증, 마지막은 409) · 소셜 연결(`auth-social` 이 있을 때) | 로그인 |
 | `POST /api/v1/account/reauth/confirmation` | 비밀번호 없는 계정의 다시 인증 코드(6자리, 이 세션에서만) | 로그인 |
-| `POST /api/v1/account/delete/confirmation` · `POST /api/v1/account/delete` | 삭제 확인 코드(비밀번호 없는 계정) · 삭제 예약(202, 다시 인증) | 로그인 |
-| `/api/v1/admin/accounts` … | 목록 · 정지 · 복구 · 역할 부여/회수 (`skeleton.account.admin.enabled=true`) | 관리자 역할 |
+| `POST /api/v1/account/delete/confirmation` · `POST /api/v1/account/delete` | 삭제 확인 코드(비밀번호 없는 계정) · 삭제 예약(202, 다시 인증). 정지된 계정은 403 | 로그인 |
+| `POST /api/v1/account/delete/cancel` | 탈퇴 대기 중 로그인 성공 뒤 받은 취소 토큰으로 탈퇴 취소 → 로그인 응답 (`deletion.self-restore=true` 일 때) | 공개 |
+| `/api/v1/admin/accounts` … | 목록(지워진 계정은 `status=ERASED` 로만) · 정지 · 복구 · 역할 부여/회수 · 정지 계정 즉시 지우기(`/{id}/erase`) · 재가입 차단 목록 · 해제(`/blocks`) (`skeleton.account.admin.enabled=true`) | 관리자 역할 |
 
 에러 코드는 `ACCOUNT.*` · `AUTH.*` (표: [docs/accounts.md](../accounts.md)). 계약 전체: 같은 문서의 "HTTP 계약".
 
@@ -36,7 +37,7 @@
 | 프론트 짝 | `@skeleton/auth` |
 | 테스트 | `modules/account/src/test`, `modules/account/src/noOptionalTest` (선택 통합이 클래스패스에 없을 때) |
 
-**메일 모양**: 12종(가입 · 이메일 변경 · 다시 인증 · 삭제 코드, 이미 가입됨, 비밀번호 재설정 · 변경, 이메일 변경 요청 · 완료 알림, 매직 링크, 삭제 예약, 로그인 수단 추가)을 ko · en 으로, **text + HTML 대체 본문**(multipart)으로 보낸다. 코드 메일은 큰 고정폭 코드 블록, 링크 메일은 버튼 하나 + 원문 주소. 제목에는 코드 · 링크가 없다(로그에 남는다). 브랜드는 `skeleton.account.mail.brand.*`(서비스 이름 · 로고 https · 색 · 문의 주소 · 바닥글)로만 바꾸고, `html-enabled=false` 면 텍스트만 보낸다. 앱이 문구를 바꾸려면 `AccountMailTemplates` 빈, **틀만** 바꾸려면 `AccountMailLayout` 빈(`MailPage` 의 날것 값을 받아 스스로 이스케이프한다)을 둔다. 눈으로 보기: `./gradlew :modules:account:mailPreview` → `build/mail-preview/*.html`. 문구를 바꾸면 `UPDATE_GOLDEN=1 ./gradlew :modules:account:test --tests '*AccountMailGoldenTest'` 로 골든 파일을 다시 쓰고 diff 를 본다. 진짜 제공자 · 메일 시험: [real-provider-setup](../real-provider-setup.md).
+**메일 모양**: 13종(가입 · 이메일 변경 · 다시 인증 · 삭제 코드, 이미 가입됨, 비밀번호 재설정 · 변경, 이메일 변경 요청 · 완료 알림, 매직 링크, 삭제 예약 · 삭제 취소, 로그인 수단 추가)을 ko · en 으로, **text + HTML 대체 본문**(multipart)으로 보낸다. 코드 메일은 큰 고정폭 코드 블록, 링크 메일은 버튼 하나 + 원문 주소. 제목에는 코드 · 링크가 없다(로그에 남는다). 브랜드는 `skeleton.account.mail.brand.*`(서비스 이름 · 로고 https · 색 · 문의 주소 · 바닥글)로만 바꾸고, `html-enabled=false` 면 텍스트만 보낸다. 앱이 문구를 바꾸려면 `AccountMailTemplates` 빈, **틀만** 바꾸려면 `AccountMailLayout` 빈(`MailPage` 의 날것 값을 받아 스스로 이스케이프한다)을 둔다. 눈으로 보기: `./gradlew :modules:account:mailPreview` → `build/mail-preview/*.html`. 문구를 바꾸면 `UPDATE_GOLDEN=1 ./gradlew :modules:account:test --tests '*AccountMailGoldenTest'` 로 골든 파일을 다시 쓰고 diff 를 본다. 진짜 제공자 · 메일 시험: [real-provider-setup](../real-provider-setup.md).
 
 자세히: [계정 수명주기 · 위협 모델](../accounts.md) · [auth](auth.md) · [account-jdbc](account-jdbc.md) · [auth-session](auth-session.md) · 메일 링크 로그인은 `auth-magic-link` 모듈 (모듈 색인)
 

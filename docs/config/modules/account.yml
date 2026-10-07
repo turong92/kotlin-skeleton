@@ -46,6 +46,14 @@ skeleton:
       purge-interval: 1h               # 유예가 끝난 계정을 지우는 주기. 0 이면 주기 실행 없음
       purge-batch: 50
       confirmation-ttl: 30m            # 비밀번호 없는 계정의 삭제 확인 코드 유효 시간
+      mode: ANONYMIZE                  # 유예 뒤: ANONYMIZE = 계정 행(id · created_at)은 ERASED 로 남기고 개인정보만 지움(기본 — 다른 표의 참조가 안 끊긴다) | DELETE = 행까지 지움
+      self-restore: false              # true: 탈퇴 대기 계정의 주인이 로그인에 성공하면 403 AUTH.ACCOUNT_DELETION_PENDING + 취소 토큰 → POST /account/delete/cancel (기본 false = 이전과 같다. 권장하지만 앱이 켠다)
+      self-restore-ttl: 15m            # 취소 토큰 유효 시간
+    cleanup:
+      expired-retention: 1d            # 만료된 코드 · 토큰 · 가입 시도 줄을 만료 뒤 이만큼 두었다가 주기 정리가 지운다. 만료는 읽을 때 검사하므로 정리가 늦어도 만료 코드가 쓰이지는 않는다
+    blocks:
+      retention: 0s                    # 운영자가 지운 정지 계정의 재가입 차단(해시) 보존 기간. 0 = 운영자가 지울 때까지 — 개인정보 처리방침에 적는다
+      secret: ""                       # 차단 해시(HMAC-SHA256)의 서버 비밀. 비면 JWT 비밀에서 파생 — 오래 둘 앱은 따로 둔다 (바꾸면 기존 차단이 맞지 않는다)
     login:
       throttle-enabled: true           # 로그인 시도 제한 (시도 전부를 센다 — 없는 계정도 같게)
       per-ip: 30                       # 창 안에 한 IP 가 시도할 수 있는 수

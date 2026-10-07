@@ -7,7 +7,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * 메일 12종 × ko · en 의 제목 · 텍스트 · HTML 을 골든 파일(`src/test/resources/mail-golden`)과 바이트 단위로 맞춘다.
+ * 메일 13종 × ko · en 의 제목 · 텍스트 · HTML 을 골든 파일(`src/test/resources/mail-golden`)과 바이트 단위로 맞춘다.
  * 문구 · 틀을 일부러 바꿨다면 `UPDATE_GOLDEN=1 ./gradlew :modules:account:test --tests '*AccountMailGoldenTest'` 로 다시 쓰고 diff 를 눈으로 본다.
  */
 class AccountMailGoldenTest {

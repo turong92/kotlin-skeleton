@@ -7,6 +7,7 @@
 - **데이터베이스 객체: 없다.** 아래 표의 모든 새 이름은 옛 이름에서 `skeleton_` 만 뗀 것이다. PostgreSQL 이 자동으로 붙이는 이름(`<테이블>_pkey` · `<테이블>_<열>_fkey` · `<테이블>_<열>_seq`)도 테이블 이름을 따라 접두사가 사라진다.
 - **테이블이 아니라서 바꾸지 않은 것**: 리프레시 쿠키의 기본 이름 `skeleton_refresh`(`skeleton.auth-session.cookie.name`) — DB 이름이 아니다. 찍은 프로젝트에서는 `rename-skeleton.sh` 가 `<접두사>_refresh` 로 바꾼다.
 - **마이그레이션 파일 이름의 설명 부분**(`V…__skeleton_accounts.sql` → `V…__accounts.sql`)도 같은 규칙으로 바꿨다. 버전(시각) 숫자는 그대로다. Flyway 는 설명과 체크섬을 이력에 적으므로 **이미 옛 마이그레이션을 적용한 로컬 DB 는 `flywayClean` 으로 다시 만든다**(배포된 곳은 없다).
+- **옛 이름이 없는 것(접두사를 단 적이 없다)**: `account-jdbc` 의 표 `account_blocks`(재가입 차단 해시) · `account_locks`(주기 정리 임대)와 열 `accounts.erased_at` — 위 이름표에 행이 없는 이유다. `accounts.status` 에 `ERASED` 값이 늘었다.
 - 예약어: `jobs` · `alerts` · `boards` · `accounts` · `notification_inbox` · `auth_sessions` · … 어느 것도 PostgreSQL · MySQL 8.4 의 예약어가 아니다 — 따옴표 없이 두 방언 시험이 통과한다.
 
 ## 이름표 (옛 → 새)
