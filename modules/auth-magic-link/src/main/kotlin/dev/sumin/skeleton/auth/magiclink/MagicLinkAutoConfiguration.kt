@@ -2,6 +2,7 @@ package dev.sumin.skeleton.auth.magiclink
 
 import dev.sumin.skeleton.account.AccountAutoConfiguration
 import dev.sumin.skeleton.account.AccountCore
+import dev.sumin.skeleton.account.MagicLinkIssuer
 import dev.sumin.skeleton.account.signin.AccountSignInService
 import dev.sumin.skeleton.account.signin.SignInMethod
 import dev.sumin.skeleton.auth.api.AuthTokenResponseFactory
@@ -27,6 +28,11 @@ class MagicLinkAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     fun magicLinkService(core: AccountCore, signIn: AccountSignInService, properties: MagicLinkProperties): MagicLinkService = MagicLinkService(core, signIn, properties)
+
+    /** `account` 의 "이미 계정이 있어요" 메일에 1회용 로그인 링크 한 줄을 더하는 고리 — 이 모듈이 있을 때만 있다 (`account` 는 이 모듈에 의존하지 않는다) */
+    @Bean
+    @ConditionalOnMissingBean(MagicLinkIssuer::class)
+    fun magicLinkIssuer(service: MagicLinkService): MagicLinkIssuer = MagicLinkIssuer { service.issueFor(it) }
 }
 
 @AutoConfiguration(after = [MagicLinkAutoConfiguration::class])

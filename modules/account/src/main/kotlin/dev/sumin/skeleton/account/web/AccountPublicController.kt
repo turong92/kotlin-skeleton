@@ -55,15 +55,18 @@ class AccountPublicController(
             ),
         )
         val http202 = if (outcome.status == SignUpStatus.CREATED) HttpStatus.CREATED else HttpStatus.ACCEPTED
-        return ResponseEntity.status(http202).body(Response.ok(SignUpResponse(outcome.status.name, outcome.signUpId)))
+        return ResponseEntity.status(http202).body(Response.ok(SignUpResponse(outcome.status.name, outcome.signUpId, outcome.expiresAt, outcome.resendAvailableAt)))
     }
 
-    @Operation(summary = "Mail a new code for the same sign-up attempt (always 202; silent inside the cooldown, after the resend limit, when unknown or expired)")
+    @Operation(
+        summary = "Mail a new code for the same sign-up attempt (always 202 with expiresAt and resendAvailableAt; silent inside the cooldown, after the resend limit and when unknown)",
+        description = "An attempt whose code EXPIRED is revived by the same call (new code, same signUpId, same limits) while its row exists (skeleton.account.cleanup.expired-retention).",
+    )
     @PostMapping("/account/verification/resend")
     @AcceptedOperation
-    fun resend(@Valid @RequestBody request: ResendRequest, http: HttpServletRequest): ResponseEntity<DataResponse<StatusResponse>> {
-        clientIps.of(http).let { registration.resendVerification(request.signUpId!!, it.ip, request.captchaToken, it.limitKey) }
-        return accepted("ACCEPTED")
+    fun resend(@Valid @RequestBody request: ResendRequest, http: HttpServletRequest): ResponseEntity<DataResponse<CodeIssuedResponse>> {
+        val window = clientIps.of(http).let { registration.resendVerification(request.signUpId!!, it.ip, request.captchaToken, it.limitKey) }
+        return Response.accepted(CodeIssuedResponse.of("ACCEPTED", window))
     }
 
     @Operation(

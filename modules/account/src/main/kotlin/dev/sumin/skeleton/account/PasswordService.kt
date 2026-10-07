@@ -27,11 +27,8 @@ class PasswordService(private val core: AccountCore) {
 
     private fun sendResetLink(email: String, ip: String?) {
         val account = core.accountByEmail(email) ?: return
-        if (account.status != AccountStatus.ACTIVE && account.status != AccountStatus.PENDING_VERIFICATION) return
-        val r = core.props.reset
-        if (!core.limits.acquire("reset:email", email, r.perEmail, r.perEmailWindow).allowed) return
-        val raw = core.tokens.issue(TokenPurposes.PASSWORD_RESET, email, account.id, r.ttl)
-        core.mailer.send(AccountMail(MailKind.PASSWORD_RESET, email, account.locale, core.links.reset(raw), mapOf("minutes" to r.ttl.toMinutes().toString())))
+        val link = core.issueResetLink(account) ?: return   // 상태 · 주소별 한도 · 토큰 — "이미 계정이 있어요" 메일과 같은 길
+        core.mailer.send(AccountMail(MailKind.PASSWORD_RESET, email, account.locale, link.url, mapOf("minutes" to link.minutes.toString())))
         core.events.publish(AccountEventType.PASSWORD_RESET_REQUESTED, account.id, ip)
     }
 

@@ -242,10 +242,11 @@ class AccountAutoConfiguration {
         atomic: ObjectProvider<AccountTransaction>,
         blocks: AccountBlocks,
         lease: AccountMaintenanceLease,
+        magicLinks: ObjectProvider<MagicLinkIssuer>,
     ): AccountCore = AccountCore(
         accounts, properties, time.getIfAvailable { TimeProvider.systemUtc() }, events, hasher, policy, tokens, mailer, links, tasks, limits, captcha,
         { sessions.getIfAvailable() }, bootstrap, challenges, { socialReauth.getIfAvailable() },
-        { consents.getIfAvailable() }, atomic.getIfAvailable { AccountTransaction.NONE }, blocks, lease,
+        { consents.getIfAvailable() }, atomic.getIfAvailable { AccountTransaction.NONE }, blocks, lease, { magicLinks.getIfAvailable() },
     )
 
     @Bean

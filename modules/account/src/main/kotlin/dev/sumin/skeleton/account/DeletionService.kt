@@ -18,19 +18,21 @@ import org.slf4j.LoggerFactory
  * 그 사이 관리자는 복구할 수 있다.
  */
 class DeletionService(private val core: AccountCore) {
-    /** 비밀번호가 없는 계정이 쓸 6자리 확인 코드를 메일로 보낸다 — 요청한 세션에서만 쓸 수 있다 (주소가 없으면 조용히) */
-    fun requestConfirmation(accountId: String, sessionId: String?) {
+    /** 비밀번호가 없는 계정이 쓸 6자리 확인 코드를 메일로 보낸다 — 요청한 세션에서만 쓸 수 있다 (주소가 없으면 조용히, [CodeWindow] 는 같은 계산) */
+    fun requestConfirmation(accountId: String, sessionId: String?): CodeWindow {
         val account = core.accounts.findById(accountId) ?: throw AccountException(AccountErrorCode.NOT_FOUND)
         if (account.status == AccountStatus.SUSPENDED) throw AccountException(AccountErrorCode.SUSPENDED_CANNOT_DELETE)
         val c = core.props.deletion
         val e = core.props.emailChange
         val a = core.limits.acquire("delete-confirmation:account", accountId, e.perAccount, e.perAccountWindow)
         if (!a.allowed) throw RateLimitedException(a.retryAfterSeconds)
-        val email = account.email ?: return
+        val window = core.codeWindow(c.confirmationTtl)
+        val email = account.email ?: return window
         val opened = core.challenges.open(ChallengePurposes.DELETE_CONFIRM, accountId, c.confirmationTtl, core.props.verification.maxAttempts, accountId = accountId, sessionId = sessionId)
         core.tasks.run("delete-confirmation") {
             core.mailer.send(AccountMail(MailKind.DELETE_CODE, email, account.locale, vars = mapOf("code" to opened.code, "minutes" to c.confirmationTtl.toMinutes().toString())))
         }
+        return window
     }
 
     /** 삭제를 예약하고 지워질 시각을 돌려준다. 이미 삭제 중이면 같은 시각(유예를 늘리지 않는다) */

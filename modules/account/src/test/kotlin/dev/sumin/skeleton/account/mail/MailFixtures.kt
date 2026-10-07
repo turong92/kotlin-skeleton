@@ -8,7 +8,13 @@ internal object MailFixtures {
         linkBaseUrl = "https://app.example.com",
         brand = AccountProperties.Mail.Brand(serviceName = "Notes", accentColor = "#2563eb", supportAddress = "help@notes.example", footer = "Notes Inc. · Seoul"),
     )
-    val vars = mapOf("code" to "739518", "minutes" to "10", "days" to "30", "method" to "Google")
+    val vars = mapOf(
+        "code" to "739518", "minutes" to "10", "days" to "30", "method" to "Google",
+        // "이미 계정이 있어요" — 로그인 페이지 · 가입 수단 · 재설정 링크 · 일회용 매직 링크
+        "loginUrl" to "https://app.example.com/login", "methods" to "google,password",
+        "resetUrl" to "https://app.example.com/reset-password?token=Zq9-fixedTokenForGoldenFiles_0123456789", "resetMinutes" to "30",
+        "magicUrl" to "https://app.example.com/magic-link?token=Zq9-fixedTokenForGoldenFiles_0123456789", "magicMinutes" to "15",
+    )
     const val RESET = "https://app.example.com/reset-password?token=Zq9-fixedTokenForGoldenFiles_0123456789"
     const val MAGIC = "https://app.example.com/magic-link?token=Zq9-fixedTokenForGoldenFiles_0123456789"
     fun link(kind: MailKind): String? = when (kind) { MailKind.PASSWORD_RESET -> RESET; MailKind.MAGIC_LINK -> MAGIC; else -> null }

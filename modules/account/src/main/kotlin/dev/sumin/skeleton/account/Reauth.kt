@@ -36,17 +36,19 @@ class Reauth(private val core: AccountCore) {
         companion object { val NONE = Proof {} }
     }
 
-    /** 계정 주소로 6자리 코드를 보낸다 — 이 세션에서만 쓸 수 있다 (응답은 늘 같다 — 주소가 없으면 조용히) */
-    fun requestConfirmation(accountId: String, sessionId: String?) {
+    /** 계정 주소로 6자리 코드를 보낸다 — 이 세션에서만 쓸 수 있다 (응답은 늘 같다 — 주소가 없으면 조용히, [CodeWindow] 도 같은 계산) */
+    fun requestConfirmation(accountId: String, sessionId: String?): CodeWindow {
         val account = core.accounts.findById(accountId) ?: throw AccountException(AccountErrorCode.NOT_FOUND)
         val c = core.props.emailChange
         val a = core.limits.acquire("reauth-confirmation:account", accountId, c.perAccount, c.perAccountWindow)
         if (!a.allowed) throw RateLimitedException(a.retryAfterSeconds)
-        val email = account.email ?: return
+        val window = core.codeWindow(c.ttl)
+        val email = account.email ?: return window
         val opened = core.challenges.open(ChallengePurposes.REAUTH, accountId, c.ttl, core.props.verification.maxAttempts, accountId = accountId, sessionId = sessionId)
         core.tasks.run("reauth-confirmation") {
             core.mailer.send(AccountMail(MailKind.REAUTH_CODE, email, account.locale, vars = mapOf("code" to opened.code, "minutes" to c.ttl.toMinutes().toString())))
         }
+        return window
     }
 
     /**

@@ -54,7 +54,7 @@ class JdbcChallengeStore(private val jdbc: NamedParameterJdbcTemplate, private v
     override fun replaceCode(id: String, codeHash: String, expiresAt: Instant, now: Instant, sentBefore: Instant, maxResends: Int, attempts: Int): Boolean =
         jdbc.update(
             "update account_challenges set code_hash = :hash, expires_at = :expires, last_sent_at = :now, resends = resends + 1, attempts_left = :attempts " +
-                "where id = :id and expires_at > :now and last_sent_at <= :before and resends < :max",
+                "where id = :id and last_sent_at <= :before and resends < :max",
             MapSqlParameterSource().addValue("hash", codeHash).addValue("expires", dialect.instantParam(expiresAt)).addValue("now", dialect.instantParam(now))
                 .addValue("attempts", attempts).addValue("id", id).addValue("before", dialect.instantParam(sentBefore)).addValue("max", maxResends),
         ) == 1

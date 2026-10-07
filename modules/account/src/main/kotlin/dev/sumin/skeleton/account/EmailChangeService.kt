@@ -26,7 +26,8 @@ internal object EmailChangePayload {
 }
 
 class EmailChangeService(private val core: AccountCore) {
-    fun request(accountId: String, newEmail: String, input: ReauthInput, sessionId: String?) {
+    /** 코드는 새 주소로 간다. 돌려주는 [CodeWindow] 는 새 주소가 남의 것이든 · 예산을 넘었든 같은 계산이다 */
+    fun request(accountId: String, newEmail: String, input: ReauthInput, sessionId: String?): CodeWindow {
         val account = core.accounts.findById(accountId) ?: throw AccountException(AccountErrorCode.NOT_FOUND)
         val c = core.props.emailChange
         val a = core.limits.acquire("email-change:account", accountId, c.perAccount, c.perAccountWindow)
@@ -54,6 +55,7 @@ class EmailChangeService(private val core: AccountCore) {
             core.mailer.send(AccountMail(MailKind.EMAIL_CHANGE_CODE, target, account.locale, vars = mapOf("code" to opened.code, "minutes" to c.ttl.toMinutes().toString())))
             core.events.publish(AccountEventType.EMAIL_CHANGE_REQUESTED, account.id)
         }
+        return core.codeWindow(c.ttl)
     }
 
     /** 새 주소로 간 코드를 **요청한 세션에서** 입력한다. 틀리면 [CodeInvalidException], 없음 · 만료 · 소진 · 다른 세션이면 CODE_EXPIRED, 그 사이 주소를 남이 가져갔으면 EMAIL_TAKEN */

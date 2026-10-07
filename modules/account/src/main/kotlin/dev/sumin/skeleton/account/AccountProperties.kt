@@ -168,6 +168,8 @@ data class AccountProperties(
         val linkBaseUrl: String = "",
         val resetPath: String = "/reset-password",
         val magicLinkPath: String = "/magic-link",
+        /** "이미 계정이 있어요" 메일이 가리키는 프론트의 로그인 페이지 경로 (링크는 `link-base-url` + 이 경로, 토큰 없음) */
+        val loginPath: String = "/login",
         /** 계정 로케일이 없거나 지원하지 않을 때 쓰는 메일 언어 (ko · en 이 내장) */
         val defaultLocale: String = "en",
         /** 제목 앞에 붙는 서비스 이름 (예: [MyService]) */

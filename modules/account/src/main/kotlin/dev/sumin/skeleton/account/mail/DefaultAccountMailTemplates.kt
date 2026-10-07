@@ -20,12 +20,18 @@ class DefaultAccountMailTemplates(
         val copy = (if (lang == "ko") KO else EN).getValue(kind)
         // 한 번에 치환한다 — 값 안의 {이름} 이 다시 풀리지 않는다
         fun fill(s: String) = PLACEHOLDER.replace(s) { m -> vars[m.groupValues[1]] ?: m.value }
-        val lines = copy.lines.map(::fill)
+        var lines = copy.lines.map(::fill)
+        // "이미 계정이 있어요": 가입 수단 문장 · 로그인 / 재설정 / 일회용 링크 행동 (값이 있는 것만 — 없으면 그 줄이 빠진다)
+        val actions = if (kind == MailKind.ALREADY_REGISTERED) {
+            lines = lines.take(1) + methodSentences(lang, vars["methods"]) + lines.drop(1)
+            alreadyRegisteredActions(lang, vars)
+        } else emptyList()
         val subject = fill(copy.subject).replace(CONTROL, " ").trim()
         val brandName = props.brand.serviceName.replace(CONTROL, " ").trim()
         val text = buildString {
             lines.forEach { append(it).append("\n\n") }
             if (link != null) append(link).append("\n\n")
+            actions.forEach { append(it.intro).append("\n").append(it.button.url).append("\n\n") }
             append(if (lang == "ko") FOOTER_KO else FOOTER_EN)
             if (brandName.isNotEmpty()) append("\n").append(brandName)
             props.brand.footer.replace(CONTROL, " ").trim().takeIf { it.isNotEmpty() }?.let { append("\n").append(it) }
@@ -40,11 +46,45 @@ class DefaultAccountMailTemplates(
             code = if (isCode) vars["code"] else null,
             warning = if (isCode) lines.last() else null,
             button = if (link != null) MailButton(copy.action ?: link, link) else null,
+            actions = actions,
         )
         return RenderedMail(subject, text.trimEnd(), layout.wrap(page))
     }
 
+    /** 가입 수단 코드(쉼표로 구분) → 로케일별 문장 하나씩 ("구글로 가입되어 있어요." · "It is signed up with Google.") */
+    private fun methodSentences(lang: String, methods: String?): List<String> =
+        methods.orEmpty().split(',').map { it.trim() }.filter { it.isNotEmpty() }.distinct().map { code ->
+            if (lang == "ko") (METHOD_KO[code] ?: (display(code) + "(으)로")) + " 가입되어 있어요."
+            else "It is signed up with " + (METHOD_EN[code] ?: display(code)) + "."
+        }
+
+    private fun display(code: String) = code.replace('_', ' ').replaceFirstChar { it.uppercase() }
+
+    private fun alreadyRegisteredActions(lang: String, vars: Map<String, String>): List<MailAction> {
+        val ko = lang == "ko"
+        fun valid(minutes: String?) = minutes?.takeIf { m -> m.isNotEmpty() && m.all { it.isDigit() } }
+        return buildList {
+            vars["loginUrl"]?.takeIf { it.isNotBlank() }?.let { url ->
+                add(MailAction(if (ko) "로그인하러 가기:" else "Sign in:", MailButton(if (ko) "로그인" else "Sign in", url)))
+            }
+            vars["resetUrl"]?.takeIf { it.isNotBlank() }?.let { url ->
+                val m = valid(vars["resetMinutes"])
+                val note = if (m == null) "" else if (ko) " (한 번만 쓸 수 있고 ${m}분 뒤에 만료돼요)" else " (works once, expires in $m minutes)"
+                add(MailAction((if (ko) "비밀번호가 기억나지 않으면 이 링크로 새로 정해 주세요" else "Forgot your password? Choose a new one with this link") + note + ":", MailButton(if (ko) "새 비밀번호 정하기" else "Choose a new password", url)))
+            }
+            vars["magicUrl"]?.takeIf { it.isNotBlank() }?.let { url ->
+                val m = valid(vars["magicMinutes"])
+                val note = if (m == null) "" else if (ko) " (한 번만 쓸 수 있고 ${m}분 뒤에 만료돼요)" else " (works once, expires in $m minutes)"
+                add(MailAction((if (ko) "또는 이 일회용 링크로 바로 로그인하세요" else "Or sign in at once with this one-time link") + note + ":", MailButton(if (ko) "링크로 로그인" else "Sign in with this link", url)))
+            }
+        }
+    }
+
     private companion object {
+        /** 가입 수단 코드의 표시 문구 — 모르는 코드(앱이 더한 수단 · OIDC 제공자)는 코드를 다듬어 쓴다 */
+        val METHOD_EN = mapOf("password" to "email and password", "magic_link" to "an email link", "google" to "Google", "kakao" to "Kakao", "naver" to "Naver", "x" to "X", "apple" to "Apple")
+        val METHOD_KO = mapOf("password" to "이메일과 비밀번호로", "magic_link" to "이메일 링크로", "google" to "구글로", "kakao" to "카카오로", "naver" to "네이버로", "x" to "X로", "apple" to "애플로")
+
         val PLACEHOLDER = Regex("\\{(\\w+)}")
         val CONTROL = Regex("[\\u0000-\\u001f\\u2028\\u2029]+")
         val CODE_KINDS = setOf(MailKind.VERIFY_CODE, MailKind.EMAIL_CHANGE_CODE, MailKind.REAUTH_CODE, MailKind.DELETE_CODE)

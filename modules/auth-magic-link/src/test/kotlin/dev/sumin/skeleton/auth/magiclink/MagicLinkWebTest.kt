@@ -99,6 +99,30 @@ class MagicLinkWebTest {
     }
 
     @Test
+    fun `the already-registered mail of a sign-up carries a one-time sign-in link that really signs in, and the 202 stays the same`() {
+        val email = unique()
+        request(email)
+        redeem(lastToken()).andExpect(status().isOk)        // an account with the magic_link method exists now
+        mails.sent.clear()
+
+        fun signUp(address: String) = mvc.perform(
+            post("/api/v1/account/sign-up").with { it.remoteAddr = "198.51.100.${100 + nextTestIp.getAndIncrement() % 100}"; it }
+                .contentType(MediaType.APPLICATION_JSON).content("""{"email":"$address","password":"tangerine-42-moon"}"""),
+        ).andExpect(status().isAccepted).andReturn()
+        val known = signUp(email)
+        val unknown = signUp(unique())
+        assertEquals(JsonPath.read<Map<String, Any?>>(known.response.contentAsString, "$.value").keys, JsonPath.read<Map<String, Any?>>(unknown.response.contentAsString, "$.value").keys)
+
+        val mail = mails.sent.last { it.kind == MailKind.ALREADY_REGISTERED }
+        assertEquals("magic_link", mail.vars["methods"])
+        assertEquals("https://app.example.com/login", mail.vars["loginUrl"])
+        assertEquals("15", mail.vars["magicMinutes"])
+        val link = mail.vars.getValue("magicUrl")
+        assertTrue(link.startsWith("https://app.example.com/magic-link?token="), link)
+        redeem(link.substringAfter("token=")).andExpect(status().isOk).andExpect(jsonPath("$.value.principal.email").value(email))
+    }
+
+    @Test
     fun `an expired link is dead`() {
         request(unique())
         val token = lastToken()

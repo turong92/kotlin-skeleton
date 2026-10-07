@@ -72,10 +72,10 @@ class AccountController(
     @IdempotentOperation(ignoredBodyFields = ["currentPassword", "confirmationCode", "socialReauth"], cacheClientErrors = false)
     @PostMapping("/email/change")
     @AcceptedOperation
-    fun changeEmail(authentication: Authentication?, @Valid @RequestBody request: ChangeEmailRequest): ResponseEntity<DataResponse<StatusResponse>> {
+    fun changeEmail(authentication: Authentication?, @Valid @RequestBody request: ChangeEmailRequest): ResponseEntity<DataResponse<CodeIssuedResponse>> {
         val caller = callers.require(authentication)
-        emailChange.request(caller.accountId, request.newEmail!!, reauthOf(request.currentPassword, request.confirmationCode, request.socialReauth), caller.sessionId)
-        return Response.accepted(StatusResponse("VERIFICATION_SENT"))
+        val window = emailChange.request(caller.accountId, request.newEmail!!, reauthOf(request.currentPassword, request.confirmationCode, request.socialReauth), caller.sessionId)
+        return Response.accepted(CodeIssuedResponse.of("VERIFICATION_SENT", window))
     }
 
     @Operation(
@@ -93,10 +93,9 @@ class AccountController(
     @Operation(summary = "Mail a 6-digit code that re-authenticates an account that has no password (for email change, first password, social link, unlink); only this session can use it")
     @PostMapping("/reauth/confirmation")
     @AcceptedOperation
-    fun reauthConfirmation(authentication: Authentication?): ResponseEntity<DataResponse<StatusResponse>> {
+    fun reauthConfirmation(authentication: Authentication?): ResponseEntity<DataResponse<CodeIssuedResponse>> {
         val caller = callers.require(authentication)
-        reauth.requestConfirmation(caller.accountId, caller.sessionId)
-        return Response.accepted(StatusResponse("ACCEPTED"))
+        return Response.accepted(CodeIssuedResponse.of("ACCEPTED", reauth.requestConfirmation(caller.accountId, caller.sessionId)))
     }
 
     @Operation(summary = "Sign-in methods linked to this account")
@@ -117,10 +116,9 @@ class AccountController(
     @Operation(summary = "Mail a 6-digit code for deleting an account that has no password; only this session can use it")
     @PostMapping("/delete/confirmation")
     @AcceptedOperation
-    fun deletionConfirmation(authentication: Authentication?): ResponseEntity<DataResponse<StatusResponse>> {
+    fun deletionConfirmation(authentication: Authentication?): ResponseEntity<DataResponse<CodeIssuedResponse>> {
         val caller = callers.require(authentication)
-        deletion.requestConfirmation(caller.accountId, caller.sessionId)
-        return Response.accepted(StatusResponse("ACCEPTED"))
+        return Response.accepted(CodeIssuedResponse.of("ACCEPTED", deletion.requestConfirmation(caller.accountId, caller.sessionId)))
     }
 
     @Operation(

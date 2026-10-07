@@ -47,6 +47,9 @@ class AccountLinks(private val props: AccountProperties.Mail) {
     fun reset(token: String) = build(props.resetPath, token)
     fun magicLink(token: String) = build(props.magicLinkPath, token)
 
+    /** 프론트의 로그인 페이지 — 토큰 없는 주소. 프론트 주소(`link-base-url`)가 비면 null (상대 주소는 메일에서 쓸모가 없다) */
+    fun login(): String? = props.linkBaseUrl.takeIf { it.isNotBlank() }?.let { it.trimEnd('/') + props.loginPath }
+
     private fun build(path: String, token: String): String =
         props.linkBaseUrl.trimEnd('/') + path + "?token=" + URLEncoder.encode(token, StandardCharsets.UTF_8)
 }

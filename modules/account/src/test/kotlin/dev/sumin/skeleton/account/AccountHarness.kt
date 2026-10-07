@@ -60,6 +60,8 @@ class AccountHarness(
     socialReauth: SocialReauthVerifier? = null,
     consents: dev.sumin.skeleton.common.consent.SignUpConsentGate? = null,
     atomic: AccountTransaction = AccountTransaction.NONE,
+    /** 매직 링크 수단(`auth-magic-link`)이 있을 때만 있는 고리 — "이미 계정이 있어요" 메일의 1회용 로그인 링크 */
+    magicLinks: MagicLinkIssuer? = null,
 ) {
     val time = MutableTime()
     val callLog = CallLog()
@@ -86,7 +88,7 @@ class AccountHarness(
         repo, props, time, publisher, hasher, policy, tokens, mailer, AccountLinks(props.mail), tasks,
         AccountRateLimits({ limitStore }, time),
         CaptchaGate(captcha, captchaRequired), { revoker }, bootstrap, challenges, { socialReauth }, { consents }, atomic,
-        AccountBlocks.local(time, props.blocks.retention),
+        AccountBlocks.local(time, props.blocks.retention), magicLinks = { magicLinks },
     )
     val registration = RegistrationService(core)
     val authRepository = AccountAuthRepository(core)

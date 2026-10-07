@@ -29,8 +29,11 @@ data class SignUpConsentRequest(
     @field:Size(max = 35) val locale: String? = null,
 )
 
-/** 가입 응답 — [signUpId] 는 코드 확인 · 재전송에 쓰는 불투명한 가입 시도 id (이메일 확인을 끈 앱에는 없다) */
-data class SignUpResponse(val status: String, val signUpId: String? = null) {
+/**
+ * 가입 응답 — [signUpId] 는 코드 확인 · 재전송에 쓰는 불투명한 가입 시도 id (이메일 확인을 끈 앱에는 없다).
+ * [expiresAt] · [resendAvailableAt]: 카운트다운용 (ISO-8601 instant, 시도가 없으면 없다) — 계정이 이미 있어도 · 메일을 안 보내도 같은 모양 · 같은 계산이다
+ */
+data class SignUpResponse(val status: String, val signUpId: String? = null, val expiresAt: Instant? = null, val resendAvailableAt: Instant? = null) {
     // Spring MVC 가 TRACE 에서 응답 객체를 toString 으로 찍는다 — 가입 id 는 코드와 함께 시도를 끝내는 열쇠다
     override fun toString() = "SignUpResponse(status=$status, signUpId=${if (signUpId == null) "none" else "<redacted>"})"
 }
@@ -138,6 +141,13 @@ data class AdminEraseRequest(@field:Size(max = 200) val reason: String? = null)
 data class AccountBlockResponse(val id: Long, val kind: String, val reason: String?, val createdAt: Instant, val expiresAt: Instant?, val createdBy: String?, val accountId: String?)
 
 data class StatusResponse(val status: String)
+
+/** 코드를 보낸 202 의 본문 — 카운트다운용 두 시각 (ISO-8601 instant). 메일을 실제로 보냈는지와 무관하게 같은 모양 · 같은 계산이다 (docs/account-http-contract.md) */
+data class CodeIssuedResponse(val status: String, val expiresAt: Instant, val resendAvailableAt: Instant) {
+    companion object {
+        fun of(status: String, w: dev.sumin.skeleton.account.CodeWindow) = CodeIssuedResponse(status, w.expiresAt, w.resendAvailableAt)
+    }
+}
 
 data class PasswordPolicyResponse(
     val minLength: Int,

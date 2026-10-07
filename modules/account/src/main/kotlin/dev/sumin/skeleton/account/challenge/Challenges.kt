@@ -61,7 +61,7 @@ interface ChallengeStore {
 
     fun deleteByAccount(accountId: String, purposes: Collection<String>): Int
 
-    /** 새 코드로 바꾼다 — 마지막 발송이 [sentBefore] 이전이고 재전송이 [maxResends] 미만일 때만. 시도는 [attempts] 로 되돌린다 */
+    /** 새 코드로 바꾼다 — 마지막 발송이 [sentBefore] 이전이고 재전송이 [maxResends] 미만일 때만 (**이미 만료된 줄도** 된다 — 청소 전이면 새 코드로 되살아난다). 시도는 [attempts] 로 되돌린다 */
     fun replaceCode(id: String, codeHash: String, expiresAt: Instant, now: Instant, sentBefore: Instant, maxResends: Int, attempts: Int): Boolean
 
     fun purgeExpired(before: Instant): Int
@@ -201,7 +201,7 @@ class InMemoryChallengeStore : ChallengeStore {
 
     @Synchronized override fun replaceCode(id: String, codeHash: String, expiresAt: Instant, now: Instant, sentBefore: Instant, maxResends: Int, attempts: Int): Boolean {
         val row = rows[id] ?: return false
-        if (!row.expiresAt.isAfter(now) || row.lastSentAt.isAfter(sentBefore) || row.resends >= maxResends) return false
+        if (row.lastSentAt.isAfter(sentBefore) || row.resends >= maxResends) return false
         rows[id] = row.copy(codeHash = codeHash, expiresAt = expiresAt, lastSentAt = now, resends = row.resends + 1, attemptsLeft = attempts)
         return true
     }

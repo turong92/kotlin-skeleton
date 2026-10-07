@@ -87,6 +87,35 @@ class AccountWebTest {
     }
 
     @Test
+    fun `every answer that sends a code carries expiresAt and resendAvailableAt as ISO instants, the same shape whether or not a mail went out`() {
+        fun window(r: org.springframework.test.web.servlet.ResultActions): Pair<java.time.Instant, java.time.Instant> {
+            val body = r.andReturn().response.contentAsString
+            return java.time.Instant.parse(JsonPath.read<String>(body, "$.value.expiresAt")) to java.time.Instant.parse(JsonPath.read<String>(body, "$.value.resendAvailableAt"))
+        }
+        fun assertCountdown(w: Pair<java.time.Instant, java.time.Instant>, ttlMinutes: Long) {
+            val now = java.time.Instant.now()
+            assertTrue(java.time.Duration.between(now, w.first).toMinutes() in (ttlMinutes - 1)..ttlMinutes, "expiresAt ${w.first}")
+            assertTrue(java.time.Duration.between(now, w.second).seconds in 0..30, "resendAvailableAt ${w.second}")
+        }
+        val email = registered()
+        // sign-up: a registered address and a new one answer alike
+        val registeredAddress = signUp(email).andExpect(status().isAccepted)
+        val newAddress = signUp(unique()).andExpect(status().isAccepted)
+        assertCountdown(window(registeredAddress), 10); assertCountdown(window(newAddress), 10)
+
+        // resend
+        val attempt = signUpIdOf(signUp(unique()).andExpect(status().isAccepted))
+        assertCountdown(window(mvc.perform(post("/api/v1/account/verification/resend").json("""{"signUpId":"$attempt"}""")).andExpect(status().isAccepted)), 10)
+        assertCountdown(window(mvc.perform(post("/api/v1/account/verification/resend").json("""{"signUpId":"${"x".repeat(43)}"}""")).andExpect(status().isAccepted)), 10)
+
+        // signed-in endpoints
+        val auth = bearer(login(email))
+        assertCountdown(window(mvc.perform(post("/api/v1/account/email/change").header("Authorization", auth).idem().json("""{"newEmail":"${unique()}","currentPassword":"tangerine-42-moon"}""")).andExpect(status().isAccepted)), 10)
+        assertCountdown(window(mvc.perform(post("/api/v1/account/reauth/confirmation").header("Authorization", auth)).andExpect(status().isAccepted)), 10)
+        assertCountdown(window(mvc.perform(post("/api/v1/account/delete/confirmation").header("Authorization", auth)).andExpect(status().isAccepted)), 10)
+    }
+
+    @Test
     fun `a weak password is a 400 with the violation codes, bad input is a validation error`() {
         signUp(unique(), "short1").andExpect(status().isBadRequest)
             .andExpect(jsonPath("$.code").value("ACCOUNT.PASSWORD_POLICY"))

@@ -1,6 +1,8 @@
 package dev.sumin.skeleton.auth.magiclink
 
+import dev.sumin.skeleton.account.Account
 import dev.sumin.skeleton.account.AccountCore
+import dev.sumin.skeleton.account.IssuedLink
 import dev.sumin.skeleton.account.AccountErrorCode
 import dev.sumin.skeleton.account.AccountException
 import dev.sumin.skeleton.account.AccountStatus
@@ -74,6 +76,19 @@ class MagicLinkService(
             core.mailer.send(AccountMail(MailKind.MAGIC_LINK, normalized, account?.locale, core.links.magicLink(raw), mapOf("minutes" to props.ttl.toMinutes().toString())))
             core.events.publish(AccountEventType.MAGIC_LINK_REQUESTED, account?.id, ip)
         }
+    }
+
+    /**
+     * "이미 계정이 있어요" 메일(가입 요청이 이미 있는 주소를 만났을 때)에 넣을 1회용 링크 — 링크 요청과 **같은 한도**(주소별 `per-email`)와 같은 토큰이다.
+     * 매직 링크를 받을 수 없는 계정(정지 · 탈퇴 · 주소 없음)이나 한도를 넘으면 null — 메일에서 그 줄이 빠진다. [MagicLinkIssuer] 로 `account` 가 부른다 (account 는 이 모듈을 모른다)
+     */
+    fun issueFor(account: Account): IssuedLink? {
+        val email = account.email ?: return null
+        if (account.status != AccountStatus.ACTIVE && account.status != AccountStatus.PENDING_VERIFICATION) return null
+        if (!core.limits.acquire("magic-link:email", email, props.perEmail, props.perEmailWindow).allowed) return null
+        val raw = core.tokens.issue(TokenPurposes.MAGIC_LINK, email, account.id, props.ttl)
+        core.events.publish(AccountEventType.MAGIC_LINK_REQUESTED, account.id, detail = mapOf("via" to "already_registered"))
+        return IssuedLink(core.links.magicLink(raw), props.ttl.toMinutes())
     }
 
     /** 링크를 소비해 로그인할 계정을 돌려준다 (토큰 발급 · 세션은 호출자가 `AuthTokenResponseFactory` 로). 쓸 수 없는 링크는 410 */

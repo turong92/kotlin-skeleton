@@ -37,8 +37,11 @@ data class SignUpCommand(
 
 enum class SignUpStatus { VERIFICATION_SENT, CREATED }
 
-/** [signUpId]: 코드 확인 · 재전송에 쓰는 가입 시도 id — 이메일 확인을 끈 앱(CREATED)에는 없다 */
-data class SignUpOutcome(val status: SignUpStatus, val signUpId: String? = null)
+/**
+ * [signUpId]: 코드 확인 · 재전송에 쓰는 가입 시도 id — 이메일 확인을 끈 앱(CREATED)에는 없다.
+ * [expiresAt] · [resendAvailableAt]: 카운트다운용 ([CodeWindow]) — 시도가 없으면(CREATED) 없다
+ */
+data class SignUpOutcome(val status: SignUpStatus, val signUpId: String? = null, val expiresAt: java.time.Instant? = null, val resendAvailableAt: java.time.Instant? = null)
 
 /**
  * 이메일 + 비밀번호 가입과 **코드로 하는** 이메일 확인.
@@ -99,7 +102,8 @@ class RegistrationService(private val core: AccountCore) {
             if (existing != null && taken(existing)) notifyAlreadyRegistered(existing, mayMail)
             else if (mayMail && mayOpen) sendCode(email, opened.code, cmd.locale)
         }
-        return SignUpOutcome(SignUpStatus.VERIFICATION_SENT, opened.handle)
+        // 시간 값은 저장한(또는 한도 때문에 저장하지 않은) 시도 행에서 — 새 주소든 있는 주소든 메일이 나갔든 안 나갔든 같은 계산이다
+        return SignUpOutcome(SignUpStatus.VERIFICATION_SENT, opened.handle, opened.row.expiresAt, opened.row.lastSentAt.plus(v.resendCooldown))
     }
 
     private fun createVerified(email: String, hash: String, cmd: SignUpCommand): SignUpStatus {
@@ -119,7 +123,22 @@ class RegistrationService(private val core: AccountCore) {
     private fun notifyAlreadyRegistered(existing: Account, allowed: Boolean) {
         val address = existing.email ?: return
         if (existing.status == AccountStatus.DELETED || !allowed) return
-        core.mailer.send(AccountMail(MailKind.ALREADY_REGISTERED, address, existing.locale))
+        core.mailer.send(AccountMail(MailKind.ALREADY_REGISTERED, address, existing.locale, vars = alreadyRegisteredVars(existing, address)))
+    }
+
+    /**
+     * "이미 계정이 있어요" 메일의 다음 걸음: 로그인 페이지 · 가입 수단(코드 목록 — 문구는 템플릿이 로케일로) · 비밀번호 재설정 링크(재설정 요청과 같은 상태 규칙 · 주소별 한도 · 토큰) ·
+     * (`auth-magic-link` 가 있으면) 1회용 매직 링크. 정지된 계정에는 링크를 주지 않는다(박제). 뒤로 넘긴 일 안에서만 돈다 — 화면 응답은 계정이 있든 없든 같다.
+     */
+    private fun alreadyRegisteredVars(existing: Account, address: String): Map<String, String> = buildMap {
+        core.links.login()?.let { put("loginUrl", it) }
+        core.accounts.identitiesOf(existing.id).map { it.method }.distinct().takeIf { it.isNotEmpty() }?.let { put("methods", it.joinToString(",")) }
+        if (existing.status == AccountStatus.SUSPENDED) return@buildMap
+        core.issueResetLink(existing)?.let {
+            put("resetUrl", it.url); put("resetMinutes", it.minutes.toString())
+            core.events.publish(AccountEventType.PASSWORD_RESET_REQUESTED, existing.id, detail = mapOf("via" to "already_registered"))
+        }
+        core.magicLinks()?.issue(existing)?.let { put("magicUrl", it.url); put("magicMinutes", it.minutes.toString()) }
     }
 
     /**
@@ -199,24 +218,35 @@ class RegistrationService(private val core: AccountCore) {
         return existing to true
     }
 
-    /** 항상 같은 응답 — 시도 조회 · 메일은 뒤에서, 쿨다운 · 재전송 한도 · 주소별 예산을 넘으면 조용히 */
-    fun resendVerification(signUpId: String, ip: String?, captchaToken: String?, ipKey: String? = ip) {
+    /**
+     * 같은 시도의 새 코드 — 응답은 늘 같은 모양이고 시간 값은 카운트다운용이다. 쿨다운 · 재전송 횟수 · 주소별 메일 예산을 넘으면 메일은 조용히 안 나가고 값은 **지금 유효한 코드의 것**이다.
+     * **만료된 시도도** (행이 아직 있으면 — `cleanup.expired-retention`) 같은 한도로 새 코드를 받는다: 시도 id 는 그대로이고(가입을 시작한 브라우저가 든 열쇠 — 새로 줄 이유가 없다),
+     * 코드 · 만료 · 남은 추측만 새로 시작한다. 한도 계산은 그대로다 — 재전송 횟수(시도당 3)와 주소별 메일 예산(`verification.per-email`)이 새 코드의 수를 묶고, 주소별 추측 천장
+     * (`guesses-per-email`)이 코드마다 5번씩의 총량을 묶는다 (docs/accounts.md 무차별 대입 계산이 그대로 맞는다). 모르는 · 이미 지워진 시도는 조용히 — 값은 **보낸 것처럼 그럴듯하게**(카운트다운 힌트일 뿐, 진실은 verify-email 이다).
+     * 계정 저장소 조회 · 메일은 뒤에서(요청 스레드는 시도 저장소와 한도만 만진다 — 주소가 쓰이는지 알 수 없다).
+     */
+    fun resendVerification(signUpId: String, ip: String?, captchaToken: String?, ipKey: String? = ip): CodeWindow {
         ipKey?.let {
             val v = core.props.verification
             val a = core.limits.acquire("resend:ip", it, v.perIp, v.perIpWindow)
             if (!a.allowed) throw RateLimitedException(a.retryAfterSeconds)
         }
         core.captcha.check(captchaToken, ip, "resend_verification")
+        val v = core.props.verification
         val id = core.challenges.idOf(signUpId)
+        val row = id?.let(core.challenges::find)?.takeIf { it.purpose == ChallengePurposes.SIGN_UP } ?: return core.codeWindow(v.codeTtl)
+        // 확인된 계정이 있는 주소의 시도도 **똑같이 재발급**한다 (남은 추측 · 만료 · 쿨다운 · 재전송 횟수가 같게) — 달라지면 재전송 뒤의 틀린 코드 한 번으로 가입 여부를 알 수 있다. 다른 것은 메일의 종류뿐이다
+        val code = if (withinEmailBudget(row.subject)) core.challenges.reissue(row.id, v.codeTtl, v.maxAttempts, v.resendCooldown, v.maxResends) else null
+        if (code == null) {
+            val now = core.time.now()
+            return CodeWindow(row.expiresAt, maxOf(now, row.lastSentAt.plus(v.resendCooldown)))
+        }
         core.tasks.run("resend-verification") {
-            val row = id?.let(core.challenges::find)?.takeIf { it.purpose == ChallengePurposes.SIGN_UP } ?: return@run
-            // 확인된 계정이 있는 주소의 시도도 **똑같이 재발급**한다 (남은 추측 · 만료 · 쿨다운 · 재전송 횟수가 같게) — 달라지면 재전송 뒤의 틀린 코드 한 번으로 가입 여부를 알 수 있다. 다른 것은 메일의 종류뿐이다
-            if (!withinEmailBudget(row.subject)) return@run
-            val v = core.props.verification
-            val code = core.challenges.reissue(row.id, v.codeTtl, v.maxAttempts, v.resendCooldown, v.maxResends) ?: return@run
             val existing = core.accountByEmail(row.subject)
             if (existing != null && taken(existing)) notifyAlreadyRegistered(existing, true) else sendCode(row.subject, code, null)
         }
+        val fresh = core.challenges.find(row.id) ?: return core.codeWindow(v.codeTtl)
+        return CodeWindow(fresh.expiresAt, fresh.lastSentAt.plus(v.resendCooldown))
     }
 
     /** 시도가 실어 온 동의를 기록한다 — 호출자는 [AccountTransaction] 안이다. 고리가 없으면 아무것도 하지 않는다 */

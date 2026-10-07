@@ -49,6 +49,8 @@ class AccountCore(
     val blocks: AccountBlocks = AccountBlocks.local(time),
     /** 주기 정리를 인스턴스 하나만 하게 하는 임대 */
     val lease: AccountMaintenanceLease = InMemoryAccountMaintenanceLease(time),
+    /** 1회용 매직 링크를 만드는 고리 — `auth-magic-link` 가 없으면 null ("이미 계정이 있어요" 메일에서 그 줄이 빠진다) */
+    val magicLinks: () -> MagicLinkIssuer? = { null },
 ) {
     /**
      * 이메일로 계정 하나 — 저장소가 어떤 정렬 규칙으로 찾았든 **저장된 주소가 정규화된 입력과 글자 그대로 같을 때만** 돌려준다
@@ -88,6 +90,25 @@ class AccountCore(
         val v = props.verification
         val a = limits.acquire("guess:email", email, v.guessesPerEmail, v.perEmailWindow)
         if (!a.allowed) throw dev.sumin.skeleton.account.abuse.RateLimitedException(a.retryAfterSeconds)
+    }
+
+    /**
+     * 비밀번호 재설정 링크를 만든다 — 재설정 요청([PasswordService.forgot])과 "이미 계정이 있어요" 메일이 **같은 길**이다: 같은 계정 상태 규칙(ACTIVE · PENDING_VERIFICATION 만),
+     * 같은 주소별 한도(`reset.per-email`), 같은 토큰(새 토큰이 이전 것을 닫는다). 못 만들면(상태 · 한도) null
+     */
+    fun issueResetLink(account: Account): IssuedLink? {
+        if (account.status != AccountStatus.ACTIVE && account.status != AccountStatus.PENDING_VERIFICATION) return null
+        val email = account.email ?: return null
+        val r = props.reset
+        if (!limits.acquire("reset:email", email, r.perEmail, r.perEmailWindow).allowed) return null
+        val raw = tokens.issue(TokenPurposes.PASSWORD_RESET, email, account.id, r.ttl)
+        return IssuedLink(links.reset(raw), r.ttl.toMinutes())
+    }
+
+    /** 코드를 [ttl] 동안 쓸 수 있게 방금 보낸 응답의 두 시각 ([CodeWindow]) — 메일을 실제로 보냈든 안 보냈든 같은 계산 */
+    fun codeWindow(ttl: java.time.Duration): CodeWindow {
+        val now = time.now()
+        return CodeWindow(now.plus(ttl), now.plus(props.verification.resendCooldown))
     }
 
     /** 새 로그인 수단이 붙었다고 계정 주소에 알린다 (내가 한 일이 아니면 알아채도록) */

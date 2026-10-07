@@ -5,6 +5,9 @@ import dev.sumin.skeleton.account.AccountProperties
 /** 버튼 하나 — [label] 이 글자, [url] 이 가는 곳 */
 data class MailButton(val label: String, val url: String)
 
+/** 본문 끝에 덧붙는 행동 하나 — [intro] 한 문장 + 그 아래 [button] ("이미 계정이 있어요" 메일의 로그인 · 재설정 · 일회용 링크) */
+data class MailAction(val intro: String, val button: MailButton)
+
 /**
  * 메일 한 통의 내용(구조) — **값은 날것이다(이스케이프 전)**. 틀([AccountMailLayout])이 자기 출력에 맞게 이스케이프한다.
  * [code] 가 있으면 큰 코드 블록, [button] 이 있으면 버튼 + 같은 주소의 글자(링크가 안 눌릴 때).
@@ -18,6 +21,8 @@ data class MailPage(
     val button: MailButton? = null,
     /** 코드 아래의 강조 한 줄 (예: 이 코드를 누구에게도 알려주지 마세요) */
     val warning: String? = null,
+    /** 주 버튼 뒤에 이어지는 행동들 — 문장 + 버튼 (기본 틀이 그린다) */
+    val actions: List<MailAction> = emptyList(),
 )
 
 /** HTML 틀 — 앱이 `AccountMailLayout` 빈을 두면 내장 틀([DefaultAccountMailLayout]) 대신 쓴다 */
@@ -60,11 +65,10 @@ class DefaultAccountMailLayout(private val brand: AccountProperties.Mail.Brand) 
             b.append("<div style=\"margin:20px 0;padding:16px;text-align:center;background:#eef2ff;border-radius:6px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:32px;font-weight:700;letter-spacing:8px;color:#111827\">").append(esc(it)).append("</div>")
         }
         page.warning?.let { b.append("<p style=\"margin:0 0 14px 0;font-size:14px;line-height:1.6;font-weight:700;color:#b42318\">").append(esc(it)).append("</p>") }
-        page.button?.let {
-            b.append("<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:20px 0\"><tr><td bgcolor=\"").append(accent).append("\" style=\"border-radius:6px;background:").append(accent).append("\">")
-            b.append("<a href=\"").append(esc(it.url)).append("\" style=\"display:inline-block;padding:12px 28px;font-size:16px;font-weight:600;color:#ffffff;text-decoration:none\">").append(esc(it.label)).append("</a></td></tr></table>")
-            b.append("<p style=\"margin:0 0 14px 0;font-size:12px;line-height:1.5;color:#6b7280\">").append(if (ko) "버튼이 안 눌리면 이 주소를 브라우저에 붙여 넣으세요." else "If the button does not work, paste this address into your browser.")
-            b.append("<br><span style=\"word-break:break-all\">").append(esc(it.url)).append("</span></p>")
+        page.button?.let { button(b, it, ko) }
+        page.actions.forEach { a ->
+            b.append("<p style=\"margin:8px 0 0 0;font-size:15px;line-height:1.6;color:#3e4c59\">").append(esc(a.intro)).append("</p>")
+            button(b, a.button, ko)
         }
         b.append("</td></tr>")
         b.append("<tr><td style=\"padding:16px 32px 28px 32px;border-top:1px solid #e5e7eb;font-size:12px;line-height:1.6;color:#6b7280\">")
@@ -74,6 +78,13 @@ class DefaultAccountMailLayout(private val brand: AccountProperties.Mail.Brand) 
         if (support != null) b.append("<br>").append(if (ko) "문의: " else "Contact: ").append("<a href=\"mailto:").append(esc(support)).append("\" style=\"color:#6b7280\">").append(esc(support)).append("</a>")
         b.append("</td></tr></table></td></tr></table></body></html>")
         return b.toString()
+    }
+
+    private fun button(b: StringBuilder, it: MailButton, ko: Boolean) {
+        b.append("<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:20px 0\"><tr><td bgcolor=\"").append(accent).append("\" style=\"border-radius:6px;background:").append(accent).append("\">")
+        b.append("<a href=\"").append(esc(it.url)).append("\" style=\"display:inline-block;padding:12px 28px;font-size:16px;font-weight:600;color:#ffffff;text-decoration:none\">").append(esc(it.label)).append("</a></td></tr></table>")
+        b.append("<p style=\"margin:0 0 14px 0;font-size:12px;line-height:1.5;color:#6b7280\">").append(if (ko) "버튼이 안 눌리면 이 주소를 브라우저에 붙여 넣으세요." else "If the button does not work, paste this address into your browser.")
+        b.append("<br><span style=\"word-break:break-all\">").append(esc(it.url)).append("</span></p>")
     }
 
     private companion object {
