@@ -51,10 +51,15 @@
 | `GET /api/v1/admin/author-profiles?accountId=` | 계정의 프로필들 (`accountId` 가 없으면 `400`) |
 
 - 응답 `{ value: { accountId, profiles: [{ id, name, tag, status, createdAt, updatedAt, deletedAt }] } }` — 만든 순, **지워진 것 포함**(`status` `DELETED`: `name` · `tag` 는 null, `deletedAt` 있음). 계정 이메일은 싣지 않는다 — 필요하면 `GET /api/v1/admin/accounts/{id}`(account 의 관리자 조회).
-- **권한**: `AccountCallers.requireAdmin` — `skeleton.account.admin.role`(기본 `ADMIN`)만, 매 호출 저장소의 계정 역할 · 상태를 다시 읽는다(토큰의 역할은 힌트). `MODERATOR` · 일반 사용자 · 정지된 관리자 `403`, 익명 `401`. 게시판 운영자는 연결을 보지 못한다(글 숨김 · 삭제는 연결 없이 되고, 계정 제재는 관리자의 일).
-- **감사**: 성공한 호출마다 `AccountEventType.AUTHOR_LINK_VIEWED` 를 낸다 — 대상 계정 id, `detail = { by: <관리자 계정 id> }`. **detail 에도 로그 한 줄에도 프로필 id 가 없다**(기본 로거는 `account=<대상> detail={by=…}` 만 찍는다). 이 이벤트는 계정 이벤트 한 종류가 늘어난 것이 `account` 의 유일한 변경이다 — `account_audit.type` 은 `varchar(40)` 문자열이라(제약 · enum 열 없음) 마이그레이션은 없다.
+- **권한**: `AccountCallers.requireAdmin` — `skeleton.account.admin.role`(기본 `ADMIN`)만, 매 호출 저장소의 계정 역할 · 상태를 다시 읽는다(토큰의 역할은 힌트). `MODERATOR`(또는 `skeleton.board.moderator-role`) · 일반 사용자 · 정지된 관리자 `403`, 익명 `401`. 게시판 운영자는 연결을 보지 못한다(글 숨김 · 삭제는 연결 없이 되고, 계정 제재는 관리자의 일).
+- **감사**: 성공한 호출마다 `AccountEventType.AUTHOR_LINK_VIEWED` 를 낸다 — 대상 계정 id, `detail = { by: <관리자 계정 id> }`. **detail 에 프로필 id 가 없고 로그 한 줄에도 없다**(기본 로거는 `account=<대상> detail={by=…}` 만 찍는다). 이 이벤트는 계정 이벤트 한 종류가 늘어난 것이 `account` 의 유일한 변경이다 — `account_audit.type` 은 `varchar(40)` 문자열이라(제약 · enum 열 없음) 마이그레이션은 없다.
+  - **전제**: 조회 기록이 남으려면 로그 리스너 밖의 이벤트 길이 있어야 한다 — `skeleton.account.audit.enabled=true`(+ `account-jdbc`, `account_audit` 표) 또는 앱의 `AccountEventListener`. 없으면 기록은 로그 한 줄뿐이라 stage · prod 에서 배포 가드(`AuthorProfileAdminDeployGuard`, 이름 `author-profile`)가 **경고**한다(기동은 막지 않는다).
+  - **기록 실패**: 듣는 쪽이 던지면 발행자가 warn 로그만 남기고 삼킨다 — **조회는 그대로 나간다**(기록 실패로 조회를 실패시키는 것은 하지 않았다; 주인 결정 항목).
+  - **한계 ①**: 대상 계정이 나중에 지워지면(`account-jdbc` 의 scrub) 그 계정의 감사 행에서 `by`(누가 봤는지)가 사라진다 — 조회 사실만 남는다.
+  - **한계 ②**: 로그 한 줄에는 쌍이 없지만, 같은 `traceId` 로 요청 줄(경로의 프로필 id)과 감사 줄(대상 계정)을 이으면 **조회한 프로필 하나와 대상 계정**이 이어진다 — 로그는 신뢰 영역이다(스펙 §3, §14).
+  - **교체**: `AuthorLinkLookup` 을 교체하는 앱은 감사 발행의 책임도 함께 가져간다 — 교체본이 `AUTHOR_LINK_VIEWED` 를 내지 않으면 조회가 기록 없이 나간다.
 - **없는 대상**: 없는 프로필 id · 없는 계정 id 는 `404 AUTHOR_PROFILE.NOT_FOUND`(관리자에게는 구별해도 되는 선택 — 이 코드가 둘 다 쓰인다) 이고 **이벤트를 남기지 않는다** — 헛짚은 조회가 감사 표에 존재 여부의 흔적을 남기지 않게. 계정은 있는데 프로필이 없으면 `200` + 빈 목록이고 감사는 남는다.
-- 요청 경로의 프로필 id 는 일반 요청 로그(`RequestLoggingFilter`)에 남는다 — 관리자 계정이 아니라 대상 계정과의 쌍은 로그 어디에도 없다.
+- 요청 경로의 프로필 id 는 일반 요청 로그(`RequestLoggingFilter`)에 남는다 — 그 줄에 대상 계정 id 는 없다(위 한계 ②).
 
 ## 탈퇴 · 넘겨받기 · 연결 차단 요약
 

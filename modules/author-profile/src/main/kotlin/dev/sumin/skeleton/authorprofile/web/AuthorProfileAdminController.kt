@@ -29,7 +29,10 @@ data class AdminAuthorProfileResponse(
     val deletedAt: Instant?,
 )
 
-data class AdminAuthorLinksResponse(val accountId: String, val profiles: List<AdminAuthorProfileResponse>)
+data class AdminAuthorLinksResponse(val accountId: String, val profiles: List<AdminAuthorProfileResponse>) {
+    /** 계정 id 와 프로필 id 의 쌍이 로그 · 예외 메시지에 실리지 않게 — 개수만 */
+    override fun toString(): String = "AdminAuthorLinksResponse(profiles=${profiles.size})"
+}
 
 private fun AuthorProfile.toAdmin() = AdminAuthorProfileResponse(id, name, visibleTag, status.name, createdAt, updatedAt, deletedAt)
 

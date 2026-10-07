@@ -3,10 +3,12 @@ package dev.sumin.skeleton.authorprofile.web
 import dev.sumin.skeleton.account.AccountAutoConfiguration
 import dev.sumin.skeleton.account.AccountProperties
 import dev.sumin.skeleton.account.AccountRepository
+import dev.sumin.skeleton.account.events.AccountEventListener
 import dev.sumin.skeleton.account.events.AccountEventPublisher
 import dev.sumin.skeleton.account.web.AccountCallers
 import dev.sumin.skeleton.account.web.AccountWebAutoConfiguration
 import dev.sumin.skeleton.authorprofile.AuthorLinkLookup
+import dev.sumin.skeleton.authorprofile.AuthorProfileAdminDeployGuard
 import dev.sumin.skeleton.authorprofile.AuthorProfileAutoConfiguration
 import dev.sumin.skeleton.authorprofile.AuthorProfileRepository
 import org.springframework.beans.factory.ObjectProvider
@@ -41,4 +43,10 @@ class AuthorProfileAdminWebAutoConfiguration {
         lookup: AuthorLinkLookup,
     ): AuthorProfileAdminController =
         AuthorProfileAdminController(callers.getIfAvailable { AccountCallers(account.admin) { accounts.getObject() } }, lookup)
+
+    /** 조회 감사가 로그 한 줄에만 남는 조립(stage · prod)을 알린다 */
+    @Bean
+    @ConditionalOnMissingBean
+    fun authorProfileAdminDeployGuard(listeners: ObjectProvider<AccountEventListener>): AuthorProfileAdminDeployGuard =
+        AuthorProfileAdminDeployGuard { listeners.orderedStream().toList() }
 }

@@ -120,17 +120,28 @@ class AuthorProfileAdminWebTest : WebTestSupport() {
     }
 
     @Test
-    fun `a MODERATOR a plain user and a stored-role-less admin token are 403 and nothing is audited`() {
+    fun `a MODERATOR a plain user a stale ADMIN token and a suspended admin are 403 on both paths and nothing is audited`() {
         val (acc, ids) = target()
         val before = recorded.events.size
         call(get("$base/${ids[0]}"), account("USER", "MODERATOR")).andExpect(status().isForbidden)
         call(get(base).param("accountId", acc), account("USER", "MODERATOR")).andExpect(status().isForbidden)
         call(get("$base/${ids[0]}"), caller()).andExpect(status().isForbidden)
+        call(get(base).param("accountId", acc), caller()).andExpect(status().isForbidden)
         // 토큰은 ADMIN 이라고 하지만 저장소의 계정은 USER 뿐 — 매 호출 저장소를 다시 읽는다
         val stale = caller().let { TestingAuthenticationToken(it.name, "n/a", "ROLE_USER", "ROLE_ADMIN") }
         call(get("$base/${ids[0]}"), stale).andExpect(status().isForbidden)
         call(get("$base/${ids[0]}"), account("USER", "ADMIN", status = AccountStatus.SUSPENDED)).andExpect(status().isForbidden)
+        call(get(base).param("accountId", acc), account("USER", "ADMIN", status = AccountStatus.SUSPENDED)).andExpect(status().isForbidden)
         assertEquals(before, recorded.events.size)
+    }
+
+    @Test
+    fun `a deleted profile id still resolves its account - 200 and exactly one audit event`() {
+        val (acc, ids) = target()
+        val boss = admin()
+        recorded.events.clear()
+        call(get("$base/${ids[2]}"), boss).andExpect(status().isOk).andExpect(jsonPath("$.value.accountId").value(acc))
+        assertEquals(1, recorded.events.count { it.type == AccountEventType.AUTHOR_LINK_VIEWED && it.accountId == acc })
     }
 
     @Test
@@ -176,6 +187,7 @@ class AuthorProfileAdminWebTest : WebTestSupport() {
         call(get(base).param("accountId", acc), admin()).andExpect(status().isOk)
         val lines = logged()
         assertTrue(lines.any { "AUTHOR_LINK_VIEWED" in it }, "the audit line is logged: $lines")
+        assertTrue(lines.any { ids[1] in it }, "the request line carrying the profile id was captured, so the pair check below looks at real output: $lines")
         lines.forEach { line -> assertFalse(acc in line && ids.any { it in line }, "pair in log line: $line") }
         lines.filter { "AUTHOR_LINK_VIEWED" in it }.forEach { line -> assertTrue(ids.none { it in line }, "profile id in the audit line: $line") }
     }

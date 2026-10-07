@@ -25,6 +25,7 @@ spring:
       - dev.sumin.skeleton.auth.magiclink.MagicLinkWebAutoConfiguration
       - dev.sumin.skeleton.authorprofile.AuthorProfileAutoConfiguration
       - dev.sumin.skeleton.authorprofile.web.AuthorProfileWebAutoConfiguration
+      - dev.sumin.skeleton.authorprofile.web.AuthorProfileAdminWebAutoConfiguration
       - dev.sumin.skeleton.authorprofile.jdbc.AuthorProfileJdbcAutoConfiguration
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/app}  # 시각 바인딩은 modules:db-postgresql (SqlDialect)
