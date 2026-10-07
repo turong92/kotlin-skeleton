@@ -2,7 +2,6 @@ package dev.sumin.skeleton.persistence.jdbc
 
 import org.springframework.boot.diagnostics.FailureAnalysis
 import org.springframework.boot.diagnostics.FailureAnalyzer
-import org.springframework.context.EnvironmentAware
 import org.springframework.core.Ordered
 import org.springframework.core.env.Environment
 
@@ -11,12 +10,12 @@ import org.springframework.core.env.Environment
  * `JdbcAggregateOperations` 빈 스택 트레이스만 남기고 죽었다(컨테이너를 두 번 다시 시작하니 떴다) — 원인은 맨 밑의 연결 실패였다.
  * JDBC URL 에서는 **host:port 만** 말한다(사용자 · 비밀번호 · 쿼리는 읽지 않는다). 방언 모듈이 없는 경우는 [SqlDialectFailureAnalyzer] 의 일이다.
  */
-class DatabaseUnavailableFailureAnalyzer : FailureAnalyzer, EnvironmentAware, Ordered {
-    private var environment: Environment? = null
+class DatabaseUnavailableFailureAnalyzer(private val environment: Environment?) : FailureAnalyzer, Ordered {
+    /** 컨텍스트가 아직 없을 때(환경 후처리기에서 던진 기다리기 실패) 스프링 부트는 인자 없이 만든다 — URL 은 [DatabaseNotReachableException] 이 이미 담고 있다 */
+    constructor() : this(null)
 
-    override fun setEnvironment(environment: Environment) {
-        this.environment = environment
-    }
+    // Environment 는 생성자 인자로 받는다 — 스프링 부트 3.x 후반부터 FailureAnalyzers 는 BeanFactory · Environment 를 생성자 인자로만 넘기고 EnvironmentAware 콜백은 부르지 않는다
+    // (콜백으로 받았을 때는 URL 을 못 읽어 "at the configured database" 로 떨어졌다 — 기다리기를 끈 배포 계약 시험에서 발견)
 
     override fun getOrder(): Int = Ordered.HIGHEST_PRECEDENCE + 10   // 스프링 기본 분석기(빈 · 순환 의존 …)보다 먼저 — 맨 위 예외가 빈 생성 실패라서
 
