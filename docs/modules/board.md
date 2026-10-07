@@ -84,7 +84,7 @@ HTTP 는 `skeleton.board.http.base-path`(기본 `/api/v1/boards`)에 열린다 (
 ## 앱이 바꾸는 곳
 
 - 누가 무엇을 하는지: `BoardPolicy` (기본: 작성자 · `moderator-role`). 상태 규칙(숨겨진 글엔 댓글 불가 등)은 서비스에 있다.
-- 첨부 키 검사: `BoardPolicy.canAttach` — 기본은 허용이다. 키 규칙은 앱의 저장소 설정이 안다. **`AuthorIdentities` 가 없을 때만** `storage` 의 키(`<접두사>/<계정 id>/…`)를 `startsWith` 한 줄로 막으면 된다. 있으면 키에 계정 id 가 없어야 하므로(`skeleton.storage.web.key-owner=OPAQUE`) `storage` 가 내는 `StorageKeyOwnership` 빈의 `owns(caller.accountId, key)` 로 소유를 확인한다 — `OPAQUE` 키는 접두사 비교가 안 되고, 이 빈은 `key-owner` 방식(옛 `ACCOUNT_ID` 꼴 포함)을 알아서 따른다. 예: `override fun canAttach(caller: BoardCaller, keys: List<String>) = keys.all { ownership.owns(caller.accountId, it) }` ([storage](storage.md)).
+- 첨부 키 검사: `BoardPolicy.canAttach` — 기본은 허용이다. 키 규칙은 앱의 저장소 설정이 안다. **`AuthorIdentities` 가 없을 때만** `storage` 의 키(`<접두사>/<계정 id>/…`)를 `startsWith` 한 줄로 막으면 된다. 있으면 키에 계정 id 가 없어야 하므로(`skeleton.storage.web.key-owner=OPAQUE`) `storage` 가 내는 `StorageKeyOwnership` 빈의 `owns(caller.accountId, key)` 로 소유를 확인한다 — `OPAQUE` 키는 접두사 비교가 안 되고, 이 빈은 `key-owner` 방식(옛 `ACCOUNT_ID` 꼴 포함)을 알아서 따른다. 예: `override fun canAttach(caller: BoardCaller, keys: List<String>) = keys.all { ownership.owns(caller.accountId, it) }` (`storage`).
 - 글 · 댓글 텍스트: **HTML 은 해석하지 않는다.** 제어문자(줄바꿈 · 탭 제외) · 글자 방향 덮어쓰기 문자를 지우고 공백을 다듬어 저장하며, 그릴 때 클라이언트가 이스케이프한다.
 - 한도: `skeleton.board.rate-limit.enabled=true` 면 platform 의 `RateLimitStore`(redis-rate-limit 이 있으면 Redis)에 계정 · 동작별 고정 창. 한도 로직을 바꾸려면 `BoardRateLimiter`.
 - 알림 문구: `BoardNotificationFormatter` (제목 · 본문). 보내는 곳 자체는 `BoardNotifier`.

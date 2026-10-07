@@ -33,8 +33,14 @@ class MySqlMigrationUpgradeTest {
         val atBaseline = jdbc.sql("select count(*) from flyway_schema_history where success = 1").query(Long::class.java).single()
 
         val migrated = Flyway.configure().dataSource(dataSource).locations(*locations.toTypedArray()).load().migrate()
-        // 기준선 뒤의 새 V 파일(board_author_ref 등)이 기존 데이터 위에서 돈다 — 적어도 하나는 실행돼야 한다
-        assertTrue(migrated.migrationsExecuted >= 1, "no migration ran after the baseline")
+        // 기준선 뒤의 새 V 파일(board_author_ref 등)이 기존 데이터 위에서 돈다 — 있으면 적어도 하나는 실행돼야 한다.
+        // (찍은 프로젝트는 기준선 == 최신이라 기준선 뒤 파일이 없다 — 그때는 0 건이 맞다)
+        val afterBaseline = locations.sumOf { loc ->
+            Files.list(Path.of(loc.removePrefix("filesystem:"))).use { files ->
+                files.filter { f -> Regex("""V(\d{14})__.*\.sql""").matchEntire(f.fileName.toString())?.groupValues?.get(1)?.let { it > UpgradeBaseline.baselineVersion } == true }.count()
+            }
+        }
+        if (afterBaseline > 0) assertTrue(migrated.migrationsExecuted >= 1, "$afterBaseline migration file(s) come after the baseline but none ran")
         val failed = jdbc.sql("select count(*) from flyway_schema_history where success = 0").query(Long::class.java).single()
         assertEquals(0L, failed)
         assertTrue(jdbc.sql("select count(*) from flyway_schema_history where success = 1").query(Long::class.java).single() >= atBaseline)
