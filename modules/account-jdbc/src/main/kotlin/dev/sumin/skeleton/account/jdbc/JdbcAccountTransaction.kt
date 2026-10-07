@@ -12,5 +12,5 @@ class JdbcAccountTransaction(transactionManager: PlatformTransactionManager) : A
     private val template = TransactionTemplate(transactionManager)
 
     @Suppress("UNCHECKED_CAST")
-    override fun <T> run(block: () -> T): T = template.execute { block() } as T
+    override fun <T> run(block: () -> T): T = LockRetry.run { template.execute { block() } as T }
 }

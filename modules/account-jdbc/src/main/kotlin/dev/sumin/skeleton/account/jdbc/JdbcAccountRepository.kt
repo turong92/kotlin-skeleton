@@ -37,6 +37,9 @@ class JdbcAccountRepository(
     private val dialect: SqlDialect,
 ) : AccountRepository {
     override fun insert(account: Account, identities: List<Identity>): Boolean =
+        LockRetry.run { insertOnce(account, identities) }
+
+    private fun insertOnce(account: Account, identities: List<Identity>): Boolean =
         try {
             tx.executeWithoutResult {
                 jdbc.update(
@@ -90,6 +93,9 @@ class JdbcAccountRepository(
     }
 
     override fun setDisplayName(id: String, name: String, key: String, tag: String?, now: Instant): SetNameResult =
+        LockRetry.run { setDisplayNameOnce(id, name, key, tag, now) }
+
+    private fun setDisplayNameOnce(id: String, name: String, key: String, tag: String?, now: Instant): SetNameResult =
         try {
             val n = jdbc.update(
                 "update accounts set display_name = :name, display_name_key = :key, display_tag = :tag, updated_at = :now where id = :id and status <> 'ERASED'",

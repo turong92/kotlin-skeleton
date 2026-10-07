@@ -91,4 +91,52 @@ class JdbcDisplayNameDbTest {
         ids.take(3).forEach { repo.insert(acc(it, key = it, name = it), emptyList()) }
         assertEquals(ids.take(3).toSet(), repo.namesOf(ids).keys)
     }
+
+    // ---- real concurrency on both databases (a MySQL deadlock between two inserts of the same key and tag used to be a 500)
+
+    /** the TAGGED loop of the service in miniature: draw a tag from a SMALL pool so the threads collide a lot, retry on the clash */
+    private fun placeTagged(id: String, key: String, pool: Int, rnd: java.util.Random): String {
+        while (true) {
+            val tag = "%04d".format(1 + rnd.nextInt(pool))
+            if (repo.insert(acc(id, key = key, tag = tag, name = "Ann"), emptyList())) return tag
+        }
+    }
+
+    @Test
+    fun `thirty-two threads placing the same nickname with tags from a small pool all succeed with different tags, and none of them sees an exception`() {
+        val threads = 32
+        val pool = java.util.concurrent.Executors.newFixedThreadPool(threads)
+        try {
+            val go = java.util.concurrent.CountDownLatch(1)
+            val jobs = (1..threads).map { n -> pool.submit<String> { go.await(); placeTagged("acc_t$n", "ann", pool = 40, rnd = java.util.Random(n.toLong())) } }
+            go.countDown()
+            val tags = jobs.map { it.get(60, java.util.concurrent.TimeUnit.SECONDS) }
+            assertEquals(threads, tags.toSet().size, "every account got its own tag: $tags")
+            assertEquals(threads, repo.displayTagsOf("ann").size)
+        } finally { pool.shutdown() }
+    }
+
+    @Test
+    fun `renaming many accounts onto the same key at once never throws, every winner holds a different tag`() {
+        val threads = 24
+        (1..threads).forEach { assertTrue(repo.insert(acc("acc_r$it", key = "own$it", tag = "0001", name = "Own$it"), emptyList())) }
+        val pool = java.util.concurrent.Executors.newFixedThreadPool(threads)
+        try {
+            val go = java.util.concurrent.CountDownLatch(1)
+            val jobs = (1..threads).map { n ->
+                pool.submit<String> {
+                    go.await()
+                    val rnd = java.util.Random(n.toLong())
+                    while (true) {
+                        val tag = "%04d".format(1 + rnd.nextInt(30))
+                        if (repo.setDisplayName("acc_r$n", "Ann", "ann", tag, now) == SetNameResult.DONE) return@submit tag
+                    }
+                    @Suppress("UNREACHABLE_CODE") ""
+                }
+            }
+            go.countDown()
+            val tags = jobs.map { it.get(60, java.util.concurrent.TimeUnit.SECONDS) }
+            assertEquals(threads, tags.toSet().size, tags.toString())
+        } finally { pool.shutdown() }
+    }
 }
