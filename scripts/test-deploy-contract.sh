@@ -93,8 +93,10 @@ docker run -d --name "$PG" --network "$NET" --network-alias db \
 if wait_for 90 docker exec "$PG" pg_isready -h 127.0.0.1 -U app -d app; then pass "postgres 가 받는다"; else fail "postgres 가 뜨지 않는다"; docker logs "$PG" 2>&1 | tail -5; exit 1; fi
 sleep 2   # 초기화 직후 재시작 구간을 넘긴다
 
-# 계약의 환경변수만 — 스프링 프로필 · 앱 접두사 DB 변수 · 비밀은 (선언의 secrets: 에서 플랫폼이 무작위로 채우는) 첨부 키 비밀 하나뿐이다: 샘플 앱은 key-owner=OPAQUE 라 없으면 기동하지 않는다. 앱마다 새 데이터베이스(앱의 마이그레이션이 서로 섞이면 Flyway 검증이 실패한다)
+# 계약의 환경변수만 — 스프링 프로필 · 앱 접두사 DB 변수 · 비밀은 첨부 키 비밀(secret_env) 하나뿐이다: 선언의 secrets: 에서 플랫폼이 무작위로 채우는 값이고, 샘플 앱은 key-owner=OPAQUE 라 없으면 기동하지 않는다. 앱을 띄우는 모든 docker run 이 쓴다.
 DBNAME=app
+# 비밀만 — 샘플 앱은 key-owner=OPAQUE 라 첨부 키 비밀이 없으면 기동하지 않는다(어떤 컨테이너를 띄우든 이것은 준다). apps/api 는 읽지 않는다
+secret_env() { printf '%s\n' $(secret_env); }
 contract_env() { printf '%s\n' "-e" "SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/$DBNAME" "-e" "SPRING_DATASOURCE_USERNAME=app" "-e" "SPRING_DATASOURCE_PASSWORD=contract-test-pw" "-e" "SKELETON_STORAGE_WEB_KEY_SECRET=contract-test-storage-key-secret-0123456789"; }
 
 for APP in $(echo "$APPS" | tr ',' ' '); do
@@ -161,7 +163,7 @@ for APP in $(echo "$APPS" | tr ',' ' '); do
   echo "-- A2. DB 보다 앱이 먼저 뜬다 (실제 배포에서 재시작을 두 번 해야 했던 경우) — 기다렸다가 재시작 없이 뜬다 / 끝내 안 나타나면 읽을 수 있는 메시지로 실패한다"
   # (1) 앱 먼저: DB 컨테이너가 아직 없다 — 이름 late-db 가 풀리지 않는다. 그다음 DB 를 올리면 첫 초기화 동안 연결 거부 → 시작 중 구간을 지난다
   LATE="$RUN-$APP-latepg"; C="$RUN-$APP-late"; CONTAINERS="$CONTAINERS $C $LATE"
-  docker run -d --name "$C" --network "$NET" -e "SPRING_DATASOURCE_URL=jdbc:postgresql://late-db:5432/app" -e SPRING_DATASOURCE_USERNAME=app -e SPRING_DATASOURCE_PASSWORD=late-test-pw "$IMG" >/dev/null
+  docker run -d --name "$C" --network "$NET" -e "SPRING_DATASOURCE_URL=jdbc:postgresql://late-db:5432/app" -e SPRING_DATASOURCE_USERNAME=app -e SPRING_DATASOURCE_PASSWORD=late-test-pw $(secret_env) "$IMG" >/dev/null
   if wait_for 90 bash -c "docker logs '$C' 2>&1 | grep -q '\[startup-wait\] waiting for database late-db:5432'"; then pass "DB 가 없는 동안 앱이 기다린다는 줄이 나온다 ([startup-wait] waiting for database late-db:5432)"; else fail "기다린다는 로그가 없다"; docker logs "$C" 2>&1 | tail -15; fi
   STARTED1="$(docker inspect -f '{{.State.StartedAt}}' "$C")"
   docker run -d --name "$LATE" --network "$NET" --network-alias late-db -e POSTGRES_DB=app -e POSTGRES_USER=app -e POSTGRES_PASSWORD=late-test-pw postgres:18 >/dev/null
@@ -176,7 +178,7 @@ for APP in $(echo "$APPS" | tr ',' ' '); do
   # (2) 끝내 안 나타나는 DB — 짧은 timeout 으로 읽을 수 있는 메시지와 함께 실패한다. URL 에 비밀번호를 넣어 두고 새지 않는지도 본다
   C="$RUN-$APP-nodb"; CONTAINERS="$CONTAINERS $C"
   docker run -d --name "$C" --network "$NET" -e "SPRING_DATASOURCE_URL=jdbc:postgresql://nowhere-db:5432/app?user=leakme&password=leak-pw-123" \
-    -e SKELETON_PERSISTENCEJDBC_STARTUPWAIT_TIMEOUT=6s -e SKELETON_PERSISTENCEJDBC_STARTUPWAIT_INTERVAL=1s "$IMG" >/dev/null
+    -e SKELETON_PERSISTENCEJDBC_STARTUPWAIT_TIMEOUT=6s -e SKELETON_PERSISTENCEJDBC_STARTUPWAIT_INTERVAL=1s $(secret_env) "$IMG" >/dev/null
   if wait_for 120 stopped "$C"; then
     EXIT="$(docker inspect -f '{{.State.ExitCode}}' "$C")"; LOGS="$(docker logs "$C" 2>&1)"
     [ "$EXIT" != 0 ] && pass "DB 가 끝내 안 나타나면 기동이 실패한다 (exit $EXIT)" || fail "기동이 실패해야 하는데 exit 0"
@@ -194,7 +196,7 @@ for APP in $(echo "$APPS" | tr ',' ' '); do
   docker rm -f "$C" >/dev/null
   # (3) 기다리기를 끈 앱(모듈 기본) — 빈 생성 중에 연결이 실패해도 JdbcAggregateOperations 스택 트레이스 대신 같은 읽을 수 있는 메시지가 나온다 (실제 배포에서 본 실패의 자리)
   C="$RUN-$APP-nowait"; CONTAINERS="$CONTAINERS $C"
-  docker run -d --name "$C" --network "$NET" -e "SPRING_DATASOURCE_URL=jdbc:postgresql://nowhere-db:5432/app?user=leakme&password=leak-pw-123" -e SKELETON_PERSISTENCEJDBC_STARTUPWAIT_ENABLED=false "$IMG" >/dev/null
+  docker run -d --name "$C" --network "$NET" -e "SPRING_DATASOURCE_URL=jdbc:postgresql://nowhere-db:5432/app?user=leakme&password=leak-pw-123" -e SKELETON_PERSISTENCEJDBC_STARTUPWAIT_ENABLED=false $(secret_env) "$IMG" >/dev/null
   if wait_for 150 stopped "$C"; then
     LOGS="$(docker logs "$C" 2>&1)"
     grep -q 'Cannot connect to the database at nowhere-db:5432' <<<"$LOGS" && pass "기다리기를 끈 앱도 빈 생성 중 연결 실패를 host:port 메시지로 말한다" || { fail "기다리기를 끈 앱의 실패가 읽을 수 있는 메시지가 아니다"; echo "$LOGS" | tail -20; }

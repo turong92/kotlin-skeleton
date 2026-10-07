@@ -36,7 +36,7 @@
 검증 실패는 400 `COMMON.VALIDATION_FAILED` + `errors: [{field, code, message}]` — `field` 는 JSON 속성 이름이다. 알 수 없는 `status` 값이나 `?status=NOPE` 는 400.
 알림: 토픽 `notes`, 타입 `NOTE_CREATED | NOTE_UPDATED | NOTE_DELETED | NOTE_EXPORTED`, `payload.noteId`(딥링크) · `payload.noteTitle`. 받는 사람은 노트 주인뿐이다(SSE 도 그 사람에게만 흐른다).
 첨부 규칙(앱의 선택, `application.yml`): png · jpg · gif · webp · pdf · txt, 5 MB 이하. 첨부 키는 **내가 올린 것**이어야 한다(아니면 `errors[attachmentKey]`) — 판정은 storage 모듈의 `StorageKeyOwnership.owns(계정, 키)` 빈이 한다. 이 앱은 `key-owner=OPAQUE` 라 업로드 키가 `uploads/o/<uuid>.<mac>/file[.<확장자>]` 이고 키만 봐서는 누구 것인지 알 수 없다(접두사 비교는 앱 코드에 없다). 옛 `uploads/<계정 id>/…` 꼴 키도 그대로 인정된다.
-**표시 이름은 키가 아니라 노트가 저장한다**: OPAQUE 키에서는 클라이언트가 보낸 파일 이름이 키에서 사라지므로(`file.png`) `PUT` 의 `attachmentName`(예: `고양이.png`)을 노트가 그대로 저장해 `Note.attachmentName` 으로 돌려준다. 보내지 않으면 키의 마지막 구간(`file.png`)이 들어가니 프론트는 항상 파일 이름을 같이 보낸다(react-skeleton 의 apps/sample 은 이미 `attachmentName: file.name` 을 보낸다 — 계약 변화 없음). 내보내기 결과 키(`uploads/<계정 id>/exports/…`)는 서버가 정하는 키라 옛 꼴 그대로이고 노트 주인에게만 알림 payload 로 간다.
+**표시 이름은 키가 아니라 노트가 저장한다**: OPAQUE 키에서는 클라이언트가 보낸 파일 이름이 키에서 사라지므로(`file.png`) `PUT` 의 `attachmentName`(예: `고양이.png`)을 노트가 그대로 저장해 `Note.attachmentName` 으로 돌려준다. 보내지 않으면 키의 마지막 구간(`file.png`)이 들어가니 프론트는 항상 파일 이름을 같이 보낸다(react-skeleton 의 apps/sample 은 이미 `attachmentName: file.name` 을 보낸다 — 계약 변화 없음). **한계**: 키에 원래 이름이 없으니 업로드 직후 `presign-download` 로 받는 파일 이름은 `file.<확장자>` 가 된다(표시 이름은 노트의 `attachmentName`). 내보내기 결과 키(`uploads/<계정 id>/exports/…`)는 서버가 정하는 키라 옛 꼴 그대로이고 노트 주인에게만 알림 payload 로 간다.
 
 ## 게시판 (`/api/v1/boards`)
 
@@ -54,9 +54,9 @@
 게시판 위에 `author-profile` + `author-profile-jdbc` 두 줄을 더했다 — 이 앱 코드는 더한 것이 **하나도 없다**(설정 · 시험만): 모듈 기본값을 그대로 쓰고(계정당 5개 · `adopt-on-startup` 켜짐) 닉네임 규칙은 위 `account.display-name` 을 따른다. 계약 · 설정: [author-profile](modules/author-profile.md).
 
 - 게시판 쓰기(`POST …/posts` · `…/comments`)는 **`authorId`(내 프로필 id `prf_…`)가 필수**다 — 없으면 `400 BOARD.AUTHOR_REQUIRED`, 남의 · 없는 · 지워진 id 면 `403 BOARD.AUTHOR_NOT_ALLOWED`. 응답의 `authorId` 는 계정 id 가 아니라 프로필 id 이고 `mine` 이 내 글인지 알려 준다. `GET /api/v1/boards/config` 의 `authorRequired` 는 `true`.
-- **시드 계정에 프로필을 만들어 둘 필요가 없다** — 첫 프로필은 `GET /api/v1/author-profiles` (또는 기동 때 `adopt-on-startup`)가 계정 닉네임을 한 번 복사해 만든다. 그래서 `application-local.yml` 의 시드 계정은 그대로이고, 프론트는 쓰기 전에 목록을 한 번 읽으면 된다.
-- 이미 글이 있는 DB 에서 켜면 기동 때 옛 글 · 댓글이 계정의 첫 프로필로 넘겨받혀 같은 이름으로 보인다 — 증거: `MigrationUpgradeIntegrationTest`(기준선 데이터 → 최신 마이그레이션 → 기동 → 옛 글이 첫 프로필 이름으로 보인다).
-- **첨부 키에 계정 id 가 없다** — `skeleton.storage.web.key-owner: OPAQUE`(위 첨부 규칙). 비밀 `skeleton.storage.web.key-secret`(32자 이상)은 환경변수 `SKELETON_STORAGE_WEB_KEY_SECRET`(배포 선언의 `secrets:` — deploy/app.yaml 의 `[storage]` 줄, [deploy.md §7](deploy.md))로 받고 **기본값이 없다**: 비었으면 기동 실패. 로컬 · e2e 는 `application-local.yml` 에, 시험은 `src/test/resources/config/application.yml` 에 고정 더미 값이 있다. 게시판은 글 첨부 키에 호출자 계정 id 가 들어 있으면 `400 BOARD.CONTENT_INVALID` 로 막는다(옛 키 안전망).
+- **시드 계정에 프로필을 만들어 둘 필요가 없다** — 첫 프로필은 계정 닉네임을 한 번 복사해 만들어진다: 옛 글이 있는 계정은 기동 때(`adopt-on-startup`), 없는 계정은 첫 `GET /api/v1/author-profiles` 때. 그래서 `application-local.yml` 의 시드 계정은 그대로이고, 프론트는 쓰기 전에 목록을 한 번 읽으면 된다.
+- 이미 글이 있는 DB 에서 켜면 기동 때 옛 글 · 댓글이 계정의 첫 프로필로 넘겨받혀 같은 이름으로 보인다 — 증거: `MigrationUpgradeIntegrationTest`(기준선 데이터 → 최신 마이그레이션 → 기동 → 게시판 읽기 경로 `GET /boards/upgrade/posts/{id}` 에서 옛 글이 첫 프로필 이름 · `prf_` 작성자 id 로 보인다).
+- **첨부 키에 계정 id 가 없다** — `skeleton.storage.web.key-owner: OPAQUE`(위 첨부 규칙). 비밀 `skeleton.storage.web.key-secret`(32자 이상)은 환경변수 `SKELETON_STORAGE_WEB_KEY_SECRET`(배포 선언의 `secrets:` — deploy/app.yaml 의 `[storage]` 줄, [deploy.md §7](deploy.md))로 받고 **기본값이 없다**: 비었으면 기동 실패. 로컬 · e2e 는 `application-local.yml` 에, 시험은 `src/test/resources/config/application.yml` 에 고정 더미 값이 있다 — **더미 비밀은 `local` 프로필 · 시험 전용**이다(같은 파일의 시드 계정이 stage/prod 에서 기동 가드에 막히므로 운영으로 새지 않는다). 게시판은 글 첨부 키에 호출자 계정 id 가 들어 있으면 `400 BOARD.CONTENT_INVALID` 로 막는다(옛 키 안전망).
 - 통합 시험: `BoardIntegrationTest`(쓰기 계약 · 읽는 사람 응답에 계정 id 없음 · 첨부 키), `NoteCrudIntegrationTest`(OPAQUE 키가 노트 첨부로 통과 · 남의 키 · 위조 mac), `AccountJourneyIntegrationTest`(탈퇴 뒤 글이 "삭제된 사용자").
 
 ## 돌려 보기

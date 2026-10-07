@@ -23,6 +23,11 @@ import kotlin.test.assertTrue
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.jdbc.autoconfigure.JdbcConnectionDetails
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
+import org.springframework.http.MediaType
+import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.get
+import org.springframework.test.web.servlet.post
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
@@ -35,6 +40,7 @@ import org.springframework.jdbc.core.simple.JdbcClient
  * 앱은 작성자 프로필을 켠 채 뜨므로 기동 뒤에는 옛 글이 첫 프로필로 넘겨받혀 이름이 보인다.
  */
 @SpringBootTest(properties = ["skeleton.job-queue.poll-interval=200ms", "spring.config.import=classpath:test-seeds.yml"])
+@AutoConfigureMockMvc
 @Import(MigrationUpgradeIntegrationTest.BaselineDatabase::class, SampleIntegrationTest.FakeStorageConfiguration::class)
 class MigrationUpgradeIntegrationTest {
     /** 컨텍스트가 쓰는 DB 를 기준선까지만 올려 행을 넣어 둔다 — 컨텍스트가 뜰 때 앱의 Flyway 가 나머지를 migrate 한다 */
@@ -57,6 +63,7 @@ class MigrationUpgradeIntegrationTest {
     @Autowired lateinit var reactions: ReactionRepository
     @Autowired lateinit var inbox: NotificationInboxRepository
     @Autowired lateinit var authors: AuthorDirectory
+    @Autowired lateinit var mockMvc: MockMvc
 
     private val now = Instant.parse("2026-10-07T00:00:00Z")
 
@@ -115,6 +122,17 @@ class MigrationUpgradeIntegrationTest {
         val card = assertNotNull(authors.resolve(listOf(ref), AuthorContext("board", "upgrade"))[ref], "the old post shows under the first profile")
         assertEquals("Upgrader", card.name, "the first profile copied the account name")
         assertTrue(Regex("[0-9]{4}").matches(card.tag.orEmpty()) && !card.deleted, card.toString())   // 기준선 꼬리표 0000 은 자리표시라 프로필이 새로 뽑는다 — 값은 정하지 않는다
+        // 읽기 경로(HTTP)에서도 같다: 옛 글이 첫 프로필 이름으로 보이고 authorId 는 프로필 id 이며 계정 id 가 아니다
+        val token = com.jayway.jsonpath.JsonPath.read<String>(
+            mockMvc.post("/api/v1/auth/login") { contentType = MediaType.APPLICATION_JSON; content = """{"email":"user@example.com","password":"password"}""" }
+                .andReturn().response.contentAsString, "$.value.accessToken",
+        )
+        mockMvc.get("/api/v1/boards/upgrade/posts/$postId") { header("Authorization", "Bearer $token") }.andExpect {
+            status { isOk() }
+            jsonPath("$.value.authorName") { value("Upgrader") }
+            jsonPath("$.value.authorId") { value(ref) }
+            jsonPath("$.value.mine") { value(false) }
+        }
         val baselineComment = jdbc.sql("select id from board_comments where post_id = :p and author_id = 'acc_upgrade'").param("p", postId).query(Long::class.java).single()
         assertEquals(ref, assertNotNull(comments.find(baselineComment)).authorRef, "the baseline comment went to the same first profile")
         val added = assertNotNull(comments.insert(NewComment(postId, null, null, 0, "acc_upgrade", "after the upgrade", now)))

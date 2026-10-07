@@ -176,6 +176,24 @@ class NoteCrudIntegrationTest : SampleIntegrationTest() {
     }
 
     @Test
+    fun `without an attachmentName the note falls back to the last segment of the key`() {
+        val id = createdId(user)
+        val key = "uploads/acc_user/${UUID.randomUUID()}/cat.png"
+        putNote(user, id, """{"title":"사진","body":"","status":"ACTIVE","pinned":false,"attachmentKey":"$key"}""").andExpect {
+            status { isOk() }
+            jsonPath("$.value.attachmentName") { value("cat.png") }
+        }
+        val opaque = mockMvc.post("/api/v1/storage/presign") {
+            header("Authorization", "Bearer $user"); contentType = MediaType.APPLICATION_JSON
+            content = """{"fileName":"cat.png","contentType":"image/png","sizeBytes":1024}"""
+        }.andReturn().readString("$.value.key")
+        putNote(user, id, """{"title":"사진","body":"","status":"ACTIVE","pinned":false,"attachmentKey":"$opaque"}""").andExpect {
+            status { isOk() }
+            jsonPath("$.value.attachmentName") { value("file.png") }   // OPAQUE 키에는 원래 이름이 없다 — 그래서 프론트는 attachmentName 을 늘 보낸다 (docs/sample.md)
+        }
+    }
+
+    @Test
     fun `removing or replacing the attachment deletes the stored object, deleting the note too`() {
         val id = createdId(user)
         val first = "uploads/acc_user/${UUID.randomUUID()}/a.txt"

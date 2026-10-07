@@ -151,7 +151,10 @@ class BoardIntegrationTest : SampleIntegrationTest() {
         commentId(other, post, "남이 단 댓글")
         val seen = listOf(
             "/api/v1/boards/general/posts", "/api/v1/boards/general/posts/$post", "/api/v1/boards/general/posts/$post/comments", "/api/v1/boards/config",
-        ).joinToString("\n") { mockMvc.get(it) { header("Authorization", "Bearer $other") }.andReturn().response.contentAsString }
+        ).joinToString("\n") { path ->
+            mockMvc.get(path) { header("Authorization", "Bearer $moderator") }.andExpect { status { isOk() } }.andReturn().response.contentAsString   // 읽는 사람: ADMIN 이 아닌 제3자
+        }
+        assertTrue(profileOf(user) in seen, "the scan can see the author's public id, so the absence below means something")
         assertFalse("acc_user" in seen, "no account id of the author in a reader's responses")
         assertFalse("user@example.com" in seen)
     }
