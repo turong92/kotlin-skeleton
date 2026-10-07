@@ -22,8 +22,8 @@ fun interface StorageKeyOwnership {
  * - `ACCOUNT_ID`: `<prefix>/<계정 id>/<uuid>/<파일>` — 소유는 접두사 비교.
  * - `OPAQUE`: `<prefix>/o/<uuid>.<mac>/<파일>`, `mac = HMAC-SHA256(key-secret, 계정 id + "\n" + uuid)` 의 앞 32자(hex).
  *   소유는 다시 계산해 상수시간으로 비교한다(DB 없음). 업로드마다 uuid 가 달라 같은 계정의 첨부끼리도 이어지지 않는다.
- *   파일 이름도 두 프로필을 잇는 값이 되므로 클라이언트 파일 이름은 버리고 짧은 영숫자 확장자만 남긴다(`file.<ext>`, 없으면 `file`).
- * - `OPAQUE` 에서도 `ACCOUNT_ID` 꼴의 옛 키는 지금처럼 소유가 확인된다. 다만 `<prefix>/o/` 로 시작하는 키는 MAC 으로만 판정한다
+ *   파일 이름도 두 프로필을 잇는 값이 되므로 클라이언트 파일 이름은 버리고 알려진 확장자(내장 목록, 원본 이름 끝에서 소문자로 비교)만 남긴다(`file[.<ext>]`). 그 밖의 확장자(`kim.minsu` · `example.com` 처럼 이름의 일부일 수 있는 것)는 `file`.
+ * - `OPAQUE` 에서도 `ACCOUNT_ID` 꼴의 옛 키는 지금처럼 소유가 확인된다. 다만 `<prefix>/o/` 로 시작하는 키는 MAC 으로만 판정하고, `<uuid>.<mac>/` 뒤 꼬리는 `file[.<소문자 영숫자 1~8자>]` 만 인정한다
  *   (계정 id 가 `o` 인 계정이 옛 접두사로 남의 `OPAQUE` 키를 주장하지 못하게).
  * - 유효한 [ObjectKey] 가 아니거나(`..` · 제어문자 …) 접두사 뒤가 비어 있으면 어느 방식에서나 소유가 아니다.
  */
@@ -34,7 +34,7 @@ class StorageKeyScheme(private val web: StorageWebProperties) : StorageKeyOwners
     fun issue(accountId: String, fileName: String): String {
         val uuid = UUID.randomUUID().toString()
         return when (web.keyOwner) {
-            StorageKeyOwner.ACCOUNT_ID -> "$prefix/$accountId/$uuid/$fileName"
+            StorageKeyOwner.ACCOUNT_ID -> "$prefix/$accountId/$uuid/${safeFileName(fileName)}"
             StorageKeyOwner.OPAQUE -> "$opaquePrefix$uuid.${mac(accountId, uuid)}/${opaqueFileName(fileName)}"
         }
     }
@@ -49,17 +49,26 @@ class StorageKeyScheme(private val web: StorageWebProperties) : StorageKeyOwners
     private fun ownsOpaque(accountId: String, key: String): Boolean {
         val rest = key.removePrefix(opaquePrefix)
         val segment = rest.substringBefore('/', missingDelimiterValue = "")
-        if (rest.length <= segment.length + 1) return false
+        val tail = rest.substringAfter('/', missingDelimiterValue = "")
+        if (!OPAQUE_TAIL_FORMAT.matches(tail)) return false
         val uuid = segment.substringBefore('.')
         val presented = segment.substringAfter('.', missingDelimiterValue = "")
         if (!UUID_FORMAT.matches(uuid) || !MAC_FORMAT.matches(presented)) return false
         return MessageDigest.isEqual(mac(accountId, uuid).toByteArray(), presented.toByteArray())
     }
 
+    /** 원본 이름(자르기 · 치환 전)의 끝에서 알려진 확장자만 남긴다 */
     private fun opaqueFileName(fileName: String): String {
-        val ext = fileName.substringAfterLast('.', missingDelimiterValue = "")
-        return if (EXTENSION_FORMAT.matches(ext)) "file.${ext.lowercase()}" else "file"
+        val ext = fileName.substringAfterLast('.', missingDelimiterValue = "").lowercase()
+        return if (ext in KNOWN_EXTENSIONS) "file.$ext" else "file"
     }
+
+    private fun safeFileName(fileName: String): String =
+        fileName.substringAfterLast('/').substringAfterLast('\\')
+            .replace(Regex("[^A-Za-z0-9._-]"), "_")
+            .trim('.')
+            .take(100)
+            .ifBlank { "file" }
 
     private fun mac(accountId: String, uuid: String): String {
         val hmac = Mac.getInstance("HmacSHA256")
@@ -72,6 +81,10 @@ class StorageKeyScheme(private val web: StorageWebProperties) : StorageKeyOwners
         const val MAC_LENGTH = 32
         val UUID_FORMAT = Regex("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
         val MAC_FORMAT = Regex("[0-9a-f]{$MAC_LENGTH}")
-        val EXTENSION_FORMAT = Regex("[A-Za-z0-9]{1,8}")
+        val OPAQUE_TAIL_FORMAT = Regex("file(\\.[a-z0-9]{1,8})?")
+        val KNOWN_EXTENSIONS = setOf(
+            "jpg", "jpeg", "png", "gif", "webp", "heic", "heif", "avif", "bmp", "svg", "pdf", "txt", "md", "csv", "json", "xml",
+            "zip", "gz", "mp3", "wav", "m4a", "mp4", "mov", "webm", "docx", "xlsx", "pptx", "hwp",
+        )
     }
 }

@@ -7,6 +7,6 @@ skeleton:
       allowed-extensions: []                # 비우면 모든 확장자 허용
     web:
       enabled: true                         # false 면 /api/v1/storage 엔드포인트를 등록하지 않는다 (PresignedStorage 빈 = 버킷 설정이 있을 때만 등록)
-      key-prefix: uploads                   # 서버가 정하는 키: <key-prefix>/<계정 id>/<uuid>/<파일 이름> (key-owner=OPAQUE 면 <key-prefix>/o/<uuid>.<mac>/<파일 이름>)
+      key-prefix: uploads                   # 서버가 정하는 키: <key-prefix>/<계정 id>/<uuid>/<파일 이름> (key-owner=OPAQUE 면 <key-prefix>/o/<uuid>.<mac>/file[.<ext>])
       key-owner: ACCOUNT_ID                 # ACCOUNT_ID: 키에 계정 id 가 든다 | OPAQUE: 키에서 계정 id 를 알 수 없다 (작성자 프로필을 쓰는 앱) — key-secret 필요
       key-secret: ""                        # OPAQUE 키의 HMAC 비밀(32자 이상, 비밀 — env <P>_STORAGE_WEB_KEY_SECRET). OPAQUE 인데 비면 기동 실패. 바꾸면 발급한 OPAQUE 키가 맞지 않게 된다

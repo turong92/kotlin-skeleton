@@ -30,15 +30,38 @@ class StorageKeySchemeTest {
     }
 
     @Test
-    fun `opaque mode drops the client file name and keeps only a safe short extension`() {
+    fun `opaque mode drops the client file name and keeps only a known extension`() {
         assertTrue(opaque.issue(account, "my holiday photo.JPG").endsWith("/file.jpg"))
         assertTrue(opaque.issue(account, "archive.tar.gz").endsWith("/file.gz"))
         assertTrue(opaque.issue(account, "README").endsWith("/file"))
         assertTrue(opaque.issue(account, "weird.ex_t!").endsWith("/file"))
-        assertTrue(opaque.issue(account, "long.abcdefghijklmnop").endsWith("/file"))
         assertTrue(opaque.issue(account, "trailing.").endsWith("/file"))
+        assertTrue(opaque.issue(account, "kim.minsu").endsWith("/file"))
+        assertTrue(opaque.issue(account, "example.com").endsWith("/file"))
+        assertTrue(opaque.issue(account, "report.2024").endsWith("/file"))
         assertFalse(opaque.issue(account, "private-name.png").contains("private-name"))
         assertTrue(plain.issue(account, "private-name.png").endsWith("/private-name.png"))
+    }
+
+    @Test
+    fun `the extension is read from the original name, not from a name cut to 100 characters`() {
+        assertTrue(opaque.issue(account, "a".repeat(150) + ".png").endsWith("/file.png"))
+        assertTrue(plain.issue(account, "a".repeat(150) + ".png").endsWith("/" + "a".repeat(100)))
+        assertTrue(opaque.issue(account, "my file name.pdf").endsWith("/file.pdf"))
+        assertTrue(plain.issue(account, "my file.png").endsWith("/my_file.png"))
+    }
+
+    @Test
+    fun `an opaque key with any tail other than file and a short extension is not owned`() {
+        val seg = opaque.issue(account, "cat.png").split('/')[2]
+        assertTrue(opaque.owns(account, "uploads/o/$seg/file"))
+        assertTrue(opaque.owns(account, "uploads/o/$seg/file.png"))
+        assertFalse(opaque.owns(account, "uploads/o/$seg/cat.png"))
+        assertFalse(opaque.owns(account, "uploads/o/$seg/file.png/extra"))
+        assertFalse(opaque.owns(account, "uploads/o/$seg/file."))
+        assertFalse(opaque.owns(account, "uploads/o/$seg/file.PNG"))
+        assertFalse(opaque.owns(account, "uploads/o/$seg/file.abcdefghi"))
+        assertFalse(opaque.owns(account, "uploads/o/$seg/x/file"))
     }
 
     @Test
@@ -108,7 +131,8 @@ class StorageKeySchemeTest {
         assertFalse(opaque.owns(account, "uploads/$account/"))
         assertFalse(opaque.owns(account, "uploads/o/$myseg/"))
         assertFalse(opaque.owns(account, "uploads/$account/x/\\y"))
-        assertFalse(opaque.owns(account, " uploads/$account/x"))
+        assertFalse(opaque.owns(account, "uploads/$account/x "))
+        assertFalse(opaque.owns(account, "uploads/$account/x\n"))
         assertFalse(plain.owns(account, "uploads/$account/"))
         assertFalse(plain.owns(account, "uploads/$account/./x"))
     }
@@ -129,9 +153,9 @@ class StorageKeySchemeTest {
     @Test
     fun `opaque mode needs a secret of at least 32 characters`() {
         assertFailsWith<IllegalArgumentException> { StorageWebProperties(keyOwner = StorageKeyOwner.OPAQUE) }
-        val e = assertFailsWith<IllegalArgumentException> { StorageWebProperties(keyOwner = StorageKeyOwner.OPAQUE, keySecret = "short") }
+        val e = assertFailsWith<IllegalArgumentException> { StorageWebProperties(keyOwner = StorageKeyOwner.OPAQUE, keySecret = "qzx-9") }
         assertTrue(e.message!!.contains("skeleton.storage.web.key-secret"))
-        assertFalse(e.message!!.contains("short"), "the value is never echoed")
+        assertFalse(e.message!!.contains("qzx-9"), "the value is never echoed")
         assertFalse(StorageWebProperties(keyOwner = StorageKeyOwner.OPAQUE, keySecret = "s3cr3t-".repeat(6)).toString().contains("s3cr3t"))
         StorageWebProperties(keyOwner = StorageKeyOwner.OPAQUE, keySecret = "x".repeat(32))
         StorageWebProperties()

@@ -229,7 +229,7 @@ create index if not exists idx_author_profiles_account on author_profiles (accou
 ### 7.8 첨부 키 (`storage`)
 
 - `storage` 웹 설정에 `key-owner: ACCOUNT_ID`(기본, 지금 동작) | `OPAQUE` 를 더한다. `OPAQUE` 의 키: `<prefix>/o/<uuid>.<mac>/<파일>`, `mac = HMAC-SHA256(서버 비밀, 계정 id + "\n" + uuid)` 앞 32자. 소유 확인은 다시 계산해 비교한다 — DB 가 필요 없고, 업로드마다 값이 달라 **같은 프로필의 첨부끼리도 이어지지 않는다.** `ACCOUNT_ID` 꼴의 옛 키는 어느 방식에서나 지금처럼 확인된다(유효한 `ObjectKey` 가 아니거나 접두사 뒤가 비면 아니다. `<prefix>/o/` 로 시작하는 키는 `OPAQUE` 에서 mac 으로만 판정한다).
-- **스펙 이탈(B4 수정): `OPAQUE` 키에서는 클라이언트 파일 이름을 버리고 짧은 영숫자 확장자만 남긴다**(`file.<ext>`, 없거나 이상하면 `file`). 이유: 파일 이름이 두 프로필의 첨부를 잇는 값이 된다(같은 이름 · 같은 카메라 파일 번호). 원래 이름이 필요하면 앱이 별도 열에 저장한다. `ACCOUNT_ID` 방식은 지금과 같다.
+- **스펙 이탈(B4 수정): `OPAQUE` 키에서는 클라이언트 파일 이름을 버리고 알려진 확장자(내장 목록, 소문자 비교)만 남긴다**(`file[.<ext>]`, 목록에 없으면 `file` — `kim.minsu` · `example.com` 처럼 이름의 일부가 확장자 자리에 올 수 있다). 이유: 파일 이름이 두 프로필의 첨부를 잇는 값이 된다(같은 이름 · 같은 카메라 파일 번호). 원래 이름이 필요하면 앱이 별도 열에 저장한다. 소유 확인은 꼬리가 `file[.<소문자 영숫자 1~8자>]` 일 때만 인정한다. `ACCOUNT_ID` 방식은 지금과 같다.
 - 앱의 `BoardPolicy.canAttach` 가 접두사 비교 대신 쓸 `StorageKeyOwnership.owns(accountId, key)` 빈을 함께 낸다.
 - board 쪽 안전망은 §7.1 의 막기(storage 를 모른 채 "키에 내 계정 id 가 있나"만 본다).
 - 버린 것: 키에 프로필 id 를 넣기 — 올린 뒤 프로필을 바꿔 쓰면 A 의 키가 B 의 글에 실린다.

@@ -99,7 +99,7 @@ enum class StorageErrorCode(
  * 브라우저가 저장소로 직접 올리고 내려받는 길 — presign · 멀티파트 · 검증을 HTTP 로 연다.
  *
  * - 호출자는 `Authentication.name`(auth 모듈에서는 계정 id). 인증 없는 호출은 401.
- * - 키는 서버가 정한다: `<keyPrefix>/<호출자>/<uuid>/<파일 이름>` (`key-owner=OPAQUE` 면 `<keyPrefix>/o/<uuid>.<mac>/<파일 이름>` — [StorageKeyScheme]). 클라이언트가 보낸 키는 **자기 접두사 아래일 때만** 받는다
+ * - 키는 서버가 정한다: `<keyPrefix>/<호출자>/<uuid>/<파일 이름>` (`key-owner=OPAQUE` 면 `<keyPrefix>/o/<uuid>.<mac>/file[.<ext>]` — [StorageKeyScheme]). 클라이언트가 보낸 키는 **자기 접두사 아래일 때만** 받는다
  *   (남의 키 · 접두사 밖은 없는 것과 같은 404).
  * - 업로드는 [StorageFileValidator] 를 통과해야 presign 한다(`STORAGE.FILE_REJECTED`, `data.errors` 에 사유).
  * - [dev.sumin.skeleton.storage.PresignedStorage] 빈이 있고(버킷 설정) `skeleton.storage.web.enabled` 가 꺼져 있지 않을 때
@@ -197,7 +197,7 @@ class StorageController(
     }
 
     private fun newKey(accountId: String, fileName: String): ObjectKey =
-        ObjectKey(keys.issue(accountId, safeFileName(fileName)))
+        ObjectKey(keys.issue(accountId, fileName))
 
     private fun ownedKey(accountId: String, raw: String): ObjectKey {
         val key = runCatching { ObjectKey(raw) }.getOrNull()
@@ -208,13 +208,6 @@ class StorageController(
     }
 
     private fun StorageCandidateRequest.toCandidate() = StorageFileCandidate(fileName, contentType, sizeBytes)
-
-    private fun safeFileName(fileName: String): String =
-        fileName.substringAfterLast('/').substringAfterLast('\\')
-            .replace(Regex("[^A-Za-z0-9._-]"), "_")
-            .trim('.')
-            .take(100)
-            .ifBlank { "file" }
 
     private fun Authentication?.accountId(): String =
         this?.takeIf { it.isAuthenticated }?.name
