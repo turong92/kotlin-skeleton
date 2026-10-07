@@ -11,23 +11,27 @@ import kotlin.test.assertTrue
 import org.slf4j.LoggerFactory
 
 class AuthorAdoptionTest {
-    /** 옛 행을 가진 계정과 그 행 수. [fail] 의 계정은 adopt 가 던지고, [stuck] 의 계정은 adopt 가 늘 0 을 돌려준다(행이 남는다) */
+    /**
+     * 옛 행을 가진 계정과 그 행 수. [fail] 의 계정은 adopt 가 던지고, [stuck] 의 계정은 adopt 가 늘 0 을 돌려준다(행이 남는다).
+     * 커서 계약을 지킨다: 계정 id 오름차순, [after] 보다 큰 것만 — [ignoreCursor] 면 일부러 어긴다
+     */
     private class FakeListener(
         override val name: String,
         rows: Map<String, Int>,
         private val fail: Set<String> = emptySet(),
         private val stuck: Set<String> = emptySet(),
         private val failPending: Boolean = false,
+        private val ignoreCursor: Boolean = false,
     ) : AuthorAdoptionListener {
         val pending = LinkedHashMap(rows)
         val adopted = LinkedHashMap<String, String>()
-        var pendingCalls = 0
+        val cursors = mutableListOf<String?>()
         var adoptCalls = 0
 
-        override fun pendingAccounts(limit: Int): List<String> {
-            pendingCalls++
+        override fun pendingAccounts(limit: Int, after: String?): List<String> {
+            cursors += after
             if (failPending) error("pending failed for acc_secret")
-            return pending.filterValues { it > 0 }.keys.take(limit)
+            return pending.filterValues { it > 0 }.keys.sorted().filter { ignoreCursor || after == null || it > after }.take(limit)
         }
 
         override fun adopt(accountId: String, authorId: String): Int {
@@ -41,7 +45,8 @@ class AuthorAdoptionTest {
         }
     }
 
-    private fun harnessWithAccounts(vararg ids: String): Harness = Harness().also { h -> ids.forEachIndexed { i, id -> h.account(id, "Name-$id", (i + 1).toString().padStart(4, '0')) } }
+    private fun harnessWithAccounts(vararg ids: String): Harness =
+        Harness().also { h -> ids.forEachIndexed { i, id -> h.account(id, "Name-$id", (i + 1).toString().padStart(4, '0')) } }
 
     @Test
     fun `every pending account gets its first profile and its old rows are moved to it, over several batches`() {
@@ -59,6 +64,7 @@ class AuthorAdoptionTest {
             assertNotNull(first.adoptedAt, "adopted_at is filled")
         }
         assertEquals(5, h.repository.all().size)
+        assertEquals(listOf(null, "acc_2", "acc_4", "acc_5"), listener.cursors, "the cursor walks forward batch by batch")
     }
 
     @Test
@@ -77,37 +83,42 @@ class AuthorAdoptionTest {
     }
 
     @Test
-    fun `a round without progress ends the run - an account that never moves does not loop forever or starve the rest`() {
-        val h = harnessWithAccounts("acc_stuck")
-        val listener = FakeListener("board", mapOf("acc_stuck" to 3), stuck = setOf("acc_stuck"))
-        assertEquals(0, AuthorAdoption({ listOf(listener) }, h.service).run())
-        assertEquals(1, listener.pendingCalls, "one look, no progress, stop")
-        assertEquals(1, listener.adoptCalls)
-    }
-
-    @Test
-    fun `a failing account is skipped, the others move, and the failing one is left for the next start`() {
-        val h = harnessWithAccounts("acc_bad", "acc_1", "acc_2")
-        val listener = FakeListener("board", mapOf("acc_bad" to 1, "acc_1" to 1, "acc_2" to 1), fail = setOf("acc_bad"))
+    fun `accounts that never move do not starve the healthy ones behind them, even with a batch of one`() {
+        val h = harnessWithAccounts("acc_a", "acc_b", "acc_c", "acc_d")
+        val listener = FakeListener("board", mapOf("acc_a" to 3, "acc_b" to 3, "acc_c" to 1, "acc_d" to 2), stuck = setOf("acc_a", "acc_b"), fail = emptySet())
 
         val moved = AuthorAdoption({ listOf(listener) }, h.service, batchSize = 1).run()
 
-        // 배치가 1 이라 첫 바퀴는 acc_bad 만 본다: 진행 0 이면 멈춘다 — 굶기지 않으려면 배치를 키우는 것이 운영 몫이다. 여기서는 멈춤 계약을 확인한다
-        assertEquals(0, moved)
-        assertTrue(listener.adopted.isEmpty())
+        assertEquals(3, moved, "c and d moved although a and b are stuck in front of them")
+        assertEquals(setOf("acc_c", "acc_d"), listener.adopted.keys)
+        assertEquals(listOf(null, "acc_a", "acc_b", "acc_c", "acc_d"), listener.cursors, "every account is looked at once and the run ends")
+    }
 
-        val moved2 = AuthorAdoption({ listOf(listener) }, h.service, batchSize = 10).run()
-        assertEquals(2, moved2, "with room in the batch the healthy accounts move")
+    @Test
+    fun `a failing account is skipped and the ones behind it move - it stays pending for the next start`() {
+        val h = harnessWithAccounts("acc_bad", "acc_1", "acc_2")
+        val listener = FakeListener("board", mapOf("acc_bad" to 1, "acc_1" to 1, "acc_2" to 1), fail = setOf("acc_bad"))
+
+        assertEquals(2, AuthorAdoption({ listOf(listener) }, h.service, batchSize = 1).run())
+
         assertEquals(setOf("acc_1", "acc_2"), listener.adopted.keys)
-        assertEquals(1, listener.pending.filterValues { it > 0 }.size, "only the failing account is still pending")
+        assertEquals(listOf("acc_bad"), listener.pending.filterValues { it > 0 }.keys.toList())
     }
 
     @Test
     fun `an account the service cannot give a profile is skipped like any other failure`() {
-        val h = harnessWithAccounts("acc_1")   // acc_ghost 는 계정이 없다 → ensureFirstProfile 이 NotFound
+        val h = Harness(autoAccounts = false).also { it.account("acc_1", "Name", "0001") }   // acc_ghost 는 계정이 없다 → NotFound
         val listener = FakeListener("board", mapOf("acc_ghost" to 1, "acc_1" to 1))
-        assertEquals(1, AuthorAdoption({ listOf(listener) }, h.service).run())
+        assertEquals(1, AuthorAdoption({ listOf(listener) }, h.service, batchSize = 1).run())
         assertEquals(setOf("acc_1"), listener.adopted.keys)
+    }
+
+    @Test
+    fun `a listener that ignores the cursor is stopped instead of looping forever`() {
+        val h = harnessWithAccounts("acc_1")
+        val listener = FakeListener("board", mapOf("acc_1" to 1), stuck = setOf("acc_1"), ignoreCursor = true)
+        assertEquals(0, AuthorAdoption({ listOf(listener) }, h.service, batchSize = 1).run())
+        assertEquals(2, listener.cursors.size, "the second look returned an account that was not past the cursor - stop")
     }
 
     @Test
@@ -142,6 +153,18 @@ class AuthorAdoptionTest {
         val listener = FakeListener("board", mapOf("acc_1" to 2))
         assertEquals(2, AuthorAdoption({ listOf(listener) }, h.service).run())
         assertEquals(null, h.repository.findPrimary("acc_1")!!.name)
+    }
+
+    @Test
+    fun `a failure to record adopted_at does not undo or hide the move`() {
+        val h = harnessWithAccounts("acc_1")
+        val broken = object : AuthorProfileRepository by h.repository {
+            override fun markAdopted(accountId: String, now: java.time.Instant): Boolean = error("no write for $accountId")
+        }
+        val service = AuthorProfileService(broken, { h.accounts }, h.names, h.limits, h.properties, h.time)
+        val listener = FakeListener("board", mapOf("acc_1" to 2))
+        assertEquals(2, AuthorAdoption({ listOf(listener) }, service).run())
+        assertEquals(setOf("acc_1"), listener.adopted.keys)
     }
 
     @Test

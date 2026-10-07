@@ -48,11 +48,11 @@ interface AuthorAdoptionListener {
     val name: String
 
     /**
-     * 아직 옮기지 않은 행을 가진 계정 id (지워진 계정 제외), **앞쪽부터** 최대 [limit] 개.
-     * 실행기 계약: 한 바퀴에 진행(`adopt` 가 1 이상)이 없으면 실행기는 그 바퀴에서 멈춘다 — 던지거나 0 을 돌려주는 계정이
-     * 뒤 계정을 굶기지 않게, 계정별 예외는 삼키고 로그를 남기며 다음 기동 때 다시 한다.
+     * 아직 옮기지 않은 행을 가진 계정 id (지워진 계정 제외), **계정 id 오름차순**으로 [after] 보다 큰 것만 최대 [limit] 개 ([after] 가 null 이면 처음부터).
+     * 실행기 계약: 실행기는 이 커서로 끝까지 훑는다 — 한 번 본 계정은 그 실행에서 다시 보지 않으므로 항상 전진하고 끝난다. 던지거나 0 을 돌려주는(못 옮기는) 계정이
+     * 뒤 계정을 굶기지 않는다. 계정별 예외는 삼키고 로그를 남기며 다음 기동 때 다시 한다. 구현은 [after] 를 무시하지 않는다(무시하면 실행기가 그 구현을 멈춘다).
      */
-    fun pendingAccounts(limit: Int): List<String>
+    fun pendingAccounts(limit: Int, after: String? = null): List<String>
 
     /** [accountId] 의 옛 행을 공개 작성자 id [authorId] 로 옮기고 옮긴 행 수를 돌려준다. 이미 옮겼으면 0 */
     fun adopt(accountId: String, authorId: String): Int

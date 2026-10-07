@@ -77,6 +77,31 @@ class JdbcAuthorRefDbTest {
     }
 
     @Test
+    fun `pendingAccounts after a cursor lists only larger account ids, so a stuck account cannot hide the ones behind it`() {
+        val board = db.newBoard()
+        val tag = UUID.randomUUID().toString().replace("-", "").take(12)
+        val a = "acc_cur_${tag}_a"
+        val b = "acc_cur_${tag}_b"
+        val c = "acc_cur_${tag}_c"
+        listOf(c, a, b).forEach { db.newPost(board, author = it) }
+
+        val mine = { after: String? -> adoption.pendingAccounts(100_000, after).filter { it.startsWith("acc_cur_$tag") } }
+        assertEquals(listOf(a, b, c), mine(null))
+        assertEquals(listOf(b, c), mine(a))
+        assertEquals(listOf(c), mine(b))
+        assertEquals(emptyList(), mine(c))
+        // 커서로 한 개씩 훑어도 모든 계정이 한 번씩 나온다 (앞 계정을 옮기지 않아도 뒤로 간다)
+        val walked = mutableListOf<String>()
+        var after: String? = a.dropLast(1)   // 이 시험의 첫 계정 바로 앞
+        while (true) {
+            val next = adoption.pendingAccounts(1, after).firstOrNull()?.takeIf { it.startsWith("acc_cur_$tag") } ?: break
+            walked += next
+            after = next
+        }
+        assertEquals(listOf(a, b, c), walked)
+    }
+
+    @Test
     fun `adopt fills author_ref on posts and comments of that account only, and is idempotent`() {
         val board = db.newBoard()
         val me = account()

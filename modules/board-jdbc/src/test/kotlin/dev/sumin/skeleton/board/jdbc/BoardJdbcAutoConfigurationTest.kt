@@ -47,7 +47,7 @@ class BoardJdbcAutoConfigurationTest {
         }
         val own = object : dev.sumin.skeleton.common.author.AuthorAdoptionListener {
             override val name = "own"
-            override fun pendingAccounts(limit: Int) = emptyList<String>()
+            override fun pendingAccounts(limit: Int, after: String?) = emptyList<String>()
             override fun adopt(accountId: String, authorId: String) = 0
         }
         runner.withBean("boardAuthorAdoptionListener", dev.sumin.skeleton.common.author.AuthorAdoptionListener::class.java, { own }).run { ctx ->
@@ -59,7 +59,7 @@ class BoardJdbcAutoConfigurationTest {
     fun `a listener of another module does not push the board one out - the app replaces it by bean name only`() {
         val other = object : dev.sumin.skeleton.common.author.AuthorAdoptionListener {
             override val name = "other"
-            override fun pendingAccounts(limit: Int) = emptyList<String>()
+            override fun pendingAccounts(limit: Int, after: String?) = emptyList<String>()
             override fun adopt(accountId: String, authorId: String) = 0
         }
         runner.withBean("otherModuleAdoption", dev.sumin.skeleton.common.author.AuthorAdoptionListener::class.java, { other }).run { ctx ->

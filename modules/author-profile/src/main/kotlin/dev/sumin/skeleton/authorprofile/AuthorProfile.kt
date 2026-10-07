@@ -33,6 +33,9 @@ data class AuthorProfile(
 ) {
     /** 화면에 보일 꼬리표 (없거나 UNIQUE 의 고정값이면 null) */
     val visibleTag: String? get() = DisplayNames.visibleTag(tag)
+
+    /** 계정 id 와 프로필 id 의 쌍이 로그 · 오류 메시지에 실리지 않게 — [accountId] · [primaryOf] 는 찍지 않는다 */
+    override fun toString(): String = "AuthorProfile(id=$id, status=$status)"
 }
 
 object AuthorProfileIds {

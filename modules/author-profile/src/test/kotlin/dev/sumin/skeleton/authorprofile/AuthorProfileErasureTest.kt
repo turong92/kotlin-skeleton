@@ -24,7 +24,8 @@ class AuthorProfileErasureTest {
 
         assertTrue(h.repository.all().none { it.accountId == "acc_1" }, "no row keeps the siblings together")
         assertNull(h.repository.find(second.id))
-        assertEquals(listOf(other), h.repository.all())
+        assertEquals(listOf(other), h.repository.all().filter { it.primaryOf == null }, "the other account's created profile stays")
+        assertTrue(h.repository.all().any { it.accountId == "acc_2" })
     }
 
     @Test

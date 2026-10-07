@@ -1,4 +1,4 @@
-# author-profile — 한 계정의 여러 작성자 프로필. 이름 규칙 · 겹침 방식 · 예약어 · 이름 바꾸기 한도는 skeleton.account.display-name.* 를 그대로 따른다.
+# author-profile — 한 계정의 여러 작성자 프로필. 만들기 한도는 표에서 세고, 이름 바꾸기 한도는 AccountRateLimits(내구성 있는 RateLimitStore 필요)로 센다. 이름 규칙 · 겹침 방식 · 예약어 · 이름 바꾸기 한도는 skeleton.account.display-name.* 를 그대로 따른다.
 skeleton:
   author-profile:
     max-per-account: 5                 # 계정당 살아 있는 프로필 수 (넘으면 409 AUTHOR_PROFILE.LIMIT_REACHED). 지우면 자리가 난다
@@ -6,7 +6,7 @@ skeleton:
     create-window: 30d
     adopt-on-startup: true             # 기동할 때 옛 글(공개 작성자 id 없는 행)을 계정의 첫 프로필로 넘겨받는다
     http:
-      enabled: true                    # false 면 /author-profiles 엔드포인트를 등록하지 않는다
-      base-path: /api/v1/author-profiles
+      enabled: true                    # (아직 동작 없음 — 엔드포인트는 뒤따르는 조각) false 면 /author-profiles 엔드포인트를 등록하지 않는다
+      base-path: /api/v1/author-profiles   # (아직 동작 없음)
     admin:
-      enabled: false                   # 관리자의 프로필 ↔ 계정 연결 조회 엔드포인트 (기본 꺼짐, 호출마다 감사 이벤트)
+      enabled: false                   # (아직 동작 없음) 관리자의 프로필 ↔ 계정 연결 조회 엔드포인트 (기본 꺼짐, 호출마다 감사 이벤트)

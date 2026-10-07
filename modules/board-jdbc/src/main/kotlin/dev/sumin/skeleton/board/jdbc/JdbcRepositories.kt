@@ -389,18 +389,18 @@ class JdbcBoardErasureRepository(private val jdbc: NamedParameterJdbcTemplate) :
 class JdbcBoardAuthorAdoption(private val jdbc: NamedParameterJdbcTemplate) : AuthorAdoptionListener {
     override val name: String = "board"
 
-    override fun pendingAccounts(limit: Int): List<String> =
+    override fun pendingAccounts(limit: Int, after: String?): List<String> =
         jdbc.queryForList(
             """
             select author_id from (
-                select author_id from board_posts where author_ref is null and author_id not like :tombstone escape '!'
+                select author_id from board_posts where author_ref is null and author_id > :after and author_id not like :tombstone escape '!'
                 union
-                select author_id from board_comments where author_ref is null and author_id not like :tombstone escape '!'
+                select author_id from board_comments where author_ref is null and author_id > :after and author_id not like :tombstone escape '!'
             ) pending
             order by author_id
             limit :limit
             """.trimIndent(),
-            mapOf("tombstone" to escapeLike(BoardAuthors.DELETED_PREFIX) + "%", "limit" to limit),
+            mapOf("tombstone" to escapeLike(BoardAuthors.DELETED_PREFIX) + "%", "limit" to limit, "after" to (after ?: "")),
             String::class.java,
         ).filterNotNull()
 

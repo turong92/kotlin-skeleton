@@ -110,7 +110,7 @@ class AuthorProfileAutoConfigurationTest {
         class Listener : AuthorAdoptionListener {
             override val name = "board"
             var left = 2
-            override fun pendingAccounts(limit: Int): List<String> = if (left > 0) listOf("acc_1") else emptyList()
+            override fun pendingAccounts(limit: Int, after: String?): List<String> = if (left > 0 && (after == null || "acc_1" > after)) listOf("acc_1") else emptyList()
             override fun adopt(accountId: String, authorId: String): Int = left.also { left = 0 }
         }
         val on = Listener()

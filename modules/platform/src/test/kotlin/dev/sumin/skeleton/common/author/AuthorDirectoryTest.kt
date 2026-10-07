@@ -45,7 +45,7 @@ class AuthorIdentitySpiTest {
         val pending = mutableListOf("acc_1")
         val listener = object : AuthorAdoptionListener {
             override val name = "board"
-            override fun pendingAccounts(limit: Int) = pending.take(limit)
+            override fun pendingAccounts(limit: Int, after: String?) = pending.sorted().filter { after == null || it > after }.take(limit)
             override fun adopt(accountId: String, authorId: String): Int = if (pending.remove(accountId)) 1 else 0
         }
         assertEquals(listOf("acc_1"), listener.pendingAccounts(10))

@@ -4,8 +4,9 @@
 설계 · 위협 모델 · 누출 경로 전수표: `docs/superpowers/specs/2026-10-07-author-profiles-design.md`.
 
 - **프로필** = 공개 작성자 id(`prf_` + 무작위 128비트) + 이름 + 꼬리표. 이름은 `skeleton.account.display-name.*`(규칙 · 예약어 · 겹침 방식)를 그대로 따르고, 꼬리표는 프로필마다 독립 추첨이다. 계정당 살아 있는 프로필 수 상한 · 만들기 횟수 한도는 `skeleton.author-profile` 의 것이고 모두 계정 기준이다.
+- **한도**: 개수 상한은 살아 있는 프로필 수(첫 프로필 포함)이고 상한 검사와 저장은 한 번에 원자적이다. **만들기 한도**는 표에서 센다(지운 것 포함, 실패한 시도는 세지 않는다 — 재시작 · 인스턴스 여럿에도 같다). **이름 바꾸기 한도**는 계정의 `display-name.change-limit`/`change-window` 숫자를 모든 프로필 합산으로 쓰되 계정 닉네임 변경과는 **따로** 센다(프로필 전용 카운터) — `AccountRateLimits` 를 쓰므로 인스턴스가 여럿이면 내구성 있는 `RateLimitStore`(예: `redis-rate-limit`)가 필요하다.
 - **지우기**는 즉시이고 되돌릴 수 없다 — 글은 "삭제된 사용자"로 남고 다른 프로필로 옮기지 않는다. 남의 · 없는 · 지워진 프로필 id 는 모두 같은 `AUTHOR_PROFILE.NOT_FOUND` 이고, `AuthorIdentities.allows` 도 같은 false 다.
-- **첫 프로필**: 계정이 처음 갖는 프로필. 계정 이름 · 꼬리표를 한 번 복사하고(이름이 없으면 이름 없는 프로필), `adopt-on-startup`(기본 켜짐)이 `AuthorAdoptionListener`(예: `board-jdbc`)가 가진 옛 글을 여기로 넘겨받는다 — 진행이 없는 바퀴에서 멈추고, 계정별 예외는 삼키며, 계정 id · 프로필 id 쌍을 로그에 남기지 않는다.
+- **첫 프로필**: 계정이 처음 갖는 프로필. 계정 이름 · 꼬리표를 한 번 복사하고(이름이 없으면 이름 없는 프로필), `adopt-on-startup`(기본 켜짐)이 `AuthorAdoptionListener`(예: `board-jdbc`)가 가진 옛 글을 여기로 넘겨받는다 — 계정 id 커서로 끝까지 훑어 못 옮기는 계정이 뒤 계정을 굶기지 않고, 계정별 예외는 삼키며, 계정 id · 프로필 id 쌍을 로그에 남기지 않는다. 목록 조회가 부르는 `ensureFirstProfile` 도 같은 넘겨받기를 그 계정에 한 번 해 본다(실행기를 끈 앱).
 - 탈퇴(`AccountErasureListener`)는 그 계정의 프로필 행을 모두 지운다. 글 쪽 `author_ref` 는 건드리지 않는다.
 - `AuthorDirectory` 는 `AccountAutoConfiguration` **보다 먼저** 등록된다 — `prf_` 가 아닌 id(아직 넘겨받지 않은 옛 행의 계정 id)는 `account` 의 기본 디렉터리에 그대로 넘긴다.
 - 저장소 포트(`AuthorProfileRepository`)는 `author-profile-jdbc` 가 구현한다. **메모리 구현은 없다** — 어댑터가 없으면 시작이 실패한다. HTTP(`/author-profiles`) · 관리자 연결 조회는 뒤따르는 조각이다(`http.*` · `admin.*` 키는 자리만 있다).

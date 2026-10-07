@@ -36,6 +36,20 @@ class FakeAuthorProfileRepository : AuthorProfileRepository {
     @Synchronized override fun tagsOf(key: String): Set<String> =
         rows.values.filter { it.nameKey == key && it.tag != null }.map { it.tag!! }.toSet()
 
+    @Synchronized override fun primariesByKey(key: String): List<AuthorProfile> =
+        rows.values.filter { it.primaryOf != null && it.nameKey == key && it.status == AuthorProfileStatus.ACTIVE }
+
+    @Synchronized override fun countCreatedSince(accountId: String, since: Instant): Int =
+        rows.values.count { it.accountId == accountId && it.primaryOf == null && it.createdAt >= since }
+
+    /** 가짜는 상한 검사와 삽입을 한 락 안에서 한다 — jdbc 는 첫 프로필 줄을 잠근다 */
+    @Synchronized override fun insertWithinCap(profile: AuthorProfile, maxActive: Int): CapInsert {
+        if (countActive(profile.accountId) >= maxActive) return CapInsert.LIMIT_REACHED
+        if (profile.id in rows || clash(profile)) return CapInsert.NAME_TAKEN
+        rows[profile.id] = profile
+        return CapInsert.INSERTED
+    }
+
     @Synchronized override fun insert(profile: AuthorProfile): Boolean {
         if (profile.id in rows) return false
         if (profile.primaryOf != null && rows.values.any { it.primaryOf == profile.primaryOf }) return false
@@ -90,8 +104,14 @@ class Harness(
     reserved: List<String> = emptyList(),
     changeLimit: Int = 10,
     random: RandomGenerator = ScriptedRandom(),
+    /** true 면 처음 보는 계정 id 를 이름 없는 ACTIVE 계정으로 만든다 — [AuthorProfileService.create] 가 첫 프로필을 먼저 보장하므로 계정이 있어야 한다 */
+    autoAccounts: Boolean = true,
+    val adoptionListeners: MutableList<dev.sumin.skeleton.common.author.AuthorAdoptionListener> = mutableListOf(),
 ) {
-    val accounts = InMemoryAccountRepository()
+    private val backing = InMemoryAccountRepository()
+    val accounts: dev.sumin.skeleton.account.AccountRepository = object : dev.sumin.skeleton.account.AccountRepository by backing {
+        override fun findById(id: String): Account? = backing.findById(id) ?: if (autoAccounts) bare(id) else null
+    }
     val repository = FakeAuthorProfileRepository()
     val time = TimeProvider.fixed(T0)
     val names = DisplayNames(
@@ -100,7 +120,7 @@ class Harness(
     )
     private val store = InMemoryFixedWindowRateLimitStore()
     val limits = AccountRateLimits({ store }, time)
-    val service = AuthorProfileService(repository, { accounts }, names, limits, properties, time)
+    val service = AuthorProfileService(repository, { accounts }, names, limits, properties, time) { adoptionListeners.toList() }
 
     /** 계정을 만든다. [name] 이 있으면 닉네임 · 비교용 키 · [tag] 까지 저장한 상태로 */
     fun account(id: String, name: String? = null, tag: String? = null, status: AccountStatus = AccountStatus.ACTIVE): Account {
@@ -109,9 +129,15 @@ class Harness(
             displayName = name, locale = null, timeZone = null, createdAt = T0, updatedAt = T0,
             displayNameKey = name?.let(names::key), displayTag = tag,
         )
-        check(accounts.insert(account, emptyList())) { "account $id was not stored" }
+        check(backing.insert(account, emptyList())) { "account $id was not stored" }
         return account
     }
+
+    private fun bare(id: String): Account? =
+        Account(id, "$id@example.com", true, AccountStatus.ACTIVE, setOf("USER"), null, null, null, T0, T0).takeIf { backing.insert(it, emptyList()) } ?: backing.findById(id)
+
+    /** 사용자가 만든 살아 있는 프로필만 (첫 프로필 제외) */
+    fun made(account: String) = service.list(account).filter { it.primaryOf == null }
 
     fun failure(block: () -> Unit): AuthorProfileException = kotlin.test.assertFailsWith<AuthorProfileException> { block() }
 }

@@ -31,7 +31,8 @@ class AuthorProfileServiceTest {
         assertEquals(AuthorProfileStatus.ACTIVE, p.status)
         assertNull(p.primaryOf, "only the first profile owns the primary slot")
         assertEquals(T0, p.createdAt)
-        assertEquals(listOf(p), h.service.list("acc_1"))
+        assertEquals(listOf(p), h.made("acc_1"))
+        assertEquals(2, h.service.list("acc_1").size, "the first profile (nameless here) was made before it")
     }
 
     @Test
@@ -56,20 +57,48 @@ class AuthorProfileServiceTest {
 
     @Test
     fun `a rejected name consumes neither a slot nor the create limit`() {
-        val h = Harness(properties = AuthorProfileProperties(maxPerAccount = 1, createLimit = 1))
+        val h = Harness(properties = AuthorProfileProperties(maxPerAccount = 2, createLimit = 1))
         repeat(3) { assertFailsWith<FieldValidationException> { h.service.create("acc_1", "a@b") } }
         assertEquals("ok", h.service.create("acc_1", "ok").name)
     }
 
     @Test
-    fun `the number of living profiles is capped per account and a deleted one frees its slot`() {
-        val h = Harness(properties = AuthorProfileProperties(maxPerAccount = 2, createLimit = 0))
-        val first = h.service.create("acc_1", "A")
+    fun `the number of living profiles - the first one included - is capped per account and a deleted one frees its slot`() {
+        val h = Harness(properties = AuthorProfileProperties(maxPerAccount = 3, createLimit = 0))
+        val a = h.service.create("acc_1", "A")
         h.service.create("acc_1", "B")
         assertEquals(AuthorProfileErrorCode.LIMIT_REACHED, h.failure { h.service.create("acc_1", "C") }.errorCode)
         assertEquals("C", h.service.create("acc_2", "C").name, "the cap is per account")
-        h.service.delete("acc_1", first.id)
+        h.service.delete("acc_1", a.id)
         assertEquals("C", h.service.create("acc_1", "C").name)
+    }
+
+    @Test
+    fun `creating makes sure the first profile exists before it checks the cap`() {
+        val h = Harness(properties = AuthorProfileProperties(maxPerAccount = 2, createLimit = 0))
+        h.account("acc_1", "Moon", "0417")
+        h.service.create("acc_1", "A")
+        assertEquals("Moon", h.repository.findPrimary("acc_1")!!.name)
+        assertEquals(AuthorProfileErrorCode.LIMIT_REACHED, h.failure { h.service.create("acc_1", "B") }.errorCode)
+    }
+
+    @Test
+    fun `creating for an unknown account is NOT_FOUND and stores nothing`() {
+        val h = Harness(autoAccounts = false)
+        assertEquals(AuthorProfileErrorCode.NOT_FOUND, h.failure { h.service.create("acc_missing", "A") }.errorCode)
+        assertTrue(h.repository.all().isEmpty())
+    }
+
+    @Test
+    fun `concurrent creates never get past the cap`() {
+        val h = Harness(properties = AuthorProfileProperties(maxPerAccount = 3, createLimit = 0))
+        h.account("acc_1", "Moon", "0001")
+        val pool = java.util.concurrent.Executors.newFixedThreadPool(16)
+        try {
+            val results = (1..40).map { i -> pool.submit<Boolean> { runCatching { h.service.create("acc_1", "N$i") }.isSuccess } }.map { it.get() }
+            assertEquals(2, results.count { it }, "first profile + 2 = 3 living profiles")
+            assertEquals(3, h.repository.countActive("acc_1"))
+        } finally { pool.shutdownNow() }
     }
 
     @Test
@@ -86,16 +115,27 @@ class AuthorProfileServiceTest {
 
     @Test
     fun `create-limit 0 means no limit`() {
-        val h = Harness(properties = AuthorProfileProperties(maxPerAccount = 1, createLimit = 0))
+        val h = Harness(properties = AuthorProfileProperties(maxPerAccount = 2, createLimit = 0))
         repeat(10) { i -> val p = h.service.create("acc_1", "n$i"); h.service.delete("acc_1", p.id) }
-        assertEquals(0, h.service.list("acc_1").size)
+        assertEquals(0, h.made("acc_1").size)
     }
 
     @Test
-    fun `the cap is checked before the create limit is spent`() {
-        val h = Harness(properties = AuthorProfileProperties(maxPerAccount = 1, createLimit = 2))
+    fun `a failed attempt is not counted by the create limit - only rows that exist are`() {
+        val h = Harness(uniqueness = Uniqueness.UNIQUE, properties = AuthorProfileProperties(maxPerAccount = 5, createLimit = 1))
+        h.service.create("acc_2", "Moon")
+        repeat(3) { assertEquals(AuthorProfileErrorCode.NAME_TAKEN, h.failure { h.service.create("acc_1", "moon") }.errorCode) }
+        assertEquals("Sun", h.service.create("acc_1", "Sun").name, "the one allowed creation is still unspent")
+        assertEquals(AuthorProfileErrorCode.RATE_LIMITED, assertFailsWith<RateLimitedException> { h.service.create("acc_1", "Star") }.errorCode)
+    }
+
+    @Test
+    fun `the create limit counts the table, so a second service over the same rows sees the same count`() {
+        val h = Harness(properties = AuthorProfileProperties(maxPerAccount = 5, createLimit = 1))
         h.service.create("acc_1", "A")
-        repeat(5) { assertEquals(AuthorProfileErrorCode.LIMIT_REACHED, h.failure { h.service.create("acc_1", "B") }.errorCode) }
+        val other = AuthorProfileService(h.repository, { h.accounts }, h.names, h.limits, h.properties, h.time)   // 다른 인스턴스 · 재시작 — 메모리 카운터는 비어 있다
+        val e = assertFailsWith<RateLimitedException> { other.create("acc_1", "B") }
+        assertEquals(AuthorProfileErrorCode.RATE_LIMITED, e.errorCode)
     }
 
     @Test
@@ -163,7 +203,7 @@ class AuthorProfileServiceTest {
         assertEquals("Sun", other.name)
         assertEquals(h.names.key("Sun"), other.nameKey)
         assertNotNull(other.tag)
-        assertEquals(other, h.service.list("acc_1").single())
+        assertEquals(other, h.made("acc_1").single())
         assertTrue(other.updatedAt >= p.updatedAt)
     }
 
@@ -200,7 +240,7 @@ class AuthorProfileServiceTest {
         val h = Harness(changeLimit = 1, reserved = listOf("admin"))
         val p = h.service.create("acc_1", "Moon")
         assertFailsWith<FieldValidationException> { h.service.rename("acc_1", p.id, "admin") }
-        assertEquals("Moon", h.service.list("acc_1").single().name)
+        assertEquals("Moon", h.made("acc_1").single().name)
         assertEquals("Sun", h.service.rename("acc_1", p.id, "Sun").name)
     }
 
@@ -210,7 +250,7 @@ class AuthorProfileServiceTest {
         h.service.create("acc_1", "Moon")
         val p = h.service.create("acc_2", "Sun")
         assertEquals(AuthorProfileErrorCode.NAME_TAKEN, h.failure { h.service.rename("acc_2", p.id, "moon") }.errorCode)
-        assertEquals("Sun", h.service.list("acc_2").single().name)
+        assertEquals("Sun", h.made("acc_2").single().name)
     }
 
     @Test
@@ -226,7 +266,7 @@ class AuthorProfileServiceTest {
         )
         errors.forEach { assertEquals(AuthorProfileErrorCode.NOT_FOUND, it.errorCode) }
         assertEquals(1, errors.map { it.message }.toSet().size, "the same wording too")
-        assertEquals("Mine", h.service.list("acc_1").single().name)
+        assertEquals("Mine", h.made("acc_1").single().name)
     }
 
     // ---- delete ----
@@ -241,7 +281,7 @@ class AuthorProfileServiceTest {
         assertNull(row.name); assertNull(row.nameKey); assertNull(row.tag)
         assertEquals(T0, row.deletedAt)
         assertEquals("acc_1", row.accountId)
-        assertTrue(h.service.list("acc_1").isEmpty())
+        assertTrue(h.made("acc_1").isEmpty())
     }
 
     @Test
@@ -256,7 +296,7 @@ class AuthorProfileServiceTest {
         )
         errors.forEach { assertEquals(AuthorProfileErrorCode.NOT_FOUND, it.errorCode) }
         assertEquals(1, errors.map { it.message }.toSet().size)
-        assertEquals(1, h.service.list("acc_1").size)
+        assertEquals(1, h.made("acc_1").size)
     }
 
     // ---- first profile ----
@@ -324,16 +364,19 @@ class AuthorProfileServiceTest {
     }
 
     @Test
-    fun `the first profile does not use up the create limit or the cap check`() {
-        val h = Harness(properties = AuthorProfileProperties(maxPerAccount = 1, createLimit = 1))
+    fun `the first profile is not a created profile - it spends no create limit and the cap is about living ones`() {
+        val h = Harness(properties = AuthorProfileProperties(maxPerAccount = 2, createLimit = 1))
         h.account("acc_1", "Moon", "0417")
         h.service.ensureFirstProfile("acc_1")
-        assertEquals(AuthorProfileErrorCode.LIMIT_REACHED, h.failure { h.service.create("acc_1", "Other") }.errorCode)
+        val a = h.service.create("acc_1", "A")   // 첫 프로필이 만들기 한도 1 을 쓰지 않았으므로 된다
+        assertEquals(AuthorProfileErrorCode.LIMIT_REACHED, h.failure { h.service.create("acc_1", "B") }.errorCode)   // 살아 있는 둘 = 상한
+        h.service.delete("acc_1", a.id)
+        assertEquals(AuthorProfileErrorCode.RATE_LIMITED, assertFailsWith<RateLimitedException> { h.service.create("acc_1", "B") }.errorCode)   // 자리는 났지만 만들기 한도(A 하나)를 썼다
     }
 
     @Test
     fun `an unknown or erased account has no first profile`() {
-        val h = Harness()
+        val h = Harness(autoAccounts = false)
         h.account("acc_gone", "Moon", "0001", status = dev.sumin.skeleton.account.AccountStatus.ERASED)
         assertEquals(AuthorProfileErrorCode.NOT_FOUND, h.failure { h.service.ensureFirstProfile("acc_missing") }.errorCode)
         assertEquals(AuthorProfileErrorCode.NOT_FOUND, h.failure { h.service.ensureFirstProfile("acc_gone") }.errorCode)
@@ -345,6 +388,93 @@ class AuthorProfileServiceTest {
         val h = Harness()
         h.account("acc_1", "Moon", "0001", status = dev.sumin.skeleton.account.AccountStatus.SUSPENDED)
         assertEquals("Moon", h.service.ensureFirstProfile("acc_1").name)
+    }
+
+    @Test
+    fun `when the first profile cannot get its name it falls to a nameless first profile instead of failing`() {
+        val h = Harness(uniqueness = Uniqueness.UNIQUE)
+        h.service.create("acc_other", "Moon")                 // 이미 쓰는 이름
+        h.account("acc_1", "Moon", "0000")
+        val first = h.service.ensureFirstProfile("acc_1")
+        assertNull(first.name); assertNull(first.nameKey); assertNull(first.tag)
+        assertEquals(AuthorProfileStatus.ACTIVE, first.status)
+        assertEquals("acc_1", first.primaryOf)
+    }
+
+    @Test
+    fun `the tag draw does not avoid the tag of an account that already has its first profile`() {
+        // other 가 Moon#0417 을 먼저 잡고, acc_1(계정 Moon#0417)의 첫 프로필은 겹쳐서 다시 뽑는다(0009). other 가 이름을 바꾼 뒤 acc_3 의 새 Moon 이 0417 을 뽑아도 된다
+        val h = Harness(random = ScriptedRandom(listOf(416, 8, 5000, 416)))
+        val other = h.service.create("acc_other", "Moon")
+        assertEquals("0417", other.tag)
+        h.account("acc_1", "Moon", "0417")
+        assertEquals("0009", h.service.ensureFirstProfile("acc_1").tag)
+        h.service.rename("acc_other", other.id, "Sun")
+        assertEquals("0417", h.service.create("acc_3", "moon").tag, "acc_1 already has its first profile - its account tag is not shown any more")
+    }
+
+    @Test
+    fun `the tag draw still avoids the tag of an account that has no first profile yet`() {
+        val h = Harness(random = ScriptedRandom(List(8) { 416 }))
+        h.account("acc_old", "Moon", "0417")
+        assertNotEquals("0417", h.service.create("acc_3", "moon").tag)
+    }
+
+    // ---- 목록 조회가 옛 행을 넘겨받게 한다 (스펙 7.4-3) ----
+
+    private class OldRows(var rows: Int, private val fail: Boolean = false) : dev.sumin.skeleton.common.author.AuthorAdoptionListener {
+        override val name = "board"
+        val adoptedInto = mutableListOf<String>()
+        var calls = 0
+        override fun pendingAccounts(limit: Int, after: String?) = emptyList<String>()
+        override fun adopt(accountId: String, authorId: String): Int {
+            calls++
+            if (fail) error("boom for $accountId")
+            adoptedInto += authorId
+            return rows.also { rows = 0 }
+        }
+    }
+
+    @Test
+    fun `ensuring the first profile also moves the account's old rows into it, once`() {
+        val listener = OldRows(rows = 3)
+        val h = Harness(adoptionListeners = mutableListOf(listener))
+        h.account("acc_1", "Moon", "0417")
+        val first = h.service.ensureFirstProfile("acc_1")
+        assertEquals(listOf(first.id), listener.adoptedInto)
+        assertEquals(T0, h.repository.findPrimary("acc_1")!!.adoptedAt)
+        h.service.ensureFirstProfile("acc_1")
+        assertEquals(1, listener.calls, "adopted_at is set - no further calls")
+    }
+
+    @Test
+    fun `an account with nothing to move is asked again next time, and a failing listener does not fail the call`() {
+        val none = OldRows(rows = 0)
+        val broken = OldRows(rows = 1, fail = true)
+        val h = Harness(adoptionListeners = mutableListOf(broken, none))
+        h.account("acc_1", "Moon", "0417")
+        val first = h.service.ensureFirstProfile("acc_1")
+        assertNull(first.adoptedAt)
+        assertEquals("Moon", h.service.ensureFirstProfile("acc_1").name)
+        assertEquals(2, none.calls)
+    }
+
+    @Test
+    fun `the row-only variant never moves old rows`() {
+        val listener = OldRows(rows = 3)
+        val h = Harness(adoptionListeners = mutableListOf(listener))
+        h.account("acc_1", "Moon", "0417")
+        h.service.ensureFirstProfileRow("acc_1")
+        assertEquals(0, listener.calls)
+    }
+
+    @Test
+    fun `the profile's text form carries neither the account id nor the primary slot`() {
+        val h = Harness()
+        h.account("acc_secret_1", "Moon", "0417")
+        val first = h.service.ensureFirstProfile("acc_secret_1")
+        assertTrue("acc_secret_1" !in first.toString(), first.toString())
+        assertTrue("acc_secret_1" !in h.service.create("acc_secret_1", "A").toString())
     }
 
     @Test

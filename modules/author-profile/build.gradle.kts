@@ -1,8 +1,8 @@
 dependencies {
     api(project(":modules:platform"))   // 타입(AuthorDirectory · AuthorIdentities · AuthorAdoptionListener · ApplicationException)이 이 모듈의 공개 API 에 나온다
 
-    // account 위에 얹힌 선택 모듈이다 (auth-magic-link 와 같은 방식) — 닉네임 규칙 · 꼬리표 · 한도 · 계정 저장소를 쓰되 공개 API 에는 내놓지 않는다
-    implementation(project(":modules:account"))
+    // account 위에 얹힌 선택 모듈이다 (auth-magic-link 와 같은 방식) — 닉네임 규칙 · 꼬리표 · 한도 · 계정 저장소 타입이 공개 생성자에 나온다
+    api(project(":modules:account"))
 
     implementation("org.springframework.boot:spring-boot-starter")
     implementation("org.springframework.boot:spring-boot-starter-webmvc")   // HttpStatus (오류 코드) · 뒤따를 HTTP 조각
