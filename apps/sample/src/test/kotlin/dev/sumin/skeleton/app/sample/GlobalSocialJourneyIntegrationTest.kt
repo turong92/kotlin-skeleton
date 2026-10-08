@@ -249,6 +249,18 @@ class GlobalSocialJourneyIntegrationTest {
     }
 
     @Test
+    fun `the sample does not import the name a provider sends - LINE and X sign-ups have no nickname until the user picks one`() {
+        for (login in listOf({ lineLogin(lineCode("Unoname1")) }, { xLogin(xCode("x-noname-1")) })) {
+            val bearer = field(login().andExpect { status { isOk() } }.andReturn().response.contentAsString, "$.value.accessToken")
+            agree(bearer)
+            mvc.get("/api/v1/account/me") { header("Authorization", "Bearer $bearer") }.andExpect {
+                status { isOk() }
+                jsonPath("$.value.displayName") { value(null as String?) }
+            }
+        }
+    }
+
+    @Test
     fun `X signs a user up without an address and finds the same account next time`() {
         val first = xLogin(xCode("x-solo-1")).andExpect { status { isOk() } }.andReturn().response.contentAsString
         assertEquals("", field(first, "$.value.principal.email"))

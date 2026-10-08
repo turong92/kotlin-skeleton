@@ -59,6 +59,7 @@ skeleton:
   account:
     social:
       sign-up: true                       # 이 앱의 선택: 소셜 로그인이 계정을 만든다 (제공자 모듈을 얹을 때만 의미가 있다)
+      import-display-name: false         # 이 앱의 선택: 제공자가 준 이름(Google 실명 · Kakao 닉네임 …)을 닉네임으로 가져오지 않는다 — 소셜 가입 직후는 이름 없음(display-name.fallback: NONE)이고 프런트가 「닉네임 정하기」를 받는다
       # merge-on-verified-email: 켜려면 true — 같은 이메일의 소셜 로그인이 기존 계정에 자동 연결된다(위험·조건은 docs/accounts.md). 이 앱은 끈다: 409 ACCOUNT.SOCIAL_EMAIL_CONFLICT → 기존 방법으로 로그인해 설정에서 직접 연결
     mail:
       brand:

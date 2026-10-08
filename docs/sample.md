@@ -49,6 +49,10 @@
 - 글 · 댓글 만들기는 `Idempotency-Key` 필수 (`idempotency` 가 있어서).
 - 경로 · 모양 · 에러 코드 · 결정 근거: [board](modules/board.md). 통합 테스트: `apps/sample/src/test/…/board/BoardIntegrationTest.kt`.
 
+## 소셜 가입과 닉네임
+
+이 앱은 소셜 가입(`skeleton.account.social.sign-up: true`) 때 **제공자가 준 이름을 가져오지 않는다**(`import-display-name: false`) — Google 실명이 닉네임이 되지 않는다. 소셜 가입 직후 계정은 이름이 없고(`display-name.fallback: NONE`) 프런트의 「닉네임 정하기」 띠와 글쓰기 전 게이트가 닉네임을 받는다. 제공자 이름을 쓰는 앱은 이 한 줄을 지우면(기본 `true`) 된다. 근거 · 시험: [accounts](accounts.md) "닉네임", `GlobalSocialJourneyIntegrationTest`.
+
 ## 작성자 프로필 (`/api/v1/author-profiles`)
 
 게시판 위에 `author-profile` + `author-profile-jdbc` 두 줄을 더했다 — 이 앱 코드는 더한 것이 **하나도 없다**(설정 · 시험만): 모듈 기본값을 그대로 쓰고(계정당 5개 · `adopt-on-startup` 켜짐) 닉네임 규칙은 위 `account.display-name` 을 따른다. 계약 · 설정: [author-profile](modules/author-profile.md).
