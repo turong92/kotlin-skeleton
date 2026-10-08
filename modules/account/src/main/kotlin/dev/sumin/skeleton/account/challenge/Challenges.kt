@@ -16,6 +16,7 @@ object ChallengePurposes {
     const val EMAIL_CHANGE = "email_change"
     const val REAUTH = "reauth"
     const val DELETE_CONFIRM = "delete_confirm"
+    const val CONTACT_EMAIL = "contact_email"
 }
 
 /**
@@ -173,7 +174,7 @@ class Challenges(
     fun deleteBySubject(purpose: String, subject: String): Int = store.deleteBySubject(purpose, subject)
 
     fun deleteForAccount(accountId: String): Int =
-        store.deleteByAccount(accountId, listOf(ChallengePurposes.EMAIL_CHANGE, ChallengePurposes.REAUTH, ChallengePurposes.DELETE_CONFIRM))
+        store.deleteByAccount(accountId, listOf(ChallengePurposes.EMAIL_CHANGE, ChallengePurposes.REAUTH, ChallengePurposes.DELETE_CONFIRM, ChallengePurposes.CONTACT_EMAIL))
 
     fun sweep(retention: Duration): Int = store.purgeExpired(time.now().minus(retention))
 

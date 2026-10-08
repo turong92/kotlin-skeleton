@@ -90,13 +90,15 @@ class DefaultAccountMailTemplates(
 
         val PLACEHOLDER = Regex("\\{(\\w+)}")
         val CONTROL = Regex("[\\u0000-\\u001f\\u2028\\u2029]+")
-        val CODE_KINDS = setOf(MailKind.VERIFY_CODE, MailKind.EMAIL_CHANGE_CODE, MailKind.REAUTH_CODE, MailKind.DELETE_CODE)
+        val CODE_KINDS = setOf(MailKind.VERIFY_CODE, MailKind.EMAIL_CHANGE_CODE, MailKind.REAUTH_CODE, MailKind.DELETE_CODE, MailKind.CONTACT_EMAIL_CODE)
         const val FOOTER_EN = "If you did not request this, you can ignore this email."
         const val FOOTER_KO = "요청하지 않았다면 무시하세요."
 
         val EN = mapOf(
             MailKind.VERIFY_CODE to Copy("Your verification code", listOf("Your verification code is {code}.", "Enter it in the sign-up page to finish creating your account. It works {minutes} minutes and only for the page that asked for it.", "Never tell this code to anyone, not even to us."), null),
             MailKind.EMAIL_CHANGE_CODE to Copy("Your code to confirm the new email", listOf("Your confirmation code is {code}.", "Enter it in your account settings, in the browser where you asked for the change, to make this address your account email. It works {minutes} minutes.", "Never tell this code to anyone."), null),
+            MailKind.CONTACT_EMAIL_CODE to Copy("Your code to confirm the contact email", listOf("Your confirmation code is {code}.", "Enter it in your account settings, in the browser where you asked for it, to receive our messages at this address. It works {minutes} minutes. This address cannot be used to sign in or to recover the account.", "Never tell this code to anyone."), null),
+            MailKind.CONTACT_EMAIL_NOTICE to Copy("Your contact email was updated", listOf("The address where we contact you was added, changed or removed in your account settings. Account and security mail still comes to this address.", "If this was not you, change your password and contact support."), null),
             MailKind.REAUTH_CODE to Copy("Your security code", listOf("Your security code is {code}.", "Enter it where you were asked to confirm it is you (new email, first password or a new sign-in method). It works {minutes} minutes and only in that browser session.", "Never tell this code to anyone."), null),
             MailKind.DELETE_CODE to Copy("Your code to delete the account", listOf("Your confirmation code is {code}.", "Enter it to schedule the deletion of your account. It works {minutes} minutes and only in the browser session that asked for it.", "Never tell this code to anyone."), null),
             MailKind.ALREADY_REGISTERED to Copy("You already have an account", listOf("Someone (hopefully you) tried to sign up with this address, but an account already exists.", "If it was you, sign in or use \"Forgot password\"."), null),
@@ -113,6 +115,8 @@ class DefaultAccountMailTemplates(
         val KO = mapOf(
             MailKind.VERIFY_CODE to Copy("인증번호를 보내 드려요", listOf("인증번호는 {code} 예요.", "가입 화면에 입력하면 계정 만들기가 끝나요. {minutes}분 동안만, 그리고 가입을 시작한 그 화면에서만 쓸 수 있어요.", "이 번호를 누구에게도 알려주지 마세요."), null),
             MailKind.EMAIL_CHANGE_CODE to Copy("새 이메일 확인 인증번호", listOf("인증번호는 {code} 예요.", "변경을 요청한 브라우저의 계정 설정 화면에 입력하면 이 주소가 계정 이메일이 돼요. {minutes}분 동안만 쓸 수 있어요.", "이 번호를 누구에게도 알려주지 마세요."), null),
+            MailKind.CONTACT_EMAIL_CODE to Copy("연락받을 이메일 확인 인증번호", listOf("인증번호는 {code} 예요.", "요청한 브라우저의 계정 설정 화면에 입력하면 이 주소로 안내 메일을 받아요. {minutes}분 동안만 쓸 수 있어요. 이 주소로 로그인하거나 계정을 되찾을 수는 없어요.", "이 번호를 누구에게도 알려주지 마세요."), null),
+            MailKind.CONTACT_EMAIL_NOTICE to Copy("연락받을 이메일이 바뀌었어요", listOf("연락받을 이메일이 계정 설정에서 등록 · 변경 · 삭제됐어요. 계정 · 보안 메일은 계속 이 주소로 와요.", "본인이 아니라면 비밀번호를 바꾸고 문의해 주세요."), null),
             MailKind.REAUTH_CODE to Copy("보안 인증번호", listOf("인증번호는 {code} 예요.", "본인 확인을 요청한 화면(새 이메일 · 첫 비밀번호 · 새 로그인 수단)에 입력해 주세요. {minutes}분 동안만, 그 브라우저 세션에서만 쓸 수 있어요.", "이 번호를 누구에게도 알려주지 마세요."), null),
             MailKind.DELETE_CODE to Copy("계정 삭제 인증번호", listOf("인증번호는 {code} 예요.", "입력하면 계정 삭제가 예약돼요. {minutes}분 동안만, 요청한 브라우저 세션에서만 쓸 수 있어요.", "이 번호를 누구에게도 알려주지 마세요."), null),
             MailKind.ALREADY_REGISTERED to Copy("이미 계정이 있어요", listOf("이 주소로 가입을 시도한 분이 있어요(본인이라면). 하지만 이미 계정이 있어요.", "본인이라면 로그인하거나 「비밀번호 찾기」를 써 주세요."), null),

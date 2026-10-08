@@ -36,11 +36,12 @@ import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.post
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
 
+// skeleton.account.email.required=false: 이 시험은 주소 없는 계정의 전 생애(연결 · 해제 · 삭제를 제공자 재동의로)를 본다 — 주소 필수 앱(샘플의 기본)의 길은 EmailRequiredJourneyIntegrationTest
 /**
  * 글로벌 소셜(LINE · X)을 진짜 계정 모듈 · PostgreSQL · 보안 체인 위에서, 가짜 제공자 서버(공식 문서 모양의 응답)와 함께:
  * PKCE · nonce 전제, 주소 없는 계정(LINE 이 이메일을 줘도 확인되지 않은 값은 없는 것) 가입 · 연결 · 해제 · 삭제, 같은 이메일의 기존 계정에 병합하지 않기.
  */
-@SpringBootTest(properties = ["spring.config.import=classpath:test-seeds.yml", "skeleton.account.mail.link-base-url=https://app.example.com", "skeleton.auth-session.reuse-grace=0s", "skeleton.legal.reconsent.enabled=true"])
+@SpringBootTest(properties = ["spring.config.import=classpath:test-seeds.yml", "skeleton.account.mail.link-base-url=https://app.example.com", "skeleton.auth-session.reuse-grace=0s", "skeleton.legal.reconsent.enabled=true", "skeleton.account.email.required=false"])
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration::class, GlobalSocialJourneyIntegrationTest.Beans::class)
 class GlobalSocialJourneyIntegrationTest {

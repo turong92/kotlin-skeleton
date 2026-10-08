@@ -136,7 +136,12 @@ class AccountJourneyIntegrationTest {
         post("/api/v1/account/email/change/confirm", """{"code":"${codeOf(MailKind.EMAIL_CHANGE_CODE, moved)}"}""", mover).andExpect { status { isNoContent() } }
 
         val auth = field(post("/api/v1/auth/login", """{"email":"$moved","password":"$second"}""").andReturn().response.contentAsString, "$.value.accessToken")
-        val planted = listOf(email, moved, displayName, displayName.lowercase(), userAgent)   // lower case = the comparison key column
+        // 연락받을 이메일도 같은 한 방향 보증 안에 있다: 등록(코드 확인)하고, 탈퇴 뒤 어느 표에도 남지 않아야 한다
+        val contact = "reach-${System.nanoTime()}@example.com"
+        post("/api/v1/account/contact-email", """{"email":"$contact"}""", auth).andExpect { status { isAccepted() } }
+        post("/api/v1/account/contact-email/confirm", """{"code":"${codeOf(MailKind.CONTACT_EMAIL_CODE, contact)}"}""", auth).andExpect { status { isNoContent() } }
+        mvc.get("/api/v1/account/me") { header("Authorization", "Bearer $auth") }.andExpect { status { isOk() }; jsonPath("$.value.contactEmail") { value(contact) } }
+        val planted = listOf(email, moved, displayName, displayName.lowercase(), userAgent, contact)   // lower case = the comparison key column
         planted.forEach { value -> assertTrue(leaks(listOf(value)).isNotEmpty(), "the scan must see '$value' before the erasure, or its absence afterwards proves nothing") }
         post("/api/v1/account/delete", """{"currentPassword":"$second"}""", auth, "Idempotency-Key" to UUID.randomUUID().toString())
             .andExpect { status { isAccepted() }; jsonPath("$.value.status") { value("DELETION_SCHEDULED") } }
@@ -147,10 +152,10 @@ class AccountJourneyIntegrationTest {
         jdbc.sql("update accounts set purge_after = now() - interval '1 minute' where id = :id").param("id", accountId).update()
         assertEquals(1, purge.purgeDue())
         // the row stays (so nothing that points at the account dangles) but is ERASED and holds nothing personal
-        val kept = jdbc.sql("select status, email, display_name, display_name_key, display_tag, locale, time_zone, last_login_at, erased_at from accounts where id = :id").param("id", accountId).query { rs, _ ->
-            listOf(rs.getString("status"), rs.getString("email"), rs.getString("display_name"), rs.getString("display_name_key"), rs.getString("display_tag"), rs.getString("locale"), rs.getString("time_zone"), rs.getObject("last_login_at"), rs.getObject("erased_at") != null)
+        val kept = jdbc.sql("select status, email, display_name, display_name_key, display_tag, locale, time_zone, last_login_at, erased_at, contact_email from accounts where id = :id").param("id", accountId).query { rs, _ ->
+            listOf(rs.getString("status"), rs.getString("email"), rs.getString("display_name"), rs.getString("display_name_key"), rs.getString("display_tag"), rs.getString("locale"), rs.getString("time_zone"), rs.getObject("last_login_at"), rs.getObject("erased_at") != null, rs.getString("contact_email"))
         }.single()
-        assertEquals(listOf("ERASED", null, null, null, null, null, null, null, true), kept)
+        assertEquals(listOf("ERASED", null, null, null, null, null, null, null, true, null), kept)
         assertEquals(0, jdbc.sql("select count(*) from account_identities where account_id = :id").param("id", accountId).query(Long::class.java).single())
         assertEquals(0, jdbc.sql("select count(*) from account_roles where account_id = :id").param("id", accountId).query(Long::class.java).single())
         assertEquals(0, jdbc.sql("select count(*) from auth_sessions where account_id = :id").param("id", accountId).query(Long::class.java).single())

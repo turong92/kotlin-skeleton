@@ -49,6 +49,9 @@ class MySqlMigrationUpgradeTest {
             assertTrue(jdbc.sql("select count(*) from $table").query(Long::class.java).single() >= 1, "$table lost its baseline row")
         }
         assertEquals("upgrade@example.com", jdbc.sql("select email from accounts where id = 'acc_upgrade'").query(String::class.java).single())
+        // 연락 이메일 열(V20261008053037): 기준선 행은 NULL, 올린 뒤 쓸 수 있다
+        assertEquals(null, jdbc.sql("select contact_email from accounts where id = 'acc_upgrade'").query(String::class.java).optional().orElse(null))
+        assertEquals(1, jdbc.sql("update accounts set contact_email = 'reach@example.com', contact_email_verified_at = now(6) where id = 'acc_upgrade'").update())
         assertEquals("Before the upgrade", jdbc.sql("select title from board_posts where board_code = 'upgrade'").query(String::class.java).single())
         assertEquals("a comment on the baseline schema", jdbc.sql("select body from board_comments where author_id = 'acc_upgrade'").query(String::class.java).single())
         assertEquals(0L, jdbc.sql("select count(*) from board_posts where author_id = 'acc_upgrade' and author_ref is not null").query(Long::class.java).single(), "baseline posts have no author_ref")

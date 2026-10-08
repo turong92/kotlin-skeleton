@@ -39,6 +39,7 @@ class InMemoryAccountRepository : AccountRepository {
             suspendedReason = if (patch.clearSuspendedReason) null else patch.suspendedReason ?: a.suspendedReason,
             deletedAt = if (patch.clearDeletion) null else patch.deletedAt ?: a.deletedAt,
             purgeAfter = if (patch.clearDeletion) null else patch.purgeAfter ?: a.purgeAfter,
+            contactEmail = if (patch.clearContactEmail) null else patch.contactEmail ?: a.contactEmail,
             updatedAt = now,
         )
         accounts[id] = updated
@@ -146,7 +147,7 @@ class InMemoryAccountRepository : AccountRepository {
         claimed.remove(id)
         accounts[id] = a.copy(
             email = null, emailVerified = false, status = AccountStatus.ERASED, roles = emptySet(), displayName = null, displayNameKey = null, displayTag = null, locale = null, timeZone = null,
-            lastLoginAt = null, suspendedReason = null, purgeAfter = null, erasedAt = now, updatedAt = now,
+            lastLoginAt = null, suspendedReason = null, purgeAfter = null, erasedAt = now, updatedAt = now, contactEmail = null,
         )
         return true
     }

@@ -16,6 +16,8 @@ data class AccountProperties(
     val verification: Verification = Verification(),
     val reset: Reset = Reset(),
     val emailChange: EmailChange = EmailChange(),
+    val email: Email = Email(),
+    val contactEmail: ContactEmail = ContactEmail(),
     val deletion: Deletion = Deletion(),
     val cleanup: Cleanup = Cleanup(),
     val blocks: Blocks = Blocks(),
@@ -112,6 +114,40 @@ data class AccountProperties(
         val perIp: Int = 10,
         val perIpWindow: Duration = Duration.ofHours(1),
     )
+
+    /** 연락받을 이메일 — 로그인 수단 · 복구 수단이 아니다. 끄면(기본) API 도 `me.contactEmail` 의 값도 없다 (키는 늘 null) */
+    data class ContactEmail(
+        val enabled: Boolean = false,
+    )
+
+    data class Email(
+        /**
+         * false(기본): 이메일은 선택 — 주소 없는 계정도 서비스를 그대로 쓴다 (지금 동작).
+         * true: 주소가 없는 계정은 이메일을 등록하기 전까지 허용 목록 밖의 모든 API 에서 403 `ACCOUNT.EMAIL_REQUIRED`.
+         * 첫 이메일 등록(`POST /account/email/change`)은 [firstRegistrationWindow] 안에서 재인증이 없다.
+         */
+        val required: Boolean = false,
+        /**
+         * 주소가 한 번도 없던 계정이 **마지막 로그인으로부터 이 시간 안에** 첫 주소를 등록하면 재인증(제공자 재동의)을 면제한다. 지나면 평소처럼 재인증.
+         * 0 이면 면제 없음. [required] 가 true 일 때만 쓴다.
+         */
+        val firstRegistrationWindow: Duration = Duration.ofHours(1),
+        /** 막는 경로 (Ant 패턴) */
+        val includePaths: List<String> = listOf("/api/**"),
+        /** 주소 없이도 열어 두는 경로 — `METHOD 패턴` 이면 그 메서드만, 패턴만 쓰면 모든 메서드. 앱이 정하면 이 목록을 **통째로** 바꾼다 */
+        val excludePaths: List<String> = listOf(
+            "GET /api/v1/account/me",
+            "POST /api/v1/account/email/change",
+            "POST /api/v1/account/email/change/confirm",
+            "POST /api/v1/account/delete",
+            "POST /api/v1/account/delete/confirmation",
+            "/api/v1/auth/**",
+            "/api/v1/legal/**",
+            "/api/v1/docs/**",
+        ),
+    ) {
+        init { require(!firstRegistrationWindow.isNegative) { "skeleton.account.email.first-registration-window must not be negative" } }
+    }
 
     data class EmailChange(
         /** 이메일 변경(새 주소) · 본인 재확인 6자리 코드의 유효 시간 — 가입 코드([Verification.codeTtl])와 같은 10분 (6자리 코드는 모두 같다. 링크 토큰인 [Reset.ttl] 만 30분) */

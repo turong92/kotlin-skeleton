@@ -37,6 +37,7 @@ enum class AccountErrorCode(
     METHOD_UNKNOWN("ACCOUNT.METHOD_UNKNOWN", HttpStatus.BAD_REQUEST, "Unknown sign-in method"),
     CODE_INVALID("ACCOUNT.CODE_INVALID", HttpStatus.BAD_REQUEST, "The code is wrong"),
     CODE_EXPIRED("ACCOUNT.CODE_EXPIRED", HttpStatus.GONE, "The code is expired or used up"),
+    EMAIL_REQUIRED("ACCOUNT.EMAIL_REQUIRED", HttpStatus.FORBIDDEN, "Register an email address first"),
     PASSWORD_REQUIRED("ACCOUNT.PASSWORD_REQUIRED", HttpStatus.BAD_REQUEST, "Verify your email before setting a password"),
 }
 

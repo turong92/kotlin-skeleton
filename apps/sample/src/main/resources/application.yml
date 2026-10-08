@@ -71,6 +71,10 @@ skeleton:
       uniqueness: TAGGED                  # 같은 닉네임이어도 되고 서버가 4자리 꼬리표를 붙인다 (닉네임#0417). 바꾸면 꼬리표를 새로 뽑는다
       required-on-sign-up: true           # 이메일 가입에는 닉네임이 필요하다 (400 · 필드 displayName). 소셜 · 매직 링크 가입은 아래 자동 닉네임이 채운다
       fallback: NONE                      # 닉네임 없이 만들어지는 계정(매직 링크 가입 · 이름을 안 주는 제공자)은 이름 없이 두고 프론트가 「닉네임 정하기」로 받는다. 자동 닉네임(user-1a2b3c)을 주려면 GENERATED
+    contact-email:
+      enabled: true                       # 이 앱의 선택: 계정 이메일과 별개로 서비스 안내를 받을 주소를 하나 등록할 수 있다 (로그인 · 계정 복구 수단은 아니다 — docs/accounts.md "연락 이메일")
+    email:
+      required: true                      # 이 앱의 선택: 이메일 없이 만들어진 계정(Kakao · Naver · X · LINE · 이메일 동의를 안 한 소셜)은 주소를 등록하기 전까지 403 ACCOUNT.EMAIL_REQUIRED — 첫 등록은 재인증 없이 (docs/accounts.md "이메일 필수")
     deletion:
       self-restore: true                  # 이 앱의 선택: 탈퇴 유예 중인 주인이 로그인하면 403 AUTH.ACCOUNT_DELETION_PENDING + 취소 토큰으로 스스로 탈퇴를 취소한다 (모듈 기본은 꺼짐 — 운영자만 복구, docs/accounts.md)
   auth-magic-link:

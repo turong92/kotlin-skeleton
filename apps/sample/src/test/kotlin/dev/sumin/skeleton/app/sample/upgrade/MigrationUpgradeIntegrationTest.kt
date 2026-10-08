@@ -19,6 +19,7 @@ import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.jdbc.autoconfigure.JdbcConnectionDetails
@@ -89,6 +90,12 @@ class MigrationUpgradeIntegrationTest {
         assertTrue(!byEmail.emailVerified)
         assertTrue(accounts.markEmailVerified("acc_upgrade", now))
         assertTrue(assertNotNull(accounts.findById("acc_upgrade")).emailVerified)
+        // 연락 이메일 열(V20261008053037): 기준선 행은 NULL 로 읽히고, 올린 뒤 쓰고 · 지울 수 있다
+        assertNull(byEmail.contactEmail)
+        accounts.update("acc_upgrade", dev.sumin.skeleton.account.AccountPatch(contactEmail = "reach@example.com"), now)
+        assertEquals("reach@example.com", assertNotNull(accounts.findById("acc_upgrade")).contactEmail)
+        accounts.update("acc_upgrade", dev.sumin.skeleton.account.AccountPatch(clearContactEmail = true), now)
+        assertNull(assertNotNull(accounts.findById("acc_upgrade")).contactEmail)
     }
 
     @Test

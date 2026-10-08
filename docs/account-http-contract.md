@@ -1,8 +1,25 @@
 # Account lifecycle — HTTP contract (kotlin-skeleton backend)
 
-Status: **FINAL-5** (= FINAL-4 + the "FINAL-5 change list" below: nicknames, additive — no field, endpoint or error code of FINAL-4 was removed) · **FINAL-4** (= FINAL-3 + the additions listed under "FINAL-4 change list" below — additive: no field, endpoint or error code of FINAL-3 was removed; matches the implemented code after the second security review; the integration tests `apps/api` / `apps/sample` AccountJourneyIntegrationTest and `modules/account` AccountWebTest / AccountSocialWebTest / SessionBodyDeliveryWebTest exercise every flow below).
+Status: **FINAL-6** (= FINAL-5 + the "FINAL-6 change list" below: required account email and a separate contact email — additive, both opt-in, defaults unchanged) · **FINAL-5** (= FINAL-4 + the "FINAL-5 change list" below: nicknames, additive — no field, endpoint or error code of FINAL-4 was removed) · **FINAL-4** (= FINAL-3 + the additions listed under "FINAL-4 change list" below — additive: no field, endpoint or error code of FINAL-3 was removed; matches the implemented code after the second security review; the integration tests `apps/api` / `apps/sample` AccountJourneyIntegrationTest and `modules/account` AccountWebTest / AccountSocialWebTest / SessionBodyDeliveryWebTest exercise every flow below).
 Audience: the frontend agent (react-skeleton `@skeleton/auth` additions). Backend modules: `account`, `account-jdbc`,
 `auth-session`, `auth-session-jdbc`, `auth-magic-link` (+ extensions of `auth`, `auth-social`).
+
+## FINAL-6 change list — required account email, contact email (additive; both are app choices, off in the module defaults)
+
+What the frontend must know (docs/accounts.md "이메일 필수" / "연락 이메일" has the reasons):
+
+| # | Where | What |
+|---|---|---|
+| E1 | `GET/PATCH /account/me` | `value` gains **`emailRequired`** — present **only when the app runs `skeleton.account.email.required=true`**: `true` = the account has no address yet, every endpoint outside the allow list answers `403 ACCOUNT.EMAIL_REQUIRED`, show the "register your email" screen; `false` = fine. When the key is absent the app does not require an address. Also `value.email` is `null` for an address-less account. |
+| E2 | every endpoint outside the allow list (any module: notes, boards, author profiles, storage, notifications, `PATCH /account/me`, `GET /account/identities`, …) | `403 ACCOUNT.EMAIL_REQUIRED` for a signed-in account without an address (anonymous calls keep `401`). **Allow list**: `GET /account/me`, `POST /account/email/change`, `POST /account/email/change/confirm`, `POST /account/delete`, `POST /account/delete/confirmation`, everything under `/auth/**` (login, logout, refresh, sessions, `methods`, `auth/me`), `/legal/**`, `/docs/**`. Order with legal re-consent: the address comes first (`ACCOUNT.EMAIL_REQUIRED`), then `LEGAL.RECONSENT_REQUIRED`. |
+| E3 | `POST /account/email/change` (+ `/confirm`) for an account that **never had an address** | **No re-authentication fields needed** (send only `{ newEmail }`) while the last *sign-in* is < 1 h old (`first-registration-window`); then `REAUTH_REQUIRED` as before (re-run the provider consent: `socialReauth`). Same `202 { status, expiresAt, resendAvailableAt }`, 6-digit code to the typed address, enter it with `POST /account/email/change/confirm { code }` in the SAME session. **Resend = call `POST /account/email/change` again** (UI hint `resendAvailableAt`). On success: `email`, `emailVerified=true`, `emailRequired=false`, the other sessions are signed out. Errors: as the change flow (`400 ACCOUNT.CODE_INVALID {attemptsLeft}`, `410 ACCOUNT.CODE_EXPIRED`, `403 ACCOUNT.REGISTRATION_BLOCKED` after the code, `429`). `POST` with an `Idempotency-Key` as before. |
+| E4 | the same call, address already owned by another account | **Same `202`, same shape and times**; the code never arrives, the owner receives the "already registered" mail. The code screen must therefore carry a hint: *"No code? That address may already have an account — sign in with it and link this social login in settings."* Entering codes counts down like wrong guesses (`400 CODE_INVALID`). |
+| E5 | `ACCOUNT.EMAIL_REQUIRED` | new error code, `403`, no `data`. |
+| C1 | `GET/PATCH /account/me` | `value` gains **`contactEmail`**: `string \| null` — the confirmed contact address (always present as a key; `null` when none or when the app has the feature off). |
+| C2 | `POST /account/contact-email` (auth, **only when `skeleton.account.contact-email.enabled=true`**, else 404) | Req `{ "email" }` -> `202 { value: { status: "VERIFICATION_SENT", expiresAt, resendAvailableAt } }`. A 6-digit code (10 min, 5 guesses, only in the requesting session) goes to THAT address. **No re-authentication.** Any address is accepted (also another account's address; no uniqueness, so there is nothing to tell). Resend = call it again. `400 COMMON.VALIDATION_FAILED` (shape), `429 ACCOUNT.RATE_LIMITED` (per account 5/h, per address like sign-up). |
+| C3 | `POST /account/contact-email/confirm` (auth) | Req `{ code }` -> `204`; `me.contactEmail` is set (this also *changes* an existing one). The **account email** receives a notice mail. `400 ACCOUNT.CODE_INVALID {attemptsLeft}`, `410 ACCOUNT.CODE_EXPIRED`, `429`. |
+| C4 | `DELETE /account/contact-email` (auth) | `204` at once (also when there was none); service messages go to the account email again; the account email gets a notice. |
+| C5 | what the contact address is **not** | not a sign-in method (`GET /account/identities`, `GET /auth/methods` unchanged), not a recovery address: password reset, magic link, verification codes, email-change codes, delete codes and security notices keep going to the **account email** only; asking for a reset with the contact address sends nothing. It does not block sign-up with the same address. With `email.required`, the thing required is the **account** email. |
 
 ## FINAL-5 review changes (2026-10-07 — behaviour changes the frontend must know; no endpoint removed)
 
@@ -297,6 +314,7 @@ Data export: no endpoint; `AccountDataExporter` is an interface only (not wired)
 | AUTH.SESSION_NOT_FOUND | 404 | revoke of a session that is not yours / does not exist |
 | AUTH.CSRF_HEADER_REQUIRED | 403 | cookie mode refresh / logout without `X-Requested-With` |
 | ACCOUNT.TOKEN_INVALID | 410 | one-time **link** token unknown / expired / used (password reset, magic link, deletion restore token) |
+| ACCOUNT.EMAIL_REQUIRED | 403 | (FINAL-6, `email.required=true`) the account has no email address yet; register one (allow list: see E2). Not retryable until `POST /account/email/change/confirm` succeeded |
 | ACCOUNT.CODE_INVALID | 400 | wrong 6-digit code (`data.attemptsLeft`) — sign-up, email change, re-auth, delete |
 | ACCOUNT.CODE_EXPIRED | 410 | code unknown / expired / used up / other session / sign-up address taken meanwhile |
 | AUTH.TOO_MANY_REFRESHES | 429 | one session refreshed more than 30 times in 10 min (session stays valid) |
@@ -329,6 +347,10 @@ Data export: no endpoint; `AccountDataExporter` is an interface only (not wired)
 **Forgot**: POST forgot(202) -> mail link -> `/reset-password?token` -> POST reset{token,newPassword}(204) -> go to login (all sessions are gone).
 **Change password**: POST change(204) -> keep using the current session; other devices are signed out.
 **Magic link**: POST magic-link/request(202) -> mail link -> `/magic-link?token` -> POST redeem(200 tokens).
+**Register the first email (address-less account, `email.required`)**: GET me (`emailRequired:true`) -> POST email/change{newEmail}(202, no proof while the last sign-in is < 1 h old) -> code mailed -> POST email/change/confirm{code}(204) -> GET me (`emailRequired:false`). Taken address: same 202, no code — show the "no code? maybe you already have an account" hint.
+
+**Contact email (`contact-email.enabled`)**: POST contact-email{email}(202) -> code mailed to it -> POST contact-email/confirm{code}(204); DELETE contact-email(204).
+
 **Change email**: POST email/change{newEmail, proof}(202) -> code mailed to the NEW address -> POST email/change/confirm{code}(204), in the same signed-in session.
 **Passwordless action (change email / first password / link / unlink)**: POST reauth/confirmation(202) -> code mailed -> the action with `confirmationCode`.
 **Address-less account (Naver ...) doing the same**: run the provider consent again -> the action with `socialReauth{provider, authorizationCode, redirectUri?}`.
@@ -336,6 +358,7 @@ Data export: no endpoint; `AccountDataExporter` is an interface only (not wired)
 **Delete**: password account: POST delete{currentPassword}(202) -> sign out locally. Passwordless: POST delete/confirmation(202) -> code mailed -> POST delete{confirmationCode}(202). Address-less: POST delete{socialReauth}(202).
 
 ## Changelog
+- FINAL-6 (2026-10-08): `email.required` (`ACCOUNT.EMAIL_REQUIRED`, `me.emailRequired`, first address without re-authentication) and the contact email (`me.contactEmail`, `/account/contact-email`). See the "FINAL-6 change list" at the top.
 - FINAL-5 review (2026-10-07): verify takes an optional `displayName` and a nickname clash keeps the attempt; `resendAvailableAt: null`; nickname change limit (429); empty nickname is `Required`; token-less "already registered" mail (`mail.forgot-path`, opt-in `include-credentials-links`); canonical IPv6 text; no `authorName` in comment notification payloads; `ACCOUNT.ERASURE_IN_PROGRESS`. See the "FINAL-5 review changes" list at the top.
 - FINAL-5: nicknames — `displayTag` on `me` and the admin views, nickname rules + field errors (`errors[].field = "displayName"`: `Required` · `Size` · `Pattern` · `Reserved`), `409 ACCOUNT.DISPLAY_NAME_TAKEN` (verification completion, profile update), generated nicknames (`user-1a2b3c`), `authorName` / `authorTag` on board responses. Additive. See the FINAL-5 change list at the top.
 - FINAL-4: `expiresAt` / `resendAvailableAt` on sign-up, resend, email change, reauth confirmation and delete confirmation; resend revives expired sign-up attempts (same `signUpId`); every 6-digit code is valid 10 minutes (email change / re-auth / delete confirmation were 30); richer "already registered" mail (login link, methods, reset link, optional magic link); `Date` exposed over CORS; `ACCOUNT.ERASURE_RETRY` 503; `REGISTRATION_BLOCKED` also on email-change confirmation and social link; magic-link / social sign-in of a deleted-grace password-only account gives the pending state; suspended accounts are frozen on every sign-in path. See the FINAL-4 change list at the top.

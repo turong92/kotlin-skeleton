@@ -92,6 +92,7 @@ class JdbcErasureDbTest {
 
     private fun plantEverythingPersonal() {
         leaving()
+        repo.update("acc_1", dev.sumin.skeleton.account.AccountPatch(contactEmail = "reach.me@example.com"), now)   // 연락 이메일 — 계정 이메일과 별개의 개인정보
         token("h1", TokenPurposes.PASSWORD_RESET, "ann@example.com", "acc_1")
         token("h2", TokenPurposes.MAGIC_LINK, "ann@example.com", null)
         // 이메일을 바꾸기 전 옛 주소로 걸린 토큰 — 주인은 계정 id 다
@@ -101,7 +102,7 @@ class JdbcErasureDbTest {
         AccountDb.audit.on(AccountEvent(AccountEventType.LOGIN_SUCCESS, "acc_1", now, "203.0.113.77", mapOf("method" to "google")))
     }
 
-    private val plantedValues = listOf("ann@example.com", "Ann Kim", "google-subject-acc_1", "203.0.113.77", "{bcrypt}hash", "ann.old@example.com", "new-address@example.com")
+    private val plantedValues = listOf("ann@example.com", "Ann Kim", "google-subject-acc_1", "203.0.113.77", "{bcrypt}hash", "ann.old@example.com", "new-address@example.com", "reach.me@example.com")
 
     @Test
     fun `after erasure no column of any table still holds the email, name, provider subject, IP or other planted personal values`() {

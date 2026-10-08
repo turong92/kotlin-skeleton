@@ -54,6 +54,7 @@ class MailPathLogLeakTest {
     private val carriers = mapOf(
         MailKind.VERIFY_CODE to AccountMail(MailKind.VERIFY_CODE, "victim.person@example.com", "ko", vars = mapOf("code" to code, "minutes" to "10")),
         MailKind.EMAIL_CHANGE_CODE to AccountMail(MailKind.EMAIL_CHANGE_CODE, "victim.person@example.com", "en", vars = mapOf("code" to code, "minutes" to "30")),
+        MailKind.CONTACT_EMAIL_CODE to AccountMail(MailKind.CONTACT_EMAIL_CODE, "victim.person@example.com", "ko", vars = mapOf("code" to code, "minutes" to "10")),
         MailKind.REAUTH_CODE to AccountMail(MailKind.REAUTH_CODE, "victim.person@example.com", "ko", vars = mapOf("code" to code, "minutes" to "30")),
         MailKind.DELETE_CODE to AccountMail(MailKind.DELETE_CODE, "victim.person@example.com", "en", vars = mapOf("code" to code, "minutes" to "30")),
         MailKind.PASSWORD_RESET to AccountMail(MailKind.PASSWORD_RESET, "victim.person@example.com", "ko", link, mapOf("minutes" to "30")),

@@ -111,6 +111,21 @@ class JdbcAccountRepositoryDbTest {
     }
 
     @Test
+    fun `the first address of an address-less account is stored and verified, a taken one is refused, and the social identity stays`() {
+        repo.insert(account("acc_k", email = null, verified = false), listOf(identity("idn_k", "acc_k", method = "kakao", subject = "kakao-1", secret = null)))
+        repo.insert(account("acc_2", "bob@example.com"), listOf(identity("idn_2", "acc_2", subject = "bob@example.com")))
+        assertEquals(ChangeEmailResult.TAKEN, repo.changeEmail("acc_k", "bob@example.com", now, expectEmailVerified = false))
+        assertNull(repo.findById("acc_k")!!.email)
+
+        assertEquals(ChangeEmailResult.CHANGED, repo.changeEmail("acc_k", "kim@example.com", now, expectEmailVerified = false))
+        val after = repo.findById("acc_k")!!
+        assertEquals("kim@example.com", after.email)
+        assertTrue(after.emailVerified)
+        assertEquals("acc_k", repo.findByIdentity("kakao", "kakao-1")!!.id)
+        assertNull(repo.findIdentity("password", "kim@example.com"), "no password identity appears out of nowhere")
+    }
+
+    @Test
     fun `partial updates leave other fields alone and deletion fields can be cleared`() {
         repo.insert(account(), listOf(identity("idn_1")))
         val later = now.plus(Duration.ofHours(1))

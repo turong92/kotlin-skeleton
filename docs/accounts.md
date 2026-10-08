@@ -155,6 +155,10 @@ skeleton:
 | **지우기와 취소의 경계 경주 (리스너가 먼저 도는 문제)** | 지우기는 리스너(board 톰스톤 · 받은편지함 삭제)를 부르기 **전에** 계정 행을 **선점**한다(`claimErasure` — 계정 행 락 안에서 조건 확인 + `erase_claimed_at`). 선점된 계정은 되살리기 · 상태 변경이 거절된다 — 시계가 어긋난 취소가 이겨서 ACTIVE 인데 톰스톤이 찍힌 계정이 생기지 않는다. 리스너가 실패하면 선점은 남고 다음 주기에 다시 한다(유예는 이미 끝났다). 운영자 지우기도 같다(정지 해제가 거절됨, 실패는 `503 ACCOUNT.ERASURE_RETRY`) — 단 **첫 리스너가 성공하기 전에** 실패했으면 아무것도 지워지지 않았으니 선점을 되돌린다(`releaseErasureClaim` — 정지 해제가 그대로 된다). 일부가 성공한 뒤 실패했으면 선점을 유지한다: 정지 해제는 `409 ACCOUNT.ERASURE_IN_PROGRESS`(이벤트 없음)이고, **같은 지우기 호출을 다시 부르면 이어서 끝난다**(리스너는 멱등이라 처음부터 다시 돈다). 저장소가 거절한 정지 · 정지 해제는 204 · 이벤트를 내지 않는다 | `ErasureClaimTest` ×8, `JdbcErasureDbTest` `claiming the erasure…` · `an administrator's forced claim…` · `a claim racing a restore…` · `releasing a claim…` (두 DB) |
 | **정지로 탈퇴해 빠져나가기** | 정지된 계정은 삭제를 요청할 수 없고(`ACCOUNT.SUSPENDED_CANNOT_DELETE`), 탈퇴 유예 중에 정지되면 유예가 끝나도 지워지지 않는다. 로그인 수단이 남아 같은 이메일 · 제공자 주체로 다시 가입할 수 없다. 운영자가 지울 때는 해시만 남는 재가입 차단이 생긴다 (아래) | `FrozenAccountTest` ×9, `SignInDepartedAndFrozenTest` (매직 링크 · 병합 소셜이 정지 계정에 수단을 붙이거나 로그인을 기록하지 않는다), `BlockedAddressBypassTest` (이메일 변경 확인 · 수단 연결로 차단 우회 불가), `JdbcAccountBlockDbTest` ×4 (두 DB), `AccountWebTest` `an admin erases a suspended account…` |
 | **탈퇴 취소 토큰 오남용** | 취소 토큰은 로그인 **성공 뒤에만** 만들어지고(조회만으로는 만들지 않는다) 한 번 쓰고 · 15분 뒤 죽고 · 새로 만들면 이전 것이 죽고 · 다른 용도로는 못 쓰고 · 정지되면 못 쓴다. 주소당 시도 수를 센다 | `SelfRestoreTest` ×14, `SelfRestoreWebTest`, `MagicLinkSelfRestoreWebTest` (비밀번호로 가입해 매직 링크 수단이 없는 계정도 유예 중 매직 링크로 취소 · 유예가 끝난 계정에는 링크를 보내지 않는다) |
+| **탈취된 세션이 첫 이메일을 심어 계정을 가로채기** | 위 "첫 이메일 등록의 재인증 면제" — 주소가 한 번도 없던 계정 · 마지막 *로그인* 1시간 창 · 요청한 세션에서만 코드 입력 · 확인 시 다른 세션 종료 · 계정 한도. 창 밖 · 주소가 있던 계정은 평소의 재인증 | `FirstEmailRegistrationTest` (`after the window…` · `a fresh login reopens…` · `a zero window…` · `an account that already has an address…` · `the code is bound to the session that asked`) |
+| **첫 이메일 등록으로 주소 존재 확인** | 이미 다른 계정의 주소여도 같은 202 · 같은 `expiresAt` / `resendAvailableAt`, 코드는 가지 않고 주인에게 "이미 계정이 있어요"만 (가입과 같은 규칙) | `FirstEmailRegistrationTest` `an address that belongs to another account…` · `EmailRequiredWebTest` `an address that already has an account…` |
+| **주소 없는 계정이 서비스를 쓰는 틈 (다른 모듈 포함)** | `EmailRequiredInterceptor` 가 허용 목록 밖 모든 경로를 403 `ACCOUNT.EMAIL_REQUIRED` 로 — board · notes · author-profile 포함 | `EmailRequiredWebTest` · 샘플 `EmailRequiredJourneyIntegrationTest` |
+| **연락 이메일로 계정 찾기 · 되찾기** | 계정을 찾는 조회는 `accounts.email` 만 본다. 연락 이메일로 재설정을 요청하면 아무 메일도 안 나가고, 어떤 계정 메일도 연락 이메일로 가지 않는다 | `MailRoutingTest` |
 | **여러 인스턴스의 중복 정리** | 정리는 짧은 임대(`account_locks`)를 쥔 하나만 돈다. 해제는 **가져간 쪽의 소유 표가 맞을 때만** — 일 도중 만료돼 다른 인스턴스가 가져갔다면 늦게 끝난 옛 보유자의 해제가 그 임대를 풀지 못한다. 잡 큐가 있으면 주기마다 한 인스턴스만 잡을 넣는다 | `AccountErasureTest` `two overlapping purge runs…`, `AccountPurgeJobTest` `repeated ticks inside one interval…`, `AccountMaintenanceLeaseTest`, `JdbcAccountMaintenanceLeaseDbTest` (두 DB, 32 스레드 + 소유 표) |
 
 ## 닉네임 (`skeleton.account.display-name.*`)
@@ -229,6 +233,50 @@ select id, display_name from accounts where display_name regexp '[#@＃＠]' or 
 - **켜는 시점 권고(Ovation 등 새로 시작하는 앱)**: 첫 배포부터 켠다. 켜기 전에 쓴 글은 계정 id 를 공개 작성자 id 로 내보낸 적이 있어 **첫 프로필과 영영 이어진다**(켠 뒤 만든 프로필은 이어지지 않는다). 비밀이 필요한 활동은 새 프로필로 하라고 안내하는 것은 앱의 몫이다. 끄는 것(모듈 빼기)은 지원하는 방향이 아니다(스펙 §11).
 - **연결 조회(`admin.enabled`)의 한계**: 대상 계정이 지워지면 그 계정의 감사 행에서 `by` 가 scrub 으로 사라진다 · 같은 `traceId` 로 요청 줄(프로필 id)과 감사 줄(대상 계정)을 이으면 조회한 프로필과 계정이 이어진다(로그는 신뢰 영역) · 기록 실패는 경고 로그만 남기고 조회는 나간다. 계약 · 전제(`account.audit.enabled`)는 모듈 페이지.
 
+## 이메일 필수 (`skeleton.account.email.*`)
+
+소셜 제공자가 권위 있게 확인한 주소(Gmail 등 — `emailAuthoritative`)는 가입 때 **자동 등록**된다(지금 동작). Kakao · Naver · X · LINE · 비-Gmail Google · 이메일 동의를 안 한 가입은 **주소 없는 계정**으로 만들어진다. 모듈 기본(`email.required: false`)은 그 계정도 서비스를 그대로 쓴다. 앱이 `email.required: true` 로 켜면:
+
+- **주소 없는 계정은 허용 목록 밖의 모든 API 에서 `403 ACCOUNT.EMAIL_REQUIRED`** 다 — 다른 모듈(board · notes · author-profile · storage …)의 엔드포인트도. 모듈끼리 서로를 모르므로 **경로**로 지킨다: `account` 가 등록하는 MVC 인터셉터 `EmailRequiredInterceptor`(`legal` 의 재동의 인터셉터와 같은 방식이고, 순서는 이쪽이 먼저 — 주소 → 약관 동의). 익명 요청은 건드리지 않는다(401). 계정 한 줄 읽기.
+- **허용 목록**(`email.exclude-paths`, 기본): `GET /api/v1/account/me`(상태 판별) · `POST /api/v1/account/email/change` · `POST /api/v1/account/email/change/confirm`(등록 · 확인 · 재전송은 같은 `email/change` 를 다시 부른다) · `POST /api/v1/account/delete` · `…/delete/confirmation`(계정 삭제) · `/api/v1/auth/**`(로그인 · 로그아웃 · 갱신 · 세션 · `methods` · `auth/me`) · `/api/v1/legal/**`(약관 조회 · 동의) · `/api/v1/docs/**`. 헬스(`/health`)는 `/api/**` 밖이라 막히지 않는다. 앱이 목록을 정하면 **통째로** 바뀐다(`METHOD 패턴` 또는 패턴).
+- 상태 판별: `GET /account/me` 의 **`emailRequired`**(켠 앱에서만 키가 있다: 주소가 없으면 `true`, 있으면 `false`; 꺼져 있으면 키 자체가 없다). 403 본문의 `code` 로도 알 수 있다.
+- **첫 이메일 등록은 재인증이 없다.** 주소가 한 번도 없던 계정이 첫 주소를 넣는 것은 권한 상승이 아니라 온보딩이다 — 방금 소셜로 로그인한 사람에게 제공자 동의를 또 시키지 않는다. 같은 `POST /account/email/change`(+ `/confirm`)를 쓰고 코드(6자리 · 10분 · 5번 · 요청한 세션에서만 · 응답에 `expiresAt` / `resendAvailableAt`)로 주소 소유를 증명한다. 확인되면 `email_verified=true`.
+- 그 주소가 **이미 다른 계정의 이메일**이면 응답은 같은 202 이고 코드는 가지 않는다 — 대신 그 주소의 주인에게 가입 때와 같은 **"이미 계정이 있어요" 메일**(토큰 없는 링크)이 간다. 화면은 코드 입력에서 멈추므로 프론트가 "코드가 오지 않으면 그 주소로 이미 계정이 있을 수 있어요 — 그 계정으로 로그인해 소셜을 연결하세요" 를 함께 보여 준다(가입 때와 같은 규칙). 운영자가 지운 주소(`account_blocks`)는 코드를 입력한 뒤 `403 ACCOUNT.REGISTRATION_BLOCKED`.
+- **계정 이메일은 하나**다. 이유: 로그인 수단 · 비밀번호 재설정 · 중복 가입 판정의 열쇠가 모두 이 주소라, 둘이 되면 "어느 쪽으로 재설정 메일을 보내나 · 둘 중 하나가 남의 계정 것이면" 이 전부 복잡해지고 약한 고리가 늘어난다. "어디로 받을지"는 두 가지로 풀었다: 계정 이메일을 **언제든 바꾸기**(기존 이메일 변경 흐름), 그리고 서비스 안내만 받을 **연락 이메일**(아래).
+- 미확인 주소: 이 설정이 켜진 앱에서도 `email-verification=false`(확인 단계 없음)인 앱의 미확인 주소는 "주소 있음"으로 본다 — 확인을 하지 않기로 한 앱이다. `email-verification=true` 에서 미확인 주소의 계정은 로그인 자체가 안 된다(`PENDING_VERIFICATION`).
+
+### 첫 이메일 등록의 재인증 면제 — 규칙과 이유 (위협)
+
+면제는 **전부** 맞을 때만이다: `email.required=true` · 계정에 주소가 없다(= 한 번도 없었다 — 주소는 비워지지 않는다, 지워진 계정만 NULL) · 계정이 ACTIVE · **마지막 *로그인*이 `email.first-registration-window`(기본 1시간) 안**. 아니면 평소처럼 제공자 재동의(`socialReauth`). `0` 이면 면제 없음.
+
+- **왜 위험한가**: 주소가 없는 계정의 열쇠는 제공자뿐이다. 주소가 붙으면 비밀번호 재설정 · 매직 링크라는 새 길이 생긴다 — 탈취된 세션이 공격자의 주소를 심으면 계정이 넘어간다.
+- **좁히는 법**: ① 마지막 로그인은 *로그인*에서만 갱신된다(토큰 갱신은 아니다) — 훔친 리프레시 토큰으로는 창을 다시 열 수 없고, 창은 로그인으로부터 1시간이다. ② 주소가 **한 번도 없던** 계정만이라 기존 사용자의 주소를 갈아끼울 수 없다. ③ 코드는 공격자의 메일함에서 **요청한 그 세션**으로 입력해야 한다(세션에 묶임). ④ 계정당 시간당 5번 · 주소별 예산은 가입과 같은 버킷. ⑤ 확인되는 순간 그 세션만 남기고 **다른 세션을 모두 닫고**(`EMAIL_CHANGED` 이벤트 `via=first_registration`, 앱이 듣는 감사 · 경보 고리), 이미 열린 다른 코드 · 링크도 닫는다. 옛 주소가 없으므로 알림 메일은 없다.
+- **남는 위험(수용)**: 로그인 직후 1시간 안에 **살아 있는 세션 자체**를 가진 공격자는 주소를 심을 수 있다. 그 시간에 주인의 다른 세션은 닫힌다 — 주인은 로그아웃된 것으로 알아챈다. 더 엄격히 하려면 `first-registration-window: 0`(항상 제공자 재동의).
+
+## 연락 이메일 (`skeleton.account.contact-email.enabled`, 기본 꺼짐)
+
+계정 이메일(로그인 · 재설정 · 중복 판정의 열쇠, 계정당 하나) 외에 **서비스 안내를 받을 주소**를 하나 더 둘 수 있다(구글의 보조 메일처럼). 로그인 수단이 아니고, 복구 수단이 아니고, 유니크하지 않다(다른 계정의 이메일 · 연락 이메일과 같아도 된다 — 그래서 "이미 쓰인 주소" 신호가 없다). 켜지 않으면 엔드포인트도 없고 `me.contactEmail` 은 늘 `null`. `email.required` 가 요구하는 것은 **계정 이메일**이고 연락 이메일은 늘 선택이다.
+
+**어디로 무엇이 가나** (시험: `MailRoutingTest` — 받는 주소별 통수로 단정한다. 이 표와 시험 이름이 서로를 가리킨다):
+
+| 메일 | 받는 주소 | `MailRoutingTest` |
+|---|---|---|
+| 가입 인증번호 · "이미 계정이 있어요" | 가입하려는 주소 · 그 주소의 계정 이메일 | `signing up with the account address…` · `a contact address is not an occupied address…` |
+| 비밀번호 재설정 링크 | **계정 이메일 한 통** (연락 이메일 주소로 요청하면 아무 메일도 안 나간다 — 연락 이메일로는 계정을 찾지 못한다) | `password reset goes to the account address only…` · `asking for a reset with the contact address sends nothing…` |
+| 매직 링크 | 계정 이메일. 연락 이메일 주소는 그저 주인 없는 주소 — 가입이 열린 앱에서는 그 주소로 *새* 가입 링크가 가고 연락 이메일을 가진 계정과는 무관하다 | `auth-magic-link` `MagicLinkContactEmailTest` |
+| 계정 이메일 변경 코드 | 새 계정 이메일 후보만 (옛 계정 이메일에 "요청됨" 알림, 연락 이메일 0통) | `an email change code goes to the new account-address candidate only…` |
+| 다시 인증 · 삭제 확인 코드 · 삭제 예약 알림 | 계정 이메일 | `re-authentication and deletion codes and the deletion notice…` |
+| 로그인 수단 추가 · 비밀번호 변경 알림 | 계정 이메일 | (같은 `core.mailer` 경로 — 받는 주소는 `accounts.email` 에서만 읽는다) |
+| 연락 이메일 확인 코드 | 연락 이메일 후보 | `registering, changing and removing the contact address…` |
+| 연락 이메일 등록 · 변경 · 삭제 알림 | **계정 이메일**(주소는 싣지 않는다) | 같은 시험 |
+| **서비스 알림**(메일 채널로 "사용자에게 연락"하는 것) | **연락 이메일, 없으면 계정 이메일** — platform SPI `ContactAddresses.contactEmail(accountId)` 가 푼다(`account` 가 구현, `@ConditionalOnMissingBean`) | `the service contact address is the contact address when there is one…` |
+
+- **왜 복구 수단이 아닌가**: 복구 경로가 둘이면 약한 쪽이 열쇠가 된다 — 계정을 여는 모든 것은 계정 이메일 하나를 지난다. 그래서 `accounts.email` 만 읽는 조회(`accountByEmail`)가 재설정 · 매직 링크 · 가입 판정의 유일한 길이고, 연락 이메일 열은 그 어느 것도 보지 않는다.
+- **재인증은 없다(일반 로그인 상태로 충분)**: 이 주소는 계정을 열 수 없다. 서비스 안내에 민감한 내용이 실릴 수 있으므로 대신 **등록 · 변경 · 삭제마다 계정 이메일로 알림 한 통**이 가고(`CONTACT_EMAIL_CHANGED` 이벤트), 코드는 요청한 세션에서만 · 주소별 예산 공유 · 계정당 시간당 5번이다. 민감한 알림을 연락 이메일로 보내지 않을 책임은 보내는 앱에 있다.
+- **운영자 차단(`account_blocks`)**: 지운 주소도 연락 이메일로 쓸 수 있다. 차단은 *등록*(가입 · 계정 이메일 · 소셜 연결)을 막는 것이고 이 주소로는 로그인도 복구도 못 하므로 막아 얻는 것이 없다(그 주소 주인에게 안내 메일이 가는 것뿐 — 코드 입력으로 소유가 증명된 뒤).
+- **저장**: `accounts.contact_email` · `contact_email_verified_at`(확인된 주소만, 유니크 · 인덱스 없음). 탈퇴 익명화(`erase`)가 둘 다 NULL 로 비운다(DELETE purge 는 행째). 시험: `JdbcErasureDbTest`(양 방언의 표 전체 스캔), `AccountJourneyIntegrationTest`(샘플 전체 표 스캔), 업그레이드 시험.
+- 관리자 DTO 에는 싣지 않는다(개인정보 최소화).
+
 ## 삭제 · 지우기 · 내보내기
 
 ### 삭제 수명주기
@@ -301,6 +349,7 @@ select id, display_name from accounts where display_name regexp '[#@＃＠]' or 
 - **로그인 한도는 시도 전부**를 센다 (위 위협 표).
 - **뒤로 넘기는 일(메일 · 재설정 조회)은 프로세스 안의 작은 풀**이다 — 종료 때는 기다려 마치고 넘치면 부른 스레드가 하지만, 비정상 종료로 처리 못 한 메일은 사라지고 사용자가 다시 요청한다(재전송). **가입 계정 행은 요청 스레드가 저장한다**(202 를 받은 가입은 사라지지 않는다). 내구성이 더 필요하면 `AccountTaskRunner` 빈으로 잡 큐에 넣는다.
 - **액세스 토큰은 상태 없는 JWT** — 정지 · 역할 변경은 일반 API 에는 최대 15분 늦게 반영된다 (새로고침은 즉시 현재 역할). **관리자 API 는 매 호출 저장소를 다시 읽는다.**
+- **계정 이메일은 하나, 연락 이메일은 따로 하나**: 위 "이메일 필수" · "연락 이메일". 복수 계정 이메일은 만들지 않는다(로그인 수단 · 복구 · 중복 판정이 전부 복잡해진다).
 - **`username` = 이메일** (이 모듈이 만든 계정에는 따로 사용자 이름이 없다).
 - **탈퇴 뒤 기본은 `ANONYMIZE`** (개인정보만 지우고 행은 `ERASED` 로 — 주인의 결정: "연결고리가 끊기면 안 된다"). `DELETE` 로 바꾸면 행까지 지운다. **정지는 박제**(탈퇴로 못 빠져나가고, 운영자가 지우면 해시 차단이 남는다). **탈퇴 취소(`self-restore`)는 기본 꺼짐**(스켈레톤은 사용 방식을 정하지 않는다) — 앱이 켠다.
 

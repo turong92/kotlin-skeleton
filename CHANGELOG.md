@@ -16,6 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Naver 토큰 요청의 `state`** (additive, 호환): 로그인 · 연결 · `socialReauth` 요청에 선택 필드 **`state`**(콜백이 받은 값)가 생겼고 `OAuthCodeExchange.state` 로 제공자에 넘어가 Naver 만 토큰 요청에 싣는다(공식 명세 원문은 도구로 열 수 없어 필수 여부는 확인하지 못했다 — 싣는 것은 해롭지 않다). 안 보내면 이전과 같다. **프런트(react-skeleton)**: Naver 를 쓰면 콜백의 `state` 를 요청에 같이 보낸다. 계약: [docs/account-http-contract.md](docs/account-http-contract.md) FINAL-3 표.
 - **소셜 가입 때 제공자 이름을 가져올지** (`skeleton.account.social.import-display-name`, 모듈 기본 `true` = 지금과 같다): `false` 면 Google 실명 · Kakao 닉네임 · OIDC `name` 을 버리고 이름 없는 계정으로 만든다(`display-name.fallback` 규칙은 그대로). 재로그인 · 수동 연결(`IdentityService.link`)은 원래 제공자 이름을 계정에 쓰지 않는다. **`apps/sample` 은 제공자의 실명을 가져오지 않는다**(`false`) — 소셜 가입 직후 계정은 이름이 없고 프런트의 「닉네임 정하기」 띠 · 글쓰기 전 게이트가 받는다. `apps/api` 는 기본값 그대로. 이메일은 이 설정과 무관하다.
 
+### 새 기능 (모두 꺼진 채 시작) — 이메일 필수, 연락받을 이메일 (2026-10-08)
+
+- **`skeleton.account.email.required`(기본 false = 지금 동작)**: true 면 주소 없는 계정(Kakao · Naver · X · LINE · 비-Gmail Google · 이메일 동의를 안 한 소셜)은 허용 목록(`me` · `email/change` · `delete` · `auth/**` · `legal/**` · `docs/**`) 밖 **모든 API(다른 모듈 포함)에서 `403 ACCOUNT.EMAIL_REQUIRED`**. `account` 의 MVC 인터셉터(`legal` 재동의와 같은 방식, 순서는 주소가 먼저). `me.emailRequired`(켠 앱에서만 키가 있다). **첫 이메일 등록은 재인증 없이**(주소가 한 번도 없던 계정 · 마지막 *로그인* 1시간 안 — `email.first-registration-window`; 아니면 평소의 제공자 재동의), 이미 쓰인 주소는 같은 202 + 주인에게 "이미 계정이 있어요" 메일(코드 없음). 위협 · 근거: docs/accounts.md. `apps/sample` 은 켠다(`GlobalSocialJourneyIntegrationTest` 는 주소 없는 계정의 전 생애를 보려고 `required=false` 로 돌린다; 켠 길은 `EmailRequiredJourneyIntegrationTest`). `apps/api` 는 기본 그대로.
+- **`skeleton.account.contact-email.enabled`(기본 false)**: 계정 이메일과 별개의 **연락받을 이메일** 하나. 로그인 수단 · 복구 수단 · 중복 판정이 아니고 유니크하지 않다. `POST /account/contact-email` → 코드 → `…/confirm`, `DELETE`. 재인증 없음(등록 · 변경 · 삭제마다 계정 이메일로 알림). `me.contactEmail`(키는 늘 있고 꺼져 있으면 null). 계정 · 보안 메일은 늘 계정 이메일 — `MailRoutingTest` 가 받는 주소별 통수로 못 박는다. 서비스 알림 수신 주소는 platform 의 새 SPI `ContactAddresses`(연락 ?: 계정 이메일).
+- **스키마**: `V20261008053037__account_contact_email.sql`(두 방언: `accounts.contact_email` · `contact_email_verified_at`, 널 허용, 인덱스 없음 — `migrations.lock` 에 있음). 탈퇴 익명화가 둘 다 비운다(`JdbcErasureDbTest` 표 전체 스캔 · `AccountJourneyIntegrationTest` · 업그레이드 시험이 덮는다).
+- 컴파일: `Account` 에 마지막 칸 `contactEmail`, `AccountPatch` 에 `contactEmail` · `clearContactEmail`, `MeView` 에 `emailRequired` · `contactEmail`, `MailKind` 에 `CONTACT_EMAIL_CODE` · `CONTACT_EMAIL_NOTICE`, `AccountEventType.CONTACT_EMAIL_CHANGED` — `when` 을 빠짐없이 도는 코드는 가지를 더한다.
+
 ### Behaviour change — 소셜 이메일 병합은 "권위자"일 때만, 샘플 앱은 병합을 끈다 (2026-10-08)
 
 - **문제**: Google 은 비-Gmail 주소로 만든 계정에도 주소의 주인이 바뀐 뒤까지 `email_verified: true` 를 준다. `merge-on-verified-email=true` 앱에서 옛 주인이 새 메일함 주인의 계정에 자동으로 붙을 수 있었다.

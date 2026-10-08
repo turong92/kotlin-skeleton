@@ -67,7 +67,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 | id | 요약 | 켜는 조각 | 키워드 (한국어 / 영어) | 짝 프런트 |
 |---|---|---|---|---|
-| `account` | 계정 수명주기 — 이메일 · 비밀번호 가입과 이메일 확인, 비밀번호 재설정 · 변경, 이메일 변경, 소셜 연결(자동 병합 없음), 탈퇴(다시 인증 → 유예 → 개인정보만 지우고 행은 ERASED 로 남김, 탈퇴 취소, 정지는 박제 + 해시 재가입 차단), 닉네임(중복 허용 · 유일 · 꼬리표 `닉네임#0417` 방식 · 필수 · 자동 닉네임 · 예약어, 작성자 이름 조회 AuthorDirectory 기본 구현), 로그인 시도 제한, 관리자 도구, 첫 관리자, ko/en 메일 템플릿. auth 가 진짜 계정으로 로그인하게 한다. | 스타터(apps/api)에 기본 포함 | 회원가입, 가입, 이메일 인증, 비밀번호 재설정, 비밀번호 찾기, 이메일 변경, 계정 삭제, 탈퇴, 계정 관리, 관리자 도구, 계정 정지, 프로필 / sign up, registration, email verification, password reset, forgot password, change email, delete account, account management, admin tools, suspend account, profile | `@skeleton/auth` |
+| `account` | 계정 수명주기 — 이메일 · 비밀번호 가입과 이메일 확인, 비밀번호 재설정 · 변경, 이메일 변경, 소셜 연결(자동 병합 없음), 탈퇴(다시 인증 → 유예 → 개인정보만 지우고 행은 ERASED 로 남김, 탈퇴 취소, 정지는 박제 + 해시 재가입 차단), 닉네임(중복 허용 · 유일 · 꼬리표 `닉네임#0417` 방식 · 필수 · 자동 닉네임 · 예약어, 작성자 이름 조회 AuthorDirectory 기본 구현), 이메일 필수(주소 없는 소셜 계정은 등록 전까지 모든 API 403 ACCOUNT.EMAIL_REQUIRED · 첫 등록은 재인증 없이, 기본 꺼짐), 연락받을 이메일(계정 이메일과 별개 · 복구 수단 아님 · 서비스 알림 수신 주소 SPI, 기본 꺼짐), 로그인 시도 제한, 관리자 도구, 첫 관리자, ko/en 메일 템플릿. auth 가 진짜 계정으로 로그인하게 한다. | 스타터(apps/api)에 기본 포함 | 회원가입, 가입, 이메일 인증, 비밀번호 재설정, 비밀번호 찾기, 이메일 변경, 계정 삭제, 탈퇴, 계정 관리, 관리자 도구, 계정 정지, 프로필 / sign up, registration, email verification, password reset, forgot password, change email, delete account, account management, admin tools, suspend account, profile | `@skeleton/auth` |
 | `account-jdbc` | account 의 저장소 · 토큰 · 감사 기록을 PostgreSQL · MySQL 로 — 스키마는 모듈 마이그레이션(MySQL 은 이메일 · 닉네임 키를 utf8mb4_bin 으로 정확 일치, 닉네임 방식 셋을 유니크 (키, 꼬리표) 하나로). 보호 환경에서 메모리 저장소를 막는 가드를 통과하는 방법. | 스타터(apps/api)에 기본 포함 | 계정 저장, 계정 DB, 회원 테이블, 계정 마이그레이션 / account storage, accounts table, account persistence, account migration | `@skeleton/auth` |
 | `alert` | 주인 경보 — 5xx 몰림 · 기동 실패 · 죽은 작업을 Discord 호환 웹훅(+ 선택적 메일)으로 알린다. 에러 수집(Sentry)의 답. | 스타터(apps/api)에 기본 포함 | 경보, 주인 알림, 에러 알림, 장애 알림, 디스코드 알림, 에러 수집, 5xx 알림 / owner alert, error reporting, discord webhook, incident alert, 5xx alert, sentry alternative | — |
 | `alert-jdbc` | 경보 기록을 DB 에 두어 여러 인스턴스 · 재시작을 가로질러 같은 경보를 접는다 (PostgreSQL · MySQL). | `--modules alert-jdbc` | 경보 기록, 경보 중복 접기, 경보 DB / alert ledger, alert dedupe, alert database | — |
@@ -175,13 +175,13 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 ## 항목 상세
 
-### `account` — 계정 수명주기 — 이메일 · 비밀번호 가입과 이메일 확인, 비밀번호 재설정 · 변경, 이메일 변경, 소셜 연결(자동 병합 없음), 탈퇴(다시 인증 → 유예 → 개인정보만 지우고 행은 ERASED 로 남김, 탈퇴 취소, 정지는 박제 + 해시 재가입 차단), 닉네임(중복 허용 · 유일 · 꼬리표 `닉네임#0417` 방식 · 필수 · 자동 닉네임 · 예약어, 작성자 이름 조회 AuthorDirectory 기본 구현), 로그인 시도 제한, 관리자 도구, 첫 관리자, ko/en 메일 템플릿. auth 가 진짜 계정으로 로그인하게 한다.
+### `account` — 계정 수명주기 — 이메일 · 비밀번호 가입과 이메일 확인, 비밀번호 재설정 · 변경, 이메일 변경, 소셜 연결(자동 병합 없음), 탈퇴(다시 인증 → 유예 → 개인정보만 지우고 행은 ERASED 로 남김, 탈퇴 취소, 정지는 박제 + 해시 재가입 차단), 닉네임(중복 허용 · 유일 · 꼬리표 `닉네임#0417` 방식 · 필수 · 자동 닉네임 · 예약어, 작성자 이름 조회 AuthorDirectory 기본 구현), 이메일 필수(주소 없는 소셜 계정은 등록 전까지 모든 API 403 ACCOUNT.EMAIL_REQUIRED · 첫 등록은 재인증 없이, 기본 꺼짐), 연락받을 이메일(계정 이메일과 별개 · 복구 수단 아님 · 서비스 알림 수신 주소 SPI, 기본 꺼짐), 로그인 시도 제한, 관리자 도구, 첫 관리자, ko/en 메일 템플릿. auth 가 진짜 계정으로 로그인하게 한다.
 
 - 종류 · 상태: module · experimental — 위치 `modules/account`
 - 켜는 법: 스타터(apps/api)에 기본 포함
 - 의존 한 줄: `implementation(project(":modules:account"))`
 - 설정 접두사 `skeleton.account` — 키와 기본값 `docs/config/modules/account.yml`
-- HTTP 경로: `/api/v1`, `/api/v1/account`, `/api/v1/account/identities/social`, `/api/v1/admin/accounts`, `/api/v1/auth`
+- HTTP 경로: `/api/v1`, `/api/v1/account`, `/api/v1/account/contact-email`, `/api/v1/account/identities/social`, `/api/v1/admin/accounts`, `/api/v1/auth`
 - 비밀 · 환경변수: `<P>_ACCOUNT_MAIL_LINK_BASE_URL` — 빠지면: 메일 링크가 여는 프론트 주소 — 비밀 아님(선언의 env:). 비면 보호 환경(<P>_ENV=stage|prod)에서 기동 실패
 - 비밀 · 환경변수: `<P>_ACCOUNT_BOOTSTRAP_ADMIN_EMAIL` — 빠지면: 선택 — 이 이메일이 확인되면 ADMIN 을 준다. 없으면 관리자 API 를 켠 앱은 경고
 - 비밀 · 환경변수: `<P>_ACCOUNT_BLOCKS_SECRET` — 빠지면: 재가입 차단 해시(HMAC)의 키 — 선언의 secrets: (무작위로 충분). 관리자 API 를 켠 앱만 필요하고 비면 JWT 비밀에서 파생돼 경고만 난다(JWT 비밀을 돌리면 차단이 풀린다)

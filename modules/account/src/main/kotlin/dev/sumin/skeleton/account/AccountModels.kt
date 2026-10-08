@@ -52,6 +52,8 @@ data class Account(
     val displayNameKey: String? = null,
     /** 닉네임 방식이 정하는 꼬리표: NONE 은 null, UNIQUE 는 [DisplayNames.NO_TAG], TAGGED 는 `0001`..`9999`. 응답에는 [DisplayNames.visibleTag] 로 나간다 */
     val displayTag: String? = null,
+    /** 연락받을 이메일(확인된 주소, 선택) — 로그인 수단 · 복구 수단 · 중복 판정이 아니다 (`skeleton.account.contact-email`, docs/accounts.md) */
+    val contactEmail: String? = null,
 ) {
     /** 화면에 보일 꼬리표 (없거나 UNIQUE 의 고정값이면 null) */
     val visibleTag: String? get() = DisplayNames.visibleTag(displayTag)
@@ -88,6 +90,9 @@ data class AccountPatch(
     val deletedAt: Instant? = null,
     val purgeAfter: Instant? = null,
     val clearDeletion: Boolean = false,
+    /** 연락 이메일을 이 값으로 (확인을 마친 주소) */
+    val contactEmail: String? = null,
+    val clearContactEmail: Boolean = false,
 )
 
 data class AccountPage(val items: List<Account>, val total: Long)

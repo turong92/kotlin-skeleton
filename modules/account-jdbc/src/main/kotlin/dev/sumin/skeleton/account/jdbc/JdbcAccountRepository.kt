@@ -86,6 +86,8 @@ class JdbcAccountRepository(
             patch.deletedAt?.let { sets += "deleted_at = :deleted"; p.addValue("deleted", dialect.instantParam(it)) }
             patch.purgeAfter?.let { sets += "purge_after = :purge"; p.addValue("purge", dialect.instantParam(it)) }
         }
+        if (patch.clearContactEmail) sets += "contact_email = null, contact_email_verified_at = null"
+        else patch.contactEmail?.let { sets += "contact_email = :contact, contact_email_verified_at = :now"; p.addValue("contact", it) }
         // ERASED 행에는 아무것도 다시 쓰지 않는다 — 지운 뒤 도착한 옛 토큰의 프로필 갱신 · 지우기와 겹친 정지 해제가 개인정보나 상태를 되살리지 못하게
         // 지우기를 선점한 계정([claimErasure])의 상태는 바꾸지 않는다
         val n = jdbc.update("update accounts set ${sets.joinToString(", ")} where id = :id and status <> 'ERASED'" + if (patch.status != null) " and erase_claimed_at is null" else "", p)
@@ -241,7 +243,7 @@ class JdbcAccountRepository(
             scrub(id, email)
             jdbc.update(
                 "update accounts set email = null, email_verified = false, status = 'ERASED', display_name = null, display_name_key = null, display_tag = null, locale = null, time_zone = null, " +
-                    "suspended_reason = null, last_login_at = null, purge_after = null, erase_claimed_at = null, erased_at = :now, updated_at = :now where id = :id",
+                    "suspended_reason = null, last_login_at = null, contact_email = null, contact_email_verified_at = null, purge_after = null, erase_claimed_at = null, erased_at = :now, updated_at = :now where id = :id",
                 p,
             )
             true
@@ -398,7 +400,7 @@ class JdbcAccountRepository(
         displayName = getString("display_name"), displayNameKey = getString("display_name_key"), displayTag = getString("display_tag"), locale = getString("locale"), timeZone = getString("time_zone"),
         createdAt = dialect.readInstant(this, "created_at")!!, updatedAt = dialect.readInstant(this, "updated_at")!!, lastLoginAt = dialect.readInstant(this, "last_login_at"),
         suspendedReason = getString("suspended_reason"), deletedAt = dialect.readInstant(this, "deleted_at"), purgeAfter = dialect.readInstant(this, "purge_after"),
-        erasedAt = dialect.readInstant(this, "erased_at"),
+        erasedAt = dialect.readInstant(this, "erased_at"), contactEmail = getString("contact_email"),
     )
 
     private fun ResultSet.identity() = Identity(

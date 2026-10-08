@@ -96,6 +96,7 @@ class AccountHarness(
     val authRepository = AccountAuthRepository(core)
     val passwords = PasswordService(core)
     val emailChange = EmailChangeService(core)
+    val contact = ContactEmailService(core)
     val reauth = Reauth(core)
     val erasers = java.util.concurrent.CopyOnWriteArrayList<dev.sumin.skeleton.common.erasure.AccountErasureListener>()
     val deletion = DeletionService(core)

@@ -103,7 +103,7 @@ class RegistrationService(private val core: AccountCore) {
         )
         core.tasks.run("sign-up") {
             val existing = core.accountByEmail(email)
-            if (existing != null && taken(existing)) notifyAlreadyRegistered(existing, mayMail, credentialLinks = true)
+            if (existing != null && taken(existing)) core.notifyAlreadyRegistered(existing, mayMail, credentialLinks = true)
             else if (mayMail && mayOpen) sendCode(email, opened.code, cmd.locale)
         }
         // 시간 값은 저장한(또는 한도 때문에 저장하지 않은) 시도 행에서 — 새 주소든 있는 주소든 메일이 나갔든 안 나갔든 같은 계산이다
@@ -142,32 +142,6 @@ class RegistrationService(private val core: AccountCore) {
 
     /** 확인된(또는 지워지는 중인) 계정이 가진 주소 — 코드로 가져갈 수 없다. 확인되지 않은 계정(이메일 확인을 나중에 켠 앱에 남은 것)은 코드로 메일함을 증명하면 이어받는다 */
     private fun taken(existing: Account) = existing.emailVerified || existing.status == AccountStatus.DELETED
-
-    private fun notifyAlreadyRegistered(existing: Account, allowed: Boolean, credentialLinks: Boolean) {
-        val address = existing.email ?: return
-        if (existing.status == AccountStatus.DELETED || !allowed) return
-        core.mailer.send(AccountMail(MailKind.ALREADY_REGISTERED, address, existing.locale, vars = alreadyRegisteredVars(existing, credentialLinks)))
-    }
-
-    /**
-     * "이미 계정이 있어요" 메일의 다음 걸음: 로그인 페이지 · 가입 수단(코드 목록 — 문구는 템플릿이 로케일로) · "비밀번호를 잊었다면" 재설정 **요청 페이지** — 모두 **토큰 없는 링크**다.
-     * 이 메일은 **남이 넣은 요청**이 만든다 — 그래서 토큰을 만들지 않는 것이 기본이다 (주인이 방금 받은 재설정 링크를 닫지 못하고, 재설정 · 매직 링크 한도를 못 바닥낸다).
-     * `sign-up.existing-account-mail.include-credentials-links=true` 이고 [credentialLinks](최초 가입 요청; 재전송은 false)이면 재설정 링크 · (`auth-magic-link` 가 있으면) 매직 링크도 싣되
-     * **열린 토큰이 없을 때만** 새로 만든다. 정지된 계정에는 링크를 주지 않는다(박제). 뒤로 넘긴 일 안에서만 돈다 — 화면 응답은 계정이 있든 없든 같다.
-     */
-    private fun alreadyRegisteredVars(existing: Account, credentialLinks: Boolean): Map<String, String> = buildMap {
-        core.links.login()?.let { put("loginUrl", it) }
-        core.accounts.identitiesOf(existing.id).map { it.method }.distinct().takeIf { it.isNotEmpty() }?.let { put("methods", it.joinToString(",")) }
-        if (existing.status == AccountStatus.SUSPENDED) return@buildMap
-        if (credentialLinks && core.props.signUp.existingAccountMail.includeCredentialsLinks) {
-            core.issueResetLink(existing, onlyIfNoneOpen = true)?.let {
-                put("resetUrl", it.url); put("resetMinutes", it.minutes.toString())
-                core.events.publish(AccountEventType.PASSWORD_RESET_REQUESTED, existing.id, detail = mapOf("via" to "already_registered"))
-            }
-            core.magicLinks()?.issue(existing)?.let { put("magicUrl", it.url); put("magicMinutes", it.minutes.toString()) }
-        }
-        if ("resetUrl" !in this) core.links.forgot()?.let { put("forgotUrl", it) }
-    }
 
     /**
      * 코드로 가입을 끝낸다 — 한 시도(가입 id)의 추측은 [AccountProperties.Verification.maxAttempts] 번이고 매번 저장소가 원자적으로 깎는다.
@@ -289,7 +263,7 @@ class RegistrationService(private val core: AccountCore) {
         }
         core.tasks.run("resend-verification") {
             val existing = core.accountByEmail(row.subject)
-            if (existing != null && taken(existing)) notifyAlreadyRegistered(existing, true, credentialLinks = false) else sendCode(row.subject, code, null)
+            if (existing != null && taken(existing)) core.notifyAlreadyRegistered(existing, true, credentialLinks = false) else sendCode(row.subject, code, null)
         }
         val fresh = core.challenges.find(row.id) ?: return core.codeWindow(v.codeTtl)
         return CodeWindow(fresh.expiresAt, if (fresh.resends >= v.maxResends) null else fresh.lastSentAt.plus(v.resendCooldown))

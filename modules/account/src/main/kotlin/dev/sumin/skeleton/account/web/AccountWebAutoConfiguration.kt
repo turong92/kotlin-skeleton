@@ -21,6 +21,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication
 import org.springframework.context.annotation.Bean
+import org.springframework.web.servlet.config.annotation.InterceptorRegistry
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer
 
 /**
  * 계정 HTTP — 서블릿 웹 앱이고 Spring Security 가 있을 때만. `skeleton.account.http.enabled=false` 로 끈다(앱이 자기 컨트롤러를 둘 때).
@@ -62,6 +64,23 @@ class AccountWebAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
+    @ConditionalOnProperty(prefix = "skeleton.account.contact-email", name = ["enabled"], havingValue = "true")
+    fun contactEmailController(callers: AccountCallers, contact: dev.sumin.skeleton.account.ContactEmailService, clientIps: ObjectProvider<ClientIps>): ContactEmailController =
+        ContactEmailController(callers, contact, clientIps.getIfAvailable { ClientIps() })
+
+    /** `skeleton.account.email.required=true` 일 때만 — 주소 없는 계정의 보호된 요청을 막는다. `legal` 의 재동의 필터(순서 0)보다 먼저 돈다 */
+    @Bean
+    @ConditionalOnMissingBean(name = ["accountEmailRequiredConfigurer"])
+    @ConditionalOnProperty(prefix = "skeleton.account.email", name = ["required"], havingValue = "true")
+    fun accountEmailRequiredConfigurer(properties: AccountProperties, accounts: ObjectProvider<AccountRepository>): WebMvcConfigurer =
+        object : WebMvcConfigurer {
+            override fun addInterceptors(registry: InterceptorRegistry) {
+                registry.addInterceptor(EmailRequiredInterceptor(properties.email) { accounts.getObject() }).order(EMAIL_REQUIRED_ORDER)
+            }
+        }
+
+    @Bean
+    @ConditionalOnMissingBean
     fun authMethodsController(
         registry: dev.sumin.skeleton.account.signin.SignInMethodRegistry,
         properties: AccountProperties,
@@ -92,4 +111,9 @@ class AccountWebAutoConfiguration {
             registry.add("GET", "/api/v1/account/password/policy")
             registry.add("GET", "/api/v1/auth/methods")
         }
+
+    companion object {
+        /** `legal` 의 재동의 인터셉터는 기본 순서(0) — 주소 확인이 먼저다 */
+        const val EMAIL_REQUIRED_ORDER = -100
+    }
 }

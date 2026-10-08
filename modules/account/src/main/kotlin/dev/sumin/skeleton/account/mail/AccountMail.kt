@@ -8,9 +8,11 @@ import org.slf4j.LoggerFactory
 
 enum class MailKind {
     /** 6자리 코드를 담은 메일 — 가입 확인 · 이메일 변경(새 주소) · 다시 인증 · 삭제 확인. 링크가 없다 */
-    VERIFY_CODE, EMAIL_CHANGE_CODE, REAUTH_CODE, DELETE_CODE,
+    VERIFY_CODE, EMAIL_CHANGE_CODE, REAUTH_CODE, DELETE_CODE, CONTACT_EMAIL_CODE,
     ALREADY_REGISTERED, PASSWORD_RESET, PASSWORD_CHANGED,
     EMAIL_CHANGE_REQUESTED_NOTICE, EMAIL_CHANGED_NOTICE, MAGIC_LINK, DELETION_SCHEDULED, DELETION_CANCELLED, IDENTITY_LINKED_NOTICE,
+    /** 연락 이메일이 등록 · 바뀜 · 지워졌다는 알림 — **계정 이메일**로만 간다 (주소 자체는 싣지 않는다) */
+    CONTACT_EMAIL_NOTICE,
 }
 
 /** 보낼 메일 한 통의 의미 — 문구는 [AccountMailTemplates] 가 고른다. [link] 에 토큰이 들어 있다 (이 객체를 로그에 싣지 않는다 — toString 은 가려 둔다) */

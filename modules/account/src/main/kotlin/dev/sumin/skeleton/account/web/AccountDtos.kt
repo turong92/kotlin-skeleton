@@ -109,6 +109,10 @@ data class ChangePasswordRequest(
     override fun toString() = "ChangePasswordRequest(currentPassword=<redacted>, newPassword=<redacted>, confirmationCode=<redacted>)"
 }
 
+data class ContactEmailRequest(@field:NotBlank @field:Email @field:Size(max = 254) val email: String?) {
+    override fun toString() = "ContactEmailRequest(email=<redacted>)"
+}
+
 data class ChangeEmailRequest(
     @field:NotBlank @field:Email @field:Size(max = 254) val newEmail: String?,
     @field:Size(max = 128) val currentPassword: String? = null,

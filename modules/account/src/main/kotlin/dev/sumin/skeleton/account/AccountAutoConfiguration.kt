@@ -271,6 +271,15 @@ class AccountAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
+    fun contactEmailService(core: AccountCore): ContactEmailService = ContactEmailService(core)
+
+    /** 서비스 알림의 받는 주소: 연락 이메일 ?: 계정 이메일 (platform SPI) */
+    @Bean
+    @ConditionalOnMissingBean(dev.sumin.skeleton.common.contact.ContactAddresses::class)
+    fun accountContactAddresses(core: AccountCore): dev.sumin.skeleton.common.contact.ContactAddresses = AccountContactAddresses(core)
+
+    @Bean
+    @ConditionalOnMissingBean
     fun reauth(core: AccountCore): Reauth = Reauth(core)
 
     @Bean

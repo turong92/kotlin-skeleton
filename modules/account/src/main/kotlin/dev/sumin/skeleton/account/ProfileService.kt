@@ -26,6 +26,11 @@ data class MeView(
     /** 이메일 변경을 요청했고 새 주소로 간 코드의 입력을 기다리는 중이면 그 주소와 코드 만료 시각 (아니면 null) */
     val pendingEmail: String? = null,
     val pendingEmailExpiresAt: Instant? = null,
+    /** `skeleton.account.email.required=true` 일 때만 값이 있다(꺼져 있으면 키가 없다): 이 계정에 주소가 아직 없어 허용 목록 밖 API 가 403 `ACCOUNT.EMAIL_REQUIRED` 인가 */
+    @get:com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+    val emailRequired: Boolean? = null,
+    /** 연락받을 이메일(확인된 주소) — 없으면 null. `skeleton.account.contact-email.enabled` 가 꺼져 있으면 늘 null */
+    val contactEmail: String? = null,
 )
 
 data class ProfileChange(val displayName: String? = null, val locale: String? = null, val timeZone: String? = null)
@@ -42,6 +47,8 @@ class ProfileService(private val core: AccountCore, registry: SignInMethodRegist
             a.id, a.email, a.emailVerified, a.displayName, a.visibleTag, a.locale, a.timeZone, a.roles, a.status, a.createdAt,
             hasPassword = methods.any { it.method == SignInMethods.PASSWORD }, methods = methods,
             pendingEmail = pending?.payload?.let(EmailChangePayload::target), pendingEmailExpiresAt = pending?.expiresAt,
+            emailRequired = if (core.props.email.required) a.email == null else null,
+            contactEmail = if (core.props.contactEmail.enabled) a.contactEmail else null,
         )
     }
 
