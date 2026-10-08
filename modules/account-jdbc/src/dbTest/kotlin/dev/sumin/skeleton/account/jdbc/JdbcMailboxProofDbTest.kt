@@ -109,7 +109,7 @@ class JdbcMailboxProofDbTest {
         assertEquals(AddIdentityResult.STALE, repo.addIdentityIfEmailVerified(late, expectEmailVerified = false))
         assertNull(repo.findIdentity("kakao", "k-squatter"))
         assertEquals(AddIdentityResult.ADDED, repo.addIdentityIfEmailVerified(late, expectEmailVerified = true), "a caller that saw the proven state may link")
-        assertEquals(AddIdentityResult.DUPLICATE, repo.addIdentityIfEmailVerified(late.copy(id = "idn_late2"), expectEmailVerified = true))
+        assertEquals(AddIdentityResult.METHOD_EXISTS, repo.addIdentityIfEmailVerified(late.copy(id = "idn_late2"), expectEmailVerified = true), "the account already has this method")
         assertEquals(AddIdentityResult.STALE, repo.addIdentityIfEmailVerified(late.copy(id = "idn_x", accountId = "acc_nope"), expectEmailVerified = true), "no such account")
     }
 

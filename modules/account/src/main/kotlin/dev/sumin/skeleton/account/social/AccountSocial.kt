@@ -57,6 +57,8 @@ class SocialLinkService(private val registry: OAuthProviderRegistry, private val
         // PKCE · nonce 전제는 다시 인증을 쓰기 **전**에 본다 — 틀려도 제공자의 한 번 쓰는 코드와 6자리 코드가 타지 않아 같은 것으로 다시 시도할 수 있다
         val exchange = provider.codeExchange(authorizationCode, redirectUri, codeVerifier, nonce, state)
         val account = core.accounts.findById(accountId) ?: throw AccountException(AccountErrorCode.NOT_FOUND)
+        // 어차피 거절될 요청(정지 계정 · 이 계정에 이미 같은 제공자)은 증명을 쓰기 전에 거절한다 — 메일 코드가 타지 않는다. 남의 계정이 쥔 주체는 증명 **뒤에만** 알린다
+        identities.checkLinkable(accountId, provider.providerId.trim().lowercase())
         val limit = core.props.emailChange
         val allowance = core.limits.acquire("social-link:account", accountId, limit.perAccount, limit.perAccountWindow)
         if (!allowance.allowed) throw RateLimitedException(allowance.retryAfterSeconds)

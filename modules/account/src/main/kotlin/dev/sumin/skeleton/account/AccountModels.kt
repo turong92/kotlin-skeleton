@@ -106,8 +106,11 @@ data class AccountName(val id: String, val status: AccountStatus, val displayNam
 /** [STALE]: 호출자가 본 계정의 이메일 확인 상태([AccountRepository.changeEmail] 의 `expectEmailVerified`)가 계정 행 락 안에서 이미 바뀌어 있다 — 그 사이 메일함이 증명됐다 */
 enum class ChangeEmailResult { CHANGED, TAKEN, NOT_FOUND, STALE }
 
-/** [AccountRepository.addIdentityIfEmailVerified] 의 결과 — [DUPLICATE]: (method, subject) 가 이미 있다 · [STALE]: 호출자가 본 이메일 확인 상태가 이미 바뀌었다 */
-enum class AddIdentityResult { ADDED, DUPLICATE, STALE }
+/**
+ * [AccountRepository.addIdentityIfEmailVerified] 의 결과 — [DUPLICATE]: (method, subject) 가 이미 있다 · [STALE]: 호출자가 본 이메일 확인 상태가 이미 바뀌었다(이거나 없는 · 지워진 계정) ·
+ * [NOT_ACTIVE]: 계정이 ACTIVE 가 아니다(정지 · 탈퇴 유예 · 미확인) · [METHOD_EXISTS]: 이 계정에 같은 방법(제공자)의 수단이 이미 있다
+ */
+enum class AddIdentityResult { ADDED, DUPLICATE, STALE, NOT_ACTIVE, METHOD_EXISTS }
 
 /**
  * [AccountRepository.proveMailbox] 에 넘기는 "메일함이 증명됐다" 의 내용.
@@ -122,7 +125,8 @@ data class MailboxProof(
     override fun toString() = "MailboxProof(keep=$keepIdentityIds, passwordSecret=${if (passwordSecret == null) "none" else "<redacted>"})"
 }
 
-enum class RemoveIdentityResult { REMOVED, NOT_FOUND, LAST }
+/** [NOT_ACTIVE]: 계정이 ACTIVE 가 아니다 — 정지된 계정은 남은 토큰으로 수단을 끊지 못한다 */
+enum class RemoveIdentityResult { REMOVED, NOT_FOUND, LAST, NOT_ACTIVE }
 
 /** 마지막 관리자 보호 연산의 결과 — [DONE] 적용됨 · [LAST] 마지막 ACTIVE 보유자라 하지 않음 · [NOT_FOUND] 없는 계정(이거나 그 역할이 없음) */
 enum class GuardedResult { DONE, LAST, NOT_FOUND }
@@ -237,7 +241,7 @@ interface AccountRepository {
      * [addIdentity] 인데 계정 행 락 안에서 `email_verified` 가 [expectEmailVerified] 와 같을 때만 — 다시 인증을 통과한 뒤 제공자 교환을 기다리는 사이 메일함이 증명됐다면,
      * 증명이 지운 수단이 뒤늦게 되살아나지 않는다 ([AddIdentityResult.STALE])
      */
-    fun addIdentityIfEmailVerified(identity: Identity, expectEmailVerified: Boolean): AddIdentityResult
+    fun addIdentityIfEmailVerified(identity: Identity, expectEmailVerified: Boolean?): AddIdentityResult
 
     fun findIdentity(method: String, subject: String): Identity?
 

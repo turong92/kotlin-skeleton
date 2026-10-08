@@ -64,6 +64,8 @@ class PasswordService(private val core: AccountCore) {
         val email = account.email
         val identity = email?.let { core.accounts.findIdentity(SignInMethods.PASSWORD, it) }
         if (identity?.secret == null && (!account.emailVerified || email == null)) throw AccountException(AccountErrorCode.PASSWORD_REQUIRED)
+        // 첫 비밀번호는 로그인 수단을 늘린다 — 정지 · 탈퇴 유예 계정은 남은 토큰으로 못 한다 (증명을 쓰기 전에 거절, 최종 판정은 저장소가 계정 행 락 안에서)
+        if (identity?.secret == null && account.status != AccountStatus.ACTIVE) throw AccountException(AccountErrorCode.NOT_ACTIVE)
         // 비밀번호가 있으면 현재 비밀번호, 없으면(첫 비밀번호) 메일함 확인 — 15분짜리 액세스 토큰이 영구 자격이 되지 않게
         val proof = Reauth(core).check(account, ReauthInput(currentPassword, confirmationCode), currentSessionId)
         val violations = core.policy.check(newPassword, email)
@@ -86,8 +88,12 @@ class PasswordService(private val core: AccountCore) {
         val email = requireNotNull(account.email) { "password needs an email" }
         if (replacing != null) {
             if (!core.accounts.updateIdentitySecret(replacing.id, hash)) throw AccountException(AccountErrorCode.REAUTH_FAILED)
-        } else if (!core.accounts.addIdentity(Identity(core.newIdentityId(), account.id, SignInMethods.PASSWORD, email, verified = account.emailVerified, secret = hash, createdAt = core.time.now()))) {
-            throw AccountException(AccountErrorCode.REAUTH_FAILED)
+        } else {
+            when (core.accounts.addIdentityIfEmailVerified(Identity(core.newIdentityId(), account.id, SignInMethods.PASSWORD, email, verified = account.emailVerified, secret = hash, createdAt = core.time.now()), null)) {
+                AddIdentityResult.ADDED -> Unit
+                AddIdentityResult.NOT_ACTIVE -> throw AccountException(AccountErrorCode.NOT_ACTIVE)
+                else -> throw AccountException(AccountErrorCode.REAUTH_FAILED)
+            }
         }
     }
 

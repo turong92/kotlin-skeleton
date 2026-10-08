@@ -97,4 +97,44 @@ class SocialLinkServiceTest {
         assertEquals("ACCOUNT.CODE_EXPIRED", assertFailsWith<ApplicationException> { links.link("acc_s", "beta", "good-2", null, ReauthInput(confirmationCode = "000000"), ses) }.errorCode.code, "no code was requested")
         assertEquals(0, (providers[1] as Provider).exchanges.get(), "no exchange without a passing proof")
     }
+
+    // ---- 미리 판별되는 거절은 증명(메일 코드)을 태우지 않는다
+
+    private fun mailedCode(accountId: String): String {
+        h.reauth.requestConfirmation(accountId, ses)
+        return h.mailer.of(MailKind.REAUTH_CODE).last().vars.getValue("code")
+    }
+
+    @Test
+    fun `linking a provider the account already has is refused BEFORE the mailed code or the provider code is spent`() {
+        passwordless()
+        IdentityService(h.core, methods).link("acc_s", "alpha", "alpha-user-good-own", verified = true)
+        val code = mailedCode("acc_s")
+        val alpha = providers[0] as Provider
+        assertEquals("ACCOUNT.IDENTITY_EXISTS", assertFailsWith<ApplicationException> { links.link("acc_s", "alpha", "good-2", null, ReauthInput(confirmationCode = code), ses) }.errorCode.code)
+        assertEquals(0, alpha.exchanges.get(), "the provider was not called")
+        links.link("acc_s", "beta", "good-3", null, ReauthInput(confirmationCode = code), ses)   // the same mailed code is still good
+        assertEquals(setOf("alpha", "beta"), h.repo.identitiesOf("acc_s").map { it.method }.toSet())
+    }
+
+    @Test
+    fun `unlinking the last sign-in method is refused BEFORE the mailed code is spent`() {
+        passwordless()
+        val ids = IdentityService(h.core, methods)
+        val only = ids.link("acc_s", "alpha", "alpha-user-good-own", verified = true)
+        val code = mailedCode("acc_s")
+        assertEquals("ACCOUNT.LAST_SIGN_IN_METHOD", assertFailsWith<ApplicationException> { ids.unlink("acc_s", only.id, ses, ReauthInput(confirmationCode = code)) }.errorCode.code)
+        ids.link("acc_s", "beta", "beta-user-good-own", verified = true)   // a second method makes the same unlink possible
+        ids.unlink("acc_s", only.id, ses, ReauthInput(confirmationCode = code))   // the same mailed code still works
+        assertEquals(setOf("beta"), h.repo.identitiesOf("acc_s").map { it.method }.toSet())
+    }
+
+    @Test
+    fun `a provider account that belongs to someone else is only reported after the re-authentication - no existence oracle without it`() {
+        val a = h.activeAccount()
+        val other = h.activeAccount("bob@example.com")
+        IdentityService(h.core, methods).link(other.id, "alpha", "alpha-user-good-taken", verified = true)
+        assertEquals("ACCOUNT.CURRENT_PASSWORD_INVALID", assertFailsWith<ApplicationException> { links.link(a.id, "alpha", "good-taken", null, ReauthInput("wrong-password-1"), ses) }.errorCode.code)
+        assertEquals("ACCOUNT.IDENTITY_TAKEN", assertFailsWith<ApplicationException> { links.link(a.id, "alpha", "good-taken", null, ReauthInput("tangerine-42-moon"), ses) }.errorCode.code)
+    }
 }

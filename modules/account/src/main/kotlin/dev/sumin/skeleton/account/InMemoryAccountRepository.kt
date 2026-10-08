@@ -192,9 +192,13 @@ class InMemoryAccountRepository : AccountRepository {
         return true
     }
 
-    @Synchronized override fun addIdentityIfEmailVerified(identity: Identity, expectEmailVerified: Boolean): AddIdentityResult =
-        if (accounts[identity.accountId]?.takeIf { it.status != AccountStatus.ERASED }?.emailVerified != expectEmailVerified) AddIdentityResult.STALE
+    @Synchronized override fun addIdentityIfEmailVerified(identity: Identity, expectEmailVerified: Boolean?): AddIdentityResult {
+        val account = accounts[identity.accountId]?.takeIf { it.status != AccountStatus.ERASED }
+        return if (account == null || (expectEmailVerified != null && account.emailVerified != expectEmailVerified)) AddIdentityResult.STALE
+        else if (account.status != AccountStatus.ACTIVE) AddIdentityResult.NOT_ACTIVE
+        else if (identities.values.any { it.accountId == identity.accountId && it.method == identity.method }) AddIdentityResult.METHOD_EXISTS
         else if (addIdentity(identity)) AddIdentityResult.ADDED else AddIdentityResult.DUPLICATE
+    }
 
     @Synchronized override fun findIdentity(method: String, subject: String): Identity? = identities.values.firstOrNull { it.method == method && it.subject == subject }
 
@@ -211,6 +215,7 @@ class InMemoryAccountRepository : AccountRepository {
 
     @Synchronized override fun removeIdentityUnlessLast(accountId: String, identityId: String, credentialMethods: Collection<String>): RemoveIdentityResult {
         val target = identities[identityId]?.takeIf { it.accountId == accountId } ?: return RemoveIdentityResult.NOT_FOUND
+        if (accounts[accountId]?.status != AccountStatus.ACTIVE) return RemoveIdentityResult.NOT_ACTIVE
         val others = identities.values.count { it.accountId == accountId && it.id != identityId && it.method in credentialMethods }
         if (target.method in credentialMethods && others == 0) return RemoveIdentityResult.LAST
         identities.remove(identityId)

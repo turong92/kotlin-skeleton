@@ -236,8 +236,9 @@ class AccountWebTest {
         mvc.perform(patch("/api/v1/account/me").header("Authorization", auth).json("""{"timeZone":"Mars/Olympus"}""")).andExpect(status().isBadRequest)
 
         val id = JsonPath.read<String>(mvc.perform(get("/api/v1/account/identities").header("Authorization", auth)).andExpect(status().isOk).andReturn().response.contentAsString, "$.values[0].id")
-        mvc.perform(delete("/api/v1/account/identities/$id").header("Authorization", auth)).andExpect(status().isBadRequest)
-            .andExpect(jsonPath("$.code").value("ACCOUNT.CURRENT_PASSWORD_INVALID"))   // unlinking is a re-authenticated action
+        // the only sign-in method is refused before any proof is asked for or spent (re-authentication of a normal unlink: AccountSocialWebTest, SocialReauthTest)
+        mvc.perform(delete("/api/v1/account/identities/$id").header("Authorization", auth)).andExpect(status().isConflict)
+            .andExpect(jsonPath("$.code").value("ACCOUNT.LAST_SIGN_IN_METHOD"))
         mvc.perform(delete("/api/v1/account/identities/$id").header("Authorization", auth).json("""{"currentPassword":"tangerine-42-moon"}""")).andExpect(status().isConflict)
             .andExpect(jsonPath("$.code").value("ACCOUNT.LAST_SIGN_IN_METHOD"))
     }

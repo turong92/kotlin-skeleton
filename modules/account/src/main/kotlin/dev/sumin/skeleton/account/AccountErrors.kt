@@ -27,6 +27,7 @@ enum class AccountErrorCode(
     LAST_ADMIN("ACCOUNT.LAST_ADMIN", HttpStatus.CONFLICT, "Cannot remove the last administrator"),
     SELF_ACTION_FORBIDDEN("ACCOUNT.SELF_ACTION_FORBIDDEN", HttpStatus.CONFLICT, "You cannot do this to your own account"),
     NOT_FOUND("ACCOUNT.NOT_FOUND", HttpStatus.NOT_FOUND, "Account not found"),
+    NOT_ACTIVE("ACCOUNT.NOT_ACTIVE", HttpStatus.FORBIDDEN, "Only an active account can change its sign-in methods"),
     SUSPENDED_CANNOT_DELETE("ACCOUNT.SUSPENDED_CANNOT_DELETE", HttpStatus.FORBIDDEN, "A suspended account cannot be deleted by its owner"),
     REGISTRATION_BLOCKED("ACCOUNT.REGISTRATION_BLOCKED", HttpStatus.FORBIDDEN, "This email or sign-in account cannot be used to register"),
     NOT_SUSPENDED("ACCOUNT.NOT_SUSPENDED", HttpStatus.CONFLICT, "Only a suspended account can be erased by an administrator"),

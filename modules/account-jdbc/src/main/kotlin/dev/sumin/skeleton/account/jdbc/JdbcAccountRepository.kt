@@ -327,12 +327,18 @@ class JdbcAccountRepository(
             } ?: false
         } catch (_: DataIntegrityViolationException) { false }
 
-    override fun addIdentityIfEmailVerified(identity: Identity, expectEmailVerified: Boolean): AddIdentityResult =
+    override fun addIdentityIfEmailVerified(identity: Identity, expectEmailVerified: Boolean?): AddIdentityResult =
         try {
             tx.execute {
                 // 계정 행 락을 먼저 — 메일함 증명 트랜잭션(같은 행 락)이 끝날 때까지 기다린 뒤 증명 뒤의 상태를 본다
-                val verified = jdbc.query("select email_verified from accounts where id = :id and status <> 'ERASED' for update", mapOf("id" to identity.accountId)) { rs, _ -> rs.getBoolean(1) }.firstOrNull()
-                if (verified != expectEmailVerified) AddIdentityResult.STALE else { insertIdentity(identity); AddIdentityResult.ADDED }
+                val row = jdbc.query("select email_verified, status from accounts where id = :id and status <> 'ERASED' for update", mapOf("id" to identity.accountId)) { rs, _ -> rs.getBoolean(1) to rs.getString(2) }.firstOrNull()
+                when {
+                    row == null || (expectEmailVerified != null && row.first != expectEmailVerified) -> AddIdentityResult.STALE
+                    // 상태 · "방법당 하나" 는 계정 행 락을 잡은 **뒤에** 본다 — 확인과 쓰기 사이에 정지 · 같은 방법의 다른 연결이 끼어들지 못한다
+                    row.second != AccountStatus.ACTIVE.name -> AddIdentityResult.NOT_ACTIVE
+                    (jdbc.queryForObject("select count(*) from account_identities where account_id = :a and method = :m", mapOf("a" to identity.accountId, "m" to identity.method), Int::class.java) ?: 0) > 0 -> AddIdentityResult.METHOD_EXISTS
+                    else -> { insertIdentity(identity); AddIdentityResult.ADDED }
+                }
             } ?: AddIdentityResult.STALE
         } catch (_: DataIntegrityViolationException) {
             AddIdentityResult.DUPLICATE
@@ -365,9 +371,11 @@ class JdbcAccountRepository(
     override fun removeIdentityUnlessLast(accountId: String, identityId: String, credentialMethods: Collection<String>): RemoveIdentityResult =
         tx.execute {
             // 계정 행을 잠가 같은 계정의 동시 해제를 줄 세운다 — 둘 다 "다른 게 남아 있다" 고 보고 둘 다 지우는 일이 없다
-            if (jdbc.query("select id from accounts where id = :a for update", mapOf("a" to accountId)) { rs, _ -> rs.getString(1) }.isEmpty()) return@execute RemoveIdentityResult.NOT_FOUND
+            val status = jdbc.query("select status from accounts where id = :a for update", mapOf("a" to accountId)) { rs, _ -> rs.getString(1) }.firstOrNull() ?: return@execute RemoveIdentityResult.NOT_FOUND
             val method = jdbc.query("select method from account_identities where id = :id and account_id = :a", mapOf("id" to identityId, "a" to accountId)) { rs, _ -> rs.getString(1) }.firstOrNull()
                 ?: return@execute RemoveIdentityResult.NOT_FOUND
+            // 정지 · 탈퇴 유예 계정은 남은 토큰으로 수단을 끊지 못한다 — 계정 행 락 안에서 본다 (정지가 이 확인과 삭제 사이에 끼어들지 못한다)
+            if (status != AccountStatus.ACTIVE.name) return@execute RemoveIdentityResult.NOT_ACTIVE
             val others = if (credentialMethods.isEmpty()) 0 else jdbc.queryForObject(
                 "select count(*) from account_identities where account_id = :a and id <> :id and method in (:methods)",
                 mapOf("a" to accountId, "id" to identityId, "methods" to credentialMethods), Int::class.java,

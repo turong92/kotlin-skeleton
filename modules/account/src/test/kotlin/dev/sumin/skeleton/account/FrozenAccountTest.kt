@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.account
 
 import dev.sumin.skeleton.account.signin.AccountSignInService
+import dev.sumin.skeleton.account.signin.IdentityService
 import dev.sumin.skeleton.account.signin.PasswordSignInMethod
 import dev.sumin.skeleton.account.signin.SignInMethod
 import dev.sumin.skeleton.account.signin.SignInMethodRegistry
@@ -165,5 +166,46 @@ class FrozenAccountTest {
         assertTrue(h.purge.eraseSuspended(admin.id, a.id, null))
         assertEquals("ACCOUNT.ERASED", code { h.purge.eraseSuspended(admin.id, a.id, null) })
         assertEquals(2, h.admin.listBlocks(0, 20).total)
+    }
+
+    // ---- 정지 계정이 남은 액세스 토큰으로 로그인 수단을 늘리거나 줄이지 못한다 (정지 우회: 수단을 끊고 같은 제공자 계정으로 새 계정을 만드는 길)
+
+    private fun AccountHarness.identities() = IdentityService(core, SignInMethodRegistry(listOf(PasswordSignInMethod(), Google, object : SignInMethod { override val code = "kakao"; override val userRemovable = true })))
+
+    @Test
+    fun `a suspended account can neither unlink nor link a sign-in method with the token it still holds`() {
+        val h = harness()
+        val a = h.suspendedWithGoogle()
+        val google = h.repo.identitiesOf(a.id).single { it.method == "google" }
+        val ids = h.identities()
+        assertEquals("ACCOUNT.NOT_ACTIVE", code { ids.unlink(a.id, google.id, "ses_1", PW) })
+        assertEquals("ACCOUNT.NOT_ACTIVE", code { ids.link(a.id, "kakao", "k-ann", verified = true) })
+        assertEquals(setOf("password", "google"), h.repo.identitiesOf(a.id).map { it.method }.toSet(), "nothing was cut and nothing was attached")
+        assertNull(h.repo.findIdentity("kakao", "k-ann"))
+        // the loophole itself: the provider account stays tied to the frozen account, so no new account can be made with it
+        assertEquals(a.id, assertNotNull(h.service().signIn(proof("g-ann"))).accountId)
+    }
+
+    @Test
+    fun `a suspended account without a password cannot set its first one - that would add a sign-in method`() {
+        val h = harness()
+        val admin = h.admin()
+        val now = h.time.now()
+        h.repo.insert(Account("acc_np", "np@example.com", true, AccountStatus.ACTIVE, setOf("USER"), null, null, null, now, now), listOf(Identity(h.core.newIdentityId(), "acc_np", "google", "g-np", true, createdAt = now)))
+        h.admin.suspend(admin.id, "acc_np", "abuse")
+        h.reauth.requestConfirmation("acc_np", "ses_1")
+        val mailed = h.mailer.of(dev.sumin.skeleton.account.mail.MailKind.REAUTH_CODE).single().vars.getValue("code")
+        assertEquals("ACCOUNT.NOT_ACTIVE", code { h.passwords.change("acc_np", null, "tangerine-42-moon", "ses_1", mailed) })
+        assertNull(h.repo.findIdentity("password", "np@example.com"))
+    }
+
+    @Test
+    fun `the store itself refuses to attach or detach a sign-in method of a frozen account - checked under the account row lock`() {
+        val h = harness()
+        val a = h.suspendedWithGoogle()
+        val google = h.repo.identitiesOf(a.id).single { it.method == "google" }
+        assertEquals(RemoveIdentityResult.NOT_ACTIVE, h.repo.removeIdentityUnlessLast(a.id, google.id, setOf("password", "google")))
+        assertEquals(AddIdentityResult.NOT_ACTIVE, h.repo.addIdentityIfEmailVerified(Identity(h.core.newIdentityId(), a.id, "kakao", "k-ann", true, createdAt = h.time.now()), null))
+        assertEquals(2, h.repo.identitiesOf(a.id).size)
     }
 }
