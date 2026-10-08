@@ -3,12 +3,14 @@ package dev.sumin.skeleton.legal.web
 import dev.sumin.skeleton.legal.ConsentService
 import dev.sumin.skeleton.legal.LegalErrorCode
 import dev.sumin.skeleton.legal.consentRequired
+import jakarta.servlet.DispatcherType
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.security.core.Authentication
 import org.springframework.security.core.context.SecurityContextHolder
-import org.springframework.web.method.HandlerMethod
+import org.springframework.web.cors.CorsUtils
 import org.springframework.web.servlet.HandlerInterceptor
+import org.springframework.web.servlet.resource.ResourceHttpRequestHandler
 
 /**
  * 필수 문서에 동의가 모자란(처음이거나 새 판이 유예를 넘긴) 로그인 호출자의 보호된 요청을 403 `LEGAL.RECONSENT_REQUIRED` 로 막는다 — 동의 화면을 거치게.
@@ -16,7 +18,8 @@ import org.springframework.web.servlet.HandlerInterceptor
  */
 class ReconsentInterceptor(private val service: ConsentService, private val callers: LegalCallers) : HandlerInterceptor {
     override fun preHandle(request: HttpServletRequest, response: HttpServletResponse, handler: Any): Boolean {
-        if (handler !is HandlerMethod) return true   // 없는 경로(404) · 정적 자원은 지키지 않는다 — 실제 엔드포인트만
+        // 핸들러 종류와 무관하게 지킨다(컨트롤러 메서드든 함수형 라우트든). 빠지는 것: 정적 자원 핸들러(없는 경로는 404 그대로) · 에러 디스패치 · 이미 통과한 비동기 · CORS preflight
+        if (handler is ResourceHttpRequestHandler || request.dispatcherType == DispatcherType.ERROR || request.dispatcherType == DispatcherType.ASYNC || CorsUtils.isPreFlightRequest(request)) return true
         val authentication = (request.userPrincipal as? Authentication) ?: SecurityContextHolder.getContext().authentication
         val subject = callers.resolve(authentication) ?: return true
         val missing = service.requireCurrent(subject)

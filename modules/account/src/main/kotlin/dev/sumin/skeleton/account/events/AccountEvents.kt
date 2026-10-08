@@ -9,6 +9,8 @@ enum class AccountEventType {
     SESSION_REVOKED, SESSIONS_REVOKED, REFRESH_REUSE_DETECTED,
     IDENTITY_LINKED, IDENTITY_UNLINKED, ACCOUNT_SUSPENDED, ACCOUNT_UNSUSPENDED, ROLE_GRANTED, ROLE_REVOKED,
     DELETION_SCHEDULED, ACCOUNT_RESTORED, ACCOUNT_PURGED, ADMIN_BOOTSTRAPPED,
+    /** 등록 미완료 계정(주소를 가진 적 없음, `email.required`)을 본인이 즉시 버렸다 — `via` = fresh_login | reauth | retry */
+    ACCOUNT_DISCARDED,
     ACCOUNT_ERASED_BY_ADMIN, REGISTRATION_BLOCK_ADDED, REGISTRATION_BLOCK_REMOVED, REGISTRATION_BLOCKED, DELETION_CANCELLED,
     /** 관리자가 `author-profile` 의 연결 조회를 했다 — 대상 계정 + `by`(관리자). detail 에 프로필 id 를 싣지 않는다 */
     AUTHOR_LINK_VIEWED,
@@ -69,7 +71,7 @@ class LoggingAccountEventListener : AccountEventListener {
  * `auth-session` 의 [SessionEvent] 를 계정 이벤트로 잇는다 — 재사용 탐지가 감사 표 · 주인 경보 · 로그에 닿는 길이다.
  * 세션 모듈이 없으면 이 빈은 아무도 부르지 않는다.
  */
-class AccountSessionEventListener(private val events: AccountEventPublisher) : dev.sumin.skeleton.auth.session.SessionEventListener {
+class AccountSessionEventListener(private val events: AccountEventPublisher, private val onUserRevokedAll: (String) -> Unit = {}) : dev.sumin.skeleton.auth.session.SessionEventListener {
     override fun on(event: dev.sumin.skeleton.auth.session.SessionEvent) {
         val detail = buildMap {
             event.sessionId?.let { put("session", it) }
@@ -82,5 +84,7 @@ class AccountSessionEventListener(private val events: AccountEventPublisher) : d
             dev.sumin.skeleton.auth.session.SessionEventType.SESSIONS_REVOKED -> AccountEventType.SESSIONS_REVOKED
         }
         events.publish(type, event.accountId, event.ip, detail)
+        // 사용자가 직접 "모든 기기에서 로그아웃" — 주인의 복구 동작이다 (계정 모듈 안에서 세션을 닫는 일은 이 이유를 쓰지 않는다)
+        if (event.type == dev.sumin.skeleton.auth.session.SessionEventType.SESSIONS_REVOKED && event.reason == dev.sumin.skeleton.auth.session.SessionRevokeReasons.USER_REVOKED_ALL) onUserRevokedAll(event.accountId)
     }
 }

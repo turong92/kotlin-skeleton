@@ -12,7 +12,6 @@ import java.util.concurrent.ConcurrentHashMap
 import org.slf4j.MDC
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
-import org.springframework.util.AntPathMatcher
 import org.springframework.web.filter.OncePerRequestFilter
 import tools.jackson.databind.ObjectMapper
 
@@ -110,14 +109,14 @@ class RateLimitFilter(
     private val objectMapper: ObjectMapper,
     private val clock: Clock = Clock.systemUTC(),
 ) : OncePerRequestFilter() {
-    private val pathMatcher = AntPathMatcher()
+    private val pathPattern = RequestPaths.pattern(properties.pathPattern)
 
     override fun doFilterInternal(
         request: HttpServletRequest,
         response: HttpServletResponse,
         filterChain: FilterChain,
     ) {
-        if (!pathMatcher.match(properties.pathPattern, request.requestURI)) {
+        if (!RequestPaths.matches(pathPattern, request)) {
             filterChain.doFilter(request, response)
             return
         }

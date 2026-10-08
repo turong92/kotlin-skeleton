@@ -109,14 +109,19 @@ class EmailRequiredJourneyIntegrationTest {
     @Test
     fun `an address that already has an account answers the same 202, mails its owner, and never gets a code`() {
         val bearer = addressLess()
+        assertTrue(accounts.findByEmail("user@example.com") != null, "the address really belongs to a seeded account")
+        beans.sent.clear()
 
         val taken = post("/api/v1/account/email/change", """{"newEmail":"user@example.com"}""", bearer, idempotent = true).andExpect { status { isAccepted() } }.andReturn().response.contentAsString
-        val free = post("/api/v1/account/email/change", """{"newEmail":"free-${System.nanoTime()}@example.com"}""", bearer, idempotent = true).andExpect { status { isAccepted() } }.andReturn().response.contentAsString
-
-        assertEquals(JsonPath.read<Map<String, Any?>>(free, "$.value").keys, JsonPath.read<Map<String, Any?>>(taken, "$.value").keys)
-        assertTrue(beans.sent.any { it.kind == MailKind.ALREADY_REGISTERED && it.to == "user@example.com" })
-        assertTrue(beans.sent.none { it.kind == MailKind.EMAIL_CHANGE_CODE && it.to == "user@example.com" })
+        assertTrue(beans.sent.any { it.kind == MailKind.EMAIL_REGISTRATION_ATTEMPT && it.to == "user@example.com" }, "the owner is told, in the first-registration wording")
+        assertTrue(beans.sent.none { it.kind == MailKind.ALREADY_REGISTERED }, "not the sign-up wording")
+        assertTrue(beans.sent.none { it.kind == MailKind.EMAIL_CHANGE_CODE }, "no code anywhere")
+        // the OPEN request is the taken one right now (a later request would replace it) - its code can never be known, so any guess fails
         post("/api/v1/account/email/change/confirm", """{"code":"000000"}""", bearer).andExpect { status { isBadRequest() }; jsonPath("$.code") { value("ACCOUNT.CODE_INVALID") } }
         blocked(get("/api/v1/notes", bearer), "ACCOUNT.EMAIL_REQUIRED")
+
+        val free = post("/api/v1/account/email/change", """{"newEmail":"free-${System.nanoTime()}@example.com"}""", bearer, idempotent = true).andExpect { status { isAccepted() } }.andReturn().response.contentAsString
+        assertEquals(JsonPath.read<Map<String, Any?>>(free, "$.value").keys, JsonPath.read<Map<String, Any?>>(taken, "$.value").keys, "the screen cannot tell the two apart")
+        assertTrue(beans.sent.any { it.kind == MailKind.EMAIL_CHANGE_CODE }, "only the free address got a code")
     }
 }

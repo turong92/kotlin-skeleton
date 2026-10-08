@@ -30,6 +30,10 @@ class H(http.server.BaseHTTPRequestHandler):
         elif "client_secret=koe101" in data: self._send(401, '{"error":"invalid_client","error_code":"KOE101","error_description":"Not exist client_id"}')
         elif "client_secret=koe320" in data: self._send(400, '{"error":"invalid_grant","error_code":"KOE320","error_description":"authorization code not found"}')
         elif "client_secret=koe999" in data: self._send(400, '{"error":"server_error","error_code":"KOE999","error_description":"something new"}')
+        elif "client_secret=echoid" in data:
+            import re as _re
+            cid = _re.search(r"client_id=([^&]+)", data).group(1)
+            self._send(401, '{"error":"invalid_client","error_description":"unknown client ' + cid + '"}')
         elif "client_secret=good" in data: self._send(400, '{"error":"invalid_grant","error_description":"Bad Request"}')
         elif "client_secret=mismatch" in data: self._send(400, '{"error":"redirect_uri_mismatch"}')
         else: self._send(401, '{"error":"invalid_client","error_description":"Unauthorized"}')
@@ -40,7 +44,7 @@ PY
 PORT=$((20000 + RANDOM % 10000)); python3 "$T/srv.py" "$PORT" & SRV=$!; sleep 1
 FAIL=0
 expect() { if ! printf '%s' "$OUT" | grep -qF -- "$1"; then echo "FAIL: expected '$1' in:"; printf '%s\n' "$OUT"; FAIL=1; fi; }
-run() { OUT="$(env -i PATH="$PATH" HOME="$HOME" ENV_FILE="$T/$1" CHECK_GOOGLE_TOKEN_URL="http://127.0.0.1:$PORT/t" CHECK_KAKAO_TOKEN_URL="http://127.0.0.1:$PORT/t" CHECK_NAVER_TOKEN_URL="http://127.0.0.1:$PORT/naver" CHECK_LINE_TOKEN_URL="http://127.0.0.1:$PORT/line" CHECK_X_TOKEN_URL="http://127.0.0.1:$PORT/x" CHECK_LINE_DISCOVERY_URL="http://127.0.0.1:$PORT/d" CHECK_GOOGLE_DISCOVERY_URL="http://127.0.0.1:$PORT/d" BASE_URL=http://127.0.0.1:1 scripts/check-real-providers.sh 2>&1)"; RC=$?; }
+run() { OUT="$(env -i PATH="$PATH" HOME="$HOME" ENV_FILE="$T/$1" CHECK_GOOGLE_TOKEN_URL="http://127.0.0.1:$PORT/t" CHECK_KAKAO_TOKEN_URL="http://127.0.0.1:$PORT/t" CHECK_NAVER_TOKEN_URL="http://127.0.0.1:$PORT/naver" CHECK_LINE_TOKEN_URL="http://127.0.0.1:$PORT/line" CHECK_X_TOKEN_URL="http://127.0.0.1:$PORT/x" CHECK_LINE_DISCOVERY_URL="http://127.0.0.1:$PORT/d" CHECK_GOOGLE_DISCOVERY_URL="http://127.0.0.1:$PORT/d" BASE_URL=http://127.0.0.1:1 "${SELF_TEST_BASH:-/bin/bash}" scripts/check-real-providers.sh 2>&1)"; RC=$?; }
 G=SKELETON_AUTH_SOCIAL_PROVIDERS_GOOGLE
 printf '' > "$T/empty.env"; run empty.env
 expect "켜진 제공자가 없다"; [ "$RC" = 0 ] || { echo "FAIL: empty env must exit 0 (got $RC)"; FAIL=1; }
@@ -50,6 +54,9 @@ printf '%s_ENABLED=true\n%s_CLIENT_ID=1-a.apps.googleusercontent.com\n%s_CLIENT_
 expect "client id 또는 client secret 이 틀렸다"; [ "$RC" = 1 ] || { echo "FAIL: wrong secret must exit 1 (got $RC)"; FAIL=1; }
 printf '%s_ENABLED=true\n%s_CLIENT_ID=1-a.apps.googleusercontent.com\n%s_CLIENT_SECRET=mismatch\n%s_REDIRECT_URI=https://app.example.com/auth/callback/\n' $G $G $G $G > "$T/mm.env"; run mm.env
 expect "REDIRECT_URI 를 콘솔 등록값과 비교한다"; expect "끝의 /"
+printf '%s_ENABLED=true\n%s_CLIENT_ID=1234567890-secretclientidtail.apps.googleusercontent.com\n%s_CLIENT_SECRET=echoid\n' $G $G $G > "$T/echo.env"; run echo.env
+expect "제공자 원문"; expect "unknown client 123456"
+if printf '%s' "$OUT" | grep -qF "secretclientidtail"; then echo "FAIL: the client id the provider echoed back was printed in full"; FAIL=1; fi
 printf '%s_CLIENT_ID=x\n' $G > "$T/off.env"; run off.env
 expect "ENABLED=true 가 없다"
 printf '%s_ENABLED=true\n%s_CLIENT_ID=\n%s_CLIENT_SECRET=\n' $G $G $G > "$T/blank.env"; run blank.env

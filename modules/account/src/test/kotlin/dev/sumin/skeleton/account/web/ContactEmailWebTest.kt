@@ -7,6 +7,7 @@ import dev.sumin.skeleton.accounttest.AccountTestBeans
 import dev.sumin.skeleton.accounttest.AccountWebTestApplication
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
@@ -46,7 +47,10 @@ class ContactEmailWebTest {
     @Test
     fun `register, confirm, read it from me, remove it`() {
         val auth = signedIn("web-contact@example.com")
-        mvc.perform(get("/api/v1/account/me").header("Authorization", auth)).andExpect(jsonPath("$.value.contactEmail").value(null as String?))
+        mvc.perform(get("/api/v1/account/me").header("Authorization", auth))
+            .andExpect { r -> assertTrue(JsonPath.read<Map<String, Any?>>(r.response.contentAsString, "$.value").containsKey("contactEmail"), "on, none yet: the key IS there (null)") }
+            .andExpect(jsonPath("$.value.contactEmail").value(null as String?))
+            .andExpect(jsonPath("$.value.emailRequired").doesNotExist())
 
         mail.sent.clear()
         mvc.perform(post("/api/v1/account/contact-email").header("Authorization", auth).contentType(json).content("""{"email":"Reach@Example.com"}"""))

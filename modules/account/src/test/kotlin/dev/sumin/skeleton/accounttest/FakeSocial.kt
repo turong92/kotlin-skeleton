@@ -21,7 +21,7 @@ class FakeOAuthProvider : OAuthProvider {
         "c-noemail-req2" -> OAuthUserProfile("fakeidp", "sub-noemail-req2", null, null, "No Mail Req 2", emailVerified = false)
         "c-noemail-req3" -> OAuthUserProfile("fakeidp", "sub-noemail-req3", null, null, "No Mail Req 3", emailVerified = false)
         "c-third" -> OAuthUserProfile("fakeidp", "sub-third", "third@example.com", "third@example.com", "Third", emailVerified = true)
-        else -> throw OAuthInvalidAuthorizationCodeException("fakeidp")
+        else -> if (authorizationCode.startsWith("c-noemail-")) OAuthUserProfile("fakeidp", "sub-$authorizationCode", null, null, "No Mail", emailVerified = false) else throw OAuthInvalidAuthorizationCodeException("fakeidp")
     }
 }
 

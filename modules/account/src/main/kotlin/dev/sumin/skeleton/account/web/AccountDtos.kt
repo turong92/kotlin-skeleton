@@ -109,7 +109,11 @@ data class ChangePasswordRequest(
     override fun toString() = "ChangePasswordRequest(currentPassword=<redacted>, newPassword=<redacted>, confirmationCode=<redacted>)"
 }
 
-data class ContactEmailRequest(@field:NotBlank @field:Email @field:Size(max = 254) val email: String?) {
+data class ContactEmailRequest(
+    @field:NotBlank @field:Email @field:Size(max = 254) val email: String?,
+    /** 계정 이메일이 **없는** 계정만 — 지금 새로 받은 제공자 인가 코드 (주소가 있는 계정은 보내지 않는다) */
+    @field:Valid val socialReauth: SocialReauthRequest? = null,
+) {
     override fun toString() = "ContactEmailRequest(email=<redacted>)"
 }
 
@@ -145,6 +149,13 @@ data class DeleteAccountRequest(
     @field:Valid val socialReauth: SocialReauthRequest? = null,
 ) {
     override fun toString() = "DeleteAccountRequest(<credentials redacted>)"
+}
+
+/** 등록 미완료 계정 버리기 — 방금 로그인한 세션이면 본문이 비어도 된다. 옛 세션이면 `socialReauth`(지금 새로 받은 제공자 인가 코드) */
+data class DiscardAccountRequest(
+    @field:Valid val socialReauth: SocialReauthRequest? = null,
+) {
+    override fun toString() = "DiscardAccountRequest(<credentials redacted>)"
 }
 
 data class SuspendRequest(@field:Size(max = 200) val reason: String? = null)

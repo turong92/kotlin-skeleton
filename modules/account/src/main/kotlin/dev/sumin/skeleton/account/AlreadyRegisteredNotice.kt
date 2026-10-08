@@ -6,10 +6,10 @@ import dev.sumin.skeleton.account.mail.MailKind
 
 // "이미 계정이 있어요" 메일 — 가입([RegistrationService])과 첫 이메일 등록([EmailChangeService])이 같은 메일 · 같은 규칙을 쓴다.
 
-internal fun AccountCore.notifyAlreadyRegistered(existing: Account, allowed: Boolean, credentialLinks: Boolean) {
+internal fun AccountCore.notifyAlreadyRegistered(existing: Account, allowed: Boolean, credentialLinks: Boolean, kind: MailKind = MailKind.ALREADY_REGISTERED) {
     val address = existing.email ?: return
     if (existing.status == AccountStatus.DELETED || !allowed) return
-    mailer.send(AccountMail(MailKind.ALREADY_REGISTERED, address, existing.locale, vars = alreadyRegisteredVars(existing, credentialLinks)))
+    mailer.send(AccountMail(kind, address, existing.locale, vars = alreadyRegisteredVars(existing, credentialLinks)))
 }
 
 /**

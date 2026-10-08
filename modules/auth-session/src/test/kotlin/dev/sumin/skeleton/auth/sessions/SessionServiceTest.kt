@@ -270,6 +270,26 @@ class SessionServiceTest {
         assertTrue(store.find(first.sessionId)!!.revokedAt != null)
         assertFailsWith<RefreshInvalidException> { s.refresh(second.refreshToken!!, client) }
     }
+
+    @Test
+    fun `openedAt is the login time of a live session of that account - a refresh does not move it`() {
+        val s = service()
+        val first = s.open(account.accountId, client)
+        val openedAt = time.now()
+        time.advance(Duration.ofMinutes(30))
+        val second = s.refresh(first.refreshToken!!, client)
+        assertEquals(openedAt, s.openedAt(account.accountId, second.session.sessionId), "a token refresh continues the session; it is not a new login")
+    }
+
+    @Test
+    fun `openedAt is null for another account's session, an unknown session and a revoked one`() {
+        val s = service()
+        val opened = s.open(account.accountId, client)
+        assertEquals(null, s.openedAt("acc_other", opened.sessionId))
+        assertEquals(null, s.openedAt(account.accountId, "ses_unknown"))
+        s.revoke(account.accountId, opened.sessionId)
+        assertEquals(null, s.openedAt(account.accountId, opened.sessionId))
+    }
 }
 
 class SessionReuseMemoryTest {

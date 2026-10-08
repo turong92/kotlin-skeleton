@@ -43,6 +43,7 @@ class AccountController(
     private val identities: IdentityService,
     private val deletion: DeletionService,
     private val reauth: Reauth,
+    private val discard: dev.sumin.skeleton.account.DiscardService,
     private val clientIps: ClientIps = ClientIps(),
 ) {
     @Operation(summary = "My profile, roles and sign-in methods")
@@ -135,5 +136,20 @@ class AccountController(
         val caller = callers.require(authentication)
         val purgeAfter = deletion.delete(caller.accountId, reauthOf(request.currentPassword, request.confirmationCode, request.socialReauth), caller.sessionId)
         return Response.accepted(DeletionResponse("DELETION_SCHEDULED", purgeAfter))
+    }
+
+    @Operation(
+        summary = "Discard an unregistered account at once (email.required=true, no address ever, active): no grace period, the sign-in methods are freed",
+        description = "For the shell account a returning user got by signing in with a social account while having an email account: discard it, sign in to the real account and link the social method there. " +
+            "204 on success (all sessions are closed). 409 ACCOUNT.DISCARD_NOT_ALLOWED when the account has an address, the setting is off or the account is not active (a suspended account cannot be discarded); " +
+            "403 ACCOUNT.REAUTH_REQUIRED / 400 ACCOUNT.REAUTH_FAILED for a session that did not just log in (send socialReauth with a fresh provider code); 409 ACCOUNT.LAST_ADMIN; " +
+            "503 ACCOUNT.ERASURE_RETRY when another module's erasure failed - repeat the call.",
+    )
+    @IdempotentOperation(ignoredBodyFields = ["socialReauth"], cacheClientErrors = false)
+    @PostMapping("/discard")
+    fun discard(authentication: Authentication?, @Valid @RequestBody(required = false) request: DiscardAccountRequest?): ResponseEntity<Void> {
+        val caller = callers.require(authentication)
+        discard.discard(caller.accountId, reauthOf(null, null, request?.socialReauth), caller.sessionId)
+        return Response.noContent()
     }
 }

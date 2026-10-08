@@ -51,7 +51,7 @@ class ContactEmailServiceTest {
         assertEquals("ann@example.com", h.mailer.of(MailKind.CONTACT_EMAIL_NOTICE).single().to)
         assertEquals(1, h.mailer.sent.size)
         assertTrue(h.revoker.calls.isEmpty(), "a contact address is not a credential - no session is closed")
-        assertEquals("contact@example.com", h.profile.me(a.id).contactEmail)
+        assertEquals("contact@example.com", h.profile.me(a.id).contactEmail?.orElse(null))
     }
 
     @Test

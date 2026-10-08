@@ -29,8 +29,12 @@ data class MeView(
     /** `skeleton.account.email.required=true` 일 때만 값이 있다(꺼져 있으면 키가 없다): 이 계정에 주소가 아직 없어 허용 목록 밖 API 가 403 `ACCOUNT.EMAIL_REQUIRED` 인가 */
     @get:com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
     val emailRequired: Boolean? = null,
-    /** 연락받을 이메일(확인된 주소) — 없으면 null. `skeleton.account.contact-email.enabled` 가 꺼져 있으면 늘 null */
-    val contactEmail: String? = null,
+    /**
+     * 연락받을 이메일(확인된 주소). `skeleton.account.contact-email.enabled` 가 **꺼져 있으면 키가 없다**(null) — 켜져 있는데 아직 없으면 키가 있고 값이 `null`(빈 [java.util.Optional]).
+     * 프론트가 "꺼짐" 과 "아직 없음" 을 가를 수 있게.
+     */
+    @get:com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+    val contactEmail: java.util.Optional<String>? = null,
 )
 
 data class ProfileChange(val displayName: String? = null, val locale: String? = null, val timeZone: String? = null)
@@ -48,7 +52,7 @@ class ProfileService(private val core: AccountCore, registry: SignInMethodRegist
             hasPassword = methods.any { it.method == SignInMethods.PASSWORD }, methods = methods,
             pendingEmail = pending?.payload?.let(EmailChangePayload::target), pendingEmailExpiresAt = pending?.expiresAt,
             emailRequired = if (core.props.email.required) a.email == null else null,
-            contactEmail = if (core.props.contactEmail.enabled) a.contactEmail else null,
+            contactEmail = if (core.props.contactEmail.enabled) java.util.Optional.ofNullable(a.contactEmail) else null,
         )
     }
 

@@ -27,7 +27,7 @@
 스키마(`accounts.display_name_key` · `display_tag` · 유니크 `(키, 꼬리표)`)는 방식과 무관하다 — 방식을 바꾸는 법 · 탈퇴 때의 풀림: [docs/accounts.md](../accounts.md) "닉네임".
 **작성자 이름**: 기본 구현 `AccountAuthorDirectory`(platform 의 `AuthorDirectory`, `@ConditionalOnMissingBean`)가 닉네임 · 꼬리표를 쿼리 한 번으로 board 같은 모듈에 낸다 — board 는 이 모듈을 모르고 이 모듈도 board 를 모른다. 앱이 같은 타입의 빈을 두면 물러난다(돌판마다 다른 닉네임 등).
 
-**이메일 필수 · 연락 이메일**: `skeleton.account.email.required=true` 면 주소 없는 계정은 허용 목록 밖 모든 API(다른 모듈 포함)에서 `403 ACCOUNT.EMAIL_REQUIRED` — `legal` 의 재동의 인터셉터와 같은 방식의 MVC 인터셉터(`EmailRequiredInterceptor`, 순서는 이쪽이 먼저)이고, 첫 이메일 등록은 마지막 로그인 1시간 안에서 재인증 없이 `email/change` 로 한다. `skeleton.account.contact-email.enabled=true` 면 계정 이메일과 별개의 **연락받을 이메일** 하나(`accounts.contact_email`)를 둔다 — 서비스 알림의 받는 주소는 platform 의 `ContactAddresses`(연락 ?: 계정 이메일, 이 모듈이 `@ConditionalOnMissingBean` 으로 구현)가 푼다. 계정 · 보안 메일은 늘 계정 이메일. 규칙 · 위협 · 어디로 무엇이 가나 표: [docs/accounts.md](../accounts.md).
+**이메일 필수 · 연락 이메일**: `skeleton.account.email.required=true` 면 주소 없는 계정은 허용 목록 밖 모든 API(다른 모듈 포함)에서 `403 ACCOUNT.EMAIL_REQUIRED` — `legal` 의 재동의 인터셉터와 같은 방식의 MVC 인터셉터(`EmailRequiredInterceptor`, 순서는 이쪽이 먼저, `account.http.enabled` 와 무관하게 등록)이고, 첫 이메일 등록은 **그 로그인이 연 세션**의 1시간 안에서만 재인증 없이 `email/change` 로 한다(세션 단위 — `auth-session` 의 `SessionInspector` 가 열린 시각을 읽는다). 주소 없이 쓸 수 없는 껍데기 계정은 `POST /account/discard` 로 즉시 버릴 수 있다. `skeleton.account.contact-email.enabled=true` 면 계정 이메일과 별개의 **연락받을 이메일** 하나(`accounts.contact_email`)를 둔다 — 서비스 알림의 받는 주소는 platform 의 `ContactAddresses`(연락 ?: 계정 이메일, 이 모듈이 `@ConditionalOnMissingBean` 으로 구현)가 푼다. 계정 · 보안 메일은 늘 계정 이메일. 규칙 · 위협 · 어디로 무엇이 가나 표: [docs/accounts.md](../accounts.md).
 
 에러 코드는 `ACCOUNT.*` · `AUTH.*` (표: [docs/accounts.md](../accounts.md)). 계약 전체: 같은 문서의 "HTTP 계약".
 

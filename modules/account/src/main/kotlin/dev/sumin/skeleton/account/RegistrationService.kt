@@ -228,7 +228,7 @@ class RegistrationService(private val core: AccountCore) {
         val proof = MailboxProof(keepIdentityIds = setOfNotNull(keep?.id), passwordSecret = secret, newPasswordIdentityId = core.newIdentityId())
         val profile = payload?.let { runCatching { json.readValue(it, Map::class.java) }.getOrNull() }
         core.atomic.run {
-            if (!core.accounts.proveMailbox(existing.id, core.time.now(), proof)) throw AccountException(AccountErrorCode.CODE_EXPIRED)
+            if (!core.proveMailbox(existing.id, core.time.now(), proof)) throw AccountException(AccountErrorCode.CODE_EXPIRED)
             recordConsents(existing.id, profile)
         }
         return existing to true

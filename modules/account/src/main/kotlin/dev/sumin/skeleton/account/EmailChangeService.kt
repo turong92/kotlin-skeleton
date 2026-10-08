@@ -35,7 +35,7 @@ class EmailChangeService(private val core: AccountCore) {
 
         val oldEmail = account.email
         // 주소가 한 번도 없던 계정의 **첫 등록**은 권한 상승이 아니라 온보딩이다 — 방금 로그인한 사람에게 제공자 재동의를 또 시키지 않는다 (조건: [firstRegistration])
-        val first = firstRegistration(account)
+        val first = core.freshLoginSession(account, sessionId)
         val proof = if (first) Reauth.Proof.NONE else Reauth(core).check(account, input, sessionId)
         val target = Emails.normalize(newEmail)
         if (!Emails.plausible(target)) throw ApplicationException("Invalid email", PlatformErrorCode.VALIDATION_FAILED)
@@ -54,24 +54,13 @@ class EmailChangeService(private val core: AccountCore) {
             // 옛 주소 알림은 새 주소가 쓰이는 중이든 아니든 똑같이 간다 — 로그인한 사용자의 받은편지함이 "그 주소는 가입돼 있다" 를 알려 주지 않게
             oldEmail?.let { core.mailer.send(AccountMail(MailKind.EMAIL_CHANGE_REQUESTED_NOTICE, it, account.locale)) }
             val owner = if (target == oldEmail) null else core.accountByEmail(target)
-            // 첫 등록의 주소가 남의 것이면 가입 때와 같은 "이미 계정이 있어요" 메일 (토큰 없는 링크) — 코드는 가지 않는다. 바꾸기(주소가 이미 있는 계정)는 예전 그대로 조용하다
-            if (first && owner != null) return@run core.notifyAlreadyRegistered(owner, mayMail, credentialLinks = false)
+            // 첫 등록의 주소가 남의 것이면 토큰 없는 "이 주소로 이메일 등록을 시도했어요" 메일 (가입 때의 "가입을 시도했어요" 문구는 상황과 안 맞는다 — 로그인한 뒤 설정에서 소셜을 연결하라고 안내) — 코드는 가지 않는다. 바꾸기(주소가 이미 있는 계정)는 예전 그대로 조용하다
+            if (first && owner != null) return@run core.notifyAlreadyRegistered(owner, mayMail, credentialLinks = false, kind = MailKind.EMAIL_REGISTRATION_ATTEMPT)
             if (target == oldEmail || owner != null || !mayOpen || !mayMail) return@run
             core.mailer.send(AccountMail(MailKind.EMAIL_CHANGE_CODE, target, account.locale, vars = mapOf("code" to opened.code, "minutes" to c.ttl.toMinutes().toString())))
             core.events.publish(AccountEventType.EMAIL_CHANGE_REQUESTED, account.id)
         }
         return core.codeWindow(c.ttl)
-    }
-
-    /**
-     * 재인증 면제 조건 — 전부여야 한다: `email.required=true` · 계정에 주소가 없음(= 한 번도 없었다: 주소는 비워지지 않고, 지워진 계정만 null 이 된다) · 활성 상태 · 마지막 로그인이 창 안.
-     * 마지막 로그인은 **로그인**에서만 갱신된다(토큰 갱신은 아니다) — 훔친 리프레시 토큰으로는 창을 다시 열 수 없다.
-     */
-    private fun firstRegistration(account: Account): Boolean {
-        val c = core.props.email
-        if (!c.required || c.firstRegistrationWindow.isZero || account.email != null || account.status != AccountStatus.ACTIVE) return false
-        val signedInAt = account.lastLoginAt ?: account.createdAt
-        return !core.time.now().isAfter(signedInAt.plus(c.firstRegistrationWindow))
     }
 
     /** 새 주소로 간 코드를 **요청한 세션에서** 입력한다. 틀리면 [CodeInvalidException], 없음 · 만료 · 소진 · 다른 세션이면 CODE_EXPIRED, 그 사이 주소를 남이 가져갔으면 EMAIL_TAKEN */

@@ -127,11 +127,11 @@ class JdbcMailboxProofDbTest {
         squatted()
         listOf(
             challenge("c_change", ChallengePurposes.EMAIL_CHANGE, "acc_1", "acc_1"), challenge("c_reauth", ChallengePurposes.REAUTH, "acc_1", "acc_1"),
-            challenge("c_delete", ChallengePurposes.DELETE_CONFIRM, "acc_1", "acc_1"), challenge("c_signup", ChallengePurposes.SIGN_UP, "victim@example.com", null),
+            challenge("c_delete", ChallengePurposes.DELETE_CONFIRM, "acc_1", "acc_1"), challenge("c_contact", ChallengePurposes.CONTACT_EMAIL, "acc_1", "acc_1"), challenge("c_signup", ChallengePurposes.SIGN_UP, "victim@example.com", null),
             challenge("c_other_signup", ChallengePurposes.SIGN_UP, "someone-else@example.com", null),
         ).forEach(AccountDb.challenges::insert)
         assertTrue(repo.proveMailbox("acc_1", now, MailboxProof(keepIdentityIds = setOf("idn_pw"))))
-        assertEquals(listOf("c_other_signup"), listOf("c_change", "c_reauth", "c_delete", "c_signup", "c_other_signup").filter { AccountDb.challenges.find(it) != null })
+        assertEquals(listOf("c_other_signup"), listOf("c_change", "c_reauth", "c_delete", "c_contact", "c_signup", "c_other_signup").filter { AccountDb.challenges.find(it) != null })
     }
 
     @Test

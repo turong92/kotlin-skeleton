@@ -124,6 +124,12 @@ class AccountPurgeService(
         return purged
     }
 
+    /** 유예가 이미 끝난(DELETED, `purgeAfter` ≤ 지금) 계정 하나를 **지금** 정리한다 — 등록 미완료 계정 버리기([DiscardService])가 쓴다. 정리했으면 true (리스너 실패 · 이미 선점됨 · 대상 아님이면 false) */
+    fun purgeNow(accountId: String): Boolean {
+        val account = core.accounts.findById(accountId) ?: return false
+        return try { purgeOne(account) } catch (e: Exception) { log.warn("purging an account failed: {}", e.javaClass.simpleName); false }
+    }
+
     private fun purgeOne(account: Account): Boolean {
         // 다시 읽어 아직 지울 계정인지 확인하고 (그 사이 되살려졌으면 건너뛴다), 지울 때도 저장소가 조건으로 한 번 더 막는다
         val now = core.time.now()

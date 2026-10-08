@@ -13,6 +13,8 @@ enum class MailKind {
     EMAIL_CHANGE_REQUESTED_NOTICE, EMAIL_CHANGED_NOTICE, MAGIC_LINK, DELETION_SCHEDULED, DELETION_CANCELLED, IDENTITY_LINKED_NOTICE,
     /** 연락 이메일이 등록 · 바뀜 · 지워졌다는 알림 — **계정 이메일**로만 간다 (주소 자체는 싣지 않는다) */
     CONTACT_EMAIL_NOTICE,
+    /** 주소 없는 계정이 **이메일 등록**(첫 이메일)에 이미 계정이 있는 주소를 넣었다 — 그 주소의 주인에게 가는 "가입 시도" 가 아닌 "이메일 등록 시도" 안내 (토큰 없음, 로그인 → 설정에서 소셜 연결) */
+    EMAIL_REGISTRATION_ATTEMPT,
 }
 
 /** 보낼 메일 한 통의 의미 — 문구는 [AccountMailTemplates] 가 고른다. [link] 에 토큰이 들어 있다 (이 객체를 로그에 싣지 않는다 — toString 은 가려 둔다) */

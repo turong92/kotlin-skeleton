@@ -46,7 +46,7 @@ class PasswordService(private val core: AccountCore) {
         // 메일함을 증명한 사람이 방금 새 비밀번호를 정했다 — 한 번의 저장소 연산으로: 비밀번호를 바꾸고, 주소가 미확인이었다면 남이 심은 다른 로그인 수단을 지우고, 확인 처리한다
         val existing = core.accounts.findIdentity(SignInMethods.PASSWORD, account.email!!)?.takeIf { it.accountId == account.id }
         val proof = MailboxProof(keepIdentityIds = setOfNotNull(existing?.id), passwordSecret = core.hasher.hash(newPassword), newPasswordIdentityId = core.newIdentityId())
-        if (!core.accounts.proveMailbox(account.id, core.time.now(), proof)) throw AccountException(AccountErrorCode.TOKEN_INVALID)
+        if (!core.proveMailbox(account.id, core.time.now(), proof)) throw AccountException(AccountErrorCode.TOKEN_INVALID)
         core.sessions()?.revokeAll(account.id, null)
         core.closeSensitiveLinks(account)
         notifyChanged(account)
@@ -71,6 +71,7 @@ class PasswordService(private val core: AccountCore) {
         proof.commit()
 
         storePassword(account, core.hasher.hash(newPassword), replacing = identity?.takeIf { it.secret != null })
+        core.clearContactAfterRecovery(account.id, "password_change")   // 현재 비밀번호(또는 메일함)를 아는 사람의 동작 — 탈취된 세션이 심은 연락 주소는 버린다
         core.sessions()?.revokeAll(account.id, currentSessionId)
         core.closeSensitiveLinks(account)
         notifyChanged(account)

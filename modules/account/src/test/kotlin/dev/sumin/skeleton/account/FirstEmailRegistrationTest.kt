@@ -26,11 +26,12 @@ class FirstEmailRegistrationTest {
     private val ses = "ses_1"
     private fun code(block: () -> Unit) = assertFailsWith<ApplicationException> { block() }.errorCode.code
 
-    /** 방금 소셜로 로그인한(lastLoginAt = 지금) 이메일 없는 계정 */
+    /** 방금 소셜로 로그인한(세션 [ses] 가 지금 열렸다) 이메일 없는 계정 */
     private fun AccountHarness.emailless(id: String = "acc_k"): Account {
         val now = time.now()
         val account = Account(id, null, false, AccountStatus.ACTIVE, setOf("USER"), "K", null, null, now, now, lastLoginAt = now)
         repo.insert(account, listOf(Identity("idn_$id", id, "kakao", "kakao-$id", true, createdAt = now)))
+        sessions.open(id, ses)
         return account
     }
 
@@ -76,13 +77,36 @@ class FirstEmailRegistrationTest {
     }
 
     @Test
-    fun `a fresh login reopens the window - the window is measured from the last sign-in, not from the account creation`() {
+    fun `a new login - a new session - reopens the window, the window is measured from that session's login`() {
         val h = harness()
         val a = h.emailless()
         h.time.advance(Duration.ofDays(3))
-        h.repo.update(a.id, AccountPatch(lastLoginAt = h.time.now()), h.time.now())
-        h.emailChange.request(a.id, "kim@example.com", ReauthInput(), ses)
+        h.sessions.open(a.id, "ses_2")
+        h.emailChange.request(a.id, "kim@example.com", ReauthInput(), "ses_2")
         assertEquals(1, h.mailer.of(MailKind.EMAIL_CHANGE_CODE).size)
+    }
+
+    @Test
+    fun `a stale session does not inherit the window when the owner logs in somewhere else - the account-level last login is not the proof`() {
+        val h = harness()
+        val a = h.emailless()   // session ses_1: opened by the attacker long ago (shared PC, leaked refresh token that keeps rotating)
+        h.time.advance(Duration.ofDays(3))
+        h.sessions.open(a.id, "ses_owner")   // the owner signs in on another device now: the account's last login is fresh
+        h.repo.update(a.id, AccountPatch(lastLoginAt = h.time.now()), h.time.now())
+
+        assertEquals("ACCOUNT.REAUTH_REQUIRED", code { h.emailChange.request(a.id, "attacker@example.com", ReauthInput(), ses) }, "the old session gets the provider re-authentication, not the exemption")
+        assertTrue(h.mailer.of(MailKind.EMAIL_CHANGE_CODE).isEmpty())
+        h.emailChange.request(a.id, "owner@example.com", ReauthInput(), "ses_owner")   // the session that just logged in is exempt
+        assertEquals("owner@example.com", h.mailer.of(MailKind.EMAIL_CHANGE_CODE).single().to)
+    }
+
+    @Test
+    fun `without a session store or with a closed or unknown session there is no exemption - the provider re-authentication is asked`() {
+        val h = harness()
+        val a = h.emailless()
+        assertEquals("ACCOUNT.REAUTH_REQUIRED", code { h.emailChange.request(a.id, "kim@example.com", ReauthInput(), null) }, "a JWT-only access token carries no session")
+        assertEquals("ACCOUNT.REAUTH_REQUIRED", code { h.emailChange.request(a.id, "kim@example.com", ReauthInput(), "ses_unknown") })
+        assertTrue(h.mailer.of(MailKind.EMAIL_CHANGE_CODE).isEmpty())
     }
 
     @Test
@@ -112,7 +136,8 @@ class FirstEmailRegistrationTest {
 
         assertEquals(free.expiresAt, taken.expiresAt, "expiresAt does not tell")
         assertEquals(free.resendAvailableAt, taken.resendAvailableAt, "resendAvailableAt does not tell")
-        val notices = h.mailer.of(MailKind.ALREADY_REGISTERED)
+        assertTrue(h.mailer.of(MailKind.ALREADY_REGISTERED).isEmpty(), "the sign-up wording (someone tried to sign up) does not fit this situation")
+        val notices = h.mailer.of(MailKind.EMAIL_REGISTRATION_ATTEMPT)
         assertEquals("owner@example.com", notices.single().to)
         assertNull(notices.single().link, "no token in this mail")
         assertEquals("free@example.com", h.mailer.of(MailKind.EMAIL_CHANGE_CODE).single().to, "only the free address got a code")

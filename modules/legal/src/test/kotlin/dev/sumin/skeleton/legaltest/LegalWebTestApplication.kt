@@ -22,6 +22,12 @@ class LegalWebFakes {
     @Bean fun store() = FakeConsentStore()
     @Bean fun consentStore(store: FakeConsentStore): ConsentStore = store
     @Bean fun ledger(): LegalLedger = FakeLedger()
+
+    /** 함수형 라우트 — `HandlerMethod` 가 아닌 핸들러 */
+    @Bean fun functionalProbe(): org.springframework.web.servlet.function.RouterFunction<org.springframework.web.servlet.function.ServerResponse> =
+        org.springframework.web.servlet.function.RouterFunctions.route()
+            .GET("/api/v1/fn") { org.springframework.web.servlet.function.ServerResponse.ok().body(mapOf("ok" to true)) }
+            .build()
 }
 
 /** 재동의 필터 시험용 — 보호된 경로와 필터가 건드리지 않는 경로 */

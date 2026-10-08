@@ -6,6 +6,7 @@ import dev.sumin.skeleton.auth.config.AuthAutoConfiguration
 import dev.sumin.skeleton.auth.config.AuthProperties
 import dev.sumin.skeleton.auth.session.LoginSessionIssuer
 import dev.sumin.skeleton.auth.session.SessionEventListener
+import dev.sumin.skeleton.auth.session.SessionInspector
 import dev.sumin.skeleton.auth.session.SessionRevoker
 import dev.sumin.skeleton.auth.sessions.web.SessionController
 import dev.sumin.skeleton.common.erasure.AccountErasureListener
@@ -103,6 +104,10 @@ class AuthSessionAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(SessionRevoker::class)
     fun sessionRevoker(sessions: SessionService): SessionRevoker = SessionRevokerAdapter(sessions)
+
+    @Bean
+    @ConditionalOnMissingBean(SessionInspector::class)
+    fun sessionInspector(sessions: SessionService): SessionInspector = SessionInspectorAdapter(sessions)
 
     @Bean
     @ConditionalOnMissingBean

@@ -160,12 +160,15 @@ class JdbcAccountRepository(
             // 증명과 **같은 트랜잭션**에서 이 계정의 열린 코드(이메일 변경 · 다시 인증 · 삭제 확인)와 이 주소의 가입 시도를 닫는다 — 증명 커밋과 정리 사이에 증명 전의 코드가 쓰일 틈이 없다
             jdbc.update(
                 "delete from account_challenges where (account_id = :id and purpose in (:purposes)) or (purpose = :signUp and subject = :email)",
-                mapOf("id" to id, "email" to email, "signUp" to ChallengePurposes.SIGN_UP, "purposes" to listOf(ChallengePurposes.EMAIL_CHANGE, ChallengePurposes.REAUTH, ChallengePurposes.DELETE_CONFIRM)),
+                mapOf("id" to id, "email" to email, "signUp" to ChallengePurposes.SIGN_UP, "purposes" to listOf(ChallengePurposes.EMAIL_CHANGE, ChallengePurposes.REAUTH, ChallengePurposes.DELETE_CONFIRM, ChallengePurposes.CONTACT_EMAIL)),
             )
             true
         } ?: false
 
-    override fun changeEmail(id: String, newEmail: String, now: Instant, expectEmailVerified: Boolean?): ChangeEmailResult =
+    // 같은 주소로 두 계정이 동시에 바꾸면 MySQL 이 유니크 위반을 기다리던 쪽들을 교착으로 되돌릴 수 있다 — 다시 해 보면 진 쪽은 TAKEN 이 된다 (LockRetry)
+    override fun changeEmail(id: String, newEmail: String, now: Instant, expectEmailVerified: Boolean?): ChangeEmailResult = LockRetry.run { changeEmailOnce(id, newEmail, now, expectEmailVerified) }
+
+    private fun changeEmailOnce(id: String, newEmail: String, now: Instant, expectEmailVerified: Boolean?): ChangeEmailResult =
         try {
             tx.execute {
                 val row = jdbc.query("select email, email_verified from accounts where id = :id and status <> 'ERASED' for update", mapOf("id" to id)) { rs, _ -> rs.getString("email") to rs.getBoolean("email_verified") }

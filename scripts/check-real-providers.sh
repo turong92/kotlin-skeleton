@@ -45,11 +45,12 @@ probe_token() {   # <url> <client_id> <client_secret> <redirect_uri> [state]
   local extra=(); [ -z "${5:-}" ] || extra=(--data-urlencode "state=$5")
   curl -sS -m 15 -X POST "$1" -H 'Content-Type: application/x-www-form-urlencoded;charset=utf-8' \
     --data-urlencode grant_type=authorization_code --data-urlencode "client_id=$2" --data-urlencode "client_secret=$3" \
-    --data-urlencode "redirect_uri=$4" --data-urlencode code=check-real-providers-dummy-code "${extra[@]}" -w '\n%{http_code}' 2>&1
+    --data-urlencode "redirect_uri=$4" --data-urlencode code=check-real-providers-dummy-code ${extra[@]+"${extra[@]}"} -w '\n%{http_code}' 2>&1
 }
-# 제공자가 준 오류 원문을 그대로 보인다 (비밀은 ***, 200자까지) — 번역이 틀려도 원문으로 판단할 수 있게
-raw_of() {   # <body> <secret>
+# 제공자가 준 오류 원문을 그대로 보인다 (비밀은 ***, 되돌아온 client id 는 앞 6글자만, 200자까지) — 번역이 틀려도 원문으로 판단할 수 있게
+raw_of() {   # <body> <secret> [client_id]
   local b="$1"; [ -z "${2:-}" ] || b="${b//"$2"/***}"
+  [ -z "${3:-}" ] || b="${b//"$3"/${3:0:6}…}"
   printf '제공자 원문: %s' "$(printf '%s' "$b" | tr '\n' ' ' | head -c 200)"
 }
 # Kakao 로그인 문제 해결(developers.kakao.com/docs/ko/kakaologin/trouble-shooting)의 코드 — 아는 것만 조치를 붙인다
@@ -63,13 +64,15 @@ kakao_hint() {   # <error_code>
     *) return 1 ;;
   esac
 }
-interpret() {   # <label> <probe output> [client_secret]
+interpret() {   # <label> <probe output> [client_secret] [client_id]
   local body status err code desc raw hint
   status="$(printf '%s' "$2" | tail -n1)"; body="$(printf '%s' "$2" | sed '$d')"
   err="$(printf '%s' "$body" | grep -oE '"error"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"([^"]*)"$/\1/')"
   code="$(printf '%s' "$body" | grep -oE '"error_code"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"([^"]*)"$/\1/')"
   desc="$(printf '%s' "$body" | grep -oE '"error_description"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"([^"]*)"$/\1/')"
-  raw="$(raw_of "$body" "${3:-}")"
+  raw="$(raw_of "$body" "${3:-}" "${4:-}")"
+  # 제공자가 되돌려 보낸 client id 는 설명(desc) · 본문에도 실릴 수 있다 — 어디에 찍히든 앞 6글자만
+  [ -z "${4:-}" ] || { desc="${desc//"$4"/${4:0:6}…}"; body="${body//"$4"/${4:0:6}…}"; }
   if [ "$1" = kakao ] && [ -n "$code" ] && hint="$(kakao_hint "$code")"; then
     case "$code" in
       KOE320) ok "kakao: $code — $hint" ;;
@@ -124,16 +127,16 @@ for X in GOOGLE KAKAO NAVER; do
       te="$(printf '%s' "$d" | grep -oE '"token_endpoint"[^,]*' | sed -E 's/.*: *"([^"]*)"/\1/')"; ue="$(printf '%s' "$d" | grep -oE '"userinfo_endpoint"[^,]*' | sed -E 's/.*: *"([^"]*)"/\1/')"
       [ "$te" = https://oauth2.googleapis.com/token ] && ok "google: 디스커버리의 token_endpoint = 스켈레톤이 쓰는 주소" || note "google: 디스커버리 token_endpoint='$te' (스켈레톤: https://oauth2.googleapis.com/token)"
       [ "$ue" = https://openidconnect.googleapis.com/v1/userinfo ] && ok "google: 디스커버리의 userinfo_endpoint = 스켈레톤이 쓰는 주소" || note "google: 디스커버리 userinfo_endpoint='$ue' (스켈레톤: https://openidconnect.googleapis.com/v1/userinfo)"
-      interpret google "$(probe_token "${CHECK_GOOGLE_TOKEN_URL:-https://oauth2.googleapis.com/token}" "$cid" "$sec" "${red:-http://localhost:5173/auth/callback}")" "$sec" ;;
-    KAKAO) interpret kakao "$(probe_token "${CHECK_KAKAO_TOKEN_URL:-https://kauth.kakao.com/oauth/token}" "$cid" "$sec" "${red:-http://localhost:5173/auth/callback}")" "$sec" ;;
+      interpret google "$(probe_token "${CHECK_GOOGLE_TOKEN_URL:-https://oauth2.googleapis.com/token}" "$cid" "$sec" "${red:-http://localhost:5173/auth/callback}")" "$sec" "$cid" ;;
+    KAKAO) interpret kakao "$(probe_token "${CHECK_KAKAO_TOKEN_URL:-https://kauth.kakao.com/oauth/token}" "$cid" "$sec" "${red:-http://localhost:5173/auth/callback}")" "$sec" "$cid" ;;
     NAVER)
       # 가짜 코드 + state 로 한 번 두드린다 (실제 토큰 요청과 같은 모양 — state 포함). 가짜 코드에 Naver 가 어떤 오류를 주는지는 문서에 없어, 틀린 키(invalid_client 류)만 ✗ 로 하고 나머지는 원문을 보인다
       nout="$(probe_token "${CHECK_NAVER_TOKEN_URL:-https://nid.naver.com/oauth2.0/token}" "$cid" "$sec" "${red:-http://localhost:5173/auth/callback}" check-real-providers-dummy-state)"
       nbody="$(printf '%s' "$nout" | sed '$d')"; nst="$(printf '%s' "$nout" | tail -n1)"
       case "$nbody" in
-        *invalid_client*|*unauthorized_client*) bad "naver: client id 또는 client secret 이 틀렸다 (HTTP $nst) — 네이버 개발자센터 > 애플리케이션 > 개요의 Client ID · Client Secret 을 다시 복사한다"; note "$(raw_of "$nbody" "$sec")" ;;
+        *invalid_client*|*unauthorized_client*) bad "naver: client id 또는 client secret 이 틀렸다 (HTTP $nst) — 네이버 개발자센터 > 애플리케이션 > 개요의 Client ID · Client Secret 을 다시 복사한다"; note "$(raw_of "$nbody" "$sec" "$cid")" ;;
         "") if [ "$nst" = 000 ] || [ -z "$nout" ]; then bad "naver: 제공자 서버에 닿지 못했다 (네트워크): $(printf '%s' "$nout" | head -c 120)"; else note "naver: 빈 응답 HTTP $nst"; fi ;;
-        *) note "naver: 서버가 가짜 코드에 답했다 (HTTP $nst) — 키가 맞는지는 이 응답으로 단정하지 못한다(진짜 로그인으로 확인). $(raw_of "$nbody" "$sec")" ;;
+        *) note "naver: 서버가 가짜 코드에 답했다 (HTTP $nst) — 키가 맞는지는 이 응답으로 단정하지 못한다(진짜 로그인으로 확인). $(raw_of "$nbody" "$sec" "$cid")" ;;
       esac ;;
   esac
 done
@@ -157,9 +160,9 @@ else
     out="$(curl -sS -m 15 -X POST "${CHECK_LINE_TOKEN_URL:-https://api.line.me/oauth2/v2.1/token}" -H 'Content-Type: application/x-www-form-urlencoded' --data-urlencode grant_type=authorization_code --data-urlencode "client_id=$lcid" --data-urlencode "client_secret=$lsec" --data-urlencode "redirect_uri=${lred:-http://localhost:5173/auth/callback}" --data-urlencode code=check-real-providers-dummy-code --data-urlencode code_verifier=check-real-providers-dummy-verifier-0123456789abcdef -w '\n%{http_code}' 2>&1)"
     # 실측(2026-10): LINE 은 틀린 client id/secret 에도 먼저 코드를 본다 — 가짜 코드에는 항상 invalid_grant 라서 키가 맞는지는 **이 두드림으로는 알 수 없다**. 서버에 닿는지만 본다
     case "$(printf '%s' "$out" | sed '$d')" in
-      *invalid_client*) bad "line: client id 또는 secret 이 틀렸다 (invalid_client) — 콘솔에서 값을 다시 복사한다. $(raw_of "$(printf '%s' "$out" | sed '$d')" "$lsec")" ;;
+      *invalid_client*) bad "line: client id 또는 secret 이 틀렸다 (invalid_client) — 콘솔에서 값을 다시 복사한다. $(raw_of "$(printf '%s' "$out" | sed '$d')" "$lsec" "$lcid")" ;;
       *invalid_grant*) ok "line: 토큰 서버에 닿는다 (가짜 코드라 invalid_grant — 정상). 단 LINE 은 틀린 키에도 같은 답이라 **키가 맞는지는 진짜 로그인으로만 안다** (docs §7.2 #5)" ;;
-      *) if [ "$(printf '%s' "$out" | tail -n1)" = 000 ] || [ -z "$out" ]; then bad "line: 토큰 서버에 닿지 못했다 (네트워크): $(printf '%s' "$out" | head -c 120)"; else note "line: 해석하지 못한 응답 — $(raw_of "$(printf '%s' "$out" | sed '$d')" "$lsec")"; fi ;;
+      *) if [ "$(printf '%s' "$out" | tail -n1)" = 000 ] || [ -z "$out" ]; then bad "line: 토큰 서버에 닿지 못했다 (네트워크): $(printf '%s' "$out" | head -c 120)"; else note "line: 해석하지 못한 응답 — $(raw_of "$(printf '%s' "$out" | sed '$d')" "$lsec" "$lcid")"; fi ;;
     esac
   fi
 fi
@@ -178,9 +181,9 @@ else
     body="$(printf '%s' "$out" | sed '$d')"; st="$(printf '%s' "$out" | tail -n1)"
     # 실측(2026-10): 모르는 client id → 400 invalid_client "Value passed for the client id was invalid". 맞는 client 에 가짜 코드 → invalid_request/invalid_grant 로 거절된다고 문서가 말한다 (키가 맞는 쪽은 진짜 키로 확인 필요)
     case "$body" in
-      *invalid_client*|*unauthorized_client*) bad "x: client id 또는 secret 이 틀렸다 ($(printf '%s' "$body" | grep -oE '"error"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1), HTTP $st) — OAuth 2.0 Client ID · Secret 인지 (OAuth 1.0a API Key 가 아닌지) 확인한다. $(raw_of "$body" "$xsec")" ;;
+      *invalid_client*|*unauthorized_client*) bad "x: client id 또는 secret 이 틀렸다 ($(printf '%s' "$body" | grep -oE '"error"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1), HTTP $st) — OAuth 2.0 Client ID · Secret 인지 (OAuth 1.0a API Key 가 아닌지) 확인한다. $(raw_of "$body" "$xsec" "$xcid")" ;;
       *invalid_request*|*invalid_grant*) ok "x: 제공자가 client id/secret 을 받아들인 것으로 보인다 (가짜 코드라 거절 — 정상). 키가 맞는지의 최종 확인은 진짜 로그인 (확인 필요)" ;;
-      *) if [ "$st" = 000 ] || [ -z "$out" ]; then bad "x: 토큰 서버에 닿지 못했다 (네트워크): $(printf '%s' "$out" | head -c 120)"; else note "x: 해석하지 못한 응답 HTTP $st — $(raw_of "$body" "$xsec")"; fi ;;
+      *) if [ "$st" = 000 ] || [ -z "$out" ]; then bad "x: 토큰 서버에 닿지 못했다 (네트워크): $(printf '%s' "$out" | head -c 120)"; else note "x: 해석하지 못한 응답 HTTP $st — $(raw_of "$body" "$xsec" "$xcid")"; fi ;;
     esac
   fi
 fi
@@ -236,7 +239,7 @@ if [ -n "$TEST_MAIL" ]; then
       "$FROM" "$TEST_MAIL" "$(printf '시험 메일 — check-real-providers' | base64)" > "$tmp"
     extra=(); [ "$scheme" = smtp ] && [ "$HOST" != localhost ] && [ "$HOST" != 127.0.0.1 ] && extra+=(--ssl-reqd)   # 로컬 mailpit 은 TLS 가 없다
     auth=(); [ -n "${SPRING_MAIL_USERNAME:-}" ] && auth=(-u "${SPRING_MAIL_USERNAME}:${SPRING_MAIL_PASSWORD:-}")
-    out="$(curl -sS -m 30 "${extra[@]}" "${auth[@]}" "$scheme://$HOST:$PORT" --mail-from "$addr" --mail-rcpt "$TEST_MAIL" -T "$tmp" 2>&1)"
+    out="$(curl -sS -m 30 ${extra[@]+"${extra[@]}"} ${auth[@]+"${auth[@]}"} "$scheme://$HOST:$PORT" --mail-from "$addr" --mail-rcpt "$TEST_MAIL" -T "$tmp" 2>&1)"
     if [ $? -eq 0 ]; then ok "시험 메일을 $TEST_MAIL 로 보냈다 (SMTP 가 받아들임) — 받은편지함 · 스팸함을 본다. 안 오면 SPF/DKIM 상태를 서비스 대시보드에서 확인"; else bad "시험 메일 실패: $(printf '%s' "$out" | tail -2 | tr '\n' ' ')"; fi
   fi
 fi

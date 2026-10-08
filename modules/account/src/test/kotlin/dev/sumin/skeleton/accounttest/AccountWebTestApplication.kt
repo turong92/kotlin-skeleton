@@ -17,3 +17,26 @@ class AccountTestBeans {
     @Bean fun recordingMailer(): RecordingMailer = RecordingMailer()
     @Bean fun accountTaskRunner(): AccountTaskRunner = AccountTaskRunner.DIRECT
 }
+
+/** 세션 저장소 없이 `auth-session` 의 계약만 흉내 낸다 — 로그인이 세션을 열고(`sid` 가 액세스 토큰에 실린다), 열린 시각을 읽을 수 있고, 시험이 세션을 "오래된 것" 으로 돌릴 수 있다 */
+class FakeSessionBook : dev.sumin.skeleton.auth.session.LoginSessionIssuer, dev.sumin.skeleton.auth.session.SessionInspector {
+    private val opened = java.util.concurrent.ConcurrentHashMap<String, Pair<String, java.time.Instant>>()
+    private val counter = java.util.concurrent.atomic.AtomicInteger()
+
+    override fun open(account: dev.sumin.skeleton.auth.account.AuthAccount): dev.sumin.skeleton.auth.session.OpenedSession {
+        val id = "ses_fake_${counter.incrementAndGet()}"
+        opened[id] = account.accountId to java.time.Instant.now()
+        return dev.sumin.skeleton.auth.session.OpenedSession(id)
+    }
+
+    override fun openedAt(accountId: String, sessionId: String): java.time.Instant? = opened[sessionId]?.takeIf { it.first == accountId }?.second
+
+    /** 이 세션이 [by] 전에 열린 것으로 돌린다 */
+    fun age(sessionId: String, by: java.time.Duration) { opened.computeIfPresent(sessionId) { _, v -> v.first to v.second.minus(by) } }
+    fun sessionsOf(accountId: String) = opened.filterValues { it.first == accountId }.keys.sorted()
+}
+
+@TestConfiguration(proxyBeanMethods = false)
+class FakeSessionBeans {
+    @Bean fun fakeSessionBook(): FakeSessionBook = FakeSessionBook()
+}

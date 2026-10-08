@@ -63,4 +63,17 @@ class AlreadyRegisteredTemplateTest {
         assertFalse("<script>" in r.html!!)
         assertEquals(1, Regex("&lt;script&gt;").findAll(r.html!!).count().coerceAtLeast(1))
     }
+
+    @Test
+    fun `the first-registration mail says the address was tried for an email registration and points at linking the social login from the existing account`() {
+        val vars = mapOf("loginUrl" to "https://app.example.com/login", "methods" to "password")
+        val ko = templates.render(MailKind.EMAIL_REGISTRATION_ATTEMPT, "ko", vars, null)
+        assertTrue("이메일 등록을 시도" in ko.text, ko.text)
+        assertTrue("설정에서 소셜" in ko.text && "연결" in ko.text, ko.text)
+        assertTrue("가입을 시도" !in ko.text, "not the sign-up wording")
+        assertTrue("https://app.example.com/login" in ko.text)
+        val en = templates.render(MailKind.EMAIL_REGISTRATION_ATTEMPT, "en", vars, null)
+        assertTrue("register this address" in en.text && "connect" in en.text, en.text)
+        assertTrue("sign up" !in en.text, "not the sign-up wording")
+    }
 }

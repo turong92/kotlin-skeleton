@@ -2,7 +2,7 @@ subject: Your contact email was updated
 
 The address where we contact you was added, changed or removed in your account settings. Account and security mail still comes to this address.
 
-If this was not you, change your password and contact support.
+If this was not you, open your account settings: you can check the contact email there and remove it, and change your password.
 
 If you did not request this, you can ignore this email.
 Notes

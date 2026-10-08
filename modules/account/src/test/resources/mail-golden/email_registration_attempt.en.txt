@@ -1,0 +1,19 @@
+subject: Someone tried to register this email
+
+Someone (hopefully you) tried to register this address as the email of another sign-in, but an account for this address already exists.
+
+It is signed up with Google.
+
+It is signed up with email and password.
+
+Sign in to that account, then connect your social login (Kakao, Naver, ...) in the settings.
+
+Sign in:
+https://app.example.com/login
+
+Forgot your password? Request a reset here:
+https://app.example.com/forgot-password
+
+If you did not request this, you can ignore this email.
+Notes
+Notes Inc. · Seoul

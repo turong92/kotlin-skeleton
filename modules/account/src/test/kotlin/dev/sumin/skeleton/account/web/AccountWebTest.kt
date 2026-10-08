@@ -145,6 +145,8 @@ class AccountWebTest {
             .andExpect(jsonPath("$.value.email").value(email))
             .andExpect(jsonPath("$.value.emailVerified").value(true))
             .andExpect(jsonPath("$.value.hasPassword").value(true))
+            // the keys are not in the response at all (doesNotExist() would also pass for a null value): off is not the same as "none yet"
+            .andExpect { r -> val me = com.jayway.jsonpath.JsonPath.read<Map<String, Any?>>(r.response.contentAsString, "$.value"); kotlin.test.assertFalse("emailRequired" in me, "email.required is off"); kotlin.test.assertFalse("contactEmail" in me, "contact-email is off") }
             .andExpect(jsonPath("$.value.roles[0]").value("USER"))
             .andExpect(jsonPath("$.value.locale").value("ko"))
             .andExpect(jsonPath("$.value.methods[0].method").value("password"))

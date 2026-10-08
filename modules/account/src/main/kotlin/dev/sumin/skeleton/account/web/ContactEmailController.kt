@@ -28,13 +28,13 @@ class ContactEmailController(
 ) {
     @Operation(
         summary = "Ask to set (or change) the contact email; a 6-digit code goes to THAT address and nothing is stored until it is entered in this session (202)",
-        description = "No re-authentication: this address cannot sign in or recover the account. Any address is accepted, also one that is another account's email (no uniqueness, nothing to reveal).",
+        description = "No re-authentication for an account that has an email (the account address gets a notice): this address cannot sign in or recover the account. An account WITHOUT an email has nobody to notify, so it sends socialReauth (a fresh provider code; 403 ACCOUNT.REAUTH_REQUIRED, 400 ACCOUNT.REAUTH_FAILED). Any address is accepted, also one that is another account's email (no uniqueness, nothing to reveal). The owner's recovery (password reset / change, mailbox proof, sign out everywhere) clears it.",
     )
     @PostMapping
     @AcceptedOperation
     fun request(authentication: Authentication?, @Valid @RequestBody request: ContactEmailRequest): ResponseEntity<DataResponse<CodeIssuedResponse>> {
         val caller = callers.require(authentication)
-        return Response.accepted(CodeIssuedResponse.of("VERIFICATION_SENT", contact.request(caller.accountId, request.email!!, caller.sessionId)))
+        return Response.accepted(CodeIssuedResponse.of("VERIFICATION_SENT", contact.request(caller.accountId, request.email!!, caller.sessionId, reauthOf(null, null, request.socialReauth))))
     }
 
     @Operation(

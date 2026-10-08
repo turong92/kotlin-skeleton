@@ -5,6 +5,8 @@ import dev.sumin.skeleton.account.RecordingMailer
 import dev.sumin.skeleton.account.mail.MailKind
 import dev.sumin.skeleton.accounttest.AccountTestBeans
 import dev.sumin.skeleton.accounttest.AccountWebTestApplication
+import dev.sumin.skeleton.accounttest.FakeSessionBeans
+import dev.sumin.skeleton.accounttest.FakeSessionBook
 import dev.sumin.skeleton.accounttest.FakeSocialBeans
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -20,6 +22,8 @@ import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.MvcResult
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.head
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
@@ -38,6 +42,12 @@ class ForeignModuleController {
 @TestConfiguration(proxyBeanMethods = false)
 class ForeignModuleBeans {
     @Bean fun foreignModuleController() = ForeignModuleController()
+
+    /** 함수형 라우트 — `HandlerMethod` 가 아닌 핸들러도 같은 규칙을 받아야 한다 */
+    @Bean fun foreignFunctionalRoute(): org.springframework.web.servlet.function.RouterFunction<org.springframework.web.servlet.function.ServerResponse> =
+        org.springframework.web.servlet.function.RouterFunctions.route()
+            .GET("/api/v1/fn") { org.springframework.web.servlet.function.ServerResponse.ok().body(mapOf("ok" to true)) }
+            .build()
 }
 
 /** `skeleton.account.email.required=true` — 주소 없는 계정은 허용 목록 밖의 모든 API 에서 403 `ACCOUNT.EMAIL_REQUIRED`, 첫 주소는 재인증 없이 등록 */
@@ -52,10 +62,11 @@ class ForeignModuleBeans {
     ],
 )
 @AutoConfigureMockMvc
-@Import(AccountTestBeans::class, FakeSocialBeans::class, ForeignModuleBeans::class)
+@Import(AccountTestBeans::class, FakeSocialBeans::class, FakeSessionBeans::class, ForeignModuleBeans::class)
 class EmailRequiredWebTest {
     @Autowired lateinit var mvc: MockMvc
     @Autowired lateinit var mail: RecordingMailer
+    @Autowired lateinit var sessions: FakeSessionBook
 
     private val json = MediaType.APPLICATION_JSON
     private fun bearer(r: MvcResult) = "Bearer " + JsonPath.read<String>(r.response.contentAsString, "$.value.accessToken")
@@ -123,14 +134,17 @@ class EmailRequiredWebTest {
         mail.sent.clear()
 
         val taken = changeEmail(auth, "owner@example.com").andExpect(status().isAccepted).andReturn()
-        assertEquals("owner@example.com", mail.of(MailKind.ALREADY_REGISTERED).single().to)
+        assertEquals("owner@example.com", mail.of(MailKind.EMAIL_REGISTRATION_ATTEMPT).single().to)
+        assertTrue(mail.of(MailKind.ALREADY_REGISTERED).isEmpty(), "not the sign-up wording")
         assertTrue(mail.of(MailKind.EMAIL_CHANGE_CODE).isEmpty(), "no code to the owner's address")
-        val free = changeEmail(auth, "free@example.com").andExpect(status().isAccepted).andReturn()
-
-        fun shape(r: MvcResult) = JsonPath.read<Map<String, Any?>>(r.response.contentAsString, "$.value").keys
-        assertEquals(shape(free), shape(taken))
+        // the open request is the TAKEN one right now (a later request would replace it): its code is unknowable, a guess fails like on a free address
         mvc.perform(post("/api/v1/account/email/change/confirm").header("Authorization", auth).contentType(json).content("""{"code":"000000"}"""))
             .andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("ACCOUNT.CODE_INVALID"))
+
+        val free = changeEmail(auth, "free@example.com").andExpect(status().isAccepted).andReturn()
+        fun shape(r: MvcResult) = JsonPath.read<Map<String, Any?>>(r.response.contentAsString, "$.value").keys
+        assertEquals(shape(free), shape(taken))
+        assertEquals("free@example.com", mail.of(MailKind.EMAIL_CHANGE_CODE).single().to, "only the free address got a code")
     }
 
     @Test
@@ -143,5 +157,57 @@ class EmailRequiredWebTest {
     @Test
     fun `an anonymous call keeps its 401 - the filter only speaks to signed-in callers`() {
         mvc.perform(get("/api/v1/things")).andExpect(status().isUnauthorized)
+    }
+
+    private fun sessionOf(r: MvcResult) = JsonPath.read<String>(r.response.contentAsString, "$.value.sessionId")
+
+    @Test
+    fun `a percent-encoded prefix does not get past the guard - the router reads it as the same path`() {
+        val auth = bearer(social("c-noemail-enc"))
+        mvc.perform(get(java.net.URI.create("/%61pi/v1/things")).header("Authorization", auth)).andExpect(status().isForbidden).andExpect(jsonPath("$.code").value("ACCOUNT.EMAIL_REQUIRED"))
+        mvc.perform(get(java.net.URI.create("/api/v1/%74hings")).header("Authorization", auth)).andExpect(status().isForbidden)
+        mvc.perform(get(java.net.URI.create("/api/v1/account/%6De")).header("Authorization", auth)).andExpect(status().isOk)
+    }
+
+    @Test
+    fun `a functional route and a HEAD call are guarded too, an unmapped path stays a 404 and a preflight stays open`() {
+        val auth = bearer(social("c-noemail-fn"))
+        mvc.perform(get("/api/v1/fn").header("Authorization", auth)).andExpect(status().isForbidden).andExpect(jsonPath("$.code").value("ACCOUNT.EMAIL_REQUIRED"))
+        mvc.perform(head("/api/v1/things").header("Authorization", auth)).andExpect(status().isForbidden)
+        mvc.perform(head("/api/v1/account/me").header("Authorization", auth)).andExpect(status().isOk)
+        mvc.perform(get("/api/v1/does-not-exist").header("Authorization", auth)).andExpect(status().isNotFound)
+        mvc.perform(options("/api/v1/things").header("Origin", "http://localhost:3000").header("Access-Control-Request-Method", "GET")).andExpect { assertTrue(it.response.status != 403, "preflight: ${it.response.status}") }
+    }
+
+    @Test
+    fun `an old session cannot use the first-registration window that the owner's new login opened`() {
+        // 공격자의 옛 세션 A (공용 PC · 유출된 리프레시 토큰이 이어 가는 세션) — 열린 지 오래다
+        val old = social("c-noemail-stale")
+        val oldAuth = bearer(old)
+        sessions.age(sessionOf(old), java.time.Duration.ofDays(3))
+        // 주인이 다른 기기에서 로그인한다 (세션 B) — 계정의 마지막 로그인이 방금이 된다
+        val owner = social("c-noemail-stale")
+        mail.sent.clear()
+
+        changeEmail(oldAuth, "attacker@example.com").andExpect(status().isForbidden).andExpect(jsonPath("$.code").value("ACCOUNT.REAUTH_REQUIRED"))
+        assertTrue(mail.of(MailKind.EMAIL_CHANGE_CODE).isEmpty(), "no code was mailed")
+        changeEmail(bearer(owner), "owner@example.com").andExpect(status().isAccepted)
+        assertEquals("owner@example.com", mail.of(MailKind.EMAIL_CHANGE_CODE).single().to)
+    }
+
+    @Test
+    fun `an unregistered account discards itself at once and its social account can start over - an account with an address cannot`() {
+        val first = social("c-noemail-discard")
+        val idBefore = JsonPath.read<String>(first.response.contentAsString, "$.value.principal.accountId")
+
+        mvc.perform(post("/api/v1/account/discard").header("Authorization", bearer(first)).header("Idempotency-Key", java.util.UUID.randomUUID().toString()).contentType(json).content("{}")).andExpect(status().isNoContent)
+
+        mvc.perform(get("/api/v1/account/me").header("Authorization", bearer(first))).andExpect(status().isNotFound)   // the account is gone for good
+        val again = social("c-noemail-discard")
+        val idAfter = JsonPath.read<String>(again.response.contentAsString, "$.value.principal.accountId")
+        assertTrue(idBefore != idAfter, "the Kakao-like identity was free, so a brand-new account was made")
+
+        val registered = passwordAccount("discard-no@example.com")
+        mvc.perform(post("/api/v1/account/discard").header("Authorization", registered).header("Idempotency-Key", java.util.UUID.randomUUID().toString()).contentType(json).content("{}")).andExpect(status().isConflict).andExpect(jsonPath("$.code").value("ACCOUNT.DISCARD_NOT_ALLOWED"))
     }
 }

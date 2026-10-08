@@ -29,3 +29,12 @@ interface SessionRevoker {
 
     fun revokeAll(accountId: String) = revokeAll(accountId, null)
 }
+
+/**
+ * 세션이 **언제 로그인으로 열렸는지** 읽는다 — 민감한 일이 "방금 로그인한 그 세션" 인지 가려야 할 때(예: 이메일이 없는 계정의 첫 이메일 등록). `auth-session` 이 구현한다.
+ * 리프레시 토큰을 돌려도 세션은 이어지므로 시각은 **옮겨지지 않는다** — 훔친 리프레시 토큰은 "방금 로그인" 이 될 수 없다.
+ */
+interface SessionInspector {
+    /** [sessionId] 가 [accountId] 의 열려 있는(철회 · 만료 · 방치 아님) 세션이면 그 세션이 열린 시각, 아니면 null */
+    fun openedAt(accountId: String, sessionId: String): Instant?
+}

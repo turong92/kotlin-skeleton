@@ -82,6 +82,19 @@ class ReconsentWebTest {
     }
 
     @Test
+    fun `a functional route is guarded like a controller - the handler kind does not decide`() {
+        call(get("/api/v1/fn"), user).andExpect(status().isForbidden).andExpect(jsonPath("$.code").value("LEGAL.RECONSENT_REQUIRED"))
+        agree("terms" to "v2", "privacy" to "v1")
+        call(get("/api/v1/fn"), user).andExpect(status().isOk)
+    }
+
+    @Test
+    fun `an encoded spelling of a path is the same path for the include and the exclude rules`() {
+        call(get(java.net.URI.create("/%61pi/v1/things")), user).andExpect(status().isForbidden)
+        call(get(java.net.URI.create("/api/v1/%6Cegal/consents/me")), user).andExpect(status().isOk)
+    }
+
+    @Test
     fun `anonymous requests are not the filter's business`() {
         call(get("/api/v1/things")).andExpect(status().isOk)
     }

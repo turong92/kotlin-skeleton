@@ -104,6 +104,12 @@ class SessionService(
         if (n > 0) onEvent(SessionEvent(SessionEventType.SESSIONS_REVOKED, accountId, count = n, reason = reason))
     }
 
+    /** 이 계정의 열려 있는 세션이 **로그인으로 열린 시각** — 토큰 갱신은 세션을 옮기지 않으므로 이 값도 그대로다. 남의 · 없는 · 닫힌 세션은 null */
+    fun openedAt(accountId: String, sessionId: String): Instant? {
+        val s = store.find(sessionId)?.takeIf { it.accountId == accountId } ?: return null
+        return if (isLive(s, time.now())) s.createdAt else null
+    }
+
     private fun isLive(s: SessionRecord, now: Instant): Boolean =
         s.revokedAt == null && s.expiresAt.isAfter(now) && s.lastUsedAt.plus(properties.idleTtl).isAfter(now)
 

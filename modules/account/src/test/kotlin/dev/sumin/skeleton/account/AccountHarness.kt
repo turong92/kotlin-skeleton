@@ -37,6 +37,13 @@ class RecordingRevoker : SessionRevoker {
     override fun revokeAll(accountId: String, exceptSessionId: String?) { calls += accountId to exceptSessionId }
 }
 
+/** 로그인으로 열린 세션의 기록 — [open] 이 "지금 로그인했다" 이고, 닫힌 · 모르는 세션은 null */
+class FakeSessions(private val time: MutableTime) : dev.sumin.skeleton.auth.session.SessionInspector {
+    private val opened = java.util.concurrent.ConcurrentHashMap<String, Pair<String, java.time.Instant>>()
+    fun open(accountId: String, sessionId: String) { opened[sessionId] = accountId to time.now() }
+    override fun openedAt(accountId: String, sessionId: String): java.time.Instant? = opened[sessionId]?.takeIf { it.first == accountId }?.second
+}
+
 class RecordingEvents : AccountEventListener {
     val all = CopyOnWriteArrayList<AccountEvent>()
     override fun on(event: AccountEvent) { all += event }
@@ -80,6 +87,7 @@ class AccountHarness(
     val mailer = RecordingMailer()
     val events = RecordingEvents()
     val revoker = RecordingRevoker()
+    val sessions = FakeSessions(time)
     val hasher = PasswordHasher(PasswordEncoders.delegating(props.password))
     val policy = DefaultPasswordPolicy(props.password, breached)
     val tokens = OneTimeTokens(tokenStore, time)
@@ -90,7 +98,7 @@ class AccountHarness(
         repo, props, time, publisher, hasher, policy, tokens, mailer, AccountLinks(props.mail), tasks,
         AccountRateLimits({ limitStore }, time),
         CaptchaGate(captcha, captchaRequired), { revoker }, bootstrap, challenges, { socialReauth }, { consents }, atomic,
-        AccountBlocks.local(time, props.blocks.retention), magicLinks = { magicLinks }, names = DisplayNames(props.displayName, random),
+        AccountBlocks.local(time, props.blocks.retention), magicLinks = { magicLinks }, names = DisplayNames(props.displayName, random), sessionInspector = { sessions },
     )
     val registration = RegistrationService(core)
     val authRepository = AccountAuthRepository(core)
@@ -102,6 +110,7 @@ class AccountHarness(
     val deletion = DeletionService(core)
     val purge = AccountPurgeService(core) { erasers.toList() }
     val admin = AdminService(core)
+    val discard = DiscardService(core, purge)
     val profile = ProfileService(core, dev.sumin.skeleton.account.signin.SignInMethodRegistry(listOf(dev.sumin.skeleton.account.signin.PasswordSignInMethod())))
 
     /** 이메일별로 마지막 가입 id — [verify] · [resend] 가 쓴다 */

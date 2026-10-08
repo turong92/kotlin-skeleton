@@ -3,6 +3,7 @@ package dev.sumin.skeleton.auth.sessions
 import dev.sumin.skeleton.auth.account.AuthAccount
 import dev.sumin.skeleton.auth.session.LoginSessionIssuer
 import dev.sumin.skeleton.auth.session.OpenedSession
+import dev.sumin.skeleton.auth.session.SessionInspector
 import dev.sumin.skeleton.auth.session.SessionRevoker
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.common.web.ClientIps
@@ -72,4 +73,8 @@ class SessionLoginIssuer(
 
 class SessionRevokerAdapter(private val sessions: SessionService) : SessionRevoker {
     override fun revokeAll(accountId: String, exceptSessionId: String?) = sessions.revokeAll(accountId, exceptSessionId)
+}
+
+class SessionInspectorAdapter(private val sessions: SessionService) : SessionInspector {
+    override fun openedAt(accountId: String, sessionId: String) = sessions.openedAt(accountId, sessionId)
 }

@@ -53,7 +53,36 @@ class AccountCore(
     val magicLinks: () -> MagicLinkIssuer? = { null },
     /** 닉네임 규칙 · 꼬리표 · 자동 닉네임 */
     val names: DisplayNames = DisplayNames(props.displayName),
+    /** 세션이 로그인으로 열린 시각을 읽는 곳 — `auth-session` 이 없으면 null (그러면 "방금 로그인한 세션" 을 가릴 수 없다 → 그것에 기대는 면제는 없다) */
+    val sessionInspector: () -> dev.sumin.skeleton.auth.session.SessionInspector? = { null },
 ) {
+    /**
+     * 메일함 증명 — [AccountRepository.proveMailbox] 에 **주인의 복구 동작 하나가 더 붙는다**: 연락 이메일을 비운다. 연락 이메일은 서비스 알림이 가는 곳인데 로그인 수단이 아니라서
+     * 탈취된 세션이 공격자 주소를 심어 둘 수 있다(재인증 없음) — 주인이 메일함을 증명해 계정을 되찾았다면 그 주소도 함께 버린다 (docs/accounts.md "연락 이메일").
+     */
+    fun proveMailbox(id: String, now: java.time.Instant, proof: MailboxProof): Boolean =
+        accounts.proveMailbox(id, now, proof).also { if (it) clearContactAfterRecovery(id, "mailbox_proof") }
+
+    /** 연락 이메일 기능이 켜져 있고 주소가 있으면 비운다 (알림 메일 없음 — 복구 동작 자체가 이미 알림을 낸다). 기능이 꺼져 있어도 남은 주소가 있으면 비운다 */
+    fun clearContactAfterRecovery(accountId: String, via: String) {
+        val account = accounts.findById(accountId)?.takeIf { it.contactEmail != null } ?: return
+        accounts.update(accountId, AccountPatch(clearContactEmail = true), time.now())
+        events.publish(dev.sumin.skeleton.account.events.AccountEventType.CONTACT_EMAIL_CHANGED, account.id, detail = mapOf("via" to "cleared_by_$via"))
+    }
+
+    /**
+     * "방금 로그인한 세션" 의 재인증 면제 — 첫 이메일 등록 · 등록 미완료 계정 버리기가 쓴다. 전부여야 한다: `email.required=true` · 창이 0 이 아님 · 계정에 주소가 없음(= 한 번도 없었다:
+     * 주소는 비워지지 않고, 지워진 계정만 null 이 된다) · 활성 상태 · **이 요청의 세션**이 창 안에 **로그인으로 열렸다**. 면제는 계정이 아니라 세션에 붙는다:
+     * 옛 세션(공용 PC · 유출된 리프레시 토큰)은 주인이 다른 기기에서 막 로그인해도 창이 열리지 않고, 토큰 갱신은 세션의 열린 시각을 옮기지 않는다.
+     * 세션을 읽을 수 없으면(세션 저장소 없음 · JWT 만 · 닫힌 세션) 면제는 없다 — 제공자 재동의로 안전하게 떨어진다.
+     */
+    fun freshLoginSession(account: Account, sessionId: String?): Boolean {
+        val c = props.email
+        if (!c.required || c.firstRegistrationWindow.isZero || account.email != null || account.status != AccountStatus.ACTIVE || sessionId == null) return false
+        val openedAt = sessionInspector()?.openedAt(account.id, sessionId) ?: return false
+        return !time.now().isAfter(openedAt.plus(c.firstRegistrationWindow))
+    }
+
     /**
      * 이메일로 계정 하나 — 저장소가 어떤 정렬 규칙으로 찾았든 **저장된 주소가 정규화된 입력과 글자 그대로 같을 때만** 돌려준다
      * (대소문자 · 악센트를 같게 보는 DB 정렬이 `victim@gmäil.com` 으로 `victim@gmail.com` 계정을 내주지 못하게 — 이것이 마지막 방어선이다).

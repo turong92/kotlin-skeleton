@@ -92,7 +92,7 @@ class SessionController(
     @DeleteMapping("/sessions")
     fun revokeAll(authentication: Authentication?, @RequestParam(defaultValue = "true") keepCurrent: Boolean): ResponseEntity<Void> {
         val principal = principal(authentication)
-        sessions.revokeAll(principal.accountId, if (keepCurrent) principal.sessionId else null)
+        sessions.revokeAll(principal.accountId, if (keepCurrent) principal.sessionId else null, dev.sumin.skeleton.auth.session.SessionRevokeReasons.USER_REVOKED_ALL)
         return Response.noContent()
     }
 

@@ -85,7 +85,7 @@ class AccountSignInService(private val core: AccountCore, val registry: SignInMe
      * 열려 있던 코드 · 링크와 세션을 닫는다.
      */
     private fun proveMailbox(account: Account, proving: Identity?, now: java.time.Instant) {
-        core.accounts.proveMailbox(account.id, now, MailboxProof(keepIdentityIds = setOfNotNull(proving?.id)))
+        core.proveMailbox(account.id, now, MailboxProof(keepIdentityIds = setOfNotNull(proving?.id)))
         core.closeSensitiveLinks(account)
         core.sessions()?.revokeAll(account.id, null)
     }

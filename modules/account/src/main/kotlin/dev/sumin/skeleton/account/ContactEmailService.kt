@@ -13,17 +13,21 @@ import dev.sumin.skeleton.common.PlatformErrorCode
  * 연락받을 이메일 — 계정 이메일과 **별개의** 선택 주소 하나 (서비스 안내를 받을 곳). 로그인 수단도 · 복구 수단도 · 중복 판정의 키도 아니다:
  * 유니크하지 않고(다른 계정의 이메일 · 연락 이메일과 같아도 된다 — 그래서 "이미 쓰인 주소" 신호가 없다), 계정을 찾는 어떤 조회도 이 열을 보지 않는다.
  * 주소 소유를 증명하는 6자리 코드는 계정 이메일 변경과 같은 규칙(챌린지 · 10분 · 5번 · 요청한 **세션에서만** · 주소별 예산 공유)이고 재인증은 요구하지 않는다 —
- * 이 주소는 계정을 열지 못하므로 일반 로그인 상태로 충분하다. 대신 등록 · 변경 · 삭제는 **계정 이메일**로 알림이 한 통 간다.
+ * 이 주소는 계정을 열지 못하므로 일반 로그인 상태로 충분하다. 대신 등록 · 변경 · 삭제는 **계정 이메일**로 알림이 한 통 간다 (**계정 이메일이 없는 계정은** 알림이 갈 곳이 없으니 등록 · 변경에 소셜 재인증).
+ * 탈취된 세션이 심은 주소가 남지 않게, 주인의 복구 동작(메일함 증명 · 비밀번호 변경 · 모든 기기 로그아웃)이 이 주소도 비운다 ([AccountCore.clearContactAfterRecovery]).
  */
 class ContactEmailService(private val core: AccountCore) {
     /** 코드는 [address](연락 이메일 후보)로 간다. 응답 시각은 메일이 나갔든 예산을 넘었든 같은 계산 */
-    fun request(accountId: String, address: String, sessionId: String?): CodeWindow {
+    fun request(accountId: String, address: String, sessionId: String?, input: ReauthInput = ReauthInput()): CodeWindow {
         val account = core.accounts.findById(accountId)?.takeIf { it.status != AccountStatus.ERASED } ?: throw AccountException(AccountErrorCode.NOT_FOUND)
         val c = core.props.emailChange
         val a = core.limits.acquire("contact-email:account", accountId, c.perAccount, c.perAccountWindow)
         if (!a.allowed) throw RateLimitedException(a.retryAfterSeconds)
         val target = Emails.normalize(address)
         if (!Emails.plausible(target)) throw ApplicationException("Invalid email", PlatformErrorCode.VALIDATION_FAILED)
+        // 계정 이메일이 없는 계정은 알림(등록 · 변경)을 받을 곳이 없다 — 탈취된 세션이 조용히 심지 못하게 제공자 새 인가 코드로 다시 인증한다. 주소가 있는 계정은 그 주소로 알림이 간다 (재인증 없음)
+        val proof = if (account.email == null) Reauth(core).check(account, input, sessionId) else Reauth.Proof.NONE
+        proof.commit()
 
         val mayOpen = core.mayOpenCodeFor(target)
         val mayMail = core.mayMailCodeTo(target)
@@ -58,6 +62,9 @@ class ContactEmailService(private val core: AccountCore) {
         core.accounts.update(accountId, AccountPatch(contactEmail = target), core.time.now()) ?: throw AccountException(AccountErrorCode.CODE_EXPIRED)
         changed(account, if (account.contactEmail == null) "registered" else "changed")
     }
+
+    /** 사용자가 직접 한 "모든 기기에서 로그아웃" 같은 주인의 복구 동작 뒤 연락 이메일을 비운다 */
+    fun clearAfterRecovery(accountId: String) = core.clearContactAfterRecovery(accountId, "sign_out_everywhere")
 
     /** 연락 이메일을 지운다 (이후 서비스 안내는 계정 이메일로). 없으면 조용히 끝난다 */
     fun remove(accountId: String) {

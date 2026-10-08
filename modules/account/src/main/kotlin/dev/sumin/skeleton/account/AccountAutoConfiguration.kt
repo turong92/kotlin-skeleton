@@ -202,7 +202,8 @@ class AccountAutoConfiguration {
     /** `auth-session` 의 세션 사건(재사용 탐지 · 철회)을 계정 이벤트로 — 감사 표 · 경보 · 로그가 한 길을 쓴다 */
     @Bean
     @ConditionalOnMissingBean(name = ["accountSessionEventListener"])
-    fun accountSessionEventListener(events: AccountEventPublisher): SessionEventListener = AccountSessionEventListener(events)
+    fun accountSessionEventListener(events: AccountEventPublisher, core: AccountCore): SessionEventListener =
+        AccountSessionEventListener(events) { core.clearContactAfterRecovery(it, "sign_out_everywhere") }
 
     @Bean
     @ConditionalOnMissingBean
@@ -245,11 +246,12 @@ class AccountAutoConfiguration {
         lease: AccountMaintenanceLease,
         magicLinks: ObjectProvider<MagicLinkIssuer>,
         displayNameRules: DisplayNameRules,
+        sessionInspector: ObjectProvider<dev.sumin.skeleton.auth.session.SessionInspector>,
     ): AccountCore = AccountCore(
         accounts, properties, time.getIfAvailable { TimeProvider.systemUtc() }, events, hasher, policy, tokens, mailer, links, tasks, limits, captcha,
         { sessions.getIfAvailable() }, bootstrap, challenges, { socialReauth.getIfAvailable() },
         { consents.getIfAvailable() }, atomic.getIfAvailable { AccountTransaction.NONE }, blocks, lease, { magicLinks.getIfAvailable() },
-        names = DisplayNames(properties.displayName, rules = displayNameRules),
+        names = DisplayNames(properties.displayName, rules = displayNameRules), sessionInspector = { sessionInspector.getIfAvailable() },
     )
 
     /** 닉네임 규칙 — 앱이 같은 타입의 빈을 두면 그것이 쓰인다 (가입 · 프로필 수정 · 제공자 이름 · 시드 · 비교용 키 모두) */
@@ -294,6 +296,10 @@ class AccountAutoConfiguration {
     @ConditionalOnMissingBean
     fun accountPurgeService(core: AccountCore, listeners: ObjectProvider<AccountErasureListener>): AccountPurgeService =
         AccountPurgeService(core) { listeners.orderedStream().toList() }
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun discardService(core: AccountCore, purge: AccountPurgeService): DiscardService = DiscardService(core, purge)
 
     @Bean
     @ConditionalOnMissingBean(name = ["passwordSignInMethod"])
