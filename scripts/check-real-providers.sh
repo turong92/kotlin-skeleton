@@ -8,7 +8,7 @@
 #
 # 끝날 때 ✗ 가 하나라도 있으면 종료 코드 1. 비밀 값은 출력하지 않는다 (client id 는 앞 6글자만).
 # 제공자: google · kakao · naver(…PROVIDERS_<X>_*) · LINE(SKELETON_AUTH_SOCIAL_OIDC_PROVIDERS_LINE_*) · X(SKELETON_AUTH_SOCIAL_X_*) — 이름 규칙은 docs/real-provider-setup.md §6.
-# 시험용: CHECK_GOOGLE_TOKEN_URL · CHECK_KAKAO_TOKEN_URL · CHECK_LINE_TOKEN_URL · CHECK_X_TOKEN_URL · CHECK_GOOGLE_DISCOVERY_URL · CHECK_LINE_DISCOVERY_URL 로 주소를 바꿀 수 있다.
+# 시험용: CHECK_GOOGLE_TOKEN_URL · CHECK_KAKAO_TOKEN_URL · CHECK_NAVER_TOKEN_URL · CHECK_LINE_TOKEN_URL · CHECK_X_TOKEN_URL · CHECK_GOOGLE_DISCOVERY_URL · CHECK_LINE_DISCOVERY_URL 로 주소를 바꿀 수 있다.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
@@ -41,22 +41,48 @@ P=SKELETON_AUTH_SOCIAL_PROVIDERS
 val() { local n="${P}_$1_$2"; printf '%s' "${!n:-}"; }
 
 # 가짜 코드로 토큰 엔드포인트를 두드린다 — 응답 본문에서 error 코드를 뽑는다 (client id/secret 이 틀리면 invalid_client 류, 맞으면 invalid_grant)
-probe_token() {   # <url> <client_id> <client_secret> <redirect_uri>
+probe_token() {   # <url> <client_id> <client_secret> <redirect_uri> [state]
+  local extra=(); [ -z "${5:-}" ] || extra=(--data-urlencode "state=$5")
   curl -sS -m 15 -X POST "$1" -H 'Content-Type: application/x-www-form-urlencoded;charset=utf-8' \
     --data-urlencode grant_type=authorization_code --data-urlencode "client_id=$2" --data-urlencode "client_secret=$3" \
-    --data-urlencode "redirect_uri=$4" --data-urlencode code=check-real-providers-dummy-code -w '\n%{http_code}' 2>&1
+    --data-urlencode "redirect_uri=$4" --data-urlencode code=check-real-providers-dummy-code "${extra[@]}" -w '\n%{http_code}' 2>&1
 }
-interpret() {   # <label> <probe output>
-  local body status err
+# 제공자가 준 오류 원문을 그대로 보인다 (비밀은 ***, 200자까지) — 번역이 틀려도 원문으로 판단할 수 있게
+raw_of() {   # <body> <secret>
+  local b="$1"; [ -z "${2:-}" ] || b="${b//"$2"/***}"
+  printf '제공자 원문: %s' "$(printf '%s' "$b" | tr '\n' ' ' | head -c 200)"
+}
+# Kakao 로그인 문제 해결(developers.kakao.com/docs/ko/kakaologin/trouble-shooting)의 코드 — 아는 것만 조치를 붙인다
+kakao_hint() {   # <error_code>
+  case "$1" in
+    KOE004) printf '카카오 로그인 사용 설정이 꺼져 있다 — 카카오 디벨로퍼스 > 내 애플리케이션 > 카카오 로그인 > 사용 설정(상태 ON). 콘솔 개편으로 활성화 스위치가 두 곳일 수 있다(docs/real-provider-setup.md §4 Kakao)' ;;
+    KOE006) printf 'Redirect URI 가 등록되지 않았다 — 카카오 로그인 > Redirect URI 에 REDIRECT_URI 를 글자 그대로 등록한다' ;;
+    KOE010) printf 'client secret 이 맞지 않거나 보내지 않았다 — 카카오 로그인 > 보안의 Client Secret 값을 CLIENT_SECRET 에 그대로 복사한다 (키 · 시크릿 사용 설정이 켜져 있으면 필수)' ;;
+    KOE101) printf '잘못된 앱 키를 썼다 — CLIENT_ID 는 앱 키 중 "REST API 키"다 (네이티브 · JavaScript · Admin 키가 아니다)' ;;
+    KOE320) printf '인가 코드를 두 번 썼거나 만료됐다 — 이 점검은 가짜 코드를 보내므로 앱 설정(키 · 시크릿)은 받아들여진 것이다 (정상)' ;;
+    *) return 1 ;;
+  esac
+}
+interpret() {   # <label> <probe output> [client_secret]
+  local body status err code desc raw hint
   status="$(printf '%s' "$2" | tail -n1)"; body="$(printf '%s' "$2" | sed '$d')"
   err="$(printf '%s' "$body" | grep -oE '"error"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"([^"]*)"$/\1/')"
-  local code; code="$(printf '%s' "$body" | grep -oE '"error_code"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"([^"]*)"$/\1/')"
+  code="$(printf '%s' "$body" | grep -oE '"error_code"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"([^"]*)"$/\1/')"
+  desc="$(printf '%s' "$body" | grep -oE '"error_description"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed -E 's/.*"([^"]*)"$/\1/')"
+  raw="$(raw_of "$body" "${3:-}")"
+  if [ "$1" = kakao ] && [ -n "$code" ] && hint="$(kakao_hint "$code")"; then
+    case "$code" in
+      KOE320) ok "kakao: $code — $hint" ;;
+      *) bad "kakao: $code${desc:+ ($desc)} — $hint" ; note "$raw" ;;
+    esac
+    return
+  fi
   case "$err" in
     invalid_grant|bad_verification_code) ok "$1: 제공자가 client id/secret 을 받아들였다 (가짜 코드라 $err 로 거절 — 정상${code:+, $code})" ;;
-    invalid_client|unauthorized_client|KOE*) bad "$1: client id 또는 client secret 이 틀렸다 ($err${code:+ $code}, HTTP $status) — 콘솔에서 값을 다시 복사한다" ;;
-    redirect_uri_mismatch|invalid_request) bad "$1: 요청이 거절됐다 ($err${code:+ $code}, HTTP $status) — REDIRECT_URI 를 콘솔 등록값과 비교한다" ;;
-    "") if [ "$status" = 000 ] || [ -z "$status" ]; then bad "$1: 제공자 서버에 닿지 못했다 (네트워크): $(printf '%s' "$body" | head -c 120)"; else note "$1: 해석하지 못한 응답 HTTP $status — $(printf '%s' "$body" | head -c 160)"; fi ;;
-    *) note "$1: 응답 error=$err${code:+ $code} (HTTP $status) — 의미를 모르겠다, 확인 필요" ;;
+    invalid_client|unauthorized_client) bad "$1: client id 또는 client secret 이 틀렸다 ($err${code:+ $code}, HTTP $status${desc:+, $desc}) — 콘솔에서 값을 다시 복사한다"; note "$raw" ;;
+    redirect_uri_mismatch|invalid_request) bad "$1: 요청이 거절됐다 ($err${code:+ $code}, HTTP $status${desc:+, $desc}) — REDIRECT_URI 를 콘솔 등록값과 비교한다"; note "$raw" ;;
+    "") if [ "$status" = 000 ] || [ -z "$status" ]; then bad "$1: 제공자 서버에 닿지 못했다 (네트워크): $(printf '%s' "$body" | head -c 120)"; else note "$1: 해석하지 못한 응답 HTTP $status — $raw"; fi ;;
+    *) note "$1: 응답 error=$err${code:+ $code} (HTTP $status) — 의미를 모르겠다, 확인 필요. $raw" ;;
   esac
 }
 
@@ -98,9 +124,17 @@ for X in GOOGLE KAKAO NAVER; do
       te="$(printf '%s' "$d" | grep -oE '"token_endpoint"[^,]*' | sed -E 's/.*: *"([^"]*)"/\1/')"; ue="$(printf '%s' "$d" | grep -oE '"userinfo_endpoint"[^,]*' | sed -E 's/.*: *"([^"]*)"/\1/')"
       [ "$te" = https://oauth2.googleapis.com/token ] && ok "google: 디스커버리의 token_endpoint = 스켈레톤이 쓰는 주소" || note "google: 디스커버리 token_endpoint='$te' (스켈레톤: https://oauth2.googleapis.com/token)"
       [ "$ue" = https://openidconnect.googleapis.com/v1/userinfo ] && ok "google: 디스커버리의 userinfo_endpoint = 스켈레톤이 쓰는 주소" || note "google: 디스커버리 userinfo_endpoint='$ue' (스켈레톤: https://openidconnect.googleapis.com/v1/userinfo)"
-      interpret google "$(probe_token "${CHECK_GOOGLE_TOKEN_URL:-https://oauth2.googleapis.com/token}" "$cid" "$sec" "${red:-http://localhost:5173/auth/callback}")" ;;
-    KAKAO) interpret kakao "$(probe_token "${CHECK_KAKAO_TOKEN_URL:-https://kauth.kakao.com/oauth/token}" "$cid" "$sec" "${red:-http://localhost:5173/auth/callback}")" ;;
-    NAVER) note "naver: 서버 두드리기는 하지 않는다 (토큰 요청에 state 가 필요하다 — docs/real-provider-setup.md §3)" ;;
+      interpret google "$(probe_token "${CHECK_GOOGLE_TOKEN_URL:-https://oauth2.googleapis.com/token}" "$cid" "$sec" "${red:-http://localhost:5173/auth/callback}")" "$sec" ;;
+    KAKAO) interpret kakao "$(probe_token "${CHECK_KAKAO_TOKEN_URL:-https://kauth.kakao.com/oauth/token}" "$cid" "$sec" "${red:-http://localhost:5173/auth/callback}")" "$sec" ;;
+    NAVER)
+      # 가짜 코드 + state 로 한 번 두드린다 (실제 토큰 요청과 같은 모양 — state 포함). 가짜 코드에 Naver 가 어떤 오류를 주는지는 문서에 없어, 틀린 키(invalid_client 류)만 ✗ 로 하고 나머지는 원문을 보인다
+      nout="$(probe_token "${CHECK_NAVER_TOKEN_URL:-https://nid.naver.com/oauth2.0/token}" "$cid" "$sec" "${red:-http://localhost:5173/auth/callback}" check-real-providers-dummy-state)"
+      nbody="$(printf '%s' "$nout" | sed '$d')"; nst="$(printf '%s' "$nout" | tail -n1)"
+      case "$nbody" in
+        *invalid_client*|*unauthorized_client*) bad "naver: client id 또는 client secret 이 틀렸다 (HTTP $nst) — 네이버 개발자센터 > 애플리케이션 > 개요의 Client ID · Client Secret 을 다시 복사한다"; note "$(raw_of "$nbody" "$sec")" ;;
+        "") if [ "$nst" = 000 ] || [ -z "$nout" ]; then bad "naver: 제공자 서버에 닿지 못했다 (네트워크): $(printf '%s' "$nout" | head -c 120)"; else note "naver: 빈 응답 HTTP $nst"; fi ;;
+        *) note "naver: 서버가 가짜 코드에 답했다 (HTTP $nst) — 키가 맞는지는 이 응답으로 단정하지 못한다(진짜 로그인으로 확인). $(raw_of "$nbody" "$sec")" ;;
+      esac ;;
   esac
 done
 # --- LINE (auth-social-oidc 의 line 프리셋): client id 가 있으면 켜진다 (ENABLED 없음) --------------------------------------------------
@@ -123,9 +157,9 @@ else
     out="$(curl -sS -m 15 -X POST "${CHECK_LINE_TOKEN_URL:-https://api.line.me/oauth2/v2.1/token}" -H 'Content-Type: application/x-www-form-urlencoded' --data-urlencode grant_type=authorization_code --data-urlencode "client_id=$lcid" --data-urlencode "client_secret=$lsec" --data-urlencode "redirect_uri=${lred:-http://localhost:5173/auth/callback}" --data-urlencode code=check-real-providers-dummy-code --data-urlencode code_verifier=check-real-providers-dummy-verifier-0123456789abcdef -w '\n%{http_code}' 2>&1)"
     # 실측(2026-10): LINE 은 틀린 client id/secret 에도 먼저 코드를 본다 — 가짜 코드에는 항상 invalid_grant 라서 키가 맞는지는 **이 두드림으로는 알 수 없다**. 서버에 닿는지만 본다
     case "$(printf '%s' "$out" | sed '$d')" in
-      *invalid_client*) bad "line: client id 또는 secret 이 틀렸다 (invalid_client) — 콘솔에서 값을 다시 복사한다" ;;
+      *invalid_client*) bad "line: client id 또는 secret 이 틀렸다 (invalid_client) — 콘솔에서 값을 다시 복사한다. $(raw_of "$(printf '%s' "$out" | sed '$d')" "$lsec")" ;;
       *invalid_grant*) ok "line: 토큰 서버에 닿는다 (가짜 코드라 invalid_grant — 정상). 단 LINE 은 틀린 키에도 같은 답이라 **키가 맞는지는 진짜 로그인으로만 안다** (docs §7.2 #5)" ;;
-      *) if [ "$(printf '%s' "$out" | tail -n1)" = 000 ] || [ -z "$out" ]; then bad "line: 토큰 서버에 닿지 못했다 (네트워크): $(printf '%s' "$out" | head -c 120)"; else note "line: 해석하지 못한 응답 — $(printf '%s' "$out" | head -c 160)"; fi ;;
+      *) if [ "$(printf '%s' "$out" | tail -n1)" = 000 ] || [ -z "$out" ]; then bad "line: 토큰 서버에 닿지 못했다 (네트워크): $(printf '%s' "$out" | head -c 120)"; else note "line: 해석하지 못한 응답 — $(raw_of "$(printf '%s' "$out" | sed '$d')" "$lsec")"; fi ;;
     esac
   fi
 fi
@@ -144,9 +178,9 @@ else
     body="$(printf '%s' "$out" | sed '$d')"; st="$(printf '%s' "$out" | tail -n1)"
     # 실측(2026-10): 모르는 client id → 400 invalid_client "Value passed for the client id was invalid". 맞는 client 에 가짜 코드 → invalid_request/invalid_grant 로 거절된다고 문서가 말한다 (키가 맞는 쪽은 진짜 키로 확인 필요)
     case "$body" in
-      *invalid_client*|*unauthorized_client*) bad "x: client id 또는 secret 이 틀렸다 ($(printf '%s' "$body" | grep -oE '"error"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1), HTTP $st) — OAuth 2.0 Client ID · Secret 인지 (OAuth 1.0a API Key 가 아닌지) 확인한다" ;;
+      *invalid_client*|*unauthorized_client*) bad "x: client id 또는 secret 이 틀렸다 ($(printf '%s' "$body" | grep -oE '"error"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1), HTTP $st) — OAuth 2.0 Client ID · Secret 인지 (OAuth 1.0a API Key 가 아닌지) 확인한다. $(raw_of "$body" "$xsec")" ;;
       *invalid_request*|*invalid_grant*) ok "x: 제공자가 client id/secret 을 받아들인 것으로 보인다 (가짜 코드라 거절 — 정상). 키가 맞는지의 최종 확인은 진짜 로그인 (확인 필요)" ;;
-      *) if [ "$st" = 000 ] || [ -z "$out" ]; then bad "x: 토큰 서버에 닿지 못했다 (네트워크): $(printf '%s' "$out" | head -c 120)"; else note "x: 해석하지 못한 응답 HTTP $st — $(printf '%s' "$body" | head -c 160)"; fi ;;
+      *) if [ "$st" = 000 ] || [ -z "$out" ]; then bad "x: 토큰 서버에 닿지 못했다 (네트워크): $(printf '%s' "$out" | head -c 120)"; else note "x: 해석하지 못한 응답 HTTP $st — $(raw_of "$body" "$xsec")"; fi ;;
     esac
   fi
 fi

@@ -129,18 +129,39 @@
 ## 4. (선택) Kakao · Naver — 오늘의 우선순위는 낮다
 
 ### Kakao
+
+막히는 순서대로 적었다. `scripts/check-real-providers.sh` 가 토큰 서버에서 받은 `error_code` 를 그대로 보여 주고 아는 코드는 조치를 붙인다(아래 표).
+
 1. <https://developers.kakao.com/> → 로그인 → **내 애플리케이션 → 애플리케이션 추가** (앱 이름 · 회사명).
-2. **앱 설정 → 앱 → 일반**의 **REST API 키** → 이것이 `…_KAKAO_CLIENT_ID`(32자).
-3. **제품 설정 → 카카오 로그인** → **활성화 ON** → **Redirect URI 등록**: `http://localhost:5173/auth/callback` · `http://localhost:5173/account/link-callback` · `https://<도메인>/auth/callback` · `https://<도메인>/account/link-callback` (각각 글자 그대로).
-4. **보안 → Client Secret**: **발급 + 활성화 상태 ON** — 공식 문서: REST API 키에는 Client Secret 기능이 **기본으로 켜져** 있어 토큰 요청에 `client_secret` 을 반드시 넣어야 한다. 이 레포는 비어 있으면 기동을 막으므로(`client secret must not be blank`) **발급해서** `…_KAKAO_CLIENT_SECRET` 에 넣는다.
-5. **동의항목**: `닉네임`(선택 동의 가능) · **`카카오계정(이메일)`**. 이메일을 **필수 동의**로 두려면 **비즈 앱 전환**이 필요하다 — 개인 개발자는 "본인인증 → 앱 일반 → 개인 개발자 비즈 앱 전환(목적: 이메일 필수 동의)" 경로(검색 결과로 확인 `확인 필요`). **선택 동의**는 비즈 앱 없이 가능한 것으로 안내되지만, 사용자가 동의 화면에서 **이메일 항목을 끌 수 있다.**
-6. **이메일을 못 받는 경우 (`email` 없음 / `is_email_valid=false` / `is_email_verified=false`)**: 코드(`KakaoOAuthProvider`)는 `is_email_valid` 와 `is_email_verified` 가 **둘 다 true** 일 때만 "확인된 이메일"로 본다(다른 카카오계정으로 넘어간 만료 주소는 `verified=true` · `valid=false` 로 오므로). 확인된 이메일이 아니면 계정은 **주소 없이** 만들어진다 → 이메일 로그인 · 매직 링크 · 이메일 코드가 없고, 민감한 일(이메일 변경 · 연결 해제 · 삭제)은 **카카오 동의를 다시 거치는 `socialReauth`** 로 다시 인증한다. 카카오 이메일이 있어도 아직 확인 전이면 **기존 계정과 자동 병합하지 않는다**(`409 ACCOUNT.SOCIAL_EMAIL_CONFLICT`).
-7. `redirect_uri` · 토큰 요청: 폼 POST(`application/x-www-form-urlencoded`), 에러는 `{"error":"invalid_grant","error_description":…,"error_code":"KOE320"}` 모양 — 서버 로그의 `social login token exchange rejected provider=kakao … error_code=…` 줄로 보인다. 카카오 에러 코드표: 카카오 문서 `확인 필요`.
+2. **앱 키의 REST API 키** → 이것이 `…_KAKAO_CLIENT_ID`(32자). 네이티브 · JavaScript · Admin 키가 아니다(`KOE101`).
+3. **카카오 로그인 사용 설정을 켠다 — 스위치가 두 군데일 수 있다.** 공식 문서(<https://developers.kakao.com/docs/ko/kakaologin/prerequisite>)는 "**[카카오 로그인] > [사용 설정]의 [상태]를 ON**" 이라고 쓴다. 주인이 겪은 콘솔에는 활성화 스위치가 두 곳이었다 — 한 곳만 켜면 토큰 요청이 `invalid_client` / **`KOE004`** ("To use Kakao account login, user management has to be configured.")로 거절된다. 콘솔 개편으로 메뉴 이름과 위치가 바뀔 수 있어 이 레포는 정확한 두 번째 위치를 단정하지 않는다 — **`check-real-providers.sh` 가 KOE004 를 말하면 카카오 로그인 화면의 모든 활성화(사용 설정) 스위치가 ON 인지 본다.** (OpenID Connect 활성화는 별개의 선택 기능이다 — 이 레포는 쓰지 않는다.)
+4. **Redirect URI 등록** (카카오 로그인 화면): `http://localhost:5173/auth/callback` · `http://localhost:5173/account/link-callback` · `https://<도메인>/auth/callback` · `https://<도메인>/account/link-callback` (각각 글자 그대로 — 틀리면 `KOE006`).
+5. **Client Secret**: 공식 문서: REST API 키에는 Client Secret 기능이 **기본으로 켜져** 있어 토큰 요청에 `client_secret` 을 넣어야 한다(없거나 틀리면 `KOE010`). 이 레포는 비어 있으면 기동을 막으므로(`client secret must not be blank`) **발급해서** `…_KAKAO_CLIENT_SECRET` 에 넣는다.
+6. **동의항목 — 닉네임(`profile_nickname`)을 켠다.** 동의항목 화면의 기본 상태는 **사용 안 함**이다 — 켜지 않으면 카카오가 이름을 주지 않아 **이름 없는 계정**이 만들어진다(주인이 실제로 겪었다). 필수 동의로 설정한다(선택으로 두면 사용자가 끌 수 있다). 단 `apps/sample` 은 제공자 이름을 닉네임으로 **가져오지 않는다**(`skeleton.account.social.import-display-name: false`) — 이름 없는 계정이 되는 것은 그 앱에서는 의도다. 제공자 이름으로 닉네임을 채우는 앱(기본값 `true`)에서만 이 항목이 결과를 바꾼다.
+7. **이메일(`account_email`)은 비즈 앱 뒤에만** 쓸 수 있다 — 개인 개발자는 "본인인증 → 비즈 앱으로 전환(개인 개발자 비즈 앱)" 경로가 있다(공식 문서 <https://developers.kakao.com/docs/ko/kakaologin/utilize> 의 동의항목 표는 이메일을 "비즈 앱" 대상으로 적는다; 전환 절차의 메뉴는 콘솔에서 확인). 켜지 않으면 계정은 **"이메일 없는 계정"**이 된다.
+8. **이미 만들어진 계정은 콘솔을 고쳐도 이름이 자동으로 채워지지 않는다.** 이름은 **가입 때 한 번**만 쓰이고 재로그인은 계정 이름을 건드리지 않는다. 시험 계정이 이름 없이 만들어졌다면 그 계정을 지우고(계정 삭제) 다시 가입하거나, 사용자가 닉네임을 직접 정한다.
+9. **이메일을 못 받는 경우 (`email` 없음 / `is_email_valid=false` / `is_email_verified=false`)**: 코드(`KakaoOAuthProvider`)는 `is_email_valid` 와 `is_email_verified` 가 **둘 다 true** 일 때만 "확인된 이메일"로 본다(다른 카카오계정으로 넘어간 만료 주소는 `verified=true` · `valid=false` 로 오므로). 확인된 이메일이 아니면 계정은 **주소 없이** 만들어진다 → 이메일 로그인 · 매직 링크 · 이메일 코드가 없고, 민감한 일(이메일 변경 · 연결 해제 · 삭제)은 **카카오 동의를 다시 거치는 `socialReauth`** 로 다시 인증한다. 카카오 이메일이 있어도 아직 확인 전이면 **기존 계정과 자동 병합하지 않는다**(`409 ACCOUNT.SOCIAL_EMAIL_CONFLICT`).
+10. 토큰 요청은 폼 POST(`application/x-www-form-urlencoded`)이고 실패하면 `{"error":"invalid_client","error_code":"KOE004","error_description":"…"}` 모양이다 — 서버 로그의 `social login token exchange rejected provider=kakao … error_code=…` 줄로도 보인다.
+
+| `error_code` | 뜻 (출처: <https://developers.kakao.com/docs/ko/kakaologin/trouble-shooting>) | 조치 |
+|---|---|---|
+| `KOE004` | 카카오 로그인을 사용하도록 설정하지 않았다 | 3번 — 사용 설정 ON (스위치가 두 곳일 수 있다) |
+| `KOE006` | 등록하지 않은 Redirect URI 로 요청했다 | 4번 — 글자 그대로 등록 |
+| `KOE010` | Client Secret 을 쓰는 앱에서 `client_secret` 을 빠뜨렸거나 틀렸다 | 5번 — 발급한 값을 그대로 |
+| `KOE101` | 잘못된 앱 키를 썼다 | 2번 — REST API 키 |
+| `KOE320` | 같은 인가 코드를 두 번 썼거나 만료됐다 | 점검 스크립트의 가짜 코드에는 **이 코드가 오는 것이 정상**이다(앱 설정은 받아들여진 것) |
+
+위 표에 없는 코드는 스크립트가 제공자 원문(`error` · `error_code` · `error_description`)만 보여 준다.
 
 ### Naver (선택)
-- <https://developers.naver.com/apps/> 에서 애플리케이션 등록 → **네이버 로그인** API, 제공 정보에 `이메일`(선택), 서비스 URL · Callback URL 등록(위와 같은 4개). Client ID / Secret 을 `…_NAVER_*` 에.
-- **네이버는 확인된 이메일을 주는 보증이 없다 → 이 백엔드는 항상 "이메일 미확인"으로 다룬다**: 주소 없는 계정이 되고 병합되지 않는다.
-- ⚠ **알려진 위험(확인 필요)**: 네이버 토큰 발급 API 는 `state` 파라미터를 요구하는 것으로 알고 있는데 `NaverOAuthProvider` 의 토큰 요청에는 `state` 가 없다(`OAuthProvider.fetchProfile(code, redirectUri)` 계약에 state 가 없다). 실제 네이버로 시험해 보기 전에는 동작을 장담하지 않는다. 이번 시험 범위(Google · LINE · X)가 아니라서 이 브랜치에서 고치지 않았다.
+> 이 절의 콘솔 항목(별명 · 개발 중 상태의 테스터)은 네이버 개발자센터(developers.naver.com)의 공식 문서 원문을 이 환경의 도구로는 열 수 없어 **조사 문서로 확인하지 못했다** — 아래는 주인의 시험에서 알려진 동작이고 콘솔 화면으로 확인한다.
+
+1. <https://developers.naver.com/apps/> 에서 애플리케이션 등록 → **네이버 로그인** API 를 고른다. **서비스 URL · Callback URL**(위 Kakao 와 같은 4개)을 등록하고 Client ID / Secret 을 `…_NAVER_*` 에 넣는다.
+2. **제공 정보(사용자 정보 동의 항목)에서 별명(nickname)을 필수로 설정한다** — 체크하지 않으면 프로필에 `nickname` 이 오지 않아 이름이 없다. 이름(`name`)·이메일은 선택 항목이다. 제공자 이름을 닉네임으로 가져오는 앱(기본값 `import-display-name: true`)에서만 이것이 결과를 바꾼다 — `apps/sample` 은 가져오지 않는다.
+3. **애플리케이션 상태가 "개발 중"이면 멤버 관리에 등록한 계정(테스터)만 로그인된다.** 시험할 네이버 계정을 **멤버 관리**에 추가한다. 일반 사용자에게 열려면 검수를 받아 서비스 상태로 바꾼다.
+4. 이미 만들어진 계정은 콘솔을 고쳐도 이름이 자동으로 채워지지 않는다(가입 때 한 번만 쓰인다) — Kakao 8번과 같다.
+5. **네이버는 확인된 이메일을 주는 보증이 없다 → 이 백엔드는 항상 "이메일 미확인"으로 다룬다**: 주소 없는 계정이 되고 병합되지 않는다.
+6. **토큰 요청의 `state`**: 네이버 토큰 발급 요청은 `state` 를 받는다(공식 명세 원문은 이 환경에서 못 열었다 — 널리 쓰이는 구현은 모두 `grant_type` · `client_id` · `client_secret` · `code` · `state` 를 보낸다). 이 레포는 이제 콜백이 받은 `state` 를 **로그인 · 연결 · 다시 인증 요청의 선택 필드 `state`** 로 받아(프런트가 같이 보낸다) 네이버 토큰 요청에 싣는다. 다른 제공자는 무시한다. 프런트가 `state` 를 보내지 않으면 예전처럼 싣지 않는다 — 그래서 네이버 시험이 `state` 때문에 실패하면 프런트가 요청에 `state` 를 싣는지부터 본다(react-skeleton 쪽 반영 필요). `check-real-providers.sh` 는 가짜 코드 + `state` 로 토큰 서버를 한 번 두드려 응답 원문을 보여 준다(틀린 키만 ✗, 그 밖의 응답은 단정하지 않고 원문을 보인다).
 
 ## 5. 메일 발송 — 서비스 고르기 · DNS(Cloudflare) · SMTP 값
 
@@ -331,5 +352,5 @@ scripts/check-real-providers.sh        # 백엔드가 뜬 뒤 다시: /auth/meth
 - LINE: 이메일 권한 신청의 정확한 요건(스크린샷 요구는 검색 요약), `http://localhost` 콜백 허용 여부, ID 토큰 이메일의 "확인됨" 보증 여부, 웹 로그인 ID 토큰의 실제 `alg`(문서는 HS256 — 모듈은 HS256 · ES256 을 모두 받는다).
 - X: 약관 · 개인정보 URL 의 필수 여부, `confirmed_email` 이 "확인된 주소"인지(모듈은 병합에 쓰지 않는다), API 등급 · 요금(로그인용 `users/me` 호출이 무료 등급에서 열려 있는지).
 - Google: 기밀(confidential) 웹 클라이언트에 PKCE 를 보내도 되는지(모듈은 `SUPPORTED` 로 보낸다, 미확인).
-- Naver: 토큰 요청의 `state` 요구(§4 경고).
+- Naver: 토큰 요청의 `state` — 요청 필드 `state` 로 받아 싣는다(§4 Naver 6번). 프런트가 보내야 한다.
 - **Google · Kakao 토큰 서버가 올바른 키에 `invalid_grant` 를 돌려주는지**는 실제 키가 있어야 확인된다. `scripts/check-real-providers.sh` 는 틀린 키에 `invalid_client`(HTTP 401)가 오는 것까지만 이 문서를 쓰며 실제 서버로 확인했다.
