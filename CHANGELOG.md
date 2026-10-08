@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 보안 수정
+
+- **notification-websocket 인바운드 인가**: 클라이언트가 브로커 목적지로 보낸 `SEND` 와 알림 토픽·사용자 목적지 밖 `SUBSCRIBE` 를 이제 거절한다(기본값으로 막힘, 기존 설정 키 불변; `/app` 아래 `@MessageMapping` 은 그대로 — 인가는 앱 몫). 구독 접두사를 더하는 새 선택 키 `broker.extra-subscribe-destination-prefixes`. 프런트(`@skeleton/realtime`)는 `SEND` 를 쓰지 않아 영향 없음. 문서: [docs/notification-websocket.md](docs/notification-websocket.md).
+
 ### 새 기능 (꺼진 채 시작) — 로그인 아이디 (2026-10-09)
 
 - **`skeleton.account.login-id.enabled`(기본 false = 지금과 같다)**: 이메일이 바뀌어도 안 바뀌는 **비공개** 로그인 아이디. 켜면 전원이 갖는다 — 이메일 가입은 가입 양식(`sign-up`·`verify-email` 의 `loginId`)에서, 소셜 · 매직 링크 · 켜기 전부터 있던 계정은 로그인 직후 게이트(`403 ACCOUNT.LOGIN_ID_REQUIRED`, `LoginIdRequiredInterceptor` 순서 `-110` → 이메일 → 약관)에서 `POST /account/login-id` 로 정한다(이메일이 없어도 된다). 로그인은 **아이디 또는 이메일**(`username` 에 `@` 가 없으면 아이디 — `auth` 모듈 · 토큰은 그대로), 못 바꾼다, 탈퇴해도 **다시 쓸 수 없다**. 규칙: 영문 · 숫자 · `.` `-` `_`, 4~20자(설정), 소문자로 저장(ASCII 만 접는다), 기호는 맨 앞 · 맨 뒤 · 연달아 불가, 영문 하나 이상, 30자(열 길이)를 넘으면 모양과 무관하게 `Size`. 새 경로 셋(꺼지면 등록되지 않는다): `POST /account/login-id/availability`(공개 · 늘 200 · `no-store` · IP 한도, `reason`·`code` 는 해당 없으면 키 자체가 없다) · `POST /account/login-id` · `POST /account/login-id/forgot`(아이디 찾기, 늘 202). 새 오류 코드 `ACCOUNT.LOGIN_ID_TAKEN`(409 — 예약어 · 살아 있는 · 탈퇴한 아이디 모두) · `LOGIN_ID_REQUIRED`(403) · `LOGIN_ID_ALREADY_SET`(409). 응답에 `loginId` 키(켠 앱에서만): `me` · `auth/methods`(`{minLength,maxLength}`) · 관리자 목록(`?loginId=` 정확히 일치). 계약: [docs/account-http-contract.md](docs/account-http-contract.md) FINAL-7 L1~L13, 설명 · 위협: [docs/accounts.md](docs/accounts.md) "로그인 아이디".

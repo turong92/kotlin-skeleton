@@ -15,6 +15,7 @@ skeleton:
       user-id-payload-key: userId              # 페이로드에서 사용자 ID 를 읽는 키
       bridge-enabled: true                     # notification → WebSocket 브리지
       bridge-topics: []                        # 브리지할 topic (비우면 전부)
+      extra-subscribe-destination-prefixes: [] # 클라이언트가 구독할 수 있는 접두사를 더한다 (기본: 알림 토픽 + 사용자 목적지만)
     authentication:
       enabled: false                           # true 면 CONNECT 때 토큰을 검증한다 (NotificationWebSocketTokenVerifier)
       authorization-header: Authorization      # 토큰을 읽는 헤더

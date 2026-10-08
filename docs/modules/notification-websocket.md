@@ -1,7 +1,7 @@
 # notification-websocket
 
 알림을 STOMP over WebSocket(`/ws/notifications`)으로 전달한다. 인증 · trace 인터셉터와 하트비트를 갖춘 인프로세스 브로커를 쓴다.
-`skeleton.notification-websocket.authentication.enabled=true` 가 되기 전까지 엔드포인트는 열려 있다.
+`skeleton.notification-websocket.authentication.enabled=true` 가 되기 전까지 엔드포인트는 열려 있다. 푸시 전용이라 클라이언트의 브로커 목적지 `SEND` 와 알림 토픽·사용자 목적지 밖 `SUBSCRIBE` 는 거절한다(`/app` 아래 `@MessageMapping` 은 앱이 직접 인가한다).
 
 | 항목 | 내용 |
 |---|---|
@@ -11,7 +11,7 @@
 | 설정 접두사 | `skeleton.notification-websocket` — [docs/config/modules/notification-websocket.yml](../config/modules/notification-websocket.yml) |
 | 기본 동작 | 켜짐 (인프로세스 simple broker). |
 | 부팅에 필요한 것 | 서블릿 웹 앱. |
-| 교체 지점 | `NotificationWebSocketAuthenticationInterceptor`, `NotificationWebSocketDestinationResolver`, `NotificationWebSocketTraceInterceptor` |
+| 교체 지점 | `NotificationWebSocketAuthenticationInterceptor`, `NotificationWebSocketInboundAuthorizationInterceptor`, `NotificationWebSocketDestinationResolver`, `NotificationWebSocketTraceInterceptor` |
 | 마이그레이션 | 없음 |
 | 프론트 짝 | `@skeleton/realtime` |
 | 테스트 | `modules/notification-websocket/src/test` |

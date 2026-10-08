@@ -48,6 +48,25 @@ If authentication is disabled, topic delivery still works. User destination
 delivery requires a session `Principal`, so enable WebSocket auth or provide a
 custom `NotificationWebSocketTokenVerifier`/handshake principal in the app.
 
+## Inbound frames are restricted (push-only)
+
+This module is server-to-client push only. A client-supplied `SEND` to a broker
+destination (`/topic/...`, `/queue/...`, `/user/...`) is rejected, and so is a
+`SUBSCRIBE` outside the public notification topic prefix
+(`broker.notification-destination-prefix`) and the user destination prefix
+(`broker.user-destination-prefix`). A rejected frame is answered with a STOMP
+`ERROR` and the connection is closed.
+
+- `SEND` is accepted only under `broker.application-destination-prefixes`
+  (default `/app`). That is the extension point for `@MessageMapping` handlers; the
+  module does not authorize what a handler does, so **an app that adds handlers must
+  authorize them itself**. Set the list to empty to forbid every client `SEND`.
+- If your destination resolver publishes outside the notification topic prefix and
+  clients must subscribe there, add the prefix to
+  `broker.extra-subscribe-destination-prefixes`.
+- For a different policy, register your own
+  `NotificationWebSocketInboundAuthorizationInterceptor` bean; it replaces the default.
+
 ## Subscribe
 
 Subscribe to the public topic channel:

@@ -42,6 +42,13 @@ class NotificationWebSocketAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
+    fun notificationWebSocketInboundAuthorizationInterceptor(
+        properties: NotificationWebSocketProperties,
+    ): NotificationWebSocketInboundAuthorizationInterceptor =
+        NotificationWebSocketInboundAuthorizationInterceptor(properties)
+
+    @Bean
+    @ConditionalOnMissingBean
     fun notificationWebSocketTraceInterceptor(): NotificationWebSocketTraceInterceptor =
         NotificationWebSocketTraceInterceptor()
 
@@ -107,12 +114,14 @@ class NotificationWebSocketBrokerConfiguration {
         properties: NotificationWebSocketProperties,
         traceInterceptor: NotificationWebSocketTraceInterceptor,
         authenticationInterceptor: NotificationWebSocketAuthenticationInterceptor,
+        inboundAuthorizationInterceptor: NotificationWebSocketInboundAuthorizationInterceptor,
         notificationWebSocketHeartbeatTaskScheduler: ThreadPoolTaskScheduler,
     ): WebSocketMessageBrokerConfigurer =
         NotificationWebSocketMessageBrokerConfigurer(
             properties = properties,
             traceInterceptor = traceInterceptor,
             authenticationInterceptor = authenticationInterceptor,
+            inboundAuthorizationInterceptor = inboundAuthorizationInterceptor,
             heartbeatTaskScheduler = notificationWebSocketHeartbeatTaskScheduler,
         )
 }

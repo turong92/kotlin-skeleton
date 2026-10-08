@@ -30,6 +30,8 @@ data class NotificationWebSocketProperties(
         val userIdPayloadKey: String = "userId",
         val bridgeEnabled: Boolean = true,
         val bridgeTopics: Set<String> = emptySet(),
+        /** 클라이언트가 구독할 수 있는 접두사를 더한다. 기본은 알림 토픽 접두사와 사용자 목적지 접두사뿐이다. */
+        val extraSubscribeDestinationPrefixes: List<String> = emptyList(),
     )
 
     data class Authentication(

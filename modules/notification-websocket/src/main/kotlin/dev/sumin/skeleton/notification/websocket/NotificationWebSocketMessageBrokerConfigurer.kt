@@ -12,6 +12,7 @@ class NotificationWebSocketMessageBrokerConfigurer(
     private val properties: NotificationWebSocketProperties,
     private val traceInterceptor: NotificationWebSocketTraceInterceptor,
     private val authenticationInterceptor: NotificationWebSocketAuthenticationInterceptor,
+    private val inboundAuthorizationInterceptor: NotificationWebSocketInboundAuthorizationInterceptor,
     private val heartbeatTaskScheduler: TaskScheduler,
 ) : WebSocketMessageBrokerConfigurer {
     override fun registerStompEndpoints(registry: StompEndpointRegistry) {
@@ -41,7 +42,7 @@ class NotificationWebSocketMessageBrokerConfigurer(
     }
 
     override fun configureClientInboundChannel(registration: ChannelRegistration) {
-        registration.interceptors(traceInterceptor, authenticationInterceptor)
+        registration.interceptors(traceInterceptor, authenticationInterceptor, inboundAuthorizationInterceptor)
         registration.applyExecutor(properties.inboundChannel)
     }
 
