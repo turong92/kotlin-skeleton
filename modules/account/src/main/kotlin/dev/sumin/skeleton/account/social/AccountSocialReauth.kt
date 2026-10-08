@@ -16,7 +16,7 @@ class AccountSocialReauthVerifier(private val registry: OAuthProviderRegistry, p
     override fun verify(accountId: String, proof: SocialReauth): Boolean {
         val provider = registry.findEnabled(proof.provider) ?: return false
         // 검증기가 없거나 틀린 모양이면 "증명이 틀렸다" 가 아니라 400 AUTH.SOCIAL_PKCE_FAILED — 프론트의 버그를 가리지 않는다
-        val exchange = provider.codeExchange(proof.authorizationCode, proof.redirectUri, proof.codeVerifier, proof.nonce)
+        val exchange = provider.codeExchange(proof.authorizationCode, proof.redirectUri, proof.codeVerifier, proof.nonce, proof.state)
         val profile = try {
             provider.fetchProfile(exchange)
         } catch (_: OAuthInvalidAuthorizationCodeException) {

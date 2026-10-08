@@ -11,6 +11,7 @@ Naver OAuth 토큰 교환 · 프로필 조회 HTTP 클라이언트를 `auth-soci
 | 설정 접두사 | 없음 (설정은 `auth-social` 블록의 providers.naver 아래) — [auth-social 블록](../config/modules/auth-social.yml) |
 | 기본 동작 | 꺼짐. `skeleton.auth-social.providers.naver.enabled=true` 로 켠다. |
 | 부팅에 필요한 것 | 없음. 클라이언트 id · secret 은 켤 때 필요하다. |
+| 토큰 요청의 `state` | 로그인 · 연결 · 다시 인증 요청의 선택 필드 `state`(콜백이 받은 값)를 `OAuthCodeExchange.state` 로 받아 토큰 요청 폼에 싣는다. 없으면 싣지 않는다 (docs/real-provider-setup.md §4) |
 | 교체 지점 | `NaverOAuthProvider` |
 | 마이그레이션 | 없음 |
 | 프론트 짝 | `@skeleton/auth` |

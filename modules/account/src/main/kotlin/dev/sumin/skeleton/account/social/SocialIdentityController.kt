@@ -32,6 +32,8 @@ data class LinkSocialRequest(
     /** 연결할 제공자의 PKCE 검증기 · 인가 요청의 nonce (`GET /auth/methods` 의 `pkce` · `nonce`) */
     @field:Size(max = 256) val codeVerifier: String? = null,
     @field:Size(max = 256) val nonce: String? = null,
+    /** 콜백이 받은 OAuth `state` — Naver 처럼 토큰 요청에 요구하는 제공자에게만 전달된다 */
+    @field:Size(max = 512) val state: String? = null,
 ) {
     override fun toString() = "LinkSocialRequest(authorizationCode=<redacted>, <credentials redacted>)"
 }
@@ -49,7 +51,7 @@ class SocialIdentityController(private val callers: AccountCallers, private val 
         val view = links.link(
             caller.accountId, provider, request.authorizationCode!!, request.redirectUri,
             dev.sumin.skeleton.account.web.reauthOf(request.currentPassword, request.confirmationCode, request.socialReauth), caller.sessionId,
-            request.codeVerifier, request.nonce,
+            request.codeVerifier, request.nonce, request.state,
         )
         return ResponseEntity.status(HttpStatus.CREATED).body(Response.ok(view))
     }

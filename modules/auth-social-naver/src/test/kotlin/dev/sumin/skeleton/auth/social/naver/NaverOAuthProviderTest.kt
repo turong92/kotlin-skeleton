@@ -3,6 +3,7 @@ package dev.sumin.skeleton.auth.social.naver
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import dev.sumin.skeleton.auth.social.config.AuthSocialProperties
+import dev.sumin.skeleton.auth.social.oauth.OAuthCodeExchange
 import dev.sumin.skeleton.common.http.DefaultExternalHttpClient
 import dev.sumin.skeleton.common.http.DefaultExternalHttpErrorMapper
 import dev.sumin.skeleton.common.http.ExternalHttpClient
@@ -75,6 +76,20 @@ class NaverOAuthProviderTest {
         assertEquals("GET", profileRequest.method)
         assertEquals("/v1/nid/me", profileRequest.path)
         assertEquals("Bearer naver-access-token", profileRequest.headers["authorization"]?.single())
+    }
+
+    @Test
+    fun `the state the callback received goes to the token request - Naver's token API takes it`() {
+        provider.fetchProfile(OAuthCodeExchange(authorizationCode = "naver-code", state = "state-0123456789"))
+
+        assertEquals("state-0123456789", requests.first().formBody()["state"])
+    }
+
+    @Test
+    fun `without a state the token request carries none - the old two-argument call is unchanged`() {
+        provider.fetchProfile("naver-code", redirectUri = null)
+
+        assertEquals(null, requests.first().formBody()["state"])
     }
 
     private fun handle(exchange: HttpExchange) {

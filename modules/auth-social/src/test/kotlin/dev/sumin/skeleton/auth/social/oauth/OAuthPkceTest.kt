@@ -116,4 +116,14 @@ class OAuthPkceTest {
         val registry = OAuthProviderRegistry(listOf(self), AuthSocialProperties())
         assertEquals(self, registry.findEnabled("Selfish"))
     }
+
+    @Test
+    fun `the state of the callback reaches every provider as given - a malformed one is dropped, never an error`() {
+        val service = service(provider(PkceMode.UNSUPPORTED))
+        service.login("fake", "code", "https://app/cb", state = "9f1c2d3e-state")
+        service.login("fake", "code", "https://app/cb", state = "has a space")
+        service.login("fake", "code", "https://app/cb")
+
+        assertEquals(listOf("9f1c2d3e-state", null, null), calls.map { it.state })
+    }
 }

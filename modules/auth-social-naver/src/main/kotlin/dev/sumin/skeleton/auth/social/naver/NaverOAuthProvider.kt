@@ -2,6 +2,7 @@ package dev.sumin.skeleton.auth.social.naver
 
 import com.fasterxml.jackson.annotation.JsonProperty
 import dev.sumin.skeleton.auth.social.config.AuthSocialProperties
+import dev.sumin.skeleton.auth.social.oauth.OAuthCodeExchange
 import dev.sumin.skeleton.auth.social.oauth.OAuthInvalidAuthorizationCodeException
 import dev.sumin.skeleton.auth.social.oauth.OAuthProvider
 import dev.sumin.skeleton.auth.social.oauth.OAuthTokenErrorLog
@@ -21,8 +22,12 @@ class NaverOAuthProvider(
         require(properties.clientSecret.isNotBlank()) { "Naver OAuth clientSecret must not be blank" }
     }
 
-    override fun fetchProfile(authorizationCode: String, redirectUri: String?): OAuthUserProfile {
-        val token = exchangeToken(authorizationCode, redirectUri)
+    override fun fetchProfile(authorizationCode: String, redirectUri: String?): OAuthUserProfile =
+        fetchProfile(OAuthCodeExchange(authorizationCode, redirectUri))
+
+    /** Naver 의 토큰 발급 요청은 `state` 를 받는다 — 콜백이 받은 값이 있으면 싣는다 (없으면 예전처럼 싣지 않는다) */
+    override fun fetchProfile(exchange: OAuthCodeExchange): OAuthUserProfile {
+        val token = exchangeToken(exchange.authorizationCode, exchange.redirectUri, exchange.state)
         val profile = requireNotNull(
             httpClient.get(
                 clientName = PROFILE_CLIENT_NAME,
@@ -48,13 +53,14 @@ class NaverOAuthProvider(
     private fun exchangeToken(
         authorizationCode: String,
         redirectUri: String?,
+        state: String?,
     ): NaverTokenResponse =
         try {
             requireNotNull(
                 httpClient.postForm(
                     clientName = TOKEN_CLIENT_NAME,
                     path = properties.tokenPath ?: DEFAULT_TOKEN_PATH,
-                    form = tokenForm(authorizationCode, redirectUri),
+                    form = tokenForm(authorizationCode, redirectUri, state),
                     responseType = NaverTokenResponse::class.java,
                 ) {
                     baseUrl(properties.tokenBaseUrl ?: DEFAULT_TOKEN_BASE_URL)
@@ -72,6 +78,7 @@ class NaverOAuthProvider(
     private fun tokenForm(
         authorizationCode: String,
         redirectUri: String?,
+        state: String?,
     ): Map<String, String> =
         linkedMapOf(
             "grant_type" to "authorization_code",
@@ -83,6 +90,7 @@ class NaverOAuthProvider(
             if (!effectiveRedirectUri.isNullOrBlank()) {
                 put("redirect_uri", effectiveRedirectUri)
             }
+            if (!state.isNullOrBlank()) put("state", state)
         }
 
     data class NaverTokenResponse(

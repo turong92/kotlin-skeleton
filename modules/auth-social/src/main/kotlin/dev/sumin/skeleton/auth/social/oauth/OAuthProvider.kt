@@ -24,6 +24,11 @@ data class OAuthCodeExchange(
     val redirectUri: String? = null,
     val codeVerifier: String? = null,
     val nonce: String? = null,
+    /**
+     * 콜백이 받은 OAuth `state` (프론트가 인가 요청에 실은 값) — 제공자가 토큰 요청에 요구하면(Naver) 싣는다. 모르는 제공자는 쓰지 않는다.
+     * 검증은 프론트의 몫이다(콜백에서 저장한 값과 비교) — 서버는 값을 해석하지 않고 그대로 넘긴다. 모양이 이상하면(공백 · 너무 긴 값) 버린다
+     */
+    val state: String? = null,
 ) {
     override fun toString() = "OAuthCodeExchange(authorizationCode=<redacted>, codeVerifier=<redacted>)"
 }
@@ -64,6 +69,7 @@ interface OAuthProvider {
 }
 
 private val VERIFIER_FORMAT = Regex("^[A-Za-z0-9\\-._~]{43,128}$") // RFC 7636 §4.1
+private val STATE_FORMAT = Regex("^[\\x21-\\x7E]{1,512}$")
 private val NONCE_FORMAT = Regex("^[\\x21-\\x7E]{8,256}$")
 
 /**
@@ -75,6 +81,7 @@ fun OAuthProvider.codeExchange(
     redirectUri: String?,
     codeVerifier: String?,
     nonce: String?,
+    state: String? = null,
 ): OAuthCodeExchange {
     val verifier = codeVerifier?.takeIf { it.isNotEmpty() }
     if (verifier != null && !VERIFIER_FORMAT.matches(verifier)) throw OAuthPkceException(providerId)
@@ -87,5 +94,6 @@ fun OAuthProvider.codeExchange(
         redirectUri = redirectUri,
         codeVerifier = verifier.takeIf { pkce != PkceMode.UNSUPPORTED },
         nonce = n.takeIf { this.nonce != NonceMode.UNSUPPORTED },
+        state = state?.takeIf { STATE_FORMAT.matches(it) },
     )
 }

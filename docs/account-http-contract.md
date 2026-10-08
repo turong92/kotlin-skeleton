@@ -374,9 +374,11 @@ Provider values today: `google` pkce SUPPORTED nonce UNSUPPORTED; `line` (preset
 ### C. Request bodies — two new optional fields everywhere an authorization code is sent
 | Endpoint | New fields |
 |---|---|
-| `POST /api/v1/auth/social/{provider}/login` | `codeVerifier?`, `nonce?` next to `authorizationCode`, `redirectUri?` |
-| `POST /api/v1/account/identities/social/{provider}` (link) | `codeVerifier?`, `nonce?` (top level, next to `authorizationCode`) |
-| `socialReauth` object on email change, link, unlink, delete, reauth | `socialReauth: { provider, authorizationCode, redirectUri?, codeVerifier?, nonce? }` |
+| `POST /api/v1/auth/social/{provider}/login` | `codeVerifier?`, `nonce?`, `state?` next to `authorizationCode`, `redirectUri?` |
+| `POST /api/v1/account/identities/social/{provider}` (link) | `codeVerifier?`, `nonce?`, `state?` (top level, next to `authorizationCode`) |
+| `socialReauth` object on email change, link, unlink, delete, reauth | `socialReauth: { provider, authorizationCode, redirectUri?, codeVerifier?, nonce?, state? }` |
+
+`state?` (optional, additive): the OAuth `state` the callback received. It is only forwarded to providers whose token request takes it (`naver`); every other provider ignores it, a malformed value (spaces, over 512 characters) is dropped, and the server does not verify it — comparing it with the stored value stays the frontend's first login-CSRF defence. Without it the Naver token request carries none, as before.
 
 Rules (server-enforced, evaluated by the target provider's mode, BEFORE the provider is called and BEFORE any re-authentication proof is spent — so a retry with the same authorization code and the same proof works after fixing the request):
 - `pkce = REQUIRED` and no `codeVerifier` -> `400 AUTH.SOCIAL_PKCE_FAILED`.

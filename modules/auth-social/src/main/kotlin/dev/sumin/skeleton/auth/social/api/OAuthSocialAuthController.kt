@@ -10,6 +10,8 @@ data class OAuthSocialLoginRequest(
     val codeVerifier: String? = null,
     /** 인가 요청에 실은 `nonce` — `nonce` 가 REQUIRED 면 필수 */
     val nonce: String? = null,
+    /** 콜백이 받은 OAuth `state` — 토큰 요청에 요구하는 제공자(Naver)에게만 전달된다. 나머지는 무시 */
+    val state: String? = null,
 ) {
     override fun toString() = "OAuthSocialLoginRequest(authorizationCode=<redacted>, codeVerifier=<redacted>)"
 }
@@ -27,5 +29,6 @@ class OAuthSocialAuthController(
             redirectUri = request.redirectUri,
             codeVerifier = request.codeVerifier,
             nonce = request.nonce,
+            state = request.state,
         )
 }

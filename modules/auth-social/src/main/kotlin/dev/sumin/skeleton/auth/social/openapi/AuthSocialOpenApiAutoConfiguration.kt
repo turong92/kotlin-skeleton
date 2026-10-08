@@ -121,6 +121,10 @@ class AuthSocialOpenApiAutoConfiguration {
                 "nonce",
                 StringSchema().description("The nonce of the authorization request: required when GET /auth/methods says nonce=REQUIRED."),
             )
+            .addProperty(
+                "state",
+                StringSchema().description("The OAuth state the callback received (optional): forwarded to providers whose token request takes it (Naver), ignored by the others."),
+            )
             .required(listOf("authorizationCode"))
 
     private fun jsonResponse(description: String, schemaRef: String): ApiResponse =

@@ -232,6 +232,12 @@ data class AccountProperties(
          * 기존 계정이 미확인이면 제공자의 확인이 메일함 증명이라 가입 때의 미확인 비밀번호를 버린다. 기본은 병합 없이 409 ACCOUNT.SOCIAL_EMAIL_CONFLICT
          */
         val mergeOnVerifiedEmail: Boolean = false,
+        /**
+         * true(기본 — 이 설정 이전과 같다)면 제공자가 준 이름(Google 실명 · Kakao 닉네임 · OIDC `name`)을 **새 계정의 닉네임**으로 쓴다(규칙에 맞게 고쳐 쓰고, 겹치면 버린다).
+         * false 면 제공자 이름을 버리고 이름 없는 계정으로 만든다 — `display-name.fallback` 규칙(GENERATED 면 자동 닉네임)은 그대로 적용되고, 닉네임은 사용자가 정한다.
+         * 이미 연결된 계정의 재로그인 · 수동 연결(`IdentityService.link`)은 원래 제공자 이름을 계정에 쓰지 않는다. 이메일은 이 설정과 무관하다
+         */
+        val importDisplayName: Boolean = true,
     )
 
     /** 닉네임(`display-name`) — 모듈은 메커니즘만, 사용 방식(중복 허용 · 필수 · 자동 닉네임)은 앱이 정한다. 기본은 이 기능 이전과 같다(중복 허용 · 선택 · 자동 닉네임 없음) */
