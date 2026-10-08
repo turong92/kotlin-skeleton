@@ -5,7 +5,7 @@
 
 `OAuthUserProfile.emailVerified` 는 제공자가 이메일을 **확인했다고** 알려 준 경우만 true 다 (Google `email_verified` · Kakao `is_email_verified`; Naver 는 알리지 않아 false). `account` 가 있으면 연결 표 · 가입 정책이 계정의 로그인 수단 표로 바뀌고,
 확인된 이메일이 기존 계정과 겹쳐도 기본은 병합하지 않는다 ([계정 수명주기](../accounts.md)).
-`emailAuthoritative` 는 제공자가 그 주소의 **권위자**인지다(기본 `emailVerified` 와 같다) — 병합 · 메일함 증명 · 새 계정의 주소는 이것만 본다. Google 은 `@gmail.com` 이거나 `hd` 가 주소 도메인과 같을 때만 true ([auth-social-google](auth-social-google.md)).
+`emailAuthoritative` 는 제공자가 그 주소의 **권위자**인지다(기본 `emailVerified` 와 같다) — 병합 · 메일함 증명 · 새 계정의 주소는 이것만 본다. Google 은 `@gmail.com` 이거나 `hd` 가 주소 도메인과 같을 때만 true (`auth-social-google` 모듈 문서).
 
 ## PKCE · nonce (제공자별 정책)
 
