@@ -30,6 +30,42 @@ class RequestLoggingFilterTest {
         }
     }
 
+
+    @Test
+    fun `an error the request recorded shows up on the end line as code and reason`() {
+        captureLogger(SkeletonLoggers.REQUEST).use { captured ->
+            val request = MockHttpServletRequest("POST", "/api/v1/notes")
+            val response = MockHttpServletResponse()
+            val chain = FilterChain { servletRequest, servletResponse ->
+                (servletResponse as MockHttpServletResponse).status = 400
+                RequestErrorNote.record(servletRequest as MockHttpServletRequest, "COMMON.IDEMPOTENCY_ERROR", "Missing Idempotency-Key")
+            }
+
+            RequestLoggingFilter().doFilter(request, response, chain)
+
+            val end = captured.events.map { it.formattedMessage }.single { it.contains("POST /api/v1/notes 400") }
+            assertTrue(end.contains("code=COMMON.IDEMPOTENCY_ERROR"), end)
+            assertTrue(end.contains("reason=Missing Idempotency-Key"), end)
+        }
+    }
+
+    @Test
+    fun `a reason is one short line - control characters are dropped and the length is capped`() {
+        val request = MockHttpServletRequest("POST", "/x")
+        RequestErrorNote.record(request, "X.Y", "line one\nline two " + "z".repeat(500))
+        val reason = RequestErrorNote.of(request)!!.reason
+        assertTrue(!reason.contains('\n') && reason.length <= 160, reason)
+    }
+
+    @Test
+    fun `a request without an error has the plain end line`() {
+        captureLogger(SkeletonLoggers.REQUEST).use { captured ->
+            RequestLoggingFilter().doFilter(MockHttpServletRequest("GET", "/ok"), MockHttpServletResponse(), FilterChain { _, _ -> })
+            val end = captured.events.map { it.formattedMessage }.single { it.contains("GET /ok 200") }
+            assertTrue(!end.contains("code="), end)
+        }
+    }
+
     private fun captureLogger(loggerName: String): CapturedLogger {
         val logger = LoggerFactory.getLogger(loggerName) as Logger
         val previousLevel = logger.level

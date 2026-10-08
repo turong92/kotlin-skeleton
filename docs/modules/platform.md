@@ -12,6 +12,7 @@
 | 설정 접두사 | `skeleton.config.validation`, `skeleton.deploy`, `skeleton.http`, `skeleton.observability.links`, `skeleton.openapi`, `skeleton.redaction`, `skeleton.web` — [docs/config/modules/platform.yml](../config/modules/platform.yml) |
 | 기본 동작 | 켜짐. 필터 · 예외 처리 · OpenAPI 는 기본값으로 동작하고, CORS · rate limit 은 설정으로 켠다. |
 | 부팅에 필요한 것 | 없음. |
+| 요청 로그의 오류 이유 | 4xx · 5xx 로 답한 요청의 종료 줄(`skeleton.debug.request`)은 끝에 `code=<오류 코드> reason=<고정 제목[ fields=<필드 이름>]>` 을 붙인다 (예: `← POST /api/v1/notes 400 (3ms) code=COMMON.IDEMPOTENCY_ERROR reason=Missing Idempotency-Key`). 응답 본문을 못 보는 운영 로그에서 "왜 400 인지" 찾는 단서이고, 코드 · 고정 제목 · 필드 이름만 싣는다(본문 · 헤더 값 · 토큰 · 키 없음). 오류를 직접 쓰는 인터셉터는 `RequestErrorNote.record` 로 같은 칸을 채운다 |
 | 교체 지점 | `GlobalExceptionHandler`, `TraceIdFilter`, `RequestLoggingFilter`, `TimeProvider`, `PublicEndpointRegistry`, `RateLimitStore`, `RateLimitKeyResolver`, `ExternalHttpClient`, `ExternalHttpErrorMapper`, `ExternalHttpTraceExtractor`, `SensitiveValueRedactor`, `ObservabilityLinkResolver`, `DeployGuardRunner`, `DeployEnvGuard`, `AuthorDirectory` |
 | 마이그레이션 | 없음 |
 | 프론트 짝 | `@skeleton/api-client` |

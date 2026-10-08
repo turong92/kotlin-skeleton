@@ -2,6 +2,7 @@ package dev.sumin.skeleton.idempotency
 
 import dev.sumin.skeleton.common.ApiError
 import dev.sumin.skeleton.common.PlatformErrorCode
+import dev.sumin.skeleton.common.RequestErrorNote
 import dev.sumin.skeleton.common.TraceIdFilter
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
@@ -34,6 +35,7 @@ class IdempotencyHandlerInterceptor(
         val rawKey = request.getHeader(IdempotencyHeaders.IDEMPOTENCY_KEY)?.trim()
         if (rawKey.isNullOrBlank()) {
             writeError(
+                request = request,
                 response = response,
                 status = HttpStatus.BAD_REQUEST,
                 title = "Missing Idempotency-Key",
@@ -66,6 +68,7 @@ class IdempotencyHandlerInterceptor(
 
             IdempotencyReservation.Conflict -> {
                 writeError(
+                    request = request,
                     response = response,
                     status = HttpStatus.CONFLICT,
                     title = "Idempotency key conflict",
@@ -77,6 +80,7 @@ class IdempotencyHandlerInterceptor(
 
             IdempotencyReservation.InProgress -> {
                 writeError(
+                    request = request,
                     response = response,
                     status = HttpStatus.CONFLICT,
                     title = "Idempotency request in progress",
@@ -109,12 +113,15 @@ class IdempotencyHandlerInterceptor(
     }
 
     private fun writeError(
+        request: HttpServletRequest,
         response: HttpServletResponse,
         status: HttpStatus,
         title: String,
         detail: String,
         rawKey: String?,
     ) {
+        // 요청 로그(skeleton.debug.request)에 이유가 남게 — 고정 제목만, 키 값은 싣지 않는다
+        RequestErrorNote.record(request, PlatformErrorCode.IDEMPOTENCY_ERROR.code, title)
         response.status = status.value()
         response.contentType = MediaType.APPLICATION_JSON_VALUE
         rawKey?.let { response.setHeader(IdempotencyHeaders.IDEMPOTENCY_KEY, it) }

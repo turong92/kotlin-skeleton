@@ -1,6 +1,7 @@
 # idempotency
 
 `Idempotency-Key` 헤더가 있는 명령 요청의 중복 실행을 막고 첫 응답을 재생한다.
+`Idempotency-Key` 가 없으면 `400 COMMON.IDEMPOTENCY_ERROR`(제목 `Missing Idempotency-Key`) — 검증 오류(`COMMON.VALIDATION_FAILED`)와 코드가 다르고, 요청 로그 종료 줄에도 `code=… reason=Missing Idempotency-Key` 가 남는다(키 값은 싣지 않는다).
 기본 저장소는 인메모리(인스턴스별)다. 여러 인스턴스라면 앱이 `IdempotencyStore` 를 대체한다.
 
 | 항목 | 내용 |

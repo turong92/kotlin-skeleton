@@ -38,6 +38,15 @@ class GlobalExceptionHandlerHttpStatusTest {
     private val mvc: MockMvc = MockMvcBuilders.standaloneSetup(Probe()).setControllerAdvice(GlobalExceptionHandler()).build()
 
     @Test
+    fun `an error answer leaves its code and a short reason on the request for the request log`() {
+        val request = mvc.perform(get("/needs-param")).andExpect(status().isBadRequest).andReturn().request
+        val note = RequestErrorNote.of(request)
+        kotlin.test.assertNotNull(note)
+        kotlin.test.assertEquals("COMMON.PARAMETER_VALIDATION_FAILED", note.code)
+        assertTrue(note.reason.isNotBlank() && !note.reason.contains("\n"), note.reason)
+    }
+
+    @Test
     fun `a method the route does not allow is 405 with an Allow header`() {
         mvc.perform(post("/only-get"))
             .andExpect(status().isMethodNotAllowed)

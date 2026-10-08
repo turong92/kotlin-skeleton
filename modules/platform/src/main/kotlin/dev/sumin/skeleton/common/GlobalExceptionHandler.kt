@@ -182,8 +182,10 @@ class GlobalExceptionHandler {
         detail: String? = errorCode.defaultDetail,
         errors: List<ApiError.FieldError>? = null,
         data: Any? = null,
-    ): ApiError =
-        ApiError(
+    ): ApiError {
+        // 요청 로그의 종료 줄이 이유를 말하게 — 코드와 고정 제목, 필드 이름만 (값 · 본문은 싣지 않는다)
+        RequestErrorNote.recordCurrent(errorCode.code, listOfNotNull(errorCode.title, errors?.takeIf { it.isNotEmpty() }?.joinToString(",", "fields=") { it.field }).joinToString(" "))
+        return ApiError(
             code = errorCode.code,
             title = errorCode.title,
             status = errorCode.status.value(),
@@ -193,6 +195,7 @@ class GlobalExceptionHandler {
             errors = errors,
             data = data,
         )
+    }
 
     private fun currentTraceId(): String? = MDC.get(TraceIdFilter.MDC_KEY)
     private fun currentSpanId(): String? = MDC.get(TraceIdFilter.MDC_SPAN_ID_KEY)
