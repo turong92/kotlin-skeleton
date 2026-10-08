@@ -30,6 +30,9 @@ class GoogleOAuthProviderTest {
     private lateinit var server: HttpServer
     private lateinit var httpClient: ExternalHttpClient
     private lateinit var provider: GoogleOAuthProvider
+    @Volatile private var userinfoJson =
+        """{"sub":"google-sub-1","email":"google@example.com","email_verified":true,"name":"Google User","picture":"https://example.com/google.png"}"""
+    @Volatile private var idTokenClaims: String? = null
     private val requests = Collections.synchronizedList(mutableListOf<RecordedRequest>())
 
     @BeforeTest
@@ -132,6 +135,88 @@ class GoogleOAuthProviderTest {
         assertTrue(!line.contains("google-secret") && !line.contains("mismatch-code"), line)
     }
 
+    private fun jwt(claims: String): String {
+        val enc = java.util.Base64.getUrlEncoder().withoutPadding()
+        return enc.encodeToString("""{"alg":"RS256"}""".toByteArray()) + "." + enc.encodeToString(claims.toByteArray()) + ".sig"
+    }
+
+    private fun profileFor(email: String?, verified: Boolean?, hd: String? = null, idTokenSub: String = "google-sub-1", idTokenEmail: String? = email, trust: AuthSocialProperties.EmailTrust? = null): dev.sumin.skeleton.auth.social.oauth.OAuthUserProfile {
+        userinfoJson = buildString {
+            append("""{"sub":"google-sub-1"""")
+            if (email != null) append(""","email":"$email"""")
+            if (verified != null) append(""","email_verified":$verified""")
+            append("}")
+        }
+        idTokenClaims = if (hd == null) null else buildString {
+            append("""{"sub":"$idTokenSub","hd":"$hd"""")
+            if (idTokenEmail != null) append(""","email":"$idTokenEmail"""")
+            append("}")
+        }
+        val p = GoogleOAuthProvider(httpClient, AuthSocialProperties.Provider(
+            enabled = true, clientId = "google-client", clientSecret = "google-secret",
+            tokenBaseUrl = "http://127.0.0.1:${server.address.port}", profileBaseUrl = "http://127.0.0.1:${server.address.port}",
+            tokenPath = "/token", profilePath = "/userinfo", emailTrust = trust,
+        ))
+        return p.fetchProfile("google-code", redirectUri = null)
+    }
+
+    @Test
+    fun `gmail and googlemail addresses are authoritative when Google says verified`() {
+        assertEquals(true, profileFor("kim@gmail.com", true).emailAuthoritative)
+        assertEquals(true, profileFor("Kim@GMAIL.com", true).emailAuthoritative, "case does not matter")
+        assertEquals(true, profileFor("kim@googlemail.com", true).emailAuthoritative)
+    }
+
+    @Test
+    fun `a workspace address is authoritative only when the signed-in id token hd equals the address domain`() {
+        assertEquals(true, profileFor("kim@corp.example", true, hd = "corp.example").emailAuthoritative)
+        assertEquals(true, profileFor("kim@CORP.example", true, hd = "Corp.Example").emailAuthoritative)
+        assertEquals(false, profileFor("kim@corp.example", true, hd = "other.example").emailAuthoritative, "hd differs from the address domain")
+        assertEquals(false, profileFor("kim@sub.corp.example", true, hd = "corp.example").emailAuthoritative, "a subdomain is not the hosted domain")
+    }
+
+    @Test
+    fun `a non-gmail address without hd is verified-by-claim but not authoritative`() {
+        val p = profileFor("me@naver.com", true)
+        assertEquals(true, p.emailVerified, "the claim is still carried (display, 409 on collision)")
+        assertEquals(false, p.emailAuthoritative)
+    }
+
+    @Test
+    fun `an unverified or missing email is never authoritative`() {
+        assertEquals(false, profileFor("kim@gmail.com", false).emailAuthoritative)
+        assertEquals(false, profileFor("kim@gmail.com", null).emailAuthoritative)
+        assertEquals(false, profileFor(null, true).emailAuthoritative)
+        assertEquals(false, profileFor("kim@corp.example", false, hd = "corp.example").emailAuthoritative)
+    }
+
+    @Test
+    fun `domain parsing traps - lookalike suffixes, two at-signs, trailing dot, blanks - are never authoritative`() {
+        assertEquals(false, profileFor("kim@gmail.com.evil.com", true).emailAuthoritative)
+        assertEquals(false, profileFor("kim@evilgmail.com", true).emailAuthoritative)
+        assertEquals(false, profileFor("gmail.com@evil.com", true).emailAuthoritative)
+        assertEquals(false, profileFor("a@evil.com@gmail.com", true).emailAuthoritative)
+        assertEquals(false, profileFor("a@gmail.com@evil.com", true).emailAuthoritative)
+        assertEquals(false, profileFor("kim@gmail.com.", true).emailAuthoritative)
+        assertEquals(false, profileFor("kim@", true).emailAuthoritative)
+        assertEquals(false, profileFor("kim", true).emailAuthoritative)
+        assertEquals(false, profileFor("kim@corp.example.", true, hd = "corp.example").emailAuthoritative)
+        assertEquals(false, profileFor("kim@corp.example@evil.com", true, hd = "corp.example").emailAuthoritative)
+    }
+
+    @Test
+    fun `an id token that does not belong to the userinfo subject or address is not believed`() {
+        assertEquals(false, profileFor("kim@corp.example", true, hd = "corp.example", idTokenSub = "someone-else").emailAuthoritative)
+        assertEquals(false, profileFor("kim@corp.example", true, hd = "corp.example", idTokenEmail = "kim@other.example").emailAuthoritative)
+    }
+
+    @Test
+    fun `email-trust VERIFIED_CLAIM restores the old behaviour - verified means authoritative`() {
+        assertEquals(true, profileFor("me@naver.com", true, trust = AuthSocialProperties.EmailTrust.VERIFIED_CLAIM).emailAuthoritative)
+        assertEquals(false, profileFor("me@naver.com", false, trust = AuthSocialProperties.EmailTrust.VERIFIED_CLAIM).emailAuthoritative)
+        assertEquals(false, profileFor("me@naver.com", true, trust = AuthSocialProperties.EmailTrust.AUTHORITATIVE).emailAuthoritative)
+    }
+
     private fun handle(exchange: HttpExchange) {
         val body = exchange.requestBody.bufferedReader().use { it.readText() }
         requests += RecordedRequest(
@@ -148,13 +233,11 @@ class GoogleOAuthProviderTest {
                 } else if (body.contains("code=invalid-code")) {
                     exchange.respond(400, """{"error":"invalid_grant"}""")
                 } else {
-                    exchange.respond(200, """{"access_token":"google-access-token","token_type":"Bearer","expires_in":3600}""")
+                    val idToken = idTokenClaims?.let { ""","id_token":"${jwt(it)}"""" } ?: ""
+                    exchange.respond(200, """{"access_token":"google-access-token","token_type":"Bearer","expires_in":3600$idToken}""")
                 }
             }
-            "/userinfo" -> exchange.respond(
-                200,
-                """{"sub":"google-sub-1","email":"google@example.com","email_verified":true,"name":"Google User","picture":"https://example.com/google.png"}""",
-            )
+            "/userinfo" -> exchange.respond(200, userinfoJson)
             else -> exchange.respond(404, """{"message":"not found"}""")
         }
     }

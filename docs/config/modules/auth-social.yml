@@ -13,3 +13,4 @@ skeleton:
 #      profile-base-url:             # 프로필 호스트 재정의 (미설정)
 #      token-path:                   # 토큰 경로 재정의 (미설정)
 #      profile-path:                 # 프로필 경로 재정의 (미설정)
+#      email-trust: AUTHORITATIVE    # google 만: AUTHORITATIVE(기본) = Google 이 지금도 그 사람 것이라 보증하는 주소(@gmail.com · googlemail.com, 또는 Workspace hd == 주소 도메인)만 병합 · 새 계정 주소에 쓴다 | VERIFIED_CLAIM = email_verified 만 보면 된다(옛 동작, 주소의 주인이 바뀐 비-Gmail 계정이 붙을 수 있다)

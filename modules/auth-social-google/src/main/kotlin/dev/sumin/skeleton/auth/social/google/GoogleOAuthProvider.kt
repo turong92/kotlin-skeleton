@@ -51,15 +51,34 @@ class GoogleOAuthProvider(
             }.block(),
         )
 
+        val verified = profile.emailVerified == true
+        val authoritative = verified && when (properties.emailTrust ?: AuthSocialProperties.EmailTrust.AUTHORITATIVE) {
+            AuthSocialProperties.EmailTrust.VERIFIED_CLAIM -> true
+            AuthSocialProperties.EmailTrust.AUTHORITATIVE -> GoogleEmailAuthority.authoritative(profile.email, hostedDomain(token, profile))
+        }
+
         return OAuthUserProfile(
             provider = providerId,
             providerUserId = profile.sub,
             email = profile.email,
             username = profile.email ?: profile.sub,
             displayName = profile.name,
-            emailVerified = profile.emailVerified == true,
+            emailVerified = verified,
+            emailAuthoritative = authoritative,
             avatarUrl = profile.picture?.takeIf { it.startsWith("https://") },
         )
+    }
+
+    /**
+     * `hd`(Workspace 호스팅 도메인)는 userinfo 에 보장되지 않고 ID 토큰에 있다. ID 토큰은 토큰 엔드포인트(TLS, 우리 client secret 으로 직접 호출)에서 바로 받은 것이라
+     * 서명 검증 없이 읽어도 된다(OIDC Core 3.1.3.7 · Google 안내) — 그래도 userinfo 와 `sub` · `email` 이 맞는 토큰만 믿는다.
+     */
+    private fun hostedDomain(token: GoogleTokenResponse, profile: GoogleUserInfoResponse): String? {
+        val claims = GoogleIdToken.claims(token.idToken) ?: return null
+        if (claims["sub"] != profile.sub) return null
+        val email = claims["email"]
+        if (email != null && !email.equals(profile.email, ignoreCase = true)) return null
+        return claims["hd"]
     }
 
     private fun exchangeToken(
@@ -108,6 +127,8 @@ class GoogleOAuthProvider(
     data class GoogleTokenResponse(
         @JsonProperty("access_token")
         val accessToken: String,
+        @JsonProperty("id_token")
+        val idToken: String? = null,
     )
 
     data class GoogleUserInfoResponse(

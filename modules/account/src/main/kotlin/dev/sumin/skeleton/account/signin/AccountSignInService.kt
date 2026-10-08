@@ -28,6 +28,11 @@ data class SignInProof(
     val locale: String? = null,
     val ip: String? = null,
     val allowSignUp: Boolean = false,
+    /**
+     * 제공자가 **그 주소의 권위자**인가 — [emailVerified](제공자가 "확인했다"고 말함)보다 강하다. 병합 · 메일함 증명 · 새 계정의 주소 저장은 이것만 본다.
+     * 기본은 [emailVerified] 와 같다(제공자가 확인했다고 하면 그대로 믿는 수단들). Google 처럼 확인 뒤에 주소의 주인이 바뀔 수 있는 제공자는 false 를 넘긴다.
+     */
+    val emailAuthoritative: Boolean = emailVerified,
 )
 
 /**
@@ -37,6 +42,7 @@ data class SignInProof(
  * 충돌 규칙 (docs/accounts.md 위협 모델 "소셜 병합 탈취"):
  *  - 메일함 증명 수단(매직 링크)은 같은 이메일의 기존 계정에 붙는다 — 메일함의 주인이 어차피 비밀번호 재설정으로 들어올 수 있다.
  *  - 소셜은 **제공자가 확인한 이메일**이 기존 계정과 같으면 기본은 병합하지 않고 ACCOUNT.SOCIAL_EMAIL_CONFLICT. `social.merge-on-verified-email` 을 켜도 두 쪽 이메일이 모두 확인된 경우만.
+ *  - 병합 · 메일함 증명 · 새 계정의 주소 저장은 **권위자**([SignInProof.emailAuthoritative])일 때만. 확인했다고만 한 주소는 충돌(409)은 알리되 붙지도 저장하지도 않는다.
  *  - 제공자가 확인하지 않은 이메일은 **없는 것으로 친다**: 저장하지 않고(남의 주소 선점 방지) 충돌도 알리지 않는다(주소 존재 여부 조회 방지).
  */
 class AccountSignInService(private val core: AccountCore, val registry: SignInMethodRegistry) {
@@ -61,7 +67,7 @@ class AccountSignInService(private val core: AccountCore, val registry: SignInMe
         val now = core.time.now()
         existing?.let { core.accounts.touchIdentity(it.id, now) } ?: core.accounts.findIdentity(method.code, subject)?.let { core.accounts.touchIdentity(it.id, now) }
         // 메일함을 증명한 로그인(매직 링크, 제공자가 확인한 같은 이메일)은 이메일 확인으로 친다
-        val proven = account.email != null && account.email == email && (method.provesEmail || proof.emailVerified)
+        val proven = account.email != null && account.email == email && (method.provesEmail || proof.emailAuthoritative)
         if (proven && !account.emailVerified) {
             proveMailbox(account, core.accounts.findIdentity(method.code, subject), now)
             core.events.publish(AccountEventType.EMAIL_VERIFIED, account.id, proof.ip, mapOf("method" to method.code))
@@ -93,7 +99,7 @@ class AccountSignInService(private val core: AccountCore, val registry: SignInMe
             // 이미 있는 계정에 붙는 것은 가입이 아니다 — 메일함 증명 수단은 `sign-up=false` 여도 기존 계정으로 들어온다.
             // 소셜 병합은 가입 허용을 따르고(충돌 알림도 가입 시도의 일부), 둘 다 아니면 새로 만들지도 붙이지도 않는다
             // 소셜 병합: 제공자가 확인한 이메일(+ 정확 일치)이면. 기존 계정의 이메일이 미확인이면 제공자의 확인이 메일함 증명이라 위 [discardUnprovenPassword] 가 돈다
-            val attach = method.provesEmail || (proof.allowSignUp && core.props.social.mergeOnVerifiedEmail && proof.emailVerified)
+            val attach = method.provesEmail || (proof.allowSignUp && core.props.social.mergeOnVerifiedEmail && proof.emailAuthoritative)
             if (attach) {
                 if (owner.status == AccountStatus.SUSPENDED) return owner   // 정지된 주인에게는 수단을 붙이지 않는다 — 정지 상태만 돌려준다
                 return attachIdentity(owner, method, subject, proof) ?: raced(method, subject)
@@ -120,8 +126,10 @@ class AccountSignInService(private val core: AccountCore, val registry: SignInMe
             throw AccountException(AccountErrorCode.REGISTRATION_BLOCKED)
         }
         val now = core.time.now()
+        // 제공자가 "확인했다"고만 하고 권위자는 아닌 주소(비-Gmail Google …)는 저장하지 않는다 — 저장하면 그 주소의 진짜 주인이 "이미 계정이 있어요" 에 막히거나 재설정 메일이 낯선 계정으로 이어진다
+        val stored = email?.takeIf { proof.emailAuthoritative }
         val base = Account(
-            id = core.newAccountId(), email = email, emailVerified = email != null, status = AccountStatus.ACTIVE, roles = core.props.defaultRoles,
+            id = core.newAccountId(), email = stored, emailVerified = stored != null, status = AccountStatus.ACTIVE, roles = core.props.defaultRoles,
             displayName = null, locale = ProfileRules.locale(proof.locale), timeZone = null, createdAt = now, updatedAt = now,
         )
         val identity = Identity(core.newIdentityId(), base.id, method.code, subject, verified = true, createdAt = now)

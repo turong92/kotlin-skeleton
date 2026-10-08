@@ -38,7 +38,7 @@ class AccountOAuthProvisioningPolicy(private val signIn: AccountSignInService, p
     override fun resolveOrCreateAccount(profile: OAuthUserProfile): String? =
         signIn.signIn(
             SignInProof(
-                method = profile.provider.trim().lowercase(), subject = profile.providerUserId, email = profile.email, emailVerified = profile.emailVerified,
+                method = profile.provider.trim().lowercase(), subject = profile.providerUserId, email = profile.email, emailVerified = profile.emailVerified, emailAuthoritative = profile.emailAuthoritative,
                 displayName = profile.displayName, allowSignUp = props.signUp,
             ),
         )?.accountId

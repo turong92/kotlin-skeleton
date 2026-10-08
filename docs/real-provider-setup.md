@@ -61,7 +61,7 @@
 
 **코드에서 확인한 Google 의 동작** (`GoogleOAuthProvider`)
 - 토큰 교환은 `application/x-www-form-urlencoded` 폼 POST. `redirect_uri` 는 **프런트가 인가 요청에 실은 값을 그대로** 받아 같이 보낸다(없으면 `…_REDIRECT_URI`). 인가 요청의 값과 다르면 구글이 `redirect_uri_mismatch`/`invalid_grant`.
-- `email_verified` 는 구글이 불리언으로 준다(`true` 일 때만 "확인된 이메일"로 취급 — 기존 계정과의 병합 · 연결은 이 값이 `true` 일 때만). 구글 계정은 거의 항상 확인된 주소다.
+- `email_verified` 는 구글이 불리언으로 준다(`true` 일 때만 "확인된 이메일"로 취급 — 기존 계정과의 병합 · 연결은 이 값이 `true` 일 때만). 구글 계정은 거의 항상 확인된 주소다. **다만 병합 · 새 계정의 주소는 `@gmail.com`/`googlemail.com` 이거나 Workspace(`hd` == 주소 도메인)일 때만** 쓴다(`email-trust` 기본 `AUTHORITATIVE`, 비-Gmail 주소는 주인이 바뀌어도 `email_verified: true` 가 남는다) — Gmail 주소로 시험하는 지금 계정에는 영향이 없다.
 - 구글이 4xx 로 거절하면 사용자에게는 `INVALID_AUTHORIZATION_CODE` 가 나가고, **서버 로그에 한 줄**이 남는다: `social login token exchange rejected provider=google status=400 error=redirect_uri_mismatch …` — 시험 중 실패하면 이 줄이 원인이다(비밀 · 코드는 싣지 않는다).
 
 ## 2. LINE Login 채널 (일본 사용자용)
@@ -288,7 +288,7 @@ scripts/check-real-providers.sh        # 백엔드가 뜬 뒤 다시: /auth/meth
 |---|---|---|---|
 | 1 | **이메일 가입(진짜 받은편지함)**: 가입 화면에서 `내 Gmail` 로 가입 | 202 후 인증번호 입력 화면. 메일이 와야 한다: 제목 "인증번호를 보내 드려요"(제목에 숫자 없음), 본문에 6자리 큰 코드. 코드 입력 → 로그인된 상태 | 메일이 안 옴: 스팸함 → 기동 로그의 `mail:` 줄 → 서버 로그 `account mail kind=VERIFY_CODE failed/was not accepted` → 서비스 대시보드 로그. 캡처: 그 로그 줄 + traceId |
 | 2 | **Google 새 계정**: 로그아웃 → "Google 로 계속" → 계정 선택(테스트 사용자) | 구글 화면(미확인 앱 경고 → 계속) → `/auth/callback` → 로그인됨. 계정 설정에 로그인 수단 `google` | `redirect_uri_mismatch`: 로그의 `error=` 줄 + 주소창의 redirect_uri 를 §1 목록과 글자 비교. `access_denied`: 테스트 사용자 목록 |
-| 3 | **Google, 같은 이메일의 비밀번호 계정이 이미 있음**: 1번으로 만든 계정의 Gmail 과 **같은 구글 계정**으로 로그아웃 상태에서 Google 로그인 | `merge-on-verified-email: true`(샘플의 선택) → 기존 계정에 연결되어 로그인 + **"로그인 수단이 추가됐어요" 알림 메일**이 도착한다. (설정이 꺼져 있으면 `409 ACCOUNT.SOCIAL_EMAIL_CONFLICT`) | 409 가 나오면 `email_verified` 가 false 인지 서버 로그/`/account/me` 확인 |
+| 3 | **Google, 같은 이메일의 비밀번호 계정이 이미 있음**: 1번으로 만든 계정의 Gmail 과 **같은 구글 계정**으로 로그아웃 상태에서 Google 로그인 | **샘플은 병합을 끈다**(모듈 기본) → `409 ACCOUNT.SOCIAL_EMAIL_CONFLICT`: 비밀번호로 로그인해 설정에서 Google 을 직접 연결한다. (`merge-on-verified-email: true` 로 켠 앱에서는 Gmail 이므로 기존 계정에 연결되어 로그인 + **"로그인 수단이 추가됐어요" 알림 메일**) | 병합을 켠 앱에서 409 가 나오면 `email_verified` 가 false 이거나 비-Gmail 주소(권위자 아님)인지 확인 |
 | 4 | **연결 / 해제**: 계정 설정 → 로그인 수단 → LINE 연결(또는 다른 제공자) → 연결 해제 | 연결: 제공자 화면 후 `/account/link-callback` 으로 돌아와 목록에 추가(+알림 메일). 해제: 다시 인증(비밀번호 또는 메일 코드) 후 사라짐. **마지막 수단은 해제할 수 없다(409)** | 콜백이 로그인 화면으로 가면 연결용 URI(`/account/link-callback`)가 콘솔에 빠졌다 |
 | 5 | **LINE / X**: 각 제공자로 로그인 | 소셜로 처음 만든 계정은 **약관 · 개인정보 동의 화면**을 거쳐야 쓸 수 있다(`403 LEGAL.RECONSENT_REQUIRED` → 동의 → 통과). LINE 은 이메일 권한 승인 전이면 **주소 없는 계정**이 된다(정상) · X 는 항상 주소 없는 계정 | 로그의 `social login token exchange rejected` 줄 |
 | 6 | **주소 없는 계정의 민감한 일**: X(또는 이메일 없는 LINE) 계정으로 계정 삭제를 눌러 본다 | 메일 코드 대신 **제공자 동의 화면을 다시 거치라**고 한다 → 돌아오면 삭제 예약 | `403 ACCOUNT.REAUTH_REQUIRED` 만 보이면 프런트가 `socialReauth` 를 안 실은 것 |

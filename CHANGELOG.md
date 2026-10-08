@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Behaviour change — 소셜 이메일 병합은 "권위자"일 때만, 샘플 앱은 병합을 끈다 (2026-10-08)
+
+- **문제**: Google 은 비-Gmail 주소로 만든 계정에도 주소의 주인이 바뀐 뒤까지 `email_verified: true` 를 준다. `merge-on-verified-email=true` 앱에서 옛 주인이 새 메일함 주인의 계정에 자동으로 붙을 수 있었다.
+- **Behaviour change (auth-social-google)**: `OAuthUserProfile` 에 `emailAuthoritative`(기본 `emailVerified` 와 같다 — 다른 제공자는 그대로)가 생겼고 Google 은 `email_verified` 이고 (`@gmail.com`/`@googlemail.com` 이거나 ID 토큰 `hd` == 주소 도메인)일 때만 true 다. 병합 · 메일함 증명(미확인 계정의 확인 처리) · **새 계정에 주소 저장**이 이것만 본다. 권위자가 아닌 주소: 기존 계정과 겹치면 `409 ACCOUNT.SOCIAL_EMAIL_CONFLICT`(예전처럼), 안 겹치면 **주소 없는 새 계정**(예전에는 확인된 주소가 저장됐다). 새 설정 `skeleton.auth-social.providers.google.email-trust: AUTHORITATIVE`(기본) | `VERIFIED_CLAIM`(옛 동작을 명시적으로 되살린다).
+- **Behaviour change (apps/api, apps/sample)**: `social.merge-on-verified-email` 을 더는 켜지 않는다(모듈 기본). 같은 이메일의 소셜 로그인은 200 이 아니라 `409 ACCOUNT.SOCIAL_EMAIL_CONFLICT` 이고 사용자는 기존 방법으로 로그인해 설정에서 직접 연결한다. 켠 하위 앱은 yml 에 그대로 두면 된다(위 권위자 규칙이 적용된다).
+- **컴파일**: `SignInProof` · `OAuthUserProfile` 의 마지막 칸에 `emailAuthoritative` 가 생겼다(위치 인자 호출은 그대로 컴파일된다). 스키마 변경 없음. 설정: [config](docs/config/modules/auth-social.yml), [Google](docs/modules/auth-social-google.md), [accounts.md](docs/accounts.md) "충돌 · 병합 규칙".
+
 ### 이식 안내 — 작성자 프로필: 한 계정이 닉네임 여러 개, 서로 이어지지 않게 (2026-10-08)
 
 하위 앱(rename-skeleton 으로 찍은 레포)이 위에서 아래로 따라 하면 된다. **켜지 않으면 아무것도 달라지지 않는다**(모듈을 끼우지 않은 앱의 응답은 덧붙는 키 `mine` · `authorRequired` 뿐이고 `apps/api` 시험은 한 줄도 바뀌지 않았다). 설계: `docs/superpowers/specs/2026-10-07-author-profiles-design.md`, 프론트 계약: `docs/author-profile-http-contract.md`, 모듈 페이지: `docs/modules/author-profile.md` · `author-profile-jdbc.md` · `board.md` · `storage.md`, `docs/accounts.md` "작성자 프로필".

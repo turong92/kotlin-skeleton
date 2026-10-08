@@ -37,8 +37,8 @@ class SignInServiceTest {
     private val methods = listOf(PasswordSignInMethod(), Google, Kakao, Magic, Locked)
     private fun AccountHarness.service() = AccountSignInService(core, SignInMethodRegistry(methods))
     private fun code(block: () -> Unit) = assertFailsWith<ApplicationException> { block() }.errorCode.code
-    private fun proof(method: String = "google", subject: String = "g-1", email: String? = "ann@example.com", verified: Boolean = true, signUp: Boolean = true) =
-        SignInProof(method, subject, email, verified, "Ann", "ko", "203.0.113.1", signUp)
+    private fun proof(method: String = "google", subject: String = "g-1", email: String? = "ann@example.com", verified: Boolean = true, signUp: Boolean = true, authoritative: Boolean = verified) =
+        SignInProof(method, subject, email, verified, "Ann", "ko", "203.0.113.1", signUp, emailAuthoritative = authoritative)
 
     // ---- registry
 
@@ -155,6 +155,69 @@ class SignInServiceTest {
         val h = harness()
         h.activeAccount("ann@example.com")
         assertEquals("ACCOUNT.SOCIAL_EMAIL_CONFLICT", code { h.service().signIn(proof()) })
+    }
+
+    // ---- 제공자가 "확인했다"고 한 주소 ≠ 제공자가 그 주소의 권위자 (Google: 비-Gmail · hd 없음)
+
+    @Test
+    fun `a claimed-but-not-authoritative provider email never merges, even with merging on - it is the same 409 as merging off`() {
+        val merge = harness(AccountProperties.Social(signUp = true, mergeOnVerifiedEmail = true))
+        val existing = merge.activeAccount("ann@example.com")
+        merge.mailer.sent.clear()
+        assertEquals("ACCOUNT.SOCIAL_EMAIL_CONFLICT", code { merge.service().signIn(proof(authoritative = false)) })
+        assertNull(merge.repo.findIdentity("google", "g-1"))
+        assertEquals(setOf("password"), merge.repo.identitiesOf(existing.id).map { it.method }.toSet())
+        assertTrue(merge.mailer.sent.isEmpty())
+        assertTrue(merge.events.all.none { it.type == AccountEventType.IDENTITY_LINKED })
+    }
+
+    @Test
+    fun `an authoritative provider email still merges when merging is on`() {
+        val merge = harness(AccountProperties.Social(signUp = true, mergeOnVerifiedEmail = true))
+        val existing = merge.activeAccount("ann@example.com")
+        assertEquals(existing.id, merge.service().signIn(proof(authoritative = true))!!.accountId)
+    }
+
+    @Test
+    fun `a new account from a non-authoritative address is created WITHOUT that address - nobody can squat the real owner's mailbox`() {
+        val h = harness()
+        val auth = h.service().signIn(proof(authoritative = false))!!
+        val account = h.repo.findById(auth.accountId)!!
+        assertEquals(AccountStatus.ACTIVE, account.status)
+        assertNull(account.email, "a claim the provider cannot back is not stored (same rule as an unverified address)")
+        assertEquals(false, account.emailVerified)
+        // the real owner of ann@example.com can still sign up by email
+        assertNull(h.repo.findByEmail("ann@example.com"))
+    }
+
+    @Test
+    fun `a non-authoritative sign-in does not prove the mailbox of an unverified account that shares its address`() {
+        val merge = harness(AccountProperties.Social(signUp = true, mergeOnVerifiedEmail = true), emailVerification = false)
+        merge.signUp("ann@example.com", password = "attacker-chosen-42")
+        val planted = merge.repo.findByEmail("ann@example.com")!!
+        assertEquals("ACCOUNT.SOCIAL_EMAIL_CONFLICT", code { merge.service().signIn(proof(authoritative = false)) })
+        assertEquals(false, merge.repo.findById(planted.id)!!.emailVerified)
+    }
+
+    @Test
+    fun `a known non-authoritative identity signing in again does not verify the account address`() {
+        val h = harness(emailVerification = false)
+        h.signUp("ann@example.com", password = "attacker-chosen-42")
+        val planted = h.repo.findByEmail("ann@example.com")!!
+        h.service().identities.link(planted.id, "google", "g-1", verified = true)
+        assertEquals(planted.id, h.service().signIn(proof(authoritative = false, signUp = false))!!.accountId)
+        assertEquals(false, h.repo.findById(planted.id)!!.emailVerified, "a claim the provider cannot back must not turn an unproven address into a verified one")
+    }
+
+    @Test
+    fun `a signed-in account links a non-authoritative provider identity by hand - it proved both sides itself`() {
+        val h = harness(AccountProperties.Social(signUp = true, mergeOnVerifiedEmail = true))
+        val a = h.activeAccount("ann@example.com")
+        // IdentityService.link takes only the provider subject; the address claim plays no part
+        h.service().identities.link(a.id, "google", "g-9", verified = true)
+        assertEquals(setOf("password", "google"), h.repo.identitiesOf(a.id).map { it.method }.toSet())
+        // and afterwards that google identity signs in to this account even though it is not authoritative
+        assertEquals(a.id, h.service().signIn(proof(subject = "g-9", authoritative = false, signUp = false))!!.accountId)
     }
 
     @Test
