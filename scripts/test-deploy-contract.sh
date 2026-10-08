@@ -309,6 +309,15 @@ for APP in $(echo "$APPS" | tr ',' ' '); do
     else fail "TEMPLATE 허락을 뺐는데 기동이 막히지 않았다"; fi
     docker rm -f "$C" >/dev/null
 
+    C="$RUN-$APP-d4"; CONTAINERS="$CONTAINERS $C"   # 첨부 키 비밀(선언 secrets:)을 빼면 — OPAQUE 키 앱은 설정 이름을 말하며 실패한다 (docs/deploy.md "버전을 올릴 때 선언에서 바꿀 것")
+    # shellcheck disable=SC2046
+    docker run -d --name "$C" --network "$NET" $(contract_env) -e SKELETON_STORAGE_WEB_KEY_SECRET= $(base_d_env) -e SKELETON_CLIENT_IP_MODE=proxy -e "SKELETON_CLIENT_IP_TRUSTED_PROXIES=$SUBNET,10.99.0.0/16" "$IMG" >/dev/null
+    if wait_for 120 stopped "$C"; then
+      LOGS="$(docker logs "$C" 2>&1)"
+      if grep -q 'skeleton.storage.web.key-secret' <<<"$LOGS" && grep -q 'STORAGE_WEB_KEY_SECRET' <<<"$LOGS"; then pass "첨부 키 비밀을 빼면 설정 이름(skeleton.storage.web.key-secret)과 환경변수 이름을 말하며 실패한다"; else fail "첨부 키 비밀을 뺀 실패에 설정 · 환경변수 이름이 없다"; echo "$LOGS" | tail -8; fi
+    else fail "첨부 키 비밀을 뺐는데 기동이 막히지 않았다"; fi
+    docker rm -f "$C" >/dev/null
+
     C="$RUN-$APP-d2"; CONTAINERS="$CONTAINERS $C"   # 메일을 빼면
     # shellcheck disable=SC2046
     docker run -d --name "$C" --network "$NET" $(contract_env) $(base_d_env nomail) -e SKELETON_CLIENT_IP_MODE=proxy -e "SKELETON_CLIENT_IP_TRUSTED_PROXIES=$SUBNET,10.99.0.0/16" "$IMG" >/dev/null

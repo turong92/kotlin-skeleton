@@ -57,6 +57,8 @@ class StorageWebAutoConfigurationTest {
             .run { context ->
                 assertThat(context).hasFailed()
                 assertThat(context.startupFailure).hasStackTraceContaining("skeleton.storage.web.key-secret")
+                // 배포에서 고칠 수 있게 환경변수 이름과 선언의 secrets: 도 말한다 (docs/deploy.md "버전을 올릴 때 선언에서 바꿀 것")
+                assertThat(context.startupFailure).hasStackTraceContaining("STORAGE_WEB_KEY_SECRET").hasStackTraceContaining("secrets:")
             }
         runner.withPropertyValues("skeleton.storage.web.key-owner=OPAQUE", "skeleton.storage.web.key-secret=tooshort-value")
             .run { context ->

@@ -245,6 +245,8 @@ Caddy 가 `<api_prefix>/*` 만 백엔드로 보내고 나머지는 `data/apps/<n
 
 ## 10. 시험 배포 — 스타터를 홈서버에서 한 번 띄워 보기
 
+> **가드가 막으면 메시지가 설정 이름을 말한다 — 그 이름을 환경변수로 주면 된다.** (실제 사례: 시험 배포가 `skeleton.legal.acknowledge-template` 를 말하며 멈췄다 → 환경변수 `<P>_LEGAL_ACKNOWLEDGE_TEMPLATE=true`. 점은 밑줄, 대시는 밑줄로 — §5.) 비밀 이름이면 `secrets:` 에 더한다(§7).
+
 계정이 생겼으므로 `SKELETON_ENV=prod` 로 뜨려면 가드가 요구하는 것을 모두 줘야 한다. 홈서버에서 스모크로 띄우는 정확한 조합 (`<P>` = `env_prefix`):
 
 | 무엇 | 어떻게 | 가드가 막는 경우 |
@@ -263,3 +265,46 @@ Caddy 가 `<api_prefix>/*` 만 백엔드로 보내고 나머지는 `data/apps/<n
 `scripts/test-deploy-contract.sh` 의 **D 단계**가 apps/sample(= 스타터 + `notification-mail` …) 이미지를 이 조합 + **플랫폼이 넣는 클라이언트 IP 두 변수**(대문자 mode · 실제 도커 네트워크 CIDR 하나)로 `SKELETON_ENV=prod` 에 띄워 헬스체크 · 가드 요약을 확인하고,
 하나씩 빼면(클라이언트 IP · 메일 · TEMPLATE 허락) 가드가 그 이름을 말하며 실패함을 확인한다. 스타터(apps/api)는 메일 모듈이 없으므로 C2 단계가 "메일 발송 길 · client-ip 를 요구하며 실패" 를 확인한다.
 첫 로그인 확인: 가입 → (메일이 릴레이로 간다) 확인 링크 → 그 주소가 `BOOTSTRAP_ADMIN_EMAIL` 이면 ADMIN.
+
+## 11. 버전을 올릴 때 선언에서 바꿀 것
+
+이 레포를 받은 앱이 **새 커밋을 따라가며** 배포 선언(`deploy/app.yaml`의 `secrets:` · `env:`)에 더해야 하는 것이다. 새 변경이 선언을 요구하면 여기에 한 줄 더한다 (CHANGELOG 의 해당 항목이 이 표를 가리킨다). `<P>` = `env_prefix`.
+
+| 어느 변경부터 | 선언에서 무엇을 | 안 하면 |
+|---|---|---|
+| **작성자 프로필** 묶음: OPAQUE 첨부 키는 `c4bef2c`(storage)에서 들어오고, `apps/sample` 이 켠 것은 `8e7d8ad`, 묶음은 `f5863fb` 에서 끝난다. `skeleton.storage.web.key-owner: OPAQUE` 로 쓰는 앱만 해당 (기본 `ACCOUNT_ID` 는 읽지 않는다) | `secrets:` 에 **`<P>_STORAGE_WEB_KEY_SECRET`** (32자 이상, 무작위로 충분 — 플랫폼이 48자를 만든다). **이미 OPAQUE 로 발급한 키가 있으면 이 값을 바꾸지 않는다**(바꾸면 발급한 키가 소유 확인에서 떨어진다 — 서버를 옮길 때도 들고 간다) | **기동 실패**: 메시지가 설정 이름을 말한다 — `skeleton.storage.web.key-secret must be at least 32 characters when skeleton.storage.web.key-owner=OPAQUE (env <P>_STORAGE_WEB_KEY_SECRET — list it under secrets:)`. 시작 실패의 원인 메시지에 들어 있고(스택 트레이스에 이름이 있음을 `StorageWebAutoConfigurationTest` 가 확인) 값은 싣지 않는다 (컨테이너로는 `scripts/test-deploy-contract.sh` D 단계가 "빼면 이름을 말하며 실패" 를 본다) |
+| **재가입 차단 키**: `e88e1b5` (이 시점 이후의 `e76e8e7` 등 모든 커밋에 해당). 관리자 API(`skeleton.account.admin.enabled`)를 켠 앱만 해당 — `apps/sample` 은 켠다 | `secrets:` 에 **`<P>_ACCOUNT_BLOCKS_SECRET`** (무작위로 충분). 처음 정한 뒤 **바꾸지 않는다**(바꾸면 기존 차단이 맞지 않게 된다) | **기동은 된다 — 경고만** (`DeployGuard` `account` 의 warning: `skeleton.account.blocks.secret is empty … (env <P>_ACCOUNT_BLOCKS_SECRET, declared under secrets:)`). 키가 JWT 비밀에서 파생되어 **`JWT_SECRET` 을 돌리면 재가입 차단이 조용히 풀린다.** 실패가 아닌 이유: 차단 기능이 없는 앱을 막지 않고, 파생 키가 동작하는 대체이기 때문이다 (`AccountDeployGuard`) |
+
+- 위 두 줄 모두 `deploy/app.yaml` 의 `secrets:` 에 이미 들어 있다 — 스켈레톤에서 새로 찍은 프로젝트는 할 일이 없고, **옛 선언을 가진 배포가 버전만 올릴 때** 빠뜨리기 쉽다. 쓰지 않는 기능의 줄은 지운다(`new-project.sh` 가 고르지 않은 모듈의 줄을 지운다).
+- 같은 이름을 `env:` 와 `secrets:` 에 동시에 쓸 수 없다. 무작위 값으로 충분한 비밀은 `secrets:` 에 이름만 적는다(§7).
+
+## 12. 여러 인스턴스로 올릴 때
+
+같은 DB 에 앱 컨테이너를 둘 이상 올리는 경우다. 아래 중 **홈서버 플랫폼 세션의 실측**이라고 적은 것은 한 DB 에 앱 컨테이너 2개로 돌려 본 결과이고, 나머지는 코드를 읽어 확인한 것이다(실행으로 증명하지 않은 것은 그렇게 적는다). `apps/api`(스타터)는 아래 모듈 일부(작업 큐 · 멱등성 · 알림 · 게시판 · 작성자 프로필)를 갖지 않는다 — 해당 모듈이 있을 때만 읽는다.
+
+### 12.1 마이그레이션
+
+- **Flyway 동시 마이그레이션은 락으로 한 인스턴스만 적용하고**, 다른 쪽은 기다렸다가 "up to date" 로 지나간다 (플랫폼 세션 실측 — 중복 행 0). 직렬화는 Flyway 의 DB 락(PostgreSQL 어드바이저리 락 · MySQL 이름 있는 락)에 기댄다 — 이 레포에는 락 설정이 없다.
+- **뒤에 뜬 인스턴스는 마이그레이션이 끝날 때까지 기동이 멈춘다** (같은 실측). 기동 시간 제한이 있는 플랫폼(Cloud Run · ECS)에서 오래 걸리는 마이그레이션은 **배포 전에 따로** 돌린다.
+- **이 레포에는 마이그레이션만 돌리는 명령이 없다.** Gradle 작업은 파일을 만드는 `newMigration` 뿐이고(`flywayMigrate` 없음), 앱에 "마이그레이션 후 종료" 모드도 없으며 `Dockerfile` 의 진입점은 `java -jar` 하나다. 방법은 둘이다: ① **한 인스턴스를 먼저 띄워 `/health` 가 200 이 된 뒤**(= 마이그레이션이 끝난 뒤) 나머지를 올린다 — 앱 기동이 곧 마이그레이션이다. ② Flyway CLI · 컨테이너로 같은 `db/migration/<vendor>` 폴더(앱 + 모듈의 폴더가 합쳐진 것은 앱 jar 안에 있다)를 `out-of-order=true` 로 적용한다 — 이 구성은 레포가 제공하지 않으므로 직접 만든다.
+
+### 12.2 데이터베이스가 직렬화하는 것
+
+- **작업 큐(`job-queue-jdbc`)**: 클레임이 `FOR UPDATE SKIP LOCKED` 로 한 트랜잭션에서 `PENDING → RUNNING` 이라 두 워커가 같은 작업을 동시에 잡지 못한다. 끝내기 · 재시도 · 죽이기 갱신은 `id` + `status='RUNNING'` + `locked_by` + `attempts` 가 모두 맞을 때만 적용되어, 임대가 풀려 다시 클레임된(시도가 오른) 작업을 옛 워커가 늦게 끝내려 해도 0행이다. 플랫폼 세션 실측: 같은 (작업, 시도) 를 두 인스턴스가 처리한 경우 0건. **핸들러는 멱등이어야 한다** — 한 번 이상 실행될 수 있다(재시도 · 오래된 임대 회수 `stale-lock-timeout` 10분). 한 인스턴스에서 워커만 끄려면 `skeleton.job-queue.worker-enabled=false`.
+- **첫 작성자 프로필(`author-profile`)**: 계정당 첫 프로필은 `primary_of`(계정 id, 첫 프로필만) 유니크 제약과 insert-ignore 로 하나다 (플랫폼 세션 실측: 계정당 1개). 기동 때의 옛 글 이어받기(`adopt-on-startup`)는 **모든 인스턴스가 임대 없이** 돈다 — 갱신이 `author_ref is null` 조건이라 겹쳐도 같은 결과가 되도록 쓰였다(코드 주석의 근거; 동시 실행 시험은 없다).
+- **계정 유지보수 임대(`account_locks`)**: 만료된 계정 정리(`purge`)·토큰/코드/차단 청소는 `account-jdbc` 의 `account_locks` 행(`name` · `locked_until` · `owner`)으로 **한 번에 한 인스턴스**만 돈다. 정리 틱(`deletion.purge-interval`, 기본 1시간)은 모든 인스턴스에서 돌지만 임대를 못 잡으면 아무것도 하지 않는다. 임대 시간은 10분이고 **갱신이 없다** — 그보다 오래 걸리면 임대가 풀려 다른 인스턴스가 들어올 수 있고, 겹침은 계정 정리의 조건부 선점(`claimErasure`)이 막는다. 소유 토큰이 일치할 때만 해제하므로 늦게 끝난 쪽이 새 보유자의 임대를 풀지 못한다. `account-jdbc` 가 없으면 임대는 프로세스 안 메모리(인스턴스 안에서만 유효)다. `job-queue-jdbc` 가 있으면 틱 대신 디스패치 임대를 잡은 인스턴스만 `account-purge` 작업을 넣는다.
+- **세션(`auth-session-jdbc`)**: 세션 행이 DB 라 인스턴스가 공유한다. 메모리 세션 저장소는 보호 환경에서 기동 실패(`AuthSessionDeployGuard`). JWT 는 무상태이지만 HS256 비밀이라 **모든 인스턴스가 같은 `JWT_SECRET`** 이어야 한다. 끝난 세션 행 청소는 모든 인스턴스가 임대 없이 돌린다(삭제는 멱등).
+
+### 12.3 인스턴스마다 따로인 것 (메모리)
+
+- **속도 제한 저장소**: 기본은 인스턴스별 메모리다. `RateLimitStore` 빈이 있으면(예: `redis-rate-limit`) `account` · `auth-session` · `board` 가 그것을 쓰고, 없으면 각자 인스턴스별 메모리 저장소로 돌아간다 → **한도가 인스턴스 수만큼 느슨해진다.** 인스턴스별로 따로 세는 것: 웹 정책 속도 제한(`skeleton.web.rate-limit`, 기본 꺼짐) · 계정의 로그인 · 가입 · 확인 · 재전송 · 비밀번호 재설정 · 매직 링크 · 비밀번호/이메일 변경 · 닉네임 변경 · 소셜 연결/해제 · 다시 인증 한도(IP별 · 주소별 · 계정별) · 세션 새로고침 회전 한도 · 게시판 쓰기 한도(켰을 때). 인스턴스와 무관하게 DB 로 세는 것: 작성자 프로필 만들기 한도(`countCreatedSince`) · 동의 기록 일일 한도(`legal`). 클라이언트 IP 가 키라 `skeleton.web.client-ip.mode` 가 맞아야 한다(§3).
+- **멱등성 저장소(`idempotency`)**: 기본 `InMemoryIdempotencyStore` 는 인스턴스별이다 — 같은 `Idempotency-Key` 가 **다른 인스턴스**로 가면 재생되지 않고 다시 실행된다. 이 레포에는 JDBC · Redis 구현이 없다: 여러 인스턴스면 앱이 `IdempotencyStore` 빈을 대체한다 (배포 가드는 이것을 막지 않는다).
+- **알림 실시간 전달(`notification` · `notification-sse`)**: SSE 연결(`SseEmitter`)과 기본 브로커(`InMemoryNotificationBroker`)의 구독자는 JVM 메모리다 — **A 인스턴스에서 발행한 알림은 B 인스턴스에 연결된 SSE 구독자에게 닿지 않는다.** `notification-jdbc` 는 받은편지함(DB)만 공유하고 실시간 전달은 잇지 않는다(그래서 새로고침 · 목록 조회에는 보인다). 여러 인스턴스에서 실시간이 필요하면 앱이 `NotificationBroker` 를 대체한다 (로드밸런서의 고정 세션으로 같은 인스턴스에 붙이면 발행 위치도 같아야 한다). 재접속 시 놓친 알림을 SSE 로 되돌려 주는 경로는 코드에서 확인하지 못했다.
+- **캐시**: 모듈에 앱 내부 캐시(`@Cacheable` · Caffeine)는 없다. `redis-cache` 를 쓰면 Redis 라 공유된다.
+- **스케줄러**: `@Scheduled` 는 모듈에 없다. 정기 작업은 위의 정리 틱 · 세션 청소 · 작업 큐 워커 폴링(+ `job-retention` 을 켰을 때)이고 모두 **인스턴스마다 돈다** — 중복이 안전하도록 임대 · 멱등 삭제로 쓰였다. `modules/scheduler` 의 기본 락 매니저는 아무것도 잠그지 않아(`Noop`) `@SkeletonScheduled` 작업은 인스턴스마다 다 돈다 — 여러 인스턴스용 락 매니저 구현(예: Redis)은 이 레포에 없으므로 앱이 `SkeletonScheduledLockManager` 를 구현한다.
+- **경보 중복 억제(`alert`)**: 기본 `InMemoryAlertStore` 라 같은 경보가 인스턴스마다 한 번씩 나갈 수 있다 — `alert-jdbc` 가 DB 로 공유한다.
+
+### 12.4 배포 가드가 이미 막는 것 · 막지 않는 것
+
+보호 환경(`SKELETON_ENV=stage|prod` 또는 보호 프로필)에서 **기동 실패**: 메모리 계정 저장소 · 메모리 일회용 토큰 저장소 · 메모리 가입 코드 저장소(`account` 가드 — "여러 인스턴스에서 공유되지 않는다" 를 이유로 적는다) · 메모리 세션 저장소(`auth-session` 가드). **막지 않는 것**: 메모리 `RateLimitStore` · 메모리 계정 유지보수 임대 · 메모리 `IdempotencyStore` · `NotificationBroker` · `AlertStore` — 위 12.3 을 읽고 직접 정한다.
+
