@@ -257,7 +257,12 @@ modules/persistence-jdbc/src/main/kotlin/dev/sumin/skeleton/persistence/jdbc/
 
 ## 작업 원칙
 
-- **확장 지점**: 이 레포는 뼈대다 — 확장 지점은 설계 대상이다. 단 새 확장 지점은 실제로 갈아 끼울 두 번째 구현이 계획에 있을 때만 둔다(하나뿐이면 얇게 두고, 두 번째가 계획에 들어올 때 넓힌다).
+<!-- skeleton-only:start -->
+
+**확장 지점**: 이 레포는 뼈대다 — 확장 지점은 설계 대상이다. 단 새 확장 지점은 실제로 갈아 끼울 두 번째 구현이 계획에 있을 때만 둔다(하나뿐이면 얇게 두고, 두 번째가 계획에 들어올 때 넓힌다).
+
+<!-- skeleton-only:end -->
+
 - **Kotlin idiomatic**: data class, scope function (`let`/`apply`/`also`), null 안전성 활용
 - **테스트**: Testcontainers로 실 PostgreSQL(`postgres:18`) 띄워 Flyway 마이그레이션 포함 검증. 방언을 타는 모듈은 MySQL 묶음도 돈다. **컨테이너는 JVM 당 하나(static) + 컨텍스트마다 새 데이터베이스** — 테스트 설정에 `@Bean @ServiceConnection` 컨테이너를 두지 않는다(`TestContainerRulesTest` 가 막는다, 이유 · 정본: `docs/testing.md`)
 - **새 기능 추가 시**:

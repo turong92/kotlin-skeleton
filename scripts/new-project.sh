@@ -230,6 +230,8 @@ else
   perl -ni -e 'print unless /^include\(":apps:sample"\)\s*$/' settings.gradle.kts
   for f in CLAUDE.md README.md; do [ ! -f "$f" ] || perl -0pi -e 's/<!-- sample:start -->.*?<!-- sample:end -->\n?//gs' "$f"; done
 fi
+# 스켈레톤 레포 자체를 고칠 때의 지침(<!-- skeleton-only:start --> … <!-- skeleton-only:end -->)은 옵션과 무관하게 표식째 뺀다 — 찍은 프로젝트는 뼈대가 아니다
+for f in CLAUDE.md README.md; do [ ! -f "$f" ] || perl -0pi -e 's/<!-- skeleton-only:start -->.*?<!-- skeleton-only:end -->\n*//gs' "$f"; done
 while IFS= read -r m; do
   [ -n "$m" ] || continue
   rm -rf "modules/$m" "docs/config/modules/$m.yml" "docs/modules/$m.md"
