@@ -191,11 +191,7 @@ class DefaultExternalHttpClient(
                 }
             }
             .timeout(timeout)
-            .doOnEach {
-                if (it.isOnComplete || it.hasError()) { // 값 신호(onNext)에는 쓰지 않는다 — 성공한 호출은 값 다음에 완료가 또 와서 두 줄이 된다
-                    filters.logCompletion(clientName, method, path, startedAt, requestSpec)
-                }
-            }
+            .doOnTerminate { filters.logCompletion(clientName, method, path, startedAt, requestSpec) } // 값 · 빈 완료 · 오류에 한 번, 값이 호출자에게 가기 전에 쓴다 (doOnEach 는 성공에서 두 번 쓴다)
             .onErrorMap { error -> mapExternalHttpTransportError(error, clientName, method, uri) }
     }
 
