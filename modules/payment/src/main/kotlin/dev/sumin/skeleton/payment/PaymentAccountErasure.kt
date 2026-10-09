@@ -20,6 +20,8 @@ class PaymentAccountErasure(
     private val store: PaymentLedgerStore,
     private val writer: PaymentLedgerWriter,
     private val mode: PaymentProperties.Erasure.AccountIdMode,
+    /** 구독을 켠 조립에서만 — 그 계정의 구독을 닫는다. */
+    private val subscriptions: SubscriptionLifecycle? = null,
 ) : AccountErasureListener, Ordered {
     override val name: String = "payment"
 
@@ -27,6 +29,7 @@ class PaymentAccountErasure(
 
     override fun erase(request: ErasureRequest) {
         closeUnpaid(request.accountId)
+        closeSubscriptions(request.accountId)
         store.eraseAccountOrders(request.accountId, writer.now())
         if (mode == PaymentProperties.Erasure.AccountIdMode.TOMBSTONE) store.replaceAccountReferences(request.accountId, request.tombstone)
     }
@@ -38,6 +41,21 @@ class PaymentAccountErasure(
             page.map { it.id }.sorted().forEach(::close)
             if (page.size < PAGE) return
             cursor = page.last().let { OrderCursor(it.createdAt, it.id) }
+        }
+    }
+
+    /** 그 계정의 구독을 하나씩 잠가 끝낸다(빌링키 삭제 작업이 따라 들어간다) — 이미 끝난 구독은 지운 시각만 찍는다. 멱등. 구독이 없는 조립에서는 구독 줄이 없으니 아무것도 하지 않는다. */
+    private fun closeSubscriptions(accountId: String) {
+        val lifecycle = subscriptions ?: return
+        store.listSubscriptionIdsOfAccount(accountId).forEach { id ->
+            store.inTransaction { tx ->
+                val subscription = tx.lockSubscription(id) ?: return@inTransaction
+                if (subscription.status != SubscriptionStatus.ENDED) {
+                    lifecycle.end(tx, subscription, SubscriptionEndReason.ACCOUNT_ERASED)
+                } else if (subscription.accountErasedAt == null) {
+                    tx.updateSubscription(subscription.copy(accountErasedAt = writer.now(), updatedAt = writer.now()))
+                }
+            }
         }
     }
 

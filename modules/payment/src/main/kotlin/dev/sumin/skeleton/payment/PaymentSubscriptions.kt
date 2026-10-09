@@ -160,7 +160,7 @@ class PaymentSubscriptions(
             val order = lifecycle.chargeOrder(locked, PaymentOrderKind.SUBSCRIPTION_INITIAL, planName, random)
             check(tx.insertOrderIfAbsent(order)) { "the first order of a subscription already exists" }
             lifecycle.chargeStarted(tx, order, PaymentActor.USER, accountId)
-            tasks.enqueue(PaymentTask(PaymentTaskTypes.ORDER_RECONCILE, order.id, runAt = writer.now().plus(properties.reconcile.firstDelay), maxAttempts = properties.reconcile.maxAttempts))
+            lifecycle.scheduleReconcile(order)
             // 상태는 `PENDING` 그대로다(첫 결제가 끝나야 `ACTIVE`) — 자리 · 빌링키 · 과금 주문만 박는다. 자리가 겹치면 저장소가 [PaymentLedgerConflictException] 으로 이 트랜잭션을 되돌린다
             val claimed = locked.copy(
                 activeKey = accountId,
@@ -172,6 +172,8 @@ class PaymentSubscriptions(
                 updatedAt = writer.now(),
             )
             tx.updateSubscription(claimed)
+            // 안전망: 응답을 못 받은 첫 결제가 끝내 실패로 닫혀도 자리(`active_key`)가 영원히 잡혀 있지 않게 — 갱신 작업이 PENDING 도 본다
+            lifecycle.scheduleRenewal(claimed, runAt = writer.now().plus(properties.reconcile.firstDelay))
             Claim(claimed, order)
         }
 

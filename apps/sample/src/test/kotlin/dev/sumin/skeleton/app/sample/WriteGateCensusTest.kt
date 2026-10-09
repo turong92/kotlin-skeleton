@@ -38,7 +38,7 @@ import java.util.function.Function
 /**
  * **변경 엔드포인트 전수** (스펙 §9.3): 이 앱의 변경 메서드(`POST` · `PUT` · `PATCH` · `DELETE`) 핸들러를 **전부** 뽑아, 주소 없는 계정(소셜 첫 로그인 같은, 아이디는 정했다)에게
  * 열린 것이 [OPEN_TO_ADDRESS_LESS] 와 **정확히 같은지** 본다. 새 변경 엔드포인트는 누가 목록에 적지 않는 한 막힌다 — 이 목록이 늘면 시험이 깨지고, 늘린 사람이 이유를 적는다.
- * 결제(`/api/v1/payments` 아래의 사용자 변경 메서드: 주문 만들기 · 승인 · 포기 · 환불 요청 · 환불 요청 거둠)는 주소 없는 계정에게 막히는지 이름으로 한 번 더 본다. 결제사 웹훅(`/api/v1/payments/webhooks/{provider}[/{token}]`)은 익명 호출이라 계정 게이트와 무관하다.
+ * 결제(`/api/v1/payments` 아래의 사용자 변경 메서드: 주문 만들기 · 승인 · 포기 · 환불 요청 · 환불 요청 거둠 · 구독 만들기 · 카드 등록 + 첫 결제 · 해지 예약)는 주소 없는 계정에게 막히는지 이름으로 한 번 더 본다. 결제사 웹훅(`/api/v1/payments/webhooks/{provider}[/{token}]`)은 익명 호출이라 계정 게이트와 무관하다.
  *
  * **무엇을 보나**: 목록은 손으로 쓰지 않고 앱 컨텍스트에서 뽑는다 — `RequestMappingHandlerMapping`(컨트롤러. 조건부로 등록된 것 포함: 아이디가 꺼지면 사라지는 `LoginIdController` 가 여기 보인다)과
  * 함수형 라우트(`RouterFunction` 빈. 소셜 로그인 `POST /api/v1/auth/social/{provider}/login` 이 여기다). "열렸나"는 규칙 목록을 읽지 않고 **진짜 요청**으로 본다: 핸들러마다 새 주소 없는 계정이
@@ -48,9 +48,10 @@ import java.util.function.Function
  * 이 게이트가 보지 않는다, 스펙 §9.3) — 은 보이지 않는다. 그런 경로가 변경 요청을 받으면 [HAND_WRITTEN] 에 `METHOD /경로` 로 **손으로 더하고** 이 시험이 같은 방식으로 찌른다(지금은 없다).
  * ② 함수형 라우트는 술어의 글자(`toString`)에서 메서드 · 경로를 읽는다 — 읽지 못하면 조용히 건너뛰지 않고 시험이 실패한다.
  */
-@SpringBootTest(properties = ["spring.config.import=classpath:test-seeds.yml"])
+// 구독을 켠다 — 구독 경로가 전수에 보이고(주소 없는 계정에게 막히는지 본다) 가짜 결제사가 빌링 능력을 낸다
+@SpringBootTest(properties = ["spring.config.import=classpath:test-seeds.yml", "skeleton.payment.subscription.enabled=true"])
 @AutoConfigureMockMvc
-@Import(TestcontainersConfiguration::class, dev.sumin.skeleton.app.sample.notes.SampleIntegrationTest.FakeStorageConfiguration::class)
+@Import(TestcontainersConfiguration::class, dev.sumin.skeleton.app.sample.notes.SampleIntegrationTest.FakeStorageConfiguration::class, dev.sumin.skeleton.app.sample.cheer.CheerIntegrationBase.Provider::class)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class WriteGateCensusTest {
     companion object {
@@ -219,6 +220,10 @@ class WriteGateCensusTest {
         val payments = census.filterKeys { it.template.startsWith("/api/v1/payments") && !it.template.startsWith(webhookPrefix) }
         // 사용자 엔드포인트의 변경 메서드가 전부 막혀 있어야 한다 (영수증 · 환불 안내가 갈 주소가 없는 결제를 만들지 않는다, 스펙 §9.3)
         assertTrue(payments.isNotEmpty(), "the sample assembles the payment ledger, so its write endpoints must be in the census")
+        // 구독 쓰기 셋(만들기 · 카드 등록 + 첫 결제 · 해지 예약)도 전수에 있고 같은 문에 막힌다 — 새 구독 경로를 목록에서 빠뜨리지 않았다는 증거
+        listOf("POST /api/v1/payments/subscriptions", "POST /api/v1/payments/subscriptions/{id}/activate", "POST /api/v1/payments/subscriptions/{id}/cancel").forEach { name ->
+            assertTrue(payments.keys.any { it.toString() == name }, "$name must be in the census")
+        }
         payments.forEach { (route, result) -> assertEquals(Verdict.BLOCKED, result.first, "$route must be refused for an account without an address (it answered ${result.second})") }
         // 웹훅은 결제사가 부르는 익명 호출이다 — 계정 게이트(이메일 · 아이디)가 보지 않는다. (census 는 토큰을 실어 보내므로 막힘으로 나올 뿐이다 — 익명으로 보내 게이트가 아닌 것이 답하는지 본다)
         val webhooks = census.keys.filter { it.template.startsWith(webhookPrefix) }

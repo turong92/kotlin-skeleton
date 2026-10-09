@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 새 기능 (꺼진 채 시작) — 구독 · 자동결제 (2026-10-09)
+
+- **`skeleton.payment.subscription.enabled`(기본 false = 지금과 같다)**: 결제 장부 위의 구독 — 카드 등록(토스 빌링키) + 첫 결제 → 「내 구독」 → 해지 예약(기간 끝에 종료) → 기간 끝 갱신 작업(거절되면 재시도, 다 쓰면 종료). 결제사의 스케줄러는 쓰지 않는다(토스는 스케줄링을 하지 않는다). 설계: `docs/superpowers/specs/2026-10-09-subscription-design.md`.
+- **켜는 앱이 내는 것**: `SubscriptionPlans` 빈(플랜 · 금액 · 주기 · 등급 — 구독 금액의 유일한 출처) · 빌링 능력을 가진 결제사(`PaymentBillingGateway` — `payment-toss`) · 빌링키를 암호화할 `crypto` 키. 하나라도 없으면 **기동 실패**. 선택: `SubscriptionRenewalGuard`(기본 = 항상 허용) — 정지 · 삭제 유예 계정의 갱신 과금을 막는다.
+- **돈이 새지 않게**: 갱신 과금은 주문 `dedupe_key` + 구독 줄 락 + 선점 → 호출 → 확정으로 한 번만 나가고, **모름이면 다시 보내지 않으며**(조회 작업이 끝낸다), 기간은 지급 고리(주문 줄 락 안)에서만 넘어간다. 해지 · 탈퇴 뒤 깨어난 갱신은 결제사를 부르지 않는다. 빌링키는 `crypto` 로 암호화해 저장하고 응답 · 로그 · `toString` 에 없다(끝난 구독은 결제사에서 지운 뒤 줄에서도 비운다).
+- **`payment-toss`**: `PaymentBillingGateway` 구현(발급 · 승인 · 삭제) — 확정 거절 목록에 `NOT_FOUND_BILLING` · `INVALID_BILL_KEY_REQUEST` 가 더해졌다(24 → 26). 진짜 토스 테스트 키로 잰 것은 `docs/real-provider-setup.md` §11.7.
+- **스키마**: `V20261009134223__payment_subscriptions.sql`(두 방언, 표 `payment_subscriptions` — 계정당 살아 있는 구독 하나 `active_key` 유니크, `migrations.lock` 갱신). 새 `PaymentOrderKind` 값은 없다(`SUBSCRIPTION_INITIAL` · `SUBSCRIPTION_RENEWAL` 은 원래 있었다). 새 검토 이유 `SUBSCRIPTION_STALE_CHARGE`(구독이 기다리는 과금이 아닌 구독 주문이 늦게 결제됨 — 운영자가 환불).
+- **컴파일**: `payment` 가 `crypto` 에 의존한다(`autoIncludes`). `PaymentLedgerStore`/`PaymentLedgerTx` 에 구독 메서드가 더해졌다(자기 구현이 있는 앱은 따라 구현). `PaymentFulfillment` · `PaymentRefundApplier` · `PaymentAccountErasure` 의 생성자에 선택 인자 하나씩.
+- **`apps/sample` 이 켠다**: 플랜 셋(Basic 3,900 · Standard 6,900 · Pro 9,900원, 주기 `skeleton.sample.subscription.period` — 기본 `P1M`, 로컬 `PT3M`), 환경변수 `SKELETON_PAYMENT_SUBSCRIPTION_ENABLED=true` + `SKELETON_CRYPTO_KEYS_MAIN`(base64 32바이트). 로컬 프로필은 토스를 켰을 때 함께 켠다. 갱신 가드는 `ACTIVE` 계정만 허용한다. **`CheerOrderListener` 는 이제 `itemType == cheer` 인 주문만 응원 기록으로 남긴다**(그 전에는 모든 주문에 남겼다).
+
 ### 변경
 
 - **쓰기 때 이메일 방식: 주소 없는 계정이 소셜 수단을 연결 · 해제할 수 있다**: `required-when=WRITE` 의 고정 허용 목록에 `POST /account/identities/social/{provider}` · `DELETE /account/identities/{id}` 를 더했다. 다시 인증 · 마지막 수단 보호 · 정지 계정 거절 · 제공자당 하나는 그대로이고 비밀번호 만들기는 계속 막힌다. 로그인 직후 방식은 그대로다.

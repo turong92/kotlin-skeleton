@@ -112,8 +112,45 @@ class SubscriptionLifecycle(
                 }
                 scheduleRenewal(active)
             }
+            order.kind == PaymentOrderKind.SUBSCRIPTION_RENEWAL && subscription.status != SubscriptionStatus.PENDING -> {
+                val anchor = subscription.anchorAt ?: return stale(tx, order)
+                val sequence = subscription.periodSeq + 1
+                // 해지 예약 중에 이미 나간 갱신 승인이 늦게 끝나도 돈을 받았으니 그 기간만큼 늘리고 해지 예약은 그대로 둔다
+                val to = if (subscription.status == SubscriptionStatus.CANCELING) SubscriptionStatus.CANCELING else SubscriptionStatus.ACTIVE
+                val next = save(tx, subscription, to) {
+                    it.copy(periodSeq = sequence, currentPeriodStart = period.after(anchor, sequence - 1), currentPeriodEnd = period.after(anchor, sequence), attempt = 1)
+                }
+                scheduleRenewal(next)
+            }
             else -> stale(tx, order)
         }
+    }
+
+    /**
+     * 구독 주문이 전액 환불됐다 — 지금 과금 주문이면 구독을 바로 끝낸다(환불했는데 다음 달 또 과금되지 않게). **주문 줄 락 안에서** 불린다([PaymentRefundApplier]).
+     * 지금 과금 주문이 아니거나 이미 끝난 구독이면 아무것도 하지 않는다.
+     */
+    fun onOrderRefunded(tx: PaymentLedgerTx, order: PaymentOrder) {
+        val subscription = tx.lockSubscription(order.originRef ?: return) ?: return
+        if (subscription.chargeOrderId != order.id || subscription.status == SubscriptionStatus.ENDED) return
+        end(tx, subscription, SubscriptionEndReason.REFUNDED)
+    }
+
+    /**
+     * 갱신 과금이 확정 거절됐거나 과금 주문이 실패로 닫혔다 — 시도가 남았으면 `PAST_DUE` + 다음 시도(작업을 [PaymentProperties.Subscription.Renewal.retryInterval] 뒤로), 다 썼으면 끝낸다.
+     * 구독 락 안에서 부른다.
+     */
+    fun onChargeFailed(tx: PaymentLedgerTx, subscription: PaymentSubscription): PaymentSubscription {
+        val renewal = properties.subscription.renewal
+        if (subscription.attempt >= renewal.maxAttempts) return end(tx, subscription, SubscriptionEndReason.PAYMENT_FAILED)
+        val pastDue = save(tx, subscription, SubscriptionStatus.PAST_DUE) { it.copy(attempt = it.attempt + 1) }
+        scheduleRenewal(pastDue, runAt = writer.now().plus(renewal.retryInterval))
+        return pastDue
+    }
+
+    /** 선점한 과금 주문의 조회 작업 — 응답을 못 받아도 결제사에 주문 번호로 물어 끝낸다(승인 선점과 같은 작업). */
+    fun scheduleReconcile(order: PaymentOrder) {
+        tasks.enqueue(PaymentTask(PaymentTaskTypes.ORDER_RECONCILE, order.id, runAt = writer.now().plus(properties.reconcile.firstDelay), maxAttempts = properties.reconcile.maxAttempts))
     }
 
     /** 기간 끝에 깨어나는 작업을 넣는다 — 갱신 과금 · 해지 예약의 종료 · 재시도가 모두 이 작업이다. */

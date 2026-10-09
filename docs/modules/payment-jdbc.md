@@ -2,7 +2,7 @@
 
 `payment` 의 결제 장부 저장 포트 `PaymentLedgerStore` 와 작업 포트 `PaymentTasks` 를 JDBC(PostgreSQL · MySQL)로 구현한다. 이 모듈이 있어야 `payment` 의 장부(주문 만들기 · 승인 · 만료 · 조회 · 지급 · 환불 · 웹훅 수신함 · 사용자/운영자 HTTP · 탈퇴 고리)가 켜진다 —
 없으면 `payment` 는 장부가 생기기 전과 같다. 표 4개: `payment_orders`(결제 한 번 = 한 줄 — 줄의 상태가 돈의 사실) · `payment_refunds`(환불 한 건) · `payment_events`(추가만 하는 이력) · `payment_webhook_events`(웹훅 수신함).
-마이그레이션 `V20261009124513__payment_ledger` 가 네 표를 한 번에 만든다. 설계와 근거: `docs/superpowers/specs/2026-10-08-payment-ledger-design.md` §4.3 · §5 · §6.
+마이그레이션 `V20261009124513__payment_ledger` 가 네 표를 한 번에 만든다. 구독은 새 파일 `V20261009134223__payment_subscriptions`(두 방언) 가 표 하나 `payment_subscriptions` 를 더한다 — 계정당 살아 있는 구독 하나(`active_key` 유니크), 빌링키는 암호문 열(`billing_token`, 지운 뒤 NULL), 구독 줄 락은 `select … for update` 이고 락 순서는 주문 → 구독. 설계와 근거: `docs/superpowers/specs/2026-10-08-payment-ledger-design.md` §4.3 · §5 · §6.
 
 규칙: 락은 DB 의 **주문 줄 하나**다(`select … for update` 로 잠그고 새 문장으로 다시 읽은 값으로 판단 — PostgreSQL 은 기다리는 동안의 변경을 같은 문장에서 놓칠 수 있다) · 한 트랜잭션에는 주문 하나(범위는 가장 바깥 `inTransaction` **블록**이지 물리 트랜잭션이 아니다 — 앱의 바깥 트랜잭션에 합류해 블록을 여러 번 열면 블록마다 다른 주문을 잠글 수 있고, 락은 바깥이 끝날 때 풀리며 락 순서[주문 id 오름차순]는 호출자의 몫) ·
 "하나만 있어야 한다"는 유니크 열이 지킨다(`dedupe_key` · `(provider, provider_payment_id)` · 환불의 `open_key` · `dedupe_key` · `(order_id, provider_refund_id)` · 웹훅의 `(provider, event_key)`) ·
@@ -37,7 +37,7 @@
 | 항목 | 내용 |
 |---|---|
 | 의존성 한 줄 | `implementation(project(":modules:payment-jdbc"))` |
-| 함께 오는 모듈 | `payment`, `platform`, `persistence-jdbc`, `job-queue-jdbc` |
+| 함께 오는 모듈 | `payment`, `platform`, `persistence-jdbc`, `job-queue-jdbc`, `crypto` |
 | 컴파일 전용 | 없음 |
 | 설정 접두사 | 없음 |
 | 기본 동작 | 켜짐. `DataSource` 가 있으면 저장소 · 작업 포트를 등록한다 (앱이 같은 타입의 빈을 두면 그쪽이 쓰인다). 큐가 꺼져 있으면(`skeleton.job-queue.enabled=false`) 시작이 실패한다. |

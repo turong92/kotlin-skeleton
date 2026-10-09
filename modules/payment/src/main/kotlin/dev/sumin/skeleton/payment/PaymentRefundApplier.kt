@@ -14,6 +14,8 @@ class PaymentRefundApplier(
     private val listener: PaymentOrderListener,
     private val fulfillment: PaymentFulfillment,
     private val writer: PaymentLedgerWriter,
+    /** 구독 주문이 전액 환불되면 구독을 끝내는 고리(구독을 켠 조립에서만). */
+    private val subscriptions: SubscriptionLifecycle? = null,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -27,6 +29,7 @@ class PaymentRefundApplier(
             if (order.fulfilledAt == null) fulfillment.fulfil(orderId)
             val current = checkNotNull(tx.lockOrder(orderId))
             listener.onRefunded(current, refund)
+            if (current.originType == PaymentOriginType.SUBSCRIPTION && current.status == PaymentOrderStatus.REFUNDED) subscriptions?.onOrderRefunded(tx, current)
             val at = writer.now()
             tx.updateRefund(refund.copy(appliedAt = at, updatedAt = at))
             tx.appendEvent(writer.refundEvent(orderId, refundId, PaymentEventType.REFUND_APPLIED, PaymentActor.SYSTEM))

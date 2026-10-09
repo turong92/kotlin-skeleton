@@ -6,7 +6,7 @@
 | 항목 | 내용 |
 |---|---|
 | 의존성 한 줄 | `implementation(project(":modules:payment-toss"))` |
-| 함께 오는 모듈 | `platform`, `payment` |
+| 함께 오는 모듈 | `platform`, `payment`, `crypto` |
 | 컴파일 전용 | 없음 |
 | 설정 접두사 | `skeleton.payment-toss` — [docs/config/modules/payment-toss.yml](../config/modules/payment-toss.yml) |
 | 기본 동작 | 꺼짐. `enabled=true` 로 켠다. 켜도 시크릿 키가 비면 제공자 빈이 없다 — 보호 환경(`skeleton.env=stage\|prod`)에서는 기동 실패, 그 밖은 기동은 되고 배포 가드가 경고한다. |

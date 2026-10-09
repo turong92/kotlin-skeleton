@@ -106,7 +106,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `notification-slack` | 알림과 @SlackException 예외 알림을 Slack 웹훅으로 보낸다. | `--modules notification-slack` | 슬랙 알림, 슬랙, 예외 알림 / slack notification, slack webhook, exception alert | — |
 | `notification-sse` | 알림을 Server-Sent Events 로 브라우저에 실시간 전달한다(GET /api/v1/notifications/sse) — 받는 사람이 정해진 알림은 그 사람에게만. | `--modules notification-sse` | 실시간 알림, SSE, 알림 즉시 표시, 푸시 알림, 서버 푸시 / realtime notification, sse, server-sent events, push notification | `@skeleton/realtime` |
 | `notification-websocket` | 알림을 STOMP over WebSocket(/ws/notifications)으로 전달한다 — 인증 · trace 인터셉터 · 하트비트를 갖춘 인프로세스 브로커. | `--modules notification-websocket` | 웹소켓, 실시간 알림, 양방향 통신, STOMP / websocket, stomp, realtime notification, two-way | `@skeleton/realtime` |
-| `payment` | 결제 계약 + 장부 HTTP — PaymentService · PaymentProviderRouter(제공자는 payment-toss \| payment-stripe). 장부(payment-jdbc)가 있으면 사용자 경로(/api/v1/payments: 설정 · 주문 만들기(PaymentCatalog 빈이 있을 때) · 승인 · 환불 요청), 꺼 둔 운영자 경로(/api/v1/admin/payments), 결제사가 부르는 웹훅 수신 경로, 탈퇴 고리 · 내보내기 고리를 연다. | `--modules payment` — `payment-toss` \| `payment-stripe` 중 하나 이상 고른다 | 결제, 결제 승인, 환불, 결제 취소, 유료 / payment, checkout, refund, payment confirm, paid | `@skeleton/payment` |
+| `payment` | 결제 계약 + 장부 HTTP — PaymentService · PaymentProviderRouter(제공자는 payment-toss \| payment-stripe). 장부(payment-jdbc)가 있으면 사용자 경로(/api/v1/payments: 설정 · 주문 만들기(PaymentCatalog 빈이 있을 때) · 승인 · 환불 요청), 꺼 둔 운영자 경로(/api/v1/admin/payments), 결제사가 부르는 웹훅 수신 경로, 탈퇴 고리 · 내보내기 고리를 연다. 구독(skeleton.payment.subscription.enabled — 꺼짐이 기본): 카드 등록 + 첫 결제, 기간 끝 갱신 작업, 해지 예약 (/api/v1/payments/subscriptions, 빌링키는 crypto 로 암호화). | `--modules payment` — `payment-toss` \| `payment-stripe` 중 하나 이상 고른다 | 결제, 결제 승인, 환불, 결제 취소, 유료 / payment, checkout, refund, payment confirm, paid | `@skeleton/payment` |
 | `payment-jdbc` | 결제 장부 저장소 — PostgreSQL · MySQL 로 payment 의 저장 포트(PaymentLedgerStore)와 작업 포트(PaymentTasks, job-queue-jdbc 에 싣는다)를 구현한다(payment_* 표 4개 · 주문 줄 락 · 유니크 · check 제약). | `--modules payment-jdbc` | 결제 장부, 주문 장부, 결제 저장소, 결제 DB / payment ledger, payment storage, payment repository, order ledger | `@skeleton/payment` |
 | `payment-stripe` | Stripe 결제 제공자 — 결제 승인 · 취소를 payment 의 제공자로 구현한다. | `--modules payment-stripe` | 스트라이프 결제, 해외 결제, 카드 결제 / stripe, stripe payments, card payment, international payment | `@skeleton/payment` |
 | `payment-toss` | Toss 결제 제공자 — 결제 승인 · 취소를 payment 의 제공자로 구현한다. | `--modules payment-toss` | 토스 결제, 토스페이먼츠, 카드 결제, 간편 결제 / toss payments, toss, card payment | `@skeleton/payment` |
@@ -718,11 +718,12 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 인스턴스가 여러 개면 인프로세스 브로커
 - 키워드: 웹소켓, 실시간 알림, 양방향 통신, STOMP / websocket, stomp, realtime notification, two-way
 
-### `payment` — 결제 계약 + 장부 HTTP — PaymentService · PaymentProviderRouter(제공자는 payment-toss | payment-stripe). 장부(payment-jdbc)가 있으면 사용자 경로(/api/v1/payments: 설정 · 주문 만들기(PaymentCatalog 빈이 있을 때) · 승인 · 환불 요청), 꺼 둔 운영자 경로(/api/v1/admin/payments), 결제사가 부르는 웹훅 수신 경로, 탈퇴 고리 · 내보내기 고리를 연다.
+### `payment` — 결제 계약 + 장부 HTTP — PaymentService · PaymentProviderRouter(제공자는 payment-toss | payment-stripe). 장부(payment-jdbc)가 있으면 사용자 경로(/api/v1/payments: 설정 · 주문 만들기(PaymentCatalog 빈이 있을 때) · 승인 · 환불 요청), 꺼 둔 운영자 경로(/api/v1/admin/payments), 결제사가 부르는 웹훅 수신 경로, 탈퇴 고리 · 내보내기 고리를 연다. 구독(skeleton.payment.subscription.enabled — 꺼짐이 기본): 카드 등록 + 첫 결제, 기간 끝 갱신 작업, 해지 예약 (/api/v1/payments/subscriptions, 빌링키는 crypto 로 암호화).
 
 - 종류 · 상태: module · experimental — 위치 `modules/payment`
 - 켜는 법: `--modules payment` — `payment-toss` | `payment-stripe` 중 하나 이상 고른다
 - 의존 한 줄: `implementation(project(":modules:payment"))`
+- 자동으로 따라온다: `crypto`
 - 하나 이상 고른다: `payment-toss` | `payment-stripe`
 - 설정 접두사 `skeleton.payment` — 키와 기본값 `docs/config/modules/payment.yml`
 - HTTP 경로: `/api/v1/payments`, `/api/v1/admin/payments`, `/api/v1/payments/webhooks`
@@ -743,7 +744,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 종류 · 상태: module · experimental — 위치 `modules/payment-jdbc`
 - 켜는 법: `--modules payment-jdbc`
 - 의존 한 줄: `implementation(project(":modules:payment-jdbc"))`
-- 자동으로 따라온다: `payment`
+- 자동으로 따라온다: `crypto`, `payment`
 - 문서: `docs/modules/payment-jdbc.md`
 - 짝 프런트(react-skeleton): 항목 `payment` · 패키지 `@skeleton/payment` · 조각 `--packages payment`
 - 쓰지 않는 경우:
@@ -758,7 +759,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 종류 · 상태: module · experimental — 위치 `modules/payment-stripe`
 - 켜는 법: `--modules payment-stripe`
 - 의존 한 줄: `implementation(project(":modules:payment-stripe"))`
-- 자동으로 따라온다: `payment`
+- 자동으로 따라온다: `crypto`, `payment`
 - 설정 접두사 `skeleton.payment-stripe` — 키와 기본값 `docs/config/modules/payment-stripe.yml`
 - 비밀 · 환경변수: `<P>_PAYMENT_STRIPE_ENABLED=true`, `<P>_PAYMENT_STRIPE_SECRET_KEY` — 빠지면: 제공자 빈이 없다 — 결제 라우팅이 그 제공자를 못 찾는다
 - 문서: `docs/modules/payment-stripe.md`
@@ -774,7 +775,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 종류 · 상태: module · experimental — 위치 `modules/payment-toss`
 - 켜는 법: `--modules payment-toss`
 - 의존 한 줄: `implementation(project(":modules:payment-toss"))`
-- 자동으로 따라온다: `payment`
+- 자동으로 따라온다: `crypto`, `payment`
 - 설정 접두사 `skeleton.payment-toss` — 키와 기본값 `docs/config/modules/payment-toss.yml`
 - 비밀 · 환경변수: `<P>_PAYMENT_TOSS_ENABLED=true`, `<P>_PAYMENT_TOSS_SECRET_KEY` — 빠지면: 제공자 빈이 없다 — 결제 라우팅이 그 제공자를 못 찾는다. 시크릿 키가 비면 보호 환경(stage · prod)에서는 기동 실패, 그 밖의 환경은 경고
 - 문서: `docs/modules/payment-toss.md`

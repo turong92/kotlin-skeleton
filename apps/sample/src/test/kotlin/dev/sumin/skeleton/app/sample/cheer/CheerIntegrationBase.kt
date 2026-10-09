@@ -36,6 +36,8 @@ import org.springframework.test.web.servlet.post
     "skeleton.payment.reconcile.first-delay=1s",
     "skeleton.payment.http.order-rate-limit.account-capacity=1000",
     "skeleton.payment.http.order-rate-limit.ip-capacity=1000",
+    "skeleton.payment.subscription.enabled=true",
+    "skeleton.payment.subscription.renewal.retry-interval=2s",
 ])
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration::class, SampleIntegrationTest.FakeStorageConfiguration::class, CheerIntegrationBase.Provider::class)
@@ -59,10 +61,10 @@ abstract class CheerIntegrationBase {
     @BeforeEach
     fun cleanLedger() {
         // 자식부터 — 장부의 표 넷 · 응원 기록 · 작업
-        listOf("payment_events", "payment_refunds", "payment_webhook_events", "payment_orders", "cheers", "jobs").forEach { jdbc.sql("delete from $it").update() }
+        listOf("payment_events", "payment_refunds", "payment_webhook_events", "payment_orders", "payment_subscriptions", "cheers", "jobs").forEach { jdbc.sql("delete from $it").update() }
         gateway.confirmCarriesDetails = true
         // 가짜 결제사는 컨텍스트 하나를 시험 여럿이 나눠 쓴다 — 호출 기록은 시험마다 비운다
-        listOf(gateway.confirmCalls, gateway.lookupCalls, gateway.checkoutCalls, gateway.refundCalls).forEach { it.clear() }
+        listOf(gateway.confirmCalls, gateway.lookupCalls, gateway.checkoutCalls, gateway.refundCalls, gateway.issueCalls, gateway.chargeCalls, gateway.revokeCalls).forEach { it.clear() }
         // 한 시험이 남긴 대본이 다음 시험의 첫 호출을 가로채지 않게 비운다(실패한 시험 뒤에도)
         gateway.clearScripts()
         user = login("user@example.com")

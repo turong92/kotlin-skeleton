@@ -90,6 +90,24 @@ class MySqlMigrationUpgradeTest {
         repeat(2) { erasure.erase(ErasureRequest("acc_upgrade", AccountTombstone.of("acc_upgrade"))) }   // 두 번째는 아무것도 바꾸지 않는다
         assertEquals(0L, jdbc.sql("select count(*) from payment_orders where card_issuer is not null or card_last4 is not null").query(Long::class.java).single(), "the erasure hook cleared both card columns on MySQL")
         assertEquals(1L, jdbc.sql("select count(*) from payment_orders where id = 'ord_upgrade' and account_erased_at is not null and status = 'PAID'").query(Long::class.java).single(), "the order line stays, marked erased")
+        subscriptionsKeepOneLivePerAccount(store, jdbc)
+    }
+
+    /** 구독 표(`V20261009134223__payment_subscriptions`)가 기준선 위에서 올라왔다 — 진짜 저장소가 MySQL 위에서 계정당 살아 있는 구독 하나를 지킨다. */
+    private fun subscriptionsKeepOneLivePerAccount(store: JdbcPaymentLedgerStore, jdbc: JdbcClient) {
+        assertEquals(0L, jdbc.sql("select count(*) from payment_subscriptions").query(Long::class.java).single())
+        val now = java.time.Instant.parse("2026-10-09T00:00:00Z")
+        fun sub(id: String, activeKey: String?) = dev.sumin.skeleton.payment.PaymentSubscription(
+            id = id, accountId = "acc_upgrade", provider = "toss", providerMode = dev.sumin.skeleton.payment.PaymentMode.TEST, status = dev.sumin.skeleton.payment.SubscriptionStatus.PENDING,
+            planCode = "basic", amount = dev.sumin.skeleton.payment.PaymentAmount(3900, "KRW"), period = "P1M", anchorAt = null, periodSeq = 0, currentPeriodStart = null, currentPeriodEnd = null,
+            chargeOrderId = null, attempt = 1, customerKey = "cus_$id", billingToken = null, cardIssuer = null, cardLast4 = null, activeKey = activeKey, pendingPlanCode = null, pendingAmount = null,
+            endReason = null, endedAt = null, accountErasedAt = null, createdAt = now, updatedAt = now,
+        )
+        assertTrue(store.inTransaction { it.insertSubscriptionIfAbsent(sub("sub_upgrade_1", null)) })
+        assertTrue(store.inTransaction { it.insertSubscriptionIfAbsent(sub("sub_upgrade_2", null)) })
+        store.inTransaction { tx -> tx.updateSubscription(checkNotNull(tx.lockSubscription("sub_upgrade_1")).copy(activeKey = "acc_upgrade")) }
+        assertTrue(runCatching { store.inTransaction { tx -> tx.updateSubscription(checkNotNull(tx.lockSubscription("sub_upgrade_2")).copy(activeKey = "acc_upgrade")) } }.isFailure, "a second live subscription for the account is refused on MySQL")
+        assertEquals("sub_upgrade_1", store.findLiveSubscription("acc_upgrade")?.id)
     }
 
     private object UtcMySqlDialect : SqlDialect {
@@ -97,6 +115,6 @@ class MySqlMigrationUpgradeTest {
         override fun instantParam(value: java.time.Instant?): Any? = value?.let { java.time.LocalDateTime.ofInstant(it, java.time.ZoneOffset.UTC) }
         override fun readInstant(rs: java.sql.ResultSet, column: String): java.time.Instant? = rs.getObject(column, java.time.LocalDateTime::class.java)?.toInstant(java.time.ZoneOffset.UTC)
         // 이 시험이 도는 탈퇴 고리는 "있으면 무시" 삽입을 실행하지 않는다(수신함이 생성자에서 문장만 만들어 둔다 - 그래서 던지면 안 된다). 실행되면 진짜 MySQL 방언을 연결하라는 신호로 SQL 이 아닌 글자를 돌려준다
-        override fun insertIgnore(table: String, columns: List<String>, conflictColumns: List<String>): String = "not sql: this test dialect does not implement insertIgnore"
+        override fun insertIgnore(table: String, columns: List<String>, conflictColumns: List<String>): String = "insert ignore into $table (${columns.joinToString(", ")}) values (${columns.joinToString(", ") { ":$it" }})"
     }
 }

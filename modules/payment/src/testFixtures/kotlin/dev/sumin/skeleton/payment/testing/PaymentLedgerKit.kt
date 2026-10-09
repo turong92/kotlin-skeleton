@@ -14,7 +14,10 @@ import dev.sumin.skeleton.payment.PaymentConvergence
 import dev.sumin.skeleton.payment.LedgerRefundConvergence
 import dev.sumin.skeleton.payment.PaymentFulfillment
 import dev.sumin.skeleton.payment.PaymentRefundApplier
+import dev.sumin.skeleton.payment.PaymentAccountErasure
 import dev.sumin.skeleton.payment.PaymentSubscriptions
+import dev.sumin.skeleton.payment.SubscriptionRenewTaskHandler
+import dev.sumin.skeleton.payment.SubscriptionRenewalGuard
 import dev.sumin.skeleton.payment.PaymentTaskTypes
 import dev.sumin.skeleton.payment.SubscriptionCharges
 import dev.sumin.skeleton.payment.SubscriptionLifecycle
@@ -118,7 +121,7 @@ class RecordingReviewNotifier : PaymentReviewNotifier {
  * 새 서비스가 생기면 여기에 더한다(운영 조립은 `PaymentLedgerAutoConfiguration` 이고 이 조립은 그것의 시험용 거울이다).
  */
 class PaymentLedgerKit(
-    val properties: PaymentProperties = PaymentProperties(webhook = PaymentProperties.Webhook(pathToken = WEBHOOK_TOKEN)),
+    val properties: PaymentProperties = PaymentProperties(webhook = PaymentProperties.Webhook(pathToken = WEBHOOK_TOKEN), subscription = PaymentProperties.Subscription(enabled = true)),
     mode: PaymentMode = PaymentMode.TEST,
     val catalog: PaymentCatalog? = CheerCatalog(),
     val listener: RecordingOrderListener = RecordingOrderListener(),
@@ -138,7 +141,7 @@ class PaymentLedgerKit(
     val expire = OrderExpireTaskHandler(store, router, convergence)
     val reconcile = OrderReconcileTaskHandler(store, router, convergence)
     val fulfil = OrderFulfilTaskHandler(fulfillment, store, convergence)
-    val applier = PaymentRefundApplier(store, listener, fulfillment, writer)
+    val applier = PaymentRefundApplier(store, listener, fulfillment, writer, lifecycle)
     val refunds = PaymentRefunds(store, tasks, router, convergence, applier, writer, properties)
     val refundReconcile = RefundReconcileTaskHandler(store, router, convergence, writer, properties)
     val refundApply = RefundApplyTaskHandler(applier, store, convergence)
@@ -147,7 +150,12 @@ class PaymentLedgerKit(
     val charges = SubscriptionCharges(store, convergence, fulfillment, writer)
     val subscriptions = PaymentSubscriptions(store, router, plans, ReversibleTestEncryptor, lifecycle, charges, tasks, writer, properties)
     val revoke = SubscriptionRevokeTaskHandler(store, router, ReversibleTestEncryptor, writer)
-    val runner = DefaultPaymentTaskRunner(listOf(expire, reconcile, fulfil, refundReconcile, refundApply, webhook, revoke))
+
+    /** 앱의 갱신 판단 대역 — [blocked] 에 든 계정은 갱신하지 않는다. */
+    val blocked: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+    val renew = SubscriptionRenewTaskHandler(store, router, plans, ReversibleTestEncryptor, lifecycle, charges, SubscriptionRenewalGuard { it !in blocked }, writer, properties.subscription.renewal.retryInterval)
+    val erasure = PaymentAccountErasure(store, writer, properties.erasure.accountId, lifecycle)
+    val runner = DefaultPaymentTaskRunner(listOf(expire, reconcile, fulfil, refundReconcile, refundApply, webhook, revoke, renew))
 
     /** 지금 시각까지 시간이 된 작업을 한 번씩 돈다. */
     fun runTasks(only: Set<String>? = null): Int = tasks.runDue(runner, time.now(), only)

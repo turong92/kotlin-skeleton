@@ -332,7 +332,7 @@
 
 `reviewReason` 은 한 칸이다. **돈이 어긋난 이유가 지급 쪽 이유를 덮어쓰고 반대는 안 되며**, 같은 급끼리는 먼저 찍힌 것이 남는다. 줄에 찍힌 이유가 있으면 **그것이 먼저** 보인다. 없을 때 줄과 환불 줄에서 파생한 것이 보인다(장부가 스스로 표시하지 못한 마지막 안전망).
 
-**줄에 찍히는 일곱**
+**줄에 찍히는 일곱**(구독을 켠 앱에는 하나가 더 있다 — 아래 표 끝의 `SUBSCRIPTION_STALE_CHARGE`)
 
 | 이유 | 뜻 | 누가 · 어떻게 푸는가 |
 |---|---|---|
@@ -342,6 +342,7 @@
 | `MODE_MISMATCH` | 주문을 만든 키의 모드(테스트 · 실결제)와 지금 키의 모드가 다르다. **승인을 선점한 `CONFIRMING` · 결제된 주문에만** 찍힌다 — 선점한 적 없는 `PENDING` 은 `sync` · 웹훅도 표시를 찍지 않고(409 만) 표시 없이 마감 뒤 `EXPIRED` 로 닫히며(그 줄에 먼저 찍힌 표시가 있었다면 닫을 때 비운다), 끝난 주문에는 `sync` 도 찍지 않는다 | 키를 맞추고 `sync` — 지금 모드가 주문과 같으면 풀린다. 선점한 뒤 모드가 바뀐 `CONFIRMING` 은 결제사가 그 결제를 모르면 풀리지 않는다(알려진 한계 — [modules/payment.md](modules/payment.md)) |
 | `CONFIRM_UNRESOLVED` | `CONFIRMING` 인데 조회 작업이 시도를 다 쓰고도 결제사의 끝 상태를 못 들었다 | 웹훅 · `sync` 가 결제사에서 `PAID` 로 맞추면 비워진다. **주문이 `FAILED` · `EXPIRED` 로 닫히면 비워진다**(돈이 안 나간 것이 확정돼 의문이 풀렸다 — 안 비우면 닫힌 주문이 「확인 필요」에 영구히 남는다). 돈 · 모드 이유는 닫아도 그대로다(단 `PENDING` 이 닫힐 때의 `MODE_MISMATCH` 는 예외 — 그 줄에서는 닫을 때 비운다) |
 | `FULFILMENT_UNRESOLVED` | 돈은 받았는데 지급 작업이 죽었다(`fulfilled` 가 거짓) | 「결제사와 맞추기」가 지급 작업을 **다시 넣고** 푼다. 지급이 끝나면 스스로 비워진다 |
+| `SUBSCRIPTION_STALE_CHARGE` | (구독) 구독이 기다리는 과금 주문이 아닌 구독 주문이 늦게 `PAID` 가 됐다 — 구독 기간은 그대로이고 돈만 받았다. 돈 쪽 이유라 지급 쪽 이유를 덮는다 | 장부에는 푸는 단추가 없다. 운영자가 그 주문을 환불한다(`POST /orders/{id}/refunds`) |
 | `REFUND_APPLY_UNRESOLVED` | 환불은 `SUCCEEDED` 인데 앱의 회수(`onRefunded`) 작업이 죽었다 | 「결제사와 맞추기」가 회수 작업을 다시 넣고 푼다. 회수가 끝나면 스스로 비워진다 |
 
 **파생 둘** — 줄에 찍힌 이유가 없을 때, `skeleton.payment.admin.stale-after`(기본 1시간)보다 오래된 것:
@@ -415,6 +416,10 @@
 | `PAYMENT.REFUND_IN_PROGRESS` | 409 | 이 주문에 열린 환불이 있다 |
 | `PAYMENT.REFUND_AMOUNT_EXCEEDED` | 400 | 환불할 수 있는 금액 초과 |
 | `PAYMENT.REFUND_DECLINED` | 402 | 환불 확정 거절. `data.category` · `data.providerCode` |
+| `PAYMENT.SUBSCRIPTION_NOT_FOUND` | 404 | 구독 — 남의 구독과 없는 구독(같은 응답) |
+| `PAYMENT.ALREADY_SUBSCRIBED` | 409 | 구독 — 이미 살아 있는 구독이 있다(계정당 하나) · 카드 등록 뒤 선점에 졌다 |
+| `PAYMENT.SUBSCRIPTION_NOT_ACTIVATABLE` | 409 | 구독 — 이미 끝난 구독으로 카드 등록 · 첫 결제를 시도했다 |
+| `PAYMENT.SUBSCRIPTION_NOT_CANCELABLE` | 409 | 구독 — 카드를 내지 않은(`PENDING`) 구독은 해지할 수 없다 |
 | `PAYMENT.UNAVAILABLE` | 503 | 결제를 받을 수 없다 · **아무것도 보내지 않았다**(환불 전 확인 실패) |
 | `PAYMENT.PROVIDER_NOT_FOUND` | 400 | 주문의 결제사 빈이 지금 없다 (사용자 승인 경로. 운영자 환불 · 승인 · `sync` 와 주문 만들기 재전송에서는 `503 UNAVAILABLE`) |
 | `PAYMENT.ROUTING_FAILED` | 400 | 결제사를 고르지 못했다 (운영자 환불 · 승인 · `sync` 에서는 `503 UNAVAILABLE`) |
@@ -448,3 +453,32 @@
 - 운영자 경로: `PaymentAdminHttpTest.kt` · `PaymentAdminDisabledHttpTest.kt`(꺼진 경로는 모두 404) · `PaymentHttpAccessTest.kt`(등록된 매핑 전부에 접근 규칙 — 운영자 아홉 · 사용자 여덟) · `PaymentAdminContractHttpTest.kt`(멱등 키 · 응답 칸 · 칸 순서) · `PaymentAdminControllerAssemblyHttpTest.kt`(컨트롤러를 상속해 갈아 끼운 조립 · 인터셉터가 없는 조립에서도 아홉 핸들러가 닫힌다) · `PaymentOpenApiDocumentHttpTest.kt`(운영자 경로를 켠 채 OpenAPI 문서가 만들어진다).
 - 웹훅: `PaymentWebhookWebTest.kt` · `PaymentWebhookRateLimitWebTest.kt` · `BoundedBodyTest.kt` · `WebhookLogMaskingTest.kt`.
 - 탈퇴 · 내보내기: `PaymentAccountErasureTest.kt`.
+
+## 12. 구독 (`skeleton.payment.subscription.enabled=true` 인 앱에만 — 꺼져 있으면 경로가 없다)
+
+기준 경로는 위와 같다(`<http.base-path>`, 기본 `/api/v1/payments`). 로그인 필요, 남의 구독 · 없는 구독은 같은 `404 PAYMENT.SUBSCRIPTION_NOT_FOUND`, 본문에 금액은 없다(금액의 출처는 앱의 플랜). **빌링키 · 고객 키는 어떤 응답에도 없다** — 카드 등록 창 값(`billingAuth`)의 `customerKey` 만 예외다(창이 필요로 하고 공개해도 되는 값). 설계: `docs/superpowers/specs/2026-10-09-subscription-design.md`.
+
+### 12.1 `Subscription`
+
+| 칸 | 뜻 |
+|---|---|
+| `id` | `sub_…` |
+| `status` | `PENDING`(카드 등록 · 첫 결제 전 또는 확인 중) · `ACTIVE` · `PAST_DUE`(갱신 거절, 재시도 중 — 이용 불가) · `CANCELING`(해지 예약, 기간 끝까지 이용) · `ENDED` |
+| `planCode` · `planName` | 만들 때 박힌 플랜 코드, 앱 플랜 목록의 이름(사라졌으면 코드) |
+| `amount` `{amount, currency}` · `period` | 박힌 금액 · 주기(ISO-8601: `P1M`, `PT3M`) |
+| `currentPeriodStart` · `currentPeriodEnd` | 지금 기간. `currentPeriodEnd` = 다음 결제일(`CANCELING` 이면 이용이 끝나는 날) |
+| `attempt` | 이번 기간의 시도 번호 — `PAST_DUE` 에서 몇 번째 재시도인지 |
+| `endReason` | `ENDED` 일 때: `FIRST_PAYMENT_DECLINED` · `USER_CANCELED` · `PAYMENT_FAILED` · `ACCOUNT_ERASED` · `RENEWAL_BLOCKED` · `REFUNDED` |
+| `card` `{issuer, last4}` · `testMode` · `createdAt` | 화면 표시용 카드(끝나면 `null`) |
+
+### 12.2 경로
+
+| 경로 | 하는 일 · 응답 |
+|---|---|
+| `GET /subscriptions/plans` | `{plans: [{code, name, amount, period, level}]}` (`level` 이 높을수록 윗등급) |
+| `POST /subscriptions` `{planCode}` + `Idempotency-Key`(필수) | `201 {subscription (PENDING), billingAuth}` · 같은 키로 다시: `200` 같은 줄(카드를 내기 전이면 같은 `billingAuth`, 낸 뒤면 `null`) · `400`(헤더 없음) · `409 ALREADY_SUBSCRIBED` · `409 IDEMPOTENCY_CONFLICT`(다른 플랜) · `422 ITEM_NOT_PURCHASABLE`(모르는 플랜) · `429`(주문 만들기와 같은 한도) · `503 UNAVAILABLE`. `billingAuth` = `{provider, kind, testMode, clientKey, customerKey, attributes}` — 프론트가 `kind`(토스: `TOSS_BILLING_AUTH`)로 갈라 카드 등록 창을 연다 |
+| `POST /subscriptions/{id}/activate` `{providerPayload: {authKey}}` | 빌링키 발급 → 첫 결제. `200 ACTIVE`(재전송도) · `202 PENDING`(첫 결제를 결제사가 아직 답하지 않았다 — `GET /subscriptions/me` 로 확인) · `402 DECLINED`(`data.providerCode` · `data.category`, 구독은 끝난다) · `409 ALREADY_SUBSCRIBED` · `409 SUBSCRIPTION_NOT_ACTIVATABLE`(이미 끝난 구독) |
+| `GET /subscriptions/me` | `{subscription (없으면 null), orders: [최근 결제 5건 — 주문 `Order` 모양]}`. 끝난 구독도 `endReason` 과 함께 남는다 — 갱신 실패 · 종료의 유일한 통지다. 시작하지 않은 `PENDING` 은 보이지 않는다 |
+| `POST /subscriptions/{id}/cancel` | `ACTIVE` → `CANCELING`, `PAST_DUE` 는 바로 `ENDED`. 다시 눌러도 같은 답. `409 SUBSCRIPTION_NOT_CANCELABLE`(`PENDING`) |
+
+구독 주문(`Order`)은 `kind` 가 `SUBSCRIPTION_INITIAL` · `SUBSCRIPTION_RENEWAL`, `itemType=subscription`, `itemRef`=플랜 코드이고 기존 `/orders/{id}` · 운영자 주문 목록에 그대로 보인다.

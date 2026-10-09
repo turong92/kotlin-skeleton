@@ -178,7 +178,21 @@ data class PaymentProperties(
      */
     data class Subscription(
         val enabled: Boolean = false,
-    )
+        /** 갱신 과금 — 거절되면 `PAST_DUE` 로 재시도하고 시도를 다 쓰면 구독이 끝난다. */
+        val renewal: Renewal = Renewal(),
+    ) {
+        data class Renewal(
+            /** 한 기간의 과금 시도 수(첫 시도 포함). 다 쓰면 구독이 `PAYMENT_FAILED` 로 끝난다. */
+            val maxAttempts: Int = 3,
+            /** 거절된 갱신을 다시 시도하기까지. */
+            val retryInterval: Duration = Duration.ofHours(24),
+        ) {
+            init {
+                require(maxAttempts >= 1) { "skeleton.payment.subscription.renewal.max-attempts must be at least 1" }
+                require(retryInterval > Duration.ZERO) { "skeleton.payment.subscription.renewal.retry-interval must be positive" }
+            }
+        }
+    }
 
     /** 계정 탈퇴(스펙 §8.2). 어느 모드든 `card_issuer` · `card_last4` 는 지워지고 주문 줄은 남는다. */
     data class Erasure(

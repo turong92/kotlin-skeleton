@@ -29,7 +29,18 @@ skeleton:
         - { id: acc_user, email: user@example.com, password: password, display-name: User, login-id: sample-user }
         - { id: acc_admin, email: admin@example.com, password: password, roles: [ADMIN], display-name: Admin, login-id: sample-admin }
         - { id: acc_moderator, email: moderator@example.com, password: password, roles: [MODERATOR], display-name: Moderator, login-id: sample-moderator }
+  crypto:
+    primary-key-id: local
+    keys:
+      local: bG9jYWwtZGV2LW9ubHktY3J5cHRvLWtleS0wMTIzNDU=   # 로컬 · e2e 전용 고정 값 — 빌링키를 암호화한다. 운영 값은 환경변수 SKELETON_CRYPTO_KEYS_MAIN
+  sample:
+    subscription:
+      period: PT3M                       # 로컬: 갱신 · 재시도 · 종료를 몇 분 안에 눌러 본다 (기본 P1M)
   payment:
+    subscription:
+      enabled: ${skeleton.payment-toss.enabled:false}   # 토스를 켰을 때만 구독도 켠다 — 키 없이 뜨는 로컬은 예전처럼 결제 화면이 「지금은 결제할 수 없어요」다
+      renewal:
+        retry-interval: 1m               # 로컬: 갱신이 거절되면 1분 뒤 다시 (기본 24시간), 세 번 거절되면 구독이 끝난다
     admin:
       enabled: true                      # 로컬 · e2e: 운영자 화면(/admin/payments)이 쓰는 경로를 연다 — 시드 admin@example.com 이 ADMIN. 배포는 SKELETON_PAYMENT_ADMIN_ENABLED
     http:

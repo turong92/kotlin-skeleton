@@ -122,6 +122,17 @@ skeleton:
     # 켜도 판정은 이 앱의 PaymentOperatorPolicy 빈(cheer/CheerPaymentConfiguration) — 토큰의 역할이 아니라 매 호출 저장소의 ADMIN 역할을 다시 읽는다.
     webhook:
       path-token: ${SKELETON_PAYMENT_WEBHOOK_PATH_TOKEN:}   # 값은 커밋하지 않는다 — 환경변수로만(배포 선언의 secrets:). 비면 서명 없는 결제사(토스)의 웹훅 경로는 늘 404 이고, 보호 환경에서는 기동 실패. 24자 이상
+    # 구독(자동결제) — 모듈 기본은 꺼짐이고 이 앱도 환경변수로 켠다: SKELETON_PAYMENT_SUBSCRIPTION_ENABLED=true. 켜면 빌링키를 암호화할 키(아래 crypto)와 빌링을 하는 결제사(토스)가 있어야 한다 —
+    # 없으면 기동 실패(카드를 받고도 과금할 수 없는 구독이 뜨지 않게). 플랜은 subscription/SubscriptionConfiguration, 주기는 skeleton.sample.subscription.period. 로컬 프로필은 토스를 켰을 때 함께 켠다(application-local.yml).
+    subscription:
+      enabled: ${SKELETON_PAYMENT_SUBSCRIPTION_ENABLED:false}
+  crypto:
+    primary-key-id: ${SKELETON_CRYPTO_PRIMARY_KEY_ID:main}
+    keys:
+      main: ${SKELETON_CRYPTO_KEYS_MAIN:}   # base64 로 인코딩한 32바이트 AES 키 — 비밀이라 커밋하지 않는다(배포는 선언의 secrets:). 구독을 켰는데 비면 기동 실패
+  sample:
+    subscription:
+      period: ${SKELETON_SAMPLE_SUBSCRIPTION_PERIOD:P1M}   # 견본 플랜의 갱신 주기(ISO-8601). 로컬 프로필은 PT3M
   payment-toss:
     secret-key: ${TOSS_PAYMENTS_SECRET_KEY:}                # 벤더 표준 이름 별칭 (모듈의 이름은 SKELETON_PAYMENT_TOSS_SECRET_KEY — 둘 다 먹고, 모듈 이름이 이긴다). 비밀 — 커밋하지 않는다
     client-key: ${TOSS_PAYMENTS_CLIENT_KEY:}                # 같은 묶음의 test_ck_… (비밀 아님). 서버가 결제창 값(GET …/orders 의 checkout)으로 프론트에 준다

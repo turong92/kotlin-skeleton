@@ -42,6 +42,16 @@ class CheerOrderListenerIntegrationTest : CheerIntegrationBase() {
     }
 
     @Test
+    fun `an order for something that is not a cheer - a subscription charge - leaves no cheer line behind, paid or refunded`() {
+        val subscription = paidOrder(id = "ord_" + "d".repeat(32)).copy(itemType = "subscription", itemRef = "basic")
+
+        listener.onPaid(subscription)
+        listener.onRefunded(subscription.copy(status = PaymentOrderStatus.REFUNDED, refundedAmount = 3000), PaymentTestOrders.refund(orderId = subscription.id, status = PaymentRefundStatus.SUCCEEDED, amount = PaymentAmount(3000, "KRW")))
+
+        assertEquals(0, row(subscription.id).size)
+    }
+
+    @Test
     fun `a refund of part keeps PAID and raises the amount - the rest closes it, and repeating or an older call changes nothing`() {
         val order = paidOrder()
         listener.onPaid(order)

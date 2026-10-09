@@ -123,6 +123,19 @@ local 프로필은 주문 만들기 한도(기본 계정당 10 / 10분)를 풀�
 
 통합 시험(`apps/sample/src/test/…/cheer/` — 진짜 PostgreSQL · 보안 체인 · 결제 장부, 결제사만 시험 소스의 `ScriptedGateway` 빈): `CheerJourneyIntegrationTest`(가입 → 주문 → 승인 → 응원 기록 → 환불 요청 → 운영자 환불 → 「환불됨」 · 일부 환불 · 금액 목록 밖 · 승인이 "모름"으로 끝난 뒤 조회 작업이 기록을 만든다) · `CheerAccessIntegrationTest`(남의 주문 404 · 본인은 환불을 실행할 수 없다 · 운영자 판정이 저장소의 지금 역할 · 웹훅 경로가 익명으로 닿되 POST 두 모양뿐 · 사용자 응답에 운영자 칸 · 심은 값 없음) · `CheerOrderListenerIntegrationTest` · `CheerOrderRateLimitIntegrationTest`(429) · `CheerOperatorDisabledIntegrationTest`(꺼져 있으면 404) · `CheerWithoutProviderIntegrationTest`(토스 없이 기동) · `PaymentEnvironmentOnlyBootTest`(환경변수만으로 기동) · `AccountJourneyIntegrationTest`(탈퇴 뒤 전체 표 스캔 — 카드 두 칸이 비고 응원 기록이 지워지고 심은 값이 없고, 운영자는 여전히 환불할 수 있다) · `MigrationUpgradeIntegrationTest` · `MySqlMigrationUpgradeTest`(기준선 데이터 위에서 새 표가 올라가고 탈퇴 고리가 카드 두 칸을 비운다).
 
+## 구독 — 플랜과 자동결제 (`/api/v1/payments/subscriptions`)
+
+`payment` 의 구독(`docs/modules/payment.md` 「구독」)을 이 앱이 켠다. 코드는 `subscription/SubscriptionConfiguration.kt` 두 빈 — `SubscriptionPlans`(Basic 3,900 · Standard 6,900 · Pro 9,900원, 주기는 `skeleton.sample.subscription.period`)와 `SubscriptionRenewalGuard`(정상 `ACTIVE` 계정만 갱신 — 정지 · 삭제 유예 · 없는 계정은 그 기간 끝에 구독이 끝난다).
+
+| 값 | 이름 |
+|---|---|
+| 켜기 | `SKELETON_PAYMENT_SUBSCRIPTION_ENABLED=true` (로컬 프로필은 토스를 켰을 때 함께 켠다) |
+| 빌링키 암호화 키 | `SKELETON_CRYPTO_KEYS_MAIN` — base64 로 인코딩한 32바이트(비밀, 배포 선언의 `secrets:` 에 이름을 더한다). 켰는데 없으면 기동 실패 |
+| 주기 | `SKELETON_SAMPLE_SUBSCRIPTION_PERIOD` (ISO-8601, 기본 `P1M`; 로컬 프로필 `PT3M`) |
+
+로컬은 갱신 · 재시도를 몇 분 안에 볼 수 있다: 주기 3분, 거절되면 1분 뒤 다시(`skeleton.payment.subscription.renewal.retry-interval`), 세 번 거절되면 구독이 끝난다. 토스 테스트 키로 카드 등록 창은 인증 번호 `000000` 과 국내 카드만 받는다([real-provider-setup §11.7](real-provider-setup.md)).
+`CheerOrderListener` 는 `itemType == cheer` 인 주문만 응원 기록으로 남긴다 — 구독 결제는 응원이 아니다.
+
 ## 돌려 보기
 
 ```bash

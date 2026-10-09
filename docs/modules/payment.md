@@ -6,12 +6,12 @@
 | 항목 | 내용 |
 |---|---|
 | 의존성 한 줄 | `implementation(project(":modules:payment"))` |
-| 함께 오는 모듈 | `platform` |
+| 함께 오는 모듈 | `platform`, `crypto` |
 | 컴파일 전용 | `alert` |
 | 설정 접두사 | `skeleton.payment` — [docs/config/modules/payment.yml](../config/modules/payment.yml) |
 | 기본 동작 | 조건부 — 라우팅 파사드는 늘 켜짐. 장부 · HTTP · 웹훅은 `PaymentLedgerStore` 빈(`payment-jdbc`)이 있을 때만 선다. 운영자 경로는 그 위에서도 기본 꺼짐. |
 | 부팅에 필요한 것 | 없음. 결제하려면 제공자 모듈이 있어야 하고, 장부는 `payment-jdbc` 와 작업 큐(`job-queue-jdbc`)가 있어야 한다. |
-| 교체 지점 | `PaymentProviderRouter`, `PaymentService`, 장부: `PaymentCatalog` · `PaymentOrderListener` · `PaymentReviewNotifier` · `PaymentOperatorPolicy` |
+| 교체 지점 | `PaymentProviderRouter`, `PaymentService`, 장부: `PaymentCatalog` · `PaymentOrderListener` · `PaymentReviewNotifier` · `PaymentOperatorPolicy`, 구독: `SubscriptionPlans` · `SubscriptionRenewalGuard` · `PaymentBillingGateway` |
 | 마이그레이션 | 없음 (장부 표는 payment-jdbc 에 있다) |
 | 프론트 짝 | `@skeleton/payment` |
 | 테스트 | `modules/payment/src/test` · `modules/payment/src/noOptionalTest` · 시험 대역 `modules/payment/src/testFixtures` |
@@ -41,6 +41,22 @@
 | `mode` | 지금 끼운 키가 테스트 · 실결제 — 주문 줄에 박히고 배포 가드가 본다 |
 
 결제사 모듈의 의무(확정/모름 분류 등)는 `payment-toss` 문서(결제사 모듈을 고른 프로젝트에 `docs/modules/payment-toss.md`). `PaymentProvider` 는 능력의 합(+`cancel`)이라 기존 구현은 고치지 않아도 된다.
+
+## 구독 (`skeleton.payment.subscription.enabled`, 기본 꺼짐)
+
+결제 장부 위에 얹는 자동결제 — 카드를 한 번 등록(토스 빌링키)하고 서버가 기간 끝마다 승인한다. 설계와 근거: `docs/superpowers/specs/2026-10-09-subscription-design.md`. **결제사의 스케줄러는 쓰지 않는다**(토스는 스케줄링을 하지 않는다) — 언제 얼마를 받을지는 우리 장부가 정한다.
+
+- **켜는 법**: `skeleton.payment.subscription.enabled=true` + 앱이 내는 세 가지 — `SubscriptionPlans` 빈(플랜 코드 · 금액 · 주기 · 등급 — **구독 금액의 유일한 출처**, 구독 줄에는 만들 때의 값이 박혀 카탈로그 가격을 바꿔도 기존 구독에 조용히 적용되지 않는다), 빌링 능력을 가진 결제사(`PaymentBillingGateway` — `payment-toss`), 빌링키를 암호화할 `crypto` 키(`skeleton.crypto.keys`). **하나라도 없으면 기동 실패**다.
+- **상태** `PENDING`(카드 등록 · 첫 결제 전 또는 확인 중) → `ACTIVE` ⇄ `PAST_DUE`(갱신 거절, 재시도 중 — 이용 불가) · `CANCELING`(해지 예약, 기간 끝까지 이용) → `ENDED`. 전이는 `SubscriptionTransitions` 한 곳이고 표 밖 전이는 버그다. 앱은 `PaymentSubscriptions.current(accountId)` 를 **읽을 때** `status.isInUse`(`ACTIVE` · `CANCELING`)로 판단한다 — 구독 리스너는 두지 않았다.
+- **계정당 살아 있는 구독 하나**: 구독 줄의 `active_key`(= 계정 id, 끝나면 NULL)가 유니크다. 자리는 카드를 낸 뒤 첫 주문과 같은 트랜잭션에서 잡는다.
+- **갱신이 한 번만 과금되는 법** — 장부의 주문 · `dedupe_key` · 작업 큐를 그대로 쓴다: 운전자는 작업 하나(`payment-subscription-renew`, `runAt` = 기간 끝)이고, 작업은 **구독 줄을 잠그고 다시 읽어** 기한이 됐을 때만 과금 주문을 넣는다(`dedupe_key = sub:<구독 id>:<다음 기간>:<시도>` 유니크 — 여러 워커가 동시에 와도 한 줄). 과금은 승인과 같은 세 걸음이다: 선점(`CONFIRMING` + 조회 작업, 커밋) → 결제사 호출(락 밖) → 확정. **모름이면 다시 보내지 않는다** — 조회 작업이 주문 번호로 물어 끝낸다. 과금 중인 주문이 끝 상태가 아니면 새 주문을 만들지 않고 나중에 다시 본다.
+- **기간은 지급 고리에서만 넘어간다**(`PaymentFulfillment` 의 주문 줄 락 안, `fulfilled_at` 이 비었을 때 한 번): 구독의 지금 과금 주문(`charge_order_id`)인 주문만 기간 +1 · `ACTIVE`. 다른 주문이 늦게 `PAID` 가 되면 기간은 두고 그 주문에 「확인 필요」(`SUBSCRIPTION_STALE_CHARGE`)를 찍는다(운영자가 환불). 기간 끝은 **첫 결제 시각 + 주기 × n**이라 늦게 깨어나도 밀리지 않는다. 락 순서는 **주문 → 구독**.
+- **실패 · 해지 · 탈퇴**: 갱신 거절은 `PAST_DUE` + `renewal.retry-interval` 뒤 다시(`renewal.max-attempts` 번, 다 쓰면 `ENDED`/`PAYMENT_FAILED`). 해지는 `ACTIVE` → `CANCELING`(기간 끝에 종료, 갱신 없음)이고 `PAST_DUE` 는 바로 끝난다. 탈퇴(`PaymentAccountErasure`)는 그 계정의 구독을 닫고 카드 표시 두 칸을 지운다. 그 기간의 주문이 **전액 환불**되면 구독을 바로 끝낸다(환불했는데 또 과금되지 않게). 해지 · 탈퇴 뒤 깨어난 갱신 작업은 결제사를 부르지 않는다.
+- **정지 · 삭제 유예 계정은 갱신 과금을 막는다**: 앱 계약 `SubscriptionRenewalGuard`(기본 = 항상 허용 — `payment` 는 `account` 를 모른다)가 거절하면 그 구독은 기간 끝에 `RENEWAL_BLOCKED` 로 끝난다. 갱신 시각마다 락 밖에서 불리니 짧게 끝낸다.
+- **빌링키**: `crypto` 로 암호화해 저장하고(`billing_token` 은 암호문), 응답 · 로그 · `toString` 어디에도 평문이 없다. 구독이 끝나면 `payment-subscription-revoke` 작업이 결제사에서 빌링키를 지운 **뒤에** 줄의 빌링키 · 고객 키(`customer_key`)를 비운다 — 카드 표시 두 칸(`card_issuer` · `card_last4`)은 끝나는 즉시 비워진다. 고객 키는 `cus_` + 무작위 32자 16진수(추측 가능한 값이 아니다).
+- **HTTP** (`<http.base-path>` 아래, [payment-http-contract §12](../payment-http-contract.md)): `GET /subscriptions/plans` · `POST /subscriptions`(Idempotency-Key, 카드 등록 창 값) · `POST /subscriptions/{id}/activate`(빌링키 발급 → 첫 결제, `200 ACTIVE` · `202` 확인 중 · `402 DECLINED`) · `GET /subscriptions/me` · `POST /subscriptions/{id}/cancel`. 남의 구독 · 없는 구독은 같은 `404`, 본문에 금액은 없다. 운영자 경로는 없다 — 구독 주문은 기존 운영자 주문 목록에 `kind` 로 보인다.
+- **이메일 없는 계정**: 구독에 이메일이 필요 없다(결제사에도 안 보낸다). `email.required=true` 인 앱은 기존 계정 게이트가 구독 쓰기 경로도 막는다. 알림이 없어 실패 · 종료는 「내 구독」 화면이 유일한 통지다.
+- **한계**: 아래 등급으로 변경 · 일시정지 · 무료 체험 · 쿠폰 · 구독 주문의 일할 환불 · 카드 바꾸기 · 갱신 예고 알림은 없다. 갱신 작업이 죽으면 `ACTIVE` 인 채 기간이 지나 무료 이용이 된다(돈 사고는 아니다). 카드를 내지 않은 `PENDING` 줄은 정리하지 않는다. 플랜 변경(위로만 · 남은 기간 차액)은 2차다.
 
 ## 앱 계약 — 앱이 하는 일
 

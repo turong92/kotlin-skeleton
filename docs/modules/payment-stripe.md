@@ -6,7 +6,7 @@
 | 항목 | 내용 |
 |---|---|
 | 의존성 한 줄 | `implementation(project(":modules:payment-stripe"))` |
-| 함께 오는 모듈 | `platform`, `payment` |
+| 함께 오는 모듈 | `platform`, `payment`, `crypto` |
 | 컴파일 전용 | 없음 |
 | 설정 접두사 | `skeleton.payment-stripe` — [docs/config/modules/payment-stripe.yml](../config/modules/payment-stripe.yml) |
 | 기본 동작 | 꺼짐. `enabled=true` 로 켠다. |

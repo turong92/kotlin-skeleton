@@ -84,6 +84,7 @@ class MigrationUpgradeIntegrationTest {
     @Autowired lateinit var authors: AuthorDirectory
     @Autowired lateinit var mockMvc: MockMvc
     @Autowired lateinit var erasures: List<AccountErasureListener>
+    @Autowired lateinit var ledger: dev.sumin.skeleton.payment.PaymentLedgerStore
 
     private val now = Instant.parse("2026-10-07T00:00:00Z")
 
@@ -201,6 +202,24 @@ class MigrationUpgradeIntegrationTest {
         // idempotent: a second run changes nothing and does not fail
         listOf("payment", "cheers").forEach { name -> erasures.single { it.name == name }.erase(request) }
         assertEquals(1L, count("select count(*) from payment_orders where id = 'ord_upgrade'"))
+    }
+
+    @Test
+    fun `subscriptions - the new table came up beside the baseline rows and the real store keeps one live subscription per account`() {
+        assertEquals(0L, jdbc.sql("select count(*) from payment_subscriptions").query(Long::class.java).single())
+        UpgradeBaseline.TABLES.forEach { table -> assertTrue(jdbc.sql("select count(*) from $table").query(Long::class.java).single() >= 1, "$table lost its baseline row") }
+        val now = java.time.Instant.parse("2026-10-09T00:00:00Z")
+        fun sub(id: String, activeKey: String?) = dev.sumin.skeleton.payment.PaymentSubscription(
+            id = id, accountId = "acc_upgrade", provider = "toss", providerMode = dev.sumin.skeleton.payment.PaymentMode.TEST, status = dev.sumin.skeleton.payment.SubscriptionStatus.PENDING,
+            planCode = "basic", amount = dev.sumin.skeleton.payment.PaymentAmount(3900, "KRW"), period = "P1M", anchorAt = null, periodSeq = 0, currentPeriodStart = null, currentPeriodEnd = null,
+            chargeOrderId = null, attempt = 1, customerKey = "cus_$id", billingToken = null, cardIssuer = null, cardLast4 = null, activeKey = activeKey, pendingPlanCode = null, pendingAmount = null,
+            endReason = null, endedAt = null, accountErasedAt = null, createdAt = now, updatedAt = now,
+        )
+        assertTrue(ledger.inTransaction { it.insertSubscriptionIfAbsent(sub("sub_upgrade_1", null)) })
+        assertTrue(ledger.inTransaction { it.insertSubscriptionIfAbsent(sub("sub_upgrade_2", null)) })
+        ledger.inTransaction { tx -> tx.updateSubscription(checkNotNull(tx.lockSubscription("sub_upgrade_1")).copy(activeKey = "acc_upgrade")) }
+        assertTrue(runCatching { ledger.inTransaction { tx -> tx.updateSubscription(checkNotNull(tx.lockSubscription("sub_upgrade_2")).copy(activeKey = "acc_upgrade")) } }.isFailure, "a second live subscription for the account is refused")
+        assertEquals("sub_upgrade_1", ledger.findLiveSubscription("acc_upgrade")?.id)
     }
 
     @Test

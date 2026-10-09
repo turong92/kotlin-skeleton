@@ -96,8 +96,13 @@ class PaymentLedgerAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    fun paymentRefundApplier(store: PaymentLedgerStore, listener: PaymentOrderListener, fulfillment: PaymentFulfillment, writer: PaymentLedgerWriter): PaymentRefundApplier =
-        PaymentRefundApplier(store, listener, fulfillment, writer)
+    fun paymentRefundApplier(
+        store: PaymentLedgerStore,
+        listener: PaymentOrderListener,
+        fulfillment: PaymentFulfillment,
+        writer: PaymentLedgerWriter,
+        subscriptions: ObjectProvider<SubscriptionLifecycle>,
+    ): PaymentRefundApplier = PaymentRefundApplier(store, listener, fulfillment, writer, subscriptions.getIfAvailable())
 
     /** 환불 서비스 — 본인 요청 · 거둠, 운영자 승인 · 거절 · 직접 환불 · 결제사와 맞추기. */
     @Bean
@@ -164,8 +169,8 @@ class PaymentLedgerAutoConfiguration {
     /** 계정 탈퇴 고리 — 카드 두 칸을 지우고 주문 줄은 남긴다(스펙 §8.2). 플랫폼의 계약만 구현하므로 `account` 모듈이 없어도 된다(아무도 부르지 않을 뿐). */
     @Bean
     @ConditionalOnMissingBean(name = ["paymentAccountErasure"])
-    fun paymentAccountErasure(store: PaymentLedgerStore, writer: PaymentLedgerWriter, properties: PaymentProperties): AccountErasureListener =
-        PaymentAccountErasure(store, writer, properties.erasure.accountId)
+    fun paymentAccountErasure(store: PaymentLedgerStore, writer: PaymentLedgerWriter, properties: PaymentProperties, subscriptions: ObjectProvider<SubscriptionLifecycle>): AccountErasureListener =
+        PaymentAccountErasure(store, writer, properties.erasure.accountId, subscriptions.getIfAvailable())
 
     @Bean
     @ConditionalOnMissingBean(name = ["paymentAccountDataExporter"])
@@ -211,6 +216,35 @@ class PaymentLedgerAutoConfiguration {
             }
             return PaymentSubscriptions(store, router, plansBean, encryptorBean, lifecycle, charges, tasks, writer, properties)
         }
+
+        /** 앱이 [SubscriptionRenewalGuard] 를 두지 않으면 늘 허용한다 — `payment` 는 `account` 를 모른다. */
+        @Bean
+        @ConditionalOnMissingBean
+        fun subscriptionRenewalGuard(): SubscriptionRenewalGuard = SubscriptionRenewalGuard.ALLOW_ALL
+
+        @Bean
+        @ConditionalOnMissingBean
+        fun subscriptionRenewTaskHandler(
+            store: PaymentLedgerStore,
+            router: PaymentProviderRouter,
+            plans: ObjectProvider<SubscriptionPlans>,
+            encryptor: ObjectProvider<TextEncryptor>,
+            lifecycle: SubscriptionLifecycle,
+            charges: SubscriptionCharges,
+            guard: SubscriptionRenewalGuard,
+            writer: PaymentLedgerWriter,
+            properties: PaymentProperties,
+        ): SubscriptionRenewTaskHandler = SubscriptionRenewTaskHandler(
+            store,
+            router,
+            plans.getIfAvailable() ?: error("skeleton.payment.subscription.enabled=true needs a SubscriptionPlans bean"),
+            encryptor.getIfAvailable() ?: error("skeleton.payment.subscription.enabled=true needs a TextEncryptor (skeleton.crypto.keys)"),
+            lifecycle,
+            charges,
+            guard,
+            writer,
+            properties.subscription.renewal.retryInterval,
+        )
 
         @Bean
         @ConditionalOnMissingBean

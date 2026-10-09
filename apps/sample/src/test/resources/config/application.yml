@@ -14,3 +14,7 @@ skeleton:
   storage:
     web:
       key-secret: test-only-storage-key-secret-0123456789abcdef   # key-owner=OPAQUE(main application.yml)의 HMAC 비밀 — 시험 전용 고정 값
+  crypto:
+    primary-key-id: test
+    keys:
+      test: dGVzdC1vbmx5LWNyeXB0by1rZXktMDEyMzQ1Njc4OSE=   # 시험 전용 고정 값 — 구독을 켠 시험이 빌링키를 암호화한다
