@@ -69,6 +69,9 @@ class TossFailureClassificationTest {
         403 to "NOT_ALLOWED_PARTIAL_REFUND",
         403 to "NOT_ALLOWED_PARTIAL_REFUND_WAITING_DEPOSIT",
         403 to "EXCEED_MAX_REFUND_DUE",
+        // 자동결제 — 2026-10-09 진짜 토스에서 잰 거절(카드 등록 값 없음 · 빌링키 없음). 어느 쪽도 돈이 움직이지 않았다
+        404 to "NOT_FOUND_BILLING",
+        400 to "INVALID_BILL_KEY_REQUEST",
     )
 
     @Test
@@ -80,7 +83,7 @@ class TossFailureClassificationTest {
 
     @Test
     fun `the allow list is exactly this set - a code added or removed by accident fails here`() {
-        assertEquals(24, allowList.size)
+        assertEquals(26, allowList.size)
         assertEquals(allowList.map { it.second }.toSet(), TossPaymentErrorMapper.DEFINITIVE_CODES)
     }
 

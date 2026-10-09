@@ -140,6 +140,9 @@ class TossPaymentErrorMapper(
             "NOT_ALLOWED_PARTIAL_REFUND",
             "NOT_ALLOWED_PARTIAL_REFUND_WAITING_DEPOSIT",
             "EXCEED_MAX_REFUND_DUE",
+            // 자동결제 — 2026-10-09 진짜 토스에서 잰 것: 카드 등록 값(authKey)이 없다 · 빌링키가 유효하지 않다. 승인이 일어나지 않았다
+            "NOT_FOUND_BILLING",
+            "INVALID_BILL_KEY_REQUEST",
         )
 
         /** 첫 이름이 진짜 토스가 보내는 것이다(2026-10-09 실측 — `scripts/check-real-providers.sh --toss-only`). 나머지는 문서에서 본 이름의 추정이라 남겨 둔다. */

@@ -25,6 +25,7 @@
 | 조회 `PaymentLookupGateway` | `GET /v1/payments/{paymentKey}` · `GET /v1/payments/orders/{orderId}` | `404 NOT_FOUND_PAYMENT` → 결제 없음(null). **조회의 그 밖 오류는 늘 모름**이다(4xx 여도 확정 거절로 표시하지 않는다 — 조회는 돈이 움직였는지 말하지 않는다). 응답이 물은 결제 키 · 주문 번호와 다르면 읽을 수 없는 응답. 상태와 환불 목록이 어긋나도(환불 상태인데 `DONE` 취소가 없다 · 결제됨인데 `DONE` 취소가 있다) 마찬가지. 통화가 없으면 설정에서 짐작하지 않는다. 조회는 요청 단위 제한 `lookup-timeout`(10초) |
 | 결제창 `PaymentCheckoutGateway` | — | `kind=TOSS_PAYMENT_WINDOW`, 클라이언트 키 · `testMode` · 주문 값. 구매자 이름 · 이메일 · 전화번호는 넘기지 않는다. 비회원 구매자 키는 SDK 상수라 서버가 문자열로 주지 않는다. **클라이언트 키는 `ck` 모양이고 시크릿 키와 같은 모드일 때만** 내려간다(그 밖은 null) |
 | 웹훅 해석 `PaymentWebhookGateway` | `PAYMENT_STATUS_CHANGED` | `signed=false`(주소의 비밀 조각이 필수). **결제 키 · 주문 번호만** 꺼낸다 — 본문의 상태 · 금액은 읽지 않는다. 이벤트 키 = 헤더 `tosspayments-webhook-transmission-id`, 없으면 본문 sha256 |
+| 자동결제 `PaymentBillingGateway` | 발급 `POST /v1/billing/authorizations/issue` · 승인 `POST /v1/billing/{billingKey}` · 삭제 `DELETE /v1/billing/{billingKey}` | 구독용(`payment` 의 구독 서비스가 쓴다). 카드 등록 창 값 `kind=TOSS_BILLING_AUTH`(클라이언트 키는 결제창과 같은 규칙). 승인은 `Idempotency-Key` = 주문 번호이고 응답을 결제 승인과 **같은 규칙**으로 읽는다. 삭제는 이미 없는 키(`INVALID_BILL_KEY_REQUEST` · `NOT_FOUND_BILLING`)를 정상으로 읽는다. 빌링키는 응답 · 로그 · `toString` 에 나오지 않는다. 진짜 토스로 잰 것은 [real-provider-setup §11.7](../real-provider-setup.md) |
 | 모드 | 시크릿 키 접두사 `test_` → TEST · `live_` → LIVE | 주문 줄에 박고 가드가 본다 |
 
 상태 대응: `READY` · `IN_PROGRESS` · `WAITING_FOR_DEPOSIT` → 진행 중 / `DONE` → 받았다 / `PARTIAL_CANCELED` → 일부 환불 / `CANCELED` → 전액 환불 / `ABORTED` → 실패 / `EXPIRED` → 만료.
@@ -46,9 +47,10 @@
 | 요청 · 인증 | `INVALID_REQUEST` · `INVALID_API_KEY` · `UNAUTHORIZED_KEY` · `INCORRECT_BASIC_AUTH_FORMAT` · `FORBIDDEN_REQUEST` |
 | 없는 결제 | `NOT_FOUND_PAYMENT` · `NOT_FOUND_PAYMENT_SESSION` |
 | 승인 거절 · 한도 | `REJECT_CARD_PAYMENT` · `REJECT_CARD_COMPANY` · `REJECT_ACCOUNT_PAYMENT` · `INVALID_REJECT_CARD` · `INVALID_STOPPED_CARD` · `INVALID_CARD_LOST_OR_STOLEN` · `INVALID_CARD_NUMBER` · `INVALID_CARD_EXPIRATION` · `EXCEED_MAX_AMOUNT` · `EXCEED_MAX_PAYMENT_AMOUNT` · `EXCEED_MAX_DAILY_PAYMENT_COUNT` · `EXCEED_MAX_MONTHLY_PAYMENT_AMOUNT` · `BELOW_MINIMUM_AMOUNT` · `FDS_ERROR` |
+| 자동결제(실측) | `NOT_FOUND_BILLING` · `INVALID_BILL_KEY_REQUEST` |
 | 환불 불가(요청 자체의 성질) | `NOT_ALLOWED_PARTIAL_REFUND` · `NOT_ALLOWED_PARTIAL_REFUND_WAITING_DEPOSIT` · `EXCEED_MAX_REFUND_DUE` |
 
-환불 호출에서 `NOT_CANCELABLE_AMOUNT` · `NOT_CANCELABLE_PAYMENT` · `EXCEED_CANCEL_LIMIT` 는 **확정이 아니다** — 앞선 환불이 잔액 · 상태 · 횟수를 이미 바꿔서 나올 수 있어서 모름으로 둔다(조회가 가린다). `REFUND_REJECTED` 도 사유 없는 코드라 확정에서 뺐다(헷갈리면 모름 — 확정 목록은 24개로 고정되어 있고 시험이 집합을 지킨다).
+환불 호출에서 `NOT_CANCELABLE_AMOUNT` · `NOT_CANCELABLE_PAYMENT` · `EXCEED_CANCEL_LIMIT` 는 **확정이 아니다** — 앞선 환불이 잔액 · 상태 · 횟수를 이미 바꿔서 나올 수 있어서 모름으로 둔다(조회가 가린다). `REFUND_REJECTED` 도 사유 없는 코드라 확정에서 뺐다(헷갈리면 모름 — 확정 목록은 26개로 고정되어 있고 시험이 집합을 지킨다).
 
 **승인 거절의 분류(`confirmDeclineCategory`)**: 확정 거절 코드를 `DECLINED` 응답의 `data.category` 로 옮긴다 — `REJECT_CARD_PAYMENT` · `REJECT_CARD_COMPANY` · `REJECT_ACCOUNT_PAYMENT` · `INVALID_REJECT_CARD` · `INVALID_STOPPED_CARD` · `INVALID_CARD_LOST_OR_STOLEN` · `INVALID_CARD_NUMBER` · `INVALID_CARD_EXPIRATION` · `FDS_ERROR` 등 카드 · 계좌 거절 → `CARD_DECLINED`, `EXCEED_MAX_AMOUNT` · `EXCEED_MAX_PAYMENT_AMOUNT` · `EXCEED_MAX_DAILY_PAYMENT_COUNT` · `EXCEED_MAX_MONTHLY_PAYMENT_AMOUNT` 한도 → `LIMIT_OR_BALANCE`, 그 밖(요청 · 인증 오류, 모르는 코드) → `OTHER`. 일시 장애는 확정 거절이 아니라 모름이라 여기에 오지 않는다. 코드는 `data.providerCode`(참조 번호)로 따로 나가고 화면 문구는 분류로 고른다.
 

@@ -11,12 +11,23 @@ internal object TossIdentifiers {
     private val PAYMENT_KEY = Regex("[A-Za-z0-9_-]{1,200}")
     private val ORDER_ID = Regex("[A-Za-z0-9_-]{1,64}")
 
+    /** 빌링키 · 카드 등록 인증 값의 문자 집합은 결제 키와 같은 **가정**이다 — 아직 못 쟀다(진짜 발급이 있어야 안다). */
+    private val BILLING_KEY = Regex("[A-Za-z0-9_-]{1,200}")
+    private val AUTH_KEY = Regex("[A-Za-z0-9_-]{1,200}")
+    private val CUSTOMER_KEY = Regex("[A-Za-z0-9_=.@-]{2,50}")
+
     fun isPaymentKey(value: String): Boolean = PAYMENT_KEY.matches(value)
 
     /** 모양이 맞으면 그대로, 아니면 [TossIdentifierRejectedException]. */
     fun paymentKey(value: String): String = if (isPaymentKey(value)) value else throw TossIdentifierRejectedException()
 
     fun orderId(value: String): String = if (ORDER_ID.matches(value)) value else throw TossIdentifierRejectedException()
+
+    fun billingKey(value: String): String = if (BILLING_KEY.matches(value)) value else throw TossIdentifierRejectedException()
+
+    fun authKey(value: String): String = if (AUTH_KEY.matches(value)) value else throw TossIdentifierRejectedException()
+
+    fun customerKey(value: String): String = if (CUSTOMER_KEY.matches(value)) value else throw TossIdentifierRejectedException()
 }
 
 /**

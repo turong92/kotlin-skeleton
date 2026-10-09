@@ -4,10 +4,14 @@ import dev.sumin.skeleton.common.http.ExternalHttpClient
 import dev.sumin.skeleton.common.http.ExternalHttpException
 import dev.sumin.skeleton.common.http.ExternalHttpRequestSpec
 import dev.sumin.skeleton.common.http.ExternalHttpResponse
+import dev.sumin.skeleton.payment.BillingChargeRequest
+import dev.sumin.skeleton.payment.BillingIssue
+import dev.sumin.skeleton.payment.BillingSetup
 import dev.sumin.skeleton.payment.CheckoutInstruction
 import dev.sumin.skeleton.payment.CheckoutOrder
 import dev.sumin.skeleton.payment.IdempotencyKey
 import dev.sumin.skeleton.payment.PaymentAmount
+import dev.sumin.skeleton.payment.PaymentBillingGateway
 import dev.sumin.skeleton.payment.PaymentCancelRequest
 import dev.sumin.skeleton.payment.PaymentCard
 import dev.sumin.skeleton.payment.PaymentCheckoutGateway
@@ -44,7 +48,7 @@ import tools.jackson.databind.json.JsonMapper
 import tools.jackson.module.kotlin.kotlinModule
 
 /**
- * 토스페이먼츠(결제창 + API 개별 연동 키). 한 빈이 승인 · 환불 · 조회 · 결제창 값 · 웹훅 해석을 모두 맡는다(라우터에 결제사가 하나로 보이게).
+ * 토스페이먼츠(결제창 + API 개별 연동 키). 한 빈이 승인 · 환불 · 조회 · 결제창 값 · 웹훅 해석 · 자동결제(빌링)를 모두 맡는다(라우터에 결제사가 하나로 보이게).
  *
  * **응답 본문은 어디에도 싣지 않는다**: 응답은 아래 [TossPaymentResponse] 가 선언한 칸만 읽고(나머지 — 구매자 이름 · 이메일 · 전화 · 카드 상세 — 는 버려진다),
  * 오류는 코드만 예외에 담으며([TossPaymentErrorMapper]), 읽지 못한 응답은 본문을 인용하지 않는 [PaymentProviderException] 으로 바꾼다.
@@ -54,7 +58,7 @@ class TossPaymentProvider(
     private val properties: TossPaymentProperties,
     /** 인증 계열 거절(키 폐기 · 오타)을 주인에게 알린다 — 없으면 알리지 않는다. */
     private val credentialAlert: PaymentProviderCredentialAlert = PaymentProviderCredentialAlert.NONE,
-) : PaymentProvider, PaymentLookupGateway, PaymentCheckoutGateway, PaymentWebhookGateway {
+) : PaymentProvider, PaymentLookupGateway, PaymentCheckoutGateway, PaymentWebhookGateway, PaymentBillingGateway {
     override val providerId: String = properties.providerId
     override val supportedCurrencies: Set<String> = properties.supportedCurrencies
     override val supportedCountries: Set<String> = properties.supportedCountries
@@ -103,23 +107,28 @@ class TossPaymentProvider(
                 }.block(),
             )
             seen.status = response.statusCode
-            val body = response.body
-
-            // 응답에 있는 값만 쓴다 — 키 · 총액 · 통화가 하나라도 없으면 요청 값으로 메우지 않고 읽을 수 없는 응답이다(모름)
-            val key = body.paymentKey.need("paymentKey")
-            val total = body.totalAmount.need("totalAmount")
-            val currency = body.currency.need("currency")
-            PaymentOperationResult(
-                provider = providerId,
-                providerPaymentId = key,
-                status = body.status.toConfirmStatus(),
-                amount = PaymentAmount(total, currency),
-                trace = body.trace(response, operationId = body.lastTransactionKey ?: body.transactionKey),
-                attributes = listOfNotNull(body.method.methodCode()?.let { "method" to it }).toMap(),
-                card = body.card.toCard(),
-                paidAt = body.approvedAt.toInstantOrNull(),
-            )
+            paymentResult(response)
         }
+    }
+
+    /**
+     * 승인 계열 응답(결제 승인 · 빌링 승인) → 결과. 응답에 있는 값만 쓴다 — 키 · 총액 · 통화가 하나라도 없으면 요청 값으로 메우지 않고 읽을 수 없는 응답이다(모름).
+     */
+    private fun paymentResult(response: ExternalHttpResponse<TossPaymentResponse>): PaymentOperationResult {
+        val body = response.body
+        val key = body.paymentKey.need("paymentKey")
+        val total = body.totalAmount.need("totalAmount")
+        val currency = body.currency.need("currency")
+        return PaymentOperationResult(
+            provider = providerId,
+            providerPaymentId = key,
+            status = body.status.toConfirmStatus(),
+            amount = PaymentAmount(total, currency),
+            trace = body.trace(response, operationId = body.lastTransactionKey ?: body.transactionKey),
+            attributes = listOfNotNull(body.method.methodCode()?.let { "method" to it }).toMap(),
+            card = body.card.toCard(),
+            paidAt = body.approvedAt.toInstantOrNull(),
+        )
     }
 
     override fun cancel(request: PaymentCancelRequest): PaymentOperationResult {
@@ -199,6 +208,92 @@ class TossPaymentProvider(
             "EXCEED_MAX_AMOUNT", "EXCEED_MAX_PAYMENT_AMOUNT", "EXCEED_MAX_DAILY_PAYMENT_COUNT", "EXCEED_MAX_MONTHLY_PAYMENT_AMOUNT" -> ConfirmDeclineCategory.LIMIT_OR_BALANCE
             else -> ConfirmDeclineCategory.OTHER
         }
+
+    // --- 자동결제(빌링) — 스펙 `2026-10-09-subscription-design.md` §6. 토스가 스케줄링을 하지 않으므로 등록 · 승인 · 삭제뿐이다. ---
+
+    override fun billingSetup(customerKey: String): BillingSetup? {
+        val clientKey = publicClientKey() ?: return null
+        return BillingSetup(
+            provider = providerId,
+            kind = BILLING_KIND,
+            testMode = mode == PaymentMode.TEST,
+            clientKey = clientKey,
+            customerKey = customerKey,
+            attributes = mapOf("method" to "CARD"),
+        )
+    }
+
+    override fun issue(customerKey: String, providerPayload: Map<String, Any?>): BillingIssue {
+        val authKey = TossIdentifiers.authKey(providerPayload["authKey"] as? String ?: throw TossIdentifierRejectedException())
+        val customer = TossIdentifiers.customerKey(customerKey)
+        return guarded("billing issue") { seen ->
+            val response = requireNotNull(
+                httpClient.postResponse(
+                    clientName = properties.clientName,
+                    path = BILLING_ISSUE_PATH,
+                    body = mapOf("authKey" to authKey, "customerKey" to customer),
+                    responseType = TossBillingResponse::class.java,
+                ) {
+                    baseUrl(properties.baseUrl)
+                    commonHeaders(null)
+                    loggingTag("payment.toss.billing-issue")
+                    errorMapper(errorMapper)
+                }.block(),
+            )
+            seen.status = response.statusCode
+            BillingIssue(
+                token = response.body.billingKey?.takeIf { BILLING_KEY.matches(it) }.need("billingKey"),
+                card = response.body.card.toCard(),
+            )
+        }
+    }
+
+    override fun charge(request: BillingChargeRequest): PaymentOperationResult {
+        val billingKey = TossIdentifiers.billingKey(request.token)
+        val customer = TossIdentifiers.customerKey(request.customerKey)
+        val orderId = TossIdentifiers.orderId(request.orderId)
+        return guarded("billing charge") { seen ->
+            val response = requireNotNull(
+                httpClient.postResponse(
+                    clientName = properties.clientName,
+                    path = BILLING_PATH,
+                    body = mapOf(
+                        "customerKey" to customer,
+                        "amount" to request.amount.amount,
+                        "orderId" to orderId,
+                        "orderName" to request.orderName,
+                    ),
+                    responseType = TossPaymentResponse::class.java,
+                ) {
+                    baseUrl(properties.baseUrl)
+                    uriVariable("billingKey", billingKey)
+                    commonHeaders(request.idempotencyKey)
+                    loggingTag("payment.toss.billing-charge")
+                    errorMapper(errorMapper)
+                }.block(),
+            )
+            seen.status = response.statusCode
+            paymentResult(response)
+        }
+    }
+
+    /** 이미 없는 빌링키(`INVALID_BILL_KEY_REQUEST` · `NOT_FOUND_BILLING`)는 정상이다 — 지우려던 결과가 이미 그렇다. 그 밖의 실패는 던진다. */
+    override fun revoke(customerKey: String, token: String) {
+        val billingKey = TossIdentifiers.billingKey(token)
+        guarded("billing revoke") { seen ->
+            try {
+                httpClient.deleteResponse(properties.clientName, BILLING_PATH, Map::class.java) {
+                    baseUrl(properties.baseUrl)
+                    uriVariable("billingKey", billingKey)
+                    commonHeaders(null)
+                    loggingTag("payment.toss.billing-revoke")
+                    errorMapper(errorMapper)
+                }.block()?.let { seen.status = it.statusCode }
+            } catch (e: PaymentProviderException) {
+                if (e.providerError.code !in BILLING_GONE_CODES) throw e
+            }
+        }
+    }
 
     override fun lookup(query: PaymentLookupQuery): PaymentSnapshot? {
         val paymentKey = query.providerPaymentId?.takeIf { it.isNotBlank() }?.let(TossIdentifiers::paymentKey)
@@ -522,6 +617,11 @@ class TossPaymentProvider(
         val log = LoggerFactory.getLogger(TossPaymentProvider::class.java)
 
         const val CHECKOUT_KIND = "TOSS_PAYMENT_WINDOW"
+        const val BILLING_KIND = "TOSS_BILLING_AUTH"
+        const val BILLING_ISSUE_PATH = "/v1/billing/authorizations/issue"
+        const val BILLING_PATH = "/v1/billing/{billingKey}"
+        val BILLING_GONE_CODES = setOf("INVALID_BILL_KEY_REQUEST", "NOT_FOUND_BILLING")
+        val BILLING_KEY = Regex("[A-Za-z0-9_-]{1,200}")
         const val NOT_FOUND_PAYMENT = "NOT_FOUND_PAYMENT"
         const val UNREADABLE_RESPONSE = "UNREADABLE_RESPONSE"
         const val PAYMENT_STATUS_CHANGED = "PAYMENT_STATUS_CHANGED"
@@ -625,6 +725,14 @@ data class TossCard(
     val number: String? = null,
 ) {
     override fun toString(): String = "TossCard(issuerCode=$issuerCode, number=${if (number == null) "null" else "***"})"
+}
+
+/** 카드 등록 인증 교환(`/issue`)의 응답에서 읽는 칸. 빌링키는 비밀이라 [toString] 이 찍지 않는다. */
+data class TossBillingResponse(
+    val billingKey: String? = null,
+    val card: TossCard? = null,
+) {
+    override fun toString(): String = "TossBillingResponse(billingKey=<redacted>, card=$card)"
 }
 
 internal data class TossWebhookBody(
