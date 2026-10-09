@@ -54,8 +54,9 @@ class EmailChangeService(private val core: AccountCore) {
             // 옛 주소 알림은 새 주소가 쓰이는 중이든 아니든 똑같이 간다 — 로그인한 사용자의 받은편지함이 "그 주소는 가입돼 있다" 를 알려 주지 않게
             oldEmail?.let { core.mailer.send(AccountMail(MailKind.EMAIL_CHANGE_REQUESTED_NOTICE, it, account.locale)) }
             val owner = if (target == oldEmail) null else core.accountByEmail(target)
+            // (재인증 면제 여부와 무관하다 — 오래된 세션이 제공자 재확인을 거쳐 온 첫 등록도 같은 안내를 받는다)
             // 첫 등록의 주소가 남의 것이면 토큰 없는 "이 주소로 이메일 등록을 시도했어요" 메일 (가입 때의 "가입을 시도했어요" 문구는 상황과 안 맞는다 — 로그인한 뒤 설정에서 소셜을 연결하라고 안내) — 코드는 가지 않는다. 바꾸기(주소가 이미 있는 계정)는 예전 그대로 조용하다
-            if (first && owner != null) return@run core.notifyAlreadyRegistered(owner, mayMail, credentialLinks = false, kind = MailKind.EMAIL_REGISTRATION_ATTEMPT)
+            if (oldEmail == null && owner != null) return@run core.notifyAlreadyRegistered(owner, mayMail, credentialLinks = false, kind = MailKind.EMAIL_REGISTRATION_ATTEMPT)
             if (target == oldEmail || owner != null || !mayOpen || !mayMail) return@run
             core.mailer.send(AccountMail(MailKind.EMAIL_CHANGE_CODE, target, account.locale, vars = mapOf("code" to opened.code, "minutes" to c.ttl.toMinutes().toString())))
             core.events.publish(AccountEventType.EMAIL_CHANGE_REQUESTED, account.id)

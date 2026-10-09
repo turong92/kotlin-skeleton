@@ -15,7 +15,8 @@ import kotlin.test.assertTrue
  * **재인증 없이** 첫 이메일을 등록한다 — 단 로그인한 지 얼마 안 됐을 때(창)만, 그리고 계정에 이메일이 한 번도 없었을 때만.
  */
 class FirstEmailRegistrationTest {
-    private fun harness(window: Duration = Duration.ofHours(1), required: Boolean = true) = AccountHarness(
+    private fun harness(window: Duration = Duration.ofHours(1), required: Boolean = true, social: SocialReauthVerifier? = null) = AccountHarness(
+        socialReauth = social,
         props = AccountProperties(
             mail = AccountProperties.Mail(linkBaseUrl = "https://app.example.com"),
             password = AccountProperties.Password(bcryptStrength = 4),
@@ -142,6 +143,18 @@ class FirstEmailRegistrationTest {
         assertNull(notices.single().link, "no token in this mail")
         assertEquals("free@example.com", h.mailer.of(MailKind.EMAIL_CHANGE_CODE).single().to, "only the free address got a code")
         assertEquals(owner.email, h.repo.findById(owner.id)!!.email)
+    }
+
+    @Test
+    fun `an old session that re-authenticated with the provider still tells the owner of a taken address`() {
+        val h = harness(window = Duration.ZERO, social = SocialReauthVerifier { _, proof -> proof.authorizationCode == "fresh" })
+        h.activeAccount("owner@example.com")
+        val a = h.emailless()
+
+        h.emailChange.request(a.id, "owner@example.com", ReauthInput(social = SocialReauth("kakao", "fresh")), ses)
+
+        assertEquals("owner@example.com", h.mailer.of(MailKind.EMAIL_REGISTRATION_ATTEMPT).single().to, "the first registration of an address-less account, exempt or not")
+        assertTrue(h.mailer.of(MailKind.EMAIL_CHANGE_CODE).isEmpty())
     }
 
     @Test
