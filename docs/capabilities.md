@@ -161,7 +161,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 > 월 구독으로 쓰는 업무 도구. 로그인 후 대시보드 · 목록 · 상세 · 설정 화면이 있고, 요금제 페이지에서 플랜을 골라 토스로 결제하며, 가입 폼은 봇을 막고, 결제 · 작업 완료 알림을 받는다.
 
-- kotlin(이 레포): `scripts/new-project.sh ~/work/saas/api dev.example.saas saas Saas --modules payment,payment-toss,notification,notification-jdbc --db mysql`
+- kotlin(이 레포): `scripts/new-project.sh ~/work/saas/api dev.example.saas saas Saas --modules payment,payment-jdbc,payment-toss,notification,notification-jdbc --db mysql`
 - react: `scripts/new-project.sh ~/work/saas/web saas --packages marketing,payment,notifications,captcha-turnstile --scope @acme`
 - 짝 프런트 항목: `account-lifecycle`, `auth`, `screen-patterns`, `pricing-page`, `payment`, `notifications`, `captcha-turnstile`
 
