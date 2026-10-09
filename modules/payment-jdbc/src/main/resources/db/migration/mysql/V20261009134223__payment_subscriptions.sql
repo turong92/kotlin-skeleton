@@ -34,7 +34,9 @@ create table if not exists payment_subscriptions (
     created_at           datetime(6)  not null,
     updated_at           datetime(6)  not null,
     constraint uq_payment_subscriptions_active unique (active_key),   -- NULL 은 서로 겹치지 않는다
-    constraint ck_payment_subscriptions_amount check (amount > 0)
+    constraint ck_payment_subscriptions_amount check (amount > 0),
+    -- 살아 있는 상태(ACTIVE · PAST_DUE · CANCELING)는 자리를 쥐고, ENDED 는 풀었다 — 어긋난 줄이 계정을 잠그거나 자리를 공짜로 풀지 못하게. PENDING 은 카드를 내기 전이라 자리가 없다
+    constraint ck_payment_subscriptions_seat check ((status in ('ACTIVE', 'PAST_DUE', 'CANCELING') and active_key is not null) or (status = 'ENDED' and active_key is null) or status = 'PENDING')
     /* [jooq ignore start] */,
     index idx_payment_subscriptions_account (account_id, created_at, id)   -- 내 구독 (거꾸로 훑는다)
     /* [jooq ignore stop] */

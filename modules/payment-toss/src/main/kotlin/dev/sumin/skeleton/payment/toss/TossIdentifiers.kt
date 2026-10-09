@@ -11,8 +11,11 @@ internal object TossIdentifiers {
     private val PAYMENT_KEY = Regex("[A-Za-z0-9_-]{1,200}")
     private val ORDER_ID = Regex("[A-Za-z0-9_-]{1,64}")
 
-    /** 빌링키 · 카드 등록 인증 값의 문자 집합은 결제 키와 같은 **가정**이다 — 아직 못 쟀다(진짜 발급이 있어야 안다). */
-    private val BILLING_KEY = Regex("[A-Za-z0-9_-]{1,200}")
+    /**
+     * 빌링키는 **불투명한 토큰**이다 - 토스 문서의 예시가 `=` 로 끝나서(`...Rdzk0=`) 문자 집합을 좁히지 않는다. 길이와 경로를 깨는 글자(공백 · 제어 문자 · `/` · `\` · `?` · `#` · `%`)만 거른다.
+     * 경로에는 `uriVariable` 로 넣어 인코딩된다. 진짜 발급 값은 아직 못 봤다(`docs/real-provider-setup.md` 11.7).
+     */
+    private val BILLING_KEY = Regex("[^\\s/\\\\?#%\\p{Cntrl}]{1,200}")
     private val AUTH_KEY = Regex("[A-Za-z0-9_-]{1,200}")
     private val CUSTOMER_KEY = Regex("[A-Za-z0-9_=.@-]{2,50}")
 
@@ -22,6 +25,8 @@ internal object TossIdentifiers {
     fun paymentKey(value: String): String = if (isPaymentKey(value)) value else throw TossIdentifierRejectedException()
 
     fun orderId(value: String): String = if (ORDER_ID.matches(value)) value else throw TossIdentifierRejectedException()
+
+    fun isBillingKey(value: String): Boolean = BILLING_KEY.matches(value)
 
     fun billingKey(value: String): String = if (BILLING_KEY.matches(value)) value else throw TossIdentifierRejectedException()
 

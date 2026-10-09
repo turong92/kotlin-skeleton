@@ -53,7 +53,6 @@ class SubscriptionLifecycle(
     /** 지금 과금하는 주문 한 줄 — 결제창이 없으니 승인을 선점한 `CONFIRMING` 으로 바로 만든다(`checkout_expires_at` 은 만든 시각). */
     fun chargeOrder(subscription: PaymentSubscription, kind: PaymentOrderKind, orderName: String, random: java.util.Random = java.security.SecureRandom()): PaymentOrder {
         val now = writer.now()
-        val sequence = subscription.periodSeq + 1
         return PaymentOrder(
             id = PaymentOrderIds.newOrderId(random),
             accountId = subscription.accountId,
@@ -72,7 +71,7 @@ class SubscriptionLifecycle(
             orderName = orderName.trim().take(ORDER_NAME_MAX),
             originType = PaymentOriginType.SUBSCRIPTION,
             originRef = subscription.id,
-            dedupeKey = "sub:${subscription.id}:$sequence:${subscription.attempt}",
+            dedupeKey = currentKey(subscription),
             method = null,
             cardIssuer = null,
             cardLast4 = null,
@@ -127,6 +126,19 @@ class SubscriptionLifecycle(
     }
 
     /**
+     * 구독 주문이 **실패로 끝났다**(결제사의 거절 · 조회가 끝내 못 물어 죽은 조회 작업) — 주문이 끝 상태가 되는 **같은 트랜잭션**(주문 줄 락 안)에서 구독이 반응한다:
+     * 첫 결제면 구독이 끝나 자리를 풀고, 갱신이면 [onChargeFailed]. **지금 과금하는 시도의 주문일 때만**(같은 주문이 두 번 알려져도 한 번 — 시도 번호가 이미 올랐으면 건너뛴다).
+     */
+    fun onOrderClosed(tx: PaymentLedgerTx, order: PaymentOrder) {
+        val subscription = tx.lockSubscription(order.originRef ?: return) ?: return
+        if (subscription.status == SubscriptionStatus.ENDED || order.dedupeKey != currentKey(subscription)) return
+        if (subscription.status == SubscriptionStatus.PENDING) end(tx, subscription, SubscriptionEndReason.FIRST_PAYMENT_DECLINED) else onChargeFailed(tx, subscription)
+    }
+
+    /** 이 구독이 지금 과금하려는 주문의 `dedupe_key`. */
+    fun currentKey(subscription: PaymentSubscription): String = "sub:${subscription.id}:${subscription.periodSeq + 1}:${subscription.attempt}"
+
+    /**
      * 구독 주문이 전액 환불됐다 — 지금 과금 주문이면 구독을 바로 끝낸다(환불했는데 다음 달 또 과금되지 않게). **주문 줄 락 안에서** 불린다([PaymentRefundApplier]).
      * 지금 과금 주문이 아니거나 이미 끝난 구독이면 아무것도 하지 않는다.
      */
@@ -141,6 +153,8 @@ class SubscriptionLifecycle(
      * 구독 락 안에서 부른다.
      */
     fun onChargeFailed(tx: PaymentLedgerTx, subscription: PaymentSubscription): PaymentSubscription {
+        // 해지 예약 중에 나가 있던 갱신이 거절됐다 — 갱신이 없으니 재시도 없이 끝난다
+        if (subscription.status == SubscriptionStatus.CANCELING) return end(tx, subscription, SubscriptionEndReason.USER_CANCELED)
         val renewal = properties.subscription.renewal
         if (subscription.attempt >= renewal.maxAttempts) return end(tx, subscription, SubscriptionEndReason.PAYMENT_FAILED)
         val pastDue = save(tx, subscription, SubscriptionStatus.PAST_DUE) { it.copy(attempt = it.attempt + 1) }

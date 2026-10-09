@@ -133,13 +133,13 @@ class PaymentLedgerKit(
     val tasks = InMemoryPaymentTasks(store)
     val router = PaymentProviderRouter(listOf(gateway), properties)
     val writer = PaymentLedgerWriter(time)
-    val convergence = PaymentConvergence(writer, tasks, review, LedgerRefundConvergence(writer, tasks, review))
-    val plans = TestSubscriptionPlans()
     val lifecycle = SubscriptionLifecycle(tasks, writer, properties, review)
+    val convergence = PaymentConvergence(writer, tasks, review, LedgerRefundConvergence(writer, tasks, review)).also { it.subscriptions = lifecycle }
+    val plans = TestSubscriptionPlans()
     val fulfillment = PaymentFulfillment(store, listener, writer, lifecycle)
     val orders = PaymentOrders(store, tasks, router, catalog, convergence, fulfillment, writer, properties)
     val expire = OrderExpireTaskHandler(store, router, convergence)
-    val reconcile = OrderReconcileTaskHandler(store, router, convergence)
+    val reconcile = OrderReconcileTaskHandler(store, router, convergence).also { it.subscriptions = lifecycle }
     val fulfil = OrderFulfilTaskHandler(fulfillment, store, convergence)
     val applier = PaymentRefundApplier(store, listener, fulfillment, writer, lifecycle)
     val refunds = PaymentRefunds(store, tasks, router, convergence, applier, writer, properties)

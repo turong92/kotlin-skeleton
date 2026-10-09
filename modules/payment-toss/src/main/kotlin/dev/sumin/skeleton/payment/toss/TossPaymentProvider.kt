@@ -241,8 +241,11 @@ class TossPaymentProvider(
                 }.block(),
             )
             seen.status = response.statusCode
+            val issued = response.body.billingKey
+            // 받았는데 모양이 우리 규칙 밖이면 토스에 살아 있는 카드를 남기지 않게 그 자리에서 지우려 해 본다(경로에는 인코딩해 넣는다)
+            if (issued != null && !TossIdentifiers.isBillingKey(issued)) runCatching { revokeRaw(issued) }
             BillingIssue(
-                token = response.body.billingKey?.takeIf { BILLING_KEY.matches(it) }.need("billingKey"),
+                token = issued?.takeIf(TossIdentifiers::isBillingKey).need("billingKey"),
                 card = response.body.card.toCard(),
             )
         }
@@ -275,6 +278,16 @@ class TossPaymentProvider(
             seen.status = response.statusCode
             paymentResult(response)
         }
+    }
+
+    private fun revokeRaw(billingKey: String) {
+        httpClient.deleteResponse(properties.clientName, BILLING_PATH, Map::class.java) {
+            baseUrl(properties.baseUrl)
+            uriVariable("billingKey", billingKey)
+            commonHeaders(null)
+            loggingTag("payment.toss.billing-revoke")
+            errorMapper(errorMapper)
+        }.block()
     }
 
     /** 이미 없는 빌링키(`INVALID_BILL_KEY_REQUEST` · `NOT_FOUND_BILLING`)는 정상이다 — 지우려던 결과가 이미 그렇다. 그 밖의 실패는 던진다. */
@@ -624,7 +637,6 @@ class TossPaymentProvider(
         const val BILLING_ISSUE_PATH = "/v1/billing/authorizations/issue"
         const val BILLING_PATH = "/v1/billing/{billingKey}"
         val BILLING_GONE_CODES = setOf("INVALID_BILL_KEY_REQUEST", "NOT_FOUND_BILLING")
-        val BILLING_KEY = Regex("[A-Za-z0-9_-]{1,200}")
         const val NOT_FOUND_PAYMENT = "NOT_FOUND_PAYMENT"
         const val UNREADABLE_RESPONSE = "UNREADABLE_RESPONSE"
         const val PAYMENT_STATUS_CHANGED = "PAYMENT_STATUS_CHANGED"

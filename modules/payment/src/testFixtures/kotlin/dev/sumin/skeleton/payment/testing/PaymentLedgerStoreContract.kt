@@ -1415,4 +1415,17 @@ abstract class PaymentLedgerStoreContract {
         assertEquals(listOf(o2.id), store.listSubscriptionOrders(sub1.id, 1).map { it.id })
         assertEquals(listOf(sub1.id, sub2.id).sorted(), store.listSubscriptionIdsOfAccount("acc_1"))
     }
+
+    @Test
+    fun `a tombstone replaces the account id of the subscription lines too, and a second call finds nothing`() {
+        val store = newStore()
+        store.inTransaction { it.insertSubscriptionIfAbsent(sub1) }
+        store.inTransaction { it.insertSubscriptionIfAbsent(sub2.copy(accountId = "acc_other")) }
+
+        assertTrue(store.replaceAccountReferences("acc_1", "deleted:abc") >= 1)
+
+        assertEquals("deleted:abc", store.findSubscription(sub1.id)?.accountId)
+        assertEquals("acc_other", store.findSubscription(sub2.id)?.accountId, "somebody else's line is not touched")
+        assertEquals(0, store.replaceAccountReferences("acc_1", "deleted:abc"))
+    }
 }

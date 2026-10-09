@@ -1,5 +1,6 @@
 dev.sumin.skeleton.payment.PaymentAutoConfiguration
 dev.sumin.skeleton.payment.PaymentLedgerAutoConfiguration
+dev.sumin.skeleton.payment.PaymentSubscriptionAutoConfiguration
 dev.sumin.skeleton.payment.alert.PaymentAlertAutoConfiguration
 dev.sumin.skeleton.payment.web.PaymentWebhookWebAutoConfiguration
 dev.sumin.skeleton.payment.web.PaymentHttpAutoConfiguration

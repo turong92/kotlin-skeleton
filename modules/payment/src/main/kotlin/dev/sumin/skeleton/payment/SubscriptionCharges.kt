@@ -28,7 +28,7 @@ class SubscriptionCharges(
 
     /**
      * @param token 복호화한 빌링키(호출 동안만 메모리에 있다)
-     * @param onDeclined 확정 거절로 주문이 `FAILED` 가 된 **같은 트랜잭션**(주문 줄을 잠근 채)에서 부른다 — 구독 쪽 반응(첫 결제 거절은 종료 · 갱신 거절은 재시도)을 구독 락을 잡고 같이 커밋한다.
+     * 확정 거절이면 주문이 `FAILED` 가 되는 같은 트랜잭션에서 구독이 반응한다([PaymentConvergence.subscriptions] → [SubscriptionLifecycle.onOrderClosed]).
      */
     fun charge(
         gateway: PaymentBillingGateway,
@@ -36,7 +36,6 @@ class SubscriptionCharges(
         order: PaymentOrder,
         token: String,
         actor: PaymentActor,
-        onDeclined: (PaymentLedgerTx, PaymentOrder) -> Unit,
     ): ChargeOutcome {
         store.requireNoOpenTransaction("Charging a subscription")
         val context = ConvergeContext(gateway.mode, ConvergeSource.CONFIRM, actor, null)
@@ -54,7 +53,7 @@ class SubscriptionCharges(
         } catch (e: Exception) {
             // 호출 자체의 실패만 여기서 가른다 — 확정(저장) 쪽 버그를 "모름"으로 삼키지 않으려고 settle 은 try 밖이다
             return when (PaymentFailures.outcomeOf(e)) {
-                PaymentFailureOutcome.DEFINITIVE -> decline(order, PaymentFailures.providerCodeOf(e), context, onDeclined)
+                PaymentFailureOutcome.DEFINITIVE -> decline(order, PaymentFailures.providerCodeOf(e), context)
                 PaymentFailureOutcome.UNKNOWN -> unknown(order, e, context)
             }
         }
@@ -89,12 +88,10 @@ class SubscriptionCharges(
         }
     }
 
-    private fun decline(order: PaymentOrder, providerCode: String?, context: ConvergeContext, onDeclined: (PaymentLedgerTx, PaymentOrder) -> Unit): ChargeOutcome {
+    private fun decline(order: PaymentOrder, providerCode: String?, context: ConvergeContext): ChargeOutcome {
         val closed = store.inTransaction { tx ->
             val locked = tx.lockOrder(order.id) ?: return@inTransaction order
-            val after = convergence.declined(tx, locked, providerCode, context).order
-            if (after.status == PaymentOrderStatus.FAILED && locked.status == PaymentOrderStatus.CONFIRMING) onDeclined(tx, after)
-            after
+            convergence.declined(tx, locked, providerCode, context).order
         }
         // 그 사이 다른 길이 먼저 끝냈다면(늦은 거절은 받은 돈을 되돌리지 못한다) 거절이 아니다
         return if (closed.status == PaymentOrderStatus.FAILED) ChargeOutcome.Declined(closed.failureCode) else ChargeOutcome.Unknown

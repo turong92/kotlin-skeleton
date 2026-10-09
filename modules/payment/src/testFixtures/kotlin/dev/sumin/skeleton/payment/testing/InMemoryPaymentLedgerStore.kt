@@ -185,7 +185,7 @@ class InMemoryPaymentLedgerStore : PaymentLedgerStore {
     override fun replaceAccountReferences(accountId: String, replacement: String): Int =
         synchronized(commitMutex) {
             val ids = committed.values.filter { it.accountId == accountId }.map { it.id }.toSet()
-            if (ids.isEmpty()) return 0
+            if (ids.isEmpty() && committedSubscriptions.values.none { it.accountId == accountId }) return 0
             var changed = 0
             committedEvents.indices.forEach { i ->
                 val event = committedEvents[i]
@@ -199,6 +199,10 @@ class InMemoryPaymentLedgerStore : PaymentLedgerStore {
                     requestedBy = if (refund.requestedBy == accountId) replacement else refund.requestedBy,
                     decidedBy = if (refund.decidedBy == accountId) replacement else refund.decidedBy,
                 )
+                changed++
+            }
+            committedSubscriptions.values.filter { it.accountId == accountId }.forEach { sub ->
+                committedSubscriptions[sub.id] = sub.copy(accountId = replacement, activeKey = if (sub.activeKey == accountId) replacement else sub.activeKey)
                 changed++
             }
             ids.forEach { id -> committed[id] = committed.getValue(id).copy(accountId = replacement) ; changed++ }

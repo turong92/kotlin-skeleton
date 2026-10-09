@@ -46,6 +46,9 @@ class PaymentConvergence(
 ) {
     private val flags = PaymentReviewFlags(writer, review)
 
+    /** 구독을 켠 조립에서만 — 구독 주문이 끝 상태(`FAILED`)가 되는 **같은 트랜잭션**에서 구독이 반응한다([SubscriptionLifecycle.onOrderClosed]). */
+    var subscriptions: SubscriptionLifecycle? = null
+
     fun converge(tx: PaymentLedgerTx, order: PaymentOrder, snapshot: PaymentSnapshot, context: ConvergeContext): ConvergeResult {
         if (order.providerMode != context.currentMode) return result(order, flag(tx, order, PaymentReviewReason.MODE_MISMATCH, context))
         val afterPayment = when (snapshot.status) {
@@ -80,7 +83,12 @@ class PaymentConvergence(
         val failed = writer.transition(tx, order, PaymentOrderStatus.FAILED, PaymentEventType.CONFIRM_DECLINED, context.actor, context.actorId, code) {
             it.copy(failureCode = code, closedAt = writer.now(), reviewReason = it.reviewReason.unlessConfirmUnresolved())
         }
+        notifyClosed(tx, failed)
         return ConvergeResult(failed, changed = true)
+    }
+
+    private fun notifyClosed(tx: PaymentLedgerTx, order: PaymentOrder) {
+        if (order.originType == PaymentOriginType.SUBSCRIPTION) subscriptions?.onOrderClosed(tx, order)
     }
 
     /** 사람이 봐야 한다고 줄에 표시한다. 이미 표시가 있으면 그대로(먼저 찍힌 이유가 남는다). 경보는 처음 찍힐 때 한 번. */
@@ -123,7 +131,7 @@ class PaymentConvergence(
                 val code = if (snapshot.status == ProviderPaymentStatus.EXPIRED) "PROVIDER_EXPIRED" else "PROVIDER_ABORTED"
                 writer.transition(tx, order, PaymentOrderStatus.FAILED, PaymentEventType.CONVERGED, context.actor, context.actorId, code) {
                     it.copy(failureCode = code, closedAt = writer.now(), reviewReason = it.reviewReason.unlessConfirmUnresolved())
-                }
+                }.also { notifyClosed(tx, it) }
             }
             PaymentOrderStatus.PENDING -> expireIfAsked(tx, order, context)
             else -> order // 이미 PAID 이후거나 닫힌 줄 — 늦게 온 실패 신호는 무시한다

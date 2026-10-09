@@ -304,6 +304,11 @@ class JdbcPaymentLedgerStore(
                     mapOf("ids" to ids, "old" to accountId, "new" to replacement),
                 )
             }
+            // 구독 줄도 같은 계정 id 를 가진다(끝난 줄은 `active_key` 가 NULL — 살아 있는 줄이 남아 있다면 자리도 같이 옮긴다)
+            changed += jdbc.update(
+                "update payment_subscriptions set account_id = :new, active_key = case when active_key = :old then :new else active_key end where account_id = :old",
+                mapOf("old" to accountId, "new" to replacement),
+            )
             changed + jdbc.update("update payment_orders set account_id = :new where account_id = :old", mapOf("old" to accountId, "new" to replacement))
         }!!
 

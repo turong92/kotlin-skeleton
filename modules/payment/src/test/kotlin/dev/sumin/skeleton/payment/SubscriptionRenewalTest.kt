@@ -97,8 +97,8 @@ class SubscriptionRenewalTest {
         toPeriodEnd(active)
         kit.gateway.script(ConfirmScript.TimeoutApplied())
 
-        assertFailsWith<PaymentTaskRetryException> { kit.renew.handle(PaymentTaskRun(PaymentTaskTypes.SUBSCRIPTION_RENEW, active.id, 1, 12)) }
-        assertFailsWith<PaymentTaskRetryException> { kit.renew.handle(PaymentTaskRun(PaymentTaskTypes.SUBSCRIPTION_RENEW, active.id, 2, 12)) }
+        kit.renew.handle(PaymentTaskRun(PaymentTaskTypes.SUBSCRIPTION_RENEW, active.id, 1, 12))
+        kit.renew.handle(PaymentTaskRun(PaymentTaskTypes.SUBSCRIPTION_RENEW, active.id, 2, 12))
         assertEquals(2, kit.gateway.chargeCalls.size, "the second run saw the charge in flight and did not send again")
 
         kit.advance(kit.properties.reconcile.firstDelay)
@@ -116,14 +116,13 @@ class SubscriptionRenewalTest {
         val active = activeSubscription()
         toPeriodEnd(active)
         kit.gateway.script(ConfirmScript.TimeoutNotApplied)
-        assertFailsWith<PaymentTaskRetryException> { kit.renew.handle(PaymentTaskRun(PaymentTaskTypes.SUBSCRIPTION_RENEW, active.id, 1, 12)) }
+        kit.renew.handle(PaymentTaskRun(PaymentTaskTypes.SUBSCRIPTION_RENEW, active.id, 1, 12))
         val first = kit.store.listSubscriptionOrders(active.id, 1).single()
         // 결제사가 그 결제를 실패로 닫는다 → 첫 시도 실패 → 두 번째 시도가 성공한다
         kit.gateway.abort(kit.gateway.providerPaymentsOfOrder(first.id).single().paymentKey)
         kit.advance(kit.properties.reconcile.firstDelay)
         kit.runTasks(setOf(PaymentTaskTypes.ORDER_RECONCILE))
-        kit.renew.handle(PaymentTaskRun(PaymentTaskTypes.SUBSCRIPTION_RENEW, active.id, 2, 12))
-        assertEquals(SubscriptionStatus.PAST_DUE, sub(active.id).status)
+        assertEquals(SubscriptionStatus.PAST_DUE, sub(active.id).status, "the failed order made it past due in the same transaction")
         kit.advance(kit.properties.subscription.renewal.retryInterval)
         renewTasks()
         kit.runTasks(setOf(PaymentTaskTypes.ORDER_FULFIL))
@@ -297,11 +296,79 @@ class SubscriptionRenewalTest {
         kit.advance(kit.properties.reconcile.firstDelay)
         kit.runTasks(setOf(PaymentTaskTypes.ORDER_RECONCILE))
 
-        kit.runTasks(setOf(PaymentTaskTypes.SUBSCRIPTION_RENEW))
-
-        assertEquals(SubscriptionStatus.ENDED, sub(id).status)
+        assertEquals(SubscriptionStatus.ENDED, sub(id).status, "the order closing freed the seat in the same transaction")
         assertEquals(SubscriptionEndReason.FIRST_PAYMENT_DECLINED, sub(id).endReason)
         assertNull(sub(id).activeKey)
         assertNotNull(kit.subscriptions.start("acc_1", "basic", IdempotencyKey("again")).subscription)
+    }
+
+    /** 조회가 끝내 null 인 채(결제사가 그 결제를 모른다) 조회 작업이 시도를 다 써 죽는다. */
+    private fun reconcileUntilDead(orderId: String) {
+        repeat(kit.properties.reconcile.maxAttempts) {
+            kit.advance(Duration.ofHours(2))
+            kit.runTasks(setOf(PaymentTaskTypes.ORDER_RECONCILE))
+        }
+        assertTrue(kit.tasks.dead(PaymentTaskTypes.ORDER_RECONCILE).any { it.task.subjectId == orderId }, "the lookup task died")
+    }
+
+    @Test
+    fun `a first charge the provider never knew - lookup null to the end - frees the account instead of locking it`() {
+        val id = kit.subscriptions.start("acc_1", "basic", IdempotencyKey("k1")).subscription.id
+        kit.gateway.script(ConfirmScript.ServerError) // 요청이 닿지 않았다 — 결제사에 그 결제가 없다
+        assertEquals(SubscriptionStatus.PENDING, kit.subscriptions.activate("acc_1", id, auth).status)
+        val order = kit.store.listSubscriptionOrders(id, 1).single()
+
+        reconcileUntilDead(order.id)
+
+        assertEquals(SubscriptionStatus.ENDED, sub(id).status)
+        assertEquals(SubscriptionEndReason.FIRST_PAYMENT_DECLINED, sub(id).endReason)
+        assertEquals(PaymentReviewReason.CONFIRM_UNRESOLVED, kit.order(order.id).reviewReason, "a person still sees the order")
+        assertNotNull(kit.subscriptions.start("acc_1", "basic", IdempotencyKey("again")))
+    }
+
+    @Test
+    fun `a renewal the provider never knew goes past due and retries instead of waiting for ever`() {
+        val active = activeSubscription()
+        toPeriodEnd(active)
+        kit.gateway.script(ConfirmScript.ServerError)
+        renewTasks()
+        val order = kit.store.listSubscriptionOrders(active.id, 1).single()
+        assertEquals(PaymentOrderStatus.CONFIRMING, order.status)
+
+        reconcileUntilDead(order.id)
+
+        assertEquals(SubscriptionStatus.PAST_DUE, sub(active.id).status)
+        assertEquals(2, sub(active.id).attempt)
+    }
+
+    @Test
+    fun `a renewal whose provider is gone or in another mode leaves no order behind`() {
+        val active = activeSubscription()
+        toPeriodEnd(active)
+        kit.gateway.mode = PaymentMode.LIVE
+
+        assertFailsWith<PaymentTaskPermanentException> { kit.renew.handle(PaymentTaskRun(PaymentTaskTypes.SUBSCRIPTION_RENEW, active.id, 1, 12)) }
+
+        assertEquals(1, kit.store.listSubscriptionOrders(active.id, 5).size, "only the first payment's order")
+        assertEquals(1, kit.gateway.chargeCalls.size)
+        assertEquals(SubscriptionStatus.ACTIVE, sub(active.id).status)
+    }
+
+    @Test
+    fun `a cancel after the renewal was claimed and then a decline ends the subscription - the order closes and nothing throws`() {
+        val active = activeSubscription()
+        toPeriodEnd(active)
+        kit.gateway.duringCharge = {
+            kit.gateway.duringCharge = null
+            kit.subscriptions.cancel("acc_1", active.id)
+        }
+        kit.gateway.script(ConfirmScript.Decline())
+
+        renewTasks()
+
+        val renewal = kit.store.listSubscriptionOrders(active.id, 1).single()
+        assertEquals(PaymentOrderStatus.FAILED, renewal.status)
+        assertEquals(SubscriptionStatus.ENDED, sub(active.id).status)
+        assertEquals(SubscriptionEndReason.USER_CANCELED, sub(active.id).endReason)
     }
 }

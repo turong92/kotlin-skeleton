@@ -172,4 +172,27 @@ class TossBillingHttpTest {
         server.on("DELETE", "/v1/billing/$token", TossFixtures.error(500, "FAILED_INTERNAL_SYSTEM_PROCESSING"))
         assertFailsWith<Exception> { provider.revoke(customerKey, token) }
     }
+
+    @Test
+    fun `a billing key that ends with an equals sign - like the documented example - is issued, charged and deleted`() {
+        val padded = "BQ3dEfRdzk0="
+        server.on("POST", "/v1/billing/authorizations/issue", Reply.Json(200, billingKeyBody(padded)))
+        server.on("POST", "/v1/billing/$padded", Reply.Json(200, TossFixtures.payment(paymentKey = "pay_sub_1", orderId = "ord_sub_0001", total = 3_900)))
+        server.on("DELETE", "/v1/billing/$padded", Reply.Json(200, "{}"))
+
+        val issued = provider.issue(customerKey, mapOf("authKey" to "auth_key_1"))
+        provider.charge(chargeRequest().copy(token = issued.token))
+        provider.revoke(customerKey, issued.token)
+
+        assertEquals(padded, issued.token)
+        assertEquals(listOf("POST", "POST", "DELETE"), server.requests.map { it.method })
+    }
+
+    @Test
+    fun `a billing key that could break the path is not accepted and the call is never made`() {
+        listOf("a/b", "a b", "a?b", "a#b", "").forEach { bad ->
+            assertFailsWith<TossIdentifierRejectedException> { provider.charge(chargeRequest().copy(token = bad)) }
+        }
+        assertTrue(server.requests.isEmpty())
+    }
 }

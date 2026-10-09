@@ -103,6 +103,8 @@ class PaymentSubscriptions(
         val issued = try {
             gateway.issue(customerKey, providerPayload)
         } catch (e: Exception) {
+            // 같은 authKey 로 겹친 요청 — 결제사가 둘째 발급을 거절해도 첫째가 이미 시작했으면 그 줄이 답이다(「결제 안 됨」으로 거짓을 말하지 않는다)
+            store.findSubscription(subscriptionId)?.takeIf { owned(it, accountId) != null && (it.status != SubscriptionStatus.PENDING || it.chargeOrderId != null) }?.let { return it }
             if (PaymentFailures.outcomeOf(e) == PaymentFailureOutcome.DEFINITIVE) {
                 throw PaymentDeclinedException(PaymentFailures.providerCodeOf(e), gateway.billingDeclineCategory(PaymentFailures.providerCodeOf(e)))
             }
@@ -119,15 +121,13 @@ class PaymentSubscriptions(
             throw e
         }
         if (claim.order == null) {
-            // 같은 구독을 동시에 시작한 다른 요청이 이겼다 — 그쪽의 빌링키가 쓰인다
-            revokeQuietly(gateway, customerKey, issued.token)
+            // 같은 구독을 동시에 시작한 다른 요청이 이겼다 — 그쪽의 빌링키가 쓰인다. 결제사가 같은 빌링키를 또 줬다면 지우지 않는다(이긴 쪽의 카드가 지워진다)
+            val winnerToken = claim.subscription.billingToken?.let { runCatching { encryptor.decrypt(it) }.getOrNull() }
+            if (winnerToken != issued.token) revokeQuietly(gateway, customerKey, issued.token)
             return claim.subscription
         }
 
-        val outcome = charges.charge(gateway, claim.subscription, claim.order, issued.token, PaymentActor.USER) { tx, _ ->
-            val locked = tx.lockSubscription(subscriptionId)
-            if (locked != null && locked.status == SubscriptionStatus.PENDING) lifecycle.end(tx, locked, SubscriptionEndReason.FIRST_PAYMENT_DECLINED)
-        }
+        val outcome = charges.charge(gateway, claim.subscription, claim.order, issued.token, PaymentActor.USER)
         val after = store.findSubscription(subscriptionId) ?: claim.subscription
         if (outcome is ChargeOutcome.Declined) {
             throw PaymentDeclinedException(outcome.providerCode, gateway.billingDeclineCategory(outcome.providerCode))
@@ -172,8 +172,6 @@ class PaymentSubscriptions(
                 updatedAt = writer.now(),
             )
             tx.updateSubscription(claimed)
-            // 안전망: 응답을 못 받은 첫 결제가 끝내 실패로 닫혀도 자리(`active_key`)가 영원히 잡혀 있지 않게 — 갱신 작업이 PENDING 도 본다
-            lifecycle.scheduleRenewal(claimed, runAt = writer.now().plus(properties.reconcile.firstDelay))
             Claim(claimed, order)
         }
 

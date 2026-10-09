@@ -12,6 +12,7 @@ import dev.sumin.skeleton.payment.PaymentProperties
 import dev.sumin.skeleton.payment.PaymentProviderRouter
 import dev.sumin.skeleton.payment.PaymentQueries
 import dev.sumin.skeleton.payment.PaymentRefunds
+import dev.sumin.skeleton.payment.PaymentSubscriptionAutoConfiguration
 import dev.sumin.skeleton.payment.PaymentSubscriptions
 import dev.sumin.skeleton.payment.PaymentWebhookInbox
 import dev.sumin.skeleton.payment.PaymentLedgerStore
@@ -32,7 +33,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer
  * 사용자 경로는 `skeleton.payment.http.enabled=false` 로 끄고(웹훅 경로는 영향 없음 — 그것은 `webhook.enabled`), 운영자 경로는 `skeleton.payment.admin.enabled=true` 일 때만 선다.
  * 주문 만들기는 [PaymentCatalog] 빈이 있을 때만. 인증은 앱의 보안 설정이 건다(auth 의 기본 체인은 모든 경로에 인증을 요구한다).
  */
-@AutoConfiguration(after = [PaymentLedgerAutoConfiguration::class])
+@AutoConfiguration(after = [PaymentLedgerAutoConfiguration::class, PaymentSubscriptionAutoConfiguration::class])
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 @ConditionalOnClass(name = ["org.springframework.security.core.Authentication"])
 @ConditionalOnBean(PaymentOrders::class)

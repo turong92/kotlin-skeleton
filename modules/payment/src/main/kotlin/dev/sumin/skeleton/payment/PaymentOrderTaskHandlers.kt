@@ -137,6 +137,9 @@ class OrderReconcileTaskHandler(
 
     override val type: String = PaymentTaskTypes.ORDER_RECONCILE
 
+    /** 구독을 켠 조립에서만 — 끝내 못 물은 구독 주문은 구독이 반응한다(계정이 구독에 갇히지 않게). */
+    var subscriptions: SubscriptionLifecycle? = null
+
     override fun handle(run: PaymentTaskRun) {
         store.requireNoOpenTransaction("The reconcile task")
         val id = run.subjectId
@@ -188,7 +191,9 @@ class OrderReconcileTaskHandler(
         store.inTransaction { tx ->
             val locked = tx.lockOrder(run.subjectId) ?: return@inTransaction
             if (locked.status != PaymentOrderStatus.CONFIRMING) return@inTransaction
-            convergence.flagReview(tx, locked, PaymentReviewReason.CONFIRM_UNRESOLVED, ConvergeContext(locked.providerMode, ConvergeSource.RECONCILE))
+            val flagged = convergence.flagReview(tx, locked, PaymentReviewReason.CONFIRM_UNRESOLVED, ConvergeContext(locked.providerMode, ConvergeSource.RECONCILE)).order
+            // 결제사에 그 결제가 없어 조회가 끝내 null 이었던 구독 과금 — 주문은 사람이 보도록 표시로 남기고 구독은 거절된 것으로 다룬다(늦게 돈이 확인되면 지급 고리가 「확인 필요」를 찍는다)
+            if (flagged.originType == PaymentOriginType.SUBSCRIPTION) subscriptions?.onOrderClosed(tx, flagged)
         }
     }
 }
