@@ -60,8 +60,15 @@ class GatePathRule private constructor(val method: String?, val pattern: PathPat
             "POST /api/v1/account/login-id/availability",
         ).map { parse(it) }
 
-        /** "쓰기 때"(`required-when=WRITE`) 방식에서만 이메일 게이트가 **더** 여는 길 — 자기 계정 살림(언어 · 시간대 · 닉네임). 로그인 직후 방식에서는 열리지 않는다 */
-        val WRITE_MODE_PATHS: List<GatePathRule> = listOf("PATCH /api/v1/account/me").map { parse(it) }
+        /**
+         * "쓰기 때"(`required-when=WRITE`) 방식에서만 이메일 게이트가 **더** 여는 길 — 자기 계정 살림(언어 · 시간대 · 닉네임)과 소셜 로그인 수단의 연결 · 해제. 로그인 직후 방식에서는 열리지 않는다.
+         * 연결 · 해제는 서버가 다시 인증(이미 연결된 제공자의 새 코드)을 요구하고, 마지막 수단 보호 · 정지 계정 거절 · 제공자당 하나는 그대로다. 비밀번호 만들기는 열지 않는다(재설정이 이메일로 가므로).
+         */
+        val WRITE_MODE_PATHS: List<GatePathRule> = listOf(
+            "PATCH /api/v1/account/me",
+            "POST /api/v1/account/identities/social/*",
+            "DELETE /api/v1/account/identities/*",
+        ).map { parse(it) }
 
         /**
          * 한 게이트가 여는 전체 목록 = [BUILT_IN] + (아이디가 켜져 있으면 [LOGIN_ID_PATHS]) + 그 게이트 자기 설정의 [extra].

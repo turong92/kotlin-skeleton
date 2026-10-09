@@ -350,7 +350,7 @@ skeleton:
 
 - `required: false` 인데 `required-when: WRITE` 면 **기동 실패**(설정 이름을 말한다) — "쓰기 때로 켰다"고 믿는데 꺼져 있는 사고를 막는다. `required-when` 을 적지 않은 앱은 한 글자도 바뀌지 않았다(`EmailRequiredInterceptorTest` · `EmailRequiredWebTest` · `EmailRequiredWiringTest` 가 무수정으로 통과).
 - **같은 인터셉터에 판정 하나**가 는다: `required-when=WRITE` 이고 메서드가 **`GET` · `HEAD` · `OPTIONS` 글자 그대로**(대소문자 구분 — `get` 은 쓰기로 취급해 막는다)면 통과, 그 밖의 메서드는 허용 목록 밖에서 `403`. 판정에 쓰는 것은 **실제로 도는 메서드**다 — `X-HTTP-Method-Override` · `X-Method-Override` 헤더나 `_method` 파라미터가 `POST` 를 `GET` 으로 바꾸지 못한다. 범위 · 경로 읽기 · 익명 · preflight · 에러 코드와 본문은 로그인 직후 방식과 같다.
-- **"쓰기 때"의 허용 목록** = 고정 목록 + 아이디 두 경로(아이디를 켰을 때) + **`PATCH /api/v1/account/me`**(이 방식에서만 — 언어 · 시간대 · 닉네임을 바꿨다고 이메일 화면이 뜨면 안 된다) + 앱의 `email.extra-exclude-paths`.
+- **"쓰기 때"의 허용 목록** = 고정 목록 + 아이디 두 경로(아이디를 켰을 때) + **`PATCH /api/v1/account/me`**(이 방식에서만 — 언어 · 시간대 · 닉네임을 바꿨다고 이메일 화면이 뜨면 안 된다) + **소셜 수단의 연결 · 해제**(`POST /api/v1/account/identities/social/{provider}` · `DELETE /api/v1/account/identities/{id}` — 이 방식에서만. 주소 없는 계정이 소셜끼리 엮을 수 있다. 다시 인증(이미 연결된 제공자의 새 코드) · 마지막 수단 보호 · 정지 계정 거절 · 제공자당 하나는 그대로이고, **비밀번호 만들기는 계속 막힌다** — 재설정이 이메일로 가므로) + 앱의 `email.extra-exclude-paths`.
 - `emailRequired` 의 뜻은 그대로("지금 주소가 없어 허용 목록 밖이 **전부** 막힌다")라 이 방식에서는 키가 있고 늘 `false` 다. 새 키 `emailRequiredToWrite` 는 이 방식에서만 있고 주소가 없으면 `true`. 프론트는 로그인 직후 막을 `emailRequired === true` 일 때만 연다.
 - 시험: `EmailOnWriteInterceptorTest` · `EmailOnWriteWebTest` · `EmailOnWriteDiscardTest`, `AccountAutoConfigurationTest` `required-when WRITE without required stops the context…`, 견본 앱 `EmailOnWriteJourneyIntegrationTest` · `WriteGateCensusTest`.
 

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 변경
+
+- **쓰기 때 이메일 방식: 주소 없는 계정이 소셜 수단을 연결 · 해제할 수 있다**: `required-when=WRITE` 의 고정 허용 목록에 `POST /account/identities/social/{provider}` · `DELETE /account/identities/{id}` 를 더했다. 다시 인증 · 마지막 수단 보호 · 정지 계정 거절 · 제공자당 하나는 그대로이고 비밀번호 만들기는 계속 막힌다. 로그인 직후 방식은 그대로다.
+
 ### 보안 수정
 
 - **notification-websocket 인바운드 인가**: 클라이언트가 브로커 목적지로 보낸 `SEND` 와 알림 토픽·사용자 목적지 밖 `SUBSCRIBE` 를 이제 거절한다(기본값으로 막힘, 기존 설정 키 불변; `/app` 아래 `@MessageMapping` 은 그대로 — 인가는 앱 몫). 구독 접두사를 더하는 새 선택 키 `broker.extra-subscribe-destination-prefixes`. 프런트(`@skeleton/realtime`)는 `SEND` 를 쓰지 않아 영향 없음. 문서: [docs/notification-websocket.md](docs/notification-websocket.md).

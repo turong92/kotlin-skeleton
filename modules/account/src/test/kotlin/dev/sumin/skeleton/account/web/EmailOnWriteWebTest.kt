@@ -61,7 +61,9 @@ class OnWriteProbeBeans {
         "skeleton.account.email.required-when=WRITE",
         "skeleton.account.email.extra-exclude-paths=PATCH /api/v1/probe/read, POST /api/v1/probe/peek",
         "skeleton.account.login-id.enabled=true",
+        "skeleton.account.login-id.claim-limit=20", // the per-IP claim bucket: this class claims an id for most of its accounts
         "skeleton.auth-social.providers.fakeidp.enabled=true",
+        "skeleton.auth-social.providers.fakeidp2.enabled=true",
     ],
 )
 @AutoConfigureMockMvc
@@ -106,8 +108,23 @@ class EmailOnWriteWebTest {
 
         mvc.perform(post("/api/v1/things").header("Authorization", auth)).blockedBy(emailRequired)
             .andExpect(jsonPath("$.title").value("Register an email address first")).andExpect(jsonPath("$.status").value(403)).andExpect(jsonPath("$.data").value(org.hamcrest.Matchers.nullValue()))
-        mvc.perform(delete("/api/v1/account/identities/idn_x").header("Authorization", auth)).blockedBy(emailRequired)
         mvc.perform(patch("/api/v1/probe/peek").header("Authorization", auth)).blockedBy(emailRequired)   // PUT / TRACE etc.: the unit test's table (a method without a handler is a 405 before any interceptor)
+    }
+
+    @Test
+    fun `an account without an address links and unlinks social sign-in methods, but still cannot create a password`() {
+        val auth = noAddress("c-noemail-link1")
+        val own = """{"provider":"fakeidp","authorizationCode":"c-noemail-link1"}"""
+        mvc.perform(post("/api/v1/account/identities/social/fakeidp2").header("Authorization", auth).contentType(json).content("""{"authorizationCode":"c-noemail-link2"}"""))
+            .andExpect(status().isForbidden).andExpect(jsonPath("$.code").value("ACCOUNT.REAUTH_REQUIRED")) // the gate is open, the re-authentication still applies
+        mvc.perform(post("/api/v1/account/identities/social/fakeidp2").header("Authorization", auth).contentType(json).content("""{"authorizationCode":"c-noemail-link2","socialReauth":$own}"""))
+            .andExpect(status().isCreated)
+        val listed = mvc.perform(get("/api/v1/account/identities").header("Authorization", auth)).andExpect(status().isOk).andReturn()
+        assertEquals(2, JsonPath.read<List<Any>>(listed.response.contentAsString, "$.values").size)
+        val linkedId = JsonPath.read<List<String>>(listed.response.contentAsString, "$.values[?(@.method=='fakeidp2')].id").single()
+        mvc.perform(delete("/api/v1/account/identities/$linkedId").header("Authorization", auth).contentType(json).content("""{"socialReauth":$own}"""))
+            .andExpect(status().isNoContent)
+        mvc.perform(post("/api/v1/account/password/change").header("Authorization", auth).contentType(json).content("{}")).blockedBy(emailRequired)
     }
 
     @Test

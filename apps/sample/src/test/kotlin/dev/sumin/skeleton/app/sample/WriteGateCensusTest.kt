@@ -67,6 +67,9 @@ class WriteGateCensusTest {
             "POST /api/v1/account/login-id/availability",
             // 쓰기 때 방식의 고정 허용: 자기 계정 살림 — 언어 · 시간대 · 닉네임 (GatePathRule.WRITE_MODE_PATHS)
             "PATCH /api/v1/account/me",
+            // 소셜 로그인 수단의 연결 · 해제 - 다시 인증(이미 연결된 제공자의 새 코드)은 서버가 그대로 요구한다 (GatePathRule.WRITE_MODE_PATHS)
+            "POST /api/v1/account/identities/social/{provider}",
+            "DELETE /api/v1/account/identities/{id}",
             // 이 앱이 yml(email.extra-exclude-paths)로 연 사소한 쓰기 · 읽기처럼 보이는 POST
             "PATCH /api/v1/notifications/{eventId}/read",
             "PATCH /api/v1/notifications/read-all",
