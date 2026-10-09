@@ -175,6 +175,11 @@ class OrderReconcileTaskHandler(
             if (after.status == PaymentOrderStatus.CONFIRMING && after.reviewReason == null && run.lastAttempt) {
                 after = convergence.flagReview(tx, after, PaymentReviewReason.CONFIRM_UNRESOLVED, context).order
             }
+            // 구독 과금: 마지막 시도에서 **결제사가 답으로 「그 결제를 모른다」(null)고 했을 때만** 구독이 거절로 반응한다(승인이 닿지 않았다 — 실측 404 NOT_FOUND_PAYMENT).
+            // 조회가 던졌거나 결제사 빈이 없으면 · 어긋난 답이면 돈이 움직였는지 모르니 반응하지 않는다 — 사람이 볼 때까지 새 과금은 없다(스펙 5.4)
+            if (after.status == PaymentOrderStatus.CONFIRMING && run.lastAttempt && gateway != null && !lookupFailed && snapshot == null && after.originType == PaymentOriginType.SUBSCRIPTION) {
+                subscriptions?.onOrderClosed(tx, after)
+            }
             after
         } ?: return
         if (settled.status != PaymentOrderStatus.CONFIRMING) return
@@ -191,9 +196,8 @@ class OrderReconcileTaskHandler(
         store.inTransaction { tx ->
             val locked = tx.lockOrder(run.subjectId) ?: return@inTransaction
             if (locked.status != PaymentOrderStatus.CONFIRMING) return@inTransaction
-            val flagged = convergence.flagReview(tx, locked, PaymentReviewReason.CONFIRM_UNRESOLVED, ConvergeContext(locked.providerMode, ConvergeSource.RECONCILE)).order
-            // 결제사에 그 결제가 없어 조회가 끝내 null 이었던 구독 과금 — 주문은 사람이 보도록 표시로 남기고 구독은 거절된 것으로 다룬다(늦게 돈이 확인되면 지급 고리가 「확인 필요」를 찍는다)
-            if (flagged.originType == PaymentOriginType.SUBSCRIPTION) subscriptions?.onOrderClosed(tx, flagged)
+            // 표시만 한다 — 구독의 반응은 [handle] 의 마지막 시도(조회가 null 로 답했을 때)에서만이다. 죽는 길 가운데는 돈이 움직였는지 모르는 길이 있다
+            convergence.flagReview(tx, locked, PaymentReviewReason.CONFIRM_UNRESOLVED, ConvergeContext(locked.providerMode, ConvergeSource.RECONCILE))
         }
     }
 }

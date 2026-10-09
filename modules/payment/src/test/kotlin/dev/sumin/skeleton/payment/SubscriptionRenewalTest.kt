@@ -371,4 +371,42 @@ class SubscriptionRenewalTest {
         assertEquals(SubscriptionStatus.ENDED, sub(active.id).status)
         assertEquals(SubscriptionEndReason.USER_CANCELED, sub(active.id).endReason)
     }
+
+    @Test
+    fun `a renewal whose lookup throws to the end is left for a person - no past due, no second order`() {
+        val active = activeSubscription()
+        toPeriodEnd(active)
+        kit.gateway.script(ConfirmScript.ServerError)
+        renewTasks()
+        val order = kit.store.listSubscriptionOrders(active.id, 1).single()
+        kit.gateway.failLookups(100)
+
+        reconcileUntilDead(order.id)
+        kit.advance(kit.properties.subscription.renewal.retryInterval.multipliedBy(2))
+        renewTasks()
+
+        assertEquals(SubscriptionStatus.ACTIVE, sub(active.id).status)
+        assertEquals(1, sub(active.id).attempt)
+        assertEquals(2, kit.store.listSubscriptionOrders(active.id, 5).size, "no new order while a person has not looked")
+        assertEquals(2, kit.gateway.chargeCalls.size)
+        assertEquals(PaymentReviewReason.CONFIRM_UNRESOLVED, kit.order(order.id).reviewReason)
+    }
+
+    @Test
+    fun `a renewal that dies on an amount mismatch is left for a person - the subscription does not retry`() {
+        val active = activeSubscription()
+        toPeriodEnd(active)
+        kit.gateway.script(ConfirmScript.TimeoutApplied(PaymentAmount(1_000, "KRW")))
+        renewTasks()
+        val order = kit.store.listSubscriptionOrders(active.id, 1).single()
+        kit.advance(kit.properties.reconcile.firstDelay)
+        kit.runTasks(setOf(PaymentTaskTypes.ORDER_RECONCILE))
+        kit.advance(kit.properties.subscription.renewal.retryInterval.multipliedBy(2))
+        renewTasks()
+
+        assertEquals(PaymentReviewReason.AMOUNT_MISMATCH, kit.order(order.id).reviewReason)
+        assertEquals(SubscriptionStatus.ACTIVE, sub(active.id).status)
+        assertEquals(2, kit.store.listSubscriptionOrders(active.id, 5).size)
+        assertEquals(2, kit.gateway.chargeCalls.size)
+    }
 }
