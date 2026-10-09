@@ -54,10 +54,11 @@ skeleton:
 ```
 
 Adapter modules expose the contract they implement with `api(project(...))`, so one line is enough:
-`payment-toss`/`payment-stripe` → `payment`, `notification-jdbc`/`-sse`/`-slack`/`-websocket` → `notification`,
+`payment-toss`/`payment-stripe`/`payment-jdbc` → `payment`, `notification-jdbc`/`-sse`/`-slack`/`-websocket` → `notification`,
 `storage-s3` → `storage`, `auth-social` → `auth`, `auth-social-google`/`-kakao`/`-naver`/`-oidc`/`-x` → `auth-social`,
 `redis-lock`/`-cache`/`-rate-limit` → `redis-core`, `board-jdbc` → `board`. You never edit a module to compose it.
 `board` alone has no storage — name `board-jdbc` too (`--modules board,board-jdbc`); `board` never depends on its adapter, as `notification` does not on `notification-jdbc`.
+`payment` alone is the provider facade with no order ledger and no tables — name `payment-jdbc` too (`--modules payment,payment-jdbc,payment-toss`) for orders, the event history and the delayed jobs (it also needs `job-queue-jdbc`, which it brings).
 
 Keep only the modules you use in `settings.gradle.kts` `include(...)` as well; delete the module directories you
 do not include (or leave them — unincluded directories are ignored by Gradle). `apps/workbench` can be deleted once
@@ -185,6 +186,7 @@ test proving a context with only that module (and its declared dependencies) boo
 | `notification-sse` | yes | nothing | — |
 | `notification-websocket` | yes (in-process simple broker; the endpoint is open until `authentication.enabled=true`) | a servlet web app | — |
 | `payment` | yes (routing only) | nothing | a provider module |
+| `payment-jdbc` | yes (turns the `payment` order ledger on) | a `DataSource` + one `db-*` module + `job-queue-jdbc` enabled (+ its migration `payment_ledger`, as above) | a provider module (`payment-toss`) to take money |
 | `payment-toss` / `payment-stripe` | off until `enabled=true` | nothing | secret key, internet |
 | `persistence-jdbc` | yes (the optional first-connection wait is off) | a `DataSource` + one `db-*` module | — |
 | `persistence-jpa` | yes | a `DataSource` + JPA starter | — |

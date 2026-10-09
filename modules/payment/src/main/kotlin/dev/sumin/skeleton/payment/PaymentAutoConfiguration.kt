@@ -11,7 +11,7 @@ class PaymentAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     fun paymentProviderRouter(
-        providers: List<PaymentProvider>,
+        providers: List<PaymentGateway>,
         properties: PaymentProperties,
     ): PaymentProviderRouter =
         PaymentProviderRouter(providers = providers, properties = properties)

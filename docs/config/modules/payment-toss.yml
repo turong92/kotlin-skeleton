@@ -1,12 +1,17 @@
-# payment-toss — 토스페이먼츠 제공자. 기본 꺼짐.
+# payment-toss — 토스페이먼츠 제공자(결제창 + API 개별 연동 키). 기본 꺼짐.
 skeleton:
   payment-toss:
-    enabled: false                                  # true + secret-key 면 제공자 빈이 생긴다
+    enabled: false                                  # true + secret-key 면 제공자 빈이 생긴다. 켰는데 secret-key 가 비면 빈이 없고, 보호 환경(skeleton.env=stage|prod)에서는 배포 가드가 기동을 막는다 (그 밖의 환경은 경고)
     provider-id: toss                               # 라우팅에서 쓰는 ID
-    client-name: payment-toss                       # 외부 HTTP 클라이언트 이름
-    secret-key: ""                                  # 토스 시크릿 키 (env 로 넘긴다)
+    client-name: payment-toss                       # 외부 HTTP 클라이언트 이름 (skeleton.http.clients.<이름>.response-timeout 이 승인 · 환불의 응답 제한)
+    secret-key: ""                                  # 토스 시크릿 키 test_sk_… / live_sk_… (env <P>_PAYMENT_TOSS_SECRET_KEY 로 넘긴다 — 배포 선언의 secrets:, 운영자 값). 보호 환경에서 비면 기동 실패
+    client-key: ""                                  # 결제창을 여는 공개 키 test_ck_… / live_ck_… — secret-key 와 같은 묶음(모드가 다르면 기동 실패). 비밀이 아니다 — env <P>_PAYMENT_TOSS_CLIENT_KEY(선언의 env:). 서버가 checkout 응답으로 프론트에 준다. 장부가 있는데 비면 보호 환경에서 기동 실패(그 밖은 경고, GET /config 가 available:false)
     base-url: https://api.tosspayments.com          # API 호스트
     confirm-path: /v1/payments/confirm              # 승인 경로
-    cancel-path: /v1/payments/{paymentKey}/cancel   # 취소 경로
+    cancel-path: /v1/payments/{paymentKey}/cancel   # 취소 · 환불 경로
+    lookup-path: /v1/payments/{paymentKey}          # 결제 키로 조회
+    lookup-by-order-path: /v1/payments/orders/{orderId}   # 주문 번호로 조회
+    lookup-timeout: 10s                             # 조회 한 번의 제한 시간(요청 단위 — 클라이언트 단위 응답 제한보다 짧을 때만 뜻이 있다). 환불 전 확인 조회는 이 시간 안에 한 번, 재시도 없음
+    allow-test-keys-in-protected-env: false         # true 면 skeleton.env=stage|prod 에서 테스트 키로 서는 것을 일부러 허락한다(경고로 내려간다)
     supported-currencies: [KRW]                     # 이 통화는 이 제공자로 라우팅
     supported-countries: [KR]                       # 이 국가는 이 제공자로 라우팅

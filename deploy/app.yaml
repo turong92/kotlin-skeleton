@@ -39,6 +39,7 @@ secrets:
   - SKELETON_AUTH_SOCIAL_PROVIDERS_NAVER_CLIENT_SECRET    # [auth-social-naver] 운영자 (.local.env)
   - SKELETON_CAPTCHA_TURNSTILE_SECRET_KEY                 # [captcha-turnstile] 운영자 (.local.env)
   - SKELETON_PAYMENT_TOSS_SECRET_KEY                      # [payment-toss] 운영자 (.local.env)
+  - SKELETON_PAYMENT_WEBHOOK_PATH_TOKEN                   # [payment] 운영자 (.local.env) — 결제사 개발자센터에 등록하는 웹훅 주소 끝의 비밀 조각, 24자 이상 (약하면 stage|prod 에서 기동 실패)
   - SKELETON_PAYMENT_STRIPE_SECRET_KEY                    # [payment-stripe] 운영자 (.local.env)
   - SKELETON_STORAGE_WEB_KEY_SECRET                       # [storage] 무작위로 충분 — OPAQUE 첨부 키의 HMAC 키(key-owner=OPAQUE 일 때만 필요, 안 쓰면 이 줄을 지운다; 바꾸면 발급한 OPAQUE 키가 맞지 않게 된다)
   - SKELETON_STORAGE_S3_CREDENTIALS_ACCESS_KEY_ID         # [storage-s3] 운영자 (.local.env)
@@ -58,7 +59,11 @@ secrets:
 #   [auth-social-kakao] (env:) SKELETON_AUTH_SOCIAL_PROVIDERS_KAKAO_ENABLED=true · _CLIENT_ID     켰는데 비면 기동 실패
 #   [auth-social-naver] (env:) SKELETON_AUTH_SOCIAL_PROVIDERS_NAVER_ENABLED=true · _CLIENT_ID     켰는데 비면 기동 실패
 #   [captcha-turnstile] (env:) SKELETON_CAPTCHA_TURNSTILE_ENABLED=true   비밀(secret key)이 비면 검증기 빈이 없다 (기동은 된다)
-#   [payment-toss] (env:) SKELETON_PAYMENT_TOSS_ENABLED=true   비밀이 비면 제공자 빈이 없다 (결제 라우팅이 그 제공자를 못 찾는다)
+#   [payment] SKELETON_PAYMENT_WEBHOOK_PATH_TOKEN   (비밀 — 운영자, secrets: 에 이름이 있다) 서명 없는 결제사(토스)의 웹훅 경로가 열리려면 필요 — 비면 그 경로는 늘 404, stage|prod 에서는 비었거나 약하면(24자 미만 등) 기동 실패. 웹훅 주소: https://<도메인>/api/v1/payments/webhooks/toss/<값>
+#   [payment] 선택 (env:) SKELETON_PAYMENT_ADMIN_ENABLED=true   운영자 경로(/api/v1/admin/payments)를 연다 — 기본 꺼짐(404)
+#   [payment] 위 변수들로 결제를 켠다 — 토스 승인 · 환불은 느릴 수 있어 앱의 application.yml 이 skeleton.http.clients.payment-toss.response-timeout 을 플랫폼 기본(5초)보다 길게 정한다(토스를 켰을 때 reconcile.first-delay · refund.settle-delay 가 이보다 길어야 기동). 토스를 안 켜면 앱은 뜨고 결제만 "지금은 결제할 수 없어요"
+#   [payment-jdbc] 설정 없음 — 결제 장부(주문 · 환불 · 웹훅 수신함 · 작업)는 이 모듈이 있어야 켜진다. 작업 큐 워커가 꺼져 있으면(skeleton.job-queue) 보호 환경에서 경고
+#   [payment-toss] (env:) SKELETON_PAYMENT_TOSS_ENABLED=true · SKELETON_PAYMENT_TOSS_CLIENT_KEY (비밀 아님)   시크릿 키가 비면 제공자 빈이 없다 — stage|prod 에서는 기동 실패 (그 밖은 경고). 장부가 있는데 클라이언트 키가 비면 stage|prod 에서 기동 실패
 #   [payment-stripe] (env:) SKELETON_PAYMENT_STRIPE_ENABLED=true   비밀이 비면 제공자 빈이 없다
 #   [storage] SKELETON_STORAGE_WEB_KEY_SECRET   key-owner=OPAQUE 인데 비었거나 32자보다 짧으면 기동 실패 (기본 ACCOUNT_ID 에서는 쓰지 않는다)
 #   [storage-s3] (env:) SKELETON_STORAGE_S3_BUCKET · _ENDPOINT_OVERRIDE   버킷이 비면 저장소 빈이 없다 · 키가 비면 AWS 기본 자격 증명 체인으로 가서 첫 사용에서 실패 (기동은 된다)

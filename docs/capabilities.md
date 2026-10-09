@@ -106,7 +106,8 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `notification-slack` | 알림과 @SlackException 예외 알림을 Slack 웹훅으로 보낸다. | `--modules notification-slack` | 슬랙 알림, 슬랙, 예외 알림 / slack notification, slack webhook, exception alert | — |
 | `notification-sse` | 알림을 Server-Sent Events 로 브라우저에 실시간 전달한다(GET /api/v1/notifications/sse) — 받는 사람이 정해진 알림은 그 사람에게만. | `--modules notification-sse` | 실시간 알림, SSE, 알림 즉시 표시, 푸시 알림, 서버 푸시 / realtime notification, sse, server-sent events, push notification | `@skeleton/realtime` |
 | `notification-websocket` | 알림을 STOMP over WebSocket(/ws/notifications)으로 전달한다 — 인증 · trace 인터셉터 · 하트비트를 갖춘 인프로세스 브로커. | `--modules notification-websocket` | 웹소켓, 실시간 알림, 양방향 통신, STOMP / websocket, stomp, realtime notification, two-way | `@skeleton/realtime` |
-| `payment` | 결제 계약 — PaymentService · PaymentProviderRouter(제공자는 payment-toss \| payment-stripe). 모듈이 HTTP 를 열지 않는다. | `--modules payment` — `payment-toss` \| `payment-stripe` 중 하나 이상 고른다 | 결제, 결제 승인, 환불, 결제 취소, 유료 / payment, checkout, refund, payment confirm, paid | `@skeleton/payment` |
+| `payment` | 결제 계약 + 장부 HTTP — PaymentService · PaymentProviderRouter(제공자는 payment-toss \| payment-stripe). 장부(payment-jdbc)가 있으면 사용자 경로(/api/v1/payments: 설정 · 주문 만들기(PaymentCatalog 빈이 있을 때) · 승인 · 환불 요청), 꺼 둔 운영자 경로(/api/v1/admin/payments), 결제사가 부르는 웹훅 수신 경로, 탈퇴 고리 · 내보내기 고리를 연다. | `--modules payment` — `payment-toss` \| `payment-stripe` 중 하나 이상 고른다 | 결제, 결제 승인, 환불, 결제 취소, 유료 / payment, checkout, refund, payment confirm, paid | `@skeleton/payment` |
+| `payment-jdbc` | 결제 장부 저장소 — PostgreSQL · MySQL 로 payment 의 저장 포트(PaymentLedgerStore)와 작업 포트(PaymentTasks, job-queue-jdbc 에 싣는다)를 구현한다(payment_* 표 4개 · 주문 줄 락 · 유니크 · check 제약). | `--modules payment-jdbc` | 결제 장부, 주문 장부, 결제 저장소, 결제 DB / payment ledger, payment storage, payment repository, order ledger | `@skeleton/payment` |
 | `payment-stripe` | Stripe 결제 제공자 — 결제 승인 · 취소를 payment 의 제공자로 구현한다. | `--modules payment-stripe` | 스트라이프 결제, 해외 결제, 카드 결제 / stripe, stripe payments, card payment, international payment | `@skeleton/payment` |
 | `payment-toss` | Toss 결제 제공자 — 결제 승인 · 취소를 payment 의 제공자로 구현한다. | `--modules payment-toss` | 토스 결제, 토스페이먼츠, 카드 결제, 간편 결제 / toss payments, toss, card payment | `@skeleton/payment` |
 | `persistence-jdbc` | Spring Data JDBC 의 audit 타임스탬프 콜백과 DB 방언 전략(SqlDialect · SqlDialectVerifier), DB 에 못 닿는 기동 실패를 읽을 수 있는 메시지로 바꾸는 분석기와 첫 연결을 기다리는 선택 기능. | 스타터(apps/api)에 기본 포함 | JDBC, Data JDBC, audit 시각, 생성일 수정일, DB 접근 / jdbc, spring data jdbc, audit timestamps, created at updated at | — |
@@ -127,7 +128,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | id | 요약 | 켜는 조각 | 키워드 (한국어 / 영어) | 짝 프런트 |
 |---|---|---|---|---|
 | `app-api` | 스타터 — 새 프로젝트가 복사해 시작하는 최소 조립(platform · auth · persistence-jdbc · db-postgresql · migration-flyway · time)과 HelloController 하나. Redis · Kafka · S3 · 메일 없이 부팅한다. | 스타터(apps/api)에 기본 포함 | 스타터, 시작 템플릿, 새 앱, 최소 구성, 기본 앱 / starter, boilerplate, minimal app, new app, template |  |
-| `app-sample` | 참조 앱 Notes — 로그인한 사람이 첨부 있는 노트를 관리하는 제품 모양의 작은 앱(스타터 + idempotency · notification-jdbc/sse · storage-s3 · job-queue-jdbc · board · author-profile · alert-jdbc). 로그인 아이디를 켜고 이메일은 쓰기 때 받는다. 새 기능은 이 앱의 한 조각을 따라 한다. | `--with-sample` | 참조 앱, 예제 앱, 샘플, 노트 앱, 제품 모양 예시 / sample app, reference app, example, notes app |  |
+| `app-sample` | 참조 앱 Notes — 로그인한 사람이 첨부 있는 노트를 관리하는 제품 모양의 작은 앱(스타터 + idempotency · notification-jdbc/sse · storage-s3 · job-queue-jdbc · board · author-profile · alert-jdbc · payment-jdbc/payment-toss 의 결제 「응원하기」). 로그인 아이디를 켜고 이메일은 쓰기 때 받는다. 새 기능은 이 앱의 한 조각을 따라 한다. | `--with-sample` | 참조 앱, 예제 앱, 샘플, 노트 앱, 제품 모양 예시, 결제 예제, 응원하기 / sample app, reference app, example, notes app, payment example, cheer |  |
 | `app-workbench` | 데모 — 모든 모듈을 함께 얹고 샘플 엔드포인트(/api/v1/skeleton · /api/v1/examples)와 통합 테스트로 모듈이 공존함을 증명한다(react-skeleton 워크벤치 화면의 백엔드). | `--with-workbench` | 워크벤치, 모듈 데모, 전체 모듈, 모든 모듈 함께 / workbench, demo, all modules, module smoke test |  |
 
 ### 스크립트 (`scripts/*`)
@@ -135,11 +136,12 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | id | 요약 | 켜는 조각 | 키워드 (한국어 / 영어) | 짝 프런트 |
 |---|---|---|---|---|
 | `script-build-capabilities` | capabilities.json 에서 docs/capabilities.md · llms.txt 를 생성하고(--check 로 어긋남 검사) 카탈로그를 정본 형식으로 정리한다. | (도구 — 켜는 조각 없음) | 기능 카탈로그, 카탈로그 생성, 카탈로그 점검, 기능 목록 / capabilities catalog, generate docs, catalog check, llms.txt | — |
-| `script-check-real-providers` | 진짜 소셜 로그인 · 진짜 메일 시험 전 점검 — .env.local 의 모양, 제공자 서버가 client id/secret 을 받아 주는지(가짜 코드로 한 번), 떠 있는 백엔드의 /auth/methods, SMTP 설정 · DNS(SPF/DMARC), 요청하면 시험 메일 한 통을 ✓/✗ 줄로 말한다. | (도구 — 켜는 조각 없음) | 소셜 로그인 점검, 메일 발송 점검, 구글 카카오 키 확인, 시험 메일 / check social login keys, smtp test mail, real provider readiness | — |
+| `script-check-real-providers` | 진짜 소셜 로그인 · 진짜 메일 · 진짜 토스 시험 전 점검 — .env.local 의 모양, 제공자 서버가 client id/secret 을 받아 주는지(가짜 코드로 한 번), 떠 있는 백엔드의 /auth/methods, SMTP 설정 · DNS(SPF/DMARC), 요청하면 시험 메일 한 통, 토스 테스트 키가 있으면 결제 장부가 기대는 응답(없는 결제의 조회 · 취소 · 멱등 키 · 응답 시간)을 돈이 움직이지 않는 호출 여섯 번(테스트 코드 헤더를 붙인 취소 포함)으로 ✓/✗ 줄로 말한다. | (도구 — 켜는 조각 없음) | 소셜 로그인 점검, 메일 발송 점검, 구글 카카오 키 확인, 시험 메일, 토스 키 점검 / check social login keys, smtp test mail, real provider readiness, toss test key check | — |
 | `script-dev` | 로컬 풀스택 한 줄 실행 — DB(+ 로컬 S3) 컨테이너를 올리고 백엔드를 띄운다. 옆의 ../web 프런트가 있으면 같이 띄운다. | (도구 — 켜는 조각 없음) | 로컬 실행, 개발 서버, 한 줄 실행, DB 띄우기 / run locally, dev server, local stack, start database | — |
 | `script-dev-sample` | 샘플 앱 Notes 풀스택 한 줄 실행 — DB + 로컬 S3 → 백엔드(apps/sample) → 짝 프런트(react-skeleton 의 apps/sample). | (도구 — 켜는 조각 없음) | 샘플 실행, 노트 앱 실행 / run sample, notes app | — |
 | `script-migrations-lock` | 동결된 Flyway 마이그레이션의 잠금(migrations.lock: 경로 + sha256 + 업그레이드 시험의 baseline)을 검사하고(--check) 새 파일만 더한다 — 기존 줄의 변경은 --rewrite <경로> 로만. | (도구 — 켜는 조각 없음) | 마이그레이션 잠금, 마이그레이션 동결, 체크섬 불일치, 마이그레이션 수정 금지 / migration lock, frozen migrations, flyway checksum, migrations.lock | — |
 | `script-new-project` | 새 프로젝트 한 줄 찍기 — 이 레포를 복사해 고른 모듈 · 앱만 남기고, 이름 · 접두사를 바꾸고, 배포 선언 · 설정 블록 · 이 카탈로그를 걸러 다시 쓴다(--dry-run 은 고른 모듈과 따라온 이유만 보인다). | (도구 — 켜는 조각 없음) | 새 프로젝트, 프로젝트 만들기, 찍어내기, 스캐폴딩, 프로젝트 시작 / new project, scaffold, stamp, template, project generator | — |
+| `script-payment-webhook` | 결제 웹훅을 손으로 넣어 본다 — 토스 PAYMENT_STATUS_CHANGED 모양의 본문을 떠 있는 서버의 수신함 주소로 보내 주소의 비밀 조각 · 재전송 중복 · 모르는 주문 · 본문 불신(서버가 결제사에 다시 조회)을 확인한다. 대상 서버는 늘 인자로 받는다. | (도구 — 켜는 조각 없음) | 웹훅 보내 보기, 결제 웹훅 시험, 수신함 시험, 토스 웹훅 / send test webhook, payment webhook check, toss webhook | — |
 | `script-rename-skeleton` | 패키지 · 설정 접두사 · 클래스 이름 · 환경변수 접두사를 한 번에 바꾸는 스크립트(GitHub Template 로 만든 뒤 이름만 바꿀 때) — 끝에 남은 흔적을 검사하고 이 카탈로그를 다시 만든다. | (도구 — 켜는 조각 없음) | 이름 바꾸기, 리네임, 패키지 변경, 템플릿 이름 바꾸기 / rename, change package, rename template, project name | — |
 | `script-sample-e2e-backend` | 샘플 앱 백엔드를 e2e 테스트용으로 올리고 내리는 비대화형 스크립트(react-skeleton 의 Playwright e2e 가 부른다). | (도구 — 켜는 조각 없음) | e2e 백엔드, e2e 테스트용 서버 / e2e backend, playwright backend | — |
 | `script-test-deploy-contract` | 홈서버 배포 계약(docs/deploy.md)을 진짜 컨테이너로 증명한다 — 이미지 빌드 · 헬스체크 · 0.0.0.0 · stdout 로그 · 보호 환경 가드 실패 화면. | (도구 — 켜는 조각 없음) | 배포 검증, 배포 계약 테스트, 컨테이너 검증 / deploy contract test, container check, image verification | — |
@@ -716,20 +718,40 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 인스턴스가 여러 개면 인프로세스 브로커
 - 키워드: 웹소켓, 실시간 알림, 양방향 통신, STOMP / websocket, stomp, realtime notification, two-way
 
-### `payment` — 결제 계약 — PaymentService · PaymentProviderRouter(제공자는 payment-toss | payment-stripe). 모듈이 HTTP 를 열지 않는다.
+### `payment` — 결제 계약 + 장부 HTTP — PaymentService · PaymentProviderRouter(제공자는 payment-toss | payment-stripe). 장부(payment-jdbc)가 있으면 사용자 경로(/api/v1/payments: 설정 · 주문 만들기(PaymentCatalog 빈이 있을 때) · 승인 · 환불 요청), 꺼 둔 운영자 경로(/api/v1/admin/payments), 결제사가 부르는 웹훅 수신 경로, 탈퇴 고리 · 내보내기 고리를 연다.
 
 - 종류 · 상태: module · experimental — 위치 `modules/payment`
 - 켜는 법: `--modules payment` — `payment-toss` | `payment-stripe` 중 하나 이상 고른다
 - 의존 한 줄: `implementation(project(":modules:payment"))`
 - 하나 이상 고른다: `payment-toss` | `payment-stripe`
 - 설정 접두사 `skeleton.payment` — 키와 기본값 `docs/config/modules/payment.yml`
+- HTTP 경로: `/api/v1/payments`, `/api/v1/admin/payments`, `/api/v1/payments/webhooks`
+- 비밀 · 환경변수: `<P>_PAYMENT_WEBHOOK_PATH_TOKEN` — 빠지면: 서명 없는 결제사(토스의 결제 이벤트)의 웹훅 경로가 늘 404 이다 — 보호 환경(stage · prod)에서는 비었거나 약하면(24자 미만) 기동 실패
 - 문서: `docs/modules/payment.md`
 - 짝 프런트(react-skeleton): 항목 `payment` · 패키지 `@skeleton/payment` · 조각 `--packages payment`
 - 쓰지 않는 경우:
-  - HTTP 엔드포인트가 없다 — 주문 · 금액 검증 · 성공/실패 리다이렉트 컨트롤러는 앱 코드(금액 검증 없는 확정 엔드포인트를 기본값으로 만들지 않으려고)
+  - 금액은 앱의 PaymentCatalog 빈이 정한다 — 브라우저가 금액을 정하는 길은 없다(카탈로그 빈이 없으면 주문 만들기 경로가 열리지 않는다)
+  - 운영자 경로(skeleton.payment.admin.enabled)는 기본 꺼짐이고, 켜면 PaymentOperatorPolicy(기본: 토큰의 ADMIN 역할)를 매 호출 확인한다
+  - 본인은 환불을 요청만 한다 — 돈을 움직이는 환불 · 승인은 운영자 경로뿐이다
   - 구독 · 정기 결제 관리는 없다
   - 제공자 모듈 없이는 결제할 수 없다
+  - 재시작에 남는 주문 장부(주문 · 환불 · 이력 · 수신함 · 뒷일 작업)는 payment-jdbc 를 같이 골라야 켜진다 — 없으면 결제 승인 파사드뿐이고 HTTP 도 열리지 않는다
 - 키워드: 결제, 결제 승인, 환불, 결제 취소, 유료 / payment, checkout, refund, payment confirm, paid
+
+### `payment-jdbc` — 결제 장부 저장소 — PostgreSQL · MySQL 로 payment 의 저장 포트(PaymentLedgerStore)와 작업 포트(PaymentTasks, job-queue-jdbc 에 싣는다)를 구현한다(payment_* 표 4개 · 주문 줄 락 · 유니크 · check 제약).
+
+- 종류 · 상태: module · experimental — 위치 `modules/payment-jdbc`
+- 켜는 법: `--modules payment-jdbc`
+- 의존 한 줄: `implementation(project(":modules:payment-jdbc"))`
+- 자동으로 따라온다: `payment`
+- 문서: `docs/modules/payment-jdbc.md`
+- 짝 프런트(react-skeleton): 항목 `payment` · 패키지 `@skeleton/payment` · 조각 `--packages payment`
+- 쓰지 않는 경우:
+  - payment 없이는 쓰지 않는다(따라온다)
+  - 결제사 모듈(payment-toss | payment-stripe)이 따로 필요하다 — 이 모듈은 저장소다
+  - job-queue-jdbc 가 켜져 있어야 한다(꺼 두면 시작에 실패한다)
+  - 다른 DB(JPA · jOOQ)로 저장하려면 payment 의 저장 포트(PaymentLedgerStore · PaymentTasks)를 앱이 구현한다
+- 키워드: 결제 장부, 주문 장부, 결제 저장소, 결제 DB / payment ledger, payment storage, payment repository, order ledger
 
 ### `payment-stripe` — Stripe 결제 제공자 — 결제 승인 · 취소를 payment 의 제공자로 구현한다.
 
@@ -754,7 +776,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 의존 한 줄: `implementation(project(":modules:payment-toss"))`
 - 자동으로 따라온다: `payment`
 - 설정 접두사 `skeleton.payment-toss` — 키와 기본값 `docs/config/modules/payment-toss.yml`
-- 비밀 · 환경변수: `<P>_PAYMENT_TOSS_ENABLED=true`, `<P>_PAYMENT_TOSS_SECRET_KEY` — 빠지면: 제공자 빈이 없다 — 결제 라우팅이 그 제공자를 못 찾는다
+- 비밀 · 환경변수: `<P>_PAYMENT_TOSS_ENABLED=true`, `<P>_PAYMENT_TOSS_SECRET_KEY` — 빠지면: 제공자 빈이 없다 — 결제 라우팅이 그 제공자를 못 찾는다. 시크릿 키가 비면 보호 환경(stage · prod)에서는 기동 실패, 그 밖의 환경은 경고
 - 문서: `docs/modules/payment-toss.md`
 - 짝 프런트(react-skeleton): 항목 `payment` · 패키지 `@skeleton/payment` · 조각 `--packages payment`
 - 쓰지 않는 경우:
@@ -933,24 +955,24 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 제품 코드는 모듈 내부가 아니라 앱 패키지(루트 패키지의 app.api 하위)에 둔다
 - 키워드: 스타터, 시작 템플릿, 새 앱, 최소 구성, 기본 앱 / starter, boilerplate, minimal app, new app, template
 
-### `app-sample` — 참조 앱 Notes — 로그인한 사람이 첨부 있는 노트를 관리하는 제품 모양의 작은 앱(스타터 + idempotency · notification-jdbc/sse · storage-s3 · job-queue-jdbc · board · author-profile · alert-jdbc). 로그인 아이디를 켜고 이메일은 쓰기 때 받는다. 새 기능은 이 앱의 한 조각을 따라 한다.
+### `app-sample` — 참조 앱 Notes — 로그인한 사람이 첨부 있는 노트를 관리하는 제품 모양의 작은 앱(스타터 + idempotency · notification-jdbc/sse · storage-s3 · job-queue-jdbc · board · author-profile · alert-jdbc · payment-jdbc/payment-toss 의 결제 「응원하기」). 로그인 아이디를 켜고 이메일은 쓰기 때 받는다. 새 기능은 이 앱의 한 조각을 따라 한다.
 
 - 종류 · 상태: app · stable — 위치 `apps/sample`
 - 켜는 법: `--with-sample`
-- 자동으로 따라온다: `alert-jdbc`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `board`, `board-jdbc`, `crypto`, `json`, `notification`, `notification-jdbc`, `notification-sse`, `storage`, `storage-s3`
-- HTTP 경로: `/api/v1/notes`
+- 자동으로 따라온다: `alert-jdbc`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `board`, `board-jdbc`, `crypto`, `json`, `notification`, `notification-jdbc`, `notification-sse`, `payment`, `payment-jdbc`, `payment-toss`, `storage`, `storage-s3`
+- HTTP 경로: `/api/v1/cheers`, `/api/v1/notes`
 - 문서: `docs/sample.md`
 - 짝 프런트(react-skeleton): 항목 `app-sample` · 조각 `--with-sample`
 - 쓰지 않는 경우:
   - 복사 대상이 아니라 따라 하는 참조 — 쓰지 않을 기능은 지운다
   - PostgreSQL 전용이다(--db mysql 과 함께 쓸 수 없다)
-- 키워드: 참조 앱, 예제 앱, 샘플, 노트 앱, 제품 모양 예시 / sample app, reference app, example, notes app
+- 키워드: 참조 앱, 예제 앱, 샘플, 노트 앱, 제품 모양 예시, 결제 예제, 응원하기 / sample app, reference app, example, notes app, payment example, cheer
 
 ### `app-workbench` — 데모 — 모든 모듈을 함께 얹고 샘플 엔드포인트(/api/v1/skeleton · /api/v1/examples)와 통합 테스트로 모듈이 공존함을 증명한다(react-skeleton 워크벤치 화면의 백엔드).
 
 - 종류 · 상태: app · stable — 위치 `apps/workbench`
 - 켜는 법: `--with-workbench`
-- 자동으로 따라온다: `alert-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `board`, `board-jdbc`, `config-aws-ssm`, `crypto`, `db-mysql`, `event-kafka`, `json`, `notification`, `notification-jdbc`, `notification-slack`, `notification-sse`, `notification-websocket`, `payment`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `scheduler`, `storage`, `storage-s3`
+- 자동으로 따라온다: `alert-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `board`, `board-jdbc`, `config-aws-ssm`, `crypto`, `db-mysql`, `event-kafka`, `json`, `notification`, `notification-jdbc`, `notification-slack`, `notification-sse`, `notification-websocket`, `payment`, `payment-jdbc`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `scheduler`, `storage`, `storage-s3`
 - HTTP 경로: `/api/v1`, `/api/v1/examples`, `/api/v1/skeleton`, `/api/v1/skeleton/enums`, `/api/v1/skeleton/json`, `/api/v1/skeleton/payments`, `/api/v1/skeleton/polymorphic/contents`
 - 문서: `docs/minimal-composition.md`, `docs/modules/README.md`
 - 짝 프런트(react-skeleton): 항목 `app-workbench` · 조각 `--with-workbench`
@@ -969,7 +991,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 항목 검증(레포의 실제와 맞는가)은 modules/platform 의 Capabilities*Test — 이 스크립트는 생성만 한다
 - 키워드: 기능 카탈로그, 카탈로그 생성, 카탈로그 점검, 기능 목록 / capabilities catalog, generate docs, catalog check, llms.txt
 
-### `script-check-real-providers` — 진짜 소셜 로그인 · 진짜 메일 시험 전 점검 — .env.local 의 모양, 제공자 서버가 client id/secret 을 받아 주는지(가짜 코드로 한 번), 떠 있는 백엔드의 /auth/methods, SMTP 설정 · DNS(SPF/DMARC), 요청하면 시험 메일 한 통을 ✓/✗ 줄로 말한다.
+### `script-check-real-providers` — 진짜 소셜 로그인 · 진짜 메일 · 진짜 토스 시험 전 점검 — .env.local 의 모양, 제공자 서버가 client id/secret 을 받아 주는지(가짜 코드로 한 번), 떠 있는 백엔드의 /auth/methods, SMTP 설정 · DNS(SPF/DMARC), 요청하면 시험 메일 한 통, 토스 테스트 키가 있으면 결제 장부가 기대는 응답(없는 결제의 조회 · 취소 · 멱등 키 · 응답 시간)을 돈이 움직이지 않는 호출 여섯 번(테스트 코드 헤더를 붙인 취소 포함)으로 ✓/✗ 줄로 말한다.
 
 - 종류 · 상태: script · stable — 위치 `scripts/check-real-providers.sh`
 - 켜는 법: (도구 — 켜는 조각 없음)
@@ -977,7 +999,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 쓰지 않는 경우:
   - 제공자 화면에서 사람이 동의를 누르는 구간은 확인하지 못한다 (docs/real-provider-setup.md 의 시험 순서)
   - 가짜 서버로 이 스크립트 자신을 시험하려면 --self-test
-- 키워드: 소셜 로그인 점검, 메일 발송 점검, 구글 카카오 키 확인, 시험 메일 / check social login keys, smtp test mail, real provider readiness
+- 키워드: 소셜 로그인 점검, 메일 발송 점검, 구글 카카오 키 확인, 시험 메일, 토스 키 점검 / check social login keys, smtp test mail, real provider readiness, toss test key check
 
 ### `script-dev` — 로컬 풀스택 한 줄 실행 — DB(+ 로컬 S3) 컨테이너를 올리고 백엔드를 띄운다. 옆의 ../web 프런트가 있으면 같이 띄운다.
 
@@ -1019,6 +1041,16 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 기존 프로젝트에 모듈을 더하는 도구가 아니다 — apps/api 에 의존 한 줄
   - 프런트는 react-skeleton 의 같은 이름 스크립트
 - 키워드: 새 프로젝트, 프로젝트 만들기, 찍어내기, 스캐폴딩, 프로젝트 시작 / new project, scaffold, stamp, template, project generator
+
+### `script-payment-webhook` — 결제 웹훅을 손으로 넣어 본다 — 토스 PAYMENT_STATUS_CHANGED 모양의 본문을 떠 있는 서버의 수신함 주소로 보내 주소의 비밀 조각 · 재전송 중복 · 모르는 주문 · 본문 불신(서버가 결제사에 다시 조회)을 확인한다. 대상 서버는 늘 인자로 받는다.
+
+- 종류 · 상태: script · stable — 위치 `scripts/payment-webhook.sh`
+- 켜는 법: (도구 — 켜는 조각 없음)
+- 문서: `docs/real-provider-setup.md`
+- 쓰지 않는 경우:
+  - 토스가 보내는 진짜 웹훅의 모양은 확인하지 못한다 — 본문 모양은 가정이다 (docs/real-provider-setup.md 의 검증 기록)
+  - 서버가 처리한 결과는 이 스크립트가 보지 못한다 — 서버 로그의 'payment webhook result=' 줄과 운영자 수신함을 본다
+- 키워드: 웹훅 보내 보기, 결제 웹훅 시험, 수신함 시험, 토스 웹훅 / send test webhook, payment webhook check, toss webhook
 
 ### `script-rename-skeleton` — 패키지 · 설정 접두사 · 클래스 이름 · 환경변수 접두사를 한 번에 바꾸는 스크립트(GitHub Template 로 만든 뒤 이름만 바꿀 때) — 끝에 남은 흔적을 검사하고 이 카탈로그를 다시 만든다.
 

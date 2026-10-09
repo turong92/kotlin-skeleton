@@ -194,6 +194,11 @@ if in_list author-profile "$SELECTED_SORTED" && ! in_list author-profile-jdbc "$
   NOTES="${NOTES:+$NOTES$'\n'}author-profile has no storage of its own: add author-profile-jdbc too (--modules author-profile,author-profile-jdbc) unless you implement its AuthorProfileRepository port yourself — without it the app fails to start"
 fi
 
+# payment 도 저장소를 모른다 (payment-jdbc 가 포트를 구현한다) — 없어도 앱은 뜬다: 결제 승인 파사드뿐이고 주문 장부(표)가 없다
+if in_list payment "$SELECTED_SORTED" && ! in_list payment-jdbc "$SELECTED_SORTED"; then
+  NOTES="${NOTES:+$NOTES$'\n'}payment alone is the provider facade with no order ledger and no tables: add payment-jdbc too (--modules payment,payment-jdbc,payment-toss) to get orders, the event history and the delayed jobs"
+fi
+
 echo "→ $TARGET"
 echo "  package $PKG, prefix $PREFIX, class prefix $CLASS, db $DB$([ "$WITH_WORKBENCH" = 1 ] && echo ', with workbench')$([ "$WITH_SAMPLE" = 1 ] && echo ', with sample')"
 echo "  modules ($(printf '%s\n' "$SELECTED_SORTED" | wc -l | tr -d ' ')): $(printf '%s\n' "$SELECTED_SORTED" | tr '\n' ' ')"
@@ -236,11 +241,22 @@ while IFS= read -r m; do
   [ -n "$m" ] || continue
   rm -rf "modules/$m" "docs/config/modules/$m.yml" "docs/modules/$m.md"
   [ "$m" != author-profile ] || rm -f docs/author-profile-http-contract.md   # 프론트 계약 문서는 모듈을 고른 프로젝트에만 남는다
+  [ "$m" != payment ] || rm -f docs/payment-http-contract.md
+  # 토스 손 시험 도구 · 안내 문서의 토스 구역(제목 조각 · 목차 줄 · ## 11 본문 — 각각 <!-- payment-toss:start --> … <!-- payment-toss:end --> 표식으로 감쌌다)은 payment-toss 를 고른 프로젝트에만 남는다 — payment 를 안 고르면 payment-toss 도 빠지므로 둘 다 이 줄이 덮는다. 카탈로그 항목은 스크립트 파일이 없으면 stamp-capabilities.pl 이 거른다
+  if [ "$m" = payment-toss ]; then
+    rm -f scripts/payment-webhook.sh
+    # 표식이 줄 하나를 통째로 차지하면 그 줄들까지, 줄 안에 있으면 표식 사이만 지운다 (뒤에 다른 절이 생겨도 같이 잘리지 않는다)
+    [ ! -f docs/real-provider-setup.md ] || perl -0pi -e 's/^<!-- payment-toss:start -->\n.*?^<!-- payment-toss:end -->\n//gms; s/<!-- payment-toss:start -->.*?<!-- payment-toss:end -->//gs; s/\n+\z/\n/' docs/real-provider-setup.md
+  fi
   M="$m" perl -ni -e 'print unless /^include\(":modules:\Q$ENV{M}\E"\)\s*$/' settings.gradle.kts
   [ ! -f docs/modules/README.md ] || M="$m" perl -ni -e 'print unless /\]\(\Q$ENV{M}\E\.md\)/' docs/modules/README.md
 done <<EOF
 $REMOVED
 EOF
+# payment-toss 를 고른 프로젝트: 안내 문서의 표식 줄 · 표식만 걷어 낸다
+if ! grep -qx payment-toss <<<"$REMOVED"; then
+  [ ! -f docs/real-provider-setup.md ] || perl -0pi -e 's/^<!-- payment-toss:(start|end) -->\n//gm; s/<!-- payment-toss:(start|end) -->//g' docs/real-provider-setup.md
+fi
 
 # 루트 build.gradle.kts: DB 통합 테스트 묶음 (선택된 모듈 · 선택된 방언만)
 DB_TEST_MODULES=""

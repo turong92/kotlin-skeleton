@@ -32,6 +32,8 @@ dependencies {
     implementation(project(":modules:auth-social-oidc"))   // 범용 OpenID Connect (LINE 프리셋 포함)
     implementation(project(":modules:auth-social-x"))      // X(Twitter) OAuth 2.0 + PKCE
     implementation(project(":modules:notification-mail")) // 계정 메일(인증 · 재설정 · 매직 링크). 로컬은 compose mail 프로필(mailpit)이 받는다
+    implementation(project(":modules:payment-jdbc"))       // 결제 장부: 주문 · 승인 · 환불 · 웹훅 수신함 (+ payment: /api/v1/payments, 운영자 /api/v1/admin/payments). 상품은 cheer/ 의 PaymentCatalog — docs/sample.md
+    implementation(project(":modules:payment-toss"))       // 토스페이먼츠 — 꺼진 채 시작한다: SKELETON_PAYMENT_TOSS_ENABLED=true + 키 둘 (docs/real-provider-setup.md). 안 켜면 결제 화면은 "지금은 결제할 수 없어요"
     implementation(project(":modules:alert-jdbc"))         // 주인 경보 (+ alert) — 5xx 몰림 · 죽은 작업을 Discord 웹훅으로. 웹훅 주소가 없으면 아무것도 안 보낸다
 
     implementation("org.springframework.boot:spring-boot-starter-actuator")
@@ -48,6 +50,7 @@ dependencies {
     developmentOnly("org.springframework.boot:spring-boot-devtools")
 
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
+    testImplementation(testFixtures(project(":modules:payment")))   // ScriptedGateway — 결제 통합 시험의 가짜 결제사 (시험 소스에만 있다)
     testImplementation("org.springframework.boot:spring-boot-testcontainers")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
     testImplementation("org.testcontainers:testcontainers-junit-jupiter")

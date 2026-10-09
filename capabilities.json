@@ -1530,7 +1530,7 @@
       "module": "payment",
       "path": "modules/payment",
       "status": "experimental",
-      "summary": "결제 계약 — PaymentService · PaymentProviderRouter(제공자는 payment-toss | payment-stripe). 모듈이 HTTP 를 열지 않는다.",
+      "summary": "결제 계약 + 장부 HTTP — PaymentService · PaymentProviderRouter(제공자는 payment-toss | payment-stripe). 장부(payment-jdbc)가 있으면 사용자 경로(/api/v1/payments: 설정 · 주문 만들기(PaymentCatalog 빈이 있을 때) · 승인 · 환불 요청), 꺼 둔 운영자 경로(/api/v1/admin/payments), 결제사가 부르는 웹훅 수신 경로, 탈퇴 고리 · 내보내기 고리를 연다.",
       "starter": false,
       "newProjectFlag": "--modules payment",
       "autoIncludes": [],
@@ -1543,8 +1543,13 @@
         "prefixes": ["skeleton.payment"],
         "snippet": "docs/config/modules/payment.yml"
       },
-      "basePaths": [],
-      "secrets": [],
+      "basePaths": ["/api/v1/payments", "/api/v1/admin/payments", "/api/v1/payments/webhooks"],
+      "secrets": [
+        {
+          "env": ["<P>_PAYMENT_WEBHOOK_PATH_TOKEN"],
+          "whenMissing": "서명 없는 결제사(토스의 결제 이벤트)의 웹훅 경로가 늘 404 이다 — 보호 환경(stage · prod)에서는 비었거나 약하면(24자 미만) 기동 실패"
+        }
+      ],
       "docs": ["docs/modules/payment.md"],
       "frontend": {
         "capabilities": ["payment"],
@@ -1552,13 +1557,51 @@
         "packages": ["@skeleton/payment"]
       },
       "notFor": [
-        "HTTP 엔드포인트가 없다 — 주문 · 금액 검증 · 성공/실패 리다이렉트 컨트롤러는 앱 코드(금액 검증 없는 확정 엔드포인트를 기본값으로 만들지 않으려고)",
+        "금액은 앱의 PaymentCatalog 빈이 정한다 — 브라우저가 금액을 정하는 길은 없다(카탈로그 빈이 없으면 주문 만들기 경로가 열리지 않는다)",
+        "운영자 경로(skeleton.payment.admin.enabled)는 기본 꺼짐이고, 켜면 PaymentOperatorPolicy(기본: 토큰의 ADMIN 역할)를 매 호출 확인한다",
+        "본인은 환불을 요청만 한다 — 돈을 움직이는 환불 · 승인은 운영자 경로뿐이다",
         "구독 · 정기 결제 관리는 없다",
-        "제공자 모듈 없이는 결제할 수 없다"
+        "제공자 모듈 없이는 결제할 수 없다",
+        "재시작에 남는 주문 장부(주문 · 환불 · 이력 · 수신함 · 뒷일 작업)는 payment-jdbc 를 같이 골라야 켜진다 — 없으면 결제 승인 파사드뿐이고 HTTP 도 열리지 않는다"
       ],
       "keywords": {
         "ko": ["결제", "결제 승인", "환불", "결제 취소", "유료"],
         "en": ["payment", "checkout", "refund", "payment confirm", "paid"]
+      }
+    },
+    {
+      "id": "payment-jdbc",
+      "kind": "module",
+      "module": "payment-jdbc",
+      "path": "modules/payment-jdbc",
+      "status": "experimental",
+      "summary": "결제 장부 저장소 — PostgreSQL · MySQL 로 payment 의 저장 포트(PaymentLedgerStore)와 작업 포트(PaymentTasks, job-queue-jdbc 에 싣는다)를 구현한다(payment_* 표 4개 · 주문 줄 락 · 유니크 · check 제약).",
+      "starter": false,
+      "newProjectFlag": "--modules payment-jdbc",
+      "autoIncludes": ["payment"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/payment-jdbc.md"],
+      "frontend": {
+        "capabilities": ["payment"],
+        "newProjectFlag": "--packages payment",
+        "packages": ["@skeleton/payment"]
+      },
+      "notFor": [
+        "payment 없이는 쓰지 않는다(따라온다)",
+        "결제사 모듈(payment-toss | payment-stripe)이 따로 필요하다 — 이 모듈은 저장소다",
+        "job-queue-jdbc 가 켜져 있어야 한다(꺼 두면 시작에 실패한다)",
+        "다른 DB(JPA · jOOQ)로 저장하려면 payment 의 저장 포트(PaymentLedgerStore · PaymentTasks)를 앱이 구현한다"
+      ],
+      "keywords": {
+        "ko": ["결제 장부", "주문 장부", "결제 저장소", "결제 DB"],
+        "en": ["payment ledger", "payment storage", "payment repository", "order ledger"]
       }
     },
     {
@@ -1622,7 +1665,7 @@
       "secrets": [
         {
           "env": ["<P>_PAYMENT_TOSS_ENABLED=true", "<P>_PAYMENT_TOSS_SECRET_KEY"],
-          "whenMissing": "제공자 빈이 없다 — 결제 라우팅이 그 제공자를 못 찾는다"
+          "whenMissing": "제공자 빈이 없다 — 결제 라우팅이 그 제공자를 못 찾는다. 시크릿 키가 비면 보호 환경(stage · prod)에서는 기동 실패, 그 밖의 환경은 경고"
         }
       ],
       "docs": ["docs/modules/payment-toss.md"],
@@ -2102,7 +2145,7 @@
       "module": null,
       "path": "apps/sample",
       "status": "stable",
-      "summary": "참조 앱 Notes — 로그인한 사람이 첨부 있는 노트를 관리하는 제품 모양의 작은 앱(스타터 + idempotency · notification-jdbc/sse · storage-s3 · job-queue-jdbc · board · author-profile · alert-jdbc). 로그인 아이디를 켜고 이메일은 쓰기 때 받는다. 새 기능은 이 앱의 한 조각을 따라 한다.",
+      "summary": "참조 앱 Notes — 로그인한 사람이 첨부 있는 노트를 관리하는 제품 모양의 작은 앱(스타터 + idempotency · notification-jdbc/sse · storage-s3 · job-queue-jdbc · board · author-profile · alert-jdbc · payment-jdbc/payment-toss 의 결제 「응원하기」). 로그인 아이디를 켜고 이메일은 쓰기 때 받는다. 새 기능은 이 앱의 한 조각을 따라 한다.",
       "starter": false,
       "newProjectFlag": "--with-sample",
       "autoIncludes": [
@@ -2122,6 +2165,9 @@
         "notification",
         "notification-jdbc",
         "notification-sse",
+        "payment",
+        "payment-jdbc",
+        "payment-toss",
         "storage",
         "storage-s3"
       ],
@@ -2131,7 +2177,7 @@
         "optional": []
       },
       "config": null,
-      "basePaths": ["/api/v1/notes"],
+      "basePaths": ["/api/v1/cheers", "/api/v1/notes"],
       "secrets": [],
       "docs": ["docs/sample.md"],
       "frontend": {
@@ -2141,8 +2187,8 @@
       },
       "notFor": ["복사 대상이 아니라 따라 하는 참조 — 쓰지 않을 기능은 지운다", "PostgreSQL 전용이다(--db mysql 과 함께 쓸 수 없다)"],
       "keywords": {
-        "ko": ["참조 앱", "예제 앱", "샘플", "노트 앱", "제품 모양 예시"],
-        "en": ["sample app", "reference app", "example", "notes app"]
+        "ko": ["참조 앱", "예제 앱", "샘플", "노트 앱", "제품 모양 예시", "결제 예제", "응원하기"],
+        "en": ["sample app", "reference app", "example", "notes app", "payment example", "cheer"]
       }
     },
     {
@@ -2179,6 +2225,7 @@
         "notification-sse",
         "notification-websocket",
         "payment",
+        "payment-jdbc",
         "payment-stripe",
         "payment-toss",
         "persistence-jooq",
@@ -2255,7 +2302,7 @@
       "module": null,
       "path": "scripts/check-real-providers.sh",
       "status": "stable",
-      "summary": "진짜 소셜 로그인 · 진짜 메일 시험 전 점검 — .env.local 의 모양, 제공자 서버가 client id/secret 을 받아 주는지(가짜 코드로 한 번), 떠 있는 백엔드의 /auth/methods, SMTP 설정 · DNS(SPF/DMARC), 요청하면 시험 메일 한 통을 ✓/✗ 줄로 말한다.",
+      "summary": "진짜 소셜 로그인 · 진짜 메일 · 진짜 토스 시험 전 점검 — .env.local 의 모양, 제공자 서버가 client id/secret 을 받아 주는지(가짜 코드로 한 번), 떠 있는 백엔드의 /auth/methods, SMTP 설정 · DNS(SPF/DMARC), 요청하면 시험 메일 한 통, 토스 테스트 키가 있으면 결제 장부가 기대는 응답(없는 결제의 조회 · 취소 · 멱등 키 · 응답 시간)을 돈이 움직이지 않는 호출 여섯 번(테스트 코드 헤더를 붙인 취소 포함)으로 ✓/✗ 줄로 말한다.",
       "starter": false,
       "newProjectFlag": null,
       "autoIncludes": [],
@@ -2274,8 +2321,8 @@
         "가짜 서버로 이 스크립트 자신을 시험하려면 --self-test"
       ],
       "keywords": {
-        "ko": ["소셜 로그인 점검", "메일 발송 점검", "구글 카카오 키 확인", "시험 메일"],
-        "en": ["check social login keys", "smtp test mail", "real provider readiness"]
+        "ko": ["소셜 로그인 점검", "메일 발송 점검", "구글 카카오 키 확인", "시험 메일", "토스 키 점검"],
+        "en": ["check social login keys", "smtp test mail", "real provider readiness", "toss test key check"]
       }
     },
     {
@@ -2387,6 +2434,35 @@
       "keywords": {
         "ko": ["새 프로젝트", "프로젝트 만들기", "찍어내기", "스캐폴딩", "프로젝트 시작"],
         "en": ["new project", "scaffold", "stamp", "template", "project generator"]
+      }
+    },
+    {
+      "id": "script-payment-webhook",
+      "kind": "script",
+      "module": null,
+      "path": "scripts/payment-webhook.sh",
+      "status": "stable",
+      "summary": "결제 웹훅을 손으로 넣어 본다 — 토스 PAYMENT_STATUS_CHANGED 모양의 본문을 떠 있는 서버의 수신함 주소로 보내 주소의 비밀 조각 · 재전송 중복 · 모르는 주문 · 본문 불신(서버가 결제사에 다시 조회)을 확인한다. 대상 서버는 늘 인자로 받는다.",
+      "starter": false,
+      "newProjectFlag": null,
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/real-provider-setup.md"],
+      "frontend": null,
+      "notFor": [
+        "토스가 보내는 진짜 웹훅의 모양은 확인하지 못한다 — 본문 모양은 가정이다 (docs/real-provider-setup.md 의 검증 기록)",
+        "서버가 처리한 결과는 이 스크립트가 보지 못한다 — 서버 로그의 'payment webhook result=' 줄과 운영자 수신함을 본다"
+      ],
+      "keywords": {
+        "ko": ["웹훅 보내 보기", "결제 웹훅 시험", "수신함 시험", "토스 웹훅"],
+        "en": ["send test webhook", "payment webhook check", "toss webhook"]
       }
     },
     {

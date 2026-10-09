@@ -6,7 +6,12 @@ import dev.sumin.skeleton.account.abuse.AccountTaskRunner
 import dev.sumin.skeleton.account.mail.AccountMail
 import dev.sumin.skeleton.account.mail.AccountMailer
 import dev.sumin.skeleton.account.mail.MailKind
+import dev.sumin.skeleton.app.sample.cheer.CheerIntegrationBase
+import dev.sumin.skeleton.app.sample.cheer.WEBHOOK_TOKEN
 import dev.sumin.skeleton.app.sample.notes.FakePresignedStorage
+import dev.sumin.skeleton.payment.PaymentAmount
+import dev.sumin.skeleton.payment.PaymentCard
+import dev.sumin.skeleton.payment.testing.ScriptedGateway
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.test.assertEquals
@@ -30,10 +35,17 @@ import org.springframework.test.web.servlet.post
  * 삭제된 계정의 게시판 글은 "삭제된 사용자" 로 남는다 (board 의 AccountErasureListener).
  * 이 앱은 로그인 아이디를 켠 채다(`login-id.enabled`): 가입에서 아이디를 받고 → 아이디로 로그인 → 이메일을 바꿔도 같은 아이디로 로그인 → 아이디 찾기 메일 →
  * 탈퇴한 뒤 그 아이디는 실시간 확인에서 "쓸 수 없음", 가입에서 409, 어느 표에도 원문이 남지 않는다 (스펙 §16 조립 — 아이디).
+ * 결제 장부(스펙 §8 · §13.2): 탈퇴한 계정의 응원 기록은 지워지고, 장부의 주문 줄은 남되 **카드 두 칸(`card_issuer` · `card_last4`)이 비워지며**, 심은 값(웹훅 본문의 이름 · 번호)은 어느 표에도 없고,
+ * 탈퇴 뒤에도 운영자는 그 주문을 환불할 수 있다. 결제사는 시험 소스의 [ScriptedGateway] 다.
  */
-@SpringBootTest(properties = ["spring.config.import=classpath:test-seeds.yml", "skeleton.account.mail.link-base-url=https://app.example.com", "skeleton.auth-session.reuse-grace=0s"])
+@SpringBootTest(
+    properties = [
+        "spring.config.import=classpath:test-seeds.yml", "skeleton.account.mail.link-base-url=https://app.example.com", "skeleton.auth-session.reuse-grace=0s",
+        "skeleton.payment.admin.enabled=true", "skeleton.payment.webhook.path-token=$WEBHOOK_TOKEN",
+    ],
+)
 @AutoConfigureMockMvc
-@Import(TestcontainersConfiguration::class, AccountJourneyIntegrationTest.Mails::class, AccountJourneyIntegrationTest.Storage::class)
+@Import(TestcontainersConfiguration::class, AccountJourneyIntegrationTest.Mails::class, AccountJourneyIntegrationTest.Storage::class, CheerIntegrationBase.Provider::class)
 class AccountJourneyIntegrationTest {
     @TestConfiguration(proxyBeanMethods = false)
     class Mails {
@@ -49,6 +61,7 @@ class AccountJourneyIntegrationTest {
     @Autowired lateinit var mails: Mails
     @Autowired lateinit var jdbc: JdbcClient
     @Autowired lateinit var purge: AccountPurgeService
+    @Autowired lateinit var gateway: ScriptedGateway
 
     private fun post(path: String, body: String, bearer: String? = null, vararg headers: Pair<String, String>) =
         mvc.post(path) {
@@ -156,8 +169,24 @@ class AccountJourneyIntegrationTest {
         post("/api/v1/account/contact-email", """{"email":"$contact"}""", auth).andExpect { status { isAccepted() } }
         post("/api/v1/account/contact-email/confirm", """{"code":"${codeOf(MailKind.CONTACT_EMAIL_CODE, contact)}"}""", auth).andExpect { status { isNoContent() } }
         mvc.get("/api/v1/account/me") { header("Authorization", "Bearer $auth") }.andExpect { status { isOk() }; jsonPath("$.value.contactEmail") { value(contact) } }
-        val planted = listOf(email, moved, displayName, displayName.lowercase(), userAgent, contact, loginId)   // lower case = the comparison key column
+        // 결제 장부: 응원 하나를 사고(카드 표시 있음), 하나는 결제창을 열기만 한 채 둔다(PENDING). 결제사가 웹훅 본문에 이름 · 번호를 흘려도 어느 표에도 남지 않는다
+        gateway.confirmCarriesDetails = true
+        val cheerOrder = field(post("/api/v1/payments/orders", """{"itemType":"cheer","itemRef":"cheer-3000","quantity":1}""", auth, "Idempotency-Key" to UUID.randomUUID().toString()).andExpect { status { isCreated() } }.andReturn().response.contentAsString, "$.value.order.id")
+        val openOrder = field(post("/api/v1/payments/orders", """{"itemType":"cheer","itemRef":"cheer-1000","quantity":1}""", auth, "Idempotency-Key" to UUID.randomUUID().toString()).andExpect { status { isCreated() } }.andReturn().response.contentAsString, "$.value.order.id")
+        val paymentKey = "pay_journey_$tag"
+        gateway.authenticate(paymentKey, cheerOrder, PaymentAmount(3000, "KRW"), PaymentCard("HYUNDAI", "1234"))
+        post("/api/v1/payments/orders/$cheerOrder/confirm", """{"providerPaymentId":"$paymentKey","amount":3000}""", auth).andExpect { status { isOk() }; jsonPath("$.value.status") { value("PAID") } }
+        val neverStored = listOf("4111111111111111", "Kim Minsu", "010-9999-8888")
+        val hook = gateway.webhookDelivery(eventKey = "evt-journey-$tag", paymentKey = paymentKey, orderId = cheerOrder, plant = "${neverStored.joinToString(" ")} $email")
+        mvc.post("/api/v1/payments/webhooks/scripted/$WEBHOOK_TOKEN") { contentType = MediaType.APPLICATION_JSON; content = hook.body; hook.headers.forEach { (n, v) -> header(n, v) } }.andExpect { status { isOk() } }
+        assertEquals(1L, jdbc.sql("select count(*) from payment_webhook_events").query(Long::class.java).single(), "the delivery with the planted body was received")
+        mvc.get("/api/v1/cheers/me") { header("Authorization", "Bearer $auth") }.andExpect { status { isOk() }; jsonPath("$.values[0].orderId") { value(cheerOrder) }; jsonPath("$.values[0].card.issuer") { value("HYUNDAI") }; jsonPath("$.values[0].card.last4") { value("1234") } }
+        assertEquals(1L, jdbc.sql("select count(*) from cheers where account_id = :a").param("a", accountId).query(Long::class.java).single(), "the cheer line exists before the erasure")
+        assertEquals(1L, jdbc.sql("select count(*) from payment_orders where account_id = :a and card_issuer = 'HYUNDAI' and card_last4 = '1234'").param("a", accountId).query(Long::class.java).single(), "the ledger holds the card before the erasure")
+
+        val planted = listOf(email, moved, displayName, displayName.lowercase(), userAgent, contact, loginId, "HYUNDAI")   // lower case = the comparison key column; the card issuer is personal data the ledger clears
         planted.forEach { value -> assertTrue(leaks(listOf(value)).isNotEmpty(), "the scan must see '$value' before the erasure, or its absence afterwards proves nothing") }
+        assertEquals(emptyList(), leaks(neverStored), "values planted in a webhook body are not kept anywhere, even before the erasure")
         post("/api/v1/account/delete", """{"currentPassword":"$second"}""", auth, "Idempotency-Key" to UUID.randomUUID().toString())
             .andExpect { status { isAccepted() }; jsonPath("$.value.status") { value("DELETION_SCHEDULED") } }
         // this app turns deletion.self-restore on: the owner who proves it is the owner is told the deletion is pending (403 + a cancel token) instead of 401
@@ -183,8 +212,16 @@ class AccountJourneyIntegrationTest {
             .andExpect { status { isConflict() }; jsonPath("$.code") { value("ACCOUNT.LOGIN_ID_TAKEN") } }
 
         // the one-way guarantee across EVERY table of EVERY module in this app (accounts, sessions, consents, board, notifications, jobs, ...)
-        val leaks = leaks(planted)
+        val leaks = leaks(planted + neverStored)
         assertEquals(emptyList(), leaks, "no personal value survives the erasure anywhere")
+        // 결제 장부: 응원 기록은 지워지고, 주문 줄은 남되 카드 두 칸이 비고 지워진 시각이 찍힌다. 결제하지 않은 주문은 닫힌다
+        assertEquals(0L, jdbc.sql("select count(*) from cheers where account_id = :a").param("a", accountId).query(Long::class.java).single(), "the cheer lines of the erased account are gone")
+        assertEquals(0L, jdbc.sql("select count(*) from payment_orders where card_issuer is not null or card_last4 is not null").query(Long::class.java).single(), "card_issuer and card_last4 are empty in every row")
+        assertEquals(
+            mapOf(cheerOrder to "PAID", openOrder to "CANCELED"),
+            jdbc.sql("select id, status from payment_orders where account_id = :a and account_erased_at is not null").param("a", accountId).query { rs, _ -> rs.getString(1) to rs.getString(2) }.list().toMap(),
+            "the ledger keeps both rows of the erased account, marked erased",
+        )
 
         val admin = field(post("/api/v1/auth/login", """{"email":"admin@example.com","password":"password"}""").andReturn().response.contentAsString, "$.value.accessToken")
         mvc.get("/api/v1/boards/general/posts/$postId") { header("Authorization", "Bearer $admin") }.andExpect {
@@ -194,5 +231,15 @@ class AccountJourneyIntegrationTest {
             jsonPath("$.value.authorTag") { value(null) }
             jsonPath("$.value.title") { value("남길 글") }
         }
+
+        // 탈퇴 뒤에도 운영자는 그 주문을 환불할 수 있다(환불은 원래 결제 수단으로 돌아간다). 응원 기록은 없으니 훅은 아무 일도 하지 않고, 카드 두 칸은 다시 채워지지 않는다
+        mvc.get("/api/v1/admin/payments/orders") { header("Authorization", "Bearer $admin") }.andExpect { status { isOk() }; jsonPath("$.values[?(@.id=='$cheerOrder')]") { isEmpty() } }
+        mvc.get("/api/v1/admin/payments/orders?includeErased=true") { header("Authorization", "Bearer $admin") }.andExpect { status { isOk() }; jsonPath("$.values[?(@.id=='$cheerOrder')]") { isNotEmpty() } }
+        post("/api/v1/admin/payments/orders/$cheerOrder/refunds", """{"reasonCode":"OPERATOR"}""", admin, "Idempotency-Key" to UUID.randomUUID().toString()).andExpect { status { isOk() } }
+        assertEquals("REFUNDED", jdbc.sql("select status from payment_orders where id = :o").param("o", cheerOrder).query(String::class.java).single())
+        assertEquals(1, gateway.refundCalls.size)
+        assertEquals(0L, jdbc.sql("select count(*) from cheers where account_id = :a").param("a", accountId).query(Long::class.java).single(), "the refund hook wrote no line for an erased account")
+        // (the operator's own login above came through the same helper, so its session carries the browser string - that is not the refund's doing)
+        assertEquals(emptyList(), leaks((planted - userAgent) + neverStored), "the refund did not bring a personal value back")
     }
 }

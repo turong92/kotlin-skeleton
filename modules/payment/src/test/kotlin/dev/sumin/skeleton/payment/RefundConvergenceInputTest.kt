@@ -1,0 +1,94 @@
+package dev.sumin.skeleton.payment
+
+import dev.sumin.skeleton.payment.testing.PaymentLedgerKit
+import dev.sumin.skeleton.payment.testing.ScriptedGateway.RefundScript
+import java.time.Duration
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
+
+/** 결제사의 취소 목록을 장부에 맞추는 입구의 걸름(식별자 모양 · 중복 · 0원)과, 늦게 적용된 환불을 다음 환불 전 확인이 잡는 길(스펙 §15). */
+class RefundConvergenceInputTest {
+    private val op = "op_1"
+
+    private fun converge(kit: PaymentLedgerKit, orderId: String, cancels: List<ProviderRefund>, remaining: Long): ConvergeResult {
+        val snapshot = kit.gateway.lookup(PaymentLookupQuery("pay_1", null))!!
+            .copy(status = ProviderPaymentStatus.PARTIALLY_REFUNDED, refunds = cancels, remaining = PaymentAmount(remaining, "KRW"))
+        return kit.store.inTransaction { tx -> kit.convergence.converge(tx, tx.lockOrder(orderId)!!, snapshot, ConvergeContext(PaymentMode.TEST, ConvergeSource.WEBHOOK)) }
+    }
+
+    private fun cancel(key: String, amount: Long) = ProviderRefund(key, PaymentAmount(amount, "KRW"), java.time.Instant.parse("2026-01-01T00:00:00Z"))
+
+    @Test
+    fun `a duplicate transaction key and a zero-amount cancel in the provider's list do not break the reconcile`() {
+        val kit = PaymentLedgerKit()
+        val order = kit.paid()
+
+        val result = converge(kit, order.id, listOf(cancel("txn_a", 1000), cancel("txn_a", 1000), cancel("txn_zero", 0)), remaining = 2000)
+
+        val lines = kit.store.listRefunds(order.id)
+        assertEquals(listOf("txn_a"), lines.map { it.providerRefundId })
+        assertEquals(1000, result.order.refundedAmount)
+        assertNull(result.order.reviewReason, "what is left agrees with the one real cancel")
+    }
+
+    @Test
+    fun `reconciling the same list twice stays one row per real cancel`() {
+        val kit = PaymentLedgerKit()
+        val order = kit.paid()
+        val list = listOf(cancel("txn_a", 1000), cancel("txn_a", 1000))
+
+        converge(kit, order.id, list, 2000)
+        val second = converge(kit, order.id, list, 2000)
+
+        assertEquals(1, kit.store.listRefunds(order.id).size)
+        assertEquals(false, second.changed)
+    }
+
+    @Test
+    fun `a transaction key that is not an identifier is dropped by the same filter as on the response path, and the leftover difference flags the order`() {
+        val kit = PaymentLedgerKit()
+        val order = kit.paid()
+
+        val result = converge(kit, order.id, listOf(cancel("a cancel with spaces", 1000)), remaining = 2000)
+
+        assertEquals(emptyList(), kit.store.listRefunds(order.id))
+        assertEquals(PaymentReviewReason.REFUND_MISMATCH, result.order.reviewReason, "money moved at the provider that the ledger could not take in")
+    }
+
+    @Test
+    fun `a transaction key with stray spaces is stored trimmed and is not entered twice`() {
+        val kit = PaymentLedgerKit()
+        val order = kit.paid()
+
+        converge(kit, order.id, listOf(cancel(" txn_a ", 1000)), 2000)
+        converge(kit, order.id, listOf(cancel("txn_a", 1000)), 2000)
+
+        assertEquals(listOf("txn_a"), kit.store.listRefunds(order.id).map { it.providerRefundId })
+    }
+
+    @Test
+    fun `a line closed as not-applied whose request lands later is caught as a provider line by the next refund's pre-check`() {
+        val kit = PaymentLedgerKit()
+        val order = kit.paid()
+        kit.gateway.scriptRefund(RefundScript.TimeoutAppliedLater)
+        val first = kit.refunds.refund(op, order.id, "OPERATOR", 1000, IdempotencyKey("k-1")).refund
+        kit.advance(Duration.ofMinutes(2))
+        kit.runTasks(setOf(PaymentTaskTypes.REFUND_RECONCILE))
+        assertEquals(PaymentRefundStatus.FAILED, kit.store.findRefund(first.id)!!.status)
+        assertEquals("NOT_APPLIED", kit.store.findRefund(first.id)!!.failureCode)
+
+        kit.gateway.applyLate() // 닫은 뒤에 결제사가 앞선 요청을 처리했다
+        kit.advance(Duration.ofSeconds(5))
+        val next = kit.refunds.refund(op, order.id, "OPERATOR", 500, IdempotencyKey("k-2"))
+
+        val provider = kit.store.listRefunds(order.id).single { it.origin == PaymentRefundOrigin.PROVIDER }
+        assertEquals(1000, provider.amount.amount)
+        assertEquals("txn_1", provider.providerRefundId)
+        assertEquals(PaymentRefundStatus.FAILED, kit.store.findRefund(first.id)!!.status, "the old line stays closed")
+        assertEquals(PaymentRefundStatus.SUCCEEDED, next.refund.status)
+        assertEquals(1500, next.order.refundedAmount)
+        assertEquals(kit.gateway.payment("pay_1")!!.refundedTotal, next.order.refundedAmount, "the ledger and the provider agree after the catch-up")
+        assertNull(next.order.reviewReason)
+    }
+}

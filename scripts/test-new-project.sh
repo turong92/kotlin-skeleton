@@ -14,6 +14,7 @@
 #   6. --modules board,board-jdbc   (게시판: board 의 compileOnly 의존 notification · idempotency 가 소스로 따라오고, board-jdbc 의 dbTest 가 두 DB 로 돈다)
 #   7. --modules redis-core,redis-lock   (Redis 환경변수 테스트가 프로젝트 접두사로 찍혀 돈다 — 배포 계약의 <ENV_PREFIX>_REDIS_*)
 #      (1 · 3 · 5 · 6 은 스타터의 약관 · 동의(legal-jdbc)를 함께 빌드한다 — 3 은 MySQL 트리거 마이그레이션, 5 는 앱 소유 문서 · 재동의 여정 시험)
+#   9. --modules payment,payment-jdbc,payment-toss   (결제 장부: payment 의 testFixtures[저장소 계약 시험 · 가짜 결제사]가 찍히고 payment-jdbc 의 dbTest 가 두 DB 로 돈다 — `8-payment`)
 #   8. docs/new-project-recipe.md 의 작업 예 3개(<!-- kotlin-stamp: … --> 블록의 명령 그대로) — 커뮤니티 · 유료 SaaS(--db mysql) · 콘텐츠 SSR(스타터 그대로)
 # macOS bash 3.2 와 GNU bash 에서 돈다. 임시 디렉토리는 끝나면 지운다 (KEEP=1 이면 남긴다).
 set -euo pipefail
@@ -45,11 +46,29 @@ deploy_env_shape() {
 }
 check() { # check "<설명>" <명령...>  — 명령이 성공하면 통과
   local what="$1"; shift
+  # 명령이 없으면 통과가 아니라 실패다 — 빈 "$@" 는 성공으로 읽혀 단정이 말없이 사라진다 (명령이 다른 호출의 뒤 인자로 붙어 버린 실수가 있었다)
+  if [ "$#" = 0 ]; then fail "$what — check 에 명령이 없다 (시험 스크립트의 실수)"; return; fi
   if "$@" >/dev/null 2>&1; then pass "$what"; else fail "$what"; fi
 }
 has_line() { grep -Eq -- "$1" "$2"; }
 lacks_line() { ! grep -Eq -- "$1" "$2"; }
 includes() { { grep -o 'include(":[a-z0-9:-]*")' "$1" || true; } | sed -E 's/include\("(.*)"\)/\1/' | sort | tr '\n' ' ' | sed 's/ $//'; }
+
+# 찍은 프로젝트의 문서(docs/modules/*.md · 결제가 건드리는 docs/deploy.md · errors.md · payment-http-contract.md)의 상대 링크가 모두 풀리는가 — ModuleDocumentationTest 의 "relative links on pages resolve" 와 같은 규칙이다.
+# 고르지 않은 모듈의 문서는 지워지므로, 선택 형제 모듈 문서로 링크하면 그 조합의 ./gradlew build 가 깨진다(링크 대신 백틱 이름으로 적는다).
+doc_links_broken() { # doc_links_broken <프로젝트>  — 깨진 링크를 "<문서>: <링크>" 한 줄씩 (없으면 출력 없음)
+  local dir="$1" page link
+  for page in "$dir"/docs/modules/*.md "$dir"/docs/deploy.md "$dir"/docs/errors.md "$dir"/docs/payment-http-contract.md; do
+    [ -f "$page" ] || continue
+    while IFS= read -r link; do
+      [ -e "$(dirname "$page")/$link" ] || echo "${page#$dir/}: $link"
+    done < <(grep -oE '\]\([^)#[:space:]]+' "$page" | sed -E 's/^\]\(//' | grep -Ev '^(https?://|mailto:)' || true)
+  done
+}
+check_docs_links() { # check_docs_links "<설명>" <프로젝트>
+  local broken; broken="$(doc_links_broken "$2")"
+  if [ -z "$broken" ]; then pass "$1"; else fail "$1 — 깨진 링크: $(echo "$broken" | head -3 | tr '\n' ';')"; fi
+}
 
 expect_exit() { # expect_exit <기대 종료코드> "<설명>" <명령...>
   local want="$1" what="$2"; shift 2
@@ -135,6 +154,7 @@ check "계약 테스트 스크립트와 그 CI 가 따라온다 (문법 검사 �
 check "계약 스크립트의 secret_env / contract_env 는 자기를 부르지 않고 출력이 끝난다 (비밀 한 쌍, DB 세 쌍 + 비밀)" deploy_env_shape "$A/scripts/test-deploy-contract.sh"
 check "Dockerfile 은 APP 인자를 받는다 (api 가 기본)" has_line '^ARG APP=api' "$A/Dockerfile"
 check "배포 가드 · Redis 환경변수 테스트가 새 접두사로 찍힌다 — 접두사가 따라간다" bash -c "grep -rq 'skeleton.env\|ovation.env' '$A/modules/platform/src/test' && ! grep -rq 'SKELETON_' '$A/modules/platform/src/test' '$A/modules/auth/src/test'"
+check_docs_links "기본 조합(결제 없음)의 문서 링크가 모두 풀린다 — 결제 문서로 가는 링크가 남지 않는다" "$A"
 check "소스 레포는 건드리지 않는다" bash -c "[ -z \"\$(find '$SRC' -newer '$MARKER' -type f -not -path '*/build/*' -not -path '*/.gradle/*' -not -path '*/.kotlin/*' -not -path '*/.git/*' -not -path '*/node_modules/*' 2>/dev/null | head -1)\" ]"
 
 echo "== 3. --modules job-queue-jdbc,notification-mail,storage-s3,scheduler"
@@ -210,7 +230,7 @@ expect_exit 0 "persistence-jooq + 형제 마이그레이션 모듈을 찍는다"
 echo "== 7. --with-sample (샘플 앱 \"Notes\" 은 요청할 때만 남는다)"
 G="$TMP/g"
 expect_exit 0 "조합 5 를 찍는다 (rename 잔여 검사 포함)" stamp "$G" --with-sample
-want=":apps:api :apps:sample :modules:account :modules:account-jdbc :modules:alert :modules:alert-jdbc :modules:auth :modules:auth-magic-link :modules:auth-session :modules:auth-session-jdbc :modules:auth-social :modules:auth-social-google :modules:auth-social-kakao :modules:auth-social-naver :modules:auth-social-oidc :modules:auth-social-x :modules:author-profile :modules:author-profile-jdbc :modules:board :modules:board-jdbc :modules:captcha-turnstile :modules:crypto :modules:db-postgresql :modules:idempotency :modules:job-queue-jdbc :modules:json :modules:legal :modules:legal-jdbc :modules:migration :modules:migration-flyway :modules:notification :modules:notification-jdbc :modules:notification-mail :modules:notification-sse :modules:persistence-jdbc :modules:platform :modules:storage :modules:storage-s3 :modules:time"
+want=":apps:api :apps:sample :modules:account :modules:account-jdbc :modules:alert :modules:alert-jdbc :modules:auth :modules:auth-magic-link :modules:auth-session :modules:auth-session-jdbc :modules:auth-social :modules:auth-social-google :modules:auth-social-kakao :modules:auth-social-naver :modules:auth-social-oidc :modules:auth-social-x :modules:author-profile :modules:author-profile-jdbc :modules:board :modules:board-jdbc :modules:captcha-turnstile :modules:crypto :modules:db-postgresql :modules:idempotency :modules:job-queue-jdbc :modules:json :modules:legal :modules:legal-jdbc :modules:migration :modules:migration-flyway :modules:notification :modules:notification-jdbc :modules:notification-mail :modules:notification-sse :modules:payment :modules:payment-jdbc :modules:payment-toss :modules:persistence-jdbc :modules:platform :modules:storage :modules:storage-s3 :modules:time"
 got="$(includes "$G/settings.gradle.kts")"
 [ "$got" = "$want" ] && pass "settings.gradle.kts 는 스타터 + 샘플 앱의 모듈과 그 닫힘을 포함한다" || fail "settings includes: [$got] expected [$want]"
 check "샘플 앱 소스가 새 패키지로 옮겨진다" test -f "$G/apps/sample/src/main/kotlin/dev/sumin/ovation/app/sample/SampleApplication.kt"
@@ -219,7 +239,7 @@ check "샘플 문서 · 실행 스크립트가 남고 안내 문서의 표식 �
 check "스타터 apps/api 는 그대로다 — 샘플 앱의 모듈을 얹지 않는다" bash -c "! grep -q 'storage-s3\|notification\|idempotency\|board\|magic-link' '$G/apps/api/build.gradle.kts'"
 check "스타터 테스트의 부재 단언(S3 클라이언트)은 그대로다 — 스타터 클래스패스에는 여전히 없다" has_line 'software.amazon.awssdk.services.s3.S3Client' "$G/apps/api/src/test/kotlin/dev/sumin/ovation/app/api/StarterCompositionIntegrationTest.kt"
 check "스타터 설정에 샘플 모듈의 설정 블록이 붙지 않는다" lacks_line 'new-project: module config blocks' "$G/apps/api/src/main/resources/application.yml"
-check "dbTestModules 에 샘플이 쓰는 DB 모듈이 들어간다" has_line 'val dbTestModules = setOf\(":modules:account-jdbc", ":modules:alert-jdbc", ":modules:auth-session-jdbc", ":modules:author-profile-jdbc", ":modules:board-jdbc", ":modules:job-queue-jdbc", ":modules:legal-jdbc", ":modules:notification-jdbc"\)' "$G/build.gradle.kts"
+check "dbTestModules 에 샘플이 쓰는 DB 모듈이 들어간다" has_line 'val dbTestModules = setOf\(":modules:account-jdbc", ":modules:alert-jdbc", ":modules:auth-session-jdbc", ":modules:author-profile-jdbc", ":modules:board-jdbc", ":modules:job-queue-jdbc", ":modules:legal-jdbc", ":modules:notification-jdbc", ":modules:payment-jdbc"\)' "$G/build.gradle.kts"
 check "dev.sh 는 APP=sample 을 알고 문법 검사를 통과한다" bash -c "grep -q 'APP' '$G/scripts/dev.sh' && bash -n '$G/scripts/dev.sh' && bash -n '$G/scripts/dev-sample.sh' && bash -n '$G/scripts/sample-e2e-backend.sh'"
 
 echo "== 7b. --modules auth-social-oidc,auth-social-x (글로벌 소셜: LINE · X · 그 외 OIDC)"
@@ -264,6 +284,45 @@ check "고르지 않은 기본 프로젝트에는 모듈 · 문서 · 카탈로�
 APN="$TMP/apn"
 expect_exit 0 "author-profile 만 요청하면 찍히되 author-profile-jdbc 를 더하라고 알려 준다" stamp "$APN" --modules author-profile
 grep -q 'author-profile has no storage of its own' <<<"$LAST_OUTPUT" && pass "저장소 없음 안내가 나온다" || fail "author-profile 만 요청했는데 author-profile-jdbc 안내가 없다"
+
+echo "== 8c. --modules payment,payment-jdbc,payment-toss (결제 장부 — payment 는 저장소를 모르고 payment-jdbc 가 포트와 표를 가진다)"
+PJ="$TMP/pj"
+expect_exit 0 "결제 장부 조합을 찍는다 (rename 잔여 검사 포함)" stamp "$PJ" --modules payment,payment-jdbc,payment-toss
+for m in payment payment-jdbc payment-toss job-queue-jdbc; do
+  check "모듈 $m 이 포함된다" bash -c "grep -q 'include(\":modules:$m\")' '$PJ/settings.gradle.kts' && test -d '$PJ/modules/$m'"
+done
+for m in payment payment-jdbc payment-toss; do
+  check "apps/api 의존성에 $m 한 줄이 생긴다" has_line "implementation\\(project\\(\":modules:$m\"\\)\\)" "$PJ/apps/api/build.gradle.kts"
+done
+check "dbTestModules 에 payment-jdbc 가 들어간다 (src/dbTest 가 있는 모듈 전부)" has_line '":modules:payment-jdbc"' "$PJ/build.gradle.kts"
+check "payment 의 testFixtures(저장소 계약 시험 · 가짜 결제사)가 새 패키지 이름으로 찍힌다 — payment-jdbc 시험이 쓴다" bash -c "test -f '$PJ/modules/payment/src/testFixtures/kotlin/dev/sumin/ovation/payment/testing/PaymentLedgerStoreContract.kt' && grep -q 'testFixtures(project(\":modules:payment\"))' '$PJ/modules/payment-jdbc/build.gradle.kts'"
+check "payment-jdbc 의 마이그레이션(두 벤더 중 방언 모듈이 고른 쪽 포함)이 있고 잠금에 올라 있다" bash -c "test -f '$PJ'/modules/payment-jdbc/src/main/resources/db/migration/postgresql/V*__payment_ledger.sql && grep -q 'modules/payment-jdbc/src/main/resources/db/migration/postgresql/V.*__payment_ledger.sql' '$PJ/migrations.lock'"
+check "자동설정 이름이 새 패키지로 바뀌어도 payment 의 afterName 과 맞는다 (payment 쪽 문자열과 payment-jdbc 클래스가 같이 찍힌다)" bash -c "grep -q 'dev.sumin.ovation.payment.jdbc.PaymentJdbcAutoConfiguration' '$PJ/modules/payment/src/main/kotlin/dev/sumin/ovation/payment/PaymentLedgerAutoConfiguration.kt' && grep -q 'dev.sumin.ovation.payment.jdbc.PaymentJdbcAutoConfiguration' '$PJ/modules/payment-jdbc/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports'"
+check "카탈로그에 payment-jdbc 항목이 남고 생성물이 맞다" bash -c "grep -q '\"path\": \"modules/payment-jdbc\"' '$PJ/capabilities.json' && cd '$PJ' && perl scripts/build-capabilities.pl --check"
+PO="$TMP/po"
+expect_exit 0 "payment-toss 만 요청하면 payment 가 따라오되 payment-jdbc 를 더하라고 알려 준다" stamp "$PO" --modules payment-toss
+grep -q 'payment alone is the provider facade' <<<"$LAST_OUTPUT" && pass "장부 없음 안내가 나온다" || fail "payment 만 골랐는데 payment-jdbc 안내가 없다"
+check "결제 계약 문서(docs/payment-http-contract.md)는 payment 를 고른 프로젝트에만 남는다" bash -c "test -f '$PJ/docs/payment-http-contract.md' && test -f '$PO/docs/payment-http-contract.md' && test ! -e '$A/docs/payment-http-contract.md' && ! grep -rq '](.*payment-http-contract' '$A/docs/errors.md'"
+check "토스 손 시험 도구(scripts/payment-webhook.sh)와 real-provider-setup.md 의 토스 절(§11)은 payment-toss 를 고른 프로젝트에만 남는다 — 안 고르면 죽은 링크도 카탈로그 항목도 없다" bash -c "test -f '$PJ/scripts/payment-webhook.sh' && grep -q '^## 11\\. ' '$PJ/docs/real-provider-setup.md' && grep -q 'script-payment-webhook' '$PJ/capabilities.json' && test -f '$PO/scripts/payment-webhook.sh' && test ! -e '$A/scripts/payment-webhook.sh' && ! grep -q '^## 11\\. ' '$A/docs/real-provider-setup.md' && ! grep -q 'payment-webhook' '$A/capabilities.json' '$A/docs/capabilities.md' && ! grep -rq 'payment-webhook.sh\|payment-toss.md\|payment-http-contract.md' '$A/docs/real-provider-setup.md' '$A/.env.example'"
+check "payment 만 고르면 표가 없다 — payment-jdbc 모듈 · 문서 · 마이그레이션 잠금 줄 · dbTest 등록이 모두 없다" bash -c "test ! -e '$PO/modules/payment-jdbc' && test ! -e '$PO/docs/modules/payment-jdbc.md' && ! grep -q 'payment-jdbc\|payment_ledger' '$PO/migrations.lock' '$PO/build.gradle.kts' '$PO/settings.gradle.kts' && ! find '$PO' -name 'V*payment_ledger*' | grep -q ."
+check "payment 만 고른 프로젝트의 카탈로그 생성물이 맞다" bash -c "cd '$PO' && perl scripts/build-capabilities.pl --check"
+check_docs_links "payment-toss 만 고른 조합의 문서 링크가 모두 풀린다 — payment.md 가 없는 payment-jdbc.md 로 링크하지 않는다" "$PO"
+check_docs_links "결제 장부 조합(payment · payment-jdbc · payment-toss)의 문서 링크가 모두 풀린다" "$PJ"
+PS="$TMP/ps"
+expect_exit 0 "토스 없는 결제 조합을 찍는다 (payment · payment-jdbc · payment-stripe)" stamp "$PS" --modules payment,payment-jdbc,payment-stripe
+check_docs_links "토스 없는 결제 조합의 문서 링크가 모두 풀린다 — payment.md 가 payment-toss.md 로 링크하지 않는다" "$PS"
+check "토스 없는 결제 조합에 payment-toss 문서 · 모듈이 없다" bash -c "test ! -e '$PS/docs/modules/payment-toss.md' && test ! -e '$PS/modules/payment-toss'"
+check "토스 없는 결제 조합에는 토스 손 시험 도구 · 토스 절(§11)도 없다 (payment 는 있어도 payment-toss 가 없다)" bash -c "test ! -e '$PS/scripts/payment-webhook.sh' && ! grep -q '^## 11\\. ' '$PS/docs/real-provider-setup.md' && ! grep -q 'payment-toss.md\|payment-webhook.sh' '$PS/docs/real-provider-setup.md' && test -f '$PS/docs/payment-http-contract.md'"
+check "토스 없는 결제 조합의 안내 문서(real-provider-setup.md)에 §11 · 토스가 남지 않는다 — 제목 · 목차 줄 · 본문 · 표식이 모두 없다" bash -c "! grep -q '§11\|토스\|payment-toss:' '$PS/docs/real-provider-setup.md'"
+check "토스 없는 결제 조합의 점검 스크립트 종료 문구에 §11 이 없다 (죽은 링크가 남지 않는다) — 깨끗한 환경에서 돌려 주변의 키로 진짜 토스 · 메일을 부르지 않고, 끝 줄(§6)이 실제로 나왔는지도 본다" bash -c "out=\$(cd '$PS' && env -i PATH=\"\$PATH\" HOME=\"\$HOME\" ENV_FILE=/nonexistent bash scripts/check-real-providers.sh --base-url http://127.0.0.1:1 </dev/null 2>&1); grep -qF '§6)' <<<\"\$out\" && ! grep -qF '토스는 §11' <<<\"\$out\""
+check "토스 있는 결제 조합의 안내 문서에는 §11 · 토스가 있고 표식은 남지 않는다" bash -c "grep -q '§11' '$PJ/docs/real-provider-setup.md' && grep -q '토스' '$PJ/docs/real-provider-setup.md' && ! grep -q 'payment-toss:' '$PJ/docs/real-provider-setup.md'"
+check "토스 없는 결제 조합으로 찍은 프로젝트에서 check-real-providers.sh --self-test 가 통과한다 (payment-webhook.sh 가 없어도)" bash -c "cd '$PS' && env -i PATH=\"\$PATH\" HOME=\"\$HOME\" bash scripts/check-real-providers.sh --self-test"
+check "토스를 고른 결제 조합으로 찍은 프로젝트에서도 check-real-providers.sh --self-test 가 통과한다 — 이름 바꾸기를 거친 웹훅 구역(payment-webhook.sh)까지 돈다" bash -c "cd '$PJ' && env -i PATH=\"\$PATH\" HOME=\"\$HOME\" bash scripts/check-real-providers.sh --self-test"
+check "토스 없는 결제 조합의 안내 문서에 토스 구역 밖 머리말 · 목차 · §10 이 남는다 — 제목 줄의 끝 표식이 빠져도 앞부분이 통째로 잘리지 않는다" bash -c "grep -q '^| §7 ' '$PS/docs/real-provider-setup.md' && grep -q '^## 10\\. ' '$PS/docs/real-provider-setup.md'"
+check "토스 없는 결제 조합의 카탈로그 생성물이 맞다" bash -c "cd '$PS' && perl scripts/build-capabilities.pl --check"
+PM="$TMP/pm"
+expect_exit 0 "MySQL 로도 결제 장부 조합을 찍는다" stamp "$PM" --db mysql --modules payment,payment-jdbc,payment-toss
+check "MySQL 로 찍으면 mysqlTest 묶음만 남고(postgresTest 소스는 지워진다) MySQL 판 마이그레이션이 잠금에 올라 있다" bash -c "test -d '$PM/modules/payment-jdbc/src/mysqlTest' && test ! -d '$PM/modules/payment-jdbc/src/postgresTest' && grep -q 'modules/payment-jdbc/src/main/resources/db/migration/mysql/V.*__payment_ledger.sql' '$PM/migrations.lock'"
 
 echo "== 9. --modules redis-core,redis-lock (Redis 환경변수 이름이 프로젝트 접두사를 따라간다 — 배포 계약)"
 J="$TMP/j"
@@ -327,6 +386,7 @@ if [ "$MODE" = "--full" ]; then
   build_composition "$F" "4-jooq"
   build_composition "$G" "5-sample"
   build_composition "$H" "6-board"
+  build_composition "$PJ" "8-payment"
   build_composition "$J" "7-redis"
   for rid in $RECIPE_DIRS; do   # 레시피의 작업 예 — 문서의 명령이 낡으면 여기서 깨진다
     build_composition "$TMP/recipe-$rid" "recipe-$rid"

@@ -21,7 +21,8 @@ import javax.sql.DataSource
         "spring.flyway.enabled=false",
         "spring.sql.init.mode=always",
         "spring.sql.init.schema-locations=classpath:schema-sql-example/schema.sql",
-        "skeleton.job-queue.enabled=false",
+        // 큐 자체는 켜 둔다 — 결제 장부(payment-jdbc)는 작업 큐 없이는 시작하지 않는다(조회 · 지급 · 웹훅 처리가 큐로 돈다). 이 시험에 필요 없는 워커 스레드만 끈다
+        "skeleton.job-queue.worker-enabled=false",
     ],
 )
 class SchemaSqlInitIntegrationTest {

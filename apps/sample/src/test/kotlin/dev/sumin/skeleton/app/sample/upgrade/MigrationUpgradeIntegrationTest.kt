@@ -10,6 +10,9 @@ import dev.sumin.skeleton.board.ReactionRepository
 import dev.sumin.skeleton.board.ReactionTarget
 import dev.sumin.skeleton.common.author.AuthorContext
 import dev.sumin.skeleton.common.author.AuthorDirectory
+import dev.sumin.skeleton.common.erasure.AccountErasureListener
+import dev.sumin.skeleton.common.erasure.AccountTombstone
+import dev.sumin.skeleton.common.erasure.ErasureRequest
 import dev.sumin.skeleton.legal.ConsentAction
 import dev.sumin.skeleton.legal.ConsentStore
 import dev.sumin.skeleton.legal.NewConsentEvent
@@ -80,6 +83,7 @@ class MigrationUpgradeIntegrationTest {
     @Autowired lateinit var inbox: NotificationInboxRepository
     @Autowired lateinit var authors: AuthorDirectory
     @Autowired lateinit var mockMvc: MockMvc
+    @Autowired lateinit var erasures: List<AccountErasureListener>
 
     private val now = Instant.parse("2026-10-07T00:00:00Z")
 
@@ -90,9 +94,20 @@ class MigrationUpgradeIntegrationTest {
         }
         assertEquals(1L, jdbc.sql("select count(*) from notes where owner_id = 'acc_upgrade'").query(Long::class.java).single())
         assertEquals(0L, jdbc.sql("select count(*) from flyway_schema_history where not success").query(Long::class.java).single())
-        // 기준선 이후의 마이그레이션도 전부 적용됐다 (잠금에 있는 postgresql 파일 수 이상)
-        val locked = java.nio.file.Files.readAllLines(UpgradeBaseline.repoRoot.resolve("migrations.lock")).count { "/db/migration/postgresql/" in it }
-        assertTrue(jdbc.sql("select count(*) from flyway_schema_history where success and version is not null").query(Long::class.java).single() >= locked - 1 /* apps/api 의 init 은 샘플 클래스패스에 없다 */)
+        // 기준선 이후의 마이그레이션도 전부 적용됐다 — 잠긴 postgresql 파일 중 **이 앱의 클래스패스에 실제로 보이는 것**은 전부. (샘플에 없는 저장 모듈의 파일 · apps/api 의 init 은 셈에 넣지 않는다 —
+        // 샘플에 없는 저장 모듈이 생길 때마다 "잠금 수 - 1" 이 깨지던 것을 이름의 교집합으로 바꿨다.)
+        val lockedNames = java.nio.file.Files.readAllLines(UpgradeBaseline.repoRoot.resolve("migrations.lock"))
+            .filter { "/db/migration/postgresql/" in it }
+            .map { it.substringBefore("  ").substringAfterLast('/') }
+            .toSet()
+        val onClasspath = org.springframework.core.io.support.PathMatchingResourcePatternResolver()
+            .getResources("classpath*:db/migration/postgresql/V*.sql").mapNotNull { it.filename }.toSet()
+        val expected = lockedNames.intersect(onClasspath).size
+        assertTrue(expected > 0, "the sample sees locked migrations on its classpath")
+        assertTrue(
+            jdbc.sql("select count(*) from flyway_schema_history where success and version is not null").query(Long::class.java).single() >= expected,
+            "every locked migration this app carries was applied ($expected)",
+        )
     }
 
     @Test
@@ -167,6 +182,25 @@ class MigrationUpgradeIntegrationTest {
         val page = inbox.findByRecipient("acc_upgrade")
         assertEquals(listOf("evt_upgrade"), page.values.map { it.event.id })
         assertNotNull(inbox.markRead("acc_upgrade", "evt_upgrade", now)?.readAt)
+    }
+
+    @Test
+    fun `payment ledger and cheers - the new tables came up beside the baseline rows, and the erasure hooks clear the card and the cheer line`() {
+        UpgradeBaseline.LEDGER_ROWS.forEach { jdbc.sql(it).update() }
+        jdbc.sql("insert into cheers (order_id, account_id, amount, currency, status, created_at) values ('ord_upgrade', 'acc_upgrade', 3000, 'KRW', 'PAID', '2026-10-01 00:00:00')").update()
+        fun count(sql: String) = jdbc.sql(sql).query(Long::class.java).single()
+        assertEquals(1L, count("select count(*) from payment_orders where account_id = 'acc_upgrade' and card_issuer = 'HYUNDAI' and card_last4 = '1234'"))
+        // the baseline rows of every other module are still there next to the new tables
+        UpgradeBaseline.TABLES.forEach { table -> assertTrue(count("select count(*) from $table") >= 1, "$table lost its baseline row") }
+
+        val request = ErasureRequest("acc_upgrade", AccountTombstone.of("acc_upgrade"))
+        listOf("payment", "cheers").forEach { name -> erasures.single { it.name == name }.erase(request) }
+        assertEquals(0L, count("select count(*) from payment_orders where card_issuer is not null or card_last4 is not null"), "the erasure hook cleared both card columns")
+        assertEquals(1L, count("select count(*) from payment_orders where id = 'ord_upgrade' and account_erased_at is not null and status = 'PAID'"), "the order line stays, marked erased")
+        assertEquals(0L, count("select count(*) from cheers where account_id = 'acc_upgrade'"), "the cheer line is deleted")
+        // idempotent: a second run changes nothing and does not fail
+        listOf("payment", "cheers").forEach { name -> erasures.single { it.name == name }.erase(request) }
+        assertEquals(1L, count("select count(*) from payment_orders where id = 'ord_upgrade'"))
     }
 
     @Test

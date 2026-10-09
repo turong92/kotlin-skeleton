@@ -2,7 +2,7 @@
 
 `apps/sample` 은 **제품 모양의 작은 앱**이다: 로그인한 사람이 노트(제목 · 본문 · 상태 · 고정 · 첨부)를 관리한다.
 스타터(`apps/api`)에 모듈 몇 줄과 도메인 하나(`notes`)만 얹었고, 모듈 내부는 건드리지 않았다. 새 부업 프로젝트에서 기능 하나를 만들 때 **그대로 따라 하는 예시**다.
-짝 프론트는 react-skeleton 의 `apps/sample` 이다(화면 · 컴포넌트 매핑은 그쪽 README).
+짝 프론트는 react-skeleton 의 `apps/sample` 이다(화면 · 컴포넌트 매핑은 그쪽 README). 결제(응원하기)도 이 앱에 있다 — 아래 "결제 — 응원하기".
 
 | 이 화면/기능이 필요하면 | 이 샘플에서 쓴 모듈 |
 |---|---|
@@ -14,6 +14,7 @@
 | 오래 걸리는 일(내보내기) | `job-queue-jdbc` |
 | 게시판(글 · 대댓글 · 공감 같은 반응 종류) | `board` + `board-jdbc` (아래 "게시판") |
 | 한 계정이 닉네임(작성자 프로필)을 여러 개 만들어 글 · 댓글마다 골라 쓰기 — 두 프로필이 같은 사람이라는 사실이 남에게 드러나지 않게 | `author-profile` + `author-profile-jdbc` + `skeleton.storage.web.key-owner=OPAQUE` (아래 "작성자 프로필") |
+| 돈 받기 · 환불하기 — 결제창 → 승인 → 내 결제 내역 → 환불 요청 → 운영자 환불 (샘플 상품은 「응원하기」) | `payment-jdbc`(결제 장부 + `payment`) + `payment-toss`(결제사, 꺼진 채 시작) + 이 앱의 `cheer/` (아래 "결제 — 응원하기") |
 | DB · 마이그레이션 · 시간 | `persistence-jdbc` · `db-postgresql` · `migration-flyway` · `time` |
 
 ## 엔드포인트
@@ -78,6 +79,50 @@
   - **주소 없는 계정에게 열린 변경 경로**의 정본은 시험 `WriteGateCensusTest` 의 목록이다(이 앱의 변경 핸들러를 전부 뽑아 정확히 같은지 본다 — 새 변경 엔드포인트는 목록에 적지 않는 한 막힌다).
 - 둘 다 `apps/sample` 의 통합 시험이 지킨다: `EmailOnWriteJourneyIntegrationTest`(소셜 첫 로그인 → 아이디 → 약관 → 읽기 → 쓰기 `403` → 이메일 등록 → 같은 쓰기 통과 · 버리기), `AccountJourneyIntegrationTest`(아이디로 가입 · 로그인 · 이메일 변경 뒤에도 같은 아이디), `LoginIdLeakIntegrationTest`(남이 읽는 어떤 응답에도 아이디가 없다), `MigrationUpgradeIntegrationTest`(켜기 전부터 있던 계정이 게이트를 만나고 정하면 풀린다). "로그인 직후" 방식의 기존 여정(`EmailRequiredJourneyIntegrationTest`)은 `required-when=SIGN_IN` 을 얹어 그대로 둔다.
 
+## 결제 — 응원하기 (`/api/v1/cheers`)
+
+`payment-jdbc` + `payment-toss` 두 줄과 이 앱의 작은 조각 `cheer/` 가 전부다 — 서버가 가진 금액 목록(1,000 · 3,000 · 5,000원)에서 하나를 골라 결제하고, 내 응원 내역을 보고, 환불을 **요청**하면 운영자가 환불한다.
+결제 자체(주문 만들기 · 승인 · 환불 요청 · 운영자 환불 · 웹훅)는 결제 장부 모듈의 `/api/v1/payments` · `/api/v1/admin/payments` 가 맡는다(계약: [payment-http-contract](payment-http-contract.md), 모듈: [payment](modules/payment.md) · [payment-jdbc](modules/payment-jdbc.md) · [payment-toss](modules/payment-toss.md)). 이 앱이 더한 것은 아래뿐이다.
+
+| 메서드 · 경로 | 하는 일 | 응답 |
+|---|---|---|
+| `GET /api/v1/cheers/options` | 서버가 가진 금액 목록 — 브라우저는 이 안에서만 고른다 | `{values: [{itemRef: "cheer-1000", amount: {amount: 1000, currency: "KRW"}}, … 3000, … 5000]}` |
+| `GET /api/v1/cheers/me?cursor&size` | 내 응원 내역, 최신순 | `{values: [{orderId, amount, refundedAmount, status: PAID|REFUNDED, createdAt, refundedAt, card: {issuer, last4}|null}], cursor: {hasNext, nextCursor}}` |
+
+주문은 `POST /api/v1/payments/orders` 에 `{itemType: "cheer", itemRef: "cheer-3000", quantity: 1}` 로 만든다(금액은 보내지 않는다). 목록에 없는 코드 · 수량이 1 이 아닌 주문 · 다른 상품 종류는 `422 PAYMENT.ITEM_NOT_PURCHASABLE`.
+`status` 는 `PAID` · `REFUNDED`(전액 환불)뿐이다 — 일부 환불은 `PAID` 에 `refundedAmount` 만 오른다. `card` 는 장부의 주문 줄에서 읽는다(카드 결제가 아니면 `null`).
+
+**앱이 결제 장부에 끼는 자리 네 곳** (`…/app/sample/cheer/`):
+
+1. `CheerCatalog` — `PaymentCatalog`. **금액의 유일한 출처**다. `orderName` 에는 개인정보가 없다.
+2. `CheerOrderListener` — `PaymentOrderListener`. `onPaid` 가 응원 기록(`cheers` 표 한 줄)을 남기고(같은 주문이 두 번 와도 한 줄), `onRefunded` 가 환불된 금액을 올린다(전액이면 `REFUNDED` + 환불 시각; **지급한 적 없는 주문에도 불리므로 기록이 없으면 아무것도 하지 않는다**). **두 훅은 주문 줄 락 안에서 돈다** — 그동안 그 주문의 웹훅 · 승인 · 환불이 기다리므로 한 문장씩만 쓴다(알림 · 메일 · 외부 호출은 넣지 않았다. 필요하면 큐로).
+3. `CheerPaymentConfiguration` — `PaymentOperatorPolicy`. 기본은 **토큰의 역할**이라 낡은 토큰(≤15분)이 ADMIN 을 회수당한 뒤에도 통한다 — 이 앱은 계정 모듈을 쓰므로 운영자 계정 도구와 같은 `AccountCallers.requireAdmin`(매 호출 저장소의 계정을 다시 읽는다)으로 갈아 끼웠다.
+4. `CheerErasure` — `AccountErasureListener`. 탈퇴한 계정의 **응원 기록을 지운다**. 장부의 주문 줄은 법정 보존이라 남고, 장부 모듈의 탈퇴 고리가 카드 두 칸(`card_issuer` · `card_last4`)을 지운다.
+   - **순서**: `CheerErasure` 는 `@Order(LOWEST_PRECEDENCE)` — 장부의 탈퇴 고리(`PaymentAccountErasure.ORDER` = 0)보다 **뒤**에 돈다. 장부 고리가 먼저 주문 줄에 `account_erased_at` 을 찍어야, 그 사이 `PAID` 가 되는 주문이 방금 지운 표에 줄을 되살리지 않는다(시험: `CheerErasureOrderIntegrationTest`). 계정 모듈은 고리를 `@Order` / `Ordered` 순으로 부른다.
+   - **탈퇴한 계정의 주문이 뒤늦게 `PAID` 가 되면** 이 앱은 응원 기록을 **남기지 않는다**(`onPaid` 가 `order.accountErasedAt` 을 보고 건너뛴다) — 장부에는 지급됨(`PAID`)으로 찍히고, 운영자는 `includeErased=true` 로 그 주문을 본다. **이 조각을 물건을 파는 앱에 복사할 때는 `order.accountErasedAt` 을 보고 지급할지 환불할지를 정해야 한다** — 응원처럼 「기록만 안 남기면 되는」 앱이 아니면 돈만 받고 물건을 안 주는 주문이 된다.
+
+표는 `cheers` 하나(마이그레이션 `V20261008205449__create_cheers`, PostgreSQL 전용 — 이 앱이 그렇다): 주문 id(키) · 계정 · 금액 · 환불된 금액 · 상태 · 시각. 장부의 표를 외래 키로 가리키지 않는다(다른 모듈의 표).
+
+**켜는 법** — 토스를 켜지 않으면 앱은 예전처럼 뜨고 `GET /api/v1/payments/config` 가 `available: false`(결제 화면은 「지금은 결제할 수 없어요」), 주문 만들기는 `503 PAYMENT.UNAVAILABLE`, 금액 목록은 그대로 나간다. 켜려면 환경변수(로컬은 `.env.local`, 배포는 선언의 `env:` · `secrets:` — [deploy.md §7](deploy.md)):
+
+| 환경변수 | 뜻 |
+|---|---|
+| `SKELETON_PAYMENT_TOSS_ENABLED=true` | 토스를 켠다 |
+| `SKELETON_PAYMENT_TOSS_SECRET_KEY` (별칭 `TOSS_PAYMENTS_SECRET_KEY`) | `test_sk_…` — 결제창 + API 개별 연동 키(결제위젯 키 `test_gsk_…` 는 쓰지 않는다). 비밀 |
+| `SKELETON_PAYMENT_TOSS_CLIENT_KEY` (별칭 `TOSS_PAYMENTS_CLIENT_KEY`) | 같은 묶음의 `test_ck_…`. 비밀 아님 — 서버가 결제창 값으로 프론트에 준다 |
+| `SKELETON_PAYMENT_TOSS_BASE_URL` | 토스 API 주소(기본 `https://api.tosspayments.com`) — 프런트 e2e 는 가짜 토스를 가리킨다 |
+| `SKELETON_PAYMENT_ADMIN_ENABLED=true` | 운영자 경로. **local 프로필은 `application-local.yml` 이 이미 켠다**; 배포는 이 변수 |
+| `SKELETON_PAYMENT_WEBHOOK_PATH_TOKEN` | 웹훅 주소 끝의 비밀 조각(24자 이상). **yml 에 값을 커밋하지 않는다** — 비면 서명 없는 토스의 웹훅 경로는 늘 404, 보호 환경에서는 기동 실패. 주소: `/api/v1/payments/webhooks/toss/<값>` |
+
+이 앱의 yml 이 정한 것: `skeleton.http.clients.payment-toss.response-timeout: 30s`(승인 · 환불은 토스가 느릴 수 있다 — 플랫폼 기본 5초) — 토스를 켜면 `reconcile.first-delay`(기본 60s) · `refund.settle-delay`(기본 2m)가 이보다 길어야 기동한다. 작업 큐(`skeleton.job-queue`, 폴링 1s)는 켜져 있어야 한다 — `job-queue.enabled=false` 이면 장부가 시작하지 못한다(조회 · 지급 · 웹훅 처리가 이 큐로 돈다). `job-queue.worker-enabled=false`(일은 다른 인스턴스가 한다)는 뜨지만 이 인스턴스는 작업을 돌리지 않는다.
+local 프로필은 주문 만들기 한도(기본 계정당 10 / 10분)를 풀어 둔다(`application-local.yml`) — 프런트 e2e 가 한 계정으로 주문을 여럿 만든다.
+
+**프런트 e2e** (react-skeleton `apps/sample/e2e/`)가 백엔드에 넘기는 것: 위 환경변수 다섯(웹훅 조각 제외) + `SPRING_APPLICATION_JSON` 의 `skeleton.payment.reconcile.first-delay=11s` · `skeleton.payment.checkout-ttl=40s` · `skeleton.http.clients.payment-toss.response-timeout=10s`(응답 제한 10초 < 첫 조회 11초 — 가드) · `skeleton.payment.http.order-rate-limit.account-capacity=1000` · `…ip-capacity=1000`(한 실행이 한 계정으로 주문을 여럿 만든다) · `skeleton.payment.webhook.path-token`(e2e 전용 값 — 비밀이 아니다). 앞의 다섯은 이 앱에서 실제로 먹는다 — 증거: `PaymentEnvironmentOnlyBootTest`(환경변수 모양 그대로 진짜 기동; JSON 은 점 표기 평면 키 — 찍은 프로젝트의 이름 바꾸기가 잡는 모양). 시드 `user@example.com` · `admin@example.com`(ADMIN) · `moderator@example.com`, 비밀번호 `password`.
+웹훅을 손으로 보내 보기(토스의 결제 웹훅은 서명이 없고 본문을 믿지 않고 조회하므로 로컬에서 만든 것도 진짜와 같은 길을 탄다): `curl -X POST localhost:8080/api/v1/payments/webhooks/toss/$SKELETON_PAYMENT_WEBHOOK_PATH_TOKEN -H 'Content-Type: application/json' -d '{"eventType":"PAYMENT_STATUS_CHANGED","data":{"paymentKey":"…","orderId":"ord_…"}}'`.
+로그에 주의: `org.springframework.web` 을 DEBUG 로 올리거나 `spring.mvc.log-resolved-exception` 을 켜면 웹훅 주소의 비밀 조각이 평문으로 찍힌다([payment](modules/payment.md) 「웹훅」). 이 앱은 주문 id · 결제 키를 남에게 보이는 화면에 싣지 않는다(`cheers/me` 에도 결제 키가 없다).
+
+통합 시험(`apps/sample/src/test/…/cheer/` — 진짜 PostgreSQL · 보안 체인 · 결제 장부, 결제사만 시험 소스의 `ScriptedGateway` 빈): `CheerJourneyIntegrationTest`(가입 → 주문 → 승인 → 응원 기록 → 환불 요청 → 운영자 환불 → 「환불됨」 · 일부 환불 · 금액 목록 밖 · 승인이 "모름"으로 끝난 뒤 조회 작업이 기록을 만든다) · `CheerAccessIntegrationTest`(남의 주문 404 · 본인은 환불을 실행할 수 없다 · 운영자 판정이 저장소의 지금 역할 · 웹훅 경로가 익명으로 닿되 POST 두 모양뿐 · 사용자 응답에 운영자 칸 · 심은 값 없음) · `CheerOrderListenerIntegrationTest` · `CheerOrderRateLimitIntegrationTest`(429) · `CheerOperatorDisabledIntegrationTest`(꺼져 있으면 404) · `CheerWithoutProviderIntegrationTest`(토스 없이 기동) · `PaymentEnvironmentOnlyBootTest`(환경변수만으로 기동) · `AccountJourneyIntegrationTest`(탈퇴 뒤 전체 표 스캔 — 카드 두 칸이 비고 응원 기록이 지워지고 심은 값이 없고, 운영자는 여전히 환불할 수 있다) · `MigrationUpgradeIntegrationTest` · `MySqlMigrationUpgradeTest`(기준선 데이터 위에서 새 표가 올라가고 탈퇴 고리가 카드 두 칸을 비운다).
+
 ## 돌려 보기
 
 ```bash
@@ -107,6 +152,8 @@ APP=sample scripts/dev.sh    # 백엔드(+프론트 WEB_DIR)만 같은 방식으
 ## 이 샘플이 하지 않는 것
 
 - 노트 시드 데이터 없음 — 빈 상태가 정직하게 보인다.
+- 응원하기는 알림 · 메일을 보내지 않는다 — `PaymentOrderListener` 는 주문 줄 락 안에서 돌아 짧아야 한다. 결제 알림이 필요하면 `NoteNotifier` 처럼 `NotificationPublisher` 를 부르거나 작업으로 넘긴다(스펙 §4.2).
+- 구독 · 정기결제 · 영수증 · 세금계산서는 없다(결제 장부 1단계는 단건 결제 + 환불).
 - 첨부는 노트 하나에 파일 하나. 목록 · 버전 · 공유는 도메인이 커질 때의 일이다.
 - 인증은 스켈레톤 기본(시드 계정 · 15분 액세스 토큰). 실제 계정 저장소는 `AuthAccountRepository` 빈을 앱이 둔다(README "Protected profiles").
 - PostgreSQL 전용(마이그레이션 · 쿼리의 `ILIKE` · `FILTER`). 그래서 `scripts/new-project.sh --with-sample` 은 `--db mysql` 과 같이 못 쓴다.

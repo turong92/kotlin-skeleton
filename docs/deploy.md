@@ -216,7 +216,8 @@ class StorageDeployGuard(private val properties: StorageProperties) : DeployGuar
 | auth-social-oidc | `<P>_AUTH_SOCIAL_OIDC_PROVIDERS_<코드>_CLIENT_ID` (env:) · `_CLIENT_SECRET` (**운영자**) · `_REDIRECT_URI` (env:) — 예: `…_PROVIDERS_LINE_CLIENT_ID` | id 가 비면 그 제공자는 없다(아무 일도 없다). id 만 있고 secret 이 비면 기동 실패 (`client-secret must not be blank`) |
 | auth-social-x | `<P>_AUTH_SOCIAL_X_CLIENT_ID` (env:) · `_CLIENT_SECRET` (**운영자**) · `_REDIRECT_URI` (env:) | id 가 비면 제공자가 없다. id 만 있으면 기동 실패 (`client-secret must not be blank`) |
 | captcha-turnstile | `<P>_CAPTCHA_TURNSTILE_ENABLED=true` (env:) · `_SECRET_KEY` (**운영자**) | 검증기 빈이 없다 — 기동은 되고, 주입받는 곳이 있으면 그 빈 이름으로 실패 |
-| payment-toss / -stripe | `<P>_PAYMENT_<X>_ENABLED=true` (env:) · `_SECRET_KEY` (**운영자**) | 제공자 빈이 없다 — 결제 라우팅이 그 제공자를 못 찾는다 |
+| payment | `<P>_PAYMENT_WEBHOOK_PATH_TOKEN` (**운영자** — `secrets:` + `.local.env`. 결제사 개발자센터에 등록하는 웹훅 주소에 그대로 들어가므로 운영자가 정한 값을 그대로 등록한다. **24자 이상**, 영문 · 숫자 · `-` `.` `_` `~` 만, 서로 다른 글자 8개 이상) · 선택 `<P>_PAYMENT_ADMIN_ENABLED=true` (env:, 운영자 경로를 연다 — 기본 꺼짐) | 서명 없는 결제사(토스의 결제 이벤트)의 웹훅 경로가 늘 404 이다 — 결제사가 보낸 신호를 못 받는다. 보호 환경(`<P>_ENV=stage\|prod`)에서는 비었거나 약하면(24자 미만 등) **기동 실패**(웹 경로가 없는 워커 전용 인스턴스도 같다). 운영자 경로를 켜지 않으면 `/api/v1/admin/payments` 는 404 |
+| payment-toss / -stripe | `<P>_PAYMENT_<X>_ENABLED=true` (env:) · `_SECRET_KEY` (**운영자**) · 토스는 `<P>_PAYMENT_TOSS_CLIENT_KEY` (**비밀 아님** — 선언의 `env:`, 시크릿 키와 같은 묶음의 `ck` 키) | 제공자 빈이 없다 — 결제 라우팅이 그 제공자를 못 찾는다. **토스는 시크릿 키가 비면 보호 환경(`stage\|prod`)에서 기동 실패**, 그 밖의 환경은 경고. 결제 장부가 있는데 클라이언트 키가 비면 보호 환경에서 기동 실패(그 밖은 경고 — `GET /config` 가 `available:false`). 두 키의 모드(`test_` ↔ `live_`)가 다르면 어느 환경이든 기동 실패 |
 | storage | `<P>_STORAGE_WEB_KEY_SECRET` — **선언의 `secrets:` (무작위로 충분)**, `skeleton.storage.web.key-owner=OPAQUE`(작성자 프로필 앱의 첨부 키 — `apps/sample` 이 이 선택을 켠다)일 때만 필요 | `OPAQUE` 인데 비었거나 32자보다 짧으면 **기동 실패**(`key-secret must be at least 32 characters`). 기본(`ACCOUNT_ID`)에서는 읽지 않는다. 바꾸면 이미 발급한 `OPAQUE` 키가 소유 확인에서 떨어진다(옛 `ACCOUNT_ID` 꼴 키는 그대로) — **서버를 옮길 때 이 값을 반드시 들고 간다** |
 | storage-s3 | `<P>_STORAGE_S3_BUCKET` · `_ENDPOINT_OVERRIDE` (env:) · `_CREDENTIALS_ACCESS_KEY_ID` · `_CREDENTIALS_SECRET_ACCESS_KEY` (**운영자**) | 버킷이 비면 저장소 빈이 없다. 키가 비면 AWS 기본 자격 증명 체인으로 가 **첫 사용에서** 실패(기동은 된다) |
 | notification-mail | `<P>_NOTIFICATION_MAIL_ENABLED=true` · `_FROM` · `SPRING_MAIL_HOST` · `_USERNAME` (env:) · `SPRING_MAIL_PASSWORD` (**운영자**, 인증 없는 릴레이면 필요 없다) | host · from 이 비면 발송기 빈이 없다. 비밀번호가 틀리면 첫 발송에서 실패 |
@@ -225,6 +226,8 @@ class StorageDeployGuard(private val properties: StorageProperties) : DeployGuar
 | crypto | `<P>_CRYPTO_PRIMARY_KEY_ID` (env:) · `<P>_CRYPTO_KEYS_<ID>` (base64 AES 키 — **운영자**, `secrets:` 에 그 이름을 더한다) | 키가 없으면 암호화 빈이 없다 |
 | redis-* | 플랫폼이 `<P>_REDIS_*` 를 넣는다 (`redis: true`) | §5 |
 | config-aws-ssm | AWS 자격 증명 | **고르지 않는다** — 홈서버에는 AWS 가 없고, `paths` 를 정하면 부팅에서 자격 증명을 찾는다 |
+
+**결제 웹훅 주소**(결제사 개발자센터에 등록): `https://<도메인>/api/v1/payments/webhooks/toss/<token>` — `<token>` 은 `<P>_PAYMENT_WEBHOOK_PATH_TOKEN` 의 값이다. Cloudflare Tunnel 뒤에서 그대로 닿는다(새 포트 · 새 경로 규칙이 필요 없다 — `api_prefix` 안이다). 이 주소는 우리 로그에서 비밀 조각이 가려진다(`payment` 모듈 문서의 「로그에 관해」 — payment 를 고른 프로젝트에 있다). 값을 바꾸면 결제사에 등록한 주소도 바꾼다.
 
 ## 8. 정적 프론트엔드
 

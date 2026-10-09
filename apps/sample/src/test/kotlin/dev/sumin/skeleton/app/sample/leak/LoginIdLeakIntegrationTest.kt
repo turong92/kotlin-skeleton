@@ -39,7 +39,7 @@ import tools.jackson.databind.ObjectMapper
     ],
 )
 @AutoConfigureMockMvc
-@Import(TestcontainersConfiguration::class, SampleIntegrationTest.FakeStorageConfiguration::class)
+@Import(TestcontainersConfiguration::class, SampleIntegrationTest.FakeStorageConfiguration::class, dev.sumin.skeleton.app.sample.cheer.CheerIntegrationBase.Provider::class)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class LoginIdLeakIntegrationTest {
     companion object {
@@ -91,6 +91,7 @@ class LoginIdLeakIntegrationTest {
             "/api/v1/author-profiles/" to listOf(w.yProfile.id, w.a.id, w.b.id),
             "/api/v1/admin/accounts/" to listOf(w.xAcc, w.yAcc),
             "/api/v1/admin/author-profiles/" to listOf(w.a.id, w.yProfile.id),
+            "/api/v1/payments/orders/" to listOf(http.post("/api/v1/payments/orders", w.yToken, """{"itemType":"cheer","itemRef":"cheer-1000","quantity":1}""", record = false).ok().read<String>("$.value.order.id")),   // 결제 장부의 주문 한 건 읽기 - Y 의 주문(결제사는 시험 소스의 가짜)
         )
     }
 

@@ -4,15 +4,22 @@ import ch.qos.logback.classic.Level
 import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
+import dev.sumin.skeleton.common.logging.LogMasker
 import dev.sumin.skeleton.common.logging.SkeletonLoggers
 import jakarta.servlet.FilterChain
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import org.slf4j.LoggerFactory
 import org.springframework.mock.web.MockHttpServletRequest
 import org.springframework.mock.web.MockHttpServletResponse
 
 class RequestLoggingFilterTest {
+    private companion object {
+        const val BUDGET_MS = 50L
+    }
+
+
     @Test
     fun `request logs use stable request debug category`() {
         captureLogger(SkeletonLoggers.REQUEST).use { captured ->
@@ -66,6 +73,124 @@ class RequestLoggingFilterTest {
         }
     }
 
+    @Test
+    fun `the logged path goes through the contributor rules so a secret path piece never reaches the line`() {
+        val previous = LogMasker.current
+        LogMasker.install(contributorMasker("""/hooks/[a-z]+/(?<value>[^\s?]+)"""))
+        try {
+            captureLogger(SkeletonLoggers.REQUEST).use { captured ->
+                RequestLoggingFilter().doFilter(MockHttpServletRequest("POST", "/hooks/toss/SECRETPIECE"), MockHttpServletResponse(), FilterChain { _, _ -> })
+
+                val messages = captured.events.map { it.formattedMessage }
+                assertEquals(2, messages.size)
+                messages.forEach { assertTrue(!it.contains("SECRETPIECE") && it.contains("/hooks/toss/[REDACTED]"), it) }
+            }
+        } finally {
+            LogMasker.install(previous)
+        }
+    }
+
+    @Test
+    fun `without a contributor the request lines carry the path exactly as it came - default rules, app rules and a long path included`() {
+        val paths = listOf("/api/v1/hello", "/a/token=abc123/b", "/a/eyJhbGciOi.eyJzdWIiOi.c2ln/b", "/a/APPSECRET/me@example.com", "/" + "x".repeat(3000))
+        val previous = LogMasker.current
+        LogMasker.install(LogMasker(patterns = listOf("(?<value>APPSECRET)"), maskEmails = true))
+        try {
+            paths.forEach { path ->
+                captureLogger(SkeletonLoggers.REQUEST).use { captured ->
+                    RequestLoggingFilter().doFilter(MockHttpServletRequest("GET", path), MockHttpServletResponse(), FilterChain { _, _ -> })
+                    val messages = captured.events.map { it.formattedMessage }
+                    assertEquals("\u2192 GET $path", messages[0])
+                    assertTrue(messages[1].startsWith("\u2190 GET $path 200 ("), messages[1])
+                }
+            }
+        } finally {
+            LogMasker.install(previous)
+        }
+    }
+
+    @Test
+    fun `with a contributor only its rule runs on the path - the default rules do not`() {
+        withContributorMasker {
+            captureLogger(SkeletonLoggers.REQUEST).use { captured ->
+                val path = "/api/v1/payments/webhooks/toss/SECRETPIECE"
+                RequestLoggingFilter().doFilter(MockHttpServletRequest("GET", path), MockHttpServletResponse(), FilterChain { _, _ -> })
+                RequestLoggingFilter().doFilter(MockHttpServletRequest("GET", "/a/token=abc123/eyJhbGciOi.eyJzdWIiOi.c2ln"), MockHttpServletResponse(), FilterChain { _, _ -> })
+
+                val messages = captured.events.map { it.formattedMessage }
+                assertTrue(messages[0] == "\u2192 GET /api/v1/payments/webhooks/toss/[REDACTED]", messages[0])
+                assertTrue(messages[2] == "\u2192 GET /a/token=abc123/eyJhbGciOi.eyJzdWIiOi.c2ln", messages[2])
+            }
+        }
+    }
+
+    @Test
+    fun `with a contributor a path longer than 512 characters is cut before masking and marked`() {
+        withContributorMasker {
+            captureLogger(SkeletonLoggers.REQUEST).use { captured ->
+                val path = "/api/v1/payments/webhooks/toss/SECRETPIECE" + "z".repeat(2000)
+                RequestLoggingFilter().doFilter(MockHttpServletRequest("GET", path), MockHttpServletResponse(), FilterChain { _, _ -> })
+                val long = "/" + "q".repeat(1000)
+                RequestLoggingFilter().doFilter(MockHttpServletRequest("GET", long), MockHttpServletResponse(), FilterChain { _, _ -> })
+
+                val messages = captured.events.map { it.formattedMessage }
+                assertEquals("\u2192 GET /api/v1/payments/webhooks/toss/[REDACTED]${LogMasker.TRUNCATED_MARK}", messages[0], "the hidden piece swallows the cut tail, and the mark follows")
+                assertEquals("\u2192 GET ${long.take(LogMasker.MAX_PATH_CHARS)}${LogMasker.TRUNCATED_MARK}", messages[2])
+                assertTrue(!messages[2].contains(long), "the full path is not logged")
+            }
+        }
+    }
+
+    /** 요청 로그의 가림은 인증 · 한도보다 앞에서 도므로, 악성 경로 한 번이 CPU 를 묶지 못해야 한다 (Tomcat 기본 헤더 8KB 안의 7,800자 경로) */
+    private fun filterMillis(path: String): Long {
+        val started = System.nanoTime()
+        RequestLoggingFilter().doFilter(MockHttpServletRequest("GET", path), MockHttpServletResponse(), FilterChain { _, _ -> })
+        return (System.nanoTime() - started) / 1_000_000
+    }
+
+    /** 여러 번 돌려 최솟값 — CI 의 우연한 지연은 거르고, 0.4초짜리는 확실히 잡는다 */
+    private fun bestOf(runs: Int, path: String): Long = (1..runs).minOf { filterMillis(path) }
+
+    private fun withContributorMasker(block: () -> Unit) {
+        val previous = LogMasker.current
+        LogMasker.install(contributorMasker("""/api/v1/payments/webhooks/[^/\s]+/(?<value>\S+)"""))
+        try {
+            block()
+        } finally {
+            LogMasker.install(previous)
+        }
+    }
+
+    @Test
+    fun `a 7800 character hostile path is logged within the time budget whatever the masker has - sensitive-pair shaped`() {
+        val path = "/" + "a-".repeat(3900)
+        withContributorMasker {
+            captureLogger(SkeletonLoggers.REQUEST).use { assertTrue(bestOf(5, path) < BUDGET_MS, "took ${bestOf(1, path)}ms") }
+        }
+    }
+
+    @Test
+    fun `a 7800 character hostile path is logged within the time budget whatever the masker has - jwt shaped`() {
+        val path = "/" + "eyJ-".repeat(1950)
+        withContributorMasker {
+            captureLogger(SkeletonLoggers.REQUEST).use { assertTrue(bestOf(5, path) < BUDGET_MS, "took ${bestOf(1, path)}ms") }
+        }
+    }
+
+    @Test
+    fun `a 7800 character hostile path aimed at a contributor rule is logged within the time budget`() {
+        val paths = listOf(
+            "/api/v1/payments/webhooks/x/" + "a/".repeat(3880),
+            "/api/v1/payments/webhooks/" + "a".repeat(7700),
+            "/api/v1/payments/webhooks/x".repeat(290),
+        )
+        withContributorMasker {
+            captureLogger(SkeletonLoggers.REQUEST).use {
+                paths.forEach { path -> assertTrue(bestOf(5, path) < BUDGET_MS, "took ${bestOf(1, path)}ms for ${path.take(40)}") }
+            }
+        }
+    }
+
     private fun captureLogger(loggerName: String): CapturedLogger {
         val logger = LoggerFactory.getLogger(loggerName) as Logger
         val previousLevel = logger.level
@@ -93,4 +218,6 @@ class RequestLoggingFilterTest {
             appender.stop()
         }
     }
+
+    private fun contributorMasker(vararg patterns: String) = LogMasker(patterns = patterns.toList(), pathPatterns = patterns.toList())
 }

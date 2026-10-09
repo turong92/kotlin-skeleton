@@ -1,4 +1,4 @@
-# payment — 결제 제공자 라우팅. 제공자 구현은 payment-toss / payment-stripe.
+# payment — 결제 제공자 라우팅 + 결제 장부(payment-jdbc 가 있을 때). 제공자 구현은 payment-toss / payment-stripe.
 skeleton:
   payment:
     # default-provider:            # 미설정: 경로가 안 맞을 때 쓸 제공자 ID (제공자가 하나뿐이면 그것)
@@ -7,3 +7,41 @@ skeleton:
 #       enabled: true              # false 면 라우팅에서 뺀다
 #       currencies: [KRW]          # 이 통화만 이 제공자로
 #       countries: [KR]            # 이 국가만 이 제공자로
+    # --- 결제 장부 (PaymentLedgerStore 빈 = payment-jdbc 가 있을 때만 쓰인다) ---
+    checkout-ttl: 30m              # 만든 주문으로 결제할 수 있는 시간. 지나면 만료 작업이 결제사에 묻고 닫는다
+    reconcile:
+      first-delay: 60s             # 승인 선점 뒤 첫 조회까지. 결제사 응답 제한 시간(skeleton.http.clients.<이름>.response-timeout)보다 길게
+      max-attempts: 12             # 조회 작업의 시도 수 (큐의 기본 백오프로 약 4시간)
+    refund:
+      requests-enabled: true       # 본인이 환불 "요청"을 만들 수 있다 (돈은 운영자가 움직인다)
+      settle-delay: 2m             # 환불 선점 뒤 첫 조회까지. 결제사 응답 제한 시간(skeleton.http.clients.<이름>.response-timeout)보다 길어야 한다 — 장부가 있는데 같거나 짧으면 payment-toss 가드가 기동을 막는다 ("적용 안 됨"으로 닫은 뒤 앞선 요청이 늦게 적용되는 경우를 줄인다)
+      provider-pending-timeout: 24h  # 결제사가 환불을 "접수했다(처리 중)"고 답했는데 조회에 여전히 안 보이는 줄을, 보낸 지 이 시간이 지나면 운영자의 「결제사와 맞추기」가 NOT_APPLIED 로 닫을 수 있다(정산 작업은 닫지 않는다 — 사람이 누른 맞추기만). 닫은 뒤 늦게 적용되면 다음 맞추기가 결제사 취소 줄로 잡는다. 양수여야 한다
+    # --- 웹훅 수신함 (장부가 있을 때만) ---
+    webhook:
+      enabled: true                # 웹훅 경로(POST <http.base-path>/webhooks/{provider}[/{token}])를 연다 — PaymentWebhookGateway 빈이 있을 때만 뜻이 있다. 수신함 서비스 · 처리 작업은 이 값과 무관하게 선다
+      path-token: ""               # 주소 끝의 비밀 조각 — 서명 없는 결제사(토스의 결제 이벤트)는 이 값이 맞아야 닿는다(비어 있으면 그 결제사의 경로는 늘 404). 환경변수 <P>_PAYMENT_WEBHOOK_PATH_TOKEN. 보호 환경(stage · prod)에서 비었거나 약하면(24자 미만 · 주소에 못 쓰는 글자 · 서로 다른 글자 8개 미만) 기동 실패
+      max-body-bytes: 65536        # 본문 크기 제한 — 넘으면 413 (주소가 맞은 요청만). 1 ~ 1048576(1 MiB) — 그 밖은 기동 실패
+      rate-limit:
+        capacity: 120              # 호출자(IP)마다 이 창 안의 요청 수 — 넘으면 429 + Retry-After. 주소를 확인하기 전에 센다
+        window: 1m
+      per-order-limit:             # 주문마다 "새 이벤트 키"의 창 상한 — 전달 id 는 호출자가 정하므로 키를 바꿔 보내는 것으로 줄 · 작업 · 결제사 조회를 늘리지 못하게 한다
+        capacity: 30               # 이 창 안에 그 주문에 저장된 줄(`order_id` 로 센다)이 이만큼이면 새 이벤트는 저장하지 않고 200 + 로그 한 줄(식별자 없음). 세기와 넣기는 주문 줄 락 안이라 인스턴스가 여럿이어도 정확히 이 수다. 같은 이벤트의 재전송은 세지 않는다
+        window: 10m                # 상한에 걸린 신호는 버리지 않는다 — 주문당 이 창(고정 구간)마다 표식 줄(event_key=limited:<주문 id>:<창 번호>)과 창 끝에 도는 조회 작업이 하나씩 걸린다(표식 줄은 세지 않는다)
+      redelivery-requeue-limit: 10 # FAILED · DEAD 줄에 결제사가 같은 이벤트를 다시 보낼 때 새 작업을 넣어 주는 상한 — 넣어 준 횟수가 아니라 그 줄의 총 전달 수(deliveries, 첫 전달 포함)가 이 값 이하일 때만 넣고, 넘으면 받은 것으로만 답한다(DUPLICATE). 실패한 작업은 백오프에 살아 있어 상한 없이 얹으면 줄당 작업이 끝없이 는다. 운영자의 「다시 처리」는 이 값과 무관하다. 0 이상, 0 이면 재전송이 작업을 다시 넣지 않는다
+    # --- HTTP (장부가 있을 때만. docs/payment-http-contract.md) ---
+    http:
+      enabled: true                # 사용자 경로(config · 주문 · 승인 · 환불 요청 …)를 연다. 웹훅 경로는 이 값과 무관하다(webhook.enabled 로만 닫는다). 주문 만들기는 이 위에서 앱이 PaymentCatalog 빈을 둘 때만 열린다
+      base-path: /api/v1/payments  # 사용자 · 웹훅 경로의 기준 — 웹훅은 그 아래 /webhooks/{provider}[/{token}]. "/" 로 시작하고 "/" 로 끝나지 않는다
+      order-rate-limit:            # 주문 만들기(POST /orders)의 요청 수 한도 — 넘으면 429. 계정당 주문 수가 웹훅 조회 유발의 전체 상한을 정한다. 저장소는 플랫폼의 RateLimitStore(redis-rate-limit 이 있으면 인스턴스끼리 공유, 없으면 인스턴스별 메모리 — n 대면 한도가 n 배)
+        account-capacity: 10       # 계정마다 이 창 안의 요청 수
+        ip-capacity: 30            # 호출자 IP 마다 이 창 안의 요청 수
+        window: 10m
+    # --- 운영자 HTTP (기본 꺼짐 — 꺼져 있으면 경로가 없어 404) ---
+    admin:
+      enabled: false               # true 면 운영자 경로(주문 목록 · 직접 환불 · 승인 · 거절 · 결제사와 맞추기 · 웹훅 수신함)가 선다. 환경변수 <P>_PAYMENT_ADMIN_ENABLED. 켜지면 PaymentOperatorPolicy 를 매 호출 확인한다(거절은 403)
+      base-path: /api/v1/admin/payments   # 운영자 경로의 기준. "/" 로 시작하고 "/" 로 끝나지 않는다
+      role: ADMIN                  # 기본 정책이 보는 역할(토큰의 ROLE_<role>). 앱이 PaymentOperatorPolicy 빈을 두면 쓰이지 않는다 — account 를 쓰는 앱은 매 호출 저장소의 역할을 읽는 빈으로 갈아 끼운다(토큰이 낡았을 수 있다)
+      stale-after: 1h              # 「오래됨」의 기준 — 이보다 오래 CONFIRMING 인 주문(STALE_CONFIRMING) · PENDING 인 채 남은 환불(STALE_REFUND) · 지급 · 회수가 안 끝난 채 남은 주문이 「확인 필요」 목록에 오르고 상세에 이유로 붙는다. 양수여야 한다
+    # --- 계정 탈퇴 ---
+    erasure:
+      account-id: KEEP             # KEEP: 탈퇴해도 결제 줄의 계정 id 를 그대로 둔다 / TOMBSTONE: 그 계정이 산 주문의 줄에서만 계정 id 를 바꾼다(운영자로서 남의 주문에 남긴 id 는 남는다). 어느 쪽이든 카드사 · 끝 네 글자는 지워지고 주문 줄은 남는다

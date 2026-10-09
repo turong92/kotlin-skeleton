@@ -107,9 +107,9 @@ class TossPaymentProviderTest {
             response = TossPaymentResponse(
                 paymentKey = "pay_1",
                 status = "CANCELED",
-                cancelAmount = 1_000,
                 currency = "KRW",
-                transactionKey = "cancel_tx_1",
+                lastTransactionKey = "cancel_tx_1",
+                cancels = listOf(TossCancel(transactionKey = "cancel_tx_1", cancelAmount = 1_000, canceledAt = "2026-10-08T10:15:30+09:00", cancelStatus = "DONE")),
             ),
         )
         val provider = TossPaymentProvider(
@@ -156,6 +156,57 @@ class TossPaymentProviderTest {
     }
 
     @Test
+    fun `refund reads the response status instead of always saying refunded`() {
+        fun refundStatusFor(providerStatus: String?): PaymentOperationStatus {
+            val client = RecordingExternalHttpClient(
+                response = TossPaymentResponse(
+                    paymentKey = "pay_1",
+                    status = providerStatus,
+                    currency = "KRW",
+                    lastTransactionKey = "tx",
+                    cancels = listOf(TossCancel(transactionKey = "tx", cancelAmount = 1_000, canceledAt = "2026-10-08T10:15:30+09:00", cancelStatus = "DONE")),
+                ),
+            )
+            val provider = TossPaymentProvider(
+                httpClient = client,
+                properties = TossPaymentProperties(enabled = true, secretKey = "test_sk_123"),
+            )
+            return provider.refund(
+                PaymentRefundRequest(
+                    providerPaymentId = "pay_1",
+                    amount = PaymentAmount(amount = 1_000, currency = "KRW"),
+                    idempotencyKey = IdempotencyKey("rfd_1"),
+                ),
+            ).status
+        }
+
+        assertEquals(PaymentOperationStatus.REFUNDED, refundStatusFor("CANCELED"))
+        assertEquals(PaymentOperationStatus.REFUNDED, refundStatusFor("PARTIAL_CANCELED"))
+        assertEquals(PaymentOperationStatus.FAILED, refundStatusFor("ABORTED"))
+        assertEquals(PaymentOperationStatus.FAILED, refundStatusFor("EXPIRED"))
+        assertEquals(PaymentOperationStatus.PENDING, refundStatusFor("IN_PROGRESS"))
+        assertEquals(PaymentOperationStatus.UNKNOWN, refundStatusFor("DONE"), "DONE after a cancel call means nothing was refunded as far as the response shows - not a success")
+        assertEquals(PaymentOperationStatus.UNKNOWN, refundStatusFor(null))
+        assertEquals(PaymentOperationStatus.UNKNOWN, refundStatusFor("SOMETHING_NEW"))
+    }
+
+    @Test
+    fun `provider error exposes the code only - no provider message and no raw body`() {
+        val pii = """{"code":"REJECT_CARD_PAYMENT","message":"홍길동 hong@example.test 010-1234-5678 4330123412341234","traceId":"trace-1","customerName":"홍길동"}"""
+        val exception = TossPaymentErrorMapper(providerId = "toss").map(
+            providerErrorContext(clientName = "payment-toss", upstreamStatus = 403, body = pii),
+        )
+
+        assertEquals("REJECT_CARD_PAYMENT", exception.providerError.code)
+        assertEquals(null, exception.providerError.message)
+        assertEquals(null, exception.providerError.rawBody)
+        val everywhere = listOf(exception.message, exception.providerError.toString(), exception.data.toString()).joinToString("|")
+        listOf("홍길동", "hong@example.test", "010-1234-5678", "4330123412341234").forEach {
+            assertEquals(false, everywhere.contains(it), "leaked $it: $everywhere")
+        }
+    }
+
+    @Test
     fun `provider error body maps to stable payment exception`() {
         val mapper = TossPaymentErrorMapper(providerId = "toss")
         val exception = mapper.map(
@@ -171,7 +222,7 @@ class TossPaymentProviderTest {
         }
         assertEquals("toss", paymentException.providerError.provider)
         assertEquals("INVALID_REQUEST", paymentException.providerError.code)
-        assertEquals("invalid amount", paymentException.providerError.message)
+        assertEquals(null, paymentException.providerError.message, "the provider's message text is never carried - the code is enough")
         assertEquals("trace-error-1", paymentException.providerError.trace.providerRequestId)
         assertEquals(400, paymentException.providerError.upstreamStatus)
     }
@@ -191,6 +242,24 @@ class TossPaymentProviderTest {
         )
 
         assertEquals("trace-error-header-1", exception.providerError.trace.providerRequestId)
+    }
+
+    @Test
+    fun `provider error maps the trace header the real Toss sends - x-tosspayments-trace-id`() {
+        // 2026-10-09 실측: 진짜 토스의 오류 응답(404 · 401)은 추적 번호를 본문이 아니라 헤더 `x-tosspayments-trace-id` 로만 준다. (성공 응답은 재지 않았다. 아래 값은 지어낸 것이다.)
+        val mapper = TossPaymentErrorMapper(providerId = "toss")
+        val exception = mapper.map(
+            providerErrorContext(
+                clientName = "payment-toss",
+                upstreamStatus = 404,
+                body = """{"code":"NOT_FOUND_PAYMENT","message":"not found"}""",
+                headers = HttpHeaders().apply {
+                    add("x-tosspayments-trace-id", "0123456789abcdef0123456789abcdef")
+                },
+            ),
+        )
+
+        assertEquals("0123456789abcdef0123456789abcdef", exception.providerError.trace.providerRequestId)
     }
 
     private class RecordingExternalHttpClient(

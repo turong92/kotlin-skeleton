@@ -62,6 +62,17 @@ object UpgradeBaseline {
         "insert into notes (owner_id, title, body, status, created_at, updated_at) values ('acc_upgrade', 'Before the upgrade', 'a note on the baseline schema', 'ACTIVE', '2026-10-01 00:00:00', '2026-10-01 00:00:00')",
     )
 
+    /**
+     * 결제 장부(`payment_orders`)는 기준선 **뒤에** 더해진 표라 올라간 뒤에 넣는다 — 기준선 계정(`acc_upgrade`)이 산 결제 한 줄(카드 표시 있음).
+     * 탈퇴 고리가 이 줄의 `card_issuer` · `card_last4` 를 비우는지 보려는 것이다(PostgreSQL · MySQL 이 같은 문장을 쓴다).
+     */
+    val LEDGER_ROWS: List<String> = listOf(
+        "insert into payment_orders (id, account_id, kind, status, provider, provider_mode, provider_payment_id, currency, amount, paid_amount, refunded_amount, item_type, item_ref, quantity, order_name, " +
+            "origin_type, method, card_issuer, card_last4, checkout_expires_at, paid_at, created_at, updated_at) " +
+            "values ('ord_upgrade', 'acc_upgrade', 'ONE_TIME', 'PAID', 'toss', 'TEST', 'pay_upgrade', 'KRW', 3000, 3000, 0, 'cheer', 'cheer-3000', 1, 'Cheer 3,000', " +
+            "'CHECKOUT', 'CARD', 'HYUNDAI', '1234', '2036-10-01 00:00:00', '2026-10-01 00:00:00', '2026-10-01 00:00:00', '2026-10-01 00:00:00')",
+    )
+
     /** 이 표들에 위 행이 하나씩(이상) 있어야 한다 — 업그레이드 뒤에도 */
     val TABLES: List<String> = listOf(
         "accounts", "account_roles", "account_identities", "account_tokens", "account_audit", "account_blocks", "account_challenges",
@@ -80,9 +91,20 @@ object UpgradeBaseline {
             ?: error("migrations.lock 에 baseline 줄이 없다")
     }
 
+    /**
+     * 이 위치들에서 기준선 버전 이하로 가장 높은 V 파일 버전 — 기준선 버전 그 자체가 이 위치들에 없을 수 있다.
+     * 찍은 프로젝트의 기준선은 **모든 방언을 통틀어** 가장 새 V 파일이라, 샘플 앱의 PostgreSQL 전용 파일(`create_cheers`)이 가장 새로우면 MySQL 폴더에는 그 버전이 없고
+     * Flyway 의 `target` 이 "No migration with a target version ... could be found" 로 죽는다. 본 레포는 기준선이 고정이라 늘 있다. 클래스패스 위치(PostgreSQL 시험)는 앱 자신의 파일을 다 담으므로 그대로 쓴다.
+     */
+    fun baselineIn(locations: List<String>): String = if (locations.any { !it.startsWith("filesystem:") }) baselineVersion else locations.flatMap { loc ->
+        Files.list(Path.of(loc.removePrefix("filesystem:"))).use { files ->
+            files.toList().mapNotNull { Regex("""V(\d{14})__.*\.sql""").matchEntire(it.fileName.toString())?.groupValues?.get(1) }
+        }
+    }.filter { it <= baselineVersion }.maxOrNull() ?: error("no V file at or below the baseline $baselineVersion in $locations")
+
     /** 기준선 버전까지만 migrate 하고 [ROWS] (+ [extraRows]) 를 넣는다. 이어서 호출하는 쪽이 최신까지 migrate 한다 */
     fun install(dataSource: DataSource, locations: List<String>, extraRows: List<String> = emptyList()) {
-        Flyway.configure().dataSource(dataSource).locations(*locations.toTypedArray()).target(baselineVersion).load().migrate()
+        Flyway.configure().dataSource(dataSource).locations(*locations.toTypedArray()).target(baselineIn(locations)).load().migrate()
         val jdbc = JdbcClient.create(dataSource)
         (ROWS + extraRows).forEach { jdbc.sql(it).update() }
     }

@@ -91,6 +91,18 @@ skeleton:
         - '(?i)\bcode=(?<value>\d{4,8})\b'      # a named group `value` replaces only that part
 ```
 
+A module can add its own rules without any app configuration: expose a `LogMaskingContributor` bean (`fun patterns(): List<String>`, same regex
+rules as above) and its patterns are appended after `skeleton.redaction.output.patterns`. `payment` does this for its webhook address
+(`<base-path>/webhooks/<provider>/<secret piece>`).
+
+The request log (`→ …` / `← …`) prints the path through `LogMasker.maskRequestPath` and **only the contributors' rules run on it** — not the default
+rules and not `skeleton.redaction.output.patterns`. The request filter runs before authentication and the rate limit on whatever path any caller sends, so the
+path is cut to 512 characters (`...[truncated]` marks the cut) before the contributors' rules see it, and a contributor's regex must not blow up on a long
+input (bounded repeats, a fixed literal in front). With no contributor the path is logged exactly as it came. Other lines (error logs, framework
+messages) need the logback fragment and get the default, configured and contributed rules. If the app replaces the `LogMasker` bean, the contributors'
+rules are gone with it (nothing adds them to a bean you build yourself — pass them as `pathPatterns` and `patterns`). A contributor's invalid regex fails
+startup with the message `Invalid skeleton.redaction.output.patterns entry '<pattern>'` — it names the pattern, not the bean that gave it.
+
 The converters are created by logback before Spring starts, so lines logged during startup use the default rules; once the
 context is up the configured rules take over. An invalid pattern fails startup with the pattern in the message.
 

@@ -21,6 +21,7 @@
 #   skeleton_refresh     → <config-prefix>_refresh  (리프레시 쿠키 기본 이름 — 테이블이 아니다. 테이블 이름에는 skeleton_ 접두사가 없다: docs/table-names.md)
 # 바꾸지 않는 것: 샘플 API 경로 /api/v1/skeleton/** (react-skeleton 워크벤치 계약),
 #   "kotlin-skeleton" 이 들어간 .md 문서 제목(수동), git 히스토리.
+# 못 바꾸는 모양: 따옴표 안의 JSON 뿌리 키 `{"skeleton":{…}}`(SPRING_APPLICATION_JSON 등) — 잔여 검사가 실패시킨다. 점 표기 평면 키 `{"skeleton.payment.x":…}` 로 쓴다.
 # 끝나면 남은 흔적을 검사해 하나라도 있으면 exit 1. 그 다음 `./gradlew build` 로 확인한다. macOS/BSD sed 와 GNU sed 모두 동작.
 set -euo pipefail
 
@@ -94,7 +95,7 @@ if [ -f scripts/build-capabilities.pl ] && [ -f capabilities.json ]; then perl s
 leftovers="$(files | xargs perl -ne '
   next if /\/skeleton\//;                                       # 의도적으로 남기는 것 (샘플 API 경로 — 테이블 이름의 skeleton_ 예외는 없다)
   next if $ARGV =~ /\.md$/ && /kotlin-skeleton/;               # 문서 제목
-  print "$ARGV:$.: $_" if ($ARGV =~ /\.(sql|kts?)$/ && /skeleton_[a-z]/) || /dev\.sumin\.skeleton|dev\/sumin\/skeleton|\bSKELETON_|^\s*skeleton:\s*$|(?<!rename-)\bskeleton\.[a-z]|-Pskeleton\.|\bskeleton-[a-z]|\bSkeleton[A-Z]|\bskeleton[A-Z]|\bkotlin-skeleton\b/;
+  print "$ARGV:$.: $_" if ($ARGV =~ /\.(sql|kts?)$/ && /skeleton_[a-z]/) || /dev\.sumin\.skeleton|dev\/sumin\/skeleton|\bSKELETON_|^\s*skeleton:\s*$|(?<!rename-)\bskeleton\.[a-z]|-Pskeleton\.|\bskeleton-[a-z]|\bSkeleton[A-Z]|\bskeleton[A-Z]|\bkotlin-skeleton\b|\\?["'"'"'"]skeleton\\?["'"'"'"]\s*:/;
   close ARGV if eof;
 ' || true)"
 if [ -n "$leftovers" ]; then

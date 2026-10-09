@@ -5,22 +5,26 @@
 #   scripts/check-real-providers.sh --send-test-mail me@gmail.com   # SMTP 가 채워져 있으면 시험 메일 한 통 (curl 로 보낸다)
 #   scripts/check-real-providers.sh --base-url http://localhost:8080  # 떠 있는 백엔드의 GET /api/v1/auth/methods 와 맞는지도 본다 (기본: 백엔드가 있으면 본다)
 #   ENV_FILE=other.env scripts/check-real-providers.sh
+#   scripts/check-real-providers.sh --toss-only --env-file <파일>   # 토스페이먼츠 구역만 (결제 장부의 가정 — 키가 있으면 토스에 돈이 움직이지 않는 호출 6번)
 #
-# 끝날 때 ✗ 가 하나라도 있으면 종료 코드 1. 비밀 값은 출력하지 않는다 (client id 는 앞 6글자만).
+# 끝날 때 ✗ 가 하나라도 있으면 종료 코드 1. ✗ 는 없지만 **--toss-only 로** 토스만 쟀고 사람의 결제창이 있어야 재는 단계를 건너뛰었으면(토스 클라이언트 키 없음) 종료 코드 3.
+# 평소 점검(소셜 · 메일 뒤에 토스 구역이 딸려 도는 경우)은 그 이유만으로는 0 으로 끝난다 — 「건너뜀」 줄만 찍는다. 비밀 값은 출력하지 않는다 (client id 는 앞 6글자만).
 # 제공자: google · kakao · naver(…PROVIDERS_<X>_*) · LINE(SKELETON_AUTH_SOCIAL_OIDC_PROVIDERS_LINE_*) · X(SKELETON_AUTH_SOCIAL_X_*) — 이름 규칙은 docs/real-provider-setup.md §6.
-# 시험용: CHECK_GOOGLE_TOKEN_URL · CHECK_KAKAO_TOKEN_URL · CHECK_NAVER_TOKEN_URL · CHECK_LINE_TOKEN_URL · CHECK_X_TOKEN_URL · CHECK_GOOGLE_DISCOVERY_URL · CHECK_LINE_DISCOVERY_URL 로 주소를 바꿀 수 있다.
+# 시험용: CHECK_GOOGLE_TOKEN_URL · CHECK_KAKAO_TOKEN_URL · CHECK_NAVER_TOKEN_URL · CHECK_LINE_TOKEN_URL · CHECK_X_TOKEN_URL · CHECK_GOOGLE_DISCOVERY_URL · CHECK_LINE_DISCOVERY_URL · CHECK_TOSS_BASE_URL 로 주소를 바꿀 수 있다
+# (CHECK_TOSS_BASE_URL 이 켜져 있으면 출력 첫머리에 「가짜 서버 대상」이 찍힌다), CHECK_TOSS_TIMEOUT_SEC 로 토스 호출의 시간 제한(기본 30초)을 바꾼다.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
-ENV_FILE="${ENV_FILE:-.env.local}"; BASE_URL="${BASE_URL:-http://localhost:${SERVER_PORT:-8080}}"; TEST_MAIL=""
+ENV_FILE="${ENV_FILE:-.env.local}"; BASE_URL="${BASE_URL:-http://localhost:${SERVER_PORT:-8080}}"; TEST_MAIL=""; TOSS_ONLY=0; TOSS_SKIPPED=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --send-test-mail) TEST_MAIL="${2:?--send-test-mail <주소>}"; shift 2 ;;
     --base-url) BASE_URL="${2:?--base-url <주소>}"; shift 2 ;;
     --env-file) ENV_FILE="${2:?--env-file <파일>}"; shift 2 ;;
+    --toss-only) TOSS_ONLY=1; shift ;;
     --self-test) exec bash scripts/check-real-providers.d/self-test.sh ;;
-    -h|--help) sed -n 2,12p "$0"; exit 0 ;;
-    *) echo "usage: $0 [--send-test-mail <주소>] [--base-url <주소>] [--env-file <파일>]" >&2; exit 2 ;;
+    -h|--help) sed -n 2,14p "$0"; exit 0 ;;
+    *) echo "usage: $0 [--send-test-mail <주소>] [--base-url <주소>] [--env-file <파일>] [--toss-only]" >&2; exit 2 ;;
   esac
 done
 
@@ -36,6 +40,19 @@ if [ -f "$ENV_FILE" ]; then
 else
   echo "환경 파일 $ENV_FILE 없음 — 현재 셸 환경만 본다 (.env.example 을 .env.local 로 복사해 채운다)"
 fi
+# 환경 파일을 읽은 뒤에 판정한다 — 파일이 CHECK_TOSS_BASE_URL 을 켜는 경우도 표시되게
+[ -z "${CHECK_TOSS_BASE_URL:-}" ] || echo "※ 가짜 서버 대상 — CHECK_TOSS_BASE_URL 이 켜져 있어 토스 구역은 진짜 토스가 아니라 $CHECK_TOSS_BASE_URL 를 부른다 (시험용)"
+
+finish() {
+  echo
+  if [ "$BAD" != 0 ]; then echo "✗ $BAD 개 문제"; exit 1; fi
+  if [ "$TOSS_SKIPPED" = 1 ] && [ "$TOSS_ONLY" = 1 ]; then echo "✓ 막히는 것은 찾지 못했다 — 단, 건너뛴 단계가 있다(토스 결제 승인 · 웹훅: 클라이언트 키 없음). 종료 코드 3"; exit 3; fi
+  # §11 은 payment-toss 를 고른 프로젝트의 안내 문서에만 있다 — 없으면 죽은 참조를 찍지 않는다
+  local s11=""; grep -q '^## 11\. ' docs/real-provider-setup.md 2>/dev/null && s11=", 토스는 §11"
+  echo "✓ 막히는 것은 찾지 못했다 (사람이 눌러 봐야 아는 것은 docs/real-provider-setup.md §6$s11)"; exit 0
+}
+. scripts/check-real-providers.d/toss.sh
+if [ "$TOSS_ONLY" = 1 ]; then toss_section; finish; fi
 
 P=SKELETON_AUTH_SOCIAL_PROVIDERS
 val() { local n="${P}_$1_$2"; printf '%s' "${!n:-}"; }
@@ -244,4 +261,5 @@ if [ -n "$TEST_MAIL" ]; then
   fi
 fi
 
-echo; if [ "$BAD" = 0 ]; then echo "✓ 막히는 것은 찾지 못했다 (사람이 눌러 봐야 아는 것은 docs/real-provider-setup.md §6)"; else echo "✗ $BAD 개 문제"; exit 1; fi
+toss_section
+finish

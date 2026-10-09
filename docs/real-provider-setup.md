@@ -1,4 +1,4 @@
-# 진짜 제공자 시험 가이드 — 소셜 로그인(Google · LINE · X) + 진짜 메일
+# 진짜 제공자 시험 가이드 — 소셜 로그인(Google · LINE · X) + 진짜 메일<!-- payment-toss:start --> + 토스페이먼츠(§11)<!-- payment-toss:end -->
 
 처음 해 보는 사람이 위에서부터 따라 하면 **내 도메인으로 진짜 소셜 로그인과 진짜 메일 발송을 시험**할 수 있게 쓴 문서다.
 `확인 필요` 로 표시한 것은 요금 · 한도 · 콘솔 화면처럼 시간이 지나면 바뀌는 사실이라 **이 문서를 쓸 때(2026-10) 공식 문서에서 읽은 값**이지만, 가입하기 전에 한 번 더 확인한다.
@@ -12,7 +12,8 @@
 | §4 | (선택) Kakao · Naver | 15분 |
 | §5 | 메일 발송 서비스 고르고 DNS 에 레코드 넣기 (Cloudflare) | 30분 + DNS 반영 |
 | §6 | 환경변수 채우기 (로컬 · 홈서버) | 10분 |
-| §7 | 점검 스크립트 + 눌러 볼 순서 | 40분 |
+| §7 | 점검 스크립트 + 눌러 볼 순서 | 40분 |<!-- payment-toss:start -->
+| §11 | 토스페이먼츠(결제 장부): 테스트 키 · 웹훅 주소 · 검증 스크립트 · **검증 기록** | 15분 + 사람의 결제 |<!-- payment-toss:end -->
 
 > **환경변수 이름은 한 규칙**이다(`docs/deploy.md` §7): Google · Kakao · Naver 는 `SKELETON_AUTH_SOCIAL_PROVIDERS_<제공자>_{ENABLED,CLIENT_ID,CLIENT_SECRET,REDIRECT_URI}`, LINE 은 `SKELETON_AUTH_SOCIAL_OIDC_PROVIDERS_LINE_{CLIENT_ID,CLIENT_SECRET,REDIRECT_URI,SCOPES}`, X 는 `SKELETON_AUTH_SOCIAL_X_{CLIENT_ID,CLIENT_SECRET,REDIRECT_URI,REQUEST_EMAIL}`. 진짜 환경변수만으로 `apps/sample` 을 띄워 셋이 `/auth/methods` 에 나오는 것은 `SocialEnvironmentOnlyBootTest` 가 증명한다. 콘솔에서 만드는 준비(§1 · §2 · §3)는 코드와 무관하니 먼저 해 둔다.
 
@@ -354,3 +355,119 @@ scripts/check-real-providers.sh        # 백엔드가 뜬 뒤 다시: /auth/meth
 - Google: 기밀(confidential) 웹 클라이언트에 PKCE 를 보내도 되는지(모듈은 `SUPPORTED` 로 보낸다, 미확인).
 - Naver: 토큰 요청의 `state` — 요청 필드 `state` 로 받아 싣는다(§4 Naver 6번). 실제 네이버는 없어도 받아 준다(2026-10-08 확인).
 - **Google · Kakao 토큰 서버가 올바른 키에 `invalid_grant` 를 돌려주는지**는 실제 키가 있어야 확인된다. `scripts/check-real-providers.sh` 는 틀린 키에 `invalid_client`(HTTP 401)가 오는 것까지만 이 문서를 쓰며 실제 서버로 확인했다.
+
+<!-- payment-toss:start -->
+## 11. 토스페이먼츠 (결제 장부)
+
+결제 장부(`payment` · `payment-jdbc` · `payment-toss`)가 토스에 기대는 가정을 **진짜 토스(테스트 키)로 재 보는** 절차와 그 기록이다. 모듈 설명은 [docs/modules/payment-toss.md](modules/payment-toss.md), 웹훅 규칙은 [docs/payment-http-contract.md](payment-http-contract.md) §8.
+
+### 11.1 키 두 개 — 어디에 두나
+
+토스페이먼츠 개발자센터에서 **결제창(API 개별 연동) 테스트 키**를 받는다 — 시크릿 키 `test_sk_…` 와 같은 묶음의 클라이언트 키 `test_ck_…`. 결제위젯 키(`test_gsk_…` · `test_gck_…`)는 쓰지 않는다. 둘 다 `.env.local`(git 밖, §6.1)에 둔다.
+
+| 값 | 환경 변수 | 비밀? |
+|---|---|---|
+| 켜기 | `SKELETON_PAYMENT_TOSS_ENABLED=true` | — |
+| 시크릿 키 `test_sk_…` | **`SKELETON_PAYMENT_TOSS_SECRET_KEY`** (모듈의 이름 — 모든 앱이 읽는다. 찍은 프로젝트는 `SKELETON_` 자리가 자기 접두사다) · 샘플 · 워크벤치만 벤더 별칭 `TOSS_PAYMENTS_SECRET_KEY` 도 읽는다 | **비밀** — 서버만 안다. 채팅 · 커밋 · 로그에 붙이지 않는다 |
+| 클라이언트 키 `test_ck_…` | **`SKELETON_PAYMENT_TOSS_CLIENT_KEY`** · 샘플 · 워크벤치만 별칭 `TOSS_PAYMENTS_CLIENT_KEY` | 비밀 아님 — 결제창을 여는 브라우저로 나간다. 시크릿 키와 **같은 묶음** |
+
+- **모듈 이름을 권한다.** `--modules payment,payment-jdbc,payment-toss` 로 찍은 스타터(`apps/api`)의 `application.yml` 에는 별칭 줄이 없다 — 별칭만 채우면 스타터 앱에는 키가 없다. 샘플 · 워크벤치는 두 이름을 다 읽고 **둘 다 있으면 모듈 이름이 이긴다**(`apps/sample` 의 `application.yml`). 점검 스크립트(11.3)도 같은 순서로 고르고, 두 이름에 **다른 값**이 있으면 `✗` 로 멈춘다.
+
+- 두 키의 모드(`test` · `live`)가 다르거나 종류가 바뀌면(`ck` 자리에 `sk`) 기동이 실패한다. 로컬 · 시험 환경에서 `live_…` 키도 기동 실패다.
+- 클라이언트 키가 없으면 기동은 되지만 결제창을 열 수 없다(`GET /api/v1/payments/config` 가 `available: false`). **서버 쪽 시험(아래 11.3)은 시크릿 키만으로 된다.**
+- 홈서버에서는 시크릿 키와 웹훅 비밀 조각을 `secrets:` 로, 클라이언트 키는 `env:` 로 둔다(§6.3 · [docs/deploy.md](deploy.md) §7).
+
+### 11.2 웹훅 주소 등록 (주소 비밀 조각)
+
+토스의 결제 웹훅은 서명이 없다 — **주소 끝의 비밀 조각이 진위의 전부**다.
+
+1. 비밀 조각을 만든다: 24자 이상, 영문 · 숫자 · `-` `.` `_` `~`, 서로 다른 글자 8개 이상 (예 `openssl rand -hex 24`). 환경 변수 `SKELETON_PAYMENT_WEBHOOK_PATH_TOKEN` 에 넣는다 — 비면 서명 없는 결제사의 웹훅 경로는 늘 404 이고, stage · prod 에서 비었거나 약하면 기동이 실패한다.
+2. 개발자센터 → 웹훅에서 주소를 등록한다: `https://<도메인>/api/v1/payments/webhooks/toss/<비밀 조각>`, 이벤트 `PAYMENT_STATUS_CHANGED`. 비밀 조각을 우리 로그에는 남기지 않는다(요청 로그가 그 자리를 가린다). 개발자센터 화면과 Caddy · Tunnel 접근 로그에는 남을 수 있다.
+3. 로컬에는 공개 주소가 없다(포트포워딩 금지). 토스가 보내는 진짜 웹훅은 도메인이 있는 환경(홈서버)에서만 받고, 로컬에서는 11.5 의 스크립트로 같은 모양을 손으로 넣는다.
+
+### 11.3 검증 스크립트 — 시크릿 키만으로 재는 것
+
+```bash
+scripts/check-real-providers.sh --toss-only --env-file <시크릿 키가 든 파일>     # 토스 구역만. 호출 여섯 번
+scripts/check-real-providers.sh                                                  # 소셜 · 메일 점검 뒤에 토스 구역도 (키가 있을 때만)
+```
+
+**환경 파일은 `source` 된다** — 그 파일의 셸 코드가 실행되고 값이 자식 프로세스 환경에 실린다. 믿는 파일만 준다.
+
+보내는 것은 **돈이 움직이지 않는 호출뿐**이다: 없는 주문 번호 조회 · 없는 결제 키 조회 · 없는 결제 취소(같은 `Idempotency-Key` 로 두 번) · 틀린 키로 조회 한 번 · **`TossPayments-Test-Code: NOT_ALLOWED_PARTIAL_REFUND` 헤더를 붙인 없는 결제 취소 한 번**(토스는 테스트 시크릿 키에서 이 헤더의 오류를 그대로 돌려준다 — 토스가 그것을 결제 존재 확인보다 먼저 적용하므로 결제 없이도 잰다, 아래 11.6. 응답 코드가 장부의 확정 거절 목록 `DEFINITIVE_CODES` 와 맞는지 본다). 응답을 **장부가 읽는 대로** 해석해 `✓` / `✗` 로 말한다 — 없는 결제 조회는 `404 NOT_FOUND_PAYMENT` 여야 장부가 "결제사가 모른다"로 읽고, 취소의 같은 코드는 확정 거절로 읽힌다(그 밖의 응답은 장부가 "모름"으로 읽어 다시 해 본다). 키 모양(시크릿 · 클라이언트 · 모드 · 결제위젯 키)도 먼저 본다. `live_` 키면 토스를 부르지 않고 `✗` 로 멈춘다.
+
+- **키는 출력되지 않는다**: 모양 접두사와 길이만 찍는다. 인증 헤더는 0600 임시 파일에서 `curl -H @파일` 로 읽혀 프로세스 인자에 남지 않고, 응답 원문을 찍을 때는 키와 그 base64 를 `***` 로 가린다. `set -x` 를 쓰지 않는다.
+- **종료 코드**: `0` 문제 없음 · `1` `✗` 가 하나라도 있음 · `3` **`--toss-only` 로 토스만 쟀고** 문제는 없지만 클라이언트 키가 없어 결제 승인 단계를 건너뜀 (사람이 결제창을 열어야 재는 것 — 11.4). 소셜 · 메일 점검 뒤에 딸려 도는 평소 점검은 클라이언트 키가 없다는 이유만으로는 `0` 이다(기존 사용처가 깨지지 않게) — 건너뛴 줄 `건너뜀` 만 분명히 찍는다.
+- 키 이름은 **모듈 이름(`SKELETON_PAYMENT_TOSS_*_KEY`)이 먼저**, 벤더 별칭(`TOSS_PAYMENTS_*_KEY`)은 그다음이다(11.1). 키는 있는데 `SKELETON_PAYMENT_TOSS_ENABLED=true` 가 없으면 「앱은 토스가 꺼진 채 시작한다」고 알린다.
+- 환경 파일은 `--env-file`(또는 `ENV_FILE`)로 준다. `CHECK_TOSS_BASE_URL` 로 주소를 바꿀 수 있다(스크립트 자신의 시험용 — `--self-test` 는 가짜 토스로 돈다; 켜져 있으면 출력 첫머리에 「가짜 서버 대상」이 찍힌다). `CHECK_TOSS_TIMEOUT_SEC` 로 호출의 시간 제한(기본 30초)을 바꾼다.
+
+### 11.4 사람이 하는 단계 — 결제창을 열어야 재는 것
+
+클라이언트 키까지 있을 때, 샘플을 띄우고(`scripts/dev-sample.sh`) 응원 화면에서 결제창을 연다. 결제창에서 **테스트 결제 정보**(개발자센터가 안내하는 테스트용 카드 입력 방식)를 사람이 입력해야 한다. 한 번 승인한 뒤 11.6 의 못 잰 가정을 하나씩 본다: 받은 결제 키의 모양 · 승인 응답의 `cancels` · 부분 환불 뒤 응답 · 웹훅 도착 여부. 서버 로그의 `payment webhook result=` 줄과 운영자 수신함(`GET /api/v1/admin/payments/webhook-events`)이 기록 장소다.
+
+### 11.5 웹훅을 손으로 넣기 — `scripts/payment-webhook.sh`
+
+```bash
+scripts/payment-webhook.sh --env-file .env.local --url http://localhost:<포트> --payment-key <결제 키> --order-id <우리 주문 id>
+```
+
+`--env-file` 은 `.env.example` 모양의 줄(줄 끝 주석 · 따옴표 · `export ` · CRLF)을 읽는다 — 따옴표 안의 `#` 은 값이다. 그 이름의 줄이 없으면 환경 변수의 비밀 조각을 쓰고 그 사실을 한 줄 알린다(값은 찍지 않는다). 옵션의 값이 빠지거나 인자가 틀리면 종료 코드 `2` 다.
+
+서버 주소는 늘 `--url` 로 준다(기본값이 없다 — 어느 서버에 넣는지는 명시한다). 토스 `PAYMENT_STATUS_CHANGED` 모양의 본문(`data.paymentKey` · `data.orderId`)을 수신함 주소로 보낸다. 손으로 확인하는 것:
+
+| 하고 싶은 것 | 옵션 | 기대 |
+|---|---|---|
+| 정상 수신 | (없음) | `200`, 서버 로그 `payment webhook result=STORED`. 처리 작업이 **토스에 조회**하고 `converge` 한다 |
+| 중복 | `--repeat 2` | 둘 다 `200`, 로그 `STORED` 다음 `DUPLICATE`(같은 전달 id) |
+| 모르는 주문 | 없는 `--order-id` | `200`(구별하지 않는다), 로그 `UNKNOWN_ORDER`, 수신함에 줄이 없다 |
+| 비밀 조각 없이 보냄 | `--no-token` | 조각을 요구하는 서버는 `404`(이것이 통과다). 조각이 없는데 이 옵션도 없으면 보내지 않고 `2` 로 멈춘다 |
+| 비밀 조각이 틀림 | `--wrong-token` | `404 PAYMENT.WEBHOOK_NOT_FOUND`, 로그에 줄이 없다 (404 가 통과다) |
+| **본문 불신** | `--decoy-status CANCELED` | 본문이 거짓 상태를 말해도 주문은 **토스의 조회 결과대로** 전이한다 — 본문의 `status` 는 읽지 않는다 |
+| 다루지 않는 이벤트 | `--event DEPOSIT_CALLBACK` | `200`, 로그 `UNSUPPORTED`, 저장하지 않는다 |
+
+비밀 조각은 **`--env-file`** 로 앱이 읽는 이름(`SKELETON_PAYMENT_WEBHOOK_PATH_TOKEN`)의 줄에서 읽는 것을 권한다 — 이 스크립트는 그 파일을 셸로 실행하지 않고 그 한 줄만 꺼낸다(11.3 의 `check-real-providers.sh` 는 파일을 `source` 한다는 점이 다르다). 값을 명령줄에 쓰면 셸 이력에 남고(`PAYMENT_WEBHOOK_TOKEN=<값> scripts/…` 도 같다), `--token` 은 프로세스 목록에도 남는다. 조각을 아예 안 주면 스크립트는 **멈춘다**(종료 코드 2) — 조각 없이 보내 `404` 를 보려는 것이면 `--no-token` 을 명시한다(기대가 404 로 바뀐다). 스크립트는 조각을 출력하지 않고, curl 의 주소도 인자가 아닌 stdin 설정으로 넘긴다. 이 스크립트가 만드는 본문 모양은 **가정**이다(11.6 의 「본문의 결제 키 · 주문 번호 위치」).
+
+### 11.6 검증 기록
+
+**2026-10-09 — 잰 것.** 테스트 시크릿 키(`test_sk_`, 36자; 클라이언트 키 없음) 한 개로 `check-real-providers.sh --toss-only` 를 한 번 돌렸다(종료 코드 3 = 문제 없음 + 결제 승인 단계 건너뜀). 진짜 토스로 간 호출은 그 다섯 번과, 응답 헤더를 보려고 같은 모양의 조회를 직접 한 번 더 한 것(404) — 합쳐 여섯 번, 모두 조회 · 없는 결제의 취소뿐이고 돈은 움직이지 않았다.
+
+| 본 것 | 결과 | 장부에 뜻하는 것 |
+|---|---|---|
+| 없는 주문 번호 조회 `GET /v1/payments/orders/{orderId}` | `404` `NOT_FOUND_PAYMENT`, 170ms. 본문은 `code` · `message` 두 칸뿐 | 장부의 조회가 `null`("결제사가 모른다")로 읽는 응답과 일치 |
+| 없는 결제 키 조회 `GET /v1/payments/{paymentKey}` | `404` `NOT_FOUND_PAYMENT`, 62ms | 같음 |
+| 없는 결제의 취소 `POST /v1/payments/{paymentKey}/cancel` + `Idempotency-Key` | `404` `NOT_FOUND_PAYMENT`, 124ms — 멱등 키 헤더를 붙여도 거절하지 않는다 | 확정 거절(`DEFINITIVE_CODES`)로 읽힌다 |
+| 같은 멱등 키로 같은 취소를 다시 | 같은 `404` `NOT_FOUND_PAYMENT` | **오류 경로뿐**이다 — 성공한 취소의 재응답 본문은 못 쟀다(11.6 못 잰 것) |
+| 틀린 시크릿 키로 조회 | `401` `UNAUTHORIZED_KEY`, 49ms | 확정 거절로 읽히는 코드(조회에서는 확정으로 쓰지 않는다) |
+| 시크릿 키 모양 | `test_sk_` + 길이 36 — 모양 가드 통과 | — |
+| 응답 시간 | 가장 느린 것 170ms (조회 · 취소 여섯 번) | 기본 응답 제한 5초 안. **승인 호출의 지연은 아니다** |
+| 추적 번호 | 오류 응답의 추적 번호는 **헤더 `x-tosspayments-trace-id`** 로만 온다(본문에 `traceId` 없음) | 오류 매퍼가 찾던 헤더 이름들에 없던 이름이었다 → `TossPaymentErrorMapper.TOSS_TRACE_HEADERS` 의 첫 이름으로 더했다(시험 있음) |
+
+스크립트 자신의 시험(`--self-test`)은 가짜 토스로 돌아 위 해석 규칙 · 종료 코드 · 키가 출력에 안 나오는 것을 본다. `scripts/payment-webhook.sh` 는 가짜 수신함으로만 시험했고 **실제 서버에 대고는 돌리지 않았다**(QA 몫).
+
+**2026-10-09 (리뷰 1회차 반영) — 테스트 코드 헤더(`TossPayments-Test-Code`).** 같은 테스트 시크릿 키(`test_sk_`, 36자)로, 없는 결제 키에 대한 취소 `POST /v1/payments/{paymentKey}/cancel` 에 `Idempotency-Key` 와 `TossPayments-Test-Code: NOT_ALLOWED_PARTIAL_REFUND` 를 붙여 **한 번** 보냈다. 결과: `HTTP 403`, 본문 `code` = `NOT_ALLOWED_PARTIAL_REFUND`(헤더에 넣은 코드 그대로), 85ms — **`NOT_FOUND_PAYMENT` 가 아니었다.** 즉 토스는 테스트 코드를 **결제 존재 확인보다 먼저** 적용한다. 그래서 취소 쪽 재현은 시크릿 키만으로, 결제 없이 잴 수 있다 → 스크립트의 정식 항목이 되었다(`check-real-providers.sh` 의 「테스트 코드 헤더를 붙인 취소」: 4xx 이고 응답 코드가 보낸 코드와 같아야 `✓`, 없는 결제의 `404 NOT_FOUND_PAYMENT` 가 먼저 나오면 `✗`). 그 코드는 장부의 확정 거절 목록(`TossPaymentErrorMapper.DEFINITIVE_CODES`)에 있고 상태가 4xx 라 장부는 이것을 확정 거절로 읽는다(스크립트의 `--self-test` 가 목록에 있는지 대 본다). 같은 실행의 `--toss-only` 전체 한 번(호출 여섯 번: 조회 둘 · 취소 둘 · 틀린 키 조회 · 테스트 코드 취소)도 모두 위 표대로였다. 진짜 토스로 간 호출은 이 직접 한 번과 스크립트 한 번의 일곱 번뿐이고 돈은 움직이지 않았다. **아직 못 잰 것**: 같은 헤더로 **승인**(`/confirm`) 오류가 재현되는지 — 승인 호출은 결제 키 · 금액이 있어야 하고 돈이 움직일 수 있는 호출이라 이 스크립트에 넣지 않았다(아래 못 잰 가정).
+
+**못 잰 가정** — 아래는 결제 승인(결제창 + 사람 + 클라이언트 키)이나 도메인이 있는 환경이 있어야 재는 것이라 이번에 **재지 못했다.** 각각 틀리면 무엇이 신호인지 적는다.
+
+| 못 잰 가정 | 틀리면 신호 | 재려면 |
+|---|---|---|
+| `failUrl` 에 쿼리(`?order=…`)가 붙어 있어도 토스가 `code` · `message` 를 `?`/`&` 로 제대로 덧붙인다 | 결제 실패 귀환 화면이 `code` · `message` 를 못 읽거나 주소가 `?…?code=` 로 깨진다 | 결제창에서 일부러 실패(취소 아님)시켜 돌아온 주소를 본다 |
+| 사용자가 결제창을 닫을 때(`PAY_PROCESS_CANCELED`) 토스가 `failUrl` 에 `orderId` 를 싣는다 | 귀환 화면이 우리 주문 id(`order` 쿼리)만으로 찾으므로, 없으면 어느 주문인지 몰라 「주문을 못 찾았어요」 류 화면이 나온다 | 결제창을 연 채 닫고 돌아온 주소를 본다 |
+| 토스의 웹훅 응답 제한은 10초이고, 그 안에 `200` 이 없으면 다시 보낸다(재전송 횟수 · 간격은 모른다) — 코드 주석의 주장이다 | 개발자센터 웹훅 전송 내역에 실패 · 재시도가 쌓이거나, 로그에 같은 일의 `DUPLICATE` · `REQUEUED` 가 예상보다 많다. (수신은 DB 쓰기 한 번이고 토스를 부르지 않는다) | 도메인이 있는 환경에서 전송 내역을 본다 |
+| 조회의 상점 단위 호출 한도와 그때의 응답(상태 · 코드) | 조회가 `429` 등 모르는 코드로 돌아와 로그에 `payment lookup failed … exception=`, 주문이 `CONFIRM_UNRESOLVED` 로 표시된다 | 여러 주문의 조회를 한꺼번에 돌려 본다(테스트 키로) |
+| 등록한 웹훅 주소를 토스가 **변형 없이** 그대로 보낸다(비밀 조각이 든 경로 · 끝 `/`) | 토스가 보낸 웹훅이 `404` 로 돌아와(전송 내역) 로그에 `payment webhook result=` 줄이 없다 | 주소를 등록하고 결제 뒤 전송 내역을 본다 |
+| `tosspayments-webhook-transmission-id` 헤더가 `PAYMENT_STATUS_CHANGED` 에도 오고 **재전송에서 같은 값**이다 | 같은 일의 수신함 줄이 여럿 생긴다(처리는 늘 조회라 결과는 같다). 헤더가 없으면 본문 sha256 이 이벤트 키가 된다 | 같은 결제의 웹훅이 두 번 올 때 두 줄의 키를 비교한다 |
+| 본문의 결제 키 · 주문 번호가 `data.paymentKey` · `data.orderId` 에 있다 | 수신마다 `payment webhook result=UNKNOWN_ORDER` 로그(주문 번호를 못 꺼냄) — 또는 결제 키를 못 꺼내 `401 PAYMENT.WEBHOOK_REJECTED`. 어느 쪽이든 신호는 「실제 결제 뒤에도 수신 줄이 `STORED` 가 아니다」 | 결제 뒤 도착한 웹훅 본문을 본다(`docs` 의 예시가 아니라 실물) |
+| **테스트 키로도** 결제 웹훅이 오는지 | 결제를 끝내도 로그에 `payment webhook result=` 줄이 하나도 없다(전송 내역에도 없다) — 그러면 웹훅 경로는 테스트 키로 시험할 수 없다 | 테스트 결제 한 번 뒤 로그 · 전송 내역 |
+| 개발자센터에서 취소하면 어떤 이벤트가 오는지 | 콘솔에서 취소했는데 장부의 주문이 안 바뀌고 로그에 `result=UNSUPPORTED`(또는 줄 없음) — 장부는 `PAYMENT_STATUS_CHANGED` 만 받으므로 그때는 운영자 `sync`(결제사와 맞추기)로만 들어온다 | 콘솔에서 테스트 결제를 취소하고 로그를 본다 |
+| `cancels[].cancelStatus` 가 완료 때 `DONE` 이다(다른 값이면 그 취소를 장부가 세지 않는다) · `cancels[].transactionKey` 가 늘 온다 | 환불이 토스에서는 됐는데 장부가 `NOT_APPLIED` 로 정산하거나, 응답을 못 읽어 환불이 모름으로 끝나 정산 작업이 반복된다 | 부분 환불 한 번 뒤 조회 응답의 `cancels` |
+| 할인 · 포인트가 낀 결제에서도 `balanceAmount = totalAmount - Σcancels` 가 성립한다 | 환불 전 확인이 **매번** 검토 표시를 찍어 환불이 막힌다 | 포인트 · 할인이 낀 테스트 결제(가능하면) |
+| `lastTransactionKey` 가 이번 취소의 거래 키다(환불 응답에서 이번 취소를 가려내는 근거) | 환불은 성공했는데 환불 줄에 `providerRefundId` 가 안 박히고 정산 작업이 조회로 넘겨 맞춘다(돈은 안전, 지연만) | 부분 환불 응답의 `lastTransactionKey` 와 `cancels[]` 를 대 본다 |
+| **같은 멱등 키로 성공한 취소를 다시** 보내면 같은 본문으로 재응답한다(우리는 다시 보내지 않지만 중간 프록시의 재전송에 대비해 안다) | 두 번째 응답이 오류(`ALREADY_CANCELED_PAYMENT` 등)면 장부가 그것을 모름으로 읽고 조회로 맞춘다 — 안전하나 로그에 오류가 남는다 | 같은 키로 취소를 두 번 |
+| 결제 키의 문자 집합이 영문 · 숫자 · `-` · `_` (최대 200자) | **진짜 토스의 모든 결제가 `400` 으로 거절된다**(승인 선점 전에 장부가 거절) — 가장 아픈 가정 | 받은 결제 키를 `[A-Za-z0-9_-]{1,200}` 에 대 본다 |
+| 결제 수단 값 · 카드사 코드 대응표(`method`, `issuerCode`; 문화상품권류 3개는 문서 기억에 기댄 추정) · 카드 번호 끝 네 글자의 모양 | 화면의 수단 라벨이 코드 그대로이거나 비고, 카드 표시가 `****` 로 끝난다 | 결제 응답의 `method` · `card` |
+| 결제창만 열고 인증하지 않은 주문 번호의 조회(404 인가), 인증만 하고 승인하지 않은 결제의 `status`, `EXPIRED` 가 되는 데 걸리는 시간 | 만료 · 조회 작업이 열린 주문을 잘못 읽는다(없음 ↔ 진행 중) | 결제창을 열고 방치 |
+| `TossPayments-Test-Code` 로 **승인** 오류가 재현되는지(취소 쪽은 위 2026-10-09 기록으로 쟀다), 승인 호출의 실제 지연 · `response-timeout: 30s` 가 맞는지 | 승인 호출이 30초 전에 끊겨 "모름" 이 잦다. 테스트 코드를 붙여도 승인 오류가 안 돌아오면 거절 분류(`DECLINED`)를 시험 환경에서 재현할 수 없다 | 결제 승인과 함께(결제창에서 얻은 `paymentKey` · `orderId` · `amount` 로 승인을 테스트 코드와 함께 부른다) |
+| 시크릿 키가 가입 뒤 받은 **내 키**인가(문서용 공개 키는 웹훅 · 결제 내역 확인이 안 된다) | 결제 내역이 개발자센터에 안 보인다 | 개발자센터에서 확인 — 이번 호출은 두 경우 모두 같은 응답이라 가리지 못한다 |
+| 토스 SDK v2 `requestPayment` 의 **귀환 값**(스펙 §16) — 리다이렉트 방식에서 무엇을 돌려주는지, 비회원 상수(`ANONYMOUS`)를 스크립트 판에서 어떻게 꺼내는지 | 결제창을 연 뒤 프론트가 `requestPayment` 의 반환 값(Promise 결과)에 기대고 있으면 `successUrl` 로 돌아온 뒤에도 값이 없거나 호출이 예외로 끝난다 — 결제창은 열리는데 돌아온 화면이 「확인 중」에 머문다 | 샘플에서 결제창을 열고 반환 값 · 콘솔 오류를 본다 |
+| 배포 경로(Cloudflare Tunnel · Caddy 뒤)에서 웹훅 본문이 그대로 닿는지 · Caddy 접근 로그에 경로(비밀 조각)가 남는지 · 모바일에서 `successUrl` 로 돌아오는지 | 개발자센터 전송 내역에 `404` · 본문 변형(11.2 의 3번), Caddy 로그에 `/webhooks/toss/<조각>` 이 그대로 보임(조각 노출), 모바일 · 앱 내 브라우저에서 결제 뒤 귀환 화면이 안 열림 | QA / 홈서버 |
+<!-- payment-toss:end -->

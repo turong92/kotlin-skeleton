@@ -1,5 +1,7 @@
 package dev.sumin.skeleton.payment
 
+import java.time.Instant
+
 data class PaymentAmount(
     val amount: Long,
     val currency: String,
@@ -10,6 +12,10 @@ data class PaymentAmount(
     }
 
     val normalizedCurrency: String = currency.trim().uppercase()
+
+    /** 금액과 **정규화한 통화**가 같은가. `==` 는 통화 문자열(대소문자 · 공백)까지 비교하니 결제사 응답과 줄을 비교할 때는 이것을 쓴다. */
+    fun sameAs(other: PaymentAmount): Boolean =
+        amount == other.amount && normalizedCurrency == other.normalizedCurrency
 }
 
 data class IdempotencyKey(
@@ -89,18 +95,26 @@ data class PaymentOperationResult(
     val providerOperationId: String? = trace.providerOperationId,
     val rawProviderStatus: String? = trace.rawStatus,
     val attributes: Map<String, String> = emptyMap(),
+    /**
+     * 환불 뒤 결제사에 남은 금액. 결제사가 알려 주지 않으면 null.
+     * **부분 환불은 [PaymentOperationStatus] 에 값을 더하지 않고 이 값으로 읽는다**(앱의 exhaustive `when` 을 깨지 않으려고):
+     * 상태가 [PaymentOperationStatus.REFUNDED] 여도 `remaining > 0` 이면 일부만 환불된 것이다 — 장부는 `remaining` 으로 판단한다.
+     */
+    val remaining: PaymentAmount? = null,
+    /**
+     * 승인 응답이 알려 준 카드(카드 결제일 때만). 있으면 장부는 카드 정보를 채우려고 결제사에 한 번 더 묻지 않는다.
+     * 결제사 모듈이 코드로 옮기고 끝 네 글자만 남겨 넘긴다([PaymentCard]).
+     */
+    val card: PaymentCard? = null,
+    /** 승인 응답이 알려 준 승인 시각. 있으면 [card] 와 같이 추가 조회를 건너뛰게 한다. */
+    val paidAt: Instant? = null,
 )
 
-interface PaymentProvider {
-    val providerId: String
-    val supportedCurrencies: Set<String>
-        get() = emptySet()
-    val supportedCountries: Set<String>
-        get() = emptySet()
-
-    fun confirm(request: PaymentConfirmRequest): PaymentOperationResult
-
+/**
+ * 기존 계약: 승인 · 취소 · 환불을 한 인터페이스로. 능력 인터페이스([PaymentConfirmGateway] · [PaymentRefundGateway])의
+ * 합이고 멤버 시그니처는 그대로라서 기존 구현은 고치지 않고 컴파일된다.
+ * 단, 구현 클래스에 이미 `mode`(다른 타입) 멤버가 있으면 [PaymentGateway.mode] 와 충돌한다.
+ */
+interface PaymentProvider : PaymentConfirmGateway, PaymentRefundGateway {
     fun cancel(request: PaymentCancelRequest): PaymentOperationResult
-
-    fun refund(request: PaymentRefundRequest): PaymentOperationResult
 }

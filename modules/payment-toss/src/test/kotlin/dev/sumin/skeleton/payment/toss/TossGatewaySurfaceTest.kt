@@ -1,0 +1,197 @@
+package dev.sumin.skeleton.payment.toss
+
+import dev.sumin.skeleton.payment.CheckoutOrder
+import dev.sumin.skeleton.payment.PaymentAmount
+import dev.sumin.skeleton.payment.PaymentCheckoutGateway
+import dev.sumin.skeleton.payment.PaymentConfirmGateway
+import dev.sumin.skeleton.payment.PaymentLookupGateway
+import dev.sumin.skeleton.payment.PaymentMode
+import dev.sumin.skeleton.payment.PaymentRefundGateway
+import dev.sumin.skeleton.payment.PaymentWebhookGateway
+import dev.sumin.skeleton.payment.PaymentWebhookRejectedException
+import dev.sumin.skeleton.payment.WebhookDelivery
+import dev.sumin.skeleton.payment.toss.support.TossFixtures
+import java.security.MessageDigest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertIs
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import dev.sumin.skeleton.common.http.ExternalHttpClient
+import java.lang.reflect.Proxy
+
+/** 결제창 값 · 모드 · 웹훅 해석 — HTTP 가 필요 없는 부분. */
+class TossGatewaySurfaceTest {
+    private val noHttp: ExternalHttpClient =
+        Proxy.newProxyInstance(javaClass.classLoader, arrayOf(ExternalHttpClient::class.java)) { _, _, _ -> error("no HTTP expected") } as ExternalHttpClient
+
+    private fun provider(secretKey: String = "test_sk_secret_part", clientKey: String = "test_ck_client_part") =
+        TossPaymentProvider(noHttp, TossPaymentProperties(enabled = true, secretKey = secretKey, clientKey = clientKey))
+
+    @Test
+    fun `one bean offers every capability under one provider id`() {
+        val provider = provider()
+        assertIs<PaymentConfirmGateway>(provider)
+        assertIs<PaymentRefundGateway>(provider)
+        assertIs<PaymentLookupGateway>(provider)
+        assertIs<PaymentCheckoutGateway>(provider)
+        assertIs<PaymentWebhookGateway>(provider)
+        assertEquals("toss", provider.providerId)
+    }
+
+    @Test
+    fun `mode comes from the secret key prefix`() {
+        assertEquals(PaymentMode.TEST, provider("test_sk_x").mode)
+        assertEquals(PaymentMode.LIVE, provider("live_sk_x").mode)
+        assertEquals(PaymentMode.TEST, provider("test_gsk_x").mode)
+        assertEquals(PaymentMode.UNKNOWN, provider("sk_without_mode").mode)
+        assertEquals(PaymentMode.UNKNOWN, provider("anything").mode)
+    }
+
+    @Test
+    fun `checkout hands the browser the public values - client key, mode, order - and never the secret key`() {
+        val order = CheckoutOrder("ord_abcdef123456", "응원하기 3,000원", PaymentAmount(3_000, "KRW"))
+
+        val instruction = provider().checkout(order)
+
+        assertEquals("toss", instruction.provider)
+        assertEquals("TOSS_PAYMENT_WINDOW", instruction.kind)
+        assertTrue(instruction.testMode)
+        assertEquals("ord_abcdef123456", instruction.orderId)
+        assertEquals("응원하기 3,000원", instruction.orderName)
+        assertEquals(PaymentAmount(3_000, "KRW"), instruction.amount)
+        assertEquals("test_ck_client_part", instruction.clientKey)
+        assertEquals(mapOf("method" to "CARD"), instruction.attributes, "the anonymous customer is the SDK's own constant - the front end passes TossPayments.ANONYMOUS, the server hands over no string for it")
+        assertFalse(instruction.toString().contains("secret_part"))
+    }
+
+    @Test
+    fun `checkout under a live key is not marked test, and an unknown mode is not claimed to be test either`() {
+        val order = CheckoutOrder("ord_abcdef123456", "x", PaymentAmount(1_000, "KRW"))
+
+        assertFalse(provider("live_sk_x", "live_ck_y").checkout(order).testMode)
+        assertFalse(provider("weird", "weird").checkout(order).testMode)
+    }
+
+    @Test
+    fun `checkout without a client key says so with a null key instead of inventing one`() {
+        val instruction = provider(clientKey = "").checkout(CheckoutOrder("ord_abcdef123456", "x", PaymentAmount(1_000, "KRW")))
+
+        assertNull(instruction.clientKey)
+    }
+
+    @Test
+    fun `checkout hands out only a value that is shaped like a client key - a secret key put in the wrong place is never sent to the browser`() {
+        val order = CheckoutOrder("ord_abcdef123456", "x", PaymentAmount(1_000, "KRW"))
+
+        assertNull(provider(clientKey = "test_sk_secret_part").checkout(order).clientKey, "secret key in the client key place")
+        assertNull(provider(clientKey = "test_sk").checkout(order).clientKey)
+        assertNull(provider(clientKey = "test_gck_widget_part").checkout(order).clientKey, "widget client key")
+        assertNull(provider(clientKey = "test_ck").checkout(order).clientKey, "nothing after the prefix")
+        assertNull(provider(clientKey = "ck_test_client_part").checkout(order).clientKey)
+        assertEquals("test_ck_client_part", provider(clientKey = "  test_ck_client_part\n").checkout(order).clientKey)
+        assertEquals("live_ck_client_part", provider("live_sk_x", "live_ck_client_part").checkout(order).clientKey)
+    }
+
+    @Test
+    fun `the checkout can be opened exactly when a client key can be handed out - empty, secret-shaped or other-mode keys cannot`() {
+        assertTrue(provider().canOpenCheckout())
+        assertTrue(provider("live_sk_x", "live_ck_client_part").canOpenCheckout())
+        assertFalse(provider(clientKey = "").canOpenCheckout(), "no client key")
+        assertFalse(provider(clientKey = "test_sk_secret_part").canOpenCheckout(), "a secret key in the client key place")
+        assertFalse(provider("live_sk_x", "test_ck_client_part").canOpenCheckout(), "a test client key with a live secret")
+    }
+
+    @Test
+    fun `the webhook is not signed - the address token is required`() {
+        assertFalse(provider().signed)
+    }
+
+    @Test
+    fun `a payment status webhook yields the payment key and order id only, keyed by the transmission id`() {
+        val envelope = provider().parse(
+            WebhookDelivery(
+                headers = mapOf("tosspayments-webhook-transmission-id" to "tx-id-0001"),
+                body = TossFixtures.webhook(status = "CANCELED").toByteArray(),
+            ),
+        )
+
+        assertEquals("tx-id-0001", envelope.eventKey)
+        assertEquals("PAYMENT_STATUS_CHANGED", envelope.eventType)
+        assertEquals("payment", envelope.resourceType)
+        assertEquals("pay_key_1", envelope.resourceId)
+        assertEquals("ord_abcdef123456", envelope.orderId)
+        assertNull(envelope.storedPayload)
+        assertFalse(envelope.toString().contains("CANCELED"), "the status in the body is not used")
+        assertFalse(envelope.toString().contains("9999999"), "the amount in the body is not used")
+    }
+
+    @Test
+    fun `without a transmission id the event key is the sha256 of the body`() {
+        val body = TossFixtures.webhook().toByteArray()
+        val expected = MessageDigest.getInstance("SHA-256").digest(body).joinToString("") { "%02x".format(it) }
+
+        assertEquals(expected, provider().parse(WebhookDelivery(emptyMap(), body)).eventKey)
+        assertEquals(expected, provider().parse(WebhookDelivery(mapOf("tosspayments-webhook-transmission-id" to "  "), body)).eventKey)
+        assertEquals(expected, provider().parse(WebhookDelivery(mapOf("tosspayments-webhook-transmission-id" to "has spaces <and> junk"), body)).eventKey)
+    }
+
+    @Test
+    fun `the same body gives the same event key - redelivery is recognised`() {
+        val body = TossFixtures.webhook().toByteArray()
+
+        assertEquals(provider().parse(WebhookDelivery(emptyMap(), body)).eventKey, provider().parse(WebhookDelivery(emptyMap(), body.copyOf())).eventKey)
+    }
+
+    @Test
+    fun `events other than payment status are handed over as unsupported`() {
+        val envelope = provider().parse(WebhookDelivery(mapOf("tosspayments-webhook-transmission-id" to "t-9"), TossFixtures.webhook(eventType = "DEPOSIT_CALLBACK", paymentKey = null, orderId = null).toByteArray()))
+
+        assertEquals("DEPOSIT_CALLBACK", envelope.eventType)
+        assertEquals("unsupported", envelope.resourceType)
+        assertEquals("t-9", envelope.eventKey)
+    }
+
+    @Test
+    fun `payout and seller events - lower case and dotted names - are unsupported, not refused, so Toss does not resend them`() {
+        listOf("payout.changed", "seller.changed", "PAYOUT_STATUS_CHANGED", "brandpay.method.updated").forEach { type ->
+            val body = TossFixtures.json(mapOf("eventType" to type, "data" to mapOf("sellerId" to "seller_1"))).toByteArray()
+
+            val envelope = provider().parse(WebhookDelivery(mapOf("tosspayments-webhook-transmission-id" to "t-1"), body))
+
+            assertEquals(type, envelope.eventType)
+            assertEquals("unsupported", envelope.resourceType)
+        }
+    }
+
+    @Test
+    fun `a body that is JSON null is refused like any other body that is not an event`() {
+        listOf("null", "[]", "\"text\"", "123").forEach { body ->
+            assertFailsWith<PaymentWebhookRejectedException>(body) { provider().parse(WebhookDelivery(emptyMap(), body.toByteArray())) }
+        }
+    }
+
+    @Test
+    fun `a body that is not a Toss payment event is refused without quoting it`() {
+        listOf(
+            "not json",
+            "",
+            """{"eventType":"PAYMENT_STATUS_CHANGED","data":{}}""",
+            """{"eventType":"PAYMENT_STATUS_CHANGED","data":{"paymentKey":"has spaces ${TossFixtures.PLANTED.NAME}"}}""",
+            """{"data":{"paymentKey":"pay_1"}}""",
+        ).forEach { body ->
+            val error = assertFailsWith<PaymentWebhookRejectedException>(body) { provider().parse(WebhookDelivery(emptyMap(), body.toByteArray())) }
+            assertFalse(error.message.orEmpty().contains(TossFixtures.PLANTED.NAME))
+            assertFalse(error.message.orEmpty().contains("not json"))
+        }
+    }
+
+    @Test
+    fun `an order id that is not a plain id is dropped rather than passed on`() {
+        val body = TossFixtures.webhook(orderId = "<script>x</script>").toByteArray()
+
+        assertNull(provider().parse(WebhookDelivery(emptyMap(), body)).orderId)
+    }
+}

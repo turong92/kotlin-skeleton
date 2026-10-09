@@ -46,7 +46,8 @@ scripts/new-project.sh <target-dir> <root-package> <config-prefix> <ClassPrefix>
 | `account`(스타터) | `<P>_ACCOUNT_MAIL_LINK_BASE_URL`(프론트 주소) · 메일 발송 길(`--modules notification-mail` + `<P>_NOTIFICATION_MAIL_ENABLED=true` · `_FROM` · `SPRING_MAIL_HOST`) · 선택 `<P>_ACCOUNT_BOOTSTRAP_ADMIN_EMAIL` · 클라이언트 IP 모드(`<P>_WEB_CLIENT_IP_MODE` · `_TRUSTED_PROXIES` — 홈서버 플랫폼이 넣는다) | 보호 환경에서 **기동 실패**(DeployGuard 가 이름을 나열한다) |
 | `auth-social-*` | `<P>_AUTH_SOCIAL_PROVIDERS_<X>_ENABLED=true` · `_CLIENT_ID` · `_CLIENT_SECRET` · `redirect-uri` | 켰는데 비면 기동 실패 |
 | `board` | `board.seed-boards`(게시판 코드) · `board.reaction.types`(반응 종류) | 게시판이 비어 있다 |
-| `payment-toss` / `-stripe` | `<P>_PAYMENT_<X>_ENABLED=true` · `_SECRET_KEY` | 제공자 빈이 없다 — 결제 라우팅 실패 |
+| `payment`(+`payment-jdbc`) | `<P>_PAYMENT_WEBHOOK_PATH_TOKEN`(24자 이상 · 배포 선언의 `secrets:`, 운영자 값 — 웹훅 주소 끝에 그대로 들어간다) · 선택 `<P>_PAYMENT_ADMIN_ENABLED=true`(운영자 경로) | 서명 없는 결제사(토스)의 웹훅 경로가 늘 404 — 보호 환경에서는 비었거나 약하면 **기동 실패** |
+| `payment-toss` / `-stripe` | `<P>_PAYMENT_<X>_ENABLED=true` · `_SECRET_KEY` · 토스는 `<P>_PAYMENT_TOSS_CLIENT_KEY`(비밀 아님) | 제공자 빈이 없다 — 결제 라우팅 실패. 토스는 시크릿 키가 비면 보호 환경(stage · prod)에서 **기동 실패**(그 밖의 환경은 경고) |
 | `captcha-turnstile` | `<P>_CAPTCHA_TURNSTILE_ENABLED=true` · `_SECRET_KEY` | 검증기 빈이 없다 |
 | `storage-s3` | `<P>_STORAGE_S3_BUCKET` 외 엔드포인트 · 키 | 저장소 빈이 없다 · 키가 비면 첫 사용에서 실패 |
 | `notification-mail` | `<P>_NOTIFICATION_MAIL_ENABLED=true` · `_FROM` · `SPRING_MAIL_HOST` · `_USERNAME` · `_PASSWORD` | 발송기 빈이 없다 |
@@ -144,7 +145,7 @@ scripts/dev.sh        # MySQL 컨테이너가 올라온다
 
 프런트: `scripts/new-project.sh ~/work/saas/web saas --packages marketing,payment,notifications,captcha-turnstile --scope @acme`(그쪽 레시피 예 2).
 
-손으로 써야 하는 것: **결제 HTTP** — 주문 · 금액 검증 컨트롤러와 성공/실패 리다이렉트 처리, 웹훅 서명 검증(`payment` 모듈은 HTTP 를 열지 않는다 — `PaymentService.confirm` 은 받은 금액을 그대로 넘기므로 서버의 주문 금액과 비교하는 코드가 앱에 있어야 한다. `docs/modules/payment.md`), 가입 · 로그인에서 `TurnstileVerifier` 호출, 알림을 만드는 코드, 구독 · 요금제 도메인(계정 · 가입 · 로그인은 스타터의 `account` — 캡차는 `saas.account.captcha.required=true`, 운영에서는 메일 발송 길).
+손으로 써야 하는 것: **결제** — 주문 만들기 · 승인 · 환불 요청 · 운영자 경로 · 웹훅 수신은 모듈이 연다(`docs/payment-http-contract.md`). 단 **장부와 이 HTTP 는 `payment-jdbc` 가 있어야 켜진다** — 위 예의 `--modules` 에는 `payment-jdbc` 가 없으니 결제 장부를 쓰려면 `payment-jdbc` 를 더해 고른다(없으면 결제 승인 파사드뿐이고 HTTP 가 열리지 않는다). 앱이 쓰는 것은 금액의 출처인 `PaymentCatalog` 빈(무엇을 얼마에 파는가 — 없으면 주문 만들기 경로가 열리지 않는다), 결제 확정 뒤 지급 · 환불 회수를 하는 `PaymentOrderListener` 빈(주문 줄 락 안에서 도니 짧게), (선택) 운영자 판정을 바꾸는 `PaymentOperatorPolicy` 빈, 웹훅 비밀 조각(`<P>_PAYMENT_WEBHOOK_PATH_TOKEN`), 결제 성공/실패로 돌아오는 화면이다. 가입 · 로그인에서 `TurnstileVerifier` 호출, 알림을 만드는 코드, 구독 · 요금제 도메인(계정 · 가입 · 로그인은 스타터의 `account` — 캡차는 `saas.account.captcha.required=true`, 운영에서는 메일 발송 길).
 
 ### 예 3. 콘텐츠 · 랜딩 사이트 (서버 렌더링) — 검색에 노출되는 소개 · 요금 · 약관
 

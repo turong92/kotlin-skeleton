@@ -73,4 +73,84 @@ class LogMaskerTest {
             LogMasker.install(previous)
         }
     }
+
+    @Test
+    fun `the default rules still hide what they hid before the repeats were bounded, inside and outside the bounds`() {
+        val longKey = "a".repeat(100) + "Token"
+        assertEquals("$longKey=[REDACTED]&x=1", masker.mask("$longKey=hunter2&x=1"), "a key name longer than the 64 character prefix is still hidden")
+        assertEquals("""{"my-long_api-key_token":"[REDACTED]"}""", masker.mask("""{"my-long_api-key_token":"abc"}"""))
+        val jwt = "eyJ" + "A".repeat(300) + "." + "B".repeat(3000) + "." + "C".repeat(600)
+        assertEquals("login [REDACTED] ok", masker.mask("login $jwt ok"), "a long header, payload and signature are one JWT")
+        assertEquals("x=[REDACTED]", masker.mask("x=eyJhbGciOiJI.eyJzdWIiOiIx."))
+    }
+
+    @Test
+    fun `a JWT larger than the bounded repeats is hidden whole, not left in the clear`() {
+        fun part(n: Int) = "A".repeat(n)
+        mapOf(
+            "header 600" to "eyJ${part(600)}.${part(100)}.${part(43)}",
+            "header 4000 (x5c chain)" to "eyJ${part(4000)}.${part(100)}.${part(43)}",
+            "payload 9000" to "eyJ${part(36)}.${part(9000)}.${part(43)}",
+            "signature 3000" to "eyJ${part(36)}.${part(100)}.${part(3000)}",
+        ).forEach { (shape, jwt) ->
+            assertEquals("login [REDACTED] ok", masker.mask("login $jwt ok"), shape)
+        }
+    }
+
+    @Test
+    fun `a quoted key name longer than the 64 character prefix is hidden like an unquoted one`() {
+        val key = "k".repeat(70) + "_token"
+        assertEquals("""{"$key":"[REDACTED]"}""", masker.mask("""{"$key":"abc"}"""), "quoted")
+        assertEquals("$key=[REDACTED]", masker.mask("$key=abc"), "unquoted")
+        assertEquals("""{'$key': '[REDACTED]'}""", masker.mask("""{'$key': 'abc'}"""), "single quoted")
+    }
+
+    @Test
+    fun `masking time grows about linearly with the line length for every default rule`() {
+        val lines = listOf<(Int) -> String>(
+            { n -> "/" + "a-".repeat(n / 2) },
+            { n -> "/" + "eyJ-".repeat(n / 4) },
+            { n -> "eyJaaaaa.".repeat(n / 9) },
+            { n -> "eyJaaaaa." + "eyJ".repeat((n - 9) / 3) },
+            { n -> "token ".repeat(n / 6) },
+            { n -> "cookie ".repeat(n / 7) },
+            { n -> "Bearer ".repeat(n / 7) },
+            { n -> "a.".repeat(n / 2) },
+        )
+        listOf(LogMasker(), LogMasker(maskEmails = true)).forEach { m ->
+            lines.forEachIndexed { i, line -> TimingGrowth.assertLinear("rule line #$i") { m.mask(line(it)) } }
+        }
+    }
+
+    @Test
+    fun `maskRequestPath returns the path itself when no path rule is set, whatever the other rules are`() {
+        val m = LogMasker(patterns = listOf("(?<value>APPSECRET)"), maskEmails = true)
+        listOf("/a/token=abc", "/a/eyJhbGciOi.eyJzdWIiOi.c2ln", "/APPSECRET/me@example.com", "/" + "x".repeat(2000)).forEach { assertEquals(it, m.maskRequestPath(it)) }
+    }
+
+    @Test
+    fun `maskRequestPath cuts first and applies only the path rules`() {
+        val m = LogMasker(patterns = listOf("(?<value>APPSECRET)", "/hooks/(?<value>\\S+)"), pathPatterns = listOf("/hooks/(?<value>\\S+)"))
+        assertEquals("/hooks/[REDACTED]", m.maskRequestPath("/hooks/s3cr3t"))
+        assertEquals("/a/token=abc/APPSECRET", m.maskRequestPath("/a/token=abc/APPSECRET"), "default and app rules do not run on a path")
+        val cut = m.maskRequestPath("/p" + "y".repeat(600))
+        assertEquals(("/p" + "y".repeat(510)) + LogMasker.TRUNCATED_MARK, cut)
+    }
+}
+
+/** 입력을 n → 2n 으로 늘렸을 때 시간이 3배 아래인지(제곱이면 4배)와 넉넉한 절대 상한(200ms)을 잰다 — 기계가 느려도 거짓 실패하지 않게 절대 시간만으로는 가르지 않는다. */
+object TimingGrowth {
+    const val N = 4000
+    const val ABSOLUTE_LIMIT_MS = 200.0
+    private const val SLACK_MS = 2.0
+
+    private fun bestMillis(block: () -> Unit): Double = (1..5).minOf { val t = System.nanoTime(); block(); (System.nanoTime() - t) / 1e6 }
+
+    fun assertLinear(what: String, run: (Int) -> Unit) {
+        run(N) // 예열
+        val small = bestMillis { run(N) }
+        val big = bestMillis { run(2 * N) }
+        assertTrue(big < ABSOLUTE_LIMIT_MS, "$what: ${2 * N} chars took ${big}ms")
+        assertTrue(big < 3 * small + SLACK_MS, "$what: doubling the input took ${small}ms -> ${big}ms (quadratic would be 4x)")
+    }
 }

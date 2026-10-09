@@ -1,30 +1,249 @@
 # payment
 
-제공자 중립 결제 계약(`PaymentService`, `PaymentProviderRouter`)이다.
+제공자 중립 결제 계약(`PaymentService`, `PaymentProviderRouter`)과, 저장 어댑터(`payment-jdbc`)가 있을 때 켜지는 **결제 장부**(주문 · 환불 · 이력 · 웹훅 수신함 · 사용자/운영자 HTTP · 탈퇴 고리)다.
 제공자(`payment-toss`, `payment-stripe`)가 각자 등록하고, 라우터가 이름으로 고른다.
 
 | 항목 | 내용 |
 |---|---|
 | 의존성 한 줄 | `implementation(project(":modules:payment"))` |
 | 함께 오는 모듈 | `platform` |
-| 컴파일 전용 | 없음 |
+| 컴파일 전용 | `alert` |
 | 설정 접두사 | `skeleton.payment` — [docs/config/modules/payment.yml](../config/modules/payment.yml) |
-| 기본 동작 | 켜짐 (라우팅만). |
-| 부팅에 필요한 것 | 없음. 제공자 모듈이 있어야 결제할 수 있다. |
-| 교체 지점 | `PaymentProviderRouter`, `PaymentService` |
-| 마이그레이션 | 없음 |
+| 기본 동작 | 조건부 — 라우팅 파사드는 늘 켜짐. 장부 · HTTP · 웹훅은 `PaymentLedgerStore` 빈(`payment-jdbc`)이 있을 때만 선다. 운영자 경로는 그 위에서도 기본 꺼짐. |
+| 부팅에 필요한 것 | 없음. 결제하려면 제공자 모듈이 있어야 하고, 장부는 `payment-jdbc` 와 작업 큐(`job-queue-jdbc`)가 있어야 한다. |
+| 교체 지점 | `PaymentProviderRouter`, `PaymentService`, 장부: `PaymentCatalog` · `PaymentOrderListener` · `PaymentReviewNotifier` · `PaymentOperatorPolicy` |
+| 마이그레이션 | 없음 (장부 표는 payment-jdbc 에 있다) |
 | 프론트 짝 | `@skeleton/payment` |
-| 테스트 | `modules/payment/src/test` |
+| 테스트 | `modules/payment/src/test` · `modules/payment/src/noOptionalTest` · 시험 대역 `modules/payment/src/testFixtures` |
 
-## 왜 HTTP 엔드포인트가 없나 — 만들려면 필요한 것
+설계와 근거: `docs/superpowers/specs/2026-10-08-payment-ledger-design.md`. 화면과 맞춘 HTTP 계약: **[docs/payment-http-contract.md](../payment-http-contract.md)**.
 
-`PaymentService.confirm` 은 금액을 **그대로** 제공자에 넘긴다. 브라우저가 돌려보내는 `amount` 는 주소에서 온 값이라 믿을 수 없고, 맞는 금액은 앱의 주문 저장소에만 있다.
-그래서 모듈이 `POST /api/v1/payments/confirm` 을 열려면 아래가 먼저 계약이어야 한다 (지금은 앱 컨트롤러가 직접 한다):
+## 장부란
 
-1. `PaymentOrderResolver`(앱이 구현): `orderId` + 호출자 → 결제할 금액 · 통화 · 소유자 확인 · 이미 결제됐는지. 모듈은 요청의 `amount` 와 이 값이 다르면 400 으로 막는다.
-2. 결제 결과를 앱의 주문 상태에 반영하는 훅(`PaymentConfirmedListener`) — 트랜잭션 경계는 앱의 것이다.
-3. `Idempotency-Key` 필수(`idempotency` 모듈 의존이 생긴다)와 웹훅(토스 · 스트라이프 서명 검증)은 제공자 모듈마다 다르다.
+- **주문 한 줄 = 결제 한 번**이고 줄의 상태가 돈의 사실이다. 환불은 줄이 따로(한 건 = 한 줄)이고, 모든 변화는 **추가만 하는 이력**(`payment_events`)에 남아 「이 주문이 왜 이 상태인가」를 로그 없이 답한다.
+- **결제사와 장부를 맞추는 코드는 `PaymentConvergence.converge` 한 곳이다.** 승인 응답 · 조회 작업 · 웹훅 · 운영자의 「결제사와 맞추기」 · 환불 전 확인이 모두 이것으로 끝난다. 몇 번 불려도 결과가 같고, 바뀐 것이 없으면 줄도 이력도 작업도 건드리지 않는다.
+- **락은 DB 의 주문 줄 하나**다(`select … for update`). 모든 전이는 락을 잡고 줄을 **다시 읽은 값**으로 판단한다. **결제사 호출은 락 · 트랜잭션 밖**이다 — 선점(커밋) → 호출 → 확정(커밋) 세 걸음으로 나눈다. 바깥 트랜잭션 안에서 부르면 서비스가 던진다.
+- **웹훅은 신호일 뿐이다.** 본문의 상태 · 금액은 어디에도 쓰지 않고, 사실은 늘 결제사 조회에서 온다.
+- 장부에는 **자유 문장이 들어갈 열이 없다.** 이름 · 이메일 · 전화 · 전체 카드 번호 · 유효기간 · 소유자명은 받지도 저장하지도 않는다. 개인정보로 볼 수 있는 칸은 카드사와 끝 네 글자 둘뿐이다.
+- 장부를 켜는 스위치는 없다 — `payment-jdbc` 의 유무가 스위치다. 없으면 이 모듈은 장부가 생기기 전과 한 글자도 다르지 않다.
 
-이 셋이 정해지기 전에 열면 "금액 검증이 없는 결제 확정 엔드포인트" 가 기본값이 되므로 열지 않았다. 프론트 `@skeleton/payment` 도 같은 이유로 기본 경로가 없다.
+## 결제사 능력
+
+한 결제사의 능력은 **한 빈**에 모인다(라우터는 id 당 빈 하나만 받는다 — 같은 id 의 두 빈은 기동 실패). 능력이 없으면 `400 PAYMENT.CAPABILITY_UNSUPPORTED`.
+
+| 능력 | 하는 일 |
+|---|---|
+| `PaymentConfirmGateway` | 승인. `acceptsPaymentKey`(결제 키 **모양** 확인 — 선점 전에 불리고 **락 안이라 I/O 금지**) · `confirmDeclineCategory`(확정 거절 코드 → `DECLINED` 의 `data.category`) |
+| `PaymentRefundGateway` | 전액 · 부분 환불. `refundDeclineCategory`(확정 거절 코드 → `REFUND_DECLINED` 의 `data.category`) |
+| `PaymentLookupGateway` | 결제사가 아는 지금 상태(취소 목록 포함). 결제가 없으면 null |
+| `PaymentCheckoutGateway` | 결제창을 여는 데 프론트가 필요한 공개 값. **계약: 결제창 결제사는 서버 승인 없이 돈을 움직이지 않는다** — 모드가 다르거나 결제사 빈이 없는 `PENDING` 을 조회 없이 닫는 규칙이 이것에 기댄다. 서버 승인 없이 결제가 끝나는 결제사를 붙이려면 그 규칙을 먼저 고친다 |
+| `PaymentWebhookGateway` | 웹훅의 진위를 확인하고 「어느 자원의 어떤 일」만 꺼낸다. `signed=false` 면 주소의 비밀 조각이 필수 |
+| `mode` | 지금 끼운 키가 테스트 · 실결제 — 주문 줄에 박히고 배포 가드가 본다 |
+
+결제사 모듈의 의무(확정/모름 분류 등)는 `payment-toss` 문서(결제사 모듈을 고른 프로젝트에 `docs/modules/payment-toss.md`). `PaymentProvider` 는 능력의 합(+`cancel`)이라 기존 구현은 고치지 않아도 된다.
+
+## 앱 계약 — 앱이 하는 일
+
+| 앱이 하는 일 | 계약 |
+|---|---|
+| 무엇을 얼마에 파는가 (**금액의 유일한 출처**) | `PaymentCatalog` — 없으면 주문 만들기 경로가 열리지 않는다(서비스는 `PAYMENT.UNAVAILABLE`). 주문 줄에 박힌 값만 결제사로 간다. 살 수 없으면 `PaymentItemNotPurchasableException`(`422`). 결제창에 보이는 `orderName` 에는 개인정보를 넣지 않는다(최대 100자) |
+| 결제 확정 · 환불 확정 뒤 지급 · 회수 | `PaymentOrderListener.onPaid` · `onRefunded` — 던져도 「결제됨」은 그대로이고 지급 · 회수 작업이 재시도한다 |
+| 운영자 판정 | `PaymentOperatorPolicy` — 기본은 토큰의 `ROLE_<admin.role>`. 토큰이 낡았을 수 있으므로(≤15분) `account` 를 쓰는 앱은 매 호출 저장소의 역할을 읽는 빈으로 갈아 끼운다 |
+| (선택) 사람이 봐야 하는 일이 줄에 찍힐 때 알림 | `PaymentReviewNotifier` — `alert` 가 있으면 `PAYMENT_REVIEW_NEEDED`(주문 id 만 싣는다), 없으면 줄 · 로그에만 남는다 |
+| (선택) 결제사가 우리 키를 받아들이지 않았을 때 알림 | `PaymentProviderCredentialAlert` — 결제사 모듈이 키 거절(토스: 401 계열 `INVALID_API_KEY` · `UNAUTHORIZED_KEY` — `FORBIDDEN_REQUEST` 는 요청 불일치일 수도 있어 알리지 않는다)을 받으면 부른다. 장부 + `alert` 가 있으면 `PAYMENT_PROVIDER_CREDENTIALS_REJECTED`(결제사 id 만 싣는다 · 한 시간에 한 번으로 접힌다), 없으면 알리지 않는다. 고객에게는 여전히 「거절」이다 |
+| 성공/실패 리다이렉트 화면 · 웹훅 비밀 조각 | 앱 몫 — [HTTP](#http) 참고 |
+
+**`PaymentOrderListener` 를 짧게 쓴다.** `onPaid` · `onRefunded` 는 **주문 줄 락 안에서 한 번** 돈다 — 같은 DB 를 쓰는 지급이 정확히 한 번인 이유다. 그동안 **그 주문의 웹훅 수신 · 승인 · 환불이 기다린다**(PostgreSQL 은 락 대기에 시간 제한이 없다). 느린 일(메일 · 외부 호출)은 리스너에서 직접 하지 말고 큐로 넘긴다(알림은 `NotificationPublisher`, 외부 시스템 호출은 작업으로).
+드물게 다시 불릴 수 있으니 멱등하게 쓴다. **지급한 적 없는 주문에도 `onRefunded` 가 온다**(지급 전에 전액 환불되면 `onPaid` 는 건너뛰고 `onRefunded` 만) — 지급했는지는 `order.fulfilledAt == null` 로 가른다. `onRefunded` 가 `onPaid` 보다 앞서지 않는다(일부만 환불된 미지급 주문은 먼저 `onPaid` 가 불린다).
+
+## 상태 전이
+
+전이는 한 곳(`PaymentOrderTransitions` · `PaymentRefundTransitions`)이 정한다. 표에 없는 전이는 버그이므로 `IllegalStateException` 이고 사용자에게 나가지 않는다.
+
+**주문**: `PENDING` → `CONFIRMING` · `CANCELED` · `EXPIRED` · `PAID` / `CONFIRMING` → `PAID` · `FAILED` / `PAID` → `PARTIALLY_REFUNDED` · `REFUNDED` / `PARTIALLY_REFUNDED` → `PARTIALLY_REFUNDED` · `REFUNDED`.
+`FAILED` · `EXPIRED` · `CANCELED` → `PAID` 는 있지만 **결제사 조회 증거로만**이다(늦게 온 결제). **`PAID` 이후에서 `FAILED` · `EXPIRED` · `CANCELED` 로 가는 길은 없다** — 늦게 온 실패 신호가 받은 돈을 되돌리지 못한다.
+
+**환불**: `REQUESTED` → `PENDING` · `REJECTED` · `WITHDRAWN` / `PENDING` → `SUCCEEDED` · `FAILED`. 줄이 처음 생길 때의 상태는 `REQUESTED`(본인 요청) · `PENDING`(운영자 직접 환불) · `SUCCEEDED`(결제사 쪽 취소를 장부에 맞춰 넣은 줄). 주문당 열린 환불(`REQUESTED` · `PENDING`)은 하나뿐이다(`open_key` 유니크).
+
+흐름: 주문 만들기 → (결제창) → 승인(`confirm`: 선점 → 호출 → 확정) → 지급. 승인에서 결제사의 답을 모르면 `CONFIRMING` 에 두고 **조회 작업**(`reconcile.first-delay` 뒤 첫 조회, `max-attempts` 번)이 결제사가 끝 상태를 말할 때까지 묻는다. 안 만든 결제는 **만료 작업**(`checkout-ttl` 뒤)이 결제사에 물어 닫는다. 작업 여섯 종: `payment-order-expire` · `payment-order-reconcile` · `payment-order-fulfil` · `payment-refund-reconcile` · `payment-refund-apply` · `payment-webhook`.
+
+## 검토 이유와 누가 푸는가
+
+「확인 필요」(`reviewReason`)는 **사람이 봐야 한다는 표시**이고 한 칸이다. 돈이 어긋난 이유가 지급 쪽 이유를 덮어쓰고 반대는 안 된다. 아홉 가지(백엔드가 찍는 일곱 + 파생 둘)와 뜻 · 푸는 길의 정본은 [계약 문서 §7](../payment-http-contract.md). 요약:
+
+| 이유 | 푸는 길 |
+|---|---|
+| `AMOUNT_MISMATCH` · `ORDER_MISMATCH` | 장부에는 푸는 단추가 없다 — 사람이 결제사 쪽을 확인해 처리한다. 주문은 `PAID` 로 올라가지 않았다 |
+| `REFUND_MISMATCH` | 숫자가 맞게 되면 웹훅 · 조회가 푼다. 사람이 봐야 하는 이상(풀리지 않은 `PENDING` · 다른 금액 · 늦은 성공 응답)은 사람이 누른 「결제사와 맞추기」만. 이 표시가 있으면 환불을 보내지 않는다 |
+| `MODE_MISMATCH` | 키를 맞추고 「결제사와 맞추기」. **승인을 선점한 뒤(`CONFIRMING`)이거나 결제된 주문에만 찍힌다** — 선점한 적 없는 `PENDING` 은 표시 없이 마감 뒤 `EXPIRED` 로 닫힌다 |
+| `CONFIRM_UNRESOLVED` | 조회 작업이 끝내 못 물었다 — 웹훅 · 「결제사와 맞추기」가 `PAID` 로 맞춘다 |
+| `FULFILMENT_UNRESOLVED` · `REFUND_APPLY_UNRESOLVED` | 지급 · 회수 작업이 죽었다 — 「결제사와 맞추기」가 작업을 다시 넣고 푼다 |
+| `STALE_CONFIRMING` · `STALE_REFUND`(파생) | `admin.stale-after`(기본 1시간)보다 오래 `CONFIRMING` · `PENDING` 환불 — 기반 상태가 움직이면 사라진다 |
+
+표시하는 고리가 같이 실패해도 놓치지 않도록, 줄에 이유가 없어도 `stale-after` 가 지난 **미지급 `PAID` 계열** · **미회수 `SUCCEEDED` 환불**은 운영자 「확인 필요」 목록에 파생 이유로 올라온다(마지막 안전망). 큐가 작업을 죽이는 모든 길에서 `payment-jdbc` 가 작업의 죽은 고리(`onDead`)를 불러 이유를 찍는다.
+
+## `sync` — 결제사와 맞추기가 하는 일
+
+운영자 경로의 `POST /orders/{id}/sync` 는 `PaymentRefunds.sync` 다. 순서:
+
+1. **모드 확인** — 주문의 키 모드와 지금 결제사의 모드가 다르면 `409 MODE_MISMATCH`. `CONFIRMING` · 결제된 주문에는 `MODE_MISMATCH` 표시를 찍고(커밋), `PENDING`(선점한 적 없다 — 만료 작업이 닫는다)과 **끝난 주문**(`FAILED` · `EXPIRED` · `CANCELED`, 또는 열린 환불 줄이 없는 `REFUNDED`)에는 표시도 이력도 남기지 않고 409 만 낸다. 열린 환불 줄이 있으면 돈이 걸려 있어 끝난 주문이 아니다.
+2. **조회** — 결제사에 묻는다(락 밖). 물을 수 없으면 `502 PROVIDER_ERROR`(결제사가 오류로 답함, `detail` 은 고정 문장) 또는 `503 UNAVAILABLE`(대답이 없음). **결제사가 그 결제를 모른다고 답하면**(조회 결과 없음) `404 PROVIDER_PAYMENT_NOT_FOUND` — 장부는 바뀌지 않고 `MODE_MISMATCH` 표시도 풀지 않는다.
+3. **`MODE_MISMATCH` 해제** — 지금 모드가 주문과 같고 결제사가 끝 상태를 말했을 때.
+4. **`converge`** — 결제사의 상태 · 취소 목록을 장부에 맞춘다(결제사 관리 화면에서 취소한 것도 환불 줄로 넣는다).
+5. **`PENDING` 환불 줄 정산** — 결제사의 남은 금액이 장부와 같으면 「적용되지 않았다」(`NOT_APPLIED`)로 닫는다(단 `settle-delay` 가 스냅샷을 얻은 시각으로 지난 뒤). 결제사가 **접수했다**고 답한 줄(`PROVIDER_PENDING`)은 자동으로 닫지 않고 `refund.provider-pending-timeout`(기본 24시간)이 지난 뒤 **사람이 누른 `sync` 만** 닫는다. 요청과 다른 금액이 취소된 줄(`RESULT_MISMATCH`)도 사람이 누른 `sync` 만 닫는다.
+6. **다시 `converge`.**
+7. **미지급 · 미회수 작업 재투입** — 맞추기 전부터 미지급이던 `PAID` 계열 주문에 지급 작업을, 미회수 `SUCCEEDED` 환불에 회수 작업을 한 번씩 다시 넣는다(지급 전에 전액 환불된 주문은 제외).
+8. **지급 쪽 이유 해제** — `FULFILMENT_UNRESOLVED` · `REFUND_APPLY_UNRESOLVED` 를 푼다. 돈 쪽 이유는 건드리지 않는다.
+
+다시 눌러도 안전하지만, 16명이 동시에 누르면 지급 · 회수 작업이 최대 16개 들어갈 수 있다(작업은 멱등이라 적용은 한 번).
+환불 전 확인(운영자 직접 환불 · 승인 앞의 조회 → 맞추기)은 **한 번 · 재시도 없음**이고 실패하면 환불을 보내지 않는다(`503 UNAVAILABLE`). 결제사가 그 결제를 모르거나 「받지 않았다」(진행 중 · 실패 · 만료)고 답해도 보내지 않는다 — `REFUND_MISMATCH` 를 찍고 `409 REFUND_NOT_ALLOWED`, 환불 줄은 만들지 않는다 — 오류 뒤 멱등 키를 바꿔 같은 요청을 다시 보내는 것은 위험하다.
+
+## 웹훅
+
+- **주소**: `POST <http.base-path>/webhooks/{provider}[/{token}]` (기본 `/api/v1/payments/webhooks/toss/<token>`). 서명 없는 결제사(토스의 결제 이벤트)는 **주소 끝의 비밀 조각**(`webhook.path-token`)이 진위의 전부다. 모르는 결제사 · 조각이 틀림은 같은 404, 서명이 틀리면 401, 본문 초과 413, 요청 수 초과 429 — [계약 문서 §8](../payment-http-contract.md).
+- **비밀 조각**: 앱이 정한다(24자 이상, 영문 · 숫자 · `-` `.` `_` `~`, 서로 다른 글자 8개 이상). 보호 환경(stage · prod)에서 서명 없는 결제사가 있는데 비었거나 약하면 **기동 실패**, 그 밖은 경고. 환경변수 `<P>_PAYMENT_WEBHOOK_PATH_TOKEN`(운영자 값 — [deploy.md](../deploy.md) §7). 조각은 우리 로그에 남기지 않는다(요청 로그의 경로를 가린다 — 아래 [로그에 관해](#로그에-관해)).
+- **수신함**: 받는 것은 **DB 쓰기 한 번**(수신함 줄 + 처리 작업, 한 트랜잭션)이고 결제사를 부르지 않는다. `(provider, event_key)` 유니크라 같은 배달이 동시에 열여섯 번 와도 줄 하나 · 작업 하나다. 모르는 주문 · 결제 이벤트가 아닌 이벤트는 저장하지 않는다.
+- **재전송**: 줄이 `FAILED` · `DEAD` 일 때만 새 작업을 넣는다(`RECEIVED` 는 작업이 이미 기다리는 중, `PROCESSED` · `IGNORED` 는 끝남). **`webhook.redelivery-requeue-limit` 은 넣어 준 횟수가 아니라 그 줄의 총 전달 수(`deliveries`) 기준이다** — 첫 전달도 센다. 이번 전달을 센 `deliveries` 가 이 값 **이하**일 때만 새 작업을 넣고, 넘으면 받은 것으로만 답한다(기본 10이면 총 전달 10번째까지; 1 이하면 재전송은 작업을 넣지 않는다). 운영자의 「다시 처리」는 이 값과 무관하다.
+- **주문 단위 창 상한**: 새 이벤트 키는 그 주문에 `webhook.per-order-limit.window` 안에 저장된 줄이 `capacity` 에 닿으면 저장하지 않고 `200` 으로만 답한다(전달 id 를 호출자가 정하므로 줄 · 작업 · 결제사 조회를 늘리지 못하게 하는 제동). 세기와 넣기는 주문 줄 락 안이라 여러 대에서도 같다(동시 요청 수만큼은 넘을 수 있다 — 폭주 제동이지 정확한 계량이 아니다).
+- **표식 줄**: 상한에 걸린 신호는 버리지 않는다 — 주문당 창마다 **표식 줄 하나**(`resourceType=LIMIT_MARKER`, `eventType=LIMIT_REACHED`, DB 의 `event_key = limited:<주문 id>:<창 번호>`)와 **창 끝에 도는 처리 작업**이 걸린다. 그 작업이 결제사에 조회해 맞추므로 상한에 걸린 진짜 신호(예: 결제사 콘솔의 취소)도 창이 끝나면 장부에 닿는다. **`per-order-limit.window` 의 길이가 미룬 조회의 최대 지연이다.** 표식 줄은 상한 계산에 세지 않고 운영자 수신함 목록에 보통 줄과 같이 나온다.
+- **처리 작업**(`payment-webhook`): 줄이 가리키는 주문을 **결제사에 조회**해 `converge` 한다(행위자 `PROVIDER`). 조회를 시작한 시각을 `snapshotAt` 으로 넘겨 낡은 스냅샷이 거짓 `REFUND_MISMATCH` 를 찍지 않게 한다. 웹훅의 맞추기는 `PENDING` 환불 줄을 `NOT_APPLIED` 로 닫지 않는다(그것은 환불 정산의 일). 실패 사유는 우리 코드만 `last_error` 에 쓴다. 모드가 다르면 조회 없이 줄을 `DEAD` 로 한다. 줄이 `DEAD` 가 된 뒤에는 결제사의 재전송이나 운영자의 「다시 처리」가 새 작업을 넣는다.
+- 웹훅 경로는 `webhook.enabled` 로만 닫는다 — `http.enabled=false` 는 사용자 경로만 닫는다.
+
+## HTTP
+
+장부가 있고 서블릿 웹 앱이며 Spring Security 가 있을 때만 선다. 컨트롤러는 HTTP 변환만 하고 `@Transactional` 이 없다. 호출자는 `Authentication.name`(auth 모듈에서는 계정 id), 익명은 401.
+
+| 경로 | 켜는 조건 |
+|---|---|
+| 사용자 `/api/v1/payments` — `config` · 주문 읽기 · 목록 · 승인 · 그만둠 · 환불 요청 · 요청 거둠 | `http.enabled`(기본 켜짐) |
+| 주문 만들기 `POST /api/v1/payments/orders` | 위 + **앱이 `PaymentCatalog` 빈을 둘 때만**. 계정 · IP 별 요청 수 한도(`http.order-rate-limit`) |
+| 운영자 `/api/v1/admin/payments` — 주문 목록 · 한 건 · 직접 환불 · 환불 요청 목록 · 승인 · 거절 · 결제사와 맞추기 · 웹훅 수신함 · 다시 처리 | `admin.enabled=true`(**기본 꺼짐 — 경로가 없어 404**). 켜지면 `PaymentOperatorPolicy` 를 매 호출 확인(거절 403) |
+| 웹훅 `POST /api/v1/payments/webhooks/{provider}[/{token}]` | `webhook.enabled`(기본 켜짐). 공개 경로 — 공개 OpenAPI 문서에서 숨김 |
+
+**`WebMvcConfigurer` 를 읽지 않는 조립에서는 운영자 경로가 닫힌 채 뜬다.** 운영자 접근 규칙(`PaymentOperatorInterceptor`)은 `WebMvcConfigurer` 로 걸린다. `WebMvcConfigurationSupport` 를 직접 상속하는 앱처럼 설정자를 읽지 않는 조립에서 `admin.enabled=true` 로 켜면 인터셉터가 안 걸려, 컨트롤러의 둘째 잠금이 **운영자를 포함한 모든 호출을 `403`** 으로 막는다(데이터는 나가지 않는다). 열려면 앱이 `PaymentOperatorInterceptor` 를 직접 등록해야 한다(`admin.enabled=true` 이면 같은 이름의 빈이 이미 있으니 자기 설정의 `addInterceptors` 에서 그 빈을 걸면 된다).
+
+본인은 환불을 **요청만** 한다. 돈을 움직이는 환불 · 승인은 운영자 경로뿐이다. 정확한 응답 모양 · 상태 코드 · 오류 코드 · 프론트가 맞출 것은 **[docs/payment-http-contract.md](../payment-http-contract.md)**.
+
+### 앱이 직접 쓰는 것
+주문 만들기 · 승인 · 환불 요청 · 운영자 경로는 모듈이 연다. 앱이 쓰는 것은 `PaymentCatalog` · `PaymentOrderListener` · (선택) `PaymentOperatorPolicy` 빈, 웹훅 비밀 조각, 결제 성공/실패 리다이렉트 화면(`successUrl` · `failUrl` 은 프론트가 정해 결제창에 넘기고 서버는 받지 않는다)이다.
+
+### HTTP 엔드포인트 — 세 조건이 이 설계로 채워졌다
+예전에는 이 모듈이 `POST /api/v1/payments/confirm` 을 열지 않았다. `PaymentService.confirm` 은 금액을 **그대로** 결제사에 넘기고, 브라우저가 돌려보내는 `amount` 는 주소에서 온 값이라 믿을 수 없으며, 맞는 금액은 앱의 주문 저장소에만 있었기 때문이다. 그래서 먼저 계약이어야 했던 세 가지가 이 설계로 채워졌다:
+
+1. **금액의 출처** — 앱이 구현하는 `PaymentCatalog`. 금액은 서버가 정하고 주문 줄에 박는다. 승인 요청의 `amount` 는 비교만 하고(달라도 결제사를 부르지 않는다 — `400 AMOUNT_MISMATCH`) 카탈로그 빈이 없으면 주문 만들기 경로가 열리지 않는다.
+2. **결과를 앱의 주문 상태에 반영하는 훅** — `PaymentOrderListener`(주문 줄 락 안에서 한 번, 지급이 끝났는지는 `fulfilled_at`). 트랜잭션 경계는 장부의 것이다.
+3. **`Idempotency-Key` 와 웹훅** — 주문 만들기 · 환불은 호출자 + 키로 중복을 막고(줄의 유니크 열), 웹훅은 수신함 + 서명 없는 결제사는 주소의 비밀 조각으로 진위를 지킨다.
+
+장부가 없는 조립(결제사 모듈만 쓰는 앱)에서는 지금도 `PaymentService.confirm` 이 금액을 그대로 넘기므로 **HTTP 가 열리지 않는다** — 그 경우 서버의 주문 금액과 비교하는 코드가 앱에 있어야 한다.
+
+## 탈퇴 · 익명화 · 보존
+
+법률 자문이 아니다. 근거 조문과 기간은 설계 문서 §8.1 에 있고 판단은 앱을 운영하는 쪽의 몫이다. 이 모듈은 `account` 를 모르고 플랫폼의 `AccountErasureListener` · `AccountDataExporter` 만 구현한다(아무도 부르지 않으면 아무 일도 일어나지 않는다).
+
+- **주문 줄은 남는다.**(전자상거래법: 대금결제 기록의 보존 의무) 계정이 지워질 때 하는 일(`PaymentAccountErasure`, 멱등 — 두 번째 호출은 아무것도 바꾸지 않는다):
+  1. 결제하지 않은 `PENDING` 주문은 `CANCELED` 로 닫는다(결제할 사람이 없다). 주문마다 잠가서 id 오름차순으로. `CONFIRMING` 은 건드리지 않는다 — 조회 작업이 끝낸다.
+  2. 그 계정의 **모든** 주문 줄에서 `card_issuer` · `card_last4` 를 NULL 로, `account_erased_at` 을 찍는다(한 문장 update). 이 시각이 찍힌 줄은 나중에 `PAID` 가 돼도 카드 두 칸을 다시 쓰지 않는다 — 지운 개인정보가 되살아나지 않는다. **탈퇴 때 지우는 것은 이 두 칸뿐**이라 보존 의무와 익명화가 부딪히지 않는다.
+  3. `erasure.account-id` 가 `KEEP`(기본)이면 계정 id 를 그대로 둔다 — 계정 모듈의 기본(`ANONYMIZE`)이 계정 id 를 남기므로 결제 줄의 계정 id 는 그 익명 줄을 가리킬 뿐이다. `TOMBSTONE` 이면 **그 계정이 산 주문의 줄에서만** 계정 id(주문의 `account_id` · 그 주문의 환불 줄 `requested_by` · `decided_by` · 이력 `actor_id`)를 탈퇴 표식으로 바꾼다. **운영자로서 남의 주문에 남긴 id 는 남는다**(누가 환불을 결정했는가의 기록). `KEEP` → `TOMBSTONE` 은 나중에 할 수 있지만 반대는 못 한다.
+  4. 열린 환불 요청(`REQUESTED`)은 남는다 — 운영자가 처리할 수 있다. 환불은 원래 결제 수단으로 돌아가므로 계정이 없어도 된다.
+- **고리의 순서**: 계정 모듈은 탈퇴 고리를 `@Order` / `Ordered` 순으로 부른다. `PaymentAccountErasure` 는 `Ordered` 로 **앞에**(`ORDER` = 0) 서고, 순서를 말하지 않은 고리(기본 가장 뒤)는 모두 그 뒤에 돈다. 앱이 자기 표(예: 응원 기록)를 지우는 고리는 이 뒤여야 한다 — 이 고리가 `account_erased_at` 을 먼저 찍어야, 그 사이 `PAID` 가 되는 주문의 훅이 방금 지운 표에 줄을 남기지 않는다.
+- **지급 · 회수 리스너(`PaymentOrderListener`)는 `order.accountErasedAt` 을 본다.** 탈퇴한 계정의 주문이 뒤늦게 `PAID` 가 될 수 있다(탈퇴 때 `CONFIRMING` 이던 주문을 조회 작업이 나중에 끝내는 경우) — 그 주문은 카드 두 칸이 비어 있고 `accountErasedAt` 이 찍혀 있다. 지급 쪽 앱은 지워진 계정에 지급할지 말지를 이 칸으로 정한다.
+- **운영자 목록은 탈퇴한 계정의 줄을 기본으로 숨긴다**(`includeErased=true` · `q` · `review=true` 에서는 보인다). 탈퇴한 사람의 결제 내역은 사용자 경로로는 아무도 볼 수 없다(로그인할 계정이 없다).
+- **내보내기**: 구역 `payments` — 내 결제와 환불 줄을 사용자 응답과 같은 모양으로(카드 표시 포함 — 지워지기 전의 본인 데이터다). 결제하지 않은 시도는 빠진다. 모으는 엔드포인트는 앱의 몫이다.
+- **보존 기간이 지난 줄 지우기는 만들지 않는다**(비목표). 기간은 앱의 정책이고 `account_erased_at` · `paid_at` 이 있어 나중에 실행기를 더해도 표를 고칠 필요가 없다.
+- **처리방침에 적을 것**은 앱의 몫이다 — [accounts.md](../accounts.md) 「처리방침에 적을 것」.
+
+## 설정
+
+접두사 `skeleton.payment` — 복사해 쓰는 블록은 [payment.yml](../config/modules/payment.yml). 환경변수는 키의 대문자(예 `skeleton.payment.admin.enabled` → `<P>_PAYMENT_ADMIN_ENABLED`).
+
+| 키 | 기본 | 뜻 |
+|---|---|---|
+| `default-provider` | — | 경로가 안 맞을 때 쓸 결제사 id (결제사가 하나뿐이면 그것) |
+| `providers.<id>.{enabled, currencies, countries}` | — | 결제사 id 별로 라우팅에서 빼거나 통화 · 국가를 좁힌다 |
+| `checkout-ttl` | `30m` | 만든 주문으로 결제할 수 있는 시간. 지나면 만료 작업이 결제사에 묻고 닫는다. 양수 |
+| `reconcile.first-delay` | `60s` | 승인 선점 뒤 첫 조회까지. **결제사 응답 제한 시간보다 길어야** 한다(`payment-toss` 가드가 어기면 기동 실패) |
+| `reconcile.max-attempts` | `12` | 조회 작업의 시도 수 (큐 기본 백오프로 약 4시간). 1 이상 |
+| `refund.requests-enabled` | `true` | 본인이 환불 **요청**을 만들 수 있다 (돈은 운영자가 움직인다) |
+| `refund.settle-delay` | `2m` | 환불 선점 뒤 첫 조회까지. 결제사 응답 제한보다 길어야 한다(어기면 기동 실패 — 「적용 안 됨」으로 닫은 뒤 앞선 요청이 늦게 적용되는 경우를 줄인다) |
+| `refund.provider-pending-timeout` | `24h` | 결제사가 **접수했다**고 답했는데 조회에 안 보이는 환불 줄을, 이 시간 뒤 사람이 누른 「결제사와 맞추기」가 `NOT_APPLIED` 로 닫을 수 있다 |
+| `webhook.enabled` | `true` | 웹훅 경로를 연다 (`PaymentWebhookGateway` 빈이 있을 때만 뜻이 있다). 수신함 서비스 · 처리 작업은 이 값과 무관하게 선다 |
+| `webhook.path-token` | `""` | 주소 끝의 비밀 조각. 서명 없는 결제사는 이 값이 맞아야 닿는다(비면 늘 404). 보호 환경에서 비었거나 약하면 기동 실패. 비밀이라 `toString` 이 찍지 않는다 |
+| `webhook.max-body-bytes` | `65536` | 본문 크기 제한. 넘으면 413. 1 ~ 1048576 |
+| `webhook.rate-limit.capacity` · `.window` | `120` · `1m` | 호출자 IP 마다 요청 수 — 주소를 확인하기 전에 센다 |
+| `webhook.per-order-limit.capacity` · `.window` | `30` · `10m` | 주문마다 새 이벤트 키의 창 상한. **`window` 가 미룬 조회의 최대 지연** |
+| `webhook.redelivery-requeue-limit` | `10` | `FAILED` · `DEAD` 줄의 재전송이 새 작업을 넣는 상한 — **그 줄의 총 전달 수(`deliveries`) 기준**. 0 이상 |
+| `http.enabled` | `true` | 사용자 경로를 연다 (웹훅 경로는 무관) |
+| `http.base-path` | `/api/v1/payments` | 사용자 · 웹훅 경로의 기준. `/` 로 시작하고 `/` 로 끝나지 않는다 |
+| `http.order-rate-limit.account-capacity` · `.ip-capacity` · `.window` | `10` · `30` · `10m` | 주문 만들기 요청 수 — 계정마다 · IP 마다. 넘으면 429 |
+| `admin.enabled` | `false` | 운영자 경로를 연다. 꺼져 있으면 404 |
+| `admin.base-path` | `/api/v1/admin/payments` | 운영자 경로의 기준 |
+| `admin.role` | `ADMIN` | 기본 정책이 보는 역할(`ROLE_<role>`). 앱이 `PaymentOperatorPolicy` 빈을 두면 쓰이지 않는다 |
+| `admin.stale-after` | `1h` | 「오래됨」의 기준 — 파생 검토 이유(`STALE_CONFIRMING` · `STALE_REFUND` · 지급 · 회수 안전망) |
+| `erasure.account-id` | `KEEP` | `KEEP`: 탈퇴해도 결제 줄의 계정 id 를 그대로 / `TOMBSTONE`: 그 계정이 산 주문의 줄에서만 바꾼다 |
+
+작업의 폴링 · 백오프 · 워커는 `skeleton.job-queue` 가 정한다(`payment-jdbc` 는 설정 접두사가 없다). 저장소 어댑터가 구현할 약속은 시험 소스 `PaymentLedgerStoreContract` 에 있다(`testFixtures`: 메모리 저장소 · `ScriptedGateway` 대역도 거기 — 제품 코드가 아니다).
+
+## 여러 인스턴스 · 시계
+
+- **정합은 프로세스 안 상태에 기대지 않는다.** 보장의 근거는 DB 의 락과 유니크다: 주문 줄 `select … for update` 선점(승인 · 만료 · 환불 · 지급 · 회수 · 웹훅 처리의 모든 전이가 락 뒤에 다시 읽고 판단) · 유니크(주문 · 환불의 `dedupe_key`, `(provider, provider_payment_id)`, 열린 환불 `open_key`, `(order_id, provider_refund_id)`, 웹훅 `(provider, event_key)`) · 작업 큐의 `SKIP LOCKED` 분배 · 웹훅 주문 단위 상한은 표의 줄 수로 센다. 멱등 키는 메모리 저장소가 아니라 줄의 유니크 열이다. 같은 DB 를 보는 독립된 백엔드 여럿으로 재는 시험은 `payment-jdbc`.
+- **워커 전용(웹 없는) 인스턴스도** 서명 없는 결제사가 있는데 웹훅 토큰이 비었거나 약하면 prod 에서 **기동 실패**한다 — 웹 경로가 없어도 배포 가드는 장부 조립에 붙어 있다(모든 인스턴스가 같은 값을 받아야 한다).
+- **시계/NTP 가 운영 전제다.** 마감(`checkout-ttl`) · `settle-delay` · `provider-pending-timeout` 은 **판정하는 인스턴스의 시계**로 잰다. 1분 빠른 인스턴스는 다른 대가 아직 받아 주는 승인을 거절하고 만료 · 정산 대기를 일찍 끝낼 수 있다(환불을 일찍 `NOT_APPLIED` 로 닫는 것 포함) — 끝 상태가 둘이 되지는 않고 늦게 적용된 환불은 맞추기가 잡지만, 인스턴스 시계는 NTP 로 맞춘다.
+- **요청 수 한도의 저장소는 플랫폼의 `RateLimitStore`** 다 — `redis-rate-limit` 이 있으면 Redis 로 인스턴스끼리 공유한다. **없으면 인스턴스별 메모리라 n 대면 한도가 n 배**다(정합과는 무관하고 폭주 제동의 정밀도만). 웹훅 요청 수 한도와 주문 만들기 한도가 이 저장소를 쓴다.
+- 클라이언트 IP 규칙(`skeleton.web.client-ip.mode` — 홈서버 플랫폼이 넣는다, [client-ip.md](../client-ip.md))을 배포에서 정한다 — 한도의 키가 호출자 IP 이기 때문이다.
+
+## 로그에 관해
+
+- **웹훅 주소의 비밀 조각**은 요청 로그의 경로에서 가려진다. 이를 위해 `payment` 웹훅이 켜진 앱은 **모든 요청의 경로가 요청 로그에서 512자로 잘린다**(가리기 전에 자른다 — 인증 · 한도보다 앞에서 아무 호출자의 경로가 가림 규칙에 태워지므로 입력을 묶는다).
+- 새 `LogMaskingContributor` 를 쓸 때는 정규식이 입력 길이에 제곱으로 느려지지 않게 쓴다 — **반복은 유한하게, 앞에 고정 글자를 둔다**(`LogMasker` 가 규칙을 요청 경로에도 태운다).
+- **logback 가림 조각을 넣지 않은 앱**에서 `org.springframework.web` 을 DEBUG 로 올리거나 `spring.mvc.log-resolved-exception` 을 켜면 **웹훅 주소의 토큰이 평문으로 로그에 남는다**. 어떤 앱도 기본으로는 그 조각을 넣지 않는다 — 켜지 말거나 조각을 넣는다.
+
+## 변이 확인 기록
+
+시험이 정말 보장을 지키는지 — 보장을 깨는 **변이**(한 줄을 지우거나 바꾸는 것)를 손으로 넣어 시험이 빨개지는지 본 기록이다. 변이는 확인 뒤 되돌렸고 커밋에 남지 않았다. 시험은 가짜 결제사(`ScriptedGateway` · 가짜 토스 HTTP 서버)로 돌고, 진짜 토스로 잰 것은 [real-provider-setup §11.6](../real-provider-setup.md) 에 있다.
+
+### 스펙이 꼽은 네 가지 — 2026-10-09 새로 돌렸다 (바뀐 범위의 시험 클래스만)
+
+| 보장 (스펙 §3) | 변이 | 빨개진 시험 |
+|---|---|---|
+| 3 금액 변조 — 요청의 `amount` 는 비교만 하고 다르면 결제사를 부르지 않는다 | `PaymentOrders` 승인의 금액 비교 한 줄(`!amount.sameAs(order.amount)` → 던지기)을 지움 | `OrderConfirmTest`: `a tampered amount never reaches the provider` · `the exceptions that reach a client name neither the provider nor internal types` |
+| 12 환불 타임아웃 → 이중 환불 — 모름이면 다시 보내지 않고 조회해서 맞춘다 | 환불 정산 작업(`RefundReconcileTaskHandler`)이 조회 전에 같은 멱등 키로 환불을 다시 보내게 함 | `RefundReconcileTest` 4개: `a refund that timed out but was applied is settled once` · `…was not applied is failed and the order is refundable again` · `a console cancel that lands between the send and the settle…` · `the settle job does not run before the settle delay…` |
+| 7 웹훅 위조 — 본문의 상태를 쓰지 않고 결제사에 조회한다 | 웹훅 처리 작업이 조회하지 않고 "결제됨" 이라는 결과를 지어내게 함 (웹훅 봉투에 상태가 없어 「본문을 믿는다」를 이렇게 흉내 냈다) | `WebhookInboxTest` 여러 개: `a forged DONE for an unpaid order changes nothing` 포함 |
+| 6 지급 한 번 — 지급은 주문 줄 락 안에서 `fulfilled_at` 이 비었을 때만 | `PaymentFulfillment` 의 `fulfilledAt != null` 조건을 지움 | `FulfillmentTest`: `fulfilling twice calls the listener once` · `two workers fulfil one order exactly once` |
+
+### 앞 작업들이 이미 한 것 — 진행 문서 · 커밋 메시지에서 모았다
+
+(시험 이름이 기록에 없으면 비워 둔다.)
+
+| 언제 | 변이 | 결과 |
+|---|---|---|
+| B3 수정 1회차 | 변이 2건 | 시험이 빨개짐 (내용은 기록에 없다) |
+| B4 수정 2회차 (`806787e`) | 환불 정산 작업 `onDead` 의 락 안 다시 읽기를 뺌 | 그 시험이 빨개짐 |
+| B4 수정 2회차 (`3ebb2928`) | 카드 번호가 `failure_code` 로 새게 함 | 옛 칸 목록은 초록으로 남고 새 목록(`PaymentPlantedValuesDbTest`)이 빨개짐 — 두 방언 |
+| B5 수정 1회차 | 승인의 락 안 재검사를 뺌 · 새 시험 24개 중 18개를 빨강으로 확인 | 빨개짐 (나머지 6개의 빨강 확인은 기록에 없다) |
+| B5 수정 2회차 (`9f529d5`) | 한 줄 변이 10가지 | 각각 시험을 하나 이상 빨갛게 함 |
+| B6 수정 3회차 (`9f876b9`) | 로그 가림 정규식을 옛것으로 되돌림 | 입력을 두 배로 했을 때의 증가율 시험이 빨개짐 |
+| B7 수정 1회차 | 12가지 | 빨개짐 (내용은 기록에 없다) |
+| B8 수정 1회차 (`c5974d9`) | 운영자 인터셉터가 `/sync` 를 건너뛰게 함 | 샘플의 HTTP 표면 훑기(`CheerHttpSurfaceIntegrationTest`)의 403 훑기가 빨개짐 |
+| B8 수정 2회차 (`b61fd82`, `7ec3fa4`) | 미지급 질의의 `limit` 를 CTE 안으로 옮김 | 저장소 계약의 미지급 시험(`PaymentLedgerStoreContract`)이 빨개짐 — PostgreSQL |
+| B10 (`96a1198`) | 주문 줄 락(`lockOrder` 의 `for update`)을 뺌 | 여러 대 시험의 시나리오 2 · 3 · 4 · 5 · 9 가 빨개짐. 1 · 6 · 8 · 10 · 11 은 유니크 제약 · `SKIP LOCKED` 가 받쳐서 초록으로 남는다 — 통과가 DB 락 덕분이라는 증거 |
+| B9 (`OperatorResponseDriftTest`) | 운영자 응답 DTO 에서 사용자 DTO 의 칸 하나를 뺌 | `OperatorResponseDriftTest` 가 빨개짐 |
+
+**안 한 것**: 위 표 밖의 §3 보장(1 · 2 · 4 · 5 · 8~11 · 13~20)에 대해서는 이번에 새 변이를 돌리지 않았다. 앞 작업의 변이 가운데 내용이 기록에 남지 않은 것(B3 둘 · B7 열둘)은 다시 재현하지 않았다.
+
+## 알려진 한계
+
+- **「확인 필요」에 영구히 남는 줄 둘, 지금 출구는 DB 직접 수정뿐이다.** ① 승인을 선점한 뒤(`CONFIRMING`)에 모드가 바뀐 주문 — `MODE_MISMATCH` 가 찍힌 채 키를 되돌리기 전에는 조회할 수 없고, 되돌려도 결제사가 그 결제를 모르면(테스트 키로 낸 결제는 실결제 키로 보이지 않는다) 풀리지 않는다. ② 결제사가 그 결제를 모른다고 답하는 주문(`404 PROVIDER_PAYMENT_NOT_FOUND`) — 장부는 바뀌지 않고 표시도 풀리지 않는다. 운영자가 「확인함」으로 닫는 동작은 아직 없다(주인 결정 대기).
+- 선점한 적 없는 `PENDING` 은 이 한계에 들지 않는다: 모드가 바뀌어도(`sync` · 웹훅도 표시를 찍지 않는다) · 결제사 빈이 없거나 꺼져 있어도 마감 뒤 만료 작업이 표시 · 경보 없이 `EXPIRED` 로 닫는다(닫을 때 그 줄에 남은 `MODE_MISMATCH` 는 비운다). 마감 전이면 재시도한다. 예외 하나: 결제사가 「받았다」고 답한 적이 있는 `PENDING`(`AMOUNT_MISMATCH` · `ORDER_MISMATCH`)은 조회 없는 길에서는 닫지 않고 작업이 죽는다 — 사람이 본다(같은 모드 경로에서 결제사가 이번에는 「결제 없음 · 실패 · 만료」로 답하면 표시를 단 채 `EXPIRED` 로 닫힌다 — 표시가 남아 안전하다). 이 규칙은 결제창 결제사가 서버 승인 없이 돈을 움직이지 않는다는 계약(`PaymentCheckoutGateway`)에 기댄다.
+- **전환 뒤 옛 `PAID` 주문에 `sync` 를 누르면 `MODE_MISMATCH` 가 영구히 남는다** — 돈이 걸린 주문이라 표시하고, 키를 되돌리고 결제사가 그 결제를 알아야 풀린다(테스트 키로 낸 결제는 실결제 키로 보이지 않는다). 위 ①과 같은 모양이다.
+- **결제사가 계속 「받지 않았다」고 답하는 `PAID` 주문은 `REFUND_MISMATCH` 가 남는다.** 이때 `sync` 는 404 가 아니라 **200** 이라(결제사가 진행 중 · 실패 · 만료로 답했으므로 「모른다」가 아니다) 화면이 이유를 말해 줄 코드가 없다. 환불 쪽 `409 REFUND_NOT_ALLOWED` 의 「먼저 결제사와 맞추기」 안내가 이 경우에는 풀지 못한다 — 지금 출구는 결제사 쪽을 확인하는 것뿐이다.
+
+## 지원 안 하는 것
+
+- 구독 · 정기 결제 관리(자리만 있다 — `kind` 의 `SUBSCRIPTION_*`).
+- 해외 결제사 · 다중 통화 · 세금 계산(통화는 최소 단위 정수로만).
+- 결제 수단 저장(빌링키) · 구매자 정보 전달.
+- 보존 기간이 지난 줄을 지우는 실행기.
+- 물리적으로 따로 보존하는 표(탈퇴한 소비자의 기록은 `account_erased_at` 으로 구분할 뿐이다).
+- 장부 없는 조립에서의 HTTP (위 「세 조건」).
 
 [모듈 색인](README.md) · [최소 구성 가이드](../minimal-composition.md)

@@ -24,4 +24,99 @@ enum class PaymentErrorCode(
         status = HttpStatus.BAD_GATEWAY,
         title = "Payment provider error",
     ),
+    CAPABILITY_UNSUPPORTED(
+        code = "PAYMENT.CAPABILITY_UNSUPPORTED",
+        status = HttpStatus.BAD_REQUEST,
+        title = "Payment provider capability unsupported",
+    ),
+    WEBHOOK_REJECTED(
+        code = "PAYMENT.WEBHOOK_REJECTED",
+        status = HttpStatus.UNAUTHORIZED,
+        title = "Payment webhook rejected",
+    ),
+    WEBHOOK_NOT_FOUND(
+        code = "PAYMENT.WEBHOOK_NOT_FOUND",
+        status = HttpStatus.NOT_FOUND,
+        title = "Payment webhook address not found",
+    ),
+    WEBHOOK_TOO_LARGE(
+        code = "PAYMENT.WEBHOOK_TOO_LARGE",
+        status = HttpStatus.CONTENT_TOO_LARGE,
+        title = "Payment webhook body too large",
+    ),
+    WEBHOOK_EVENT_NOT_FOUND(
+        code = "PAYMENT.WEBHOOK_EVENT_NOT_FOUND",
+        status = HttpStatus.NOT_FOUND,
+        title = "Payment webhook event not found",
+    ),
+    ORDER_NOT_FOUND(
+        code = "PAYMENT.ORDER_NOT_FOUND",
+        status = HttpStatus.NOT_FOUND,
+        title = "Payment order not found",
+    ),
+    ITEM_NOT_PURCHASABLE(
+        code = "PAYMENT.ITEM_NOT_PURCHASABLE",
+        status = HttpStatus.UNPROCESSABLE_ENTITY,
+        title = "Item not purchasable",
+    ),
+    IDEMPOTENCY_CONFLICT(
+        code = "PAYMENT.IDEMPOTENCY_CONFLICT",
+        status = HttpStatus.CONFLICT,
+        title = "Idempotency key reused with a different request",
+    ),
+    AMOUNT_MISMATCH(
+        code = "PAYMENT.AMOUNT_MISMATCH",
+        status = HttpStatus.BAD_REQUEST,
+        title = "Payment amount mismatch",
+    ),
+    ORDER_NOT_PAYABLE(
+        code = "PAYMENT.ORDER_NOT_PAYABLE",
+        status = HttpStatus.CONFLICT,
+        title = "Payment order cannot be paid",
+    ),
+    MODE_MISMATCH(
+        code = "PAYMENT.MODE_MISMATCH",
+        status = HttpStatus.CONFLICT,
+        title = "Payment mode mismatch",
+    ),
+    DECLINED(
+        code = "PAYMENT.DECLINED",
+        status = HttpStatus.PAYMENT_REQUIRED,
+        title = "Payment declined",
+    ),
+    REFUND_NOT_FOUND(
+        code = "PAYMENT.REFUND_NOT_FOUND",
+        status = HttpStatus.NOT_FOUND,
+        title = "Payment refund not found",
+    ),
+    REFUND_NOT_ALLOWED(
+        code = "PAYMENT.REFUND_NOT_ALLOWED",
+        status = HttpStatus.CONFLICT,
+        title = "Refund not allowed",
+    ),
+    REFUND_IN_PROGRESS(
+        code = "PAYMENT.REFUND_IN_PROGRESS",
+        status = HttpStatus.CONFLICT,
+        title = "Another refund is open",
+    ),
+    REFUND_AMOUNT_EXCEEDED(
+        code = "PAYMENT.REFUND_AMOUNT_EXCEEDED",
+        status = HttpStatus.BAD_REQUEST,
+        title = "Refund amount exceeds the refundable amount",
+    ),
+    REFUND_DECLINED(
+        code = "PAYMENT.REFUND_DECLINED",
+        status = HttpStatus.PAYMENT_REQUIRED,
+        title = "Refund declined",
+    ),
+    PROVIDER_PAYMENT_NOT_FOUND(
+        code = "PAYMENT.PROVIDER_PAYMENT_NOT_FOUND",
+        status = HttpStatus.NOT_FOUND,
+        title = "The payment provider does not know this payment",
+    ),
+    UNAVAILABLE(
+        code = "PAYMENT.UNAVAILABLE",
+        status = HttpStatus.SERVICE_UNAVAILABLE,
+        title = "Payment unavailable",
+    ),
 }
