@@ -23,6 +23,6 @@ object AccountDb {
     val blocks = JdbcAccountBlockStore(jdbc, DbTestDatabase.dialect)
 
     fun clean() {
-        listOf("account_audit", "account_challenges", "account_tokens", "account_blocks", "accounts").forEach { jdbc.update("delete from $it", emptyMap<String, Any>()) }
+        listOf("account_audit", "account_challenges", "account_tokens", "account_blocks", "account_used_login_ids", "accounts").forEach { jdbc.update("delete from $it", emptyMap<String, Any>()) }
     }
 }

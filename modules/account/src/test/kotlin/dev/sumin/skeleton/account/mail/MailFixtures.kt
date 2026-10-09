@@ -9,7 +9,7 @@ internal object MailFixtures {
         brand = AccountProperties.Mail.Brand(serviceName = "Notes", accentColor = "#2563eb", supportAddress = "help@notes.example", footer = "Notes Inc. · Seoul"),
     )
     val vars = mapOf(
-        "code" to "739518", "minutes" to "10", "days" to "30", "method" to "Google",
+        "code" to "739518", "minutes" to "10", "days" to "30", "method" to "Google", "loginId" to "ann.kim",
         // "이미 계정이 있어요" 의 기본 — 로그인 페이지 · 가입 수단 · 비밀번호 재설정 **요청** 페이지 (토큰 없음)
         "loginUrl" to "https://app.example.com/login", "methods" to "google,password", "forgotUrl" to "https://app.example.com/forgot-password",
     )
@@ -19,8 +19,11 @@ internal object MailFixtures {
         "resetUrl" to "https://app.example.com/reset-password?token=Zq9-fixedTokenForGoldenFiles_0123456789", "resetMinutes" to "30",
         "magicUrl" to "https://app.example.com/magic-link?token=Zq9-fixedTokenForGoldenFiles_0123456789", "magicMinutes" to "15",
     )
+    /** 아이디 찾기 메일의 두 번째 본문 — 아직 아이디를 정하지 않은 계정 (`loginId` 가 없다) */
+    val loginIdReminderUnset = vars - "loginId"
+    const val LOGIN = "https://app.example.com/login"
     const val RESET = "https://app.example.com/reset-password?token=Zq9-fixedTokenForGoldenFiles_0123456789"
     const val MAGIC = "https://app.example.com/magic-link?token=Zq9-fixedTokenForGoldenFiles_0123456789"
-    fun link(kind: MailKind): String? = when (kind) { MailKind.PASSWORD_RESET -> RESET; MailKind.MAGIC_LINK -> MAGIC; else -> null }
+    fun link(kind: MailKind): String? = when (kind) { MailKind.PASSWORD_RESET -> RESET; MailKind.MAGIC_LINK -> MAGIC; MailKind.LOGIN_ID_REMINDER -> LOGIN; else -> null }
     val langs = listOf("ko", "en")
 }

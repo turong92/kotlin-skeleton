@@ -265,6 +265,18 @@ class AccountAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
+    fun loginIdAvailabilityService(core: AccountCore): LoginIdAvailabilityService = LoginIdAvailabilityService(core)
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun loginIdService(core: AccountCore): LoginIdService = LoginIdService(core)
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun loginIdReminderService(core: AccountCore): LoginIdReminderService = LoginIdReminderService(core)
+
+    @Bean
+    @ConditionalOnMissingBean
     fun passwordService(core: AccountCore): PasswordService = PasswordService(core)
 
     @Bean

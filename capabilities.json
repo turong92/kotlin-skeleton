@@ -73,7 +73,7 @@
       "module": "account",
       "path": "modules/account",
       "status": "experimental",
-      "summary": "계정 수명주기 — 이메일 · 비밀번호 가입과 이메일 확인, 비밀번호 재설정 · 변경, 이메일 변경, 소셜 연결(자동 병합 없음), 탈퇴(다시 인증 → 유예 → 개인정보만 지우고 행은 ERASED 로 남김, 탈퇴 취소, 정지는 박제 + 해시 재가입 차단), 닉네임(중복 허용 · 유일 · 꼬리표 `닉네임#0417` 방식 · 필수 · 자동 닉네임 · 예약어, 작성자 이름 조회 AuthorDirectory 기본 구현), 이메일 필수(주소 없는 소셜 계정은 등록 전까지 모든 API 403 ACCOUNT.EMAIL_REQUIRED · 첫 등록은 재인증 없이, 기본 꺼짐), 연락받을 이메일(계정 이메일과 별개 · 복구 수단 아님 · 서비스 알림 수신 주소 SPI, 기본 꺼짐), 로그인 시도 제한, 관리자 도구, 첫 관리자, ko/en 메일 템플릿. auth 가 진짜 계정으로 로그인하게 한다.",
+      "summary": "계정 수명주기 — 이메일 · 비밀번호 가입과 이메일 확인, 비밀번호 재설정 · 변경, 이메일 변경, 소셜 연결(자동 병합 없음), 탈퇴(다시 인증 → 유예 → 개인정보만 지우고 행은 ERASED 로 남김, 탈퇴 취소, 정지는 박제 + 해시 재가입 차단), 닉네임(중복 허용 · 유일 · 꼬리표 `닉네임#0417` 방식 · 필수 · 자동 닉네임 · 예약어, 작성자 이름 조회 AuthorDirectory 기본 구현), 이메일 필수(주소 없는 소셜 계정은 등록 전까지 모든 API 403 ACCOUNT.EMAIL_REQUIRED · 첫 등록은 재인증 없이, 기본 꺼짐 · `required-when=WRITE` 면 읽기는 통과하고 쓰기에서만 막는다), 로그인 아이디(이메일이 바뀌어도 안 바뀌는 비공개 간판 — 아이디 또는 이메일로 로그인 · 실시간 중복 확인 POST /account/login-id/availability · 아이디 정하기 게이트 POST /account/login-id · 아이디 찾기 메일 POST /account/login-id/forgot · 탈퇴해도 재사용 금지(해시), 기본 꺼짐), 연락받을 이메일(계정 이메일과 별개 · 복구 수단 아님 · 서비스 알림 수신 주소 SPI, 기본 꺼짐), 로그인 시도 제한, 관리자 도구, 첫 관리자, ko/en 메일 템플릿. auth 가 진짜 계정으로 로그인하게 한다.",
       "starter": true,
       "newProjectFlag": null,
       "autoIncludes": [],
@@ -105,7 +105,7 @@
         },
         {
           "env": ["<P>_ACCOUNT_BLOCKS_SECRET"],
-          "whenMissing": "재가입 차단 해시(HMAC)의 키 — 선언의 secrets: (무작위로 충분). 관리자 API 를 켠 앱만 필요하고 비면 JWT 비밀에서 파생돼 경고만 난다(JWT 비밀을 돌리면 차단이 풀린다)"
+          "whenMissing": "재가입 차단 · 탈퇴한 로그인 아이디 해시(HMAC)의 키 — 선언의 secrets: (무작위로 충분). 로그인 아이디를 켠 앱은 보호 환경에서 비면 기동 실패, 관리자 API 만 켠 앱은 경고만(비면 JWT 비밀에서 파생돼 JWT 비밀을 돌리면 차단이 풀린다)"
         },
         {
           "env": ["<P>_CLIENT_IP_MODE", "<P>_CLIENT_IP_TRUSTED_PROXIES"],
@@ -136,6 +136,8 @@
           "계정 삭제",
           "탈퇴",
           "계정 관리",
+          "로그인 아이디",
+          "아이디 찾기",
           "관리자 도구",
           "계정 정지",
           "프로필"
@@ -149,6 +151,9 @@
           "change email",
           "delete account",
           "account management",
+          "login id",
+          "username login",
+          "find my id",
           "admin tools",
           "suspend account",
           "profile"
@@ -2097,7 +2102,7 @@
       "module": null,
       "path": "apps/sample",
       "status": "stable",
-      "summary": "참조 앱 Notes — 로그인한 사람이 첨부 있는 노트를 관리하는 제품 모양의 작은 앱(스타터 + idempotency · notification-jdbc/sse · storage-s3 · job-queue-jdbc · board · author-profile · alert-jdbc). 새 기능은 이 앱의 한 조각을 따라 한다.",
+      "summary": "참조 앱 Notes — 로그인한 사람이 첨부 있는 노트를 관리하는 제품 모양의 작은 앱(스타터 + idempotency · notification-jdbc/sse · storage-s3 · job-queue-jdbc · board · author-profile · alert-jdbc). 로그인 아이디를 켜고 이메일은 쓰기 때 받는다. 새 기능은 이 앱의 한 조각을 따라 한다.",
       "starter": false,
       "newProjectFlag": "--with-sample",
       "autoIncludes": [

@@ -52,6 +52,13 @@ class MySqlMigrationUpgradeTest {
         // 연락 이메일 열(V20261008053037): 기준선 행은 NULL, 올린 뒤 쓸 수 있다
         assertEquals(null, jdbc.sql("select contact_email from accounts where id = 'acc_upgrade'").query(String::class.java).optional().orElse(null))
         assertEquals(1, jdbc.sql("update accounts set contact_email = 'reach@example.com', contact_email_verified_at = now(6) where id = 'acc_upgrade'").update())
+        // 로그인 아이디 열 · 표(V20261008173435): 기준선 계정은 아이디가 없다(NULL). 올린 뒤 정할 수 있고 같은 값은 둘이 못 가지며, 한 번 쓰인 아이디의 해시 표가 있다
+        assertEquals(null, jdbc.sql("select login_id from accounts where id = 'acc_upgrade'").query(String::class.java).optional().orElse(null), "the baseline account has no login ID")
+        assertEquals(1, jdbc.sql("update accounts set login_id = 'upgrade.user' where id = 'acc_upgrade'").update())
+        jdbc.sql("insert into accounts (id, email, email_verified, status, created_at, updated_at) values ('acc_twin', 'twin@example.com', false, 'ACTIVE', '2026-10-01 00:00:00', '2026-10-01 00:00:00')").update()
+        assertTrue(runCatching { jdbc.sql("update accounts set login_id = 'upgrade.user' where id = 'acc_twin'").update() }.isFailure, "two accounts cannot hold the same login ID")
+        assertEquals(1, jdbc.sql("update accounts set login_id = 'Upgrade.User' where id = 'acc_twin'").update(), "the column compares binary (utf8mb4_bin): a different case is a different string here - the service lower-cases before it gets here")
+        assertEquals(1, jdbc.sql("insert into account_used_login_ids (hash, used_at) values (:h, now(6))").param("h", "f".repeat(64)).update())
         assertEquals("Before the upgrade", jdbc.sql("select title from board_posts where board_code = 'upgrade'").query(String::class.java).single())
         assertEquals("a comment on the baseline schema", jdbc.sql("select body from board_comments where author_id = 'acc_upgrade'").query(String::class.java).single())
         assertEquals(0L, jdbc.sql("select count(*) from board_posts where author_id = 'acc_upgrade' and author_ref is not null").query(Long::class.java).single(), "baseline posts have no author_ref")

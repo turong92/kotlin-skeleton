@@ -33,16 +33,17 @@ import org.springframework.web.bind.annotation.RestController
 @RequestMapping("/api/v1/admin/accounts")
 @Tag(name = "Account admin")
 class AdminAccountController(private val callers: AccountCallers, private val admin: AdminService, private val purge: AccountPurgeService) {
-    @Operation(summary = "Search accounts by email fragment and status")
+    @Operation(summary = "Search accounts by email fragment, exact login ID (only when login-id is enabled) and status")
     @GetMapping
     fun search(
         authentication: Authentication?,
         @RequestParam(required = false) email: String?,
+        @RequestParam(required = false) loginId: String?,
         @RequestParam(required = false) status: AccountStatus?,
         @Valid @ParameterObject @ModelAttribute page: PageQuery,
     ): PageResponse<AdminAccountResponse> {
         callers.requireAdmin(authentication)
-        val result = admin.search(email, status, page.page, page.size)
+        val result = admin.search(email, status, page.page, page.size, loginId)
         return Response.ok(result.items.map { it.toAdmin() }, page.toPagination(result.total))
     }
 
@@ -115,5 +116,5 @@ class AdminAccountController(private val callers: AccountCallers, private val ad
         return Response.noContent()
     }
 
-    private fun Account.toAdmin() = AdminAccountResponse(id, email, status.name, roles, displayName, visibleTag, createdAt, lastLoginAt, suspendedReason, purgeAfter, erasedAt)
+    private fun Account.toAdmin() = AdminAccountResponse(id, email, status.name, roles, displayName, visibleTag, createdAt, lastLoginAt, suspendedReason, purgeAfter, erasedAt, if (admin.loginIdEnabled) java.util.Optional.ofNullable(loginId) else null)
 }

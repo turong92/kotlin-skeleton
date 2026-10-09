@@ -1,0 +1,11 @@
+subject: Your login ID
+
+Your login ID is ann.kim.
+
+You can sign in with it or with this email address.
+
+https://app.example.com/login
+
+If you did not request this, you can ignore this email.
+Notes
+Notes Inc. · Seoul

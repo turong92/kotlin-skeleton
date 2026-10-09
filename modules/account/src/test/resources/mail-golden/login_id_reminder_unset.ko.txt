@@ -1,0 +1,11 @@
+subject: 아직 아이디를 정하지 않았어요
+
+아직 아이디를 정하지 않았어요.
+
+로그인하면 정할 수 있어요.
+
+https://app.example.com/login
+
+요청하지 않았다면 무시하세요.
+Notes
+Notes Inc. · Seoul

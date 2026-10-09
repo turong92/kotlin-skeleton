@@ -50,9 +50,24 @@ class MigrationUpgradeIntegrationTest {
         @Bean
         fun jdbcConnectionDetails(): JdbcConnectionDetails {
             val db = dev.sumin.skeleton.app.sample.SharedPostgres.newDatabase()
-            UpgradeBaseline.install(UpgradeBaseline.dataSource(db), listOf("classpath:db/migration/postgresql"), UpgradeBaseline.SAMPLE_ROWS)
+            UpgradeBaseline.install(UpgradeBaseline.dataSource(db), listOf("classpath:db/migration/postgresql"), UpgradeBaseline.SAMPLE_ROWS + legacyAccountRows())
             return db
         }
+    }
+
+    companion object {
+        const val LEGACY_PASSWORD = "legacy-pass-7-moon"
+
+        /**
+         * 로그인 아이디가 생기기 전부터 있던 계정 — 이메일이 확인된 평범한 가입자(비밀번호를 안다). 기준선 스키마(`login_id` 열이 없다)에 넣고, 앱이 뜨며 Flyway 가 새 V 파일을 이 위에서 돌린다.
+         * (`acc_upgrade` 는 다른 시험이 이메일 확인을 바꾸므로 따로 둔다.)
+         */
+        fun legacyAccountRows(): List<String> = listOf(
+            "insert into accounts (id, email, email_verified, status, display_name, display_name_key, display_tag, locale, time_zone, created_at, updated_at) " +
+                "values ('acc_legacy', 'legacy@example.com', true, 'ACTIVE', 'Legacy', 'legacy', '0000', 'ko', 'Asia/Seoul', '2026-10-01 00:00:00', '2026-10-01 00:00:00')",
+            "insert into account_identities (id, account_id, method, subject, verified, secret, created_at) " +
+                "values ('idn_legacy', 'acc_legacy', 'password', 'legacy@example.com', true, '{bcrypt}" + org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder(4).encode(LEGACY_PASSWORD) + "', '2026-10-01 00:00:00')",
+        )
     }
 
     @Autowired lateinit var jdbc: JdbcClient
@@ -152,5 +167,36 @@ class MigrationUpgradeIntegrationTest {
         val page = inbox.findByRecipient("acc_upgrade")
         assertEquals(listOf("evt_upgrade"), page.values.map { it.event.id })
         assertNotNull(inbox.markRead("acc_upgrade", "evt_upgrade", now)?.readAt)
+    }
+
+    @Test
+    fun `login ID - an account from before the feature has none, still signs in by email, meets the gate on its next call and is released by choosing an ID`() {
+        // 새 V 파일(account_login_id)이 데이터가 있는 DB 에 적용됐다: 기존 계정의 열은 비어 있다
+        assertNull(jdbc.sql("select login_id from accounts where id = 'acc_legacy'").query(String::class.java).optional().orElse(null), "the existing account has no login ID")
+        assertNull(jdbc.sql("select login_id from accounts where id = 'acc_upgrade'").query(String::class.java).optional().orElse(null))
+        assertNull(assertNotNull(accounts.findById("acc_legacy")).loginId)
+
+        // 이메일로 로그인된다 (아이디가 없어도 로그인은 막히지 않는다)
+        val login = mockMvc.post("/api/v1/auth/login") { contentType = MediaType.APPLICATION_JSON; content = """{"email":"legacy@example.com","password":"$LEGACY_PASSWORD"}""" }
+            .andExpect { status { isOk() } }.andReturn().response.contentAsString
+        val token = com.jayway.jsonpath.JsonPath.read<String>(login, "$.value.accessToken")
+        assertEquals("acc_legacy", com.jayway.jsonpath.JsonPath.read<String>(login, "$.value.principal.accountId"))
+
+        // 다음 호출에서 아이디 게이트를 만난다 — 읽기도. 허용 목록(me)은 열려 있고 아이디가 없다고 알려 준다
+        mockMvc.get("/api/v1/notes") { header("Authorization", "Bearer $token") }.andExpect { status { isForbidden() }; jsonPath("$.code") { value("ACCOUNT.LOGIN_ID_REQUIRED") } }
+        mockMvc.get("/api/v1/boards/upgrade/posts") { header("Authorization", "Bearer $token") }.andExpect { status { isForbidden() }; jsonPath("$.code") { value("ACCOUNT.LOGIN_ID_REQUIRED") } }
+        mockMvc.get("/api/v1/account/me") { header("Authorization", "Bearer $token") }.andExpect { status { isOk() }; jsonPath("$.value.loginId") { value(null as String?) }; jsonPath("$.value.email") { value("legacy@example.com") } }
+
+        // 아이디를 정하면 풀린다 — 이메일은 이미 있고(쓰기 때 방식도 통과), 이 계정은 이제 아이디로도 로그인된다
+        mockMvc.post("/api/v1/account/login-id") { with { it.remoteAddr = dev.sumin.skeleton.app.sample.TestClientIps.fresh(); it }; contentType = MediaType.APPLICATION_JSON; content = """{"loginId":"legacy.user"}"""; header("Authorization", "Bearer $token") }
+            .andExpect { status { isOk() }; jsonPath("$.value.loginId") { value("legacy.user") } }
+        mockMvc.get("/api/v1/notes") { header("Authorization", "Bearer $token") }.andExpect { status { isOk() } }
+        mockMvc.get("/api/v1/boards/upgrade/posts") { header("Authorization", "Bearer $token") }.andExpect { status { isOk() } }
+        val byId = mockMvc.post("/api/v1/auth/login") { contentType = MediaType.APPLICATION_JSON; content = """{"username":"Legacy.User","password":"$LEGACY_PASSWORD"}""" }
+            .andExpect { status { isOk() } }.andReturn().response.contentAsString
+        assertEquals("acc_legacy", com.jayway.jsonpath.JsonPath.read<String>(byId, "$.value.principal.accountId"))
+        assertEquals("legacy.user", jdbc.sql("select login_id from accounts where id = 'acc_legacy'").query(String::class.java).single())
+        // 정한 아이디는 해시로도 남는다 (탈퇴해도 다시 쓸 수 없게) — 표는 마이그레이션이 만들었다
+        assertTrue(jdbc.sql("select count(*) from account_used_login_ids").query(Long::class.java).single() >= 1)
     }
 }

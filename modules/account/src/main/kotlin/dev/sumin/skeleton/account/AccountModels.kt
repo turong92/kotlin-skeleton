@@ -54,6 +54,8 @@ data class Account(
     val displayTag: String? = null,
     /** 연락받을 이메일(확인된 주소, 선택) — 로그인 수단 · 복구 수단 · 중복 판정이 아니다 (`skeleton.account.contact-email`, docs/accounts.md) */
     val contactEmail: String? = null,
+    /** 로그인 아이디 — 소문자로 정규화한 값([LoginIds.normalize]). 아직 안 정했거나 기능을 껐거나 지워졌으면 null. 정하면 바꾸지 못한다 (`skeleton.account.login-id`) */
+    val loginId: String? = null,
 ) {
     /** 화면에 보일 꼬리표 (없거나 UNIQUE 의 고정값이면 null) */
     val visibleTag: String? get() = DisplayNames.visibleTag(displayTag)
@@ -100,6 +102,12 @@ data class AccountPage(val items: List<Account>, val total: Long)
 /** [AccountRepository.setDisplayName] 의 결과 — [TAKEN]: (키, 꼬리표) 유니크가 막았다 · [NOT_FOUND]: 없거나 지워진(ERASED) 계정 */
 enum class SetNameResult { DONE, TAKEN, NOT_FOUND }
 
+/**
+ * [AccountRepository.claimLoginId] 의 결과 — [TAKEN]: 살아 있는 아이디거나 한 번이라도 쓰인 아이디(둘을 가르지 않는다) · [ALREADY_SET]: 이 계정에 이미 아이디가 있다 ·
+ * [NOT_ACTIVE]: 계정이 ACTIVE 가 아니다(정지 · 탈퇴 유예 · 미확인) · [NOT_FOUND]: 없거나 지워진(ERASED) 계정
+ */
+enum class ClaimLoginIdResult { CLAIMED, TAKEN, ALREADY_SET, NOT_ACTIVE, NOT_FOUND }
+
 /** 이름 조회용 가벼운 줄 ([AccountRepository.namesOf]) — 역할 · 이메일 같은 것은 읽지 않는다 */
 data class AccountName(val id: String, val status: AccountStatus, val displayName: String?, val displayTag: String?)
 
@@ -142,7 +150,11 @@ enum class GuardedResult { DONE, LAST, NOT_FOUND }
  *    (지운 뒤 도착한 옛 액세스 토큰의 프로필 갱신, 지우기와 겹친 정지 해제가 개인정보 · 상태를 되살리지 못하게 — 서비스의 사전 검사와 별개로 저장소가 막는다)
  */
 interface AccountRepository {
-    fun insert(account: Account, identities: List<Identity>): Boolean
+    /**
+     * [loginIdHash] 는 계정에 [Account.loginId] 가 있을 때 서비스가 계산해 넘기는 그 아이디의 해시([AccountBlocks.loginIdHash]) — 같은 트랜잭션에 "쓰인 아이디" 로 남긴다.
+     * 아이디나 해시가 이미 쓰였으면 이메일 · 수단과 같이 유니크 위반으로 false (계정 행도 남지 않는다)
+     */
+    fun insert(account: Account, identities: List<Identity>, loginIdHash: String? = null): Boolean
 
     fun findById(id: String): Account?
 
@@ -150,6 +162,18 @@ interface AccountRepository {
     fun findByEmail(email: String): Account?
 
     fun findByIdentity(method: String, subject: String): Account?
+
+    /** [loginId] 는 이미 정규화된 값 — 저장소는 대소문자를 합치지 않는다(서비스가 [LoginIds.normalize] 한다) */
+    fun findByLoginId(loginId: String): Account?
+
+    /** 이 해시의 아이디가 한 번이라도 쓰였나 (살아 있거나, 계정이 탈퇴 · 삭제된 뒤이거나) */
+    fun loginIdUsed(hash: String): Boolean
+
+    /**
+     * 아이디를 **정한다** — 한 트랜잭션: 계정 행 락 → ACTIVE 이고 아이디가 비어 있는지 → [hash] 삽입(쓰인 아이디) → 열 갱신. 어느 유니크(열 · 해시)에 걸리든 결과는 [ClaimLoginIdResult.TAKEN] 하나다.
+     * 거절되면 아무것도 남지 않는다. [hash] 는 서비스가 계산한다 — 저장소는 비밀을 모른다
+     */
+    fun claimLoginId(id: String, loginId: String, hash: String, now: Instant): ClaimLoginIdResult
 
     fun update(id: String, patch: AccountPatch, now: Instant): Account?
 
@@ -189,8 +213,8 @@ interface AccountRepository {
     /** [role] 을 가진 ACTIVE 계정 수 — 마지막 관리자 보호 · 첫 관리자 부트스트랩 */
     fun countActiveWithRole(role: String): Long
 
-    /** [status] 가 null 이면 ERASED 를 뺀 모두 (지워진 계정은 `status=ERASED` 로 명시했을 때만) */
-    fun search(email: String?, status: AccountStatus?, page: Int, size: Int): AccountPage
+    /** [status] 가 null 이면 ERASED 를 뺀 모두 (지워진 계정은 `status=ERASED` 로 명시했을 때만). [loginId] 는 정규화된 값과 **정확히 일치**하는 계정만 */
+    fun search(email: String?, status: AccountStatus?, page: Int, size: Int, loginId: String? = null): AccountPage
 
     /** 삭제 유예가 [now] 까지 끝난 계정 */
     fun dueForPurge(now: Instant, limit: Int): List<Account>
@@ -225,7 +249,7 @@ interface AccountRepository {
 
     /**
      * 행은 남기고 개인정보만 지운다(`deletion.mode=ANONYMIZE`) — [purge] 와 같은 조건(DELETED + 유예 끝남)에서 **한 트랜잭션**으로:
-     * 이메일 · 이름 · 로케일 · 시간대 · 정지 사유 · 마지막 로그인을 비우고 `status=ERASED`, `erased_at=now`; 로그인 수단(비밀번호 해시 · 제공자 주체) · 역할을 지우고,
+     * 이메일 · 이름 · 로그인 아이디(`login_id` — 쓰인 아이디의 해시는 남는다) · 로케일 · 시간대 · 정지 사유 · 마지막 로그인을 비우고 `status=ERASED`, `erased_at=now`; 로그인 수단(비밀번호 해시 · 제공자 주체) · 역할을 지우고,
      * 그 계정의 한 번 쓰는 토큰 · 코드 · 이메일 변경 대기를 지우고, 감사 행의 IP · 상세를 비운다. 조건이 안 맞으면(되살려졌거나 이미 지움) 아무것도 바꾸지 않고 false.
      * [forced] (운영자가 정지한 계정을 지울 때): 조건이 DELETED + 유예 끝남 대신 **SUSPENDED** 다 — [purge] 도 같다.
      * **JDBC 구현은 토큰 · 챌린지 · 감사 표를 이 저장소가 직접(같은 트랜잭션에서) 지운다** — `OneTimeTokenStore` · `ChallengeStore` 를 앱이 바꿨다면 자기 `erase` · `purge` 에서 자기 표를 같이 지운다 (못 지운 줄은 서비스의 `closeSensitiveLinks` + 만료 청소가 마지막 방어)

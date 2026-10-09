@@ -124,7 +124,7 @@ class AccountPurgeService(
         return purged
     }
 
-    /** 유예가 이미 끝난(DELETED, `purgeAfter` ≤ 지금) 계정 하나를 **지금** 정리한다 — 등록 미완료 계정 버리기([DiscardService])가 쓴다. 정리했으면 true (리스너 실패 · 이미 선점됨 · 대상 아님이면 false) */
+    /** 유예가 이미 끝난(DELETED, `purgeAfter` ≤ 지금) 계정 하나를 **지금** 정리한다 — 이메일 없는 계정 버리기([DiscardService])가 쓴다. 정리했으면 true (리스너 실패 · 이미 선점됨 · 대상 아님이면 false) */
     fun purgeNow(accountId: String): Boolean {
         val account = core.accounts.findById(accountId) ?: return false
         return try { purgeOne(account) } catch (e: Exception) { log.warn("purging an account failed: {}", e.javaClass.simpleName); false }

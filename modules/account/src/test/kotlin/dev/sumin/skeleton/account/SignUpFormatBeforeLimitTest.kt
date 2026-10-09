@@ -50,4 +50,23 @@ class SignUpFormatBeforeLimitTest {
         assertEquals(2, calls, "over the allowance: still no external call")
         assertTrue(h.mailer.sent.size <= 2)
     }
+
+    @Test
+    fun `a refused login id is a form error too - it costs no allowance and never reaches the captcha service`() {
+        var calls = 0
+        val h = AccountHarness(
+            AccountProperties(
+                mail = AccountProperties.Mail(linkBaseUrl = "https://app.example.com"), password = AccountProperties.Password(bcryptStrength = 4),
+                signUp = AccountProperties.SignUp(perIp = 2), loginId = AccountProperties.LoginId(enabled = true),
+            ),
+            captcha = AccountCaptcha { _, _, _ -> calls++; true },
+        )
+        fun attempt(email: String, loginId: String?) = h.registration.signUp(SignUpCommand(email, "tangerine-42-moon", null, null, null, "203.0.113.1", "t", loginId = loginId))
+        repeat(5) { assertEquals("Pattern", assertFailsWith<FieldValidationException> { attempt("a$it@example.com", "bad id") }.fieldCode) }
+        assertEquals("Required", assertFailsWith<FieldValidationException> { attempt("a@example.com", null) }.fieldCode)
+        assertEquals(0, calls)
+        attempt("one@example.com", "oneid"); attempt("two@example.com", "twoid")
+        assertEquals("ACCOUNT.RATE_LIMITED", assertFailsWith<ApplicationException> { attempt("three@example.com", "threeid") }.errorCode.code)
+        assertEquals(2, calls)
+    }
 }

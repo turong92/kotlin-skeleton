@@ -29,15 +29,17 @@ class LoginThrottle(private val core: AccountCore) : LoginHooks {
     }
 
     /**
-     * 한 계정은 한 버킷 — `email:` · `username:`(이 모듈에서 username 은 이메일이다)은 [Emails.normalize] 한 주소 하나로,
-     * `accountId:` 는 그 계정의 주소로 풀어 같은 버킷에 모은다 (입력 방식을 바꿔 한도를 2~3 배로 만들지 못하게).
-     * 없는 계정 id 는 자기 이름 그대로 — 결과가 응답에 드러나지 않는다.
+     * 입력 방식마다 버킷이 있다 — `email:` 은 [Emails.normalize] 한 주소, `username:`(켜짐 + `@` 없음 → 아이디)은 **계정이 있든 없든** 정규화한 입력 자기 이름(`loginId:<입력>`),
+     * `accountId:` 는 그 계정의 주소로 풀어 이메일 버킷에 모은다 (없는 계정 id 는 자기 이름 그대로).
+     * 아이디를 계정의 이메일 버킷으로 합치지 않는 까닭: 합치면 "이메일 버킷을 채운 뒤 후보 아이디가 429 면 그 이메일 계정의 아이디" 로 아이디 ↔ 이메일을 확인해 준다.
+     * 아이디 버킷은 저장소를 읽지 않으므로 존재 여부로 일이 갈리지 않는다 (타이밍도 같다). 대가: 한 계정의 추측이 창마다 이메일 몫 + 아이디 몫이다.
      */
     private fun bucketOf(identifier: String): String {
         val kind = identifier.substringBefore(':', "")
         val value = identifier.substringAfter(':', identifier)
         return when (kind) {
-            "email", "username" -> Emails.normalize(value)
+            "email" -> Emails.normalize(value)
+            "username" -> core.loginIdOf(value)?.let { "loginId:$it" } ?: Emails.normalize(value)
             "accountId" -> core.accounts.findById(value)?.email ?: "accountId:$value"
             else -> Emails.normalize(identifier)
         }
@@ -51,7 +53,7 @@ class LoginThrottle(private val core: AccountCore) : LoginHooks {
         val windowIndex = core.time.now().toEpochMilli() / window.toMillis().coerceAtLeast(1)
         if (announced.add("$scope:${AccountRateLimits.digest(key)}@$windowIndex")) {
             if (announced.size > MAX_REMEMBERED) announced.clear()
-            core.events.publish(AccountEventType.LOGIN_THROTTLED, null, attempt.clientIp, mapOf("scope" to label, "id" to AccountRateLimits.digest(attempt.identifier)))
+            core.events.publish(AccountEventType.LOGIN_THROTTLED, null, attempt.clientIp, mapOf("scope" to label, "id" to eventIdOf(core, attempt.identifier)))
         }
         throw RateLimitedException(a.retryAfterSeconds, AuthErrorCode.TOO_MANY_ATTEMPTS)
     }
@@ -59,12 +61,23 @@ class LoginThrottle(private val core: AccountCore) : LoginHooks {
     private companion object { const val MAX_REMEMBERED = 10_000 }
 }
 
+/**
+ * 이벤트에 싣는 입력의 식별자. 아이디로 읽힌 `username:` 입력(켜짐 + `@` 없음)만 열쇠 있는 해시([dev.sumin.skeleton.account.AccountBlocks.loginIdEventId])고,
+ * 이메일 · `accountId:` 입력과 꺼짐은 지금과 같은 [AccountRateLimits.digest] 다.
+ */
+internal fun eventIdOf(core: AccountCore, identifier: String): String {
+    if (identifier.substringBefore(':', "") == "username") {
+        core.loginIdOf(identifier.substringAfter(':', identifier))?.let { return core.blocks.loginIdEventId(it) }
+    }
+    return AccountRateLimits.digest(identifier)
+}
+
 /** 로그인 결과를 계정 이벤트로 · 성공이면 계정 · 수단에 마지막 로그인 시각을 찍는다 */
 class LoginRecorder(private val core: AccountCore) : LoginHooks {
     override fun onFailure(attempt: LoginAttempt, reason: LoginFailure, account: AuthAccount?) {
         core.events.publish(
             AccountEventType.LOGIN_FAILURE, account?.accountId, attempt.clientIp,
-            mapOf("method" to SignInMethods.PASSWORD, "reason" to reason.name, "id" to AccountRateLimits.digest(attempt.identifier)),
+            mapOf("method" to SignInMethods.PASSWORD, "reason" to reason.name, "id" to eventIdOf(core, attempt.identifier)),
         )
     }
 

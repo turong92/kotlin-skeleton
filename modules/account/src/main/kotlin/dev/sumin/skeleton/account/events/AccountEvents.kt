@@ -9,11 +9,15 @@ enum class AccountEventType {
     SESSION_REVOKED, SESSIONS_REVOKED, REFRESH_REUSE_DETECTED,
     IDENTITY_LINKED, IDENTITY_UNLINKED, ACCOUNT_SUSPENDED, ACCOUNT_UNSUSPENDED, ROLE_GRANTED, ROLE_REVOKED,
     DELETION_SCHEDULED, ACCOUNT_RESTORED, ACCOUNT_PURGED, ADMIN_BOOTSTRAPPED,
-    /** 등록 미완료 계정(주소를 가진 적 없음, `email.required`)을 본인이 즉시 버렸다 — `via` = fresh_login | reauth | retry */
+    /** 이메일 없는 계정(주소를 가진 적 없음, `email.required`)을 본인이 즉시 버렸다 — `via` = fresh_login | reauth | retry */
     ACCOUNT_DISCARDED,
     ACCOUNT_ERASED_BY_ADMIN, REGISTRATION_BLOCK_ADDED, REGISTRATION_BLOCK_REMOVED, REGISTRATION_BLOCKED, DELETION_CANCELLED,
     /** 관리자가 `author-profile` 의 연결 조회를 했다 — 대상 계정 + `by`(관리자). detail 에 프로필 id 를 싣지 않는다 */
     AUTHOR_LINK_VIEWED,
+    /** 로그인 아이디를 정했다 — 값은 detail 에 싣지 않는다 (`via` = sign_up | gate) */
+    LOGIN_ID_SET,
+    /** 아이디 찾기 메일을 보냈다 — 계정이 있을 때만 (없으면 이벤트도 없다) */
+    LOGIN_ID_REMINDER_SENT,
 }
 
 /**

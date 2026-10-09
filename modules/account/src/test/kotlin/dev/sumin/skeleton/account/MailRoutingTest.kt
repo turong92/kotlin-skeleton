@@ -42,6 +42,19 @@ class MailRoutingTest {
     }
 
     @Test
+    fun `the login-ID reminder goes to the account address only - once - and the contact address gets nothing and finds nothing`() {
+        withContact()
+        h.reminder.forgot(account, "203.0.113.1", null)
+        assertEquals(mapOf(account to 1), sentTo())
+        assertEquals(MailKind.LOGIN_ID_REMINDER, to(account).single().kind)
+        assertEquals(0, to(contact).size)
+        h.mailer.sent.clear()
+        h.reminder.forgot(contact, "203.0.113.2", null)   // same call, same (empty) result as for any unknown address
+        h.reminder.forgot("nobody@example.com", "203.0.113.3", null)
+        assertTrue(h.mailer.sent.isEmpty(), "sent: ${sentTo()}")
+    }
+
+    @Test
     fun `asking for a reset with the contact address sends nothing at all - it does not find the account`() {
         withContact()
         h.passwords.forgot(contact, "203.0.113.1", null)   // same call, same (empty) result as for any unknown address

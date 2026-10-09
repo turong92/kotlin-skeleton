@@ -139,8 +139,9 @@ class AccountController(
     }
 
     @Operation(
-        summary = "Discard an unregistered account at once (email.required=true, no address ever, active): no grace period, the sign-in methods are freed",
-        description = "For the shell account a returning user got by signing in with a social account while having an email account: discard it, sign in to the real account and link the social method there. " +
+        summary = "Discard an account without an email at once (email.required=true in either mode, no address ever, active): no grace period, the sign-in methods are freed",
+        description = "Meaning: an account that could not write anything is erased without the grace period. For the shell account a returning user got by signing in with a social account while having an email account: discard it, sign in to the real account and link the social method there. " +
+            "An account that already chose a login ID can be discarded too; the ID is erased with it and can never be used again. Same conditions and same re-authentication in both email.required-when modes. " +
             "204 on success (all sessions are closed). 409 ACCOUNT.DISCARD_NOT_ALLOWED when the account has an address, the setting is off or the account is not active (a suspended account cannot be discarded); " +
             "403 ACCOUNT.REAUTH_REQUIRED / 400 ACCOUNT.REAUTH_FAILED for a session that did not just log in (send socialReauth with a fresh provider code); 409 ACCOUNT.LAST_ADMIN; " +
             "503 ACCOUNT.ERASURE_RETRY when another module's erasure failed - repeat the call.",

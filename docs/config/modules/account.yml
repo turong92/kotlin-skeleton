@@ -46,7 +46,8 @@ skeleton:
     email:
       required: false                  # true: 주소 없는 계정(Kakao · Naver · X · LINE …)은 주소를 등록하기 전까지 허용 목록 밖 모든 API 에서 403 ACCOUNT.EMAIL_REQUIRED (docs/accounts.md "이메일 필수")
       first-registration-window: 1h    # 주소가 한 번도 없던 계정의 **그 로그인이 연 세션**이 열린 지 이 시간 안이면 첫 주소 등록에 재인증(제공자 재동의) 없음 (세션 단위 — 토큰 갱신 · 다른 기기의 로그인은 창을 열지 못함). 0 이면 항상 재인증
-      # extra-exclude-paths: []        # 주소 없이도 **더** 열어 둘 경로 — `METHOD /패턴` 또는 `/패턴`. 더하기만 한다(me · email/change · discard · delete · auth/** · legal/** · docs/** 는 코드에 고정). 읽지 못한 항목은 기동 실패. 막는 범위는 /api/ 아래 전부 고정
+      required-when: SIGN_IN           # required: true 일 때 언제 막는가. SIGN_IN = 로그인 직후부터(지금 동작) | WRITE = 읽기(GET · HEAD · OPTIONS 글자 그대로)는 통과, 변경 요청에서만 — PATCH /account/me 가 열리고 me 에 emailRequiredToWrite. required: false 인데 WRITE 면 기동 실패 (docs/accounts.md "이메일을 받는 시점")
+      # extra-exclude-paths: []        # 주소 없이도 **더** 열어 둘 경로 — `METHOD /패턴` 또는 `/패턴`. 더하기만 한다(me · email/change · discard · delete · auth/** · legal/** · docs/** 는 코드에 고정). 읽지 못한 항목은 기동 실패. 막는 범위는 /api/ 아래 전부 고정. 이 목록은 이메일 게이트에만 더해진다(아이디 게이트는 login-id.extra-exclude-paths). 쓰기 때 방식에서 읽기처럼 보이는 POST · 사소한 쓰기를 여는 곳 — 예: ["PATCH /api/v1/notifications/*/read", "PATCH /api/v1/notifications/read-all", "POST /api/v1/storage/presign-download"]. 결제 경로는 적지 않는다
     contact-email:
       enabled: false                   # true: POST/DELETE /api/v1/account/contact-email — 서비스 안내를 받을 주소 하나(로그인 · 복구 수단 아님). 서비스 알림 수신 주소는 platform SPI ContactAddresses
     deletion:
@@ -99,8 +100,18 @@ skeleton:
       reserved: []                     # 거절할 닉네임(운영자 · 예약어) — 대소문자 · 전각 · 띄어쓰기 · _ 무시. 운영자 역할 계정 · 시드는 예외. 소셜 제공자가 준 이름도 걸린다(버리고 fallback). 예: [admin, administrator, 운영자]
       change-limit: 10                 # 한 계정이 change-window 안에 닉네임을 바꿀 수 있는 횟수 (넘으면 429 ACCOUNT.RATE_LIMITED). 0 = 한도 없음
       change-window: 1d
+    login-id:                          # 로그인 아이디 — 이메일이 바뀌어도 안 바뀌는, 본인과 운영자만 보는 간판 (기본 꺼짐 = 이 기능 이전과 같다)
+      enabled: false                   # true 면 가입 · 로그인(아이디 또는 이메일) · 게이트 · 찾기 · 응답의 아이디 동작이 전부 켜진다. 반쪽 스위치는 없다. 보호 환경에서 켜면 skeleton.account.blocks.secret(<P>_ACCOUNT_BLOCKS_SECRET)이 있어야 기동한다 — 탈퇴한 아이디의 재사용 금지 해시 열쇠
+      min-length: 4                    # 아이디 길이. 1 ≤ min ≤ max ≤ 30(열 길이) 아니면 기동 실패
+      max-length: 20
+      reserved: []                     # 내줄 수 없는 아이디 — 기호(. - _)와 대소문자를 빼고 비교. display-name.reserved 와 따로. 시드 계정은 예외. 예: [admin, root, support]
+      check-per-ip: 30                 # 실시간 중복 확인을 한 IP 가 창 안에 부를 수 있는 횟수 (넘으면 429 ACCOUNT.RATE_LIMITED)
+      check-per-ip-window: 10m         # 0 보다 커야 한다
+      claim-limit: 10                  # 아이디 정하기를 창 안에 시도할 수 있는 횟수 — 형식을 통과한 시도(성공 · 실패 모두)를 센다, 형식 오류는 세지 않는다. 계정별 하나 + IP 별 하나(같은 값, 버킷만 따로 — 정하기 → 버리기 → 재로그인으로 아이디를 태우는 것을 묶는다; 한 IP 뒤 사용자들이 같이 쓴다; 넘으면 429 ACCOUNT.RATE_LIMITED)
+      claim-window: 1h                 # claim-limit 의 창 (0 보다 커야 한다). check-per-ip-window 도 같다
+      # extra-exclude-paths: []        # 아이디 없이도 더 열어 둘 경로 — email.extra-exclude-paths 와 같은 문법 · 같은 규칙(더하기만, 못 읽으면 기동 실패). 이 게이트에만 더해진다(이메일 쪽 목록은 아이디 게이트를 열지 않는다)
     seed:
-      accounts: []                     # 로컬 · e2e 시드 — 예: [{ id: acc_user, email: user@example.com, password: password, roles: [], display-name: User }]. stage · prod 에서는 DeployGuard 문제
+      accounts: []                     # 로컬 · e2e 시드 — 예: [{ id: acc_user, email: user@example.com, password: password, roles: [], display-name: User, login-id: sample-user }]. login-id 는 login-id.enabled 일 때만 읽고(예약어 검사 없이 기동 때 넣는다 — 아이디 게이트에 e2e 가 막히지 않게), 형식이 틀리면 기동이 막힌다. stage · prod 에서는 DeployGuard 문제
     captcha:
       required: false                  # true 면 가입 · 재설정 · 재전송 · 매직 링크 요청에 캡차 토큰을 요구한다 (captcha-turnstile 필요)
     audit:

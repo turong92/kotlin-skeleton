@@ -21,11 +21,14 @@ skeleton:
     login:
       per-account: 200                       # e2e(Playwright)가 같은 시드 계정으로 자주 로그인한다 — 로컬에서만 한도를 넉넉히
       per-ip: 500
+    login-id:
+      claim-limit: 500                       # 로컬은 모두가 같은 IP(localhost)다 — 소셜 계정을 열 개 넘게 만들며 손으로 확인(dev-sample.sh)해도 아이디 정하기가 429 가 나지 않게 (모듈 기본 10/h)
+      check-per-ip: 500                      # 실시간 중복 확인도 같은 IP 한도를 쓴다 (모듈 기본 30/10m)
     seed:
       accounts:                              # 로컬 · e2e 시드 — 고정 id 로 픽스처 · 업로드 키가 안정된다. 비밀번호는 모두 password
-        - { id: acc_user, email: user@example.com, password: password, display-name: User }
-        - { id: acc_admin, email: admin@example.com, password: password, roles: [ADMIN], display-name: Admin }
-        - { id: acc_moderator, email: moderator@example.com, password: password, roles: [MODERATOR], display-name: Moderator }
+        - { id: acc_user, email: user@example.com, password: password, display-name: User, login-id: sample-user }
+        - { id: acc_admin, email: admin@example.com, password: password, roles: [ADMIN], display-name: Admin, login-id: sample-admin }
+        - { id: acc_moderator, email: moderator@example.com, password: password, roles: [MODERATOR], display-name: Moderator, login-id: sample-moderator }
   legal:
     reconsent:
       enabled: false                    # 로컬 전용: 시드 계정은 가입 화면을 거치지 않아 동의 기록이 없다 — 켜 둔 채로는 e2e(Playwright)가 403 이다. 동의 흐름을 시험하려면 true (docs/legal.md)

@@ -9,6 +9,7 @@ import dev.sumin.skeleton.account.AccountPatch
 import dev.sumin.skeleton.account.AccountRepository
 import dev.sumin.skeleton.account.AccountStatus
 import dev.sumin.skeleton.account.ChangeEmailResult
+import dev.sumin.skeleton.account.ClaimLoginIdResult
 import dev.sumin.skeleton.account.challenge.ChallengePurposes
 import dev.sumin.skeleton.account.GuardedResult
 import dev.sumin.skeleton.account.MailboxProof
@@ -36,22 +37,25 @@ class JdbcAccountRepository(
     private val tx: TransactionTemplate,
     private val dialect: SqlDialect,
 ) : AccountRepository {
-    override fun insert(account: Account, identities: List<Identity>): Boolean =
-        LockRetry.run { insertOnce(account, identities) }
+    override fun insert(account: Account, identities: List<Identity>, loginIdHash: String?): Boolean =
+        LockRetry.run { insertOnce(account, identities, loginIdHash) }
 
-    private fun insertOnce(account: Account, identities: List<Identity>): Boolean =
+    private fun insertOnce(account: Account, identities: List<Identity>, loginIdHash: String?): Boolean =
         try {
             tx.executeWithoutResult {
+                // 해시(쓰인 아이디의 기본키)를 **먼저** 넣는다 — 정하기(`claimLoginIdOnce`)도 해시 → 아이디 열 순서라, 같은 아이디를 두고 맞서도 서로를 기다리는 고리가 생기지 않는다
+                loginIdHash?.let { insertUsedLoginId(it, account.createdAt) }
                 jdbc.update(
                     """
-                    insert into accounts (id, email, email_verified, status, display_name, display_name_key, display_tag, locale, time_zone, created_at, updated_at, last_login_at, suspended_reason, deleted_at, purge_after, erased_at)
-                    values (:id, :email, :verified, :status, :name, :nameKey, :tag, :locale, :tz, :created, :updated, :lastLogin, :suspended, :deleted, :purge, :erased)
+                    insert into accounts (id, email, email_verified, status, display_name, display_name_key, display_tag, locale, time_zone, created_at, updated_at, last_login_at, suspended_reason, deleted_at, purge_after, erased_at, login_id)
+                    values (:id, :email, :verified, :status, :name, :nameKey, :tag, :locale, :tz, :created, :updated, :lastLogin, :suspended, :deleted, :purge, :erased, :loginId)
                     """.trimIndent(),
                     MapSqlParameterSource().addValue("id", account.id).addValue("email", account.email).addValue("verified", account.emailVerified)
                         .addValue("status", account.status.name).addValue("name", account.displayName).addValue("nameKey", account.displayNameKey).addValue("tag", account.displayTag).addValue("locale", account.locale).addValue("tz", account.timeZone)
                         .addValue("created", dialect.instantParam(account.createdAt)).addValue("updated", dialect.instantParam(account.updatedAt))
                         .addValue("lastLogin", dialect.instantParam(account.lastLoginAt)).addValue("suspended", account.suspendedReason)
-                        .addValue("deleted", dialect.instantParam(account.deletedAt)).addValue("purge", dialect.instantParam(account.purgeAfter)).addValue("erased", dialect.instantParam(account.erasedAt)),
+                        .addValue("deleted", dialect.instantParam(account.deletedAt)).addValue("purge", dialect.instantParam(account.purgeAfter)).addValue("erased", dialect.instantParam(account.erasedAt))
+                        .addValue("loginId", account.loginId),
                 )
                 account.roles.forEach { jdbc.update("insert into account_roles (account_id, role) values (:a, :r)", mapOf("a" to account.id, "r" to it)) }
                 identities.forEach(::insertIdentity)
@@ -64,6 +68,39 @@ class JdbcAccountRepository(
     override fun findById(id: String): Account? = one("select * from accounts where id = :v", id)
 
     override fun findByEmail(email: String): Account? = one("select * from accounts where email = :v", email)
+
+    override fun findByLoginId(loginId: String): Account? = one("select * from accounts where login_id = :v", loginId)
+
+    override fun loginIdUsed(hash: String): Boolean =
+        (jdbc.queryForObject("select count(*) from account_used_login_ids where hash = :h", mapOf("h" to hash), Int::class.java) ?: 0) > 0
+
+    /** `used_at` 은 읽는 코드가 없다 — 날짜(UTC 자정)까지만 남겨, 계정 행의 `created_at` 과 이어 맞춰 해시를 계정에 잇지 못하게 한다 */
+    private fun insertUsedLoginId(hash: String, now: Instant) {
+        jdbc.update("insert into account_used_login_ids (hash, used_at) values (:h, :now)", MapSqlParameterSource().addValue("h", hash).addValue("now", dialect.instantParam(now.truncatedTo(java.time.temporal.ChronoUnit.DAYS))))
+    }
+
+    // 같은 아이디를 두 계정이 동시에 정하면 MySQL 이 유니크 위반을 기다리던 쪽들을 교착으로 되돌릴 수 있다 — 다시 해 보면 진 쪽은 TAKEN 이 된다 (LockRetry)
+    override fun claimLoginId(id: String, loginId: String, hash: String, now: Instant): ClaimLoginIdResult = LockRetry.run { claimLoginIdOnce(id, loginId, hash, now) }
+
+    private fun claimLoginIdOnce(id: String, loginId: String, hash: String, now: Instant): ClaimLoginIdResult =
+        try {
+            tx.execute {
+                // 계정 행 락을 먼저 — 지우기 · 정지와 줄 서고, 상태 · 빈 칸 확인은 락을 잡은 뒤에 한다
+                val row = jdbc.query("select status, login_id from accounts where id = :id for update", mapOf("id" to id)) { rs, _ -> rs.getString("status") to rs.getString("login_id") }.firstOrNull()
+                when {
+                    row == null || row.first == AccountStatus.ERASED.name -> ClaimLoginIdResult.NOT_FOUND
+                    row.first != AccountStatus.ACTIVE.name -> ClaimLoginIdResult.NOT_ACTIVE
+                    row.second != null -> ClaimLoginIdResult.ALREADY_SET
+                    else -> {
+                        insertUsedLoginId(hash, now)   // 쓰인 아이디면 여기서 유니크 위반
+                        jdbc.update("update accounts set login_id = :login, updated_at = :now where id = :id", MapSqlParameterSource().addValue("login", loginId).addValue("now", dialect.instantParam(now)).addValue("id", id))
+                        ClaimLoginIdResult.CLAIMED
+                    }
+                }
+            } ?: ClaimLoginIdResult.NOT_FOUND
+        } catch (_: DuplicateKeyException) {
+            ClaimLoginIdResult.TAKEN   // 어느 유니크(열 · 해시)에 걸렸든 같은 답 — 살아 있는 아이디와 탈퇴한 아이디를 가르지 않는다
+        }
 
     override fun findByIdentity(method: String, subject: String): Account? =
         jdbc.query(
@@ -210,10 +247,11 @@ class JdbcAccountRepository(
             mapOf("role" to role), Long::class.java,
         ) ?: 0
 
-    override fun search(email: String?, status: AccountStatus?, page: Int, size: Int): AccountPage {
+    override fun search(email: String?, status: AccountStatus?, page: Int, size: Int, loginId: String?): AccountPage {
         val where = mutableListOf<String>()
         val p = MapSqlParameterSource().addValue("limit", size).addValue("offset", page.toLong() * size)
         email?.let { where += "email like :pattern escape '!'"; p.addValue("pattern", "%" + it.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%") }
+        loginId?.let { where += "login_id = :loginId"; p.addValue("loginId", it) }
         if (status == null) where += "status <> 'ERASED'" else { where += "status = :status"; p.addValue("status", status.name) }
         val clause = if (where.isEmpty()) "" else " where " + where.joinToString(" and ")
         val total = jdbc.queryForObject("select count(*) from accounts$clause", p, Long::class.java) ?: 0
@@ -245,7 +283,7 @@ class JdbcAccountRepository(
             jdbc.update("delete from account_identities where account_id = :id", p)
             scrub(id, email)
             jdbc.update(
-                "update accounts set email = null, email_verified = false, status = 'ERASED', display_name = null, display_name_key = null, display_tag = null, locale = null, time_zone = null, " +
+                "update accounts set email = null, email_verified = false, status = 'ERASED', display_name = null, display_name_key = null, display_tag = null, locale = null, time_zone = null, login_id = null, " +
                     "suspended_reason = null, last_login_at = null, contact_email = null, contact_email_verified_at = null, purge_after = null, erase_claimed_at = null, erased_at = :now, updated_at = :now where id = :id",
                 p,
             )
@@ -411,7 +449,7 @@ class JdbcAccountRepository(
         displayName = getString("display_name"), displayNameKey = getString("display_name_key"), displayTag = getString("display_tag"), locale = getString("locale"), timeZone = getString("time_zone"),
         createdAt = dialect.readInstant(this, "created_at")!!, updatedAt = dialect.readInstant(this, "updated_at")!!, lastLoginAt = dialect.readInstant(this, "last_login_at"),
         suspendedReason = getString("suspended_reason"), deletedAt = dialect.readInstant(this, "deleted_at"), purgeAfter = dialect.readInstant(this, "purge_after"),
-        erasedAt = dialect.readInstant(this, "erased_at"), contactEmail = getString("contact_email"),
+        erasedAt = dialect.readInstant(this, "erased_at"), contactEmail = getString("contact_email"), loginId = getString("login_id"),
     )
 
     private fun ResultSet.identity() = Identity(

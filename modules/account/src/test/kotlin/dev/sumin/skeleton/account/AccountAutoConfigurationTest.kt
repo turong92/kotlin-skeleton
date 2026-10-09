@@ -21,6 +21,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.springframework.boot.autoconfigure.AutoConfigurations
 import org.springframework.boot.test.context.runner.ApplicationContextRunner
@@ -223,5 +224,98 @@ class AccountAutoConfigurationTest {
             val claim = dev.sumin.skeleton.common.consent.ConsentClaim("terms", "v1")
             ctx.getBean(RegistrationService::class.java).signUp(SignUpCommand("ann@example.com", "tangerine-42-moon", null, null, null, "203.0.113.1", null, consents = listOf(claim)))
         }
+    }
+
+    private fun failureMessage(vararg props: String): String? {
+        var message: String? = null
+        runner.withPropertyValues(*props).run { ctx ->
+            message = ctx.startupFailure?.let { f -> generateSequence(f as Throwable?) { it.cause }.mapNotNull { it.message }.joinToString(" | ") }
+        }
+        return message
+    }
+
+    @Test
+    fun `the login id settings are off by default and bind from skeleton account login-id`() {
+        runner.run { ctx ->
+            val l = ctx.getBean(AccountProperties::class.java).loginId
+            assertEquals(AccountProperties.LoginId(), l)
+            assertFalse(l.enabled, "the module default is off")
+            assertEquals(4, l.minLength)
+            assertEquals(20, l.maxLength)
+            assertTrue(l.reserved.isEmpty())
+            assertEquals(30, l.checkPerIp)
+            assertEquals(java.time.Duration.ofMinutes(10), l.checkPerIpWindow)
+            assertEquals(10, l.claimLimit)
+            assertEquals(java.time.Duration.ofHours(1), l.claimWindow)
+            assertTrue(l.extraExcludePaths.isEmpty())
+        }
+        runner.withPropertyValues(
+            "skeleton.account.login-id.enabled=true", "skeleton.account.login-id.min-length=3", "skeleton.account.login-id.max-length=12",
+            "skeleton.account.login-id.reserved=admin,root", "skeleton.account.login-id.check-per-ip=5", "skeleton.account.login-id.check-per-ip-window=1m",
+            "skeleton.account.login-id.claim-limit=2", "skeleton.account.login-id.claim-window=30m",
+            "skeleton.account.login-id.extra-exclude-paths=GET /api/v1/x",
+        ).run { ctx ->
+            val l = ctx.getBean(AccountProperties::class.java).loginId
+            assertTrue(l.enabled)
+            assertEquals(3, l.minLength)
+            assertEquals(12, l.maxLength)
+            assertEquals(listOf("admin", "root"), l.reserved)
+            assertEquals(5, l.checkPerIp)
+            assertEquals(java.time.Duration.ofMinutes(1), l.checkPerIpWindow)
+            assertEquals(2, l.claimLimit)
+            assertEquals(java.time.Duration.ofMinutes(30), l.claimWindow)
+            assertEquals(listOf("GET /api/v1/x"), l.extraExcludePaths)
+        }
+    }
+
+    @Test
+    fun `login id lengths outside 1 to min to max to 30 stop the context and name the setting`() {
+        listOf(
+            "skeleton.account.login-id.min-length=0" to "skeleton.account.login-id.min-length",
+            "skeleton.account.login-id.max-length=31" to "skeleton.account.login-id.max-length",
+            "skeleton.account.login-id.min-length=21" to "skeleton.account.login-id.min-length",
+            "skeleton.account.login-id.max-length=3" to "skeleton.account.login-id.max-length",
+        ).forEach { (prop, name) ->
+            val message = failureMessage(prop)
+            assertNotNull(message, "$prop should not start")
+            assertTrue(name in message, message)
+        }
+        assertNull(failureMessage("skeleton.account.login-id.min-length=1", "skeleton.account.login-id.max-length=30"), "the bounds themselves are fine")
+    }
+
+    @Test
+    fun `login id limits and extra exclude paths that make no sense stop the context and name the setting`() {
+        assertTrue("skeleton.account.login-id.check-per-ip" in failureMessage("skeleton.account.login-id.check-per-ip=0").orEmpty())
+        assertTrue("skeleton.account.login-id.claim-limit" in failureMessage("skeleton.account.login-id.claim-limit=0").orEmpty())
+        assertTrue("skeleton.account.login-id.extra-exclude-paths" in failureMessage("skeleton.account.login-id.extra-exclude-paths=GET api/v1/x").orEmpty())
+    }
+
+    @Test
+    fun `login id windows that are zero or negative stop the context and name the setting (M8)`() {
+        listOf("check-per-ip-window", "claim-window").forEach { key ->
+            listOf("0s", "-5m").forEach { value ->
+                val message = failureMessage("skeleton.account.login-id.$key=$value")
+                assertNotNull(message, "$key=$value should not start")
+                assertTrue("skeleton.account.login-id.$key" in message, message)
+            }
+        }
+        assertNull(failureMessage("skeleton.account.login-id.check-per-ip-window=1s", "skeleton.account.login-id.claim-window=1s"), "a positive window is fine")
+    }
+
+    @Test
+    fun `email required-when defaults to SIGN_IN and binds WRITE`() {
+        runner.run { ctx -> assertEquals(AccountProperties.Email.RequiredWhen.SIGN_IN, ctx.getBean(AccountProperties::class.java).email.requiredWhen) }
+        runner.withPropertyValues("skeleton.account.email.required=true", "skeleton.account.email.required-when=WRITE").run { ctx ->
+            assertEquals(AccountProperties.Email.RequiredWhen.WRITE, ctx.getBean(AccountProperties::class.java).email.requiredWhen)
+        }
+    }
+
+    @Test
+    fun `required-when WRITE without required stops the context and names the setting`() {
+        val message = failureMessage("skeleton.account.email.required-when=WRITE")
+        assertNotNull(message)
+        assertTrue("skeleton.account.email.required-when" in message, message)
+        assertTrue("skeleton.account.email.required" in message, message)
+        assertNull(failureMessage("skeleton.account.email.required-when=SIGN_IN"), "SIGN_IN with required off is the old behavior")
     }
 }

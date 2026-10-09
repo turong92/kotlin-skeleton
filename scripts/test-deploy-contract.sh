@@ -17,7 +17,7 @@
 #   8. 정직한 헬스: GET /health 는 인증 없이 200 {"status":"UP"} 뿐이고, DB 컨테이너를 멈추면 503, 다시 올리면 200
 #   8b. (A2) DB 보다 앱이 먼저 뜬다: DB 컨테이너가 없는 채로 앱을 먼저 띄우고 DB 를 늦게 올려도 앱이 재시작 없이 /health 200 에 이른다(startup-wait). DB 가 끝내 안 나타나면
 #      host:port · 원인 · 가능한 원인을 말하는 메시지로 실패하고 URL 의 비밀번호는 새지 않는다 (docs/deploy.md §3)
-#   9. (메일 모듈이 있는 앱 = sample) 시험 배포 조합(docs/deploy.md §10) — JWT 비밀 · 메일 발송 길 · 링크 주소 · 첫 관리자 + 플랫폼이 넣는 모양 그대로의
+#   9. (메일 모듈이 있는 앱 = sample) 시험 배포 조합(docs/deploy.md §10) — JWT 비밀 · 차단/아이디 해시 비밀 · 메일 발송 길 · 링크 주소 · 첫 관리자 + 플랫폼이 넣는 모양 그대로의
 #      <PREFIX>_CLIENT_IP_MODE(소문자) / _TRUSTED_PROXIES(실제 도커 네트워크 CIDR + 하나 더, 쉼표로 이어)를 주면 SKELETON_ENV=prod 로 **실제로 뜬다**. 하나씩 빼면 가드가 그 이름을 말하며 실패한다
 #
 # Docker 가 필요하다. marina 가 도커를 가로채는 기계에서는 `MARINA_DIRECT=1 scripts/test-deploy-contract.sh`.
@@ -93,7 +93,7 @@ docker run -d --name "$PG" --network "$NET" --network-alias db \
 if wait_for 90 docker exec "$PG" pg_isready -h 127.0.0.1 -U app -d app; then pass "postgres 가 받는다"; else fail "postgres 가 뜨지 않는다"; docker logs "$PG" 2>&1 | tail -5; exit 1; fi
 sleep 2   # 초기화 직후 재시작 구간을 넘긴다
 
-# 계약의 환경변수만 — 스프링 프로필 · 앱 접두사 DB 변수 · 비밀은 첨부 키 비밀(secret_env) 하나뿐이다: 선언의 secrets: 에서 플랫폼이 무작위로 채우는 값이고, 샘플 앱은 key-owner=OPAQUE 라 없으면 기동하지 않는다. 앱을 띄우는 모든 docker run 이 쓴다.
+# 계약의 환경변수만 — 스프링 프로필 · 앱 접두사 DB 변수 · 비밀은 첨부 키 비밀(secret_env) 하나뿐이다: 선언의 secrets: 에서 플랫폼이 무작위로 채우는 값이고, 샘플 앱은 key-owner=OPAQUE 라 없으면 기동하지 않는다. 앱을 띄우는 모든 docker run 이 쓴다. (보호 환경으로 띄우는 D 단계는 base_d_env 에서 JWT · 차단/아이디 해시 비밀을 더 준다 — secret_env 는 두 줄 그대로다.)
 DBNAME=app
 # 비밀만 — 샘플 앱은 key-owner=OPAQUE 라 첨부 키 비밀이 없으면 기동하지 않는다(어떤 컨테이너를 띄우든 이것은 준다). apps/api 는 읽지 않는다
 secret_env() { printf '%s\n' "-e" "SKELETON_STORAGE_WEB_KEY_SECRET=contract-test-storage-key-secret-0123456789"; }
@@ -269,10 +269,12 @@ for APP in $(echo "$APPS" | tr ',' ' '); do
     echo "-- D. 시험 배포 조합 (docs/deploy.md §10) — SKELETON_ENV=prod 로 실제로 뜬다"
     SUBNET="$(docker network inspect "$NET" -f '{{(index .IPAM.Config 0).Subnet}}')"
     JWT="$(head -c 36 /dev/urandom | base64 | tr -d '\n=')"
+    # TEMPLATE 허락: 약관 문서가 모듈의 TEMPLATE 인 시험 배포 — 일부러 허락 (docs/deploy.md §10, docs/legal.md)
+    # BLOCKS_SECRET: 로그인 아이디를 켠 앱(apps/sample)은 보호 환경에서 이 비밀이 없으면 기동하지 않는다 — 선언의 secrets: 에서 플랫폼이 무작위로 채우는 값 (docs/deploy.md §11)
     base_d_env() {   # $1 = nomail 이면 메일 발송 길을 뺀다
       printf '%s\n' -e SKELETON_ENV=prod -e SPRING_PROFILES_ACTIVE=prod -e "JWT_SECRET=$JWT" \
         -e SKELETON_ACCOUNT_MAIL_LINK_BASE_URL=https://app.example.com -e SKELETON_ACCOUNT_BOOTSTRAP_ADMIN_EMAIL=boss@example.com \
-        -e SKELETON_LEGAL_ACKNOWLEDGE_TEMPLATE=true   # 약관 문서가 모듈의 TEMPLATE 인 시험 배포 — 일부러 허락 (docs/deploy.md §10, docs/legal.md)
+        -e SKELETON_LEGAL_ACKNOWLEDGE_TEMPLATE=true -e SKELETON_ACCOUNT_BLOCKS_SECRET=contract-test-blocks-secret-0123456789
       [ "${1:-}" = nomail ] || printf '%s\n' -e SKELETON_NOTIFICATION_MAIL_ENABLED=true -e SKELETON_NOTIFICATION_MAIL_FROM=no-reply@example.com -e SPRING_MAIL_HOST=mail-relay.invalid
     }
     C="$RUN-$APP-d"; CONTAINERS="$CONTAINERS $C"
@@ -316,6 +318,15 @@ for APP in $(echo "$APPS" | tr ',' ' '); do
       LOGS="$(docker logs "$C" 2>&1)"
       if grep -q 'skeleton.storage.web.key-secret' <<<"$LOGS" && grep -q 'STORAGE_WEB_KEY_SECRET' <<<"$LOGS"; then pass "첨부 키 비밀을 빼면 설정 이름(skeleton.storage.web.key-secret)과 환경변수 이름을 말하며 실패한다"; else fail "첨부 키 비밀을 뺀 실패에 설정 · 환경변수 이름이 없다"; echo "$LOGS" | tail -8; fi
     else fail "첨부 키 비밀을 뺐는데 기동이 막히지 않았다"; fi
+    docker rm -f "$C" >/dev/null
+
+    C="$RUN-$APP-d5"; CONTAINERS="$CONTAINERS $C"   # 차단/아이디 해시 비밀(선언 secrets:)을 빼면 — 로그인 아이디를 켠 앱은 설정 이름을 말하며 기동하지 않는다 (docs/deploy.md §11 "로그인 아이디 묶음")
+    # shellcheck disable=SC2046
+    docker run -d --name "$C" --network "$NET" $(contract_env) $(base_d_env) -e SKELETON_ACCOUNT_BLOCKS_SECRET= -e SKELETON_CLIENT_IP_MODE=proxy -e "SKELETON_CLIENT_IP_TRUSTED_PROXIES=$SUBNET,10.99.0.0/16" "$IMG" >/dev/null
+    if wait_for 120 stopped "$C"; then
+      LOGS="$(docker logs "$C" 2>&1)"
+      if grep -q 'skeleton.account.blocks.secret' <<<"$LOGS" && grep -q 'ACCOUNT_BLOCKS_SECRET' <<<"$LOGS"; then pass "차단/아이디 해시 비밀을 빼면 설정 이름(skeleton.account.blocks.secret)과 환경변수 이름을 말하며 실패한다"; else fail "차단/아이디 해시 비밀을 뺀 실패에 설정 · 환경변수 이름이 없다"; echo "$LOGS" | tail -8; fi
+    else fail "차단/아이디 해시 비밀을 뺐는데 기동이 막히지 않았다"; fi
     docker rm -f "$C" >/dev/null
 
     C="$RUN-$APP-d2"; CONTAINERS="$CONTAINERS $C"   # 메일을 빼면

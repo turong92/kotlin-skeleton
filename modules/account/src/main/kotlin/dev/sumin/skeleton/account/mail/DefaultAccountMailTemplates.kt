@@ -17,7 +17,9 @@ class DefaultAccountMailTemplates(
 
     override fun render(kind: MailKind, locale: String?, vars: Map<String, String>, link: String?): RenderedMail {
         val lang = pickLocale(locale, props.defaultLocale)
-        val copy = (if (lang == "ko") KO else EN).getValue(kind)
+        // 아이디 찾기는 본문이 둘이다 — 아이디가 있으면 한 줄로 알리고, 없으면 "아직 정하지 않았어요" (같은 제목 틀 · 같은 로그인 링크)
+        val unsetId = kind == MailKind.LOGIN_ID_REMINDER && vars["loginId"].isNullOrBlank()
+        val copy = if (unsetId) (if (lang == "ko") LOGIN_ID_UNSET_KO else LOGIN_ID_UNSET_EN) else (if (lang == "ko") KO else EN).getValue(kind)
         // 한 번에 치환한다 — 값 안의 {이름} 이 다시 풀리지 않는다
         fun fill(s: String) = PLACEHOLDER.replace(s) { m -> vars[m.groupValues[1]] ?: m.value }
         var lines = copy.lines.map(::fill)
@@ -96,6 +98,9 @@ class DefaultAccountMailTemplates(
         const val FOOTER_EN = "If you did not request this, you can ignore this email."
         const val FOOTER_KO = "요청하지 않았다면 무시하세요."
 
+        val LOGIN_ID_UNSET_EN = Copy("You have not chosen a login ID yet", listOf("You have not chosen a login ID yet.", "Sign in and you can choose one."), "Sign in")
+        val LOGIN_ID_UNSET_KO = Copy("아직 아이디를 정하지 않았어요", listOf("아직 아이디를 정하지 않았어요.", "로그인하면 정할 수 있어요."), "로그인")
+
         val EN = mapOf(
             MailKind.VERIFY_CODE to Copy("Your verification code", listOf("Your verification code is {code}.", "Enter it in the sign-up page to finish creating your account. It works {minutes} minutes and only for the page that asked for it.", "Never tell this code to anyone, not even to us."), null),
             MailKind.EMAIL_CHANGE_CODE to Copy("Your code to confirm the new email", listOf("Your confirmation code is {code}.", "Enter it in your account settings, in the browser where you asked for the change, to make this address your account email. It works {minutes} minutes.", "Never tell this code to anyone."), null),
@@ -105,6 +110,7 @@ class DefaultAccountMailTemplates(
             MailKind.DELETE_CODE to Copy("Your code to delete the account", listOf("Your confirmation code is {code}.", "Enter it to schedule the deletion of your account. It works {minutes} minutes and only in the browser session that asked for it.", "Never tell this code to anyone."), null),
             MailKind.ALREADY_REGISTERED to Copy("You already have an account", listOf("Someone (hopefully you) tried to sign up with this address, but an account already exists.", "If it was you, sign in or use \"Forgot password\"."), null),
             MailKind.EMAIL_REGISTRATION_ATTEMPT to Copy("Someone tried to register this email", listOf("Someone (hopefully you) tried to register this address as the email of another sign-in, but an account for this address already exists.", "Sign in to that account, then connect your social login (Kakao, Naver, ...) in the settings."), null),
+            MailKind.LOGIN_ID_REMINDER to Copy("Your login ID", listOf("Your login ID is {loginId}.", "You can sign in with it or with this email address."), "Sign in"),
             MailKind.PASSWORD_RESET to Copy("Reset your password", listOf("We received a request to reset your password.", "This link works once and expires in {minutes} minutes. Opening it does not change anything until you choose a new password."), "Choose a new password"),
             MailKind.PASSWORD_CHANGED to Copy("Your password was changed", listOf("The password of your account was just changed and you were signed out on other devices.", "If this was not you, reset your password right away."), null),
             MailKind.EMAIL_CHANGE_REQUESTED_NOTICE to Copy("Email change requested", listOf("A change of your account email was requested. Nothing changes until the new address is confirmed.", "If this was not you, change your password now."), null),
@@ -124,6 +130,7 @@ class DefaultAccountMailTemplates(
             MailKind.DELETE_CODE to Copy("계정 삭제 인증번호", listOf("인증번호는 {code} 예요.", "입력하면 계정 삭제가 예약돼요. {minutes}분 동안만, 요청한 브라우저 세션에서만 쓸 수 있어요.", "이 번호를 누구에게도 알려주지 마세요."), null),
             MailKind.ALREADY_REGISTERED to Copy("이미 계정이 있어요", listOf("이 주소로 가입을 시도한 분이 있어요(본인이라면). 하지만 이미 계정이 있어요.", "본인이라면 로그인하거나 「비밀번호 찾기」를 써 주세요."), null),
             MailKind.EMAIL_REGISTRATION_ATTEMPT to Copy("이 주소로 이메일 등록을 시도했어요", listOf("이 주소로 이메일 등록을 시도한 분이 있어요(본인이라면). 이미 이 주소의 계정이 있어요.", "그 계정으로 로그인한 뒤 설정에서 소셜 로그인(카카오 · 네이버 등)을 연결해 주세요."), null),
+            MailKind.LOGIN_ID_REMINDER to Copy("아이디를 알려 드려요", listOf("아이디는 {loginId} 예요.", "아이디나 이 이메일 주소로 로그인할 수 있어요."), "로그인"),
             MailKind.PASSWORD_RESET to Copy("비밀번호를 다시 정해 주세요", listOf("비밀번호 재설정 요청을 받았어요.", "이 링크는 한 번만 쓸 수 있고 {minutes}분 뒤에 만료돼요. 열기만 해서는 아무것도 바뀌지 않아요."), "새 비밀번호 정하기"),
             MailKind.PASSWORD_CHANGED to Copy("비밀번호가 바뀌었어요", listOf("계정 비밀번호가 방금 바뀌었고 다른 기기에서는 로그아웃됐어요.", "본인이 아니라면 바로 비밀번호를 다시 정해 주세요."), null),
             MailKind.EMAIL_CHANGE_REQUESTED_NOTICE to Copy("이메일 변경 요청이 있었어요", listOf("계정 이메일을 바꾸려는 요청이 있었어요. 새 주소를 확인하기 전에는 아무것도 바뀌지 않아요.", "본인이 아니라면 지금 비밀번호를 바꿔 주세요."), null),

@@ -25,6 +25,8 @@ data class SignUpCommand(
     val consents: List<dev.sumin.skeleton.common.consent.ConsentClaim> = emptyList(),
     /** 동의 기록에 남길 가입 요청의 User-Agent (앞 120 자) */
     val userAgent: String? = null,
+    /** 로그인 아이디 — `login-id.enabled` 일 때만 읽는다 (꺼짐이면 값이 있어도 무시). 로그에 남기지 않는다 */
+    val loginId: String? = null,
 ) {
     override fun toString() = "SignUpCommand(email=<redacted>, password=<redacted>)"
 
@@ -65,6 +67,8 @@ class RegistrationService(private val core: AccountCore) {
         val name = core.names.accept(cmd.displayName, required = p.displayName.requiredOnSignUp)
         val email = Emails.normalize(cmd.email)
         if (!Emails.plausible(email)) throw ApplicationException("Invalid email", PlatformErrorCode.VALIDATION_FAILED)
+        // 아이디 형식도 같은 자리다 — 요청 본문만 본다 (저장소 · 주소를 읽지 않는다). 꺼짐이면 읽지 않는다
+        val loginId = if (p.loginId.enabled) core.acceptLoginId(cmd.loginId) else null
         // 한도가 지키는 것 — 동의 조회 · 캡차 호출 · 비밀번호 정책(유출 조회가 외부일 수 있다) · 해시 · 시도 저장 · 메일 — 은 이 뒤다
         cmd.ipKey?.let {
             val a = core.limits.acquire("signup:ip", it, p.signUp.perIp, p.signUp.perIpWindow)
@@ -75,11 +79,13 @@ class RegistrationService(private val core: AccountCore) {
         if (cmd.consents.size > SignUpCommand.MAX_CONSENTS) throw ApplicationException("Too many consents", PlatformErrorCode.VALIDATION_FAILED)
         gate?.check(cmd.consents)
         core.captcha.check(cmd.captchaToken, cmd.ip, "sign_up")
+        // 아이디를 쓸 수 있나 — 캡차 **뒤**(캡차를 못 넘긴 호출에게 아이디의 상태를 알리지 않는다), 비밀번호 정책 앞. 아이디만 본다: 같이 낸 이메일이 가입돼 있든 아니든 같은 시점 · 같은 응답이다
+        if (loginId != null) core.requireLoginIdAvailable(loginId)
         val violations = core.policy.check(cmd.password, email)
         if (violations.isNotEmpty()) throw PasswordPolicyException(violations)
         val hash = core.hasher.hash(cmd.password)
 
-        if (!p.signUp.emailVerification) return SignUpOutcome(createVerified(email, hash, cmd, name))
+        if (!p.signUp.emailVerification) return SignUpOutcome(createVerified(email, hash, cmd, name, loginId))
 
         val v = p.verification
         val mayOpen = core.mayOpenCodeFor(email)
@@ -89,6 +95,8 @@ class RegistrationService(private val core: AccountCore) {
                 put("displayName", name)
                 put("locale", ProfileRules.locale(cmd.locale))
                 put("timeZone", ProfileRules.timeZone(cmd.timeZone))
+                // 아이디는 계정이 만들어지는 순간에만 잡힌다 (선점 없음) — 시도에는 후보만 실린다
+                if (loginId != null) put("loginId", loginId)
                 // 동의는 이 시도에 묶여 시도와 함께 저장된다 — 확인될 때 계정과 같은 트랜잭션에서 기록한다 (고리가 없으면 싣지 않는다)
                 if (gate != null) {
                     put("consents", cmd.consents.map { mapOf("type" to it.type, "version" to it.version, "locale" to it.locale) })
@@ -110,9 +118,9 @@ class RegistrationService(private val core: AccountCore) {
         return SignUpOutcome(SignUpStatus.VERIFICATION_SENT, opened.handle, opened.row.expiresAt, if (v.maxResends <= 0) null else opened.row.lastSentAt.plus(v.resendCooldown))
     }
 
-    private fun createVerified(email: String, hash: String, cmd: SignUpCommand, name: String?): SignUpStatus {
+    private fun createVerified(email: String, hash: String, cmd: SignUpCommand, name: String?, loginId: String?): SignUpStatus {
         if (core.accountByEmail(email) != null || core.blocks.blocked(email)) throw AccountException(AccountErrorCode.EMAIL_TAKEN)   // 차단도 "이미 있는 주소" 와 같은 응답 — 메일함 증명이 없는 길이다
-        val base = newAccount(email, ProfileRules.locale(cmd.locale), ProfileRules.timeZone(cmd.timeZone), unverified = true)
+        val base = newAccount(email, ProfileRules.locale(cmd.locale), ProfileRules.timeZone(cmd.timeZone), unverified = true).copy(loginId = loginId)
         val identity = passwordIdentity(base, email, hash, verified = false)
         val result = core.insertNamed(base, listOf(identity), name, strict = true) { account ->
             insertWithConsents(account, identity) { recordConsents(account.id, cmd.consents, cmd.ip, cmd.userAgent?.take(SignUpCommand.MAX_USER_AGENT)) }
@@ -121,16 +129,23 @@ class RegistrationService(private val core: AccountCore) {
             AccountCore.NamedInsert.INSERTED -> Unit
             AccountCore.NamedInsert.REFUSED -> throw AccountException(AccountErrorCode.EMAIL_TAKEN)
             AccountCore.NamedInsert.NAME_TAKEN -> throw AccountException(AccountErrorCode.DISPLAY_NAME_TAKEN)
+            AccountCore.NamedInsert.LOGIN_ID_TAKEN -> throw AccountException(AccountErrorCode.LOGIN_ID_TAKEN)
         }
         core.events.publish(AccountEventType.SIGN_UP, result.account.id, cmd.ip, mapOf("method" to SignInMethods.PASSWORD))
+        publishLoginIdSet(result.account, cmd.ip)
         return SignUpStatus.CREATED
     }
 
-    /** 계정 + 첫 수단 + 동의 기록을 한 트랜잭션으로 — 유니크 위반(이메일 · 수단 · 닉네임)이면 모두 되돌리고 false */
+    /** 가입으로 아이디가 정해졌다 — 값은 싣지 않는다 (감사 표에 아이디가 남지 않게) */
+    private fun publishLoginIdSet(account: Account, ip: String?) {
+        if (account.loginId != null) core.events.publish(AccountEventType.LOGIN_ID_SET, account.id, ip, mapOf("via" to "sign_up"))
+    }
+
+    /** 계정 + 첫 수단 + 동의 기록을 한 트랜잭션으로 — 유니크 위반(아이디 · 이메일 · 수단 · 닉네임)이면 모두 되돌리고 false */
     private fun insertWithConsents(account: Account, identity: Identity, record: () -> Unit): Boolean =
         try {
             core.atomic.run {
-                if (!core.accounts.insert(account, listOf(identity))) throw InsertRefused()
+                if (!core.accounts.insert(account, listOf(identity), core.loginIdHashOf(account.loginId))) throw InsertRefused()
                 record()
             }
             true
@@ -148,10 +163,12 @@ class RegistrationService(private val core: AccountCore) {
      * 맞으면 **이 시도의 비밀번호로** 계정을 만들고(그 주소에 계정이 이미 있으면 만들지 않는다) 같은 주소의 다른 시도를 모두 버리고 로그인할 계정을 돌려준다.
      * 없음 · 만료 · 소진 · 이미 쓴 시도 · 그 사이 주소를 가져간 계정은 모두 [AccountErrorCode.CODE_EXPIRED] 하나다.
      */
-    fun verifyEmail(signUpId: String, code: String, ip: String?, ipKey: String? = ip, displayName: String? = null): AuthAccount {
+    fun verifyEmail(signUpId: String, code: String, ip: String?, ipKey: String? = ip, displayName: String? = null, loginId: String? = null): AuthAccount {
         val v = core.props.verification
         // 확인 때 새로 낸 닉네임 — 규칙에 걸리면 400 이고 **아무것도 쓰기 전에**(한도 · 시도 · 코드) 거절한다. 없으면 가입 요청의 닉네임을 쓴다
         val chosenName = core.names.accept(displayName)
+        // 확인 때 새로 낸 아이디 — 같은 자리에서 형식을 본다 (400, 아무것도 쓰기 전에). 꺼짐 · 안 냄이면 가입 요청의 후보를 쓴다
+        val chosenLoginId = if (core.props.loginId.enabled && !loginId.isNullOrBlank()) core.acceptLoginId(loginId) else null
         ipKey?.let {
             val a = core.limits.acquire("verify:ip", it, v.attemptsPerIp, v.attemptsWindow)
             if (!a.allowed) throw RateLimitedException(a.retryAfterSeconds)
@@ -170,10 +187,10 @@ class RegistrationService(private val core: AccountCore) {
         val email = row.subject
         val secret = row.secret ?: throw AccountException(AccountErrorCode.CODE_EXPIRED)
         val (account, existed) = try {
-            createOrProve(email, secret, row.payload, chosenName)
+            createOrProve(email, secret, row.payload, chosenName, chosenLoginId)
         } catch (e: AccountException) {
-            // 코드는 맞았다 — 닉네임이 겹쳤다고 시도를 태우지 않는다: 같은 가입 id · 코드로 다른 닉네임을 내 다시 확인할 수 있다 (맞는 코드를 아는 사람만 여기에 온다 — 추측 계산이 그대로다)
-            if (e.errorCode == AccountErrorCode.DISPLAY_NAME_TAKEN) core.challenges.reopen(row)
+            // 코드는 맞았다 — 닉네임 · 아이디가 겹쳤다고 시도를 태우지 않는다: 같은 가입 id · 코드로 다른 값을 내 다시 확인할 수 있다 (맞는 코드를 아는 사람만 여기에 온다 — 추측 계산이 그대로다)
+            if (e.errorCode == AccountErrorCode.DISPLAY_NAME_TAKEN || e.errorCode == AccountErrorCode.LOGIN_ID_TAKEN) core.challenges.reopen(row)
             throw e
         }
         core.challenges.deleteBySubject(ChallengePurposes.SIGN_UP, email)
@@ -200,24 +217,29 @@ class RegistrationService(private val core: AccountCore) {
     }
 
     /** (계정, 이미 있던 계정이었나) */
-    private fun createOrProve(email: String, secret: String, payload: String?, chosenName: String? = null): Pair<Account, Boolean> {
+    private fun createOrProve(email: String, secret: String, payload: String?, chosenName: String? = null, chosenLoginId: String? = null): Pair<Account, Boolean> {
         val existing = core.accountByEmail(email)
         if (existing == null) {
             refuseIfBlocked(email)
             val profile = payload?.let { runCatching { json.readValue(it, Map::class.java) }.getOrNull() }
-            val base = newAccount(email, profile?.get("locale") as String?, profile?.get("timeZone") as String?, unverified = false)
+            // 꺼짐이면 후보를 읽지 않는다. 후보가 예약어면(그 사이 설정이 바뀐 경우 · 갈아 낀 후보) 쓸 수 없는 아이디와 같은 409
+            val loginId = if (core.props.loginId.enabled) (chosenLoginId ?: profile?.get("loginId") as String?) else null
+            if (loginId != null && LoginIds.isReserved(loginId, core.props.loginId.reserved)) throw AccountException(AccountErrorCode.LOGIN_ID_TAKEN)
+            val base = newAccount(email, profile?.get("locale") as String?, profile?.get("timeZone") as String?, unverified = false).copy(loginId = loginId)
             val identity = passwordIdentity(base, email, secret, verified = true)
             val result = core.insertNamed(base, listOf(identity), chosenName ?: core.names.sanitize(profile?.get("displayName") as String?), strict = true) { account ->
                 insertWithConsents(account, identity) { recordConsents(account.id, profile) }
             }
-            // 이름이 겹쳤으면 [verifyEmail] 이 시도를 되살린다 — 다른 닉네임(`displayName`)으로 같은 코드를 다시 낸다
+            // 이름 · 아이디가 겹쳤으면 [verifyEmail] 이 시도를 되살린다 — 다른 닉네임(`displayName`) · 아이디(`loginId`)로 같은 코드를 다시 낸다
             when (result.outcome) {
                 AccountCore.NamedInsert.INSERTED -> Unit
                 AccountCore.NamedInsert.REFUSED -> throw AccountException(AccountErrorCode.CODE_EXPIRED)
                 AccountCore.NamedInsert.NAME_TAKEN -> throw AccountException(AccountErrorCode.DISPLAY_NAME_TAKEN)
+                AccountCore.NamedInsert.LOGIN_ID_TAKEN -> throw AccountException(AccountErrorCode.LOGIN_ID_TAKEN)
             }
             val account = result.account
             core.events.publish(AccountEventType.SIGN_UP, account.id, detail = mapOf("method" to SignInMethods.PASSWORD))
+            publishLoginIdSet(account, null)
             return account to false
         }
         // 이메일 확인을 나중에 켠 앱에 남은 미확인 계정 — 메일함이 증명됐으니 그 자격은 이 시도의 비밀번호 하나만 남는다. 확인된 계정은 건드리지 않는다

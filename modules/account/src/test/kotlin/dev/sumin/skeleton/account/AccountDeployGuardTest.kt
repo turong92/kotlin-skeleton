@@ -118,4 +118,27 @@ class AccountDeployGuardTest {
         // forgot-password and resend are always limited per IP, so the mode stays required: only the two optional limits are off here
         assertTrue(guard(off, healthy.copy(clientIpModeConfigured = false)).problems(prod).any { "client-ip" in it })
     }
+
+    @Test
+    fun `login ids on in a protected env without a blocks secret stop the start - a rotated JWT secret would silently free every retired id`() {
+        val on = goodProps.copy(loginId = AccountProperties.LoginId(enabled = true))
+        val problems = guard(on).problems(prod)
+        assertEquals(1, problems.size, problems.toString())
+        assertTrue("skeleton.account.blocks.secret" in problems.single() && "login-id" in problems.single(), problems.single())
+        assertEquals(1, guard(on).problems(stage).size)
+        assertEquals(1, guard(on).problems(prodProfile).size)
+        assertEquals(emptyList(), guard(on).problems(local))
+        assertEquals(emptyList(), guard(on).problems(unset))
+        assertEquals(emptyList(), guard(on.copy(blocks = AccountProperties.Blocks(secret = "a-long-random-block-secret"))).problems(prod))
+        assertTrue(guard(on).problems(prod).none { "a-long-random" in it })
+    }
+
+    @Test
+    fun `login ids off keep the admin-only app's behaviour - a warning and no problem`() {
+        val admin = goodProps.copy(admin = AccountProperties.Admin(enabled = true))
+        assertEquals(emptyList(), guard(admin).problems(prod))
+        assertTrue(guard(admin).warnings(prod).any { "blocks.secret" in it })
+        val both = admin.copy(loginId = AccountProperties.LoginId(enabled = true))
+        assertEquals(1, guard(both).problems(prod).size)
+    }
 }

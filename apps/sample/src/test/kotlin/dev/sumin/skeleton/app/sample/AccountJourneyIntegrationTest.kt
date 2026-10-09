@@ -28,6 +28,8 @@ import org.springframework.test.web.servlet.post
 /**
  * 가입 → 이메일 확인 → 로그인 → 새로고침(회전 · 재사용 탐지) → 비밀번호 변경 → 세션 목록 → 삭제 → (유예가 끝난 뒤) 지우기까지, 진짜 PostgreSQL · 보안 체인 · 모듈들과 함께.
  * 삭제된 계정의 게시판 글은 "삭제된 사용자" 로 남는다 (board 의 AccountErasureListener).
+ * 이 앱은 로그인 아이디를 켠 채다(`login-id.enabled`): 가입에서 아이디를 받고 → 아이디로 로그인 → 이메일을 바꿔도 같은 아이디로 로그인 → 아이디 찾기 메일 →
+ * 탈퇴한 뒤 그 아이디는 실시간 확인에서 "쓸 수 없음", 가입에서 409, 어느 표에도 원문이 남지 않는다 (스펙 §16 조립 — 아이디).
  */
 @SpringBootTest(properties = ["spring.config.import=classpath:test-seeds.yml", "skeleton.account.mail.link-base-url=https://app.example.com", "skeleton.auth-session.reuse-grace=0s"])
 @AutoConfigureMockMvc
@@ -60,6 +62,7 @@ class AccountJourneyIntegrationTest {
     private val tag = System.nanoTime()
     private val userAgent = "JourneyBrowser/9.9-$tag"
     private val displayName = "Journey$tag"
+    private val loginId = "journey.${tag % 1_000_000_000}"
 
     private fun allColumns(): List<Pair<String, String>> =
         jdbc.sql("select table_name, column_name from information_schema.columns where table_schema = current_schema() and table_name not like 'flyway%'")
@@ -81,13 +84,17 @@ class AccountJourneyIntegrationTest {
         val first = "tangerine-42-moon"
         val second = "a-brand-new-pass-7"
 
-        val signUp = post("/api/v1/account/sign-up", """{"email":"$email","password":"$first","displayName":"$displayName","locale":"ko","consents":[{"type":"terms","version":"sample-1"},{"type":"privacy","version":"sample-1"}]}""").andExpect { status { isAccepted() } }.andReturn().response.contentAsString
+        val signUp = post("/api/v1/account/sign-up", """{"email":"$email","password":"$first","displayName":"$displayName","loginId":"$loginId","locale":"ko","consents":[{"type":"terms","version":"sample-1"},{"type":"privacy","version":"sample-1"}]}""").andExpect { status { isAccepted() } }.andReturn().response.contentAsString
         // no account exists until the code is entered
         post("/api/v1/auth/login", """{"email":"$email","password":"$first"}""").andExpect { status { isUnauthorized() }; jsonPath("$.code") { value("AUTH.INVALID_CREDENTIALS") } }
         val verified = post("/api/v1/auth/verify-email", """{"signUpId":"${field(signUp, "$.value.signUpId")}","code":"${codeOf(MailKind.VERIFY_CODE, email)}"}""").andExpect { status { isOk() } }.andReturn().response.contentAsString
         assertTrue(field(verified, "$.value.accessToken").isNotBlank() && field(verified, "$.value.refreshToken").startsWith("r1."), "the verifying browser is signed in at once")
 
+        // 로그인 아이디: 가입에서 받은 값으로 (대문자·앞뒤 공백은 정규화된다) 같은 계정에 로그인된다 — 이메일로도 같은 계정이다
+        val byLoginId = post("/api/v1/auth/login", """{"username":" ${loginId.uppercase()} ","password":"$first"}""").andExpect { status { isOk() } }.andReturn().response.contentAsString
         val login = post("/api/v1/auth/login", """{"email":"$email","password":"$first"}""").andExpect { status { isOk() } }.andReturn().response.contentAsString
+        assertEquals(field(login, "$.value.principal.accountId"), field(byLoginId, "$.value.principal.accountId"), "the login ID and the email reach the same account")
+        post("/api/v1/auth/login", """{"username":"$loginId","password":"wrong-password-9"}""").andExpect { status { isUnauthorized() }; jsonPath("$.code") { value("AUTH.INVALID_CREDENTIALS") } }
         val bearer = field(login, "$.value.accessToken")
         val refresh1 = field(login, "$.value.refreshToken")
         val accountId = field(login, "$.value.principal.accountId")
@@ -136,12 +143,20 @@ class AccountJourneyIntegrationTest {
         post("/api/v1/account/email/change/confirm", """{"code":"${codeOf(MailKind.EMAIL_CHANGE_CODE, moved)}"}""", mover).andExpect { status { isNoContent() } }
 
         val auth = field(post("/api/v1/auth/login", """{"email":"$moved","password":"$second"}""").andReturn().response.contentAsString, "$.value.accessToken")
+        // 이메일이 바뀌어도 아이디는 그대로이고, 같은 아이디로 여전히 (같은 계정에) 로그인된다. 옛 이메일로는 더 이상 안 된다
+        mvc.get("/api/v1/account/me") { header("Authorization", "Bearer $auth") }.andExpect { status { isOk() }; jsonPath("$.value.loginId") { value(loginId) }; jsonPath("$.value.email") { value(moved) } }
+        val stillByLoginId = post("/api/v1/auth/login", """{"username":"$loginId","password":"$second"}""").andExpect { status { isOk() } }.andReturn().response.contentAsString
+        assertEquals(accountId, field(stillByLoginId, "$.value.principal.accountId"), "after the email change the same login ID still reaches the same account")
+        post("/api/v1/auth/login", """{"email":"$email","password":"$second"}""").andExpect { status { isUnauthorized() } }
+        // 아이디 찾기: 계정 이메일로 아이디가 간다 (응답은 계정 유무와 무관하게 같은 202)
+        post("/api/v1/account/login-id/forgot", """{"email":"$moved"}""").andExpect { status { isAccepted() } }
+        assertEquals(loginId, mails.sent.last { it.kind == MailKind.LOGIN_ID_REMINDER && it.to == moved }.vars.getValue("loginId"), "the reminder mail carries the login ID")
         // 연락받을 이메일도 같은 한 방향 보증 안에 있다: 등록(코드 확인)하고, 탈퇴 뒤 어느 표에도 남지 않아야 한다
         val contact = "reach-${System.nanoTime()}@example.com"
         post("/api/v1/account/contact-email", """{"email":"$contact"}""", auth).andExpect { status { isAccepted() } }
         post("/api/v1/account/contact-email/confirm", """{"code":"${codeOf(MailKind.CONTACT_EMAIL_CODE, contact)}"}""", auth).andExpect { status { isNoContent() } }
         mvc.get("/api/v1/account/me") { header("Authorization", "Bearer $auth") }.andExpect { status { isOk() }; jsonPath("$.value.contactEmail") { value(contact) } }
-        val planted = listOf(email, moved, displayName, displayName.lowercase(), userAgent, contact)   // lower case = the comparison key column
+        val planted = listOf(email, moved, displayName, displayName.lowercase(), userAgent, contact, loginId)   // lower case = the comparison key column
         planted.forEach { value -> assertTrue(leaks(listOf(value)).isNotEmpty(), "the scan must see '$value' before the erasure, or its absence afterwards proves nothing") }
         post("/api/v1/account/delete", """{"currentPassword":"$second"}""", auth, "Idempotency-Key" to UUID.randomUUID().toString())
             .andExpect { status { isAccepted() }; jsonPath("$.value.status") { value("DELETION_SCHEDULED") } }
@@ -152,14 +167,20 @@ class AccountJourneyIntegrationTest {
         jdbc.sql("update accounts set purge_after = now() - interval '1 minute' where id = :id").param("id", accountId).update()
         assertEquals(1, purge.purgeDue())
         // the row stays (so nothing that points at the account dangles) but is ERASED and holds nothing personal
-        val kept = jdbc.sql("select status, email, display_name, display_name_key, display_tag, locale, time_zone, last_login_at, erased_at, contact_email from accounts where id = :id").param("id", accountId).query { rs, _ ->
-            listOf(rs.getString("status"), rs.getString("email"), rs.getString("display_name"), rs.getString("display_name_key"), rs.getString("display_tag"), rs.getString("locale"), rs.getString("time_zone"), rs.getObject("last_login_at"), rs.getObject("erased_at") != null, rs.getString("contact_email"))
+        val kept = jdbc.sql("select status, email, display_name, display_name_key, display_tag, locale, time_zone, last_login_at, erased_at, contact_email, login_id from accounts where id = :id").param("id", accountId).query { rs, _ ->
+            listOf(rs.getString("status"), rs.getString("email"), rs.getString("display_name"), rs.getString("display_name_key"), rs.getString("display_tag"), rs.getString("locale"), rs.getString("time_zone"), rs.getObject("last_login_at"), rs.getObject("erased_at") != null, rs.getString("contact_email"), rs.getString("login_id"))
         }.single()
-        assertEquals(listOf("ERASED", null, null, null, null, null, null, null, true, null), kept)
+        assertEquals(listOf("ERASED", null, null, null, null, null, null, null, true, null, null), kept)
         assertEquals(0, jdbc.sql("select count(*) from account_identities where account_id = :id").param("id", accountId).query(Long::class.java).single())
         assertEquals(0, jdbc.sql("select count(*) from account_roles where account_id = :id").param("id", accountId).query(Long::class.java).single())
         assertEquals(0, jdbc.sql("select count(*) from auth_sessions where account_id = :id").param("id", accountId).query(Long::class.java).single())
         post("/api/v1/auth/login", """{"email":"$moved","password":"$second"}""").andExpect { status { isUnauthorized() } }
+        post("/api/v1/auth/login", """{"username":"$loginId","password":"$second"}""").andExpect { status { isUnauthorized() } }
+        // 탈퇴한 아이디는 다시 쓸 수 없다 — 원문은 지워졌고(아래 전수 스캔) 해시만 남아 실시간 확인도 가입도 "쓸 수 없음" 이다
+        post("/api/v1/account/login-id/availability", """{"loginId":"$loginId"}""")
+            .andExpect { status { isOk() }; jsonPath("$.value.available") { value(false) }; jsonPath("$.value.reason") { value("TAKEN") } }
+        post("/api/v1/account/sign-up", """{"email":"again-${System.nanoTime()}@example.com","password":"$first","displayName":"Again","loginId":"$loginId","consents":[{"type":"terms","version":"sample-1"},{"type":"privacy","version":"sample-1"}]}""")
+            .andExpect { status { isConflict() }; jsonPath("$.code") { value("ACCOUNT.LOGIN_ID_TAKEN") } }
 
         // the one-way guarantee across EVERY table of EVERY module in this app (accounts, sessions, consents, board, notifications, jobs, ...)
         val leaks = leaks(planted)

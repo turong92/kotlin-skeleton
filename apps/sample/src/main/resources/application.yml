@@ -74,7 +74,15 @@ skeleton:
     contact-email:
       enabled: true                       # 이 앱의 선택: 계정 이메일과 별개로 서비스 안내를 받을 주소를 하나 등록할 수 있다 (로그인 · 계정 복구 수단은 아니다 — docs/accounts.md "연락 이메일")
     email:
-      required: true                      # 이 앱의 선택: 이메일 없이 만들어진 계정(Kakao · Naver · X · LINE · 이메일 동의를 안 한 소셜)은 주소를 등록하기 전까지 403 ACCOUNT.EMAIL_REQUIRED — 첫 등록은 재인증 없이 (docs/accounts.md "이메일 필수")
+      required: true                      # 이 앱의 선택: 이메일 없이 만들어진 계정(Kakao · Naver · X · LINE · 이메일 동의를 안 한 소셜)은 주소를 등록하기 전까지 403 ACCOUNT.EMAIL_REQUIRED (docs/accounts.md "이메일 필수")
+      required-when: WRITE                # 이 앱의 선택: 읽기는 이메일 없이, 쓰려 할 때 받는다 (모듈 기본은 SIGN_IN = 로그인 직후부터 막는다). 오래된 세션의 첫 등록은 제공자 재확인 — 새 세션은 재인증 없이
+      extra-exclude-paths:                # 이메일 없이도 되는 사소한 쓰기 · 읽기처럼 보이는 POST — 기본은 막힘이라 여기 적은 것만 열린다 (WriteGateCensusTest 가 목록을 고정한다. 결제 경로는 절대 적지 않는다)
+        - PATCH /api/v1/notifications/*/read   # 알림함을 여는 것은 읽기인데 화면이 읽음 표시를 보낸다
+        - PATCH /api/v1/notifications/read-all
+        - POST /api/v1/storage/presign-download  # 글의 첨부를 보려면 필요하다 — 읽기처럼 보이는 POST
+    login-id:
+      enabled: true                       # 이 앱의 선택: 이메일이 바뀌어도 안 바뀌는 로그인 아이디 — 가입 때 받고, 소셜 첫 로그인 · 아이디 없는 기존 계정은 403 ACCOUNT.LOGIN_ID_REQUIRED 로 정하게 한다 (docs/accounts.md). 서버 비밀 <PREFIX>_ACCOUNT_BLOCKS_SECRET 이 stage · prod 에서 필요하다
+      reserved: [admin, administrator, root, system, support, help, staff, moderator, notes]   # 내줄 수 없는 아이디 — 기호와 대소문자를 빼고 비교. 로컬 시드 계정은 예외
     deletion:
       self-restore: true                  # 이 앱의 선택: 탈퇴 유예 중인 주인이 로그인하면 403 AUTH.ACCOUNT_DELETION_PENDING + 취소 토큰으로 스스로 탈퇴를 취소한다 (모듈 기본은 꺼짐 — 운영자만 복구, docs/accounts.md)
   auth-magic-link:

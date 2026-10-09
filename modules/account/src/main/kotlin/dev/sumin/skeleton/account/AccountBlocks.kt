@@ -81,6 +81,18 @@ class AccountBlocks(
     fun identityHash(method: String, subject: String): String =
         if (method in EMAIL_METHODS) emailHash(subject) else hmac("identity:$method:$subject")
 
+    /**
+     * 로그인 아이디가 "한 번이라도 쓰였다" 는 표시의 해시 — 같은 서버 비밀에 용도 접두사 `login-id:` 를 붙인다 (이메일 · 수단 해시와 겹치지 않는다).
+     * [normalized] 는 [LoginIds.normalize] 를 거친 값. 열쇠 없는 해시는 쓰지 않는다 — 아이디는 짧아 사전 대입으로 되돌려진다
+     */
+    fun loginIdHash(normalized: String): String = hmac("login-id:$normalized")
+
+    /**
+     * 로그인 실패 · 잠김 이벤트에 싣는 아이디 입력의 식별자 — 같은 서버 비밀의 HMAC 앞 24자 (`login-id-event:` 접두사로 다른 해시와 겹치지 않는다).
+     * 이벤트 `id` 는 INFO 로그와 감사 표 `detail` 에 남는데, 아이디는 짧아 열쇠 없는 SHA-256 은 사전 대입으로 되돌려진다.
+     */
+    fun loginIdEventId(normalized: String): String = hmac("login-id-event:$normalized").take(24)
+
     /** 이 이메일 · 로그인 수단으로 새 계정을 만들면 안 되나 */
     fun blocked(email: String?, method: String? = null, subject: String? = null): Boolean {
         val hashes = listOfNotNull(email?.let(::emailHash), if (method != null && subject != null) identityHash(method, subject) else null)

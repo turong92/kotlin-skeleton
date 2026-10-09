@@ -33,7 +33,12 @@ class SecretsStayOutOfToStringTest {
         assertHidden(SocialReauthRequest("kakao", secret))
         assertHidden(VerifyEmailRequest(secret, secret))
         assertHidden(ResendRequest(secret))
+        assertHidden(LoginIdAvailabilityRequest(secret))
+        assertHidden(LoginIdRequest(secret))
+        assertHidden(LoginIdForgotRequest(secret, secret))
         assertHidden(CodeRequest(secret))
+        assertHidden(LoginIdAvailabilityResponse(secret, false, "TAKEN"))
+        assertHidden(dev.sumin.skeleton.account.LoginIdAvailability(secret, false, "TAKEN"))
         assertHidden(SignUpResponse("VERIFICATION_SENT", secret))
         assertHidden(LinkSocialRequest(secret, null, secret, secret, SocialReauthRequest("kakao", secret)))
     }
@@ -57,6 +62,7 @@ class SecretsStayOutOfToStringTest {
         val accepted = dev.sumin.skeleton.common.openapi.AcceptedOperation::class.java
         assertTrue(annotated(AccountPublicController::class.java, "resend", accepted))
         assertTrue(annotated(AccountPublicController::class.java, "forgot", accepted))
+        assertTrue(annotated(LoginIdReminderController::class.java, "forgot", accepted))
         assertTrue(annotated(AccountController::class.java, "changeEmail", accepted))
         assertTrue(annotated(AccountController::class.java, "delete", accepted))
         assertTrue(annotated(dev.sumin.skeleton.account.social.SocialIdentityController::class.java, "link", dev.sumin.skeleton.common.openapi.CreatedOperation::class.java))

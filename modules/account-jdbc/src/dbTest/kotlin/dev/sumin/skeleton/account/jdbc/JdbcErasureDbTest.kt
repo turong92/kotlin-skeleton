@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.account.jdbc
 
 import dev.sumin.skeleton.account.Account
+import dev.sumin.skeleton.account.AccountBlocks
 import dev.sumin.skeleton.account.AccountPatch
 import dev.sumin.skeleton.account.AccountStatus
 import dev.sumin.skeleton.account.AddIdentityResult
@@ -13,6 +14,7 @@ import dev.sumin.skeleton.account.events.AccountEvent
 import dev.sumin.skeleton.account.events.AccountEventType
 import dev.sumin.skeleton.account.token.TokenPurposes
 import dev.sumin.skeleton.account.token.TokenRow
+import dev.sumin.skeleton.common.time.TimeProvider
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.CountDownLatch
@@ -32,17 +34,19 @@ class JdbcErasureDbTest {
     private val jdbc = AccountDb.jdbc
     private val now = Instant.parse("2026-10-06T00:00:00.123456Z")
     private val due = now.plus(Duration.ofDays(30))
+    private val loginIdBlocks = AccountBlocks(AccountDb.blocks, "a-long-random-block-secret".toByteArray(), Duration.ZERO, TimeProvider.systemUtc())
 
     @BeforeTest fun clean() = AccountDb.clean()
 
-    private fun leaving(id: String = "acc_1", email: String = "ann@example.com", purgeAfter: Instant = now.minusSeconds(60)) {
+    private fun leaving(id: String = "acc_1", email: String = "ann@example.com", purgeAfter: Instant = now.minusSeconds(60), loginId: String? = null) {
         assertTrue(
             repo.insert(
-                Account(id, email, true, AccountStatus.DELETED, setOf("USER", "ADMIN"), "Ann Kim", "ko", "Asia/Seoul", now, now, lastLoginAt = now, suspendedReason = "spam", deletedAt = now.minusSeconds(3600), purgeAfter = purgeAfter),
+                Account(id, email, true, AccountStatus.DELETED, setOf("USER", "ADMIN"), "Ann Kim", "ko", "Asia/Seoul", now, now, lastLoginAt = now, suspendedReason = "spam", deletedAt = now.minusSeconds(3600), purgeAfter = purgeAfter, loginId = loginId),
                 listOf(
                     Identity("idn_${id}_pw", id, "password", email, true, "{bcrypt}hash", null, now),
                     Identity("idn_${id}_g", id, "google", "google-subject-$id", true, null, null, now),
                 ),
+                loginId?.let { loginIdBlocks.loginIdHash(it) },
             ),
         )
     }
@@ -91,7 +95,7 @@ class JdbcErasureDbTest {
     }
 
     private fun plantEverythingPersonal() {
-        leaving()
+        leaving(loginId = "ann.login")   // 로그인 아이디 — 다른 곳에서 쓰는 핸들과 같을 수 있는 개인정보. 해시 표에는 해시만 남는다
         repo.update("acc_1", dev.sumin.skeleton.account.AccountPatch(contactEmail = "reach.me@example.com"), now)   // 연락 이메일 — 계정 이메일과 별개의 개인정보
         token("h1", TokenPurposes.PASSWORD_RESET, "ann@example.com", "acc_1")
         token("h2", TokenPurposes.MAGIC_LINK, "ann@example.com", null)
@@ -102,7 +106,7 @@ class JdbcErasureDbTest {
         AccountDb.audit.on(AccountEvent(AccountEventType.LOGIN_SUCCESS, "acc_1", now, "203.0.113.77", mapOf("method" to "google")))
     }
 
-    private val plantedValues = listOf("ann@example.com", "Ann Kim", "google-subject-acc_1", "203.0.113.77", "{bcrypt}hash", "ann.old@example.com", "new-address@example.com", "reach.me@example.com")
+    private val plantedValues = listOf("ann@example.com", "Ann Kim", "google-subject-acc_1", "203.0.113.77", "{bcrypt}hash", "ann.old@example.com", "new-address@example.com", "reach.me@example.com", "ann.login")
 
     @Test
     fun `after erasure no column of any table still holds the email, name, provider subject, IP or other planted personal values`() {

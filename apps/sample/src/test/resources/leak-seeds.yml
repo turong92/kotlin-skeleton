@@ -10,8 +10,8 @@ skeleton:
       per-ip: 1000
     seed:
       accounts:
-        - { id: acc_leak_x, email: xavier.leak@example.com, password: password, display-name: Xavier }
-        - { id: acc_leak_y, email: yolanda.leak@example.com, password: password, display-name: Yolanda }
-        - { id: acc_leak_mod, email: mod.leak@example.com, password: password, roles: [MODERATOR], display-name: Warden }
-        - { id: acc_leak_v, email: vera.leak@example.com, password: password, display-name: Vera }
-        - { id: acc_leak_admin, email: admin.leak@example.com, password: password, roles: [ADMIN], display-name: Overseer }
+        - { id: acc_leak_x, email: xavier.leak@example.com, password: password, display-name: Xavier, login-id: zq7.probe-x1 }
+        - { id: acc_leak_y, email: yolanda.leak@example.com, password: password, display-name: Yolanda, login-id: yolanda-leak }
+        - { id: acc_leak_mod, email: mod.leak@example.com, password: password, roles: [MODERATOR], display-name: Warden, login-id: warden-leak }
+        - { id: acc_leak_v, email: vera.leak@example.com, password: password, display-name: Vera, login-id: vera-leak }
+        - { id: acc_leak_admin, email: admin.leak@example.com, password: password, roles: [ADMIN], display-name: Overseer, login-id: overseer-leak }

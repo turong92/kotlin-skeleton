@@ -40,6 +40,9 @@ enum class AccountErrorCode(
     CODE_INVALID("ACCOUNT.CODE_INVALID", HttpStatus.BAD_REQUEST, "The code is wrong"),
     CODE_EXPIRED("ACCOUNT.CODE_EXPIRED", HttpStatus.GONE, "The code is expired or used up"),
     EMAIL_REQUIRED("ACCOUNT.EMAIL_REQUIRED", HttpStatus.FORBIDDEN, "Register an email address first"),
+    LOGIN_ID_TAKEN("ACCOUNT.LOGIN_ID_TAKEN", HttpStatus.CONFLICT, "Login ID is not available"),
+    LOGIN_ID_REQUIRED("ACCOUNT.LOGIN_ID_REQUIRED", HttpStatus.FORBIDDEN, "Choose a login ID first"),
+    LOGIN_ID_ALREADY_SET("ACCOUNT.LOGIN_ID_ALREADY_SET", HttpStatus.CONFLICT, "The login ID is already set and cannot be changed"),
     PASSWORD_REQUIRED("ACCOUNT.PASSWORD_REQUIRED", HttpStatus.BAD_REQUEST, "Verify your email before setting a password"),
 }
 

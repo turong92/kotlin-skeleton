@@ -41,6 +41,9 @@ class LeakWorld(private val http: LeakHttp, registry: NotificationSubscriptionRe
     /** 구독해 둔 알림 — SSE 가 흘리는 것과 같은 이벤트 */
     val events = CopyOnWriteArrayList<NotificationEvent>()
 
+    /** 세계를 만드는 동안 받은 **응답** 전부 (로그인 · 프로필 · 글 · 댓글 · 첨부 · 반응 · 이름 바꾸기) — 요청 본문은 없다. 쓰기 응답을 값으로 훑는 데 쓴다 */
+    val journey: List<Captured>
+
     /** 어디에도 없어야 하는 값 (X 의 계정 id · 이메일 · 계정 톰스톤 · 현재 계정 이름) */
     val forbidden: Map<String, String> by lazy {
         mapOf("account id" to xAcc, "email" to xEmail, "tombstone" to AccountTombstone.of(xAcc), "account name" to xAccountName)
@@ -72,10 +75,11 @@ class LeakWorld(private val http: LeakHttp, registry: NotificationSubscriptionRe
         react(yToken, "posts/$postA", "EMPATHY"); react(yToken, "posts/$postB", "LIKE"); react(yToken, "posts/$yPost/comments/$c1", "LIKE")
         react(adminToken, "posts/$postA", "LIKE"); react(adminToken, "posts/$yPost/comments/$c2", "LIKE")
         react(xToken, "posts/$yPost", "LIKE"); react(xToken, "posts/$yPost/comments/$c0", "EMPATHY")   // X 자신의 반응 — 계정 키 행
+        journey = http.since(0)
     }
 
     fun login(email: String): Pair<String, String> {
-        val r = http.post("/api/v1/auth/login", null, """{"email":"$email","password":"password"}""", record = false).ok()
+        val r = http.post("/api/v1/auth/login", null, """{"email":"$email","password":"password"}""").ok()
         return r.read<String>("$.value.accessToken") to r.read("$.value.principal.accountId")
     }
 
@@ -89,7 +93,7 @@ class LeakWorld(private val http: LeakHttp, registry: NotificationSubscriptionRe
     /** [token] 계정의 새 프로필 (첫 프로필은 `profiles(token)` 이 보장한다) */
     fun newProfile(token: String, name: String): Profile {
         tick()
-        val r = http.post("/api/v1/author-profiles", token, """{"name":${json(name)}}""", record = false).ok()
+        val r = http.post("/api/v1/author-profiles", token, """{"name":${json(name)}}""").ok()
         return Profile(r.read("$.value.id"), r.read("$.value.name"), r.read("$.value.tag"))
     }
 
@@ -106,7 +110,7 @@ class LeakWorld(private val http: LeakHttp, registry: NotificationSubscriptionRe
     }
 
     private fun attach(): List<String> {
-        val r = http.post("/api/v1/storage/presign", xToken, """{"fileName":"photo.png","contentType":"image/png","sizeBytes":1024}""", record = false).ok()
+        val r = http.post("/api/v1/storage/presign", xToken, """{"fileName":"photo.png","contentType":"image/png","sizeBytes":1024}""").ok()
         return listOf(r.read<String>("$.value.key").also { keys += it })
     }
 
@@ -116,13 +120,13 @@ class LeakWorld(private val http: LeakHttp, registry: NotificationSubscriptionRe
         tick()
         val files = attachments.joinToString(",", "[", "]") { json(it) }
         val st = status?.let { ""","status":"$it"""" } ?: ""
-        return http.post("/api/v1/boards/general/posts", token, """{"title":${json(title)},"body":${json(body)},"authorId":"${author.id}","attachments":$files$st}""", record = false).ok().read<Number>("$.value.id").toLong()
+        return http.post("/api/v1/boards/general/posts", token, """{"title":${json(title)},"body":${json(body)},"authorId":"${author.id}","attachments":$files$st}""").ok().read<Number>("$.value.id").toLong()
     }
 
     fun createComment(token: String, author: Profile, post: Long, text: String, parent: Long? = null): Long {
         tick()
         val p = parent?.let { ""","parentId":$it""" } ?: ""
-        return http.post("/api/v1/boards/general/posts/$post/comments", token, """{"body":${json(text)},"authorId":"${author.id}"$p}""", record = false).ok().read<Number>("$.value.id").toLong()
+        return http.post("/api/v1/boards/general/posts/$post/comments", token, """{"body":${json(text)},"authorId":"${author.id}"$p}""").ok().read<Number>("$.value.id").toLong()
     }
 
     private fun react(token: String, path: String, type: String) { tick(); http.put("/api/v1/boards/general/$path/reactions", token, """{"type":"$type"}""").ok() }

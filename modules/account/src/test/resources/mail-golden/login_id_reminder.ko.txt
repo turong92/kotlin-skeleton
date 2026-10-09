@@ -1,0 +1,11 @@
+subject: 아이디를 알려 드려요
+
+아이디는 ann.kim 예요.
+
+아이디나 이 이메일 주소로 로그인할 수 있어요.
+
+https://app.example.com/login
+
+요청하지 않았다면 무시하세요.
+Notes
+Notes Inc. · Seoul

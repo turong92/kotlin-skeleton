@@ -101,6 +101,9 @@ class AccountHarness(
         AccountBlocks.local(time, props.blocks.retention), magicLinks = { magicLinks }, names = DisplayNames(props.displayName, random), sessionInspector = { sessions },
     )
     val registration = RegistrationService(core)
+    val availability = LoginIdAvailabilityService(core)
+    val loginIds = LoginIdService(core)
+    val reminder = LoginIdReminderService(core)
     val authRepository = AccountAuthRepository(core)
     val passwords = PasswordService(core)
     val emailChange = EmailChangeService(core)

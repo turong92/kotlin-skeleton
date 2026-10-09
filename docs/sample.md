@@ -64,6 +64,20 @@
 - 계약: `docs/author-profile-http-contract.md`(`author-profile` 을 고른 프로젝트에만 남는다). 누출 스캔: `AuthorLinkLeakIntegrationTest`(Y · Z 가 읽는 모든 경로에 X 의 값이 없고 프로필끼리 값으로 겹치지 않음 — 삭제 · 정지 · 탈퇴 뒤에도, 시드는 `src/test/resources/leak-seeds.yml`) · `AuthorLinkColumnsMySqlTest`(MySQL 열 분류).
 - 통합 시험: `BoardIntegrationTest`(쓰기 계약 · 읽는 사람 응답에 계정 id 없음 · 첨부 키), `NoteCrudIntegrationTest`(OPAQUE 키가 노트 첨부로 통과 · 남의 키 · 위조 mac), `AccountJourneyIntegrationTest`(탈퇴 뒤 글이 "삭제된 사용자").
 
+## 로그인 아이디와 이메일은 쓰기 때 (`application.yml`의 선택 둘)
+
+계정 쪽에서 이 앱이 **명시적으로 켠** 선택이 둘 있다(모듈 기본은 둘 다 꺼짐 / 로그인 직후 — 설정 한 곳에서 되돌린다). 규칙 · 위협 · 시험은 [accounts.md](accounts.md) "로그인 아이디" · "이메일을 받는 시점".
+
+- **`skeleton.account.login-id.enabled: true`** — 이메일이 바뀌어도 안 바뀌는 **비공개** 로그인 아이디. 가입 양식에서 받고, 소셜 첫 로그인은 인증 직후 「아이디를 정해 주세요」 게이트(`403 ACCOUNT.LOGIN_ID_REQUIRED`)를 지난 뒤 약관으로 간다. 로그인은 **아이디 또는 이메일** + 비밀번호. 예약어(`reserved`): `admin` · `administrator` · `root` · `system` · `support` · `help` · `staff` · `moderator` · `notes`(기호 · 대소문자를 빼고 비교, 로컬 시드 계정은 예외).
+  - **로컬 시드 아이디**(`application-local.yml`, 비밀번호는 모두 `password`): `user@example.com` → `sample-user`, `admin@example.com` → `sample-admin`, `moderator@example.com` → `sample-moderator`. 아이디를 안 주면 e2e 가 전부 아이디 게이트에 막힌다.
+  - 배포(`SKELETON_ENV=stage|prod`)에서는 **`SKELETON_ACCOUNT_BLOCKS_SECRET` 이 있어야 기동한다**(탈퇴한 아이디의 재사용 금지 해시 열쇠 — 선언 `deploy/app.yaml` 의 `secrets:` 에 이름이 이미 있고 플랫폼이 무작위 값을 채운다). 계약 증명 스크립트의 견본 앱 구간도 이 값을 넘긴다([deploy.md](deploy.md)).
+- **`skeleton.account.email.required: true` + `required-when: WRITE`** — 소셜로 이메일 없이 만들어진 계정(Kakao · Naver · X · LINE …)은 **읽기는 전부 통과하고, 쓰려 할 때** 이메일을 등록하게 한다(`403 ACCOUNT.EMAIL_REQUIRED`는 변경 요청에서만). 오래된 세션의 첫 등록은 제공자 재확인(`REAUTH_REQUIRED` → `socialReauth`), 방금 연 세션은 재인증 없이. 결제 모듈은 이 앱에 없지만 **결제 경로는 어떤 경우에도 열지 않는다**.
+  - **`email.extra-exclude-paths` 세 줄**(기본이 "막힘"이라 여기 적은 것만 열린다 — 왜 이 셋인가):
+    - `PATCH /api/v1/notifications/*/read` · `PATCH /api/v1/notifications/read-all` — 알림함을 여는 것은 읽기인데 화면이 읽음 표시를 보낸다. 이것이 막히면 읽기만 하는 계정에도 이메일 화면이 뜬다.
+    - `POST /api/v1/storage/presign-download` — 글의 첨부를 보려면 필요하다. 메서드는 `POST` 지만 읽기다.
+  - **주소 없는 계정에게 열린 변경 경로**의 정본은 시험 `WriteGateCensusTest` 의 목록이다(이 앱의 변경 핸들러를 전부 뽑아 정확히 같은지 본다 — 새 변경 엔드포인트는 목록에 적지 않는 한 막힌다).
+- 둘 다 `apps/sample` 의 통합 시험이 지킨다: `EmailOnWriteJourneyIntegrationTest`(소셜 첫 로그인 → 아이디 → 약관 → 읽기 → 쓰기 `403` → 이메일 등록 → 같은 쓰기 통과 · 버리기), `AccountJourneyIntegrationTest`(아이디로 가입 · 로그인 · 이메일 변경 뒤에도 같은 아이디), `LoginIdLeakIntegrationTest`(남이 읽는 어떤 응답에도 아이디가 없다), `MigrationUpgradeIntegrationTest`(켜기 전부터 있던 계정이 게이트를 만나고 정하면 풀린다). "로그인 직후" 방식의 기존 여정(`EmailRequiredJourneyIntegrationTest`)은 `required-when=SIGN_IN` 을 얹어 그대로 둔다.
+
 ## 돌려 보기
 
 ```bash

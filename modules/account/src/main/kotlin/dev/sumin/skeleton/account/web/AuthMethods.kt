@@ -32,6 +32,9 @@ data class SocialMethodView(
 
 data class SocialAuthorizeView(val url: String, val scopes: List<String>, val params: Map<String, String>)
 
+/** 아이디 규칙 중 화면이 미리 알아야 하는 길이 (나머지 형식은 서버가 `errors[].code` 로 알린다) */
+data class LoginIdMethodView(val minLength: Int, val maxLength: Int)
+
 /** 이 백엔드가 지금 켜 둔 로그인 방법 — 프론트가 환경변수로 손으로 맞추지 않게. 계정 · 주소 정보는 없다 (모두에게 같은 답) */
 data class AuthMethodsView(
     val methods: List<String>,
@@ -40,6 +43,9 @@ data class AuthMethodsView(
     val captchaRequired: Boolean,
     /** `body` | `cookie` — `auth-session` 이 없으면 null (리프레시 토큰이 없다) */
     val refreshDelivery: String?,
+    /** `skeleton.account.login-id.enabled=true` 일 때만 — **꺼져 있으면 키가 없다.** 있으면 가입에 아이디 칸, 로그인 칸은 "아이디 또는 이메일" */
+    @get:com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+    val loginId: LoginIdMethodView? = null,
 )
 
 /** 소셜 제공자 목록을 대는 쪽 — `auth-social` 이 있을 때만 [AccountSocialWebAutoConfiguration] 이 빈으로 둔다 */
@@ -69,6 +75,7 @@ class AuthMethodsController(
             social = socials,
             captchaRequired = props.captcha.required,
             refreshDelivery = refreshDelivery(),
+            loginId = props.loginId.takeIf { it.enabled }?.let { LoginIdMethodView(it.minLength, it.maxLength) },
         )
         return ResponseEntity.ok().cacheControl(CacheControl.maxAge(Duration.ofMinutes(5)).cachePublic()).body(Response.ok(view))
     }

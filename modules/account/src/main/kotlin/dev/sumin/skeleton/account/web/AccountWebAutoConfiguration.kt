@@ -47,6 +47,27 @@ class AccountWebAutoConfiguration {
         tokens: ObjectProvider<dev.sumin.skeleton.auth.api.AuthTokenResponseFactory>,
     ): AccountPublicController = AccountPublicController(registration, passwords, policy, deletion, clientIps.getIfAvailable { ClientIps() }) { tokens.getObject() }
 
+    /** 실시간 아이디 확인 — 아이디 기능이 켜졌을 때만 있다 (꺼짐이면 경로가 없다 = 404) */
+    @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnProperty(prefix = "skeleton.account.login-id", name = ["enabled"], havingValue = "true")
+    fun loginIdAvailabilityController(availability: dev.sumin.skeleton.account.LoginIdAvailabilityService, clientIps: ObjectProvider<ClientIps>): LoginIdAvailabilityController =
+        LoginIdAvailabilityController(availability, clientIps.getIfAvailable { ClientIps() })
+
+    /** 아이디 정하기 — 아이디 기능이 켜졌을 때만 있다 (꺼짐이면 경로가 없다 = 404) */
+    @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnProperty(prefix = "skeleton.account.login-id", name = ["enabled"], havingValue = "true")
+    fun loginIdController(callers: AccountCallers, loginIds: dev.sumin.skeleton.account.LoginIdService, profile: ProfileService, clientIps: ObjectProvider<ClientIps>): LoginIdController =
+        LoginIdController(callers, loginIds, profile, clientIps.getIfAvailable { ClientIps() })
+
+    /** 아이디 찾기 — 아이디 기능이 켜졌을 때만 있다 (꺼짐이면 경로가 없다 = 404) */
+    @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnProperty(prefix = "skeleton.account.login-id", name = ["enabled"], havingValue = "true")
+    fun loginIdReminderController(reminders: dev.sumin.skeleton.account.LoginIdReminderService, clientIps: ObjectProvider<ClientIps>): LoginIdReminderController =
+        LoginIdReminderController(reminders, clientIps.getIfAvailable { ClientIps() })
+
     @Bean
     @ConditionalOnMissingBean
     fun accountController(
@@ -85,6 +106,19 @@ class AccountWebAutoConfiguration {
     @ConditionalOnMissingBean
     @ConditionalOnProperty(prefix = "skeleton.account.admin", name = ["enabled"], havingValue = "true")
     fun adminAccountController(callers: AccountCallers, admin: AdminService, purge: dev.sumin.skeleton.account.AccountPurgeService): AdminAccountController = AdminAccountController(callers, admin, purge)
+
+    /** 켜졌을 때만 공개 경로에 더한다 — 꺼짐이면 허용 목록이 지금과 같다 */
+    @Bean
+    @ConditionalOnMissingBean(name = ["loginIdAvailabilityPublicEndpointContributor"])
+    @ConditionalOnProperty(prefix = "skeleton.account.login-id", name = ["enabled"], havingValue = "true")
+    fun loginIdAvailabilityPublicEndpointContributor(): PublicEndpointContributor =
+        PublicEndpointContributor { registry -> registry.add("POST", "/api/v1/account/login-id/availability") }
+
+    @Bean
+    @ConditionalOnMissingBean(name = ["loginIdReminderPublicEndpointContributor"])
+    @ConditionalOnProperty(prefix = "skeleton.account.login-id", name = ["enabled"], havingValue = "true")
+    fun loginIdReminderPublicEndpointContributor(): PublicEndpointContributor =
+        PublicEndpointContributor { registry -> registry.add("POST", "/api/v1/account/login-id/forgot") }
 
     @Bean
     @ConditionalOnMissingBean(name = ["accountPublicEndpointContributor"])

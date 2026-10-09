@@ -210,7 +210,7 @@ class StorageDeployGuard(private val properties: StorageProperties) : DeployGuar
 |---|---|---|
 | auth | `JWT_SECRET` (별칭) 또는 `<P>_AUTH_JWT_SECRET` — **선언의 `secrets:` (무작위로 충분)** | 보호 환경(`<P>_ENV=stage\|prod` · 프로필 `prod\|staging`)에서 **기동 실패**: 비었음 / 내장 기본값 / 32바이트 미만 |
 | auth | `<P>_AUTH_BREAK_GLASS_SECRET` (**운영자** — `secrets:` + `.local.env`) · `_ALLOWED_ACCOUNT_IDS` (env:) (break-glass 를 켰을 때만) | 비밀이 비면 기동 실패 · 허용 계정이 비면 보호 환경에서 기동 실패 |
-| account | `<P>_ACCOUNT_MAIL_LINK_BASE_URL` (메일 링크가 여는 프론트 주소 — 비밀 아님, 선언의 `env:` 에 적어도 된다) · 선택 `<P>_ACCOUNT_BOOTSTRAP_ADMIN_EMAIL` · `<P>_ACCOUNT_BLOCKS_SECRET` (재가입 차단 해시의 키 — **선언의 `secrets:` (무작위로 충분)**, 관리자 API 를 켠 앱만 필요) | 보호 환경에서 **기동 실패** (`DeployGuard` `account`): 주소가 비었음 · 메모리 계정 저장소(`account-jdbc` 를 얹는다) · 메일 발송 길 없음(`notification-mail`) · 시드 계정 · 링크 로그 켬. 첫 관리자 이메일은 확인된 로그인 때 ADMIN 을 준다. `<P>_ACCOUNT_BLOCKS_SECRET` 이 비면(관리자 API 를 켠 앱) **경고**만 — 키가 JWT 비밀에서 파생되므로 **`JWT_SECRET` 을 돌리면 재가입 차단이 조용히 풀린다**. 차단 키를 따로 두면 JWT 비밀을 돌려도 차단이 유지되고, 이 키를 바꾸면 기존 차단이 맞지 않게 된다 |
+| account | `<P>_ACCOUNT_MAIL_LINK_BASE_URL` (메일 링크가 여는 프론트 주소 — 비밀 아님, 선언의 `env:` 에 적어도 된다) · 선택 `<P>_ACCOUNT_BOOTSTRAP_ADMIN_EMAIL` · `<P>_ACCOUNT_BLOCKS_SECRET` (재가입 차단 해시와 탈퇴한 로그인 아이디 해시의 키 — **선언의 `secrets:` (무작위로 충분)**, 관리자 API 를 켠 앱은 권장 · **로그인 아이디를 켠 앱은 필수**) | 보호 환경에서 **기동 실패** (`DeployGuard` `account`): 주소가 비었음 · 메모리 계정 저장소(`account-jdbc` 를 얹는다) · 메일 발송 길 없음(`notification-mail`) · 시드 계정 · 링크 로그 켬. 첫 관리자 이메일은 확인된 로그인 때 ADMIN 을 준다. **로그인 아이디를 켠 앱**(`skeleton.account.login-id.enabled`)은 `<P>_ACCOUNT_BLOCKS_SECRET` 이 비면 **기동 실패**(`skeleton.account.login-id.enabled=true but skeleton.account.blocks.secret is empty …`) — 탈퇴한 아이디의 재사용 금지 해시가 JWT 비밀에서 파생되면 JWT 비밀을 돌릴 때 조용히 풀린다. `<P>_ACCOUNT_BLOCKS_SECRET` 이 비면(관리자 API 만 켠 앱) **경고**만 — 키가 JWT 비밀에서 파생되므로 **`JWT_SECRET` 을 돌리면 재가입 차단이 조용히 풀린다**. 차단 키를 따로 두면 JWT 비밀을 돌려도 차단이 유지되고, 이 키를 바꾸면 기존 차단이 맞지 않게 된다 |
 | auth-session | (없음 — 설정만) | 보호 환경에서 메모리 세션 저장소(`auth-session-jdbc` 를 얹는다) · 쿠키 전달인데 `cookie.secure=false` 면 기동 실패 |
 | auth-social-google / -kakao / -naver | `<P>_AUTH_SOCIAL_PROVIDERS_<X>_ENABLED=true` · `_CLIENT_ID` (env:) · `_CLIENT_SECRET` (**운영자**) | 켰는데 비면 기동 실패 (`client id/secret must not be blank`) |
 | auth-social-oidc | `<P>_AUTH_SOCIAL_OIDC_PROVIDERS_<코드>_CLIENT_ID` (env:) · `_CLIENT_SECRET` (**운영자**) · `_REDIRECT_URI` (env:) — 예: `…_PROVIDERS_LINE_CLIENT_ID` | id 가 비면 그 제공자는 없다(아무 일도 없다). id 만 있고 secret 이 비면 기동 실패 (`client-secret must not be blank`) |
@@ -252,7 +252,7 @@ Caddy 가 `<api_prefix>/*` 만 백엔드로 보내고 나머지는 `data/apps/<n
 | 무엇 | 어떻게 | 가드가 막는 경우 |
 |---|---|---|
 | 모듈 | 스타터에 `--modules notification-mail` (메일 발송 길). 샘플은 이미 있다 | 메일 발송 길 없음 → 기동 실패 (`account` 가드) |
-| 비밀 목록 | 선언의 `secrets: [JWT_SECRET]` (기본으로 들어 있다 — 무작위로 충분). 샘플(`apps/sample`)은 `<P>_STORAGE_WEB_KEY_SECRET` 도 (첨부 키 `OPAQUE`) | 이름이 빠지면 `skeleton.auth.jwt.secret is blank … list JWT_SECRET under secrets:` 로 기동 실패 |
+| 비밀 목록 | 선언의 `secrets: [JWT_SECRET]` (기본으로 들어 있다 — 무작위로 충분). 샘플(`apps/sample`)은 `<P>_STORAGE_WEB_KEY_SECRET` 도 (첨부 키 `OPAQUE`) **와 `<P>_ACCOUNT_BLOCKS_SECRET`** (로그인 아이디를 켠 앱 — 둘 다 선언에 이미 있다) | 이름이 빠지면 `skeleton.auth.jwt.secret is blank … list JWT_SECRET under secrets:` 로 기동 실패 |
 | 메일 | env: `<P>_NOTIFICATION_MAIL_ENABLED=true` · `_FROM=no-reply@…` · `SPRING_MAIL_HOST=<릴레이>`. 인증이 있으면 `SPRING_MAIL_PASSWORD` 를 `secrets:` + `.local.env` 로 | host · from 이 비면 발송기 빈이 없어 위와 같다 |
 | 메일 링크 주소 | env: `<P>_ACCOUNT_MAIL_LINK_BASE_URL=https://<프론트 origin>` | 비면 기동 실패 |
 | 클라이언트 IP | **넣지 않는다 — 플랫폼이 넣는다** (`PROXY`/`CLOUDFLARE` + 네트워크 CIDR) | 플랫폼이 안 넣으면(구버전) mode 없음 → 기동 실패 |
@@ -263,7 +263,7 @@ Caddy 가 `<api_prefix>/*` 만 백엔드로 보내고 나머지는 `data/apps/<n
 | 시드 계정 | 넣지 않는다 (로컬 전용) | 있으면 기동 실패 |
 
 `scripts/test-deploy-contract.sh` 의 **D 단계**가 apps/sample(= 스타터 + `notification-mail` …) 이미지를 이 조합 + **플랫폼이 넣는 클라이언트 IP 두 변수**(대문자 mode · 실제 도커 네트워크 CIDR 하나)로 `SKELETON_ENV=prod` 에 띄워 헬스체크 · 가드 요약을 확인하고,
-하나씩 빼면(클라이언트 IP · 메일 · TEMPLATE 허락) 가드가 그 이름을 말하며 실패함을 확인한다. 스타터(apps/api)는 메일 모듈이 없으므로 C2 단계가 "메일 발송 길 · client-ip 를 요구하며 실패" 를 확인한다.
+하나씩 빼면(클라이언트 IP · 메일 · TEMPLATE 허락 · 첨부 키 비밀 · 계정 차단/아이디 해시 비밀) 가드가 그 이름을 말하며 실패함을 확인한다. 스타터(apps/api)는 메일 모듈이 없으므로 C2 단계가 "메일 발송 길 · client-ip 를 요구하며 실패" 를 확인한다.
 첫 로그인 확인: 가입 → (메일이 릴레이로 간다) 확인 링크 → 그 주소가 `BOOTSTRAP_ADMIN_EMAIL` 이면 ADMIN.
 
 ## 11. 버전을 올릴 때 선언에서 바꿀 것
@@ -274,8 +274,9 @@ Caddy 가 `<api_prefix>/*` 만 백엔드로 보내고 나머지는 `data/apps/<n
 |---|---|---|
 | **작성자 프로필** 묶음: OPAQUE 첨부 키는 `c4bef2c`(storage)에서 들어오고, `apps/sample` 이 켠 것은 `8e7d8ad`, 묶음은 `f5863fb` 에서 끝난다. `skeleton.storage.web.key-owner: OPAQUE` 로 쓰는 앱만 해당 (기본 `ACCOUNT_ID` 는 읽지 않는다) | `secrets:` 에 **`<P>_STORAGE_WEB_KEY_SECRET`** (32자 이상, 무작위로 충분 — 플랫폼이 48자를 만든다). **이미 OPAQUE 로 발급한 키가 있으면 이 값을 바꾸지 않는다**(바꾸면 발급한 키가 소유 확인에서 떨어진다 — 서버를 옮길 때도 들고 간다) | **기동 실패**: 메시지가 설정 이름을 말한다 — `skeleton.storage.web.key-secret must be at least 32 characters when skeleton.storage.web.key-owner=OPAQUE (env <P>_STORAGE_WEB_KEY_SECRET — list it under secrets:)`. 시작 실패의 원인 메시지에 들어 있고(스택 트레이스에 이름이 있음을 `StorageWebAutoConfigurationTest` 가 확인) 값은 싣지 않는다 (컨테이너로는 `scripts/test-deploy-contract.sh` D 단계가 "빼면 이름을 말하며 실패" 를 본다) |
 | **재가입 차단 키**: `e88e1b5` (이 시점 이후의 `e76e8e7` 등 모든 커밋에 해당). 관리자 API(`skeleton.account.admin.enabled`)를 켠 앱만 해당 — `apps/sample` 은 켠다 | `secrets:` 에 **`<P>_ACCOUNT_BLOCKS_SECRET`** (무작위로 충분). 처음 정한 뒤 **바꾸지 않는다**(바꾸면 기존 차단이 맞지 않게 된다) | **기동은 된다 — 경고만** (`DeployGuard` `account` 의 warning: `skeleton.account.blocks.secret is empty … (env <P>_ACCOUNT_BLOCKS_SECRET, declared under secrets:)`). 키가 JWT 비밀에서 파생되어 **`JWT_SECRET` 을 돌리면 재가입 차단이 조용히 풀린다.** 실패가 아닌 이유: 차단 기능이 없는 앱을 막지 않고, 파생 키가 동작하는 대체이기 때문이다 (`AccountDeployGuard`) |
+| **로그인 아이디** 묶음 (`skeleton.account.login-id.enabled=true`로 켜는 앱만 — `apps/sample` 은 켠다. 새 V 파일 `V20261008173435__account_login_id`(`accounts.login_id` 열 + `account_used_login_ids` 표)가 함께 따라온다) | `secrets:` 에 **`<P>_ACCOUNT_BLOCKS_SECRET`** (무작위로 충분 — 위 "재가입 차단 키" 줄과 같은 이름이라 이미 있으면 할 일이 없다). 처음 정한 뒤 **바꾸지 않는다**(바꾸면 탈퇴한 아이디의 해시가 맞지 않아 재사용 금지가 조용히 풀린다). 아이디를 안 켠 앱은 할 일이 없다 | **기동 실패**(보호 환경): `skeleton.account.login-id.enabled=true but skeleton.account.blocks.secret is empty … (env <P>_ACCOUNT_BLOCKS_SECRET, declared under secrets:)`. 재가입 차단 줄과 달리 경고가 아니다 — 비밀이 JWT 비밀에서 파생되면 JWT 비밀을 돌릴 때 탈퇴한 아이디가 다시 풀려 "재사용 금지"가 말뿐이 되기 때문이다 (`AccountDeployGuard`, 컨테이너로는 `scripts/test-deploy-contract.sh` D 단계가 "빼면 이름을 말하며 실패" 를 본다) |
 
-- 위 두 줄 모두 `deploy/app.yaml` 의 `secrets:` 에 이미 들어 있다 — 스켈레톤에서 새로 찍은 프로젝트는 할 일이 없고, **옛 선언을 가진 배포가 버전만 올릴 때** 빠뜨리기 쉽다. 쓰지 않는 기능의 줄은 지운다(`new-project.sh` 가 고르지 않은 모듈의 줄을 지운다).
+- 위 줄 모두 `deploy/app.yaml` 의 `secrets:` 에 이미 들어 있다 — 스켈레톤에서 새로 찍은 프로젝트는 할 일이 없고, **옛 선언을 가진 배포가 버전만 올릴 때** 빠뜨리기 쉽다. 쓰지 않는 기능의 줄은 지운다(`new-project.sh` 가 고르지 않은 모듈의 줄을 지운다).
 - 같은 이름을 `env:` 와 `secrets:` 에 동시에 쓸 수 없다. 무작위 값으로 충분한 비밀은 `secrets:` 에 이름만 적는다(§7).
 
 ## 12. 여러 인스턴스로 올릴 때

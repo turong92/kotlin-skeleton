@@ -349,4 +349,15 @@ class AccountWebTest {
         mvc.perform(get("/api/v1/admin/accounts").header("Authorization", auth)).andExpect(status().isForbidden)
         mvc.perform(get("/api/v1/admin/accounts")).andExpect(status().isUnauthorized)
     }
+
+    @Test
+    fun `a MODERATOR is not an administrator - the admin list and read are 403 for it too (so no login id through them either)`() {
+        val auth = bossAuth()
+        val email = registered()
+        val id = accounts.findByEmail(email)!!.id
+        mvc.perform(put("/api/v1/admin/accounts/$id/roles/MODERATOR").header("Authorization", auth)).andExpect(status().isNoContent)
+        val moderator = bearer(login(email))
+        mvc.perform(get("/api/v1/admin/accounts").param("loginId", "anyone").header("Authorization", moderator)).andExpect(status().isForbidden)
+        mvc.perform(get("/api/v1/admin/accounts/$id").header("Authorization", moderator)).andExpect(status().isForbidden)
+    }
 }

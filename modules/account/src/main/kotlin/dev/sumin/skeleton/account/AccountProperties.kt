@@ -28,6 +28,7 @@ data class AccountProperties(
     val social: Social = Social(),
     val seed: Seed = Seed(),
     val displayName: DisplayName = DisplayName(),
+    val loginId: LoginId = LoginId(),
     val captcha: Captcha = Captcha(),
     val audit: Audit = Audit(),
     val http: Http = Http(),
@@ -137,8 +138,18 @@ data class AccountProperties(
          * 이 설정으로 계정이 갇히지 않는다. 읽지 못한 항목은 기동 실패. 막는 범위는 `/api/` 아래 전부(핸들러 종류와 무관)로 고정이다
          */
         val extraExcludePaths: List<String> = emptyList(),
+        /**
+         * [required] 가 true 일 때 **언제 막는가.** SIGN_IN(기본, 지금 동작) = 로그인 직후부터 허용 목록 밖 모든 API. WRITE = 읽기(`GET` · `HEAD` · `OPTIONS`)는 통과, 변경 요청에서만.
+         * [required] 가 false 인데 WRITE 면 기동 실패 — 쓰기 때로 켰다고 믿는데 실제로는 꺼져 있는 사고를 막는다
+         */
+        val requiredWhen: RequiredWhen = RequiredWhen.SIGN_IN,
     ) {
+        enum class RequiredWhen { SIGN_IN, WRITE }
+
         init {
+            require(required || requiredWhen == RequiredWhen.SIGN_IN) {
+                "skeleton.account.email.required-when=$requiredWhen needs skeleton.account.email.required=true (required-when only says when a required email is asked for)"
+            }
             require(!firstRegistrationWindow.isNegative) { "skeleton.account.email.first-registration-window must not be negative" }
             extraExcludePaths.forEach(EmailRequiredRule::parse)
         }
@@ -296,6 +307,40 @@ data class AccountProperties(
         enum class Fallback { NONE, GENERATED }
     }
 
+    /** 로그인 아이디(`login-id`) — 이메일이 바뀌어도 안 바뀌는, 본인과 운영자만 보는 간판. 기본은 꺼짐: 켜지 않으면 API · 응답 · 로그인이 이 기능 이전과 같다 */
+    data class LoginId(
+        /** true 면 가입 · 로그인 · 게이트 · 찾기 · 응답의 아이디 동작이 전부 켜진다 (반쪽 스위치는 없다) */
+        val enabled: Boolean = false,
+        /** 아이디 길이. `1 ≤ min ≤ max ≤ 30`(열 길이) 아니면 기동 실패 */
+        val minLength: Int = 4,
+        val maxLength: Int = 20,
+        /** 내줄 수 없는 아이디 (기호와 대소문자를 빼고 비교). `display-name.reserved` 와 따로다. 시드 계정은 예외 */
+        val reserved: List<String> = emptyList(),
+        /** 실시간 중복 확인을 한 IP 가 창 안에 부를 수 있는 횟수 — 넘으면 `429 ACCOUNT.RATE_LIMITED`. 창 길이는 0 보다 커야 한다 */
+        val checkPerIp: Int = 30,
+        val checkPerIpWindow: Duration = Duration.ofMinutes(10),
+        /** 「아이디 정하기」를 창 안에 **시도**할 수 있는 횟수 — 형식을 통과한 시도(성공 · 실패 모두)를 센다, 형식 오류는 세지 않는다. 계정별 하나와 IP 별 하나(같은 값 · 버킷만 따로) */
+        val claimLimit: Int = 10,
+        val claimWindow: Duration = Duration.ofHours(1),
+        /** 아이디 없이도 **더** 열어 둘 경로 — `email.extra-exclude-paths` 와 같은 문법 · 같은 규칙(더하기만, 못 읽으면 기동 실패) */
+        val extraExcludePaths: List<String> = emptyList(),
+    ) {
+        init {
+            require(minLength >= 1) { "skeleton.account.login-id.min-length must be >= 1" }
+            require(maxLength <= LoginIds.COLUMN_LENGTH) { "skeleton.account.login-id.max-length must be <= ${LoginIds.COLUMN_LENGTH} (the column length)" }
+            require(minLength <= maxLength) { "skeleton.account.login-id.min-length must be <= skeleton.account.login-id.max-length" }
+            require(checkPerIp >= 1) { "skeleton.account.login-id.check-per-ip must be >= 1" }
+            require(claimLimit >= 1) { "skeleton.account.login-id.claim-limit must be >= 1" }
+            require(!checkPerIpWindow.isZero && !checkPerIpWindow.isNegative) { "skeleton.account.login-id.check-per-ip-window must be > 0" }
+            require(!claimWindow.isZero && !claimWindow.isNegative) { "skeleton.account.login-id.claim-window must be > 0" }
+            extraExcludePaths.forEach {
+                try { EmailRequiredRule.parse(it) } catch (e: IllegalArgumentException) {
+                    throw IllegalArgumentException("skeleton.account.login-id.extra-exclude-paths: cannot read \"$it\" — write `/path/pattern` or `METHOD /path/pattern`", e)
+                }
+            }
+        }
+    }
+
     data class Seed(
         /** 로컬 · e2e 용 시드 계정 — 기동 때 없으면 만든다. stage · prod 에서 하나라도 있으면 DeployGuard 문제 */
         val accounts: List<SeedAccount> = emptyList(),
@@ -309,6 +354,8 @@ data class AccountProperties(
         val roles: Set<String> = emptySet(),
         val displayName: String? = null,
         val locale: String? = null,
+        /** 로그인 아이디 — `login-id.enabled` 일 때만 쓴다. 예약어 검사 없이 기동 때 넣는다 (e2e 가 아이디 게이트에 막히지 않게) */
+        val loginId: String? = null,
     ) {
         override fun toString() = "SeedAccount(id=$id, email=<redacted>, password=<redacted>, roles=$roles)"
     }

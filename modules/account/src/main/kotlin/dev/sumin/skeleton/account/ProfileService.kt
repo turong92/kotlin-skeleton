@@ -30,11 +30,22 @@ data class MeView(
     @get:com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
     val emailRequired: Boolean? = null,
     /**
+     * "쓰기 때" 방식(`email.required-when=WRITE`)에서만 값이 있다(그 밖에는 키가 없다): 주소가 없어 허용 목록 밖의 **변경 요청**이 403 `ACCOUNT.EMAIL_REQUIRED` 인가.
+     * 이 방식에서 [emailRequired] 는 키가 있고 늘 false 다(로그인 직후에 막지 않는다) — 그 값을 읽는 쪽의 뜻이 바뀌지 않게 키를 나눴다.
+     */
+    @get:com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+    val emailRequiredToWrite: Boolean? = null,
+    /**
      * 연락받을 이메일(확인된 주소). `skeleton.account.contact-email.enabled` 가 **꺼져 있으면 키가 없다**(null) — 켜져 있는데 아직 없으면 키가 있고 값이 `null`(빈 [java.util.Optional]).
      * 프론트가 "꺼짐" 과 "아직 없음" 을 가를 수 있게.
      */
     @get:com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
     val contactEmail: java.util.Optional<String>? = null,
+    /**
+     * 로그인 아이디(`skeleton.account.login-id.enabled=true` 일 때만). **꺼져 있으면 키가 없다**(null) — 켜져 있는데 아직 안 정했으면 키가 있고 값이 `null`(빈 [java.util.Optional]): 그것이 곧 "정해야 함"(게이트)이다.
+     */
+    @get:com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+    val loginId: java.util.Optional<String>? = null,
 )
 
 data class ProfileChange(val displayName: String? = null, val locale: String? = null, val timeZone: String? = null)
@@ -47,12 +58,15 @@ class ProfileService(private val core: AccountCore, registry: SignInMethodRegist
         val a = core.accounts.findById(accountId)?.takeIf { it.status != AccountStatus.ERASED } ?: throw AccountException(AccountErrorCode.NOT_FOUND)
         val methods = identities.list(accountId)
         val pending = core.challenges.findOpen(ChallengePurposes.EMAIL_CHANGE, accountId)
+        val writeMode = core.props.email.required && core.props.email.requiredWhen == AccountProperties.Email.RequiredWhen.WRITE
         return MeView(
             a.id, a.email, a.emailVerified, a.displayName, a.visibleTag, a.locale, a.timeZone, a.roles, a.status, a.createdAt,
             hasPassword = methods.any { it.method == SignInMethods.PASSWORD }, methods = methods,
             pendingEmail = pending?.payload?.let(EmailChangePayload::target), pendingEmailExpiresAt = pending?.expiresAt,
-            emailRequired = if (core.props.email.required) a.email == null else null,
+            emailRequired = if (core.props.email.required) a.email == null && !writeMode else null,
+            emailRequiredToWrite = if (writeMode) a.email == null else null,
             contactEmail = if (core.props.contactEmail.enabled) java.util.Optional.ofNullable(a.contactEmail) else null,
+            loginId = if (core.props.loginId.enabled) java.util.Optional.ofNullable(a.loginId) else null,
         )
     }
 

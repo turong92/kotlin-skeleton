@@ -24,6 +24,8 @@ data class SignUpRequest(
     @field:Size(max = 2048) val captchaToken: String? = null,
     /** 가입자가 보고 동의한 약관 (`legal` 모듈이 있을 때만 쓰인다 — 없으면 무시) */
     @field:Size(max = 8) @field:Valid val consents: List<SignUpConsentRequest>? = null,
+    /** 로그인 아이디 — `login-id.enabled` 일 때만 읽는다. Bean Validation 을 붙이지 않는다: 규칙은 서비스의 `LoginIds` 한 곳이고 어긋나면 `errors[].field=loginId` 로 거절한다 */
+    val loginId: String? = null,
 ) {
     override fun toString() = "SignUpRequest(email=<redacted>, password=<redacted>)"
 }
@@ -53,6 +55,8 @@ data class VerifyEmailRequest(
     @field:NotBlank @field:Pattern(regexp = "^[0-9]{6}$") val code: String?,
     /** 선택 — 가입 요청의 닉네임 대신 쓸 닉네임. `409 DISPLAY_NAME_TAKEN` 으로 막힌 사람이 같은 가입 id · 코드로 다른 닉네임을 내 다시 확인한다 (시도는 닫히지 않았다) */
     @field:Size(max = DISPLAY_NAME_UNITS, message = DISPLAY_NAME_SIZE_MESSAGE) val displayName: String? = null,
+    /** 선택 — 가입 요청의 아이디 대신 쓸 아이디 (`login-id.enabled` 일 때만; 꺼짐이면 무시). `409 ACCOUNT.LOGIN_ID_TAKEN` 으로 막힌 사람이 같은 가입 id · 코드로 다시 낸다 */
+    val loginId: String? = null,
 ) {
     override fun toString() = "VerifyEmailRequest(signUpId=<redacted>, code=<redacted>)"
 }
@@ -72,6 +76,14 @@ data class EmailRequest(
     @field:NotBlank @field:Email @field:Size(max = 254) val email: String?,
     @field:Size(max = 2048) val captchaToken: String? = null,
 )
+
+/** 아이디 찾기의 요청 — 주소는 가려 둔다 (`toString` 이 로그에 남지 않게) */
+data class LoginIdForgotRequest(
+    @field:NotBlank @field:Email @field:Size(max = 254) val email: String?,
+    @field:Size(max = 2048) val captchaToken: String? = null,
+) {
+    override fun toString() = "LoginIdForgotRequest(email=<redacted>, captchaToken=<redacted>)"
+}
 
 data class ResetPasswordRequest(
     @field:NotBlank @field:Size(max = 128) val token: String?,
@@ -151,7 +163,7 @@ data class DeleteAccountRequest(
     override fun toString() = "DeleteAccountRequest(<credentials redacted>)"
 }
 
-/** 등록 미완료 계정 버리기 — 방금 로그인한 세션이면 본문이 비어도 된다. 옛 세션이면 `socialReauth`(지금 새로 받은 제공자 인가 코드) */
+/** 이메일 없는 계정 버리기 — 방금 로그인한 세션이면 본문이 비어도 된다. 옛 세션이면 `socialReauth`(지금 새로 받은 제공자 인가 코드) */
 data class DiscardAccountRequest(
     @field:Valid val socialReauth: SocialReauthRequest? = null,
 ) {
@@ -205,4 +217,23 @@ data class AdminAccountResponse(
     val purgeAfter: Instant?,
     /** 개인정보를 지운 시각 (status=ERASED) */
     val erasedAt: Instant? = null,
+    /** 로그인 아이디(`skeleton.account.login-id.enabled=true` 일 때만). 꺼져 있으면 키가 없다(null) — 켜져 있는데 아직 안 정한 계정은 키가 있고 값이 `null`(빈 [java.util.Optional]). `MeView` 와 같은 방식 */
+    @get:com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+    val loginId: java.util.Optional<String>? = null,
 )
+
+/** 실시간 아이디 확인의 요청 — 후보 아이디는 주소 줄 · 로그에 남지 않게 POST 로 받고 `toString` 도 가린다. 형식은 서비스(`LoginIds`)가 본다 */
+data class LoginIdAvailabilityRequest(val loginId: String? = null) {
+    override fun toString() = "LoginIdAvailabilityRequest(loginId=<redacted>)"
+}
+
+/** `reason` · `code` 는 해당할 때만 실린다 (null 이면 키가 없다 — `LoginIdWebTest` M4 가 실제 JSON 의 키 집합으로 지킨다). 후보 아이디(`normalized`)는 `toString` 에 나오지 않는다 */
+@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+data class LoginIdAvailabilityResponse(val normalized: String, val available: Boolean, val reason: String? = null, val code: String? = null) {
+    override fun toString() = "LoginIdAvailabilityResponse(normalized=<redacted>, available=$available, reason=$reason, code=$code)"
+}
+
+/** 「아이디 정하기」 요청 — 아이디는 `toString` 에 나오지 않는다. 형식은 서비스(`LoginIds`)가 본다 (`errors[].field=loginId`) */
+data class LoginIdRequest(val loginId: String? = null) {
+    override fun toString() = "LoginIdRequest(loginId=<redacted>)"
+}

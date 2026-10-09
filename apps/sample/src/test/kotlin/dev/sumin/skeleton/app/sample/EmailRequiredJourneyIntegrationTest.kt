@@ -31,10 +31,12 @@ import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.post
 
 /**
+ * "로그인 직후" 방식(`skeleton.account.email.required-when=SIGN_IN` — 이 앱의 yml 은 WRITE 라 설정 한 줄로 되돌린다; 기능은 그대로이고 방식만 다르다. "쓰기 때" 길은 EmailOnWriteJourneyIntegrationTest).
+ * 이 앱은 로그인 아이디도 켠 채라 아이디 게이트가 이메일 게이트 앞에 선다 — 만들어 둔 계정은 아이디만 먼저 정해(준비 단계) 이메일 게이트를 만난다.
  * 샘플 앱(`skeleton.account.email.required: true`)에서 이메일 없이 만들어진 계정(Kakao · Naver · X · LINE …)의 길 — 진짜 PostgreSQL · 보안 체인 · 모든 모듈:
  * 노트 · 게시판 · 작성자 프로필이 403 ACCOUNT.EMAIL_REQUIRED, 허용 목록은 열림, 재인증 없이 첫 주소 등록, 그 뒤 약관 재동의(순서: 주소가 먼저), 이미 쓰인 주소의 무노출.
  */
-@SpringBootTest(properties = ["spring.config.import=classpath:test-seeds.yml", "skeleton.account.mail.link-base-url=https://app.example.com", "skeleton.legal.reconsent.enabled=true"])
+@SpringBootTest(properties = ["spring.config.import=classpath:test-seeds.yml", "skeleton.account.mail.link-base-url=https://app.example.com", "skeleton.legal.reconsent.enabled=true", "skeleton.account.email.required-when=SIGN_IN"])
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration::class, EmailRequiredJourneyIntegrationTest.Beans::class)
 class EmailRequiredJourneyIntegrationTest {
@@ -57,12 +59,16 @@ class EmailRequiredJourneyIntegrationTest {
         val id = "acc_" + UUID.randomUUID().toString().replace("-", "").take(16)
         val now = Instant.now()
         check(accounts.insert(Account(id, null, false, AccountStatus.ACTIVE, setOf("USER"), "Kakao ${id.takeLast(4)}", null, null, now, now, lastLoginAt = now), listOf(Identity("idn_${id.takeLast(12)}", id, "kakao", "kakao-$id", true, createdAt = now))))
-        return tokens.issue(authAccounts.findBy(AccountIdentifier(accountId = id))!!).accessToken
+        val bearer = tokens.issue(authAccounts.findBy(AccountIdentifier(accountId = id))!!).accessToken
+        // 준비 단계: 아이디 게이트(-110)가 이메일 게이트(-100) 앞이다 — 아이디를 먼저 정해야 이 시험의 주제(이메일 게이트)가 보인다. 이메일 없이도 정할 수 있다
+        post("/api/v1/account/login-id", """{"loginId":"kakao.${id.takeLast(10)}"}""", bearer).andExpect { status { isOk() } }
+        return bearer
     }
 
     private fun get(path: String, bearer: String) = mvc.get(path) { header("Authorization", "Bearer $bearer") }
 
     private fun post(path: String, body: String, bearer: String, idempotent: Boolean = false) = mvc.post(path) {
+        if (path == "/api/v1/account/login-id") with { it.remoteAddr = TestClientIps.fresh(); it }   // 정하기는 IP 별로도 센다 — 시험마다 새 주소
         contentType = MediaType.APPLICATION_JSON; content = body; header("Authorization", "Bearer $bearer")
         if (idempotent) header("Idempotency-Key", UUID.randomUUID().toString())
     }

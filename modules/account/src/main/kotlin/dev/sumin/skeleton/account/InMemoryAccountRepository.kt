@@ -10,14 +10,18 @@ class InMemoryAccountRepository : AccountRepository {
     private val accounts = LinkedHashMap<String, Account>()
     private val identities = LinkedHashMap<String, Identity>()
     private val claimed = HashSet<String>()   // 지우기를 선점한 계정 ([claimErasure])
+    private val usedLoginIds = HashSet<String>()   // 한 번이라도 쓰인 아이디의 해시 — 계정이 사라져도 남는다
 
-    @Synchronized override fun insert(account: Account, identities: List<Identity>): Boolean {
+    @Synchronized override fun insert(account: Account, identities: List<Identity>, loginIdHash: String?): Boolean {
         if (account.id in accounts) return false
         if (account.email != null && accounts.values.any { it.email == account.email }) return false
+        if (account.loginId != null && accounts.values.any { it.loginId == account.loginId }) return false
+        if (loginIdHash != null && loginIdHash in usedLoginIds) return false
         if (identities.any { n -> this.identities.values.any { it.method == n.method && it.subject == n.subject } }) return false
         if (nameClash(account.id, account.displayNameKey, account.displayTag)) return false
         accounts[account.id] = account
         identities.forEach { this.identities[it.id] = it }
+        loginIdHash?.let { usedLoginIds += it }
         return true
     }
 
@@ -27,6 +31,20 @@ class InMemoryAccountRepository : AccountRepository {
 
     @Synchronized override fun findByIdentity(method: String, subject: String): Account? =
         identities.values.firstOrNull { it.method == method && it.subject == subject }?.let { accounts[it.accountId] }
+
+    @Synchronized override fun findByLoginId(loginId: String): Account? = accounts.values.firstOrNull { it.loginId == loginId }
+
+    @Synchronized override fun loginIdUsed(hash: String): Boolean = hash in usedLoginIds
+
+    @Synchronized override fun claimLoginId(id: String, loginId: String, hash: String, now: Instant): ClaimLoginIdResult {
+        val a = accounts[id]?.takeIf { it.status != AccountStatus.ERASED } ?: return ClaimLoginIdResult.NOT_FOUND
+        if (a.status != AccountStatus.ACTIVE) return ClaimLoginIdResult.NOT_ACTIVE
+        if (a.loginId != null) return ClaimLoginIdResult.ALREADY_SET
+        if (hash in usedLoginIds || accounts.values.any { it.loginId == loginId }) return ClaimLoginIdResult.TAKEN
+        usedLoginIds += hash
+        accounts[id] = a.copy(loginId = loginId, updatedAt = now)
+        return ClaimLoginIdResult.CLAIMED
+    }
 
     @Synchronized override fun update(id: String, patch: AccountPatch, now: Instant): Account? {
         val a = accounts[id]?.takeIf { it.status != AccountStatus.ERASED } ?: return null   // 지운 행에는 아무것도 다시 쓰지 않는다
@@ -120,8 +138,8 @@ class InMemoryAccountRepository : AccountRepository {
     @Synchronized override fun countActiveWithRole(role: String): Long =
         accounts.values.count { it.status == AccountStatus.ACTIVE && role in it.roles }.toLong()
 
-    @Synchronized override fun search(email: String?, status: AccountStatus?, page: Int, size: Int): AccountPage {
-        val all = accounts.values.filter { (email == null || it.email?.contains(email.lowercase()) == true) && (if (status == null) it.status != AccountStatus.ERASED else it.status == status) }
+    @Synchronized override fun search(email: String?, status: AccountStatus?, page: Int, size: Int, loginId: String?): AccountPage {
+        val all = accounts.values.filter { (email == null || it.email?.contains(email.lowercase()) == true) && (loginId == null || it.loginId == loginId) && (if (status == null) it.status != AccountStatus.ERASED else it.status == status) }
             .sortedWith(compareByDescending<Account> { it.createdAt }.thenBy { it.id })
         return AccountPage(all.drop(page * size).take(size), all.size.toLong())
     }
@@ -147,7 +165,7 @@ class InMemoryAccountRepository : AccountRepository {
         claimed.remove(id)
         accounts[id] = a.copy(
             email = null, emailVerified = false, status = AccountStatus.ERASED, roles = emptySet(), displayName = null, displayNameKey = null, displayTag = null, locale = null, timeZone = null,
-            lastLoginAt = null, suspendedReason = null, purgeAfter = null, erasedAt = now, updatedAt = now, contactEmail = null,
+            lastLoginAt = null, suspendedReason = null, purgeAfter = null, erasedAt = now, updatedAt = now, contactEmail = null, loginId = null,
         )
         return true
     }

@@ -8,8 +8,15 @@ import dev.sumin.skeleton.common.PlatformErrorCode
 class AdminService(private val core: AccountCore) {
     private val adminRole get() = core.props.admin.role
 
-    fun search(email: String?, status: AccountStatus?, page: Int, size: Int): AccountPage =
-        core.accounts.search(email?.let(Emails::normalize)?.takeIf { it.isNotEmpty() }, status, page.coerceAtLeast(0), size.coerceIn(1, 100))
+    /** 응답에 `loginId` 키를 싣는가 — `skeleton.account.login-id.enabled` */
+    val loginIdEnabled get() = core.props.loginId.enabled
+
+    /** [loginId] 는 정확히 일치만(조각 검색 없음) — [LoginIds.normalize] 한 뒤 비교한다. 아이디 기능이 꺼진 앱에서는 읽지 않는다. 검색한 값은 어디에도 남기지 않는다(이벤트 · 로그 없음) */
+    fun search(email: String?, status: AccountStatus?, page: Int, size: Int, loginId: String? = null): AccountPage =
+        core.accounts.search(
+            email?.let(Emails::normalize)?.takeIf { it.isNotEmpty() }, status, page.coerceAtLeast(0), size.coerceIn(1, 100),
+            loginId?.takeIf { loginIdEnabled }?.let(LoginIds::normalize)?.takeIf { it.isNotEmpty() },
+        )
 
     fun get(id: String): Account = core.accounts.findById(id) ?: throw AccountException(AccountErrorCode.NOT_FOUND)
 

@@ -50,7 +50,8 @@ class MailPathLogLeakTest {
     // ---- the code and the link never reach a log line through the REAL mailer path, for every mail kind that carries one
 
     private val code = "739518"
-    private val secrets = listOf(code, token, "reset-password", "magic-link")
+    private val loginId = "leak.me.id"
+    private val secrets = listOf(code, token, "reset-password", "magic-link", loginId)
     private val carriers = mapOf(
         MailKind.VERIFY_CODE to AccountMail(MailKind.VERIFY_CODE, "victim.person@example.com", "ko", vars = mapOf("code" to code, "minutes" to "10")),
         MailKind.EMAIL_CHANGE_CODE to AccountMail(MailKind.EMAIL_CHANGE_CODE, "victim.person@example.com", "en", vars = mapOf("code" to code, "minutes" to "30")),
@@ -58,6 +59,8 @@ class MailPathLogLeakTest {
         MailKind.REAUTH_CODE to AccountMail(MailKind.REAUTH_CODE, "victim.person@example.com", "ko", vars = mapOf("code" to code, "minutes" to "30")),
         MailKind.DELETE_CODE to AccountMail(MailKind.DELETE_CODE, "victim.person@example.com", "en", vars = mapOf("code" to code, "minutes" to "30")),
         MailKind.PASSWORD_RESET to AccountMail(MailKind.PASSWORD_RESET, "victim.person@example.com", "ko", link, mapOf("minutes" to "30")),
+        // 아이디는 비밀이 아니라 비공개다 — 메일 본문에만 있고 로그 줄에는 없다. 링크는 토큰 없는 로그인 페이지
+        MailKind.LOGIN_ID_REMINDER to AccountMail(MailKind.LOGIN_ID_REMINDER, "victim.person@example.com", "ko", "https://app.example.com/login", mapOf("loginId" to loginId)),
         MailKind.MAGIC_LINK to AccountMail(MailKind.MAGIC_LINK, "victim.person@example.com", "en", "https://app.example.com/magic-link?token=$token", mapOf("minutes" to "15")),
     )
 
@@ -100,8 +103,8 @@ class MailPathLogLeakTest {
     fun `no template, ko or en, puts a code or a link in the SUBJECT`() {
         val templates = DefaultAccountMailTemplates(AccountProperties.Mail())
         for (kind in MailKind.entries) for (lang in listOf("ko", "en")) {
-            val subject = templates.render(kind, lang, mapOf("code" to code, "minutes" to "10", "days" to "30", "method" to "google"), link).subject
-            assertTrue(code !in subject && token !in subject && "https://" !in subject, "$kind/$lang subject carries a secret: $subject")
+            val subject = templates.render(kind, lang, mapOf("code" to code, "minutes" to "10", "days" to "30", "method" to "google", "loginId" to loginId), link).subject
+            assertTrue(code !in subject && token !in subject && loginId !in subject && "https://" !in subject, "$kind/$lang subject carries a secret: $subject")
         }
     }
 

@@ -43,6 +43,10 @@ class AccountDeployGuard(
         if (props.mail.logLinks == AccountProperties.Mail.LogLinks.ON) add("skeleton.account.mail.log-links=ON writes one-time link tokens to the log: remove it outside local")
         if (props.seed.accounts.isNotEmpty()) add("skeleton.account.seed.accounts defines seed accounts (known passwords): remove them outside local")
         if (props.captcha.required && !s.captchaAvailable) add("skeleton.account.captcha.required=true but no captcha verifier exists: add modules:captcha-turnstile and enable it, or set it to false")
+        // 쓰인 아이디의 해시 열쇠 — 비면 JWT 비밀에서 파생돼, JWT 비밀을 돌릴 때 탈퇴한 아이디의 해시가 맞지 않아 재사용 금지가 조용히 풀린다
+        if (props.loginId.enabled && props.blocks.secret.isBlank()) {
+            add("skeleton.account.login-id.enabled=true but skeleton.account.blocks.secret is empty: the hash that keeps a retired login id from being taken again is then keyed from the JWT secret, so rotating the JWT secret silently frees every retired id - set it (env <P>_ACCOUNT_BLOCKS_SECRET, declared under secrets:)")
+        }
         if (props.bootstrap.adminEmail.isNotBlank() && !Emails.plausible(Emails.normalize(props.bootstrap.adminEmail))) add("skeleton.account.bootstrap.admin-email is not an email address")
     }
 

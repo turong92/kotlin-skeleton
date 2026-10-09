@@ -15,6 +15,7 @@ import dev.sumin.skeleton.account.password.PasswordHasher
 import dev.sumin.skeleton.account.password.PasswordPolicy
 import dev.sumin.skeleton.account.token.OneTimeTokens
 import dev.sumin.skeleton.auth.session.SessionRevoker
+import dev.sumin.skeleton.common.FieldValidationException
 import dev.sumin.skeleton.common.time.TimeProvider
 import java.security.SecureRandom
 import java.text.Normalizer
@@ -71,7 +72,7 @@ class AccountCore(
     }
 
     /**
-     * "방금 로그인한 세션" 의 재인증 면제 — 첫 이메일 등록 · 등록 미완료 계정 버리기가 쓴다. 전부여야 한다: `email.required=true` · 창이 0 이 아님 · 계정에 주소가 없음(= 한 번도 없었다:
+     * "방금 로그인한 세션" 의 재인증 면제 — 첫 이메일 등록 · 이메일 없는 계정 버리기가 쓴다. 전부여야 한다: `email.required=true` · 창이 0 이 아님 · 계정에 주소가 없음(= 한 번도 없었다:
      * 주소는 비워지지 않고, 지워진 계정만 null 이 된다) · 활성 상태 · **이 요청의 세션**이 창 안에 **로그인으로 열렸다**. 면제는 계정이 아니라 세션에 붙는다:
      * 옛 세션(공용 PC · 유출된 리프레시 토큰)은 주인이 다른 기기에서 막 로그인해도 창이 열리지 않고, 토큰 갱신은 세션의 열린 시각을 옮기지 않는다.
      * 세션을 읽을 수 없으면(세션 저장소 없음 · JWT 만 · 닫힌 세션) 면제는 없다 — 제공자 재동의로 안전하게 떨어진다.
@@ -89,6 +90,15 @@ class AccountCore(
      * [email] 은 이미 [Emails.normalize] 를 거친 값이어야 한다.
      */
     fun accountByEmail(email: String): Account? = accounts.findByEmail(email)?.takeIf { it.email == email }
+
+    /**
+     * 로그인 칸의 `username` 이 **아이디로 읽히는 값**이면 그 정규화한 아이디, 아니면 null — 켜져 있고 `@` 가 없을 때만이다 (꺼짐이면 지금처럼 이메일).
+     * 저장소는 대소문자를 합치지 않으므로 [LoginIds.normalize] 를 먼저 거친다.
+     */
+    fun loginIdOf(username: String): String? = if (props.loginId.enabled && !LoginIds.looksLikeEmail(username)) LoginIds.normalize(username) else null
+
+    /** [normalized] 아이디의 계정. 저장된 아이디가 글자 그대로 같을 때만 돌려준다 ([accountByEmail] 과 같은 마지막 방어선) */
+    fun accountByLoginId(normalized: String): Account? = accounts.findByLoginId(normalized)?.takeIf { it.loginId == normalized }
 
     /**
      * 비밀번호가 바뀌었거나 메일함이 증명된 계정의 **그 전에 나간 민감한 코드 · 링크**를 모두 닫는다 — 이메일 변경 · 삭제 확인 · 다시 인증 코드, 같은 주소의 가입 시도, 매직 링크.
@@ -177,7 +187,8 @@ class AccountCore(
         return attempt(tag)
     }
 
-    enum class NamedInsert { INSERTED, REFUSED, NAME_TAKEN }
+    /** [LOGIN_ID_TAKEN]: 계정에 실린 로그인 아이디(또는 그 해시)가 그 사이 쓰였다 — 이메일 · 수단 · 닉네임보다 먼저 가린다 (§5.5) */
+    enum class NamedInsert { INSERTED, REFUSED, NAME_TAKEN, LOGIN_ID_TAKEN }
 
     data class NamedInsertResult(val outcome: NamedInsert, val account: Account)
 
@@ -195,24 +206,70 @@ class AccountCore(
             val chosen = name ?: if (generate && generatedTries < GENERATED_TRIES) names.generated() else null
             if (chosen == null) {
                 val plain = base.copy(displayName = null, displayNameKey = null, displayTag = null)
-                return NamedInsertResult(if (write(plain)) NamedInsert.INSERTED else NamedInsert.REFUSED, plain)
+                return NamedInsertResult(if (write(plain)) NamedInsert.INSERTED else if (loginIdClash(base)) NamedInsert.LOGIN_ID_TAKEN else NamedInsert.REFUSED, plain)
             }
             val key = names.key(chosen)
             var stored: Account? = null
+            var idTaken = false
             val slot = placeName(key) { tag ->
                 val candidate = base.copy(displayName = chosen, displayNameKey = key, displayTag = tag)
                 when {
                     write(candidate) -> { stored = candidate; Slot.STORED }
+                    loginIdClash(base) -> { idTaken = true; Slot.REFUSED }
                     names.uniqueness == AccountProperties.DisplayName.Uniqueness.NONE || refusedForOtherReason(base, identities) -> Slot.REFUSED
                     else -> Slot.CLASH
                 }
             }
             when (slot) {
                 Slot.STORED -> return NamedInsertResult(NamedInsert.INSERTED, stored!!)
-                Slot.REFUSED -> return NamedInsertResult(NamedInsert.REFUSED, base)
+                Slot.REFUSED -> return NamedInsertResult(if (idTaken) NamedInsert.LOGIN_ID_TAKEN else NamedInsert.REFUSED, base)
                 Slot.CLASH -> if (name != null) { if (strict) return NamedInsertResult(NamedInsert.NAME_TAKEN, base); name = null } else generatedTries++
             }
         }
+    }
+
+    /** 저장이 거절된 뒤, 거절한 것이 [base] 의 로그인 아이디(살아 있는 줄 또는 쓰인 해시)인가 — 이메일 · 수단 · 닉네임보다 먼저 본다 */
+    private fun loginIdClash(base: Account): Boolean =
+        base.loginId?.let { accounts.findByLoginId(it) != null || accounts.loginIdUsed(blocks.loginIdHash(it)) } ?: false
+
+    /** 계정에 아이디가 실리면 그 해시 — 저장소에 같은 트랜잭션으로 넘긴다 */
+    fun loginIdHashOf(loginId: String?): String? = loginId?.let(blocks::loginIdHash)
+
+    /**
+     * 요청이 낸 아이디를 규칙에 맞춰 받는다 — 정규화한 값. 어긋나면 `400` 필드 오류 `loginId`(`Required` · `Size` · `Pattern`).
+     * **저장소를 읽지 않는다** (형식은 요청 본문만 본다 — 가입에서는 한도 앞, 이메일이 있든 없든 같은 시점 · 같은 응답).
+     */
+    fun acceptLoginId(raw: String?): String {
+        val cfg = props.loginId
+        val normalized = LoginIds.normalize(raw.orEmpty())
+        LoginIds.problemOf(normalized, cfg.minLength, cfg.maxLength)?.let {
+            throw FieldValidationException(
+                "loginId", it.code,
+                when (it) {
+                    LoginIdProblem.REQUIRED -> "Login ID is required"
+                    LoginIdProblem.SIZE -> "Login ID must be ${cfg.minLength} to ${cfg.maxLength} characters"
+                    LoginIdProblem.PATTERN -> "Login ID has characters or a shape that is not allowed"
+                },
+            )
+        }
+        return normalized
+    }
+
+    /**
+     * **아이디를 쓸 수 있나** — 가입(`RegistrationService.signUp`)과 실시간 확인이 같이 쓰는 한 곳. [normalized] 는 [acceptLoginId] 를 거친 값이다.
+     * 못 쓰는 이유 셋(예약어 · 살아 있는 계정 · 한 번이라도 쓰인 해시 = 탈퇴한 계정)을 **가르지 않는다**. 아이디 하나만 본다 — 이메일과 무관하다.
+     */
+    fun loginIdAvailable(normalized: String): Boolean {
+        // 셋을 **항상 다 본다** — 단락 평가를 하면 예약어는 저장소 0번, 살아 있는 아이디는 1번, 탈퇴한 · 빈 아이디는 2번 + HMAC 이라 응답 시간이 이유를 알린다
+        val reserved = LoginIds.isReserved(normalized, props.loginId.reserved)
+        val live = accounts.findByLoginId(normalized) != null
+        val used = accounts.loginIdUsed(blocks.loginIdHash(normalized))
+        return !reserved && !live && !used
+    }
+
+    /** [loginIdAvailable] 이 아니면 `409 ACCOUNT.LOGIN_ID_TAKEN` */
+    fun requireLoginIdAvailable(normalized: String) {
+        if (!loginIdAvailable(normalized)) throw AccountException(AccountErrorCode.LOGIN_ID_TAKEN)
     }
 
     private fun refusedForOtherReason(base: Account, identities: List<Identity>): Boolean =

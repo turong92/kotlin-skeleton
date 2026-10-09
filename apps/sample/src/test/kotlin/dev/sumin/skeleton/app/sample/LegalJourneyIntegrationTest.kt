@@ -60,16 +60,17 @@ class LegalJourneyIntegrationTest {
     @Test
     fun `sign up with consents, a new version takes effect, re-consent, then withdraw and agree to marketing`() {
         val email = "legal-${System.nanoTime()}@example.com"
+        val loginId = "legal.${System.nanoTime() % 1_000_000_000}"   // 이 앱은 로그인 아이디를 켠 채다 — 가입에는 아이디가 있고, 아이디 게이트를 지나야 약관 화면(재동의)이 보인다
 
         // 1. 동의 없이는 가입이 거절된다 — 메일은 나가지 않는다
-        post("/api/v1/account/sign-up", """{"email":"$email","password":"tangerine-42-moon","displayName":"Legal","consents":[{"type":"terms","version":"v1"}]}""")
+        post("/api/v1/account/sign-up", """{"email":"$email","password":"tangerine-42-moon","displayName":"Legal","loginId":"$loginId","consents":[{"type":"terms","version":"v1"}]}""")
             .andExpect { status { isBadRequest() }; jsonPath("$.code") { value("LEGAL.CONSENT_REQUIRED") }; jsonPath("$.data.missing[0].type") { value("privacy") } }
         assertEquals(0, fakes.sent.size)
 
         // 2. 동의를 달아 가입 → 코드를 입력해야 계정 · 동의 기록이 생긴다
         val signUp = post(
             "/api/v1/account/sign-up",
-            """{"email":"$email","password":"tangerine-42-moon","displayName":"Legal","consents":[{"type":"terms","version":"v1","locale":"ko"},{"type":"privacy","version":"v1"},{"type":"marketing","version":"v1"}]}""",
+            """{"email":"$email","password":"tangerine-42-moon","displayName":"Legal","loginId":"$loginId","consents":[{"type":"terms","version":"v1","locale":"ko"},{"type":"privacy","version":"v1"},{"type":"marketing","version":"v1"}]}""",
         ).andExpect { status { isAccepted() } }.andReturn().response.contentAsString
         assertEquals(0, jdbc.sql("select count(*) from legal_consents").query(Int::class.java).single())
         val code = fakes.sent.last { it.kind.name == "VERIFY_CODE" && it.to == email }.vars.getValue("code")

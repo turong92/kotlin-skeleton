@@ -52,7 +52,7 @@ class SignUpConsentTest {
     /** 저장소 쓰기 순서를 trace 에 남긴다 — 하나의 메모리 저장소를 감싼다 */
     private val real = InMemoryAccountRepository()
     private val storage = object : AccountRepository by real {
-        override fun insert(account: Account, identities: List<Identity>): Boolean { trace += "insert"; return real.insert(account, identities) }
+        override fun insert(account: Account, identities: List<Identity>, loginIdHash: String?): Boolean { trace += "insert"; return real.insert(account, identities, loginIdHash) }
         override fun proveMailbox(id: String, now: java.time.Instant, proof: MailboxProof): Boolean { trace += "prove"; return real.proveMailbox(id, now, proof) }
     }
 

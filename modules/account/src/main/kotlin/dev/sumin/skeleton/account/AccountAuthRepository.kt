@@ -8,7 +8,7 @@ import dev.sumin.skeleton.auth.account.LoginBlock
 
 /**
  * 진짜 계정 저장소를 `auth` 의 [AuthAccountRepository] 포트로 보인다 — `auth` 는 이 모듈이 있다는 것을 모른 채 실제 계정으로 로그인한다.
- * `username` 은 이메일이다 (이 모듈이 만든 계정에는 따로 사용자 이름이 없다). 삭제된 계정은 없는 것처럼 null.
+ * `username` 은 이메일이다 (이 모듈이 만든 계정에는 따로 사용자 이름이 없다). 단 `login-id.enabled` 이고 `@` 가 없으면 로그인 아이디로 읽는다 (토큰의 `username` 은 그대로 이메일이다). 삭제된 계정은 없는 것처럼 null.
  */
 class AccountAuthRepository(private val core: AccountCore) : AuthAccountRepository {
     override fun findBy(identifier: AccountIdentifier): AuthAccount? {
@@ -18,11 +18,15 @@ class AccountAuthRepository(private val core: AccountCore) : AuthAccountReposito
         val account = when {
             id != null -> core.accounts.findById(id)
             email != null -> core.accountByEmail(Emails.normalize(email))
-            username != null -> core.accountByEmail(Emails.normalize(username))
+            username != null -> core.loginIdOf(username)?.let(core::accountByLoginId) ?: byEmailUnlessLoginId(username)
             else -> null
         } ?: return null
         return toAuth(account)
     }
+
+    /** `username` 이 아이디로 읽히면 이메일 길로 넘어가지 않는다 — 아이디를 이메일로도 찾아 보는 두 번째 질문이 생기지 않게 */
+    private fun byEmailUnlessLoginId(username: String): Account? =
+        if (core.loginIdOf(username) != null) null else core.accountByEmail(Emails.normalize(username))
 
     /** [via]: 로그인에 성공한 수단 코드 — 탈퇴 취소 토큰에 실려 취소 뒤 로그인 기록이 실제 수단을 적게 한다 (모르면 비밀번호 로그인 길이다) */
     fun toAuth(account: Account, via: String = SignInMethods.PASSWORD): AuthAccount? {
