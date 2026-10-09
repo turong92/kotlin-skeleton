@@ -219,6 +219,7 @@ class ExternalHttpClientTest {
 
             val messages = captured.events.map { it.formattedMessage }
             assertTrue(messages.any { it.startsWith("External HTTP GET test /methods/get") })
+            assertEquals(1, messages.count { it.startsWith("External HTTP GET test /methods/get") }, "one call, one completion line")
         }
     }
 

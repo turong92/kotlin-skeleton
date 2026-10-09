@@ -192,7 +192,7 @@ class DefaultExternalHttpClient(
             }
             .timeout(timeout)
             .doOnEach {
-                if (it.isOnComplete || it.hasValue() || it.hasError()) {
+                if (it.isOnComplete || it.hasError()) { // 값 신호(onNext)에는 쓰지 않는다 — 성공한 호출은 값 다음에 완료가 또 와서 두 줄이 된다
                     filters.logCompletion(clientName, method, path, startedAt, requestSpec)
                 }
             }
