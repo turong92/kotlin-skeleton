@@ -10,6 +10,7 @@ dependencies {
     compileOnly("org.springframework.security:spring-security-core")
 
     implementation(project(":modules:platform"))
+    implementation(project(":modules:crypto"))   // 구독의 빌링키를 암호화해 저장한다(TextEncryptor — 구독을 켠 앱이 암호 키를 낸다)
 
     implementation("org.springframework.boot:spring-boot-starter")
     implementation("org.springframework.boot:spring-boot-starter-webmvc")   // 웹훅 수신 경로(컨트롤러) — 서블릿 웹 앱일 때만 등록한다 (board 와 같은 방식)
@@ -19,6 +20,7 @@ dependencies {
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("tools.jackson.module:jackson-module-kotlin")
 
+    testFixturesApi(project(":modules:crypto"))   // 구독의 빌링키를 암호화하는 TextEncryptor — 시험 조립(PaymentLedgerKit)이 대역을 낸다
     testFixturesImplementation(project(":modules:platform"))   // TimeProvider · ExternalHttp 예외 — 대역이 쓴다
     testFixturesImplementation("org.jetbrains.kotlin:kotlin-reflect")
     testFixturesApi("org.jetbrains.kotlin:kotlin-test-junit5")   // PaymentLedgerStoreContract(저장소가 지킬 약속의 시험)를 다른 모듈이 상속한다

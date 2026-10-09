@@ -114,6 +114,26 @@ enum class PaymentErrorCode(
         status = HttpStatus.NOT_FOUND,
         title = "The payment provider does not know this payment",
     ),
+    SUBSCRIPTION_NOT_FOUND(
+        code = "PAYMENT.SUBSCRIPTION_NOT_FOUND",
+        status = HttpStatus.NOT_FOUND,
+        title = "Subscription not found",
+    ),
+    ALREADY_SUBSCRIBED(
+        code = "PAYMENT.ALREADY_SUBSCRIBED",
+        status = HttpStatus.CONFLICT,
+        title = "Already subscribed",
+    ),
+    SUBSCRIPTION_NOT_ACTIVATABLE(
+        code = "PAYMENT.SUBSCRIPTION_NOT_ACTIVATABLE",
+        status = HttpStatus.CONFLICT,
+        title = "Subscription cannot be started",
+    ),
+    SUBSCRIPTION_NOT_CANCELABLE(
+        code = "PAYMENT.SUBSCRIPTION_NOT_CANCELABLE",
+        status = HttpStatus.CONFLICT,
+        title = "Subscription cannot be canceled",
+    ),
     UNAVAILABLE(
         code = "PAYMENT.UNAVAILABLE",
         status = HttpStatus.SERVICE_UNAVAILABLE,

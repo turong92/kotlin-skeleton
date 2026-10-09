@@ -12,6 +12,7 @@ import dev.sumin.skeleton.payment.PaymentProperties
 import dev.sumin.skeleton.payment.PaymentProviderRouter
 import dev.sumin.skeleton.payment.PaymentQueries
 import dev.sumin.skeleton.payment.PaymentRefunds
+import dev.sumin.skeleton.payment.PaymentSubscriptions
 import dev.sumin.skeleton.payment.PaymentWebhookInbox
 import dev.sumin.skeleton.payment.PaymentLedgerStore
 import dev.sumin.skeleton.payment.PaymentLedgerWriter
@@ -68,6 +69,18 @@ class PaymentHttpAutoConfiguration {
         limiter: PaymentOrderRateLimiter,
         clientIps: ObjectProvider<ClientIps>,
     ): PaymentOrderController = PaymentOrderController(orders, callers, limiter, clientIps.getIfAvailable { ClientIps() })
+
+    /** 구독 경로 — 구독을 켠 앱([PaymentSubscriptions] 빈)에서만. 만들기는 주문 만들기와 같은 요청 수 한도를 쓴다. */
+    @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnBean(PaymentSubscriptions::class)
+    @ConditionalOnProperty(prefix = "skeleton.payment.http", name = ["enabled"], havingValue = "true", matchIfMissing = true)
+    fun paymentSubscriptionController(
+        subscriptions: PaymentSubscriptions,
+        callers: PaymentCallers,
+        limiter: PaymentOrderRateLimiter,
+        clientIps: ObjectProvider<ClientIps>,
+    ): PaymentSubscriptionController = PaymentSubscriptionController(subscriptions, callers, limiter, clientIps.getIfAvailable { ClientIps() })
 
     @Bean
     @ConditionalOnMissingBean

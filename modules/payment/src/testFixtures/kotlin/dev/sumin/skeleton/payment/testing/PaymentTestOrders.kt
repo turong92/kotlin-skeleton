@@ -11,12 +11,53 @@ import dev.sumin.skeleton.payment.PaymentRefundOrigin
 import dev.sumin.skeleton.payment.PaymentRefundStatus
 import dev.sumin.skeleton.payment.PaymentRefundTransitions
 import dev.sumin.skeleton.payment.PaymentWebhookEvent
+import dev.sumin.skeleton.payment.PaymentSubscription
 import dev.sumin.skeleton.payment.PaymentWebhookStatus
+import dev.sumin.skeleton.payment.SubscriptionStatus
 import java.time.Instant
 
 /** 시험용 주문 줄 만들기 — 이름 붙은 인자로 필요한 칸만 바꾼다. */
 object PaymentTestOrders {
     val T0: Instant = Instant.parse("2026-10-08T00:00:00Z")
+
+    /** 시험용 구독 줄 — 시작하기 전(`PENDING`, 자리 없음)이 기본이다. */
+    fun subscription(
+        id: String = "sub_" + "a".repeat(32),
+        accountId: String = "acc_1",
+        status: SubscriptionStatus = SubscriptionStatus.PENDING,
+        activeKey: String? = null,
+        chargeOrderId: String? = null,
+        customerKey: String? = "cus_" + id.takeLast(32),
+        billingToken: String? = null,
+        now: Instant = T0,
+    ): PaymentSubscription = PaymentSubscription(
+        id = id,
+        accountId = accountId,
+        provider = "scripted",
+        providerMode = PaymentMode.TEST,
+        status = status,
+        planCode = "basic",
+        amount = PaymentAmount(3900, "KRW"),
+        period = "P1M",
+        anchorAt = null,
+        periodSeq = 0,
+        currentPeriodStart = null,
+        currentPeriodEnd = null,
+        chargeOrderId = chargeOrderId,
+        attempt = 1,
+        customerKey = customerKey,
+        billingToken = billingToken,
+        cardIssuer = null,
+        cardLast4 = null,
+        activeKey = activeKey,
+        pendingPlanCode = null,
+        pendingAmount = null,
+        endReason = null,
+        endedAt = null,
+        accountErasedAt = null,
+        createdAt = now,
+        updatedAt = now,
+    )
 
     fun order(
         id: String = "ord_" + "a".repeat(32),

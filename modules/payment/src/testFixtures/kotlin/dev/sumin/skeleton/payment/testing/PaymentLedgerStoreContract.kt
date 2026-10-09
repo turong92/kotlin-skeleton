@@ -19,6 +19,8 @@ import dev.sumin.skeleton.payment.PaymentRefund
 import dev.sumin.skeleton.payment.PaymentRefundOrigin
 import dev.sumin.skeleton.payment.PaymentRefundStatus
 import dev.sumin.skeleton.payment.PaymentReviewReason
+import dev.sumin.skeleton.payment.SubscriptionEndReason
+import dev.sumin.skeleton.payment.SubscriptionStatus
 import dev.sumin.skeleton.payment.PaymentWebhookEvent
 import dev.sumin.skeleton.payment.RefundCursor
 import dev.sumin.skeleton.payment.PaymentWebhookStatus
@@ -1288,4 +1290,129 @@ abstract class PaymentLedgerStoreContract {
 
     private fun event(orderId: String, type: PaymentEventType = PaymentEventType.ORDER_CREATED) =
         PaymentEvent(orderId = orderId, type = type, actor = PaymentActor.SYSTEM, createdAt = PaymentTestOrders.T0)
+
+    // --- 구독: 계정당 살아 있는 구독 하나(자리 유니크) · 줄 락 · 모든 칸 왕복. 두 DB 와 메모리 대역이 같은 약속을 지킨다. ---
+
+    private val sub1 = PaymentTestOrders.subscription(id = "sub_" + "1".repeat(32))
+    private val sub2 = PaymentTestOrders.subscription(id = "sub_" + "2".repeat(32))
+
+    @Test
+    fun `a subscription round-trips every column and a repeated insert of the same id is refused`() {
+        val store = newStore()
+        val full = sub1.copy(
+            status = SubscriptionStatus.ACTIVE, activeKey = "acc_1", anchorAt = PaymentTestOrders.T0, periodSeq = 3,
+            currentPeriodStart = PaymentTestOrders.T0, currentPeriodEnd = PaymentTestOrders.T0.plusSeconds(3600), chargeOrderId = "ord_" + "9".repeat(32), attempt = 2,
+            billingToken = "enc:secret", cardIssuer = "HYUNDAI", cardLast4 = "123*", pendingPlanCode = "plus", pendingAmount = 6900,
+            endReason = SubscriptionEndReason.PAYMENT_FAILED, endedAt = PaymentTestOrders.T0.plusSeconds(5), accountErasedAt = PaymentTestOrders.T0.plusSeconds(6),
+        )
+
+        assertTrue(store.inTransaction { it.insertSubscriptionIfAbsent(full) })
+        assertFalse(store.inTransaction { it.insertSubscriptionIfAbsent(full.copy(customerKey = "cus_" + "f".repeat(32))) }, "the same request id is the same subscription")
+
+        assertEquals(full, store.findSubscription(sub1.id))
+        assertEquals(full, store.findLiveSubscription("acc_1"))
+        assertNull(store.findSubscription("sub_missing"))
+    }
+
+    @Test
+    fun `an account holds one live subscription - the second seat is refused and the seat comes back when the first ends`() {
+        val store = newStore()
+        store.inTransaction { it.insertSubscriptionIfAbsent(sub1) }
+        store.inTransaction { it.insertSubscriptionIfAbsent(sub2) }
+        store.inTransaction { tx -> tx.updateSubscription(checkNotNull(tx.lockSubscription(sub1.id)).copy(activeKey = "acc_1")) }
+
+        assertFailsWith<PaymentLedgerConflictException> {
+            store.inTransaction { tx -> tx.updateSubscription(checkNotNull(tx.lockSubscription(sub2.id)).copy(activeKey = "acc_1")) }
+        }
+        assertNull(checkNotNull(store.findSubscription(sub2.id)).activeKey, "the refused claim is rolled back")
+
+        store.inTransaction { tx -> tx.updateSubscription(checkNotNull(tx.lockSubscription(sub1.id)).copy(status = SubscriptionStatus.ENDED, activeKey = null)) }
+        store.inTransaction { tx -> tx.updateSubscription(checkNotNull(tx.lockSubscription(sub2.id)).copy(activeKey = "acc_1")) }
+        assertEquals(sub2.id, store.findLiveSubscription("acc_1")?.id)
+    }
+
+    @Test
+    fun `sixteen threads claiming the seat of one account - exactly one wins`() {
+        val store = newStore()
+        val ids = (1..16).map { n -> "sub_" + n.toString(16).padStart(32, '0') }
+        ids.forEach { id -> store.inTransaction { it.insertSubscriptionIfAbsent(PaymentTestOrders.subscription(id = id)) } }
+        val pool = Executors.newFixedThreadPool(16)
+        val start = CountDownLatch(1)
+        try {
+            val results = ids.map { id ->
+                pool.submit<Boolean> {
+                    start.await()
+                    try {
+                        store.inTransaction { tx -> tx.updateSubscription(checkNotNull(tx.lockSubscription(id)).copy(activeKey = "acc_1")) }
+                        true
+                    } catch (e: PaymentLedgerConflictException) {
+                        false
+                    }
+                }
+            }
+            start.countDown()
+            assertEquals(1, results.count { it.get(30, TimeUnit.SECONDS) })
+        } finally {
+            pool.shutdownNow()
+        }
+        assertNotNull(store.findLiveSubscription("acc_1"))
+    }
+
+    @Test
+    fun `a subscription row lock makes sixteen read-modify-write loops count exactly`() {
+        val store = newStore()
+        store.inTransaction { it.insertSubscriptionIfAbsent(sub1) }
+        val pool = Executors.newFixedThreadPool(16)
+        val start = CountDownLatch(1)
+        try {
+            val futures = (1..16).map {
+                pool.submit {
+                    start.await()
+                    store.inTransaction { tx -> tx.updateSubscription(checkNotNull(tx.lockSubscription(sub1.id)).let { it.copy(periodSeq = it.periodSeq + 1) }) }
+                }
+            }
+            start.countDown()
+            futures.forEach { it.get(30, TimeUnit.SECONDS) }
+        } finally {
+            pool.shutdownNow()
+        }
+        assertEquals(16, store.findSubscription(sub1.id)?.periodSeq)
+    }
+
+    @Test
+    fun `a subscription can only be changed after it was locked and the order is locked before the subscription`() {
+        val store = newStore()
+        store.inTransaction { it.insertSubscriptionIfAbsent(sub1) }
+        store.inTransaction { it.insertOrderIfAbsent(first) }
+
+        assertFailsWith<IllegalStateException> { store.inTransaction { it.updateSubscription(sub1.copy(attempt = 2)) } }
+        assertFailsWith<IllegalStateException> { store.inTransaction { tx -> tx.lockSubscription(sub1.id); tx.lockSubscription(sub2.id) } }
+        // 주문 → 구독 순서는 된다 (지급 고리)
+        store.inTransaction { tx ->
+            checkNotNull(tx.lockOrder(first.id))
+            tx.updateSubscription(checkNotNull(tx.lockSubscription(sub1.id)).copy(attempt = 2))
+        }
+        assertEquals(2, store.findSubscription(sub1.id)?.attempt)
+    }
+
+    @Test
+    fun `the latest subscription skips one that was only created, and the subscription orders are the paid attempts newest first`() {
+        val store = newStore()
+        store.inTransaction { it.insertSubscriptionIfAbsent(sub1.copy(createdAt = PaymentTestOrders.T0)) }
+        assertNull(store.findLatestSubscription("acc_1"), "a PENDING subscription that never took a card is not shown")
+
+        store.inTransaction { tx -> tx.updateSubscription(checkNotNull(tx.lockSubscription(sub1.id)).copy(chargeOrderId = "ord_" + "9".repeat(32), activeKey = "acc_1")) }
+        store.inTransaction { it.insertSubscriptionIfAbsent(sub2.copy(createdAt = PaymentTestOrders.T0.plusSeconds(10))) }
+        assertEquals(sub1.id, store.findLatestSubscription("acc_1")?.id)
+
+        val o1 = first.copy(id = "ord_" + "1".repeat(32), dedupeKey = "d1", originType = PaymentOriginType.SUBSCRIPTION, originRef = sub1.id, status = PaymentOrderStatus.PAID, createdAt = PaymentTestOrders.T0)
+        val o2 = o1.copy(id = "ord_" + "2".repeat(32), dedupeKey = "d2", createdAt = PaymentTestOrders.T0.plusSeconds(5))
+        val pending = o1.copy(id = "ord_" + "3".repeat(32), dedupeKey = "d3", status = PaymentOrderStatus.PENDING, createdAt = PaymentTestOrders.T0.plusSeconds(6))
+        val other = o1.copy(id = "ord_" + "4".repeat(32), dedupeKey = "d4", originRef = sub2.id)
+        listOf(o1, o2, pending, other).forEach { order -> store.inTransaction { it.insertOrderIfAbsent(order) } }
+
+        assertEquals(listOf(o2.id, o1.id), store.listSubscriptionOrders(sub1.id, 5).map { it.id })
+        assertEquals(listOf(o2.id), store.listSubscriptionOrders(sub1.id, 1).map { it.id })
+        assertEquals(listOf(sub1.id, sub2.id).sorted(), store.listSubscriptionIdsOfAccount("acc_1"))
+    }
 }

@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.payment
 
 import dev.sumin.skeleton.common.erasure.AccountDataExporter
+import dev.sumin.skeleton.crypto.TextEncryptor
 import dev.sumin.skeleton.common.erasure.AccountErasureListener
 import dev.sumin.skeleton.common.time.TimeProvider
 import org.springframework.beans.factory.ObjectProvider
@@ -9,6 +10,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.context.annotation.Bean
+import org.springframework.context.annotation.Configuration
 
 /**
  * 결제 장부 서비스(스펙 §4.3). **[PaymentLedgerStore] 빈이 없으면 이 설정은 통째로 빠진다 — `payment` 는 장부가 생기기 전과 한 글자도 다르지 않다.**
@@ -60,7 +62,8 @@ class PaymentLedgerAutoConfiguration {
         store: PaymentLedgerStore,
         listener: PaymentOrderListener,
         writer: PaymentLedgerWriter,
-    ): PaymentFulfillment = PaymentFulfillment(store, listener, writer)
+        subscriptions: ObjectProvider<SubscriptionLifecycle>,
+    ): PaymentFulfillment = PaymentFulfillment(store, listener, writer, subscriptions.getIfAvailable())
 
     /** [PaymentCatalog] 빈이 없으면 서비스는 있되 주문 만들기가 [PaymentUnavailableException] 이다. */
     @Bean
@@ -168,4 +171,50 @@ class PaymentLedgerAutoConfiguration {
     @ConditionalOnMissingBean(name = ["paymentAccountDataExporter"])
     fun paymentAccountDataExporter(store: PaymentLedgerStore, router: PaymentProviderRouter, writer: PaymentLedgerWriter, properties: PaymentProperties): AccountDataExporter =
         PaymentAccountDataExporter(PaymentQueries(store, router, writer, properties))
+
+    /**
+     * 구독(스펙 `2026-10-09-subscription-design.md`) — **`skeleton.payment.subscription.enabled=true` 일 때만** 서고, 켰는데 앱이 [SubscriptionPlans] · 빌링 능력을 가진 결제사 · 빌링키를 암호화할
+     * `crypto` 키([TextEncryptor])를 내지 않으면 **기동 실패**다(빠뜨린 채 뜬 구독은 카드를 받고도 과금할 수 없다).
+     */
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnProperty(prefix = "skeleton.payment.subscription", name = ["enabled"], havingValue = "true")
+    class SubscriptionConfiguration {
+        @Bean
+        @ConditionalOnMissingBean
+        fun subscriptionLifecycle(tasks: PaymentTasks, writer: PaymentLedgerWriter, properties: PaymentProperties, review: PaymentReviewNotifier): SubscriptionLifecycle =
+            SubscriptionLifecycle(tasks, writer, properties, review)
+
+        @Bean
+        @ConditionalOnMissingBean
+        fun subscriptionCharges(store: PaymentLedgerStore, convergence: PaymentConvergence, fulfillment: PaymentFulfillment, writer: PaymentLedgerWriter): SubscriptionCharges =
+            SubscriptionCharges(store, convergence, fulfillment, writer)
+
+        @Bean
+        @ConditionalOnMissingBean
+        fun paymentSubscriptions(
+            store: PaymentLedgerStore,
+            router: PaymentProviderRouter,
+            plans: ObjectProvider<SubscriptionPlans>,
+            encryptor: ObjectProvider<TextEncryptor>,
+            billing: ObjectProvider<PaymentBillingGateway>,
+            lifecycle: SubscriptionLifecycle,
+            charges: SubscriptionCharges,
+            tasks: PaymentTasks,
+            writer: PaymentLedgerWriter,
+            properties: PaymentProperties,
+        ): PaymentSubscriptions {
+            val plansBean = plans.getIfAvailable() ?: error("skeleton.payment.subscription.enabled=true needs a SubscriptionPlans bean (the app owns the plans and prices)")
+            val encryptorBean = encryptor.getIfAvailable()
+                ?: error("skeleton.payment.subscription.enabled=true needs an encryption key to store billing keys: set skeleton.crypto.keys (the crypto module's TextEncryptor)")
+            check(billing.orderedStream().findAny().isPresent) {
+                "skeleton.payment.subscription.enabled=true needs a payment provider with the billing capability (PaymentBillingGateway), e.g. payment-toss"
+            }
+            return PaymentSubscriptions(store, router, plansBean, encryptorBean, lifecycle, charges, tasks, writer, properties)
+        }
+
+        @Bean
+        @ConditionalOnMissingBean
+        fun subscriptionRevokeTaskHandler(store: PaymentLedgerStore, router: PaymentProviderRouter, encryptor: ObjectProvider<TextEncryptor>, writer: PaymentLedgerWriter): SubscriptionRevokeTaskHandler =
+            SubscriptionRevokeTaskHandler(store, router, encryptor.getIfAvailable() ?: error("skeleton.payment.subscription.enabled=true needs a TextEncryptor (skeleton.crypto.keys)"), writer)
+    }
 }

@@ -9,6 +9,9 @@ import dev.sumin.skeleton.payment.PaymentLedgerStore
 import dev.sumin.skeleton.payment.PaymentLedgerTx
 import dev.sumin.skeleton.payment.PaymentOrder
 import dev.sumin.skeleton.payment.PaymentOrderStatus
+import dev.sumin.skeleton.payment.PaymentOriginType
+import dev.sumin.skeleton.payment.PaymentSubscription
+import dev.sumin.skeleton.payment.SubscriptionStatus
 import dev.sumin.skeleton.payment.PaymentRefund
 import dev.sumin.skeleton.payment.PaymentRefundStatus
 import dev.sumin.skeleton.payment.RefundCursor
@@ -34,6 +37,7 @@ class InMemoryPaymentLedgerStore : PaymentLedgerStore {
     private val committedEvents = ArrayList<PaymentEvent>()
     private val committedRefunds = LinkedHashMap<String, PaymentRefund>()
     private val committedWebhooks = LinkedHashMap<Long, PaymentWebhookEvent>()
+    private val committedSubscriptions = LinkedHashMap<String, PaymentSubscription>()
     private val webhookIds = AtomicLong()
     private val rowLocks = ConcurrentHashMap<String, ReentrantLock>()
     private val keyLocks = ConcurrentHashMap<String, ReentrantLock>()
@@ -145,6 +149,26 @@ class InMemoryPaymentLedgerStore : PaymentLedgerStore {
     override fun listRefundsByStatus(status: PaymentRefundStatus, before: RefundCursor?, limit: Int): List<PaymentRefund> =
         synchronized(commitMutex) { committedRefunds.values.filter { it.status == status }.refundsNewestFirst(before).take(limit) }
 
+    override fun findSubscription(id: String): PaymentSubscription? = synchronized(commitMutex) { committedSubscriptions[id] }
+
+    override fun findLiveSubscription(accountId: String): PaymentSubscription? =
+        synchronized(commitMutex) { committedSubscriptions.values.firstOrNull { it.activeKey == accountId } }
+
+    override fun findLatestSubscription(accountId: String): PaymentSubscription? =
+        synchronized(commitMutex) {
+            committedSubscriptions.values
+                .filter { it.accountId == accountId && (it.status != SubscriptionStatus.PENDING || it.chargeOrderId != null) }
+                .maxWithOrNull(compareBy<PaymentSubscription> { it.createdAt }.thenBy { it.id })
+        }
+
+    override fun listSubscriptionOrders(subscriptionId: String, limit: Int): List<PaymentOrder> =
+        synchronized(commitMutex) {
+            committed.values.filter { it.originType == PaymentOriginType.SUBSCRIPTION && it.originRef == subscriptionId && it.status != PaymentOrderStatus.PENDING }.newestFirst(null).take(limit)
+        }
+
+    override fun listSubscriptionIdsOfAccount(accountId: String): List<String> =
+        synchronized(commitMutex) { committedSubscriptions.values.filter { it.accountId == accountId }.map { it.id }.sorted() }
+
     override fun listOrderIdsOfAccount(accountId: String): List<String> =
         synchronized(commitMutex) { committed.values.filter { it.accountId == accountId }.map { it.id }.sorted() }
 
@@ -197,6 +221,8 @@ class InMemoryPaymentLedgerStore : PaymentLedgerStore {
         private val pendingRefunds = LinkedHashMap<String, PaymentRefund>()
         private val pendingEvents = ArrayList<PaymentEvent>()
         private val pendingWebhooks = LinkedHashMap<Long, PaymentWebhookEvent>()
+        private val pendingSubscriptions = LinkedHashMap<String, PaymentSubscription>()
+        private var ownedSubscriptionId: String? = null
         private var ownedWebhookId: Long? = null
         private val ownedOrderIds = LinkedHashSet<String>()
         private val heldLocks = ArrayList<ReentrantLock>()
@@ -325,6 +351,42 @@ class InMemoryPaymentLedgerStore : PaymentLedgerStore {
             pendingWebhooks[event.id] = stored.copy(status = event.status, lastError = event.lastError, processedAt = event.processedAt)
         }
 
+        override fun lockSubscription(id: String): PaymentSubscription? {
+            if (id == ownedSubscriptionId) return subscriptionView(id)
+            check(ownedSubscriptionId == null) { "one subscription per transaction: already holds $ownedSubscriptionId" }
+            acquire(rowLocks.computeIfAbsent("subscription|$id") { ReentrantLock() })
+            val row = subscriptionView(id)
+            if (row != null) ownedSubscriptionId = id
+            return row
+        }
+
+        override fun insertSubscriptionIfAbsent(subscription: PaymentSubscription): Boolean {
+            check(ownedSubscriptionId == null) { "one subscription per transaction: already holds $ownedSubscriptionId" }
+            acquire(rowLocks.computeIfAbsent("subscription|${subscription.id}") { ReentrantLock() })
+            if (subscriptionView(subscription.id) != null) return false
+            checkActiveKey(subscription)
+            pendingSubscriptions[subscription.id] = subscription
+            ownedSubscriptionId = subscription.id
+            return true
+        }
+
+        override fun updateSubscription(subscription: PaymentSubscription) {
+            check(subscription.id == ownedSubscriptionId) { "the subscription must be locked in this transaction before it is updated" }
+            checkActiveKey(subscription)
+            pendingSubscriptions[subscription.id] = subscription
+        }
+
+        /** `active_key` 유니크 — 같은 키를 쥐려는 쪽은 앞선 트랜잭션이 끝날 때까지 기다렸다가(DB 유니크 인덱스처럼) 겹치면 충돌이다. */
+        private fun checkActiveKey(subscription: PaymentSubscription) {
+            val key = subscription.activeKey ?: return
+            acquire(keyLocks.computeIfAbsent("subscription-active|$key") { ReentrantLock() })
+            val owner = pendingSubscriptions.values.firstOrNull { it.activeKey == key && it.id != subscription.id }
+                ?: synchronized(commitMutex) { committedSubscriptions.values.firstOrNull { it.activeKey == key && it.id != subscription.id && it.id !in pendingSubscriptions } }
+            if (owner != null) throw PaymentLedgerConflictException("the account already has a live subscription")
+        }
+
+        private fun subscriptionView(id: String): PaymentSubscription? = pendingSubscriptions[id] ?: synchronized(commitMutex) { committedSubscriptions[id] }
+
         private fun webhookView(id: Long): PaymentWebhookEvent? = pendingWebhooks[id] ?: synchronized(commitMutex) { committedWebhooks[id] }
 
         private fun refundView(id: String): PaymentRefund? = pendingRefunds[id] ?: synchronized(commitMutex) { committedRefunds[id] }
@@ -347,6 +409,7 @@ class InMemoryPaymentLedgerStore : PaymentLedgerStore {
                 committed.putAll(pending)
                 committedRefunds.putAll(pendingRefunds)
                 committedWebhooks.putAll(pendingWebhooks)
+                committedSubscriptions.putAll(pendingSubscriptions)
                 committedEvents += pendingEvents
                 onCommit.toList()
             }
@@ -357,6 +420,7 @@ class InMemoryPaymentLedgerStore : PaymentLedgerStore {
             pending.clear()
             pendingRefunds.clear()
             pendingWebhooks.clear()
+            pendingSubscriptions.clear()
             pendingEvents.clear()
             onCommit.clear()
         }

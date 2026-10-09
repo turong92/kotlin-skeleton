@@ -21,6 +21,8 @@ data class PaymentProperties(
     val admin: Admin = Admin(),
     /** (장부) 계정 탈퇴 때 결제 줄을 어떻게 하는가. */
     val erasure: Erasure = Erasure(),
+    /** (장부) 구독 — 기본 꺼짐. 켜는 앱이 플랜([SubscriptionPlans])과 암호 키(`crypto`)를 낸다. */
+    val subscription: Subscription = Subscription(),
 ) {
     init {
         require(checkoutTtl > Duration.ZERO) { "skeleton.payment.checkout-ttl must be positive" }
@@ -169,6 +171,14 @@ data class PaymentProperties(
             require(staleAfter > Duration.ZERO) { "skeleton.payment.admin.stale-after must be positive" }
         }
     }
+
+    /**
+     * 구독(스펙 `2026-10-09-subscription-design.md`). **모듈은 기본값을 고르지 않는다** — 꺼져 있고, 켜려면 앱이 [SubscriptionPlans] 빈, 빌링 능력을 가진 결제사, 빌링키를 암호화할 `crypto` 키를 낸다
+     * (하나라도 없으면 기동 실패).
+     */
+    data class Subscription(
+        val enabled: Boolean = false,
+    )
 
     /** 계정 탈퇴(스펙 §8.2). 어느 모드든 `card_issuer` · `card_last4` 는 지워지고 주문 줄은 남는다. */
     data class Erasure(

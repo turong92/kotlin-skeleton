@@ -295,6 +295,9 @@ class TossPaymentProvider(
         }
     }
 
+    /** 빌링 승인의 거절 분류는 결제 승인과 같은 코드 어휘다. */
+    override fun billingDeclineCategory(providerCode: String?): ConfirmDeclineCategory = confirmDeclineCategory(providerCode)
+
     override fun lookup(query: PaymentLookupQuery): PaymentSnapshot? {
         val paymentKey = query.providerPaymentId?.takeIf { it.isNotBlank() }?.let(TossIdentifiers::paymentKey)
         val orderId = if (paymentKey == null) TossIdentifiers.orderId(requireNotNull(query.orderId)) else null

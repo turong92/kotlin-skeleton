@@ -25,3 +25,11 @@ class InMemoryLedgerBeans {
 
     @Bean fun catalog(): PaymentCatalog = CheerCatalog()
 }
+
+/** 구독을 켠 시험 조립 — 플랜 · 암호기 대역. `skeleton.payment.subscription.enabled=true` 와 함께 쓴다. */
+@TestConfiguration(proxyBeanMethods = false)
+class SubscriptionBeans {
+    @Bean fun subscriptionPlans(): dev.sumin.skeleton.payment.SubscriptionPlans = dev.sumin.skeleton.payment.testing.TestSubscriptionPlans()
+
+    @Bean fun textEncryptor(): dev.sumin.skeleton.crypto.TextEncryptor = dev.sumin.skeleton.payment.testing.ReversibleTestEncryptor
+}

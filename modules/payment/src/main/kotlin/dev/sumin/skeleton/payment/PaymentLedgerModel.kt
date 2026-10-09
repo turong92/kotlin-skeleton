@@ -21,7 +21,7 @@ enum class PaymentOrderStatus {
     val isClosed: Boolean get() = this == FAILED || this == EXPIRED || this == CANCELED
 }
 
-enum class PaymentOrderKind { ONE_TIME, SUBSCRIPTION_INITIAL, SUBSCRIPTION_RENEWAL }
+enum class PaymentOrderKind { ONE_TIME, SUBSCRIPTION_INITIAL, SUBSCRIPTION_RENEWAL }  // 2차에 SUBSCRIPTION_CHANGE 가 더해진다
 
 /** 이 주문을 만든 것. 1단계는 [CHECKOUT] 뿐이다. */
 enum class PaymentOriginType { CHECKOUT, SUBSCRIPTION }
@@ -36,6 +36,9 @@ enum class PaymentReviewReason(val isMoney: Boolean) {
     REFUND_MISMATCH(true),
     MODE_MISMATCH(true),
     CONFIRM_UNRESOLVED(true),
+
+    /** 구독의 지금 과금 주문이 아닌 구독 주문이 늦게 `PAID` 가 됐다 — 구독 기간은 그대로이고 돈만 받았다. 운영자가 환불한다. */
+    SUBSCRIPTION_STALE_CHARGE(true),
 
     /** 지급 작업이 죽었다 — 돈은 받았는데 `fulfilled_at` 이 비어 있다. 운영자의 맞추기가 지급 작업을 다시 넣고 푼다. */
     FULFILMENT_UNRESOLVED(false),

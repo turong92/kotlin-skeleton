@@ -204,7 +204,7 @@ class PaymentSchemaDbTest {
 
         // origin_ref: 2단계 구독 id(구독 표의 이진 기본키)와 조인한다 — 정렬이 다르면 MySQL 이 조인을 거절하거나 인덱스를 못 탄다
         assertEquals(
-            setOf("payment_orders.account_id", "payment_orders.origin_ref", "payment_refunds.requested_by", "payment_refunds.decided_by", "payment_events.actor_id"),
+            setOf("payment_orders.account_id", "payment_orders.origin_ref", "payment_refunds.requested_by", "payment_refunds.decided_by", "payment_events.actor_id", "payment_subscriptions.account_id"),
             collations.keys,
         )
         collations.forEach { (column, collation) -> assertEquals("utf8mb4_bin", collation, column) }
@@ -225,7 +225,7 @@ class PaymentSchemaDbTest {
         assertEquals(emptyList(), COLUMN_CLASSES.keys.filter { key -> actual.none { it.first == key } }, "분류표에 있는데 표에 없는 열")
 
         val personal = COLUMN_CLASSES.filterValues { it == ColumnClass.ERASED_PERSONAL }.keys
-        assertEquals(setOf("payment_orders.card_issuer", "payment_orders.card_last4"), personal)
+        assertEquals(setOf("payment_orders.card_issuer", "payment_orders.card_last4", "payment_subscriptions.card_issuer", "payment_subscriptions.card_last4"), personal)
 
         // 앱이 쓰는 문장은 이름 하나뿐이다 - 코드 칸으로 분류해 두면 "코드니까 문장이 아니다"로 읽힌다
         val labels = COLUMN_CLASSES.filterValues { it == ColumnClass.LABEL }.keys
@@ -235,7 +235,9 @@ class PaymentSchemaDbTest {
         val textColumns = actual.filter { it.second in setOf("text", "mediumtext", "longtext") }.map { it.first }
         assertEquals(listOf("payment_webhook_events.payload"), textColumns)
         assertEquals(ColumnClass.RAW, COLUMN_CLASSES["payment_webhook_events.payload"])
-        assertThat(actual.filter { it.third != null && it.first != "payment_webhook_events.payload" }.map { it.third!! }).allMatch { it <= 200 }
+        // 빌링키의 암호문은 문장이 아니라 불투명한 값이다 — 길이 상한이 따로 있다
+        assertThat(actual.filter { it.third != null && it.first != "payment_webhook_events.payload" && it.first != "payment_subscriptions.billing_token" }.map { it.third!! }).allMatch { it <= 200 }
+        assertThat(actual.single { it.first == "payment_subscriptions.billing_token" }.third!!).isLessThanOrEqualTo(512)
     }
 
     /**
@@ -250,7 +252,7 @@ class PaymentSchemaDbTest {
     private fun schemaOfConnection(): String = if (DbTestDatabase.vendor == "postgresql") "current_schema()" else "database()"
 
     /** LABEL = 앱이 정하는 문장(결제창 · 내역에 보이는 이름) — 코드가 아니다. 개인정보를 넣지 않는 것은 앱(카탈로그)의 책임이다. */
-    private enum class ColumnClass { IDENTIFIER, CODE, AMOUNT, TIME, RAW, ERASED_PERSONAL, LABEL }
+    private enum class ColumnClass { IDENTIFIER, CODE, AMOUNT, TIME, RAW, ERASED_PERSONAL, LABEL, SECRET }
 
     private companion object {
         private fun cols(table: String, kind: ColumnClass, vararg names: String) = names.associate { "$table.$it" to kind }
@@ -262,6 +264,14 @@ class PaymentSchemaDbTest {
             putAll(cols("payment_orders", ColumnClass.AMOUNT, "amount", "paid_amount", "tax_amount", "refunded_amount"))
             putAll(cols("payment_orders", ColumnClass.TIME, "checkout_expires_at", "confirm_started_at", "paid_at", "fulfilled_at", "closed_at", "account_erased_at", "created_at", "updated_at"))
             putAll(cols("payment_orders", ColumnClass.ERASED_PERSONAL, "card_issuer", "card_last4"))
+
+            // 구독 — 카드 표시 두 칸은 지워지는 개인정보이고, 고객 키 · 빌링키(암호문)는 비밀이다(응답 · 로그에 나가지 않는다)
+            putAll(cols("payment_subscriptions", ColumnClass.IDENTIFIER, "id", "account_id", "charge_order_id", "active_key"))
+            putAll(cols("payment_subscriptions", ColumnClass.CODE, "provider", "provider_mode", "status", "plan_code", "currency", "period", "period_seq", "attempt", "pending_plan_code", "end_reason"))
+            putAll(cols("payment_subscriptions", ColumnClass.AMOUNT, "amount", "pending_amount"))
+            putAll(cols("payment_subscriptions", ColumnClass.TIME, "anchor_at", "current_period_start", "current_period_end", "ended_at", "account_erased_at", "created_at", "updated_at"))
+            putAll(cols("payment_subscriptions", ColumnClass.ERASED_PERSONAL, "card_issuer", "card_last4"))
+            putAll(cols("payment_subscriptions", ColumnClass.SECRET, "customer_key", "billing_token"))
 
             putAll(cols("payment_refunds", ColumnClass.IDENTIFIER, "id", "order_id", "open_key", "dedupe_key", "provider_refund_id", "requested_by", "decided_by"))
             putAll(cols("payment_refunds", ColumnClass.CODE, "status", "origin", "currency", "reason_code", "failure_code"))

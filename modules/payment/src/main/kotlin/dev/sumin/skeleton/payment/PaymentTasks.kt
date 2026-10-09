@@ -21,6 +21,12 @@ object PaymentTaskTypes {
 
     /** 웹훅을 받을 때(수신함 줄과 같은 트랜잭션). 대상 id 는 수신함 줄 id(숫자) — 결제사에 조회해 맞춘다. 재전송(상한 안에서)과 운영자의 다시 처리는 대기 없이 새 작업을 넣는다. 상한에 걸린 신호의 표식 줄은 창 끝에 도는 작업 하나를 가진다. */
     const val WEBHOOK = "payment-webhook"
+
+    /** 구독이 기간을 넘길 때(첫 결제 · 갱신 지급 때). `runAt` = 기간 끝 — 갱신 과금 · 해지 예약의 종료 · 첫 결제 확인을 한 작업이 맡는다. 대상 id 는 구독 id. */
+    const val SUBSCRIPTION_RENEW = "payment-subscription-renew"
+
+    /** 구독이 끝날 때 빌링키가 남아 있으면. 결제사에서 빌링키를 지우고 줄의 빌링키 · 고객 키를 비운다. 대상 id 는 구독 id. */
+    const val SUBSCRIPTION_REVOKE = "payment-subscription-revoke"
 }
 
 /** [subjectId] 는 작업이 가리키는 줄의 id(주문 id, 환불 작업은 환불 줄 id). 작업의 내용은 그 줄을 다시 읽어 정한다 — 작업에 상태를 싣지 않는다. */

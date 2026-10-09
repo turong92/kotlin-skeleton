@@ -156,3 +156,27 @@ private fun PaymentProviderError.toSafeData(): Map<String, Any?> =
         "upstreamStatus" to upstreamStatus,
         "retryable" to retryable,
     )
+
+/** 남의 구독 · 없는 구독 — 둘을 구별하지 않는다. */
+class PaymentSubscriptionNotFoundException : ApplicationException(
+    message = "The subscription was not found.",
+    errorCode = PaymentErrorCode.SUBSCRIPTION_NOT_FOUND,
+)
+
+/** 이미 살아 있는 구독이 있다(계정당 하나) — 새 구독을 시작할 수 없다. */
+class PaymentAlreadySubscribedException : ApplicationException(
+    message = "This account already has a subscription.",
+    errorCode = PaymentErrorCode.ALREADY_SUBSCRIBED,
+)
+
+/** 이 구독으로는 카드 등록 · 첫 결제를 할 수 없다(이미 끝났다). */
+class PaymentSubscriptionNotActivatableException : ApplicationException(
+    message = "This subscription can no longer be started.",
+    errorCode = PaymentErrorCode.SUBSCRIPTION_NOT_ACTIVATABLE,
+)
+
+/** 아직 시작하지 않은 구독은 해지할 수 없다. */
+class PaymentSubscriptionNotCancelableException : ApplicationException(
+    message = "This subscription cannot be canceled in its current state.",
+    errorCode = PaymentErrorCode.SUBSCRIPTION_NOT_CANCELABLE,
+)

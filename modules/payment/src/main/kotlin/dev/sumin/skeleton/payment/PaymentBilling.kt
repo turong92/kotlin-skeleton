@@ -21,6 +21,11 @@ interface PaymentBillingGateway : PaymentGateway {
     /** 토큰으로 승인한다. 결과는 승인([PaymentConfirmGateway.confirm])과 같은 모양이고 실패 분류도 같다(확정 거절 / 모름). */
     fun charge(request: BillingChargeRequest): PaymentOperationResult
 
+    /**
+     * 확정 거절 코드를 `DECLINED` 응답의 `data.category` 로 옮긴다([PaymentConfirmGateway.confirmDeclineCategory] 와 같은 뜻 — 결제사 코드 어휘는 결제사 모듈만 안다). 기본은 [ConfirmDeclineCategory.OTHER].
+     */
+    fun billingDeclineCategory(providerCode: String?): ConfirmDeclineCategory = ConfirmDeclineCategory.OTHER
+
     /** 토큰을 지운다. **이미 없으면 정상 반환한다**(멱등). 못 지우면 던진다. */
     fun revoke(customerKey: String, token: String)
 }

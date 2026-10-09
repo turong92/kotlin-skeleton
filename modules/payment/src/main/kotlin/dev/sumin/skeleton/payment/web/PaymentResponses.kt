@@ -288,3 +288,64 @@ data class WebhookEventResponse(
         )
     }
 }
+
+// --- 구독 (스펙 `2026-10-09-subscription-design.md` §7) — 빌링키 · 고객 키는 어떤 응답에도 없다(카드 등록 창 값만 예외: 고객 키는 창이 필요로 하고 공개해도 되는 값이다) ---
+
+data class SubscriptionPlanResponse(val code: String, val name: String, val amount: AmountResponse, val period: String, val level: Int) {
+    companion object {
+        fun of(plan: dev.sumin.skeleton.payment.SubscriptionPlan) = SubscriptionPlanResponse(plan.code, plan.name, plan.amount.toResponse(), plan.period, plan.level)
+    }
+}
+
+data class SubscriptionPlansResponse(val plans: List<SubscriptionPlanResponse>)
+
+data class SubscriptionResponse(
+    val id: String,
+    /** `PENDING` · `ACTIVE` · `PAST_DUE` · `CANCELING` · `ENDED`. */
+    val status: String,
+    val planCode: String,
+    /** 앱 플랜 목록의 이름 — 목록에서 사라진 플랜이면 코드. */
+    val planName: String,
+    val amount: AmountResponse,
+    val period: String,
+    val currentPeriodStart: Instant?,
+    /** 다음 결제일 — `CANCELING` 이면 이용이 끝나는 날, `ENDED` 면 마지막 기간이 끝난 날. */
+    val currentPeriodEnd: Instant?,
+    /** 갱신 실패로 이번 시도가 몇 번째인가(`PAST_DUE` 에서 의미가 있다). */
+    val attempt: Int,
+    /** 끝난 이유(`ENDED` 일 때만) — `FIRST_PAYMENT_DECLINED` · `USER_CANCELED` · `PAYMENT_FAILED` · `ACCOUNT_ERASED` · `RENEWAL_BLOCKED` · `REFUNDED`. */
+    val endReason: String?,
+    val card: CardResponse?,
+    val testMode: Boolean,
+    val createdAt: Instant,
+) {
+    companion object {
+        fun of(subscription: dev.sumin.skeleton.payment.PaymentSubscription, planName: String?) = SubscriptionResponse(
+            id = subscription.id,
+            status = subscription.status.name,
+            planCode = subscription.planCode,
+            planName = planName ?: subscription.planCode,
+            amount = subscription.amount.toResponse(),
+            period = subscription.period,
+            currentPeriodStart = subscription.currentPeriodStart,
+            currentPeriodEnd = subscription.currentPeriodEnd,
+            attempt = subscription.attempt,
+            endReason = subscription.endReason?.name,
+            card = if (subscription.cardIssuer == null && subscription.cardLast4 == null) null else CardResponse(subscription.cardIssuer, subscription.cardLast4),
+            testMode = subscription.providerMode == PaymentMode.TEST,
+            createdAt = subscription.createdAt,
+        )
+    }
+}
+
+/** 카드 등록 창을 여는 값. 프론트가 [kind] 로 갈라 연다. */
+data class BillingAuthResponse(val provider: String, val kind: String, val testMode: Boolean, val clientKey: String, val customerKey: String, val attributes: Map<String, String>) {
+    companion object {
+        fun of(setup: dev.sumin.skeleton.payment.BillingSetup) = BillingAuthResponse(setup.provider, setup.kind, setup.testMode, setup.clientKey, setup.customerKey, setup.attributes)
+    }
+}
+
+data class StartSubscriptionResponse(val subscription: SubscriptionResponse, val billingAuth: BillingAuthResponse?)
+
+/** `GET /subscriptions/me` — 지금 구독(없으면 `null`)과 최근 결제 다섯 건. */
+data class MySubscriptionResponse(val subscription: SubscriptionResponse?, val orders: List<OrderResponse>)

@@ -89,6 +89,22 @@ interface PaymentLedgerStore {
     /** 환불 줄 목록, **최신순**(요청한 시각, 같으면 id) — `idx_payment_refunds_status (status, requested_at, id)` 를 거꾸로 훑는다. */
     fun listRefundsByStatus(status: PaymentRefundStatus, before: RefundCursor?, limit: Int): List<PaymentRefund>
 
+    // --- 구독 (스펙 `2026-10-09-subscription-design.md` §4). 모두 잠그지 않고 커밋된 줄을 읽는다 — 상태를 바꾸는 판단은 [PaymentLedgerTx.lockSubscription] 으로. ---
+
+    fun findSubscription(id: String): PaymentSubscription?
+
+    /** 계정의 **살아 있는** 구독(`active_key` 의 주인) — 없으면 null. */
+    fun findLiveSubscription(accountId: String): PaymentSubscription?
+
+    /** 계정의 가장 최근 구독 — 카드 등록 · 첫 결제를 시작하지 않은 `PENDING`(만들기만 한 줄)은 뺀다. 「내 구독」이 끝난 구독도 보여 주려고(실패 · 종료의 유일한 통지). */
+    fun findLatestSubscription(accountId: String): PaymentSubscription?
+
+    /** 한 구독이 만든 주문, 최신순(`origin_type = SUBSCRIPTION`, `origin_ref` = 구독 id) — 결제하지 않은 시도(`PENDING`)는 뺀다. */
+    fun listSubscriptionOrders(subscriptionId: String, limit: Int): List<PaymentOrder>
+
+    /** 그 계정의 구독 id, **오름차순** — 탈퇴가 하나씩 잠가 닫는다. */
+    fun listSubscriptionIdsOfAccount(accountId: String): List<String>
+
     // --- 계정 탈퇴 (벌크 · 스펙 §8.2). 주문 여럿을 건드리므로 "한 블록 한 주문" 규칙 밖에 있는 한 문장짜리 쓰기다. 둘 다 **멱등**이다. ---
 
     /** 그 계정의 주문 id, **오름차순** — 한 계정의 모든 주문을 한 문장으로 못 바꾸는 길(이력 · 환불 줄의 계정 id 바꿔 쓰기)이 조각을 나눠 쓴다. 주문을 잠그는 길은 이것을 쓰지 않는다(미결제 주문 닫기는 목록 조회로 한 쪽씩). */
@@ -183,6 +199,20 @@ interface PaymentLedgerTx {
 
     /** 이 트랜잭션이 [recordWebhookDelivery] 로 넣었거나 [lockWebhookEvent] 로 잡은 줄만 — 아니면 [IllegalStateException]. 바뀌는 것은 상태 · `last_error` · `processed_at` 뿐이다(나머지는 첫 전달의 값). */
     fun updateWebhookEvent(event: PaymentWebhookEvent)
+
+    // --- 구독. 락 순서는 **주문 → 구독**: 주문 줄을 잠근 채 구독을 잠글 수 있고(지급 고리), 구독을 잠근 채 주문을 잠그지는 않는다(새 주문을 **넣을** 수는 있다). 한 트랜잭션에서 잠그는 구독은 하나다. ---
+
+    /** 구독 줄을 `select … for update` 로 잡고 지금의 값을 돌려준다(없으면 null). 잠금은 이 트랜잭션이 끝날 때까지 간다. */
+    fun lockSubscription(id: String): PaymentSubscription?
+
+    /** 새 구독 줄을 넣는다. 같은 id 가 이미 있으면 넣지 않고 false(같은 요청의 재전송). 넣은 줄은 이 트랜잭션이 잠근 것으로 본다. */
+    fun insertSubscriptionIfAbsent(subscription: PaymentSubscription): Boolean
+
+    /**
+     * 구독 줄 전체를 바꾼다. 이 트랜잭션이 [lockSubscription] 으로 잠갔거나 [insertSubscriptionIfAbsent] 로 넣은 줄만 — 아니면 [IllegalStateException].
+     * `active_key` 가 다른 줄과 겹치면 [PaymentLedgerConflictException](계정당 살아 있는 구독 하나) — PostgreSQL 에서는 이 트랜잭션을 더 쓸 수 없으니 던져서 되돌린다.
+     */
+    fun updateSubscription(subscription: PaymentSubscription)
 }
 
 /** 유니크 제약이 막았다(예: 한 결제 키가 두 주문에 붙으려 했다). 저장소가 던진다 — 서비스는 "결제할 수 없는 주문"으로 읽는다. */

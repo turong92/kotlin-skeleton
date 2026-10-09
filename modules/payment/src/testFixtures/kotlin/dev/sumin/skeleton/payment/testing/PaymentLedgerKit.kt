@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.payment.testing
 
+import dev.sumin.skeleton.crypto.TextEncryptor
 import dev.sumin.skeleton.payment.CreateOrderCommand
 import dev.sumin.skeleton.payment.CreatedOrder
 import dev.sumin.skeleton.payment.DefaultPaymentTaskRunner
@@ -13,7 +14,13 @@ import dev.sumin.skeleton.payment.PaymentConvergence
 import dev.sumin.skeleton.payment.LedgerRefundConvergence
 import dev.sumin.skeleton.payment.PaymentFulfillment
 import dev.sumin.skeleton.payment.PaymentRefundApplier
+import dev.sumin.skeleton.payment.PaymentSubscriptions
 import dev.sumin.skeleton.payment.PaymentTaskTypes
+import dev.sumin.skeleton.payment.SubscriptionCharges
+import dev.sumin.skeleton.payment.SubscriptionLifecycle
+import dev.sumin.skeleton.payment.SubscriptionPlan
+import dev.sumin.skeleton.payment.SubscriptionPlans
+import dev.sumin.skeleton.payment.SubscriptionRevokeTaskHandler
 import dev.sumin.skeleton.payment.PaymentWebhookInbox
 import dev.sumin.skeleton.payment.PaymentWebhookTaskHandler
 import dev.sumin.skeleton.payment.WebhookDelivery
@@ -81,6 +88,23 @@ class RecordingOrderListener : PaymentOrderListener {
     }
 }
 
+/** 시험용 구독 플랜 — 3,900원(`basic`) · 6,900원(`plus`) 월 구독. 시험이 목록을 바꾼다. */
+class TestSubscriptionPlans : SubscriptionPlans {
+    val plans = mutableListOf(
+        SubscriptionPlan("basic", "Basic", PaymentAmount(3_900, "KRW"), "P1M", 1),
+        SubscriptionPlan("plus", "Plus", PaymentAmount(6_900, "KRW"), "P1M", 2),
+    )
+
+    override fun list(): List<SubscriptionPlan> = plans.toList()
+}
+
+/** 시험용 암호기 — 되돌릴 수 있지만 평문이 그대로 보이지는 않는다(저장된 값이 평문이 아님을 가르려는 것). */
+object ReversibleTestEncryptor : TextEncryptor {
+    override fun encrypt(plainText: String): String = "enc:" + plainText.reversed()
+
+    override fun decrypt(cipherText: String): String = cipherText.removePrefix("enc:").reversed()
+}
+
 class RecordingReviewNotifier : PaymentReviewNotifier {
     val flagged = CopyOnWriteArrayList<Pair<String, PaymentReviewReason>>()
 
@@ -107,7 +131,9 @@ class PaymentLedgerKit(
     val router = PaymentProviderRouter(listOf(gateway), properties)
     val writer = PaymentLedgerWriter(time)
     val convergence = PaymentConvergence(writer, tasks, review, LedgerRefundConvergence(writer, tasks, review))
-    val fulfillment = PaymentFulfillment(store, listener, writer)
+    val plans = TestSubscriptionPlans()
+    val lifecycle = SubscriptionLifecycle(tasks, writer, properties, review)
+    val fulfillment = PaymentFulfillment(store, listener, writer, lifecycle)
     val orders = PaymentOrders(store, tasks, router, catalog, convergence, fulfillment, writer, properties)
     val expire = OrderExpireTaskHandler(store, router, convergence)
     val reconcile = OrderReconcileTaskHandler(store, router, convergence)
@@ -118,7 +144,10 @@ class PaymentLedgerKit(
     val refundApply = RefundApplyTaskHandler(applier, store, convergence)
     val inbox = PaymentWebhookInbox(store, tasks, router, writer, properties)
     val webhook = PaymentWebhookTaskHandler(store, router, convergence, writer)
-    val runner = DefaultPaymentTaskRunner(listOf(expire, reconcile, fulfil, refundReconcile, refundApply, webhook))
+    val charges = SubscriptionCharges(store, convergence, fulfillment, writer)
+    val subscriptions = PaymentSubscriptions(store, router, plans, ReversibleTestEncryptor, lifecycle, charges, tasks, writer, properties)
+    val revoke = SubscriptionRevokeTaskHandler(store, router, ReversibleTestEncryptor, writer)
+    val runner = DefaultPaymentTaskRunner(listOf(expire, reconcile, fulfil, refundReconcile, refundApply, webhook, revoke))
 
     /** 지금 시각까지 시간이 된 작업을 한 번씩 돈다. */
     fun runTasks(only: Set<String>? = null): Int = tasks.runDue(runner, time.now(), only)

@@ -3,11 +3,15 @@ package dev.sumin.skeleton.payment.testing
 import dev.sumin.skeleton.common.ApplicationException
 import dev.sumin.skeleton.common.PlatformErrorCode
 import dev.sumin.skeleton.common.http.ExternalHttpTimeoutException
+import dev.sumin.skeleton.payment.BillingChargeRequest
+import dev.sumin.skeleton.payment.BillingIssue
+import dev.sumin.skeleton.payment.BillingSetup
 import dev.sumin.skeleton.payment.CheckoutInstruction
 import dev.sumin.skeleton.payment.CheckoutOrder
 import dev.sumin.skeleton.payment.IdempotencyKey
 import dev.sumin.skeleton.payment.ConfirmDeclineCategory
 import dev.sumin.skeleton.payment.PaymentAmount
+import dev.sumin.skeleton.payment.PaymentBillingGateway
 import dev.sumin.skeleton.payment.PaymentCard
 import dev.sumin.skeleton.payment.PaymentCheckoutGateway
 import dev.sumin.skeleton.payment.PaymentConfirmGateway
@@ -60,7 +64,7 @@ class ScriptedGateway(
      * [PaymentLedgerKit] 가 자기 저장소를 연결한다. 기본은 감시 없음.
      */
     private val openTransaction: () -> Boolean = { false },
-) : PaymentConfirmGateway, PaymentLookupGateway, PaymentCheckoutGateway, PaymentRefundGateway, PaymentWebhookGateway {
+) : PaymentConfirmGateway, PaymentLookupGateway, PaymentCheckoutGateway, PaymentRefundGateway, PaymentWebhookGateway, PaymentBillingGateway {
     /** 이 결제사가 받는 결제 키의 모양 — 기본은 전부 받는다. 시험이 바꾼다. */
     @Volatile
     var acceptsPaymentKey: (String) -> Boolean = { true }
@@ -314,6 +318,98 @@ class ScriptedGateway(
         key?.let { refundsByKey[it.value] = cancelled }
         return cancelled
     }
+
+    // --- 자동결제(빌링) 대역 — 카드 등록(`issue`) · 승인(`charge`) · 삭제(`revoke`). 승인은 [ConfirmScript] 대본을 그대로 쓰고(대본이 없으면 승인), 결제사 쪽 결제를 `payments` 에 남겨 조회가 말한다. ---
+
+    /** `issue` 가 받은 값 · 부른 횟수. 발급마다 새 토큰(`bkey_1`, `bkey_2` …)이 나온다. */
+    val issueCalls = CopyOnWriteArrayList<Map<String, Any?>>()
+    val chargeCalls = CopyOnWriteArrayList<BillingChargeRequest>()
+    val revokeCalls = CopyOnWriteArrayList<Pair<String, String>>()
+    private var billingSequence = 0
+    private val billingIssueFailures = ArrayDeque<Exception>()
+    private val chargesByKey = HashMap<String, PaymentOperationResult>()
+
+    /** 결제사가 지운 빌링키를 말하게 한다 — 이미 없는 키의 삭제도 정상이어야 한다. */
+    @Volatile var revokeFailure: (() -> Exception)? = null
+
+    /** 다음 `issue` 호출이 [error] 로 실패한다(차례로 소비). */
+    fun failNextIssue(error: Exception) = synchronized(lock) { billingIssueFailures.addLast(error) }
+
+    /** 발급 안에서(결제사 쪽 상태를 만들기 전에) 실행된다 — 동시성 시험이 경주 창을 넓히는 데 쓴다. */
+    @Volatile var duringIssue: (() -> Unit)? = null
+
+    /** 승인 호출 안에서(결제사 쪽 상태를 바꾸기 전에) 실행된다. */
+    @Volatile var duringCharge: (() -> Unit)? = null
+
+    override fun billingSetup(customerKey: String): BillingSetup? =
+        if (!checkoutReady) null else BillingSetup(providerId, "SCRIPTED_BILLING_AUTH", mode == PaymentMode.TEST, "scripted_ck", customerKey)
+
+    override fun issue(customerKey: String, providerPayload: Map<String, Any?>): BillingIssue {
+        refuseInsideTransaction("issue")
+        duringIssue?.invoke()
+        synchronized(lock) {
+            issueCalls += providerPayload
+            billingIssueFailures.removeFirstOrNull()?.let { throw it }
+            return BillingIssue("bkey_${++billingSequence}", PaymentCard("HYUNDAI", "1234"))
+        }
+    }
+
+    override fun charge(request: BillingChargeRequest): PaymentOperationResult {
+        refuseInsideTransaction("charge")
+        val script = synchronized(lock) {
+            chargeCalls += request
+            scripts.removeFirstOrNull() ?: ConfirmScript.Approve
+        }
+        duringCharge?.invoke()
+        synchronized(lock) { chargesByKey[request.idempotencyKey.value] }?.let { return it } // 같은 멱등 키는 결제사가 한 번으로 본다
+        return when (script) {
+            is ConfirmScript.Approve -> charged(request, request.amount)
+            is ConfirmScript.ApproveWithTotal -> charged(request, script.total)
+            is ConfirmScript.Decline -> throw refusal(script.code)
+            is ConfirmScript.TimeoutApplied -> {
+                charged(request, script.total ?: request.amount)
+                throw timeout()
+            }
+            is ConfirmScript.TimeoutNotApplied, is ConfirmScript.TimeoutAppliedLater -> {
+                register(request, request.amount, ProviderPaymentStatus.IN_PROGRESS)
+                throw timeout()
+            }
+            is ConfirmScript.ServerError -> throw serverError()
+        }
+    }
+
+    override fun revoke(customerKey: String, token: String) {
+        refuseInsideTransaction("revoke")
+        synchronized(lock) { revokeCalls += customerKey to token }
+        revokeFailure?.let { throw it() }
+    }
+
+    /** 결제사 쪽에 이 승인으로 생긴 결제가 있는가(주문 번호로) — 이중 승인 시험이 센다. */
+    fun providerPaymentsOfOrder(orderId: String): List<ProviderPayment> = synchronized(lock) { payments.values.filter { it.orderId == orderId } }
+
+    private fun register(request: BillingChargeRequest, total: PaymentAmount, status: ProviderPaymentStatus): ProviderPayment = synchronized(lock) {
+        val existing = payments.values.lastOrNull { it.orderId == request.orderId }
+        existing ?: ProviderPayment("pay_bill_${payments.size + 1}", request.orderId, total, status, PaymentCard("HYUNDAI", "1234"), paidAt = now().takeIf { status == ProviderPaymentStatus.PAID })
+            .also { payments[it.paymentKey] = it }
+    }
+
+    private fun charged(request: BillingChargeRequest, total: PaymentAmount): PaymentOperationResult = synchronized(lock) {
+        val payment = register(request, total, ProviderPaymentStatus.PAID).let { registered ->
+            registered.copy(total = total, status = ProviderPaymentStatus.PAID, paidAt = now()).also { payments[it.paymentKey] = it }
+        }
+        PaymentOperationResult(
+            provider = providerId,
+            providerPaymentId = payment.paymentKey,
+            status = PaymentOperationStatus.CONFIRMED,
+            amount = payment.total,
+            trace = ProviderTrace(provider = providerId, rawStatus = "DONE", metadata = mapOf("orderId" to request.orderId)),
+            attributes = mapOf("method" to "CARD"),
+            card = payment.card,
+            paidAt = payment.paidAt,
+        ).also { chargesByKey[request.idempotencyKey.value] = it }
+    }
+
+    override fun billingDeclineCategory(providerCode: String?): ConfirmDeclineCategory = confirmDeclineCategories[providerCode] ?: ConfirmDeclineCategory.OTHER
 
     /** [Error] 로 던진다 — 호출한 쪽의 `catch (e: Exception)` 이 "모름"으로 삼키지 못하게. */
     private fun refuseInsideTransaction(call: String) {

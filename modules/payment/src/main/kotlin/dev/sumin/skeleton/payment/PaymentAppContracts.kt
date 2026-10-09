@@ -77,3 +77,34 @@ fun interface PaymentProviderCredentialAlert {
         val NONE: PaymentProviderCredentialAlert = PaymentProviderCredentialAlert { }
     }
 }
+
+/** 구독 플랜 하나. [period] 는 ISO-8601(`P1M` · `PT3M`), [level] 은 높을수록 윗등급이다(2차의 위로만 바꾸기가 쓴다). */
+data class SubscriptionPlan(
+    val code: String,
+    val name: String,
+    val amount: PaymentAmount,
+    val period: String,
+    val level: Int,
+)
+
+/**
+ * 무엇을 얼마에 구독하는가 — **구독 금액의 유일한 출처**([PaymentCatalog] 와 같은 원칙). 앱이 구현한다.
+ * `skeleton.payment.subscription.enabled=true` 인데 이 빈이 없으면 기동 실패. 구독 줄에는 만들 때의 코드 · 금액 · 주기가 박힌다.
+ */
+interface SubscriptionPlans {
+    fun list(): List<SubscriptionPlan>
+
+    fun find(code: String): SubscriptionPlan? = list().firstOrNull { it.code == code }
+}
+
+/**
+ * 이 계정의 구독을 **갱신해도 되는가**(정지 · 삭제 유예 계정은 해지할 수 없으니 과금하지 않는다). 갱신 시각마다 락 밖에서 불린다 — 짧게 끝낸다.
+ * false 면 구독은 그 기간 끝에 `RENEWAL_BLOCKED` 로 끝난다. 기본은 항상 허용([ALLOW_ALL]) — `payment` 는 `account` 를 모른다.
+ */
+fun interface SubscriptionRenewalGuard {
+    fun allows(accountId: String): Boolean
+
+    companion object {
+        val ALLOW_ALL: SubscriptionRenewalGuard = SubscriptionRenewalGuard { true }
+    }
+}

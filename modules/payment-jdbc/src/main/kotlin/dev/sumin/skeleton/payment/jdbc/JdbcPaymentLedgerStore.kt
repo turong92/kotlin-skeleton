@@ -11,6 +11,7 @@ import dev.sumin.skeleton.payment.PaymentOrder
 import dev.sumin.skeleton.payment.PaymentOrderStatus
 import dev.sumin.skeleton.payment.PaymentRefund
 import dev.sumin.skeleton.payment.PaymentRefundStatus
+import dev.sumin.skeleton.payment.PaymentSubscription
 import dev.sumin.skeleton.payment.RefundCursor
 import dev.sumin.skeleton.payment.PaymentWebhookEvent
 import dev.sumin.skeleton.payment.PaymentWebhookStatus
@@ -48,6 +49,7 @@ class JdbcPaymentLedgerStore(
 ) : PaymentLedgerStore {
     private val rows = PaymentOrderRows(dialect)
     private val refundRows = PaymentRefundRows(dialect)
+    private val subscriptionRows = PaymentSubscriptionRows(dialect)
     private val webhook = JdbcWebhookInbox(jdbc, dialect)
     private val template = TransactionTemplate(transactionManager).also { it.isolationLevel = TransactionDefinition.ISOLATION_READ_COMMITTED }
 
@@ -61,6 +63,14 @@ class JdbcPaymentLedgerStore(
             "insert into payment_orders (${columns.joinToString(", ")}) values (${columns.joinToString(", ") { ":$it" }}) on conflict (dedupe_key) do nothing"
         } else {
             dialect.insertIgnore("payment_orders", columns, listOf("id"))
+        }
+    }
+
+    private val insertSubscriptionSql: String = subscriptionRows.insertColumns.let { columns ->
+        if (dialect.vendor == "postgresql") {
+            "insert into payment_subscriptions (${columns.joinToString(", ")}) values (${columns.joinToString(", ") { ":$it" }}) on conflict (id) do nothing"
+        } else {
+            dialect.insertIgnore("payment_subscriptions", columns, listOf("id"))
         }
     }
 
@@ -247,6 +257,27 @@ class JdbcPaymentLedgerStore(
 
     // --- 계정 탈퇴 (벌크). 한 문장 · 멱등 — 이미 지워진 줄은 where 에서 걸러져 두 번째 호출은 아무것도 바꾸지 않는다. ---
 
+    override fun findSubscription(id: String): PaymentSubscription? =
+        jdbc.query("${subscriptionRows.select} where id = :id", mapOf("id" to id)) { rs, _ -> subscriptionRows.subscription(rs) }.firstOrNull()
+
+    override fun findLiveSubscription(accountId: String): PaymentSubscription? =
+        jdbc.query("${subscriptionRows.select} where active_key = :account", mapOf("account" to accountId)) { rs, _ -> subscriptionRows.subscription(rs) }.firstOrNull()
+
+    override fun findLatestSubscription(accountId: String): PaymentSubscription? =
+        jdbc.query(
+            "${subscriptionRows.select} where account_id = :account and (status <> 'PENDING' or charge_order_id is not null) order by created_at desc, id desc limit 1",
+            mapOf("account" to accountId),
+        ) { rs, _ -> subscriptionRows.subscription(rs) }.firstOrNull()
+
+    override fun listSubscriptionOrders(subscriptionId: String, limit: Int): List<PaymentOrder> =
+        jdbc.query(
+            "${rows.orderSelect} where origin_type = 'SUBSCRIPTION' and origin_ref = :id and status <> 'PENDING' order by created_at desc, id desc limit :limit",
+            mapOf("id" to subscriptionId, "limit" to limit),
+        ) { rs, _ -> rows.order(rs) }
+
+    override fun listSubscriptionIdsOfAccount(accountId: String): List<String> =
+        jdbc.queryForList("select id from payment_subscriptions where account_id = :account order by id", mapOf("account" to accountId), String::class.java).filterNotNull()
+
     override fun listOrderIdsOfAccount(accountId: String): List<String> =
         jdbc.queryForList("select id from payment_orders where account_id = :account order by id", mapOf("account" to accountId), String::class.java).filterNotNull()
 
@@ -290,6 +321,9 @@ class JdbcPaymentLedgerStore(
 
         /** 이 트랜잭션이 잠갔거나 넣은 주문 — 하나뿐이다. */
         private var ownedOrderId: String? = null
+
+        /** 이 트랜잭션이 잠갔거나 넣은 구독 — 하나뿐이다. 락 순서는 주문 → 구독. */
+        private var ownedSubscriptionId: String? = null
 
         override fun lockOrder(id: String): PaymentOrder? {
             if (id == ownedOrderId) return readLocked(id)
@@ -387,6 +421,38 @@ class JdbcPaymentLedgerStore(
         override fun updateWebhookEvent(event: PaymentWebhookEvent) {
             check(event.id == ownedWebhookId) { "the webhook row must be recorded or locked in this transaction before it is updated" }
             webhook.update(event)
+        }
+
+        override fun lockSubscription(id: String): PaymentSubscription? {
+            if (id == ownedSubscriptionId) return readLockedSubscription(id)
+            check(ownedSubscriptionId == null) { "one subscription per transaction: already holds $ownedSubscriptionId" }
+            val locked = jdbc.queryForList("select id from payment_subscriptions where id = :id for update", mapOf("id" to id), String::class.java)
+            if (locked.isEmpty()) return null
+            ownedSubscriptionId = id
+            return readLockedSubscription(id)
+        }
+
+        private fun readLockedSubscription(id: String): PaymentSubscription? =
+            jdbc.query("${subscriptionRows.select} where id = :id for update", mapOf("id" to id)) { rs, _ -> subscriptionRows.subscription(rs) }.firstOrNull()
+
+        override fun insertSubscriptionIfAbsent(subscription: PaymentSubscription): Boolean {
+            check(ownedSubscriptionId == null) { "one subscription per transaction: already holds ${ownedSubscriptionId}" }
+            jdbc.update(insertSubscriptionSql, subscriptionRows.params(subscription))
+            // 갱신 행 수로는 못 가른다(MySQL) · id 는 요청에서 정해지니 id 가 있다고 우리가 넣은 것도 아니다 — 고객 키(무작위 128비트)가 우리 것이면 우리가 넣었다
+            val owner = jdbc.queryForList("select customer_key from payment_subscriptions where id = :id", mapOf("id" to subscription.id), String::class.java).firstOrNull()
+            val inserted = owner != null && owner == subscription.customerKey
+            if (inserted) ownedSubscriptionId = subscription.id
+            return inserted
+        }
+
+        override fun updateSubscription(subscription: PaymentSubscription) {
+            check(subscription.id == ownedSubscriptionId) { "the subscription must be locked in this transaction before it is updated" }
+            try {
+                jdbc.update("update payment_subscriptions set ${subscriptionRows.updateAssignments} where id = :id", subscriptionRows.params(subscription))
+            } catch (e: DuplicateKeyException) {
+                // 고칠 수 있는 유니크는 active_key 뿐이다(계정당 살아 있는 구독 하나). PostgreSQL 은 이 문장 때문에 트랜잭션이 못 쓰게 되므로 호출자가 이 트랜잭션을 끝내야 한다(서비스는 던져서 되돌린다)
+                throw PaymentLedgerConflictException("the account already has a live subscription")
+            }
         }
 
         override fun appendEvent(event: PaymentEvent) {
