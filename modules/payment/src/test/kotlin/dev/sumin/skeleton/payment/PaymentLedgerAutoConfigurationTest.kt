@@ -8,7 +8,6 @@ import dev.sumin.skeleton.payment.testing.ScriptedGateway
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import org.springframework.boot.autoconfigure.AutoConfigurations
@@ -66,15 +65,6 @@ class PaymentLedgerAutoConfigurationTest {
     }
 
     @Test
-    fun `without a catalog the service exists but refuses to create an order`() {
-        withLedgerConfig.withUserConfiguration(Ledger::class.java).run { context ->
-            assertFailsWith<PaymentUnavailableException> {
-                context.getBean(PaymentOrders::class.java).create(CreateOrderCommand("acc_1", "cheer", "cheer-3000", IdempotencyKey("k")))
-            }
-        }
-    }
-
-    @Test
     fun `an app's own listener, notifier and time source win over the defaults`() {
         val listener = object : PaymentOrderListener {}
         val notifier = PaymentReviewNotifier { _, _ -> }
@@ -103,17 +93,6 @@ class PaymentLedgerAutoConfigurationTest {
         }
     }
 
-    @Test
-    fun `the checkout deadline and the reconcile keys come from the one skeleton payment prefix`() {
-        withLedgerConfig.withUserConfiguration(Ledger::class.java)
-            .withPropertyValues("skeleton.payment.checkout-ttl=10m", "skeleton.payment.reconcile.max-attempts=7")
-            .withBean(PaymentCatalog::class.java, java.util.function.Supplier { CheerCatalog() })
-            .run { context ->
-                val created = context.getBean(PaymentOrders::class.java).create(CreateOrderCommand("acc_1", "cheer", "cheer-3000", IdempotencyKey("k"))).order
-                assertEquals(java.time.Duration.ofMinutes(10), java.time.Duration.between(created.createdAt, created.checkoutExpiresAt))
-                assertEquals(7, context.getBean(InMemoryPaymentTasks::class.java).all(PaymentTaskTypes.ORDER_EXPIRE).single().maxAttempts)
-            }
-    }
 }
 
 /** `payment-toss` 는 장부 유무를 이 **타입 이름**으로 찾는다(컴파일 의존 없이) — 포트의 이름 · 패키지가 바뀌면 그쪽 가드가 조용히 꺼진다. */

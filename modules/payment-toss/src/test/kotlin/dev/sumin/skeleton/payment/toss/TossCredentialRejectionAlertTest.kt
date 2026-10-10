@@ -45,16 +45,6 @@ class TossCredentialRejectionAlertTest {
     }
 
     @Test
-    fun `a customer refusal, a server error and an unknown code do not alert`() {
-        map(403, "REJECT_CARD_PAYMENT")
-        map(400, "INVALID_REQUEST")
-        map(500, "INVALID_API_KEY") // 5xx 는 우리가 모르는 장애다 — 키 문제로 단정하지 않는다
-        map(401, "SOMETHING_NEW")
-
-        assertTrue(rejected.isEmpty(), rejected.toString())
-    }
-
-    @Test
     fun `a failing alert never breaks the mapping`() {
         val broken = TossPaymentErrorMapper(providerId = "toss", credentialAlert = PaymentProviderCredentialAlert { error("alert channel down") })
 

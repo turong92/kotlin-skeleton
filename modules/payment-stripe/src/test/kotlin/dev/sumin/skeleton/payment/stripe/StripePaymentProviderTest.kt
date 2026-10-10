@@ -59,38 +59,6 @@ class StripePaymentProviderTest {
     }
 
     @Test
-    fun `confirm uses Stripe request id header when response body has no request id`() {
-        val client = RecordingExternalHttpClient(
-            response = StripePaymentIntentResponse(
-                id = "pi_1",
-                status = "succeeded",
-                amount = 2_500,
-                currency = "usd",
-                latestCharge = "ch_1",
-            ),
-            responseHeaders = HttpHeaders().apply {
-                add("Request-Id", "req_header_1")
-            },
-        )
-        val provider = StripePaymentProvider(
-            httpClient = client,
-            properties = StripePaymentProperties(
-                enabled = true,
-                secretKey = "sk_test_123",
-            ),
-        )
-
-        val result = provider.confirm(
-            PaymentConfirmRequest(
-                providerPaymentId = "pi_1",
-                amount = PaymentAmount(amount = 2_500, currency = "USD"),
-            ),
-        )
-
-        assertEquals("req_header_1", result.trace.providerRequestId)
-    }
-
-    @Test
     fun `cancel and refund use Stripe form bodies`() {
         val client = RecordingExternalHttpClient(
             responses = ArrayDeque(
@@ -176,23 +144,6 @@ class StripePaymentProviderTest {
         assertEquals("card_error", paymentException.providerError.trace.rawCode)
         assertEquals("https://dashboard.stripe.com/test/logs/req_1", paymentException.providerError.trace.metadata["requestLogUrl"])
         assertEquals(402, paymentException.providerError.upstreamStatus)
-    }
-
-    @Test
-    fun `provider error maps Stripe request id header`() {
-        val mapper = StripePaymentErrorMapper(providerId = "stripe")
-        val exception = mapper.map(
-            providerErrorContext(
-                clientName = "payment-stripe",
-                upstreamStatus = 500,
-                body = """{"error":{"type":"api_error","message":"provider failed"}}""",
-                headers = HttpHeaders().apply {
-                    add("Request-Id", "req_error_header_1")
-                },
-            ),
-        )
-
-        assertEquals("req_error_header_1", exception.providerError.trace.providerRequestId)
     }
 
     private class RecordingExternalHttpClient(

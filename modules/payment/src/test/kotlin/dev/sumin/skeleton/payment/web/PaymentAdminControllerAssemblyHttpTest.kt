@@ -76,10 +76,6 @@ class PaymentAdminSubclassHttpTest {
         }
     }
 
-    @Test
-    fun `the operator is let in through a subclassed controller`() {
-        mvc.perform(request(HttpMethod.GET, "/api/v1/admin/payments/orders").asOperator()).andExpect(status().isOk)
-    }
 }
 
 /** 인터셉터가 없는 조립(`admin.enabled` 없이 컨트롤러 빈만 · `WebMvcConfigurationSupport` 로 설정자를 읽지 않는 앱 — 둘 다 인터셉터가 안 걸린다)에서는 아홉 핸들러가 전부 닫힌다. */

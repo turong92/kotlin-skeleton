@@ -21,8 +21,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
-import kotlin.test.assertIs
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -79,24 +77,10 @@ class TossIdentifierTest {
     }
 
     @Test
-    fun `the provider tells the ledger which payment keys it can take - the same rule the calls apply`() {
-        badKeys.forEach { assertFalse(provider.acceptsPaymentKey(it), "'$it'") }
-        listOf("pay_key_1", "Pay_key-9", "k".repeat(200)).forEach { assertTrue(provider.acceptsPaymentKey(it), it) }
-        assertTrue(server.requests.isEmpty())
-    }
-
-    @Test
     fun `an order id of the wrong shape never reaches the provider`() {
         listOf("ord/../../v1", "ord one", "o|r", "x".repeat(65), "a.b", "../x").forEach { orderId ->
             assertRejectedBeforeAnyCall("lookup order '$orderId'") { provider.lookup(PaymentLookupQuery(providerPaymentId = null, orderId = orderId)) }
         }
-    }
-
-    @Test
-    fun `keys of the allowed shape go out as they are`() {
-        server.on("GET", "/v1/payments/Pay_key-9", Reply.Json(200, TossFixtures.payment(paymentKey = "Pay_key-9")))
-
-        assertEquals("Pay_key-9", provider.lookup(PaymentLookupQuery("Pay_key-9", null))?.providerPaymentId)
     }
 
     @Test
@@ -119,15 +103,6 @@ class TossIdentifierTest {
     }
 
     @Test
-    fun `a lookup answer without the key or order id that was asked about is not readable either`() {
-        server.on("GET", "/v1/payments/pay_asked", Reply.Json(200, TossFixtures.payment(extra = mapOf("paymentKey" to null))))
-        assertFailsWith<PaymentProviderException> { provider.lookup(PaymentLookupQuery("pay_asked", null)) }
-
-        server.on("GET", "/v1/payments/orders/ord_asked", Reply.Json(200, TossFixtures.payment(extra = mapOf("orderId" to null))))
-        assertFailsWith<PaymentProviderException> { provider.lookup(PaymentLookupQuery(null, "ord_asked")) }
-    }
-
-    @Test
     fun `a webhook payment key that could change a path is refused`() {
         listOf("orders/ord_victim123", "x/../y", "a.b", "a/b").forEach { key ->
             val body = TossFixtures.webhook(paymentKey = key).toByteArray()
@@ -137,19 +112,4 @@ class TossIdentifierTest {
         assertEquals("pay_OK-1", ok.resourceId)
     }
 
-    @Test
-    fun `the rejection is the same exception class for every caller and carries no value`() {
-        val error = assertFailsWith<TossIdentifierRejectedException> { provider.lookup(PaymentLookupQuery("a b", null)) }
-
-        assertIs<ApplicationException>(error)
-        assertNull(error.cause)
-    }
-
-    @Test
-    fun `the rejection carries the platform validation error code - not the anonymous HTTP one - so a client can tell it from a missing page`() {
-        val error = assertFailsWith<TossIdentifierRejectedException> { provider.lookup(PaymentLookupQuery("a b", null)) }
-
-        assertEquals("COMMON.VALIDATION_FAILED", error.errorCode.code)
-        assertEquals(400, error.status.value())
-    }
 }

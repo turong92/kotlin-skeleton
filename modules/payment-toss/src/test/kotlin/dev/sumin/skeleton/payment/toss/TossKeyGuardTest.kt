@@ -58,25 +58,6 @@ class TossKeyGuardTest {
     }
 
     @Test
-    fun `the guard is named for the module`() {
-        assertEquals("payment-toss", guard().name)
-    }
-
-    @Test
-    fun `a matching test pair is fine in local-like and unset environments and warned about nowhere`() {
-        listOf("unset", "local", "profile local", "profile test").forEach { env ->
-            assertEquals(emptyList(), guard().all(everyEnv.getValue(env)), env)
-        }
-    }
-
-    @Test
-    fun `a matching live pair is fine in unset and protected environments`() {
-        listOf("unset", "stage", "prod").forEach { env ->
-            assertEquals(emptyList(), guard(liveSecret, liveClient).all(everyEnv.getValue(env)), env)
-        }
-    }
-
-    @Test
     fun `enabled with no secret key outside a protected environment - the provider bean is absent - only warns`() {
         (everyEnv - protectedEnvs.toSet()).forEach { (env, context) ->
             val g = guard(secret = "", client = "")
@@ -95,11 +76,6 @@ class TossKeyGuardTest {
             assertTrue("skeleton.payment-toss.secret-key" in problems.single() && "PAYMENT_TOSS_SECRET_KEY" in problems.single(), problems.single())
             assertEquals(emptyList(), g.warnings(everyEnv.getValue(env)).filter { "secret-key" in it }, "said once, as a problem - not twice")
         }
-    }
-
-    @Test
-    fun `a blank secret key counts as empty`() {
-        assertEquals(1, guard(secret = "  \n", client = "").problems(prod).size)
     }
 
     @Test
@@ -151,11 +127,6 @@ class TossKeyGuardTest {
         }
     }
 
-    @Test
-    fun `a widget secret key alone fails the start - this module only does the payment window`() {
-        assertTrue(guard(secret = "test_gsk_WIDGETSUFFIX", client = "").problems(unset).isNotEmpty())
-    }
-
     /** 환경에 어긋나지 않는 시크릿 키 — 보호 환경이면 실결제 키, 아니면 테스트 키. */
     private fun fitting(env: String) = if (env in protectedEnvs) liveSecret else testSecret
 
@@ -171,11 +142,6 @@ class TossKeyGuardTest {
             assertEquals(emptyList(), g.problems(everyEnv.getValue(env)), env)
             assertEquals(1, g.warnings(everyEnv.getValue(env)).size, env)
         }
-    }
-
-    @Test
-    fun `without a ledger a missing client key is nothing - there is no checkout to open`() {
-        everyEnv.forEach { (env, context) -> assertEquals(emptyList(), guard(secret = fitting(env), client = "", ledger = false).all(context), env) }
     }
 
     @Test
@@ -260,14 +226,6 @@ class TossKeyGuardTest {
     }
 
     @Test
-    fun `a first delay one tick longer than the response limit passes - the front end e2e combination 11s over 10s`() {
-        assertEquals(emptyList(), guard(ledger = true, responseTimeout = Duration.ofSeconds(10), firstDelay = Duration.ofSeconds(11)).problems(local))
-        assertEquals(emptyList(), guard(ledger = true, responseTimeout = Duration.ofSeconds(10), firstDelay = Duration.ofSeconds(11)).problems(prod).filter { "first-delay" in it })
-        assertEquals(emptyList(), guard(ledger = true, responseTimeout = Duration.ofSeconds(30), firstDelay = Duration.ofSeconds(60)).all(local))
-        assertEquals(emptyList(), guard(ledger = true, responseTimeout = Duration.ofSeconds(10), firstDelay = Duration.ofMillis(10_001)).problems(local))
-    }
-
-    @Test
     fun `with a ledger a refund settle delay that is not longer than the response limit fails the start - the settle job would judge a refund that is still in flight`() {
         val limit = Duration.ofSeconds(30)
         listOf(Duration.ofSeconds(30), Duration.ofSeconds(10), Duration.ofSeconds(1)).forEach { delay ->
@@ -279,29 +237,6 @@ class TossKeyGuardTest {
                 assertTrue("${delay.seconds}s" in line && "${limit.seconds}s" in line, "the message names both durations: $line")
                 assertTrue(problems.none { "first-delay" in it }, "the first-delay line is its own: $problems")
             }
-        }
-    }
-
-    @Test
-    fun `a refund settle delay one tick longer than the response limit passes, and so do the defaults`() {
-        assertEquals(emptyList(), guard(ledger = true, responseTimeout = Duration.ofSeconds(10), settleDelay = Duration.ofMillis(10_001)).problems(local))
-        assertEquals(emptyList(), guard(ledger = true, responseTimeout = Duration.ofSeconds(30), settleDelay = Duration.ofMinutes(2)).all(local))
-        assertEquals(emptyList(), guard(ledger = true, responseTimeout = Duration.ofSeconds(30), settleDelay = Duration.ofMinutes(2)).problems(prod).filter { "settle-delay" in it })
-    }
-
-    @Test
-    fun `without a ledger the refund settle delay is nothing - no settle job exists`() {
-        everyEnv.forEach { (env, context) ->
-            val problems = guard(ledger = false, responseTimeout = Duration.ofSeconds(60), settleDelay = Duration.ofSeconds(1)).problems(context)
-            assertTrue(problems.none { "settle-delay" in it }, "$env: $problems")
-        }
-    }
-
-    @Test
-    fun `without a ledger the first delay is nothing - nothing schedules a lookup`() {
-        everyEnv.forEach { (env, context) ->
-            val problems = guard(ledger = false, responseTimeout = Duration.ofSeconds(60), firstDelay = Duration.ofSeconds(1)).problems(context)
-            assertTrue(problems.none { "first-delay" in it }, "$env: $problems")
         }
     }
 

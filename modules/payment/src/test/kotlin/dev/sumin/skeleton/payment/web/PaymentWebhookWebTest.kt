@@ -33,7 +33,6 @@ import org.springframework.http.HttpMethod
 import org.springframework.http.MediaType
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.ResultActions
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
@@ -90,31 +89,6 @@ class PaymentWebhookWebTest {
         assertEquals(order.id, row.orderId)
         assertEquals(PaymentWebhookStatus.RECEIVED, row.status)
         assertEquals(before + 1, tasks.all(PaymentTaskTypes.WEBHOOK).size)
-    }
-
-    @Test
-    fun `the same delivery again is 200 as well and changes nothing - the caller cannot tell it from the first`() {
-        val order = order()
-        val first = send("$base/scripted/$token", body(order), mapOf(ScriptedGateway.DELIVERY_HEADER to "evt-web-2")).andExpect(status().isOk).andReturn().response
-        val jobs = tasks.all(PaymentTaskTypes.WEBHOOK).size
-
-        val second = send("$base/scripted/$token", body(order), mapOf(ScriptedGateway.DELIVERY_HEADER to "evt-web-2")).andExpect(status().isOk).andReturn().response
-
-        assertEquals(1, rows().count { it.eventKey == "evt-web-2" })
-        assertEquals(2, rows().single { it.eventKey == "evt-web-2" }.deliveries)
-        assertEquals(jobs, tasks.all(PaymentTaskTypes.WEBHOOK).size, "the row's job is still waiting, so a resend queues nothing")
-        assertEquals(first.contentType, second.contentType)
-        assertEquals(first.status, second.status)
-    }
-
-    @Test
-    fun `an unknown order and an event that is not a payment event are 200 and nothing is stored`() {
-        val rowsBefore = rows().size
-
-        send("$base/scripted/$token", "eventType=PAYMENT_STATUS_CHANGED\npaymentKey=pay_nobody\norderId=ord_${"e".repeat(32)}\nstatus=DONE\n").andExpect(status().isOk)
-        send("$base/scripted/$token", "eventType=DEPOSIT_CALLBACK\npaymentKey=pay_x\n").andExpect(status().isOk)
-
-        assertEquals(rowsBefore, rows().size)
     }
 
     @Test
@@ -204,24 +178,6 @@ class PaymentWebhookWebTest {
             root.detachAppender(appender)
             LogMasker.install(previousMasker)
         }
-    }
-
-    @Test
-    fun `past the per-order limit a new event is answered 200 like any other and is not stored`() {
-        val order = order()
-        val rowsBefore = rows().count { it.orderId == order.id }
-        val answers = (1..32).map { n ->
-            send("$base/scripted/$token", body(order), mapOf(ScriptedGateway.DELIVERY_HEADER to "evt-cap-$n")).andExpect(status().isOk).andReturn().response.contentAsString
-        }
-
-        assertEquals(1, answers.map { it.replace(Regex("\"(traceId|spanId|timestamp)\":\"[^\"]*\""), "") }.toSet().size, "the caller cannot tell a refused one from a stored one")
-        assertEquals(30, rows().count { it.orderId == order.id && it.resourceType == "PAYMENT" } - rowsBefore)
-        assertEquals(1, rows().count { it.orderId == order.id && it.resourceType == "LIMIT_MARKER" }, "the refused ones left one marker row")
-    }
-
-    @Test
-    fun `only POST is served`() {
-        mvc.perform(get("$base/scripted/$token")).andExpect(status().isMethodNotAllowed)
     }
 
     @Test

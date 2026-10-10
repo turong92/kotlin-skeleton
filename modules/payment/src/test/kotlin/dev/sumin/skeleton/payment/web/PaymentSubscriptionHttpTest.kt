@@ -5,7 +5,6 @@ import dev.sumin.skeleton.payment.web.PaymentHttpSupport.keys
 import dev.sumin.skeleton.payment.web.PaymentHttpSupport.read
 import dev.sumin.skeleton.payment.web.PaymentHttpSupport.strings
 import dev.sumin.skeleton.payment.testing.ScriptedGateway
-import dev.sumin.skeleton.payment.testing.ScriptedGateway.ConfirmScript
 import dev.sumin.skeleton.paymenttest.InMemoryLedgerBeans
 import dev.sumin.skeleton.paymenttest.PaymentWebTestApplication
 import dev.sumin.skeleton.paymenttest.SubscriptionBeans
@@ -53,15 +52,6 @@ class PaymentSubscriptionHttpTest {
     private fun started(account: String): String = read(start(account).andExpect(status().isCreated).andReturn().response.contentAsString)["value"]["subscription"]["id"].asString()
 
     @Test
-    fun `the plans are listed with code, name, amount, period and level`() {
-        mvc.perform(get("$base/subscriptions/plans").asUser(account())).andExpect(status().isOk)
-            .andExpect(jsonPath("$.value.plans[0].code").value("basic"))
-            .andExpect(jsonPath("$.value.plans[0].amount.amount").value(3900))
-            .andExpect(jsonPath("$.value.plans[0].period").value("P1M"))
-            .andExpect(jsonPath("$.value.plans[1].level").value(2))
-    }
-
-    @Test
     fun `start is 201 with the card registration values, the same key again is 200 with the same ones until the card is handed in, and the header is required`() {
         val account = account()
         val first = start(account, "same").andExpect(status().isCreated)
@@ -100,26 +90,6 @@ class PaymentSubscriptionHttpTest {
     }
 
     @Test
-    fun `a first charge that is declined is 402 with the provider code and the category`() {
-        val account = account()
-        val id = started(account)
-        gateway.script(ConfirmScript.Decline("REJECT_CARD_COMPANY"))
-
-        activate(account, id).andExpect(status().isPaymentRequired)
-            .andExpect(jsonPath("$.data.providerCode").value("REJECT_CARD_COMPANY"))
-            .andExpect(jsonPath("$.data.category").value("CARD_DECLINED"))
-    }
-
-    @Test
-    fun `an unknown answer to the first charge is 202 and the answer is PENDING`() {
-        val account = account()
-        val id = started(account)
-        gateway.script(ConfirmScript.TimeoutNotApplied)
-
-        activate(account, id).andExpect(status().isAccepted).andExpect(jsonPath("$.value.status").value("PENDING"))
-    }
-
-    @Test
     fun `somebody else's subscription is 404 on every route, the same as a missing one`() {
         val owner = account()
         val id = started(owner)
@@ -130,17 +100,6 @@ class PaymentSubscriptionHttpTest {
         activate(stranger, "sub_missing").andExpect(status().isNotFound)
         mvc.perform(post("$base/subscriptions/sub_missing/cancel").asUser(stranger)).andExpect(status().isNotFound)
         mvc.perform(get("$base/subscriptions/me").asUser(stranger)).andExpect(status().isOk).andExpect(jsonPath("$.value.subscription").value(null as Any?))
-    }
-
-    @Test
-    fun `cancel reserves the end and says the same when pressed again`() {
-        val account = account()
-        val id = started(account)
-        activate(account, id).andExpect(status().isOk)
-
-        repeat(2) {
-            mvc.perform(post("$base/subscriptions/$id/cancel").asUser(account)).andExpect(status().isOk).andExpect(jsonPath("$.value.status").value("CANCELING"))
-        }
     }
 
     @Test

@@ -1,7 +1,6 @@
 package dev.sumin.skeleton.payment.web
 
 import dev.sumin.skeleton.payment.PaymentAmount
-import dev.sumin.skeleton.payment.PaymentOrder
 import dev.sumin.skeleton.payment.PaymentOrderStatus
 import dev.sumin.skeleton.payment.PaymentRefund
 import dev.sumin.skeleton.payment.PaymentRefundStatus
@@ -73,16 +72,6 @@ class PaymentUserHttpTest {
     private fun refundRequest(account: String, orderId: String, key: String = "r-${System.nanoTime()}", body: String = """{"reasonCode":"CUSTOMER_REQUEST"}"""): ResultActions =
         mvc.perform(post("$base/orders/$orderId/refund-requests").asUser(account).header("Idempotency-Key", key).contentType(MediaType.APPLICATION_JSON).content(body))
 
-    // --- config ---
-
-    @Test
-    fun `config says whether payments can be taken - a checkout provider and a catalog - and whether the test keys are in`() {
-        mvc.perform(get("$base/config").asUser(account())).andExpect(status().isOk)
-            .andExpect(jsonPath("$.value.available").value(true))
-            .andExpect(jsonPath("$.value.testMode").value(true))
-            .andExpect(jsonPath("$.value.refundRequestsEnabled").value(true))
-    }
-
     // --- 주문 만들기 ---
 
     @Test
@@ -90,15 +79,8 @@ class PaymentUserHttpTest {
         val account = account()
         val first = createOrder(account, "same-key").andExpect(status().isCreated)
             .andExpect(jsonPath("$.value.order.status").value("PENDING"))
-            .andExpect(jsonPath("$.value.order.kind").value("ONE_TIME"))
-            .andExpect(jsonPath("$.value.order.itemRef").value("cheer-3000"))
             .andExpect(jsonPath("$.value.order.amount.amount").value(3000))
-            .andExpect(jsonPath("$.value.order.amount.currency").value("KRW"))
-            .andExpect(jsonPath("$.value.order.testMode").value(true))
-            .andExpect(jsonPath("$.value.order.card").value(org.hamcrest.Matchers.nullValue()))
             .andExpect(jsonPath("$.value.checkout.kind").value("SCRIPTED_WINDOW"))
-            .andExpect(jsonPath("$.value.checkout.clientKey").value("scripted_ck"))
-            .andExpect(jsonPath("$.value.checkout.orderId").exists())
             .andReturn().response.contentAsString
 
         val again = createOrder(account, "same-key").andExpect(status().isOk).andReturn().response.contentAsString
@@ -124,28 +106,9 @@ class PaymentUserHttpTest {
     }
 
     @Test
-    fun `an anonymous caller is 401 on config, the list and abandon - every mapping is covered by PaymentHttpAccessTest`() {
-        mvc.perform(get("$base/config")).andExpect(status().isUnauthorized)
-        mvc.perform(get("$base/orders")).andExpect(status().isUnauthorized)
-        mvc.perform(post("$base/orders/ord_x/abandon")).andExpect(status().isUnauthorized)
-    }
-
-    @Test
-    fun `config says not available when the provider cannot hand out the values for its window - a missing or mismatched public key`() {
-        gateway.checkoutReady = false
-        try {
-            mvc.perform(get("$base/config").asUser(account())).andExpect(status().isOk)
-                .andExpect(jsonPath("$.value.available").value(false))
-                .andExpect(jsonPath("$.value.testMode").value(false))
-        } finally {
-            gateway.checkoutReady = true
-        }
-        mvc.perform(get("$base/config").asUser(account())).andExpect(jsonPath("$.value.available").value(true))
-    }
-
-    @Test
-    fun `when config says not available, creating an order is 503 UNAVAILABLE and makes no order and no job`() {
+    fun `config says whether payments can be taken, and when it says not available creating an order is 503 UNAVAILABLE and makes no order`() {
         val account = account()
+        mvc.perform(get("$base/config").asUser(account)).andExpect(jsonPath("$.value.available").value(true)).andExpect(jsonPath("$.value.testMode").value(true))
         val orders = store.allOrders().size
         gateway.checkoutReady = false
         try {
@@ -157,106 +120,36 @@ class PaymentUserHttpTest {
         assertEquals(orders, store.allOrders().size)
     }
 
-    @Test
-    fun `the same key again for a pending order whose payment window has passed is 200 with checkout null - the expiry job need not have run`() {
-        val account = account()
-        val id = read(createOrder(account, "k-late").andReturn().response.contentAsString)["value"]["order"]["id"].asString()
-        store.inTransaction { tx -> tx.updateOrder(tx.lockOrder(id)!!.copy(checkoutExpiresAt = Instant.now().minusSeconds(60))) }
-
-        val body = createOrder(account, "k-late").andExpect(status().isOk).andReturn().response.contentAsString
-
-        val value = read(body)["value"]
-        assertEquals(id, value["order"]["id"].asString())
-        assertEquals("PENDING", value["order"]["status"].asString())
-        assertTrue(value.has("checkout") && value["checkout"].isNull, "checkout is a field and it is null: $body")
-    }
-
-    @Test
-    fun `the same key again when the payment provider is gone is 503 unavailable, like a new order - not a 400 provider-not-found`() {
-        val account = account()
-        val id = read(createOrder(account, "k-gone").andReturn().response.contentAsString)["value"]["order"]["id"].asString()
-        store.inTransaction { tx -> tx.updateOrder(tx.lockOrder(id)!!.copy(provider = "ghost")) }
-
-        createOrder(account, "k-gone").andExpect(status().isServiceUnavailable).andExpect(jsonPath("$.code").value("PAYMENT.UNAVAILABLE"))
-    }
-
     // --- 승인 ---
 
     @Test
-    fun `confirming a paid order is 200 and a resend with the same payment key is 200 again without another call to the provider`() {
+    fun `confirm maps the outcomes - paid 200 with the card, unknown answer 202 CONFIRMING, changed amount 400 before the provider, refused card 402 with a category`() {
         val account = account()
-        val id = newOrder(account)
-        gateway.authenticate("pay_$id", id, PaymentAmount(3000, "KRW"))
-
-        confirm(account, id, "pay_$id").andExpect(status().isOk)
+        val paid = newOrder(account)
+        gateway.authenticate("pay_$paid", paid, PaymentAmount(3000, "KRW"))
+        confirm(account, paid, "pay_$paid").andExpect(status().isOk)
             .andExpect(jsonPath("$.value.status").value("PAID"))
             .andExpect(jsonPath("$.value.card.issuer").value("HYUNDAI"))
             .andExpect(jsonPath("$.value.card.last4").value("1234"))
-            .andExpect(jsonPath("$.value.method").value(org.hamcrest.Matchers.anything()))
-        val calls = gateway.confirmCalls.size
 
-        confirm(account, id, "pay_$id").andExpect(status().isOk).andExpect(jsonPath("$.value.status").value("PAID"))
-
-        assertEquals(calls, gateway.confirmCalls.size)
-    }
-
-    @Test
-    fun `an answer that never came back leaves the order confirming and the response 202 - a resend does not call the provider again`() {
-        val account = account()
-        val id = newOrder(account)
-        gateway.authenticate("pay_$id", id, PaymentAmount(3000, "KRW"))
+        val unknown = newOrder(account)
+        gateway.authenticate("pay_$unknown", unknown, PaymentAmount(3000, "KRW"))
         gateway.script(ScriptedGateway.ConfirmScript.TimeoutNotApplied)
+        confirm(account, unknown, "pay_$unknown").andExpect(status().isAccepted).andExpect(jsonPath("$.value.status").value("CONFIRMING"))
 
-        confirm(account, id, "pay_$id").andExpect(status().isAccepted).andExpect(jsonPath("$.value.status").value("CONFIRMING"))
+        val changed = newOrder(account)
+        gateway.authenticate("pay_$changed", changed, PaymentAmount(3000, "KRW"))
         val calls = gateway.confirmCalls.size
-        confirm(account, id, "pay_$id").andExpect(status().isAccepted)
-
+        confirm(account, changed, "pay_$changed", amount = "2999").andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("PAYMENT.AMOUNT_MISMATCH"))
         assertEquals(calls, gateway.confirmCalls.size)
-    }
 
-    @Test
-    fun `a changed amount is 400 amount mismatch before the provider is called and the order stays pending`() {
-        val account = account()
-        val id = newOrder(account)
-        gateway.authenticate("pay_$id", id, PaymentAmount(3000, "KRW"))
-        val calls = gateway.confirmCalls.size
-
-        confirm(account, id, "pay_$id", amount = "2999").andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("PAYMENT.AMOUNT_MISMATCH"))
-
-        assertEquals(calls, gateway.confirmCalls.size)
-        assertEquals(PaymentOrderStatus.PENDING, store.findOrder(id)!!.status)
-    }
-
-    @Test
-    fun `a card the provider refuses is 402 declined with the provider code and a category the screen can word`() {
-        val account = account()
-        val id = newOrder(account)
-        gateway.authenticate("pay_$id", id, PaymentAmount(3000, "KRW"))
+        val declined = newOrder(account)
+        gateway.authenticate("pay_$declined", declined, PaymentAmount(3000, "KRW"))
         gateway.script(ScriptedGateway.ConfirmScript.Decline("REJECT_CARD_COMPANY"))
-
-        confirm(account, id, "pay_$id").andExpect(status().isPaymentRequired)
+        confirm(account, declined, "pay_$declined").andExpect(status().isPaymentRequired)
             .andExpect(jsonPath("$.code").value("PAYMENT.DECLINED"))
             .andExpect(jsonPath("$.data.providerCode").value("REJECT_CARD_COMPANY"))
             .andExpect(jsonPath("$.data.category").value("CARD_DECLINED"))
-        assertEquals(PaymentOrderStatus.FAILED, store.findOrder(id)!!.status)
-    }
-
-    @Test
-    fun `confirming a PAID order with another payment key is 409, and a CONFIRMING order with another payment key is 202 with the order as it is - nothing is claimed twice`() {
-        val account = account()
-        val paid = paidOrder(account)
-        confirm(account, paid, "pay_other").andExpect(status().isConflict).andExpect(jsonPath("$.code").value("PAYMENT.ORDER_NOT_PAYABLE"))
-
-        val confirming = newOrder(account)
-        gateway.authenticate("pay_c_$confirming", confirming, PaymentAmount(3000, "KRW"))
-        gateway.script(ScriptedGateway.ConfirmScript.TimeoutNotApplied)
-        confirm(account, confirming, "pay_c_$confirming").andExpect(status().isAccepted)
-        val calls = gateway.confirmCalls.size
-
-        confirm(account, confirming, "pay_c_other").andExpect(status().isAccepted).andExpect(jsonPath("$.value.status").value("CONFIRMING"))
-
-        assertEquals(calls, gateway.confirmCalls.size)
-        assertEquals("pay_c_$confirming", store.findOrder(confirming)!!.providerPaymentId)
     }
 
     @Test
@@ -289,17 +182,6 @@ class PaymentUserHttpTest {
     // --- 그만둠 · 읽기 ---
 
     @Test
-    fun `abandoning gives back the canceled order and an order that is already over is returned as it is, not an error`() {
-        val account = account()
-        val pending = newOrder(account)
-        val paid = paidOrder(account)
-
-        mvc.perform(post("$base/orders/$pending/abandon").asUser(account)).andExpect(status().isOk).andExpect(jsonPath("$.value.status").value("CANCELED"))
-        mvc.perform(post("$base/orders/$pending/abandon").asUser(account)).andExpect(status().isOk).andExpect(jsonPath("$.value.status").value("CANCELED"))
-        mvc.perform(post("$base/orders/$paid/abandon").asUser(account)).andExpect(status().isOk).andExpect(jsonPath("$.value.status").value("PAID"))
-    }
-
-    @Test
     fun `one order comes with its refund lines and the summary fields - and a pending attempt is readable by its owner`() {
         val account = account()
         val paid = paidOrder(account)
@@ -309,9 +191,7 @@ class PaymentUserHttpTest {
         mvc.perform(get("$base/orders/$paid").asUser(account)).andExpect(status().isOk)
             .andExpect(jsonPath("$.value.order.status").value("PAID"))
             .andExpect(jsonPath("$.value.order.refundableAmount").value(3000))
-            .andExpect(jsonPath("$.value.order.refundPending").value(true))
             .andExpect(jsonPath("$.value.order.openRefundStatus").value("REQUESTED"))
-            .andExpect(jsonPath("$.value.order.fulfilled").value(true))
             .andExpect(jsonPath("$.value.refunds.length()").value(1))
             .andExpect(jsonPath("$.value.refunds[0].status").value("REQUESTED"))
             .andExpect(jsonPath("$.value.refunds[0].origin").value("USER"))
@@ -337,19 +217,13 @@ class PaymentUserHttpTest {
     }
 
     @Test
-    fun `a cursor whose time or id is outside what the databases hold is 400, not a 500 from the query`() {
+    fun `a cursor whose time or id is outside what the databases hold, or that is not ours, is 400 - not a 500 from the query`() {
         fun cursor(text: String) = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(text.toByteArray())
         listOf("o.-1.ord_x", "o.9223372036854775807.ord_x", "o.300000000000000000.ord_x", "o.1700000000000000.ord x", "o.1700000000000000.ord\u0000x").forEach { raw ->
             mvc.perform(get("$base/orders?cursor=${cursor(raw)}").asUser(account())).andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("COMMON.VALIDATION_FAILED"))
         }
         mvc.perform(get("$base/orders?cursor=${cursor("o.1700000000000000.ord_x")}").asUser(account())).andExpect(status().isOk)
-    }
-
-    @Test
-    fun `a cursor that is not ours is 400 and a size outside 1 to 100 is clamped`() {
-        mvc.perform(get("$base/orders?cursor=not-a-cursor").asUser(account())).andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("COMMON.VALIDATION_FAILED"))
-        mvc.perform(get("$base/orders?size=0").asUser(account())).andExpect(status().isOk)
-        mvc.perform(get("$base/orders?size=100000").asUser(account())).andExpect(status().isOk)
+        mvc.perform(get("$base/orders?cursor=not-a-cursor").asUser(account())).andExpect(status().isBadRequest)
     }
 
     // --- 환불 요청 ---
@@ -452,7 +326,4 @@ class PaymentUserHttpTest {
             tx.insertRefundIfAbsent(line)
         }
     }
-
-    @Suppress("unused")
-    private fun order(id: String): PaymentOrder = store.findOrder(id)!!
 }

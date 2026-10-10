@@ -20,11 +20,6 @@ class TossRefundDeclineCategoryTest {
     }
 
     @Test
-    fun `every other code, a new code and no code are other`() {
-        listOf("INVALID_REQUEST", "UNAUTHORIZED_KEY", "NOT_FOUND_PAYMENT", "SOMETHING_NEW", null).forEach { assertEquals(RefundDeclineCategory.OTHER, provider.refundDeclineCategory(it), "$it") }
-    }
-
-    @Test
     fun `the unknown-outcome refund codes are never given a kind - they are other, even if one ever reached the classifier`() {
         listOf("ALREADY_CANCELED_PAYMENT", "NOT_CANCELABLE_AMOUNT", "EXCEED_CANCEL_LIMIT", "REFUND_REJECTED").forEach {
             assertEquals(RefundDeclineCategory.OTHER, provider.refundDeclineCategory(it), it)

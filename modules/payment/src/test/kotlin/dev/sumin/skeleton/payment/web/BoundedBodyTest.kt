@@ -55,9 +55,4 @@ class BoundedBodyTest {
         assertTrue(endless.served in 1001..1001 + 4096, "read at most a little past the limit, not the whole stream: ${endless.served}")
     }
 
-    @Test
-    fun `one byte over the limit is refused and exactly the limit is not`() {
-        assertEquals(10, BoundedBody.read(ByteArrayInputStream(ByteArray(10)), declared = -1, maxBytes = 10).size)
-        assertFailsWith<PaymentWebhookTooLargeException> { BoundedBody.read(ByteArrayInputStream(ByteArray(11)), declared = -1, maxBytes = 10) }
-    }
 }

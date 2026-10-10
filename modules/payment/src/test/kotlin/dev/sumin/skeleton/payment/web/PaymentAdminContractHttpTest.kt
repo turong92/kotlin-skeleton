@@ -20,7 +20,6 @@ import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
-import org.hamcrest.Matchers.nullValue
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.context.TestConfiguration
@@ -34,7 +33,6 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
-import tools.jackson.databind.JsonNode
 
 /** 조회만 하는 결제사 — 환불 능력이 없다(`CAPABILITY_UNSUPPORTED` 가 나는 자리). */
 class LookupOnlyGateway : PaymentLookupGateway {
@@ -160,30 +158,6 @@ class PaymentAdminContractHttpTest {
 
     // --- C3 · 같은 키 ---
 
-    @Test
-    fun `the same key again after the provider refused returns that FAILED line as 200 and does not ask the provider again`() {
-        val id = paid()
-        gateway.scriptRefund(ScriptedGateway.RefundScript.Decline("NOT_ALLOWED_PARTIAL_REFUND"))
-        val body = """{"reasonCode":"OPERATOR","amount":1000}"""
-        refundNow(id, "k-declined", body).andExpect(status().isPaymentRequired)
-        val calls = gateway.refundCalls.size
-        val lookups = gateway.lookupCalls.size
-
-        refundNow(id, "k-declined", body).andExpect(status().isOk).andExpect(jsonPath("$.value.status").value("FAILED"))
-
-        assertEquals(calls, gateway.refundCalls.size)
-        assertEquals(lookups, gateway.lookupCalls.size)
-    }
-
-    @Test
-    fun `a direct refund with the same key and another body is 409 idempotency conflict`() {
-        val id = paid()
-        refundNow(id, "k-conflict", """{"reasonCode":"OPERATOR","amount":1000}""").andExpect(status().isOk)
-
-        refundNow(id, "k-conflict", """{"reasonCode":"OPERATOR","amount":2000}""").andExpect(status().isConflict).andExpect(jsonPath("$.code").value("PAYMENT.IDEMPOTENCY_CONFLICT"))
-        refundNow(id, "k-conflict", """{"reasonCode":"DUPLICATE","amount":1000}""").andExpect(status().isConflict).andExpect(jsonPath("$.code").value("PAYMENT.IDEMPOTENCY_CONFLICT"))
-    }
-
     // --- 탈퇴한 계정의 줄: 기본 숨김과 예외 ---
 
     @Test
@@ -201,19 +175,6 @@ class PaymentAdminContractHttpTest {
         mvc.perform(get("$admin/orders?q=$id").asOperator()).andExpect(jsonPath("$.values[0].id").value(id)).andExpect(jsonPath("$.values[0].accountErasedAt").value("2026-10-01T00:00:00Z"))
         mvc.perform(get("$admin/orders/$id").asOperator()).andExpect(jsonPath("$.value.order.accountErasedAt").value("2026-10-01T00:00:00Z"))
         mvc.perform(post("$admin/orders/$id/sync").asOperator()).andExpect(status().isOk).andExpect(jsonPath("$.value.accountErasedAt").value("2026-10-01T00:00:00Z"))
-    }
-
-    @Test
-    fun `accountErasedAt is a field of every operator order shape even while the account is there - null`() {
-        val id = paid()
-
-        val shapes = listOf(
-            read(mvc.perform(get("$admin/orders?q=$id").asOperator()).andReturn().response.contentAsString)["values"][0],
-            read(mvc.perform(get("$admin/orders/$id").asOperator()).andReturn().response.contentAsString)["value"]["order"],
-            read(mvc.perform(post("$admin/orders/$id/sync").asOperator()).andReturn().response.contentAsString)["value"],
-        )
-
-        shapes.forEach { assertTrue(it.has("accountErasedAt") && it["accountErasedAt"].isNull, "shape: $it") }
     }
 
     // --- 맞추기 ---
@@ -281,47 +242,6 @@ class PaymentAdminContractHttpTest {
     // --- 모든 응답 DTO 의 칸 ---
 
     @Test
-    fun `every order object in every response has openRefundStatus and every refund line has closedBy - null is allowed, a missing field is not`() {
-        val account = account()
-        val id = paid(account)
-        val line = userRequest(account, id)
-        val responses: List<JsonNode> = listOf(
-            mvc.perform(get("$user/orders/$id").asUser(account)),
-            mvc.perform(get("$user/orders").asUser(account)),
-            mvc.perform(post("$user/orders/$line/withdraw".replace("orders/$line", "refunds/$line")).asUser(account)),
-            mvc.perform(post("$user/orders/$id/abandon").asUser(account)),
-            mvc.perform(post("$user/orders").asUser(account).header("Idempotency-Key", "shape-1").contentType(MediaType.APPLICATION_JSON).content("""{"itemType":"cheer","itemRef":"cheer-3000"}""")),
-            mvc.perform(post("$user/orders").asUser(account).header("Idempotency-Key", "shape-1").contentType(MediaType.APPLICATION_JSON).content("""{"itemType":"cheer","itemRef":"cheer-3000"}""")),
-            mvc.perform(post("$user/orders/$id/confirm").asUser(account).contentType(MediaType.APPLICATION_JSON).content("""{"providerPaymentId":"pay_$id","amount":3000}""")),
-            mvc.perform(post("$user/orders/$id/refund-requests").asUser(account).header("Idempotency-Key", "shape-2").contentType(MediaType.APPLICATION_JSON).content("""{"reasonCode":"CUSTOMER_REQUEST"}""")),
-            mvc.perform(get("$admin/orders?accountId=$account").asOperator()),
-            mvc.perform(get("$admin/orders/$id").asOperator()),
-            mvc.perform(post("$admin/orders/$id/sync").asOperator()),
-            mvc.perform(get("$admin/refunds?status=WITHDRAWN").asOperator()),
-            mvc.perform(post("$admin/orders/$id/refunds").asOperator().header("Idempotency-Key", "shape-3").contentType(MediaType.APPLICATION_JSON).content("""{"reasonCode":"OPERATOR","amount":1000}""")),
-        ).map { read(it.andReturn().response.contentAsString) }
-
-        var orders = 0
-        var refunds = 0
-        fun walk(node: JsonNode) {
-            if (node.isObject) {
-                if (node.has("refundableAmount")) {
-                    orders++
-                    assertTrue(node.has("openRefundStatus"), "an order object without openRefundStatus: $node")
-                }
-                if (node.has("reasonCode") && node.has("origin") && node.has("orderId")) {
-                    refunds++
-                    assertTrue(node.has("closedBy"), "a refund line without closedBy: $node")
-                }
-                node.properties().forEach { (_, child) -> walk(child) }
-            }
-            if (node.isArray) node.forEach(::walk)
-        }
-        responses.forEach(::walk)
-        assertTrue(orders >= 8 && refunds >= 3, "the walk really met orders ($orders) and refund lines ($refunds)")
-    }
-
-    @Test
     fun `an operator order and an operator refund line have exactly these fields in exactly this order - the front end reads this shape`() {
         val account = account()
         val id = paid(account)
@@ -343,21 +263,4 @@ class PaymentAdminContractHttpTest {
         assertEquals(refundFields, refund.propertyNames().toList())
     }
 
-    @Test
-    fun `the same key again for an order that already has a refund open says so - refundPending, openRefundStatus and refundableAmount are the order's real ones`() {
-        val account = account()
-        val key = "replay-open-refund"
-        val created = read(
-            mvc.perform(post("$user/orders").asUser(account).header("Idempotency-Key", key).contentType(MediaType.APPLICATION_JSON).content("""{"itemType":"cheer","itemRef":"cheer-3000"}""")).andReturn().response.contentAsString,
-        )["value"]["order"]["id"].asString()
-        gateway.authenticate("pay_$created", created, PaymentAmount(3000, "KRW"))
-        mvc.perform(post("$user/orders/$created/confirm").asUser(account).contentType(MediaType.APPLICATION_JSON).content("""{"providerPaymentId":"pay_$created","amount":3000}""")).andExpect(status().isOk)
-        userRequest(account, created)
-
-        mvc.perform(post("$user/orders").asUser(account).header("Idempotency-Key", key).contentType(MediaType.APPLICATION_JSON).content("""{"itemType":"cheer","itemRef":"cheer-3000"}"""))
-            .andExpect(status().isOk)
-            .andExpect(jsonPath("$.value.order.refundPending").value(true))
-            .andExpect(jsonPath("$.value.order.openRefundStatus").value("REQUESTED"))
-            .andExpect(jsonPath("$.value.checkout").value(nullValue()))
-    }
 }

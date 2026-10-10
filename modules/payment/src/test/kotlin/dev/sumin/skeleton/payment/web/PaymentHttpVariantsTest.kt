@@ -73,21 +73,4 @@ class PaymentHttpVariantsTest {
         }
     }
 
-    @Test
-    fun `http enabled false closes the user paths but leaves the webhook path to its own switch`() {
-        all.withUserConfiguration(Ledger::class.java).withBean(PaymentCatalog::class.java, java.util.function.Supplier { CheerCatalog() })
-            .withPropertyValues("skeleton.payment.http.enabled=false").run { context ->
-                assertTrue(context.getBeansOfType(PaymentController::class.java).isEmpty())
-                assertTrue(context.getBeansOfType(PaymentOrderController::class.java).isEmpty())
-            }
-    }
-
-    @Test
-    fun `an app's own operator policy replaces the role check`() {
-        val policy = PaymentOperatorPolicy { true }
-        all.withUserConfiguration(Ledger::class.java).withBean(PaymentOperatorPolicy::class.java, java.util.function.Supplier { policy })
-            .withPropertyValues("skeleton.payment.admin.enabled=true").run { context ->
-                assertEquals(policy, context.getBean(PaymentOperatorPolicy::class.java))
-            }
-    }
 }

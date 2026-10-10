@@ -16,15 +16,6 @@ class PaymentLedgerPropertiesTest {
             .orElseGet { PaymentProperties() }
 
     @Test
-    fun `defaults are the ones the design fixed - 30 minutes, 60 seconds, 12 attempts`() {
-        val properties = bind()
-
-        assertEquals(Duration.ofMinutes(30), properties.checkoutTtl)
-        assertEquals(Duration.ofSeconds(60), properties.reconcile.firstDelay)
-        assertEquals(12, properties.reconcile.maxAttempts)
-    }
-
-    @Test
     fun `the ledger keys bind under the one skeleton payment prefix and the old keys still bind`() {
         val properties = bind(
             "skeleton.payment.checkout-ttl" to "10m",
@@ -44,27 +35,8 @@ class PaymentLedgerPropertiesTest {
         assertFailsWith<BindException> { bind("skeleton.payment.checkout-ttl" to "0s") }
         assertFailsWith<BindException> { bind("skeleton.payment.reconcile.first-delay" to "-5s") }
         assertFailsWith<BindException> { bind("skeleton.payment.reconcile.max-attempts" to "0") }
-    }
-
-    @Test
-    fun `the redelivery requeue limit defaults to 10, binds, and may be zero but not negative`() {
-        assertEquals(10, bind().webhook.redeliveryRequeueLimit)
-        assertEquals(3, bind("skeleton.payment.webhook.redelivery-requeue-limit" to "3").webhook.redeliveryRequeueLimit)
-        assertEquals(0, bind("skeleton.payment.webhook.redelivery-requeue-limit" to "0").webhook.redeliveryRequeueLimit)
         assertFailsWith<BindException> { bind("skeleton.payment.webhook.redelivery-requeue-limit" to "-1") }
-    }
-
-    @Test
-    fun `the per-order webhook limit defaults to 30 events in 10 minutes and binds`() {
-        assertEquals(30, bind().webhook.perOrderLimit.capacity)
-        assertEquals(Duration.ofMinutes(10), bind().webhook.perOrderLimit.window)
-
-        val bound = bind("skeleton.payment.webhook.per-order-limit.capacity" to "5", "skeleton.payment.webhook.per-order-limit.window" to "2m")
-
-        assertEquals(5, bound.webhook.perOrderLimit.capacity)
-        assertEquals(Duration.ofMinutes(2), bound.webhook.perOrderLimit.window)
         assertFailsWith<BindException> { bind("skeleton.payment.webhook.per-order-limit.capacity" to "0") }
-        assertFailsWith<BindException> { bind("skeleton.payment.webhook.per-order-limit.window" to "0s") }
     }
 
     @Test

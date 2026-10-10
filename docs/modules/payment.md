@@ -242,7 +242,7 @@
 | B8 수정 1회차 (`c5974d9`) | 운영자 인터셉터가 `/sync` 를 건너뛰게 함 | 샘플의 HTTP 표면 훑기(`CheerHttpSurfaceIntegrationTest`)의 403 훑기가 빨개짐 |
 | B8 수정 2회차 (`b61fd82`, `7ec3fa4`) | 미지급 질의의 `limit` 를 CTE 안으로 옮김 | 저장소 계약의 미지급 시험(`PaymentLedgerStoreContract`)이 빨개짐 — PostgreSQL |
 | B10 (`96a1198`) | 주문 줄 락(`lockOrder` 의 `for update`)을 뺌 | 여러 대 시험의 시나리오 2 · 3 · 4 · 5 · 9 가 빨개짐. 1 · 6 · 8 · 10 · 11 은 유니크 제약 · `SKIP LOCKED` 가 받쳐서 초록으로 남는다 — 통과가 DB 락 덕분이라는 증거 |
-| B9 (`OperatorResponseDriftTest`) | 운영자 응답 DTO 에서 사용자 DTO 의 칸 하나를 뺌 | `OperatorResponseDriftTest` 가 빨개짐 |
+| B9 (`PaymentAdminContractHttpTest`) | 운영자 응답 DTO 에서 사용자 DTO 의 칸 하나를 뺌 | `PaymentAdminContractHttpTest` 의 운영자 칸 순서 시험이 빨개짐 |
 
 **안 한 것**: 위 표 밖의 §3 보장(1 · 2 · 4 · 5 · 8~11 · 13~20)에 대해서는 이번에 새 변이를 돌리지 않았다. 앞 작업의 변이 가운데 내용이 기록에 남지 않은 것(B3 둘 · B7 열둘)은 다시 재현하지 않았다.
 

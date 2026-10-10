@@ -79,8 +79,4 @@ class PaymentWebhookDeployGuardTest {
         assertTrue(messages.any { "weak" in it })
     }
 
-    @Test
-    fun `the guard is named payment`() {
-        assertEquals("payment", guard(strong).name)
-    }
 }

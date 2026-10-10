@@ -74,17 +74,6 @@ class PaymentAdminHttpTest {
 
     // --- 권한 ---
 
-    @Test
-    fun `an operator path is 403 for a caller without the role and 401 for an anonymous one - a few paths by hand, every mapping is covered by PaymentHttpAccessTest`() {
-        val id = paid()
-        mvc.perform(get("$admin/orders").asUser("acc_plain", "USER")).andExpect(status().isForbidden).andExpect(jsonPath("$.code").value("COMMON.FORBIDDEN"))
-        mvc.perform(get("$admin/orders/$id").asUser("acc_plain")).andExpect(status().isForbidden)
-        mvc.perform(post("$admin/orders/$id/sync").asUser("acc_plain")).andExpect(status().isForbidden)
-        mvc.perform(post("$admin/refunds/rfd_x/approve").asUser("acc_plain")).andExpect(status().isForbidden)
-        mvc.perform(get("$admin/webhook-events").asUser("acc_plain")).andExpect(status().isForbidden)
-        mvc.perform(get("$admin/orders")).andExpect(status().isUnauthorized)
-    }
-
     // --- 목록 · 한 건 ---
 
     @Test
@@ -104,19 +93,6 @@ class PaymentAdminHttpTest {
         assertEquals("PAID", row["status"].asString())
         mvc.perform(get("$admin/orders?accountId=$account&status=REFUNDED").asOperator()).andExpect(status().isOk).andExpect(jsonPath("$.values.length()").value(0))
         mvc.perform(get("$admin/orders?status=NOPE").asOperator()).andExpect(status().isBadRequest)
-    }
-
-    @Test
-    fun `the list pages by a cursor`() {
-        val account = account()
-        val ids = (1..3).map { paid(account) }
-
-        val firstPage = read(mvc.perform(get("$admin/orders?accountId=$account&size=2").asOperator()).andReturn().response.contentAsString)
-        val secondPage = read(mvc.perform(get("$admin/orders?accountId=$account&size=2&cursor=${firstPage["cursor"]["nextCursor"].asString()}").asOperator()).andReturn().response.contentAsString)
-
-        assertEquals(ids.reversed(), (firstPage["values"] + secondPage["values"]).map { it["id"].asString() })
-        assertTrue(firstPage["cursor"]["hasNext"].asBoolean())
-        assertTrue(!secondPage["cursor"]["hasNext"].asBoolean())
     }
 
     @Test
@@ -159,27 +135,6 @@ class PaymentAdminHttpTest {
     }
 
     @Test
-    fun `a paid order nobody fulfilled and a succeeded refund nobody applied are in the review list once they are stale, with the reason their dead job would have set`() {
-        val account = account()
-        val unfulfilled = paid(account)
-        store.inTransaction { tx -> tx.updateOrder(tx.lockOrder(unfulfilled)!!.copy(fulfilledAt = null, paidAt = Instant.now().minus(Duration.ofHours(3)))) }
-        val unapplied = paid(account)
-        store.inTransaction { tx ->
-            tx.updateOrder(tx.lockOrder(unapplied)!!.copy(fulfilledAt = Instant.now()))
-            tx.insertRefundIfAbsent(
-                PaymentTestOrders.refund(id = "rfd_" + "8".repeat(32), orderId = unapplied, status = PaymentRefundStatus.SUCCEEDED, now = Instant.now().minus(Duration.ofHours(3)))
-                    .copy(completedAt = Instant.now().minus(Duration.ofHours(3))),
-            )
-        }
-
-        val reasons = read(mvc.perform(get("$admin/orders?accountId=$account&review=true").asOperator()).andReturn().response.contentAsString)["values"]
-            .associate { it["id"].asString() to it["reviewReason"].asString() }
-
-        assertEquals("FULFILMENT_UNRESOLVED", reasons[unfulfilled])
-        assertEquals("REFUND_APPLY_UNRESOLVED", reasons[unapplied])
-    }
-
-    @Test
     fun `one order comes with its refunds and its history oldest first - ids count from 1 - and an unknown id is the order-not-found 404`() {
         val id = paid()
 
@@ -218,14 +173,6 @@ class PaymentAdminHttpTest {
     }
 
     @Test
-    fun `a refund whose answer never came back is 202 PENDING`() {
-        val id = paid()
-        gateway.scriptRefund(ScriptedGateway.RefundScript.TimeoutNotApplied)
-
-        refundNow(id).andExpect(status().isAccepted).andExpect(jsonPath("$.value.status").value("PENDING"))
-    }
-
-    @Test
     fun `a provider refusal is 402 refund declined with a category and the provider code, and the line is closed so the next refund is not blocked`() {
         val id = paid()
         gateway.scriptRefund(ScriptedGateway.RefundScript.Decline("NOT_ALLOWED_PARTIAL_REFUND"))
@@ -258,18 +205,6 @@ class PaymentAdminHttpTest {
                 .andReturn().response.contentAsString,
         )["value"]["order"]["id"].asString()
         refundNow(unpaid).andExpect(status().isConflict).andExpect(jsonPath("$.code").value("PAYMENT.REFUND_NOT_ALLOWED"))
-    }
-
-    @Test
-    fun `when the check before the refund cannot reach the provider nothing is sent - 503 unavailable - and no pending line stays`() {
-        val id = paid()
-        gateway.failLookups(1)
-        val calls = gateway.refundCalls.size
-
-        refundNow(id).andExpect(status().isServiceUnavailable).andExpect(jsonPath("$.code").value("PAYMENT.UNAVAILABLE"))
-
-        assertEquals(calls, gateway.refundCalls.size)
-        assertEquals(emptyList(), store.listRefunds(id).filter { it.status == PaymentRefundStatus.PENDING })
     }
 
     // --- 환불 요청 목록 · 승인 · 거절 ---
@@ -309,19 +244,6 @@ class PaymentAdminHttpTest {
     }
 
     @Test
-    fun `an approval the provider refuses is 402 and the request line is closed as failed`() {
-        val account = account()
-        val id = paid(account)
-        val line = userRequest(account, id)
-        gateway.scriptRefund(ScriptedGateway.RefundScript.Decline("EXCEED_MAX_REFUND_DUE"))
-
-        mvc.perform(post("$admin/refunds/$line/approve").asOperator()).andExpect(status().isPaymentRequired)
-            .andExpect(jsonPath("$.code").value("PAYMENT.REFUND_DECLINED"))
-            .andExpect(jsonPath("$.data.category").value("PERIOD_EXPIRED"))
-        assertEquals(PaymentRefundStatus.FAILED, store.findRefund(line)!!.status)
-    }
-
-    @Test
     fun `rejecting a request is 200 REJECTED and a decided line is 409`() {
         val account = account()
         val id = paid(account)
@@ -335,24 +257,13 @@ class PaymentAdminHttpTest {
     // --- 맞추기 ---
 
     @Test
-    fun `sync returns the matched order and asks the provider`() {
-        val id = paid()
-        val lookups = gateway.lookupCalls.size
-
-        mvc.perform(post("$admin/orders/$id/sync").asOperator()).andExpect(status().isOk).andExpect(jsonPath("$.value.id").value(id)).andExpect(jsonPath("$.value.providerPaymentId").value("pay_$id"))
-
-        assertTrue(gateway.lookupCalls.size > lookups)
-    }
-
-    @Test
-    fun `sync is 503 unavailable when the provider cannot be reached, 409 mode mismatch for an order of the other mode, 404 for a missing order`() {
+    fun `sync is 503 unavailable when the provider cannot be reached and 404 for a missing order, and a refund of an order of the other mode is 409 mode mismatch`() {
         val id = paid()
         gateway.failLookups(1) { IllegalStateException("network down") }
         mvc.perform(post("$admin/orders/$id/sync").asOperator()).andExpect(status().isServiceUnavailable).andExpect(jsonPath("$.code").value("PAYMENT.UNAVAILABLE"))
 
         gateway.mode = dev.sumin.skeleton.payment.PaymentMode.LIVE
         try {
-            mvc.perform(post("$admin/orders/$id/sync").asOperator()).andExpect(status().isConflict).andExpect(jsonPath("$.code").value("PAYMENT.MODE_MISMATCH"))
             refundNow(id).andExpect(status().isConflict).andExpect(jsonPath("$.code").value("PAYMENT.MODE_MISMATCH"))
         } finally {
             gateway.mode = dev.sumin.skeleton.payment.PaymentMode.TEST

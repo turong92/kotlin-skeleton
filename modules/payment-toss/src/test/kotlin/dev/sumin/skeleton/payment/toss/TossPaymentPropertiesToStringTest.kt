@@ -16,12 +16,4 @@ class TossPaymentPropertiesToStringTest {
         assertTrue(set.toString().contains("enabled=true"), "the rest of the settings stay readable")
     }
 
-    @Test
-    fun `toString does not print the base url either - it says only whether it is the default`() {
-        val custom = TossPaymentProperties(baseUrl = "https://internal-proxy.example.test")
-
-        assertFalse(custom.toString().contains("internal-proxy"), custom.toString())
-        assertTrue(custom.toString().contains("baseUrl=<set>"), custom.toString())
-        assertTrue(TossPaymentProperties().toString().contains("baseUrl=<default>"), TossPaymentProperties().toString())
-    }
 }

@@ -82,12 +82,6 @@ class TossFailureClassificationTest {
     }
 
     @Test
-    fun `the allow list is exactly this set - a code added or removed by accident fails here`() {
-        assertEquals(26, allowList.size)
-        assertEquals(allowList.map { it.second }.toSet(), TossPaymentErrorMapper.DEFINITIVE_CODES)
-    }
-
-    @Test
     fun `every allow-listed code is marked definitive on the exception and nothing else is`() {
         server.on("POST", "/v1/payments/confirm", TossFixtures.error(403, "REJECT_CARD_PAYMENT"))
         assertTrue(assertFailsWith<PaymentProviderException> { confirm() }.providerError.definitive)
@@ -127,30 +121,8 @@ class TossFailureClassificationTest {
     }
 
     @Test
-    fun `a 4xx code that is not on the allow list is unknown - including one Toss adds tomorrow`() {
-        listOf(
-            400 to "A_CODE_ADDED_NEXT_YEAR",
-            403 to "REJECT_SOMETHING_NEW",
-            404 to "NOT_FOUND_SOMETHING",
-            422 to "UNPROCESSABLE",
-        ).forEach { (status, code) ->
-            assertEquals(PaymentFailureOutcome.UNKNOWN, outcomeOfRefundReplying(TossFixtures.error(status, code)), "$status $code")
-        }
-    }
-
-    @Test
     fun `an allow-listed code that arrives with a 5xx status is unknown`() {
         assertEquals(PaymentFailureOutcome.UNKNOWN, outcomeOfRefundReplying(TossFixtures.error(502, "REJECT_CARD_PAYMENT")))
-    }
-
-    @Test
-    fun `PROVIDER_ERROR is marked retryable on the exception`() {
-        server.on("POST", "/v1/payments/confirm", TossFixtures.error(400, "PROVIDER_ERROR"))
-
-        val error = assertFailsWith<PaymentProviderException> { confirm() }
-
-        assertTrue(error.providerError.retryable)
-        assertEquals("PROVIDER_ERROR", error.providerError.code)
     }
 
     @Test

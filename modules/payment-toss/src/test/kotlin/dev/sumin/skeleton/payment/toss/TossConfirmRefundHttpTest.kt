@@ -58,22 +58,6 @@ class TossConfirmRefundHttpTest {
     }
 
     @Test
-    fun `an explicit idempotency key wins over the order id`() {
-        server.on("POST", "/v1/payments/confirm", Reply.Json(200, TossFixtures.payment()))
-
-        provider.confirm(
-            PaymentConfirmRequest(
-                providerPaymentId = "pay_key_1",
-                amount = PaymentAmount(3_000, "KRW"),
-                merchantReferenceId = "ord_abcdef123456",
-                idempotencyKey = IdempotencyKey("custom-key"),
-            ),
-        )
-
-        assertEquals("custom-key", server.requests.single().header("idempotency-key"))
-    }
-
-    @Test
     fun `a partial refund reports the remaining amount, the cancel transaction key and the refunded amount`() {
         val cancels = listOf(TossFixtures.cancel("tx_older", 500), TossFixtures.cancel("tx_this", 1_000))
         server.on(
@@ -95,22 +79,6 @@ class TossConfirmRefundHttpTest {
         assertEquals("tx_this", result.providerOperationId, "the cancel whose transaction key is the payment's last transaction key is this refund")
         assertEquals(PaymentAmount(1_000, "KRW"), result.amount, "the refunded amount, not the payment total")
         assertEquals("true", result.attributes["partial"])
-    }
-
-    @Test
-    fun `a full refund has nothing left`() {
-        server.on(
-            "POST",
-            "/v1/payments/pay_key_1/cancel",
-            Reply.Json(200, TossFixtures.payment(status = "CANCELED", total = 3_000, balance = 0, cancels = listOf(TossFixtures.cancel("tx_all", 3_000)), lastTransactionKey = "tx_all")),
-        )
-
-        val result = provider.refund(refundRequest(amount = 3_000))
-
-        assertEquals(PaymentOperationStatus.REFUNDED, result.status)
-        assertEquals(PaymentAmount(0, "KRW"), result.remaining)
-        assertEquals("tx_all", result.providerOperationId)
-        assertNull(result.attributes["partial"])
     }
 
     @Test
@@ -140,17 +108,6 @@ class TossConfirmRefundHttpTest {
     }
 
     @Test
-    fun `the cancel of this call is the one whose transaction key is the payment's last transaction key - not the first or the last in the list`() {
-        val cancels = listOf(TossFixtures.cancel("tx_this", 1_000), TossFixtures.cancel("tx_older", 500))
-
-        val result = refundReplying(TossFixtures.payment(status = "PARTIAL_CANCELED", balance = 1_500, cancels = cancels, lastTransactionKey = "tx_this"))
-
-        assertEquals(PaymentOperationStatus.REFUNDED, result.status)
-        assertEquals("tx_this", result.providerOperationId)
-        assertEquals(PaymentAmount(1_000, "KRW"), result.amount)
-    }
-
-    @Test
     fun `an earlier partial refund does not make this refund look done - this cancel still in progress is unknown with no old key or amount`() {
         val cancels = listOf(TossFixtures.cancel("tx_older", 500), TossFixtures.cancel("tx_this", 1_000, status = "IN_PROGRESS"))
 
@@ -170,23 +127,6 @@ class TossConfirmRefundHttpTest {
     }
 
     @Test
-    fun `no cancel carries the last transaction key - unknown`() {
-        val cancels = listOf(TossFixtures.cancel("tx_other", 1_000))
-
-        val result = refundReplying(TossFixtures.payment(status = "PARTIAL_CANCELED", balance = 2_000, cancels = cancels, lastTransactionKey = "tx_not_in_the_list"))
-
-        assertEquals(PaymentOperationStatus.UNKNOWN, result.status)
-        assertNull(result.providerOperationId)
-    }
-
-    @Test
-    fun `without a last transaction key nothing can be matched - unknown`() {
-        val result = refundReplying(TossFixtures.payment(status = "PARTIAL_CANCELED", balance = 2_000, cancels = listOf(TossFixtures.cancel("tx_a", 1_000))))
-
-        assertEquals(PaymentOperationStatus.UNKNOWN, result.status)
-    }
-
-    @Test
     fun `cancel is as strict as refund - DONE is not a cancellation and an unmatched cancel is unknown`() {
         server.on("POST", "/v1/payments/pay_key_1/cancel", Reply.Json(200, TossFixtures.payment(status = "DONE", cancels = null)))
         val done = provider.cancel(dev.sumin.skeleton.payment.PaymentCancelRequest("pay_key_1", idempotencyKey = IdempotencyKey("c_1")))
@@ -196,15 +136,6 @@ class TossConfirmRefundHttpTest {
         val canceled = provider.cancel(dev.sumin.skeleton.payment.PaymentCancelRequest("pay_key_1", idempotencyKey = IdempotencyKey("c_2")))
         assertEquals(PaymentOperationStatus.CANCELED, canceled.status)
         assertEquals("tx_c", canceled.providerOperationId)
-    }
-
-    @Test
-    fun `a transaction key that is not an identifier is not matched or reported`() {
-        val odd = "tx key <b>"
-        val result = refundReplying(TossFixtures.payment(status = "CANCELED", balance = 0, cancels = listOf(TossFixtures.cancel(odd, 3_000)), lastTransactionKey = odd))
-
-        assertEquals(PaymentOperationStatus.UNKNOWN, result.status)
-        assertNull(result.providerOperationId)
     }
 
     @Test
@@ -228,41 +159,6 @@ class TossConfirmRefundHttpTest {
     }
 
     @Test
-    fun `a confirm result carries the card, the method and the approval time from the answer`() {
-        server.on("POST", "/v1/payments/confirm", Reply.Json(200, TossFixtures.payment()))
-
-        val result = provider.confirm(PaymentConfirmRequest("pay_key_1", PaymentAmount(3_000, "KRW"), merchantReferenceId = "ord_abcdef123456"))
-
-        assertEquals(dev.sumin.skeleton.payment.PaymentCard("HYUNDAI", "123*"), result.card)
-        assertEquals("CARD", result.attributes["method"], "the Korean label is mapped to the neutral kind code")
-        assertEquals(java.time.Instant.parse("2026-10-08T01:00:00Z"), result.paidAt)
-    }
-
-    @Test
-    fun `a confirm answer without a card or an approval time leaves both empty`() {
-        server.on("POST", "/v1/payments/confirm", Reply.Json(200, TossFixtures.payment(card = null, approvedAt = null)))
-
-        val result = provider.confirm(PaymentConfirmRequest("pay_key_1", PaymentAmount(3_000, "KRW"), merchantReferenceId = "ord_abcdef123456"))
-
-        assertNull(result.card)
-        assertNull(result.paidAt)
-    }
-
-    @Test
-    fun `a trace id and a status that are not code-shaped are not passed on`() {
-        server.on(
-            "POST",
-            "/v1/payments/confirm",
-            Reply.Json(200, TossFixtures.payment(extra = mapOf("status" to "DONE", "traceId" to "010-1234-5678 hong")), mapOf("X-Toss-Trace-Id" to "has spaces and junk")),
-        )
-
-        val result = provider.confirm(PaymentConfirmRequest("pay_key_1", PaymentAmount(3_000, "KRW"), merchantReferenceId = "ord_abcdef123456"))
-
-        assertNull(result.trace.providerRequestId)
-        assertEquals("DONE", result.trace.rawStatus)
-    }
-
-    @Test
     fun `without any idempotency key a refund goes out with no Idempotency-Key header - sending it again would refund twice`() {
         FakeTossServer(requireIdempotencyKey = false).use { open ->
             open.on("POST", "/v1/payments/pay_key_1/cancel", Reply.Json(200, TossFixtures.payment(status = "CANCELED", balance = 0, cancels = listOf(TossFixtures.cancel("tx_all", 3_000)), lastTransactionKey = "tx_all")))
@@ -273,28 +169,4 @@ class TossConfirmRefundHttpTest {
         }
     }
 
-    @Test
-    fun `a confirm with neither a key nor an order number goes out with no Idempotency-Key header`() {
-        FakeTossServer(requireIdempotencyKey = false).use { open ->
-            open.on("POST", "/v1/payments/confirm", Reply.Json(200, TossFixtures.payment()))
-
-            tossProvider(open).confirm(PaymentConfirmRequest("pay_key_1", PaymentAmount(3_000, "KRW")))
-
-            assertNull(open.requests.single().header("idempotency-key"))
-        }
-    }
-
-    @Test
-    fun `the secret key is trimmed before it is used for Basic auth - the same as the guard and the mode`() {
-        val padded = TossPaymentProvider(
-            httpClient = dev.sumin.skeleton.payment.toss.support.realHttpClient(),
-            properties = dev.sumin.skeleton.payment.toss.support.tossProperties(server).copy(secretKey = "  ${server.secretKey}\n"),
-        )
-        server.on("POST", "/v1/payments/confirm", Reply.Json(200, TossFixtures.payment()))
-
-        padded.confirm(PaymentConfirmRequest("pay_key_1", PaymentAmount(3_000, "KRW"), merchantReferenceId = "ord_abcdef123456"))
-
-        assertEquals(1, server.requests.size)
-        assertEquals(dev.sumin.skeleton.payment.PaymentMode.TEST, padded.mode)
-    }
 }

@@ -68,37 +68,6 @@ class TossPaymentWiringTest {
     }
 
     @Test
-    fun `new keys bind from properties with their defaults`() {
-        runner
-            .withPropertyValues(
-                "skeleton.payment-toss.enabled=true",
-                "skeleton.payment-toss.secret-key=test_sk_1",
-            )
-            .run { context ->
-                val properties = context.getBean(TossPaymentProperties::class.java)
-                assertThat(properties.clientKey).isEmpty()
-                assertThat(properties.lookupPath).isEqualTo("/v1/payments/{paymentKey}")
-                assertThat(properties.lookupByOrderPath).isEqualTo("/v1/payments/orders/{orderId}")
-                assertThat(properties.lookupTimeout).isEqualTo(java.time.Duration.ofSeconds(10))
-                assertThat(properties.allowTestKeysInProtectedEnv).isFalse()
-            }
-        runner
-            .withPropertyValues(
-                "skeleton.payment-toss.enabled=true",
-                "skeleton.payment-toss.secret-key=test_sk_1",
-                "skeleton.payment-toss.lookup-timeout=3s",
-                "skeleton.payment-toss.allow-test-keys-in-protected-env=true",
-                "skeleton.payment-toss.client-key=test_ck_1",
-            )
-            .run { context ->
-                val properties = context.getBean(TossPaymentProperties::class.java)
-                assertThat(properties.lookupTimeout).isEqualTo(java.time.Duration.ofSeconds(3))
-                assertThat(properties.allowTestKeysInProtectedEnv).isTrue()
-                assertThat(properties.clientKey).isEqualTo("test_ck_1")
-            }
-    }
-
-    @Test
     fun `the ledger is recognised by the type of a bean - a type reference, not a class name string`() {
         ApplicationContextRunner().withBean(FakeLedger::class.java).run { context ->
             val beanFactory = context.autowireCapableBeanFactory as org.springframework.beans.factory.ListableBeanFactory

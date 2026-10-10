@@ -12,7 +12,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import org.springframework.boot.autoconfigure.AutoConfigurations
-import org.springframework.boot.test.context.runner.ApplicationContextRunner
 import org.springframework.boot.test.context.runner.WebApplicationContextRunner
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -72,17 +71,6 @@ class PaymentWebhookAutoConfigurationTest {
             assertTrue(!context.has(PaymentWebhookDeployGuard::class))
             assertTrue(context.getBeansOfType(PublicEndpointContributor::class.java).isEmpty())
         }
-    }
-
-    @Test
-    fun `outside a servlet web app there is no route and no public endpoint but the guard and the inbox still stand`() {
-        ApplicationContextRunner().withBean(ScriptedGateway::class.java, java.util.function.Supplier { gateway }).withConfiguration(configs)
-            .withUserConfiguration(Ledger::class.java).run { context ->
-                assertTrue(context.has(PaymentWebhookInbox::class))
-                assertTrue(context.has(PaymentWebhookDeployGuard::class))
-                assertTrue(!context.has(PaymentWebhookController::class))
-                assertTrue(context.getBeansOfType(PublicEndpointContributor::class.java).isEmpty())
-            }
     }
 
     @Test

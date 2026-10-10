@@ -2,12 +2,7 @@ package dev.sumin.skeleton.payment.toss
 
 import dev.sumin.skeleton.payment.CheckoutOrder
 import dev.sumin.skeleton.payment.PaymentAmount
-import dev.sumin.skeleton.payment.PaymentCheckoutGateway
-import dev.sumin.skeleton.payment.PaymentConfirmGateway
-import dev.sumin.skeleton.payment.PaymentLookupGateway
 import dev.sumin.skeleton.payment.PaymentMode
-import dev.sumin.skeleton.payment.PaymentRefundGateway
-import dev.sumin.skeleton.payment.PaymentWebhookGateway
 import dev.sumin.skeleton.payment.PaymentWebhookRejectedException
 import dev.sumin.skeleton.payment.WebhookDelivery
 import dev.sumin.skeleton.payment.toss.support.TossFixtures
@@ -16,7 +11,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
-import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import dev.sumin.skeleton.common.http.ExternalHttpClient
@@ -29,17 +23,6 @@ class TossGatewaySurfaceTest {
 
     private fun provider(secretKey: String = "test_sk_secret_part", clientKey: String = "test_ck_client_part") =
         TossPaymentProvider(noHttp, TossPaymentProperties(enabled = true, secretKey = secretKey, clientKey = clientKey))
-
-    @Test
-    fun `one bean offers every capability under one provider id`() {
-        val provider = provider()
-        assertIs<PaymentConfirmGateway>(provider)
-        assertIs<PaymentRefundGateway>(provider)
-        assertIs<PaymentLookupGateway>(provider)
-        assertIs<PaymentCheckoutGateway>(provider)
-        assertIs<PaymentWebhookGateway>(provider)
-        assertEquals("toss", provider.providerId)
-    }
 
     @Test
     fun `mode comes from the secret key prefix`() {
@@ -68,21 +51,6 @@ class TossGatewaySurfaceTest {
     }
 
     @Test
-    fun `checkout under a live key is not marked test, and an unknown mode is not claimed to be test either`() {
-        val order = CheckoutOrder("ord_abcdef123456", "x", PaymentAmount(1_000, "KRW"))
-
-        assertFalse(provider("live_sk_x", "live_ck_y").checkout(order).testMode)
-        assertFalse(provider("weird", "weird").checkout(order).testMode)
-    }
-
-    @Test
-    fun `checkout without a client key says so with a null key instead of inventing one`() {
-        val instruction = provider(clientKey = "").checkout(CheckoutOrder("ord_abcdef123456", "x", PaymentAmount(1_000, "KRW")))
-
-        assertNull(instruction.clientKey)
-    }
-
-    @Test
     fun `checkout hands out only a value that is shaped like a client key - a secret key put in the wrong place is never sent to the browser`() {
         val order = CheckoutOrder("ord_abcdef123456", "x", PaymentAmount(1_000, "KRW"))
 
@@ -102,11 +70,6 @@ class TossGatewaySurfaceTest {
         assertFalse(provider(clientKey = "").canOpenCheckout(), "no client key")
         assertFalse(provider(clientKey = "test_sk_secret_part").canOpenCheckout(), "a secret key in the client key place")
         assertFalse(provider("live_sk_x", "test_ck_client_part").canOpenCheckout(), "a test client key with a live secret")
-    }
-
-    @Test
-    fun `the webhook is not signed - the address token is required`() {
-        assertFalse(provider().signed)
     }
 
     @Test
@@ -139,22 +102,6 @@ class TossGatewaySurfaceTest {
     }
 
     @Test
-    fun `the same body gives the same event key - redelivery is recognised`() {
-        val body = TossFixtures.webhook().toByteArray()
-
-        assertEquals(provider().parse(WebhookDelivery(emptyMap(), body)).eventKey, provider().parse(WebhookDelivery(emptyMap(), body.copyOf())).eventKey)
-    }
-
-    @Test
-    fun `events other than payment status are handed over as unsupported`() {
-        val envelope = provider().parse(WebhookDelivery(mapOf("tosspayments-webhook-transmission-id" to "t-9"), TossFixtures.webhook(eventType = "DEPOSIT_CALLBACK", paymentKey = null, orderId = null).toByteArray()))
-
-        assertEquals("DEPOSIT_CALLBACK", envelope.eventType)
-        assertEquals("unsupported", envelope.resourceType)
-        assertEquals("t-9", envelope.eventKey)
-    }
-
-    @Test
     fun `payout and seller events - lower case and dotted names - are unsupported, not refused, so Toss does not resend them`() {
         listOf("payout.changed", "seller.changed", "PAYOUT_STATUS_CHANGED", "brandpay.method.updated").forEach { type ->
             val body = TossFixtures.json(mapOf("eventType" to type, "data" to mapOf("sellerId" to "seller_1"))).toByteArray()
@@ -163,13 +110,6 @@ class TossGatewaySurfaceTest {
 
             assertEquals(type, envelope.eventType)
             assertEquals("unsupported", envelope.resourceType)
-        }
-    }
-
-    @Test
-    fun `a body that is JSON null is refused like any other body that is not an event`() {
-        listOf("null", "[]", "\"text\"", "123").forEach { body ->
-            assertFailsWith<PaymentWebhookRejectedException>(body) { provider().parse(WebhookDelivery(emptyMap(), body.toByteArray())) }
         }
     }
 

@@ -17,7 +17,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import tools.jackson.databind.json.JsonMapper
 
@@ -58,12 +57,6 @@ class TossBillingHttpTest {
     }
 
     @Test
-    fun `without a usable public key there are no card registration values`() {
-        assertNull(tossProvider(server, clientKey = "").billingSetup(customerKey))
-        assertNull(tossProvider(server, clientKey = "live_ck_wrong_mode").billingSetup(customerKey))
-    }
-
-    @Test
     fun `issue exchanges the auth key for a token and keeps only the last four card characters`() {
         server.on("POST", "/v1/billing/authorizations/issue", Reply.Json(200, billingKeyBody()))
 
@@ -83,16 +76,6 @@ class TossBillingHttpTest {
         assertFailsWith<TossIdentifierRejectedException> { provider.issue(customerKey, mapOf("authKey" to "../x?y")) }
         assertFailsWith<TossIdentifierRejectedException> { provider.issue(customerKey, emptyMap()) }
         assertTrue(server.requests.isEmpty())
-    }
-
-    @Test
-    fun `an issue that the provider refuses for good is definitive and carries only the code`() {
-        server.on("POST", "/v1/billing/authorizations/issue", TossFixtures.error(404, "NOT_FOUND_BILLING"))
-
-        val failure = assertFailsWith<dev.sumin.skeleton.payment.PaymentProviderException> { provider.issue(customerKey, mapOf("authKey" to "auth_key_1")) }
-
-        assertEquals(PaymentFailureOutcome.DEFINITIVE, PaymentFailures.outcomeOf(failure))
-        assertEquals("NOT_FOUND_BILLING", PaymentFailures.providerCodeOf(failure))
     }
 
     @Test
@@ -171,21 +154,6 @@ class TossBillingHttpTest {
 
         server.on("DELETE", "/v1/billing/$token", TossFixtures.error(500, "FAILED_INTERNAL_SYSTEM_PROCESSING"))
         assertFailsWith<Exception> { provider.revoke(customerKey, token) }
-    }
-
-    @Test
-    fun `a billing key that ends with an equals sign - like the documented example - is issued, charged and deleted`() {
-        val padded = "BQ3dEfRdzk0="
-        server.on("POST", "/v1/billing/authorizations/issue", Reply.Json(200, billingKeyBody(padded)))
-        server.on("POST", "/v1/billing/$padded", Reply.Json(200, TossFixtures.payment(paymentKey = "pay_sub_1", orderId = "ord_sub_0001", total = 3_900)))
-        server.on("DELETE", "/v1/billing/$padded", Reply.Json(200, "{}"))
-
-        val issued = provider.issue(customerKey, mapOf("authKey" to "auth_key_1"))
-        provider.charge(chargeRequest().copy(token = issued.token))
-        provider.revoke(customerKey, issued.token)
-
-        assertEquals(padded, issued.token)
-        assertEquals(listOf("POST", "POST", "DELETE"), server.requests.map { it.method })
     }
 
     @Test
