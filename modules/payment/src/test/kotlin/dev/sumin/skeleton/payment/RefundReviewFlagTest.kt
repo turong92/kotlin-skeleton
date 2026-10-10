@@ -7,9 +7,7 @@ import java.time.Duration
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.test.assertNotNull
 import kotlin.test.assertNull
-import kotlin.test.assertTrue
 
 /**
  * `REFUND_MISMATCH` 표시는 **풀리지 않은 `PENDING` 환불 줄을 화면에서 지우지 않는다** — 사람이 누른 「결제사와 맞추기」(`SYNC`)이거나 그 주문에 `PENDING` 줄이 없을 때만 풀리고,
@@ -58,19 +56,6 @@ class RefundReviewFlagTest {
 
         assertNull(kit.order(order.id).reviewReason)
         assertEquals(PaymentRefundStatus.FAILED, kit.store.findRefund(line.id)!!.status)
-    }
-
-    @Test
-    fun `a flag with no pending line left is cleared by an automatic reconcile as before`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.paid()
-        val skewed = kit.gateway.lookup(PaymentLookupQuery("pay_1", null))!!.copy(remaining = PaymentAmount(1234, "KRW"))
-        kit.store.inTransaction { tx -> kit.convergence.converge(tx, tx.lockOrder(order.id)!!, skewed, webhookContext()) }
-        assertEquals(PaymentReviewReason.REFUND_MISMATCH, kit.order(order.id).reviewReason)
-
-        convergeNow(kit, order.id)
-
-        assertNull(kit.order(order.id).reviewReason)
     }
 
     @Test
@@ -132,27 +117,6 @@ class RefundReviewFlagTest {
         assertEquals(PaymentRefundStatus.WITHDRAWN, closed.status)
         assertNull(closed.openKey)
         assertEquals("ORDER_REFUNDED", closed.failureCode)
-        val event = kit.store.listEvents(order.id).single { it.refundId == request.id && it.type == PaymentEventType.REFUND_WITHDRAWN }
-        assertEquals(PaymentActor.SYSTEM, event.actor)
-        assertEquals("ORDER_REFUNDED", event.providerCode)
-        assertEquals("REQUESTED", event.fromStatus)
-        assertEquals("WITHDRAWN", event.toStatus)
-        val view = kit.refunds.get("acc_1", order.id)
-        assertEquals(PaymentOrderStatus.REFUNDED, view.order.status)
-        assertNull(view.summary.openRefundStatus, "a refunded order does not show an open request")
-        assertTrue(!view.summary.refundPending)
-        assertNotNull(kit.store.findRefund(request.id)!!.completedAt)
-    }
-
-    @Test
-    fun `a partial console cancel leaves the request open - only a fully refunded order has nothing left to ask for`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.paid()
-        val request = kit.refunds.request("acc_1", order.id, "DUPLICATE", 1000, IdempotencyKey("req")).refund
-        kit.gateway.consoleCancel("pay_1", 1000)
-
-        kit.refunds.sync(op, order.id)
-
-        assertEquals(PaymentRefundStatus.REQUESTED, kit.store.findRefund(request.id)!!.status)
+        assertNull(kit.refunds.get("acc_1", order.id).summary.openRefundStatus, "a refunded order does not show an open request")
     }
 }

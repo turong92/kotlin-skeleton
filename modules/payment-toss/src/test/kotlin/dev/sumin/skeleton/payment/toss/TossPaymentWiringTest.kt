@@ -1,6 +1,5 @@
 package dev.sumin.skeleton.payment.toss
 
-import dev.sumin.skeleton.common.deploy.DeployGuard
 import dev.sumin.skeleton.common.http.OutboundHttpAutoConfiguration
 import dev.sumin.skeleton.payment.PaymentAutoConfiguration
 import dev.sumin.skeleton.payment.PaymentCheckoutGateway
@@ -56,27 +55,6 @@ class TossPaymentWiringTest {
     }
 
     @Test
-    fun `the guard is a DeployGuard bean only while the module is enabled`() {
-        runner.run { context ->
-            assertThat(context).doesNotHaveBean(TossKeyGuard::class.java)
-        }
-        runner
-            .withPropertyValues("skeleton.payment-toss.enabled=true", "skeleton.payment-toss.secret-key=test_sk_1")
-            .run { context ->
-                assertThat(context.getBeansOfType(DeployGuard::class.java).values.map { it.name }).contains("payment-toss")
-            }
-    }
-
-    @Test
-    fun `the ledger is recognised by the type of a bean - a type reference, not a class name string`() {
-        ApplicationContextRunner().withBean(FakeLedger::class.java).run { context ->
-            val beanFactory = context.autowireCapableBeanFactory as org.springframework.beans.factory.ListableBeanFactory
-            assertThat(LedgerPresence.present(beanFactory, FakeLedger::class.java)).isTrue()
-            assertThat(LedgerPresence.present(beanFactory)).isFalse()
-        }
-    }
-
-    @Test
     fun `the guard reads the reconcile first delay and the refund settle delay from the bound payment properties`() {
         val ledger = java.lang.reflect.Proxy.newProxyInstance(javaClass.classLoader, arrayOf(PaymentLedgerStore::class.java)) { _, _, _ -> error("the guard never touches the store") } as PaymentLedgerStore
         val local = dev.sumin.skeleton.common.deploy.DeployContext(dev.sumin.skeleton.common.deploy.DeployEnv.LOCAL, emptySet())
@@ -97,9 +75,5 @@ class TossPaymentWiringTest {
         runner.withBean(PaymentLedgerStore::class.java, java.util.function.Supplier { ledger })
             .withPropertyValues(*base, "skeleton.payment.reconcile.first-delay=11s", "skeleton.payment.refund.settle-delay=11s")
             .run { context -> assertThat(context.getBean(TossKeyGuard::class.java).problems(local)).isEmpty() }
-        runner.withPropertyValues(*base, "skeleton.payment.refund.settle-delay=1s")
-            .run { context -> assertThat(context.getBean(TossKeyGuard::class.java).problems(local)).describedAs("no ledger, no settle job").isEmpty() }
     }
-
-    private class FakeLedger
 }

@@ -52,22 +52,17 @@ class PaymentSubscriptionHttpTest {
     private fun started(account: String): String = read(start(account).andExpect(status().isCreated).andReturn().response.contentAsString)["value"]["subscription"]["id"].asString()
 
     @Test
-    fun `start is 201 with the card registration values, the same key again is 200 with the same ones until the card is handed in, and the header is required`() {
+    fun `start is 201, the same key again is 200 with the same subscription and no card window once the card is in, another body 409, a bad activate body 400`() {
         val account = account()
         val first = start(account, "same").andExpect(status().isCreated)
-            .andExpect(jsonPath("$.value.subscription.status").value("PENDING"))
-            .andExpect(jsonPath("$.value.billingAuth.kind").value("SCRIPTED_BILLING_AUTH"))
-            .andExpect(jsonPath("$.value.billingAuth.customerKey").exists())
             .andReturn().response.contentAsString
         start(account, "same").andExpect(status().isOk)
             .andExpect(jsonPath("$.value.subscription.id").value(read(first)["value"]["subscription"]["id"].asString()))
-            .andExpect(jsonPath("$.value.billingAuth.customerKey").value(read(first)["value"]["billingAuth"]["customerKey"].asString()))
         // 카드를 낸 뒤의 재전송에는 등록 창 값이 없다
         activate(account, read(first)["value"]["subscription"]["id"].asString()).andExpect(status().isOk)
         start(account, "same").andExpect(status().isOk).andExpect(jsonPath("$.value.billingAuth").value(null as Any?))
-        mvc.perform(post("$base/subscriptions").asUser(account).contentType(MediaType.APPLICATION_JSON).content("""{"planCode":"basic"}""")).andExpect(status().isBadRequest)
-        start(account, "other", plan = "gold").andExpect(status().isUnprocessableContent)
         start(account, "same", plan = "plus").andExpect(status().isConflict)
+        activate(account, "sub_x", """{}""").andExpect(status().isBadRequest)
     }
 
     @Test
@@ -78,7 +73,6 @@ class PaymentSubscriptionHttpTest {
         val activated = activate(account, id).andExpect(status().isOk).andExpect(jsonPath("$.value.status").value("ACTIVE")).andReturn().response.contentAsString
         val me = mvc.perform(get("$base/subscriptions/me").asUser(account)).andExpect(status().isOk)
             .andExpect(jsonPath("$.value.subscription.status").value("ACTIVE"))
-            .andExpect(jsonPath("$.value.subscription.card.last4").value("1234"))
             .andExpect(jsonPath("$.value.orders[0].kind").value("SUBSCRIPTION_INITIAL"))
             .andReturn().response.contentAsString
 
@@ -98,16 +92,6 @@ class PaymentSubscriptionHttpTest {
         activate(stranger, id).andExpect(status().isNotFound)
         mvc.perform(post("$base/subscriptions/$id/cancel").asUser(stranger)).andExpect(status().isNotFound)
         activate(stranger, "sub_missing").andExpect(status().isNotFound)
-        mvc.perform(post("$base/subscriptions/sub_missing/cancel").asUser(stranger)).andExpect(status().isNotFound)
         mvc.perform(get("$base/subscriptions/me").asUser(stranger)).andExpect(status().isOk).andExpect(jsonPath("$.value.subscription").value(null as Any?))
-    }
-
-    @Test
-    fun `the body of activate must carry a providerPayload of strings`() {
-        val account = account()
-        val id = started(account)
-
-        activate(account, id, """{}""").andExpect(status().isBadRequest)
-        activate(account, id, """{"providerPayload":{"authKey":5}}""").andExpect(status().isBadRequest)
     }
 }

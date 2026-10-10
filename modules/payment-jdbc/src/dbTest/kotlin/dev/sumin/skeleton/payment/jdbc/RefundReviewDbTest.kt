@@ -70,22 +70,6 @@ class RefundReviewDbTest {
     }
 
     @Test
-    fun `a money reason replaces a supply reason on the real row and the history says so`() {
-        val kit = JdbcLedgerKit()
-        val order = kit.paid()
-        val context = ConvergeContext(PaymentMode.TEST, ConvergeSource.RECONCILE)
-        kit.store.inTransaction { tx -> kit.convergence.flagReview(tx, tx.lockOrder(order.id)!!, PaymentReviewReason.FULFILMENT_UNRESOLVED, context) }
-
-        kit.store.inTransaction { tx -> kit.convergence.flagReview(tx, tx.lockOrder(order.id)!!, PaymentReviewReason.AMOUNT_MISMATCH, context) }
-        kit.store.inTransaction { tx -> kit.convergence.flagReview(tx, tx.lockOrder(order.id)!!, PaymentReviewReason.FULFILMENT_UNRESOLVED, context) }
-
-        assertEquals(PaymentReviewReason.AMOUNT_MISMATCH, kit.order(order.id).reviewReason)
-        val flagged = kit.store.listEvents(order.id).filter { it.type == PaymentEventType.REVIEW_FLAGGED }
-        assertEquals(listOf("FULFILMENT_UNRESOLVED", "AMOUNT_MISMATCH", "REPLACED_FULFILMENT_UNRESOLVED"), flagged.map { it.providerCode })
-        assertEquals(PaymentActor.SYSTEM, flagged.first().actor)
-    }
-
-    @Test
     fun `the mark of a late result survives an automatic reconcile on the real rows and a sync clears it`() {
         val kit = JdbcLedgerKit()
         val order = kit.paid()

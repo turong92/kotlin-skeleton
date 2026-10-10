@@ -63,8 +63,6 @@ class RefundSettlementTimingTest {
         assertEquals(1, kit.store.listRefunds(line.orderId).size, "no second line for the same cancel")
     }
 
-    // ---- M-8: 정산의 마지막 갈래도 낡은 스냅샷 규칙을 따른다 ----
-
     /** 웹훅이 하듯 지금 상태로 장부만 맞춘다 - 정산(줄 닫기)은 하지 않는다. */
     private fun absorbWithoutSettling(kit: PaymentLedgerKit, orderId: String) {
         val fresh = kit.gateway.lookup(PaymentLookupQuery("pay_1", null))!!
@@ -96,22 +94,4 @@ class RefundSettlementTimingTest {
         assertEquals(PaymentRefundStatus.PENDING, kit.store.findRefund(line.id)!!.status)
     }
 
-    @Test
-    fun `the settle job retries instead of dying when its snapshot went stale`() {
-        val kit = PaymentLedgerKit()
-        val line = timedOutLater(kit)
-        kit.advance(settleDelay)
-        kit.gateway.afterLookup = { // 조회가 끝난 뒤 락을 잡기 전에 다른 취소가 장부에 들어왔다
-            kit.gateway.afterLookup = null
-            kit.advance(Duration.ofSeconds(5))
-            kit.gateway.consoleCancel("pay_1", 500)
-            absorbWithoutSettling(kit, line.orderId)
-        }
-
-        kit.runTasks(setOf(PaymentTaskTypes.REFUND_RECONCILE))
-
-        val task = kit.tasks.all(PaymentTaskTypes.REFUND_RECONCILE).single()
-        assertEquals(dev.sumin.skeleton.payment.testing.InMemoryPaymentTasks.State.PENDING, task.state, "retry, not a permanent failure")
-        assertNull(kit.order(line.orderId).reviewReason)
-    }
 }

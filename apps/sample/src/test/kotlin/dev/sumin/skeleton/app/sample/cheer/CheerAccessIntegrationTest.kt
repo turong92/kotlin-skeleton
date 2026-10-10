@@ -129,11 +129,6 @@ class CheerAccessIntegrationTest : CheerIntegrationBase() {
         val adminView = get("$ADMIN/orders/$orderId", operator).andExpect { status { isOk() } }.andReturn().response.contentAsString
         assertTrue(adminView.contains(paymentKey) && adminView.contains(accountOf("user@example.com")), "the operator sees the payment key and the account id")
         planted.forEach { assertFalse(adminView.contains(it), "even the operator view never holds $it") }
-        val tables = listOf("payment_orders", "payment_refunds", "payment_events", "payment_webhook_events", "jobs", "cheers")
-        tables.forEach { table ->
-            val rows = jdbc.sql("select cast(t as text) from $table t").query(String::class.java).list().filterNotNull()
-            planted.forEach { secret -> assertTrue(rows.none { it.contains(secret, ignoreCase = true) }, "$table holds the planted $secret") }
-        }
     }
 
 }

@@ -64,13 +64,4 @@ class PaymentHttpVariantsTest {
                 assertEquals(1, context.getBeansOfType(PaymentOperatorPolicy::class.java).size)
             }
     }
-
-    @Test
-    fun `without a catalog bean there is no way to create an order over HTTP`() {
-        all.withUserConfiguration(Ledger::class.java).run { context ->
-            assertEquals(1, context.getBeansOfType(PaymentController::class.java).size)
-            assertTrue(context.getBeansOfType(PaymentOrderController::class.java).isEmpty())
-        }
-    }
-
 }

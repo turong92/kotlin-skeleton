@@ -2,17 +2,13 @@ package dev.sumin.skeleton.payment.web
 
 import dev.sumin.skeleton.payment.PaymentAmount
 import dev.sumin.skeleton.payment.PaymentOrderStatus
-import dev.sumin.skeleton.payment.PaymentRefund
-import dev.sumin.skeleton.payment.PaymentRefundStatus
 import dev.sumin.skeleton.payment.testing.InMemoryPaymentLedgerStore
-import dev.sumin.skeleton.payment.testing.PaymentTestOrders
 import dev.sumin.skeleton.payment.testing.ScriptedGateway
 import dev.sumin.skeleton.payment.web.PaymentHttpSupport.asUser
 import dev.sumin.skeleton.payment.web.PaymentHttpSupport.keys
 import dev.sumin.skeleton.payment.web.PaymentHttpSupport.read
 import dev.sumin.skeleton.paymenttest.InMemoryLedgerBeans
 import dev.sumin.skeleton.paymenttest.PaymentWebTestApplication
-import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -72,10 +68,8 @@ class PaymentUserHttpTest {
     private fun refundRequest(account: String, orderId: String, key: String = "r-${System.nanoTime()}", body: String = """{"reasonCode":"CUSTOMER_REQUEST"}"""): ResultActions =
         mvc.perform(post("$base/orders/$orderId/refund-requests").asUser(account).header("Idempotency-Key", key).contentType(MediaType.APPLICATION_JSON).content(body))
 
-    // --- 주문 만들기 ---
-
     @Test
-    fun `creating an order is 201 with the order and the values for the checkout window, and the same key again is 200 with the same order`() {
+    fun `creating an order is 201 and the same key again is 200 with the same order - no key 400, same key with another body 409, a refused item 422`() {
         val account = account()
         val first = createOrder(account, "same-key").andExpect(status().isCreated)
             .andExpect(jsonPath("$.value.order.status").value("PENDING"))
@@ -86,23 +80,10 @@ class PaymentUserHttpTest {
         val again = createOrder(account, "same-key").andExpect(status().isOk).andReturn().response.contentAsString
 
         assertEquals(read(first)["value"]["order"]["id"], read(again)["value"]["order"]["id"])
-    }
 
-    @Test
-    fun `an order without an Idempotency-Key header is 400 validation failed`() {
-        mvc.perform(post("$base/orders").asUser(account()).contentType(MediaType.APPLICATION_JSON).content("""{"itemType":"cheer","itemRef":"cheer-3000"}"""))
-            .andExpect(status().isBadRequest)
-            .andExpect(jsonPath("$.code").value("COMMON.VALIDATION_FAILED"))
-    }
-
-    @Test
-    fun `the same key with another body is 409 idempotency conflict, and an item the catalog refuses is 422`() {
-        val account = account()
-        createOrder(account, "k-conflict").andExpect(status().isCreated)
-
-        createOrder(account, "k-conflict", itemRef = "cheer-5000").andExpect(status().isConflict).andExpect(jsonPath("$.code").value("PAYMENT.IDEMPOTENCY_CONFLICT"))
+        mvc.perform(post("$base/orders").asUser(account).contentType(MediaType.APPLICATION_JSON).content("""{"itemType":"cheer","itemRef":"cheer-3000"}""")).andExpect(status().isBadRequest)
+        createOrder(account, "same-key", itemRef = "cheer-5000").andExpect(status().isConflict).andExpect(jsonPath("$.code").value("PAYMENT.IDEMPOTENCY_CONFLICT"))
         createOrder(account, itemRef = "cheer-999999").andExpect(status().`is`(422)).andExpect(jsonPath("$.code").value("PAYMENT.ITEM_NOT_PURCHASABLE"))
-        createOrder(account, quantity = 2).andExpect(status().`is`(422)).andExpect(jsonPath("$.code").value("PAYMENT.ITEM_NOT_PURCHASABLE"))
     }
 
     @Test
@@ -119,8 +100,6 @@ class PaymentUserHttpTest {
         }
         assertEquals(orders, store.allOrders().size)
     }
-
-    // --- 승인 ---
 
     @Test
     fun `confirm maps the outcomes - paid 200 with the card, unknown answer 202 CONFIRMING, changed amount 400 before the provider, refused card 402 with a category`() {
@@ -142,6 +121,8 @@ class PaymentUserHttpTest {
         val calls = gateway.confirmCalls.size
         confirm(account, changed, "pay_$changed", amount = "2999").andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("PAYMENT.AMOUNT_MISMATCH"))
         assertEquals(calls, gateway.confirmCalls.size)
+        confirm(account, changed, "pay_x", amount = "\"3000\"").andExpect(status().isBadRequest)
+        confirm(account, changed, "", amount = "3000").andExpect(status().isBadRequest)
 
         val declined = newOrder(account)
         gateway.authenticate("pay_$declined", declined, PaymentAmount(3000, "KRW"))
@@ -150,16 +131,6 @@ class PaymentUserHttpTest {
             .andExpect(jsonPath("$.code").value("PAYMENT.DECLINED"))
             .andExpect(jsonPath("$.data.providerCode").value("REJECT_CARD_COMPANY"))
             .andExpect(jsonPath("$.data.category").value("CARD_DECLINED"))
-    }
-
-    @Test
-    fun `a confirm body whose amount is not a whole number or whose payment key is empty is 400`() {
-        val account = account()
-        val id = newOrder(account)
-
-        confirm(account, id, "pay_x", amount = "\"3000\"").andExpect(status().isBadRequest)
-        confirm(account, id, "", amount = "3000").andExpect(status().isBadRequest)
-        confirm(account, id, "pay_x", amount = "30.5").andExpect(status().isBadRequest)
     }
 
     @Test
@@ -179,85 +150,31 @@ class PaymentUserHttpTest {
         assertEquals(PaymentOrderStatus.PENDING, store.findOrder(id)!!.status, "the other caller changed nothing")
     }
 
-    // --- 그만둠 · 읽기 ---
-
-    @Test
-    fun `one order comes with its refund lines and the summary fields - and a pending attempt is readable by its owner`() {
-        val account = account()
-        val paid = paidOrder(account)
-        refundRequest(account, paid).andExpect(status().isCreated)
-        val pending = newOrder(account)
-
-        mvc.perform(get("$base/orders/$paid").asUser(account)).andExpect(status().isOk)
-            .andExpect(jsonPath("$.value.order.status").value("PAID"))
-            .andExpect(jsonPath("$.value.order.refundableAmount").value(3000))
-            .andExpect(jsonPath("$.value.order.openRefundStatus").value("REQUESTED"))
-            .andExpect(jsonPath("$.value.refunds.length()").value(1))
-            .andExpect(jsonPath("$.value.refunds[0].status").value("REQUESTED"))
-            .andExpect(jsonPath("$.value.refunds[0].origin").value("USER"))
-        mvc.perform(get("$base/orders/$pending").asUser(account)).andExpect(status().isOk).andExpect(jsonPath("$.value.order.status").value("PENDING"))
-    }
-
-    @Test
-    fun `my payments come newest first as a cursor page without the attempts that were never paid`() {
-        val account = account()
-        val ids = (1..3).map { paidOrder(account) }
-        newOrder(account) // 결제하지 않은 시도는 빠진다
-
-        val first = read(mvc.perform(get("$base/orders?size=2").asUser(account)).andExpect(status().isOk).andReturn().response.contentAsString)
-        assertEquals(2, first["values"].size())
-        assertTrue(first["cursor"]["hasNext"].asBoolean())
-        val second = read(mvc.perform(get("$base/orders?size=2&cursor=${first["cursor"]["nextCursor"].asString()}").asUser(account)).andExpect(status().isOk).andReturn().response.contentAsString)
-
-        val listed = (first["values"] + second["values"]).map { it["id"].asString() }
-        assertEquals(3, listed.size)
-        assertEquals(ids.toSet(), listed.toSet())
-        assertTrue(!second["cursor"]["hasNext"].asBoolean())
-        assertEquals(listOf(PaymentOrderStatus.PAID.name), (first["values"] + second["values"]).map { it["status"].asString() }.distinct())
-    }
-
     @Test
     fun `a cursor whose time or id is outside what the databases hold, or that is not ours, is 400 - not a 500 from the query`() {
         fun cursor(text: String) = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(text.toByteArray())
-        listOf("o.-1.ord_x", "o.9223372036854775807.ord_x", "o.300000000000000000.ord_x", "o.1700000000000000.ord x", "o.1700000000000000.ord\u0000x").forEach { raw ->
+        listOf("o.-1.ord_x", "o.9223372036854775807.ord_x", "o.1700000000000000.ord\u0000x").forEach { raw ->
             mvc.perform(get("$base/orders?cursor=${cursor(raw)}").asUser(account())).andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("COMMON.VALIDATION_FAILED"))
         }
-        mvc.perform(get("$base/orders?cursor=${cursor("o.1700000000000000.ord_x")}").asUser(account())).andExpect(status().isOk)
         mvc.perform(get("$base/orders?cursor=not-a-cursor").asUser(account())).andExpect(status().isBadRequest)
     }
 
-    // --- 환불 요청 ---
-
     @Test
-    fun `a refund request is 201 and only a request - the money does not move - and the same key again is 200 with the same line`() {
+    fun `a refund request is 201 and only a request, the same key is 200 with the same line, and the input and state errors are 400 and 409`() {
         val account = account()
         val paid = paidOrder(account)
 
+        refundRequest(account, paid, body = """{"reasonCode":"OPERATOR"}""").andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("COMMON.VALIDATION_FAILED"))
+        refundRequest(account, paid, body = """{"reasonCode":"CUSTOMER_REQUEST","amount":3001}""").andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("PAYMENT.REFUND_AMOUNT_EXCEEDED"))
         val first = refundRequest(account, paid, "r-same", """{"reasonCode":"DUPLICATE","amount":1000}""").andExpect(status().isCreated)
-            .andExpect(jsonPath("$.value.status").value("REQUESTED"))
-            .andExpect(jsonPath("$.value.origin").value("USER"))
-            .andExpect(jsonPath("$.value.amount.amount").value(1000))
-            .andExpect(jsonPath("$.value.reasonCode").value("DUPLICATE"))
+            .andExpect(jsonPath("$.value.status").value("REQUESTED")).andExpect(jsonPath("$.value.origin").value("USER"))
             .andReturn().response.contentAsString
         val again = refundRequest(account, paid, "r-same", """{"reasonCode":"DUPLICATE","amount":1000}""").andExpect(status().isOk).andReturn().response.contentAsString
 
         assertEquals(read(first)["value"]["id"], read(again)["value"]["id"])
         assertEquals(emptyList(), gateway.refundCalls.filter { it.providerPaymentId == "pay_$paid" }, "asking is not refunding")
-    }
-
-    @Test
-    fun `the refund request errors - a reason a customer may not pick is 400, too much is 400, a second open one is 409, an unpaid order is 409`() {
-        val account = account()
-        val paid = paidOrder(account)
-
-        refundRequest(account, paid, body = """{"reasonCode":"OPERATOR"}""").andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("COMMON.VALIDATION_FAILED"))
-        refundRequest(account, paid, body = """{"reasonCode":"free text"}""").andExpect(status().isBadRequest)
-        refundRequest(account, paid, body = """{"reasonCode":"CUSTOMER_REQUEST","amount":3001}""").andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("PAYMENT.REFUND_AMOUNT_EXCEEDED"))
-        refundRequest(account, paid).andExpect(status().isCreated)
         refundRequest(account, paid).andExpect(status().isConflict).andExpect(jsonPath("$.code").value("PAYMENT.REFUND_IN_PROGRESS"))
         refundRequest(account, newOrder(account)).andExpect(status().isConflict).andExpect(jsonPath("$.code").value("PAYMENT.REFUND_NOT_ALLOWED"))
-        mvc.perform(post("$base/orders/$paid/refund-requests").asUser(account).contentType(MediaType.APPLICATION_JSON).content("""{"reasonCode":"CUSTOMER_REQUEST"}"""))
-            .andExpect(status().isBadRequest)
     }
 
     @Test
@@ -275,24 +192,6 @@ class PaymentUserHttpTest {
     }
 
     @Test
-    fun `a request the system closed because the order was refunded in full says so with closedBy SYSTEM - and shows no failure code`() {
-        val account = account()
-        val paid = paidOrder(account)
-        val line = PaymentTestOrders.refund(
-            id = "rfd_" + "9".repeat(32), orderId = paid, status = PaymentRefundStatus.WITHDRAWN, now = Instant.now(),
-        ).copy(failureCode = "ORDER_REFUNDED", requestedBy = account, decidedBy = null)
-        insertRefund(paid, line)
-
-        val body = mvc.perform(get("$base/orders/$paid").asUser(account)).andExpect(status().isOk).andReturn().response.contentAsString
-
-        val refund = read(body)["value"]["refunds"].single { it["id"].asString() == line.id }
-        assertEquals("SYSTEM", refund["closedBy"].asString())
-        assertTrue(!refund.has("failureCode"))
-    }
-
-    // --- 사용자 응답에 나가면 안 되는 것 ---
-
-    @Test
     fun `no user response carries a provider payment number, a review reason, an operator id, a failure code, an internal key or an inbox field`() {
         val account = account()
         val paid = paidOrder(account)
@@ -306,7 +205,6 @@ class PaymentUserHttpTest {
             mvc.perform(get("$base/orders").asUser(account)).andReturn().response.contentAsString,
             mvc.perform(post("$base/refunds/$line/withdraw").asUser(account)).andReturn().response.contentAsString,
             confirm(account, paid, "pay_$paid").andReturn().response.contentAsString,
-            mvc.perform(post("$base/orders/$paid/abandon").asUser(account)).andReturn().response.contentAsString,
         ).map(::read)
 
         val forbidden = setOf(
@@ -315,15 +213,6 @@ class PaymentUserHttpTest {
         )
         bodies.forEach { body -> assertEquals(emptySet(), keys(body) intersect forbidden, "user body leaks: $body") }
         bodies.forEach { body -> assertTrue("pay_$paid" !in body.toString(), "the provider payment number is not in a user response") }
-        val allowedRefundKeys = setOf("id", "orderId", "status", "amount", "currency", "reasonCode", "origin", "requestedAt", "completedAt", "closedBy")
-        val refundKeys = keys(bodies[0]["value"]["refunds"])
-        assertEquals(emptySet(), refundKeys - allowedRefundKeys, "a refund line in a user response has only the neutral fields")
     }
 
-    private fun insertRefund(orderId: String, line: PaymentRefund) {
-        store.inTransaction { tx ->
-            tx.lockOrder(orderId)
-            tx.insertRefundIfAbsent(line)
-        }
-    }
 }

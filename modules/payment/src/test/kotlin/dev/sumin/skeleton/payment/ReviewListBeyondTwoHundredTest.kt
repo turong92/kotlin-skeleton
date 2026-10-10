@@ -45,7 +45,7 @@ class ReviewListBeyondTwoHundredTest {
     }
 
     @Test
-    fun `with more than 200 stale pending refunds the oldest order is still in the review list`() {
+    fun `behind more than 200 stale pending refunds the oldest order is found - and the account filter is applied before the cut`() {
         stuckRefunds(total = 250, oldOnes = 10)
 
         val ids = allReviewIds()
@@ -53,15 +53,6 @@ class ReviewListBeyondTwoHundredTest {
         assertEquals(250, ids.size)
         assertEquals(ids.distinct(), ids)
         assertTrue("ord_" + "1".padStart(32, '0') in ids, "the order of the oldest stuck refund must not be dropped")
+        assertEquals((1..10).map { "ord_" + it.toString().padStart(32, '0') }.reversed(), allReviewIds("acc_old"), "the quiet account is found behind 240 of a loud one")
     }
-
-    @Test
-    fun `the account filter is applied before the cut - the stuck refunds of a quiet account are found behind 240 of a loud one`() {
-        stuckRefunds(total = 250, oldOnes = 10)
-
-        val ids = allReviewIds("acc_old")
-
-        assertEquals((1..10).map { "ord_" + it.toString().padStart(32, '0') }.reversed(), ids)
-    }
-
 }

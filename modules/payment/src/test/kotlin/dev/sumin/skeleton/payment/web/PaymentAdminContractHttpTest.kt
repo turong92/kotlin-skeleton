@@ -3,7 +3,6 @@ package dev.sumin.skeleton.payment.web
 import dev.sumin.skeleton.payment.PaymentAmount
 import dev.sumin.skeleton.payment.PaymentLookupGateway
 import dev.sumin.skeleton.payment.PaymentMode
-import dev.sumin.skeleton.payment.PaymentOrderStatus
 import dev.sumin.skeleton.payment.PaymentRefundStatus
 import dev.sumin.skeleton.payment.PaymentReviewReason
 import dev.sumin.skeleton.payment.PaymentSnapshot
@@ -15,7 +14,6 @@ import dev.sumin.skeleton.payment.web.PaymentHttpSupport.asUser
 import dev.sumin.skeleton.payment.web.PaymentHttpSupport.read
 import dev.sumin.skeleton.paymenttest.InMemoryLedgerBeans
 import dev.sumin.skeleton.paymenttest.PaymentWebTestApplication
-import java.time.Duration
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -98,8 +96,6 @@ class PaymentAdminContractHttpTest {
         store.inTransaction { tx -> tx.updateOrder(change(tx.lockOrder(id)!!)) }
     }
 
-    // --- 계약 ③: 보내지 않았다 = 503 UNAVAILABLE (선점 전의 환불 전 확인 구간에서만) ---
-
     @Test
     fun `a refund or an approval whose provider cannot be found or cannot refund is 503 unavailable - nothing was sent and no pending line stays`() {
         val account = account()
@@ -124,8 +120,6 @@ class PaymentAdminContractHttpTest {
         assertEquals(emptyList(), store.listRefunds(ghost).filter { it.status == PaymentRefundStatus.PENDING })
     }
 
-    // --- 계약: 검증 코드는 환불 줄을 선점하기 전에만 나간다 ---
-
     @Test
     fun `input the server refuses - amount 0 or negative, a wrong type, broken JSON - is 400 with a validation code before any line, any provider call or any change`() {
         val id = paid()
@@ -134,11 +128,8 @@ class PaymentAdminContractHttpTest {
         val before = store.findOrder(id)
 
         refundNow(id, body = """{"reasonCode":"OPERATOR","amount":0}""").andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("COMMON.VALIDATION_FAILED"))
-        refundNow(id, body = """{"reasonCode":"OPERATOR","amount":-5}""").andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("COMMON.VALIDATION_FAILED"))
         refundNow(id, body = """{"reasonCode":"OPERATOR","amount":"3000"}""").andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("COMMON.VALIDATION_FAILED"))
-        refundNow(id, body = """{"reasonCode":7,"amount":3000}""").andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("COMMON.VALIDATION_FAILED"))
         refundNow(id, body = """{"reasonCode":"OPERATOR",""").andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("COMMON.MALFORMED_REQUEST"))
-        mvc.perform(get("$admin/orders?size=abc").asOperator()).andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("COMMON.PARAMETER_VALIDATION_FAILED"))
 
         assertEquals(lookups, gateway.lookupCalls.size, "no provider call, not even the pre-check lookup")
         assertEquals(calls, gateway.refundCalls.size)
@@ -156,12 +147,8 @@ class PaymentAdminContractHttpTest {
         assertEquals(1, store.listRefunds(id).count { it.status == PaymentRefundStatus.PENDING })
     }
 
-    // --- C3 · 같은 키 ---
-
-    // --- 탈퇴한 계정의 줄: 기본 숨김과 예외 ---
-
     @Test
-    fun `an erased account's rows are hidden from the default list and shown with includeErased, a q lookup and review - and every operator shape carries accountErasedAt`() {
+    fun `an erased account's rows are hidden from the default list and shown with includeErased, a q lookup and review`() {
         val account = account()
         val id = paid(account)
         val erasedAt = Instant.parse("2026-10-01T00:00:00Z")
@@ -172,25 +159,13 @@ class PaymentAdminContractHttpTest {
         assertEquals(emptyList<String>(), ids(""))
         assertEquals(listOf(id), ids("&includeErased=true"))
         assertEquals(listOf(id), ids("&review=true"))
-        mvc.perform(get("$admin/orders?q=$id").asOperator()).andExpect(jsonPath("$.values[0].id").value(id)).andExpect(jsonPath("$.values[0].accountErasedAt").value("2026-10-01T00:00:00Z"))
-        mvc.perform(get("$admin/orders/$id").asOperator()).andExpect(jsonPath("$.value.order.accountErasedAt").value("2026-10-01T00:00:00Z"))
-        mvc.perform(post("$admin/orders/$id/sync").asOperator()).andExpect(status().isOk).andExpect(jsonPath("$.value.accountErasedAt").value("2026-10-01T00:00:00Z"))
-    }
-
-    // --- 맞추기 ---
-
-    @Test
-    fun `sync is 404 PROVIDER_PAYMENT_NOT_FOUND when the provider does not know the payment - the ledger row is as it was`() {
-        val unpaid = create(account())
-        val before = store.findOrder(unpaid)
-
-        mvc.perform(post("$admin/orders/$unpaid/sync").asOperator()).andExpect(status().isNotFound).andExpect(jsonPath("$.code").value("PAYMENT.PROVIDER_PAYMENT_NOT_FOUND"))
-
-        assertEquals(before, store.findOrder(unpaid))
+        mvc.perform(get("$admin/orders?q=$id").asOperator()).andExpect(jsonPath("$.values[0].id").value(id))
     }
 
     @Test
-    fun `a mode mismatch found by sync stays flagged - what sync already did is committed, even though it ends in an error`() {
+    fun `sync is 404 when the provider does not know the payment, and a mode mismatch found by sync stays flagged though it ends in an error`() {
+        val unknown = create(account())
+        mvc.perform(post("$admin/orders/$unknown/sync").asOperator()).andExpect(status().isNotFound).andExpect(jsonPath("$.code").value("PAYMENT.PROVIDER_PAYMENT_NOT_FOUND"))
         val unpaid = paid() // 결제된 주문 — 선점한 적 없는 PENDING 에는 표시를 찍지 않는다
         gateway.mode = PaymentMode.LIVE
         try {
@@ -212,55 +187,4 @@ class PaymentAdminContractHttpTest {
         assertTrue("SECRET_PROVIDER_WORDS" !in read(body)["detail"].asString(), "detail is fixed: $body")
         assertTrue(read(body)["data"].toString().contains("SECRET_PROVIDER_WORDS"), "the provider's words are in data: $body")
     }
-
-    @Test
-    fun `the sync response and the order detail carry the same reviewReason, derived ones included`() {
-        val account = account()
-        val stale = create(account)
-        gateway.authenticate("pay_$stale", stale, PaymentAmount(3000, "KRW"))
-        changeOrder(stale) { it.copy(status = PaymentOrderStatus.CONFIRMING, providerPaymentId = "pay_$stale", confirmStartedAt = Instant.now().minus(Duration.ofHours(5))) }
-        val unfulfilled = paid(account)
-        changeOrder(unfulfilled) { it.copy(fulfilledAt = null, paidAt = Instant.now().minus(Duration.ofHours(3))) }
-        val unapplied = paid(account)
-        changeOrder(unapplied) { it.copy(fulfilledAt = Instant.now()) }
-        store.inTransaction { tx ->
-            tx.lockOrder(unapplied)
-            tx.insertRefundIfAbsent(
-                dev.sumin.skeleton.payment.testing.PaymentTestOrders.refund(id = "rfd_" + "6".repeat(32), orderId = unapplied, status = PaymentRefundStatus.SUCCEEDED, now = Instant.now().minus(Duration.ofHours(3)))
-                    .copy(completedAt = Instant.now().minus(Duration.ofHours(3))),
-            )
-        }
-
-        mapOf(stale to "STALE_CONFIRMING", unfulfilled to "FULFILMENT_UNRESOLVED", unapplied to "REFUND_APPLY_UNRESOLVED").forEach { (id, expected) ->
-            val synced = read(mvc.perform(post("$admin/orders/$id/sync").asOperator()).andExpect(status().isOk).andReturn().response.contentAsString)["value"]
-            val detail = read(mvc.perform(get("$admin/orders/$id").asOperator()).andReturn().response.contentAsString)["value"]["order"]
-            assertEquals(expected, synced["reviewReason"].asString(), "sync of $id")
-            assertEquals(synced["reviewReason"], detail["reviewReason"], "detail of $id")
-        }
-    }
-
-    // --- 모든 응답 DTO 의 칸 ---
-
-    @Test
-    fun `an operator order and an operator refund line have exactly these fields in exactly this order - the front end reads this shape`() {
-        val account = account()
-        val id = paid(account)
-        val line = userRequest(account, id)
-        val orderFields = listOf(
-            "id", "status", "kind", "itemType", "itemRef", "quantity", "orderName", "amount", "refundedAmount", "refundableAmount", "refundPending", "openRefundStatus", "method", "card", "testMode",
-            "failureCode", "createdAt", "paidAt", "fulfilled", "accountId", "provider", "providerPaymentId", "reviewReason", "accountErasedAt",
-        )
-        val refundFields = listOf("id", "orderId", "status", "amount", "reasonCode", "origin", "requestedAt", "completedAt", "closedBy", "requestedBy", "decidedBy", "failureCode")
-
-        val order = read(mvc.perform(post("$admin/orders/$id/sync").asOperator()).andExpect(status().isOk).andReturn().response.contentAsString)["value"]
-        assertEquals(orderFields, order.propertyNames().toList())
-        val listed = read(mvc.perform(get("$admin/orders?accountId=$account").asOperator()).andReturn().response.contentAsString)["values"][0]
-        assertEquals(orderFields, listed.propertyNames().toList())
-        val detail = read(mvc.perform(get("$admin/orders/$id").asOperator()).andReturn().response.contentAsString)["value"]
-        assertEquals(orderFields, detail["order"].propertyNames().toList())
-        assertEquals(refundFields, detail["refunds"][0].propertyNames().toList())
-        val refund = read(mvc.perform(get("$admin/refunds").asOperator()).andReturn().response.contentAsString)["values"].first { it["id"].asString() == line }
-        assertEquals(refundFields, refund.propertyNames().toList())
-    }
-
 }

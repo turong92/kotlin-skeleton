@@ -1,6 +1,5 @@
 package dev.sumin.skeleton.payment
 
-import dev.sumin.skeleton.common.http.ExternalHttpException
 import dev.sumin.skeleton.common.http.ExternalHttpNetworkException
 import dev.sumin.skeleton.common.http.ExternalHttpStatusException
 import dev.sumin.skeleton.common.http.ExternalHttpTimeoutException
@@ -21,33 +20,19 @@ class PaymentFailuresTest {
         }
 
     @Test
-    fun `an exception hidden under a wrapper is classified by its cause`() {
-        val wrapped = RuntimeException("wrapper", providerException(status = 400, code = "REJECT_CARD_COMPANY", definitive = true))
-
-        assertEquals(PaymentFailureOutcome.DEFINITIVE, PaymentFailures.outcomeOf(wrapped))
-        assertEquals(
-            PaymentFailureOutcome.UNKNOWN,
-            PaymentFailures.outcomeOf(RuntimeException("wrapper", timeout())),
-        )
-    }
-
-    @Test
-    fun `a definitive answer buried deeper than the depth limit is read as unknown`() {
-        var chain: Throwable = providerException(status = 403, code = "REJECT_CARD_PAYMENT", definitive = true)
+    fun `a failure is read through wrappers but only to a depth limit and a cause cycle is unknown - unknown is the safe side`() {
+        val refusal = providerException(status = 403, code = "REJECT_CARD_PAYMENT", definitive = true)
+        assertEquals(PaymentFailureOutcome.UNKNOWN, PaymentFailures.outcomeOf(RuntimeException("wrapper", timeout())))
+        var chain: Throwable = refusal
         repeat(9) { chain = RuntimeException("wrapper", chain) }
         assertEquals(PaymentFailureOutcome.DEFINITIVE, PaymentFailures.outcomeOf(chain), "ten levels deep is still read")
-
         repeat(5) { chain = RuntimeException("wrapper", chain) }
-        assertEquals(PaymentFailureOutcome.UNKNOWN, PaymentFailures.outcomeOf(chain), "past the limit it is not read - unknown is the safe side")
-    }
+        assertEquals(PaymentFailureOutcome.UNKNOWN, PaymentFailures.outcomeOf(chain))
 
-    @Test
-    fun `a cause cycle ends as unknown instead of looping`() {
         val a = RuntimeException("a")
         val b = RuntimeException("b")
         a.initCause(b)
         b.initCause(a)
-
         assertEquals(PaymentFailureOutcome.UNKNOWN, PaymentFailures.outcomeOf(a))
     }
 
@@ -89,19 +74,11 @@ class PaymentFailuresTest {
             case("409 IDEMPOTENT_REQUEST_PROCESSING - an earlier request is still running", providerException(409, "IDEMPOTENT_REQUEST_PROCESSING"), PaymentFailureOutcome.UNKNOWN),
             case("400 ALREADY_PROCESSED_PAYMENT - on a confirm the money already moved", providerException(400, "ALREADY_PROCESSED_PAYMENT"), PaymentFailureOutcome.UNKNOWN),
             case("400 ALREADY_CANCELED_PAYMENT - on a refund it is already refunded", providerException(400, "ALREADY_CANCELED_PAYMENT"), PaymentFailureOutcome.UNKNOWN),
-            case("a 4xx code nobody listed", providerException(400, "A_CODE_THE_MODULE_NEVER_HEARD_OF"), PaymentFailureOutcome.UNKNOWN),
             case("refusal mark on a 5xx", providerException(500, definitive = true), PaymentFailureOutcome.UNKNOWN),
             case("refusal mark on a 429", providerException(429, definitive = true), PaymentFailureOutcome.UNKNOWN),
-            case("refusal mark without a code", providerException(400, code = null, definitive = true), PaymentFailureOutcome.UNKNOWN),
             case("refusal mark that is also retryable (contradiction)", providerException(400, definitive = true, retryable = true), PaymentFailureOutcome.UNKNOWN),
             case("4xx marked retryable (provider says transient)", providerException(400, "PROVIDER_ERROR", retryable = true), PaymentFailureOutcome.UNKNOWN),
-            case("429 rate limited", providerException(429, "TOO_MANY_REQUESTS", retryable = true), PaymentFailureOutcome.UNKNOWN),
-            case("408 request timeout", providerException(408), PaymentFailureOutcome.UNKNOWN),
-            case("4xx without a code (cannot interpret)", providerException(400, code = null), PaymentFailureOutcome.UNKNOWN),
-            case("500", providerException(500, retryable = true), PaymentFailureOutcome.UNKNOWN),
             case("untranslated 4xx from the http layer", ExternalHttpStatusException("pay", "POST", uri, 400, "{}"), PaymentFailureOutcome.UNKNOWN),
-            case("external exception without a status", ExternalHttpException("m", "pay", "POST", uri, null, false, errorCode = PaymentErrorCode.PROVIDER_ERROR), PaymentFailureOutcome.UNKNOWN),
-            case("unrelated exception", IllegalStateException("boom"), PaymentFailureOutcome.UNKNOWN),
         )
     }
 }

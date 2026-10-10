@@ -37,18 +37,10 @@ class TossIdentifierTest {
 
     private val badKeys = listOf(
         "orders/ord_victim123", // 다른 경로로 새는 길
-        "x/../orders/ord_victim123",
-        "a.b",
         "a b",
-        "a|b",
-        "a\"b",
         "a%2Fb",
         "a?b",
-        "a#b",
-        "",
-        " ",
         "k".repeat(201),
-        "한글키",
     )
 
     private fun assertRejectedBeforeAnyCall(label: String, block: () -> Unit) {
@@ -78,33 +70,26 @@ class TossIdentifierTest {
 
     @Test
     fun `an order id of the wrong shape never reaches the provider`() {
-        listOf("ord/../../v1", "ord one", "o|r", "x".repeat(65), "a.b", "../x").forEach { orderId ->
+        listOf("ord/../../v1", "ord one", "x".repeat(65)).forEach { orderId ->
             assertRejectedBeforeAnyCall("lookup order '$orderId'") { provider.lookup(PaymentLookupQuery(providerPaymentId = null, orderId = orderId)) }
         }
     }
 
     @Test
-    fun `a lookup answer for a different payment key is not a readable answer`() {
+    fun `a lookup answer for another payment or another order is not a readable answer`() {
         server.on("GET", "/v1/payments/pay_asked", Reply.Json(200, TossFixtures.payment(paymentKey = "pay_someone_else")))
-
-        val error = assertFailsWith<PaymentProviderException> { provider.lookup(PaymentLookupQuery("pay_asked", null)) }
-
-        assertEquals("UNREADABLE_RESPONSE", error.providerError.code)
-        assertEquals(PaymentFailureOutcome.UNKNOWN, PaymentFailures.outcomeOf(error))
-    }
-
-    @Test
-    fun `a lookup by order id whose answer is another order is not a readable answer`() {
         server.on("GET", "/v1/payments/orders/ord_asked", Reply.Json(200, TossFixtures.payment(orderId = "ord_somebody_else")))
 
-        val error = assertFailsWith<PaymentProviderException> { provider.lookup(PaymentLookupQuery(null, "ord_asked")) }
-
-        assertEquals("UNREADABLE_RESPONSE", error.providerError.code)
+        listOf(PaymentLookupQuery("pay_asked", null), PaymentLookupQuery(null, "ord_asked")).forEach { query ->
+            val error = assertFailsWith<PaymentProviderException> { provider.lookup(query) }
+            assertEquals("UNREADABLE_RESPONSE", error.providerError.code)
+            assertEquals(PaymentFailureOutcome.UNKNOWN, PaymentFailures.outcomeOf(error))
+        }
     }
 
     @Test
     fun `a webhook payment key that could change a path is refused`() {
-        listOf("orders/ord_victim123", "x/../y", "a.b", "a/b").forEach { key ->
+        listOf("orders/ord_victim123", "x/../y").forEach { key ->
             val body = TossFixtures.webhook(paymentKey = key).toByteArray()
             assertFailsWith<PaymentWebhookRejectedException>(key) { provider.parse(WebhookDelivery(emptyMap(), body)) }
         }

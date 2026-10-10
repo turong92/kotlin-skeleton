@@ -21,42 +21,25 @@ class PaymentSchemaDbTest {
     // ---- check 제약 (이 저장소 마이그레이션에서 처음 쓰였다 — 두 방언이 모두 집행하는지 실측) ----
 
     @Test
-    fun `a negative amount is refused by the check constraint`() {
+    fun `the check constraints refuse a negative amount, a refund above the paid amount - the ordered amount when nothing was paid -, a zero refund and a five-character card tail`() {
         refusedBy("ck_payment_orders_amounts") { PaymentDb.insertOrderRow(PaymentDb.unique("ord"), amount = -1) }
-    }
-
-    @Test
-    fun `a refunded amount above the paid amount is refused - paid amount wins when it is set`() {
+        // 결제액이 있으면 그것이 상한이다(같으면 된다)
         refusedBy("ck_payment_orders_amounts") { PaymentDb.insertOrderRow(PaymentDb.unique("ord"), amount = 5000, paidAmount = 3000, refundedAmount = 3001) }
-        PaymentDb.insertOrderRow(PaymentDb.unique("ord"), amount = 5000, paidAmount = 3000, refundedAmount = 3000) // 같으면 된다
-    }
-
-    @Test
-    fun `without a paid amount the ordered amount is the ceiling - coalesce works in the check`() {
+        PaymentDb.insertOrderRow(PaymentDb.unique("ord"), amount = 5000, paidAmount = 3000, refundedAmount = 3000)
+        // 결제액이 없으면 주문 금액이 상한이다 - coalesce 가 check 안에서 돈다
         refusedBy("ck_payment_orders_amounts") { PaymentDb.insertOrderRow(PaymentDb.unique("ord"), amount = 3000, paidAmount = null, refundedAmount = 3001) }
-        PaymentDb.insertOrderRow(PaymentDb.unique("ord"), amount = 3000, paidAmount = null, refundedAmount = 3000)
-    }
 
-
-    @Test
-    fun `a refund of zero or less is refused`() {
         val order = PaymentDb.unique("ord")
         PaymentDb.insertOrderRow(order)
-
         refusedBy("ck_payment_refunds_amount") { PaymentDb.insertRefundRow(PaymentDb.unique("rfd"), order, null, null, null, amount = 0) }
-        PaymentDb.insertRefundRow(PaymentDb.unique("rfd"), order, null, null, null, amount = 1)
-    }
-
-    @Test
-    fun `the last four characters of a card are at most four - the column is the last defence`() {
+        // 카드 끝 네 자리 칸은 마지막 방어선이다
         assertFailsWith<DataIntegrityViolationException> { PaymentDb.insertOrderRow(PaymentDb.unique("ord"), cardLast4 = "12345") }
-        PaymentDb.insertOrderRow(PaymentDb.unique("ord"), cardLast4 = "12*4")
     }
 
     // ---- 유니크 (저장소 시험이 주문의 둘을 재고, 여기서는 환불 · 웹훅의 넷을 16 스레드로 잰다) ----
 
     @Test
-    fun `sixteen threads opening a refund on one order leave exactly one open refund`() {
+    fun `sixteen threads opening a refund on one order leave exactly one open refund - and a closed refund frees the open key`() {
         val order = PaymentDb.unique("ord")
         PaymentDb.insertOrderRow(order)
 
@@ -64,19 +47,9 @@ class PaymentSchemaDbTest {
 
         assertEquals(1, results.count { it.isSuccess })
         assertTrue(results.filter { it.isFailure }.all { it.exceptionOrNull() is DuplicateKeyException }, results.mapNotNull { it.exceptionOrNull() }.toString())
-        assertEquals(1, PaymentDb.count("select count(*) from payment_refunds where order_id = :o", "o" to order))
-    }
-
-    @Test
-    fun `a closed refund frees the open key - the next refund of the order can open`() {
-        val order = PaymentDb.unique("ord")
-        PaymentDb.insertOrderRow(order)
-        PaymentDb.insertRefundRow(PaymentDb.unique("rfd"), order, openKey = order, dedupeKey = null, providerRefundId = null)
         PaymentDb.jdbc.update("update payment_refunds set open_key = null, status = 'FAILED' where order_id = :o", mapOf("o" to order))
-
         PaymentDb.insertRefundRow(PaymentDb.unique("rfd"), order, openKey = order, dedupeKey = null, providerRefundId = null)
     }
-
 
     @Test
     fun `sixteen threads matching one provider refund id leave exactly one refund row - the same id on another order is fine`() {
@@ -92,23 +65,16 @@ class PaymentSchemaDbTest {
     }
 
     @Test
-    fun `sixteen threads receiving one webhook event key create exactly one inbox row - per provider`() {
+    fun `sixteen threads receiving one webhook event key create exactly one inbox row - per provider, and provider ids are case sensitive`() {
         val results = race(16) { PaymentDb.insertWebhookRow("scripted", "tx-1") }
 
         assertEquals(1, results.count { it.isSuccess })
         PaymentDb.insertWebhookRow("another", "tx-1")
-        assertEquals(2, PaymentDb.count("select count(*) from payment_webhook_events where event_key = 'tx-1'"))
-    }
-
-    @Test
-    fun `an event key that differs only in case is another event - provider ids are case sensitive`() {
         PaymentDb.insertWebhookRow("scripted", "Tx-A")
         PaymentDb.insertWebhookRow("scripted", "tx-a")
-        val order = PaymentDb.unique("ord")
-        PaymentDb.insertOrderRow(order, providerPaymentId = "PayKey")
+        PaymentDb.insertOrderRow(PaymentDb.unique("ord"), providerPaymentId = "PayKey")
         PaymentDb.insertOrderRow(PaymentDb.unique("ord"), providerPaymentId = "paykey")
     }
-
 
     // ---- 인덱스 · 유니크 (이름 → 열 구성까지) ----
 

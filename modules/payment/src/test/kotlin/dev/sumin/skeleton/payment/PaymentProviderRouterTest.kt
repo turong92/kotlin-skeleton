@@ -15,7 +15,7 @@ class PaymentProviderRouterTest {
         PaymentProviderRouter(gateways.toList(), properties)
 
     @Test
-    fun `explicit provider wins over currency and country routing`() {
+    fun `explicit provider wins, then routing goes currency, country, default`() {
         val stripe = FakePaymentProvider("stripe")
         val router = router(
             toss,
@@ -29,24 +29,7 @@ class PaymentProviderRouterTest {
             ),
         )
 
-        assertSame<Any>(stripe, router.resolve(" Stripe ", PaymentAmount(10_000, "KRW"), "KR"))
-    }
-
-    @Test
-    fun `routing order is currency, then country, then default provider`() {
-        val stripe = FakePaymentProvider("stripe")
-        val router = router(
-            toss,
-            stripe,
-            properties = PaymentProperties(
-                defaultProvider = "stripe",
-                providers = mapOf(
-                    "toss" to PaymentProperties.Provider(currencies = setOf("KRW"), countries = setOf("KR")),
-                    "stripe" to PaymentProperties.Provider(currencies = setOf("USD"), countries = setOf("US")),
-                ),
-            ),
-        )
-
+        assertSame<Any>(stripe, router.resolve(" Stripe ", PaymentAmount(10_000, "KRW"), "KR"), "explicit")
         assertSame<Any>(toss, router.resolve(null, PaymentAmount(10_000, "krw"), "US"), "currency first")
         assertSame<Any>(toss, router.resolve(null, PaymentAmount(10_000, "JPY"), " kr "), "country when no currency route matches")
         assertSame<Any>(stripe, router.resolve(null, PaymentAmount(10_000, "JPY"), "JP"), "default when nothing matches")
@@ -69,7 +52,7 @@ class PaymentProviderRouterTest {
     }
 
     @Test
-    fun `gateways that are not payment providers do not take part in provider routing`() {
+    fun `gateways that are not payment providers do not take part in provider routing and an explicit id naming one is capability unsupported`() {
         assertSame<Any>(toss, router(toss, lookupOnly).resolve(null, null, null), "single provider shortcut")
         val sameRoutes = router(
             toss,
@@ -83,24 +66,11 @@ class PaymentProviderRouterTest {
         )
         assertSame<Any>(toss, sameRoutes.resolve(null, PaymentAmount(1_000, "KRW"), null), "currency not ambiguous")
         assertSame<Any>(toss, sameRoutes.resolve(null, null, "KR"), "country not ambiguous")
-        val onlyLookupHandlesJpy = router(
-            toss,
-            lookupOnly,
-            properties = PaymentProperties(defaultProvider = "toss", providers = mapOf("lookup-only" to PaymentProperties.Provider(currencies = setOf("JPY")))),
-        )
-        assertSame<Any>(toss, onlyLookupHandlesJpy.resolve(null, PaymentAmount(1_000, "JPY"), null), "falls through to the default")
+        assertFailsWith<PaymentCapabilityUnsupportedException> { router(toss, lookupOnly).resolve("lookup-only", null, null) }
     }
 
     @Test
-    fun `an explicit id naming a gateway that is not a payment provider is capability unsupported`() {
-        val error = assertFailsWith<PaymentCapabilityUnsupportedException> { router(toss, lookupOnly).resolve("lookup-only", null, null) }
-
-        assertEquals("PAYMENT.CAPABILITY_UNSUPPORTED", error.errorCode.code)
-        assertEquals(400, error.status.value())
-    }
-
-    @Test
-    fun `routing by capability uses currency then country then default among capable gateways only`() {
+    fun `routing by capability uses currency, country, then the default among capable gateways only - a default without the capability is not picked`() {
         val other = CheckoutOnly("other-checkout")
         val router = router(
             checkoutOnly,
@@ -116,21 +86,11 @@ class PaymentProviderRouterTest {
             ),
         )
 
-        assertSame<Any>(checkoutOnly, router(toss, checkoutOnly).resolve(null, null, null, PaymentCheckoutGateway::class), "single capable gateway")
         assertSame<Any>(checkoutOnly, router.resolve(null, PaymentAmount(1, "krw"), null, PaymentCheckoutGateway::class))
         assertSame<Any>(other, router.resolve(null, null, "us", PaymentCheckoutGateway::class))
         assertSame<Any>(other, router.resolve(null, PaymentAmount(1, "JPY"), "JP", PaymentCheckoutGateway::class))
-    }
-
-    @Test
-    fun `a default provider that lacks the capability is not picked - the default step only searches the capable gateways`() {
-        val second = CheckoutOnly("second")
-        val tossDefault = router(toss, checkoutOnly, second, properties = PaymentProperties(defaultProvider = "toss"))
-
-        val error = assertFailsWith<PaymentRoutingException> { tossDefault.resolve(null, null, null, PaymentCheckoutGateway::class) }
-        assertEquals("PAYMENT.ROUTING_FAILED", error.errorCode.code)
-        assertFailsWith<PaymentRoutingException> { router(toss).resolve(null, null, null, PaymentCheckoutGateway::class) }
-        assertSame<Any>(second, router(checkoutOnly, second, toss, properties = PaymentProperties(defaultProvider = "second")).resolve(null, null, null, PaymentCheckoutGateway::class))
+        val tossDefault = router(toss, checkoutOnly, other, properties = PaymentProperties(defaultProvider = "toss"))
+        assertEquals("PAYMENT.ROUTING_FAILED", assertFailsWith<PaymentRoutingException> { tossDefault.resolve(null, null, null, PaymentCheckoutGateway::class) }.errorCode.code)
     }
 
     @Test

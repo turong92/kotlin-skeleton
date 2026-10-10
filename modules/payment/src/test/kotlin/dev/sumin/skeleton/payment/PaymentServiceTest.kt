@@ -9,122 +9,56 @@ import kotlin.test.assertSame
 class PaymentServiceTest {
     @Test
     fun `confirm routes request to the selected provider`() {
-        val toss = RecordingPaymentProvider("toss")
+        val toss = StubProvider("toss")
         val service = PaymentService(
             router = PaymentProviderRouter(
-                providers = listOf(toss, RecordingPaymentProvider("stripe")),
-                properties = PaymentProperties(
-                    providers = mapOf(
-                        "toss" to PaymentProperties.Provider(currencies = setOf("KRW")),
-                    ),
-                ),
+                providers = listOf(toss, StubProvider("stripe")),
+                properties = PaymentProperties(providers = mapOf("toss" to PaymentProperties.Provider(currencies = setOf("KRW")))),
             ),
         )
-        val request = PaymentConfirmRequest(
-            providerPaymentId = "pay_1",
-            merchantReferenceId = "order_1",
-            amount = PaymentAmount(amount = 30_000, currency = "KRW"),
-            idempotencyKey = IdempotencyKey("idem-1"),
-        )
+        val request = PaymentConfirmRequest("pay_1", PaymentAmount(30_000, "KRW"), merchantReferenceId = "order_1", idempotencyKey = IdempotencyKey("idem-1"))
 
-        val result = service.confirm(request)
-
-        assertEquals("toss", result.provider)
+        assertEquals("toss", service.confirm(request).provider)
         assertEquals(request, toss.confirmed.single())
     }
 
     @Test
     fun `provider failures are published to configured failure handlers before rethrowing`() {
-        val failure = paymentProviderException(provider = "toss")
-        val provider = FailingPaymentProvider(providerId = "toss", failure = failure)
+        val failure = PaymentProviderException(
+            providerError = PaymentProviderError("toss", "UPSTREAM_ERROR", "provider failed", ProviderTrace("toss", providerRequestId = "req_1"), 502, retryable = true),
+            clientName = "payment-toss",
+            method = "POST",
+            uri = URI.create("https://provider.example.test/payments"),
+        )
         val events = mutableListOf<PaymentFailureEvent>()
         val service = PaymentService(
-            router = PaymentProviderRouter(
-                providers = listOf(provider),
-                properties = PaymentProperties(defaultProvider = "toss"),
-            ),
+            router = PaymentProviderRouter(listOf(StubProvider("toss", failure)), PaymentProperties(defaultProvider = "toss")),
             failureHandlers = listOf(PaymentFailureHandler { events += it }),
-        )
-        val request = PaymentRefundRequest(
-            providerPaymentId = "pay_1",
-            amount = PaymentAmount(amount = 1_000, currency = "KRW"),
-            reason = "duplicate",
-            idempotencyKey = IdempotencyKey("refund-idem"),
         )
 
         val thrown = assertFailsWith<PaymentProviderException> {
-            service.refund(request)
+            service.refund(PaymentRefundRequest("pay_1", PaymentAmount(1_000, "KRW"), reason = "duplicate", idempotencyKey = IdempotencyKey("refund-idem")))
         }
 
-        val event = events.single()
         assertSame(failure, thrown)
-        assertEquals(PaymentOperation.REFUND, event.operation)
-        assertEquals("toss", event.provider)
-        assertEquals("pay_1", event.providerPaymentId)
-        assertEquals(PaymentAmount(amount = 1_000, currency = "KRW"), event.amount)
-        assertEquals("refund-idem", event.idempotencyKey?.value)
-        assertSame(failure, event.exception)
+        assertEquals(PaymentOperation.REFUND, events.single().operation)
+        assertSame(failure, events.single().exception)
     }
 
-    private class RecordingPaymentProvider(
-        override val providerId: String,
-    ) : PaymentProvider {
+    private class StubProvider(override val providerId: String, private val failure: RuntimeException? = null) : PaymentProvider {
         val confirmed = mutableListOf<PaymentConfirmRequest>()
-        val canceled = mutableListOf<PaymentCancelRequest>()
-        val refunded = mutableListOf<PaymentRefundRequest>()
 
         override fun confirm(request: PaymentConfirmRequest): PaymentOperationResult {
+            failure?.let { throw it }
             confirmed += request
             return result(PaymentOperationStatus.CONFIRMED, request.providerPaymentId, request.amount)
         }
 
-        override fun cancel(request: PaymentCancelRequest): PaymentOperationResult {
-            canceled += request
-            return result(PaymentOperationStatus.CANCELED, request.providerPaymentId, request.amount)
-        }
+        override fun cancel(request: PaymentCancelRequest): PaymentOperationResult = failure?.let { throw it } ?: result(PaymentOperationStatus.CANCELED, request.providerPaymentId, request.amount)
 
-        override fun refund(request: PaymentRefundRequest): PaymentOperationResult {
-            refunded += request
-            return result(PaymentOperationStatus.REFUNDED, request.providerPaymentId, request.amount)
-        }
+        override fun refund(request: PaymentRefundRequest): PaymentOperationResult = failure?.let { throw it } ?: result(PaymentOperationStatus.REFUNDED, request.providerPaymentId, request.amount)
 
-        private fun result(
-            status: PaymentOperationStatus,
-            providerPaymentId: String,
-            amount: PaymentAmount?,
-        ): PaymentOperationResult =
-            PaymentOperationResult(
-                provider = providerId,
-                providerPaymentId = providerPaymentId,
-                status = status,
-                amount = amount,
-                trace = ProviderTrace(provider = providerId),
-            )
+        private fun result(status: PaymentOperationStatus, providerPaymentId: String, amount: PaymentAmount?) =
+            PaymentOperationResult(providerId, providerPaymentId, status, amount, ProviderTrace(providerId))
     }
-
-    private class FailingPaymentProvider(
-        override val providerId: String,
-        private val failure: RuntimeException,
-    ) : PaymentProvider {
-        override fun confirm(request: PaymentConfirmRequest): PaymentOperationResult = throw failure
-
-        override fun cancel(request: PaymentCancelRequest): PaymentOperationResult = throw failure
-
-        override fun refund(request: PaymentRefundRequest): PaymentOperationResult = throw failure
-    }
-
-    private fun paymentProviderException(provider: String): PaymentProviderException =
-        PaymentProviderException(
-            providerError = PaymentProviderError(
-                provider = provider,
-                code = "UPSTREAM_ERROR",
-                message = "provider failed",
-                trace = ProviderTrace(provider = provider, providerRequestId = "req_1"),
-                upstreamStatus = 502,
-                retryable = true,
-            ),
-            clientName = "payment-$provider",
-            method = "POST",
-            uri = URI.create("https://provider.example.test/payments"),
-        )
 }

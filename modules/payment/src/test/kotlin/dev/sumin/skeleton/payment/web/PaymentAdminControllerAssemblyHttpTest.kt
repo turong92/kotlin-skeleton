@@ -63,13 +63,9 @@ class PaymentAdminSubclassHttpTest {
     @Autowired @Qualifier("requestMappingHandlerMapping") lateinit var mappings: RequestMappingHandlerMapping
 
     @Test
-    fun `the subclassed controller really is the one serving the operator paths`() {
+    fun `every handler of a subclassed operator controller is 403 for a caller without the role and 401 for an anonymous one`() {
         val types = mappings.handlerMethods.values.map { it.beanType }.filter { PaymentAdminController::class.java.isAssignableFrom(it) }.toSet()
         assertEquals(setOf(AppAdminController::class.java), types)
-    }
-
-    @Test
-    fun `every handler of a subclassed operator controller is 403 for a caller without the role and 401 for an anonymous one`() {
         ADMIN_ENDPOINTS.forEach { (method, path) ->
             mvc.perform(call(method, path).asUser("acc_plain", "USER")).andExpect(status().isForbidden).andExpect(jsonPath("$.code").value("COMMON.FORBIDDEN"))
             mvc.perform(call(method, path)).andExpect(status().isUnauthorized)
@@ -91,13 +87,7 @@ class PaymentAdminWithoutInterceptorHttpTest {
         ADMIN_ENDPOINTS.forEach { (method, path) ->
             val body = mvc.perform(call(method, path).asOperator()).andExpect(status().isForbidden).andExpect(jsonPath("$.code").value("COMMON.FORBIDDEN")).andReturn().response.contentAsString
             assertEquals(false, body.contains("providerPaymentId") || body.contains("\"values\""), "no data in a closed answer: $body")
-        }
-    }
-
-    @Test
-    fun `an operator attribute that is not a string does not open the second lock`() {
-        // 인터셉터가 아닌 누가 같은 이름으로 다른 타입을 실어도 "있다"로 읽지 않는다 - 핸들러의 `String` 인자와 같은 기준
-        ADMIN_ENDPOINTS.forEach { (method, path) ->
+            // 인터셉터가 아닌 누가 같은 이름으로 다른 타입을 실어도 둘째 잠금은 열리지 않는다
             mvc.perform(call(method, path).asOperator().requestAttr(PaymentOperatorInterceptor.OPERATOR_ATTRIBUTE, Any())).andExpect(status().isForbidden)
         }
     }

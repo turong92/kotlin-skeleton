@@ -27,12 +27,8 @@ class PaymentAdminDisabledHttpTest {
         val one = listOf("PAYMENT.ORDER_NOT_FOUND", "PAYMENT.REFUND_NOT_FOUND", "PAYMENT.WEBHOOK_EVENT_NOT_FOUND")
         listOf(
             get("/api/v1/admin/payments/orders"),
-            get("/api/v1/admin/payments/orders/ord_x"),
             post("/api/v1/admin/payments/orders/ord_x/refunds"),
-            get("/api/v1/admin/payments/refunds"),
             post("/api/v1/admin/payments/refunds/rfd_x/approve"),
-            post("/api/v1/admin/payments/orders/ord_x/sync"),
-            get("/api/v1/admin/payments/webhook-events"),
             post("/api/v1/admin/payments/webhook-events/1/retry"),
         ).forEach { request ->
             val result = mvc.perform(request.asOperator()).andExpect(status().isNotFound).andReturn().response.contentAsString

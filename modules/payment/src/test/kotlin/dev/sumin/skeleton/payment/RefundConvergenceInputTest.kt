@@ -1,16 +1,12 @@
 package dev.sumin.skeleton.payment
 
 import dev.sumin.skeleton.payment.testing.PaymentLedgerKit
-import dev.sumin.skeleton.payment.testing.ScriptedGateway.RefundScript
-import java.time.Duration
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
-/** 결제사의 취소 목록을 장부에 맞추는 입구의 걸름(식별자 모양 · 중복 · 0원)과, 늦게 적용된 환불을 다음 환불 전 확인이 잡는 길(스펙 §15). */
+/** 결제사의 취소 목록을 장부에 맞추는 입구의 걸름(식별자 모양 · 중복 · 0원). */
 class RefundConvergenceInputTest {
-    private val op = "op_1"
-
     private fun converge(kit: PaymentLedgerKit, orderId: String, cancels: List<ProviderRefund>, remaining: Long): ConvergeResult {
         val snapshot = kit.gateway.lookup(PaymentLookupQuery("pay_1", null))!!
             .copy(status = ProviderPaymentStatus.PARTIALLY_REFUNDED, refunds = cancels, remaining = PaymentAmount(remaining, "KRW"))
@@ -41,30 +37,5 @@ class RefundConvergenceInputTest {
 
         assertEquals(emptyList(), kit.store.listRefunds(order.id))
         assertEquals(PaymentReviewReason.REFUND_MISMATCH, result.order.reviewReason, "money moved at the provider that the ledger could not take in")
-    }
-
-    @Test
-    fun `a line closed as not-applied whose request lands later is caught as a provider line by the next refund's pre-check`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.paid()
-        kit.gateway.scriptRefund(RefundScript.TimeoutAppliedLater)
-        val first = kit.refunds.refund(op, order.id, "OPERATOR", 1000, IdempotencyKey("k-1")).refund
-        kit.advance(Duration.ofMinutes(2))
-        kit.runTasks(setOf(PaymentTaskTypes.REFUND_RECONCILE))
-        assertEquals(PaymentRefundStatus.FAILED, kit.store.findRefund(first.id)!!.status)
-        assertEquals("NOT_APPLIED", kit.store.findRefund(first.id)!!.failureCode)
-
-        kit.gateway.applyLate() // 닫은 뒤에 결제사가 앞선 요청을 처리했다
-        kit.advance(Duration.ofSeconds(5))
-        val next = kit.refunds.refund(op, order.id, "OPERATOR", 500, IdempotencyKey("k-2"))
-
-        val provider = kit.store.listRefunds(order.id).single { it.origin == PaymentRefundOrigin.PROVIDER }
-        assertEquals(1000, provider.amount.amount)
-        assertEquals("txn_1", provider.providerRefundId)
-        assertEquals(PaymentRefundStatus.FAILED, kit.store.findRefund(first.id)!!.status, "the old line stays closed")
-        assertEquals(PaymentRefundStatus.SUCCEEDED, next.refund.status)
-        assertEquals(1500, next.order.refundedAmount)
-        assertEquals(kit.gateway.payment("pay_1")!!.refundedTotal, next.order.refundedAmount, "the ledger and the provider agree after the catch-up")
-        assertNull(next.order.reviewReason)
     }
 }

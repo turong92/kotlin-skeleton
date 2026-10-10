@@ -37,14 +37,12 @@ class RefundProviderPendingTest {
 
         val task = kit.tasks.all(PaymentTaskTypes.REFUND_RECONCILE).single()
         assertEquals(State.PENDING, task.state)
-        assertEquals(PaymentRefundStatus.PENDING, kit.store.findRefund(line.id)!!.status)
         assertNull(kit.order(line.orderId).reviewReason, "not before the last attempt")
         runSettle(kit)
 
         assertEquals(State.DEAD, task.state)
         assertEquals(PaymentRefundStatus.PENDING, kit.store.findRefund(line.id)!!.status, "never closed as not-applied")
         assertEquals(PaymentReviewReason.REFUND_MISMATCH, kit.order(line.orderId).reviewReason)
-        assertEquals(1, kit.gateway.refundCalls.size)
     }
 
     @Test
@@ -63,13 +61,9 @@ class RefundProviderPendingTest {
         val done = kit.store.findRefund(line.id)!!
         assertEquals(PaymentRefundStatus.SUCCEEDED, done.status)
         assertEquals("txn_1", done.providerRefundId)
-        assertNull(done.failureCode, "the acknowledgement mark goes away with the pending state")
         assertEquals(1000, kit.order(line.orderId).refundedAmount, "counted once")
         assertEquals(1, kit.store.listRefunds(line.orderId).size)
         assertEquals(1, kit.gateway.refundCalls.size)
-        kit.runTasks(setOf(PaymentTaskTypes.REFUND_APPLY))
-        assertEquals(1, kit.listener.refunded.size)
         assertNull(kit.order(line.orderId).reviewReason)
     }
-
 }

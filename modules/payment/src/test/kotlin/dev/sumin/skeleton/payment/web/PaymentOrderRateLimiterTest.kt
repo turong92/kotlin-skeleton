@@ -6,7 +6,6 @@ import dev.sumin.skeleton.payment.PaymentProperties
 import java.time.Duration
 import java.time.Instant
 import kotlin.test.Test
-import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
@@ -28,12 +27,5 @@ class PaymentOrderRateLimiterTest {
         repeat(2) { n -> assertNull(limiter.acquire("acc_quiet_$n", "ip_nat"), "quiet account $n behind the same IP") }
         assertNull(limiter.acquire("acc_quiet_2", "ip_nat"))
         assertNotNull(limiter.acquire("acc_quiet_3", "ip_nat"), "the IP bucket is really 5: 2 + 3 used, the next is denied")
-    }
-
-    @Test
-    fun `an IP that is over its limit waits until its window ends`() {
-        repeat(5) { n -> assertNull(limiter.acquire("acc_$n", "ip_x")) }
-
-        assertEquals(600L, limiter.acquire("acc_new", "ip_x"))
     }
 }

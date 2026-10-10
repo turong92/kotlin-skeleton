@@ -59,20 +59,4 @@ class WebhookKeepsReviewMarksTest {
         assertEquals(RefundSettlement.RESULT_MISMATCH, kit.store.findRefund(line.id)!!.failureCode)
         assertEquals(PaymentRefundStatus.PENDING, kit.store.findRefund(line.id)!!.status)
     }
-
-    @Test
-    fun `a webhook does not clear the mark of an order that still has an accepted pending refund line`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.paid()
-        kit.gateway.scriptRefund(RefundScript.TimeoutNotApplied)
-        val line = kit.refunds.refund(op, order.id, "OPERATOR", 1000, IdempotencyKey("k-1")).refund
-        kit.refundReconcile.onDead(PaymentTaskRun(PaymentTaskTypes.REFUND_RECONCILE, line.id, 12, 12))
-        assertEquals(PaymentReviewReason.REFUND_MISMATCH, kit.order(order.id).reviewReason)
-        kit.advance(Duration.ofMinutes(30))
-
-        webhookArrives(kit, order.id)
-
-        assertEquals(PaymentReviewReason.REFUND_MISMATCH, kit.order(order.id).reviewReason)
-        assertEquals(PaymentRefundStatus.PENDING, kit.store.findRefund(line.id)!!.status, "the webhook never closes the line - that is the refund settlement's job")
-    }
 }

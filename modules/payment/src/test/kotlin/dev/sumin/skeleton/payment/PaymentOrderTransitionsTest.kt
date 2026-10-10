@@ -39,13 +39,8 @@ class PaymentOrderTransitionsTest {
                 val expected = (from to to) in allowed
                 DynamicTest.dynamicTest("$from -> $to is ${if (expected) "allowed" else "rejected"}") {
                     assertEquals(expected, PaymentOrderTransitions.isAllowed(from, to))
-                    if (expected) {
-                        PaymentOrderTransitions.require(from, to)
-                    } else {
-                        assertFailsWith<IllegalStateException> { PaymentOrderTransitions.require(from, to) }
-                    }
+                    if (expected) PaymentOrderTransitions.require(from, to) else assertFailsWith<IllegalStateException> { PaymentOrderTransitions.require(from, to) }
                 }
             }
         }
-
 }

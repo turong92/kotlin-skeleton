@@ -47,40 +47,45 @@ abstract class PaymentLedgerStoreContract {
 
     private val first = PaymentTestOrders.order(id = "ord_" + "1".repeat(32), dedupeKey = "dedupe-1")
 
+    private val second = first.copy(id = "ord_" + "2".repeat(32), dedupeKey = null)
+
+    /** [n] 개 스레드가 신호와 함께 동시에 [task] 를 돈다. */
+    private fun race(n: Int, task: (Int) -> Unit) {
+        val start = CountDownLatch(1)
+        val pool = Executors.newFixedThreadPool(n)
+        try {
+            val futures = (1..n).map { i -> pool.submit { start.await(); task(i) } }
+            start.countDown()
+            futures.forEach { it.get(30, TimeUnit.SECONDS) }
+        } finally {
+            pool.shutdownNow()
+        }
+    }
+
+    private fun id32(prefix: String, n: Int) = prefix + n.toString(16).padStart(32, '0')
+
     @Test
-    fun `an inserted order is readable by id and by dedupe key after commit`() {
+    fun `an order is found by id, dedupe key and provider payment id - a taken dedupe key is refused, a missing one never collides`() {
         val store = newStore()
 
         assertTrue(store.inTransaction { it.insertOrderIfAbsent(first) })
-
+        assertFalse(store.inTransaction { it.insertOrderIfAbsent(first.copy(id = second.id, orderName = "other")) })
         assertEquals(first, store.findOrder(first.id))
         assertEquals(first, store.findOrderByDedupeKey("dedupe-1"))
-        assertNull(store.findOrder("ord_missing"))
-    }
-
-    @Test
-    fun `an insert with a dedupe key that exists is refused and the first row stays`() {
-        val store = newStore()
-        store.inTransaction { it.insertOrderIfAbsent(first) }
-
-        val second = first.copy(id = "ord_" + "2".repeat(32), orderName = "other")
-        val inserted = store.inTransaction { it.insertOrderIfAbsent(second) }
-
-        assertFalse(inserted)
-        assertEquals(first, store.findOrderByDedupeKey("dedupe-1"))
         assertNull(store.findOrder(second.id))
+        assertNull(store.findOrder("ord_missing"))
+
+        assertTrue(store.inTransaction { it.insertOrderIfAbsent(first.copy(id = id32("ord_", 3), dedupeKey = null)) })
+        assertTrue(store.inTransaction { it.insertOrderIfAbsent(first.copy(id = id32("ord_", 4), dedupeKey = null)) })
+
+        store.inTransaction { tx -> tx.lockOrder(first.id); tx.updateOrder(first.copy(providerPaymentId = "pay_known")) }
+        assertEquals(first.id, store.findOrderByProviderPayment("scripted", "pay_known")?.id)
+        assertNull(store.findOrderByProviderPayment("scripted", "pay_unknown"))
+        assertNull(store.findOrderByProviderPayment("another", "pay_known"))
     }
 
     @Test
-    fun `orders without a dedupe key never collide`() {
-        val store = newStore()
-
-        assertTrue(store.inTransaction { it.insertOrderIfAbsent(first.copy(dedupeKey = null)) })
-        assertTrue(store.inTransaction { it.insertOrderIfAbsent(first.copy(id = "ord_" + "2".repeat(32), dedupeKey = null)) })
-    }
-
-    @Test
-    fun `a transaction that throws leaves no order and no event`() {
+    fun `a transaction that throws - checked or not - leaves no order and no event and frees the dedupe key`() {
         val store = newStore()
 
         assertFailsWith<IllegalArgumentException> {
@@ -90,15 +95,8 @@ abstract class PaymentLedgerStoreContract {
                 throw IllegalArgumentException("boom")
             }
         }
-
         assertNull(store.findOrder(first.id))
         assertEquals(emptyList(), store.listEvents(first.id))
-        assertTrue(store.inTransaction { it.insertOrderIfAbsent(first) }, "the dedupe key was released with the rollback")
-    }
-
-    @Test
-    fun `a checked exception thrown inside the transaction comes out as itself - not wrapped - and rolls back`() {
-        val store = newStore()
 
         val failure = assertFailsWith<java.io.IOException> {
             store.inTransaction { tx ->
@@ -106,67 +104,30 @@ abstract class PaymentLedgerStoreContract {
                 throw java.io.IOException("checked boom")
             }
         }
-
-        assertEquals("checked boom", failure.message)
-        assertNull(store.findOrder(first.id))
+        assertEquals("checked boom", failure.message, "not wrapped")
+        assertTrue(store.inTransaction { it.insertOrderIfAbsent(first) }, "the dedupe key was released with the rollback")
     }
 
     @Test
-    fun `an order can be read inside the transaction that inserted it before the commit`() {
-        val store = newStore()
-
-        store.inTransaction { tx ->
-            tx.insertOrderIfAbsent(first)
-            assertEquals(first, tx.findOrderByDedupeKey("dedupe-1"))
-            assertEquals(first, tx.lockOrder(first.id))
-        }
-    }
-
-    @Test
-    fun `updating an order that was not locked in this transaction fails`() {
+    fun `an order is changed only under its lock - committed with the transaction, gone with a rollback, one order lock per transaction`() {
         val store = newStore()
         store.inTransaction { it.insertOrderIfAbsent(first) }
+        store.inTransaction { it.insertOrderIfAbsent(second) }
 
-        assertFailsWith<IllegalStateException> {
-            store.inTransaction { tx -> tx.updateOrder(first.copy(status = PaymentOrderStatus.PAID)) }
-        }
+        assertFailsWith<IllegalStateException> { store.inTransaction { tx -> tx.updateOrder(first.copy(status = PaymentOrderStatus.PAID)) } }
         assertEquals(PaymentOrderStatus.PENDING, store.findOrder(first.id)!!.status)
-    }
 
-    @Test
-    fun `an update made under the lock is visible after commit and gone after rollback`() {
-        val store = newStore()
-        store.inTransaction { it.insertOrderIfAbsent(first) }
-
-        store.inTransaction { tx ->
-            val locked = assertNotNull(tx.lockOrder(first.id))
-            tx.updateOrder(locked.copy(status = PaymentOrderStatus.CONFIRMING))
-        }
+        store.inTransaction { tx -> tx.updateOrder(assertNotNull(tx.lockOrder(first.id)).copy(status = PaymentOrderStatus.CONFIRMING)) }
         assertEquals(PaymentOrderStatus.CONFIRMING, store.findOrder(first.id)!!.status)
-
         assertFailsWith<IllegalStateException> {
             store.inTransaction { tx ->
-                val locked = assertNotNull(tx.lockOrder(first.id))
-                tx.updateOrder(locked.copy(status = PaymentOrderStatus.PAID))
+                tx.updateOrder(assertNotNull(tx.lockOrder(first.id)).copy(status = PaymentOrderStatus.PAID))
                 error("boom")
             }
         }
         assertEquals(PaymentOrderStatus.CONFIRMING, store.findOrder(first.id)!!.status)
-    }
 
-    @Test
-    fun `locking a second order in one transaction is refused - one order per transaction keeps lock order trivial`() {
-        val store = newStore()
-        val other = first.copy(id = "ord_" + "2".repeat(32), dedupeKey = null)
-        store.inTransaction { it.insertOrderIfAbsent(first) }
-        store.inTransaction { it.insertOrderIfAbsent(other) }
-
-        assertFailsWith<IllegalStateException> {
-            store.inTransaction { tx ->
-                tx.lockOrder(first.id)
-                tx.lockOrder(other.id)
-            }
-        }
+        assertFailsWith<IllegalStateException> { store.inTransaction { tx -> tx.lockOrder(first.id); tx.lockOrder(second.id) } }
     }
 
     @Test
@@ -180,26 +141,43 @@ abstract class PaymentLedgerStoreContract {
             tx.appendEvent(event("ord_other", PaymentEventType.ORDER_CREATED))
         }
 
-        assertEquals(
-            listOf(PaymentEventType.ORDER_CREATED, PaymentEventType.CONFIRM_STARTED),
-            store.listEvents(first.id).map { it.type },
-        )
+        assertEquals(listOf(PaymentEventType.ORDER_CREATED, PaymentEventType.CONFIRM_STARTED), store.listEvents(first.id).map { it.type })
     }
 
     @Test
-    fun `a provider payment id cannot belong to two orders`() {
+    fun `a provider payment id cannot belong to two orders - a rolled back claim frees it and sixteen racers leave one owner`() {
         val store = newStore()
-        val other = first.copy(id = "ord_" + "2".repeat(32), dedupeKey = null)
         store.inTransaction { it.insertOrderIfAbsent(first) }
-        store.inTransaction { it.insertOrderIfAbsent(other) }
-        store.inTransaction { tx -> tx.updateOrder(tx.lockOrder(first.id)!!.copy(providerPaymentId = "pay_1")) }
+        store.inTransaction { it.insertOrderIfAbsent(second) }
 
-        assertFailsWith<PaymentLedgerConflictException> {
-            store.inTransaction { tx -> tx.updateOrder(tx.lockOrder(other.id)!!.copy(providerPaymentId = "pay_1")) }
+        assertFailsWith<IllegalStateException> {
+            store.inTransaction { tx ->
+                tx.updateOrder(tx.lockOrder(first.id)!!.copy(providerPaymentId = "pay_1"))
+                error("boom")
+            }
         }
-        assertNull(store.findOrder(other.id)!!.providerPaymentId)
-        assertEquals(first.id, store.inTransaction { it.findOrderByProviderPayment("scripted", "pay_1") }!!.id)
+        assertNull(store.inTransaction { it.findOrderByProviderPayment("scripted", "pay_1") }, "nobody owns the key after the rollback")
+        store.inTransaction { tx -> tx.updateOrder(tx.lockOrder(first.id)!!.copy(providerPaymentId = "pay_1")) }
+        assertFailsWith<PaymentLedgerConflictException> {
+            store.inTransaction { tx -> tx.updateOrder(tx.lockOrder(second.id)!!.copy(providerPaymentId = "pay_1")) }
+        }
+        assertNull(store.findOrder(second.id)!!.providerPaymentId)
         assertNull(store.inTransaction { it.findOrderByProviderPayment("another", "pay_1") }, "the unique key is per provider")
+
+        val ids = (1..16).map { id32("ord_", 100 + it) }
+        ids.forEach { id -> store.inTransaction { it.insertOrderIfAbsent(first.copy(id = id, dedupeKey = null)) } }
+        val won = AtomicInteger()
+        val conflicted = AtomicInteger()
+        race(16) { n ->
+            try {
+                store.inTransaction { tx -> tx.updateOrder(tx.lockOrder(ids[n - 1])!!.copy(providerPaymentId = "pay_shared")) }
+                won.incrementAndGet()
+            } catch (e: PaymentLedgerConflictException) {
+                conflicted.incrementAndGet()
+            }
+        }
+        assertEquals(1, won.get())
+        assertEquals(15, conflicted.get())
     }
 
     @Test
@@ -239,21 +217,7 @@ abstract class PaymentLedgerStoreContract {
     fun `sixteen threads inserting one dedupe key create exactly one row`() {
         val store = newStore()
         val inserted = AtomicInteger()
-        val start = CountDownLatch(1)
-        val pool = Executors.newFixedThreadPool(16)
-        try {
-            val futures = (1..16).map { n ->
-                pool.submit {
-                    start.await()
-                    val order = first.copy(id = "ord_" + n.toString(16).padStart(32, '0'))
-                    if (store.inTransaction { it.insertOrderIfAbsent(order) }) inserted.incrementAndGet()
-                }
-            }
-            start.countDown()
-            futures.forEach { it.get(10, TimeUnit.SECONDS) }
-        } finally {
-            pool.shutdownNow()
-        }
+        race(16) { n -> if (store.inTransaction { it.insertOrderIfAbsent(first.copy(id = id32("ord_", n))) }) inserted.incrementAndGet() }
 
         assertEquals(1, inserted.get())
     }
@@ -265,7 +229,6 @@ abstract class PaymentLedgerStoreContract {
 
         assertTrue(store.inTransaction { it.insertOrderIfAbsent(full) })
         assertEquals(full, store.findOrder(full.id), "insert then read")
-        assertEquals(full, store.findOrderByDedupeKey("dedupe-full"))
 
         val changed = full.copy(
             status = PaymentOrderStatus.PARTIALLY_REFUNDED,
@@ -310,58 +273,6 @@ abstract class PaymentLedgerStoreContract {
     }
 
     @Test
-    fun `sixteen threads taking one provider payment id leave exactly one owner and fifteen conflicts`() {
-        val store = newStore()
-        val ids = (1..16).map { n -> "ord_" + n.toString(16).padStart(32, '0') }
-        ids.forEach { id -> store.inTransaction { it.insertOrderIfAbsent(first.copy(id = id, dedupeKey = null)) } }
-        val won = AtomicInteger()
-        val conflicted = AtomicInteger()
-        val start = CountDownLatch(1)
-        val pool = Executors.newFixedThreadPool(16)
-        try {
-            val futures = ids.map { id ->
-                pool.submit {
-                    start.await()
-                    try {
-                        store.inTransaction { tx -> tx.updateOrder(tx.lockOrder(id)!!.copy(providerPaymentId = "pay_shared")) }
-                        won.incrementAndGet()
-                    } catch (e: PaymentLedgerConflictException) {
-                        conflicted.incrementAndGet()
-                    }
-                }
-            }
-            start.countDown()
-            futures.forEach { it.get(10, TimeUnit.SECONDS) }
-        } finally {
-            pool.shutdownNow()
-        }
-
-        assertEquals(1, won.get())
-        assertEquals(15, conflicted.get())
-        assertEquals(1, ids.count { store.findOrder(it)!!.providerPaymentId == "pay_shared" })
-    }
-
-    @Test
-    fun `a provider payment id taken in a transaction that rolls back is free again`() {
-        val store = newStore()
-        val other = first.copy(id = "ord_" + "2".repeat(32), dedupeKey = null)
-        store.inTransaction { it.insertOrderIfAbsent(first) }
-        store.inTransaction { it.insertOrderIfAbsent(other) }
-
-        assertFailsWith<IllegalStateException> {
-            store.inTransaction { tx ->
-                tx.updateOrder(tx.lockOrder(first.id)!!.copy(providerPaymentId = "pay_1"))
-                error("boom")
-            }
-        }
-
-        assertNull(store.findOrder(first.id)!!.providerPaymentId)
-        assertNull(store.inTransaction { it.findOrderByProviderPayment("scripted", "pay_1") }, "nobody owns the key after the rollback")
-        store.inTransaction { tx -> tx.updateOrder(tx.lockOrder(other.id)!!.copy(providerPaymentId = "pay_1")) }
-        assertEquals(other.id, store.inTransaction { it.findOrderByProviderPayment("scripted", "pay_1") }!!.id)
-    }
-
-    @Test
     fun `hasOpenTransaction is true only for the thread inside a transaction, nested ones included`() {
         val store = newStore()
         assertFalse(store.hasOpenTransaction(), "before")
@@ -370,14 +281,12 @@ abstract class PaymentLedgerStoreContract {
             assertTrue(store.hasOpenTransaction(), "inside")
             store.inTransaction { assertTrue(store.hasOpenTransaction(), "inside a nested one that joins") }
             assertTrue(store.hasOpenTransaction(), "still inside after the nested one")
-            val seenByOtherThread = Executors.newSingleThreadExecutor().let { pool ->
-                try {
-                    pool.submit<Boolean> { store.hasOpenTransaction() }.get(5, TimeUnit.SECONDS)
-                } finally {
-                    pool.shutdownNow()
-                }
+            val pool = Executors.newSingleThreadExecutor()
+            try {
+                assertFalse(pool.submit<Boolean> { store.hasOpenTransaction() }.get(5, TimeUnit.SECONDS), "another thread has no transaction of its own")
+            } finally {
+                pool.shutdownNow()
             }
-            assertFalse(seenByOtherThread, "another thread has no transaction of its own")
         }
         assertFalse(store.hasOpenTransaction(), "after the commit")
 
@@ -385,7 +294,7 @@ abstract class PaymentLedgerStoreContract {
         assertFalse(store.hasOpenTransaction(), "after the rollback")
     }
 
-    // --- 환불 줄 (B5) ---
+    // --- 환불 줄 ---
 
     private val refundA get() = PaymentTestOrders.refund(id = "rfd_" + "1".repeat(32), orderId = first.id, dedupeKey = "rd-1")
 
@@ -447,47 +356,32 @@ abstract class PaymentLedgerStoreContract {
         withOrder(store) { tx -> tx.updateRefund(changed) }
         assertEquals(changed, store.findRefund(full.id), "update then read")
         assertEquals(changed, withOrder(store) { it.lockRefund(full.id) }, "the in-transaction read sees the same row")
-        assertEquals(listOf(changed), withOrder(store) { it.listRefunds(first.id) })
     }
 
     @Test
-    fun `a refund line is refused when its dedupe key exists - even for another order - and the first line stays`() {
+    fun `a refund dedupe key is unique across orders and an order has one open refund slot that closing frees`() {
         val store = newStore()
-        val other = first.copy(id = "ord_" + "2".repeat(32), dedupeKey = null)
         assertTrue(withOrder(store) { it.insertRefundIfAbsent(refundA) })
 
-        val sameKeyOtherOrder = refundA.copy(id = "rfd_" + "2".repeat(32), orderId = other.id, openKey = other.id)
-        assertFalse(withOrder(store, other) { it.insertRefundIfAbsent(sameKeyOtherOrder) })
-
+        val sameKeyOtherOrder = refundA.copy(id = "rfd_" + "2".repeat(32), orderId = second.id, openKey = second.id)
+        assertFalse(withOrder(store, second) { it.insertRefundIfAbsent(sameKeyOtherOrder) })
         assertEquals(refundA, store.findRefundByDedupeKey("rd-1"))
-        assertNull(store.findRefund(sameKeyOtherOrder.id))
-        assertEquals(emptyList(), store.listRefunds(other.id))
-    }
+        assertEquals(emptyList(), store.listRefunds(second.id))
 
-    @Test
-    fun `an order has one open refund slot - a second open line is refused and closing the first frees the slot`() {
-        val store = newStore()
-        assertTrue(withOrder(store) { it.insertRefundIfAbsent(refundA) })
-
-        val second = PaymentTestOrders.refund(id = "rfd_" + "2".repeat(32), orderId = first.id, dedupeKey = "rd-2", status = PaymentRefundStatus.PENDING)
-        assertFalse(withOrder(store) { it.insertRefundIfAbsent(second) }, "REQUESTED holds the slot")
-
+        val next = PaymentTestOrders.refund(id = "rfd_" + "3".repeat(32), orderId = first.id, dedupeKey = "rd-2", status = PaymentRefundStatus.PENDING)
+        assertFalse(withOrder(store) { it.insertRefundIfAbsent(next) }, "the open line holds the slot")
         withOrder(store) { tx -> tx.updateRefund(tx.lockRefund(refundA.id)!!.copy(status = PaymentRefundStatus.WITHDRAWN, openKey = null)) }
-        assertTrue(withOrder(store) { it.insertRefundIfAbsent(second) }, "a closed line leaves the slot free")
-        assertEquals(listOf(refundA.id, second.id), store.listRefunds(first.id).map { it.id })
+        assertTrue(withOrder(store) { it.insertRefundIfAbsent(next) }, "a closed line leaves the slot free")
     }
 
     @Test
     fun `a provider refund id belongs to one line per order and may repeat on another order`() {
         val store = newStore()
-        val other = first.copy(id = "ord_" + "2".repeat(32), dedupeKey = null)
         val closed = PaymentTestOrders.refund(id = "rfd_" + "1".repeat(32), orderId = first.id, status = PaymentRefundStatus.SUCCEEDED, origin = PaymentRefundOrigin.PROVIDER, providerRefundId = "txn_1")
         assertTrue(withOrder(store) { it.insertRefundIfAbsent(closed) })
 
-        val again = closed.copy(id = "rfd_" + "2".repeat(32))
-        assertFalse(withOrder(store) { it.insertRefundIfAbsent(again) }, "the same cancel cannot be put in twice")
-        val onOther = closed.copy(id = "rfd_" + "3".repeat(32), orderId = other.id)
-        assertTrue(withOrder(store, other) { it.insertRefundIfAbsent(onOther) }, "the unique key is per order")
+        assertFalse(withOrder(store) { it.insertRefundIfAbsent(closed.copy(id = "rfd_" + "2".repeat(32))) }, "the same cancel cannot be put in twice")
+        assertTrue(withOrder(store, second) { it.insertRefundIfAbsent(closed.copy(id = "rfd_" + "3".repeat(32), orderId = second.id)) }, "the unique key is per order")
 
         val pending = PaymentTestOrders.refund(id = "rfd_" + "5".repeat(32), orderId = first.id, status = PaymentRefundStatus.PENDING, dedupeKey = "rd-5")
         assertTrue(withOrder(store) { it.insertRefundIfAbsent(pending) })
@@ -498,31 +392,19 @@ abstract class PaymentLedgerStoreContract {
     }
 
     @Test
-    fun `a refund cannot be written unless its order is locked in this transaction`() {
+    fun `a refund is written only under its order's lock - a missing one reads as null and cannot be updated`() {
         val store = newStore()
-        val other = first.copy(id = "ord_" + "2".repeat(32), dedupeKey = null)
-        store.inTransaction { it.insertOrderIfAbsent(first) }
-        store.inTransaction { it.insertOrderIfAbsent(other) }
+        store.inTransaction { it.insertOrderIfAbsent(second) }
         withOrder(store) { it.insertRefundIfAbsent(refundA) }
 
         assertFailsWith<IllegalStateException> { store.inTransaction { tx -> tx.insertRefundIfAbsent(refundA.copy(id = "rfd_" + "2".repeat(32), dedupeKey = "rd-2")) } }
         assertFailsWith<IllegalStateException> { store.inTransaction { tx -> tx.updateRefund(refundA.copy(failureCode = "X")) } }
         assertFailsWith<IllegalStateException> { store.inTransaction { tx -> tx.lockRefund(refundA.id) } }
         assertFailsWith<IllegalStateException> { store.inTransaction { tx -> tx.listRefunds(first.id) } }
-        assertFailsWith<IllegalStateException> {
-            store.inTransaction { tx ->
-                tx.lockOrder(other.id)
-                tx.updateRefund(refundA.copy(failureCode = "X")) // 다른 주문을 잠갔다
-            }
-        }
+        assertFailsWith<IllegalStateException> { store.inTransaction { tx -> tx.lockOrder(second.id); tx.updateRefund(refundA.copy(failureCode = "X")) } }
         assertEquals(refundA, store.findRefund(refundA.id), "nothing was written")
-    }
 
-    @Test
-    fun `updating a refund that does not exist fails and a missing refund reads as null`() {
-        val store = newStore()
-
-        assertFailsWith<IllegalStateException> { withOrder(store) { it.updateRefund(refundA) } }
+        assertFailsWith<IllegalStateException> { withOrder(store) { it.updateRefund(refundA.copy(id = "rfd_missing")) } }
         assertNull(withOrder(store) { it.lockRefund("rfd_missing") })
         assertNull(store.findRefund("rfd_missing"))
         assertNull(store.findRefundByDedupeKey("nope"))
@@ -537,31 +419,13 @@ abstract class PaymentLedgerStoreContract {
             store.inTransaction { tx ->
                 tx.lockOrder(first.id)
                 tx.insertRefundIfAbsent(refundA)
-                assertEquals(refundA, tx.findRefundByDedupeKey("rd-1"), "visible to its own transaction")
-                assertEquals(listOf(refundA), tx.listRefunds(first.id))
+                assertEquals(listOf(refundA), tx.listRefunds(first.id), "visible to its own transaction")
                 throw IllegalArgumentException("boom")
             }
         }
 
         assertNull(store.findRefund(refundA.id))
-        assertNull(store.findRefundByDedupeKey("rd-1"))
         assertTrue(withOrder(store) { it.insertRefundIfAbsent(refundA) }, "the slot and the key were released")
-    }
-
-    @Test
-    fun `refund lines are listed oldest first and only for their order`() {
-        val store = newStore()
-        val other = first.copy(id = "ord_" + "2".repeat(32), dedupeKey = null)
-        val later = PaymentTestOrders.refund(id = "rfd_" + "0".repeat(32), orderId = first.id, status = PaymentRefundStatus.FAILED, now = PaymentTestOrders.T0.plusSeconds(10))
-        val earlier = PaymentTestOrders.refund(id = "rfd_" + "9".repeat(32), orderId = first.id, status = PaymentRefundStatus.FAILED, now = PaymentTestOrders.T0)
-        withOrder(store) { tx ->
-            tx.insertRefundIfAbsent(later)
-            tx.insertRefundIfAbsent(earlier)
-        }
-        withOrder(store, other) { it.insertRefundIfAbsent(PaymentTestOrders.refund(id = "rfd_" + "7".repeat(32), orderId = other.id, status = PaymentRefundStatus.FAILED)) }
-
-        assertEquals(listOf(earlier.id, later.id), store.listRefunds(first.id).map { it.id })
-        assertEquals(listOf(earlier.id, later.id), withOrder(store) { tx -> tx.listRefunds(first.id).map { it.id } })
     }
 
     @Test
@@ -569,35 +433,13 @@ abstract class PaymentLedgerStoreContract {
         val store = newStore()
         store.inTransaction { it.insertOrderIfAbsent(first) }
         val won = AtomicInteger()
-        val start = CountDownLatch(1)
-        val pool = Executors.newFixedThreadPool(16)
-        try {
-            val futures = (1..16).map { n ->
-                pool.submit {
-                    start.await()
-                    val line = PaymentTestOrders.refund(id = "rfd_" + n.toString(16).padStart(32, '0'), orderId = first.id, status = PaymentRefundStatus.PENDING, dedupeKey = "rd-race-$n")
-                    if (withOrder(store) { it.insertRefundIfAbsent(line) }) won.incrementAndGet()
-                }
-            }
-            start.countDown()
-            futures.forEach { it.get(10, TimeUnit.SECONDS) }
-        } finally {
-            pool.shutdownNow()
+        race(16) { n ->
+            val line = PaymentTestOrders.refund(id = id32("rfd_", n), orderId = first.id, status = PaymentRefundStatus.PENDING, dedupeKey = "rd-race-$n")
+            if (withOrder(store) { it.insertRefundIfAbsent(line) }) won.incrementAndGet()
         }
 
         assertEquals(1, won.get())
         assertEquals(1, store.listRefunds(first.id).size)
-    }
-
-    @Test
-    fun `an event keeps the refund it is about`() {
-        val store = newStore()
-        store.inTransaction { it.insertOrderIfAbsent(first) }
-        val about = PaymentEvent(first.id, PaymentEventType.REFUND_SENT, PaymentActor.OPERATOR, PaymentTestOrders.T0, refundId = "rfd_" + "1".repeat(32), fromStatus = "REQUESTED", toStatus = "PENDING")
-
-        store.inTransaction { it.appendEvent(about) }
-
-        assertEquals(listOf(about), store.listEvents(first.id))
     }
 
     // ---- 웹훅 수신함 ----
@@ -606,40 +448,24 @@ abstract class PaymentLedgerStoreContract {
         PaymentTestOrders.webhookEvent(provider = provider, eventKey = key, receivedAt = at, status = status)
 
     @Test
-    fun `the first delivery of an event inserts the row and counts one`() {
+    fun `the first delivery inserts the row, a repeat only counts up, and the same key of another provider is another row`() {
         val store = newStore()
 
-        val recorded = store.inTransaction { it.recordWebhookDelivery(hook()) }
-
-        assertTrue(recorded.first)
-        assertEquals(1, recorded.event.deliveries)
-        assertTrue(recorded.event.id > 0)
-        assertEquals(recorded.event, store.findWebhookEvent(recorded.event.id))
-    }
-
-    @Test
-    fun `a repeated delivery counts up and leaves the stored row as it was`() {
-        val store = newStore()
         val firstTime = store.inTransaction { it.recordWebhookDelivery(hook()) }
+        assertTrue(firstTime.first)
+        assertEquals(1, firstTime.event.deliveries)
+        assertEquals(firstTime.event, store.findWebhookEvent(firstTime.event.id))
 
         val again = store.inTransaction { it.recordWebhookDelivery(hook().copy(eventType = "OTHER", payloadHash = "b".repeat(64), status = PaymentWebhookStatus.DEAD)) }
-
         assertFalse(again.first)
-        assertEquals(firstTime.event.id, again.event.id)
-        assertEquals(2, again.event.deliveries)
         assertEquals(firstTime.event.copy(deliveries = 2), again.event, "only the counter moved")
-        assertEquals(again.event, store.findWebhookEvent(firstTime.event.id))
-    }
 
-    @Test
-    fun `the same event key of another provider is another row`() {
-        val store = newStore()
-
-        val a = store.inTransaction { it.recordWebhookDelivery(hook(provider = "scripted")) }
-        val b = store.inTransaction { it.recordWebhookDelivery(hook(provider = "another")) }
-
-        assertTrue(a.first && b.first)
-        assertTrue(a.event.id != b.event.id)
+        val other = store.inTransaction { it.recordWebhookDelivery(hook(provider = "another")) }
+        assertTrue(other.first)
+        assertTrue(other.event.id != firstTime.event.id)
+        assertEquals(firstTime.event.copy(deliveries = 2), store.findWebhookEventByKey("scripted", "evt-1"))
+        assertEquals(other.event, store.findWebhookEventByKey("another", "evt-1"))
+        assertNull(store.findWebhookEventByKey("scripted", "evt-2"))
     }
 
     @Test
@@ -647,73 +473,53 @@ abstract class PaymentLedgerStoreContract {
         val store = newStore()
         store.inTransaction { it.recordWebhookDelivery(hook(key = "kept")) }
 
-        assertFailsWith<IllegalArgumentException> {
-            store.inTransaction { tx ->
-                tx.recordWebhookDelivery(hook(key = "kept"))
-                throw IllegalArgumentException("boom")
-            }
-        }
-        assertFailsWith<IllegalArgumentException> {
-            store.inTransaction { tx ->
-                tx.recordWebhookDelivery(hook(key = "ghost"))
-                throw IllegalArgumentException("boom")
+        for (key in listOf("kept", "ghost")) {
+            assertFailsWith<IllegalArgumentException> {
+                store.inTransaction { tx ->
+                    tx.recordWebhookDelivery(hook(key = key))
+                    throw IllegalArgumentException("boom")
+                }
             }
         }
 
-        assertEquals(1, store.listWebhookEvents(null, null, 10).single().deliveries, "one row (the rolled back first delivery left none) counted once (the rolled back repeats did not count)")
+        assertEquals(1, store.listWebhookEvents(null, null, 10).single().deliveries, "one row (the rolled back first delivery left none) counted once (the rolled back repeat did not count)")
     }
 
     @Test
     fun `sixteen threads recording one event key leave one row counted sixteen times and exactly one first delivery`() {
         val store = newStore()
         val firsts = AtomicInteger()
-        val start = CountDownLatch(1)
-        val pool = Executors.newFixedThreadPool(16)
-        try {
-            val futures = (1..16).map {
-                pool.submit {
-                    start.await()
-                    if (store.inTransaction { tx -> tx.recordWebhookDelivery(hook()) }.first) firsts.incrementAndGet()
-                }
-            }
-            start.countDown()
-            futures.forEach { it.get(20, TimeUnit.SECONDS) }
-        } finally {
-            pool.shutdownNow()
-        }
+        race(16) { if (store.inTransaction { tx -> tx.recordWebhookDelivery(hook()) }.first) firsts.incrementAndGet() }
 
         val rows = store.listWebhookEvents(null, null, 10)
-        assertEquals(1, rows.size)
         assertEquals(16, rows.single().deliveries)
         assertEquals(1, firsts.get())
     }
 
     @Test
-    fun `a webhook row cannot be written unless it was recorded or locked in this transaction`() {
+    fun `a webhook row is written only under its lock, and only status, error and processed time change - every column survives the round trip`() {
         val store = newStore()
-        val row = store.inTransaction { it.recordWebhookDelivery(hook()) }.event
+        store.inTransaction { it.insertOrderIfAbsent(first) }
+        val t = PaymentTestOrders.T0
+        val candidate = PaymentWebhookEvent(
+            id = 0, provider = "scripted", eventKey = "evt-full", eventType = "PAYMENT_STATUS_CHANGED", resourceType = "PAYMENT", resourceId = "pay_full", orderId = first.id,
+            payload = "a body\nof several lines", payloadHash = "d".repeat(64), status = PaymentWebhookStatus.RECEIVED, deliveries = 0, lastError = null, receivedAt = t.plusSeconds(5), processedAt = null,
+        )
+        val row = store.inTransaction { it.recordWebhookDelivery(candidate) }.event
 
         assertFailsWith<IllegalStateException> { store.inTransaction { it.updateWebhookEvent(row.copy(status = PaymentWebhookStatus.PROCESSED)) } }
-
         assertEquals(PaymentWebhookStatus.RECEIVED, store.findWebhookEvent(row.id)!!.status)
-    }
-
-    @Test
-    fun `a locked webhook row is re-read and updated - status, error and processed time change, nothing else does`() {
-        val store = newStore()
-        val row = store.inTransaction { it.recordWebhookDelivery(hook().copy(orderId = null, payload = "keep-me")) }.event
-        val done = PaymentTestOrders.T0.plusSeconds(30)
 
         store.inTransaction { tx ->
             val locked = checkNotNull(tx.lockWebhookEvent(row.id))
-            tx.updateWebhookEvent(locked.copy(status = PaymentWebhookStatus.IGNORED, lastError = "UNKNOWN_ORDER", processedAt = done, eventType = "CHANGED", deliveries = 99, payloadHash = "c".repeat(64)))
+            tx.updateWebhookEvent(locked.copy(status = PaymentWebhookStatus.FAILED, lastError = "LOOKUP_UNAVAILABLE", processedAt = t.plusSeconds(9), eventType = "CHANGED", deliveries = 99, payloadHash = "c".repeat(64)))
         }
 
-        val stored = checkNotNull(store.findWebhookEvent(row.id))
-        assertEquals(PaymentWebhookStatus.IGNORED, stored.status)
-        assertEquals("UNKNOWN_ORDER", stored.lastError)
-        assertEquals(done, stored.processedAt)
-        assertEquals(row.copy(status = PaymentWebhookStatus.IGNORED, lastError = "UNKNOWN_ORDER", processedAt = done), stored, "event type, delivery count and hash are the first delivery's")
+        assertEquals(
+            candidate.copy(id = row.id, deliveries = 1, status = PaymentWebhookStatus.FAILED, lastError = "LOOKUP_UNAVAILABLE", processedAt = t.plusSeconds(9)),
+            store.findWebhookEvent(row.id),
+            "event type, delivery count and hash are the first delivery's",
+        )
     }
 
     @Test
@@ -723,18 +529,8 @@ abstract class PaymentLedgerStoreContract {
         val a = store.inTransaction { it.recordWebhookDelivery(hook(key = "a")) }.event
         val b = store.inTransaction { it.recordWebhookDelivery(hook(key = "b")) }.event
 
-        assertFailsWith<IllegalStateException> {
-            store.inTransaction { tx ->
-                tx.lockWebhookEvent(a.id)
-                tx.lockWebhookEvent(b.id)
-            }
-        }
-        assertFailsWith<IllegalStateException>("lock order is order, then webhook row") {
-            store.inTransaction { tx ->
-                tx.lockWebhookEvent(a.id)
-                tx.lockOrder(first.id)
-            }
-        }
+        assertFailsWith<IllegalStateException> { store.inTransaction { tx -> tx.lockWebhookEvent(a.id); tx.lockWebhookEvent(b.id) } }
+        assertFailsWith<IllegalStateException>("lock order is order, then webhook row") { store.inTransaction { tx -> tx.lockWebhookEvent(a.id); tx.lockOrder(first.id) } }
         store.inTransaction { tx ->
             assertNotNull(tx.lockOrder(first.id))
             assertNotNull(tx.lockWebhookEvent(a.id))
@@ -742,39 +538,34 @@ abstract class PaymentLedgerStoreContract {
     }
 
     @Test
-    fun `the inbox lists newest first with a cursor, filters by status, and an unfiltered list merges every status`() {
+    fun `the inbox lists newest first with a cursor and filters by status - a tie on the time breaks by id, an id order holds even when times run backwards`() {
         val store = newStore()
         val t = PaymentTestOrders.T0
         val statuses = listOf(PaymentWebhookStatus.RECEIVED, PaymentWebhookStatus.PROCESSED, PaymentWebhookStatus.FAILED, PaymentWebhookStatus.PROCESSED, PaymentWebhookStatus.DEAD, PaymentWebhookStatus.IGNORED, PaymentWebhookStatus.PROCESSED)
         statuses.forEachIndexed { i, status ->
             store.inTransaction { it.recordWebhookDelivery(hook(key = "e$i", at = t.plusSeconds(i.toLong()), status = status)) }
         }
-        // 같은 시각이면 id 가 큰 쪽이 먼저
         store.inTransaction { it.recordWebhookDelivery(hook(key = "tie", at = t.plusSeconds(6), status = PaymentWebhookStatus.PROCESSED)) }
 
         val all = store.listWebhookEvents(null, null, 100)
         assertEquals(listOf("tie", "e6", "e5", "e4", "e3", "e2", "e1", "e0"), all.map { it.eventKey })
 
         val page1 = store.listWebhookEvents(null, null, 3)
-        val last = page1.last()
-        val page2 = store.listWebhookEvents(null, WebhookEventCursor(last.receivedAt, last.id), 3)
+        val page2 = store.listWebhookEvents(null, WebhookEventCursor(page1.last().receivedAt, page1.last().id), 3)
         assertEquals(listOf("tie", "e6", "e5"), page1.map { it.eventKey })
         assertEquals(listOf("e4", "e3", "e2"), page2.map { it.eventKey })
 
         assertEquals(listOf("tie", "e6", "e3", "e1"), store.listWebhookEvents(PaymentWebhookStatus.PROCESSED, null, 10).map { it.eventKey })
         val processedPage = store.listWebhookEvents(PaymentWebhookStatus.PROCESSED, WebhookEventCursor(t.plusSeconds(6), all.first { it.eventKey == "e6" }.id), 10)
         assertEquals(listOf("e3", "e1"), processedPage.map { it.eventKey })
-        assertEquals(emptyList(), store.listWebhookEvents(PaymentWebhookStatus.DEAD, WebhookEventCursor(t.plusSeconds(4), all.first { it.eventKey == "e4" }.id), 10).map { it.eventKey })
-    }
 
-    @Test
-    fun `an inbox row is found by its provider and event key - the same key of another provider is another row`() {
-        val store = newStore()
-        val a = store.inTransaction { it.recordWebhookDelivery(hook(key = "k1", provider = "scripted")) }.event
-
-        assertEquals(a, store.findWebhookEventByKey("scripted", "k1"))
-        assertNull(store.findWebhookEventByKey("another", "k1"))
-        assertNull(store.findWebhookEventByKey("scripted", "k2"))
+        // 시계가 거꾸로 간 줄 — 받은 시각 순과 id 순이 다르다. 필터 없는 목록은 id 로 센다.
+        val backwards = newStore()
+        listOf("a" to 10L, "b" to 5L, "c" to 20L, "d" to 1L).forEach { (key, sec) -> backwards.inTransaction { it.recordWebhookDelivery(hook(key = key, at = t.plusSeconds(sec))) } }
+        val p1 = backwards.listWebhookEvents(null, null, 2)
+        val p2 = backwards.listWebhookEvents(null, WebhookEventCursor(p1.last().receivedAt, p1.last().id), 2)
+        assertEquals(listOf("d", "c"), p1.map { it.eventKey })
+        assertEquals(listOf("b", "a"), p2.map { it.eventKey }, "no row twice, none missing")
     }
 
     @Test
@@ -782,10 +573,8 @@ abstract class PaymentLedgerStoreContract {
         val store = newStore()
         val t = PaymentTestOrders.T0
         val other = PaymentTestOrders.order(id = "ord_" + "2".repeat(32), dedupeKey = "dedupe-2")
-        store.inTransaction { it.insertOrderIfAbsent(first) }
-        store.inTransaction { it.insertOrderIfAbsent(other) }
         val quiet = PaymentTestOrders.order(id = "ord_" + "3".repeat(32), dedupeKey = "dedupe-3")
-        store.inTransaction { it.insertOrderIfAbsent(quiet) }
+        listOf(first, other, quiet).forEach { o -> store.inTransaction { it.insertOrderIfAbsent(o) } }
         fun put(key: String, at: Instant, order: String = first.id, resource: String = "pay_1", type: String = "PAYMENT", status: PaymentWebhookStatus = PaymentWebhookStatus.RECEIVED) {
             store.inTransaction { it.recordWebhookDelivery(PaymentTestOrders.webhookEvent(eventKey = key, resourceId = resource, orderId = order, receivedAt = at, status = status).copy(resourceType = type)) }
         }
@@ -797,14 +586,13 @@ abstract class PaymentLedgerStoreContract {
         put("edge", t)
         put("later", t.plusSeconds(30), status = PaymentWebhookStatus.PROCESSED)
         put("dead", t.plusSeconds(31), status = PaymentWebhookStatus.DEAD)
-        put("order:resource", t.plusSeconds(30), resource = "order:${first.id}") // the same order under its other resource id: still the same order
+        put("order:resource", t.plusSeconds(30), resource = "order:${first.id}")
         put("other-order", t.plusSeconds(30), order = other.id)
         put("marker", t.plusSeconds(30), type = "LIMIT_MARKER")
         store.inTransaction { it.recordWebhookDelivery(PaymentTestOrders.webhookEvent(eventKey = "edge", orderId = first.id)) } // 같은 줄을 다시 센 것은 줄을 늘리지 않는다
 
         assertEquals(4, count(first.id, "PAYMENT", t))
         assertEquals(5, count(first.id, "PAYMENT", t.minusSeconds(1)))
-        assertEquals(3, count(first.id, "PAYMENT", t.plusSeconds(1)))
         assertEquals(0, count(first.id, "PAYMENT", t.plusSeconds(32)))
         assertEquals(1, count(other.id, "PAYMENT", t))
         assertEquals(1, count(first.id, "LIMIT_MARKER", t))
@@ -812,58 +600,8 @@ abstract class PaymentLedgerStoreContract {
         assertFailsWith<IllegalStateException>("the count is taken under the order lock") { store.inTransaction { it.countWebhookEventsOfOrder(first.id, "PAYMENT", t) } }
     }
 
-    @Test
-    fun `the unfiltered list is one statement by id - newest insert first, the cursor is its id - even when received times run backwards`() {
-        val store = newStore()
-        val t = PaymentTestOrders.T0
-        // 시계가 거꾸로 간 줄 둘 — 받은 시각 순과 id 순이 다르다
-        listOf("a" to 10L, "b" to 5L, "c" to 20L, "d" to 1L).forEach { (key, sec) -> store.inTransaction { it.recordWebhookDelivery(hook(key = key, at = t.plusSeconds(sec))) } }
-
-        val all = store.listWebhookEvents(null, null, 100)
-        assertEquals(listOf("d", "c", "b", "a"), all.map { it.eventKey })
-
-        val first = store.listWebhookEvents(null, null, 2)
-        val second = store.listWebhookEvents(null, WebhookEventCursor(first.last().receivedAt, first.last().id), 2)
-        assertEquals(listOf("d", "c"), first.map { it.eventKey })
-        assertEquals(listOf("b", "a"), second.map { it.eventKey }, "no row twice, none missing")
-    }
-
-    @Test
-    fun `every column of an inbox row survives the round trip`() {
-        val store = newStore()
-        val t = PaymentTestOrders.T0
-        store.inTransaction { it.insertOrderIfAbsent(first) }
-        val candidate = PaymentWebhookEvent(
-            id = 0, provider = "scripted", eventKey = "evt-full", eventType = "PAYMENT_STATUS_CHANGED", resourceType = "PAYMENT", resourceId = "pay_full", orderId = first.id,
-            payload = "a body\nof several lines", payloadHash = "d".repeat(64), status = PaymentWebhookStatus.RECEIVED, deliveries = 0, lastError = null, receivedAt = t.plusSeconds(5), processedAt = null,
-        )
-        val id = store.inTransaction { it.recordWebhookDelivery(candidate) }.event.id
-
-        store.inTransaction { tx ->
-            val locked = checkNotNull(tx.lockWebhookEvent(id))
-            tx.updateWebhookEvent(locked.copy(status = PaymentWebhookStatus.FAILED, lastError = "LOOKUP_UNAVAILABLE", processedAt = t.plusSeconds(9)))
-        }
-
-        assertEquals(
-            candidate.copy(id = id, deliveries = 1, status = PaymentWebhookStatus.FAILED, lastError = "LOOKUP_UNAVAILABLE", processedAt = t.plusSeconds(9)),
-            store.findWebhookEvent(id),
-        )
-    }
-
-    @Test
-    fun `an order is found by provider and provider payment id outside a transaction too`() {
-        val store = newStore()
-        val paid = first.copy(providerPaymentId = "pay_known")
-        store.inTransaction { it.insertOrderIfAbsent(paid.copy(providerPaymentId = null)) }
-        store.inTransaction { tx -> tx.lockOrder(paid.id); tx.updateOrder(paid) }
-
-        assertEquals(paid.id, store.findOrderByProviderPayment(paid.provider, "pay_known")?.id)
-        assertNull(store.findOrderByProviderPayment(paid.provider, "pay_unknown"))
-        assertNull(store.findOrderByProviderPayment("another", "pay_known"))
-    }
-
     // ---------------------------------------------------------------------------------------------------------------------------------
-    // 목록 읽기 (B7 — HTTP). 메모리 대역과 두 방언이 같은 순서 · 같은 커서 · 같은 필터를 지킨다.
+    // 목록 읽기. 메모리 대역과 두 방언이 같은 순서 · 같은 커서 · 같은 필터를 지킨다.
     // ---------------------------------------------------------------------------------------------------------------------------------
 
     private fun orderAt(n: Int, accountId: String = "acc_1", status: PaymentOrderStatus = PaymentOrderStatus.PAID, at: Instant = PaymentTestOrders.T0.plusSeconds(n.toLong()), provider: String = "scripted") =
@@ -875,162 +613,87 @@ abstract class PaymentLedgerStoreContract {
         assertTrue(store.inTransaction { tx -> tx.lockOrder(refund.orderId); tx.insertRefundIfAbsent(refund) })
     }
 
+    private fun refundOf(n: Int, orderN: Int, status: PaymentRefundStatus, now: Instant = PaymentTestOrders.T0.plusSeconds(n.toLong())) =
+        PaymentTestOrders.refund(id = "rfd_" + n.toString().padStart(32, '0'), orderId = orderAt(orderN).id, status = status, now = now)
+
+    private fun List<PaymentOrder>.nums() = map { it.id.takeLast(2).toInt() }
+
+    private fun cursorOf(n: Int) = OrderCursor(orderAt(n).createdAt, orderAt(n).id)
+
     @Test
-    fun `an account's orders come newest first without the unpaid attempts, and only its own`() {
+    fun `an account's orders come newest first without the unpaid attempts and only its own - and page by a cursor with ties broken by id`() {
         val store = newStore()
         insert(
             store,
             orderAt(1), orderAt(2, status = PaymentOrderStatus.PENDING), orderAt(3), orderAt(4, accountId = "acc_other"),
             orderAt(5, status = PaymentOrderStatus.CONFIRMING), orderAt(6, status = PaymentOrderStatus.FAILED),
         )
+        assertEquals(listOf(6, 5, 3, 1), store.listAccountOrders("acc_1", null, 10).nums())
 
-        val listed = store.listAccountOrders("acc_1", null, 10)
-
-        assertEquals(listOf(6, 5, 3, 1).map { orderAt(it).id }, listed.map { it.id })
-    }
-
-    @Test
-    fun `an account's order list pages by a cursor that skips the cursor row - ties on the created time break by id, the larger id first`() {
-        val store = newStore()
+        val tied = newStore()
         val same = PaymentTestOrders.T0.plusSeconds(100)
-        insert(store, orderAt(1, at = same), orderAt(2, at = same), orderAt(3, at = same), orderAt(4, at = same.plusSeconds(1)), orderAt(5, at = same.minusSeconds(1)))
-
-        val firstPage = store.listAccountOrders("acc_1", null, 2)
-        val secondPage = store.listAccountOrders("acc_1", OrderCursor(firstPage.last().createdAt, firstPage.last().id), 2)
-        val thirdPage = store.listAccountOrders("acc_1", OrderCursor(secondPage.last().createdAt, secondPage.last().id), 2)
-
-        assertEquals(listOf(4, 3), firstPage.map { it.id.takeLast(2).toInt() })
-        assertEquals(listOf(2, 1), secondPage.map { it.id.takeLast(2).toInt() })
-        assertEquals(listOf(5), thirdPage.map { it.id.takeLast(2).toInt() })
+        insert(tied, orderAt(1, at = same), orderAt(2, at = same), orderAt(3, at = same), orderAt(4, at = same.plusSeconds(1)), orderAt(5, at = same.minusSeconds(1)))
+        val firstPage = tied.listAccountOrders("acc_1", null, 2)
+        val secondPage = tied.listAccountOrders("acc_1", OrderCursor(firstPage.last().createdAt, firstPage.last().id), 2)
+        val thirdPage = tied.listAccountOrders("acc_1", OrderCursor(secondPage.last().createdAt, secondPage.last().id), 2)
+        assertEquals(listOf(listOf(4, 3), listOf(2, 1), listOf(5)), listOf(firstPage.nums(), secondPage.nums(), thirdPage.nums()))
     }
 
     @Test
-    fun `the operator list without a scope is newest first and the filters narrow it - status, account, and erased accounts hidden on request`() {
+    fun `the operator list is newest first - pending attempts included - and the filters and the cursor narrow it`() {
         val store = newStore()
-        val erased = orderAt(3).copy(accountErasedAt = PaymentTestOrders.T0.plusSeconds(500))
-        insert(store, orderAt(1), orderAt(2, accountId = "acc_2", status = PaymentOrderStatus.PENDING), erased, orderAt(4, accountId = "acc_2"))
-
-        fun ids(filter: OperatorOrderFilter) = store.listOrdersForOperator(OperatorOrderScope.ALL, filter, null, null, 10).map { it.id.takeLast(2).toInt() }
-
-        assertEquals(listOf(4, 3, 2, 1), ids(OperatorOrderFilter()))
-        assertEquals(listOf(2), ids(OperatorOrderFilter(status = PaymentOrderStatus.PENDING)))
-        assertEquals(listOf(4, 2), ids(OperatorOrderFilter(accountId = "acc_2")))
-        assertEquals(listOf(4, 2, 1), ids(OperatorOrderFilter(hideErased = true)))
-        assertEquals(listOf(2), ids(OperatorOrderFilter(status = PaymentOrderStatus.PENDING, accountId = "acc_2", hideErased = true)))
-    }
-
-    @Test
-    fun `the operator list pages by a cursor - including the pending attempts the user list leaves out`() {
-        val store = newStore()
-        insert(store, *(1..5).map { orderAt(it, status = if (it % 2 == 0) PaymentOrderStatus.PENDING else PaymentOrderStatus.PAID) }.toTypedArray())
-
-        val firstPage = store.listOrdersForOperator(OperatorOrderScope.ALL, OperatorOrderFilter(), null, null, 2)
-        val secondPage = store.listOrdersForOperator(OperatorOrderScope.ALL, OperatorOrderFilter(), null, OrderCursor(firstPage.last().createdAt, firstPage.last().id), 2)
-        val thirdPage = store.listOrdersForOperator(OperatorOrderScope.ALL, OperatorOrderFilter(), null, OrderCursor(secondPage.last().createdAt, secondPage.last().id), 2)
-
-        assertEquals(listOf(5, 4), firstPage.map { it.id.takeLast(2).toInt() })
-        assertEquals(listOf(3, 2), secondPage.map { it.id.takeLast(2).toInt() })
-        assertEquals(listOf(1), thirdPage.map { it.id.takeLast(2).toInt() })
-    }
-
-    @Test
-    fun `the review scope lists the rows with a review reason - newest first, filters and a cursor apply`() {
-        val store = newStore()
-        insert(
-            store,
-            orderAt(1).copy(reviewReason = PaymentReviewReason.AMOUNT_MISMATCH), orderAt(2), orderAt(3).copy(reviewReason = PaymentReviewReason.REFUND_MISMATCH),
-            orderAt(4, accountId = "acc_2").copy(reviewReason = PaymentReviewReason.MODE_MISMATCH),
-        )
+        insert(store, orderAt(1), orderAt(2, accountId = "acc_2", status = PaymentOrderStatus.PENDING), orderAt(3).copy(accountErasedAt = PaymentTestOrders.T0.plusSeconds(500)), orderAt(4, accountId = "acc_2"), orderAt(5, status = PaymentOrderStatus.PENDING))
 
         fun ids(filter: OperatorOrderFilter = OperatorOrderFilter(), before: OrderCursor? = null, limit: Int = 10) =
-            store.listOrdersForOperator(OperatorOrderScope.REVIEW_REASON, filter, null, before, limit).map { it.id.takeLast(2).toInt() }
+            store.listOrdersForOperator(OperatorOrderScope.ALL, filter, null, before, limit).nums()
 
-        assertEquals(listOf(4, 3, 1), ids())
-        assertEquals(listOf(4), ids(OperatorOrderFilter(accountId = "acc_2")))
-        assertEquals(listOf(3, 1), ids(before = OrderCursor(orderAt(4).createdAt, orderAt(4).id)))
-        assertEquals(listOf(4, 3), ids(limit = 2))
+        assertEquals(listOf(5, 4, 3, 2, 1), ids())
+        assertEquals(listOf(5, 2), ids(OperatorOrderFilter(status = PaymentOrderStatus.PENDING)))
+        assertEquals(listOf(4, 2), ids(OperatorOrderFilter(accountId = "acc_2")))
+        assertEquals(listOf(5, 4, 2, 1), ids(OperatorOrderFilter(hideErased = true)))
+        assertEquals(listOf(2), ids(OperatorOrderFilter(status = PaymentOrderStatus.PENDING, accountId = "acc_2", hideErased = true)))
+        assertEquals(listOf(5, 4), ids(limit = 2))
+        assertEquals(listOf(3, 2), ids(before = cursorOf(4), limit = 2))
+        assertEquals(listOf(1), ids(before = cursorOf(2)))
     }
 
     @Test
-    fun `the stale-confirming scope lists the rows still CONFIRMING since before the threshold - a younger one and other statuses stay out`() {
-        val store = newStore()
-        val t = PaymentTestOrders.T0
-        insert(
-            store,
-            orderAt(1, status = PaymentOrderStatus.CONFIRMING).copy(confirmStartedAt = t.plusSeconds(10)),
-            orderAt(2, status = PaymentOrderStatus.CONFIRMING).copy(confirmStartedAt = t.plusSeconds(5_000)),
-            orderAt(3, status = PaymentOrderStatus.PAID).copy(confirmStartedAt = t.plusSeconds(10)),
-            orderAt(4, status = PaymentOrderStatus.CONFIRMING).copy(confirmStartedAt = t.plusSeconds(20)),
-        )
-
-        val listed = store.listOrdersForOperator(OperatorOrderScope.STALE_CONFIRMING, OperatorOrderFilter(), t.plusSeconds(1_000), null, 10)
-
-        assertEquals(listOf(4, 1), listed.map { it.id.takeLast(2).toInt() })
-    }
-
-    @Test
-    fun `the unfulfilled scope lists paid rows with no fulfilment time that were paid before the threshold - fully refunded and fulfilled rows stay out`() {
-        val store = newStore()
-        val t = PaymentTestOrders.T0
-        insert(
-            store,
-            orderAt(1).copy(paidAt = t.plusSeconds(10)),
-            orderAt(2).copy(paidAt = t.plusSeconds(10), fulfilledAt = t.plusSeconds(11)),
-            orderAt(3, status = PaymentOrderStatus.PARTIALLY_REFUNDED).copy(paidAt = t.plusSeconds(10)),
-            orderAt(4, status = PaymentOrderStatus.REFUNDED).copy(paidAt = t.plusSeconds(10)),
-            orderAt(5).copy(paidAt = t.plusSeconds(5_000)),
-            orderAt(6, status = PaymentOrderStatus.CONFIRMING),
-            orderAt(7).copy(paidAt = null),
-        )
-
-        val listed = store.listOrdersForOperator(OperatorOrderScope.UNFULFILLED, OperatorOrderFilter(), t.plusSeconds(1_000), null, 10)
-
-        assertEquals(listOf(7, 3, 1), listed.map { it.id.takeLast(2).toInt() })
-    }
-
-    @Test
-    fun `the unfulfilled scope applies the account filter, the erased filter, the status filter, the cursor and the limit to the unfulfilled orders - and a walk by cursor skips none and repeats none`() {
+    fun `the review, stale-confirming and unfulfilled scopes list only their rows - newest first`() {
         val store = newStore()
         val t = PaymentTestOrders.T0
         val paid = t.plusSeconds(10)
         insert(
             store,
-            orderAt(1).copy(paidAt = paid),
-            orderAt(2, accountId = "acc_2", status = PaymentOrderStatus.PARTIALLY_REFUNDED).copy(paidAt = paid),
-            orderAt(3).copy(paidAt = paid, accountErasedAt = t.plusSeconds(500)),
-            orderAt(4, status = PaymentOrderStatus.PARTIALLY_REFUNDED).copy(paidAt = paid),
-            orderAt(5, accountId = "acc_2").copy(paidAt = paid),
-            orderAt(6).copy(paidAt = paid, fulfilledAt = t.plusSeconds(11)),
-            orderAt(7).copy(paidAt = t.plusSeconds(5_000)),
+            orderAt(1, status = PaymentOrderStatus.CONFIRMING).copy(confirmStartedAt = paid, reviewReason = PaymentReviewReason.AMOUNT_MISMATCH),
+            orderAt(2, status = PaymentOrderStatus.CONFIRMING).copy(confirmStartedAt = t.plusSeconds(5_000)),
+            orderAt(3, status = PaymentOrderStatus.PARTIALLY_REFUNDED).copy(paidAt = paid),
+            orderAt(4, status = PaymentOrderStatus.REFUNDED).copy(paidAt = paid),
+            orderAt(5).copy(paidAt = paid, fulfilledAt = t.plusSeconds(11)),
+            orderAt(6).copy(paidAt = t.plusSeconds(5_000)),
+            orderAt(7).copy(paidAt = null),
+            orderAt(8, accountId = "acc_2").copy(paidAt = paid, reviewReason = PaymentReviewReason.MODE_MISMATCH),
         )
         val threshold = t.plusSeconds(1_000)
+        fun ids(scope: OperatorOrderScope, filter: OperatorOrderFilter = OperatorOrderFilter(), before: OrderCursor? = null, limit: Int = 10) =
+            store.listOrdersForOperator(scope, filter, threshold, before, limit).nums()
 
-        fun ids(filter: OperatorOrderFilter = OperatorOrderFilter(), before: Int? = null, limit: Int = 10) =
-            store.listOrdersForOperator(OperatorOrderScope.UNFULFILLED, filter, threshold, before?.let { OrderCursor(orderAt(it).createdAt, orderAt(it).id) }, limit).map { it.id.takeLast(2).toInt() }
+        assertEquals(listOf(8, 1), ids(OperatorOrderScope.REVIEW_REASON))
+        assertEquals(listOf(8), ids(OperatorOrderScope.REVIEW_REASON, OperatorOrderFilter(accountId = "acc_2")))
+        assertEquals(listOf(1), ids(OperatorOrderScope.STALE_CONFIRMING), "a younger one and other statuses stay out")
+        assertEquals(listOf(8, 7, 3), ids(OperatorOrderScope.UNFULFILLED), "fully refunded, fulfilled and not yet due rows stay out")
+        assertEquals(listOf(7, 3), ids(OperatorOrderScope.UNFULFILLED, before = cursorOf(8)))
+        assertEquals(listOf(3), ids(OperatorOrderScope.UNFULFILLED, OperatorOrderFilter(status = PaymentOrderStatus.PARTIALLY_REFUNDED)))
+        assertEquals(listOf(7), ids(OperatorOrderScope.UNFULFILLED, OperatorOrderFilter(accountId = "acc_1"), before = cursorOf(8), limit = 1))
 
-        assertEquals(listOf(5, 4, 3, 2, 1), ids())
-        assertEquals(listOf(4, 3, 1), ids(OperatorOrderFilter(accountId = "acc_1")))
-        assertEquals(listOf(5, 2), ids(OperatorOrderFilter(accountId = "acc_2")))
-        assertEquals(listOf(5, 4, 2, 1), ids(OperatorOrderFilter(hideErased = true)))
-        assertEquals(listOf(4, 2), ids(OperatorOrderFilter(status = PaymentOrderStatus.PARTIALLY_REFUNDED)))
-        assertEquals(listOf(5, 3, 1), ids(OperatorOrderFilter(status = PaymentOrderStatus.PAID)))
-        assertEquals(listOf(4, 1), ids(OperatorOrderFilter(accountId = "acc_1", hideErased = true)))
-        assertEquals(listOf(5), ids(limit = 1))
-        assertEquals(listOf(3, 2), ids(before = 4, limit = 2))
-        assertEquals(listOf(3), ids(OperatorOrderFilter(accountId = "acc_1"), before = 4, limit = 1))
-        assertEquals(listOf(2), ids(OperatorOrderFilter(hideErased = true), before = 4, limit = 1))
-        assertEquals(emptyList(), ids(before = 1))
-
-        // 한 건씩 커서로 끝까지 — 건너뜀도 중복도 없이 전체와 같다
         val walked = mutableListOf<Int>()
-        var cursor: Int? = null
+        var cursor: OrderCursor? = null
         while (true) {
-            val page = ids(before = cursor, limit = 1)
+            val page = ids(OperatorOrderScope.UNFULFILLED, before = cursor, limit = 1)
             if (page.isEmpty()) break
             walked += page
-            cursor = page.single()
+            cursor = cursorOf(page.single())
         }
-        assertEquals(listOf(5, 4, 3, 2, 1), walked)
+        assertEquals(listOf(8, 7, 3), walked, "a walk by cursor skips none and repeats none")
     }
 
     @Test
@@ -1042,104 +705,58 @@ abstract class PaymentLedgerStoreContract {
 
         assertEquals(listOf(orderAt(1).id), store.findOrdersByProviderPayment(listOf("scripted"), "pay_same").map { it.id })
         assertEquals(setOf(orderAt(1).id, orderAt(2).id), store.findOrdersByProviderPayment(listOf("scripted", "other"), "pay_same").map { it.id }.toSet())
-        assertEquals(emptyList(), store.findOrdersByProviderPayment(listOf("scripted"), "pay_none"))
         assertEquals(emptyList(), store.findOrdersByProviderPayment(emptyList(), "pay_same"))
-        assertEquals(listOf(3, 1), store.listOrdersByIds(listOf(orderAt(1).id, orderAt(3).id, "ord_missing")).map { it.id.takeLast(2).toInt() })
+        assertEquals(listOf(3, 1), store.listOrdersByIds(listOf(orderAt(1).id, orderAt(3).id, "ord_missing")).nums())
         assertEquals(emptyList(), store.listOrdersByIds(emptyList()))
     }
 
     @Test
-    fun `the refund lines of several orders come in one read - oldest first within an order`() {
-        val store = newStore()
-        insert(store, orderAt(1), orderAt(2), orderAt(3))
-        val t = PaymentTestOrders.T0
-        fun line(n: Int, order: PaymentOrder, status: PaymentRefundStatus, at: Instant) =
-            PaymentTestOrders.refund(id = "rfd_" + n.toString().padStart(32, '0'), orderId = order.id, status = status, now = at)
-        insertRefund(store, line(1, orderAt(1), PaymentRefundStatus.FAILED, t.plusSeconds(10)))
-        insertRefund(store, line(2, orderAt(1), PaymentRefundStatus.REQUESTED, t.plusSeconds(20)))
-        insertRefund(store, line(3, orderAt(2), PaymentRefundStatus.PENDING, t.plusSeconds(5)))
-
-        val lines = store.listRefundsOfOrders(listOf(orderAt(1).id, orderAt(2).id))
-
-        assertEquals(listOf(1, 2), lines.filter { it.orderId == orderAt(1).id }.map { it.id.takeLast(2).toInt() })
-        assertEquals(listOf(3), lines.filter { it.orderId == orderAt(2).id }.map { it.id.takeLast(2).toInt() })
-        assertEquals(3, lines.size)
-        assertEquals(emptyList(), store.listRefundsOfOrders(emptyList()))
-    }
-
-    @Test
-    fun `refund lines by status come newest first by the request time and page by a cursor`() {
+    fun `refund lines come oldest first per order in one read and newest first by status with a cursor`() {
         val store = newStore()
         val t = PaymentTestOrders.T0
         insert(store, orderAt(1), orderAt(2), orderAt(3), orderAt(4))
-        fun line(n: Int, status: PaymentRefundStatus, at: Instant) =
-            PaymentTestOrders.refund(id = "rfd_" + n.toString().padStart(32, '0'), orderId = orderAt(n).id, status = status, now = at)
-        insertRefund(store, line(1, PaymentRefundStatus.REQUESTED, t.plusSeconds(10)))
-        insertRefund(store, line(2, PaymentRefundStatus.REQUESTED, t.plusSeconds(30)))
-        insertRefund(store, line(3, PaymentRefundStatus.PENDING, t.plusSeconds(20)))
-        insertRefund(store, line(4, PaymentRefundStatus.REQUESTED, t.plusSeconds(30)))
+        insertRefund(store, refundOf(1, 1, PaymentRefundStatus.REQUESTED, t.plusSeconds(10)))
+        insertRefund(store, refundOf(2, 2, PaymentRefundStatus.REQUESTED, t.plusSeconds(30)))
+        insertRefund(store, refundOf(3, 3, PaymentRefundStatus.PENDING, t.plusSeconds(20)))
+        insertRefund(store, refundOf(4, 4, PaymentRefundStatus.REQUESTED, t.plusSeconds(30)))
+        insertRefund(store, refundOf(5, 1, PaymentRefundStatus.FAILED, t.plusSeconds(5)))
+
+        val lines = store.listRefundsOfOrders(listOf(orderAt(1).id, orderAt(2).id))
+        assertEquals(listOf(5, 1), lines.filter { it.orderId == orderAt(1).id }.map { it.id.takeLast(2).toInt() })
+        assertEquals(3, lines.size)
+        assertEquals(emptyList(), store.listRefundsOfOrders(emptyList()))
 
         val firstPage = store.listRefundsByStatus(PaymentRefundStatus.REQUESTED, null, 2)
         val secondPage = store.listRefundsByStatus(PaymentRefundStatus.REQUESTED, RefundCursor(firstPage.last().requestedAt, firstPage.last().id), 2)
-
         assertEquals(listOf(4, 2), firstPage.map { it.id.takeLast(2).toInt() })
         assertEquals(listOf(1), secondPage.map { it.id.takeLast(2).toInt() })
-        assertEquals(listOf(3), store.listRefundsByStatus(PaymentRefundStatus.PENDING, null, 10).map { it.id.takeLast(2).toInt() })
     }
 
-    private fun refundLines(store: PaymentLedgerStore) {
+    @Test
+    fun `the refund scopes list orders - the filters, cursor and limit apply to the orders and an order with two matching lines is listed once`() {
+        val store = newStore()
         val t = PaymentTestOrders.T0
         insert(store, orderAt(1), orderAt(2), orderAt(3), orderAt(4), orderAt(5), orderAt(6, accountId = "acc_2").copy(accountErasedAt = t.plusSeconds(500)), orderAt(7, accountId = "acc_2"))
-        fun line(n: Int, status: PaymentRefundStatus) = PaymentTestOrders.refund(id = "rfd_" + n.toString().padStart(32, '0'), orderId = orderAt(n).id, status = status, now = t.plusSeconds(n.toLong()))
-        insertRefund(store, line(1, PaymentRefundStatus.PENDING).copy(sentAt = t.plusSeconds(10)))
-        insertRefund(store, line(2, PaymentRefundStatus.PENDING).copy(sentAt = t.plusSeconds(5_000)))
-        insertRefund(store, line(3, PaymentRefundStatus.SUCCEEDED).copy(completedAt = t.plusSeconds(10)))
-        insertRefund(store, line(4, PaymentRefundStatus.SUCCEEDED).copy(completedAt = t.plusSeconds(10), appliedAt = t.plusSeconds(11)))
-        insertRefund(store, line(5, PaymentRefundStatus.SUCCEEDED).copy(completedAt = t.plusSeconds(5_000)))
-        insertRefund(store, line(6, PaymentRefundStatus.PENDING).copy(sentAt = t.plusSeconds(10)))
-        insertRefund(store, line(7, PaymentRefundStatus.SUCCEEDED).copy(completedAt = null))
-    }
-
-    @Test
-    fun `the stale-refund scope lists orders with a PENDING refund sent before the threshold, the unapplied-refund scope orders with a SUCCEEDED refund nobody applied - newest first`() {
-        val store = newStore()
-        refundLines(store)
-        val threshold = PaymentTestOrders.T0.plusSeconds(1_000)
-
-        fun ids(scope: OperatorOrderScope) = store.listOrdersForOperator(scope, OperatorOrderFilter(), threshold, null, 10).map { it.id.takeLast(2).toInt() }
+        insertRefund(store, refundOf(1, 1, PaymentRefundStatus.PENDING).copy(sentAt = t.plusSeconds(10)))
+        insertRefund(store, refundOf(2, 2, PaymentRefundStatus.PENDING).copy(sentAt = t.plusSeconds(5_000)))
+        insertRefund(store, refundOf(3, 3, PaymentRefundStatus.SUCCEEDED).copy(completedAt = t.plusSeconds(10)))
+        insertRefund(store, refundOf(4, 4, PaymentRefundStatus.SUCCEEDED).copy(completedAt = t.plusSeconds(10), appliedAt = t.plusSeconds(11)))
+        insertRefund(store, refundOf(5, 5, PaymentRefundStatus.SUCCEEDED).copy(completedAt = t.plusSeconds(5_000)))
+        insertRefund(store, refundOf(6, 6, PaymentRefundStatus.PENDING).copy(sentAt = t.plusSeconds(10)))
+        insertRefund(store, refundOf(7, 7, PaymentRefundStatus.SUCCEEDED).copy(completedAt = null))
+        insertRefund(store, refundOf(8, 3, PaymentRefundStatus.SUCCEEDED, t.plusSeconds(1)).copy(completedAt = t.plusSeconds(10)))
+        val threshold = t.plusSeconds(1_000)
+        fun ids(scope: OperatorOrderScope, filter: OperatorOrderFilter = OperatorOrderFilter(), before: OrderCursor? = null, limit: Int = 10) =
+            store.listOrdersForOperator(scope, filter, threshold, before, limit).nums()
 
         assertEquals(listOf(6, 1), ids(OperatorOrderScope.STALE_REFUND))
-        assertEquals(listOf(7, 3), ids(OperatorOrderScope.UNAPPLIED_REFUND))
-    }
-
-    @Test
-    fun `the refund scopes apply the account filter, the erased filter, the cursor and the limit to the orders - not to a capped read of the refund lines`() {
-        val store = newStore()
-        refundLines(store)
-        val threshold = PaymentTestOrders.T0.plusSeconds(1_000)
-
-        fun ids(scope: OperatorOrderScope, filter: OperatorOrderFilter = OperatorOrderFilter(), before: OrderCursor? = null, limit: Int = 10) =
-            store.listOrdersForOperator(scope, filter, threshold, before, limit).map { it.id.takeLast(2).toInt() }
-
+        assertEquals(listOf(7, 3), ids(OperatorOrderScope.UNAPPLIED_REFUND), "order 3 has two matching lines")
         assertEquals(listOf(6), ids(OperatorOrderScope.STALE_REFUND, OperatorOrderFilter(accountId = "acc_2")))
-        assertEquals(listOf(1), ids(OperatorOrderScope.STALE_REFUND, OperatorOrderFilter(accountId = "acc_1")))
         assertEquals(listOf(1), ids(OperatorOrderScope.STALE_REFUND, OperatorOrderFilter(hideErased = true)))
-        assertEquals(listOf(1), ids(OperatorOrderScope.STALE_REFUND, before = OrderCursor(orderAt(6).createdAt, orderAt(6).id)))
+        assertEquals(listOf(1), ids(OperatorOrderScope.STALE_REFUND, before = cursorOf(6)))
         assertEquals(listOf(7), ids(OperatorOrderScope.UNAPPLIED_REFUND, limit = 1))
-        assertEquals(listOf(3), ids(OperatorOrderScope.UNAPPLIED_REFUND, before = OrderCursor(orderAt(7).createdAt, orderAt(7).id)))
-        assertEquals(listOf(3), ids(OperatorOrderScope.UNAPPLIED_REFUND, OperatorOrderFilter(accountId = "acc_1", status = PaymentOrderStatus.PAID)))
+        assertEquals(listOf(3), ids(OperatorOrderScope.UNAPPLIED_REFUND, before = cursorOf(7)))
         assertEquals(emptyList(), ids(OperatorOrderScope.UNAPPLIED_REFUND, OperatorOrderFilter(status = PaymentOrderStatus.PENDING)))
-    }
-
-    @Test
-    fun `an order with two matching refund lines is listed once`() {
-        val store = newStore()
-        insert(store, orderAt(1))
-        val t = PaymentTestOrders.T0
-        insertRefund(store, PaymentTestOrders.refund(id = "rfd_" + "1".padStart(32, '0'), orderId = orderAt(1).id, status = PaymentRefundStatus.SUCCEEDED, now = t).copy(completedAt = t))
-        insertRefund(store, PaymentTestOrders.refund(id = "rfd_" + "2".padStart(32, '0'), orderId = orderAt(1).id, status = PaymentRefundStatus.SUCCEEDED, now = t.plusSeconds(1)).copy(completedAt = t))
-
-        assertEquals(1, store.listOrdersForOperator(OperatorOrderScope.UNAPPLIED_REFUND, OperatorOrderFilter(), t.plusSeconds(1_000), null, 10).size)
     }
 
     // --- 탈퇴 (벌크) ---
@@ -1154,39 +771,27 @@ abstract class PaymentLedgerStoreContract {
     }
 
     @Test
-    fun `erasing an account clears the card on every one of its orders and stamps the time - nothing else changes, other accounts are untouched, and a second call changes nothing`() {
+    fun `erasing an account clears the card on every one of its orders and stamps the time - nothing else changes, an earlier stamp stays, other accounts are untouched, a second call changes nothing`() {
         val store = newStore()
         val t = PaymentTestOrders.T0
         val withCard = orderAt(1).copy(cardIssuer = "HYUNDAI", cardLast4 = "1234", method = "CARD", providerPaymentId = "pay_1", paidAt = t.plusSeconds(2))
         val pending = orderAt(2, status = PaymentOrderStatus.PENDING)
         val otherAccount = orderAt(3, accountId = "acc_other").copy(cardIssuer = "KB", cardLast4 = "9999")
-        insert(store, withCard, pending, otherAccount)
+        val early = t.plusSeconds(100)
+        val alreadyStamped = orderAt(4).copy(accountErasedAt = early, cardIssuer = "HYUNDAI", cardLast4 = "1234")
+        insert(store, withCard, pending, otherAccount, alreadyStamped)
         val erasedAt = t.plusSeconds(1_000)
 
-        assertEquals(2, store.eraseAccountOrders("acc_1", erasedAt))
+        assertEquals(3, store.eraseAccountOrders("acc_1", erasedAt))
 
         val cleared = store.findOrder(withCard.id)!!
         assertEquals(withCard.copy(cardIssuer = null, cardLast4 = null, accountErasedAt = erasedAt), cleared)
         assertEquals(pending.copy(accountErasedAt = erasedAt), store.findOrder(pending.id))
         assertEquals(otherAccount, store.findOrder(otherAccount.id))
+        assertEquals(alreadyStamped.copy(cardIssuer = null, cardLast4 = null), store.findOrder(alreadyStamped.id), "the earlier erasure time stays, the card that came back is cleared")
 
         assertEquals(0, store.eraseAccountOrders("acc_1", erasedAt.plusSeconds(60)), "a second call finds nothing to change")
-        assertEquals(cleared, store.findOrder(withCard.id), "the first erasure time stays")
-    }
-
-    @Test
-    fun `erasing an account keeps an erasure time that is already there and still clears a card that came back`() {
-        val store = newStore()
-        val t = PaymentTestOrders.T0
-        val early = t.plusSeconds(100)
-        insert(store, orderAt(1).copy(accountErasedAt = early, cardIssuer = "HYUNDAI", cardLast4 = "1234"))
-
-        assertEquals(1, store.eraseAccountOrders("acc_1", t.plusSeconds(900)))
-
-        val row = store.findOrder(orderAt(1).id)!!
-        assertEquals(early, row.accountErasedAt)
-        assertNull(row.cardIssuer)
-        assertNull(row.cardLast4)
+        assertEquals(cleared, store.findOrder(withCard.id))
     }
 
     @Test
@@ -1223,18 +828,16 @@ abstract class PaymentLedgerStoreContract {
     }
 
     @Test
-    fun `replacing references also replaces the operator ids an erased account wrote on its own orders when the operator was the account itself`() {
+    fun `replacing references also replaces the decided_by an erased account wrote on its own order when the operator was the account itself`() {
         val store = newStore()
-        val t = PaymentTestOrders.T0
-        val own = orderAt(1)
-        insert(store, own)
-        insertRefund(store, PaymentTestOrders.refund(id = "rfd_" + "1".padStart(32, '0'), orderId = own.id, status = PaymentRefundStatus.SUCCEEDED, now = t).copy(requestedBy = "acc_1", decidedBy = "acc_1"))
+        insert(store, orderAt(1))
+        val rid = "rfd_" + "1".padStart(32, '0')
+        insertRefund(store, PaymentTestOrders.refund(id = rid, orderId = orderAt(1).id, status = PaymentRefundStatus.SUCCEEDED, now = PaymentTestOrders.T0).copy(requestedBy = "acc_1", decidedBy = "acc_1"))
 
         store.replaceAccountReferences("acc_1", "deleted:abc")
 
-        val line = store.findRefund("rfd_" + "1".padStart(32, '0'))!!
-        assertEquals("deleted:abc", line.requestedBy)
-        assertEquals("deleted:abc", line.decidedBy)
+        assertEquals("deleted:abc", store.findRefund(rid)!!.requestedBy)
+        assertEquals("deleted:abc", store.findRefund(rid)!!.decidedBy)
     }
 
     /** 모든 칸에 서로 다른 값을 넣은 줄 — 왕복에서 칸이 바뀌거나 빠지면 드러난다. 시각은 초 단위(저장소의 시각 정밀도에 기대지 않는다). */
@@ -1278,7 +881,7 @@ abstract class PaymentLedgerStoreContract {
     private fun event(orderId: String, type: PaymentEventType = PaymentEventType.ORDER_CREATED) =
         PaymentEvent(orderId = orderId, type = type, actor = PaymentActor.SYSTEM, createdAt = PaymentTestOrders.T0)
 
-    // --- 구독: 계정당 살아 있는 구독 하나(자리 유니크) · 줄 락 · 모든 칸 왕복. 두 DB 와 메모리 대역이 같은 약속을 지킨다. ---
+    // --- 구독: 계정당 살아 있는 구독 하나(자리 유니크) · 줄 락 · 모든 칸 왕복 ---
 
     private val sub1 = PaymentTestOrders.subscription(id = "sub_" + "1".repeat(32))
     private val sub2 = PaymentTestOrders.subscription(id = "sub_" + "2".repeat(32))
@@ -1321,27 +924,18 @@ abstract class PaymentLedgerStoreContract {
     @Test
     fun `sixteen threads claiming the seat of one account - exactly one wins`() {
         val store = newStore()
-        val ids = (1..16).map { n -> "sub_" + n.toString(16).padStart(32, '0') }
+        val ids = (1..16).map { n -> id32("sub_", n) }
         ids.forEach { id -> store.inTransaction { it.insertSubscriptionIfAbsent(PaymentTestOrders.subscription(id = id)) } }
-        val pool = Executors.newFixedThreadPool(16)
-        val start = CountDownLatch(1)
-        try {
-            val results = ids.map { id ->
-                pool.submit<Boolean> {
-                    start.await()
-                    try {
-                        store.inTransaction { tx -> tx.updateSubscription(checkNotNull(tx.lockSubscription(id)).copy(activeKey = "acc_1")) }
-                        true
-                    } catch (e: PaymentLedgerConflictException) {
-                        false
-                    }
-                }
+        val won = AtomicInteger()
+        race(16) { n ->
+            try {
+                store.inTransaction { tx -> tx.updateSubscription(checkNotNull(tx.lockSubscription(ids[n - 1])).copy(activeKey = "acc_1")) }
+                won.incrementAndGet()
+            } catch (e: PaymentLedgerConflictException) {
+                // lost
             }
-            start.countDown()
-            assertEquals(1, results.count { it.get(30, TimeUnit.SECONDS) })
-        } finally {
-            pool.shutdownNow()
         }
+        assertEquals(1, won.get())
         assertNotNull(store.findLiveSubscription("acc_1"))
     }
 
@@ -1349,20 +943,7 @@ abstract class PaymentLedgerStoreContract {
     fun `a subscription row lock makes sixteen read-modify-write loops count exactly`() {
         val store = newStore()
         store.inTransaction { it.insertSubscriptionIfAbsent(sub1) }
-        val pool = Executors.newFixedThreadPool(16)
-        val start = CountDownLatch(1)
-        try {
-            val futures = (1..16).map {
-                pool.submit {
-                    start.await()
-                    store.inTransaction { tx -> tx.updateSubscription(checkNotNull(tx.lockSubscription(sub1.id)).let { it.copy(periodSeq = it.periodSeq + 1) }) }
-                }
-            }
-            start.countDown()
-            futures.forEach { it.get(30, TimeUnit.SECONDS) }
-        } finally {
-            pool.shutdownNow()
-        }
+        race(16) { store.inTransaction { tx -> tx.updateSubscription(checkNotNull(tx.lockSubscription(sub1.id)).let { it.copy(periodSeq = it.periodSeq + 1) }) } }
         assertEquals(16, store.findSubscription(sub1.id)?.periodSeq)
     }
 

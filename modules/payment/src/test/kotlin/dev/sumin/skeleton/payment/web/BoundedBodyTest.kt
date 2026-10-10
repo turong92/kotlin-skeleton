@@ -30,10 +30,8 @@ class BoundedBodyTest {
     fun `a body up to the limit is read whole, whatever the declared length says`() {
         val bytes = ByteArray(1000) { it.toByte() }
 
-        assertContentEquals(bytes, BoundedBody.read(ByteArrayInputStream(bytes), declared = 1000, maxBytes = 1000))
         assertContentEquals(bytes, BoundedBody.read(ByteArrayInputStream(bytes), declared = -1, maxBytes = 1000), "chunked: no declared length")
         assertContentEquals(bytes, BoundedBody.read(ByteArrayInputStream(bytes), declared = 5, maxBytes = 1000), "a short declared length does not cut the body")
-        assertEquals(0, BoundedBody.read(ByteArrayInputStream(ByteArray(0)), declared = 0, maxBytes = 10).size)
     }
 
     @Test

@@ -2,7 +2,6 @@ package dev.sumin.skeleton.payment
 
 import dev.sumin.skeleton.payment.PaymentOrderStatus.CANCELED
 import dev.sumin.skeleton.payment.PaymentOrderStatus.CONFIRMING
-import dev.sumin.skeleton.payment.PaymentOrderStatus.EXPIRED
 import dev.sumin.skeleton.payment.PaymentOrderStatus.FAILED
 import dev.sumin.skeleton.payment.PaymentOrderStatus.PAID
 import dev.sumin.skeleton.payment.PaymentOrderStatus.PARTIALLY_REFUNDED
@@ -17,19 +16,14 @@ import java.util.concurrent.atomic.AtomicReference
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.junit.jupiter.api.DynamicTest
 import org.junit.jupiter.api.TestFactory
 
-/**
- * 스펙 §13.2 "허용되지 않는 전이 전부가 거절된다" 를 **서비스 입구에서** 본다: 입구(`confirm` · `abandon` · `declined` · `converge`)마다
- * 여덟 상태 전부에서 무슨 일이 일어나야 하는지 표로 적고 돌린다. 전이표 객체 자체의 시험은 [PaymentOrderTransitionsTest].
- */
+/** 스펙 §13.2 를 **서비스 입구에서** 본다: 입구(`confirm` · `abandon` · `declined` · `converge`)마다 여덟 상태에서 무슨 일이 일어나야 하는지. 전이표 자체는 [PaymentOrderTransitionsTest]. */
 class OrderEntryStateMatrixTest {
     private val paidFamily = setOf(PAID, PARTIALLY_REFUNDED, REFUNDED)
-    private val closed = setOf(FAILED, EXPIRED, CANCELED)
 
     /** 주문 하나를 만들고 그 줄을 [status] 로 직접 놓는다(전이표를 거치지 않는 시험용 배치). 결제 키는 `PENDING` 만 비어 있다. */
     private fun orderIn(kit: PaymentLedgerKit, status: PaymentOrderStatus): PaymentOrder {
@@ -47,50 +41,30 @@ class OrderEntryStateMatrixTest {
     }
 
     private fun snapshot(status: ProviderPaymentStatus, order: PaymentOrder) = PaymentSnapshot(
-        providerPaymentId = "pay_1",
-        orderId = order.id,
-        status = status,
-        total = order.amount,
-        remaining = order.amount,
-        method = "CARD",
-        paidAt = java.time.Instant.parse("2026-10-08T00:00:05Z"),
-        refunds = emptyList(),
-        card = PaymentCard("HYUNDAI", "1234"),
+        "pay_1", order.id, status, order.amount, order.amount, "CARD", java.time.Instant.parse("2026-10-08T00:00:05Z"), emptyList(), PaymentCard("HYUNDAI", "1234"),
     )
 
     @TestFactory
     fun `confirm on every status that is not pending never calls the provider and only a paid order with the same payment id answers`(): List<DynamicTest> =
         PaymentOrderStatus.entries.filter { it != PENDING }.flatMap { status ->
-            listOf(
-                DynamicTest.dynamicTest("confirm with the order's own payment id on $status") {
+            listOf("pay_1", "pay_other").map { paymentId ->
+                DynamicTest.dynamicTest("confirm with $paymentId on $status") {
                     val kit = PaymentLedgerKit()
                     val order = orderIn(kit, status)
                     val eventsBefore = kit.store.listEvents(order.id)
+                    val answers = if (paymentId == "pay_1") status in paidFamily || status == CONFIRMING else status == CONFIRMING
 
-                    if (status in paidFamily || status == CONFIRMING) {
-                        assertEquals(order, kit.orders.confirm("acc_1", order.id, "pay_1", order.amount), "the row is returned as it is")
+                    if (answers) {
+                        assertEquals(order, kit.orders.confirm("acc_1", order.id, paymentId, order.amount), "the row is returned as it is")
                     } else {
-                        assertFailsWith<PaymentOrderNotPayableException> { kit.orders.confirm("acc_1", order.id, "pay_1", order.amount) }
+                        assertFailsWith<PaymentOrderNotPayableException> { kit.orders.confirm("acc_1", order.id, paymentId, order.amount) }
                     }
 
                     assertEquals(0, kit.gateway.confirmCalls.size)
                     assertEquals(order, kit.order(order.id))
                     assertEquals(eventsBefore, kit.store.listEvents(order.id))
-                },
-                DynamicTest.dynamicTest("confirm with another payment id on $status") {
-                    val kit = PaymentLedgerKit()
-                    val order = orderIn(kit, status)
-
-                    if (status == CONFIRMING) {
-                        assertEquals(order, kit.orders.confirm("acc_1", order.id, "pay_other", order.amount), "already being confirmed - nothing is started again")
-                    } else {
-                        assertFailsWith<PaymentOrderNotPayableException> { kit.orders.confirm("acc_1", order.id, "pay_other", order.amount) }
-                    }
-
-                    assertEquals(0, kit.gateway.confirmCalls.size)
-                    assertEquals(order, kit.order(order.id))
-                },
-            )
+                }
+            }
         }
 
     @TestFactory
@@ -105,85 +79,44 @@ class OrderEntryStateMatrixTest {
 
                 if (status == PENDING) {
                     assertEquals(CANCELED, result.status)
-                    assertEquals(eventsBefore.size + 1, kit.store.listEvents(order.id).size)
                 } else {
                     assertEquals(order, result)
-                    assertEquals(order, kit.order(order.id))
                     assertEquals(eventsBefore, kit.store.listEvents(order.id), "no history line for a no-op")
                 }
             }
         }
 
+    /** 결제사의 끝 상태 하나가 여덟 주문 상태에 닿으면 어디가 바뀌는지 — 확정 거절(`declined`)과 조회 결과(`converge`) 모두. */
     @TestFactory
-    fun `a definitive decline closes a confirming order and changes no other status`(): List<DynamicTest> =
-        PaymentOrderStatus.entries.map { status ->
-            DynamicTest.dynamicTest("declined on $status") {
-                val kit = PaymentLedgerKit()
-                val order = orderIn(kit, status)
-                val context = ConvergeContext(PaymentMode.TEST, ConvergeSource.CONFIRM)
-
-                val result = kit.store.inTransaction { tx -> kit.convergence.declined(tx, tx.lockOrder(order.id)!!, "REJECT_CARD_COMPANY", context) }
-
-                if (status == CONFIRMING) {
-                    assertEquals(FAILED, result.order.status)
-                } else {
-                    assertFalse(result.changed)
-                    assertEquals(order, kit.order(order.id))
-                }
-            }
-        }
-
-    @TestFactory
-    fun `converge on a received payment pays every unpaid status and leaves the paid family alone`(): List<DynamicTest> =
-        PaymentOrderStatus.entries.map { status ->
-            DynamicTest.dynamicTest("PAID snapshot on $status") {
-                val kit = PaymentLedgerKit()
-                val order = orderIn(kit, status)
-                val context = ConvergeContext(PaymentMode.TEST, ConvergeSource.RECONCILE)
-
-                kit.store.inTransaction { tx -> kit.convergence.converge(tx, tx.lockOrder(order.id)!!, snapshot(ProviderPaymentStatus.PAID, order), context) }
-
-                if (status in paidFamily) {
-                    assertEquals(order, kit.order(order.id), "the money is already counted")
-                    assertEquals(0, kit.tasks.all(PaymentTaskTypes.ORDER_FULFIL).size)
-                } else {
-                    assertEquals(PAID, kit.order(order.id).status)
-                    assertEquals(1, kit.tasks.all(PaymentTaskTypes.ORDER_FULFIL).size)
-                }
-            }
-        }
-
-    @TestFactory
-    fun `converge on a failed or expired payment closes only a confirming order - nothing else, a paid one above all`(): List<DynamicTest> =
-        listOf(ProviderPaymentStatus.FAILED, ProviderPaymentStatus.EXPIRED).flatMap { providerStatus ->
-            PaymentOrderStatus.entries.map { status ->
-                DynamicTest.dynamicTest("$providerStatus snapshot on $status") {
+    fun `a provider verdict moves only the statuses the table allows and never touches the paid family`(): List<DynamicTest> =
+        PaymentOrderStatus.entries.flatMap { status ->
+            listOf(null, ProviderPaymentStatus.FAILED, ProviderPaymentStatus.EXPIRED, ProviderPaymentStatus.IN_PROGRESS, ProviderPaymentStatus.PAID).map { verdict -> // null = 확정 거절
+                DynamicTest.dynamicTest("${verdict ?: "DECLINED"} on $status") {
                     val kit = PaymentLedgerKit()
                     val order = orderIn(kit, status)
-                    val context = ConvergeContext(PaymentMode.TEST, ConvergeSource.RECONCILE)
+                    kit.store.inTransaction { tx ->
+                        val locked = tx.lockOrder(order.id)!!
+                        if (verdict == null) {
+                            kit.convergence.declined(tx, locked, "REJECT_CARD_COMPANY", ConvergeContext(PaymentMode.TEST, ConvergeSource.CONFIRM))
+                        } else {
+                            kit.convergence.converge(tx, locked, snapshot(verdict, order), ConvergeContext(PaymentMode.TEST, ConvergeSource.RECONCILE))
+                        }
+                    }
 
-                    kit.store.inTransaction { tx -> kit.convergence.converge(tx, tx.lockOrder(order.id)!!, snapshot(providerStatus, order), context) }
-
-                    if (status == CONFIRMING) {
-                        assertEquals(FAILED, kit.order(order.id).status)
-                    } else {
-                        assertEquals(order, kit.order(order.id), "only a confirming order is closed by a reconcile")
+                    val closes = status == CONFIRMING && verdict != ProviderPaymentStatus.IN_PROGRESS && verdict != ProviderPaymentStatus.PAID
+                    val pays = verdict == ProviderPaymentStatus.PAID && status !in paidFamily
+                    when {
+                        closes -> assertEquals(FAILED, kit.order(order.id).status)
+                        pays -> {
+                            assertEquals(PAID, kit.order(order.id).status)
+                            assertEquals(1, kit.tasks.all(PaymentTaskTypes.ORDER_FULFIL).size)
+                        }
+                        else -> {
+                            assertEquals(order, kit.order(order.id))
+                            assertEquals(0, kit.tasks.all(PaymentTaskTypes.ORDER_FULFIL).size)
+                        }
                     }
                 }
-            }
-        }
-
-    @TestFactory
-    fun `converge on an in progress payment changes no status`(): List<DynamicTest> =
-        PaymentOrderStatus.entries.map { status ->
-            DynamicTest.dynamicTest("IN_PROGRESS snapshot on $status") {
-                val kit = PaymentLedgerKit()
-                val order = orderIn(kit, status)
-                val context = ConvergeContext(PaymentMode.TEST, ConvergeSource.RECONCILE)
-
-                kit.store.inTransaction { tx -> kit.convergence.converge(tx, tx.lockOrder(order.id)!!, snapshot(ProviderPaymentStatus.IN_PROGRESS, order), context) }
-
-                assertEquals(order, kit.order(order.id))
             }
         }
 
@@ -201,11 +134,9 @@ class OrderEntryStateMatrixTest {
         val result = kit.orders.confirm("acc_1", order.id, "pay_1", order.amount) // 던지지 않는다
 
         assertEquals(PAID, result.status)
-        assertEquals(PAID, kit.order(order.id).status)
         assertNull(kit.order(order.id).failureCode)
-        assertTrue(kit.store.listEvents(order.id).none { it.type == PaymentEventType.CONFIRM_DECLINED })
         kit.runTasks(setOf(PaymentTaskTypes.ORDER_FULFIL))
-        assertEquals(1, kit.listener.paid.size, "the fulfil task the reconcile queued delivers it")
+        assertEquals(1, kit.listener.paid.size)
     }
 
     @Test
@@ -254,6 +185,5 @@ class OrderEntryStateMatrixTest {
         assertEquals(1, kit.gateway.confirmCalls.size, "the provider heard about pay_1 once")
         assertEquals(PENDING, kit.order(b.id).status)
         assertNull(kit.order(b.id).providerPaymentId)
-        assertEquals(0, kit.tasks.all(PaymentTaskTypes.ORDER_RECONCILE).count { it.task.subjectId == b.id })
     }
 }

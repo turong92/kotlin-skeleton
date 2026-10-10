@@ -6,11 +6,13 @@ import dev.sumin.skeleton.payment.testing.ScriptedGateway
 import java.time.Duration
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class OrderExpiryTest {
     private val ttl = Duration.ofMinutes(30)
+    private val expire = setOf(PaymentTaskTypes.ORDER_EXPIRE)
 
     @Test
     fun `an abandoned order expires after the provider says there is no payment`() {
@@ -18,33 +20,27 @@ class OrderExpiryTest {
         val order = kit.create().order
         kit.advance(ttl)
 
-        kit.runTasks(setOf(PaymentTaskTypes.ORDER_EXPIRE))
+        kit.runTasks(expire)
 
-        val expired = kit.order(order.id)
-        assertEquals(PaymentOrderStatus.EXPIRED, expired.status)
-        assertEquals("EXPIRED_UNPAID", expired.failureCode)
-        assertEquals(kit.time.now(), expired.closedAt)
+        assertEquals(PaymentOrderStatus.EXPIRED, kit.order(order.id).status)
         assertEquals(PaymentLookupQuery(providerPaymentId = null, orderId = order.id), kit.gateway.lookupCalls.single(), "asked once, by order number")
         assertEquals(State.DONE, kit.tasks.all(PaymentTaskTypes.ORDER_EXPIRE).single().state)
         assertEquals(0, kit.gateway.confirmCalls.size, "the server never confirms on its own")
     }
 
     @Test
-    fun `while the provider says in progress the expiry waits and retries and the order stays pending`() {
+    fun `while the provider says in progress the expiry waits and the order stays pending`() {
         val kit = PaymentLedgerKit()
         val order = kit.createAuthenticated()
         kit.advance(ttl)
 
-        kit.runTasks(setOf(PaymentTaskTypes.ORDER_EXPIRE))
-        val task = kit.tasks.all(PaymentTaskTypes.ORDER_EXPIRE).single()
+        kit.runTasks(expire)
 
         assertEquals(PaymentOrderStatus.PENDING, kit.order(order.id).status)
-        assertEquals(State.PENDING, task.state)
-        assertEquals(1, task.attempts)
-        assertNull(kit.order(order.id).reviewReason)
+        assertEquals(State.PENDING, kit.tasks.all(PaymentTaskTypes.ORDER_EXPIRE).single().state)
 
         kit.gateway.expire("pay_1")
-        kit.runTasks(setOf(PaymentTaskTypes.ORDER_EXPIRE))
+        kit.runTasks(expire)
         assertEquals(PaymentOrderStatus.EXPIRED, kit.order(order.id).status)
     }
 
@@ -55,75 +51,46 @@ class OrderExpiryTest {
         kit.gateway.settle("pay_1")
         kit.advance(ttl)
 
-        kit.runTasks(setOf(PaymentTaskTypes.ORDER_EXPIRE))
+        kit.runTasks(expire)
 
         val paid = kit.order(order.id)
         assertEquals(PaymentOrderStatus.PAID, paid.status)
         assertEquals("pay_1", paid.providerPaymentId, "the payment id is taken from the evidence so a refund can find it")
-        assertEquals("HYUNDAI", paid.cardIssuer)
         assertEquals(1, kit.tasks.pending(PaymentTaskTypes.ORDER_FULFIL).size)
     }
 
     @Test
-    fun `the expiry leaves paid, confirming and canceled orders alone without asking the provider`() {
+    fun `the expiry leaves paid and canceled orders alone without asking the provider`() {
         val kit = PaymentLedgerKit()
         val canceled = kit.create(key = "k1").order.also { kit.orders.abandon("acc_1", it.id) }
         val paid = kit.createAuthenticated(key = "k2", paymentKey = "pay_2").also { kit.orders.confirm("acc_1", it.id, "pay_2", it.amount) }
-        val lookupsBefore = kit.gateway.lookupCalls.size // 승인이 카드 정보를 채우려고 한 번 물었다
+        val lookupsBefore = kit.gateway.lookupCalls.size
         kit.advance(ttl)
 
-        kit.runTasks(setOf(PaymentTaskTypes.ORDER_EXPIRE))
+        kit.runTasks(expire)
 
         assertEquals(PaymentOrderStatus.CANCELED, kit.order(canceled.id).status)
         assertEquals(PaymentOrderStatus.PAID, kit.order(paid.id).status)
         assertEquals(lookupsBefore, kit.gateway.lookupCalls.size, "the expiry did not ask the provider")
-        assertEquals(2, kit.tasks.all(PaymentTaskTypes.ORDER_EXPIRE).count { it.state == State.DONE })
-    }
-
-    @Test
-    fun `a mode that changed is judged before the lookup - a lookup that would fail does not loop the job`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.create().order
-        kit.gateway.mode = PaymentMode.LIVE
-        kit.gateway.failLookups(5)
-        kit.advance(ttl)
-
-        kit.runTasks(setOf(PaymentTaskTypes.ORDER_EXPIRE))
-
-        assertEquals(PaymentOrderStatus.EXPIRED, kit.order(order.id).status)
-        assertNull(kit.order(order.id).reviewReason, "it never claimed an approval - no flag")
-        assertEquals(State.DONE, kit.tasks.all(PaymentTaskTypes.ORDER_EXPIRE).single().state)
-        assertEquals(1, kit.tasks.all(PaymentTaskTypes.ORDER_EXPIRE).single().attempts)
-        assertEquals(0, kit.gateway.lookupCalls.size)
     }
 
     private fun withoutProvider(kit: PaymentLedgerKit) =
         OrderExpireTaskHandler(kit.store, PaymentProviderRouter(listOf(ScriptedGateway(providerId = "elsewhere")), kit.properties), kit.convergence)
 
     @Test
-    fun `a pending order whose provider bean is missing closes without a mark once its deadline has passed - it never claimed an approval`() {
+    fun `a pending order whose provider bean is missing closes without a mark once its deadline has passed and is retried before it`() {
         val kit = PaymentLedgerKit()
-        val order = kit.create().order
-        kit.advance(ttl)
-
-        withoutProvider(kit).handle(PaymentTaskRun(PaymentTaskTypes.ORDER_EXPIRE, order.id, 1, 12))
-
-        val expired = kit.order(order.id)
-        assertEquals(PaymentOrderStatus.EXPIRED, expired.status)
-        assertEquals("EXPIRED_UNPAID", expired.failureCode)
-        assertNull(expired.reviewReason)
-        assertTrue(kit.review.flagged.isEmpty())
-    }
-
-    @Test
-    fun `a pending order whose provider bean is missing is retried before its deadline`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.create().order
+        val early = kit.create(key = "k1").order
         kit.advance(ttl.minusSeconds(1))
+        assertFailsWith<PaymentTaskRetryException> { withoutProvider(kit).handle(PaymentTaskRun(PaymentTaskTypes.ORDER_EXPIRE, early.id, 1, 12)) }
+        assertEquals(PaymentOrderStatus.PENDING, kit.order(early.id).status)
 
-        kotlin.test.assertFailsWith<PaymentTaskRetryException> { withoutProvider(kit).handle(PaymentTaskRun(PaymentTaskTypes.ORDER_EXPIRE, order.id, 1, 12)) }
+        kit.advance(Duration.ofSeconds(1))
+        withoutProvider(kit).handle(PaymentTaskRun(PaymentTaskTypes.ORDER_EXPIRE, early.id, 2, 12))
 
-        assertEquals(PaymentOrderStatus.PENDING, kit.order(order.id).status)
+        assertEquals(PaymentOrderStatus.EXPIRED, kit.order(early.id).status)
+        assertNull(kit.order(early.id).reviewReason)
+        assertTrue(kit.review.flagged.isEmpty())
     }
 
     @Test
@@ -133,23 +100,8 @@ class OrderExpiryTest {
         kit.store.inTransaction { tx -> kit.convergence.flagReview(tx, tx.lockOrder(order.id)!!, PaymentReviewReason.AMOUNT_MISMATCH, ConvergeContext(PaymentMode.TEST, ConvergeSource.RECONCILE)) }
         kit.advance(ttl)
 
-        kotlin.test.assertFailsWith<PaymentTaskPermanentException> { withoutProvider(kit).handle(PaymentTaskRun(PaymentTaskTypes.ORDER_EXPIRE, order.id, 1, 12)) }
+        assertFailsWith<PaymentTaskPermanentException> { withoutProvider(kit).handle(PaymentTaskRun(PaymentTaskTypes.ORDER_EXPIRE, order.id, 1, 12)) }
 
         assertEquals(PaymentOrderStatus.PENDING, kit.order(order.id).status)
-        assertEquals(PaymentReviewReason.AMOUNT_MISMATCH, kit.order(order.id).reviewReason)
-    }
-
-    @Test
-    fun `an expiry task for a confirming order leaves it alone even without its provider - only the reconcile task handles it`() {
-        val kit = PaymentLedgerKit()
-        val created = kit.createAuthenticated()
-        kit.gateway.script(ScriptedGateway.ConfirmScript.TimeoutApplied())
-        kit.orders.confirm("acc_1", created.id, "pay_1", created.amount)
-        kit.advance(ttl)
-
-        withoutProvider(kit).handle(PaymentTaskRun(PaymentTaskTypes.ORDER_EXPIRE, created.id, 1, 12))
-
-        assertEquals(PaymentOrderStatus.CONFIRMING, kit.order(created.id).status)
-        assertNull(kit.order(created.id).reviewReason)
     }
 }

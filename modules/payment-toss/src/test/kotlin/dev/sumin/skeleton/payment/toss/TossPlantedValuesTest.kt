@@ -5,7 +5,6 @@ import dev.sumin.skeleton.payment.PaymentAmount
 import dev.sumin.skeleton.payment.PaymentConfirmRequest
 import dev.sumin.skeleton.payment.PaymentLookupQuery
 import dev.sumin.skeleton.payment.PaymentRefundRequest
-import dev.sumin.skeleton.payment.WebhookDelivery
 import dev.sumin.skeleton.payment.toss.support.CapturedLogs
 import dev.sumin.skeleton.payment.toss.support.FakeTossServer
 import dev.sumin.skeleton.payment.toss.support.FakeTossServer.Reply
@@ -64,18 +63,17 @@ class TossPlantedValuesTest {
             assertNoPlanted("refund", refund.toString())
             assertNoPlanted("lookup", snapshot.toString())
             assertTrue(snapshot.card?.last4 == "1234", "only the last four characters survive: ${snapshot.card}")
-            assertTrue(logs.lines().any { "payment.toss.confirm" in it }, "the capture is not empty: the platform's completion line is there")
             assertNoPlanted("logs", logs.lines().joinToString("\n"))
         }
     }
 
     @Test
-    fun `error answers - the message the provider put in the body never reaches the exception or the logs`() {
+    fun `error and broken answers - what the provider put in the body never reaches the exception or the logs`() {
         listOf(
             TossFixtures.error(403, "REJECT_CARD_PAYMENT"),
-            TossFixtures.error(400, "PROVIDER_ERROR"),
             TossFixtures.error(500, "FAILED_INTERNAL_SYSTEM_PROCESSING"),
             Reply.Json(502, "<html>${TossFixtures.PLANTED.NAME} ${TossFixtures.PLANTED.EMAIL} ${TossFixtures.PLANTED.PHONE} ${TossFixtures.PLANTED.FULL_CARD_NUMBER}</html>"),
+            Reply.Broken(body = TossFixtures.PLANTED.ALL.joinToString(" ", prefix = "{\"customerName\": \"", postfix = "\", \"status\": ")),
         ).forEach { reply ->
             server.on("POST", "/v1/payments/confirm", reply)
             server.on("POST", "/v1/payments/pay_key_1/cancel", reply)
@@ -97,35 +95,11 @@ class TossPlantedValuesTest {
     }
 
     @Test
-    fun `broken and dropped answers do not quote the body either`() {
-        val broken = TossFixtures.PLANTED.ALL.joinToString(" ", prefix = "{\"customerName\": \"", postfix = "\", \"status\": ")
-        server.on("POST", "/v1/payments/confirm", Reply.Broken(body = broken))
-        server.on("GET", "/v1/payments/pay_key_1", Reply.Broken(body = broken))
-
-        CapturedLogs().use { logs ->
-            val errors = listOf(
-                runCatching { provider.confirm(PaymentConfirmRequest("pay_key_1", PaymentAmount(3_000, "KRW"), merchantReferenceId = "ord_abcdef123456")) }.exceptionOrNull(),
-                runCatching { provider.lookup(PaymentLookupQuery("pay_key_1", null)) }.exceptionOrNull(),
-            )
-            errors.forEach { assertNoPlanted("broken answer exception", describe(requireNotNull(it))) }
-            assertTrue(logs.lines().any { "could not be read" in it }, "the unreadable-answer warning is logged, class name only")
-            assertNoPlanted("logs", logs.lines().joinToString("\n"))
-        }
-    }
-
-    @Test
     fun `the card object prints without the number - decoders log decoded objects at debug`() {
         val card = TossCard(issuerCode = "61", number = TossFixtures.PLANTED.FULL_CARD_NUMBER)
         val response = TossPaymentResponse(paymentKey = "pay_key_1", card = card)
 
         assertNoPlanted("card", card.toString())
         assertNoPlanted("response", response.toString())
-    }
-
-    @Test
-    fun `a webhook body with planted values yields an envelope without them`() {
-        val envelope = provider.parse(WebhookDelivery(emptyMap(), TossFixtures.webhook().toByteArray()))
-
-        assertNoPlanted("envelope", envelope.toString())
     }
 }

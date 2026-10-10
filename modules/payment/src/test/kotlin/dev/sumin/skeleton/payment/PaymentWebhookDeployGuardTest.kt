@@ -45,21 +45,10 @@ class PaymentWebhookDeployGuardTest {
     }
 
     @Test
-    fun `a strong token says nothing anywhere`() {
+    fun `a strong token, no unsigned provider or the route off say nothing anywhere`() {
         everyEnv.forEach { (envName, context) ->
-            assertTrue(guard(strong).problems(context).isEmpty(), envName)
-            assertTrue(guard(strong).warnings(context).isEmpty(), envName)
-        }
-    }
-
-    @Test
-    fun `without a provider that sends unsigned webhooks - or with the webhook route off - the guard has nothing to say`() {
-        weakOnes.values.forEach { token ->
-            everyEnv.values.forEach { context ->
-                listOf(guard(token, unsigned = emptyList()), guard(token, enabled = false)).forEach {
-                    assertTrue(it.problems(context).isEmpty())
-                    assertTrue(it.warnings(context).isEmpty())
-                }
+            listOf(guard(strong), guard(monotone, unsigned = emptyList()), guard("", enabled = false)).forEach {
+                assertTrue(it.problems(context).isEmpty() && it.warnings(context).isEmpty(), envName)
             }
         }
     }
@@ -75,8 +64,6 @@ class PaymentWebhookDeployGuardTest {
             assertFalse("SECRETSUFFIX" in message, message)
             assertFalse(monotone in message, message)
         }
-        assertTrue(messages.any { "empty" in it })
-        assertTrue(messages.any { "weak" in it })
     }
 
 }

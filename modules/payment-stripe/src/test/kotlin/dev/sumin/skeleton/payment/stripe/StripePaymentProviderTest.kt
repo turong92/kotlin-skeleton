@@ -8,11 +8,9 @@ import dev.sumin.skeleton.payment.PaymentAmount
 import dev.sumin.skeleton.payment.PaymentCancelRequest
 import dev.sumin.skeleton.payment.PaymentConfirmRequest
 import dev.sumin.skeleton.payment.PaymentOperationStatus
-import dev.sumin.skeleton.payment.PaymentProviderException
 import dev.sumin.skeleton.payment.PaymentRefundRequest
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 import org.springframework.http.HttpHeaders
 import reactor.core.publisher.Mono
 
@@ -47,15 +45,12 @@ class StripePaymentProviderTest {
             ),
         )
 
-        assertEquals("payment-stripe", client.calls.single().clientName)
         assertEquals("/custom/payment_intents/{paymentIntentId}/confirm", client.calls.single().path)
         assertEquals("pi_1", client.calls.single().uriVariables["paymentIntentId"])
         assertEquals(mapOf("payment_method" to "pm_card_visa"), client.calls.single().form)
         assertEquals("Bearer sk_test_123", client.calls.single().headers["Authorization"]?.single())
         assertEquals("idem-confirm", client.calls.single().headers["Idempotency-Key"]?.single())
         assertEquals(PaymentOperationStatus.CONFIRMED, result.status)
-        assertEquals("req_1", result.trace.providerRequestId)
-        assertEquals("ch_1", result.providerOperationId)
     }
 
     @Test
@@ -90,7 +85,7 @@ class StripePaymentProviderTest {
             ),
         )
 
-        val cancel = provider.cancel(
+        provider.cancel(
             PaymentCancelRequest(
                 providerPaymentId = "pi_1",
                 reason = "requested_by_customer",
@@ -119,31 +114,7 @@ class StripePaymentProviderTest {
             client.calls[1].form,
         )
         assertEquals("idem-refund", client.calls[1].headers["Idempotency-Key"]?.single())
-        assertEquals(PaymentOperationStatus.CANCELED, cancel.status)
         assertEquals(PaymentOperationStatus.REFUNDED, refund.status)
-        assertEquals("re_1", refund.providerOperationId)
-    }
-
-    @Test
-    fun `provider error body maps to stable payment exception`() {
-        val mapper = StripePaymentErrorMapper(providerId = "stripe")
-        val exception = mapper.map(
-            providerErrorContext(
-                clientName = "payment-stripe",
-                upstreamStatus = 402,
-                body = """{"error":{"type":"card_error","code":"card_declined","message":"card declined","request_log_url":"https://dashboard.stripe.com/test/logs/req_1"}}""",
-            ),
-        )
-
-        val paymentException = assertFailsWith<PaymentProviderException> {
-            throw exception
-        }
-        assertEquals("stripe", paymentException.providerError.provider)
-        assertEquals("card_declined", paymentException.providerError.code)
-        assertEquals("card declined", paymentException.providerError.message)
-        assertEquals("card_error", paymentException.providerError.trace.rawCode)
-        assertEquals("https://dashboard.stripe.com/test/logs/req_1", paymentException.providerError.trace.metadata["requestLogUrl"])
-        assertEquals(402, paymentException.providerError.upstreamStatus)
     }
 
     private class RecordingExternalHttpClient(

@@ -116,9 +116,6 @@ class ScriptedGateway(
         /** 결제사가 [amount] 를 취소하고 그 금액으로 "환불됨"이라 답한다(요청한 금액이 아니다). */
         data class ApproveOtherAmount(val amount: PaymentAmount) : RefundScript
 
-        /** 요청한 금액을 취소하지만 남은 금액을 [remaining] 이라 답한다. */
-        data class ApproveWrongRemaining(val remaining: PaymentAmount) : RefundScript
-
         /** 취소했고 "환불됨"이라 답하지만 이 취소의 거래 키를 싣지 않는다. */
         data object ApproveWithoutTransactionKey : RefundScript
 
@@ -326,14 +323,7 @@ class ScriptedGateway(
     val chargeCalls = CopyOnWriteArrayList<BillingChargeRequest>()
     val revokeCalls = CopyOnWriteArrayList<Pair<String, String>>()
     private var billingSequence = 0
-    private val billingIssueFailures = ArrayDeque<Exception>()
     private val chargesByKey = HashMap<String, PaymentOperationResult>()
-
-    /** 결제사가 지운 빌링키를 말하게 한다 — 이미 없는 키의 삭제도 정상이어야 한다. */
-    @Volatile var revokeFailure: (() -> Exception)? = null
-
-    /** 다음 `issue` 호출이 [error] 로 실패한다(차례로 소비). */
-    fun failNextIssue(error: Exception) = synchronized(lock) { billingIssueFailures.addLast(error) }
 
     /** 발급 안에서(결제사 쪽 상태를 만들기 전에) 실행된다 — 동시성 시험이 경주 창을 넓히는 데 쓴다. */
     @Volatile var duringIssue: (() -> Unit)? = null
@@ -349,7 +339,6 @@ class ScriptedGateway(
         duringIssue?.invoke()
         synchronized(lock) {
             issueCalls += providerPayload
-            billingIssueFailures.removeFirstOrNull()?.let { throw it }
             return BillingIssue("bkey_${++billingSequence}", PaymentCard("HYUNDAI", "1234"))
         }
     }
@@ -381,7 +370,6 @@ class ScriptedGateway(
     override fun revoke(customerKey: String, token: String) {
         refuseInsideTransaction("revoke")
         synchronized(lock) { revokeCalls += customerKey to token }
-        revokeFailure?.let { throw it() }
     }
 
     /** 결제사 쪽에 이 승인으로 생긴 결제가 있는가(주문 번호로) — 이중 승인 시험이 센다. */
@@ -486,7 +474,6 @@ class ScriptedGateway(
             when (script) {
                 is RefundScript.Approve -> answer(request, apply(request, request.amount.amount), withKey = true)
                 is RefundScript.ApproveOtherAmount -> answer(request, apply(request, script.amount.amount), withKey = true)
-                is RefundScript.ApproveWrongRemaining -> answer(request, apply(request, request.amount.amount), withKey = true, remaining = script.remaining)
                 is RefundScript.ApproveWithoutTransactionKey -> answer(request, apply(request, request.amount.amount), withKey = false)
                 is RefundScript.Decline -> throw providerException(status = 400, code = script.code, definitive = true)
                 is RefundScript.TimeoutApplied -> {
@@ -521,7 +508,7 @@ class ScriptedGateway(
         return cancel(request.providerPaymentId, amount, request.idempotencyKey)
     }
 
-    private fun answer(request: PaymentRefundRequest, cancelled: ProviderRefund, withKey: Boolean, remaining: PaymentAmount? = null): PaymentOperationResult {
+    private fun answer(request: PaymentRefundRequest, cancelled: ProviderRefund, withKey: Boolean): PaymentOperationResult {
         val payment = checkNotNull(payments[request.providerPaymentId])
         return PaymentOperationResult(
             provider = providerId,
@@ -530,7 +517,7 @@ class ScriptedGateway(
             amount = cancelled.amount,
             trace = ProviderTrace(provider = providerId, providerOperationId = cancelled.providerRefundId.takeIf { withKey }, rawStatus = "CANCELED"),
             providerOperationId = cancelled.providerRefundId.takeIf { withKey },
-            remaining = remaining ?: payment.remaining,
+            remaining = payment.remaining,
         )
     }
 

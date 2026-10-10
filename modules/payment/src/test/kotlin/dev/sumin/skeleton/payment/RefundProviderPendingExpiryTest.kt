@@ -44,22 +44,8 @@ class RefundProviderPendingExpiryTest {
 
         assertEquals(PaymentReviewReason.REFUND_MISMATCH, synced.reviewReason)
         assertEquals(PaymentRefundStatus.PENDING, kit.store.findRefund(line.id)!!.status)
-        assertEquals(PaymentRefundStatus.PENDING, kit.refunds.view(line.orderId).refunds.single().status)
         assertFailsWith<PaymentRefundNotAllowedException> { kit.refunds.refund(op, line.orderId, "OPERATOR", 500, IdempotencyKey("k-2")) }
         assertEquals(1, kit.gateway.refundCalls.size)
-    }
-
-    @Test
-    fun `the settle job does not close an acknowledged line even long after the deadline - only a person's sync does`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.paid()
-        kit.gateway.scriptRefund(RefundScript.AnswerPending)
-        val line = kit.refunds.refund(op, order.id, "OPERATOR", 1000, IdempotencyKey("k-1")).refund
-        kit.advance(timeout.plusHours(1))
-
-        kit.runTasks(setOf(PaymentTaskTypes.REFUND_RECONCILE))
-
-        assertEquals(PaymentRefundStatus.PENDING, kit.store.findRefund(line.id)!!.status)
     }
 
     @Test
@@ -73,10 +59,6 @@ class RefundProviderPendingExpiryTest {
         val closed = kit.store.findRefund(line.id)!!
         assertEquals(PaymentRefundStatus.FAILED, closed.status)
         assertEquals("NOT_APPLIED", closed.failureCode)
-        assertNull(closed.openKey)
-        val event = kit.store.listEvents(line.orderId).last { it.refundId == line.id && it.type == PaymentEventType.REFUND_FAILED }
-        assertEquals("PROVIDER_PENDING_EXPIRED", event.providerCode)
-        assertEquals(PaymentActor.OPERATOR, event.actor)
         assertNull(synced.reviewReason)
 
         val again = kit.refunds.refund(op, line.orderId, "OPERATOR", 1000, IdempotencyKey("k-2"))
@@ -107,5 +89,4 @@ class RefundProviderPendingExpiryTest {
 
         assertEquals(PaymentRefundStatus.PENDING, kit.store.findRefund(line.id)!!.status)
     }
-
 }

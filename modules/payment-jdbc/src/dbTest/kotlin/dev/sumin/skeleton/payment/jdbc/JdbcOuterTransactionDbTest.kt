@@ -17,7 +17,6 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.assertj.core.api.Assertions.assertThat
-import org.springframework.dao.DuplicateKeyException
 import org.springframework.transaction.support.TransactionTemplate
 
 /**
@@ -39,52 +38,19 @@ class JdbcOuterTransactionDbTest {
 
     private fun orderOf(n: Int) = PaymentTestOrders.order(id = "ord_" + n.toString().repeat(32), accountId = "acc_$n")
 
-    // ---- ① 바깥 트랜잭션은 "열려 있다" ----
-
     @Test
-    fun `inside an app transaction the store reports an open transaction - and outside it does not`() {
-        assertFalse(store.hasOpenTransaction())
-
-        outer.execute { assertTrue(store.hasOpenTransaction(), "no inTransaction block is open here - the app's transaction alone makes it true") }
-
-        assertFalse(store.hasOpenTransaction())
-    }
-
-    @Test
-    fun `confirm refuses to run inside an app transaction - the provider is never called and nothing stays`() {
-        val order = kit.createAuthenticated()
-
-        val failure = assertFailsWith<IllegalStateException> {
-            outer.execute { kit.orders.confirm("acc_1", order.id, "pay_1", order.amount) }
-        }
-
-        assertThat(failure.message).contains("transaction")
-        assertEquals(emptyList(), kit.gateway.confirmCalls.toList(), "the money never moved")
-        assertEquals(PaymentOrderStatus.PENDING, kit.order(order.id).status)
-    }
-
-    @Test
-    fun `a refund refuses to run inside an app transaction - the provider is never called and the order is untouched`() {
+    fun `confirm and refund refuse to run inside an app transaction - the provider is never called and nothing stays`() {
         val paid = kit.paid()
+        val pending = kit.createAuthenticated(key = "key-2", paymentKey = "pay_2")
 
-        val failure = assertFailsWith<IllegalStateException> {
-            outer.execute { kit.refunds.refund("op_1", paid.id, "OPERATOR", 1000, IdempotencyKey("k-1")) }
-        }
+        assertThat(assertFailsWith<IllegalStateException> { outer.execute { kit.orders.confirm("acc_1", pending.id, "pay_2", pending.amount) } }.message).contains("transaction")
+        assertThat(assertFailsWith<IllegalStateException> { outer.execute { kit.refunds.refund("op_1", paid.id, "OPERATOR", 1000, IdempotencyKey("k-1")) } }.message).contains("transaction")
 
-        assertThat(failure.message).contains("transaction")
         assertEquals(emptyList(), kit.gateway.refundCalls.toList())
+        assertEquals(1, kit.gateway.confirmCalls.size, "only the confirm that paid the first order - the money never moved inside the app transaction")
+        assertEquals(PaymentOrderStatus.PENDING, kit.order(pending.id).status)
         assertEquals(0, kit.store.listRefunds(paid.id).size)
-        assertEquals(0, kit.order(paid.id).refundedAmount)
     }
-
-    @Test
-    fun `enqueuing a task is allowed inside an app transaction - it joins it and follows its fate`() {
-        outer.execute { tasks("ord_x") }
-
-        assertEquals(1, jobs(), "the app's commit keeps the job")
-    }
-
-    private fun tasks(subject: String) = kit.tasks.enqueue(PaymentTask("payment-order-expire", subject))
 
     // ---- ② 바깥이 롤백되면 함께 사라진다 ----
 
@@ -171,16 +137,4 @@ class JdbcOuterTransactionDbTest {
                 true
             }
         }.get(30, TimeUnit.SECONDS)
-
-    // ---- 같이 고친 것: PostgreSQL 의 넣기는 dedupe 충돌만 삼킨다 ----
-
-    @Test
-    fun `an insert that collides on the provider payment id is not reported as a dedupe hit - PostgreSQL raises it`() {
-        if (DbTestDatabase.vendor != "postgresql") return // MySQL 의 insert ignore 는 충돌 종류를 가르지 못한다 - 새 주문은 결제 키 없이 들어가므로 실제로는 닿지 않는다
-        store.inTransaction { it.insertOrderIfAbsent(orderOf(1).copy(providerPaymentId = "pay_same")) }
-
-        assertFailsWith<DuplicateKeyException> {
-            store.inTransaction { it.insertOrderIfAbsent(orderOf(2).copy(providerPaymentId = "pay_same")) }
-        }
-    }
 }

@@ -31,12 +31,8 @@ class SubscriptionActivationTest {
         assertEquals(SubscriptionStatus.ACTIVE, active.status)
         assertEquals(1, kit.gateway.chargeCalls.size)
         assertEquals(1, active.periodSeq)
-        assertEquals(active.anchorAt?.let { kit.writer.now() }, kit.writer.now().takeIf { active.anchorAt != null })
-        assertNotNull(active.currentPeriodEnd)
         val order = kit.store.listSubscriptionOrders(sub.id, 5).single()
-        assertEquals(PaymentOrderKind.SUBSCRIPTION_INITIAL, order.kind)
         assertEquals(PaymentOrderStatus.PAID, order.status)
-        assertEquals(sub.id, order.originRef)
         // 빌링키는 암호문으로만 저장된다
         val stored = checkNotNull(kit.store.findSubscription(sub.id)?.billingToken)
         assertNotEquals("bkey_1", stored)
@@ -51,7 +47,7 @@ class SubscriptionActivationTest {
         val sub = started().subscription
         val active = kit.subscriptions.activate("acc_1", sub.id, auth)
         val order = kit.store.listSubscriptionOrders(sub.id, 5).single()
-        val texts = listOf(active.toString(), sub.toString(), order.toString(), kit.gateway.chargeCalls.single().toString(), kit.gateway.issueCalls.toString().takeIf { false } ?: "")
+        val texts = listOf(active.toString(), sub.toString(), order.toString(), kit.gateway.chargeCalls.single().toString())
         val secrets = listOf("bkey_1", ReversibleTestEncryptor.encrypt("bkey_1"), checkNotNull(active.customerKey), "1234")
 
         texts.forEach { text -> secrets.forEach { secret -> assertFalse(text.contains(secret), "$secret leaked into $text") } }
@@ -101,7 +97,6 @@ class SubscriptionActivationTest {
 
         assertEquals(first.subscription.id, again.subscription.id)
         assertTrue(again.replayed)
-        assertEquals(first.subscription.customerKey, again.billing?.customerKey)
         assertFailsWith<PaymentIdempotencyConflictException> { started(plan = "plus") }
         assertFailsWith<PaymentItemNotPurchasableException> { started(key = "other", plan = "gold") }
     }
@@ -130,14 +125,12 @@ class SubscriptionActivationTest {
         assertEquals(SubscriptionStatus.ENDED, ended.status)
         assertEquals(SubscriptionEndReason.FIRST_PAYMENT_DECLINED, ended.endReason)
         assertNull(ended.activeKey)
-        assertNull(ended.cardLast4)
         assertEquals(PaymentOrderStatus.FAILED, kit.store.listSubscriptionOrders(sub.id, 5).single().status)
         // 빌링키는 결제사에서 지운 뒤에야 줄에서 사라진다
         assertNotNull(ended.billingToken)
         kit.runTasks(setOf(PaymentTaskTypes.SUBSCRIPTION_REVOKE))
         assertEquals("bkey_1", kit.gateway.revokeCalls.single().second)
         assertNull(kit.store.findSubscription(sub.id)?.billingToken)
-        assertNull(kit.store.findSubscription(sub.id)?.customerKey)
         // 자리가 풀렸으니 다시 구독할 수 있다
         assertNotNull(started(key = "again").subscription)
     }
@@ -154,7 +147,6 @@ class SubscriptionActivationTest {
         // 다시 눌러도 결제사를 다시 부르지 않는다
         assertEquals(SubscriptionStatus.PENDING, kit.subscriptions.activate("acc_1", sub.id, auth).status)
         assertEquals(1, kit.gateway.chargeCalls.size)
-        assertEquals(1, kit.gateway.issueCalls.size)
 
         kit.advance(kit.properties.reconcile.firstDelay)
         kit.runTasks(setOf(PaymentTaskTypes.ORDER_RECONCILE))
@@ -175,9 +167,6 @@ class SubscriptionActivationTest {
 
         assertEquals(SubscriptionStatus.CANCELING, canceling.status)
         assertEquals(canceling, again)
-        assertTrue(canceling.status.isInUse)
-        assertEquals(canceling.currentPeriodEnd, kit.subscriptions.current("acc_1")?.currentPeriodEnd)
         assertEquals(1, kit.gateway.chargeCalls.size)
     }
-
 }

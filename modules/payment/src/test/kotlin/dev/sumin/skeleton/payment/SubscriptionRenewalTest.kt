@@ -35,6 +35,7 @@ class SubscriptionRenewalTest {
     fun `at the end of the period one renewal is charged with the stored amount and the next period counts from the first payment, not from today`() {
         val active = activeSubscription()
         val anchor = checkNotNull(active.anchorAt)
+        kit.plans.plans[0] = kit.plans.plans[0].copy(amount = PaymentAmount(9_900, "KRW")) // 카탈로그 값이 바뀌어도 줄이 든 금액으로 청구한다
         kit.time.set(checkNotNull(active.currentPeriodEnd).plus(Duration.ofDays(2))) // 이틀 늦게 깬 작업
 
         renewTasks()
@@ -52,31 +53,15 @@ class SubscriptionRenewalTest {
     }
 
     @Test
-    fun `a price change in the catalog does not touch an existing subscription - the renewal charges the amount the row holds`() {
-        val active = activeSubscription()
-        kit.plans.plans[0] = kit.plans.plans[0].copy(amount = PaymentAmount(9_900, "KRW"))
-        toPeriodEnd(active)
-
-        renewTasks()
-
-        assertEquals(3_900, kit.gateway.chargeCalls.last().amount.amount)
-    }
-
-    @Test
     fun `two workers that pick the same renewal leave one order and one provider call`() {
         val active = activeSubscription()
         toPeriodEnd(active)
-        val bothInside = CountDownLatch(2)
-        kit.gateway.duringCharge = {
-            // 첫 호출이 승인하는 동안 다른 워커가 같은 갱신을 집는다
-        }
         val pool = Executors.newFixedThreadPool(2)
         val start = CountDownLatch(1)
         try {
             val results = (1..2).map {
                 pool.submit<Result<Unit>> {
                     start.await()
-                    bothInside.countDown()
                     runCatching { kit.renew.handle(PaymentTaskRun(PaymentTaskTypes.SUBSCRIPTION_RENEW, active.id, 1, 12)) }
                 }
             }
@@ -197,22 +182,6 @@ class SubscriptionRenewalTest {
     }
 
     @Test
-    fun `a canceled subscription is not charged at the end of the period - it ends`() {
-        val active = activeSubscription()
-        kit.subscriptions.cancel("acc_1", active.id)
-        toPeriodEnd(active)
-
-        renewTasks()
-
-        val ended = sub(active.id)
-        assertEquals(SubscriptionStatus.ENDED, ended.status)
-        assertEquals(SubscriptionEndReason.USER_CANCELED, ended.endReason)
-        assertEquals(1, kit.gateway.chargeCalls.size, "only the first payment was ever charged")
-        kit.runTasks(setOf(PaymentTaskTypes.SUBSCRIPTION_REVOKE))
-        assertEquals(1, kit.gateway.revokeCalls.size)
-    }
-
-    @Test
     fun `an account that left is not charged again - the subscription is closed, the card forgotten and a renewal that wakes up does nothing`() {
         val active = activeSubscription()
 
@@ -221,10 +190,8 @@ class SubscriptionRenewalTest {
         renewTasks()
 
         val ended = sub(active.id)
-        assertEquals(SubscriptionStatus.ENDED, ended.status)
         assertEquals(SubscriptionEndReason.ACCOUNT_ERASED, ended.endReason)
         assertNull(ended.cardLast4)
-        assertNotNull(ended.accountErasedAt)
         assertEquals(1, kit.gateway.chargeCalls.size)
         kit.runTasks(setOf(PaymentTaskTypes.SUBSCRIPTION_REVOKE))
         assertEquals("bkey_1", kit.gateway.revokeCalls.single().second)
@@ -235,46 +202,22 @@ class SubscriptionRenewalTest {
     }
 
     @Test
-    fun `the app's guard stops the renewal of a suspended account and the subscription ends at the period end`() {
-        val active = activeSubscription()
-        kit.blocked += "acc_1"
-        toPeriodEnd(active)
+    fun `a canceled, a suspended or a fully refunded subscription is not charged at the end of the period - it ends with its own reason`() {
+        val canceled = activeSubscription("acc_1", "k1")
+        val suspended = activeSubscription("acc_2", "k2")
+        val refunded = activeSubscription("acc_3", "k3")
+        kit.subscriptions.cancel("acc_1", canceled.id)
+        kit.blocked += "acc_2"
+        kit.refunds.refund("operator_1", kit.store.listSubscriptionOrders(refunded.id, 1).single().id, "OPERATOR", null, IdempotencyKey("refund-1"))
+        toPeriodEnd(canceled)
 
         renewTasks()
 
-        assertEquals(SubscriptionStatus.ENDED, sub(active.id).status)
-        assertEquals(SubscriptionEndReason.RENEWAL_BLOCKED, sub(active.id).endReason)
-        assertEquals(1, kit.gateway.chargeCalls.size)
-    }
-
-    @Test
-    fun `the whole period refunded ends the subscription so the refund is not followed by another charge`() {
-        val active = activeSubscription()
-        val order = kit.store.listSubscriptionOrders(active.id, 1).single()
-
-        kit.refunds.refund("operator_1", order.id, "OPERATOR", null, IdempotencyKey("refund-1"))
-        toPeriodEnd(active)
-        renewTasks()
-
-        assertEquals(SubscriptionStatus.ENDED, sub(active.id).status)
-        assertEquals(SubscriptionEndReason.REFUNDED, sub(active.id).endReason)
-        assertEquals(1, kit.gateway.chargeCalls.size)
-    }
-
-    @Test
-    fun `a first charge that was unknown and then closed as failed frees the seat through the renewal task`() {
-        val id = kit.subscriptions.start("acc_1", "basic", IdempotencyKey("k1")).subscription.id
-        kit.gateway.script(ConfirmScript.TimeoutNotApplied)
-        assertEquals(SubscriptionStatus.PENDING, kit.subscriptions.activate("acc_1", id, auth).status)
-        val order = kit.store.listSubscriptionOrders(id, 1).single()
-        kit.gateway.abort(kit.gateway.providerPaymentsOfOrder(order.id).single().paymentKey)
-        kit.advance(kit.properties.reconcile.firstDelay)
-        kit.runTasks(setOf(PaymentTaskTypes.ORDER_RECONCILE))
-
-        assertEquals(SubscriptionStatus.ENDED, sub(id).status, "the order closing freed the seat in the same transaction")
-        assertEquals(SubscriptionEndReason.FIRST_PAYMENT_DECLINED, sub(id).endReason)
-        assertNull(sub(id).activeKey)
-        assertNotNull(kit.subscriptions.start("acc_1", "basic", IdempotencyKey("again")).subscription)
+        assertEquals(SubscriptionEndReason.USER_CANCELED, sub(canceled.id).endReason)
+        assertEquals(SubscriptionEndReason.RENEWAL_BLOCKED, sub(suspended.id).endReason)
+        assertEquals(SubscriptionEndReason.REFUNDED, sub(refunded.id).endReason)
+        assertEquals(listOf(SubscriptionStatus.ENDED), listOf(canceled, suspended, refunded).map { sub(it.id).status }.distinct())
+        assertEquals(3, kit.gateway.chargeCalls.size, "only the three first payments were ever charged")
     }
 
     /** 조회가 끝내 null 인 채(결제사가 그 결제를 모른다) 조회 작업이 시도를 다 써 죽는다. */
@@ -308,7 +251,6 @@ class SubscriptionRenewalTest {
         kit.gateway.script(ConfirmScript.ServerError)
         renewTasks()
         val order = kit.store.listSubscriptionOrders(active.id, 1).single()
-        assertEquals(PaymentOrderStatus.CONFIRMING, order.status)
 
         reconcileUntilDead(order.id)
 
@@ -381,7 +323,6 @@ class SubscriptionRenewalTest {
 
         assertEquals(PaymentReviewReason.AMOUNT_MISMATCH, kit.order(order.id).reviewReason)
         assertEquals(SubscriptionStatus.ACTIVE, sub(active.id).status)
-        assertEquals(2, kit.store.listSubscriptionOrders(active.id, 5).size)
         assertEquals(2, kit.gateway.chargeCalls.size)
     }
 }

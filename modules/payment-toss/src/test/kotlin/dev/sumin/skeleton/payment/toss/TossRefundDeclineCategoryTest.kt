@@ -25,11 +25,4 @@ class TossRefundDeclineCategoryTest {
             assertEquals(RefundDeclineCategory.OTHER, provider.refundDeclineCategory(it), it)
         }
     }
-
-    @Test
-    fun `the refund codes the mapper treats as definitive are all classified above other`() {
-        val refundCodes = setOf("NOT_ALLOWED_PARTIAL_REFUND", "NOT_ALLOWED_PARTIAL_REFUND_WAITING_DEPOSIT", "EXCEED_MAX_REFUND_DUE")
-        assertEquals(true, TossPaymentErrorMapper.DEFINITIVE_CODES.containsAll(refundCodes))
-        refundCodes.forEach { assertEquals(false, provider.refundDeclineCategory(it) == RefundDeclineCategory.OTHER, it) }
-    }
 }

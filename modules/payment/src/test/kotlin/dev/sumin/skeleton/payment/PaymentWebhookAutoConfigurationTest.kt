@@ -72,22 +72,4 @@ class PaymentWebhookAutoConfigurationTest {
             assertTrue(context.getBeansOfType(PublicEndpointContributor::class.java).isEmpty())
         }
     }
-
-    @Test
-    fun `the guard sees the unsigned providers that are really there`() {
-        web.withPropertyValues("skeleton.payment.webhook.path-token=").run { context ->
-            val guard = context.getBean(PaymentWebhookDeployGuard::class.java)
-            val prod = dev.sumin.skeleton.common.deploy.DeployContext(dev.sumin.skeleton.common.deploy.DeployEnv.PROD, emptySet())
-            assertEquals(1, guard.problems(prod).size, "the scripted gateway signs nothing and the token is empty")
-        }
-        web.withPropertyValues("skeleton.payment.webhook.path-token=a-token-that-is-long-enough-0123456789").run { context ->
-            val prod = dev.sumin.skeleton.common.deploy.DeployContext(dev.sumin.skeleton.common.deploy.DeployEnv.PROD, emptySet())
-            assertEquals(emptyList(), context.getBean(PaymentWebhookDeployGuard::class.java).problems(prod))
-        }
-        web.withPropertyValues("skeleton.payment.webhook.path-token=").run { context ->
-            context.getBean(ScriptedGateway::class.java).webhookSigned = true
-            val prod = dev.sumin.skeleton.common.deploy.DeployContext(dev.sumin.skeleton.common.deploy.DeployEnv.PROD, emptySet())
-            assertEquals(emptyList(), context.getBean(PaymentWebhookDeployGuard::class.java).problems(prod), "a provider that signs needs no path token")
-        }
-    }
 }

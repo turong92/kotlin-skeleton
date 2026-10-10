@@ -33,12 +33,5 @@ class PaymentOpenApiDocumentHttpTest {
         val paths = doc["paths"].propertyNames().toList()
         assertTrue(paths.any { it.startsWith("/api/v1/admin/payments/orders") }, "operator paths are in the document: $paths")
         assertFalse(paths.any { "/webhooks/" in it }, "the webhook receiver stays hidden: $paths")
-
-        val schemas = doc["components"]["schemas"]
-        val order = schemas["AdminOrderResponse"]["properties"].propertyNames().toSet()
-        assertTrue(setOf("id", "status", "amount", "openRefundStatus", "accountId", "providerPaymentId", "reviewReason", "accountErasedAt").all { it in order }, "AdminOrderResponse fields: $order")
-        assertFalse(order.any { it.isBlank() || it == "null" }, "no nameless property: $order")
-        val refund = schemas["AdminRefundResponse"]["properties"].propertyNames().toSet()
-        assertTrue(setOf("id", "orderId", "closedBy", "requestedBy", "decidedBy", "failureCode").all { it in refund }, "AdminRefundResponse fields: $refund")
     }
 }

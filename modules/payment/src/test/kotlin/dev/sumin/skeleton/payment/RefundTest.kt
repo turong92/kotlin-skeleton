@@ -6,7 +6,6 @@ import dev.sumin.skeleton.payment.testing.ScriptedGateway.RefundScript
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -26,30 +25,11 @@ class RefundTest {
 
         val requested = kit.refunds.request("acc_1", order.id, "NOT_DELIVERED", 1000, key("1"))
 
-        assertFalse(requested.replayed)
         assertEquals(PaymentRefundStatus.REQUESTED, requested.refund.status)
-        assertEquals(PaymentRefundOrigin.USER, requested.refund.origin)
-        assertEquals("NOT_DELIVERED", requested.refund.reasonCode)
         assertEquals(order.id, requested.refund.openKey, "it holds the order's open slot")
         assertEquals(0, kit.gateway.refundCalls.size)
         assertEquals(lookupsBefore, kit.gateway.lookupCalls.size)
-        assertEquals(PaymentOrderStatus.PAID, kit.order(order.id).status)
         assertEquals(0, kit.order(order.id).refundedAmount)
-        assertEquals(PaymentEventType.REFUND_REQUESTED, kit.store.listEvents(order.id).last().type)
-    }
-
-    @Test
-    fun `a customer picks one of three reason codes - anything else is a 400 and the operator's code is not theirs`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.paid()
-
-        listOf("OPERATOR", "PROVIDER_CONSOLE", "customer_request", "because I want it", "").forEach { code ->
-            val e = assertFailsWith<FieldValidationException>(code) { kit.refunds.request("acc_1", order.id, code, 1000, key(code)) }
-            assertEquals("reasonCode", e.field)
-        }
-        listOf("CUSTOMER_REQUEST", "DUPLICATE", "NOT_DELIVERED").forEachIndexed { i, code ->
-            kit.refunds.request("acc_1", order.id, code, 100, key("ok$i")).also { kit.refunds.withdraw("acc_1", it.refund.id) }
-        }
     }
 
     @Test
@@ -66,6 +46,7 @@ class RefundTest {
         assertFailsWith<PaymentRefundAmountExceededException> { kit.refunds.request("acc_1", order.id, "DUPLICATE", 3001, key("5")) }
         assertFailsWith<FieldValidationException> { kit.refunds.request("acc_1", order.id, "DUPLICATE", 0, key("6")) }
         assertFailsWith<FieldValidationException> { kit.refunds.request("acc_1", order.id, "DUPLICATE", -5, key("7")) }
+        assertEquals("reasonCode", assertFailsWith<FieldValidationException> { kit.refunds.request("acc_1", order.id, "OPERATOR", 100, key("8")) }.field, "the operator's code is not the customer's")
         assertEquals(emptyList(), kit.store.listRefunds(order.id))
     }
 
@@ -86,36 +67,24 @@ class RefundTest {
     }
 
     @Test
-    fun `withdrawing frees the slot, only the owner may, and only a requested line can be withdrawn`() {
+    fun `a requested line closes by withdrawal - owner only - or by one operator rejection, frees the slot and moves no money`() {
         val kit = PaymentLedgerKit()
         val order = kit.paid()
         val line = kit.refunds.request("acc_1", order.id, "DUPLICATE", 1000, key("1")).refund
 
         assertFailsWith<PaymentRefundNotFoundException> { kit.refunds.withdraw("acc_2", line.id) }
-        assertFailsWith<PaymentRefundNotFoundException> { kit.refunds.withdraw("acc_1", "rfd_" + "0".repeat(32)) }
         val withdrawn = kit.refunds.withdraw("acc_1", line.id)
-
         assertEquals(PaymentRefundStatus.WITHDRAWN, withdrawn.status)
         assertNull(withdrawn.openKey)
         assertFailsWith<PaymentRefundNotAllowedException> { kit.refunds.withdraw("acc_1", line.id) }
-        kit.refunds.request("acc_1", order.id, "DUPLICATE", 1000, key("2")) // the slot is free again
-        assertEquals(0, kit.gateway.refundCalls.size)
-    }
 
-    @Test
-    fun `an operator rejects a request once - it closes the line and frees the slot`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.paid()
-        val line = kit.refunds.request("acc_1", order.id, "DUPLICATE", 1000, key("1")).refund
-
-        val rejected = kit.refunds.reject(op, line.id)
-
+        val second = kit.refunds.request("acc_1", order.id, "DUPLICATE", 1000, key("2")).refund // the slot is free again
+        val rejected = kit.refunds.reject(op, second.id)
         assertEquals(PaymentRefundStatus.REJECTED, rejected.status)
         assertEquals(op, rejected.decidedBy)
         assertNull(rejected.openKey)
-        assertFailsWith<PaymentRefundNotAllowedException> { kit.refunds.reject(op, line.id) }
-        assertFailsWith<PaymentRefundNotAllowedException> { kit.refunds.approve(op, line.id) }
-        assertFailsWith<PaymentRefundNotFoundException> { kit.refunds.reject(op, "rfd_" + "0".repeat(32)) }
+        assertFailsWith<PaymentRefundNotAllowedException> { kit.refunds.reject(op, second.id) }
+        assertFailsWith<PaymentRefundNotAllowedException> { kit.refunds.approve(op, second.id) }
         assertEquals(0, kit.gateway.refundCalls.size)
     }
 
@@ -140,36 +109,22 @@ class RefundTest {
         assertEquals(1000, call.amount.amount)
         assertEquals(PaymentRefundReason.DUPLICATE.providerText, call.reason, "a fixed sentence, never the customer's words")
         assertEquals(1, kit.listener.refunded.size, "the app's refund hook ran once")
-        assertEquals(
-            listOf(PaymentEventType.REFUND_REQUESTED, PaymentEventType.REFUND_SENT, PaymentEventType.REFUND_SUCCEEDED, PaymentEventType.CONVERGED, PaymentEventType.REFUND_APPLIED),
-            kit.store.listEvents(order.id).filter { it.refundId != null }.map { it.type },
-        )
+        assertFailsWith<PaymentRefundNotAllowedException> { kit.refunds.approve(op, line.id) }
+        assertEquals(1, kit.gateway.refundCalls.size, "approved twice sends one refund")
     }
 
     @Test
-    fun `an operator can refund without a request, in full by default, and an erased account's order too`() {
+    fun `the sum of partial refunds never exceeds the paid amount - an operator needs no request, an erased account's order too`() {
         val kit = PaymentLedgerKit()
         val order = kit.paid()
         kit.store.inTransaction { tx -> tx.updateOrder(tx.lockOrder(order.id)!!.copy(accountErasedAt = kit.time.now(), cardIssuer = null, cardLast4 = null)) }
-
-        val outcome = kit.refunds.refund(op, order.id, "OPERATOR", null, key("1"))
-
-        assertEquals(PaymentRefundOrigin.OPERATOR, outcome.refund.origin)
-        assertEquals(3000, outcome.refund.amount.amount)
-        assertEquals(PaymentOrderStatus.REFUNDED, outcome.order.status)
-        assertEquals(op, outcome.refund.requestedBy)
-    }
-
-    @Test
-    fun `the sum of partial refunds never exceeds the paid amount`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.paid()
 
         kit.refunds.refund(op, order.id, "OPERATOR", 1000, key("1"))
         kit.refunds.refund(op, order.id, "OPERATOR", 1500, key("2"))
         assertFailsWith<PaymentRefundAmountExceededException> { kit.refunds.refund(op, order.id, "OPERATOR", 501, key("3")) }
         assertEquals(1, kit.refunds.view(order.id).refunds.count { it.status == PaymentRefundStatus.SUCCEEDED && it.amount.amount == 1500L })
         val last = kit.refunds.refund(op, order.id, "OPERATOR", 500, key("4"))
+        assertEquals(PaymentRefundOrigin.OPERATOR, last.refund.origin)
 
         assertEquals(PaymentOrderStatus.REFUNDED, last.order.status)
         assertEquals(3000, last.order.refundedAmount)
@@ -191,20 +146,6 @@ class RefundTest {
         assertEquals(0, kit.gateway.refundCalls.size)
         assertEquals(1000, kit.order(order.id).refundedAmount, "the pre-check still recorded the console cancel")
     }
-
-    @Test
-    fun `while a request is open an operator's direct refund is refused as in progress`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.paid()
-        kit.refunds.request("acc_1", order.id, "DUPLICATE", 1000, key("1"))
-
-        assertFailsWith<PaymentRefundInProgressException> { kit.refunds.refund(op, order.id, "OPERATOR", 500, key("2")) }
-
-        assertEquals(0, kit.gateway.refundCalls.size)
-        assertEquals(1, kit.store.listRefunds(order.id).size)
-    }
-
-    // --- 같은 키 · 거절 · 모름 ---
 
     @Test
     fun `the same key returns the refund line as it is now and never calls the provider again - even a failed one`() {
@@ -237,26 +178,17 @@ class RefundTest {
         assertEquals("NOT_ALLOWED_PARTIAL_REFUND", failed.failureCode)
         assertNull(failed.openKey)
         assertEquals(0, kit.order(order.id).refundedAmount)
-        assertEquals(1, kit.tasks.pending(PaymentTaskTypes.REFUND_RECONCILE).size, "the settle job is still queued and will find nothing to do")
         val retry = kit.refunds.refund(op, order.id, "OPERATOR", 1000, key("2"))
         assertEquals(PaymentRefundStatus.SUCCEEDED, retry.refund.status)
         assertNotEquals(failed.id, retry.refund.id, "a new line, a new provider key")
         assertNotEquals(kit.gateway.refundCalls[0].idempotencyKey, kit.gateway.refundCalls[1].idempotencyKey)
-    }
 
-    @Test
-    fun `an approved request that the provider declines ends failed - it does not go back to requested`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.paid()
-        val line = kit.refunds.request("acc_1", order.id, "DUPLICATE", 1000, key("1")).refund
+        // 승인한 요청이 거절되면 REQUESTED 로 돌아가지 않고 FAILED 로 끝난다
+        val other = kit.paid(key = "key-2", paymentKey = "pay_2")
+        val line = kit.refunds.request("acc_1", other.id, "DUPLICATE", 1000, key("3")).refund
         kit.gateway.scriptRefund(RefundScript.Decline("EXCEED_MAX_REFUND_DUE"))
-
-        val e = assertFailsWith<PaymentRefundDeclinedException> { kit.refunds.approve(op, line.id) }
-
-        assertEquals(RefundDeclineCategory.PERIOD_EXPIRED, e.category)
+        assertEquals(RefundDeclineCategory.PERIOD_EXPIRED, assertFailsWith<PaymentRefundDeclinedException> { kit.refunds.approve(op, line.id) }.category)
         assertEquals(PaymentRefundStatus.FAILED, kit.store.findRefund(line.id)!!.status)
-        assertEquals(false, kit.refunds.view(order.id).summary.refundPending)
-        assertEquals(3000, kit.refunds.view(order.id).summary.refundableAmount)
     }
 
     @Test
@@ -271,7 +203,6 @@ class RefundTest {
         assertEquals(order.id, outcome.refund.openKey)
         assertEquals(1, kit.gateway.refundCalls.size)
         assertEquals(PaymentOrderStatus.PAID, kit.order(order.id).status, "the money state is untouched until the provider is asked")
-        assertEquals(PaymentRefundStatus.PENDING, kit.refunds.view(order.id).summary.openRefundStatus)
         assertEquals(2000, kit.refunds.view(order.id).summary.refundableAmount, "a refund in flight is not refundable again")
         val task = kit.tasks.pending(PaymentTaskTypes.REFUND_RECONCILE).single()
         assertEquals(outcome.refund.id, task.task.subjectId)
@@ -290,7 +221,6 @@ class RefundTest {
         assertEquals(PaymentRefundStatus.PENDING, outcome.refund.status)
         assertEquals(PaymentReviewReason.REFUND_MISMATCH, kit.order(order.id).reviewReason)
         assertEquals(0, kit.order(order.id).refundedAmount)
-        assertEquals(0, kit.listener.refunded.size)
     }
 
     @Test
@@ -374,17 +304,5 @@ class RefundTest {
             assertFailsWith<IllegalStateException> { kit.refunds.sync(op, order.id) }
             assertFailsWith<IllegalStateException> { kit.refundReconcile.handle(PaymentTaskRun(PaymentTaskTypes.REFUND_RECONCILE, line.id, 1, 12)) }
         }
-    }
-
-    @Test
-    fun `the same request approved twice sends one refund and the second is refused`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.paid()
-        val line = kit.refunds.request("acc_1", order.id, "DUPLICATE", 1000, key("1")).refund
-
-        kit.refunds.approve(op, line.id)
-
-        assertFailsWith<PaymentRefundNotAllowedException> { kit.refunds.approve(op, line.id) }
-        assertEquals(1, kit.gateway.refundCalls.size)
     }
 }

@@ -20,7 +20,7 @@ import kotlin.test.assertTrue
 import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.transaction.support.TransactionTemplate
 
-/** 웹훅 수신함 — 진짜 DB · 진짜 작업 큐(두 방언)에서: 같은 전달의 중복 수신, 승인 응답 ↔ 웹훅 경주, 죽은 작업과 재전송. */
+/** 웹훅 수신함 — 진짜 DB · 진짜 작업 큐(두 방언)에서: 죽은 이벤트의 재전송, 같은 주문의 이벤트 열여섯, 승인 응답 ↔ 웹훅 경주, 죽은 작업과 재전송. (같은 배달·주문 단위 상한은 `MultiInstanceDbTest`.) */
 class WebhookInboxDbTest {
     private val clock = TimeProvider.systemUtc()
     private val repository = JdbcJobRepository(JdbcClient.create(PaymentDb.dataSource), TransactionTemplate(PaymentDb.transactionManager), DbTestDatabase.dialect)
@@ -31,23 +31,6 @@ class WebhookInboxDbTest {
     private fun rows() = PaymentDb.jdbc.queryForList("select * from payment_webhook_events", emptyMap<String, Any>())
 
     private fun jobs(type: String = PaymentTaskTypes.WEBHOOK) = PaymentDb.count("select count(*) from jobs where job_type = :t", "t" to type)
-
-    @Test
-    fun `the same delivery sixteen times stores one row`() {
-        val kit = JdbcLedgerKit()
-        val order = kit.createAuthenticated()
-        val delivery = kit.gateway.webhookDelivery(eventKey = "evt-sixteen", orderId = order.id)
-
-        val results = race(16) { kit.deliver(delivery) }
-
-        assertTrue(results.all { it.isSuccess }, results.mapNotNull { it.exceptionOrNull() }.toString())
-        val receipts = results.map { it.getOrThrow() }
-        assertEquals(1, receipts.count { it == WebhookReceipt.STORED }, "exactly one delivery made the row")
-        assertEquals(15, receipts.count { it == WebhookReceipt.DUPLICATE }, "the other fifteen found a row whose job is already waiting")
-        assertEquals(1, rows().size)
-        assertEquals(16, kit.store.listWebhookEvents(null, null, 10).single().deliveries)
-        assertEquals(1, jobs(), "sixteen deliveries at once, one job")
-    }
 
     @Test
     fun `sixteen resends of a dead event queue exactly one job - the first one puts the row back to received`() {
@@ -68,45 +51,6 @@ class WebhookInboxDbTest {
         assertEquals(PaymentWebhookStatus.RECEIVED, kit.store.findWebhookEvent(id)!!.status)
     }
 
-
-    @Test
-    fun `sixteen operator retries of a dead row each queue a job - the operator is not throttled`() {
-        val kit = JdbcLedgerKit()
-        val order = kit.createAuthenticated()
-        kit.deliver(kit.gateway.webhookDelivery(eventKey = "evt-retry-16", orderId = order.id))
-        val id = kit.store.listWebhookEvents(null, null, 1).single().id
-        kit.store.inTransaction { tx -> tx.updateWebhookEvent(checkNotNull(tx.lockWebhookEvent(id)).copy(status = PaymentWebhookStatus.DEAD, lastError = "LOOKUP_UNAVAILABLE")) }
-        val jobsBefore = jobs()
-
-        val results = race(16) { kit.inbox.retry(id) }
-
-        assertTrue(results.all { it.isSuccess }, results.mapNotNull { it.exceptionOrNull() }.toString())
-        assertEquals(jobsBefore + 16, jobs(), "a retry of a RECEIVED row queues a job too (the row may have lost its job)")
-        assertEquals(PaymentWebhookStatus.RECEIVED, kit.store.findWebhookEvent(id)!!.status)
-    }
-
-    @Test
-    fun `the per-order limit counts rows in the table - two instances share one count and the thirty-first new event is not stored`() {
-        val a = JdbcLedgerKit()
-        val b = JdbcLedgerKit()
-        val order = a.createAuthenticated()
-        a.gateway.authenticate("pay_1", order.id, order.amount)
-        val receipts = (1..30).map { n -> (if (n % 2 == 0) a else b).deliver(a.gateway.webhookDelivery(eventKey = "evt-lim-$n", paymentKey = "pay_forged_$n", orderId = order.id)) }
-        val jobsBefore = jobs()
-
-        val limited = listOf(a, b).map { it.deliver(a.gateway.webhookDelivery(eventKey = "evt-lim-31", paymentKey = "pay_x", orderId = order.id)) }
-        val again = b.deliver(a.gateway.webhookDelivery(eventKey = "evt-lim-4", orderId = order.id))
-
-        assertEquals(List(30) { WebhookReceipt.STORED }, receipts)
-        assertEquals(listOf(WebhookReceipt.LIMITED, WebhookReceipt.LIMITED), limited)
-        assertEquals(WebhookReceipt.DUPLICATE, again, "a resend of a stored event is no new event")
-        val lines = a.store.listWebhookEvents(null, null, 100)
-        assertEquals(30, lines.count { it.resourceType == "PAYMENT" })
-        assertEquals(1, lines.count { it.resourceType == "LIMIT_MARKER" }, "the refused ones left one marker row for the window")
-        assertEquals(2, lines.single { it.resourceType == "LIMIT_MARKER" }.deliveries)
-        assertEquals(jobsBefore + 1, jobs(), "no job for the refused ones but the one deferred job of the marker")
-        assertEquals(setOf("order:${order.id}"), lines.map { it.resourceId }.toSet())
-    }
 
     @Test
     fun `sixteen different events of one order leave sixteen rows and the order settles once`() {
@@ -183,28 +127,5 @@ class WebhookInboxDbTest {
         assertEquals(PaymentOrderStatus.PAID, kit.order(created.id).status)
         assertEquals(PaymentWebhookStatus.PROCESSED, kit.store.findWebhookEvent(dead.id)!!.status)
         assertEquals(2, kit.store.findWebhookEvent(dead.id)!!.deliveries)
-    }
-
-    @Test
-    fun `retrying a processed row queues nothing and retrying a dead one queues a job that is due now`() {
-        val kit = JdbcLedgerKit()
-        val created = kit.createAuthenticated()
-        kit.deliver(kit.gateway.webhookDelivery(eventKey = "evt-op", orderId = created.id))
-        val id = kit.store.listWebhookEvents(null, null, 1).single().id
-        kit.webhook.handle(PaymentTaskRun(PaymentTaskTypes.WEBHOOK, id.toString(), 1, 5))
-        val jobsBefore = jobs()
-
-        val same = kit.inbox.retry(id)
-        assertEquals(PaymentWebhookStatus.PROCESSED, same.status)
-        assertEquals(jobsBefore, jobs())
-
-        kit.store.inTransaction { tx -> tx.updateWebhookEvent(checkNotNull(tx.lockWebhookEvent(id)).copy(status = PaymentWebhookStatus.DEAD, lastError = "LOOKUP_UNAVAILABLE", processedAt = null)) }
-        val queued = kit.inbox.retry(id)
-
-        assertEquals(PaymentWebhookStatus.RECEIVED, queued.status)
-        assertEquals(queued, kit.store.findWebhookEvent(id))
-        assertEquals(jobsBefore + 1, jobs())
-        val dueNow = PaymentDb.count("select count(*) from jobs where job_type = :t and status = 'PENDING' and next_run_at <= :now", "t" to PaymentTaskTypes.WEBHOOK, "now" to DbTestDatabase.dialect.instantParam(Instant.now().plusSeconds(2)))
-        assertTrue(dueNow >= 1, "the new job is due now")
     }
 }

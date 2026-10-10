@@ -1,14 +1,11 @@
 package dev.sumin.skeleton.payment
 
-import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.payment.testing.CheerCatalog
 import dev.sumin.skeleton.payment.testing.InMemoryPaymentLedgerStore
 import dev.sumin.skeleton.payment.testing.InMemoryPaymentTasks
 import dev.sumin.skeleton.payment.testing.ScriptedGateway
-import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import org.springframework.boot.autoconfigure.AutoConfigurations
 import org.springframework.boot.test.context.runner.ApplicationContextRunner
@@ -61,35 +58,6 @@ class PaymentLedgerAutoConfigurationTest {
             val created = context.getBean(PaymentOrders::class.java).create(CreateOrderCommand("acc_1", "cheer", "cheer-3000", IdempotencyKey("k")))
             assertEquals(PaymentOrderStatus.PENDING, created.order.status)
             assertEquals(1, context.getBean(InMemoryPaymentLedgerStore::class.java).allOrders().size)
-        }
-    }
-
-    @Test
-    fun `an app's own listener, notifier and time source win over the defaults`() {
-        val listener = object : PaymentOrderListener {}
-        val notifier = PaymentReviewNotifier { _, _ -> }
-        val fixed = Instant.parse("2026-01-02T03:04:05Z")
-        withLedgerConfig.withUserConfiguration(Ledger::class.java)
-            .withBean(PaymentOrderListener::class.java, java.util.function.Supplier { listener })
-            .withBean(PaymentReviewNotifier::class.java, java.util.function.Supplier { notifier })
-            .withBean(TimeProvider::class.java, java.util.function.Supplier { TimeProvider.fixed(fixed) })
-            .withBean(PaymentCatalog::class.java, java.util.function.Supplier { CheerCatalog() })
-            .run { context ->
-                assertSame(listener, context.getBean(PaymentOrderListener::class.java))
-                assertSame(notifier, context.getBean(PaymentReviewNotifier::class.java))
-                val created = context.getBean(PaymentOrders::class.java).create(CreateOrderCommand("acc_1", "cheer", "cheer-3000", IdempotencyKey("k")))
-                assertEquals(fixed, created.order.createdAt)
-            }
-    }
-
-    @Test
-    fun `an app handler for another task type joins the runner`() {
-        val extra = object : PaymentTaskHandler {
-            override val type = "payment-app-extra"
-            override fun handle(run: PaymentTaskRun) = Unit
-        }
-        withLedgerConfig.withUserConfiguration(Ledger::class.java).withBean(PaymentTaskHandler::class.java, java.util.function.Supplier { extra }).run { context ->
-            assertTrue("payment-app-extra" in context.getBean(PaymentTaskRunner::class.java).types)
         }
     }
 

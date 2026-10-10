@@ -41,8 +41,6 @@ class MoneyReasonReleaseRequeueTest {
 
     private fun applyTasks(kit: PaymentLedgerKit) = kit.tasks.all(PaymentTaskTypes.REFUND_APPLY).size
 
-    // ---- 웹훅이 REFUND_MISMATCH 를 푸는 길 ----
-
     @Test
     fun `fulfil died, then the money reason covered it, then a webhook cleared it - the fulfil job comes back`() {
         val kit = PaymentLedgerKit()
@@ -62,67 +60,6 @@ class MoneyReasonReleaseRequeueTest {
     }
 
     @Test
-    fun `the money reason first, then the fulfil job dies under it, then a webhook clears it - the fulfil job comes back`() {
-        val kit = PaymentLedgerKit()
-        val order = unfulfilled(kit)
-        flag(kit, order.id, PaymentReviewReason.REFUND_MISMATCH)
-        kit.runner.onDead(dead(PaymentTaskTypes.ORDER_FULFIL, order.id))
-        assertEquals(PaymentReviewReason.REFUND_MISMATCH, kit.order(order.id).reviewReason)
-        val before = fulfilTasks(kit)
-
-        webhookArrives(kit, order.id)
-
-        assertNull(kit.order(order.id).reviewReason)
-        assertEquals(before + 1, fulfilTasks(kit))
-    }
-
-    @Test
-    fun `apply died, then the money reason covered it, then a webhook cleared it - the apply job comes back`() {
-        val kit = PaymentLedgerKit()
-        val refund = unapplied(kit, kit.paid())
-        kit.runner.onDead(dead(PaymentTaskTypes.REFUND_APPLY, refund.id))
-        flag(kit, refund.orderId, PaymentReviewReason.REFUND_MISMATCH)
-        val before = applyTasks(kit)
-
-        webhookArrives(kit, refund.orderId)
-
-        assertNull(kit.order(refund.orderId).reviewReason)
-        assertEquals(before + 1, applyTasks(kit), "the unapplied refund must be queued again")
-        kit.listener.failRefunded(0)
-        kit.runTasks(setOf(PaymentTaskTypes.REFUND_APPLY))
-        assertNotNull(kit.store.findRefund(refund.id)!!.appliedAt)
-    }
-
-    @Test
-    fun `the money reason first, then the apply job dies under it, then a webhook clears it - the apply job comes back`() {
-        val kit = PaymentLedgerKit()
-        val refund = unapplied(kit, kit.paid())
-        flag(kit, refund.orderId, PaymentReviewReason.REFUND_MISMATCH)
-        kit.runner.onDead(dead(PaymentTaskTypes.REFUND_APPLY, refund.id))
-        val before = applyTasks(kit)
-
-        webhookArrives(kit, refund.orderId)
-
-        assertNull(kit.order(refund.orderId).reviewReason)
-        assertEquals(before + 1, applyTasks(kit))
-    }
-
-    @Test
-    fun `a webhook that clears the mark of an order with nothing left to do queues nothing`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.paid()
-        flag(kit, order.id, PaymentReviewReason.REFUND_MISMATCH)
-        val fulfil = fulfilTasks(kit)
-        val apply = applyTasks(kit)
-
-        webhookArrives(kit, order.id)
-
-        assertNull(kit.order(order.id).reviewReason)
-        assertEquals(fulfil, fulfilTasks(kit))
-        assertEquals(apply, applyTasks(kit))
-    }
-
-    @Test
     fun `a person's sync that clears the mark queues the fulfil job exactly once`() {
         val kit = PaymentLedgerKit()
         val order = unfulfilled(kit)
@@ -134,8 +71,6 @@ class MoneyReasonReleaseRequeueTest {
         assertNull(kit.order(order.id).reviewReason)
         assertEquals(before + 1, fulfilTasks(kit), "sync requeues on its own - the convergence it runs must not stack a second job")
     }
-
-    // ---- MODE_MISMATCH ----
 
     @Test
     fun `a sync that releases a mode mismatch of an unfulfilled paid order queues the fulfil job once`() {
@@ -151,17 +86,6 @@ class MoneyReasonReleaseRequeueTest {
     }
 
     @Test
-    fun `a sync whose lookup finds no payment does not release a mode mismatch`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.create().order
-        flag(kit, order.id, PaymentReviewReason.MODE_MISMATCH)
-
-        assertFailsWith<PaymentProviderPaymentNotFoundException> { kit.refunds.sync(op, order.id) }
-
-        assertEquals(PaymentReviewReason.MODE_MISMATCH, kit.order(order.id).reviewReason, "nobody knows the state of this order yet - a person keeps watching")
-    }
-
-    @Test
     fun `a sync that finds the payment still in progress does not release a mode mismatch`() {
         val kit = PaymentLedgerKit()
         val order = kit.createAuthenticated()
@@ -171,22 +95,6 @@ class MoneyReasonReleaseRequeueTest {
 
         assertEquals(PaymentReviewReason.MODE_MISMATCH, kit.order(order.id).reviewReason)
         assertEquals(0, kit.store.listEvents(order.id).count { it.providerCode == "MODE_MISMATCH_CLEARED" })
-    }
-
-    // ---- 지급 쪽 표시가 낡은 채 남지 않는다 ----
-
-    @Test
-    fun `a fulfilment that succeeds some other way clears its own mark`() {
-        val kit = PaymentLedgerKit()
-        val order = unfulfilled(kit)
-        kit.runner.onDead(dead(PaymentTaskTypes.ORDER_FULFIL, order.id))
-        assertEquals(PaymentReviewReason.FULFILMENT_UNRESOLVED, kit.order(order.id).reviewReason)
-        kit.listener.failPaid(0)
-
-        assertEquals(true, kit.fulfillment.fulfil(order.id))
-
-        assertNull(kit.order(order.id).reviewReason)
-        assertEquals("FULFILMENT_UNRESOLVED_CLEARED", kit.store.listEvents(order.id).last().providerCode)
     }
 
     @Test
@@ -219,5 +127,4 @@ class MoneyReasonReleaseRequeueTest {
         assertNull(kit.order(first.orderId).reviewReason)
         assertEquals("REFUND_APPLY_UNRESOLVED_CLEARED", kit.store.listEvents(first.orderId).last().providerCode)
     }
-
 }

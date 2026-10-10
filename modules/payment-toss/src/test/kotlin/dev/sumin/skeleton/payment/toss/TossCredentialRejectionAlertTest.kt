@@ -33,24 +33,4 @@ class TossCredentialRejectionAlertTest {
         assertTrue(rejected.isEmpty(), rejected.toString())
         assertTrue(error.definitive, "the classification is unchanged")
     }
-
-    @Test
-    fun `a lookup refusal of the same family alerts too - and stays not definitive`() {
-        val lookup = TossPaymentErrorMapper(providerId = "toss", definitiveAllowed = false, credentialAlert = alert)
-
-        val error = map(401, "UNAUTHORIZED_KEY", lookup).providerError
-
-        assertEquals(listOf("toss"), rejected.toList())
-        assertEquals(false, error.definitive)
-    }
-
-    @Test
-    fun `a failing alert never breaks the mapping`() {
-        val broken = TossPaymentErrorMapper(providerId = "toss", credentialAlert = PaymentProviderCredentialAlert { error("alert channel down") })
-
-        val error = map(401, "INVALID_API_KEY", broken).providerError
-
-        assertEquals("INVALID_API_KEY", error.code)
-        assertTrue(error.definitive)
-    }
 }

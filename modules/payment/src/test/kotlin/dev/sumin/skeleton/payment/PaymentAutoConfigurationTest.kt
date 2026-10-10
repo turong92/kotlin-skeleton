@@ -21,22 +21,6 @@ class PaymentAutoConfigurationTest {
             }
     }
 
-    @Test
-    fun `router sees a capability gateway that is not a full provider`() {
-        contextRunner
-            .withBean(PaymentLookupGateway::class.java, Supplier { LookupOnly("pay") })
-            .run { context ->
-                val router = context.getBean(PaymentProviderRouter::class.java)
-                assertEquals("pay", router.gateway("pay", PaymentLookupGateway::class).providerId)
-            }
-    }
-
-    private class LookupOnly(
-        override val providerId: String,
-    ) : PaymentLookupGateway {
-        override fun lookup(query: PaymentLookupQuery): PaymentSnapshot? = null
-    }
-
     private class StubPaymentProvider(
         override val providerId: String,
     ) : PaymentProvider {

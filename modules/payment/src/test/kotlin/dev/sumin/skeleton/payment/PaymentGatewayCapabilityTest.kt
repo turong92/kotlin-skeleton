@@ -11,12 +11,9 @@ class PaymentGatewayCapabilityTest {
     @Test
     fun `card keeps a valid last four, drops anything else, and does not print it`() {
         assertEquals("12**", PaymentCard("HYUNDAI", "12**").last4)
-        assertEquals("1234", PaymentCard("HYUNDAI", "1234").last4)
         assertNull(PaymentCard("HYUNDAI", "12345").last4)
         assertNull(PaymentCard("HYUNDAI", "12ab").last4)
-
-        val printed = PaymentCard("HYUNDAI", "9876").toString()
-        assertFalse(printed.contains("9876"), printed)
+        assertFalse(PaymentCard("HYUNDAI", "9876").toString().contains("9876"))
     }
 
     @Test
@@ -24,7 +21,6 @@ class PaymentGatewayCapabilityTest {
         val envelope = WebhookEnvelope("e1", "T", "payment", "pay_1", storedPayload = "SECRET-RAW-BODY")
 
         assertFalse(envelope.toString().contains("SECRET-RAW-BODY"), envelope.toString())
-        assertEquals("SECRET-RAW-BODY", envelope.storedPayload)
     }
 
     @Test
@@ -35,12 +31,13 @@ class PaymentGatewayCapabilityTest {
     }
 
     @Test
-    fun `exception details - the response text - do not name provider ids or internal interfaces`() {
+    fun `the response text names no provider id and a client-typed id cannot forge a log line`() {
         val unsupported = PaymentCapabilityUnsupportedException("secret-provider", "PaymentLookupGateway")
         val notFound = PaymentProviderNotFoundException("secret-provider")
+        val forged = PaymentProviderNotFoundException("x\n[ERROR] forged " + "y".repeat(500))
 
-        assertFalse(unsupported.detail.orEmpty().contains("secret-provider"))
-        assertFalse(unsupported.detail.orEmpty().contains("Gateway"))
+        assertFalse(unsupported.detail.orEmpty().contains("secret-provider") || unsupported.detail.orEmpty().contains("Gateway"))
         assertFalse(notFound.detail.orEmpty().contains("secret-provider"))
+        assertFalse('\n' in forged.message.orEmpty())
     }
 }

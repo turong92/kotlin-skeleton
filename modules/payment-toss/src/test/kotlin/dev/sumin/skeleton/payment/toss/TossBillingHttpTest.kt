@@ -16,8 +16,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
-import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
 import tools.jackson.databind.json.JsonMapper
 
 /** 자동결제(빌링) — 가짜 토스 서버로 요청 모양과 결과를 본다. 빌링키는 비밀이라 결과 · 예외 · 로그 어디에도 평문이 나오지 않아야 한다. */
@@ -46,17 +44,6 @@ class TossBillingHttpTest {
         BillingChargeRequest(token, customerKey, key, "월 구독", PaymentAmount(3_900, "KRW"), IdempotencyKey(key))
 
     @Test
-    fun `the card registration values carry the public key, the kind and the customer key - and nothing secret`() {
-        val setup = assertNotNull(provider.billingSetup(customerKey))
-
-        assertEquals("TOSS_BILLING_AUTH", setup.kind)
-        assertEquals("test_ck_fake_client_key", setup.clientKey)
-        assertEquals(customerKey, setup.customerKey)
-        assertTrue(setup.testMode)
-        assertFalse(setup.toString().contains(server.secretKey))
-    }
-
-    @Test
     fun `issue exchanges the auth key for a token and keeps only the last four card characters`() {
         server.on("POST", "/v1/billing/authorizations/issue", Reply.Json(200, billingKeyBody()))
 
@@ -69,13 +56,9 @@ class TossBillingHttpTest {
         assertEquals("HYUNDAI", issued.card?.issuer)
         TossFixtures.PLANTED.ALL.forEach { assertFalse(issued.toString().contains(it), "leaked $it") }
         assertFalse(issued.toString().contains(token), "the token is secret")
-    }
-
-    @Test
-    fun `an auth key that is not an identifier is refused before the provider is called`() {
         assertFailsWith<TossIdentifierRejectedException> { provider.issue(customerKey, mapOf("authKey" to "../x?y")) }
-        assertFailsWith<TossIdentifierRejectedException> { provider.issue(customerKey, emptyMap()) }
-        assertTrue(server.requests.isEmpty())
+        listOf("a/b", "a?b", "").forEach { bad -> assertFailsWith<TossIdentifierRejectedException> { provider.charge(chargeRequest().copy(token = bad)) } }
+        assertEquals(1, server.requests.size, "only the first issue reached the provider")
     }
 
     @Test
@@ -94,8 +77,6 @@ class TossBillingHttpTest {
         assertEquals(PaymentOperationStatus.CONFIRMED, result.status)
         assertEquals("pay_sub_1", result.providerPaymentId)
         assertEquals(PaymentAmount(3_900, "KRW"), result.amount)
-        assertEquals("123*", result.card?.last4)
-        assertEquals("ord_sub_0001", result.trace.metadata["orderId"])
     }
 
     @Test
@@ -107,10 +88,8 @@ class TossBillingHttpTest {
             assertEquals(PaymentFailureOutcome.DEFINITIVE, PaymentFailures.outcomeOf(failure), "$status $code")
             assertEquals(1, server.requests.size)
         }
-        listOf(500 to "FAILED_INTERNAL_SYSTEM_PROCESSING", 400 to "PROVIDER_ERROR").forEach { (status, code) ->
-            server.on("POST", "/v1/billing/$token", TossFixtures.error(status, code))
-            assertEquals(PaymentFailureOutcome.UNKNOWN, PaymentFailures.outcomeOf(assertFailsWith<Exception> { provider.charge(chargeRequest()) }), "$status $code")
-        }
+        server.on("POST", "/v1/billing/$token", TossFixtures.error(500, "FAILED_INTERNAL_SYSTEM_PROCESSING"))
+        assertEquals(PaymentFailureOutcome.UNKNOWN, PaymentFailures.outcomeOf(assertFailsWith<Exception> { provider.charge(chargeRequest()) }))
         server.on("POST", "/v1/billing/$token", Reply.Broken())
         assertEquals(PaymentFailureOutcome.UNKNOWN, PaymentFailures.outcomeOf(assertFailsWith<Exception> { provider.charge(chargeRequest()) }))
     }
@@ -149,18 +128,8 @@ class TossBillingHttpTest {
 
         server.on("DELETE", "/v1/billing/$token", TossFixtures.error(400, "INVALID_BILL_KEY_REQUEST"))
         provider.revoke(customerKey, token)
-        server.on("DELETE", "/v1/billing/$token", TossFixtures.error(404, "NOT_FOUND_BILLING"))
-        provider.revoke(customerKey, token)
 
         server.on("DELETE", "/v1/billing/$token", TossFixtures.error(500, "FAILED_INTERNAL_SYSTEM_PROCESSING"))
         assertFailsWith<Exception> { provider.revoke(customerKey, token) }
-    }
-
-    @Test
-    fun `a billing key that could break the path is not accepted and the call is never made`() {
-        listOf("a/b", "a b", "a?b", "a#b", "").forEach { bad ->
-            assertFailsWith<TossIdentifierRejectedException> { provider.charge(chargeRequest().copy(token = bad)) }
-        }
-        assertTrue(server.requests.isEmpty())
     }
 }

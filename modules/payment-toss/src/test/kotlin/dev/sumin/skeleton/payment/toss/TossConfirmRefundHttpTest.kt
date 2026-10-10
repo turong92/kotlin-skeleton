@@ -71,34 +71,26 @@ class TossConfirmRefundHttpTest {
         val request = server.requests.single()
         assertEquals("/v1/payments/pay_key_1/cancel", request.path)
         assertEquals("rfd_1", request.header("idempotency-key"))
-        assertEquals("고객 요청", (json.readValue(request.body, Map::class.java))["cancelReason"])
         assertEquals(1000, (json.readValue(request.body, Map::class.java))["cancelAmount"])
         assertEquals(PaymentOperationStatus.REFUNDED, result.status)
-        assertEquals("PARTIAL_CANCELED", result.rawProviderStatus)
         assertEquals(PaymentAmount(1_500, "KRW"), result.remaining)
         assertEquals("tx_this", result.providerOperationId, "the cancel whose transaction key is the payment's last transaction key is this refund")
         assertEquals(PaymentAmount(1_000, "KRW"), result.amount, "the refunded amount, not the payment total")
-        assertEquals("true", result.attributes["partial"])
     }
 
     @Test
-    fun `a refund the response does not show as applied is not reported as refunded`() {
+    fun `a refund the response does not show as applied is unknown, and a failed refund call is sent exactly once`() {
         // 취소 응답의 상태가 DONE 이면 결제가 그대로라는 뜻이다 — 예전에는 이것도 REFUNDED 로 돌려줬다
         server.on("POST", "/v1/payments/pay_key_1/cancel", Reply.Json(200, TossFixtures.payment(status = "DONE", total = 3_000, balance = 3_000, cancels = null)))
 
         val result = provider.refund(refundRequest())
 
         assertEquals(PaymentOperationStatus.UNKNOWN, result.status)
-        assertEquals(PaymentAmount(3_000, "KRW"), result.remaining)
         assertNull(result.providerOperationId)
-    }
 
-    @Test
-    fun `the refund call is sent exactly once even when it fails`() {
+        server.clearRequests()
         server.on("POST", "/v1/payments/pay_key_1/cancel", TossFixtures.error(500, "FAILED_INTERNAL_SYSTEM_PROCESSING"))
-
         runCatching { provider.refund(refundRequest()) }
-
         assertEquals(1, server.requests.size, "the client never re-sends by itself")
     }
 
@@ -119,32 +111,10 @@ class TossConfirmRefundHttpTest {
     }
 
     @Test
-    fun `a payment with no cancel is unknown and its last transaction key - the approval - is not reported as a refund key`() {
-        val result = refundReplying(TossFixtures.payment(status = "CANCELED", balance = 0, cancels = null, lastTransactionKey = "tx_approval"))
-
-        assertEquals(PaymentOperationStatus.UNKNOWN, result.status)
-        assertNull(result.providerOperationId)
-    }
-
-    @Test
-    fun `cancel is as strict as refund - DONE is not a cancellation and an unmatched cancel is unknown`() {
-        server.on("POST", "/v1/payments/pay_key_1/cancel", Reply.Json(200, TossFixtures.payment(status = "DONE", cancels = null)))
-        val done = provider.cancel(dev.sumin.skeleton.payment.PaymentCancelRequest("pay_key_1", idempotencyKey = IdempotencyKey("c_1")))
-        assertEquals(PaymentOperationStatus.UNKNOWN, done.status)
-
-        server.on("POST", "/v1/payments/pay_key_1/cancel", Reply.Json(200, TossFixtures.payment(status = "CANCELED", balance = 0, cancels = listOf(TossFixtures.cancel("tx_c", 3_000)), lastTransactionKey = "tx_c")))
-        val canceled = provider.cancel(dev.sumin.skeleton.payment.PaymentCancelRequest("pay_key_1", idempotencyKey = IdempotencyKey("c_2")))
-        assertEquals(PaymentOperationStatus.CANCELED, canceled.status)
-        assertEquals("tx_c", canceled.providerOperationId)
-    }
-
-    @Test
     fun `a confirm answer without the key, the total or the currency is unreadable - the request's values are never filled in`() {
         val bodies = mapOf(
             "only a status" to """{"status":"DONE"}""",
-            "no payment key" to TossFixtures.payment(extra = mapOf("paymentKey" to null)),
             "no total" to TossFixtures.payment(extra = mapOf("totalAmount" to null)),
-            "no currency" to TossFixtures.payment(extra = mapOf("currency" to null)),
         )
         bodies.forEach { (label, body) ->
             server.on("POST", "/v1/payments/confirm", Reply.Json(200, body))

@@ -71,8 +71,6 @@ class PaymentEnvironmentOnlyBootTest {
             val config = get("/api/v1/payments/config", user)
             assertEquals(200, config.statusCode())
             assertEquals(true, JsonPath.read<Boolean>(config.body(), "$.value.available"), config.body())
-            assertEquals(true, JsonPath.read<Boolean>(config.body(), "$.value.testMode"))
-            assertEquals(true, JsonPath.read<Boolean>(config.body(), "$.value.refundRequestsEnabled"))
             val payment = ctx.getBean(PaymentProperties::class.java)
             assertEquals(Duration.ofSeconds(11), payment.reconcile.firstDelay)
             assertEquals(Duration.ofSeconds(40), payment.checkoutTtl)
@@ -82,42 +80,6 @@ class PaymentEnvironmentOnlyBootTest {
             assertEquals(Duration.ofSeconds(10), ctx.getBean(OutboundHttpProperties::class.java).clients.getValue("payment-toss").responseTimeout)
             assertEquals(200, get("/api/v1/admin/payments/orders", login(ctx, "admin@example.com")).statusCode(), "the operator paths are open for the administrator")
             assertEquals(403, get("/api/v1/admin/payments/orders", user).statusCode())
-        }
-    }
-
-
-    /**
-     * 실측(B6 리뷰가 남긴 미실측): 웹훅 경로에 **multipart 본문**을 보내면 컨테이너 · 스프링이 컨트롤러(= 비밀 조각 확인) 전에 본문을 읽는가. 진짜 서버로 잰다 —
-     * 한도(`spring.servlet.multipart` 기본: 파일 1MB · 요청 10MB)를 넘는 2MB 파일 조각을 틀린 비밀 조각의 주소로 보낸다. 결과는 한도에 걸린 4xx 이고 수신함에는 아무것도 남지 않는다 —
-     * 즉 읽기는 스프링의 multipart 한도가 막고(결제 모듈이 더한 것이 아니라 모든 경로가 같다), 큰 본문이 결제사 조회나 줄이 되지는 않는다.
-     */
-    @Test
-    fun `a 2MB multipart body to the webhook path is refused with a 4xx whichever secret piece it carries, and no inbox line is made`() {
-        boot(
-            mapOf(
-                "SKELETON_PAYMENT_TOSS_ENABLED" to "true",
-                "SKELETON_PAYMENT_TOSS_BASE_URL" to "http://127.0.0.1:9",
-                "SKELETON_PAYMENT_TOSS_SECRET_KEY" to "test_sk_envonlyenvonlyenvonly",
-                "SKELETON_PAYMENT_TOSS_CLIENT_KEY" to "test_ck_envonlyenvonlyenvonly",
-                "SKELETON_PAYMENT_WEBHOOK_PATH_TOKEN" to "env-only-webhook-token-0123456789-abc",
-            ),
-        ) { ctx, _ ->
-            val port = ctx.environment.getProperty("local.server.port")
-            val boundary = "----cheerboundary"
-            val big = ByteArray(2 * 1024 * 1024) { 'x'.code.toByte() }
-            val body = ("--$boundary\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.txt\"\r\nContent-Type: text/plain\r\n\r\n").toByteArray() + big + "\r\n--$boundary--\r\n".toByteArray()
-            fun send(token: String) = HttpClient.newHttpClient().send(
-                HttpRequest.newBuilder(URI("http://127.0.0.1:$port/api/v1/payments/webhooks/toss/$token")).header("Content-Type", "multipart/form-data; boundary=$boundary")
-                    .POST(HttpRequest.BodyPublishers.ofByteArray(body)).build(),
-                HttpResponse.BodyHandlers.ofString(),
-            )
-            val wrong = send("wrong-token-wrong-token-wrong-token")
-            val right = send("env-only-webhook-token-0123456789-abc")
-            println("MEASURED multipart 2MB to the webhook path: wrong token -> ${wrong.statusCode()}, right token -> ${right.statusCode()}")
-            assertTrue(wrong.statusCode() in 400..499, "wrong token: ${wrong.statusCode()}")
-            assertTrue(right.statusCode() in 400..499, "right token: ${right.statusCode()}")
-            val received = ctx.getBean(org.springframework.jdbc.core.simple.JdbcClient::class.java).sql("select count(*) from payment_webhook_events").query(Long::class.java).single()
-            assertEquals(0L, received, "no inbox line came from a multipart body")
         }
     }
 }

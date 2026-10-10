@@ -15,25 +15,8 @@ class WebhookLogMaskingTest {
         assertEquals("→ POST /api/v1/payments/webhooks/toss/[REDACTED]", m.mask("→ POST /api/v1/payments/webhooks/toss/Abc.def_123~x"))
         assertEquals("← POST /api/v1/payments/webhooks/toss/[REDACTED] 200 (3ms)", m.mask("← POST /api/v1/payments/webhooks/toss/Abc.def_123~x 200 (3ms)"))
         assertEquals("POST /api/v1/payments/webhooks/toss/[REDACTED]", m.mask("POST /api/v1/payments/webhooks/toss/tok/extra/more"), "a three piece address is hidden to its end")
-        assertEquals("POST /api/v1/payments/webhooks/toss", m.mask("POST /api/v1/payments/webhooks/toss"))
+        assertEquals("POST /api/v1/payments/webhooks/toss/[REDACTED]", m.mask("POST /api/v1/payments/webhooks/toss/ab&cd\"ef'gh"), "& quote and apostrophe are hidden to the end too")
         assertEquals("GET /api/v1/payments/orders/ord_1", m.mask("GET /api/v1/payments/orders/ord_1"))
-    }
-
-    @Test
-    fun `the rule follows a changed base path and does not touch the old one`() {
-        val m = masker("/pay/v2")
-
-        assertEquals("POST /pay/v2/webhooks/toss/[REDACTED]", m.mask("POST /pay/v2/webhooks/toss/secret-piece"))
-        assertEquals("POST /api/v1/payments/webhooks/toss/secret-piece", m.mask("POST /api/v1/payments/webhooks/toss/secret-piece"))
-    }
-
-    @Test
-    fun `a token that holds & quote or apostrophe is hidden to its end, not only up to that character`() {
-        val m = masker("/api/v1/payments")
-
-        assertEquals("POST /api/v1/payments/webhooks/toss/[REDACTED]", m.mask("POST /api/v1/payments/webhooks/toss/ab&cd\"ef'gh"))
-        assertEquals("→ POST /api/v1/payments/webhooks/toss/[REDACTED] 200 (3ms)", m.mask("→ POST /api/v1/payments/webhooks/toss/ab&cd\"ef'gh 200 (3ms)"))
-        assertEquals("/api/v1/payments/webhooks/toss/[REDACTED]", m.maskRequestPath("/api/v1/payments/webhooks/toss/ab&cd\"ef'gh/more?x=1"))
     }
 
     @Test

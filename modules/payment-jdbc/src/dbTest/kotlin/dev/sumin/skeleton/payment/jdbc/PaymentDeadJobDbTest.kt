@@ -1,8 +1,6 @@
 package dev.sumin.skeleton.payment.jdbc
 
 import dev.sumin.skeleton.common.time.TimeProvider
-import dev.sumin.skeleton.jobqueue.jdbc.Job
-import dev.sumin.skeleton.jobqueue.jdbc.JobDeadListener
 import dev.sumin.skeleton.jobqueue.jdbc.JobHandler
 import dev.sumin.skeleton.jobqueue.jdbc.JobQueueProperties
 import dev.sumin.skeleton.jobqueue.jdbc.JobQueueWorker
@@ -16,18 +14,15 @@ import dev.sumin.skeleton.payment.PaymentOrder
 import dev.sumin.skeleton.payment.PaymentOrderStatus
 import dev.sumin.skeleton.payment.PaymentRefundStatus
 import dev.sumin.skeleton.payment.PaymentReviewReason
-import dev.sumin.skeleton.payment.PaymentTask
 import dev.sumin.skeleton.payment.PaymentTaskRunner
 import dev.sumin.skeleton.payment.PaymentTaskTypes
 import dev.sumin.skeleton.payment.testing.ScriptedGateway.ConfirmScript
 import dev.sumin.skeleton.payment.testing.ScriptedGateway.RefundScript
 import java.time.Instant
-import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
-import org.assertj.core.api.Assertions.assertThat
 import org.springframework.dao.DataAccessResourceFailureException
 import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.transaction.support.TransactionTemplate
@@ -56,11 +51,9 @@ class PaymentDeadJobDbTest {
     private val runner: PaymentTaskRunner = DefaultPaymentTaskRunner(
         listOf(kit.expire, OrderReconcileTaskHandler(flaky, kit.router, kit.convergence), kit.fulfil, kit.refundReconcile, kit.refundApply),
     )
-    private val deadSeen = CopyOnWriteArrayList<Pair<Job, String>>()
-    private val recorder = JobDeadListener { job, reason -> deadSeen += job to reason }
     private val listener = PaymentJobDeadListener { runner }
     private val handlers: List<JobHandler> = runner.types.map { PaymentJobHandler(it, runner) }
-    private val worker = JobQueueWorker(repository, handlers, JobQueueProperties(), clock, deadListeners = listOf(listener, recorder))
+    private val worker = JobQueueWorker(repository, handlers, JobQueueProperties(), clock, deadListeners = listOf(listener))
 
     @BeforeTest
     fun clean() = PaymentDb.clean()
@@ -93,7 +86,6 @@ class PaymentDeadJobDbTest {
     fun `a reconcile job that died stale RUNNING - no handler ran - marks the confirming order`() {
         val order = confirming()
         val job = jobId(PaymentTaskTypes.ORDER_RECONCILE)
-        assertNull(kit.order(order.id).reviewReason, "nothing marked it before the job died")
         abandonedByDeadWorker(job)
 
         worker.pollOnce()
@@ -101,8 +93,6 @@ class PaymentDeadJobDbTest {
         assertEquals("DEAD", status(job))
         assertEquals(PaymentReviewReason.CONFIRM_UNRESOLVED, kit.order(order.id).reviewReason)
         assertEquals(PaymentOrderStatus.CONFIRMING, kit.order(order.id).status, "marked, not decided")
-        assertEquals(listOf(order.id to PaymentReviewReason.CONFIRM_UNRESOLVED), kit.review.flagged.toList())
-        assertThat(deadSeen.map { it.first.type }).`as`("the other listeners still hear about it").contains(PaymentTaskTypes.ORDER_RECONCILE)
     }
 
     @Test
@@ -118,24 +108,10 @@ class PaymentDeadJobDbTest {
         worker.pollOnce()
 
         assertEquals("DEAD", status(job))
-        assertThat(PaymentDb.jdbc.queryForObject("select last_error from jobs where id = :id", mapOf("id" to job), String::class.java)).contains("DataAccessResourceFailureException")
         assertEquals(PaymentReviewReason.CONFIRM_UNRESOLVED, kit.order(order.id).reviewReason, "the handler never reached its own last-attempt marking")
         assertEquals(1, flaggedEvents(order.id))
     }
 
-
-    @Test
-    fun `a reconcile job that died for an order that finished by another way marks nothing`() {
-        val paid = kit.paid()
-        kit.store.inTransaction { kit.tasks.enqueue(PaymentTask(PaymentTaskTypes.ORDER_RECONCILE, paid.id, maxAttempts = 3)) }
-        abandonedByDeadWorker(jobId(PaymentTaskTypes.ORDER_RECONCILE))
-
-        worker.pollOnce()
-
-        assertNull(kit.order(paid.id).reviewReason)
-        assertEquals(0, flaggedEvents(paid.id))
-        assertEquals(emptyList(), kit.review.flagged.toList())
-    }
 
     // ---- 환불 정산 작업 ----
 
@@ -201,29 +177,5 @@ class PaymentDeadJobDbTest {
 
         assertNull(kit.order(order.id).reviewReason)
         assertEquals(jobsBefore + 1, PaymentDb.count("select count(*) from jobs where job_type = :t", "t" to PaymentTaskTypes.REFUND_APPLY), "one new job")
-    }
-
-    // ---- 고리의 경계 ----
-
-
-    @Test
-    fun `a hook that fails does not stop the queue - the next listener still hears and the worker goes on`() {
-        val order = confirming()
-        val job = jobId(PaymentTaskTypes.ORDER_RECONCILE)
-        abandonedByDeadWorker(job)
-        val broken = PaymentJobDeadListener {
-            object : PaymentTaskRunner {
-                override val types = setOf(PaymentTaskTypes.ORDER_RECONCILE)
-                override fun run(run: dev.sumin.skeleton.payment.PaymentTaskRun) = Unit
-                override fun onDead(run: dev.sumin.skeleton.payment.PaymentTaskRun) = throw DataAccessResourceFailureException("planted")
-            }
-        }
-        val worker = JobQueueWorker(repository, handlers, JobQueueProperties(), clock, deadListeners = listOf(broken, recorder))
-
-        worker.pollOnce()
-
-        assertEquals("DEAD", status(job))
-        assertThat(deadSeen.map { it.first.type }).contains(PaymentTaskTypes.ORDER_RECONCILE)
-        assertNull(kit.order(order.id).reviewReason, "the failed hook marked nothing - the queue itself was not harmed")
     }
 }

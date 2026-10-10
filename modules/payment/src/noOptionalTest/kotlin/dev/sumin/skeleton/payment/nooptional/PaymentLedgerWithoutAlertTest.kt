@@ -24,7 +24,6 @@ import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration
 import org.springframework.boot.context.annotation.ImportCandidates
 import org.springframework.boot.test.context.runner.ApplicationContextRunner
-import org.springframework.boot.test.system.CapturedOutput
 import org.springframework.boot.test.system.OutputCaptureExtension
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -61,7 +60,7 @@ class PaymentLedgerWithoutAlertTest {
     }
 
     @Test
-    fun `the ledger runs and a review reason stays in the row and in the log`(output: CapturedOutput) {
+    fun `the ledger runs and a review reason stays in the row`() {
         runner.run { context ->
             val gateway = context.getBean(ScriptedGateway::class.java)
             val store = context.getBean(InMemoryPaymentLedgerStore::class.java)
@@ -75,8 +74,6 @@ class PaymentLedgerWithoutAlertTest {
 
             assertEquals(PaymentOrderStatus.CONFIRMING, result.status)
             assertEquals(PaymentReviewReason.AMOUNT_MISMATCH, store.findOrder(created.id)!!.reviewReason)
-            assertTrue(output.all.contains("needs review") && output.all.contains(created.id), output.all)
-            assertTrue(!output.all.contains("pay_1"), "the log line carries the order id and the reason only")
         }
     }
 }

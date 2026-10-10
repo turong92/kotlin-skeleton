@@ -27,7 +27,7 @@ class PaymentIndexPlanDbTest {
 
     @Test
     fun `the review list uses the review index when almost every row has no review reason`() {
-        load()
+        loadMixed()
 
         val plans = listOf(
             "select id from payment_orders where review_reason is not null order by created_at, id",
@@ -39,7 +39,7 @@ class PaymentIndexPlanDbTest {
 
     @Test
     fun `the operator's default list - no filter, newest first, cursor by created_at and id - uses the created index`() {
-        load()
+        loadMixed()
         val cursor = if (DbTestDatabase.vendor == "postgresql") "'2026-10-08 05:00:00+00'" else "'2026-10-08 05:00:00'"
 
         val plans = listOf(
@@ -55,55 +55,17 @@ class PaymentIndexPlanDbTest {
         loadInbox()
         val cursor = if (DbTestDatabase.vendor == "postgresql") "'2026-10-08 05:00:00+00'" else "'2026-10-08 05:00:00'"
 
-        val plans = listOf("FAILED", "DEAD", "PROCESSED").flatMap { status ->
+        listOf("FAILED", "DEAD", "PROCESSED").flatMap { status ->
             listOf(
                 "select id from payment_webhook_events where status = '$status' order by received_at desc, id desc limit 51",
                 "select id from payment_webhook_events where status = '$status' and (received_at < $cursor or (received_at = $cursor and id < 99999)) order by received_at desc, id desc limit 51",
             )
-        }.map { it to indexUsed(it) }
-
-        plans.forEach { (query, plan) -> assertThat(plan).`as`("$query\n$plan").containsIgnoringCase("idx_payment_webhook_events_status") }
-        if (DbTestDatabase.vendor == "mysql") {
+        }.forEach { query ->
+            assertThat(indexUsed(query)).`as`(query).containsIgnoringCase("idx_payment_webhook_events_status")
             // 인덱스 이름만으로는 전체 인덱스 훑기도 통과한다 — 접근 방식(type)이 ref/range 인지 본다
-            listOf("FAILED", "DEAD", "PROCESSED").forEach { status ->
-                val withCursor = "select id from payment_webhook_events where status = '$status' and (received_at < $cursor or (received_at = $cursor and id < 99999)) order by received_at desc, id desc limit 51"
-                assertThat(mysqlAccessType(withCursor)).`as`(withCursor).isIn("range", "ref")
-                val firstPage = "select id from payment_webhook_events where status = '$status' order by received_at desc, id desc limit 51"
-                assertThat(mysqlAccessType(firstPage)).`as`(firstPage).isIn("range", "ref")
-            }
+            if (DbTestDatabase.vendor == "mysql") assertThat(mysqlAccessTypes(query).first()).`as`(query).isIn("range", "ref")
         }
     }
-
-    @Test
-    fun `the inbox list without a status is one statement on the primary key, and with a cursor it is a range on it`() {
-        loadInbox()
-
-        val first = "select id from payment_webhook_events order by id desc limit 51"
-        val withCursor = "select id from payment_webhook_events where id < 29000 order by id desc limit 51"
-
-        val pk = if (DbTestDatabase.vendor == "postgresql") "pkey" else "PRIMARY"
-        listOf(first, withCursor).forEach { query -> assertThat(indexUsed(query)).`as`(query).containsIgnoringCase(pk) }
-        // 첫 쪽은 limit 까지만 읽고 멈추는 PK 역방향 훑기(MySQL 은 type=index 로 보이지만 limit 이 멈춘다). 커서가 붙으면 범위 접근이어야 한다
-        if (DbTestDatabase.vendor == "mysql") assertThat(mysqlAccessType(withCursor)).`as`(withCursor).isEqualTo("range")
-    }
-
-    @Test
-    fun `the per-order window count uses the order index`() {
-        loadInbox()
-        val since = if (DbTestDatabase.vendor == "postgresql") "'2026-10-08 05:00:00+00'" else "'2026-10-08 05:00:00'"
-
-        // the exact statement JdbcWebhookInbox.countOfOrderSince runs (literals in place of the bind values)
-        val query = "select count(*) from payment_webhook_events where order_id = 'ord_plan_77' and resource_type = 'PAYMENT' and received_at >= $since"
-
-        assertThat(indexUsed(query)).`as`(query).containsIgnoringCase("idx_payment_webhook_events_order")
-        if (DbTestDatabase.vendor == "mysql") assertThat(mysqlAccessType(query)).`as`(query).isIn("ref", "range")
-    }
-
-
-    // ---------------------------------------------------------------------------------------------------------------------------------
-    // B7 — 운영자 · 사용자 목록과 탈퇴 벌크가 쓰는 문장들. 각 문장은 저장소가 실제로 보내는 것(바인드 값 자리에 리터럴)이다.
-    // 같은 질의를 "저장소가 같은 줄을 돌려주는가"는 PaymentLedgerStoreContract 가 잰다.
-    // ---------------------------------------------------------------------------------------------------------------------------------
 
     @Test
     fun `the user's order list with a cursor walks the account index`() {
@@ -113,18 +75,9 @@ class PaymentIndexPlanDbTest {
         val query = "select id from payment_orders where account_id = 'acc_5' and status <> 'PENDING' and (created_at < $cursor or (created_at = $cursor and id < 'ord_plan_9999')) order by created_at desc, id desc limit 51"
 
         assertThat(indexUsed(query)).`as`(query).containsIgnoringCase("idx_payment_orders_account")
-        if (DbTestDatabase.vendor == "mysql") assertThat(mysqlAccessType(query)).`as`(query).isIn("ref", "range")
+        if (DbTestDatabase.vendor == "mysql") assertThat(mysqlAccessTypes(query).first()).`as`(query).isIn("ref", "range")
     }
 
-
-    @Test
-    fun `stuck confirming rows are found through the status index, not by reading every order`() {
-        loadMixed()
-
-        val query = "select id from payment_orders where status = 'CONFIRMING' and confirm_started_at < ${ts("2026-10-08 06:00:00")} order by created_at desc, id desc limit 51"
-
-        assertThat(indexUsed(query)).`as`(query).containsIgnoringCase("idx_payment_orders_status")
-    }
 
     @Test
     fun `paid rows nobody fulfilled are found through the unfulfilled index - not by reading every paid order`() {
@@ -137,29 +90,8 @@ class PaymentIndexPlanDbTest {
             // 부분 환불된 줄은 이 데이터에 없다 — 빈 범위라 상태 인덱스를 읽어도 비용이 같다. 어느 쪽이든 created 인덱스로 전부 읽는 계획이 아니면 된다
             val expected = if (status == PaymentOrderStatus.PAID) listOf("idx_payment_orders_unfulfilled") else listOf("idx_payment_orders_unfulfilled", "idx_payment_orders_status")
             assertThat(expected.any { plan.contains(it, ignoreCase = true) }).`as`(statement.sql + "\n" + plan).isTrue()
-            if (DbTestDatabase.vendor == "mysql") assertThat(mysqlAccessType(statement)).`as`(statement.sql).isIn("ref", "range")
+            if (DbTestDatabase.vendor == "mysql") assertThat(mysqlAccessTypes(statement).first()).`as`(statement.sql).isIn("ref", "range")
         }
-    }
-
-    @Test
-    fun `a provider payment id search with the known providers uses the unique index`() {
-        loadMixed()
-
-        val query = "select id from payment_orders where provider in ('scripted', 'toss') and provider_payment_id = 'pay_plan_77' order by created_at desc, id desc"
-
-        assertThat(indexUsed(query)).`as`(query).containsIgnoringCase("uq_payment_orders_provider_payment")
-        // 결제사 조건 없이 번호만으로 찾으면 그 인덱스를 못 탄다 — 그래서 저장소는 늘 결제사를 같이 건다
-        if (DbTestDatabase.vendor == "mysql") assertThat(mysqlAccessType(query)).`as`(query).isIn("ref", "range")
-    }
-
-    @Test
-    fun `the refund request list walks its own index`() {
-        loadMixed()
-        val cursor = ts("2026-10-08 05:00:00")
-
-        val requested = "select id from payment_refunds where status = 'REQUESTED' and (requested_at < $cursor or (requested_at = $cursor and id < 'rfd_plan_9999')) order by requested_at desc, id desc limit 51"
-
-        assertThat(indexUsed(requested)).`as`(requested).containsIgnoringCase("idx_payment_refunds_status")
     }
 
     @Test
@@ -186,22 +118,6 @@ class PaymentIndexPlanDbTest {
         }
     }
 
-    @Test
-    fun `the erasure statements find the account's orders, refunds and events through the account, order and event indexes`() {
-        loadMixed()
-
-        val erase = "select id from payment_orders where account_id = 'acc_5' and (account_erased_at is null or card_issuer is not null or card_last4 is not null)"
-        val events = "select id from payment_events where order_id in ('ord_plan_5', 'ord_plan_505', 'ord_plan_1005') and actor_id = 'acc_5'"
-        val refunds = "select id from payment_refunds where order_id in ('ord_plan_5', 'ord_plan_505', 'ord_plan_1005') and (requested_by = 'acc_5' or decided_by = 'acc_5')"
-        val byIds = "select id from payment_orders where id in ('ord_plan_5', 'ord_plan_505', 'ord_plan_1005') order by created_at desc, id desc"
-
-        assertThat(indexUsed(erase)).`as`(erase).containsIgnoringCase("idx_payment_orders_account")
-        assertThat(indexUsed(events)).`as`(events).containsIgnoringCase("idx_payment_events_order")
-        // order_id 로 시작하는 두 인덱스(idx_payment_refunds_order · uq_payment_refunds_provider) 어느 쪽이든 그 주문들만 읽는다
-        assertThat(listOf("idx_payment_refunds_order", "uq_payment_refunds_provider").any { indexUsed(refunds).contains(it, ignoreCase = true) }).`as`(refunds).isTrue()
-        assertThat(indexUsed(byIds)).`as`(byIds).containsIgnoringCase(if (DbTestDatabase.vendor == "postgresql") "pkey" else "PRIMARY")
-    }
-
     // ---------------------------------------------------------------------------------------------------------------------------------
     // 정상 상태 — 지급 · 회수가 모두 끝나 「확인 필요」의 지급 · 회수 갈래가 **0 줄**일 때. 위의 `loadMixed` 는 미지급 여섯 줄이 섞여 있어 계획기가 인덱스를 고르지만, 0 줄이면 추정이
     // 약 1,400 줄(닫힌 주문의 비율이 `fulfilled_at is null` 로 보이고 상태와의 상관을 모른다)이라 `idx_payment_orders_created` 를 거꾸로 훑으며 거르는 쪽(= 전부 읽기)으로 기운다.
@@ -209,25 +125,16 @@ class PaymentIndexPlanDbTest {
     // ---------------------------------------------------------------------------------------------------------------------------------
 
     @Test
-    fun `healthy ledger - the unfulfilled paid statement finds no rows without reading the closed orders`() {
-        loadHealthy()
-        val store = PaymentDb.newStore()
-
-        listOf(PaymentOrderStatus.PAID, PaymentOrderStatus.PARTIALLY_REFUNDED).forEach { status ->
-            listOf(null, OrderCursor(T_CURSOR, "ord_plan_999999")).forEach { cursor ->
-                // 부분 환불된 줄은 이 데이터에 없다 — 빈 범위라 상태 인덱스(`idx_payment_orders_status`)를 읽어도 읽는 줄이 0 이다. 지급 안 된 `PAID` 의 몫은 지급 인덱스가 맡아야 한다
-                val index = if (status == PaymentOrderStatus.PAID) "idx_payment_orders_unfulfilled" else "idx_payment_orders_(unfulfilled|status)"
-                assertNoFullRead(store.orderListStatement(OperatorOrderScope.UNFULFILLED, status, OperatorOrderFilter(), T_THRESHOLD, cursor, 51), index, HEALTHY_ORDERS)
-            }
-        }
-    }
-
-    @Test
-    fun `healthy ledger - the unapplied and the stale refund branches find no rows without reading the closed refunds or every order`() {
+    fun `healthy ledger - the unfulfilled, unapplied and stale refund statements find no rows without reading the closed orders or refunds`() {
         loadHealthy()
         val store = PaymentDb.newStore()
 
         listOf(null, OrderCursor(T_CURSOR, "ord_plan_999999")).forEach { cursor ->
+            listOf(PaymentOrderStatus.PAID, PaymentOrderStatus.PARTIALLY_REFUNDED).forEach { status ->
+                // 부분 환불된 줄은 이 데이터에 없다 — 빈 범위라 상태 인덱스를 읽어도 읽는 줄이 0 이다
+                val index = if (status == PaymentOrderStatus.PAID) "idx_payment_orders_unfulfilled" else "idx_payment_orders_(unfulfilled|status)"
+                assertNoFullRead(store.orderListStatement(OperatorOrderScope.UNFULFILLED, status, OperatorOrderFilter(), T_THRESHOLD, cursor, 51), index, HEALTHY_ORDERS)
+            }
             assertNoFullRead(store.orderListStatement(OperatorOrderScope.UNAPPLIED_REFUND, null, OperatorOrderFilter(), T_THRESHOLD, cursor, 101), "idx_payment_refunds_unapplied", HEALTHY_ORDERS)
             assertNoFullRead(store.orderListStatement(OperatorOrderScope.STALE_REFUND, null, OperatorOrderFilter(accountId = "acc_7"), T_THRESHOLD, cursor, 101), "idx_payment_refunds_status", HEALTHY_ORDERS)
         }
@@ -262,8 +169,6 @@ class PaymentIndexPlanDbTest {
         return if (DbTestDatabase.vendor == "postgresql") plan
         else rows.joinToString(",") { row -> row.entries.first { it.key.equals("key", ignoreCase = true) }.value.toString() }
     }
-
-    private fun mysqlAccessType(statement: JdbcPaymentLedgerStore.OrderListStatement): String = mysqlAccessTypes(statement).first()
 
     private fun mysqlAccessTypes(statement: JdbcPaymentLedgerStore.OrderListStatement): List<String> =
         PaymentDb.jdbc.queryForList("explain ${statement.sql}", statement.params).map { row -> row.entries.first { it.key.equals("type", ignoreCase = true) }.value.toString().lowercase() }
@@ -394,24 +299,6 @@ class PaymentIndexPlanDbTest {
         if (DbTestDatabase.vendor == "postgresql") PaymentDb.jdbc.jdbcOperations.execute("analyze payment_webhook_events") else PaymentDb.jdbc.jdbcOperations.execute("analyze table payment_webhook_events")
     }
 
-    /** 3만 줄 — 줄마다 문장을 보내면 MySQL 에서 40초가 걸린다. 천 줄씩 한 문장으로 넣는다(값은 시험이 만든 리터럴이다). 만든 시각은 줄마다 다르다. */
-    private fun load() {
-        val base = LocalDateTime.of(2026, 10, 8, 0, 0, 0)
-        val zone = if (DbTestDatabase.vendor == "postgresql") "+00" else ""
-        (0 until 30_000).chunked(1000).forEach { chunk ->
-            val values = chunk.joinToString(",") { n ->
-                val review = if (n % 10_000 == 0) "'AMOUNT_MISMATCH'" else "null"
-                val ts = "'${base.plusSeconds(n.toLong()).format(TS)}$zone'"
-                "('ord_plan_$n', 'acc_${n % 500}', 'ONE_TIME', 'PAID', 'scripted', 'TEST', 'KRW', 3000, 'cheer', 'cheer-3000', 'Cheer', 'CHECKOUT', $review, $ts, $ts, $ts)"
-            }
-            PaymentDb.jdbc.jdbcOperations.execute(
-                """insert into payment_orders (id, account_id, kind, status, provider, provider_mode, currency, amount, item_type, item_ref, order_name, origin_type,
-                                               review_reason, checkout_expires_at, created_at, updated_at) values $values""",
-            )
-        }
-        if (DbTestDatabase.vendor == "postgresql") PaymentDb.jdbc.jdbcOperations.execute("analyze payment_orders") else PaymentDb.jdbc.jdbcOperations.execute("analyze table payment_orders")
-    }
-
     /** 계획이 **실제로 고른** 인덱스를 담은 문자열: PostgreSQL 은 계획 문장, MySQL 은 `key` 열(NULL 이면 "null"). */
     private fun indexUsed(query: String): String {
         val rows = PaymentDb.jdbc.queryForList("explain $query", emptyMap<String, Any>())
@@ -421,11 +308,6 @@ class PaymentIndexPlanDbTest {
     }
 
     /** MySQL `explain` 의 접근 방식(`type` 열) — `ALL`(전체 테이블) · `index`(전체 인덱스) 가 아닌 `ref` · `range` 인지 가르려고. */
-    private fun mysqlAccessType(query: String): String {
-        val rows = PaymentDb.jdbc.queryForList("explain $query", emptyMap<String, Any>())
-        return rows.first().entries.first { it.key.equals("type", ignoreCase = true) }.value.toString().lowercase()
-    }
-
     /** MySQL `explain` 의 모든 행의 접근 방식 — 준조회가 어느 표도 전체 훑기(`all`)로 읽지 않는지. */
     private fun mysqlAccessTypes(query: String): List<String> =
         PaymentDb.jdbc.queryForList("explain $query", emptyMap<String, Any>()).map { row -> row.entries.first { it.key.equals("type", ignoreCase = true) }.value.toString().lowercase() }

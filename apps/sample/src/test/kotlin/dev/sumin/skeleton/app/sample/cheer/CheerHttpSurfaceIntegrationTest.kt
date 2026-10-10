@@ -62,17 +62,9 @@ class CheerHttpSurfaceIntegrationTest : CheerIntegrationBase() {
     private val webhookShapes = setOf(Mapped(HttpMethod.POST, "$PAYMENTS/webhooks/{provider}"), Mapped(HttpMethod.POST, "$PAYMENTS/webhooks/{provider}/{token}"))
 
     @Test
-    fun `the swept surface is the whole payment and cheer surface - the nine operator handlers, the user handlers, the two webhook shapes`() {
-        val all = surface()
-        assertEquals(ADMIN_SURFACE, all.filter { it.pattern.startsWith("$ADMIN/") }.toSet(), "the operator handlers this test knows are the ones the context has")
-        assertTrue(all.containsAll(webhookShapes), "the two webhook shapes are mapped: $all")
-        assertTrue(all.any { it.pattern == "/api/v1/cheers/options" } && all.any { it.pattern == "/api/v1/cheers/me" } && all.any { it.pattern == "$PAYMENTS/orders" && it.method == HttpMethod.POST }, "$all")
-        println("MEASURED swept mappings: ${all.size} (operator ${ADMIN_SURFACE.size}, webhook ${webhookShapes.size}) - $all")
-    }
-
-    @Test
     fun `anonymous callers get 401 on every user and operator mapping - only the two webhook POST shapes are reached without a login`() {
         val all = surface()
+        assertTrue(all.containsAll(webhookShapes), "the two webhook shapes are mapped: $all")
         val gated = all.filter { it !in webhookShapes }
         assertTrue(gated.size >= ADMIN_SURFACE.size + 6, "the sweep found only ${gated.size} gated mappings: $gated")
         gated.forEach { m -> call(m, null).andExpect { status { isUnauthorized() } } }
@@ -82,6 +74,8 @@ class CheerHttpSurfaceIntegrationTest : CheerIntegrationBase() {
 
     @Test
     fun `a signed-in account without the role gets 403 on every operator handler, and nothing reaches the provider or the ledger`() {
+        val all = surface()
+        assertEquals(ADMIN_SURFACE, all.filter { it.pattern.startsWith("$ADMIN/") }.toSet(), "the operator handlers this test knows are the ones the context has")
         val orderId = buy(user)
         val before = jdbc.sql("select count(*) from payment_events").query(Long::class.java).single()
         ADMIN_SURFACE.forEach { m ->

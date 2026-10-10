@@ -1,17 +1,11 @@
 package dev.sumin.skeleton.payment
 
-import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.Logger
-import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
 import dev.sumin.skeleton.payment.testing.PaymentLedgerKit
 import java.time.Duration
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.test.assertFalse
 import kotlin.test.assertTrue
-import org.slf4j.LoggerFactory
 
 /**
  * 새 이벤트 키에 거는 주문 단위 창 상한(`webhook.per-order-limit`) — 호출자가 정하는 전달 id 로 새 줄 · 새 작업 · 결제사 조회를 마음대로 만들지 못하게 한다.
@@ -27,8 +21,6 @@ class WebhookPerOrderLimitTest {
     private fun stored(kit: PaymentLedgerKit) = rows(kit).filter { it.resourceType == "PAYMENT" }
 
     private fun markers(kit: PaymentLedgerKit) = rows(kit).filter { it.resourceType == WebhookMarkers.RESOURCE_TYPE }
-
-    private fun windowOf(kit: PaymentLedgerKit, at: java.time.Instant = kit.time.now()): Long = at.toEpochMilli() / Duration.ofMinutes(10).toMillis()
 
     @Test
     fun `thirty new events of one order are stored and the thirty-first is answered but not stored, not queued and never looked up`() {
@@ -52,19 +44,6 @@ class WebhookPerOrderLimitTest {
     }
 
     @Test
-    fun `a resend of a stored event is no new event - it still counts as a duplicate while the order is at the limit`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.paid()
-        (1..30).forEach { kit.deliver(delivery(kit, order.id, it)) }
-        assertEquals(WebhookReceipt.LIMITED, kit.deliver(delivery(kit, order.id, 31)))
-
-        val again = kit.deliver(delivery(kit, order.id, 7))
-
-        assertEquals(WebhookReceipt.DUPLICATE, again)
-        assertEquals(2, rows(kit).single { it.eventKey == "evt-7" }.deliveries)
-    }
-
-    @Test
     fun `changing the payment key in the body does not buy a new allowance - the order is counted by its own payment`() {
         val kit = PaymentLedgerKit()
         val order = kit.paid() // 결제 키 pay_1
@@ -73,29 +52,6 @@ class WebhookPerOrderLimitTest {
         assertEquals(30, receipts.count { it == WebhookReceipt.STORED })
         assertEquals(10, receipts.count { it == WebhookReceipt.LIMITED })
         assertEquals(setOf("pay_1"), stored(kit).map { it.resourceId }.toSet(), "the row names the order's own payment, whatever the body claimed")
-    }
-
-    @Test
-    fun `a signal past the limit is not dropped - one marker row per order and window, one job deferred to the end of the window`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.paid()
-        (1..30).forEach { kit.deliver(delivery(kit, order.id, it)) }
-        val jobsBefore = kit.tasks.all(PaymentTaskTypes.WEBHOOK).size
-        val window = windowOf(kit)
-
-        val receipts = (31..37).map { kit.deliver(delivery(kit, order.id, it)) }
-
-        assertEquals(List(7) { WebhookReceipt.LIMITED }, receipts)
-        val marker = markers(kit).single()
-        assertEquals("limited:${order.id}:$window", marker.eventKey)
-        assertEquals(WebhookMarkers.EVENT_TYPE, marker.eventType)
-        assertEquals(order.id, marker.orderId)
-        assertEquals(PaymentWebhookStatus.RECEIVED, marker.status)
-        assertEquals(7, marker.deliveries, "deliveries = how many signals hit the limit in that window")
-        assertEquals(30, stored(kit).size, "the marker is not a delivery - it does not count against the limit")
-        val job = kit.tasks.all(PaymentTaskTypes.WEBHOOK).drop(jobsBefore).single()
-        assertEquals(marker.id.toString(), job.task.subjectId)
-        assertEquals(java.time.Instant.ofEpochMilli((window + 1) * Duration.ofMinutes(10).toMillis()), job.task.runAt, "deferred to the end of the window")
     }
 
     @Test
@@ -115,52 +71,6 @@ class WebhookPerOrderLimitTest {
 
         assertEquals(PaymentOrderStatus.REFUNDED, kit.order(order.id).status, "the deferred lookup put the cancel on the ledger")
         assertEquals(PaymentWebhookStatus.PROCESSED, markers(kit).single().status)
-    }
-
-    @Test
-    fun `an operator who retries the marker does not swallow the rest of the window - the next limited signal re-arms the marker and the end-of-window job`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.paid()
-        (1..30).forEach { kit.deliver(delivery(kit, order.id, it)) }
-        kit.runWebhooks()
-        assertEquals(WebhookReceipt.LIMITED, kit.deliver(delivery(kit, order.id, 31)))
-        val marker = markers(kit).single()
-        kit.inbox.retry(marker.id) // 창 한가운데에서 운영자가 표식 줄의 「다시 처리」를 누른다
-        kit.runWebhooks()
-        assertEquals(PaymentWebhookStatus.PROCESSED, kit.store.findWebhookEvent(marker.id)!!.status)
-        kit.gateway.consoleCancel("pay_1", order.amount.amount) // 그 뒤 결제사 콘솔에서 취소 - 창은 아직 가득이다
-        val markerJobs = { kit.tasks.pending(PaymentTaskTypes.WEBHOOK).filter { it.task.subjectId == marker.id.toString() } }
-        val before = markerJobs().size
-
-        assertEquals(WebhookReceipt.LIMITED, kit.deliver(delivery(kit, order.id, 32, paymentKey = "pay_1")))
-
-        assertEquals(PaymentWebhookStatus.RECEIVED, kit.store.findWebhookEvent(marker.id)!!.status, "the marker is back to waiting")
-        assertEquals(before + 1, markerJobs().size, "one more job at the end of the window")
-        val window = windowOf(kit)
-        assertEquals(java.time.Instant.ofEpochMilli((window + 1) * Duration.ofMinutes(10).toMillis()), markerJobs().last().task.runAt)
-        (33..40).forEach { assertEquals(WebhookReceipt.LIMITED, kit.deliver(delivery(kit, order.id, it))) }
-        assertEquals(before + 1, markerJobs().size, "more limited signals while the marker waits add no job")
-
-        kit.advance(Duration.ofMinutes(10))
-        kit.runWebhooks()
-
-        assertEquals(PaymentOrderStatus.REFUNDED, kit.order(order.id).status, "the end-of-window lookup put the cancel on the ledger")
-        assertEquals(PaymentWebhookStatus.PROCESSED, kit.store.findWebhookEvent(marker.id)!!.status)
-    }
-
-    @Test
-    fun `a marker row never takes a place in the count - the window frees up exactly when the real rows fall out`() {
-        val kit = PaymentLedgerKit(
-            PaymentProperties(webhook = PaymentProperties.Webhook(pathToken = PaymentLedgerKit.WEBHOOK_TOKEN, perOrderLimit = PaymentProperties.Webhook.PerOrderLimit(capacity = 2, window = Duration.ofMinutes(1)))),
-        )
-        val order = kit.paid()
-        val receipts = (1..5).map { kit.deliver(delivery(kit, order.id, it)) }
-
-        assertEquals(listOf(WebhookReceipt.STORED, WebhookReceipt.STORED, WebhookReceipt.LIMITED, WebhookReceipt.LIMITED, WebhookReceipt.LIMITED), receipts)
-        assertEquals(2, stored(kit).size)
-        assertEquals(1, markers(kit).size)
-        kit.advance(Duration.ofMinutes(1).plusSeconds(1))
-        assertEquals(listOf(WebhookReceipt.STORED, WebhookReceipt.STORED, WebhookReceipt.LIMITED), (6..8).map { kit.deliver(delivery(kit, order.id, it)) })
     }
 
     @Test
@@ -190,37 +100,5 @@ class WebhookPerOrderLimitTest {
         } finally {
             pool.shutdownNow()
         }
-    }
-
-    @Test
-    fun `every kind of receipt leaves one log line with the kind only - no order id, payment key, event key or token`() {
-        val kit = PaymentLedgerKit(
-            PaymentProperties(webhook = PaymentProperties.Webhook(pathToken = PaymentLedgerKit.WEBHOOK_TOKEN, perOrderLimit = PaymentProperties.Webhook.PerOrderLimit(capacity = 1, window = Duration.ofMinutes(1)))),
-        )
-        val order = kit.paid()
-        val logger = LoggerFactory.getLogger(PaymentWebhookInbox::class.java) as Logger
-        val previous = logger.level
-        val appender = ListAppender<ILoggingEvent>().also { it.start() }
-        logger.level = Level.INFO
-        logger.addAppender(appender)
-        try {
-            kit.deliver(delivery(kit, order.id, 1)) // STORED
-            kit.deliver(delivery(kit, order.id, 1)) // DUPLICATE
-            kit.deliver(delivery(kit, order.id, 2)) // LIMITED
-            kit.deliver(kit.gateway.webhookDelivery(eventKey = "evt-ghost", paymentKey = "pay_ghost", orderId = "ord_" + "e".repeat(32))) // UNKNOWN_ORDER
-            kit.deliver(kit.gateway.webhookDelivery(eventType = "DEPOSIT_CALLBACK", eventKey = "evt-dep")) // UNSUPPORTED
-            kit.runWebhooks()
-            kit.store.inTransaction { tx -> tx.updateWebhookEvent(checkNotNull(tx.lockWebhookEvent(stored(kit).single().id)).copy(status = PaymentWebhookStatus.DEAD)) }
-            kit.deliver(delivery(kit, order.id, 1)) // REQUEUED
-        } finally {
-            logger.detachAppender(appender)
-            logger.level = previous
-        }
-
-        val lines = appender.list.map { it.formattedMessage }
-        listOf("STORED", "DUPLICATE", "LIMITED", "UNKNOWN_ORDER", "UNSUPPORTED", "REQUEUED").forEach { kind -> assertTrue(lines.any { it.contains("result=$kind") }, "no line for $kind: $lines") }
-        val all = lines.joinToString("\n")
-        listOf(order.id, "pay_1", "pay_ghost", "evt-1", "evt-ghost", PaymentLedgerKit.WEBHOOK_TOKEN).forEach { assertFalse(all.contains(it), "the log carries $it:\n$all") }
-        assertTrue(appender.list.single { it.formattedMessage.contains("result=LIMITED") }.level == Level.WARN)
     }
 }

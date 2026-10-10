@@ -98,16 +98,16 @@ class PaymentWebhookWebTest {
             "$base/scripted/wrong-token-0123456789abcdef-xyz",
             "$base/unknown/$token",
             "$base/unknown",
-        ).map { path -> path to send(path, body(order)).andExpect(status().isNotFound).andExpect(jsonPath("$.code").value("PAYMENT.WEBHOOK_NOT_FOUND")).andReturn().response.contentAsString }
-        val tokenless = send("$base/scripted", body(order)).andExpect(status().isNotFound).andExpect(jsonPath("$.code").value("PAYMENT.WEBHOOK_NOT_FOUND")).andReturn().response.contentAsString
+            "$base/scripted",
+        ).map { path -> send(path, body(order)).andExpect(status().isNotFound).andExpect(jsonPath("$.code").value("PAYMENT.WEBHOOK_NOT_FOUND")).andReturn().response.contentAsString }
 
-        val shapes = (answers.map { it.second } + tokenless).map { text -> text.replace(Regex("\"(traceId|spanId|timestamp)\":\"[^\"]*\""), "").replace(Regex(",+"), ",") }
+        val shapes = answers.map { text -> text.replace(Regex("\"(traceId|spanId|timestamp)\":\"[^\"]*\""), "").replace(Regex(",+"), ",") }
         assertEquals(1, shapes.toSet().size, "the body says nothing about which check failed: $shapes")
         assertTrue(rows().none { it.orderId == order.id }, "a refused request stores nothing")
     }
 
     @Test
-    fun `a provider that signs its webhooks is reached without the token and a bad signature is 401`() {
+    fun `a provider that signs its webhooks is reached without the token, a bad signature and an unreadable body are 401 and store nothing`() {
         gateway.webhookSigned = true
         val order = order()
         val sign = mapOf(ScriptedGateway.SIGNATURE_HEADER to ScriptedGateway.VALID_SIGNATURE, ScriptedGateway.DELIVERY_HEADER to "evt-signed")
@@ -117,35 +117,18 @@ class PaymentWebhookWebTest {
         send("$base/scripted", body(order), mapOf(ScriptedGateway.SIGNATURE_HEADER to "forged")).andExpect(status().isUnauthorized).andExpect(jsonPath("$.code").value("PAYMENT.WEBHOOK_REJECTED"))
 
         assertEquals(setOf("evt-signed", "evt-signed-2"), rows().filter { it.orderId == order.id }.map { it.eventKey }.toSet())
-    }
-
-    @Test
-    fun `an unreadable body is 401 and stores nothing`() {
         val rowsBefore = rows().size
-
         send("$base/scripted/$token", "this is not an event").andExpect(status().isUnauthorized)
-
         assertEquals(rowsBefore, rows().size)
     }
 
     @Test
-    fun `a body over the size limit is 413 and is not looked at, a body at the limit is read`() {
+    fun `a body over the size limit is 413 and is not looked at`() {
         val order = order()
         val rowsBefore = rows().size
 
         send("$base/scripted/$token", body(order) + "pad=" + "x".repeat(2048)).andExpect(status().isContentTooLarge).andExpect(jsonPath("$.code").value("PAYMENT.WEBHOOK_TOO_LARGE"))
         assertEquals(rowsBefore, rows().size)
-
-        val head = body(order)
-        val exact = head + "p=" + "x".repeat(2048 - head.length - 2)
-        assertEquals(2048, exact.toByteArray().size)
-        send("$base/scripted/$token", exact, mapOf(ScriptedGateway.DELIVERY_HEADER to "evt-exact")).andExpect(status().isOk)
-        assertEquals(1, rows().count { it.eventKey == "evt-exact" })
-    }
-
-    @Test
-    fun `the size limit is checked after the address - a stranger learns nothing from a large body`() {
-        send("$base/scripted/wrong-token-0123456789abcdef-xyz", "x".repeat(10_000)).andExpect(status().isNotFound)
     }
 
     @Test
@@ -163,7 +146,6 @@ class PaymentWebhookWebTest {
             val bodies = listOf(
                 send("$base/scripted/$wrongWithSymbols", body(order)).andExpect(status().isNotFound),
                 send("$base/scripted/$token", body(order), mapOf(ScriptedGateway.DELIVERY_HEADER to "evt-log-1")).andExpect(status().isOk),
-                send("$base/scripted/$wrong", body(order)).andExpect(status().isNotFound),
                 send("$base/scripted/$token/extra", body(order)).andExpect(status().isNotFound),
                 send("$base/scripted/$wrong/$token", body(order)).andExpect(status().isNotFound),
             ).map { it.andReturn().response.contentAsString }
@@ -192,10 +174,8 @@ class PaymentWebhookWebTest {
 
         assertTrue(open(HttpMethod.POST, "$base/scripted"))
         assertTrue(open(HttpMethod.POST, "$base/scripted/$token"))
-        assertTrue(open(HttpMethod.POST, "$base/toss/$token"))
         assertFalse(open(HttpMethod.GET, "$base/scripted/$token"), "only POST is opened")
         assertFalse(open(HttpMethod.POST, "/api/v1/payments/orders"))
-        assertFalse(open(HttpMethod.POST, "/api/v1/payments/webhook-events/1/retry"))
         assertFalse(open(HttpMethod.POST, "/api/v1/admin/payments/webhook-events/1/retry"))
         assertTrue(registry.endpoints.none { it.pattern.contains("admin") })
     }

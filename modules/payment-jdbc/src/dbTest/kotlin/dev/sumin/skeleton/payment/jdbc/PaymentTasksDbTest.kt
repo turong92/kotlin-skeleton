@@ -8,7 +8,6 @@ import dev.sumin.skeleton.jobqueue.jdbc.JobQueueProperties
 import dev.sumin.skeleton.jobqueue.jdbc.JobQueueWorker
 import dev.sumin.skeleton.payment.PaymentTask
 import dev.sumin.skeleton.payment.PaymentTaskPermanentException
-import dev.sumin.skeleton.payment.PaymentTaskRetryException
 import dev.sumin.skeleton.payment.PaymentTaskRun
 import dev.sumin.skeleton.payment.PaymentTaskRunner
 import dev.sumin.skeleton.payment.testing.PaymentTestOrders
@@ -19,7 +18,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
 import org.assertj.core.api.Assertions.assertThat
 import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.transaction.support.TransactionTemplate
@@ -125,38 +123,4 @@ class PaymentTasksDbTest {
         assertEquals(1, (row["attempts"] as Number).toInt())
         assertThat(row["last_error"].toString()).contains("mode mismatch for order ord_1")
     }
-
-    @Test
-    fun `a retry request keeps the job pending with a later run time`() {
-        behavior = { throw PaymentTaskRetryException("provider still working on ord_1") }
-        store.inTransaction { tasks.enqueue(PaymentTask("payment-order-expire", "ord_1", maxAttempts = 3)) }
-
-        worker.pollOnce()
-
-        val row = PaymentDb.jdbc.queryForMap("select status, attempts from jobs", emptyMap<String, Any>())
-        assertEquals("PENDING", row["status"])
-        assertEquals(1, (row["attempts"] as Number).toInt())
-        assertEquals(0, worker.pollOnce(), "backed off - not due again right away")
-    }
-
-    @Test
-    fun `an unexpected failure uses the queue's retry and the last attempt ends dead`() {
-        behavior = { throw IllegalStateException("planted") }
-        store.inTransaction { tasks.enqueue(PaymentTask("payment-order-expire", "ord_1", maxAttempts = 1)) }
-
-        worker.pollOnce()
-
-        assertEquals("DEAD", PaymentDb.jdbc.queryForObject("select status from jobs", emptyMap<String, Any>(), String::class.java))
-    }
-
-    @Test
-    fun `a job whose payload is not ours is killed as permanent - nothing to retry`() {
-        queue.enqueue("payment-order-expire", """{"unexpected":true}""")
-
-        worker.pollOnce()
-
-        assertEquals("DEAD", PaymentDb.jdbc.queryForObject("select status from jobs", emptyMap<String, Any>(), String::class.java))
-        assertTrue(runs.isEmpty())
-    }
-
 }

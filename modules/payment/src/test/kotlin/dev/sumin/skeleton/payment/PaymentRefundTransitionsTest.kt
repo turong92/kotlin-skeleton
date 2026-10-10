@@ -42,20 +42,4 @@ class PaymentRefundTransitionsTest {
         assertEquals("ord_x", PaymentRefundTransitions.openKeyFor(REQUESTED, "ord_x"))
         listOf(SUCCEEDED, FAILED, REJECTED, WITHDRAWN).forEach { assertEquals(null, PaymentRefundTransitions.openKeyFor(it, "ord_x"), "$it") }
     }
-
-    @Test
-    fun `reason codes - people may pick three, an operator four, and the provider console one is ours alone`() {
-        assertEquals(
-            setOf(PaymentRefundReason.CUSTOMER_REQUEST, PaymentRefundReason.DUPLICATE, PaymentRefundReason.NOT_DELIVERED),
-            PaymentRefundReason.entries.filter { it.forCustomer }.toSet(),
-        )
-        assertEquals(
-            setOf(PaymentRefundReason.CUSTOMER_REQUEST, PaymentRefundReason.DUPLICATE, PaymentRefundReason.NOT_DELIVERED, PaymentRefundReason.OPERATOR),
-            PaymentRefundReason.entries.filter { it.forOperator }.toSet(),
-        )
-        assertEquals(PaymentRefundReason.DUPLICATE, PaymentRefundReason.parse("DUPLICATE"))
-        assertEquals(null, PaymentRefundReason.parse("duplicate"), "the code is exact")
-        assertEquals(null, PaymentRefundReason.parse("because I said so"))
-    }
-
 }

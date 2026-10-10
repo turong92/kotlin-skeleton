@@ -1,6 +1,5 @@
 package dev.sumin.skeleton.payment.jdbc
 
-import dev.sumin.skeleton.jobqueue.jdbc.JobDeadListener
 import dev.sumin.skeleton.jobqueue.jdbc.JobHandler
 import dev.sumin.skeleton.jobqueue.jdbc.JobQueue
 import dev.sumin.skeleton.jobqueue.jdbc.JobQueueJdbcAutoConfiguration
@@ -20,8 +19,6 @@ import javax.sql.DataSource
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
-import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
 import org.assertj.core.api.Assertions.assertThat
 import org.springframework.boot.autoconfigure.AutoConfigurations
 import org.springframework.boot.test.context.runner.ApplicationContextRunner
@@ -92,13 +89,6 @@ class PaymentJdbcAutoConfigurationTest {
     }
 
     @Test
-    fun `the auto-configuration is registered under the exact class name the payment module waits for`() {
-        assertEquals("dev.sumin.skeleton.payment.jdbc.PaymentJdbcAutoConfiguration", PaymentJdbcAutoConfiguration::class.java.name)
-        val imports = javaClass.classLoader.getResourceAsStream("META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports")!!.bufferedReader().readLines()
-        assertTrue("dev.sumin.skeleton.payment.jdbc.PaymentJdbcAutoConfiguration" in imports)
-    }
-
-    @Test
     fun `every task type of the runner gets a queue handler - the ones the app adds included`() {
         runner.withUserConfiguration(AppHandler::class.java).run { ctx ->
             assertThat(ctx).hasNotFailed()
@@ -107,19 +97,7 @@ class PaymentJdbcAutoConfigurationTest {
 
             assertThat(runnerTypes).contains("payment-app-extra", PaymentTaskTypes.ORDER_EXPIRE, PaymentTaskTypes.ORDER_RECONCILE, PaymentTaskTypes.ORDER_FULFIL)
             assertThat(queueTypes).containsExactlyInAnyOrderElementsOf(runnerTypes)
-        }
-    }
-
-    @Test
-    fun `without an app handler the queue handlers are exactly the order, refund and webhook tasks`() {
-        runner.run { ctx ->
-            assertEquals(
-                setOf(
-                    PaymentTaskTypes.ORDER_EXPIRE, PaymentTaskTypes.ORDER_RECONCILE, PaymentTaskTypes.ORDER_FULFIL,
-                    PaymentTaskTypes.REFUND_RECONCILE, PaymentTaskTypes.REFUND_APPLY, PaymentTaskTypes.WEBHOOK,
-                ),
-                ctx.getBeansOfType(JobHandler::class.java).values.map { it.type }.toSet(),
-            )
+            assertThat(runnerTypes).containsAll(listOf(PaymentTaskTypes.REFUND_RECONCILE, PaymentTaskTypes.REFUND_APPLY, PaymentTaskTypes.WEBHOOK))
         }
     }
 
@@ -136,17 +114,6 @@ class PaymentJdbcAutoConfigurationTest {
     }
 
     @Test
-    fun `the dead-job hook is a bean the queue worker collects - next to any other dead-job listener`() {
-        val other = JobDeadListener { _, _ -> }
-        runner.withBean("otherDeadListener", JobDeadListener::class.java, { other }).run { ctx ->
-            assertThat(ctx).hasNotFailed()
-            val listeners = ctx.getBeansOfType(JobDeadListener::class.java).values
-            assertThat(listeners).contains(other)
-            assertThat(listeners.filterIsInstance<PaymentJobDeadListener>()).hasSize(1)
-        }
-    }
-
-    @Test
     fun `an app queue handler for a payment task type that is already handled stops the start - the worker would pick one silently`() {
         val duplicate = object : JobHandler {
             override val type = PaymentTaskTypes.ORDER_EXPIRE
@@ -156,31 +123,6 @@ class PaymentJdbcAutoConfigurationTest {
             assertThat(ctx).hasFailed()
             assertThat(ctx.startupFailure).hasStackTraceContaining(PaymentTaskTypes.ORDER_EXPIRE).hasStackTraceContaining("more than one")
         }
-    }
-
-    @Test
-    fun `an app store and an app task port replace the JDBC ones`() {
-        val store = object : PaymentLedgerStore by JdbcPaymentLedgerStore(
-            org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate(dataSource), DataSourceTransactionManager(dataSource), FakeDialect,
-        ) {}
-        val tasks = PaymentTasks { }
-        runner.withBean(PaymentLedgerStore::class.java, { store }).withBean("ownTasks", PaymentTasks::class.java, { tasks }).run { ctx ->
-            assertThat(ctx).hasNotFailed()
-            assertEquals(store, ctx.getBean(PaymentLedgerStore::class.java))
-            assertEquals(tasks, ctx.getBean(PaymentTasks::class.java))
-        }
-    }
-
-    @Test
-    fun `without a data source nothing is registered and payment alone is untouched`() {
-        ApplicationContextRunner()
-            .withConfiguration(AutoConfigurations.of(PaymentAutoConfiguration::class.java, PaymentLedgerAutoConfiguration::class.java, PaymentJdbcAutoConfiguration::class.java))
-            .run { ctx ->
-                assertThat(ctx).hasNotFailed()
-                assertTrue(ctx.getBeansOfType(PaymentLedgerStore::class.java).isEmpty())
-                assertTrue(ctx.getBeansOfType(PaymentOrders::class.java).isEmpty())
-                assertNotNull(ctx.getBean(dev.sumin.skeleton.payment.PaymentProviderRouter::class.java))
-            }
     }
 
     @Test

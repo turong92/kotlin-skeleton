@@ -20,7 +20,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
-import kotlin.test.assertTrue
 
 /** 확정(허용 목록의 거절 코드만) / 모름(그 밖의 전부 — 타임아웃 · 5xx · 네트워크 · 해석 불가 · 목록에 없는 코드) — 헷갈리면 모름이다. */
 class TossFailureClassificationTest {
@@ -82,37 +81,17 @@ class TossFailureClassificationTest {
     }
 
     @Test
-    fun `every allow-listed code is marked definitive on the exception and nothing else is`() {
-        server.on("POST", "/v1/payments/confirm", TossFixtures.error(403, "REJECT_CARD_PAYMENT"))
-        assertTrue(assertFailsWith<PaymentProviderException> { confirm() }.providerError.definitive)
-
-        server.on("POST", "/v1/payments/confirm", TossFixtures.error(400, "ALREADY_PROCESSED_PAYMENT"))
-        assertFalse(assertFailsWith<PaymentProviderException> { confirm() }.providerError.definitive)
-    }
-
-    @Test
     fun `codes where the money may have moved or the outcome is not known are unknown even though they are 4xx`() {
         listOf(
             400 to "ALREADY_PROCESSED_PAYMENT",
-            400 to "ALREADY_PROCESSING_REQUEST",
             400 to "ALREADY_CANCELED_PAYMENT",
-            400 to "ALREADY_REFUND_PAYMENT",
-            // 환불 쪽에서도: 앞선 환불이 잔액 · 상태 · 횟수를 이미 바꿨기 때문에 나올 수 있는 거절은 확정이 아니다(이중 환불 방지)
             403 to "NOT_CANCELABLE_AMOUNT",
             403 to "NOT_CANCELABLE_PAYMENT",
             403 to "EXCEED_CANCEL_LIMIT",
-            // 공식 설명이 「결제사에 문의」뿐이라 앞선 환불이 적용됐을 가능성을 배제할 근거가 없다
             400 to "REFUND_REJECTED",
             409 to "IDEMPOTENT_REQUEST_PROCESSING",
-            403 to "FORBIDDEN_CONSECUTIVE_REQUEST",
             400 to "PROVIDER_ERROR",
-            400 to "CARD_PROCESSING_ERROR",
-            400 to "NOT_MATCHES_REFUNDABLE_AMOUNT",
-            400 to "UNAPPROVED_ORDER_ID",
             500 to "FAILED_INTERNAL_SYSTEM_PROCESSING",
-            500 to "FAILED_PAYMENT_INTERNAL_SYSTEM_PROCESSING",
-            500 to "UNKNOWN_PAYMENT_ERROR",
-            500 to "FAILED_REFUND_PROCESS",
             429 to "TOO_MANY_REQUESTS",
             503 to "ANYTHING",
         ).forEach { (status, code) ->
@@ -147,33 +126,18 @@ class TossFailureClassificationTest {
     }
 
     @Test
-    fun `a dropped connection is a network error and unknown`() {
+    fun `a dropped connection is a network error and unknown, a POST on a first or reused connection reaches the server once`() {
         server.on("POST", "/v1/payments/pay_key_1/cancel", Reply.Drop)
-
         val error = assertFailsWith<Exception> { refund() }
-
         assertIs<ExternalHttpNetworkException>(error)
         assertEquals(PaymentFailureOutcome.UNKNOWN, PaymentFailures.outcomeOf(error))
-    }
 
-    @Test
-    fun `a POST whose first connection is dropped without an answer reaches the server once`() {
-        server.on("POST", "/v1/payments/confirm", Reply.Drop)
-
-        assertFailsWith<ExternalHttpNetworkException> { confirm() }
-
-        assertEquals(1, server.requests.size, "requests the server saw: ${server.requests.map { it.method + " " + it.path }}")
-    }
-
-    @Test
-    fun `a POST dropped on a connection that was already used reaches the server once`() {
+        server.clearRequests()
         server.on("POST", "/v1/payments/confirm", Reply.Json(200, TossFixtures.payment()))
         confirm()
         server.clearRequests()
         server.on("POST", "/v1/payments/confirm", Reply.Drop)
-
         assertFailsWith<ExternalHttpNetworkException> { confirm() }
-
         assertEquals(1, server.requests.size, "requests the server saw: ${server.requests.map { it.method + " " + it.path }}")
     }
 

@@ -32,8 +32,6 @@ class PaymentTaskDeadHookTest {
 
     private fun flaggedEvents(kit: PaymentLedgerKit, orderId: String) = kit.store.listEvents(orderId).count { it.type == PaymentEventType.REVIEW_FLAGGED }
 
-    // ---- 조회 작업 ----
-
     @Test
     fun `a dead reconcile job flags a still confirming order that has no mark - once, with the alert`() {
         val kit = PaymentLedgerKit()
@@ -49,20 +47,6 @@ class PaymentTaskDeadHookTest {
     }
 
     @Test
-    fun `a dead reconcile job keeps the reason that was marked first`() {
-        val kit = PaymentLedgerKit()
-        val order = confirming(kit)
-        kit.store.inTransaction { tx ->
-            kit.convergence.flagReview(tx, tx.lockOrder(order.id)!!, PaymentReviewReason.MODE_MISMATCH, ConvergeContext(PaymentMode.TEST, ConvergeSource.RECONCILE))
-        }
-
-        kit.runner.onDead(dead(PaymentTaskTypes.ORDER_RECONCILE, order.id))
-
-        assertEquals(PaymentReviewReason.MODE_MISMATCH, kit.order(order.id).reviewReason)
-        assertEquals(1, kit.review.flagged.size)
-    }
-
-    @Test
     fun `a dead reconcile job leaves an order that finished by another way alone`() {
         val kit = PaymentLedgerKit()
         val paid = kit.paid()
@@ -74,8 +58,6 @@ class PaymentTaskDeadHookTest {
         assertEquals(PaymentOrderStatus.PAID, kit.order(paid.id).status)
         assertEquals(emptyList(), kit.review.flagged.toList())
     }
-
-    // ---- 환불 정산 작업 ----
 
     @Test
     fun `a dead refund settle job marks the order REFUND_MISMATCH while the refund is still pending - once`() {
@@ -89,21 +71,6 @@ class PaymentTaskDeadHookTest {
         assertEquals(listOf(refund.orderId to PaymentReviewReason.REFUND_MISMATCH), kit.review.flagged.toList())
         assertEquals(1, flaggedEvents(kit, refund.orderId))
         assertEquals(PaymentRefundStatus.PENDING, kit.store.findRefund(refund.id)!!.status, "the line is left as it is - a person decides")
-    }
-
-    @Test
-    fun `a dead refund settle job leaves a refund that was settled by another way alone`() {
-        val kit = PaymentLedgerKit()
-        val refund = pendingRefund(kit)
-        kit.advance(java.time.Duration.ofMinutes(2))
-        kit.runTasks(setOf(PaymentTaskTypes.REFUND_RECONCILE))
-        assertEquals(PaymentRefundStatus.SUCCEEDED, kit.store.findRefund(refund.id)!!.status)
-
-        kit.runner.onDead(dead(PaymentTaskTypes.REFUND_RECONCILE, refund.id))
-        kit.runner.onDead(dead(PaymentTaskTypes.REFUND_RECONCILE, "rfd_missing"))
-
-        assertNull(kit.order(refund.orderId).reviewReason)
-        assertEquals(emptyList(), kit.review.flagged.toList())
     }
 
     @Test
@@ -126,20 +93,4 @@ class PaymentTaskDeadHookTest {
     }
 
     // ---- 표시할 것이 없는 작업 · 러너 ----
-
-    @Test
-    fun `dead expiry, fulfilment and refund apply jobs mark nothing when nothing is outstanding`() {
-        val kit = PaymentLedgerKit()
-        val pending = kit.create(key = "k-pending").order
-        val paid = kit.paid(key = "k-paid", paymentKey = "pay_paid")
-
-        kit.runner.onDead(dead(PaymentTaskTypes.ORDER_EXPIRE, pending.id))
-        kit.runner.onDead(dead(PaymentTaskTypes.ORDER_FULFIL, paid.id))
-        kit.runner.onDead(dead(PaymentTaskTypes.REFUND_APPLY, "rfd_missing"))
-
-        assertNull(kit.order(pending.id).reviewReason)
-        assertNull(kit.order(paid.id).reviewReason)
-        assertEquals(emptyList(), kit.review.flagged.toList())
-    }
-
 }

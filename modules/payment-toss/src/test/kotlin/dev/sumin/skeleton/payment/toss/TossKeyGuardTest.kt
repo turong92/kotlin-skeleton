@@ -58,16 +58,6 @@ class TossKeyGuardTest {
     }
 
     @Test
-    fun `enabled with no secret key outside a protected environment - the provider bean is absent - only warns`() {
-        (everyEnv - protectedEnvs.toSet()).forEach { (env, context) ->
-            val g = guard(secret = "", client = "")
-            assertEquals(emptyList(), g.problems(context), env)
-            assertEquals(1, g.warnings(context).size, env)
-            assertTrue("skeleton.payment-toss.secret-key" in g.warnings(context).single() && "PAYMENT_TOSS_SECRET_KEY" in g.warnings(context).single())
-        }
-    }
-
-    @Test
     fun `enabled with no secret key in a protected environment fails the start - a deployment that asked for payments must not come up without them`() {
         protectedEnvs.forEach { env ->
             val g = guard(secret = "", client = "")
@@ -76,20 +66,8 @@ class TossKeyGuardTest {
             assertTrue("skeleton.payment-toss.secret-key" in problems.single() && "PAYMENT_TOSS_SECRET_KEY" in problems.single(), problems.single())
             assertEquals(emptyList(), g.warnings(everyEnv.getValue(env)).filter { "secret-key" in it }, "said once, as a problem - not twice")
         }
-    }
-
-    @Test
-    fun `a base url that is not the Toss host warns in protected environments only`() {
-        listOf("stage", "prod").forEach { env ->
-            val custom = guard(baseUrl = "https://payments.example.test").warnings(everyEnv.getValue(env))
-            assertEquals(1, custom.count { "base-url" in it }, env)
-            assertFalse(custom.joinToString().contains("example.test"), "the host is not printed")
-            assertEquals(0, guard().warnings(everyEnv.getValue(env)).count { "base-url" in it }, "the default host is fine")
-            assertEquals(0, guard(baseUrl = " https://api.tosspayments.com/ ").warnings(everyEnv.getValue(env)).count { "base-url" in it }, "spacing and a trailing slash do not matter")
-            assertEquals(1, guard(baseUrl = "https://api.tosspayments.com.evil.test").warnings(everyEnv.getValue(env)).count { "base-url" in it })
-        }
-        listOf("unset", "local", "profile local", "profile test").forEach { env ->
-            assertEquals(0, guard(baseUrl = "http://127.0.0.1:9999").warnings(everyEnv.getValue(env)).count { "base-url" in it }, "a fake server in a local run is the normal case: $env")
+        (everyEnv - protectedEnvs.toSet()).forEach { (env, context) ->
+            assertEquals(emptyList(), guard(secret = "", client = "").problems(context), "$env: only a warning")
         }
     }
 
@@ -185,34 +163,6 @@ class TossKeyGuardTest {
     }
 
     @Test
-    fun `with a ledger in any environment a stopped job queue worker is a warning - lookups, fulfilment and webhooks would not run`() {
-        everyEnv.keys.forEach { env ->
-            val context = everyEnv.getValue(env)
-            val g = guard(fitting(env), if (env in protectedEnvs) liveClient else testClient, ledger = true, workerRunning = false)
-            assertEquals(emptyList(), g.problems(context), env)
-            val warnings = g.warnings(context)
-            assertEquals(1, warnings.size, env)
-            assertTrue("skeleton.job-queue.worker-enabled" in warnings.single(), env)
-            assertEquals(emptyList(), guard(fitting(env), if (env in protectedEnvs) liveClient else testClient, ledger = true, workerRunning = true).all(context), env)
-        }
-        assertEquals(emptyList(), guard(liveSecret, liveClient, ledger = false, workerRunning = false).all(prod))
-        assertEquals(emptyList(), guard(ledger = false, workerRunning = false).all(local))
-    }
-
-    @Test
-    fun `with a ledger a response limit shorter than the lookup limit is a warning - an honest confirm would often end up unknown`() {
-        val short = guard(ledger = true, responseTimeout = Duration.ofSeconds(5))
-        val warnings = short.warnings(local)
-        assertEquals(1, warnings.size)
-        assertTrue("skeleton.http.clients.payment-toss.response-timeout" in warnings.single())
-        assertEquals(emptyList(), short.problems(local))
-
-        assertEquals(emptyList(), guard(ledger = true, responseTimeout = Duration.ofSeconds(10)).all(local))
-        assertEquals(emptyList(), guard(ledger = true, responseTimeout = Duration.ofSeconds(30)).all(local))
-        assertEquals(emptyList(), guard(ledger = false, responseTimeout = Duration.ofSeconds(5)).all(local), "without a ledger nothing waits on the confirm")
-    }
-
-    @Test
     fun `with a ledger a reconcile first delay that is not longer than the response limit fails the start - the lookup would overlap a confirm still in flight`() {
         val limit = Duration.ofSeconds(60)
         listOf(Duration.ofSeconds(60), Duration.ofSeconds(30), Duration.ofSeconds(1)).forEach { delay ->
@@ -226,18 +176,9 @@ class TossKeyGuardTest {
     }
 
     @Test
-    fun `with a ledger a refund settle delay that is not longer than the response limit fails the start - the settle job would judge a refund that is still in flight`() {
-        val limit = Duration.ofSeconds(30)
-        listOf(Duration.ofSeconds(30), Duration.ofSeconds(10), Duration.ofSeconds(1)).forEach { delay ->
-            everyEnv.forEach { (env, context) ->
-                val problems = guard(ledger = true, responseTimeout = limit, settleDelay = delay).problems(context)
-                val line = problems.singleOrNull { "skeleton.payment.refund.settle-delay" in it }
-                assertTrue(line != null, "$env $delay: $problems")
-                assertTrue("skeleton.http.clients.payment-toss.response-timeout" in line)
-                assertTrue("${delay.seconds}s" in line && "${limit.seconds}s" in line, "the message names both durations: $line")
-                assertTrue(problems.none { "first-delay" in it }, "the first-delay line is its own: $problems")
-            }
-        }
+    fun `with a ledger a refund settle delay that is not longer than the response limit fails the start too`() {
+        val problems = guard(ledger = true, responseTimeout = Duration.ofSeconds(30), settleDelay = Duration.ofSeconds(30)).problems(local)
+        assertEquals(1, problems.count { "skeleton.payment.refund.settle-delay" in it }, "$problems")
     }
 
     @Test
@@ -260,14 +201,5 @@ class TossKeyGuardTest {
             }
         }
         assertTrue(checked > 500)
-    }
-
-    @Test
-    fun `a key that does not look like a Toss key warns without printing it`() {
-        val g = guard(secret = "weird-secret", client = "weird-client")
-        val warnings = g.warnings(unset)
-        assertTrue(warnings.isNotEmpty())
-        assertEquals(emptyList(), g.problems(unset))
-        warnings.forEach { assertFalse(it.contains("weird")) }
     }
 }

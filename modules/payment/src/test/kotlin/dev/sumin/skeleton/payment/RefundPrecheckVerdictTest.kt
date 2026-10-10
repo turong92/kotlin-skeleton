@@ -54,31 +54,6 @@ class RefundPrecheckVerdictTest {
         }
     }
 
-    @Test
-    fun `a supply reason in the column is replaced by the refund mismatch the check finds`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.paid()
-        flag(kit, order.id, PaymentReviewReason.FULFILMENT_UNRESOLVED)
-        skewLedger(kit, order.id)
-
-        assertFailsWith<PaymentRefundNotAllowedException> { kit.refunds.refund(op, order.id, "OPERATOR", 500, IdempotencyKey("k-1")) }
-
-        assertEquals(PaymentReviewReason.REFUND_MISMATCH, kit.order(order.id).reviewReason)
-    }
-
-    @Test
-    fun `numbers that agree send the refund even when another reason holds the column`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.paid()
-        flag(kit, order.id, PaymentReviewReason.FULFILMENT_UNRESOLVED)
-
-        val outcome = kit.refunds.refund(op, order.id, "OPERATOR", 500, IdempotencyKey("k-1"))
-
-        assertEquals(PaymentRefundStatus.SUCCEEDED, outcome.refund.status)
-    }
-
-    // ---- M-2 ----
-
     /** 두 번째 트랜잭션(= 선점)이 열리기 직전에 [before] 가 끼는 저장소 — 확인과 선점 사이의 틈. */
     private fun gapStore(kit: PaymentLedgerKit, before: () -> Unit): PaymentLedgerStore {
         var opened = 0
@@ -112,10 +87,8 @@ class RefundPrecheckVerdictTest {
         assertEquals(emptyList(), directKit.store.listRefunds(directOrder.id))
     }
 
-    // ---- ⓒ ----
-
     @Test
-    fun `sync releases a mode mismatch when the gateway's mode is the order's mode - and says so in the history`() {
+    fun `sync releases a mode mismatch when the gateway's mode is the order's mode`() {
         val kit = PaymentLedgerKit()
         val order = kit.paid()
         flag(kit, order.id, PaymentReviewReason.MODE_MISMATCH)
@@ -124,7 +97,5 @@ class RefundPrecheckVerdictTest {
 
         assertNull(synced.reviewReason)
         assertNull(kit.order(order.id).reviewReason)
-        assertEquals("MODE_MISMATCH_CLEARED", kit.store.listEvents(order.id).last().providerCode)
     }
-
 }

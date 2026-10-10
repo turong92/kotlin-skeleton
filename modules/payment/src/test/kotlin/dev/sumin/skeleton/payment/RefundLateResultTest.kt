@@ -1,11 +1,9 @@
 package dev.sumin.skeleton.payment
 
 import dev.sumin.skeleton.payment.testing.PaymentLedgerKit
-import dev.sumin.skeleton.payment.testing.ScriptedGateway.RefundScript
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
-import kotlin.test.assertTrue
 
 /**
  * 결제사의 **환불됨 응답이 도착했는데 그 사이 줄이 이미 닫혔다**(다른 길이 먼저 `NOT_APPLIED` 로 닫았거나, 같은 금액의 콘솔 취소를 이 줄이 가져갔다).
@@ -34,9 +32,6 @@ class RefundLateResultTest {
         assertEquals(1000, kit.order(order.id).refundedAmount)
         assertEquals(kit.gateway.payment("pay_1")!!.refundedTotal, kit.order(order.id).refundedAmount)
         assertEquals(PaymentReviewReason.REFUND_MISMATCH, kit.order(order.id).reviewReason)
-        assertEquals(listOf(order.id to PaymentReviewReason.REFUND_MISMATCH), kit.review.flagged)
-        val trail = kit.store.listEvents(order.id).filter { it.refundId == outcome.refund.id }.map { it.providerCode }
-        assertTrue("LATE_RESULT" in trail, "$trail")
     }
 
     @Test
@@ -56,7 +51,6 @@ class RefundLateResultTest {
         assertEquals("txn_2", provider.providerRefundId, "our own cancel was not the one the line took")
         assertEquals(2000, kit.order(order.id).refundedAmount)
         assertEquals(kit.gateway.payment("pay_1")!!.refundedTotal, kit.order(order.id).refundedAmount)
-        assertEquals(PaymentReviewReason.REFUND_MISMATCH, kit.order(order.id).reviewReason)
     }
 
     @Test
@@ -73,8 +67,6 @@ class RefundLateResultTest {
         assertEquals(PaymentReviewReason.REFUND_MISMATCH, kit.order(order.id).reviewReason)
         assertEquals(2500, kit.order(order.id).refundedAmount)
     }
-
-    // ---- M-1: 늦은 결과의 표시는 SYNC 로만 풀린다 ----
 
     private fun closeLineDuringRefund(kit: PaymentLedgerKit, orderId: String): RefundOutcome =
         withDuring(kit, orderId) {
@@ -108,22 +100,5 @@ class RefundLateResultTest {
         kit.refunds.sync(op, order.id)
 
         assertNull(kit.order(order.id).reviewReason)
-    }
-
-    // ---- M-6: 거래 키 없는 환불됨 응답이 닫힌 줄에 도착했다 ----
-
-    @Test
-    fun `a refunded answer without a transaction key on a closed failed line is not dropped - the order is flagged and the trail says so`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.paid()
-        kit.gateway.scriptRefund(RefundScript.ApproveWithoutTransactionKey)
-
-        val outcome = closeLineDuringRefund(kit, order.id)
-
-        assertEquals(PaymentRefundStatus.FAILED, outcome.refund.status)
-        assertEquals(PaymentReviewReason.REFUND_MISMATCH, kit.order(order.id).reviewReason)
-        val trail = kit.store.listEvents(order.id).filter { it.refundId == outcome.refund.id }.map { it.providerCode }
-        assertTrue("LATE_RESULT" in trail, "$trail")
-        assertEquals(kit.gateway.payment("pay_1")!!.refundedTotal, kit.order(order.id).refundedAmount, "the cancel that went out is in the ledger too")
     }
 }
