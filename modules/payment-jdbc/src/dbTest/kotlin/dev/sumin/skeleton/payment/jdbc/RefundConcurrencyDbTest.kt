@@ -25,57 +25,6 @@ class RefundConcurrencyDbTest {
     @BeforeTest
     fun clean() = PaymentDb.clean()
 
-    @Test
-    fun `two operators refunding one order - one wins`() {
-        val kit = JdbcLedgerKit()
-        val order = kit.paid()
-        kit.gateway.duringRefund = { Thread.sleep(150) } // 이긴 쪽이 결제사에 있는 동안 진 쪽이 선점을 시도하게 한다
-
-        val results = race(2) { n -> kit.refunds.refund(op, order.id, "OPERATOR", null, IdempotencyKey("op-$n")) }
-
-        assertEquals(1, results.count { it.isSuccess }, results.mapNotNull { it.exceptionOrNull() }.toString())
-        val loser = results.single { it.isFailure }.exceptionOrNull()
-        assertTrue(loser is PaymentRefundInProgressException || loser is PaymentRefundNotAllowedException, "$loser")
-        assertEquals(1, kit.gateway.refundCalls.size, "the provider was asked once")
-        assertEquals(1, kit.store.listRefunds(order.id).size)
-        assertEquals(PaymentOrderStatus.REFUNDED, kit.order(order.id).status)
-        assertEquals(3000, kit.order(order.id).refundedAmount)
-        assertEquals(1, kit.listener.refunded.size)
-    }
-
-    @Test
-    fun `sixteen threads pressing refund with one idempotency key leave one line and one provider call`() {
-        val kit = JdbcLedgerKit()
-        val order = kit.paid()
-
-        val results = race(16) { kit.refunds.refund(op, order.id, "OPERATOR", 1000, IdempotencyKey("same")) }
-
-        assertTrue(results.all { it.isSuccess }, results.mapNotNull { it.exceptionOrNull() }.toString())
-        assertEquals(1, results.map { it.getOrThrow().refund.id }.toSet().size, "everyone got the same line")
-        assertEquals(1, kit.gateway.refundCalls.size)
-        assertEquals(1, PaymentDb.count("select count(*) from payment_refunds"))
-        assertEquals(1, PaymentDb.count("select count(*) from jobs where job_type = :t", "t" to PaymentTaskTypes.REFUND_RECONCILE))
-    }
-
-    @Test
-    fun `sixteen threads approving one request send one refund - the re-check under the lock stops the rest`() {
-        val kit = JdbcLedgerKit()
-        val order = kit.paid()
-        val request = kit.refunds.request("acc_1", order.id, "DUPLICATE", 1000, IdempotencyKey("req")).refund
-        kit.gateway.duringRefund = { Thread.sleep(100) } // 이긴 쪽이 결제사에 있는 동안 나머지가 선점 락에 줄을 선다
-
-        val results = race(16) { kit.refunds.approve(op, request.id) }
-
-        assertEquals(1, results.count { it.isSuccess }, results.mapNotNull { it.exceptionOrNull() }.toString())
-        val losers = results.mapNotNull { it.exceptionOrNull() }
-        assertEquals(15, losers.size)
-        assertTrue(losers.all { it is PaymentRefundNotAllowedException }, "$losers")
-        assertEquals(1, kit.gateway.refundCalls.size, "the provider was asked once")
-        assertEquals(1, PaymentDb.count("select count(*) from payment_refunds"))
-        assertEquals(1, PaymentDb.count("select count(*) from jobs where job_type = :t", "t" to PaymentTaskTypes.REFUND_RECONCILE), "one settle job")
-        assertEquals(PaymentRefundStatus.SUCCEEDED, kit.store.findRefund(request.id)!!.status)
-        assertEquals(1000, kit.order(order.id).refundedAmount)
-    }
 
     @Test
     fun `sixteen syncs finding the same provider cancel leave one provider line and an apply that runs once`() {

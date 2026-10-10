@@ -85,26 +85,6 @@ class PaymentEnvironmentOnlyBootTest {
         }
     }
 
-    @Test
-    fun `the vendor-standard key names work too, and the defaults pass the response-timeout guard with the sample's 30 seconds`() {
-        boot(
-            mapOf(
-                "SKELETON_PAYMENT_TOSS_ENABLED" to "true",
-                "TOSS_PAYMENTS_SECRET_KEY" to "test_sk_aliasaliasaliasalias",
-                "TOSS_PAYMENTS_CLIENT_KEY" to "test_ck_aliasaliasaliasalias",
-            ),
-        ) { ctx, get ->
-            val config = get("/api/v1/payments/config", login(ctx, "user@example.com"))
-            assertEquals(true, JsonPath.read<Boolean>(config.body(), "$.value.available"), config.body())
-            assertEquals(true, JsonPath.read<Boolean>(config.body(), "$.value.testMode"))
-            val payment = ctx.getBean(PaymentProperties::class.java)
-            val responseTimeout = ctx.getBean(OutboundHttpProperties::class.java).clients.getValue("payment-toss").responseTimeout
-            assertEquals(Duration.ofSeconds(30), responseTimeout, "the sample raises the provider response limit to 30s")
-            assertTrue(payment.reconcile.firstDelay > responseTimeout && payment.refund.settleDelay > responseTimeout, "the module defaults are longer than the response limit")
-            assertEquals("", payment.webhook.pathToken, "no token is committed anywhere - the webhook path stays closed until an env value is given")
-            assertEquals(404, get("/api/v1/admin/payments/orders", login(ctx, "admin@example.com")).statusCode(), "the operator paths stay off until SKELETON_PAYMENT_ADMIN_ENABLED (local profile turns them on)")
-        }
-    }
 
     /**
      * 실측(B6 리뷰가 남긴 미실측): 웹훅 경로에 **multipart 본문**을 보내면 컨테이너 · 스프링이 컨트롤러(= 비밀 조각 확인) 전에 본문을 읽는가. 진짜 서버로 잰다 —

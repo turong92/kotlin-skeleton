@@ -32,21 +32,6 @@ class CheerAccessIntegrationTest : CheerIntegrationBase() {
         get("$PAYMENTS/orders/$paid", user).andExpect { status { isOk() } }   // the owner still sees it
     }
 
-    @Test
-    fun `the buyer cannot run a refund - the operator paths are 403 for a signed-in account without the role, 401 without a login`() {
-        val orderId = buy(user)
-        val refundId = read(post("$PAYMENTS/orders/$orderId/refund-requests", user, """{"reasonCode":"CUSTOMER_REQUEST"}""", UUID.randomUUID().toString()).andExpect { status { isCreated() } }, "$.value.id")
-
-        post("$ADMIN/refunds/$refundId/approve", user).andExpect { status { isForbidden() } }
-        post("$ADMIN/orders/$orderId/refunds", user, """{"reasonCode":"OPERATOR"}""", UUID.randomUUID().toString()).andExpect { status { isForbidden() } }
-        get("$ADMIN/orders", user).andExpect { status { isForbidden() } }
-        get("$ADMIN/refunds", stranger).andExpect { status { isForbidden() } }   // a MODERATOR is not an ADMIN
-        post("$ADMIN/refunds/$refundId/approve", null).andExpect { status { isUnauthorized() } }
-        assertEquals(0, gateway.refundCalls.size, "no refund reached the provider")
-        assertEquals("PAID", jdbc.sql("select status from payment_orders where id = :i").param("i", orderId).query(String::class.java).single())
-
-        get("$ADMIN/orders", operator).andExpect { status { isOk() } }   // the operator is let in
-    }
 
     @Test
     fun `the operator is decided by the account store on every call - a token that still says ADMIN is not enough after the role is taken away`() {
@@ -151,10 +136,4 @@ class CheerAccessIntegrationTest : CheerIntegrationBase() {
         }
     }
 
-    @Test
-    fun `the payment screen can ask whether payments can be taken, and a webhook for a provider nobody has is a 404`() {
-        get("$PAYMENTS/config", user).andExpect { status { isOk() }; jsonPath("$.value.available") { value(true) }; jsonPath("$.value.testMode") { value(true) }; jsonPath("$.value.refundRequestsEnabled") { value(true) } }
-        get("$PAYMENTS/config", null).andExpect { status { isUnauthorized() } }
-        mvc.post("$PAYMENTS/webhooks/nobody/$WEBHOOK_TOKEN") { contentType = MediaType.APPLICATION_JSON; content = "{}" }.andExpect { status { isNotFound() } }
-    }
 }

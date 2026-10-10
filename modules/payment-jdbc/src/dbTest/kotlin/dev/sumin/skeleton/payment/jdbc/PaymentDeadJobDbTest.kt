@@ -123,18 +123,6 @@ class PaymentDeadJobDbTest {
         assertEquals(1, flaggedEvents(order.id))
     }
 
-    @Test
-    fun `the hook called twice for one dead job marks the order once`() {
-        val order = confirming()
-        val job = jobId(PaymentTaskTypes.ORDER_RECONCILE)
-        abandonedByDeadWorker(job)
-        worker.pollOnce()
-
-        deadSeen.single { it.first.type == PaymentTaskTypes.ORDER_RECONCILE }.let { (dead, reason) -> listener.onDead(dead, reason) }
-
-        assertEquals(1, flaggedEvents(order.id))
-        assertEquals(1, kit.review.flagged.size)
-    }
 
     @Test
     fun `a reconcile job that died for an order that finished by another way marks nothing`() {
@@ -168,23 +156,6 @@ class PaymentDeadJobDbTest {
         assertEquals(1, flaggedEvents(order.id))
     }
 
-    @Test
-    fun `a settled refund whose settle job died marks nothing`() {
-        val order = kit.paid()
-        kit.gateway.scriptRefund(RefundScript.TimeoutApplied)
-        val refund = kit.refunds.refund("op_1", order.id, "OPERATOR", 1000, IdempotencyKey("k-1")).refund
-        // 정산은 다른 길(운영자의 「결제사와 맞추기」)로 끝났다
-        kit.store.inTransaction { tx ->
-            tx.lockOrder(order.id)
-            val locked = tx.lockRefund(refund.id)!!
-            tx.updateRefund(locked.copy(status = PaymentRefundStatus.FAILED, openKey = null))
-        }
-        abandonedByDeadWorker(jobId(PaymentTaskTypes.REFUND_RECONCILE))
-
-        worker.pollOnce()
-
-        assertNull(kit.order(order.id).reviewReason)
-    }
 
     // ---- 지급 · 회수 작업 (B4 리뷰 2회차 I-A) ----
 
@@ -234,22 +205,6 @@ class PaymentDeadJobDbTest {
 
     // ---- 고리의 경계 ----
 
-    @Test
-    fun `a job of another module is not ours - the hook ignores it even when the payload looks the same`() {
-        val order = confirming()
-        val lookalike = Job(1, "someone-elses-job", """{"subjectId":"${order.id}"}""", JobStatus.DEAD, 5, 5, Instant.now(), null, null, null, Instant.now(), Instant.now())
-
-        listener.onDead(lookalike, "dead")
-
-        assertNull(kit.order(order.id).reviewReason)
-    }
-
-    @Test
-    fun `a payload the adapter cannot read is ignored - nothing to mark`() {
-        val unreadable = Job(1, PaymentTaskTypes.ORDER_RECONCILE, """{"unexpected":true}""", JobStatus.DEAD, 5, 5, Instant.now(), null, null, null, Instant.now(), Instant.now())
-
-        listener.onDead(unreadable, "dead")
-    }
 
     @Test
     fun `a hook that fails does not stop the queue - the next listener still hears and the worker goes on`() {

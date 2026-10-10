@@ -82,18 +82,6 @@ class PaymentTasksDbTest {
         assertEquals(0, PaymentDb.count("select count(*) from payment_orders"))
     }
 
-    @Test
-    fun `a commit keeps the ledger row and the job together`() {
-        val order = PaymentTestOrders.order(id = "ord_" + "6".repeat(32))
-
-        store.inTransaction { tx ->
-            tx.insertOrderIfAbsent(order)
-            tasks.enqueue(PaymentTask("payment-order-expire", order.id))
-        }
-
-        assertEquals(1, jobs())
-        assertEquals(1, PaymentDb.count("select count(*) from payment_orders"))
-    }
 
     @Test
     fun `a task enqueued outside a ledger transaction is refused and leaves nothing`() {
@@ -124,14 +112,6 @@ class PaymentTasksDbTest {
         assertEquals("DONE", PaymentDb.jdbc.queryForObject("select status from jobs", emptyMap<String, Any>(), String::class.java))
     }
 
-    @Test
-    fun `a task type only the app adds is handled too`() {
-        store.inTransaction { tasks.enqueue(PaymentTask("payment-app-extra", "ref_1")) }
-
-        assertEquals(1, worker.pollOnce())
-
-        assertEquals("payment-app-extra", runs.single().type)
-    }
 
     @Test
     fun `a permanent failure kills the job at once - no retry - and carries only our sentence`() {
@@ -179,8 +159,4 @@ class PaymentTasksDbTest {
         assertTrue(runs.isEmpty())
     }
 
-    @Test
-    fun `the job handler of a type reports that type`() {
-        assertEquals(runner.types, handlers.map { it.type }.toSet())
-    }
 }

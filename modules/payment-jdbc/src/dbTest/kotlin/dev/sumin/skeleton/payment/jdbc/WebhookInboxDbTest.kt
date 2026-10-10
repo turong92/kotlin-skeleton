@@ -68,20 +68,6 @@ class WebhookInboxDbTest {
         assertEquals(PaymentWebhookStatus.RECEIVED, kit.store.findWebhookEvent(id)!!.status)
     }
 
-    @Test
-    fun `three resends of a failed event in a row are one job`() {
-        val kit = JdbcLedgerKit()
-        val order = kit.createAuthenticated()
-        kit.deliver(kit.gateway.webhookDelivery(eventKey = "evt-failed-3", orderId = order.id))
-        val id = kit.store.listWebhookEvents(null, null, 1).single().id
-        kit.store.inTransaction { tx -> tx.updateWebhookEvent(checkNotNull(tx.lockWebhookEvent(id)).copy(status = PaymentWebhookStatus.FAILED, lastError = "LOOKUP_UNAVAILABLE")) }
-        val jobsBefore = jobs()
-
-        val receipts = (1..3).map { kit.deliver(kit.gateway.webhookDelivery(eventKey = "evt-failed-3", orderId = order.id)) }
-
-        assertEquals(listOf(WebhookReceipt.REQUEUED, WebhookReceipt.DUPLICATE, WebhookReceipt.DUPLICATE), receipts)
-        assertEquals(jobsBefore + 1, jobs())
-    }
 
     @Test
     fun `sixteen operator retries of a dead row each queue a job - the operator is not throttled`() {

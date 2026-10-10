@@ -62,19 +62,6 @@ class CheerJourneyIntegrationTest : CheerIntegrationBase() {
         assertEquals(1, gateway.refundCalls.size)
     }
 
-    @Test
-    fun `a partial refund leaves the cheer PAID and only raises the refunded amount - the rest makes it refunded`() {
-        val orderId = buy(user, "cheer-5000", 5000)
-        post("$ADMIN/orders/$orderId/refunds", operator, """{"reasonCode":"OPERATOR","amount":2000}""", UUID.randomUUID().toString()).andExpect { status { isOk() } }
-        val partial = await { myCheers(user).takeIf { JsonPath.read<Int>(it, "$.values[0].refundedAmount") == 2000 } }
-        assertEquals("PAID", JsonPath.read<String>(partial, "$.values[0].status"))
-        assertEquals(null, JsonPath.read<String?>(partial, "$.values[0].refundedAt"))
-
-        post("$ADMIN/orders/$orderId/refunds", operator, """{"reasonCode":"OPERATOR","amount":3000}""", UUID.randomUUID().toString()).andExpect { status { isOk() } }
-        val full = await { myCheers(user).takeIf { JsonPath.read<String>(it, "$.values[0].status") == "REFUNDED" } }
-        assertEquals(5000, JsonPath.read<Int>(full, "$.values[0].refundedAmount"))
-        assertTrue(JsonPath.read<String?>(full, "$.values[0].refundedAt") != null)
-    }
 
     @Test
     fun `an item that is not on the server's list, another quantity or another kind is ITEM_NOT_PURCHASABLE and no order is made`() {

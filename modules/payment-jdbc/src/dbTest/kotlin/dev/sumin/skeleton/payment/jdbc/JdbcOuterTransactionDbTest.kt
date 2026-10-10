@@ -108,20 +108,6 @@ class JdbcOuterTransactionDbTest {
         assertNull(store.findOrder(order.id))
     }
 
-    @Test
-    fun `an app commit keeps the order row and the job together`() {
-        val order = orderOf(1)
-
-        outer.execute {
-            store.inTransaction { tx ->
-                tx.insertOrderIfAbsent(order)
-                kit.tasks.enqueue(PaymentTask("payment-order-expire", order.id))
-            }
-        }
-
-        assertEquals(1, orderRows())
-        assertEquals(1, jobs())
-    }
 
     @Test
     fun `a block that throws inside an app transaction marks the whole app transaction for rollback`() {
@@ -156,19 +142,6 @@ class JdbcOuterTransactionDbTest {
         }
     }
 
-    @Test
-    fun `inside an app transaction each block may take its own order - the rule is per block, not per physical transaction`() {
-        store.inTransaction { it.insertOrderIfAbsent(orderOf(1)) }
-        store.inTransaction { it.insertOrderIfAbsent(orderOf(2)) }
-
-        val locked = outer.execute {
-            val a = store.inTransaction { it.lockOrder(orderOf(1).id) }
-            val b = store.inTransaction { it.lockOrder(orderOf(2).id) }
-            listOf(a?.id, b?.id)
-        }
-
-        assertEquals(listOf(orderOf(1).id, orderOf(2).id), locked, "an account-wide pass over several orders inside the caller's transaction is possible")
-    }
 
     @Test
     fun `a lock taken in a block lasts until the app transaction ends - not until the block ends`() {

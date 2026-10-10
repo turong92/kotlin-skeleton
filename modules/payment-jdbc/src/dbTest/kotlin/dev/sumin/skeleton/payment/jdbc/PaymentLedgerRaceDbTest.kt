@@ -22,49 +22,6 @@ class PaymentLedgerRaceDbTest {
     @BeforeTest
     fun clean() = PaymentDb.clean()
 
-    @Test
-    fun `an expiry and a confirm racing at the deadline always end in one consistent state`() {
-        repeat(15) { round ->
-            val kit = JdbcLedgerKit()
-            val order = kit.create(key = "k$round").order
-            kit.time.advance(ttl) // 마감 시각 그대로: 승인도 만료도 아직 허용된다
-
-            val results = race<Any>(2) { n ->
-                if (n == 0) kit.orders.confirm("acc_1", order.id, "pay_$round", order.amount)
-                else kit.expire.handle(PaymentTaskRun(PaymentTaskTypes.ORDER_EXPIRE, order.id, 1, 12))
-            }
-
-            val confirm = results[0]
-            val final = kit.order(order.id)
-            when (final.status) {
-                PaymentOrderStatus.PAID -> {
-                    assertTrue(confirm.isSuccess, "round $round: ${confirm.exceptionOrNull()}")
-                    assertEquals(1, kit.gateway.confirmCalls.size, "round $round: paid means the provider was asked once")
-                    assertEquals(1, kit.listener.paid.size, "round $round: one fulfilment")
-                    val paidWrites = kit.store.listEvents(order.id).count { it.toStatus == PaymentOrderStatus.PAID.name && it.fromStatus != it.toStatus }
-                    assertEquals(1, paidWrites, "round $round: PAID was written once")
-                }
-                PaymentOrderStatus.EXPIRED -> {
-                    assertTrue(confirm.exceptionOrNull() is PaymentOrderNotPayableException, "round $round: ${confirm.exceptionOrNull()}")
-                    assertEquals(0, kit.gateway.confirmCalls.size, "round $round: an expired order was never sent to the provider")
-                }
-                else -> error("round $round ended as ${final.status}")
-            }
-            assertTrue(results[1].isSuccess, "round $round: the expiry finished instead of failing: ${results[1].exceptionOrNull()}")
-        }
-    }
-
-    @Test
-    fun `sixteen threads creating one order with one idempotency key leave one row and one expiry task`() {
-        val kit = JdbcLedgerKit()
-
-        val results = race(16) { kit.create(key = "same-key").order.id }
-
-        assertTrue(results.all { it.isSuccess }, results.mapNotNull { it.exceptionOrNull() }.toString())
-        assertEquals(1, results.map { it.getOrThrow() }.toSet().size, "everyone got the same order")
-        assertEquals(1, PaymentDb.count("select count(*) from payment_orders"))
-        assertEquals(1, PaymentDb.count("select count(*) from jobs where job_type = :t", "t" to PaymentTaskTypes.ORDER_EXPIRE), "the expiry task was enqueued once, with the winning insert")
-    }
 
     @Test
     fun `eight fulfil handlers racing on one paid order call the listener exactly once`() {

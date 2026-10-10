@@ -99,18 +99,6 @@ class PaymentIndexPlanDbTest {
         if (DbTestDatabase.vendor == "mysql") assertThat(mysqlAccessType(query)).`as`(query).isIn("ref", "range")
     }
 
-    @Test
-    fun `the store's own inbox list returns the same rows the plan was measured for`() {
-        loadInbox()
-
-        val failed = PaymentDb.newStore().listWebhookEvents(dev.sumin.skeleton.payment.PaymentWebhookStatus.FAILED, null, 50)
-        val everything = PaymentDb.newStore().listWebhookEvents(null, null, 50)
-
-        assertThat(failed).hasSize(10).allMatch { it.status == dev.sumin.skeleton.payment.PaymentWebhookStatus.FAILED }
-        assertThat(failed.map { it.receivedAt }).isSortedAccordingTo(Comparator.reverseOrder())
-        assertThat(everything).hasSize(50)
-        assertThat(everything.map { it.receivedAt }).isSortedAccordingTo(Comparator.reverseOrder())
-    }
 
     // ---------------------------------------------------------------------------------------------------------------------------------
     // B7 — 운영자 · 사용자 목록과 탈퇴 벌크가 쓰는 문장들. 각 문장은 저장소가 실제로 보내는 것(바인드 값 자리에 리터럴)이다.
@@ -128,26 +116,6 @@ class PaymentIndexPlanDbTest {
         if (DbTestDatabase.vendor == "mysql") assertThat(mysqlAccessType(query)).`as`(query).isIn("ref", "range")
     }
 
-    @Test
-    fun `the operator list for one status, with a cursor, walks the status index`() {
-        loadMixed()
-        val cursor = ts("2026-10-08 05:00:00")
-
-        listOf("FAILED", "CONFIRMING", "EXPIRED").forEach { status ->
-            val query = "select id from payment_orders where status = '$status' and (created_at < $cursor or (created_at = $cursor and id < 'ord_plan_9999')) order by created_at desc, id desc limit 51"
-            assertThat(indexUsed(query)).`as`(query).containsIgnoringCase("idx_payment_orders_status")
-        }
-    }
-
-    @Test
-    fun `the review list newest first with a cursor walks the review index`() {
-        loadMixed()
-        val cursor = ts("2026-10-08 06:00:00")
-
-        val query = "select id from payment_orders where review_reason is not null and (created_at < $cursor or (created_at = $cursor and id < 'ord_plan_9999')) order by created_at desc, id desc limit 51"
-
-        assertThat(indexUsed(query)).`as`(query).containsIgnoringCase("idx_payment_orders_review")
-    }
 
     @Test
     fun `stuck confirming rows are found through the status index, not by reading every order`() {

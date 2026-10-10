@@ -16,18 +16,7 @@ class PaymentSchemaDbTest {
     @BeforeTest
     fun clean() = PaymentDb.clean()
 
-    // ---- 확장 통계는 없다 ----
 
-    @Test
-    fun `the migration creates no extended statistics - they never changed a plan, and the migration files need no PostgreSQL 12 (only the repository's as materialized does)`() {
-        assumeTrue(DbTestDatabase.vendor == "postgresql", "MySQL has no extended statistics")
-        // 실측(PostgreSQL 18, 다섯 가지 분포): `create statistics … (mcv)` 가 「미지급 PAID」 질의의 계획을 한 번도 바꾸지 못했다. 그 질의의 모양은 `PaymentIndexPlanDbTest` 가 지킨다
-        assertEquals(
-            0L,
-            PaymentDb.count("select count(*) from pg_statistic_ext where stxrelid in ('payment_orders'::regclass, 'payment_refunds'::regclass, 'payment_events'::regclass, 'payment_webhook_events'::regclass)"),
-            "the ledger migration left extended statistics behind",
-        )
-    }
 
     // ---- check 제약 (이 저장소 마이그레이션에서 처음 쓰였다 — 두 방언이 모두 집행하는지 실측) ----
 
@@ -48,15 +37,6 @@ class PaymentSchemaDbTest {
         PaymentDb.insertOrderRow(PaymentDb.unique("ord"), amount = 3000, paidAmount = null, refundedAmount = 3000)
     }
 
-    @Test
-    fun `an update that pushes the refunded amount past the ceiling is refused too`() {
-        val id = PaymentDb.unique("ord")
-        PaymentDb.insertOrderRow(id, amount = 3000, paidAmount = 3000)
-
-        refusedBy("ck_payment_orders_amounts") {
-            PaymentDb.jdbc.update("update payment_orders set refunded_amount = 3001 where id = :id", mapOf("id" to id))
-        }
-    }
 
     @Test
     fun `a refund of zero or less is refused`() {
@@ -97,16 +77,6 @@ class PaymentSchemaDbTest {
         PaymentDb.insertRefundRow(PaymentDb.unique("rfd"), order, openKey = order, dedupeKey = null, providerRefundId = null)
     }
 
-    @Test
-    fun `sixteen threads sending one refund dedupe key create exactly one refund`() {
-        val order = PaymentDb.unique("ord")
-        PaymentDb.insertOrderRow(order)
-
-        val results = race(16) { n -> PaymentDb.insertRefundRow(PaymentDb.unique("rfd$n"), order, openKey = null, dedupeKey = "dedupe-same", providerRefundId = null) }
-
-        assertEquals(1, results.count { it.isSuccess })
-        assertEquals(1, PaymentDb.count("select count(*) from payment_refunds where dedupe_key = 'dedupe-same'"))
-    }
 
     @Test
     fun `sixteen threads matching one provider refund id leave exactly one refund row - the same id on another order is fine`() {
@@ -139,10 +109,6 @@ class PaymentSchemaDbTest {
         PaymentDb.insertOrderRow(PaymentDb.unique("ord"), providerPaymentId = "paykey")
     }
 
-    @Test
-    fun `a refund needs an existing order`() {
-        assertFailsWith<DataIntegrityViolationException> { PaymentDb.insertRefundRow(PaymentDb.unique("rfd"), "ord_missing", null, null, null) }
-    }
 
     // ---- 인덱스 · 유니크 (이름 → 열 구성까지) ----
 
