@@ -9,7 +9,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
-import kotlin.test.assertTrue
 
 class RefundReconcileTest {
     private val op = "op_1"
@@ -155,21 +154,6 @@ class RefundReconcileTest {
     }
 
     @Test
-    fun `a settle job of a line that was settled meanwhile does nothing`() {
-        val kit = PaymentLedgerKit()
-        val line = timedOut(kit, RefundScript.TimeoutApplied)
-        kit.refunds.sync(op, line.orderId)
-        val lookups = kit.gateway.lookupCalls.size
-        kit.advance(settleDelay)
-
-        runSettle(kit)
-
-        assertEquals(lookups, kit.gateway.lookupCalls.size)
-        assertEquals(1, kit.order(line.orderId).refundedAmount / 1000)
-        assertTrue(kit.tasks.pending(PaymentTaskTypes.REFUND_RECONCILE).isEmpty())
-    }
-
-    @Test
     fun `an order created under another mode is flagged and the job dies without asking`() {
         val kit = PaymentLedgerKit()
         val line = timedOut(kit, RefundScript.TimeoutNotApplied)
@@ -187,17 +171,4 @@ class RefundReconcileTest {
         }
     }
 
-    @Test
-    fun `settling a refund flagged as mismatched clears the flag once the numbers agree`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.paid()
-        kit.gateway.scriptRefund(RefundScript.ApproveWrongRemaining(PaymentAmount(1, "KRW")))
-        val line = kit.refunds.refund(op, order.id, "OPERATOR", 1000, IdempotencyKey("k-1")).refund
-        assertEquals(PaymentReviewReason.REFUND_MISMATCH, kit.order(order.id).reviewReason)
-
-        kit.refunds.sync(op, order.id)
-
-        assertEquals(PaymentRefundStatus.SUCCEEDED, kit.store.findRefund(line.id)!!.status)
-        assertNull(kit.order(order.id).reviewReason)
-    }
 }

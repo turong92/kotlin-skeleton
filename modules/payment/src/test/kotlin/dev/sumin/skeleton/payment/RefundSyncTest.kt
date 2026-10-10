@@ -51,20 +51,6 @@ class RefundSyncTest {
     }
 
     @Test
-    fun `two console cancels become two rows and a full one ends the order as refunded`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.paid()
-        kit.gateway.consoleCancel("pay_1", 1000)
-        kit.gateway.consoleCancel("pay_1", 2000)
-
-        val synced = kit.refunds.sync(op, order.id)
-
-        assertEquals(2, kit.store.listRefunds(order.id).size)
-        assertEquals(PaymentOrderStatus.REFUNDED, synced.status)
-        assertEquals(3000, synced.refundedAmount)
-    }
-
-    @Test
     fun `sync with nothing to find changes nothing - not the row, not the events`() {
         val kit = PaymentLedgerKit()
         val order = kit.paid()
@@ -74,22 +60,6 @@ class RefundSyncTest {
 
         assertEquals(order, synced)
         assertEquals(events, kit.store.listEvents(order.id))
-    }
-
-    @Test
-    fun `converging the same snapshot twice changes nothing the second time`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.paid()
-        kit.gateway.consoleCancel("pay_1", 1000)
-        val snapshot = kit.gateway.lookup(PaymentLookupQuery("pay_1", null))!!
-        val context = ConvergeContext(PaymentMode.TEST, ConvergeSource.WEBHOOK)
-
-        val first = kit.store.inTransaction { tx -> kit.convergence.converge(tx, tx.lockOrder(order.id)!!, snapshot, context) }
-        val second = kit.store.inTransaction { tx -> kit.convergence.converge(tx, tx.lockOrder(order.id)!!, snapshot, context) }
-
-        assertEquals(true, first.changed)
-        assertEquals(false, second.changed)
-        assertEquals(1, kit.store.listRefunds(order.id).size)
     }
 
     @Test

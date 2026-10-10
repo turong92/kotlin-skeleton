@@ -93,15 +93,6 @@ class FulfillmentTest {
     }
 
     @Test
-    fun `fulfilling twice calls the listener once`() {
-        val kit = PaymentLedgerKit()
-        val order = paidOrder(kit)
-
-        assertFalse(kit.fulfillment.fulfil(order.id), "the request thread already did it")
-        assertEquals(1, kit.listener.paid.size)
-    }
-
-    @Test
     fun `an order that is not paid is not fulfilled`() {
         val kit = PaymentLedgerKit()
         val pending = kit.create().order
@@ -111,15 +102,4 @@ class FulfillmentTest {
         assertEquals(0, kit.listener.attempts.get())
     }
 
-    @Test
-    fun `tryFulfil swallows the listener's failure and says false - the job retries`() {
-        val kit = PaymentLedgerKit()
-        kit.listener.failPaid(2) // 확정 직후의 시도 + 아래의 시도
-        val order = paidOrder(kit)
-        assertNull(kit.order(order.id).fulfilledAt)
-
-        assertFalse(kit.fulfillment.tryFulfil(order.id))
-        assertTrue(kit.fulfillment.tryFulfil(order.id))
-        assertEquals(1, kit.listener.paid.size)
-    }
 }

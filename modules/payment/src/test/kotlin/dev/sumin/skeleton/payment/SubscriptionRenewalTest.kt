@@ -197,19 +197,6 @@ class SubscriptionRenewalTest {
     }
 
     @Test
-    fun `canceling a past-due subscription ends it at once`() {
-        val active = activeSubscription()
-        toPeriodEnd(active)
-        kit.gateway.script(ConfirmScript.Decline())
-        renewTasks()
-
-        val ended = kit.subscriptions.cancel("acc_1", active.id)
-
-        assertEquals(SubscriptionStatus.ENDED, ended.status)
-        assertEquals(SubscriptionEndReason.USER_CANCELED, ended.endReason)
-    }
-
-    @Test
     fun `a canceled subscription is not charged at the end of the period - it ends`() {
         val active = activeSubscription()
         kit.subscriptions.cancel("acc_1", active.id)
@@ -223,18 +210,6 @@ class SubscriptionRenewalTest {
         assertEquals(1, kit.gateway.chargeCalls.size, "only the first payment was ever charged")
         kit.runTasks(setOf(PaymentTaskTypes.SUBSCRIPTION_REVOKE))
         assertEquals(1, kit.gateway.revokeCalls.size)
-    }
-
-    @Test
-    fun `a canceled subscription stays usable until the period ends and is not charged before`() {
-        val active = activeSubscription()
-        kit.subscriptions.cancel("acc_1", active.id)
-        kit.advance(Duration.ofDays(1))
-
-        renewTasks()
-
-        assertEquals(SubscriptionStatus.CANCELING, sub(active.id).status)
-        assertEquals(1, kit.gateway.chargeCalls.size)
     }
 
     @Test

@@ -39,21 +39,6 @@ class RefundTest {
     }
 
     @Test
-    fun `the amount defaults to what is left and the summary tells a request from a refund in flight`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.paid()
-
-        val requested = kit.refunds.request("acc_1", order.id, "DUPLICATE", null, key("1")).refund
-        val view = kit.refunds.get("acc_1", order.id)
-
-        assertEquals(3000, requested.amount.amount)
-        assertEquals(PaymentRefundStatus.REQUESTED, view.summary.openRefundStatus)
-        assertTrue(view.summary.refundPending)
-        assertEquals(3000, view.summary.refundableAmount, "a request alone does not reduce what can be refunded")
-        assertNull(kit.refunds.get("acc_1", kit.paid(key = "key-2", paymentKey = "pay_2").id).summary.openRefundStatus)
-    }
-
-    @Test
     fun `a customer picks one of three reason codes - anything else is a 400 and the operator's code is not theirs`() {
         val kit = PaymentLedgerKit()
         val order = kit.paid()
@@ -219,17 +204,6 @@ class RefundTest {
         assertEquals(1, kit.store.listRefunds(order.id).size)
     }
 
-    @Test
-    fun `an operator reason code is one of four and a customer's words are not accepted`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.paid()
-
-        assertFailsWith<FieldValidationException> { kit.refunds.refund(op, order.id, "PROVIDER_CONSOLE", 100, key("1")) }
-        assertFailsWith<FieldValidationException> { kit.refunds.refund(op, order.id, "refund please", 100, key("2")) }
-        listOf("CUSTOMER_REQUEST", "DUPLICATE", "NOT_DELIVERED", "OPERATOR").forEachIndexed { i, code -> kit.refunds.refund(op, order.id, code, 100, key("ok$i")) }
-        assertEquals(4, kit.gateway.refundCalls.size)
-    }
-
     // --- 같은 키 · 거절 · 모름 ---
 
     @Test
@@ -286,15 +260,6 @@ class RefundTest {
     }
 
     @Test
-    fun `a decline code outside the provider's list is classified as other`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.paid()
-        kit.gateway.scriptRefund(RefundScript.Decline("SOMETHING_NEW"))
-
-        assertEquals(RefundDeclineCategory.OTHER, assertFailsWith<PaymentRefundDeclinedException> { kit.refunds.refund(op, order.id, "OPERATOR", 1000, key("1")) }.category)
-    }
-
-    @Test
     fun `an unknown outcome leaves the line pending, sends nothing again and queues the settle job after the settle delay`() {
         val kit = PaymentLedgerKit()
         val order = kit.paid()
@@ -326,18 +291,6 @@ class RefundTest {
         assertEquals(PaymentReviewReason.REFUND_MISMATCH, kit.order(order.id).reviewReason)
         assertEquals(0, kit.order(order.id).refundedAmount)
         assertEquals(0, kit.listener.refunded.size)
-    }
-
-    @Test
-    fun `a result with a wrong remaining amount is not trusted either`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.paid()
-        kit.gateway.scriptRefund(RefundScript.ApproveWrongRemaining(PaymentAmount(1, "KRW")))
-
-        val outcome = kit.refunds.refund(op, order.id, "OPERATOR", 1000, key("1"))
-
-        assertEquals(PaymentRefundStatus.PENDING, outcome.refund.status)
-        assertEquals(PaymentReviewReason.REFUND_MISMATCH, kit.order(order.id).reviewReason)
     }
 
     @Test

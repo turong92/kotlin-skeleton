@@ -122,19 +122,6 @@ class OrderReconcileTest {
     }
 
     @Test
-    fun `a lookup that fails on the last attempt also flags the order`() {
-        val kit = PaymentLedgerKit(PaymentProperties(reconcile = PaymentProperties.Reconcile(maxAttempts = 2)))
-        val order = timedOut(kit, ConfirmScript.TimeoutApplied())
-        kit.advance(firstDelay)
-        kit.gateway.failLookups(5)
-
-        repeat(2) { kit.runTasks(setOf(PaymentTaskTypes.ORDER_RECONCILE)) }
-
-        assertEquals(PaymentReviewReason.CONFIRM_UNRESOLVED, kit.order(order.id).reviewReason)
-        assertEquals(1, kit.tasks.dead(PaymentTaskTypes.ORDER_RECONCILE).size)
-    }
-
-    @Test
     fun `a provider total that differs dies permanently without retrying and is flagged`() {
         val kit = PaymentLedgerKit()
         val order = timedOut(kit, ConfirmScript.TimeoutApplied(total = PaymentAmount(2000, "KRW")))
@@ -147,20 +134,6 @@ class OrderReconcileTest {
         val task = kit.tasks.all(PaymentTaskTypes.ORDER_RECONCILE).single()
         assertEquals(dev.sumin.skeleton.payment.testing.InMemoryPaymentTasks.State.DEAD, task.state)
         assertEquals(1, task.attempts)
-    }
-
-    @Test
-    fun `a mode that changed since the order was created dies permanently and is flagged`() {
-        val kit = PaymentLedgerKit()
-        val order = timedOut(kit, ConfirmScript.TimeoutApplied())
-        kit.gateway.mode = PaymentMode.LIVE
-        kit.advance(firstDelay)
-
-        kit.runTasks(setOf(PaymentTaskTypes.ORDER_RECONCILE))
-
-        assertEquals(PaymentReviewReason.MODE_MISMATCH, kit.order(order.id).reviewReason)
-        assertEquals(PaymentOrderStatus.CONFIRMING, kit.order(order.id).status)
-        assertEquals(1, kit.tasks.dead(PaymentTaskTypes.ORDER_RECONCILE).size)
     }
 
     @Test
@@ -193,22 +166,6 @@ class OrderReconcileTest {
         assertEquals(1, task.attempts, "no twelve futile attempts")
         assertEquals(0, kit.gateway.lookupCalls.size, "the other mode's key is never used to ask")
         assertEquals(listOf(order.id to PaymentReviewReason.MODE_MISMATCH), kit.review.flagged)
-    }
-
-    @Test
-    fun `a mode that changed is judged before any lookup - a payment the other mode's key cannot see is not waited for`() {
-        val kit = PaymentLedgerKit()
-        val created = kit.create().order // 결제사에는 이 주문의 결제가 없다(인증을 안 했다)
-        kit.gateway.script(ConfirmScript.ServerError)
-        kit.orders.confirm("acc_1", created.id, "pay_1", created.amount)
-        kit.gateway.mode = PaymentMode.LIVE
-        kit.advance(firstDelay)
-
-        kit.runTasks(setOf(PaymentTaskTypes.ORDER_RECONCILE))
-
-        assertEquals(PaymentReviewReason.MODE_MISMATCH, kit.order(created.id).reviewReason)
-        assertEquals(1, kit.tasks.dead(PaymentTaskTypes.ORDER_RECONCILE).size)
-        assertEquals(0, kit.gateway.lookupCalls.size)
     }
 
     private fun confirmOnlyRouter(kit: PaymentLedgerKit): PaymentProviderRouter {

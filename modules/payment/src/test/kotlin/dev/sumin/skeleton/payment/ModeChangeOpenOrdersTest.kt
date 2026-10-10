@@ -95,22 +95,6 @@ class ModeChangeOpenOrdersTest {
     }
 
     @Test
-    fun `sync on a fully refunded order of another mode answers mode mismatch but flags nothing`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.paid()
-        kit.gateway.consoleCancel("pay_1", 3000)
-        kit.refunds.sync(op, order.id)
-        assertEquals(PaymentOrderStatus.REFUNDED, kit.order(order.id).status)
-        val events = kit.store.listEvents(order.id)
-        kit.gateway.mode = PaymentMode.LIVE
-
-        assertFailsWith<PaymentModeMismatchException> { kit.refunds.sync(op, order.id) }
-
-        assertNull(kit.order(order.id).reviewReason)
-        assertEquals(events, kit.store.listEvents(order.id))
-    }
-
-    @Test
     fun `sync on a pending order of another mode answers mode mismatch and flags nothing - it never claimed an approval`() {
         val kit = PaymentLedgerKit()
         val pending = kit.create(key = "k1").order

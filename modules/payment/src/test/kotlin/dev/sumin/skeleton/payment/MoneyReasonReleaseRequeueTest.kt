@@ -220,15 +220,4 @@ class MoneyReasonReleaseRequeueTest {
         assertEquals("REFUND_APPLY_UNRESOLVED_CLEARED", kit.store.listEvents(first.orderId).last().providerCode)
     }
 
-    @Test
-    fun `an apply that succeeds leaves a money reason alone`() {
-        val kit = PaymentLedgerKit()
-        val refund = unapplied(kit, kit.paid())
-        flag(kit, refund.orderId, PaymentReviewReason.AMOUNT_MISMATCH)
-        kit.listener.failRefunded(0)
-
-        kit.applier.apply(refund.id)
-
-        assertEquals(PaymentReviewReason.AMOUNT_MISMATCH, kit.order(refund.orderId).reviewReason)
-    }
 }

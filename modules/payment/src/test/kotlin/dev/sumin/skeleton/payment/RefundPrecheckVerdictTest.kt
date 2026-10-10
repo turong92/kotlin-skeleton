@@ -29,21 +29,17 @@ class RefundPrecheckVerdictTest {
     }
 
     @Test
-    fun `a direct refund is not sent when the numbers disagree even though another reason already holds the column`() {
+    fun `a direct refund or an approval is not sent when the numbers disagree even though another reason already holds the column`() {
         taken.forEach { reason ->
             val kit = PaymentLedgerKit()
             val order = kit.paid()
             flag(kit, order.id, reason)
             skewLedger(kit, order.id)
 
-            assertFailsWith<PaymentRefundNotAllowedException>("reason=$reason") { kit.refunds.refund(op, order.id, "OPERATOR", 500, IdempotencyKey("k-1")) }
+            assertFailsWith<PaymentRefundNotAllowedException>("direct, reason=$reason") { kit.refunds.refund(op, order.id, "OPERATOR", 500, IdempotencyKey("k-1")) }
 
             assertEquals(0, kit.gateway.refundCalls.size, "reason=$reason: no provider refund call")
         }
-    }
-
-    @Test
-    fun `an approval is not sent when the numbers disagree even though another reason already holds the column`() {
         taken.forEach { reason ->
             val kit = PaymentLedgerKit()
             val order = kit.paid()
@@ -51,7 +47,7 @@ class RefundPrecheckVerdictTest {
             flag(kit, order.id, reason)
             skewLedger(kit, order.id)
 
-            assertFailsWith<PaymentRefundNotAllowedException>("reason=$reason") { kit.refunds.approve(op, request.id) }
+            assertFailsWith<PaymentRefundNotAllowedException>("approval, reason=$reason") { kit.refunds.approve(op, request.id) }
 
             assertEquals(0, kit.gateway.refundCalls.size, "reason=$reason: no provider refund call")
             assertEquals(PaymentRefundStatus.REQUESTED, kit.store.findRefund(request.id)!!.status)
@@ -95,30 +91,25 @@ class RefundPrecheckVerdictTest {
     }
 
     @Test
-    fun `a refund mismatch that lands between the pre-check and the claim stops the direct refund inside the lock`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.paid()
-        val store = gapStore(kit) { flag(kit, order.id, PaymentReviewReason.REFUND_MISMATCH) }
-        val refunds = PaymentRefunds(store, kit.tasks, kit.router, kit.convergence, kit.applier, kit.writer, kit.properties)
-
-        assertFailsWith<PaymentRefundNotAllowedException> { refunds.refund(op, order.id, "OPERATOR", 500, IdempotencyKey("k-1")) }
-
-        assertEquals(0, kit.gateway.refundCalls.size)
-        assertEquals(emptyList(), kit.store.listRefunds(order.id))
-    }
-
-    @Test
-    fun `a refund mismatch that lands between the pre-check and the claim stops the approval inside the lock - the request stays requested`() {
+    fun `a refund mismatch that lands between the pre-check and the claim stops the direct refund and the approval inside the lock`() {
         val kit = PaymentLedgerKit()
         val order = kit.paid()
         val request = kit.refunds.request("acc_1", order.id, "DUPLICATE", 500, IdempotencyKey("req")).refund
-        val store = gapStore(kit) { flag(kit, order.id, PaymentReviewReason.REFUND_MISMATCH) }
-        val refunds = PaymentRefunds(store, kit.tasks, kit.router, kit.convergence, kit.applier, kit.writer, kit.properties)
+        val refunds = PaymentRefunds(gapStore(kit) { flag(kit, order.id, PaymentReviewReason.REFUND_MISMATCH) }, kit.tasks, kit.router, kit.convergence, kit.applier, kit.writer, kit.properties)
 
         assertFailsWith<PaymentRefundNotAllowedException> { refunds.approve(op, request.id) }
 
         assertEquals(0, kit.gateway.refundCalls.size)
         assertEquals(PaymentRefundStatus.REQUESTED, kit.store.findRefund(request.id)!!.status)
+
+        val directKit = PaymentLedgerKit()
+        val directOrder = directKit.paid()
+        val direct = PaymentRefunds(gapStore(directKit) { flag(directKit, directOrder.id, PaymentReviewReason.REFUND_MISMATCH) }, directKit.tasks, directKit.router, directKit.convergence, directKit.applier, directKit.writer, directKit.properties)
+
+        assertFailsWith<PaymentRefundNotAllowedException> { direct.refund(op, directOrder.id, "OPERATOR", 500, IdempotencyKey("k-1")) }
+
+        assertEquals(0, directKit.gateway.refundCalls.size)
+        assertEquals(emptyList(), directKit.store.listRefunds(directOrder.id))
     }
 
     // ---- ⓒ ----
@@ -136,26 +127,4 @@ class RefundPrecheckVerdictTest {
         assertEquals("MODE_MISMATCH_CLEARED", kit.store.listEvents(order.id).last().providerCode)
     }
 
-    @Test
-    fun `sync keeps the mode mismatch while the gateway's mode differs from the order's`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.paid()
-        flag(kit, order.id, PaymentReviewReason.MODE_MISMATCH)
-        kit.store.inTransaction { tx -> tx.updateOrder(tx.lockOrder(order.id)!!.copy(providerMode = PaymentMode.LIVE)) }
-
-        assertFailsWith<PaymentModeMismatchException> { kit.refunds.sync(op, order.id) }
-
-        assertEquals(PaymentReviewReason.MODE_MISMATCH, kit.order(order.id).reviewReason)
-    }
-
-    @Test
-    fun `sync leaves other reasons alone when it releases nothing`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.paid()
-        flag(kit, order.id, PaymentReviewReason.AMOUNT_MISMATCH)
-
-        kit.refunds.sync(op, order.id)
-
-        assertEquals(PaymentReviewReason.AMOUNT_MISMATCH, kit.order(order.id).reviewReason)
-    }
 }

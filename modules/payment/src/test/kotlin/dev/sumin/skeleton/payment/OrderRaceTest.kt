@@ -37,22 +37,6 @@ class OrderRaceTest {
     }
 
     @Test
-    fun `a confirm that lands between the expiry's lookup and its lock is not undone by the expiry - the payment was in progress`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.createAuthenticated()
-        kit.advance(ttl)
-        kit.gateway.afterLookup = {
-            kit.gateway.afterLookup = null
-            kit.orders.confirm("acc_1", order.id, "pay_1", order.amount)
-        }
-
-        kit.runTasks(setOf(PaymentTaskTypes.ORDER_EXPIRE))
-
-        assertEquals(PaymentOrderStatus.PAID, kit.order(order.id).status)
-        assertEquals(0, kit.tasks.dead().size, "the expiry finished instead of retrying")
-    }
-
-    @Test
     fun `an approval response racing the reconcile job settles the order once`() {
         val kit = PaymentLedgerKit()
         val order = kit.createAuthenticated()

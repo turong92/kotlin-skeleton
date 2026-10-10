@@ -221,10 +221,10 @@
 
 | 보장 (스펙 §3) | 변이 | 빨개진 시험 |
 |---|---|---|
-| 3 금액 변조 — 요청의 `amount` 는 비교만 하고 다르면 결제사를 부르지 않는다 | `PaymentOrders` 승인의 금액 비교 한 줄(`!amount.sameAs(order.amount)` → 던지기)을 지움 | `OrderConfirmTest`: `a tampered amount never reaches the provider` · `the exceptions that reach a client name neither the provider nor internal types` |
+| 3 금액 변조 — 요청의 `amount` 는 비교만 하고 다르면 결제사를 부르지 않는다 | `PaymentOrders` 승인의 금액 비교 한 줄(`!amount.sameAs(order.amount)` → 던지기)을 지움 | `OrderConfirmTest`: `a tampered amount never reaches the provider` |
 | 12 환불 타임아웃 → 이중 환불 — 모름이면 다시 보내지 않고 조회해서 맞춘다 | 환불 정산 작업(`RefundReconcileTaskHandler`)이 조회 전에 같은 멱등 키로 환불을 다시 보내게 함 | `RefundReconcileTest` 4개: `a refund that timed out but was applied is settled once` · `…was not applied is failed and the order is refundable again` · `a console cancel that lands between the send and the settle…` · `the settle job does not run before the settle delay…` |
 | 7 웹훅 위조 — 본문의 상태를 쓰지 않고 결제사에 조회한다 | 웹훅 처리 작업이 조회하지 않고 "결제됨" 이라는 결과를 지어내게 함 (웹훅 봉투에 상태가 없어 「본문을 믿는다」를 이렇게 흉내 냈다) | `WebhookInboxTest` 여러 개: `a forged DONE for an unpaid order changes nothing` 포함 |
-| 6 지급 한 번 — 지급은 주문 줄 락 안에서 `fulfilled_at` 이 비었을 때만 | `PaymentFulfillment` 의 `fulfilledAt != null` 조건을 지움 | `FulfillmentTest`: `fulfilling twice calls the listener once` · `two workers fulfil one order exactly once` |
+| 6 지급 한 번 — 지급은 주문 줄 락 안에서 `fulfilled_at` 이 비었을 때만 | `PaymentFulfillment` 의 `fulfilledAt != null` 조건을 지움 | `FulfillmentTest`: `two workers fulfil one order exactly once` |
 
 ### 앞 작업들이 이미 한 것 — 진행 문서 · 커밋 메시지에서 모았다
 

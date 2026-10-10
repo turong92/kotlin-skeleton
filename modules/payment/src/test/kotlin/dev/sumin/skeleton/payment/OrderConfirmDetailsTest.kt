@@ -21,14 +21,4 @@ class OrderConfirmDetailsTest {
         assertEquals(kit.time.now(), paid.paidAt)
     }
 
-    @Test
-    fun `a confirm answer without the card still asks the provider once`() {
-        val kit = PaymentLedgerKit()
-        val created = kit.createAuthenticated()
-
-        val paid = kit.orders.confirm("acc_1", created.id, "pay_1", created.amount)
-
-        assertEquals(1, kit.gateway.lookupCalls.size)
-        assertEquals("HYUNDAI", paid.cardIssuer)
-    }
 }

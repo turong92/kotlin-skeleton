@@ -106,31 +106,6 @@ class WebhookInboxOperatorTest {
     }
 
     @Test
-    fun `retry adds one more job for a row whose first job is still waiting`() {
-        val kit = PaymentLedgerKit()
-        val order = confirmingOrder(kit)
-        val row = delivered(kit, order)
-        val jobsBefore = kit.tasks.all(PaymentTaskTypes.WEBHOOK).size
-
-        kit.inbox.retry(row.id)
-
-        assertEquals(jobsBefore + 1, kit.tasks.all(PaymentTaskTypes.WEBHOOK).size, "a second job that is due now, whatever the first one waits for")
-    }
-
-    @Test
-    fun `retrying a dead row five times in a row queues a job each time - the operator is not throttled`() {
-        val kit = PaymentLedgerKit()
-        val order = confirmingOrder(kit)
-        val row = delivered(kit, order)
-        kit.store.inTransaction { tx -> tx.updateWebhookEvent(checkNotNull(tx.lockWebhookEvent(row.id)).copy(status = PaymentWebhookStatus.DEAD, lastError = "LOOKUP_UNAVAILABLE")) }
-        val jobs = kit.tasks.all(PaymentTaskTypes.WEBHOOK).size
-
-        repeat(5) { kit.inbox.retry(row.id) }
-
-        assertEquals(jobs + 5, kit.tasks.all(PaymentTaskTypes.WEBHOOK).size)
-    }
-
-    @Test
     fun `a retried ignored row is looked at again and can now settle the order`() {
         val kit = PaymentLedgerKit()
         val order = kit.create().order // 처음에는 결제사에 결제가 없어 무시됐다

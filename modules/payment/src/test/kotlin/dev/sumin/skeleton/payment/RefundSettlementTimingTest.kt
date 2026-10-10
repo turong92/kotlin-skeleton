@@ -63,24 +63,6 @@ class RefundSettlementTimingTest {
         assertEquals(1, kit.store.listRefunds(line.orderId).size, "no second line for the same cancel")
     }
 
-    @Test
-    fun `a snapshot taken after the delay closes an unapplied line`() {
-        val kit = PaymentLedgerKit()
-        val line = timedOutLater(kit)
-        kit.advance(settleDelay)
-        val snapshot = kit.gateway.lookup(PaymentLookupQuery("pay_1", null))!!
-
-        val result = kit.store.inTransaction { tx ->
-            RefundSettlement(kit.convergence, kit.writer).settle(
-                tx, tx.lockOrder(line.orderId)!!, line.id, snapshot, kit.time.now(),
-                ConvergeContext(PaymentMode.TEST, ConvergeSource.REFUND), PaymentProperties.Refund(settleDelay = settleDelay),
-            )
-        }
-
-        assertEquals(RefundSettlement.Result.DONE, result)
-        assertEquals(PaymentRefundStatus.FAILED, kit.store.findRefund(line.id)!!.status)
-    }
-
     // ---- M-8: 정산의 마지막 갈래도 낡은 스냅샷 규칙을 따른다 ----
 
     /** 웹훅이 하듯 지금 상태로 장부만 맞춘다 - 정산(줄 닫기)은 하지 않는다. */

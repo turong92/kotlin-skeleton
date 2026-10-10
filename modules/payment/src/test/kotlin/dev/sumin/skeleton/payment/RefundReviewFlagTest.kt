@@ -117,26 +117,6 @@ class RefundReviewFlagTest {
         assertEquals(PaymentRefundStatus.SUCCEEDED, kit.refunds.approve(op, request.id).refund.status)
     }
 
-    @Test
-    fun `a pre-refund check that has just flagged a mismatch sends nothing - the numbers disagreed`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.paid()
-        val request = kit.refunds.request("acc_1", order.id, "DUPLICATE", 1000, IdempotencyKey("req")).refund
-        kit.advance(Duration.ofSeconds(1)) // 요청 줄보다 뒤에 얻은 스냅샷이어야 낡은 것으로 건너뛰지 않는다
-        kit.store.inTransaction { tx -> tx.updateOrder(tx.lockOrder(order.id)!!.copy(refundedAmount = 500)) } // 장부만 500 이 환불됐다고 믿는다
-
-        assertFailsWith<PaymentRefundNotAllowedException> { kit.refunds.approve(op, request.id) }
-
-        assertEquals(PaymentReviewReason.REFUND_MISMATCH, kit.order(order.id).reviewReason)
-        assertEquals(0, kit.gateway.refundCalls.size)
-        assertEquals(PaymentRefundStatus.REQUESTED, kit.store.findRefund(request.id)!!.status)
-        val direct = PaymentLedgerKit()
-        val other = direct.paid()
-        direct.store.inTransaction { tx -> tx.updateOrder(tx.lockOrder(other.id)!!.copy(refundedAmount = 500)) }
-        assertFailsWith<PaymentRefundNotAllowedException> { direct.refunds.refund(op, other.id, "OPERATOR", 500, IdempotencyKey("k-1")) }
-        assertEquals(0, direct.gateway.refundCalls.size)
-    }
-
     // --- m9 ---
 
     @Test

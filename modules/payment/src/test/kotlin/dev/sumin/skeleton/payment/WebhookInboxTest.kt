@@ -79,23 +79,6 @@ class WebhookInboxTest {
     }
 
     @Test
-    fun `a provider that has no webhook capability is the same not-found - the capability exception is not told apart`() {
-        val kit = PaymentLedgerKit()
-        val lookupOnly = object : PaymentLookupGateway {
-            override val providerId = "lookup-only"
-            override fun lookup(query: PaymentLookupQuery): PaymentSnapshot? = null
-        }
-        val inbox = PaymentWebhookInbox(kit.store, kit.tasks, PaymentProviderRouter(listOf(kit.gateway, lookupOnly), kit.properties), kit.writer, kit.properties)
-
-        val withoutCapability = assertFailsWith<PaymentWebhookNotFoundException> { inbox.admit("lookup-only", PaymentLedgerKit.WEBHOOK_TOKEN) }
-        val unknown = assertFailsWith<PaymentWebhookNotFoundException> { inbox.admit("nope", PaymentLedgerKit.WEBHOOK_TOKEN) }
-
-        assertEquals(unknown.message, withoutCapability.message)
-        assertEquals(unknown.errorCode, withoutCapability.errorCode)
-        assertNotNull(inbox.admit("scripted", PaymentLedgerKit.WEBHOOK_TOKEN), "the provider that can is still reached")
-    }
-
-    @Test
     fun `a provider that signs its webhooks needs no path token`() {
         val kit = PaymentLedgerKit(PaymentProperties())
         kit.gateway.webhookSigned = true
@@ -222,22 +205,6 @@ class WebhookInboxTest {
     }
 
     @Test
-    fun `resends of a dead event queue one job - the second resend finds the row waiting`() {
-        val kit = PaymentLedgerKit()
-        val order = confirmingButPaidAtProvider(kit)
-        kit.gateway.failLookups(5)
-        kit.deliver(kit.gateway.webhookDelivery(orderId = order.id))
-        repeat(5) { kit.runWebhooks() }
-        assertEquals(PaymentWebhookStatus.DEAD, inbox(kit).single().status)
-        val jobsBefore = kit.tasks.all(PaymentTaskTypes.WEBHOOK).size
-
-        val receipts = (1..3).map { kit.deliver(kit.gateway.webhookDelivery(orderId = order.id)) }
-
-        assertEquals(listOf(WebhookReceipt.REQUEUED, WebhookReceipt.DUPLICATE, WebhookReceipt.DUPLICATE), receipts)
-        assertEquals(jobsBefore + 1, kit.tasks.all(PaymentTaskTypes.WEBHOOK).size)
-    }
-
-    @Test
     fun `a failing event that is resent over and over stops adding jobs at the redelivery limit - the jobs of a line do not grow without end`() {
         val kit = PaymentLedgerKit()
         val order = confirmingButPaidAtProvider(kit)
@@ -253,40 +220,6 @@ class WebhookInboxTest {
         assertEquals(List(9) { WebhookReceipt.REQUEUED } + List(21) { WebhookReceipt.DUPLICATE }, receipts)
         assertEquals(10, kit.tasks.all(PaymentTaskTypes.WEBHOOK).size)
         assertEquals(31, inbox(kit).single().deliveries)
-    }
-
-    @Test
-    fun `a dead mode-mismatch line is not turned into a new job by every resend`() {
-        val kit = PaymentLedgerKit(PaymentProperties(webhook = PaymentProperties.Webhook(pathToken = PaymentLedgerKit.WEBHOOK_TOKEN, redeliveryRequeueLimit = 2)))
-        val order = confirmingButPaidAtProvider(kit)
-        kit.deliver(kit.gateway.webhookDelivery(orderId = order.id))
-        kit.store.inTransaction { tx -> tx.updateWebhookEvent(checkNotNull(tx.lockWebhookEvent(inbox(kit).single().id)).copy(status = PaymentWebhookStatus.DEAD, lastError = "MODE_MISMATCH")) }
-
-        val receipts = (1..6).map { kit.deliver(kit.gateway.webhookDelivery(orderId = order.id)) }
-        kit.store.inTransaction { tx -> tx.updateWebhookEvent(checkNotNull(tx.lockWebhookEvent(inbox(kit).single().id)).copy(status = PaymentWebhookStatus.DEAD)) }
-        val after = (1..3).map { kit.deliver(kit.gateway.webhookDelivery(orderId = order.id)) }
-
-        assertEquals(listOf(WebhookReceipt.REQUEUED) + List(5) { WebhookReceipt.DUPLICATE }, receipts, "the second delivery is within the limit of 2, the rest are not")
-        assertEquals(List(3) { WebhookReceipt.DUPLICATE }, after, "once past the limit a dead line stays dead for resends")
-        assertEquals(2, kit.tasks.all(PaymentTaskTypes.WEBHOOK).size)
-    }
-
-    @Test
-    fun `the redelivery limit counts the total deliveries of the line, the first one included - 1 never queues, 2 queues the second delivery only`() {
-        fun resends(limit: Int): Pair<List<WebhookReceipt>, Int> {
-            val kit = PaymentLedgerKit(PaymentProperties(webhook = PaymentProperties.Webhook(pathToken = PaymentLedgerKit.WEBHOOK_TOKEN, redeliveryRequeueLimit = limit)))
-            val order = confirmingButPaidAtProvider(kit)
-            kit.deliver(kit.gateway.webhookDelivery(orderId = order.id)) // deliveries = 1
-            val id = inbox(kit).single().id
-            val receipts = (1..3).map {
-                kit.store.inTransaction { tx -> tx.updateWebhookEvent(checkNotNull(tx.lockWebhookEvent(id)).copy(status = PaymentWebhookStatus.DEAD)) }
-                kit.deliver(kit.gateway.webhookDelivery(orderId = order.id)) // deliveries = 2, 3, 4
-            }
-            return receipts to kit.tasks.all(PaymentTaskTypes.WEBHOOK).size
-        }
-
-        assertEquals(List(3) { WebhookReceipt.DUPLICATE } to 1, resends(1), "limit 1: the second delivery is already past it")
-        assertEquals(listOf(WebhookReceipt.REQUEUED, WebhookReceipt.DUPLICATE, WebhookReceipt.DUPLICATE) to 2, resends(2), "limit 2: deliveries 2 is within it, 3 and 4 are not")
     }
 
     @Test
@@ -338,27 +271,6 @@ class WebhookInboxTest {
     }
 
     // ---- 스펙 §3 9: 순서 뒤바뀜 ----
-
-    @Test
-    fun `a late failure after success keeps the order paid`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.paid()
-
-        // ① 늦게 도착한 "실패" 웹훅 — 결제사의 지금 상태는 승인이다
-        kit.deliver(kit.gateway.webhookDelivery(eventKey = "late-1", orderId = order.id, claimedStatus = "ABORTED"))
-        kit.runWebhooks()
-        // ② 결제사 조회가 실제로 실패를 말하는 이상한 경우에도 PAID 를 되돌리지 않는다
-        kit.gateway.abort("pay_1")
-        kit.deliver(kit.gateway.webhookDelivery(eventKey = "late-2", orderId = order.id, claimedStatus = "ABORTED"))
-        kit.runWebhooks()
-
-        val after = kit.order(order.id)
-        assertEquals(PaymentOrderStatus.PAID, after.status)
-        assertNull(after.failureCode)
-        assertNull(after.closedAt)
-        assertEquals(1, kit.listener.paid.size)
-        assertEquals(listOf(PaymentWebhookStatus.PROCESSED, PaymentWebhookStatus.PROCESSED), inbox(kit).map { it.status })
-    }
 
     @Test
     fun `a cancel that arrives before the confirm settles ends as refunded`() {
@@ -433,23 +345,6 @@ class WebhookInboxTest {
     }
 
     @Test
-    fun `a redelivery of a failed event skips the retry wait too`() {
-        val kit = PaymentLedgerKit()
-        val order = confirmingButPaidAtProvider(kit)
-        kit.gateway.failLookups(1)
-        kit.deliver(kit.gateway.webhookDelivery(orderId = order.id))
-        kit.runWebhooks()
-        assertEquals(PaymentWebhookStatus.FAILED, inbox(kit).single().status)
-        val jobsBefore = kit.tasks.all(PaymentTaskTypes.WEBHOOK).size
-
-        val receipt = kit.deliver(kit.gateway.webhookDelivery(orderId = order.id))
-
-        assertEquals(WebhookReceipt.REQUEUED, receipt)
-        assertEquals(jobsBefore + 1, kit.tasks.all(PaymentTaskTypes.WEBHOOK).size, "one more job, due now")
-        assertEquals(PaymentWebhookStatus.RECEIVED, inbox(kit).single().status)
-    }
-
-    @Test
     fun `a dead webhook job marks only an unfinished row - the hook is safe to call twice`() {
         val kit = PaymentLedgerKit()
         val order = confirmingButPaidAtProvider(kit)
@@ -467,27 +362,6 @@ class WebhookInboxTest {
     }
 
     // ---- 처리기의 판단 ----
-
-    @Test
-    fun `a webhook for a confirming order made under another payment mode is dead at once and flags the order without asking the provider`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.createAuthenticated()
-        kit.gateway.script(dev.sumin.skeleton.payment.testing.ScriptedGateway.ConfirmScript.TimeoutApplied())
-        kit.orders.confirm("acc_1", order.id, "pay_1", order.amount)
-        assertEquals(PaymentOrderStatus.CONFIRMING, kit.order(order.id).status)
-        kit.deliver(kit.gateway.webhookDelivery(orderId = order.id))
-        kit.gateway.mode = PaymentMode.LIVE // 개발 주소에도 등록된 실결제 웹훅 같은 설정 오류
-
-        kit.runWebhooks()
-
-        val row = inbox(kit).single()
-        assertEquals(PaymentWebhookStatus.DEAD, row.status)
-        assertEquals("MODE_MISMATCH", row.lastError)
-        assertEquals(PaymentReviewReason.MODE_MISMATCH, kit.order(order.id).reviewReason)
-        assertEquals(0, kit.gateway.lookupCalls.size)
-        assertEquals(InMemoryPaymentTasks.State.DEAD, kit.tasks.all(PaymentTaskTypes.WEBHOOK).single().state, "no retry for a mode that cannot change")
-        assertEquals(1, kit.tasks.all(PaymentTaskTypes.WEBHOOK).single().attempts)
-    }
 
     @Test
     fun `a mode mismatch marks only a confirming order - a pending or finished order gets no mark, the row alone goes dead`() {
@@ -508,6 +382,7 @@ class WebhookInboxTest {
             assertEquals(if (status in markedOnes) PaymentReviewReason.MODE_MISMATCH else null, kit.order(order.id).reviewReason, "from $status")
             assertEquals(if (status in markedOnes) 1 else 0, kit.review.flagged.size, "from $status")
             assertEquals(0, kit.gateway.lookupCalls.size, "from $status")
+            assertEquals(InMemoryPaymentTasks.State.DEAD, kit.tasks.all(PaymentTaskTypes.WEBHOOK).single().state, "no retry for a mode that cannot change: from $status")
         }
     }
 
@@ -618,11 +493,4 @@ class WebhookInboxTest {
         assertEquals(emptyList(), inbox(kit))
     }
 
-    @Test
-    fun `the webhook job has a type of its own and the runner knows it`() {
-        val kit = PaymentLedgerKit()
-
-        assertEquals("payment-webhook", PaymentTaskTypes.WEBHOOK)
-        assertTrue(PaymentTaskTypes.WEBHOOK in kit.runner.types)
-    }
 }

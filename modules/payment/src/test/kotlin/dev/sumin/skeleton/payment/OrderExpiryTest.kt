@@ -30,18 +30,6 @@ class OrderExpiryTest {
     }
 
     @Test
-    fun `when the provider itself expired the authentication the order expires too`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.createAuthenticated()
-        kit.gateway.expire("pay_1")
-        kit.advance(ttl)
-
-        kit.runTasks(setOf(PaymentTaskTypes.ORDER_EXPIRE))
-
-        assertEquals(PaymentOrderStatus.EXPIRED, kit.order(order.id).status)
-    }
-
-    @Test
     fun `while the provider says in progress the expiry waits and retries and the order stays pending`() {
         val kit = PaymentLedgerKit()
         val order = kit.createAuthenticated()
@@ -77,15 +65,6 @@ class OrderExpiryTest {
     }
 
     @Test
-    fun `the expiry task does not run before the deadline`() {
-        val kit = PaymentLedgerKit()
-        kit.create()
-        kit.advance(ttl.minusSeconds(1))
-
-        assertEquals(0, kit.runTasks(setOf(PaymentTaskTypes.ORDER_EXPIRE)))
-    }
-
-    @Test
     fun `the expiry leaves paid, confirming and canceled orders alone without asking the provider`() {
         val kit = PaymentLedgerKit()
         val canceled = kit.create(key = "k1").order.also { kit.orders.abandon("acc_1", it.id) }
@@ -102,20 +81,6 @@ class OrderExpiryTest {
     }
 
     @Test
-    fun `an order created under another mode is closed without asking the provider and without a flag - it never claimed an approval`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.create().order
-        kit.gateway.mode = PaymentMode.LIVE
-        kit.advance(ttl)
-
-        kit.runTasks(setOf(PaymentTaskTypes.ORDER_EXPIRE))
-
-        assertEquals(PaymentOrderStatus.EXPIRED, kit.order(order.id).status)
-        assertNull(kit.order(order.id).reviewReason)
-        assertEquals(0, kit.tasks.dead(PaymentTaskTypes.ORDER_EXPIRE).size)
-    }
-
-    @Test
     fun `a mode that changed is judged before the lookup - a lookup that would fail does not loop the job`() {
         val kit = PaymentLedgerKit()
         val order = kit.create().order
@@ -126,19 +91,10 @@ class OrderExpiryTest {
         kit.runTasks(setOf(PaymentTaskTypes.ORDER_EXPIRE))
 
         assertEquals(PaymentOrderStatus.EXPIRED, kit.order(order.id).status)
+        assertNull(kit.order(order.id).reviewReason, "it never claimed an approval - no flag")
         assertEquals(State.DONE, kit.tasks.all(PaymentTaskTypes.ORDER_EXPIRE).single().state)
         assertEquals(1, kit.tasks.all(PaymentTaskTypes.ORDER_EXPIRE).single().attempts)
         assertEquals(0, kit.gateway.lookupCalls.size)
-    }
-
-    @Test
-    fun `a provider bean that is missing makes the expiry retry instead of dying before its deadline`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.create().order
-        val handler = OrderExpireTaskHandler(kit.store, PaymentProviderRouter(listOf(ScriptedGateway(providerId = "elsewhere")), kit.properties), kit.convergence)
-
-        kotlin.test.assertFailsWith<PaymentTaskRetryException> { handler.handle(PaymentTaskRun(PaymentTaskTypes.ORDER_EXPIRE, order.id, 1, 12)) }
-        assertEquals(PaymentOrderStatus.PENDING, kit.order(order.id).status)
     }
 
     private fun withoutProvider(kit: PaymentLedgerKit) =

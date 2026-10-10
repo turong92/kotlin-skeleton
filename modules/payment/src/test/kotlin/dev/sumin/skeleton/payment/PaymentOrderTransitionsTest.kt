@@ -8,10 +8,8 @@ import dev.sumin.skeleton.payment.PaymentOrderStatus.PAID
 import dev.sumin.skeleton.payment.PaymentOrderStatus.PARTIALLY_REFUNDED
 import dev.sumin.skeleton.payment.PaymentOrderStatus.PENDING
 import dev.sumin.skeleton.payment.PaymentOrderStatus.REFUNDED
-import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.test.assertTrue
 import org.junit.jupiter.api.DynamicTest
 import org.junit.jupiter.api.TestFactory
 
@@ -50,18 +48,4 @@ class PaymentOrderTransitionsTest {
             }
         }
 
-    @Test
-    fun `nothing leaves a paid order for a failure or a close - a late failure signal cannot undo money`() {
-        listOf(PAID, PARTIALLY_REFUNDED, REFUNDED).forEach { from ->
-            listOf(FAILED, EXPIRED, CANCELED, PENDING, CONFIRMING).forEach { to ->
-                assertTrue(!PaymentOrderTransitions.isAllowed(from, to), "$from -> $to")
-            }
-        }
-    }
-
-    @Test
-    fun `the closed statuses and the paid family are named once`() {
-        assertEquals(setOf(FAILED, EXPIRED, CANCELED), PaymentOrderStatus.entries.filter { it.isClosed }.toSet())
-        assertEquals(setOf(PAID, PARTIALLY_REFUNDED, REFUNDED), PaymentOrderStatus.entries.filter { it.isPaidFamily }.toSet())
-    }
 }

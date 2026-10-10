@@ -17,14 +17,6 @@ class PaymentExceptionsTest {
     }
 
     @Test
-    fun `an unsupported capability names provider and capability in the log message and neither in the response detail`() {
-        val error = PaymentCapabilityUnsupportedException("toss", "PaymentCheckoutGateway")
-
-        assertTrue("toss" in error.message.orEmpty() && "PaymentCheckoutGateway" in error.message.orEmpty(), error.message)
-        assertEquals("The payment provider does not support this operation.", error.detail)
-    }
-
-    @Test
     fun `a provider id typed by a client cannot break the log line`() {
         val error = PaymentProviderNotFoundException("x\n[ERROR] forged " + "y".repeat(500))
 

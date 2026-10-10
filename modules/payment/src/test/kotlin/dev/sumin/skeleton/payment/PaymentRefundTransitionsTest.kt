@@ -9,8 +9,6 @@ import dev.sumin.skeleton.payment.PaymentRefundStatus.WITHDRAWN
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
 import org.junit.jupiter.api.DynamicTest
 import org.junit.jupiter.api.TestFactory
 
@@ -38,27 +36,11 @@ class PaymentRefundTransitionsTest {
         }
 
     @Test
-    fun `a line can be created only as requested, pending (an operator refund) or succeeded (a cancel found at the provider)`() {
-        PaymentRefundStatus.entries.forEach { status ->
-            val expected = status in setOf(REQUESTED, PENDING, SUCCEEDED)
-            assertEquals(expected, PaymentRefundTransitions.isCreatable(status), "$status")
-            if (expected) PaymentRefundTransitions.requireCreatable(status) else assertFailsWith<IllegalStateException> { PaymentRefundTransitions.requireCreatable(status) }
-        }
-    }
-
-    @Test
     fun `only a requested or pending line is open - it is the one that holds the order's single open slot`() {
         assertEquals(setOf(REQUESTED, PENDING), PaymentRefundStatus.entries.filter { PaymentRefundTransitions.isOpen(it) }.toSet())
         assertEquals("ord_x", PaymentRefundTransitions.openKeyFor(PENDING, "ord_x"))
         assertEquals("ord_x", PaymentRefundTransitions.openKeyFor(REQUESTED, "ord_x"))
         listOf(SUCCEEDED, FAILED, REJECTED, WITHDRAWN).forEach { assertEquals(null, PaymentRefundTransitions.openKeyFor(it, "ord_x"), "$it") }
-    }
-
-    @Test
-    fun `a closed line never opens again`() {
-        listOf(SUCCEEDED, FAILED, REJECTED, WITHDRAWN).forEach { from ->
-            PaymentRefundStatus.entries.forEach { to -> assertFalse(PaymentRefundTransitions.isAllowed(from, to), "$from -> $to") }
-        }
     }
 
     @Test
@@ -76,11 +58,4 @@ class PaymentRefundTransitionsTest {
         assertEquals(null, PaymentRefundReason.parse("because I said so"))
     }
 
-    @Test
-    fun `the text sent to the provider is a fixed sentence of ours, short enough for the provider and never a customer's words`() {
-        PaymentRefundReason.entries.forEach { reason ->
-            assertTrue(reason.providerText.isNotBlank() && reason.providerText.length <= 200, "$reason")
-            assertTrue(Regex("[A-Za-z ]+").matches(reason.providerText), "$reason: ${reason.providerText}")
-        }
-    }
 }

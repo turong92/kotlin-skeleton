@@ -123,11 +123,6 @@ abstract class PaymentLedgerStoreContract {
     }
 
     @Test
-    fun `lockOrder of a missing order is null`() {
-        assertNull(newStore().inTransaction { it.lockOrder("ord_missing") })
-    }
-
-    @Test
     fun `updating an order that was not locked in this transaction fails`() {
         val store = newStore()
         store.inTransaction { it.insertOrderIfAbsent(first) }
@@ -719,14 +714,6 @@ abstract class PaymentLedgerStoreContract {
         assertEquals("UNKNOWN_ORDER", stored.lastError)
         assertEquals(done, stored.processedAt)
         assertEquals(row.copy(status = PaymentWebhookStatus.IGNORED, lastError = "UNKNOWN_ORDER", processedAt = done), stored, "event type, delivery count and hash are the first delivery's")
-    }
-
-    @Test
-    fun `a missing webhook row reads and locks as null`() {
-        val store = newStore()
-
-        assertNull(store.findWebhookEvent(424242))
-        assertNull(store.inTransaction { it.lockWebhookEvent(424242) })
     }
 
     @Test

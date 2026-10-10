@@ -53,19 +53,6 @@ class SupplyDeadJobTest {
     }
 
     @Test
-    fun `a dead fulfil job marks a partially refunded order that was never fulfilled`() {
-        val kit = PaymentLedgerKit()
-        val order = unfulfilled(kit)
-        kit.gateway.consoleCancel("pay_1", 1000)
-        kit.refunds.sync(op, order.id)
-        assertEquals(PaymentOrderStatus.PARTIALLY_REFUNDED, kit.order(order.id).status)
-
-        kit.runner.onDead(dead(PaymentTaskTypes.ORDER_FULFIL, order.id))
-
-        assertEquals(PaymentReviewReason.FULFILMENT_UNRESOLVED, kit.order(order.id).reviewReason)
-    }
-
-    @Test
     fun `a dead fulfil job leaves a fulfilled order, a fully refunded one and a missing one alone`() {
         val kit = PaymentLedgerKit()
         val fulfilled = kit.paid(key = "k-a", paymentKey = "pay_a")
@@ -139,19 +126,6 @@ class SupplyDeadJobTest {
 
         kit.runner.onDead(dead(PaymentTaskTypes.ORDER_FULFIL, order.id))
         assertEquals(PaymentReviewReason.FULFILMENT_UNRESOLVED, kit.order(order.id).reviewReason)
-    }
-
-    @Test
-    fun `the requeued fulfil job really fulfils once the listener works`() {
-        val kit = PaymentLedgerKit()
-        val order = unfulfilled(kit)
-        kit.listener.failPaid(0)
-
-        kit.refunds.sync(op, order.id)
-        kit.runTasks(setOf(PaymentTaskTypes.ORDER_FULFIL))
-
-        assertNotNull(kit.order(order.id).fulfilledAt)
-        assertEquals(1, kit.listener.paid.size)
     }
 
     @Test

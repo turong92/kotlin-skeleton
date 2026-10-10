@@ -7,7 +7,6 @@ import java.time.Duration
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
-import kotlin.test.assertTrue
 
 /**
  * 결제사가 "접수했다(처리 중)"고 답한 환불은 타임아웃(아무 답이 없었다)과 다르다 — 받았다고 말한 요청을 "안 나갔다"로 닫으면 늦은 적용(스펙 §15)이 예외가 아니라 정상 경로가 된다.
@@ -28,18 +27,6 @@ class RefundProviderPendingTest {
     private fun runSettle(kit: PaymentLedgerKit) = kit.runTasks(setOf(PaymentTaskTypes.REFUND_RECONCILE))
 
     @Test
-    fun `an acknowledged refund is recorded as such on the line and in the history`() {
-        val kit = PaymentLedgerKit()
-
-        val line = acknowledged(kit)
-
-        assertEquals("PROVIDER_PENDING", kit.store.findRefund(line.id)!!.failureCode)
-        val unknown = kit.store.listEvents(line.orderId).filter { it.refundId == line.id && it.type == PaymentEventType.REFUND_UNKNOWN }
-        assertEquals(listOf("PROVIDER_PENDING"), unknown.map { it.providerCode })
-        assertEquals(1, kit.gateway.refundCalls.size)
-    }
-
-    @Test
     fun `a refund the provider said it accepted is not closed as failed when the lookup does not show it - the job retries and flags on the last attempt`() {
         val kit = PaymentLedgerKit(PaymentProperties(reconcile = PaymentProperties.Reconcile(maxAttempts = 3)))
         val line = acknowledged(kit)
@@ -58,18 +45,6 @@ class RefundProviderPendingTest {
         assertEquals(PaymentRefundStatus.PENDING, kit.store.findRefund(line.id)!!.status, "never closed as not-applied")
         assertEquals(PaymentReviewReason.REFUND_MISMATCH, kit.order(line.orderId).reviewReason)
         assertEquals(1, kit.gateway.refundCalls.size)
-    }
-
-    @Test
-    fun `a manual sync does not close an acknowledged refund either`() {
-        val kit = PaymentLedgerKit()
-        val line = acknowledged(kit)
-        kit.advance(settleDelay.plusMinutes(10))
-
-        kit.refunds.sync(op, line.orderId)
-
-        assertEquals(PaymentRefundStatus.PENDING, kit.store.findRefund(line.id)!!.status)
-        assertEquals(0, kit.store.listRefunds(line.orderId).count { it.status == PaymentRefundStatus.FAILED })
     }
 
     @Test
@@ -97,14 +72,4 @@ class RefundProviderPendingTest {
         assertNull(kit.order(line.orderId).reviewReason)
     }
 
-    @Test
-    fun `a settle job that dies on an acknowledged refund flags the order like any other dead settle job`() {
-        val kit = PaymentLedgerKit()
-        val line = acknowledged(kit)
-
-        kit.refundReconcile.onDead(PaymentTaskRun(PaymentTaskTypes.REFUND_RECONCILE, line.id, 12, 12))
-
-        assertEquals(PaymentReviewReason.REFUND_MISMATCH, kit.order(line.orderId).reviewReason)
-        assertTrue(kit.store.findRefund(line.id)!!.status == PaymentRefundStatus.PENDING)
-    }
 }

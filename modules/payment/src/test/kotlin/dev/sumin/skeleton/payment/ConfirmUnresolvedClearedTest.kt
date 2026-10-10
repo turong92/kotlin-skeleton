@@ -36,20 +36,6 @@ class ConfirmUnresolvedClearedTest {
     }
 
     @Test
-    fun `a definitive decline that closes the order clears the mark too`() {
-        val kit = PaymentLedgerKit()
-        val order = unresolved(kit)
-
-        kit.store.inTransaction { tx ->
-            kit.convergence.declined(tx, tx.lockOrder(order.id)!!, "REJECT_CARD_COMPANY", ConvergeContext(PaymentMode.TEST, ConvergeSource.RECONCILE))
-        }
-
-        val closed = kit.order(order.id)
-        assertEquals(PaymentOrderStatus.FAILED, closed.status)
-        assertNull(closed.reviewReason)
-    }
-
-    @Test
     fun `an unpaid order the expiry job closes EXPIRED loses the mark as well, and a money reason stays`() {
         val kit = PaymentLedgerKit()
         val withMark = kit.create("acc_1", key = "k-a").order

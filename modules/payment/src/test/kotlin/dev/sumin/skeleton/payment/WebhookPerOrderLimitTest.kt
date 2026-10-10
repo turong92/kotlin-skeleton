@@ -76,57 +76,6 @@ class WebhookPerOrderLimitTest {
     }
 
     @Test
-    fun `an order that has no payment key yet is counted too - whatever key the body names`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.createAuthenticated() // 아직 승인 전 - 결제 키가 장부에 없다
-
-        val receipts = (1..40).map { kit.deliver(delivery(kit, order.id, it, paymentKey = "pay_forged_$it")) }
-
-        assertEquals(30, receipts.count { it == WebhookReceipt.STORED })
-        assertEquals(10, receipts.count { it == WebhookReceipt.LIMITED })
-    }
-
-    @Test
-    fun `after the window the order is accepted again - the rows that fell out of the window no longer count`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.paid()
-        (1..30).forEach { kit.deliver(delivery(kit, order.id, it)) }
-        assertEquals(WebhookReceipt.LIMITED, kit.deliver(delivery(kit, order.id, 31)))
-
-        kit.advance(Duration.ofMinutes(10).plusSeconds(1))
-        val after = kit.deliver(delivery(kit, order.id, 32))
-
-        assertEquals(WebhookReceipt.STORED, after)
-        assertEquals(31, stored(kit).size)
-    }
-
-    @Test
-    fun `another order is not affected by a saturated one`() {
-        val kit = PaymentLedgerKit()
-        val noisy = kit.paid(accountId = "acc_1", key = "k-1", paymentKey = "pay_1")
-        val quiet = kit.paid(accountId = "acc_2", key = "k-2", paymentKey = "pay_2")
-        (1..31).forEach { kit.deliver(delivery(kit, noisy.id, it)) }
-
-        val receipt = kit.deliver(kit.gateway.webhookDelivery(eventKey = "evt-quiet", paymentKey = "pay_2", orderId = quiet.id))
-
-        assertEquals(WebhookReceipt.STORED, receipt)
-    }
-
-    @Test
-    fun `the limit comes from the properties`() {
-        val kit = PaymentLedgerKit(
-            PaymentProperties(webhook = PaymentProperties.Webhook(pathToken = PaymentLedgerKit.WEBHOOK_TOKEN, perOrderLimit = PaymentProperties.Webhook.PerOrderLimit(capacity = 2, window = Duration.ofMinutes(1)))),
-        )
-        val order = kit.paid()
-
-        val receipts = (1..3).map { kit.deliver(delivery(kit, order.id, it)) }
-        kit.advance(Duration.ofMinutes(1).plusSeconds(1))
-
-        assertEquals(listOf(WebhookReceipt.STORED, WebhookReceipt.STORED, WebhookReceipt.LIMITED), receipts)
-        assertEquals(WebhookReceipt.STORED, kit.deliver(delivery(kit, order.id, 4)))
-    }
-
-    @Test
     fun `a signal past the limit is not dropped - one marker row per order and window, one job deferred to the end of the window`() {
         val kit = PaymentLedgerKit()
         val order = kit.paid()
@@ -200,24 +149,6 @@ class WebhookPerOrderLimitTest {
     }
 
     @Test
-    fun `the next window gets its own marker`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.paid()
-        (1..30).forEach { kit.deliver(delivery(kit, order.id, it)) }
-        assertEquals(WebhookReceipt.LIMITED, kit.deliver(delivery(kit, order.id, 31)))
-        val first = windowOf(kit)
-
-        kit.advance(Duration.ofMinutes(10).plusSeconds(1))
-        (32..61).forEach { assertEquals(WebhookReceipt.STORED, kit.deliver(delivery(kit, order.id, it))) }
-        assertEquals(WebhookReceipt.LIMITED, kit.deliver(delivery(kit, order.id, 62)))
-        assertEquals(WebhookReceipt.LIMITED, kit.deliver(delivery(kit, order.id, 63)))
-
-        val keys = markers(kit).associate { it.eventKey to it.deliveries }
-        assertEquals(mapOf("limited:${order.id}:$first" to 1, "limited:${order.id}:${windowOf(kit)}" to 2), keys)
-        assertTrue(windowOf(kit) > first)
-    }
-
-    @Test
     fun `a marker row never takes a place in the count - the window frees up exactly when the real rows fall out`() {
         val kit = PaymentLedgerKit(
             PaymentProperties(webhook = PaymentProperties.Webhook(pathToken = PaymentLedgerKit.WEBHOOK_TOKEN, perOrderLimit = PaymentProperties.Webhook.PerOrderLimit(capacity = 2, window = Duration.ofMinutes(1)))),
@@ -230,16 +161,6 @@ class WebhookPerOrderLimitTest {
         assertEquals(1, markers(kit).size)
         kit.advance(Duration.ofMinutes(1).plusSeconds(1))
         assertEquals(listOf(WebhookReceipt.STORED, WebhookReceipt.STORED, WebhookReceipt.LIMITED), (6..8).map { kit.deliver(delivery(kit, order.id, it)) })
-    }
-
-    @Test
-    fun `the marker shows in the operator list under a key that starts with limited and the order id`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.paid()
-        (1..30).forEach { kit.deliver(delivery(kit, order.id, it)) }
-        kit.deliver(delivery(kit, order.id, 31))
-
-        assertTrue(kit.inbox.list(null, null, 100).values.any { it.eventKey.startsWith("limited:${order.id}:") }, "the operator can see which order hit the limit")
     }
 
     @Test

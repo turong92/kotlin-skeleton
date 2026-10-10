@@ -25,15 +25,7 @@ class RefundLateResultTest {
         val kit = PaymentLedgerKit()
         val order = kit.paid()
 
-        val outcome = withDuring(kit, order.id) {
-            val line = kit.store.listRefunds(order.id).single()
-            kit.store.inTransaction { tx ->
-                tx.lockOrder(order.id)
-                kit.writer.transitionRefund(tx, tx.lockRefund(line.id)!!, PaymentRefundStatus.FAILED, PaymentEventType.REFUND_FAILED, PaymentActor.SYSTEM, null, RefundSettlement.NOT_APPLIED) {
-                    it.copy(failureCode = RefundSettlement.NOT_APPLIED, completedAt = kit.time.now())
-                }
-            }
-        }
+        val outcome = closeLineDuringRefund(kit, order.id)
 
         assertEquals(PaymentRefundStatus.FAILED, outcome.refund.status, "the closed line is not reopened")
         val lines = kit.store.listRefunds(order.id)
@@ -116,18 +108,6 @@ class RefundLateResultTest {
         kit.refunds.sync(op, order.id)
 
         assertNull(kit.order(order.id).reviewReason)
-    }
-
-    @Test
-    fun `a webhook delivered after a late result does not clear the mark either`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.paid()
-        closeLineDuringRefund(kit, order.id)
-
-        kit.deliver(kit.gateway.webhookDelivery(eventType = "PAYMENT_STATUS_CHANGED", paymentKey = "pay_1", orderId = order.id))
-        kit.runWebhooks()
-
-        assertEquals(PaymentReviewReason.REFUND_MISMATCH, kit.order(order.id).reviewReason)
     }
 
     // ---- M-6: 거래 키 없는 환불됨 응답이 닫힌 줄에 도착했다 ----

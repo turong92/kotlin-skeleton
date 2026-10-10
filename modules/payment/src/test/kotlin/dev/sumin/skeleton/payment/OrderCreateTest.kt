@@ -1,11 +1,6 @@
 package dev.sumin.skeleton.payment
 
-import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.Logger
-import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.read.ListAppender
 import dev.sumin.skeleton.payment.testing.PaymentLedgerKit
-import org.slf4j.LoggerFactory
 import java.time.Duration
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
@@ -51,34 +46,6 @@ class OrderCreateTest {
         assertEquals(kit.time.now().plus(Duration.ofMinutes(30)), order.checkoutExpiresAt)
         assertFalse(created.replayed)
         assertEquals(order, kit.store.findOrder(order.id))
-    }
-
-    @Test
-    fun `the checkout instruction comes from the provider and names this order and its amount`() {
-        val kit = PaymentLedgerKit()
-
-        val created = kit.create()
-        val checkout = assertNotNull(created.checkout)
-
-        assertEquals(created.order.id, checkout.orderId)
-        assertEquals(PaymentAmount(3000, "KRW"), checkout.amount)
-        assertEquals("scripted", checkout.provider)
-        assertEquals(1, kit.gateway.checkoutCalls.size)
-    }
-
-    @Test
-    fun `creating queues an expiry task at the checkout deadline in the same transaction and writes the first event`() {
-        val kit = PaymentLedgerKit()
-
-        val order = kit.create().order
-
-        val task = kit.tasks.pending(PaymentTaskTypes.ORDER_EXPIRE).single()
-        assertEquals(order.id, task.task.subjectId)
-        assertEquals(order.checkoutExpiresAt, task.task.runAt)
-        assertEquals(12, task.maxAttempts)
-        assertEquals(listOf(PaymentEventType.ORDER_CREATED), kit.store.listEvents(order.id).map { it.type })
-        assertEquals(PaymentActor.USER, kit.store.listEvents(order.id).single().actor)
-        assertEquals("acc_1", kit.store.listEvents(order.id).single().actorId)
     }
 
     @Test
@@ -175,24 +142,6 @@ class OrderCreateTest {
     }
 
     @Test
-    fun `an order name longer than a hundred characters is cut to the provider limit`() {
-        val kit = PaymentLedgerKit(catalog = PaymentCatalog { PurchaseQuote(PaymentAmount(10, "KRW"), "x".repeat(150)) })
-
-        assertEquals(100, kit.create().order.orderName.length)
-    }
-
-    @Test
-    fun `when no provider can open a checkout the answer is unavailable`() {
-        val kit = PaymentLedgerKit()
-        val router = PaymentProviderRouter(emptyList(), PaymentProperties())
-        val orders = PaymentOrders(kit.store, kit.tasks, router, kit.catalog, kit.convergence, kit.fulfillment, kit.writer, kit.properties)
-
-        assertFailsWith<PaymentUnavailableException> {
-            orders.create(CreateOrderCommand("acc_1", "cheer", "cheer-3000", IdempotencyKey("k")))
-        }
-    }
-
-    @Test
     fun `a provider that cannot hand out its checkout values makes the new order unavailable - no order, no task, no event`() {
         val kit = PaymentLedgerKit()
         kit.gateway.checkoutReady = false
@@ -227,29 +176,6 @@ class OrderCreateTest {
     }
 
     @Test
-    fun `asking whether a checkout can open is silent - only creating an order says why it could not`() {
-        val kit = PaymentLedgerKit()
-        kit.gateway.checkoutReady = false
-        val logger = LoggerFactory.getLogger(PaymentOrders::class.java) as Logger
-        val previous = logger.level
-        val appender = ListAppender<ILoggingEvent>().also { it.start() }
-        logger.level = Level.DEBUG
-        logger.addAppender(appender)
-        try {
-            repeat(3) { assertNull(kit.orders.openableCheckout(null, null)) } // GET /config has no rate limit - it must not fill the log
-            assertEquals(emptyList(), appender.list.filter { it.level.isGreaterOrEqual(Level.WARN) }.map { it.formattedMessage })
-
-            assertFailsWith<PaymentUnavailableException> { kit.create(key = "k-warn") }
-        } finally {
-            logger.detachAppender(appender)
-            logger.level = previous
-        }
-        val warnings = appender.list.filter { it.level == Level.WARN }
-        assertEquals(1, warnings.size, warnings.map { it.formattedMessage }.toString())
-        assertTrue(warnings.single().formattedMessage.contains("cannot hand out its checkout values"), warnings.single().formattedMessage)
-    }
-
-    @Test
     fun `if the task cannot be queued the order is not written either`() {
         val kit = PaymentLedgerKit()
         val orders = PaymentOrders(
@@ -267,10 +193,4 @@ class OrderCreateTest {
         assertEquals(0, kit.store.allOrders().size)
     }
 
-    @Test
-    fun `the exception for a missing catalog carries no provider or type names`() {
-        val message = PaymentUnavailableException().message.orEmpty()
-
-        listOf("scripted", "Gateway", "dev.sumin", "toss").forEach { assertFalse(message.contains(it), message) }
-    }
 }

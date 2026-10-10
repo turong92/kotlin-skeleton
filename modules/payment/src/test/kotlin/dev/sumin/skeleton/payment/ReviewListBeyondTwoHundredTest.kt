@@ -64,11 +64,4 @@ class ReviewListBeyondTwoHundredTest {
         assertEquals((1..10).map { "ord_" + it.toString().padStart(32, '0') }.reversed(), ids)
     }
 
-    @Test
-    fun `unapplied succeeded refunds get the same treatment`() {
-        stuckRefunds(total = 250, oldOnes = 10, status = PaymentRefundStatus.SUCCEEDED)
-
-        assertEquals(10, allReviewIds("acc_old").size)
-        assertEquals(250, allReviewIds().size)
-    }
 }

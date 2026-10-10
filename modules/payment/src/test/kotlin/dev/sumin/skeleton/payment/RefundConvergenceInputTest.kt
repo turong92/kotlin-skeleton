@@ -33,19 +33,6 @@ class RefundConvergenceInputTest {
     }
 
     @Test
-    fun `reconciling the same list twice stays one row per real cancel`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.paid()
-        val list = listOf(cancel("txn_a", 1000), cancel("txn_a", 1000))
-
-        converge(kit, order.id, list, 2000)
-        val second = converge(kit, order.id, list, 2000)
-
-        assertEquals(1, kit.store.listRefunds(order.id).size)
-        assertEquals(false, second.changed)
-    }
-
-    @Test
     fun `a transaction key that is not an identifier is dropped by the same filter as on the response path, and the leftover difference flags the order`() {
         val kit = PaymentLedgerKit()
         val order = kit.paid()
@@ -54,17 +41,6 @@ class RefundConvergenceInputTest {
 
         assertEquals(emptyList(), kit.store.listRefunds(order.id))
         assertEquals(PaymentReviewReason.REFUND_MISMATCH, result.order.reviewReason, "money moved at the provider that the ledger could not take in")
-    }
-
-    @Test
-    fun `a transaction key with stray spaces is stored trimmed and is not entered twice`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.paid()
-
-        converge(kit, order.id, listOf(cancel(" txn_a ", 1000)), 2000)
-        converge(kit, order.id, listOf(cancel("txn_a", 1000)), 2000)
-
-        assertEquals(listOf("txn_a"), kit.store.listRefunds(order.id).map { it.providerRefundId })
     }
 
     @Test

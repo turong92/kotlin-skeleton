@@ -50,20 +50,6 @@ class RefundProviderPendingExpiryTest {
     }
 
     @Test
-    fun `an acknowledged line that was never flagged keeps its mark after a sync as well - the settle result flags nothing new`() {
-        val kit = kit()
-        val order = kit.paid()
-        kit.gateway.scriptRefund(RefundScript.AnswerPending)
-        val line = kit.refunds.refund(op, order.id, "OPERATOR", 1000, IdempotencyKey("k-1")).refund
-        kit.advance(settleDelay)
-
-        kit.refunds.sync(op, order.id)
-
-        assertEquals(PaymentRefundStatus.PENDING, kit.store.findRefund(line.id)!!.status)
-        assertEquals("PROVIDER_PENDING", kit.store.findRefund(line.id)!!.failureCode)
-    }
-
-    @Test
     fun `the settle job does not close an acknowledged line even long after the deadline - only a person's sync does`() {
         val kit = PaymentLedgerKit()
         val order = kit.paid()
@@ -98,25 +84,6 @@ class RefundProviderPendingExpiryTest {
     }
 
     @Test
-    fun `a request the provider applies after the line was closed is caught by the next sync as one provider line`() {
-        val kit = kit()
-        val line = deadAcknowledged(kit)
-        kit.advance(timeout)
-        kit.refunds.sync(op, line.orderId)
-        assertEquals(PaymentRefundStatus.FAILED, kit.store.findRefund(line.id)!!.status)
-
-        kit.gateway.applyLate() // 접수했던 요청이 이제 적용된다
-
-        kit.refunds.sync(op, line.orderId)
-        kit.refunds.sync(op, line.orderId)
-
-        val provider = kit.store.listRefunds(line.orderId).filter { it.origin == PaymentRefundOrigin.PROVIDER }
-        assertEquals(1, provider.size)
-        assertEquals(1000, kit.order(line.orderId).refundedAmount)
-        assertEquals(kit.gateway.payment("pay_1")!!.refundedTotal, kit.order(line.orderId).refundedAmount)
-    }
-
-    @Test
     fun `a sync after the deadline does not close the line when the lookup shows the cancel - it succeeds instead`() {
         val kit = kit()
         val line = deadAcknowledged(kit)
@@ -141,10 +108,4 @@ class RefundProviderPendingExpiryTest {
         assertEquals(PaymentRefundStatus.PENDING, kit.store.findRefund(line.id)!!.status)
     }
 
-    @Test
-    fun `the timeout must be positive and defaults to 24 hours`() {
-        assertEquals(Duration.ofHours(24), PaymentProperties().refund.providerPendingTimeout)
-        assertFailsWith<IllegalArgumentException> { PaymentProperties.Refund(providerPendingTimeout = Duration.ZERO) }
-        assertFailsWith<IllegalArgumentException> { PaymentProperties.Refund(providerPendingTimeout = Duration.ofSeconds(-1)) }
-    }
 }

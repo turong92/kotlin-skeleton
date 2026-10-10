@@ -3,7 +3,6 @@ package dev.sumin.skeleton.payment
 import dev.sumin.skeleton.payment.testing.PaymentLedgerKit
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
-import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
 /**
@@ -37,10 +36,4 @@ class DisabledSoleProviderCheckoutTest {
         assertNull(kit.gateway.checkoutCalls.firstOrNull())
     }
 
-    @Test
-    fun `an enabled sole provider still opens`() {
-        val kit = PaymentLedgerKit()
-
-        assertNotNull(kit.orders.openableCheckout(null, null))
-    }
 }

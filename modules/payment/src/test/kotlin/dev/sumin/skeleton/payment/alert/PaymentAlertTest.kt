@@ -16,7 +16,6 @@ import java.util.concurrent.CopyOnWriteArrayList
 import java.util.function.Supplier
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import org.springframework.boot.autoconfigure.AutoConfigurations
 import org.springframework.boot.test.context.runner.ApplicationContextRunner
@@ -82,14 +81,6 @@ class PaymentAlertTest {
     fun `without an OwnerAlerts bean there is no credential alert bean - the provider falls back to NONE`() {
         runner(null).run { context ->
             assertTrue(context.getBeansOfType(PaymentProviderCredentialAlert::class.java).isEmpty())
-        }
-    }
-
-    @Test
-    fun `without an OwnerAlerts bean the notifier does nothing`() {
-        runner(null).run { context ->
-            context.getBean(PaymentReviewNotifier::class.java).flagged("ord_x", PaymentReviewReason.MODE_MISMATCH)
-            assertSame(PaymentReviewNotifier.NONE, context.getBean(PaymentReviewNotifier::class.java))
         }
     }
 

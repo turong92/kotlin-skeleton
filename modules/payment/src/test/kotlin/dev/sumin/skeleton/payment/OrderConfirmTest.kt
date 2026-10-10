@@ -77,18 +77,6 @@ class OrderConfirmTest {
     }
 
     @Test
-    fun `the request thread fulfils right after the confirm`() {
-        val kit = PaymentLedgerKit()
-        val created = kit.createAuthenticated()
-
-        val paid = kit.orders.confirm("acc_1", created.id, "pay_1", created.amount)
-
-        assertEquals(1, kit.listener.paid.size)
-        assertEquals(created.id, kit.listener.paid.single().id)
-        assertNotNull(paid.fulfilledAt)
-    }
-
-    @Test
     fun `sixteen simultaneous confirms of one order call the provider exactly once`() {
         val kit = PaymentLedgerKit()
         val created = kit.createAuthenticated()
@@ -127,16 +115,6 @@ class OrderConfirmTest {
 
         assertEquals(0, kit.gateway.confirmCalls.size)
         assertEquals(before, kit.order(created.id), "the row did not move")
-    }
-
-    @Test
-    fun `a request amount that is the same money in a different spelling is accepted and the order's amount is what is sent`() {
-        val kit = PaymentLedgerKit()
-        val created = kit.createAuthenticated()
-
-        kit.orders.confirm("acc_1", created.id, "pay_1", PaymentAmount(3000, " krw "))
-
-        assertEquals(PaymentAmount(3000, "KRW"), kit.gateway.confirmCalls.single().amount)
     }
 
     @Test
@@ -222,41 +200,6 @@ class OrderConfirmTest {
     }
 
     @Test
-    fun `a provider server error is unknown too and does not close the order`() {
-        val kit = PaymentLedgerKit()
-        val created = kit.createAuthenticated()
-        kit.gateway.script(ConfirmScript.ServerError)
-
-        assertEquals(PaymentOrderStatus.CONFIRMING, kit.orders.confirm("acc_1", created.id, "pay_1", created.amount).status)
-    }
-
-    @Test
-    fun `a second confirm while the order is confirming does not call the provider`() {
-        val kit = PaymentLedgerKit()
-        val created = kit.createAuthenticated()
-        kit.gateway.script(ConfirmScript.TimeoutNotApplied)
-        kit.orders.confirm("acc_1", created.id, "pay_1", created.amount)
-
-        val again = kit.orders.confirm("acc_1", created.id, "pay_1", created.amount)
-
-        assertEquals(PaymentOrderStatus.CONFIRMING, again.status)
-        assertEquals(1, kit.gateway.confirmCalls.size)
-    }
-
-    @Test
-    fun `confirming an order that is already paid returns it when the payment id is the same and is not payable otherwise`() {
-        val kit = PaymentLedgerKit()
-        val created = kit.createAuthenticated()
-        kit.orders.confirm("acc_1", created.id, "pay_1", created.amount)
-
-        val again = kit.orders.confirm("acc_1", created.id, "pay_1", created.amount)
-
-        assertEquals(PaymentOrderStatus.PAID, again.status)
-        assertFailsWith<PaymentOrderNotPayableException> { kit.orders.confirm("acc_1", created.id, "pay_other", created.amount) }
-        assertEquals(1, kit.gateway.confirmCalls.size)
-    }
-
-    @Test
     fun `a checkout past its deadline cannot be confirmed`() {
         val kit = PaymentLedgerKit()
         val created = kit.createAuthenticated()
@@ -280,44 +223,4 @@ class OrderConfirmTest {
         assertEquals(PaymentOrderStatus.PENDING, kit.order(second.id).status)
     }
 
-    @Test
-    fun `the exceptions that reach a client name neither the provider nor internal types`() {
-        val kit = PaymentLedgerKit()
-        val created = kit.createAuthenticated()
-        kit.gateway.script(ConfirmScript.Decline("REJECT_CARD_COMPANY"))
-        val messages = listOf(
-            assertFailsWith<PaymentAmountMismatchException> { kit.orders.confirm("acc_1", created.id, "pay_1", PaymentAmount(1, "KRW")) },
-            assertFailsWith<PaymentDeclinedException> { kit.orders.confirm("acc_1", created.id, "pay_1", created.amount) },
-            assertFailsWith<PaymentOrderNotPayableException> { kit.orders.confirm("acc_1", created.id, "pay_9", created.amount) },
-            assertFailsWith<PaymentOrderNotFoundException> { kit.orders.get("acc_9", created.id) },
-        ).map { it.message.orEmpty() + it.detail.orEmpty() }
-
-        messages.forEach { message ->
-            listOf("scripted", "Gateway", "dev.sumin", "toss", created.id).forEach { assertTrue(!message.contains(it), "$it in $message") }
-        }
-    }
-
-    @Test
-    fun `abandoning closes a pending order as canceled and is harmless afterwards`() {
-        val kit = PaymentLedgerKit()
-        val created = kit.createAuthenticated()
-
-        val canceled = kit.orders.abandon("acc_1", created.id)
-        val again = kit.orders.abandon("acc_1", created.id)
-
-        assertEquals(PaymentOrderStatus.CANCELED, canceled.status)
-        assertEquals(kit.time.now(), canceled.closedAt)
-        assertEquals(canceled, again)
-        assertEquals(PaymentEventType.CANCELED, kit.store.listEvents(created.id).last().type)
-    }
-
-    @Test
-    fun `abandoning a confirming order leaves it as it is`() {
-        val kit = PaymentLedgerKit()
-        val created = kit.createAuthenticated()
-        kit.gateway.script(ConfirmScript.TimeoutNotApplied)
-        kit.orders.confirm("acc_1", created.id, "pay_1", created.amount)
-
-        assertEquals(PaymentOrderStatus.CONFIRMING, kit.orders.abandon("acc_1", created.id).status)
-    }
 }

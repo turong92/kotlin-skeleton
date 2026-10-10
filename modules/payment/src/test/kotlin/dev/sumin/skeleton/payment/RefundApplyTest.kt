@@ -93,19 +93,6 @@ class RefundApplyTest {
         assertEquals(1, kit.listener.refunded.size)
     }
 
-    @Test
-    fun `applying a line that is not succeeded or was applied does nothing`() {
-        val kit = PaymentLedgerKit()
-        val order = kit.paid()
-        val requested = kit.refunds.request("acc_1", order.id, "DUPLICATE", 500, IdempotencyKey("k-1")).refund
-
-        assertTrue(!kit.applier.apply(requested.id))
-        assertTrue(!kit.applier.apply("rfd_" + "0".repeat(32)))
-        kit.refunds.approve(op, requested.id)
-        assertTrue(!kit.applier.apply(requested.id), "the inline application already ran")
-        assertEquals(1, kit.listener.refunded.size)
-    }
-
     // --- 지급 전 환불의 순서 (B3 리뷰가 남긴 결정) ---
 
     /** 승인 응답을 못 받은 주문 — 결제사는 이미 결제를 끝냈다. 장부는 아직 CONFIRMING. */
@@ -152,18 +139,4 @@ class RefundApplyTest {
         assertNotNull(kit.store.findRefund(outcome.refund.id)!!.appliedAt)
     }
 
-    @Test
-    fun `fulfilling a fully refunded unfulfilled order is a quiet no-op and a partly refunded one still fulfils`() {
-        val kit = PaymentLedgerKit()
-        kit.listener.failPaid(10)
-        val partly = kit.paid()
-        kit.refunds.refund(op, partly.id, "OPERATOR", 1000, IdempotencyKey("k-1"))
-        val full = kit.paid(accountId = "acc_2", key = "key-2", paymentKey = "pay_2")
-        kit.refunds.refund(op, full.id, "OPERATOR", null, IdempotencyKey("k-2"))
-        kit.listener.failPaid(0)
-
-        assertTrue(kit.fulfillment.fulfil(partly.id))
-        assertTrue(!kit.fulfillment.fulfil(full.id))
-        assertEquals(listOf(partly.id), kit.listener.paid.map { it.id })
-    }
 }

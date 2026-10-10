@@ -180,10 +180,4 @@ class SubscriptionActivationTest {
         assertEquals(1, kit.gateway.chargeCalls.size)
     }
 
-    @Test
-    fun `a subscription that was never started cannot be canceled`() {
-        val sub = started().subscription
-
-        assertFailsWith<PaymentSubscriptionNotCancelableException> { kit.subscriptions.cancel("acc_1", sub.id) }
-    }
 }

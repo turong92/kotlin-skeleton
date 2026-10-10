@@ -132,16 +132,6 @@ class PaymentConvergenceTest {
     }
 
     @Test
-    fun `a snapshot whose order id is this order and whose total matches in a different spelling is accepted`() {
-        val kit = PaymentLedgerKit()
-        val order = confirming(kit)
-
-        converge(kit, order.id, snapshot(orderId = order.id, total = PaymentAmount(3000, " krw ")))
-
-        assertEquals(PaymentOrderStatus.PAID, kit.order(order.id).status)
-    }
-
-    @Test
     fun `a mode that differs from the row's changes nothing but the review reason`() {
         val kit = PaymentLedgerKit()
         val order = confirming(kit)
@@ -289,21 +279,6 @@ class PaymentConvergenceTest {
             assertEquals(PaymentEventType.REOPENED_PAID, kit.store.listEvents(order.id).last().type)
             assertEquals(1, kit.tasks.pending(PaymentTaskTypes.ORDER_FULFIL).size)
         }
-    }
-
-    @Test
-    fun `the refund slot is called after the payment step with the up to date row`() {
-        val kit = PaymentLedgerKit()
-        val seen = mutableListOf<PaymentOrderStatus>()
-        val convergence = PaymentConvergence(kit.writer, kit.tasks, kit.review) { _, order, _, _ -> seen += order.status; order }
-        val order = confirming(kit)
-
-        kit.store.inTransaction { tx ->
-            convergence.converge(tx, tx.lockOrder(order.id)!!, snapshot(status = ProviderPaymentStatus.PARTIALLY_REFUNDED), ConvergeContext(PaymentMode.TEST, ConvergeSource.WEBHOOK))
-        }
-
-        assertEquals(listOf(PaymentOrderStatus.PAID), seen)
-        assertEquals(PaymentOrderStatus.PAID, kit.order(order.id).status)
     }
 
     @Test

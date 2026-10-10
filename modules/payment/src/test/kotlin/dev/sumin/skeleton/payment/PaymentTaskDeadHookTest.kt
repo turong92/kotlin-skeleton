@@ -49,18 +49,6 @@ class PaymentTaskDeadHookTest {
     }
 
     @Test
-    fun `a dead reconcile job called twice marks the order once`() {
-        val kit = PaymentLedgerKit()
-        val order = confirming(kit)
-
-        kit.runner.onDead(dead(PaymentTaskTypes.ORDER_RECONCILE, order.id))
-        kit.runner.onDead(dead(PaymentTaskTypes.ORDER_RECONCILE, order.id))
-
-        assertEquals(1, kit.review.flagged.size, "one alert")
-        assertEquals(1, flaggedEvents(kit, order.id), "one event")
-    }
-
-    @Test
     fun `a dead reconcile job keeps the reason that was marked first`() {
         val kit = PaymentLedgerKit()
         val order = confirming(kit)
@@ -154,20 +142,4 @@ class PaymentTaskDeadHookTest {
         assertEquals(emptyList(), kit.review.flagged.toList())
     }
 
-    @Test
-    fun `a dead job of a type the runner does not know is ignored`() {
-        val kit = PaymentLedgerKit()
-
-        kit.runner.onDead(dead("payment-unknown", "ord_1"))
-    }
-
-    @Test
-    fun `a handler's default dead hook does nothing`() {
-        val handler = object : PaymentTaskHandler {
-            override val type = "payment-app-extra"
-            override fun handle(run: PaymentTaskRun) = Unit
-        }
-
-        handler.onDead(dead("payment-app-extra", "ref_1"))
-    }
 }

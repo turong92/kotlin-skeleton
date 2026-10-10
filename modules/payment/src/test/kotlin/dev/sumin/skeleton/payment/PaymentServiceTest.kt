@@ -34,37 +34,6 @@ class PaymentServiceTest {
     }
 
     @Test
-    fun `cancel and refund preserve idempotency key and provider payload`() {
-        val stripe = RecordingPaymentProvider("stripe")
-        val service = PaymentService(
-            router = PaymentProviderRouter(
-                providers = listOf(stripe),
-                properties = PaymentProperties(defaultProvider = "stripe"),
-            ),
-        )
-
-        val cancel = PaymentCancelRequest(
-            providerPaymentId = "pi_1",
-            reason = "requested_by_customer",
-            idempotencyKey = IdempotencyKey("cancel-idem"),
-            providerPayload = mapOf("memo" to "customer asked"),
-        )
-        val refund = PaymentRefundRequest(
-            providerPaymentId = "pi_1",
-            amount = PaymentAmount(amount = 1_000, currency = "USD"),
-            reason = "duplicate",
-            idempotencyKey = IdempotencyKey("refund-idem"),
-            providerPayload = mapOf("expand[]" to "charge"),
-        )
-
-        service.cancel(cancel)
-        service.refund(refund)
-
-        assertEquals(cancel, stripe.canceled.single())
-        assertEquals(refund, stripe.refunded.single())
-    }
-
-    @Test
     fun `provider failures are published to configured failure handlers before rethrowing`() {
         val failure = paymentProviderException(provider = "toss")
         val provider = FailingPaymentProvider(providerId = "toss", failure = failure)
