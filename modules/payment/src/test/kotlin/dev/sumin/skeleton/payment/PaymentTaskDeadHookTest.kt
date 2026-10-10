@@ -38,6 +38,7 @@ class PaymentTaskDeadHookTest {
         val order = confirming(kit)
 
         kit.runner.onDead(dead(PaymentTaskTypes.ORDER_RECONCILE, order.id))
+        kit.runner.onDead(dead(PaymentTaskTypes.ORDER_RECONCILE, order.id))
 
         val flagged = kit.order(order.id)
         assertEquals(PaymentOrderStatus.CONFIRMING, flagged.status)
