@@ -120,11 +120,15 @@ class PaymentAdminController(
         return Response.cursor(page.values.map(AdminRefundResponse::of), page.next?.let(PaymentCursors::refund))
     }
 
-    @Operation(summary = "Approve a refund request = refund it as requested (operator)", description = "Same answers as refunding directly. No body, no Idempotency-Key: the line's state is the guard — a second approval is 409 REFUND_NOT_ALLOWED.")
+    @Operation(
+        summary = "Approve a refund request, optionally with a corrected amount (operator)",
+        description = "Optional body { amount } (smallest unit): without it the requested amount is refunded; with it 0 < amount <= min(requested, refundable) or 400 REFUND_AMOUNT_EXCEEDED before the provider is called. " +
+            "The provider gets the corrected amount; the line shows it as amount and keeps the first one as requestedAmount. Same answers as refunding directly. No Idempotency-Key: the line's state is the guard — a second approval is 409 REFUND_NOT_ALLOWED.",
+    )
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = AdminRefundResponse::class)
     @PostMapping("/refunds/{id}/approve")
-    fun approve(@RequestAttribute(OPERATOR_ATTRIBUTE) operator: String, @PathVariable id: String): ResponseEntity<DataResponse<AdminRefundResponse>> =
-        outcome(refunds.approve(operator, id))
+    fun approve(@RequestAttribute(OPERATOR_ATTRIBUTE) operator: String, @PathVariable id: String, @RequestBody(required = false) body: JsonNode?): ResponseEntity<DataResponse<AdminRefundResponse>> =
+        outcome(refunds.approve(operator, id, PaymentRequests.wholeNumber(body?.get("amount"), "amount")))
 
     @Operation(summary = "Reject a refund request (operator)", description = "Only a REQUESTED line; an already decided one is 409 REFUND_NOT_ALLOWED.")
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = AdminRefundResponse::class)

@@ -87,6 +87,8 @@ data class RefundResponse(
     val completedAt: Instant?,
     /** `WITHDRAWN` 줄을 누가 닫았나 — `USER` 본인이 거뒀다 · `SYSTEM` 주문이 전액 환불돼 요청이 닫혔다. 다른 상태의 줄은 `null`. */
     val closedBy: String?,
+    /** 운영자가 금액을 고쳐 승인했다면 처음 요청한 금액(그때 [amount] 는 승인한 금액), 아니면 `null`. */
+    val requestedAmount: AmountResponse?,
 ) {
     companion object {
         fun of(refund: PaymentRefund) = RefundResponse(
@@ -99,6 +101,7 @@ data class RefundResponse(
             requestedAt = refund.requestedAt,
             completedAt = refund.completedAt,
             closedBy = closedBy(refund),
+            requestedAmount = refund.requestedAmount?.let { AmountResponse(it, refund.amount.normalizedCurrency) },
         )
 
         /** 시스템이 닫은 `WITHDRAWN` = `failureCode ORDER_REFUNDED`. 결제사 코드를 내보내지 않고 중립 칸 하나로만 알린다. */
@@ -205,13 +208,14 @@ data class AdminRefundResponse(
     val requestedBy: String?,
     val decidedBy: String?,
     val failureCode: String?,
+    val requestedAmount: AmountResponse?,
 ) {
     companion object {
         fun of(refund: PaymentRefund): AdminRefundResponse {
             val r = RefundResponse.of(refund)
             return AdminRefundResponse(
                 id = r.id, orderId = r.orderId, status = r.status, amount = r.amount, reasonCode = r.reasonCode, origin = r.origin, requestedAt = r.requestedAt, completedAt = r.completedAt,
-                closedBy = r.closedBy, requestedBy = refund.requestedBy, decidedBy = refund.decidedBy, failureCode = refund.failureCode,
+                closedBy = r.closedBy, requestedBy = refund.requestedBy, decidedBy = refund.decidedBy, failureCode = refund.failureCode, requestedAmount = r.requestedAmount,
             )
         }
     }

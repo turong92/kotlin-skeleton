@@ -130,8 +130,12 @@ class PaymentRefunds(
         return execute(claimed.order, claimed.refund, gateways, operatorId)
     }
 
-    /** 본인의 요청을 승인해 그 요청의 금액으로 실행한다. 이미 결정된 요청(동시 승인의 뒤쪽 포함)은 [PaymentRefundNotAllowedException]. */
-    fun approve(operatorId: String, refundId: String): RefundOutcome {
+    /**
+     * 본인의 요청을 승인해 실행한다. [amount] 가 없으면 요청 금액, 있으면 `0 < amount ≤ min(요청 금액, 환불 가능액)` — 넘으면 결제사를 부르지 않고 [PaymentRefundAmountExceededException].
+     * 고친 금액이면 줄의 금액을 승인 금액으로 바꾸고 처음 요청한 금액은 [PaymentRefund.requestedAmount] 에 남긴다.
+     * 이미 결정된 요청(동시 승인의 뒤쪽 포함)은 [PaymentRefundNotAllowedException].
+     */
+    fun approve(operatorId: String, refundId: String, amount: Long? = null): RefundOutcome {
         store.requireNoOpenTransaction("PaymentRefunds.approve")
         val refund0 = store.findRefund(refundId) ?: throw PaymentRefundNotFoundException()
         if (refund0.status != PaymentRefundStatus.REQUESTED) throw PaymentRefundNotAllowedException()
@@ -145,10 +149,12 @@ class PaymentRefunds(
             requireNoRefundMismatch(order)
             requireMode(gateways, order)
             val refunds = tx.listRefunds(order.id)
-            val value = amountFor(order, refunds, refund.amount.amount, excluding = refund.id)
+            val asked = refund.amount.amount
+            val value = amountFor(order, refunds, amount ?: asked, excluding = refund.id)
+            if (value > asked) throw PaymentRefundAmountExceededException() // 요청한 것보다 많이는 돌려주지 않는다
             val now = writer.now()
             val sent = writer.transitionRefund(tx, refund, PaymentRefundStatus.PENDING, PaymentEventType.REFUND_SENT, PaymentActor.OPERATOR, operatorId) {
-                it.copy(decidedBy = operatorId, expectedRemaining = RefundLines.baseOf(order) - order.refundedAmount - value, sentAt = now)
+                it.copy(amount = PaymentAmount(value, it.amount.currency), requestedAmount = asked.takeIf { _ -> value != asked }, decidedBy = operatorId, expectedRemaining = RefundLines.baseOf(order) - order.refundedAmount - value, sentAt = now)
             }
             enqueueSettle(sent)
             Claimed(order, sent, false)

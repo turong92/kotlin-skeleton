@@ -40,6 +40,7 @@ internal class PaymentRefundRows(private val dialect: SqlDialect) {
         appliedAt = dialect.readInstant(rs, "applied_at"),
         createdAt = dialect.readInstant(rs, "created_at")!!,
         updatedAt = dialect.readInstant(rs, "updated_at")!!,
+        requestedAmount = rs.getLong("requested_amount").takeUnless { rs.wasNull() },
     )
 
     /** 통화는 정규화한 값으로 저장한다 — 비교는 `PaymentAmount.sameAs` 로 한다. */
@@ -64,11 +65,12 @@ internal class PaymentRefundRows(private val dialect: SqlDialect) {
         .addValue("applied_at", dialect.instantParam(refund.appliedAt))
         .addValue("created_at", dialect.instantParam(refund.createdAt))
         .addValue("updated_at", dialect.instantParam(refund.updatedAt))
+        .addValue("requested_amount", refund.requestedAmount)
 
     companion object {
         val COLUMNS = listOf(
             "id", "order_id", "status", "origin", "amount", "currency", "reason_code", "open_key", "dedupe_key", "provider_refund_id", "expected_remaining",
-            "requested_by", "decided_by", "failure_code", "requested_at", "sent_at", "completed_at", "applied_at", "created_at", "updated_at",
+            "requested_by", "decided_by", "failure_code", "requested_at", "sent_at", "completed_at", "applied_at", "created_at", "updated_at", "requested_amount",
         )
     }
 }

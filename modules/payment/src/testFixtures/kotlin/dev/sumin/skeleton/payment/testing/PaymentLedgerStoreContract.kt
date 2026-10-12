@@ -345,6 +345,7 @@ abstract class PaymentLedgerStoreContract {
             openKey = null,
             providerRefundId = "txn_changed",
             expectedRemaining = 1_700,
+            requestedAmount = 2_000,
             requestedBy = null,
             decidedBy = "acc_dec2",
             failureCode = "OTHER_CODE",

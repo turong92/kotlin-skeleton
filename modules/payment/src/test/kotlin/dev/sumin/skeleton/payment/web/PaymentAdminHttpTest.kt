@@ -135,6 +135,17 @@ class PaymentAdminHttpTest {
     }
 
     @Test
+    fun `approving with a corrected amount refunds that amount and shows both, an amount above the request is 400`() {
+        val account = account()
+        val id = paid(account)
+        val line = userRequest(account, id, amount = 1000)
+        fun approve(amount: Long) = mvc.perform(post("$admin/refunds/$line/approve").asOperator().contentType(MediaType.APPLICATION_JSON).content("""{"amount":$amount}"""))
+
+        approve(1500).andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("PAYMENT.REFUND_AMOUNT_EXCEEDED"))
+        approve(400).andExpect(status().isOk).andExpect(jsonPath("$.value.amount.amount").value(400)).andExpect(jsonPath("$.value.requestedAmount.amount").value(1000))
+    }
+
+    @Test
     fun `approving a request refunds it as requested and the second approval is 409, rejecting is 200 and a decided line is 409, an unknown line is 404`() {
         val account = account()
         val id = paid(account)

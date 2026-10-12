@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 환불 요청을 금액 고쳐 승인 (2026-10-12)
+
+- `POST /admin/payments/refunds/{id}/approve` 가 선택 본문 `{amount}` 를 받는다(없으면 지금처럼 요청 금액). 요청 금액 · 환불 가능액을 넘으면 결제사를 부르지 않고 `400 REFUND_AMOUNT_EXCEEDED`. 줄의 `amount` 는 승인 금액이 되고 처음 요청한 금액은 새 열 `payment_refunds.requested_amount`(`V20261012100000`, 두 방언, NULL = 고치지 않음)와 응답의 `requestedAmount` 로 남는다.
+
 ### 새 기능 (꺼진 채 시작) — 구독 플랜 변경 (2026-10-12)
 
 - **`skeleton.payment.subscription.plan-change.enabled`(기본 false)**: 위 등급으로 바로 바꾸기 — `GET /subscriptions/{id}/change-preview` · `POST /subscriptions/{id}/change`. 켜는 앱이 `charge` 를 명시한다(`FULL_RESTART` 전액 결제 + 새 주기 · `PRORATED_DIFFERENCE` 남은 기간 차액만, 모듈 기본값 없음), `min-charge` 미만의 차액은 과금 없이 바꾼다. 결제(`SUBSCRIPTION_CHANGE` 주문)가 `PAID` 가 된 뒤에만 플랜이 바뀌고, 그 주문이 구독의 과금 주문 자리를 차지하므로 변경과 갱신이 겹쳐도 이중 과금이 없다. 새 V 파일 없음(1차의 `pending_plan_code` · `pending_amount` 사용).

@@ -121,6 +121,8 @@ data class PaymentRefund(
     val appliedAt: Instant?,
     val createdAt: Instant,
     val updatedAt: Instant,
+    /** 운영자가 금액을 고쳐 승인했다면 처음 요청한 금액(그때 [amount] 는 승인한 금액), 아니면 null. */
+    val requestedAmount: Long? = null,
 ) {
     override fun toString(): String =
         "PaymentRefund(id=$id, orderId=$orderId, status=$status, origin=$origin, amount=${amount.amount} ${amount.normalizedCurrency}, reason=$reasonCode)"

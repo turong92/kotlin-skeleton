@@ -194,8 +194,8 @@
 ### GET /refunds?status=&cursor=&size=
 `200 { values: AdminRefund[], cursor }`, **`status` 가 없으면 `REQUESTED`**(필터 없는 전체 목록은 없다). 최신순(요청한 시각). 모르는 `status` 는 `400`. 줄은 주문 이름 · 금액 없이 `orderId` 만 갖는다.
 
-### POST /refunds/{id}/approve — 요청대로 환불
-본문 없음 · **`Idempotency-Key` 없음** — 줄의 상태가 방어다(같은 요청 id 의 동시 승인은 서버가 한 건만 실행하고 나머지는 `409 PAYMENT.REFUND_NOT_ALLOWED`). 응답은 직접 환불과 같다: `200 SUCCEEDED` · `202 PENDING` · `402 PAYMENT.REFUND_DECLINED`(**요청 줄은 `FAILED` 로 닫힌다** — 다시 시도하려면 직접 환불) · `400 PAYMENT.REFUND_AMOUNT_EXCEEDED`(**요청 줄은 `REQUESTED` 로 남는다** — 거절하거나 직접 환불) · `409 PAYMENT.MODE_MISMATCH` · `404 PAYMENT.REFUND_NOT_FOUND` · `503 PAYMENT.UNAVAILABLE`.
+### POST /refunds/{id}/approve — 요청대로(또는 고친 금액으로) 환불
+선택 본문 `{ "amount": <최소 단위 정수> }` — 없으면 요청 금액, 있으면 `0 < amount ≤ min(요청 금액, 환불 가능액)`(넘으면 결제사를 부르지 않고 `400 PAYMENT.REFUND_AMOUNT_EXCEEDED`). 결제사에는 고친 금액이 가고, 줄의 `amount` 는 승인 금액이며 처음 요청한 금액은 `requestedAmount`(고치지 않았으면 `null`)로 남는다 — 사용자 · 운영자의 환불 줄 응답 모두. **`Idempotency-Key` 없음** — 줄의 상태가 방어다(같은 요청 id 의 동시 승인은 서버가 한 건만 실행하고 나머지는 `409 PAYMENT.REFUND_NOT_ALLOWED`). 응답은 직접 환불과 같다: `200 SUCCEEDED` · `202 PENDING` · `402 PAYMENT.REFUND_DECLINED`(**요청 줄은 `FAILED` 로 닫힌다** — 다시 시도하려면 직접 환불) · `400 PAYMENT.REFUND_AMOUNT_EXCEEDED`(**요청 줄은 `REQUESTED` 로 남는다** — 거절하거나 직접 환불) · `409 PAYMENT.MODE_MISMATCH` · `404 PAYMENT.REFUND_NOT_FOUND` · `503 PAYMENT.UNAVAILABLE`.
 **`409 PAYMENT.REFUND_NOT_ALLOWED` 는 두 뜻이다**: 요청이 이미 결정됐다, 또는 주문이 환불할 수 없다(결제 안 됨 · `REFUND_MISMATCH` · 환불 전 확인의 불일치 — 결제사가 그 결제를 모르거나 받지 않았다고 하는 것 포함). 화면은 중립 문구로 말한다.
 
 ### POST /refunds/{id}/reject
@@ -203,7 +203,7 @@
 
 ### POST /orders/{id}/sync — 결제사와 맞추기
 본문 없음. 결제사에 묻고 장부를 맞춘다(결제사 관리 화면의 취소 포함). `200 { value: AdminOrder }` — 맞춘 뒤의 주문(`reviewReason` 이 풀렸으면 `null`). 응답의 `reviewReason` 은 한 건 상세의 `order.reviewReason` 과 **같은 계산**(파생 사유 포함)이다.
-승인 경로(`POST /refunds/{id}/approve`)는 본문도 변환 인자도 받지 않는다 — 검증 코드가 나갈 자리가 없다.
+승인 경로(`POST /refunds/{id}/approve`)의 본문은 금액 하나뿐이다 — 검증 코드가 나갈 자리가 없다.
 순서(§ [modules/payment.md](modules/payment.md) 「sync」): 모드 확인 → 조회 → `MODE_MISMATCH` 해제 → `converge` → `PENDING` 환불 줄 정산 → 다시 `converge` → **미지급 · 미회수 작업 재투입** → 지급 쪽 이유 해제. 그래서 이 단추는 「결제사와 다시 맞추고, 끝나지 않은 지급 · 회수를 다시 돌린다」다.
 
 | 오류 | 뜻 |
