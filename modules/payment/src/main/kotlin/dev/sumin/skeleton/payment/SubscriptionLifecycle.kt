@@ -196,6 +196,8 @@ class SubscriptionLifecycle(
         // 변경 결제의 환불은 그 기간의 구독을 끝내지 않는다(기간의 결제는 따로 있다) — 플랜은 되돌리지 않으니 운영자가 본다
         if (subscription.status == SubscriptionStatus.ENDED || order.kind == PaymentOrderKind.SUBSCRIPTION_CHANGE) return
         // 지금 과금 주문이거나(아직 지급 전), 지금 기간을 산 주문이다(그 뒤 변경 주문이 과금 주문 자리를 차지해도) - 결제 시각이 지금 기간 안에 있다
+        // 「확인 필요」로 찍힌 늦은 결제(`SUBSCRIPTION_STALE_CHARGE`)는 기간을 넘기지 않았다 - 운영자가 그 이중 결제를 환불해도 기간을 낸 다른 주문의 구독은 그대로다
+        if (order.reviewReason == PaymentReviewReason.SUBSCRIPTION_STALE_CHARGE) return
         if (subscription.chargeOrderId != order.id && !boughtCurrentPeriod(subscription, order)) return
         end(tx, subscription, SubscriptionEndReason.REFUNDED)
     }

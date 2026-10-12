@@ -132,6 +132,37 @@ class SubscriptionRenewalTest {
     }
 
     @Test
+    fun `refunding a late double payment flagged for review leaves the subscription that paid the period alone`() {
+        val active = activeSubscription()
+        toPeriodEnd(active)
+        kit.gateway.script(ConfirmScript.TimeoutNotApplied)
+        kit.renew.handle(PaymentTaskRun(PaymentTaskTypes.SUBSCRIPTION_RENEW, active.id, 1, 12))
+        val first = kit.store.listSubscriptionOrders(active.id, 1).single()
+        kit.gateway.abort(kit.gateway.providerPaymentsOfOrder(first.id).single().paymentKey)
+        kit.advance(kit.properties.reconcile.firstDelay)
+        kit.runTasks(setOf(PaymentTaskTypes.ORDER_RECONCILE))
+        kit.advance(kit.properties.subscription.renewal.retryInterval)
+        renewTasks()
+        kit.runTasks(setOf(PaymentTaskTypes.ORDER_FULFIL))
+        assertEquals(2, sub(active.id).periodSeq)
+        // 첫 시도의 결제가 늦게 도착해 「확인 필요」가 찍힌다
+        val paymentKey = kit.gateway.providerPaymentsOfOrder(first.id).single().paymentKey
+        kit.gateway.settle(paymentKey)
+        val snapshot = checkNotNull(kit.gateway.lookup(PaymentLookupQuery(paymentKey, null)))
+        kit.store.inTransaction { tx ->
+            kit.convergence.converge(tx, checkNotNull(tx.lockOrder(first.id)), snapshot, ConvergeContext(PaymentMode.TEST, ConvergeSource.SYNC))
+        }
+        kit.fulfillment.fulfil(first.id)
+        assertEquals(PaymentReviewReason.SUBSCRIPTION_STALE_CHARGE, kit.order(first.id).reviewReason)
+
+        kit.refunds.refund("op_1", first.id, "OPERATOR", null, IdempotencyKey("r-late"))
+        kit.runTasks(setOf(PaymentTaskTypes.REFUND_APPLY))
+
+        assertEquals(PaymentOrderStatus.REFUNDED, kit.order(first.id).status)
+        assertEquals(SubscriptionStatus.ACTIVE, sub(active.id).status)
+    }
+
+    @Test
     fun `a declined renewal makes it past due and retries, the retry that works brings it back, and the period still counts from the first payment`() {
         val active = activeSubscription()
         val anchor = checkNotNull(active.anchorAt)
