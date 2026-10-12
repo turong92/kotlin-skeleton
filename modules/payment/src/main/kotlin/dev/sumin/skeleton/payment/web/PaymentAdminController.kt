@@ -145,6 +145,17 @@ class PaymentAdminController(
     }
 
     @Operation(
+        summary = "Close a stuck subscription charge as not paid (operator)",
+        description = "For a subscription charge the provider never answered (CONFIRMING). It asks the provider once more first: a payment that is found paid is settled as PAID and not closed; " +
+            "otherwise the order becomes FAILED (OPERATOR_CLOSED, with the operator on the history) and the subscription's seat is freed. 409 ORDER_NOT_CLOSABLE for any other order or while the provider is still processing · " +
+            "404 · 409 MODE_MISMATCH · 502 PROVIDER_ERROR · 503 UNAVAILABLE (nothing is closed when the provider cannot be asked).",
+    )
+    @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = AdminOrderResponse::class)
+    @PostMapping("/orders/{id}/close")
+    fun closeStuckCharge(@RequestAttribute(OPERATOR_ATTRIBUTE) operator: String, @PathVariable id: String): DataResponse<AdminOrderResponse> =
+        Response.ok(AdminOrderResponse.of(queries.operatorView(refunds.closeStuckSubscriptionCharge(operator, id))))
+
+    @Operation(
         summary = "Webhook inbox, newest first (operator)",
         description = "No body is shown. A row with resourceType LIMIT_MARKER / eventType LIMIT_REACHED means this order's webhooks hit the per-order window limit and were deferred to one lookup at the end of the window. " +
             "Without status the list is by id; with a status it is by received time.",

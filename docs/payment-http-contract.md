@@ -201,6 +201,9 @@
 ### POST /refunds/{id}/reject
 본문 없음. `200 { value: AdminRefund }`(`REJECTED`). `REQUESTED` 일 때만 — 이미 결정된 줄은 `409 PAYMENT.REFUND_NOT_ALLOWED`, 없으면 `404 PAYMENT.REFUND_NOT_FOUND`.
 
+### POST /orders/{id}/close — 막힌 구독 결제를 「결제 안 됨」으로 닫기
+본문 없음. 결제사가 끝내 답하지 않아 `CONFIRMING` 으로 남은 **구독 결제 주문**만. 닫기 전에 결제사에 한 번 더 묻는다 — 결제된 것으로 나오면 닫지 않고 정상 `PAID` 로 맞추고(지급 작업이 이어진다), 결제사가 모르거나 실패 · 만료로 답하면 `FAILED`(`failureCode` `OPERATOR_CLOSED`, 이력에 운영자)로 닫아 구독의 자리를 푼다. `200 { value: AdminOrder }`. `409 PAYMENT.ORDER_NOT_CLOSABLE`(구독 결제가 아니다 · `CONFIRMING` 이 아니다 · 결제사가 아직 처리 중이다) · `404` · `409 MODE_MISMATCH` · `502` · `503`(결제사에 물을 수 없으면 닫지 않는다).
+
 ### POST /orders/{id}/sync — 결제사와 맞추기
 본문 없음. 결제사에 묻고 장부를 맞춘다(결제사 관리 화면의 취소 포함). `200 { value: AdminOrder }` — 맞춘 뒤의 주문(`reviewReason` 이 풀렸으면 `null`). 응답의 `reviewReason` 은 한 건 상세의 `order.reviewReason` 과 **같은 계산**(파생 사유 포함)이다.
 승인 경로(`POST /refunds/{id}/approve`)의 본문은 금액 하나뿐이다 — 검증 코드가 나갈 자리가 없다.
@@ -420,6 +423,7 @@
 | `PAYMENT.ALREADY_SUBSCRIBED` | 409 | 구독 — 이미 살아 있는 구독이 있다(계정당 하나) · 카드 등록 뒤 선점에 졌다 |
 | `PAYMENT.SUBSCRIPTION_NOT_ACTIVATABLE` | 409 | 구독 — 이미 끝난 구독으로 카드 등록 · 첫 결제를 시도했다 |
 | `PAYMENT.SUBSCRIPTION_NOT_CANCELABLE` | 409 | 구독 — 카드를 내지 않은(`PENDING`) 구독은 해지할 수 없다 |
+| `PAYMENT.ORDER_NOT_CLOSABLE` | 409 | 운영자 — 막힌 구독 결제 닫기: 구독 결제가 아니다 · `CONFIRMING` 이 아니다 · 결제사가 아직 처리 중이다 |
 | `PAYMENT.PLAN_CHANGE_NOT_ALLOWED` | 409 | 구독 플랜 변경 — 꺼져 있다 · 이용 중(`ACTIVE`)이 아니다 · 위 등급이 아니다 · 주기 · 통화가 다르다 · 과금 중인 주문이 있다 |
 | `PAYMENT.PLAN_CHANGE_CHARGE_CHANGED` | 409 | 구독 플랜 변경 — 서버가 다시 계산한 금액이 호출자가 본 금액보다 크다 |
 | `PAYMENT.UNAVAILABLE` | 503 | 결제를 받을 수 없다 · **아무것도 보내지 않았다**(환불 전 확인 실패) |

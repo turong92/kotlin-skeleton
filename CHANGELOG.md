@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 운영자의 막힌 구독 결제 닫기 (2026-10-12)
+
+- `POST /admin/payments/orders/{id}/close` — 결제사가 끝내 답하지 않아 `CONFIRMING` 으로 남은 구독 결제 주문을 「결제 안 됨」으로 닫아 구독의 자리를 푼다. 닫기 전에 결제사에 한 번 더 물어 결제됐으면 닫지 않고 `PAID` 로 맞춘다. 새 오류 `PAYMENT.ORDER_NOT_CLOSABLE`(409). 새 V 파일 없음.
+
 ### 환불 요청을 금액 고쳐 승인 (2026-10-12)
 
 - `POST /admin/payments/refunds/{id}/approve` 가 선택 본문 `{amount}` 를 받는다(없으면 지금처럼 요청 금액). 요청 금액 · 환불 가능액을 넘으면 결제사를 부르지 않고 `400 REFUND_AMOUNT_EXCEEDED`. 줄의 `amount` 는 승인 금액이 되고 처음 요청한 금액은 새 열 `payment_refunds.requested_amount`(`V20261012100000`, 두 방언, NULL = 고치지 않음)와 응답의 `requestedAmount` 로 남는다.

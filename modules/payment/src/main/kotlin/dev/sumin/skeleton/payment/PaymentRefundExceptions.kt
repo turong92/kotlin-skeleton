@@ -46,3 +46,9 @@ class PaymentRefundNotSentException : ApplicationException(
     message = "The refund was not sent because the payment provider could not be checked first.",
     errorCode = PaymentErrorCode.UNAVAILABLE,
 )
+
+/** 운영자가 닫을 수 없는 주문 — 구독 결제가 아니거나, 결제사의 답을 기다리는 중(`CONFIRMING`)이 아니거나, 결제사가 아직 처리 중이다. */
+class PaymentOrderNotClosableException : ApplicationException(
+    message = "The order cannot be closed in its current state.",
+    errorCode = PaymentErrorCode.ORDER_NOT_CLOSABLE,
+)

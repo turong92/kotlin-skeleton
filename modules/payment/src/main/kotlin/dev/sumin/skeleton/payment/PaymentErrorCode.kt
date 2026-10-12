@@ -89,6 +89,11 @@ enum class PaymentErrorCode(
         status = HttpStatus.NOT_FOUND,
         title = "Payment refund not found",
     ),
+    ORDER_NOT_CLOSABLE(
+        code = "PAYMENT.ORDER_NOT_CLOSABLE",
+        status = HttpStatus.CONFLICT,
+        title = "The order cannot be closed",
+    ),
     REFUND_NOT_ALLOWED(
         code = "PAYMENT.REFUND_NOT_ALLOWED",
         status = HttpStatus.CONFLICT,

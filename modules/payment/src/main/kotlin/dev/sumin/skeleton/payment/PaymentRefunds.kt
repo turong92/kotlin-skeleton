@@ -163,6 +163,43 @@ class PaymentRefunds(
     }
 
     /**
+     * 운영자가 **막힌 구독 결제 주문**(결제사가 끝내 답하지 않아 `CONFIRMING` 으로 남은 것)을 「결제 안 됨」(`FAILED`)으로 닫는다 — 구독이 그 주문 때문에 쥔 자리가 풀린다.
+     * 닫기 전에 결제사에 **한 번 더 묻는다**: 돈이 들어간 것으로 나오면 닫지 않고 정상 `PAID` 처리로 맞추고, 아직 처리 중이거나 주문이 어긋나 있으면 [PaymentOrderNotClosableException].
+     * 물을 수 없으면(결제사 오류 · 대답 없음) 닫지 않는다 — [sync] 와 같은 예외. 이력에 운영자와 `OPERATOR_CLOSED` 가 남는다.
+     */
+    fun closeStuckSubscriptionCharge(operatorId: String, orderId: String): PaymentOrder {
+        store.requireNoOpenTransaction("PaymentRefunds.closeStuckSubscriptionCharge")
+        val order0 = store.findOrder(orderId) ?: throw PaymentOrderNotFoundException()
+        if (order0.originType != PaymentOriginType.SUBSCRIPTION || order0.status != PaymentOrderStatus.CONFIRMING) throw PaymentOrderNotClosableException()
+        val gateway = try {
+            router.gateway(order0.provider, PaymentLookupGateway::class)
+        } catch (e: PaymentProviderNotFoundException) {
+            log.warn("closing a subscription charge: the provider is not available order={} provider={}", orderId, e.providerId)
+            throw PaymentUnavailableException()
+        }
+        if (gateway.mode != order0.providerMode) throw PaymentModeMismatchException()
+        val at = writer.now()
+        val snapshot = try {
+            gateway.lookup(PaymentLookupQuery(providerPaymentId = order0.providerPaymentId, orderId = if (order0.providerPaymentId == null) order0.id else null))
+        } catch (e: PaymentProviderException) {
+            throw e
+        } catch (e: Exception) {
+            log.warn("closing a subscription charge: the lookup failed order={} exception={}", orderId, e.javaClass.simpleName)
+            throw PaymentUnavailableException()
+        }
+        return store.inTransaction { tx ->
+            val ctx = ConvergeContext(gateway.mode, ConvergeSource.SYNC, PaymentActor.OPERATOR, operatorId, at)
+            val locked = tx.lockOrder(orderId) ?: throw PaymentOrderNotFoundException()
+            if (locked.status != PaymentOrderStatus.CONFIRMING) return@inTransaction locked // 그 사이 다른 길이 끝냈다 — 닫을 것이 없다
+            if (snapshot == null) return@inTransaction convergence.declined(tx, locked, OPERATOR_CLOSED, ctx).order
+            // 결제사가 아는 결제다 — 받았다면 정상 PAID, 실패 · 만료면 정상으로 닫힌다. 그 어느 쪽도 아니면(처리 중 · 어긋남) 닫지 않는다
+            val converged = convergence.converge(tx, locked, snapshot, ctx).order
+            if (converged.status == PaymentOrderStatus.CONFIRMING) throw PaymentOrderNotClosableException()
+            converged
+        }
+    }
+
+    /**
      * 「결제사와 맞추기」 — 결제사에 묻고 장부를 맞춘다(결제사 관리 화면의 취소 포함). 모름으로 남은 환불이 있으면 정산한다. 돌려주는 것은 맞춘 뒤의 주문.
      * 물을 수 없으면 [PaymentProviderException](결제사가 오류로 답함) 또는 [PaymentUnavailableException](대답이 없음).
      * 모드가 다르면 409([PaymentModeMismatchException]) — 돈이 움직였을 수 있는 `CONFIRMING` · 결제된 주문에는 `MODE_MISMATCH` 를 표시하고, `PENDING`(승인을 선점한 적 없다 — 만료 작업이 닫는다)과 끝난 주문([isFinished])에는 표시하지 않는다.
@@ -477,6 +514,10 @@ class PaymentRefunds(
             throw FieldValidationException("reasonCode", "Pattern", "reasonCode is not one of the allowed refund reasons")
         }
         return reason
+    }
+
+    private companion object {
+        const val OPERATOR_CLOSED = "OPERATOR_CLOSED"
     }
 
     private fun requirePositive(amount: Long?) {
