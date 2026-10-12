@@ -121,4 +121,16 @@ begin
     insert into jobs (job_type, payload_json, status, max_attempts, next_run_at, created_at, updated_at) values ('note-export', '{"noteId":"' || n1 || '","ownerId":"' || acc || '"}', 'DONE', 3, now(), now(), now());
 end $$;
 
+-- 시드 계정(변환 제외)의 구독 해지 환불: 구독 · 주문 · 환불 id 는 바뀌고 계정 id 는 그대로 — dedupe_key 를 새 id 로 다시 계산해야 한다
+do $$
+declare sub text := 'sub_' || pg_temp.h32(); o text := 'ord_' || pg_temp.h32(); t timestamptz := '2026-10-08 12:00:00+00';
+begin
+    insert into payment_subscriptions (id, account_id, provider, provider_mode, status, plan_code, currency, amount, period, charge_order_id, attempt, customer_key, active_key, end_reason, created_at, updated_at)
+    values (sub, 'acc_user', 'toss', 'TEST', 'ENDED', 'basic', 'KRW', 3900, 'P1M', o, 1, 'cus_' || pg_temp.h32(), null, 'USER_CANCELED', t, t);
+    insert into payment_orders (id, account_id, kind, status, provider, provider_mode, provider_payment_id, currency, amount, paid_amount, refunded_amount, item_type, item_ref, order_name, origin_type, origin_ref, dedupe_key, checkout_expires_at, paid_at, created_at, updated_at)
+    values (o, 'acc_user', 'SUBSCRIPTION_INITIAL', 'REFUNDED', 'toss', 'TEST', 'pay_seed', 'KRW', 3900, 3900, 3900, 'subscription', 'basic', 'n', 'SUBSCRIPTION', sub, 'sub:' || sub || ':0:1:1', t, t, t, t);
+    insert into payment_refunds (id, order_id, status, origin, amount, currency, reason_code, dedupe_key, requested_by, requested_at, created_at, updated_at)
+    values ('rfd_' || pg_temp.h32(), o, 'SUCCEEDED', 'USER', 3900, 'KRW', 'SUBSCRIPTION_CANCEL', encode(sha256(convert_to('acc_user' || E'\n' || 'subcancel:' || sub || ':' || o, 'UTF8')), 'hex'), 'acc_user', t, t, t);
+end $$;
+
 commit;

@@ -17,10 +17,11 @@
 #   되돌리기: docker exec -i NAME pg_restore -U app -d app --clean --if-exists < 그_파일   (앱을 내린 채로)
 # 그 밖
 #   --dry-run          모든 변환과 검사를 하고 마지막에 되돌린다 — 검사 출력만 본다.
+#   --app-port N / --force   앱이 떠 있으면(기본 127.0.0.1:8080 이 열려 있으면) 멈춘다. 포트를 바꾸거나 건너뛴다.
 #   --no-backup        백업을 건너뛴다(리허설 DB 에서만).
 set -euo pipefail
 
-container="" url="" user="app" db="app" dry=0 backup=1
+app_port=8080 force=0 container="" url="" user="app" db="app" dry=0 backup=1
 backup_dir="./.id-conversion-backups"
 here="$(cd "$(dirname "$0")" && pwd)"
 
@@ -32,6 +33,8 @@ while [ $# -gt 0 ]; do
     --db) db="$2"; shift 2 ;;
     --backup-dir) backup_dir="$2"; shift 2 ;;
     --dry-run) dry=1; shift ;;
+    --app-port) app_port="$2"; shift 2 ;;
+    --force) force=1; shift ;;
     --no-backup) backup=0; shift ;;
     -h|--help) sed -n '2,22p' "$0"; exit 0 ;;
     *) echo "알 수 없는 인자: $1 (--help)" >&2; exit 2 ;;
@@ -48,6 +51,9 @@ else
   echo "--container NAME 또는 --url URL 중 하나를 준다 (--help)" >&2; exit 2
 fi
 
+if [ "$force" = 0 ] && (exec 3<>"/dev/tcp/127.0.0.1/$app_port") 2>/dev/null; then
+  echo "127.0.0.1:$app_port 에서 뭔가 떠 있다 — 앱을 내린 뒤 다시 실행한다 (다른 포트면 --app-port, 무시하려면 --force)" >&2; exit 1
+fi
 psql_run -At -v ON_ERROR_STOP=1 -c "select 1" > /dev/null || { echo "DB 에 연결하지 못했다" >&2; exit 1; }
 
 mkdir -p "$backup_dir"

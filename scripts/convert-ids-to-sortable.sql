@@ -10,7 +10,7 @@
 --      charge_order_id · active_key · order_id · refund_id · session_id · actor_id · requested_by … 가 빠짐없이 걸리고, 문장 안에 박힌 id(jobs.payload_json ·
 --      notification_inbox.payload_json / recipient_ids_json · account_audit.detail · account_challenges.payload · alerts.alert_key / detail · 주문 dedupe_key 의
 --      `sub:<구독 id>:…` · `subchg:<구독 id>:…` · webhook limited:<주문 id>:… )도 같이 바뀐다. uuid 형 칸(notes.id)은 따로.
---   3. 구독 dedupe_key 를 옛 해시로 채운다(V20261012153000 이 만든 열 — 먼저 적용돼 있어야 한다). 구독 해지 환불의 dedupe_key 는 새 id 로 다시 계산한다.
+--   3. 구독 dedupe_key 를 옛 id 뒤 32자(옛 요청 해시의 앞)로 채운다(V20261012153000 이 만든 열 — 먼저 적용돼 있어야 한다). 유니크 칸을 채우는 것일 뿐 멱등을 이어 주지는 않는다: 새 코드는 64자 키를 쓰고 계정 id 도 바뀌어 옛 요청 키의 재시도는 새 구독을 만든다. 구독 해지 환불의 dedupe_key 는 새 id 로 다시 계산한다.
 --   4. 검사: 표마다 행 수 같음 · 옛 형식 id 0건 · 외래 키 다시 검증 · (1) 의 순서 보존.
 --
 -- 바꾸지 않는 것(일부러)
@@ -19,6 +19,8 @@
 --   · 모양이 옛 형식이 아닌 id(시드 계정 acc_user · acc_admin … 같은 고정 이름, TOMBSTONE, deleted:<해시>).
 --   · 해시가 된 값: 주문 · 환불 요청의 dedupe_key (sha256(계정 id + 요청 키)) — 요청 키를 몰라 다시 계산할 수 없다. 변환 이전에 보낸 같은 Idempotency-Key 의 재시도는 중복으로 알아보지 못한다.
 --   · cus_ (결제사에 묶이는 고객 키).
+--
+-- 다시 실행해도 안전하다: 대상은 옛 형식(접두사_16진수 32 · UUID v4)뿐이라 이미 바뀐 값(ULID · UUIDv7)은 건드리지 않는다.
 --
 -- 알아 둘 것: 주문 id 는 결제사에 orderId 로 간다. 이미 결제된 주문은 결제사 쪽에 옛 orderId 로 남아 있어, 변환 뒤 그 주문을 결제사에 조회하면(환불 전 확인 · 맞추기)
 -- ORDER_MISMATCH 로 걸린다. 테스트 모드 데이터 / 더는 결제사와 오갈 일이 없는 주문일 때만 쓴다.
@@ -92,7 +94,7 @@ begin
             ('payment_orders',       'id',       'ord_', 'created_at',       '^ord_[0-9a-f]{32}$', 'ulid'),
             ('payment_refunds',      'id',       'rfd_', 'created_at',       '^rfd_[0-9a-f]{32}$', 'ulid'),
             ('payment_subscriptions','id',       'sub_', 'created_at',       '^sub_[0-9a-f]{32}$', 'ulid'),
-            ('notes',                'id',       '',     'created_at',       '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', 'uuidv7')
+            ('notes',                'id',       '',     'created_at',       '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$', 'uuidv7')
         ) v(tbl, col, prefix, ts, pat, fmt)
     loop
         if to_regclass('public.' || t.tbl) is null then continue; end if;
@@ -118,7 +120,7 @@ begin
     -- 알림 이벤트 id (UUID v4 → evt_) : 같은 이벤트는 받는 사람마다 한 줄씩이라 이벤트 단위로 한 번
     if to_regclass('public.notification_inbox') is not null then
         src := $s$select event_id as id, min(event_created_at) as ts from public.notification_inbox
-                  where event_id ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' group by event_id$s$;
+                  where event_id ~ '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' group by event_id$s$;
         execute format($q$
             insert into id_map(old, new, kind)
             select id, 'evt_' || pg_temp.ulid(ms, base + rn - 1), 'evt'
@@ -147,11 +149,14 @@ begin
     end if;
     if to_regclass('public.payment_refunds') is not null and to_regclass('public.payment_orders') is not null then
         update public.payment_refunds r
-        set dedupe_key = encode(sha256(convert_to(ma.new || E'\n' || 'subcancel:' || ms.new || ':' || mo.new, 'UTF8')), 'hex')
-        from public.payment_orders o, id_map ma, id_map ms, id_map mo
+        set dedupe_key = encode(sha256(convert_to(coalesce(ma.new, o.account_id) || E'\n' || 'subcancel:' || coalesce(ms.new, o.origin_ref) || ':' || coalesce(mo.new, o.id), 'UTF8')), 'hex')
+        from public.payment_orders o
+        left join id_map ma on ma.old = o.account_id   -- 시드 계정(변환 제외)은 id 가 그대로라 맵에 없다
+        left join id_map ms on ms.old = o.origin_ref
+        left join id_map mo on mo.old = o.id
         where o.id = r.order_id and o.origin_type = 'SUBSCRIPTION'
-          and mo.old = o.id and ma.old = o.account_id and ms.old = o.origin_ref
-          and r.dedupe_key = encode(sha256(convert_to(o.account_id || E'\n' || 'subcancel:' || o.origin_ref || ':' || o.id, 'UTF8')), 'hex');
+          and r.dedupe_key = encode(sha256(convert_to(o.account_id || E'\n' || 'subcancel:' || o.origin_ref || ':' || o.id, 'UTF8')), 'hex')
+          and r.dedupe_key <> encode(sha256(convert_to(coalesce(ma.new, o.account_id) || E'\n' || 'subcancel:' || coalesce(ms.new, o.origin_ref) || ':' || coalesce(mo.new, o.id), 'UTF8')), 'hex');
         get diagnostics n = row_count;
         insert into report values ('해지 환불 dedupe_key 다시 계산', 'payment_refunds.dedupe_key', n);
     end if;
@@ -181,7 +186,7 @@ declare
     result text := t;
 begin
     for tok in select distinct (regexp_matches(t,
-        '(?:(?:acc|idn|ses|prf|ord|rfd|sub)_[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})', 'g'))[1]
+        '(?:(?:acc|idn|ses|prf|ord|rfd|sub)_[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})', 'g'))[1]
     loop
         select new into mapped from id_map where old = tok;
         if found then result := replace(result, tok, mapped); end if;
@@ -193,7 +198,7 @@ do $$
 declare
     c record;
     n bigint;
-    pat constant text := '(?:(?:acc|idn|ses|prf|ord|rfd|sub)_[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})';
+    pat constant text := '(?:(?:acc|idn|ses|prf|ord|rfd|sub)_[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})';
 begin
     for c in
         select col.table_name::text as tbl, col.column_name::text as col
@@ -205,7 +210,7 @@ begin
           and col.column_name <> 'attachment_key'
         order by 1, 2
     loop
-        execute format('update public.%I set %I = pg_temp.remap(%I) where %I ~ %L', c.tbl, c.col, c.col, c.col, pat);
+        execute format('update public.%I set %I = pg_temp.remap(%I) where %I ~ %L and pg_temp.remap(%I) is distinct from %I', c.tbl, c.col, c.col, c.col, pat, c.col, c.col);
         get diagnostics n = row_count;
         if n > 0 then insert into report values ('바꿈', c.tbl || '.' || c.col, n); end if;
     end loop;
@@ -258,8 +263,8 @@ begin
             ('accounts', 'id', '^acc_[0-9a-f]{32}$'), ('account_identities', 'id', '^idn_[0-9a-f]{32}$'), ('auth_sessions', 'id', '^ses_[0-9a-f]{32}$'),
             ('author_profiles', 'id', '^prf_[0-9a-f]{32}$'), ('payment_orders', 'id', '^ord_[0-9a-f]{32}$'), ('payment_refunds', 'id', '^rfd_[0-9a-f]{32}$'),
             ('payment_subscriptions', 'id', '^sub_[0-9a-f]{32}$'),
-            ('notes', 'id', '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'),
-            ('notification_inbox', 'event_id', '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
+            ('notes', 'id', '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'),
+            ('notification_inbox', 'event_id', '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
         ) v(tbl, col, pat)
     loop
         if to_regclass('public.' || t.tbl) is null then continue; end if;
