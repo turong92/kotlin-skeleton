@@ -2326,6 +2326,36 @@
       }
     },
     {
+      "id": "script-convert-ids-to-sortable",
+      "kind": "script",
+      "module": null,
+      "path": "scripts/convert-ids-to-sortable.sh",
+      "status": "stable",
+      "summary": "일회용 — 이미 있는 PostgreSQL DB 의 옛 행 id(접두사 + 32자 16진수 · UUID v4)를 시간순 id(접두사 + ULID · UUIDv7)로 바꾼다: pg_dump 백업 → 한 트랜잭션에서 id 를 가리키는 모든 문자열 칸을 같이 변환 → 행 수 · 옛 형식 0건 · 외래 키 검사(--dry-run 은 끝에서 되돌린다).",
+      "starter": false,
+      "newProjectFlag": null,
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/schema-management.md"],
+      "frontend": null,
+      "notFor": [
+        "새 DB 에는 필요 없다 — 새 id 는 처음부터 시간순이다(SortableIds)",
+        "MySQL 은 지원하지 않는다(로컬에 데이터가 없어 만들지 않았다)",
+        "이미 결제사에 결제된 주문이 있는 운영 DB 에는 쓰지 않는다 — 주문 id 는 결제사의 orderId 라 바꾸면 조회가 어긋난다"
+      ],
+      "keywords": {
+        "ko": ["id 변환", "시간순 id", "ULID 변환", "기존 데이터 id 바꾸기"],
+        "en": ["convert ids", "sortable ids", "ULID migration", "rewrite primary keys"]
+      }
+    },
+    {
       "id": "script-dev",
       "kind": "script",
       "module": null,

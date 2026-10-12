@@ -131,6 +131,13 @@ private class FlywayAfterDeployGuards : AbstractDependsOnBeanFactoryPostProcesso
 guard), and a guard inside a custom `FlywayMigrationStrategy` would replace the skeleton's local clean strategy
 (`@ConditionalOnMissingBean`).
 
+## Rewriting row ids in an existing database (one time, PostgreSQL)
+
+New row ids are time-ordered (`prefix + ULID`, `SortableIds` in `platform`). A database created before that keeps its old ids (`prefix + 32 hex`, UUID v4) until you run `scripts/convert-ids-to-sortable.sh` once:
+stop the app, let a new build apply the latest Flyway files (it needs `payment_subscriptions.dedupe_key`), then `scripts/convert-ids-to-sortable.sh --container <postgres container> --dry-run` (everything is done and checked, then rolled back) and the same command without `--dry-run`.
+It writes a `pg_dump -Fc` backup first (path printed), rewrites every id **and every column that holds one** (found through `information_schema`, text inside JSON / audit detail included) in one transaction, and fails — changing nothing — unless row counts are unchanged, no old-format id is left in any id column and every foreign key validates again. It is not a Flyway file on purpose (a permanent migration would run on every new database).
+What it leaves alone is listed at the top of `scripts/convert-ids-to-sortable.sql` (storage keys, stored webhook bodies, fixed-name seed accounts, request-key hashes, `cus_`). Payment order ids are the provider's `orderId`: do not use it on data whose paid orders still talk to the provider.
+
 ## Mode B — `schema.sql` only (no migration tool yet)
 
 For a v0 with no external data yet. In `application.yml`:
