@@ -164,13 +164,16 @@ class PaymentRefunds(
 
     /**
      * 운영자가 **막힌 구독 결제 주문**(결제사가 끝내 답하지 않아 `CONFIRMING` 으로 남은 것)을 「결제 안 됨」(`FAILED`)으로 닫는다 — 구독이 그 주문 때문에 쥔 자리가 풀린다.
-     * 닫기 전에 결제사에 **한 번 더 묻는다**: 돈이 들어간 것으로 나오면 닫지 않고 정상 `PAID` 처리로 맞추고, 아직 처리 중이거나 주문이 어긋나 있으면 [PaymentOrderNotClosableException].
+     * **막 나간 승인은 닫지 않는다** - `CONFIRM_UNRESOLVED` 표시가 있거나 `admin.stale-after` 보다 오래 확인 중일 때만. 닫기 전에 결제사에 **한 번 더 묻는다**: 돈이 들어간 것으로 나오면 닫지 않고 정상 `PAID` 처리로 맞추고, 아직 처리 중이거나 주문이 어긋나 있으면 [PaymentOrderNotClosableException].
      * 물을 수 없으면(결제사 오류 · 대답 없음) 닫지 않는다 — [sync] 와 같은 예외. 이력에 운영자와 `OPERATOR_CLOSED` 가 남는다.
      */
     fun closeStuckSubscriptionCharge(operatorId: String, orderId: String): PaymentOrder {
         store.requireNoOpenTransaction("PaymentRefunds.closeStuckSubscriptionCharge")
         val order0 = store.findOrder(orderId) ?: throw PaymentOrderNotFoundException()
         if (order0.originType != PaymentOriginType.SUBSCRIPTION || order0.status != PaymentOrderStatus.CONFIRMING) throw PaymentOrderNotClosableException()
+        // 막 나간 승인은 결제사가 아직 모를 뿐이다 - 「확인 필요」(끝내 못 물음)이거나 운영자 목록의 오래된 확인 중([PaymentProperties.Admin.staleAfter])일 때만 닫는다
+        val stale = order0.confirmStartedAt?.let { !it.isAfter(writer.now().minus(properties.admin.staleAfter)) } ?: true
+        if (order0.reviewReason != PaymentReviewReason.CONFIRM_UNRESOLVED && !stale) throw PaymentOrderNotClosableException()
         val gateway = try {
             router.gateway(order0.provider, PaymentLookupGateway::class)
         } catch (e: PaymentProviderNotFoundException) {

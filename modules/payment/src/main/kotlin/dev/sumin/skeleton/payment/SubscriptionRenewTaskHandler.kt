@@ -93,9 +93,8 @@ class SubscriptionRenewTaskHandler(
     private fun renew(tx: PaymentLedgerTx, subscription: PaymentSubscription): Step {
         val chargeOrder = subscription.chargeOrderId?.let(store::findOrder)
         // 지금 시도의 주문이 이미 있다 — 진행 중이거나 지급(기간 넘기기)이 아직이다. 새 주문을 만들지 않는다. 끝 상태가 되면 그 트랜잭션에서 구독이 반응한다
-        if (chargeOrder != null && chargeOrder.dedupeKey == lifecycle.currentKey(subscription)) return Step.Done
-        // 플랜 변경 결제가 아직 오가는 중이다 — 과금하지 않는다. 변경이 끝나면(지급 · 실패) 그 쪽에서 이 작업을 다시 깨운다([SubscriptionLifecycle.onOrderPaid] · onOrderClosed)
-        if (chargeOrder?.kind == PaymentOrderKind.SUBSCRIPTION_CHANGE && !lifecycle.isSettled(chargeOrder)) return Step.Done
+        // (변경 결제가 오가는 중일 때도 같다 - 끝나면 지급 · 실패 쪽이 이 작업을 다시 깨운다: [SubscriptionLifecycle.onOrderPaid] · onOrderClosed)
+        if (!lifecycle.isSettled(chargeOrder)) return Step.Done
         // 다음 시도는 앞선 시도가 닫힌 때부터 재시도 간격이 지나야 한다 — 같은 구독을 깨우는 작업이 둘 있어도 간격 없이 곧바로 또 과금하지 않는다
         val failedAt = chargeOrder?.closedAt
         if (subscription.status == SubscriptionStatus.PAST_DUE && failedAt != null && writer.now().isBefore(failedAt.plus(retryInterval))) return Step.Done

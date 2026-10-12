@@ -177,6 +177,13 @@ class SubscriptionLifecycle(
     fun currentKey(subscription: PaymentSubscription): String =
         "sub:${subscription.id}:${subscription.anchorAt?.toEpochMilli() ?: 0}:${subscription.periodSeq + 1}:${subscription.attempt}"
 
+    private fun boughtCurrentPeriod(subscription: PaymentSubscription, order: PaymentOrder): Boolean {
+        val paidAt = order.paidAt ?: return false
+        val start = subscription.currentPeriodStart ?: return false
+        val end = subscription.currentPeriodEnd ?: return false
+        return !paidAt.isBefore(start) && paidAt.isBefore(end)
+    }
+
     /** 과금 주문이 없거나 끝났다(실패로 닫혔거나, 돈을 받고 지급까지 마쳤거나, 전액 환불됐다) — 아직 오가는 중이 아니다. */
     fun isSettled(order: PaymentOrder?): Boolean = order == null || order.status.isClosed || order.status == PaymentOrderStatus.REFUNDED || (order.status.isPaidFamily && order.fulfilledAt != null)
 
@@ -187,7 +194,9 @@ class SubscriptionLifecycle(
     fun onOrderRefunded(tx: PaymentLedgerTx, order: PaymentOrder) {
         val subscription = tx.lockSubscription(order.originRef ?: return) ?: return
         // 변경 결제의 환불은 그 기간의 구독을 끝내지 않는다(기간의 결제는 따로 있다) — 플랜은 되돌리지 않으니 운영자가 본다
-        if (subscription.chargeOrderId != order.id || subscription.status == SubscriptionStatus.ENDED || order.kind == PaymentOrderKind.SUBSCRIPTION_CHANGE) return
+        if (subscription.status == SubscriptionStatus.ENDED || order.kind == PaymentOrderKind.SUBSCRIPTION_CHANGE) return
+        // 지금 과금 주문이거나(아직 지급 전), 지금 기간을 산 주문이다(그 뒤 변경 주문이 과금 주문 자리를 차지해도) - 결제 시각이 지금 기간 안에 있다
+        if (subscription.chargeOrderId != order.id && !boughtCurrentPeriod(subscription, order)) return
         end(tx, subscription, SubscriptionEndReason.REFUNDED)
     }
 

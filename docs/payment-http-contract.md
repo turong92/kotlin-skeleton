@@ -202,7 +202,7 @@
 본문 없음. `200 { value: AdminRefund }`(`REJECTED`). `REQUESTED` 일 때만 — 이미 결정된 줄은 `409 PAYMENT.REFUND_NOT_ALLOWED`, 없으면 `404 PAYMENT.REFUND_NOT_FOUND`.
 
 ### POST /orders/{id}/close — 막힌 구독 결제를 「결제 안 됨」으로 닫기
-본문 없음. 결제사가 끝내 답하지 않아 `CONFIRMING` 으로 남은 **구독 결제 주문**만. 닫기 전에 결제사에 한 번 더 묻는다 — 결제된 것으로 나오면 닫지 않고 정상 `PAID` 로 맞추고(지급 작업이 이어진다), 결제사가 모르거나 실패 · 만료로 답하면 `FAILED`(`failureCode` `OPERATOR_CLOSED`, 이력에 운영자)로 닫아 구독의 자리를 푼다. `200 { value: AdminOrder }`. `409 PAYMENT.ORDER_NOT_CLOSABLE`(구독 결제가 아니다 · `CONFIRMING` 이 아니다 · 결제사가 아직 처리 중이다) · `404` · `409 MODE_MISMATCH` · `502` · `503`(결제사에 물을 수 없으면 닫지 않는다).
+본문 없음. 결제사가 끝내 답하지 않아 `CONFIRMING` 으로 남은 **구독 결제 주문**만 - 그중에서도 `CONFIRM_UNRESOLVED` 표시가 있거나 `admin.stale-after` 보다 오래 확인 중인 것만(막 나간 승인은 `409`). 닫기 전에 결제사에 한 번 더 묻는다 — 결제된 것으로 나오면 닫지 않고 정상 `PAID` 로 맞추고(지급 작업이 이어진다), 결제사가 모르거나 실패 · 만료로 답하면 `FAILED`(`failureCode` `OPERATOR_CLOSED`, 이력에 운영자)로 닫아 구독의 자리를 푼다. `200 { value: AdminOrder }`. `409 PAYMENT.ORDER_NOT_CLOSABLE`(구독 결제가 아니다 · `CONFIRMING` 이 아니다 · 결제사가 아직 처리 중이다) · `404` · `409 MODE_MISMATCH` · `502` · `503`(결제사에 물을 수 없으면 닫지 않는다).
 
 ### POST /orders/{id}/sync — 결제사와 맞추기
 본문 없음. 결제사에 묻고 장부를 맞춘다(결제사 관리 화면의 취소 포함). `200 { value: AdminOrder }` — 맞춘 뒤의 주문(`reviewReason` 이 풀렸으면 `null`). 응답의 `reviewReason` 은 한 건 상세의 `order.reviewReason` 과 **같은 계산**(파생 사유 포함)이다.

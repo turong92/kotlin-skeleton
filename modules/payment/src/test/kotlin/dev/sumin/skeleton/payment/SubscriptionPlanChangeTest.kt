@@ -192,4 +192,20 @@ class SubscriptionPlanChangeTest {
         assertEquals(6_900, kit.gateway.chargeCalls.last().amount.amount)
         assertEquals(4, kit.gateway.chargeCalls.size, "first payment, one renewal, the change, the renewal after the restart")
     }
+
+    @Test
+    fun `after a plan change a full refund of the payment that bought the period still ends the subscription`() {
+        val kit = newKit()
+        val active = kit.active()
+        kit.time.advance(Duration.ofDays(2))
+        kit.change(active.id, 3_000) // 변경 주문이 과금 주문 자리를 차지한다
+        val initial = kit.store.listSubscriptionOrders(active.id, 5).single { it.kind == PaymentOrderKind.SUBSCRIPTION_INITIAL }
+
+        kit.refunds.refund("op_1", initial.id, "OPERATOR", null, IdempotencyKey("r1"))
+        kit.runTasks(setOf(PaymentTaskTypes.REFUND_APPLY))
+
+        val after = kit.sub(active.id)
+        assertEquals(SubscriptionStatus.ENDED, after.status)
+        assertEquals(SubscriptionEndReason.REFUNDED, after.endReason)
+    }
 }

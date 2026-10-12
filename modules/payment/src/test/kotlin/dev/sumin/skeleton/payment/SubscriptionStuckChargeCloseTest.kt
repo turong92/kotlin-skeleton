@@ -13,11 +13,12 @@ class SubscriptionStuckChargeCloseTest {
     private val kit = PaymentLedgerKit()
     private val op = "op_1"
 
-    private fun stuckFirstCharge(script: ConfirmScript): Pair<PaymentSubscription, PaymentOrder> {
+    private fun stuckFirstCharge(script: ConfirmScript, aged: Boolean = true): Pair<PaymentSubscription, PaymentOrder> {
         kit.gateway.script(script)
         val id = kit.subscriptions.start("acc_1", "basic", IdempotencyKey("k1")).subscription.id
         val pending = kit.subscriptions.activate("acc_1", id, mapOf("authKey" to "auth_1"))
         assertEquals(SubscriptionStatus.PENDING, pending.status)
+        if (aged) kit.advance(kit.properties.admin.staleAfter.plusMinutes(1)) // 오래 막힌 주문만 닫을 수 있다
         return pending to kit.store.listSubscriptionOrders(id, 1).single()
     }
 
@@ -62,5 +63,14 @@ class SubscriptionStuckChargeCloseTest {
 
         val cheer = kit.paid()
         assertFailsWith<PaymentOrderNotClosableException> { kit.refunds.closeStuckSubscriptionCharge(op, cheer.id) }
+    }
+
+    @Test
+    fun `an order that was only just sent is not closed - the provider may simply not have answered yet`() {
+        val (_, order) = stuckFirstCharge(ConfirmScript.ServerError, aged = false)
+
+        assertFailsWith<PaymentOrderNotClosableException> { kit.refunds.closeStuckSubscriptionCharge(op, order.id) }
+
+        assertEquals(PaymentOrderStatus.CONFIRMING, kit.order(order.id).status)
     }
 }
