@@ -180,3 +180,15 @@ class PaymentSubscriptionNotCancelableException : ApplicationException(
     message = "This subscription cannot be canceled in its current state.",
     errorCode = PaymentErrorCode.SUBSCRIPTION_NOT_CANCELABLE,
 )
+
+/** 플랜 변경을 할 수 없다 — 꺼져 있다 · 이용 중이 아니다 · 위 등급이 아니다 · 주기 · 통화가 다르다 · 과금 중인 주문이 있다. */
+class PaymentPlanChangeNotAllowedException : ApplicationException(
+    message = "The plan cannot be changed now.",
+    errorCode = PaymentErrorCode.PLAN_CHANGE_NOT_ALLOWED,
+)
+
+/** 서버가 다시 계산한 변경 금액이 호출자가 본 금액보다 크다 — 미리보기부터 다시 한다. */
+class PaymentPlanChangeChargeChangedException : ApplicationException(
+    message = "The charge for the plan change is higher than the one shown.",
+    errorCode = PaymentErrorCode.PLAN_CHANGE_CHARGE_CHANGED,
+)

@@ -49,6 +49,28 @@ class PaymentSubscriptionAutoConfiguration {
         return PaymentSubscriptions(store, router, plansBean, encryptorBean, lifecycle, charges, tasks, writer, properties)
     }
 
+    @Bean
+    @ConditionalOnMissingBean
+    fun subscriptionPlanChanges(
+        store: PaymentLedgerStore,
+        router: PaymentProviderRouter,
+        plans: ObjectProvider<SubscriptionPlans>,
+        encryptor: ObjectProvider<TextEncryptor>,
+        lifecycle: SubscriptionLifecycle,
+        charges: SubscriptionCharges,
+        writer: PaymentLedgerWriter,
+        properties: PaymentProperties,
+    ): SubscriptionPlanChanges = SubscriptionPlanChanges(
+        store,
+        router,
+        plans.getIfAvailable() ?: error("skeleton.payment.subscription.enabled=true needs a SubscriptionPlans bean"),
+        encryptor.getIfAvailable() ?: error("skeleton.payment.subscription.enabled=true needs a TextEncryptor (skeleton.crypto.keys)"),
+        lifecycle,
+        charges,
+        writer,
+        properties,
+    )
+
     /** 앱이 [SubscriptionRenewalGuard] 를 두지 않으면 늘 허용한다 — `payment` 는 `account` 를 모른다. */
     @Bean
     @ConditionalOnMissingBean

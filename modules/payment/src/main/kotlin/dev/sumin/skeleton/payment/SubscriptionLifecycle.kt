@@ -51,7 +51,16 @@ class SubscriptionLifecycle(
     }
 
     /** 지금 과금하는 주문 한 줄 — 결제창이 없으니 승인을 선점한 `CONFIRMING` 으로 바로 만든다(`checkout_expires_at` 은 만든 시각). */
-    fun chargeOrder(subscription: PaymentSubscription, kind: PaymentOrderKind, orderName: String, random: java.util.Random = java.security.SecureRandom()): PaymentOrder {
+    fun chargeOrder(
+        subscription: PaymentSubscription,
+        kind: PaymentOrderKind,
+        orderName: String,
+        random: java.util.Random = java.security.SecureRandom(),
+        /** 플랜 변경은 구독 금액이 아니라 변경 때 결제할 금액 · 새 플랜 코드 · 요청 키로 만든 중복 방지 키를 쓴다. */
+        amount: PaymentAmount = subscription.amount,
+        itemRef: String = subscription.planCode,
+        dedupeKey: String = currentKey(subscription),
+    ): PaymentOrder {
         val now = writer.now()
         return PaymentOrder(
             id = PaymentOrderIds.newOrderId(random),
@@ -61,17 +70,17 @@ class SubscriptionLifecycle(
             provider = subscription.provider,
             providerMode = subscription.providerMode,
             providerPaymentId = null,
-            amount = subscription.amount,
+            amount = amount,
             paidAmount = null,
             taxAmount = null,
             refundedAmount = 0,
             itemType = ITEM_TYPE,
-            itemRef = subscription.planCode,
+            itemRef = itemRef,
             quantity = 1,
             orderName = orderName.trim().take(ORDER_NAME_MAX),
             originType = PaymentOriginType.SUBSCRIPTION,
             originRef = subscription.id,
-            dedupeKey = currentKey(subscription),
+            dedupeKey = dedupeKey,
             method = null,
             cardIssuer = null,
             cardLast4 = null,
@@ -121,6 +130,23 @@ class SubscriptionLifecycle(
                 }
                 scheduleRenewal(next)
             }
+            order.kind == PaymentOrderKind.SUBSCRIPTION_CHANGE && (subscription.status == SubscriptionStatus.ACTIVE || subscription.status == SubscriptionStatus.CANCELING) -> {
+                val planCode = subscription.pendingPlanCode ?: order.itemRef
+                val amount = subscription.pendingAmount ?: return stale(tx, order)
+                val restart = properties.subscription.planChange.charge == PaymentProperties.Subscription.PlanChange.Charge.FULL_RESTART
+                val changed = save(tx, subscription, subscription.status) {
+                    val switched = it.copy(planCode = planCode, amount = PaymentAmount(amount, it.amount.currency), pendingPlanCode = null, pendingAmount = null)
+                    // 전액 결제하고 새 주기: 지금부터 한 주기(남은 기간은 버린다). 차액만: 기간은 그대로
+                    if (restart) {
+                        val anchor = order.paidAt ?: now
+                        switched.copy(anchorAt = anchor, periodSeq = 1, currentPeriodStart = anchor, currentPeriodEnd = period.after(anchor, 1), attempt = 1)
+                    } else {
+                        switched
+                    }
+                }
+                // 변경이 도는 동안 깨어난 갱신 작업은 과금하지 않고 물러났다 — 다시 깨운다(차액만이면 기간 끝이 이미 지났을 수 있다)
+                scheduleRenewal(changed)
+            }
             else -> stale(tx, order)
         }
     }
@@ -131,12 +157,28 @@ class SubscriptionLifecycle(
      */
     fun onOrderClosed(tx: PaymentLedgerTx, order: PaymentOrder) {
         val subscription = tx.lockSubscription(order.originRef ?: return) ?: return
-        if (subscription.status == SubscriptionStatus.ENDED || order.dedupeKey != currentKey(subscription)) return
+        if (subscription.status == SubscriptionStatus.ENDED) return
+        if (order.kind == PaymentOrderKind.SUBSCRIPTION_CHANGE) return onChangeClosed(tx, subscription, order)
+        if (order.dedupeKey != currentKey(subscription)) return
         if (subscription.status == SubscriptionStatus.PENDING) end(tx, subscription, SubscriptionEndReason.FIRST_PAYMENT_DECLINED) else onChargeFailed(tx, subscription)
     }
 
-    /** 이 구독이 지금 과금하려는 주문의 `dedupe_key`. */
-    fun currentKey(subscription: PaymentSubscription): String = "sub:${subscription.id}:${subscription.periodSeq + 1}:${subscription.attempt}"
+    /** 변경 결제가 실패로 닫혔다 — 플랜은 그대로 두고 대기 값을 비운 뒤, 변경 때문에 물러났던 갱신 작업을 지금 다시 깨운다. */
+    private fun onChangeClosed(tx: PaymentLedgerTx, subscription: PaymentSubscription, order: PaymentOrder) {
+        if (subscription.chargeOrderId != order.id) return
+        val cleared = save(tx, subscription, subscription.status) { it.copy(pendingPlanCode = null, pendingAmount = null) }
+        scheduleRenewal(cleared, runAt = writer.now())
+    }
+
+    /**
+     * 이 구독이 지금 과금하려는 주문의 `dedupe_key`. 기준 시각([PaymentSubscription.anchorAt])이 들어 있다 — 플랜 변경이 주기를 새로 시작하면(`FULL_RESTART`) 기간 번호가 1부터 다시 세어지므로
+     * 이전 주기의 같은 번호와 겹치지 않게 한다.
+     */
+    fun currentKey(subscription: PaymentSubscription): String =
+        "sub:${subscription.id}:${subscription.anchorAt?.toEpochMilli() ?: 0}:${subscription.periodSeq + 1}:${subscription.attempt}"
+
+    /** 과금 주문이 없거나 끝났다(실패로 닫혔거나, 돈을 받고 지급까지 마쳤거나, 전액 환불됐다) — 아직 오가는 중이 아니다. */
+    fun isSettled(order: PaymentOrder?): Boolean = order == null || order.status.isClosed || order.status == PaymentOrderStatus.REFUNDED || (order.status.isPaidFamily && order.fulfilledAt != null)
 
     /**
      * 구독 주문이 전액 환불됐다 — 지금 과금 주문이면 구독을 바로 끝낸다(환불했는데 다음 달 또 과금되지 않게). **주문 줄 락 안에서** 불린다([PaymentRefundApplier]).
@@ -144,7 +186,8 @@ class SubscriptionLifecycle(
      */
     fun onOrderRefunded(tx: PaymentLedgerTx, order: PaymentOrder) {
         val subscription = tx.lockSubscription(order.originRef ?: return) ?: return
-        if (subscription.chargeOrderId != order.id || subscription.status == SubscriptionStatus.ENDED) return
+        // 변경 결제의 환불은 그 기간의 구독을 끝내지 않는다(기간의 결제는 따로 있다) — 플랜은 되돌리지 않으니 운영자가 본다
+        if (subscription.chargeOrderId != order.id || subscription.status == SubscriptionStatus.ENDED || order.kind == PaymentOrderKind.SUBSCRIPTION_CHANGE) return
         end(tx, subscription, SubscriptionEndReason.REFUNDED)
     }
 

@@ -23,6 +23,7 @@ import dev.sumin.skeleton.payment.SubscriptionCharges
 import dev.sumin.skeleton.payment.SubscriptionLifecycle
 import dev.sumin.skeleton.payment.SubscriptionPlan
 import dev.sumin.skeleton.payment.SubscriptionPlans
+import dev.sumin.skeleton.payment.SubscriptionPlanChanges
 import dev.sumin.skeleton.payment.SubscriptionRevokeTaskHandler
 import dev.sumin.skeleton.payment.PaymentWebhookInbox
 import dev.sumin.skeleton.payment.PaymentWebhookTaskHandler
@@ -149,6 +150,7 @@ class PaymentLedgerKit(
     val webhook = PaymentWebhookTaskHandler(store, router, convergence, writer)
     val charges = SubscriptionCharges(store, convergence, fulfillment, writer)
     val subscriptions = PaymentSubscriptions(store, router, plans, ReversibleTestEncryptor, lifecycle, charges, tasks, writer, properties)
+    val planChanges = SubscriptionPlanChanges(store, router, plans, ReversibleTestEncryptor, lifecycle, charges, writer, properties)
     val revoke = SubscriptionRevokeTaskHandler(store, router, ReversibleTestEncryptor, writer)
 
     /** 앱의 갱신 판단 대역 — [blocked] 에 든 계정은 갱신하지 않는다. */

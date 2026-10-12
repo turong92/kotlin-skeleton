@@ -126,6 +126,10 @@ skeleton:
     # 없으면 기동 실패(카드를 받고도 과금할 수 없는 구독이 뜨지 않게). 플랜은 subscription/SubscriptionConfiguration, 주기는 skeleton.sample.subscription.period. 로컬 프로필은 토스를 켰을 때 함께 켠다(application-local.yml).
     subscription:
       enabled: ${SKELETON_PAYMENT_SUBSCRIPTION_ENABLED:false}
+      plan-change:                            # 위 등급으로 바로 바꾸기 — 모듈은 과금 방식을 고르지 않는다. 이 앱의 선택: 남은 기간의 차액만(PRORATED_DIFFERENCE), 100원 미만이면 과금 없이 (전액 결제 후 새 주기는 FULL_RESTART)
+        enabled: true
+        charge: PRORATED_DIFFERENCE
+        min-charge: 100
   crypto:
     primary-key-id: ${SKELETON_CRYPTO_PRIMARY_KEY_ID:main}
     keys:

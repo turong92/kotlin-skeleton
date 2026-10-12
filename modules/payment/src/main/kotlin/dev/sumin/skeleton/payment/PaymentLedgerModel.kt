@@ -21,7 +21,7 @@ enum class PaymentOrderStatus {
     val isClosed: Boolean get() = this == FAILED || this == EXPIRED || this == CANCELED
 }
 
-enum class PaymentOrderKind { ONE_TIME, SUBSCRIPTION_INITIAL, SUBSCRIPTION_RENEWAL }  // 2차에 SUBSCRIPTION_CHANGE 가 더해진다
+enum class PaymentOrderKind { ONE_TIME, SUBSCRIPTION_INITIAL, SUBSCRIPTION_RENEWAL, SUBSCRIPTION_CHANGE }
 
 /** 이 주문을 만든 것. 1단계는 [CHECKOUT] 뿐이다. */
 enum class PaymentOriginType { CHECKOUT, SUBSCRIPTION }

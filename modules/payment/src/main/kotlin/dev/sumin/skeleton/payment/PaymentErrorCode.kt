@@ -134,6 +134,16 @@ enum class PaymentErrorCode(
         status = HttpStatus.CONFLICT,
         title = "Subscription cannot be canceled",
     ),
+    PLAN_CHANGE_NOT_ALLOWED(
+        code = "PAYMENT.PLAN_CHANGE_NOT_ALLOWED",
+        status = HttpStatus.CONFLICT,
+        title = "The plan cannot be changed",
+    ),
+    PLAN_CHANGE_CHARGE_CHANGED(
+        code = "PAYMENT.PLAN_CHANGE_CHARGE_CHANGED",
+        status = HttpStatus.CONFLICT,
+        title = "The charge for the plan change changed",
+    ),
     UNAVAILABLE(
         code = "PAYMENT.UNAVAILABLE",
         status = HttpStatus.SERVICE_UNAVAILABLE,

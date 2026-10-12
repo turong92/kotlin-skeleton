@@ -180,7 +180,30 @@ data class PaymentProperties(
         val enabled: Boolean = false,
         /** 갱신 과금 — 거절되면 `PAST_DUE` 로 재시도하고 시도를 다 쓰면 구독이 끝난다. */
         val renewal: Renewal = Renewal(),
+        /** 플랜 변경(위로만) — 꺼져 있고, 켜는 앱이 과금 방식을 명시한다. */
+        val planChange: PlanChange = PlanChange(),
     ) {
+        data class PlanChange(
+            val enabled: Boolean = false,
+            /** 켰다면 필수 — 모듈은 과금 방식을 고르지 않는다. */
+            val charge: Charge? = null,
+            /** [Charge.PRORATED_DIFFERENCE] 의 차액이 이 값 미만이면 과금 없이 바꾼다(최소 단위). */
+            val minCharge: Long = 0,
+        ) {
+            enum class Charge {
+                /** 전액을 결제하고 지금부터 새 주기를 시작한다(남은 기간은 버린다). */
+                FULL_RESTART,
+
+                /** 남은 기간만큼의 차액만 결제하고 기간은 그대로 둔다. */
+                PRORATED_DIFFERENCE,
+            }
+
+            init {
+                require(!enabled || charge != null) { "skeleton.payment.subscription.plan-change.charge must be set (FULL_RESTART or PRORATED_DIFFERENCE) when plan-change.enabled=true" }
+                require(minCharge >= 0) { "skeleton.payment.subscription.plan-change.min-charge must not be negative" }
+            }
+        }
+
         data class Renewal(
             /** 한 기간의 과금 시도 수(첫 시도 포함). 다 쓰면 구독이 `PAYMENT_FAILED` 로 끝난다. */
             val maxAttempts: Int = 3,

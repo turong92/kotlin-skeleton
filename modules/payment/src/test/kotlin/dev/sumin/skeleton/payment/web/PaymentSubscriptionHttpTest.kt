@@ -28,6 +28,8 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
     classes = [PaymentWebTestApplication::class],
     properties = [
         "skeleton.payment.subscription.enabled=true",
+        "skeleton.payment.subscription.plan-change.enabled=true",
+        "skeleton.payment.subscription.plan-change.charge=FULL_RESTART",
         "skeleton.payment.http.order-rate-limit.account-capacity=100000",
         "skeleton.payment.http.order-rate-limit.ip-capacity=100000",
     ],
@@ -93,5 +95,25 @@ class PaymentSubscriptionHttpTest {
         mvc.perform(post("$base/subscriptions/$id/cancel").asUser(stranger)).andExpect(status().isNotFound)
         activate(stranger, "sub_missing").andExpect(status().isNotFound)
         mvc.perform(get("$base/subscriptions/me").asUser(stranger)).andExpect(status().isOk).andExpect(jsonPath("$.value.subscription").value(null as Any?))
+    }
+
+    @Test
+    fun `change preview shows the charge, the change itself needs the header and an expectedCharge that covers it, and somebody else's subscription is 404`() {
+        val owner = account()
+        val id = started(owner)
+        activate(owner, id).andExpect(status().isOk)
+
+        mvc.perform(get("$base/subscriptions/$id/change-preview").param("planCode", "plus").asUser(owner)).andExpect(status().isOk)
+            .andExpect(jsonPath("$.value.charge.amount").value(6_900)).andExpect(jsonPath("$.value.restartsPeriod").value(true))
+        mvc.perform(get("$base/subscriptions/$id/change-preview").param("planCode", "basic").asUser(owner)).andExpect(status().isConflict)
+        mvc.perform(get("$base/subscriptions/$id/change-preview").param("planCode", "plus").asUser(account())).andExpect(status().isNotFound)
+
+        fun change(body: String, key: String? = "chg-1") = mvc.perform(
+            post("$base/subscriptions/$id/change").asUser(owner).contentType(MediaType.APPLICATION_JSON).content(body).also { if (key != null) it.header("Idempotency-Key", key) },
+        )
+        change("""{"planCode":"plus","expectedCharge":6900}""", key = null).andExpect(status().isBadRequest)
+        change("""{"planCode":"plus","expectedCharge":100}""").andExpect(status().isConflict)
+        change("""{"planCode":"plus","expectedCharge":6900}""").andExpect(status().isOk)
+            .andExpect(jsonPath("$.value.planCode").value("plus")).andExpect(jsonPath("$.value.pendingPlanCode").value(null as Any?))
     }
 }

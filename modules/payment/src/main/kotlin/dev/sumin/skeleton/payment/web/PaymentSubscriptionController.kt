@@ -10,6 +10,7 @@ import dev.sumin.skeleton.common.openapi.ApiResponseEnvelope
 import dev.sumin.skeleton.common.web.ClientIps
 import dev.sumin.skeleton.payment.PaymentSubscription
 import dev.sumin.skeleton.payment.PaymentSubscriptions
+import dev.sumin.skeleton.payment.SubscriptionPlanChanges
 import dev.sumin.skeleton.payment.SubscriptionStatus
 import dev.sumin.skeleton.payment.web.PaymentRequests.idempotencyKey
 import io.swagger.v3.oas.annotations.Operation
@@ -25,6 +26,7 @@ import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import tools.jackson.databind.JsonNode
 
@@ -37,6 +39,7 @@ import tools.jackson.databind.JsonNode
 @Tag(name = "Payment")
 class PaymentSubscriptionController(
     private val subscriptions: PaymentSubscriptions,
+    private val planChanges: SubscriptionPlanChanges,
     private val callers: PaymentCallers,
     private val limiter: PaymentOrderRateLimiter,
     private val clientIps: ClientIps,
@@ -102,6 +105,43 @@ class PaymentSubscriptionController(
     @PostMapping("/subscriptions/{id}/cancel")
     fun cancel(authentication: Authentication?, @PathVariable id: String): DataResponse<SubscriptionResponse> =
         Response.ok(view(subscriptions.cancel(callers.account(authentication), id)))
+
+    @Operation(
+        summary = "What a change to a higher plan would charge now",
+        description = "charge is what is paid at once (0 = changed for free), amount is the new plan's full price, restartsPeriod tells that a new period starts today. " +
+            "409 PLAN_CHANGE_NOT_ALLOWED when the plan is not higher / the subscription is not in use / a charge is in flight / plan change is off · 422 ITEM_NOT_PURCHASABLE for an unknown plan.",
+    )
+    @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = PlanChangePreviewResponse::class)
+    @GetMapping("/subscriptions/{id}/change-preview")
+    fun changePreview(authentication: Authentication?, @PathVariable id: String, @RequestParam planCode: String): DataResponse<PlanChangePreviewResponse> =
+        Response.ok(PlanChangePreviewResponse.of(planChanges.preview(callers.account(authentication), id, planCode)))
+
+    @Operation(
+        summary = "Change to a higher plan at once",
+        description = "Body { planCode, expectedCharge } + Idempotency-Key. 200 changed · 202 the charge is unconfirmed (subscription.pendingPlanCode is set — poll GET /subscriptions/me) · " +
+            "402 DECLINED (the plan stays) · 409 PLAN_CHANGE_CHARGE_CHANGED when the charge is now higher than expectedCharge (preview again) · 409 PLAN_CHANGE_NOT_ALLOWED · 429.",
+    )
+    @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = SubscriptionResponse::class)
+    @PostMapping("/subscriptions/{id}/change")
+    fun change(
+        authentication: Authentication?,
+        request: HttpServletRequest,
+        response: HttpServletResponse,
+        @PathVariable id: String,
+        @Parameter(name = "Idempotency-Key", required = true) @RequestHeader(name = "Idempotency-Key", required = false) key: String?,
+        @RequestBody body: JsonNode,
+    ): ResponseEntity<DataResponse<SubscriptionResponse>> {
+        val account = callers.account(authentication)
+        limiter.acquire(account, clientIps.of(request).limitKey)?.let { retryAfter ->
+            response.setHeader("Retry-After", retryAfter.toString())
+            throw ApplicationException(message = "Too many requests", errorCode = PlatformErrorCode.TOO_MANY_REQUESTS, data = mapOf("retryAfterSeconds" to retryAfter))
+        }
+        val planCode = PaymentRequests.text(body["planCode"], "planCode", 64)
+        val expected = PaymentRequests.requiredWholeNumber(body["expectedCharge"], "expectedCharge")
+        val changed = planChanges.change(account, id, planCode, expected, idempotencyKey(key))
+        val payload = Response.ok(view(changed))
+        return if (changed.pendingPlanCode != null) ResponseEntity.accepted().body(payload) else ResponseEntity.ok(payload)
+    }
 
     private fun view(subscription: PaymentSubscription): SubscriptionResponse =
         SubscriptionResponse.of(subscription, subscriptions.plans().firstOrNull { it.code == subscription.planCode }?.name)

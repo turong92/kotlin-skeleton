@@ -420,6 +420,8 @@
 | `PAYMENT.ALREADY_SUBSCRIBED` | 409 | 구독 — 이미 살아 있는 구독이 있다(계정당 하나) · 카드 등록 뒤 선점에 졌다 |
 | `PAYMENT.SUBSCRIPTION_NOT_ACTIVATABLE` | 409 | 구독 — 이미 끝난 구독으로 카드 등록 · 첫 결제를 시도했다 |
 | `PAYMENT.SUBSCRIPTION_NOT_CANCELABLE` | 409 | 구독 — 카드를 내지 않은(`PENDING`) 구독은 해지할 수 없다 |
+| `PAYMENT.PLAN_CHANGE_NOT_ALLOWED` | 409 | 구독 플랜 변경 — 꺼져 있다 · 이용 중(`ACTIVE`)이 아니다 · 위 등급이 아니다 · 주기 · 통화가 다르다 · 과금 중인 주문이 있다 |
+| `PAYMENT.PLAN_CHANGE_CHARGE_CHANGED` | 409 | 구독 플랜 변경 — 서버가 다시 계산한 금액이 호출자가 본 금액보다 크다 |
 | `PAYMENT.UNAVAILABLE` | 503 | 결제를 받을 수 없다 · **아무것도 보내지 않았다**(환불 전 확인 실패) |
 | `PAYMENT.PROVIDER_NOT_FOUND` | 400 | 주문의 결제사 빈이 지금 없다 (사용자 승인 경로. 운영자 환불 · 승인 · `sync` 와 주문 만들기 재전송에서는 `503 UNAVAILABLE`) |
 | `PAYMENT.ROUTING_FAILED` | 400 | 결제사를 고르지 못했다 (운영자 환불 · 승인 · `sync` 에서는 `503 UNAVAILABLE`) |
@@ -467,6 +469,7 @@
 | `planCode` · `planName` | 만들 때 박힌 플랜 코드, 앱 플랜 목록의 이름(사라졌으면 코드) |
 | `amount` `{amount, currency}` · `period` | 박힌 금액 · 주기(ISO-8601: `P1M`, `PT3M`) |
 | `currentPeriodStart` · `currentPeriodEnd` | 지금 기간. `currentPeriodEnd` = 다음 결제일(`CANCELING` 이면 이용이 끝나는 날) |
+| `pendingPlanCode` | 플랜 변경의 결제가 확인 중이면 바뀔 플랜 코드(`planCode` 는 아직 옛 플랜), 아니면 `null` |
 | `attempt` | 이번 기간의 시도 번호 — `PAST_DUE` 에서 몇 번째 재시도인지 |
 | `endReason` | `ENDED` 일 때: `FIRST_PAYMENT_DECLINED` · `USER_CANCELED` · `PAYMENT_FAILED` · `ACCOUNT_ERASED` · `RENEWAL_BLOCKED` · `REFUNDED` |
 | `card` `{issuer, last4}` · `testMode` · `createdAt` | 화면 표시용 카드(끝나면 `null`) |
@@ -480,5 +483,7 @@
 | `POST /subscriptions/{id}/activate` `{providerPayload: {authKey}}` | 빌링키 발급 → 첫 결제. `200 ACTIVE`(재전송도) · `202 PENDING`(첫 결제를 결제사가 아직 답하지 않았다 — `GET /subscriptions/me` 로 확인) · `402 DECLINED`(`data.providerCode` · `data.category`, 구독은 끝난다) · `409 ALREADY_SUBSCRIBED` · `409 SUBSCRIPTION_NOT_ACTIVATABLE`(이미 끝난 구독) |
 | `GET /subscriptions/me` | `{subscription (없으면 null), orders: [최근 결제 5건 — 주문 `Order` 모양]}`. 끝난 구독도 `endReason` 과 함께 남는다 — 갱신 실패 · 종료의 유일한 통지다. 시작하지 않은 `PENDING` 은 보이지 않는다 |
 | `POST /subscriptions/{id}/cancel` | `ACTIVE` → `CANCELING`, `PAST_DUE` 는 바로 `ENDED`. 다시 눌러도 같은 답. `409 SUBSCRIPTION_NOT_CANCELABLE`(`PENDING`) |
+| `GET /subscriptions/{id}/change-preview?planCode=` | 위 등급으로 바꾸면 지금 얼마가 결제되는가: `{planCode, planName, charge, amount, period, restartsPeriod}` — `charge` 가 지금 결제될 금액(0 이면 과금 없이 바뀐다), `amount` 는 새 플랜 전체 가격, `restartsPeriod` 면 오늘부터 새 주기. `409 PLAN_CHANGE_NOT_ALLOWED` · `422 ITEM_NOT_PURCHASABLE` |
+| `POST /subscriptions/{id}/change` `{planCode, expectedCharge}` + `Idempotency-Key`(필수) | 위 등급으로 바로 바꾼다. 결제가 `PAID` 가 된 뒤에만 플랜이 바뀐다. `200` 바뀜 · `202` 결제 확인 중(`pendingPlanCode`) · `402 DECLINED`(플랜 그대로) · `409 PLAN_CHANGE_CHARGE_CHANGED`(서버가 다시 계산한 금액이 `expectedCharge` 보다 크다 — 미리보기부터 다시) · `409 PLAN_CHANGE_NOT_ALLOWED`. 과금 방식은 앱 설정 `skeleton.payment.subscription.plan-change.{enabled,charge,min-charge}`(`charge`: `FULL_RESTART` 전액 + 새 주기 · `PRORATED_DIFFERENCE` 남은 기간 차액만, 기본값 없음) |
 
-구독 주문(`Order`)은 `kind` 가 `SUBSCRIPTION_INITIAL` · `SUBSCRIPTION_RENEWAL`, `itemType=subscription`, `itemRef`=플랜 코드이고 기존 `/orders/{id}` · 운영자 주문 목록에 그대로 보인다.
+구독 주문(`Order`)은 `kind` 가 `SUBSCRIPTION_INITIAL` · `SUBSCRIPTION_RENEWAL` · `SUBSCRIPTION_CHANGE`, `itemType=subscription`, `itemRef`=플랜 코드이고 기존 `/orders/{id}` · 운영자 주문 목록에 그대로 보인다.

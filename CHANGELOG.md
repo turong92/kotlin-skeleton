@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 새 기능 (꺼진 채 시작) — 구독 플랜 변경 (2026-10-12)
+
+- **`skeleton.payment.subscription.plan-change.enabled`(기본 false)**: 위 등급으로 바로 바꾸기 — `GET /subscriptions/{id}/change-preview` · `POST /subscriptions/{id}/change`. 켜는 앱이 `charge` 를 명시한다(`FULL_RESTART` 전액 결제 + 새 주기 · `PRORATED_DIFFERENCE` 남은 기간 차액만, 모듈 기본값 없음), `min-charge` 미만의 차액은 과금 없이 바꾼다. 결제(`SUBSCRIPTION_CHANGE` 주문)가 `PAID` 가 된 뒤에만 플랜이 바뀌고, 그 주문이 구독의 과금 주문 자리를 차지하므로 변경과 갱신이 겹쳐도 이중 과금이 없다. 새 V 파일 없음(1차의 `pending_plan_code` · `pending_amount` 사용).
+- **구독 주문의 `dedupe_key` 가 기준 시각(`anchorAt`)을 담는다**(`sub:<id>:<anchor>:<기간>:<시도>`) — `FULL_RESTART` 가 기간 번호를 1부터 다시 세어도 옛 주기의 주문과 겹치지 않게. 1차를 이미 배포했다면 갱신이 나가 있는 그 순간의 주문 한 건만 옛 모양의 키를 가진다.
+
 ### 새 기능 (꺼진 채 시작) — 구독 · 자동결제 (2026-10-09)
 
 - **`skeleton.payment.subscription.enabled`(기본 false = 지금과 같다)**: 결제 장부 위의 구독 — 카드 등록(토스 빌링키) + 첫 결제 → 「내 구독」 → 해지 예약(기간 끝에 종료) → 기간 끝 갱신 작업(거절되면 재시도, 다 쓰면 종료). 결제사의 스케줄러는 쓰지 않는다(토스는 스케줄링을 하지 않는다). 설계: `docs/superpowers/specs/2026-10-09-subscription-design.md`.

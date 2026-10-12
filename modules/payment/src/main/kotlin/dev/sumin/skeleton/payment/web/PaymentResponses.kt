@@ -316,6 +316,8 @@ data class SubscriptionResponse(
     /** 끝난 이유(`ENDED` 일 때만) — `FIRST_PAYMENT_DECLINED` · `USER_CANCELED` · `PAYMENT_FAILED` · `ACCOUNT_ERASED` · `RENEWAL_BLOCKED` · `REFUNDED`. */
     val endReason: String?,
     val card: CardResponse?,
+    /** 플랜 변경의 결제가 확인 중이면 바뀔 플랜 코드(`planCode` 는 아직 옛 플랜) — 아니면 null. */
+    val pendingPlanCode: String?,
     val testMode: Boolean,
     val createdAt: Instant,
 ) {
@@ -332,9 +334,18 @@ data class SubscriptionResponse(
             attempt = subscription.attempt,
             endReason = subscription.endReason?.name,
             card = if (subscription.cardIssuer == null && subscription.cardLast4 == null) null else CardResponse(subscription.cardIssuer, subscription.cardLast4),
+            pendingPlanCode = subscription.pendingPlanCode,
             testMode = subscription.providerMode == PaymentMode.TEST,
             createdAt = subscription.createdAt,
         )
+    }
+}
+
+/** `GET /subscriptions/{id}/change-preview` — [charge] 는 지금 결제될 금액(0 이면 과금 없이 바뀐다), [amount] 는 새 플랜의 전체 가격, [restartsPeriod] 면 오늘부터 새 주기. */
+data class PlanChangePreviewResponse(val planCode: String, val planName: String, val charge: AmountResponse, val amount: AmountResponse, val period: String, val restartsPeriod: Boolean) {
+    companion object {
+        fun of(quote: dev.sumin.skeleton.payment.PlanChangeQuote) =
+            PlanChangePreviewResponse(quote.plan.code, quote.plan.name, quote.charge.toResponse(), quote.plan.amount.toResponse(), quote.plan.period, quote.restartsPeriod)
     }
 }
 
