@@ -68,7 +68,7 @@ class JdbcPaymentLedgerStore(
 
     private val insertSubscriptionSql: String = subscriptionRows.insertColumns.let { columns ->
         if (dialect.vendor == "postgresql") {
-            "insert into payment_subscriptions (${columns.joinToString(", ")}) values (${columns.joinToString(", ") { ":$it" }}) on conflict (id) do nothing"
+            "insert into payment_subscriptions (${columns.joinToString(", ")}) values (${columns.joinToString(", ") { ":$it" }}) on conflict do nothing"
         } else {
             dialect.insertIgnore("payment_subscriptions", columns, listOf("id"))
         }
@@ -260,6 +260,9 @@ class JdbcPaymentLedgerStore(
     override fun findSubscription(id: String): PaymentSubscription? =
         jdbc.query("${subscriptionRows.select} where id = :id", mapOf("id" to id)) { rs, _ -> subscriptionRows.subscription(rs) }.firstOrNull()
 
+    override fun findSubscriptionByDedupeKey(dedupeKey: String): PaymentSubscription? =
+        jdbc.query("${subscriptionRows.select} where dedupe_key = :key", mapOf("key" to dedupeKey)) { rs, _ -> subscriptionRows.subscription(rs) }.firstOrNull()
+
     override fun findLiveSubscription(accountId: String): PaymentSubscription? =
         jdbc.query("${subscriptionRows.select} where active_key = :account", mapOf("account" to accountId)) { rs, _ -> subscriptionRows.subscription(rs) }.firstOrNull()
 
@@ -443,7 +446,7 @@ class JdbcPaymentLedgerStore(
         override fun insertSubscriptionIfAbsent(subscription: PaymentSubscription): Boolean {
             check(ownedSubscriptionId == null) { "one subscription per transaction: already holds ${ownedSubscriptionId}" }
             jdbc.update(insertSubscriptionSql, subscriptionRows.params(subscription))
-            // 갱신 행 수로는 못 가른다(MySQL) · id 는 요청에서 정해지니 id 가 있다고 우리가 넣은 것도 아니다 — 고객 키(무작위 128비트)가 우리 것이면 우리가 넣었다
+            // 갱신 행 수로는 못 가른다(MySQL) · 같은 요청 키의 다른 줄이 이겼으면 이 id 의 줄은 없다 — 이 id 의 줄이 있고 고객 키(무작위 128비트)가 우리 것이면 우리가 넣었다
             val owner = jdbc.queryForList("select customer_key from payment_subscriptions where id = :id", mapOf("id" to subscription.id), String::class.java).firstOrNull()
             val inserted = owner != null && owner == subscription.customerKey
             if (inserted) ownedSubscriptionId = subscription.id

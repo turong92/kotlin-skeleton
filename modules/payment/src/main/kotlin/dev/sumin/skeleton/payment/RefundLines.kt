@@ -1,8 +1,7 @@
 package dev.sumin.skeleton.payment
 
-import java.security.SecureRandom
+import dev.sumin.skeleton.common.id.SortableIds
 import java.time.Instant
-import java.util.Random
 
 /**
  * 환불 줄이 `SUCCEEDED` 가 되는 **유일한 길** — 결제사 응답으로도, 조회 맞추기로도, 결제사 관리 화면의 취소를 발견해도 여기를 지난다.
@@ -11,7 +10,7 @@ import java.util.Random
  * 이력은 둘이다: 환불 줄의 것(`REFUND_SUCCEEDED` · 결제사 취소를 발견했으면 `REFUND_SYNCED`, `from/to` 는 환불 줄의 상태)과 주문이 움직인 것(`CONVERGED`,
  * `providerCode=REFUND_LANDED`, `refundId` 포함, `from/to` 는 주문의 상태).
  */
-internal class RefundLines(private val writer: PaymentLedgerWriter, private val tasks: PaymentTasks, private val random: Random = SecureRandom()) {
+internal class RefundLines(private val writer: PaymentLedgerWriter, private val tasks: PaymentTasks, private val ids: SortableIds = SortableIds.system) {
     /** 결제사 쪽 총액 기준(`paid_amount`, 없으면 청구액)으로 [amount] 를 더 환불해도 넘치지 않는가. */
     fun fits(order: PaymentOrder, amount: PaymentAmount): Boolean =
         amount.normalizedCurrency == order.amount.normalizedCurrency && order.refundedAmount + amount.amount <= baseOf(order)
@@ -56,7 +55,7 @@ internal class RefundLines(private val writer: PaymentLedgerWriter, private val 
         }
     }
 
-    fun newRefundId(): String = "rfd_" + PaymentOrderIds.newOrderId(random).removePrefix("ord_")
+    fun newRefundId(): String = ids.newId("rfd_")
 
     companion object {
         /** 열려 있던 요청 줄의 `failure_code` · 이력의 `provider_code`: 요청이 닫히기 전에 주문이 전액 환불됐다(결제사 관리 화면의 취소 등). */

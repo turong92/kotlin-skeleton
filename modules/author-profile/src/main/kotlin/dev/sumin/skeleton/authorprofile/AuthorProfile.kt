@@ -1,9 +1,8 @@
 package dev.sumin.skeleton.authorprofile
 
 import dev.sumin.skeleton.account.DisplayNames
-import java.security.SecureRandom
+import dev.sumin.skeleton.common.id.SortableIds
 import java.time.Instant
-import java.util.HexFormat
 
 enum class AuthorProfileStatus { ACTIVE, DELETED }
 
@@ -41,9 +40,7 @@ data class AuthorProfile(
 object AuthorProfileIds {
     const val PREFIX = "prf_"
 
-    private val random = SecureRandom()
-
-    fun newId(): String = PREFIX + HexFormat.of().formatHex(ByteArray(16).also(random::nextBytes))
+    fun newId(): String = SortableIds.system.newId(PREFIX)
 
     /** 프로필 id 의 **모양**인가 — 있는 프로필인지는 저장소가 안다. 아니면 옛 행의 계정 id 같은, 다른 디렉터리의 몫이다 */
     fun isProfileId(id: String): Boolean = id.startsWith(PREFIX)

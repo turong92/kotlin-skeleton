@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.payment
 
+import dev.sumin.skeleton.common.id.SortableIds
 import org.slf4j.LoggerFactory
 
 /**
@@ -55,7 +56,7 @@ class SubscriptionLifecycle(
         subscription: PaymentSubscription,
         kind: PaymentOrderKind,
         orderName: String,
-        random: java.util.Random = java.security.SecureRandom(),
+        ids: SortableIds = SortableIds.system,
         /** 플랜 변경은 구독 금액이 아니라 변경 때 결제할 금액 · 새 플랜 코드 · 요청 키로 만든 중복 방지 키를 쓴다. */
         amount: PaymentAmount = subscription.amount,
         itemRef: String = subscription.planCode,
@@ -63,7 +64,7 @@ class SubscriptionLifecycle(
     ): PaymentOrder {
         val now = writer.now()
         return PaymentOrder(
-            id = PaymentOrderIds.newOrderId(random),
+            id = ids.newId(PaymentOrderIds.ORDER_PREFIX),
             accountId = subscription.accountId,
             kind = kind,
             status = PaymentOrderStatus.CONFIRMING,

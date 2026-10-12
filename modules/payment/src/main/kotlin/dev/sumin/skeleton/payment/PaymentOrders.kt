@@ -1,8 +1,7 @@
 package dev.sumin.skeleton.payment
 
 import dev.sumin.skeleton.common.FieldValidationException
-import java.security.SecureRandom
-import java.util.Random
+import dev.sumin.skeleton.common.id.SortableIds
 import org.slf4j.LoggerFactory
 
 data class CreateOrderCommand(
@@ -41,7 +40,7 @@ class PaymentOrders(
     private val fulfillment: PaymentFulfillment,
     private val writer: PaymentLedgerWriter,
     private val properties: PaymentProperties,
-    private val random: Random = SecureRandom(),
+    private val ids: SortableIds = SortableIds.system,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -58,7 +57,7 @@ class PaymentOrders(
 
         val now = writer.now()
         val order = PaymentOrder(
-            id = PaymentOrderIds.newOrderId(random),
+            id = ids.newId(PaymentOrderIds.ORDER_PREFIX),
             accountId = command.accountId,
             kind = PaymentOrderKind.ONE_TIME,
             status = PaymentOrderStatus.PENDING,

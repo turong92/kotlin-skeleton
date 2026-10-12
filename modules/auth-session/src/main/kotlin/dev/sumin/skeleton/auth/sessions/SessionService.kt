@@ -3,6 +3,7 @@ package dev.sumin.skeleton.auth.sessions
 import dev.sumin.skeleton.auth.session.OpenedSession
 import dev.sumin.skeleton.auth.session.SessionEvent
 import dev.sumin.skeleton.auth.session.SessionEventType
+import dev.sumin.skeleton.common.id.SortableIds
 import dev.sumin.skeleton.common.time.TimeProvider
 import java.security.MessageDigest
 import java.security.SecureRandom
@@ -36,7 +37,7 @@ class SessionService(
     fun open(accountId: String, client: SessionClient): OpenedSession {
         val now = time.now()
         evictOverflow(accountId, now)
-        val id = "ses_" + HexFormat.of().formatHex(ByteArray(16).also(random::nextBytes))
+        val id = SortableIds.system.newId("ses_")
         val token = newToken()
         store.create(
             SessionRecord(

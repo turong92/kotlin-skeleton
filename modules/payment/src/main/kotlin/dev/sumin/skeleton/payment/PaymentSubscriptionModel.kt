@@ -91,6 +91,8 @@ data class PaymentSubscription(
     val updatedAt: Instant,
     /** 구매자 나라(ISO-3166 두 글자, 대문자) — 해지·환불 정책을 고르는 열쇠. 없으면 기본 정책. */
     val country: String? = null,
+    /** 같은 요청의 재전송이 같은 구독이게 하는 키(`sha256(계정 id + "\n" + Idempotency-Key)`) — 유니크. id 는 시간순이라 요청에서 정해지지 않는다. 옛 줄은 null 일 수 있다. */
+    val dedupeKey: String? = null,
 ) {
     override fun toString(): String =
         "PaymentSubscription(id=$id, status=$status, plan=$planCode, amount=${amount.amount} ${amount.normalizedCurrency}, seq=$periodSeq, attempt=$attempt)"

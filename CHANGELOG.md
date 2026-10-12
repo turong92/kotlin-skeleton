@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 행 id 를 시간순으로 (2026-10-12) — 전체 적용
+
+- **공통 도우미 `SortableIds`**(`modules/platform` `common/id`): `접두사 + ULID`(26자, 소문자 Crockford base32 — 앞 48비트 = 만든 시각 ms, 뒤 80비트 = `SecureRandom`). 같은 ms 안에서도 늘어나고(난수부 +1) 시계가 뒤로 가도 작아지지 않는다. 문자열 정렬 = 만든 순서. `newUuid()` 는 같은 규칙의 UUIDv7(열 타입이 `uuid` 인 표용). `Clock` · `RandomGenerator` 를 받는다(시험용), 기본은 `SortableIds.system`.
+- **모두 이 도우미로**: `payment_orders` `ord_` · `payment_refunds` `rfd_` · `payment_subscriptions` `sub_` · `accounts` `acc_` · `account_identities` `idn_` · `auth_sessions` `ses_` · `author_profiles` `prf_` · 알림 `NotificationEvent.id` · `KafkaEvent.id`(둘 다 `evt_`) · 샘플 `notes.id`(앱이 UUIDv7 을 만든다, 열은 `uuid` 그대로). 비밀 값(토큰 · 챌린지 핸들 · 해시)과 `cus_`(결제사에 묶이는 고객 키)는 그대로다.
+- **구독의 「같은 요청 = 같은 줄」은 id 가 아니라 `dedupe_key` 유니크 열이 맡는다**(주문과 같은 방식). 새 열 `payment_subscriptions.dedupe_key`(`V20261012153000`, 두 방언) · `PaymentLedgerStore.findSubscriptionByDedupeKey`. `PaymentSubscription` 에 마지막 선택 칸 `dedupeKey`.
+- **컴파일**: `PaymentOrderIds.newOrderId` · `subscriptionId` 가 없어졌다(`ORDER_PREFIX` · `SUBSCRIPTION_PREFIX` 상수와 `dedupeKey` 만 남는다). `PaymentOrders` · `PaymentRefunds` · `SubscriptionPlanChanges` 등의 `random: Random` 인자는 `ids: SortableIds`, `SubscriptionLifecycle.chargeOrder` 의 `random` 도 `ids`. `sample` 의 `Note.id` 는 `UUID`(null 아님) + `fresh`.
+- **주의 — 공개 id 가 만든 시각을 드러낸다**: 특히 `prf_`(작성자 프로필)는 한 계정이 짧은 간격으로 만든 프로필들의 id 앞부분이 비슷해 「같은 사람」 추측의 단서가 된다. 80비트 난수라 id 자체를 추측할 수는 없다.
+- **기존 데이터**: `scripts/convert-ids-to-sortable.sh`(PostgreSQL, 한 번 · 백업 포함) — 사용법은 스크립트 머리말.
+
 ### 새 기능 (꺼진 채 시작) — 구독 중도 해지 · 환불 (2026-10-12)
 
 - **나라마다 갈아 끼우는 해지·환불 정책**(`SubscriptionCancelPolicy`): 구독 하나(나라 · 이번 기간의 결제 내역)를 받아 중도 해지를 여는지, 지금 해지하면 얼마를 돌려주는지(내역 포함)를 답한다. 내장 둘 - `period-end-only`(**모듈 기본**: 중도 해지 닫힘, 환불 0) · `korea`(낸 돈 - 쓴 몫 - 위약금, 7일 철회 전액). 나라 → 정책은 `skeleton.payment.subscription.cancel.policies`(`KR: korea`), 지도에 없는 나라는 기본. 앱이 `SubscriptionCancelPolicy` 빈을 더해 정책을 늘리거나 같은 이름으로 바꿀 수 있다. `SubscriptionUsageCheck`(앱 계약, 기본 = 안 썼다)가 7일 철회의 「썼는가」를 답한다.

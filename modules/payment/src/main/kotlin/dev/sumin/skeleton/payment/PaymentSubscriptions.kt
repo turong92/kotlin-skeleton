@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.payment
 
+import dev.sumin.skeleton.common.id.SortableIds
 import dev.sumin.skeleton.crypto.TextEncryptor
 import java.security.SecureRandom
 import java.util.Random
@@ -24,6 +25,7 @@ class PaymentSubscriptions(
     private val writer: PaymentLedgerWriter,
     private val properties: PaymentProperties,
     private val random: Random = SecureRandom(),
+    private val ids: SortableIds = SortableIds.system,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -36,8 +38,8 @@ class PaymentSubscriptions(
 
     /** `PENDING` 줄을 만들고 카드 등록 창 값을 돌려준다. 같은 키로 다시 부르면 같은 줄이다. [country] 가 비면 설정의 기본 나라(그것도 없으면 나라 없음). */
     fun start(accountId: String, planCode: String, key: IdempotencyKey, country: String? = null): StartedSubscription {
-        val id = PaymentOrderIds.subscriptionId(accountId, key)
-        store.findSubscription(id)?.let { return replay(it, planCode) }
+        val dedupeKey = PaymentOrderIds.dedupeKey(accountId, key)
+        store.findSubscriptionByDedupeKey(dedupeKey)?.let { return replay(it, planCode) }
 
         val plan = plans.find(planCode)?.takeIf { it.amount.amount > 0 } ?: throw PaymentItemNotPurchasableException()
         SubscriptionPeriod.parse(plan.period)
@@ -48,7 +50,7 @@ class PaymentSubscriptions(
 
         val now = writer.now()
         val subscription = PaymentSubscription(
-            id = id,
+            id = ids.newId(PaymentOrderIds.SUBSCRIPTION_PREFIX),
             accountId = accountId,
             provider = gateway.providerId.trim().lowercase(),
             providerMode = gateway.mode,
@@ -75,10 +77,11 @@ class PaymentSubscriptions(
             createdAt = now,
             updatedAt = now,
             country = country?.uppercase() ?: properties.subscription.cancel.defaultCountry,
+            dedupeKey = dedupeKey,
         )
         if (!store.inTransaction { it.insertSubscriptionIfAbsent(subscription) }) {
             // 동시에 같은 키로 들어온 다른 요청이 먼저 넣었다 — 그 줄이 곧 답이다
-            return replay(checkNotNull(store.findSubscription(id)) { "the subscription for this idempotency key disappeared" }, planCode)
+            return replay(checkNotNull(store.findSubscriptionByDedupeKey(dedupeKey)) { "the subscription for this idempotency key disappeared" }, planCode)
         }
         return StartedSubscription(subscription, setup, replayed = false)
     }
@@ -158,7 +161,7 @@ class PaymentSubscriptions(
             if (locked.status != SubscriptionStatus.PENDING || locked.chargeOrderId != null) return@inTransaction Claim(locked, null)
 
             val planName = plans.find(locked.planCode)?.name ?: locked.planCode
-            val order = lifecycle.chargeOrder(locked, PaymentOrderKind.SUBSCRIPTION_INITIAL, planName, random)
+            val order = lifecycle.chargeOrder(locked, PaymentOrderKind.SUBSCRIPTION_INITIAL, planName, ids)
             check(tx.insertOrderIfAbsent(order)) { "the first order of a subscription already exists" }
             lifecycle.chargeStarted(tx, order, PaymentActor.USER, accountId)
             lifecycle.scheduleReconcile(order)

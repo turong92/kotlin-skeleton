@@ -152,7 +152,7 @@ APP=sample scripts/dev.sh    # 백엔드(+프론트 WEB_DIR)만 같은 방식으
 경로는 `apps/sample/src/main/kotlin/dev/sumin/skeleton/app/sample/notes/` (아래 `…/`) 기준이다.
 
 1. **마이그레이션** — `./gradlew newMigration -Pname=create_notes -Pmodule=apps/sample` → `apps/sample/src/main/resources/db/migration/postgresql/V…__create_notes.sql`. UTC 타임스탬프 버전, `timestamptz`, `deleted_at` 은 audit 계약의 열.
-2. **엔티티** — `…/Note.kt`: Spring Data JDBC `@Table`, `persistence-jdbc` 의 `JdbcAuditable` + `AuditTimestamps`(created/updated 를 콜백이 채운다). id 는 DB 가 정한다.
+2. **엔티티** — `…/Note.kt`: Spring Data JDBC `@Table`, `persistence-jdbc` 의 `JdbcAuditable` + `AuditTimestamps`(created/updated 를 콜백이 채운다). id 는 앱이 만든 시간순 UUIDv7(`SortableIds.newUuid()`).
 3. **저장소** — `…/NoteRepository.kt`: `CrudRepository` + 한 쿼리로 되는 목록 검색(`:p IS NULL OR …`). 소유자 조건(`owner_id`)을 모든 조회에 건다 — 남의 노트는 "없는 것"과 같다.
 4. **서비스** — `…/NoteService.kt`: 모든 규칙(소유자 확인 · 알림 · 잡 · 첨부 정리). 쓰기는 한 트랜잭션이라 알림 저장과 잡 등록이 노트 저장과 함께 커밋/롤백된다.
 5. **DTO · 검증** — `…/NoteDtos.kt`(Bean Validation), `…/OwnAttachmentKey.kt`(구조 규칙을 커스텀 제약으로: 어기면 `errors[attachmentKey]`), `…/NoteErrors.kt`(`NOTES.NOT_FOUND`).

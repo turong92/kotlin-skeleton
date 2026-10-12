@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.app.sample.notes
 
 import dev.sumin.skeleton.common.PageQuery
+import dev.sumin.skeleton.common.id.SortableIds
 import dev.sumin.skeleton.jobqueue.jdbc.JobQueue
 import dev.sumin.skeleton.storage.ObjectKey
 import dev.sumin.skeleton.storage.ObjectStorage
@@ -23,6 +24,7 @@ data class NotePage(val notes: List<Note>, val totalElements: Long)
 @Service
 class NoteService(
     private val notes: NoteRepository,
+    private val aggregates: org.springframework.data.jdbc.core.JdbcAggregateOperations,
     private val notifier: NoteNotifier,
     private val jobs: JobQueue,
     private val storage: ObjectProvider<ObjectStorage>,
@@ -33,8 +35,8 @@ class NoteService(
 
     @Transactional
     fun create(owner: String, request: CreateNoteRequest): Note {
-        val saved = notes.save(
-            Note(ownerId = owner, title = request.title.trim(), body = request.body, status = request.status, pinned = request.pinned),
+        val saved = aggregates.insert(
+            Note(id = SortableIds.system.newUuid(), fresh = true, ownerId = owner, title = request.title.trim(), body = request.body, status = request.status, pinned = request.pinned),
         )
         notifier.created(saved)
         return saved

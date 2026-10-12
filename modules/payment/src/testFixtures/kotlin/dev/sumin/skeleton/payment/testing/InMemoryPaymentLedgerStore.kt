@@ -151,6 +151,9 @@ class InMemoryPaymentLedgerStore : PaymentLedgerStore {
 
     override fun findSubscription(id: String): PaymentSubscription? = synchronized(commitMutex) { committedSubscriptions[id] }
 
+    override fun findSubscriptionByDedupeKey(dedupeKey: String): PaymentSubscription? =
+        synchronized(commitMutex) { committedSubscriptions.values.firstOrNull { it.dedupeKey == dedupeKey } }
+
     override fun findLiveSubscription(accountId: String): PaymentSubscription? =
         synchronized(commitMutex) { committedSubscriptions.values.firstOrNull { it.activeKey == accountId } }
 
@@ -366,6 +369,10 @@ class InMemoryPaymentLedgerStore : PaymentLedgerStore {
 
         override fun insertSubscriptionIfAbsent(subscription: PaymentSubscription): Boolean {
             check(ownedSubscriptionId == null) { "one subscription per transaction: already holds $ownedSubscriptionId" }
+            subscription.dedupeKey?.let { key ->
+                acquire(keyLocks.computeIfAbsent("subscription-dedupe|$key") { ReentrantLock() })
+                if (pendingSubscriptions.values.any { it.dedupeKey == key } || findSubscriptionByDedupeKey(key) != null) return false
+            }
             acquire(rowLocks.computeIfAbsent("subscription|${subscription.id}") { ReentrantLock() })
             if (subscriptionView(subscription.id) != null) return false
             checkActiveKey(subscription)

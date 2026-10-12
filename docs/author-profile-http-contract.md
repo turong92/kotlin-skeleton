@@ -10,7 +10,7 @@ The point of the feature: **one account can write under several names (profiles)
 
 - Base path `/api/v1/author-profiles` (`skeleton.author-profile.http.base-path`). Present only when the app has the `author-profile` module; removable with `skeleton.author-profile.http.enabled=false`. **Every endpoint needs a signed-in user** (`Authorization: Bearer …`); no public path exists. The caller is the token's account.
 - Envelope and errors are the platform ones: `{ value | values, meta }`, errors `{ code, title, status, detail?, traceId, spanId, timestamp, errors?, data? }`. Branch on `code`, never on `detail`.
-- A **profile id** (`prf_` + 32 lowercase hex, 128 random bits) is an **opaque string**. It is not derived from the account id, carries no time or order, and is the only author identifier a reader ever sees. Never parse it, never sort by it.
+- A **profile id** (`prf_` + a 26-character ULID: the creation time in milliseconds + 80 random bits) is an **opaque string**. It is not derived from the account id and is the only author identifier a reader ever sees. It sorts by creation time, but never parse it. Note that it shows *when* the profile was made.
 - A **public author id** is whatever `authorId` holds in board responses: a profile id (`prf_…`), or — only for a row not adopted yet — `pending:p123` (a post) / `pending:c45` (a comment), or — only in an app **without** this module — the account id. Treat it as an opaque grouping key ("same author").
 - Instants are ISO-8601 UTC (`...Z`).
 - Errors that look the same on purpose (the frontend must not try to tell them apart): see section 3, "identical answers".
@@ -37,8 +37,8 @@ All responses are `200` unless stated. All paths below are relative to the base 
 The caller's living profiles, oldest first. Creates the first profile if there is none and adopts old rows (section 1).
 ```json
 { "values": [
-  { "id": "prf_8c1e5d0b3a7f4e29b6d4a1c20f93e7ab", "name": "Minsu", "tag": "0417", "createdAt": "2026-10-08T01:02:03.456789Z" },
-  { "id": "prf_41f0c8a2d9e64b3f8a57c0de12b9f6a3", "name": "mins", "tag": "5231", "createdAt": "2026-10-08T01:10:00.000000Z" }
+  { "id": "prf_01k7vq3m8e4b2x9f5ws6ta0hcz", "name": "Minsu", "tag": "0417", "createdAt": "2026-10-08T01:02:03.456789Z" },
+  { "id": "prf_01k7vq9rn2d7y4c0pj8gx5e1ba", "name": "mins", "tag": "5231", "createdAt": "2026-10-08T01:10:00.000000Z" }
 ] }
 ```
 - These **four keys are all there is** — no account id, no "is first", no status, no adoption time. `createdAt` is for the owner's own list only.
@@ -103,7 +103,7 @@ In post summary, post detail and comment responses `authorId` is `prf_…`. The 
 ### 5.2 Writing: `authorId` is required
 `POST /{code}/posts` and `POST /{code}/posts/{id}/comments` take `"authorId": "prf_…"` in the body.
 ```json
-{ "title": "Hello", "body": "…", "attachments": ["uploads/o/3f9c….a1b2…/file.png"], "authorId": "prf_8c1e5d0b3a7f4e29b6d4a1c20f93e7ab" }
+{ "title": "Hello", "body": "…", "attachments": ["uploads/o/3f9c….a1b2…/file.png"], "authorId": "prf_01k7vq3m8e4b2x9f5ws6ta0hcz" }
 ```
 | Case | Answer |
 |---|---|

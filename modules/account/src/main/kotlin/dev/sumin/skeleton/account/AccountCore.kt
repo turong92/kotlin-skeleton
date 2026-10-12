@@ -16,10 +16,9 @@ import dev.sumin.skeleton.account.password.PasswordPolicy
 import dev.sumin.skeleton.account.token.OneTimeTokens
 import dev.sumin.skeleton.auth.session.SessionRevoker
 import dev.sumin.skeleton.common.FieldValidationException
+import dev.sumin.skeleton.common.id.SortableIds
 import dev.sumin.skeleton.common.time.TimeProvider
-import java.security.SecureRandom
 import java.text.Normalizer
-import java.util.HexFormat
 import java.util.Locale
 
 /** 서비스들이 함께 쓰는 협력자 묶음 — 자동설정이 한 번 만들어 모든 서비스에 준다 */
@@ -275,15 +274,11 @@ class AccountCore(
     private fun refusedForOtherReason(base: Account, identities: List<Identity>): Boolean =
         accounts.findById(base.id) != null || base.email?.let { accounts.findByEmail(it) } != null || identities.any { accounts.findIdentity(it.method, it.subject) != null }
 
-    fun newAccountId(): String = "acc_" + randomHex()
+    fun newAccountId(): String = SortableIds.system.newId("acc_")
 
-    fun newIdentityId(): String = "idn_" + randomHex()
-
-    private fun randomHex() = HexFormat.of().formatHex(ByteArray(16).also(random::nextBytes))
+    fun newIdentityId(): String = SortableIds.system.newId("idn_")
 
     private companion object {
-        val random = SecureRandom()
-
         /** 무작위 꼬리표를 몇 번 시도하고 나서 빈 꼬리표를 직접 찾나 */
         const val TAG_TRIES = 8
 

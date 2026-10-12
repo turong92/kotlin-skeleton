@@ -1,12 +1,12 @@
 package dev.sumin.skeleton.notification
 
+import dev.sumin.skeleton.common.id.SortableIds
 import java.time.Instant
-import java.util.UUID
 
 data class NotificationEvent(
     val topic: String,
     val type: String,
-    val id: String = UUID.randomUUID().toString(),
+    val id: String = SortableIds.system.newId("evt_"),
     val recipientIds: Set<String> = emptySet(),
     val severity: NotificationSeverity = NotificationSeverity.INFO,
     val title: String? = null,

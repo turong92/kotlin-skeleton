@@ -21,7 +21,7 @@ class OrderCreateTest {
         val created = kit.create(accountId = "acc_1", itemRef = "cheer-3000", key = "key-1")
         val order = created.order
 
-        assertTrue(Regex("ord_[0-9a-f]{32}").matches(order.id), order.id)
+        assertTrue(Regex("ord_[0-9a-hjkmnp-tv-z]{26}").matches(order.id), order.id)
         assertEquals(PaymentOrderStatus.PENDING, order.status)
         assertEquals(PaymentAmount(3000, "KRW"), order.amount)
         assertEquals("Cheer 3000", order.orderName)

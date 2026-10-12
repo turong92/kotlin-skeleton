@@ -23,7 +23,7 @@ class AuthorProfileServiceTest {
     fun `create stores an active profile with a prf id, the cleaned name and a tag`() {
         val h = Harness()
         val p = h.service.create("acc_1", "  Moon   Light ")
-        assertTrue(Regex("prf_[0-9a-f]{32}").matches(p.id), p.id)
+        assertTrue(Regex("prf_[0-9a-hjkmnp-tv-z]{26}").matches(p.id), p.id)
         assertEquals("acc_1", p.accountId)
         assertEquals("Moon Light", p.name)
         assertEquals(h.names.key("Moon Light"), p.nameKey)
@@ -36,15 +36,13 @@ class AuthorProfileServiceTest {
     }
 
     @Test
-    fun `profile ids are random - prf_ and 32 hex digits, no shared prefix, nothing derived from the account or each other`() {
+    fun `profile ids are time-ordered - prf_ and a 26 character ULID, handed out in increasing order, nothing derived from the account`() {
         val h = Harness(properties = AuthorProfileProperties(maxPerAccount = 40, createLimit = 0))
         val ids = (1..30).map { h.service.create("acc_1", "N$it").id } + h.service.create("acc_2", "Other").id
-        assertTrue(ids.all { Regex("prf_[0-9a-f]{32}").matches(it) }, ids.toString())
+        assertTrue(ids.all { Regex("prf_[0-9a-hjkmnp-tv-z]{26}").matches(it) }, ids.toString())
         assertEquals(ids.size, ids.toSet().size)
         assertTrue(ids.none { it.contains("acc_") }, "nothing of the account id")
-        // 앞자리(8 hex)가 서로 겹치지 않는다 — 시각 · 순번 같은 단조 증가나 고정 접두사가 없다 (128 비트 무작위면 31 개의 앞 32 비트가 겹칠 확률은 무시할 만하다)
-        assertEquals(ids.size, ids.map { it.substring(4, 12) }.toSet().size, "no shared leading digits: $ids")
-        assertNotEquals(ids.sorted(), ids, "ids are not handed out in increasing order")
+        assertEquals(ids.sorted(), ids, "ids sort in the order they were made")
     }
 
     @Test

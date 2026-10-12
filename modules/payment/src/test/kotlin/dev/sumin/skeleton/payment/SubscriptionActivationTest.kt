@@ -23,6 +23,17 @@ class SubscriptionActivationTest {
     private fun started(account: String = "acc_1", key: String = "k1", plan: String = "basic") = kit.subscriptions.start(account, plan, IdempotencyKey(key))
 
     @Test
+    fun `the same request key is the same subscription, another key or another account is another`() {
+        val first = started(key = "k1")
+        val again = started(key = "k1")
+        assertEquals(first.subscription.id, again.subscription.id)
+        assertTrue(again.replayed)
+        assertNotNull(first.subscription.dedupeKey)
+        assertNotEquals(first.subscription.id, started(account = "acc_2", key = "k1").subscription.id)
+        assertTrue(started(account = "acc_3", key = "k1").subscription.id > first.subscription.id, "ids rise with creation order")
+    }
+
+    @Test
     fun `a first payment turns the subscription active, charges once and keeps the billing key encrypted`() {
         val sub = started().subscription
 

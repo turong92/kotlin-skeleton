@@ -1,0 +1,5 @@
+-- modules:payment-jdbc — 구독에 요청 키 열 (mysql)
+-- 동결된 V20261009134223__payment_subscriptions.sql 을 고치지 않고 열 하나를 더한다. 구독 id 가 시간순(sub_ + ULID)이 되면서 「같은 요청 = 같은 줄」을 id 가 아니라 이 열의 유니크가 맡는다
+-- (주문의 dedupe_key 와 같은 방식: sha256(계정 id + "\n" + Idempotency-Key), NULL 은 서로 겹치지 않는다 — 옛 줄은 NULL 일 수 있다). 이진 정렬(utf8mb4_bin)은 장부의 다른 키 열과 같다.
+alter table payment_subscriptions add column dedupe_key varchar(100) /* [jooq ignore start] */ character set utf8mb4 collate utf8mb4_bin /* [jooq ignore stop] */;
+alter table payment_subscriptions add constraint uq_payment_subscriptions_dedupe unique (dedupe_key);

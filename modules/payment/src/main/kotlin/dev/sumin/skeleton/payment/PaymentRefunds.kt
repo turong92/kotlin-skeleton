@@ -1,8 +1,7 @@
 package dev.sumin.skeleton.payment
 
 import dev.sumin.skeleton.common.FieldValidationException
-import java.security.SecureRandom
-import java.util.Random
+import dev.sumin.skeleton.common.id.SortableIds
 import org.slf4j.LoggerFactory
 
 /**
@@ -21,10 +20,10 @@ class PaymentRefunds(
     private val applier: PaymentRefundApplier,
     private val writer: PaymentLedgerWriter,
     private val properties: PaymentProperties,
-    random: Random = SecureRandom(),
+    ids: SortableIds = SortableIds.system,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
-    private val lines = RefundLines(writer, tasks, random)
+    private val lines = RefundLines(writer, tasks, ids)
     private val settlement = RefundSettlement(convergence, writer)
     private val enqueue = tasks
     private val supply = SupplyWork(tasks)

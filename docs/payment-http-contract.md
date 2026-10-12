@@ -471,7 +471,7 @@
 
 | 칸 | 뜻 |
 |---|---|
-| `id` | `sub_…` |
+| `id` | `sub_…` (시간순 ID — `ord_` · `rfd_` 와 같은 방식) |
 | `status` | `PENDING`(카드 등록 · 첫 결제 전 또는 확인 중) · `ACTIVE` · `PAST_DUE`(갱신 거절, 재시도 중 — 이용 불가) · `CANCELING`(해지 예약, 기간 끝까지 이용) · `ENDED` |
 | `planCode` · `planName` | 만들 때 박힌 플랜 코드, 앱 플랜 목록의 이름(사라졌으면 코드) |
 | `amount` `{amount, currency}` · `period` | 박힌 금액 · 주기(ISO-8601: `P1M`, `PT3M`) |

@@ -1,13 +1,13 @@
 package dev.sumin.skeleton.event.kafka
 
+import dev.sumin.skeleton.common.id.SortableIds
 import java.time.Instant
-import java.util.UUID
 import org.springframework.context.ApplicationEvent
 
 class KafkaEvent(
     val topic: String,
     val type: String,
-    val id: String = UUID.randomUUID().toString(),
+    val id: String = SortableIds.system.newId("evt_"),
     val payload: Any? = null,
     val partitionKey: String? = null,
     val headers: Map<String, String> = emptyMap(),

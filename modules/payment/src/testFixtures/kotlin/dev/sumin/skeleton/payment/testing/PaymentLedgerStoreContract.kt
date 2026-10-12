@@ -888,19 +888,28 @@ abstract class PaymentLedgerStoreContract {
     private val sub2 = PaymentTestOrders.subscription(id = "sub_" + "2".repeat(32))
 
     @Test
+    fun `a second subscription with the same request key is refused even under another id`() {
+        val store = newStore()
+        assertTrue(store.inTransaction { it.insertSubscriptionIfAbsent(sub1.copy(dedupeKey = "k".repeat(64))) })
+        assertFalse(store.inTransaction { it.insertSubscriptionIfAbsent(sub2.copy(dedupeKey = "k".repeat(64))) })
+        assertNull(store.findSubscription(sub2.id))
+    }
+
+    @Test
     fun `a subscription round-trips every column and a repeated insert of the same id is refused`() {
         val store = newStore()
         val full = sub1.copy(
             status = SubscriptionStatus.ACTIVE, activeKey = "acc_1", anchorAt = PaymentTestOrders.T0, periodSeq = 3,
             currentPeriodStart = PaymentTestOrders.T0, currentPeriodEnd = PaymentTestOrders.T0.plusSeconds(3600), chargeOrderId = "ord_" + "9".repeat(32), attempt = 2,
             billingToken = "enc:secret", cardIssuer = "HYUNDAI", cardLast4 = "123*", pendingPlanCode = "plus", pendingAmount = 6900,
-            endReason = SubscriptionEndReason.PAYMENT_FAILED, endedAt = PaymentTestOrders.T0.plusSeconds(5), accountErasedAt = PaymentTestOrders.T0.plusSeconds(6), country = "KR",
+            endReason = SubscriptionEndReason.PAYMENT_FAILED, endedAt = PaymentTestOrders.T0.plusSeconds(5), accountErasedAt = PaymentTestOrders.T0.plusSeconds(6), country = "KR", dedupeKey = "d".repeat(64),
         )
 
         assertTrue(store.inTransaction { it.insertSubscriptionIfAbsent(full) })
         assertFalse(store.inTransaction { it.insertSubscriptionIfAbsent(full.copy(customerKey = "cus_" + "f".repeat(32))) }, "the same request id is the same subscription")
 
         assertEquals(full, store.findSubscription(sub1.id))
+        assertEquals(full, store.findSubscriptionByDedupeKey("d".repeat(64)))
         assertEquals(full, store.findLiveSubscription("acc_1"))
         assertNull(store.findSubscription("sub_missing"))
     }

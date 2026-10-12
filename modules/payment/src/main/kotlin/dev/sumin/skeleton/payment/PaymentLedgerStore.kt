@@ -93,6 +93,9 @@ interface PaymentLedgerStore {
 
     fun findSubscription(id: String): PaymentSubscription?
 
+    /** 요청 키([PaymentSubscription.dedupeKey])로 구독을 찾는다 — 같은 요청의 재전송이 앞선 줄을 만난다. */
+    fun findSubscriptionByDedupeKey(dedupeKey: String): PaymentSubscription?
+
     /** 계정의 **살아 있는** 구독(`active_key` 의 주인) — 없으면 null. */
     fun findLiveSubscription(accountId: String): PaymentSubscription?
 
@@ -205,7 +208,7 @@ interface PaymentLedgerTx {
     /** 구독 줄을 `select … for update` 로 잡고 지금의 값을 돌려준다(없으면 null). 잠금은 이 트랜잭션이 끝날 때까지 간다. */
     fun lockSubscription(id: String): PaymentSubscription?
 
-    /** 새 구독 줄을 넣는다. 같은 id 가 이미 있으면 넣지 않고 false(같은 요청의 재전송). 넣은 줄은 이 트랜잭션이 잠근 것으로 본다. */
+    /** 새 구독 줄을 넣는다. 같은 id 나 같은 [PaymentSubscription.dedupeKey] 가 이미 있으면 넣지 않고 false(같은 요청의 재전송). 넣은 줄은 이 트랜잭션이 잠근 것으로 본다. */
     fun insertSubscriptionIfAbsent(subscription: PaymentSubscription): Boolean
 
     /**

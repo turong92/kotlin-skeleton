@@ -1,10 +1,9 @@
 package dev.sumin.skeleton.payment
 
+import dev.sumin.skeleton.common.id.SortableIds
 import dev.sumin.skeleton.crypto.TextEncryptor
 import dev.sumin.skeleton.payment.PaymentProperties.Subscription.PlanChange.Charge
-import java.security.SecureRandom
 import java.time.Instant
-import java.util.Random
 
 /** 변경 미리보기 — [charge] 가 지금 결제될 금액이고, [plan] 이 바뀔 플랜. [restartsPeriod] 면 지금부터 새 주기가 시작된다. */
 data class PlanChangeQuote(val plan: SubscriptionPlan, val charge: PaymentAmount, val restartsPeriod: Boolean)
@@ -44,7 +43,7 @@ class SubscriptionPlanChanges(
     private val charges: SubscriptionCharges,
     private val writer: PaymentLedgerWriter,
     private val properties: PaymentProperties,
-    private val random: Random = SecureRandom(),
+    private val ids: SortableIds = SortableIds.system,
 ) {
     fun preview(accountId: String, subscriptionId: String, planCode: String): PlanChangeQuote =
         quote(owned(store.findSubscription(subscriptionId), accountId) ?: throw PaymentSubscriptionNotFoundException(), planCode)
@@ -68,7 +67,7 @@ class SubscriptionPlanChanges(
                 // 차액이 최소 금액 미만이다 — 과금 없이 바꾼다
                 return@inTransaction Claim(lifecycle.save(tx, locked, locked.status) { it.copy(planCode = quote.plan.code, amount = quote.plan.amount) }, null)
             }
-            val order = lifecycle.chargeOrder(locked, PaymentOrderKind.SUBSCRIPTION_CHANGE, quote.plan.name, random, quote.charge, quote.plan.code, dedupeKey)
+            val order = lifecycle.chargeOrder(locked, PaymentOrderKind.SUBSCRIPTION_CHANGE, quote.plan.name, ids, quote.charge, quote.plan.code, dedupeKey)
             if (!tx.insertOrderIfAbsent(order)) return@inTransaction Claim(locked, null) // 같은 키로 동시에 들어온 요청이 먼저 넣었다
             lifecycle.chargeStarted(tx, order, PaymentActor.USER, accountId)
             lifecycle.scheduleReconcile(order)
