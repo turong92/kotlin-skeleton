@@ -30,6 +30,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
         "skeleton.payment.subscription.enabled=true",
         "skeleton.payment.subscription.plan-change.enabled=true",
         "skeleton.payment.subscription.plan-change.charge=FULL_RESTART",
+        "skeleton.payment.subscription.cancel.policies.KR=korea",
         "skeleton.payment.http.order-rate-limit.account-capacity=100000",
         "skeleton.payment.http.order-rate-limit.ip-capacity=100000",
     ],
@@ -115,5 +116,53 @@ class PaymentSubscriptionHttpTest {
         change("""{"planCode":"plus","expectedCharge":100}""").andExpect(status().isConflict)
         change("""{"planCode":"plus","expectedCharge":6900}""").andExpect(status().isOk)
             .andExpect(jsonPath("$.value.planCode").value("plus")).andExpect(jsonPath("$.value.pendingPlanCode").value(null as Any?))
+    }
+
+    private fun startIn(account: String, country: String?): String {
+        val body = if (country == null) """{"planCode":"basic"}""" else """{"planCode":"basic","country":"$country"}"""
+        val response = mvc.perform(post("$base/subscriptions").asUser(account).header("Idempotency-Key", "k-${System.nanoTime()}").contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(status().isCreated).andReturn().response.contentAsString
+        return read(response)["value"]["subscription"]["id"].asString()
+    }
+
+    @Test
+    fun `the country is kept in upper case, anything but two letters is 400, and the subscription answers with it`() {
+        val owner = account()
+        mvc.perform(post("$base/subscriptions").asUser(owner).header("Idempotency-Key", "bad-1").contentType(MediaType.APPLICATION_JSON).content("""{"planCode":"basic","country":"Korea"}""")).andExpect(status().isBadRequest)
+        mvc.perform(post("$base/subscriptions").asUser(owner).header("Idempotency-Key", "bad-2").contentType(MediaType.APPLICATION_JSON).content("""{"planCode":"basic","country":7}""")).andExpect(status().isBadRequest)
+
+        val id = startIn(owner, "kr")
+
+        activate(owner, id).andExpect(status().isOk).andExpect(jsonPath("$.value.country").value("KR"))
+    }
+
+    @Test
+    fun `cancelling now previews the refund, ends the subscription and answers the same when pressed again`() {
+        val owner = account()
+        val id = startIn(owner, "KR")
+        activate(owner, id).andExpect(status().isOk)
+
+        mvc.perform(get("$base/subscriptions/$id/cancel-preview").asUser(owner)).andExpect(status().isOk)
+            .andExpect(jsonPath("$.value.open").value(true)).andExpect(jsonPath("$.value.withdrawal").value(true)).andExpect(jsonPath("$.value.refund.amount").value(3_900))
+        mvc.perform(get("$base/subscriptions/$id/cancel-preview").asUser(account())).andExpect(status().isNotFound)
+
+        repeat(2) {
+            mvc.perform(post("$base/subscriptions/$id/cancel-now").asUser(owner)).andExpect(status().isOk)
+                .andExpect(jsonPath("$.value.subscription.status").value("ENDED")).andExpect(jsonPath("$.value.subscription.endReason").value("USER_CANCELED_NOW"))
+                .andExpect(jsonPath("$.value.refund.amount").value(3_900)).andExpect(jsonPath("$.value.refunds[0].status").value("SUCCEEDED"))
+        }
+        mvc.perform(post("$base/subscriptions/$id/cancel-now").asUser(account())).andExpect(status().isNotFound)
+    }
+
+    @Test
+    fun `a country whose policy is the default shows the mid-term cancel as closed and refuses it with 409`() {
+        val owner = account()
+        val id = startIn(owner, null)
+        activate(owner, id).andExpect(status().isOk)
+
+        mvc.perform(get("$base/subscriptions/$id/cancel-preview").asUser(owner)).andExpect(status().isOk)
+            .andExpect(jsonPath("$.value.open").value(false)).andExpect(jsonPath("$.value.refund.amount").value(0))
+        mvc.perform(post("$base/subscriptions/$id/cancel-now").asUser(owner)).andExpect(status().isConflict)
+            .andExpect(jsonPath("$.code").value("PAYMENT.SUBSCRIPTION_CANCEL_NOT_ALLOWED"))
     }
 }

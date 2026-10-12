@@ -102,25 +102,41 @@ class PaymentRefunds(
         store.requireNoOpenTransaction("PaymentRefunds.refund")
         val reason = reasonOf(reasonCode, forOperator = true)
         requirePositive(amount)
-        val dedupe = PaymentOrderIds.dedupeKey(operatorId, key)
-        store.findRefundByDedupeKey(dedupe)?.let { return outcomeOf(replayed(it, orderId, reason, amount, PaymentRefundOrigin.OPERATOR), replayed = true) }
+        return send(operatorId, PaymentRefundOrigin.OPERATOR, reason, orderId, amount, PaymentOrderIds.dedupeKey(operatorId, key))
+    }
+
+    /**
+     * 구독 중도 해지의 환불 한 줄 — 본인이 누른 해지가 곧 결정이라 요청 없이 바로 보낸다(origin `USER`, 사유 [PaymentRefundReason.SUBSCRIPTION_CANCEL]).
+     * [seed] 가 같으면 같은 줄이다(같은 주문의 같은 해지를 다시 불러도 결제사는 한 번만 부른다). 나머지는 [refund] 와 같다.
+     */
+    fun refundForSubscriptionCancel(accountId: String, orderId: String, amount: Long, seed: String): RefundOutcome {
+        store.requireNoOpenTransaction("PaymentRefunds.refundForSubscriptionCancel")
+        requirePositive(amount)
+        val dedupe = PaymentOrderIds.dedupeKey(accountId, IdempotencyKey(seed))
+        // 앞서 보낸 줄이 있으면 그 줄이 답이다 - 그 사이 주문의 환불 가능액이 달라져 금액이 달라졌어도 충돌이 아니다
+        store.findRefundByDedupeKey(dedupe)?.let { return outcomeOf(it, replayed = true) }
+        return send(accountId, PaymentRefundOrigin.USER, PaymentRefundReason.SUBSCRIPTION_CANCEL, orderId, amount, dedupe)
+    }
+
+    private fun send(operatorId: String, origin: PaymentRefundOrigin, reason: PaymentRefundReason, orderId: String, amount: Long?, dedupe: String): RefundOutcome {
+        store.findRefundByDedupeKey(dedupe)?.let { return outcomeOf(replayed(it, orderId, reason, amount, origin), replayed = true) }
         val order0 = store.findOrder(orderId) ?: throw PaymentOrderNotFoundException()
         val gateways = precheck(order0, operatorId)
         val claimed = store.inTransaction { tx ->
             val order = tx.lockOrder(orderId) ?: throw PaymentOrderNotFoundException()
-            tx.findRefundByDedupeKey(dedupe)?.let { return@inTransaction Claimed(order, replayed(it, orderId, reason, amount, PaymentRefundOrigin.OPERATOR), true) }
+            tx.findRefundByDedupeKey(dedupe)?.let { return@inTransaction Claimed(order, replayed(it, orderId, reason, amount, origin), true) }
             val refunds = openable(order, tx.listRefunds(orderId))
             requireNoRefundMismatch(order)
             requireMode(gateways, order)
             val value = amountFor(order, refunds, amount, excluding = null)
             val now = writer.now()
-            val line = newLine(order, PaymentRefundStatus.PENDING, PaymentRefundOrigin.OPERATOR, value, reason, dedupe, operatorId, now)
+            val line = newLine(order, PaymentRefundStatus.PENDING, origin, value, reason, dedupe, operatorId, now)
                 .copy(decidedBy = operatorId, expectedRemaining = RefundLines.baseOf(order) - order.refundedAmount - value, sentAt = now)
             val stored = writer.createRefund(tx, line, PaymentEventType.REFUND_SENT, PaymentActor.OPERATOR, operatorId)
             if (stored == null) {
                 // 유니크가 무시했다: 같은 요청(dedupe_key)을 먼저, 그다음 열린 자리(open_key) 순서로 가른다
                 val winner = tx.findRefundByDedupeKey(dedupe)
-                if (winner != null) return@inTransaction Claimed(order, replayed(winner, orderId, reason, amount, PaymentRefundOrigin.OPERATOR), true)
+                if (winner != null) return@inTransaction Claimed(order, replayed(winner, orderId, reason, amount, origin), true)
                 throw PaymentRefundInProgressException()
             }
             enqueueSettle(stored)

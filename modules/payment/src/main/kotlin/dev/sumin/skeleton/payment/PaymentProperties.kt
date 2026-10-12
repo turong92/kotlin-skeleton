@@ -182,7 +182,38 @@ data class PaymentProperties(
         val renewal: Renewal = Renewal(),
         /** 플랜 변경(위로만) — 꺼져 있고, 켜는 앱이 과금 방식을 명시한다. */
         val planChange: PlanChange = PlanChange(),
+        /** 해지·환불 정책 — 기본은 기간 끝 해지만(중도 해지 닫힘). 나라마다 정책을 갈아 끼운다. */
+        val cancel: Cancel = Cancel(),
     ) {
+        data class Cancel(
+            /** 구독을 만들 때 나라가 오지 않으면 쓰는 나라(ISO-3166 두 글자). 비우면 나라 없이 만든다(기본 정책). */
+            val defaultCountry: String? = null,
+            /** 나라 → 정책 이름(`korea` 가 내장). 지도에 없는 나라는 기간 끝 해지만(`period-end-only`). 예: `KR: korea`. */
+            val policies: Map<String, String> = emptyMap(),
+            val korea: Korea = Korea(),
+        ) {
+            data class Korea(
+                /** 중도 해지 때 남은 금액에서 떼는 위약금 비율(%). 기본 0. */
+                val penaltyPercent: Int = 0,
+                /** 이번 기간 시작 후 이 일수 안이고 안 썼으면 전액 환불(청약 철회). */
+                val withdrawalDays: Long = 7,
+            ) {
+                init {
+                    require(penaltyPercent in 0..100) { "skeleton.payment.subscription.cancel.korea.penalty-percent must be between 0 and 100" }
+                    require(withdrawalDays >= 0) { "skeleton.payment.subscription.cancel.korea.withdrawal-days must not be negative" }
+                }
+            }
+
+            init {
+                require(defaultCountry == null || COUNTRY.matches(defaultCountry)) { "skeleton.payment.subscription.cancel.default-country must be an ISO-3166 alpha-2 code (two capital letters)" }
+                policies.keys.forEach { require(COUNTRY.matches(it)) { "skeleton.payment.subscription.cancel.policies keys must be ISO-3166 alpha-2 codes (two capital letters): $it" } }
+            }
+
+            companion object {
+                private val COUNTRY = Regex("[A-Z]{2}")
+            }
+        }
+
         data class PlanChange(
             val enabled: Boolean = false,
             /** 켰다면 필수 — 모듈은 과금 방식을 고르지 않는다. */

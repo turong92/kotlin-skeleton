@@ -130,6 +130,13 @@ skeleton:
         enabled: true
         charge: PRORATED_DIFFERENCE
         min-charge: 100
+      cancel:                                 # 해지·환불 정책 - 이 앱의 견본: KR 은 한국 소비자 정책(중도 해지 · 7일 철회 · 위약금 10%), 그 밖은 기간 끝 해지만. 화면의 환불 정책 페이지가 같은 내용이다
+        default-country: KR
+        policies:
+          KR: korea
+        korea:
+          penalty-percent: 10
+          withdrawal-days: 7
   crypto:
     primary-key-id: ${SKELETON_CRYPTO_PRIMARY_KEY_ID:main}
     keys:

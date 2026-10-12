@@ -25,6 +25,11 @@ import dev.sumin.skeleton.payment.SubscriptionPlan
 import dev.sumin.skeleton.payment.SubscriptionPlans
 import dev.sumin.skeleton.payment.SubscriptionPlanChanges
 import dev.sumin.skeleton.payment.SubscriptionRevokeTaskHandler
+import dev.sumin.skeleton.payment.KoreaConsumerCancelPolicy
+import dev.sumin.skeleton.payment.SubscriptionCancelPolicies
+import dev.sumin.skeleton.payment.SubscriptionCancelRefundTaskHandler
+import dev.sumin.skeleton.payment.SubscriptionCancellations
+import dev.sumin.skeleton.payment.SubscriptionUsageCheck
 import dev.sumin.skeleton.payment.PaymentWebhookInbox
 import dev.sumin.skeleton.payment.PaymentWebhookTaskHandler
 import dev.sumin.skeleton.payment.WebhookDelivery
@@ -127,6 +132,10 @@ class PaymentLedgerKit(
     val catalog: PaymentCatalog? = CheerCatalog(),
     val listener: RecordingOrderListener = RecordingOrderListener(),
     val review: RecordingReviewNotifier = RecordingReviewNotifier(),
+    /** 「썼는가」 앱 계약의 대역 - 기본은 안 쓴 것. */
+    val usage: SubscriptionUsageCheck = SubscriptionUsageCheck.NEVER_USED,
+    /** 시험 조립의 해지 정책 지도 - `KR` 은 한국 정책(위약금 10%), 그 밖은 기간 끝 해지만. */
+    val cancelPolicies: SubscriptionCancelPolicies = SubscriptionCancelPolicies(listOf(KoreaConsumerCancelPolicy(penaltyPercent = 10, withdrawalDays = 7)), mapOf("KR" to KoreaConsumerCancelPolicy.NAME)),
 ) {
     val time = MutableTime()
     val store = InMemoryPaymentLedgerStore()
@@ -152,12 +161,14 @@ class PaymentLedgerKit(
     val subscriptions = PaymentSubscriptions(store, router, plans, ReversibleTestEncryptor, lifecycle, charges, tasks, writer, properties)
     val planChanges = SubscriptionPlanChanges(store, router, plans, ReversibleTestEncryptor, lifecycle, charges, writer, properties)
     val revoke = SubscriptionRevokeTaskHandler(store, router, ReversibleTestEncryptor, writer)
+    val cancellations = SubscriptionCancellations(store, plans, cancelPolicies, usage, lifecycle, refunds, tasks, writer, properties)
+    val cancelRefund = SubscriptionCancelRefundTaskHandler(store, cancellations)
 
     /** 앱의 갱신 판단 대역 — [blocked] 에 든 계정은 갱신하지 않는다. */
     val blocked: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
     val renew = SubscriptionRenewTaskHandler(store, router, plans, ReversibleTestEncryptor, lifecycle, charges, SubscriptionRenewalGuard { it !in blocked }, writer, properties.subscription.renewal.retryInterval)
     val erasure = PaymentAccountErasure(store, writer, properties.erasure.accountId, lifecycle)
-    val runner = DefaultPaymentTaskRunner(listOf(expire, reconcile, fulfil, refundReconcile, refundApply, webhook, revoke, renew))
+    val runner = DefaultPaymentTaskRunner(listOf(expire, reconcile, fulfil, refundReconcile, refundApply, webhook, revoke, renew, cancelRefund))
 
     /** 지금 시각까지 시간이 된 작업을 한 번씩 돈다. */
     fun runTasks(only: Set<String>? = null): Int = tasks.runDue(runner, time.now(), only)

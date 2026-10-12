@@ -104,4 +104,47 @@ class PaymentSubscriptionAutoConfiguration {
     @ConditionalOnMissingBean
     fun subscriptionRevokeTaskHandler(store: PaymentLedgerStore, router: PaymentProviderRouter, encryptor: ObjectProvider<TextEncryptor>, writer: PaymentLedgerWriter): SubscriptionRevokeTaskHandler =
         SubscriptionRevokeTaskHandler(store, router, encryptor.getIfAvailable() ?: error("skeleton.payment.subscription.enabled=true needs a TextEncryptor (skeleton.crypto.keys)"), writer)
+
+    /** 앱이 [SubscriptionUsageCheck] 를 두지 않으면 「안 썼다」 - 7일 철회가 시간만으로 판단된다. */
+    @Bean
+    @ConditionalOnMissingBean
+    fun subscriptionUsageCheck(): SubscriptionUsageCheck = SubscriptionUsageCheck.NEVER_USED
+
+    /** 내장 `period-end-only` · `korea` 에 앱이 빈으로 더한 정책을 합친다(같은 이름이면 앱의 것이 이긴다). 나라 → 정책 지도는 `skeleton.payment.subscription.cancel.policies`. */
+    @Bean
+    @ConditionalOnMissingBean
+    fun subscriptionCancelPolicies(custom: ObjectProvider<SubscriptionCancelPolicy>, properties: PaymentProperties): SubscriptionCancelPolicies {
+        val cancel = properties.subscription.cancel
+        val builtIn = KoreaConsumerCancelPolicy(cancel.korea.penaltyPercent, cancel.korea.withdrawalDays)
+        return SubscriptionCancelPolicies(listOf<SubscriptionCancelPolicy>(builtIn) + custom.orderedStream().toList(), cancel.policies)
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun subscriptionCancellations(
+        store: PaymentLedgerStore,
+        plans: ObjectProvider<SubscriptionPlans>,
+        policies: SubscriptionCancelPolicies,
+        usage: SubscriptionUsageCheck,
+        lifecycle: SubscriptionLifecycle,
+        refunds: PaymentRefunds,
+        tasks: PaymentTasks,
+        writer: PaymentLedgerWriter,
+        properties: PaymentProperties,
+    ): SubscriptionCancellations = SubscriptionCancellations(
+        store,
+        plans.getIfAvailable() ?: error("skeleton.payment.subscription.enabled=true needs a SubscriptionPlans bean"),
+        policies,
+        usage,
+        lifecycle,
+        refunds,
+        tasks,
+        writer,
+        properties,
+    )
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun subscriptionCancelRefundTaskHandler(store: PaymentLedgerStore, cancellations: SubscriptionCancellations): SubscriptionCancelRefundTaskHandler =
+        SubscriptionCancelRefundTaskHandler(store, cancellations)
 }

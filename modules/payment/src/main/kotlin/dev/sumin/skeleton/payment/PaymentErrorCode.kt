@@ -139,6 +139,16 @@ enum class PaymentErrorCode(
         status = HttpStatus.CONFLICT,
         title = "Subscription cannot be canceled",
     ),
+    SUBSCRIPTION_CANCEL_NOT_ALLOWED(
+        code = "PAYMENT.SUBSCRIPTION_CANCEL_NOT_ALLOWED",
+        status = HttpStatus.CONFLICT,
+        title = "The subscription cannot be canceled now",
+    ),
+    SUBSCRIPTION_CHARGE_IN_PROGRESS(
+        code = "PAYMENT.SUBSCRIPTION_CHARGE_IN_PROGRESS",
+        status = HttpStatus.CONFLICT,
+        title = "A charge for this subscription is in progress",
+    ),
     PLAN_CHANGE_NOT_ALLOWED(
         code = "PAYMENT.PLAN_CHANGE_NOT_ALLOWED",
         status = HttpStatus.CONFLICT,

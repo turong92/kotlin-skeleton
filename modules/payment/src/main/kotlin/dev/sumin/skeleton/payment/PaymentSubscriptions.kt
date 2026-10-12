@@ -34,8 +34,8 @@ class PaymentSubscriptions(
 
     fun recentOrders(subscriptionId: String, limit: Int = RECENT_ORDERS): List<PaymentOrder> = store.listSubscriptionOrders(subscriptionId, limit)
 
-    /** `PENDING` 줄을 만들고 카드 등록 창 값을 돌려준다. 같은 키로 다시 부르면 같은 줄이다. */
-    fun start(accountId: String, planCode: String, key: IdempotencyKey): StartedSubscription {
+    /** `PENDING` 줄을 만들고 카드 등록 창 값을 돌려준다. 같은 키로 다시 부르면 같은 줄이다. [country] 가 비면 설정의 기본 나라(그것도 없으면 나라 없음). */
+    fun start(accountId: String, planCode: String, key: IdempotencyKey, country: String? = null): StartedSubscription {
         val id = PaymentOrderIds.subscriptionId(accountId, key)
         store.findSubscription(id)?.let { return replay(it, planCode) }
 
@@ -74,6 +74,7 @@ class PaymentSubscriptions(
             accountErasedAt = null,
             createdAt = now,
             updatedAt = now,
+            country = country?.uppercase() ?: properties.subscription.cancel.defaultCountry,
         )
         if (!store.inTransaction { it.insertSubscriptionIfAbsent(subscription) }) {
             // 동시에 같은 키로 들어온 다른 요청이 먼저 넣었다 — 그 줄이 곧 답이다

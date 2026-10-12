@@ -181,6 +181,18 @@ class PaymentSubscriptionNotCancelableException : ApplicationException(
     errorCode = PaymentErrorCode.SUBSCRIPTION_NOT_CANCELABLE,
 )
 
+/** 중도 해지를 할 수 없다 — 이용 중이 아니다 · 이 나라의 정책이 중도 해지를 닫았다. */
+class PaymentSubscriptionCancelNotAllowedException : ApplicationException(
+    message = "This subscription cannot be canceled now with a refund.",
+    errorCode = PaymentErrorCode.SUBSCRIPTION_CANCEL_NOT_ALLOWED,
+)
+
+/** 갱신 · 변경 결제가 오가는 중이라 지금 끝낼 수 없다 — 결제가 끝난 뒤 다시. */
+class PaymentSubscriptionChargeInProgressException : ApplicationException(
+    message = "A payment for this subscription is still in progress. Try again in a moment.",
+    errorCode = PaymentErrorCode.SUBSCRIPTION_CHARGE_IN_PROGRESS,
+)
+
 /** 플랜 변경을 할 수 없다 — 꺼져 있다 · 이용 중이 아니다 · 위 등급이 아니다 · 주기 · 통화가 다르다 · 과금 중인 주문이 있다. */
 class PaymentPlanChangeNotAllowedException : ApplicationException(
     message = "The plan cannot be changed now.",

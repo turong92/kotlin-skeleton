@@ -35,6 +35,9 @@ enum class SubscriptionEndReason {
     /** 본인이 해지했다(기간 끝에 끝났거나, 갱신 실패 중에 해지했다). */
     USER_CANCELED,
 
+    /** 본인이 중도 해지했다(지금 끝내고 이번 기간의 쓰지 않은 몫을 환불). */
+    USER_CANCELED_NOW,
+
     /** 갱신 재시도를 다 썼다. */
     PAYMENT_FAILED,
 
@@ -86,6 +89,8 @@ data class PaymentSubscription(
     val accountErasedAt: Instant?,
     val createdAt: Instant,
     val updatedAt: Instant,
+    /** 구매자 나라(ISO-3166 두 글자, 대문자) — 해지·환불 정책을 고르는 열쇠. 없으면 기본 정책. */
+    val country: String? = null,
 ) {
     override fun toString(): String =
         "PaymentSubscription(id=$id, status=$status, plan=$planCode, amount=${amount.amount} ${amount.normalizedCurrency}, seq=$periodSeq, attempt=$attempt)"
@@ -114,6 +119,9 @@ object SubscriptionTransitions {
  */
 class SubscriptionPeriod private constructor(private val calendar: Period?, private val clock: Duration?) {
     /** [anchor] 에서 [cycles] 주기가 지난 시각. */
+    /** 달력 주기가 정확히 몇 개월인가(`P1Y` = 12, `P3M` = 3) — 일 단위가 섞였거나 시간 주기면 null. */
+    val calendarMonths: Int? get() = calendar?.takeIf { it.days == 0 }?.toTotalMonths()?.toInt()
+
     fun after(anchor: Instant, cycles: Int): Instant =
         if (calendar != null) anchor.atZone(ZoneOffset.UTC).plus(calendar.multipliedBy(cycles)).toInstant() else anchor.plus(clock!!.multipliedBy(cycles.toLong()))
 

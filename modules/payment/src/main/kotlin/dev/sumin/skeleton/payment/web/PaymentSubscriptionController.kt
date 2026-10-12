@@ -10,6 +10,7 @@ import dev.sumin.skeleton.common.openapi.ApiResponseEnvelope
 import dev.sumin.skeleton.common.web.ClientIps
 import dev.sumin.skeleton.payment.PaymentSubscription
 import dev.sumin.skeleton.payment.PaymentSubscriptions
+import dev.sumin.skeleton.payment.SubscriptionCancellations
 import dev.sumin.skeleton.payment.SubscriptionPlanChanges
 import dev.sumin.skeleton.payment.SubscriptionStatus
 import dev.sumin.skeleton.payment.web.PaymentRequests.idempotencyKey
@@ -40,6 +41,7 @@ import tools.jackson.databind.JsonNode
 class PaymentSubscriptionController(
     private val subscriptions: PaymentSubscriptions,
     private val planChanges: SubscriptionPlanChanges,
+    private val cancellations: SubscriptionCancellations,
     private val callers: PaymentCallers,
     private val limiter: PaymentOrderRateLimiter,
     private val clientIps: ClientIps,
@@ -55,7 +57,8 @@ class PaymentSubscriptionController(
     @Operation(
         summary = "Start a subscription and get the values for the card registration window",
         description = "201 with { subscription (PENDING), billingAuth }; the same Idempotency-Key again is 200 with the same subscription (billingAuth is null once the card was handed in). " +
-            "400 without the header · 409 ALREADY_SUBSCRIBED · 409 IDEMPOTENCY_CONFLICT for another plan · 422 ITEM_NOT_PURCHASABLE for an unknown plan · 429 over the per-account / per-IP limit · 503 UNAVAILABLE.",
+            "Body { planCode, country? } - country is the buyer's ISO-3166 alpha-2 code (the cancel / refund policy follows it; the configured default when missing). " +
+            "400 without the header or for a bad country · 409 ALREADY_SUBSCRIBED · 409 IDEMPOTENCY_CONFLICT for another plan · 422 ITEM_NOT_PURCHASABLE for an unknown plan · 429 over the per-account / per-IP limit · 503 UNAVAILABLE.",
     )
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = StartSubscriptionResponse::class)
     @PostMapping("/subscriptions")
@@ -72,7 +75,7 @@ class PaymentSubscriptionController(
             throw ApplicationException(message = "Too many requests", errorCode = PlatformErrorCode.TOO_MANY_REQUESTS, data = mapOf("retryAfterSeconds" to retryAfter))
         }
         val planCode = PaymentRequests.text(body["planCode"], "planCode", 64)
-        val started = subscriptions.start(account, planCode, idempotencyKey(key))
+        val started = subscriptions.start(account, planCode, idempotencyKey(key), country(body["country"]))
         val payload = Response.ok(StartSubscriptionResponse(view(started.subscription), started.billing?.let(BillingAuthResponse::of)))
         return if (started.replayed) ResponseEntity.ok(payload) else ResponseEntity.status(201).body(payload)
     }
@@ -105,6 +108,29 @@ class PaymentSubscriptionController(
     @PostMapping("/subscriptions/{id}/cancel")
     fun cancel(authentication: Authentication?, @PathVariable id: String): DataResponse<SubscriptionResponse> =
         Response.ok(view(subscriptions.cancel(callers.account(authentication), id)))
+
+    @Operation(
+        summary = "What cancelling now would refund",
+        description = "open=false means the policy of the subscription's country keeps the mid-term cancel closed (only 'cancel at the end of the period'). Otherwise refund is what comes back, lines the calculation " +
+            "(PAID +, USED -, PENALTY -) and withdrawal tells it is a full refund inside the withdrawal window. 409 SUBSCRIPTION_CANCEL_NOT_ALLOWED when the subscription is not in use.",
+    )
+    @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = CancelPreviewResponse::class)
+    @GetMapping("/subscriptions/{id}/cancel-preview")
+    fun cancelPreview(authentication: Authentication?, @PathVariable id: String): DataResponse<CancelPreviewResponse> =
+        Response.ok(CancelPreviewResponse.of(cancellations.preview(callers.account(authentication), id)))
+
+    @Operation(
+        summary = "Cancel now and refund the unused rest of this period",
+        description = "Ends the subscription at once (ENDED, endReason USER_CANCELED_NOW) and refunds through the refund ledger, order by order; the card is removed. Pressing again answers the same and refunds once. " +
+            "409 SUBSCRIPTION_CANCEL_NOT_ALLOWED when the country's policy keeps it closed or the subscription is not in use · 409 SUBSCRIPTION_CHARGE_IN_PROGRESS while a renewal / plan-change charge is unanswered. " +
+            "refunds[].status NOT_SENT is sent again by the server; FAILED was declined by the provider.",
+    )
+    @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = CancelNowResponse::class)
+    @PostMapping("/subscriptions/{id}/cancel-now")
+    fun cancelNow(authentication: Authentication?, @PathVariable id: String): DataResponse<CancelNowResponse> {
+        val result = cancellations.cancelNow(callers.account(authentication), id)
+        return Response.ok(CancelNowResponse.of(result, subscriptions.plans().firstOrNull { it.code == result.subscription.planCode }?.name))
+    }
 
     @Operation(
         summary = "What a change to a higher plan would charge now",
@@ -146,6 +172,14 @@ class PaymentSubscriptionController(
     private fun view(subscription: PaymentSubscription): SubscriptionResponse =
         SubscriptionResponse.of(subscription, subscriptions.plans().firstOrNull { it.code == subscription.planCode }?.name)
 
+    /** 구매자 나라 - 없으면 null(설정의 기본 나라), 있으면 두 글자 영문(소문자도 받아 대문자로). */
+    private fun country(node: JsonNode?): String? {
+        if (node == null || node.isNull) return null
+        val text = if (node.isString) node.stringValue().trim() else ""
+        if (!COUNTRY.matches(text)) throw FieldValidationException("country", "Pattern", "country must be an ISO-3166 alpha-2 code (two letters)")
+        return text.uppercase()
+    }
+
     /** 카드 등록 창이 돌려준 값 — 문자열 칸만, 여덟 개까지, 칸마다 512자까지. 모양은 결제사가 확인한다. */
     private fun providerPayload(node: JsonNode?): Map<String, Any?> {
         if (node == null || node.isNull || !node.isObject) throw FieldValidationException("providerPayload", "Required", "providerPayload is required")
@@ -158,6 +192,7 @@ class PaymentSubscriptionController(
     }
 
     private companion object {
+        val COUNTRY = Regex("[A-Za-z]{2}")
         const val PAYLOAD_FIELDS_MAX = 8
         const val PAYLOAD_VALUE_MAX = 512
     }

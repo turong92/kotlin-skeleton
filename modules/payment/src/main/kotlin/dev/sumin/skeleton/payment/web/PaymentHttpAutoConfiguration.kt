@@ -14,6 +14,7 @@ import dev.sumin.skeleton.payment.PaymentQueries
 import dev.sumin.skeleton.payment.PaymentRefunds
 import dev.sumin.skeleton.payment.PaymentSubscriptionAutoConfiguration
 import dev.sumin.skeleton.payment.PaymentSubscriptions
+import dev.sumin.skeleton.payment.SubscriptionCancellations
 import dev.sumin.skeleton.payment.SubscriptionPlanChanges
 import dev.sumin.skeleton.payment.PaymentWebhookInbox
 import dev.sumin.skeleton.payment.PaymentLedgerStore
@@ -80,10 +81,11 @@ class PaymentHttpAutoConfiguration {
     fun paymentSubscriptionController(
         subscriptions: PaymentSubscriptions,
         planChanges: SubscriptionPlanChanges,
+        cancellations: SubscriptionCancellations,
         callers: PaymentCallers,
         limiter: PaymentOrderRateLimiter,
         clientIps: ObjectProvider<ClientIps>,
-    ): PaymentSubscriptionController = PaymentSubscriptionController(subscriptions, planChanges, callers, limiter, clientIps.getIfAvailable { ClientIps() })
+    ): PaymentSubscriptionController = PaymentSubscriptionController(subscriptions, planChanges, cancellations, callers, limiter, clientIps.getIfAvailable { ClientIps() })
 
     @Bean
     @ConditionalOnMissingBean

@@ -324,6 +324,8 @@ data class SubscriptionResponse(
     val pendingPlanCode: String?,
     val testMode: Boolean,
     val createdAt: Instant,
+    /** 구매자 나라(ISO-3166 두 글자) - 해지·환불 정책을 고른 열쇠. 모르면 null. */
+    val country: String?,
 ) {
     companion object {
         fun of(subscription: dev.sumin.skeleton.payment.PaymentSubscription, planName: String?) = SubscriptionResponse(
@@ -341,6 +343,7 @@ data class SubscriptionResponse(
             pendingPlanCode = subscription.pendingPlanCode,
             testMode = subscription.providerMode == PaymentMode.TEST,
             createdAt = subscription.createdAt,
+            country = subscription.country,
         )
     }
 }
@@ -350,6 +353,37 @@ data class PlanChangePreviewResponse(val planCode: String, val planName: String,
     companion object {
         fun of(quote: dev.sumin.skeleton.payment.PlanChangeQuote) =
             PlanChangePreviewResponse(quote.plan.code, quote.plan.name, quote.charge.toResponse(), quote.plan.amount.toResponse(), quote.plan.period, quote.restartsPeriod)
+    }
+}
+
+/** 계산 내역 한 줄 - `PAID`(낸 돈, 양수) · `USED`(쓴 몫, 음수) · `PENALTY`(위약금, 음수). 합이 환불 금액이다. */
+data class CancelLineResponse(val code: String, val amount: Long)
+
+/** 중도 해지 미리보기 - [open] 이 false 면 이 구독은 기간 끝 해지만 된다(환불 0). [withdrawal] 은 7일 철회로 전액을 돌려주는 경우. */
+data class CancelPreviewResponse(val open: Boolean, val refund: AmountResponse, val withdrawal: Boolean, val lines: List<CancelLineResponse>) {
+    companion object {
+        fun of(preview: dev.sumin.skeleton.payment.CancelPreview): CancelPreviewResponse {
+            val quote = preview.quote
+            return CancelPreviewResponse(quote.open, dev.sumin.skeleton.payment.PaymentAmount(quote.refund, preview.subscription.amount.currency).toResponse(), quote.withdrawal, quote.lines.map { CancelLineResponse(it.code.name, it.amount) })
+        }
+    }
+}
+
+/** 주문 하나의 환불 결과 - `status` 는 `SUCCEEDED` · `PENDING`(결제사 응답 대기) · `FAILED`(결제사 거절) · `NOT_SENT`(아직 못 보냄 - 서버가 다시 보낸다). */
+data class CancelRefundResponse(val orderId: String, val amount: AmountResponse, val status: String)
+
+data class CancelNowResponse(val subscription: SubscriptionResponse, val refund: AmountResponse, val withdrawal: Boolean, val lines: List<CancelLineResponse>, val refunds: List<CancelRefundResponse>) {
+    companion object {
+        fun of(result: dev.sumin.skeleton.payment.CancelNowResult, planName: String?): CancelNowResponse {
+            val currency = result.subscription.amount.currency
+            return CancelNowResponse(
+                SubscriptionResponse.of(result.subscription, planName),
+                PaymentAmount(result.quote.refund, currency).toResponse(),
+                result.quote.withdrawal,
+                result.quote.lines.map { CancelLineResponse(it.code.name, it.amount) },
+                result.refunds.map { CancelRefundResponse(it.orderId, PaymentAmount(it.amount, currency).toResponse(), it.status.name) },
+            )
+        }
     }
 }
 

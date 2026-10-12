@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 새 기능 (꺼진 채 시작) — 구독 중도 해지 · 환불 (2026-10-12)
+
+- **나라마다 갈아 끼우는 해지·환불 정책**(`SubscriptionCancelPolicy`): 구독 하나(나라 · 이번 기간의 결제 내역)를 받아 중도 해지를 여는지, 지금 해지하면 얼마를 돌려주는지(내역 포함)를 답한다. 내장 둘 - `period-end-only`(**모듈 기본**: 중도 해지 닫힘, 환불 0) · `korea`(낸 돈 - 쓴 몫 - 위약금, 7일 철회 전액). 나라 → 정책은 `skeleton.payment.subscription.cancel.policies`(`KR: korea`), 지도에 없는 나라는 기본. 앱이 `SubscriptionCancelPolicy` 빈을 더해 정책을 늘리거나 같은 이름으로 바꿀 수 있다. `SubscriptionUsageCheck`(앱 계약, 기본 = 안 썼다)가 7일 철회의 「썼는가」를 답한다.
+- **구독에 구매자 나라**: `POST /subscriptions` 가 선택 `country`(ISO-3166 두 글자)를 받아 구독 줄에 박는다(없으면 `cancel.default-country`). 새 열 `payment_subscriptions.country`(`V20261012140000`, 두 방언).
+- **`GET /subscriptions/{id}/cancel-preview` · `POST /subscriptions/{id}/cancel-now`**: 구독을 즉시 `ENDED`(`USER_CANCELED_NOW`)로 끝내고 이번 기간에 낸 주문마다 기존 환불 장부로 환불한다(환불 줄 origin `USER`, 사유 `SUBSCRIPTION_CANCEL`) + 빌링키 삭제. 두 번 눌러도 환불은 한 번(환불 줄 멱등 키 = 구독 + 주문), 갱신 · 변경 과금이 오가는 중이면 409 `SUBSCRIPTION_CHARGE_IN_PROGRESS`, 정책이 닫혀 있으면 409 `SUBSCRIPTION_CANCEL_NOT_ALLOWED`. 못 보낸 환불은 작업 `payment-subscription-cancel-refund` 가 다시 보낸다.
+- **컴파일**: `PaymentSubscription` 에 마지막 선택 칸 `country`, `PaymentSubscriptions.start` 에 마지막 선택 인자 `country`, `PaymentSubscriptionController` 생성자에 `SubscriptionCancellations`.
+- **`apps/sample`**: `KR` → `korea`(위약금 10%, 7일), 기본 나라 `KR`.
+
 ### 운영자의 막힌 구독 결제 닫기 (2026-10-12)
 
 - `POST /admin/payments/orders/{id}/close` — 결제사가 끝내 답하지 않아 `CONFIRMING` 으로 남은 구독 결제 주문을 「결제 안 됨」으로 닫아 구독의 자리를 푼다. 닫기 전에 결제사에 한 번 더 물어 결제됐으면 닫지 않고 `PAID` 로 맞춘다. 새 오류 `PAYMENT.ORDER_NOT_CLOSABLE`(409). 새 V 파일 없음.

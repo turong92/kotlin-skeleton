@@ -894,7 +894,7 @@ abstract class PaymentLedgerStoreContract {
             status = SubscriptionStatus.ACTIVE, activeKey = "acc_1", anchorAt = PaymentTestOrders.T0, periodSeq = 3,
             currentPeriodStart = PaymentTestOrders.T0, currentPeriodEnd = PaymentTestOrders.T0.plusSeconds(3600), chargeOrderId = "ord_" + "9".repeat(32), attempt = 2,
             billingToken = "enc:secret", cardIssuer = "HYUNDAI", cardLast4 = "123*", pendingPlanCode = "plus", pendingAmount = 6900,
-            endReason = SubscriptionEndReason.PAYMENT_FAILED, endedAt = PaymentTestOrders.T0.plusSeconds(5), accountErasedAt = PaymentTestOrders.T0.plusSeconds(6),
+            endReason = SubscriptionEndReason.PAYMENT_FAILED, endedAt = PaymentTestOrders.T0.plusSeconds(5), accountErasedAt = PaymentTestOrders.T0.plusSeconds(6), country = "KR",
         )
 
         assertTrue(store.inTransaction { it.insertSubscriptionIfAbsent(full) })

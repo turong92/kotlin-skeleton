@@ -9,7 +9,7 @@ import dev.sumin.skeleton.payment.PaymentRefundStatus.WITHDRAWN
 
 /**
  * 환불 사유 코드(`reason_code`, 스펙 §5.3) — **자유 문장은 받지 않는다.** 본인은 앞의 셋만 고르고([forCustomer]), 운영자는 거기에 [OPERATOR] 를 더해 쓴다([forOperator]).
- * [PROVIDER_CONSOLE] 은 결제사 관리 화면의 취소를 장부에 맞춰 넣은 줄에만 우리가 붙인다.
+ * [PROVIDER_CONSOLE] 은 결제사 관리 화면의 취소를 장부에 맞춰 넣은 줄에만, [SUBSCRIPTION_CANCEL] 은 구독 중도 해지의 환불 줄에만 우리가 붙인다.
  *
  * [providerText] 는 결제사에 보내는 취소 사유다(토스는 필수 · 최대 200자) — 사용자가 쓴 글이 아니라 **우리가 정한 고정 문장**이다.
  */
@@ -18,6 +18,7 @@ enum class PaymentRefundReason(val forCustomer: Boolean, val forOperator: Boolea
     DUPLICATE(true, true, "Duplicate payment"),
     NOT_DELIVERED(true, true, "Not delivered"),
     OPERATOR(false, true, "Operator refund"),
+    SUBSCRIPTION_CANCEL(false, false, "Subscription canceled"),
     PROVIDER_CONSOLE(false, false, "Canceled in the provider console"),
     ;
 
