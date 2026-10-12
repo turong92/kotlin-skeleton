@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **구독에 구매자 나라**: `POST /subscriptions` 가 선택 `country`(ISO-3166 두 글자)를 받아 구독 줄에 박는다(없으면 `cancel.default-country`). 새 열 `payment_subscriptions.country`(`V20261012140000`, 두 방언).
 - **`GET /subscriptions/{id}/cancel-preview` · `POST /subscriptions/{id}/cancel-now`**: 구독을 즉시 `ENDED`(`USER_CANCELED_NOW`)로 끝내고 이번 기간에 낸 주문마다 기존 환불 장부로 환불한다(환불 줄 origin `USER`, 사유 `SUBSCRIPTION_CANCEL`) + 빌링키 삭제. 두 번 눌러도 환불은 한 번(환불 줄 멱등 키 = 구독 + 주문), 갱신 · 변경 과금이 오가는 중이면 409 `SUBSCRIPTION_CHARGE_IN_PROGRESS`, 정책이 닫혀 있으면 409 `SUBSCRIPTION_CANCEL_NOT_ALLOWED`. 못 보낸 환불은 작업 `payment-subscription-cancel-refund` 가 다시 보낸다.
 - **컴파일**: `PaymentSubscription` 에 마지막 선택 칸 `country`, `PaymentSubscriptions.start` 에 마지막 선택 인자 `country`, `PaymentSubscriptionController` 생성자에 `SubscriptionCancellations`.
+- **환불이 못 나가면 운영자에게**: 영구 실패(금액 초과 · 모드 불일치 · 환불 불가 상태)와 결제사의 거절은 바로, 환불 재시도 작업이 시도를 다 써도 못 보낸 것은 작업이 죽을 때 주문에 새 검토 이유 `SUBSCRIPTION_CANCEL_REFUND_UNRESOLVED` 를 찍는다(확인 필요 목록). 쓴 몫은 낸 돈마다 자기가 덮는 구간으로 센다(기간 중에 올린 차액은 올린 날부터), 7일 철회는 앱 시간대의 날짜로 가른다(시작 날짜 + 7일의 밤까지).
 - **`apps/sample`**: `KR` → `korea`(위약금 10%, 7일), 기본 나라 `KR`.
 
 ### 운영자의 막힌 구독 결제 닫기 (2026-10-12)

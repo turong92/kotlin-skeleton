@@ -37,15 +37,31 @@ class SubscriptionCancelPolicyTest {
     }
 
     @Test
-    fun `within seven days and unused the whole payment comes back, one second later it is the prorated rest`() {
-        val atSeven = korea0.quote(month(now = start.plus(Duration.ofDays(7))))
-        assertTrue(atSeven.withdrawal)
-        assertEquals(3_900, atSeven.refund, "day seven itself is still inside the withdrawal window")
-        assertEquals(listOf(CancelLine(CancelLineCode.PAID, 3_900)), atSeven.lines)
+    fun `the withdrawal lasts through the seventh date after the start date of the app zone, then it is the prorated rest`() {
+        // 기간 시작은 서울 1월 1일 09:00 - 7일 뒤는 1월 8일. 그날 밤 23:59:59 까지는 철회, 1월 9일 00:00 부터는 아니다
+        val lastNight = korea0.quote(month(now = Instant.parse("2026-01-08T14:59:59Z")))
+        assertTrue(lastNight.withdrawal)
+        assertEquals(3_900, lastNight.refund)
+        assertEquals(listOf(CancelLine(CancelLineCode.PAID, 3_900)), lastNight.lines)
 
-        val after = korea0.quote(month(now = start.plus(Duration.ofDays(7)).plusSeconds(1)))
-        assertFalse(after.withdrawal)
-        assertEquals(2_990, after.refund, "3,900 x 23 of 30 days, rounded down")
+        val dawn = korea0.quote(month(now = Instant.parse("2026-01-08T15:00:00Z")))
+        assertFalse(dawn.withdrawal)
+        assertEquals(2_860, dawn.refund, "3,900 x 22 of 30 days, rounded down")
+    }
+
+    @Test
+    fun `a plan raise paid mid-period is used only from the day it was paid, not over the whole period`() {
+        // 3,900 을 기간 시작에, 차액 6,000 을 16일째(남은 15일)에 냈고 같은 날 해지 - 차액은 한 번도 안 썼다
+        val raisedOn = Instant.parse("2026-01-16T00:00:00Z")
+        val context = CancelContext(
+            subscription("P1M", 9_900, monthEnd), paid = 9_900, now = raisedOn, monthlyPrice = null, used = true,
+            payments = listOf(CancelPayment(3_900, start), CancelPayment(6_000, raisedOn)),
+        )
+
+        val quote = korea0.quote(context)
+
+        assertEquals(7_950, quote.refund, "3,900 x 15/30 = 1,950 left + all 6,000 left (not 9,900 x 15/30 = 4,950)")
+        assertEquals(-1_950, quote.lines.single { it.code == CancelLineCode.USED }.amount)
     }
 
     @Test
@@ -62,9 +78,9 @@ class SubscriptionCancelPolicyTest {
         assertEquals(3_393, whole.refund, "3,770 left - 377 penalty")
         assertEquals(listOf(CancelLine(CancelLineCode.PAID, 3_900), CancelLine(CancelLineCode.USED, -130), CancelLine(CancelLineCode.PENALTY, -377)), whole.lines)
 
-        val odd = korea10.quote(month(now = start.plus(Duration.ofDays(7)).plusSeconds(1), paid = 3_905))
-        assertEquals(2_694, odd.refund, "2,993 left - 299 penalty")
-        assertEquals(-299, odd.lines.single { it.code == CancelLineCode.PENALTY }.amount, "3,905 x 23/30 = 2,993 left; floor(299.3) = 299")
+        val odd = korea10.quote(month(now = Instant.parse("2026-01-08T15:00:00Z"), paid = 3_905))
+        assertEquals(2_577, odd.refund, "2,863 left - 286 penalty")
+        assertEquals(-286, odd.lines.single { it.code == CancelLineCode.PENALTY }.amount, "3,905 x 22/30 = 2,863 left; floor(286.3) = 286")
     }
 
     @Test

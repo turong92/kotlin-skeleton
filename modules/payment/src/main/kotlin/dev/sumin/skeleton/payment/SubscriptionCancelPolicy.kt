@@ -2,13 +2,15 @@ package dev.sumin.skeleton.payment
 
 import java.time.Duration
 import java.time.Instant
-import java.time.ZoneOffset
 
 /**
  * 해지·환불 정책 입력(스펙 `2026-10-12-subscription-cancel-refund-design.md`) — 구독 하나와 **이번 기간의** 결제 내역.
  * [paid] 는 이번 기간에 낸 돈 중 아직 돌려받지 않은 몫(여러 주문의 합 — 플랜 올리기 차액 포함), [monthlyPrice] 는 같은 등급의 월 가격(없으면 null),
  * [used] 는 앱의 「썼는가」 답([SubscriptionUsageCheck]).
  */
+/** 이번 기간에 낸 돈 한 줄 - [coversFrom] 부터 기간 끝까지가 이 돈이 덮는 구간이다(기간 중에 낸 플랜 올리기 차액은 낸 날부터, 나머지는 기간 시작부터). */
+data class CancelPayment(val net: Long, val coversFrom: Instant)
+
 data class CancelContext(
     val subscription: PaymentSubscription,
     val paid: Long,
@@ -17,6 +19,8 @@ data class CancelContext(
     val used: Boolean,
     /** 일할 계산이 날짜를 가르는 시간대 */
     val zone: java.time.ZoneId = Proration.DEFAULT_ZONE,
+    /** 낸 돈의 줄별 내역 - 비어 있으면 [paid] 전체가 기간 시작부터 덮는 한 줄이다. */
+    val payments: List<CancelPayment> = emptyList(),
 )
 
 /** 계산 내역 한 줄 — [PAID] 는 양수, [USED] · [PENALTY] 는 음수(합이 환불 금액이다). */
@@ -48,9 +52,9 @@ object PeriodEndOnlyCancelPolicy : SubscriptionCancelPolicy {
 
 /**
  * 한국 소비자 정책 — 중도 해지가 열려 있고 환불은 `낸 돈 − 쓴 몫 − 위약금`.
- * - 쓴 몫: 월 주기는 일할(남은 일수 비율 - [Proration], 남은 몫을 내림). 월보다 긴 주기(연간 등)는 **시작한 개월 수 × 같은 등급의 월 가격**(할인은 쓴 몫에 안 쳐 준다. 월 가격이 없으면 일할). 낸 돈을 넘지 않는다.
+ * - 쓴 몫: 월 주기는 낸 돈마다 자기가 덮는 구간으로 일할(남은 일수 비율 - [Proration], 남은 몫을 내림). 월보다 긴 주기(연간 등)는 **시작한 개월 수 × 같은 등급의 월 가격**(할인은 쓴 몫에 안 쳐 준다. 월 가격이 없으면 일할). 낸 돈을 넘지 않는다.
  * - 위약금 = 남은 금액 × [penaltyPercent]% (내림).
- * - 7일 철회: 이번 기간 시작 후 [withdrawalDays] 일 안(그날 끝 시각 포함)이고 앱이 「안 썼다」고 하면 전액, 위약금 없음.
+ * - 7일 철회: 오늘 날짜가 이번 기간 시작 날짜 + [withdrawalDays] 일 이하(날짜는 앱 시간대, 그날이 끝날 때까지)이고 앱이 「안 썼다」고 하면 전액, 위약금 없음.
  */
 class KoreaConsumerCancelPolicy(private val penaltyPercent: Int = 0, private val withdrawalDays: Long = 7) : SubscriptionCancelPolicy {
     init {
@@ -65,7 +69,7 @@ class KoreaConsumerCancelPolicy(private val penaltyPercent: Int = 0, private val
         val end = context.subscription.currentPeriodEnd ?: return CancelQuote.CLOSED
         val paid = context.paid
         if (paid <= 0) return CancelQuote(open = true, refund = 0, lines = emptyList(), withdrawal = false)
-        if (!context.used && !context.now.isAfter(start.plus(Duration.ofDays(withdrawalDays)))) {
+        if (!context.used && withinWithdrawal(context, start)) {
             return CancelQuote(open = true, refund = paid, lines = listOf(CancelLine(CancelLineCode.PAID, paid)), withdrawal = true)
         }
         val used = usedShare(context, start, end)
@@ -79,18 +83,25 @@ class KoreaConsumerCancelPolicy(private val penaltyPercent: Int = 0, private val
         return CancelQuote(open = true, refund = remaining - penalty, lines = lines, withdrawal = false)
     }
 
+    /** 오늘 날짜 <= 이번 기간 시작 날짜 + [withdrawalDays] (날짜는 앱 시간대) - 그날이 끝날 때까지 철회할 수 있다. */
+    private fun withinWithdrawal(context: CancelContext, start: Instant): Boolean =
+        !context.now.atZone(context.zone).toLocalDate().isAfter(start.atZone(context.zone).toLocalDate().plusDays(withdrawalDays))
+
     private fun usedShare(context: CancelContext, start: Instant, end: Instant): Long {
         val paid = context.paid
         val months = SubscriptionPeriod.parse(context.subscription.period).calendarMonths
         if (months != null && months > 1 && context.monthlyPrice != null) {
-            return minOf(paid, startedMonths(start, context.now, months) * context.monthlyPrice)
+            return minOf(paid, startedMonths(start, context.now, months, context.zone) * context.monthlyPrice)
         }
-        return paid - Proration.remaining(paid, start, end, context.now, context.zone)
+        // 돈마다 자기가 덮는 구간으로 센다 - 기간 중에 올린 차액은 올린 날부터 기간 끝까지의 몫이라, 기간 전체로 일할하면 쓴 몫이 늘어난다
+        val parts = context.payments.ifEmpty { listOf(CancelPayment(paid, start)) }
+        val used = parts.sumOf { it.net - Proration.remaining(it.net, maxOf(it.coversFrom, start), end, context.now, context.zone) }
+        return minOf(paid, used)
     }
 
     /** 이미 시작한 개월 수(시작 시각에 첫 달이 시작된다) — 주기의 개월 수를 넘지 않는다. */
-    private fun startedMonths(start: Instant, now: Instant, months: Int): Long {
-        val from = start.atZone(ZoneOffset.UTC)
+    private fun startedMonths(start: Instant, now: Instant, months: Int, zone: java.time.ZoneId): Long {
+        val from = start.atZone(zone)
         var started = 0L
         while (started < months && !from.plusMonths(started).toInstant().isAfter(now)) started++
         return started

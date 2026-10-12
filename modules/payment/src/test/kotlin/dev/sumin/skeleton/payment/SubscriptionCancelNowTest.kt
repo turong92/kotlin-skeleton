@@ -171,6 +171,37 @@ class SubscriptionCancelNowTest {
     }
 
     @Test
+    fun `a refund that can never go out is shown as failed at once, flagged for review, and not retried`() {
+        val kit = newKit()
+        val active = kit.active()
+        kit.time.advance(Duration.ofDays(1))
+        kit.gateway.mode = PaymentMode.LIVE // 결제는 TEST 로 했다 - 모드가 어긋난 주문은 환불을 보내지 않는다
+
+        val result = kit.cancellations.cancelNow("acc_1", active.id)
+
+        assertEquals(listOf(CancelRefundStatus.FAILED), result.refunds.map { it.status })
+        assertEquals(PaymentReviewReason.SUBSCRIPTION_CANCEL_REFUND_UNRESOLVED, kit.order(result.refunds.single().orderId).reviewReason)
+        assertEquals(0, kit.gateway.refundCalls.size)
+        kit.time.advance(Duration.ofHours(1))
+        kit.runTasks(setOf(PaymentTaskTypes.SUBSCRIPTION_CANCEL_REFUND)) // 영구 실패라 작업이 다시 던지지 않는다
+        assertEquals(0, kit.gateway.refundCalls.size)
+    }
+
+    @Test
+    fun `when the retry task is dead the orders that never got a refund are flagged for review`() {
+        val kit = newKit()
+        val active = kit.active()
+        kit.time.advance(Duration.ofDays(1))
+        kit.gateway.failLookups(1)
+        val result = kit.cancellations.cancelNow("acc_1", active.id)
+        assertEquals(null, kit.order(result.refunds.single().orderId).reviewReason)
+
+        kit.cancelRefund.onDead(PaymentTaskRun(PaymentTaskTypes.SUBSCRIPTION_CANCEL_REFUND, active.id, 12, 12))
+
+        assertEquals(PaymentReviewReason.SUBSCRIPTION_CANCEL_REFUND_UNRESOLVED, kit.order(result.refunds.single().orderId).reviewReason)
+    }
+
+    @Test
     fun `a refund the provider declines is reported and the subscription stays ended`() {
         val kit = newKit()
         val active = kit.active()
@@ -182,5 +213,6 @@ class SubscriptionCancelNowTest {
         assertEquals(listOf(CancelRefundStatus.FAILED), result.refunds.map { it.status })
         assertEquals(SubscriptionStatus.ENDED, kit.sub(active.id).status)
         assertEquals(1, kit.gateway.refundCalls.size)
+        assertEquals(PaymentReviewReason.SUBSCRIPTION_CANCEL_REFUND_UNRESOLVED, kit.order(result.refunds.single().orderId).reviewReason)
     }
 }

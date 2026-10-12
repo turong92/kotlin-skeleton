@@ -40,6 +40,9 @@ enum class PaymentReviewReason(val isMoney: Boolean) {
     /** 구독의 지금 과금 주문이 아닌 구독 주문이 늦게 `PAID` 가 됐다 — 구독 기간은 그대로이고 돈만 받았다. 운영자가 환불한다. */
     SUBSCRIPTION_STALE_CHARGE(true),
 
+    /** 구독 중도 해지의 환불을 결제사에 보내지 못했거나 결제사가 거절했다 - 구독은 이미 끝났다. 운영자가 환불한다. */
+    SUBSCRIPTION_CANCEL_REFUND_UNRESOLVED(true),
+
     /** 지급 작업이 죽었다 — 돈은 받았는데 `fulfilled_at` 이 비어 있다. 운영자의 맞추기가 지급 작업을 다시 넣고 푼다. */
     FULFILMENT_UNRESOLVED(false),
 

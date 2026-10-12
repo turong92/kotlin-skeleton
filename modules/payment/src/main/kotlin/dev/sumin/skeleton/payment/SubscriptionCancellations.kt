@@ -27,6 +27,7 @@ class SubscriptionCancellations(
     private val usage: SubscriptionUsageCheck,
     private val lifecycle: SubscriptionLifecycle,
     private val refunds: PaymentRefunds,
+    private val convergence: PaymentConvergence,
     private val tasks: PaymentTasks,
     private val writer: PaymentLedgerWriter,
     private val properties: PaymentProperties,
@@ -70,9 +71,9 @@ class SubscriptionCancellations(
         return CancelNowResult(store.findSubscription(subscription.id) ?: subscription, quote, results)
     }
 
-    private fun send(subscription: PaymentSubscription, orderId: String, amount: Long): CancelRefundStatus =
-        try {
-            when (refunds.refundForSubscriptionCancel(subscription.accountId, orderId, amount, "subcancel:${subscription.id}:$orderId").refund.status) {
+    private fun send(subscription: PaymentSubscription, orderId: String, amount: Long): CancelRefundStatus {
+        val status = try {
+            when (refunds.refundForSubscriptionCancel(subscription.accountId, orderId, amount, seedOf(subscription, orderId)).refund.status) {
                 PaymentRefundStatus.SUCCEEDED -> CancelRefundStatus.SUCCEEDED
                 PaymentRefundStatus.FAILED -> CancelRefundStatus.FAILED
                 else -> CancelRefundStatus.PENDING
@@ -81,8 +82,37 @@ class SubscriptionCancellations(
             CancelRefundStatus.FAILED
         } catch (e: Exception) {
             log.warn("a mid-term cancel refund was not sent subscription={} order={} exception={}", subscription.id, orderId, e.javaClass.simpleName)
-            CancelRefundStatus.NOT_SENT
+            // 다시 해도 소용없는 거절(금액 초과 · 모드 불일치 · 환불할 수 없는 상태 · 없는 주문)은 재시도하지 않고 바로 사람에게 - 나머지(결제사 확인 실패 · 열린 환불)는 작업이 다시 보낸다
+            if (e is PaymentRefundAmountExceededException || e is PaymentModeMismatchException || e is PaymentRefundNotAllowedException || e is PaymentOrderNotFoundException) CancelRefundStatus.FAILED else CancelRefundStatus.NOT_SENT
         }
+        if (status == CancelRefundStatus.FAILED) flagForReview(orderId)
+        return status
+    }
+
+    private fun seedOf(subscription: PaymentSubscription, orderId: String) = "subcancel:${subscription.id}:$orderId"
+
+    /** 주문에 「확인 필요」를 찍는다(운영자 확인 필요 목록에 뜬다) - 이미 표시가 있으면 그대로. */
+    private fun flagForReview(orderId: String) {
+        store.inTransaction { tx ->
+            val locked = tx.lockOrder(orderId) ?: return@inTransaction
+            convergence.flagReview(tx, locked, PaymentReviewReason.SUBSCRIPTION_CANCEL_REFUND_UNRESOLVED, ConvergeContext(locked.providerMode, ConvergeSource.RECONCILE))
+        }
+    }
+
+    /**
+     * 환불 작업이 죽었다 - 아직 환불 줄이 없거나 결제사가 거절한 주문을 모두 「확인 필요」로 올린다(결제사는 부르지 않는다). 두 번 불려도 한 번.
+     */
+    fun flagUnrefunded(subscription: PaymentSubscription) {
+        val payments = periodPayments(subscription)
+        var left = quote(subscription, subscription.endedAt ?: return, payments).refund
+        payments.sortedByDescending { it.order.paidAt }.forEach { payment ->
+            val amount = minOf(left, payment.net)
+            if (amount <= 0) return@forEach
+            left -= amount
+            val line = store.findRefundByDedupeKey(PaymentOrderIds.dedupeKey(subscription.accountId, IdempotencyKey(seedOf(subscription, payment.order.id))))
+            if (line == null || line.status == PaymentRefundStatus.FAILED) flagForReview(payment.order.id)
+        }
+    }
 
     /** 이번 기간에 돈을 낸 주문과 각각의 **순액**(결제사 기준 총액 - 이 해지가 아닌 환불). 이 해지가 이미 돌려준 몫은 빼지 않는다 - 다시 계산해도 같은 값이 나오게. */
     private class PeriodPayment(val order: PaymentOrder, val net: Long)
@@ -101,7 +131,8 @@ class SubscriptionCancellations(
 
     private fun quote(subscription: PaymentSubscription, at: java.time.Instant, payments: List<PeriodPayment> = periodPayments(subscription)): CancelQuote {
         val start = subscription.currentPeriodStart ?: return CancelQuote.CLOSED
-        val context = CancelContext(subscription, payments.sumOf { it.net }, at, monthlyPrice(subscription), usage.used(subscription, start, at), properties.subscription.prorationZone)
+        val covers = payments.map { CancelPayment(it.net, if (it.order.kind == PaymentOrderKind.SUBSCRIPTION_CHANGE) it.order.paidAt ?: start else start) }
+        val context = CancelContext(subscription, payments.sumOf { it.net }, at, monthlyPrice(subscription), usage.used(subscription, start, at), properties.subscription.prorationZone, covers)
         return policies.forCountry(subscription.country).quote(context)
     }
 
@@ -131,5 +162,10 @@ class SubscriptionCancelRefundTaskHandler(private val store: PaymentLedgerStore,
         val subscription = store.findSubscription(run.subjectId)?.takeIf { it.status == SubscriptionStatus.ENDED && it.endReason == SubscriptionEndReason.USER_CANCELED_NOW } ?: return
         val result = cancellations.settleRefunds(subscription)
         if (result.refunds.any { it.status == CancelRefundStatus.NOT_SENT }) throw PaymentTaskRetryException("A refund of the canceled subscription ${subscription.id} could not be sent yet")
+    }
+
+    /** 시도를 다 써도 못 보낸 환불은 조용히 사라지지 않게 주문을 「확인 필요」로 올린다. */
+    override fun onDead(run: PaymentTaskRun) {
+        store.findSubscription(run.subjectId)?.takeIf { it.status == SubscriptionStatus.ENDED && it.endReason == SubscriptionEndReason.USER_CANCELED_NOW }?.let(cancellations::flagUnrefunded)
     }
 }
