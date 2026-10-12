@@ -11,12 +11,12 @@ import org.springframework.test.context.TestPropertySource
 
 /**
  * 운영자 경로를 끄면(`skeleton.payment.admin.enabled=false`) 경로 자체가 없다 — 운영자 계정이 불러도 404.
- * 운영자 아홉 핸들러 전부([ADMIN_SURFACE])에서: 로그인한 계정은 404, **익명은 401** — 켜져 있는지 아닌지가 로그인하지 않은 사람에게 보이지 않는다.
+ * 운영자 열 핸들러 전부([ADMIN_SURFACE])에서: 로그인한 계정은 404, **익명은 401** — 켜져 있는지 아닌지가 로그인하지 않은 사람에게 보이지 않는다.
  */
 @TestPropertySource(properties = ["skeleton.payment.admin.enabled=false"])
 class CheerOperatorDisabledIntegrationTest : CheerIntegrationBase() {
     @Test
-    fun `with the operator paths off every one of the nine operator handlers is 404 for a signed-in account and 401 for an anonymous caller`() {
+    fun `with the operator paths off every one of the ten operator handlers is 404 for a signed-in account and 401 for an anonymous caller`() {
         ADMIN_SURFACE.forEach { m ->
             fun call(token: String?) = mvc.request(m.method, m.path) {
                 token?.let { header("Authorization", "Bearer $it") }

@@ -21,7 +21,7 @@ data class Mapped(val method: HttpMethod, val pattern: String) {
     override fun toString() = "$method $pattern"
 }
 
-/** 운영자 핸들러 아홉 — 꺼진 컨텍스트에서는 매핑이 없어 열거할 수 없으므로 켜진 컨텍스트가 이 목록과 같음을 단정한다(목록이 낡으면 거기서 깨진다). */
+/** 운영자 핸들러 열 — 꺼진 컨텍스트에서는 매핑이 없어 열거할 수 없으므로 켜진 컨텍스트가 이 목록과 같음을 단정한다(목록이 낡으면 거기서 깨진다). */
 val ADMIN_SURFACE: Set<Mapped> = setOf(
     Mapped(HttpMethod.GET, "$ADMIN/orders"),
     Mapped(HttpMethod.GET, "$ADMIN/orders/{id}"),
@@ -30,6 +30,7 @@ val ADMIN_SURFACE: Set<Mapped> = setOf(
     Mapped(HttpMethod.POST, "$ADMIN/refunds/{id}/approve"),
     Mapped(HttpMethod.POST, "$ADMIN/refunds/{id}/reject"),
     Mapped(HttpMethod.POST, "$ADMIN/orders/{id}/sync"),
+    Mapped(HttpMethod.POST, "$ADMIN/orders/{id}/close"),
     Mapped(HttpMethod.GET, "$ADMIN/webhook-events"),
     Mapped(HttpMethod.POST, "$ADMIN/webhook-events/{id}/retry"),
 )
