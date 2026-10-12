@@ -3,7 +3,6 @@ package dev.sumin.skeleton.payment
 import dev.sumin.skeleton.crypto.TextEncryptor
 import dev.sumin.skeleton.payment.PaymentProperties.Subscription.PlanChange.Charge
 import java.security.SecureRandom
-import java.time.Duration
 import java.time.Instant
 import java.util.Random
 
@@ -13,14 +12,20 @@ data class PlanChangeQuote(val plan: SubscriptionPlan, val charge: PaymentAmount
 /** 변경 때 지금 결제할 금액(스펙 `2026-10-09-subscription-design.md` §9). */
 object PlanChangePricing {
     /**
-     * [Charge.FULL_RESTART] 는 새 플랜 전액. [Charge.PRORATED_DIFFERENCE] 는 `floor((새 − 옛) × 남은 초 / 기간 전체 초)` 이고 [minCharge] 미만이면 0(과금 없이 바꾼다).
+     * [Charge.FULL_RESTART] 는 새 플랜 전액. [Charge.PRORATED_DIFFERENCE] 는 `floor((새 − 옛) × 남은 일수 / 기간 일수)`([Proration] - 날짜 단위) 이고 [minCharge] 미만이면 0(과금 없이 바꾼다).
      */
-    fun charge(option: Charge, current: PaymentAmount, target: PaymentAmount, periodStart: Instant, periodEnd: Instant, now: Instant, minCharge: Long): Long {
+    fun charge(
+        option: Charge,
+        current: PaymentAmount,
+        target: PaymentAmount,
+        periodStart: Instant,
+        periodEnd: Instant,
+        now: Instant,
+        minCharge: Long,
+        zone: java.time.ZoneId = Proration.DEFAULT_ZONE,
+    ): Long {
         if (option == Charge.FULL_RESTART) return target.amount
-        val total = Duration.between(periodStart, periodEnd).seconds
-        if (total <= 0) return 0
-        val remaining = Duration.between(now, periodEnd).seconds.coerceIn(0, total)
-        val prorated = Math.multiplyExact(target.amount - current.amount, remaining) / total
+        val prorated = Proration.remaining(target.amount - current.amount, periodStart, periodEnd, now, zone)
         return if (prorated < minCharge) 0 else prorated
     }
 }
@@ -91,7 +96,7 @@ class SubscriptionPlanChanges(
         if (!lifecycle.isSettled(subscription.chargeOrderId?.let(store::findOrder))) throw PaymentPlanChangeNotAllowedException()
         val start = subscription.currentPeriodStart ?: throw PaymentPlanChangeNotAllowedException()
         val end = subscription.currentPeriodEnd ?: throw PaymentPlanChangeNotAllowedException()
-        val charge = PlanChangePricing.charge(option, subscription.amount, target.amount, start, end, writer.now(), properties.subscription.planChange.minCharge)
+        val charge = PlanChangePricing.charge(option, subscription.amount, target.amount, start, end, writer.now(), properties.subscription.planChange.minCharge, properties.subscription.prorationZone)
         return PlanChangeQuote(target, PaymentAmount(charge, target.amount.currency), restartsPeriod = option == Charge.FULL_RESTART)
     }
 

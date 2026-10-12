@@ -15,6 +15,8 @@ data class CancelContext(
     val now: Instant,
     val monthlyPrice: Long?,
     val used: Boolean,
+    /** 일할 계산이 날짜를 가르는 시간대 */
+    val zone: java.time.ZoneId = Proration.DEFAULT_ZONE,
 )
 
 /** 계산 내역 한 줄 — [PAID] 는 양수, [USED] · [PENALTY] 는 음수(합이 환불 금액이다). */
@@ -46,7 +48,7 @@ object PeriodEndOnlyCancelPolicy : SubscriptionCancelPolicy {
 
 /**
  * 한국 소비자 정책 — 중도 해지가 열려 있고 환불은 `낸 돈 − 쓴 몫 − 위약금`.
- * - 쓴 몫: 월 주기는 일할(남은 시간 비율, 남은 몫을 내림). 월보다 긴 주기(연간 등)는 **시작한 개월 수 × 같은 등급의 월 가격**(할인은 쓴 몫에 안 쳐 준다. 월 가격이 없으면 일할). 낸 돈을 넘지 않는다.
+ * - 쓴 몫: 월 주기는 일할(남은 일수 비율 - [Proration], 남은 몫을 내림). 월보다 긴 주기(연간 등)는 **시작한 개월 수 × 같은 등급의 월 가격**(할인은 쓴 몫에 안 쳐 준다. 월 가격이 없으면 일할). 낸 돈을 넘지 않는다.
  * - 위약금 = 남은 금액 × [penaltyPercent]% (내림).
  * - 7일 철회: 이번 기간 시작 후 [withdrawalDays] 일 안(그날 끝 시각 포함)이고 앱이 「안 썼다」고 하면 전액, 위약금 없음.
  */
@@ -83,10 +85,7 @@ class KoreaConsumerCancelPolicy(private val penaltyPercent: Int = 0, private val
         if (months != null && months > 1 && context.monthlyPrice != null) {
             return minOf(paid, startedMonths(start, context.now, months) * context.monthlyPrice)
         }
-        val total = Duration.between(start, end).seconds
-        if (total <= 0) return paid
-        val left = Duration.between(context.now, end).seconds.coerceIn(0, total)
-        return paid - Math.multiplyExact(paid, left) / total
+        return paid - Proration.remaining(paid, start, end, context.now, context.zone)
     }
 
     /** 이미 시작한 개월 수(시작 시각에 첫 달이 시작된다) — 주기의 개월 수를 넘지 않는다. */

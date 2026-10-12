@@ -52,6 +52,7 @@ skeleton:
         enabled: false             # true 면 GET <base>/subscriptions/{id}/change-preview · POST .../change 가 열린다. 같은 주기 · 같은 통화의 윗등급 플랜으로만. 켜면 charge 가 필수
         # charge: PRORATED_DIFFERENCE  # 켜면 필수(기본값 없음). PRORATED_DIFFERENCE: 남은 기간의 차액만 결제하고 기간은 그대로 / FULL_RESTART: 새 플랜 전액을 결제하고 지금부터 새 주기
         min-charge: 0              # PRORATED_DIFFERENCE 의 차액이 이 값(최소 단위) 미만이면 과금 없이 바꾼다. 0 이상
+      proration-zone: Asia/Seoul   # 일할 계산(플랜 변경 차액 · 중도 해지의 쓴 몫)이 날짜를 가르는 시간대. 날짜(일) 단위이고 하루보다 짧은 주기(시험용)는 시간 비율
       cancel:                      # 해지·환불 정책 — 나라마다 갈아 끼운다(스펙 docs/superpowers/specs/2026-10-12-subscription-cancel-refund-design.md). 모듈 기본: 기간 끝 해지만(중도 해지 닫힘)
         # default-country: KR      # 구독을 만들 때 나라가 오지 않으면 쓰는 나라(ISO-3166 대문자 두 글자). 비우면 나라 없이 만든다
         policies: {}               # 나라 → 정책 이름. 내장: korea(중도 해지 열림, 환불 = 낸 돈 - 쓴 몫 - 위약금, 7일 철회 전액). 예: { KR: korea }. 지도에 없는 나라는 period-end-only

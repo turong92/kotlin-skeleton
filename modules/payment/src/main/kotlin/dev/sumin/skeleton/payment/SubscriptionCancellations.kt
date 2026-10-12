@@ -101,7 +101,7 @@ class SubscriptionCancellations(
 
     private fun quote(subscription: PaymentSubscription, at: java.time.Instant, payments: List<PeriodPayment> = periodPayments(subscription)): CancelQuote {
         val start = subscription.currentPeriodStart ?: return CancelQuote.CLOSED
-        val context = CancelContext(subscription, payments.sumOf { it.net }, at, monthlyPrice(subscription), usage.used(subscription, start, at))
+        val context = CancelContext(subscription, payments.sumOf { it.net }, at, monthlyPrice(subscription), usage.used(subscription, start, at), properties.subscription.prorationZone)
         return policies.forCountry(subscription.country).quote(context)
     }
 

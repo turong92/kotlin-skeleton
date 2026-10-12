@@ -184,6 +184,8 @@ data class PaymentProperties(
         val planChange: PlanChange = PlanChange(),
         /** 해지·환불 정책 — 기본은 기간 끝 해지만(중도 해지 닫힘). 나라마다 정책을 갈아 끼운다. */
         val cancel: Cancel = Cancel(),
+        /** 일할 계산(플랜 변경 차액 · 중도 해지의 쓴 몫)이 날짜를 가르는 시간대 - 기본 Asia/Seoul. */
+        val prorationZone: java.time.ZoneId = Proration.DEFAULT_ZONE,
     ) {
         data class Cancel(
             /** 구독을 만들 때 나라가 오지 않으면 쓰는 나라(ISO-3166 두 글자). 비우면 나라 없이 만든다(기본 정책). */

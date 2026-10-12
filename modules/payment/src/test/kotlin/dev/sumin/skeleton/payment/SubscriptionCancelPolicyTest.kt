@@ -45,7 +45,7 @@ class SubscriptionCancelPolicyTest {
 
         val after = korea0.quote(month(now = start.plus(Duration.ofDays(7)).plusSeconds(1)))
         assertFalse(after.withdrawal)
-        assertEquals(2_989, after.refund, "3,900 x (30d - 7d - 1s) / 30d rounded down")
+        assertEquals(2_990, after.refund, "3,900 x 23 of 30 days, rounded down")
     }
 
     @Test
@@ -62,9 +62,9 @@ class SubscriptionCancelPolicyTest {
         assertEquals(3_393, whole.refund, "3,770 left - 377 penalty")
         assertEquals(listOf(CancelLine(CancelLineCode.PAID, 3_900), CancelLine(CancelLineCode.USED, -130), CancelLine(CancelLineCode.PENALTY, -377)), whole.lines)
 
-        val odd = korea10.quote(month(now = start.plus(Duration.ofDays(7)).plusSeconds(1)))
-        assertEquals(2_691, odd.refund, "2,989 left - floor(298.9) = 298 penalty")
-        assertEquals(-298, odd.lines.single { it.code == CancelLineCode.PENALTY }.amount)
+        val odd = korea10.quote(month(now = start.plus(Duration.ofDays(7)).plusSeconds(1), paid = 3_905))
+        assertEquals(2_694, odd.refund, "2,993 left - 299 penalty")
+        assertEquals(-299, odd.lines.single { it.code == CancelLineCode.PENALTY }.amount, "3,905 x 23/30 = 2,993 left; floor(299.3) = 299")
     }
 
     @Test

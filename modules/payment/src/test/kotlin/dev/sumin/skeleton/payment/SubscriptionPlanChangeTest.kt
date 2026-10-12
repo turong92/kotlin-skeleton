@@ -21,9 +21,10 @@ class SubscriptionPlanChangeTest {
     @Test
     fun `the prorated difference is the price gap times the remaining share of the period, rounded down`() {
         assertEquals(3_000, prorated(start), "at the very start the whole gap")
-        assertEquals(2_999, prorated(start.plusSeconds(1)), "one second in is already less - rounded down, never up")
+        assertEquals(3_000, prorated(start.plusSeconds(1)), "the first day counts as used whole - the price drops at the next date, not per second")
+        assertEquals(2_900, prorated(Instant.parse("2026-01-02T00:00:00Z")), "29 of 30 days")
         assertEquals(1_500, prorated(start.plus(Duration.ofDays(15))))
-        assertEquals(0, prorated(end.minusSeconds(1)), "the last second of 3,000 won rounds to nothing")
+        assertEquals(0, prorated(end.minusSeconds(1)), "on the last date nothing is left")
         assertEquals(0, prorated(end.plusSeconds(10)), "after the end nothing is left")
         assertEquals(0, prorated(start, minCharge = 3_001), "a gap below the minimum charge is changed for free")
         assertEquals(3_000, prorated(start, minCharge = 3_000))
