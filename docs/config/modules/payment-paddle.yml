@@ -1,0 +1,15 @@
+# payment-paddle — Paddle Billing(해외 결제, 판매 대행). 기본 꺼짐.
+skeleton:
+  payment-paddle:
+    enabled: false                       # true + 세 비밀이 모두 있어야 제공자 빈이 생긴다 (하나라도 비면 이 결제사만 꺼진다)
+    provider-id: paddle                  # 라우팅에서 쓰는 ID — 웹훅 주소 /api/v1/payments/webhooks/paddle
+    client-name: payment-paddle          # 외부 HTTP 클라이언트 이름
+    api-key: ""                          # 서버가 Paddle API 를 부르는 키 (env 로 넘긴다)
+    client-token: ""                     # Paddle.js 클라이언트 토큰 (공개해도 된다)
+    webhook-secret: ""                   # 웹훅 엔드포인트 비밀값 (env 로 넘긴다)
+    environment: sandbox                 # sandbox | live
+    base-url: ""                         # 비우면 환경에 따른 기본 주소 (시험의 가짜 Paddle 은 여기에)
+    signature-tolerance: 60s             # 서명 시각이 지금과 이보다 멀면 거절
+    prices: {}                           # 플랜 코드 · 상품 코드 → Paddle 가격 id (pri_…)
+    supported-currencies: []             # 비우면 통화로 라우팅하지 않는다
+    supported-countries: []              # 비우면 국가로 라우팅하지 않는다

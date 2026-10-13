@@ -100,7 +100,7 @@ class PaymentOrders(
             val winner = checkNotNull(store.findOrderByDedupeKey(dedupeKey)) { "the order for this idempotency key disappeared" }
             return replay(winner, command)
         }
-        return CreatedOrder(order, checkout.checkout(CheckoutOrder(order.id, order.orderName, order.amount)), replayed = false)
+        return CreatedOrder(order, checkout.checkout(CheckoutOrder(order.id, order.orderName, order.amount, order.itemRef, order.accountId)), replayed = false)
     }
 
     /**
@@ -303,7 +303,7 @@ class PaymentOrders(
                 log.warn("the payment provider of a replayed order cannot hand out its checkout values: {}", gateway.providerId)
                 throw PaymentUnavailableException()
             }
-            gateway.checkout(CheckoutOrder(existing.id, existing.orderName, existing.amount))
+            gateway.checkout(CheckoutOrder(existing.id, existing.orderName, existing.amount, existing.itemRef, existing.accountId))
         } else {
             null
         }

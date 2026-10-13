@@ -20,6 +20,7 @@ dependencies {
     implementation(project(":modules:notification-sse"))
     implementation(project(":modules:notification-websocket"))
     implementation(project(":modules:payment-stripe"))
+    implementation(project(":modules:payment-paddle"))
     implementation(project(":modules:payment-toss"))
     implementation(project(":modules:payment-jdbc"))   // + payment (api) — 결제 장부(주문 · 환불 · 웹훅 수신함 · 작업)가 켜진다: /api/v1/payments. PaymentCatalog 빈이 없어 주문 만들기는 닫혀 있다(상품은 앱이 정한다 — 실제 흐름은 apps/sample 의 cheer/)
     implementation(project(":modules:persistence-jdbc"))

@@ -38,6 +38,7 @@
 | `payment-jdbc` | 결제 장부 저장소 + 작업 어댑터 (PostgreSQL · MySQL) | [payment-jdbc](payment-jdbc.md) |
 | `payment-toss` | Toss 결제 제공자 | [payment-toss](payment-toss.md) |
 | `payment-stripe` | Stripe 결제 제공자 | [payment-stripe](payment-stripe.md) |
+| `payment-paddle` | Paddle 해외 결제 제공자 | [payment-paddle](payment-paddle.md) |
 | `config-aws-ssm` | AWS SSM Parameter Store 를 프로퍼티로 읽기 | [config-aws-ssm](config-aws-ssm.md) |
 | `idempotency` | Idempotency-Key 로 명령 엔드포인트 보호 | [idempotency](idempotency.md) |
 | `json` | JsonCodec · JsonDocument · 버전 있는 페이로드 | [json](json.md) |
