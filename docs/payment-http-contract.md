@@ -91,10 +91,12 @@
 기준 경로 `/api/v1/payments`. 상태 코드 규칙의 요약은 §4.
 
 ### GET /config
-결제를 받을 수 있는가. `200 { value: { available, testMode, refundRequestsEnabled } }`.
+결제를 받을 수 있는가. `200 { value: { available, testMode, refundRequestsEnabled, providers } }`. `providers`: 결제창을 열 수 있는 켜진 결제사 id 목록(예 `["paddle","toss"]`) — 화면이 나라 · 언어로 하나를 골라 `POST /orders` · `POST /subscriptions` 의 `provider` 로 보낸다(결제사가 둘 이상이면 서버가 고르지 못한다).
 `available`: `PaymentCatalog` 빈이 있고 결제창을 여는 결제사가 있고 **그 결제사가 지금 결제창 값을 낼 수 있다**(토스: 클라이언트 키가 비었거나 시크릿 키와 모드가 다르면 `false`). `testMode`: `available` 이면서 그 결제사가 테스트 키다. `refundRequestsEnabled`: `skeleton.payment.refund.requests-enabled`.
 
 ### POST /orders — 주문 만들기 (`PaymentCatalog` 빈이 있을 때만)
+
+선택 본문 칸 `provider`(결제사 id, 소문자). 비우면 통화 · 나라 · 기본 결제사로 서버가 고른다. 서명된 웹훅이 곧 사실인 결제사(Paddle)는 승인 호출(`/confirm`)이 없다 — 결제창이 끝나면 웹훅이 주문을 `PAID` 로 옮기므로 화면은 `GET /orders/{id}` 를 폴링한다. 그 주문의 금액 · 통화는 결제사가 받은 값으로 바뀐다(여러 통화).
 헤더 `Idempotency-Key`. 본문 `{ "itemType": "cheer", "itemRef": "cheer-3000", "quantity": 1 }`(`itemType` 1~40자 · `itemRef` 1~128자 · `quantity` 생략하면 1).
 **금액은 본문에 없다** — 앱의 카탈로그가 `(itemType, itemRef, quantity)` 로 정한다. 브라우저가 금액을 정하는 길은 없다.
 

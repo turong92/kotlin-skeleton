@@ -19,6 +19,10 @@ class PaymentProviderRouter(
     /** 이 라우터가 아는 결제사 id 전부(꺼진 것 포함) — 운영자의 결제 번호 검색이 `provider in (…)` 을 같이 걸어 유니크 인덱스를 타게 한다. */
     fun providerIds(): Set<String> = providersById.keys
 
+    /** [capability] 를 가진 켜진 결제사의 id — 화면이 고를 수 있는 결제사 목록. */
+    fun providerIds(capability: KClass<out PaymentGateway>): List<String> =
+        providersById.filterValues { capability.isInstance(it) && it.route().enabled }.keys.sorted()
+
     fun resolve(
         provider: String?,
         amount: PaymentAmount?,

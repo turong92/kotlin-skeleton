@@ -46,7 +46,7 @@ class SubscriptionPlanChanges(
     private val ids: SortableIds = SortableIds.system,
 ) {
     fun preview(accountId: String, subscriptionId: String, planCode: String): PlanChangeQuote =
-        quote(owned(store.findSubscription(subscriptionId), accountId) ?: throw PaymentSubscriptionNotFoundException(), planCode)
+        quote(owned(store.findSubscription(subscriptionId), accountId)?.also { if (it.isProviderManaged) throw PaymentPlanChangeNotAllowedException() } ?: throw PaymentSubscriptionNotFoundException(), planCode)
 
     /**
      * @param expectedCharge 호출자가 미리보기로 본 금액 — 서버가 다시 계산한 값이 더 크면 [PaymentPlanChangeChargeChangedException].
@@ -55,6 +55,7 @@ class SubscriptionPlanChanges(
     fun change(accountId: String, subscriptionId: String, planCode: String, expectedCharge: Long, key: IdempotencyKey): PaymentSubscription {
         store.requireNoOpenTransaction("PaymentSubscriptions.change")
         val before = owned(store.findSubscription(subscriptionId), accountId) ?: throw PaymentSubscriptionNotFoundException()
+        if (before.isProviderManaged) throw PaymentPlanChangeNotAllowedException() // 결제사가 갱신하는 구독의 플랜 변경은 2차
         val dedupeKey = "subchg:$subscriptionId:${PaymentOrderIds.dedupeKey(accountId, key).take(32)}"
         if (store.findOrderByDedupeKey(dedupeKey) != null) return before // 같은 요청의 재전송 — 이미 했다
         val gateway = billingGateway(before)

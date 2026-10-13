@@ -15,6 +15,16 @@ internal object PaymentRequests {
         return IdempotencyKey(value)
     }
 
+    private val PROVIDER = Regex("[a-z0-9_-]{1,40}")
+
+    /** 결제사 id(선택) — 없으면 null. 모양만 본다; 없는 · 꺼진 결제사는 서비스가 거절한다. */
+    fun provider(node: JsonNode?): String? {
+        if (node == null || node.isNull) return null
+        val text = if (node.isString) node.stringValue().trim().lowercase() else ""
+        if (!PROVIDER.matches(text)) throw FieldValidationException("provider", "Pattern", "provider must be a payment provider id")
+        return text
+    }
+
     fun text(node: JsonNode?, field: String, max: Int): String {
         if (node == null || node.isNull) throw FieldValidationException(field, "Required", "$field is required")
         if (!node.isString) throw FieldValidationException(field, "Pattern", "$field must be a string")

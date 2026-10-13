@@ -130,6 +130,7 @@ class SubscriptionCancellations(
     }
 
     private fun quote(subscription: PaymentSubscription, at: java.time.Instant, payments: List<PeriodPayment> = periodPayments(subscription)): CancelQuote {
+        if (subscription.isProviderManaged) return CancelQuote.CLOSED // 결제사가 갱신하는 구독은 결제사의 정책을 따른다(기간 끝 해지만)
         val start = subscription.currentPeriodStart ?: return CancelQuote.CLOSED
         val covers = payments.map { CancelPayment(it.net, if (it.order.kind == PaymentOrderKind.SUBSCRIPTION_CHANGE) it.order.paidAt ?: start else start) }
         val context = CancelContext(subscription, payments.sumOf { it.net }, at, monthlyPrice(subscription), usage.used(subscription, start, at), properties.subscription.prorationZone, covers)

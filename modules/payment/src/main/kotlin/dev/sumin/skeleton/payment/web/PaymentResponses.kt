@@ -143,7 +143,8 @@ data class CheckoutResponse(
 
 data class CreateOrderResponse(val order: OrderResponse, val checkout: CheckoutResponse?)
 
-data class PaymentConfigResponse(val available: Boolean, val testMode: Boolean, val refundRequestsEnabled: Boolean)
+/** [providers] 는 결제창을 열 수 있는 결제사 id — 화면이 나라 · 언어로 하나를 골라 주문 · 구독을 만들 때 `provider` 로 보낸다. */
+data class PaymentConfigResponse(val available: Boolean, val testMode: Boolean, val refundRequestsEnabled: Boolean, val providers: List<String> = emptyList())
 
 /**
  * 운영자 주문 — 사용자 응답([OrderResponse])의 칸에 더해 계정 · 결제사 · 결제사 결제 번호 · 검토 이유(파생 포함)를 싣는다.
@@ -326,6 +327,10 @@ data class SubscriptionResponse(
     val createdAt: Instant,
     /** 구매자 나라(ISO-3166 두 글자) - 해지·환불 정책을 고른 열쇠. 모르면 null. */
     val country: String?,
+    /** 어느 결제사의 구독인가(`toss` · `paddle` …). */
+    val provider: String,
+    /** 결제사가 갱신을 직접 하는 구독이다 - 플랜 변경 · 중도 해지(환불)는 열리지 않고 해지는 기간 끝에만 된다. */
+    val providerManaged: Boolean,
 ) {
     companion object {
         fun of(subscription: dev.sumin.skeleton.payment.PaymentSubscription, planName: String?) = SubscriptionResponse(
@@ -344,6 +349,8 @@ data class SubscriptionResponse(
             testMode = subscription.providerMode == PaymentMode.TEST,
             createdAt = subscription.createdAt,
             country = subscription.country,
+            provider = subscription.provider,
+            providerManaged = subscription.isProviderManaged,
         )
     }
 }

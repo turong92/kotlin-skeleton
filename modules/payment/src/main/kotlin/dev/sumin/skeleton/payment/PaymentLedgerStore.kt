@@ -96,6 +96,9 @@ interface PaymentLedgerStore {
     /** 요청 키([PaymentSubscription.dedupeKey])로 구독을 찾는다 — 같은 요청의 재전송이 앞선 줄을 만난다. */
     fun findSubscriptionByDedupeKey(dedupeKey: String): PaymentSubscription?
 
+    /** 결제사 쪽 구독 id([PaymentSubscription.providerSubscriptionId])로 찾는다. */
+    fun findSubscriptionByProviderId(provider: String, providerSubscriptionId: String): PaymentSubscription?
+
     /** 계정의 **살아 있는** 구독(`active_key` 의 주인) — 없으면 null. */
     fun findLiveSubscription(accountId: String): PaymentSubscription?
 

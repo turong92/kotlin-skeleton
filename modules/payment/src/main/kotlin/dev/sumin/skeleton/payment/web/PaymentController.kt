@@ -6,6 +6,7 @@ import dev.sumin.skeleton.common.Response
 import dev.sumin.skeleton.common.openapi.ApiEnvelopeType
 import dev.sumin.skeleton.common.openapi.ApiResponseEnvelope
 import dev.sumin.skeleton.payment.PaymentAmount
+import dev.sumin.skeleton.payment.PaymentCheckoutGateway
 import dev.sumin.skeleton.payment.PaymentCatalog
 import dev.sumin.skeleton.payment.PaymentMode
 import dev.sumin.skeleton.payment.PaymentOrderStatus
@@ -55,7 +56,8 @@ class PaymentController(
         callers.account(authentication)
         val checkout = orders.openableCheckout(null, null)   // 주문 만들기와 같은 고르기 · 같은 판정(결제창 값을 낼 수 있는가)
         val available = catalog.getIfAvailable() != null && checkout != null
-        return Response.ok(PaymentConfigResponse(available, checkout != null && available && checkout.mode == PaymentMode.TEST, properties.refund.requestsEnabled))
+        val providers = if (catalog.getIfAvailable() == null) emptyList() else router.providerIds(PaymentCheckoutGateway::class).filter { orders.openableCheckout(null, null, it) != null }
+        return Response.ok(PaymentConfigResponse(available || providers.isNotEmpty(), (checkout ?: providers.firstOrNull()?.let { orders.openableCheckout(null, null, it) })?.mode == PaymentMode.TEST, properties.refund.requestsEnabled, providers))
     }
 
     @Operation(summary = "Confirm a payment returned from the checkout window", description = "200 PAID (also a resend with the same payment key) · 202 CONFIRMING (the provider has not answered — poll GET /orders/{id}) · 400 AMOUNT_MISMATCH before the provider is called · 402 DECLINED (data.providerCode, data.category).")

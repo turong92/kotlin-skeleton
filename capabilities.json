@@ -2214,6 +2214,7 @@
         "notification-sse",
         "payment",
         "payment-jdbc",
+        "payment-paddle",
         "payment-toss",
         "storage",
         "storage-s3"

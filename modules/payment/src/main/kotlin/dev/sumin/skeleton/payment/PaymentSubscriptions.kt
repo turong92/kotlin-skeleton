@@ -37,20 +37,31 @@ class PaymentSubscriptions(
     fun recentOrders(subscriptionId: String, limit: Int = RECENT_ORDERS): List<PaymentOrder> = store.listSubscriptionOrders(subscriptionId, limit)
 
     /** `PENDING` 줄을 만들고 카드 등록 창 값을 돌려준다. 같은 키로 다시 부르면 같은 줄이다. [country] 가 비면 설정의 기본 나라(그것도 없으면 나라 없음). */
-    fun start(accountId: String, planCode: String, key: IdempotencyKey, country: String? = null): StartedSubscription {
+    fun start(accountId: String, planCode: String, key: IdempotencyKey, country: String? = null, provider: String? = null): StartedSubscription {
         val dedupeKey = PaymentOrderIds.dedupeKey(accountId, key)
         store.findSubscriptionByDedupeKey(dedupeKey)?.let { return replay(it, planCode) }
 
         val plan = plans.find(planCode)?.takeIf { it.amount.amount > 0 } ?: throw PaymentItemNotPurchasableException()
         SubscriptionPeriod.parse(plan.period)
         if (store.findLiveSubscription(accountId) != null) throw PaymentAlreadySubscribedException()
-        val gateway = billingGateway(plan.amount) ?: throw PaymentUnavailableException()
+        val subscriptionId = ids.newId(PaymentOrderIds.SUBSCRIPTION_PREFIX)
         val customerKey = PaymentOrderIds.newCustomerKey(random)
-        val setup = gateway.billingSetup(customerKey) ?: throw PaymentUnavailableException()
+        // 결제사가 갱신까지 하는 결제사(Paddle)를 골랐으면 그 결제창 값, 아니면 카드 등록 창 값
+        val hosted = provider?.let(::hostedGateway)
+        val gateway: PaymentGateway
+        val setup: BillingSetup
+        if (hosted != null) {
+            gateway = hosted
+            setup = hosted.subscriptionSetup(HostedSubscriptionRequest(plan.code, accountId, subscriptionId, customerKey, country?.uppercase())) ?: throw PaymentUnavailableException()
+        } else {
+            val billing = billingGateway(plan.amount, provider) ?: throw PaymentUnavailableException()
+            gateway = billing
+            setup = billing.billingSetup(customerKey) ?: throw PaymentUnavailableException()
+        }
 
         val now = writer.now()
         val subscription = PaymentSubscription(
-            id = ids.newId(PaymentOrderIds.SUBSCRIPTION_PREFIX),
+            id = subscriptionId,
             accountId = accountId,
             provider = gateway.providerId.trim().lowercase(),
             providerMode = gateway.mode,
@@ -140,8 +151,9 @@ class PaymentSubscriptions(
     }
 
     /** 해지 예약 — `ACTIVE` → `CANCELING`(기간 끝까지 이용), `PAST_DUE` 는 바로 끝. 다시 눌러도 같은 답. 시작하지 않은 구독은 [PaymentSubscriptionNotCancelableException]. */
-    fun cancel(accountId: String, subscriptionId: String): PaymentSubscription =
-        store.inTransaction { tx ->
+    fun cancel(accountId: String, subscriptionId: String): PaymentSubscription {
+        asProviderCancel(accountId, subscriptionId)
+        return store.inTransaction { tx ->
             val subscription = owned(tx.lockSubscription(subscriptionId), accountId) ?: throw PaymentSubscriptionNotFoundException()
             when (subscription.status) {
                 SubscriptionStatus.ACTIVE -> lifecycle.save(tx, subscription, SubscriptionStatus.CANCELING)
@@ -150,6 +162,20 @@ class PaymentSubscriptions(
                 SubscriptionStatus.PENDING -> throw PaymentSubscriptionNotCancelableException()
             }
         }
+    }
+
+    /**
+     * 결제사가 갱신하는 구독이면 **결제사에 먼저 해지를 요청한다**(락 · 트랜잭션 밖) — 요청이 거절되면 던지고 우리 줄은 그대로다. 이미 해지 예약 · 끝난 구독이면 다시 부르지 않는다.
+     * 기간 끝 해지는 `ACTIVE` 만, 연체 중(`PAST_DUE`)은 즉시 해지다(수금을 멈춘다). 결과는 웹훅으로도 오고 우리 줄은 곧바로 같은 상태로 간다.
+     */
+    private fun asProviderCancel(accountId: String, subscriptionId: String) {
+        val subscription = owned(store.findSubscription(subscriptionId), accountId) ?: throw PaymentSubscriptionNotFoundException()
+        val providerId = subscription.providerSubscriptionId ?: return
+        if (subscription.status != SubscriptionStatus.ACTIVE && subscription.status != SubscriptionStatus.PAST_DUE) return
+        store.requireNoOpenTransaction("PaymentSubscriptions.cancel")
+        val gateway = hostedGateway(subscription.provider) ?: return
+        gateway.cancel(providerId, atPeriodEnd = subscription.status == SubscriptionStatus.ACTIVE)
+    }
 
     private class Claim(val subscription: PaymentSubscription, val order: PaymentOrder?)
 
@@ -182,12 +208,17 @@ class PaymentSubscriptions(
     private fun replay(existing: PaymentSubscription, planCode: String): StartedSubscription {
         if (existing.planCode != planCode) throw PaymentIdempotencyConflictException()
         val setup = if (existing.status == SubscriptionStatus.PENDING && existing.chargeOrderId == null) {
-            val gateway = try {
-                router.gateway(existing.provider, PaymentBillingGateway::class)
-            } catch (e: PaymentProviderNotFoundException) {
-                throw PaymentUnavailableException()
+            val hosted = hostedGateway(existing.provider)
+            if (hosted != null) {
+                hosted.subscriptionSetup(HostedSubscriptionRequest(existing.planCode, existing.accountId, existing.id, checkNotNull(existing.customerKey), existing.country)) ?: throw PaymentUnavailableException()
+            } else {
+                val gateway = try {
+                    router.gateway(existing.provider, PaymentBillingGateway::class)
+                } catch (e: PaymentProviderNotFoundException) {
+                    throw PaymentUnavailableException()
+                }
+                gateway.billingSetup(checkNotNull(existing.customerKey)) ?: throw PaymentUnavailableException()
             }
-            gateway.billingSetup(checkNotNull(existing.customerKey)) ?: throw PaymentUnavailableException()
         } else {
             null
         }
@@ -195,15 +226,28 @@ class PaymentSubscriptions(
     }
 
     /** 카드 등록 창을 열 수 있는 결제사 — 없으면 null. */
-    private fun billingGateway(amount: PaymentAmount): PaymentBillingGateway? =
+    private fun billingGateway(amount: PaymentAmount, provider: String? = null): PaymentBillingGateway? =
         try {
-            router.resolve(null, amount, null, PaymentBillingGateway::class)
+            router.resolve(provider, amount, null, PaymentBillingGateway::class)
         } catch (e: PaymentRoutingException) {
             log.warn("no payment provider can register a card: {}", e.message)
             null
         } catch (e: PaymentProviderNotFoundException) {
             log.warn("the payment provider for a card registration is not available: {}", e.providerId)
             null
+        } catch (e: PaymentCapabilityUnsupportedException) {
+            log.warn("the payment provider cannot register a card: {}", e.message)
+            null
+        }
+
+    /** 결제사가 갱신까지 하는 결제사 — 그런 능력이 없는 결제사면 null(카드 등록 길로 간다). 없는 · 꺼진 결제사는 [PaymentUnavailableException]. */
+    private fun hostedGateway(provider: String): PaymentHostedSubscriptionGateway? =
+        try {
+            router.gateway(provider, PaymentHostedSubscriptionGateway::class)
+        } catch (e: PaymentCapabilityUnsupportedException) {
+            null
+        } catch (e: PaymentProviderNotFoundException) {
+            throw PaymentUnavailableException()
         }
 
     /** 선점에서 진 쪽의 방금 받은 빌링키를 지운다 — 못 지워도 응답은 바꾸지 않는다(토큰은 어디에도 남기지 않으므로 로그에 사실만). */

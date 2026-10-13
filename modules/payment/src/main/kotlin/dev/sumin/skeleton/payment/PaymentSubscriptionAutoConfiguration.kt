@@ -34,6 +34,7 @@ class PaymentSubscriptionAutoConfiguration {
         plans: ObjectProvider<SubscriptionPlans>,
         encryptor: ObjectProvider<TextEncryptor>,
         billing: ObjectProvider<PaymentBillingGateway>,
+        hosted: ObjectProvider<PaymentHostedSubscriptionGateway>,
         lifecycle: SubscriptionLifecycle,
         charges: SubscriptionCharges,
         tasks: PaymentTasks,
@@ -43,8 +44,8 @@ class PaymentSubscriptionAutoConfiguration {
         val plansBean = plans.getIfAvailable() ?: error("skeleton.payment.subscription.enabled=true needs a SubscriptionPlans bean (the app owns the plans and prices)")
         val encryptorBean = encryptor.getIfAvailable()
             ?: error("skeleton.payment.subscription.enabled=true needs an encryption key to store billing keys: set skeleton.crypto.keys (the crypto module's TextEncryptor)")
-        check(billing.orderedStream().findAny().isPresent) {
-            "skeleton.payment.subscription.enabled=true needs a payment provider with the billing capability (PaymentBillingGateway), e.g. payment-toss"
+        check(billing.orderedStream().findAny().isPresent || hosted.orderedStream().findAny().isPresent) {
+            "skeleton.payment.subscription.enabled=true needs a payment provider with the billing capability (PaymentBillingGateway, e.g. payment-toss) or one that renews by itself (PaymentHostedSubscriptionGateway, e.g. payment-paddle)"
         }
         return PaymentSubscriptions(store, router, plansBean, encryptorBean, lifecycle, charges, tasks, writer, properties)
     }

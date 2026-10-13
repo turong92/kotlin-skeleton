@@ -46,6 +46,7 @@
 
 결제 장부 위에 얹는 자동결제 — 카드를 한 번 등록(토스 빌링키)하고 서버가 기간 끝마다 승인한다. 설계와 근거: `docs/superpowers/specs/2026-10-09-subscription-design.md`. **결제사의 스케줄러는 쓰지 않는다**(토스는 스케줄링을 하지 않는다) — 언제 얼마를 받을지는 우리 장부가 정한다.
 
+- **결제사가 갱신하는 구독(Paddle)**: `PaymentHostedSubscriptionGateway` 를 가진 결제사는 카드 등록 · 첫 승인 · 갱신을 하지 않는다 — 결제창은 프론트가 열고, 서명된 웹훅(`PaymentPushGateway`, 수신함 줄 `resource_type=PUSHED`)이 `PaymentPushedEvents` 로 결제(주문 `PAID`, 금액 · 통화는 웹훅 값)와 구독 상태(`provider_subscription_id` · `provider_synced_at` 열, 더 새로운 사건만 반영)를 옮긴다. 그런 구독은 우리 갱신 작업이 건너뛰고(이중 과금 방지) 해지는 결제사 API(기간 끝), 중도 해지 · 플랜 변경은 열리지 않는다(2차). 결제사는 `POST /subscriptions` · `POST /orders` 의 `provider` 로 고른다.
 - **켜는 법**: `skeleton.payment.subscription.enabled=true` + 앱이 내는 세 가지 — `SubscriptionPlans` 빈(플랜 코드 · 금액 · 주기 · 등급 — **구독 금액의 유일한 출처**, 구독 줄에는 만들 때의 값이 박혀 카탈로그 가격을 바꿔도 기존 구독에 조용히 적용되지 않는다), 빌링 능력을 가진 결제사(`PaymentBillingGateway` — `payment-toss`), 빌링키를 암호화할 `crypto` 키(`skeleton.crypto.keys`). **하나라도 없으면 기동 실패**다.
 - **상태** `PENDING`(카드 등록 · 첫 결제 전 또는 확인 중) → `ACTIVE` ⇄ `PAST_DUE`(갱신 거절, 재시도 중 — 이용 불가) · `CANCELING`(해지 예약, 기간 끝까지 이용) → `ENDED`. 전이는 `SubscriptionTransitions` 한 곳이고 표 밖 전이는 버그다. 앱은 `PaymentSubscriptions.current(accountId)` 를 **읽을 때** `status.isInUse`(`ACTIVE` · `CANCELING`)로 판단한다 — 구독 리스너는 두지 않았다.
 - **계정당 살아 있는 구독 하나**: 구독 줄의 `active_key`(= 계정 id, 끝나면 NULL)가 유니크다. 자리는 카드를 낸 뒤 첫 주문과 같은 트랜잭션에서 잡는다.

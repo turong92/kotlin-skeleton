@@ -154,6 +154,9 @@ class InMemoryPaymentLedgerStore : PaymentLedgerStore {
     override fun findSubscriptionByDedupeKey(dedupeKey: String): PaymentSubscription? =
         synchronized(commitMutex) { committedSubscriptions.values.firstOrNull { it.dedupeKey == dedupeKey } }
 
+    override fun findSubscriptionByProviderId(provider: String, providerSubscriptionId: String): PaymentSubscription? =
+        synchronized(commitMutex) { committedSubscriptions.values.firstOrNull { it.provider == provider && it.providerSubscriptionId == providerSubscriptionId } }
+
     override fun findLiveSubscription(accountId: String): PaymentSubscription? =
         synchronized(commitMutex) { committedSubscriptions.values.firstOrNull { it.activeKey == accountId } }
 
@@ -384,7 +387,16 @@ class InMemoryPaymentLedgerStore : PaymentLedgerStore {
         override fun updateSubscription(subscription: PaymentSubscription) {
             check(subscription.id == ownedSubscriptionId) { "the subscription must be locked in this transaction before it is updated" }
             checkActiveKey(subscription)
+            checkProviderId(subscription)
             pendingSubscriptions[subscription.id] = subscription
+        }
+
+        /** `(provider, provider_subscription_id)` 유니크 — 결제사의 구독 하나는 우리 구독 하나에만 붙는다. */
+        private fun checkProviderId(subscription: PaymentSubscription) {
+            val providerId = subscription.providerSubscriptionId ?: return
+            fun clash(other: PaymentSubscription) = other.id != subscription.id && other.provider == subscription.provider && other.providerSubscriptionId == providerId
+            val owner = pendingSubscriptions.values.firstOrNull(::clash) ?: synchronized(commitMutex) { committedSubscriptions.values.firstOrNull { clash(it) && it.id !in pendingSubscriptions } }
+            if (owner != null) throw PaymentLedgerConflictException("the provider subscription already belongs to another subscription")
         }
 
         /** `active_key` 유니크 — 같은 키를 쥐려는 쪽은 앞선 트랜잭션이 끝날 때까지 기다렸다가(DB 유니크 인덱스처럼) 겹치면 충돌이다. */

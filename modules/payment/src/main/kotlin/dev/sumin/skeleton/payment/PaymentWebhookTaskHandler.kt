@@ -17,6 +17,8 @@ class PaymentWebhookTaskHandler(
     private val router: PaymentProviderRouter,
     private val convergence: PaymentConvergence,
     private val writer: PaymentLedgerWriter,
+    /** 서명된 웹훅이 곧 사실인 결제사([PaymentPushGateway])의 줄을 옮기는 곳. */
+    private val pushed: PaymentPushedEvents? = null,
 ) : PaymentTaskHandler {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -27,6 +29,7 @@ class PaymentWebhookTaskHandler(
         val id = run.subjectId.toLongOrNull() ?: throw PaymentTaskPermanentException("The webhook task has an unreadable subject")
         val event = store.findWebhookEvent(id) ?: return
         if (event.status.isFinished) return
+        if (event.resourceType == PushedEvents.RESOURCE_TYPE) return handlePushed(run, id, event)
         val order = event.orderId?.let(store::findOrder)
         if (order == null) {
             conclude(id, PaymentWebhookStatus.IGNORED, WebhookCodes.UNKNOWN_ORDER)
@@ -76,6 +79,42 @@ class PaymentWebhookTaskHandler(
         }
     }
 
+    /** 서명이 진위를 보증한 줄 — 결제사에 묻지 않고 저장된 원문을 사건으로 읽어 장부에 옮긴다. 줄을 닫는 일은 같은 트랜잭션이다. */
+    private fun handlePushed(run: PaymentTaskRun, id: Long, event: PaymentWebhookEvent) {
+        val gateway = try {
+            router.gateway(event.provider, PaymentPushGateway::class)
+        } catch (_: PaymentProviderNotFoundException) {
+            throw retry(id, WebhookCodes.PROVIDER_UNAVAILABLE, "No payment provider is available to apply webhook event $id")
+        } catch (_: PaymentCapabilityUnsupportedException) {
+            fail(id, WebhookCodes.LOOKUP_UNSUPPORTED, dead = true)
+            throw PaymentTaskPermanentException("The payment provider of webhook event $id does not push events")
+        }
+        if (pushed == null) {
+            fail(id, WebhookCodes.LOOKUP_UNSUPPORTED, dead = true)
+            throw PaymentTaskPermanentException("No pushed event handler is wired for webhook event $id")
+        }
+        val pushedEvent = try {
+            event.payload?.let(gateway::interpret)
+        } catch (e: Exception) {
+            log.warn("pushed webhook event={} could not be read exception={}", id, e.javaClass.simpleName)
+            fail(id, PAYLOAD_UNREADABLE, dead = true)
+            throw PaymentTaskPermanentException("Webhook event $id has an unreadable payload")
+        }
+        if (pushedEvent == null) {
+            conclude(id, PaymentWebhookStatus.IGNORED, PaymentPushedEvents.NOT_HANDLED)
+            return
+        }
+        try {
+            store.inTransaction { tx ->
+                val reason = pushed.apply(tx, gateway, pushedEvent)
+                mark(tx, id, if (reason == null) PaymentWebhookStatus.PROCESSED else PaymentWebhookStatus.IGNORED, reason)
+            }
+        } catch (e: Exception) {
+            log.warn("applying pushed webhook event={} failed attempt={}/{} exception={}", id, run.attempt, run.maxAttempts, e.javaClass.simpleName)
+            throw retry(id, WebhookCodes.PROCESSING_FAILED, "Applying webhook event $id failed")
+        }
+    }
+
     /**
      * 웹훅 작업이 죽었다 — 줄이 아직 끝나지 않았으면(`RECEIVED` · `FAILED`) `DEAD`. 앞선 시도의 사유가 있으면 그대로 두고 없으면 [WebhookCodes.RETRIES_EXHAUSTED].
      * 마지막 시도에 표시하는 길에 기대지 않는다: 워커가 죽어 멈춘 채 시도를 다 쓴 작업은 처리기를 거치지 않고 DEAD 가 된다. 끝난 줄 · 이미 `DEAD` 인 줄 · 없는 줄은 건드리지 않는다 — 두 번 불려도 한 번.
@@ -94,6 +133,10 @@ class PaymentWebhookTaskHandler(
     private fun retry(id: Long, code: String, message: String): PaymentTaskRetryException {
         runCatching { fail(id, code, dead = false) }.onFailure { log.warn("could not record the failure of webhook event={} exception={}", id, it.javaClass.simpleName) }
         return PaymentTaskRetryException(message)
+    }
+
+    private companion object {
+        const val PAYLOAD_UNREADABLE = "PAYLOAD_UNREADABLE"
     }
 
     private fun fail(id: Long, code: String, dead: Boolean) {

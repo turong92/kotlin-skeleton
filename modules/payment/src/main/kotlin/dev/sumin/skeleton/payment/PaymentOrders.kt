@@ -12,6 +12,8 @@ data class CreateOrderCommand(
     val idempotencyKey: IdempotencyKey,
     val quantity: Int = 1,
     val country: String? = null,
+    /** 결제사를 지정한다(예: 화면 언어 · 나라가 정한 `paddle`). 비우면 통화 · 나라 · 기본 결제사로 서버가 고른다. */
+    val provider: String? = null,
 )
 
 /**
@@ -53,7 +55,7 @@ class PaymentOrders(
         val quote = catalog.quote(PurchaseRequest(command.accountId, command.itemType, command.itemRef, command.quantity, command.country))
         if (quote.amount.amount <= 0) throw PaymentItemNotPurchasableException()
         check(quote.orderName.isNotBlank()) { "The payment catalog returned a blank order name" }
-        val checkout = findOpenableCheckout(quote.amount, command.country, warn = true) ?: throw PaymentUnavailableException()
+        val checkout = findOpenableCheckout(command.provider, quote.amount, command.country, warn = true) ?: throw PaymentUnavailableException()
 
         val now = writer.now()
         val order = PaymentOrder(
@@ -252,17 +254,20 @@ class PaymentOrders(
      * 결제사가 하나인 1단계에서는 같고, 금액 · 국가로 갈리는 결제사가 늘면 `config` 가 「가능」이라 해도 어떤 주문은 503 일 수 있다(반대도).
      * **조용히 묻는다** — 이유는 `debug` 로만 남는다(`GET /config` 가 호출마다 `WARN` 을 찍지 않게). 주문 만들기만 이유를 `WARN` 으로 말한다.
      */
-    fun openableCheckout(amount: PaymentAmount?, country: String?): PaymentCheckoutGateway? = findOpenableCheckout(amount, country, warn = false)
+    fun openableCheckout(amount: PaymentAmount?, country: String?, provider: String? = null): PaymentCheckoutGateway? = findOpenableCheckout(provider, amount, country, warn = false)
 
     /** [openableCheckout] 에 이유를 로그로 남길지 고른 것 — `GET /config` 는 요청 한도가 없어 조용히(`debug`) 묻고, 주문 만들기만 이유를 `WARN` 으로 말한다. */
-    private fun findOpenableCheckout(amount: PaymentAmount?, country: String?, warn: Boolean): PaymentCheckoutGateway? {
+    private fun findOpenableCheckout(provider: String?, amount: PaymentAmount?, country: String?, warn: Boolean): PaymentCheckoutGateway? {
         val gateway = try {
-            router.resolve(null, amount, country, PaymentCheckoutGateway::class)
+            router.resolve(provider, amount, country, PaymentCheckoutGateway::class)
         } catch (e: PaymentRoutingException) {
             if (warn) log.warn("no payment provider can open a checkout: {}", e.message) else log.debug("no payment provider can open a checkout: {}", e.message)
             return null
         } catch (e: PaymentProviderNotFoundException) {
             if (warn) log.warn("the payment provider for a checkout is not available: {}", e.providerId) else log.debug("the payment provider for a checkout is not available: {}", e.providerId)
+            return null
+        } catch (e: PaymentCapabilityUnsupportedException) {
+            if (warn) log.warn("the payment provider cannot open a checkout: {}", e.message) else log.debug("the payment provider cannot open a checkout: {}", e.message)
             return null
         }
         // 라우터의 단일 결제사 지름길은 `enabled` 를 안 본다(호환) — 꺼진 결제사의 결제창을 열면 고객이 인증까지 마친 뒤 승인이 막힌다. 승인 경로와 같은 문(`gateway`)으로 한 번 더 확인한다

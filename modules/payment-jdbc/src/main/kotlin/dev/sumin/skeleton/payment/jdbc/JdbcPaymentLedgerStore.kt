@@ -263,6 +263,9 @@ class JdbcPaymentLedgerStore(
     override fun findSubscriptionByDedupeKey(dedupeKey: String): PaymentSubscription? =
         jdbc.query("${subscriptionRows.select} where dedupe_key = :key", mapOf("key" to dedupeKey)) { rs, _ -> subscriptionRows.subscription(rs) }.firstOrNull()
 
+    override fun findSubscriptionByProviderId(provider: String, providerSubscriptionId: String): PaymentSubscription? =
+        jdbc.query("${subscriptionRows.select} where provider = :provider and provider_subscription_id = :id", mapOf("provider" to provider, "id" to providerSubscriptionId)) { rs, _ -> subscriptionRows.subscription(rs) }.firstOrNull()
+
     override fun findLiveSubscription(accountId: String): PaymentSubscription? =
         jdbc.query("${subscriptionRows.select} where active_key = :account", mapOf("account" to accountId)) { rs, _ -> subscriptionRows.subscription(rs) }.firstOrNull()
 
@@ -458,7 +461,7 @@ class JdbcPaymentLedgerStore(
             try {
                 jdbc.update("update payment_subscriptions set ${subscriptionRows.updateAssignments} where id = :id", subscriptionRows.params(subscription))
             } catch (e: DuplicateKeyException) {
-                // 고칠 수 있는 유니크는 active_key 뿐이다(계정당 살아 있는 구독 하나). PostgreSQL 은 이 문장 때문에 트랜잭션이 못 쓰게 되므로 호출자가 이 트랜잭션을 끝내야 한다(서비스는 던져서 되돌린다)
+                // 겹칠 수 있는 유니크는 active_key(계정당 살아 있는 구독 하나)와 결제사 구독 id(하나는 우리 구독 하나에만)다. PostgreSQL 은 이 문장 때문에 트랜잭션이 못 쓰게 되므로 호출자가 이 트랜잭션을 끝내야 한다(서비스는 던져서 되돌린다)
                 throw PaymentLedgerConflictException("the account already has a live subscription")
             }
         }

@@ -60,7 +60,7 @@ class PaymentOrderController(
         val itemType = PaymentRequests.text(body["itemType"], "itemType", 40)
         val itemRef = PaymentRequests.text(body["itemRef"], "itemRef", 128)
         val quantity = PaymentRequests.wholeNumber(body["quantity"], "quantity") ?: 1
-        val created = orders.create(CreateOrderCommand(account, itemType, itemRef, idempotencyKey(key), quantity.coerceIn(0, Int.MAX_VALUE.toLong()).toInt()))
+        val created = orders.create(CreateOrderCommand(account, itemType, itemRef, idempotencyKey(key), quantity.coerceIn(0, Int.MAX_VALUE.toLong()).toInt(), provider = PaymentRequests.provider(body["provider"])))
         val response = Response.ok(CreateOrderResponse(OrderResponse.of(OrderView(created.order, created.refunds)), created.checkout?.let(CheckoutResponse::of)))
         return if (created.replayed) ResponseEntity.ok(response) else ResponseEntity.status(201).body(response)
     }

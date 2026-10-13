@@ -75,7 +75,7 @@ class PaymentSubscriptionController(
             throw ApplicationException(message = "Too many requests", errorCode = PlatformErrorCode.TOO_MANY_REQUESTS, data = mapOf("retryAfterSeconds" to retryAfter))
         }
         val planCode = PaymentRequests.text(body["planCode"], "planCode", 64)
-        val started = subscriptions.start(account, planCode, idempotencyKey(key), country(body["country"]))
+        val started = subscriptions.start(account, planCode, idempotencyKey(key), country(body["country"]), PaymentRequests.provider(body["provider"]))
         val payload = Response.ok(StartSubscriptionResponse(view(started.subscription), started.billing?.let(BillingAuthResponse::of)))
         return if (started.replayed) ResponseEntity.ok(payload) else ResponseEntity.status(201).body(payload)
     }

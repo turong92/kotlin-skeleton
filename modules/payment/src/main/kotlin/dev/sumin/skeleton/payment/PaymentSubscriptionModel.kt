@@ -93,7 +93,16 @@ data class PaymentSubscription(
     val country: String? = null,
     /** 같은 요청의 재전송이 같은 구독이게 하는 키(`sha256(계정 id + "\n" + Idempotency-Key)`) — 유니크. id 는 시간순이라 요청에서 정해지지 않는다. 옛 줄은 null 일 수 있다. */
     val dedupeKey: String? = null,
+    /**
+     * 결제사가 갱신까지 직접 하는 구독(Paddle)의 결제사 쪽 id — 있으면 **우리 갱신 작업은 과금하지 않고** 상태는 웹훅이 미러링한다. 결제사 + 이 id 가 유니크.
+     */
+    val providerSubscriptionId: String? = null,
+    /** 마지막으로 반영한 구독 웹훅의 발생 시각 — 이보다 이른 사건은 낡았다(순서가 뒤바뀌어 도착해도 가장 새로운 상태가 남는다). */
+    val providerSyncedAt: Instant? = null,
 ) {
+    /** 결제사가 갱신을 한다 — 우리 갱신 · 중도 해지 · 플랜 변경 길은 이 구독에 열리지 않는다. */
+    val isProviderManaged: Boolean get() = providerSubscriptionId != null
+
     override fun toString(): String =
         "PaymentSubscription(id=$id, status=$status, plan=$planCode, amount=${amount.amount} ${amount.normalizedCurrency}, seq=$periodSeq, attempt=$attempt)"
 }

@@ -30,6 +30,7 @@ import dev.sumin.skeleton.payment.SubscriptionCancelPolicies
 import dev.sumin.skeleton.payment.SubscriptionCancelRefundTaskHandler
 import dev.sumin.skeleton.payment.SubscriptionCancellations
 import dev.sumin.skeleton.payment.SubscriptionUsageCheck
+import dev.sumin.skeleton.payment.PaymentPushedEvents
 import dev.sumin.skeleton.payment.PaymentWebhookInbox
 import dev.sumin.skeleton.payment.PaymentWebhookTaskHandler
 import dev.sumin.skeleton.payment.WebhookDelivery
@@ -136,12 +137,14 @@ class PaymentLedgerKit(
     val usage: SubscriptionUsageCheck = SubscriptionUsageCheck.NEVER_USED,
     /** 시험 조립의 해지 정책 지도 - `KR` 은 한국 정책(위약금 10%), 그 밖은 기간 끝 해지만. */
     val cancelPolicies: SubscriptionCancelPolicies = SubscriptionCancelPolicies(listOf(KoreaConsumerCancelPolicy(penaltyPercent = 10, withdrawalDays = 7)), mapOf("KR" to KoreaConsumerCancelPolicy.NAME)),
+    /** 서명된 웹훅이 곧 사실인 결제사(Paddle 모양)의 대역 — 라우터에는 들어가지만 결제창 · 빌링 능력이 없어 다른 시험의 라우팅을 바꾸지 않는다. */
+    val push: FakePushGateway = FakePushGateway(),
 ) {
     val time = MutableTime()
     val store = InMemoryPaymentLedgerStore()
     val gateway = ScriptedGateway(mode = mode, now = { time.now() }, openTransaction = store::hasOpenTransaction)
     val tasks = InMemoryPaymentTasks(store)
-    val router = PaymentProviderRouter(listOf(gateway), properties)
+    val router = PaymentProviderRouter(listOf(gateway, push), properties)
     val writer = PaymentLedgerWriter(time)
     val lifecycle = SubscriptionLifecycle(tasks, writer, properties, review)
     val convergence = PaymentConvergence(writer, tasks, review, LedgerRefundConvergence(writer, tasks, review)).also { it.subscriptions = lifecycle }
@@ -156,7 +159,8 @@ class PaymentLedgerKit(
     val refundReconcile = RefundReconcileTaskHandler(store, router, convergence, writer, properties)
     val refundApply = RefundApplyTaskHandler(applier, store, convergence)
     val inbox = PaymentWebhookInbox(store, tasks, router, writer, properties)
-    val webhook = PaymentWebhookTaskHandler(store, router, convergence, writer)
+    val pushed = PaymentPushedEvents(store, tasks, writer, lifecycle)
+    val webhook = PaymentWebhookTaskHandler(store, router, convergence, writer, pushed)
     val charges = SubscriptionCharges(store, convergence, fulfillment, writer)
     val subscriptions = PaymentSubscriptions(store, router, plans, ReversibleTestEncryptor, lifecycle, charges, tasks, writer, properties)
     val planChanges = SubscriptionPlanChanges(store, router, plans, ReversibleTestEncryptor, lifecycle, charges, writer, properties)

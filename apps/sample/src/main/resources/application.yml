@@ -147,6 +147,20 @@ skeleton:
   payment-toss:
     secret-key: ${TOSS_PAYMENTS_SECRET_KEY:}                # 벤더 표준 이름 별칭 (모듈의 이름은 SKELETON_PAYMENT_TOSS_SECRET_KEY — 둘 다 먹고, 모듈 이름이 이긴다). 비밀 — 커밋하지 않는다
     client-key: ${TOSS_PAYMENTS_CLIENT_KEY:}                # 같은 묶음의 test_ck_… (비밀 아님). 서버가 결제창 값(GET …/orders 의 checkout)으로 프론트에 준다
+  payment-paddle:                                           # 해외 결제(판매 대행). 켜기: SKELETON_PAYMENT_PADDLE_ENABLED=true. 세 비밀이 모두 있어야 서고, 하나라도 비면 이 결제사만 없다(서버는 뜬다)
+    api-key: ${PADDLE_API_KEY:}                             # 비밀 — 커밋하지 않는다
+    client-token: ${PADDLE_CLIENT_TOKEN:}                   # Paddle.js 클라이언트 토큰 (비밀 아님)
+    webhook-secret: ${PADDLE_WEBHOOK_SECRET:}               # 웹훅 엔드포인트 비밀값 — 비밀
+    environment: ${PADDLE_ENVIRONMENT:sandbox}              # sandbox | live
+    base-url: ${PADDLE_BASE_URL:}                           # 비우면 환경의 기본 주소. e2e 의 가짜 Paddle 만 적는다
+    signature-tolerance: ${PADDLE_SIGNATURE_TOLERANCE:60s}
+    prices:                                                 # 플랜 코드 · 응원 상품 코드 → Paddle 가격 id (금액 · 통화는 Paddle 가격이 정한다)
+      basic: ${PADDLE_PRICE_BASIC:}
+      standard: ${PADDLE_PRICE_STANDARD:}
+      pro: ${PADDLE_PRICE_PRO:}
+      cheer-1000: ${PADDLE_PRICE_CHEER_1000:}
+      cheer-3000: ${PADDLE_PRICE_CHEER_3000:}
+      cheer-5000: ${PADDLE_PRICE_CHEER_5000:}
   http:
     clients:
       payment-toss:

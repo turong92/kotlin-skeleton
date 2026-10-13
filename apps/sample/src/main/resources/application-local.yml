@@ -38,7 +38,7 @@ skeleton:
       period: PT3M                       # 로컬: 갱신 · 재시도 · 종료를 몇 분 안에 눌러 본다 (기본 P1M)
   payment:
     subscription:
-      enabled: ${skeleton.payment-toss.enabled:false}   # 토스를 켰을 때만 구독도 켠다 — 키 없이 뜨는 로컬은 예전처럼 결제 화면이 「지금은 결제할 수 없어요」다
+      enabled: ${skeleton.payment-toss.enabled:${skeleton.payment-paddle.enabled:false}}   # 토스나 Paddle 을 켰을 때만 구독도 켠다 — 키 없이 뜨는 로컬은 예전처럼 결제 화면이 「지금은 결제할 수 없어요」다
       renewal:
         retry-interval: 1m               # 로컬: 갱신이 거절되면 1분 뒤 다시 (기본 24시간), 세 번 거절되면 구독이 끝난다
     admin:

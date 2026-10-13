@@ -147,6 +147,12 @@ class PaymentLedgerAutoConfiguration {
         properties: PaymentProperties,
     ): PaymentWebhookInbox = PaymentWebhookInbox(store, tasks, router, writer, properties)
 
+    /** 서명된 웹훅이 곧 사실인 결제사(Paddle)의 사건을 장부에 옮긴다. 구독을 켠 조립이면 구독 사건도 반영한다. */
+    @Bean
+    @ConditionalOnMissingBean
+    fun paymentPushedEvents(store: PaymentLedgerStore, tasks: PaymentTasks, writer: PaymentLedgerWriter, subscriptions: ObjectProvider<SubscriptionLifecycle>): PaymentPushedEvents =
+        PaymentPushedEvents(store, tasks, writer, subscriptions.getIfAvailable())
+
     @Bean
     @ConditionalOnMissingBean
     fun paymentWebhookTaskHandler(
@@ -154,7 +160,8 @@ class PaymentLedgerAutoConfiguration {
         router: PaymentProviderRouter,
         convergence: PaymentConvergence,
         writer: PaymentLedgerWriter,
-    ): PaymentWebhookTaskHandler = PaymentWebhookTaskHandler(store, router, convergence, writer)
+        pushed: PaymentPushedEvents,
+    ): PaymentWebhookTaskHandler = PaymentWebhookTaskHandler(store, router, convergence, writer, pushed)
 
     /** 서명 없는 결제사의 웹훅인데 주소의 비밀 조각이 비었거나 약하면 보호 환경에서 기동 실패(스펙 §9.3). 웹훅 경로를 껐으면 서지 않는다. */
     @Bean

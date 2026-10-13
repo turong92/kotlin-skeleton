@@ -903,6 +903,7 @@ abstract class PaymentLedgerStoreContract {
             currentPeriodStart = PaymentTestOrders.T0, currentPeriodEnd = PaymentTestOrders.T0.plusSeconds(3600), chargeOrderId = "ord_" + "9".repeat(32), attempt = 2,
             billingToken = "enc:secret", cardIssuer = "HYUNDAI", cardLast4 = "123*", pendingPlanCode = "plus", pendingAmount = 6900,
             endReason = SubscriptionEndReason.PAYMENT_FAILED, endedAt = PaymentTestOrders.T0.plusSeconds(5), accountErasedAt = PaymentTestOrders.T0.plusSeconds(6), country = "KR", dedupeKey = "d".repeat(64),
+            providerSubscriptionId = "psub_1", providerSyncedAt = PaymentTestOrders.T0.plusSeconds(7),
         )
 
         assertTrue(store.inTransaction { it.insertSubscriptionIfAbsent(full) })
@@ -911,7 +912,17 @@ abstract class PaymentLedgerStoreContract {
         assertEquals(full, store.findSubscription(sub1.id))
         assertEquals(full, store.findSubscriptionByDedupeKey("d".repeat(64)))
         assertEquals(full, store.findLiveSubscription("acc_1"))
+        assertEquals(full, store.findSubscriptionByProviderId(full.provider, "psub_1"))
+        assertNull(store.findSubscriptionByProviderId(full.provider, "psub_other"))
         assertNull(store.findSubscription("sub_missing"))
+    }
+
+    @Test
+    fun `one provider subscription id belongs to one of our subscriptions`() {
+        val store = newStore()
+        assertTrue(store.inTransaction { it.insertSubscriptionIfAbsent(sub1.copy(providerSubscriptionId = "psub_1")) })
+        store.inTransaction { it.insertSubscriptionIfAbsent(sub2) }
+        assertFailsWith<Exception> { store.inTransaction { tx -> tx.updateSubscription(checkNotNull(tx.lockSubscription(sub2.id)).copy(providerSubscriptionId = "psub_1")) } }
     }
 
     @Test

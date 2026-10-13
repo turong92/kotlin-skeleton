@@ -198,10 +198,10 @@ class PaymentSchemaDbTest {
             putAll(cols("payment_orders", ColumnClass.ERASED_PERSONAL, "card_issuer", "card_last4"))
 
             // 구독 — 카드 표시 두 칸은 지워지는 개인정보이고, 고객 키 · 빌링키(암호문)는 비밀이다(응답 · 로그에 나가지 않는다)
-            putAll(cols("payment_subscriptions", ColumnClass.IDENTIFIER, "id", "account_id", "charge_order_id", "active_key", "dedupe_key"))
+            putAll(cols("payment_subscriptions", ColumnClass.IDENTIFIER, "id", "account_id", "charge_order_id", "active_key", "dedupe_key", "provider_subscription_id"))
             putAll(cols("payment_subscriptions", ColumnClass.CODE, "provider", "provider_mode", "status", "plan_code", "currency", "period", "period_seq", "attempt", "pending_plan_code", "end_reason", "country"))
             putAll(cols("payment_subscriptions", ColumnClass.AMOUNT, "amount", "pending_amount"))
-            putAll(cols("payment_subscriptions", ColumnClass.TIME, "anchor_at", "current_period_start", "current_period_end", "ended_at", "account_erased_at", "created_at", "updated_at"))
+            putAll(cols("payment_subscriptions", ColumnClass.TIME, "anchor_at", "current_period_start", "current_period_end", "ended_at", "account_erased_at", "created_at", "updated_at", "provider_synced_at"))
             putAll(cols("payment_subscriptions", ColumnClass.ERASED_PERSONAL, "card_issuer", "card_last4"))
             putAll(cols("payment_subscriptions", ColumnClass.SECRET, "customer_key", "billing_token"))
 

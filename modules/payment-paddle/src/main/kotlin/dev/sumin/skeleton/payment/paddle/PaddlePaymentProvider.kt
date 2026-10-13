@@ -95,7 +95,7 @@ class PaddlePaymentProvider(
             ourAccountId = custom.text(PushedEvents.ACCOUNT_KEY),
             ourSubscriptionId = custom.text(PushedEvents.SUBSCRIPTION_KEY),
             providerSubscriptionId = data.text("subscription_id"),
-            method = details.text("type"),
+            method = details.text("type")?.uppercase()?.replace('-', '_'),
             card = card,
             periodStart = data["billing_period"]?.text("starts_at")?.let(Instant::parse),
             periodEnd = data["billing_period"]?.text("ends_at")?.let(Instant::parse),
@@ -127,7 +127,7 @@ class PaddlePaymentProvider(
     override fun canOpenCheckout(): Boolean = properties.clientToken.isNotBlank()
 
     override fun checkout(order: CheckoutOrder): CheckoutInstruction {
-        val price = order.itemRef?.let(properties.prices::get)
+        val price = order.itemRef?.let { properties.prices[it] }?.takeIf { it.isNotBlank() }
         val custom = linkedMapOf(PushedEvents.ORDER_KEY to order.orderId).apply { order.accountId?.let { put(PushedEvents.ACCOUNT_KEY, it) } }
         return CheckoutInstruction(
             provider = providerId,
@@ -142,7 +142,7 @@ class PaddlePaymentProvider(
     }
 
     override fun subscriptionSetup(request: HostedSubscriptionRequest): BillingSetup? {
-        val price = properties.prices[request.planCode] ?: return null
+        val price = properties.prices[request.planCode]?.takeIf { it.isNotBlank() } ?: return null
         if (!canOpenCheckout()) return null
         val custom = mapOf(PushedEvents.SUBSCRIPTION_KEY to request.subscriptionId, PushedEvents.ACCOUNT_KEY to request.accountId)
         return BillingSetup(

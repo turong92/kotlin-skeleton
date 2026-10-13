@@ -109,6 +109,7 @@ class SubscriptionLifecycle(
      */
     fun onOrderPaid(tx: PaymentLedgerTx, order: PaymentOrder) {
         val subscription = tx.lockSubscription(order.originRef ?: return) ?: return
+        if (subscription.isProviderManaged) return // 결제사가 기간을 정한다 — 웹훅([PaymentPushedEvents])이 옮긴다
         val current = subscription.chargeOrderId == order.id && subscription.status != SubscriptionStatus.ENDED
         if (!current) return stale(tx, order)
         val period = SubscriptionPeriod.parse(subscription.period)

@@ -43,6 +43,7 @@ class SubscriptionRenewTaskHandler(
         store.requireNoOpenTransaction("The subscription renewal task")
         val id = run.subjectId
         val before = store.findSubscription(id) ?: return
+        if (before.isProviderManaged) return // 결제사가 갱신한다 — 우리는 과금하지 않는다(이중 과금 방지)
         val chargeable = (before.status == SubscriptionStatus.ACTIVE || before.status == SubscriptionStatus.PAST_DUE) && due(before)
         // 결제사 · 모드는 주문을 선점하기 **전에** 확인한다 — 보낼 수 없는 과금의 주문이 남지 않게(테스트 키 → 실결제 키 전환 같은 길)
         val gateway = if (chargeable) billingGateway(before) else null
@@ -73,6 +74,7 @@ class SubscriptionRenewTaskHandler(
     private fun step(id: String, allowed: Boolean): Step =
         store.inTransaction { tx ->
             val subscription = tx.lockSubscription(id) ?: return@inTransaction Step.Done
+            if (subscription.isProviderManaged) return@inTransaction Step.Done
             when (subscription.status) {
                 SubscriptionStatus.ENDED, SubscriptionStatus.PENDING -> Step.Done // 첫 결제는 주문이 끝 상태가 될 때 구독이 반응한다
                 SubscriptionStatus.CANCELING -> {

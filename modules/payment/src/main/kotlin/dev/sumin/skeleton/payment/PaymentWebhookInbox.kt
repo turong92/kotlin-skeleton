@@ -62,6 +62,7 @@ class PaymentWebhookInbox(
     private fun receiveOnce(gateway: PaymentWebhookGateway, delivery: WebhookDelivery): WebhookReceipt {
         val envelope = gateway.parse(delivery)
         val resourceType = envelope.resourceType.trim().uppercase()
+        if (resourceType == PushedEvents.RESOURCE_TYPE) return receivePushed(gateway, delivery, envelope)
         if (resourceType != PAYMENT) return WebhookReceipt.UNSUPPORTED
         val eventKey = envelope.eventKey.takeIf { EVENT_KEY.matches(it) && !it.startsWith(WebhookMarkers.KEY_PREFIX) }
         val eventType = envelope.eventType.takeIf { EVENT_TYPE.matches(it) }
@@ -106,6 +107,41 @@ class PaymentWebhookInbox(
                 event.deliveries > properties.webhook.redeliveryRequeueLimit -> WebhookReceipt.DUPLICATE
                 else -> {
                     // FAILED · DEAD: 새 작업을 바로 넣고 줄을 RECEIVED 로 되돌린다 — 다음 재전송은 "기다리는 작업이 있다"를 본다(재전송이 연달아 와도 줄마다 작업 하나)
+                    tx.updateWebhookEvent(event.copy(status = PaymentWebhookStatus.RECEIVED))
+                    enqueue(event.id)
+                    WebhookReceipt.REQUEUED
+                }
+            }
+        }
+    }
+
+    /**
+     * 서명된 본문이 곧 사실인 결제사의 사건 — 주문이 아직 없을 수 있어(구독의 갱신 결제) 주문 단위 상한은 없고, 서명 · 요청 수 한도가 제동이다.
+     * 줄 하나 + 처리 작업 하나(한 트랜잭션), 같은 사건이 다시 와도 줄은 하나다. 원문은 서명을 통과한 것만 줄에 남는다.
+     */
+    private fun receivePushed(gateway: PaymentWebhookGateway, delivery: WebhookDelivery, envelope: WebhookEnvelope): WebhookReceipt {
+        val eventKey = envelope.eventKey.takeIf { EVENT_KEY.matches(it) && !it.startsWith(WebhookMarkers.KEY_PREFIX) }
+        val eventType = envelope.eventType.takeIf { EVENT_TYPE.matches(it) }
+        val resourceId = envelope.resourceId.takeIf { EVENT_KEY.matches(it) }
+        val payload = envelope.storedPayload
+        if (eventKey == null || eventType == null || resourceId == null || payload == null) throw PaymentWebhookRejectedException()
+        val provider = gateway.providerId.trim().lowercase()
+        return store.inTransaction { tx ->
+            val candidate = PaymentWebhookEvent(
+                id = 0, provider = provider, eventKey = eventKey, eventType = eventType, resourceType = PushedEvents.RESOURCE_TYPE, resourceId = resourceId,
+                orderId = null, payload = payload, payloadHash = sha256Hex(delivery.body), status = PaymentWebhookStatus.RECEIVED,
+                deliveries = 0, lastError = null, receivedAt = writer.now(), processedAt = null,
+            )
+            val recorded = tx.recordWebhookDelivery(candidate)
+            val event = recorded.event
+            when {
+                recorded.first -> {
+                    enqueue(event.id)
+                    WebhookReceipt.STORED
+                }
+                event.status.isFinished || event.status == PaymentWebhookStatus.RECEIVED -> WebhookReceipt.DUPLICATE
+                event.deliveries > properties.webhook.redeliveryRequeueLimit -> WebhookReceipt.DUPLICATE
+                else -> {
                     tx.updateWebhookEvent(event.copy(status = PaymentWebhookStatus.RECEIVED))
                     enqueue(event.id)
                     WebhookReceipt.REQUEUED
