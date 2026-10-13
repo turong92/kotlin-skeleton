@@ -34,6 +34,11 @@ class FakePushGateway(override val providerId: String = "paddle", override val m
         return WebhookEnvelope(eventKey = id, eventType = "test.event", resourceType = PushedEvents.RESOURCE_TYPE, resourceId = "res_$id", storedPayload = id)
     }
 
+    /** 상품/플랜 코드 → 가격 id. 기본은 `pri_<코드>`. */
+    val prices = ConcurrentHashMap<String, String>()
+
+    override fun priceIdOf(itemRef: String): String? = prices[itemRef] ?: "pri_$itemRef"
+
     override fun interpret(payload: String): PushedPaymentEvent? = events[payload]
 
     override fun subscriptionSetup(request: HostedSubscriptionRequest): BillingSetup? =

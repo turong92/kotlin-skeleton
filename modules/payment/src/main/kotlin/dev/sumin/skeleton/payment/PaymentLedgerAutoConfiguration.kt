@@ -150,8 +150,8 @@ class PaymentLedgerAutoConfiguration {
     /** 서명된 웹훅이 곧 사실인 결제사(Paddle)의 사건을 장부에 옮긴다. 구독을 켠 조립이면 구독 사건도 반영한다. */
     @Bean
     @ConditionalOnMissingBean
-    fun paymentPushedEvents(store: PaymentLedgerStore, tasks: PaymentTasks, writer: PaymentLedgerWriter, subscriptions: ObjectProvider<SubscriptionLifecycle>): PaymentPushedEvents =
-        PaymentPushedEvents(store, tasks, writer, subscriptions.getIfAvailable())
+    fun paymentPushedEvents(store: PaymentLedgerStore, tasks: PaymentTasks, writer: PaymentLedgerWriter, subscriptions: ObjectProvider<SubscriptionLifecycle>, review: PaymentReviewNotifier): PaymentPushedEvents =
+        PaymentPushedEvents(store, tasks, writer, subscriptions.getIfAvailable(), review)
 
     @Bean
     @ConditionalOnMissingBean

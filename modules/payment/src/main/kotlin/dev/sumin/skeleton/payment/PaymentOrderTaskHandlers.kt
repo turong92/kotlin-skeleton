@@ -68,7 +68,9 @@ class OrderExpireTaskHandler(
             closeWithoutLookup(id, ConvergeContext(order.providerMode, ConvergeSource.EXPIRE), "No payment provider is available to look up order $id")
             return
         } catch (e: PaymentCapabilityUnsupportedException) {
-            throw PaymentTaskPermanentException("The payment provider of order $id cannot be looked up")
+            // 조회 능력이 없는 결제사(서명된 웹훅이 사실인 Paddle)의 `PENDING` 은 조회 없이 마감 뒤 닫는다 - 늦게 결제되면 웹훅이 `EXPIRED` 를 `PAID` 로 다시 연다
+            closeWithoutLookup(id, ConvergeContext(order.providerMode, ConvergeSource.EXPIRE), "Order $id is still open for payment")
+            return
         }
         val context = ConvergeContext(gateway.mode, ConvergeSource.EXPIRE)
         if (gateway.mode != order.providerMode) {

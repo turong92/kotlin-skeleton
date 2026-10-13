@@ -28,6 +28,9 @@ object PaymentTaskTypes {
     /** 구독이 끝날 때 빌링키가 남아 있으면. 결제사에서 빌링키를 지우고 줄의 빌링키 · 고객 키를 비운다. 대상 id 는 구독 id. */
     const val SUBSCRIPTION_REVOKE = "payment-subscription-revoke"
 
+    /** 결제사가 갱신하는 구독을 **즉시** 해지한다(탈퇴 · 둘째 결제사 구독 · 자리 충돌). 대상 id 는 `<결제사 id>:<결제사 구독 id>`. */
+    const val PROVIDER_SUBSCRIPTION_CANCEL = "payment-provider-subscription-cancel"
+
     /** 구독을 중도 해지로 끝낼 때. 보내지 못한 환불이 있으면 다시 보낸다(보낸 줄은 건너뛴다). `runAt` = 지금 + reconcile.first-delay. 대상 id 는 구독 id. */
     const val SUBSCRIPTION_CANCEL_REFUND = "payment-subscription-cancel-refund"
 }

@@ -159,7 +159,7 @@ class PaymentLedgerKit(
     val refundReconcile = RefundReconcileTaskHandler(store, router, convergence, writer, properties)
     val refundApply = RefundApplyTaskHandler(applier, store, convergence)
     val inbox = PaymentWebhookInbox(store, tasks, router, writer, properties)
-    val pushed = PaymentPushedEvents(store, tasks, writer, lifecycle)
+    val pushed = PaymentPushedEvents(store, tasks, writer, lifecycle, review)
     val webhook = PaymentWebhookTaskHandler(store, router, convergence, writer, pushed)
     val charges = SubscriptionCharges(store, convergence, fulfillment, writer)
     val subscriptions = PaymentSubscriptions(store, router, plans, ReversibleTestEncryptor, lifecycle, charges, tasks, writer, properties)
@@ -170,9 +170,10 @@ class PaymentLedgerKit(
 
     /** 앱의 갱신 판단 대역 — [blocked] 에 든 계정은 갱신하지 않는다. */
     val blocked: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+    val cancelAtProvider = dev.sumin.skeleton.payment.ProviderSubscriptionCancelTaskHandler(store, router)
     val renew = SubscriptionRenewTaskHandler(store, router, plans, ReversibleTestEncryptor, lifecycle, charges, SubscriptionRenewalGuard { it !in blocked }, writer, properties.subscription.renewal.retryInterval)
     val erasure = PaymentAccountErasure(store, writer, properties.erasure.accountId, lifecycle)
-    val runner = DefaultPaymentTaskRunner(listOf(expire, reconcile, fulfil, refundReconcile, refundApply, webhook, revoke, renew, cancelRefund))
+    val runner = DefaultPaymentTaskRunner(listOf(expire, reconcile, fulfil, refundReconcile, refundApply, webhook, revoke, renew, cancelRefund, cancelAtProvider))
 
     /** 지금 시각까지 시간이 된 작업을 한 번씩 돈다. */
     fun runTasks(only: Set<String>? = null): Int = tasks.runDue(runner, time.now(), only)

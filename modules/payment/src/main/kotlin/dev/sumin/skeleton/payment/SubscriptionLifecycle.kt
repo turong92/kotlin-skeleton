@@ -48,6 +48,8 @@ class SubscriptionLifecycle(
             )
         }
         if (hasToken) tasks.enqueue(PaymentTask(PaymentTaskTypes.SUBSCRIPTION_REVOKE, current.id))
+        // 결제사가 갱신하는 구독은 우리가 끝내도 결제사는 계속 과금한다 - 탈퇴하면 결제사에도 즉시 해지를 보낸다
+        if (reason == SubscriptionEndReason.ACCOUNT_ERASED) current.providerSubscriptionId?.let { tasks.enqueue(PaymentTask(PaymentTaskTypes.PROVIDER_SUBSCRIPTION_CANCEL, "${current.provider}:$it")) }
         return ended
     }
 

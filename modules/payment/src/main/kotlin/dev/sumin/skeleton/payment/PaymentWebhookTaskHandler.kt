@@ -105,9 +105,14 @@ class PaymentWebhookTaskHandler(
             return
         }
         try {
-            store.inTransaction { tx ->
-                val reason = pushed.apply(tx, gateway, pushedEvent)
-                mark(tx, id, if (reason == null) PaymentWebhookStatus.PROCESSED else PaymentWebhookStatus.IGNORED, reason)
+            try {
+                store.inTransaction { tx ->
+                    val reason = pushed.apply(tx, gateway, pushedEvent)
+                    mark(tx, id, if (reason == null) PaymentWebhookStatus.PROCESSED else PaymentWebhookStatus.IGNORED, reason)
+                }
+            } catch (e: PaymentLedgerConflictException) {
+                // 이 계정에 이미 살아 있는 구독이 있다 - 재시도해도 같다. 결제는 기록해 「확인 필요」로 남기고 결제사 구독은 해지한다(조용히 죽어 결제사가 계속 과금하지 않게)
+                store.inTransaction { tx -> mark(tx, id, PaymentWebhookStatus.IGNORED, pushed.applyConflicted(tx, gateway, pushedEvent)) }
             }
         } catch (e: Exception) {
             log.warn("applying pushed webhook event={} failed attempt={}/{} exception={}", id, run.attempt, run.maxAttempts, e.javaClass.simpleName)

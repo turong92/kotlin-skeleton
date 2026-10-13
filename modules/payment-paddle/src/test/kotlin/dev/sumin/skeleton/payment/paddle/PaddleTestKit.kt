@@ -55,10 +55,11 @@ internal class FakePaddleApi : AutoCloseable {
     override fun close() = server.stop(0)
 }
 
-internal fun transactionCompleted(custom: String = """{"orderId":"ord_1","accountId":"acc_1"}""", subscriptionId: String? = null, total: String = "990", currency: String = "USD", eventId: String = "evt_1") = """
+internal fun transactionCompleted(custom: String = """{"orderId":"ord_1","accountId":"acc_1"}""", subscriptionId: String? = null, total: String = "990", currency: String = "USD", eventId: String = "evt_1", priceId: String = "pri_cheer") = """
 {"event_id":"$eventId","event_type":"transaction.completed","occurred_at":"2026-10-13T09:59:59Z","notification_id":"ntf_1",
  "data":{"id":"txn_1","status":"completed","currency_code":"$currency","origin":"web",${subscriptionId?.let { "\"subscription_id\":\"$it\"," } ?: ""}
   "custom_data":$custom,"billed_at":"2026-10-13T09:59:00Z","billing_period":{"starts_at":"2026-10-13T09:59:00Z","ends_at":"2026-11-13T09:59:00Z"},
+  "items":[{"price":{"id":"$priceId"},"quantity":1}],
   "details":{"totals":{"subtotal":"900","tax":"90","total":"$total"}},
   "payments":[{"status":"captured","method_details":{"type":"card","card":{"type":"visa","last4":"4242"}}}]}}
 """.trim()

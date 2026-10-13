@@ -103,6 +103,10 @@ class PaymentSubscriptionAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
+    fun providerSubscriptionCancelTaskHandler(store: PaymentLedgerStore, router: PaymentProviderRouter): ProviderSubscriptionCancelTaskHandler = ProviderSubscriptionCancelTaskHandler(store, router)
+
+    @Bean
+    @ConditionalOnMissingBean
     fun subscriptionRevokeTaskHandler(store: PaymentLedgerStore, router: PaymentProviderRouter, encryptor: ObjectProvider<TextEncryptor>, writer: PaymentLedgerWriter): SubscriptionRevokeTaskHandler =
         SubscriptionRevokeTaskHandler(store, router, encryptor.getIfAvailable() ?: error("skeleton.payment.subscription.enabled=true needs a TextEncryptor (skeleton.crypto.keys)"), writer)
 

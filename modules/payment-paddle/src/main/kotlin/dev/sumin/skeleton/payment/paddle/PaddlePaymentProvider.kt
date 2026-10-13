@@ -14,6 +14,7 @@ import dev.sumin.skeleton.payment.PaymentMode
 import dev.sumin.skeleton.payment.PaymentPushGateway
 import dev.sumin.skeleton.payment.PaymentWebhookRejectedException
 import dev.sumin.skeleton.payment.PushedEvents
+import dev.sumin.skeleton.payment.PushedItem
 import dev.sumin.skeleton.payment.PushedPayment
 import dev.sumin.skeleton.payment.PushedPaymentEvent
 import dev.sumin.skeleton.payment.PushedSubscription
@@ -99,8 +100,14 @@ class PaddlePaymentProvider(
             card = card,
             periodStart = data["billing_period"]?.text("starts_at")?.let(Instant::parse),
             periodEnd = data["billing_period"]?.text("ends_at")?.let(Instant::parse),
+            items = data["items"]?.toList().orEmpty().mapNotNull { item ->
+                val priceId = (item["price"]?.text("id") ?: item.text("price_id")) ?: return@mapNotNull null
+                PushedItem(priceId, item["quantity"]?.asInt(1) ?: 1)
+            },
         )
     }
+
+    override fun priceIdOf(itemRef: String): String? = properties.prices[itemRef]?.takeIf { it.isNotBlank() }
 
     private fun subscription(eventId: String, occurredAt: Instant, data: JsonNode, custom: JsonNode?, type: String?): PushedSubscription? {
         val scheduledCancel = data["scheduled_change"]?.text("action") == "cancel"
