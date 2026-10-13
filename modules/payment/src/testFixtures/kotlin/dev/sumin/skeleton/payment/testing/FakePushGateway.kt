@@ -50,6 +50,9 @@ class FakePushGateway(override val providerId: String = "paddle", override val m
 
     override fun interpret(payload: String): PushedPaymentEvent? = events[payload]
 
+    /** 서버가 거래에 넣는 가격 id - 기본은 `pri_<코드>`. */
+    override fun priceIdOf(itemRef: String): String? = "pri_$itemRef"
+
     override fun createTransaction(request: TransactionRequest): String {
         check(!createFails) { "planted Paddle transaction failure" }
         return "txn_s${txnSeq.incrementAndGet()}".also { transactions += it to request }

@@ -23,6 +23,7 @@ class PaymentPushedEvents(
     private val review: PaymentReviewNotifier = PaymentReviewNotifier.NONE,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
+    private val flags = PaymentReviewFlags(writer, review)
 
     fun apply(tx: PaymentLedgerTx, gateway: PaymentPushGateway, event: PushedPaymentEvent): String? =
         when (event) {
@@ -54,11 +55,24 @@ class PaymentPushedEvents(
 
     private fun oneTime(tx: PaymentLedgerTx, gateway: PaymentPushGateway, event: PushedPayment, orderId: String): String? {
         val order = tx.lockOrder(orderId) ?: return UNKNOWN_ORDER
-        if (order.providerMode != gateway.mode) return MODE_MISMATCH
         if (order.status.isPaidFamily) return null
+        // 우리 주문을 찾은 뒤의 거절은 수신함만 닫지 않는다 - 돈이 들어왔을 수 있으니 주문에 「확인 필요」를 찍는다(지급 없음)
+        val context = ConvergeContext(gateway.mode, ConvergeSource.WEBHOOK, PaymentActor.PROVIDER)
+        if (order.providerMode != gateway.mode) {
+            flags.flag(tx, order, PaymentReviewReason.MODE_MISMATCH, context)
+            return MODE_MISMATCH
+        }
         // 교차 확인 - 서버가 거래에 넣은 우리 주문 id 와 다르면 반영하지 않는다
-        if (event.ourOrderId != null && event.ourOrderId != order.id) return ORDER_MISMATCH
-        // 금액 · 통화는 결제사가 받은 그대로다(구매자가 낸 통화) - 가격은 서버가 정한 거래의 것이다
+        if (event.ourOrderId != null && event.ourOrderId != order.id) {
+            flags.flag(tx, order, PaymentReviewReason.ORDER_MISMATCH, context)
+            return ORDER_MISMATCH
+        }
+        // 서버가 거래에 넣은 품목과 같은가 - 결제창에서 품목을 바꿔 결제했다면 지급하지 않는다
+        if (!boughtExactly(event.items, gateway.priceIdOf(order.itemRef), order.quantity)) {
+            flags.flag(tx, order, PaymentReviewReason.AMOUNT_MISMATCH, context)
+            return PRICE_MISMATCH
+        }
+        // 금액 · 통화는 결제사가 받은 그대로다(구매자가 낸 통화)
         writer.transition(tx, order, PaymentOrderStatus.PAID, PaymentEventType.CONVERGED, PaymentActor.PROVIDER, providerCode = WEBHOOK) {
             it.copy(
                 amount = event.total,
@@ -77,6 +91,9 @@ class PaymentPushedEvents(
         return null
     }
 
+    private fun boughtExactly(items: List<PushedItem>, expectedPrice: String?, quantity: Int): Boolean =
+        expectedPrice != null && items.size == 1 && items[0].priceId == expectedPrice && items[0].quantity == quantity
+
     private fun subscriptionPayment(tx: PaymentLedgerTx, gateway: PaymentPushGateway, event: PushedPayment): String? {
         val provider = gateway.providerId.trim().lowercase()
         val lifecycle = subscriptions ?: return SUBSCRIPTIONS_OFF
@@ -84,15 +101,21 @@ class PaymentPushedEvents(
         val byFirst = store.findSubscriptionByFirstTransaction(provider, event.providerPaymentId)
         val id = byFirst?.id ?: event.providerSubscriptionId?.let { store.findSubscriptionByProviderId(provider, it)?.id } ?: return UNKNOWN_TRANSACTION
         val subscription = tx.lockSubscription(id)?.takeIf { it.provider == provider } ?: return UNKNOWN_TRANSACTION
-        if (subscription.providerMode != gateway.mode) return MODE_MISMATCH
-        if (event.ourSubscriptionId != null && event.ourSubscriptionId != subscription.id) return SUBSCRIPTION_MISMATCH // 교차 확인
-        val first = byFirst != null && subscription.status == SubscriptionStatus.PENDING
-        if (first && event.providerSubscriptionId == null) return NO_PROVIDER_SUBSCRIPTION // 구독의 첫 결제인데 결제사 구독 id 가 없다 - 연결할 수 없다
+        // 우리 줄을 찾은 뒤의 거절은 결제를 기록하고 「확인 필요」로 표시한다(수신함만 닫으면 돈이 들어온 사실이 운영자에게 안 보인다). 자동 해지는 붙이지 않는다 - 운영자가 본다
+        if (subscription.providerMode != gateway.mode) return unapplied(tx, lifecycle, subscription, event, MODE_MISMATCH, cancel = false)
+        if (event.ourSubscriptionId != null && event.ourSubscriptionId != subscription.id) return unapplied(tx, lifecycle, subscription, event, SUBSCRIPTION_MISMATCH, cancel = false) // 교차 확인
+        val first = subscription.status == SubscriptionStatus.PENDING // 아직 켜지지 않은 줄의 첫 결제(첫 거래 id 로 왔든, 연결된 구독의 거래로 왔든)
         return when {
             // 끝난 구독에 결제가 왔다 - 탈퇴로 끝났다면 결제사는 아직 과금 중이다
             subscription.status == SubscriptionStatus.ENDED ->
                 unapplied(tx, lifecycle, subscription, event, ALREADY_ENDED, cancel = subscription.endReason == SubscriptionEndReason.ACCOUNT_ERASED)
             byFirst != null && !first -> null // 첫 거래가 이미 반영된 줄 - 같은 거래의 재전달
+            // 구독을 켜려면 결제사 구독 id 가 필요하다 - 이 결제에도, `subscription.created` 의 거래 id 로 이미 연결된 줄에도 없으면 연결할 수 없다
+            first && subscription.providerSubscriptionId == null && event.providerSubscriptionId == null ->
+                unapplied(tx, lifecycle, subscription, event, NO_PROVIDER_SUBSCRIPTION, cancel = false)
+            // 첫 결제만 품목을 대조한다(갱신은 가격 인상 등으로 설정과 다를 수 있다) - 서버가 거래에 넣은 품목이 아니면 켜지 않는다
+            first && !boughtExactly(event.items, gateway.priceIdOf(subscription.planCode), 1) ->
+                unapplied(tx, lifecycle, subscription, event, PRICE_MISMATCH, cancel = false)
             else -> applyPayment(tx, lifecycle, subscription, event)
         }
     }
@@ -157,9 +180,17 @@ class PaymentPushedEvents(
     private fun subscriptionState(tx: PaymentLedgerTx, gateway: PaymentPushGateway, event: PushedSubscription): String? {
         val provider = gateway.providerId.trim().lowercase()
         val lifecycle = subscriptions ?: return SUBSCRIPTIONS_OFF
-        // 줄에 연결된 결제사 구독 id 로만 찾는다 - 연결 전(첫 결제 전)에 온 사건이나 우리 구독이 아닌 사건은 반영하지 않는다
-        val id = store.findSubscriptionByProviderId(provider, event.providerSubscriptionId)?.id ?: return UNKNOWN_SUBSCRIPTION
+        // 줄에 연결된 결제사 구독 id 로만 찾는다 - 연결 전(첫 결제 전)에 온 사건이나 우리 구독이 아닌 사건은 반영하지 않는다.
+        // 예외: 구독이 만들어진 사건이 싣는 거래 id 가 우리가 만든 첫 거래 id 면 그 줄에 결제사 구독 id 만 **연결**한다(켜지는 않는다) - 첫 결제 사건을 놓쳐도 이후 갱신이 이 줄에 닿게
+        val linkedId = store.findSubscriptionByProviderId(provider, event.providerSubscriptionId)?.id
+        val firstTxnId = if (linkedId == null) event.transactionId?.let { store.findSubscriptionByFirstTransaction(provider, it)?.id } else null
+        val id = linkedId ?: firstTxnId ?: return UNKNOWN_SUBSCRIPTION
         val subscription = tx.lockSubscription(id)?.takeIf { it.provider == provider } ?: return UNKNOWN_SUBSCRIPTION
+        if (firstTxnId != null) {
+            if (subscription.providerSubscriptionId != null || subscription.status != SubscriptionStatus.PENDING) return SUBSCRIPTION_MISMATCH
+            tx.updateSubscription(subscription.copy(providerSubscriptionId = event.providerSubscriptionId, providerSyncedAt = event.occurredAt, updatedAt = writer.now()))
+            return null
+        }
         if (subscription.providerMode != gateway.mode) return MODE_MISMATCH
         if (subscription.status == SubscriptionStatus.ENDED) return ALREADY_ENDED
         val syncedAt = subscription.providerSyncedAt
@@ -220,6 +251,7 @@ class PaymentPushedEvents(
         const val UNKNOWN_TRANSACTION = "UNKNOWN_TRANSACTION"
         const val SUBSCRIPTION_MISMATCH = "SUBSCRIPTION_MISMATCH"
         const val NO_PROVIDER_SUBSCRIPTION = "NO_PROVIDER_SUB"
+        const val PRICE_MISMATCH = "PRICE_MISMATCH"
         const val SEAT_TAKEN = "SEAT_TAKEN"
         const val NOT_HANDLED = "NOT_HANDLED"
     }

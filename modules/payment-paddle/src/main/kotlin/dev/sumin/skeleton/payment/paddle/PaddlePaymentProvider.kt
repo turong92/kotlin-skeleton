@@ -16,6 +16,7 @@ import dev.sumin.skeleton.payment.PaymentTransactionGateway
 import dev.sumin.skeleton.payment.TransactionRequest
 import dev.sumin.skeleton.payment.PaymentWebhookRejectedException
 import dev.sumin.skeleton.payment.PushedEvents
+import dev.sumin.skeleton.payment.PushedItem
 import dev.sumin.skeleton.payment.PushedPayment
 import dev.sumin.skeleton.payment.PushedPaymentEvent
 import dev.sumin.skeleton.payment.PushedSubscription
@@ -101,10 +102,14 @@ class PaddlePaymentProvider(
             card = card,
             periodStart = data["billing_period"]?.text("starts_at")?.let(Instant::parse),
             periodEnd = data["billing_period"]?.text("ends_at")?.let(Instant::parse),
+            items = data["items"]?.toList().orEmpty().mapNotNull { item ->
+                val priceId = (item["price"]?.text("id") ?: item.text("price_id")) ?: return@mapNotNull null
+                PushedItem(priceId, item["quantity"]?.asInt(1) ?: 1)
+            },
         )
     }
 
-    private fun priceIdOf(itemRef: String): String? = properties.prices[itemRef]?.takeIf { it.isNotBlank() }
+    override fun priceIdOf(itemRef: String): String? = properties.prices[itemRef]?.takeIf { it.isNotBlank() }
 
     private fun subscription(eventId: String, occurredAt: Instant, data: JsonNode, custom: JsonNode?, type: String?): PushedSubscription? {
         val scheduledCancel = data["scheduled_change"]?.text("action") == "cancel"
@@ -123,6 +128,7 @@ class PaddlePaymentProvider(
             ourSubscriptionId = custom.text(PushedEvents.SUBSCRIPTION_KEY),
             periodStart = data["current_billing_period"]?.text("starts_at")?.let(Instant::parse),
             periodEnd = data["current_billing_period"]?.text("ends_at")?.let(Instant::parse),
+            transactionId = data.text("transaction_id"),
         )
     }
 
@@ -142,6 +148,7 @@ class PaddlePaymentProvider(
             ) {
                 baseUrl(properties.resolvedBaseUrl)
                 header(HttpHeaders.AUTHORIZATION, "Bearer ${properties.apiKey}")
+                timeout(properties.createTransactionTimeout)
                 loggingTag("payment.paddle.create-transaction")
             }.block(),
         )

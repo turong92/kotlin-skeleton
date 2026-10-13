@@ -9,7 +9,13 @@ import java.time.Instant
 interface PaymentPushGateway : PaymentWebhookGateway {
     /** 저장된 원문을 결제사 중립의 사건으로 읽는다. 장부가 다루지 않는 사건이면 null(줄은 `IGNORED`). 읽을 수 없는 원문은 던진다. */
     fun interpret(payload: String): PushedPaymentEvent?
+
+    /** 이 상품(단건 `itemRef`) · 플랜 코드로 서버가 거래에 넣는 결제사 가격 id - 단건과 첫 구독 결제의 품목을 이것과 대조한다(콘솔에서 품목을 바꿔 결제하는 길을 막는다). 설정에 없으면 null. */
+    fun priceIdOf(itemRef: String): String?
 }
+
+/** 거래의 품목 한 줄 - 결제사의 가격 id 와 수량. */
+data class PushedItem(val priceId: String, val quantity: Int)
 
 object PushedEvents {
     /** 수신함 줄의 `resource_type` — 서명된 본문이 곧 사실이다. */
@@ -42,6 +48,8 @@ data class PushedPayment(
     val card: PaymentCard? = null,
     val periodStart: Instant? = null,
     val periodEnd: Instant? = null,
+    /** 거래의 품목 - 비어 있으면(읽지 못했다) 서버가 정한 품목과 같다고 할 수 없다. */
+    val items: List<PushedItem> = emptyList(),
 ) : PushedPaymentEvent
 
 enum class PushedSubscriptionStatus { ACTIVE, PAST_DUE, CANCELING, ENDED }
@@ -56,6 +64,8 @@ data class PushedSubscription(
     val ourSubscriptionId: String? = null,
     val periodStart: Instant? = null,
     val periodEnd: Instant? = null,
+    /** 구독이 만들어진 사건(`subscription.created`)만 싣는, 구독을 만든 거래 id - 첫 결제 사건을 놓쳐도 줄에 결제사 구독 id 를 연결할 수 있다. */
+    val transactionId: String? = null,
 ) : PushedPaymentEvent
 
 /** 결제사가 결제와 갱신을 직접 하는 구독(우리 갱신 작업은 건너뛴다). 결제창은 프론트가 연다. */

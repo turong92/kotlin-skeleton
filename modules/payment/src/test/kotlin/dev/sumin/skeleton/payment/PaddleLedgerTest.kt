@@ -22,13 +22,14 @@ class PaddleLedgerTest {
 
     private fun pending(key: String = "k1"): PaymentSubscription = kit.subscriptions.start("acc_1", "basic", IdempotencyKey(key), provider = "paddle").subscription
 
-    private fun payment(txn: String?, total: PaymentAmount = PaymentAmount(990, "USD"), at: Instant = t0, providerSub: String? = "psub_1", order: String? = null, ourSub: String? = null) =
+    private fun payment(txn: String?, total: PaymentAmount = PaymentAmount(990, "USD"), at: Instant = t0, providerSub: String? = "psub_1", order: String? = null, ourSub: String? = null, price: String? = null) =
         PushedPayment(
             eventId = "evt_${++seq}", occurredAt = at, providerPaymentId = txn ?: "txn_unknown", total = total, tax = 90, paidAt = at, ourOrderId = order, ourAccountId = "acc_1",
             ourSubscriptionId = ourSub, providerSubscriptionId = providerSub, periodStart = at, periodEnd = at.plusSeconds(31 * 86400),
+            items = listOf(PushedItem(price ?: if (order != null) "pri_cheer-3000" else "pri_basic", 1)),
         )
 
-    private fun state(status: PushedSubscriptionStatus, at: Instant, providerSub: String = "psub_1") = PushedSubscription("evt_${++seq}", at, providerSub, status, null, null, t0, monthLater)
+    private fun state(status: PushedSubscriptionStatus, at: Instant, providerSub: String = "psub_1", txn: String? = null) = PushedSubscription("evt_${++seq}", at, providerSub, status, null, null, t0, monthLater, txn)
 
     private fun feed(event: PushedPaymentEvent): WebhookReceipt = kit.deliver(push.delivery(event), token = null, provider = "paddle").also { kit.runWebhooks(); kit.runTasks(setOf(PaymentTaskTypes.ORDER_FULFIL)) }
 
@@ -58,13 +59,19 @@ class PaddleLedgerTest {
     }
 
     @Test
-    fun `when the provider cannot create the transaction nothing is started and no row is left`() {
+    fun `when the provider cannot create the transaction nothing opens, the row waits without a transaction and the next open creates exactly one`() {
         push.createFails = true
         assertFailsWith<PaymentUnavailableException> { pending() }
-        assertNull(kit.store.findLiveSubscription("acc_1"))
-        assertNull(kit.store.findSubscriptionByDedupeKey(PaymentOrderIds.dedupeKey("acc_1", IdempotencyKey("k1"))))
         assertFailsWith<PaymentUnavailableException> { kit.orders.create(CreateOrderCommand("acc_1", "cheer", "cheer-3000", IdempotencyKey("o1"), provider = "paddle")) }
-        assertNull(kit.store.findOrderByDedupeKey(PaymentOrderIds.dedupeKey("acc_1", IdempotencyKey("o1"))))
+        assertEquals(0, push.transactions.size)
+        assertNull(kit.store.findLatestSubscription("acc_1"), "a subscription without a transaction is not shown and holds no seat")
+
+        push.createFails = false
+        val again = kit.subscriptions.start("acc_1", "basic", IdempotencyKey("k1"), provider = "paddle")
+        assertNotNull(again.billing?.attributes?.get("transactionId"))
+        val order = kit.orders.create(CreateOrderCommand("acc_1", "cheer", "cheer-3000", IdempotencyKey("o1"), provider = "paddle"))
+        assertNotNull(order.checkout?.attributes?.get("transactionId"))
+        assertEquals(2, push.transactions.size)
     }
 
     @Test
@@ -233,6 +240,55 @@ class PaddleLedgerTest {
         } finally {
             pool.shutdownNow()
         }
-        assertEquals(2, push.transactions.size, "one transaction for the subscription and one for the order")
+        // 동시에 만든 쪽의 거래가 결제 안 된 채 남을 수는 있지만(수용) 줄에 박힌 거래 id 는 하나다
+        val stored = push.transactions.map { it.first }
+        val subTxn = kit.store.findSubscriptionByDedupeKey(PaymentOrderIds.dedupeKey("acc_1", IdempotencyKey("same")))?.firstTransactionId
+        val orderTxn = kit.store.findOrderByDedupeKey(PaymentOrderIds.dedupeKey("acc_1", IdempotencyKey("same-order")))?.providerPaymentId
+        assertNotNull(subTxn)
+        assertNotNull(orderTxn)
+        assertEquals(true, subTxn in stored && orderTxn in stored)
+    }
+
+    @Test
+    fun `a first payment whose items differ from what the server put in the transaction does not turn the subscription on and is recorded for a person - a renewal is not compared`() {
+        val pending = pending()
+        feed(payment(pending.firstTransactionId, price = "pri_cheap"))
+        assertEquals(SubscriptionStatus.PENDING, sub(pending.id).status)
+        assertEquals(PaymentReviewReason.SUBSCRIPTION_STALE_CHARGE, kit.store.listSubscriptionOrders(pending.id, 5).single().reviewReason)
+        assertEquals(emptyList(), push.cancelCalls.toList())
+
+        val other = kit.subscriptions.start("acc_2", "basic", IdempotencyKey("k2"), provider = "paddle").subscription
+        feed(payment(other.firstTransactionId, providerSub = "psub_2", price = "pri_basic"))
+        feed(payment("txn_r", providerSub = "psub_2", price = "pri_raised", at = monthLater))
+        assertEquals(null, kit.store.listSubscriptionOrders(other.id, 5).first { it.providerPaymentId == "txn_r" }.reviewReason)
+
+        val order = kit.orders.create(CreateOrderCommand("acc_1", "cheer", "cheer-3000", IdempotencyKey("o9"), provider = "paddle")).order
+        feed(payment(kit.order(order.id).providerPaymentId, providerSub = null, order = order.id, price = "pri_cheap"))
+        assertEquals(PaymentOrderStatus.PENDING, kit.order(order.id).status)
+        assertEquals(PaymentReviewReason.AMOUNT_MISMATCH, kit.order(order.id).reviewReason)
+        assertEquals(0, kit.listener.paid.count { it.id == order.id })
+    }
+
+    @Test
+    fun `a first payment without a provider subscription id is recorded for a person, and subscription created with the transaction id links the row so the next payment turns it on`() {
+        val pending = pending()
+        feed(payment(pending.firstTransactionId, providerSub = null))
+        assertEquals(SubscriptionStatus.PENDING, sub(pending.id).status)
+        assertEquals(PaymentReviewReason.SUBSCRIPTION_STALE_CHARGE, kit.store.listSubscriptionOrders(pending.id, 5).single().reviewReason)
+
+        feed(state(PushedSubscriptionStatus.ACTIVE, t0, txn = pending.firstTransactionId))
+        assertEquals("psub_1", sub(pending.id).providerSubscriptionId)
+        assertEquals(SubscriptionStatus.PENDING, sub(pending.id).status) // 연결만 - 켜지 않는다
+
+        feed(payment("txn_next", at = monthLater))
+        assertEquals(SubscriptionStatus.ACTIVE, sub(pending.id).status)
+    }
+
+    @Test
+    fun `a payment found on our row but refused by the cross check is recorded and flagged, not just dropped from the inbox`() {
+        val pending = pending()
+        feed(payment(pending.firstTransactionId, ourSub = "sub_somebody_else"))
+        assertEquals(SubscriptionStatus.PENDING, sub(pending.id).status)
+        assertEquals(PaymentReviewReason.SUBSCRIPTION_STALE_CHARGE, kit.store.listSubscriptionOrders(pending.id, 5).single().reviewReason)
     }
 }

@@ -9,6 +9,7 @@ skeleton:
     webhook-secret: ""                   # 웹훅 엔드포인트 비밀값 (env 로 넘긴다)
     environment: sandbox                 # sandbox | live
     base-url: ""                         # 비우면 환경에 따른 기본 주소 (시험의 가짜 Paddle 은 여기에)
+    create-transaction-timeout: 5s       # 거래 만들기(주문 · 구독 시작이 기다리는 호출) 한 번의 제한 시간
     signature-tolerance: 60s             # 서명 시각이 지금과 이보다 멀면 거절
     prices: {}                           # 플랜 코드 · 상품 코드 → Paddle 가격 id (pri_…)
     supported-currencies: []             # 비우면 통화로 라우팅하지 않는다

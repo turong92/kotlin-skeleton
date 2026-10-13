@@ -61,6 +61,7 @@ class PaddleWebhookTest {
         assertThat(event.ourOrderId).isEqualTo("ord_1")
         assertThat(event.ourAccountId).isEqualTo("acc_1")
         assertThat(event.card?.last4).isEqualTo("4242")
+        assertThat(event.items).containsExactly(dev.sumin.skeleton.payment.PushedItem("pri_cheer", 1))
     }
 
     @Test
@@ -72,5 +73,6 @@ class PaddleWebhookTest {
         val active = gateway.interpret(subscriptionEvent()) as PushedSubscription
         assertThat(active.ourSubscriptionId).isEqualTo("sub_ours")
         assertThat(active.periodEnd).isNotNull()
+        assertThat((gateway.interpret(subscriptionEvent("subscription.created", transactionId = "txn_first")) as PushedSubscription).transactionId).isEqualTo("txn_first")
     }
 }

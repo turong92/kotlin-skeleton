@@ -24,6 +24,8 @@ data class PaddleProperties(
     val baseUrl: String = "",
     /** 서명의 시각이 지금과 이보다 멀면 거절한다(재전송 방지). Paddle SDK 의 기본은 5초다 — 시계 오차를 감안해 넉넉히. */
     val signatureTolerance: Duration = Duration.ofSeconds(60),
+    /** 거래 만들기(요청 한 번)의 제한 시간 - 주문 · 구독 시작이 이 호출을 기다린다. */
+    val createTransactionTimeout: Duration = Duration.ofSeconds(5),
     /** 플랜 코드(구독) 또는 상품 코드(단건) → Paddle 가격 id(`pri_…`). 금액은 Paddle 가격이 정한다. */
     val prices: Map<String, String> = emptyMap(),
     val supportedCurrencies: Set<String> = emptySet(),

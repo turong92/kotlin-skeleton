@@ -65,8 +65,8 @@ internal fun transactionCompleted(custom: String = """{"orderId":"ord_1","accoun
   "payments":[{"status":"captured","method_details":{"type":"card","card":{"type":"visa","last4":"4242"}}}]}}
 """.trim()
 
-internal fun subscriptionEvent(type: String = "subscription.updated", status: String = "active", scheduled: String = "null", at: String = "2026-10-13T09:59:30Z", eventId: String = "evt_s1") = """
+internal fun subscriptionEvent(type: String = "subscription.updated", status: String = "active", scheduled: String = "null", at: String = "2026-10-13T09:59:30Z", eventId: String = "evt_s1", transactionId: String? = null) = """
 {"event_id":"$eventId","event_type":"$type","occurred_at":"$at",
- "data":{"id":"sub_1","status":"$status","custom_data":{"subscriptionId":"sub_ours","accountId":"acc_1"},"scheduled_change":$scheduled,
+ "data":{"id":"sub_1","status":"$status",${transactionId?.let { "\"transaction_id\":\"$it\"," } ?: ""}"custom_data":{"subscriptionId":"sub_ours","accountId":"acc_1"},"scheduled_change":$scheduled,
   "current_billing_period":{"starts_at":"2026-10-13T09:59:00Z","ends_at":"2026-11-13T09:59:00Z"}}}
 """.trim()
