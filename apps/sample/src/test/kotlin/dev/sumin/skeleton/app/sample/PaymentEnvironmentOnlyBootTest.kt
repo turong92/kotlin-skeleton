@@ -31,7 +31,7 @@ class PaymentEnvironmentOnlyBootTest {
             .environment(environment)
             .web(WebApplicationType.SERVLET)
             .properties("spring.config.import=classpath:test-seeds.yml")
-            .run("--server.port=0")
+            .run("--server.port=0", "--skeleton.payment.routing.country-providers.KR=toss") // 이 시험의 결제사는 진짜 토스다 - 시험 설정의 KR → scripted 를 main 의 KR → toss 로 되돌린다
         ctx.use {
             val port = ctx.environment.getProperty("local.server.port")
             val http = HttpClient.newHttpClient()

@@ -3,7 +3,7 @@ skeleton:
   payment:
     # default-provider:            # 미설정: 경로가 안 맞을 때 쓸 제공자 ID (제공자가 하나뿐이면 그것)
     routing:
-      country-providers: {}        # 접속 나라(ISO-3166 두 글자 대문자) → 결제사 id. 예 KR: toss — 그 밖의 나라는 default-provider. 화면이 보낸 provider 가 다르면 400
+      country-providers: {}        # 접속 나라(ISO-3166 두 글자 대문자) → 결제사 id. 예 KR: toss — 지도에 있는 나라는 그 결제사만(못 열면 503, 다른 결제사로 넘기지 않는다), 그 밖의 나라는 default-provider. 화면이 보낸 provider 는 읽지 않는다
       # dev-country: US            # 로컬 개발 전용: 모든 요청을 이 나라로 고정한다. 보호 환경(stage · prod)에서 정해져 있으면 기동 실패
     providers: {}                  # 제공자 ID → { enabled, currencies, countries } — 제공자 기본 지원 범위를 덮어쓴다
 #     toss:

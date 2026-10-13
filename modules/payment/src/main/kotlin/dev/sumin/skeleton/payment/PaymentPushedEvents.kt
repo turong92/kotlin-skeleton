@@ -137,7 +137,7 @@ class PaymentPushedEvents(
     }
 
     private fun applyPayment(tx: PaymentLedgerTx, lifecycle: SubscriptionLifecycle, subscription: PaymentSubscription, event: PushedPayment): String? {
-        val koreanBuyer = event.buyerCountry == KOREA
+        val koreanBuyer = event.buyerCountry == KOREA && subscription.status == SubscriptionStatus.PENDING // 첫 결제에서 한 번만 - 갱신마다 찍지 않는다
         val order = paidOrder(lifecycle, subscription, event).let { if (koreanBuyer) it.copy(reviewReason = PaymentReviewReason.BUYER_COUNTRY_KR) else it }
         if (!tx.insertOrderIfAbsent(order)) return null
         tx.appendEvent(writer.event(order.id, PaymentEventType.CONVERGED, PaymentActor.PROVIDER, providerCode = WEBHOOK, to = PaymentOrderStatus.PAID))

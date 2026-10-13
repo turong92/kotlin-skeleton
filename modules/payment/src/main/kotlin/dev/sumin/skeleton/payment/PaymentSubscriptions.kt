@@ -37,9 +37,10 @@ class PaymentSubscriptions(
     fun recentOrders(subscriptionId: String, limit: Int = RECENT_ORDERS): List<PaymentOrder> = store.listSubscriptionOrders(subscriptionId, limit)
 
     /** `PENDING` 줄을 만들고 카드 등록 창 값을 돌려준다. 같은 키로 다시 부르면 같은 줄이다. [country] 가 비면 설정의 기본 나라(그것도 없으면 나라 없음). */
-    fun start(accountId: String, planCode: String, key: IdempotencyKey, country: String? = null, provider: String? = null): StartedSubscription {
+    fun start(accountId: String, planCode: String, key: IdempotencyKey, country: String? = null, provider: String? = null, providerClosed: Boolean = false): StartedSubscription {
         val dedupeKey = PaymentOrderIds.dedupeKey(accountId, key)
         store.findSubscriptionByDedupeKey(dedupeKey)?.let { return replay(it, planCode) }
+        if (providerClosed) throw PaymentUnavailableException() // 나라 지도가 정한 결제사가 못 열린다 - 다른 결제사로 넘기지 않는다
 
         val plan = plans.find(planCode)?.takeIf { it.amount.amount > 0 } ?: throw PaymentItemNotPurchasableException()
         SubscriptionPeriod.parse(plan.period)

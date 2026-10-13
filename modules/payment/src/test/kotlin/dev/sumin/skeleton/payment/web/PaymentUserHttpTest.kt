@@ -37,6 +37,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
         "skeleton.web.client-ip.mode=cloudflare",
         "skeleton.web.client-ip.trusted-proxies=127.0.0.1/32",
         "skeleton.payment.subscription.cancel.policies.KR=korea",
+        "skeleton.payment.routing.country-providers.KR=toss",
     ],
 )
 @AutoConfigureMockMvc
@@ -108,28 +109,43 @@ class PaymentUserHttpTest {
     }
 
     @Test
-    fun `config tells the country the server decided, its provider and the cancel policy of that country`() {
+    fun `config tells the country the server decided, its provider and the cancel policy of that country - and not available when the country's own provider cannot open`() {
         val account = account()
-        mvc.perform(get("$base/config").asUser(account).header("CF-IPCountry", "KR")).andExpect(status().isOk)
-            .andExpect(jsonPath("$.value.country").value("KR")).andExpect(jsonPath("$.value.provider").value("scripted"))
+        mvc.perform(get("$base/config").asUser(account).header("CF-IPCountry", "US")).andExpect(status().isOk)
+            .andExpect(jsonPath("$.value.country").value("US")).andExpect(jsonPath("$.value.provider").value("scripted"))
+            .andExpect(jsonPath("$.value.cancelPolicy.key").value("period-end-only")).andExpect(jsonPath("$.value.available").value(true))
+        // KR is mapped to a provider that is not here: no other provider is offered, the cancel policy still follows the country
+        mvc.perform(get("$base/config").asUser(account).header("CF-IPCountry", "KR")).andExpect(jsonPath("$.value.country").value("KR"))
+            .andExpect(jsonPath("$.value.provider").value(null as Any?)).andExpect(jsonPath("$.value.available").value(false))
             .andExpect(jsonPath("$.value.cancelPolicy.key").value("korea")).andExpect(jsonPath("$.value.cancelPolicy.withdrawalDays").value(7))
-        mvc.perform(get("$base/config").asUser(account).header("CF-IPCountry", "US")).andExpect(jsonPath("$.value.country").value("US"))
-            .andExpect(jsonPath("$.value.cancelPolicy.key").value("period-end-only"))
     }
 
+    private fun createFrom(account: String, country: String, key: String, body: String = """{"itemType":"cheer","itemRef":"cheer-3000"}"""): ResultActions =
+        mvc.perform(post("$base/orders").asUser(account).header("CF-IPCountry", country).header("Idempotency-Key", key).contentType(MediaType.APPLICATION_JSON).content(body))
+
     @Test
-    fun `an order records the country the server decided, and a provider the server did not choose is 400 with no order`() {
+    fun `an order records the server's country, a body provider or country changes nothing, and a Korean visitor whose provider is closed gets 503 and no order`() {
         val account = account()
         val before = store.allOrders().size
-        mvc.perform(post("$base/orders").asUser(account).header("Idempotency-Key", "k-prov-${System.nanoTime()}").contentType(MediaType.APPLICATION_JSON).content("""{"itemType":"cheer","itemRef":"cheer-3000","provider":"paddle"}"""))
-            .andExpect(status().isBadRequest)
+        createFrom(account, "KR", "k-closed-${System.nanoTime()}").andExpect(status().isServiceUnavailable).andExpect(jsonPath("$.code").value("PAYMENT.UNAVAILABLE"))
         assertEquals(before, store.allOrders().size)
 
         val id = read(
-            mvc.perform(post("$base/orders").asUser(account).header("CF-IPCountry", "US").header("Idempotency-Key", "k-ctry-${System.nanoTime()}").contentType(MediaType.APPLICATION_JSON).content("""{"itemType":"cheer","itemRef":"cheer-3000","provider":"scripted"}"""))
+            createFrom(account, "US", "k-ctry-${System.nanoTime()}", """{"itemType":"cheer","itemRef":"cheer-3000","provider":"paddle","country":"KR"}""")
                 .andExpect(status().isCreated).andReturn().response.contentAsString,
         )["value"]["order"]["id"].asString()
-        assertEquals("US", store.allOrders().single { it.id == id }.country)
+        val order = store.allOrders().single { it.id == id }
+        assertEquals("US", order.country)
+        assertEquals("scripted", order.provider)
+    }
+
+    @Test
+    fun `the same key sent again after the visitor's country changed gives the same order as it was made - even from a country whose provider is closed`() {
+        val account = account()
+        val key = "k-flip-${System.nanoTime()}"
+        val first = read(createFrom(account, "US", key).andExpect(status().isCreated).andReturn().response.contentAsString)["value"]["order"]["id"].asString()
+        val again = read(createFrom(account, "KR", key).andExpect(status().isOk).andReturn().response.contentAsString)["value"]["order"]["id"].asString()
+        assertEquals(first, again)
     }
 
     @Test

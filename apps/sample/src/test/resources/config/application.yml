@@ -18,3 +18,7 @@ skeleton:
     primary-key-id: test
     keys:
       test: dGVzdC1vbmx5LWNyeXB0by1rZXktMDEyMzQ1Njc4OSE=   # 시험 전용 고정 값 — 구독을 켠 시험이 빌링키를 암호화한다
+  payment:
+    routing:
+      country-providers:
+        KR: scripted   # main 의 KR → toss 는 토스가 없는 시험에서 한국(기본 나라)을 닫아 버린다 - 이 시험들의 결제사는 시험 소스의 ScriptedGateway 다

@@ -9,6 +9,7 @@ import dev.sumin.skeleton.paymenttest.InMemoryLedgerBeans
 import dev.sumin.skeleton.paymenttest.PaymentWebTestApplication
 import dev.sumin.skeleton.paymenttest.SubscriptionBeans
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import org.springframework.beans.factory.annotation.Autowired
@@ -31,6 +32,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
         "skeleton.payment.subscription.plan-change.enabled=true",
         "skeleton.payment.subscription.plan-change.charge=FULL_RESTART",
         "skeleton.payment.subscription.cancel.policies.KR=korea",
+        "skeleton.payment.routing.country-providers.JP=toss",
         "skeleton.web.client-ip.mode=cloudflare",
         "skeleton.web.client-ip.trusted-proxies=127.0.0.1/32",
         "skeleton.payment.http.order-rate-limit.account-capacity=100000",
@@ -137,13 +139,17 @@ class PaymentSubscriptionHttpTest {
     }
 
     @Test
-    fun `a provider in the body that differs from the server's choice is 400 and makes no subscription`() {
+    fun `a provider in the body is ignored, a visitor whose country maps to a provider that is closed gets 503, and the same key after the country changed gives the same row`() {
         val owner = account()
-        mvc.perform(post("$base/subscriptions").asUser(owner).header("Idempotency-Key", "mismatch-1").contentType(MediaType.APPLICATION_JSON).content("""{"planCode":"basic","provider":"paddle"}"""))
-            .andExpect(status().isBadRequest)
+        fun startFrom(country: String, key: String, body: String) = mvc.perform(
+            post("$base/subscriptions").asUser(owner).header("CF-IPCountry", country).header("Idempotency-Key", key).contentType(MediaType.APPLICATION_JSON).content(body),
+        )
+        startFrom("JP", "closed-1", """{"planCode":"basic"}""").andExpect(status().isServiceUnavailable).andExpect(jsonPath("$.code").value("PAYMENT.UNAVAILABLE"))
         mvc.perform(get("$base/subscriptions/me").asUser(owner)).andExpect(jsonPath("$.value.subscription").value(null as Any?))
-        mvc.perform(post("$base/subscriptions").asUser(owner).header("Idempotency-Key", "match-1").contentType(MediaType.APPLICATION_JSON).content("""{"planCode":"basic","provider":"scripted"}"""))
-            .andExpect(status().isCreated)
+
+        val id = read(startFrom("US", "flip-1", """{"planCode":"basic","provider":"paddle"}""").andExpect(status().isCreated).andReturn().response.contentAsString)["value"]["subscription"]["id"].asString()
+        val again = read(startFrom("JP", "flip-1", """{"planCode":"basic"}""").andExpect(status().isOk).andReturn().response.contentAsString)["value"]["subscription"]["id"].asString()
+        assertEquals(id, again)
     }
 
     @Test

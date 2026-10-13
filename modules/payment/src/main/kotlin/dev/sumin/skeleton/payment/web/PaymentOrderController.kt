@@ -42,7 +42,7 @@ class PaymentOrderController(
     @Operation(
         summary = "Create an order and get the values for the checkout window",
         description = "201 with { order, checkout }; the same Idempotency-Key again is 200 with the same order (checkout is null once the order is no longer PENDING or its payment window has passed). " +
-            "The buyer's country and the payment provider are decided by the server (see GET /config); a body provider that differs is 400. " +
+            "The buyer's country and the payment provider are decided by the server (see GET /config); a body provider or country is ignored. 503 UNAVAILABLE when the provider of the country cannot open its window (no other provider is tried; a resend of an existing key still answers). " +
             "400 without the header · 409 IDEMPOTENCY_CONFLICT for another body · 422 ITEM_NOT_PURCHASABLE · 429 over the per-account / per-IP limit · 503 UNAVAILABLE.",
     )
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = CreateOrderResponse::class)
@@ -63,8 +63,7 @@ class PaymentOrderController(
         val itemRef = PaymentRequests.text(body["itemRef"], "itemRef", 128)
         val quantity = PaymentRequests.wholeNumber(body["quantity"], "quantity") ?: 1
         val route = routing.of(request)
-        routing.requireSame(route, PaymentRequests.provider(body["provider"]))
-        val created = orders.create(CreateOrderCommand(account, itemType, itemRef, idempotencyKey(key), quantity.coerceIn(0, Int.MAX_VALUE.toLong()).toInt(), country = route.country, provider = route.provider))
+        val created = orders.create(CreateOrderCommand(account, itemType, itemRef, idempotencyKey(key), quantity.coerceIn(0, Int.MAX_VALUE.toLong()).toInt(), country = route.country, provider = route.provider, providerClosed = route.providerClosed))
         val response = Response.ok(CreateOrderResponse(OrderResponse.of(OrderView(created.order, created.refunds)), created.checkout?.let(CheckoutResponse::of)))
         return if (created.replayed) ResponseEntity.ok(response) else ResponseEntity.status(201).body(response)
     }

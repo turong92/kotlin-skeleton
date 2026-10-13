@@ -51,18 +51,19 @@ class PaymentController(
     private val callers: PaymentCallers,
     private val routing: PaymentCountryRouting,
 ) {
-    @Operation(summary = "Can payments be taken", description = "country, provider and cancelPolicy are what the server decided for this request (its Cloudflare country, the configured default or the local switch): the provider is the only one an order or subscription may name, cancelPolicy.key picks the cancel / refund summary. available is false without a catalog, without a provider that opens a checkout, or when that provider cannot hand out the values for its window (a missing or mismatched public key). testMode is true while test keys are in.")
+    @Operation(summary = "Can payments be taken", description = "country, provider and cancelPolicy are what the server decided for this request (its Cloudflare country, the configured default or the local switch): the provider is the one an order or subscription will use (a body provider is ignored), cancelPolicy.key picks the cancel / refund summary. available is false without a catalog, without a provider that opens a checkout, or when that provider cannot hand out the values for its window (a missing or mismatched public key). testMode is true while test keys are in.")
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = PaymentConfigResponse::class)
     @GetMapping("/config")
     fun config(authentication: Authentication?, request: HttpServletRequest): DataResponse<PaymentConfigResponse> {
         callers.account(authentication)
         val checkout = orders.openableCheckout(null, null)   // 주문 만들기와 같은 고르기 · 같은 판정(결제창 값을 낼 수 있는가)
-        val available = catalog.getIfAvailable() != null && checkout != null
-        val providers = if (catalog.getIfAvailable() == null) emptyList() else orders.openableProviders()
         val route = routing.of(request)
+        // 이 요청이 실제로 쓸 결제사와 같은 답 - 나라가 정한 결제사가 있으면 그것이 열려 있다는 뜻, 못 열면 다른 결제사로 넘기지 않으니 불가
+        val available = catalog.getIfAvailable() != null && (route.provider != null || (!route.providerClosed && checkout != null))
+        val providers = if (catalog.getIfAvailable() == null) emptyList() else orders.openableProviders()
         return Response.ok(
             PaymentConfigResponse(
-                available || providers.isNotEmpty(),
+                available || (providers.isNotEmpty() && !route.providerClosed),
                 (checkout ?: providers.firstOrNull()?.let { orders.openableCheckout(null, null, it) })?.mode == PaymentMode.TEST,
                 properties.refund.requestsEnabled,
                 providers,

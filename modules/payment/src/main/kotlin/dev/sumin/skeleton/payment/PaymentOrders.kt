@@ -14,6 +14,8 @@ data class CreateOrderCommand(
     val country: String? = null,
     /** 결제사를 지정한다(예: 화면 언어 · 나라가 정한 `paddle`). 비우면 통화 · 나라 · 기본 결제사로 서버가 고른다. */
     val provider: String? = null,
+    /** 나라 지도가 정한 결제사가 못 열린다 - 다른 결제사로 넘기지 않고 새 주문은 [PaymentUnavailableException]. 같은 키의 재전송은 만든 때의 줄을 돌려준다. */
+    val providerClosed: Boolean = false,
 )
 
 /**
@@ -51,6 +53,7 @@ class PaymentOrders(
         validate(command)
         val dedupeKey = PaymentOrderIds.dedupeKey(command.accountId, command.idempotencyKey)
         store.findOrderByDedupeKey(dedupeKey)?.let { return replay(it, command) }
+        if (command.providerClosed) throw PaymentUnavailableException()
 
         val quote = catalog.quote(PurchaseRequest(command.accountId, command.itemType, command.itemRef, command.quantity, command.country))
         if (quote.amount.amount <= 0) throw PaymentItemNotPurchasableException()

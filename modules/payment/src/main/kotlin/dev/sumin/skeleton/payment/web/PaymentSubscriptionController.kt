@@ -58,7 +58,7 @@ class PaymentSubscriptionController(
     @Operation(
         summary = "Start a subscription and get the values for the card registration window",
         description = "201 with { subscription (PENDING), billingAuth }; the same Idempotency-Key again is 200 with the same subscription (billingAuth is null once the card was handed in). " +
-            "Body { planCode, provider? } - the buyer's country (and so the cancel / refund policy) and the provider are decided by the server (see GET /config); a body provider that differs is 400, a body country is ignored. " +
+            "Body { planCode } - the buyer's country (and so the cancel / refund policy) and the provider are decided by the server (see GET /config); a body provider or country is ignored. A resend of the same key answers with the row as it was made. " +
             "400 without the header · 409 ALREADY_SUBSCRIBED · 409 IDEMPOTENCY_CONFLICT for another plan · 422 ITEM_NOT_PURCHASABLE for an unknown plan · 429 over the per-account / per-IP limit · 503 UNAVAILABLE.",
     )
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = StartSubscriptionResponse::class)
@@ -77,8 +77,7 @@ class PaymentSubscriptionController(
         }
         val planCode = PaymentRequests.text(body["planCode"], "planCode", 64)
         val route = routing.of(request)
-        routing.requireSame(route, PaymentRequests.provider(body["provider"]))
-        val started = subscriptions.start(account, planCode, idempotencyKey(key), route.country, route.provider)
+        val started = subscriptions.start(account, planCode, idempotencyKey(key), route.country, route.provider, route.providerClosed)
         val payload = Response.ok(StartSubscriptionResponse(view(started.subscription), started.billing?.let(BillingAuthResponse::of)))
         return if (started.replayed) ResponseEntity.ok(payload) else ResponseEntity.status(201).body(payload)
     }

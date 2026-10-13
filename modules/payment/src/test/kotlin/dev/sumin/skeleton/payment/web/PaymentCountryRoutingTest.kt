@@ -1,13 +1,13 @@
 package dev.sumin.skeleton.payment.web
 
-import dev.sumin.skeleton.common.FieldValidationException
 import dev.sumin.skeleton.common.web.ClientIpMode
 import dev.sumin.skeleton.common.web.ClientIps
 import dev.sumin.skeleton.common.web.WebProperties
 import dev.sumin.skeleton.payment.PaymentProperties
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import kotlin.test.assertNull
 import org.springframework.mock.web.MockHttpServletRequest
 
@@ -64,16 +64,18 @@ class PaymentCountryRoutingTest {
     }
 
     @Test
-    fun `when only one provider is open it is the one, whatever the country`() {
-        assertEquals("paddle", routing(cloudflare, openable = listOf("paddle")).of(request("KR")).provider)
+    fun `when only one provider is open it is the one - but only for a country the map does not name`() {
         assertEquals("toss", routing(cloudflare, openable = listOf("toss")).of(request("US")).provider)
+        assertEquals("paddle", routing(cloudflare, properties(defaultCountry = null).copy(defaultProvider = null), openable = listOf("paddle")).of(request("US")).provider)
     }
 
     @Test
-    fun `a provider the screen sends that differs from the server's choice is refused`() {
-        val route = routing(cloudflare).of(request("US"))
-        routing(cloudflare).requireSame(route, "paddle")
-        routing(cloudflare).requireSame(route, null)
-        assertFailsWith<FieldValidationException> { routing(cloudflare).requireSame(route, "toss") }
+    fun `a Korean visitor is never sent to Paddle - when Toss cannot open its window the route is closed instead of falling to the only open provider`() {
+        val route = routing(cloudflare, openable = listOf("paddle")).of(request("KR"))
+        assertNull(route.provider)
+        assertTrue(route.providerClosed)
+        val abroad = routing(cloudflare, openable = listOf("paddle")).of(request("US"))
+        assertEquals("paddle", abroad.provider)
+        assertFalse(abroad.providerClosed)
     }
 }

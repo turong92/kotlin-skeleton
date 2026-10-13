@@ -378,4 +378,17 @@ class PaddleLedgerTest {
         assertEquals(PaymentOrderStatus.PAID, kit.store.findOrder(order.id)!!.status)
         assertNull(kit.store.findOrder(order.id)!!.reviewReason)
     }
+
+    @Test
+    fun `a renewal from a Korean address is not flagged again - only the first payment is`() {
+        push.buyerCountries["add_kr"] = "KR"
+        val pending = pending()
+        feed(buyerPayment(pending.firstTransactionId, "add_kr", providerSub = "psub_1"))
+        feed(buyerPayment("txn_renew", "add_kr", providerSub = "psub_1").copy(occurredAt = monthLater, paidAt = monthLater))
+
+        val orders = kit.store.listSubscriptionOrders(pending.id, 5)
+        assertEquals(2, orders.size)
+        assertEquals(1, orders.count { it.reviewReason == PaymentReviewReason.BUYER_COUNTRY_KR })
+        assertEquals(PaymentOrderKind.SUBSCRIPTION_INITIAL, orders.single { it.reviewReason == PaymentReviewReason.BUYER_COUNTRY_KR }.kind)
+    }
 }
