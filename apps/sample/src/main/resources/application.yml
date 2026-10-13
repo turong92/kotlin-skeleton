@@ -120,7 +120,7 @@ skeleton:
   payment:
     # 접속 나라로 결제사 · 해지·환불 규칙을 서버가 정한다(화면은 못 바꾼다): 한국(KR) 은 토스 + 한국 소비자 정책(아래 subscription.cancel), 그 밖은 Paddle + 기간 끝 해지만.
     # 나라는 Cloudflare 가 붙인 CF-IPCountry — skeleton.web.client-ip.mode=cloudflare 일 때만 믿는다(배포가 정한다). 못 정하면 아래 cancel.default-country.
-    # 결제사가 하나만 켜져 있으면 나라와 상관없이 그것이다. 로컬 개발: SKELETON_PAYMENT_ROUTING_DEV_COUNTRY=US 처럼 한 나라로 고정(보호 환경에서는 기동 실패).
+    # 아래 지도에 있는 나라(KR)는 그 결제사만 쓴다 — 토스가 꺼져 있으면 Paddle 로 넘기지 않고 결제를 닫는다(503). 지도에 없는 나라는 default-provider, 그것도 못 쓰면 하나뿐인 결제사. 로컬 개발: SKELETON_PAYMENT_ROUTING_DEV_COUNTRY=US 처럼 한 나라로 고정(보호 환경에서는 기동 실패).
     default-provider: paddle
     routing:
       country-providers:
