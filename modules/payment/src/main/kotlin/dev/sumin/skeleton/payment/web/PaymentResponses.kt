@@ -127,6 +127,8 @@ data class CheckoutResponse(
     val orderId: String,
     val orderName: String,
     val amount: AmountResponse,
+    /** 결제사가 결제창에 더 넘기는 공개 값(Paddle: `environment` · `priceId` · `customData`). 토스는 비어 있다. */
+    val attributes: Map<String, String> = emptyMap(),
 ) {
     companion object {
         fun of(checkout: CheckoutInstruction) = CheckoutResponse(
@@ -137,6 +139,7 @@ data class CheckoutResponse(
             orderId = checkout.orderId,
             orderName = checkout.orderName,
             amount = checkout.amount.toResponse(),
+            attributes = checkout.attributes,
         )
     }
 }

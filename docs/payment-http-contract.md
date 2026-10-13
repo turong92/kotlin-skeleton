@@ -59,7 +59,7 @@
 
 ```jsonc
 { "provider": "toss", "kind": "TOSS_PAYMENT_WINDOW", "clientKey": "test_ck_…", "testMode": true,
-  "orderId": "ord_…", "orderName": "응원하기 3,000원", "amount": { "amount": 3000, "currency": "KRW" } }
+  "orderId": "ord_…", "orderName": "응원하기 3,000원", "amount": { "amount": 3000, "currency": "KRW" } } /* + "attributes": {} (Paddle: environment · priceId · customData) */
 ```
 
 `clientKey` 는 `string | null` 이다 — 결제사 모듈이 정하고, 낼 수 없으면(토스: 공개 키가 비었거나 시크릿 키와 모드가 다름) `null` 이다. 그때 `GET /config` 의 `available` 도 `false` 다(§2). 돌아올 주소(`successUrl` · `failUrl`)는 프론트가 정해 결제창에 넘긴다 — **서버는 받지도 저장하지도 않는다.** 구매자 이름 · 이메일 · 전화는 결제창에 넘기지 않는다.

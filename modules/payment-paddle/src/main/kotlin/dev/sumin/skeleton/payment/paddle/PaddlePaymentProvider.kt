@@ -180,7 +180,7 @@ class PaddlePaymentProvider(
     private fun JsonNode?.text(name: String): String? = this?.get(name)?.takeIf { it.isString || it.isNumber }?.asString()?.takeIf { it.isNotBlank() }
 
     private companion object {
-        const val KIND = "paddle"
+        const val KIND = "PADDLE_CHECKOUT"
         val SUBSCRIPTION_EVENTS = setOf("subscription.created", "subscription.activated", "subscription.updated", "subscription.canceled", "subscription.past_due")
         val HANDLED = SUBSCRIPTION_EVENTS + "transaction.completed"
     }

@@ -13,7 +13,7 @@ class PaddleGatewayTest {
         val gateway = gateway()
         assertThat(gateway.mode).isEqualTo(PaymentMode.TEST)
         val checkout = gateway.checkout(CheckoutOrder("ord_1", "Cheer", PaymentAmount(1000, "KRW"), "cheer", "acc_1"))
-        assertThat(checkout.kind).isEqualTo("paddle")
+        assertThat(checkout.kind).isEqualTo("PADDLE_CHECKOUT")
         assertThat(checkout.clientKey).isEqualTo("test_clienttoken")
         assertThat(checkout.attributes["priceId"]).isEqualTo("pri_cheer")
         assertThat(checkout.attributes["customData"]).contains("\"orderId\":\"ord_1\"").contains("\"accountId\":\"acc_1\"")
