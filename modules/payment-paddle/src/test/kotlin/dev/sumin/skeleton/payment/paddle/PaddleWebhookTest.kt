@@ -4,6 +4,7 @@ import dev.sumin.skeleton.payment.PaymentAmount
 import dev.sumin.skeleton.payment.PaymentWebhookRejectedException
 import dev.sumin.skeleton.payment.PushedEvents
 import dev.sumin.skeleton.payment.PushedPayment
+import dev.sumin.skeleton.payment.PushedPaymentFailure
 import dev.sumin.skeleton.payment.PushedSubscription
 import dev.sumin.skeleton.payment.PushedSubscriptionStatus
 import dev.sumin.skeleton.payment.WebhookDelivery
@@ -51,6 +52,22 @@ class PaddleWebhookTest {
     fun `events the ledger does not handle are unsupported`() {
         val body = """{"event_id":"evt_9","event_type":"customer.created","occurred_at":"2026-10-13T09:59:59Z","data":{"id":"ctm_1"}}"""
         assertThat(gateway.parse(delivery(body)).resourceType).isEqualTo("UNSUPPORTED")
+    }
+
+    @Test
+    fun `a failed payment attempt is handled and carries Paddle's reason code and no body text`() {
+        val body = paymentFailed()
+        assertThat(gateway.parse(delivery(body)).resourceType).isEqualTo(PushedEvents.RESOURCE_TYPE)
+        val event = gateway.interpret(body) as PushedPaymentFailure
+        assertThat(event.providerPaymentId).isEqualTo("txn_1")
+        assertThat(event.errorCode).isEqualTo("declined")
+        assertThat(event.ourOrderId).isEqualTo("ord_1")
+    }
+
+    @Test
+    fun `the cycle comes from Paddle's price - on a payment and on a subscription event`() {
+        assertThat((gateway.interpret(transactionCompleted()) as PushedPayment).period).isEqualTo("P1M")
+        assertThat((gateway.interpret(subscriptionEvent()) as PushedSubscription).period).isEqualTo("P1M")
     }
 
     @Test

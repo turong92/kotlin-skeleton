@@ -29,7 +29,7 @@ class ProviderSubscriptionCancelTaskHandler(
         try {
             gateway.cancel(providerSubscriptionId, atPeriodEnd = false)
         } catch (e: Exception) {
-            log.warn("canceling a provider subscription failed provider={} attempt={}/{} exception={}", provider, run.attempt, run.maxAttempts, e.javaClass.simpleName)
+            log.warn("canceling a provider subscription failed provider={} attempt={}/{} exception={} {}", provider, run.attempt, run.maxAttempts, e.javaClass.simpleName, PaymentFailures.describe(e))
             throw PaymentTaskRetryException("Canceling the provider subscription failed")
         }
     }

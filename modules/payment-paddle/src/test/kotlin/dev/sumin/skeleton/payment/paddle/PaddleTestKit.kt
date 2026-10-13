@@ -60,13 +60,19 @@ internal fun transactionCompleted(custom: String = """{"orderId":"ord_1","accoun
 {"event_id":"$eventId","event_type":"transaction.completed","occurred_at":"2026-10-13T09:59:59Z","notification_id":"ntf_1",
  "data":{"id":"txn_1","status":"completed","currency_code":"$currency","origin":"web",${subscriptionId?.let { "\"subscription_id\":\"$it\"," } ?: ""}
   "custom_data":$custom,"billed_at":"2026-10-13T09:59:00Z","billing_period":{"starts_at":"2026-10-13T09:59:00Z","ends_at":"2026-11-13T09:59:00Z"},
-  "items":[{"price":{"id":"$priceId"},"quantity":1}],
+  "items":[{"price":{"id":"$priceId","billing_cycle":{"interval":"month","frequency":1}},"quantity":1}],
   "details":{"totals":{"subtotal":"900","tax":"90","total":"$total"}},
   "payments":[{"status":"captured","method_details":{"type":"card","card":{"type":"visa","last4":"4242"}}}]}}
 """.trim()
 
 internal fun subscriptionEvent(type: String = "subscription.updated", status: String = "active", scheduled: String = "null", at: String = "2026-10-13T09:59:30Z", eventId: String = "evt_s1", transactionId: String? = null) = """
 {"event_id":"$eventId","event_type":"$type","occurred_at":"$at",
- "data":{"id":"sub_1","status":"$status",${transactionId?.let { "\"transaction_id\":\"$it\"," } ?: ""}"custom_data":{"subscriptionId":"sub_ours","accountId":"acc_1"},"scheduled_change":$scheduled,
+ "data":{"id":"sub_1","status":"$status",${transactionId?.let { "\"transaction_id\":\"$it\"," } ?: ""}"custom_data":{"subscriptionId":"sub_ours","accountId":"acc_1"},"scheduled_change":$scheduled,"billing_cycle":{"interval":"month","frequency":1},
   "current_billing_period":{"starts_at":"2026-10-13T09:59:00Z","ends_at":"2026-11-13T09:59:00Z"}}}
+""".trim()
+
+internal fun paymentFailed(custom: String = """{"orderId":"ord_1","accountId":"acc_1"}""", errorCode: String = "declined") = """
+{"event_id":"evt_f1","event_type":"transaction.payment_failed","occurred_at":"2026-10-13T09:59:59Z",
+ "data":{"id":"txn_1","status":"ready","currency_code":"USD","custom_data":$custom,
+  "payments":[{"status":"error","error_code":"$errorCode"}]}}
 """.trim()

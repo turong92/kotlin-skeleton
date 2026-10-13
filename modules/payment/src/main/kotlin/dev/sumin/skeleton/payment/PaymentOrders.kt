@@ -304,13 +304,23 @@ class PaymentOrders(
         val transactionId = try {
             creator.createTransaction(TransactionRequest(order.itemRef, order.quantity, mapOf(PushedEvents.ORDER_KEY to order.id, PushedEvents.ACCOUNT_KEY to order.accountId)))
         } catch (e: Exception) {
-            log.warn("the provider could not create a transaction for an order exception={}", e.javaClass.simpleName)
+            log.warn("the provider could not create a transaction for an order exception={} {}", e.javaClass.simpleName, PaymentFailures.describe(e))
+            recordTransactionFailure(order, e)
             throw PaymentUnavailableException()
         }
         return store.inTransaction { tx ->
             val locked = tx.lockOrder(order.id) ?: return@inTransaction order
             if (locked.providerPaymentId != null) return@inTransaction locked
             locked.copy(providerPaymentId = transactionId).also(tx::updateOrder)
+        }
+    }
+
+    /** 거절의 이유(상태 + 결제사 코드)를 그 주문의 이력에 남긴다 - 이력을 못 남겨도 원래 실패(503)는 그대로 나간다. */
+    private fun recordTransactionFailure(order: PaymentOrder, e: Exception) {
+        try {
+            store.inTransaction { tx -> tx.appendEvent(writer.event(order.id, PaymentEventType.TRANSACTION_FAILED, PaymentActor.SYSTEM, providerCode = PaymentFailures.eventCodeOf(e), from = order.status, to = order.status)) }
+        } catch (recording: Exception) {
+            log.warn("could not record the transaction failure on the order history exception={}", recording.javaClass.simpleName)
         }
     }
 

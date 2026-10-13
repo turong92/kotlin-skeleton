@@ -29,6 +29,7 @@ class PaymentPushedEvents(
         when (event) {
             is PushedPayment -> payment(tx, gateway, event)
             is PushedSubscription -> subscriptionState(tx, gateway, event)
+            is PushedPaymentFailure -> paymentFailure(tx, gateway, event)
         }
 
     /**
@@ -51,6 +52,20 @@ class PaymentPushedEvents(
         val order = tx.findOrderByProviderPayment(provider, event.providerPaymentId)
         if (order != null) return if (order.kind == PaymentOrderKind.ONE_TIME) oneTime(tx, gateway, event, order.id) else null // 구독 결제는 이미 반영됐다(같은 거래)
         return subscriptionPayment(tx, gateway, event)
+    }
+
+    /** 결제 시도 실패 - 주문이면 그 주문의 이력에 사유 코드 한 줄(상태는 그대로 PENDING). 구독의 첫 결제는 이력을 붙일 주문 줄이 없어 로그만, 갱신 실패는 구독 사건(past_due)이 다룬다. */
+    private fun paymentFailure(tx: PaymentLedgerTx, gateway: PaymentPushGateway, event: PushedPaymentFailure): String? {
+        val provider = gateway.providerId.trim().lowercase()
+        val order = tx.findOrderByProviderPayment(provider, event.providerPaymentId)
+        if (order == null) {
+            if (store.findSubscriptionByFirstTransaction(provider, event.providerPaymentId) == null) return UNKNOWN_TRANSACTION
+            log.warn("the first payment of a subscription failed provider={} reason={}", provider, LedgerValues.code(event.errorCode) ?: "-")
+            return null
+        }
+        if (order.status.isPaidFamily) return null
+        tx.appendEvent(writer.event(order.id, PaymentEventType.PAYMENT_FAILED, PaymentActor.PROVIDER, providerCode = LedgerValues.code(event.errorCode), from = order.status, to = order.status))
+        return null
     }
 
     private fun oneTime(tx: PaymentLedgerTx, gateway: PaymentPushGateway, event: PushedPayment, orderId: String): String? {
@@ -129,6 +144,7 @@ class PaymentPushedEvents(
         val base = subscription.copy(
             providerSubscriptionId = subscription.providerSubscriptionId ?: event.providerSubscriptionId,
             amount = event.total,
+            period = event.period ?: subscription.period,
             chargeOrderId = order.id,
         )
         when {
@@ -196,7 +212,12 @@ class PaymentPushedEvents(
         val syncedAt = subscription.providerSyncedAt
         if (syncedAt != null && event.occurredAt.isBefore(syncedAt)) return STALE_EVENT // 더 새로운 사건이 먼저 도착해 반영됐다
 
-        var current = subscription.copy(providerSyncedAt = event.occurredAt)
+        var current = subscription.copy(providerSyncedAt = event.occurredAt, period = event.period ?: subscription.period)
+        // 첫 결제 전의 줄은 구독 사건으로 켜지 않는다(자리 `active_key` 가 없으면 제약에 걸린다) - 연결 · 주기만 남기고 첫 결제가 켠다. 결제가 끝나지 않은 채 끝난 구독(ENDED)만 아래에서 닫는다
+        if (current.status == SubscriptionStatus.PENDING && event.status != PushedSubscriptionStatus.ENDED) {
+            tx.updateSubscription(current.copy(updatedAt = writer.now()))
+            return null
+        }
         if (event.status == PushedSubscriptionStatus.ENDED) {
             val reason = when (current.status) {
                 SubscriptionStatus.PENDING -> SubscriptionEndReason.FIRST_PAYMENT_DECLINED

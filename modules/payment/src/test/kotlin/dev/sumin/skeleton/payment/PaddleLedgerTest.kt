@@ -22,11 +22,11 @@ class PaddleLedgerTest {
 
     private fun pending(key: String = "k1"): PaymentSubscription = kit.subscriptions.start("acc_1", "basic", IdempotencyKey(key), provider = "paddle").subscription
 
-    private fun payment(txn: String?, total: PaymentAmount = PaymentAmount(990, "USD"), at: Instant = t0, providerSub: String? = "psub_1", order: String? = null, ourSub: String? = null, price: String? = null) =
+    private fun payment(txn: String?, total: PaymentAmount = PaymentAmount(990, "USD"), at: Instant = t0, providerSub: String? = "psub_1", order: String? = null, ourSub: String? = null, price: String? = null, period: String? = null) =
         PushedPayment(
             eventId = "evt_${++seq}", occurredAt = at, providerPaymentId = txn ?: "txn_unknown", total = total, tax = 90, paidAt = at, ourOrderId = order, ourAccountId = "acc_1",
             ourSubscriptionId = ourSub, providerSubscriptionId = providerSub, periodStart = at, periodEnd = at.plusSeconds(31 * 86400),
-            items = listOf(PushedItem(price ?: if (order != null) "pri_cheer-3000" else "pri_basic", 1)),
+            items = listOf(PushedItem(price ?: if (order != null) "pri_cheer-3000" else "pri_basic", 1)), period = period,
         )
 
     private fun state(status: PushedSubscriptionStatus, at: Instant, providerSub: String = "psub_1", txn: String? = null) = PushedSubscription("evt_${++seq}", at, providerSub, status, null, null, t0, monthLater, txn)
@@ -290,5 +290,54 @@ class PaddleLedgerTest {
         feed(payment(pending.firstTransactionId, ourSub = "sub_somebody_else"))
         assertEquals(SubscriptionStatus.PENDING, sub(pending.id).status)
         assertEquals(PaymentReviewReason.SUBSCRIPTION_STALE_CHARGE, kit.store.listSubscriptionOrders(pending.id, 5).single().reviewReason)
+    }
+
+    @Test
+    fun `a refused transaction creation leaves one history line on the order with the status and the provider code`() {
+        push.createFailure = dev.sumin.skeleton.common.http.ExternalHttpStatusException(
+            "paddle", "POST", java.net.URI("https://sandbox-api.paddle.com/transactions"), 400,
+            """{"error":{"code":"transaction_default_checkout_url_not_set","detail":"long text"}}""",
+        )
+        assertFailsWith<PaymentUnavailableException> { kit.orders.create(CreateOrderCommand("acc_1", "cheer", "cheer-3000", IdempotencyKey("o1"), provider = "paddle")) }
+        val order = kit.store.allOrders().single()
+        val failed = kit.store.listEvents(order.id).single { it.type == PaymentEventType.TRANSACTION_FAILED }
+        assertEquals("400:transaction_default_checkout_url_not_set", failed.providerCode)
+        assertEquals(PaymentActor.SYSTEM, failed.actor)
+    }
+
+    @Test
+    fun `a failed payment attempt leaves one history line with Paddle's reason on the order, which stays pending and can be paid with the same transaction`() {
+        val order = kit.orders.create(CreateOrderCommand("acc_1", "cheer", "cheer-3000", IdempotencyKey("o1"), provider = "paddle")).order
+        val txn = checkNotNull(kit.order(order.id).providerPaymentId)
+        feed(PushedPaymentFailure("evt_f1", t0, txn, errorCode = "declined", ourOrderId = order.id))
+        feed(PushedPaymentFailure("evt_f1", t0, txn, errorCode = "declined", ourOrderId = order.id)) // 같은 웹훅 재전송
+        assertEquals(PaymentOrderStatus.PENDING, kit.order(order.id).status)
+        val failed = kit.store.listEvents(order.id).filter { it.type == PaymentEventType.PAYMENT_FAILED }
+        assertEquals(listOf("declined"), failed.map { it.providerCode })
+
+        feed(payment(txn, providerSub = null, order = order.id))
+        assertEquals(PaymentOrderStatus.PAID, kit.order(order.id).status)
+    }
+
+    @Test
+    fun `a subscription event on a row still waiting for its first payment only links - it never turns the row on without a seat`() {
+        val pending = pending()
+        feed(state(PushedSubscriptionStatus.ACTIVE, t0, txn = pending.firstTransactionId)) // subscription.created: 연결만
+        feed(state(PushedSubscriptionStatus.ACTIVE, t0.plusSeconds(5))) // subscription.activated 가 첫 결제보다 먼저 처리됐다
+        assertEquals(SubscriptionStatus.PENDING, sub(pending.id).status)
+        assertNull(sub(pending.id).activeKey)
+
+        feed(payment(pending.firstTransactionId))
+        assertEquals(SubscriptionStatus.ACTIVE, sub(pending.id).status)
+        assertNotNull(sub(pending.id).activeKey)
+    }
+
+    @Test
+    fun `the cycle of a Paddle subscription is Paddle's, not the local plan's`() {
+        val pending = pending()
+        feed(payment(pending.firstTransactionId, period = "P1Y"))
+        assertEquals("P1Y", sub(pending.id).period)
+        feed(PushedSubscription("evt_c", monthLater, "psub_1", PushedSubscriptionStatus.ACTIVE, null, null, t0, monthLater, null, period = "P3M"))
+        assertEquals("P3M", sub(pending.id).period)
     }
 }

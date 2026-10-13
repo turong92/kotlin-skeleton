@@ -50,6 +50,17 @@ data class PushedPayment(
     val periodEnd: Instant? = null,
     /** 거래의 품목 - 비어 있으면(읽지 못했다) 서버가 정한 품목과 같다고 할 수 없다. */
     val items: List<PushedItem> = emptyList(),
+    /** 결제사 가격의 결제 주기(ISO-8601, 예 `P1M`) - 구독 결제에서 우리 로컬 플랜 주기 대신 쓴다. 모르면 null. */
+    val period: String? = null,
+) : PushedPaymentEvent
+
+/** 결제 시도가 실패했다(카드 거절 등). 거래는 열려 있어 같은 거래로 다시 결제할 수 있다 - 장부는 상태를 바꾸지 않고 이력 한 줄만 남긴다. [errorCode] 는 결제사가 준 사유 코드(설명 문장은 싣지 않는다). */
+data class PushedPaymentFailure(
+    override val eventId: String,
+    override val occurredAt: Instant,
+    val providerPaymentId: String,
+    val errorCode: String? = null,
+    val ourOrderId: String? = null,
 ) : PushedPaymentEvent
 
 enum class PushedSubscriptionStatus { ACTIVE, PAST_DUE, CANCELING, ENDED }
@@ -66,6 +77,8 @@ data class PushedSubscription(
     val periodEnd: Instant? = null,
     /** 구독이 만들어진 사건(`subscription.created`)만 싣는, 구독을 만든 거래 id - 첫 결제 사건을 놓쳐도 줄에 결제사 구독 id 를 연결할 수 있다. */
     val transactionId: String? = null,
+    /** 결제사 구독의 결제 주기(ISO-8601). 모르면 null - 줄의 주기를 그대로 둔다. */
+    val period: String? = null,
 ) : PushedPaymentEvent
 
 /** 결제사가 결제와 갱신을 직접 하는 구독(우리 갱신 작업은 건너뛴다). 결제창은 프론트가 연다. */

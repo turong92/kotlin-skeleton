@@ -35,6 +35,9 @@ class FakePushGateway(override val providerId: String = "paddle", override val m
     @Volatile
     var createFails = false
 
+    /** 거래 만들기가 이 예외로 실패한다(`createFails` 보다 먼저) - 결제사가 돌려준 거절 모양을 시험에 심는다. */
+    var createFailure: Throwable? = null
+
     override val signed: Boolean = true
 
     fun delivery(event: PushedPaymentEvent, signature: String = "ok"): WebhookDelivery {
@@ -54,6 +57,7 @@ class FakePushGateway(override val providerId: String = "paddle", override val m
     override fun priceIdOf(itemRef: String): String? = "pri_$itemRef"
 
     override fun createTransaction(request: TransactionRequest): String {
+        createFailure?.let { throw it }
         check(!createFails) { "planted Paddle transaction failure" }
         return "txn_s${txnSeq.incrementAndGet()}".also { transactions += it to request }
     }

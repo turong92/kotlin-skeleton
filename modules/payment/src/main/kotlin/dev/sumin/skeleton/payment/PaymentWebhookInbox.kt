@@ -63,7 +63,11 @@ class PaymentWebhookInbox(
         val envelope = gateway.parse(delivery)
         val resourceType = envelope.resourceType.trim().uppercase()
         if (resourceType == PushedEvents.RESOURCE_TYPE) return receivePushed(gateway, delivery, envelope)
-        if (resourceType != PAYMENT) return WebhookReceipt.UNSUPPORTED
+        if (resourceType != PAYMENT) {
+            // 무엇이 안 받아졌는지 알 수 있게 이벤트 종류만 남긴다(모양이 이상하면 생략 - 식별자는 싣지 않는다)
+            log.info("payment webhook ignored eventType={}", envelope.eventType.takeIf { EVENT_TYPE.matches(it) } ?: "-")
+            return WebhookReceipt.UNSUPPORTED
+        }
         val eventKey = envelope.eventKey.takeIf { EVENT_KEY.matches(it) && !it.startsWith(WebhookMarkers.KEY_PREFIX) }
         val eventType = envelope.eventType.takeIf { EVENT_TYPE.matches(it) }
         val resourceId = envelope.resourceId.takeIf { EVENT_KEY.matches(it) }

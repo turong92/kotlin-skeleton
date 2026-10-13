@@ -20,6 +20,7 @@ import dev.sumin.skeleton.payment.PaymentWebhookRejectedException
 import dev.sumin.skeleton.payment.PushedEvents
 import dev.sumin.skeleton.payment.PushedItem
 import dev.sumin.skeleton.payment.PushedPayment
+import dev.sumin.skeleton.payment.PushedPaymentFailure
 import dev.sumin.skeleton.payment.PushedPaymentEvent
 import dev.sumin.skeleton.payment.PushedSubscription
 import dev.sumin.skeleton.payment.PushedSubscriptionStatus
@@ -76,9 +77,27 @@ class PaddlePaymentProvider(
         val custom = data["custom_data"]
         return when (val type = root.text("event_type")) {
             "transaction.completed" -> payment(eventId, occurredAt, data, custom)
+            "transaction.payment_failed" -> paymentFailure(eventId, occurredAt, data, custom)
             in SUBSCRIPTION_EVENTS -> subscription(eventId, occurredAt, data, custom, type)
             else -> null
         }
+    }
+
+    /** 사유 코드만(`payments[].error_code`, 가장 마지막 실패 시도) - 설명 문장 · 카드 정보는 읽지 않는다. */
+    private fun paymentFailure(eventId: String, occurredAt: Instant, data: JsonNode, custom: JsonNode?): PushedPaymentFailure =
+        PushedPaymentFailure(
+            eventId = eventId,
+            occurredAt = occurredAt,
+            providerPaymentId = data.text("id") ?: error("Paddle transaction without id"),
+            errorCode = data["payments"]?.toList().orEmpty().lastOrNull { it.text("error_code") != null }?.text("error_code"),
+            ourOrderId = custom.text(PushedEvents.ORDER_KEY),
+        )
+
+    /** Paddle 가격의 결제 주기 `{interval, frequency}` → ISO-8601(`P1M`). 1회 가격(`null`)이나 모르는 모양은 null. */
+    private fun cycleOf(cycle: JsonNode?): String? {
+        val unit = when (cycle?.text("interval")) { "day" -> "D"; "week" -> "W"; "month" -> "M"; "year" -> "Y"; else -> return null }
+        val frequency = cycle?.get("frequency")?.asInt(0)?.takeIf { it > 0 } ?: return null
+        return "P$frequency$unit"
     }
 
     private fun payment(eventId: String, occurredAt: Instant, data: JsonNode, custom: JsonNode?): PushedPayment {
@@ -108,6 +127,7 @@ class PaddlePaymentProvider(
                 val priceId = (item["price"]?.text("id") ?: item.text("price_id")) ?: return@mapNotNull null
                 PushedItem(priceId, item["quantity"]?.asInt(1) ?: 1)
             },
+            period = cycleOf(data["items"]?.toList().orEmpty().firstNotNullOfOrNull { it["price"]?.get("billing_cycle")?.takeIf { cycle -> cycle.isObject } }),
         )
     }
 
@@ -137,6 +157,7 @@ class PaddlePaymentProvider(
             periodStart = data["current_billing_period"]?.text("starts_at")?.let(Instant::parse),
             periodEnd = data["current_billing_period"]?.text("ends_at")?.let(Instant::parse),
             transactionId = data.text("transaction_id"),
+            period = cycleOf(data["billing_cycle"] ?: data["items"]?.toList().orEmpty().firstNotNullOfOrNull { it["price"]?.get("billing_cycle")?.takeIf { cycle -> cycle.isObject } }),
         )
     }
 
@@ -217,6 +238,6 @@ class PaddlePaymentProvider(
     private companion object {
         const val KIND = "PADDLE_CHECKOUT"
         val SUBSCRIPTION_EVENTS = setOf("subscription.created", "subscription.activated", "subscription.updated", "subscription.canceled", "subscription.past_due")
-        val HANDLED = SUBSCRIPTION_EVENTS + "transaction.completed"
+        val HANDLED = SUBSCRIPTION_EVENTS + setOf("transaction.completed", "transaction.payment_failed")
     }
 }

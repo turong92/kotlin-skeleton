@@ -11,6 +11,17 @@ import org.junit.jupiter.api.DynamicTest
 import org.junit.jupiter.api.TestFactory
 
 class PaymentFailuresTest {
+    @Test
+    fun `a failure is described by the http status and the provider error code only - never the body or message`() {
+        val body = """{"error":{"type":"request_error","code":"transaction_default_checkout_url_not_set","detail":"secret-ish detail","errors":[{"field":"x"}]}}"""
+        val failure = RuntimeException("wrapper", ExternalHttpStatusException("paddle", "POST", URI("https://sandbox-api.paddle.com/transactions"), 400, body))
+        assertEquals("status=400 code=transaction_default_checkout_url_not_set", PaymentFailures.describe(failure))
+        assertEquals("400:transaction_default_checkout_url_not_set", PaymentFailures.eventCodeOf(failure))
+        assertEquals("status=503 code=-", PaymentFailures.describe(ExternalHttpStatusException("paddle", "POST", URI("https://x/y"), 503, "<html>down</html>")))
+        assertEquals("HTTP_503", PaymentFailures.eventCodeOf(ExternalHttpStatusException("paddle", "POST", URI("https://x/y"), 503, "")))
+        assertEquals("IllegalStateException", PaymentFailures.eventCodeOf(IllegalStateException("boom")))
+    }
+
     @TestFactory
     fun `classifies a failure as definitive or unknown`(): List<DynamicTest> =
         classification().map { case ->

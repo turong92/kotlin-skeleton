@@ -1,6 +1,8 @@
 package dev.sumin.skeleton.payment
 
 import dev.sumin.skeleton.common.http.ExternalHttpException
+import dev.sumin.skeleton.common.http.ExternalHttpStatusException
+import tools.jackson.databind.json.JsonMapper
 
 /** 결제사 호출이 실패했을 때 돈이 움직였는지 아는가. */
 enum class PaymentFailureOutcome {
@@ -58,5 +60,45 @@ object PaymentFailures {
             depth++
         }
         return null
+    }
+
+    private val SAFE_CODE = Regex("[A-Za-z0-9_.-]{1,40}")
+
+    /** 실패에서 읽을 수 있는 (HTTP 상태, 결제사 오류 코드). 본문 · 메시지는 코드 한 칸만 꺼내고 버린다 - 비밀이나 긴 설명이 로그 · 이력에 새지 않게. */
+    private fun statusAndCode(exception: Throwable): Pair<Int?, String?> {
+        var current: Throwable? = exception
+        var depth = 0
+        while (current != null && depth < MAX_CAUSE_DEPTH) {
+            when (current) {
+                is PaymentProviderException -> return current.providerError.upstreamStatus to current.providerError.code?.takeIf(SAFE_CODE::matches)
+                is ExternalHttpException -> return current.upstreamStatus to ((current as? ExternalHttpStatusException)?.let { codeInBody(it.upstreamBody) })
+            }
+            current = current.cause
+            depth++
+        }
+        return null to null
+    }
+
+    /** Paddle · Stripe 처럼 `{"error":{"code":"…"}}` 모양일 때만. 읽을 수 없거나 모양이 이상하면 null. */
+    private fun codeInBody(body: String): String? = try {
+        JsonMapper.builder().build().readTree(body)?.get("error")?.get("code")?.takeIf { it.isString }?.asString()?.takeIf(SAFE_CODE::matches)
+    } catch (_: Exception) {
+        null
+    }
+
+    /** 로그용 한 줄 - `status=400 code=transaction_default_checkout_url_not_set` (없는 칸은 `-`). */
+    fun describe(exception: Throwable): String {
+        val (status, code) = statusAndCode(exception)
+        return "status=${status ?: "-"} code=${code ?: "-"}"
+    }
+
+    /** 이력(`payment_events.provider_code`, 64자)에 남길 한 칸 - `400:코드` · 코드가 없으면 `HTTP_상태` · HTTP 실패가 아니면 예외 종류 이름. */
+    fun eventCodeOf(exception: Throwable): String {
+        val (status, code) = statusAndCode(exception)
+        return when {
+            status != null && code != null -> "$status:$code"
+            status != null -> "HTTP_$status"
+            else -> generateSequence(exception) { it.cause }.take(MAX_CAUSE_DEPTH).last().javaClass.simpleName.take(40).ifBlank { "ERROR" }
+        }
     }
 }

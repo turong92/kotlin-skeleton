@@ -221,7 +221,7 @@ class PaymentSubscriptions(
         val transactionId = try {
             creator.createTransaction(TransactionRequest(subscription.planCode, 1, mapOf(PushedEvents.SUBSCRIPTION_KEY to subscription.id, PushedEvents.ACCOUNT_KEY to subscription.accountId)))
         } catch (e: Exception) {
-            log.warn("the provider could not create a transaction for a subscription exception={}", e.javaClass.simpleName)
+            log.warn("the provider could not create a transaction for a subscription exception={} {}", e.javaClass.simpleName, PaymentFailures.describe(e))
             throw PaymentUnavailableException()
         }
         return store.inTransaction { tx ->

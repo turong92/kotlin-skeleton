@@ -191,6 +191,12 @@ enum class PaymentEventType {
     /** 앱의 `onRefunded` 가 끝났다(지급의 [FULFILLED] 에 짝). */
     REFUND_APPLIED,
     REVIEW_FLAGGED,
+
+    /** 결제사가 거래 만들기를 거절했다(주문은 거래 id 없이 남는다) - [PaymentEvent.providerCode] 는 `상태:결제사코드` 또는 `HTTP_상태`. */
+    TRANSACTION_FAILED,
+
+    /** 결제 시도가 실패했다(결제사 웹훅, 카드 거절 등) - 주문 상태는 그대로이고 [PaymentEvent.providerCode] 는 결제사의 사유 코드. */
+    PAYMENT_FAILED,
 }
 
 enum class PaymentActor { USER, OPERATOR, SYSTEM, PROVIDER }

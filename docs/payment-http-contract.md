@@ -82,7 +82,7 @@
 
 - **`id` 는 그 주문 이력 안의 순번**이다(1 부터, 오래된 것부터). 다른 주문의 `id` 와 겹친다 — 전역 키로 쓰지 않는다.
 - `refundId`: 환불 줄에 대한 이력이면 그 줄의 id. 이때 `fromStatus` · `toStatus` 는 **환불 줄의** 상태이고, 주문 이력에서는 주문의 상태다.
-- `type`: `ORDER_CREATED` · `CONFIRM_STARTED` · `CONFIRM_SUCCEEDED` · `CONFIRM_DECLINED` · `CONFIRM_UNKNOWN` · `CONVERGED`(결제사와 맞춰 상태가 움직였다) · `EXPIRED` · `CANCELED` · `REOPENED_PAID`(닫혔던 주문이 결제사 증거로 `PAID` 가 됐다) · `FULFILLED` · `REFUND_REQUESTED` · `REFUND_SENT` · `REFUND_SUCCEEDED` · `REFUND_FAILED` · `REFUND_UNKNOWN` · `REFUND_REJECTED` · `REFUND_WITHDRAWN` · `REFUND_SYNCED`(결제사 쪽 취소를 장부에 넣었다) · `REFUND_APPLIED`(환불에 맞춰 앱이 지급을 거뒀다) · `REVIEW_FLAGGED`.
+- `type`: `ORDER_CREATED` · `CONFIRM_STARTED` · `CONFIRM_SUCCEEDED` · `CONFIRM_DECLINED` · `CONFIRM_UNKNOWN` · `CONVERGED`(결제사와 맞춰 상태가 움직였다) · `EXPIRED` · `CANCELED` · `REOPENED_PAID`(닫혔던 주문이 결제사 증거로 `PAID` 가 됐다) · `FULFILLED` · `REFUND_REQUESTED` · `REFUND_SENT` · `REFUND_SUCCEEDED` · `REFUND_FAILED` · `REFUND_UNKNOWN` · `REFUND_REJECTED` · `REFUND_WITHDRAWN` · `REFUND_SYNCED`(결제사 쪽 취소를 장부에 넣었다) · `REFUND_APPLIED`(환불에 맞춰 앱이 지급을 거뒀다) · `REVIEW_FLAGGED` · `TRANSACTION_FAILED`(결제사가 거래 만들기를 거절했다 — `providerCode` 는 `400:결제사코드` 또는 `HTTP_상태`. 구독 시작의 거절은 줄이 없어 로그에만 남는다). · `PAYMENT_FAILED`(결제 시도가 실패했다 — Paddle `transaction.payment_failed` 웹훅의 `payments[].error_code` 가 `providerCode`, 주문 상태는 그대로 `PENDING`).
 - `actor`: `USER` · `OPERATOR` · `SYSTEM` · `PROVIDER`. `actorId`: 사람이면 그 계정 · 운영자 id, 시스템 · 결제사면 `null`.
 - `providerCode`: 결제사의 오류 · 상태 코드이거나 **우리 코드**(열이 하나뿐이다). 값은 §6.2. `providerTraceId`: 결제사 응답의 추적 번호. `traceId`: 우리 요청의 추적 번호.
 
