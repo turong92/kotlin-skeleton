@@ -49,6 +49,12 @@ class PaymentHttpAutoConfiguration {
     @ConditionalOnMissingBean
     fun paymentCallers(policy: ObjectProvider<PaymentOperatorPolicy>): PaymentCallers = PaymentCallers(policy.getIfAvailable())
 
+    /** 접속 나라로 결제사 · 해지·환불 정책을 서버가 정한다. 클라이언트 IP 풀이는 플랫폼의 [ClientIps] 를 쓴다(모드가 cloudflare 일 때만 `CF-IPCountry` 를 믿는다). */
+    @Bean
+    @ConditionalOnMissingBean
+    fun paymentCountryRouting(orders: PaymentOrders, properties: PaymentProperties, clientIps: ObjectProvider<ClientIps>): PaymentCountryRouting =
+        PaymentCountryRouting(properties, clientIps.getIfAvailable { ClientIps() }) { orders.openableProviders() }
+
     @Bean
     @ConditionalOnMissingBean
     @ConditionalOnProperty(prefix = "skeleton.payment.http", name = ["enabled"], havingValue = "true", matchIfMissing = true)
@@ -60,7 +66,8 @@ class PaymentHttpAutoConfiguration {
         catalog: ObjectProvider<PaymentCatalog>,
         properties: PaymentProperties,
         callers: PaymentCallers,
-    ): PaymentController = PaymentController(orders, refunds, queries, router, catalog, properties, callers)
+        routing: PaymentCountryRouting,
+    ): PaymentController = PaymentController(orders, refunds, queries, router, catalog, properties, callers, routing)
 
     @Bean
     @ConditionalOnMissingBean
@@ -71,7 +78,8 @@ class PaymentHttpAutoConfiguration {
         callers: PaymentCallers,
         limiter: PaymentOrderRateLimiter,
         clientIps: ObjectProvider<ClientIps>,
-    ): PaymentOrderController = PaymentOrderController(orders, callers, limiter, clientIps.getIfAvailable { ClientIps() })
+        routing: PaymentCountryRouting,
+    ): PaymentOrderController = PaymentOrderController(orders, callers, limiter, clientIps.getIfAvailable { ClientIps() }, routing)
 
     /** 구독 경로 — 구독을 켠 앱([PaymentSubscriptions] 빈)에서만. 만들기는 주문 만들기와 같은 요청 수 한도를 쓴다. */
     @Bean
@@ -85,7 +93,8 @@ class PaymentHttpAutoConfiguration {
         callers: PaymentCallers,
         limiter: PaymentOrderRateLimiter,
         clientIps: ObjectProvider<ClientIps>,
-    ): PaymentSubscriptionController = PaymentSubscriptionController(subscriptions, planChanges, cancellations, callers, limiter, clientIps.getIfAvailable { ClientIps() })
+        routing: PaymentCountryRouting,
+    ): PaymentSubscriptionController = PaymentSubscriptionController(subscriptions, planChanges, cancellations, callers, limiter, clientIps.getIfAvailable { ClientIps() }, routing)
 
     @Bean
     @ConditionalOnMissingBean

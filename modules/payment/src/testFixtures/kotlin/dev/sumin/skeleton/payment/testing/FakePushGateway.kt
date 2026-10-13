@@ -2,6 +2,7 @@ package dev.sumin.skeleton.payment.testing
 
 import dev.sumin.skeleton.payment.BillingSetup
 import dev.sumin.skeleton.payment.CheckoutInstruction
+import dev.sumin.skeleton.payment.PaymentBuyerCountryGateway
 import dev.sumin.skeleton.payment.CheckoutOrder
 import dev.sumin.skeleton.payment.HostedSubscriptionRequest
 import dev.sumin.skeleton.payment.PaymentCheckoutGateway
@@ -21,7 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 /** 서명된 웹훅이 곧 사실이고 거래를 서버가 먼저 만드는 결제사(Paddle 모양)의 대역. 웹훅 본문은 사건 id 한 줄이고, 사건은 [delivery] 가 등록한다. */
 class FakePushGateway(override val providerId: String = "paddle", override val mode: PaymentMode = PaymentMode.TEST) :
-    PaymentPushGateway, PaymentHostedSubscriptionGateway, PaymentTransactionGateway, PaymentCheckoutGateway {
+    PaymentPushGateway, PaymentHostedSubscriptionGateway, PaymentTransactionGateway, PaymentCheckoutGateway, PaymentBuyerCountryGateway {
     private val events = ConcurrentHashMap<String, PushedPaymentEvent>()
     private val txnSeq = AtomicInteger()
     val cancelCalls = CopyOnWriteArrayList<Pair<String, Boolean>>()
@@ -37,6 +38,17 @@ class FakePushGateway(override val providerId: String = "paddle", override val m
 
     /** 거래 만들기가 이 예외로 실패한다(`createFails` 보다 먼저) - 결제사가 돌려준 거절 모양을 시험에 심는다. */
     var createFailure: Throwable? = null
+
+    /** 주소 id → 그 주소의 나라. */
+    val buyerCountries = ConcurrentHashMap<String, String>()
+
+    @Volatile
+    var buyerCountryFails = false
+
+    override fun buyerCountry(customerId: String, addressId: String): String? {
+        check(!buyerCountryFails) { "planted address lookup failure" }
+        return buyerCountries[addressId]
+    }
 
     override val signed: Boolean = true
 

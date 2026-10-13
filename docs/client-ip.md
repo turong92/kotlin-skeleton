@@ -27,6 +27,8 @@ skeleton:
 | `proxy` | a reverse proxy you run (Caddy, nginx) appends to `X-Forwarded-For` | walk `X-Forwarded-For` right to left, skip trusted hops, first untrusted address wins; entries that are not IPs stop the walk (no DNS) |
 | `cloudflare` | only Cloudflare reaches the origin (Tunnel with a private origin port, or an origin that verifies the zone's client certificate) | `CF-Connecting-IP` from a trusted peer; missing/garbage falls back to the `proxy` rule |
 
+In `cloudflare` mode the trusted peer's `CF-IPCountry` (two letters; `XX` and `T1` are no country) is also read - `ClientAddress.country`, which the payment module uses to decide the provider and the refund rules. In every other mode the header is not believed (anyone could send it).
+
 Headers are only read when the socket peer is inside `trusted-proxies`. A Cloudflare-range address alone is **not** trusted
 (Workers `connect()` and WARP reach any origin from Cloudflare addresses). With `cloudflare`/`proxy` and an empty
 `trusted-proxies` the app refuses to start; so does an entry that is not an IP/CIDR.

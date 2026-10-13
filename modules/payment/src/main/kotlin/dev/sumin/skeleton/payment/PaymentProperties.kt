@@ -7,6 +7,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties
 data class PaymentProperties(
     val defaultProvider: String? = null,
     val providers: Map<String, Provider> = emptyMap(),
+    /** 접속 나라로 결제사를 정하는 규칙 - 서버가 정하고 화면은 못 바꾼다. */
+    val routing: Routing = Routing(),
     /** (장부) 만든 주문으로 결제할 수 있는 시간. 지나면 만료 작업이 결제사에 묻고 닫는다. */
     val checkoutTtl: Duration = Duration.ofMinutes(30),
     /** (장부) 조회 작업. */
@@ -33,6 +35,25 @@ data class PaymentProperties(
         val currencies: Set<String> = emptySet(),
         val countries: Set<String> = emptySet(),
     )
+
+    data class Routing(
+        /** 나라(ISO-3166 두 글자 대문자) → 결제사 id. 지도에 없는 나라는 [PaymentProperties.defaultProvider], 그것도 열려 있지 않으면 열린 결제사가 하나뿐일 때 그것. 예: `KR: toss`. */
+        val countryProviders: Map<String, String> = emptyMap(),
+        /**
+         * **로컬 개발 전용** 나라 덮어쓰기 - 정하면 접속 나라와 상관없이 모든 요청이 이 나라다(예: `US` 로 Paddle 화면을 본다). 보호 환경(stage · prod)에서 정해져 있으면 기동 실패(`PaymentCountryDeployGuard`).
+         * 요청의 헤더나 값으로는 나라를 덮어쓰지 못한다.
+         */
+        val devCountry: String? = null,
+    ) {
+        init {
+            countryProviders.keys.forEach { require(COUNTRY.matches(it)) { "skeleton.payment.routing.country-providers keys must be ISO-3166 alpha-2 codes (two capital letters): $it" } }
+            require(devCountry == null || COUNTRY.matches(devCountry)) { "skeleton.payment.routing.dev-country must be an ISO-3166 alpha-2 code (two capital letters)" }
+        }
+
+        private companion object {
+            val COUNTRY = Regex("[A-Z]{2}")
+        }
+    }
 
     data class Reconcile(
         /** 승인 선점 뒤 첫 조회까지. 결제사 응답 제한 시간보다 길어야 한다(`payment-toss` 의 가드가 본다). */

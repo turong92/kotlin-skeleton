@@ -31,7 +31,13 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 @SpringBootTest(
     classes = [PaymentWebTestApplication::class],
     // 한 컨텍스트에서 주문을 수십 번 만든다 — 한도 시험은 PaymentOrderRateLimitHttpTest 가 따로 한다
-    properties = ["skeleton.payment.http.order-rate-limit.account-capacity=100000", "skeleton.payment.http.order-rate-limit.ip-capacity=100000"],
+    properties = [
+        "skeleton.payment.http.order-rate-limit.account-capacity=100000",
+        "skeleton.payment.http.order-rate-limit.ip-capacity=100000",
+        "skeleton.web.client-ip.mode=cloudflare",
+        "skeleton.web.client-ip.trusted-proxies=127.0.0.1/32",
+        "skeleton.payment.subscription.cancel.policies.KR=korea",
+    ],
 )
 @AutoConfigureMockMvc
 @Import(InMemoryLedgerBeans::class)
@@ -99,6 +105,31 @@ class PaymentUserHttpTest {
             gateway.checkoutReady = true
         }
         assertEquals(orders, store.allOrders().size)
+    }
+
+    @Test
+    fun `config tells the country the server decided, its provider and the cancel policy of that country`() {
+        val account = account()
+        mvc.perform(get("$base/config").asUser(account).header("CF-IPCountry", "KR")).andExpect(status().isOk)
+            .andExpect(jsonPath("$.value.country").value("KR")).andExpect(jsonPath("$.value.provider").value("scripted"))
+            .andExpect(jsonPath("$.value.cancelPolicy.key").value("korea")).andExpect(jsonPath("$.value.cancelPolicy.withdrawalDays").value(7))
+        mvc.perform(get("$base/config").asUser(account).header("CF-IPCountry", "US")).andExpect(jsonPath("$.value.country").value("US"))
+            .andExpect(jsonPath("$.value.cancelPolicy.key").value("period-end-only"))
+    }
+
+    @Test
+    fun `an order records the country the server decided, and a provider the server did not choose is 400 with no order`() {
+        val account = account()
+        val before = store.allOrders().size
+        mvc.perform(post("$base/orders").asUser(account).header("Idempotency-Key", "k-prov-${System.nanoTime()}").contentType(MediaType.APPLICATION_JSON).content("""{"itemType":"cheer","itemRef":"cheer-3000","provider":"paddle"}"""))
+            .andExpect(status().isBadRequest)
+        assertEquals(before, store.allOrders().size)
+
+        val id = read(
+            mvc.perform(post("$base/orders").asUser(account).header("CF-IPCountry", "US").header("Idempotency-Key", "k-ctry-${System.nanoTime()}").contentType(MediaType.APPLICATION_JSON).content("""{"itemType":"cheer","itemRef":"cheer-3000","provider":"scripted"}"""))
+                .andExpect(status().isCreated).andReturn().response.contentAsString,
+        )["value"]["order"]["id"].asString()
+        assertEquals("US", store.allOrders().single { it.id == id }.country)
     }
 
     @Test

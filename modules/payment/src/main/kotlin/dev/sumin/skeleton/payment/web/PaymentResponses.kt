@@ -150,7 +150,22 @@ data class CreateOrderResponse(val order: OrderResponse, val checkout: CheckoutR
  * [providers] 는 결제창을 열 수 있는 결제사 id — 화면이 나라 · 언어로 하나를 골라 주문 · 구독을 만들 때 `provider` 로 보낸다.
  * [pricePreviews] 는 결제사 id → 가격 미리보기 값(구매자 통화로 환산된 실제 결제 금액을 보이려는 결제사만).
  */
-data class PaymentConfigResponse(val available: Boolean, val testMode: Boolean, val refundRequestsEnabled: Boolean, val providers: List<String> = emptyList(), val pricePreviews: Map<String, PricePreviewResponse> = emptyMap())
+data class PaymentConfigResponse(
+    val available: Boolean,
+    val testMode: Boolean,
+    val refundRequestsEnabled: Boolean,
+    val providers: List<String> = emptyList(),
+    val pricePreviews: Map<String, PricePreviewResponse> = emptyMap(),
+    /** 이 요청의 접속 나라(ISO-3166 두 글자) - 서버가 정했다. 모르면 null. */
+    val country: String? = null,
+    /** 이 요청의 나라로 서버가 정한 결제사 - 주문 · 구독을 만들 때 다른 값을 보내면 거절된다. 정할 수 없으면 null. */
+    val provider: String? = null,
+    /** 그 나라의 해지·환불 정책 요약. */
+    val cancelPolicy: CancelPolicyResponse? = null,
+)
+
+/** [key] 는 정책 이름(`korea` · `period-end-only` …) - 화면이 요약 문구를 고른다. 숫자는 한국 정책일 때만(설정값). */
+data class CancelPolicyResponse(val key: String, val penaltyPercent: Int? = null, val withdrawalDays: Long? = null)
 
 data class PricePreviewResponse(val clientToken: String, val environment: String, val prices: Map<String, String>)
 

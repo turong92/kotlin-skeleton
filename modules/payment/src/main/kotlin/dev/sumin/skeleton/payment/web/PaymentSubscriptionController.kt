@@ -45,6 +45,7 @@ class PaymentSubscriptionController(
     private val callers: PaymentCallers,
     private val limiter: PaymentOrderRateLimiter,
     private val clientIps: ClientIps,
+    private val routing: PaymentCountryRouting,
 ) {
     @Operation(summary = "The subscription plans", description = "code, name, amount, period (ISO-8601, P1M or PT3M) and level (higher is a higher tier).")
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = SubscriptionPlansResponse::class)
@@ -57,8 +58,8 @@ class PaymentSubscriptionController(
     @Operation(
         summary = "Start a subscription and get the values for the card registration window",
         description = "201 with { subscription (PENDING), billingAuth }; the same Idempotency-Key again is 200 with the same subscription (billingAuth is null once the card was handed in). " +
-            "Body { planCode, country? } - country is the buyer's ISO-3166 alpha-2 code (the cancel / refund policy follows it; the configured default when missing). " +
-            "400 without the header or for a bad country · 409 ALREADY_SUBSCRIBED · 409 IDEMPOTENCY_CONFLICT for another plan · 422 ITEM_NOT_PURCHASABLE for an unknown plan · 429 over the per-account / per-IP limit · 503 UNAVAILABLE.",
+            "Body { planCode, provider? } - the buyer's country (and so the cancel / refund policy) and the provider are decided by the server (see GET /config); a body provider that differs is 400, a body country is ignored. " +
+            "400 without the header · 409 ALREADY_SUBSCRIBED · 409 IDEMPOTENCY_CONFLICT for another plan · 422 ITEM_NOT_PURCHASABLE for an unknown plan · 429 over the per-account / per-IP limit · 503 UNAVAILABLE.",
     )
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = StartSubscriptionResponse::class)
     @PostMapping("/subscriptions")
@@ -75,7 +76,9 @@ class PaymentSubscriptionController(
             throw ApplicationException(message = "Too many requests", errorCode = PlatformErrorCode.TOO_MANY_REQUESTS, data = mapOf("retryAfterSeconds" to retryAfter))
         }
         val planCode = PaymentRequests.text(body["planCode"], "planCode", 64)
-        val started = subscriptions.start(account, planCode, idempotencyKey(key), country(body["country"]), PaymentRequests.provider(body["provider"]))
+        val route = routing.of(request)
+        routing.requireSame(route, PaymentRequests.provider(body["provider"]))
+        val started = subscriptions.start(account, planCode, idempotencyKey(key), route.country, route.provider)
         val payload = Response.ok(StartSubscriptionResponse(view(started.subscription), started.billing?.let(BillingAuthResponse::of)))
         return if (started.replayed) ResponseEntity.ok(payload) else ResponseEntity.status(201).body(payload)
     }
@@ -172,14 +175,6 @@ class PaymentSubscriptionController(
     private fun view(subscription: PaymentSubscription): SubscriptionResponse =
         SubscriptionResponse.of(subscription, subscriptions.plans().firstOrNull { it.code == subscription.planCode }?.name)
 
-    /** 구매자 나라 - 없으면 null(설정의 기본 나라), 있으면 두 글자 영문(소문자도 받아 대문자로). */
-    private fun country(node: JsonNode?): String? {
-        if (node == null || node.isNull) return null
-        val text = if (node.isString) node.stringValue().trim() else ""
-        if (!COUNTRY.matches(text)) throw FieldValidationException("country", "Pattern", "country must be an ISO-3166 alpha-2 code (two letters)")
-        return text.uppercase()
-    }
-
     /** 카드 등록 창이 돌려준 값 — 문자열 칸만, 여덟 개까지, 칸마다 512자까지. 모양은 결제사가 확인한다. */
     private fun providerPayload(node: JsonNode?): Map<String, Any?> {
         if (node == null || node.isNull || !node.isObject) throw FieldValidationException("providerPayload", "Required", "providerPayload is required")
@@ -192,7 +187,6 @@ class PaymentSubscriptionController(
     }
 
     private companion object {
-        val COUNTRY = Regex("[A-Za-z]{2}")
         const val PAYLOAD_FIELDS_MAX = 8
         const val PAYLOAD_VALUE_MAX = 512
     }

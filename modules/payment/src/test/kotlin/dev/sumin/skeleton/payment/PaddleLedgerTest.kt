@@ -340,4 +340,42 @@ class PaddleLedgerTest {
         feed(PushedSubscription("evt_c", monthLater, "psub_1", PushedSubscriptionStatus.ACTIVE, null, null, t0, monthLater, null, period = "P3M"))
         assertEquals("P3M", sub(pending.id).period)
     }
+
+    private fun buyerPayment(txn: String?, address: String?, providerSub: String? = null, order: String? = null) =
+        payment(txn, providerSub = providerSub, order = order).copy(customerId = "ctm_1", addressId = address)
+
+    @Test
+    fun `a one-time payment whose buyer address is in Korea is paid and flagged for the operator - not blocked`() {
+        push.buyerCountries["add_kr"] = "KR"
+        push.buyerCountries["add_us"] = "US"
+        val flagged = kit.orders.create(CreateOrderCommand("acc_1", "cheer", "cheer-3000", IdempotencyKey("o-kr"), provider = "paddle")).order
+        feed(buyerPayment(kit.store.findOrder(flagged.id)!!.providerPaymentId, "add_kr", order = flagged.id))
+        val clean = kit.orders.create(CreateOrderCommand("acc_1", "cheer", "cheer-3000", IdempotencyKey("o-us"), provider = "paddle")).order
+        feed(buyerPayment(kit.store.findOrder(clean.id)!!.providerPaymentId, "add_us", order = clean.id))
+
+        assertEquals(PaymentOrderStatus.PAID, kit.store.findOrder(flagged.id)!!.status)
+        assertEquals(PaymentReviewReason.BUYER_COUNTRY_KR, kit.store.findOrder(flagged.id)!!.reviewReason)
+        assertEquals(PaymentOrderStatus.PAID, kit.store.findOrder(clean.id)!!.status)
+        assertNull(kit.store.findOrder(clean.id)!!.reviewReason)
+    }
+
+    @Test
+    fun `a first subscription payment from a Korean address activates the subscription and flags its order`() {
+        push.buyerCountries["add_kr"] = "KR"
+        val pending = pending()
+        feed(buyerPayment(pending.firstTransactionId, "add_kr", providerSub = "psub_1"))
+
+        assertEquals(SubscriptionStatus.ACTIVE, sub(pending.id).status)
+        assertEquals(PaymentReviewReason.BUYER_COUNTRY_KR, kit.store.listSubscriptionOrders(pending.id, 5).single().reviewReason)
+    }
+
+    @Test
+    fun `when the address cannot be looked up the payment is applied as usual and nothing is flagged`() {
+        push.buyerCountryFails = true
+        val order = kit.orders.create(CreateOrderCommand("acc_1", "cheer", "cheer-3000", IdempotencyKey("o-x"), provider = "paddle")).order
+        feed(buyerPayment(kit.store.findOrder(order.id)!!.providerPaymentId, "add_kr", order = order.id))
+
+        assertEquals(PaymentOrderStatus.PAID, kit.store.findOrder(order.id)!!.status)
+        assertNull(kit.store.findOrder(order.id)!!.reviewReason)
+    }
 }

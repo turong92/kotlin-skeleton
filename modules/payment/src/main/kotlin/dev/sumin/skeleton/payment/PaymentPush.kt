@@ -52,6 +52,11 @@ data class PushedPayment(
     val items: List<PushedItem> = emptyList(),
     /** 결제사 가격의 결제 주기(ISO-8601, 예 `P1M`) - 구독 결제에서 우리 로컬 플랜 주기 대신 쓴다. 모르면 null. */
     val period: String? = null,
+    /** 결제사의 고객 · 주소 id - 구매자 주소의 나라를 [PaymentBuyerCountryGateway] 로 물을 때 쓴다. 결제 본문은 나라를 싣지 않는다. */
+    val customerId: String? = null,
+    val addressId: String? = null,
+    /** 구매자 주소의 나라(ISO-3166 두 글자) - 처리 작업이 락 밖에서 물어 채운다. 못 물었으면 null. */
+    val buyerCountry: String? = null,
 ) : PushedPaymentEvent
 
 /** 결제 시도가 실패했다(카드 거절 등). 거래는 열려 있어 같은 거래로 다시 결제할 수 있다 - 장부는 상태를 바꾸지 않고 이력 한 줄만 남긴다. [errorCode] 는 결제사가 준 사유 코드(설명 문장은 싣지 않는다). */
@@ -80,6 +85,14 @@ data class PushedSubscription(
     /** 결제사 구독의 결제 주기(ISO-8601). 모르면 null - 줄의 주기를 그대로 둔다. */
     val period: String? = null,
 ) : PushedPaymentEvent
+
+/**
+ * 결제 본문에 구매자 주소의 나라가 없는 결제사(Paddle)가 고객 · 주소 id 로 그 나라를 알려 준다. 처리 작업이 **락 · 트랜잭션 밖에서** 부르고, 실패해도 결제는 그대로 반영된다(나라만 모른다).
+ */
+interface PaymentBuyerCountryGateway : PaymentGateway {
+    /** @return ISO-3166 alpha-2 대문자. 모르면 null, 호출이 실패하면 던진다. */
+    fun buyerCountry(customerId: String, addressId: String): String?
+}
 
 /** 결제사가 결제와 갱신을 직접 하는 구독(우리 갱신 작업은 건너뛴다). 결제창은 프론트가 연다. */
 interface PaymentHostedSubscriptionGateway : PaymentGateway {

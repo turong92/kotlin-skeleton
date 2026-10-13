@@ -78,6 +78,8 @@ class PaddleWebhookTest {
         assertThat(event.ourOrderId).isEqualTo("ord_1")
         assertThat(event.ourAccountId).isEqualTo("acc_1")
         assertThat(event.card?.last4).isEqualTo("4242")
+        assertThat(event.customerId).isEqualTo("ctm_1")
+        assertThat(event.addressId).isEqualTo("add_1")
         assertThat(event.items).containsExactly(dev.sumin.skeleton.payment.PushedItem("pri_cheer", 1))
     }
 

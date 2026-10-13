@@ -3,6 +3,7 @@ package dev.sumin.skeleton.payment.paddle
 import dev.sumin.skeleton.common.http.ExternalHttpClient
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.payment.BillingSetup
+import dev.sumin.skeleton.payment.PaymentBuyerCountryGateway
 import dev.sumin.skeleton.payment.CheckoutInstruction
 import dev.sumin.skeleton.payment.CheckoutOrder
 import dev.sumin.skeleton.payment.HostedSubscriptionRequest
@@ -40,7 +41,7 @@ class PaddlePaymentProvider(
     private val httpClient: ExternalHttpClient,
     private val properties: PaddleProperties,
     private val time: TimeProvider = TimeProvider.systemUtc(),
-) : PaymentPushGateway, PaymentCheckoutGateway, PaymentHostedSubscriptionGateway, PaymentTransactionGateway, PaymentPricePreviewGateway {
+) : PaymentPushGateway, PaymentCheckoutGateway, PaymentHostedSubscriptionGateway, PaymentTransactionGateway, PaymentPricePreviewGateway, PaymentBuyerCountryGateway {
     override val providerId: String = properties.providerId
     override val supportedCurrencies: Set<String> = properties.supportedCurrencies
     override val supportedCountries: Set<String> = properties.supportedCountries
@@ -128,7 +129,28 @@ class PaddlePaymentProvider(
                 PushedItem(priceId, item["quantity"]?.asInt(1) ?: 1)
             },
             period = cycleOf(data["items"]?.toList().orEmpty().firstNotNullOfOrNull { it["price"]?.get("billing_cycle")?.takeIf { cycle -> cycle.isObject } }),
+            customerId = data.text("customer_id"),
+            addressId = data.text("address_id"),
         )
+    }
+
+    /** 결제 본문에는 주소의 나라가 없다(`address_id` 뿐) - 주소를 읽어 `country_code` 를 얻는다(`GET /customers/{id}/addresses/{id}`). */
+    override fun buyerCountry(customerId: String, addressId: String): String? {
+        val response = requireNotNull(
+            httpClient.get(
+                clientName = properties.clientName,
+                path = "/customers/{customer}/addresses/{address}",
+                responseType = String::class.java,
+            ) {
+                baseUrl(properties.resolvedBaseUrl)
+                uriVariable("customer", customerId)
+                uriVariable("address", addressId)
+                header(HttpHeaders.AUTHORIZATION, "Bearer ${properties.apiKey}")
+                timeout(properties.createTransactionTimeout)
+                loggingTag("payment.paddle.buyer-country")
+            }.block(),
+        )
+        return read(response)?.get("data")?.text("country_code")?.uppercase()?.takeIf { it.length == 2 }
     }
 
     override fun pricePreview(): PricePreviewSetup? {

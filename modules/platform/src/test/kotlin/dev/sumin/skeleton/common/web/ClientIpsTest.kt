@@ -3,6 +3,7 @@ package dev.sumin.skeleton.common.web
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
 import org.springframework.mock.web.MockHttpServletRequest
 
 /**
@@ -120,5 +121,25 @@ class ClientIpsTest {
         assertFailsWith<IllegalArgumentException> { ClientIps(WebProperties.ClientIp(mode = ClientIpMode.DIRECT, trustedProxies = listOf("proxy.local"))) }
         assertFailsWith<IllegalArgumentException> { ClientIps(WebProperties.ClientIp(mode = ClientIpMode.PROXY, trustedProxies = listOf(" "))) }
         assertFailsWith<IllegalArgumentException> { ClientIps(WebProperties.ClientIp(mode = ClientIpMode.CLOUDFLARE, trustedProxies = emptyList())) }
+    }
+
+    private fun withCountry(remote: String, country: String?) = MockHttpServletRequest().apply {
+        remoteAddr = remote
+        country?.let { addHeader("CF-IPCountry", it) }
+    }
+
+    @Test
+    fun `CF-IPCountry is believed only in cloudflare mode from a trusted proxy peer`() {
+        assertEquals("KR", cloudflare.of(withCountry("127.0.0.1", "KR")).country)
+        assertEquals("US", cloudflare.of(withCountry("127.0.0.1", "us")).country)
+        listOf(direct, proxy, ClientIps(WebProperties.ClientIp())).forEach { assertNull(it.of(withCountry("127.0.0.1", "KR")).country) }
+        // 믿는 프록시가 아닌 곳이 헤더를 직접 붙여도 믿지 않는다
+        assertNull(cloudflare.of(withCountry("203.0.113.9", "KR")).country)
+    }
+
+    @Test
+    fun `Cloudflare's unknown and Tor markers and garbage are no country`() {
+        listOf("XX", "T1", "garbage", "", "KOR").forEach { assertNull(cloudflare.of(withCountry("127.0.0.1", it)).country, it) }
+        assertNull(cloudflare.of(withCountry("127.0.0.1", null)).country)
     }
 }

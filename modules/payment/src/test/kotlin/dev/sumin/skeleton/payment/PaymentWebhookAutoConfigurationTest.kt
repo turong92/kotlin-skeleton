@@ -57,7 +57,7 @@ class PaymentWebhookAutoConfigurationTest {
         web.run { context ->
             webhookTypes.forEach { assertTrue(context.has(it), "${it.simpleName} must exist with a store") }
             assertEquals(1, context.getBeansOfType(PublicEndpointContributor::class.java).size)
-            assertEquals(listOf("payment"), context.getBeansOfType(DeployGuard::class.java).values.map { it.name })
+            assertEquals(listOf("payment", "payment-country"), context.getBeansOfType(DeployGuard::class.java).values.map { it.name }.sorted())
             assertTrue(PaymentTaskTypes.WEBHOOK in context.getBean(PaymentTaskRunner::class.java).types)
         }
     }

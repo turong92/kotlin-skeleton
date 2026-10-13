@@ -191,7 +191,7 @@ class PaymentSchemaDbTest {
 
         val COLUMN_CLASSES: Map<String, ColumnClass> = buildMap {
             putAll(cols("payment_orders", ColumnClass.IDENTIFIER, "id", "account_id", "provider_payment_id", "item_ref", "origin_ref", "dedupe_key"))
-            putAll(cols("payment_orders", ColumnClass.CODE, "kind", "status", "provider", "provider_mode", "currency", "item_type", "origin_type", "method", "failure_code", "review_reason", "quantity"))
+            putAll(cols("payment_orders", ColumnClass.CODE, "kind", "status", "provider", "provider_mode", "currency", "item_type", "origin_type", "method", "failure_code", "review_reason", "quantity", "country"))
             putAll(cols("payment_orders", ColumnClass.LABEL, "order_name"))
             putAll(cols("payment_orders", ColumnClass.AMOUNT, "amount", "paid_amount", "tax_amount", "refunded_amount"))
             putAll(cols("payment_orders", ColumnClass.TIME, "checkout_expires_at", "confirm_started_at", "paid_at", "fulfilled_at", "closed_at", "account_erased_at", "created_at", "updated_at"))

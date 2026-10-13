@@ -88,7 +88,7 @@ class PaymentPushedEvents(
             return PRICE_MISMATCH
         }
         // 금액 · 통화는 결제사가 받은 그대로다(구매자가 낸 통화)
-        writer.transition(tx, order, PaymentOrderStatus.PAID, PaymentEventType.CONVERGED, PaymentActor.PROVIDER, providerCode = WEBHOOK) {
+        val paid = writer.transition(tx, order, PaymentOrderStatus.PAID, PaymentEventType.CONVERGED, PaymentActor.PROVIDER, providerCode = WEBHOOK) {
             it.copy(
                 amount = event.total,
                 paidAmount = event.total.amount,
@@ -103,6 +103,7 @@ class PaymentPushedEvents(
             )
         }
         tasks.enqueue(PaymentTask(PaymentTaskTypes.ORDER_FULFIL, order.id))
+        if (event.buyerCountry == KOREA) flags.flag(tx, paid, PaymentReviewReason.BUYER_COUNTRY_KR, context)
         return null
     }
 
@@ -136,9 +137,14 @@ class PaymentPushedEvents(
     }
 
     private fun applyPayment(tx: PaymentLedgerTx, lifecycle: SubscriptionLifecycle, subscription: PaymentSubscription, event: PushedPayment): String? {
-        val order = paidOrder(lifecycle, subscription, event)
+        val koreanBuyer = event.buyerCountry == KOREA
+        val order = paidOrder(lifecycle, subscription, event).let { if (koreanBuyer) it.copy(reviewReason = PaymentReviewReason.BUYER_COUNTRY_KR) else it }
         if (!tx.insertOrderIfAbsent(order)) return null
         tx.appendEvent(writer.event(order.id, PaymentEventType.CONVERGED, PaymentActor.PROVIDER, providerCode = WEBHOOK, to = PaymentOrderStatus.PAID))
+        if (koreanBuyer) {
+            tx.appendEvent(writer.event(order.id, PaymentEventType.REVIEW_FLAGGED, PaymentActor.PROVIDER, providerCode = PaymentReviewReason.BUYER_COUNTRY_KR.name, from = order.status, to = order.status))
+            review.flagged(order.id, PaymentReviewReason.BUYER_COUNTRY_KR)
+        }
         tasks.enqueue(PaymentTask(PaymentTaskTypes.ORDER_FULFIL, order.id))
 
         val base = subscription.copy(
@@ -262,6 +268,7 @@ class PaymentPushedEvents(
 
     companion object {
         const val WEBHOOK = "WEBHOOK"
+        private const val KOREA = "KR"
         const val UNKNOWN_ORDER = "UNKNOWN_ORDER"
         const val UNKNOWN_SUBSCRIPTION = "UNKNOWN_SUBSCRIPTION"
         const val ORDER_MISMATCH = "ORDER_MISMATCH"

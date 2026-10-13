@@ -61,6 +61,7 @@ internal class PaymentOrderRows(private val dialect: SqlDialect) {
         accountErasedAt = dialect.readInstant(rs, "account_erased_at"),
         createdAt = dialect.readInstant(rs, "created_at")!!,
         updatedAt = dialect.readInstant(rs, "updated_at")!!,
+        country = rs.getString("country")?.trim(),
     )
 
     /** 통화는 정규화한 값(대문자 · 공백 없음)으로 저장한다 — 읽을 때도 그 값이다. 비교는 `PaymentAmount.sameAs` 로 한다. */
@@ -97,6 +98,7 @@ internal class PaymentOrderRows(private val dialect: SqlDialect) {
         .addValue("account_erased_at", dialect.instantParam(order.accountErasedAt))
         .addValue("created_at", dialect.instantParam(order.createdAt))
         .addValue("updated_at", dialect.instantParam(order.updatedAt))
+        .addValue("country", order.country)
 
     val eventSelect: String =
         "select order_id, refund_id, type, from_status, to_status, actor, actor_id, provider_code, provider_trace_id, trace_id, created_at from payment_events"
@@ -134,7 +136,7 @@ internal class PaymentOrderRows(private val dialect: SqlDialect) {
         val ORDER_COLUMNS = listOf(
             "id", "account_id", "kind", "status", "provider", "provider_mode", "provider_payment_id", "currency", "amount", "paid_amount", "tax_amount",
             "refunded_amount", "item_type", "item_ref", "quantity", "order_name", "origin_type", "origin_ref", "dedupe_key", "method", "card_issuer", "card_last4",
-            "failure_code", "review_reason", "checkout_expires_at", "confirm_started_at", "paid_at", "fulfilled_at", "closed_at", "account_erased_at", "created_at", "updated_at",
+            "failure_code", "review_reason", "checkout_expires_at", "confirm_started_at", "paid_at", "fulfilled_at", "closed_at", "account_erased_at", "created_at", "updated_at", "country",
         )
     }
 }

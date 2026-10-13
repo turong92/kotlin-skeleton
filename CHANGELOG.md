@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 접속 나라로 결제사 · 해지·환불 규칙을 서버가 정한다 (2026-10-13)
+
+- `ClientAddress.country`(platform `ClientIps`): Cloudflare 의 `CF-IPCountry` — **클라이언트 IP 모드가 `cloudflare` 이고 믿는 프록시에서 온 것만** 읽는다(다른 모드에서는 헤더를 믿지 않는다). `XX`(모름) · `T1`(Tor) · 두 글자가 아닌 값은 나라가 아니다.
+- `payment`: 나라 → 결제사는 서버가 정한다(`skeleton.payment.routing.country-providers`, 지도에 없으면 `default-provider`, 열린 결제사가 하나뿐이면 그것). `GET /config` 가 `country` · `provider` · `cancelPolicy {key, penaltyPercent?, withdrawalDays?}` 를 준다. `POST /orders` · `POST /subscriptions` 는 **본문의 `provider` 가 서버 값과 다르면 `400`**, 본문의 `country` 는 받지 않는다(서버가 넣는다). 나라를 못 정하면 `subscription.cancel.default-country`.
+- 새 열 `payment_orders.country`(`V20261013180000`, 두 방언 + lock) — 서버가 정한 나라. 구독 과금 주문은 구독의 나라를 따른다.
+- **로컬 스위치** `skeleton.payment.routing.dev-country`(환경변수 `<P>_PAYMENT_ROUTING_DEV_COUNTRY`): 모든 요청을 한 나라로 고정. 요청 값으로는 못 덮어쓰고, 보호 환경(stage · prod)에서 정해져 있으면 기동 실패(`PaymentCountryDeployGuard`).
+- Paddle 결제의 구매자 주소 나라(결제 본문에는 `address_id` 뿐 → `GET /customers/{id}/addresses/{id}` 의 `country_code`, 락 밖에서 묻고 실패해도 결제는 반영)가 `KR` 이면 주문에 운영자 「확인 필요」 `BUYER_COUNTRY_KR`. 막지 않는다.
+
 ### 행 id 를 시간순으로 (2026-10-12) — 전체 적용
 
 - **공통 도우미 `SortableIds`**(`modules/platform` `common/id`): `접두사 + ULID`(26자, 소문자 Crockford base32 — 앞 48비트 = 만든 시각 ms, 뒤 80비트 = `SecureRandom`). 같은 ms 안에서도 늘어나고(난수부 +1) 시계가 뒤로 가도 작아지지 않는다. 문자열 정렬 = 만든 순서. `newUuid()` 는 같은 규칙의 UUIDv7(열 타입이 `uuid` 인 표용). `Clock` · `RandomGenerator` 를 받는다(시험용), 기본은 `SortableIds.system`.

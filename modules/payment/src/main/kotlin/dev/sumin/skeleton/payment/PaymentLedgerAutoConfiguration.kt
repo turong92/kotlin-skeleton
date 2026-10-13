@@ -172,6 +172,11 @@ class PaymentLedgerAutoConfiguration {
             gateways.orderedStream().filter { !it.signed && (properties.providers[it.providerId.trim().lowercase()]?.enabled ?: true) }.map { it.providerId }.toList()
         }
 
+    /** 로컬 나라 스위치가 보호 환경에서 켜져 있으면 기동 실패. */
+    @Bean
+    @ConditionalOnMissingBean(name = ["paymentCountryDeployGuard"])
+    fun paymentCountryDeployGuard(properties: PaymentProperties): PaymentCountryDeployGuard = PaymentCountryDeployGuard(properties)
+
     /** 큐 어댑터가 [PaymentTaskRunner.types] 마다 작업 처리기 하나를 등록하고 [PaymentTaskRunner.run] 을 부른다. */
     @Bean
     @ConditionalOnMissingBean

@@ -22,8 +22,11 @@ import org.springframework.web.filter.OncePerRequestFilter
  */
 enum class ClientIpMode { DIRECT, PROXY, CLOUDFLARE }
 
-/** 요청 한 건의 클라이언트 — [ip] 는 감사 · 사람 확인(`remoteip`)용, [limitKey] 는 요청 한도 · 중복 키(IPv6 는 /64) */
-data class ClientAddress(val ip: String, val limitKey: String)
+/**
+ * 요청 한 건의 클라이언트 — [ip] 는 감사 · 사람 확인(`remoteip`)용, [limitKey] 는 요청 한도 · 중복 키(IPv6 는 /64).
+ * [country] 는 Cloudflare 가 붙인 접속 나라(`CF-IPCountry`, ISO-3166 두 글자 대문자) - **[ClientIpMode.CLOUDFLARE] 이고 피어가 믿는 프록시일 때만** 읽는다(아니면 헤더를 누구든 쓸 수 있다). 모르면 null.
+ */
+data class ClientAddress(val ip: String, val limitKey: String, val country: String? = null)
 
 /**
  * `request.remoteAddr` 대신 부르는 한 곳 — platform rate limit · redis-rate-limit · idempotency 의 익명 범위가 모두 여기를 지난다.
@@ -64,7 +67,19 @@ class ClientIps(props: WebProperties.ClientIp = WebProperties.ClientIp()) {
         if (mode == null) return raw(request.remoteAddr)
         val remote = literal(request.remoteAddr) ?: return raw(request.remoteAddr)
         if (mode == ClientIpMode.DIRECT || !trusted(remote)) return address(remote)
-        if (mode == ClientIpMode.CLOUDFLARE) literal(request.getHeader(CF_CONNECTING_IP))?.let { return address(it) }
+        if (mode == ClientIpMode.CLOUDFLARE) {
+            val country = countryOf(request.getHeader(CF_IP_COUNTRY))
+            literal(request.getHeader(CF_CONNECTING_IP))?.let { return address(it, country) }
+            return resolveChain(request, remote).copy(country = country)
+        }
+        return resolveChain(request, remote)
+    }
+
+    /** Cloudflare 의 「모름」(`XX`) · Tor(`T1`) 은 나라가 아니다 */
+    private fun countryOf(header: String?): String? =
+        header?.trim()?.uppercase()?.takeIf { COUNTRY.matches(it) && it != "XX" }
+
+    private fun resolveChain(request: HttpServletRequest, remote: InetAddress): ClientAddress {
         var last = remote
         val chain = request.getHeaders(FORWARDED_FOR)?.toList().orEmpty().flatMap { it.split(',') }.map(String::trim).filter(String::isNotEmpty)
         for (entry in chain.asReversed()) {
@@ -80,10 +95,10 @@ class ClientIps(props: WebProperties.ClientIp = WebProperties.ClientIp()) {
     /** 모드가 없거나 주소 글자가 아닐 때 — IP 글자면 정규 표기로, 아니면 그대로(최대 64자) */
     private fun raw(value: String?): ClientAddress = ((literal(value)?.let(::canonical)) ?: (value ?: "unknown").take(64)).let { ClientAddress(it, it) }
 
-    private fun address(ip: InetAddress): ClientAddress {
+    private fun address(ip: InetAddress, country: String? = null): ClientAddress {
         val text = canonical(ip)
         val key = if (ip is Inet6Address) canonical(InetAddress.getByAddress(ip.address.copyOf(8) + ByteArray(8))) + "/64" else text
-        return ClientAddress(text, key)
+        return ClientAddress(text, key, country)
     }
 
     private class Cidr(val network: ByteArray, val prefix: Int, private val text: String) {
@@ -119,6 +134,8 @@ class ClientIps(props: WebProperties.ClientIp = WebProperties.ClientIp()) {
         const val ATTRIBUTE = "dev.sumin.skeleton.clientAddress"
         const val FORWARDED_FOR = "X-Forwarded-For"
         const val CF_CONNECTING_IP = "CF-Connecting-IP"
+        const val CF_IP_COUNTRY = "CF-IPCountry"
+        private val COUNTRY = Regex("[A-Z]{2}")
         private val IPV4 = Regex("^\\d{1,3}(\\.\\d{1,3}){3}$")
         private val IPV4_PORT = Regex("^(\\d{1,3}(\\.\\d{1,3}){3}):\\d{1,5}$")
         private val IPV6 = Regex("^[0-9A-Fa-f:.]*:[0-9A-Fa-f:.]*$")

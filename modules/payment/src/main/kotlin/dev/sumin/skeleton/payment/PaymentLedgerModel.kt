@@ -43,6 +43,9 @@ enum class PaymentReviewReason(val isMoney: Boolean) {
     /** 구독 중도 해지의 환불을 결제사에 보내지 못했거나 결제사가 거절했다 - 구독은 이미 끝났다. 운영자가 환불한다. */
     SUBSCRIPTION_CANCEL_REFUND_UNRESOLVED(true),
 
+    /** 해외 결제사(Paddle)로 결제한 구매자의 주소 나라가 한국이다 - 한국 구매자는 토스 + 한국 정책이 맞다. 막지 않았고 돈은 받았다; 운영자가 본다. */
+    BUYER_COUNTRY_KR(false),
+
     /** 지급 작업이 죽었다 — 돈은 받았는데 `fulfilled_at` 이 비어 있다. 운영자의 맞추기가 지급 작업을 다시 넣고 푼다. */
     FULFILMENT_UNRESOLVED(false),
 
@@ -92,6 +95,8 @@ data class PaymentOrder(
     val accountErasedAt: Instant?,
     val createdAt: Instant,
     val updatedAt: Instant,
+    /** 서버가 주문을 만들 때 정한 접속 나라(ISO-3166 두 글자) - 화면이 보낸 값이 아니다. 모르면 null. */
+    val country: String? = null,
 ) {
     override fun toString(): String =
         "PaymentOrder(id=$id, status=$status, amount=${amount.amount} ${amount.normalizedCurrency}, refunded=$refundedAmount, " +

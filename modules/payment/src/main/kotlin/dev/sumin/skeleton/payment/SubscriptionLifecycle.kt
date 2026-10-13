@@ -97,6 +97,7 @@ class SubscriptionLifecycle(
             accountErasedAt = null,
             createdAt = now,
             updatedAt = now,
+            country = subscription.country,
         )
     }
 

@@ -94,7 +94,7 @@ class PaymentWebhookTaskHandler(
             throw PaymentTaskPermanentException("No pushed event handler is wired for webhook event $id")
         }
         val pushedEvent = try {
-            event.payload?.let(gateway::interpret)
+            event.payload?.let(gateway::interpret)?.let { withBuyerCountry(gateway, it) }
         } catch (e: Exception) {
             log.warn("pushed webhook event={} could not be read exception={}", id, e.javaClass.simpleName)
             fail(id, PAYLOAD_UNREADABLE, dead = true)
@@ -118,6 +118,20 @@ class PaymentWebhookTaskHandler(
             log.warn("applying pushed webhook event={} failed attempt={}/{} exception={}", id, run.attempt, run.maxAttempts, e.javaClass.simpleName)
             throw retry(id, WebhookCodes.PROCESSING_FAILED, "Applying webhook event $id failed")
         }
+    }
+
+    /** 결제 본문에 없는 구매자 주소의 나라를 락 · 트랜잭션 밖에서 묻는다 - 실패해도 결제는 그대로 반영하고 나라만 모른다. */
+    private fun withBuyerCountry(gateway: PaymentPushGateway, event: PushedPaymentEvent): PushedPaymentEvent {
+        if (event !is PushedPayment || gateway !is PaymentBuyerCountryGateway) return event
+        val customer = event.customerId ?: return event
+        val address = event.addressId ?: return event
+        val country = try {
+            gateway.buyerCountry(customer, address)
+        } catch (e: Exception) {
+            log.warn("could not look up the buyer address country exception={}", e.javaClass.simpleName)
+            null
+        }
+        return event.copy(buyerCountry = country)
     }
 
     /**

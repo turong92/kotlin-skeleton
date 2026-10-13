@@ -31,6 +31,8 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
         "skeleton.payment.subscription.plan-change.enabled=true",
         "skeleton.payment.subscription.plan-change.charge=FULL_RESTART",
         "skeleton.payment.subscription.cancel.policies.KR=korea",
+        "skeleton.web.client-ip.mode=cloudflare",
+        "skeleton.web.client-ip.trusted-proxies=127.0.0.1/32",
         "skeleton.payment.http.order-rate-limit.account-capacity=100000",
         "skeleton.payment.http.order-rate-limit.ip-capacity=100000",
     ],
@@ -118,22 +120,30 @@ class PaymentSubscriptionHttpTest {
             .andExpect(jsonPath("$.value.planCode").value("plus")).andExpect(jsonPath("$.value.pendingPlanCode").value(null as Any?))
     }
 
-    private fun startIn(account: String, country: String?): String {
-        val body = if (country == null) """{"planCode":"basic"}""" else """{"planCode":"basic","country":"$country"}"""
-        val response = mvc.perform(post("$base/subscriptions").asUser(account).header("Idempotency-Key", "k-${System.nanoTime()}").contentType(MediaType.APPLICATION_JSON).content(body))
-            .andExpect(status().isCreated).andReturn().response.contentAsString
+    /** 접속 나라는 Cloudflare 가 붙인 헤더로만 온다 - 본문의 `country` 는 받지 않는다. */
+    private fun startIn(account: String, country: String?, body: String = """{"planCode":"basic"}"""): String {
+        val request = post("$base/subscriptions").asUser(account).header("Idempotency-Key", "k-${System.nanoTime()}").contentType(MediaType.APPLICATION_JSON).content(body)
+        if (country != null) request.header("CF-IPCountry", country)
+        val response = mvc.perform(request).andExpect(status().isCreated).andReturn().response.contentAsString
         return read(response)["value"]["subscription"]["id"].asString()
     }
 
     @Test
-    fun `the country is kept in upper case, anything but two letters is 400, and the subscription answers with it`() {
+    fun `the subscription records the country the server decided and a country in the body changes nothing`() {
         val owner = account()
-        mvc.perform(post("$base/subscriptions").asUser(owner).header("Idempotency-Key", "bad-1").contentType(MediaType.APPLICATION_JSON).content("""{"planCode":"basic","country":"Korea"}""")).andExpect(status().isBadRequest)
-        mvc.perform(post("$base/subscriptions").asUser(owner).header("Idempotency-Key", "bad-2").contentType(MediaType.APPLICATION_JSON).content("""{"planCode":"basic","country":7}""")).andExpect(status().isBadRequest)
-
-        val id = startIn(owner, "kr")
+        val id = startIn(owner, "kr", body = """{"planCode":"basic","country":"US"}""")
 
         activate(owner, id).andExpect(status().isOk).andExpect(jsonPath("$.value.country").value("KR"))
+    }
+
+    @Test
+    fun `a provider in the body that differs from the server's choice is 400 and makes no subscription`() {
+        val owner = account()
+        mvc.perform(post("$base/subscriptions").asUser(owner).header("Idempotency-Key", "mismatch-1").contentType(MediaType.APPLICATION_JSON).content("""{"planCode":"basic","provider":"paddle"}"""))
+            .andExpect(status().isBadRequest)
+        mvc.perform(get("$base/subscriptions/me").asUser(owner)).andExpect(jsonPath("$.value.subscription").value(null as Any?))
+        mvc.perform(post("$base/subscriptions").asUser(owner).header("Idempotency-Key", "match-1").contentType(MediaType.APPLICATION_JSON).content("""{"planCode":"basic","provider":"scripted"}"""))
+            .andExpect(status().isCreated)
     }
 
     @Test

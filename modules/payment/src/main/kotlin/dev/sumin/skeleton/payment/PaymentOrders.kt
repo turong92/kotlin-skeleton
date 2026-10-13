@@ -92,6 +92,7 @@ class PaymentOrders(
             accountErasedAt = null,
             createdAt = now,
             updatedAt = now,
+            country = command.country?.uppercase(),
         )
         // 주문을 먼저 커밋한다(결제사 호출은 트랜잭션 밖) - 같은 요청 키로 동시에 들어온 쪽은 dedupe_key 유니크로 `false` 를 받아 그 주문을 돌려받는다
         val inserted = store.inTransaction { tx ->
@@ -261,6 +262,9 @@ class PaymentOrders(
      * **조용히 묻는다** — 이유는 `debug` 로만 남는다(`GET /config` 가 호출마다 `WARN` 을 찍지 않게). 주문 만들기만 이유를 `WARN` 으로 말한다.
      */
     fun openableCheckout(amount: PaymentAmount?, country: String?, provider: String? = null): PaymentCheckoutGateway? = findOpenableCheckout(provider, amount, country, warn = false)
+
+    /** 결제창을 열 수 있는 결제사 id(`GET /config` 의 `providers`) - 서버가 접속 나라로 고르는 후보. */
+    fun openableProviders(): List<String> = router.providerIds(PaymentCheckoutGateway::class).filter { openableCheckout(null, null, it) != null }
 
     /** [openableCheckout] 에 이유를 로그로 남길지 고른 것 — `GET /config` 는 요청 한도가 없어 조용히(`debug`) 묻고, 주문 만들기만 이유를 `WARN` 으로 말한다. */
     private fun findOpenableCheckout(provider: String?, amount: PaymentAmount?, country: String?, warn: Boolean): PaymentCheckoutGateway? {

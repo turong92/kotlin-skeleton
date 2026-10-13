@@ -34,6 +34,18 @@ class PaddleGatewayTest {
     }
 
     @Test
+    fun `the buyer's address country is read from the address with the API key`() {
+        FakePaddleApi().use { api ->
+            api.responseBody = """{"data":{"id":"add_1","country_code":"kr"}}"""
+            assertThat(gateway(api.baseUrl).buyerCountry("ctm_1", "add_1")).isEqualTo("KR")
+            val request = api.requests.single()
+            assertThat(request.method).isEqualTo("GET")
+            assertThat(request.path).isEqualTo("/customers/ctm_1/addresses/add_1")
+            assertThat(request.auth).isEqualTo("Bearer pdl_sdbx_apikey_x")
+        }
+    }
+
+    @Test
     fun `the price preview setup carries the public client token, the environment and only the configured price ids`() {
         val setup = gateway(props = properties(prices = mapOf("basic" to "pri_basic", "pro" to " "))).pricePreview()!!
         assertThat(setup.clientToken).isEqualTo("test_clienttoken")

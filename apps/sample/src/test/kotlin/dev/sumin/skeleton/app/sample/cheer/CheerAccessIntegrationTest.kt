@@ -112,7 +112,9 @@ class CheerAccessIntegrationTest : CheerIntegrationBase() {
         fun keysOf(body: String) = Regex("\"([A-Za-z]+)\"\\s*:").findAll(body).map { m -> m.groupValues[1] }.toSet()
         val checkoutKeys = keysOf(responses[1])   // the checkout names the provider for the payment window - that is its job (contract: the window instruction), not an operator field
         assertTrue("provider" in checkoutKeys && "clientKey" in checkoutKeys, "the checkout answer is the window instruction: $checkoutKeys")
-        val userKeys = responses.filterIndexed { i, _ -> i != 1 }.flatMap { keysOf(it) }.toSet()
+        // GET /config names the provider the server chose for this request's country - the screen sends it back; it is not the operator's `provider` column
+        assertTrue("provider" in keysOf(responses[6]), "config tells the provider the server chose")
+        val userKeys = responses.filterIndexed { i, _ -> i != 1 && i != 6 }.flatMap { keysOf(it) }.toSet()
         assertTrue(userKeys.isNotEmpty())
         // failureCode is a user-visible field of an order (null here) - the others never are
         (operatorOnly - "failureCode").forEach { assertFalse(it in userKeys, "$it is an operator-only field but a user response has it") }

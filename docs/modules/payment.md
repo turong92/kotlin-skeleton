@@ -94,6 +94,7 @@
 | `REFUND_MISMATCH` | 숫자가 맞게 되면 웹훅 · 조회가 푼다. 사람이 봐야 하는 이상(풀리지 않은 `PENDING` · 다른 금액 · 늦은 성공 응답)은 사람이 누른 「결제사와 맞추기」만. 이 표시가 있으면 환불을 보내지 않는다 |
 | `MODE_MISMATCH` | 키를 맞추고 「결제사와 맞추기」. **승인을 선점한 뒤(`CONFIRMING`)이거나 결제된 주문에만 찍힌다** — 선점한 적 없는 `PENDING` 은 표시 없이 마감 뒤 `EXPIRED` 로 닫힌다 |
 | `CONFIRM_UNRESOLVED` | 조회 작업이 끝내 못 물었다 — 웹훅 · 「결제사와 맞추기」가 `PAID` 로 맞춘다 |
+| `BUYER_COUNTRY_KR` | 해외 결제사(Paddle)로 결제한 구매자의 주소 나라가 한국이다 — 막지 않았다(돈은 받았다). 장부에는 푸는 단추가 없다 |
 | `FULFILMENT_UNRESOLVED` · `REFUND_APPLY_UNRESOLVED` | 지급 · 회수 작업이 죽었다 — 「결제사와 맞추기」가 작업을 다시 넣고 푼다 |
 | `STALE_CONFIRMING` · `STALE_REFUND`(파생) | `admin.stale-after`(기본 1시간)보다 오래 `CONFIRMING` · `PENDING` 환불 — 기반 상태가 움직이면 사라진다 |
 
@@ -176,6 +177,8 @@
 | 키 | 기본 | 뜻 |
 |---|---|---|
 | `default-provider` | — | 경로가 안 맞을 때 쓸 결제사 id (결제사가 하나뿐이면 그것) |
+| `routing.country-providers` | — | 접속 나라(ISO-3166 두 글자 대문자) → 결제사 id. 예 `KR: toss`. 지도에 없는 나라는 `default-provider`, 그 결제사가 열려 있지 않으면 열린 결제사가 하나뿐일 때 그것. **화면이 보낸 `provider` 는 서버가 정한 것과 다르면 `400`** |
+| `routing.dev-country` | — | **로컬 개발 전용** — 정하면 모든 요청이 이 나라다(접속 나라 무시). 보호 환경(stage · prod)에서 정해져 있으면 기동 실패 |
 | `providers.<id>.{enabled, currencies, countries}` | — | 결제사 id 별로 라우팅에서 빼거나 통화 · 국가를 좁힌다 |
 | `checkout-ttl` | `30m` | 만든 주문으로 결제할 수 있는 시간. 지나면 만료 작업이 결제사에 묻고 닫는다. 양수 |
 | `reconcile.first-delay` | `60s` | 승인 선점 뒤 첫 조회까지. **결제사 응답 제한 시간보다 길어야** 한다(`payment-toss` 가드가 어기면 기동 실패) |
