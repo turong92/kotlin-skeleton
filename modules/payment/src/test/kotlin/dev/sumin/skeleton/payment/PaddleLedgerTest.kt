@@ -88,6 +88,7 @@ class PaddleLedgerTest {
     @Test
     fun `an update that arrives before the creation still leaves the right state`() {
         val pending = pending()
+        feed(payment(pending.id, "txn_1"))
         feed(state(pending.id, PushedSubscriptionStatus.CANCELING, Instant.parse("2026-10-13T10:05:00Z")))
         feed(state(pending.id, PushedSubscriptionStatus.ACTIVE, Instant.parse("2026-10-13T10:00:00Z"))) // 더 일찍 일어난 사건이 늦게 왔다
 
@@ -205,5 +206,28 @@ class PaddleLedgerReviewTest {
         kit.store.inTransaction { tx -> kit.lifecycle.end(tx, checkNotNull(tx.lockSubscription(pending.id)), SubscriptionEndReason.ACCOUNT_ERASED) }
         kit.runTasks(setOf(PaymentTaskTypes.PROVIDER_SUBSCRIPTION_CANCEL))
         assertEquals(listOf("psub_1" to false), push.cancelCalls.toList())
+    }
+
+    @Test
+    fun `a subscription event alone never turns a pending row on - the payment with the right price does, in either order`() {
+        val pending = pending()
+        feed(PushedSubscription("evt_${++seq}", t0, "psub_1", PushedSubscriptionStatus.ACTIVE, "acc_1", pending.id, t0, t0.plusSeconds(86400)))
+        assertEquals(SubscriptionStatus.PENDING, sub(pending.id).status)
+
+        feed(payment(pending.id, "txn_1", price = "pri_basic"))
+        assertEquals(SubscriptionStatus.ACTIVE, sub(pending.id).status)
+    }
+
+    @Test
+    fun `a connected subscription renewed at a price the config no longer lists is recorded and fulfilled, with no cancel`() {
+        val pending = pending()
+        feed(payment(pending.id, "txn_1", price = "pri_basic"))
+        feed(payment(pending.id, "txn_2", price = "pri_basic_raised", account = null))
+
+        val renewal = kit.store.listSubscriptionOrders(pending.id, 5).first { it.providerPaymentId == "txn_2" }
+        assertEquals(PaymentOrderKind.SUBSCRIPTION_RENEWAL, renewal.kind)
+        assertEquals(null, renewal.reviewReason)
+        kit.runTasks(setOf(PaymentTaskTypes.PROVIDER_SUBSCRIPTION_CANCEL))
+        assertEquals(emptyList(), push.cancelCalls.toList())
     }
 }

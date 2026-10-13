@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.payment.paddle
 
 import dev.sumin.skeleton.common.http.ExternalHttpClient
+import dev.sumin.skeleton.common.http.ExternalHttpStatusException
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.payment.BillingSetup
 import dev.sumin.skeleton.payment.CheckoutInstruction
@@ -163,6 +164,17 @@ class PaddlePaymentProvider(
     }
 
     override fun cancel(providerSubscriptionId: String, atPeriodEnd: Boolean) {
+        try {
+            postCancel(providerSubscriptionId, atPeriodEnd)
+        } catch (e: ExternalHttpStatusException) {
+            // 이미 해지된 구독이라 거절하면 성공으로 읽는다(멱등) - 해지 작업이 헛재시도 끝에 죽지 않게
+            val status = e.upstreamStatus
+            if (status != null && status in 400..499 && (status == 404 || status == 409 || e.upstreamBody.contains("cancel", ignoreCase = true))) return
+            throw e
+        }
+    }
+
+    private fun postCancel(providerSubscriptionId: String, atPeriodEnd: Boolean) {
         requireNotNull(
             httpClient.post(
                 clientName = properties.clientName,

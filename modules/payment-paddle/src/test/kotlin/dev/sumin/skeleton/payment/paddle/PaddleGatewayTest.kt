@@ -40,6 +40,18 @@ class PaddleGatewayTest {
     }
 
     @Test
+    fun `canceling a subscription Paddle says is already canceled counts as done, any other refusal throws`() {
+        FakePaddleApi().use { api ->
+            api.status = 400
+            api.responseBody = """{"error":{"code":"subscription_update_when_canceled"}}"""
+            gateway(api.baseUrl).cancel("sub_1", atPeriodEnd = false)
+            api.responseBody = """{"error":{"code":"forbidden"}}"""
+            api.status = 403
+            org.assertj.core.api.Assertions.assertThatThrownBy { gateway(api.baseUrl).cancel("sub_1", atPeriodEnd = false) }.isInstanceOf(Exception::class.java)
+        }
+    }
+
+    @Test
     fun `the default base url follows the environment`() {
         assertThat(properties().resolvedBaseUrl).isEqualTo("https://sandbox-api.paddle.com")
         assertThat(properties().copy(environment = "live").resolvedBaseUrl).isEqualTo("https://api.paddle.com")

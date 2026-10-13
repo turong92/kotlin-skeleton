@@ -41,10 +41,11 @@ internal class FakePaddleApi : AutoCloseable {
 
     val requests: MutableList<Req> = Collections.synchronizedList(mutableListOf())
     var status = 200
+    var responseBody = "{\"data\":{}}"
     private val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
         createContext("/") { ex ->
             requests += Req(ex.requestMethod, ex.requestURI.path, ex.requestHeaders.getFirst("Authorization"), ex.requestBody.readBytes().decodeToString())
-            val out = "{\"data\":{}}".toByteArray()
+            val out = responseBody.toByteArray()
             ex.responseHeaders.add("Content-Type", "application/json")
             ex.sendResponseHeaders(status, out.size.toLong())
             ex.responseBody.use { it.write(out) }

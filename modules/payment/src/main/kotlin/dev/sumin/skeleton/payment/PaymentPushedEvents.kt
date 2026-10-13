@@ -38,7 +38,7 @@ class PaymentPushedEvents(
             is PushedSubscription -> event.providerSubscriptionId
         }
         if (event is PushedPayment && lifecycle != null) {
-            lock(tx, gateway.providerId.trim().lowercase(), event.ourSubscriptionId, event.providerSubscriptionId)?.let { unapplied(tx, lifecycle, it, event, null) }
+            lock(tx, gateway.providerId.trim().lowercase(), event.ourSubscriptionId, event.providerSubscriptionId)?.let { unapplied(tx, lifecycle, it, event, null, cancel = false) }
         }
         if (!(event is PushedSubscription && event.status == PushedSubscriptionStatus.ENDED)) cancelAtProvider(gateway.providerId, providerSubscriptionId)
         return SEAT_TAKEN
@@ -92,14 +92,18 @@ class PaymentPushedEvents(
         if (subscription.providerMode != gateway.mode) return MODE_MISMATCH
         if (tx.findOrderByProviderPayment(provider, event.providerPaymentId) != null) return null // 같은 거래 - 이미 반영했다
         val linked = subscription.providerSubscriptionId
+        // 가격 · 계정 대조는 아직 켜지지 않은 줄의 첫 결제에만 - 켜진 구독의 갱신은 설정의 가격이 바뀌어도(가격 인상) 정상 운영이다
+        val first = subscription.status == SubscriptionStatus.PENDING
+        val priced = boughtExactly(event.items, gateway.priceIdOf(subscription.planCode), 1)
+        if (!first && !priced && subscription.status != SubscriptionStatus.ENDED) log.info("a renewal was charged at a price other than the configured one subscription={}", subscription.id)
         return when {
             // 한 줄에 결제사 구독이 둘 - 같은 결제창을 두 번 결제했다. 먼저 붙은 쪽만 이 줄의 구독이다 → 둘째는 기록하고 즉시 해지
             linked != null && event.providerSubscriptionId != null && linked != event.providerSubscriptionId ->
                 unapplied(tx, lifecycle, subscription, event, PROVIDER_SUBSCRIPTION_MISMATCH, cancel = true)
             // 계정은 결제창에 실어 보낸 값이다 - 아직 결제사 구독이 붙지 않은 줄(첫 결제)은 계정이 맞아야 한다
-            event.ourAccountId != subscription.accountId && (event.ourAccountId != null || linked == null) ->
+            event.ourAccountId != subscription.accountId && (event.ourAccountId != null || first) ->
                 unapplied(tx, lifecycle, subscription, event, if (event.ourAccountId == null) ACCOUNT_MISSING else ACCOUNT_MISMATCH, cancel = true)
-            !boughtExactly(event.items, gateway.priceIdOf(subscription.planCode), 1) ->
+            first && !priced ->
                 unapplied(tx, lifecycle, subscription, event, PRICE_MISMATCH, cancel = true)
             // 끝난 구독에 결제가 왔다 - 탈퇴로 끝났다면 결제사는 아직 과금 중이다
             subscription.status == SubscriptionStatus.ENDED ->
@@ -176,7 +180,7 @@ class PaymentPushedEvents(
             if (event.status != PushedSubscriptionStatus.ENDED) cancelAtProvider(provider, event.providerSubscriptionId)
             return PROVIDER_SUBSCRIPTION_MISMATCH
         }
-        if (event.ourAccountId != subscription.accountId && (event.ourAccountId != null || linked == null)) return if (event.ourAccountId == null) ACCOUNT_MISSING else ACCOUNT_MISMATCH
+        if (event.ourAccountId != subscription.accountId && (event.ourAccountId != null || subscription.status == SubscriptionStatus.PENDING)) return if (event.ourAccountId == null) ACCOUNT_MISSING else ACCOUNT_MISMATCH
         if (subscription.status == SubscriptionStatus.ENDED) return ALREADY_ENDED
         val syncedAt = subscription.providerSyncedAt
         if (syncedAt != null && event.occurredAt.isBefore(syncedAt)) return STALE_EVENT // 더 새로운 사건이 먼저 도착해 반영됐다
@@ -192,7 +196,9 @@ class PaymentPushedEvents(
             return null
         }
         if (current.status == SubscriptionStatus.PENDING) {
-            current = activate(tx, lifecycle, current, event.periodStart ?: writer.now(), event.periodEnd)
+            // 구독 사건에는 품목이 없어 가격을 확인할 수 없다 - `PENDING` 은 가격을 확인한 결제 사건으로만 켠다. 여기서는 결제사 구독 id 와 반영 시각만 붙여 두고 기다린다
+            tx.updateSubscription(current.copy(updatedAt = writer.now()))
+            return null
         } else if (event.periodStart != null && event.periodEnd != null) {
             val moved = current.currentPeriodStart?.let { event.periodStart.isAfter(it) } ?: true
             current = current.copy(currentPeriodStart = event.periodStart, currentPeriodEnd = event.periodEnd, periodSeq = if (moved) current.periodSeq + 1 else current.periodSeq)
