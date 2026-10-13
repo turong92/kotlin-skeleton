@@ -4,50 +4,60 @@ import dev.sumin.skeleton.payment.CheckoutOrder
 import dev.sumin.skeleton.payment.HostedSubscriptionRequest
 import dev.sumin.skeleton.payment.PaymentAmount
 import dev.sumin.skeleton.payment.PaymentMode
+import dev.sumin.skeleton.payment.TransactionRequest
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 
 class PaddleGatewayTest {
     @Test
-    fun `sandbox is TEST mode and the checkout carries the price and our ids as custom data`() {
+    fun `the transaction is created by the server with the price and quantity it chose and its own ids`() {
+        FakePaddleApi().use { api ->
+            api.responseBody = """{"data":{"id":"txn_abc","status":"draft"}}"""
+            val id = gateway(api.baseUrl).createTransaction(TransactionRequest("cheer", 2, mapOf("orderId" to "ord_1", "accountId" to "acc_1")))
+            assertThat(id).isEqualTo("txn_abc")
+            val request = api.requests.single()
+            assertThat(request.path).isEqualTo("/transactions")
+            assertThat(request.auth).isEqualTo("Bearer pdl_sdbx_apikey_x")
+            assertThat(request.body).contains("\"price_id\":\"pri_cheer\"").contains("\"quantity\":2").contains("\"orderId\":\"ord_1\"")
+        }
+    }
+
+    @Test
+    fun `no transaction is created for a product without a configured price, and a refusal throws`() {
+        FakePaddleApi().use { api ->
+            assertThatThrownBy { gateway(api.baseUrl).createTransaction(TransactionRequest("unknown", 1, emptyMap())) }.isInstanceOf(IllegalStateException::class.java)
+            assertThat(api.requests).isEmpty()
+            api.status = 403
+            assertThatThrownBy { gateway(api.baseUrl).createTransaction(TransactionRequest("cheer", 1, emptyMap())) }.isInstanceOf(Exception::class.java)
+        }
+    }
+
+    @Test
+    fun `the checkout carries only the transaction id - no price and no custom data from the browser`() {
         val gateway = gateway()
         assertThat(gateway.mode).isEqualTo(PaymentMode.TEST)
-        val checkout = gateway.checkout(CheckoutOrder("ord_1", "Cheer", PaymentAmount(1000, "KRW"), "cheer", "acc_1"))
+        val checkout = gateway.checkout(CheckoutOrder("ord_1", "Cheer", PaymentAmount(1000, "KRW"), "cheer", "acc_1", "txn_1"))
         assertThat(checkout.kind).isEqualTo("PADDLE_CHECKOUT")
         assertThat(checkout.clientKey).isEqualTo("test_clienttoken")
-        assertThat(checkout.attributes["priceId"]).isEqualTo("pri_cheer")
-        assertThat(checkout.attributes["customData"]).contains("\"orderId\":\"ord_1\"").contains("\"accountId\":\"acc_1\"")
+        assertThat(checkout.attributes).containsOnlyKeys("environment", "transactionId")
+        assertThat(checkout.attributes["transactionId"]).isEqualTo("txn_1")
+        val setup = gateway.subscriptionSetup(HostedSubscriptionRequest("basic", "acc_1", "sub_ours", "cus_x", "US", "txn_2"))!!
+        assertThat(setup.attributes["transactionId"]).isEqualTo("txn_2")
+        assertThat(gateway.subscriptionSetup(HostedSubscriptionRequest("basic", "acc_1", "sub_ours", "cus_x", "US", null))).isNull()
     }
 
     @Test
-    fun `subscription setup needs a price for the plan`() {
-        val request = HostedSubscriptionRequest("basic", "acc_1", "sub_ours", "cus_x", "US")
-        val setup = gateway().subscriptionSetup(request)!!
-        assertThat(setup.attributes["priceId"]).isEqualTo("pri_basic")
-        assertThat(setup.attributes["customData"]).contains("\"subscriptionId\":\"sub_ours\"")
-        assertThat(gateway().subscriptionSetup(request.copy(planCode = "unknown"))).isNull()
-    }
-
-    @Test
-    fun `cancel at period end posts effective_from next_billing_period with the API key`() {
+    fun `cancel at period end posts effective_from next_billing_period with the API key, and a refusal is a failure`() {
         FakePaddleApi().use { api ->
             gateway(api.baseUrl).cancel("sub_1", atPeriodEnd = true)
             val request = api.requests.single()
             assertThat(request.path).isEqualTo("/subscriptions/sub_1/cancel")
             assertThat(request.auth).isEqualTo("Bearer pdl_sdbx_apikey_x")
             assertThat(request.body).contains("\"effective_from\":\"next_billing_period\"")
-        }
-    }
-
-    @Test
-    fun `canceling a subscription Paddle says is already canceled counts as done, any other refusal throws`() {
-        FakePaddleApi().use { api ->
             api.status = 400
             api.responseBody = """{"error":{"code":"subscription_update_when_canceled"}}"""
-            gateway(api.baseUrl).cancel("sub_1", atPeriodEnd = false)
-            api.responseBody = """{"error":{"code":"forbidden"}}"""
-            api.status = 403
-            org.assertj.core.api.Assertions.assertThatThrownBy { gateway(api.baseUrl).cancel("sub_1", atPeriodEnd = false) }.isInstanceOf(Exception::class.java)
+            assertThatThrownBy { gateway(api.baseUrl).cancel("sub_1", atPeriodEnd = false) }.isInstanceOf(Exception::class.java)
         }
     }
 

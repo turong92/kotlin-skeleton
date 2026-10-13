@@ -266,6 +266,9 @@ class JdbcPaymentLedgerStore(
     override fun findSubscriptionByProviderId(provider: String, providerSubscriptionId: String): PaymentSubscription? =
         jdbc.query("${subscriptionRows.select} where provider = :provider and provider_subscription_id = :id", mapOf("provider" to provider, "id" to providerSubscriptionId)) { rs, _ -> subscriptionRows.subscription(rs) }.firstOrNull()
 
+    override fun findSubscriptionByFirstTransaction(provider: String, transactionId: String): PaymentSubscription? =
+        jdbc.query("${subscriptionRows.select} where provider = :provider and first_transaction_id = :id", mapOf("provider" to provider, "id" to transactionId)) { rs, _ -> subscriptionRows.subscription(rs) }.firstOrNull()
+
     override fun findLiveSubscription(accountId: String): PaymentSubscription? =
         jdbc.query("${subscriptionRows.select} where active_key = :account", mapOf("account" to accountId)) { rs, _ -> subscriptionRows.subscription(rs) }.firstOrNull()
 

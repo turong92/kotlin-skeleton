@@ -99,6 +99,9 @@ interface PaymentLedgerStore {
     /** 결제사 쪽 구독 id([PaymentSubscription.providerSubscriptionId])로 찾는다. */
     fun findSubscriptionByProviderId(provider: String, providerSubscriptionId: String): PaymentSubscription?
 
+    /** 서버가 미리 만든 첫 결제 거래 id([PaymentSubscription.firstTransactionId])로 찾는다. */
+    fun findSubscriptionByFirstTransaction(provider: String, transactionId: String): PaymentSubscription?
+
     /** 계정의 **살아 있는** 구독(`active_key` 의 주인) — 없으면 null. */
     fun findLiveSubscription(accountId: String): PaymentSubscription?
 

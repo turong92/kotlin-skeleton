@@ -1,7 +1,6 @@
 package dev.sumin.skeleton.payment.paddle
 
 import dev.sumin.skeleton.common.http.ExternalHttpClient
-import dev.sumin.skeleton.common.http.ExternalHttpStatusException
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.payment.BillingSetup
 import dev.sumin.skeleton.payment.CheckoutInstruction
@@ -13,9 +12,10 @@ import dev.sumin.skeleton.payment.PaymentCheckoutGateway
 import dev.sumin.skeleton.payment.PaymentHostedSubscriptionGateway
 import dev.sumin.skeleton.payment.PaymentMode
 import dev.sumin.skeleton.payment.PaymentPushGateway
+import dev.sumin.skeleton.payment.PaymentTransactionGateway
+import dev.sumin.skeleton.payment.TransactionRequest
 import dev.sumin.skeleton.payment.PaymentWebhookRejectedException
 import dev.sumin.skeleton.payment.PushedEvents
-import dev.sumin.skeleton.payment.PushedItem
 import dev.sumin.skeleton.payment.PushedPayment
 import dev.sumin.skeleton.payment.PushedPaymentEvent
 import dev.sumin.skeleton.payment.PushedSubscription
@@ -36,7 +36,7 @@ class PaddlePaymentProvider(
     private val httpClient: ExternalHttpClient,
     private val properties: PaddleProperties,
     private val time: TimeProvider = TimeProvider.systemUtc(),
-) : PaymentPushGateway, PaymentCheckoutGateway, PaymentHostedSubscriptionGateway {
+) : PaymentPushGateway, PaymentCheckoutGateway, PaymentHostedSubscriptionGateway, PaymentTransactionGateway {
     override val providerId: String = properties.providerId
     override val supportedCurrencies: Set<String> = properties.supportedCurrencies
     override val supportedCountries: Set<String> = properties.supportedCountries
@@ -101,14 +101,10 @@ class PaddlePaymentProvider(
             card = card,
             periodStart = data["billing_period"]?.text("starts_at")?.let(Instant::parse),
             periodEnd = data["billing_period"]?.text("ends_at")?.let(Instant::parse),
-            items = data["items"]?.toList().orEmpty().mapNotNull { item ->
-                val priceId = (item["price"]?.text("id") ?: item.text("price_id")) ?: return@mapNotNull null
-                PushedItem(priceId, item["quantity"]?.asInt(1) ?: 1)
-            },
         )
     }
 
-    override fun priceIdOf(itemRef: String): String? = properties.prices[itemRef]?.takeIf { it.isNotBlank() }
+    private fun priceIdOf(itemRef: String): String? = properties.prices[itemRef]?.takeIf { it.isNotBlank() }
 
     private fun subscription(eventId: String, occurredAt: Instant, data: JsonNode, custom: JsonNode?, type: String?): PushedSubscription? {
         val scheduledCancel = data["scheduled_change"]?.text("action") == "cancel"
@@ -134,10 +130,27 @@ class PaddlePaymentProvider(
 
     override fun canOpenCheckout(): Boolean = properties.clientToken.isNotBlank()
 
-    override fun checkout(order: CheckoutOrder): CheckoutInstruction {
-        val price = order.itemRef?.let { properties.prices[it] }?.takeIf { it.isNotBlank() }
-        val custom = linkedMapOf(PushedEvents.ORDER_KEY to order.orderId).apply { order.accountId?.let { put(PushedEvents.ACCOUNT_KEY, it) } }
-        return CheckoutInstruction(
+    /** 거래를 서버가 먼저 만든다 - 품목(가격 · 수량)과 `custom_data`(우리 줄 id)는 서버가 정한 값이다. 가격이 설정에 없으면 던진다. */
+    override fun createTransaction(request: TransactionRequest): String {
+        val price = priceIdOf(request.itemRef) ?: error("no Paddle price is configured for ${request.itemRef}")
+        val response = requireNotNull(
+            httpClient.post(
+                clientName = properties.clientName,
+                path = "/transactions",
+                body = mapOf("items" to listOf(mapOf("price_id" to price, "quantity" to request.quantity)), "custom_data" to request.customData),
+                responseType = String::class.java,
+            ) {
+                baseUrl(properties.resolvedBaseUrl)
+                header(HttpHeaders.AUTHORIZATION, "Bearer ${properties.apiKey}")
+                loggingTag("payment.paddle.create-transaction")
+            }.block(),
+        )
+        return read(response)?.get("data")?.text("id")?.takeIf { it.isNotBlank() } ?: error("Paddle did not return a transaction id")
+    }
+
+    /** 결제창은 서버가 만든 거래 id 만 연다 - 가격 · customData 를 브라우저가 넘기지 않는다. */
+    override fun checkout(order: CheckoutOrder): CheckoutInstruction =
+        CheckoutInstruction(
             provider = providerId,
             kind = KIND,
             testMode = properties.sandbox,
@@ -145,36 +158,24 @@ class PaddlePaymentProvider(
             orderName = order.orderName,
             amount = order.amount,
             clientKey = properties.clientToken,
-            attributes = mapOf("environment" to properties.environment.trim().lowercase(), "priceId" to price.orEmpty(), "customData" to mapper.writeValueAsString(custom)),
+            attributes = mapOf("environment" to properties.environment.trim().lowercase(), "transactionId" to order.providerTransactionId.orEmpty()),
         )
-    }
 
     override fun subscriptionSetup(request: HostedSubscriptionRequest): BillingSetup? {
-        val price = properties.prices[request.planCode]?.takeIf { it.isNotBlank() } ?: return null
+        val transactionId = request.transactionId ?: return null
         if (!canOpenCheckout()) return null
-        val custom = mapOf(PushedEvents.SUBSCRIPTION_KEY to request.subscriptionId, PushedEvents.ACCOUNT_KEY to request.accountId)
         return BillingSetup(
             provider = providerId,
             kind = KIND,
             testMode = properties.sandbox,
             clientKey = properties.clientToken,
             customerKey = request.customerKey,
-            attributes = mapOf("environment" to properties.environment.trim().lowercase(), "priceId" to price, "customData" to mapper.writeValueAsString(custom)),
+            attributes = mapOf("environment" to properties.environment.trim().lowercase(), "transactionId" to transactionId),
         )
     }
 
+    /** 거절은 그대로 던진다(이미 해지된 구독의 응답 모양은 샌드박스에서 잰 뒤 다룬다). */
     override fun cancel(providerSubscriptionId: String, atPeriodEnd: Boolean) {
-        try {
-            postCancel(providerSubscriptionId, atPeriodEnd)
-        } catch (e: ExternalHttpStatusException) {
-            // 이미 해지된 구독이라 거절하면 성공으로 읽는다(멱등) - 해지 작업이 헛재시도 끝에 죽지 않게
-            val status = e.upstreamStatus
-            if (status != null && status in 400..499 && (status == 404 || status == 409 || e.upstreamBody.contains("cancel", ignoreCase = true))) return
-            throw e
-        }
-    }
-
-    private fun postCancel(providerSubscriptionId: String, atPeriodEnd: Boolean) {
         requireNotNull(
             httpClient.post(
                 clientName = properties.clientName,

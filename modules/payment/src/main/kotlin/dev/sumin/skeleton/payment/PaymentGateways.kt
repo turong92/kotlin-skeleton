@@ -185,6 +185,8 @@ data class CheckoutOrder(
     /** 결제사가 가격을 직접 아는 결제사(Paddle)가 가격을 고르는 열쇠. */
     val itemRef: String? = null,
     val accountId: String? = null,
+    /** 서버가 결제사에 미리 만든 거래 id(거래를 먼저 만드는 결제사) - 결제창은 이것만 연다. */
+    val providerTransactionId: String? = null,
 )
 
 /** `checkout` 응답의 결제사 몫. 프론트가 [kind] 로 갈라 결제창을 연다. 공개해도 되는 값만 담는다. */

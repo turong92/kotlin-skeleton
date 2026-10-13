@@ -48,6 +48,7 @@ internal class PaymentSubscriptionRows(private val dialect: SqlDialect) {
         dedupeKey = rs.getString("dedupe_key"),
         providerSubscriptionId = rs.getString("provider_subscription_id"),
         providerSyncedAt = dialect.readInstant(rs, "provider_synced_at"),
+        firstTransactionId = rs.getString("first_transaction_id"),
     )
 
     fun params(s: PaymentSubscription): MapSqlParameterSource = MapSqlParameterSource()
@@ -82,13 +83,14 @@ internal class PaymentSubscriptionRows(private val dialect: SqlDialect) {
         .addValue("dedupe_key", s.dedupeKey)
         .addValue("provider_subscription_id", s.providerSubscriptionId)
         .addValue("provider_synced_at", dialect.instantParam(s.providerSyncedAt))
+        .addValue("first_transaction_id", s.firstTransactionId)
 
     companion object {
         val COLUMNS = listOf(
             "id", "account_id", "provider", "provider_mode", "status", "plan_code", "currency", "amount", "period", "anchor_at", "period_seq", "current_period_start",
             "current_period_end", "charge_order_id", "attempt", "customer_key", "billing_token", "card_issuer", "card_last4", "active_key", "pending_plan_code",
             "pending_amount", "end_reason", "ended_at", "account_erased_at", "created_at", "updated_at", "country", "dedupe_key",
-            "provider_subscription_id", "provider_synced_at",
+            "provider_subscription_id", "provider_synced_at", "first_transaction_id",
         )
     }
 }

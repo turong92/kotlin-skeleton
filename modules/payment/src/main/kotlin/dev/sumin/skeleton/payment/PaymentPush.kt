@@ -9,12 +9,6 @@ import java.time.Instant
 interface PaymentPushGateway : PaymentWebhookGateway {
     /** 저장된 원문을 결제사 중립의 사건으로 읽는다. 장부가 다루지 않는 사건이면 null(줄은 `IGNORED`). 읽을 수 없는 원문은 던진다. */
     fun interpret(payload: String): PushedPaymentEvent?
-
-    /**
-     * 이 상품(단건 `itemRef`) · 플랜 코드가 결제사에서 팔리는 가격 id — **웹훅의 거래가 이 가격이어야 지급한다**(결제창 값은 브라우저를 거치므로 싼 가격으로 비싼 것을 사지 못하게).
-     * 설정에 없으면 null(그 상품은 이 결제사로 지급하지 않는다).
-     */
-    fun priceIdOf(itemRef: String): String?
 }
 
 object PushedEvents {
@@ -32,9 +26,6 @@ sealed interface PushedPaymentEvent {
     val occurredAt: Instant
 }
 
-/** 거래의 품목 한 줄 — 결제사의 가격 id 와 수량. */
-data class PushedItem(val priceId: String, val quantity: Int)
-
 /** 결제 한 건이 끝났다. 금액 · 통화는 결제사가 말한 그대로다(여러 통화). [ourOrderId] 가 있으면 단건 주문, 없으면 구독 결제다. */
 data class PushedPayment(
     override val eventId: String,
@@ -51,8 +42,6 @@ data class PushedPayment(
     val card: PaymentCard? = null,
     val periodStart: Instant? = null,
     val periodEnd: Instant? = null,
-    /** 거래의 품목 — 비어 있으면(읽지 못했다) 어떤 상품인지 모르는 것이라 지급하지 않는다. */
-    val items: List<PushedItem> = emptyList(),
 ) : PushedPaymentEvent
 
 enum class PushedSubscriptionStatus { ACTIVE, PAST_DUE, CANCELING, ENDED }
@@ -84,4 +73,18 @@ data class HostedSubscriptionRequest(
     val subscriptionId: String,
     val customerKey: String,
     val country: String?,
+    /** 서버가 결제사에 미리 만든 첫 결제 거래 id - 결제창은 이것만 연다(가격 · 사용자 값을 브라우저가 넘기지 않는다). */
+    val transactionId: String? = null,
 )
+
+/**
+ * 서버가 결제사에 **거래를 먼저 만든다**(품목 = 서버가 정한 가격 · 수량, `custom_data` = 우리 줄 id). 결제창은 거래 id 만 열고, 웹훅은 우리 줄에 저장된 거래 id 로 맞춘다 -
+ * 브라우저가 가격이나 어느 줄인지를 정하지 못한다. 만들지 못하면 던진다(주문 · 구독 시작도 실패하고 줄은 남지 않는다).
+ */
+interface PaymentTransactionGateway : PaymentGateway {
+    /** @return 결제사의 거래 id */
+    fun createTransaction(request: TransactionRequest): String
+}
+
+/** [itemRef] 는 단건 상품 코드 또는 구독 플랜 코드 - 결제사 가격은 결제사 모듈의 설정이 정한다. */
+data class TransactionRequest(val itemRef: String, val quantity: Int, val customData: Map<String, String>)

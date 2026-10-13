@@ -99,6 +99,8 @@ data class PaymentSubscription(
     val providerSubscriptionId: String? = null,
     /** 마지막으로 반영한 구독 웹훅의 발생 시각 — 이보다 이른 사건은 낡았다(순서가 뒤바뀌어 도착해도 가장 새로운 상태가 남는다). */
     val providerSyncedAt: Instant? = null,
+    /** 서버가 결제사에 미리 만든 첫 결제 거래 id(Paddle) - 웹훅의 첫 결제는 이 id 로 이 줄을 찾는다(결제사 + 이 id 유니크). */
+    val firstTransactionId: String? = null,
 ) {
     /** 결제사가 갱신을 한다 — 우리 갱신 · 중도 해지 · 플랜 변경 길은 이 구독에 열리지 않는다. */
     val isProviderManaged: Boolean get() = providerSubscriptionId != null

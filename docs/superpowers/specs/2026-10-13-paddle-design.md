@@ -16,9 +16,15 @@
 | 환불 | 우리가 요청 → 토스 | 우리가 요청(adjustment) → **Paddle 이 검토 후 처리**, 결과는 웹훅 |
 | 나라 | 우리 화면에서 받음 | Paddle 결제창이 받음, 웹훅으로 옴 |
 
+## 구조 (리뷰 뒤 확정 — 브라우저가 넘기는 값을 믿지 않는다)
+- **서버가 Paddle 거래를 먼저 만든다.** 단건 주문 생성 · 구독 시작(`provider=paddle`) 때 서버가 `POST /transactions` 로 거래를 만든다(품목 = 서버가 정한 price id · 수량, `custom_data` = 우리 계정 id · 주문/구독 줄 id). 받은 `txn_…` 는 주문의 결제 키(`provider_payment_id`) · 구독의 첫 거래 id(`first_transaction_id`)에 저장하고, 화면에는 **거래 id 만** 준다. 프론트는 `Paddle.Checkout.open({ transactionId })` — 가격 id · customData 를 브라우저가 넘기지 않는다.
+- **거래 만들기는 우리 쪽에서 멱등**: 줄을 넣는 트랜잭션 안에서 거래를 만든다(같은 요청 키 `dedupe_key` 의 동시 요청은 유니크에서 기다렸다가 같은 줄을 돌려받는다 → 거래 하나). 만들기가 실패하면 되돌려져 줄이 남지 않는다. 응답을 잃어 id 를 못 저장해도 다음 시도가 새로 만든다 — Paddle 에 결제 안 된 빈 거래가 남는 것은 수용. Paddle API 에 멱등 키 헤더는 없다(공식 문서에서 근거를 못 찾음).
+- **웹훅은 서명된 식별자로만 맞춘다.** `transaction.completed` 는 우리 줄에 저장된 거래 id 로 찾는다(주문 = 결제 키, 구독 첫 결제 = 첫 거래 id; custom_data 는 교차 확인용). 첫 구독 결제가 PENDING 줄을 ACTIVE 로 올리고 Paddle 구독 id 를 연결한다. 갱신 · 구독 사건은 **연결된 Paddle 구독 id** 와 같을 때만 반영한다. 우리 거래도 우리 구독도 아닌 사건은 반영하지 않는다.
+- 구독 사건은 PENDING 줄을 올리지 않는다(연결 전에 온 사건은 반영하지 않고, 이후 사건이 맞춘다).
+
 ## 1차(최소 버전) — 끝에서 끝까지 한 번 도는 것
-1. **`payment-paddle` 모듈**: 설정(API 키·클라이언트 토큰·웹훅 비밀값·환경 sandbox/live), Paddle API 호출(구독 조회·해지), 웹훅 서명 검증(`Paddle-Signature`, HMAC).
-2. **구독 시작**: 프론트가 Paddle.js 로 결제창을 연다(price id + `customData` 에 우리 계정 id·우리 구독 줄 id). 결제가 끝나면 Paddle 이 웹훅 → 우리 구독 줄을 `ACTIVE` 로.
+1. **`payment-paddle` 모듈**: 설정(API 키(거래 쓰기 + 구독 쓰기 권한)·클라이언트 토큰·웹훅 비밀값·환경 sandbox/live), Paddle API 호출(거래 만들기·구독 해지), 웹훅 서명 검증(`Paddle-Signature`, HMAC).
+2. **구독 시작**: 서버가 거래를 만들고 프론트가 그 거래 id 로 Paddle.js 결제창을 연다. 결제가 끝나면 Paddle 이 웹훅 → 거래 id 가 걸린 우리 구독 줄을 `ACTIVE` 로.
 3. **웹훅 → 장부**: `transaction.completed`(결제 = 주문 한 줄 PAID, 금액은 웹훅 값), `subscription.created/updated/canceled/past_due`(구독 상태 미러링). 기존 웹훅 수신함(중복 제거·재처리)을 그대로 쓴다.
 4. **우리 갱신 작업은 Paddle 구독을 건너뛴다** — 갱신은 Paddle 이 한다(이중 과금 방지의 핵심).
 5. **해지**: 「기간 끝에 해지」 → Paddle API `cancel(effective_from = next_billing_period)`. 결과는 웹훅.

@@ -1,7 +1,7 @@
 # payment-paddle
 
 Paddle Billing(v2 API)을 `payment` 의 제공자로 구현한다. Paddle 이 판매자(해외 세금 대행)이고, 결제창은 프론트의 Paddle.js, 구독 갱신도 Paddle 이 한다.
-서버는 **서명된 웹훅**(`Paddle-Signature` = `ts=…;h1=…`, HMAC-SHA256(`ts:원문`), 시각 허용 오차 밖이면 거절)으로 결과를 받아 장부에 옮기고, Paddle API 는 구독 해지에만 부른다.
+서버가 먼저 Paddle 거래를 만들고(`POST /transactions`, 가격은 설정 `prices`) 결제창은 그 거래 id 만 연다. 서버는 **서명된 웹훅**(`Paddle-Signature` = `ts=…;h1=…`, HMAC-SHA256(`ts:원문`), 시각 허용 오차 밖이면 거절)으로 결과를 받아 장부에 옮기고, Paddle API 는 거래 만들기와 구독 해지에만 부른다.
 웹훅 주소는 `/api/v1/payments/webhooks/paddle`. 금액 · 통화는 웹훅 값 그대로 기록한다(여러 통화).
 
 | 항목 | 내용 |

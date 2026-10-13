@@ -157,6 +157,9 @@ class InMemoryPaymentLedgerStore : PaymentLedgerStore {
     override fun findSubscriptionByProviderId(provider: String, providerSubscriptionId: String): PaymentSubscription? =
         synchronized(commitMutex) { committedSubscriptions.values.firstOrNull { it.provider == provider && it.providerSubscriptionId == providerSubscriptionId } }
 
+    override fun findSubscriptionByFirstTransaction(provider: String, transactionId: String): PaymentSubscription? =
+        synchronized(commitMutex) { committedSubscriptions.values.firstOrNull { it.provider == provider && it.firstTransactionId == transactionId } }
+
     override fun findLiveSubscription(accountId: String): PaymentSubscription? =
         synchronized(commitMutex) { committedSubscriptions.values.firstOrNull { it.activeKey == accountId } }
 

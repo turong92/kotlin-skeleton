@@ -50,9 +50,11 @@ class PaymentSubscriptions(
         val hosted = provider?.let(::hostedGateway)
         val gateway: PaymentGateway
         val setup: BillingSetup
+        val creator = hosted?.let { it as? PaymentTransactionGateway ?: throw PaymentUnavailableException() }
         if (hosted != null) {
             gateway = hosted
-            setup = hosted.subscriptionSetup(HostedSubscriptionRequest(plan.code, accountId, subscriptionId, customerKey, country?.uppercase())) ?: throw PaymentUnavailableException()
+            // 결제창 값은 거래 id 가 정해진 뒤에 낸다(아래 — 줄을 넣는 트랜잭션 안에서 거래를 만든다). 설정이 모자라면 여기서 미리 거절하려고 거래 id 없이 한 번 물어 둔다
+            setup = hosted.subscriptionSetup(HostedSubscriptionRequest(plan.code, accountId, subscriptionId, customerKey, country?.uppercase(), "pending")) ?: throw PaymentUnavailableException()
         } else {
             val billing = billingGateway(plan.amount, provider) ?: throw PaymentUnavailableException()
             gateway = billing
@@ -90,11 +92,34 @@ class PaymentSubscriptions(
             country = country?.uppercase() ?: properties.subscription.cancel.defaultCountry,
             dedupeKey = dedupeKey,
         )
-        if (!store.inTransaction { it.insertSubscriptionIfAbsent(subscription) }) {
+        // 거래를 만드는 결제사: **줄을 넣은 트랜잭션 안에서** 거래를 만든다. 같은 요청 키로 동시에 들어온 쪽은 이 줄의 유니크(dedupe_key)에서 앞선 트랜잭션이 끝나길 기다렸다가 `false` 를 받아
+        // 그 줄을 돌려받는다 - 거래는 하나만 만들어지고, 거래 만들기가 실패하면 트랜잭션이 되돌려져 줄이 남지 않는다(응답을 잃어 거래 id 를 못 저장해도 같다 - 다음 시도가 새로 만든다.
+        // 결제사에 결제 안 된 빈 거래가 남을 수는 있다). Paddle API 에는 멱등 키 헤더가 없다.
+        var started: PaymentSubscription = subscription
+        val inserted = store.inTransaction { tx ->
+            if (!tx.insertSubscriptionIfAbsent(subscription)) return@inTransaction false
+            if (creator != null) {
+                val transactionId = try {
+                    creator.createTransaction(TransactionRequest(plan.code, 1, mapOf(PushedEvents.SUBSCRIPTION_KEY to subscriptionId, PushedEvents.ACCOUNT_KEY to accountId)))
+                } catch (e: Exception) {
+                    log.warn("the provider could not create a transaction for a subscription exception={}", e.javaClass.simpleName)
+                    throw PaymentUnavailableException()
+                }
+                started = subscription.copy(firstTransactionId = transactionId)
+                tx.updateSubscription(started)
+            }
+            true
+        }
+        if (!inserted) {
             // 동시에 같은 키로 들어온 다른 요청이 먼저 넣었다 — 그 줄이 곧 답이다
             return replay(checkNotNull(store.findSubscriptionByDedupeKey(dedupeKey)) { "the subscription for this idempotency key disappeared" }, planCode)
         }
-        return StartedSubscription(subscription, setup, replayed = false)
+        val finalSetup = if (creator != null) {
+            checkNotNull(hosted).subscriptionSetup(HostedSubscriptionRequest(plan.code, accountId, subscriptionId, customerKey, country?.uppercase(), started.firstTransactionId)) ?: throw PaymentUnavailableException()
+        } else {
+            setup
+        }
+        return StartedSubscription(started, finalSetup, replayed = false)
     }
 
     /**
@@ -210,7 +235,7 @@ class PaymentSubscriptions(
         val setup = if (existing.status == SubscriptionStatus.PENDING && existing.chargeOrderId == null) {
             val hosted = hostedGateway(existing.provider)
             if (hosted != null) {
-                hosted.subscriptionSetup(HostedSubscriptionRequest(existing.planCode, existing.accountId, existing.id, checkNotNull(existing.customerKey), existing.country)) ?: throw PaymentUnavailableException()
+                hosted.subscriptionSetup(HostedSubscriptionRequest(existing.planCode, existing.accountId, existing.id, checkNotNull(existing.customerKey), existing.country, existing.firstTransactionId)) ?: throw PaymentUnavailableException()
             } else {
                 val gateway = try {
                     router.gateway(existing.provider, PaymentBillingGateway::class)

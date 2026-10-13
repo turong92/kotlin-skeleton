@@ -56,6 +56,8 @@ class PaymentOrders(
         if (quote.amount.amount <= 0) throw PaymentItemNotPurchasableException()
         check(quote.orderName.isNotBlank()) { "The payment catalog returned a blank order name" }
         val checkout = findOpenableCheckout(command.provider, quote.amount, command.country, warn = true) ?: throw PaymentUnavailableException()
+        val orderId = ids.newId(PaymentOrderIds.ORDER_PREFIX)
+        val creator = checkout as? PaymentTransactionGateway
 
         val now = writer.now()
         val order = PaymentOrder(
@@ -91,8 +93,22 @@ class PaymentOrders(
             createdAt = now,
             updatedAt = now,
         )
+        // 거래를 먼저 만드는 결제사(Paddle): **주문을 넣은 트랜잭션 안에서** 서버가 정한 가격 · 수량 · 우리 줄 id 로 거래를 만들어 그 id 를 주문의 결제 키 자리에 박는다.
+        // 같은 요청 키로 동시에 들어온 쪽은 dedupe_key 유니크에서 앞선 트랜잭션을 기다렸다가 `false` 를 받아 그 주문을 돌려받는다 - 거래는 하나만 만들어지고, 만들기가 실패하면
+        // 되돌려져 주문이 남지 않는다(응답을 잃어 id 를 못 저장해도 같다 - 다음 시도가 새로 만든다. 결제 안 된 빈 거래가 남을 수는 있다). Paddle API 에는 멱등 키 헤더가 없다.
+        var created = order
         val inserted = store.inTransaction { tx ->
             if (!tx.insertOrderIfAbsent(order)) return@inTransaction false
+            if (creator != null) {
+                val transactionId = try {
+                    creator.createTransaction(TransactionRequest(command.itemRef, command.quantity, mapOf(PushedEvents.ORDER_KEY to order.id, PushedEvents.ACCOUNT_KEY to command.accountId)))
+                } catch (e: Exception) {
+                    log.warn("the provider could not create a transaction for an order exception={}", e.javaClass.simpleName)
+                    throw PaymentUnavailableException()
+                }
+                created = order.copy(providerPaymentId = transactionId)
+                tx.updateOrder(created)
+            }
             tx.appendEvent(writer.event(order.id, PaymentEventType.ORDER_CREATED, PaymentActor.USER, command.accountId, to = order.status))
             tasks.enqueue(PaymentTask(PaymentTaskTypes.ORDER_EXPIRE, order.id, runAt = order.checkoutExpiresAt, maxAttempts = properties.reconcile.maxAttempts))
             true
@@ -102,7 +118,7 @@ class PaymentOrders(
             val winner = checkNotNull(store.findOrderByDedupeKey(dedupeKey)) { "the order for this idempotency key disappeared" }
             return replay(winner, command)
         }
-        return CreatedOrder(order, checkout.checkout(CheckoutOrder(order.id, order.orderName, order.amount, order.itemRef, order.accountId)), replayed = false)
+        return CreatedOrder(created, checkout.checkout(CheckoutOrder(created.id, created.orderName, created.amount, created.itemRef, created.accountId, created.providerPaymentId)), replayed = false)
     }
 
     /**
@@ -308,7 +324,7 @@ class PaymentOrders(
                 log.warn("the payment provider of a replayed order cannot hand out its checkout values: {}", gateway.providerId)
                 throw PaymentUnavailableException()
             }
-            gateway.checkout(CheckoutOrder(existing.id, existing.orderName, existing.amount, existing.itemRef, existing.accountId))
+            gateway.checkout(CheckoutOrder(existing.id, existing.orderName, existing.amount, existing.itemRef, existing.accountId, existing.providerPaymentId))
         } else {
             null
         }
