@@ -44,6 +44,11 @@ data class PaymentProperties(
          * 요청의 헤더나 값으로는 나라를 덮어쓰지 못한다.
          */
         val devCountry: String? = null,
+        /**
+         * **로컬 개발 전용** - 켜면 요청의 `X-Dev-Country: US` 헤더가 **그 요청의** 나라가 된다(기동을 다시 하지 않고 토스 ↔ Paddle 을 오간다). 꺼져 있으면 헤더는 완전히 무시된다.
+         * 보호 환경(stage · prod)에서 켜져 있으면 기동 실패(`PaymentCountryDeployGuard`). `GET /config` 가 켜져 있음을 알린다.
+         */
+        val devCountrySwitch: Boolean = false,
     ) {
         init {
             countryProviders.keys.forEach { require(COUNTRY.matches(it)) { "skeleton.payment.routing.country-providers keys must be ISO-3166 alpha-2 codes (two capital letters): $it" } }

@@ -162,6 +162,8 @@ data class PaymentConfigResponse(
     val provider: String? = null,
     /** 그 나라의 해지·환불 정책 요약. */
     val cancelPolicy: CancelPolicyResponse? = null,
+    /** 개발용 나라 덮어쓰기가 켜져 있다(로컬만) - 켜져 있으면 요청의 `X-Dev-Country` 가 `country` 를 정한다. */
+    val devCountrySwitch: Boolean = false,
 )
 
 /** [key] 는 정책 이름(`korea` · `period-end-only` …) - 화면이 요약 문구를 고른다. 숫자는 한국 정책일 때만(설정값). */

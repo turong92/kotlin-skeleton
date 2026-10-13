@@ -19,9 +19,9 @@ class PaymentCountryRoutingTest {
     private val cloudflare = ClientIps(WebProperties.ClientIp(mode = ClientIpMode.CLOUDFLARE, trustedProxies = listOf("127.0.0.1/32")))
     private val direct = ClientIps(WebProperties.ClientIp(mode = ClientIpMode.DIRECT))
 
-    private fun properties(devCountry: String? = null, defaultCountry: String? = "KR") = PaymentProperties(
+    private fun properties(devCountry: String? = null, defaultCountry: String? = "KR", devSwitch: Boolean = false) = PaymentProperties(
         defaultProvider = "paddle",
-        routing = PaymentProperties.Routing(countryProviders = mapOf("KR" to "toss"), devCountry = devCountry),
+        routing = PaymentProperties.Routing(countryProviders = mapOf("KR" to "toss"), devCountry = devCountry, devCountrySwitch = devSwitch),
         subscription = PaymentProperties.Subscription(
             cancel = PaymentProperties.Subscription.Cancel(defaultCountry = defaultCountry, policies = mapOf("KR" to "korea"), korea = PaymentProperties.Subscription.Cancel.Korea(penaltyPercent = 10)),
         ),
@@ -30,9 +30,10 @@ class PaymentCountryRoutingTest {
     private fun routing(ips: ClientIps, properties: PaymentProperties = properties(), openable: List<String> = listOf("paddle", "toss")) =
         PaymentCountryRouting(properties, ips) { openable }
 
-    private fun request(country: String?) = MockHttpServletRequest().apply {
+    private fun request(country: String?, dev: String? = null) = MockHttpServletRequest().apply {
         remoteAddr = "127.0.0.1"
         country?.let { addHeader("CF-IPCountry", it) }
+        dev?.let { addHeader("X-Dev-Country", it) }
     }
 
     @Test
@@ -77,5 +78,25 @@ class PaymentCountryRoutingTest {
         val abroad = routing(cloudflare, openable = listOf("paddle")).of(request("US"))
         assertEquals("paddle", abroad.provider)
         assertFalse(abroad.providerClosed)
+    }
+
+    @Test
+    fun `the dev header is ignored completely while the switch is off`() {
+        val route = routing(cloudflare).of(request("US", dev = "KR"))
+        assertEquals("US", route.country)
+        assertFalse(route.devSwitch)
+        assertEquals("KR", routing(direct).of(request(null, dev = "US")).country) // default country, not the header
+    }
+
+    @Test
+    fun `with the switch on the dev header decides the country of that request - a bad value is no override`() {
+        val on = routing(cloudflare, properties(devSwitch = true))
+        val kr = on.of(request("US", dev = "kr"))
+        assertEquals("KR", kr.country)
+        assertEquals("toss", kr.provider)
+        assertTrue(kr.devSwitch)
+        assertEquals("paddle", on.of(request("KR", dev = "JP")).provider)
+        assertEquals("US", on.of(request("US", dev = "Korea")).country)
+        assertEquals("US", on.of(request("US")).country)
     }
 }

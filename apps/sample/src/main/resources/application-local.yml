@@ -37,6 +37,8 @@ skeleton:
     subscription:
       period: PT3M                       # 로컬: 갱신 · 재시도 · 종료를 몇 분 안에 눌러 본다 (기본 P1M)
   payment:
+    routing:
+      dev-country-switch: true           # 로컬 전용: 요청의 X-Dev-Country 헤더로 나라를 오간다(견본 화면의 「개발용 나라」 고르기) - 보호 환경에서 켜면 기동 실패
     # 로컬 나라: client-ip 가 direct 라 CF-IPCountry 는 읽지 않는다 → 기본 나라 KR(토스 + 한국 정책). 다른 나라 화면(Paddle)은 SKELETON_PAYMENT_ROUTING_DEV_COUNTRY=US (아래 routing.dev-country 의 환경변수 이름). Cloudflare 터널(skel.ovation.fans) 뒤라면 SKELETON_WEB_CLIENT_IP_MODE=cloudflare + SKELETON_WEB_CLIENT_IP_TRUSTED_PROXIES=127.0.0.1/32,::1/128 로 실제 접속 나라를 쓴다.
     subscription:
       enabled: ${skeleton.payment-toss.enabled:${skeleton.payment-paddle.enabled:false}}   # 토스나 Paddle 을 켰을 때만 구독도 켠다 — 키 없이 뜨는 로컬은 예전처럼 결제 화면이 「지금은 결제할 수 없어요」다

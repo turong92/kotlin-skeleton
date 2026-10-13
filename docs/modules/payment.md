@@ -178,6 +178,7 @@
 |---|---|---|
 | `default-provider` | — | 경로가 안 맞을 때 쓸 결제사 id (결제사가 하나뿐이면 그것) |
 | `routing.country-providers` | — | 접속 나라(ISO-3166 두 글자 대문자) → 결제사 id. 예 `KR: toss`. 지도에 있는 나라는 **그 결제사만**(못 열면 `503 UNAVAILABLE` — 다른 결제사로 넘기지 않는다). 지도에 없는 나라는 `default-provider`, 열려 있지 않으면 열린 결제사가 하나뿐일 때 그것. 화면이 보낸 `provider` 는 읽지 않는다 |
+| `routing.dev-country-switch` | `false` | **로컬 개발 전용** — 켜면 요청의 `X-Dev-Country: US` 헤더가 그 요청의 나라가 된다(재기동 없이 토스 ↔ Paddle). 꺼져 있으면 헤더는 완전히 무시된다. 보호 환경에서 켜져 있으면 기동 실패. `GET /config` 의 `devCountrySwitch` 로 알린다 |
 | `routing.dev-country` | — | **로컬 개발 전용** — 정하면 모든 요청이 이 나라다(접속 나라 무시). 보호 환경(stage · prod)에서 정해져 있으면 기동 실패 |
 | `providers.<id>.{enabled, currencies, countries}` | — | 결제사 id 별로 라우팅에서 빼거나 통화 · 국가를 좁힌다 |
 | `checkout-ttl` | `30m` | 만든 주문으로 결제할 수 있는 시간. 지나면 만료 작업이 결제사에 묻고 닫는다. 양수 |

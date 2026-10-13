@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `payment`: 나라 → 결제사는 서버가 정한다(`skeleton.payment.routing.country-providers`, 지도에 없으면 `default-provider`, 열린 결제사가 하나뿐이면 그것). `GET /config` 가 `country` · `provider` · `cancelPolicy {key, penaltyPercent?, withdrawalDays?}` 를 준다. `POST /orders` · `POST /subscriptions` 는 **본문의 `provider` · `country` 를 읽지 않는다**(서버가 넣는다); 나라 지도가 정한 결제사가 못 열리면 다른 결제사로 넘기지 않고 `503 UNAVAILABLE`, 같은 키의 재전송은 만든 때의 줄 그대로. 구매자 주소 KR 표시는 첫 결제에서만. 나라를 못 정하면 `subscription.cancel.default-country`.
 - 새 열 `payment_orders.country`(`V20261013180000`, 두 방언 + lock) — 서버가 정한 나라. 구독 과금 주문은 구독의 나라를 따른다.
 - **로컬 스위치** `skeleton.payment.routing.dev-country`(환경변수 `<P>_PAYMENT_ROUTING_DEV_COUNTRY`): 모든 요청을 한 나라로 고정. 요청 값으로는 못 덮어쓰고, 보호 환경(stage · prod)에서 정해져 있으면 기동 실패(`PaymentCountryDeployGuard`).
+- **요청별 개발용 나라**: `skeleton.payment.routing.dev-country-switch=true`(견본은 `application-local.yml` 만)일 때만 요청의 `X-Dev-Country` 가 그 요청의 나라를 정한다(재기동 없이 토스 ↔ Paddle). 꺼져 있으면 헤더는 무시, 보호 환경에서 켜져 있으면 기동 실패(`PaymentCountryDeployGuard`), `GET /config` 가 `devCountrySwitch` 로 알린다.
 - Paddle 결제의 구매자 주소 나라(결제 본문에는 `address_id` 뿐 → `GET /customers/{id}/addresses/{id}` 의 `country_code`, 락 밖에서 묻고 실패해도 결제는 반영)가 `KR` 이면 주문에 운영자 「확인 필요」 `BUYER_COUNTRY_KR`. 막지 않는다.
 
 ### 행 id 를 시간순으로 (2026-10-12) — 전체 적용
