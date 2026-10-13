@@ -146,8 +146,13 @@ data class CheckoutResponse(
 
 data class CreateOrderResponse(val order: OrderResponse, val checkout: CheckoutResponse?)
 
-/** [providers] 는 결제창을 열 수 있는 결제사 id — 화면이 나라 · 언어로 하나를 골라 주문 · 구독을 만들 때 `provider` 로 보낸다. */
-data class PaymentConfigResponse(val available: Boolean, val testMode: Boolean, val refundRequestsEnabled: Boolean, val providers: List<String> = emptyList())
+/**
+ * [providers] 는 결제창을 열 수 있는 결제사 id — 화면이 나라 · 언어로 하나를 골라 주문 · 구독을 만들 때 `provider` 로 보낸다.
+ * [pricePreviews] 는 결제사 id → 가격 미리보기 값(구매자 통화로 환산된 실제 결제 금액을 보이려는 결제사만).
+ */
+data class PaymentConfigResponse(val available: Boolean, val testMode: Boolean, val refundRequestsEnabled: Boolean, val providers: List<String> = emptyList(), val pricePreviews: Map<String, PricePreviewResponse> = emptyMap())
+
+data class PricePreviewResponse(val clientToken: String, val environment: String, val prices: Map<String, String>)
 
 /**
  * 운영자 주문 — 사용자 응답([OrderResponse])의 칸에 더해 계정 · 결제사 · 결제사 결제 번호 · 검토 이유(파생 포함)를 싣는다.

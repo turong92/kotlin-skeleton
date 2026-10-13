@@ -23,6 +23,10 @@ class PaymentProviderRouter(
     fun providerIds(capability: KClass<out PaymentGateway>): List<String> =
         providersById.filterValues { capability.isInstance(it) && it.route().enabled }.keys.sorted()
 
+    /** [capability] 를 가진 켜진 게이트웨이 자체(id 순). */
+    fun <T : PaymentGateway> gateways(capability: KClass<T>): List<T> =
+        providersById.toSortedMap().values.filter { it.route().enabled }.mapNotNull { capability.safeCast(it) }
+
     fun resolve(
         provider: String?,
         amount: PaymentAmount?,

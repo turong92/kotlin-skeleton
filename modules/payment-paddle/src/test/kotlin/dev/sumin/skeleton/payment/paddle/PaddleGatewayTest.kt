@@ -34,6 +34,15 @@ class PaddleGatewayTest {
     }
 
     @Test
+    fun `the price preview setup carries the public client token, the environment and only the configured price ids`() {
+        val setup = gateway(props = properties(prices = mapOf("basic" to "pri_basic", "pro" to " "))).pricePreview()!!
+        assertThat(setup.clientToken).isEqualTo("test_clienttoken")
+        assertThat(setup.environment).isEqualTo("sandbox")
+        assertThat(setup.prices).isEqualTo(mapOf("basic" to "pri_basic"))
+        assertThat(gateway(props = properties().copy(clientToken = "")).pricePreview()).isNull()
+    }
+
+    @Test
     fun `the checkout carries only the transaction id - no price and no custom data from the browser`() {
         val gateway = gateway()
         assertThat(gateway.mode).isEqualTo(PaymentMode.TEST)

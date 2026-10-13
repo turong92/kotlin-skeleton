@@ -11,6 +11,8 @@ import dev.sumin.skeleton.payment.PaymentCard
 import dev.sumin.skeleton.payment.PaymentCheckoutGateway
 import dev.sumin.skeleton.payment.PaymentHostedSubscriptionGateway
 import dev.sumin.skeleton.payment.PaymentMode
+import dev.sumin.skeleton.payment.PaymentPricePreviewGateway
+import dev.sumin.skeleton.payment.PricePreviewSetup
 import dev.sumin.skeleton.payment.PaymentPushGateway
 import dev.sumin.skeleton.payment.PaymentTransactionGateway
 import dev.sumin.skeleton.payment.TransactionRequest
@@ -37,7 +39,7 @@ class PaddlePaymentProvider(
     private val httpClient: ExternalHttpClient,
     private val properties: PaddleProperties,
     private val time: TimeProvider = TimeProvider.systemUtc(),
-) : PaymentPushGateway, PaymentCheckoutGateway, PaymentHostedSubscriptionGateway, PaymentTransactionGateway {
+) : PaymentPushGateway, PaymentCheckoutGateway, PaymentHostedSubscriptionGateway, PaymentTransactionGateway, PaymentPricePreviewGateway {
     override val providerId: String = properties.providerId
     override val supportedCurrencies: Set<String> = properties.supportedCurrencies
     override val supportedCountries: Set<String> = properties.supportedCountries
@@ -107,6 +109,12 @@ class PaddlePaymentProvider(
                 PushedItem(priceId, item["quantity"]?.asInt(1) ?: 1)
             },
         )
+    }
+
+    override fun pricePreview(): PricePreviewSetup? {
+        if (properties.clientToken.isBlank()) return null
+        val prices = properties.prices.filterValues { it.isNotBlank() }
+        return PricePreviewSetup(properties.clientToken, properties.environment.trim().lowercase(), prices)
     }
 
     override fun priceIdOf(itemRef: String): String? = properties.prices[itemRef]?.takeIf { it.isNotBlank() }

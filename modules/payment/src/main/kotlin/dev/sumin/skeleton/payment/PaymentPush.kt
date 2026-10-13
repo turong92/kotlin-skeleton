@@ -98,3 +98,14 @@ interface PaymentTransactionGateway : PaymentGateway {
 
 /** [itemRef] 는 단건 상품 코드 또는 구독 플랜 코드 - 결제사 가격은 결제사 모듈의 설정이 정한다. */
 data class TransactionRequest(val itemRef: String, val quantity: Int, val customData: Map<String, String>)
+
+/**
+ * 결제사가 구매자 위치의 통화로 환산한 가격을 브라우저가 직접 물어볼 수 있게 하는 값(공개해도 되는 것만) - 화면이 우리 플랜 표의 금액 대신 **실제로 결제될 금액**을 보이게 한다.
+ * 설정이 모자라면 null.
+ */
+interface PaymentPricePreviewGateway : PaymentGateway {
+    fun pricePreview(): PricePreviewSetup?
+}
+
+/** [prices] 는 상품 코드 · 플랜 코드 → 결제사 가격 id (비밀이 아니다). */
+data class PricePreviewSetup(val clientToken: String, val environment: String, val prices: Map<String, String>)

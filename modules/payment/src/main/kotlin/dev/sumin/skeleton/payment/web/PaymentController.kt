@@ -9,6 +9,7 @@ import dev.sumin.skeleton.payment.PaymentAmount
 import dev.sumin.skeleton.payment.PaymentCheckoutGateway
 import dev.sumin.skeleton.payment.PaymentCatalog
 import dev.sumin.skeleton.payment.PaymentMode
+import dev.sumin.skeleton.payment.PaymentPricePreviewGateway
 import dev.sumin.skeleton.payment.PaymentOrderStatus
 import dev.sumin.skeleton.payment.PaymentOrders
 import dev.sumin.skeleton.payment.PaymentProperties
@@ -57,8 +58,13 @@ class PaymentController(
         val checkout = orders.openableCheckout(null, null)   // 주문 만들기와 같은 고르기 · 같은 판정(결제창 값을 낼 수 있는가)
         val available = catalog.getIfAvailable() != null && checkout != null
         val providers = if (catalog.getIfAvailable() == null) emptyList() else router.providerIds(PaymentCheckoutGateway::class).filter { orders.openableCheckout(null, null, it) != null }
-        return Response.ok(PaymentConfigResponse(available || providers.isNotEmpty(), (checkout ?: providers.firstOrNull()?.let { orders.openableCheckout(null, null, it) })?.mode == PaymentMode.TEST, properties.refund.requestsEnabled, providers))
+        return Response.ok(PaymentConfigResponse(available || providers.isNotEmpty(), (checkout ?: providers.firstOrNull()?.let { orders.openableCheckout(null, null, it) })?.mode == PaymentMode.TEST, properties.refund.requestsEnabled, providers, pricePreviews(providers)))
     }
+
+    private fun pricePreviews(providers: List<String>): Map<String, PricePreviewResponse> =
+        router.gateways(PaymentPricePreviewGateway::class).filter { it.providerId in providers }
+            .mapNotNull { gateway -> gateway.pricePreview()?.let { gateway.providerId to PricePreviewResponse(it.clientToken, it.environment, it.prices) } }
+            .toMap()
 
     @Operation(summary = "Confirm a payment returned from the checkout window", description = "200 PAID (also a resend with the same payment key) · 202 CONFIRMING (the provider has not answered — poll GET /orders/{id}) · 400 AMOUNT_MISMATCH before the provider is called · 402 DECLINED (data.providerCode, data.category).")
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = OrderResponse::class)

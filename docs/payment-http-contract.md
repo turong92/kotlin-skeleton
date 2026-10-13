@@ -91,7 +91,8 @@
 기준 경로 `/api/v1/payments`. 상태 코드 규칙의 요약은 §4.
 
 ### GET /config
-결제를 받을 수 있는가. `200 { value: { available, testMode, refundRequestsEnabled, providers } }`. `providers`: 결제창을 열 수 있는 켜진 결제사 id 목록(예 `["paddle","toss"]`) — 화면이 나라 · 언어로 하나를 골라 `POST /orders` · `POST /subscriptions` 의 `provider` 로 보낸다(결제사가 둘 이상이면 서버가 고르지 못한다).
+결제를 받을 수 있는가. `200 { value: { available, testMode, refundRequestsEnabled, providers, pricePreviews } }`. `providers`: 결제창을 열 수 있는 켜진 결제사 id 목록(예 `["paddle","toss"]`) — 화면이 나라 · 언어로 하나를 골라 `POST /orders` · `POST /subscriptions` 의 `provider` 로 보낸다(결제사가 둘 이상이면 서버가 고르지 못한다).
+`pricePreviews`: 결제사 id → `{ clientToken, environment, prices }` (Paddle 만 — 클라이언트 토큰과 환경은 결제창 값과 같고, `prices` 는 상품 · 플랜 코드 → 가격 id 로 비밀이 아니다). 화면이 Paddle.js 의 가격 미리보기로 **구매자 통화로 환산된 실제 결제 금액**을 보이는 데 쓴다 — 우리 플랜 표의 원화 금액은 Paddle 결제의 금액이 아니다. 없는 결제사는 키가 없다.
 `available`: `PaymentCatalog` 빈이 있고 결제창을 여는 결제사가 있고 **그 결제사가 지금 결제창 값을 낼 수 있다**(토스: 클라이언트 키가 비었거나 시크릿 키와 모드가 다르면 `false`). `testMode`: `available` 이면서 그 결제사가 테스트 키다. `refundRequestsEnabled`: `skeleton.payment.refund.requests-enabled`.
 
 ### POST /orders — 주문 만들기 (`PaymentCatalog` 빈이 있을 때만)

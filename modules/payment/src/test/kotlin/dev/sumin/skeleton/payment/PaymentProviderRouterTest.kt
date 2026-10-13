@@ -36,6 +36,16 @@ class PaymentProviderRouterTest {
     }
 
     @Test
+    fun `gateways lists the enabled gateways with a capability, in id order`() {
+        val adyen = FakePaymentProvider("adyen")
+        val router = router(
+            toss, lookupOnly, adyen, FakePaymentProvider("stripe"),
+            properties = PaymentProperties(providers = mapOf("stripe" to PaymentProperties.Provider(enabled = false))),
+        )
+        assertEquals(listOf<Any>(adyen, toss), router.gateways(PaymentProvider::class))
+    }
+
+    @Test
     fun `disabled providers are not selected`() {
         val router = router(
             toss,
