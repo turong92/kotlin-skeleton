@@ -20,14 +20,15 @@ scripts/native-test.sh                       # 시험용 조립(tools/native-che
 
 ## 실측 — JVM 과 네이티브 (같은 앱, 같은 조건)
 
-`tools/native-check`(스타터 + 결제 장부 + 구독 + 작업 큐), 리눅스 arm64 컨테이너, **CPU 1 · 메모리 512MB**, PostgreSQL 은 컨테이너 밖. 5회 중앙값.
+JVM 줄과 `apps/api` 줄은 스파이크 측정, `tools/native-check` 줄은 이 문서의 정식 힌트로 만든 이미지(5회 중앙값). 리눅스 arm64 컨테이너, **CPU 1 · 메모리 512MB**, PostgreSQL 은 컨테이너 밖. 5회 중앙값.
 맥(M3 Pro)에서 잰 값이라 Cloud Run(linux/x86_64)과 다를 수 있다 — 방향은 믿고 숫자는 배포 환경에서 다시 잰다.
 
 | | 기동(/health 200) | Spring "Started" | RSS 기동 직후 | RSS 요청 뒤 | 첫 로그인 |
 |---|---|---|---|---|---|
 | JVM 그대로 (docker, CPU 1) | 약 7.7s | 약 6.7s | — | — | 320~380ms |
 | JVM 다듬기 (AOT + CDS + SerialGC 등) | 약 3.3s | 약 2.7s | 224MB | 234MB | 237ms |
-| **네이티브** | **약 0.6s** | **약 0.36s** | **206MB** | **208MB** | **120ms** |
+| **네이티브 — 스타터 `apps/api`** (실측 스파이크) | **약 0.6s** | **약 0.36s** | **206MB** | **208MB** | **120ms** |
+| **네이티브 — `tools/native-check`** (결제 · 구독 · 작업 큐 포함, 새 DB 에 마이그레이션까지) | **약 0.85s** | **약 0.6s** | **216MB** | 핵심 흐름 전체를 돌린 뒤 250MB | — |
 
 (스타터 `apps/api` 로 맥에서 직접 재면 JVM 2.8s/419MB → 다듬기 1.1s/269MB. 다듬기 = `-Dspring.aot.enabled=true` + CDS 아카이브 + `-XX:+UseSerialGC -XX:TieredStopAtLevel=1 -Xmx256m` 등. 결과 · 명령 전체는 측정 보고서에 있다.)
 
