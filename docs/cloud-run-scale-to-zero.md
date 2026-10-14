@@ -38,7 +38,9 @@ skeleton:
 프로젝트 N개 모드([multi-project](multi-project.md))면 판마다 프로젝트를 모두 돈다. 응답은 `{ tasks:[{name,ok}], processed, rounds, timedOut, elapsedMillis }`. `timedOut:true` 면 한도로 멈춘 것이다(남은 일감은 다음 호출이 이어받는다).
 
 - **인증**: 공유 비밀값 헤더(상수 시간 비교). 틀리거나 없으면 401, 서버에 비밀값이 비어 있으면 404 이고 어느 쪽도 일감에 손대지 않는다. **보호 환경(stage · prod)에서 비밀값이 없거나 약하면(24자 미만 · 서로 다른 글자 8개 미만) 기동 실패**한다.
-  Cloud Run 을 `--no-allow-unauthenticated` 로 두고 Scheduler 가 서비스 계정 OIDC 로 부르게 하면 플랫폼이 한 겹 더 막는다 — 앱 비밀값과 겹쳐 써도 된다(둘 다 맞아야 닿는다).
+  Cloud Run 을 `--no-allow-unauthenticated` 로 두고 Scheduler 가 서비스 계정 OIDC 로 부르게 하면 플랫폼(IAM)이 한 겹 더 막는다 — 앱 비밀값과 겹쳐 써도 된다(둘 다 맞아야 닿는다).
+  OIDC 는 Google ID 토큰을 `Authorization: Bearer` 에 싣는데, **요청 구동 모드에서는 깨우기 경로의 Bearer 를 JWT 필터가 읽지 않는다**(`BearerIgnoredPaths`) — 이 경로의 인증은 `X-Wake-Secret` 하나이고 Bearer 는 무시된다(플랫폼이 이미 검증했다).
+  프로젝트 N개 모드에서 프로젝트 없는 경로(서비스 주소)에 오는 다른 Bearer 는 어느 프로젝트의 키로도 검증할 수 없어 **401**(인증 실패)이다 — 500 이 아니다.
 - **재시도 대기 중인 일감**(백오프)은 때가 안 되면 집지 않는다 — 다음 호출이 그때 집는다. 그래서 스케줄 간격이 곧 **일감 지연의 상한**이다.
 - 핸들러는 지금처럼 **멱등**이어야 한다(깨우기가 겹쳐 불려도 `SKIP LOCKED` 가 나눠 주지만, 시간 한도로 끊긴 호출 · 인스턴스 종료 뒤 재시도가 있다).
 - 새 주기 작업을 더하려면 `OnRequestTask` 빈을 등록한다 (`dev.sumin.skeleton.common.wake`). 이미 큐로 도는 작업은 필요 없다.

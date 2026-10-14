@@ -80,3 +80,11 @@ class PublicEndpointRegistry(
             )
     }
 }
+
+/**
+ * `Authorization: Bearer …` 를 **읽지 않는** 경로를 더하는 고리 — 그 경로가 자기 인증을 따로 하고, 밖의 호출자가 다른 종류의 Bearer(예: Cloud Scheduler OIDC 의 Google ID 토큰)를 싣는 경우.
+ * 이 경로에서는 JWT 필터가 헤더를 검증하지 않고 지나보낸다(로그인한 호출자로 보지도 않는다). 경로는 요청마다 읽는다. 작업 큐의 깨우기 주소(`wake.path`)가 요청 구동 모드에서 쓴다.
+ */
+fun interface BearerIgnoredPaths {
+    fun paths(): List<String>
+}

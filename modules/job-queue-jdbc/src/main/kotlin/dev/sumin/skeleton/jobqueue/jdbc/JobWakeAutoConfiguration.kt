@@ -4,6 +4,7 @@ import dev.sumin.skeleton.common.deploy.DeployContext
 import dev.sumin.skeleton.common.deploy.DeployGuard
 import dev.sumin.skeleton.common.project.ProjectUnscopedPaths
 import dev.sumin.skeleton.common.wake.OnRequestTask
+import dev.sumin.skeleton.common.web.BearerIgnoredPaths
 import dev.sumin.skeleton.common.web.PublicEndpointContributor
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.autoconfigure.AutoConfiguration
@@ -36,6 +37,12 @@ class JobWakeAutoConfiguration {
     @ConditionalOnMissingBean(name = ["jobWakeUnscopedPath"])
     fun jobWakeUnscopedPath(properties: JobQueueProperties): ProjectUnscopedPaths =
         ProjectUnscopedPaths { if (properties.mode == JobQueueProperties.Mode.ON_REQUEST) listOf(properties.wake.path) else emptyList() }
+
+    /** 깨우기 주소는 자기 인증(비밀값 헤더)을 한다 — Scheduler 의 OIDC 가 싣는 Google ID 토큰(Authorization: Bearer)을 JWT 필터가 우리 토큰으로 검증하려다 401 을 내지 않게 한다. 요청 구동일 때만 */
+    @Bean
+    @ConditionalOnMissingBean(name = ["jobWakeBearerIgnored"])
+    fun jobWakeBearerIgnored(properties: JobQueueProperties): BearerIgnoredPaths =
+        BearerIgnoredPaths { if (properties.mode == JobQueueProperties.Mode.ON_REQUEST) listOf(properties.wake.path) else emptyList() }
 
     @Bean
     @ConditionalOnMissingBean(name = ["jobWakeDeployGuard"])

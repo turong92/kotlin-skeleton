@@ -2586,7 +2586,7 @@
       "module": null,
       "path": "scripts/native-test.sh",
       "status": "stable",
-      "summary": "tools/native-check 를 네이티브로 빌드하고 컨테이너에서 띄워 scripts/native-smoke.sh 의 핵심 흐름을 돌린다(릴리스 전 · 의존성 파일 PR 에서만 CI 가 돈다).",
+      "summary": "앱을 네이티브로 빌드해 새 DB 와 함께 컨테이너에서 띄우고 흐름 시험(--smoke)을 돌린다 — 스켈레톤은 tools/native-check + native-smoke.sh, 새 프로젝트는 apps/api + 자기 시험(릴리스 전 · 의존성 파일 PR 에서 돌리는 것을 권한다).",
       "starter": false,
       "newProjectFlag": null,
       "autoIncludes": [],

@@ -85,7 +85,7 @@ class AuthSessionAutoConfiguration {
     fun authSessionPurgeOnRequestTask(properties: AuthSessionProperties, purge: SessionPurge, projects: ObjectProvider<ProjectRegistry>): dev.sumin.skeleton.common.wake.OnRequestTask =
         // 주기를 0 으로 꺼 둔 앱(`purge.interval`)은 깨우기도 이 정리를 돌리지 않는다. 값은 실행 때 읽는다
         dev.sumin.skeleton.common.wake.SimpleOnRequestTask("auth-session-purge") {
-            if (!properties.purge.interval.isZero) projects.getIfAvailable()?.let { r -> r.forEachProject { purge.runOnce() } } ?: purge.runOnce()
+            if (!properties.purge.interval.isZero && !properties.purge.interval.isNegative) projects.getIfAvailable()?.let { r -> r.forEachProject { purge.runOnce() } } ?: purge.runOnce()
         }
 
     /** 계정 삭제가 끝나면 그 계정의 세션 행을 지운다 */

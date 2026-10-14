@@ -122,3 +122,13 @@ class JobWakeControllerTest {
         assertEquals(0, JobWakeDeployGuard(JobQueueProperties()).problems(prod).size)
     }
 }
+
+/** 깨우기 경로가 Bearer 를 JWT 필터에 맡기지 않는 것은 요청 구동 모드에서만이다 (Scheduler OIDC 토큰을 함께 받는 구성). */
+class JobWakeBearerIgnoredTest {
+    @Test
+    fun `the wake path is Bearer-ignored only in on-request mode`() {
+        val on = JobQueueProperties(mode = JobQueueProperties.Mode.ON_REQUEST)
+        assertEquals(listOf("/internal/jobs/drain"), JobWakeAutoConfiguration().jobWakeBearerIgnored(on).paths())
+        assertTrue(JobWakeAutoConfiguration().jobWakeBearerIgnored(JobQueueProperties()).paths().isEmpty())
+    }
+}

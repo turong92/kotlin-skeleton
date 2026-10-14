@@ -137,8 +137,9 @@ class AuthAutoConfiguration {
     fun jwtAuthenticationFilter(
         jwtTokenService: JwtTokenService,
         authErrorWriter: AuthErrorWriter,
+        bearerIgnored: ObjectProvider<dev.sumin.skeleton.common.web.BearerIgnoredPaths>,
     ): JwtAuthenticationFilter =
-        JwtAuthenticationFilter(jwtTokenService, authErrorWriter)
+        JwtAuthenticationFilter(jwtTokenService, authErrorWriter, bearerIgnored.orderedStream().toList())
 
     @Bean
     @ConditionalOnMissingBean
