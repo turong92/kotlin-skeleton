@@ -29,7 +29,8 @@ import org.springframework.web.bind.annotation.RestController
  * 모듈이 함께 있을 때(alert + alert-jdbc + job-queue-jdbc + platform 필터 체인): 웹훅 주소가 있으면 5xx 몰림과 죽은 작업이 웹훅에 도착하고 DB 에 기록된다.
  * 웹훅 주소가 없으면 같은 앱이 아무것도 보내지 않는다는 것은 다른 워크벤치 테스트가 (주소 없이) 뜨는 것으로 증명된다.
  */
-@SpringBootTest
+// 처리기 없는 종류는 기한(unhandled-type-grace)이 지나야 DEAD — 이 시험은 그 경로를 바로 보려고 기한을 0 으로 둔다
+@SpringBootTest(properties = ["skeleton.job-queue.unhandled-type-grace=0s"])
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration::class, AlertCompositionIntegrationTest.Probe::class)
 class AlertCompositionIntegrationTest {
