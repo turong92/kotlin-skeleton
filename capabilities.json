@@ -2448,6 +2448,32 @@
       }
     },
     {
+      "id": "script-dev-multi",
+      "kind": "script",
+      "module": null,
+      "path": "scripts/dev-multi.sh",
+      "status": "stable",
+      "summary": "한 프로세스에 프로젝트 둘(a.localhost · b.localhost) 견본을 로컬에서 띄운다 — Docker Postgres 에 프로젝트 계정 · 스키마(scripts/project-account.sql, 멱등)를 만들고 multi 프로필로 apps/api 를 기동한다.",
+      "starter": false,
+      "newProjectFlag": null,
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/multi-project.md"],
+      "frontend": null,
+      "notFor": ["한 서비스로 띄울 때는 scripts/dev.sh", "운영 DB 계정은 docs/multi-project.md 의 SQL 로 만든다"],
+      "keywords": {
+        "ko": ["프로젝트 여럿 로컬 실행", "멀티 프로젝트 견본"],
+        "en": ["multi project local run", "multi tenant sample"]
+      }
+    },
+    {
       "id": "script-dev-sample",
       "kind": "script",
       "module": null,

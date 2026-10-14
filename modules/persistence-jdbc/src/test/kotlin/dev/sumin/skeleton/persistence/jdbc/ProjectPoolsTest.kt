@@ -29,10 +29,10 @@ class ProjectPoolsTest {
     private fun project(ds: ProjectDatasource = ProjectDatasource()) = Project("a", listOf("a.test"), "proj_a", ds, emptyMap())
 
     @Test
-    fun `a pool is lazy, small, scoped to the project schema and uses the common account unless the project has its own`() {
+    fun `a pool is lazy, small, leaves the schema to the account default and uses the common account unless the project has its own`() {
         val p = pool(project(), Dialect("postgresql"))
         assertThat(p.isRunning).isFalse()
-        assertThat(p.schema).isEqualTo("proj_a")
+        assertThat(p.schema).isNull()   // 기본 스키마는 계정에 박힌다 (ProjectAccountsVerifier) — 연결 단위 SET 에 기대지 않는다
         assertThat(p.catalog).isNull()
         assertThat(p.minimumIdle).isZero()
         assertThat(p.maximumPoolSize).isEqualTo(3)

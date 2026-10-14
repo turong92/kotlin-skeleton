@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
+import org.springframework.boot.jdbc.autoconfigure.JdbcConnectionDetails
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
@@ -25,8 +26,8 @@ import org.springframework.test.web.servlet.post
  */
 @SpringBootTest(
     properties = [
-        "skeleton.projects.a.hosts=a.localhost", "skeleton.projects.a.schema=mpl_a",
-        "skeleton.projects.b.hosts=b.localhost", "skeleton.projects.b.schema=mpl_b",
+        "skeleton.projects.a.hosts=a.localhost", "skeleton.projects.a.schema=mpl_a", "skeleton.projects.a.datasource.username=mpl_a", "skeleton.projects.a.datasource.password=mpl_a-pw",
+        "skeleton.projects.b.hosts=b.localhost", "skeleton.projects.b.schema=mpl_b", "skeleton.projects.b.datasource.username=mpl_b", "skeleton.projects.b.datasource.password=mpl_b-pw",
         "skeleton.projects.old.hosts=old.localhost", "skeleton.projects.old.status=closed",
         "skeleton.projects.a.config.account.seed.accounts[0].email=seed-a@example.com",
         "skeleton.projects.a.config.account.seed.accounts[0].password=password",
@@ -40,8 +41,16 @@ import org.springframework.test.web.servlet.post
     ],
 )
 @AutoConfigureMockMvc
-@Import(TestcontainersConfiguration::class, MultiProjectLoginIntegrationTest.Mails::class)
+@Import(MultiProjectLoginIntegrationTest.Db::class, MultiProjectLoginIntegrationTest.Mails::class)
 class MultiProjectLoginIntegrationTest {
+    @TestConfiguration(proxyBeanMethods = false)
+    class Db {
+        @Bean fun jdbcConnectionDetails(): JdbcConnectionDetails = db
+    }
+
+    companion object {
+        val db: JdbcConnectionDetails by lazy { MultiProjectTestAccounts.newDatabase("mpl_a", "mpl_b") }
+    }
     @TestConfiguration(proxyBeanMethods = false)
     class Mails {
         val sent = CopyOnWriteArrayList<AccountMail>()

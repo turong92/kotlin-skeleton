@@ -5,6 +5,9 @@ import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
+import org.springframework.boot.jdbc.autoconfigure.JdbcConnectionDetails
+import org.springframework.boot.test.context.TestConfiguration
+import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
 import org.springframework.test.context.ActiveProfiles
@@ -17,8 +20,16 @@ import org.springframework.test.web.servlet.post
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("multi")
-@Import(TestcontainersConfiguration::class)
+@Import(MultiProfileIntegrationTest.Db::class)
 class MultiProfileIntegrationTest {
+    @TestConfiguration(proxyBeanMethods = false)
+    class Db {
+        @Bean fun jdbcConnectionDetails(): JdbcConnectionDetails = db
+    }
+
+    companion object {
+        val db: JdbcConnectionDetails by lazy { MultiProjectTestAccounts.newDatabase("proj_a", "proj_b", passwordOf = { "${it}_dev_pw" }) }
+    }
     @Autowired lateinit var mvc: MockMvc
 
     private fun host(h: String): (org.springframework.mock.web.MockHttpServletRequest) -> org.springframework.mock.web.MockHttpServletRequest = { it.serverName = h; it }

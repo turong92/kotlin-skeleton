@@ -226,7 +226,7 @@ rm -rf scripts/new-project.sh scripts/test-new-project.sh scripts/new-project.d 
 rm -f modules/platform/src/test/kotlin/dev/sumin/skeleton/common/capabilities/CapabilitiesGuardsTest.kt
 # 한 프로세스에 프로젝트 둘을 띄워 보는 apps/api 시험(docs/multi-project.md)은 스타터 조합 + PostgreSQL 전제다 — 모듈을 더하면(프로젝트를 모르는 기능은 둘 이상일 때 기동을 막는다)
 # 또는 MySQL 이면(스키마 만들기 권한 · 방언 SQL) 성립하지 않는다. 기능(platform · persistence-jdbc …)과 그 단위 시험은 그대로 남는다
-rm -f apps/api/src/test/kotlin/dev/sumin/skeleton/app/api/MultiProject*Test.kt apps/api/src/test/kotlin/dev/sumin/skeleton/app/api/MultiProfileIntegrationTest.kt
+rm -f apps/api/src/test/kotlin/dev/sumin/skeleton/app/api/MultiProject*.kt apps/api/src/test/kotlin/dev/sumin/skeleton/app/api/MultiProfileIntegrationTest.kt
 
 # ---------------------------------------------------------------------------------------------------- 지우기
 [ "$WITH_WORKBENCH" = 1 ] || { rm -rf apps/workbench; perl -ni -e 'print unless /^include\(":apps:workbench"\)\s*$/' settings.gradle.kts; }

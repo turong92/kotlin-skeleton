@@ -21,7 +21,7 @@ skeleton:
 
 ## DB (프로젝트마다 스키마)
 
-- 서버 하나, 프로젝트마다 연결 풀 하나(`persistence-jdbc` 의 `ProjectRoutingDataSource`). 풀은 처음 쓸 때 열고(안 쓰면 연결 0), 최대 `datasource.pool-max`(기본 3), 최소 유지 0. 같은 서버 URL(`spring.datasource.*`)에 프로젝트의 스키마를 고른다(PostgreSQL `search_path`, MySQL 은 데이터베이스). 프로젝트별 DB 계정(`datasource.username/password`)을 주면 자기 스키마 밖은 DB 가 막는다.
+- **프로젝트마다 DB 계정이 필수**다(예외 없음 — 로컬 · 시험도). 아래 "DB 계정" 절. 서버 하나, 프로젝트마다 연결 풀 하나(`persistence-jdbc` 의 `ProjectRoutingDataSource`). 풀은 처음 쓸 때 열고(안 쓰면 연결 0), 최대 `datasource.pool-max`(기본 3), 최소 유지 0. 같은 서버 URL(`spring.datasource.*`)에 프로젝트의 계정으로 붙는다. PostgreSQL 의 기본 스키마는 **계정에 박힌 `search_path`** 이고(풀의 연결 단위 `SET` 에 기대지 않는다), MySQL 은 스키마 = 데이터베이스라 풀이 catalog 를 고른다.
 - **프로젝트 문맥 없이 연결을 꺼내면 예외**(`NoProjectContextException`) — 기본 스키마로 가지 않는다. 트랜잭션이 열린 뒤 프로젝트가 바뀌면 문장을 만들 때 예외.
 - 기동 때 `migration-flyway` 가 스키마마다 같은 스크립트를 돌린다(이력도 스키마마다, 하나라도 실패하면 기동 실패). 스키마가 없으면 Flyway 가 만든다 — DB 계정에 권한이 없으면 운영자가 미리 만든다. `public` 은 건드리지 않는다.
 - `SqlDialectVerifier` 는 기동 때 연결을 열지 않고 URL 로 방언을 본다. `/health` 는 프로젝트별 풀을 하나씩 본다(Boot 의 라우팅 DataSource 지원).
@@ -99,3 +99,35 @@ SKELETON_PROJECTS_A_CONFIG_ACCOUNT_SEED_ACCOUNTS_0_EMAIL=…
 ```
 
 함정: 환경변수 이름의 `_` 는 `.` 로 바뀌므로 **이름 안에 하이픈이 든 마디는 하이픈 없이** 쓴다 — `link-base-url` → `LINKBASEURL`, `pool-max` → `POOLMAX`, `auth-session` → `AUTHSESSION` (`..._CONFIG_AUTHSESSION_COOKIE_NAME`). `LINK_BASE_URL` 로 쓰면 `link.base.url` 이라 다른 키다 — `auth_session` 처럼 지원 접두사를 벗어나는 것은 기동 실패로 걸리지만 `account.mail.` 아래의 오타는 조용히 안 먹는다(그래도 링크 주소는 프로젝트마다 필수라 prod 가드가 잡는다). 파일 하나로 받는 길은 열지 않았다(필요 없었다).
+
+## DB 계정 (프로젝트 모드에서 필수)
+
+PgBouncer 트랜잭션 모드(PlanetScale 기본, 포트 **6432**)는 트랜잭션마다 실제 연결을 바꿔 끼워 연결 단위 `SET search_path` 가 따라가지 않고, 계정을 같이 쓰면 실제 연결이 프로젝트끼리 돌려 쓰여 A 의 요청이 B 의 스키마에 붙을 수 있다.
+그래서 **프로젝트마다 계정을 나누고 계정에 기본 스키마를 박는다**(`ALTER ROLE … SET search_path`) — PgBouncer 가 계정별로 풀을 나누고, 붙을 때마다 그 스키마가 걸린다. (PlanetScale: 앱의 일반 연결은 6432(PgBouncer), `LISTEN` 같은 세션 기능이 필요한 연결만 5432 직접.)
+
+기동 때(마이그레이션 뒤, 활성 프로젝트마다) 앱이 확인하고 어기면 **기동 실패**(메시지에 프로젝트 id)한다 — `ProjectAccountsVerifier`:
+1. 두 프로젝트가 같은 DB 계정이면 실패 — `datasource.username` 이 없어 공통 `spring.datasource` 계정으로 떨어지는 것도 같은 계정이다.
+2. (PostgreSQL) 풀 설정이 아니라 **새 연결**의 `current_schema()` 가 자기 스키마가 아니면 실패 — 계정 기본값 누락. (계정 이름이 스키마 이름과 같으면 PostgreSQL 기본값 `"$user"` 가 우연히 맞을 수 있다 — 그래도 `ALTER ROLE` 을 박는 것이 규칙이다.)
+3. 그 계정이 다른 활성 프로젝트 스키마에 `USAGE` 가 있으면 실패 (`has_schema_privilege`).
+- MySQL: 1, 3 만 가능한 범위로 본다(다른 프로젝트 데이터베이스의 표가 보이면 실패). 2 에 해당하는 것은 없다 — 풀이 catalog 를 고르고, PgBouncer 같은 연결 바꿔 끼우기 문제가 없는 구성을 전제한다. 한계다.
+- 프로젝트 목록이 비면(한 서비스) 아무 검사도 없다.
+
+### 운영에서 만들기 (관리자 계정으로, 프로젝트마다 한 번 — 멱등)
+
+`scripts/project-account.sql` 이 정본이다(로컬 `scripts/dev-multi.sh` 와 시험이 같은 틀을 쓴다). 중괄호 두 겹 자리(계정 · 비밀번호 · 스키마)를 바꿔 해당 데이터베이스에서 돌린다:
+
+```sql
+do $$
+begin
+  if not exists (select from pg_roles where rolname = '<계정>') then
+    create role "<계정>" login password '<비밀번호>';
+  end if;
+end
+$$;
+alter role "<계정>" with login password '<비밀번호>';
+create schema if not exists "<스키마>" authorization "<계정>";
+alter schema "<스키마>" owner to "<계정>";
+alter role "<계정>" set search_path = "<스키마>";
+```
+
+그 뒤 `datasource.username/password` 에 계정을 적는다. 다른 프로젝트 스키마에는 권한을 주지 않는다. 로컬은 `scripts/dev-multi.sh` 가 Docker Postgres 에 `proj_a` · `proj_b` 를 만들고(`public` 은 건드리지 않는다, 비밀번호는 로컬 전용 `<계정>_dev_pw`) `multi` 프로필로 띄운다.

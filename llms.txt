@@ -138,6 +138,7 @@
 - script-check-real-providers: 진짜 소셜 로그인 · 진짜 메일 · 진짜 토스 시험 전 점검 [소셜 로그인 점검, 메일 발송 점검]
 - script-convert-ids-to-sortable: 일회용 — 이미 있는 PostgreSQL DB 의 옛 행 id(접두사… [id 변환, 시간순 id]
 - script-dev: 로컬 풀스택 한 줄 실행 — DB(+ 로컬 S3) [로컬 실행, 개발 서버]
+- script-dev-multi: 한 프로세스에 프로젝트 둘(a.localhost ·… [프로젝트 여럿 로컬 실행, 멀티 프로젝트 견본]
 - script-dev-sample: 샘플 앱 Notes 풀스택 한 줄 실행 — DB + 로컬 S3 →… [샘플 실행, 노트 앱 실행]
 - script-migrations-lock: 동결된 Flyway 마이그레이션의 잠금(migrations.lock:… [마이그레이션 잠금, 마이그레이션 동결]
 - script-new-project: 새 프로젝트 한 줄 찍기 [새 프로젝트, 프로젝트 만들기]

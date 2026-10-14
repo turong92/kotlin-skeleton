@@ -1,5 +1,6 @@
 # 견본: 한 프로세스에 프로젝트 둘 — `--spring.profiles.active=local,multi` (docs/multi-project.md).
 # 브라우저 · curl 이 *.localhost 를 127.0.0.1 로 보내므로 hosts 파일이 필요 없다:  curl http://a.localhost:8080/api/v1/project-hello
+# 먼저 scripts/dev-multi.sh 가 계정 · 스키마를 만들고 띄운다 (직접 띄우려면 scripts/project-account.sql).
 # 프로젝트마다 스키마(proj_a · proj_b — `public` 은 건드리지 않는다)와 자기 로그인 설정을 가진다. 아래 비밀은 개발용이다.
 skeleton:
   web:
@@ -9,6 +10,7 @@ skeleton:
     a:
       hosts: [a.localhost]
       schema: proj_a
+      datasource: { username: proj_a, password: proj_a_dev_pw }   # 프로젝트마다 DB 계정이 필수 — scripts/dev-multi.sh 가 계정 · 스키마를 만든다
       config:
         auth:
           jwt: { secret: dev-only-jwt-secret-of-project-a-32+bytes, issuer: project-a }
@@ -26,6 +28,7 @@ skeleton:
     b:
       hosts: [b.localhost]
       schema: proj_b
+      datasource: { username: proj_b, password: proj_b_dev_pw }
       config:
         auth:
           jwt: { secret: dev-only-jwt-secret-of-project-b-32+bytes, issuer: project-b }

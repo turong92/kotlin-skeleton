@@ -8,19 +8,30 @@ import kotlin.test.assertFailsWith
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.jdbc.autoconfigure.JdbcConnectionDetails
+import org.springframework.boot.test.context.TestConfiguration
+import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
 import org.springframework.jdbc.core.simple.JdbcClient
 
 /** 프로젝트 둘 — 같은 서버 · 다른 스키마. 마이그레이션이 스키마마다 돌고, 한 프로젝트의 문맥은 다른 프로젝트의 행을 읽지 못하고, 문맥 없는 DB 사용은 실패한다 */
 @SpringBootTest(
     properties = [
-        "skeleton.projects.a.hosts=a.localhost", "skeleton.projects.a.schema=mp_a",
-        "skeleton.projects.b.hosts=b.localhost", "skeleton.projects.b.schema=mp_b",
+        "skeleton.projects.a.hosts=a.localhost", "skeleton.projects.a.schema=mp_a", "skeleton.projects.a.datasource.username=mp_a", "skeleton.projects.a.datasource.password=mp_a-pw",
+        "skeleton.projects.b.hosts=b.localhost", "skeleton.projects.b.schema=mp_b", "skeleton.projects.b.datasource.username=mp_b", "skeleton.projects.b.datasource.password=mp_b-pw",
         "skeleton.projects.old.hosts=old.localhost", "skeleton.projects.old.status=closed",
     ],
 )
-@Import(TestcontainersConfiguration::class)
+@Import(MultiProjectDatabaseIntegrationTest.Db::class)
 class MultiProjectDatabaseIntegrationTest {
+    @TestConfiguration(proxyBeanMethods = false)
+    class Db {
+        @Bean fun jdbcConnectionDetails(): JdbcConnectionDetails = db
+    }
+
+    companion object {
+        val db: JdbcConnectionDetails by lazy { MultiProjectTestAccounts.newDatabase("mp_a", "mp_b") }
+    }
     @Autowired lateinit var jdbc: JdbcClient
     @Autowired lateinit var registry: ProjectRegistry
 

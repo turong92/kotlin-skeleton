@@ -20,7 +20,8 @@ object ProjectPools {
         pool.poolName = "project-${project.id}"
         pool.minimumIdle = 0
         pool.maximumPoolSize = project.datasource.poolMax
-        if (dialect.schemaIsDatabase) pool.catalog = project.schema else pool.schema = project.schema
+        // PostgreSQL 은 pool.schema 를 걸지 않는다 — 연결 단위 SET search_path 는 PgBouncer 트랜잭션 모드를 따라가지 못한다. 기본 스키마는 계정에 박혀 있고 기동 때 ProjectAccountsVerifier 가 확인한다
+        if (dialect.schemaIsDatabase) pool.catalog = project.schema
         return pool
     }
 }

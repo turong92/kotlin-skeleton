@@ -140,6 +140,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `script-check-real-providers` | 진짜 소셜 로그인 · 진짜 메일 · 진짜 토스 시험 전 점검 — .env.local 의 모양, 제공자 서버가 client id/secret 을 받아 주는지(가짜 코드로 한 번), 떠 있는 백엔드의 /auth/methods, SMTP 설정 · DNS(SPF/DMARC), 요청하면 시험 메일 한 통, 토스 테스트 키가 있으면 결제 장부가 기대는 응답(없는 결제의 조회 · 취소 · 멱등 키 · 응답 시간)을 돈이 움직이지 않는 호출 여섯 번(테스트 코드 헤더를 붙인 취소 포함)으로 ✓/✗ 줄로 말한다. | (도구 — 켜는 조각 없음) | 소셜 로그인 점검, 메일 발송 점검, 구글 카카오 키 확인, 시험 메일, 토스 키 점검 / check social login keys, smtp test mail, real provider readiness, toss test key check | — |
 | `script-convert-ids-to-sortable` | 일회용 — 이미 있는 PostgreSQL DB 의 옛 행 id(접두사 + 32자 16진수 · UUID v4)를 시간순 id(접두사 + ULID · UUIDv7)로 바꾼다: pg_dump 백업 → 한 트랜잭션에서 id 를 가리키는 모든 문자열 칸을 같이 변환 → 행 수 · 옛 형식 0건 · 외래 키 검사(--dry-run 은 끝에서 되돌린다). | (도구 — 켜는 조각 없음) | id 변환, 시간순 id, ULID 변환, 기존 데이터 id 바꾸기 / convert ids, sortable ids, ULID migration, rewrite primary keys | — |
 | `script-dev` | 로컬 풀스택 한 줄 실행 — DB(+ 로컬 S3) 컨테이너를 올리고 백엔드를 띄운다. 옆의 ../web 프런트가 있으면 같이 띄운다. | (도구 — 켜는 조각 없음) | 로컬 실행, 개발 서버, 한 줄 실행, DB 띄우기 / run locally, dev server, local stack, start database | — |
+| `script-dev-multi` | 한 프로세스에 프로젝트 둘(a.localhost · b.localhost) 견본을 로컬에서 띄운다 — Docker Postgres 에 프로젝트 계정 · 스키마(scripts/project-account.sql, 멱등)를 만들고 multi 프로필로 apps/api 를 기동한다. | (도구 — 켜는 조각 없음) | 프로젝트 여럿 로컬 실행, 멀티 프로젝트 견본 / multi project local run, multi tenant sample | — |
 | `script-dev-sample` | 샘플 앱 Notes 풀스택 한 줄 실행 — DB + 로컬 S3 → 백엔드(apps/sample) → 짝 프런트(react-skeleton 의 apps/sample). | (도구 — 켜는 조각 없음) | 샘플 실행, 노트 앱 실행 / run sample, notes app | — |
 | `script-migrations-lock` | 동결된 Flyway 마이그레이션의 잠금(migrations.lock: 경로 + sha256 + 업그레이드 시험의 baseline)을 검사하고(--check) 새 파일만 더한다 — 기존 줄의 변경은 --rewrite <경로> 로만. | (도구 — 켜는 조각 없음) | 마이그레이션 잠금, 마이그레이션 동결, 체크섬 불일치, 마이그레이션 수정 금지 / migration lock, frozen migrations, flyway checksum, migrations.lock | — |
 | `script-new-project` | 새 프로젝트 한 줄 찍기 — 이 레포를 복사해 고른 모듈 · 앱만 남기고, 이름 · 접두사를 바꾸고, 배포 선언 · 설정 블록 · 이 카탈로그를 걸러 다시 쓴다(--dry-run 은 고른 모듈과 따라온 이유만 보인다). | (도구 — 켜는 조각 없음) | 새 프로젝트, 프로젝트 만들기, 찍어내기, 스캐폴딩, 프로젝트 시작 / new project, scaffold, stamp, template, project generator | — |
@@ -1040,6 +1041,16 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 로컬 개발용이다 — 운영 배포는 deploy/app.yaml 선언(docs/deploy.md)
   - Docker 가 필요하다
 - 키워드: 로컬 실행, 개발 서버, 한 줄 실행, DB 띄우기 / run locally, dev server, local stack, start database
+
+### `script-dev-multi` — 한 프로세스에 프로젝트 둘(a.localhost · b.localhost) 견본을 로컬에서 띄운다 — Docker Postgres 에 프로젝트 계정 · 스키마(scripts/project-account.sql, 멱등)를 만들고 multi 프로필로 apps/api 를 기동한다.
+
+- 종류 · 상태: script · stable — 위치 `scripts/dev-multi.sh`
+- 켜는 법: (도구 — 켜는 조각 없음)
+- 문서: `docs/multi-project.md`
+- 쓰지 않는 경우:
+  - 한 서비스로 띄울 때는 scripts/dev.sh
+  - 운영 DB 계정은 docs/multi-project.md 의 SQL 로 만든다
+- 키워드: 프로젝트 여럿 로컬 실행, 멀티 프로젝트 견본 / multi project local run, multi tenant sample
 
 ### `script-dev-sample` — 샘플 앱 Notes 풀스택 한 줄 실행 — DB + 로컬 S3 → 백엔드(apps/sample) → 짝 프런트(react-skeleton 의 apps/sample).
 

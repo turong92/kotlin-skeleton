@@ -16,7 +16,7 @@ import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.post
 
 /** 분리 리허설 — 프로젝트 a · b 를 함께 띄워 a 의 데이터를 만든 뒤, **a 만 남긴 설정**으로 같은 DB 의 그 스키마에 붙여 혼자 띄워도 그대로 로그인된다 (코드 수정 없이) */
-@SpringBootTest(properties = ["skeleton.projects.a.hosts=a.localhost", "skeleton.projects.a.schema=sep_a"])
+@SpringBootTest(properties = ["skeleton.projects.a.hosts=a.localhost", "skeleton.projects.a.schema=sep_a", "skeleton.projects.a.datasource.username=sep_a", "skeleton.projects.a.datasource.password=sep_a-pw"])
 @AutoConfigureMockMvc
 @Import(MultiProjectSeparationRehearsalTest.SameDatabase::class)
 class MultiProjectSeparationRehearsalTest {
@@ -26,15 +26,15 @@ class MultiProjectSeparationRehearsalTest {
     }
 
     companion object {
-        val db: JdbcConnectionDetails by lazy { SharedPostgres.newDatabase() }
+        val db: JdbcConnectionDetails by lazy { MultiProjectTestAccounts.newDatabase("sep_a", "sep_b") }
 
         @JvmStatic @BeforeAll
         fun runTogether() {
             // 함께 띄운 서버: a · b 둘 다, a 에 시드 계정
             SpringApplicationBuilder(ApiApplication::class.java, SameDatabase::class.java).web(WebApplicationType.SERVLET)
                 .properties(
-                    "skeleton.projects.a.hosts=a.localhost", "skeleton.projects.a.schema=sep_a",
-                    "skeleton.projects.b.hosts=b.localhost", "skeleton.projects.b.schema=sep_b",
+                    "skeleton.projects.a.hosts=a.localhost", "skeleton.projects.a.schema=sep_a", "skeleton.projects.a.datasource.username=sep_a", "skeleton.projects.a.datasource.password=sep_a-pw",
+                    "skeleton.projects.b.hosts=b.localhost", "skeleton.projects.b.schema=sep_b", "skeleton.projects.b.datasource.username=sep_b", "skeleton.projects.b.datasource.password=sep_b-pw",
                     "skeleton.projects.a.config.account.seed.accounts[0].email=alone@example.com",
                     "skeleton.projects.a.config.account.seed.accounts[0].password=password",
                     "skeleton.persistence-jdbc.startup-wait.enabled=false", "skeleton.account.password.bcrypt-strength=4",

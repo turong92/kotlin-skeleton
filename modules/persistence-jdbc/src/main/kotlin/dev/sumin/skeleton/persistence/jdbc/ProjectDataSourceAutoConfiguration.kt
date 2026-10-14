@@ -42,4 +42,10 @@ class ProjectDataSourceAutoConfiguration {
         val dialect = dialects.orderedStream().findFirst().orElseThrow { IllegalStateException("No SqlDialect. Add exactly one of modules:db-postgresql / modules:db-mysql to the app.") }
         return ProjectRoutingDataSource(registry.active) { ProjectPools.create(it, details, dialect, environment) }
     }
+
+    /** 프로젝트 모드의 계정 규칙 확인 — 마이그레이션까지 끝난 뒤(모든 싱글턴이 만들어진 직후) 돈다 */
+    @Bean
+    @ConditionalOnMissingBean(name = ["projectAccountsVerifier"])
+    fun projectAccountsVerifier(registry: ProjectRegistry, details: JdbcConnectionDetails, dialects: ObjectProvider<SqlDialect>): ProjectAccountsVerifier =
+        ProjectAccountsVerifier(registry.active, details, dialects.orderedStream().findFirst().orElseThrow { IllegalStateException("No SqlDialect") }.vendor)
 }
