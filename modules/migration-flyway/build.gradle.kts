@@ -1,6 +1,7 @@
 // 마이그레이션 Flyway 구현: 옵트인 로컬 clean 전략, V<UTC 14자리> 이름 규칙 검사. 가드 · 설정은 공통 migration 모듈. Flyway 설정값은 바꾸지 않는다 (앱의 선택)
 dependencies {
     api(project(":modules:migration"))
+    implementation(project(":modules:platform"))   // Project — 프로젝트별 스키마 마이그레이션
     implementation("org.springframework.boot:spring-boot-autoconfigure")
     implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("org.jetbrains.kotlin:kotlin-reflect")

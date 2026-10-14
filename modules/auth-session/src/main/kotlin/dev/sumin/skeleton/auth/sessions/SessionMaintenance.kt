@@ -16,7 +16,9 @@ class SessionPurge(private val store: SessionStore, private val time: TimeProvid
 }
 
 /** [SessionPurge] 를 주기마다 돌린다. 여러 인스턴스가 동시에 돌려도 삭제는 멱등이다 */
-class SessionPurgeScheduler(private val interval: Duration, private val purge: SessionPurge) : AutoCloseable {
+class SessionPurgeScheduler(private val interval: Duration, private val run: () -> Unit) : AutoCloseable {
+    constructor(interval: Duration, purge: SessionPurge) : this(interval, { purge.runOnce() })
+
     private val log = LoggerFactory.getLogger(javaClass)
     private var executor: ScheduledExecutorService? = null
 
@@ -26,7 +28,7 @@ class SessionPurgeScheduler(private val interval: Duration, private val purge: S
         if (interval.isZero || interval.isNegative) return
         executor = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "auth-session-purge").apply { isDaemon = true } }.also {
             it.scheduleWithFixedDelay({
-                try { purge.runOnce() } catch (e: Exception) { log.warn("session purge run failed: {}", e.javaClass.simpleName) }
+                try { run() } catch (e: Exception) { log.warn("session purge run failed: {}", e.javaClass.simpleName) }
             }, interval.toMillis(), interval.toMillis(), TimeUnit.MILLISECONDS)
         }
     }

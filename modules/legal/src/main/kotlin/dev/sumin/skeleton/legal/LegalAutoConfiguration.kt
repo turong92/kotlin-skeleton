@@ -6,6 +6,7 @@ import dev.sumin.skeleton.common.erasure.AccountDataExporter
 import dev.sumin.skeleton.common.erasure.AccountErasureListener
 import dev.sumin.skeleton.common.time.TimeProvider
 import org.springframework.beans.factory.ObjectProvider
+import dev.sumin.skeleton.common.project.ProjectRegistry
 import org.springframework.beans.factory.SmartInitializingSingleton
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
@@ -79,9 +80,12 @@ class LegalAutoConfiguration {
     /** 모든 빈이 만들어진 직후(웹 서버가 열리기 전) — 문서 집합이 쓸 만한지, 발행된 본문이 장부와 같은지 */
     @Bean
     @ConditionalOnMissingBean(name = ["legalStartupCheck"])
-    fun legalStartupCheck(catalog: LegalCatalog, ledger: LegalLedger, time: ObjectProvider<TimeProvider>): SmartInitializingSingleton = SmartInitializingSingleton {
+    fun legalStartupCheck(catalog: LegalCatalog, ledger: LegalLedger, time: ObjectProvider<TimeProvider>, projects: ObjectProvider<ProjectRegistry>): SmartInitializingSingleton = SmartInitializingSingleton {
         catalog.requireValid()
-        LedgerPin(ledger) { time.getIfAvailable { TimeProvider.systemUtc() }.now() }.requireClean(catalog)
+        val pin = LedgerPin(ledger) { time.getIfAvailable { TimeProvider.systemUtc() }.now() }
+        // 프로젝트가 있으면 장부는 프로젝트마다(스키마마다) 있다 — 차례로 본다
+        val registry = projects.getIfAvailable()
+        if (registry == null) pin.requireClean(catalog) else registry.forEachProject { pin.requireClean(catalog) }
     }
 
     companion object {

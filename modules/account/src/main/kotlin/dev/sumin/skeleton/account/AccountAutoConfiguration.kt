@@ -19,6 +19,7 @@ import dev.sumin.skeleton.account.events.AccountSessionEventListener
 import dev.sumin.skeleton.account.events.DefaultAccountEventPublisher
 import dev.sumin.skeleton.account.events.LoggingAccountEventListener
 import dev.sumin.skeleton.account.mail.AccountLinks
+import dev.sumin.skeleton.common.project.ProjectRegistry
 import dev.sumin.skeleton.account.mail.AccountMailLayout
 import dev.sumin.skeleton.account.mail.AccountMailTemplates
 import dev.sumin.skeleton.account.mail.DefaultAccountMailLayout
@@ -146,8 +147,14 @@ class AccountAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(AccountMailer::class)
-    fun accountMailer(templates: AccountMailTemplates, transport: AccountMailTransport, properties: AccountProperties): AccountMailer =
-        TemplatedAccountMailer(templates, transport, properties.mail)
+    fun accountMailer(templates: AccountMailTemplates, transport: AccountMailTransport, properties: AccountProperties, projects: ObjectProvider<ProjectRegistry>): AccountMailer {
+        val registry = projects.getIfAvailable() ?: return TemplatedAccountMailer(templates, transport, properties.mail)
+        // 프로젝트마다 메일 설정(브랜드 · 제목 접두사 · …)이 다르다 — 내장 틀이면 프로젝트마다 한 번 만들어 둔다. 앱이 자기 틀 빈을 두었으면 그것을 모두가 쓴다
+        val mailers = registry.scopedFrom("skeleton.account", AccountProperties::class.java) { _, p ->
+            TemplatedAccountMailer(if (templates is DefaultAccountMailTemplates) DefaultAccountMailTemplates(p.mail, DefaultAccountMailLayout(p.mail.brand)) else templates, transport, p.mail)
+        }
+        return AccountMailer { mailers.get().send(it) }
+    }
 
     /** 기동 로그 한 줄 — 켜진 로그인 방법과 메일 길 (비밀 없음). 소셜 목록은 웹 자동설정이 빈을 둘 때만 있다 */
     @Bean
@@ -170,7 +177,11 @@ class AccountAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    fun accountLinks(properties: AccountProperties): AccountLinks = AccountLinks(properties.mail)
+    fun accountLinks(properties: AccountProperties, projects: ObjectProvider<ProjectRegistry>): AccountLinks {
+        val registry = projects.getIfAvailable() ?: return AccountLinks(properties.mail)
+        val mails = registry.scopedFrom("skeleton.account", AccountProperties::class.java) { _, p -> p.mail }
+        return AccountLinks { mails.get() }
+    }
 
     @Bean(destroyMethod = "close")
     @ConditionalOnMissingBean(AccountTaskRunner::class)
@@ -361,7 +372,8 @@ class AccountAutoConfiguration {
     /** 로컬 · e2e 시드 계정 (`skeleton.account.seed.accounts`) — 비어 있으면 아무것도 하지 않는다 */
     @Bean
     @ConditionalOnMissingBean
-    fun accountSeeder(core: AccountCore): AccountSeeder = AccountSeeder(core)
+    fun accountSeeder(core: AccountCore, projects: ObjectProvider<ProjectRegistry>): AccountSeeder =
+        AccountSeeder(core, projects.getIfAvailable()?.let { r -> AccountSeeder.ProjectSeeds(r) { p -> r.bind(p, "skeleton.account", AccountProperties::class.java).seed.accounts } })
 
     @Bean(initMethod = "start", destroyMethod = "close")
     @ConditionalOnMissingBean(name = ["accountPurgeScheduler"])
@@ -371,7 +383,8 @@ class AccountAutoConfiguration {
     /** 주기마다 직접 지운다 — `job-queue-jdbc` 가 있으면 [AccountPurgeJobAutoConfiguration] 이 잡 넣기로 바꾼다 */
     @Bean
     @ConditionalOnMissingBean(AccountPurgeDispatch::class)
-    fun accountPurgeDispatch(purge: AccountPurgeService): AccountPurgeDispatch = AccountPurgeDispatch { purge.purgeDue() }
+    fun accountPurgeDispatch(purge: AccountPurgeService, projects: ObjectProvider<ProjectRegistry>): AccountPurgeDispatch =
+        projects.getIfAvailable()?.let { r -> AccountPurgeDispatch { r.forEachProject { purge.purgeDue() } } } ?: AccountPurgeDispatch { purge.purgeDue() }
 
     @Bean
     @ConditionalOnMissingBean

@@ -4,7 +4,11 @@ import dev.sumin.skeleton.persistence.jdbc.SqlDialect
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
+import dev.sumin.skeleton.common.project.ProjectsConfigured
 import org.springframework.context.annotation.Bean
+import org.springframework.context.annotation.Conditional
+import org.springframework.data.jdbc.core.dialect.JdbcDialect
+import org.springframework.data.jdbc.core.dialect.JdbcPostgresDialect
 import org.springframework.data.jdbc.core.convert.JdbcCustomConversions
 
 /** `modules:db-postgresql` 을 끼우면 SqlDialect = PostgreSQL. 다른 db-* 모듈과 같이 끼우면 SqlDialectVerifier 가 기동을 막는다. */
@@ -21,5 +25,16 @@ class PostgresDialectAutoConfiguration {
         @Bean
         @ConditionalOnMissingBean
         fun jdbcCustomConversions(): JdbcCustomConversions = JdbcCustomConversions(PostgresTimeConversions.all)
+    }
+
+    /**
+     * `skeleton.projects` 가 있으면 기동 때 프로젝트 문맥이 없어 Spring Data JDBC 가 연결을 열어 방언을 알아내지 못한다 — 이 방언 모듈이 이미 아는 방언을 직접 낸다.
+     */
+    @Conditional(ProjectsConfigured::class)
+    @ConditionalOnClass(JdbcDialect::class)
+    class ProjectsJdbcDialect {
+        @Bean
+        @ConditionalOnMissingBean(JdbcDialect::class)
+        fun jdbcDialect(): JdbcDialect = JdbcPostgresDialect.INSTANCE
     }
 }

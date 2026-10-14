@@ -17,10 +17,14 @@ class ProjectRegistry private constructor(
     val projects: List<Project>,
     private val environment: Environment,
 ) {
+    /** 서비스 중인 프로젝트 — DB 풀 · 마이그레이션 · 뒤 작업 · "둘 이상" 개수는 이것만 센다. 닫힌 프로젝트는 도메인만 남는다 */
+    val active: List<Project> = projects.filter { !it.closed }
+
     private val byHost = projects.flatMap { p -> p.hosts.map { it to p } }.toMap()
 
-    /** 요청의 Host(포트 없이)로 프로젝트를 정한다. 모르는 도메인은 null */
-    fun byHost(host: String?): Project? = host?.trim()?.lowercase(Locale.ROOT)?.let(byHost::get)
+    /** 요청의 Host 로 프로젝트를 정한다 — 소문자로, 포트는 빼고 비교한다(`ovation.localhost:5173` == `ovation.localhost`). 모르는 도메인은 null */
+    fun byHost(host: String?): Project? =
+        host?.trim()?.lowercase(Locale.ROOT)?.let { if (it.startsWith("[")) it else it.substringBefore(':') }?.let(byHost::get)
 
     /**
      * 공통 `skeleton.*` 위에 이 프로젝트의 `config` 를 덮어 [type] 으로 바인딩한다 — 모듈이 쓰는 properties 클래스를 그대로.
@@ -37,7 +41,7 @@ class ProjectRegistry private constructor(
         ProjectScoped { project -> create(project, bind(project, prefix, type)) }
 
     /** 요청 밖의 일: 모든 프로젝트에서 차례로 */
-    fun forEachProject(block: (Project) -> Unit) = projects.forEach { ProjectContext.runIn(it) { block(it) } }
+    fun forEachProject(block: (Project) -> Unit) = active.forEach { ProjectContext.runIn(it) { block(it) } }
 
     companion object {
         const val ROOT = "skeleton"
@@ -53,7 +57,7 @@ class ProjectRegistry private constructor(
             val raw = raw(environment)
             val projects = raw.toSortedMap().map { (id, s) -> project(id, s) }
             check(projects.isNotEmpty()) { "$PROPERTY is empty" }
-            projects.groupBy { it.schema }.filterValues { it.size > 1 }.forEach { (schema, same) ->
+            projects.filter { it.schema.isNotEmpty() }.groupBy { it.schema }.filterValues { it.size > 1 }.forEach { (schema, same) ->
                 error("Projects ${same.joinToString { "'${it.id}'" }} use the same schema '$schema' — every project needs its own ($PROPERTY.<id>.schema)")
             }
             projects.flatMap { p -> p.hosts.map { it to p.id } }.groupBy({ it.first }, { it.second }).filterValues { it.size > 1 }.forEach { (host, ids) ->
@@ -72,9 +76,10 @@ class ProjectRegistry private constructor(
             check(hosts.isNotEmpty()) { "$where.hosts is empty — a project is found by its domain" }
             hosts.forEach { check(HOST.matches(it)) { "$where.hosts has '$it', which is not a bare host name (no port, scheme or path)" } }
             val schema = s.schema.trim().lowercase(Locale.ROOT)
-            check(SCHEMA.matches(schema)) { "$where.schema must be a plain lower-case identifier (letters, digits, '_'), was '${s.schema}'" }
+            // 닫힌 프로젝트는 DB 를 쓰지 않으므로 스키마를 안 적어도 된다 (적었으면 모양은 본다)
+            check(SCHEMA.matches(schema) || (s.status == ProjectStatus.CLOSED && schema.isEmpty())) { "$where.schema must be a plain lower-case identifier (letters, digits, '_'), was '${s.schema}'" }
             check(s.datasource.poolMax >= 1) { "$where.datasource.pool-max must be at least 1" }
-            return Project(id, hosts.distinct(), schema, s.datasource, s.config)
+            return Project(id, hosts.distinct(), schema, s.datasource, s.config, s.status)
         }
     }
 
@@ -84,5 +89,6 @@ class ProjectRegistry private constructor(
         val schema: String = "",
         val datasource: ProjectDatasource = ProjectDatasource(),
         val config: Map<String, String> = emptyMap(),
+        val status: ProjectStatus = ProjectStatus.ACTIVE,
     )
 }

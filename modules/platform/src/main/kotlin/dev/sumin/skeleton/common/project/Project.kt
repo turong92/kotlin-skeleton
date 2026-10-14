@@ -13,7 +13,13 @@ data class Project(
     val datasource: ProjectDatasource,
     /** `skeleton.` 아래 키 → 값. 공통 `skeleton.*` 위에 덮어 같은 properties 클래스로 바인딩한다 ([ProjectRegistry.bind]) */
     val config: Map<String, String>,
-)
+    /** `closed` 면 서비스를 끝낸 프로젝트 — 도메인은 503 으로 답하고 DB 풀 · 마이그레이션 · 개수 계산에서 빠진다 */
+    val status: ProjectStatus = ProjectStatus.ACTIVE,
+) {
+    val closed: Boolean get() = status == ProjectStatus.CLOSED
+}
+
+enum class ProjectStatus { ACTIVE, CLOSED }
 
 /** 프로젝트의 DB 연결 — 비워 두면 공통 `spring.datasource.*` 를 쓴다 (프로젝트별 DB 계정을 주면 자기 스키마 밖은 DB 가 막는다) */
 data class ProjectDatasource(

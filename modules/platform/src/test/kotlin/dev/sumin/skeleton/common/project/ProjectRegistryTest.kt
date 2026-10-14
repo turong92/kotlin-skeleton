@@ -30,6 +30,7 @@ class ProjectRegistryTest {
         assertEquals(listOf("a", "b"), registry.projects.map { it.id })
         assertEquals("a", registry.byHost("WWW.A.localhost")?.id)
         assertEquals("b", registry.byHost("b.localhost")?.id)
+        assertEquals("a", registry.byHost("a.localhost:5173")?.id, "the port is not part of the host")
         assertNull(registry.byHost("c.localhost"))
         assertNull(registry.byHost(null))
     }

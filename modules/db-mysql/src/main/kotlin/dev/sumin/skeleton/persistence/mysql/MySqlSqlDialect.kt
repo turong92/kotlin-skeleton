@@ -14,6 +14,8 @@ import java.time.ZoneOffset
 class MySqlSqlDialect : SqlDialect {
     override val vendor: String = "mysql"
 
+    override val schemaIsDatabase: Boolean = true   // MySQL 의 스키마 = 데이터베이스
+
     override fun instantParam(value: Instant?): Any? = value?.let { LocalDateTime.ofInstant(it, ZoneOffset.UTC) }
 
     override fun readInstant(rs: ResultSet, column: String): Instant? =

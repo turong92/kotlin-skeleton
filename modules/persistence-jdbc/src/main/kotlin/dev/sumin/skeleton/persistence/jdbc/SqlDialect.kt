@@ -16,6 +16,9 @@ interface SqlDialect {
     /** Spring Boot `DatabaseDriver.id` 와 같은 값 — Flyway `{vendor}` 폴더 이름이기도 하다 (`postgresql`, `mysql`). */
     val vendor: String
 
+    /** 이 DB 에서 "스키마" 가 데이터베이스인가 (MySQL). 프로젝트 풀이 스키마를 고르는 방법이 갈린다 — 아니면 JDBC schema(PostgreSQL search_path), 맞으면 catalog */
+    val schemaIsDatabase: Boolean get() = false
+
     fun instantParam(value: Instant?): Any?
 
     fun readInstant(rs: ResultSet, column: String): Instant?

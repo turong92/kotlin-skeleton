@@ -1,6 +1,7 @@
 // MySQL 방언 — 앱은 db-postgresql / db-mysql 중 하나만 끼운다
 dependencies {
     api(project(":modules:persistence-jdbc"))
+    implementation(project(":modules:platform"))   // ProjectsConfigured — 프로젝트가 있을 때만 켜지는 조각
 
     implementation("org.springframework.boot:spring-boot-autoconfigure")
     implementation("org.springframework.boot:spring-boot-starter-data-jdbc")

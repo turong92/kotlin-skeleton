@@ -49,7 +49,12 @@ fun interface AccountMailer {
 }
 
 /** 링크로 가는 메일은 비밀번호 재설정 · 매직 링크 둘뿐이다 — 세션이 없는 흐름이라서. 나머지는 코드다 */
-class AccountLinks(private val props: AccountProperties.Mail) {
+class AccountLinks(private val mail: () -> AccountProperties.Mail) {
+    constructor(props: AccountProperties.Mail) : this({ props })
+
+    /** 지금 프로젝트의 메일 설정 (프로젝트가 없으면 앱의 설정) — 링크는 부를 때마다 읽는다 */
+    private val props: AccountProperties.Mail get() = mail()
+
     fun reset(token: String) = build(props.resetPath, token)
     fun magicLink(token: String) = build(props.magicLinkPath, token)
 

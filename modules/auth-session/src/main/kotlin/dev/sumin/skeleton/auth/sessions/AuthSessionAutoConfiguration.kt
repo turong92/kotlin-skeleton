@@ -10,6 +10,7 @@ import dev.sumin.skeleton.auth.session.SessionInspector
 import dev.sumin.skeleton.auth.session.SessionRevoker
 import dev.sumin.skeleton.auth.sessions.web.SessionController
 import dev.sumin.skeleton.common.erasure.AccountErasureListener
+import dev.sumin.skeleton.common.project.ProjectRegistry
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.common.web.ClientIps
 import dev.sumin.skeleton.common.web.PublicEndpointContributor
@@ -75,7 +76,8 @@ class AuthSessionAutoConfiguration {
     /** 끝난 세션 행을 주기로 지운다 (`skeleton.auth-session.purge.interval`, 0 이면 끔) */
     @Bean(initMethod = "start", destroyMethod = "close")
     @ConditionalOnMissingBean(name = ["authSessionPurgeScheduler"])
-    fun authSessionPurgeScheduler(properties: AuthSessionProperties, purge: SessionPurge): SessionPurgeScheduler = SessionPurgeScheduler(properties.purge.interval, purge)
+    fun authSessionPurgeScheduler(properties: AuthSessionProperties, purge: SessionPurge, projects: ObjectProvider<ProjectRegistry>): SessionPurgeScheduler =
+        projects.getIfAvailable()?.let { r -> SessionPurgeScheduler(properties.purge.interval) { r.forEachProject { purge.runOnce() } } } ?: SessionPurgeScheduler(properties.purge.interval, purge)
 
     /** 계정 삭제가 끝나면 그 계정의 세션 행을 지운다 */
     @Bean

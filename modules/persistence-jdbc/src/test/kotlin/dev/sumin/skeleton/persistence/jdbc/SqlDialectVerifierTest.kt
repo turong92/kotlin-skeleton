@@ -21,6 +21,10 @@ class SqlDialectVerifierTest {
     private val h2: Supplier<DataSource> = Supplier {
         EmbeddedDatabaseBuilder().setType(EmbeddedDatabaseType.H2).generateUniqueName(true).build()
     }
+    private val noConnections: DataSource = object : org.springframework.jdbc.datasource.AbstractDataSource() {
+        override fun getConnection(): java.sql.Connection = error("must not be asked for a connection")
+        override fun getConnection(username: String, password: String): java.sql.Connection = error("must not be asked for a connection")
+    }
     private val runner = ApplicationContextRunner()
         .withConfiguration(AutoConfigurations.of(SqlDialectAutoConfiguration::class.java))
 
@@ -65,5 +69,22 @@ class SqlDialectVerifierTest {
     @Test
     fun `app without a DataSource is not checked`() {
         runner.run { context -> assertThat(context).hasNotFailed().doesNotHaveBean(SqlDialectVerifier::class.java) }
+    }
+
+    @Test
+    fun `with projects the dialect is checked against the configured url - no project is in context at startup so no connection is opened`() {
+        val projectsRunner = runner.withPropertyValues(
+            "skeleton.projects.a.hosts=a.test", "skeleton.projects.a.schema=pa",
+            "spring.datasource.url=jdbc:postgresql://localhost:1/app",
+        )
+        projectsRunner.withBean(DataSource::class.java, Supplier<DataSource> { noConnections })
+            .withBean(SqlDialect::class.java, Supplier<SqlDialect> { FakeDialect("mysql") })
+            .run { context ->
+                assertThat(context).hasFailed()
+                assertThat(context.startupFailure).rootCause().hasMessageContaining("mysql").hasMessageContaining("postgresql")
+            }
+        projectsRunner.withBean(DataSource::class.java, Supplier<DataSource> { noConnections })
+            .withBean(SqlDialect::class.java, Supplier<SqlDialect> { FakeDialect("postgresql") })
+            .run { context -> assertThat(context).hasNotFailed() }
     }
 }

@@ -33,13 +33,19 @@ class AccountPurgeScheduler(private val interval: Duration, private val dispatch
 }
 
 /** 로컬 · e2e 용 시드 계정을 기동 때 만든다 — 이미 있는 이메일은 건드리지 않는다. 확인된 ACTIVE 계정이고 `bootstrap` 과 무관하다 */
-class AccountSeeder(private val core: AccountCore) : ApplicationRunner {
+class AccountSeeder(private val core: AccountCore, private val projects: ProjectSeeds? = null) : ApplicationRunner {
+    /** 프로젝트가 있을 때: 프로젝트마다(스키마마다) 그 프로젝트 설정의 시드 */
+    class ProjectSeeds(val registry: dev.sumin.skeleton.common.project.ProjectRegistry, val seedsOf: (dev.sumin.skeleton.common.project.Project) -> List<AccountProperties.SeedAccount>)
+
     private val log = LoggerFactory.getLogger(javaClass)
 
-    override fun run(args: ApplicationArguments) = seed()
+    override fun run(args: ApplicationArguments) {
+        if (projects == null) seed() else projects.registry.forEachProject { seed(projects.seedsOf(it)) }
+    }
 
-    fun seed() {
-        core.props.seed.accounts.forEachIndexed { index, seed ->
+    /** [seeds] 는 시드 목록 — 프로젝트가 있으면 프로젝트마다 그 프로젝트의 설정으로 부른다 */
+    fun seed(seeds: List<AccountProperties.SeedAccount> = core.props.seed.accounts) {
+        seeds.forEachIndexed { index, seed ->
             val email = Emails.normalize(seed.email)
             if (core.accountByEmail(email) != null) return@forEachIndexed
             val now = core.time.now()
