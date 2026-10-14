@@ -49,9 +49,10 @@ object UpgradeBaseline {
         // notification-jdbc
         "insert into notification_inbox (recipient_id, event_id, topic, type, severity, title, message, payload_json, recipient_ids_json, event_created_at, created_at, updated_at) " +
             "values ('acc_upgrade', 'evt_upgrade', 'baseline', 'baseline.created', 'INFO', 'Before', 'written on the baseline schema', '{\"k\":\"v\"}', '[\"acc_upgrade\"]', '2026-10-01 00:00:00', '2026-10-01 00:00:00', '2026-10-01 00:00:00')",
-        // job-queue-jdbc (DONE — 워커가 모르는 작업을 집어 가지 않는다)
+        // job-queue-jdbc (DONE — 워커가 모르는 작업을 집어 가지 않는다). 시각은 **지금**이다: 샘플 앱은 끝난 줄 정리(retention, DONE 14일)를 켜 두어서 고정된 옛 날짜의 DONE 줄은
+        // 앱이 뜨자마자 지워진다 — 기준 줄이 사라진 것으로 보여 시험이 날짜가 지나면 깨졌다(2026-10-15)
         "insert into jobs (job_type, payload_json, status, attempts, max_attempts, next_run_at, created_at, updated_at) " +
-            "values ('baseline.job', '{}', 'DONE', 1, 3, '2026-10-01 00:00:00', '2026-10-01 00:00:00', '2026-10-01 00:00:00')",
+            "values ('baseline.job', '{}', 'DONE', 1, 3, current_timestamp, current_timestamp, current_timestamp)",
         // alert-jdbc
         "insert into alerts (kind, alert_key, severity, title, first_at, occurred_at, sent_at) " +
             "values ('BASELINE', 'k', 'WARN', 'Before', '2026-10-01 00:00:00', '2026-10-01 00:00:00', '2026-10-01 00:00:00')",

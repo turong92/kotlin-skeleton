@@ -85,8 +85,13 @@ class WriteGateCensusTest {
             "POST /api/v1/auth/verify-email", "POST /api/v1/legal/consents", "POST /api/v1/legal/consents/{type}/withdraw",
         )
 
-        /** `/api/` 밖에서 변경 요청을 받는 경로 — 이 게이트의 범위 밖이다. 서블릿 컨테이너의 오류 디스패치가 향하는 `BasicErrorController` 뿐이다(사용자 요청이 직접 닿는 곳이 아니다) */
-        val OUTSIDE_THE_API: Set<String> = setOf("POST /error", "PUT /error", "PATCH /error", "DELETE /error")
+        /**
+         * `/api/` 밖에서 변경 요청을 받는 경로 — 이 게이트의 범위 밖이다.
+         *  · 서블릿 컨테이너의 오류 디스패치가 향하는 `BasicErrorController`(사용자 요청이 직접 닿는 곳이 아니다)
+         *  · 작업 큐의 깨우기 주소 `POST /internal/jobs/drain`(`job-queue-jdbc`): 사람 계정의 쓰기가 아니다 — 계정이 아니라 공유 비밀값 헤더(`X-Wake-Secret`)로 인증하는 Cloud Scheduler 같은 밖의 호출자용이라 이메일 · 아이디 게이트와 무관하다.
+         *    기본(폴링) 모드에서는 요청마다 404 이고, 이 목록에 이름으로 올려 둔다 — 깨우기 경로가 바뀌거나 `/api/` 밖에 다른 변경 경로가 생기면 여기서 깨져 누가 알게 된다
+         */
+        val OUTSIDE_THE_API: Set<String> = setOf("POST /error", "PUT /error", "PATCH /error", "DELETE /error", "POST /internal/jobs/drain")
 
         /** MVC 매핑 · 함수형 라우트로 보이지 않는데 변경 요청을 받는 경로 (`METHOD /경로`) — 지금은 없다. 앱이 서블릿 · 필터로 변경 요청을 받으면 여기 더한다 */
         val HAND_WRITTEN: List<String> = emptyList()
