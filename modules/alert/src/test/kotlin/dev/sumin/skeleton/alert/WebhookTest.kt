@@ -117,4 +117,23 @@ class WebhookTest {
         assertFalse(StartupFailureAlert.attempt(webhookUrl = "", profiles = listOf("prod"), skipProfiles = listOf("local"), message = "x"))
         assertEquals(1, received.size)
     }
+
+    @Test
+    fun `a direct-fallback alert of one project does not use up the interval of the same kind in another project`() {
+        fun project(id: String) = dev.sumin.skeleton.common.project.Project(id, listOf("$id.test"), id, dev.sumin.skeleton.common.project.ProjectDatasource(), emptyMap())
+        val clock = object : TimeProvider { var now = Instant.parse("2026-10-06T00:00:00Z"); override fun now() = now }
+        val brokenStore = object : AlertStore {
+            override fun record(kind: AlertKind, key: String, severity: AlertSeverity, title: String, detail: String, now: Instant, minInterval: Duration): AlertRecorded = error("db down")
+        }
+        val alerts = DefaultOwnerAlerts(brokenStore, emptyList(), AlertProperties(webhookUrl = url), clock, handoff = { it.run() }, pause = {})
+
+        dev.sumin.skeleton.common.project.ProjectContext.runIn(project("a")) {
+            alerts.emit(BuiltInAlertKind.SERVER_ERROR_SURGE, detail = "from a")
+            alerts.emit(BuiltInAlertKind.SERVER_ERROR_SURGE, detail = "from a again")
+        }
+        dev.sumin.skeleton.common.project.ProjectContext.runIn(project("b")) { alerts.emit(BuiltInAlertKind.SERVER_ERROR_SURGE, detail = "from b") }
+
+        assertEquals(2, received.size, "a's second one is folded, b's first one still goes out")
+        assertTrue(received.last().body.contains("from b"))
+    }
 }

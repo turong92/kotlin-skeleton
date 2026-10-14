@@ -30,4 +30,17 @@ class PrincipalIdempotencyScopeResolverTest {
 
         assertThat(resolver.resolve(request)).isEqualTo("anonymous:198.51.100.20")
     }
+
+    @Test
+    fun `the same caller name in two projects is two scopes - their idempotency keys cannot collide`() {
+        fun project(id: String) = dev.sumin.skeleton.common.project.Project(id, listOf("$id.test"), id, dev.sumin.skeleton.common.project.ProjectDatasource(), emptyMap())
+        val request = MockHttpServletRequest().apply { userPrincipal = Principal { "acc_user" } }
+        val resolver = PrincipalIdempotencyScopeResolver()
+
+        val inA = dev.sumin.skeleton.common.project.ProjectContext.runIn(project("a")) { resolver.resolve(request) }
+        val inB = dev.sumin.skeleton.common.project.ProjectContext.runIn(project("b")) { resolver.resolve(request) }
+
+        assertThat(inA).isNotEqualTo(inB)
+        assertThat(inA).endsWith("acc_user")
+    }
 }

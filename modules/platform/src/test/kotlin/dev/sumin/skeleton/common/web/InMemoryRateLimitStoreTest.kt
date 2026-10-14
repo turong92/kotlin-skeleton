@@ -37,4 +37,17 @@ class InMemoryRateLimitStoreTest {
         assertEquals(1, store.size())
         assertTrue(store.consume("long", capacity = 5, windowMillis = 3_600_000, now = now.plusSeconds(5)).remaining == 3)
     }
+
+    @Test
+    fun `the same key in two projects is counted separately - one project's callers cannot use up another's allowance`() {
+        fun project(id: String) = dev.sumin.skeleton.common.project.Project(id, listOf("$id.test"), id, dev.sumin.skeleton.common.project.ProjectDatasource(), emptyMap())
+        val a = project("a")
+        val b = project("b")
+        fun consume(p: dev.sumin.skeleton.common.project.Project) =
+            dev.sumin.skeleton.common.project.ProjectContext.runIn(p) { store.consume("login:ann", capacity = 1, windowMillis = 60_000, now = now) }
+
+        assertTrue(consume(a).allowed)
+        assertFalse(consume(a).allowed)
+        assertTrue(consume(b).allowed, "project b has its own counter for the same key")
+    }
 }

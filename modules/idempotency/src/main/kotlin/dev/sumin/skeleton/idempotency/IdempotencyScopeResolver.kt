@@ -12,7 +12,9 @@ class PrincipalIdempotencyScopeResolver(
     private val clientIps: ClientIps = ClientIps(),
 ) : IdempotencyScopeResolver {
     override fun resolve(request: HttpServletRequest): String =
-        request.userPrincipal?.name
-            ?.takeIf { it.isNotBlank() }
-            ?: "anonymous:${clientIps.of(request).limitKey}"
+        dev.sumin.skeleton.common.project.ProjectContext.scopedKey( // 프로젝트 모드: 같은 계정 id · IP 가 프로젝트 사이에서 겹쳐도 멱등 키가 섞이지 않는다
+            request.userPrincipal?.name
+                ?.takeIf { it.isNotBlank() }
+                ?: "anonymous:${clientIps.of(request).limitKey}",
+        )
 }

@@ -228,4 +228,15 @@ class LoginControlsTest {
         assertEquals(listOf("account.login-throttled", "account.refresh-reuse"), alerts.emitted.map { it.first.name })
         assertTrue(alerts.emitted.none { "@" in it.third })
     }
+
+    @Test
+    fun `the same email in two projects has two attempt budgets (project mode)`() {
+        fun project(id: String) = dev.sumin.skeleton.common.project.Project(id, listOf("$id.test"), id, dev.sumin.skeleton.common.project.ProjectDatasource(), emptyMap())
+        val id = "email:project-budget@example.com"
+        dev.sumin.skeleton.common.project.ProjectContext.runIn(project("a")) {
+            repeat(10) { throttle.beforeAttempt(attempt(id, "198.51.100.$it")) }
+            assertFailsWith<ApplicationException> { throttle.beforeAttempt(attempt(id, "198.51.100.99")) }
+        }
+        dev.sumin.skeleton.common.project.ProjectContext.runIn(project("b")) { throttle.beforeAttempt(attempt(id, "198.51.100.98")) }
+    }
 }

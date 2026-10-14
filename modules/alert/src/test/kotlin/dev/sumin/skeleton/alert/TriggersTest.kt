@@ -88,4 +88,30 @@ class TriggersTest {
         assertTrue(e.detail.contains("MailException"), e.detail)
         assertFalse(e.detail.contains("secret@example.com") || e.detail.contains("token=abc"), e.detail)
     }
+
+    @Test
+    fun `5xx of different projects are counted per project - two projects below the threshold do not add up to an alert`() {
+        fun project(id: String) = dev.sumin.skeleton.common.project.Project(id, listOf("$id.test"), id, dev.sumin.skeleton.common.project.ProjectDatasource(), emptyMap())
+        val surge = surge(threshold = 3)
+        dev.sumin.skeleton.common.project.ProjectContext.runIn(project("a")) { repeat(2) { surge.record() } }
+        dev.sumin.skeleton.common.project.ProjectContext.runIn(project("b")) { repeat(2) { surge.record() } }
+        assertTrue(alerts.emitted.isEmpty())
+
+        dev.sumin.skeleton.common.project.ProjectContext.runIn(project("a")) { surge.record() }
+        assertEquals(1, alerts.emitted.size)
+    }
+
+    @Test
+    fun `the default hand-off to another thread keeps the project - the alert is recorded in the schema of the project that failed`() {
+        fun project(id: String) = dev.sumin.skeleton.common.project.Project(id, listOf("$id.test"), id, dev.sumin.skeleton.common.project.ProjectDatasource(), emptyMap())
+        val seen = java.util.concurrent.CompletableFuture<String?>()
+        val capturing = object : OwnerAlerts {
+            override fun emit(kind: AlertKind, key: String, detail: String, immediate: Boolean) { seen.complete(dev.sumin.skeleton.common.project.ProjectContext.currentOrNull()?.id) }
+        }
+        val surge = ServerErrorSurge(capturing, AlertProperties.Surge(threshold = 1, window = Duration.ofMinutes(1)), clock)
+
+        dev.sumin.skeleton.common.project.ProjectContext.runIn(project("a")) { surge.record() }
+
+        assertEquals("a", seen.get(5, java.util.concurrent.TimeUnit.SECONDS))
+    }
 }

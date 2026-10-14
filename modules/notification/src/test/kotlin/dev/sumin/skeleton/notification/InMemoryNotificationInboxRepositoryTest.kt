@@ -44,4 +44,18 @@ class InMemoryNotificationInboxRepositoryTest {
         assertEquals(readAt, read.readAt)
         assertEquals(listOf("event-1"), unread.values.map { it.event.id })
     }
+
+    @Test
+    fun `the inbox of the same account id is separate per project`() {
+        fun project(id: String) = dev.sumin.skeleton.common.project.Project(id, listOf("$id.test"), id, dev.sumin.skeleton.common.project.ProjectDatasource(), emptyMap())
+        val repository = InMemoryNotificationInboxRepository()
+        val event = NotificationEvent(id = "event-1", topic = "demo", type = "t", createdAt = Instant.parse("2026-06-17T00:00:00Z"))
+        dev.sumin.skeleton.common.project.ProjectContext.runIn(project("a")) { repository.save(event, setOf("acc_user")) }
+
+        fun page(id: String) = dev.sumin.skeleton.common.project.ProjectContext.runIn(project(id)) { repository.findByRecipient("acc_user", NotificationInboxQuery()) }
+        assertEquals(1, page("a").totalElements)
+        assertEquals(0, page("b").totalElements)
+        assertEquals(0, dev.sumin.skeleton.common.project.ProjectContext.runIn(project("b")) { repository.markAllRead("acc_user", Instant.now()) })
+        assertEquals(1, dev.sumin.skeleton.common.project.ProjectContext.runIn(project("a")) { repository.markAllRead("acc_user", Instant.now()) })
+    }
 }

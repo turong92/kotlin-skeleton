@@ -29,4 +29,28 @@ class ProjectContextTest {
         }
         assertNull(ProjectContext.currentOrNull())
     }
+
+    @Test
+    fun `scopedKey leaves a key alone outside a project and prefixes the project inside one`() {
+        assertEquals("ip:1.2.3.4", ProjectContext.scopedKey("ip:1.2.3.4"))
+        val inA = ProjectContext.runIn(project("a")) { ProjectContext.scopedKey("ip:1.2.3.4") }
+        val inB = ProjectContext.runIn(project("b")) { ProjectContext.scopedKey("ip:1.2.3.4") }
+        assertEquals(false, inA == inB)
+        assertEquals(true, inA.endsWith("ip:1.2.3.4") && inA.startsWith("a"), inA)
+    }
+
+    @Test
+    fun `carry runs a task in the project of whoever handed it over, on any thread`() {
+        val seen = java.util.concurrent.atomic.AtomicReference<String?>("unset")
+        val task = ProjectContext.runIn(project("a")) { ProjectContext.carry(Runnable { seen.set(ProjectContext.currentOrNull()?.id) }) }
+        Thread(task).apply { start(); join() }
+        assertEquals("a", seen.get())
+        assertNull(ProjectContext.currentOrNull())
+    }
+
+    @Test
+    fun `carry outside a project hands the task back untouched`() {
+        val task = Runnable { }
+        assertSame(task, ProjectContext.carry(task))
+    }
 }

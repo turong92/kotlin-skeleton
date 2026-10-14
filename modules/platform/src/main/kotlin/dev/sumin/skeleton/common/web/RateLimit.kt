@@ -56,7 +56,7 @@ class InMemoryFixedWindowRateLimitStore(
         val currentMillis = now.toEpochMilli()
         val windowStart = (currentMillis / effectiveWindowMillis) * effectiveWindowMillis
         val windowEnd = windowStart + effectiveWindowMillis
-        val counterKey = "$key:$windowStart"
+        val counterKey = "${dev.sumin.skeleton.common.project.ProjectContext.scopedKey(key)}:$windowStart" // 프로젝트마다 따로 센다 — 같은 IP · 이메일 · 계정 id 가 프로젝트 사이에서 한도를 나눠 쓰지 않게
         val counter = counters.compute(counterKey) { _, current ->
             current?.copy(count = current.count + 1) ?: WindowCounter(windowEnd = windowEnd, count = 1)
         }!!

@@ -84,4 +84,45 @@ class InMemoryNotificationBrokerTest {
             NotificationEvent(topic = "orders", type = " ")
         }
     }
+
+    private fun project(id: String) = dev.sumin.skeleton.common.project.Project(id, listOf("$id.test"), id, dev.sumin.skeleton.common.project.ProjectDatasource(), emptyMap())
+    private fun <T> inProject(id: String, block: () -> T) = dev.sumin.skeleton.common.project.ProjectContext.runIn(project(id), block)
+
+    @Test
+    fun `an event reaches the subscribers of its own project only - the same account id in another project hears nothing`() {
+        val broker = InMemoryNotificationBroker()
+        val heardInA = mutableListOf<NotificationEvent>()
+        val heardInB = mutableListOf<NotificationEvent>()
+        inProject("a") { broker.subscribe(emptySet()) { heardInA += it } }
+        inProject("b") { broker.subscribe(emptySet()) { heardInB += it } }
+
+        val result = inProject("a") { broker.publish(NotificationEvent(topic = "t", type = "x", recipientIds = setOf("acc_user"))) }
+
+        assertEquals(1, result.deliveredSubscribers)
+        assertEquals(1, heardInA.size)
+        assertEquals(0, heardInB.size)
+    }
+
+    @Test
+    fun `a server-level listener registered outside any project still hears every project`() {
+        val broker = InMemoryNotificationBroker()
+        val serverWide = mutableListOf<NotificationEvent>()
+        broker.subscribe(emptySet()) { serverWide += it }
+
+        inProject("a") { broker.publish(NotificationEvent(topic = "t", type = "x")) }
+        inProject("b") { broker.publish(NotificationEvent(topic = "t", type = "x")) }
+
+        assertEquals(2, serverWide.size)
+    }
+
+    @Test
+    fun `an event published with no project is not handed to a subscriber of a project`() {
+        val broker = InMemoryNotificationBroker()
+        val heardInA = mutableListOf<NotificationEvent>()
+        inProject("a") { broker.subscribe(emptySet()) { heardInA += it } }
+
+        broker.publish(NotificationEvent(topic = "t", type = "x"))
+
+        assertEquals(0, heardInA.size)
+    }
 }

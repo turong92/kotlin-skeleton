@@ -94,7 +94,7 @@ class InMemoryNotificationInboxRepository : NotificationInboxRepository {
     ): List<NotificationInboxRecord> =
         recipientIds.mapNotNull { recipientId ->
             val normalizedRecipientId = recipientId.trim().takeIf { it.isNotBlank() } ?: return@mapNotNull null
-            val key = NotificationInboxKey(normalizedRecipientId, event.id)
+            val key = NotificationInboxKey(normalizedRecipientId, event.id, project())
             records.computeIfAbsent(key) {
                 NotificationInboxRecord(recipientId = normalizedRecipientId, event = event)
             }
@@ -105,8 +105,10 @@ class InMemoryNotificationInboxRepository : NotificationInboxRepository {
         query: NotificationInboxQuery,
     ): NotificationInboxPage {
         val normalizedRecipientId = recipientId.trim()
-        val filtered = records.values.asSequence()
-            .filter { it.recipientId == normalizedRecipientId }
+        val project = project()
+        val filtered = records.entries.asSequence()
+            .filter { it.key.project == project && it.key.recipientId == normalizedRecipientId }
+            .map { it.value }
             .filter { !query.unreadOnly || it.readAt == null }
             .filter { query.topic.isNullOrBlank() || it.event.topic == query.topic.trim() }
             .sortedWith(
@@ -126,7 +128,7 @@ class InMemoryNotificationInboxRepository : NotificationInboxRepository {
         eventId: String,
         readAt: Instant,
     ): NotificationInboxRecord? {
-        val key = NotificationInboxKey(recipientId.trim(), eventId.trim())
+        val key = NotificationInboxKey(recipientId.trim(), eventId.trim(), project())
         return records.computeIfPresent(key) { _, current ->
             current.copy(readAt = current.readAt ?: readAt)
         }
@@ -138,8 +140,9 @@ class InMemoryNotificationInboxRepository : NotificationInboxRepository {
     ): Int {
         val normalizedRecipientId = recipientId.trim()
         var updated = 0
+        val project = project()
         records.keys
-            .filter { it.recipientId == normalizedRecipientId }
+            .filter { it.project == project && it.recipientId == normalizedRecipientId }
             .forEach { key ->
                 records.computeIfPresent(key) { _, current ->
                     if (current.readAt == null) {
@@ -153,10 +156,14 @@ class InMemoryNotificationInboxRepository : NotificationInboxRepository {
         return updated
     }
 
+    /** 프로젝트 모드: 같은 계정 id 가 프로젝트 사이에서 겹쳐도 받은편지함이 섞이지 않는다. 프로젝트 밖(한 서비스)이면 null */
     private data class NotificationInboxKey(
         val recipientId: String,
         val eventId: String,
+        val project: String?,
     )
+
+    private fun project(): String? = dev.sumin.skeleton.common.project.ProjectContext.currentOrNull()?.id
 }
 
 object NoopNotificationInboxRepository : NotificationInboxRepository {

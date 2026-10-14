@@ -51,7 +51,7 @@ class LoginThrottle(private val core: AccountCore) : LoginHooks {
         if (a.allowed) return
         // 창마다 버킷당 첫 거절만 이벤트로 — 공격 중에 감사 표 · 경보가 요청 수만큼 늘지 않게
         val windowIndex = core.time.now().toEpochMilli() / window.toMillis().coerceAtLeast(1)
-        if (announced.add("$scope:${AccountRateLimits.digest(key)}@$windowIndex")) {
+        if (announced.add(dev.sumin.skeleton.common.project.ProjectContext.scopedKey("$scope:${AccountRateLimits.digest(key)}@$windowIndex"))) {
             if (announced.size > MAX_REMEMBERED) announced.clear()
             core.events.publish(AccountEventType.LOGIN_THROTTLED, null, attempt.clientIp, mapOf("scope" to label, "id" to eventIdOf(core, attempt.identifier)))
         }

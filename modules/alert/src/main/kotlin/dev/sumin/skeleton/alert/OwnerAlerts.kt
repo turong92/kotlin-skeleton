@@ -34,7 +34,7 @@ class DefaultOwnerAlerts(
     private val properties: AlertProperties,
     private val time: TimeProvider,
     /** 채널 보내기는 부르는 스레드가 아니라 여기서 — 웹훅이 느려도 요청이 기다리지 않는다 */
-    private val handoff: (Runnable) -> Unit = { Thread.ofVirtual().name("owner-alert").start(it) },
+    private val handoff: (Runnable) -> Unit = { Thread.ofVirtual().name("owner-alert").start(dev.sumin.skeleton.common.project.ProjectContext.carry(it)) },
     private val pause: (Duration) -> Unit = { Thread.sleep(it) },
 ) : OwnerAlerts {
     private val log = LoggerFactory.getLogger(javaClass)
@@ -94,9 +94,10 @@ class DefaultOwnerAlerts(
     private fun directFallback(kind: AlertKind, detail: String) {
         val uri = properties.webhookUri ?: return
         val now = time.now()
-        val last = lastDirect[kind.name]
+        val debounceKey = dev.sumin.skeleton.common.project.ProjectContext.scopedKey(kind.name) // 프로젝트마다 따로 — 한 프로젝트의 경보가 다른 프로젝트의 같은 종류를 가리지 않게
+        val last = lastDirect[debounceKey]
         if (last != null && now < last.plus(properties.interval(kind))) return
-        lastDirect[kind.name] = now
+        lastDirect[debounceKey] = now
         val text = "$detail\n(recording was unavailable, sent directly)".take(DETAIL_MAX)
         DirectWebhook.post(uri, "[$environment][${kind.severity}] ${kind.title}", text, kind.severity, "alert ${kind.name}")
     }

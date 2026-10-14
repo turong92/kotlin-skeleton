@@ -20,11 +20,13 @@ class ServerErrorSurge(
     private val settings: AlertProperties.Surge,
     private val time: TimeProvider,
     /** 경보 기록은 요청 스레드가 아니라 여기서 — 기록이 DB 를 기다려도 5xx 를 내는 요청이 더 늦어지지 않는다 */
-    private val handoff: (Runnable) -> Unit = { Thread.ofVirtual().name("alert-surge").start(it) },
+    private val handoff: (Runnable) -> Unit = { Thread.ofVirtual().name("alert-surge").start(dev.sumin.skeleton.common.project.ProjectContext.carry(it)) },
 ) {
-    private val hits = ArrayDeque<Instant>()
+    /** 프로젝트마다 따로 센다 — 프로젝트 둘의 5xx 가 합쳐져 엉뚱한 프로젝트 이름으로 경보가 나가지 않게. 프로젝트 밖(한 서비스)이면 키는 하나 */
+    private val hitsByProject = java.util.concurrent.ConcurrentHashMap<String, ArrayDeque<Instant>>()
 
     fun record() {
+        val hits = hitsByProject.computeIfAbsent(dev.sumin.skeleton.common.project.ProjectContext.scopedKey("")) { ArrayDeque() }
         val count: Int
         synchronized(hits) {
             val now = time.now()
