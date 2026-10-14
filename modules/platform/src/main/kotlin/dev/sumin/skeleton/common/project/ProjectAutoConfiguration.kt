@@ -1,6 +1,8 @@
 package dev.sumin.skeleton.common.project
 
+import org.springframework.beans.factory.ObjectProvider
 import org.springframework.beans.factory.SmartInitializingSingleton
+import org.springframework.core.task.TaskDecorator
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.webmvc.autoconfigure.WebMvcRegistrations
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping
@@ -43,11 +45,15 @@ class ProjectAutoConfiguration {
     fun projectUnawareFeaturesCheck(registry: ProjectRegistry): SmartInitializingSingleton =
         SmartInitializingSingleton { ProjectUnawareFeatures.check(registry) }
 
-    /** MVC 비동기(Callable · DeferredResult 의 실행기)가 일을 제출한 요청의 프로젝트로 돈다 */
+    /**
+     * MVC 비동기(Callable · DeferredResult 의 실행기)가 일을 제출한 요청의 프로젝트로 돈다.
+     * 앱이 자기 `TaskDecorator`(MDC · trace …)를 두었으면 덮어쓰지 않고 **함께** 감싼다 — 실행기에는 데코레이터가 하나뿐이라 여기서 합친다.
+     */
     @Bean
     @ConditionalOnMissingBean(name = ["projectTaskExecutorCustomizer"])
     @ConditionalOnClass(ThreadPoolTaskExecutorCustomizer::class)
-    fun projectTaskExecutorCustomizer(): ThreadPoolTaskExecutorCustomizer = ThreadPoolTaskExecutorCustomizer { it.setTaskDecorator(ProjectTaskDecorator()) }
+    fun projectTaskExecutorCustomizer(appDecorators: ObjectProvider<TaskDecorator>): ThreadPoolTaskExecutorCustomizer =
+        ThreadPoolTaskExecutorCustomizer { it.setTaskDecorator(ProjectTaskDecorator.around(appDecorators.orderedStream().toList())) }
 
     /** [ProjectApi] 를 읽는 핸들러 매핑 — 목록이 비어 있으면 이 빈이 없어 표시는 무시된다 */
     @Bean

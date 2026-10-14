@@ -11,20 +11,15 @@ object ProjectUnawareFeatures {
     data class Feature(val label: String, val marker: String)
 
     val DEFAULT = listOf(
-        Feature("job-queue-jdbc (background worker)", "dev.sumin.skeleton.jobqueue.jdbc.JobQueueJdbcAutoConfiguration"),
         Feature("payment", "dev.sumin.skeleton.payment.PaymentAutoConfiguration"),
         Feature("auth-social (social login)", "dev.sumin.skeleton.auth.social.config.AuthSocialAutoConfiguration"),
         Feature("notification-mail (mail sender)", "dev.sumin.skeleton.notification.mail.NotificationMailAutoConfiguration"),
         Feature("storage (files)", "dev.sumin.skeleton.storage.StorageAutoConfiguration"),
-        Feature("notification", "dev.sumin.skeleton.notification.NotificationAutoConfiguration"),
-        Feature("alert", "dev.sumin.skeleton.alert.AlertAutoConfiguration"),
-        Feature("idempotency", "dev.sumin.skeleton.idempotency.IdempotencyAutoConfiguration"),
+        Feature("notification-websocket (STOMP user destinations)", "dev.sumin.skeleton.notification.websocket.NotificationWebSocketAutoConfiguration"),
         Feature("redis-core", "dev.sumin.skeleton.redis.core.RedisCoreAutoConfiguration"),
         Feature("captcha-turnstile", "dev.sumin.skeleton.captcha.turnstile.TurnstileAutoConfiguration"),
         Feature("crypto", "dev.sumin.skeleton.crypto.CryptoAutoConfiguration"),
         Feature("event-kafka", "dev.sumin.skeleton.event.kafka.EventKafkaAutoConfiguration"),
-        Feature("scheduler", "dev.sumin.skeleton.scheduler.SkeletonSchedulerAutoConfiguration"),
-        Feature("async", "dev.sumin.skeleton.async.SkeletonAsyncAutoConfiguration"),
     )
 
     fun check(registry: ProjectRegistry, features: List<Feature> = DEFAULT, classLoader: ClassLoader? = ClassUtils.getDefaultClassLoader()) {

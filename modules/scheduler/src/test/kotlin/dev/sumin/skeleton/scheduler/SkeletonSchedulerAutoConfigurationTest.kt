@@ -47,4 +47,19 @@ class SkeletonSchedulerAutoConfigurationTest {
                 assertThat(context.getBean(SkeletonScheduledLockManager::class.java)).isSameAs(custom)
             }
     }
+
+    @Test
+    fun `a task scheduled from inside a project runs in that project`() {
+        val project = dev.sumin.skeleton.common.project.Project("a", listOf("a.test"), "a", dev.sumin.skeleton.common.project.ProjectDatasource(), emptyMap())
+        contextRunner.run { context ->
+            val scheduler = context.getBean("skeletonTaskScheduler", TaskScheduler::class.java)
+            val seen = java.util.concurrent.CompletableFuture<String?>()
+
+            dev.sumin.skeleton.common.project.ProjectContext.runIn(project) {
+                scheduler.schedule({ seen.complete(dev.sumin.skeleton.common.project.ProjectContext.currentOrNull()?.id) }, java.time.Instant.now())
+            }
+
+            assertThat(seen.get(5, java.util.concurrent.TimeUnit.SECONDS)).isEqualTo("a")
+        }
+    }
 }

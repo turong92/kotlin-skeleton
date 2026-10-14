@@ -50,4 +50,10 @@ class ProjectScoped<T : Any>(private val create: (Project) -> T) {
 /** 다른 스레드(MVC 비동기 실행기 …)로 넘어가는 일에 제출한 쪽의 프로젝트를 들려 보낸다 — 스레드가 프로젝트를 물려받지는 않는다(InheritableThreadLocal 아님) */
 class ProjectTaskDecorator : org.springframework.core.task.TaskDecorator {
     override fun decorate(runnable: Runnable): Runnable = ProjectContext.carry(runnable)
+
+    companion object {
+        /** 프로젝트를 들려 보내는 데코레이터가 [others](앱의 것)를 안에 두고 함께 돈다 — 제출한 스레드에서 모두 호출되고, 실행 스레드에서는 프로젝트가 바깥이다 */
+        fun around(others: List<org.springframework.core.task.TaskDecorator>): org.springframework.core.task.TaskDecorator =
+            org.springframework.core.task.TaskDecorator { runnable -> ProjectContext.carry(others.fold(runnable) { task, other -> other.decorate(task) }) }
+    }
 }

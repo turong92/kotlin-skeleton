@@ -76,4 +76,18 @@ class AsyncExecutionContextTest {
         assertNull(MDC.get(TraceIdFilter.MDC_KEY))
         assertNull(SecurityContextHolder.getContext().authentication)
     }
+
+    private val project = dev.sumin.skeleton.common.project.Project("a", listOf("a.test"), "a", dev.sumin.skeleton.common.project.ProjectDatasource(), emptyMap())
+
+    @Test
+    fun `the project of the submitting code travels to the pool thread and is gone afterwards`() {
+        val seen = java.util.concurrent.atomic.AtomicReference<String?>("unset")
+        val decorated = dev.sumin.skeleton.common.project.ProjectContext.runIn(project) {
+            AsyncContextTaskDecorator().decorate(Runnable { seen.set(dev.sumin.skeleton.common.project.ProjectContext.currentOrNull()?.id) })
+        }
+
+        Thread { decorated.run(); assertNull(dev.sumin.skeleton.common.project.ProjectContext.currentOrNull()) }.apply { start(); join() }
+
+        assertEquals("a", seen.get())
+    }
 }

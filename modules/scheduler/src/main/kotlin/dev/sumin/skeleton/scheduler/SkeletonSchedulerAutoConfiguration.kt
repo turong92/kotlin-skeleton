@@ -29,6 +29,7 @@ class SkeletonSchedulerAutoConfiguration {
         ThreadPoolTaskScheduler().apply {
             poolSize = properties.poolSize.coerceAtLeast(1)
             setThreadNamePrefix("skeleton-scheduler-")
+            setTaskDecorator(dev.sumin.skeleton.common.project.ProjectTaskDecorator()) // 프로젝트 안에서 예약한 일은 그 프로젝트로 돈다. @SkeletonScheduled 는 프로젝트 밖에서 돈다(프로젝트마다 일하려면 forEachProject)
             setWaitForTasksToCompleteOnShutdown(true)
             setAwaitTerminationSeconds(properties.shutdownAwaitTermination.toSeconds().toInt())
         }

@@ -6,7 +6,7 @@
 | 항목 | 내용 |
 |---|---|
 | 의존성 한 줄 | `implementation(project(":modules:scheduler"))` |
-| 함께 오는 모듈 | 없음 |
+| 함께 오는 모듈 | `platform` |
 | 컴파일 전용 | 없음 |
 | 설정 접두사 | `skeleton.scheduler` — [docs/config/modules/scheduler.yml](../config/modules/scheduler.yml) |
 | 기본 동작 | 켜짐 (no-op 락). |
