@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 # 네이티브 이미지 시험 — 떠 있는 tools/native-check 서버(JVM 이든 네이티브 바이너리든)에 핵심 흐름을 실제 HTTP 로 돌린다 (docs/native-image.md).
-#   scripts/native-smoke.sh --url http://localhost:18080 [--webhook-token <값>]
-# 확인하는 것: 기동(/health) · 가입(메일 확인 코드) · 로그인 · 토큰 갱신(재사용 거절) · 단건 결제(가짜 결제사) · 구독 시작 · 작업 큐 일감 처리 · 웹훅 수신(재전송 중복) · OpenAPI 문서.
+#   scripts/native-smoke.sh --url http://localhost:18080 [--webhook-token <값>] [--wake-secret <값>]
+# 확인하는 것: 기동(/health) · 가입(메일 확인 코드) · 로그인 · 토큰 갱신(재사용 거절) · 단건 결제(가짜 결제사) · 구독 시작 · 작업 큐 일감 처리(요청 구동: 깨우기 주소) · 웹훅 수신(재전송 중복) · OpenAPI 문서.
 # 종료 코드: 0 = 전부 통과 · 1 = 어느 단계가 어긋남(단계 이름을 출력). 비밀 값은 출력하지 않는다. 필요한 것: curl · python3.
 set -uo pipefail
 
-URL=""; WH_TOKEN="native-check-webhook-token-0123456789"
+URL=""; WH_TOKEN="native-check-webhook-token-0123456789"; WAKE_SECRET="native-check-wake-secret-0123456789-abcdefgh"
 while [ $# -gt 0 ]; do
   case "$1" in
     --url) URL="$2"; shift 2 ;;
     --webhook-token) WH_TOKEN="$2"; shift 2 ;;
+    --wake-secret) WAKE_SECRET="$2"; shift 2 ;;
     *) echo "알 수 없는 인자: $1" >&2; exit 2 ;;
   esac
 done
@@ -81,11 +82,19 @@ SUB=$(printf '%s' "$R" | body | json value.subscription.id)
 R=$(call POST "/api/v1/payments/subscriptions/$SUB/activate" "$ACCESS" '{"providerPayload":{"authKey":"auth_smoke"}}'); expect "구독 활성화(첫 결제)" 200 "$R"
 [ "$(printf '%s' "$R" | body | json value.status)" = ACTIVE ] && ok "구독이 ACTIVE" || bad "구독이 ACTIVE 가 아니다"
 
-echo "== 작업 큐"
+echo "== 작업 큐 (요청 구동 — 폴링 스레드 없이 깨우기 주소가 부를 때만 처리한다)"
+WAKE=/internal/jobs/drain
+R=$(curl -sS -m 30 -X POST "$URL$WAKE" -w '\n%{http_code}'); expect "깨우기: 비밀값 없으면 401" 401 "$R"
+R=$(curl -sS -m 30 -X POST "$URL$WAKE" -H 'X-Wake-Secret: wrong' -w '\n%{http_code}'); expect "깨우기: 틀린 비밀값은 401" 401 "$R"
 NOTE="smoke-$RANDOM"
 R=$(call POST /api/v1/native-check/jobs "" "{\"note\":\"$NOTE\"}"); expect "일감 넣기" 200 "$R"
-GOT=""; for _ in $(seq 1 30); do GOT=$(curl -s "$URL/api/v1/native-check/jobs/handled" | json lastNote); [ "$GOT" = "$NOTE" ] && break; sleep 0.5; done
-[ "$GOT" = "$NOTE" ] && ok "일감이 처리됐다" || bad "일감이 처리되지 않았다"
+sleep 2
+[ "$(curl -s "$URL/api/v1/native-check/jobs/handled" | json lastNote)" != "$NOTE" ] && ok "깨우기 전에는 처리되지 않았다(폴링 없음)" || bad "깨우기 전에 처리됐다 — 폴링 스레드가 돈다"
+R=$(curl -sS -m 60 -X POST "$URL$WAKE" -H "X-Wake-Secret: $WAKE_SECRET" -w '\n%{http_code}'); expect "깨우기" 200 "$R"
+[ "$(printf '%s' "$R" | body | json processed)" -ge 1 ] 2>/dev/null && ok "깨우기가 일감을 처리했다" || bad "깨우기가 일감을 처리하지 못했다: $(printf '%s' "$R" | body | head -c 200)"
+[ "$(printf '%s' "$R" | body | json tasks.0.ok)" = True ] && ok "주기 작업(계정 삭제 정리)을 깨웠다" || bad "주기 작업 결과가 이상하다"
+GOT=$(curl -s "$URL/api/v1/native-check/jobs/handled" | json lastNote)
+[ "$GOT" = "$NOTE" ] && ok "일감 본문(JSON)이 처리기까지 닿았다" || bad "처리기가 본문을 읽지 못했다 (lastNote=$GOT)"
 
 echo "== 웹훅 수신"
 WH="/api/v1/payments/webhooks/scripted/$WH_TOKEN"

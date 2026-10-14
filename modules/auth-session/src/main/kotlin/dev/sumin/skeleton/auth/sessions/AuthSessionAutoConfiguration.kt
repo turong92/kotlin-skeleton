@@ -79,6 +79,12 @@ class AuthSessionAutoConfiguration {
     fun authSessionPurgeScheduler(properties: AuthSessionProperties, purge: SessionPurge, projects: ObjectProvider<ProjectRegistry>): SessionPurgeScheduler =
         projects.getIfAvailable()?.let { r -> SessionPurgeScheduler(properties.purge.interval) { r.forEachProject { purge.runOnce() } } } ?: SessionPurgeScheduler(properties.purge.interval, purge)
 
+    /** 요청 구동 모드(`skeleton.job-queue.mode=on-request`)의 깨우기 주소가 이 정리를 한 번 깨울 수 있게 내놓는다 — 타이머가 없는 0대 배포용 (docs/cloud-run-scale-to-zero.md) */
+    @Bean
+    @ConditionalOnMissingBean(name = ["authSessionPurgeOnRequestTask"])
+    fun authSessionPurgeOnRequestTask(purge: SessionPurge, projects: ObjectProvider<ProjectRegistry>): dev.sumin.skeleton.common.wake.OnRequestTask =
+        dev.sumin.skeleton.common.wake.SimpleOnRequestTask("auth-session-purge") { projects.getIfAvailable()?.let { r -> r.forEachProject { purge.runOnce() } } ?: purge.runOnce() }
+
     /** 계정 삭제가 끝나면 그 계정의 세션 행을 지운다 */
     @Bean
     @ConditionalOnMissingBean(name = ["sessionErasureListener"])

@@ -34,7 +34,7 @@ class JobQueueWorker(
     private val retention: JobRetention? = null,
     /** 프로젝트 모드(`skeleton.projects`)면 서비스 중인 프로젝트를 차례로 돈다. null 이면 지금까지처럼 한 서비스 */
     private val projects: ProjectRegistry? = null,
-) {
+) : JobDrainer {
     private val log = LoggerFactory.getLogger(javaClass)
     private val handlerByType = handlers.associateBy { it.type }
     val workerId: String = properties.workerId.ifBlank { defaultWorkerId() }
@@ -43,6 +43,11 @@ class JobQueueWorker(
 
     fun start() {
         if (!running.compareAndSet(false, true)) return
+        if (properties.mode == JobQueueProperties.Mode.ON_REQUEST) {
+            // 요청 구동: 스레드를 띄우지 않는다 — 깨우기 주소가 drain 을 부를 때만 처리한다 (인스턴스가 0대로 내려가도 일감은 DB 에 남는다)
+            log.info("Job queue worker is on-request (no polling thread): workerId={} batchSize={}", workerId, properties.batchSize)
+            return
+        }
         executor = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "skeleton-job-queue").apply { isDaemon = true } }
             .also { it.scheduleWithFixedDelay(::safePoll, properties.pollInterval.toMillis(), properties.pollInterval.toMillis(), TimeUnit.MILLISECONDS) }
         log.info("Job queue worker started: workerId={} pollInterval={} batchSize={}", workerId, properties.pollInterval, properties.batchSize)
@@ -52,6 +57,27 @@ class JobQueueWorker(
         if (!running.compareAndSet(true, false)) return
         executor?.shutdownNow()
         executor = null
+    }
+
+    /**
+     * 밀린 일감을 [budget] 안에서 처리하고 끝낸다 (요청 구동 모드의 깨우기 주소가 부른다). 한 판([pollOnce])을 돌고, 처리한 것이 있고 시간이 남았으면 다음 판 —
+     * 처리할 것이 없으면(또는 시간이 다 되면) 멈춘다. 시간 한도는 **새 판을 시작하기 전에만** 본다: 이미 집은 일감은 끝까지 돌리므로 긴 핸들러는 한도를 넘길 수 있다.
+     * 아직 이를 때가 안 된 재시도(백오프 대기)는 집지 않는다 — 다음 호출이 그때 집는다.
+     * 프로젝트 모드면 판마다 프로젝트를 모두 한 번씩 돈다([pollOnce]).
+     */
+    override fun drain(budget: java.time.Duration): DrainResult {
+        val started = System.nanoTime()
+        var rounds = 0
+        var processed = 0
+        var timedOut = false
+        while (true) {
+            val handled = pollOnce()
+            rounds++
+            processed += handled
+            if (handled == 0) break
+            if (System.nanoTime() - started >= budget.toNanos()) { timedOut = true; break }
+        }
+        return DrainResult(processed, rounds, timedOut, (System.nanoTime() - started) / 1_000_000)
     }
 
     private fun safePoll() {

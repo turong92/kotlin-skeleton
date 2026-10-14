@@ -72,6 +72,51 @@ class JdbcJobQueueIntegrationTest {
     }
 
     @Test
+    fun `drain 은 밀린 일감을 판마다 한 묶음씩 비울 때까지 처리하고 끝난다`() {
+        val ids = (1..3).map { queue.enqueue("ok", """{"n":$it}""") }
+        val oneByOne = JobQueueWorker(repository, handlers, properties.copy(batchSize = 1), time)
+
+        val result = oneByOne.drain(Duration.ofSeconds(30))
+
+        assertEquals(3, result.processed)
+        assertEquals(4, result.rounds) // 셋 + 빈 판 하나
+        assertEquals(false, result.timedOut)
+        ids.forEach { assertEquals(JobStatus.DONE, repository.findById(it)!!.status) }
+    }
+
+    @Test
+    fun `drain 의 시간 한도는 새 판을 시작하기 전에 본다 - 한도가 다 되면 남은 일감을 두고 timedOut 으로 끝난다`() {
+        val ids = (1..3).map { queue.enqueue("ok", """{"n":$it}""") }
+        val oneByOne = JobQueueWorker(repository, handlers, properties.copy(batchSize = 1), time)
+
+        val first = oneByOne.drain(Duration.ZERO) // 한 판은 돌고(이미 집은 일감은 끝까지) 다음 판은 시작하지 않는다
+
+        assertEquals(1, first.processed)
+        assertEquals(1, first.rounds)
+        assertEquals(true, first.timedOut)
+        assertEquals(listOf(JobStatus.DONE, JobStatus.PENDING, JobStatus.PENDING), ids.map { repository.findById(it)!!.status })
+
+        val rest = oneByOne.drain(Duration.ofSeconds(30)) // 다음 호출이 이어받는다
+        assertEquals(2, rest.processed)
+        ids.forEach { assertEquals(JobStatus.DONE, repository.findById(it)!!.status) }
+    }
+
+    @Test
+    fun `요청 구동 모드는 폴링 스레드를 띄우지 않지만 drain 은 일한다`() {
+        val id = queue.enqueue("ok", "{}")
+        val onRequest = JobQueueWorker(repository, handlers, properties.copy(mode = JobQueueProperties.Mode.ON_REQUEST, pollInterval = Duration.ofMillis(10)), time)
+        onRequest.start()
+        try {
+            Thread.sleep(300) // 폴링이 있었다면 그 사이 집었을 것이다
+            assertEquals(JobStatus.PENDING, repository.findById(id)!!.status)
+            assertEquals(1, onRequest.drain(Duration.ofSeconds(30)).processed)
+            assertEquals(JobStatus.DONE, repository.findById(id)!!.status)
+        } finally {
+            onRequest.stop()
+        }
+    }
+
+    @Test
     fun `실패하면 attempts 가 오르고 백오프 뒤 재시도, 결국 성공`() {
         val id = queue.enqueue("flaky", "{}")
 

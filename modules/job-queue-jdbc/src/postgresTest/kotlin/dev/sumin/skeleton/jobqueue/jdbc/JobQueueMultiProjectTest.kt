@@ -97,6 +97,19 @@ class JobQueueMultiProjectTest {
     }
 
     @Test
+    fun `drain 은 판마다 프로젝트를 모두 돌아 일감이 많은 프로젝트가 다른 프로젝트를 굶기지 않고 모두 비운다`() {
+        repeat(3) { enqueueIn(a, "a$it") }
+        enqueueIn(b, "b0")
+
+        val result = worker().drain(Duration.ofSeconds(30)) // batchSize = 1
+
+        assertEquals(4, result.processed)
+        assertEquals(listOf("DONE", "DONE", "DONE"), statusesIn(a))
+        assertEquals(listOf("DONE"), statusesIn(b))
+        assertEquals(setOf("a", "b"), handler.seen.map { it.first }.toSet())
+    }
+
+    @Test
     fun `일감이 많은 프로젝트가 다른 프로젝트를 굶기지 않는다 - 한 번 돌 때 프로젝트마다 한 묶음씩`() {
         repeat(5) { enqueueIn(a, "a$it") }
         enqueueIn(b, "b0")

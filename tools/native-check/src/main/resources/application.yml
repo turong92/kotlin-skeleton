@@ -43,7 +43,9 @@ skeleton:
   auth-session:
     reuse-grace: 0s
   job-queue:
-    poll-interval: 500ms
+    mode: on-request       # 0대 배포의 모양: 폴링 스레드 없이 깨우기 주소가 부를 때만 처리한다 (네이티브는 이 선택이 빌드 때 굳는다)
+    wake:
+      secret: native-check-wake-secret-0123456789-abcdefgh
   crypto:
     primary-key-id: check
     keys:

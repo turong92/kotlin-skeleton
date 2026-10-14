@@ -1,1 +1,2 @@
 dev.sumin.skeleton.jobqueue.jdbc.JobQueueJdbcAutoConfiguration
+dev.sumin.skeleton.jobqueue.jdbc.JobWakeAutoConfiguration

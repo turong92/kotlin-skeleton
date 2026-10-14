@@ -390,6 +390,12 @@ class AccountAutoConfiguration {
     fun accountPurgeScheduler(properties: AccountProperties, dispatch: AccountPurgeDispatch): AccountPurgeScheduler =
         AccountPurgeScheduler(properties.deletion.purgeInterval, dispatch)
 
+    /** 요청 구동 모드(`skeleton.job-queue.mode=on-request`)의 깨우기 주소가 이 정리를 한 번 깨울 수 있게 내놓는다 — 타이머가 없는 0대 배포용 (docs/cloud-run-scale-to-zero.md). 다른 곳이 부르지 않으면 쓰이지 않는다 */
+    @Bean
+    @ConditionalOnMissingBean(name = ["accountPurgeOnRequestTask"])
+    fun accountPurgeOnRequestTask(dispatch: AccountPurgeDispatch): dev.sumin.skeleton.common.wake.OnRequestTask =
+        dev.sumin.skeleton.common.wake.SimpleOnRequestTask("account-purge") { dispatch.dispatch() }
+
     /** 주기마다 직접 지운다 — `job-queue-jdbc` 가 있으면 [AccountPurgeJobAutoConfiguration] 이 잡 넣기로 바꾼다 */
     @Bean
     @ConditionalOnMissingBean(AccountPurgeDispatch::class)
