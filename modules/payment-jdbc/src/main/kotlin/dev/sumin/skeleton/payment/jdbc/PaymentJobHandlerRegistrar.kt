@@ -3,10 +3,11 @@ package dev.sumin.skeleton.payment.jdbc
 import dev.sumin.skeleton.jobqueue.jdbc.JobHandler
 import dev.sumin.skeleton.payment.PaymentTaskHandler
 import dev.sumin.skeleton.payment.PaymentTaskRunner
-import java.util.function.Supplier
 import org.springframework.beans.factory.ListableBeanFactory
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.beans.factory.SmartInitializingSingleton
+import org.springframework.beans.factory.config.RuntimeBeanReference
+import dev.sumin.skeleton.jobqueue.jdbc.Job
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory
 import org.springframework.beans.factory.support.BeanDefinitionBuilder
 import org.springframework.beans.factory.support.BeanDefinitionRegistry
@@ -25,15 +26,25 @@ internal class PaymentJobHandlerRegistrar : BeanDefinitionRegistryPostProcessor 
         val factory = registry as? ListableBeanFactory ?: return
         // 이 시점에는 모든 설정 클래스가 읽혀 빈 정의가 레지스트리에 있다(설정 클래스 후처리기가 먼저 돈다). 빈을 만들지 않고 정의의 타입만 본다
         factory.getBeanNamesForType(PaymentTaskHandler::class.java, true, false).forEach { name ->
-            val definition = BeanDefinitionBuilder.genericBeanDefinition(PaymentJobHandler::class.java, Supplier {
-                val beans = registry as org.springframework.beans.factory.BeanFactory
-                PaymentJobHandler(beans.getBean(name, PaymentTaskHandler::class.java).type, beans.getBean(PaymentTaskRunner::class.java))
-            }).beanDefinition
+            // 네이티브 이미지: 정의는 빌드 때 이미 구워져 있고 이 후처리기는 실행 때 다시 돈다 — 있는 정의는 건드리지 않는다
+            if (registry.containsBeanDefinition("paymentJobHandler:$name")) return@forEach
+            // 생성자 인자는 빈 참조로 건다(공급자 람다가 아니다) — Spring AOT(네이티브 이미지)는 인스턴스 공급자가 달린 빈 정의를 구울 수 없다 (docs/native-image.md)
+            val definition = BeanDefinitionBuilder.genericBeanDefinition(HandlerBackedJobHandler::class.java)
+                .addConstructorArgReference(name)
+                .addConstructorArgValue(RuntimeBeanReference(PaymentTaskRunner::class.java))
+                .beanDefinition
             registry.registerBeanDefinition("paymentJobHandler:$name", definition)
         }
     }
 
     override fun postProcessBeanFactory(beanFactory: ConfigurableListableBeanFactory) = Unit
+}
+
+/** [PaymentTaskHandler] 빈 하나가 정한 종류의 [JobHandler] — 일은 [PaymentJobHandler] 와 같다. 종류는 처리기 빈에서 읽는다. */
+internal class HandlerBackedJobHandler(handler: PaymentTaskHandler, runner: PaymentTaskRunner) : JobHandler {
+    private val delegate = PaymentJobHandler(handler.type, runner)
+    override val type: String = delegate.type
+    override fun handle(job: Job) = delegate.handle(job)
 }
 
 /**

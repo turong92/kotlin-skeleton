@@ -1,0 +1,66 @@
+# 네이티브 시험용 조립의 설정 — 시험이 필요한 만큼만. 비밀 값은 시험 전용 고정 값이다(이 앱은 배포 대상이 아니다).
+spring:
+  application:
+    name: native-check
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/app}
+    username: ${SPRING_DATASOURCE_USERNAME:app}
+    password: ${SPRING_DATASOURCE_PASSWORD:dev}
+  flyway:
+    locations: classpath:db/migration/{vendor}
+    out-of-order: true
+    validate-migration-naming: true
+
+server:
+  port: ${SERVER_PORT:8080}
+
+management:
+  endpoints:
+    web:
+      base-path: /
+      exposure:
+        include: health, info
+
+springdoc:
+  api-docs:
+    path: /api/v1/docs
+
+skeleton:
+  web:
+    client-ip:
+      mode: direct
+  legal:
+    reconsent:
+      enabled: false
+  account:
+    password:
+      bcrypt-strength: 4
+    mail:
+      link-base-url: https://native-check.invalid
+  auth:
+    jwt:
+      secret: native-check-only-jwt-secret-0123456789abcdef
+  auth-session:
+    reuse-grace: 0s
+  job-queue:
+    poll-interval: 500ms
+  crypto:
+    primary-key-id: check
+    keys:
+      check: dGVzdC1vbmx5LWNyeXB0by1rZXktMDEyMzQ1Njc4OSE=
+  payment:
+    routing:
+      country-providers:
+        KR: scripted
+    default-provider: scripted
+    webhook:
+      path-token: native-check-webhook-token-0123456789
+    subscription:
+      enabled: true
+    http:
+      order-rate-limit:
+        account-capacity: 1000
+        ip-capacity: 1000
+  persistence-jdbc:
+    startup-wait:
+      enabled: false

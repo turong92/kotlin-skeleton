@@ -9,6 +9,7 @@ plugins {
     kotlin("plugin.spring") version "2.3.21" apply false
     id("org.springframework.boot") version "4.1.1" apply false
     id("io.spring.dependency-management") version "1.1.7" apply false
+    id("org.graalvm.buildtools.native") version "0.11.3" apply false   // 선택 빌드 -Pnative 일 때만 앱에 적용된다 (아래 · docs/native-image.md)
 }
 
 allprojects {
@@ -28,9 +29,13 @@ configure(subprojects.filter { it.buildFile.isFile }) {
 
     extensions.configure<JavaPluginExtension> {
         toolchain {
-            languageVersion = JavaLanguageVersion.of(21)
+            // 기본은 21. 네이티브 이미지는 GraalVM 25 컨테이너 안에서 -PjavaToolchain=25 로 빌드한다 (Dockerfile.native · docs/native-image.md) — 바이트코드 목표는 아래 JvmTarget 21 그대로
+            languageVersion = JavaLanguageVersion.of(providers.gradleProperty("javaToolchain").map(String::toInt).getOrElse(21))
         }
     }
+
+    // 다른 JDK 로 컴파일해도(-PjavaToolchain=25) 자바 쪽 바이트코드 목표는 21 로 둔다 — Kotlin 의 JVM_21 과 맞아야 한다
+    if (providers.gradleProperty("javaToolchain").isPresent) tasks.withType<JavaCompile>().configureEach { options.release.set(21) }
 
     extensions.configure<io.spring.gradle.dependencymanagement.dsl.DependencyManagementExtension> {
         imports {
@@ -50,6 +55,27 @@ configure(subprojects.filter { it.buildFile.isFile }) {
         // Testcontainers 의 Ryuk 대기 기본값은 30초인데, 바쁜 호스트(여러 세션이 같이 쓰는 맥)에서는 도커가 Ryuk 컨테이너를 올리고 포트를 여는 데만 30초가 넘게 걸린다(실측 PT30.35S).
         // 그러면 그 JVM 의 첫 DB 시험이 ExceptionInInitializerError(RyukResourceReaper), 나머지는 NoClassDefFoundError 로 줄줄이 죽는다 — docs/testing.md
         environment("TESTCONTAINERS_RYUK_CONTAINER_TIMEOUT", "120")
+    }
+}
+
+// 네이티브 이미지는 **선택 빌드**다 — `-Pnative` 를 줄 때만 부트 앱에 GraalVM 플러그인을 건다. 안 주면 이 블록은 아무 일도 하지 않는다(기본 JVM 빌드는 그대로).
+//   ./gradlew :apps:api:nativeCompile -Pnative -PjavaToolchain=25     (보통 scripts/native-build.sh · Dockerfile.native 가 GraalVM 25 컨테이너에서 부른다)
+// 루트가 모든 서브프로젝트에 java-library 를 걸어서 플러그인이 기본으로 공유 라이브러리(--shared)를 고르므로 실행 파일로 돌려놓는다.
+// 라이브러리 설정은 플러그인의 reachability metadata 저장소가 대고, 이 레포의 코드가 필요로 하는 것은 모듈이 RuntimeHintsRegistrar 로 직접 낸다 (CLAUDE.md "네이티브 리플렉션 규칙").
+if (providers.gradleProperty("native").isPresent) {
+    subprojects {
+        pluginManager.withPlugin("org.springframework.boot") {
+            pluginManager.apply("org.graalvm.buildtools.native")
+            extensions.configure<org.graalvm.buildtools.gradle.dsl.GraalVMExtension> {
+                binaries.named("main") {
+                    sharedLibrary.set(false)
+                    imageName.set("app")
+                }
+                // 라이브러리별 reachability metadata 저장소(플러그인이 받아 온다)를 쓰되, 자기 jar 에 더 새 설정이 든 것은 jar 쪽을 쓴다
+                (this as org.gradle.api.plugins.ExtensionAware).extensions
+                    .getByType<org.graalvm.buildtools.gradle.dsl.GraalVMReachabilityMetadataRepositoryExtension>().excludedModules.addAll("org.flywaydb:flyway-core", "org.flywaydb:flyway-database-postgresql")
+            }
+        }
     }
 }
 

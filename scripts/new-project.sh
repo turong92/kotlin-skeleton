@@ -230,6 +230,9 @@ rm -f apps/api/src/test/kotlin/dev/sumin/skeleton/app/api/MultiProject*.kt apps/
 
 # ---------------------------------------------------------------------------------------------------- 지우기
 [ "$WITH_WORKBENCH" = 1 ] || { rm -rf apps/workbench; perl -ni -e 'print unless /^include\(":apps:workbench"\)\s*$/' settings.gradle.kts; }
+# 네이티브 이미지 시험용 조립(tools/native-check · scripts/native-*.sh · Dockerfile.native · 워크플로)은 스켈레톤 자신의 검사다 — 새 프로젝트에는 가지 않는다 (docs/native-image.md 는 남는다)
+rm -rf tools scripts/native-smoke.sh scripts/native-test.sh .github/workflows/native.yml
+perl -ni -e 'print unless /^include\(":tools:native-check"\)\s*$/' settings.gradle.kts
 # 샘플 앱은 기본으로 빠진다 — 앱 · 그 문서 · 실행 스크립트 · 안내 문서의 샘플 구역(<!-- sample:start --> … <!-- sample:end -->)까지. --with-sample 이면 표식 줄만 지운다
 if [ "$WITH_SAMPLE" = 1 ]; then
   for f in CLAUDE.md README.md; do [ ! -f "$f" ] || perl -ni -e 'print unless /^<!-- sample:(start|end) -->\s*$/' "$f"; done
