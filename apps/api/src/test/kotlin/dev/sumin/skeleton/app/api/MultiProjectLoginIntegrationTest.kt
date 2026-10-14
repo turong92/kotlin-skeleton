@@ -1,7 +1,6 @@
 package dev.sumin.skeleton.app.api
 
 import com.jayway.jsonpath.JsonPath
-import dev.sumin.skeleton.account.abuse.AccountTaskRunner
 import dev.sumin.skeleton.account.mail.AccountMail
 import dev.sumin.skeleton.account.mail.AccountMailer
 import java.util.concurrent.CopyOnWriteArrayList
@@ -47,7 +46,6 @@ class MultiProjectLoginIntegrationTest {
     class Mails {
         val sent = CopyOnWriteArrayList<AccountMail>()
         @Bean fun recordingMailer(): AccountMailer = AccountMailer { sent += it }
-        @Bean fun directTasks(): AccountTaskRunner = AccountTaskRunner.DIRECT
     }
 
     @Autowired lateinit var mvc: MockMvc
@@ -67,6 +65,9 @@ class MultiProjectLoginIntegrationTest {
         val email = "journey-${System.nanoTime()}@example.com"
         val signUp = post("a.localhost", "/api/v1/account/sign-up", """{"email":"$email","password":"tangerine-42-moon","consents":[{"type":"terms","version":"template-1"},{"type":"privacy","version":"template-1"}]}""")
             .andExpect { status { isAccepted() } }.andReturn().response.contentAsString
+        // 진짜 일꾼(account-task 풀)이 메일을 보낸다 — 풀 스레드에도 프로젝트가 따라가야 코드 메일이 나간다
+        val deadline = System.currentTimeMillis() + 10_000
+        while (mails.sent.none { it.kind.name == "VERIFY_CODE" && it.to == email } && System.currentTimeMillis() < deadline) Thread.sleep(50)
         val code = mails.sent.last { it.kind.name == "VERIFY_CODE" && it.to == email }.vars.getValue("code")
         post("a.localhost", "/api/v1/auth/verify-email", """{"signUpId":"${JsonPath.read<String>(signUp, "$.value.signUpId")}","code":"$code"}""").andExpect { status { isOk() } }
 
@@ -108,6 +109,8 @@ class MultiProjectLoginIntegrationTest {
         post("a.localhost", "/api/v1/account/password/forgot", """{"email":"$email"}""")
         // 가입하지 않은 이메일이라 메일이 안 갈 수 있다 — 링크 주소가 필요한 흐름은 아래 시드 계정으로
         post("b.localhost", "/api/v1/account/password/forgot", """{"email":"seed-b@example.com"}""")
+        val deadline = System.currentTimeMillis() + 10_000
+        while (mails.sent.none { it.to == "seed-b@example.com" } && System.currentTimeMillis() < deadline) Thread.sleep(50)
         val mailToB = mails.sent.lastOrNull { it.to == "seed-b@example.com" }
         assertTrue(mailToB?.link?.startsWith("https://b.example.com") == true, "link: ${mailToB?.link}")
     }

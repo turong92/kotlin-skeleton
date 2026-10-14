@@ -12,8 +12,13 @@ import dev.sumin.skeleton.common.deploy.DeployGuard
 class AccountDeployGuard(
     private val props: AccountProperties,
     private val protectedProfiles: List<String>,
+    /** 프로젝트가 있으면 활성 프로젝트마다 — 비어 있으면 공통 값 하나를 본다 */
+    private val projects: List<ProjectView> = emptyList(),
     private val state: () -> State,
 ) : DeployGuard {
+    /** 프로젝트 하나의 계정 설정(공통 위에 프로젝트 config 를 덮은 것)과 프로젝트가 직접 정한 링크 주소 */
+    class ProjectView(val id: String, val props: AccountProperties, val ownLinkBaseUrl: String)
+
     /** 가드가 돌 때 읽는 구성 상태 — 빈 생성 순서에 기대지 않는다 */
     data class State(
         val repository: AccountRepository?,
@@ -39,9 +44,17 @@ class AccountDeployGuard(
         // 비밀번호 찾기 · 인증 재전송은 늘 IP 별로 한도를 걸고(로그인 · 가입 · 매직 링크도 기본으로 건다) 그 키가 클라이언트 IP 다 —
         // mode 가 없으면 ForwardedHeaderFilter 가 X-Forwarded-For 로 remoteAddr 를 덮어써 호출자가 IP 를 고르고, 한도가 전부 풀린다
         if (!s.clientIpModeConfigured) add("skeleton.web.client-ip.mode is not set, so any caller can pick its own IP with X-Forwarded-For and every per-IP limit of sign-in, sign-up, reset and magic link is open: set it to direct, proxy or cloudflare (docs/client-ip.md)")
-        if (props.mail.linkBaseUrl.isBlank()) add("skeleton.account.mail.link-base-url is empty: set the frontend origin the mailed links should open")
-        if (props.mail.logLinks == AccountProperties.Mail.LogLinks.ON) add("skeleton.account.mail.log-links=ON writes one-time link tokens to the log: remove it outside local")
-        if (props.seed.accounts.isNotEmpty()) add("skeleton.account.seed.accounts defines seed accounts (known passwords): remove them outside local")
+        if (projects.isEmpty()) {
+            if (props.mail.linkBaseUrl.isBlank()) add("skeleton.account.mail.link-base-url is empty: set the frontend origin the mailed links should open")
+            if (props.mail.logLinks == AccountProperties.Mail.LogLinks.ON) add("skeleton.account.mail.log-links=ON writes one-time link tokens to the log: remove it outside local")
+            if (props.seed.accounts.isNotEmpty()) add("skeleton.account.seed.accounts defines seed accounts (known passwords): remove them outside local")
+        }
+        projects.forEach { p ->
+            val at = "project '${p.id}': "
+            if (p.ownLinkBaseUrl.isBlank()) add("${at}skeleton.projects.${p.id}.config.account.mail.link-base-url is empty: every project sets its own frontend origin (the common value is not used, it could be another project's domain)")
+            if (p.props.mail.logLinks == AccountProperties.Mail.LogLinks.ON) add("${at}account.mail.log-links=ON writes one-time link tokens to the log: remove it outside local")
+            if (p.props.seed.accounts.isNotEmpty()) add("${at}account.seed.accounts defines seed accounts (known passwords): remove them outside local")
+        }
         if (props.captcha.required && !s.captchaAvailable) add("skeleton.account.captcha.required=true but no captcha verifier exists: add modules:captcha-turnstile and enable it, or set it to false")
         // 쓰인 아이디의 해시 열쇠 — 비면 JWT 비밀에서 파생돼, JWT 비밀을 돌릴 때 탈퇴한 아이디의 해시가 맞지 않아 재사용 금지가 조용히 풀린다
         if (props.loginId.enabled && props.blocks.secret.isBlank()) {

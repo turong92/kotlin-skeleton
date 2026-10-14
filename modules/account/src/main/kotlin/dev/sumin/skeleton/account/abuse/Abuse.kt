@@ -93,6 +93,19 @@ fun interface AccountTaskRunner {
 }
 
 /**
+ * 프로젝트가 있을 때 [delegate] 로 넘어가는 일에 제출한 스레드의 프로젝트를 들려 보낸다 — 풀 스레드는 프로젝트를 모르므로 메일 · 계정 조회가 전부 실패한다.
+ * 스레드가 프로젝트를 물려받는 방식(InheritableThreadLocal)은 쓰지 않는다: 풀 스레드가 첫 프로젝트를 평생 들고 다닌다.
+ */
+class ProjectAwareTaskRunner(private val delegate: AccountTaskRunner) : AccountTaskRunner, AutoCloseable {
+    override fun run(label: String, task: Runnable) {
+        val project = dev.sumin.skeleton.common.project.ProjectContext.currentOrNull()
+        delegate.run(label, if (project == null) task else Runnable { dev.sumin.skeleton.common.project.ProjectContext.runIn(project) { task.run() } })
+    }
+
+    override fun close() { (delegate as? AutoCloseable)?.close() }
+}
+
+/**
  * 이 프로세스의 작은 풀. 넘치면 **버리지 않고 부른 스레드가 직접 한다**(밀어내기) — 과부하일 때만 응답이 느려진다.
  * 닫힐 때(배포 · 종료)는 대기 중인 일을 [shutdownWait] 동안 기다려 마친다 (데몬 스레드라서 그냥 두면 JVM 과 함께 사라진다).
  */

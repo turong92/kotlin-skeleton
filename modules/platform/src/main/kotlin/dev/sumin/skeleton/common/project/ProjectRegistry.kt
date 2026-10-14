@@ -36,6 +36,10 @@ class ProjectRegistry private constructor(
         return Binder(sources, PropertySourcesPlaceholdersResolver(environment)).bindOrCreate(prefix, Bindable.of(type))
     }
 
+    /** 공통 값 **없이** 이 프로젝트의 `config` 만으로 바인딩한다 — 공통 값으로 내려가면 안 되는 값(메일 링크 주소 …)이 프로젝트에 정해져 있는지 볼 때 */
+    fun <T : Any> bindOwn(project: Project, prefix: String, type: Class<T>): T =
+        Binder(listOf(MapConfigurationPropertySource(project.config.mapKeys { "$ROOT.${it.key}" })), PropertySourcesPlaceholdersResolver(environment)).bindOrCreate(prefix, Bindable.of(type))
+
     /** 프로젝트마다 한 번 만들어 두는 부품 도우미 — [bind] 한 properties 로 부품을 만든다 */
     fun <P : Any, T : Any> scopedFrom(prefix: String, type: Class<P>, create: (Project, P) -> T): ProjectScoped<T> =
         ProjectScoped { project -> create(project, bind(project, prefix, type)) }
@@ -53,9 +57,10 @@ class ProjectRegistry private constructor(
         /** 목록에 프로젝트가 하나라도 있는가 — 자동 구성의 켜짐 조건 */
         fun configured(environment: Environment): Boolean = raw(environment).isNotEmpty()
 
-        fun from(environment: Environment): ProjectRegistry {
+        /** [supportedConfig] 가 있으면 프로젝트 `config` 키는 그 접두사들 아래여야 한다 — 지원하지 않는 키가 조용히 무시되지 않게 기동 실패 */
+        fun from(environment: Environment, supportedConfig: List<String>? = null): ProjectRegistry {
             val raw = raw(environment)
-            val projects = raw.toSortedMap().map { (id, s) -> project(id, s) }
+            val projects = raw.toSortedMap().map { (id, s) -> project(id, s, supportedConfig) }
             check(projects.isNotEmpty()) { "$PROPERTY is empty" }
             projects.filter { it.schema.isNotEmpty() }.groupBy { it.schema }.filterValues { it.size > 1 }.forEach { (schema, same) ->
                 error("Projects ${same.joinToString { "'${it.id}'" }} use the same schema '$schema' — every project needs its own ($PROPERTY.<id>.schema)")
@@ -66,12 +71,20 @@ class ProjectRegistry private constructor(
             return ProjectRegistry(projects, environment)
         }
 
+        /** 키 비교용 — 대소문자 · 하이픈 · 인덱스를 무시하고 마디는 점으로 */
+        private fun configKey(key: String): String = key.lowercase(Locale.ROOT).replace("-", "").replace("_", "").replace(Regex("\\[[^\\]]*]"), "")
+
         private fun raw(environment: Environment): Map<String, Settings> =
             Binder.get(environment).bind(PROPERTY, Bindable.mapOf(String::class.java, Settings::class.java)).orElse(emptyMap<String, Settings>()) ?: emptyMap()
 
-        private fun project(id: String, s: Settings): Project {
+        private fun project(id: String, s: Settings, supportedConfig: List<String>?): Project {
             val where = "$PROPERTY.$id"
             check(ID.matches(id)) { "Project id '$id' must be lower-case letters, digits, '-' or '_' and start with a letter ($PROPERTY.<id>)" }
+            supportedConfig?.let { allowed ->
+                s.config.keys.filterNot { key -> allowed.any { configKey(key).startsWith(configKey(it)) } }.let { bad ->
+                    check(bad.isEmpty()) { "$where.config has keys that are not per-project settings (they would be silently ignored): ${bad.sorted()}. Supported: ${allowed.sorted()}" }
+                }
+            }
             val hosts = s.hosts.map { it.trim().lowercase(Locale.ROOT) }.filter { it.isNotEmpty() }
             check(hosts.isNotEmpty()) { "$where.hosts is empty — a project is found by its domain" }
             hosts.forEach { check(HOST.matches(it)) { "$where.hosts has '$it', which is not a bare host name (no port, scheme or path)" } }

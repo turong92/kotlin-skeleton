@@ -86,8 +86,12 @@ class AuthSessionAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(name = ["refreshDeliveryInfo"])
-    fun refreshDeliveryInfo(properties: AuthSessionProperties): dev.sumin.skeleton.auth.session.RefreshDeliveryInfo =
-        object : dev.sumin.skeleton.auth.session.RefreshDeliveryInfo { override val mode = properties.delivery.name.lowercase() }
+    fun refreshDeliveryInfo(properties: AuthSessionProperties, projects: ObjectProvider<ProjectRegistry>): dev.sumin.skeleton.auth.session.RefreshDeliveryInfo {
+        val registry = projects.getIfAvailable() ?: return object : dev.sumin.skeleton.auth.session.RefreshDeliveryInfo { override val mode = properties.delivery.name.lowercase() }
+        // 프로젝트마다 전달 방식이 다를 수 있다 — `/auth/methods` 는 지금 프로젝트의 방식을 알린다
+        val perProject = registry.scopedFrom("skeleton.auth-session", AuthSessionProperties::class.java) { _, p -> p.delivery.name.lowercase() }
+        return object : dev.sumin.skeleton.auth.session.RefreshDeliveryInfo { override val mode get() = perProject.get() }
+    }
 
     @Bean
     @ConditionalOnMissingBean
@@ -118,8 +122,12 @@ class AuthSessionAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    fun authSessionDeployGuard(properties: AuthSessionProperties, auth: ObjectProvider<AuthProperties>, store: ObjectProvider<SessionStore>): AuthSessionDeployGuard =
-        AuthSessionDeployGuard(properties, auth.getIfAvailable { AuthProperties() }.protectedProfiles) { store.getIfUnique() }
+    fun authSessionDeployGuard(properties: AuthSessionProperties, auth: ObjectProvider<AuthProperties>, store: ObjectProvider<SessionStore>, projects: ObjectProvider<ProjectRegistry>): AuthSessionDeployGuard =
+        AuthSessionDeployGuard(
+            properties, auth.getIfAvailable { AuthProperties() }.protectedProfiles,
+            // 프로젝트가 있으면 활성 프로젝트마다 쿠키 규칙을 본다
+            projects.getIfAvailable()?.let { r -> r.active.map { it.id to r.bind(it, "skeleton.auth-session", AuthSessionProperties::class.java) } }.orEmpty(),
+        ) { store.getIfUnique() }
 
     @Bean
     @ConditionalOnMissingBean(name = ["authSessionPublicEndpointContributor"])

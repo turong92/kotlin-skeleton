@@ -111,4 +111,27 @@ class ProjectRegistryTest {
         assertEquals("part-of-b", ProjectContext.runIn(b) { scoped.get() })
         assertEquals(2, built)
     }
+
+    @Test
+    fun `a config key that no module reads per project fails the start instead of being ignored`() {
+        val supported = ProjectConfigKeys.SUPPORTED
+        ProjectRegistry.from(env(*twoProjects, "skeleton.projects.a.config.account.mail.link-base-url" to "https://a", "skeleton.projects.a.config.web.cors.allowed-origin-patterns[0]" to "x"), supported)
+        listOf("account.sign-up.enabled", "web.cors.enabled", "legal.facts.company", "web.rate-limit.capacity").forEach { key ->
+            val e = assertFailsWith<IllegalStateException>(key) { ProjectRegistry.from(env(*twoProjects, "skeleton.projects.a.config.$key" to "x"), supported) }
+            assertTrue(e.message!!.contains(key), e.message)
+        }
+    }
+
+    @Test
+    fun `a task handed to another thread carries the project of whoever handed it over`() {
+        val registry = ProjectRegistry.from(env(*twoProjects))
+        val a = registry.projects.first { it.id == "a" }
+        var seen: String? = "unset"
+        val job = ProjectContext.runIn(a) { ProjectTaskDecorator().decorate { seen = ProjectContext.currentOrNull()?.id } }
+        Thread(job).also { it.start(); it.join() }
+        assertEquals("a", seen)
+        var bare: String? = "unset"
+        Thread(ProjectTaskDecorator().decorate { bare = ProjectContext.currentOrNull()?.id }).also { it.start(); it.join() }
+        assertNull(bare)
+    }
 }

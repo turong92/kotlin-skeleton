@@ -70,14 +70,16 @@ class ConsentRetention(
     private val retention: Duration,
     private val interval: Duration,
 ) {
-    @Volatile private var last: Instant? = null
+    // 프로젝트마다 스키마(= 줄)가 따로다 — 마지막으로 비운 때도 프로젝트마다 둔다 (공유하면 한산한 프로젝트의 줄이 기한을 넘겨도 안 지워진다). 프로젝트가 없으면 키 하나
+    private val last = java.util.concurrent.ConcurrentHashMap<String, Instant>()
 
     fun runIfDue(): Int? {
         if (retention.isZero || retention.isNegative) return null
         val now = time.now()
-        val previous = last
+        val key = dev.sumin.skeleton.common.project.ProjectContext.currentOrNull()?.id.orEmpty()
+        val previous = last[key]
         if (previous != null && now.isBefore(previous.plus(interval))) return null
-        last = now
+        last[key] = now
         return store.scrubPersonalData(now.minus(retention))
     }
 }

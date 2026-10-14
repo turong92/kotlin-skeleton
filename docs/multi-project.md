@@ -39,9 +39,17 @@ skeleton:
 | 계정 메일 링크 주소 · 브랜드 · 제목 접두사 | `account.mail.*` | 내장 메일 틀은 프로젝트마다 한 번 만든다 (앱이 자기 `AccountMailTemplates` 빈을 두면 그것을 모두가 쓴다) |
 | 시드 계정 | `account.seed.accounts[n].*` | 기동 때 프로젝트마다 그 스키마에 만든다 |
 
+**위 표의 키만 프로젝트 `config` 에 쓸 수 있다**(`ProjectConfigKeys.SUPPORTED`) — 그 밖의 키(`account.sign-up.enabled`, `legal.facts.*`, `web.rate-limit.*`, `web.cors.enabled` …)는 조용히 무시되는 대신 기동 실패다. 프로젝트별 `auth-session.delivery` 도 받는다(`/auth/methods` 는 지금 프로젝트의 방식을 알린다).
+
+- 계정 메일 작업(확인 코드 · 재설정 · 매직 링크)은 `account-task` 풀로 넘어가지만 제출한 요청의 프로젝트를 들고 간다(스레드가 물려받지는 않는다).
+- **프로젝트 모드에서 `account.mail.link-base-url` 은 프로젝트마다 필수**다 — 공통 값으로 내려가지 않는다(다른 프로젝트 도메인으로 링크가 나갈 수 있다). stage · prod 가드가 프로젝트마다 본다.
+- stage · prod 가드는 활성 프로젝트마다 시드 계정 · `log-links=ON`(계정), 쿠키 `secure=false`(auth-session)를 같은 규칙으로 본다 — 메시지에 `project '<id>'`.
+- 앱이 자기 `AccountMailTemplates`/`AccountMailLayout` 빈을 두고 활성 프로젝트가 둘 이상이면 모든 프로젝트가 같은 문구 · 틀을 쓴다는 경고를 남긴다(기동 실패는 아님 — 의도일 수 있다).
+- 약관 보존 기한 정리의 "마지막으로 비운 때"는 프로젝트마다 둔다.
+- MVC 비동기(`Callable` · `DeferredResult` · `SseEmitter`)에서도 프로젝트가 유지된다(`ProjectFilter` 가 비동기 재진입에도 돌고, MVC 실행기에 `ProjectTaskDecorator`).
+
 뒤 주기 작업 중 계정 삭제 유예 정리 · 세션 정리는 프로젝트를 차례로 돈다. 그 밖의 값(가입 정책 · 비밀번호 정책 · 한도 …)은 아직 공통이다.
 
-알려진 한계: stage · prod 의 계정 가드(`link-base-url` 비면 실패)와 JWT 가드의 일부는 공통 값을 본다(JWT 비밀은 프로젝트마다 검사한다).
 
 ## 프로젝트 전용 API (`@ProjectApi`)
 

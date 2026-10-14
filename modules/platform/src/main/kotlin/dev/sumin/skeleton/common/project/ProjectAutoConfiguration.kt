@@ -4,7 +4,9 @@ import org.springframework.beans.factory.SmartInitializingSingleton
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.webmvc.autoconfigure.WebMvcRegistrations
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
+import org.springframework.boot.task.ThreadPoolTaskExecutorCustomizer
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication
 import org.springframework.boot.web.servlet.FilterRegistrationBean
 import org.springframework.context.annotation.Bean
@@ -26,7 +28,7 @@ class ProjectsConfigured : Condition {
 class ProjectAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
-    fun projectRegistry(environment: Environment): ProjectRegistry = ProjectRegistry.from(environment)
+    fun projectRegistry(environment: Environment): ProjectRegistry = ProjectRegistry.from(environment, ProjectConfigKeys.SUPPORTED)
 
     /** `ForwardedHeaderFilter`(HIGHEST+1) 가 Host 를 푼 **뒤**, 보안 헤더 · CORS 앞 */
     @Bean
@@ -41,6 +43,12 @@ class ProjectAutoConfiguration {
     fun projectUnawareFeaturesCheck(registry: ProjectRegistry): SmartInitializingSingleton =
         SmartInitializingSingleton { ProjectUnawareFeatures.check(registry) }
 
+    /** MVC 비동기(Callable · DeferredResult 의 실행기)가 일을 제출한 요청의 프로젝트로 돈다 */
+    @Bean
+    @ConditionalOnMissingBean(name = ["projectTaskExecutorCustomizer"])
+    @ConditionalOnClass(ThreadPoolTaskExecutorCustomizer::class)
+    fun projectTaskExecutorCustomizer(): ThreadPoolTaskExecutorCustomizer = ThreadPoolTaskExecutorCustomizer { it.setTaskDecorator(ProjectTaskDecorator()) }
+
     /** [ProjectApi] 를 읽는 핸들러 매핑 — 목록이 비어 있으면 이 빈이 없어 표시는 무시된다 */
     @Bean
     @ConditionalOnMissingBean(name = ["projectApiMvcRegistrations"])
@@ -48,4 +56,12 @@ class ProjectAutoConfiguration {
     fun projectApiMvcRegistrations(registry: ProjectRegistry): WebMvcRegistrations = object : WebMvcRegistrations {
         override fun getRequestMappingHandlerMapping(): RequestMappingHandlerMapping = ProjectApiHandlerMapping(registry)
     }
+}
+
+/**
+ * 프로젝트 `config` 로 실제로 먹는 키(`skeleton.` 아래) — 한 표. 이 밖의 키는 기동 실패다(조용히 무시되면 안 된다).
+ * 모듈이 프로젝트별 설정을 더하면 여기에 접두사를 더한다. `web.cors.enabled` 처럼 빈 조건인 값은 프로젝트별이 될 수 없어 뺀다.
+ */
+object ProjectConfigKeys {
+    val SUPPORTED = listOf("auth.jwt.", "auth-session.cookie.", "auth-session.delivery", "web.cors.allowed", "web.cors.allow-", "web.cors.exposed", "web.cors.max-age", "web.cors.path-pattern", "account.mail.", "account.seed.")
 }

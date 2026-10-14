@@ -22,6 +22,9 @@ class ProjectFilter(
     private val registry: ProjectRegistry,
     private val objectMapper: ObjectMapper,
 ) : OncePerRequestFilter() {
+    // 비동기 재진입(DeferredResult · Callable · SseEmitter)에서도 프로젝트 문맥을 다시 세운다
+    override fun shouldNotFilterAsyncDispatch(): Boolean = false
+
     private val unscoped = UNSCOPED_PATHS.map(RequestPaths::pattern)
 
     override fun doFilterInternal(request: HttpServletRequest, response: HttpServletResponse, chain: FilterChain) {

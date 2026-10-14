@@ -141,4 +141,25 @@ class AccountDeployGuardTest {
         val both = admin.copy(loginId = AccountProperties.LoginId(enabled = true))
         assertEquals(1, guard(both).problems(prod).size)
     }
+
+    // 프로젝트가 있으면 시드 · 로그 링크 · 링크 주소는 프로젝트 config 에서 온다 — 가드가 프로젝트마다 본다
+    private fun projectGuard(vararg views: AccountDeployGuard.ProjectView) = AccountDeployGuard(AccountProperties(), listOf("prod", "staging"), views.toList()) { healthy }
+    private fun view(id: String, props: AccountProperties, own: String = "https://$id.example.com") = AccountDeployGuard.ProjectView(id, props, own)
+
+    @Test
+    fun `a project's seed accounts and log-links are problems in a protected env and name the project`() {
+        val seeded = AccountProperties(seed = AccountProperties.Seed(accounts = listOf(AccountProperties.SeedAccount(email = "x@example.com", password = "password"))))
+        val logging = AccountProperties(mail = AccountProperties.Mail(logLinks = AccountProperties.Mail.LogLinks.ON))
+        val problems = projectGuard(view("a", seeded), view("b", logging), view("c", AccountProperties())).problems(prod)
+        assertEquals(2, problems.size, problems.toString())
+        assertTrue(problems.any { it.startsWith("project 'a'") && "seed" in it } && problems.any { it.startsWith("project 'b'") && "log-links" in it })
+        assertEquals(emptyList(), projectGuard(view("a", seeded)).problems(local))
+    }
+
+    @Test
+    fun `every project must set its own link base url - the common one is not a substitute`() {
+        val problems = projectGuard(view("a", AccountProperties()), view("b", AccountProperties(), own = "")).problems(prod)
+        assertEquals(1, problems.size, problems.toString())
+        assertTrue(problems.single().startsWith("project 'b'") && "link-base-url" in problems.single())
+    }
 }

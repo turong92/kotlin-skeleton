@@ -147,11 +147,20 @@ class AccountAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(AccountMailer::class)
-    fun accountMailer(templates: AccountMailTemplates, transport: AccountMailTransport, properties: AccountProperties, projects: ObjectProvider<ProjectRegistry>): AccountMailer {
+    fun accountMailer(templates: AccountMailTemplates, layout: AccountMailLayout, transport: AccountMailTransport, properties: AccountProperties, projects: ObjectProvider<ProjectRegistry>): AccountMailer {
         val registry = projects.getIfAvailable() ?: return TemplatedAccountMailer(templates, transport, properties.mail)
         // 프로젝트마다 메일 설정(브랜드 · 제목 접두사 · …)이 다르다 — 내장 틀이면 프로젝트마다 한 번 만들어 둔다. 앱이 자기 틀 빈을 두었으면 그것을 모두가 쓴다
-        val mailers = registry.scopedFrom("skeleton.account", AccountProperties::class.java) { _, p ->
-            TemplatedAccountMailer(if (templates is DefaultAccountMailTemplates) DefaultAccountMailTemplates(p.mail, DefaultAccountMailLayout(p.mail.brand)) else templates, transport, p.mail)
+        val mailers = registry.scopedFrom("skeleton.account", AccountProperties::class.java) { project, bound ->
+            val mail = bound.mail.withOwnLinkBase(registry, project)
+            // 앱이 자기 틀(templates)이나 레이아웃(layout) 빈을 두었으면 그것을 쓴다 — 내장 틀 · 레이아웃일 때만 프로젝트의 브랜드로 새로 만든다
+            val projectLayout = if (layout is DefaultAccountMailLayout) DefaultAccountMailLayout(mail.brand) else layout
+            TemplatedAccountMailer(if (templates is DefaultAccountMailTemplates) DefaultAccountMailTemplates(mail, projectLayout) else templates, transport, mail)
+        }
+        if (registry.active.size > 1 && (templates !is DefaultAccountMailTemplates || layout !is DefaultAccountMailLayout)) {
+            org.slf4j.LoggerFactory.getLogger(AccountAutoConfiguration::class.java).warn(
+                "The app defines its own AccountMailTemplates/AccountMailLayout, so every project ({}) sends mail with the same text and layout — the per-project skeleton.account.mail.brand only applies to the built-in ones",
+                registry.active.joinToString { it.id },
+            )
         }
         return AccountMailer { mailers.get().send(it) }
     }
@@ -179,13 +188,14 @@ class AccountAutoConfiguration {
     @ConditionalOnMissingBean
     fun accountLinks(properties: AccountProperties, projects: ObjectProvider<ProjectRegistry>): AccountLinks {
         val registry = projects.getIfAvailable() ?: return AccountLinks(properties.mail)
-        val mails = registry.scopedFrom("skeleton.account", AccountProperties::class.java) { _, p -> p.mail }
+        val mails = registry.scopedFrom("skeleton.account", AccountProperties::class.java) { project, p -> p.mail.withOwnLinkBase(registry, project) }
         return AccountLinks { mails.get() }
     }
 
     @Bean(destroyMethod = "close")
     @ConditionalOnMissingBean(AccountTaskRunner::class)
-    fun accountTaskRunner(): AccountTaskRunner = ExecutorAccountTaskRunner()
+    fun accountTaskRunner(projects: ObjectProvider<ProjectRegistry>): AccountTaskRunner =
+        ExecutorAccountTaskRunner().let { if (projects.getIfAvailable() != null) dev.sumin.skeleton.account.abuse.ProjectAwareTaskRunner(it) else it }
 
     @Bean
     @ConditionalOnMissingBean
@@ -398,7 +408,14 @@ class AccountAutoConfiguration {
         captcha: ObjectProvider<AccountCaptcha>,
         clientIps: ObjectProvider<ClientIps>,
         registry: ObjectProvider<SignInMethodRegistry>,
-    ): AccountDeployGuard = AccountDeployGuard(properties, auth.getIfAvailable { AuthProperties() }.protectedProfiles) {
+        projects: ObjectProvider<ProjectRegistry>,
+    ): AccountDeployGuard = AccountDeployGuard(
+        properties, auth.getIfAvailable { AuthProperties() }.protectedProfiles,
+        // 프로젝트가 있으면 프로젝트마다 같은 검사 — 시드 · 로그 링크는 공통+프로젝트 값, 링크 주소는 프로젝트 자기 값만(공통으로 내려가지 않는다)
+        projects.getIfAvailable()?.active.orEmpty().map { p ->
+            AccountDeployGuard.ProjectView(p.id, projects.getObject().bind(p, "skeleton.account", AccountProperties::class.java), projects.getObject().bindOwn(p, "skeleton.account", AccountProperties::class.java).mail.linkBaseUrl)
+        },
+    ) {
         AccountDeployGuard.State(
             accounts.getIfUnique(), tokenStore.getIfUnique(), challengeStore.getIfUnique(), transport.getIfUnique() is LogOnlyMailTransport, captcha.getIfAvailable() != null,
             clientIps.getIfAvailable { ClientIps() }.configured,
@@ -406,3 +423,7 @@ class AccountAutoConfiguration {
         )
     }
 }
+
+/** 프로젝트 모드의 링크 주소는 그 프로젝트가 정한 값만 — 비면 공통(다른 프로젝트의 도메인일 수 있다)으로 내려가지 않고 비워 둔다. 가드가 보호 환경에서 막는다 */
+private fun AccountProperties.Mail.withOwnLinkBase(registry: ProjectRegistry, project: dev.sumin.skeleton.common.project.Project): AccountProperties.Mail =
+    copy(linkBaseUrl = registry.bindOwn(project, "skeleton.account", AccountProperties::class.java).mail.linkBaseUrl)
