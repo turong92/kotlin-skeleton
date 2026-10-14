@@ -112,8 +112,12 @@ class JdbcJobQueueIntegrationTest {
     }
 
     @Test
-    fun `핸들러 없는 타입은 DEAD`() {
+    fun `핸들러 없는 타입은 집지 않고 둔다 - DEAD 는 기한이 지난 뒤`() {
         val id = queue.enqueue("unknown-type", "{}")
+        assertEquals(0, worker().pollOnce())
+        assertEquals(JobStatus.PENDING, repository.findById(id)!!.status)
+        // 이 클래스는 줄을 지우지 않고 시간을 앞으로만 돌리므로, 다른 시험에 남지 않게 여기서 치운다
+        time.now = time.now.plus(Duration.ofDays(2))
         worker().pollOnce()
         assertEquals(JobStatus.DEAD, repository.findById(id)!!.status)
     }

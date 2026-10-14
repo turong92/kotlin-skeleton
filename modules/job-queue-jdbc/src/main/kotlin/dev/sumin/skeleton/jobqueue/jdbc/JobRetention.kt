@@ -14,7 +14,8 @@ class JobRetention(
     private val config: JobQueueProperties.Retention,
     private val timeProvider: dev.sumin.skeleton.common.time.TimeProvider,
 ) {
-    @Volatile private var lastRun: Instant? = null
+    /** 프로젝트마다 따로 — 한 프로젝트의 정리가 다른 프로젝트의 정리를 가리지 않게. 프로젝트 문맥이 없으면(한 서비스) 키는 하나 */
+    private val lastRun = java.util.concurrent.ConcurrentHashMap<String, Instant>()
 
     fun run(now: Instant): JobRetentionResult {
         val batch = config.batchSize.coerceAtLeast(1)
@@ -27,9 +28,10 @@ class JobRetention(
     /** 간격이 지났을 때만 돈다. 돌았으면 결과, 아니면 null */
     fun runIfDue(): JobRetentionResult? {
         val now = timeProvider.now()
-        val last = lastRun
+        val key = dev.sumin.skeleton.common.project.ProjectContext.currentOrNull()?.id.orEmpty()
+        val last = lastRun[key]
         if (last != null && now.isBefore(last.plus(config.interval))) return null
-        lastRun = now
+        lastRun[key] = now
         return run(now)
     }
 }

@@ -178,19 +178,17 @@ class JobQueueHardeningIntegrationTest {
     // ---- DEAD 고리 ----
 
     @Test
-    fun `재시도를 다 쓴 잡 · 영구 실패 · 처리기 없음이 DEAD 가 될 때 리스너가 한 번씩 불린다`() {
+    fun `재시도를 다 쓴 잡 · 영구 실패가 DEAD 가 될 때 리스너가 한 번씩 불린다`() {
         val heard = CopyOnWriteArrayList<Pair<Job, String>>()
         val listener = JobDeadListener { job, reason -> heard += job to reason }
         val exhausted = queue.enqueue("failing", "{}", maxAttempts = 1)
         val permanent = queue.enqueue("permanent", "{}")
-        val unknown = queue.enqueue("no-such-type", "{}")
 
         worker(listOf(listener)).pollOnce()
 
-        assertEquals(setOf(exhausted, permanent, unknown), heard.map { it.first.id }.toSet())
-        assertEquals(3, heard.size)
+        assertEquals(setOf(exhausted, permanent), heard.map { it.first.id }.toSet())
+        assertEquals(2, heard.size)
         assertTrue(heard.first { it.first.id == exhausted }.second.contains("boom"))
-        assertTrue(heard.first { it.first.id == unknown }.second.contains("no-such-type"))
     }
 
     @Test
@@ -226,6 +224,48 @@ class JobQueueHardeningIntegrationTest {
 
         assertEquals(listOf(id), heard)
         assertEquals(JobStatus.DONE, repository.findById(other)!!.status)
+    }
+
+    // ---- 모르는 잡 종류 (배포 중 신구 혼재) ----
+
+    @Test
+    fun `처리기 없는 종류는 DEAD 가 아니라 그대로 두고 시도도 쓰지 않아 다른 버전 워커가 집을 수 있다`() {
+        val unknown = queue.enqueue("newer-version-only", "{}")
+        val known = queue.enqueue("scripted", "{}")
+
+        assertEquals(1, worker().pollOnce()) // 아는 종류만 집는다
+
+        val job = repository.findById(unknown)!!
+        assertEquals(JobStatus.PENDING, job.status)
+        assertEquals(0, job.attempts)
+        assertNull(job.lockedBy)
+        assertEquals(JobStatus.DONE, repository.findById(known)!!.status)
+
+        // 그 종류의 처리기를 가진 다른 버전 워커는 집는다
+        val newer = ScriptedHandler("newer-version-only")
+        val other = JobQueueWorker(repository, listOf(newer), properties.copy(workerId = "w-new"), time, propagator)
+        assertEquals(1, other.pollOnce())
+        assertEquals(JobStatus.DONE, repository.findById(unknown)!!.status)
+    }
+
+    @Test
+    fun `처리기 없는 종류도 기한이 지나면 DEAD 가 되고 듣는 쪽에 알린다 - 기한 안에는 건드리지 않는다`() {
+        val id = queue.enqueue("nobody-handles-this", "{}")
+        val dead = CopyOnWriteArrayList<String>()
+        val w = worker(listOf(JobDeadListener { job, reason -> dead += "${job.id}:$reason" }))
+
+        time.now = time.now.plus(properties.unhandledTypeGrace).minusSeconds(1)
+        w.pollOnce()
+        assertEquals(JobStatus.PENDING, repository.findById(id)!!.status)
+        assertTrue(dead.isEmpty())
+
+        time.now = time.now.plusSeconds(2)
+        w.pollOnce()
+        val job = repository.findById(id)!!
+        assertEquals(JobStatus.DEAD, job.status)
+        assertTrue(job.lastError!!.contains("nobody-handles-this"), job.lastError)
+        assertEquals(1, dead.size)
+        assertTrue(dead.single().startsWith("$id:"))
     }
 
     // ---- 보관 정리 ----

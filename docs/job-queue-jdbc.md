@@ -14,6 +14,7 @@ skeleton:
     max-attempts: 10
     backoff: { initial: 30s, multiplier: 2.0, max: 1h }
     stale-lock-timeout: 10m   # RUNNING older than this is returned to PENDING (worker died), or DEAD when all attempts are used
+    unhandled-type-grace: 1d  # job types this worker has no handler for are left alone (a newer version may own them); DEAD only after this long
     propagated-mdc-keys: [traceId]   # MDC keys copied from the enqueuing thread to the worker's logs
     retention: { enabled: false, done: 14d, dead: 90d }   # opt-in purge of finished rows
 ```
@@ -59,6 +60,12 @@ class TranslateCardHandler(private val json: ObjectMapper) : JobHandler {
 `RUNNING --locked_at older than stale-lock-timeout--> PENDING` (recovered on the next poll)  
 `RUNNING --locked_at older than stale-lock-timeout, attempts >= max_attempts--> DEAD` (a poison job that kills its worker never resurrects)
 
+A worker only claims job types it has a handler for. A type nobody on this build handles — typically a job enqueued by
+the **new** version while the old version is still running during a deploy — stays `PENDING` with its attempts untouched, so a worker
+of the other version picks it up. If it is still unclaimed `unhandled-type-grace` (default 1d) after it was due, no worker has a
+handler anywhere: it becomes `DEAD` with `No handler registered for job type '…'`, is logged at ERROR and reported to the dead-job
+hook. Set the grace longer than a deploy takes. (Before, the old worker marked such jobs `DEAD` immediately.)
+
 Handlers run **outside** the claim transaction so long jobs do not hold row locks.
 
 ## Lease rules
@@ -74,7 +81,7 @@ A claimed job belongs to the worker that claimed it (`locked_by` + `attempts`):
 ## Dead-job hook
 
 Register a `JobDeadListener` bean to hear every transition to DEAD (retries exhausted, `PermanentJobFailureException`,
-no handler, or a stale job that used all attempts — the worker running the recovery reports that one).
+no worker with a handler within `unhandled-type-grace`, or a stale job that used all attempts — the worker running the recovery reports that one).
 The listener decides where to send it (the `alert` module registers one when it is on the classpath); an exception in a
 listener is logged and never stops the worker.
 
@@ -84,6 +91,15 @@ listener is logged and never stops the worker.
 `jobs.log_context`; while a handler runs the worker restores them and adds `jobId` / `jobKind`, so one `grep traceId=…`
 follows a request into its background work. Set the list to `[]` to store nothing, or define a `JobContextPropagator`
 bean to carry something else.
+
+## Several projects in one process
+
+With `skeleton.projects` ([multi-project](multi-project.md)) the worker visits every active project in turn, inside `ProjectContext.runIn(project)`,
+so each project's own `jobs` table (its schema) is polled, retried, recovered and retained separately. Each round takes at most one
+`batch-size` per project, so a project with a long backlog cannot starve another. An error in one project (its database included) is logged
+with the project id and the round goes on to the next project. Handlers run with that project in `ProjectContext`; the project of an enqueue is
+simply the schema it writes to (no id travels with the job). With no project list nothing changes. The worker is still one thread: a slow
+handler delays every project's next round, it does not starve them.
 
 ## Retention
 

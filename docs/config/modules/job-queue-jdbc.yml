@@ -11,6 +11,7 @@ skeleton:
       multiplier: 2.0              # 실패마다 곱하는 배수
       max: 1h                      # 대기 상한
     stale-lock-timeout: 10m        # RUNNING 인 채로 이 시간이 지나면 워커가 죽은 것으로 보고 PENDING 으로 되돌린다 (시도를 다 썼으면 DEAD)
+    unhandled-type-grace: 1d       # 이 워커에 처리기가 없는 종류는 집지 않고 둔다 (배포 중 새 버전이 넣은 잡). 이 기간이 지나도 아무도 안 집으면 DEAD
     propagated-mdc-keys: [traceId] # 넣는 쪽 MDC 에서 작업 줄(log_context)로 옮겨 워커 로그에 복원할 키. 비우면 문맥을 싣지 않는다
     retention:
       enabled: false               # true 면 워커가 끝난 줄을 보관 기간 뒤 지운다 (기본 꺼짐 — 보관 정책은 앱이 정한다)

@@ -31,16 +31,21 @@ class JdbcJobRepository(
         return keys.key!!.toLong()
     }
 
-    /** 실행할 잡을 잡는다. 잡힌 잡은 RUNNING 이고 attempts 가 1 올라간 상태로 돌아온다. */
-    fun claim(workerId: String, limit: Int, now: Instant): List<Job> =
-        transactions.execute {
+    /**
+     * 실행할 잡을 잡는다. 잡힌 잡은 RUNNING 이고 attempts 가 1 올라간 상태로 돌아온다.
+     * [types] 가 있으면 **그 종류만** 집는다 — 이 워커가 처리기를 모르는 종류(배포 중 새 버전이 넣은 잡)는 건드리지 않아 시도도 쓰지 않는다. 비어 있으면 아무것도 안 집는다. null 이면 전부.
+     */
+    fun claim(workerId: String, limit: Int, now: Instant, types: Collection<String>? = null): List<Job> {
+        if (types != null && types.isEmpty()) return emptyList()
+        return transactions.execute {
             val ids = jdbc.sql(
                 """select id from jobs
-                   where status = 'PENDING' and next_run_at <= :now
+                   where status = 'PENDING' and next_run_at <= :now ${if (types != null) "and job_type in (:types)" else ""}
                    order by next_run_at, id
                    limit :limit
                    for update skip locked""",
-            ).param("now", dialect.instantParam(now)).param("limit", limit).query(Long::class.java).list()
+            ).param("now", dialect.instantParam(now)).param("limit", limit).also { if (types != null) it.param("types", types) }
+                .query(Long::class.java).list()
             if (ids.isEmpty()) return@execute emptyList()
             jdbc.sql(
                 """update jobs
@@ -49,6 +54,30 @@ class JdbcJobRepository(
             ).param("worker", workerId).param("now", dialect.instantParam(now)).param("ids", ids).update()
             jdbc.sql("select * from jobs where id in (:ids) order by next_run_at, id")
                 .param("ids", ids).query(::map).list()
+        } ?: emptyList()
+    }
+
+    /**
+     * [knownTypes] 가 아닌 종류의 PENDING 잡 중 실행 시각이 [dueBefore] 보다 오래된 것을 DEAD 로 만들고 돌려준다 — 이 워커는 그 종류를 집지 않으므로(claim)
+     * 어느 버전의 워커도 처리기가 없어 기한이 지난 잡이다. 다른 워커가 집는 중인 줄은 건너뛴다(SKIP LOCKED).
+     */
+    fun deadenUnhandled(knownTypes: Collection<String>, dueBefore: Instant, now: Instant, reason: (String) -> String): List<Job> =
+        transactions.execute {
+            val ids = jdbc.sql(
+                """select id from jobs
+                   where status = 'PENDING' and next_run_at < :before ${if (knownTypes.isNotEmpty()) "and job_type not in (:types)" else ""}
+                   order by id
+                   limit 1000
+                   for update skip locked""",
+            ).param("before", dialect.instantParam(dueBefore)).also { if (knownTypes.isNotEmpty()) it.param("types", knownTypes) }
+                .query(Long::class.java).list()
+            if (ids.isEmpty()) return@execute emptyList()
+            val jobs = jdbc.sql("select * from jobs where id in (:ids) order by id").param("ids", ids).query(::map).list()
+            jobs.forEach { job ->
+                jdbc.sql("update jobs set status = 'DEAD', last_error = :error, updated_at = :now where id = :id")
+                    .param("error", reason(job.type).take(4000)).param("now", dialect.instantParam(now)).param("id", job.id).update()
+            }
+            jobs
         } ?: emptyList()
 
     /**

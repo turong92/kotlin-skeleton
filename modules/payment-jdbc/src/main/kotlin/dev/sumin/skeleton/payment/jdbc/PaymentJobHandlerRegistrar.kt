@@ -38,7 +38,7 @@ internal class PaymentJobHandlerRegistrar : BeanDefinitionRegistryPostProcessor 
 
 /**
  * 시작할 때 [PaymentTaskRunner.types] 의 모든 종류에 큐 처리기가 **하나** 있는지 본다. 없거나 둘 이상이면 시작을 멈춘다(둘이면 워커가 말없이 하나만 고른다) —
- * 처리기 없는 종류의 작업은 큐에 쌓였다가 `No handler registered` 로 죽고, 그 작업은 돈이 걸린 일(만료 · 조회 · 지급 · 환불)이다.
+ * 처리기 없는 종류의 작업은 큐에 쌓였다가 기한(`unhandled-type-grace`)이 지나면 `No handler registered` 로 죽고, 그 작업은 돈이 걸린 일(만료 · 조회 · 지급 · 환불)이다.
  * (`PaymentTaskHandler` 빈이 아닌 방식으로 러너가 종류를 더한 경우 — 그 종류의 `JobHandler` 는 앱이 직접 등록한다.)
  */
 internal class PaymentJobHandlerCoverage(

@@ -1,5 +1,8 @@
 package dev.sumin.skeleton.jobqueue.jdbc
 
+import dev.sumin.skeleton.common.project.Project
+import dev.sumin.skeleton.common.project.ProjectContext
+import dev.sumin.skeleton.common.project.ProjectRegistry
 import dev.sumin.skeleton.common.time.TimeProvider
 import java.net.InetAddress
 import java.util.UUID
@@ -18,6 +21,8 @@ import org.slf4j.MDC
  * - 워커가 죽어 RUNNING 으로 남은 잡은 [JobQueueProperties.staleLockTimeout] 뒤 PENDING 으로 복구 (시도를 다 썼으면 DEAD)
  * - 종료 갱신은 임대 주인(`locked_by` · `attempts`)일 때만 반영하고, 묶음의 각 잡은 차례가 올 때 임대를 새로 잡는다
  * - 돌리는 동안 넣은 쪽의 MDC 문맥을 복원하고, DEAD 가 되는 잡은 [JobDeadListener] 에 알린다
+ * - 처리기를 모르는 종류는 집지 않는다 (배포 중 새 버전의 잡을 DEAD 로 만들지 않게) — [JobQueueProperties.unhandledTypeGrace] 가 지나도 남으면 그때 DEAD
+ * - 프로젝트 모드면 프로젝트마다 그 스키마의 `jobs` 를 돈다 (프로젝트마다 한 묶음씩, 오류는 프로젝트 안에서 끝낸다)
  */
 class JobQueueWorker(
     private val repository: JdbcJobRepository,
@@ -27,6 +32,8 @@ class JobQueueWorker(
     private val propagator: JobContextPropagator = MdcJobContextPropagator(properties.propagatedMdcKeys),
     private val deadListeners: List<JobDeadListener> = emptyList(),
     private val retention: JobRetention? = null,
+    /** 프로젝트 모드(`skeleton.projects`)면 서비스 중인 프로젝트를 차례로 돈다. null 이면 지금까지처럼 한 서비스 */
+    private val projects: ProjectRegistry? = null,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val handlerByType = handlers.associateBy { it.type }
@@ -55,8 +62,35 @@ class JobQueueWorker(
         }
     }
 
-    /** 한 번 폴링. 테스트에서 직접 호출할 수 있다. 처리한 잡 수를 돌려준다. */
+    /**
+     * 한 번 폴링. 테스트에서 직접 호출할 수 있다. 처리한 잡 수를 돌려준다.
+     * 프로젝트 모드면 서비스 중인 프로젝트마다 그 스키마에서 한 묶음([JobQueueProperties.batchSize])씩 — 일감 많은 프로젝트가 다른 프로젝트를 굶기지 않는다.
+     * 한 프로젝트의 오류(DB 포함)는 그 프로젝트에서 끝내고 다음 프로젝트로 간다.
+     */
     fun pollOnce(): Int {
+        val registry = projects ?: return pollProject()
+        var processed = 0
+        registry.active.forEach { project ->
+            try {
+                processed += ProjectContext.runIn(project) { inProject(project) { pollProject() } }
+            } catch (ex: Exception) {
+                log.error("Job queue poll failed for project '{}'", project.id, ex)
+            }
+        }
+        return processed
+    }
+
+    private fun <T> inProject(project: Project, block: () -> T): T {
+        MDC.put("project", project.id)
+        try {
+            return block()
+        } finally {
+            MDC.remove("project")
+        }
+    }
+
+    /** 지금 프로젝트 문맥(없으면 한 서비스)의 `jobs` 한 번 폴링 */
+    private fun pollProject(): Int {
         val now = timeProvider.now()
         val stale = repository.recoverStale(now.minus(properties.staleLockTimeout), now)
         if (stale.recovered > 0) log.warn("Recovered {} stale RUNNING job(s)", stale.recovered)
@@ -65,14 +99,26 @@ class JobQueueWorker(
             log.warn("Job {} ({}) was stale RUNNING with all {} attempts used, marked DEAD", job.id, job.type, job.maxAttempts)
             notifyDead(job, job.lastError ?: "stale RUNNING job exhausted its attempts")
         }
+        deadenUnhandled(now)
         runRetention()
-        val jobs = repository.claim(workerId, properties.batchSize, now)
+        // 아는 종류만 집는다 — 모르는 종류(배포 중 새 버전이 넣은 잡)는 시도도 쓰지 않고 남아, 그 종류를 아는 워커가 집는다
+        val jobs = repository.claim(workerId, properties.batchSize, now, handlerByType.keys)
         jobs.forEach { job ->
             // 차례가 온 잡의 임대를 새로 잡는다 — 못 잡으면 앞 잡이 오래 걸려 그 사이 복구되어 남에게 넘어갔다. 돌리지 않는다
             if (repository.renew(job.id, workerId, job.attempts, timeProvider.now())) run(job)
             else log.warn("Job {} ({}) was reclaimed by another worker before its turn, skipped", job.id, job.type)
         }
         return jobs.size
+    }
+
+    /** 이 워커가 모르는 종류가 [JobQueueProperties.unhandledTypeGrace] 가 지나도록 남아 있으면 처리기가 어디에도 없다는 뜻이다 — 그때 DEAD */
+    private fun deadenUnhandled(now: java.time.Instant) {
+        repository.deadenUnhandled(handlerByType.keys, now.minus(properties.unhandledTypeGrace), now) { type ->
+            "No handler registered for job type '$type' (waited ${properties.unhandledTypeGrace} for a worker that has one)"
+        }.forEach { job ->
+            log.error("No worker has a handler for job type '{}' (job {}), marked DEAD after {}", job.type, job.id, properties.unhandledTypeGrace)
+            notifyDead(job, "No handler registered for job type '${job.type}'")
+        }
     }
 
     private fun runRetention() {
@@ -98,13 +144,8 @@ class JobQueueWorker(
     }
 
     private fun runHandler(job: Job) {
-        val handler = handlerByType[job.type]
-        if (handler == null) {
-            val reason = "No handler registered for job type '${job.type}'"
-            if (repository.markDead(job.id, workerId, job.attempts, reason, timeProvider.now())) notifyDead(job, reason) else logLostLease(job)
-            log.error("No handler for job type '{}' (job {}), marked DEAD", job.type, job.id)
-            return
-        }
+        // claim 이 아는 종류만 집으므로 처리기는 항상 있다
+        val handler = handlerByType.getValue(job.type)
         try {
             handler.handle(job)
             if (!repository.markDone(job.id, workerId, job.attempts, timeProvider.now())) logLostLease(job)

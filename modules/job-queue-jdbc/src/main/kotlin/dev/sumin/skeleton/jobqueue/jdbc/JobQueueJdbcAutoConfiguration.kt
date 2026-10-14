@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.jobqueue.jdbc
 
+import dev.sumin.skeleton.common.project.ProjectRegistry
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.persistence.jdbc.SqlDialect
 import javax.sql.DataSource
@@ -60,8 +61,9 @@ class JobQueueJdbcAutoConfiguration {
         propagator: JobContextPropagator,
         deadListeners: ObjectProvider<JobDeadListener>,
         retention: ObjectProvider<JobRetention>,
+        projects: ObjectProvider<ProjectRegistry>,
     ) = JobQueueWorker(
         repository, handlers.orderedStream().toList(), properties, timeProvider.getIfAvailable { TimeProvider.systemUtc() },
-        propagator, deadListeners.orderedStream().toList(), retention.getIfAvailable(),
+        propagator, deadListeners.orderedStream().toList(), retention.getIfAvailable(), projects.getIfAvailable(),
     )
 }
