@@ -21,6 +21,8 @@ import tools.jackson.databind.ObjectMapper
 class ProjectFilter(
     private val registry: ProjectRegistry,
     private val objectMapper: ObjectMapper,
+    /** 모듈이 더하는 프로젝트 없는 경로(예: 작업 큐의 깨우기 주소 — 호출자는 서비스 주소(run.app)로 부른다). 요청마다 읽는다 */
+    private val extraUnscoped: List<ProjectUnscopedPaths> = emptyList(),
 ) : OncePerRequestFilter() {
     // 비동기 재진입(DeferredResult · Callable · SseEmitter)에서도 프로젝트 문맥을 다시 세운다
     override fun shouldNotFilterAsyncDispatch(): Boolean = false
@@ -38,7 +40,7 @@ class ProjectFilter(
             ProjectContext.runIn(project) { chain.doFilter(request, response) }
             return
         }
-        if (unscoped.any { RequestPaths.matches(it, request) }) {
+        if (unscoped.any { RequestPaths.matches(it, request) } || extraUnscoped.flatMap { it.paths() }.any { RequestPaths.matches(RequestPaths.pattern(it), request) }) {
             chain.doFilter(request, response)
             return
         }
@@ -67,4 +69,12 @@ class ProjectFilter(
         /** 프로젝트 없이 지나가는 경로 — 액추에이터 `/health` · `/info` (배포 계약의 헬스체크) */
         val UNSCOPED_PATHS = listOf("/health", "/health/**", "/info")
     }
+}
+
+/**
+ * 프로젝트 없이 지나가야 하는 경로를 더하는 고리 — 호스트가 어느 프로젝트에도 안 맞는 요청(서비스 주소로 부르는 외부 호출)이 421 로 막히지 않게.
+ * 그 경로의 처리는 프로젝트 문맥이 없다는 것을 알고 스스로 프로젝트를 돌아야 한다(작업 큐 깨우기는 `forEachProject` 로 돈다). 반환값은 요청마다 읽는다.
+ */
+fun interface ProjectUnscopedPaths {
+    fun paths(): List<String>
 }

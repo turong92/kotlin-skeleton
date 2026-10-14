@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 네이티브 이미지(선택 빌드) + 0대 운영 — 요청 구동 작업 큐 (2026-10-15)
+
+- **네이티브는 선택 빌드**: `./gradlew :apps:<앱>:nativeCompile -Pnative -PjavaToolchain=25`(보통 `scripts/native-build.sh` — GraalVM 25 공식 Docker 이미지 안에서). `-Pnative` 가 없으면 기본 JVM 빌드는 그대로다(루트에 플러그인 선언과 `-PjavaToolchain` 읽는 한 줄만 늘었다). 배포 이미지는 `Dockerfile.native`(기존 `Dockerfile` 은 JVM 그대로). 설명 · 규칙: `docs/native-image.md`.
+- **힌트(`META-INF/spring/aot.factories` 의 `RuntimeHintsRegistrar`)**: `platform`(kotlin-reflect 용), `migration-flyway`, `legal`, `time`, `auth`(검증기), `payment-toss` · `payment-stripe` · `auth-social-google/kakao/naver` · `crypto`(외부 응답 · 본문 DTO). JVM 실행에는 아무 일도 하지 않는다. 새 공유 도우미 `BindingHints`(platform).
+- **`payment-jdbc` 작업 처리기 등록 방식 변경**: `PaymentJobHandlerRegistrar` 가 빈 정의에 람다 공급자 대신 생성자 빈 참조(`HandlerBackedJobHandler`)를 쓰고, 이미 있는 정의는 건너뛴다 — Spring AOT 가 공급자 달린 정의를 못 굽는다. 동작(종류마다 `JobHandler` 하나)은 같다.
+- **작업 큐 "요청 구동" 모드**: `skeleton.job-queue.mode`(`polling` 기본 | `on-request`)와 `skeleton.job-queue.wake.{path, secret, time-budget}`. `on-request` 면 폴링 스레드가 없고 **새 공개 경로 `POST /internal/jobs/drain`**(보안 체인에서 로그인 없이 열림, 인증은 헤더 `X-Wake-Secret` 상수 시간 비교)이 주기 작업(`OnRequestTask`)을 깨우고 밀린 일감을 `time-budget`(기본 25s) 안에서 처리한다. 폴링 모드에서는 서블릿 앱에 이 경로가 있어도 404 이고, 비밀값이 비면 404 · 틀리면 401. 보호 환경(stage · prod)에서 요청 구동인데 비밀값이 없거나 24자 미만이면 기동 실패(`job-queue-wake` 가드). 프로젝트 N개 모드에서는 이 경로가 프로젝트 없는 경로(`ProjectUnscopedPaths`, platform 의 새 고리)로 열리고 순회는 워커가 한다. `JobQueueWorker.drain(budget)`·`JobDrainer`·`DrainResult` 신설. 문서: `docs/cloud-run-scale-to-zero.md` · `docs/job-queue-jdbc.md`.
+- **`OnRequestTask`**(platform `common.wake`): 스스로 도는 주기 작업을 밖의 호출로도 깨우는 고리. `account`(`account-purge`)와 `auth-session`(`auth-session-purge`)이 빈을 낸다 — 주기를 0 으로 꺼 둔 앱은 깨우기도 돌리지 않는다.
+- 새 설정 키: `skeleton.job-queue.mode` · `wake.path` · `wake.secret` · `wake.time-budget`(`docs/config/modules/job-queue-jdbc.yml`). 새 도구: `scripts/native-build.sh` · `native-test.sh`(`--app` · `--smoke`), `tools/native-check`(시험용 조립 — 새 프로젝트에는 복사되지 않는다), `.github/workflows/native.yml`(릴리스 태그 · 의존성 파일 PR · 수동에서만).
+
 ### 한 프로세스에 프로젝트 여럿 — 부품은 한 벌, 설정과 데이터만 프로젝트마다 (2026-10-14)
 
 - `skeleton.projects.<id>.{hosts, schema, status, datasource, config}`(platform): 요청의 Host 로 프로젝트를 정해 스레드 문맥(`ProjectContext`)에 둔다. 모르는 Host → `421 COMMON.UNKNOWN_HOST`, `status: closed` → `503 COMMON.PROJECT_CLOSED`(풀 · 마이그레이션 · 개수에서 빠진다), `/health` · `/info` 는 예외. **목록이 비면 아무것도 달라지지 않는다.** 설명: `docs/multi-project.md`.

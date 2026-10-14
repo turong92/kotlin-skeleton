@@ -230,8 +230,32 @@ rm -f apps/api/src/test/kotlin/dev/sumin/skeleton/app/api/MultiProject*.kt apps/
 
 # ---------------------------------------------------------------------------------------------------- 지우기
 [ "$WITH_WORKBENCH" = 1 ] || { rm -rf apps/workbench; perl -ni -e 'print unless /^include\(":apps:workbench"\)\s*$/' settings.gradle.kts; }
-# 네이티브 이미지 시험용 조립(tools/native-check · scripts/native-*.sh · Dockerfile.native · 워크플로)은 스켈레톤 자신의 검사다 — 새 프로젝트에는 가지 않는다 (docs/native-image.md 는 남는다)
-rm -rf tools scripts/native-smoke.sh scripts/native-test.sh .github/workflows/native.yml
+# 네이티브 이미지(docs/native-image.md): 스켈레톤 자신의 시험용 조립(tools/native-check)과 그 흐름 시험(scripts/native-smoke.sh)은 새 프로젝트에 가지 않는다.
+# 빌드 · 시험 도구(scripts/native-build.sh · scripts/native-test.sh · Dockerfile.native)는 남는다 — 앱(apps/api)을 대상으로 쓰고, 프로젝트가 자기 핵심 흐름 시험을 `--smoke` 로 붙인다.
+# 워크플로는 손으로 돌리는 것(workflow_dispatch)만 남긴다: 프로젝트가 네이티브로 가기로 하면 릴리스 태그 · 의존성 파일 PR 트리거를 켠다(스켈레톤의 .github/workflows/native.yml 이 틀).
+rm -rf tools scripts/native-smoke.sh
+cat > .github/workflows/native.yml <<'YML'
+name: native
+# 네이티브 이미지 시험 (docs/native-image.md) — 지금은 손으로만 돈다. 네이티브로 배포하기로 하면 아래 on: 에 릴리스 태그 · 의존성 파일 PR 트리거를 더한다:
+#   push: { tags: ['v*'] }
+#   pull_request: { paths: ['build.gradle.kts', 'settings.gradle.kts', '**/build.gradle.kts', 'gradle/**', 'gradle.properties', '**/*.lockfile', '**/aot.factories', 'scripts/native-*.sh'] }
+# 그리고 scripts/native-test.sh 에 프로젝트의 핵심 흐름 시험을 붙인다: scripts/native-test.sh --smoke scripts/<내 시험>.sh
+on:
+  workflow_dispatch:
+
+jobs:
+  native:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/.gradle-native
+          key: native-gradle-${{ hashFiles('**/*.gradle.kts', 'gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: native-gradle-
+      - run: NATIVE_CPUS="$(nproc)" scripts/native-test.sh
+YML
 perl -ni -e 'print unless /^include\(":tools:native-check"\)\s*$/' settings.gradle.kts
 # 샘플 앱은 기본으로 빠진다 — 앱 · 그 문서 · 실행 스크립트 · 안내 문서의 샘플 구역(<!-- sample:start --> … <!-- sample:end -->)까지. --with-sample 이면 표식 줄만 지운다
 if [ "$WITH_SAMPLE" = 1 ]; then

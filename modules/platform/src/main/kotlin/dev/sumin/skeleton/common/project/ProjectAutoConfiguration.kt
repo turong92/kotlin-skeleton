@@ -36,8 +36,8 @@ class ProjectAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(name = ["projectFilterRegistration"])
     @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
-    fun projectFilterRegistration(registry: ProjectRegistry, objectMapper: ObjectMapper): FilterRegistrationBean<ProjectFilter> =
-        FilterRegistrationBean(ProjectFilter(registry, objectMapper)).apply { order = Ordered.HIGHEST_PRECEDENCE + 2 }
+    fun projectFilterRegistration(registry: ProjectRegistry, objectMapper: ObjectMapper, unscoped: org.springframework.beans.factory.ObjectProvider<ProjectUnscopedPaths>): FilterRegistrationBean<ProjectFilter> =
+        FilterRegistrationBean(ProjectFilter(registry, objectMapper, unscoped.orderedStream().toList())).apply { order = Ordered.HIGHEST_PRECEDENCE + 2 }
 
     /** 서비스 중인 프로젝트가 둘 이상이면 프로젝트를 모르는 기능이 빌드에 있는지 본다 — 모듈마다 가드를 흩뿌리지 않고 이 한 곳에서 */
     @Bean

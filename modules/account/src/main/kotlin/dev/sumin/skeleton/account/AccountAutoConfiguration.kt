@@ -393,8 +393,12 @@ class AccountAutoConfiguration {
     /** 요청 구동 모드(`skeleton.job-queue.mode=on-request`)의 깨우기 주소가 이 정리를 한 번 깨울 수 있게 내놓는다 — 타이머가 없는 0대 배포용 (docs/cloud-run-scale-to-zero.md). 다른 곳이 부르지 않으면 쓰이지 않는다 */
     @Bean
     @ConditionalOnMissingBean(name = ["accountPurgeOnRequestTask"])
-    fun accountPurgeOnRequestTask(dispatch: AccountPurgeDispatch): dev.sumin.skeleton.common.wake.OnRequestTask =
-        dev.sumin.skeleton.common.wake.SimpleOnRequestTask("account-purge") { dispatch.dispatch() }
+    fun accountPurgeOnRequestTask(properties: AccountProperties, dispatch: AccountPurgeDispatch): dev.sumin.skeleton.common.wake.OnRequestTask =
+        // 주기를 0 으로 꺼 둔 앱(`deletion.purge-interval` — 정리는 앱이 직접 부른다)은 깨우기도 이 정리를 돌리지 않는다. 값은 실행 때 읽는다
+        dev.sumin.skeleton.common.wake.SimpleOnRequestTask("account-purge") {
+            val interval = properties.deletion.purgeInterval
+            if (!interval.isZero && !interval.isNegative) dispatch.dispatch()
+        }
 
     /** 주기마다 직접 지운다 — `job-queue-jdbc` 가 있으면 [AccountPurgeJobAutoConfiguration] 이 잡 넣기로 바꾼다 */
     @Bean

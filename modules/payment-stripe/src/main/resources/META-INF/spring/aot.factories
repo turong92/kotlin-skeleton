@@ -1,0 +1,2 @@
+org.springframework.aot.hint.RuntimeHintsRegistrar=\
+dev.sumin.skeleton.payment.stripe.StripeNativeHints

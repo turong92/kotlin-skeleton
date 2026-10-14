@@ -19,8 +19,12 @@ class JobWakeControllerTest {
     private val drainer = JobDrainer { budget -> order += "drain(${budget.seconds}s)"; DrainResult(processed = 2, rounds = 2, timedOut = false, elapsedMillis = 5) }
     private val secret = "a-long-random-wake-secret-0123456789"
 
-    private fun mvc(secret: String = this.secret, tasks: List<OnRequestTask> = listOf(SimpleOnRequestTask("t1") { order += "t1" })): MockMvc =
-        MockMvcBuilders.standaloneSetup(JobWakeController(drainer, tasks, secret, Duration.ofSeconds(25))).build()
+    private fun mvc(
+        secret: String = this.secret,
+        tasks: List<OnRequestTask> = listOf(SimpleOnRequestTask("t1") { order += "t1" }),
+        mode: JobQueueProperties.Mode = JobQueueProperties.Mode.ON_REQUEST,
+    ): MockMvc =
+        MockMvcBuilders.standaloneSetup(JobWakeController(drainer, tasks, JobQueueProperties(mode = mode, wake = JobQueueProperties.Wake(secret = secret, timeBudget = Duration.ofSeconds(25))))).build()
 
     @Test
     fun `맞는 비밀값이면 주기 작업을 먼저 깨우고 일감을 비운 뒤 결과를 돌려준다`() {
@@ -50,6 +54,45 @@ class JobWakeControllerTest {
     }
 
     @Test
+    fun `폴링 모드에서는 맞는 비밀값이어도 404 이고 아무것도 돌리지 않는다 - 빈은 서 있어도 모드는 실행 때 본다`() {
+        mvc(mode = JobQueueProperties.Mode.POLLING).post("/internal/jobs/drain") { header("X-Wake-Secret", secret) }.andExpect { status { isNotFound() } }
+        assertTrue(order.isEmpty(), "아무것도 돌지 않아야 한다: $order")
+    }
+
+    @Test
+    fun `프로젝트 N개 모드에서 서비스 주소(어느 프로젝트의 호스트도 아닌 run-app)로 불러도 호스트 필터가 421 로 막지 않는다`() {
+        val registry = dev.sumin.skeleton.common.project.ProjectRegistry.from(
+            org.springframework.mock.env.MockEnvironment()
+                .withProperty("skeleton.projects.a.hosts", "a.example").withProperty("skeleton.projects.a.schema", "pa"),
+        )
+        val properties = JobQueueProperties(mode = JobQueueProperties.Mode.ON_REQUEST, wake = JobQueueProperties.Wake(secret = secret))
+        val filter = dev.sumin.skeleton.common.project.ProjectFilter(registry, tools.jackson.databind.ObjectMapper(), listOf(JobWakeAutoConfiguration().jobWakeUnscopedPath(properties)))
+        val web = MockMvcBuilders.standaloneSetup(JobWakeController(drainer, emptyList(), properties)).addFilters<org.springframework.test.web.servlet.setup.StandaloneMockMvcBuilder>(filter).build()
+
+        web.post("/internal/jobs/drain") { header("X-Wake-Secret", secret); with { it.serverName = "svc-abc.a.run.app"; it } }.andExpect { status { isOk() } }
+        assertEquals(listOf("drain(25s)"), order.toList())
+        // 다른 경로는 여전히 421 — 예외는 이 경로 하나뿐이다
+        web.post("/api/v1/other") { with { it.serverName = "svc-abc.a.run.app"; it } }.andExpect { status { isEqualTo(421) } }
+    }
+
+    @Test
+    fun `폴링 모드에서는 깨우기 경로가 프로젝트 없는 경로가 아니다`() {
+        val paths = JobWakeAutoConfiguration().jobWakeUnscopedPath(JobQueueProperties()).paths()
+        assertTrue(paths.isEmpty())
+    }
+
+    @Test
+    fun `환경변수 모양의 모드 값 ON_REQUEST 와 설정 모양 on-request 가 모두 요청 구동으로 묶인다`() {
+        fun bound(key: String, value: String): JobQueueProperties.Mode {
+            val env = org.springframework.core.env.StandardEnvironment()
+            env.propertySources.addFirst(org.springframework.core.env.SystemEnvironmentPropertySource("env", mapOf(key to value)))
+            return org.springframework.boot.context.properties.bind.Binder.get(env).bind("skeleton.job-queue", JobQueueProperties::class.java).get().mode
+        }
+        assertEquals(JobQueueProperties.Mode.ON_REQUEST, bound("SKELETON_JOB_QUEUE_MODE", "ON_REQUEST"))
+        assertEquals(JobQueueProperties.Mode.ON_REQUEST, bound("SKELETON_JOB_QUEUE_MODE", "on-request"))
+    }
+
+    @Test
     fun `주기 작업 하나가 던져도 다음 작업과 일감 비우기는 이어진다`() {
         val tasks = listOf(SimpleOnRequestTask("bad") { throw IllegalStateException("boom") }, SimpleOnRequestTask("good") { order += "good" })
 
@@ -64,7 +107,7 @@ class JobWakeControllerTest {
     @Test
     fun `보호 환경에서 비밀값이 비었거나 약하면 기동 실패 문제이고 값은 메시지에 없다`() {
         val prod = DeployContext(env = DeployEnv.PROD, activeProfiles = emptySet())
-        fun problems(secret: String) = JobWakeDeployGuard(JobQueueProperties.Wake(secret = secret)).problems(prod)
+        fun problems(secret: String) = JobWakeDeployGuard(JobQueueProperties(mode = JobQueueProperties.Mode.ON_REQUEST, wake = JobQueueProperties.Wake(secret = secret))).problems(prod)
 
         assertEquals(1, problems("").size)
         assertEquals(1, problems("short-secret").size)
@@ -73,7 +116,9 @@ class JobWakeControllerTest {
         assertTrue(problems("short-secret").none { it.contains("short-secret") })
         // 보호 환경이 아니면 경고만
         val local = DeployContext(env = null, activeProfiles = setOf("local"))
-        assertEquals(0, JobWakeDeployGuard(JobQueueProperties.Wake(secret = "")).problems(local).size)
-        assertEquals(1, JobWakeDeployGuard(JobQueueProperties.Wake(secret = "")).warnings(local).size)
+        assertEquals(0, JobWakeDeployGuard(JobQueueProperties(mode = JobQueueProperties.Mode.ON_REQUEST, wake = JobQueueProperties.Wake(secret = ""))).problems(local).size)
+        assertEquals(1, JobWakeDeployGuard(JobQueueProperties(mode = JobQueueProperties.Mode.ON_REQUEST, wake = JobQueueProperties.Wake(secret = ""))).warnings(local).size)
+        // 폴링 모드(기본)는 비밀값이 없어도 할 말이 없다
+        assertEquals(0, JobWakeDeployGuard(JobQueueProperties()).problems(prod).size)
     }
 }

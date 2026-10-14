@@ -108,7 +108,7 @@ With `skeleton.job-queue.mode=on-request` no polling thread starts. An outside c
 drains the backlog round by round (`batch-size` per project per round) until a round finds nothing or `wake.time-budget` (default 25s) is used up
 (checked before each new round — a job already claimed always finishes). Retry back-offs that are not due yet wait for the next call. The secret is compared in constant time; an empty
 server secret keeps the address closed (404), a wrong one is 401, and protected environments refuse to start with a missing or weak secret (< 24 characters).
-The mode is baked at build time for AOT / native images. Polling stays the default. Details and the Cloud Scheduler setup: [Cloud Run scale to zero](cloud-run-scale-to-zero.md).
+The mode and the secret are read at run time (the wake controller is always present in a servlet app and answers 404 outside on-request mode), so one AOT / native image can run either way. Polling stays the default. Details and the Cloud Scheduler setup: [Cloud Run scale to zero](cloud-run-scale-to-zero.md).
 
 ## Retention
 

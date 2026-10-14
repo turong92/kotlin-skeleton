@@ -8,13 +8,15 @@
 | | JVM 그대로 | JVM 다듬기 | 네이티브 |
 |---|---|---|---|
 | 빌드 | 지금 `Dockerfile` | AOT + CDS 아카이브(이미지에 굽는다) | `Dockerfile.native` ([native-image](native-image.md)), 몇 분 |
-| 콜드스타트 (CPU 1) | 약 7.7s | 약 3.3s | **약 0.6~0.9s** |
-| 메모리(RSS) | 약 420MB (맥 직접) | 약 270MB | **약 210~250MB** |
+| 콜드스타트 (/health 200) | 약 7.7s | 약 3.3s | **약 0.6s** |
+| 첫 로그인 | 320~380ms | 237ms | **120ms** |
+| 메모리 (요청 뒤) | 약 257MB (`docker stats`, 페이지 캐시 포함 — 방식이 달라 참고만) | 234MB (프로세스 RSS) | **208MB** (프로세스 RSS) |
 | 켜기/끄기(환경변수) | 실행 때 가능 | **빌드 때 굳음** | **빌드 때 굳음** |
 | 위험 | 없음 | 낮음 | 새 의존성마다 리플렉션 규칙 · 릴리스 전 시험 |
 
-(측정 조건 · 방법은 [native-image](native-image.md) — 리눅스 arm64 컨테이너, CPU 1·메모리 512MB. Cloud Run 은 amd64라 숫자가 다를 수 있다. **고르는 기준**: 콜드스타트가 사용자가 기다리는 요청 경로면 네이티브,
-무거운 라이브러리(JS 압축기 · ImageIO · jOOQ)가 핵심이거나 모듈이 자주 바뀌면 JVM 다듬기. 메모리 512MB 로 JVM 은 빠듯하다 — 최소 1GB 를 권한다.)
+(**전부 같은 앱(스타터 `apps/api`)·같은 조건**: 리눅스 arm64 컨테이너, CPU 1 · 메모리 512MB 제한, DB 는 컨테이너 밖, 5회 중앙값 — 정본은 측정 보고서. 맥(M3 Pro)에서 잰 값이라 Cloud Run(amd64)과 다를 수 있다.
+결제 · 구독 · 작업 큐까지 얹은 `tools/native-check` 네이티브는 새 DB 마이그레이션 포함 약 0.85s · RSS 216MB(흐름 전체를 돈 뒤 250MB)다. **고르는 기준**: 콜드스타트가 사용자가 기다리는 요청 경로면 네이티브,
+무거운 라이브러리(JS 압축기 · ImageIO · jOOQ)가 핵심이거나 모듈이 자주 바뀌면 JVM 다듬기. 512MB 제한에서 세 방식 모두 요청 몇 개 동안은 들어맞았다 — 실제 부하의 메모리(동시성 · 힙)는 재 보지 않았으니 배포 값은 부하로 정한다.)
 
 ## 2. 0대에서는 타이머가 돌지 않는다 — "요청 구동" 모드
 
@@ -30,7 +32,7 @@ skeleton:
       time-budget: 25s               # 새 묶음을 집기를 멈추는 시간 (이미 집은 일감은 끝까지 돈다)
 ```
 
-환경변수로는 `<PREFIX>_JOB_QUEUE_MODE=on-request` · `<PREFIX>_JOB_QUEUE_WAKE_SECRET=…` (배포 선언의 `secrets:` 에 이름을 적는다). **`mode` 는 이미지를 만들 때 굳는다**(AOT · 네이티브, [native-image](native-image.md)) — 0대용 이미지는 이 모드로 만든다.
+환경변수로는 `<PREFIX>_JOB_QUEUE_MODE=on-request` · `<PREFIX>_JOB_QUEUE_WAKE_SECRET=…` (배포 선언의 `secrets:` 에 이름을 적는다). **`mode` · `wake.secret` 은 실행 때 읽는다** — 깨우기 주소는 모드와 상관없이 이미지에 들어 있고(폴링 모드에서는 404), 같은 네이티브 이미지를 환경변수로 폴링 ↔ 요청 구동으로 바꿀 수 있다. (일반 `@ConditionalOnProperty` 와 달리 AOT 에 굳지 않게 만들었다 — [native-image](native-image.md#켜기끄기는-빌드-때-굳는다-aot).) 환경변수의 `ON_REQUEST` · 설정의 `on-request` 둘 다 받는다.
 
 깨우기 한 번이 하는 일: ① 주기 작업을 깨운다 — `OnRequestTask` 빈(계정 삭제 정리 `account-purge` · 세션 정리 `auth-session-purge`)을 한 번씩 부른다(큐에 넣거나 한 묶음 지운다) ② 밀린 일감을 판마다 한 묶음씩(`batch-size`) 처리하고, 처리한 것이 있고 시간이 남았으면 다음 판 — 비면 끝낸다.
 프로젝트 N개 모드([multi-project](multi-project.md))면 판마다 프로젝트를 모두 돈다. 응답은 `{ tasks:[{name,ok}], processed, rounds, timedOut, elapsedMillis }`. `timedOut:true` 면 한도로 멈춘 것이다(남은 일감은 다음 호출이 이어받는다).
@@ -65,7 +67,7 @@ gcloud scheduler jobs create http drain-jobs \
 | 동시성 | 80(기본) 이하, 작으면 20~40 | 요청 스레드가 많을수록 메모리가 는다. CPU 1 이면 20~40 으로 시작 |
 | CPU | 1 이상, **요청 중에만 할당**(기본) | 깨우기 중 일감이 도는 동안은 요청이 열려 있어 CPU 가 있다 |
 | 기동 CPU 부스트 | **켠다** (`--cpu-boost`) | JVM 은 기동 때 CPU 를 많이 쓴다. 부스트가 콜드스타트를 줄인다(이 레포의 측정은 부스트 없는 CPU 1 이다) |
-| 메모리 | JVM 1GB+, 네이티브 512MB | 위 표. 측정은 512MB 제한에서 돌았다(네이티브) |
+| 메모리 | 부하로 정한다 (시작점 512MB) | 위 표는 512MB 제한에서 요청 몇 개만 돌렸다 — 동시 요청 · 힙 크기에 따라 는다. 부하 상태는 재 보지 않았다 |
 | 요청 제한 시간 | `time-budget` + 여유 | 깨우기 요청이 이 안에 끝나야 한다 |
 | 헬스 | 시작 프로브 `/health` | 앱이 DB 를 못 보면 503 — 시작 프로브 임계값은 기동 시간(JVM 약 7s, 네이티브 약 1s)보다 넉넉히 |
 

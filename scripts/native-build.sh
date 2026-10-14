@@ -5,7 +5,7 @@
 # 환경변수: NATIVE_IMAGE_BUILDER(기본 ghcr.io/graalvm/native-image-community:25) · NATIVE_GRADLE_HOME(컨테이너의 Gradle 캐시, 기본 $HOME/.gradle-native — 매번 의존성을 다시 받지 않게 둔다)
 #           · NATIVE_PLATFORM(예: linux/amd64 — 기본은 이 머신의 아키텍처. Cloud Run 은 amd64 라 CI 에서는 비워 둔다. 맥에서 amd64 는 에뮬레이션이라 매우 느리다)
 #           · NATIVE_GRADLE_RO_CACHE(읽기 전용 의존성 캐시 폴더 — 오프라인에서 ~/.gradle/caches 를 넘길 때. 있으면 --offline)
-#           · NATIVE_CPUS(기본 8) · NATIVE_MEMORY(기본 20g — 빌드 최대 메모리는 앱에 따라 5~6GB 안팎이다)
+#           · NATIVE_CPUS · NATIVE_MEMORY(둘 다 기본은 한도 없음 — 러너가 작으면 맞춰서 준다. 빌드 최대 메모리는 앱에 따라 5~6GB 안팎이다. 한도를 넘는 값은 docker 가 거부한다)
 # 이 스크립트는 Gradle 을 컨테이너 안에서 -Pnative -PjavaToolchain=25 로 돌린다. 기본 JVM 빌드(./gradlew build)에는 아무 영향이 없다.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -24,7 +24,9 @@ GRADLE_PATH=":$(echo "$DIR" | tr / :):nativeCompile"
 IMAGE="${NATIVE_IMAGE_BUILDER:-ghcr.io/graalvm/native-image-community:25}"
 GHOME="${NATIVE_GRADLE_HOME:-$HOME/.gradle-native}"
 mkdir -p "$GHOME"
-ARGS=(--rm --cpus "${NATIVE_CPUS:-8}" --memory "${NATIVE_MEMORY:-20g}" -v "$PWD:/src" -w /src -v "$GHOME:/gh" -e GRADLE_USER_HOME=/gh)
+ARGS=(--rm -v "$PWD:/src" -w /src -v "$GHOME:/gh" -e GRADLE_USER_HOME=/gh)
+[ -z "${NATIVE_CPUS:-}" ] || ARGS+=(--cpus "$NATIVE_CPUS")
+[ -z "${NATIVE_MEMORY:-}" ] || ARGS+=(--memory "$NATIVE_MEMORY")
 [ -z "${NATIVE_PLATFORM:-}" ] || ARGS+=(--platform "$NATIVE_PLATFORM")
 GRADLE_ARGS=("$GRADLE_PATH" -Pnative -PjavaToolchain=25 -x test --console=plain)
 if [ -n "${NATIVE_GRADLE_RO_CACHE:-}" ]; then

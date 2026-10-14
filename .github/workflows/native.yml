@@ -23,7 +23,6 @@ on:
 
 jobs:
   native:
-    if: github.event.repository.is_template != true
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -33,4 +32,5 @@ jobs:
           path: ~/.gradle-native
           key: native-gradle-${{ hashFiles('**/*.gradle.kts', 'gradle/wrapper/gradle-wrapper.properties') }}
           restore-keys: native-gradle-
-      - run: scripts/native-test.sh
+      # 러너 자원에 맞춘다 — 한도를 넘는 --cpus 는 docker 가 거부한다(메모리는 한도를 두지 않는다: 공개 러너 16GB 에서 빌드 최대 6GB 안팎)
+      - run: NATIVE_CPUS="$(nproc)" scripts/native-test.sh
