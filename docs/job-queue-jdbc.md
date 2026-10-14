@@ -101,6 +101,15 @@ with the project id and the round goes on to the next project. Handlers run with
 simply the schema it writes to (no id travels with the job). With no project list nothing changes. The worker is still one thread: a slow
 handler delays every project's next round, it does not starve them.
 
+## On-request mode (scale to zero)
+
+With `skeleton.job-queue.mode=on-request` no polling thread starts. An outside caller (Cloud Scheduler) `POST`s `skeleton.job-queue.wake.path`
+(default `/internal/jobs/drain`) with the header `X-Wake-Secret`; the app wakes its `OnRequestTask` beans (account purge, session purge), then
+drains the backlog round by round (`batch-size` per project per round) until a round finds nothing or `wake.time-budget` (default 25s) is used up
+(checked before each new round — a job already claimed always finishes). Retry back-offs that are not due yet wait for the next call. The secret is compared in constant time; an empty
+server secret keeps the address closed (404), a wrong one is 401, and protected environments refuse to start with a missing or weak secret (< 24 characters).
+The mode is baked at build time for AOT / native images. Polling stays the default. Details and the Cloud Scheduler setup: [Cloud Run scale to zero](cloud-run-scale-to-zero.md).
+
 ## Retention
 
 Finished rows pile up. `skeleton.job-queue.retention.enabled=true` makes a worker-enabled instance delete `DONE` rows older

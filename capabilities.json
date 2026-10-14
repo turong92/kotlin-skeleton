@@ -1128,7 +1128,7 @@
         "prefixes": ["skeleton.job-queue"],
         "snippet": "docs/config/modules/job-queue-jdbc.yml"
       },
-      "basePaths": [],
+      "basePaths": ["/internal/jobs/drain"],
       "secrets": [],
       "docs": ["docs/modules/job-queue-jdbc.md", "docs/job-queue-jdbc.md"],
       "frontend": null,
@@ -2526,6 +2526,84 @@
       "keywords": {
         "ko": ["마이그레이션 잠금", "마이그레이션 동결", "체크섬 불일치", "마이그레이션 수정 금지"],
         "en": ["migration lock", "frozen migrations", "flyway checksum", "migrations.lock"]
+      }
+    },
+    {
+      "id": "script-native-build",
+      "kind": "script",
+      "module": null,
+      "path": "scripts/native-build.sh",
+      "status": "stable",
+      "summary": "GraalVM 25 공식 Docker 이미지 안에서 앱을 네이티브 실행 파일로 만든다(선택 빌드 -Pnative, 기본 JVM 빌드는 그대로) — 결과 apps/<앱>/build/native/nativeCompile/app.",
+      "starter": false,
+      "newProjectFlag": null,
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/native-image.md"],
+      "frontend": null,
+      "notFor": ["기본 배포 이미지(Dockerfile)를 만들지 않는다 — 네이티브 배포는 Dockerfile.native"],
+      "keywords": {
+        "ko": ["네이티브 이미지", "네이티브 빌드", "GraalVM", "콜드스타트"],
+        "en": ["native image", "graalvm build", "cold start"]
+      }
+    },
+    {
+      "id": "script-native-smoke",
+      "kind": "script",
+      "module": null,
+      "path": "scripts/native-smoke.sh",
+      "status": "stable",
+      "summary": "떠 있는 tools/native-check 서버에 가입 · 로그인 · 갱신 · 가짜 결제사 결제 · 구독 · 작업 큐(깨우기 주소) · 웹훅을 실제 HTTP 로 돌려 본다.",
+      "starter": false,
+      "newProjectFlag": null,
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/native-image.md"],
+      "frontend": null,
+      "notFor": ["서버를 띄우거나 빌드하지 않는다 — scripts/native-test.sh 가 한다"],
+      "keywords": {
+        "ko": ["네이티브 시험", "핵심 흐름 시험"],
+        "en": ["native smoke test", "core flow check"]
+      }
+    },
+    {
+      "id": "script-native-test",
+      "kind": "script",
+      "module": null,
+      "path": "scripts/native-test.sh",
+      "status": "stable",
+      "summary": "tools/native-check 를 네이티브로 빌드하고 컨테이너에서 띄워 scripts/native-smoke.sh 의 핵심 흐름을 돌린다(릴리스 전 · 의존성 파일 PR 에서만 CI 가 돈다).",
+      "starter": false,
+      "newProjectFlag": null,
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/native-image.md"],
+      "frontend": null,
+      "notFor": ["평소 CI 가 아니다 — 매 PR 에서 돌지 않는다(.github/workflows/native.yml)"],
+      "keywords": {
+        "ko": ["네이티브 시험", "릴리스 전 시험"],
+        "en": ["native test", "release check"]
       }
     },
     {

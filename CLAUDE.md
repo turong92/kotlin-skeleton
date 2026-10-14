@@ -277,7 +277,8 @@ modules/persistence-jdbc/src/main/kotlin/dev/sumin/skeleton/persistence/jdbc/
   8. 외부 API 연동은 `ExternalHttpClient` 기반으로 만들고, provider/vendor 별 mapper/customizer 만 추가한다
   9. 기능 모듈이 endpoint/route 를 자동 등록하면 같은 모듈의 `openapi/` 에 명세 기여도 같이 둔다
   10. DB 스키마 바뀌면 `./gradlew newMigration -Pname=<snake_case>` (→ `db/migration/postgresql/V<UTC 14자리>__<name>.sql`)
-  11. entity audit 이 필요하면 선택한 persistence 모듈의 `AuditTimestamps` 를 사용하고, core/platform 에 JPA/JDBC annotation 을 직접 추가하지 않는다.
+  11. 네이티브 이미지(선택 빌드, `docs/native-image.md`): 컨트롤러 밖에서 JSON 으로 바꾸는 타입(작업 일감 · 웹훅 본문 · JSON 컬럼 값)은 `@RegisterReflectionForBinding` 으로 등록 표시, 반환 타입은 구체적으로(`ResponseEntity<Any>` 금지), 이름으로 만드는 클래스 · classpath 리소스는 `RuntimeHintsRegistrar`, 빈 정의에 인스턴스 공급자(람다) 금지 — 새 의존성은 릴리스 전 `scripts/native-test.sh`
+  12. entity audit 이 필요하면 선택한 persistence 모듈의 `AuditTimestamps` 를 사용하고, core/platform 에 JPA/JDBC annotation 을 직접 추가하지 않는다.
 
 <!-- sample:start -->
 ## 새 기능의 정본 예시 — `apps/sample` (에이전트 필독)

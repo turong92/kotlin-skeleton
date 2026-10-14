@@ -245,6 +245,7 @@ Caddy 가 `<api_prefix>/*` 만 백엔드로 보내고 나머지는 `data/apps/<n
 - 운영자 비밀은 `data/secrets/<name>.local.env` 로 넣는다 (§7). `secrets:` 에 적고 파일에 안 적으면 무작위 값이 들어간다.
 - `<ENV_PREFIX>_CLIENT_IP_MODE` · `_CLIENT_IP_TRUSTED_PROXIES` 는 플랫폼이 넣는다 (§3).
 - 계정(`account`)이 `AuthAccountRepository` 를 대신하므로 스타터는 내장 시드 계정 없이 prod 에서 뜬다 (시드 계정은 로컬 프로필 전용 — 보호 환경에서는 기동 실패).
+- 네이티브 이미지(`Dockerfile.native`)와 Cloud Run 에서 인스턴스 0대로 두는 운영은 따로 정리했다 — [native-image](native-image.md) · [cloud-run-scale-to-zero](cloud-run-scale-to-zero.md). 홈서버 배포 계약은 위 그대로다.
 - 예약 이름(플랫폼이 넣는다 — 선언 `env:` · `secrets:` 에 쓰면 plan 이 거부): `SPRING_DATASOURCE_*`, `<ENV_PREFIX>_REDIS_*` (`_REDIS_SSL_ENABLED` · `_REDIS_LOCK_ENABLED` 포함), `<ENV_PREFIX>_CLIENT_IP_MODE` · `_CLIENT_IP_TRUSTED_PROXIES`.
 
 ## 10. 시험 배포 — 스타터를 홈서버에서 한 번 띄워 보기

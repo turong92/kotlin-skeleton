@@ -19,4 +19,9 @@ skeleton:
       dead: 90d                    # DEAD 줄 보관
       batch-size: 1000             # 한 번에 지우는 줄 수
       interval: 1h                 # 정리를 도는 간격
+    mode: polling                  # polling(기본) | on-request — on-request 면 폴링 스레드 없이 깨우기 주소(wake)가 부를 때만 처리한다 (0대 배포용, docs/cloud-run-scale-to-zero.md). 이미지를 만들 때 굳는다
+    wake:
+      path: /internal/jobs/drain   # 깨우기 주소 (POST, mode=on-request 일 때만 선다)
+      secret: ""                   # 공유 비밀값 — 헤더 X-Wake-Secret 과 상수 시간으로 맞춘다. 비면 주소는 닫혀 있다(404). 보호 환경에서 비거나 약하면(24자 미만) 기동 실패
+      time-budget: 25s             # 한 번 불렸을 때 새 묶음을 집기를 멈추는 시간 (남은 일감은 다음 호출이 이어받는다)
     worker-id: ""                  # 워커 식별자 (비우면 hostname + 랜덤)

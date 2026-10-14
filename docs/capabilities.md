@@ -143,6 +143,9 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `script-dev-multi` | 한 프로세스에 프로젝트 둘(a.localhost · b.localhost) 견본을 로컬에서 띄운다 — Docker Postgres 에 프로젝트 계정 · 스키마(scripts/project-account.sql, 멱등)를 만들고 multi 프로필로 apps/api 를 기동한다. | (도구 — 켜는 조각 없음) | 프로젝트 여럿 로컬 실행, 멀티 프로젝트 견본 / multi project local run, multi tenant sample | — |
 | `script-dev-sample` | 샘플 앱 Notes 풀스택 한 줄 실행 — DB + 로컬 S3 → 백엔드(apps/sample) → 짝 프런트(react-skeleton 의 apps/sample). | (도구 — 켜는 조각 없음) | 샘플 실행, 노트 앱 실행 / run sample, notes app | — |
 | `script-migrations-lock` | 동결된 Flyway 마이그레이션의 잠금(migrations.lock: 경로 + sha256 + 업그레이드 시험의 baseline)을 검사하고(--check) 새 파일만 더한다 — 기존 줄의 변경은 --rewrite <경로> 로만. | (도구 — 켜는 조각 없음) | 마이그레이션 잠금, 마이그레이션 동결, 체크섬 불일치, 마이그레이션 수정 금지 / migration lock, frozen migrations, flyway checksum, migrations.lock | — |
+| `script-native-build` | GraalVM 25 공식 Docker 이미지 안에서 앱을 네이티브 실행 파일로 만든다(선택 빌드 -Pnative, 기본 JVM 빌드는 그대로) — 결과 apps/<앱>/build/native/nativeCompile/app. | (도구 — 켜는 조각 없음) | 네이티브 이미지, 네이티브 빌드, GraalVM, 콜드스타트 / native image, graalvm build, cold start | — |
+| `script-native-smoke` | 떠 있는 tools/native-check 서버에 가입 · 로그인 · 갱신 · 가짜 결제사 결제 · 구독 · 작업 큐(깨우기 주소) · 웹훅을 실제 HTTP 로 돌려 본다. | (도구 — 켜는 조각 없음) | 네이티브 시험, 핵심 흐름 시험 / native smoke test, core flow check | — |
+| `script-native-test` | tools/native-check 를 네이티브로 빌드하고 컨테이너에서 띄워 scripts/native-smoke.sh 의 핵심 흐름을 돌린다(릴리스 전 · 의존성 파일 PR 에서만 CI 가 돈다). | (도구 — 켜는 조각 없음) | 네이티브 시험, 릴리스 전 시험 / native test, release check | — |
 | `script-new-project` | 새 프로젝트 한 줄 찍기 — 이 레포를 복사해 고른 모듈 · 앱만 남기고, 이름 · 접두사를 바꾸고, 배포 선언 · 설정 블록 · 이 카탈로그를 걸러 다시 쓴다(--dry-run 은 고른 모듈과 따라온 이유만 보인다). | (도구 — 켜는 조각 없음) | 새 프로젝트, 프로젝트 만들기, 찍어내기, 스캐폴딩, 프로젝트 시작 / new project, scaffold, stamp, template, project generator | — |
 | `script-payment-webhook` | 결제 웹훅을 손으로 넣어 본다 — 토스 PAYMENT_STATUS_CHANGED 모양의 본문을 떠 있는 서버의 수신함 주소로 보내 주소의 비밀 조각 · 재전송 중복 · 모르는 주문 · 본문 불신(서버가 결제사에 다시 조회)을 확인한다. 대상 서버는 늘 인자로 받는다. | (도구 — 켜는 조각 없음) | 웹훅 보내 보기, 결제 웹훅 시험, 수신함 시험, 토스 웹훅 / send test webhook, payment webhook check, toss webhook | — |
 | `script-rename-skeleton` | 패키지 · 설정 접두사 · 클래스 이름 · 환경변수 접두사를 한 번에 바꾸는 스크립트(GitHub Template 로 만든 뒤 이름만 바꿀 때) — 끝에 남은 흔적을 검사하고 이 카탈로그를 다시 만든다. | (도구 — 켜는 조각 없음) | 이름 바꾸기, 리네임, 패키지 변경, 템플릿 이름 바꾸기 / rename, change package, rename template, project name | — |
@@ -564,6 +567,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 켜는 법: 스타터(apps/api)에 기본 포함
 - 의존 한 줄: `implementation(project(":modules:job-queue-jdbc"))`
 - 설정 접두사 `skeleton.job-queue` — 키와 기본값 `docs/config/modules/job-queue-jdbc.yml`
+- HTTP 경로: `/internal/jobs/drain`
 - 문서: `docs/modules/job-queue-jdbc.md`, `docs/job-queue-jdbc.md`
 - 쓰지 않는 경우:
   - 핸들러는 멱등이어야 한다(재시도된다)
@@ -1071,6 +1075,33 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 이미 배포된 마이그레이션을 고치는 용도가 아니다 — 새 V 파일을 더한다 (./gradlew newMigration)
   - new-project.sh 가 찍은 프로젝트의 첫 잠금은 --regenerate 로 스스로 만든다 — 손으로 쓰지 않는다
 - 키워드: 마이그레이션 잠금, 마이그레이션 동결, 체크섬 불일치, 마이그레이션 수정 금지 / migration lock, frozen migrations, flyway checksum, migrations.lock
+
+### `script-native-build` — GraalVM 25 공식 Docker 이미지 안에서 앱을 네이티브 실행 파일로 만든다(선택 빌드 -Pnative, 기본 JVM 빌드는 그대로) — 결과 apps/<앱>/build/native/nativeCompile/app.
+
+- 종류 · 상태: script · stable — 위치 `scripts/native-build.sh`
+- 켜는 법: (도구 — 켜는 조각 없음)
+- 문서: `docs/native-image.md`
+- 쓰지 않는 경우:
+  - 기본 배포 이미지(Dockerfile)를 만들지 않는다 — 네이티브 배포는 Dockerfile.native
+- 키워드: 네이티브 이미지, 네이티브 빌드, GraalVM, 콜드스타트 / native image, graalvm build, cold start
+
+### `script-native-smoke` — 떠 있는 tools/native-check 서버에 가입 · 로그인 · 갱신 · 가짜 결제사 결제 · 구독 · 작업 큐(깨우기 주소) · 웹훅을 실제 HTTP 로 돌려 본다.
+
+- 종류 · 상태: script · stable — 위치 `scripts/native-smoke.sh`
+- 켜는 법: (도구 — 켜는 조각 없음)
+- 문서: `docs/native-image.md`
+- 쓰지 않는 경우:
+  - 서버를 띄우거나 빌드하지 않는다 — scripts/native-test.sh 가 한다
+- 키워드: 네이티브 시험, 핵심 흐름 시험 / native smoke test, core flow check
+
+### `script-native-test` — tools/native-check 를 네이티브로 빌드하고 컨테이너에서 띄워 scripts/native-smoke.sh 의 핵심 흐름을 돌린다(릴리스 전 · 의존성 파일 PR 에서만 CI 가 돈다).
+
+- 종류 · 상태: script · stable — 위치 `scripts/native-test.sh`
+- 켜는 법: (도구 — 켜는 조각 없음)
+- 문서: `docs/native-image.md`
+- 쓰지 않는 경우:
+  - 평소 CI 가 아니다 — 매 PR 에서 돌지 않는다(.github/workflows/native.yml)
+- 키워드: 네이티브 시험, 릴리스 전 시험 / native test, release check
 
 ### `script-new-project` — 새 프로젝트 한 줄 찍기 — 이 레포를 복사해 고른 모듈 · 앱만 남기고, 이름 · 접두사를 바꾸고, 배포 선언 · 설정 블록 · 이 카탈로그를 걸러 다시 쓴다(--dry-run 은 고른 모듈과 따라온 이유만 보인다).
 
