@@ -84,3 +84,18 @@ curl http://b.localhost:8080/api/v1/project-hello   # project b
 ## 분리
 
 목록에 그 프로젝트만 남기고(나머지 삭제 또는 `closed`) 같은 DB 의 그 스키마에 붙이면 혼자 뜬다 — `MultiProjectSeparationRehearsalTest` 가 함께 띄워 만든 계정으로 혼자 띄운 서버에서 로그인되는 것을 확인한다.
+
+## 환경변수로만 넣기
+
+프로젝트 값은 환경변수만으로도 묶인다(`config` 는 Map 이다) — 시험으로 확인했다(`ProjectRegistryTest`):
+
+```
+SKELETON_PROJECTS_A_HOSTS_0=a.example.com
+SKELETON_PROJECTS_A_SCHEMA=a
+SKELETON_PROJECTS_A_DATASOURCE_POOLMAX=5
+SKELETON_PROJECTS_A_CONFIG_AUTH_JWT_SECRET=…
+SKELETON_PROJECTS_A_CONFIG_ACCOUNT_MAIL_LINKBASEURL=https://a.example.com
+SKELETON_PROJECTS_A_CONFIG_ACCOUNT_SEED_ACCOUNTS_0_EMAIL=…
+```
+
+함정: 환경변수 이름의 `_` 는 `.` 로 바뀌므로 **이름 안에 하이픈이 든 마디는 하이픈 없이** 쓴다 — `link-base-url` → `LINKBASEURL`, `pool-max` → `POOLMAX`, `auth-session` → `AUTHSESSION` (`..._CONFIG_AUTHSESSION_COOKIE_NAME`). `LINK_BASE_URL` 로 쓰면 `link.base.url` 이라 다른 키다 — `auth_session` 처럼 지원 접두사를 벗어나는 것은 기동 실패로 걸리지만 `account.mail.` 아래의 오타는 조용히 안 먹는다(그래도 링크 주소는 프로젝트마다 필수라 prod 가드가 잡는다). 파일 하나로 받는 길은 열지 않았다(필요 없었다).

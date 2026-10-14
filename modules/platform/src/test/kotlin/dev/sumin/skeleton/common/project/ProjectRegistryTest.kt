@@ -116,7 +116,7 @@ class ProjectRegistryTest {
     fun `a config key that no module reads per project fails the start instead of being ignored`() {
         val supported = ProjectConfigKeys.SUPPORTED
         ProjectRegistry.from(env(*twoProjects, "skeleton.projects.a.config.account.mail.link-base-url" to "https://a", "skeleton.projects.a.config.web.cors.allowed-origin-patterns[0]" to "x"), supported)
-        listOf("account.sign-up.enabled", "web.cors.enabled", "legal.facts.company", "web.rate-limit.capacity").forEach { key ->
+        listOf("account.sign-up.enabled", "web.cors.enabled", "legal.facts.company", "web.rate-limit.capacity", "auth.session.cookie.name").forEach { key ->
             val e = assertFailsWith<IllegalStateException>(key) { ProjectRegistry.from(env(*twoProjects, "skeleton.projects.a.config.$key" to "x"), supported) }
             assertTrue(e.message!!.contains(key), e.message)
         }
@@ -133,5 +133,32 @@ class ProjectRegistryTest {
         var bare: String? = "unset"
         Thread(ProjectTaskDecorator().decorate { bare = ProjectContext.currentOrNull()?.id }).also { it.start(); it.join() }
         assertNull(bare)
+    }
+
+    @ConfigurationProperties("skeleton.demo")
+    data class Mailish(val linkBaseUrl: String = "", val secret: String = "", val seeds: List<Seed> = emptyList()) {
+        data class Seed(val email: String = "")
+    }
+
+    @Test
+    fun `a project given by environment variables only is bound - hosts, schema, a secret, a hyphenated key and an indexed list`() {
+        val envVars = mapOf(
+            "SKELETON_PROJECTS_A_HOSTS_0" to "a.localhost",
+            "SKELETON_PROJECTS_A_SCHEMA" to "a",
+            "SKELETON_PROJECTS_A_DATASOURCE_POOLMAX" to "5",
+            "SKELETON_PROJECTS_A_CONFIG_DEMO_SECRET" to "from-env-secret",
+            "SKELETON_PROJECTS_A_CONFIG_DEMO_LINKBASEURL" to "https://a.example.com",   // 하이픈 키(link-base-url)는 환경변수에서 하이픈 없이 쓴다
+            "SKELETON_PROJECTS_A_CONFIG_DEMO_SEEDS_0_EMAIL" to "seed@example.com",
+        )
+        val env = org.springframework.core.env.StandardEnvironment()
+        env.propertySources.addFirst(org.springframework.core.env.SystemEnvironmentPropertySource("test-systemEnvironment", envVars))
+        val registry = ProjectRegistry.from(env, ProjectConfigKeys.SUPPORTED + "demo.")
+        val a = registry.projects.single()
+        assertEquals(listOf("a.localhost"), a.hosts)
+        assertEquals("a", a.schema)
+        assertEquals(5, a.datasource.poolMax)
+        val bound = registry.bind(a, "skeleton.demo", Mailish::class.java)
+        assertEquals(Mailish("https://a.example.com", "from-env-secret", listOf(Mailish.Seed("seed@example.com"))), bound)
+        assertEquals("https://a.example.com", registry.bindOwn(a, "skeleton.demo", Mailish::class.java).linkBaseUrl)
     }
 }

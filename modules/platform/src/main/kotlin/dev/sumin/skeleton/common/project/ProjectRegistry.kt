@@ -48,8 +48,10 @@ class ProjectRegistry private constructor(
     fun forEachProject(block: (Project) -> Unit) = active.forEach { ProjectContext.runIn(it) { block(it) } }
 
     companion object {
-        const val ROOT = "skeleton"
-        const val PROPERTY = "$ROOT.projects"
+        // 설정 접두사는 `skeleton.projects` 한 곳에만 적는다 — 찍은 프로젝트에서 rename-skeleton.sh 가 `skeleton.<글자>` 꼴을 새 접두사로 바꾸므로, 루트는 여기서 떼어 쓴다
+        // (`"skeleton"` 이나 `"skeleton.${…}"` 로 따로 적으면 안 바뀌어 찍은 프로젝트에서 프로젝트 목록을 못 읽는다)
+        const val PROPERTY = "skeleton.projects"
+        val ROOT: String get() = PROPERTY.substringBefore('.')
         private val ID = Regex("[a-z][a-z0-9_-]{0,39}")
         private val SCHEMA = Regex("[a-z][a-z0-9_]{0,62}")
         private val HOST = Regex("[a-z0-9]([a-z0-9.-]*[a-z0-9])?")
