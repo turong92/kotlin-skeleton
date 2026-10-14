@@ -156,4 +156,19 @@ class SlackNotificationForwarderTest {
         ): List<dev.sumin.skeleton.common.observability.ObservabilityLink> =
             error("resolver failed")
     }
+
+    @Test
+    fun `an event published inside a project is forwarded with the project id in the title and fields`() {
+        val registry = RecordingSubscriptionRegistry()
+        val sender = RecordingSlackAlertSender()
+        SlackNotificationForwarder(sender, SlackNotificationProperties(notificationEvents = true), registry, projectMode = true)
+        val project = dev.sumin.skeleton.common.project.Project("b", listOf("b.test"), "b", dev.sumin.skeleton.common.project.ProjectDatasource(), emptyMap())
+
+        dev.sumin.skeleton.common.project.ProjectContext.runIn(project) {
+            registry.subscriber?.onNotification(NotificationEvent(topic = "t", type = "x", title = "Hello"))
+        }
+
+        assertEquals("[b] Hello", sender.alerts.single().title)
+        assertEquals("b", sender.alerts.single().fields["project"])
+    }
 }

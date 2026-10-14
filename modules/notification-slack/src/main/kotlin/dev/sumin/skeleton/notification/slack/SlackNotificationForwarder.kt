@@ -14,8 +14,19 @@ class SlackNotificationForwarder(
     private val properties: SlackNotificationProperties,
     subscriptionRegistry: NotificationSubscriptionRegistry?,
     private val linkResolver: ObservabilityLinkResolver = ObservabilityLinkResolver { emptyList() },
+    /** 프로젝트 모드(`skeleton.projects`)인가 — 켜져 있고 알림 전달도 켜져 있으면 모든 프로젝트의 알림이 한 채널로 모인다는 경고를 남긴다 */
+    projectMode: Boolean = false,
 ) : AutoCloseable {
     private val log = LoggerFactory.getLogger(javaClass)
+
+    init {
+        if (projectMode && properties.notificationEvents) {
+            log.warn(
+                "skeleton.notification.slack.notification-events is on while skeleton.projects has projects: notifications of EVERY project " +
+                    "(recipient ids, payload fields, message) go to the one Slack channel, tagged with the project id. Turn it off if the channel is not for all of them.",
+            )
+        }
+    }
 
     private val subscription: NotificationSubscription? =
         if (properties.notificationEvents) {
@@ -25,7 +36,9 @@ class SlackNotificationForwarder(
         }
 
     private fun forward(event: NotificationEvent) {
-        val fields = event.fields()
+        // 프로젝트 모드: 브로커가 발행한 스레드에서 부르므로 문맥에 발행 프로젝트가 있다 — 어느 서비스 알림인지 제목과 필드에 싣는다
+        val project = dev.sumin.skeleton.common.project.ProjectContext.currentOrNull()?.id
+        val fields = event.fields() + listOfNotNull(project?.let { "project" to it })
         val linkContext = ObservabilityContext.fromMdc(
             fields + mapOf(
                 "topic" to event.topic,
@@ -39,7 +52,7 @@ class SlackNotificationForwarder(
 
         sender.send(
             SlackAlert(
-                title = event.title ?: event.type,
+                title = (event.title ?: event.type).let { if (project == null) it else "[$project] $it" },
                 message = event.message ?: event.type,
                 severity = event.severity.toSlackSeverity(),
                 topic = event.topic,

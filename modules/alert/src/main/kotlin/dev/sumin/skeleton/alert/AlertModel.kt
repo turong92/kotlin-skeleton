@@ -43,6 +43,8 @@ data class AlertMessage(
     val suppressed: Int,
     val occurredAt: Instant,
     val environment: String,
+    /** 프로젝트 모드에서 경보가 난 프로젝트 id — 받는 쪽이 어느 서비스 것인지 알 수 있게. 한 서비스면 null */
+    val project: String? = null,
 )
 
 /** [AlertStore.record] 의 결과 — [send] 면 이번에 내보내고, [suppressedFolded] 는 이 알림에 「N건 더」로 싣는 수 */

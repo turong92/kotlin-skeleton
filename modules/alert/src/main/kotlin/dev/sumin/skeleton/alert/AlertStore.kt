@@ -26,7 +26,7 @@ class InMemoryAlertStore : AlertStore {
 
     @Synchronized
     override fun record(kind: AlertKind, key: String, severity: AlertSeverity, title: String, detail: String, now: Instant, minInterval: Duration): AlertRecorded {
-        val id = "${kind.name}\u0000$key"
+        val id = dev.sumin.skeleton.common.project.ProjectContext.scopedKey("${kind.name}\u0000$key") // 프로젝트마다 따로 접는다
         val entry = entries[id]
         if (entry == null) {
             entries[id] = Entry(now, 0, 1)

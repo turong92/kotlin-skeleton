@@ -51,12 +51,14 @@ class NotificationSlackAutoConfiguration {
         properties: SlackNotificationProperties,
         subscriptionRegistry: ObjectProvider<NotificationSubscriptionRegistry>,
         linkResolver: ObjectProvider<ObservabilityLinkResolver>,
+        projects: ObjectProvider<dev.sumin.skeleton.common.project.ProjectRegistry>,
     ): SlackNotificationForwarder =
         SlackNotificationForwarder(
             sender = sender,
             properties = properties,
             subscriptionRegistry = subscriptionRegistry.ifAvailable,
             linkResolver = linkResolver.getIfAvailable { ObservabilityLinkResolver { emptyList() } },
+            projectMode = projects.getIfAvailable() != null,
         )
 
     @Bean

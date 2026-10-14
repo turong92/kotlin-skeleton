@@ -139,4 +139,16 @@ class OwnerAlertsTest {
     fun `NONE does nothing`() {
         OwnerAlerts.NONE.emit(BuiltInAlertKind.TEST)
     }
+
+    @Test
+    fun `the same kind and key in two projects is two alerts - the second project is not folded into the first, and each message names its project`() {
+        fun project(id: String) = dev.sumin.skeleton.common.project.Project(id, listOf("$id.test"), id, dev.sumin.skeleton.common.project.ProjectDatasource(), emptyMap())
+        val alerts = alerts()
+        dev.sumin.skeleton.common.project.ProjectContext.runIn(project("a")) { alerts.emit(ShopKind.ORDER_STUCK, key = "order-7") }
+        dev.sumin.skeleton.common.project.ProjectContext.runIn(project("b")) { alerts.emit(ShopKind.ORDER_STUCK, key = "order-7") }
+        dev.sumin.skeleton.common.project.ProjectContext.runIn(project("a")) { alerts.emit(ShopKind.ORDER_STUCK, key = "order-7") }
+
+        assertEquals(listOf("a", "b"), channel.sent.map { it.project })
+        assertTrue(AlertText.headline(channel.sent.last()).contains("[b]"))
+    }
 }

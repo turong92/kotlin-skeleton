@@ -55,4 +55,33 @@ class AccountPurgeJobTest {
             ctx.getBean(AccountPurgeDispatch::class.java).dispatch()
         }
     }
+
+    class ProjectRecordingQueue : JobQueue {
+        val enqueued = java.util.concurrent.CopyOnWriteArrayList<String?>()
+        override fun enqueue(type: String, payloadJson: String, runAt: Instant?, maxAttempts: Int?): Long {
+            enqueued += dev.sumin.skeleton.common.project.ProjectContext.current().id // 문맥 없이 부르면 여기서 예외
+            return enqueued.size.toLong()
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    class ProjectQueue {
+        @Bean fun queue(): JobQueue = ProjectRecordingQueue()
+        // 이 시험 클래스패스에는 아직 프로젝트를 모르는 모듈(소셜 · 메일 · 캡차)도 들어 있다 — 가드는 따로 시험한다(ProjectUnawareFeaturesTest)
+        @Bean fun projectUnawareFeaturesCheck(): org.springframework.beans.factory.SmartInitializingSingleton = org.springframework.beans.factory.SmartInitializingSingleton { }
+    }
+
+    @Test
+    fun `with two projects and a job queue the purge job is enqueued in each project - not in no project at all`() {
+        runner.withConfiguration(AutoConfigurations.of(dev.sumin.skeleton.common.project.ProjectAutoConfiguration::class.java))
+            .withUserConfiguration(ProjectQueue::class.java)
+            .withPropertyValues(
+                "skeleton.projects.a.hosts[0]=a.test", "skeleton.projects.a.schema=pa", "skeleton.projects.a.config.account.mail.link-base-url=https://a.test",
+                "skeleton.projects.b.hosts[0]=b.test", "skeleton.projects.b.schema=pb", "skeleton.projects.b.config.account.mail.link-base-url=https://b.test",
+            ).run { ctx ->
+                assertEquals(null, ctx.startupFailure)
+                ctx.getBean(AccountPurgeDispatch::class.java).dispatch()
+                assertEquals(setOf("a", "b"), (ctx.getBean(JobQueue::class.java) as ProjectRecordingQueue).enqueued.toSet())
+            }
+    }
 }

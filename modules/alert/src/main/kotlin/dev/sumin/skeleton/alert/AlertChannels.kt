@@ -16,7 +16,7 @@ interface AlertChannel {
 
 /** 글 꾸미기 — 웹훅 · 메일이 같은 줄을 쓴다 */
 object AlertText {
-    fun headline(m: AlertMessage) = "[${m.environment}][${m.severity}] ${m.title}"
+    fun headline(m: AlertMessage) = "[${m.environment}]${m.project?.let { "[$it]" }.orEmpty()}[${m.severity}] ${m.title}"
 
     fun body(m: AlertMessage): String = buildList {
         if (m.key.isNotEmpty()) add("Subject: ${m.key}")

@@ -65,7 +65,7 @@ class DefaultOwnerAlerts(
             val now = time.now()
             val recorded = store.record(kind, key, kind.severity, kind.title, detail, now, properties.interval(kind))
             if (!recorded.send) return
-            val message = AlertMessage(kind.name, key, kind.severity, kind.title, detail, recorded.suppressedFolded, now, environment)
+            val message = AlertMessage(kind.name, key, kind.severity, kind.title, detail, recorded.suppressedFolded, now, environment, dev.sumin.skeleton.common.project.ProjectContext.currentOrNull()?.id)
             channels.forEach { channel -> handoff(Runnable { deliver(channel, message) }) }
         } catch (e: Exception) {
             log.warn("owner alert dispatch failed kind={}: {}", kind.name, e.javaClass.simpleName)
@@ -99,7 +99,7 @@ class DefaultOwnerAlerts(
         if (last != null && now < last.plus(properties.interval(kind))) return
         lastDirect[debounceKey] = now
         val text = "$detail\n(recording was unavailable, sent directly)".take(DETAIL_MAX)
-        DirectWebhook.post(uri, "[$environment][${kind.severity}] ${kind.title}", text, kind.severity, "alert ${kind.name}")
+        DirectWebhook.post(uri, "[$environment]${dev.sumin.skeleton.common.project.ProjectContext.currentOrNull()?.id?.let { "[$it]" }.orEmpty()}[${kind.severity}] ${kind.title}", text, kind.severity, "alert ${kind.name}")
     }
 
     /** 채널이 없어도 줄은 남는다 — 심각도대로 INFO · WARN · ERROR */

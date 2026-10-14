@@ -25,13 +25,19 @@ class InMemoryAccountMaintenanceLease(private val time: TimeProvider) : AccountM
 
     private val held = HashMap<String, Held>()
 
-    @Synchronized override fun tryAcquire(name: String, ttl: Duration): String? {
+    // 프로젝트마다 따로 — 프로젝트 모드의 DB 구현은 스키마마다 줄이 있으므로 같은 모양이다
+    @Synchronized override fun tryAcquire(name: String, ttl: Duration): String? = tryAcquireScoped(dev.sumin.skeleton.common.project.ProjectContext.scopedKey(name), ttl)
+
+    private fun tryAcquireScoped(name: String, ttl: Duration): String? {
         val now = time.now()
         if (held[name]?.until?.isAfter(now) == true) return null
         return java.util.UUID.randomUUID().toString().also { held[name] = Held(now.plus(ttl), it) }
     }
 
-    @Synchronized override fun release(name: String, owner: String) { if (held[name]?.owner == owner) held.remove(name) }
+    @Synchronized override fun release(name: String, owner: String) {
+        val key = dev.sumin.skeleton.common.project.ProjectContext.scopedKey(name)
+        if (held[key]?.owner == owner) held.remove(key)
+    }
 }
 
 object MaintenanceLeases {

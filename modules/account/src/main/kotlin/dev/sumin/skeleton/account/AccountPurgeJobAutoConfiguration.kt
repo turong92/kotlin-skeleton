@@ -3,6 +3,9 @@ package dev.sumin.skeleton.account
 import dev.sumin.skeleton.jobqueue.jdbc.Job
 import dev.sumin.skeleton.jobqueue.jdbc.JobHandler
 import dev.sumin.skeleton.jobqueue.jdbc.JobQueue
+import dev.sumin.skeleton.common.project.ProjectRegistry
+import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
@@ -22,12 +25,21 @@ class AccountPurgeJobHandler(private val purge: AccountPurgeService) : JobHandle
 @ConditionalOnClass(name = ["dev.sumin.skeleton.jobqueue.jdbc.JobQueue"])
 @ConditionalOnBean(JobQueue::class)
 class AccountPurgeJobAutoConfiguration {
+    private val log = LoggerFactory.getLogger(javaClass)
+
     @Bean
     @ConditionalOnMissingBean(AccountPurgeDispatch::class)
-    fun accountPurgeJobDispatch(queue: JobQueue, lease: AccountMaintenanceLease, properties: AccountProperties): AccountPurgeDispatch {
+    fun accountPurgeJobDispatch(queue: JobQueue, lease: AccountMaintenanceLease, properties: AccountProperties, projects: ObjectProvider<ProjectRegistry>): AccountPurgeDispatch {
         // 인스턴스마다 틱이 돌므로 한 주기에 한 인스턴스만 잡을 넣는다 (임대 = 주기의 80% — 틱 위상이 달라도 한 주기에 하나)
         val ttl = properties.deletion.purgeInterval.multipliedBy(8).dividedBy(10).coerceAtLeast(java.time.Duration.ofSeconds(1))
-        return AccountPurgeDispatch { if (lease.tryAcquire(MaintenanceLeases.PURGE_DISPATCH, ttl) != null) queue.enqueue(AccountPurgeJobHandler.TYPE, "{}") }
+        val enqueue = { if (lease.tryAcquire(MaintenanceLeases.PURGE_DISPATCH, ttl) != null) queue.enqueue(AccountPurgeJobHandler.TYPE, "{}") }
+        // 프로젝트 모드: 임대 · 잡 큐가 프로젝트의 스키마에 있으므로 프로젝트마다 그 문맥에서 — 한 프로젝트의 오류가 다음 프로젝트를 건너뛰게 하지 않는다
+        val registry = projects.getIfAvailable() ?: return AccountPurgeDispatch { enqueue() }
+        return AccountPurgeDispatch {
+            registry.forEachProject {
+                try { enqueue() } catch (e: Exception) { log.warn("account purge dispatch failed for project '{}': {}", it.id, e.javaClass.simpleName) }
+            }
+        }
     }
 
     @Bean
