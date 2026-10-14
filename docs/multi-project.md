@@ -42,3 +42,37 @@ skeleton:
 뒤 주기 작업 중 계정 삭제 유예 정리 · 세션 정리는 프로젝트를 차례로 돈다. 그 밖의 값(가입 정책 · 비밀번호 정책 · 한도 …)은 아직 공통이다.
 
 알려진 한계: stage · prod 의 계정 가드(`link-base-url` 비면 실패)와 JWT 가드의 일부는 공통 값을 본다(JWT 비밀은 프로젝트마다 검사한다).
+
+## 프로젝트 전용 API (`@ProjectApi`)
+
+```kotlin
+@ProjectApi("ovation") annotation class OvationApi          // 프로젝트 모듈이 한 번 만든다
+@RestController @RequestMapping("/api/v1/cheers") @OvationApi class CheerController { … }
+```
+
+- 문자열은 `skeleton.projects.<이름>` 의 이름. 다른 프로젝트 도메인으로 부르면 404 (`RequestMappingHandlerMapping` 의 요청 조건 — 컨트롤러 안 if 가 아니다). 두 프로젝트가 **같은 경로**를 써도 기동 충돌이 없다.
+- 목록에 없는 이름이 붙은 컨트롤러는 어느 도메인에서도 열리지 않고 기동 로그에 경고(실패 아님 — 빌드에는 있지만 이 서버가 안 켠 프로젝트일 수 있다).
+- **목록이 비면 표시는 무시되고 전부 열린다.** 한 프로젝트를 떼어 혼자 띄워도 코드 수정이 없다 — 단 같은 경로를 쓰는 다른 프로젝트의 컨트롤러가 같은 빌드에 있으면 한 서비스에서는 모호하다(견본은 그래서 `@Profile("multi")`).
+- 프로젝트 모듈끼리는 서로의 코드 · 표를 부르지 않는다(떼어 낼 수 있게).
+
+## 아직 프로젝트를 모르는 기능
+
+뒤 작업 일꾼(job-queue) · 결제 · 소셜 · 메일 발신 · 파일 · 알림 · 경보 · 멱등 · Redis · 캡차 · 암호화 · Kafka · 스케줄러 · async 가 **빌드에 들어 있고 서비스 중인 프로젝트가 둘 이상**이면 기동이 실패한다(한 곳, `ProjectUnawareFeatures`). 해결: 모듈을 빼거나 나머지를 `status: closed` 로. 모듈이 프로젝트를 알게 되면 표에서 뺀다.
+
+## 견본: `multi` 프로필
+
+`apps/api` 에서 `--spring.profiles.active=local,multi` → `a.localhost` · `b.localhost` (hosts 파일 없이 `*.localhost` 가 127.0.0.1). 스키마 `proj_a` · `proj_b`, 시드 `user@a.localhost` · `user@b.localhost` (password), 같은 경로 `/api/v1/project-hello` 가 도메인마다 다른 컨트롤러. 기본 `local` 프로필은 지금처럼 한 서비스다.
+
+```
+curl http://a.localhost:8080/api/v1/project-hello   # project a
+curl http://b.localhost:8080/api/v1/project-hello   # project b
+```
+
+## 프런트가 맞출 것 (이번 범위 밖)
+
+- 브라우저가 보내는 **Host 가 곧 프로젝트**다. 프런트 개발 서버(Vite)가 `/api` 를 프록시할 때 원래 Host(`a.localhost:5173`)를 그대로 전달해야 한다(`changeOrigin: false` — 포트는 서버가 무시한다). 운영은 Caddy 가 `X-Forwarded-Host` 를 넘긴다(`ForwardedHeaderFilter` 가 푼 뒤 판정).
+- CORS 출처 · 쿠키 이름은 프로젝트의 `config` 에 있다. 메일 링크 주소(`account.mail.link-base-url`)도 프로젝트마다.
+
+## 분리
+
+목록에 그 프로젝트만 남기고(나머지 삭제 또는 `closed`) 같은 DB 의 그 스키마에 붙이면 혼자 뜬다 — `MultiProjectSeparationRehearsalTest` 가 함께 띄워 만든 계정으로 혼자 띄운 서버에서 로그인되는 것을 확인한다.

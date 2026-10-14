@@ -1,6 +1,9 @@
 package dev.sumin.skeleton.common.project
 
+import org.springframework.beans.factory.SmartInitializingSingleton
 import org.springframework.boot.autoconfigure.AutoConfiguration
+import org.springframework.boot.webmvc.autoconfigure.WebMvcRegistrations
+import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication
 import org.springframework.boot.web.servlet.FilterRegistrationBean
@@ -31,4 +34,18 @@ class ProjectAutoConfiguration {
     @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
     fun projectFilterRegistration(registry: ProjectRegistry, objectMapper: ObjectMapper): FilterRegistrationBean<ProjectFilter> =
         FilterRegistrationBean(ProjectFilter(registry, objectMapper)).apply { order = Ordered.HIGHEST_PRECEDENCE + 2 }
+
+    /** 서비스 중인 프로젝트가 둘 이상이면 프로젝트를 모르는 기능이 빌드에 있는지 본다 — 모듈마다 가드를 흩뿌리지 않고 이 한 곳에서 */
+    @Bean
+    @ConditionalOnMissingBean(name = ["projectUnawareFeaturesCheck"])
+    fun projectUnawareFeaturesCheck(registry: ProjectRegistry): SmartInitializingSingleton =
+        SmartInitializingSingleton { ProjectUnawareFeatures.check(registry) }
+
+    /** [ProjectApi] 를 읽는 핸들러 매핑 — 목록이 비어 있으면 이 빈이 없어 표시는 무시된다 */
+    @Bean
+    @ConditionalOnMissingBean(name = ["projectApiMvcRegistrations"])
+    @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
+    fun projectApiMvcRegistrations(registry: ProjectRegistry): WebMvcRegistrations = object : WebMvcRegistrations {
+        override fun getRequestMappingHandlerMapping(): RequestMappingHandlerMapping = ProjectApiHandlerMapping(registry)
+    }
 }

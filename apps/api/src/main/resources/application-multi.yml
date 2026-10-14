@@ -1,0 +1,42 @@
+# 견본: 한 프로세스에 프로젝트 둘 — `--spring.profiles.active=local,multi` (docs/multi-project.md).
+# 브라우저 · curl 이 *.localhost 를 127.0.0.1 로 보내므로 hosts 파일이 필요 없다:  curl http://a.localhost:8080/api/v1/project-hello
+# 프로젝트마다 스키마(proj_a · proj_b — `public` 은 건드리지 않는다)와 자기 로그인 설정을 가진다. 아래 비밀은 개발용이다.
+skeleton:
+  web:
+    cors:
+      enabled: true                     # 프런트 개발 서버(Vite)가 *.localhost:5173 에서 부른다 — 출처는 프로젝트마다 config 에서 정한다
+  projects:
+    a:
+      hosts: [a.localhost]
+      schema: proj_a
+      config:
+        auth:
+          jwt: { secret: dev-only-jwt-secret-of-project-a-32+bytes, issuer: project-a }
+        auth-session:
+          cookie: { name: a_refresh }
+        web:
+          cors: { allowed-origin-patterns: ["http://a.localhost:[*]"], allow-credentials: true }
+        account:
+          mail:
+            link-base-url: http://a.localhost:5173
+            brand: { service-name: Project A }
+          seed:
+            accounts:
+              - { id: acc_a_user, email: user@a.localhost, password: password }
+    b:
+      hosts: [b.localhost]
+      schema: proj_b
+      config:
+        auth:
+          jwt: { secret: dev-only-jwt-secret-of-project-b-32+bytes, issuer: project-b }
+        auth-session:
+          cookie: { name: b_refresh }
+        web:
+          cors: { allowed-origin-patterns: ["http://b.localhost:[*]"], allow-credentials: true }
+        account:
+          mail:
+            link-base-url: http://b.localhost:5173
+            brand: { service-name: Project B }
+          seed:
+            accounts:
+              - { id: acc_b_user, email: user@b.localhost, password: password }

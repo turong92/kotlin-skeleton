@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 한 프로세스에 프로젝트 여럿 — 부품은 한 벌, 설정과 데이터만 프로젝트마다 (2026-10-14)
+
+- `skeleton.projects.<id>.{hosts, schema, status, datasource, config}`(platform): 요청의 Host 로 프로젝트를 정해 스레드 문맥(`ProjectContext`)에 둔다. 모르는 Host → `421 COMMON.UNKNOWN_HOST`, `status: closed` → `503 COMMON.PROJECT_CLOSED`(풀 · 마이그레이션 · 개수에서 빠진다), `/health` · `/info` 는 예외. **목록이 비면 아무것도 달라지지 않는다.** 설명: `docs/multi-project.md`.
+- DB: 프로젝트마다 연결 풀(`ProjectRoutingDataSource`, 최대 `pool-max` 기본 3, 연결 0 에서 시작), 기동 때 스키마마다 Flyway(`ProjectsMigrationStrategy`). 프로젝트 문맥 없이 연결을 꺼내면 예외, 트랜잭션 도중 프로젝트가 바뀌면 예외. `SqlDialect.schemaIsDatabase`(기본 false, MySQL true).
+- 로그인 설정을 프로젝트별로: JWT 키 · 발급자(토큰에 `prj` 클레임, 받을 때 대조), 리프레시 쿠키, CORS 출처, 계정 메일 링크 · 브랜드, 시드 계정. `JwtTokenService.perProject(…)`, `RefreshTokenDelivery`/`AccountLinks` 는 설정을 함수로도 받는다(기존 생성자 그대로).
+- `@ProjectApi("<이름>")`(메타 어노테이션 가능): 그 프로젝트 도메인에서만 열리는 컨트롤러. 프로젝트를 모르는 기능이 빌드에 있고 활성 프로젝트가 둘 이상이면 기동 실패(`ProjectUnawareFeatures`).
+- 견본: `apps/api` `multi` 프로필(`a.localhost` · `b.localhost`).
+
 ### 접속 나라로 결제사 · 해지·환불 규칙을 서버가 정한다 (2026-10-13)
 
 - `ClientAddress.country`(platform `ClientIps`): Cloudflare 의 `CF-IPCountry` — **클라이언트 IP 모드가 `cloudflare` 이고 믿는 프록시에서 온 것만** 읽는다(다른 모드에서는 헤더를 믿지 않는다). `XX`(모름) · `T1`(Tor) · 두 글자가 아닌 값은 나라가 아니다.

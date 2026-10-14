@@ -1814,7 +1814,7 @@
       "module": "platform",
       "path": "modules/platform",
       "status": "stable",
-      "summary": "모든 모듈의 공용 기반 — 표준 응답/에러 봉투 · 전역 예외 처리(필드 오류 FieldValidationException) · 모듈끼리 만나는 계약(AuthorDirectory · AccountErasureListener) · trace id · 요청 로깅 · CORS · rate limit · 외부 HTTP 클라이언트 · OpenAPI · 배포 가드.",
+      "summary": "모든 모듈의 공용 기반 — 표준 응답/에러 봉투 · 전역 예외 처리(필드 오류 FieldValidationException) · 모듈끼리 만나는 계약(AuthorDirectory · AccountErasureListener) · trace id · 요청 로깅 · CORS · rate limit · 외부 HTTP 클라이언트 · OpenAPI · 배포 가드 · 한 프로세스에 프로젝트 여럿(skeleton.projects: Host 로 프로젝트 판정 · 프로젝트별 스키마/풀/로그인 설정 · @ProjectApi — docs/multi-project.md).",
       "starter": true,
       "newProjectFlag": null,
       "autoIncludes": [],
@@ -1846,7 +1846,8 @@
         "docs/client-ip.md",
         "docs/configuration.md",
         "docs/observability-links.md",
-        "docs/deploy.md"
+        "docs/deploy.md",
+        "docs/multi-project.md"
       ],
       "frontend": {
         "capabilities": ["api-client"],
@@ -1855,7 +1856,21 @@
       },
       "notFor": ["벤더 연동(결제 · 메일 · 저장소 · 소셜 로그인)은 여기에 없다 — 각 모듈", "스타터가 이미 가진다 — 따로 켜는 줄이 없다"],
       "keywords": {
-        "ko": ["에러 응답", "표준 응답", "예외 처리", "요청 로깅", "트레이스", "CORS", "요청 제한", "외부 API 호출", "스웨거", "배포 가드"],
+        "ko": [
+          "에러 응답",
+          "표준 응답",
+          "예외 처리",
+          "요청 로깅",
+          "트레이스",
+          "CORS",
+          "요청 제한",
+          "외부 API 호출",
+          "스웨거",
+          "배포 가드",
+          "프로젝트 여럿",
+          "멀티 프로젝트",
+          "도메인별 서비스"
+        ],
         "en": [
           "error response",
           "exception handling",
@@ -1866,7 +1881,9 @@
           "http client",
           "openapi",
           "swagger",
-          "deploy guard"
+          "deploy guard",
+          "multi project",
+          "multi tenant host"
         ]
       }
     },
@@ -2172,7 +2189,7 @@
         "optional": []
       },
       "config": null,
-      "basePaths": ["/api/v1"],
+      "basePaths": ["/api/v1", "/api/v1/project-hello"],
       "secrets": [],
       "docs": ["docs/minimal-composition.md"],
       "frontend": {

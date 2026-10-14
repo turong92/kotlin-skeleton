@@ -114,7 +114,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `persistence-jdbc` | Spring Data JDBC 의 audit 타임스탬프 콜백과 DB 방언 전략(SqlDialect · SqlDialectVerifier), DB 에 못 닿는 기동 실패를 읽을 수 있는 메시지로 바꾸는 분석기와 첫 연결을 기다리는 선택 기능. | 스타터(apps/api)에 기본 포함 | JDBC, Data JDBC, audit 시각, 생성일 수정일, DB 접근 / jdbc, spring data jdbc, audit timestamps, created at updated at | — |
 | `persistence-jooq` | jOOQ 연결 — audit 리스너 · MySQL UTC Instant 변환기, DDL 파일에서 코드 생성(빌드에 DB 불필요). | `--modules persistence-jooq` | jOOQ, 타입 안전 SQL, 쿼리 빌더 / jooq, type-safe sql, query builder, code generation | — |
 | `persistence-jpa` | JPA 엔티티의 created_at · updated_at 자동 채움과 부분 수정 · fetch graph 도우미. | `--modules persistence-jpa` | JPA, 하이버네이트, 엔티티 audit, ORM / jpa, hibernate, entity audit, orm | — |
-| `platform` | 모든 모듈의 공용 기반 — 표준 응답/에러 봉투 · 전역 예외 처리(필드 오류 FieldValidationException) · 모듈끼리 만나는 계약(AuthorDirectory · AccountErasureListener) · trace id · 요청 로깅 · CORS · rate limit · 외부 HTTP 클라이언트 · OpenAPI · 배포 가드. | 스타터(apps/api)에 기본 포함 | 에러 응답, 표준 응답, 예외 처리, 요청 로깅, 트레이스, CORS, 요청 제한, 외부 API 호출, 스웨거, 배포 가드 / error response, exception handling, request logging, trace id, cors, rate limit, http client, openapi, swagger, deploy guard | `@skeleton/api-client` |
+| `platform` | 모든 모듈의 공용 기반 — 표준 응답/에러 봉투 · 전역 예외 처리(필드 오류 FieldValidationException) · 모듈끼리 만나는 계약(AuthorDirectory · AccountErasureListener) · trace id · 요청 로깅 · CORS · rate limit · 외부 HTTP 클라이언트 · OpenAPI · 배포 가드 · 한 프로세스에 프로젝트 여럿(skeleton.projects: Host 로 프로젝트 판정 · 프로젝트별 스키마/풀/로그인 설정 · @ProjectApi — docs/multi-project.md). | 스타터(apps/api)에 기본 포함 | 에러 응답, 표준 응답, 예외 처리, 요청 로깅, 트레이스, CORS, 요청 제한, 외부 API 호출, 스웨거, 배포 가드, 프로젝트 여럿, 멀티 프로젝트, 도메인별 서비스 / error response, exception handling, request logging, trace id, cors, rate limit, http client, openapi, swagger, deploy guard, multi project, multi tenant host | `@skeleton/api-client` |
 | `redis-cache` | 이름 있는 Redis 캐시(TTL · 접두사) · 안정적인 키 생성기 · 캐시 오류 정책(기본 FAIL_OPEN). | `--modules redis-cache` | 캐시, Redis 캐시, 캐싱, 응답 캐시 / cache, redis cache, caching, ttl | — |
 | `redis-core` | Redis 연결 · StringRedisTemplate · JSON 템플릿 · 키 접두사 — 다른 redis-* 모듈의 바탕. | `--modules redis-core` | Redis, 레디스, 키 접두사 / redis, redis connection, key prefix | — |
 | `redis-lock` | Redisson 기반 분산 락 — @DistributedLock 어노테이션과 락 실행기. | `--modules redis-lock` | 분산 락, 락, 동시 실행 방지, 중복 실행 방지 / distributed lock, lock, mutex, redisson | — |
@@ -836,18 +836,18 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - JPA 스타터와 DataSource 가 필요하다
 - 키워드: JPA, 하이버네이트, 엔티티 audit, ORM / jpa, hibernate, entity audit, orm
 
-### `platform` — 모든 모듈의 공용 기반 — 표준 응답/에러 봉투 · 전역 예외 처리(필드 오류 FieldValidationException) · 모듈끼리 만나는 계약(AuthorDirectory · AccountErasureListener) · trace id · 요청 로깅 · CORS · rate limit · 외부 HTTP 클라이언트 · OpenAPI · 배포 가드.
+### `platform` — 모든 모듈의 공용 기반 — 표준 응답/에러 봉투 · 전역 예외 처리(필드 오류 FieldValidationException) · 모듈끼리 만나는 계약(AuthorDirectory · AccountErasureListener) · trace id · 요청 로깅 · CORS · rate limit · 외부 HTTP 클라이언트 · OpenAPI · 배포 가드 · 한 프로세스에 프로젝트 여럿(skeleton.projects: Host 로 프로젝트 판정 · 프로젝트별 스키마/풀/로그인 설정 · @ProjectApi — docs/multi-project.md).
 
 - 종류 · 상태: module · stable — 위치 `modules/platform`
 - 켜는 법: 스타터(apps/api)에 기본 포함
 - 의존 한 줄: `implementation(project(":modules:platform"))`
 - 설정 접두사 `skeleton.config.validation`, `skeleton.deploy`, `skeleton.http`, `skeleton.observability.links`, `skeleton.openapi`, `skeleton.redaction`, `skeleton.web` — 키와 기본값 `docs/config/modules/platform.yml`
-- 문서: `docs/modules/platform.md`, `docs/errors.md`, `docs/logging.md`, `docs/openapi.md`, `docs/external-http.md`, `docs/client-ip.md`, `docs/configuration.md`, `docs/observability-links.md`, `docs/deploy.md`
+- 문서: `docs/modules/platform.md`, `docs/errors.md`, `docs/logging.md`, `docs/openapi.md`, `docs/external-http.md`, `docs/client-ip.md`, `docs/configuration.md`, `docs/observability-links.md`, `docs/deploy.md`, `docs/multi-project.md`
 - 짝 프런트(react-skeleton): 항목 `api-client` · 패키지 `@skeleton/api-client` · 조각 기본 포함(덧붙일 것 없음)
 - 쓰지 않는 경우:
   - 벤더 연동(결제 · 메일 · 저장소 · 소셜 로그인)은 여기에 없다 — 각 모듈
   - 스타터가 이미 가진다 — 따로 켜는 줄이 없다
-- 키워드: 에러 응답, 표준 응답, 예외 처리, 요청 로깅, 트레이스, CORS, 요청 제한, 외부 API 호출, 스웨거, 배포 가드 / error response, exception handling, request logging, trace id, cors, rate limit, http client, openapi, swagger, deploy guard
+- 키워드: 에러 응답, 표준 응답, 예외 처리, 요청 로깅, 트레이스, CORS, 요청 제한, 외부 API 호출, 스웨거, 배포 가드, 프로젝트 여럿, 멀티 프로젝트, 도메인별 서비스 / error response, exception handling, request logging, trace id, cors, rate limit, http client, openapi, swagger, deploy guard, multi project, multi tenant host
 
 ### `redis-cache` — 이름 있는 Redis 캐시(TTL · 접두사) · 안정적인 키 생성기 · 캐시 오류 정책(기본 FAIL_OPEN).
 
@@ -966,7 +966,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 - 종류 · 상태: app · stable — 위치 `apps/api`
 - 켜는 법: 스타터(apps/api)에 기본 포함
-- HTTP 경로: `/api/v1`
+- HTTP 경로: `/api/v1`, `/api/v1/project-hello`
 - 문서: `docs/minimal-composition.md`
 - 짝 프런트(react-skeleton): 항목 `app-starter`, `app-starter-ssr` · 조각 기본 포함(덧붙일 것 없음)
 - 쓰지 않는 경우:
