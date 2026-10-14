@@ -31,7 +31,7 @@ interceptors.
 
 ## Namespaces
 
-- `COMMON.*`: platform and generic web errors.
+- `COMMON.*`: platform and generic web errors. `COMMON.UNKNOWN_HOST` (421) — only when `skeleton.projects` is set and the request's Host belongs to no project (`/health` and `/info` are exempt); see [multi-project.md](multi-project.md).
 - `AUTH.*`: password/JWT/authentication errors — `INVALID_CREDENTIALS` (401), `EMAIL_NOT_VERIFIED` · `ACCOUNT_SUSPENDED` (403), `TOO_MANY_ATTEMPTS` (429, `Retry-After`), and from `auth-session` `REFRESH_INVALID` · `REFRESH_REUSED` (401), `SESSION_NOT_FOUND` (404), `CSRF_HEADER_REQUIRED` (403).
 - `ACCOUNT.*`: the `account` module — `TOKEN_INVALID` (410), `PASSWORD_POLICY` (400, `data.violations`), `CURRENT_PASSWORD_INVALID` · `REAUTH_FAILED` · `CAPTCHA_FAILED` · `METHOD_UNKNOWN` · `PASSWORD_REQUIRED` (400), `SIGN_UP_CLOSED` (403), `LOGIN_ID_REQUIRED` (403 — the account has not chosen a login ID; login IDs on only), `LOGIN_ID_TAKEN` · `LOGIN_ID_ALREADY_SET` (409 — login IDs on only; `TAKEN` covers reserved, live and retired IDs alike), `EMAIL_TAKEN` · `SOCIAL_EMAIL_CONFLICT` · `IDENTITY_TAKEN` · `IDENTITY_EXISTS` · `LAST_SIGN_IN_METHOD` · `LAST_ADMIN` · `SELF_ACTION_FORBIDDEN` (409), `NOT_FOUND` · `IDENTITY_NOT_FOUND` (404), `RATE_LIMITED` (429, `Retry-After`). Full table and meanings: [accounts.md](accounts.md).
 - `AUTH_SOCIAL.*`: OAuth/social login errors.

@@ -64,3 +64,6 @@ skeleton:
       enabled: false                           # 알림 · 에러 응답에 로그/트레이스 링크를 붙인다
       custom-fields: []                        # 템플릿에서 쓸 추가 필드
       templates: {}                            # 이름 → { label, kind: LOGS|TRACE|RUN|PROVIDER|CUSTOM, url, required-fields }
+  # 한 프로세스에 프로젝트 여럿 (docs/multi-project.md). 기본은 비어 있다 = 서비스 하나. 프로젝트 하나 = 도메인들 + DB 스키마 + 덮어쓸 설정.
+  # projects:
+  #   a: { hosts: [a.example.com], schema: proj_a, datasource: { username: proj_a, password: ..., pool-max: 3 }, config: { auth.jwt.secret: ..., account.mail.brand: A } }
