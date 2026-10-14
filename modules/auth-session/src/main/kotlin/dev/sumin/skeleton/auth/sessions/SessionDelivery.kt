@@ -27,7 +27,12 @@ class SessionClients(private val clientIps: ClientIps) {
 }
 
 /** 리프레시 토큰을 클라이언트에 내려 주고 · 요청에서 읽는 방식(body | cookie) 한 곳 */
-class RefreshTokenDelivery(private val properties: AuthSessionProperties, private val time: TimeProvider) {
+class RefreshTokenDelivery(private val propertiesOf: () -> AuthSessionProperties, private val time: TimeProvider) {
+    constructor(properties: AuthSessionProperties, time: TimeProvider) : this({ properties }, time)
+
+    /** 프로젝트가 있으면 지금 프로젝트의 설정(쿠키 이름 · 경로 · 보안 속성) */
+    private val properties: AuthSessionProperties get() = propertiesOf()
+
     val cookieMode: Boolean get() = properties.delivery == AuthSessionProperties.Delivery.COOKIE
 
     /** 쿠키 전달이면 쿠키를 심고 본문에는 토큰을 싣지 않는다. body 전달이면 그대로 */

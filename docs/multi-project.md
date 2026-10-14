@@ -26,3 +26,19 @@ skeleton:
 - 기동 때 `migration-flyway` 가 스키마마다 같은 스크립트를 돌린다(이력도 스키마마다, 하나라도 실패하면 기동 실패). 스키마가 없으면 Flyway 가 만든다 — DB 계정에 권한이 없으면 운영자가 미리 만든다. `public` 은 건드리지 않는다.
 - `SqlDialectVerifier` 는 기동 때 연결을 열지 않고 URL 로 방언을 본다. `/health` 는 프로젝트별 풀을 하나씩 본다(Boot 의 라우팅 DataSource 지원).
 - `status: closed` 인 프로젝트: 도메인은 `503 COMMON.PROJECT_CLOSED`, 풀 · 마이그레이션 · "프로젝트 둘 이상" 개수에서 빠진다(스키마는 안 적어도 된다).
+
+## 로그인 쪽 설정을 프로젝트별로
+
+`config` 에 적은 `skeleton.*` 키는 공통 값 위에 덮여 **같은 properties 클래스**로 바인딩된다 (`ProjectRegistry.bind` / `scopedFrom`). 지금 프로젝트별로 갈리는 것:
+
+| 무엇 | 키 (config 아래) | 어떻게 |
+|---|---|---|
+| JWT 키 · 발급자 · TTL | `auth.jwt.*` | 프로젝트마다 `JwtTokenService` 부품. 토큰에 프로젝트 이름(`prj`)이 들어가고 받을 때 대조 — A 토큰은 B 에서 거절(키를 같이 써도). 잘못된 비밀은 기동에서 막는다 |
+| 리프레시 쿠키 | `auth-session.cookie.*` | `RefreshTokenDelivery` 가 지금 프로젝트의 이름 · 경로 · 보안 속성을 쓴다 |
+| CORS 허용 출처 | `web.cors.*` | 요청의 프로젝트가 고른다 (`skeleton.web.cors.enabled=true` 일 때) |
+| 계정 메일 링크 주소 · 브랜드 · 제목 접두사 | `account.mail.*` | 내장 메일 틀은 프로젝트마다 한 번 만든다 (앱이 자기 `AccountMailTemplates` 빈을 두면 그것을 모두가 쓴다) |
+| 시드 계정 | `account.seed.accounts[n].*` | 기동 때 프로젝트마다 그 스키마에 만든다 |
+
+뒤 주기 작업 중 계정 삭제 유예 정리 · 세션 정리는 프로젝트를 차례로 돈다. 그 밖의 값(가입 정책 · 비밀번호 정책 · 한도 …)은 아직 공통이다.
+
+알려진 한계: stage · prod 의 계정 가드(`link-base-url` 비면 실패)와 JWT 가드의 일부는 공통 값을 본다(JWT 비밀은 프로젝트마다 검사한다).

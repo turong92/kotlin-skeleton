@@ -95,8 +95,13 @@ class AuthSessionAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    fun refreshTokenDelivery(properties: AuthSessionProperties, time: ObjectProvider<TimeProvider>): RefreshTokenDelivery =
-        RefreshTokenDelivery(properties, time.getIfAvailable { TimeProvider.systemUtc() })
+    fun refreshTokenDelivery(properties: AuthSessionProperties, time: ObjectProvider<TimeProvider>, projects: ObjectProvider<ProjectRegistry>): RefreshTokenDelivery {
+        val clock = time.getIfAvailable { TimeProvider.systemUtc() }
+        val registry = projects.getIfAvailable() ?: return RefreshTokenDelivery(properties, clock)
+        // 쿠키 이름 · 경로 · 보안 속성은 프로젝트마다 — 브라우저는 Host 로 이미 갈라 두지만 이름까지 갈라야 같은 상위 도메인에서도 안 섞인다
+        val scoped = registry.scopedFrom("skeleton.auth-session", AuthSessionProperties::class.java) { _, p -> p }
+        return RefreshTokenDelivery({ scoped.get() }, clock)
+    }
 
     @Bean
     @ConditionalOnMissingBean(LoginSessionIssuer::class)

@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.common.web
 
+import dev.sumin.skeleton.common.project.ProjectRegistry
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.common.time.asClock
 import java.time.Clock
@@ -84,17 +85,24 @@ class WebPolicyAutoConfiguration {
     @Bean("skeletonCorsConfigurationSource")
     @ConditionalOnMissingBean(name = ["skeletonCorsConfigurationSource"])
     @ConditionalOnProperty(prefix = "skeleton.web.cors", name = ["enabled"], havingValue = "true")
-    fun corsConfigurationSource(properties: WebProperties): CorsConfigurationSource {
+    fun corsConfigurationSource(properties: WebProperties, projects: ObjectProvider<ProjectRegistry>? = null): CorsConfigurationSource {
+        val registry = projects?.getIfAvailable() ?: return corsSource(properties.cors)
+        // 프로젝트마다 허용 출처가 다르다 — 요청의 프로젝트(Host)가 고른다
+        val perProject = registry.scopedFrom("skeleton.web", WebProperties::class.java) { _, p -> corsSource(p.cors) }
+        return CorsConfigurationSource { request -> perProject.get().getCorsConfiguration(request) }
+    }
+
+    private fun corsSource(cors: WebProperties.Cors): UrlBasedCorsConfigurationSource {
         val configuration = CorsConfiguration().apply {
-            allowedOriginPatterns = properties.cors.allowedOriginPatterns
-            allowedMethods = properties.cors.allowedMethods
-            allowedHeaders = properties.cors.allowedHeaders
-            exposedHeaders = properties.cors.exposedHeaders
-            allowCredentials = properties.cors.allowCredentials
-            maxAge = properties.cors.maxAge.seconds
+            allowedOriginPatterns = cors.allowedOriginPatterns
+            allowedMethods = cors.allowedMethods
+            allowedHeaders = cors.allowedHeaders
+            exposedHeaders = cors.exposedHeaders
+            allowCredentials = cors.allowCredentials
+            maxAge = cors.maxAge.seconds
         }
         return UrlBasedCorsConfigurationSource().apply {
-            registerCorsConfiguration(properties.cors.pathPattern, configuration)
+            registerCorsConfiguration(cors.pathPattern, configuration)
         }
     }
 

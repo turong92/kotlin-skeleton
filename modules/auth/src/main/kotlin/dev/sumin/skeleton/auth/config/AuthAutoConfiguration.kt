@@ -9,6 +9,7 @@ import dev.sumin.skeleton.auth.jwt.JwtTokenService
 import dev.sumin.skeleton.auth.login.LoginHooks
 import dev.sumin.skeleton.auth.login.PasswordLoginService
 import dev.sumin.skeleton.auth.session.LoginSessionIssuer
+import dev.sumin.skeleton.common.project.ProjectRegistry
 import dev.sumin.skeleton.common.web.ClientIps
 import dev.sumin.skeleton.auth.security.AuthErrorWriter
 import dev.sumin.skeleton.auth.security.BreakGlassAuthenticationFilter
@@ -66,7 +67,16 @@ class AuthAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    fun jwtTokenService(properties: AuthProperties, environment: Environment): JwtTokenService {
+    fun jwtTokenService(properties: AuthProperties, environment: Environment, projects: ObjectProvider<ProjectRegistry>): JwtTokenService {
+        projects.getIfAvailable()?.let { registry ->
+            // 프로젝트마다 키 · 발급자 (공통 skeleton.auth.jwt 위에 프로젝트 config 를 덮는다). 잘못된 비밀은 첫 요청이 아니라 기동에서 막는다
+            val jwt = registry.scopedFrom("skeleton.auth", AuthProperties::class.java) { project, bound ->
+                AuthStartupValidator.validateJwtSecret(bound, DeployContext.from(environment))
+                bound.jwt
+            }
+            registry.active.forEach { jwt.of(it) }
+            return JwtTokenService.perProject(jwt)
+        }
         // 빈 키는 SecretKeySpec 이 더 모호한 오류로 던지므로, 보호 프로필의 잘못된 비밀은 여기서 이름 붙은 메시지로 먼저 막는다
         AuthStartupValidator.validateJwtSecret(properties, DeployContext.from(environment))
         return JwtTokenService(properties.jwt)
