@@ -110,6 +110,8 @@ PgBouncer 트랜잭션 모드(PlanetScale 기본, 포트 **6432**)는 트랜잭�
 2. (PostgreSQL) 풀 설정이 아니라 **새 연결**의 `current_schema()` 가 자기 스키마가 아니면 실패 — 계정 기본값 누락. (계정 이름이 스키마 이름과 같으면 PostgreSQL 기본값 `"$user"` 가 우연히 맞을 수 있다 — 그래도 `ALTER ROLE` 을 박는 것이 규칙이다.)
 3. 그 계정이 다른 활성 프로젝트 스키마에 `USAGE` 가 있으면 실패 (`has_schema_privilege`).
 - MySQL: 1, 3 만 가능한 범위로 본다(다른 프로젝트 데이터베이스의 표가 보이면 실패). 2 에 해당하는 것은 없다 — 풀이 catalog 를 고르고, PgBouncer 같은 연결 바꿔 끼우기 문제가 없는 구성을 전제한다. 한계다.
+- 확인은 프로젝트의 **실제 풀 연결**로 한다. 프로젝트 모드에서 공통 `spring.datasource.hikari` 에 `schema` · `connection-init-sql` · `data-source-properties.currentSchema`/`options` 가 있으면(연결마다 스키마를 덮어쓴다) 기동 실패.
+- 이 확인은 모든 빈이 만들어진 직후 돈다. 약관 기동 검사(`legalStartupCheck`)도 같은 때 돌고 둘의 순서는 빈 등록 순서에 기댄다(어느 쪽이 먼저든 계정이 틀리면 기동은 실패하고 메시지만 달라진다).
 - 프로젝트 목록이 비면(한 서비스) 아무 검사도 없다.
 
 ### 운영에서 만들기 (관리자 계정으로, 프로젝트마다 한 번 — 멱등)

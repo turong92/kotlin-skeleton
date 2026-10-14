@@ -57,4 +57,13 @@ class ProjectPoolsTest {
         val env = MockEnvironment().withProperty("spring.datasource.hikari.data-source-properties.connectionTimeZone", "UTC")
         assertThat(pool(project(), Dialect("postgresql"), env).dataSourceProperties.getProperty("connectionTimeZone")).isEqualTo("UTC")
     }
+
+    @Test
+    fun `a shared hikari setting that picks a schema per connection fails the start in project mode`() {
+        listOf("schema", "connection-init-sql", "data-source-properties.currentSchema", "data-source-properties.options").forEach { key ->
+            val env = MockEnvironment().withProperty("spring.datasource.hikari.$key", "app")
+            val e = org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException::class.java) { pool(project(), Dialect("postgresql"), env) }
+            assertThat(e.message).contains("spring.datasource.hikari.")
+        }
+    }
 }

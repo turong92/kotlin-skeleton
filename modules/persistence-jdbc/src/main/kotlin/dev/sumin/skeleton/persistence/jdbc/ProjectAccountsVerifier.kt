@@ -2,7 +2,6 @@ package dev.sumin.skeleton.persistence.jdbc
 
 import dev.sumin.skeleton.common.project.Project
 import java.sql.Connection
-import java.sql.DriverManager
 import org.springframework.beans.factory.SmartInitializingSingleton
 import org.springframework.boot.jdbc.autoconfigure.JdbcConnectionDetails
 
@@ -12,7 +11,7 @@ import org.springframework.boot.jdbc.autoconfigure.JdbcConnectionDetails
  * 한 프로젝트의 요청이 다른 프로젝트의 스키마에 붙을 수 있다. 계정을 나누고 계정에 기본 스키마를 박으면(`ALTER ROLE … SET search_path`) 풀도 계정별로 나뉘고 붙을 때마다 그 스키마가 걸린다.
  *
  * 1. 두 프로젝트가 같은 DB 계정이면 실패 (프로젝트 `datasource.username` 이 없어 공통 계정으로 떨어지는 것도 같은 계정이다)
- * 2. (PostgreSQL) 스키마를 걸지 않은 새 연결의 `current_schema()` 가 자기 스키마가 아니면 실패 — 계정 기본 search_path 누락
+ * 2. (PostgreSQL) 프로젝트의 실제 풀 연결의 `current_schema()` 가 자기 스키마가 아니면 실패 — 계정 기본 search_path 누락
  * 3. 그 계정이 다른 활성 프로젝트 스키마에 접근할 수 있으면 실패 (PostgreSQL `has_schema_privilege USAGE`, MySQL 은 그 데이터베이스의 표가 보이는지)
  * MySQL 은 스키마 = 데이터베이스라 2 에 해당하는 것이 없다(풀이 catalog 를 고른다) — 한계로 문서에 있다.
  */
@@ -20,11 +19,13 @@ class ProjectAccountsVerifier(
     private val projects: List<Project>,
     private val details: JdbcConnectionDetails,
     private val vendor: String,
-    private val connect: (url: String, user: String, password: String) -> Connection = { url, user, password -> DriverManager.getConnection(url, user, password) },
+    /** 프로젝트의 **실제 풀** 에서 연결 하나 — 풀이 받는 설정(공통 hikari.* 포함)까지 그대로 본다 */
+    private val connect: (Project) -> Connection,
 ) : SmartInitializingSingleton {
     override fun afterSingletonsInstantiated() {
         sameAccount()
-        projects.forEach { checkProject(it) }
+        // 프로젝트 문맥 안에서 — 풀 연결은 그 프로젝트의 것이고, 문맥 밖에서 쓰면 라우팅 DataSource 가 막는다
+        projects.forEach { p -> dev.sumin.skeleton.common.project.ProjectContext.runIn(p) { checkProject(p) } }
     }
 
     private fun accountOf(p: Project): String = p.datasource.username ?: details.username.orEmpty()
@@ -38,12 +39,11 @@ class ProjectAccountsVerifier(
 
     private fun checkProject(p: Project) {
         val user = accountOf(p)
-        val password = if (p.datasource.username != null) p.datasource.password.orEmpty() else details.password.orEmpty()
         val others = projects.filter { it.id != p.id }
         try {
-            connect(details.jdbcUrl, user, password).use { c ->
+            connect(p).use { c ->
                 if (vendor == "postgresql") {
-                    // 풀의 schema 설정과 무관한 새 연결 — 계정에 박힌 기본값만 보인다
+                    // 풀은 schema 를 걸지 않는다(ProjectPools) — 계정에 박힌 기본값이 보인다
                     val current = c.createStatement().use { s -> s.executeQuery("select current_schema()").use { rs -> if (rs.next()) rs.getString(1) else null } }
                     check(current == p.schema) {
                         "Project '${p.id}': the database account '$user' does not default to schema '${p.schema}' (current_schema() is ${current ?: "null"}). " +
