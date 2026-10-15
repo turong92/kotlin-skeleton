@@ -1,2 +1,5 @@
 org.springframework.aot.hint.RuntimeHintsRegistrar=\
 dev.sumin.skeleton.common.nativeimage.KotlinReflectionHints
+org.springframework.beans.factory.aot.BeanFactoryInitializationAotProcessor=\
+dev.sumin.skeleton.common.nativeimage.ConfigurationPropertiesBindingAotProcessor,\
+dev.sumin.skeleton.common.nativeimage.ApiResponseEnvelopeAotProcessor

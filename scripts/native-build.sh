@@ -33,9 +33,14 @@ if [ -n "${NATIVE_GRADLE_RO_CACHE:-}" ]; then
   ARGS+=(-v "$NATIVE_GRADLE_RO_CACHE:/ro-cache:ro" -e GRADLE_RO_DEP_CACHE=/ro-cache); GRADLE_ARGS+=(--offline)
 fi
 
+# 같은 출력 폴더를 다른 아키텍처로 다시 만들 때 Gradle 은 "최신" 이라며 건너뛴다(플랫폼은 입력이 아니다) — 마지막으로 만든 플랫폼을 적어 두고 다르면 지운다
+PLATFORM_MARK="$DIR/build/native/.platform"; WANT="${NATIVE_PLATFORM:-native}"
+if [ -f "$PLATFORM_MARK" ] && [ "$(cat "$PLATFORM_MARK")" != "$WANT" ]; then rm -rf "$DIR/build/native/nativeCompile"; fi
+
 echo "== $IMAGE 에서 $GRADLE_PATH (캐시 $GHOME)"
 START=$(date +%s)
 docker run "${ARGS[@]}" --entrypoint ./gradlew "$IMAGE" "${GRADLE_ARGS[@]}"
 BIN="$DIR/build/native/nativeCompile/app"
+mkdir -p "$DIR/build/native" && echo "$WANT" > "$PLATFORM_MARK"
 [ -x "$BIN" ] || { echo "✗ 실행 파일이 없다: $BIN" >&2; exit 1; }
 echo "OK $BIN ($(du -h "$BIN" | cut -f1), $(( $(date +%s) - START ))초) — 리눅스 실행 파일: 같은 아키텍처의 glibc 리눅스(컨테이너)에서만 돈다"

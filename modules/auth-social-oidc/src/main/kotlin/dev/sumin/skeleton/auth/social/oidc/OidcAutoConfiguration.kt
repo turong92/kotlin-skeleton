@@ -3,7 +3,7 @@ package dev.sumin.skeleton.auth.social.oidc
 import dev.sumin.skeleton.auth.social.oauth.OAuthProvider
 import dev.sumin.skeleton.common.http.ExternalHttpClient
 import java.time.Clock
-import org.springframework.beans.factory.BeanFactory
+import org.springframework.beans.factory.ObjectProvider
 import org.springframework.beans.factory.support.BeanDefinitionBuilder
 import org.springframework.beans.factory.support.BeanDefinitionRegistry
 import org.springframework.boot.autoconfigure.AutoConfiguration
@@ -33,6 +33,24 @@ class OidcAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     fun oidcProviderFactory(): OidcProviderFactory = OidcProviderFactory { code, provider, global, http, clock -> OidcProviders.create(code, provider, global, http, clock) }
+
+    /** 제공자 빈 정의(아래 레지스트라)가 팩터리 메서드로 부르는 곳 — 설정 덩어리는 정의에 담지 않고 여기서 코드로 찾는다 (Spring AOT 가 람다 공급자 달린 정의를 못 굽는다, docs/native-image.md) */
+    @Bean
+    @ConditionalOnMissingBean
+    fun oidcProviderBuilder(properties: OidcProperties, factory: OidcProviderFactory, http: ObjectProvider<ExternalHttpClient>, clock: ObjectProvider<Clock>): OidcProviderBuilder =
+        OidcProviderBuilder(properties, factory, http, clock)
+}
+
+class OidcProviderBuilder(
+    private val properties: OidcProperties,
+    private val factory: OidcProviderFactory,
+    private val http: ObjectProvider<ExternalHttpClient>,
+    private val clock: ObjectProvider<Clock>,
+) {
+    fun create(code: String): OidcOAuthProvider {
+        val provider = properties.providers.entries.first { it.key.trim().lowercase() == code }.value
+        return factory.create(code, provider, properties, http.getObject(), clock.getIfAvailable { Clock.systemUTC() })
+    }
 }
 
 class OidcProviderRegistrar : ImportBeanDefinitionRegistrar, EnvironmentAware {
@@ -48,13 +66,13 @@ class OidcProviderRegistrar : ImportBeanDefinitionRegistrar, EnvironmentAware {
             val code = rawCode.trim().lowercase()
             val beanName = "oidcOAuthProvider.$code"
             if (registry.containsBeanDefinition(beanName)) return@forEach
-            val factory = registry as BeanFactory
+            // 팩터리 메서드 + 코드(문자열) 하나만 정의에 담는다 — 람다 공급자는 Spring AOT(네이티브 이미지)가 굽지 못한다. 설정 덩어리는 oidcProviderBuilder 가 실행 때 코드로 찾는다
             registry.registerBeanDefinition(
                 beanName,
-                BeanDefinitionBuilder.genericBeanDefinition(OidcOAuthProvider::class.java) {
-                    val clock = factory.getBeanProvider(Clock::class.java).getIfAvailable { Clock.systemUTC() }
-                    factory.getBean(OidcProviderFactory::class.java).create(code, provider, props, factory.getBean(ExternalHttpClient::class.java), clock)
-                }.beanDefinition,
+                BeanDefinitionBuilder.genericBeanDefinition(OidcOAuthProvider::class.java)
+                    .setFactoryMethodOnBean("create", "oidcProviderBuilder")
+                    .addConstructorArgValue(code)
+                    .beanDefinition,
             )
         }
     }

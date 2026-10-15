@@ -2581,6 +2581,32 @@
       }
     },
     {
+      "id": "script-native-smoke-full",
+      "kind": "script",
+      "module": null,
+      "path": "scripts/native-smoke-full.sh",
+      "status": "stable",
+      "summary": "네이티브 --full 시험: 가짜 상대(메일 · 로컬 S3 · 소셜 5종 · 토스 · Paddle)를 붙여 메일 · 파일 저장 · 소셜 로그인 · 결제사 · SSE 흐름을 실제 HTTP 로 돌린다.",
+      "starter": false,
+      "newProjectFlag": null,
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/native-image.md"],
+      "frontend": null,
+      "notFor": ["서버를 띄우지 않는다 — scripts/native-test.sh --full 이 한다", "스켈레톤 레포 전용(새 프로젝트에는 복사되지 않는다)"],
+      "keywords": {
+        "ko": ["네이티브 전체 시험", "소셜 로그인 시험"],
+        "en": ["native full test", "social login check"]
+      }
+    },
+    {
       "id": "script-native-test",
       "kind": "script",
       "module": null,

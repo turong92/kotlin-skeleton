@@ -145,6 +145,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `script-migrations-lock` | 동결된 Flyway 마이그레이션의 잠금(migrations.lock: 경로 + sha256 + 업그레이드 시험의 baseline)을 검사하고(--check) 새 파일만 더한다 — 기존 줄의 변경은 --rewrite <경로> 로만. | (도구 — 켜는 조각 없음) | 마이그레이션 잠금, 마이그레이션 동결, 체크섬 불일치, 마이그레이션 수정 금지 / migration lock, frozen migrations, flyway checksum, migrations.lock | — |
 | `script-native-build` | GraalVM 25 공식 Docker 이미지 안에서 앱을 네이티브 실행 파일로 만든다(선택 빌드 -Pnative, 기본 JVM 빌드는 그대로) — 결과 apps/<앱>/build/native/nativeCompile/app. | (도구 — 켜는 조각 없음) | 네이티브 이미지, 네이티브 빌드, GraalVM, 콜드스타트 / native image, graalvm build, cold start | — |
 | `script-native-smoke` | 떠 있는 tools/native-check 서버에 가입 · 로그인 · 갱신 · 가짜 결제사 결제 · 구독 · 작업 큐(깨우기 주소) · 웹훅을 실제 HTTP 로 돌려 본다. | (도구 — 켜는 조각 없음) | 네이티브 시험, 핵심 흐름 시험 / native smoke test, core flow check | — |
+| `script-native-smoke-full` | 네이티브 --full 시험: 가짜 상대(메일 · 로컬 S3 · 소셜 5종 · 토스 · Paddle)를 붙여 메일 · 파일 저장 · 소셜 로그인 · 결제사 · SSE 흐름을 실제 HTTP 로 돌린다. | (도구 — 켜는 조각 없음) | 네이티브 전체 시험, 소셜 로그인 시험 / native full test, social login check | — |
 | `script-native-test` | 앱을 네이티브로 빌드해 새 DB 와 함께 컨테이너에서 띄우고 흐름 시험(--smoke)을 돌린다 — 스켈레톤은 tools/native-check + native-smoke.sh, 새 프로젝트는 apps/api + 자기 시험(릴리스 전 · 의존성 파일 PR 에서 돌리는 것을 권한다). | (도구 — 켜는 조각 없음) | 네이티브 시험, 릴리스 전 시험 / native test, release check | — |
 | `script-new-project` | 새 프로젝트 한 줄 찍기 — 이 레포를 복사해 고른 모듈 · 앱만 남기고, 이름 · 접두사를 바꾸고, 배포 선언 · 설정 블록 · 이 카탈로그를 걸러 다시 쓴다(--dry-run 은 고른 모듈과 따라온 이유만 보인다). | (도구 — 켜는 조각 없음) | 새 프로젝트, 프로젝트 만들기, 찍어내기, 스캐폴딩, 프로젝트 시작 / new project, scaffold, stamp, template, project generator | — |
 | `script-payment-webhook` | 결제 웹훅을 손으로 넣어 본다 — 토스 PAYMENT_STATUS_CHANGED 모양의 본문을 떠 있는 서버의 수신함 주소로 보내 주소의 비밀 조각 · 재전송 중복 · 모르는 주문 · 본문 불신(서버가 결제사에 다시 조회)을 확인한다. 대상 서버는 늘 인자로 받는다. | (도구 — 켜는 조각 없음) | 웹훅 보내 보기, 결제 웹훅 시험, 수신함 시험, 토스 웹훅 / send test webhook, payment webhook check, toss webhook | — |
@@ -1093,6 +1094,16 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 쓰지 않는 경우:
   - 서버를 띄우거나 빌드하지 않는다 — scripts/native-test.sh 가 한다
 - 키워드: 네이티브 시험, 핵심 흐름 시험 / native smoke test, core flow check
+
+### `script-native-smoke-full` — 네이티브 --full 시험: 가짜 상대(메일 · 로컬 S3 · 소셜 5종 · 토스 · Paddle)를 붙여 메일 · 파일 저장 · 소셜 로그인 · 결제사 · SSE 흐름을 실제 HTTP 로 돌린다.
+
+- 종류 · 상태: script · stable — 위치 `scripts/native-smoke-full.sh`
+- 켜는 법: (도구 — 켜는 조각 없음)
+- 문서: `docs/native-image.md`
+- 쓰지 않는 경우:
+  - 서버를 띄우지 않는다 — scripts/native-test.sh --full 이 한다
+  - 스켈레톤 레포 전용(새 프로젝트에는 복사되지 않는다)
+- 키워드: 네이티브 전체 시험, 소셜 로그인 시험 / native full test, social login check
 
 ### `script-native-test` — 앱을 네이티브로 빌드해 새 DB 와 함께 컨테이너에서 띄우고 흐름 시험(--smoke)을 돌린다 — 스켈레톤은 tools/native-check + native-smoke.sh, 새 프로젝트는 apps/api + 자기 시험(릴리스 전 · 의존성 파일 PR 에서 돌리는 것을 권한다).
 

@@ -1,22 +1,44 @@
 #!/usr/bin/env bash
 # 네이티브 이미지 시험 — 떠 있는 tools/native-check 서버(JVM 이든 네이티브 바이너리든)에 핵심 흐름을 실제 HTTP 로 돌린다 (docs/native-image.md).
-#   scripts/native-smoke.sh --url http://localhost:18080 [--webhook-token <값>] [--wake-secret <값>]
+#   scripts/native-smoke.sh --url http://localhost:18080 --mail http://localhost:18025 [--webhook-token <값>] [--wake-secret <값>]
+#   (메일은 실제 SMTP 로 나가 mailpit 이 받는다 — --mail 은 mailpit 의 HTTP 주소. scripts/native-test.sh 가 mailpit 을 올린다)
 # 확인하는 것: 기동(/health) · 가입(메일 확인 코드) · 로그인 · 토큰 갱신(재사용 거절) · 단건 결제(가짜 결제사) · 구독 시작 · 작업 큐 일감 처리(요청 구동: 깨우기 주소) · 웹훅 수신(재전송 중복) · OpenAPI 문서.
 # 종료 코드: 0 = 전부 통과 · 1 = 어느 단계가 어긋남(단계 이름을 출력). 비밀 값은 출력하지 않는다. 필요한 것: curl · python3.
 set -uo pipefail
 
-URL=""; WH_TOKEN="native-check-webhook-token-0123456789"; WAKE_SECRET="native-check-wake-secret-0123456789-abcdefgh"
+URL=""; MAIL_URL=""; WH_TOKEN="native-check-webhook-token-0123456789"; WAKE_SECRET="native-check-wake-secret-0123456789-abcdefgh"
 while [ $# -gt 0 ]; do
   case "$1" in
     --url) URL="$2"; shift 2 ;;
     --webhook-token) WH_TOKEN="$2"; shift 2 ;;
     --wake-secret) WAKE_SECRET="$2"; shift 2 ;;
+    --mail) MAIL_URL="$2"; shift 2 ;;
     *) echo "알 수 없는 인자: $1" >&2; exit 2 ;;
   esac
 done
 [ -n "$URL" ] || { echo "--url 이 필요하다" >&2; exit 2; }
+[ -n "$MAIL_URL" ] || { echo "--mail(mailpit 주소)이 필요하다" >&2; exit 2; }
 
 FAILS=0
+# mail_find <받는 주소> <정규식(첫 그룹)> — mailpit 에서 그 주소로 온 가장 최근 메일 본문(text)의 첫 일치. 최대 15초 기다린다
+mail_find() {
+  python3 - "$MAIL_URL" "$1" "$2" <<'PY'
+import json, re, sys, time, urllib.request, urllib.parse
+base, to, pattern = sys.argv[1:4]
+for _ in range(30):
+    try:
+        q = urllib.parse.quote(f"to:{to}")
+        msgs = json.load(urllib.request.urlopen(f"{base}/api/v1/search?query={q}", timeout=5)).get("messages") or []
+        if msgs:
+            msg = json.load(urllib.request.urlopen(f"{base}/api/v1/message/{msgs[0]['ID']}", timeout=5))
+            m = re.search(pattern, msg.get("Text") or "")
+            if m:
+                print(m.group(1)); sys.exit(0)
+    except Exception:
+        pass
+    time.sleep(0.5)
+PY
+}
 ok() { printf '  ✓ %s\n' "$1"; }
 bad() { printf '  ✗ %s\n' "$1" >&2; FAILS=$((FAILS + 1)); }
 # json <path> — stdin 의 JSON 에서 점 경로 값을 꺼낸다 (없으면 빈 문자열)
@@ -53,8 +75,7 @@ echo "== 가입 · 로그인 · 갱신"
 R=$(call POST /api/v1/account/sign-up "" "{\"email\":\"$EMAIL\",\"password\":\"$PASS\",\"consents\":[{\"type\":\"terms\",\"version\":\"template-1\"},{\"type\":\"privacy\",\"version\":\"template-1\"}]}")
 expect "가입 요청" 202 "$R"
 SIGNUP=$(printf '%s' "$R" | body | json value.signUpId)
-CODE=""; for _ in $(seq 1 20); do CODE=$(curl -s "$URL/api/v1/native-check/mails/last?to=$EMAIL&kind=VERIFY_CODE" | json code); [ -n "$CODE" ] && break; sleep 0.5; done
-[ -n "$CODE" ] && ok "확인 메일을 받았다" || bad "확인 메일이 없다"
+CODE=$(mail_find "$EMAIL" '\b([0-9]{6})\b'); [ -n "$CODE" ] && ok "확인 메일(SMTP → mailpit)을 받았다" || bad "확인 메일이 없다"
 R=$(call POST /api/v1/auth/verify-email "" "{\"signUpId\":\"$SIGNUP\",\"code\":\"$CODE\"}"); expect "이메일 확인" 200 "$R"
 R=$(call POST /api/v1/auth/login "" "{\"email\":\"$EMAIL\",\"password\":\"$PASS\"}"); expect "로그인" 200 "$R"
 ACCESS=$(printf '%s' "$R" | body | json value.accessToken); REFRESH=$(printf '%s' "$R" | body | json value.refreshToken)

@@ -17,6 +17,18 @@ dependencies {
     implementation(project(":modules:job-queue-jdbc"))
     implementation(project(":modules:payment-jdbc"))
     implementation(project(":modules:crypto"))
+    // --full 시험(scripts/native-test.sh --full)이 쓰는 모듈 — 메일 · 파일 저장 · 소셜 로그인 · 토스 · Paddle · 실시간 알림. 꺼진 채 시작하는 것은 application.yml 이 시험용 값으로 켠다 (빌드 때 굳는다)
+    implementation(project(":modules:notification-mail"))
+    implementation(project(":modules:storage-s3"))
+    implementation(project(":modules:notification-jdbc"))
+    implementation(project(":modules:notification-sse"))
+    implementation(project(":modules:auth-social-google"))
+    implementation(project(":modules:auth-social-kakao"))
+    implementation(project(":modules:auth-social-naver"))
+    implementation(project(":modules:auth-social-oidc"))
+    implementation(project(":modules:auth-social-x"))
+    implementation(project(":modules:payment-toss"))
+    implementation(project(":modules:payment-paddle"))
     implementation(testFixtures(project(":modules:payment")))   // ScriptedGateway — 가짜 결제사. 이 앱에서만 main 클래스패스에 올린다
 
     implementation("org.springframework.boot:spring-boot-starter-actuator")

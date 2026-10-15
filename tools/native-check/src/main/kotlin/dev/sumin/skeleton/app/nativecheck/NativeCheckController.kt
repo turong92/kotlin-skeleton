@@ -1,7 +1,8 @@
 package dev.sumin.skeleton.app.nativecheck
 
-import dev.sumin.skeleton.account.mail.AccountMail
 import dev.sumin.skeleton.jobqueue.jdbc.Job
+import dev.sumin.skeleton.notification.NotificationEvent
+import dev.sumin.skeleton.notification.NotificationPublisher
 import dev.sumin.skeleton.jobqueue.jdbc.JobHandler
 import dev.sumin.skeleton.jobqueue.jdbc.JobQueue
 import dev.sumin.skeleton.payment.PaymentAmount
@@ -13,24 +14,23 @@ import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
-import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 
 /** 시험 스크립트의 보조 경로. 가짜 결제사의 "결제창에서 인증 끝" 흉내 · 받은 메일 · 작업 넣기/처리 횟수 — 제품 코드가 아니다. */
 @RestController
 @RequestMapping("/api/v1/native-check")
 class NativeCheckController(
-    private val mails: MailBox,
     private val gateway: ScriptedGateway,
     private val jobs: JobQueue,
     private val handler: PingJobHandler,
     private val json: tools.jackson.databind.ObjectMapper,
+    private val publisher: NotificationPublisher,
 ) {
-    /** 마지막 메일의 종류 · 확인 코드 · 링크. */
-    @GetMapping("/mails/last")
-    fun lastMail(@RequestParam to: String, @RequestParam kind: String): Map<String, Any?> {
-        val mail: AccountMail = mails.sent.lastOrNull { m: AccountMail -> m.to == to && m.kind.name == kind } ?: return mapOf("found" to false)
-        return mapOf("found" to true, "code" to mail.vars["code"], "link" to mail.link)
+    /** 알림 하나를 발행한다 — `--full` 의 SSE 시험이 구독 중인 연결로 도착하는지 본다 */
+    @PostMapping("/notify")
+    fun notify(@RequestBody body: PingPayload): Map<String, Any?> {
+        val result = publisher.publish(NotificationEvent(topic = "native-check", type = "native-check.ping", title = "native check", message = body.note, payload = mapOf("note" to body.note)))
+        return mapOf("published" to true, "result" to result.toString())
     }
 
     @PostMapping("/authenticate")

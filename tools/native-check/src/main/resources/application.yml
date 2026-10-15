@@ -6,6 +6,9 @@ spring:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/app}
     username: ${SPRING_DATASOURCE_USERNAME:app}
     password: ${SPRING_DATASOURCE_PASSWORD:dev}
+  mail:
+    host: ${NATIVE_MAIL_HOST:localhost}
+    port: ${NATIVE_MAIL_PORT:1025}
   flyway:
     locations: classpath:db/migration/{vendor}
     out-of-order: true
@@ -15,6 +18,9 @@ server:
   port: ${SERVER_PORT:8080}
 
 management:
+  health:
+    mail:
+      enabled: false
   endpoints:
     web:
       base-path: /
@@ -25,14 +31,70 @@ springdoc:
   api-docs:
     path: /api/v1/docs
 
+
+# --full 시험의 가짜 상대: NATIVE_FAKE_URL = 소셜 · 토스 · Paddle 을 흉내 내는 서버(scripts/native-fakes.py), NATIVE_S3_URL = 로컬 S3(SeaweedFS), 메일은 mailpit
 skeleton:
   web:
     client-ip:
       mode: direct
+  notification-mail:
+    enabled: true
+    from: "Native Check <no-reply@native-check.invalid>"
+  storage-s3:
+    bucket: app
+    region: us-east-1
+    endpoint-override: ${NATIVE_S3_URL:http://localhost:18333}
+    path-style-access-enabled: true
+    credentials:
+      access-key-id: dev
+      secret-access-key: dev-secret
+  storage:
+    web:
+      key-secret: native-check-only-storage-key-secret-0123456789
+  auth-social:
+    providers:
+      google:
+        enabled: true
+        client-id: native-google
+        client-secret: native-google-secret
+        token-base-url: ${NATIVE_FAKE_URL:http://localhost:19000}/google
+        token-path: /token
+        profile-base-url: ${NATIVE_FAKE_URL:http://localhost:19000}/google
+        profile-path: /userinfo
+        email-trust: VERIFIED_CLAIM
+      kakao:
+        enabled: true
+        client-id: native-kakao
+        client-secret: native-kakao-secret
+        token-base-url: ${NATIVE_FAKE_URL:http://localhost:19000}/kakao
+        profile-base-url: ${NATIVE_FAKE_URL:http://localhost:19000}/kakao
+      naver:
+        enabled: true
+        client-id: native-naver
+        client-secret: native-naver-secret
+        token-base-url: ${NATIVE_FAKE_URL:http://localhost:19000}/naver
+        profile-base-url: ${NATIVE_FAKE_URL:http://localhost:19000}/naver
+  auth-social-x:
+    client-id: native-x
+    client-secret: native-x-secret
+    api-base-url: ${NATIVE_FAKE_URL:http://localhost:19000}/x
+  auth-social-oidc:
+    providers:
+      line:
+        issuer: ${NATIVE_FAKE_URL:http://localhost:19000}/line
+        authorization-endpoint: ${NATIVE_FAKE_URL:http://localhost:19000}/line/authorize
+        token-endpoint: ${NATIVE_FAKE_URL:http://localhost:19000}/line/token
+        jwks-uri: ${NATIVE_FAKE_URL:http://localhost:19000}/line/certs
+        userinfo-endpoint: ${NATIVE_FAKE_URL:http://localhost:19000}/line/userinfo
+        client-id: native-line
+        client-secret: native-line-secret-0123456789abcdef
+        redirect-uri: https://native-check.invalid/callback
   legal:
     reconsent:
       enabled: false
   account:
+    social:
+      sign-up: true
     password:
       bcrypt-strength: 4
     mail:
@@ -50,10 +112,26 @@ skeleton:
     primary-key-id: check
     keys:
       check: dGVzdC1vbmx5LWNyeXB0by1rZXktMDEyMzQ1Njc4OSE=
+  payment-toss:
+    enabled: true
+    secret-key: test_sk_native_check_0123456789
+    client-key: test_ck_native_check_0123456789
+    base-url: ${NATIVE_FAKE_URL:http://localhost:19000}/toss
+  payment-paddle:
+    enabled: true
+    api-key: native-paddle-api-key
+    client-token: test_native_paddle_client_token
+    webhook-secret: native-paddle-webhook-secret-0123456789
+    base-url: ${NATIVE_FAKE_URL:http://localhost:19000}/paddle
+    prices:
+      check-1000: pri_native_check
   payment:
     routing:
+      dev-country-switch: true     # 시험 전용: 요청의 X-Dev-Country 로 나라(결제사)를 고른다 — KR=가짜 결제사, JP=토스, US=Paddle
       country-providers:
         KR: scripted
+        JP: toss
+        US: paddle
     default-provider: scripted
     webhook:
       path-token: native-check-webhook-token-0123456789

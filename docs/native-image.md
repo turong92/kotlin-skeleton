@@ -13,14 +13,15 @@ scripts/native-test.sh                       # 앱을 네이티브로 빌드해 
 
 - 빌드는 **GraalVM 공식 Docker 이미지**(`ghcr.io/graalvm/native-image-community:25`) 안에서 `./gradlew :apps:<앱>:nativeCompile -Pnative -PjavaToolchain=25` 를 돌린다 — 맥 · 윈도에서도 같은 결과, 호스트에 GraalVM 이 필요 없다.
   (맥에서 GraalVM 21 은 링크 오류가 난다. 25 를 쓴다.) `-PjavaToolchain=25` 는 컨테이너의 JDK 25 로 컴파일하되 바이트코드 목표는 21 로 둔다.
-- 실행 파일은 **빌드한 쪽과 같은 아키텍처의 glibc 리눅스**에서만 돈다 (맥에서 만들면 arm64). **Cloud Run 은 amd64** — 배포용은 amd64 에서(CI · `NATIVE_PLATFORM=linux/amd64`, 맥에서는 에뮬레이션이라 매우 느리다) 만든다.
-- 빌드 자원: 시험용 조립으로 **약 2분(캐시가 따뜻할 때), 빌드 중 최대 메모리 5.4~6GB**(native-image 자체 보고), 바이너리 약 150~190MB. 컨테이너에 메모리 8GB 이상을 준다 (`NATIVE_MEMORY`).
+- 실행 파일은 **빌드한 쪽과 같은 아키텍처의 glibc 리눅스**에서만 돈다 (맥에서 만들면 arm64). **Cloud Run 은 amd64** — 배포용은 amd64 에서(CI · `NATIVE_PLATFORM=linux/amd64`, 맥에서는 에뮬레이션이라 느리다 — 그래도 끝까지 돌아 `--full` 시험 73항목이 통과했다) 만든다. 같은 출력 폴더를 다른 플랫폼으로 다시 만들면 `scripts/native-build.sh` 가 이전 결과를 지우고 새로 만든다.
+- 빌드 자원: 시험용 조립(모듈을 모두 얹은 `tools/native-check`)으로 **arm64: 약 3분 20초(캐시가 따뜻할 때), 빌드 중 최대 메모리 6GB 안팎**(native-image 자체 보고), 바이너리 약 220MB.
+  **amd64**(맥 Docker Desktop 의 에뮬레이션 — Rosetta): native-image 약 6분, Gradle 전체 약 8분, **최대 메모리 12.9GB**(에뮬레이션이 부풀린 값일 수 있다 — 진짜 x86 러너에서는 다시 재야 한다), 바이너리 약 229MB. 컨테이너/러너에 메모리를 넉넉히 준다 (`NATIVE_MEMORY`; GitHub 공개 러너는 16GB 라 amd64 빌드가 빠듯할 수 있다 — 첫 CI 실행에서 확인한다).
 - Gradle 캐시는 `~/.gradle-native` 에 둔다 (`NATIVE_GRADLE_HOME`) — 안 그러면 매번 의존성을 다시 받는다.
 - **네이티브 플러그인은 `-Pnative` 일 때만 앱에 걸린다.** 안 주면 기본 빌드는 그대로이고(플러그인 선언만 루트에 있다), 안 쓰는 팀이 신경 쓸 것은 없다.
 
 ## 실측 — JVM 과 네이티브 (같은 앱, 같은 조건)
 
-JVM 줄과 `apps/api` 줄은 스파이크 측정, `tools/native-check` 줄은 이 문서의 정식 힌트로 만든 이미지(5회 중앙값). 리눅스 arm64 컨테이너, **CPU 1 · 메모리 512MB**, PostgreSQL 은 컨테이너 밖. 5회 중앙값.
+JVM 줄과 `apps/api` 줄은 스파이크 측정, `tools/native-check` 줄은 이 문서의 정식 힌트로 만든 이미지(5회 중앙값). **amd64 줄은 Apple 실리콘에서 에뮬레이션으로 돌린 값이라 느리고 메모리가 부풀어 있다 — 실제 x86 서버의 숫자가 아니다**(Cloud Run 같은 진짜 amd64 에서 다시 잰다). 리눅스 arm64 컨테이너, **CPU 1 · 메모리 512MB**, PostgreSQL 은 컨테이너 밖. 5회 중앙값.
 맥(M3 Pro)에서 잰 값이라 Cloud Run(linux/x86_64)과 다를 수 있다 — 방향은 믿고 숫자는 배포 환경에서 다시 잰다.
 
 | | 기동(/health 200) | Spring "Started" | RSS 기동 직후 | RSS 요청 뒤 | 첫 로그인 |
@@ -28,7 +29,8 @@ JVM 줄과 `apps/api` 줄은 스파이크 측정, `tools/native-check` 줄은 �
 | JVM 그대로 (docker, CPU 1) | 약 7.7s | 약 6.7s | — | — | 320~380ms |
 | JVM 다듬기 (AOT + CDS + SerialGC 등) | 약 3.3s | 약 2.7s | 224MB | 234MB | 237ms |
 | **네이티브 — 스타터 `apps/api`** (실측 스파이크) | **약 0.6s** | **약 0.36s** | **206MB** | **208MB** | **120ms** |
-| **네이티브 — `tools/native-check`** (결제 · 구독 · 작업 큐 포함, 새 DB 에 마이그레이션까지) | **약 0.85s** | **약 0.6s** | **216MB** | 핵심 흐름 전체를 돌린 뒤 250MB | — |
+| **네이티브 — `tools/native-check`** (결제 · 구독 · 작업 큐 · 메일 · 저장소 · 소셜 5종 · 토스 · Paddle · SSE 를 모두 얹은 조립, 새 DB 에 마이그레이션까지, arm64) | **약 0.92s** | **약 0.7s** | **212MB** | 기본 흐름 전체를 돌린 뒤 약 288MB | — |
+| 같은 조립, **amd64**(맥에서 에뮬레이션 — 참고용) | 약 3.65s | 약 3.0s | 334MB | 약 455MB | — |
 
 (스타터 `apps/api` 로 맥에서 직접 재면 JVM 2.8s/419MB → 다듬기 1.1s/269MB. 다듬기 = `-Dspring.aot.enabled=true` + CDS 아카이브 + `-XX:+UseSerialGC -XX:TieredStopAtLevel=1 -Xmx256m` 등. 결과 · 명령 전체는 측정 보고서에 있다.)
 
@@ -58,13 +60,17 @@ Spring AOT 는 `@ConditionalOnProperty` · `@ConditionalOnBean` 같은 **조건�
 | `time` (`TimeNativeHints`) | `country-zones.tsv` | 나라별 시간대 표 |
 | `auth` (`AuthNativeHints`) | `RequiredLoginIdentifierValidator` | Bean Validation 검증기 |
 | `payment-toss` · `payment-stripe` · `auth-social-google/kakao/naver` · `crypto` | 외부 응답 · 웹훅 본문 · 토큰 본문 DTO (`BindingHints`) | 컨트롤러 밖에서 JSON 으로 바꾸는 타입 |
+| `auth-social` (`AuthSocialNativeHints`) | `OAuthSocialLoginRequest` | 소셜 로그인 경로가 컨트롤러가 아니라 **함수형 라우트**(`RouterFunction`)라 AOT 가 요청 본문 타입을 못 찾는다 |
+| `notification-sse` (`NotificationSseNativeHints`) | `NotificationSseConnectedEvent` · `NotificationEvent` | `SseEmitter.send(객체)` 로 흘리는 이벤트 본문 |
+| `platform` (`ConfigurationPropertiesBindingAotProcessor`) | 모든 `@ConfigurationProperties` 클래스와 그 중첩 타입 · 맵 값 타입 | 코틀린 기본 인자 data class 의 중첩 설정(`StorageWebProperties` …)을 kotlin-reflect 가 못 찾는다 |
+| `platform` (`ApiResponseEnvelopeAotProcessor`) | `@ApiResponseEnvelope(value = X::class)` 의 `X` | 컨트롤러가 `Any` 를 돌려줘도(저장소 presign) 응답 타입이 이 어노테이션에 있다 |
 
 **새 코드를 쓸 때의 규칙** (`CLAUDE.md` 에도 한 줄):
 
 1. **컨트롤러 밖에서 JSON 으로 바꾸는 타입은 등록 표시를 한다** — 작업 큐 일감 본문, 웹훅 본문, JSON 컬럼에 저장하는 값, 이벤트 페이로드. 컨트롤러의 `@RequestBody` · 반환 타입은 AOT 가 알아서 찾는다.
    그 밖의 타입은 쓰는 빈에 `@RegisterReflectionForBinding(Type::class)` 을 단다. (직접 확인: 표시가 없으면 네이티브에서 `KotlinReflectionInternalError: Unresolved class` 로 500 이다.)
-2. **반환 타입을 구체적으로** 적는다. `ResponseEntity<Any>` · `Map<String, Any>` 에 담긴 타입은 AOT 가 못 찾는다 (직접 확인: 깨우기 주소의 응답이 이 때문에 500 이었다).
-3. **이름으로 만드는 클래스**(Hibernate Validator 의 `ConstraintValidator`, `ServiceLoader`, `Class.forName`)는 `RuntimeHintsRegistrar` 로 직접 등록한다. 빈 정의에 **인스턴스 공급자(람다)를 달지 않는다** — AOT 가 못 굽는다 (`payment-jdbc` 의 작업 처리기 등록이 이래서 생성자 인자 참조로 바뀌었다).
+2. **반환 타입을 구체적으로** 적는다. `ResponseEntity<Any>` · `Any` · `Map<String, Any>` 에 담긴 타입은 AOT 가 못 찾는다 (직접 확인: 깨우기 주소의 응답이 이 때문에 500 이었다). 단 `@ApiResponseEnvelope(value = X::class)` 를 단 메서드는 `X` 가 자동 등록된다. **함수형 라우트**(`RouterFunction`) · `SseEmitter.send(객체)` 의 본문 타입은 반환 타입에 안 보이므로 직접 등록한다.
+3. **이름으로 만드는 클래스**(Hibernate Validator 의 `ConstraintValidator`, `ServiceLoader`, `Class.forName`)는 `RuntimeHintsRegistrar` 로 직접 등록한다. 빈 정의에 **인스턴스 공급자(람다)를 달지 않는다** — AOT 가 못 굽는다 (`payment-jdbc` 의 작업 처리기 등록은 생성자 인자 참조로, `auth-social-oidc` 의 제공자 빈은 팩터리 메서드 + 코드(문자열)로 바뀌었다). 설정 개수만큼 빈을 만드는 레지스트라도 같다 — 목록은 빌드 때 굳는다.
 4. **classpath 리소스**(`getResource` · 약관 · SQL · 템플릿 · 이미지)는 패턴을 등록한다.
 5. **새 의존성은 릴리스 전에 네이티브 시험으로 확인한다** (아래). 라이브러리가 리플렉션을 쓰는지는 문서를 봐서는 모른다 — 돌려 봐야 안다.
 6. 라이브러리별 설정은 GraalVM 플러그인의 reachability metadata 저장소가 대고(자동), 자기 jar 에 더 새 설정이 든 것(`org.flywaydb:*`)은 루트 `build.gradle.kts` 의 `excludedModules` 로 jar 쪽을 쓴다.
@@ -102,8 +108,13 @@ class AppHints : RuntimeHintsRegistrar {
 
 ## 네이티브에서 확인한 것과 못 한 것
 
-확인(시험용 조립): 기동 · Flyway(새 DB 에 마이그레이션 적용) · 가입 / 로그인 / 갱신 · 단건 결제 · 구독 · 작업 큐 · 웹훅 · Jackson · 검증 · OpenAPI.
-**못 본 것**: 위 표의 `payment-toss` · `payment-stripe` · 소셜(google/kakao/naver) · `crypto` 힌트는 이름을 확인하고 넣었지만 **네이티브로 돌려 보지 못했다**(`crypto` 는 시험용 조립이 얹지만 토큰 경로를 타지 않는다). `payment-paddle` · `auth-social-oidc/x` · `notification-sse` 이벤트는 확인하지 않았다(Map/String 응답이면 필요 없을 수 있다). 그 밖에 소셜 로그인 · 메일 발송(`notification-mail`) · S3(`storage-s3`) · 이메일 변경 · 비밀번호 재설정 · 샘플 앱 전체 · 부하 · amd64. 이런 모듈을 쓰는 앱은 처음 네이티브로 빌드할 때 같은 종류의 규칙 위반이 몇 개 더 나올 수 있다.
+**기본 시험**(`scripts/native-test.sh`): 기동 · Flyway(새 DB 에 마이그레이션) · 가입(메일은 실제 SMTP → mailpit) / 로그인 / 갱신 · 단건 결제 · 구독 · 작업 큐(요청 구동) · 웹훅 · Jackson · 검증 · OpenAPI — 30항목.
+**`--full` 시험**(`scripts/native-test.sh --full`, **릴리스 전에**): 가짜 상대를 붙여 실제 흐름으로 —
+메일 발송(비밀번호 재설정 메일 수신) · 파일 저장(로컬 S3 에 업로드 주소 발급 → PUT → 내려받기) · 소셜 로그인 5종(google · kakao · naver · LINE(OIDC, HS256 ID 토큰 + PKCE + nonce) · X(PKCE) — 토큰 · 사용자정보 JSON 읽기) ·
+Paddle(서명한 웹훅 → 주문 PAID, 틀린 서명 거절) · 토스(승인 · 웹훅 → 조회 · 빌링키 발급 + 첫 과금) · SSE 알림. 가짜 서버는 `scripts/native-fakes.py`(앱과 같은 네트워크 이름공간의 컨테이너 — OIDC 모듈이 http 엔드포인트를 localhost 에만 허용한다),
+S3 는 compose 의 SeaweedFS(`s3` 프로필 — MinIO 를 쓰지 않는다: 이미 로컬 개발이 쓰는 S3 대역이다), 메일은 compose 의 mailpit. `--full` 은 `python:3-slim` 이미지가 필요하다.
+이 시험이 **찾아 고친 것**(전부 위 표에 있다): `auth-social-oidc` 의 람다 공급자 빈, `OAuthSocialLoginRequest`(함수형 라우트), 저장소 응답(`Any` 반환), SSE 이벤트 본문, 코틀린 설정 중첩 타입.
+**못 본 것**: `payment-stripe`(시험용 조립에 없다) · `crypto` 의 불투명 URL 토큰 경로(`OpaqueUrlTokenPayload`, 저장소 공개 URL 을 `OPAQUE` 로 쓸 때) · 이메일 변경 · 로그인 아이디 · 매직 링크 · 게시판 · 작성자 프로필 · 샘플 앱 전체 · 부하. 이런 기능을 쓰는 앱은 처음 네이티브로 빌드할 때 같은 종류의 규칙 위반이 몇 개 더 나올 수 있다.
 Flyway 는 기동 때 `Unable to scan location: /db/migration/postgresql (unsupported protocol: resource)` 경고를 여러 번 찍지만 마이그레이션은 적용된다.
 
 ## 무거운 라이브러리를 쓰는 앱을 위한 안내
