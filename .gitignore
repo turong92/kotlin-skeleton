@@ -51,3 +51,4 @@ application-*.secret.yaml
 application-*.secret.properties
 *ssm*dump*
 *ssm*export*
+__pycache__/
