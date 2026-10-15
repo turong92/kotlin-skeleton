@@ -72,6 +72,7 @@ class DatabaseStartupWaitPostProcessor(
     override fun postProcessEnvironment(environment: ConfigurableEnvironment, application: SpringApplication) {
         val props = Binder.get(environment).bind("skeleton.persistence-jdbc.startup-wait", JdbcStartupWaitProperties::class.java).orElseGet { JdbcStartupWaitProperties() }
         if (!props.enabled) return
+        if (java.lang.Boolean.getBoolean("spring.aot.processing")) return   // 네이티브 빌드(processAot)는 DB 없이 돈다 — 기다릴 대상이 없다
         val url = environment.getProperty("spring.datasource.url")?.takeIf { it.isNotBlank() } ?: return
         val target = DatabaseTarget.fromUrl(url) ?: "the configured database"
         DatabaseStartupWait.await(target, props.timeout, props.interval, report = report) {

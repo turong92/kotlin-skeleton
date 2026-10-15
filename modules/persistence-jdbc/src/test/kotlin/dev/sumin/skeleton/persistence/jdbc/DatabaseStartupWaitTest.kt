@@ -82,4 +82,19 @@ class DatabaseStartupWaitTest {
         DatabaseStartupWaitPostProcessor { _, _, _ -> tried = true }.postProcessEnvironment(environment("skeleton.persistence-jdbc.startup-wait.enabled" to "true"), SpringApplication())
         assertEquals(false, tried)
     }
+
+    @Test
+    fun `AOT processing at image build time does not wait for a database that is not there`() {
+        var tried = false
+        System.setProperty("spring.aot.processing", "true")
+        try {
+            DatabaseStartupWaitPostProcessor { _, _, _ -> tried = true }.postProcessEnvironment(
+                environment("skeleton.persistence-jdbc.startup-wait.enabled" to "true", "spring.datasource.url" to "jdbc:postgresql://db:5432/app"),
+                SpringApplication(),
+            )
+        } finally {
+            System.clearProperty("spring.aot.processing")
+        }
+        assertEquals(false, tried)
+    }
 }

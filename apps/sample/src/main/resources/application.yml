@@ -2,6 +2,9 @@
 spring:
   application:
     name: kotlin-skeleton
+  aot:
+    repositories:
+      enabled: false   # 네이티브 빌드 전용: Spring Data 의 저장소 AOT 생성은 빌드 때 DB 에 연결해 방언을 알아내려 한다(빌드에는 DB 가 없다) - 끄면 저장소 프록시가 실행 때 만들어진다 (docs/native-image.md). JVM 실행에는 영향 없다
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:${DB_PORT:5432}/app}  # 시각 바인딩은 modules:db-postgresql (SqlDialect)
     username: ${SPRING_DATASOURCE_USERNAME:app}

@@ -106,6 +106,19 @@ class AppHints : RuntimeHintsRegistrar {
 **언제 도는가** (스켈레톤의 `.github/workflows/native.yml`): 릴리스 태그(`v*`)를 밀 때, 의존성 파일(빌드 파일 · `gradle/` · lock) 또는 네이티브 힌트(`aot.factories`)가 바뀐 PR, 손으로. **평소 CI 는 그대로**다 (매번 몇 분이 더 든다).
 시험이 깨지면 위 규칙의 어느 것을 빠뜨렸는지부터 본다 — 컨테이너 로그의 `Unresolved class` · `MissingReflectionRegistrationError` · `... missing from the class path` 가 거의 전부다.
 
+### 샘플 앱(`apps/sample`)을 네이티브로 — 프런트 e2e 를 그 위에서
+
+`scripts/native-build.sh --app sample` 이 샘플 앱을 만든다(맥 arm64 에서 약 5분, 실행 파일 약 224MB). 샘플은 모듈을 가장 많이 쓰는 앱이라 처음 만들 때 찾은 것이 둘 있다:
+- **저장소(`CrudRepository`)가 있는 앱은 빌드 때 DB 에 연결하려 든다.** Spring Data 의 저장소 AOT 생성이 방언을 알아내려고 DB 에 붙는데 빌드에는 DB 가 없다. 앱 `application.yml` 에 `spring.aot.repositories.enabled: false` 를 둔다(저장소 프록시는 실행 때 만들어진다).
+  또 `DatabaseStartupWaitPostProcessor`(DB 기다리기)는 AOT 처리 중(`spring.aot.processing`)에는 건너뛴다 — 빌드가 60초를 기다리다 죽던 일.
+- 앱이 직접 쓰는 `ConstraintValidator`(샘플의 `OwnAttachmentKeyValidator`)는 앱의 `RuntimeHintsRegistrar`(`SampleNativeHints`, `@ImportRuntimeHints`)로 등록한다 — 규칙 3 그대로.
+
+모듈 켜기/끄기가 빌드 때 굳으므로 **빌드 구성 = 그때의 환경**이다: `scripts/native-build.sh` 는 `NATIVE_BUILD_ENV="NAME1 NAME2 …"`(빌드 컨테이너에 그대로 넘길 환경변수 이름)을 받고, 값이 바뀌면(숫자는 무시) AOT 결과를 지우고 다시 한다.
+
+**프런트(react-skeleton) e2e 를 네이티브 백엔드로 돌리기**: `E2E_NATIVE=1 pnpm e2e` (kotlin 레포 위치는 `SAMPLE_API_DIR`). 백엔드 스크립트(`scripts/sample-e2e-backend.sh`)가 지금 환경(`SKELETON_*` · `SPRING_APPLICATION_JSON` · `PADDLE_*`)으로 샘플을 네이티브로 빌드해
+리눅스 컨테이너로 띄운다. 앱이 쓰는 `localhost:<포트>`(DB · 로컬 S3 · 메일 · 가짜 소셜/토스/Paddle)는 곁 컨테이너(`alpine/socat`)가 호스트로 이어 줘서 JVM 때와 같은 설정이 그대로 맞는다.
+이미 만든 실행 파일을 쓰려면 `E2E_NATIVE_SKIP_BUILD=1`. 기본 e2e(JVM)는 그대로다.
+
 ## 네이티브에서 확인한 것과 못 한 것
 
 **기본 시험**(`scripts/native-test.sh`): 기동 · Flyway(새 DB 에 마이그레이션) · 가입(메일은 실제 SMTP → mailpit) / 로그인 / 갱신 · 단건 결제 · 구독 · 작업 큐(요청 구동) · 웹훅 · Jackson · 검증 · OpenAPI — 30항목.
@@ -114,7 +127,7 @@ class AppHints : RuntimeHintsRegistrar {
 Paddle(서명한 웹훅 → 주문 PAID, 틀린 서명 거절) · 토스(승인 · 웹훅 → 조회 · 빌링키 발급 + 첫 과금) · SSE 알림. 가짜 서버는 `scripts/native-fakes.py`(앱과 같은 네트워크 이름공간의 컨테이너 — OIDC 모듈이 http 엔드포인트를 localhost 에만 허용한다),
 S3 는 compose 의 SeaweedFS(`s3` 프로필 — MinIO 를 쓰지 않는다: 이미 로컬 개발이 쓰는 S3 대역이다), 메일은 compose 의 mailpit. `--full` 은 `python:3-slim` 이미지가 필요하다.
 이 시험이 **찾아 고친 것**(전부 위 표에 있다): `auth-social-oidc` 의 람다 공급자 빈, `OAuthSocialLoginRequest`(함수형 라우트), 저장소 응답(`Any` 반환), SSE 이벤트 본문, 코틀린 설정 중첩 타입.
-**못 본 것**: `payment-stripe`(시험용 조립에 없다) · `crypto` 의 불투명 URL 토큰 경로(`OpaqueUrlTokenPayload`, 저장소 공개 URL 을 `OPAQUE` 로 쓸 때) · 이메일 변경 · 로그인 아이디 · 매직 링크 · 게시판 · 작성자 프로필 · 샘플 앱 전체 · 부하. 이런 기능을 쓰는 앱은 처음 네이티브로 빌드할 때 같은 종류의 규칙 위반이 몇 개 더 나올 수 있다.
+**못 본 것**: `payment-stripe`(시험용 조립에 없다) · `crypto` 의 불투명 URL 토큰 경로(`OpaqueUrlTokenPayload`, 저장소 공개 URL 을 `OPAQUE` 로 쓸 때) · 부하. (샘플 앱 전체 — 이메일 변경 · 로그인 아이디 · 매직 링크 · 게시판 · 작성자 프로필 · 노트 · 첨부 · 응원하기 — 는 프런트 e2e 로 확인했다, 위.) 이런 기능을 쓰는 앱은 처음 네이티브로 빌드할 때 같은 종류의 규칙 위반이 몇 개 더 나올 수 있다.
 Flyway 는 기동 때 `Unable to scan location: /db/migration/postgresql (unsupported protocol: resource)` 경고를 여러 번 찍지만 마이그레이션은 적용된다.
 
 ## 무거운 라이브러리를 쓰는 앱을 위한 안내
