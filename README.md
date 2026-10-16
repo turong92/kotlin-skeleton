@@ -53,63 +53,76 @@ apps/
   api                 # STARTER: minimal runnable app (platform, auth, accounts + sessions + legal on JDBC, PostgreSQL + Flyway, time). Copy this to start a project
   workbench           # DEMO: every module together + sample endpoints under /api/v1/skeleton/** (the react-skeleton workbench UI calls it)
 
-modules/
-  platform            # web, errors, trace/logging, shared infrastructure (+ per-project context: skeleton.projects)
-  auth                # stateless auth, JWT, dev-login, break-glass access (+ login hooks, session SPI)
-  auth-session        # refresh tokens (rotation + reuse detection), session list, logout
-  auth-session-jdbc   # session store for PostgreSQL / MySQL
-  account             # account lifecycle: sign-up, email verification, reset, change, sign-in methods, deletion, login ID, admin
-  account-jdbc        # account store for PostgreSQL / MySQL
-  auth-magic-link     # email-link sign-in (one more method on the same account)
-  auth-social         # optional social-login extension for auth
-  auth-social-google  # optional Google OAuth provider client
-  auth-social-kakao   # optional Kakao OAuth provider client
-  auth-social-naver   # optional Naver OAuth provider client
-  auth-social-x       # optional X (Twitter) OAuth 2.0 + PKCE provider client
-  auth-social-oidc    # optional generic OpenID Connect provider (several by properties, LINE preset)
-  author-profile      # optional author profiles: several unlinkable nicknames per account
-  author-profile-jdbc # author profile store for PostgreSQL / MySQL
-  legal               # optional terms / privacy documents and consent records
-  legal-jdbc          # legal store for PostgreSQL / MySQL
-  async               # optional context-propagating @Async executor and task groups
-  async-notification  # optional: async exceptions become notifications
-  config-aws-ssm      # optional AWS SSM Parameter Store property loading
-  event-kafka         # optional Kafka event publishing adapter
-  idempotency         # optional Idempotency-Key support for command endpoints
-  json                # optional JsonCodec, JsonDocument, versioned payloads
-  crypto              # optional AES-GCM text encryption, opaque URL tokens
-  notification        # optional notification contracts and local broker
-  notification-jdbc   # optional DB inbox for notification
-  notification-slack  # optional Slack webhook alerts and exception notices
-  notification-sse    # optional server-to-web SSE notification delivery
-  notification-websocket # optional STOMP/WebSocket notification delivery
-  notification-mail   # optional SMTP sending (spring.mail.* + skeleton.notification-mail.*)
-  payment             # optional provider-neutral payment contracts + ledger HTTP (orders, refunds, subscriptions)
-  payment-jdbc        # payment ledger store for PostgreSQL / MySQL
-  payment-toss        # optional Toss payment provider (one-time, billing keys)
-  payment-stripe      # optional Stripe payment provider (confirm / cancel)
-  payment-paddle      # optional Paddle (merchant of record) provider: server-made transactions, signed webhooks
-  persistence-jpa     # optional JPA audit timestamp support
-  persistence-jdbc    # optional Spring Data JDBC audit timestamp support + SqlDialect strategy + per-project routing DataSource
-  db-postgresql       # dialect module (default): driver, Flyway support, SqlDialect, time conversions
-  db-mysql            # dialect module (alternative) — an app assembles exactly one db-* module
-  migration           # common: skeleton.migration, guard against DB-wiping settings outside allowed profiles
-  migration-flyway    # Flyway implementation: opt-in local clean, V<UTC 14 digits> naming check (no Flyway defaults changed)
-  persistence-jooq    # optional jOOQ with DDL-file code generation (no DB at build), UTC Instant converter, audit listener
-  redis-core          # optional Redis connection, templates, key prefixing
-  redis-lock          # optional Redis-backed distributed locks
-  redis-cache         # optional Redis cache manager defaults
-  redis-rate-limit    # optional Redis-backed rate-limit store
-  scheduler           # optional annotation-driven scheduler
-  time                # optional global-time capability: viewer zone/locale, ZonedMoment, dual formatting, country -> zone
-  storage             # optional storage contracts and file validation
-  storage-s3          # optional S3/R2 storage adapter (presigned + server-side put, cache headers, batch delete)
-  job-queue-jdbc      # optional DB-table retry queue (FOR UPDATE SKIP LOCKED, backoff, dead-letter; polling or on-request wake) — no Redis
-  board               # optional board: posts, nested comments, reaction types set by config (no schema change), moderation — storage in board-jdbc (list both)
-  board-jdbc          # PostgreSQL / MySQL storage for board
-  captcha-turnstile   # optional Cloudflare Turnstile token verification
-  alert               # optional owner alerts (Discord-style webhook, optional mail): 5xx surge, startup failure, dead job; the error-reporting answer (no Sentry)
-  alert-jdbc          # optional DB ledger for alert: fold repeats across instances and restarts (PostgreSQL / MySQL)
+modules/                # grouped by area; a module's store / provider clients sit under it (-jdbc = PostgreSQL / MySQL store)
+  [Foundation]
+  platform              # web, errors, trace/logging, shared infrastructure (+ per-project context: skeleton.projects)
+  json                  # optional JsonCodec, JsonDocument, versioned payloads
+  time                  # optional global-time capability: viewer zone/locale, ZonedMoment, dual formatting, country -> zone
+  crypto                # optional AES-GCM text encryption, opaque URL tokens
+  idempotency           # optional Idempotency-Key support for command endpoints
+  config-aws-ssm        # optional AWS SSM Parameter Store property loading
+  async                 # optional context-propagating @Async executor and task groups
+  scheduler             # optional annotation-driven scheduler
+
+  [Auth and accounts]
+  auth                  # stateless auth, JWT, dev-login, break-glass access (+ login hooks, session SPI)
+  |- auth-session       # refresh tokens (rotation + reuse detection), session list, logout
+  |  `- auth-session-jdbc   # session store for PostgreSQL / MySQL
+  |- auth-magic-link    # email-link sign-in (one more method on the same account)
+  `- auth-social        # optional social-login extension for auth
+     |- auth-social-google  # optional Google OAuth provider client
+     |- auth-social-kakao   # optional Kakao OAuth provider client
+     |- auth-social-naver   # optional Naver OAuth provider client
+     |- auth-social-x       # optional X (Twitter) OAuth 2.0 + PKCE provider client
+     `- auth-social-oidc    # optional generic OpenID Connect provider (several by properties, LINE preset)
+  account               # account lifecycle: sign-up, email verification, reset, change, sign-in methods, deletion, login ID, admin
+  `- account-jdbc       # account store for PostgreSQL / MySQL
+  author-profile        # optional author profiles: several unlinkable nicknames per account
+  `- author-profile-jdbc # author profile store for PostgreSQL / MySQL
+  legal                 # optional terms / privacy documents and consent records
+  `- legal-jdbc         # legal store for PostgreSQL / MySQL
+
+  [Payment]
+  payment               # optional provider-neutral payment contracts + ledger HTTP (orders, refunds, subscriptions)
+  |- payment-jdbc       # payment ledger store for PostgreSQL / MySQL
+  |- payment-toss       # optional Toss payment provider (one-time, billing keys)
+  |- payment-stripe     # optional Stripe payment provider (confirm / cancel)
+  `- payment-paddle     # optional Paddle (merchant of record) provider: server-made transactions, signed webhooks
+
+  [Notification]
+  notification          # optional notification contracts and local broker
+  |- notification-jdbc  # optional DB inbox for notification
+  |- notification-mail  # optional SMTP sending (spring.mail.* + skeleton.notification-mail.*)
+  |- notification-slack # optional Slack webhook alerts and exception notices
+  |- notification-sse   # optional server-to-web SSE notification delivery
+  `- notification-websocket # optional STOMP/WebSocket notification delivery
+  async-notification    # optional: async exceptions become notifications
+
+  [Operations]
+  alert                 # optional owner alerts (Discord-style webhook, optional mail): 5xx surge, startup failure, dead job; the error-reporting answer (no Sentry)
+  `- alert-jdbc         # optional DB ledger for alert: fold repeats across instances and restarts (PostgreSQL / MySQL)
+  job-queue-jdbc        # optional DB-table retry queue (FOR UPDATE SKIP LOCKED, backoff, dead-letter; polling or on-request wake) — no Redis
+
+  [Persistence and data]
+  persistence-jdbc      # optional Spring Data JDBC audit timestamp support + SqlDialect strategy + per-project routing DataSource
+  persistence-jpa       # optional JPA audit timestamp support
+  persistence-jooq      # optional jOOQ with DDL-file code generation (no DB at build), UTC Instant converter, audit listener
+  db-postgresql         # dialect module (default): driver, Flyway support, SqlDialect, time conversions
+  db-mysql              # dialect module (alternative) — an app assembles exactly one db-* module
+  migration             # common: skeleton.migration, guard against DB-wiping settings outside allowed profiles
+  `- migration-flyway   # Flyway implementation: opt-in local clean, V<UTC 14 digits> naming check (no Flyway defaults changed)
+  storage               # optional storage contracts and file validation
+  `- storage-s3         # optional S3/R2 storage adapter (presigned + server-side put, cache headers, batch delete)
+  redis-core            # optional Redis connection, templates, key prefixing
+  |- redis-lock         # optional Redis-backed distributed locks
+  |- redis-cache        # optional Redis cache manager defaults
+  `- redis-rate-limit   # optional Redis-backed rate-limit store
+  event-kafka           # optional Kafka event publishing adapter
+
+  [Features and guards]
+  board                 # optional board: posts, nested comments, reaction types set by config (no schema change), moderation — storage in board-jdbc (list both)
+  `- board-jdbc         # PostgreSQL / MySQL storage for board
+  captcha-turnstile     # optional Cloudflare Turnstile token verification
 ```
 
 Use modules as capability choices:
