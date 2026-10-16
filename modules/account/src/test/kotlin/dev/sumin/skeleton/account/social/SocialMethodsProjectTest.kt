@@ -52,9 +52,8 @@ class SocialMethodsProjectTest {
     }
 
     @Test
-    fun `the sign-in methods an account can have are the providers of the project too`() {
+    fun `the sign-in method codes are known app-wide at start - the union of the projects' providers, no project needed`() {
         val source = AccountSocialAutoConfiguration().socialSignInMethodSource(registry)
-        assertEquals(listOf("kakao"), ProjectContext.runIn(a) { source.methods().map { it.code } })
-        assertEquals(listOf("naver"), ProjectContext.runIn(b) { source.methods().map { it.code } })
+        assertEquals(listOf("kakao", "naver"), source.methods().map { it.code }.sorted())
     }
 }

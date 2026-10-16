@@ -43,11 +43,14 @@ class AccountSocialAutoConfiguration {
     @ConditionalOnMissingBean(SocialReauthVerifier::class)
     fun socialReauthVerifier(registry: OAuthProviderRegistry, core: AccountCore): SocialReauthVerifier = AccountSocialReauthVerifier(registry, core)
 
-    /** 앱에 있는 `OAuthProvider` 마다 로그인 수단 하나 — 새 제공자 모듈을 더하면 이 코드는 그대로다 */
+    /**
+     * 앱에 있는 `OAuthProvider` 마다 로그인 수단 하나 — 새 제공자 모듈을 더하면 이 코드는 그대로다.
+     * 로그인 수단 표는 시작 때 한 번 모으므로(프로젝트 문맥이 없다) 프로젝트 모드에서는 프로젝트들의 제공자 합집합이다 — 어느 제공자가 켜졌는지는 프로젝트마다 레지스트리가 본다.
+     */
     @Bean
     @ConditionalOnMissingBean(name = ["socialSignInMethodSource"])
     fun socialSignInMethodSource(registry: OAuthProviderRegistry): SignInMethodSource =
-        SignInMethodSource { registry.providers().map { SocialSignInMethod(it.providerId.trim().lowercase()) } }
+        SignInMethodSource { registry.knownProviderIds().map { SocialSignInMethod(it) } }
 }
 
 @AutoConfiguration(after = [AccountSocialAutoConfiguration::class, AccountWebAutoConfiguration::class])

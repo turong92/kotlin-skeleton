@@ -59,6 +59,12 @@ class OAuthProviderRegistry(
 
     private val view: View get() = perProject?.get() ?: shared
 
+    private val activeProjects = projects?.active.orEmpty()
+
+    /** 앱이 아는 제공자 id 전체 — 프로젝트 모드에서는 서비스 중인 프로젝트들의 합집합. 시작 때 한 번 모으는 로그인 수단 표처럼 **프로젝트 문맥 없이** 쓰는 곳용이다 (켜졌는지는 [findEnabled] 가 프로젝트마다 본다) */
+    fun knownProviderIds(): Set<String> =
+        if (perProject == null) shared.providers.keys else activeProjects.flatMapTo(linkedSetOf()) { perProject.of(it).providers.keys }
+
     /** 지금 프로젝트(프로젝트 모드가 아니면 앱 전체)의 제공자 — 켜졌는지는 보지 않는다 */
     fun providers(): List<OAuthProvider> = view.providers.values.toList()
 
