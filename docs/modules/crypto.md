@@ -6,7 +6,7 @@ AES-GCM 텍스트 암호화(`TextEncryptor`), URL 에 안전한 불투명 토큰
 | 항목 | 내용 |
 |---|---|
 | 의존성 한 줄 | `implementation(project(":modules:crypto"))` |
-| 함께 오는 모듈 | 없음 |
+| 함께 오는 모듈 | `platform` |
 | 컴파일 전용 | 없음 |
 | 설정 접두사 | `skeleton.crypto` — [docs/config/modules/crypto.yml](../config/modules/crypto.yml) |
 | 기본 동작 | 조건부. `skeleton.crypto.keys` 에 키가 있어야 빈이 생긴다. |
@@ -15,6 +15,8 @@ AES-GCM 텍스트 암호화(`TextEncryptor`), URL 에 안전한 불투명 토큰
 | 마이그레이션 | 없음 |
 | 프론트 짝 | 없음 |
 | 테스트 | `modules/crypto/src/test` |
+
+프로젝트 여럿([multi-project](../multi-project.md)): 프로젝트마다 `crypto.{primary-key-id, keys.<id>}` 를 따로 두고 `TextEncryptor` 가 지금 프로젝트의 키로 넘어간다. 프로젝트끼리 같은 키 바이트면 기동 실패.
 
 자세히: [암호화 상세](../crypto.md)
 

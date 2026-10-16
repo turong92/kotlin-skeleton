@@ -36,7 +36,7 @@ class ProjectUnawareFeaturesTest {
         val labels = ProjectUnawareFeatures.DEFAULT.map { it.label.substringBefore(' ') }.toSet()
         // 프로젝트를 알게 된 모듈(job-queue-jdbc · idempotency · notification · alert · scheduler · async · auth-social · notification-mail · storage · captcha-turnstile · redis · notification-websocket)은 표에 없다
         assertEquals(
-            setOf("payment", "crypto", "event-kafka"),
+            setOf("payment", "event-kafka"),
             labels,
         )
     }

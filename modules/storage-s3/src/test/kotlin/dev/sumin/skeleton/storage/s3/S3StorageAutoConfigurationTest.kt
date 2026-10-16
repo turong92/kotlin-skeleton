@@ -209,8 +209,6 @@ class S3StorageAutoConfigurationTest {
 
     private val projectRunner = ApplicationContextRunner()
         .withConfiguration(AutoConfigurations.of(ProjectAutoConfiguration::class.java, S3StorageAutoConfiguration::class.java))
-        // 이 시험 클래스패스에는 crypto(아직 프로젝트를 모르는 기능)가 있어 프로젝트 둘이면 가드가 막는다 — 가드 자체는 platform 시험이 본다
-        .withBean("projectUnawareFeaturesCheck", org.springframework.beans.factory.SmartInitializingSingleton::class.java, Supplier { org.springframework.beans.factory.SmartInitializingSingleton { } })
         .withPropertyValues(
             "skeleton.projects.a.hosts=a.test", "skeleton.projects.a.schema=pa",
             "skeleton.projects.b.hosts=b.test", "skeleton.projects.b.schema=pb",
@@ -261,13 +259,35 @@ class S3StorageAutoConfigurationTest {
         }
     }
 
-    @Test
-    fun `project mode - the OPAQUE public url is not available yet and says why`() {
-        projectRunner.withPropertyValues(
+    private val opaqueRunner = projectRunner
+        .withConfiguration(AutoConfigurations.of(S3OpaquePublicUrlAutoConfiguration::class.java, dev.sumin.skeleton.crypto.CryptoAutoConfiguration::class.java))
+        .withPropertyValues(
             "skeleton.projects.a.config.storage-s3.bucket=bucket-a", "skeleton.projects.a.config.storage-s3.public-url.base-url=https://cdn.a.test",
             "skeleton.projects.a.config.storage-s3.public-url.strategy=OPAQUE",
-        ).run { ctx ->
-            assertTrue(failureMessages(ctx).any { "project 'a'" in it && "OPAQUE" in it }, failureMessages(ctx).toString())
+            "skeleton.projects.b.config.storage-s3.bucket=bucket-b", "skeleton.projects.b.config.storage-s3.public-url.base-url=https://cdn.b.test",
+            "skeleton.projects.b.config.storage-s3.public-url.strategy=OPAQUE",
+        )
+
+    private fun cryptoKey(seed: Int) = Base64.getEncoder().encodeToString(ByteArray(32) { (seed + it).toByte() })
+
+    @Test
+    fun `project mode - the OPAQUE public url token of one project is not readable with another project's key`() {
+        opaqueRunner.withPropertyValues("skeleton.projects.a.config.crypto.keys.local=${cryptoKey(1)}", "skeleton.projects.b.config.crypto.keys.local=${cryptoKey(2)}").run { ctx ->
+            val storage = ctx.getBean(PresignedStorage::class.java)
+            val codec = ctx.getBean(OpaqueUrlTokenCodec::class.java)
+            val (a, b) = ctx.getBean(ProjectRegistry::class.java).projects
+            val urlA = ProjectContext.runIn(a) { storage.publicUrl(ObjectKey("k/x.png")) }.toString()
+            assertTrue(urlA.startsWith("https://cdn.a.test/c/"), urlA)
+            val token = urlA.substringAfterLast('/')
+            assertEquals("k/x.png", ProjectContext.runIn(a) { codec.decode(token).value })
+            assertFailsWith<dev.sumin.skeleton.crypto.CryptoException> { ProjectContext.runIn(b) { codec.decode(token) } }
+        }
+    }
+
+    @Test
+    fun `project mode - OPAQUE for a project without crypto keys stops the start naming the project`() {
+        opaqueRunner.withPropertyValues("skeleton.projects.a.config.crypto.keys.local=${cryptoKey(1)}").run { ctx ->
+            assertTrue(failureMessages(ctx).any { "project 'b'" in it && "crypto" in it }, failureMessages(ctx).toString())
         }
     }
 

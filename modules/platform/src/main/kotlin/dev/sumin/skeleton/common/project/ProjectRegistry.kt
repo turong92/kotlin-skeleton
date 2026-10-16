@@ -59,6 +59,10 @@ class ProjectRegistry private constructor(
         /** 목록에 프로젝트가 하나라도 있는가 — 자동 구성의 켜짐 조건 */
         fun configured(environment: Environment): Boolean = raw(environment).isNotEmpty()
 
+        /** 어느 프로젝트의 `config` 에든 [prefix](`skeleton.` 아래, 예: `crypto.keys.`) 아래 값이 비지 않게 적혀 있는가 — 자동 구성의 켜짐 조건용 */
+        fun hasConfig(environment: Environment, prefix: String): Boolean =
+            raw(environment).values.any { s -> s.config.any { (key, value) -> value.isNotBlank() && configKey(key).startsWith(configKey(prefix)) } }
+
         /** [supportedConfig] 가 있으면 프로젝트 `config` 키는 그 접두사들 아래여야 한다 — 지원하지 않는 키가 조용히 무시되지 않게 기동 실패 */
         fun from(environment: Environment, supportedConfig: List<String>? = null): ProjectRegistry {
             val raw = raw(environment)

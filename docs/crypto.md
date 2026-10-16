@@ -33,6 +33,18 @@ If no keys are configured, the module stays passive and does not create a
 `TextEncryptor`. If keys are configured with an invalid size or an unknown
 primary key id, startup fails fast.
 
+### Projects (`skeleton.projects`)
+
+With a project list ([docs/multi-project.md](multi-project.md)) each project has
+its own keys: `skeleton.projects.<id>.config.crypto.{primary-key-id, keys.<id>}`
+over the shared `skeleton.crypto.*`. `TextEncryptor` then routes by the current
+project, so the Spring Data converters, `OpaqueUrlTokenCodec` and the
+`storage-s3` OPAQUE public URL all use the project's key; a ciphertext or token
+made in project A cannot be opened in project B (key ids only have meaning
+inside a project). Two active projects that share **any key bytes** stop the
+start. A project with no key at all fails with its name when it first encrypts.
+With an empty list nothing changes.
+
 Ciphertext format:
 
 ```text

@@ -1,5 +1,8 @@
 package dev.sumin.skeleton.crypto
 
+import dev.sumin.skeleton.common.project.ProjectRegistry
+import dev.sumin.skeleton.common.project.ProjectsConfigured
+import dev.sumin.skeleton.common.project.ProjectsNotConfigured
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
@@ -12,7 +15,7 @@ import org.springframework.context.annotation.Conditional
 class CryptoAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
-    @Conditional(CryptoKeysConfiguredCondition::class)
+    @Conditional(ProjectsNotConfigured::class, CryptoKeysConfiguredCondition::class)
     fun textEncryptor(properties: CryptoProperties): TextEncryptor =
         AesGcmTextEncryptor(
             primaryKeyId = properties.primaryKeyId,
@@ -20,6 +23,12 @@ class CryptoAutoConfiguration {
                 .filterValues { it.isNotBlank() }
                 .mapValues { (_, key) -> AesGcmKey.fromBase64(key) },
         )
+
+    /** 프로젝트 모드: 프로젝트마다 자기 키 (공통 키 위에 덮어) — 부를 때 지금 프로젝트의 것으로 넘긴다. 어디에도 키가 없으면 passive */
+    @Bean
+    @ConditionalOnMissingBean
+    @Conditional(ProjectsConfigured::class, ProjectCryptoKeysConfiguredCondition::class)
+    fun projectTextEncryptor(projects: ProjectRegistry): TextEncryptor = ProjectRoutedTextEncryptor.create(projects)
 
     @Bean
     @ConditionalOnBean(TextEncryptor::class)

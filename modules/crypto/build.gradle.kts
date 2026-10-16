@@ -1,4 +1,5 @@
 dependencies {
+    implementation(project(":modules:platform"))   // 프로젝트 모드: 프로젝트마다 암호화 키 (ProjectRegistry)
     implementation("org.springframework.boot:spring-boot")
     implementation("org.springframework.boot:spring-boot-autoconfigure")
     implementation("org.jetbrains.kotlin:kotlin-reflect")

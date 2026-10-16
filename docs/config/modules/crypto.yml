@@ -3,3 +3,4 @@ skeleton:
   crypto:
     primary-key-id: local            # 새로 암호화할 때 쓰는 키 ID (keys 안에 있어야 한다)
     keys: {}                         # 키 ID → base64 AES 키. 예: { local: ${CRYPTO_KEY_LOCAL}, previous: ${CRYPTO_KEY_PREVIOUS:} } (회전 시 이전 키를 남긴다)
+  # 프로젝트 여럿(skeleton.projects)이면 skeleton.projects.<id>.config.crypto.{primary-key-id, keys.<id>} 로 프로젝트마다 — 프로젝트끼리 같은 키 바이트면 기동 실패

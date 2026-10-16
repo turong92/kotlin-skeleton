@@ -7,6 +7,7 @@ import dev.sumin.skeleton.storage.KeyPrefixedPresignedStorage
 import dev.sumin.skeleton.storage.PresignedStorage
 import dev.sumin.skeleton.storage.ProjectRoutedStorage
 import java.util.Optional
+import org.springframework.beans.factory.ObjectProvider
 import dev.sumin.skeleton.storage.StoragePublicUrlResolver
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
@@ -112,20 +113,30 @@ class S3StorageAutoConfiguration {
     /**
      * 프로젝트 모드: 프로젝트마다 자기 `storage-s3.*` (공통 위에 덮어)로 S3 클라이언트 · 서명기 · 저장소를 만들고, 부를 때 지금 프로젝트의 것으로 넘긴다.
      * 버킷을 정하지 않은 프로젝트는 저장소가 없다(쓰면 그 프로젝트 이름의 예외). 같은 버킷을 둘이 쓰면 `key-prefix` 가 서로 달라야 한다(기동 실패).
-     * 공개 URL 은 RAW 만 — OPAQUE 는 프로젝트별 암호화 키(crypto)가 있어야 하는데 crypto 가 아직 프로젝트를 모른다.
+     * 공개 URL 의 OPAQUE 는 crypto 가 클래스패스에 있을 때 프로젝트의 암호화 키(`config.crypto.keys`)로 토큰을 만든다 — 키가 없는 프로젝트는 기동 실패.
      */
     @Bean
     @Conditional(ProjectsConfigured::class)
     @ConditionalOnMissingBean(PresignedStorage::class)
-    fun projectS3PresignedStorage(projects: ProjectRegistry, resources: ProjectS3Resources): PresignedStorage {
+    fun projectS3PresignedStorage(projects: ProjectRegistry, resources: ProjectS3Resources, opaque: ObjectProvider<OpaquePublicUrlResolvers>): PresignedStorage {
         val parts = projects.scopedFrom("skeleton.storage-s3", S3StorageProperties::class.java) { project, p ->
             if (p.bucket.isBlank()) return@scopedFrom Optional.empty<PresignedStorage>()
-            check(p.publicUrl.strategy == S3StorageProperties.PublicUrlStrategy.RAW || p.publicUrl.baseUrl.isBlank()) {
-                "project '${project.id}': skeleton.storage-s3.public-url.strategy=OPAQUE is not available in project mode yet (it needs per-project crypto keys); use RAW"
+            val opaqueUrls = p.publicUrl.strategy == S3StorageProperties.PublicUrlStrategy.OPAQUE && p.publicUrl.baseUrl.isNotBlank()
+            val opaqueResolvers = if (opaqueUrls) {
+                opaque.getIfAvailable() ?: error(
+                    "project '${project.id}': skeleton.storage-s3.public-url.strategy=OPAQUE needs the crypto module: " +
+                        "add implementation(project(\":modules:crypto\")) and configure skeleton.projects.${project.id}.config.crypto.keys.",
+                )
+            } else {
+                null
             }
             val client = newClient(p).also(resources::add)
             val presigner = newPresigner(p).also(resources::add)
-            val resolver = if (p.publicUrl.baseUrl.isBlank()) StoragePublicUrlResolver.NONE else BaseUrlStoragePublicUrlResolver(p.publicUrl.baseUrl)
+            val resolver = when {
+                p.publicUrl.baseUrl.isBlank() -> StoragePublicUrlResolver.NONE
+                opaqueResolvers != null -> opaqueResolvers.create(project, p.publicUrl)
+                else -> BaseUrlStoragePublicUrlResolver(p.publicUrl.baseUrl)
+            }
             Optional.of(
                 withKeyPrefix(
                     S3PresignedStorageService(p.bucket, client, presigner, p.presign.upload, p.presign.download, p.presign.multipartPart, resolver),
@@ -191,4 +202,9 @@ class ProjectS3Resources : org.springframework.beans.factory.DisposableBean {
     }
 
     override fun destroy() = closeables.forEach { runCatching { it.close() } }
+}
+
+/** 프로젝트 모드의 OPAQUE 공개 URL 해석기 만들기 — crypto 가 클래스패스에 있을 때만 [S3OpaquePublicUrlAutoConfiguration] 이 등록한다(crypto 타입이 이 인터페이스에 나오지 않는다) */
+fun interface OpaquePublicUrlResolvers {
+    fun create(project: dev.sumin.skeleton.common.project.Project, publicUrl: S3StorageProperties.PublicUrl): StoragePublicUrlResolver
 }
