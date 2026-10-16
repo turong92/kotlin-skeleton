@@ -20,12 +20,12 @@ data class ManifestVersion(
 )
 
 /** 문서 집합을 해석하는 규칙 — 설정에서 온다. [grace]: 새 판이 시행된 뒤 바로 앞 판의 동의를 계속 받아 주는 시간(0 이면 받지 않는다) */
-class LegalRules(
-    val required: Set<String>,
-    val requiredAtSignUp: Set<String>,
-    val defaultLocale: String,
-    val grace: Duration,
-    val facts: Map<String, String>,
+open class LegalRules(
+    open val required: Set<String>,
+    open val requiredAtSignUp: Set<String>,
+    open val defaultLocale: String,
+    open val grace: Duration,
+    open val facts: Map<String, String>,
 )
 
 class DocumentVersion(val meta: ManifestVersion, val sources: Map<String, String>) {
@@ -51,7 +51,7 @@ data class RenderedDocument(
  * 앱이 가져온 문서 집합 — 매니페스트 + 원문. 현재 판 · 다음 판 · 유예 · 읽기 · 시작 때 검사를 한곳에서 답한다. 시계는 받지 않는다: 모든 질문이 `now` 를 인자로 받는다.
  * 원문은 처음 쓸 때 한 번 읽는다 ([reader] 가 못 찾으면 null).
  */
-class LegalCatalog(
+open class LegalCatalog(
     private val manifest: List<ManifestVersion>,
     private val reader: (type: String, version: String, locale: String) -> String?,
     private val rules: LegalRules,
@@ -60,29 +60,29 @@ class LegalCatalog(
         manifest.map { m -> DocumentVersion(m, m.locales.mapNotNull { l -> reader(m.type, m.version, l)?.let { l to it } }.toMap()) }
     }
 
-    val types: Set<String> get() = manifest.map { it.type }.toCollection(linkedSetOf())
+    open val types: Set<String> get() = manifest.map { it.type }.toCollection(linkedSetOf())
 
-    fun all(): List<DocumentVersion> = versions
+    open fun all(): List<DocumentVersion> = versions
 
-    fun versionsOf(type: String): List<DocumentVersion> = versions.filter { it.type == type }
+    open fun versionsOf(type: String): List<DocumentVersion> = versions.filter { it.type == type }
 
     private fun inForce(type: String, now: Instant) =
         versionsOf(type).filter { it.effectiveFrom != null && !it.effectiveFrom!!.isAfter(now) }
 
-    fun current(type: String, now: Instant): DocumentVersion? = inForce(type, now).maxByOrNull { it.effectiveFrom!! }
+    open fun current(type: String, now: Instant): DocumentVersion? = inForce(type, now).maxByOrNull { it.effectiveFrom!! }
 
     /** 바로 앞 판 — 지금 현재 판 직전에 시행되던 것 */
-    fun previous(type: String, now: Instant): DocumentVersion? {
+    open fun previous(type: String, now: Instant): DocumentVersion? {
         val current = current(type, now) ?: return null
         return inForce(type, now).filter { it.effectiveFrom!! < current.effectiveFrom!! }.maxByOrNull { it.effectiveFrom!! }
     }
 
     /** 시행 예정인 가장 이른 판 */
-    fun next(type: String, now: Instant): DocumentVersion? =
+    open fun next(type: String, now: Instant): DocumentVersion? =
         versionsOf(type).filter { it.effectiveFrom != null && it.effectiveFrom!!.isAfter(now) }.minByOrNull { it.effectiveFrom!! }
 
     /** 지금 동의로 받는 판 — 현재 판, 또는 유예가 켜져 있고 새 판 시행 뒤 [LegalRules.grace] 안이면 바로 앞 판 */
-    fun agreeable(type: String, version: String, now: Instant): DocumentVersion? {
+    open fun agreeable(type: String, version: String, now: Instant): DocumentVersion? {
         val current = current(type, now) ?: return null
         if (current.version == version) return current
         val previous = previous(type, now) ?: return null
@@ -91,7 +91,7 @@ class LegalCatalog(
     }
 
     /** 앞 판 동의를 받아 주는 끝 시각 — 유예가 0 이거나 앞 판이 없으면 null */
-    fun graceUntil(type: String, now: Instant): Instant? {
+    open fun graceUntil(type: String, now: Instant): Instant? {
         if (rules.grace.isZero || rules.grace.isNegative) return null
         val current = current(type, now) ?: return null
         previous(type, now) ?: return null
@@ -99,10 +99,10 @@ class LegalCatalog(
     }
 
     /** 읽을 수 있는 판 — 시행된(`effectiveFrom <= now`) 판만. 옛 판도 읽힌다 */
-    fun find(type: String, version: String, now: Instant): DocumentVersion? =
+    open fun find(type: String, version: String, now: Instant): DocumentVersion? =
         inForce(type, now).firstOrNull { it.version == version }
 
-    fun render(document: DocumentVersion, locale: String): RenderedDocument {
+    open fun render(document: DocumentVersion, locale: String): RenderedDocument {
         val shown = if (locale in document.sources) locale else rules.defaultLocale
         val source = document.sources.getValue(shown)
         val rendered = LegalText.render(source, rules.facts)
@@ -112,15 +112,15 @@ class LegalCatalog(
     }
 
     /** 지금 내줄 수 있는 판(현재 · 다음)의 원문이 쓰는 자리표시 중 설정에 없는 사실 */
-    fun missingFacts(now: Instant, includeTemplates: Boolean = true): Set<String> =
+    open fun missingFacts(now: Instant, includeTemplates: Boolean = true): Set<String> =
         types.flatMap { listOfNotNull(current(it, now), next(it, now)) }.filter { includeTemplates || !it.meta.template }
             .flatMap { v -> v.sources.values.flatMap { LegalText.placeholders(it) } }
             .filter { it !in rules.facts }.toCollection(linkedSetOf())
 
     /** 시작할 때 막아야 하는 것들 — 사람이 읽을 수 있는 문장. 비면 문서 집합이 쓸 만하다 */
-    val problems: List<String> by lazy { computeProblems() }
+    open val problems: List<String> by lazy { computeProblems() }
 
-    fun requireValid() {
+    open fun requireValid() {
         check(problems.isEmpty()) { "skeleton.legal: " + problems.joinToString("; ") }
     }
 

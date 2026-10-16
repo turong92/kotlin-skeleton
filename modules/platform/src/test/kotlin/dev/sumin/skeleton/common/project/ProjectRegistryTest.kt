@@ -116,7 +116,7 @@ class ProjectRegistryTest {
     fun `a config key that no module reads per project fails the start instead of being ignored`() {
         val supported = ProjectConfigKeys.SUPPORTED
         ProjectRegistry.from(env(*twoProjects, "skeleton.projects.a.config.account.mail.link-base-url" to "https://a", "skeleton.projects.a.config.web.cors.allowed-origin-patterns[0]" to "x"), supported)
-        listOf("account.sign-up.enabled", "web.cors.enabled", "legal.facts.company", "web.rate-limit.capacity", "auth.session.cookie.name").forEach { key ->
+        listOf("account.sign-up.enabled", "web.cors.enabled", "legal.record.store-ip", "web.rate-limit.capacity", "auth.session.cookie.name").forEach { key ->
             val e = assertFailsWith<IllegalStateException>(key) { ProjectRegistry.from(env(*twoProjects, "skeleton.projects.a.config.$key" to "x"), supported) }
             assertTrue(e.message!!.contains(key), e.message)
         }

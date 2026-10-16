@@ -18,6 +18,8 @@ HTTP 는 `skeleton.legal.http.base-path`(기본 `/api/v1/legal`)에 열린다 (�
 
 에러 코드는 `LEGAL.*` ([에러 표](../errors.md)에 같은 모양): `CONSENT_REQUIRED` 400 (가입) · `RECONSENT_REQUIRED` 403 (재동의 필터) · `VERSION_STALE` · `WITHDRAWAL_NOT_ALLOWED` 409 · `UNKNOWN_DOCUMENT` 400 · `DOCUMENT_NOT_FOUND` 404 · `RATE_LIMITED` 429.
 
+프로젝트 여럿([multi-project](../multi-project.md)): 문서 위치(`legal.location`) · 기본 언어 · 필수 종류(`required` · `required-at-sign-up`) · 유예 · 사실(`legal.facts.*`) · `acknowledge-template` 을 프로젝트마다 둔다(`skeleton.projects.<id>.config.legal.*`). 문서 집합(`LegalCatalog`)과 규칙(`LegalRules`)은 프로젝트마다 한 번 만들고 부를 때 지금 프로젝트의 것으로 답한다 — 한 프로젝트의 운영자 이름이 다른 프로젝트의 약관에 들어가지 않는다. 시작 때 프로젝트마다 문서 집합 검사와 장부 못 박기를 하고(실패 메시지에 프로젝트 id), DeployGuard 는 프로젝트마다 같은 규칙을 보며 메시지 앞에 `project '<id>': ` 가 붙는다. 동의 기록은 스키마마다라 이미 갈린다. 기록 보존 · HTTP · 재동의 같은 나머지 설정은 공통이다. 문서 위치를 안 준 프로젝트는 모듈의 TEMPLATE 문서로 물러서고 stage · prod 에서 막힌다.
+
 | 항목 | 내용 |
 |---|---|
 | 의존성 한 줄 | `implementation(project(":modules:legal"))` |
