@@ -109,6 +109,18 @@ class PaymentUserHttpTest {
     }
 
     @Test
+    fun `config lists the easy pays of a provider so the screen can draw its buttons before any order exists - and has no entry when the list is empty`() {
+        val account = account()
+        mvc.perform(get("$base/config").asUser(account)).andExpect(jsonPath("$.value.easyPays").isEmpty)
+        gateway.easyPays = listOf("NAVERPAY", "KAKAOPAY")
+        try {
+            mvc.perform(get("$base/config").asUser(account)).andExpect(jsonPath("$.value.easyPays.scripted[0]").value("NAVERPAY")).andExpect(jsonPath("$.value.easyPays.scripted[1]").value("KAKAOPAY"))
+        } finally {
+            gateway.easyPays = emptyList()
+        }
+    }
+
+    @Test
     fun `config tells the country the server decided, its provider and the cancel policy of that country - and not available when the country's own provider cannot open`() {
         val account = account()
         mvc.perform(get("$base/config").asUser(account).header("CF-IPCountry", "US")).andExpect(status().isOk)

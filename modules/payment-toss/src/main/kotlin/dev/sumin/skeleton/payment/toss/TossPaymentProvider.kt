@@ -15,6 +15,7 @@ import dev.sumin.skeleton.payment.PaymentBillingGateway
 import dev.sumin.skeleton.payment.PaymentCancelRequest
 import dev.sumin.skeleton.payment.PaymentCard
 import dev.sumin.skeleton.payment.PaymentCheckoutGateway
+import dev.sumin.skeleton.payment.PaymentEasyPayGateway
 import dev.sumin.skeleton.payment.PaymentConfirmRequest
 import dev.sumin.skeleton.payment.PaymentLookupGateway
 import dev.sumin.skeleton.payment.PaymentLookupQuery
@@ -58,7 +59,7 @@ class TossPaymentProvider(
     private val properties: TossPaymentProperties,
     /** 인증 계열 거절(키 폐기 · 오타)을 주인에게 알린다 — 없으면 알리지 않는다. */
     private val credentialAlert: PaymentProviderCredentialAlert = PaymentProviderCredentialAlert.NONE,
-) : PaymentProvider, PaymentLookupGateway, PaymentCheckoutGateway, PaymentWebhookGateway, PaymentBillingGateway {
+) : PaymentProvider, PaymentLookupGateway, PaymentCheckoutGateway, PaymentWebhookGateway, PaymentBillingGateway, PaymentEasyPayGateway {
     override val providerId: String = properties.providerId
     override val supportedCurrencies: Set<String> = properties.supportedCurrencies
     override val supportedCountries: Set<String> = properties.supportedCountries
@@ -345,6 +346,8 @@ class TossPaymentProvider(
     /** 공개 클라이언트 키를 낼 수 없으면(비었거나 모양 · 모드가 시크릿 키와 다름) 결제창이 열리지 않는다. */
     override fun canOpenCheckout(): Boolean = publicClientKey() != null
 
+    override fun easyPays(): List<String> = TossEasyPays.normalize(properties.easyPays)
+
     override fun checkout(order: CheckoutOrder): CheckoutInstruction =
         CheckoutInstruction(
             provider = providerId,
@@ -357,7 +360,7 @@ class TossPaymentProvider(
             // SDK v2 requestPayment 의 고정 인자. 구매자 이름 · 이메일 · 전화번호는 넘기지 않는다(선택 칸).
             // 비회원 구매자 키는 SDK 의 상수(`TossPayments.ANONYMOUS`)라 서버가 문자열로 넘겨 주지 않는다.
             // 간편결제 목록이 비면 지금과 같다(`method` 하나). 있으면 쉼표로 이어 프론트가 단추를 하나씩 그린다.
-            attributes = mapOf("method" to "CARD") + TossEasyPays.normalize(properties.easyPays).takeIf { it.isNotEmpty() }?.let { mapOf("easyPays" to it.joinToString(",")) }.orEmpty(),
+            attributes = mapOf("method" to "CARD") + easyPays().takeIf { it.isNotEmpty() }?.let { mapOf("easyPays" to it.joinToString(",")) }.orEmpty(),
         )
 
     /**

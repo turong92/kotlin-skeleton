@@ -8,6 +8,7 @@ import dev.sumin.skeleton.common.openapi.ApiResponseEnvelope
 import dev.sumin.skeleton.payment.PaymentAmount
 import dev.sumin.skeleton.payment.PaymentCatalog
 import dev.sumin.skeleton.payment.PaymentMode
+import dev.sumin.skeleton.payment.PaymentEasyPayGateway
 import dev.sumin.skeleton.payment.PaymentPricePreviewGateway
 import dev.sumin.skeleton.payment.PaymentOrderStatus
 import dev.sumin.skeleton.payment.PaymentOrders
@@ -68,6 +69,7 @@ class PaymentController(
                 properties.refund.requestsEnabled,
                 providers,
                 pricePreviews(providers),
+                easyPays(providers),
                 route.country,
                 route.provider,
                 CancelPolicyResponse(route.cancelPolicy.key, route.cancelPolicy.penaltyPercent, route.cancelPolicy.withdrawalDays),
@@ -75,6 +77,10 @@ class PaymentController(
             ),
         )
     }
+
+    private fun easyPays(providers: List<String>): Map<String, List<String>> =
+        router.gateways(PaymentEasyPayGateway::class).filter { it.providerId in providers }
+            .map { it.providerId to it.easyPays() }.filter { it.second.isNotEmpty() }.toMap()
 
     private fun pricePreviews(providers: List<String>): Map<String, PricePreviewResponse> =
         router.gateways(PaymentPricePreviewGateway::class).filter { it.providerId in providers }

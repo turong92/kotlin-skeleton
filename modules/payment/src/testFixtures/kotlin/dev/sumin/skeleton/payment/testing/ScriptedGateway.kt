@@ -13,6 +13,7 @@ import dev.sumin.skeleton.payment.ConfirmDeclineCategory
 import dev.sumin.skeleton.payment.PaymentAmount
 import dev.sumin.skeleton.payment.PaymentBillingGateway
 import dev.sumin.skeleton.payment.PaymentCard
+import dev.sumin.skeleton.payment.PaymentEasyPayGateway
 import dev.sumin.skeleton.payment.PaymentCheckoutGateway
 import dev.sumin.skeleton.payment.PaymentConfirmGateway
 import dev.sumin.skeleton.payment.PaymentConfirmRequest
@@ -64,7 +65,12 @@ class ScriptedGateway(
      * [PaymentLedgerKit] 가 자기 저장소를 연결한다. 기본은 감시 없음.
      */
     private val openTransaction: () -> Boolean = { false },
-) : PaymentConfirmGateway, PaymentLookupGateway, PaymentCheckoutGateway, PaymentRefundGateway, PaymentWebhookGateway, PaymentBillingGateway {
+) : PaymentConfirmGateway, PaymentLookupGateway, PaymentCheckoutGateway, PaymentRefundGateway, PaymentWebhookGateway, PaymentBillingGateway, PaymentEasyPayGateway {
+    /** 결제창 안 간편결제 목록 - 시험이 바꾼다. 기본 빈 목록 */
+    @Volatile var easyPays: List<String> = emptyList()
+
+    override fun easyPays(): List<String> = easyPays
+
     /** 이 결제사가 받는 결제 키의 모양 — 기본은 전부 받는다. 시험이 바꾼다. */
     @Volatile
     var acceptsPaymentKey: (String) -> Boolean = { true }

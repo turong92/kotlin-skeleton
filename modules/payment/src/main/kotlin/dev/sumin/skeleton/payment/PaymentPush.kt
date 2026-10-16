@@ -133,5 +133,13 @@ interface PaymentPricePreviewGateway : PaymentGateway {
     fun pricePreview(): PricePreviewSetup?
 }
 
+/**
+ * 결제창 안에서 바로 열 수 있는 간편결제 코드(결제사 모듈의 설정). 결제 화면이 주문을 만들기 **전에** 단추를 그리려고 `GET /config` 로 나간다 -
+ * 같은 목록이 checkout 응답에도 실려 화면이 고른 코드를 거기서 한 번 더 맞춰 본다. 비면 단추는 카드 하나.
+ */
+interface PaymentEasyPayGateway : PaymentGateway {
+    fun easyPays(): List<String>
+}
+
 /** [prices] 는 상품 코드 · 플랜 코드 → 결제사 가격 id (비밀이 아니다). */
 data class PricePreviewSetup(val clientToken: String, val environment: String, val prices: Map<String, String>)

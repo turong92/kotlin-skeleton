@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 토스 결제창 안 간편결제 단추 — 네이버페이 · 카카오페이 · 토스페이 (2026-10-16)
 
-- `payment-toss` 에 `skeleton.payment-toss.easy-pays`(목록, 기본 **빈 목록 = 지금과 같다**): 적은 간편결제 코드(`NAVERPAY` · `KAKAOPAY` · `TOSSPAY` … 토스 코드표)가 `TOSS_PAYMENT_WINDOW` checkout 응답의 `attributes.easyPays`(쉼표로 이은 문자열)로 나가고, 프런트 `@skeleton/payment` 가 카드 단추 옆에 단추를 그려 `card.flowMode=DIRECT` + `easyPay` 로 그 앱을 바로 연다. 모르는 코드는 기동 실패(오타 방지). 프로젝트 모드에서는 프로젝트마다(`ProjectConfigKeys.SUPPORTED` 의 `payment-toss.` 아래라 새 줄 없음). 단건 결제만 — 토스 자동결제 카드 등록 창에는 간편결제가 없다. 견본 앱(`apps/sample`)은 `[NAVERPAY, KAKAOPAY, TOSSPAY]` 로 켠다. 간편결제로 결제해도 장부에는 `method=EASY_PAY` 까지만 남는다(간편결제사 칸 없음).
+- `payment-toss` 에 `skeleton.payment-toss.easy-pays`(목록, 기본 **빈 목록 = 지금과 같다**): 적은 간편결제 코드(`NAVERPAY` · `KAKAOPAY` · `TOSSPAY` … 토스 코드표)가 `TOSS_PAYMENT_WINDOW` checkout 응답의 `attributes.easyPays`(쉼표로 이은 문자열)로 나가고, 프런트 `@skeleton/payment` 가 카드 단추 옆에 단추를 그려 `card.flowMode=DIRECT` + `easyPay` 로 그 앱을 바로 연다. 모르는 코드는 기동 실패(오타 방지). 프로젝트 모드에서는 프로젝트마다(`ProjectConfigKeys.SUPPORTED` 의 `payment-toss.` 아래라 새 줄 없음). 단건 결제만 — 토스 자동결제 카드 등록 창에는 간편결제가 없다. 견본 앱(`apps/sample`)은 `[NAVERPAY, KAKAOPAY, TOSSPAY]` 로 켠다. 간편결제로 결제해도 장부에는 `method=EASY_PAY` 까지만 남는다(간편결제사 칸 없음). 화면이 주문을 만들기 **전에** 단추를 그려야 해서 같은 목록이 `GET /payments/config` 의 `easyPays`(결제사 id → 코드 목록, 빈 결제사는 키 없음)로도 나간다 - 새 선택 포트 `PaymentEasyPayGateway`(payment).
 
 ### 한 서버에 프로젝트 N개 — 3조각: 암호화 · 결제 (2026-10-16)
 

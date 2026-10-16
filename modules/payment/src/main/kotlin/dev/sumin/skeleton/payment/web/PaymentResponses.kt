@@ -156,6 +156,8 @@ data class PaymentConfigResponse(
     val refundRequestsEnabled: Boolean,
     val providers: List<String> = emptyList(),
     val pricePreviews: Map<String, PricePreviewResponse> = emptyMap(),
+    /** 결제사 id -> 결제창 안에서 바로 열 간편결제 코드(`NAVERPAY` …). 목록이 빈 결제사는 키가 없다. */
+    val easyPays: Map<String, List<String>> = emptyMap(),
     /** 이 요청의 접속 나라(ISO-3166 두 글자) - 서버가 정했다. 모르면 null. */
     val country: String? = null,
     /** 이 요청의 나라로 서버가 정한 결제사 - 주문 · 구독을 만들 때 다른 값을 보내면 거절된다. 정할 수 없으면 null. */
