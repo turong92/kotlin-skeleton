@@ -109,4 +109,14 @@ class LegalProjectsTest {
             assertTrue(problems.any { it.startsWith("project 'b':") && "TEMPLATE" in it }, problems.toString())
         }
     }
+
+    @Test
+    fun `a project that gave no location does not pick up the app's own documents at the default location`() {
+        // 클래스패스에 legal/manifest.json(앱의 문서)이 있다 — 위치를 적은 a 만 문서를 쓰고, 안 적은 b 는 TEMPLATE
+        runner.withPropertyValues("$a.location=classpath:legal-web/", "$a.facts.company-name=x", "$b.required=terms", "$c.required=terms").run { ctx ->
+            val catalog = ctx.getBean(LegalCatalog::class.java)
+            val (_, pb) = ctx.getBean(ProjectRegistry::class.java).projects
+            assertTrue(pb.run { catalog.current("terms", clock.now)!!.meta.template }, "b must get the TEMPLATE, not classpath:legal/")
+        }
+    }
 }

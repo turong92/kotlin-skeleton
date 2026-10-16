@@ -128,7 +128,9 @@ class LegalAutoConfiguration {
     private fun ownIdentity(registry: ProjectRegistry, project: dev.sumin.skeleton.common.project.Project): LegalProperties {
         val merged = registry.bind(project, "skeleton.legal", LegalProperties::class.java)
         val own = registry.bindOwn(project, "skeleton.legal", LegalProperties::class.java)
-        return merged.copy(location = own.location, facts = own.facts)
+        // `bindOwn` 도 기본값(`classpath:legal/`)을 채운다 — 앱이 그 자리에 자기 문서를 두었다면 위치를 안 적은 프로젝트가 그걸 쓰게 되므로, 키가 실제로 있을 때만 쓰고 아니면 TEMPLATE 위치다
+        val located = project.config.keys.any { it.lowercase().replace("-", "").replace("_", "") == "legal.location" }
+        return merged.copy(location = if (located) own.location else TEMPLATE_LOCATION, facts = own.facts)
     }
 
     private fun rulesOf(properties: LegalProperties) = LegalRules(
