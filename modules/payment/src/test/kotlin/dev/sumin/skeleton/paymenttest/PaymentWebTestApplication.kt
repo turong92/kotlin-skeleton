@@ -21,7 +21,7 @@ class InMemoryLedgerBeans {
 
     @Bean fun inMemoryTasks(store: InMemoryPaymentLedgerStore): PaymentTasks = InMemoryPaymentTasks(store)
 
-    @Bean fun scriptedGateway(store: InMemoryPaymentLedgerStore) = ScriptedGateway(openTransaction = store::hasOpenTransaction)
+    @Bean fun scriptedGateway(store: InMemoryPaymentLedgerStore) = ScriptedGateway(now = java.time.Instant::now, openTransaction = store::hasOpenTransaction) // 앱의 시계(실제 시각)와 같이 - 고정 날짜면 7일 철회 같은 날짜 규칙이 날이 가면 깨진다
 
     @Bean fun catalog(): PaymentCatalog = CheerCatalog()
 }
