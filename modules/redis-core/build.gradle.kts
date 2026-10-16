@@ -1,4 +1,5 @@
 dependencies {
+    implementation(project(":modules:platform"))   // 프로젝트 모드: 키에 프로젝트가 들어간다 (ProjectContext)
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("tools.jackson.core:jackson-databind")
     implementation("tools.jackson.module:jackson-module-kotlin")

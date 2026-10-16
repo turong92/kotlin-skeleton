@@ -6,7 +6,7 @@ Redisson 클라이언트는 지연 연결이고 시작 점검은 선택이다 (`
 | 항목 | 내용 |
 |---|---|
 | 의존성 한 줄 | `implementation(project(":modules:redis-lock"))` |
-| 함께 오는 모듈 | `redis-core` |
+| 함께 오는 모듈 | `platform`, `redis-core` |
 | 컴파일 전용 | 없음 |
 | 설정 접두사 | `skeleton.redis-lock` — [docs/config/modules/redis-lock.yml](../config/modules/redis-lock.yml) |
 | 기본 동작 | 켜짐 (지연 연결, 시작 점검은 꺼짐). |

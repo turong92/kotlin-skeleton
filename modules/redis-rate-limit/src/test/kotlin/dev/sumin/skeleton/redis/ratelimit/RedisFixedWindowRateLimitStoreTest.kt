@@ -1,6 +1,9 @@
 package dev.sumin.skeleton.redis.ratelimit
 
 import dev.sumin.skeleton.redis.core.RedisKeyPrefixer
+import dev.sumin.skeleton.common.project.Project
+import dev.sumin.skeleton.common.project.ProjectContext
+import dev.sumin.skeleton.common.project.ProjectDatasource
 import java.time.Instant
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
@@ -27,6 +30,18 @@ class RedisFixedWindowRateLimitStoreTest {
         assertThat(decision.limit).isEqualTo(2)
         assertThat(decision.remaining).isEqualTo(1)
         assertThat(decision.resetAt).isEqualTo(Instant.ofEpochMilli(3000))
+    }
+
+    @Test
+    fun `the same key in two projects is two counters`() {
+        val counter = RecordingCounter(1)
+        val store = RedisFixedWindowRateLimitStore(counter, RedisKeyPrefixer("app"), RedisRateLimitProperties(keyNamespace = "api"))
+        fun project(id: String) = Project(id, listOf("$id.test"), "p$id", ProjectDatasource(), emptyMap())
+
+        ProjectContext.runIn(project("a")) { store.consume("ip:1.2.3.4", 2, 1000, Instant.ofEpochMilli(2345)) }
+        ProjectContext.runIn(project("b")) { store.consume("ip:1.2.3.4", 2, 1000, Instant.ofEpochMilli(2345)) }
+
+        assertThat(counter.calls.map { it.key }).containsExactly("app:project:a:rate-limit:api:ip:1.2.3.4:2000", "app:project:b:rate-limit:api:ip:1.2.3.4:2000")
     }
 
     @Test
