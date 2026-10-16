@@ -17,7 +17,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties
  * skeleton:
  *   notification-mail:
  *     enabled: true
- *     from: "Ovation <no-reply@example.com>"
+ *     from: "Acme <no-reply@example.com>"
  * ```
  * 기본은 꺼짐(enabled=false) — 비밀이 없으면 통합이 죽는 대신 빠지는 스켈레톤 규칙.
  */

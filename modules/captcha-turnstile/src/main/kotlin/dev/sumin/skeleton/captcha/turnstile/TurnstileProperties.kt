@@ -9,7 +9,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties
  *   captcha-turnstile:
  *     enabled: true
  *     secret-key: ${TURNSTILE_SECRET_KEY}
- *     expected-hostname: ovation.example.com   # 비우면 검사 안 함
+ *     expected-hostname: acme.example.com   # 비우면 검사 안 함
  * ```
  * 기본 꺼짐. 꺼져 있으면 [TurnstileVerifier] 빈이 없다 — 앱은 `ObjectProvider` 로 받아 "없으면 통과" 로 처리한다.
  */

@@ -5,13 +5,13 @@
 ```yaml
 skeleton:
   projects:
-    ovation:
-      hosts: [ovation.fans, api.ovation.fans]   # 요청의 Host 로 프로젝트를 정한다 (ForwardedHeaderFilter 가 푼 뒤)
-      schema: ovation                          # DB 스키마 (MySQL 은 데이터베이스) — 프로젝트마다 하나
-      datasource: { username: ovation, password: ${OVATION_DB_PASSWORD}, pool-max: 3 }   # 선택. 비우면 공통 spring.datasource.*
+    acme:
+      hosts: [example.com, api.example.com]   # 요청의 Host 로 프로젝트를 정한다 (ForwardedHeaderFilter 가 푼 뒤)
+      schema: acme                          # DB 스키마 (MySQL 은 데이터베이스) — 프로젝트마다 하나
+      datasource: { username: acme, password: ${ACME_DB_PASSWORD}, pool-max: 3 }   # 선택. 비우면 공통 spring.datasource.*
       config:                                  # skeleton.* 아래 키 — 공통 값 위에 덮어 같은 properties 클래스로 바인딩한다
-        auth.jwt.secret: ${OVATION_JWT_SECRET}
-        account.mail.brand: Ovation
+        auth.jwt.secret: ${ACME_JWT_SECRET}
+        account.mail.brand: Acme
 ```
 
 - 모르는 Host → `421 COMMON.UNKNOWN_HOST`. `/health` · `/info` 는 프로젝트 없이 지나간다(헬스체크는 `localhost` 로 온다).
@@ -54,8 +54,8 @@ skeleton:
 ## 프로젝트 전용 API (`@ProjectApi`)
 
 ```kotlin
-@ProjectApi("ovation") annotation class OvationApi          // 프로젝트 모듈이 한 번 만든다
-@RestController @RequestMapping("/api/v1/cheers") @OvationApi class CheerController { … }
+@ProjectApi("acme") annotation class AcmeApi          // 프로젝트 모듈이 한 번 만든다
+@RestController @RequestMapping("/api/v1/cheers") @AcmeApi class CheerController { … }
 ```
 
 - 문자열은 `skeleton.projects.<이름>` 의 이름. 다른 프로젝트 도메인으로 부르면 404 (`RequestMappingHandlerMapping` 의 요청 조건 — 컨트롤러 안 if 가 아니다). 두 프로젝트가 **같은 경로**를 써도 기동 충돌이 없다.

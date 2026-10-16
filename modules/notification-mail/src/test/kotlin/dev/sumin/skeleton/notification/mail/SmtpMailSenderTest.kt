@@ -19,7 +19,7 @@ class SmtpMailSenderTest {
     @Test
     fun `from, to, subject, 본문(text+html) 을 MIME 으로 만들어 보낸다`() {
         val smtp = RecordingJavaMailSender()
-        val sender = SmtpMailSender(smtp, "Ovation <no-reply@example.com>")
+        val sender = SmtpMailSender(smtp, "Acme <no-reply@example.com>")
 
         val result = sender.send(MailMessage(to = listOf("fan@example.com"), subject = "편집 링크", text = "링크: x", html = "<a href='x'>링크</a>"))
 

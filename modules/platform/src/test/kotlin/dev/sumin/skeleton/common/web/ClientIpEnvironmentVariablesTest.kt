@@ -29,7 +29,7 @@ class ClientIpEnvironmentVariablesTest {
 
     @Test
     fun `a stamped project's prefix works the same way`() {
-        val p = bind("ovation.web.client-ip", "OVATION_WEB_CLIENT_IP_MODE" to "proxy", "OVATION_WEB_CLIENT_IP_TRUSTED_PROXIES" to "172.18.0.0/16")
+        val p = bind("acme.web.client-ip", "ACME_WEB_CLIENT_IP_MODE" to "proxy", "ACME_WEB_CLIENT_IP_TRUSTED_PROXIES" to "172.18.0.0/16")
         assertEquals(ClientIpMode.PROXY, p.mode)
         assertEquals(listOf("172.18.0.0/16"), p.trustedProxies)
     }

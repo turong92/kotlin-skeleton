@@ -53,4 +53,4 @@ react 커밋: acb9bdb, 79ee18b, 11d6215, 3163f32, dff425c, b63341e, 68f55b5, 347
 3. **대상 계정 삭제 시 감사 행의 `by` scrub**: 기존 account 이벤트와 같은 동작이라 "누가 봤는지"가 사라진다. (1) 문서화한 한계로 둠 (추천) (2) 이 종류만 scrub 에서 보존(account-jdbc 변경).
 4. **설정 화면의 「문의용 정보(계정 id + 복사)」 구역 제거**를 알고 있는지(화면 원칙에 맞춰 제거함). 필요하면 다른 문의 수단을 정해야 한다.
 5. **커밋 형식**: 작업공간 `AGENTS.md` 는 `Co-Authored-By` 금지·header 50자 권장인데 이 브랜치(와 main)는 하네스 지시대로 트레일러를 단다. 어느 쪽을 정본으로 할지.
-6. **병합 순서**: kotlin·react 두 브랜치는 서로 짝이다(e2e 와 카탈로그 형제 대조가 서로를 본다). 같이 병합해야 `CapabilitiesCatalogTest` 의 형제 검사와 react `tests/capabilities.skeleton.test.ts` 가 초록이 된다. Ovation 권고(첫 배포부터 켠다)는 CHANGELOG 에 적어 두었다.
+6. **병합 순서**: kotlin·react 두 브랜치는 서로 짝이다(e2e 와 카탈로그 형제 대조가 서로를 본다). 같이 병합해야 `CapabilitiesCatalogTest` 의 형제 검사와 react `tests/capabilities.skeleton.test.ts` 가 초록이 된다. 실사용 프로젝트 권고(첫 배포부터 켠다)는 CHANGELOG 에 적어 두었다.

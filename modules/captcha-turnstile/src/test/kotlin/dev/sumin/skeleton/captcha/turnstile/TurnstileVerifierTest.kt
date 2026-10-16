@@ -26,11 +26,11 @@ class TurnstileVerifierTest {
         override fun <T : Any> delete(clientName: String, path: String, responseType: Class<T>, customize: ExternalHttpRequestSpec.() -> Unit): Mono<T> = TODO()
     }
 
-    private val props = TurnstileProperties(enabled = true, secretKey = "sk", expectedHostname = "ovation.example.com")
+    private val props = TurnstileProperties(enabled = true, secretKey = "sk", expectedHostname = "acme.example.com")
 
     @Test
     fun `secret, response, remoteip 를 form 으로 보내고 success 를 돌려준다`() {
-        val http = FakeHttp { TurnstileSiteverifyResponse(success = true, hostname = "ovation.example.com", action = "submit") }
+        val http = FakeHttp { TurnstileSiteverifyResponse(success = true, hostname = "acme.example.com", action = "submit") }
         val result = TurnstileVerifier(http, props).verify("tok", "1.2.3.4")
         assertTrue(result.success)
         assertEquals(mapOf("secret" to "sk", "response" to "tok", "remoteip" to "1.2.3.4"), http.lastForm)

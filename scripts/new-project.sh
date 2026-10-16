@@ -4,9 +4,9 @@
 #   scripts/new-project.sh <target-dir> <root-package> <config-prefix> <ClassPrefix> \
 #       [--modules a,b,c] [--db postgresql|mysql] [--with-workbench] [--with-sample]
 #
-#   예) scripts/new-project.sh ~/work/ovation dev.sumin.ovation ovation Ovation
-#       scripts/new-project.sh ~/work/ovation dev.sumin.ovation ovation Ovation --modules job-queue-jdbc,storage-s3,scheduler
-#       scripts/new-project.sh ~/work/ovation dev.sumin.ovation ovation Ovation --db mysql --modules job-queue-jdbc
+#   예) scripts/new-project.sh ~/work/acme com.acme.shop acme Acme
+#       scripts/new-project.sh ~/work/acme com.acme.shop acme Acme --modules job-queue-jdbc,storage-s3,scheduler
+#       scripts/new-project.sh ~/work/acme com.acme.shop acme Acme --db mysql --modules job-queue-jdbc
 #
 # 하는 일
 #   1. 이 레포를 <target-dir> 로 복사한다 (build · .gradle · .kotlin · .git · .superpowers · .claude · node_modules · .env 제외).
@@ -35,9 +35,9 @@ usage: scripts/new-project.sh <target-dir> <root-package> <config-prefix> <Class
                               [--modules a,b,c] [--db postgresql|mysql] [--with-workbench] [--with-sample] [--dry-run]
 
   <target-dir>     새로 만들 디렉토리 (이미 있으면 거부)
-  <root-package>   예: dev.sumin.ovation
-  <config-prefix>  예: ovation   (설정 접두사 · 환경변수 접두사 · 이름 문자열)
-  <ClassPrefix>    예: Ovation   (클래스 이름 접두사)
+  <root-package>   예: com.acme.shop
+  <config-prefix>  예: acme   (설정 접두사 · 환경변수 접두사 · 이름 문자열)
+  <ClassPrefix>    예: Acme   (클래스 이름 접두사)
   --modules        스타터에 더할 모듈, 쉼표로 구분 (예: job-queue-jdbc,notification-mail,storage-s3,scheduler)
   --db             postgresql(기본) | mysql
   --with-workbench apps/workbench(모든 모듈 데모)도 남긴다 — 모든 모듈이 남고 PostgreSQL 전용
@@ -89,9 +89,9 @@ done
 [ "${#POSITIONAL[@]}" -eq 4 ] || die_usage "expected 4 arguments (<target-dir> <root-package> <config-prefix> <ClassPrefix>), got ${#POSITIONAL[@]}"
 TARGET_ARG="${POSITIONAL[0]}"; PKG="${POSITIONAL[1]}"; PREFIX="${POSITIONAL[2]}"; CLASS="${POSITIONAL[3]}"
 
-grep -Eq '^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$' <<<"$PKG" || die_usage "root package must look like dev.sumin.ovation: $PKG"
+grep -Eq '^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$' <<<"$PKG" || die_usage "root package must look like com.acme.shop: $PKG"
 grep -Eq '^[a-z][a-z0-9-]*$' <<<"$PREFIX" || die_usage "config prefix must be lower-case letters, digits, hyphens: $PREFIX"
-grep -Eq '^[A-Z][A-Za-z0-9]*$' <<<"$CLASS" || die_usage "class prefix must look like Ovation: $CLASS"
+grep -Eq '^[A-Z][A-Za-z0-9]*$' <<<"$CLASS" || die_usage "class prefix must look like Acme: $CLASS"
 case "$DB" in postgresql|mysql) ;; *) die_usage "--db must be postgresql or mysql: $DB" ;; esac
 if [ "$WITH_WORKBENCH" = 1 ] && [ "$DB" = mysql ]; then
   die_usage "--with-workbench is PostgreSQL-only (the workbench depends on db-postgresql); drop --db mysql or --with-workbench"

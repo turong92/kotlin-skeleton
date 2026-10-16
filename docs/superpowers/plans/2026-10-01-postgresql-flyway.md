@@ -2044,10 +2044,10 @@ Mode A(Flyway) 절을 아래 내용으로 다시 쓴다 (Mode B 절은 PG 판으
 ```bash
 S=$(mktemp -d)
 rsync -a --exclude build --exclude .gradle --exclude .kotlin --exclude .git ./ "$S/ren/"
-(cd "$S/ren" && scripts/rename-skeleton.sh dev.sumin.ovation ovation Ovation && ./gradlew build)
+(cd "$S/ren" && scripts/rename-skeleton.sh com.acme.shop acme Acme && ./gradlew build)
 ```
 
-Expected: 스크립트가 "no skeleton leftovers", 빌드 PASS. `skeleton.migration` → `ovation.migration` 으로 바뀌었는지 `grep -rn "ovation.migration" "$S/ren/modules/migration-flyway/src/main"` 로 확인. 남은 흔적 검사에 `skeleton_jobs`/`skeleton_notification_inbox` 가 걸리면 스크립트의 의도적 예외 목록에 `skeleton_notification_inbox` 를 추가한다 (`skeleton_jobs` 와 같은 이유).
+Expected: 스크립트가 "no skeleton leftovers", 빌드 PASS. `skeleton.migration` → `acme.migration` 으로 바뀌었는지 `grep -rn "acme.migration" "$S/ren/modules/migration-flyway/src/main"` 로 확인. 남은 흔적 검사에 `skeleton_jobs`/`skeleton_notification_inbox` 가 걸리면 스크립트의 의도적 예외 목록에 `skeleton_notification_inbox` 를 추가한다 (`skeleton_jobs` 와 같은 이유).
 
 - [ ] **Step 5: 전체 빌드**
 
@@ -2060,7 +2060,7 @@ Expected: BUILD SUCCESSFUL. 테스트 수를 JUnit XML 로 집계해 기록 (`fi
 
 ---
 
-### Task 10: ovation 「A2-1 계획 실행」 세션에 보고
+### Task 10: 실사용 프로젝트 「A2-1 계획 실행」 세션에 보고
 
-- [ ] **Step 1:** `ListAgents` 로 ovation 세션(이름에 `a2-1` 또는 제목 「A2-1 계획 실행」)을 찾는다.
+- [ ] **Step 1:** `ListAgents` 로 실사용 프로젝트 세션(이름에 `a2-1` 또는 제목 「A2-1 계획 실행」)을 찾는다.
 - [ ] **Step 2:** `SendMessage` 로 보낸다: 정한 설계(주인 답 — MySQL 유지 · 조립식, DDLDatabase 유지, outOfOrder 전 환경, postgres:18), 커밋(주인이 커밋했으면 해시, 아니면 "미커밋, 작업 트리 상태"), 테스트 수, CHANGELOG `[Unreleased]` 이식 안내 절 경로와 본문.

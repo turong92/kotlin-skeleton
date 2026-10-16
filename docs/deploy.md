@@ -23,18 +23,18 @@ deploy/app.yaml 의 tag: v0.1.1 로 올려 플랫폼에 적용      # 컨테이�
 ## 2. 선언 `deploy/app.yaml`
 
 ```yaml
-name: ovation              # ^[a-z][a-z0-9-]{1,19}$
-image: ovation             # 로컬 빌드 이름 (docker build -t ovation:v0.1.0 .)
+name: acme              # ^[a-z][a-z0-9-]{1,19}$
+image: acme             # 로컬 빌드 이름 (docker build -t acme:v0.1.0 .)
 image_local: true          # 레지스트리에서 당기지 않는다
 tag: v0.1.0                # 불변 태그
 port: 8080
 health: /health
-env_prefix: OVATION        # ^[A-Z][A-Z0-9_]*$ — 프로젝트의 설정 접두사의 대문자
+env_prefix: ACME        # ^[A-Z][A-Z0-9_]*$ — 프로젝트의 설정 접두사의 대문자
 api_prefix: /api/v1
 db: postgres               # postgres | mysql | none
 redis: false
 secrets: [JWT_SECRET]
-env: { OVATION_ENV: prod, SPRING_PROFILES_ACTIVE: prod }
+env: { ACME_ENV: prod, SPRING_PROFILES_ACTIVE: prod }
 ```
 
 `scripts/new-project.sh` 가 찍을 때 이렇게 채운다 (rename 스크립트가 이름 · 접두사를 바꾼다):
@@ -124,7 +124,7 @@ Caddy 가 `X-Forwarded-For` 를 덧붙이고 `CF-Connecting-IP` 를 넘기므로
 - 모르는 값(`production` 같은 오타)은 **항상 기동 실패** — 오타가 가드를 조용히 끄지 않게 한다. 메시지에 값은 싣지 않는다.
 - `skeleton.deploy.require-env=true` 면 비었을 때도 기동 실패 ("스위치를 꼭 정한다" — 옵트인, 기본은 꺼짐).
 - **스프링 프로필과의 관계**: 스위치는 프로필을 켜지 않고, 프로필은 스위치를 켜지 않는다. 둘이 어긋나면(`prod` 인데 프로필 `prod` 가 꺼짐, 또는 그 반대) 기동은 되고 **경고**만 한다 —
-  Ovation 처럼 어긋남을 실패로 보고 싶으면 앱이 `DeployGuard` 하나를 둔다. 프로필로 보호하던 가드(auth `protected-profiles`, migration `clean-allowed-profiles`)는 **자기 프로필 목록으로 그대로** 동작하고, 스위치가 stage · prod 면 프로필과 상관없이 같은 규칙이 **더** 선다.
+  실사용 프로젝트처럼 어긋남을 실패로 보고 싶으면 앱이 `DeployGuard` 하나를 둔다. 프로필로 보호하던 가드(auth `protected-profiles`, migration `clean-allowed-profiles`)는 **자기 프로필 목록으로 그대로** 동작하고, 스위치가 stage · prod 면 프로필과 상관없이 같은 규칙이 **더** 선다.
 
 ### `DeployGuard` — 모듈이 기여하는 기동 규칙
 
@@ -164,15 +164,15 @@ class StorageDeployGuard(private val properties: StorageProperties) : DeployGuar
 
 `env_prefix` 는 프로젝트의 설정 접두사의 대문자다. 스프링 느슨한 바인딩이 `<prefix>.redis.ssl.enabled` 를 `<PREFIX>_REDIS_SSL_ENABLED` 로 받고, rename 스크립트가 코드 · yml · 문서 · 테스트의 `skeleton.` · `SKELETON_` 를 프로젝트 접두사로 바꾼다.
 
-| 플랫폼이 넣는 변수 | 스켈레톤 | 프로젝트(`ovation`) | 설정 키 |
+| 플랫폼이 넣는 변수 | 스켈레톤 | 프로젝트(`acme`) | 설정 키 |
 |---|---|---|---|
-| `<ENV_PREFIX>_REDIS_HOST` | `SKELETON_REDIS_HOST` | `OVATION_REDIS_HOST` | `redis.host` |
-| `<ENV_PREFIX>_REDIS_PORT` | `SKELETON_REDIS_PORT` | `OVATION_REDIS_PORT` | `redis.port` |
-| `<ENV_PREFIX>_REDIS_SSL_ENABLED` | `SKELETON_REDIS_SSL_ENABLED` | `OVATION_REDIS_SSL_ENABLED` | `redis.ssl.enabled` |
-| `<ENV_PREFIX>_REDIS_KEY_PREFIX` | `SKELETON_REDIS_KEY_PREFIX` | `OVATION_REDIS_KEY_PREFIX` | `redis.key-prefix` |
-| `<ENV_PREFIX>_REDIS_PASSWORD` | `SKELETON_REDIS_PASSWORD` | `OVATION_REDIS_PASSWORD` | `redis.password` |
-| `<ENV_PREFIX>_REDIS_LOCK_ENABLED` (`redis: false`) | `SKELETON_REDIS_LOCK_ENABLED` | `OVATION_REDIS_LOCK_ENABLED` | `redis-lock.enabled` |
-| (선언의 `env:`) | `SKELETON_ENV` | `OVATION_ENV` | `env` |
+| `<ENV_PREFIX>_REDIS_HOST` | `SKELETON_REDIS_HOST` | `ACME_REDIS_HOST` | `redis.host` |
+| `<ENV_PREFIX>_REDIS_PORT` | `SKELETON_REDIS_PORT` | `ACME_REDIS_PORT` | `redis.port` |
+| `<ENV_PREFIX>_REDIS_SSL_ENABLED` | `SKELETON_REDIS_SSL_ENABLED` | `ACME_REDIS_SSL_ENABLED` | `redis.ssl.enabled` |
+| `<ENV_PREFIX>_REDIS_KEY_PREFIX` | `SKELETON_REDIS_KEY_PREFIX` | `ACME_REDIS_KEY_PREFIX` | `redis.key-prefix` |
+| `<ENV_PREFIX>_REDIS_PASSWORD` | `SKELETON_REDIS_PASSWORD` | `ACME_REDIS_PASSWORD` | `redis.password` |
+| `<ENV_PREFIX>_REDIS_LOCK_ENABLED` (`redis: false`) | `SKELETON_REDIS_LOCK_ENABLED` | `ACME_REDIS_LOCK_ENABLED` | `redis-lock.enabled` |
+| (선언의 `env:`) | `SKELETON_ENV` | `ACME_ENV` | `env` |
 
 - **prod 프로필이 SSL 을 조용히 강제하지 않는다.** `apps/workbench` 의 `application-prod.yml` 은 `redis.ssl.enabled: true`(관리형 Redis 전제)지만 **환경변수가 프로필 yml 을 이긴다** — 사설 네트워크의 평문 Redis 는 `<ENV_PREFIX>_REDIS_SSL_ENABLED=false` 로 켠다 (`ProdRedisSslEnvironmentTest` 가 진짜 yml 과 진짜 환경변수 모양으로 증명). `apps/api` · `apps/sample` 에는 prod yml 이 없어 기본 `false` 다.
 - 접두사가 틀리면(`env_prefix` 가 프로젝트의 설정 접두사와 다르면) 변수는 아무 데도 닿지 않고 조용히 무시된다 — 그래서 `env_prefix` 는 `new-project.sh` 가 채운다.

@@ -13,7 +13,7 @@ spring:
 skeleton:
   notification-mail:
     enabled: true                      # default false: no host/secret -> module simply absent
-    from: "Ovation <no-reply@example.com>"
+    from: "Acme <no-reply@example.com>"
 ```
 
 ```kotlin

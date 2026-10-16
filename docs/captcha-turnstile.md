@@ -5,7 +5,7 @@ skeleton:
   captcha-turnstile:
     enabled: true                     # default false: TurnstileVerifier bean absent
     secret-key: ${TURNSTILE_SECRET_KEY}
-    expected-hostname: ovation.example.com   # optional
+    expected-hostname: acme.example.com   # optional
     expected-action: submit-card             # optional, matches the widget's data-action
 ```
 

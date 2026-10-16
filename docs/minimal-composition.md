@@ -64,7 +64,7 @@ Keep only the modules you use in `settings.gradle.kts` `include(...)` as well; d
 do not include (or leave them — unincluded directories are ignored by Gradle). `apps/workbench` can be deleted once
 you no longer need it (the React skeleton's workbench UI is its only client).
 
-**Your app lives in a sub-package of the root** (`dev.sumin.skeleton.app.api`, after the rename `dev.sumin.ovation.app.api`)
+**Your app lives in a sub-package of the root** (`dev.sumin.skeleton.app.api`, after the rename `com.acme.shop.app.api`)
 so `@SpringBootApplication` scans only your code. Modules are never component-scanned: each registers its
 controllers, filters and advice through its `AutoConfiguration` (`META-INF/spring/…AutoConfiguration.imports`), and a
 module switched off by `skeleton.<module>.enabled=false` leaves no stray bean behind. Two tests keep it that way:
@@ -228,9 +228,9 @@ with an ambiguous injection — it now owns a `skeletonTaskScheduler`. The other
 scripts/new-project.sh <target-dir> <root-package> <config-prefix> <ClassPrefix> \
     [--modules a,b,c] [--db postgresql|mysql] [--with-workbench]
 
-scripts/new-project.sh ~/work/ovation dev.sumin.ovation ovation Ovation --modules job-queue-jdbc,notification-mail,storage-s3,scheduler
-scripts/new-project.sh ~/work/ovation dev.sumin.ovation ovation Ovation --db mysql --modules job-queue-jdbc
-scripts/new-project.sh ~/work/ovation dev.sumin.ovation ovation Ovation --modules board,board-jdbc
+scripts/new-project.sh ~/work/acme com.acme.shop acme Acme --modules job-queue-jdbc,notification-mail,storage-s3,scheduler
+scripts/new-project.sh ~/work/acme com.acme.shop acme Acme --db mysql --modules job-queue-jdbc
+scripts/new-project.sh ~/work/acme com.acme.shop acme Acme --modules board,board-jdbc
 ```
 
 Add `--dry-run` to see the chosen modules and why each is in without writing anything. Which modules to choose for a product (decision table, worked examples): `llms.txt` · `docs/capabilities.md` · `docs/new-project-recipe.md`.
@@ -267,16 +267,16 @@ needing Docker; CI: `.github/workflows/new-project.yml`).
 ### Rename only
 
 ```bash
-scripts/rename-skeleton.sh dev.sumin.ovation ovation Ovation
+scripts/rename-skeleton.sh com.acme.shop acme Acme
 ./gradlew build
 ```
 
-Rewrites the root package (`dev.sumin.skeleton` → `dev.sumin.ovation`, also the slash form in resource paths and scripts), config prefix (`skeleton.*` → `ovation.*`,
-including the YAML root key `skeleton:`), env-var placeholders (`SKELETON_*` → `OVATION_*`, `.env.example` too),
-class/file names (`Skeleton*` → `Ovation*`, bean names `skeleton*` → `ovation*`), and name strings (`kotlin-skeleton`
-→ `ovation` for `spring.application.name`, JWT issuer, Redis key prefix, SSM paths, OpenAPI title; `skeleton-*` →
-`ovation-*` for thread-name prefixes, the Jackson module, Kafka headers, the AWS profile, `skeleton-jooq-schema.sql`).
+Rewrites the root package (`dev.sumin.skeleton` → `com.acme.shop`, also the slash form in resource paths and scripts), config prefix (`skeleton.*` → `acme.*`,
+including the YAML root key `skeleton:`), env-var placeholders (`SKELETON_*` → `ACME_*`, `.env.example` too),
+class/file names (`Skeleton*` → `Acme*`, bean names `skeleton*` → `acme*`), and name strings (`kotlin-skeleton`
+→ `acme` for `spring.application.name`, JWT issuer, Redis key prefix, SSM paths, OpenAPI title; `skeleton-*` →
+`acme-*` for thread-name prefixes, the Jackson module, Kafka headers, the AWS profile, `skeleton-jooq-schema.sql`).
 It ends with a leftover scan and fails if any `skeleton` trace remains — a build cannot catch a leftover `skeleton:`
-YAML root key, which silently disables every `ovation.*` setting in that file. The leftover scan also fails on any `skeleton_` table / index / constraint name in SQL or Kotlin (module tables have no prefix — `docs/table-names.md`); the refresh cookie `skeleton_refresh` becomes `ovation_refresh`. Left alone on purpose: the sample API paths `/api/v1/skeleton/**` (the react-skeleton
+YAML root key, which silently disables every `acme.*` setting in that file. The leftover scan also fails on any `skeleton_` table / index / constraint name in SQL or Kotlin (module tables have no prefix — `docs/table-names.md`); the refresh cookie `skeleton_refresh` becomes `acme_refresh`. Left alone on purpose: the sample API paths `/api/v1/skeleton/**` (the react-skeleton
 workbench calls them), and `kotlin-skeleton` in Markdown titles. Verified by running the script on a copy of this
 repo and building it.

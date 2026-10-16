@@ -130,7 +130,7 @@ class S3StorageAutoConfigurationTest {
     fun `static key pair credentials and region auto work for R2 style endpoints`() {
         contextRunner
             .withPropertyValues(
-                "skeleton.storage-s3.bucket=ovation",
+                "skeleton.storage-s3.bucket=acme",
                 "skeleton.storage-s3.region=auto",
                 "skeleton.storage-s3.endpoint-override=https://account.r2.cloudflarestorage.com",
                 "skeleton.storage-s3.path-style-access-enabled=true",

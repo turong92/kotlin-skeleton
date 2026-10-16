@@ -80,28 +80,28 @@ expect_exit() { # expect_exit <기대 종료코드> "<설명>" <명령...>
 
 stamp() { # stamp <dir> <옵션...>  — 항상 같은 이름으로 찍는다
   local dir="$1"; shift
-  bash "$SCRIPT" "$dir" dev.sumin.ovation ovation Ovation "$@"
+  bash "$SCRIPT" "$dir" com.acme.shop acme Acme "$@"
 }
 
 echo "== 1. 인자 검증"
 # set -o pipefail 에서 `값 | grep -q` 는 grep 이 먼저 끝나면 앞쪽이 SIGPIPE 로 죽어 가끔 거짓 실패한다(unknown module 오판이 실제로 났다) — here-string 을 쓴다
 check "스크립트에 값을 파이프로 grep -q 에 넘기는 곳이 없다 (here-string 을 쓴다)" bash -c "! grep -nE '(echo|printf)[^|]*[|] *grep -[a-zA-Z]*q' '$SRC/scripts/new-project.sh' '$SRC/scripts/test-new-project.sh' '$SRC/scripts/test-deploy-contract.sh'"
 expect_exit 2 "인자 없이 부르면 사용법과 함께 exit 2" bash "$SCRIPT"
-expect_exit 2 "없는 모듈은 exit 2" bash "$SCRIPT" "$TMP/x1" dev.sumin.ovation ovation Ovation --modules no-such-module
+expect_exit 2 "없는 모듈은 exit 2" bash "$SCRIPT" "$TMP/x1" com.acme.shop acme Acme --modules no-such-module
 grep -q "job-queue-jdbc" <<<"$LAST_OUTPUT" && pass "없는 모듈 오류가 유효한 모듈 목록을 보여 준다" || fail "유효한 모듈 목록이 없다: $LAST_OUTPUT"
 [ ! -e "$TMP/x1" ] && pass "검증 실패는 아무것도 만들지 않는다" || fail "검증 실패인데 $TMP/x1 이 생겼다"
 mkdir "$TMP/exists"
-expect_exit 2 "대상 디렉토리가 이미 있으면 exit 2" bash "$SCRIPT" "$TMP/exists" dev.sumin.ovation ovation Ovation
-expect_exit 2 "--db 는 postgresql | mysql" bash "$SCRIPT" "$TMP/x2" dev.sumin.ovation ovation Ovation --db oracle
-expect_exit 2 "알 수 없는 옵션은 exit 2" bash "$SCRIPT" "$TMP/x3" dev.sumin.ovation ovation Ovation --nope
-expect_exit 2 "--modules 에 방언 모듈을 넣으면 --db 를 쓰라며 exit 2" bash "$SCRIPT" "$TMP/x4" dev.sumin.ovation ovation Ovation --modules db-mysql
-expect_exit 2 "--with-workbench 는 PostgreSQL 전용이라 --db mysql 과 같이 못 쓴다" bash "$SCRIPT" "$TMP/x5" dev.sumin.ovation ovation Ovation --with-workbench --db mysql
-expect_exit 2 "--with-sample 은 PostgreSQL 전용이라 --db mysql 과 같이 못 쓴다" bash "$SCRIPT" "$TMP/x6" dev.sumin.ovation ovation Ovation --with-sample --db mysql
-expect_exit 2 "대상이 소스 레포 안이면 exit 2" bash "$SCRIPT" "$SRC/stamped-inside" dev.sumin.ovation ovation Ovation
+expect_exit 2 "대상 디렉토리가 이미 있으면 exit 2" bash "$SCRIPT" "$TMP/exists" com.acme.shop acme Acme
+expect_exit 2 "--db 는 postgresql | mysql" bash "$SCRIPT" "$TMP/x2" com.acme.shop acme Acme --db oracle
+expect_exit 2 "알 수 없는 옵션은 exit 2" bash "$SCRIPT" "$TMP/x3" com.acme.shop acme Acme --nope
+expect_exit 2 "--modules 에 방언 모듈을 넣으면 --db 를 쓰라며 exit 2" bash "$SCRIPT" "$TMP/x4" com.acme.shop acme Acme --modules db-mysql
+expect_exit 2 "--with-workbench 는 PostgreSQL 전용이라 --db mysql 과 같이 못 쓴다" bash "$SCRIPT" "$TMP/x5" com.acme.shop acme Acme --with-workbench --db mysql
+expect_exit 2 "--with-sample 은 PostgreSQL 전용이라 --db mysql 과 같이 못 쓴다" bash "$SCRIPT" "$TMP/x6" com.acme.shop acme Acme --with-sample --db mysql
+expect_exit 2 "대상이 소스 레포 안이면 exit 2" bash "$SCRIPT" "$SRC/stamped-inside" com.acme.shop acme Acme
 [ ! -e "$SRC/stamped-inside" ] && pass "레포 안에는 아무것도 만들지 않는다" || { fail "레포 안에 만들었다"; rm -rf "$SRC/stamped-inside"; }
 # 레포 안에서 `../내-프로젝트` 로 부르는 것이 가장 흔한 첫 시도다 — 경로를 정리하지 않으면 "레포 안" 으로 오인된다
 REL="$(python3 -c 'import os,sys; print(os.path.relpath(sys.argv[1], sys.argv[2]))' "$TMP/relative-target" "$SRC")"
-expect_exit 0 "레포 안에서 ../ 로 레포 밖(\$REL)을 가리키면 찍힌다" bash -c "cd '$SRC' && bash scripts/new-project.sh '$REL' dev.sumin.ovation ovation Ovation"
+expect_exit 0 "레포 안에서 ../ 로 레포 밖(\$REL)을 가리키면 찍힌다" bash -c "cd '$SRC' && bash scripts/new-project.sh '$REL' com.acme.shop acme Acme"
 check "상대 경로 대상이 실제 레포 밖에 만들어졌다" test -f "$TMP/relative-target/settings.gradle.kts"
 
 echo "== 2. 기본값만"
@@ -123,37 +123,37 @@ check "샘플 앱만 쓰는 모듈은 기본 조합에 없다 (notification-sse 
 check "선택되지 않은 모듈 디렉토리가 없다 (redis-core)" test ! -e "$A/modules/redis-core"
 check "선택되지 않은 모듈의 설정 블록도 없다" test ! -e "$A/docs/config/modules/redis-core.yml"
 check "선택된 모듈의 설정 블록은 남는다 (time)" test -f "$A/docs/config/modules/time.yml"
-check "모듈 테이블 이름에 접두사가 없다 — 찍은 프로젝트에도 skeleton_ · ovation_ 테이블이 없다 (docs/table-names.md)" bash -c "grep -rhiE 'create table( if not exists)? +(skeleton|ovation)_' '$A/modules' --include=*.sql | grep -q . && exit 1; grep -rhiqE 'create table( if not exists)? +accounts' '$A/modules/account-jdbc/src/main/resources/db/migration/postgresql'"
-check "찍은 프로젝트의 SQL · Kotlin 에 skeleton_ 식별자가 남지 않는다 (리프레시 쿠키 이름은 ovation_refresh)" bash -c "! grep -rIlE 'skeleton_[a-z]' '$A' --include=*.sql --include=*.kt --include=*.kts | grep -q . && grep -rq 'ovation_refresh' '$A/modules/auth-session/src/main'"
+check "모듈 테이블 이름에 접두사가 없다 — 찍은 프로젝트에도 skeleton_ · acme_ 테이블이 없다 (docs/table-names.md)" bash -c "grep -rhiE 'create table( if not exists)? +(skeleton|acme)_' '$A/modules' --include=*.sql | grep -q . && exit 1; grep -rhiqE 'create table( if not exists)? +accounts' '$A/modules/account-jdbc/src/main/resources/db/migration/postgresql'"
+check "찍은 프로젝트의 SQL · Kotlin 에 skeleton_ 식별자가 남지 않는다 (리프레시 쿠키 이름은 acme_refresh)" bash -c "! grep -rIlE 'skeleton_[a-z]' '$A' --include=*.sql --include=*.kt --include=*.kts | grep -q . && grep -rq 'acme_refresh' '$A/modules/auth-session/src/main'"
 RL="$TMP/rl"; mkdir -p "$RL/modules/x/src/main/resources" && printf 'create table skeleton_leftover (id int);\n' > "$RL/modules/x/src/main/resources/V1__x.sql" && cp "$SRC/settings.gradle.kts" "$RL/settings.gradle.kts"
-expect_exit 1 "rename 잔여 검사는 남은 skeleton_ 테이블 이름을 잡아 실패한다" bash "$SRC/scripts/rename-skeleton.sh" dev.sumin.ovation ovation Ovation "$RL"
+expect_exit 1 "rename 잔여 검사는 남은 skeleton_ 테이블 이름을 잡아 실패한다" bash "$SRC/scripts/rename-skeleton.sh" com.acme.shop acme Acme "$RL"
 check "선택되지 않은 모듈의 문서 쪽(docs/modules)도 없다 (redis-core)" test ! -e "$A/docs/modules/redis-core.md"
 check "선택된 모듈의 문서 쪽은 남는다 (time)" test -f "$A/docs/modules/time.md"
 check "모듈 색인에서 지운 모듈의 행이 빠지고 남은 모듈의 행은 남는다" bash -c "! grep -q '](redis-core.md)' '$A/docs/modules/README.md' && ! grep -q '](async.md)' '$A/docs/modules/README.md' && grep -q '](time.md)' '$A/docs/modules/README.md' && grep -q '](auth.md)' '$A/docs/modules/README.md'"
 check "dbTestModules 에는 스타터의 DB 모듈(계정 · 세션)과 compileOnly 로 따라온 job-queue-jdbc 가 든다" has_line 'val dbTestModules = setOf\(":modules:account-jdbc", ":modules:auth-session-jdbc", ":modules:job-queue-jdbc", ":modules:legal-jdbc"\)' "$A/build.gradle.kts"
 check "기본값으로 찍어도 약관 · 동의(legal-jdbc)가 스타터에 한 줄로 들어 있고 문서 · 계약이 남는다" bash -c "grep -q 'modules:legal-jdbc' '$A/apps/api/build.gradle.kts' && test -f '$A/docs/legal.md' && test -f '$A/docs/legal-http-contract.md' && test -f '$A/docs/modules/legal.md' && test -f '$A/modules/legal-jdbc/src/main/resources/db/migration/postgresql'/*legal.sql"
-check "찍은 스타터의 약관 시험은 새 패키지 · 접두사로 찍힌다 (skeleton 이름 · skeleton.legal 흔적 없음)" bash -c "! grep -rq 'dev.sumin.skeleton\\|skeleton\\.legal' '$A/modules/legal/src/main' '$A/apps/api/src' && grep -q 'ovation.legal' '$A/modules/legal/src/main/kotlin/dev/sumin/ovation/legal/LegalProperties.kt'"
-check "legal 의 TEMPLATE 문서(모듈 리소스)가 남고, 시험 배포 안내(ACKNOWLEDGE_TEMPLATE)가 배포 선언에 찍힌 접두사로 있다" bash -c "test -f '$A/modules/legal/src/main/resources/legal-templates/manifest.json' && grep -q 'OVATION_LEGAL_ACKNOWLEDGE_TEMPLATE' '$A/deploy/app.yaml'"
-check "찍은 legal 의 TEMPLATE 위치(Kotlin 상수)가 실제 리소스 디렉터리를 가리킨다 (rename 이 skeleton-<소문자> 를 바꿔도 깨지지 않는다)" bash -c "loc=\$(sed -n 's/.*TEMPLATE_LOCATION = \"classpath:\\(.*\\)\".*/\\1/p' '$A/modules/legal/src/main/kotlin/dev/sumin/ovation/legal/LegalAutoConfiguration.kt'); test -n \"\$loc\" && test -f \"$A/modules/legal/src/main/resources/\${loc}manifest.json\""
+check "찍은 스타터의 약관 시험은 새 패키지 · 접두사로 찍힌다 (skeleton 이름 · skeleton.legal 흔적 없음)" bash -c "! grep -rq 'dev.sumin.skeleton\\|skeleton\\.legal' '$A/modules/legal/src/main' '$A/apps/api/src' && grep -q 'acme.legal' '$A/modules/legal/src/main/kotlin/com/acme/shop/legal/LegalProperties.kt'"
+check "legal 의 TEMPLATE 문서(모듈 리소스)가 남고, 시험 배포 안내(ACKNOWLEDGE_TEMPLATE)가 배포 선언에 찍힌 접두사로 있다" bash -c "test -f '$A/modules/legal/src/main/resources/legal-templates/manifest.json' && grep -q 'ACME_LEGAL_ACKNOWLEDGE_TEMPLATE' '$A/deploy/app.yaml'"
+check "찍은 legal 의 TEMPLATE 위치(Kotlin 상수)가 실제 리소스 디렉터리를 가리킨다 (rename 이 skeleton-<소문자> 를 바꿔도 깨지지 않는다)" bash -c "loc=\$(sed -n 's/.*TEMPLATE_LOCATION = \"classpath:\\(.*\\)\".*/\\1/p' '$A/modules/legal/src/main/kotlin/com/acme/shop/legal/LegalAutoConfiguration.kt'); test -n \"\$loc\" && test -f \"$A/modules/legal/src/main/resources/\${loc}manifest.json\""
 check "새 프로젝트에는 new-project 도구가 따라오지 않는다" bash -c "! ls '$A/scripts/new-project.sh' '$A/scripts/test-new-project.sh' '$A/.github/workflows/new-project.yml' 2>/dev/null | grep -q ."
-check "rootProject.name 이 바뀐다" has_line 'rootProject.name = "ovation"' "$A/settings.gradle.kts"
-check "패키지가 바뀐다" test -f "$A/apps/api/src/main/kotlin/dev/sumin/ovation/app/api/ApiApplication.kt"
-check "starter 테스트의 부재 단언은 그대로 (모듈을 더하지 않았다)" has_line 'software.amazon.awssdk.services.s3.S3Client' "$A/apps/api/src/test/kotlin/dev/sumin/ovation/app/api/StarterCompositionIntegrationTest.kt"
+check "rootProject.name 이 바뀐다" has_line 'rootProject.name = "acme"' "$A/settings.gradle.kts"
+check "패키지가 바뀐다" test -f "$A/apps/api/src/main/kotlin/com/acme/shop/app/api/ApiApplication.kt"
+check "starter 테스트의 부재 단언은 그대로 (모듈을 더하지 않았다)" has_line 'software.amazon.awssdk.services.s3.S3Client' "$A/apps/api/src/test/kotlin/com/acme/shop/app/api/StarterCompositionIntegrationTest.kt"
 check "application.yml 에 모듈 블록 구역이 없다 (--modules 를 안 줬다)" lacks_line 'new-project: module config blocks' "$A/apps/api/src/main/resources/application.yml"
 check "로컬 한 줄 실행 스크립트가 따라온다 (scripts/dev.sh — 문법 검사 통과)" bash -c "test -x '$A/scripts/dev.sh' && bash -n '$A/scripts/dev.sh'"
 check "compose 에 로컬 S3(profile s3)와 버킷 준비 서비스가 있다 — 프론트 업로드를 시험하는 데 필요하다" bash -c "grep -q '^  s3:' '$A/docker-compose.yml' && grep -q '^  s3-init:' '$A/docker-compose.yml' && grep -q 'profiles: \\[s3\\]' '$A/docker-compose.yml'"
-check "compose 프로젝트 이름이 새 이름이다 — 폴더 이름(api)을 쓰면 다른 프로젝트의 컨테이너 · 볼륨과 섞인다" has_line '^name: ovation$' "$A/docker-compose.yml"
+check "compose 프로젝트 이름이 새 이름이다 — 폴더 이름(api)을 쓰면 다른 프로젝트의 컨테이너 · 볼륨과 섞인다" has_line '^name: acme$' "$A/docker-compose.yml"
 check "storage-s3 를 고르지 않으면 application-local.yml 에 S3 설정이 붙지 않는다" lacks_line 'storage-s3' "$A/apps/api/src/main/resources/application-local.yml"
-check "배포 선언이 따라오고 name · image · env_prefix 가 새 접두사다 (deploy/app.yaml)" bash -c "grep -Eq '^name: ovation( |\$)' '$A/deploy/app.yaml' && grep -q '^image: ovation ' '$A/deploy/app.yaml' && grep -q '^image_local: true' '$A/deploy/app.yaml' && grep -q '^env_prefix: OVATION' '$A/deploy/app.yaml'"
+check "배포 선언이 따라오고 name · image · env_prefix 가 새 접두사다 (deploy/app.yaml)" bash -c "grep -Eq '^name: acme( |\$)' '$A/deploy/app.yaml' && grep -q '^image: acme ' '$A/deploy/app.yaml' && grep -q '^image_local: true' '$A/deploy/app.yaml' && grep -q '^env_prefix: ACME' '$A/deploy/app.yaml'"
 check "배포 선언의 DB · Redis 는 고른 모듈을 따른다 (postgres · redis false)" bash -c "grep -q '^db: postgres' '$A/deploy/app.yaml' && grep -q '^redis: false' '$A/deploy/app.yaml'"
-check "배포 선언에 skeleton · SKELETON 흔적이 없다 (스위치 이름은 OVATION_ENV)" bash -c "! grep -i 'skeleton' '$A/deploy/app.yaml' | grep -v 'react-skeleton' | grep -q . && grep -q 'OVATION_ENV: prod' '$A/deploy/app.yaml'"
+check "배포 선언에 skeleton · SKELETON 흔적이 없다 (스위치 이름은 ACME_ENV)" bash -c "! grep -i 'skeleton' '$A/deploy/app.yaml' | grep -v 'react-skeleton' | grep -q . && grep -q 'ACME_ENV: prod' '$A/deploy/app.yaml'"
 check "배포 선언에서 고르지 않은 모듈의 비밀 설명이 지워진다 (storage-s3 · payment-toss), 쓰는 모듈(auth)은 남는다" bash -c "! grep -q '\[storage-s3\]\|\[storage\]\|\[payment-toss\]\|\[redis-core\]' '$A/deploy/app.yaml' && grep -q '\[auth\]' '$A/deploy/app.yaml'"
 check "배포 선언은 compose · Caddyfile · cloudflared · 백업을 만들지 않는다 (플랫폼 몫)" bash -c "test ! -e '$A/deploy/docker-compose.yml' && test ! -e '$A/deploy/Caddyfile' && test ! -e '$A/deploy/cloudflared' && ls '$A/deploy' | grep -qx 'app.yaml' && [ \"\$(ls '$A/deploy' | wc -l | tr -d ' ')\" = 1 ]"
 check "이미지 워크플로는 보류 — 따라오지만 수동 실행(workflow_dispatch)만 트리거한다 (태그 · 브랜치 푸시 없음 · latest 없음)" bash -c "grep -q 'workflow_dispatch:' '$A/.github/workflows/image.yml' && ! grep -q \"tags: \\['v\" '$A/.github/workflows/image.yml' && ! grep -q 'branches' '$A/.github/workflows/image.yml' && ! grep -Eq '^  push:' '$A/.github/workflows/image.yml' && ! grep -q ':latest' '$A/.github/workflows/image.yml'"
 check "계약 테스트 스크립트와 그 CI 가 따라온다 (문법 검사 통과)" bash -c "test -x '$A/scripts/test-deploy-contract.sh' && bash -n '$A/scripts/test-deploy-contract.sh' && test -f '$A/.github/workflows/deploy-contract.yml'"
 check "계약 스크립트의 secret_env / contract_env 는 자기를 부르지 않고 출력이 끝난다 (비밀 한 쌍, DB 세 쌍 + 비밀)" deploy_env_shape "$A/scripts/test-deploy-contract.sh"
 check "Dockerfile 은 APP 인자를 받는다 (api 가 기본)" has_line '^ARG APP=api' "$A/Dockerfile"
-check "배포 가드 · Redis 환경변수 테스트가 새 접두사로 찍힌다 — 접두사가 따라간다" bash -c "grep -rq 'skeleton.env\|ovation.env' '$A/modules/platform/src/test' && ! grep -rq 'SKELETON_' '$A/modules/platform/src/test' '$A/modules/auth/src/test'"
+check "배포 가드 · Redis 환경변수 테스트가 새 접두사로 찍힌다 — 접두사가 따라간다" bash -c "grep -rq 'skeleton.env\|acme.env' '$A/modules/platform/src/test' && ! grep -rq 'SKELETON_' '$A/modules/platform/src/test' '$A/modules/auth/src/test'"
 check_docs_links "기본 조합(결제 없음)의 문서 링크가 모두 풀린다 — 결제 문서로 가는 링크가 남지 않는다" "$A"
 check "소스 레포는 건드리지 않는다" bash -c "[ -z \"\$(find '$SRC' -newer '$MARKER' -type f -not -path '*/build/*' -not -path '*/.gradle/*' -not -path '*/.kotlin/*' -not -path '*/.git/*' -not -path '*/node_modules/*' 2>/dev/null | head -1)\" ]"
 
@@ -171,12 +171,12 @@ done
 check "닫힘으로 따라온 모듈은 앱 의존성에 줄을 더하지 않는다 (crypto)" lacks_line 'modules:crypto' "$B/apps/api/build.gradle.kts"
 check "dbTestModules 는 선택된 DB 모듈만 남는다" has_line 'val dbTestModules = setOf\(":modules:account-jdbc", ":modules:auth-session-jdbc", ":modules:job-queue-jdbc", ":modules:legal-jdbc"\)' "$B/build.gradle.kts"
 check "application.yml 에 표시된 모듈 블록 구역이 생긴다" has_line 'new-project: module config blocks' "$B/apps/api/src/main/resources/application.yml"
-check "블록은 주석이고 접두사가 새 이름이다" has_line '^# ovation:$' "$B/apps/api/src/main/resources/application.yml"
+check "블록은 주석이고 접두사가 새 이름이다" has_line '^# acme:$' "$B/apps/api/src/main/resources/application.yml"
 check "storage-s3 블록이 들어 있다" has_line '^#     bucket: ""' "$B/apps/api/src/main/resources/application.yml"
 check "블록을 붙인 yml 이 여전히 유효하다 (주석뿐이라 키가 늘지 않는다)" bash -c "! grep -E '^[a-z]' '$B/apps/api/src/main/resources/application.yml' | sort | uniq -d | grep -q ."
-check "starter 테스트의 부재 단언에서 S3 · 메일이 빠진다" bash -c "! grep -q 'awssdk.services.s3.S3Client\|jakarta.mail.Session' '$B/apps/api/src/test/kotlin/dev/sumin/ovation/app/api/StarterCompositionIntegrationTest.kt'"
-check "starter 테스트의 부재 단언에서 나머지(Redis · Kafka · JPA)는 남는다" bash -c "grep -q 'RedisTemplate' '$B/apps/api/src/test/kotlin/dev/sumin/ovation/app/api/StarterCompositionIntegrationTest.kt'"
-check "storage-s3 를 고르면 application-local.yml 에 로컬 S3 설정(버킷 · 엔드포인트 · 키)이 새 접두사로 붙는다" bash -c "grep -q '^ovation:' '$B/apps/api/src/main/resources/application-local.yml' && grep -q 'endpoint-override: http://localhost:8333' '$B/apps/api/src/main/resources/application-local.yml' && grep -q 'bucket: app' '$B/apps/api/src/main/resources/application-local.yml'"
+check "starter 테스트의 부재 단언에서 S3 · 메일이 빠진다" bash -c "! grep -q 'awssdk.services.s3.S3Client\|jakarta.mail.Session' '$B/apps/api/src/test/kotlin/com/acme/shop/app/api/StarterCompositionIntegrationTest.kt'"
+check "starter 테스트의 부재 단언에서 나머지(Redis · Kafka · JPA)는 남는다" bash -c "grep -q 'RedisTemplate' '$B/apps/api/src/test/kotlin/com/acme/shop/app/api/StarterCompositionIntegrationTest.kt'"
+check "storage-s3 를 고르면 application-local.yml 에 로컬 S3 설정(버킷 · 엔드포인트 · 키)이 새 접두사로 붙는다" bash -c "grep -q '^acme:' '$B/apps/api/src/main/resources/application-local.yml' && grep -q 'endpoint-override: http://localhost:8333' '$B/apps/api/src/main/resources/application-local.yml' && grep -q 'bucket: app' '$B/apps/api/src/main/resources/application-local.yml'"
 check "붙은 application-local.yml 에 skeleton 흔적이 없다" bash -c "! grep -qi 'skeleton' '$B/apps/api/src/main/resources/application-local.yml'"
 check "dev.sh 는 S3 를 쓰는 조합에서 s3 서비스를 같이 올린다" has_line 'storage-s3' "$B/scripts/dev.sh"
 check "dev.sh 는 앱이 쓰는 모듈로 인프라를 정한다 — storage-s3 를 고른 조합은 postgres + s3" bash -c "[ \"\$(DEV_DRY_RUN=1 APP=api bash -c 'cd \"$B\" && bash scripts/dev.sh' 2>&1 | tail -1)\" = 'infra: postgres s3=1 app=api' ]"
@@ -184,7 +184,7 @@ check "dev.sh 는 기본 조합에서 s3 를 올리지 않는다" bash -c "[ \"\
 check "dev.sh 는 소스 레포(두 DB 모듈이 다 있다)에서도 스타터 apps/api 에 postgres 를 고른다 — 폴더 존재로 고르면 mysql 이 된다" bash -c "[ \"\$(DEV_DRY_RUN=1 bash -c 'cd \"$SRC\" && bash scripts/dev.sh' 2>&1 | tail -1)\" = 'infra: postgres s3=0 app=api' ]"
 check "dev.sh APP=sample 은 postgres + s3" bash -c "[ \"\$(DEV_DRY_RUN=1 APP=sample bash -c 'cd \"$SRC\" && bash scripts/dev.sh' 2>&1 | tail -1)\" = 'infra: postgres s3=1 app=sample' ]"
 check "persistence-jooq 가 없으니 그 모듈이 읽던 형제 폴더 문제도 없다" test ! -e "$B/modules/persistence-jooq"
-check "배포 선언에 고른 모듈(storage-s3 · notification-mail)의 비밀 설명이 남고 고르지 않은 모듈(payment-toss)은 없다" bash -c "grep -q '\[storage-s3\] (env:) OVATION_STORAGE_S3_BUCKET' '$B/deploy/app.yaml' && grep -q 'OVATION_STORAGE_WEB_KEY_SECRET' '$B/deploy/app.yaml' && grep -q '\[notification-mail\]' '$B/deploy/app.yaml' && ! grep -q '\[payment-toss\]' '$B/deploy/app.yaml'"
+check "배포 선언에 고른 모듈(storage-s3 · notification-mail)의 비밀 설명이 남고 고르지 않은 모듈(payment-toss)은 없다" bash -c "grep -q '\[storage-s3\] (env:) ACME_STORAGE_S3_BUCKET' '$B/deploy/app.yaml' && grep -q 'ACME_STORAGE_WEB_KEY_SECRET' '$B/deploy/app.yaml' && grep -q '\[notification-mail\]' '$B/deploy/app.yaml' && ! grep -q '\[payment-toss\]' '$B/deploy/app.yaml'"
 
 echo "== 4. --db mysql --modules job-queue-jdbc,alert-jdbc"
 C="$TMP/c"
@@ -198,7 +198,7 @@ check "--db mysql 이면 배포 선언의 db 가 mysql 이다" has_line '^db: my
 check "db-postgresql 모듈이 사라지고 db-mysql 이 들어온다" bash -c "grep -q 'include(\":modules:db-mysql\")' '$C/settings.gradle.kts' && ! grep -q 'db-postgresql' '$C/settings.gradle.kts' && test ! -e '$C/modules/db-postgresql'"
 check "dev.sh 는 mysql 조합에서 mysql 컨테이너를 고른다" bash -c "[ \"\$(DEV_DRY_RUN=1 bash -c 'cd \"$C\" && bash scripts/dev.sh' 2>&1 | tail -1)\" = 'infra: mysql s3=0 app=api' ]"
 check "apps/api 가 db-mysql 을 쓴다" bash -c "grep -q 'project(\":modules:db-mysql\")' '$C/apps/api/build.gradle.kts' && ! grep -q 'project(\":modules:db-postgresql\")\|testcontainers-postgresql' '$C/apps/api/build.gradle.kts'"
-check "apps/api 테스트 컨테이너가 MySQL 이다" has_line 'MySQLContainer' "$C/apps/api/src/test/kotlin/dev/sumin/ovation/app/api/TestcontainersConfiguration.kt"
+check "apps/api 테스트 컨테이너가 MySQL 이다" has_line 'MySQLContainer' "$C/apps/api/src/test/kotlin/com/acme/shop/app/api/TestcontainersConfiguration.kt"
 check "datasource URL 이 MySQL 이다" has_line 'jdbc:mysql://localhost:3306/app' "$C/apps/api/src/main/resources/application.yml"
 check "첫 마이그레이션이 mysql 폴더에 있다" test -f "$C/apps/api/src/main/resources/db/migration/mysql/V20261005000000__init.sql"
 # 마이그레이션 잠금 — 찍힌 프로젝트는 자기 파일로 잠금을 새로 만든다: 빠진 모듈 · 다른 방언의 줄은 없고 모든 파일이 잠겨 있다 (docs/schema-management.md)
@@ -233,11 +233,11 @@ expect_exit 0 "조합 5 를 찍는다 (rename 잔여 검사 포함)" stamp "$G" 
 want=":apps:api :apps:sample :modules:account :modules:account-jdbc :modules:alert :modules:alert-jdbc :modules:auth :modules:auth-magic-link :modules:auth-session :modules:auth-session-jdbc :modules:auth-social :modules:auth-social-google :modules:auth-social-kakao :modules:auth-social-naver :modules:auth-social-oidc :modules:auth-social-x :modules:author-profile :modules:author-profile-jdbc :modules:board :modules:board-jdbc :modules:captcha-turnstile :modules:crypto :modules:db-postgresql :modules:idempotency :modules:job-queue-jdbc :modules:json :modules:legal :modules:legal-jdbc :modules:migration :modules:migration-flyway :modules:notification :modules:notification-jdbc :modules:notification-mail :modules:notification-sse :modules:payment :modules:payment-jdbc :modules:payment-paddle :modules:payment-toss :modules:persistence-jdbc :modules:platform :modules:storage :modules:storage-s3 :modules:time"
 got="$(includes "$G/settings.gradle.kts")"
 [ "$got" = "$want" ] && pass "settings.gradle.kts 는 스타터 + 샘플 앱의 모듈과 그 닫힘을 포함한다" || fail "settings includes: [$got] expected [$want]"
-check "샘플 앱 소스가 새 패키지로 옮겨진다" test -f "$G/apps/sample/src/main/kotlin/dev/sumin/ovation/app/sample/SampleApplication.kt"
-check "샘플 앱의 설정 루트 키가 새 접두사다 (ovation:) — skeleton: 이 남으면 설정이 조용히 무시된다" bash -c "grep -q '^ovation:' '$G/apps/sample/src/main/resources/application.yml' && ! grep -q '^skeleton:' '$G/apps/sample/src/main/resources/application.yml' '$G/apps/sample/src/main/resources/application-local.yml'"
+check "샘플 앱 소스가 새 패키지로 옮겨진다" test -f "$G/apps/sample/src/main/kotlin/com/acme/shop/app/sample/SampleApplication.kt"
+check "샘플 앱의 설정 루트 키가 새 접두사다 (acme:) — skeleton: 이 남으면 설정이 조용히 무시된다" bash -c "grep -q '^acme:' '$G/apps/sample/src/main/resources/application.yml' && ! grep -q '^skeleton:' '$G/apps/sample/src/main/resources/application.yml' '$G/apps/sample/src/main/resources/application-local.yml'"
 check "샘플 문서 · 실행 스크립트가 남고 안내 문서의 표식 줄만 지워진다" bash -c "test -f '$G/docs/sample.md' && test -x '$G/scripts/dev-sample.sh' && test -x '$G/scripts/sample-e2e-backend.sh' && grep -q 'apps/sample' '$G/CLAUDE.md' && ! grep -q 'sample:start\|sample:end' '$G/CLAUDE.md' '$G/README.md'"
 check "스타터 apps/api 는 그대로다 — 샘플 앱의 모듈을 얹지 않는다" bash -c "! grep -q 'storage-s3\|notification\|idempotency\|board\|magic-link' '$G/apps/api/build.gradle.kts'"
-check "스타터 테스트의 부재 단언(S3 클라이언트)은 그대로다 — 스타터 클래스패스에는 여전히 없다" has_line 'software.amazon.awssdk.services.s3.S3Client' "$G/apps/api/src/test/kotlin/dev/sumin/ovation/app/api/StarterCompositionIntegrationTest.kt"
+check "스타터 테스트의 부재 단언(S3 클라이언트)은 그대로다 — 스타터 클래스패스에는 여전히 없다" has_line 'software.amazon.awssdk.services.s3.S3Client' "$G/apps/api/src/test/kotlin/com/acme/shop/app/api/StarterCompositionIntegrationTest.kt"
 check "스타터 설정에 샘플 모듈의 설정 블록이 붙지 않는다" lacks_line 'new-project: module config blocks' "$G/apps/api/src/main/resources/application.yml"
 check "dbTestModules 에 샘플이 쓰는 DB 모듈이 들어간다" has_line 'val dbTestModules = setOf\(":modules:account-jdbc", ":modules:alert-jdbc", ":modules:auth-session-jdbc", ":modules:author-profile-jdbc", ":modules:board-jdbc", ":modules:job-queue-jdbc", ":modules:legal-jdbc", ":modules:notification-jdbc", ":modules:payment-jdbc"\)' "$G/build.gradle.kts"
 check "dev.sh 는 APP=sample 을 알고 문법 검사를 통과한다" bash -c "grep -q 'APP' '$G/scripts/dev.sh' && bash -n '$G/scripts/dev.sh' && bash -n '$G/scripts/dev-sample.sh' && bash -n '$G/scripts/sample-e2e-backend.sh'"
@@ -260,7 +260,7 @@ for m in board board-jdbc; do
 done
 check "닫힘으로 따라온 컴파일 전용 모듈은 앱 의존성에 줄을 더하지 않는다 (notification · idempotency)" bash -c "! grep -q 'modules:notification\|modules:idempotency' '$H/apps/api/build.gradle.kts'"
 check "dbTestModules 에 board-jdbc 가 들어간다 (src/dbTest 가 있는 모듈 전부)" has_line 'val dbTestModules = setOf\(":modules:account-jdbc", ":modules:auth-session-jdbc", ":modules:board-jdbc", ":modules:job-queue-jdbc", ":modules:legal-jdbc"\)' "$H/build.gradle.kts"
-check "게시판 문서 쪽과 설정 블록이 남고 새 접두사로 붙는다" bash -c "test -f '$H/docs/modules/board.md' && test -f '$H/docs/modules/board-jdbc.md' && grep -q '^# ovation.board\|^#   board:' '$H/apps/api/src/main/resources/application.yml' && grep -q 'ovation.board' '$H/modules/board/src/main/kotlin/dev/sumin/ovation/board/BoardProperties.kt'"
+check "게시판 문서 쪽과 설정 블록이 남고 새 접두사로 붙는다" bash -c "test -f '$H/docs/modules/board.md' && test -f '$H/docs/modules/board-jdbc.md' && grep -q '^# acme.board\|^#   board:' '$H/apps/api/src/main/resources/application.yml' && grep -q 'acme.board' '$H/modules/board/src/main/kotlin/com/acme/shop/board/BoardProperties.kt'"
 check "찍은 프로젝트에 skeleton 이름 흔적이 없다 (BoardController 경로 속성 포함)" bash -c "! grep -rq 'skeleton\.board' '$H/modules/board/src/main'"
 I="$TMP/i"
 expect_exit 0 "board 만 요청하면 찍히되 board-jdbc 를 더하라고 알려 준다" stamp "$I" --modules board
@@ -276,10 +276,10 @@ for m in author-profile author-profile-jdbc; do
   check "apps/api 의존성에 $m 한 줄이 생긴다" has_line "implementation\\(project\\(\":modules:$m\"\\)\\)" "$AP/apps/api/build.gradle.kts"
 done
 check "dbTestModules 에 author-profile-jdbc 가 들어간다 (src/dbTest 가 있는 모듈)" has_line '":modules:author-profile-jdbc"' "$AP/build.gradle.kts"
-check "두 모듈의 문서 쪽과 설정 블록이 남고 코드의 설정 접두사가 새 이름이다" bash -c "test -f '$AP/docs/modules/author-profile.md' && test -f '$AP/docs/modules/author-profile-jdbc.md' && grep -q '^#   author-profile:' '$AP/apps/api/src/main/resources/application.yml' && grep -q 'ovation.author-profile' '$AP/modules/author-profile/src/main/kotlin/dev/sumin/ovation/authorprofile/AuthorProfileProperties.kt'"
+check "두 모듈의 문서 쪽과 설정 블록이 남고 코드의 설정 접두사가 새 이름이다" bash -c "test -f '$AP/docs/modules/author-profile.md' && test -f '$AP/docs/modules/author-profile-jdbc.md' && grep -q '^#   author-profile:' '$AP/apps/api/src/main/resources/application.yml' && grep -q 'acme.author-profile' '$AP/modules/author-profile/src/main/kotlin/com/acme/shop/authorprofile/AuthorProfileProperties.kt'"
 check "프론트 계약 문서(docs/author-profile-http-contract.md)는 모듈을 고르면 남는다" test -f "$AP/docs/author-profile-http-contract.md"
 check "두 모듈의 main 소스에 skeleton.author-profile 이름 흔적이 없다 (컨트롤러 경로 속성 포함)" bash -c "! grep -rq 'skeleton\.author-profile' '$AP/modules/author-profile/src/main' '$AP/modules/author-profile-jdbc/src/main'"
-check "카탈로그에 두 항목이 남고 접두사가 새 이름이다" bash -c "grep -q '\"path\": \"modules/author-profile\"' '$AP/capabilities.json' && grep -q '\"path\": \"modules/author-profile-jdbc\"' '$AP/capabilities.json' && grep -q '\"ovation.author-profile\"' '$AP/capabilities.json' && cd '$AP' && perl scripts/build-capabilities.pl --check"
+check "카탈로그에 두 항목이 남고 접두사가 새 이름이다" bash -c "grep -q '\"path\": \"modules/author-profile\"' '$AP/capabilities.json' && grep -q '\"path\": \"modules/author-profile-jdbc\"' '$AP/capabilities.json' && grep -q '\"acme.author-profile\"' '$AP/capabilities.json' && cd '$AP' && perl scripts/build-capabilities.pl --check"
 check "고르지 않은 기본 프로젝트에는 모듈 · 문서 · 카탈로그 항목 · 설정 · 가지치기 뒤 깨질 링크가 없다" bash -c "test ! -e '$A/docs/modules/author-profile.md' && ! grep -rq '](.*modules/author-profile' '$A/docs/accounts.md' '$A/docs/errors.md' && ! grep -q '\"path\": \"modules/author-profile\"' '$A/capabilities.json' && test ! -e '$A/modules/author-profile' && ! grep -rq 'author-profile' '$A/settings.gradle.kts' '$A/apps/api/build.gradle.kts' && test ! -e '$A/docs/author-profile-http-contract.md'"
 APN="$TMP/apn"
 expect_exit 0 "author-profile 만 요청하면 찍히되 author-profile-jdbc 를 더하라고 알려 준다" stamp "$APN" --modules author-profile
@@ -295,9 +295,9 @@ for m in payment payment-jdbc payment-toss; do
   check "apps/api 의존성에 $m 한 줄이 생긴다" has_line "implementation\\(project\\(\":modules:$m\"\\)\\)" "$PJ/apps/api/build.gradle.kts"
 done
 check "dbTestModules 에 payment-jdbc 가 들어간다 (src/dbTest 가 있는 모듈 전부)" has_line '":modules:payment-jdbc"' "$PJ/build.gradle.kts"
-check "payment 의 testFixtures(저장소 계약 시험 · 가짜 결제사)가 새 패키지 이름으로 찍힌다 — payment-jdbc 시험이 쓴다" bash -c "test -f '$PJ/modules/payment/src/testFixtures/kotlin/dev/sumin/ovation/payment/testing/PaymentLedgerStoreContract.kt' && grep -q 'testFixtures(project(\":modules:payment\"))' '$PJ/modules/payment-jdbc/build.gradle.kts'"
+check "payment 의 testFixtures(저장소 계약 시험 · 가짜 결제사)가 새 패키지 이름으로 찍힌다 — payment-jdbc 시험이 쓴다" bash -c "test -f '$PJ/modules/payment/src/testFixtures/kotlin/com/acme/shop/payment/testing/PaymentLedgerStoreContract.kt' && grep -q 'testFixtures(project(\":modules:payment\"))' '$PJ/modules/payment-jdbc/build.gradle.kts'"
 check "payment-jdbc 의 마이그레이션(두 벤더 중 방언 모듈이 고른 쪽 포함)이 있고 잠금에 올라 있다" bash -c "test -f '$PJ'/modules/payment-jdbc/src/main/resources/db/migration/postgresql/V*__payment_ledger.sql && grep -q 'modules/payment-jdbc/src/main/resources/db/migration/postgresql/V.*__payment_ledger.sql' '$PJ/migrations.lock'"
-check "자동설정 이름이 새 패키지로 바뀌어도 payment 의 afterName 과 맞는다 (payment 쪽 문자열과 payment-jdbc 클래스가 같이 찍힌다)" bash -c "grep -q 'dev.sumin.ovation.payment.jdbc.PaymentJdbcAutoConfiguration' '$PJ/modules/payment/src/main/kotlin/dev/sumin/ovation/payment/PaymentLedgerAutoConfiguration.kt' && grep -q 'dev.sumin.ovation.payment.jdbc.PaymentJdbcAutoConfiguration' '$PJ/modules/payment-jdbc/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports'"
+check "자동설정 이름이 새 패키지로 바뀌어도 payment 의 afterName 과 맞는다 (payment 쪽 문자열과 payment-jdbc 클래스가 같이 찍힌다)" bash -c "grep -q 'com.acme.shop.payment.jdbc.PaymentJdbcAutoConfiguration' '$PJ/modules/payment/src/main/kotlin/com/acme/shop/payment/PaymentLedgerAutoConfiguration.kt' && grep -q 'com.acme.shop.payment.jdbc.PaymentJdbcAutoConfiguration' '$PJ/modules/payment-jdbc/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports'"
 check "카탈로그에 payment-jdbc 항목이 남고 생성물이 맞다" bash -c "grep -q '\"path\": \"modules/payment-jdbc\"' '$PJ/capabilities.json' && cd '$PJ' && perl scripts/build-capabilities.pl --check"
 PO="$TMP/po"
 expect_exit 0 "payment-toss 만 요청하면 payment 가 따라오되 payment-jdbc 를 더하라고 알려 준다" stamp "$PO" --modules payment-toss
@@ -328,7 +328,7 @@ echo "== 9. --modules redis-core,redis-lock (Redis 환경변수 이름이 프로
 J="$TMP/j"
 expect_exit 0 "redis 조합을 찍는다" stamp "$J" --modules redis-core,redis-lock
 check "배포 선언의 redis 가 true 다 (redis 모듈을 골랐다)" has_line '^redis: true' "$J/deploy/app.yaml"
-check "Redis 환경변수 테스트가 프로젝트 접두사(OVATION_REDIS_*)로 찍힌다" bash -c "grep -q 'OVATION_REDIS_SSL_ENABLED' '$J/modules/redis-core/src/test/kotlin/dev/sumin/ovation/redis/core/RedisEnvironmentVariablesTest.kt' && grep -q 'OVATION_REDIS_LOCK_ENABLED' '$J/modules/redis-lock/src/test/kotlin/dev/sumin/ovation/redis/lock/RedisLockEnvironmentVariablesTest.kt'"
+check "Redis 환경변수 테스트가 프로젝트 접두사(ACME_REDIS_*)로 찍힌다" bash -c "grep -q 'ACME_REDIS_SSL_ENABLED' '$J/modules/redis-core/src/test/kotlin/com/acme/shop/redis/core/RedisEnvironmentVariablesTest.kt' && grep -q 'ACME_REDIS_LOCK_ENABLED' '$J/modules/redis-lock/src/test/kotlin/com/acme/shop/redis/lock/RedisLockEnvironmentVariablesTest.kt'"
 check "찍은 Redis 테스트에 SKELETON_ 이름이 남지 않는다" bash -c "! grep -rq 'SKELETON_' '$J/modules/redis-core/src/test' '$J/modules/redis-lock/src/test'"
 check "배포 선언에 redis-core 안내가 남는다" has_line '\[redis-core\]' "$J/deploy/app.yaml"
 
@@ -341,7 +341,7 @@ check "기본값으로 찍으면 카탈로그가 stamped 모드이고 스타터 
 check "찍은 프로젝트의 카탈로그 생성물이 맞다 (--check)" bash -c "cd '$A' && perl scripts/build-capabilities.pl --check"
 check "찍은 프로젝트의 llms.txt 는 스켈레톤을 가리키고 빠진 모듈을 알려 준다 (이 프로젝트에 없는 것: board)" bash -c "grep -q 'kotlin-skeleton' '$A/llms.txt' && grep -q '이 프로젝트에 없는 것' '$A/llms.txt' && grep -q '^- board:' '$A/llms.txt'"
 check "게시판으로 찍으면 board · board-jdbc 항목이 남고 결정표에 게시판 줄이 있다" bash -c "has_path '$H' modules/board && has_path '$H' modules/board-jdbc && grep -q '게시판' '$H/llms.txt' && ! grep -q '^- 결제' '$H/llms.txt'"
-check "찍은 프로젝트의 설정 접두사가 새 이름이다 (ovation.board)" bash -c "grep -q '\"ovation.board\"' '$H/capabilities.json' && ! grep -q '\"skeleton\.board\"' '$H/capabilities.json'"
+check "찍은 프로젝트의 설정 접두사가 새 이름이다 (acme.board)" bash -c "grep -q '\"acme.board\"' '$H/capabilities.json' && ! grep -q '\"skeleton\.board\"' '$H/capabilities.json'"
 check "MySQL 로 찍으면 db-mysql 이 스타터 항목이고 db-postgresql 항목은 없다" bash -c "has_path '$C' modules/db-mysql && ! has_path '$C' modules/db-postgresql && perl -0ne 'exit(/\"starterModules\": \\[[^]]*db-mysql/ ? 0 : 1)' '$C/capabilities.json'"
 check "샘플로 찍으면 app-sample 항목과 그 스크립트(dev-sample)가 남고 기본값으로는 없다" bash -c "has_path '$G' apps/sample && has_path '$G' scripts/dev-sample.sh && ! has_path '$A' apps/sample"
 check "찍은 프로젝트에는 레시피 · 스켈레톤 도구가 없다 (new-project-recipe.md · new-project 스크립트 항목)" bash -c "test ! -e '$A/docs/new-project-recipe.md' && ! grep -q 'script-new-project' '$A/capabilities.json'"

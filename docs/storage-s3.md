@@ -144,7 +144,7 @@ R2 is S3-compatible; only credentials, region and endpoint differ:
 ```yaml
 skeleton:
   storage-s3:
-    bucket: ovation
+    bucket: acme
     region: auto
     endpoint-override: https://<account-id>.r2.cloudflarestorage.com
     path-style-access-enabled: true
@@ -173,7 +173,7 @@ cannot be rewritten after the fact. Give the presigner its own endpoint; everyth
 ```yaml
 skeleton:
   storage-s3:
-    bucket: ovation
+    bucket: acme
     region: us-east-1
     endpoint-override: http://s3:8333            # server → S3 (compose service name)
     path-style-access-enabled: true

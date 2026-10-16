@@ -101,13 +101,13 @@ No active profile counts as `default`, which is not allowed.
 The guard is an `EnvironmentPostProcessor`, so it runs before any bean exists. An app that adds its own startup
 guard on top (e.g. "stage/prod never allow clean, whatever the allowed profiles say") must also run before the
 `Flyway` bean — `FlywayMigrationInitializer`, which needs `Flyway`, runs `migrate()` (and the local clean strategy)
-when it is created, and with no ordering Spring may create both first (Ovation measured jOOQ → Flyway being created before its
+when it is created, and with no ordering Spring may create both first (a real project measured jOOQ → Flyway being created before its
 `DeployGuards` bean, so the guard fired only after clean had wiped the database). Either:
 
 - make the app guard an `EnvironmentPostProcessor` too (registered in `META-INF/spring.factories`) when it only
   reads the `Environment`; or
 - keep it a bean and make every `Flyway` bean depend on it with a **static** `BeanFactoryPostProcessor`
-  (what Ovation does, verified by an `ApplicationContextRunner` test that registers a Flyway configuration first and
+  (what a real project does, verified by an `ApplicationContextRunner` test that registers a Flyway configuration first and
   asserts the guard fails startup before the Flyway bean is created):
 
 ```kotlin

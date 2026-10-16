@@ -2,7 +2,7 @@
 # 새 프로젝트로 찍어내기: 패키지 · 설정 접두사 · 클래스 접두사 · 환경변수 접두사 · 이름 문자열을 한 번에 바꾼다.
 #
 #   scripts/rename-skeleton.sh <root-package> <config-prefix> <ClassPrefix> [target-dir]
-#   예) scripts/rename-skeleton.sh dev.sumin.ovation ovation Ovation
+#   예) scripts/rename-skeleton.sh com.acme.shop acme Acme
 #
 # 바꾸는 것
 #   dev.sumin.skeleton   → <root-package>        (Kotlin 패키지, 디렉토리, AutoConfiguration.imports, spring.factories, persistence.xml, 문서)
@@ -25,9 +25,9 @@
 # 끝나면 남은 흔적을 검사해 하나라도 있으면 exit 1. 그 다음 `./gradlew build` 로 확인한다. macOS/BSD sed 와 GNU sed 모두 동작.
 set -euo pipefail
 
-PKG="${1:?root package (e.g. dev.sumin.ovation)}"
-PREFIX="${2:?config prefix (e.g. ovation)}"
-CLASS="${3:?class prefix (e.g. Ovation)}"
+PKG="${1:?root package (e.g. com.acme.shop)}"
+PREFIX="${2:?config prefix (e.g. acme)}"
+CLASS="${3:?class prefix (e.g. Acme)}"
 ROOT="${4:-$(cd "$(dirname "$0")/.." && pwd)}"
 ENVPREFIX="$(echo "$PREFIX" | tr '[:lower:]-' '[:upper:]_')"
 CAMEL="$(echo "${CLASS:0:1}" | tr '[:upper:]' '[:lower:]')${CLASS:1}"

@@ -193,7 +193,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 하위 앱(rename-skeleton 으로 찍은 레포)이 위에서 아래로 따라 하면 된다. **켜지 않으면 아무것도 달라지지 않는다**(모듈을 끼우지 않은 앱의 응답은 덧붙는 키 `mine` · `authorRequired` 뿐이고 `apps/api` 시험은 한 줄도 바뀌지 않았다). 설계: `docs/superpowers/specs/2026-10-07-author-profiles-design.md`, 프론트 계약: `docs/author-profile-http-contract.md`, 모듈 페이지: `docs/modules/author-profile.md` · `author-profile-jdbc.md` · `board.md` · `storage.md`, `docs/accounts.md` "작성자 프로필".
 
-**A. 켤지 정한다 — 권고: 새로 시작하는 앱(Ovation 등)은 첫 배포부터 켠다.** 켜기 전에 쓴 글은 계정 id 를 공개 작성자 id 로 내보낸 적이 있어 켠 뒤 계정의 **첫 프로필과 영영 이어진다**(켜기 전의 받은편지함 payload · 첨부 키에도 계정 id 가 남는다). 비밀이 필요한 활동은 새 프로필로 하라고 안내하는 것은 앱의 몫이다. 모듈을 다시 빼는 것은 지원하는 방향이 아니다(글은 `author_ref` 를 유지하고 이름만 사라진다).
+**A. 켤지 정한다 — 권고: 새로 시작하는 앱(실사용 프로젝트등)은 첫 배포부터 켠다.** 켜기 전에 쓴 글은 계정 id 를 공개 작성자 id 로 내보낸 적이 있어 켠 뒤 계정의 **첫 프로필과 영영 이어진다**(켜기 전의 받은편지함 payload · 첨부 키에도 계정 id 가 남는다). 비밀이 필요한 활동은 새 프로필로 하라고 안내하는 것은 앱의 몫이다. 모듈을 다시 빼는 것은 지원하는 방향이 아니다(글은 `author_ref` 를 유지하고 이름만 사라진다).
 
 **B. 컴파일이 깨지는 곳 (켜지 않아도 먼저 고친다).**
 - platform: `AuthorCard` 가 세 번째 속성 `deleted: Boolean = false` 를 얻었다(두 인자 생성은 그대로 컴파일되고 `copy` · `component3` · `equals` / `hashCode` / `toString` 이 달라진다). 새 SPI `AuthorIdentities`(`allows(accountId, authorId, AuthorContext)`) · `AuthorAdoptionListener`(`name`, `pendingAccounts(limit, after)`, `adopt(accountId, authorId)`).
@@ -333,11 +333,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `scripts/new-project.sh` `in_list` (and the test scripts) piped a value into `grep -q` under `set -o pipefail`: grep exits early, the producer dies of SIGPIPE, and the pipeline reports "not found" — `unknown module: notification-jdbc` for a module that exists (seen once in `test-new-project.sh --full`). Here-strings now; `test-new-project.sh` guards against the pattern.
 
 ### Test infrastructure — containers, flaky tests (찍은 프로젝트가 가져갈 것은 아래 "복사할 것")
-- **Testcontainers: JVM 당 컨테이너 하나.** 앱 · `job-queue-jdbc` · `alert-jdbc` · `persistence-jooq` 의 테스트 설정이 `@Bean @ServiceConnection` 컨테이너였다 → 서로 다른 스프링 컨텍스트마다 컨테이너가 뜨고 컨텍스트 캐시가 JVM 종료까지 붙들었다(찍은 프로젝트에서 `postgres:18` 32 개 · 스왑 95%). 이제 `object SharedPostgres`/`SharedMySql`(static, 한 번) + 컨텍스트마다 새 데이터베이스(`create database`) + `JdbcConnectionDetails` 빈. 앱 코드는 그대로, 컨텍스트마다 Flyway 는 그대로 돈다. `max_connections=500` · PostgreSQL `fsync=off` · 앱 시험 설정 Hikari `minimum-idle: 1`(Ovation 의 같은 수정과 맞춤). 실측(같은 호스트, load 40~75): `:apps:api:test` 동시 컨테이너 5 → 1(컨텍스트 5 → 4: MockMvc 유무만 달랐던 시험을 맞췄다), `:apps:workbench:test` 11 이상(중단 시점, 약 26초에 하나씩 증가) → 1(컨텍스트 21), `job-queue-jdbc` `postgresTest` 2 → 1. 포크는 태스크당 하나라 DB 종류당 컨테이너 1 개.
+- **Testcontainers: JVM 당 컨테이너 하나.** 앱 · `job-queue-jdbc` · `alert-jdbc` · `persistence-jooq` 의 테스트 설정이 `@Bean @ServiceConnection` 컨테이너였다 → 서로 다른 스프링 컨텍스트마다 컨테이너가 뜨고 컨텍스트 캐시가 JVM 종료까지 붙들었다(찍은 프로젝트에서 `postgres:18` 32 개 · 스왑 95%). 이제 `object SharedPostgres`/`SharedMySql`(static, 한 번) + 컨텍스트마다 새 데이터베이스(`create database`) + `JdbcConnectionDetails` 빈. 앱 코드는 그대로, 컨텍스트마다 Flyway 는 그대로 돈다. `max_connections=500` · PostgreSQL `fsync=off` · 앱 시험 설정 Hikari `minimum-idle: 1`(실사용 프로젝트의 같은 수정과 맞춤). 실측(같은 호스트, load 40~75): `:apps:api:test` 동시 컨테이너 5 → 1(컨텍스트 5 → 4: MockMvc 유무만 달랐던 시험을 맞췄다), `:apps:workbench:test` 11 이상(중단 시점, 약 26초에 하나씩 증가) → 1(컨텍스트 21), `job-queue-jdbc` `postgresTest` 2 → 1. 포크는 태스크당 하나라 DB 종류당 컨테이너 1 개.
 - **가드**: `TestContainerRulesTest`(platform)가 테스트 소스의 `@ServiceConnection` · 컨테이너 `@Bean` 을 막는다. `scripts/new-project.sh --db mysql` 의 `TestcontainersConfiguration` 도 같은 모양(`SharedMySql`).
 - **`OpaqueUrlTokenCodecTest > rejects tampered token` 간헐 실패**: 마지막 base64 글자만 바꾸면 버려지는 비트만 건드려 바이트가 같을 수 있다(무작위 토큰의 약 6%). 서명 · 페이로드 바이트를 뒤집는 시험으로 바꾸고, `OpaqueUrlTokenCodec` · `AesGcmTextEncryptor` 가 **정규형이 아닌 base64url(패딩 · 0 이 아닌 버려진 비트)을 거부**하도록 했다(토큰 가변성 제거 — 한 값에 문자열 하나). JWT 에는 서명 · 페이로드 변조 시험을 더했다.
 - **부하에 민감한 시험**(load 60~70 + CPU 부하 8 에서 30회 반복: `ExternalHttpClientTest` 4/30 → 0/30, `ExternalHttpJsonExtensionsTest` 20/30 → 0/30): `ExternalHttpClientTest` · `ExternalHttpJsonExtensionsTest` 의 연결 · 응답 상한을 2 초 → 30 초로, 시간 초과 시험은 `sleep(300)` 대 50ms 경주에서 "서버가 응답을 잡아 둠"으로 바꿨다(예외 종류만 단언). 같은 냄새를 쓸어 고친 것: `AccountResponseLevelSecurityTest`(응답 400ms 이내 · sleep 800/900 → 메일을 래치로 잡아 두고 "요청이 끝났다"로 증명, 메일 도착은 폴링), `AccountTaskRunnerTest`, `redis-lock` · workbench 래치 3초 → 30초. `MagicLinkWebTest` · `AccountWebTest` 는 요청 IP 를 1..250 무작위로 골라, 한도 시험이 채워 둔 고정 IP(.9 등)를 가끔 만나 메일이 없었다(깨끗한 복사본의 build 에서 1회 실패) — 돌아가며 쓰는 .100~.199 로.
-- **복사할 것(Ovation 등 찍은 프로젝트)**: ① 앱의 `src/test/…/TestcontainersConfiguration.kt` 를 이 레포 것으로 교체(패키지만 바꾼다) ② `postgresTest`/`mysqlTest` 의 `DbTestcontainers.kt` 가 있으면 같은 방식으로 ③ `modules/platform` 의 `TestContainerRulesTest` ④ `modules/crypto` 의 `CanonicalBase64Url` + 두 호출부 + `OpaqueUrlTokenCodecTest` ⑤ 두 외부 HTTP 시험의 상한 · 래치 ⑥ `docs/testing.md` ⑦ 앱 `src/test/resources/config/application.yml`(Hikari `minimum-idle: 1`). 필요한 의존: 테스트 클래스패스의 `spring-boot-jdbc`(데이터 JDBC 스타터가 가져온다).
+- **복사할 것(실사용 프로젝트등 찍은 프로젝트)**: ① 앱의 `src/test/…/TestcontainersConfiguration.kt` 를 이 레포 것으로 교체(패키지만 바꾼다) ② `postgresTest`/`mysqlTest` 의 `DbTestcontainers.kt` 가 있으면 같은 방식으로 ③ `modules/platform` 의 `TestContainerRulesTest` ④ `modules/crypto` 의 `CanonicalBase64Url` + 두 호출부 + `OpaqueUrlTokenCodecTest` ⑤ 두 외부 HTTP 시험의 상한 · 래치 ⑥ `docs/testing.md` ⑦ 앱 `src/test/resources/config/application.yml`(Hikari `minimum-idle: 1`). 필요한 의존: 테스트 클래스패스의 `spring-boot-jdbc`(데이터 JDBC 스타터가 가져온다).
 
 ### Security review of the account lifecycle (fixes before the first release)
 - **Pre-hijack closed**: a mailbox proof (magic link, verified social login) on an unverified account discards the password someone set at sign-up and closes sessions; verification links are bound to the password they were issued for.
@@ -379,9 +379,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`JWT_SECRET` 별칭**: `apps/api` · `apps/sample` yml 이 `skeleton.auth.jwt.secret: ${JWT_SECRET:<개발용 기본값>}` 을 읽는다(워크벤치와 같다) — 배포 선언의 `secrets: [JWT_SECRET]` 이 그대로 닿는다. 개발용 기본값은 보호 환경에서 여전히 기동 실패다.
 - 문서: `docs/deploy.md`, `docs/modules/platform.md` · `migration.md`, `docs/config/modules/platform.yml`(`skeleton.deploy`), README · CLAUDE.md.
 
-### Ovation 하드닝 이식 (2026-10-06)
+### 실사용 프로젝트 하드닝 이식 (2026-10-06)
 
-Ovation 이 운영 설계(`hardening-design`)로 고친 것 중 범용인 것을 스켈레톤에 옮겼다. 각 항목은 고치기 전에 실패하는 테스트로 문제를 먼저 보였다.
+실사용 프로젝트이 운영 설계(`hardening-design`)로 고친 것 중 범용인 것을 스켈레톤에 옮겼다. 각 항목은 고치기 전에 실패하는 테스트로 문제를 먼저 보였다.
 
 - **`job-queue-jdbc` — 정확성 수정 3건 (동작이 바뀌는 변경)**: (1) `markDone`/`markRetry`/`markDead` 가 이제 `status='RUNNING' and locked_by and attempts` 가 내 청구와 같을 때만 반영된다 — 스테일 복구로 남에게 넘어간 잡을 옛 워커가 늦게 덮어쓰던 것을 막는다(시그니처에 `workerId`·`attempts` 가 늘고 `Boolean` 을 돌려준다). (2) 묶음 안의 잡은 차례가 올 때 `renew` 로 임대를 새로 잡고, 이미 남에게 넘어갔으면 돌리지 않는다 — 묶음이 한 `locked_at` 을 공유해 뒤 잡이 두 번 도는 문제. (3) 스테일 복구가 시도를 다 쓴 잡(`attempts >= max_attempts`)은 PENDING 이 아니라 DEAD 로 보낸다 — 워커를 죽이는 독 작업이 영영 되살아나지 않게. `recoverStale` 은 `StaleRecovery(recovered, dead)` 를 돌려주고, `UPDATE … RETURNING` 대신 한 트랜잭션의 select 후 update 라 MySQL 에서도 같다
 - **`job-queue-jdbc` — 새 기능**: `JobDeadListener` 고리(재시도 소진 · 영구 실패 · 처리기 없음 · 멈춘 채 소진), `skeleton_jobs.log_context` 칼럼(양 방언 마이그레이션 `V20261005175044`)과 `JobContextPropagator` — `skeleton.job-queue.propagated-mdc-keys`(기본 `[traceId]`)의 MDC 값이 잡 줄에 실려 워커가 돌리는 동안 복원되고 `jobId`/`jobKind` 가 붙는다, `skeleton.job-queue.retention.*` — DONE/DEAD 줄 정리(**기본 꺼짐**: 줄 삭제는 보관 정책이라 앱이 고른다). 두 방언 모두 `postgresTest`/`mysqlTest` 로 검증
@@ -501,7 +501,7 @@ src/test/.../dev/sumin/skeleton/**                →  src/test/.../dev/sumin/sk
 `payment-toss`/`-stripe` → `payment`, `notification-jdbc`/`-sse`/`-slack`/`-websocket` → `notification`, `storage-s3` → `storage`, `auth-social` → `auth`,
 `auth-social-google`/`-kakao`/`-naver` → `auth-social`, `redis-lock`/`-cache`/`-rate-limit` → `redis-core`.
 
-**5. 확인.** `./gradlew build` 와 `scripts/rename-skeleton.sh dev.sumin.ovation ovation Ovation` 후 `./gradlew build` 를 복사본에서 돌려 통과를 확인했다.
+**5. 확인.** `./gradlew build` 와 `scripts/rename-skeleton.sh com.acme.shop acme Acme` 후 `./gradlew build` 를 복사본에서 돌려 통과를 확인했다.
 `skeleton.notification.sse.enabled=false` 처럼 모듈을 끄면 이제 기동이 깨지지 않는다 (`apps/workbench` `ModuleDisabledIntegrationTest`).
 
 ### 이식 안내 — PostgreSQL 기본 + 방언 조립식 + Flyway 충돌 방지 (2026-10-01)
@@ -636,9 +636,9 @@ database {
 **9. 동작 수정.** notification-jdbc 가 같은 알림을 같은 트랜잭션에서 두 번 저장하면 PG 에서 트랜잭션이 깨지던 문제
 (`DuplicateKeyException` 삼키기) → `insertIgnore`. 두 DB 테스트(`saving the same event twice inside one transaction…`)로 고정.
 
-### 이식 안내 — 마이그레이션 규칙 검사 범위 · 앱 기동 규칙 순서 (2026-10-01, Ovation 이식에서 발견)
+### 이식 안내 — 마이그레이션 규칙 검사 범위 · 앱 기동 규칙 순서 (2026-10-01, 실사용 프로젝트이식에서 발견)
 
-`9593d55` 를 이미 옮긴 앱이 따라 하면 된다. 아래 두 가지 모두 Ovation(`7161171` · `0440714`)에서 먼저 고치고 확인한 것.
+`9593d55` 를 이미 옮긴 앱이 따라 하면 된다. 아래 두 가지 모두 실사용 프로젝트(`7161171` · `0440714`)에서 먼저 고치고 확인한 것.
 
 **1. `MigrationFileRules` 가 레포 안 워크트리 · 레포 · `node_modules` 를 훑지 않게.** `9593d55` 는 `Files.walk` 로 루트 아래를 다
 훑고 나서 경로에 `build` 등이 있는지 걸렀다. 그래서 (가) 레포 안에 다른 git 워크트리가 있으면 — Claude Code 가 만드는
@@ -653,12 +653,12 @@ database {
 
 **2. 앱이 따로 둔 기동 규칙은 Flyway 빈보다 먼저.** 스켈레톤 가드(`MigrationCleanGuardEnvironmentPostProcessor`)는
 `EnvironmentPostProcessor` 라 빈보다 먼저 돈다 — 코드 변경 없음. 하지만 앱이 그 위에 **보통 빈**으로 기동 규칙을 더하면
-(예: Ovation `DeployGuards` — stage · prod 에선 허용 프로필과 무관하게 clean 설정 거부) Spring 이 Flyway 빈을 먼저 만들 수
+(예: 실사용 프로젝트의 `DeployGuards` — stage · prod 에선 허용 프로필과 무관하게 clean 설정 거부) Spring 이 Flyway 빈을 먼저 만들 수
 있고, 그러면 Flyway 빈을 받는 `FlywayMigrationInitializer` 의 `migrate()`(로컬 clean 전략 포함)가 DB 를 지운 **뒤에야** 규칙이 기동을 막는다
-(Ovation 실측: jOOQ → Flyway 가 먼저 생성). 둘 중 하나:
+(실사용 프로젝트 실측: jOOQ → Flyway 가 먼저 생성). 둘 중 하나:
 
 - 규칙이 `Environment` 만 읽으면 `EnvironmentPostProcessor` 로 만든다 (`META-INF/spring.factories`).
-- 빈으로 두려면 static `BeanFactoryPostProcessor` 로 모든 `Flyway` 빈이 규칙 빈에 기대게 한다 (Ovation 방식,
+- 빈으로 두려면 static `BeanFactoryPostProcessor` 로 모든 `Flyway` 빈이 규칙 빈에 기대게 한다 (실사용 프로젝트 방식,
   `ApplicationContextRunner` 에 Flyway 설정을 먼저 등록하고 「규칙으로 기동 실패 + Flyway 빈 미생성」을 확인하는 테스트로 고정):
 
 ```kotlin
@@ -680,7 +680,7 @@ private class FlywayAfterDeployGuards :
 - `storage-s3`: static key-pair credentials (`credentials.access-key-id` / `secret-access-key`) for R2/MinIO with fail-fast on half-specified pairs; `region: auto` supported; `UploadObjectRequest.cacheControl` / `contentDisposition` passed to `PutObject`; `StorageService.deleteAll` (S3: `DeleteObjects` in batches of 1000). `docs/storage-s3.md` R2 section
 
 ### Added
-- `storage-s3`: `skeleton.storage-s3.presign.endpoint-override` — a separate endpoint for presigned URLs (browser-facing) when the server reaches S3 through a compose service name such as `http://s3:8333`; unset keeps the shared `endpoint-override`. Requested from the Ovation local SeaweedFS setup. `docs/storage-s3.md` "Local container"
+- `storage-s3`: `skeleton.storage-s3.presign.endpoint-override` — a separate endpoint for presigned URLs (browser-facing) when the server reaches S3 through a compose service name such as `http://s3:8333`; unset keeps the shared `endpoint-override`. Requested from a real project's local SeaweedFS setup. `docs/storage-s3.md` "Local container"
 - `modules/persistence-jooq`: jOOQ with code generation from a DDL file (`DDLDatabase`, no DB at build), `UtcInstantConverter` (`*_at` → `Instant`, UTC-fixed), `JooqAuditRecordListener`, UTC session defaults; Testcontainers MySQL test with JVM zone forced to Seoul. `docs/persistence-jooq.md`
 - `modules/job-queue-jdbc`: MySQL table retry queue — `JobQueue.enqueue`, `JobHandler` by type, `FOR UPDATE SKIP LOCKED` claiming, exponential backoff, `max-attempts` → DEAD, `PermanentJobFailureException`, stale RUNNING recovery, no Redis; 6 Testcontainers tests. `docs/job-queue-jdbc.md`
 - `modules/notification-mail`: SMTP `MailSender` on top of `spring.mail.*`, off by default. `docs/notification-mail.md`
@@ -726,8 +726,8 @@ private class FlywayAfterDeployGuards :
 
 ### Fixed
 - 방언 모듈을 안 끼운 앱이 `NoSuchBeanDefinitionException: SqlDialect` 만 보던 경우에도 "db-postgresql 또는 db-mysql 을 끼워라" 안내가 나온다 (`SqlDialectFailureAnalyzer`, persistence-jdbc `spring.factories`). `db-postgresql` / `db-mysql` 자동설정은 Boot 의 Data JDBC 자동설정보다 먼저 돌도록 `beforeName` 으로 명시 (이름 순서에 기대지 않음). `newMigration` 작업 그룹 이름을 `migration` 으로 (rename 후 `skeleton` 이 남던 것)
-- Copying a module migration into `schema.sql` broke jOOQ codegen (reported from Ovation): `DDLDatabase` cannot parse MySQL inline `index` clauses, and a separate `create index` is not idempotent on MySQL 8.4. `job-queue-jdbc` and `notification-jdbc` migrations now wrap their index clauses in `/* [jooq ignore start] */ … /* [jooq ignore stop] */` (comma inside the span), `persistence-jooq` sets `parseIgnoreComments=true` and generates code from those migrations on every build, and `SchemaSqlInitIntegrationTest` runs a `schema.sql` containing the `skeleton_jobs` DDL twice and checks the indexes. `docs/persistence-jooq.md` documents the pattern
-- `scripts/rename-skeleton.sh` (reported from the Ovation rename): the YAML root key `skeleton:` was left as is, so every `<prefix>.*` block in `application*.yml` was silently ignored after a rename (e.g. `storage-s3.enabled=false` lost, module booted enabled); `.env.example` kept `SKELETON_*` while the yml switched to the new prefix; visible defaults kept the skeleton name (OpenAPI title/description, `skeleton-job-queue` thread, `skeleton-code-enum` Jackson module, `skeleton-async-`/`skeleton-scheduler-` prefixes, Kafka headers, Redis key prefix, JWT issuer, SSM paths, `skeleton-jooq-schema.sql`). `CountryTimeZones` looked up its TSV by the absolute path `/dev/sumin/skeleton/time/…` while the resource directory moved with the package (3 `modules:time` tests failed after a rename) — it now loads the resource relative to its own class. The script rewrites all of the above (plus the slash-form `dev/sumin/skeleton` in `.py`/`.sh`) and ends with a leftover scan that fails the run if any `skeleton` trace remains
+- Copying a module migration into `schema.sql` broke jOOQ codegen (reported from a real project): `DDLDatabase` cannot parse MySQL inline `index` clauses, and a separate `create index` is not idempotent on MySQL 8.4. `job-queue-jdbc` and `notification-jdbc` migrations now wrap their index clauses in `/* [jooq ignore start] */ … /* [jooq ignore stop] */` (comma inside the span), `persistence-jooq` sets `parseIgnoreComments=true` and generates code from those migrations on every build, and `SchemaSqlInitIntegrationTest` runs a `schema.sql` containing the `skeleton_jobs` DDL twice and checks the indexes. `docs/persistence-jooq.md` documents the pattern
+- `scripts/rename-skeleton.sh` (reported from a project rename): the YAML root key `skeleton:` was left as is, so every `<prefix>.*` block in `application*.yml` was silently ignored after a rename (e.g. `storage-s3.enabled=false` lost, module booted enabled); `.env.example` kept `SKELETON_*` while the yml switched to the new prefix; visible defaults kept the skeleton name (OpenAPI title/description, `skeleton-job-queue` thread, `skeleton-code-enum` Jackson module, `skeleton-async-`/`skeleton-scheduler-` prefixes, Kafka headers, Redis key prefix, JWT issuer, SSM paths, `skeleton-jooq-schema.sql`). `CountryTimeZones` looked up its TSV by the absolute path `/dev/sumin/skeleton/time/…` while the resource directory moved with the package (3 `modules:time` tests failed after a rename) — it now loads the resource relative to its own class. The script rewrites all of the above (plus the slash-form `dev/sumin/skeleton` in `.py`/`.sh`) and ends with a leftover scan that fails the run if any `skeleton` trace remains
 - Modules no longer depend on the app component-scanning `dev.sumin.skeleton`: `platform` registers `TraceIdFilter`, `RequestLoggingFilter` and `GlobalExceptionHandler` via `PlatformWebAutoConfiguration`, `auth` registers `AuthController` in `AuthAutoConfiguration` (all `@ConditionalOnMissingBean`, so scanning apps keep their beans). Found by assembling a monorepo app in `dev.sumin.app1`: auth endpoints were 404 and responses had no trace id. Guarded by `ModuleSelfRegistrationIntegrationTest`, which boots a root configuration that scans nothing. `CodeEnumOpenApiCustomizer` no longer filters DTOs by the `dev.sumin.skeleton` package prefix (it skips JDK/Kotlin/Spring/Jackson types instead), so code-enum descriptions appear for DTOs in any package
 - 매핑되지 않은 API 경로를 `500`이 아니라 표준 `404 ApiError`로 응답
 - break-glass/dev-login authentication is no longer overwritten by a later bearer-token filter when both headers are present

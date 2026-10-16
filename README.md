@@ -178,14 +178,14 @@ scripts/new-project.sh <target-dir> <root-package> <config-prefix> <ClassPrefix>
 
 ```bash
 # 스타터 그대로 (platform, auth, account-jdbc, auth-session-jdbc, legal-jdbc, persistence-jdbc, db-postgresql, migration-flyway, time)
-scripts/new-project.sh ~/work/ovation dev.sumin.ovation ovation Ovation
+scripts/new-project.sh ~/work/acme com.acme.shop acme Acme
 
 # 모듈 더하기 — 한 모듈 = 의존성 한 줄 + (바꿀 때만) 설정 몇 줄
-scripts/new-project.sh ~/work/ovation dev.sumin.ovation ovation Ovation \
+scripts/new-project.sh ~/work/acme com.acme.shop acme Acme \
     --modules job-queue-jdbc,notification-mail,storage-s3,scheduler
 
 # MySQL 로: db-mysql, datasource URL, compose, Testcontainers, 첫 마이그레이션 폴더까지 바뀐다
-scripts/new-project.sh ~/work/ovation dev.sumin.ovation ovation Ovation --db mysql --modules job-queue-jdbc
+scripts/new-project.sh ~/work/acme com.acme.shop acme Acme --db mysql --modules job-queue-jdbc
 ```
 
 - 모듈은 스타터의 모듈 + `--modules` 를 모듈끼리의 `project(":modules:x")` 의존으로 **닫은** 집합이다 (`storage-s3` → `storage`; `crypto` 는 컴파일 전용이라 소스만 따라오고 앱의 런타임에는 없다). 테스트에만 필요한 모듈 의존도 따라오고 이유가 출력된다. 모르는 모듈 이름이면 유효한 목록과 함께 exit 2.
@@ -196,7 +196,7 @@ scripts/new-project.sh ~/work/ovation dev.sumin.ovation ovation Ovation --db mys
 
 - 찍힌 프로젝트에는 배포 선언 `deploy/app.yaml`(이름 · 이미지 · `env_prefix` · DB · Redis 를 채운다), 로컬 빌드 이미지(`image_local: true`, GHCR 는 쓰지 않는다 — 이미지 워크플로는 수동 실행만 · 보류), 계약 증명 `scripts/test-deploy-contract.sh` 가 따라온다 — **[배포 계약 · 배포 가드 · 모듈별 비밀: docs/deploy.md](docs/deploy.md)**.
 
-수동으로 하려면: 레포를 복사해 `scripts/rename-skeleton.sh dev.sumin.ovation ovation Ovation`, 쓰지 않는 모듈과 `apps/workbench` 를 지우고 `docs/minimal-composition.md` 를 따른다.
+수동으로 하려면: 레포를 복사해 `scripts/rename-skeleton.sh com.acme.shop acme Acme`, 쓰지 않는 모듈과 `apps/workbench` 를 지우고 `docs/minimal-composition.md` 를 따른다.
 
 <!-- sample:start -->
 ## 샘플 앱 — 새 기능을 어떻게 얹는지 (`apps/sample`)

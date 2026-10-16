@@ -94,7 +94,7 @@ class ProjectRegistryTest {
 
     @Test
     fun `a project config value may use a placeholder`() {
-        val registry = ProjectRegistry.from(env(*twoProjects, "OVATION_SECRET" to "from-env", "skeleton.projects.a.config.demo.secret" to "\${OVATION_SECRET}"))
+        val registry = ProjectRegistry.from(env(*twoProjects, "ACME_SECRET" to "from-env", "skeleton.projects.a.config.demo.secret" to "\${ACME_SECRET}"))
         assertEquals("from-env", registry.bind(registry.projects.first { it.id == "a" }, "skeleton.demo", Demo::class.java).secret)
     }
 

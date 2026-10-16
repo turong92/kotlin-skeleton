@@ -22,7 +22,7 @@ class ProjectRegistry private constructor(
 
     private val byHost = projects.flatMap { p -> p.hosts.map { it to p } }.toMap()
 
-    /** 요청의 Host 로 프로젝트를 정한다 — 소문자로, 포트는 빼고 비교한다(`ovation.localhost:5173` == `ovation.localhost`). 모르는 도메인은 null */
+    /** 요청의 Host 로 프로젝트를 정한다 — 소문자로, 포트는 빼고 비교한다(`acme.localhost:5173` == `acme.localhost`). 모르는 도메인은 null */
     fun byHost(host: String?): Project? =
         host?.trim()?.lowercase(Locale.ROOT)?.let { if (it.startsWith("[")) it else it.substringBefore(':') }?.let(byHost::get)
 

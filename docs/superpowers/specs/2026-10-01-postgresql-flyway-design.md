@@ -1,9 +1,9 @@
 # PostgreSQL 기본 + 방언 조립식 + Flyway 충돌 방지 — 설계
 
 - 날짜: 2026-10-01
-- 요청: ovation `.superpowers/sdd/2026-10-01-skeleton-pg-request.md` (주인 sumin)
+- 요청: 실사용 프로젝트 `.superpowers/sdd/2026-10-01-skeleton-pg-request.md` (주인 sumin)
 - 기준 커밋: `5cf377b`
-- 결과물의 핵심: 하위 앱(ovation)이 손으로 옮길 수 있는 **CHANGELOG 이식 안내**
+- 결과물의 핵심: 하위 앱(실사용 프로젝트)이 손으로 옮길 수 있는 **CHANGELOG 이식 안내**
 
 ## 1. 목표와 결정
 
@@ -119,7 +119,7 @@ spring:
 
 - 형식: `V<yyyyMMddHHmmss UTC>__<snake_case>.sql`, 정규식 `^V\d{14}__[a-z0-9]+(_[a-z0-9]+)*\.sql$`.
 - 기존 파일 재명명: `notification` `V2026061701` → `V20260617010000__skeleton_notification_inbox`, `job-queue` `V2026091001` → `V20260910010000__skeleton_jobs`. 앱 `V1__init.sql`(주석뿐인 자리표시)은 삭제. 테스트 전용 `V9000__utc_probe` → 타임스탬프로.
-- 재명명은 이미 적용된 DB 의 이력과 어긋난다. ovation 은 PG 로 새 DB 에서 시작하므로 영향 없음 — CHANGELOG 에 명시.
+- 재명명은 이미 적용된 DB 의 이력과 어긋난다. 실사용 프로젝트는 PG 로 새 DB 에서 시작하므로 영향 없음 — CHANGELOG 에 명시.
 
 ### 5.2 outOfOrder = 모든 환경
 

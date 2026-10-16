@@ -1,7 +1,7 @@
 # Owner alerts (`alert`, `alert-jdbc`)
 
 The skeleton's answer to "how do I learn that production is broken" is **not Sentry**: it is an alert to the owner, over a Discord-compatible
-webhook (and optionally mail), for the few things that need a human *now*. Ported from the Ovation project's hardening work and made generic.
+webhook (and optionally mail), for the few things that need a human *now*. Ported from a real-world project's hardening work and made generic.
 
 ## What it does
 
