@@ -14,9 +14,12 @@ class NotificationWebSocketMessageBrokerConfigurer(
     private val authenticationInterceptor: NotificationWebSocketAuthenticationInterceptor,
     private val inboundAuthorizationInterceptor: NotificationWebSocketInboundAuthorizationInterceptor,
     private val heartbeatTaskScheduler: TaskScheduler,
+    /** 프로젝트 모드(프로젝트 레지스트리가 있을 때)에만 넘어온다 — 핸드셰이크가 프로젝트를 적고, 공개 토픽 구독에 선택자가 붙는다 */
+    private val projectSelectorInterceptor: NotificationWebSocketProjectSelectorInterceptor? = null,
 ) : WebSocketMessageBrokerConfigurer {
     override fun registerStompEndpoints(registry: StompEndpointRegistry) {
         val endpointRegistration = registry.addEndpoint(properties.endpoint.path)
+        if (projectSelectorInterceptor != null) endpointRegistration.addInterceptors(ProjectHandshakeInterceptor())
         if (properties.endpoint.allowedOriginPatterns.isNotEmpty()) {
             endpointRegistration.setAllowedOriginPatterns(*properties.endpoint.allowedOriginPatterns.toTypedArray())
         }
@@ -33,6 +36,7 @@ class NotificationWebSocketMessageBrokerConfigurer(
 
         val broker = registry.enableSimpleBroker(*properties.broker.simpleBrokerDestinationPrefixes.toTypedArray())
         broker.setTaskScheduler(heartbeatTaskScheduler)
+        if (projectSelectorInterceptor != null) broker.setSelectorHeaderName(SELECTOR_HEADER)
         broker.setHeartbeatValue(
             longArrayOf(
                 properties.heartbeat.serverInterval.toMillis(),
@@ -42,7 +46,7 @@ class NotificationWebSocketMessageBrokerConfigurer(
     }
 
     override fun configureClientInboundChannel(registration: ChannelRegistration) {
-        registration.interceptors(traceInterceptor, authenticationInterceptor, inboundAuthorizationInterceptor)
+        registration.interceptors(*listOfNotNull(traceInterceptor, authenticationInterceptor, inboundAuthorizationInterceptor, projectSelectorInterceptor).toTypedArray())
         registration.applyExecutor(properties.inboundChannel)
     }
 

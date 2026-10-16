@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.notification.websocket
 
+import dev.sumin.skeleton.common.project.ProjectRegistry
 import dev.sumin.skeleton.common.web.PublicEndpointContributor
 import dev.sumin.skeleton.notification.NotificationAutoConfiguration
 import dev.sumin.skeleton.notification.NotificationSubscriptionRegistry
@@ -34,10 +35,12 @@ class NotificationWebSocketAutoConfiguration {
     fun notificationWebSocketAuthenticationInterceptor(
         properties: NotificationWebSocketProperties,
         tokenVerifier: ObjectProvider<NotificationWebSocketTokenVerifier>,
+        projects: ObjectProvider<ProjectRegistry>,
     ): NotificationWebSocketAuthenticationInterceptor =
         NotificationWebSocketAuthenticationInterceptor(
             properties = properties,
             tokenVerifier = tokenVerifier.ifAvailable,
+            projects = projects.ifAvailable,
         )
 
     @Bean
@@ -116,6 +119,7 @@ class NotificationWebSocketBrokerConfiguration {
         authenticationInterceptor: NotificationWebSocketAuthenticationInterceptor,
         inboundAuthorizationInterceptor: NotificationWebSocketInboundAuthorizationInterceptor,
         notificationWebSocketHeartbeatTaskScheduler: ThreadPoolTaskScheduler,
+        projects: ObjectProvider<ProjectRegistry>,
     ): WebSocketMessageBrokerConfigurer =
         NotificationWebSocketMessageBrokerConfigurer(
             properties = properties,
@@ -123,5 +127,6 @@ class NotificationWebSocketBrokerConfiguration {
             authenticationInterceptor = authenticationInterceptor,
             inboundAuthorizationInterceptor = inboundAuthorizationInterceptor,
             heartbeatTaskScheduler = notificationWebSocketHeartbeatTaskScheduler,
+            projectSelectorInterceptor = projects.ifAvailable?.let { NotificationWebSocketProjectSelectorInterceptor(properties) },
         )
 }

@@ -12,7 +12,6 @@ object ProjectUnawareFeatures {
 
     val DEFAULT = listOf(
         Feature("payment", "dev.sumin.skeleton.payment.PaymentAutoConfiguration"),
-        Feature("notification-websocket (STOMP user destinations)", "dev.sumin.skeleton.notification.websocket.NotificationWebSocketAutoConfiguration"),
         Feature("crypto", "dev.sumin.skeleton.crypto.CryptoAutoConfiguration"),
         Feature("event-kafka", "dev.sumin.skeleton.event.kafka.EventKafkaAutoConfiguration"),
     )
