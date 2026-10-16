@@ -11,6 +11,14 @@ skeleton:
       hosts: [a.localhost]
       schema: proj_a
       datasource: { username: proj_a, password: proj_a_dev_pw }   # 프로젝트마다 DB 계정이 필수 — scripts/dev-multi.sh 가 계정 · 스키마를 만든다
+      # 프로젝트마다 갈리는 설정의 전체 목록과 필수 값은 docs/multi-project.md. 모듈을 얹으면 같은 config 아래에 그 키를 적는다 (스타터는 로그인 쪽만 쓴다):
+      #   auth-social.providers.google: { enabled: true, client-id: ..., client-secret: ${A_GOOGLE_SECRET}, redirect-uri: https://a.example.com/auth/callback/google }
+      #   auth-social-x / auth-social-oidc.providers.<코드>: { client-id: ..., client-secret: ... }       # 켜는 스위치는 client-id
+      #   notification-mail: { from: "Project A <no-reply@a.example.com>" }                              # 프로젝트마다 필수 (공통 값으로 내려가지 않는다)
+      #   storage-s3: { bucket: shared-bucket, key-prefix: a }   # 버킷을 나눠 쓰면 key-prefix 가 서로 달라야 한다. 공개 URL 은 RAW 만
+      #   storage.web: { key-prefix: uploads, key-owner: OPAQUE, key-secret: ${A_STORAGE_KEY_SECRET} }  # OPAQUE 비밀은 프로젝트마다 달라야 한다
+      #   legal: { location: file:/etc/app/legal-a/, facts: { company-name: Project A, contact-email: help@a.example.com } }
+      #   captcha-turnstile: { secret-key: ${A_TURNSTILE_SECRET}, expected-hostname: a.example.com }
       config:
         auth:
           jwt: { secret: dev-only-jwt-secret-of-project-a-32+bytes, issuer: project-a }

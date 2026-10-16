@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 한 서버에 프로젝트 N개 — 4조각: 소셜 · 메일 · 파일 · 약관 · 캡차 · Redis · 웹소켓 (2026-10-16)
+
+- **프로젝트를 아는 모듈**: `auth-social*`(Google · Kakao · Naver · X · OIDC — 제공자가 프로젝트마다 만들어지고 A 에서 켠 제공자는 B 의 `/auth/methods` · 로그인 · 연결에 없다, OIDC discovery · JWKS 보관은 제공자 인스턴스 안), `notification-mail`(발신자 `from` 프로젝트마다 필수), `storage` · `storage-s3`(프로젝트마다 버킷 · 자격 증명 · 공개 URL(RAW), 같은 버킷 접두사 `key-prefix`, 업로드 키 규칙 · OPAQUE `key-secret`), `legal`(문서 위치 · 필수 종류 · 사실 · 템플릿 허용), `captcha-turnstile`(비밀 키 · 기대 hostname), `redis-*`(키에 `project:<id>` 가 들어간다), `notification-websocket`(세션의 프로젝트 = 핸드셰이크 Host, 사용자 이름 `<프로젝트>|<계정 id>`, 공개 토픽은 브로커 선택자). `ProjectUnawareFeatures` 표에서 이 모듈들을 뺐다(남은 것: `payment`, `crypto`, `event-kafka`). 목록이 비면 지금과 같다.
+- 새 공개 타입: `OAuthProviderSource`(auth-social), `ProjectRoutedStorage` · `KeyPrefixedPresignedStorage` · `StorageKeySchemes`(storage), `ProjectsNotConfigured`(platform), `ProjectLegalCatalog` · `ProjectLegalRules`(legal), `ProjectUserPrincipal` · `ProjectHandshakeInterceptor`(notification-websocket). 새 설정 키: `storage-s3.key-prefix`. `ProjectConfigKeys.SUPPORTED` 에 위 모듈의 키가 늘었다.
+- **모듈 의존이 늘었다**: `notification-mail` · `storage-s3` · `redis-core` 가 `platform` 에 의존한다(프로젝트 문맥을 읽는다). `LegalCatalog` · `LegalRules` 는 `open`, `RedisKeyPrefixer` 는 프로젝트 안에서 `<key-prefix>:project:<id>:…`.
+- 판단: `crypto` 는 프로젝트별 키가 필요하다(구현은 결제 조각에서) — `docs/multi-project.md`. 찍은 프로젝트에서 켜는 순서도 같은 문서에.
+
 ### 작업 일꾼: 넣자마자 깨우기 · 이어 집기 · 동시 처리 (2026-10-16)
 
 - `job-queue-jdbc`: 잡을 넣은 트랜잭션이 **커밋되면** 같은 프로세스의 일꾼을 바로 깨운다(트랜잭션 밖이면 즉시). 폴링(`poll-interval`)은 안전망으로 남는다 — 다른 인스턴스가 넣은 잡 · 나중 `runAt` 의 잡은 예전처럼 폴링이 찾는다. 묶음(`batch-size`)이 가득 찼으면 쉬지 않고 바로 다시 집는다. 옵션 없이 항상 켜진다(처리 순서 · 임대 규칙은 그대로). 다만 가득 찬 묶음을 바로 이어 집으므로 밀린 일감은 `batch-size`/`poll-interval` 로 제한되지 않고 연달아 나간다(밀린 메일이 한꺼번에) - 속도 제한이 필요한 처리기는 스스로 건다. 정리 일(스테일 복구 · DEAD 유예 · 보관 정리)은 일꾼 고리에서 프로젝트마다 `poll-interval` 에 한 번만 돈다. `batch-size` < 1 · `poll-interval` <= 0 은 기동 실패. `payment.webhook.inline` 은 `job-queue.mode=on-request` 에서 무시된다(기동 경고).

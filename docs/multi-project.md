@@ -27,9 +27,9 @@ skeleton:
 - `SqlDialectVerifier` 는 기동 때 연결을 열지 않고 URL 로 방언을 본다. `/health` 는 프로젝트별 풀을 하나씩 본다(Boot 의 라우팅 DataSource 지원).
 - `status: closed` 인 프로젝트: 도메인은 `503 COMMON.PROJECT_CLOSED`, 풀 · 마이그레이션 · "프로젝트 둘 이상" 개수에서 빠진다(스키마는 안 적어도 된다).
 
-## 로그인 쪽 설정을 프로젝트별로
+## 설정을 프로젝트별로 (로그인 · 소셜 · 메일 · 파일 · 약관 · 캡차)
 
-`config` 에 적은 `skeleton.*` 키는 공통 값 위에 덮여 **같은 properties 클래스**로 바인딩된다 (`ProjectRegistry.bind` / `scopedFrom`). 지금 프로젝트별로 갈리는 것:
+`config` 에 적은 `skeleton.*` 키는 공통 값 위에 덮여 **같은 properties 클래스**로 바인딩된다 (`ProjectRegistry.bind` / `scopedFrom`). 지금 프로젝트별로 갈리는 것(로그인 쪽 + 소셜 · 메일 · 파일 · 약관 · 캡차 · Redis · 웹소켓):
 
 | 무엇 | 키 (config 아래) | 어떻게 |
 |---|---|---|
@@ -83,7 +83,34 @@ skeleton:
 
 ## 아직 프로젝트를 모르는 기능
 
-결제 · 소셜 로그인 · 메일 발신 · 파일 · 알림 웹소켓 · Redis · 캡차 · 암호화 · Kafka 가 **빌드에 들어 있고 서비스 중인 프로젝트가 둘 이상**이면 기동이 실패한다(한 곳, `ProjectUnawareFeatures`). 해결: 모듈을 빼거나 나머지를 `status: closed` 로. 모듈이 프로젝트를 알게 되면 표에서 뺀다. (웹소켓은 STOMP 사용자 목적지가 계정 id 라 프로젝트끼리 겹칠 수 있어 남겨 두었다.)
+결제(`payment*`) · 암호화(`crypto`) · Kafka(`event-kafka`) 가 **빌드에 들어 있고 서비스 중인 프로젝트가 둘 이상**이면 기동이 실패한다(한 곳, `ProjectUnawareFeatures`). 해결: 모듈을 빼거나 나머지를 `status: closed` 로. 모듈이 프로젝트를 알게 되면 표에서 뺀다.
+소셜 로그인 · 메일 발신 · 파일 · 약관 · 캡차 · Redis · 알림 웹소켓은 위 표대로 프로젝트를 안다. 한계(프로젝트가 알지 못하는 부분):
+
+- **프로젝트별 SMTP · Redis · 웹소켓 허용 출처는 없다** — 접속 정보(`spring.mail.*` · `skeleton.redis.*` · `notification-websocket.endpoint.*`)는 서버 공통이다. 메일은 발신자(`from`)만 프로젝트별이다.
+- **캡차 `enabled` 는 앱 전체 하나**다 — 켜면 서비스 중인 프로젝트 모두 비밀 키가 있어야 한다.
+- **저장소 공개 URL 은 프로젝트 모드에서 RAW 만** 된다(OPAQUE 는 `crypto` 가 프로젝트를 알아야 한다 — 아래).
+- 버킷을 정하지 않은 프로젝트는 저장소가 없고, 그 프로젝트가 `/api/v1/storage` 를 부르면 프로젝트 이름이 담긴 오류다.
+- 프로젝트 밖에서(뒤 작업 · 스케줄러) 저장소 · 약관 · 캡차 · 메일 발신자를 부르면 `NoProjectContextException` 이다 — `ProjectRegistry.forEachProject` 로 돈다. Redis 키는 예외라 프로젝트 밖이면 서버 전체 키가 된다(`<key-prefix>:…`).
+
+### 암호화(`crypto`) — 프로젝트별 키가 필요한가 (판단, 구현은 결제 조각에서)
+
+**필요하다. 다만 구현은 결제(빌링키 암호화)와 같이 한다.**
+
+- DB 는 스키마 · 계정으로 갈려 한 프로젝트의 앱 코드가 다른 프로젝트 표를 읽지 못하므로, 공유 키가 지금 당장 데이터를 섞지는 않는다. 문제는 (1) 키 하나가 새면 모든 프로젝트의 암호문이 열리고, (2) 프로젝트를 떼어 혼자 띄울 때(분리) 공유 키를 같이 넘겨야 하고, (3) `storage-s3` 의 `OPAQUE` 공개 URL 토큰이 같은 키로 만들어져 A 의 토큰을 B 도메인이 풀 수 있다는 것이다.
+- 설계(결제 조각): `skeleton.projects.<id>.config.crypto.{primary-key-id, keys.<id>}` 를 프로젝트마다 바인딩해 `TextEncryptor` 를 프로젝트 문맥으로 고르는 라우팅 빈으로 바꾼다(`ProjectRoutedStorage` 와 같은 꼴 — Spring Data 변환기와 `OpaqueUrlTokenCodec` 이 이 빈을 지나므로 따로 고칠 곳이 없다). 암호문 봉투의 키 id 는 프로젝트 안에서만 뜻이 있고, 프로젝트끼리 **같은 키 바이트를 쓰면 기동 실패**로 막는다(OPAQUE `key-secret` 과 같은 규칙).
+- 그러면 `storage-s3` 의 프로젝트 모드 `OPAQUE` 공개 URL 도 풀린다(프로젝트마다 `OpaqueUrlTokenCodec`).
+- 결제는 이 조각의 범위가 아니라서(`payment*` 를 건드리지 않는다) `crypto` 는 가드에 남긴다. `event-kafka` 는 범위 밖이라 가드에 남는다.
+
+## 찍은 프로젝트에서 프로젝트 여럿 켜기
+
+`scripts/new-project.sh` 로 찍은 프로젝트에도 이 문서 · 견본 · 스크립트가 그대로 따라온다(`apps/api/src/main/resources/application-multi.yml`, `scripts/dev-multi.sh`, `scripts/project-account.sql`, `ProjectHello`). 켜는 순서:
+
+1. **모듈 고르기** — 위 표의 모듈만 두 프로젝트 이상과 함께 쓸 수 있다. 결제 · 암호화 · Kafka 를 골랐다면 프로젝트는 하나만 서비스 중이어야 한다.
+2. **설정** — `application-multi.yml` 을 앱 설정으로 옮겨 `skeleton.projects.<id>.{hosts, schema, datasource, config}` 를 채운다. 찍으면 접두사가 바뀌므로(`skeleton.` → 새 접두사) 키는 `<접두사>.projects` 가 된다. `config` 에는 위 표의 키만 쓸 수 있고(그 밖은 기동 실패), 비밀 값은 환경변수로 넣는다("환경변수로만 넣기").
+   프로젝트마다 필수인 값: `account.mail.link-base-url`, `notification-mail.from`(메일을 쓸 때), 캡차를 켰다면 `captcha-turnstile.secret-key`, `storage.web.key-secret`(OPAQUE 일 때, 서로 달라야 한다), 버킷을 나눠 쓰면 `storage-s3.key-prefix`.
+3. **DB 계정 · 스키마** — 프로젝트마다 `scripts/project-account.sql` 로 만든다(운영) 또는 `scripts/dev-multi.sh`(로컬).
+4. **도메인** — 로컬은 `*.localhost`. X 로그인은 `localhost` 콜백을 거부하므로 한 프로젝트의 hosts 에 `127.0.0.1` 을 넣어 그 주소로 연다.
+5. **확인** — 기동 로그에서 서비스 중인 프로젝트마다 소셜 · 저장소 · 약관 검사가 통과하는지 본다(잘못된 설정은 메시지에 `project '<id>'` 가 붙은 기동 실패다).
 
 ## 견본: `multi` 프로필
 
