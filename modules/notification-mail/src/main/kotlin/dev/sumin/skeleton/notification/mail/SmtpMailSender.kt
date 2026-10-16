@@ -4,16 +4,19 @@ import org.slf4j.LoggerFactory
 import org.springframework.mail.javamail.JavaMailSender
 import org.springframework.mail.javamail.MimeMessageHelper
 
+/** [from] 은 보낼 때마다 읽는다 — 프로젝트 모드에서는 지금 프로젝트의 발신자 */
 class SmtpMailSender(
     private val javaMailSender: JavaMailSender,
-    private val from: String,
+    private val from: () -> String,
 ) : MailSender {
+    constructor(javaMailSender: JavaMailSender, from: String) : this(javaMailSender, { from })
+
     private val log = LoggerFactory.getLogger(javaClass)
 
     override fun send(message: MailMessage): MailSendResult {
         val mime = javaMailSender.createMimeMessage()
         val helper = MimeMessageHelper(mime, message.html != null, "UTF-8")
-        helper.setFrom(from)
+        helper.setFrom(from())
         helper.setTo(message.to.toTypedArray())
         helper.setSubject(message.subject)
         message.replyTo?.let(helper::setReplyTo)

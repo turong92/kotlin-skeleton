@@ -34,9 +34,9 @@ class ProjectUnawareFeaturesTest {
     @Test
     fun `the guard table names exactly the modules that still do not know projects`() {
         val labels = ProjectUnawareFeatures.DEFAULT.map { it.label.substringBefore(' ') }.toSet()
-        // 프로젝트를 알게 된 모듈(job-queue-jdbc · idempotency · notification · alert · scheduler · async · auth-social)은 표에 없다
+        // 프로젝트를 알게 된 모듈(job-queue-jdbc · idempotency · notification · alert · scheduler · async · auth-social · notification-mail)은 표에 없다
         assertEquals(
-            setOf("payment", "notification-mail", "notification-websocket", "storage", "redis-core", "captcha-turnstile", "crypto", "event-kafka"),
+            setOf("payment", "notification-websocket", "storage", "redis-core", "captcha-turnstile", "crypto", "event-kafka"),
             labels,
         )
     }

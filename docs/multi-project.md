@@ -40,6 +40,7 @@ skeleton:
 | 시드 계정 | `account.seed.accounts[n].*` | 기동 때 프로젝트마다 그 스키마에 만든다 |
 | 소셜 로그인 (Google · Kakao · Naver) | `auth-social.providers.<id>.{enabled, client-id, client-secret, redirect-uri, …}` | 프로젝트마다 제공자를 따로 만든다 — A 에서 켠 제공자는 B 의 `/auth/methods` · 로그인 · 연결에 없다 |
 | X | `auth-social-x.*` | 프로젝트의 `client-id` 가 있을 때만 그 프로젝트에 X 가 있다 |
+| 메일 발신자 | `notification-mail.from` | 프로젝트마다 **필수**(공통 값으로 내려가지 않는다 — 다른 서비스 이름의 주소로 나가면 안 된다). SMTP 접속(`spring.mail.*`)은 서버 공통, 프로젝트별 SMTP 는 지원하지 않는다 |
 | 범용 OIDC | `auth-social-oidc.providers.<코드>.*` | 프로젝트마다 제공자를 만든다 — discovery · JWKS 보관도 제공자 안이라 프로젝트끼리 섞이지 않는다 |
 
 **위 표의 키만 프로젝트 `config` 에 쓸 수 있다**(`ProjectConfigKeys.SUPPORTED`) — 그 밖의 키(`account.sign-up.enabled`, `legal.facts.*`, `web.rate-limit.*`, `web.cors.enabled` …)는 조용히 무시되는 대신 기동 실패다. 프로젝트별 `auth-session.delivery` 도 받는다(`/auth/methods` 는 지금 프로젝트의 방식을 알린다).

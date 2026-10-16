@@ -74,5 +74,5 @@ class ProjectAutoConfiguration {
  * 모듈이 프로젝트별 설정을 더하면 여기에 접두사를 더한다. `web.cors.enabled` 처럼 빈 조건인 값은 프로젝트별이 될 수 없어 뺀다.
  */
 object ProjectConfigKeys {
-    val SUPPORTED = listOf("auth.jwt.", "auth-session.cookie.", "auth-session.delivery", "web.cors.allowed", "web.cors.allow-", "web.cors.exposed", "web.cors.max-age", "web.cors.path-pattern", "account.mail.", "account.seed.", "auth-social.providers.", "auth-social-x.", "auth-social-oidc.")
+    val SUPPORTED = listOf("auth.jwt.", "auth-session.cookie.", "auth-session.delivery", "web.cors.allowed", "web.cors.allow-", "web.cors.exposed", "web.cors.max-age", "web.cors.path-pattern", "account.mail.", "account.seed.", "auth-social.providers.", "auth-social-x.", "auth-social-oidc.", "notification-mail.from")
 }
