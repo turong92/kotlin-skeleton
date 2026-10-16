@@ -12,7 +12,6 @@ object ProjectUnawareFeatures {
 
     val DEFAULT = listOf(
         Feature("payment", "dev.sumin.skeleton.payment.PaymentAutoConfiguration"),
-        Feature("storage (files)", "dev.sumin.skeleton.storage.StorageAutoConfiguration"),
         Feature("notification-websocket (STOMP user destinations)", "dev.sumin.skeleton.notification.websocket.NotificationWebSocketAutoConfiguration"),
         Feature("redis-core", "dev.sumin.skeleton.redis.core.RedisCoreAutoConfiguration"),
         Feature("captcha-turnstile", "dev.sumin.skeleton.captcha.turnstile.TurnstileAutoConfiguration"),

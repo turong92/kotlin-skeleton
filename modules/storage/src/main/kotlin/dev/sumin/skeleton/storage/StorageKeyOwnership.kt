@@ -26,27 +26,33 @@ fun interface StorageKeyOwnership {
  * - `OPAQUE` 에서도 `ACCOUNT_ID` 꼴의 옛 키는 지금처럼 소유가 확인된다. 다만 `<prefix>/o/` 로 시작하는 키는 MAC 으로만 판정하고, `<uuid>.<mac>/` 뒤 꼬리는 `file[.<소문자 영숫자 1~8자>]` 만 인정한다
  *   (계정 id 가 `o` 인 계정이 옛 접두사로 남의 `OPAQUE` 키를 주장하지 못하게).
  * - 유효한 [ObjectKey] 가 아니거나(`..` · 제어문자 …) 접두사 뒤가 비어 있으면 어느 방식에서나 소유가 아니다.
+ *
+ * 프로젝트 모드에서는 규칙(접두사 · 소유 방식 · 비밀)을 **부를 때마다** 지금 프로젝트의 것으로 읽는다 — A 의 비밀로 만든 OPAQUE 키는 B 에서 소유로 인정되지 않는다.
  */
-class StorageKeyScheme(private val web: StorageWebProperties) : StorageKeyOwnership {
-    private val prefix = web.keyPrefix.trim('/')
-    private val opaquePrefix = "$prefix/$OPAQUE_SEGMENT/"
+class StorageKeyScheme(private val webOf: () -> StorageWebProperties) : StorageKeyOwnership {
+    constructor(web: StorageWebProperties) : this({ web })
 
     fun issue(accountId: String, fileName: String): String {
+        val web = webOf()
+        val prefix = web.keyPrefix.trim('/')
         val uuid = UUID.randomUUID().toString()
         return when (web.keyOwner) {
             StorageKeyOwner.ACCOUNT_ID -> "$prefix/$accountId/$uuid/${safeFileName(fileName)}"
-            StorageKeyOwner.OPAQUE -> "$opaquePrefix$uuid.${mac(accountId, uuid)}/${opaqueFileName(fileName)}"
+            StorageKeyOwner.OPAQUE -> "$prefix/$OPAQUE_SEGMENT/$uuid.${mac(web, accountId, uuid)}/${opaqueFileName(fileName)}"
         }
     }
 
     override fun owns(accountId: String, key: String): Boolean {
         if (runCatching { ObjectKey(key) }.isFailure) return false
-        if (web.keyOwner == StorageKeyOwner.OPAQUE && key.startsWith(opaquePrefix)) return ownsOpaque(accountId, key)
+        val web = webOf()
+        val prefix = web.keyPrefix.trim('/')
+        val opaquePrefix = "$prefix/$OPAQUE_SEGMENT/"
+        if (web.keyOwner == StorageKeyOwner.OPAQUE && key.startsWith(opaquePrefix)) return ownsOpaque(web, opaquePrefix, accountId, key)
         val own = "$prefix/$accountId/"
         return key.startsWith(own) && key.length > own.length
     }
 
-    private fun ownsOpaque(accountId: String, key: String): Boolean {
+    private fun ownsOpaque(web: StorageWebProperties, opaquePrefix: String, accountId: String, key: String): Boolean {
         val rest = key.removePrefix(opaquePrefix)
         val segment = rest.substringBefore('/', missingDelimiterValue = "")
         val tail = rest.substringAfter('/', missingDelimiterValue = "")
@@ -54,7 +60,7 @@ class StorageKeyScheme(private val web: StorageWebProperties) : StorageKeyOwners
         val uuid = segment.substringBefore('.')
         val presented = segment.substringAfter('.', missingDelimiterValue = "")
         if (!UUID_FORMAT.matches(uuid) || !MAC_FORMAT.matches(presented)) return false
-        return MessageDigest.isEqual(mac(accountId, uuid).toByteArray(), presented.toByteArray())
+        return MessageDigest.isEqual(mac(web, accountId, uuid).toByteArray(), presented.toByteArray())
     }
 
     /** 원본 이름(자르기 · 치환 전)의 끝에서 알려진 확장자만 남긴다 */
@@ -70,7 +76,7 @@ class StorageKeyScheme(private val web: StorageWebProperties) : StorageKeyOwners
             .take(100)
             .ifBlank { "file" }
 
-    private fun mac(accountId: String, uuid: String): String {
+    private fun mac(web: StorageWebProperties, accountId: String, uuid: String): String {
         val hmac = Mac.getInstance("HmacSHA256")
         hmac.init(SecretKeySpec(web.keySecret.toByteArray(Charsets.UTF_8), "HmacSHA256"))
         return hmac.doFinal("$accountId\n$uuid".toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }.take(MAC_LENGTH)

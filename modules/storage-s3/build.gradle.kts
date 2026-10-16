@@ -1,4 +1,5 @@
 dependencies {
+    implementation(project(":modules:platform"))   // 프로젝트 모드: 프로젝트마다 버킷 · 자격 증명 · 공개 URL 기준 (ProjectRegistry)
     // crypto 는 OPAQUE 공개 URL 에만 쓴다 — 컴파일에만 걸고 런타임 전이는 하지 않는다 (필요한 앱이 :modules:crypto 한 줄을 더한다)
     compileOnly(project(":modules:crypto"))
     api(project(":modules:storage"))   // 계약 타입이 이 모듈의 공개 API 에 나온다 — 의존성 한 줄로 충분하게

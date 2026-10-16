@@ -41,6 +41,8 @@ skeleton:
 | 소셜 로그인 (Google · Kakao · Naver) | `auth-social.providers.<id>.{enabled, client-id, client-secret, redirect-uri, …}` | 프로젝트마다 제공자를 따로 만든다 — A 에서 켠 제공자는 B 의 `/auth/methods` · 로그인 · 연결에 없다 |
 | X | `auth-social-x.*` | 프로젝트의 `client-id` 가 있을 때만 그 프로젝트에 X 가 있다 |
 | 메일 발신자 | `notification-mail.from` | 프로젝트마다 **필수**(공통 값으로 내려가지 않는다 — 다른 서비스 이름의 주소로 나가면 안 된다). SMTP 접속(`spring.mail.*`)은 서버 공통, 프로젝트별 SMTP 는 지원하지 않는다 |
+| 파일 저장소 (S3 · R2 · MinIO) | `storage-s3.{bucket, region, endpoint-override, credentials.*, presign.*, public-url.*, key-prefix}` | 프로젝트마다 S3 클라이언트 · 저장소를 만든다. 같은 버킷을 나눠 쓰면 `key-prefix` 가 서로 달라야 한다(같으면 기동 실패). 버킷이 없는 프로젝트는 저장소가 없다. 공개 URL 은 RAW 만(OPAQUE 는 crypto 가 프로젝트를 알아야 한다) |
+| 업로드 키 규칙 | `storage.web.{key-prefix, key-owner, key-secret}` | 발급 · 소유 확인이 지금 프로젝트의 규칙으로 돈다. OPAQUE 비밀은 프로젝트마다 달라야 한다(같으면 기동 실패) — A 의 키는 B 에서 소유로 인정되지 않는다 |
 | 범용 OIDC | `auth-social-oidc.providers.<코드>.*` | 프로젝트마다 제공자를 만든다 — discovery · JWKS 보관도 제공자 안이라 프로젝트끼리 섞이지 않는다 |
 
 **위 표의 키만 프로젝트 `config` 에 쓸 수 있다**(`ProjectConfigKeys.SUPPORTED`) — 그 밖의 키(`account.sign-up.enabled`, `legal.facts.*`, `web.rate-limit.*`, `web.cors.enabled` …)는 조용히 무시되는 대신 기동 실패다. 프로젝트별 `auth-session.delivery` 도 받는다(`/auth/methods` 는 지금 프로젝트의 방식을 알린다).

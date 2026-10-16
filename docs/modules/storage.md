@@ -20,6 +20,8 @@ class AppBoardPolicy(private val keys: StorageKeyOwnership) : BoardPolicy by Def
 }
 ```
 
+**프로젝트 여럿([multi-project](../multi-project.md))**: `storage.web.key-prefix` · `key-owner` · `key-secret` 을 프로젝트마다 둘 수 있고(`skeleton.projects.<id>.config.storage.web.*`) 발급 · 소유 확인이 지금 프로젝트의 규칙으로 돈다. `OPAQUE` 비밀은 프로젝트마다 달라야 한다 — 같으면 기동 실패(A 의 비밀로 B 의 키를 만들 수 있다). 비밀은 키의 MAC 에만 쓰이고 프로젝트 id 는 섞지 않는다(한 프로젝트를 떼어 혼자 띄워도 발급한 키가 그대로 맞는다). 프로젝트마다 저장소(`ProjectRoutedStorage`)와 같은 버킷을 나눠 쓰는 접두사 장식(`KeyPrefixedPresignedStorage`)은 어댑터 문서 참고. 목록이 비면 지금과 같다.
+
 버킷을 정하지 않으면 저장소 빈이 없어 이 엔드포인트도 없다(404). 앱이 자기 컨트롤러를 두거나 끄려면 `skeleton.storage.web.enabled=false`.
 
 | 항목 | 내용 |

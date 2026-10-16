@@ -3,7 +3,12 @@ package dev.sumin.skeleton.storage.s3
 import dev.sumin.skeleton.crypto.AesGcmKey
 import dev.sumin.skeleton.crypto.AesGcmTextEncryptor
 import dev.sumin.skeleton.crypto.OpaqueUrlTokenCodec
+import dev.sumin.skeleton.common.project.ProjectAutoConfiguration
+import dev.sumin.skeleton.common.project.ProjectContext
+import dev.sumin.skeleton.common.project.ProjectRegistry
 import dev.sumin.skeleton.storage.ObjectKey
+import dev.sumin.skeleton.storage.PresignedDownloadRequest
+import kotlin.test.assertFailsWith
 import dev.sumin.skeleton.storage.PresignedStorage
 import dev.sumin.skeleton.storage.StoragePublicUrlResolver
 import java.net.URI
@@ -200,5 +205,82 @@ class S3StorageAutoConfigurationTest {
         contextRunner
             .withPropertyValues("skeleton.storage-s3.bucket=b", "skeleton.storage-s3.credentials.access-key-id=only-key")
             .run { context -> assertThat(context).hasFailed() }
+    }
+
+    private val projectRunner = ApplicationContextRunner()
+        .withConfiguration(AutoConfigurations.of(ProjectAutoConfiguration::class.java, S3StorageAutoConfiguration::class.java))
+        // 이 시험 클래스패스에는 crypto(아직 프로젝트를 모르는 기능)가 있어 프로젝트 둘이면 가드가 막는다 — 가드 자체는 platform 시험이 본다
+        .withBean("projectUnawareFeaturesCheck", org.springframework.beans.factory.SmartInitializingSingleton::class.java, Supplier { org.springframework.beans.factory.SmartInitializingSingleton { } })
+        .withPropertyValues(
+            "skeleton.projects.a.hosts=a.test", "skeleton.projects.a.schema=pa",
+            "skeleton.projects.b.hosts=b.test", "skeleton.projects.b.schema=pb",
+            "skeleton.storage-s3.region=us-east-1",
+            "skeleton.storage-s3.credentials.access-key-id=ak", "skeleton.storage-s3.credentials.secret-access-key=sk",
+        )
+
+    private fun failureMessages(ctx: org.springframework.context.ApplicationContext): List<String> =
+        generateSequence<Throwable>((ctx as org.springframework.boot.test.context.assertj.AssertableApplicationContext).startupFailure) { it.cause }.mapNotNull { it.message }.toList()
+
+    @Test
+    fun `project mode - each project presigns against its own bucket`() {
+        projectRunner.withPropertyValues(
+            "skeleton.projects.a.config.storage-s3.bucket=bucket-a",
+            "skeleton.projects.b.config.storage-s3.bucket=bucket-b",
+        ).run { ctx ->
+            val storage = ctx.getBean(PresignedStorage::class.java)
+            val (a, b) = ctx.getBean(ProjectRegistry::class.java).projects
+            fun url(p: dev.sumin.skeleton.common.project.Project) = ProjectContext.runIn(p) { storage.presignDownload(PresignedDownloadRequest(ObjectKey("k/x.png"))).url.toString() }
+            assertTrue("bucket-a" in url(a) && "bucket-b" !in url(a), url(a))
+            assertTrue("bucket-b" in url(b) && "bucket-a" !in url(b), url(b))
+        }
+    }
+
+    @Test
+    fun `project mode - two projects in one bucket need their own key prefix, and the prefix stays out of the keys the app sees`() {
+        val shared = arrayOf("skeleton.projects.a.config.storage-s3.bucket=shared", "skeleton.projects.b.config.storage-s3.bucket=shared")
+        projectRunner.withPropertyValues(*shared).run { ctx ->
+            assertTrue(failureMessages(ctx).any { "'a'" in it && "'b'" in it && "shared" in it && "key-prefix" in it }, failureMessages(ctx).toString())
+        }
+        projectRunner.withPropertyValues(*shared, "skeleton.projects.a.config.storage-s3.key-prefix=proj-a", "skeleton.projects.b.config.storage-s3.key-prefix=proj-b").run { ctx ->
+            val storage = ctx.getBean(PresignedStorage::class.java)
+            val (a, b) = ctx.getBean(ProjectRegistry::class.java).projects
+            val presigned = ProjectContext.runIn(a) { storage.presignDownload(PresignedDownloadRequest(ObjectKey("k/x.png"))) }
+            assertEquals("k/x.png", presigned.key.value)
+            assertTrue("/proj-a/k/x.png" in presigned.url.toString(), presigned.url.toString())
+            assertTrue("/proj-b/k/x.png" in ProjectContext.runIn(b) { storage.presignDownload(PresignedDownloadRequest(ObjectKey("k/x.png"))) }.url.toString())
+        }
+    }
+
+    @Test
+    fun `project mode - a project without a bucket has no storage, and says so by name`() {
+        projectRunner.withPropertyValues("skeleton.projects.a.config.storage-s3.bucket=bucket-a").run { ctx ->
+            val storage = ctx.getBean(PresignedStorage::class.java)
+            val (_, b) = ctx.getBean(ProjectRegistry::class.java).projects
+            val e = assertFailsWith<IllegalStateException> { ProjectContext.runIn(b) { storage.delete(ObjectKey("k")) } }
+            assertTrue("'b'" in e.message!!, e.message)
+        }
+    }
+
+    @Test
+    fun `project mode - the OPAQUE public url is not available yet and says why`() {
+        projectRunner.withPropertyValues(
+            "skeleton.projects.a.config.storage-s3.bucket=bucket-a", "skeleton.projects.a.config.storage-s3.public-url.base-url=https://cdn.a.test",
+            "skeleton.projects.a.config.storage-s3.public-url.strategy=OPAQUE",
+        ).run { ctx ->
+            assertTrue(failureMessages(ctx).any { "project 'a'" in it && "OPAQUE" in it }, failureMessages(ctx).toString())
+        }
+    }
+
+    @Test
+    fun `project mode - each project's public url base is its own`() {
+        projectRunner.withPropertyValues(
+            "skeleton.projects.a.config.storage-s3.bucket=bucket-a", "skeleton.projects.a.config.storage-s3.public-url.base-url=https://cdn.a.test",
+            "skeleton.projects.b.config.storage-s3.bucket=bucket-b", "skeleton.projects.b.config.storage-s3.public-url.base-url=https://cdn.b.test",
+        ).run { ctx ->
+            val storage = ctx.getBean(PresignedStorage::class.java)
+            val (a, b) = ctx.getBean(ProjectRegistry::class.java).projects
+            assertEquals(URI.create("https://cdn.a.test/k/x.png"), ProjectContext.runIn(a) { storage.publicUrl(ObjectKey("k/x.png")) })
+            assertEquals(URI.create("https://cdn.b.test/k/x.png"), ProjectContext.runIn(b) { storage.publicUrl(ObjectKey("k/x.png")) })
+        }
     }
 }

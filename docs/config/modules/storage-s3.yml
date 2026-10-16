@@ -3,6 +3,7 @@ skeleton:
   storage-s3:
     enabled: true                  # false 면 모듈이 빈을 만들지 않는다
     bucket: ""                     # 버킷 이름 — 정해야 PresignedStorage 빈이 생긴다
+    key-prefix: ""                 # 같은 버킷을 여럿(프로젝트들)이 나눠 쓸 때 이 서비스의 키 전부를 이 접두사 아래에 둔다. 앱은 접두사 없는 키로 말한다
     region: ap-northeast-2         # R2 는 auto
     # endpoint-override:           # 서버가 S3 에 붙는 주소 (R2: https://<account>.r2.cloudflarestorage.com, MinIO: http://s3:8333) (미설정)
     path-style-access-enabled: false   # R2 · MinIO 는 true

@@ -3,6 +3,9 @@ package dev.sumin.skeleton.storage.web
 import dev.sumin.skeleton.storage.PresignedStorage
 import dev.sumin.skeleton.storage.StorageAutoConfiguration
 import dev.sumin.skeleton.storage.StorageFileValidator
+import dev.sumin.skeleton.common.project.ProjectRegistry
+import dev.sumin.skeleton.storage.StorageKeySchemes
+import org.springframework.beans.factory.ObjectProvider
 import dev.sumin.skeleton.storage.StorageProperties
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean
@@ -28,5 +31,6 @@ class StorageWebAutoConfiguration {
         storage: PresignedStorage,
         validator: StorageFileValidator,
         properties: StorageProperties,
-    ): StorageController = StorageController(storage, validator, properties.web)
+        projects: ObjectProvider<ProjectRegistry>,
+    ): StorageController = StorageController(storage, validator, properties.web, StorageKeySchemes.create(properties, projects.getIfAvailable()))
 }

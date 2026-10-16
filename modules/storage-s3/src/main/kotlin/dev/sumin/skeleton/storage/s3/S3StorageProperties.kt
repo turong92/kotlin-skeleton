@@ -8,6 +8,11 @@ import org.springframework.boot.context.properties.ConfigurationProperties
 data class S3StorageProperties(
     val enabled: Boolean = true,
     val bucket: String = "",
+    /**
+     * 같은 버킷을 여럿(프로젝트들)이 나눠 쓸 때 이 서비스의 키 전부를 이 접두사 아래에 둔다 — 앱은 접두사 없는 키로 말하고 버킷에는 `<key-prefix>/<키>` 로 들어간다.
+     * 비우면(기본) 키를 그대로 쓴다. 프로젝트 모드에서 버킷을 나눠 쓰면 프로젝트마다 다르게 적는다(같으면 기동 실패).
+     */
+    val keyPrefix: String = "",
     val region: String = "ap-northeast-2",
     val endpointOverride: URI? = null,
     val pathStyleAccessEnabled: Boolean = false,
