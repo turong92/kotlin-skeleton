@@ -33,7 +33,7 @@ class PaymentWebhookInbox(
         } catch (_: PaymentCapabilityUnsupportedException) {
             throw PaymentWebhookNotFoundException()
         }
-        if (!gateway.signed && !WebhookPathToken.matches(properties.webhook.pathToken, token)) throw PaymentWebhookNotFoundException()
+        if (!gateway.signed && !WebhookPathToken.matches(router.properties().webhook.pathToken, token)) throw PaymentWebhookNotFoundException()
         return gateway
     }
 

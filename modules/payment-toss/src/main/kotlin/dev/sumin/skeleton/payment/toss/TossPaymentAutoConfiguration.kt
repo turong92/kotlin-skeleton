@@ -1,7 +1,13 @@
 package dev.sumin.skeleton.payment.toss
 
+import dev.sumin.skeleton.common.deploy.DeployContext
+import dev.sumin.skeleton.common.deploy.DeployGuard
 import dev.sumin.skeleton.common.http.ExternalHttpClient
 import dev.sumin.skeleton.common.http.OutboundHttpProperties
+import dev.sumin.skeleton.common.project.ProjectRegistry
+import dev.sumin.skeleton.common.project.ProjectsConfigured
+import dev.sumin.skeleton.common.project.ProjectsNotConfigured
+import dev.sumin.skeleton.payment.PaymentGatewaySource
 import dev.sumin.skeleton.payment.PaymentProperties
 import dev.sumin.skeleton.payment.PaymentProviderCredentialAlert
 import org.springframework.beans.factory.ObjectProvider
@@ -28,7 +34,7 @@ class TossPaymentAutoConfiguration {
         name = ["enabled"],
         havingValue = "true",
     )
-    @Conditional(TossSecretKeyConfigured::class)
+    @Conditional(TossSecretKeyConfigured::class, ProjectsNotConfigured::class)
     @ConditionalOnMissingBean(name = ["tossPaymentProvider"])
     fun tossPaymentProvider(
         httpClient: ExternalHttpClient,
@@ -36,6 +42,47 @@ class TossPaymentAutoConfiguration {
         credentialAlert: ObjectProvider<PaymentProviderCredentialAlert>,
     ): TossPaymentProvider =
         TossPaymentProvider(httpClient = httpClient, properties = properties, credentialAlert = credentialAlert.getIfAvailable { PaymentProviderCredentialAlert.NONE })
+
+    /**
+     * 프로젝트 모드: 프로젝트마다 자기 `payment-toss.*` (공통 위에 덮어)로 토스 게이트웨이(= 그 프로젝트의 시크릿 키를 든 클라이언트)를 만든다.
+     * 그 프로젝트에서 켜지 않았거나 시크릿 키가 비었으면 만들지 않는다 — 그 프로젝트의 결제 화면 · 설정 응답에 토스가 나오지 않는다. 외부 HTTP 풀은 공유하지만 키는 요청마다 이 프로젝트의 것이 실린다.
+     */
+    @Bean
+    @ConditionalOnMissingBean(name = ["tossGatewaySource"])
+    @Conditional(ProjectsConfigured::class)
+    fun tossGatewaySource(httpClient: ExternalHttpClient, credentialAlert: ObjectProvider<PaymentProviderCredentialAlert>): PaymentGatewaySource =
+        PaymentGatewaySource { settings ->
+            val properties = settings.bind("skeleton.payment-toss", TossPaymentProperties::class.java)
+            if (!properties.enabled || properties.secretKey.isBlank()) {
+                null
+            } else {
+                TossPaymentProvider(httpClient = httpClient, properties = properties, credentialAlert = credentialAlert.getIfAvailable { PaymentProviderCredentialAlert.NONE })
+            }
+        }
+
+    /** 프로젝트 모드의 키 가드: 토스를 켠 프로젝트마다 같은 규칙을 본다 — 메시지 앞에 `project '<id>': ` */
+    @Bean
+    @ConditionalOnMissingBean(name = ["tossProjectKeyGuard"])
+    @Conditional(ProjectsConfigured::class)
+    fun tossProjectKeyGuard(
+        projects: ProjectRegistry,
+        applicationContext: ApplicationContext,
+        environment: Environment,
+        outboundHttp: ObjectProvider<OutboundHttpProperties>,
+        paymentProperties: ObjectProvider<PaymentProperties>,
+    ): DeployGuard {
+        val guards = projects.scopedFrom("skeleton.payment-toss", TossPaymentProperties::class.java) { _, properties ->
+            guard(properties, applicationContext, environment, outboundHttp, paymentProperties)
+        }
+        return object : DeployGuard {
+            override val name = "payment-toss"
+            override fun problems(context: DeployContext) = perProject { it.problems(context) }
+            override fun warnings(context: DeployContext) = perProject { it.warnings(context) }
+            private fun perProject(of: (TossKeyGuard) -> List<String>) =
+                projects.active.filter { projects.bind(it, "skeleton.payment-toss", TossPaymentProperties::class.java).enabled }
+                    .flatMap { project -> of(guards.of(project)).map { "project '${project.id}': $it" } }
+        }
+    }
 
     /** 키를 잘못 끼우는 실수를 기동 때 막는다(스펙 §9.3). 켠 순간부터 선다 — 시크릿 키가 비어도 경고하려고. */
     @Bean
@@ -45,7 +92,16 @@ class TossPaymentAutoConfiguration {
         havingValue = "true",
     )
     @ConditionalOnMissingBean
+    @Conditional(ProjectsNotConfigured::class)
     fun tossKeyGuard(
+        properties: TossPaymentProperties,
+        applicationContext: ApplicationContext,
+        environment: Environment,
+        outboundHttp: ObjectProvider<OutboundHttpProperties>,
+        paymentProperties: ObjectProvider<PaymentProperties>,
+    ): TossKeyGuard = guard(properties, applicationContext, environment, outboundHttp, paymentProperties)
+
+    private fun guard(
         properties: TossPaymentProperties,
         applicationContext: ApplicationContext,
         environment: Environment,
