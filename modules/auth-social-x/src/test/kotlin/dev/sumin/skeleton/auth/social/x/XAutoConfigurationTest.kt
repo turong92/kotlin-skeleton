@@ -1,6 +1,9 @@
 package dev.sumin.skeleton.auth.social.x
 
 import dev.sumin.skeleton.auth.social.oauth.OAuthProvider
+import dev.sumin.skeleton.auth.social.oauth.OAuthProviderSource
+import dev.sumin.skeleton.common.project.ProjectAutoConfiguration
+import dev.sumin.skeleton.common.project.ProjectRegistry
 import dev.sumin.skeleton.common.http.DefaultExternalHttpClient
 import dev.sumin.skeleton.common.http.DefaultExternalHttpErrorMapper
 import dev.sumin.skeleton.common.http.ExternalHttpClient
@@ -37,5 +40,24 @@ class XAutoConfigurationTest {
             val messages = generateSequence<Throwable>(ctx.startupFailure) { it.cause }.mapNotNull { it.message }.toList()
             assertTrue(messages.any { "skeleton.auth-social-x.client-secret" in it }, messages.toString())
         }
+    }
+
+    @Test
+    fun `project mode - a project with a client id has X, one without has none, and there is no app-wide provider bean`() {
+        ApplicationContextRunner()
+            .withConfiguration(AutoConfigurations.of(ProjectAutoConfiguration::class.java, XAutoConfiguration::class.java))
+            .withBean(ExternalHttpClient::class.java, Supplier { DefaultExternalHttpClient(WebClient.builder(), OutboundHttpProperties(), DefaultExternalHttpErrorMapper(), emptyList()) })
+            .withPropertyValues(
+                "skeleton.projects.a.hosts=a.test", "skeleton.projects.a.schema=pa",
+                "skeleton.projects.b.hosts=b.test", "skeleton.projects.b.schema=pb",
+                "skeleton.projects.a.config.auth-social-x.client-id=x-a", "skeleton.projects.a.config.auth-social-x.client-secret=s",
+            )
+            .run { ctx ->
+                assertTrue(ctx.getBeansOfType(OAuthProvider::class.java).isEmpty())
+                val registry = ctx.getBean(ProjectRegistry::class.java)
+                val source = ctx.getBean(OAuthProviderSource::class.java)
+                assertEquals("x-a", source.providersFor(registry.projects.first { it.id == "a" }).single().publicClientId)
+                assertTrue(source.providersFor(registry.projects.first { it.id == "b" }).isEmpty())
+            }
     }
 }

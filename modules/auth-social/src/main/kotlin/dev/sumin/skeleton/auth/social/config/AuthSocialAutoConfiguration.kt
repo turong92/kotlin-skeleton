@@ -11,8 +11,11 @@ import dev.sumin.skeleton.auth.social.oauth.OAuthAccountLinkRepository
 import dev.sumin.skeleton.auth.social.oauth.OAuthAccountProvisioningPolicy
 import dev.sumin.skeleton.auth.social.oauth.OAuthProvider
 import dev.sumin.skeleton.auth.social.oauth.OAuthProviderRegistry
+import dev.sumin.skeleton.auth.social.oauth.OAuthProviderSource
 import dev.sumin.skeleton.auth.social.oauth.OAuthSocialLoginService
 import dev.sumin.skeleton.common.Response
+import dev.sumin.skeleton.common.project.ProjectRegistry
+import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.context.properties.EnableConfigurationProperties
@@ -29,10 +32,12 @@ class AuthSocialAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     fun oauthProviderRegistry(
-        providers: List<OAuthProvider>,
+        providers: ObjectProvider<OAuthProvider>,
         properties: AuthSocialProperties,
+        projects: ObjectProvider<ProjectRegistry>,
+        sources: ObjectProvider<OAuthProviderSource>,
     ): OAuthProviderRegistry =
-        OAuthProviderRegistry(providers, properties)
+        OAuthProviderRegistry(providers.orderedStream().toList(), properties, projects.getIfAvailable(), sources.orderedStream().toList())
 
     @Bean
     @ConditionalOnMissingBean

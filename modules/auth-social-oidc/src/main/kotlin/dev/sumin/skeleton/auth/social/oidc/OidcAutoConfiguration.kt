@@ -1,7 +1,10 @@
 package dev.sumin.skeleton.auth.social.oidc
 
 import dev.sumin.skeleton.auth.social.oauth.OAuthProvider
+import dev.sumin.skeleton.auth.social.oauth.OAuthProviderSource
 import dev.sumin.skeleton.common.http.ExternalHttpClient
+import dev.sumin.skeleton.common.project.ProjectRegistry
+import dev.sumin.skeleton.common.project.ProjectsConfigured
 import java.time.Clock
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.beans.factory.support.BeanDefinitionBuilder
@@ -12,6 +15,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.boot.context.properties.bind.Binder
 import org.springframework.context.EnvironmentAware
 import org.springframework.context.annotation.Bean
+import org.springframework.context.annotation.Conditional
 import org.springframework.context.annotation.Import
 import org.springframework.context.annotation.ImportBeanDefinitionRegistrar
 import org.springframework.core.env.Environment
@@ -39,6 +43,20 @@ class OidcAutoConfiguration {
     @ConditionalOnMissingBean
     fun oidcProviderBuilder(properties: OidcProperties, factory: OidcProviderFactory, http: ObjectProvider<ExternalHttpClient>, clock: ObjectProvider<Clock>): OidcProviderBuilder =
         OidcProviderBuilder(properties, factory, http, clock)
+
+    /**
+     * 프로젝트 모드: 프로젝트마다 자기 `auth-social-oidc.providers.*` (공통 위에 덮어)로 제공자를 만든다 — 위 레지스트라의 빈 대신.
+     * discovery · JWKS 보관은 제공자 인스턴스 안이라 프로젝트끼리 섞이지 않는다. 잘못된 설정은 기동 실패(레지스트리가 프로젝트 id 를 붙인다)
+     */
+    @Bean
+    @Conditional(ProjectsConfigured::class)
+    @ConditionalOnMissingBean(name = ["oidcOAuthProviderSource"])
+    fun oidcOAuthProviderSource(projects: ProjectRegistry, factory: OidcProviderFactory, http: ObjectProvider<ExternalHttpClient>, clock: ObjectProvider<Clock>): OAuthProviderSource =
+        OAuthProviderSource { project ->
+            val props = projects.bind(project, "skeleton.auth-social-oidc", OidcProperties::class.java)
+            props.providers.filterValues { it.clientId.isNotBlank() }
+                .map { (code, provider) -> factory.create(code.trim().lowercase(), provider, props, http.getObject(), clock.getIfAvailable { Clock.systemUTC() }) }
+        }
 }
 
 class OidcProviderBuilder(
@@ -61,6 +79,7 @@ class OidcProviderRegistrar : ImportBeanDefinitionRegistrar, EnvironmentAware {
     }
 
     override fun registerBeanDefinitions(importingClassMetadata: AnnotationMetadata, registry: BeanDefinitionRegistry) {
+        if (ProjectRegistry.configured(environment)) return   // 프로젝트 모드는 oidcOAuthProviderSource 가 프로젝트마다 만든다
         val props = Binder.get(environment).bind("skeleton.auth-social-oidc", OidcProperties::class.java).orElseGet { OidcProperties() }!!
         props.providers.filterValues { it.clientId.isNotBlank() }.forEach { (rawCode, provider) ->
             val code = rawCode.trim().lowercase()

@@ -1,6 +1,9 @@
 package dev.sumin.skeleton.auth.social.google
 
+import dev.sumin.skeleton.auth.social.oauth.OAuthProviderSource
 import dev.sumin.skeleton.common.http.ExternalHttpClient
+import dev.sumin.skeleton.common.project.ProjectAutoConfiguration
+import dev.sumin.skeleton.common.project.ProjectRegistry
 import dev.sumin.skeleton.common.http.ExternalHttpRequestSpec
 import java.util.function.Supplier
 import kotlin.test.Test
@@ -32,6 +35,30 @@ class GoogleOAuthProviderAutoConfigurationTest {
             )
             .run { context ->
                 assertEquals(1, context.getBeansOfType(GoogleOAuthProvider::class.java).size)
+            }
+    }
+
+    @Test
+    fun `project mode - each project turns Google on with its own client, and no app-wide provider bean exists`() {
+        ApplicationContextRunner()
+            .withConfiguration(AutoConfigurations.of(ProjectAutoConfiguration::class.java, GoogleOAuthProviderAutoConfiguration::class.java))
+            .withBean(ExternalHttpClient::class.java, Supplier { NoopExternalHttpClient() })
+            .withPropertyValues(
+                "skeleton.projects.a.hosts=a.test", "skeleton.projects.a.schema=pa",
+                "skeleton.projects.b.hosts=b.test", "skeleton.projects.b.schema=pb",
+                "skeleton.auth-social.providers.google.client-secret=shared-secret",
+                "skeleton.projects.a.config.auth-social.providers.google.enabled=true",
+                "skeleton.projects.a.config.auth-social.providers.google.client-id=google-a",
+                "skeleton.projects.a.config.auth-social.providers.google.redirect-uri=https://a.test/cb",
+            )
+            .run { context ->
+                assertTrue(context.getBeansOfType(GoogleOAuthProvider::class.java).isEmpty())
+                val registry = context.getBean(ProjectRegistry::class.java)
+                val source = context.getBean(OAuthProviderSource::class.java)
+                val a = source.providersFor(registry.projects.first { it.id == "a" }).single()
+                assertEquals("google-a", a.publicClientId)
+                assertEquals("https://a.test/cb", a.publicRedirectUri)
+                assertTrue(source.providersFor(registry.projects.first { it.id == "b" }).isEmpty(), "B did not turn it on")
             }
     }
 

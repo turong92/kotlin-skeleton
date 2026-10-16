@@ -123,6 +123,19 @@ class ProjectRegistryTest {
     }
 
     @Test
+    fun `social login keys are per-project settings`() {
+        ProjectRegistry.from(
+            env(
+                *twoProjects,
+                "skeleton.projects.a.config.auth-social.providers.google.client-id" to "id",
+                "skeleton.projects.a.config.auth-social-x.client-id" to "x",
+                "skeleton.projects.a.config.auth-social-oidc.providers.line.client-id" to "l",
+            ),
+            ProjectConfigKeys.SUPPORTED,
+        )
+    }
+
+    @Test
     fun `a task handed to another thread carries the project of whoever handed it over`() {
         val registry = ProjectRegistry.from(env(*twoProjects))
         val a = registry.projects.first { it.id == "a" }

@@ -16,6 +16,11 @@
 `OAuthUserProfile.avatarUrl` 은 제공자가 준 https 사진 주소다 — `account` 는 아직 저장하지 않는다.
 토큰 엔드포인트 오류의 갈래(코드 틀림 401 · 검증기 틀림 400 · 우리 client 설정 거부 502 · 한도 · 장애 502)는 `OAuthTokenErrors`.
 
+## 프로젝트 여럿 ([multi-project](../multi-project.md))
+
+`skeleton.projects` 가 있으면 제공자 모듈은 앱 전체 빈 대신 `OAuthProviderSource` 를 내고, `OAuthProviderRegistry` 가 프로젝트마다 제공자를 한 번 만들어 보관한다(시작 때 서비스 중인 프로젝트마다 만들어 보고, 잘못된 설정은 기동 실패 — 메시지에 프로젝트 id).
+켜짐 · client id/secret · redirect URI 는 프로젝트의 `config`(`auth-social.providers.<id>.*` · `auth-social-x.*` · `auth-social-oidc.*`)가 공통 값 위에 덮는다. A 에서 켠 제공자는 B 의 `/auth/methods` · 로그인 · 연결 · 로그인 수단 목록에 없다. 앱이 직접 둔 `OAuthProvider` 빈은 모든 프로젝트가 같이 쓴다. 목록이 비면 지금과 같다.
+
 | 항목 | 내용 |
 |---|---|
 | 의존성 한 줄 | `implementation(project(":modules:auth-social"))` |
@@ -24,7 +29,7 @@
 | 설정 접두사 | `skeleton.auth-social` — [docs/config/modules/auth-social.yml](../config/modules/auth-social.yml) |
 | 기본 동작 | 켜짐. 환경변수 `<P>_AUTH_SOCIAL_PROVIDERS_<X>_CLIENT_ID` 같은 이름은 `ProviderEnvironmentAliases`(소셜 제공자 환경변수 규칙 하나 — `auth-social-oidc` 도 같은 구현, 제공자 하나짜리 `auth-social-x` 는 별칭 없이 그대로 묶인다)가 점 표기 프로퍼티로 옮겨 준다(Map 값이라 스프링 느슨한 바인딩만으로는 묶이지 않는다). 토큰 교환 거절은 제공자 `error` 코드와 함께 로그에 남는다. 제공자가 켜지기 전에는 로그인 가능한 제공자가 없다. |
 | 부팅에 필요한 것 | 없음. |
-| 교체 지점 | `OAuthProviderRegistry`, `OAuthAccountLinkRepository`, `OAuthAccountProvisioningPolicy`, `OAuthSocialLoginService` |
+| 교체 지점 | `OAuthProviderRegistry`, `OAuthProviderSource`, `OAuthAccountLinkRepository`, `OAuthAccountProvisioningPolicy`, `OAuthSocialLoginService` |
 | 마이그레이션 | 없음 |
 | 프론트 짝 | `@skeleton/auth` |
 | 테스트 | `modules/auth-social/src/test` |

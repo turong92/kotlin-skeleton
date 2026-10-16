@@ -11,9 +11,7 @@ import dev.sumin.skeleton.account.web.AccountCallers
 import dev.sumin.skeleton.account.web.AccountWebAutoConfiguration
 import dev.sumin.skeleton.auth.social.oauth.OAuthAccountLinkRepository
 import dev.sumin.skeleton.auth.social.oauth.OAuthAccountProvisioningPolicy
-import dev.sumin.skeleton.auth.social.oauth.OAuthProvider
 import dev.sumin.skeleton.auth.social.oauth.OAuthProviderRegistry
-import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
@@ -48,8 +46,8 @@ class AccountSocialAutoConfiguration {
     /** 앱에 있는 `OAuthProvider` 마다 로그인 수단 하나 — 새 제공자 모듈을 더하면 이 코드는 그대로다 */
     @Bean
     @ConditionalOnMissingBean(name = ["socialSignInMethodSource"])
-    fun socialSignInMethodSource(providers: ObjectProvider<OAuthProvider>): SignInMethodSource =
-        SignInMethodSource { providers.orderedStream().toList().map { SocialSignInMethod(it.providerId.trim().lowercase()) } }
+    fun socialSignInMethodSource(registry: OAuthProviderRegistry): SignInMethodSource =
+        SignInMethodSource { registry.providers().map { SocialSignInMethod(it.providerId.trim().lowercase()) } }
 }
 
 @AutoConfiguration(after = [AccountSocialAutoConfiguration::class, AccountWebAutoConfiguration::class])
@@ -60,10 +58,10 @@ class AccountSocialWebAutoConfiguration {
     /** 켜진 제공자 목록 — 프론트가 로그인 버튼과 인가 URL 을 환경변수 없이 만든다 (client id 는 공개 값) */
     @Bean
     @ConditionalOnMissingBean(name = ["socialMethodsSource"])
-    fun socialMethodsSource(providers: ObjectProvider<dev.sumin.skeleton.auth.social.oauth.OAuthProvider>, registry: OAuthProviderRegistry, props: ObjectProvider<dev.sumin.skeleton.auth.social.config.AuthSocialProperties>): dev.sumin.skeleton.account.web.SocialMethodsSource =
+    fun socialMethodsSource(registry: OAuthProviderRegistry): dev.sumin.skeleton.account.web.SocialMethodsSource =
         dev.sumin.skeleton.account.web.SocialMethodsSource {
-            providers.orderedStream().toList().filter { registry.findEnabled(it.providerId) != null }.map {
-                val p = props.getIfAvailable()?.providers?.get(it.providerId.trim().lowercase())
+            registry.providers().filter { registry.findEnabled(it.providerId) != null }.map {
+                val p = registry.settings(it.providerId)
                 dev.sumin.skeleton.account.web.SocialMethodView(
                     provider = it.providerId.trim().lowercase(),
                     clientId = it.publicClientId?.takeIf { c -> c.isNotBlank() } ?: p?.clientId?.takeIf { c -> c.isNotBlank() },
