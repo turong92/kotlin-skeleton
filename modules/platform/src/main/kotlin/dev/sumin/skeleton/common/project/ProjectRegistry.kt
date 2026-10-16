@@ -45,7 +45,8 @@ class ProjectRegistry private constructor(
         project.config.entries.firstOrNull { configKey(it.key) == configKey(key) }?.value?.takeIf { it.isNotBlank() }
 
     /** 공통 `skeleton.<key>` 값 (프로젝트 `config` 가 덮기 전) */
-    fun sharedValue(key: String): String? = environment.getProperty("$ROOT.$key")?.takeIf { it.isNotBlank() }
+    fun sharedValue(key: String): String? =
+        (environment.getProperty("$ROOT.$key") ?: environment.getProperty("$ROOT.$key[0]"))?.takeIf { it.isNotBlank() }   // 목록은 `a[0]` 꼴로도 적힌다
 
     /** 프로젝트마다 한 번 만들어 두는 부품 도우미 — [bind] 한 properties 로 부품을 만든다 */
     fun <P : Any, T : Any> scopedFrom(prefix: String, type: Class<P>, create: (Project, P) -> T): ProjectScoped<T> =

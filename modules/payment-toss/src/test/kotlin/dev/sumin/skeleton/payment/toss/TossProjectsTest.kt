@@ -112,6 +112,16 @@ class TossProjectsTest {
     }
 
     @Test
+    fun `a shared easy-pays list is not inherited - every project that switched Toss on writes its own, because the contract differs per project`() {
+        for (shared in listOf("skeleton.payment-toss.easy-pays=NAVERPAY", "skeleton.payment-toss.easy-pays[0]=NAVERPAY")) {
+            runner().withPropertyValues(*toss("a", "test_sk_project_a", "test_ck_a"), "skeleton.projects.a.config.payment-toss.easy-pays=KAKAOPAY", *toss("b", "test_sk_project_b", "test_ck_b"), shared).run { ctx ->
+                val message = generateSequence(ctx.startupFailure) { it.cause }.mapNotNull { it.message }.joinToString(" | ")
+                assertTrue("project 'b'" in message && "payment-toss.easy-pays" in message && "inherited" in message, "$shared -> $message")
+            }
+        }
+    }
+
+    @Test
     fun `an unknown easy pay code stops the start - in one project and in the single mode alike`() {
         runner().withPropertyValues(*toss("a", "test_sk_project_a", "test_ck_a"), "skeleton.projects.a.config.payment-toss.easy-pays=NAVERPAI").run { ctx ->
             assertTrue(ctx.startupFailure != null, "project mode starts with a typo in easy-pays")
