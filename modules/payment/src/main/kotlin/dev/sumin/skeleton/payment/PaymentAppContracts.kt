@@ -78,13 +78,16 @@ fun interface PaymentProviderCredentialAlert {
     }
 }
 
+/** 다른 주문 · 금액의 승인을 결제사 모듈이 어떻게 처리했나 - 취소했다 / 취소가 아직 끝나지 않았다(결제사가 곧 다시 처리한다고 한다) / 취소하지 못했거나 확인하지 못했다. */
+enum class PaymentMismatchOutcome { CANCELLED, IN_PROGRESS, FAILED }
+
 /**
  * 결제사가 **다른 주문 · 다른 금액의 결제를 이 주문의 승인으로 받아 버려**(승인 API 가 결제 번호만 받는 결제사) 결제 모듈이 그 승인을 곧바로 취소했거나 취소하지 못했다는 것을 밖에 알린다.
- * [cancelled] 가 false 면 돈이 아직 결제사에 걸려 있다 - 사람이 풀어야 한다. **결제사 id 와 주문 id 말고는 아무 값도 싣지 않는다.**
- * `alert` 모듈이 있고 장부가 있으면 `OwnerAlerts.emit(PAYMENT_MISMATCH_CANCELLED | PAYMENT_MISMATCH_CANCEL_FAILED, key = 주문 id)`, 없으면 알리지 않는다. 결제사 모듈이 부른다.
+ * [PaymentMismatchOutcome.FAILED] 면 돈이 아직 결제사에 걸려 있다 - 사람이 풀어야 한다. [PaymentMismatchOutcome.IN_PROGRESS] 는 결제사가 취소를 곧 다시 처리한다고 한 때라 알아 두면 된다. **결제사 id 와 주문 id 말고는 아무 값도 싣지 않는다.**
+ * `alert` 모듈이 있고 장부가 있으면 `OwnerAlerts.emit(PAYMENT_MISMATCH_CANCELLED | PAYMENT_MISMATCH_CANCEL_PENDING | PAYMENT_MISMATCH_CANCEL_FAILED, key = 주문 id)`, 없으면 알리지 않는다. 결제사 모듈이 부른다.
  */
 fun interface PaymentProviderMismatchAlert {
-    fun applied(providerId: String, orderId: String, cancelled: Boolean)
+    fun applied(providerId: String, orderId: String, outcome: PaymentMismatchOutcome)
 
     companion object {
         val NONE: PaymentProviderMismatchAlert = PaymentProviderMismatchAlert { _, _, _ -> }

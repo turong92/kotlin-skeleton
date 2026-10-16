@@ -76,9 +76,14 @@ internal class FakeNaverPayServer(
     private val payments = Collections.synchronizedMap(linkedMapOf<String, Payment>())
     private val failures = Collections.synchronizedMap(mutableMapOf<String, ArrayDeque<Fail>>())
     private val replies = Collections.synchronizedMap(mutableMapOf<String, String>())
+    /** 취소를 적용하기 직전에 한 번씩 부른다 - 취소가 진행 중일 때 끼어드는 일(조회 작업)을 시험한다. */
+    @Volatile
+    var beforeCancel: (() -> Unit)? = null
+
     private val reservations = Collections.synchronizedMap(linkedMapOf<String, Reservation>())
     private val sequence = AtomicInteger()
     private val server: HttpServer = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
+        executor = java.util.concurrent.Executors.newCachedThreadPool() // 한 요청이 붙잡혀 있는 동안(취소 직전의 끼어들기 · 지연) 다른 요청에도 답한다
         createContext("/") { exchange -> handle(exchange) }
         start()
     }
@@ -159,7 +164,10 @@ internal class FakeNaverPayServer(
         val reply = when (operation) {
             "reserve" -> reserve(request.body)
             "apply" -> apply(request.form)
-            else -> cancel(request.form)
+            else -> {
+                beforeCancel?.invoke()
+                cancel(request.form)
+            }
         }
         if (reply is Reply.Json && reply.status == 200) replies["$operation/$key"] = reply.body
         return reply

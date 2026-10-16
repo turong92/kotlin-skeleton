@@ -8,6 +8,7 @@ import dev.sumin.skeleton.payment.PaymentOrder
 import dev.sumin.skeleton.payment.PaymentOrderStatus
 import dev.sumin.skeleton.payment.PaymentRefundAmountExceededException
 import dev.sumin.skeleton.payment.PaymentRefundStatus
+import dev.sumin.skeleton.payment.PaymentReviewReason
 import dev.sumin.skeleton.payment.naverpay.support.FakeNaverPayServer
 import dev.sumin.skeleton.payment.naverpay.support.FakeNaverPayServer.Fail
 import dev.sumin.skeleton.payment.naverpay.support.naverProvider
@@ -93,6 +94,27 @@ class NaverPayLedgerTest {
         assertEquals(other.id, reopened.id)
         val paid = kit.orders.confirm("acc_1", other.id, payOrderWindow(server, other.id), other.amount)
         assertEquals(PaymentOrderStatus.PAID, paid.status)
+    }
+
+    @Test
+    fun `a lookup that runs while the mismatch cancel is in flight marks the order, and the refusal that follows clears the mark - the money is back, nobody needs to look`() {
+        val mine = order("k1")
+        val other = order("k2")
+        val othersPaymentId = payOrderWindow(server, other.id)
+        var markedMidway: PaymentReviewReason? = null
+        server.beforeCancel = {
+            server.beforeCancel = null
+            kit.advance(Duration.ofMinutes(3))
+            kit.runTasks() // 첫 조회: 이 결제가 다른 주문의 것으로 읽혀 표시가 찍힌다
+            markedMidway = kit.order(mine.id).reviewReason
+        }
+
+        runCatching { kit.orders.confirm("acc_1", mine.id, othersPaymentId, mine.amount) }
+
+        assertEquals(PaymentOrderStatus.FAILED, kit.order(mine.id).status)
+        assertNull(kit.order(mine.id).reviewReason, "no flag left on an order whose money is already back")
+        assertEquals(0, server.paymentOf(othersPaymentId)!!.available)
+        assertEquals(PaymentReviewReason.ORDER_MISMATCH, markedMidway, "the lookup did mark it while the cancel was in flight")
     }
 
     @Test

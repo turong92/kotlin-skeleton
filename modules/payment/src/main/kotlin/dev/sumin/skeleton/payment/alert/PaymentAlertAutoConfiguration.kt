@@ -5,6 +5,7 @@ import dev.sumin.skeleton.alert.AlertSeverity
 import dev.sumin.skeleton.alert.OwnerAlerts
 import dev.sumin.skeleton.payment.PaymentLedgerAutoConfiguration
 import dev.sumin.skeleton.payment.PaymentLedgerStore
+import dev.sumin.skeleton.payment.PaymentMismatchOutcome
 import dev.sumin.skeleton.payment.PaymentProviderCredentialAlert
 import dev.sumin.skeleton.payment.PaymentProviderMismatchAlert
 import dev.sumin.skeleton.payment.PaymentReviewNotifier
@@ -30,6 +31,9 @@ enum class PaymentAlertKind(
     /** 다른 주문 · 다른 금액의 결제가 이 주문의 승인으로 받아졌고 곧바로 전액 취소했다 - 알아 두면 되는 일이다. 키는 주문 id. */
     PAYMENT_MISMATCH_CANCELLED(AlertSeverity.WARN, "A payment applied for another order or amount was cancelled automatically"),
 
+    /** 위와 같은데 결제사가 취소를 아직 끝내지 못했다(`CancelNotComplete` - 곧 자동으로 다시 처리한다고 한다) - 알아 두고 조회가 맞추는 것을 본다. 키는 주문 id. */
+    PAYMENT_MISMATCH_CANCEL_PENDING(AlertSeverity.WARN, "A payment applied for another order or amount is still being cancelled"),
+
     /** 위와 같은데 취소가 되지 않았다 - 돈이 결제사에 걸려 있다. 사람이 풀어야 한다. 키는 주문 id. */
     PAYMENT_MISMATCH_CANCEL_FAILED(AlertSeverity.ERROR, "A payment applied for another order or amount could not be cancelled"),
 }
@@ -50,8 +54,13 @@ class OwnerAlertsPaymentProviderCredentialAlert(private val alerts: OwnerAlerts)
 
 /** 결제사 id · 주문 id 만 싣는다. 바로 낸다(일어난 사실이다). */
 class OwnerAlertsPaymentProviderMismatchAlert(private val alerts: OwnerAlerts) : PaymentProviderMismatchAlert {
-    override fun applied(providerId: String, orderId: String, cancelled: Boolean) {
-        alerts.emit(if (cancelled) PaymentAlertKind.PAYMENT_MISMATCH_CANCELLED else PaymentAlertKind.PAYMENT_MISMATCH_CANCEL_FAILED, key = orderId, immediate = true)
+    override fun applied(providerId: String, orderId: String, outcome: PaymentMismatchOutcome) {
+        val kind = when (outcome) {
+            PaymentMismatchOutcome.CANCELLED -> PaymentAlertKind.PAYMENT_MISMATCH_CANCELLED
+            PaymentMismatchOutcome.IN_PROGRESS -> PaymentAlertKind.PAYMENT_MISMATCH_CANCEL_PENDING
+            PaymentMismatchOutcome.FAILED -> PaymentAlertKind.PAYMENT_MISMATCH_CANCEL_FAILED
+        }
+        alerts.emit(kind, key = orderId, immediate = true)
     }
 }
 

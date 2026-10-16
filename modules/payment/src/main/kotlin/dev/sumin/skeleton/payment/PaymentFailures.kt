@@ -62,6 +62,18 @@ object PaymentFailures {
         return null
     }
 
+    /** 실패 안에 든 결제사 오류가 「걸렸던 돈을 결제사 모듈이 되돌렸다」([PaymentProviderError.moneyReturned])고 말하는가. */
+    fun moneyReturnedOf(exception: Throwable): Boolean {
+        var current: Throwable? = exception
+        var depth = 0
+        while (current != null && depth < MAX_CAUSE_DEPTH) {
+            if (current is PaymentProviderException) return current.providerError.moneyReturned
+            current = current.cause
+            depth++
+        }
+        return false
+    }
+
     private val SAFE_CODE = Regex("[A-Za-z0-9_.-]{1,40}")
 
     /** 실패에서 읽을 수 있는 (HTTP 상태, 결제사 오류 코드). 본문 · 메시지는 코드 한 칸만 꺼내고 버린다 - 비밀이나 긴 설명이 로그 · 이력에 새지 않게. */

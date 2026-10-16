@@ -123,6 +123,11 @@ data class PaymentProviderError(
      * ([PaymentFailures.outcomeOf]). 표시를 빠뜨리면 모름이 되므로 안전한 쪽으로 틀린다.
      */
     val definitive: Boolean = false,
+    /**
+     * 확정 거절([definitive])인데 **결제사에 걸렸던 돈을 결제사 모듈이 이미 되돌렸다**(승인 API 가 결제 번호만 받아 다른 주문의 결제가 이 주문의 승인으로 받아졌고 모듈이 곧바로 전액 취소했다).
+     * 장부가 그 사이 조회로 찍은 「결제사가 받았다」 표시(`AMOUNT_MISMATCH` · `ORDER_MISMATCH`)를 주문을 닫을 때 비운다 - 돈이 이미 돌아와 사람이 볼 일이 없다. 기본 false.
+     */
+    val moneyReturned: Boolean = false,
 )
 
 class PaymentProviderException(

@@ -77,11 +77,12 @@ class PaymentConvergence(
     }
 
     /** 결제사가 **돈이 움직이지 않았다**고 확정해서 거절했다 — `CONFIRMING` 만 `FAILED` 로 닫는다(이미 끝난 줄은 그대로). */
-    fun declined(tx: PaymentLedgerTx, order: PaymentOrder, providerCode: String?, context: ConvergeContext): ConvergeResult {
+    fun declined(tx: PaymentLedgerTx, order: PaymentOrder, providerCode: String?, context: ConvergeContext, clearReceivedMarks: Boolean = false): ConvergeResult {
         if (order.status != PaymentOrderStatus.CONFIRMING) return ConvergeResult(order, changed = false)
         val code = LedgerValues.code(providerCode) ?: "DECLINED"
         val failed = writer.transition(tx, order, PaymentOrderStatus.FAILED, PaymentEventType.CONFIRM_DECLINED, context.actor, context.actorId, code) {
-            it.copy(failureCode = code, closedAt = writer.now(), reviewReason = it.reviewReason.unlessConfirmUnresolved())
+            // 결제사 모듈이 걸렸던 돈을 이미 되돌렸다고 말하면(`clearReceivedMarks`) 그 사이 조회가 찍은 「결제사가 받았다」 표시는 풀린 의문이다
+            it.copy(failureCode = code, closedAt = writer.now(), reviewReason = it.reviewReason.unlessConfirmUnresolved().takeUnless { reason -> clearReceivedMarks && reason in PROVIDER_RECEIVED_MARKS })
         }
         notifyClosed(tx, failed)
         return ConvergeResult(failed, changed = true)

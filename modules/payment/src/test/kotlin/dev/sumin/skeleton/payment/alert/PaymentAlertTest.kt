@@ -4,6 +4,7 @@ import dev.sumin.skeleton.alert.AlertKind
 import dev.sumin.skeleton.alert.OwnerAlerts
 import dev.sumin.skeleton.payment.PaymentAutoConfiguration
 import dev.sumin.skeleton.payment.PaymentLedgerAutoConfiguration
+import dev.sumin.skeleton.payment.PaymentMismatchOutcome
 import dev.sumin.skeleton.payment.PaymentProviderCredentialAlert
 import dev.sumin.skeleton.payment.PaymentProviderMismatchAlert
 import dev.sumin.skeleton.payment.PaymentReviewNotifier
@@ -60,15 +61,16 @@ class PaymentAlertTest {
     }
 
     @Test
-    fun `a mismatch cancel emits PAYMENT_MISMATCH_CANCELLED or PAYMENT_MISMATCH_CANCEL_FAILED keyed by the order id and carries no value`() {
+    fun `a mismatch cancel emits PAYMENT_MISMATCH_CANCELLED or PAYMENT_MISMATCH_CANCEL_FAILED keyed by the order id and carries no value (cancelled, still pending, failed)`() {
         val alerts = RecordingAlerts()
         runner(alerts).run { context ->
             val alert = context.getBean(PaymentProviderMismatchAlert::class.java)
-            alert.applied("naverpay", "ord_1", cancelled = true)
-            alert.applied("naverpay", "ord_2", cancelled = false)
+            alert.applied("naverpay", "ord_1", PaymentMismatchOutcome.CANCELLED)
+            alert.applied("naverpay", "ord_2", PaymentMismatchOutcome.IN_PROGRESS)
+            alert.applied("naverpay", "ord_3", PaymentMismatchOutcome.FAILED)
         }
 
-        assertEquals(listOf("PAYMENT_MISMATCH_CANCELLED" to "ord_1", "PAYMENT_MISMATCH_CANCEL_FAILED" to "ord_2"), alerts.emitted.map { it.kind.name to it.key })
+        assertEquals(listOf("PAYMENT_MISMATCH_CANCELLED" to "ord_1", "PAYMENT_MISMATCH_CANCEL_PENDING" to "ord_2", "PAYMENT_MISMATCH_CANCEL_FAILED" to "ord_3"), alerts.emitted.map { it.kind.name to it.key })
         assertTrue(alerts.emitted.all { it.detail == "" && it.immediate })
     }
 

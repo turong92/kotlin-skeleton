@@ -71,7 +71,7 @@ class NaverPayAutoConfiguration {
                     httpClient = httpClient,
                     properties = properties,
                     credentialAlert = PaymentProviderCredentialAlert { id -> settings.inProject { alert.rejected(id) } },
-                    mismatchAlert = PaymentProviderMismatchAlert { id, orderId, cancelled -> settings.inProject { mismatch.applied(id, orderId, cancelled) } },
+                    mismatchAlert = PaymentProviderMismatchAlert { id, orderId, outcome -> settings.inProject { mismatch.applied(id, orderId, outcome) } },
                 )
             }
         }

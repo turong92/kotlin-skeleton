@@ -70,7 +70,7 @@
 | 운영자 판정 | `PaymentOperatorPolicy` — 기본은 토큰의 `ROLE_<admin.role>`. 토큰이 낡았을 수 있으므로(≤15분) `account` 를 쓰는 앱은 매 호출 저장소의 역할을 읽는 빈으로 갈아 끼운다 |
 | (선택) 사람이 봐야 하는 일이 줄에 찍힐 때 알림 | `PaymentReviewNotifier` — `alert` 가 있으면 `PAYMENT_REVIEW_NEEDED`(주문 id 만 싣는다), 없으면 줄 · 로그에만 남는다 |
 | (선택) 결제사가 우리 키를 받아들이지 않았을 때 알림 | `PaymentProviderCredentialAlert` — 결제사 모듈이 키 거절(토스: 401 계열 `INVALID_API_KEY` · `UNAUTHORIZED_KEY` — `FORBIDDEN_REQUEST` 는 요청 불일치일 수도 있어 알리지 않는다)을 받으면 부른다. 장부 + `alert` 가 있으면 `PAYMENT_PROVIDER_CREDENTIALS_REJECTED`(결제사 id 만 싣는다 · 한 시간에 한 번으로 접힌다), 없으면 알리지 않는다. 고객에게는 여전히 「거절」이다 |
-| (선택) 결제사가 다른 주문 · 금액의 결제를 이 주문의 승인으로 받았을 때 알림 | `PaymentProviderMismatchAlert` — 승인 API 가 결제 번호만 받는 결제사(네이버페이)가 그 승인을 곧바로 취소했거나 취소하지 못했을 때 부른다. 장부 + `alert` 가 있으면 `PAYMENT_MISMATCH_CANCELLED` · `PAYMENT_MISMATCH_CANCEL_FAILED`(주문 id 만 싣는다), 없으면 알리지 않는다 |
+| (선택) 결제사가 다른 주문 · 금액의 결제를 이 주문의 승인으로 받았을 때 알림 | `PaymentProviderMismatchAlert` — 승인 API 가 결제 번호만 받는 결제사(네이버페이)가 그 승인을 곧바로 취소했거나 취소하지 못했을 때 부른다. 장부 + `alert` 가 있으면 `PAYMENT_MISMATCH_CANCELLED` · `PAYMENT_MISMATCH_CANCEL_PENDING`(취소가 아직 끝나지 않음) · `PAYMENT_MISMATCH_CANCEL_FAILED`(주문 id 만 싣는다), 없으면 알리지 않는다 |
 | 성공/실패 리다이렉트 화면 · 웹훅 비밀 조각 | 앱 몫 — [HTTP](#http) 참고 |
 
 **`PaymentOrderListener` 를 짧게 쓴다.** `onPaid` · `onRefunded` 는 **주문 줄 락 안에서 한 번** 돈다 — 같은 DB 를 쓰는 지급이 정확히 한 번인 이유다. 그동안 **그 주문의 웹훅 수신 · 승인 · 환불이 기다린다**(PostgreSQL 은 락 대기에 시간 제한이 없다). 느린 일(메일 · 외부 호출)은 리스너에서 직접 하지 말고 큐로 넘긴다(알림은 `NotificationPublisher`, 외부 시스템 호출은 작업으로).

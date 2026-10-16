@@ -13,6 +13,7 @@ import dev.sumin.skeleton.payment.PaymentFailures
 import dev.sumin.skeleton.payment.PaymentConfirmRequest
 import dev.sumin.skeleton.payment.PaymentLookupGateway
 import dev.sumin.skeleton.payment.PaymentLookupQuery
+import dev.sumin.skeleton.payment.PaymentMismatchOutcome
 import dev.sumin.skeleton.payment.PaymentMode
 import dev.sumin.skeleton.payment.PaymentOperationResult
 import dev.sumin.skeleton.payment.PaymentOperationStatus
@@ -287,9 +288,10 @@ class NaverPayProvider(
      * 확인하지 못하면 모름을 돌려줘 장부가 `CONFIRMING` 에 두고 조회가 맞춘다(결제가 다른 주문의 것으로 읽혀 `ORDER_MISMATCH`/`AMOUNT_MISMATCH` 표시가 찍힌다). 어느 쪽이든 주인에게 알린다.
      */
     private fun cancelMismatch(paymentId: String, total: Long, orderId: String, code: String): PaymentProviderException {
-        val cancelled = fullyCancelled(paymentId, total)
-        runCatching { mismatchAlert.applied(providerId, orderId, cancelled) }
-        log.warn("NaverPay applied a payment that is not this order's order={} reason={} cancelled={}", orderId, code, cancelled)
+        val outcome = cancelMismatching(paymentId, total)
+        runCatching { mismatchAlert.applied(providerId, orderId, outcome) }
+        log.warn("NaverPay applied a payment that is not this order's order={} reason={} outcome={}", orderId, code, outcome)
+        val cancelled = outcome == PaymentMismatchOutcome.CANCELLED
         return PaymentProviderException(
             providerError = PaymentProviderError(
                 provider = providerId,
@@ -299,6 +301,7 @@ class NaverPayProvider(
                 upstreamStatus = if (cancelled) 409 else 502,
                 retryable = !cancelled,
                 definitive = cancelled,
+                moneyReturned = cancelled, // 장부가 그 사이 조회로 찍은 「결제사가 받았다」 표시를 주문을 닫을 때 비운다
                 rawBody = null,
             ),
             clientName = properties.clientName,
@@ -307,20 +310,27 @@ class NaverPayProvider(
         )
     }
 
-    private fun fullyCancelled(paymentId: String, total: Long): Boolean {
-        val answered = try {
+    private fun cancelMismatching(paymentId: String, total: Long): PaymentMismatchOutcome {
+        try {
             val result = cancelOnce(paymentId, total, MISMATCH_REASON, "mismatch-$paymentId", "payment.naverpay.mismatch-cancel", PaymentOperationStatus.CANCELED)
-            result.status == PaymentOperationStatus.CANCELED && result.remaining?.amount == 0L
+            if (result.status == PaymentOperationStatus.CANCELED && result.remaining?.amount == 0L) return PaymentMismatchOutcome.CANCELLED
+            // CancelNotComplete - 취소가 아직 끝나지 않았다(네이버페이가 곧 자동으로 다시 처리한다)
+            if (result.status == PaymentOperationStatus.PENDING) return PaymentMismatchOutcome.IN_PROGRESS
         } catch (e: Exception) {
-            false
+            restoreInterrupt(e)
         }
-        if (answered) return true
         // 모르면 조회로 맞춘다 - 이미 전액 환불로 보이면 취소된 것이다
         return try {
-            lookup(PaymentLookupQuery(paymentId, null))?.status == ProviderPaymentStatus.REFUNDED
+            if (lookup(PaymentLookupQuery(paymentId, null))?.status == ProviderPaymentStatus.REFUNDED) PaymentMismatchOutcome.CANCELLED else PaymentMismatchOutcome.FAILED
         } catch (e: Exception) {
-            false
+            restoreInterrupt(e)
+            PaymentMismatchOutcome.FAILED
         }
+    }
+
+    /** 인터럽트가 원인이면 삼키지 않고 표시를 되살린다 - 호출한 스레드가 곧 알아챈다. */
+    private fun restoreInterrupt(e: Throwable) {
+        if (generateSequence(e) { it.cause }.any { it is InterruptedException }) Thread.currentThread().interrupt()
     }
 
     private fun cancelable(paymentId: String): Long {

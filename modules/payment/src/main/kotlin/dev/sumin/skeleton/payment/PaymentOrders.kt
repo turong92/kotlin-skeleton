@@ -151,7 +151,7 @@ class PaymentOrders(
         } catch (e: Exception) {
             // 호출 자체의 실패만 여기서 가른다 — 확정(저장) 쪽 버그를 "모름"으로 삼키지 않으려고 settle 은 try 밖이다
             val after = when (PaymentFailures.outcomeOf(e)) {
-                PaymentFailureOutcome.DEFINITIVE -> decline(order, gateway, PaymentFailures.providerCodeOf(e), context)
+                PaymentFailureOutcome.DEFINITIVE -> decline(order, gateway, PaymentFailures.providerCodeOf(e), context, PaymentFailures.moneyReturnedOf(e))
                 PaymentFailureOutcome.UNKNOWN -> unknown(order, e, context)
             }
             return after
@@ -225,10 +225,10 @@ class PaymentOrders(
         }
     }
 
-    private fun decline(order: PaymentOrder, gateway: PaymentConfirmGateway, providerCode: String?, context: ConvergeContext): PaymentOrder {
+    private fun decline(order: PaymentOrder, gateway: PaymentConfirmGateway, providerCode: String?, context: ConvergeContext, moneyReturned: Boolean = false): PaymentOrder {
         val closed = store.inTransaction { tx ->
             val locked = tx.lockOrder(order.id) ?: return@inTransaction order
-            convergence.declined(tx, locked, providerCode, context).order
+            convergence.declined(tx, locked, providerCode, context, clearReceivedMarks = moneyReturned).order
         }
         if (closed.status == PaymentOrderStatus.FAILED) throw PaymentDeclinedException(closed.failureCode, gateway.confirmDeclineCategory(closed.failureCode))
         return closed // 그 사이 다른 길이 먼저 끝냈다 — 늦은 거절은 받은 돈을 되돌리지 못한다

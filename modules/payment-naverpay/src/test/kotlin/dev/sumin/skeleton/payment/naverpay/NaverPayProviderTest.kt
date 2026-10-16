@@ -6,6 +6,7 @@ import dev.sumin.skeleton.payment.PaymentConfirmRequest
 import dev.sumin.skeleton.payment.PaymentFailureOutcome
 import dev.sumin.skeleton.payment.PaymentFailures
 import dev.sumin.skeleton.payment.PaymentLookupQuery
+import dev.sumin.skeleton.payment.PaymentMismatchOutcome
 import dev.sumin.skeleton.payment.PaymentMode
 import dev.sumin.skeleton.payment.PaymentOperationStatus
 import dev.sumin.skeleton.payment.PaymentRefundRequest
@@ -137,8 +138,8 @@ class NaverPayProviderTest {
         assertNotNull(result.paidAt)
     }
 
-    private val alerts = java.util.concurrent.CopyOnWriteArrayList<Pair<String, Boolean>>()
-    private val guarded = naverProvider(server, mismatchAlert = { _, orderId, cancelled -> alerts += orderId to cancelled })
+    private val alerts = java.util.concurrent.CopyOnWriteArrayList<Pair<String, PaymentMismatchOutcome>>()
+    private val guarded = naverProvider(server, mismatchAlert = { _, orderId, outcome -> alerts += orderId to outcome })
 
     @Test
     fun `an approval that is not this order's - another order's payment id - is cancelled in full at once with a key, refused for good, and the owner is told`() {
@@ -152,7 +153,7 @@ class NaverPayProviderTest {
         assertEquals(listOf(3_000L), server.paymentOf(others)!!.cancels.map { it.second })
         val cancel = server.requests.last { it.path.endsWith("/v1/cancel") }
         assertEquals("mismatch-$others", cancel.header("x-naverpay-idempotency-key"))
-        assertEquals(listOf("ord_abcdef123456" to true), alerts)
+        assertEquals(listOf("ord_abcdef123456" to PaymentMismatchOutcome.CANCELLED), alerts)
     }
 
     @Test
@@ -164,7 +165,7 @@ class NaverPayProviderTest {
 
         assertEquals(PaymentFailureOutcome.UNKNOWN, PaymentFailures.outcomeOf(failure))
         assertEquals(3_000, server.paymentOf(others)!!.available)
-        assertEquals(listOf("ord_abcdef123456" to false), alerts)
+        assertEquals(listOf("ord_abcdef123456" to PaymentMismatchOutcome.FAILED), alerts)
 
         // 취소 응답이 유실됐어도 취소는 적용됐다 - 조회가 전액 환불을 보여 주면 확정이다
         alerts.clear()
@@ -172,7 +173,35 @@ class NaverPayProviderTest {
         server.failNext("cancel", Fail.LOSE)
         val settled = assertFailsWith<Exception> { guarded.confirm(confirmRequest(lost)) }
         assertEquals(PaymentFailureOutcome.DEFINITIVE, PaymentFailures.outcomeOf(settled))
-        assertEquals(listOf("ord_abcdef123456" to true), alerts)
+        assertEquals(listOf("ord_abcdef123456" to PaymentMismatchOutcome.CANCELLED), alerts)
+    }
+
+    @Test
+    fun `when the cancel of a mismatching approval answers CancelNotComplete the owner is told it is still in progress, not failed - and the answer stays unknown`() {
+        val others = payAtWindow(server, guarded, orderId = "ord_someone_else")
+        server.failNext("cancel", Fail.NOT_COMPLETE)
+
+        val failure = assertFailsWith<Exception> { guarded.confirm(confirmRequest(others)) }
+
+        assertEquals(PaymentFailureOutcome.UNKNOWN, PaymentFailures.outcomeOf(failure))
+        assertEquals(listOf("ord_abcdef123456" to PaymentMismatchOutcome.IN_PROGRESS), alerts)
+    }
+
+    @Test
+    fun `an interrupt during the mismatch cancel is not swallowed - the flag is restored`() {
+        val others = payAtWindow(server, guarded, orderId = "ord_someone_else")
+        server.failNext("cancel", Fail.DELAY)
+        val interrupter = Thread.currentThread()
+        val timer = java.util.Timer(true).also { it.schedule(object : java.util.TimerTask() { override fun run() { interrupter.interrupt() } }, 300) }
+
+        try {
+            runCatching { guarded.confirm(confirmRequest(others)) }
+            assertTrue(Thread.interrupted(), "the interrupt flag is set again")
+        } finally {
+            timer.cancel()
+            server.release()
+            Thread.interrupted()
+        }
     }
 
     @Test
