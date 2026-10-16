@@ -4,7 +4,6 @@
 
 ## 형 결정 (원문)
 - "그럼 패들로 해보자" / 오베이션 "해외도 바로 같이 오픈" / 돈 받는 형태 "아직 미정" → 단건·구독 둘 다 받을 수 있게.
-- "다 하면 paddle 도 해놓고. 로그인 화면 aside ovation profile 에 열어놨으니까 거기서 확인하면서"
 
 ## 토스와 무엇이 다른가
 | | 토스(지금) | Paddle |
@@ -36,9 +35,9 @@
 플랜 올리기(Paddle `PATCH subscription` + 차액 방식), 환불 요청(adjustment), 운영자 화면의 Paddle 전용 동작, 상품·가격 DB 와의 동기화(지금은 설정에 price id 를 적음), 중도 해지 환불(Paddle 정책을 따름 — 우리 한국 정책 부품은 토스 경로 전용).
 
 ## 밖에서 할 일
-- **웹훅 공개 주소**: `skel.ovation.fans` 는 Cloudflare Access 가 막고 있음 → `/api/v1/payments/webhooks/paddle` 경로만 Access 예외(Bypass) 정책. 형이 대시보드에서(내가 단계 안내).
-- **Paddle 샌드박스**(형 계정, Aside ovation 프로필): 상품·가격 만들기, 웹훅 대상 등록(위 주소, 이벤트 선택), 클라이언트 토큰·API 키 발급. 설정 변경은 내가 할 때마다 무엇을 바꾸는지 먼저 말하고 OK 받고 누름. **키·비밀값은 형이 `.env.local` 에 직접**(`PADDLE_API_KEY`, `PADDLE_CLIENT_TOKEN`, `PADDLE_WEBHOOK_SECRET`, `PADDLE_ENVIRONMENT=sandbox`).
-- 진짜 Paddle 샌드박스 결제는 테스트 카드로 형이 누름(카드 입력은 내가 못 함).
+- **웹훅 공개 주소**: 개발 서버를 터널로 열어 둔 경우, 앞단 접근 제한(예: Cloudflare Access)이 있으면 `/api/v1/payments/webhooks/paddle` 경로만 예외로 둔다.
+- **Paddle 샌드박스**: 상품·가격 만들기, 웹훅 대상 등록(위 주소, 이벤트 선택), 클라이언트 토큰·API 키 발급. **키·비밀값은 형이 `.env.local` 에 직접**(`PADDLE_API_KEY`, `PADDLE_CLIENT_TOKEN`, `PADDLE_WEBHOOK_SECRET`, `PADDLE_ENVIRONMENT=sandbox`).
+- 진짜 Paddle 샌드박스 결제는 테스트 카드로 사람이 직접 한다.
 
 ## 크기 (예상)
 조각 4(모듈·웹훅 / 장부 연결·갱신 건너뛰기 / 프론트 결제창·견본 / 가짜 Paddle e2e), developer 1명, 리뷰 1 + 확인 1, 끝 검사 1. 3~4시간 + 샌드박스 설정 30분.
