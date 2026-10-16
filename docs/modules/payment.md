@@ -3,6 +3,8 @@
 제공자 중립 결제 계약(`PaymentService`, `PaymentProviderRouter`)과, 저장 어댑터(`payment-jdbc`)가 있을 때 켜지는 **결제 장부**(주문 · 환불 · 이력 · 웹훅 수신함 · 사용자/운영자 HTTP · 탈퇴 고리)다.
 제공자(`payment-toss`, `payment-stripe`)가 각자 등록하고, 라우터가 이름으로 고른다.
 
+프로젝트 여럿([multi-project](../multi-project.md) "결제"): 결제사 게이트웨이 · 라우팅(`payment.{default-provider, providers.*, routing.country-providers}`) · 웹훅 비밀 조각(`payment.webhook.path-token`)이 프로젝트마다고 `PaymentProviderRouter` 가 지금 프로젝트의 것으로 넘긴다. 결제사 모듈은 `PaymentGatewaySource` 빈 하나로 이 모양을 따른다(새 결제사도 같다). 장부는 스키마마다, 시각 · 한도 · 구독 정책은 공통. 빌링키 암호화는 프로젝트의 `crypto` 키. 닫는 순서도 같은 문서.
+
 | 항목 | 내용 |
 |---|---|
 | 의존성 한 줄 | `implementation(project(":modules:payment"))` |

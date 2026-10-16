@@ -15,10 +15,14 @@ skeleton:
       #   auth-social.providers.google: { enabled: true, client-id: ..., client-secret: ${A_GOOGLE_SECRET}, redirect-uri: https://a.example.com/auth/callback/google }
       #   auth-social-x / auth-social-oidc.providers.<코드>: { client-id: ..., client-secret: ... }       # 켜는 스위치는 client-id
       #   notification-mail: { from: "Project A <no-reply@a.example.com>" }                              # 프로젝트마다 필수 (공통 값으로 내려가지 않는다)
-      #   storage-s3: { bucket: shared-bucket, key-prefix: a }   # 버킷을 나눠 쓰면 key-prefix 가 서로 달라야 한다. 공개 URL 은 RAW 만
+      #   storage-s3: { bucket: shared-bucket, key-prefix: a }   # 버킷을 나눠 쓰면 key-prefix 가 서로 달라야 한다. 공개 URL 은 RAW, crypto 가 있으면 OPAQUE 도
       #   storage.web: { key-prefix: uploads, key-owner: OPAQUE, key-secret: ${A_STORAGE_KEY_SECRET} }  # OPAQUE 비밀은 프로젝트마다 달라야 한다
       #   legal: { location: file:/etc/app/legal-a/, facts: { company-name: Project A, contact-email: help@a.example.com } }
       #   captcha-turnstile: { secret-key: ${A_TURNSTILE_SECRET}, expected-hostname: a.example.com }
+      #   crypto: { primary-key-id: a1, keys: { a1: ${A_CRYPTO_KEY} } }                                   # 프로젝트마다 다른 키 바이트(같으면 기동 실패). base64 AES 키
+      #   payment-toss: { enabled: true, secret-key: ${A_TOSS_SECRET}, client-key: ${A_TOSS_CLIENT} }    # 결제사 키는 프로젝트마다 — B 가 안 켠 결제사는 B 의 결제 화면에 없다
+      #   payment-paddle: { enabled: true, api-key: ${A_PADDLE_API}, client-token: ..., webhook-secret: ${A_PADDLE_WEBHOOK} }
+      #   payment: { default-provider: toss, routing: { country-providers: { KR: toss, US: paddle } }, webhook: { path-token: ${A_PAYMENT_WEBHOOK_TOKEN} } }  # 비밀 조각 24자+ (서명 없는 결제사의 웹훅 주소)
       config:
         auth:
           jwt: { secret: dev-only-jwt-secret-of-project-a-32+bytes, issuer: project-a }

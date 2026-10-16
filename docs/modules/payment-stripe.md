@@ -3,6 +3,8 @@
 `payment` 의 제공자로 Stripe 결제 승인 · 취소를 구현한다. 외부 호출은 `platform` 의 `ExternalHttpClient` 를 쓴다.
 에러는 `ExternalHttpErrorMapper` 로 표준 결제 예외에 옮긴다.
 
+프로젝트 여럿([multi-project](../multi-project.md) "결제"): 프로젝트마다 자기 `payment-stripe.*` 로 게이트웨이를 만든다. 켜지 않은 프로젝트에는 없다.
+
 | 항목 | 내용 |
 |---|---|
 | 의존성 한 줄 | `implementation(project(":modules:payment-stripe"))` |

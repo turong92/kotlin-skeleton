@@ -11,3 +11,4 @@ skeleton:
     refund-path: /v1/refunds                                        # 환불 경로
     supported-currencies: []                                        # 비우면 통화로 라우팅하지 않는다
     supported-countries: []                                         # 비우면 국가로 라우팅하지 않는다
+# 프로젝트 여럿(skeleton.projects)이면 skeleton.projects.<id>.config.payment-stripe.* 로 프로젝트마다 — 그 프로젝트에서 켜지 않으면 그 프로젝트의 결제 화면에 없다

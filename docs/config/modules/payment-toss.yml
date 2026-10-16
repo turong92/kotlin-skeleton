@@ -15,3 +15,4 @@ skeleton:
     allow-test-keys-in-protected-env: false         # true 면 skeleton.env=stage|prod 에서 테스트 키로 서는 것을 일부러 허락한다(경고로 내려간다)
     supported-currencies: [KRW]                     # 이 통화는 이 제공자로 라우팅
     supported-countries: [KR]                       # 이 국가는 이 제공자로 라우팅
+# 프로젝트 여럿(skeleton.projects)이면 skeleton.projects.<id>.config.payment-toss.* 로 프로젝트마다 — 그 프로젝트에서 켜지 않으면 그 프로젝트의 결제 화면에 없다

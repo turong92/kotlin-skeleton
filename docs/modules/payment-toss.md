@@ -3,6 +3,8 @@
 `payment` 의 제공자로 토스페이먼츠(**결제창 + API 개별 연동 키** `test_ck_…`/`test_sk_…`)를 구현한다. 외부 호출은 `platform` 의 `ExternalHttpClient` 를 쓴다.
 한 빈(`TossPaymentProvider`)이 능력을 모두 맡아 라우터에는 결제사가 하나로 보인다: 승인 · 취소 · 환불 · 조회 · 결제창 값 · 웹훅 해석.
 
+프로젝트 여럿([multi-project](../multi-project.md) "결제"): 프로젝트마다 자기 `payment-toss.*`(시크릿 키 · 클라이언트 키 …)로 게이트웨이를 만든다 — 켜지 않았거나 시크릿 키가 비면 그 프로젝트에는 토스가 없다. 키 가드(보호 환경)는 토스를 켠 프로젝트마다 돈다. 웹훅 주소 비밀 조각은 프로젝트의 `payment.webhook.path-token`.
+
 | 항목 | 내용 |
 |---|---|
 | 의존성 한 줄 | `implementation(project(":modules:payment-toss"))` |

@@ -41,7 +41,7 @@ skeleton:
 | 소셜 로그인 (Google · Kakao · Naver) | `auth-social.providers.<id>.{enabled, client-id, client-secret, redirect-uri, …}` | 프로젝트마다 제공자를 따로 만든다 — A 에서 켠 제공자는 B 의 `/auth/methods` · 로그인 · 연결에 없다 |
 | X | `auth-social-x.*` | 프로젝트의 `client-id` 가 있을 때만 그 프로젝트에 X 가 있다 |
 | 메일 발신자 | `notification-mail.from` | 프로젝트마다 **필수**(공통 값으로 내려가지 않는다 — 다른 서비스 이름의 주소로 나가면 안 된다). SMTP 접속(`spring.mail.*`)은 서버 공통, 프로젝트별 SMTP 는 지원하지 않는다 |
-| 파일 저장소 (S3 · R2 · MinIO) | `storage-s3.{bucket, region, endpoint-override, credentials.*, presign.*, public-url.*, key-prefix}` | 프로젝트마다 S3 클라이언트 · 저장소를 만든다. 같은 버킷을 나눠 쓰면 `key-prefix` 가 서로 달라야 한다(같으면 기동 실패). 버킷이 없는 프로젝트는 저장소가 없다. 공개 URL 은 RAW 만(OPAQUE 는 crypto 가 프로젝트를 알아야 한다) |
+| 파일 저장소 (S3 · R2 · MinIO) | `storage-s3.{bucket, region, endpoint-override, credentials.*, presign.*, public-url.*, key-prefix}` | 프로젝트마다 S3 클라이언트 · 저장소를 만든다. 같은 버킷을 나눠 쓰면 `key-prefix` 가 서로 달라야 한다(같으면 기동 실패). 버킷이 없는 프로젝트는 저장소가 없다. 공개 URL 은 RAW, 또는 `crypto` 가 있으면 OPAQUE(프로젝트의 암호화 키로 토큰을 만든다 — 키 없는 프로젝트는 기동 실패) |
 | 업로드 키 규칙 | `storage.web.{key-prefix, key-owner, key-secret}` | 발급 · 소유 확인이 지금 프로젝트의 규칙으로 돈다. OPAQUE 비밀은 프로젝트마다 달라야 한다(같으면 기동 실패) — A 의 키는 B 에서 소유로 인정되지 않는다 |
 | 약관 · 동의 문서 | `legal.{location, default-locale, required, required-at-sign-up, previous-version-grace, facts.*, acknowledge-template}` | 문서 집합 · 규칙을 프로젝트마다 만든다(운영자 이름 같은 사실도 프로젝트의 것). 시작 검사와 DeployGuard 가 프로젝트마다 돈다. 동의 기록은 스키마마다 |
 | 캡차 (Turnstile) | `captcha-turnstile.{secret-key, expected-hostname, expected-action, siteverify-url, timeout}` | 검증할 때마다 지금 프로젝트의 값. `enabled` 는 앱 전체 하나 — 켜면 서비스 중인 프로젝트 모두 비밀 키가 있어야 한다 |
@@ -49,6 +49,9 @@ skeleton:
 | 알림 웹소켓 (STOMP) | (설정 없음) | 세션의 프로젝트 = 연결 요청의 Host. 사용자 이름(`Principal.name`)이 `<프로젝트>\|<계정 id>` 라 앱 핸들러가 받는 이름도 그 꼴이고, 사용자 알림이 프로젝트 사이에 섞이지 않고, 공개 토픽은 구독 선택자로 프로젝트마다 나뉜다 |
 | (공통 값으로 내려가지 않는 것) | 약관 `legal.location` · `legal.facts.*`, 소셜 `auth-social.providers.<id>.{enabled, redirect-uri}`, X `client-id` · `client-secret` · `redirect-uri`, OIDC `providers.*` 전체, 메일 `from`, 계정 메일 `link-base-url` | 프로젝트가 자기 값만 읽는다 — 한 서비스 시절의 공통 값이 남아 있어도 값을 빠뜨린 프로젝트가 남의 약관 · 소셜 앱 · 주소를 물려받지 않는다(약관은 안 주면 TEMPLATE 문서라 stage · prod 가 막고, 소셜은 안 주면 꺼진다) |
 | 범용 OIDC | `auth-social-oidc.providers.<코드>.*` | 프로젝트마다 제공자를 만든다 — discovery · JWKS 보관도 제공자 안이라 프로젝트끼리 섞이지 않는다 |
+| 암호화 키 | `crypto.{primary-key-id, keys.<id>}` | `TextEncryptor` 가 지금 프로젝트의 키로 넘어간다(변환기 · `OpaqueUrlTokenCodec` · 빌링키 모두 이 빈을 지난다). 프로젝트끼리 **같은 키 바이트**면 기동 실패, 키 없는 프로젝트는 쓰는 순간 그 프로젝트 이름의 오류. 아래 "결제" |
+| 결제사 키 (토스 · Paddle · Stripe) | `payment-toss.*` · `payment-paddle.*` · `payment-stripe.*` | 프로젝트마다 그 프로젝트의 키를 든 결제사 게이트웨이(= 결제사 HTTP 클라이언트)를 따로 만든다 — A 에서 켠 결제사는 B 의 결제 화면 · `GET /config` 에 없다. 아래 "결제" |
+| 결제 라우팅 · 웹훅 비밀 조각 | `payment.{default-provider, providers.*, routing.country-providers, webhook.path-token}` | 나라 → 결제사 지도 · 기본 결제사 · 켜고 끔 · 서명 없는 결제사(토스)의 웹훅 주소 비밀 조각이 프로젝트마다 |
 
 **위 표의 키만 프로젝트 `config` 에 쓸 수 있다**(`ProjectConfigKeys.SUPPORTED`) — 그 밖의 키(`account.sign-up.enabled`, `legal.record.*`, `web.rate-limit.*`, `web.cors.enabled` …)는 조용히 무시되는 대신 기동 실패다. 프로젝트별 `auth-session.delivery` 도 받는다(`/auth/methods` 는 지금 프로젝트의 방식을 알린다).
 
@@ -84,31 +87,54 @@ skeleton:
 
 ## 아직 프로젝트를 모르는 기능
 
-결제(`payment*`) · 암호화(`crypto`) · Kafka(`event-kafka`) 가 **빌드에 들어 있고 서비스 중인 프로젝트가 둘 이상**이면 기동이 실패한다(한 곳, `ProjectUnawareFeatures`). 해결: 모듈을 빼거나 나머지를 `status: closed` 로. 모듈이 프로젝트를 알게 되면 표에서 뺀다.
-소셜 로그인 · 메일 발신 · 파일 · 약관 · 캡차 · Redis · 알림 웹소켓은 위 표대로 프로젝트를 안다. 한계(프로젝트가 알지 못하는 부분):
+Kafka(`event-kafka`) 만 남았다 — **빌드에 들어 있고 서비스 중인 프로젝트가 둘 이상**이면 기동이 실패한다(한 곳, `ProjectUnawareFeatures`). 해결: 모듈을 빼거나 나머지를 `status: closed` 로. 모듈이 프로젝트를 알게 되면 표에서 뺀다.
+소셜 로그인 · 메일 발신 · 파일 · 약관 · 캡차 · Redis · 알림 웹소켓 · 암호화 · 결제는 위 표대로 프로젝트를 안다. 한계(프로젝트가 알지 못하는 부분):
 
 - **프로젝트별 SMTP · Redis · 웹소켓 허용 출처는 없다** — 접속 정보(`spring.mail.*` · `skeleton.redis.*` · `notification-websocket.endpoint.*`)는 서버 공통이다. 메일은 발신자(`from`)만 프로젝트별이다.
 - **캡차 `enabled` 는 앱 전체 하나**다 — 켜면 서비스 중인 프로젝트 모두 비밀 키가 있어야 한다.
-- **저장소 공개 URL 은 프로젝트 모드에서 RAW 만** 된다(OPAQUE 는 `crypto` 가 프로젝트를 알아야 한다 — 아래).
 - 버킷을 정하지 않은 프로젝트는 저장소가 없고, 그 프로젝트가 `/api/v1/storage` 를 부르면 프로젝트 이름이 담긴 오류다.
 - 프로젝트 밖에서(뒤 작업 · 스케줄러) 저장소 · 약관 · 캡차 · 메일 발신자를 부르면 `NoProjectContextException` 이다 — `ProjectRegistry.forEachProject` 로 돈다. Redis 키는 예외라 프로젝트 밖이면 서버 전체 키가 된다(`<key-prefix>:…`).
 
-### 암호화(`crypto`) — 프로젝트별 키가 필요한가 (판단, 구현은 결제 조각에서)
+### 암호화(`crypto`) — 프로젝트별 키
 
-**필요하다. 다만 구현은 결제(빌링키 암호화)와 같이 한다.**
+DB 는 스키마 · 계정으로 갈려 공유 키가 데이터를 섞지는 않지만, (1) 키 하나가 새면 모든 프로젝트의 암호문이 열리고 (2) 프로젝트를 떼어 혼자 띄울 때 공유 키를 같이 넘겨야 하고 (3) `storage-s3` 의 `OPAQUE` 공개 URL 토큰을 B 도메인이 풀 수 있어서 **프로젝트마다 키를 둔다**(구현됨).
 
-- DB 는 스키마 · 계정으로 갈려 한 프로젝트의 앱 코드가 다른 프로젝트 표를 읽지 못하므로, 공유 키가 지금 당장 데이터를 섞지는 않는다. 문제는 (1) 키 하나가 새면 모든 프로젝트의 암호문이 열리고, (2) 프로젝트를 떼어 혼자 띄울 때(분리) 공유 키를 같이 넘겨야 하고, (3) `storage-s3` 의 `OPAQUE` 공개 URL 토큰이 같은 키로 만들어져 A 의 토큰을 B 도메인이 풀 수 있다는 것이다.
-- 설계(결제 조각): `skeleton.projects.<id>.config.crypto.{primary-key-id, keys.<id>}` 를 프로젝트마다 바인딩해 `TextEncryptor` 를 프로젝트 문맥으로 고르는 라우팅 빈으로 바꾼다(`ProjectRoutedStorage` 와 같은 꼴 — Spring Data 변환기와 `OpaqueUrlTokenCodec` 이 이 빈을 지나므로 따로 고칠 곳이 없다). 암호문 봉투의 키 id 는 프로젝트 안에서만 뜻이 있고, 프로젝트끼리 **같은 키 바이트를 쓰면 기동 실패**로 막는다(OPAQUE `key-secret` 과 같은 규칙).
-- 그러면 `storage-s3` 의 프로젝트 모드 `OPAQUE` 공개 URL 도 풀린다(프로젝트마다 `OpaqueUrlTokenCodec`).
-- 결제는 이 조각의 범위가 아니라서(`payment*` 를 건드리지 않는다) `crypto` 는 가드에 남긴다. `event-kafka` 는 범위 밖이라 가드에 남는다.
+- `skeleton.projects.<id>.config.crypto.{primary-key-id, keys.<id>}` 를 공통 `skeleton.crypto.*` 위에 덮어 프로젝트마다 `AesGcmTextEncryptor` 를 만들고, `TextEncryptor` 빈(`ProjectRoutedTextEncryptor`)이 부를 때 지금 프로젝트의 것으로 넘긴다. Spring Data 변환기 · `OpaqueUrlTokenCodec` 이 이 빈을 지나므로 따로 고칠 곳이 없다. 암호문 봉투의 키 id 는 프로젝트 안에서만 뜻이 있다 — 같은 id(`local`)를 둘이 써도 A 의 암호문은 B 의 키로 풀리지 않는다.
+- **서비스 중인 프로젝트끼리 같은 키 바이트를 쓰면 기동 실패**(메시지에 프로젝트 · 키 id). 공통 `skeleton.crypto.keys` 만 두고 프로젝트가 둘이면 같은 키라 이 검사에 걸린다 — 프로젝트마다 자기 키를 준다. 닫힌 프로젝트는 세지 않는다.
+- 어느 프로젝트에도 키가 없으면 모듈은 passive(예전과 같다). 키가 없는 프로젝트가 암호화를 쓰면 그 프로젝트 이름이 담긴 `CryptoException`, 프로젝트 문맥 없이 부르면 `NoProjectContextException`(뒤 작업은 `forEachProject`).
+- `storage-s3` 의 프로젝트 모드 `OPAQUE` 공개 URL 은 이 코덱으로 풀렸다 — 프로젝트의 키가 없으면 그 프로젝트 이름의 기동 실패.
+
+## 결제 (`payment*`)
+
+**결제사 키 · 웹훅 비밀은 프로젝트마다, 장부는 스키마마다.** 장부 표 · 수신함 · 작업은 프로젝트의 스키마(풀 · DB 계정)에서 돌고 뒤 작업 일꾼이 프로젝트를 차례로 돈다(위 "뒤 작업"). 목록이 비면 지금과 같다 — 결제사 모듈의 옛 게이트웨이 빈이 그대로 선다.
+
+- **결제사 모듈이 프로젝트 모드를 따르는 한 가지 모양**: `PaymentGatewaySource`(payment) 빈 하나. `create(settings)` 가 프로젝트마다 불리고, 모듈은 `settings.bind("skeleton.payment-<결제사>", MyProps::class.java)` 로 **그 프로젝트의 키**를 묶어 게이트웨이를 만들거나(켜지 않았거나 비밀이 비었으면) `null` 을 돌려준다. 라우터(`PaymentProviderRouter.forProjects`)가 프로젝트마다 게이트웨이 목록을 만들어 두고, 부를 때 지금 프로젝트의 것으로 넘긴다. 토스 · Paddle · Stripe 가 이 모양이고, 새 결제사 모듈(네이버페이 · 카카오페이)도 `@Conditional(ProjectsConfigured)` 소스 빈 하나(+ 옛 빈에 `@Conditional(ProjectsNotConfigured)`)면 된다. 결제사 HTTP 풀(`ExternalHttpClient`)은 서버 공통이지만 키는 요청마다 그 프로젝트의 게이트웨이가 싣는다.
+- **한 프로젝트에서 켠 결제사는 다른 프로젝트에 없다** — 결제 화면의 결제사 목록 · `GET /config` · 주문 만들기 · 웹훅 경로(404) 모두 지금 프로젝트의 라우터를 지난다.
+- **웹훅 식별 = 도메인 + 프로젝트별 비밀값.** 웹훅 경로(`/api/v1/payments/webhooks/{provider}[/{token}]`)도 다른 요청처럼 Host 로 프로젝트가 정해진다(모르는 도메인은 421). 서명 있는 결제사(Paddle)는 **그 프로젝트의** 웹훅 비밀값으로 서명을 확인해 A 의 비밀값으로 서명한 웹훅이 B 도메인으로 오면 `401`, 서명 없는 결제사(토스)는 그 프로젝트의 `payment.webhook.path-token` 이 아니면 `404`. 수신함 줄 · 처리 작업 · 인라인 반영(`webhook.inline`)은 그 프로젝트의 스키마에서 돈다. 보호 환경 가드(약한 비밀 조각 · 토스 키 모드)는 프로젝트마다 돌고 메시지에 `project '<id>'`.
+- **프로젝트마다 다른 것 / 공통인 것(판단)**
+  - *프로젝트별*: 결제사 키 · 켜고 끔(`payment-*.*`), 결제사 라우팅(`payment.default-provider` · `providers.*` · `routing.country-providers` — 프로젝트마다 파는 나라가 다르다), 웹훅 비밀 조각, 암호화 키. 프로젝트가 다르면 계약 · 정산 · 키가 다르기 때문이다.
+  - *공통*: 만료 · 조회 · 환불 시각(`checkout-ttl` · `reconcile.*` · `refund.*`), 웹훅 본문 상한 · 요청 한도, 운영자 경로 · 역할, 탈퇴 처리, 구독 정책(갱신 재시도 · 플랜 변경 방식 · 해지·환불 정책 · 일할 시간대). 인프라 정책이라 서버가 하나로 정하고, 프로젝트 `config` 에 쓰면 기동 실패라 조용히 무시되지 않는다. (프로젝트마다 갈라야 할 만큼 필요해지면 `ProjectConfigKeys` 에 키를 더하고 소비하는 곳을 `router.properties()` 로 읽게 한다 — 나라 지도 · 비밀 조각이 그렇게 읽는다.)
+  - *앱 코드*: **플랜 · 금액 · 지급 훅**(`SubscriptionPlans` · `PaymentCatalog` · `PaymentOrderListener` · `SubscriptionRenewalGuard` · `SubscriptionUsageCheck`)은 앱이 구현하는 빈이다. 호출은 그 프로젝트 문맥 안에서 일어나므로 구현이 `ProjectContext.current()` 로 프로젝트를 보고 가른다. 한 빈이 프로젝트마다 다른 플랜을 내는 모듈 쪽 라우팅은 아직 없다.
+- **빌링키 암호화는 프로젝트의 암호화 키로**(위 `crypto`). 빌링 능력이 있는 결제사(토스)를 켠 프로젝트에 암호화 키가 없으면 카드를 받은 뒤가 아니라 **기동 때** 그 프로젝트 이름으로 실패한다.
+- 한계: 같은 결제사 계정(키)을 두 프로젝트가 같이 써도 막지 않는다(웹훅은 도메인으로 갈리지만 결제사 콘솔의 한 계정에 주문이 섞인다 — 프로젝트마다 계정을 권한다). `SubscriptionPlans`/`PaymentCatalog` 같은 앱 빈을 프로젝트마다 둘 수 있는 라우팅은 없다.
+
+### 프로젝트 종료 절차 — 결제 쪽 (`status: closed` 로 바꾸기 전과 후)
+
+`closed` 는 도메인을 503 으로 막고 DB 풀 · 뒤 작업 순회에서 그 프로젝트를 뺀다 — 결제는 돈이 걸려 있어서 **순서가 있다**. 건너뛰면 결제사가 돈을 받았는데 장부가 모르거나, 웹훅이 영영 안 닿는다.
+
+1. **새 결제 막기** (프로젝트는 아직 `active`) — 앱의 `PaymentCatalog.quote` 가 이 프로젝트의 상품을 `PaymentItemNotPurchasableException` 으로 거절하고 `SubscriptionPlans.list()` 가 이 프로젝트에서 비도록 바꿔 배포한다. 결제사 설정(`payment-*.enabled=false`)은 쓰지 않는다 — 이미 열린 결제창의 승인 · 웹훅 경로까지 닫혀 결제된 돈을 장부가 못 따라온다. 결제창이 이미 열린 주문은 `checkout-ttl`(기본 30분) 안에 끝나거나 만료된다.
+2. **남은 구독 해지 · 환불** — 운영자 경로(`admin.enabled`)에서 구독을 해지하고(결제사가 갱신하는 Paddle 은 결제사 쪽 해지까지 확인) 환불할 주문을 환불한다. 운영자 목록의 「확인 필요」(`CONFIRMING` 이 오래됨 · 환불 `PENDING` · 지급/회수 미완)가 비고, 갱신 대기 구독이 0 이 될 때까지 기다린다.
+3. **웹훅 마지막 처리** — 결제사 콘솔에서 이 프로젝트 도메인의 웹훅 수신(토스 웹훅 등록 · Paddle notification destination)을 끈 뒤, 이 프로젝트 스키마의 결제 작업(`payment.*` 종류)이 모두 끝났는지(대기 · 재시도 0, `DEAD` 는 사람이 확인) 본다. **이 단계가 끝나기 전에 `closed` 로 바꾸지 않는다** — `closed` 가 되면 그 프로젝트의 일꾼 순회가 멈춰 남은 작업이 영영 안 돈다.
+4. **`status: closed`** — 도메인이 503, 이후 늦게 오는 결제사 재전송은 503 이라 결제사가 재시도하다 포기한다(3 에서 끈 뒤라 정상).
+5. **키 회수** (이 순서) — ① 결제사 키(토스 시크릿 키 · Paddle API 키와 웹훅 비밀값 · Stripe 키)를 각 결제사 콘솔에서 폐기하고 설정(`payment-*.*` · `payment.webhook.path-token`)에서 지운다. ② 장부 스키마는 법정 보존 기간 동안 읽기 전용으로 남기고(DB 계정에서 쓰기 권한을 거둔다), 그 안의 암호문(빌링키)은 이미 ①로 결제사에서 무효라 풀어도 쓸모가 없다. ③ `crypto.keys` 는 보존 기간이 끝나 스키마를 지울 때 함께 폐기한다 — 암호문이 남아 있는 동안 키를 먼저 지우면 장부의 빌링키 칸을 읽을 수 없게 된다(결제 이력 자체는 평문이라 읽힌다).
 
 ## 찍은 프로젝트에서 프로젝트 여럿 켜기
 
 `scripts/new-project.sh` 로 찍은 프로젝트에도 이 문서 · 견본 · 스크립트가 그대로 따라온다(`apps/api/src/main/resources/application-multi.yml`, `scripts/dev-multi.sh`, `scripts/project-account.sql`, `ProjectHello`). 켜는 순서:
 
-1. **모듈 고르기** — 위 표의 모듈만 두 프로젝트 이상과 함께 쓸 수 있다. 결제 · 암호화 · Kafka 를 골랐다면 프로젝트는 하나만 서비스 중이어야 한다.
+1. **모듈 고르기** — 위 표의 모듈만 두 프로젝트 이상과 함께 쓸 수 있다. Kafka 를 골랐다면 프로젝트는 하나만 서비스 중이어야 한다. 결제 · 암호화는 프로젝트마다 자기 키를 준다(위 "결제").
 2. **설정** — `application-multi.yml` 을 앱 설정으로 옮겨 `skeleton.projects.<id>.{hosts, schema, datasource, config}` 를 채운다. 찍으면 접두사가 바뀌므로(`skeleton.` → 새 접두사) 키는 `<접두사>.projects` 가 된다. `config` 에는 위 표의 키만 쓸 수 있고(그 밖은 기동 실패), 비밀 값은 환경변수로 넣는다("환경변수로만 넣기").
-   프로젝트마다 필수인 값: `account.mail.link-base-url`, `notification-mail.from`(메일을 쓸 때), 캡차를 켰다면 `captcha-turnstile.secret-key`, `storage.web.key-secret`(OPAQUE 일 때, 서로 달라야 한다), 버킷을 나눠 쓰면 `storage-s3.key-prefix`.
+   프로젝트마다 필수인 값: `account.mail.link-base-url`, `notification-mail.from`(메일을 쓸 때), 캡차를 켰다면 `captcha-turnstile.secret-key`, `storage.web.key-secret`(OPAQUE 일 때, 서로 달라야 한다), 버킷을 나눠 쓰면 `storage-s3.key-prefix`, 암호화를 쓰면 `crypto.keys.<id>`(서로 다른 키 바이트), 결제를 쓰면 `payment-<결제사>.*` · `payment.webhook.path-token`(서명 없는 결제사).
 3. **DB 계정 · 스키마** — 프로젝트마다 `scripts/project-account.sql` 로 만든다(운영) 또는 `scripts/dev-multi.sh`(로컬).
 4. **도메인** — 로컬은 `*.localhost`. X 로그인은 `localhost` 콜백을 거부하므로 한 프로젝트의 hosts 에 `127.0.0.1` 을 넣어 그 주소로 연다.
 5. **확인** — 기동 로그에서 서비스 중인 프로젝트마다 소셜 · 저장소 · 약관 검사가 통과하는지 본다(잘못된 설정은 메시지에 `project '<id>'` 가 붙은 기동 실패다).

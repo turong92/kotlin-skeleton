@@ -69,3 +69,4 @@ skeleton:
     # --- 계정 탈퇴 ---
     erasure:
       account-id: KEEP             # KEEP: 탈퇴해도 결제 줄의 계정 id 를 그대로 둔다 / TOMBSTONE: 그 계정이 산 주문의 줄에서만 계정 id 를 바꾼다(운영자로서 남의 주문에 남긴 id 는 남는다). 어느 쪽이든 카드사 · 끝 네 글자는 지워지고 주문 줄은 남는다
+# 프로젝트 여럿(skeleton.projects)이면 skeleton.projects.<id>.config.payment.{default-provider, providers.*, routing.country-providers, webhook.path-token} 만 프로젝트마다 — 나머지는 공통(프로젝트 config 에 쓰면 기동 실패)

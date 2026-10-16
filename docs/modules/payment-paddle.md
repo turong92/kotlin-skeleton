@@ -4,6 +4,8 @@ Paddle Billing(v2 API)을 `payment` 의 제공자로 구현한다. Paddle 이 �
 서버가 먼저 Paddle 거래를 만들고(`POST /transactions`, 가격은 설정 `prices`) 결제창은 그 거래 id 만 연다. 서버는 **서명된 웹훅**(`Paddle-Signature` = `ts=…;h1=…`, HMAC-SHA256(`ts:원문`), 시각 허용 오차 밖이면 거절)으로 결과를 받아 장부에 옮기고, Paddle API 는 거래 만들기와 구독 해지에만 부른다.
 웹훅 주소는 `/api/v1/payments/webhooks/paddle`. 금액 · 통화는 웹훅 값 그대로 기록한다(여러 통화).
 
+프로젝트 여럿([multi-project](../multi-project.md) "결제"): 프로젝트마다 자기 `payment-paddle.*`(API 키 · 클라이언트 토큰 · 웹훅 비밀값)로 게이트웨이를 만든다. 웹훅은 도메인으로 프로젝트가 정해지고 그 프로젝트의 비밀값으로 서명을 확인한다 — A 의 비밀값으로 서명한 웹훅은 B 도메인에서 거절.
+
 | 항목 | 내용 |
 |---|---|
 | 의존성 한 줄 | `implementation(project(":modules:payment-paddle"))` |
