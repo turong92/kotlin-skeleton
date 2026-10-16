@@ -5,7 +5,6 @@ import dev.sumin.skeleton.common.web.ClientIps
 import dev.sumin.skeleton.common.web.InMemoryFixedWindowRateLimitStore
 import dev.sumin.skeleton.common.web.RateLimitStore
 import dev.sumin.skeleton.payment.PaymentCatalog
-import dev.sumin.skeleton.payment.PaymentCheckoutGateway
 import dev.sumin.skeleton.payment.PaymentLedgerAutoConfiguration
 import dev.sumin.skeleton.payment.PaymentOperatorPolicy
 import dev.sumin.skeleton.payment.PaymentOrders
@@ -59,7 +58,7 @@ class PaymentHttpAutoConfiguration {
             { router.properties() },
             clientIps.getIfAvailable { ClientIps() },
             { orders.openableProviders() },
-            { country -> router.gateways(PaymentCheckoutGateway::class).filter { gateway -> router.servesCountry(gateway.providerId, country) }.map { it.providerId.trim().lowercase() } },
+            { country -> router.choosableProviders(country) },
         )
 
     @Bean

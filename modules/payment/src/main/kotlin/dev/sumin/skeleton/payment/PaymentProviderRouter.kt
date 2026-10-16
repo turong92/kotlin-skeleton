@@ -48,6 +48,13 @@ class PaymentProviderRouter internal constructor(
     fun servesCountry(providerId: String, country: String): Boolean =
         providerId.normalizeProviderId()?.let { providersById[it] }?.route()?.countries?.contains(country.trim().uppercase()) == true
 
+    /**
+     * 구매자가 고를 수 있는 결제창 결제사 - [country] 를 실효 설정으로 받는 켜진 결제사. 서버가 고를 때 통화를 바꿔 결제하는 결제사([PaymentTransactionGateway] - Paddle)는 뺀다:
+     * 견적 통화(원화)를 받지 않아 구매자가 고르면 늘 거절되기 때문이다(그 결제사는 서버가 나라로 고른다).
+     */
+    fun choosableProviders(country: String): List<String> =
+        gateways(PaymentCheckoutGateway::class).filter { it !is PaymentTransactionGateway && servesCountry(it.providerId, country) }.map { it.providerId.trim().lowercase() }
+
     /** 이 결제사가 [currency] 를 실효 설정으로 받는가(덮어쓰기 `providers.<id>.currencies` 가 먼저). */
     fun servesCurrency(providerId: String, currency: String): Boolean =
         providerId.normalizeProviderId()?.let { providersById[it] }?.route()?.currencies?.contains(currency.trim().uppercase()) == true

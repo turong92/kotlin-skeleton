@@ -338,8 +338,8 @@ class PaymentOrders(
 
     /**
      * 결제창이 결제사가 먼저 정한 거래 번호를 줬으면([CheckoutInstruction.providerPaymentId]) 주문에 박는다 - 결제창에서 돌아온 승인이 그 번호로만 열린다.
-     * 같은 `PENDING` 주문을 다시 열 때마다 결제사가 새 번호를 주고, **마지막으로 저장한 번호가 남는다**(동시에 두 번 열면 늦게 커밋한 쪽). 승인은 이 번호로만 열리므로 **먼저 연 창은 승인이 409 로 막힌다** -
-     * 구매자는 가장 나중에 받은 창으로 결제해야 한다. 그 사이 주문이 `PENDING` 을 벗어났으면 건드리지 않는다. 결제사 호출은 이미 끝났다(트랜잭션 밖).
+     * 같은 `PENDING` 주문을 다시 열 때마다 결제사가 새 번호를 주고, **마지막으로 저장한 번호가 남는다**(동시에 두 번 열면 늦게 커밋한 쪽). 승인은 이 번호로 나간다. 화면이 거래 번호를 안 싣는 클라이언트(react)가 **먼저 연 창**에서 돌아오면 새 번호로 승인이 나가
+     * 결제사가 옛 창의 토큰을 거절하고(카카오페이 -780) 주문이 `CONFIRMING` 에 굳는다(돈은 안 움직인다); 409 는 번호를 직접 보내는 클라이언트일 때만 난다. 구매자는 가장 나중에 받은 창으로 결제해야 한다. 그 사이 주문이 `PENDING` 을 벗어났으면 건드리지 않는다. 결제사 호출은 이미 끝났다(트랜잭션 밖).
      */
     private fun remember(order: PaymentOrder, instruction: CheckoutInstruction): PaymentOrder {
         val id = instruction.providerPaymentId ?: return order

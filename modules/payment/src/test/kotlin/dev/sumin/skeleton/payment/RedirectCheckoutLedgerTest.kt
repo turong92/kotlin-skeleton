@@ -103,6 +103,20 @@ class RedirectCheckoutLedgerTest {
     }
 
     @Test
+    fun `a provider that swaps the currency itself (a transaction-first one like Paddle) is never a choice for the buyer`() {
+        val props = PaymentProperties(
+            webhook = PaymentProperties.Webhook(pathToken = PaymentLedgerKit.WEBHOOK_TOKEN),
+            providers = mapOf(
+                "scripted" to PaymentProperties.Provider(countries = setOf("KR")),
+                "paddle" to PaymentProperties.Provider(countries = setOf("KR")),
+            ),
+        )
+        val both = PaymentLedgerKit(properties = props)
+
+        assertEquals(listOf("scripted"), both.router.choosableProviders("KR"))
+    }
+
+    @Test
     fun `a provider the buyer picked must serve the quote currency - the server's own pick is not checked`() {
         val props = PaymentProperties(
             webhook = PaymentProperties.Webhook(pathToken = PaymentLedgerKit.WEBHOOK_TOKEN),
