@@ -42,8 +42,10 @@ private fun payloadOf(subjectId: String) = """{"subjectId":"$subjectId"}"""
  * [PaymentTasksNow] - 방금 넣은 작업을 큐 워커의 임대로 지금 돌린다(`JobQueueWorker.runNow`: 같은 처리기 · 같은 종료 갱신 · 같은 백오프). 워커가 없는 프로세스
  * (`skeleton.job-queue.worker-enabled=false`)에서는 아무것도 돌리지 않는다 - 작업은 다른 인스턴스의 일꾼이 맡는다. [worker] 는 호출 때마다 읽는다(빈 순환을 피한다).
  */
-class JdbcPaymentTasksNow(private val worker: () -> JobQueueWorker?) : PaymentTasksNow {
+class JdbcPaymentTasksNow(private val onRequest: Boolean = false, private val worker: () -> JobQueueWorker?) : PaymentTasksNow {
     override fun runNow(type: String, subjectId: String): Boolean {
+        // 요청 구동 모드(0대 · 요청 중에만 CPU)에서는 시간 한도를 넘긴 시도가 응답 뒤 CPU 를 못 받거나 인스턴스와 함께 죽어 임대(stale-lock-timeout)가 남는다 - 돌리지 않는다
+        if (onRequest) return false
         require(SUBJECT_ID.matches(subjectId)) { "a payment task subject must be a plain identifier" }
         return worker()?.runNow(type, payloadOf(subjectId)) ?: false
     }

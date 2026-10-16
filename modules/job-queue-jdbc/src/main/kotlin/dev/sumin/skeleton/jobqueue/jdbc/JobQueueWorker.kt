@@ -127,7 +127,7 @@ class JobQueueWorker(
 
     private fun safePoll(): Int =
         try {
-            pollOnce()
+            pollOnce(throttleMaintenance = true)
         } catch (ex: Exception) {
             log.error("Job queue poll failed", ex)
             0
@@ -138,12 +138,18 @@ class JobQueueWorker(
      * 프로젝트 모드면 서비스 중인 프로젝트마다 그 스키마에서 한 묶음([JobQueueProperties.batchSize])씩 — 일감 많은 프로젝트가 다른 프로젝트를 굶기지 않는다.
      * 한 프로젝트의 오류(DB 포함)는 그 프로젝트에서 끝내고 다음 프로젝트로 간다.
      */
-    fun pollOnce(): Int {
-        val registry = projects ?: return pollProject()
+    fun pollOnce(): Int = pollOnce(throttleMaintenance = false)
+
+    /**
+     * [throttleMaintenance] 면(일꾼 스레드의 고리) 정리 일(스테일 복구 · DEAD 유예 · 보관 정리)은 프로젝트마다 [JobQueueProperties.pollInterval] 에 한 번만 돈다 -
+     * 깨우기 · 이어 집기로 판이 잦아져도 잡 하나에 정리 쿼리가 따라붙지 않는다. 판은 `claim` 만 한다.
+     */
+    private fun pollOnce(throttleMaintenance: Boolean): Int {
+        val registry = projects ?: return pollProject(throttleMaintenance)
         var processed = 0
         registry.active.forEach { project ->
             try {
-                processed += ProjectContext.runIn(project) { inProject(project) { pollProject() } }
+                processed += ProjectContext.runIn(project) { inProject(project) { pollProject(throttleMaintenance) } }
             } catch (ex: Exception) {
                 log.error("Job queue poll failed for project '{}'", project.id, ex)
             }
@@ -161,8 +167,26 @@ class JobQueueWorker(
     }
 
     /** 지금 프로젝트 문맥(없으면 한 서비스)의 `jobs` 한 번 폴링 */
-    private fun pollProject(): Int {
+    private fun pollProject(throttleMaintenance: Boolean): Int {
         val now = timeProvider.now()
+        if (!throttleMaintenance || maintenanceDue()) maintain(now)
+        return claimAndRun(now)
+    }
+
+    private val lastMaintenance = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    /** 이 프로젝트(없으면 한 서비스)의 정리를 지난 [JobQueueProperties.pollInterval] 안에 돌았나 - 아니면 지금 도는 것으로 표시한다(스레드 여럿 중 하나만 통과). 실제 시계로 잰다 */
+    private fun maintenanceDue(): Boolean {
+        val key = ProjectContext.currentOrNull()?.id.orEmpty()
+        val nowNanos = System.nanoTime()
+        var due = false
+        lastMaintenance.compute(key) { _, last ->
+            if (last == null || nowNanos - last >= properties.pollInterval.toNanos()) { due = true; nowNanos } else last
+        }
+        return due
+    }
+
+    private fun maintain(now: java.time.Instant) {
         val stale = repository.recoverStale(now.minus(properties.staleLockTimeout), now)
         if (stale.recovered > 0) log.warn("Recovered {} stale RUNNING job(s)", stale.recovered)
         stale.dead.forEach { job ->
@@ -172,6 +196,9 @@ class JobQueueWorker(
         }
         deadenUnhandled(now)
         runRetention()
+    }
+
+    private fun claimAndRun(now: java.time.Instant): Int {
         // 아는 종류만 집는다 — 모르는 종류(배포 중 새 버전이 넣은 잡)는 시도도 쓰지 않고 남아, 그 종류를 아는 워커가 집는다
         val jobs = repository.claim(workerId, properties.batchSize, now, handlerByType.keys)
         jobs.forEach { job ->

@@ -3,7 +3,9 @@ package dev.sumin.skeleton.payment.jdbc
 import dev.sumin.skeleton.jobqueue.jdbc.JobHandler
 import dev.sumin.skeleton.jobqueue.jdbc.JobQueue
 import dev.sumin.skeleton.jobqueue.jdbc.JobQueueJdbcAutoConfiguration
+import dev.sumin.skeleton.jobqueue.jdbc.JobQueueProperties
 import dev.sumin.skeleton.jobqueue.jdbc.JobQueueWorker
+import dev.sumin.skeleton.payment.PaymentProperties
 import dev.sumin.skeleton.payment.PaymentLedgerStore
 import dev.sumin.skeleton.payment.PaymentTaskRunner
 import dev.sumin.skeleton.payment.PaymentTasks
@@ -52,7 +54,12 @@ class PaymentJdbcAutoConfiguration {
     /** 웹훅 즉시 반영(`skeleton.payment.webhook.inline`)이 쓰는 입구 - 켜지 않으면 아무도 부르지 않는다. 일꾼은 늦게 찾는다(처리기가 이 빈들을 쓰는 순환을 피한다). */
     @Bean
     @ConditionalOnMissingBean(PaymentTasksNow::class)
-    fun jdbcPaymentTasksNow(worker: ObjectProvider<JobQueueWorker>): PaymentTasksNow = JdbcPaymentTasksNow { worker.getIfAvailable() }
+    fun jdbcPaymentTasksNow(worker: ObjectProvider<JobQueueWorker>, jobQueue: ObjectProvider<JobQueueProperties>, payment: ObjectProvider<PaymentProperties>): PaymentTasksNow {
+        val onRequest = jobQueue.getIfAvailable()?.mode == JobQueueProperties.Mode.ON_REQUEST
+        if (onRequest && payment.getIfAvailable()?.webhook?.inline?.enabled == true)
+            org.slf4j.LoggerFactory.getLogger(javaClass).warn("skeleton.payment.webhook.inline is ignored with skeleton.job-queue.mode=on-request: an attempt past its time budget could be left without CPU and hold its lease; the next wake call picks the webhook job up")
+        return JdbcPaymentTasksNow(onRequest) { worker.getIfAvailable() }
+    }
 
     /**
      * 죽은 작업의 고리 — 큐 워커가 `JobDeadListener` 빈을 모아 DEAD 가 되는 모든 작업에 부른다(`alert` 의 `JOB_DEAD` 경보와 나란히). 이 빈이 우리 작업이면 종류의 처리기가 줄에 표시를 찍는다.

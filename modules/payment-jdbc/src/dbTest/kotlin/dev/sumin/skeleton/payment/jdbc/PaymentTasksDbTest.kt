@@ -81,6 +81,16 @@ class PaymentTasksDbTest {
     }
 
     @Test
+    fun `runNow leaves the task alone in on-request mode - the next wake call takes it`() {
+        store.inTransaction { tasks.enqueue(PaymentTask("payment-order-expire", "ord_10")) }
+
+        assertFalse(JdbcPaymentTasksNow(onRequest = true) { worker }.runNow("payment-order-expire", "ord_10"))
+
+        assertEquals(emptyList(), runs.toList())
+        assertEquals(1, worker.pollOnce(), "still waiting, not leased")
+    }
+
+    @Test
     fun `a rollback takes the job row away together with the ledger row - the same connection`() {
         val order = PaymentTestOrders.order(id = "ord_" + "5".repeat(32))
 

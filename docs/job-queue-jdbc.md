@@ -72,12 +72,12 @@ Handlers run **outside** the claim transaction so long jobs do not hold row lock
 
 Polling (`poll-interval`) is the safety net, not the latency. When a transaction that called `enqueue` **commits** (or at once when there is no
 transaction), the worker of the same process is woken and takes the job without waiting for the next poll; a failed wake is swallowed (the poll
-still finds the job). A batch that came back full (`batch-size` jobs) means more may be waiting, so the worker claims again immediately instead of
+still finds the job). Housekeeping (stale-lock recovery, the unhandled-type DEAD grace, retention) runs at most once per `poll-interval` per project in the worker loop, so wake-ups and back-to-back rounds add only the claim query. A batch that came back full (`batch-size` jobs) means more may be waiting, so the worker claims again immediately instead of
 sleeping. Jobs enqueued by *another* instance (or a job whose `runAt` is later) are still found by the poll — there is no cross-instance signal.
 
 `skeleton.job-queue.concurrency` (default `1`, the same as before) is the number of worker threads in this process. Each thread runs the same claim loop;
 `FOR UPDATE SKIP LOCKED` keeps two threads from taking the same job. Handlers must be safe to run at the same time (they already must be idempotent), and each
-thread holds a database connection while its handler runs. It has no meaning in `mode=on-request` (no worker threads).
+thread holds a database connection while its handler runs. Because a full batch is re-claimed at once, a backlog is no longer throttled to `batch-size` per `poll-interval` (a queue of mail jobs goes out back to back) - use `concurrency`/handler-side limits if the downstream needs a rate. It has no meaning in `mode=on-request` (no worker threads).
 
 ## Lease rules
 
@@ -109,8 +109,8 @@ With `skeleton.projects` ([multi-project](multi-project.md)) the worker visits e
 so each project's own `jobs` table (its schema) is polled, retried, recovered and retained separately. Each round takes at most one
 `batch-size` per project, so a project with a long backlog cannot starve another. An error in one project (its database included) is logged
 with the project id and the round goes on to the next project. Handlers run with that project in `ProjectContext`; the project of an enqueue is
-simply the schema it writes to (no id travels with the job). With no project list nothing changes. The worker is still one thread: a slow
-handler delays every project's next round, it does not starve them.
+simply the schema it writes to (no id travels with the job). With no project list nothing changes. With `concurrency: 1` (the default) the worker is one thread: a slow
+handler delays every project's next round, it does not starve them; more threads each run the same round loop.
 
 ## On-request mode (scale to zero)
 

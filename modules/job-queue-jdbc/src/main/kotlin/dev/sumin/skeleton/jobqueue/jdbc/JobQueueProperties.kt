@@ -58,6 +58,8 @@ data class JobQueueProperties(
 ) {
     init {
         require(concurrency >= 1) { "skeleton.job-queue.concurrency must be at least 1" }
+        require(batchSize >= 1) { "skeleton.job-queue.batch-size must be at least 1" }
+        require(!pollInterval.isNegative && !pollInterval.isZero) { "skeleton.job-queue.poll-interval must be positive" }
     }
 
     enum class Mode { POLLING, ON_REQUEST }
