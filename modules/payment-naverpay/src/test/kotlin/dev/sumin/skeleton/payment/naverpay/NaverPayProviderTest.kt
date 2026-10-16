@@ -137,14 +137,67 @@ class NaverPayProviderTest {
         assertNotNull(result.paidAt)
     }
 
+    private val alerts = java.util.concurrent.CopyOnWriteArrayList<Pair<String, Boolean>>()
+    private val guarded = naverProvider(server, mismatchAlert = { _, orderId, cancelled -> alerts += orderId to cancelled })
+
     @Test
-    fun `an approval of another order than the ledger expects is reported as it is - the ledger flags it, the module does not hide it`() {
-        val other = payAtWindow(server, provider, orderId = "ord_someone_else")
+    fun `an approval that is not this order's - another order's payment id - is cancelled in full at once with a key, refused for good, and the owner is told`() {
+        val others = payAtWindow(server, guarded, orderId = "ord_someone_else")
 
-        val result = provider.confirm(confirmRequest(other))
+        val failure = assertFailsWith<Exception> { guarded.confirm(confirmRequest(others)) }
 
-        assertEquals("ord_someone_else", result.trace.metadata["orderId"])
-        assertEquals(PaymentAmount(3_000, "KRW"), result.amount)
+        assertEquals(PaymentFailureOutcome.DEFINITIVE, PaymentFailures.outcomeOf(failure), "nothing is paid for this order")
+        assertEquals("ORDER_MISMATCH", PaymentFailures.providerCodeOf(failure))
+        assertEquals(0, server.paymentOf(others)!!.available, "the money is back")
+        assertEquals(listOf(3_000L), server.paymentOf(others)!!.cancels.map { it.second })
+        val cancel = server.requests.last { it.path.endsWith("/v1/cancel") }
+        assertEquals("mismatch-$others", cancel.header("x-naverpay-idempotency-key"))
+        assertEquals(listOf("ord_abcdef123456" to true), alerts)
+    }
+
+    @Test
+    fun `when the cancel of a mismatching approval cannot be confirmed the answer is unknown (the money is still held), the owner is told it failed, and a lookup that shows it refunded makes it final`() {
+        val others = payAtWindow(server, guarded, orderId = "ord_someone_else")
+        server.failNext("cancel", Fail.ERROR)
+
+        val failure = assertFailsWith<Exception> { guarded.confirm(confirmRequest(others)) }
+
+        assertEquals(PaymentFailureOutcome.UNKNOWN, PaymentFailures.outcomeOf(failure))
+        assertEquals(3_000, server.paymentOf(others)!!.available)
+        assertEquals(listOf("ord_abcdef123456" to false), alerts)
+
+        // 취소 응답이 유실됐어도 취소는 적용됐다 - 조회가 전액 환불을 보여 주면 확정이다
+        alerts.clear()
+        val lost = payAtWindow(server, guarded, orderId = "ord_someone_else")
+        server.failNext("cancel", Fail.LOSE)
+        val settled = assertFailsWith<Exception> { guarded.confirm(confirmRequest(lost)) }
+        assertEquals(PaymentFailureOutcome.DEFINITIVE, PaymentFailures.outcomeOf(settled))
+        assertEquals(listOf("ord_abcdef123456" to true), alerts)
+    }
+
+    @Test
+    fun `a CancelNotComplete answer is pending - not a cancel, not a refusal - and nothing was cancelled`() {
+        val paymentId = approved()
+        server.failNext("cancel", Fail.NOT_COMPLETE)
+
+        val result = provider.refund(PaymentRefundRequest(paymentId, PaymentAmount(1_000, "KRW"), idempotencyKey = IdempotencyKey("rfd_1")))
+
+        assertEquals(PaymentOperationStatus.PENDING, result.status)
+        assertNull(result.remaining)
+        assertEquals(3_000, server.paymentOf(paymentId)!!.available)
+    }
+
+    @Test
+    fun `a refusal the documentation says nothing moved for (no balance) is definitive even inside a 200, a card failure the module cannot be sure of stays unknown`() {
+        val paymentId = payAtWindow(server, provider)
+        server.failNext("apply", Fail.BALANCE)
+
+        val refused = assertFailsWith<Exception> { provider.confirm(confirmRequest(paymentId)) }
+
+        assertEquals(PaymentFailureOutcome.DEFINITIVE, PaymentFailures.outcomeOf(refused))
+        assertEquals("NotEnoughAccountBalance", PaymentFailures.providerCodeOf(refused))
+        assertEquals(dev.sumin.skeleton.payment.ConfirmDeclineCategory.LIMIT_OR_BALANCE, provider.confirmDeclineCategory("NotEnoughAccountBalance"))
+        assertFalse(server.paymentOf(paymentId)!!.applied)
     }
 
     @Test

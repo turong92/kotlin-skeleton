@@ -10,6 +10,7 @@ import dev.sumin.skeleton.common.project.ProjectsNotConfigured
 import dev.sumin.skeleton.payment.PaymentGatewaySource
 import dev.sumin.skeleton.payment.PaymentProperties
 import dev.sumin.skeleton.payment.PaymentProviderCredentialAlert
+import dev.sumin.skeleton.payment.PaymentProviderMismatchAlert
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionOutcome
@@ -36,8 +37,14 @@ class NaverPayAutoConfiguration {
         httpClient: ExternalHttpClient,
         properties: NaverPayProperties,
         credentialAlert: ObjectProvider<PaymentProviderCredentialAlert>,
+        mismatchAlert: ObjectProvider<PaymentProviderMismatchAlert>,
     ): NaverPayProvider =
-        NaverPayProvider(httpClient = httpClient, properties = properties, credentialAlert = credentialAlert.getIfAvailable { PaymentProviderCredentialAlert.NONE })
+        NaverPayProvider(
+            httpClient = httpClient,
+            properties = properties,
+            credentialAlert = credentialAlert.getIfAvailable { PaymentProviderCredentialAlert.NONE },
+            mismatchAlert = mismatchAlert.getIfAvailable { PaymentProviderMismatchAlert.NONE },
+        )
 
     /**
      * 프로젝트 모드: 프로젝트마다 자기 `payment-naverpay.*` (공통 위에 덮어)로 네이버페이 게이트웨이(= 그 프로젝트의 키를 든 클라이언트)를 만든다.
@@ -47,7 +54,11 @@ class NaverPayAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(name = ["naverPayGatewaySource"])
     @Conditional(ProjectsConfigured::class)
-    fun naverPayGatewaySource(httpClient: ExternalHttpClient, credentialAlert: ObjectProvider<PaymentProviderCredentialAlert>): PaymentGatewaySource =
+    fun naverPayGatewaySource(
+        httpClient: ExternalHttpClient,
+        credentialAlert: ObjectProvider<PaymentProviderCredentialAlert>,
+        mismatchAlert: ObjectProvider<PaymentProviderMismatchAlert>,
+    ): PaymentGatewaySource =
         PaymentGatewaySource.of(listOf("payment-naverpay.client-secret"), listOf("payment-naverpay.client-id", "payment-naverpay.chain-id", "payment-naverpay.return-url")) { settings ->
             val properties = settings.bind("skeleton.payment-naverpay", NaverPayProperties::class.java)
             if (!properties.enabled || properties.clientSecret.isBlank() || properties.clientId.isBlank() || properties.chainId.isBlank()) {
@@ -55,7 +66,13 @@ class NaverPayAutoConfiguration {
             } else {
                 // 키 거절 경보는 결제사 응답 스레드(프로젝트 문맥 없음)에서 불린다 - 만들 때 프로젝트를 잡아 두고 그 문맥으로 부른다
                 val alert = credentialAlert.getIfAvailable { PaymentProviderCredentialAlert.NONE }
-                NaverPayProvider(httpClient = httpClient, properties = properties, credentialAlert = PaymentProviderCredentialAlert { id -> settings.inProject { alert.rejected(id) } })
+                val mismatch = mismatchAlert.getIfAvailable { PaymentProviderMismatchAlert.NONE }
+                NaverPayProvider(
+                    httpClient = httpClient,
+                    properties = properties,
+                    credentialAlert = PaymentProviderCredentialAlert { id -> settings.inProject { alert.rejected(id) } },
+                    mismatchAlert = PaymentProviderMismatchAlert { id, orderId, cancelled -> settings.inProject { mismatch.applied(id, orderId, cancelled) } },
+                )
             }
         }
 

@@ -18,7 +18,7 @@ import tools.jackson.module.kotlin.kotlinModule
  * **응답 본문은 예외에 싣지 않는다** - `message` 는 사람 글이라 버리고, 꺼내 쓰는 것은 **결과 코드뿐**이며 모양이 맞을 때만 쓴다.
  *
  * **확정 거절은 허용 목록으로만 정한다**([DEFINITIVE_CODES]): 요청 자체를 받아들이지 않았거나 결제를 만들지 않았다고 문서가 말하는 코드이고 **상태가 4xx 일 때만** `definitive=true`.
- * HTTP 200 안의 업무 오류는 확정으로 쓰지 않는다 - 업무 오류가 200 으로 오는지 4xx 로 오는지 문서가 밝히지 않았다(**못 잰 가정**). 앞선 요청이 적용됐을 수 있는 코드(`AlreadyComplete` · `AlreadyOnGoing` ·
+ * 업무 오류가 HTTP 200 으로 오는지 4xx 로 오는지 문서가 밝히지 않았다(**못 잰 가정**) - 200 안의 오류는 [exceptionFor] 가 상태를 그대로 받아 확정으로 쓰지 않고, 모듈이 [DEFINITIVE_CODES] 의 코드만 4xx 로 옮겨 부른다(`NaverPayProvider.requireSuccess`). 앞선 요청이 적용됐을 수 있는 코드(`AlreadyComplete` · `AlreadyOnGoing` ·
  * `AlreadyCanceled` · `OverRemainAmount` · `PreCancelNotComplete` · 멱등 키 재요청의 409)와 확신하지 못한 코드(`Fail`)는 모름이고, 조회 정산이 가린다.
  * **키 거절**(401)은 분류(확정)를 그대로 두고 [credentialAlert] 로 주인에게 알린다 - 키가 폐기된 배포는 모든 결제가 「거절」로만 보이기 때문이다.
  */

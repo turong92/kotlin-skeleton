@@ -78,6 +78,19 @@ fun interface PaymentProviderCredentialAlert {
     }
 }
 
+/**
+ * 결제사가 **다른 주문 · 다른 금액의 결제를 이 주문의 승인으로 받아 버려**(승인 API 가 결제 번호만 받는 결제사) 결제 모듈이 그 승인을 곧바로 취소했거나 취소하지 못했다는 것을 밖에 알린다.
+ * [cancelled] 가 false 면 돈이 아직 결제사에 걸려 있다 - 사람이 풀어야 한다. **결제사 id 와 주문 id 말고는 아무 값도 싣지 않는다.**
+ * `alert` 모듈이 있고 장부가 있으면 `OwnerAlerts.emit(PAYMENT_MISMATCH_CANCELLED | PAYMENT_MISMATCH_CANCEL_FAILED, key = 주문 id)`, 없으면 알리지 않는다. 결제사 모듈이 부른다.
+ */
+fun interface PaymentProviderMismatchAlert {
+    fun applied(providerId: String, orderId: String, cancelled: Boolean)
+
+    companion object {
+        val NONE: PaymentProviderMismatchAlert = PaymentProviderMismatchAlert { _, _, _ -> }
+    }
+}
+
 /** 구독 플랜 하나. [period] 는 ISO-8601(`P1M` · `PT3M`), [level] 은 높을수록 윗등급이다(2차의 위로만 바꾸기가 쓴다). */
 data class SubscriptionPlan(
     val code: String,

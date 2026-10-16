@@ -33,8 +33,9 @@ class NaverPayKeyGuardTest {
         firstDelay: Duration = Duration.ofSeconds(90),
         settleDelay: Duration = Duration.ofMinutes(3),
         baseUrl: String = "",
+        windowBaseUrl: String = "",
     ) = NaverPayKeyGuard(
-        properties = NaverPayProperties(enabled = true, mode = mode, clientId = id, clientSecret = clientSecret, chainId = chain, returnUrl = returnUrl, baseUrl = baseUrl, allowDevelopmentModeInProtectedEnv = allowDevelopment),
+        properties = NaverPayProperties(enabled = true, mode = mode, clientId = id, clientSecret = clientSecret, chainId = chain, returnUrl = returnUrl, baseUrl = baseUrl, windowBaseUrl = windowBaseUrl, allowDevelopmentModeInProtectedEnv = allowDevelopment),
         ledgerPresent = { ledger },
         jobQueueWorkerRunning = { workerRunning },
         responseTimeout = { responseTimeout },
@@ -91,6 +92,18 @@ class NaverPayKeyGuardTest {
         assertTrue(guard(mode = NaverPayMode.PRODUCTION, returnUrl = "http://app.example.test/r").warnings(prod).any { "https" in it })
         assertTrue(guard(ledger = true, workerRunning = false).warnings(local).any { "job queue worker" in it })
         assertTrue(guard(ledger = true, responseTimeout = Duration.ofSeconds(30)).warnings(local).any { "response-timeout" in it })
+    }
+
+    @Test
+    fun `an address of the other mode's NaverPay host stops the start - the api address everywhere, the window address in a protected environment`() {
+        // 개발 모드인데 운영 호스트 / 운영 모드인데 개발 호스트
+        assertTrue(guard(baseUrl = "https://pay.paygate.naver.com").problems(local).any { "base-url" in it && "other mode" in it })
+        assertTrue(guard(mode = NaverPayMode.PRODUCTION, baseUrl = "https://dev-pay.paygate.naver.com/").problems(prod).any { "base-url" in it })
+        assertTrue(guard(mode = NaverPayMode.PRODUCTION, windowBaseUrl = "https://test-m.pay.naver.com").problems(prod).any { "window-base-url" in it })
+        assertTrue(guard(allowDevelopment = true, windowBaseUrl = "https://m.pay.naver.com").problems(stage).any { "window-base-url" in it })
+        // 같은 모드의 호스트 · 다른 주소(프록시 · 가짜 서버)는 말하지 않는다
+        assertEquals(emptyList(), guard(baseUrl = "https://dev-pay.paygate.naver.com", windowBaseUrl = "https://test-m.pay.naver.com").problems(local))
+        assertEquals(emptyList(), guard(baseUrl = "http://127.0.0.1:9", windowBaseUrl = "http://127.0.0.1:9").problems(local))
     }
 
     @Test

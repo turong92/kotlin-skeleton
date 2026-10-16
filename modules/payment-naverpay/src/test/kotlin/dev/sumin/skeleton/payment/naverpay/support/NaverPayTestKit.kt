@@ -6,6 +6,7 @@ import dev.sumin.skeleton.common.http.ExternalHttpClient
 import dev.sumin.skeleton.common.http.OutboundHttpProperties
 import dev.sumin.skeleton.payment.CheckoutOrder
 import dev.sumin.skeleton.payment.PaymentAmount
+import dev.sumin.skeleton.payment.PaymentProviderMismatchAlert
 import dev.sumin.skeleton.payment.naverpay.NaverPayProperties
 import dev.sumin.skeleton.payment.naverpay.NaverPayProvider
 import java.time.Duration
@@ -28,8 +29,13 @@ internal fun realHttpClient(responseTimeout: Duration = GENEROUS): ExternalHttpC
 internal fun naverProperties(server: FakeNaverPayServer, returnUrl: String = RETURN_URL): NaverPayProperties =
     NaverPayProperties(enabled = true, clientId = server.clientId, clientSecret = server.clientSecret, chainId = server.chainId, baseUrl = server.baseUrl, returnUrl = returnUrl)
 
-internal fun naverProvider(server: FakeNaverPayServer, responseTimeout: Duration = GENEROUS, returnUrl: String = RETURN_URL): NaverPayProvider =
-    NaverPayProvider(httpClient = realHttpClient(responseTimeout), properties = naverProperties(server, returnUrl))
+internal fun naverProvider(
+    server: FakeNaverPayServer,
+    responseTimeout: Duration = GENEROUS,
+    returnUrl: String = RETURN_URL,
+    mismatchAlert: PaymentProviderMismatchAlert = PaymentProviderMismatchAlert.NONE,
+): NaverPayProvider =
+    NaverPayProvider(httpClient = realHttpClient(responseTimeout), properties = naverProperties(server, returnUrl), mismatchAlert = mismatchAlert)
 
 /** 서버가 결제창을 예약하고(`checkout`) 구매자가 그 창에서 결제를 마쳐 돌려받은 결제 번호. */
 internal fun payAtWindow(server: FakeNaverPayServer, provider: NaverPayProvider, orderId: String = "ord_abcdef123456", amount: Long = 3_000): String {

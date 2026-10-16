@@ -19,6 +19,7 @@ import dev.sumin.skeleton.payment.PaymentOperationStatus
 import dev.sumin.skeleton.payment.PaymentProvider
 import dev.sumin.skeleton.payment.PaymentProviderCredentialAlert
 import dev.sumin.skeleton.payment.PaymentProviderError
+import dev.sumin.skeleton.payment.PaymentProviderMismatchAlert
 import dev.sumin.skeleton.payment.PaymentProviderException
 import dev.sumin.skeleton.payment.PaymentRefundRequest
 import dev.sumin.skeleton.payment.PaymentSnapshot
@@ -53,6 +54,8 @@ class NaverPayProvider(
     private val properties: NaverPayProperties,
     /** 인증 계열 거절(키 폐기 · 오타)을 주인에게 알린다 - 없으면 알리지 않는다. */
     private val credentialAlert: PaymentProviderCredentialAlert = PaymentProviderCredentialAlert.NONE,
+    /** 다른 주문 · 금액의 결제가 승인돼 곧바로 취소했거나(못 했거나) 한 일을 주인에게 알린다 - 없으면 알리지 않는다. */
+    private val mismatchAlert: PaymentProviderMismatchAlert = PaymentProviderMismatchAlert.NONE,
 ) : PaymentProvider, PaymentLookupGateway, PaymentCheckoutGateway {
     override val providerId: String = properties.providerId
     override val supportedCurrencies: Set<String> = properties.supportedCurrencies
@@ -161,7 +164,7 @@ class NaverPayProvider(
 
     override fun confirm(request: PaymentConfirmRequest): PaymentOperationResult {
         val paymentId = NaverPayIdentifiers.paymentId(request.providerPaymentId)
-        NaverPayIdentifiers.orderId(request.merchantReferenceId.orEmpty())
+        val orderId = NaverPayIdentifiers.orderId(request.merchantReferenceId.orEmpty())
         return guarded("apply") { seen ->
             val response = requireNotNull(
                 httpClient.postFormResponse(
@@ -185,6 +188,8 @@ class NaverPayProvider(
             // 총액과 주문 번호는 읽은 그대로 돌려준다 - 주문과 맞는지는 장부가 대조한다(결제창 값은 브라우저가 쥐었다)
             val total = detail.totalPayAmount.need("totalPayAmount")
             val merchantPayKey = detail.merchantPayKey?.takeIf(SAFE_ID::matches).need("merchantPayKey")
+            // 승인 API 는 결제 번호만 받아 다른 주문의 결제 번호로도 승인이 일어난다(돈이 움직였다) - 이 주문의 것이 아니면 곧바로 전액 취소하고 지급하지 않는다
+            if (merchantPayKey != orderId || total != request.amount.amount) throw cancelMismatch(paymentId, total, orderId, if (merchantPayKey != orderId) ORDER_MISMATCH else AMOUNT_MISMATCH)
             PaymentOperationResult(
                 provider = providerId,
                 providerPaymentId = paymentId,
@@ -240,8 +245,18 @@ class NaverPayProvider(
             )
             seen.status = response.statusCode
             val answer = response.body
-            // CancelNotComplete: 문서는 「재시도 없이 취소 성공으로 두라 - 네이버페이가 자동으로 다시 처리한다」고 한다
             requireSuccess(answer.code, errorMapper, setOf(SUCCESS, CANCEL_NOT_COMPLETE))
+            // CancelNotComplete: 취소가 아직 끝나지 않았다(네이버페이가 곧 자동으로 다시 처리한다고 한다) - 취소됐다고 읽지 않고 「처리 중」으로 돌려준다.
+            // 장부는 줄에 접수 표시(`PROVIDER_PENDING`)만 남기고 NOT_APPLIED 로 닫지 않으며, 조회가 취소를 보면 그때 맞춘다. 같은 요청을 다시 보내지도 않는다.
+            if (answer.code == CANCEL_NOT_COMPLETE)
+                return@guarded PaymentOperationResult(
+                    provider = providerId,
+                    providerPaymentId = paymentId,
+                    status = PaymentOperationStatus.PENDING,
+                    amount = PaymentAmount(amount, KRW),
+                    trace = ProviderTrace(provider = providerId, providerRequestId = response.trace.traceId?.takeIf(SAFE_TRACE::matches), rawStatus = CANCEL_NOT_COMPLETE),
+                    attributes = mapOf("method" to METHOD),
+                )
             val body = answer.body.need("body")
             if (body.paymentId != paymentId) throw UnreadableAnswer("paymentId")
             val cancelled = body.primaryPayCancelAmount.need("primaryPayCancelAmount") + (body.npointCancelAmount ?: 0) + (body.giftCardCancelAmount ?: 0) + (body.discountCancelAmount ?: 0)
@@ -266,6 +281,47 @@ class NaverPayProvider(
                 remaining = PaymentAmount(rest, KRW).takeIf { status == done },
             )
         }
+
+    /**
+     * 승인이 이 주문의 것이 아니다 - 곧바로 전액 취소한다(멱등 키 `mismatch-<결제 번호>`). 취소가 확인되면(응답이 전액 취소 · 못 받았으면 조회가 전액 환불) **확정 실패**를 돌려줘 주문은 지급되지 않고 닫히며,
+     * 확인하지 못하면 모름을 돌려줘 장부가 `CONFIRMING` 에 두고 조회가 맞춘다(결제가 다른 주문의 것으로 읽혀 `ORDER_MISMATCH`/`AMOUNT_MISMATCH` 표시가 찍힌다). 어느 쪽이든 주인에게 알린다.
+     */
+    private fun cancelMismatch(paymentId: String, total: Long, orderId: String, code: String): PaymentProviderException {
+        val cancelled = fullyCancelled(paymentId, total)
+        runCatching { mismatchAlert.applied(providerId, orderId, cancelled) }
+        log.warn("NaverPay applied a payment that is not this order's order={} reason={} cancelled={}", orderId, code, cancelled)
+        return PaymentProviderException(
+            providerError = PaymentProviderError(
+                provider = providerId,
+                code = if (cancelled) code else MISMATCH_CANCEL_UNCONFIRMED,
+                message = null,
+                trace = ProviderTrace(provider = providerId, rawCode = code),
+                upstreamStatus = if (cancelled) 409 else 502,
+                retryable = !cancelled,
+                definitive = cancelled,
+                rawBody = null,
+            ),
+            clientName = properties.clientName,
+            method = "HTTP",
+            uri = apiUri(),
+        )
+    }
+
+    private fun fullyCancelled(paymentId: String, total: Long): Boolean {
+        val answered = try {
+            val result = cancelOnce(paymentId, total, MISMATCH_REASON, "mismatch-$paymentId", "payment.naverpay.mismatch-cancel", PaymentOperationStatus.CANCELED)
+            result.status == PaymentOperationStatus.CANCELED && result.remaining?.amount == 0L
+        } catch (e: Exception) {
+            false
+        }
+        if (answered) return true
+        // 모르면 조회로 맞춘다 - 이미 전액 환불로 보이면 취소된 것이다
+        return try {
+            lookup(PaymentLookupQuery(paymentId, null))?.status == ProviderPaymentStatus.REFUNDED
+        } catch (e: Exception) {
+            false
+        }
+    }
 
     private fun cancelable(paymentId: String): Long {
         val snapshot = requireNotNull(lookup(PaymentLookupQuery(paymentId, null))) { "NaverPay does not know the payment" }
@@ -360,7 +416,9 @@ class NaverPayProvider(
     private fun requireSuccess(code: String?, mapper: NaverPayErrorMapper, ok: Set<String>) {
         val value = code ?: throw UnreadableAnswer("code")
         if (value in ok) return
-        throw mapper.exceptionFor(value, upstreamStatus = 200, traceId = null, clientName = properties.clientName, method = "POST", uri = apiUri())
+        // 업무 오류가 HTTP 200 으로 온다(문서의 결과 코드 표) - 결제가 일어나지 않은 게 분명한 코드(`DEFINITIVE_CODES`)만 4xx 거절로 옮겨 확정 거절로 이어지게 하고, 그 밖은 200 그대로 둬 모름이다
+        val status = if (value in NaverPayErrorMapper.DEFINITIVE_CODES) BUSINESS_REFUSAL_STATUS else 200
+        throw mapper.exceptionFor(value, upstreamStatus = status, traceId = null, clientName = properties.clientName, method = "POST", uri = apiUri())
     }
 
     private fun apiUri(): URI = runCatching { URI.create(properties.apiBaseUrl) }.getOrDefault(URI.create("about:blank"))
@@ -423,6 +481,11 @@ class NaverPayProvider(
         const val UNREADABLE_RESPONSE = "UNREADABLE_RESPONSE"
         const val SUCCESS = "Success"
         const val CANCEL_NOT_COMPLETE = "CancelNotComplete"
+        const val ORDER_MISMATCH = "ORDER_MISMATCH"
+        const val AMOUNT_MISMATCH = "AMOUNT_MISMATCH"
+        const val MISMATCH_CANCEL_UNCONFIRMED = "MISMATCH_CANCEL_UNCONFIRMED"
+        const val MISMATCH_REASON = "order mismatch"
+        const val BUSINESS_REFUSAL_STATUS = 400
         const val IDEMPOTENCY_HEADER = "X-NaverPay-Idempotency-Key"
         const val CANCEL_REQUESTER_MERCHANT = "2"
         const val DEFAULT_REASON = "refund"

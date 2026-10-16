@@ -11,7 +11,7 @@ import java.time.Duration
  * 키를 잘못 끼우는 실수를 기동 때 막는다. 메시지에는 **속성 · 환경변수 이름만** 적고 키 값은 싣지 않는다.
  * 네이버페이는 키 모양으로 개발과 운영을 가르지 않는다 - **`mode` 설정**이 API 서버 · 결제창 주소를 함께 가른다([NaverPayMode]). 개발 키와 운영 키가 같은 설정에 섞이면 안 되므로 모드를 일부러 고르게 한다.
  *
- * 기동 실패: 로컬 계열에서 운영 모드 / 보호 환경(stage · prod)에서 개발 모드(허락 스위치가 없으면) / 보호 환경에서 클라이언트 아이디 · 시크릿 · 체인 아이디가 비어 있음 /
+ * 기동 실패: 반대 모드의 네이버페이 호스트를 `base-url`(보호 환경에서는 `window-base-url` 도)에 적음 / 로컬 계열에서 운영 모드 / 보호 환경(stage · prod)에서 개발 모드(허락 스위치가 없으면) / 보호 환경에서 클라이언트 아이디 · 시크릿 · 체인 아이디가 비어 있음 /
  * 장부가 있는데 보호 환경에서 돌아올 주소(`return-url`)가 http(s) 절대 주소가 아님 / 장부가 있는데 `reconcile.first-delay` · `refund.settle-delay` 가 응답 제한보다 길지 않음.
  * 경고: 아이디 · 시크릿 · 체인 아이디 없음(보호 환경 밖) · 허락한 개발 모드 · 장부가 있는데 돌아올 주소 없음(보호 환경 밖) · 보호 환경에서 네이버페이 주소가 아닌 `base-url`(주소 값은 적지 않는다) ·
  * 보호 환경에서 http 로 돌아오는 주소 · 장부가 있는데 작업 워커가 꺼짐 · 장부가 있는데 응답 제한이 문서의 60초보다 짧음.
@@ -31,6 +31,12 @@ class NaverPayKeyGuard(
     override fun problems(context: DeployContext): List<String> = buildList {
         if (isLocalLike(context) && properties.mode == NaverPayMode.PRODUCTION) {
             add("$MODE_PROPERTY is production mode but this is a local or test environment: real money must not move from here, use development mode with the development keys")
+        }
+        if (isOtherModeHost(properties.baseUrl)) {
+            add("$BASE_URL_PROPERTY is the NaverPay host of the other mode (this is ${properties.mode.name.lowercase()} mode): the requests carrying the client secret would go to the wrong environment; fix the mode or leave the address empty")
+        }
+        if (context.protectedEnv && isOtherModeHost(properties.windowBaseUrl)) {
+            add("$WINDOW_BASE_URL_PROPERTY is the NaverPay window host of the other mode (this is ${properties.mode.name.lowercase()} mode): the buyer would pay in the wrong environment; fix the mode or leave the address empty")
         }
         if (context.protectedEnv && !properties.allowDevelopmentModeInProtectedEnv && properties.mode == NaverPayMode.DEVELOPMENT) {
             add("$MODE_PROPERTY is development mode in a protected environment (skeleton.env=stage|prod): set production with the production keys, or set $ALLOW_PROPERTY=true to run a development-mode deployment on purpose")
@@ -100,6 +106,13 @@ class NaverPayKeyGuard(
             uri.rawQuery == null
     }
 
+    /** 비어 있지 않은 주소가 **반대 모드**의 네이버페이 호스트(API 또는 결제창)인가 - 호스트 이름만 본다. 다른 주소(프록시 · 가짜 서버)는 여기서 말하지 않는다. */
+    private fun isOtherModeHost(address: String): Boolean {
+        val host = runCatching { URI.create(address.trim()).host }.getOrNull() ?: return false
+        val other = NaverPayMode.entries.filter { it != properties.mode }
+        return other.any { host.equals(URI.create(it.apiBaseUrl).host, ignoreCase = true) || host.equals(URI.create(it.windowBaseUrl).host, ignoreCase = true) }
+    }
+
     private fun isLocalLike(context: DeployContext): Boolean =
         context.env == DeployEnv.LOCAL || context.activeProfiles.any { it in LOCAL_PROFILES }
 
@@ -111,6 +124,7 @@ class NaverPayKeyGuard(
         const val CHAIN_ID_PROPERTY = "skeleton.payment-naverpay.chain-id"
         const val RETURN_PROPERTY = "skeleton.payment-naverpay.return-url"
         const val BASE_URL_PROPERTY = "skeleton.payment-naverpay.base-url"
+        const val WINDOW_BASE_URL_PROPERTY = "skeleton.payment-naverpay.window-base-url"
         const val FIRST_DELAY_PROPERTY = "skeleton.payment.reconcile.first-delay"
         const val SETTLE_DELAY_PROPERTY = "skeleton.payment.refund.settle-delay"
         const val RESPONSE_TIMEOUT_PROPERTY = "skeleton.http.clients.payment-naverpay.response-timeout"

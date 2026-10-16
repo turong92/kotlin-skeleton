@@ -41,7 +41,8 @@ internal class FakeNaverPayServer(
             }
     }
 
-    enum class Fail { DECLINE, DELAY, LOSE, ERROR }
+    /** [BALANCE] 잔액 부족(`NotEnoughAccountBalance`) - 결제가 일어나지 않은 게 분명한 거절 / [NOT_COMPLETE] 취소 응답 `CancelNotComplete`(적용하지 않는다) */
+    enum class Fail { DECLINE, DELAY, LOSE, ERROR, BALANCE, NOT_COMPLETE }
 
     /** 응답에 심는 값 - 이 모듈이 읽지 않는 칸에 들어 있다. 결과 · 예외 · 로그 어디에도 나오면 안 된다. */
     object PLANTED {
@@ -144,6 +145,8 @@ internal class FakeNaverPayServer(
             Fail.DELAY -> Reply.Hang
             Fail.LOSE -> normal().also { return Reply.Drop }
             Fail.ERROR -> Reply.Empty(500)
+            Fail.BALANCE -> envelope("NotEnoughAccountBalance", "balance", null)
+            Fail.NOT_COMPLETE -> envelope("CancelNotComplete", "retry later", null)
         }
     }
 

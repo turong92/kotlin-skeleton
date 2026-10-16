@@ -8,7 +8,6 @@ import dev.sumin.skeleton.payment.PaymentOrder
 import dev.sumin.skeleton.payment.PaymentOrderStatus
 import dev.sumin.skeleton.payment.PaymentRefundAmountExceededException
 import dev.sumin.skeleton.payment.PaymentRefundStatus
-import dev.sumin.skeleton.payment.PaymentReviewReason
 import dev.sumin.skeleton.payment.naverpay.support.FakeNaverPayServer
 import dev.sumin.skeleton.payment.naverpay.support.FakeNaverPayServer.Fail
 import dev.sumin.skeleton.payment.naverpay.support.naverProvider
@@ -77,15 +76,23 @@ class NaverPayLedgerTest {
     }
 
     @Test
-    fun `a payment id that was made for another order is not marked paid either`() {
+    fun `a payment id made for another order is cancelled in full and never pays this order - and the other order is not stuck, it pays through a new window`() {
         val mine = order("k1")
         val other = order("k2")
         val othersPaymentId = payOrderWindow(server, other.id)
 
-        kit.orders.confirm("acc_1", mine.id, othersPaymentId, mine.amount)
+        val result = runCatching { kit.orders.confirm("acc_1", mine.id, othersPaymentId, mine.amount) }
 
-        assertEquals(PaymentReviewReason.ORDER_MISMATCH, kit.order(mine.id).reviewReason)
+        assertEquals(true, result.isFailure, "refused for good: ${result.getOrNull()}")
+        assertEquals(PaymentOrderStatus.FAILED, kit.order(mine.id).status)
         assertEquals(0, kit.listener.paid.size)
+        assertEquals(0, server.paymentOf(othersPaymentId)!!.available, "the money taken by the wrong approval went back")
+        assertEquals(PaymentOrderStatus.PENDING, kit.order(other.id).status, "the real owner's order is untouched")
+
+        val reopened = kit.orders.create(CreateOrderCommand("acc_1", "cheer", "cheer-3000", IdempotencyKey("k2"), provider = "naverpay")).order
+        assertEquals(other.id, reopened.id)
+        val paid = kit.orders.confirm("acc_1", other.id, payOrderWindow(server, other.id), other.amount)
+        assertEquals(PaymentOrderStatus.PAID, paid.status)
     }
 
     @Test
