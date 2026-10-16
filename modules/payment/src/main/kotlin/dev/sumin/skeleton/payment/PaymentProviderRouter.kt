@@ -170,7 +170,7 @@ class PaymentProviderRouter internal constructor(
          */
         private fun requireOwnSecrets(registry: ProjectRegistry, sources: List<PaymentGatewaySource>, made: Set<Pair<String, PaymentGatewaySource>>, routes: dev.sumin.skeleton.common.project.ProjectScoped<PaymentRoutes>) {
             val values = mutableMapOf<String, MutableList<Pair<String, String>>>()   // 설정 키 → (프로젝트, 값)
-            fun check(project: Project, key: String) {
+            fun check(project: Project, key: String, trackSameness: Boolean = true) {
                 val own = registry.ownValue(project, key)
                 val effective = own ?: registry.sharedValue(key)
                 if (effective == null) return
@@ -178,10 +178,12 @@ class PaymentProviderRouter internal constructor(
                     "project '${project.id}': skeleton.$key is inherited from the shared settings — every project needs its own payment provider account and keys " +
                         "(set skeleton.projects.${project.id}.config.$key; one provider account must not serve two projects)"
                 }
-                values.getOrPut(key) { mutableListOf() } += project.id to effective
+                if (trackSameness) values.getOrPut(key) { mutableListOf() } += project.id to effective
             }
             registry.active.forEach { project ->
-                sources.filter { project.id to it in made }.flatMap { it.secretKeys }.distinct().forEach { check(project, it) }
+                val enabled = sources.filter { project.id to it in made }
+                enabled.flatMap { it.secretKeys }.distinct().forEach { check(project, it) }
+                enabled.flatMap { it.ownKeys }.distinct().forEach { check(project, it, trackSameness = false) }
                 if (routes.of(project).gateways.any { it is PaymentWebhookGateway && !it.signed }) check(project, "payment.webhook.path-token")
             }
             values.forEach { (key, owners) ->

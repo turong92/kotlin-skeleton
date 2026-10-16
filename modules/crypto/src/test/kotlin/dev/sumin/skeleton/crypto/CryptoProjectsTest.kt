@@ -98,6 +98,16 @@ class CryptoProjectsTest {
     }
 
     @Test
+    fun `two TextEncryptor beans - an app wrapper around the routed one - do not break the guard`() {
+        val beans = org.springframework.beans.factory.support.DefaultListableBeanFactory().apply {
+            registerSingleton("a", object : TextEncryptor { override fun encrypt(plainText: String) = plainText; override fun decrypt(cipherText: String) = cipherText })
+            registerSingleton("b", object : TextEncryptor { override fun encrypt(plainText: String) = plainText; override fun decrypt(cipherText: String) = cipherText })
+        }
+        val guard = CryptoAutoConfiguration().cryptoSharedEncryptorDeployGuard(beans.getBeanProvider(TextEncryptor::class.java))
+        assertEquals(emptyList(), guard.problems(dev.sumin.skeleton.common.deploy.DeployContext(dev.sumin.skeleton.common.deploy.DeployEnv.PROD, emptySet())))
+    }
+
+    @Test
     fun `keys written only for a closed project do not switch the module on`() {
         runner.withPropertyValues("$b.keys.local=${key(2)}", "skeleton.projects.b.status=closed", "skeleton.projects.b.schema=").run { ctx ->
             assertTrue(ctx.getBeansOfType(TextEncryptor::class.java).isEmpty())

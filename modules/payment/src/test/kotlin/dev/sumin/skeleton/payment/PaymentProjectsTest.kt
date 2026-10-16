@@ -195,4 +195,21 @@ class PaymentProjectsTest {
         assertEquals(1, guard.warnings(local).size)
         assertEquals(emptyList(), PaymentAutoConfiguration().paymentSharedGatewaysDeployGuard(emptyList()).problems(prod))
     }
+
+    @Test
+    fun `a paired public key such as the client key must be the project's own too - but equal values are fine`() {
+        val paired = PaymentGatewaySource.of(listOf("keyed-pay.key"), listOf("keyed-pay.client")) { settings ->
+            val p = settings.bind("skeleton.keyed-pay", KeyedProps::class.java)
+            if (p.enabled) KeyedGateway(p.key) else null
+        }
+        val inherited = assertFailsWith<IllegalStateException> {
+            PaymentProviderRouter.forProjects(registry("skeleton.keyed-pay.client" to "SHARED-CLIENT"), emptyList(), listOf(paired))
+        }.let { generateSequence<Throwable>(it) { e -> e.cause }.mapNotNull { m -> m.message }.joinToString(" | ") }
+        assertTrue("keyed-pay.client" in inherited && "inherited" in inherited, inherited)
+
+        PaymentProviderRouter.forProjects(
+            registry("skeleton.projects.a.config.keyed-pay.client" to "SAME", "skeleton.projects.b.config.keyed-pay.client" to "SAME"),
+            emptyList(), listOf(paired),
+        )
+    }
 }

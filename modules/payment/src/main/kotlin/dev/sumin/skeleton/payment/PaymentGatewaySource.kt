@@ -28,14 +28,21 @@ interface PaymentGatewaySource {
      */
     val secretKeys: List<String> get() = emptyList()
 
+    /**
+     * 비밀은 아니지만 [secretKeys] 와 **짝으로 한 프로젝트 것이어야 하는** 설정 키(토스 `client-key`, Paddle `client-token` …). 공통에서 물려받으면 기동 실패 —
+     * 결제창은 공통(A 상점)의 클라이언트 키로 열리는데 승인은 이 프로젝트의 시크릿 키로 시도되어 결제가 계속 실패한다. 같은 값 검사는 하지 않는다(공개 값).
+     */
+    val ownKeys: List<String> get() = emptyList()
+
     fun create(settings: PaymentProviderSettings): PaymentGateway?
 
     companion object {
         /** 비밀 키 선언 없이 만드는 간단한 소스 */
-        operator fun invoke(create: (PaymentProviderSettings) -> PaymentGateway?): PaymentGatewaySource = of(emptyList(), create)
+        operator fun invoke(create: (PaymentProviderSettings) -> PaymentGateway?): PaymentGatewaySource = of(emptyList(), emptyList(), create)
 
-        fun of(secretKeys: List<String>, create: (PaymentProviderSettings) -> PaymentGateway?): PaymentGatewaySource = object : PaymentGatewaySource {
+        fun of(secretKeys: List<String>, ownKeys: List<String> = emptyList(), create: (PaymentProviderSettings) -> PaymentGateway?): PaymentGatewaySource = object : PaymentGatewaySource {
             override val secretKeys = secretKeys
+            override val ownKeys = ownKeys
             override fun create(settings: PaymentProviderSettings): PaymentGateway? = create(settings)
         }
     }

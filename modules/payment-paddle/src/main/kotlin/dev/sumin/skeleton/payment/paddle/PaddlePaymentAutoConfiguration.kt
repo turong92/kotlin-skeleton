@@ -33,7 +33,7 @@ class PaddlePaymentAutoConfiguration {
     @ConditionalOnMissingBean(name = ["paddleGatewaySource"])
     @Conditional(ProjectsConfigured::class)
     fun paddleGatewaySource(httpClient: ExternalHttpClient, time: ObjectProvider<TimeProvider>): PaymentGatewaySource =
-        PaymentGatewaySource.of(listOf("payment-paddle.api-key", "payment-paddle.webhook-secret")) { settings ->
+        PaymentGatewaySource.of(listOf("payment-paddle.api-key", "payment-paddle.webhook-secret"), listOf("payment-paddle.client-token")) { settings ->
             val properties = settings.bind("skeleton.payment-paddle", PaddleProperties::class.java)
             if (!properties.enabled || listOf(properties.apiKey, properties.clientToken, properties.webhookSecret).any { it.isBlank() }) {
                 null

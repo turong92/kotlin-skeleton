@@ -59,9 +59,9 @@ class CryptoAutoConfiguration {
         override val name = "crypto"
         override fun problems(context: DeployContext) = if (context.protectedEnv) findings() else emptyList()
         override fun warnings(context: DeployContext) = if (context.protectedEnv) emptyList() else findings()
-        private fun findings() = if (encryptor.getIfAvailable().let { it == null || it is ProjectRoutedTextEncryptor }) emptyList() else listOf(
+        private fun findings() = if (encryptor.getIfUnique().let { it == null || it is ProjectRoutedTextEncryptor }) emptyList() else listOf(
             "a TextEncryptor bean defined by the app is shared by every project (one key for all projects' ciphertext); " +
-                "remove it and give each project its own skeleton.projects.<id>.config.crypto.keys.<id>",
+                "remove it and give each project its own skeleton.projects.<id>.config.crypto.keys.<id> (if it wraps the project-routed encryptor on purpose, override this guard by defining a bean named cryptoSharedEncryptorDeployGuard)",
         )
     }
 }

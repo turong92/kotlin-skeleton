@@ -44,7 +44,7 @@ class PaymentSubscriptionAutoConfiguration {
     ): PaymentSubscriptions {
         val plansBean = plans.getIfAvailable() ?: error("skeleton.payment.subscription.enabled=true needs a SubscriptionPlans bean (the app owns the plans and prices)")
         val encryptorBean = encryptor.getIfAvailable()
-            ?: error("skeleton.payment.subscription.enabled=true needs an encryption key to store billing keys: set skeleton.crypto.keys (the crypto module's TextEncryptor)")
+            ?: error("skeleton.payment.subscription.enabled=true needs an encryption key to store billing keys: set skeleton.crypto.keys (the crypto module's TextEncryptor); with skeleton.projects give each project its own skeleton.projects.<id>.config.crypto.keys.<id> (projects must not share key bytes)")
         check(router.anyGateway(PaymentBillingGateway::class) || router.anyGateway(PaymentHostedSubscriptionGateway::class)) {
             "skeleton.payment.subscription.enabled=true needs a payment provider with the billing capability (PaymentBillingGateway, e.g. payment-toss) or one that renews by itself (PaymentHostedSubscriptionGateway, e.g. payment-paddle)"
         }
@@ -77,7 +77,7 @@ class PaymentSubscriptionAutoConfiguration {
         store,
         router,
         plans.getIfAvailable() ?: error("skeleton.payment.subscription.enabled=true needs a SubscriptionPlans bean"),
-        encryptor.getIfAvailable() ?: error("skeleton.payment.subscription.enabled=true needs a TextEncryptor (skeleton.crypto.keys)"),
+        encryptor.getIfAvailable() ?: error("skeleton.payment.subscription.enabled=true needs a TextEncryptor (skeleton.crypto.keys; with skeleton.projects: skeleton.projects.<id>.config.crypto.keys.<id> for each project)"),
         lifecycle,
         charges,
         writer,
@@ -105,7 +105,7 @@ class PaymentSubscriptionAutoConfiguration {
         store,
         router,
         plans.getIfAvailable() ?: error("skeleton.payment.subscription.enabled=true needs a SubscriptionPlans bean"),
-        encryptor.getIfAvailable() ?: error("skeleton.payment.subscription.enabled=true needs a TextEncryptor (skeleton.crypto.keys)"),
+        encryptor.getIfAvailable() ?: error("skeleton.payment.subscription.enabled=true needs a TextEncryptor (skeleton.crypto.keys; with skeleton.projects: skeleton.projects.<id>.config.crypto.keys.<id> for each project)"),
         lifecycle,
         charges,
         guard,
@@ -120,7 +120,7 @@ class PaymentSubscriptionAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     fun subscriptionRevokeTaskHandler(store: PaymentLedgerStore, router: PaymentProviderRouter, encryptor: ObjectProvider<TextEncryptor>, writer: PaymentLedgerWriter): SubscriptionRevokeTaskHandler =
-        SubscriptionRevokeTaskHandler(store, router, encryptor.getIfAvailable() ?: error("skeleton.payment.subscription.enabled=true needs a TextEncryptor (skeleton.crypto.keys)"), writer)
+        SubscriptionRevokeTaskHandler(store, router, encryptor.getIfAvailable() ?: error("skeleton.payment.subscription.enabled=true needs a TextEncryptor (skeleton.crypto.keys; with skeleton.projects: skeleton.projects.<id>.config.crypto.keys.<id> for each project)"), writer)
 
     /** 앱이 [SubscriptionUsageCheck] 를 두지 않으면 「안 썼다」 - 7일 철회가 시간만으로 판단된다. */
     @Bean

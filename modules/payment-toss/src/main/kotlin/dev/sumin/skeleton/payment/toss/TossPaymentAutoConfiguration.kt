@@ -51,7 +51,7 @@ class TossPaymentAutoConfiguration {
     @ConditionalOnMissingBean(name = ["tossGatewaySource"])
     @Conditional(ProjectsConfigured::class)
     fun tossGatewaySource(httpClient: ExternalHttpClient, credentialAlert: ObjectProvider<PaymentProviderCredentialAlert>): PaymentGatewaySource =
-        PaymentGatewaySource.of(listOf("payment-toss.secret-key")) { settings ->
+        PaymentGatewaySource.of(listOf("payment-toss.secret-key"), listOf("payment-toss.client-key")) { settings ->
             val properties = settings.bind("skeleton.payment-toss", TossPaymentProperties::class.java)
             if (!properties.enabled || properties.secretKey.isBlank()) {
                 null
