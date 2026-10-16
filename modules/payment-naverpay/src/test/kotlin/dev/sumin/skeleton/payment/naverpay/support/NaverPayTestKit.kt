@@ -31,5 +31,15 @@ internal fun naverProperties(server: FakeNaverPayServer, returnUrl: String = RET
 internal fun naverProvider(server: FakeNaverPayServer, responseTimeout: Duration = GENEROUS, returnUrl: String = RETURN_URL): NaverPayProvider =
     NaverPayProvider(httpClient = realHttpClient(responseTimeout), properties = naverProperties(server, returnUrl))
 
+/** 서버가 결제창을 예약하고(`checkout`) 구매자가 그 창에서 결제를 마쳐 돌려받은 결제 번호. */
+internal fun payAtWindow(server: FakeNaverPayServer, provider: NaverPayProvider, orderId: String = "ord_abcdef123456", amount: Long = 3_000): String {
+    val instruction = provider.checkout(checkoutOrder(orderId, amount))
+    return server.buyerPays(instruction.attributes.getValue("windowUrl").substringAfterLast('/'))
+}
+
+/** 장부가 이미 만든 주문의 결제창(주문을 만들 때 예약됐다)에서 결제를 마친 결제 번호. */
+internal fun payOrderWindow(server: FakeNaverPayServer, orderId: String): String =
+    server.buyerPays(server.reservations().last { it.merchantPayKey == orderId }.reserveId)
+
 internal fun checkoutOrder(orderId: String = "ord_abcdef123456", amount: Long = 3_000, accountId: String? = "acc_1") =
     CheckoutOrder(orderId = orderId, orderName = "응원하기", amount = PaymentAmount(amount, "KRW"), accountId = accountId)

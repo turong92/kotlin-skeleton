@@ -168,12 +168,13 @@ skeleton:
     cid: ${SKELETON_PAYMENT_KAKAOPAY_CID:}                  # 가맹점 코드 — 테스트는 TC0ONETIME (비밀 아님)
     return-url: ${SKELETON_PAYMENT_KAKAOPAY_RETURN_URL:}    # 구매자를 돌려보낼 이 앱의 화면 주소 — <프런트 주소>/payments/return (비밀 아님)
   payment-naverpay:                                         # 네이버페이 직접 연동(토스 계약 없이). 켜기: SKELETON_PAYMENT_NAVERPAY_ENABLED=true. 클라이언트 아이디 · 시크릿 · 체인 아이디가 모두 있어야 서고, 비면 이 결제사만 없다(보호 환경은 기동 실패)
-    mode: ${SKELETON_PAYMENT_NAVERPAY_MODE:development}      # development | production — API 서버 · 결제창 · SDK 가 함께 따른다. 개발 모드로 stage|prod, 운영 모드로 로컬에 서면 기동 실패
-    client-id: ${SKELETON_PAYMENT_NAVERPAY_CLIENT_ID:}       # 가맹점 식별키 — 결제창 SDK 에 실려 브라우저에 나간다(비밀 아님)
+    mode: ${SKELETON_PAYMENT_NAVERPAY_MODE:development}      # development | production — API 서버 · 결제창 도메인이 함께 따른다. 개발 모드로 stage|prod, 운영 모드로 로컬에 서면 기동 실패
+    client-id: ${SKELETON_PAYMENT_NAVERPAY_CLIENT_ID:}       # 가맹점 식별키 — 서버가 헤더로 싣는다(비밀 아님)
     client-secret: ${SKELETON_PAYMENT_NAVERPAY_CLIENT_SECRET:}   # 비밀, 커밋하지 않는다
     chain-id: ${SKELETON_PAYMENT_NAVERPAY_CHAIN_ID:}         # 가맹점 그룹 식별키(비밀 아님). 단건 값을 쓴다
     return-url: ${SKELETON_PAYMENT_NAVERPAY_RETURN_URL:}     # 구매자를 돌려보낼 이 앱의 화면 주소 — <프런트 주소>/payments/return (비밀 아님)
     base-url: ${SKELETON_PAYMENT_NAVERPAY_BASE_URL:}         # 비우면 모드가 정한 네이버페이 주소 — 프런트 e2e 는 가짜 네이버페이를 가리킨다
+    window-base-url: ${SKELETON_PAYMENT_NAVERPAY_WINDOW_BASE_URL:}   # 비우면 모드가 정한 결제창 주소(test-m.pay.naver.com / m.pay.naver.com) — 프런트 e2e 의 가짜 결제창
   payment-paddle:                                           # 해외 결제(판매 대행). 켜기: SKELETON_PAYMENT_PADDLE_ENABLED=true. 세 비밀이 모두 있어야 서고, 하나라도 비면 이 결제사만 없다(서버는 뜬다)
     api-key: ${PADDLE_API_KEY:}                             # 비밀 — 커밋하지 않는다
     client-token: ${PADDLE_CLIENT_TOKEN:}                   # Paddle.js 클라이언트 토큰 (비밀 아님)

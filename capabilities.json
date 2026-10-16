@@ -1656,7 +1656,7 @@
       "module": "payment-naverpay",
       "path": "modules/payment-naverpay",
       "status": "experimental",
-      "summary": "네이버페이 직접 연동 단건 결제 — 토스 계약 없이 네이버페이 계약만 있어도 쓰는 별도 결제사(기본 꺼짐). 구매자 브라우저가 네이버 SDK 로 결제창을 열고 → 서버 승인(apply) → 취소 · 환불 · 결제 내역 조회. 정기 결제(자동결제) · 웹훅은 없다.",
+      "summary": "네이버페이 직접 연동 단건 결제 — 토스 계약 없이 네이버페이 계약만 있어도 쓰는 별도 결제사(기본 꺼짐). 서버 결제 예약(reserve) → 구매자가 예약한 결제창 → 서버 승인(apply) → 취소 · 환불 · 결제 내역 조회. 정기 결제(자동결제) · 웹훅은 없다.",
       "starter": false,
       "newProjectFlag": "--modules payment-naverpay",
       "autoIncludes": ["crypto", "payment"],

@@ -9,9 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 네이버페이 직접 연동 `payment-naverpay` — 단건 결제 · 취소 · 환불 (2026-10-17)
 
-- 새 모듈 `payment-naverpay`(기본 꺼짐, 토스를 거치지 않는 별도 결제사 - 토스 계약 없이 네이버페이 계약만 있는 사업자용): **구매자 브라우저가 네이버 SDK 로 결제창을 열고**(서버가 결제를 미리 만드는 호출이 없다) → 돌아온 주소의 `paymentId` 로 서버 승인 `apply/payment`(멱등 키 헤더) → 장부 `PAID`. 취소 · 부분 환불은 `cancel`, 결과 맞추기는 결제 번호로 묻는 결제 내역 조회. **정기 결제(자동결제) · 웹훅은 없다**(문서에서 결제 이벤트 웹훅을 찾지 못했다). 설정 `skeleton.payment-naverpay.{enabled, mode, client-id, client-secret, chain-id, return-url, base-url, …}` - [docs/modules/payment-naverpay.md](docs/modules/payment-naverpay.md).
+- 새 모듈 `payment-naverpay`(기본 꺼짐, 토스를 거치지 않는 별도 결제사 - 토스 계약 없이 네이버페이 계약만 있는 사업자용): 서버가 결제를 **예약**하고(`v2/reserve`) 구매자가 예약 번호가 든 결제창(`/payments/{예약 번호}`)에서 결제 → 돌아온 주소의 `paymentId` 로 서버 승인 `apply/payment`(멱등 키 헤더) → 장부 `PAID`. 취소 · 부분 환불은 `cancel`, 결과 맞추기는 결제 번호로 묻는 결제 내역 조회. **정기 결제(자동결제) · 웹훅은 없다**(문서에서 결제 이벤트 웹훅을 찾지 못했다). 설정 `skeleton.payment-naverpay.{enabled, mode, client-id, client-secret, chain-id, return-url, base-url, …}` - [docs/modules/payment-naverpay.md](docs/modules/payment-naverpay.md).
 - **인증값이 가맹 심사 뒤에야 나와 진짜 서버로는 재 보지 못했다** - 문서를 따라 만들고 엄격한 가짜 서버로 끝까지 시험했다. 「진짜 키로 확인할 것」은 [docs/real-provider-setup.md](docs/real-provider-setup.md) §13.
-- 승인 API 가 금액을 받지 않아 **금액은 브라우저가 쥔다** - 모듈은 승인 응답의 총액 · 주문 번호를 있는 그대로 돌려주고 장부가 대조해 다르면 `PAID` 로 두지 않는다(`AMOUNT_MISMATCH` · `ORDER_MISMATCH`). 자동 취소는 하지 않는다.
+- 승인 API 가 금액을 받지 않아 SDK 로 브라우저가 결제창을 열면 구매자가 금액을 낮출 수 있다 - 그래서 문서의 「SDK 미사용」 길(서버 예약, 금액 · 주문 번호는 장부의 값)을 쓴다. 그래도 승인 응답의 총액 · 주문 번호는 있는 그대로 돌려주고 장부가 대조해 다르면(다른 주문의 결제 번호 등) `PAID` 로 두지 않는다(`AMOUNT_MISMATCH` · `ORDER_MISMATCH`). 자동 취소는 하지 않는다.
 - 개발 모드(`mode: development`)로 stage · prod 에 서면 기동 실패, 운영 모드로 로컬에 서면 기동 실패(`allow-development-mode-in-protected-env=true` 로 일부러 허락). 클라이언트 시크릿은 로그 · `toString` 에 찍지 않는다. 프로젝트 모드: `client-secret` · `client-id` · `chain-id` · `return-url` 모두 프로젝트마다 자기 것(물려받으면 기동 실패), `ProjectConfigKeys.SUPPORTED` 에 `payment-naverpay.`. `payment` 계약은 바뀌지 않았다(토스처럼 결제 번호를 브라우저가 들고 온다).
 - 샘플 앱: 네이버페이 응답 제한 60초(`skeleton.http.clients.payment-naverpay.response-timeout`)에 맞춰 `skeleton.payment.reconcile.first-delay` 를 90초로 늘렸다(모듈 기본 60초; 토스 조회도 30초 늦게 돈다).
 

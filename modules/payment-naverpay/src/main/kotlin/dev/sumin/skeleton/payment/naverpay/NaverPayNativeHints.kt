@@ -9,6 +9,8 @@ class NaverPayNativeHints : RuntimeHintsRegistrar {
     override fun registerHints(hints: RuntimeHints, classLoader: ClassLoader?) {
         BindingHints.register(
             hints, classLoader,
+            "dev.sumin.skeleton.payment.naverpay.NaverPayReserveResponse",
+            "dev.sumin.skeleton.payment.naverpay.NaverPayReserveBody",
             "dev.sumin.skeleton.payment.naverpay.NaverPayApplyResponse",
             "dev.sumin.skeleton.payment.naverpay.NaverPayApplyBody",
             "dev.sumin.skeleton.payment.naverpay.NaverPayApplyDetail",

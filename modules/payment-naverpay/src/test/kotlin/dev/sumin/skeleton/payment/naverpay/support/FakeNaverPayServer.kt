@@ -12,12 +12,13 @@ import java.util.concurrent.atomic.AtomicInteger
 import tools.jackson.databind.json.JsonMapper
 
 /**
- * 가짜 네이버페이 HTTP 서버 (JDK `HttpServer`) - 개발 문서(docs.pay.naver.com) 모양으로 승인(`apply/payment`) · 취소(`cancel`) · 결제 내역 조회(`list/history/{paymentId}`)에 답한다. 시험 소스에만 있다.
- * 결제창은 구매자 브라우저가 네이버 SDK 로 여는 것이라 서버 호출이 아니다 - [buyerPays] 가 그 결과(구매자가 결제창에서 낸 값 + 돌려받은 `paymentId`)를 흉내 낸다.
+ * 가짜 네이버페이 HTTP 서버 (JDK `HttpServer`) - 개발 문서(docs.pay.naver.com) 모양으로 결제 예약(`v2/reserve`) · 승인(`apply/payment`) · 취소(`cancel`) · 결제 내역 조회(`list/history/{paymentId}`)에 답한다. 시험 소스에만 있다.
+ * 결제창은 구매자 브라우저가 `/payments/{reserveId}` 로 가는 것이라 서버 호출이 아니다 - [buyerPays] 가 그 결과(예약한 값 그대로의 결제 + 돌려받은 `paymentId`)를 흉내 낸다. 금액 · 주문 번호는 서버가 예약한 값이라 구매자가 바꿀 수 없다.
  *
  * **엄격하다** - 진짜 네이버페이가 거절할 일을 이 서버도 거절해, 모듈이 그 거절을 만나도 올바르게 구는지 본다:
  * - 인증 헤더 셋(`X-Naver-Client-Id` · `X-Naver-Client-Secret` · `X-NaverPay-Chain-Id`)이 하나라도 틀리면 `401`(본문 없음).
  * - 승인 · 취소는 폼(`application/x-www-form-urlencoded`)이고 **멱등 키 헤더가 없으면 `400`**. 같은 멱등 키의 재요청은 적용하지 않고 `409` + 처음 응답을 그대로 돌려준다(문서의 약속).
+ * - 예약: 필수 칸이 빠지거나 과세 + 면세가 총액과 다르거나 총액이 10원 미만이거나 상품 목록이 비면 `InvalidParameter`.
  * - 승인: 모르는 결제 번호 `InvalidMerchant` · 이미 승인된 결제 `AlreadyComplete`. 업무 오류는 HTTP 200 + `code`(문서의 결과 코드 표를 그렇게 읽었다 - 진짜 상태는 못 잰 가정).
  * - 취소: 남은 금액을 넘으면 `OverRemainAmount` · 과세 + 면세가 취소 금액과 다르면 `TaxScopeAmountError` · 승인되지 않은 결제는 `InvalidPaymentId`.
  * - 실패 지시([failNext]): [Fail.DECLINE] 적용하지 않고 `Fail` · [Fail.DELAY] 응답을 붙잡는다(적용 안 함) · [Fail.LOSE] **적용한 뒤** 연결을 끊는다(응답 유실) · [Fail.ERROR] 적용 안 하고 500.
@@ -51,7 +52,10 @@ internal class FakeNaverPayServer(
         val ALL = listOf(USER_KEY, CARD_NO, USER_IDENTIFIER, PRODUCT)
     }
 
-    /** 구매자가 결제창에서 낸 결제(진짜는 SDK 가 정한 값 - 결제 예약). */
+    /** 서버가 예약한 결제. */
+    class Reservation(val reserveId: String, val merchantPayKey: String, val total: Long, val returnUrl: String)
+
+    /** 구매자가 예약한 결제창에서 낸 결제. */
     class Payment(
         val paymentId: String,
         val merchantPayKey: String,
@@ -71,6 +75,7 @@ internal class FakeNaverPayServer(
     private val payments = Collections.synchronizedMap(linkedMapOf<String, Payment>())
     private val failures = Collections.synchronizedMap(mutableMapOf<String, ArrayDeque<Fail>>())
     private val replies = Collections.synchronizedMap(mutableMapOf<String, String>())
+    private val reservations = Collections.synchronizedMap(linkedMapOf<String, Reservation>())
     private val sequence = AtomicInteger()
     private val server: HttpServer = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
         createContext("/") { exchange -> handle(exchange) }
@@ -82,6 +87,8 @@ internal class FakeNaverPayServer(
 
     fun paymentOf(paymentId: String): Payment? = payments[paymentId]
 
+    fun reservations(): List<Reservation> = synchronized(reservations) { reservations.values.toList() }
+
     fun payments(): List<Payment> = synchronized(payments) { payments.values.toList() }
 
     /** 이 경로(`apply` · `cancel` · `history`)의 다음 호출 하나를 실패시킨다. */
@@ -89,13 +96,11 @@ internal class FakeNaverPayServer(
         failures.getOrPut(operation) { ArrayDeque() }.addLast(fail)
     }
 
-    /**
-     * 구매자가 결제창에서 결제를 마쳤다 - 결제창에 **구매자 브라우저가 넘긴** 주문 번호(`merchantPayKey`)와 총액이 그대로 결제 예약이 되고, 결제 번호(`paymentId`)가 돌아온다(`returnUrl` 로 붙어 온다).
-     * 브라우저가 주문과 다른 값을 넘기는 일(변조)은 인자를 다르게 주어 흉내 낸다.
-     */
-    fun buyerPays(merchantPayKey: String, total: Long): String {
+    /** 구매자가 예약한 결제창(`/payments/{reserveId}`)에서 결제를 마쳤다 - 예약한 주문 번호 · 총액 그대로 결제가 만들어지고 결제 번호(`paymentId`)가 돌아온다(`returnUrl` 로 붙어 온다). */
+    fun buyerPays(reserveId: String): String {
+        val reservation = checkNotNull(reservations[reserveId]) { "no such reservation" }
         val paymentId = "2026" + "1017NP" + "%08d".format(sequence.incrementAndGet())
-        payments[paymentId] = Payment(paymentId, merchantPayKey, total)
+        payments[paymentId] = Payment(paymentId, reservation.merchantPayKey, reservation.total)
         return paymentId
     }
 
@@ -125,6 +130,7 @@ internal class FakeNaverPayServer(
 
     private fun operationOf(path: String): String? =
         when {
+            path.endsWith("/v2/reserve") -> "reserve"
             path.endsWith("/apply/payment") -> "apply"
             path.endsWith("/v1/cancel") -> "cancel"
             "/list/history/" in path -> "history"
@@ -147,10 +153,31 @@ internal class FakeNaverPayServer(
         val key = request.header("x-naverpay-idempotency-key")
         if (key.isNullOrBlank() || key.length > 64 || !Regex("[A-Za-z0-9_-]+").matches(key)) return Reply.Empty(400)
         replies["$operation/$key"]?.let { return Reply.Json(409, it) }
-        val form = request.form
-        val reply = if (operation == "apply") apply(form) else cancel(form)
+        val reply = when (operation) {
+            "reserve" -> reserve(request.body)
+            "apply" -> apply(request.form)
+            else -> cancel(request.form)
+        }
         if (reply is Reply.Json && reply.status == 200) replies["$operation/$key"] = reply.body
         return reply
+    }
+
+    private fun reserve(body: String): Reply {
+        val node = runCatching { mapper.readTree(body) }.getOrNull()
+        val merchantPayKey = node?.get("merchantPayKey")?.takeIf { it.isString }?.asString()
+        val total = node?.get("totalPayAmount")?.takeIf { it.isIntegralNumber }?.longValue()
+        val taxed = node?.get("taxScopeAmount")?.takeIf { it.isIntegralNumber }?.longValue()
+        val exempt = node?.get("taxExScopeAmount")?.takeIf { it.isIntegralNumber }?.longValue()
+        val returnUrl = node?.get("returnUrl")?.takeIf { it.isString }?.asString()
+        val items = node?.get("productItems")
+        if (merchantPayKey.isNullOrBlank() || merchantPayKey.length > 64 || total == null || total < 10 || taxed == null || exempt == null || taxed + exempt != total ||
+            returnUrl.isNullOrBlank() || node.get("productName")?.isString != true || node.get("productCount")?.isIntegralNumber != true || items == null || !items.isArray || items.size() == 0
+        ) {
+            return envelope("InvalidParameter", "reserve", null)
+        }
+        val reserveId = "RSV%08d".format(sequence.incrementAndGet())
+        reservations[reserveId] = Reservation(reserveId, merchantPayKey, total, returnUrl)
+        return envelope("Success", "", linkedMapOf("reserveId" to reserveId))
     }
 
     private fun apply(form: Map<String, String>): Reply {

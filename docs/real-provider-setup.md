@@ -569,22 +569,23 @@ SKELETON_PAYMENT_NAVERPAY_CHAIN_ID=<체인 아이디>              # 비밀 아�
 SKELETON_PAYMENT_NAVERPAY_RETURN_URL=http://localhost:5173/payments/return
 ```
 
-개발 · 운영은 키 모양이 아니라 **`mode` 설정**이 가른다(API 서버 `dev-pay.paygate.naver.com` / `pay.paygate.naver.com`, 결제창 `test-m.pay.naver.com` / `m.pay.naver.com`, SDK `development` / `production`). 개발 모드는 stage · prod 에서 기동 실패, 운영 모드는 로컬 계열에서 기동 실패한다. 응답 제한은 문서가 60초를 권하므로 샘플 앱이 `skeleton.http.clients.payment-naverpay.response-timeout: 60s` 로 두고 `reconcile.first-delay` 를 90초로 늘렸다(둘 다 가드가 본다). 같은 나라(KR)의 나라 지도가 토스를 가리키는데 토스가 꺼져 있으면(네이버페이만 쓰는 배포) 지도의 KR 을 `naverpay` 로 고친다 - 지도에 있는 나라는 그 결제사만 쓴다. 토스 · 카카오페이도 켜져 있으면 결제 화면에 「결제 방법」 고르기가 생긴다.
+개발 · 운영은 키 모양이 아니라 **`mode` 설정**이 가른다(API 서버 `dev-pay.paygate.naver.com` / `pay.paygate.naver.com`, 결제창 `test-m.pay.naver.com` / `m.pay.naver.com`). 개발 모드는 stage · prod 에서 기동 실패, 운영 모드는 로컬 계열에서 기동 실패한다. 응답 제한은 문서가 60초를 권하므로 샘플 앱이 `skeleton.http.clients.payment-naverpay.response-timeout: 60s` 로 두고 `reconcile.first-delay` 를 90초로 늘렸다(둘 다 가드가 본다). 같은 나라(KR)의 나라 지도가 토스를 가리키는데 토스가 꺼져 있으면(네이버페이만 쓰는 배포) 지도의 KR 을 `naverpay` 로 고친다 - 지도에 있는 나라는 그 결제사만 쓴다. 토스 · 카카오페이도 켜져 있으면 결제 화면에 「결제 방법」 고르기가 생긴다.
 
 ### 13.2 눌러 보기 (사람이 하는 단계)
 
-샘플을 띄우고(`scripts/dev-sample.sh`) 응원하기 → 네이버페이를 고르면 네이버 결제창(SDK)이 **같은 창에서 열린다**(`openType` 기본 page). 시험 카드로 결제하면 `RETURN_URL` 로 `resultCode=Success&paymentId=…` 이 붙어 돌아오고 화면이 서버 승인을 부른다. 네이버페이는 **웹훅이 없다**고 읽었다(찾지 못했다) - 로그의 `payment confirm` · `NaverPay apply` 줄과 운영자 화면이 기록 장소다. 한 번 승인한 뒤 13.3 을 하나씩 본다.
+샘플을 띄우고(`scripts/dev-sample.sh`) 응원하기 → 네이버페이를 고르면 서버가 결제를 예약하고 화면이 구매자를 `<결제창 도메인>/payments/<예약 번호>` 로 **같은 창에서 보낸다**(SDK 없음). 시험 카드로 결제하면 `RETURN_URL` 로 `resultCode=Success&paymentId=…` 이 붙어 돌아오고 화면이 서버 승인을 부른다. 네이버페이는 **웹훅이 없다**고 읽었다(찾지 못했다) - 로그의 `payment confirm` · `NaverPay apply` 줄과 운영자 화면이 기록 장소다. 한 번 승인한 뒤 13.3 을 하나씩 본다.
 
 ### 13.3 못 잰 가정 (진짜 키가 있어야 잰다) - 「진짜 키로 확인할 것」
 
 | 못 잰 가정 | 틀리면 신호 | 재려면 |
 |---|---|---|
 | **업무 오류(`AlreadyComplete` · `OverRemainAmount` · 카드 거절 `Fail` …)는 HTTP 200 + `code` 로 온다** (문서의 결과 코드 표를 그렇게 읽었다) | 4xx 로 오면 허용 목록의 코드(`TimeExpired` · `OwnerAuthFail` · `NotEnoughAccountBalance` …)가 **확정 거절**로 읽혀 주문이 바로 `FAILED` 가 된다 - 의도한 동작이다. 200 이면 전부 「모름」이라 거절된 결제가 첫 조회(`reconcile.first-delay`)까지 「확인 중」으로 보인다 | 카드 거절 · 잔액 부족을 일부러 만들어 상태와 `code` 를 본다 |
+| **결제 예약 응답은 `{code:"Success", body:{reserveId}}`, 결제창 주소는 `<결제창 도메인>/payments/<reserveId>` 이고 PC 에서도 열린다**(문서의 결제창 호출 도메인이 모바일 주소 `m.pay.naver.com` 인 점) | 결제창이 열리지 않거나 모바일 화면만 나온다 | 예약 한 번 + 주소 열기 |
 | 돌아온 주소에 이미 쿼리가 있어도 네이버페이가 `&resultCode=…&paymentId=…` 로 붙인다 | 화면의 주소에 `paymentId` 가 없거나 `?` 가 두 번 | 결제 한 번 뒤 주소창을 본다 |
 | `paymentId` 의 문자 집합이 영문 · 숫자 · `-` `_` (50자까지) · `merchantPayKey`(= 우리 주문 id)는 64바이트까지 | 모양이 틀린 결제 번호는 **선점 전에** `400`(주문은 `PENDING` 그대로)이라 실제 번호가 규칙 밖이면 모든 결제가 400 으로 막힌다 - 이 신호가 보이면 규칙을 넓힌다 | 첫 결제의 `paymentId` 를 본다 |
-| 결제창에 `productItems` 의 `categoryType=ETC` · `categoryId=ETC` · `uid=<주문 id>` · `count=1` 을 넣어도 받아 준다 (문서 예시 값; 분류 표는 별도 문서) | 결제창이 오류 | 결제창을 열어 본다 |
-| 전액 과세(`taxScopeAmount`=결제액 · `taxExScopeAmount`=0)가 우리 상품에 맞는다 | 면세 상품이면 `TaxScopeAmountError` 류 | 계약 형태 확인 |
-| **금액은 브라우저가 결제창에 넘기는 값이다** - 서버 승인 API 는 결제 번호만 받는다. 구매자가 낮은 금액으로 결제하면 그 금액으로 승인된다 | 승인 응답의 `totalPayAmount`/`merchantPayKey` 가 주문과 다르면 장부가 주문을 `PAID` 로 두지 않고 `AMOUNT_MISMATCH`/`ORDER_MISMATCH` 로 사람이 보게 한다. **이 모듈은 자동으로 취소하지 않는다** - 운영자가 네이버페이 관리자나 환불로 돌려준다 | 결제창 값을 바꿔 결제해 본다(개발 환경) |
+| 예약에 `productItems` 의 `categoryType=ETC` · `categoryId=ETC` · `uid=<주문 id>` · `count=1` 을 넣어도 받아 준다 (문서 예시 값; 분류 표는 별도 문서) | 예약이 `InvalidParameter` 로 거절돼 모든 결제가 503 | 결제창을 예약해 본다 |
+| 전액 과세(`taxScopeAmount`=결제액 · `taxExScopeAmount`=0)가 우리 상품에 맞는다 | 면세 상품이면 취소가 `TaxScopeAmountError` 류 | 계약 형태 확인 |
+| **금액을 서버가 고정한다** - 처음에는 네이버 SDK 로 브라우저가 결제창을 열게 만들었는데, 승인 API 가 결제 번호만 받아(금액 없음) 구매자가 창 금액을 낮추면 낮춘 금액으로 승인돼 돈이 이미 빠진다. 그래서 문서의 「SDK 미사용」 길 - 서버가 `v2/reserve` 로 장부 금액을 예약하고 브라우저는 예약 번호가 든 `/payments/<예약 번호>` 로 이동만 한다 - 을 쓴다. 그래도 승인 응답의 `totalPayAmount`/`merchantPayKey` 가 주문과 다르면(예: 다른 주문의 결제 번호) 장부가 `PAID` 로 두지 않고 `AMOUNT_MISMATCH`/`ORDER_MISMATCH` 로 사람이 보게 한다 | 예약 번호가 든 결제창 주소를 열어 결제창의 금액이 예약한 금액인지, 주소를 고쳐 다른 금액을 만들 수 없는지 본다(개발 환경) |
 | 승인 가능 시간은 결제창이 열린 지 10분(`TimeExpired`)이고 서버 승인 없이는 돈이 움직이지 않는다 | 구매자가 결제는 했는데 우리가 승인을 못 불러 돈이 빠진 채 남는다 | 결제창에서 결제하고 승인을 일부러 안 부른다 |
 | 같은 멱등 키(`X-NaverPay-Idempotency-Key`)의 재요청은 `409` + 처음 응답을 돌려준다 (문서의 약속) | 두 번 적용되거나 `409` 가 아닌 모양 - 모듈은 `409` 를 「모름」으로 읽고 조회가 가린다 | 같은 승인을 두 번 보낸다(개발 환경) |
 | 승인의 멱등 키를 `apply-<paymentId>` 로 정했다 · 취소는 장부의 환불 줄 id | 키 규칙(영문 · 숫자 · `_` `-` 64자)과 어긋나면 `400` | 첫 승인 · 취소 |

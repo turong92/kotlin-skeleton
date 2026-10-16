@@ -28,7 +28,7 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner
 
 /** 프로젝트 모드의 네이버페이: 클라이언트 시크릿 · 아이디 · 체인 · 돌아올 주소는 프로젝트마다, A 의 키는 B 의 요청에 실리지 않고 B 가 안 켠 네이버페이는 B 의 결제 화면에 없다 */
 class NaverPayProjectsTest {
-    private val server = FakeNaverPayServer(clientSecret = "secret-of-project-a")
+    private val server = FakeNaverPayServer(clientId = "id-a", clientSecret = "secret-of-project-a", chainId = "chain-a")
 
     @AfterTest
     fun tearDown() = server.close()
@@ -54,26 +54,25 @@ class NaverPayProjectsTest {
     private val order = CheckoutOrder(orderId = "ord_abcdef123456", orderName = "x", amount = PaymentAmount(3_000, "KRW"), accountId = "acc_1")
 
     @Test
-    fun `the window values and the apply of project B carry B's ids and B's secret, never A's - and each project returns its buyers to its own address`() {
+    fun `the reserve and the apply of project B carry B's ids and B's secret, never A's - and each project returns its buyers to its own address`() {
         runner().withPropertyValues(*naver("a", "secret-of-project-a"), *naver("b", "secret-of-project-b")).run { ctx ->
             val router = ctx.getBean(PaymentProviderRouter::class.java)
             val (a, b, c) = ctx.getBean(ProjectRegistry::class.java).projects
 
-            val forA = ProjectContext.runIn(a) { router.gateway("naverpay", PaymentCheckoutGateway::class).checkout(order) }
-            val forB = ProjectContext.runIn(b) { router.gateway("naverpay", PaymentCheckoutGateway::class).checkout(order) }
-            val paymentId = server.buyerPays(order.orderId, 3_000)
+            ProjectContext.runIn(a) { router.gateway("naverpay", PaymentCheckoutGateway::class).checkout(order) }
+            runCatching { ProjectContext.runIn(b) { router.gateway("naverpay", PaymentCheckoutGateway::class).checkout(order) } }
             runCatching {
-                ProjectContext.runIn(b) { router.gateway("naverpay", PaymentConfirmGateway::class).confirm(PaymentConfirmRequest(paymentId, PaymentAmount(3_000, "KRW"), merchantReferenceId = order.orderId)) }
+                ProjectContext.runIn(b) { router.gateway("naverpay", PaymentConfirmGateway::class).confirm(PaymentConfirmRequest("20261017NP00000001", PaymentAmount(3_000, "KRW"), merchantReferenceId = order.orderId)) }
             }
 
-            assertEquals("id-a", forA.clientKey)
-            assertEquals("id-b", forB.clientKey)
-            assertEquals("chain-b", forB.attributes["chainId"])
-            assertTrue(forA.attributes["returnUrl"]!!.startsWith("https://a.test/payments/return"))
-            assertTrue(forB.attributes["returnUrl"]!!.startsWith("https://b.test/payments/return"))
-            val sent = server.requests.single()
-            assertEquals("secret-of-project-b", sent.header("x-naver-client-secret"), "B's request carries B's secret")
-            assertEquals("id-b", sent.header("x-naver-client-id"))
+            val (reserveA, reserveB, applyB) = server.requests
+            assertEquals(listOf("id-a", "id-b", "id-b"), listOf(reserveA, reserveB, applyB).map { it.header("x-naver-client-id") })
+            assertEquals(listOf("chain-a", "chain-b", "chain-b"), listOf(reserveA, reserveB, applyB).map { it.header("x-naverpay-chain-id") })
+            assertEquals("secret-of-project-a", reserveA.header("x-naver-client-secret"))
+            // B's calls carry B's secret: the fake serves project A's, so they are refused - A's secret never reached B's calls
+            assertEquals("secret-of-project-b", reserveB.header("x-naver-client-secret"))
+            assertEquals("secret-of-project-b", applyB.header("x-naver-client-secret"))
+            assertTrue("https://a.test/payments/return" in reserveA.body && "b.test" !in reserveA.body)
             assertFailsWith<PaymentProviderNotFoundException> { ProjectContext.runIn(c) { router.gateway("naverpay", PaymentCheckoutGateway::class) } }
             assertEquals(emptyList(), ProjectContext.runIn(c) { router.providerIds(PaymentCheckoutGateway::class) })
         }

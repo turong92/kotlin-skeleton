@@ -13,11 +13,18 @@ internal object NaverPayIdentifiers {
     private val ORDER_ID = Regex("[A-Za-z0-9_-]{1,64}")
     private val IDEMPOTENCY_KEY = Regex("[A-Za-z0-9_-]{1,64}")
 
+    private val RESERVE_ID = Regex("[A-Za-z0-9_-]{1,50}")
+
+    fun isReserveId(value: String): Boolean = RESERVE_ID.matches(value)
+
     fun isPaymentId(value: String): Boolean = PAYMENT_ID.matches(value)
 
     fun paymentId(value: String): String = if (isPaymentId(value)) value else throw NaverPayIdentifierRejectedException()
 
     fun orderId(value: String): String = if (ORDER_ID.matches(value)) value else throw NaverPayIdentifierRejectedException()
+
+    /** 결제 예약은 부를 때마다 새 결제창이다 - 키도 새로 만든다. */
+    fun reserveKey(): String = java.util.UUID.randomUUID().toString()
 
     /** 승인은 결제 번호마다 한 번이다 - 같은 결제 번호의 재요청은 같은 키라서 네이버페이가 409 로 처음 응답을 돌려준다(적용하지 않는다). 최대 64자. */
     fun applyKey(paymentId: String): String = "apply-$paymentId"

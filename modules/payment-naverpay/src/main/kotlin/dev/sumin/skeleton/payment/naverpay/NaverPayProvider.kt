@@ -9,6 +9,7 @@ import dev.sumin.skeleton.payment.ConfirmDeclineCategory
 import dev.sumin.skeleton.payment.PaymentAmount
 import dev.sumin.skeleton.payment.PaymentCancelRequest
 import dev.sumin.skeleton.payment.PaymentCheckoutGateway
+import dev.sumin.skeleton.payment.PaymentFailures
 import dev.sumin.skeleton.payment.PaymentConfirmRequest
 import dev.sumin.skeleton.payment.PaymentLookupGateway
 import dev.sumin.skeleton.payment.PaymentLookupQuery
@@ -35,15 +36,14 @@ import java.time.format.DateTimeFormatter
 import org.slf4j.LoggerFactory
 
 /**
- * 네이버페이 단건 결제(결제형 REST, 결제창 SDK → 서버 승인 → 취소 · 조회). 한 빈이 결제창 값 · 승인 · 환불 · 조회를 모두 맡는다(라우터에 결제사가 하나로 보이게).
+ * 네이버페이 단건 결제(결제형 REST, 결제 예약 → 결제창 → 서버 승인 → 취소 · 조회). 한 빈이 결제 예약 · 승인 · 환불 · 조회를 모두 맡는다(라우터에 결제사가 하나로 보이게).
  * 정기 결제(자동결제) · 웹훅은 이 모듈에 없다 - 이번에 읽은 문서에서 결제 이벤트 웹훅을 찾지 못했다(`docs/modules/payment-naverpay.md`). 결과는 승인 응답과 결제 내역 조회로 맞춘다.
  *
- * **결제창 흐름**: 결제창은 **구매자 브라우저가 네이버 SDK 로 연다** - 서버가 결제를 미리 만드는 호출이 없다. [checkout] 은 아무도 부르지 않고 브라우저에 줄 공개 값(클라이언트 아이디 · 체인 아이디 · 모드 · 돌아올 주소 ·
- * 과세/면세 금액)만 낸다. 구매자가 결제를 마치면 네이버가 우리 `returnUrl` 로 `paymentId` 를 붙여 돌려보내고, 프론트가 그 번호로 승인을 부른다([confirm] = `apply/payment`).
- * **서버 승인 없이는 돈이 움직이지 않는다**(결제창 결제사의 계약 - 승인은 결제창이 열린 지 10분 안에).
+ * **결제창 흐름**: [checkout] 이 결제를 서버에서 예약하고(`v2/reserve` - 금액 · 주문 번호는 장부의 값) 받은 예약 번호로 결제창 주소(`<결제창 도메인>/payments/{예약 번호}`)를 만들어 프론트에 준다. 네이버 SDK 는 쓰지 않는다 - 구매자 브라우저는 그 주소로 이동하기만 한다.
+ * 구매자가 결제하면 네이버가 우리 `returnUrl` 로 `paymentId` 를 붙여 돌려보내고, 프론트가 그 번호로 승인을 부른다([confirm] = `apply/payment`). **서버 승인 없이는 돈이 움직이지 않는다**(승인은 결제창이 열린 지 10분 안에).
  *
- * **결제창 값은 브라우저가 쥔다**: 승인 API 는 결제 번호만 받고 금액을 받지 않아, 구매자가 결제창에 낮은 금액을 넘기면 그 금액으로 승인된다. 그래서 승인 응답의 총액 · 주문 번호(`merchantPayKey`)는
- * **있는 그대로 돌려주고 장부가 주문과 대조한다** - 다르면 장부가 주문을 `PAID` 로 두지 않고 사람이 보게 표시한다(`AMOUNT_MISMATCH` · `ORDER_MISMATCH`). 이 모듈이 자동으로 취소하지는 않는다.
+ * **금액은 서버가 고정한다**: SDK 로 브라우저가 결제창을 열면 금액을 구매자가 바꿀 수 있고 승인 API 는 금액을 받지 않아 이미 빠진 돈을 되돌려야 한다 - 그래서 문서의 「SDK 미사용」 길(서버 예약)을 쓴다. 그래도 승인 응답의 총액 · 주문 번호(`merchantPayKey`)는
+ * **있는 그대로 돌려주고 장부가 주문과 대조한다**(다른 주문의 결제 번호를 들고 오는 경우 등) - 다르면 장부가 주문을 `PAID` 로 두지 않고 사람이 보게 표시한다(`AMOUNT_MISMATCH` · `ORDER_MISMATCH`). 이 모듈이 자동으로 취소하지는 않는다.
  *
  * **응답 본문은 어디에도 싣지 않는다**: 응답은 아래 data class 가 선언한 칸만 읽고(나머지 - 카드 정보 · 상품명 · 사용자 키 - 는 버려진다), 오류는 코드만 예외에 담으며([NaverPayErrorMapper]),
  * 읽지 못한 응답은 본문을 인용하지 않는 [PaymentProviderException] 으로 바꾼다.
@@ -80,18 +80,42 @@ class NaverPayProvider(
 
     // --- 결제창 ---
 
-    /** 돌아올 주소(`return-url`)가 http(s) 절대 주소가 아니면 결제창을 열 수 없다 - 네이버페이는 결제창을 호출할 때 `returnUrl` 을 받는다. */
+    /** 돌아올 주소(`return-url`)가 http(s) 절대 주소가 아니면 결제창을 예약할 수 없다 - 네이버페이는 결제 예약 때 `returnUrl` 을 받는다. */
     override fun canOpenCheckout(): Boolean = returnBase() != null
 
     /**
-     * 브라우저가 네이버 SDK 로 결제창을 여는 데 필요한 값. 금액 · 주문 번호 · 과세/면세 구분은 서버가 정한 값이다(브라우저가 이것을 바꾸면 승인 응답의 총액 · 주문 번호가 달라져 장부가 막는다).
-     * 클라이언트 아이디 · 체인 아이디는 SDK 가 공개 값으로 정의한다 - 시크릿은 나가지 않는다.
+     * 결제를 **서버에서 예약**한다(`v2/reserve`) - 금액 · 주문 번호 · 상품명 · 과세 구분 · 돌아올 주소는 서버가 정한 값이고 브라우저는 예약 번호가 든 결제창 주소만 받는다(구매자가 금액을 바꿀 길이 없다).
+     * 결제사가 답하지 못하면 [PaymentUnavailableException](503) - 주문은 `PENDING` 으로 남아 만료 작업이 닫고, 같은 키로 다시 열면 그때 다시 예약한다. 모든 예약이 새 결제창이다(이전 것은 결제되지 않은 채 30분 뒤 만료된다 - 수용).
+     * 결제 번호는 아직 없다 - 구매자가 결제를 마치면 돌아온 주소에 실려 온다.
      */
     override fun checkout(order: CheckoutOrder): CheckoutInstruction {
         val base = returnBase() ?: throw PaymentUnavailableException()
-        // 네이버페이는 원화만 받는다 - 다른 통화의 금액을 결제창에 넘기지 않는다(구매자가 고른 결제사일 때의 마지막 방어)
+        // 네이버페이는 원화만 받는다 - 다른 통화의 금액을 예약하지 않는다(구매자가 고른 결제사일 때의 마지막 방어)
         if (order.amount.normalizedCurrency != KRW) throw PaymentUnavailableException()
         val orderId = NaverPayIdentifiers.orderId(order.orderId)
+        val reserveId = try {
+            guarded("reserve") { seen ->
+                val response = requireNotNull(
+                    httpClient.postResponse(
+                        clientName = properties.clientName,
+                        path = properties.reservePath,
+                        body = reserveBody(order, orderId, base),
+                        responseType = NaverPayReserveResponse::class.java,
+                    ) {
+                        common("payment.naverpay.reserve", errorMapper)
+                        header(IDEMPOTENCY_HEADER, NaverPayIdentifiers.reserveKey())
+                        timeout(properties.reserveTimeout)
+                    }.block(),
+                )
+                seen.status = response.statusCode
+                requireSuccess(response.body.code, errorMapper, setOf(SUCCESS))
+                response.body.body?.reserveId?.takeIf(NaverPayIdentifiers::isReserveId).need("reserveId")
+            }
+        } catch (e: Exception) {
+            if (e is InterruptedException || generateSequence<Throwable>(e) { it.cause }.any { it is InterruptedException }) throw e
+            log.warn("NaverPay reserve failed for order={} {}", orderId, PaymentFailures.describe(e))
+            throw PaymentUnavailableException()
+        }
         return CheckoutInstruction(
             provider = providerId,
             kind = CHECKOUT_KIND,
@@ -99,14 +123,24 @@ class NaverPayProvider(
             orderId = order.orderId,
             orderName = order.orderName,
             amount = order.amount,
-            clientKey = properties.clientId.trim(),
-            attributes = mapOf(
-                "chainId" to properties.chainId.trim(),
-                "mode" to properties.mode.sdkMode,
-                "returnUrl" to returnUrl(base, orderId),
-                "taxScopeAmount" to order.amount.amount.toString(), // 모두 과세 - 면세 상품이 있는 가맹점은 계약에 맞춰 이 구분을 고친다
-                "taxExScopeAmount" to "0",
-            ),
+            clientKey = null, // 브라우저에 줄 공개 키가 없다 - 결제창 주소가 그 몫이다
+            attributes = mapOf("windowUrl" to "${properties.windowBase}/payments/$reserveId"),
+        )
+    }
+
+    private fun reserveBody(order: CheckoutOrder, orderId: String, base: String): Map<String, Any?> {
+        val name = order.orderName.take(NAME_MAX)
+        return linkedMapOf(
+            "modelVersion" to "2",
+            "merchantPayKey" to orderId,
+            "productName" to name,
+            "productCount" to 1,
+            "totalPayAmount" to order.amount.amount,
+            "taxScopeAmount" to order.amount.amount, // 모두 과세 - 면세 상품이 있는 가맹점은 계약에 맞춰 이 구분을 고친다
+            "taxExScopeAmount" to 0,
+            "returnUrl" to returnUrl(base, orderId),
+            // 상품 분류는 문서 예시의 값(ETC)을 못 잰 가정으로 쓴다 - 구매자 정보(merchantUserKey · purchaser*)는 보내지 않는다
+            "productItems" to listOf(linkedMapOf("categoryType" to "ETC", "categoryId" to "ETC", "uid" to orderId, "name" to name, "count" to 1)),
         )
     }
 
@@ -382,7 +416,8 @@ class NaverPayProvider(
     private companion object {
         val log = LoggerFactory.getLogger(NaverPayProvider::class.java)
 
-        const val CHECKOUT_KIND = "NAVERPAY_SDK"
+        const val CHECKOUT_KIND = "NAVERPAY_REDIRECT"
+        const val NAME_MAX = 128
         const val METHOD = "EASY_PAY"
         const val KRW = "KRW"
         const val UNREADABLE_RESPONSE = "UNREADABLE_RESPONSE"
@@ -402,6 +437,11 @@ class NaverPayProvider(
         val SAFE_STATUS = Regex("[A-Za-z_]{1,40}")
     }
 }
+
+/** 결제 예약(`v2/reserve`)에서 읽는 칸. */
+data class NaverPayReserveResponse(val code: String? = null, val body: NaverPayReserveBody? = null)
+
+data class NaverPayReserveBody(val reserveId: String? = null)
 
 /** 결제 승인(`apply/payment`)에서 읽는 칸. 카드 정보 · 상품명 · 사용자 키 · 정산 칸은 선언하지 않았으니 버려진다. */
 data class NaverPayApplyResponse(val code: String? = null, val body: NaverPayApplyBody? = null)

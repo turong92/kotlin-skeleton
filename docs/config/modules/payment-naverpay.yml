@@ -1,15 +1,18 @@
-# payment-naverpay — 네이버페이 단건 결제 제공자(결제형 REST: 구매자 브라우저가 네이버 SDK 로 결제창 → 서버 승인 → 취소 · 결제 내역 조회). 기본 꺼짐.
+# payment-naverpay — 네이버페이 단건 결제 제공자(결제형 REST: 서버 결제 예약 → 구매자가 예약한 결제창 → 서버 승인 → 취소 · 결제 내역 조회). 기본 꺼짐.
 skeleton:
   payment-naverpay:
     enabled: false                                  # true + client-id + client-secret + chain-id 면 제공자 빈이 생긴다. 켰는데 하나라도 비면 빈이 없고, 보호 환경(skeleton.env=stage|prod)에서는 배포 가드가 기동을 막는다 (그 밖의 환경은 경고)
     provider-id: naverpay                           # 라우팅에서 쓰는 ID
     client-name: payment-naverpay                   # 외부 HTTP 클라이언트 이름 (skeleton.http.clients.<이름>.response-timeout 이 승인 · 취소의 응답 제한 - 문서는 60초를 권한다)
-    mode: development                               # development | production — API 서버(dev-pay.paygate.naver.com / pay.paygate.naver.com) · 결제창 · SDK 모드가 함께 따른다. 키 모양이 아니라 이 값이 개발 · 운영을 가른다: 보호 환경(stage|prod)에서 development 면 기동 실패, 로컬 계열에서 production 이면 기동 실패
-    client-id: ""                                   # 가맹점 식별키(Client ID) — 결제창 SDK 에 실려 브라우저에 나간다(비밀 아님). env <P>_PAYMENT_NAVERPAY_CLIENT_ID (선언의 env:). client-secret 과 짝이라 프로젝트 모드는 프로젝트마다 자기 것
+    mode: development                               # development | production — API 서버(dev-pay.paygate.naver.com / pay.paygate.naver.com) · 결제창 도메인(test-m.pay.naver.com / m.pay.naver.com)이 함께 따른다. 키 모양이 아니라 이 값이 개발 · 운영을 가른다: 보호 환경(stage|prod)에서 development 면 기동 실패, 로컬 계열에서 production 이면 기동 실패
+    client-id: ""                                   # 가맹점 식별키(Client ID) — 서버가 네이버페이를 부를 때 헤더로 싣는다(브라우저에 나가지 않는다). env <P>_PAYMENT_NAVERPAY_CLIENT_ID (선언의 env:). client-secret 과 짝이라 프로젝트 모드는 프로젝트마다 자기 것
     client-secret: ""                               # 클라이언트 시크릿 — 서버에만 있다 (env <P>_PAYMENT_NAVERPAY_CLIENT_SECRET — 배포 선언의 secrets:, 운영자 값). 보호 환경에서 비면 기동 실패
-    chain-id: ""                                    # 가맹점 그룹 식별키(Chain ID, 비밀 아님) - 단건 값. 자동결제는 값이 다르다. env <P>_PAYMENT_NAVERPAY_CHAIN_ID (선언의 env:). 프로젝트마다 자기 것
-    return-url: ""                                  # 구매자를 돌려보낼 우리 화면의 주소(예: https://app.example.com/payments/return) — 네이버페이는 결제창을 호출할 때 returnUrl 을 받는다. 모듈이 kind · provider · order 조각을 붙이고 네이버페이가 resultCode · paymentId 를 붙인다. 구매자가 정하는 값이 아니라 설정이다. 장부가 있는데 http(s) 절대 주소가 아니면 보호 환경에서 기동 실패(그 밖은 경고, GET /config 가 available:false). 프로젝트 모드는 프로젝트마다 자기 것(공통에서 물려받으면 기동 실패)
+    chain-id: ""                                    # 가맹점 그룹 식별키(Chain ID) - 단건 값. 자동결제는 값이 다르다. env <P>_PAYMENT_NAVERPAY_CHAIN_ID (선언의 env:). 프로젝트마다 자기 것
+    return-url: ""                                  # 구매자를 돌려보낼 우리 화면의 주소(예: https://app.example.com/payments/return) — 서버가 결제를 예약할 때 returnUrl 로 넘긴다. 모듈이 kind · provider · order 조각을 붙이고 네이버페이가 resultCode · paymentId 를 붙인다. 구매자가 정하는 값이 아니라 설정이다. 장부가 있는데 http(s) 절대 주소가 아니면 보호 환경에서 기동 실패(그 밖은 경고, GET /config 가 available:false). 프로젝트 모드는 프로젝트마다 자기 것(공통에서 물려받으면 기동 실패)
     base-url: ""                                    # 비우면 mode 가 정한 네이버페이 API 주소. 프록시나 가짜 서버를 가리킬 때만
+    window-base-url: ""                              # 비우면 mode 가 정한 결제창 주소(구매자가 <이 주소>/payments/{결제 예약 ID} 로 간다). 프런트 e2e 의 가짜 창을 가리킬 때만
+    reserve-path: /naverpay-partner/naverpay/payments/v2/reserve         # 결제 예약 경로
+    reserve-timeout: 10s                            # 결제 예약 한 번의 제한 시간(요청 단위). 실패하면 결제창을 열지 않는다(503)
     apply-path: /naverpay-partner/naverpay/payments/v2.2/apply/payment   # 결제 승인 경로
     cancel-path: /naverpay-partner/naverpay/payments/v1/cancel           # 취소 · 환불 경로
     history-path: /naverpay-partner/naverpay/payments/v2.3/list/history  # 결제 내역 조회 경로 (뒤에 /{결제 번호} - 결제 번호로만 묻는다)

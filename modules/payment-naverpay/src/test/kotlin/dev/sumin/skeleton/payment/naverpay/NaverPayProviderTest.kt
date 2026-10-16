@@ -14,6 +14,7 @@ import dev.sumin.skeleton.payment.naverpay.support.FakeNaverPayServer
 import dev.sumin.skeleton.payment.naverpay.support.FakeNaverPayServer.Fail
 import dev.sumin.skeleton.payment.naverpay.support.checkoutOrder
 import dev.sumin.skeleton.payment.naverpay.support.naverProvider
+import dev.sumin.skeleton.payment.naverpay.support.payAtWindow
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -38,52 +39,90 @@ class NaverPayProviderTest {
         PaymentConfirmRequest(providerPaymentId = paymentId, amount = PaymentAmount(amount, "KRW"), merchantReferenceId = orderId, idempotencyKey = IdempotencyKey(orderId), accountId = "acc_1")
 
     private fun approved(amount: Long = 3_000): String {
-        val paymentId = server.buyerPays("ord_abcdef123456", amount)
+        val paymentId = payAtWindow(server, provider, amount = amount)
         assertEquals(PaymentOperationStatus.CONFIRMED, provider.confirm(confirmRequest(paymentId, amount)).status)
         return paymentId
     }
 
     @Test
-    fun `the checkout calls nobody - it hands the browser the public ids, the mode, the return address and the amounts the server decided`() {
+    fun `the checkout reserves the payment on the server with the server's own amount and order id, and hands the browser only the window address`() {
         val instruction = provider.checkout(checkoutOrder())
 
-        assertEquals(0, server.requests.size, "the payment window is opened by the browser with the SDK - no server call")
-        assertEquals("NAVERPAY_SDK", instruction.kind)
+        val reserve = server.requests.single()
+        assertEquals("/naverpay-partner/naverpay/payments/v2/reserve", reserve.path)
+        assertEquals(server.clientId, reserve.header("x-naver-client-id"))
+        assertEquals(server.clientSecret, reserve.header("x-naver-client-secret"))
+        assertEquals(server.chainId, reserve.header("x-naverpay-chain-id"))
+        assertTrue(Regex("[A-Za-z0-9-]{1,64}").matches(reserve.header("x-naverpay-idempotency-key").orEmpty()))
+        val body = tools.jackson.databind.json.JsonMapper.builder().build().readValue(reserve.body, Map::class.java)
+        assertEquals("ord_abcdef123456", body["merchantPayKey"])
+        assertEquals(3000, body["totalPayAmount"])
+        assertEquals(3000, body["taxScopeAmount"])
+        assertEquals(0, body["taxExScopeAmount"])
+        assertEquals("https://app.example.test/payments/return?kind=NAVERPAY_REDIRECT&provider=naverpay&order=ord_abcdef123456", body["returnUrl"])
+        assertFalse(reserve.body.contains("merchantUserKey") || reserve.body.contains("purchaser"), "no buyer information is sent")
+
+        assertEquals("NAVERPAY_REDIRECT", instruction.kind)
         assertTrue(instruction.testMode)
-        assertEquals(server.clientId, instruction.clientKey)
-        assertNull(instruction.providerPaymentId, "the payment id comes back to the browser at the return address, not from the server")
-        assertEquals(server.chainId, instruction.attributes["chainId"])
-        assertEquals("development", instruction.attributes["mode"])
-        assertEquals("3000", instruction.attributes["taxScopeAmount"])
-        assertEquals("0", instruction.attributes["taxExScopeAmount"])
-        assertEquals("https://app.example.test/payments/return?kind=NAVERPAY_SDK&provider=naverpay&order=ord_abcdef123456", instruction.attributes["returnUrl"])
-        assertFalse(server.clientSecret in instruction.toString(), "the client secret never goes to the browser")
+        assertNull(instruction.clientKey, "the ids are not for the browser any more")
+        assertNull(instruction.providerPaymentId, "the payment id comes back to the browser at the return address")
+        val reservation = server.reservations().single()
+        assertEquals("https://test-m.pay.naver.com/payments/${reservation.reserveId}", instruction.attributes["windowUrl"])
+        assertEquals(setOf("windowUrl"), instruction.attributes.keys)
+        assertFalse(server.clientSecret in instruction.toString())
     }
 
     @Test
-    fun `a purchase in another currency than KRW is never offered a window - 503`() {
+    fun `the buyer cannot lower the amount - the window address carries only the reserve id and the reservation holds the ledger's amount`() {
+        val instruction = provider.checkout(checkoutOrder(amount = 5_000))
+
+        assertEquals(5_000, server.reservations().single().total)
+        assertFalse("5000" in instruction.attributes.getValue("windowUrl"))
+    }
+
+    @Test
+    fun `every checkout is its own reservation with its own key, and when NaverPay cannot reserve the checkout is unavailable (503)`() {
+        provider.checkout(checkoutOrder())
+        provider.checkout(checkoutOrder())
+        assertEquals(2, server.reservations().size)
+        assertEquals(2, server.requests.map { it.header("x-naverpay-idempotency-key") }.toSet().size)
+
+        server.failNext("reserve", Fail.ERROR)
+        assertFailsWith<dev.sumin.skeleton.payment.PaymentUnavailableException> { provider.checkout(checkoutOrder()) }
+        server.failNext("reserve", Fail.DECLINE)
+        assertFailsWith<dev.sumin.skeleton.payment.PaymentUnavailableException> { provider.checkout(checkoutOrder()) }
+    }
+
+    @Test
+    fun `a purchase in another currency than KRW is never reserved - 503 and no request`() {
         val usd = checkoutOrder().copy(amount = PaymentAmount(3_000, "USD"))
 
         assertFailsWith<dev.sumin.skeleton.payment.PaymentUnavailableException> { provider.checkout(usd) }
+
+        assertEquals(0, server.requests.size)
     }
 
     @Test
     fun `a return address that already has a query gets the pieces appended with ampersands, and one that is not an http address closes the window`() {
         val withQuery = naverProvider(server, returnUrl = "https://app.example.test/pay?lang=ko")
-        assertEquals("https://app.example.test/pay?lang=ko&kind=NAVERPAY_SDK&provider=naverpay&order=ord_abcdef123456", withQuery.checkout(checkoutOrder()).attributes["returnUrl"])
+        withQuery.checkout(checkoutOrder())
+        val body = tools.jackson.databind.json.JsonMapper.builder().build().readValue(server.requests.single().body, Map::class.java)
+        assertEquals("https://app.example.test/pay?lang=ko&kind=NAVERPAY_REDIRECT&provider=naverpay&order=ord_abcdef123456", body["returnUrl"])
 
+        server.clearRequests()
         val relative = naverProvider(server, returnUrl = "/payments/return")
         assertFalse(relative.canOpenCheckout())
         assertFailsWith<dev.sumin.skeleton.payment.PaymentUnavailableException> { relative.checkout(checkoutOrder()) }
+        assertEquals(0, server.requests.size)
     }
 
     @Test
     fun `apply sends only the payment id as a form with the three auth headers and a key derived from the payment id - and reads the paid figures from the answer`() {
-        val paymentId = server.buyerPays("ord_abcdef123456", 3_000)
+        val paymentId = payAtWindow(server, provider)
 
         val result = provider.confirm(confirmRequest(paymentId))
 
-        val apply = server.requests.single()
+        val apply = server.requests.last()
         assertEquals("/naverpay-partner/naverpay/payments/v2.2/apply/payment", apply.path)
         assertEquals(server.clientId, apply.header("x-naver-client-id"))
         assertEquals(server.clientSecret, apply.header("x-naver-client-secret"))
@@ -99,14 +138,13 @@ class NaverPayProviderTest {
     }
 
     @Test
-    fun `an approval of another amount or another order than the ledger expects is reported as it is - the ledger flags it, the module does not hide it`() {
-        val tampered = server.buyerPays("ord_abcdef123456", 10)
+    fun `an approval of another order than the ledger expects is reported as it is - the ledger flags it, the module does not hide it`() {
+        val other = payAtWindow(server, provider, orderId = "ord_someone_else")
 
-        val result = provider.confirm(confirmRequest(tampered, amount = 3_000))
+        val result = provider.confirm(confirmRequest(other))
 
-        assertEquals(PaymentAmount(10, "KRW"), result.amount, "the amount actually charged, not the amount asked for")
-        val other = server.buyerPays("ord_someone_else", 3_000)
-        assertEquals("ord_someone_else", provider.confirm(confirmRequest(other)).trace.metadata["orderId"])
+        assertEquals("ord_someone_else", result.trace.metadata["orderId"])
+        assertEquals(PaymentAmount(3_000, "KRW"), result.amount)
     }
 
     @Test
@@ -122,7 +160,7 @@ class NaverPayProviderTest {
 
     @Test
     fun `a lost apply answer is unknown, a resend with the same key is not applied again, and the lookup then says the payment is paid`() {
-        val paymentId = server.buyerPays("ord_abcdef123456", 3_000)
+        val paymentId = payAtWindow(server, provider)
         server.failNext("apply", Fail.LOSE)
 
         val failure = assertFailsWith<Exception> { provider.confirm(confirmRequest(paymentId)) }
@@ -201,7 +239,7 @@ class NaverPayProviderTest {
 
     @Test
     fun `the lookup knows nothing before the apply, asks nothing when only an order number is known, and reads a card refusal as failed`() {
-        val paymentId = server.buyerPays("ord_abcdef123456", 3_000)
+        val paymentId = payAtWindow(server, provider)
 
         assertNull(provider.lookup(PaymentLookupQuery(paymentId, null)), "the buyer paid in the window but nobody applied: no money moved")
         val calls = server.requests.size
@@ -223,7 +261,7 @@ class NaverPayProviderTest {
 
     @Test
     fun `wrong keys are a definitive refusal on apply, but never on a lookup`() {
-        val paymentId = server.buyerPays("ord_abcdef123456", 3_000)
+        val paymentId = payAtWindow(server, provider)
         val impostor = NaverPayProvider(
             dev.sumin.skeleton.payment.naverpay.support.realHttpClient(),
             NaverPayProperties(enabled = true, clientId = server.clientId, clientSecret = "not-the-secret", chainId = server.chainId, baseUrl = server.baseUrl, returnUrl = dev.sumin.skeleton.payment.naverpay.support.RETURN_URL),
@@ -239,7 +277,7 @@ class NaverPayProviderTest {
 
     @Test
     fun `a business refusal the module cannot be sure of is unknown with the code only, and the planted personal data appears nowhere`() {
-        val paymentId = server.buyerPays("ord_abcdef123456", 3_000)
+        val paymentId = payAtWindow(server, provider)
         server.failNext("apply", Fail.DECLINE)
 
         val failure = assertFailsWith<Exception> { provider.confirm(confirmRequest(paymentId)) }
