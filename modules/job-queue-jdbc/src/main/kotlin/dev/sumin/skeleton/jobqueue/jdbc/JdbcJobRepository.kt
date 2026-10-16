@@ -58,6 +58,28 @@ class JdbcJobRepository(
     }
 
     /**
+     * 종류와 내용이 같은, 때가 된 대기 잡 **하나**를 잡는다([claim] 과 같은 `SKIP LOCKED` 임대 - 다른 워커가 집는 중이거나 이미 집었으면 null). 같은 내용이 여럿이면 가장 오래된 것.
+     * 넣을 때 id 를 몰라도 "방금 넣은 그 잡"을 지금 돌리고 싶을 때(웹훅 즉시 반영) 쓴다.
+     */
+    fun claimOne(workerId: String, type: String, payloadJson: String, now: Instant): Job? =
+        transactions.execute {
+            val id = jdbc.sql(
+                """select id from jobs
+                   where status = 'PENDING' and next_run_at <= :now and job_type = :type and payload_json = :payload
+                   order by next_run_at, id
+                   limit 1
+                   for update skip locked""",
+            ).param("now", dialect.instantParam(now)).param("type", type).param("payload", payloadJson).query(Long::class.java).optional().orElse(null)
+                ?: return@execute null
+            jdbc.sql(
+                """update jobs
+                   set status = 'RUNNING', locked_by = :worker, locked_at = :now, attempts = attempts + 1, updated_at = :now
+                   where id = :id""",
+            ).param("worker", workerId).param("now", dialect.instantParam(now)).param("id", id).update()
+            jdbc.sql("select * from jobs where id = :id").param("id", id).query(::map).optional().orElse(null)
+        }
+
+    /**
      * [knownTypes] 가 아닌 종류의 PENDING 잡 중 실행 시각이 [dueBefore] 보다 오래된 것을 DEAD 로 만들고 돌려준다 — 이 워커는 그 종류를 집지 않으므로(claim)
      * 어느 버전의 워커도 처리기가 없어 기한이 지난 잡이다. 다른 워커가 집는 중인 줄은 건너뛴다(SKIP LOCKED).
      */

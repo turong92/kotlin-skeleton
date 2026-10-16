@@ -113,6 +113,18 @@ class JobQueueWorker(
         return DrainResult(processed, rounds, timedOut, (System.nanoTime() - started) / 1_000_000)
     }
 
+    /**
+     * 이미 넣은 잡 하나(종류 + 내용이 같은 것 중 가장 오래된, 때가 된 것)를 **지금 이 스레드에서** 임대해 돌린다 - 폴링을 기다리지 않는다. 돌렸으면(성공이든 실패·재시도 예약이든) true,
+     * 처리기가 없는 종류 · 잡이 없음 · 때가 안 됨 · 남(일꾼 스레드나 다른 인스턴스)이 이미 집음이면 false. 임대 · 종료 갱신 · 백오프 · DEAD 는 폴링으로 돈 잡과 같다.
+     * 지금 프로젝트 문맥(프로젝트 모드)의 `jobs` 를 본다 - 부르는 쪽이 문맥 안에서 부른다.
+     */
+    fun runNow(type: String, payloadJson: String): Boolean {
+        if (type !in handlerByType) return false
+        val job = repository.claimOne(workerId, type, payloadJson, timeProvider.now()) ?: return false
+        run(job)
+        return true
+    }
+
     private fun safePoll(): Int =
         try {
             pollOnce()

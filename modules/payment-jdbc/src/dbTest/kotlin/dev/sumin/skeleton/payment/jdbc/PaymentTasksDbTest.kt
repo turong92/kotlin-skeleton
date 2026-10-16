@@ -17,7 +17,9 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 import org.assertj.core.api.Assertions.assertThat
 import org.springframework.jdbc.core.simple.JdbcClient
 import org.springframework.transaction.support.TransactionTemplate
@@ -61,6 +63,21 @@ class PaymentTasksDbTest {
         assertEquals(7, (row["max_attempts"] as Number).toInt())
         assertEquals("PENDING", row["status"])
         assertEquals(0, worker.pollOnce(), "a job that is not due yet is not taken")
+    }
+
+    @Test
+    fun `runNow runs the waiting task once through the same handler - and the worker has nothing left to take`() {
+        store.inTransaction { tasks.enqueue(PaymentTask("payment-order-expire", "ord_9")) }
+        val now = JdbcPaymentTasksNow { worker }
+
+        assertTrue(now.runNow("payment-order-expire", "ord_9"))
+
+        assertEquals(listOf("ord_9"), runs.map { it.subjectId })
+        assertEquals(listOf(false), openTransactionDuringRun.toList(), "the handler runs outside any transaction, as in the worker")
+        assertEquals(0, worker.pollOnce(), "the task is finished - not run a second time")
+        assertFalse(now.runNow("payment-order-expire", "ord_9"))
+        assertEquals(1, runs.size)
+        assertFalse(JdbcPaymentTasksNow { null }.runNow("payment-order-expire", "ord_9"), "without a worker nothing runs")
     }
 
     @Test

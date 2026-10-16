@@ -109,6 +109,8 @@ data class PaymentProperties(
          * 실패한 작업은 백오프에 살아 있으므로(큐 기본 10회) 재전송마다 작업을 얹으면 줄당 작업 수가 끝없이 는다. 운영자의 「다시 처리」(`retry`)는 이 값과 무관하다. 0 이상.
          */
         val redeliveryRequeueLimit: Int = 10,
+        /** 웹훅을 받은 요청 안에서 그 웹훅의 처리를 한 번 바로 해 보는 길 - 기본 꺼짐(아래 [Inline]). */
+        val inline: Inline = Inline(),
     ) {
         init {
             require(maxBodyBytes in 1..MAX_BODY_BYTES_LIMIT) { "skeleton.payment.webhook.max-body-bytes must be between 1 and $MAX_BODY_BYTES_LIMIT" }
@@ -116,7 +118,7 @@ data class PaymentProperties(
         }
 
         override fun toString(): String =
-            "Webhook(enabled=$enabled, pathToken=${if (pathToken.isBlank()) "<unset>" else "<redacted>"}, maxBodyBytes=$maxBodyBytes, rateLimit=$rateLimit, perOrderLimit=$perOrderLimit, redeliveryRequeueLimit=$redeliveryRequeueLimit)"
+            "Webhook(enabled=$enabled, pathToken=${if (pathToken.isBlank()) "<unset>" else "<redacted>"}, maxBodyBytes=$maxBodyBytes, rateLimit=$rateLimit, perOrderLimit=$perOrderLimit, redeliveryRequeueLimit=$redeliveryRequeueLimit, inline=$inline)"
 
         /**
          * 한 주문(그 주문의 결제)에 [window] 안에 저장되는 새 줄이 [capacity] 를 넘으면 더 저장하지 않고 받은 것으로만 답한다. 수신함 표의 줄 수로 세므로 인스턴스가 여럿이어도 같은 숫자다.
@@ -134,6 +136,21 @@ data class PaymentProperties(
 
         companion object {
             const val MAX_BODY_BYTES_LIMIT = 1_048_576
+        }
+
+        /**
+         * 웹훅 수신(줄 + 작업, 한 트랜잭션)이 **커밋된 뒤** 같은 요청 안에서 그 웹훅의 처리 작업을 [timeBudget] 안에서 한 번 돌려 본다 - 결제 직후 화면이 일꾼의 차례를 기다리지 않게.
+         * 작업을 큐에서 임대해 돌리므로 일꾼과 같은 웹훅을 두 번 반영하지 않는다. 한도를 넘으면 기다리지 않고 바로 `200`(처리는 그 스레드에서 끝까지 이어진다), 실패하면 작업이 지금처럼 일꾼에게 남는다.
+         * 기본 꺼짐 - 요청 스레드와 결제사 호출을 쓰는 선택이라 앱이 켠다. 작업 큐가 [PaymentTasksNow] 를 낼 때(`payment-jdbc`)만 뜻이 있다.
+         */
+        data class Inline(
+            val enabled: Boolean = false,
+            /** 요청이 처리를 기다리는 최대 시간. 결제사(토스)는 10초 안에 `200` 을 받지 못하면 다시 보내므로 그보다 훨씬 짧게. */
+            val timeBudget: Duration = Duration.ofSeconds(3),
+        ) {
+            init {
+                require(!timeBudget.isNegative && !timeBudget.isZero) { "skeleton.payment.webhook.inline.time-budget must be positive" }
+            }
         }
 
         data class RateLimit(

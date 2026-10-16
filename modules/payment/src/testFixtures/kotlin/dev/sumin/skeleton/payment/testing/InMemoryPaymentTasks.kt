@@ -20,7 +20,7 @@ class InMemoryPaymentTasks(
     private val store: InMemoryPaymentLedgerStore,
     private val defaultMaxAttempts: Int = 5,
 ) : PaymentTasks {
-    enum class State { PENDING, DONE, DEAD }
+    enum class State { PENDING, RUNNING, DONE, DEAD }
 
     class Record(val task: PaymentTask, val maxAttempts: Int) {
         @Volatile var attempts: Int = 0
@@ -52,20 +52,41 @@ class InMemoryPaymentTasks(
      */
     fun runDue(runner: PaymentTaskRunner, now: Instant, only: Set<String>? = null): Int {
         val due = records.filter { it.state == State.PENDING && (only == null || it.task.type in only) && (it.task.runAt == null || !it.task.runAt.isAfter(now)) }
-        due.forEach { record ->
-            record.attempts += 1
-            try {
-                runner.run(PaymentTaskRun(record.task.type, record.task.subjectId, record.attempts, record.maxAttempts))
-                record.state = State.DONE
-            } catch (e: PaymentTaskPermanentException) {
-                record.lastError = "${e::class.java.name}: ${e.message}"
-                die(record, runner)
-            } catch (e: Exception) {
-                record.lastError = "${e::class.java.name}: ${e.message}"
-                if (record.attempts >= record.maxAttempts) die(record, runner)
-            }
+        return due.count { record -> claim(record) && run { attempt(record, runner); true } }
+    }
+
+    /**
+     * 종류 · 대상이 맞는, 시간이 된 대기 작업 하나를 **임대해서** 지금 돈다(`job-queue-jdbc` 의 `runNow` 흉내) - 이미 누가 집었으면(RUNNING) false.
+     * 느린 처리기가 도는 동안 [runDue] 가 같은 작업을 다시 집지 않는다.
+     */
+    fun runNow(runner: PaymentTaskRunner, now: Instant, type: String, subjectId: String): Boolean {
+        val record = records.firstOrNull {
+            it.state == State.PENDING && it.task.type == type && it.task.subjectId == subjectId && (it.task.runAt == null || !it.task.runAt.isAfter(now))
+        } ?: return false
+        if (!claim(record)) return false
+        attempt(record, runner)
+        return true
+    }
+
+    @Synchronized
+    private fun claim(record: Record): Boolean {
+        if (record.state != State.PENDING) return false
+        record.state = State.RUNNING
+        return true
+    }
+
+    private fun attempt(record: Record, runner: PaymentTaskRunner) {
+        record.attempts += 1
+        try {
+            runner.run(PaymentTaskRun(record.task.type, record.task.subjectId, record.attempts, record.maxAttempts))
+            record.state = State.DONE
+        } catch (e: PaymentTaskPermanentException) {
+            record.lastError = "${e::class.java.name}: ${e.message}"
+            die(record, runner)
+        } catch (e: Exception) {
+            record.lastError = "${e::class.java.name}: ${e.message}"
+            if (record.attempts >= record.maxAttempts) die(record, runner) else record.state = State.PENDING
         }
-        return due.size
     }
 
     private fun die(record: Record, runner: PaymentTaskRunner) {

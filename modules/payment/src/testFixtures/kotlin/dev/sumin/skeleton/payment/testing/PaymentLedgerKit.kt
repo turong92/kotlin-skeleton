@@ -18,7 +18,10 @@ import dev.sumin.skeleton.payment.PaymentAccountErasure
 import dev.sumin.skeleton.payment.PaymentSubscriptions
 import dev.sumin.skeleton.payment.SubscriptionRenewTaskHandler
 import dev.sumin.skeleton.payment.SubscriptionRenewalGuard
+import dev.sumin.skeleton.payment.PaymentTaskRunner
 import dev.sumin.skeleton.payment.PaymentTaskTypes
+import dev.sumin.skeleton.payment.PaymentTasksNow
+import dev.sumin.skeleton.payment.PaymentWebhookInline
 import dev.sumin.skeleton.payment.SubscriptionCharges
 import dev.sumin.skeleton.payment.SubscriptionLifecycle
 import dev.sumin.skeleton.payment.SubscriptionPlan
@@ -158,7 +161,10 @@ class PaymentLedgerKit(
     val refunds = PaymentRefunds(store, tasks, router, convergence, applier, writer, properties)
     val refundReconcile = RefundReconcileTaskHandler(store, router, convergence, writer, properties)
     val refundApply = RefundApplyTaskHandler(applier, store, convergence)
-    val inbox = PaymentWebhookInbox(store, tasks, router, writer, properties)
+    val inbox = PaymentWebhookInbox(
+        store, tasks, router, writer, properties,
+        inline = properties.webhook.inline.takeIf { it.enabled }?.let { PaymentWebhookInline(PaymentTasksNow { type, subject -> tasks.runNow(runner, time.now(), type, subject) }, it.timeBudget) },
+    )
     val pushed = PaymentPushedEvents(store, tasks, writer, lifecycle, review)
     val webhook = PaymentWebhookTaskHandler(store, router, convergence, writer, pushed)
     val charges = SubscriptionCharges(store, convergence, fulfillment, writer)
@@ -173,7 +179,7 @@ class PaymentLedgerKit(
     val cancelAtProvider = dev.sumin.skeleton.payment.ProviderSubscriptionCancelTaskHandler(store, router)
     val renew = SubscriptionRenewTaskHandler(store, router, plans, ReversibleTestEncryptor, lifecycle, charges, SubscriptionRenewalGuard { it !in blocked }, writer, properties.subscription.renewal.retryInterval)
     val erasure = PaymentAccountErasure(store, writer, properties.erasure.accountId, lifecycle)
-    val runner = DefaultPaymentTaskRunner(listOf(expire, reconcile, fulfil, refundReconcile, refundApply, webhook, revoke, renew, cancelRefund, cancelAtProvider))
+    val runner: PaymentTaskRunner = DefaultPaymentTaskRunner(listOf(expire, reconcile, fulfil, refundReconcile, refundApply, webhook, revoke, renew, cancelRefund, cancelAtProvider))
 
     /** 지금 시각까지 시간이 된 작업을 한 번씩 돈다. */
     fun runTasks(only: Set<String>? = null): Int = tasks.runDue(runner, time.now(), only)

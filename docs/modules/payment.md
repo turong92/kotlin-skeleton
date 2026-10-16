@@ -125,6 +125,7 @@
 - **주문 단위 창 상한**: 새 이벤트 키는 그 주문에 `webhook.per-order-limit.window` 안에 저장된 줄이 `capacity` 에 닿으면 저장하지 않고 `200` 으로만 답한다(전달 id 를 호출자가 정하므로 줄 · 작업 · 결제사 조회를 늘리지 못하게 하는 제동). 세기와 넣기는 주문 줄 락 안이라 여러 대에서도 같다(동시 요청 수만큼은 넘을 수 있다 — 폭주 제동이지 정확한 계량이 아니다).
 - **표식 줄**: 상한에 걸린 신호는 버리지 않는다 — 주문당 창마다 **표식 줄 하나**(`resourceType=LIMIT_MARKER`, `eventType=LIMIT_REACHED`, DB 의 `event_key = limited:<주문 id>:<창 번호>`)와 **창 끝에 도는 처리 작업**이 걸린다. 그 작업이 결제사에 조회해 맞추므로 상한에 걸린 진짜 신호(예: 결제사 콘솔의 취소)도 창이 끝나면 장부에 닿는다. **`per-order-limit.window` 의 길이가 미룬 조회의 최대 지연이다.** 표식 줄은 상한 계산에 세지 않고 운영자 수신함 목록에 보통 줄과 같이 나온다.
 - **처리 작업**(`payment-webhook`): 줄이 가리키는 주문을 **결제사에 조회**해 `converge` 한다(행위자 `PROVIDER`). 조회를 시작한 시각을 `snapshotAt` 으로 넘겨 낡은 스냅샷이 거짓 `REFUND_MISMATCH` 를 찍지 않게 한다. 웹훅의 맞추기는 `PENDING` 환불 줄을 `NOT_APPLIED` 로 닫지 않는다(그것은 환불 정산의 일). 실패 사유는 우리 코드만 `last_error` 에 쓴다. 모드가 다르면 조회 없이 줄을 `DEAD` 로 한다. 줄이 `DEAD` 가 된 뒤에는 결제사의 재전송이나 운영자의 「다시 처리」가 새 작업을 넣는다.
+- **즉시 반영**(`webhook.inline.enabled`, 기본 꺼짐): 수신 트랜잭션(줄 + 작업)이 **커밋된 뒤** 같은 요청 안에서 그 줄의 `payment-webhook` 작업을 큐에서 **임대해** 한 번 돌린다(`PaymentTasksNow`, `payment-jdbc` 가 낸다). 일꾼이 같은 작업을 동시에 집을 수 없고(`SKIP LOCKED` 임대), 인라인이 끝낸 작업은 일꾼이 다시 돌리지 않는다 - 처리기 자신도 몇 번 돌아도 같은 결과(멱등). 요청은 `time-budget` 까지만 기다리고 넘으면 바로 `200`(처리는 별도 스레드에서 끝까지 이어진다; 스레드 8개가 모두 바쁘면 시도하지 않는다). 실패하면 작업은 큐의 재시도 · 백오프에 남아 지금처럼 일꾼이 맡는다. 대기 시각이 있는 작업(주문 단위 상한의 표식)과 운영자의 다시 처리는 대상이 아니다. 켜면 결제사 조회가 요청 스레드 대신 별도 스레드에서 돈다.
 - 웹훅 경로는 `webhook.enabled` 로만 닫는다 — `http.enabled=false` 는 사용자 경로만 닫는다.
 
 ## HTTP
@@ -192,6 +193,7 @@
 | `webhook.max-body-bytes` | `65536` | 본문 크기 제한. 넘으면 413. 1 ~ 1048576 |
 | `webhook.rate-limit.capacity` · `.window` | `120` · `1m` | 호출자 IP 마다 요청 수 — 주소를 확인하기 전에 센다 |
 | `webhook.per-order-limit.capacity` · `.window` | `30` · `10m` | 주문마다 새 이벤트 키의 창 상한. **`window` 가 미룬 조회의 최대 지연** |
+| `webhook.inline.enabled` · `.time-budget` | `false` · `3s` | 수신 커밋 뒤 같은 요청 안에서 처리 작업을 한 번 바로 돌려 본다 - 아래 「즉시 반영」 |
 | `webhook.redelivery-requeue-limit` | `10` | `FAILED` · `DEAD` 줄의 재전송이 새 작업을 넣는 상한 — **그 줄의 총 전달 수(`deliveries`) 기준**. 0 이상 |
 | `http.enabled` | `true` | 사용자 경로를 연다 (웹훅 경로는 무관) |
 | `http.base-path` | `/api/v1/payments` | 사용자 · 웹훅 경로의 기준. `/` 로 시작하고 `/` 로 끝나지 않는다 |

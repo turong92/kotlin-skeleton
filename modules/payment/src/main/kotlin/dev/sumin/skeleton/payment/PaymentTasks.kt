@@ -53,6 +53,15 @@ fun interface PaymentTasks {
     fun enqueue(task: PaymentTask)
 }
 
+/**
+ * 이미 넣은 작업을 **지금 이 프로세스에서** 돌려 본다(선택 포트 - 웹훅 즉시 반영이 쓴다). 큐가 그 작업을 **임대**해서 돌리므로(일꾼이 같은 작업을 동시에 집지 못한다)
+ * 인라인과 일꾼이 같은 작업을 두 번 돌리지 않는다. 임대에 성공해 처리기를 돌렸으면(성공이든 재시도 예약이든) true, 작업이 없거나 아직 때가 아니거나
+ * 남이 이미 집었으면 false. 실패해도 일반 작업과 같은 재시도 · 백오프 · DEAD 규칙을 탄다. 부르는 쪽 트랜잭션 **밖**에서 부른다.
+ */
+fun interface PaymentTasksNow {
+    fun runNow(type: String, subjectId: String): Boolean
+}
+
 /** 큐가 작업을 돌려줄 때 처리기에 건네는 것. [attempt] 는 이번이 몇 번째 시도인가(1부터), 마지막 시도면 [lastAttempt]. */
 data class PaymentTaskRun(
     val type: String,

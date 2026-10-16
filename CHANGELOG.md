@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### 작업 일꾼: 넣자마자 깨우기 · 이어 집기 · 동시 처리 (2026-10-16)
 
 - `job-queue-jdbc`: 잡을 넣은 트랜잭션이 **커밋되면** 같은 프로세스의 일꾼을 바로 깨운다(트랜잭션 밖이면 즉시). 폴링(`poll-interval`)은 안전망으로 남는다 — 다른 인스턴스가 넣은 잡 · 나중 `runAt` 의 잡은 예전처럼 폴링이 찾는다. 묶음(`batch-size`)이 가득 찼으면 쉬지 않고 바로 다시 집는다. 옵션 없이 항상 켜진다(지연만 줄고 처리 순서 · 임대 규칙은 그대로).
+- `payment` 웹훅 **즉시 반영**(`skeleton.payment.webhook.inline.{enabled, time-budget}`, 기본 **꺼짐** - 요청 스레드 · 결제사 조회를 쓰는 선택이라 앱이 켠다. 견본 앱은 켠다): 수신 트랜잭션이 커밋된 뒤 같은 요청 안에서 그 웹훅의 처리 작업을 큐에서 **임대해** 한 번 돌린다(새 포트 `PaymentTasksNow`, 구현 `JdbcPaymentTasksNow` -> `JobQueueWorker.runNow`). 일꾼과 같은 웹훅을 두 번 반영하지 않고, `time-budget`(기본 3초)을 넘으면 기다리지 않고 바로 200, 실패하면 작업이 지금처럼 일꾼에게 남는다. `JdbcJobRepository.claimOne` 신설.
 - 새 설정 `skeleton.job-queue.concurrency`(기본 `1` = 지금과 같다): 일꾼 스레드 수. 같은 잡을 둘이 집지 않는 것은 `SKIP LOCKED` 가 지킨다. 견본 앱(`apps/sample`)은 `4` 로 켠다. 문서: `docs/job-queue-jdbc.md`.
 
 ### 네이티브 이미지(선택 빌드) + 0대 운영 — 요청 구동 작업 큐 (2026-10-15)

@@ -145,7 +145,11 @@ class PaymentLedgerAutoConfiguration {
         router: PaymentProviderRouter,
         writer: PaymentLedgerWriter,
         properties: PaymentProperties,
-    ): PaymentWebhookInbox = PaymentWebhookInbox(store, tasks, router, writer, properties)
+        tasksNow: ObjectProvider<PaymentTasksNow>,
+    ): PaymentWebhookInbox {
+        val inline = properties.webhook.inline.takeIf { it.enabled }?.let { config -> tasksNow.getIfAvailable()?.let { PaymentWebhookInline(it, config.timeBudget) } }
+        return PaymentWebhookInbox(store, tasks, router, writer, properties, inline)
+    }
 
     /** 서명된 웹훅이 곧 사실인 결제사(Paddle)의 사건을 장부에 옮긴다. 구독을 켠 조립이면 구독 사건도 반영한다. */
     @Bean

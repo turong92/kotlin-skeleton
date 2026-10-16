@@ -17,6 +17,8 @@ class PaymentWebhookInbox(
     private val router: PaymentProviderRouter,
     private val writer: PaymentLedgerWriter,
     private val properties: PaymentProperties,
+    /** 켜져 있으면 수신이 커밋된 뒤 같은 요청 안에서 처리를 한 번 바로 해 본다(`webhook.inline`). null 이면 지금까지처럼 작업만 넣는다. */
+    private val inline: PaymentWebhookInline? = null,
 ) {
     /**
      * 주소 확인 — 컨트롤러가 본문을 읽기 **전에** 부른다. 모르는 결제사 · 웹훅 능력이 없는 결제사 · 꺼진 결제사 · (서명 없는 결제사에서) 비밀 조각이 없거나 틀림은
@@ -47,7 +49,19 @@ class PaymentWebhookInbox(
      * 주문당 창마다 **표식 줄 하나**(`event_key = limited:<주문 id>:<창 번호>`, [WebhookMarkers])와 **창 끝으로 미룬 처리 작업 하나**를 건다. 그 작업이 결제사에 조회해 맞추므로,
      * 상한에 걸린 진짜 신호(예: 결제사 콘솔의 취소)도 창이 끝나면 장부에 닿는다. 표식 줄은 상한 계산에 세지 않는다.
      */
-    fun receive(gateway: PaymentWebhookGateway, delivery: WebhookDelivery): WebhookReceipt = receiveOnce(gateway, delivery).also(::logReceipt)
+    fun receive(gateway: PaymentWebhookGateway, delivery: WebhookDelivery): WebhookReceipt {
+        val queued = QueuedNow()
+        val receipt = receiveOnce(gateway, delivery, queued)
+        logReceipt(receipt)
+        // 커밋된 뒤에만 - 처리 작업이 방금 넣은 줄을 보려면 수신 트랜잭션이 끝나 있어야 한다(바깥 트랜잭션 안이면 아직 아니다)
+        queued.eventId?.takeIf { !store.hasOpenTransaction() }?.let { inline?.attempt(it) }
+        return receipt
+    }
+
+    /** 이번 수신이 **바로 돌 수 있게** 넣은 처리 작업의 줄 id(대기 시각이 있는 작업은 아니다). 인라인 시도의 대상. */
+    private class QueuedNow {
+        var eventId: Long? = null
+    }
 
     /** 결과의 종류만 한 줄 — 식별자(주문 id · 결제 키 · 전달 id · 주소 조각)는 싣지 않는다. 토스 본문 가정이 틀리면 전부 `UNKNOWN_ORDER` 로 떨어지는 것을 실측에서 볼 수 있다. */
     private fun logReceipt(receipt: WebhookReceipt) {
@@ -59,10 +73,10 @@ class PaymentWebhookInbox(
         }
     }
 
-    private fun receiveOnce(gateway: PaymentWebhookGateway, delivery: WebhookDelivery): WebhookReceipt {
+    private fun receiveOnce(gateway: PaymentWebhookGateway, delivery: WebhookDelivery, queued: QueuedNow): WebhookReceipt {
         val envelope = gateway.parse(delivery)
         val resourceType = envelope.resourceType.trim().uppercase()
-        if (resourceType == PushedEvents.RESOURCE_TYPE) return receivePushed(gateway, delivery, envelope)
+        if (resourceType == PushedEvents.RESOURCE_TYPE) return receivePushed(gateway, delivery, envelope, queued)
         if (resourceType != PAYMENT) {
             // 무엇이 안 받아졌는지 알 수 있게 이벤트 종류만 남긴다(모양이 이상하면 생략 - 식별자는 싣지 않는다)
             log.info("payment webhook ignored eventType={}", envelope.eventType.takeIf { EVENT_TYPE.matches(it) } ?: "-")
@@ -102,7 +116,7 @@ class PaymentWebhookInbox(
             val event = recorded.event
             when {
                 recorded.first -> {
-                    enqueue(event.id)
+                    enqueueNow(queued, event.id)
                     WebhookReceipt.STORED
                 }
                 // 끝난 줄(PROCESSED · IGNORED)은 할 일이 없고, RECEIVED 는 작업이 이미 기다리는 중이다 — 전달 횟수만 올랐다
@@ -112,7 +126,7 @@ class PaymentWebhookInbox(
                 else -> {
                     // FAILED · DEAD: 새 작업을 바로 넣고 줄을 RECEIVED 로 되돌린다 — 다음 재전송은 "기다리는 작업이 있다"를 본다(재전송이 연달아 와도 줄마다 작업 하나)
                     tx.updateWebhookEvent(event.copy(status = PaymentWebhookStatus.RECEIVED))
-                    enqueue(event.id)
+                    enqueueNow(queued, event.id)
                     WebhookReceipt.REQUEUED
                 }
             }
@@ -123,7 +137,7 @@ class PaymentWebhookInbox(
      * 서명된 본문이 곧 사실인 결제사의 사건 — 주문이 아직 없을 수 있어(구독의 갱신 결제) 주문 단위 상한은 없고, 서명 · 요청 수 한도가 제동이다.
      * 줄 하나 + 처리 작업 하나(한 트랜잭션), 같은 사건이 다시 와도 줄은 하나다. 원문은 서명을 통과한 것만 줄에 남는다.
      */
-    private fun receivePushed(gateway: PaymentWebhookGateway, delivery: WebhookDelivery, envelope: WebhookEnvelope): WebhookReceipt {
+    private fun receivePushed(gateway: PaymentWebhookGateway, delivery: WebhookDelivery, envelope: WebhookEnvelope, queued: QueuedNow): WebhookReceipt {
         val eventKey = envelope.eventKey.takeIf { EVENT_KEY.matches(it) && !it.startsWith(WebhookMarkers.KEY_PREFIX) }
         val eventType = envelope.eventType.takeIf { EVENT_TYPE.matches(it) }
         val resourceId = envelope.resourceId.takeIf { EVENT_KEY.matches(it) }
@@ -140,14 +154,14 @@ class PaymentWebhookInbox(
             val event = recorded.event
             when {
                 recorded.first -> {
-                    enqueue(event.id)
+                    enqueueNow(queued, event.id)
                     WebhookReceipt.STORED
                 }
                 event.status.isFinished || event.status == PaymentWebhookStatus.RECEIVED -> WebhookReceipt.DUPLICATE
                 event.deliveries > properties.webhook.redeliveryRequeueLimit -> WebhookReceipt.DUPLICATE
                 else -> {
                     tx.updateWebhookEvent(event.copy(status = PaymentWebhookStatus.RECEIVED))
-                    enqueue(event.id)
+                    enqueueNow(queued, event.id)
                     WebhookReceipt.REQUEUED
                 }
             }
@@ -205,6 +219,11 @@ class PaymentWebhookInbox(
     }
 
     private val log = LoggerFactory.getLogger(javaClass)
+
+    private fun enqueueNow(queued: QueuedNow, eventId: Long) {
+        enqueue(eventId)
+        queued.eventId = eventId
+    }
 
     private fun enqueue(eventId: Long, runAt: Instant? = null) = tasks.enqueue(PaymentTask(PaymentTaskTypes.WEBHOOK, eventId.toString(), runAt = runAt))
 

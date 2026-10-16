@@ -4,6 +4,7 @@ import dev.sumin.skeleton.jobqueue.jdbc.Job
 import dev.sumin.skeleton.jobqueue.jdbc.JobDeadListener
 import dev.sumin.skeleton.jobqueue.jdbc.JobHandler
 import dev.sumin.skeleton.jobqueue.jdbc.JobQueue
+import dev.sumin.skeleton.jobqueue.jdbc.JobQueueWorker
 import dev.sumin.skeleton.jobqueue.jdbc.PermanentJobFailureException
 import dev.sumin.skeleton.payment.PaymentLedgerStore
 import dev.sumin.skeleton.payment.PaymentTask
@@ -11,6 +12,7 @@ import dev.sumin.skeleton.payment.PaymentTaskPermanentException
 import dev.sumin.skeleton.payment.PaymentTaskRun
 import dev.sumin.skeleton.payment.PaymentTaskRunner
 import dev.sumin.skeleton.payment.PaymentTasks
+import dev.sumin.skeleton.payment.PaymentTasksNow
 import org.slf4j.LoggerFactory
 
 /** 작업 줄의 내용 — `{"subjectId":"…"}` 하나. 작업에 상태를 싣지 않는다(처리기는 그 줄을 다시 읽어 정한다). */
@@ -30,7 +32,20 @@ class JdbcPaymentTasks(
     override fun enqueue(task: PaymentTask) {
         require(SUBJECT_ID.matches(task.subjectId)) { "a payment task subject must be a plain identifier (letters, digits, _ . : -), up to 200 characters" }
         check(store.hasOpenTransaction()) { "PaymentTasks.enqueue must be called inside a ledger transaction (PaymentLedgerStore.inTransaction): the job must roll back with the ledger row" }
-        queue.enqueue(task.type, """{"subjectId":"${task.subjectId}"}""", task.runAt, task.maxAttempts)
+        queue.enqueue(task.type, payloadOf(task.subjectId), task.runAt, task.maxAttempts)
+    }
+}
+
+private fun payloadOf(subjectId: String) = """{"subjectId":"$subjectId"}"""
+
+/**
+ * [PaymentTasksNow] - 방금 넣은 작업을 큐 워커의 임대로 지금 돌린다(`JobQueueWorker.runNow`: 같은 처리기 · 같은 종료 갱신 · 같은 백오프). 워커가 없는 프로세스
+ * (`skeleton.job-queue.worker-enabled=false`)에서는 아무것도 돌리지 않는다 - 작업은 다른 인스턴스의 일꾼이 맡는다. [worker] 는 호출 때마다 읽는다(빈 순환을 피한다).
+ */
+class JdbcPaymentTasksNow(private val worker: () -> JobQueueWorker?) : PaymentTasksNow {
+    override fun runNow(type: String, subjectId: String): Boolean {
+        require(SUBJECT_ID.matches(subjectId)) { "a payment task subject must be a plain identifier" }
+        return worker()?.runNow(type, payloadOf(subjectId)) ?: false
     }
 }
 

@@ -3,9 +3,11 @@ package dev.sumin.skeleton.payment.jdbc
 import dev.sumin.skeleton.jobqueue.jdbc.JobHandler
 import dev.sumin.skeleton.jobqueue.jdbc.JobQueue
 import dev.sumin.skeleton.jobqueue.jdbc.JobQueueJdbcAutoConfiguration
+import dev.sumin.skeleton.jobqueue.jdbc.JobQueueWorker
 import dev.sumin.skeleton.payment.PaymentLedgerStore
 import dev.sumin.skeleton.payment.PaymentTaskRunner
 import dev.sumin.skeleton.payment.PaymentTasks
+import dev.sumin.skeleton.payment.PaymentTasksNow
 import dev.sumin.skeleton.persistence.jdbc.SqlDialect
 import javax.sql.DataSource
 import org.springframework.beans.factory.ObjectProvider
@@ -46,6 +48,11 @@ class PaymentJdbcAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(PaymentTasks::class)
     fun jdbcPaymentTasks(queue: JobQueue, store: PaymentLedgerStore): PaymentTasks = JdbcPaymentTasks(queue, store)
+
+    /** 웹훅 즉시 반영(`skeleton.payment.webhook.inline`)이 쓰는 입구 - 켜지 않으면 아무도 부르지 않는다. 일꾼은 늦게 찾는다(처리기가 이 빈들을 쓰는 순환을 피한다). */
+    @Bean
+    @ConditionalOnMissingBean(PaymentTasksNow::class)
+    fun jdbcPaymentTasksNow(worker: ObjectProvider<JobQueueWorker>): PaymentTasksNow = JdbcPaymentTasksNow { worker.getIfAvailable() }
 
     /**
      * 죽은 작업의 고리 — 큐 워커가 `JobDeadListener` 빈을 모아 DEAD 가 되는 모든 작업에 부른다(`alert` 의 `JOB_DEAD` 경보와 나란히). 이 빈이 우리 작업이면 종류의 처리기가 줄에 표시를 찍는다.
