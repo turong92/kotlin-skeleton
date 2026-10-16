@@ -53,7 +53,9 @@ class OidcAutoConfiguration {
     @ConditionalOnMissingBean(name = ["oidcOAuthProviderSource"])
     fun oidcOAuthProviderSource(projects: ProjectRegistry, factory: OidcProviderFactory, http: ObjectProvider<ExternalHttpClient>, clock: ObjectProvider<Clock>): OAuthProviderSource =
         OAuthProviderSource { project ->
+            // 제공자 목록(`providers.*`)은 프로젝트 자기 값만 — 공통에 남은 제공자가 모든 프로젝트에 켜지지 않는다. 캐시 시간 같은 나머지는 공통 위에 덮는다
             val props = projects.bind(project, "skeleton.auth-social-oidc", OidcProperties::class.java)
+                .copy(providers = projects.bindOwn(project, "skeleton.auth-social-oidc", OidcProperties::class.java).providers)
             props.providers.filterValues { it.clientId.isNotBlank() }
                 .map { (code, provider) -> factory.create(code.trim().lowercase(), provider, props, http.getObject(), clock.getIfAvailable { Clock.systemUTC() }) }
         }

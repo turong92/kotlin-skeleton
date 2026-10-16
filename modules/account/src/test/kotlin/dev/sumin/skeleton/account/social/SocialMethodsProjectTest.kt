@@ -9,6 +9,7 @@ import dev.sumin.skeleton.common.project.ProjectContext
 import dev.sumin.skeleton.common.project.ProjectRegistry
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import org.springframework.core.env.MapPropertySource
 import org.springframework.core.env.StandardEnvironment
 
@@ -55,5 +56,13 @@ class SocialMethodsProjectTest {
     fun `the sign-in method codes are known app-wide at start - the union of the projects' providers, no project needed`() {
         val source = AccountSocialAutoConfiguration().socialSignInMethodSource(registry)
         assertEquals(listOf("kakao", "naver"), source.methods().map { it.code }.sorted())
+    }
+
+    @Test
+    fun `the start-up summary lists the social providers without a project in context - the start has none`() {
+        val source = AccountSocialWebAutoConfiguration().socialMethodsSource(registry)
+        assertFailsWith<dev.sumin.skeleton.common.project.NoProjectContextException> { source.enabled() }
+        val listed = dev.sumin.skeleton.account.enabledSocialForSummary(source, projects).map { it.provider }
+        assertEquals(listOf("kakao", "naver"), listed.sorted())
     }
 }

@@ -140,11 +140,16 @@ class S3StorageAutoConfiguration {
                 throw IllegalStateException("Storage of project '${project.id}' cannot start: ${generateSequence<Throwable>(ex) { it.cause }.last().message}", ex)
             }
         }.filter { it.second.bucket.isNotBlank() }
-        active.groupBy { (_, p) -> Triple(p.endpointOverride, p.bucket, p.keyPrefix.trim('/')) }.values.firstOrNull { it.size > 1 }?.let { same ->
-            error(
-                "Projects ${same.joinToString { "'${it.first.id}'" }} use the same bucket '${same.first().second.bucket}' with the same key prefix — " +
-                    "give each its own bucket or its own skeleton.projects.<id>.config.storage-s3.key-prefix",
-            )
+        // 같은 버킷(과 엔드포인트)을 나눠 쓰는 프로젝트는 접두사가 있어야 하고, 서로 상대의 경로 접두사여도 안 된다(`a` 와 `a/b`)
+        active.groupBy { (_, p) -> p.endpointOverride to p.bucket }.values.filter { it.size > 1 }.forEach { shared ->
+            val prefixes = shared.map { (project, p) -> project.id to p.keyPrefix.trim('/') }
+            prefixes.forEachIndexed { i, (id, prefix) ->
+                val clash = prefix.isEmpty() || prefixes.drop(i + 1).any { (_, other) -> other.isEmpty() || "$prefix/".startsWith("$other/") || "$other/".startsWith("$prefix/") }
+                check(!clash) {
+                    "Projects ${prefixes.joinToString { "'${it.first}'" }} share the bucket '${shared.first().second.bucket}' but project '$id' has no key prefix of its own or one that contains another's — " +
+                        "give each its own bucket or its own non-overlapping skeleton.projects.<id>.config.storage-s3.key-prefix"
+                }
+            }
         }
         active.forEach { (project, _) ->
             try {

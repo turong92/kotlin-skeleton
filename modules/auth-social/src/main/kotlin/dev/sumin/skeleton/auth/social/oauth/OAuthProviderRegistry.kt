@@ -14,12 +14,23 @@ fun interface OAuthProviderSource {
 
     companion object {
         /**
+         * 프로젝트의 소셜 설정 — 켜짐(`enabled`)과 `redirect-uri` 는 **프로젝트 자기 값만** 읽는다(공통 값으로 내려가지 않는다):
+         * 한 서비스 시절의 공통 `enabled` · A 의 redirect URI 가 남아 있어도 B 에 제공자가 켜지거나 B 의 `/auth/methods` 가 A 의 주소를 내주지 않는다.
+         * client id · secret 등 나머지는 공통 위에 덮는다(켜는 프로젝트가 id 를 빠뜨리면 제공자가 기동에서 거절한다).
+         */
+        fun projectProperties(projects: ProjectRegistry, project: Project): AuthSocialProperties {
+            val merged = projects.bind(project, "skeleton.auth-social", AuthSocialProperties::class.java)
+            val own = projects.bindOwn(project, "skeleton.auth-social", AuthSocialProperties::class.java).providers
+            return merged.copy(providers = merged.providers.mapValues { (id, p) -> p.copy(enabled = own[id]?.enabled ?: false, redirectUri = own[id]?.redirectUri) })
+        }
+
+        /**
          * `skeleton.auth-social.providers.<id>` 를 쓰는 제공자(Google · Kakao · Naver)용: 그 프로젝트의 값(공통 위에 덮어)이 `enabled=true` 일 때만 [create] 로 만든다.
          * 한 서비스에서 빈 조건이 보던 `enabled` 와 같은 스위치다.
          */
         fun ofProvidersKey(projects: ProjectRegistry, id: String, create: (AuthSocialProperties.Provider) -> OAuthProvider): OAuthProviderSource =
             OAuthProviderSource { project ->
-                projects.bind(project, "skeleton.auth-social", AuthSocialProperties::class.java).providers[id]
+                projectProperties(projects, project).providers[id]
                     ?.takeIf { it.enabled }
                     ?.let { listOf(create(it)) }
                     ?: emptyList()
@@ -45,7 +56,7 @@ class OAuthProviderRegistry(
     private val perProject: ProjectScoped<View>? = projects?.let { registry ->
         val scoped = ProjectScoped { project ->
             val all = providers + sources.flatMap { it.providersFor(project) }
-            View(all.associateByUniqueProviderId(), registry.bind(project, "skeleton.auth-social", AuthSocialProperties::class.java))
+            View(all.associateByUniqueProviderId(), OAuthProviderSource.projectProperties(registry, project))
         }
         registry.active.forEach { project ->
             try {

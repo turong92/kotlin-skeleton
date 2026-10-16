@@ -78,11 +78,14 @@ class NotificationMailAutoConfigurationTest {
     }
 
     @Test
-    fun `outside a request in project mode a mail without a project fails instead of using some address`() {
-        projectRunner.withPropertyValues(
-            "skeleton.projects.a.config.notification-mail.from=no-reply@a.test",
-            "skeleton.projects.b.config.notification-mail.from=no-reply@b.test",
-        ).run { ctx ->
+    fun `outside a request in project mode a mail uses the shared from - and fails when there is none instead of picking a project's address`() {
+        val own = arrayOf("skeleton.projects.a.config.notification-mail.from=no-reply@a.test", "skeleton.projects.b.config.notification-mail.from=no-reply@b.test")
+        projectRunner.withPropertyValues(*own, "skeleton.notification-mail.from=ops@server.test").run { ctx ->
+            val smtp = ctx.getBean(JavaMailSender::class.java) as RecordingJavaMailSender
+            assertTrue(ctx.getBean(MailSender::class.java).send(MailMessage(listOf("x@y.z"), "s", "t")).accepted)
+            assertTrue(smtp.sent.single().also(MimeMessage::saveChanges).from.single().toString().contains("ops@server.test"))
+        }
+        projectRunner.withPropertyValues(*own).run { ctx ->
             assertFailsWith<NoProjectContextException> { ctx.getBean(MailSender::class.java).send(MailMessage(listOf("x@y.z"), "s", "t")) }
         }
     }

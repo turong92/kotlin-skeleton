@@ -91,4 +91,21 @@ class OAuthProviderRegistryProjectTest {
         val e = assertFailsWith<IllegalStateException> { OAuthProviderRegistry(emptyList(), AuthSocialProperties(), projects, listOf(broken)) }
         assertEquals(true, e.message!!.contains("'b'") && e.message!!.contains("client id is blank"), e.message)
     }
+
+    @Test
+    fun `a switch and a redirect URI left in the shared settings do not turn the provider on in a project that did not set them`() {
+        val projects = registry(
+            "skeleton.auth-social.providers.kakao.enabled" to "true",
+            "skeleton.auth-social.providers.kakao.client-id" to "shared-id",
+            "skeleton.auth-social.providers.kakao.redirect-uri" to "https://a.test/cb",
+            "skeleton.projects.a.config.auth-social.providers.kakao.enabled" to "true",
+        )
+        val registry = OAuthProviderRegistry(emptyList(), AuthSocialProperties(), projects, listOf(OAuthProviderSource.ofProvidersKey(projects, "kakao") { Fake("kakao", it.clientId) }))
+        val (a, b) = projects.projects
+
+        assertNull(b.run { registry.findEnabled("kakao") }, "B must not get the shared switch")
+        assertNull(b.run { registry.settings("kakao") }?.redirectUri)
+        assertNull(a.run { registry.settings("kakao") }?.redirectUri, "A's own redirect URI is none; the shared one is not borrowed")
+        assertEquals("shared-id", (a.run { registry.findEnabled("kakao") } as Fake).clientId, "the rest still falls back to the shared settings")
+    }
 }

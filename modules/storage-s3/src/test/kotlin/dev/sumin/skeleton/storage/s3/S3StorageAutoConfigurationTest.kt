@@ -283,4 +283,18 @@ class S3StorageAutoConfigurationTest {
             assertEquals(URI.create("https://cdn.b.test/k/x.png"), ProjectContext.runIn(b) { storage.publicUrl(ObjectKey("k/x.png")) })
         }
     }
+
+    @Test
+    fun `project mode - sharing a bucket needs a prefix for each, and one prefix inside the other's is refused`() {
+        val shared = arrayOf("skeleton.projects.a.config.storage-s3.bucket=shared", "skeleton.projects.b.config.storage-s3.bucket=shared")
+        projectRunner.withPropertyValues(*shared, "skeleton.projects.a.config.storage-s3.key-prefix=team").run { ctx ->
+            assertTrue(failureMessages(ctx).any { "'b'" in it && "key prefix" in it }, "B has no prefix at all: " + failureMessages(ctx))
+        }
+        projectRunner.withPropertyValues(*shared, "skeleton.projects.a.config.storage-s3.key-prefix=team", "skeleton.projects.b.config.storage-s3.key-prefix=team/b").run { ctx ->
+            assertTrue(failureMessages(ctx).any { "key prefix" in it }, "team contains team/b: " + failureMessages(ctx))
+        }
+        projectRunner.withPropertyValues(*shared, "skeleton.projects.a.config.storage-s3.key-prefix=team", "skeleton.projects.b.config.storage-s3.key-prefix=team2").run { ctx ->
+            assertEquals(null, ctx.startupFailure, "team and team2 do not overlap")
+        }
+    }
 }

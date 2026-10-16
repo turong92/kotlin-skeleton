@@ -1,5 +1,7 @@
 package dev.sumin.skeleton.notification.mail
 
+import dev.sumin.skeleton.common.project.NoProjectContextException
+import dev.sumin.skeleton.common.project.ProjectContext
 import dev.sumin.skeleton.common.project.ProjectRegistry
 import dev.sumin.skeleton.common.project.ProjectScoped
 import org.springframework.beans.factory.ObjectProvider
@@ -29,7 +31,8 @@ class NotificationMailAutoConfiguration {
                 }
             }
             registry.active.forEach { froms.of(it) }
-            return SmtpMailSender(javaMailSender) { froms.get() }
+            // 프로젝트 문맥이 없는 발송(서버 전체 경보 메일 …)은 공통 `from` 을 쓴다 — 그것도 없으면 어느 프로젝트의 주소로 보낼지 정할 수 없어 실패한다
+            return SmtpMailSender(javaMailSender) { ProjectContext.currentOrNull()?.let(froms::of) ?: properties.from.ifBlank { throw NoProjectContextException() } }
         }
         require(properties.from.isNotBlank()) { "skeleton.notification-mail.from must be set when mail is enabled." }
         return SmtpMailSender(javaMailSender, properties.from)

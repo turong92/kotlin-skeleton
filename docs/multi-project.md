@@ -46,10 +46,11 @@ skeleton:
 | 약관 · 동의 문서 | `legal.{location, default-locale, required, required-at-sign-up, previous-version-grace, facts.*, acknowledge-template}` | 문서 집합 · 규칙을 프로젝트마다 만든다(운영자 이름 같은 사실도 프로젝트의 것). 시작 검사와 DeployGuard 가 프로젝트마다 돈다. 동의 기록은 스키마마다 |
 | 캡차 (Turnstile) | `captcha-turnstile.{secret-key, expected-hostname, expected-action, siteverify-url, timeout}` | 검증할 때마다 지금 프로젝트의 값. `enabled` 는 앱 전체 하나 — 켜면 서비스 중인 프로젝트 모두 비밀 키가 있어야 한다 |
 | Redis 키 (한도 · 캐시 · 락) | (설정 없음) | `RedisKeyPrefixer` 가 프로젝트 안에서 `<key-prefix>:project:<id>:…` 로 만든다. 접속 정보는 서버 공통 |
-| 알림 웹소켓 (STOMP) | (설정 없음) | 세션의 프로젝트 = 연결 요청의 Host. 사용자 이름이 `<프로젝트>\|<계정 id>` 라 사용자 알림이 프로젝트 사이에 섞이지 않고, 공개 토픽은 구독 선택자로 프로젝트마다 나뉜다 |
+| 알림 웹소켓 (STOMP) | (설정 없음) | 세션의 프로젝트 = 연결 요청의 Host. 사용자 이름(`Principal.name`)이 `<프로젝트>\|<계정 id>` 라 앱 핸들러가 받는 이름도 그 꼴이고, 사용자 알림이 프로젝트 사이에 섞이지 않고, 공개 토픽은 구독 선택자로 프로젝트마다 나뉜다 |
+| (공통 값으로 내려가지 않는 것) | 약관 `legal.location` · `legal.facts.*`, 소셜 `auth-social.providers.<id>.{enabled, redirect-uri}`, X `client-id` · `client-secret` · `redirect-uri`, OIDC `providers.*` 전체, 메일 `from`, 계정 메일 `link-base-url` | 프로젝트가 자기 값만 읽는다 — 한 서비스 시절의 공통 값이 남아 있어도 값을 빠뜨린 프로젝트가 남의 약관 · 소셜 앱 · 주소를 물려받지 않는다(약관은 안 주면 TEMPLATE 문서라 stage · prod 가 막고, 소셜은 안 주면 꺼진다) |
 | 범용 OIDC | `auth-social-oidc.providers.<코드>.*` | 프로젝트마다 제공자를 만든다 — discovery · JWKS 보관도 제공자 안이라 프로젝트끼리 섞이지 않는다 |
 
-**위 표의 키만 프로젝트 `config` 에 쓸 수 있다**(`ProjectConfigKeys.SUPPORTED`) — 그 밖의 키(`account.sign-up.enabled`, `legal.facts.*`, `web.rate-limit.*`, `web.cors.enabled` …)는 조용히 무시되는 대신 기동 실패다. 프로젝트별 `auth-session.delivery` 도 받는다(`/auth/methods` 는 지금 프로젝트의 방식을 알린다).
+**위 표의 키만 프로젝트 `config` 에 쓸 수 있다**(`ProjectConfigKeys.SUPPORTED`) — 그 밖의 키(`account.sign-up.enabled`, `legal.record.*`, `web.rate-limit.*`, `web.cors.enabled` …)는 조용히 무시되는 대신 기동 실패다. 프로젝트별 `auth-session.delivery` 도 받는다(`/auth/methods` 는 지금 프로젝트의 방식을 알린다).
 
 - 계정 메일 작업(확인 코드 · 재설정 · 매직 링크)은 `account-task` 풀로 넘어가지만 제출한 요청의 프로젝트를 들고 간다(스레드가 물려받지는 않는다).
 - **프로젝트 모드에서 `account.mail.link-base-url` 은 프로젝트마다 필수**다 — 공통 값으로 내려가지 않는다(다른 프로젝트 도메인으로 링크가 나갈 수 있다). stage · prod 가드가 프로젝트마다 본다.

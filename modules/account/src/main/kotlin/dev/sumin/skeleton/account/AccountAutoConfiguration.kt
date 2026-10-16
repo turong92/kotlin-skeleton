@@ -174,11 +174,12 @@ class AccountAutoConfiguration {
         properties: AccountProperties,
         environment: Environment,
         social: ObjectProvider<dev.sumin.skeleton.account.web.SocialMethodsSource>,
+        projects: ObjectProvider<ProjectRegistry>,
     ): org.springframework.boot.ApplicationRunner = org.springframework.boot.ApplicationRunner {
         val host = environment.getProperty("spring.mail.host")?.takeIf { it.isNotBlank() }?.let { h -> h + (environment.getProperty("spring.mail.port")?.let { ":$it" } ?: "") }
         org.slf4j.LoggerFactory.getLogger(AccountStartupSummary::class.java).info(
             AccountStartupSummary.describe(
-                registry.all().map { it.code }, social.getIfAvailable()?.enabled().orEmpty(), transport, host,
+                registry.all().map { it.code }, enabledSocialForSummary(social.getIfAvailable(), projects.getIfAvailable()), transport, host,
                 environment.getProperty("skeleton.notification-mail.from")?.takeIf { it.isNotBlank() }, properties.mail,
             ),
         )
@@ -435,5 +436,12 @@ class AccountAutoConfiguration {
 }
 
 /** 프로젝트 모드의 링크 주소는 그 프로젝트가 정한 값만 — 비면 공통(다른 프로젝트의 도메인일 수 있다)으로 내려가지 않고 비워 둔다. 가드가 보호 환경에서 막는다 */
+/** 기동 로그용 켜진 소셜 목록 — 기동에는 프로젝트 문맥이 없으니 프로젝트 모드에서는 프로젝트마다 그 문맥에서 모아 제공자별로 하나만 남긴다 */
+internal fun enabledSocialForSummary(source: dev.sumin.skeleton.account.web.SocialMethodsSource?, projects: ProjectRegistry?): List<dev.sumin.skeleton.account.web.SocialMethodView> {
+    source ?: return emptyList()
+    projects ?: return source.enabled()
+    return projects.active.flatMap { project -> dev.sumin.skeleton.common.project.ProjectContext.runIn(project) { source.enabled() } }.distinctBy { it.provider }
+}
+
 private fun AccountProperties.Mail.withOwnLinkBase(registry: ProjectRegistry, project: dev.sumin.skeleton.common.project.Project): AccountProperties.Mail =
     copy(linkBaseUrl = registry.bindOwn(project, "skeleton.account", AccountProperties::class.java).mail.linkBaseUrl)

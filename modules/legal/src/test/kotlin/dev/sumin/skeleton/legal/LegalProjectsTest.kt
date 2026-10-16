@@ -93,4 +93,20 @@ class LegalProjectsTest {
             assertFalse(problems.any { it.startsWith("project 'a':") }, problems.toString())
         }
     }
+
+    @Test
+    fun `documents and facts left in the shared settings are not borrowed by a project that gave none`() {
+        runner.withPropertyValues(
+            "skeleton.legal.location=classpath:legal-web/", "skeleton.legal.facts.company-name=SHARED-CO", "skeleton.legal.facts.contact-email=s@s.test",
+            "$a.location=classpath:legal-web/", "$a.facts.company-name=ACME-A", "$a.facts.contact-email=a@a.test",
+            "$b.required=terms", "$c.required=terms",
+        ).run { ctx ->
+            val catalog = ctx.getBean(LegalCatalog::class.java)
+            val (pa, pb) = ctx.getBean(ProjectRegistry::class.java).projects
+            assertTrue(pa.run { catalog.render(catalog.current("terms", clock.now)!!, "ko").markdown }.contains("ACME-A"))
+            assertTrue(pb.run { catalog.current("terms", clock.now)!!.meta.template }, "B gave no documents: TEMPLATE, not the shared ones")
+            val problems = ctx.getBean(DeployGuard::class.java).problems(DeployContext(DeployEnv.PROD, emptySet()))
+            assertTrue(problems.any { it.startsWith("project 'b':") && "TEMPLATE" in it }, problems.toString())
+        }
+    }
 }

@@ -28,7 +28,10 @@ class XAutoConfiguration {
     @ConditionalOnMissingBean(name = ["xOAuthProviderSource"])
     fun xOAuthProviderSource(httpClient: ExternalHttpClient, projects: ProjectRegistry): OAuthProviderSource =
         OAuthProviderSource { project ->
+            // client id · secret · redirect URI 는 프로젝트 자기 값만 (공통 값으로 내려가지 않는다 — 다른 프로젝트의 X 앱으로 로그인이 시작되면 안 된다)
+            val own = projects.bindOwn(project, "skeleton.auth-social-x", XProperties::class.java)
             projects.bind(project, "skeleton.auth-social-x", XProperties::class.java)
+                .copy(clientId = own.clientId, clientSecret = own.clientSecret, redirectUri = own.redirectUri)
                 .takeIf { it.clientId.isNotBlank() }
                 ?.let { listOf(XOAuthProvider(httpClient, it)) }
                 ?: emptyList()

@@ -9,6 +9,7 @@ import dev.sumin.skeleton.common.time.TimeProvider
 import org.springframework.beans.factory.ObjectProvider
 import dev.sumin.skeleton.common.project.ProjectContext
 import dev.sumin.skeleton.common.project.ProjectRegistry
+import dev.sumin.skeleton.common.project.ProjectScoped
 import org.springframework.beans.factory.SmartInitializingSingleton
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
@@ -27,7 +28,7 @@ class LegalAutoConfiguration {
     @ConditionalOnMissingBean
     fun legalRules(properties: LegalProperties, projects: ObjectProvider<ProjectRegistry>): LegalRules {
         val registry = projects.getIfAvailable() ?: return rulesOf(properties)
-        return ProjectLegalRules(registry.scopedFrom("skeleton.legal", LegalProperties::class.java) { _, p -> rulesOf(p) })
+        return ProjectLegalRules(ProjectScoped { project -> rulesOf(ownIdentity(registry, project)) })
     }
 
     /** 앱의 `skeleton.legal.location` 에 `manifest.json` 이 있으면 그것, 없으면 모듈의 TEMPLATE 문서 (stage · prod 에서는 DeployGuard 가 막는다) */
@@ -36,7 +37,7 @@ class LegalAutoConfiguration {
     fun legalCatalog(properties: LegalProperties, rules: LegalRules, loader: ResourceLoader, projects: ObjectProvider<ProjectRegistry>): LegalCatalog {
         val registry = projects.getIfAvailable() ?: return catalogOf(properties, rules, loader)
         // 프로젝트 모드: 프로젝트마다 자기 문서 위치 · 규칙(필수 종류 · 사실 · 기본 언어 · 유예)으로 한 번 만든다
-        val parts = registry.scopedFrom("skeleton.legal", LegalProperties::class.java) { _, p -> catalogOf(p, rulesOf(p), loader) }
+        val parts = ProjectScoped { project -> ownIdentity(registry, project).let { catalogOf(it, rulesOf(it), loader) } }
         registry.active.forEach { project ->
             try {
                 parts.of(project)
@@ -117,6 +118,17 @@ class LegalAutoConfiguration {
                 }
             }
         }
+    }
+
+    /**
+     * 프로젝트의 약관 설정 — 문서 위치(`location`)와 사실(`facts`)은 **프로젝트 자기 값만** 읽는다(공통 값으로 내려가지 않는다):
+     * 한 서비스 시절의 공통 문서 · 운영자 이름이 남아 있어도 값을 빠뜨린 프로젝트가 남의 약관으로 동의를 받지 않는다. 안 준 프로젝트는 모듈의 TEMPLATE 문서(stage · prod 는 가드가 막는다).
+     * 필수 종류 · 유예 · 기본 언어 · 템플릿 허용은 공통 위에 덮는다.
+     */
+    private fun ownIdentity(registry: ProjectRegistry, project: dev.sumin.skeleton.common.project.Project): LegalProperties {
+        val merged = registry.bind(project, "skeleton.legal", LegalProperties::class.java)
+        val own = registry.bindOwn(project, "skeleton.legal", LegalProperties::class.java)
+        return merged.copy(location = own.location, facts = own.facts)
     }
 
     private fun rulesOf(properties: LegalProperties) = LegalRules(

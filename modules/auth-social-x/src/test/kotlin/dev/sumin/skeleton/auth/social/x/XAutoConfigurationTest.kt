@@ -60,4 +60,25 @@ class XAutoConfigurationTest {
                 assertTrue(source.providersFor(registry.projects.first { it.id == "b" }).isEmpty())
             }
     }
+
+    @Test
+    fun `project mode - a shared client id does not turn X on in a project that did not set its own`() {
+        ApplicationContextRunner()
+            .withConfiguration(AutoConfigurations.of(ProjectAutoConfiguration::class.java, XAutoConfiguration::class.java))
+            .withBean(ExternalHttpClient::class.java, Supplier { DefaultExternalHttpClient(WebClient.builder(), OutboundHttpProperties(), DefaultExternalHttpErrorMapper(), emptyList()) })
+            .withPropertyValues(
+                "skeleton.projects.a.hosts=a.test", "skeleton.projects.a.schema=pa",
+                "skeleton.projects.b.hosts=b.test", "skeleton.projects.b.schema=pb",
+                "skeleton.auth-social-x.client-id=shared-x", "skeleton.auth-social-x.client-secret=shared-s", "skeleton.auth-social-x.redirect-uri=https://a.test/cb",
+                "skeleton.projects.a.config.auth-social-x.client-id=x-a", "skeleton.projects.a.config.auth-social-x.client-secret=s",
+            )
+            .run { ctx ->
+                val registry = ctx.getBean(ProjectRegistry::class.java)
+                val source = ctx.getBean(OAuthProviderSource::class.java)
+                val a = source.providersFor(registry.projects.first { it.id == "a" }).single()
+                assertEquals("x-a", a.publicClientId)
+                assertEquals(null, a.publicRedirectUri, "the shared redirect URI is not borrowed")
+                assertTrue(source.providersFor(registry.projects.first { it.id == "b" }).isEmpty())
+            }
+    }
 }

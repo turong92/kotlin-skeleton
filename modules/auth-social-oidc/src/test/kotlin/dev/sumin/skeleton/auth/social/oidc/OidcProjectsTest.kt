@@ -51,4 +51,17 @@ class OidcProjectsTest {
             assertTrue(source.providersFor(registry.projects.first { it.id == "c" }).isEmpty())
         }
     }
+
+    @Test
+    fun `a provider left in the shared settings is not turned on for the projects`() {
+        runner.withPropertyValues(
+            "skeleton.auth-social-oidc.providers.microsoft.issuer=${idpA.issuer}", "skeleton.auth-social-oidc.providers.microsoft.client-id=shared", "skeleton.auth-social-oidc.providers.microsoft.client-secret=s",
+            "$a.issuer=${idpA.issuer}", "$a.client-id=client-a", "$a.client-secret=secret-a",
+        ).run { ctx ->
+            val registry = ctx.getBean(ProjectRegistry::class.java)
+            val source = ctx.getBean(OAuthProviderSource::class.java)
+            assertEquals("client-a", source.providersFor(registry.projects.first { it.id == "a" }).single().publicClientId)
+            assertTrue(source.providersFor(registry.projects.first { it.id == "b" }).isEmpty())
+        }
+    }
 }
