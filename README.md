@@ -2,7 +2,41 @@
 
 Kotlin + Spring Boot 백엔드 스켈레톤. 새 API 프로젝트 시작점.
 
-## 무엇이 들어 있나 / 새 프로젝트 3단계
+<!-- skeleton-only:start -->
+## 기능 한눈에
+
+상태 표기 — **기본**: 스타터(`apps/api`)에 이미 들어 있다 · **선택**: 의존성 한 줄로 얹는다(필요한 키·서버는 모듈 문서의 "부팅에 필요한 것") · **꺼진 채 시작**: 코드는 있어도 설정 스위치를 켜야 동작한다(안 켜면 이전과 한 글자도 다르지 않다) · **제한**: 아래에 적은 한계가 있다.
+정본 목록은 [`docs/capabilities.md`](docs/capabilities.md)(`capabilities.json` 에서 생성), 모듈마다 한 쪽 문서는 [`docs/modules/`](docs/modules/README.md), 바뀐 이력은 [`CHANGELOG.md`](CHANGELOG.md) 의 `[Unreleased]`.
+
+| 영역 | 들어 있는 것 | 상태 | 자세히 |
+|---|---|---|---|
+| **인증 · 계정** | 이메일 + 비밀번호 로그인(JWT), 가입(메일로 받은 코드 확인), 비밀번호 재설정 · 이메일 변경, 탈퇴(행은 남기고 익명화 · 유예 기간), 리프레시 토큰 회전 · 재사용 탐지 · 로그인 기기 목록 | 기본 (메일을 실제로 보내려면 `notification-mail` 추가) | [accounts](docs/accounts.md) · [HTTP 계약](docs/account-http-contract.md) |
+| | 메일 링크 로그인(매직 링크) · 운영자 계정 관리(목록 · 정지 · 역할 · 삭제 복구) | 선택 · 운영자 경로는 꺼진 채 시작 | [auth-magic-link](docs/modules/auth-magic-link.md) |
+| | 로그인 아이디(이메일이 바뀌어도 안 바뀌는 비공개 아이디) · 이메일 필수 + 받는 시점(로그인 직후 / 처음 쓰기 때) · 연락받을 이메일 | 꺼진 채 시작 | [accounts](docs/accounts.md) |
+| | 소셜 로그인: Google · Kakao · Naver · X(PKCE) · LINE · 범용 OIDC. 같은 이메일 자동 병합은 제공자가 그 주소의 권위자일 때만 | 선택 (실제 제공자 설정 · 확인 스크립트는 문서) | [auth-social](docs/modules/auth-social.md) · [real-provider-setup](docs/real-provider-setup.md) |
+| | 작성자 프로필(한 계정이 닉네임 여러 개, 서로 이어지지 않는다) · 게시판(글 · 대댓글 · 설정으로 늘리는 반응) | 선택 | [author-profile](docs/modules/author-profile.md) · [board](docs/modules/board.md) |
+| | 약관 · 개인정보 처리방침 · 동의 기록(판 · 시행일 · 재동의). 예시 TEMPLATE 문서는 prod 에서 막힌다 | 기본 (문서 본문은 앱이 싣는다) | [legal](docs/legal.md) |
+| **결제 · 구독 (토스, 한국)** | 결제 장부: 주문 · 환불 · 변경 이력 · 웹훅 수신함 · 사용자 / 운영자 HTTP. 금액은 앱의 `PaymentCatalog` 만 정하고, 같은 요청은 같은 줄(멱등), 결제사 응답을 모르면 다시 보내지 않고 조회로 맞춘다 | 선택 (`payment` + `payment-jdbc` + `payment-toss`, 운영자 경로는 꺼진 채 시작) | [payment-http-contract](docs/payment-http-contract.md) · [payment](docs/modules/payment.md) |
+| | 토스 단건 결제 · 전액 / 부분 환불. 환불 요청(본인은 요청만) → 운영자가 **금액을 고쳐 승인**하거나 직접 환불, 결제사가 끝내 답하지 않은 구독 결제를 운영자가 「결제 안 됨」으로 닫기 | 선택 (토스 테스트 키로 실측한 기록: [real-provider-setup](docs/real-provider-setup.md) §11.7) | [payment-toss](docs/modules/payment-toss.md) |
+| | 구독(정기결제): 카드 등록(빌링키) + 첫 결제 → 내 구독 → 해지 예약 → 기간 끝 갱신(앱이 직접 — 결제사 스케줄러를 쓰지 않는다) · 거절 시 재시도. 켜는 앱이 플랜(`SubscriptionPlans`)과 `crypto` 키를 내야 하고 없으면 기동 실패 | 꺼진 채 시작 (`skeleton.payment.subscription.enabled`) | [payment](docs/modules/payment.md) |
+| | 구독 **플랜 올리기**: 남은 기간 차액만(`PRORATED_DIFFERENCE`) 또는 전액 재시작(`FULL_RESTART`) — 켜는 앱이 고른다 | 꺼진 채 시작 (`…subscription.plan-change.enabled`) | [payment-http-contract](docs/payment-http-contract.md) §12.2 |
+| | **중도 해지 · 환불**과 **7일 철회**(한국 규정): 나라마다 갈아 끼우는 정책. 모듈 기본은 기간 끝에만 해지(환불 0), 내장 `korea` 는 낸 돈 − 쓴 몫(날짜 단위) − 위약금, 7일 이내 미사용이면 전액. 못 나간 환불은 운영자 「확인 필요」로 올라온다 | 꺼진 채 시작 (`…subscription.cancel.policies` 에 나라를 적는다) | [payment](docs/modules/payment.md) |
+| | Stripe | 선택 · 승인 · 취소만 있다(장부 위의 구독 · 웹훅 기능은 문서에 없다) | [payment-stripe](docs/modules/payment-stripe.md) |
+| **해외 결제** | **Paddle**(판매 대행 — 해외 세금을 Paddle 이 처리, 여러 통화): 서버가 Paddle 거래를 먼저 만들고(가격은 서버 설정) 결제창은 그 거래 id 만 연다 · **서명된 웹훅**(HMAC-SHA256, 시각 허용 오차)만 믿고 장부에 옮긴다 · 산 가격 대조 · 갱신은 Paddle, 해지는 Paddle API · 가격 표시용 값(클라이언트 토큰 · 환경 · 가격 id)을 `GET /config` 로 준다 | 선택 · 가짜 Paddle 서버로 시험했다(Paddle 샌드박스 실측 기록은 문서에 없다). 한국 구매자의 Paddle 결제는 막지 않고 운영자 「확인 필요」로 표시 | [payment-paddle](docs/modules/payment-paddle.md) |
+| **접속 나라로 고르기** | 서버가 접속 나라(Cloudflare `CF-IPCountry` — 클라이언트 IP 모드가 `cloudflare` 이고 믿는 프록시에서 온 것만)로 결제사와 해지 · 환불 규칙을 정한다. 요청 본문의 `provider` · `country` 는 읽지 않는다. 그 나라의 결제사가 못 열리면 다른 결제사로 넘기지 않고 503. `GET /config` 가 `country` · `provider` · `cancelPolicy` 를 알려 준다 | 꺼진 채 시작 (`skeleton.payment.routing.*`) | [CHANGELOG](CHANGELOG.md) "접속 나라로 결제사 · 해지·환불 규칙" |
+| | **개발용 나라 전환**: `routing.dev-country`(모든 요청을 한 나라로) · `routing.dev-country-switch=true` 면 요청 헤더 `X-Dev-Country` 로 재기동 없이 토스 ↔ Paddle. 보호 환경(stage · prod)에서 켜져 있으면 기동 실패 | 로컬 전용 | [CHANGELOG](CHANGELOG.md) |
+| **운영 · 관리** | 주인 경보: 5xx 몰림 · 기동 실패 · 죽은 작업을 Discord 식 웹훅(+메일)으로, 여러 인스턴스의 같은 경보는 한 번만(`alert-jdbc`). 에러 수집 서비스(Sentry)를 쓰지 않는 답 | 기본 · 웹훅 주소를 넣어야 켜진다 | [alert](docs/alert.md) |
+| | DB 작업 큐(Redis 없이): 재시도 · 백오프 · 죽은 작업, 결제 환불 · 갱신도 이것으로 돈다 | 기본 | [job-queue-jdbc](docs/job-queue-jdbc.md) |
+| | 배포 가드: 보호 환경(prod · stage)에서 개발 기본 비밀 · 시드 계정 · dev-login · 빠진 비밀이 있으면 기동 실패(`DeployGuard`). 행 id 는 시간순(`접두사 + ULID`, 열이 `uuid` 면 UUIDv7). 마이그레이션은 UTC 타임스탬프 이름 + `migrations.lock` 으로 동결 | 기본 | [deploy](docs/deploy.md) · [schema-management](docs/schema-management.md) |
+| **멀티 프로젝트** | 한 프로세스에 프로젝트 여럿: 요청 Host 로 프로젝트를 고르고, 프로젝트마다 DB 스키마 · DB 계정 · 연결 풀, 로그인 설정(JWT 키 · 쿠키 · CORS · 메일 링크 · 시드)을 따로 둔다. `@ProjectApi` 로 도메인별 컨트롤러, 잡 큐 · 계정 정리 · 메모리 한도는 프로젝트마다 | **제한 · 초기** — 설정이 비면 아무것도 달라지지 않는다. 결제 · 소셜 로그인 · 메일 발신 · 파일 · 알림 웹소켓 · Redis · 캡차 · 암호화 · Kafka 는 **아직 프로젝트를 몰라서**, 서비스 중인 프로젝트가 둘 이상이면 이 모듈들이 빌드에 있는 것만으로 기동이 실패한다. 프로젝트마다 DB 계정이 필수(PostgreSQL 기준 검사) | [multi-project](docs/multi-project.md) |
+| **배포 · 런타임** | 홈서버 배포 계약: 이미지 하나 + `deploy/app.yaml` 한 장, `wget` 헬스체크, `0.0.0.0`, `SPRING_DATASOURCE_*`, 클라이언트 IP 모드 | 기본 | [deploy](docs/deploy.md) |
+| | **GraalVM 네이티브 이미지**: `-Pnative` 일 때만 켜지는 선택 빌드(기본 빌드는 JVM 그대로, `Dockerfile.native`). 콜드스타트(`/health` 200)가 스타터 약 0.6초(JVM 약 7.7초), 모듈을 모두 얹은 시험 조립 약 0.9초 — 맥에서 잰 리눅스 arm64 컨테이너(CPU 1 · 메모리 512MB) 값 | 선택 · **제한**: amd64(Cloud Run) 빌드는 맥 에뮬레이션으로만 돌려 봤고 실제 x86 값은 재지 않았다. 새 의존성마다 리플렉션 힌트 규칙을 지켜야 하고, 켜기 / 끄기가 빌드 때 굳는다 | [native-image](docs/native-image.md) |
+| | **Cloud Run 0대 운영**: 안 쓸 때 인스턴스 0 — 작업 큐를 "요청 구동" 모드로 바꾸고 밖의 스케줄러가 깨우기 주소 `POST /internal/jobs/drain`(헤더 `X-Wake-Secret`)을 부르면 그때 밀린 일감을 처리한다 | 선택 · 레포는 앱이 지킬 것과 설정 예만 준다(실제 Cloud Run 배포는 하지 않는다) | [cloud-run-scale-to-zero](docs/cloud-run-scale-to-zero.md) |
+| **기반 부품** | 표준 응답 · 에러 봉투 · OpenAPI(코드 우선) · trace 로그 · 외부 HTTP 클라이언트 / 시간대 · `ZonedMoment` / `Idempotency-Key` / AES-GCM 암호화 · JSON 도구 / 알림(받은편지함 · SSE · WebSocket · Slack · 메일) / 파일(S3 · R2 presign) / Redis(락 · 캐시 · 요청 제한) · 스케줄러 · Kafka / JPA · jOOQ(기본은 Data JDBC) · PostgreSQL 18(기본) · MySQL 8.4 | 기본 / 선택 | [modules 색인](docs/modules/README.md) |
+| **견본 · 도구** | `apps/sample`: 로그인한 사람이 노트(첨부 · 알림 · 내보내기)를 관리하고 「응원하기」 결제 · 구독까지 있는 제품 모양의 앱 — 새 기능을 얹는 정본 예시. `apps/workbench`: 모든 모듈을 합친 데모. 견본 앱은 네이티브로도 빌드해 react 쪽 e2e 를 그대로 돌린다(`E2E_NATIVE=1`) | 참조용 (새 프로젝트에는 `--with-sample` 일 때만 따라간다) | [sample](docs/sample.md) · [native-image](docs/native-image.md) |
+<!-- skeleton-only:end -->
+
+## 새 프로젝트 3단계
 
 - **들어 있는 것**: 골라 쓰는 모듈들(웹 기반 · 인증 · DB · 알림 · 저장소 · 결제 · Redis · 스케줄러 …), 스타터 앱 `apps/api`, 모든 모듈을 합친 데모 `apps/workbench`. 모듈마다 한 쪽짜리 문서: [`docs/modules/`](docs/modules/README.md).
 - **규칙**: 모듈 하나 = 의존성 한 줄 (`implementation(project(":modules:x"))`). 모듈은 메커니즘만 주고 프레임워크 기본값을 바꾸지 않는다 — 선택은 앱 yml 이 하고, 모듈 내부는 고치지 않는다.
@@ -16,40 +50,52 @@ This skeleton uses coarse-grained Gradle modules.
 
 ```text
 apps/
-  api                 # STARTER: minimal runnable app (platform, auth, JDBC + PostgreSQL + Flyway, time). Copy this to start a project
+  api                 # STARTER: minimal runnable app (platform, auth, accounts + sessions + legal on JDBC, PostgreSQL + Flyway, time). Copy this to start a project
   workbench           # DEMO: every module together + sample endpoints under /api/v1/skeleton/** (the react-skeleton workbench UI calls it)
 
 modules/
-  platform            # web, errors, trace/logging, shared infrastructure
+  platform            # web, errors, trace/logging, shared infrastructure (+ per-project context: skeleton.projects)
   auth                # stateless auth, JWT, dev-login, break-glass access (+ login hooks, session SPI)
   auth-session        # refresh tokens (rotation + reuse detection), session list, logout
   auth-session-jdbc   # session store for PostgreSQL / MySQL
-  account             # account lifecycle: sign-up, email verification, reset, change, sign-in methods, deletion, admin
+  account             # account lifecycle: sign-up, email verification, reset, change, sign-in methods, deletion, login ID, admin
   account-jdbc        # account store for PostgreSQL / MySQL
   auth-magic-link     # email-link sign-in (one more method on the same account)
   auth-social         # optional social-login extension for auth
   auth-social-google  # optional Google OAuth provider client
   auth-social-kakao   # optional Kakao OAuth provider client
   auth-social-naver   # optional Naver OAuth provider client
-  async              # optional context-propagating @Async executor and task groups
+  auth-social-x       # optional X (Twitter) OAuth 2.0 + PKCE provider client
+  auth-social-oidc    # optional generic OpenID Connect provider (several by properties, LINE preset)
+  author-profile      # optional author profiles: several unlinkable nicknames per account
+  author-profile-jdbc # author profile store for PostgreSQL / MySQL
+  legal               # optional terms / privacy documents and consent records
+  legal-jdbc          # legal store for PostgreSQL / MySQL
+  async               # optional context-propagating @Async executor and task groups
+  async-notification  # optional: async exceptions become notifications
   config-aws-ssm      # optional AWS SSM Parameter Store property loading
   event-kafka         # optional Kafka event publishing adapter
-  idempotency          # optional Idempotency-Key support for command endpoints
-  notification         # optional notification contracts and local broker
-  notification-slack   # optional Slack webhook alerts and exception notices
-  notification-sse     # optional server-to-web SSE notification delivery
+  idempotency         # optional Idempotency-Key support for command endpoints
+  json                # optional JsonCodec, JsonDocument, versioned payloads
+  crypto              # optional AES-GCM text encryption, opaque URL tokens
+  notification        # optional notification contracts and local broker
+  notification-jdbc   # optional DB inbox for notification
+  notification-slack  # optional Slack webhook alerts and exception notices
+  notification-sse    # optional server-to-web SSE notification delivery
   notification-websocket # optional STOMP/WebSocket notification delivery
-  notification-mail    # optional SMTP sending (spring.mail.* + skeleton.notification-mail.*)
-  payment             # optional provider-neutral payment contracts
-  payment-toss        # optional Toss payment provider
-  payment-stripe      # optional Stripe payment provider
-  persistence-jpa      # optional JPA audit timestamp support
-  persistence-jdbc     # optional Spring Data JDBC audit timestamp support + SqlDialect strategy
-  db-postgresql        # dialect module (default): driver, Flyway support, SqlDialect, time conversions
-  db-mysql             # dialect module (alternative) — an app assembles exactly one db-* module
-  migration            # common: skeleton.migration, guard against DB-wiping settings outside allowed profiles
-  migration-flyway     # Flyway implementation: opt-in local clean, V<UTC 14 digits> naming check (no Flyway defaults changed)
-  persistence-jooq     # optional jOOQ with DDL-file code generation (no DB at build), UTC Instant converter, audit listener
+  notification-mail   # optional SMTP sending (spring.mail.* + skeleton.notification-mail.*)
+  payment             # optional provider-neutral payment contracts + ledger HTTP (orders, refunds, subscriptions)
+  payment-jdbc        # payment ledger store for PostgreSQL / MySQL
+  payment-toss        # optional Toss payment provider (one-time, billing keys)
+  payment-stripe      # optional Stripe payment provider (confirm / cancel)
+  payment-paddle      # optional Paddle (merchant of record) provider: server-made transactions, signed webhooks
+  persistence-jpa     # optional JPA audit timestamp support
+  persistence-jdbc    # optional Spring Data JDBC audit timestamp support + SqlDialect strategy + per-project routing DataSource
+  db-postgresql       # dialect module (default): driver, Flyway support, SqlDialect, time conversions
+  db-mysql            # dialect module (alternative) — an app assembles exactly one db-* module
+  migration           # common: skeleton.migration, guard against DB-wiping settings outside allowed profiles
+  migration-flyway    # Flyway implementation: opt-in local clean, V<UTC 14 digits> naming check (no Flyway defaults changed)
+  persistence-jooq    # optional jOOQ with DDL-file code generation (no DB at build), UTC Instant converter, audit listener
   redis-core          # optional Redis connection, templates, key prefixing
   redis-lock          # optional Redis-backed distributed locks
   redis-cache         # optional Redis cache manager defaults
@@ -58,7 +104,7 @@ modules/
   time                # optional global-time capability: viewer zone/locale, ZonedMoment, dual formatting, country -> zone
   storage             # optional storage contracts and file validation
   storage-s3          # optional S3/R2 storage adapter (presigned + server-side put, cache headers, batch delete)
-  job-queue-jdbc      # optional DB-table retry queue (FOR UPDATE SKIP LOCKED, backoff, dead-letter) — no Redis
+  job-queue-jdbc      # optional DB-table retry queue (FOR UPDATE SKIP LOCKED, backoff, dead-letter; polling or on-request wake) — no Redis
   board               # optional board: posts, nested comments, reaction types set by config (no schema change), moderation — storage in board-jdbc (list both)
   board-jdbc          # PostgreSQL / MySQL storage for board
   captcha-turnstile   # optional Cloudflare Turnstile token verification
@@ -68,7 +114,7 @@ modules/
 
 Use modules as capability choices:
 
-- `apps/api` is the **starter**: the smallest composition that builds and boots **with real accounts** (`platform`, `auth`, `account-jdbc`, `auth-session-jdbc`, `persistence-jdbc`, `db-postgresql`, `migration-flyway`, `time` — sign-up, email verification, login, refresh tokens, password reset and deletion work out of the box; add `notification-mail` to actually send the mails), one `HelloController`, a short `application.yml`. A real service starts here and adds one dependency line per module it needs (`docs/minimal-composition.md`).
+- `apps/api` is the **starter**: the smallest composition that builds and boots **with real accounts** (`platform`, `auth`, `account-jdbc`, `auth-session-jdbc`, `legal-jdbc`, `persistence-jdbc`, `db-postgresql`, `migration-flyway`, `time` — sign-up, email verification, login, refresh tokens, password reset and deletion work out of the box; add `notification-mail` to actually send the mails), one `HelloController`, a short `application.yml`. A real service starts here and adds one dependency line per module it needs (`docs/minimal-composition.md`).
 - `apps/workbench` is the **demo**: it depends on every module, keeps the sample controllers (`/api/v1/examples/*`, `/api/v1/skeleton/*`) and the integration tests that prove the modules coexist. Nothing is copied from it into a product; it is also the backend of the `react-skeleton` workbench UI.
 - Modules are never reached through component scan. Both apps live in a sub-package of the root (`dev.sumin.skeleton.app.api`, `dev.sumin.skeleton.app.workbench`), so `@SpringBootApplication` scans only app code, and every module registers its beans through its `AutoConfiguration`. A module's controllers/filters/advice therefore need no app-side wiring, and `skeleton.<module>.enabled=false` removes the module cleanly.
 - `modules/platform` is the shared foundation for most apps. It also contributes default OpenAPI metadata, standard response/error schemas, web policy defaults, outbound HTTP client scaffolding, and trace header documentation.
@@ -101,9 +147,10 @@ Full stack in one line (stamped project with the React skeleton's project next t
 docker compose up -d postgres            # PostgreSQL 18 on 127.0.0.1:5432 (db/user app, password dev)
 ./gradlew :apps:api:bootRun --args='--spring.profiles.active=local'
 curl -s localhost:8080/api/v1/hello
-curl -s localhost:8080/api/v1/auth/login -H 'Content-Type: application/json' -d '{"email":"user@example.com","password":"password"}'
 ./gradlew build                          # everything: all modules, both apps (Testcontainers needs Docker)
 ```
+
+The starter has **no seed accounts**: create one through sign-up (`POST /api/v1/account/sign-up`, then the code that was mailed, see [docs/accounts.md](docs/accounts.md)). The ready-made `user@example.com` / `password` accounts exist only in the sample app's `local` profile (`scripts/dev-sample.sh`) and in tests.
 
 `docker compose up --build` builds `:apps:api` (the starter) into the image. The same `Dockerfile` is the deployable image of the homeserver deploy contract (`APP=api|sample`, wget healthcheck, stdout logs): see [docs/deploy.md](docs/deploy.md). Optional infrastructure for the modules that need it sits behind compose profiles and does not start with a plain `docker compose up`: `--profile redis` (redis-*), `--profile kafka` (event-kafka), `--profile mail` (notification-mail, Mailpit UI on :8025), `--profile mysql` (db-mysql). Per-module environment variables are in the commented sections of `.env.example`.
 
@@ -117,7 +164,7 @@ scripts/new-project.sh <target-dir> <root-package> <config-prefix> <ClassPrefix>
 ```
 
 ```bash
-# 스타터 그대로 (platform, auth, account-jdbc, auth-session-jdbc, persistence-jdbc, db-postgresql, migration-flyway, time)
+# 스타터 그대로 (platform, auth, account-jdbc, auth-session-jdbc, legal-jdbc, persistence-jdbc, db-postgresql, migration-flyway, time)
 scripts/new-project.sh ~/work/ovation dev.sumin.ovation ovation Ovation
 
 # 모듈 더하기 — 한 모듈 = 의존성 한 줄 + (바꿀 때만) 설정 몇 줄
@@ -160,7 +207,7 @@ docker compose up -d postgres
 ./gradlew :apps:workbench:bootRun   # port 8080 — stop the starter first. Without a profile no Redis/Kafka/S3 is needed (the local profile turns redis-lock on)
 ```
 
-It intentionally depends on the skeleton capability modules, then uses properties to decide which runtime integrations are active. It intentionally depends on the skeleton capability modules, then uses properties to decide which runtime integrations are active.
+It intentionally depends on the skeleton capability modules, then uses properties to decide which runtime integrations are active.
 
 - `GET /api/v1/skeleton/modules` returns the current module catalog as a standard list response.
 - `GET /api/v1/skeleton/redis/key?value=orders:1` proves `redis-core` key prefixing works without pinging Redis.
@@ -183,7 +230,7 @@ Adding a module turns it on, except where it would fail or hang boot without ext
 - JWT claims use `sub=accountId`, `username`, `email`, `roles`, `iss`, `iat`, and `exp`.
 - Successful auth responses use the shared success envelope, and auth failures return the shared `ApiError` shape with trace/span fields.
 
-Development seed accounts:
+Development seed accounts — these belong to the built-in in-memory `AuthAccountRepository`, which is used only when no account store module is present (e.g. `modules/auth` alone). With `account-jdbc` (the starter) there are no seeds unless you set `skeleton.account.seed.accounts`:
 
 | accountId | username | email | password | roles |
 | --- | --- | --- | --- | --- |
@@ -236,7 +283,7 @@ The built-in defaults are for development: the JWT secret `dev-local-jwt-secret-
 
 Setting `skeleton.env=stage|prod` (env `SKELETON_ENV`, opt-in — see [docs/deploy.md](docs/deploy.md)) applies the same rules without a profile; the rules are `DeployGuard` beans listed in a startup log summary.
 
-`local`, `dev`, `test` and no profile keep working unchanged (the starter's tests log in with the seed user). To protect other profile names, set `skeleton.auth.protected-profiles`. A starter run with `--spring.profiles.active=prod` will not boot until you add an `AuthAccountRepository` — that is the point.
+`local`, `dev`, `test` and no profile keep working unchanged (the starter's tests load seed accounts from a test-only file). To protect other profile names, set `skeleton.auth.protected-profiles`. The starter already has an account-backed `AuthAccountRepository` (`account-jdbc`), so the account-store rule is met there; a run with `--spring.profiles.active=prod` still will not boot until the JWT secret and the other guard settings (see `docs/deploy.md` §4) are set — that is the point.
 
 ## Auth Social Capability
 
@@ -438,8 +485,8 @@ data class OrderEntity(
 # 로컬 DB만 띄우기
 docker compose up -d postgres
 
-# 앱 실행 (호스트 JDK 사용)
-./gradlew bootRun
+# 앱 실행 (호스트 JDK 사용) — 스타터
+./gradlew :apps:api:bootRun --args='--spring.profiles.active=local'
 ```
 
 `http://localhost:8080/health` → `{"status":"UP"}`
@@ -488,4 +535,4 @@ docker compose up -d
 이 레포는 **GitHub Template**. 새 프로젝트 시작:
 
 1. GitHub 레포 페이지 → **Use this template** 버튼
-2. 또는 `gh repo create <name> --template sumin/kotlin-skeleton --private`
+2. 또는 `gh repo create <name> --template turong92/kotlin-skeleton --private`
