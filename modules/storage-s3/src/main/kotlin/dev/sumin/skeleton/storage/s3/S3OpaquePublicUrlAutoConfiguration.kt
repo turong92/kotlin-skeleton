@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.storage.s3
 
 import dev.sumin.skeleton.common.project.ProjectContext
+import dev.sumin.skeleton.common.project.ProjectsConfigured
 import dev.sumin.skeleton.crypto.OpaqueUrlTokenCodec
 import dev.sumin.skeleton.crypto.OpaqueUrlTokenPayload
 import dev.sumin.skeleton.storage.StoragePublicUrlResolver
@@ -10,6 +11,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.context.annotation.Bean
+import org.springframework.context.annotation.Conditional
 
 /**
  * OPAQUE 공개 URL 은 crypto 모듈(OpaqueUrlTokenCodec)이 클래스패스에 있을 때만 이 자동 구성이 켜진다.
@@ -44,14 +46,15 @@ class S3OpaquePublicUrlAutoConfiguration {
     /** 프로젝트 모드: 프로젝트마다 해석기를 만든다. 코덱은 프로젝트를 라우팅하는 암호기를 지나므로 토큰은 그 프로젝트의 키로 만들어진다. 키가 없는 프로젝트는 여기서 기동 실패 */
     @Bean
     @ConditionalOnMissingBean
+    @Conditional(ProjectsConfigured::class)
     fun opaquePublicUrlResolvers(opaqueUrlTokenCodec: ObjectProvider<OpaqueUrlTokenCodec>): OpaquePublicUrlResolvers =
         OpaquePublicUrlResolvers { project, publicUrl ->
             val codec = opaqueUrlTokenCodec.getIfAvailable()
-                ?: error("project '${project.id}': OPAQUE public url needs crypto keys: configure skeleton.projects.${project.id}.config.crypto.keys (module crypto).")
+                ?: error("project '${project.id}': OPAQUE public url needs crypto keys: configure skeleton.projects.${project.id}.config.crypto.keys.<id> (module crypto).")
             try {
                 ProjectContext.runIn(project) { codec.encode(OpaqueUrlTokenPayload(value = "probe", purpose = publicUrl.tokenPurpose)) }
             } catch (ex: RuntimeException) {
-                throw IllegalStateException("project '${project.id}': OPAQUE public url cannot make tokens — configure skeleton.projects.${project.id}.config.crypto.keys (module crypto): ${ex.message}", ex)
+                throw IllegalStateException("project '${project.id}': OPAQUE public url cannot make tokens — configure skeleton.projects.${project.id}.config.crypto.keys.<id> (module crypto): ${ex.message}", ex)
             }
             OpaqueStoragePublicUrlResolver(publicUrl.baseUrl, publicUrl.tokenPathPrefix, publicUrl.tokenPurpose, codec)
         }

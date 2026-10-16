@@ -51,12 +51,14 @@ class TossPaymentAutoConfiguration {
     @ConditionalOnMissingBean(name = ["tossGatewaySource"])
     @Conditional(ProjectsConfigured::class)
     fun tossGatewaySource(httpClient: ExternalHttpClient, credentialAlert: ObjectProvider<PaymentProviderCredentialAlert>): PaymentGatewaySource =
-        PaymentGatewaySource { settings ->
+        PaymentGatewaySource.of(listOf("payment-toss.secret-key")) { settings ->
             val properties = settings.bind("skeleton.payment-toss", TossPaymentProperties::class.java)
             if (!properties.enabled || properties.secretKey.isBlank()) {
                 null
             } else {
-                TossPaymentProvider(httpClient = httpClient, properties = properties, credentialAlert = credentialAlert.getIfAvailable { PaymentProviderCredentialAlert.NONE })
+                // 키 거절 경보는 결제사 응답 스레드(프로젝트 문맥 없음)에서 불린다 — 만들 때 프로젝트를 잡아 두고 그 문맥으로 부른다(안 그러면 경보가 사라지거나 어느 프로젝트 것인지 빠진다)
+                val alert = credentialAlert.getIfAvailable { PaymentProviderCredentialAlert.NONE }
+                TossPaymentProvider(httpClient = httpClient, properties = properties, credentialAlert = PaymentProviderCredentialAlert { id -> settings.inProject { alert.rejected(id) } })
             }
         }
 

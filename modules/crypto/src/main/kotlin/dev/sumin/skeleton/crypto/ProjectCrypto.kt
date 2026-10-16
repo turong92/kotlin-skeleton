@@ -20,7 +20,7 @@ class ProjectRoutedTextEncryptor(
 
     private fun current(): TextEncryptor {
         val project = ProjectContext.current()
-        return parts.of(project).orElseThrow { CryptoException("project '${project.id}' has no crypto keys (skeleton.projects.${project.id}.config.crypto.keys.<id>).") }
+        return parts.of(project).orElseThrow { CryptoException("project '${project.id}' has no crypto keys: set skeleton.projects.${project.id}.config.crypto.primary-key-id and skeleton.projects.${project.id}.config.crypto.keys.<id>.") }
     }
 
     companion object {

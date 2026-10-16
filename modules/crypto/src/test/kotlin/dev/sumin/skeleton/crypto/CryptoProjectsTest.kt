@@ -78,5 +78,31 @@ class CryptoProjectsTest {
         runner.run { ctx -> assertTrue(ctx.getBeansOfType(TextEncryptor::class.java).isEmpty()) }
     }
 
+    @Test
+    fun `a TextEncryptor the app defined is shared by all projects - warning, and a start failure in a protected environment`() {
+        val custom = object : TextEncryptor {
+            override fun encrypt(plainText: String) = plainText
+            override fun decrypt(cipherText: String) = cipherText
+        }
+        val prod = dev.sumin.skeleton.common.deploy.DeployContext(dev.sumin.skeleton.common.deploy.DeployEnv.PROD, emptySet())
+        val local = dev.sumin.skeleton.common.deploy.DeployContext(dev.sumin.skeleton.common.deploy.DeployEnv.LOCAL, emptySet())
+        runner.withBean(TextEncryptor::class.java, java.util.function.Supplier { custom }).run { ctx ->
+            val guard = ctx.getBean("cryptoSharedEncryptorDeployGuard", dev.sumin.skeleton.common.deploy.DeployGuard::class.java)
+            assertEquals(1, guard.problems(prod).size)
+            assertEquals(1, guard.warnings(local).size)
+        }
+        keyed(1, 2).run { ctx ->
+            val guard = ctx.getBean("cryptoSharedEncryptorDeployGuard", dev.sumin.skeleton.common.deploy.DeployGuard::class.java)
+            assertEquals(emptyList(), guard.problems(prod), "the module's own routed encryptor is fine")
+        }
+    }
+
+    @Test
+    fun `keys written only for a closed project do not switch the module on`() {
+        runner.withPropertyValues("$b.keys.local=${key(2)}", "skeleton.projects.b.status=closed", "skeleton.projects.b.schema=").run { ctx ->
+            assertTrue(ctx.getBeansOfType(TextEncryptor::class.java).isEmpty())
+        }
+    }
+
     private fun key(seed: Int): String = Base64.getEncoder().encodeToString(ByteArray(32) { (seed + it).toByte() })
 }

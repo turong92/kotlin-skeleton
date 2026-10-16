@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.payment
 
 import dev.sumin.skeleton.common.project.Project
+import dev.sumin.skeleton.common.project.ProjectContext
 import dev.sumin.skeleton.common.project.ProjectRegistry
 import kotlin.reflect.KClass
 import kotlin.reflect.safeCast
@@ -163,18 +164,48 @@ class PaymentProviderRouter internal constructor(
 
     companion object {
         /**
+         * 결제사 비밀은 프로젝트마다 **자기 것**이어야 한다(프로젝트마다 결제사 계정 · 키를 따로): 결제사를 켠 프로젝트가 비밀을 자기 `config` 에 적지 않고 공통 설정에서 물려받았거나,
+         * 서비스 중인 두 프로젝트의 비밀이 같으면 기동 실패 — 한 계정의 상점으로 다른 프로젝트 주문이 결제되고 웹훅이 엉뚱한 스키마로 가는 것을 막는다.
+         * 서명 없는 결제사의 웹훅 주소 비밀 조각(`payment.webhook.path-token`)도 같은 규칙이다.
+         */
+        private fun requireOwnSecrets(registry: ProjectRegistry, sources: List<PaymentGatewaySource>, made: Set<Pair<String, PaymentGatewaySource>>, routes: dev.sumin.skeleton.common.project.ProjectScoped<PaymentRoutes>) {
+            val values = mutableMapOf<String, MutableList<Pair<String, String>>>()   // 설정 키 → (프로젝트, 값)
+            fun check(project: Project, key: String) {
+                val own = registry.ownValue(project, key)
+                val effective = own ?: registry.sharedValue(key)
+                if (effective == null) return
+                check(own != null) {
+                    "project '${project.id}': skeleton.$key is inherited from the shared settings — every project needs its own payment provider account and keys " +
+                        "(set skeleton.projects.${project.id}.config.$key; one provider account must not serve two projects)"
+                }
+                values.getOrPut(key) { mutableListOf() } += project.id to effective
+            }
+            registry.active.forEach { project ->
+                sources.filter { project.id to it in made }.flatMap { it.secretKeys }.distinct().forEach { check(project, it) }
+                if (routes.of(project).gateways.any { it is PaymentWebhookGateway && !it.signed }) check(project, "payment.webhook.path-token")
+            }
+            values.forEach { (key, owners) ->
+                owners.groupBy({ it.second }, { it.first }).values.firstOrNull { it.size > 1 }?.let { ids ->
+                    error("Projects ${ids.joinToString { "'$it'" }} use the same skeleton.$key — every project needs its own payment provider account and keys (skeleton.projects.<id>.config.$key)")
+                }
+            }
+        }
+
+        /**
          * 프로젝트 모드: 프로젝트마다 자기 설정(`skeleton.payment.{default-provider, providers, routing.country-providers, webhook.path-token}` — 나머지는 공통)과
          * 자기 결제사 게이트웨이(각 결제사 모듈의 [PaymentGatewaySource] 가 그 프로젝트의 키로 만든다)를 가진 라우팅 상태를 만든다.
          * [shared] 는 모든 프로젝트가 같이 쓰는 게이트웨이(앱이 직접 둔 빈). 서비스 중인 프로젝트는 지금 만들어 보므로 잘못된 설정은 프로젝트 이름이 담긴 기동 실패다.
          * 부를 때는 지금 프로젝트(`ProjectContext`)의 것으로 넘어간다 — 프로젝트 문맥이 없으면 `NoProjectContextException`.
          */
         fun forProjects(registry: ProjectRegistry, shared: List<PaymentGateway>, sources: List<PaymentGatewaySource>): PaymentProviderRouter {
+            val made = java.util.concurrent.ConcurrentHashMap.newKeySet<Pair<String, PaymentGatewaySource>>()
             val routes = registry.scopedFrom("skeleton.payment", PaymentProperties::class.java) { project, properties ->
                 val settings = object : PaymentProviderSettings {
                     override val projectId = project.id
                     override fun <T : Any> bind(prefix: String, type: Class<T>): T = registry.bind(project, prefix, type)
+                    override fun <R> inProject(block: () -> R): R = ProjectContext.runIn(project, block)
                 }
-                PaymentRoutes(project.id, project, shared + sources.mapNotNull { it.create(settings) }, properties)
+                PaymentRoutes(project.id, project, shared + sources.mapNotNull { source -> source.create(settings)?.also { made += project.id to source } }, properties)
             }
             registry.active.forEach { project ->
                 try {
@@ -183,6 +214,7 @@ class PaymentProviderRouter internal constructor(
                     throw IllegalStateException("Payment of project '${project.id}' cannot start: ${generateSequence<Throwable>(ex) { it.cause }.last().message}", ex)
                 }
             }
+            requireOwnSecrets(registry, sources, made, routes)
             return PaymentProviderRouter({ routes.get() }, { registry.active.map { routes.of(it) } })
         }
     }

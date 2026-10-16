@@ -33,7 +33,7 @@ class StripePaymentAutoConfiguration {
     @ConditionalOnMissingBean(name = ["stripeGatewaySource"])
     @Conditional(ProjectsConfigured::class)
     fun stripeGatewaySource(httpClient: ExternalHttpClient): PaymentGatewaySource =
-        PaymentGatewaySource { settings ->
+        PaymentGatewaySource.of(listOf("payment-stripe.secret-key")) { settings ->
             val properties = settings.bind("skeleton.payment-stripe", StripePaymentProperties::class.java)
             if (properties.enabled) StripePaymentProvider(httpClient = httpClient, properties = properties) else null
         }

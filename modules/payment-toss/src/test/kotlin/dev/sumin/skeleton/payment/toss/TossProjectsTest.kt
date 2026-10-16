@@ -83,6 +83,23 @@ class TossProjectsTest {
     }
 
     @Test
+    fun `a key the provider rejected raises the alert inside the project that owns the key - on the provider's response thread too`() {
+        val seen = java.util.concurrent.CopyOnWriteArrayList<String?>()
+        val alert = dev.sumin.skeleton.payment.PaymentProviderCredentialAlert { seen += ProjectContext.currentOrNull()?.id }
+        server.on("POST", "/v1/payments/confirm", Reply.Json(200, TossFixtures.payment()))
+        runner().withBean(dev.sumin.skeleton.payment.PaymentProviderCredentialAlert::class.java, java.util.function.Supplier { alert })
+            .withPropertyValues(*toss("a", "test_sk_project_a", "test_ck_a"), *toss("b", "test_sk_wrong_key_of_b", "test_ck_b")).run { ctx ->
+                val router = ctx.getBean(PaymentProviderRouter::class.java)
+                val b = ctx.getBean(ProjectRegistry::class.java).projects.single { it.id == "b" }
+                val confirm = PaymentConfirmRequest(providerPaymentId = "pay_key_1", amount = PaymentAmount(3_000, "KRW"), merchantReferenceId = "ord_abcdef123456")
+
+                runCatching { ProjectContext.runIn(b) { router.gateway("toss", PaymentConfirmGateway::class).confirm(confirm) } }
+
+                assertEquals(listOf<String?>("b"), seen, "the money alert was raised once, in project b's context")
+            }
+    }
+
+    @Test
     fun `without a project list the single Toss provider bean is unchanged`() {
         ApplicationContextRunner()
             .withConfiguration(AutoConfigurations.of(OutboundHttpAutoConfiguration::class.java, PaymentAutoConfiguration::class.java, TossPaymentAutoConfiguration::class.java))

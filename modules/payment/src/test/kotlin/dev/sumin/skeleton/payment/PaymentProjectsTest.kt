@@ -154,4 +154,45 @@ class PaymentProjectsTest {
         }
         assertTrue("project 'b'" in e.message!!, e.message)
     }
+
+    private val secretSource = PaymentGatewaySource.of(listOf("keyed-pay.key")) { settings ->
+        val p = settings.bind("skeleton.keyed-pay", KeyedProps::class.java)
+        if (p.enabled) KeyedGateway(p.key) else null
+    }
+
+    private fun startFailure(registry: ProjectRegistry): String = assertFailsWith<IllegalStateException> {
+        PaymentProviderRouter.forProjects(registry, emptyList(), listOf(secretSource))
+    }.let { e -> generateSequence<Throwable>(e) { it.cause }.mapNotNull { it.message }.joinToString(" | ") }
+
+    @Test
+    fun `a project that switched a provider on but took its secret from the shared settings stops the start`() {
+        val message = startFailure(registry("skeleton.keyed-pay.key" to "SHARED", "skeleton.projects.c.config.keyed-pay.enabled" to "true"))
+        assertTrue("project 'c'" in message && "inherited" in message && "own payment provider account" in message, message)
+    }
+
+    @Test
+    fun `two projects with the same provider secret - or the same webhook path token - stop the start however they got it`() {
+        val sameKey = startFailure(registry("skeleton.projects.b.config.keyed-pay.key" to "KEY-A"))
+        assertTrue("'a'" in sameKey && "'b'" in sameKey && "keyed-pay.key" in sameKey, sameKey)
+        val sameToken = startFailure(registry("skeleton.projects.b.config.payment.webhook.path-token" to "token-of-project-a-0123456789abcdef"))
+        assertTrue("'a'" in sameToken && "'b'" in sameToken && "path-token" in sameToken, sameToken)
+    }
+
+    @Test
+    fun `a provider switched on nowhere is not judged, and a closed project does not count for sameness`() {
+        PaymentProviderRouter.forProjects(registry(), emptyList(), listOf(secretSource))   // c has nothing on, a and b have their own
+        PaymentProviderRouter.forProjects(registry("skeleton.projects.b.config.keyed-pay.key" to "KEY-A", "skeleton.projects.b.status" to "closed", "skeleton.projects.b.schema" to ""), emptyList(), listOf(secretSource))
+    }
+
+    @Test
+    fun `a PaymentGateway bean the app defined is shared by all projects - a warning, and a start failure in a protected environment`() {
+        val guard = PaymentAutoConfiguration().paymentSharedGatewaysDeployGuard(listOf(KeyedGateway("app")))
+        val prod = dev.sumin.skeleton.common.deploy.DeployContext(dev.sumin.skeleton.common.deploy.DeployEnv.PROD, emptySet())
+        val local = dev.sumin.skeleton.common.deploy.DeployContext(dev.sumin.skeleton.common.deploy.DeployEnv.LOCAL, emptySet())
+        assertEquals(1, guard.problems(prod).size)
+        assertEquals(emptyList(), guard.warnings(prod))
+        assertEquals(emptyList(), guard.problems(local))
+        assertEquals(1, guard.warnings(local).size)
+        assertEquals(emptyList(), PaymentAutoConfiguration().paymentSharedGatewaysDeployGuard(emptyList()).problems(prod))
+    }
 }

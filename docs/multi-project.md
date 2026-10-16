@@ -116,13 +116,17 @@ DB 는 스키마 · 계정으로 갈려 공유 키가 데이터를 섞지는 않
   - *공통*: 만료 · 조회 · 환불 시각(`checkout-ttl` · `reconcile.*` · `refund.*`), 웹훅 본문 상한 · 요청 한도, 운영자 경로 · 역할, 탈퇴 처리, 구독 정책(갱신 재시도 · 플랜 변경 방식 · 해지·환불 정책 · 일할 시간대). 인프라 정책이라 서버가 하나로 정하고, 프로젝트 `config` 에 쓰면 기동 실패라 조용히 무시되지 않는다. (프로젝트마다 갈라야 할 만큼 필요해지면 `ProjectConfigKeys` 에 키를 더하고 소비하는 곳을 `router.properties()` 로 읽게 한다 — 나라 지도 · 비밀 조각이 그렇게 읽는다.)
   - *앱 코드*: **플랜 · 금액 · 지급 훅**(`SubscriptionPlans` · `PaymentCatalog` · `PaymentOrderListener` · `SubscriptionRenewalGuard` · `SubscriptionUsageCheck`)은 앱이 구현하는 빈이다. 호출은 그 프로젝트 문맥 안에서 일어나므로 구현이 `ProjectContext.current()` 로 프로젝트를 보고 가른다. 한 빈이 프로젝트마다 다른 플랜을 내는 모듈 쪽 라우팅은 아직 없다.
 - **빌링키 암호화는 프로젝트의 암호화 키로**(위 `crypto`). 빌링 능력이 있는 결제사(토스)를 켠 프로젝트에 암호화 키가 없으면 카드를 받은 뒤가 아니라 **기동 때** 그 프로젝트 이름으로 실패한다.
-- 한계: 같은 결제사 계정(키)을 두 프로젝트가 같이 써도 막지 않는다(웹훅은 도메인으로 갈리지만 결제사 콘솔의 한 계정에 주문이 섞인다 — 프로젝트마다 계정을 권한다). `SubscriptionPlans`/`PaymentCatalog` 같은 앱 빈을 프로젝트마다 둘 수 있는 라우팅은 없다.
+- **결제사 계정 · 키는 프로젝트마다 따로 — 기동이 강제한다.** 공통 `skeleton.payment-*.*` 는 프로젝트로 내려가지만(공통 위에 덮는다), 결제사를 켠 프로젝트가 **비밀 값(토스 `secret-key`, Paddle `api-key` · `webhook-secret`, Stripe `secret-key`)을 자기 `config` 에 적지 않고 공통에서 물려받으면 기동 실패**다(그러면 그 프로젝트 주문이 다른 프로젝트의 상점 계정으로 결제되고 웹훅이 엉뚱한 스키마로 간다). **서비스 중인 두 프로젝트의 비밀 값이 같아도 기동 실패**(상속이든 일부러든 같다). 서명 없는 결제사(토스)의 웹훅 주소 비밀 조각 `payment.webhook.path-token` 도 같은 규칙. 이 검사는 결제사 이름을 나열하지 않는다 — 결제사 모듈의 `PaymentGatewaySource.secretKeys`(비밀 값의 설정 키 목록)가 선언한 것을 라우터가 본다(새 결제사 모듈은 그 목록만 채우면 된다). 닫힌 프로젝트와 그 결제사를 켜지 않은 프로젝트는 보지 않는다. 한 프로젝트가 결제사 설정을 공통에 두려면 프로젝트를 하나만 두거나, 공통에서 키를 지우고 프로젝트마다 적는다.
+- **앱이 직접 둔 `PaymentGateway` · `TextEncryptor` 빈은 모든 프로젝트가 같이 쓴다**(한 계정의 키 · 하나의 암호화 키) — 프로젝트 모드에서는 기동 경고, 보호 환경(`skeleton.env=stage|prod`)에서는 기동 실패(DeployGuard `payment` · `crypto`). 프로젝트마다 갈리게 하려면 앱 빈 대신 `PaymentGatewaySource` · 프로젝트별 `crypto.keys` 를 쓴다. (예전에는 이런 앱이 프로젝트가 둘이면 `ProjectUnawareFeatures` 가드로 기동 실패했다.)
+- **결제사가 우리 키를 거절했다는 경보**(`PaymentProviderCredentialAlert`)는 게이트웨이를 만들 때 잡아 둔 프로젝트의 문맥으로 불린다 — 결제사 응답 스레드에는 프로젝트가 없어서 그러지 않으면 경보가 사라지거나 프로젝트가 빠진다.
+- 프로젝트 모드에서는 앱이 `paymentWebhookDeployGuard` 라는 이름으로 덮어쓴 가드가 쓰이지 않는다 — 프로젝트 모드의 가드 빈 이름은 `paymentProjectWebhookDeployGuard`(덮으려면 그 이름으로).
+- 한계: `SubscriptionPlans`/`PaymentCatalog` 같은 앱 빈을 프로젝트마다 둘 수 있는 라우팅은 없다.
 
 ### 프로젝트 종료 절차 — 결제 쪽 (`status: closed` 로 바꾸기 전과 후)
 
 `closed` 는 도메인을 503 으로 막고 DB 풀 · 뒤 작업 순회에서 그 프로젝트를 뺀다 — 결제는 돈이 걸려 있어서 **순서가 있다**. 건너뛰면 결제사가 돈을 받았는데 장부가 모르거나, 웹훅이 영영 안 닿는다.
 
-1. **새 결제 막기** (프로젝트는 아직 `active`) — 앱의 `PaymentCatalog.quote` 가 이 프로젝트의 상품을 `PaymentItemNotPurchasableException` 으로 거절하고 `SubscriptionPlans.list()` 가 이 프로젝트에서 비도록 바꿔 배포한다. 결제사 설정(`payment-*.enabled=false`)은 쓰지 않는다 — 이미 열린 결제창의 승인 · 웹훅 경로까지 닫혀 결제된 돈을 장부가 못 따라온다. 결제창이 이미 열린 주문은 `checkout-ttl`(기본 30분) 안에 끝나거나 만료된다.
+1. **새 결제 막기** (프로젝트는 아직 `active`) — 앱의 `PaymentCatalog.quote` 가 이 프로젝트의 상품을 `PaymentItemNotPurchasableException` 으로 거절하고 `SubscriptionPlans.list()` 가 이 프로젝트에서 비도록 바꿔 배포한다. 결제사 설정(`payment-*.enabled=false` · `payment.providers.<id>.enabled=false`)은 쓰지 않는다 — 둘 다 `router.gateway` 를 막아 환불 · 웹훅 처리 작업까지 멈추고, 이미 열린 결제창의 승인 · 웹훅 경로까지 닫혀 결제된 돈을 장부가 못 따라온다. 결제창이 이미 열린 주문은 `checkout-ttl`(기본 30분) 안에 끝나거나 만료된다.
 2. **남은 구독 해지 · 환불** — 운영자 경로(`admin.enabled`)에서 구독을 해지하고(결제사가 갱신하는 Paddle 은 결제사 쪽 해지까지 확인) 환불할 주문을 환불한다. 운영자 목록의 「확인 필요」(`CONFIRMING` 이 오래됨 · 환불 `PENDING` · 지급/회수 미완)가 비고, 갱신 대기 구독이 0 이 될 때까지 기다린다.
 3. **웹훅 마지막 처리** — 결제사 콘솔에서 이 프로젝트 도메인의 웹훅 수신(토스 웹훅 등록 · Paddle notification destination)을 끈 뒤, 이 프로젝트 스키마의 결제 작업(`payment.*` 종류)이 모두 끝났는지(대기 · 재시도 0, `DEAD` 는 사람이 확인) 본다. **이 단계가 끝나기 전에 `closed` 로 바꾸지 않는다** — `closed` 가 되면 그 프로젝트의 일꾼 순회가 멈춰 남은 작업이 영영 안 돈다.
 4. **`status: closed`** — 도메인이 503, 이후 늦게 오는 결제사 재전송은 503 이라 결제사가 재시도하다 포기한다(3 에서 끈 뒤라 정상).

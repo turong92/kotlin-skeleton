@@ -40,6 +40,13 @@ class ProjectRegistry private constructor(
     fun <T : Any> bindOwn(project: Project, prefix: String, type: Class<T>): T =
         Binder(listOf(MapConfigurationPropertySource(project.config.mapKeys { "$ROOT.${it.key}" })), PropertySourcesPlaceholdersResolver(environment)).bindOrCreate(prefix, Bindable.of(type))
 
+    /** 이 프로젝트가 `config` 에 **직접** 적은 값 ([key] 는 `skeleton.` 아래, 예: `payment-toss.secret-key`; 대소문자 · `-` · `_` 는 무시) — 공통 값으로 내려가지 않은 것만 */
+    fun ownValue(project: Project, key: String): String? =
+        project.config.entries.firstOrNull { configKey(it.key) == configKey(key) }?.value?.takeIf { it.isNotBlank() }
+
+    /** 공통 `skeleton.<key>` 값 (프로젝트 `config` 가 덮기 전) */
+    fun sharedValue(key: String): String? = environment.getProperty("$ROOT.$key")?.takeIf { it.isNotBlank() }
+
     /** 프로젝트마다 한 번 만들어 두는 부품 도우미 — [bind] 한 properties 로 부품을 만든다 */
     fun <P : Any, T : Any> scopedFrom(prefix: String, type: Class<P>, create: (Project, P) -> T): ProjectScoped<T> =
         ProjectScoped { project -> create(project, bind(project, prefix, type)) }
@@ -61,7 +68,7 @@ class ProjectRegistry private constructor(
 
         /** 어느 프로젝트의 `config` 에든 [prefix](`skeleton.` 아래, 예: `crypto.keys.`) 아래 값이 비지 않게 적혀 있는가 — 자동 구성의 켜짐 조건용 */
         fun hasConfig(environment: Environment, prefix: String): Boolean =
-            raw(environment).values.any { s -> s.config.any { (key, value) -> value.isNotBlank() && configKey(key).startsWith(configKey(prefix)) } }
+            raw(environment).values.filter { it.status != ProjectStatus.CLOSED }.any { s -> s.config.any { (key, value) -> value.isNotBlank() && configKey(key).startsWith(configKey(prefix)) } }
 
         /** [supportedConfig] 가 있으면 프로젝트 `config` 키는 그 접두사들 아래여야 한다 — 지원하지 않는 키가 조용히 무시되지 않게 기동 실패 */
         fun from(environment: Environment, supportedConfig: List<String>? = null): ProjectRegistry {
