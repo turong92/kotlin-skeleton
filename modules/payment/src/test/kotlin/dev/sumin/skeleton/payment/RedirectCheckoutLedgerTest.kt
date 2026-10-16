@@ -85,4 +85,38 @@ class RedirectCheckoutLedgerTest {
 
         assertNull(kit.gateway.confirmRequests.single().approvalToken)
     }
+
+    @Test
+    fun `a malformed or missing approval token is refused with a 400 before the claim - the order stays PENDING and the buyer can still pay`() {
+        withTransactionIds()
+        val order = kit.create(key = "k1").order
+        kit.gateway.authenticate("T1", order.id, order.amount)
+        kit.gateway.acceptsApprovalToken = { it == "good" }
+
+        for (token in listOf(null, "forged token")) {
+            assertFailsWith<dev.sumin.skeleton.common.FieldValidationException> { kit.orders.confirm("acc_1", order.id, "T1", order.amount, token) }
+        }
+
+        assertEquals(0, kit.gateway.confirmCalls.size)
+        assertEquals(PaymentOrderStatus.PENDING, kit.order(order.id).status)
+        assertEquals(PaymentOrderStatus.PAID, kit.orders.confirm("acc_1", order.id, "T1", order.amount, "good").status)
+    }
+
+    @Test
+    fun `a provider the buyer picked must serve the quote currency - the server's own pick is not checked`() {
+        val props = PaymentProperties(
+            webhook = PaymentProperties.Webhook(pathToken = PaymentLedgerKit.WEBHOOK_TOKEN),
+            providers = mapOf("scripted" to PaymentProperties.Provider(currencies = setOf("USD"), countries = setOf("US"))),
+        )
+        val strict = PaymentLedgerKit(properties = props)
+
+        assertFailsWith<PaymentRoutingException> {
+            strict.orders.create(CreateOrderCommand("acc_1", "cheer", "cheer-3000", IdempotencyKey("c1"), provider = "scripted", providerChosen = true))
+        }
+        assertEquals(0, strict.store.allOrders().size)
+        strict.orders.create(CreateOrderCommand("acc_1", "cheer", "cheer-3000", IdempotencyKey("c2"), provider = "scripted"))
+        assertEquals(1, strict.store.allOrders().size)
+        assertEquals(false, strict.router.servesCountry("scripted", "KR"), "the operator's countries override is the effective list")
+        assertEquals(true, strict.router.servesCountry("scripted", "us"))
+    }
 }

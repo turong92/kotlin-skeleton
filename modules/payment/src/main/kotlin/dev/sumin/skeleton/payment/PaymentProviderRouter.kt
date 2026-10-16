@@ -44,6 +44,14 @@ class PaymentProviderRouter internal constructor(
     fun <T : PaymentGateway> gateways(capability: KClass<T>): List<T> =
         providersById.toSortedMap().values.filter { it.route().enabled }.mapNotNull { capability.safeCast(it) }
 
+    /** 이 결제사가 [country] 를 **실효 설정**으로 받는가 - 운영자의 `skeleton.payment.providers.<id>.countries` 덮어쓰기가 모듈 기본보다 먼저다. */
+    fun servesCountry(providerId: String, country: String): Boolean =
+        providerId.normalizeProviderId()?.let { providersById[it] }?.route()?.countries?.contains(country.trim().uppercase()) == true
+
+    /** 이 결제사가 [currency] 를 실효 설정으로 받는가(덮어쓰기 `providers.<id>.currencies` 가 먼저). */
+    fun servesCurrency(providerId: String, currency: String): Boolean =
+        providerId.normalizeProviderId()?.let { providersById[it] }?.route()?.currencies?.contains(currency.trim().uppercase()) == true
+
     fun resolve(
         provider: String?,
         amount: PaymentAmount?,

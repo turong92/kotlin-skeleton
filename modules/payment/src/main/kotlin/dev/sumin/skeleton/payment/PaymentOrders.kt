@@ -16,6 +16,8 @@ data class CreateOrderCommand(
     val provider: String? = null,
     /** 나라 지도가 정한 결제사가 못 열린다 - 다른 결제사로 넘기지 않고 새 주문은 [PaymentUnavailableException]. 같은 키의 재전송은 만든 때의 줄을 돌려준다. */
     val providerClosed: Boolean = false,
+    /** [provider] 는 구매자가 `choices` 에서 고른 것이다(서버 몫이 아니다) - 그 결제사가 견적 통화를 받는지 본다. 서버가 정한 결제사는 보지 않는다(Paddle 은 자기 가격 통화로 바꾼다). */
+    val providerChosen: Boolean = false,
 )
 
 /**
@@ -58,6 +60,9 @@ class PaymentOrders(
         val quote = catalog.quote(PurchaseRequest(command.accountId, command.itemType, command.itemRef, command.quantity, command.country))
         if (quote.amount.amount <= 0) throw PaymentItemNotPurchasableException()
         check(quote.orderName.isNotBlank()) { "The payment catalog returned a blank order name" }
+        if (command.providerChosen && (command.provider == null || !router.servesCurrency(command.provider, quote.amount.currency))) {
+            throw PaymentRoutingException("The chosen payment provider does not take the currency of this purchase.")
+        }
         val checkout = findOpenableCheckout(command.provider, quote.amount, command.country, warn = true) ?: throw PaymentUnavailableException()
         val orderId = ids.newId(PaymentOrderIds.ORDER_PREFIX)
         val creator = checkout as? PaymentTransactionGateway
@@ -128,7 +133,7 @@ class PaymentOrders(
         if (providerPaymentId.isBlank() || providerPaymentId.length > PAYMENT_ID_MAX) {
             throw FieldValidationException("providerPaymentId", "Size", "providerPaymentId must be 1 to $PAYMENT_ID_MAX characters")
         }
-        val claim = claim(accountId, orderId, providerPaymentId, amount)
+        val claim = claim(accountId, orderId, providerPaymentId, amount, approvalToken)
         val gateway = claim.gateway ?: return claim.order
         val order = claim.order
         val request = PaymentConfirmRequest(
@@ -172,7 +177,7 @@ class PaymentOrders(
     private class Claim(val order: PaymentOrder, val gateway: PaymentConfirmGateway?)
 
     /** ① 선점. 락 안에서 모든 조건을 다시 보고, 통과하면 `CONFIRMING` + 결제 키 + 조회 작업을 한 트랜잭션에 커밋한다. */
-    private fun claim(accountId: String, orderId: String, providerPaymentId: String, amount: PaymentAmount): Claim =
+    private fun claim(accountId: String, orderId: String, providerPaymentId: String, amount: PaymentAmount, approvalToken: String?): Claim =
         store.inTransaction { tx ->
             val order = ownedOrNull(tx.lockOrder(orderId), accountId) ?: throw PaymentOrderNotFoundException()
             when {
@@ -189,6 +194,10 @@ class PaymentOrders(
             // 모양이 틀린 키는 선점 전에 거절한다 — 선점된 뒤에 결제사 호출이 거절하면 주문이 CONFIRMING 에 갇히고 조회 작업이 같은 키로 끝까지 실패한다
             if (!gateway.acceptsPaymentKey(providerPaymentId)) {
                 throw FieldValidationException("providerPaymentId", "Pattern", "providerPaymentId is not in a form the payment provider accepts")
+            }
+            // 승인 토큰도 같은 자리에서 - 선점 뒤에 거절하면 「모름」으로 굳는다
+            if (!gateway.acceptsApprovalToken(approvalToken)) {
+                throw FieldValidationException("approvalToken", "Pattern", "approvalToken is not in a form the payment provider accepts")
             }
             // 결제창을 열 때 결제사가 거래 번호를 먼저 정했으면(`CheckoutInstruction.providerPaymentId`) 그 번호로만 승인한다 - 브라우저가 다른 번호를 끼워 넣지 못한다
             if (order.providerPaymentId != null && order.providerPaymentId != providerPaymentId) throw PaymentOrderNotPayableException()
@@ -329,7 +338,8 @@ class PaymentOrders(
 
     /**
      * 결제창이 결제사가 먼저 정한 거래 번호를 줬으면([CheckoutInstruction.providerPaymentId]) 주문에 박는다 - 결제창에서 돌아온 승인이 그 번호로만 열린다.
-     * 같은 `PENDING` 주문을 다시 열면 새 번호가 이긴다(지금 사용자가 보는 결제창이 승인될 수 있는 쪽). 그 사이 주문이 `PENDING` 을 벗어났으면 건드리지 않는다. 결제사 호출은 이미 끝났다(트랜잭션 밖).
+     * 같은 `PENDING` 주문을 다시 열 때마다 결제사가 새 번호를 주고, **마지막으로 저장한 번호가 남는다**(동시에 두 번 열면 늦게 커밋한 쪽). 승인은 이 번호로만 열리므로 **먼저 연 창은 승인이 409 로 막힌다** -
+     * 구매자는 가장 나중에 받은 창으로 결제해야 한다. 그 사이 주문이 `PENDING` 을 벗어났으면 건드리지 않는다. 결제사 호출은 이미 끝났다(트랜잭션 밖).
      */
     private fun remember(order: PaymentOrder, instruction: CheckoutInstruction): PaymentOrder {
         val id = instruction.providerPaymentId ?: return order

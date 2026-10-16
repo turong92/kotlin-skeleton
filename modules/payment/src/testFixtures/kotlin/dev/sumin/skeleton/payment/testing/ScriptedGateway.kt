@@ -77,6 +77,12 @@ class ScriptedGateway(
 
     override fun acceptsPaymentKey(providerPaymentId: String): Boolean = acceptsPaymentKey.invoke(providerPaymentId)
 
+    /** 이 결제사가 받는 승인 토큰의 모양 - 기본은 전부 받는다. 시험이 바꾼다. */
+    @Volatile
+    var acceptsApprovalToken: (String?) -> Boolean = { true }
+
+    override fun acceptsApprovalToken(approvalToken: String?): Boolean = acceptsApprovalToken.invoke(approvalToken)
+
     sealed interface ConfirmScript {
         /** 승인됨 — 결제사 쪽 결제를 `PAID` 로 두고 그 총액으로 답한다. */
         data object Approve : ConfirmScript

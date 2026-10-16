@@ -66,9 +66,9 @@ class KakaoPayProviderTest {
         assertEquals("ord_abcdef123456", body["partner_order_id"])
         assertEquals("acc_1", body["partner_user_id"])
         assertEquals(3000, body["total_amount"])
-        assertEquals("https://app.example.test/payments/return?provider=kakaopay&order=ord_abcdef123456&result=success", body["approval_url"])
-        assertEquals("https://app.example.test/payments/return?provider=kakaopay&order=ord_abcdef123456&result=cancel", body["cancel_url"])
-        assertEquals("https://app.example.test/payments/return?provider=kakaopay&order=ord_abcdef123456&result=fail", body["fail_url"])
+        assertEquals("https://app.example.test/payments/return?kind=KAKAOPAY_REDIRECT&provider=kakaopay&order=ord_abcdef123456&result=success", body["approval_url"])
+        assertEquals("https://app.example.test/payments/return?kind=KAKAOPAY_REDIRECT&provider=kakaopay&order=ord_abcdef123456&result=cancel", body["cancel_url"])
+        assertEquals("https://app.example.test/payments/return?kind=KAKAOPAY_REDIRECT&provider=kakaopay&order=ord_abcdef123456&result=fail", body["fail_url"])
 
         assertEquals("KAKAOPAY_REDIRECT", instruction.kind)
         assertTrue(instruction.testMode)
@@ -79,13 +79,30 @@ class KakaoPayProviderTest {
     }
 
     @Test
+    fun `a purchase in another currency than KRW is never sent to ready - 503 and no request`() {
+        val usd = checkoutOrder().copy(amount = PaymentAmount(3_000, "USD"))
+
+        assertFailsWith<dev.sumin.skeleton.payment.PaymentUnavailableException> { provider.checkout(usd) }
+
+        assertEquals(0, server.requests.size)
+    }
+
+    @Test
+    fun `the approval token shape is judged before the claim - missing and malformed are refused, a real looking one is accepted`() {
+        assertFalse(provider.acceptsApprovalToken(null))
+        assertFalse(provider.acceptsApprovalToken(""))
+        assertFalse(provider.acceptsApprovalToken("a b/c"))
+        assertTrue(provider.acceptsApprovalToken("pgtok_abc123"))
+    }
+
+    @Test
     fun `a return address that already has a query gets the pieces appended with ampersands`() {
         val withQuery = kakaoProvider(server, returnUrl = "https://app.example.test/pay?lang=ko")
 
         withQuery.checkout(checkoutOrder())
 
         val approval = json.readValue(server.requests.single().body, Map::class.java)["approval_url"] as String
-        assertEquals("https://app.example.test/pay?lang=ko&provider=kakaopay&order=ord_abcdef123456&result=success", approval)
+        assertEquals("https://app.example.test/pay?lang=ko&kind=KAKAOPAY_REDIRECT&provider=kakaopay&order=ord_abcdef123456&result=success", approval)
     }
 
     @Test

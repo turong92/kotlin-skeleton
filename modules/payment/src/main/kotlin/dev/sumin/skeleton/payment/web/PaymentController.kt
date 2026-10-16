@@ -52,7 +52,7 @@ class PaymentController(
     private val callers: PaymentCallers,
     private val routing: PaymentCountryRouting,
 ) {
-    @Operation(summary = "Can payments be taken", description = "country, provider and cancelPolicy are what the server decided for this request (its Cloudflare country, the configured default or the local switch): the provider is the one an order or subscription will use (a body provider is ignored), cancelPolicy.key picks the cancel / refund summary. available is false without a catalog, without a provider that opens a checkout, or when that provider cannot hand out the values for its window (a missing or mismatched public key). testMode is true while test keys are in.")
+    @Operation(summary = "Can payments be taken", description = "country, provider and cancelPolicy are what the server decided for this request (its Cloudflare country, the configured default or the local switch): the provider is the one an order or subscription will use (an order takes a body provider only when it is one of choices - the providers open for this country - and a subscription never does; choices is always present, [] when there is nothing to pick), cancelPolicy.key picks the cancel / refund summary. available is false without a catalog, without a provider that opens a checkout, or when that provider cannot hand out the values for its window (a missing or mismatched public key). testMode is true while test keys are in.")
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = PaymentConfigResponse::class)
     @GetMapping("/config")
     fun config(authentication: Authentication?, request: HttpServletRequest): DataResponse<PaymentConfigResponse> {

@@ -39,6 +39,13 @@ interface PaymentConfirmGateway : PaymentGateway {
     fun acceptsPaymentKey(providerPaymentId: String): Boolean = true
 
     /**
+     * 돌아온 결제창의 승인 토큰(카카오페이 `pg_token`)이 결제사가 받을 수 있는 **모양**인가. [acceptsPaymentKey] 와 같은 자리(선점 전, 주문 줄 락 안 - 문자열 검사만)에서 불려
+     * false 면 선점 없이 400 으로 거절한다 - 선점 뒤에 결제사가 거절하면 「모름」으로 읽혀 주문이 `CONFIRMING` 에 굳는다. 토큰이 없는 결제창(토스)은 늘 받는다(기본 true).
+     * 모양만 본다 - 토큰이 진짜인지는 결제사가 답한다.
+     */
+    fun acceptsApprovalToken(approvalToken: String?): Boolean = true
+
+    /**
      * 결제사가 **확정 거절**한 승인의 코드를 `DECLINED` 응답의 `data.category`(화면이 문구를 고르는 분류)로 옮긴다 — 결제사 코드 어휘는 결제사 모듈만 안다([PaymentRefundGateway.refundDeclineCategory] 와 같은 방식).
      * 기본은 [ConfirmDeclineCategory.OTHER]. 코드는 로그 · 참조 번호로만 나가고 화면 문구는 분류로 고른다.
      */

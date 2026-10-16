@@ -7,7 +7,7 @@ skeleton:
     secret-key: ""                                  # 개발자센터 앱의 Secret key — 테스트는 「Secret key(dev)」 (env <P>_PAYMENT_KAKAOPAY_SECRET_KEY 로 넘긴다 — 배포 선언의 secrets:, 운영자 값). 보호 환경에서 비면 기동 실패
     cid: ""                                         # 가맹점 코드(CID, 10자) — 테스트는 TC0ONETIME. 키 모양이 아니라 이 코드가 테스트 · 실결제를 가른다: 보호 환경(stage|prod)에서 테스트 코드면 기동 실패, 로컬 계열에서 실결제 코드면 기동 실패. 비밀은 아니다 — env <P>_PAYMENT_KAKAOPAY_CID (선언의 env:). secret-key 와 짝이라 프로젝트 모드는 프로젝트마다 자기 것
     cid-secret: ""                                  # 가맹점 코드 인증키(선택, 24자) — 발급받았을 때만. 비밀 (env <P>_PAYMENT_KAKAOPAY_CID_SECRET)
-    return-url: ""                                  # 구매자를 돌려보낼 우리 화면의 주소(예: https://app.example.com/payments/return) — 카카오페이는 ready 때 성공 · 취소 · 실패 주소를 서버가 받는다. 모듈이 provider · order · result 조각을 붙이고 성공일 때 카카오페이가 pg_token 을 붙인다. 구매자가 정하는 값이 아니라 설정이다. 장부가 있는데 http(s) 절대 주소가 아니면 보호 환경에서 기동 실패(그 밖은 경고, GET /config 가 available:false). 프로젝트 모드는 프로젝트마다 자기 것(공통에서 물려받으면 기동 실패)
+    return-url: ""                                  # 구매자를 돌려보낼 우리 화면의 주소(예: https://app.example.com/payments/return) — 카카오페이는 ready 때 성공 · 취소 · 실패 주소를 서버가 받는다. 모듈이 kind · provider · order · result 조각을 붙이고 성공일 때 카카오페이가 pg_token 을 붙인다. 구매자가 정하는 값이 아니라 설정이다. 장부가 있는데 http(s) 절대 주소가 아니면 보호 환경에서 기동 실패(그 밖은 경고, GET /config 가 available:false). 프로젝트 모드는 프로젝트마다 자기 것(공통에서 물려받으면 기동 실패)
     base-url: https://open-api.kakaopay.com         # API 호스트 (테스트와 운영이 같은 호스트 — 키와 가맹점 코드가 환경을 가른다)
     ready-path: /online/v1/payment/ready            # 결제 준비 경로
     approve-path: /online/v1/payment/approve        # 결제 승인 경로

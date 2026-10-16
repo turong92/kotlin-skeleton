@@ -17,6 +17,8 @@ internal object KakaoPayIdentifiers {
 
     fun isTid(value: String): Boolean = TID.matches(value)
 
+    fun isApprovalToken(value: String?): Boolean = value != null && TOKEN.matches(value)
+
     fun tid(value: String): String = if (isTid(value)) value else throw KakaoPayIdentifierRejectedException()
 
     fun orderId(value: String): String = if (ORDER_ID.matches(value)) value else throw KakaoPayIdentifierRejectedException()

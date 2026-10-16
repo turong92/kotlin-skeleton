@@ -72,6 +72,9 @@ class KakaoPayProvider(
     /** 장부가 선점 전에 묻는다(주문 줄 락 안 - 문자열 검사만). 거래 번호 모양이 문서에서 확정되지 않았다([KakaoPayIdentifiers]). */
     override fun acceptsPaymentKey(providerPaymentId: String): Boolean = KakaoPayIdentifiers.isTid(providerPaymentId)
 
+    /** 승인 토큰의 모양 - 장부가 선점 전에 묻는다(없으면 선점 없이 400). 선점 뒤에 거절하면 「모름」으로 읽혀 주문이 `CONFIRMING` 에 굳는다. */
+    override fun acceptsApprovalToken(approvalToken: String?): Boolean = KakaoPayIdentifiers.isApprovalToken(approvalToken)
+
     // --- 결제창 ---
 
     /** 돌아올 주소(`return-url`)가 http(s) 절대 주소가 아니면 결제창을 열 수 없다 - 카카오페이는 `ready` 에 성공 · 취소 · 실패 주소를 받는다. */
@@ -83,6 +86,8 @@ class KakaoPayProvider(
      */
     override fun checkout(order: CheckoutOrder): CheckoutInstruction {
         val base = returnBase() ?: throw PaymentUnavailableException()
+        // 카카오페이는 원화만 받는다 - 다른 통화의 금액을 `total_amount` 로 보내지 않는다(구매자가 고른 결제사일 때의 마지막 방어)
+        if (order.amount.normalizedCurrency != KRW) throw PaymentUnavailableException()
         val orderId = KakaoPayIdentifiers.orderId(order.orderId)
         val ready = try {
             guarded("ready") { seen ->
@@ -139,7 +144,7 @@ class KakaoPayProvider(
     /** `return-url` 에 우리 조각을 붙인다 - 성공일 때 카카오페이가 `pg_token` 을 이어 붙인다. */
     private fun returnUrl(base: String, orderId: String, result: String): String {
         val separator = if ('?' in base) '&' else '?'
-        return "$base${separator}provider=${properties.providerId.urlEncoded()}&order=${orderId.urlEncoded()}&result=$result"
+        return "$base${separator}kind=$CHECKOUT_KIND&provider=${properties.providerId.urlEncoded()}&order=${orderId.urlEncoded()}&result=$result"
     }
 
     private fun returnBase(): String? {

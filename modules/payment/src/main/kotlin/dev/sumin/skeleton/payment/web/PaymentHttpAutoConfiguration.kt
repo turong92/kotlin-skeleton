@@ -59,7 +59,7 @@ class PaymentHttpAutoConfiguration {
             { router.properties() },
             clientIps.getIfAvailable { ClientIps() },
             { orders.openableProviders() },
-            { country -> router.gateways(PaymentCheckoutGateway::class).filter { gateway -> gateway.supportedCountries.any { it.equals(country, ignoreCase = true) } }.map { it.providerId.trim().lowercase() } },
+            { country -> router.gateways(PaymentCheckoutGateway::class).filter { gateway -> router.servesCountry(gateway.providerId, country) }.map { it.providerId.trim().lowercase() } },
         )
 
     @Bean
