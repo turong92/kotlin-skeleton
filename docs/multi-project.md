@@ -44,6 +44,7 @@ skeleton:
 | 파일 저장소 (S3 · R2 · MinIO) | `storage-s3.{bucket, region, endpoint-override, credentials.*, presign.*, public-url.*, key-prefix}` | 프로젝트마다 S3 클라이언트 · 저장소를 만든다. 같은 버킷을 나눠 쓰면 `key-prefix` 가 서로 달라야 한다(같으면 기동 실패). 버킷이 없는 프로젝트는 저장소가 없다. 공개 URL 은 RAW 만(OPAQUE 는 crypto 가 프로젝트를 알아야 한다) |
 | 업로드 키 규칙 | `storage.web.{key-prefix, key-owner, key-secret}` | 발급 · 소유 확인이 지금 프로젝트의 규칙으로 돈다. OPAQUE 비밀은 프로젝트마다 달라야 한다(같으면 기동 실패) — A 의 키는 B 에서 소유로 인정되지 않는다 |
 | 약관 · 동의 문서 | `legal.{location, default-locale, required, required-at-sign-up, previous-version-grace, facts.*, acknowledge-template}` | 문서 집합 · 규칙을 프로젝트마다 만든다(운영자 이름 같은 사실도 프로젝트의 것). 시작 검사와 DeployGuard 가 프로젝트마다 돈다. 동의 기록은 스키마마다 |
+| 캡차 (Turnstile) | `captcha-turnstile.{secret-key, expected-hostname, expected-action, siteverify-url, timeout}` | 검증할 때마다 지금 프로젝트의 값. `enabled` 는 앱 전체 하나 — 켜면 서비스 중인 프로젝트 모두 비밀 키가 있어야 한다 |
 | 범용 OIDC | `auth-social-oidc.providers.<코드>.*` | 프로젝트마다 제공자를 만든다 — discovery · JWKS 보관도 제공자 안이라 프로젝트끼리 섞이지 않는다 |
 
 **위 표의 키만 프로젝트 `config` 에 쓸 수 있다**(`ProjectConfigKeys.SUPPORTED`) — 그 밖의 키(`account.sign-up.enabled`, `legal.facts.*`, `web.rate-limit.*`, `web.cors.enabled` …)는 조용히 무시되는 대신 기동 실패다. 프로젝트별 `auth-session.delivery` 도 받는다(`/auth/methods` 는 지금 프로젝트의 방식을 알린다).

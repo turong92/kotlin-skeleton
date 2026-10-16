@@ -32,11 +32,15 @@ data class TurnstileSiteverifyResponse(
  */
 class TurnstileVerifier(
     private val http: ExternalHttpClient,
-    private val properties: TurnstileProperties,
+    private val propertiesOf: () -> TurnstileProperties,
 ) {
+    /** 프로젝트 모드에서는 [propertiesOf] 가 검증할 때마다 지금 프로젝트의 비밀 키 · 기대 hostname 을 준다 */
+    constructor(http: ExternalHttpClient, properties: TurnstileProperties) : this(http, { properties })
+
     private val log = LoggerFactory.getLogger(javaClass)
 
     fun verify(token: String?, remoteIp: String? = null): TurnstileVerification {
+        val properties = propertiesOf()
         if (token.isNullOrBlank()) return TurnstileVerification.failed("missing-input-response")
         val form = buildMap {
             put("secret", properties.secretKey)

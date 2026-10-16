@@ -3,6 +3,8 @@
 Cloudflare Turnstile 토큰을 서버에서 검증하는 `TurnstileVerifier` 를 준다.
 외부 호출은 `platform` 의 `ExternalHttpClient` 를 쓴다.
 
+프로젝트 여럿([multi-project](../multi-project.md)): 켜짐(`enabled`)은 앱 전체 하나이고 비밀 키 · 기대 hostname · action · siteverify 주소 · 타임아웃은 프로젝트마다(`skeleton.projects.<id>.config.captcha-turnstile.*`, 공통 값 위에 덮어) 검증할 때마다 지금 프로젝트의 것을 쓴다. 켜 두면 서비스 중인 프로젝트 모두 비밀 키가 있어야 한다(없으면 기동 실패, 메시지에 프로젝트 id) — 프로젝트별로 켜고 끄는 스위치는 없다.
+
 | 항목 | 내용 |
 |---|---|
 | 의존성 한 줄 | `implementation(project(":modules:captcha-turnstile"))` |
