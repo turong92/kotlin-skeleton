@@ -13,6 +13,7 @@ skeleton:
     lookup-by-order-path: /v1/payments/orders/{orderId}   # 주문 번호로 조회
     lookup-timeout: 10s                             # 조회 한 번의 제한 시간(요청 단위 — 클라이언트 단위 응답 제한보다 짧을 때만 뜻이 있다). 환불 전 확인 조회는 이 시간 안에 한 번, 재시도 없음
     allow-test-keys-in-protected-env: false         # true 면 skeleton.env=stage|prod 에서 테스트 키로 서는 것을 일부러 허락한다(경고로 내려간다)
+    easy-pays: []                                   # 결제창 안에서 바로 열 간편결제 코드: TOSSPAY · NAVERPAY · KAKAOPAY · SAMSUNGPAY · LPAY · PAYCO · SSG · APPLEPAY · PINPAY. 비면 카드 단추 하나(지금과 같다). 있으면 checkout 응답 attributes.easyPays 로 나가 프론트가 단추를 하나씩 그린다. 상점 계약(MID)에 있는 것만 열린다. 모르는 코드는 기동 실패. 단건 결제만(자동결제 카드 등록 창에는 간편결제가 없다)
     supported-currencies: [KRW]                     # 이 통화는 이 제공자로 라우팅
     supported-countries: [KR]                       # 이 국가는 이 제공자로 라우팅
 # 프로젝트 여럿(skeleton.projects)이면 skeleton.projects.<id>.config.payment-toss.* 로 프로젝트마다 — 그 프로젝트에서 켜지 않으면 그 프로젝트의 결제 화면에 없다

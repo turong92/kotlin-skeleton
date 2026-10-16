@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 토스 결제창 안 간편결제 단추 — 네이버페이 · 카카오페이 · 토스페이 (2026-10-16)
+
+- `payment-toss` 에 `skeleton.payment-toss.easy-pays`(목록, 기본 **빈 목록 = 지금과 같다**): 적은 간편결제 코드(`NAVERPAY` · `KAKAOPAY` · `TOSSPAY` … 토스 코드표)가 `TOSS_PAYMENT_WINDOW` checkout 응답의 `attributes.easyPays`(쉼표로 이은 문자열)로 나가고, 프런트 `@skeleton/payment` 가 카드 단추 옆에 단추를 그려 `card.flowMode=DIRECT` + `easyPay` 로 그 앱을 바로 연다. 모르는 코드는 기동 실패(오타 방지). 프로젝트 모드에서는 프로젝트마다(`ProjectConfigKeys.SUPPORTED` 의 `payment-toss.` 아래라 새 줄 없음). 단건 결제만 — 토스 자동결제 카드 등록 창에는 간편결제가 없다. 견본 앱(`apps/sample`)은 `[NAVERPAY, KAKAOPAY, TOSSPAY]` 로 켠다. 간편결제로 결제해도 장부에는 `method=EASY_PAY` 까지만 남는다(간편결제사 칸 없음).
+
 ### 한 서버에 프로젝트 N개 — 3조각: 암호화 · 결제 (2026-10-16)
 
 - **`crypto` 가 프로젝트를 안다**: `skeleton.projects.<id>.config.crypto.{primary-key-id, keys.<id>}` 로 프로젝트마다 키를 두고, `TextEncryptor` 빈이 지금 프로젝트의 키로 넘어간다(`ProjectRoutedTextEncryptor` — Spring Data 변환기 · `OpaqueUrlTokenCodec` 이 이 빈을 지난다). 프로젝트끼리 **같은 키 바이트면 기동 실패**, 키 없는 프로젝트는 쓰는 순간 그 프로젝트 이름의 오류. 이로써 `storage-s3` 의 프로젝트 모드 **OPAQUE 공개 URL** 이 풀렸다(예전 기동 실패 메시지는 키 없는 프로젝트의 메시지로 바뀜). `crypto` 가 `platform` 에 의존한다(프로젝트 문맥).

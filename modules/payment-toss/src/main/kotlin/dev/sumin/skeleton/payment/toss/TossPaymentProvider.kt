@@ -356,7 +356,8 @@ class TossPaymentProvider(
             clientKey = publicClientKey(),
             // SDK v2 requestPayment 의 고정 인자. 구매자 이름 · 이메일 · 전화번호는 넘기지 않는다(선택 칸).
             // 비회원 구매자 키는 SDK 의 상수(`TossPayments.ANONYMOUS`)라 서버가 문자열로 넘겨 주지 않는다.
-            attributes = mapOf("method" to "CARD"),
+            // 간편결제 목록이 비면 지금과 같다(`method` 하나). 있으면 쉼표로 이어 프론트가 단추를 하나씩 그린다.
+            attributes = mapOf("method" to "CARD") + TossEasyPays.normalize(properties.easyPays).takeIf { it.isNotEmpty() }?.let { mapOf("easyPays" to it.joinToString(",")) }.orEmpty(),
         )
 
     /**

@@ -48,6 +48,28 @@ class TossGatewaySurfaceTest {
     }
 
     @Test
+    fun `checkout without easy pays is exactly what it was - the only attribute is the method`() {
+        val order = CheckoutOrder("ord_abcdef123456", "x", PaymentAmount(1_000, "KRW"))
+
+        assertEquals(mapOf("method" to "CARD"), provider().checkout(order).attributes)
+    }
+
+    @Test
+    fun `checkout carries the configured easy pays in order, so the browser can draw one button each`() {
+        val order = CheckoutOrder("ord_abcdef123456", "x", PaymentAmount(1_000, "KRW"))
+        val withEasyPays = TossPaymentProvider(noHttp, TossPaymentProperties(enabled = true, secretKey = "test_sk_secret_part", clientKey = "test_ck_client_part", easyPays = listOf("naverpay", " KAKAOPAY ", "TOSSPAY", "NAVERPAY")))
+
+        assertEquals(mapOf("method" to "CARD", "easyPays" to "NAVERPAY,KAKAOPAY,TOSSPAY"), withEasyPays.checkout(order).attributes)
+    }
+
+    @Test
+    fun `an easy pay code Toss does not have stops the settings from being built - a typo never reaches the browser`() {
+        val failure = assertFailsWith<IllegalArgumentException> { TossPaymentProperties(easyPays = listOf("NAVERPAY", "NAVERPAI")) }
+
+        assertTrue(failure.message!!.contains("NAVERPAI"), failure.message)
+    }
+
+    @Test
     fun `checkout hands out only a value that is shaped like a client key - a secret key put in the wrong place is never sent to the browser`() {
         val order = CheckoutOrder("ord_abcdef123456", "x", PaymentAmount(1_000, "KRW"))
 

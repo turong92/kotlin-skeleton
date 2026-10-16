@@ -100,6 +100,30 @@ class TossProjectsTest {
     }
 
     @Test
+    fun `the easy pays of project A are in A's checkout only - B without a list sees the plain checkout`() {
+        runner().withPropertyValues(*toss("a", "test_sk_project_a", "test_ck_a"), *toss("b", "test_sk_project_b", "test_ck_b"), "skeleton.projects.a.config.payment-toss.easy-pays=NAVERPAY,KAKAOPAY").run { ctx ->
+            val router = ctx.getBean(PaymentProviderRouter::class.java)
+            val (a, b) = ctx.getBean(ProjectRegistry::class.java).projects
+            val order = CheckoutOrder(orderId = "ord_abcdef123456", orderName = "x", amount = PaymentAmount(3_000, "KRW"))
+
+            assertEquals(mapOf("method" to "CARD", "easyPays" to "NAVERPAY,KAKAOPAY"), ProjectContext.runIn(a) { router.gateway("toss", PaymentCheckoutGateway::class).checkout(order).attributes })
+            assertEquals(mapOf("method" to "CARD"), ProjectContext.runIn(b) { router.gateway("toss", PaymentCheckoutGateway::class).checkout(order).attributes })
+        }
+    }
+
+    @Test
+    fun `an unknown easy pay code stops the start - in one project and in the single mode alike`() {
+        runner().withPropertyValues(*toss("a", "test_sk_project_a", "test_ck_a"), "skeleton.projects.a.config.payment-toss.easy-pays=NAVERPAI").run { ctx ->
+            assertTrue(ctx.startupFailure != null, "project mode starts with a typo in easy-pays")
+            assertTrue(generateSequence(ctx.startupFailure) { it.cause }.any { it.message?.contains("NAVERPAI") == true }, "the message names the code")
+        }
+        ApplicationContextRunner()
+            .withConfiguration(AutoConfigurations.of(OutboundHttpAutoConfiguration::class.java, PaymentAutoConfiguration::class.java, TossPaymentAutoConfiguration::class.java))
+            .withPropertyValues("skeleton.payment-toss.enabled=true", "skeleton.payment-toss.secret-key=test_sk_123", "skeleton.payment-toss.easy-pays=NAVERPAI")
+            .run { ctx -> assertTrue(ctx.startupFailure != null, "single mode starts with a typo in easy-pays") }
+    }
+
+    @Test
     fun `without a project list the single Toss provider bean is unchanged`() {
         ApplicationContextRunner()
             .withConfiguration(AutoConfigurations.of(OutboundHttpAutoConfiguration::class.java, PaymentAutoConfiguration::class.java, TossPaymentAutoConfiguration::class.java))
