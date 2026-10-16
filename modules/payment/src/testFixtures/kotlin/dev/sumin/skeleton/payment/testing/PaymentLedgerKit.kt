@@ -142,12 +142,14 @@ class PaymentLedgerKit(
     val cancelPolicies: SubscriptionCancelPolicies = SubscriptionCancelPolicies(listOf(KoreaConsumerCancelPolicy(penaltyPercent = 10, withdrawalDays = 7)), mapOf("KR" to KoreaConsumerCancelPolicy.NAME)),
     /** 서명된 웹훅이 곧 사실인 결제사(Paddle 모양)의 대역 — 라우터에는 들어가지만 결제창 · 빌링 능력이 없어 다른 시험의 라우팅을 바꾸지 않는다. */
     val push: FakePushGateway = FakePushGateway(),
+    /** 진짜 결제사 모듈(가짜 결제사 서버와 말하는 것)을 이 장부에 꽂는 자리 - 라우터에 더해진다. 주문은 `CreateOrderCommand.provider` 로 그 결제사를 고른다. */
+    extraGateways: List<dev.sumin.skeleton.payment.PaymentGateway> = emptyList(),
 ) {
     val time = MutableTime()
     val store = InMemoryPaymentLedgerStore()
     val gateway = ScriptedGateway(mode = mode, now = { time.now() }, openTransaction = store::hasOpenTransaction)
     val tasks = InMemoryPaymentTasks(store)
-    val router = PaymentProviderRouter(listOf(gateway, push), properties)
+    val router = PaymentProviderRouter(listOf(gateway, push) + extraGateways, properties)
     val writer = PaymentLedgerWriter(time)
     val lifecycle = SubscriptionLifecycle(tasks, writer, properties, review)
     val convergence = PaymentConvergence(writer, tasks, review, LedgerRefundConvergence(writer, tasks, review)).also { it.subscriptions = lifecycle }

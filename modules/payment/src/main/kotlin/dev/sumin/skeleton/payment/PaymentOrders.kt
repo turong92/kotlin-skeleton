@@ -112,7 +112,8 @@ class PaymentOrders(
         // 거래를 먼저 만드는 결제사(Paddle): 밖에서 서버가 정한 가격 · 수량 · 우리 줄 id 로 거래를 만들어 주문의 결제 키 자리에 박는다. 만들기가 실패하면 주문은 거래 id 없이 남는다
         // (만료 작업이 닫는다; 같은 키로 다시 열면 그때 만든다)
         val created = if (creator != null) ensureTransaction(order, creator) else order
-        return CreatedOrder(created, checkout.checkout(CheckoutOrder(created.id, created.orderName, created.amount, created.itemRef, created.accountId, created.providerPaymentId)), replayed = false)
+        val instruction = checkout.checkout(CheckoutOrder(created.id, created.orderName, created.amount, created.itemRef, created.accountId, created.providerPaymentId))
+        return CreatedOrder(remember(created, instruction), instruction, replayed = false)
     }
 
     /**
@@ -122,7 +123,7 @@ class PaymentOrders(
      * **바깥 트랜잭션 안에서 부르면 던진다**([IllegalStateException], 프로그래밍 오류) — 선점이 커밋되지 않은 채 결제사가 불리고, 바깥이 롤백되면 선점과
      * 조회 작업이 사라지는데 돈은 이미 나간다([PaymentLedgerStore.hasOpenTransaction]). 앱은 `@Transactional` 밖에서 부른다.
      */
-    fun confirm(accountId: String, orderId: String, providerPaymentId: String, amount: PaymentAmount): PaymentOrder {
+    fun confirm(accountId: String, orderId: String, providerPaymentId: String, amount: PaymentAmount, approvalToken: String? = null): PaymentOrder {
         store.requireNoOpenTransaction("PaymentOrders.confirm")
         if (providerPaymentId.isBlank() || providerPaymentId.length > PAYMENT_ID_MAX) {
             throw FieldValidationException("providerPaymentId", "Size", "providerPaymentId must be 1 to $PAYMENT_ID_MAX characters")
@@ -136,6 +137,8 @@ class PaymentOrders(
             merchantReferenceId = order.id,
             provider = order.provider,
             idempotencyKey = IdempotencyKey(order.id), // 같은 주문의 재전송이 생겨도 결제사가 한 번으로 본다
+            approvalToken = approvalToken,
+            accountId = accountId,
         )
         val context = ConvergeContext(gateway.mode, ConvergeSource.CONFIRM, PaymentActor.USER, accountId)
         val result = try {
@@ -187,6 +190,8 @@ class PaymentOrders(
             if (!gateway.acceptsPaymentKey(providerPaymentId)) {
                 throw FieldValidationException("providerPaymentId", "Pattern", "providerPaymentId is not in a form the payment provider accepts")
             }
+            // 결제창을 열 때 결제사가 거래 번호를 먼저 정했으면(`CheckoutInstruction.providerPaymentId`) 그 번호로만 승인한다 - 브라우저가 다른 번호를 끼워 넣지 못한다
+            if (order.providerPaymentId != null && order.providerPaymentId != providerPaymentId) throw PaymentOrderNotPayableException()
             val owner = tx.findOrderByProviderPayment(order.provider, providerPaymentId)
             if (owner != null && owner.id != order.id) throw PaymentOrderNotPayableException() // 한 결제 키가 두 주문에 붙지 못한다
 
@@ -322,6 +327,20 @@ class PaymentOrders(
         }
     }
 
+    /**
+     * 결제창이 결제사가 먼저 정한 거래 번호를 줬으면([CheckoutInstruction.providerPaymentId]) 주문에 박는다 - 결제창에서 돌아온 승인이 그 번호로만 열린다.
+     * 같은 `PENDING` 주문을 다시 열면 새 번호가 이긴다(지금 사용자가 보는 결제창이 승인될 수 있는 쪽). 그 사이 주문이 `PENDING` 을 벗어났으면 건드리지 않는다. 결제사 호출은 이미 끝났다(트랜잭션 밖).
+     */
+    private fun remember(order: PaymentOrder, instruction: CheckoutInstruction): PaymentOrder {
+        val id = instruction.providerPaymentId ?: return order
+        if (order.providerPaymentId == id) return order
+        return store.inTransaction { tx ->
+            val locked = tx.lockOrder(order.id) ?: return@inTransaction order
+            if (locked.status != PaymentOrderStatus.PENDING) return@inTransaction locked
+            locked.copy(providerPaymentId = id).also(tx::updateOrder)
+        }
+    }
+
     /** 거절의 이유(상태 + 결제사 코드)를 그 주문의 이력에 남긴다 - 이력을 못 남겨도 원래 실패(503)는 그대로 나간다. */
     private fun recordTransactionFailure(order: PaymentOrder, e: Exception) {
         try {
@@ -356,7 +375,8 @@ class PaymentOrders(
         } else {
             null
         }
-        return CreatedOrder(existing, checkout, replayed = true, refunds = store.listRefunds(existing.id))
+        val shown = if (checkout != null) remember(existing, checkout) else existing
+        return CreatedOrder(shown, checkout, replayed = true, refunds = store.listRefunds(existing.id))
     }
 
     private fun validate(command: CreateOrderCommand) {

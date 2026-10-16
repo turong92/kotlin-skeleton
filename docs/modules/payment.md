@@ -1,7 +1,7 @@
 # payment
 
 제공자 중립 결제 계약(`PaymentService`, `PaymentProviderRouter`)과, 저장 어댑터(`payment-jdbc`)가 있을 때 켜지는 **결제 장부**(주문 · 환불 · 이력 · 웹훅 수신함 · 사용자/운영자 HTTP · 탈퇴 고리)다.
-제공자(`payment-toss`, `payment-stripe`)가 각자 등록하고, 라우터가 이름으로 고른다.
+제공자(`payment-toss`, `payment-kakaopay`, `payment-stripe`, `payment-paddle`)가 각자 등록하고, 라우터가 이름으로 고른다.
 
 프로젝트 여럿([multi-project](../multi-project.md) "결제"): 결제사 게이트웨이 · 라우팅(`payment.{default-provider, providers.*, routing.country-providers}`) · 웹훅 비밀 조각(`payment.webhook.path-token`)이 프로젝트마다고 `PaymentProviderRouter` 가 지금 프로젝트의 것으로 넘긴다. 결제사 모듈은 `PaymentGatewaySource` 빈 하나로 이 모양을 따른다(새 결제사도 같다). 장부는 스키마마다, 시각 · 한도 · 구독 정책은 공통. 빌링키 암호화는 프로젝트의 `crypto` 키. 닫는 순서도 같은 문서.
 
@@ -42,7 +42,7 @@
 | `PaymentWebhookGateway` | 웹훅의 진위를 확인하고 「어느 자원의 어떤 일」만 꺼낸다. `signed=false` 면 주소의 비밀 조각이 필수 |
 | `mode` | 지금 끼운 키가 테스트 · 실결제 — 주문 줄에 박히고 배포 가드가 본다 |
 
-결제사 모듈의 의무(확정/모름 분류 등)는 `payment-toss` 문서(결제사 모듈을 고른 프로젝트에 `docs/modules/payment-toss.md`). `PaymentProvider` 는 능력의 합(+`cancel`)이라 기존 구현은 고치지 않아도 된다.
+결제사 모듈의 의무(확정/모름 분류 등)는 `payment-toss` 문서(결제사 모듈을 고른 프로젝트에 `docs/modules/payment-toss.md`). 결제창을 열 때 **결제사가 거래 번호를 먼저 정하는** 결제사(카카오페이 `ready`)는 `CheckoutInstruction.providerPaymentId` 로 돌려주고 장부가 주문에 박는다 - 승인 요청이 다른 번호를 들고 오면 결제사를 부르기 전에 막는다. 승인에 결제창이 돌려준 증거(`pg_token`)가 필요한 결제사는 `PaymentConfirmRequest.approvalToken` 으로 받는다. `PaymentProvider` 는 능력의 합(+`cancel`)이라 기존 구현은 고치지 않아도 된다.
 
 ## 구독 (`skeleton.payment.subscription.enabled`, 기본 꺼짐)
 

@@ -41,6 +41,7 @@ secrets:
   - SKELETON_PAYMENT_TOSS_SECRET_KEY                      # [payment-toss] 운영자 (.local.env)
   - SKELETON_PAYMENT_WEBHOOK_PATH_TOKEN                   # [payment] 운영자 (.local.env) — 결제사 개발자센터에 등록하는 웹훅 주소 끝의 비밀 조각, 24자 이상 (약하면 stage|prod 에서 기동 실패)
   - SKELETON_PAYMENT_STRIPE_SECRET_KEY                    # [payment-stripe] 운영자 (.local.env)
+  - SKELETON_PAYMENT_KAKAOPAY_SECRET_KEY                  # [payment-kakaopay] 운영자 (.local.env) — 개발자센터 앱의 Secret key (테스트는 Secret key(dev)). 가맹점 코드(CID) · 돌아올 주소는 env: 에 적는다
   - SKELETON_PAYMENT_PADDLE_API_KEY                        # [payment-paddle] 운영자 (.local.env)
   - SKELETON_PAYMENT_PADDLE_WEBHOOK_SECRET                 # [payment-paddle] 운영자 (.local.env) — 웹훅 엔드포인트 비밀값(pdl_ntfset_…)
   - SKELETON_STORAGE_WEB_KEY_SECRET                       # [storage] 무작위로 충분 — OPAQUE 첨부 키의 HMAC 키(key-owner=OPAQUE 일 때만 필요, 안 쓰면 이 줄을 지운다; 바꾸면 발급한 OPAQUE 키가 맞지 않게 된다)
@@ -66,6 +67,7 @@ secrets:
 #   [payment] 위 변수들로 결제를 켠다 — 토스 승인 · 환불은 느릴 수 있어 앱의 application.yml 이 skeleton.http.clients.payment-toss.response-timeout 을 플랫폼 기본(5초)보다 길게 정한다(토스를 켰을 때 reconcile.first-delay · refund.settle-delay 가 이보다 길어야 기동). 토스를 안 켜면 앱은 뜨고 결제만 "지금은 결제할 수 없어요"
 #   [payment-jdbc] 설정 없음 — 결제 장부(주문 · 환불 · 웹훅 수신함 · 작업)는 이 모듈이 있어야 켜진다. 작업 큐 워커가 꺼져 있으면(skeleton.job-queue) 보호 환경에서 경고
 #   [payment-toss] (env:) SKELETON_PAYMENT_TOSS_ENABLED=true · SKELETON_PAYMENT_TOSS_CLIENT_KEY (비밀 아님)   시크릿 키가 비면 제공자 빈이 없다 — stage|prod 에서는 기동 실패 (그 밖은 경고). 장부가 있는데 클라이언트 키가 비면 stage|prod 에서 기동 실패
+#   [payment-kakaopay] (env:) SKELETON_PAYMENT_KAKAOPAY_ENABLED=true · SKELETON_PAYMENT_KAKAOPAY_CID (가맹점 코드, 테스트는 TC0ONETIME — 비밀 아님) · SKELETON_PAYMENT_KAKAOPAY_RETURN_URL (구매자를 돌려보낼 우리 화면 주소 — 비밀 아님)   시크릿 키나 가맹점 코드가 비면 제공자 빈이 없다 — stage|prod 에서는 기동 실패 (그 밖은 경고). 테스트 코드인데 stage|prod 이면 기동 실패
 #   [payment-stripe] (env:) SKELETON_PAYMENT_STRIPE_ENABLED=true   비밀이 비면 제공자 빈이 없다
 #   [payment-paddle] (env:) SKELETON_PAYMENT_PADDLE_ENABLED=true · SKELETON_PAYMENT_PADDLE_CLIENT_TOKEN (비밀 아님) · SKELETON_PAYMENT_PADDLE_ENVIRONMENT=sandbox|live   세 비밀이 하나라도 비면 이 제공자만 없다 (서버는 뜬다)
 #   [storage] SKELETON_STORAGE_WEB_KEY_SECRET   key-owner=OPAQUE 인데 비었거나 32자보다 짧으면 기동 실패 (기본 ACCOUNT_ID 에서는 쓰지 않는다)

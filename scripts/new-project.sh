@@ -278,6 +278,10 @@ while IFS= read -r m; do
     # 표식이 줄 하나를 통째로 차지하면 그 줄들까지, 줄 안에 있으면 표식 사이만 지운다 (뒤에 다른 절이 생겨도 같이 잘리지 않는다)
     [ ! -f docs/real-provider-setup.md ] || perl -0pi -e 's/^<!-- payment-toss:start -->\n.*?^<!-- payment-toss:end -->\n//gms; s/<!-- payment-toss:start -->.*?<!-- payment-toss:end -->//gs; s/\n+\z/\n/' docs/real-provider-setup.md
   fi
+  # 카카오페이 직접 연동 절(## 12)도 같은 방식 - payment-kakaopay 를 고른 프로젝트에만 남는다
+  if [ "$m" = payment-kakaopay ]; then
+    [ ! -f docs/real-provider-setup.md ] || perl -0pi -e 's/^<!-- payment-kakaopay:start -->\n.*?^<!-- payment-kakaopay:end -->\n//gms; s/\n+\z/\n/' docs/real-provider-setup.md
+  fi
   M="$m" perl -ni -e 'print unless /^include\(":modules:\Q$ENV{M}\E"\)\s*$/' settings.gradle.kts
   [ ! -f docs/modules/README.md ] || M="$m" perl -ni -e 'print unless /\]\(\Q$ENV{M}\E\.md\)/' docs/modules/README.md
 done <<EOF
@@ -286,6 +290,11 @@ EOF
 # payment-toss 를 고른 프로젝트: 안내 문서의 표식 줄 · 표식만 걷어 낸다
 if ! grep -qx payment-toss <<<"$REMOVED"; then
   [ ! -f docs/real-provider-setup.md ] || perl -0pi -e 's/^<!-- payment-toss:(start|end) -->\n//gm; s/<!-- payment-toss:(start|end) -->//g' docs/real-provider-setup.md
+fi
+
+# payment-kakaopay 를 고른 프로젝트: 안내 문서의 표식 줄만 걷어 낸다
+if ! grep -qx payment-kakaopay <<<"$REMOVED"; then
+  [ ! -f docs/real-provider-setup.md ] || perl -0pi -e 's/^<!-- payment-kakaopay:(start|end) -->\n//gm' docs/real-provider-setup.md
 fi
 
 # 루트 build.gradle.kts: DB 통합 테스트 묶음 (선택된 모듈 · 선택된 방언만)

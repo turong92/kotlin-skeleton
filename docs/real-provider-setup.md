@@ -41,6 +41,9 @@
 | §6 | 환경변수 채우기 (로컬 · 홈서버) | 10분 |
 | §7 | 점검 스크립트 + 눌러 볼 순서 | 40분 |<!-- payment-toss:start -->
 | §11 | 토스페이먼츠(결제 장부): 테스트 키 · 웹훅 주소 · 검증 스크립트 · **검증 기록** | 15분 + 사람의 결제 |<!-- payment-toss:end -->
+<!-- payment-kakaopay:start -->
+| §12 | 카카오페이 직접 연동(단건 결제): 개발자센터 앱 등록 · Secret key(dev) · 테스트 가맹점 코드 · 못 잰 가정 | 20분 + 사람의 결제 |
+<!-- payment-kakaopay:end -->
 
 > **환경변수 이름은 한 규칙**이다(`docs/deploy.md` §7): Google · Kakao · Naver 는 `SKELETON_AUTH_SOCIAL_PROVIDERS_<제공자>_{ENABLED,CLIENT_ID,CLIENT_SECRET,REDIRECT_URI}`, LINE 은 `SKELETON_AUTH_SOCIAL_OIDC_PROVIDERS_LINE_{CLIENT_ID,CLIENT_SECRET,REDIRECT_URI,SCOPES}`, X 는 `SKELETON_AUTH_SOCIAL_X_{CLIENT_ID,CLIENT_SECRET,REDIRECT_URI,REQUEST_EMAIL}`. 진짜 환경변수만으로 `apps/sample` 을 띄워 셋이 `/auth/methods` 에 나오는 것은 `SocialEnvironmentOnlyBootTest` 가 증명한다. 콘솔에서 만드는 준비(§1 · §2 · §3)는 코드와 무관하니 먼저 해 둔다.
 
@@ -498,3 +501,44 @@ scripts/payment-webhook.sh --env-file .env.local --url http://localhost:<포트>
 | 토스 SDK v2 `requestPayment` 의 **귀환 값**(스펙 §16) — 리다이렉트 방식에서 무엇을 돌려주는지, 비회원 상수(`ANONYMOUS`)를 스크립트 판에서 어떻게 꺼내는지 | 결제창을 연 뒤 프론트가 `requestPayment` 의 반환 값(Promise 결과)에 기대고 있으면 `successUrl` 로 돌아온 뒤에도 값이 없거나 호출이 예외로 끝난다 — 결제창은 열리는데 돌아온 화면이 「확인 중」에 머문다 | 샘플에서 결제창을 열고 반환 값 · 콘솔 오류를 본다 |
 | 배포 경로(Cloudflare Tunnel · Caddy 뒤)에서 웹훅 본문이 그대로 닿는지 · Caddy 접근 로그에 경로(비밀 조각)가 남는지 · 모바일에서 `successUrl` 로 돌아오는지 | 개발자센터 전송 내역에 `404` · 본문 변형(11.2 의 3번), Caddy 로그에 `/webhooks/toss/<조각>` 이 그대로 보임(조각 노출), 모바일 · 앱 내 브라우저에서 결제 뒤 귀환 화면이 안 열림 | QA / 홈서버 |
 <!-- payment-toss:end -->
+
+<!-- payment-kakaopay:start -->
+## 12. 카카오페이 직접 연동 (단건 결제)
+
+토스 계약 없이 카카오페이 계약만 있는 사업자를 위한 별도 결제사(`payment-kakaopay`)가 기대는 가정을 **진짜 카카오페이 테스트 환경으로 재 보는** 절차와 목록이다. 모듈 설명은 [docs/modules/payment-kakaopay.md](modules/payment-kakaopay.md), HTTP 계약은 [docs/payment-http-contract.md](payment-http-contract.md). 공식 문서: <https://developers.kakaopay.com/docs/payment/online/single-payment> · [주문 조회](https://developers.kakaopay.com/docs/payment/online/payment-detail) · [결제 취소](https://developers.kakaopay.com/docs/payment/online/cancellation) (2026-10-16 에 본문을 읽었다).
+
+### 12.1 준비 - 계약 없이 테스트까지
+
+1. 카카오 개발자(카카오페이 개발자센터, <https://developers.kakaopay.com>)에 **비즈니스 계정**으로 가입하고 **애플리케이션을 등록**한다. 로그인 계정이 비즈니스 계정이어야 한다는 것까지 문서에서 읽었고, 비즈니스 계정에 사업자등록이 필요한지는 **못 확인했다**.
+2. 앱 설정의 「사용 API」에 온라인 결제를 켜고 「플랫폼 > Web」에 서비스 도메인을 등록한다(와일드카드 가능, 최대 10개). 로컬은 `http://localhost:5173` 을 넣어 보고, 막히면 그 줄이 거절 신호다(못 잰 가정).
+3. 앱의 **Secret key(dev)** 를 복사한다. 테스트 결제는 가맹점 코드 **`TC0ONETIME`**(단건) + Secret key(dev) 로 부른다 - **제휴(CID 발급) 전에도 된다**고 문서가 말한다. 운영은 제휴 뒤 발급되는 가맹점 코드와 운영 Secret key.
+4. 값을 넣는다(샘플 앱):
+
+```
+SKELETON_PAYMENT_KAKAOPAY_ENABLED=true
+SKELETON_PAYMENT_KAKAOPAY_SECRET_KEY=<Secret key(dev)>      # 비밀
+SKELETON_PAYMENT_KAKAOPAY_CID=TC0ONETIME
+SKELETON_PAYMENT_KAKAOPAY_RETURN_URL=http://localhost:5173/payments/return
+```
+
+테스트 가맹점 코드(`TC0ONETIME`)는 stage · prod 에서 기동 실패, 실결제 코드는 로컬 계열에서 기동 실패한다(키는 모양으로 테스트와 실결제를 가르지 않아서 **가맹점 코드가 가른다**). 토스도 켜져 있으면 결제 화면에 「결제 방법」 고르기가 생긴다(같은 나라의 결제사가 둘 이상이므로).
+
+### 12.2 눌러 보기 (사람이 하는 단계)
+
+샘플을 띄우고(`scripts/dev-sample.sh`) 응원하기 → 카카오페이를 고르고 결제한다. 결제창(PC 는 QR · 카카오톡 메시지, 모바일은 카카오톡)에서 인증하면 `RETURN_URL` 로 돌아와 「결제됨」이 된다. 한 번 승인한 뒤 12.3 의 못 잰 가정을 하나씩 본다. 카카오페이는 **웹훅이 없다**고 읽었다(문서에서 찾지 못했다) - 로그의 `payment confirm` · `KakaoPay approve` 줄과 운영자 화면이 기록 장소다.
+
+### 12.3 못 잰 가정 (진짜 키가 있어야 잰다)
+
+| 못 잰 가정 | 틀리면 신호 | 재려면 |
+|---|---|---|
+| 돌아온 주소가 `approval_url` 에 이미 있는 쿼리가 있어도 `&pg_token=…` 으로 붙는다 | 돌아온 화면의 주소에 `pg_token` 이 없거나 `?` 가 두 번 | 결제 한 번 뒤 주소창을 본다 |
+| `pg_token` 의 문자 집합이 영문 · 숫자 · `_` `.` `~` `-` (200자까지) · 거래 번호(`tid`)는 영문 · 숫자 · `-` `_` (50자까지) | 승인 요청이 400 으로 거절된다(결제사를 부르기 전에) | 첫 결제의 `tid` · `pg_token` 을 본다 |
+| 승인 실패(`-780`)의 `extras.method_result_code` 중 **카드 거절 · 잔액 부족** 코드 | 지금은 -780 을 전부 모름으로 읽는다 - 거절된 결제도 「확인 중」으로 보이다가 조회 작업이 `FAIL_PAYMENT` 등으로 닫는다(첫 조회까지 `reconcile.first-delay`, 기본 60초) | 한도 초과 · 잔액 부족을 일부러 만들어 코드를 적는다. 확정 거절이 분명한 코드는 `KakaoPayErrorMapper.DEFINITIVE_CODES` 에 더한다 |
+| 구매자가 인증을 마친 뒤 돌아오지 않았을 때(창을 닫음) 카카오페이 쪽 상태 | 주문 조회가 `AUTH_PASSWORD` 등으로 남는다 - 서버 승인이 없으면 돈이 안 움직인다고 읽었다 | 인증만 하고 창을 닫은 뒤 `payment_action_details` 를 본다 |
+| 주문 조회 응답의 `cancel_available_amount` 가 승인 직후 0 으로 오는 문서 예시 | 우리는 그 칸을 조회에서 쓰지 않고 `amount.total` 에서 `CANCEL` 줄 합을 뺀다 | 승인 직후 조회 |
+| 취소 응답이 일부 취소 뒤 `cancel_available_amount.total` 에 남은 금액을 준다 | 장부의 환불 뒤 남은 금액 판단이 틀어진다 - 환불이 「모름」으로 읽혀 조회로 맞춘다 | 부분 환불 두 번 |
+| 취소 호출을 다시 보내면(응답 유실) 카카오페이가 중복을 막는다 | 이중 환불 - 그래서 장부는 환불 한 건에 호출을 한 번만 하고 모름이면 조회로 가린다(`cancel_available_amount` 로 막는 길은 일부러 쓰지 않았다) | 같은 취소를 두 번 보낸다(테스트 키) |
+| 같은 `tid` 로 `approve` 를 다시 보내면 오는 오류 | 지금은 -780 으로 오고 모름으로 읽혀 조회가 `SUCCESS_PAYMENT` 를 확인한다 | 승인한 `tid` 로 한 번 더 |
+| `ready` 마다 새 `tid` 가 만들어지고 이전 것은 결제되지 않은 채 남는다 | 같은 주문을 다시 열 때 이전 창으로 결제하면 승인이 `ORDER_NOT_PAYABLE` 로 막힌다(주문에는 마지막 `tid` 만 박힌다) | 같은 키로 주문을 두 번 만든다 |
+| 운영 Secret key · 가맹점 코드(CID) · `cid_secret` 의 쓰임 | - | 제휴 뒤 |
+<!-- payment-kakaopay:end -->

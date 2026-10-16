@@ -220,6 +220,12 @@ class ScriptedGateway(
     private var lookupFailure: () -> Exception = { serverError() }
 
     val confirmCalls = CopyOnWriteArrayList<ConfirmCall>()
+
+    /** 승인 요청 전체(승인 토큰 · 계정 포함) - [confirmCalls] 가 담지 않는 칸을 보는 시험용. */
+    val confirmRequests = CopyOnWriteArrayList<PaymentConfirmRequest>()
+
+    /** 결제창을 열 때 결제사가 거래 번호를 먼저 정하는 결제사(카카오페이)처럼 군다 - 주문마다 돌려줄 번호. 기본은 정하지 않는다. */
+    @Volatile var checkoutPaymentId: ((CheckoutOrder) -> String?)? = null
     val lookupCalls = CopyOnWriteArrayList<PaymentLookupQuery>()
     val checkoutCalls = CopyOnWriteArrayList<CheckoutOrder>()
     val refundCalls = CopyOnWriteArrayList<RefundCall>()
@@ -417,6 +423,7 @@ class ScriptedGateway(
         refuseInsideTransaction("confirm")
         val script = synchronized(lock) {
             confirmCalls += ConfirmCall(request.providerPaymentId, request.amount, request.idempotencyKey, request.merchantReferenceId)
+            confirmRequests += request
             scripts.removeFirstOrNull() ?: ConfirmScript.Approve
         }
         duringConfirm?.invoke()
@@ -551,6 +558,7 @@ class ScriptedGateway(
             orderName = order.orderName,
             amount = order.amount,
             clientKey = "scripted_ck",
+            providerPaymentId = checkoutPaymentId?.invoke(order),
         )
     }
 

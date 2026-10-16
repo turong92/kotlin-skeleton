@@ -99,4 +99,37 @@ class PaymentCountryRoutingTest {
         assertEquals("US", on.of(request("US", dev = "Korea")).country)
         assertEquals("US", on.of(request("US")).country)
     }
+
+    // --- 같은 나라의 결제사가 둘 이상 열려 있을 때(토스 + 카카오페이) 구매자가 고른다 ---
+
+    private fun choosing(openable: List<String>, countries: Map<String, List<String>>, properties: PaymentProperties = properties()) =
+        PaymentCountryRouting({ properties }, cloudflare, { openable }, { country -> countries.filterValues { country in it }.keys.toList() })
+
+    @Test
+    fun `a buyer may pick a provider that the operator opened for the buyer's own country - and nothing else`() {
+        val routing = choosing(listOf("paddle", "toss", "kakaopay"), mapOf("toss" to listOf("KR"), "kakaopay" to listOf("KR"), "paddle" to listOf("US")))
+        val kr = routing.of(request("KR"))
+
+        assertEquals("kakaopay", routing.chosen(kr, " KakaoPay "))
+        assertEquals("toss", routing.chosen(kr, "toss"))
+        assertEquals("toss", routing.chosen(kr, null), "no choice - the server's own pick")
+        assertEquals("toss", routing.chosen(kr, "paddle"), "a provider that does not serve this country is ignored")
+        assertEquals("toss", routing.chosen(kr, "nonsense"))
+        assertEquals(listOf("toss", "kakaopay"), routing.choices(kr))
+        assertEquals("paddle", routing.chosen(routing.of(request("US")), "kakaopay"), "outside Korea the Korean provider is not a choice")
+    }
+
+    @Test
+    fun `without a mapping for the country two providers are no pick - the buyer must choose, and a closed mapped provider is never replaced by a choice`() {
+        val unmapped = choosing(listOf("toss", "kakaopay"), mapOf("toss" to listOf("KR"), "kakaopay" to listOf("KR")), PaymentProperties(subscription = properties().subscription))
+        val route = unmapped.of(request("KR"))
+        assertNull(route.provider)
+        assertEquals("kakaopay", unmapped.chosen(route, "kakaopay"))
+        assertNull(unmapped.chosen(route, null))
+
+        val closed = choosing(listOf("kakaopay"), mapOf("kakaopay" to listOf("KR")))
+        val closedRoute = closed.of(request("KR"))
+        assertTrue(closedRoute.providerClosed)
+        assertNull(closed.chosen(closedRoute, "kakaopay"), "the country map names toss and it is closed: no silent fallback, not even by a choice")
+    }
 }

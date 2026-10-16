@@ -43,10 +43,18 @@ data class PaymentConfirmRequest(
     val country: String? = null,
     val idempotencyKey: IdempotencyKey? = null,
     val providerPayload: Map<String, Any?> = emptyMap(),
+    /** 돌아온 결제창이 승인을 허락한 증거(카카오페이 `pg_token`). 없는 결제창(토스)은 null. 값이라 [toString] 에 찍지 않는다. */
+    val approvalToken: String? = null,
+    /** 이 주문의 주인 계정(결제사에 「가맹점 회원 id」를 보내는 결제사가 쓴다). 장부 밖에서 부르면 null. */
+    val accountId: String? = null,
 ) {
     init {
         require(providerPaymentId.isNotBlank()) { "Provider payment id must not be blank" }
     }
+
+    override fun toString(): String =
+        "PaymentConfirmRequest(providerPaymentId=$providerPaymentId, amount=$amount, merchantReferenceId=$merchantReferenceId, provider=$provider, country=$country, " +
+            "idempotencyKey=$idempotencyKey, providerPayload=$providerPayload, approvalToken=${if (approvalToken == null) "null" else "<redacted>"}, accountId=${if (accountId == null) "null" else "<set>"})"
 }
 
 data class PaymentCancelRequest(

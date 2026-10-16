@@ -1530,13 +1530,13 @@
       "module": "payment",
       "path": "modules/payment",
       "status": "experimental",
-      "summary": "결제 계약 + 장부 HTTP — PaymentService · PaymentProviderRouter(제공자는 payment-toss | payment-stripe | payment-paddle). 장부(payment-jdbc)가 있으면 사용자 경로(/api/v1/payments: 설정 · 주문 만들기(PaymentCatalog 빈이 있을 때) · 승인 · 환불 요청), 꺼 둔 운영자 경로(/api/v1/admin/payments), 결제사가 부르는 웹훅 수신 경로, 탈퇴 고리 · 내보내기 고리를 연다. 구독(skeleton.payment.subscription.enabled — 꺼짐이 기본): 카드 등록 + 첫 결제, 기간 끝 갱신 작업, 해지 예약 (/api/v1/payments/subscriptions, 빌링키는 crypto 로 암호화).",
+      "summary": "결제 계약 + 장부 HTTP — PaymentService · PaymentProviderRouter(제공자는 payment-toss | payment-kakaopay | payment-stripe | payment-paddle). 장부(payment-jdbc)가 있으면 사용자 경로(/api/v1/payments: 설정 · 주문 만들기(PaymentCatalog 빈이 있을 때) · 승인 · 환불 요청), 꺼 둔 운영자 경로(/api/v1/admin/payments), 결제사가 부르는 웹훅 수신 경로, 탈퇴 고리 · 내보내기 고리를 연다. 구독(skeleton.payment.subscription.enabled — 꺼짐이 기본): 카드 등록 + 첫 결제, 기간 끝 갱신 작업, 해지 예약 (/api/v1/payments/subscriptions, 빌링키는 crypto 로 암호화).",
       "starter": false,
       "newProjectFlag": "--modules payment",
       "autoIncludes": ["crypto"],
       "needs": {
         "requires": [],
-        "oneOf": [["payment-toss", "payment-stripe", "payment-paddle"]],
+        "oneOf": [["payment-toss", "payment-kakaopay", "payment-stripe", "payment-paddle"]],
         "optional": []
       },
       "config": {
@@ -1595,13 +1595,59 @@
       },
       "notFor": [
         "payment 없이는 쓰지 않는다(따라온다)",
-        "결제사 모듈(payment-toss | payment-stripe | payment-paddle)이 따로 필요하다 — 이 모듈은 저장소다",
+        "결제사 모듈(payment-toss | payment-kakaopay | payment-stripe | payment-paddle)이 따로 필요하다 — 이 모듈은 저장소다",
         "job-queue-jdbc 가 켜져 있어야 한다(꺼 두면 시작에 실패한다)",
         "다른 DB(JPA · jOOQ)로 저장하려면 payment 의 저장 포트(PaymentLedgerStore · PaymentTasks)를 앱이 구현한다"
       ],
       "keywords": {
         "ko": ["결제 장부", "주문 장부", "결제 저장소", "결제 DB"],
         "en": ["payment ledger", "payment storage", "payment repository", "order ledger"]
+      }
+    },
+    {
+      "id": "payment-kakaopay",
+      "kind": "module",
+      "module": "payment-kakaopay",
+      "path": "modules/payment-kakaopay",
+      "status": "experimental",
+      "summary": "카카오페이 직접 연동 단건 결제 — 토스 계약 없이 카카오페이 계약만 있어도 쓰는 별도 결제사(기본 꺼짐). 결제 준비(ready) → 카카오톡 인증 → 서버 승인(approve) → 취소 · 환불 · 조회. 정기 결제 · 웹훅은 없다.",
+      "starter": false,
+      "newProjectFlag": "--modules payment-kakaopay",
+      "autoIncludes": ["crypto", "payment"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": ["skeleton.payment-kakaopay"],
+        "snippet": "docs/config/modules/payment-kakaopay.yml"
+      },
+      "basePaths": [],
+      "secrets": [
+        {
+          "env": [
+            "<P>_PAYMENT_KAKAOPAY_ENABLED=true",
+            "<P>_PAYMENT_KAKAOPAY_SECRET_KEY",
+            "<P>_PAYMENT_KAKAOPAY_CID_SECRET"
+          ],
+          "whenMissing": "제공자 빈이 없다 — 결제 라우팅이 그 제공자를 못 찾는다. 시크릿 키나 가맹점 코드(CID)가 비면 보호 환경(stage · prod)에서는 기동 실패, 그 밖의 환경은 경고"
+        }
+      ],
+      "docs": ["docs/modules/payment-kakaopay.md"],
+      "frontend": {
+        "capabilities": ["payment"],
+        "newProjectFlag": "--packages payment",
+        "packages": ["@skeleton/payment"]
+      },
+      "notFor": [
+        "payment 없이는 쓰지 않는다(따라온다)",
+        "정기 결제(SID) · 웹훅은 아직 없다 — 결과는 승인 응답과 주문 조회로 맞춘다",
+        "토스 계약이 있고 카카오페이를 간편결제 단추로만 받으면 payment-toss 의 easy-pays 로 충분하다"
+      ],
+      "keywords": {
+        "ko": ["카카오페이", "카카오페이 결제", "간편 결제", "토스 없이 결제"],
+        "en": ["kakaopay", "kakao pay", "korean easy pay", "payment without toss"]
       }
     },
     {
@@ -2231,6 +2277,7 @@
         "notification-sse",
         "payment",
         "payment-jdbc",
+        "payment-kakaopay",
         "payment-paddle",
         "payment-toss",
         "storage",
@@ -2291,6 +2338,7 @@
         "notification-websocket",
         "payment",
         "payment-jdbc",
+        "payment-kakaopay",
         "payment-stripe",
         "payment-paddle",
         "payment-toss",
@@ -2912,7 +2960,7 @@
         "capabilities": ["payment"],
         "flag": "--packages payment"
       },
-      "oneOf": [["payment-toss", "payment-stripe", "payment-paddle"]],
+      "oneOf": [["payment-toss", "payment-kakaopay", "payment-stripe", "payment-paddle"]],
       "need": "결제 (토스 · 스트라이프)",
       "modules": ["payment"],
       "flag": "--modules payment,payment-toss",

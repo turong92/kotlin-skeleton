@@ -5,6 +5,7 @@ import dev.sumin.skeleton.common.web.ClientIps
 import dev.sumin.skeleton.common.web.InMemoryFixedWindowRateLimitStore
 import dev.sumin.skeleton.common.web.RateLimitStore
 import dev.sumin.skeleton.payment.PaymentCatalog
+import dev.sumin.skeleton.payment.PaymentCheckoutGateway
 import dev.sumin.skeleton.payment.PaymentLedgerAutoConfiguration
 import dev.sumin.skeleton.payment.PaymentOperatorPolicy
 import dev.sumin.skeleton.payment.PaymentOrders
@@ -54,7 +55,12 @@ class PaymentHttpAutoConfiguration {
     @ConditionalOnMissingBean
     fun paymentCountryRouting(orders: PaymentOrders, router: PaymentProviderRouter, clientIps: ObjectProvider<ClientIps>): PaymentCountryRouting =
         // 나라 지도 · 기본 결제사는 프로젝트마다 다르다 - 부를 때 지금 프로젝트의 설정으로
-        PaymentCountryRouting({ router.properties() }, clientIps.getIfAvailable { ClientIps() }) { orders.openableProviders() }
+        PaymentCountryRouting(
+            { router.properties() },
+            clientIps.getIfAvailable { ClientIps() },
+            { orders.openableProviders() },
+            { country -> router.gateways(PaymentCheckoutGateway::class).filter { gateway -> gateway.supportedCountries.any { it.equals(country, ignoreCase = true) } }.map { it.providerId.trim().lowercase() } },
+        )
 
     @Bean
     @ConditionalOnMissingBean

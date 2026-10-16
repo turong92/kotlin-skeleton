@@ -199,4 +199,9 @@ data class CheckoutInstruction(
     val amount: PaymentAmount,
     val clientKey: String? = null,
     val attributes: Map<String, String> = emptyMap(),
+    /**
+     * 결제창을 열 때 **결제사가 먼저 정한 거래 번호**(카카오페이 `ready` 의 `tid`). 장부가 주문의 결제 키 자리에 박아 두고, 돌아온 승인 요청이 다른 번호를 들고 오면 결제사를 부르지 않는다.
+     * 번호를 승인 때 브라우저가 들고 오는 결제창(토스 `paymentKey`)은 비운다.
+     */
+    val providerPaymentId: String? = null,
 )

@@ -59,7 +59,7 @@ Spring AOT 는 `@ConditionalOnProperty` · `@ConditionalOnBean` 같은 **조건�
 | `legal` (`LegalNativeHints`) | `legal-templates/` · `legal/` 문서 | 약관 카탈로그 |
 | `time` (`TimeNativeHints`) | `country-zones.tsv` | 나라별 시간대 표 |
 | `auth` (`AuthNativeHints`) | `RequiredLoginIdentifierValidator` | Bean Validation 검증기 |
-| `payment-toss` · `payment-stripe` · `auth-social-google/kakao/naver` · `crypto` | 외부 응답 · 웹훅 본문 · 토큰 본문 DTO (`BindingHints`) | 컨트롤러 밖에서 JSON 으로 바꾸는 타입 |
+| `payment-toss` · `payment-kakaopay` · `payment-stripe` · `auth-social-google/kakao/naver` · `crypto` | 외부 응답 · 웹훅 본문 · 토큰 본문 DTO (`BindingHints`) | 컨트롤러 밖에서 JSON 으로 바꾸는 타입 |
 | `auth-social` (`AuthSocialNativeHints`) | `OAuthSocialLoginRequest` | 소셜 로그인 경로가 컨트롤러가 아니라 **함수형 라우트**(`RouterFunction`)라 AOT 가 요청 본문 타입을 못 찾는다 |
 | `notification-sse` (`NotificationSseNativeHints`) | `NotificationSseConnectedEvent` · `NotificationEvent` | `SseEmitter.send(객체)` 로 흘리는 이벤트 본문 |
 | `platform` (`ConfigurationPropertiesBindingAotProcessor`) | 모든 `@ConfigurationProperties` 클래스와 그 중첩 타입 · 맵 값 타입 | 코틀린 기본 인자 data class 의 중첩 설정(`StorageWebProperties` …)을 kotlin-reflect 가 못 찾는다 |

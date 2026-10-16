@@ -161,6 +161,54 @@ class PaymentUserHttpTest {
     }
 
     @Test
+    fun `confirm hands the approval token of a redirect checkout to the provider - and a token that is not a short string is a 400 before the provider`() {
+        val account = account()
+        val id = newOrder(account)
+        gateway.authenticate("pay_$id", id, PaymentAmount(3000, "KRW"))
+        val calls = gateway.confirmRequests.size
+        mvc.perform(post("$base/orders/$id/confirm").asUser(account).contentType(MediaType.APPLICATION_JSON).content("""{"providerPaymentId":"pay_$id","amount":3000,"approvalToken":123}"""))
+            .andExpect(status().isBadRequest)
+        assertEquals(calls, gateway.confirmRequests.size)
+
+        mvc.perform(post("$base/orders/$id/confirm").asUser(account).contentType(MediaType.APPLICATION_JSON).content("""{"providerPaymentId":"pay_$id","amount":3000,"approvalToken":"pg_tok"}"""))
+            .andExpect(status().isOk)
+        assertEquals("pg_tok", gateway.confirmRequests.last().approvalToken)
+    }
+
+    @Test
+    fun `an order whose provider fixed the transaction id at checkout is confirmed without the buyer knowing it - the stored id is used, and another id is refused`() {
+        val account = account()
+        gateway.checkoutPaymentId = { order -> "TID_${order.orderId}" }
+        try {
+            val id = newOrder(account)
+            gateway.authenticate("TID_$id", id, PaymentAmount(3000, "KRW"))
+            val calls = gateway.confirmRequests.size
+
+            mvc.perform(post("$base/orders/$id/confirm").asUser(account).contentType(MediaType.APPLICATION_JSON).content("""{"providerPaymentId":"TID_other","amount":3000,"approvalToken":"tok"}"""))
+                .andExpect(status().isConflict).andExpect(jsonPath("$.code").value("PAYMENT.ORDER_NOT_PAYABLE"))
+            assertEquals(calls, gateway.confirmRequests.size)
+
+            mvc.perform(post("$base/orders/$id/confirm").asUser(account).contentType(MediaType.APPLICATION_JSON).content("""{"amount":3000,"approvalToken":"tok"}"""))
+                .andExpect(status().isOk).andExpect(jsonPath("$.value.status").value("PAID"))
+            assertEquals("TID_$id", gateway.confirmRequests.last().providerPaymentId)
+        } finally {
+            gateway.checkoutPaymentId = null
+        }
+    }
+
+    @Test
+    fun `a confirm without a payment id for an order that has none stored is a 400 before the provider`() {
+        val account = account()
+        val id = newOrder(account)
+        val calls = gateway.confirmRequests.size
+
+        mvc.perform(post("$base/orders/$id/confirm").asUser(account).contentType(MediaType.APPLICATION_JSON).content("""{"amount":3000}"""))
+            .andExpect(status().isBadRequest)
+
+        assertEquals(calls, gateway.confirmRequests.size)
+    }
+
+    @Test
     fun `confirm maps the outcomes - paid 200 with the card, unknown answer 202 CONFIRMING, changed amount 400 before the provider, refused card 402 with a category`() {
         val account = account()
         val paid = newOrder(account)

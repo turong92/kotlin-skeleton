@@ -117,6 +117,12 @@ skeleton:
     secret-key: test_sk_native_check_0123456789
     client-key: test_ck_native_check_0123456789
     base-url: ${NATIVE_FAKE_URL:http://localhost:19000}/toss
+  payment-kakaopay:
+    enabled: true
+    secret-key: native-kakaopay-secret-key
+    cid: TC0ONETIME
+    return-url: http://localhost:5173/payments/return
+    base-url: ${NATIVE_FAKE_URL:http://localhost:19000}/kakaopay
   payment-paddle:
     enabled: true
     api-key: native-paddle-api-key

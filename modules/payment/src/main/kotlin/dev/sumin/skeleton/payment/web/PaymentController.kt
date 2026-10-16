@@ -74,6 +74,7 @@ class PaymentController(
                 route.provider,
                 CancelPolicyResponse(route.cancelPolicy.key, route.cancelPolicy.penaltyPercent, route.cancelPolicy.withdrawalDays),
                 route.devSwitch,
+                routing.choices(route),
             ),
         )
     }
@@ -92,11 +93,14 @@ class PaymentController(
     @PostMapping("/orders/{id}/confirm")
     fun confirm(authentication: Authentication?, @PathVariable id: String, @RequestBody body: JsonNode): ResponseEntity<DataResponse<OrderResponse>> {
         val account = callers.account(authentication)
-        val paymentKey = PaymentRequests.text(body["providerPaymentId"], "providerPaymentId", 200)
+        val sentKey = body["providerPaymentId"]?.takeUnless { it.isNull }?.let { PaymentRequests.text(it, "providerPaymentId", 200) }
         val amount = PaymentRequests.requiredWholeNumber(body["amount"], "amount")
+        val approvalToken = body["approvalToken"]?.takeUnless { it.isNull }?.let { PaymentRequests.text(it, "approvalToken", 200) }
         val current = orders.get(account, id)
         if (amount < 0) throw dev.sumin.skeleton.common.FieldValidationException("amount", "Min", "amount must not be negative")
-        val order = orders.confirm(account, id, paymentKey, PaymentAmount(amount, current.amount.currency))
+        // 결제사가 결제창을 열 때 거래 번호를 먼저 정한 주문(카카오페이)은 번호를 브라우저가 몰라도 된다 - 박힌 번호를 쓴다. 보냈다면 장부가 박힌 번호와 같은지 본다
+        val paymentKey = sentKey ?: current.providerPaymentId ?: throw dev.sumin.skeleton.common.FieldValidationException("providerPaymentId", "Required", "providerPaymentId is required")
+        val order = orders.confirm(account, id, paymentKey, PaymentAmount(amount, current.amount.currency), approvalToken)
         val response = Response.ok(OrderResponse.of(refunds.get(account, order.id).let { dev.sumin.skeleton.payment.OrderView(it.order, it.refunds) }))
         return if (order.status == PaymentOrderStatus.CONFIRMING) ResponseEntity.accepted().body(response) else ResponseEntity.ok(response)
     }

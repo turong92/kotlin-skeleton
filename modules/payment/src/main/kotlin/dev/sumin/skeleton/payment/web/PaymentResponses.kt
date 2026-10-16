@@ -166,6 +166,8 @@ data class PaymentConfigResponse(
     val cancelPolicy: CancelPolicyResponse? = null,
     /** 개발용 나라 덮어쓰기가 켜져 있다(로컬만) - 켜져 있으면 요청의 `X-Dev-Country` 가 `country` 를 정한다. */
     val devCountrySwitch: Boolean = false,
+    /** 구매자가 고를 수 있는 결제사 - 이 나라를 자기 `supportedCountries` 에 적은 열린 결제사. 둘 이상일 때만 화면이 고르기를 그린다(주문을 만들 때 `provider` 로 보낸다). 하나 이하면 고르기가 없다. */
+    val choices: List<String> = emptyList(),
 )
 
 /** [key] 는 정책 이름(`korea` · `period-end-only` …) - 화면이 요약 문구를 고른다. 숫자는 한국 정책일 때만(설정값). */

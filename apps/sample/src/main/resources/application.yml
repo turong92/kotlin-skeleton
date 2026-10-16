@@ -161,6 +161,10 @@ skeleton:
     secret-key: ${TOSS_PAYMENTS_SECRET_KEY:}                # 벤더 표준 이름 별칭 (모듈의 이름은 SKELETON_PAYMENT_TOSS_SECRET_KEY — 둘 다 먹고, 모듈 이름이 이긴다). 비밀 — 커밋하지 않는다
     easy-pays: [NAVERPAY, KAKAOPAY, TOSSPAY]                # 결제창의 카드 단추 옆에 간편결제 단추(상점 계약에 있는 것만 열린다). 스켈레톤 기본은 빈 목록
     client-key: ${TOSS_PAYMENTS_CLIENT_KEY:}                # 같은 묶음의 test_ck_… (비밀 아님). 서버가 결제창 값(GET …/orders 의 checkout)으로 프론트에 준다
+  payment-kakaopay:                                         # 카카오페이 직접 연동(토스 계약 없이). 켜기: SKELETON_PAYMENT_KAKAOPAY_ENABLED=true. 시크릿 키 · 가맹점 코드가 모두 있어야 서고, 비면 이 결제사만 없다(보호 환경은 기동 실패)
+    secret-key: ${SKELETON_PAYMENT_KAKAOPAY_SECRET_KEY:}    # 개발자센터 앱의 Secret key(dev) — 비밀, 커밋하지 않는다
+    cid: ${SKELETON_PAYMENT_KAKAOPAY_CID:}                  # 가맹점 코드 — 테스트는 TC0ONETIME (비밀 아님)
+    return-url: ${SKELETON_PAYMENT_KAKAOPAY_RETURN_URL:}    # 구매자를 돌려보낼 이 앱의 화면 주소 — <프런트 주소>/payments/return (비밀 아님)
   payment-paddle:                                           # 해외 결제(판매 대행). 켜기: SKELETON_PAYMENT_PADDLE_ENABLED=true. 세 비밀이 모두 있어야 서고, 하나라도 비면 이 결제사만 없다(서버는 뜬다)
     api-key: ${PADDLE_API_KEY:}                             # 비밀 — 커밋하지 않는다
     client-token: ${PADDLE_CLIENT_TOKEN:}                   # Paddle.js 클라이언트 토큰 (비밀 아님)
