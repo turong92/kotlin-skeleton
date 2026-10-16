@@ -124,6 +124,17 @@
 | `SKELETON_PAYMENT_KAKAOPAY_RETURN_URL` | 구매자를 돌려보낼 이 앱의 화면 주소(프런트 주소 + `/payments/return`). 비밀 아님 |
 | `SKELETON_PAYMENT_KAKAOPAY_BASE_URL` | 카카오페이 API 주소(기본 `https://open-api.kakaopay.com`) - 프런트 e2e 는 가짜 카카오페이를 가리킨다 |
 
+**네이버페이(토스 계약 없이)** — 같은 방식으로 꺼진 채 시작한다. 인증값은 가맹 심사 뒤에야 나오므로 그 전에는 가짜 서버(프런트 e2e · 백엔드 시험)로만 시험된다. 안내: [real-provider-setup](real-provider-setup.md) §13.
+
+| 환경변수 | 뜻 |
+|---|---|
+| `SKELETON_PAYMENT_NAVERPAY_ENABLED=true` | 네이버페이를 켠다 |
+| `SKELETON_PAYMENT_NAVERPAY_MODE` | `development`(기본) \| `production` - API 서버 · 결제창 · SDK 가 함께 따른다. stage · prod 에서 development 면 기동 실패, 로컬에서 production 이면 기동 실패 |
+| `SKELETON_PAYMENT_NAVERPAY_CLIENT_ID` · `…_CHAIN_ID` | 가맹점 · 그룹 식별키. 비밀 아님(결제창 SDK 에 실려 브라우저에 나간다) |
+| `SKELETON_PAYMENT_NAVERPAY_CLIENT_SECRET` | 클라이언트 시크릿. 비밀 |
+| `SKELETON_PAYMENT_NAVERPAY_RETURN_URL` | 구매자를 돌려보낼 이 앱의 화면 주소(프런트 주소 + `/payments/return`). 비밀 아님 |
+| `SKELETON_PAYMENT_NAVERPAY_BASE_URL` | 비우면 모드가 정한 네이버페이 API 주소 - 프런트 e2e 는 가짜 네이버페이를 가리킨다 |
+
 이 앱의 yml 이 정한 것: `skeleton.http.clients.payment-toss.response-timeout: 30s`(승인 · 환불은 토스가 느릴 수 있다 — 플랫폼 기본 5초) — 토스를 켜면 `reconcile.first-delay`(기본 60s) · `refund.settle-delay`(기본 2m)가 이보다 길어야 기동한다. 작업 큐(`skeleton.job-queue`, 폴링 1s)는 켜져 있어야 한다 — `job-queue.enabled=false` 이면 장부가 시작하지 못한다(조회 · 지급 · 웹훅 처리가 이 큐로 돈다). `job-queue.worker-enabled=false`(일은 다른 인스턴스가 한다)는 뜨지만 이 인스턴스는 작업을 돌리지 않는다.
 local 프로필은 주문 만들기 한도(기본 계정당 10 / 10분)를 풀어 둔다(`application-local.yml`) — 프런트 e2e 가 한 계정으로 주문을 여럿 만든다.
 

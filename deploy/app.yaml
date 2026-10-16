@@ -43,6 +43,7 @@ secrets:
   - SKELETON_PAYMENT_STRIPE_SECRET_KEY                    # [payment-stripe] 운영자 (.local.env)
   - SKELETON_PAYMENT_KAKAOPAY_CID_SECRET                  # [payment-kakaopay] 운영자 (.local.env) — 가맹점 코드 인증키(선택, 발급받았을 때만; 안 쓰면 이 줄을 지운다)
   - SKELETON_PAYMENT_KAKAOPAY_SECRET_KEY                  # [payment-kakaopay] 운영자 (.local.env) — 개발자센터 앱의 Secret key (테스트는 Secret key(dev)). 가맹점 코드(CID) · 돌아올 주소는 env: 에 적는다
+  - SKELETON_PAYMENT_NAVERPAY_CLIENT_SECRET               # [payment-naverpay] 운영자 (.local.env) — 가맹 심사 뒤 받는 클라이언트 시크릿. 클라이언트 아이디 · 체인 아이디 · 모드 · 돌아올 주소는 env: 에 적는다
   - SKELETON_PAYMENT_PADDLE_API_KEY                        # [payment-paddle] 운영자 (.local.env)
   - SKELETON_PAYMENT_PADDLE_WEBHOOK_SECRET                 # [payment-paddle] 운영자 (.local.env) — 웹훅 엔드포인트 비밀값(pdl_ntfset_…)
   - SKELETON_STORAGE_WEB_KEY_SECRET                       # [storage] 무작위로 충분 — OPAQUE 첨부 키의 HMAC 키(key-owner=OPAQUE 일 때만 필요, 안 쓰면 이 줄을 지운다; 바꾸면 발급한 OPAQUE 키가 맞지 않게 된다)
@@ -69,6 +70,7 @@ secrets:
 #   [payment-jdbc] 설정 없음 — 결제 장부(주문 · 환불 · 웹훅 수신함 · 작업)는 이 모듈이 있어야 켜진다. 작업 큐 워커가 꺼져 있으면(skeleton.job-queue) 보호 환경에서 경고
 #   [payment-toss] (env:) SKELETON_PAYMENT_TOSS_ENABLED=true · SKELETON_PAYMENT_TOSS_CLIENT_KEY (비밀 아님)   시크릿 키가 비면 제공자 빈이 없다 — stage|prod 에서는 기동 실패 (그 밖은 경고). 장부가 있는데 클라이언트 키가 비면 stage|prod 에서 기동 실패
 #   [payment-kakaopay] (env:) SKELETON_PAYMENT_KAKAOPAY_ENABLED=true · SKELETON_PAYMENT_KAKAOPAY_CID (가맹점 코드, 테스트는 TC0ONETIME — 비밀 아님) · SKELETON_PAYMENT_KAKAOPAY_RETURN_URL (구매자를 돌려보낼 우리 화면 주소 — 비밀 아님)   시크릿 키나 가맹점 코드가 비면 제공자 빈이 없다 — stage|prod 에서는 기동 실패 (그 밖은 경고). 테스트 코드인데 stage|prod 이면 기동 실패
+#   [payment-naverpay] (env:) SKELETON_PAYMENT_NAVERPAY_ENABLED=true · SKELETON_PAYMENT_NAVERPAY_MODE=production · SKELETON_PAYMENT_NAVERPAY_CLIENT_ID · SKELETON_PAYMENT_NAVERPAY_CHAIN_ID (가맹 심사 뒤 받는 식별키 — 비밀 아님) · SKELETON_PAYMENT_NAVERPAY_RETURN_URL (구매자를 돌려보낼 우리 화면 주소 — 비밀 아님)   클라이언트 시크릿 · 아이디 · 체인 아이디가 비면 제공자 빈이 없다 — stage|prod 에서는 기동 실패 (그 밖은 경고). 개발 모드인데 stage|prod 이면 기동 실패
 #   [payment-stripe] (env:) SKELETON_PAYMENT_STRIPE_ENABLED=true   비밀이 비면 제공자 빈이 없다
 #   [payment-paddle] (env:) SKELETON_PAYMENT_PADDLE_ENABLED=true · SKELETON_PAYMENT_PADDLE_CLIENT_TOKEN (비밀 아님) · SKELETON_PAYMENT_PADDLE_ENVIRONMENT=sandbox|live   세 비밀이 하나라도 비면 이 제공자만 없다 (서버는 뜬다)
 #   [storage] SKELETON_STORAGE_WEB_KEY_SECRET   key-owner=OPAQUE 인데 비었거나 32자보다 짧으면 기동 실패 (기본 ACCOUNT_ID 에서는 쓰지 않는다)

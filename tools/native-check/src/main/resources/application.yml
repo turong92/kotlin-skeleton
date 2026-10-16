@@ -123,6 +123,13 @@ skeleton:
     cid: TC0ONETIME
     return-url: http://localhost:5173/payments/return
     base-url: ${NATIVE_FAKE_URL:http://localhost:19000}/kakaopay
+  payment-naverpay:
+    enabled: true
+    client-id: native-naverpay-client-id
+    client-secret: native-naverpay-client-secret
+    chain-id: native-naverpay-chain-id
+    return-url: http://localhost:5173/payments/return
+    base-url: ${NATIVE_FAKE_URL:http://localhost:19000}/naverpay
   payment-paddle:
     enabled: true
     api-key: native-paddle-api-key

@@ -44,6 +44,9 @@
 <!-- payment-kakaopay:start -->
 | §12 | 카카오페이 직접 연동(단건 결제): 개발자센터 앱 등록 · Secret key(dev) · 테스트 가맹점 코드 · 못 잰 가정 | 20분 + 사람의 결제 |
 <!-- payment-kakaopay:end -->
+<!-- payment-naverpay:start -->
+| §13 | 네이버페이 직접 연동(단건 결제): 가맹 심사 · 인증값 · 개발 환경 시험 카드 · 못 잰 가정(진짜 키로 확인할 것) | 심사 대기 + 30분 |
+<!-- payment-naverpay:end -->
 
 > **환경변수 이름은 한 규칙**이다(`docs/deploy.md` §7): Google · Kakao · Naver 는 `SKELETON_AUTH_SOCIAL_PROVIDERS_<제공자>_{ENABLED,CLIENT_ID,CLIENT_SECRET,REDIRECT_URI}`, LINE 은 `SKELETON_AUTH_SOCIAL_OIDC_PROVIDERS_LINE_{CLIENT_ID,CLIENT_SECRET,REDIRECT_URI,SCOPES}`, X 는 `SKELETON_AUTH_SOCIAL_X_{CLIENT_ID,CLIENT_SECRET,REDIRECT_URI,REQUEST_EMAIL}`. 진짜 환경변수만으로 `apps/sample` 을 띄워 셋이 `/auth/methods` 에 나오는 것은 `SocialEnvironmentOnlyBootTest` 가 증명한다. 콘솔에서 만드는 준비(§1 · §2 · §3)는 코드와 무관하니 먼저 해 둔다.
 
@@ -542,3 +545,55 @@ SKELETON_PAYMENT_KAKAOPAY_RETURN_URL=http://localhost:5173/payments/return
 | `ready` 마다 새 `tid` 가 만들어지고 이전 것은 결제되지 않은 채 남는다 | 주문에는 **마지막으로 저장한 `tid` 만** 박힌다. react 화면은 승인 요청에 거래 번호를 싣지 않으므로 먼저 연 창(옛 `tid` A)에서 결제하고 돌아오면 서버가 박힌 새 `tid` B 로 `approve`(창 A 의 토큰)를 불러 카카오페이가 `-780` 으로 거절하고, 주문은 `CONFIRMING`(202)에 굳는다 - 돈은 움직이지 않고 조회가 닫는 데는 위 `-780` 줄과 같은 시간이 든다(`409` 는 거래 번호를 직접 보내는 클라이언트일 때만 난다). 구매자는 가장 나중에 받은 창으로 결제해야 한다 | 같은 키로 주문을 두 번 만든다 |
 | 운영 Secret key · 가맹점 코드(CID) · `cid_secret` 의 쓰임 | - | 제휴 뒤 |
 <!-- payment-kakaopay:end -->
+
+<!-- payment-naverpay:start -->
+## 13. 네이버페이 직접 연동 (단건 결제)
+
+토스 계약 없이 네이버페이 계약만 있는 사업자를 위한 별도 결제사(`payment-naverpay`)가 기대는 가정을 **진짜 네이버페이 개발 환경으로 재 보는** 절차와 목록이다. 모듈 설명은 [docs/modules/payment-naverpay.md](modules/payment-naverpay.md), HTTP 계약은 [docs/payment-http-contract.md](payment-http-contract.md). 공식 문서: <https://docs.pay.naver.com/docs/onetime-payment/onetime-payment-overview> (각 문서 주소 뒤에 `.md` 를 붙이면 본문이 마크다운으로 받아진다) · 결제형 FAQ <https://developers.pay.naver.com/support/faq/payment>
+
+**이 모듈은 문서만 보고 만들었고 진짜 서버로는 한 번도 재 보지 않았다** - 인증값(클라이언트 아이디 · 시크릿 · 체인 아이디)이 **가맹점 가입 심사가 끝난 뒤에야** 나오기 때문이다. 그래서 모듈 시험은 문서 모양을 따라 만든 엄격한 가짜 서버로만 돈다. 이 절의 13.3 표가 그 대가다.
+
+### 13.1 준비 - 계약 뒤에야 시험까지
+
+1. 네이버페이 개발자센터(<https://developers.pay.naver.com>)에서 **가입 가능 여부를 문의하고 → 제휴 협의 → 가입 신청(서류)** 을 거친다. 사이트 운영 기간 · 취급 상품 조건이 있고 검수는 평균 15영업일이라고 읽었다. 심사가 끝나면 **개발에 필요한 인증 정보를 전달**해 준다(클라이언트 아이디 · 클라이언트 시크릿 · 체인 아이디).
+2. 단건 결제와 자동결제(정기)는 **클라이언트 아이디 · 체인 아이디가 다르다.** 이 모듈은 단건이므로 단건 값을 넣는다.
+3. 개발 환경(`mode: development`)은 실제 출금이 없고 시험 카드 `1111-1111-1111-1111` 등으로 결제를 눌러 볼 수 있다. 개인 네이버 계정으로 개발환경 서비스에 동의해야 한다. (「내 개발정보 > 결제형 > 결제 연동 체험하기」 메뉴가 계약 없이 쓰이는지는 로그인해야 보여 **못 확인했다**.)
+4. 값을 넣는다(샘플 앱):
+
+```
+SKELETON_PAYMENT_NAVERPAY_ENABLED=true
+SKELETON_PAYMENT_NAVERPAY_MODE=development                  # 운영은 production
+SKELETON_PAYMENT_NAVERPAY_CLIENT_ID=<클라이언트 아이디>        # 비밀 아님(브라우저에 나간다)
+SKELETON_PAYMENT_NAVERPAY_CLIENT_SECRET=<클라이언트 시크릿>    # 비밀
+SKELETON_PAYMENT_NAVERPAY_CHAIN_ID=<체인 아이디>              # 비밀 아님
+SKELETON_PAYMENT_NAVERPAY_RETURN_URL=http://localhost:5173/payments/return
+```
+
+개발 · 운영은 키 모양이 아니라 **`mode` 설정**이 가른다(API 서버 `dev-pay.paygate.naver.com` / `pay.paygate.naver.com`, 결제창 `test-m.pay.naver.com` / `m.pay.naver.com`, SDK `development` / `production`). 개발 모드는 stage · prod 에서 기동 실패, 운영 모드는 로컬 계열에서 기동 실패한다. 응답 제한은 문서가 60초를 권하므로 샘플 앱이 `skeleton.http.clients.payment-naverpay.response-timeout: 60s` 로 두고 `reconcile.first-delay` 를 90초로 늘렸다(둘 다 가드가 본다). 같은 나라(KR)의 나라 지도가 토스를 가리키는데 토스가 꺼져 있으면(네이버페이만 쓰는 배포) 지도의 KR 을 `naverpay` 로 고친다 - 지도에 있는 나라는 그 결제사만 쓴다. 토스 · 카카오페이도 켜져 있으면 결제 화면에 「결제 방법」 고르기가 생긴다.
+
+### 13.2 눌러 보기 (사람이 하는 단계)
+
+샘플을 띄우고(`scripts/dev-sample.sh`) 응원하기 → 네이버페이를 고르면 네이버 결제창(SDK)이 **같은 창에서 열린다**(`openType` 기본 page). 시험 카드로 결제하면 `RETURN_URL` 로 `resultCode=Success&paymentId=…` 이 붙어 돌아오고 화면이 서버 승인을 부른다. 네이버페이는 **웹훅이 없다**고 읽었다(찾지 못했다) - 로그의 `payment confirm` · `NaverPay apply` 줄과 운영자 화면이 기록 장소다. 한 번 승인한 뒤 13.3 을 하나씩 본다.
+
+### 13.3 못 잰 가정 (진짜 키가 있어야 잰다) - 「진짜 키로 확인할 것」
+
+| 못 잰 가정 | 틀리면 신호 | 재려면 |
+|---|---|---|
+| **업무 오류(`AlreadyComplete` · `OverRemainAmount` · 카드 거절 `Fail` …)는 HTTP 200 + `code` 로 온다** (문서의 결과 코드 표를 그렇게 읽었다) | 4xx 로 오면 허용 목록의 코드(`TimeExpired` · `OwnerAuthFail` · `NotEnoughAccountBalance` …)가 **확정 거절**로 읽혀 주문이 바로 `FAILED` 가 된다 - 의도한 동작이다. 200 이면 전부 「모름」이라 거절된 결제가 첫 조회(`reconcile.first-delay`)까지 「확인 중」으로 보인다 | 카드 거절 · 잔액 부족을 일부러 만들어 상태와 `code` 를 본다 |
+| 돌아온 주소에 이미 쿼리가 있어도 네이버페이가 `&resultCode=…&paymentId=…` 로 붙인다 | 화면의 주소에 `paymentId` 가 없거나 `?` 가 두 번 | 결제 한 번 뒤 주소창을 본다 |
+| `paymentId` 의 문자 집합이 영문 · 숫자 · `-` `_` (50자까지) · `merchantPayKey`(= 우리 주문 id)는 64바이트까지 | 모양이 틀린 결제 번호는 **선점 전에** `400`(주문은 `PENDING` 그대로)이라 실제 번호가 규칙 밖이면 모든 결제가 400 으로 막힌다 - 이 신호가 보이면 규칙을 넓힌다 | 첫 결제의 `paymentId` 를 본다 |
+| 결제창에 `productItems` 의 `categoryType=ETC` · `categoryId=ETC` · `uid=<주문 id>` · `count=1` 을 넣어도 받아 준다 (문서 예시 값; 분류 표는 별도 문서) | 결제창이 오류 | 결제창을 열어 본다 |
+| 전액 과세(`taxScopeAmount`=결제액 · `taxExScopeAmount`=0)가 우리 상품에 맞는다 | 면세 상품이면 `TaxScopeAmountError` 류 | 계약 형태 확인 |
+| **금액은 브라우저가 결제창에 넘기는 값이다** - 서버 승인 API 는 결제 번호만 받는다. 구매자가 낮은 금액으로 결제하면 그 금액으로 승인된다 | 승인 응답의 `totalPayAmount`/`merchantPayKey` 가 주문과 다르면 장부가 주문을 `PAID` 로 두지 않고 `AMOUNT_MISMATCH`/`ORDER_MISMATCH` 로 사람이 보게 한다. **이 모듈은 자동으로 취소하지 않는다** - 운영자가 네이버페이 관리자나 환불로 돌려준다 | 결제창 값을 바꿔 결제해 본다(개발 환경) |
+| 승인 가능 시간은 결제창이 열린 지 10분(`TimeExpired`)이고 서버 승인 없이는 돈이 움직이지 않는다 | 구매자가 결제는 했는데 우리가 승인을 못 불러 돈이 빠진 채 남는다 | 결제창에서 결제하고 승인을 일부러 안 부른다 |
+| 같은 멱등 키(`X-NaverPay-Idempotency-Key`)의 재요청은 `409` + 처음 응답을 돌려준다 (문서의 약속) | 두 번 적용되거나 `409` 가 아닌 모양 - 모듈은 `409` 를 「모름」으로 읽고 조회가 가린다 | 같은 승인을 두 번 보낸다(개발 환경) |
+| 승인의 멱등 키를 `apply-<paymentId>` 로 정했다 · 취소는 장부의 환불 줄 id | 키 규칙(영문 · 숫자 · `_` `-` 64자)과 어긋나면 `400` | 첫 승인 · 취소 |
+| `CancelNotComplete`(취소 처리가 끝나지 않았지만 곧 자동 재처리)를 **취소 성공**으로 읽는다 (문서: 「재시도 없이 성공 상태로 두라」) | 장부는 환불 성공으로 닫았는데 네이버페이의 결제 내역에 취소가 안 보인다 | 취소 응답의 `code` 가 이 값일 때 조회를 본다 |
+| 취소에 `doCompareRest` · `expectedRestAmount` 를 쓰지 않는다 (문서는 권한다) - 이중 환불은 멱등 키와 장부의 「환불 한 건에 호출 한 번」으로 막는다 | `RestAmountDiff` 같은 신호는 나오지 않는다 - 대신 이중 취소를 모듈이 못 막는 경로가 있는지 | 응답 유실 뒤 같은 환불을 다시 보낸다 |
+| 결제 내역 조회(`list/history/{paymentId}`)는 승인 전에는 **빈 목록**으로 답하고(모듈은 null = 결제를 모른다), 승인은 `01`, 취소는 `03`(전체)/`04`(부분)이며 취소 건의 `totalPayAmount` 가 **취소한 금액**이다 | 조회가 결제를 엉뚱하게 읽어 `UNREADABLE` 로 떨어진다 | 승인 전 · 후 · 부분 취소 뒤 조회 |
+| 결제 내역 조회에서 카드 거절 같은 승인 실패는 `admissionState=FAIL` 로 남는다 | 조회가 실패를 못 읽어 「확인 중」이 오래 간다 | 카드 거절 뒤 조회 |
+| 응답 필드 이름 · 형(문서 예시 그대로 `Number` 가 정수) | 모듈이 읽는 칸이 비어 `UNREADABLE_RESPONSE` | 첫 승인 응답 |
+| 웹훅이 없다 | 결제 이벤트 웹훅이 있다면 응답 유실 · 창 닫힘을 더 빨리 알 수 있다 | 개발자센터 메뉴 확인 |
+
+정기 결제(자동결제)는 이 모듈에 없다 - 클라이언트 · 체인 아이디가 단건과 따로이고 결제 방식이 다르다(다음 일).
+<!-- payment-naverpay:end -->

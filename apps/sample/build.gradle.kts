@@ -36,6 +36,7 @@ dependencies {
     implementation(project(":modules:crypto"))             // 구독의 빌링키를 암호화해 저장한다 (payment 가 TextEncryptor 를 쓴다) — 키: SKELETON_CRYPTO_KEYS_MAIN (docs/sample.md)
     implementation(project(":modules:payment-toss"))       // 토스페이먼츠 — 꺼진 채 시작한다: SKELETON_PAYMENT_TOSS_ENABLED=true + 키 둘 (docs/real-provider-setup.md). 안 켜면 결제 화면은 "지금은 결제할 수 없어요"
     implementation(project(":modules:payment-kakaopay"))   // 카카오페이 직접 연동(토스 계약 없이) — 꺼진 채 시작한다: SKELETON_PAYMENT_KAKAOPAY_ENABLED=true + SECRET_KEY · CID · RETURN_URL (docs/real-provider-setup.md). 토스와 함께 켜면 결제 화면에서 고른다
+    implementation(project(":modules:payment-naverpay"))   // 네이버페이 직접 연동(토스 계약 없이) — 꺼진 채 시작한다: SKELETON_PAYMENT_NAVERPAY_ENABLED=true + MODE · CLIENT_ID · CLIENT_SECRET · CHAIN_ID · RETURN_URL (docs/real-provider-setup.md). 카카오페이 · 토스와 함께 켜면 결제 화면에서 고른다
     implementation(project(":modules:payment-paddle"))     // Paddle(해외 결제) — 꺼진 채 시작한다: SKELETON_PAYMENT_PADDLE_ENABLED=true + PADDLE_API_KEY · PADDLE_CLIENT_TOKEN · PADDLE_WEBHOOK_SECRET. 세 비밀 중 하나라도 비면 이 결제사만 없다
     implementation(project(":modules:alert-jdbc"))         // 주인 경보 (+ alert) — 5xx 몰림 · 죽은 작업을 Discord 웹훅으로. 웹훅 주소가 없으면 아무것도 안 보낸다
 

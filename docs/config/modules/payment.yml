@@ -1,4 +1,4 @@
-# payment — 결제 제공자 라우팅 + 결제 장부(payment-jdbc 가 있을 때). 제공자 구현은 payment-toss / payment-kakaopay / payment-stripe / payment-paddle.
+# payment — 결제 제공자 라우팅 + 결제 장부(payment-jdbc 가 있을 때). 제공자 구현은 payment-toss / payment-kakaopay / payment-naverpay / payment-stripe / payment-paddle.
 skeleton:
   payment:
     # default-provider:            # 미설정: 경로가 안 맞을 때 쓸 제공자 ID (제공자가 하나뿐이면 그것)

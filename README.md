@@ -22,6 +22,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤. 새 API 프로젝트 시작점.
 | | 구독 **플랜 올리기**: 남은 기간 차액만(`PRORATED_DIFFERENCE`) 또는 전액 재시작(`FULL_RESTART`) — 켜는 앱이 고른다 | 꺼진 채 시작 (`…subscription.plan-change.enabled`) | [payment-http-contract](docs/payment-http-contract.md) §12.2 |
 | | **중도 해지 · 환불**과 **7일 철회**(한국 규정): 나라마다 갈아 끼우는 정책. 모듈 기본은 기간 끝에만 해지(환불 0), 내장 `korea` 는 낸 돈 − 쓴 몫(날짜 단위) − 위약금, 7일 이내 미사용이면 전액. 못 나간 환불은 운영자 「확인 필요」로 올라온다 | 꺼진 채 시작 (`…subscription.cancel.policies` 에 나라를 적는다) | [payment](docs/modules/payment.md) |
 | | 카카오페이 직접 연동 | 선택 · 토스 계약 없이 카카오페이 계약만으로(토스와 함께 켜면 결제 화면에서 고른다). 결제 준비 → 카카오톡 인증 → 서버 승인 · 취소 · 부분 환불 · 조회. 정기 결제 · 웹훅은 없다. 테스트는 Secret key(dev) + 가맹점 코드 `TC0ONETIME`([real-provider-setup](docs/real-provider-setup.md) §12) | [payment-kakaopay](docs/modules/payment-kakaopay.md) |
+| | 네이버페이 직접 연동 | 선택 · 토스 계약 없이 네이버페이 계약만으로(카카오페이 · 토스와 함께 켜면 결제 화면에서 고른다). 구매자 브라우저가 네이버 SDK 로 결제창을 열고 → 서버 승인 · 취소 · 부분 환불 · 결제 내역 조회. 정기 결제(자동결제) · 웹훅은 없다. 인증값은 가맹 심사 뒤에 나온다 - 심사 전에는 가짜 서버로만 시험([real-provider-setup](docs/real-provider-setup.md) §13) | [payment-naverpay](docs/modules/payment-naverpay.md) |
 | | Stripe | 선택 · 승인 · 취소만 있다(장부 위의 구독 · 웹훅 기능은 문서에 없다) | [payment-stripe](docs/modules/payment-stripe.md) |
 | **해외 결제** | **Paddle**(판매 대행 — 해외 세금을 Paddle 이 처리, 여러 통화): 서버가 Paddle 거래를 먼저 만들고(가격은 서버 설정) 결제창은 그 거래 id 만 연다 · **서명된 웹훅**(HMAC-SHA256, 시각 허용 오차)만 믿고 장부에 옮긴다 · 산 가격 대조 · 갱신은 Paddle, 해지는 Paddle API · 가격 표시용 값(클라이언트 토큰 · 환경 · 가격 id)을 `GET /config` 로 준다 | 선택 · 가짜 Paddle 서버로 e2e, Paddle 샌드박스에서 단건 · 구독 첫 결제를 실측했다(2026-10-13 — 갱신 · 해지 · 환불은 샌드박스 미실측). 한국 구매자의 Paddle 결제는 막지 않고 운영자 「확인 필요」로 표시 | [payment-paddle](docs/modules/payment-paddle.md) |
 | **접속 나라로 고르기** | 서버가 접속 나라(Cloudflare `CF-IPCountry` — 클라이언트 IP 모드가 `cloudflare` 이고 믿는 프록시에서 온 것만)로 결제사와 해지 · 환불 규칙을 정한다. 요청 본문의 `country` 는 읽지 않고, `provider` 는 같은 나라에 결제사가 둘 이상 켜졌을 때 `GET /config` 의 `choices` 안에서만 받는다. 그 나라의 결제사가 못 열리면 다른 결제사로 넘기지 않고 503. `GET /config` 가 `country` · `provider` · `cancelPolicy` 를 알려 준다 | 꺼진 채 시작 (`skeleton.payment.routing.*`) | [CHANGELOG](CHANGELOG.md) "접속 나라로 결제사 · 해지·환불 규칙" |
@@ -88,6 +89,7 @@ modules/                # grouped by area; a module's store / provider clients s
   |- payment-jdbc       # payment ledger store for PostgreSQL / MySQL
   |- payment-toss       # optional Toss payment provider (one-time, billing keys)
   |- payment-kakaopay   # optional KakaoPay direct provider (one-time: ready, approve, cancel; no Toss contract needed)
+  |- payment-naverpay   # optional NaverPay direct provider (one-time: SDK window, apply, cancel; no Toss contract needed)
   |- payment-stripe     # optional Stripe payment provider (confirm / cancel)
   `- payment-paddle     # optional Paddle (merchant of record) provider: server-made transactions, signed webhooks
 

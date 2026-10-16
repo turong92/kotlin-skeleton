@@ -131,6 +131,8 @@ skeleton:
         KR: toss
     # 운영자 경로(/api/v1/admin/payments)는 모듈 기본대로 꺼 둔다 — 켜려면 SKELETON_PAYMENT_ADMIN_ENABLED=true (로컬 프로필은 application-local.yml 이 켠다).
     # 켜도 판정은 이 앱의 PaymentOperatorPolicy 빈(cheer/CheerPaymentConfiguration) — 토큰의 역할이 아니라 매 호출 저장소의 ADMIN 역할을 다시 읽는다.
+    reconcile:
+      first-delay: 90s                 # 이 앱의 선택(모듈 기본 60초): 네이버페이 승인 · 취소의 응답 제한이 문서의 60초라 그보다 길어야 한다 — 네이버페이를 켰을 때 payment-naverpay 의 가드가 기동 때 본다
     webhook:
       inline:
         enabled: true                  # 웹훅을 받은 요청 안에서 바로 한 번 반영해 본다(짧은 시간 한도, 실패하면 일꾼이 지금처럼) - 결제 직후 화면이 일꾼의 차례를 안 기다린다. 모듈 기본은 꺼짐
@@ -165,6 +167,13 @@ skeleton:
     secret-key: ${SKELETON_PAYMENT_KAKAOPAY_SECRET_KEY:}    # 개발자센터 앱의 Secret key(dev) — 비밀, 커밋하지 않는다
     cid: ${SKELETON_PAYMENT_KAKAOPAY_CID:}                  # 가맹점 코드 — 테스트는 TC0ONETIME (비밀 아님)
     return-url: ${SKELETON_PAYMENT_KAKAOPAY_RETURN_URL:}    # 구매자를 돌려보낼 이 앱의 화면 주소 — <프런트 주소>/payments/return (비밀 아님)
+  payment-naverpay:                                         # 네이버페이 직접 연동(토스 계약 없이). 켜기: SKELETON_PAYMENT_NAVERPAY_ENABLED=true. 클라이언트 아이디 · 시크릿 · 체인 아이디가 모두 있어야 서고, 비면 이 결제사만 없다(보호 환경은 기동 실패)
+    mode: ${SKELETON_PAYMENT_NAVERPAY_MODE:development}      # development | production — API 서버 · 결제창 · SDK 가 함께 따른다. 개발 모드로 stage|prod, 운영 모드로 로컬에 서면 기동 실패
+    client-id: ${SKELETON_PAYMENT_NAVERPAY_CLIENT_ID:}       # 가맹점 식별키 — 결제창 SDK 에 실려 브라우저에 나간다(비밀 아님)
+    client-secret: ${SKELETON_PAYMENT_NAVERPAY_CLIENT_SECRET:}   # 비밀, 커밋하지 않는다
+    chain-id: ${SKELETON_PAYMENT_NAVERPAY_CHAIN_ID:}         # 가맹점 그룹 식별키(비밀 아님). 단건 값을 쓴다
+    return-url: ${SKELETON_PAYMENT_NAVERPAY_RETURN_URL:}     # 구매자를 돌려보낼 이 앱의 화면 주소 — <프런트 주소>/payments/return (비밀 아님)
+    base-url: ${SKELETON_PAYMENT_NAVERPAY_BASE_URL:}         # 비우면 모드가 정한 네이버페이 주소 — 프런트 e2e 는 가짜 네이버페이를 가리킨다
   payment-paddle:                                           # 해외 결제(판매 대행). 켜기: SKELETON_PAYMENT_PADDLE_ENABLED=true. 세 비밀이 모두 있어야 서고, 하나라도 비면 이 결제사만 없다(서버는 뜬다)
     api-key: ${PADDLE_API_KEY:}                             # 비밀 — 커밋하지 않는다
     client-token: ${PADDLE_CLIENT_TOKEN:}                   # Paddle.js 클라이언트 토큰 (비밀 아님)
@@ -183,3 +192,5 @@ skeleton:
     clients:
       payment-toss:
         response-timeout: 30s   # 이 앱의 선택(플랫폼 기본 5초): 승인 · 환불은 토스가 느릴 수 있다. reconcile.first-delay(60s) · refund.settle-delay(2m)가 이보다 길어야 한다 — 토스를 켜면 payment-toss 의 가드가 기동 때 본다
+      payment-naverpay:
+        response-timeout: 60s   # 문서가 승인 · 취소에 권하는 시간(최종 승인이 끝나기까지 시간이 걸린다). reconcile.first-delay(90s) · refund.settle-delay(2m)가 이보다 길어야 한다 — 네이버페이를 켜면 payment-naverpay 의 가드가 기동 때 본다

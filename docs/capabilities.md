@@ -34,7 +34,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | 알림 (종 · 목록 · 안 읽은 수) | `notification` + `notification-jdbc` | `--modules notification,notification-jdbc` | `--packages notifications` — react `notifications` | 알림을 만드는 쪽(NotificationPublisher.publish)은 앱 코드 — 받는 사람은 NotificationEvent.recipientIds. 프런트에서는 NotificationBell 배치와 알림 API 인스턴스. |
 | 알림이 새로고침 없이 즉시 뜬다 (실시간) | `notification` + `notification-jdbc` + (`notification-sse` \| `notification-websocket`) | `--modules notification,notification-jdbc,notification-sse` — `notification-sse` \| `notification-websocket` 중 하나 이상 고른다 | `--packages notifications,realtime` — react `live-notifications` | SSE(단방향, 더 단순) 또는 WebSocket(양방향) 중 고른다. 둘 다 프로세스 안 브로커라 인스턴스가 여럿이면 다른 인스턴스의 알림을 못 받는다. 프런트 연결 훅. |
 | 파일 업로드 (이미지 · 첨부) | `storage` + `storage-s3` | `--modules storage,storage-s3` | `--packages storage` — react `storage` | 버킷 · 키(환경변수), 업로드 규칙(skeleton.storage.validation — 확장자 · 크기), 업로드한 파일 키를 도메인에 저장하는 코드(앱). 로컬 개발은 compose 의 S3 를 scripts/dev.sh 가 올린다. |
-| 결제 (토스 · 스트라이프) | `payment` + (`payment-toss` \| `payment-kakaopay` \| `payment-stripe` \| `payment-paddle`) | `--modules payment,payment-toss` — `payment-toss` \| `payment-kakaopay` \| `payment-stripe` \| `payment-paddle` 중 하나 이상 고른다 | `--packages payment` — react `payment` | HTTP 엔드포인트가 없다 — 주문 · 금액 검증 컨트롤러 · 성공/실패 리다이렉트 처리 · 웹훅 서명 검증을 앱이 쓴다(PaymentService.confirm 은 받은 금액을 그대로 넘긴다). enabled=true + secret-key(환경변수). 중복 결제 방지에는 idempotency. |
+| 결제 (토스 · 스트라이프) | `payment` + (`payment-toss` \| `payment-kakaopay` \| `payment-naverpay` \| `payment-stripe` \| `payment-paddle`) | `--modules payment,payment-toss` — `payment-toss` \| `payment-kakaopay` \| `payment-naverpay` \| `payment-stripe` \| `payment-paddle` 중 하나 이상 고른다 | `--packages payment` — react `payment` | HTTP 엔드포인트가 없다 — 주문 · 금액 검증 컨트롤러 · 성공/실패 리다이렉트 처리 · 웹훅 서명 검증을 앱이 쓴다(PaymentService.confirm 은 받은 금액을 그대로 넘긴다). enabled=true + secret-key(환경변수). 중복 결제 방지에는 idempotency. |
 | 봇 방지 (캡차) | `captcha-turnstile` | `--modules captcha-turnstile` | `--packages captcha-turnstile` — react `captcha-turnstile` | 가입 · 로그인 요청에서 TurnstileVerifier 로 토큰을 검증하는 코드(앱)와 enabled=true + secret-key(환경변수). |
 | 메일 보내기 (SMTP) | `notification-mail` | `--modules notification-mail` | (프런트 없음) | SMTP 환경변수(host · username · password · from)와 메일 본문 · 템플릿(앱). |
 | 슬랙으로 알림 | `notification-slack` | `--modules notification-slack` | (프런트 없음) | 웹훅 URL(환경변수)과 보낼 알림 종류(앱). |
@@ -106,9 +106,10 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `notification-slack` | 알림과 @SlackException 예외 알림을 Slack 웹훅으로 보낸다. | `--modules notification-slack` | 슬랙 알림, 슬랙, 예외 알림 / slack notification, slack webhook, exception alert | — |
 | `notification-sse` | 알림을 Server-Sent Events 로 브라우저에 실시간 전달한다(GET /api/v1/notifications/sse) — 받는 사람이 정해진 알림은 그 사람에게만. | `--modules notification-sse` | 실시간 알림, SSE, 알림 즉시 표시, 푸시 알림, 서버 푸시 / realtime notification, sse, server-sent events, push notification | `@skeleton/realtime` |
 | `notification-websocket` | 알림을 STOMP over WebSocket(/ws/notifications)으로 전달한다 — 인증 · trace 인터셉터 · 하트비트를 갖춘 인프로세스 브로커. | `--modules notification-websocket` | 웹소켓, 실시간 알림, 양방향 통신, STOMP / websocket, stomp, realtime notification, two-way | `@skeleton/realtime` |
-| `payment` | 결제 계약 + 장부 HTTP — PaymentService · PaymentProviderRouter(제공자는 payment-toss \| payment-kakaopay \| payment-stripe \| payment-paddle). 장부(payment-jdbc)가 있으면 사용자 경로(/api/v1/payments: 설정 · 주문 만들기(PaymentCatalog 빈이 있을 때) · 승인 · 환불 요청), 꺼 둔 운영자 경로(/api/v1/admin/payments), 결제사가 부르는 웹훅 수신 경로, 탈퇴 고리 · 내보내기 고리를 연다. 구독(skeleton.payment.subscription.enabled — 꺼짐이 기본): 카드 등록 + 첫 결제, 기간 끝 갱신 작업, 해지 예약 (/api/v1/payments/subscriptions, 빌링키는 crypto 로 암호화). | `--modules payment` — `payment-toss` \| `payment-kakaopay` \| `payment-stripe` \| `payment-paddle` 중 하나 이상 고른다 | 결제, 결제 승인, 환불, 결제 취소, 유료 / payment, checkout, refund, payment confirm, paid | `@skeleton/payment` |
+| `payment` | 결제 계약 + 장부 HTTP — PaymentService · PaymentProviderRouter(제공자는 payment-toss \| payment-kakaopay \| payment-naverpay \| payment-stripe \| payment-paddle). 장부(payment-jdbc)가 있으면 사용자 경로(/api/v1/payments: 설정 · 주문 만들기(PaymentCatalog 빈이 있을 때) · 승인 · 환불 요청), 꺼 둔 운영자 경로(/api/v1/admin/payments), 결제사가 부르는 웹훅 수신 경로, 탈퇴 고리 · 내보내기 고리를 연다. 구독(skeleton.payment.subscription.enabled — 꺼짐이 기본): 카드 등록 + 첫 결제, 기간 끝 갱신 작업, 해지 예약 (/api/v1/payments/subscriptions, 빌링키는 crypto 로 암호화). | `--modules payment` — `payment-toss` \| `payment-kakaopay` \| `payment-naverpay` \| `payment-stripe` \| `payment-paddle` 중 하나 이상 고른다 | 결제, 결제 승인, 환불, 결제 취소, 유료 / payment, checkout, refund, payment confirm, paid | `@skeleton/payment` |
 | `payment-jdbc` | 결제 장부 저장소 — PostgreSQL · MySQL 로 payment 의 저장 포트(PaymentLedgerStore)와 작업 포트(PaymentTasks, job-queue-jdbc 에 싣는다)를 구현한다(payment_* 표 4개 · 주문 줄 락 · 유니크 · check 제약). | `--modules payment-jdbc` | 결제 장부, 주문 장부, 결제 저장소, 결제 DB / payment ledger, payment storage, payment repository, order ledger | `@skeleton/payment` |
 | `payment-kakaopay` | 카카오페이 직접 연동 단건 결제 — 토스 계약 없이 카카오페이 계약만 있어도 쓰는 별도 결제사(기본 꺼짐). 결제 준비(ready) → 카카오톡 인증 → 서버 승인(approve) → 취소 · 환불 · 조회. 정기 결제 · 웹훅은 없다. | `--modules payment-kakaopay` | 카카오페이, 카카오페이 결제, 간편 결제, 토스 없이 결제 / kakaopay, kakao pay, korean easy pay, payment without toss | `@skeleton/payment` |
+| `payment-naverpay` | 네이버페이 직접 연동 단건 결제 — 토스 계약 없이 네이버페이 계약만 있어도 쓰는 별도 결제사(기본 꺼짐). 구매자 브라우저가 네이버 SDK 로 결제창을 열고 → 서버 승인(apply) → 취소 · 환불 · 결제 내역 조회. 정기 결제(자동결제) · 웹훅은 없다. | `--modules payment-naverpay` | 네이버페이, 네이버페이 결제, 간편 결제, 토스 없이 결제 / naverpay, naver pay, korean easy pay, payment without toss | `@skeleton/payment` |
 | `payment-paddle` | Paddle 해외 결제(판매 대행) — 서명된 웹훅으로 결제 · 구독 상태를 장부에 옮기고, 결제 · 갱신은 Paddle 이 한다. 구독 해지는 Paddle API. | `--modules payment-paddle` | 패들, 해외 결제, 해외 구독, 다통화 / paddle, merchant of record, international subscription, multi-currency | `@skeleton/payment` |
 | `payment-stripe` | Stripe 결제 제공자 — 결제 승인 · 취소를 payment 의 제공자로 구현한다. | `--modules payment-stripe` | 스트라이프 결제, 해외 결제, 카드 결제 / stripe, stripe payments, card payment, international payment | `@skeleton/payment` |
 | `payment-toss` | Toss 결제 제공자 — 결제 승인 · 취소를 payment 의 제공자로 구현한다. | `--modules payment-toss` | 토스 결제, 토스페이먼츠, 카드 결제, 간편 결제 / toss payments, toss, card payment | `@skeleton/payment` |
@@ -727,13 +728,13 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 인스턴스가 여러 개면 인프로세스 브로커
 - 키워드: 웹소켓, 실시간 알림, 양방향 통신, STOMP / websocket, stomp, realtime notification, two-way
 
-### `payment` — 결제 계약 + 장부 HTTP — PaymentService · PaymentProviderRouter(제공자는 payment-toss | payment-kakaopay | payment-stripe | payment-paddle). 장부(payment-jdbc)가 있으면 사용자 경로(/api/v1/payments: 설정 · 주문 만들기(PaymentCatalog 빈이 있을 때) · 승인 · 환불 요청), 꺼 둔 운영자 경로(/api/v1/admin/payments), 결제사가 부르는 웹훅 수신 경로, 탈퇴 고리 · 내보내기 고리를 연다. 구독(skeleton.payment.subscription.enabled — 꺼짐이 기본): 카드 등록 + 첫 결제, 기간 끝 갱신 작업, 해지 예약 (/api/v1/payments/subscriptions, 빌링키는 crypto 로 암호화).
+### `payment` — 결제 계약 + 장부 HTTP — PaymentService · PaymentProviderRouter(제공자는 payment-toss | payment-kakaopay | payment-naverpay | payment-stripe | payment-paddle). 장부(payment-jdbc)가 있으면 사용자 경로(/api/v1/payments: 설정 · 주문 만들기(PaymentCatalog 빈이 있을 때) · 승인 · 환불 요청), 꺼 둔 운영자 경로(/api/v1/admin/payments), 결제사가 부르는 웹훅 수신 경로, 탈퇴 고리 · 내보내기 고리를 연다. 구독(skeleton.payment.subscription.enabled — 꺼짐이 기본): 카드 등록 + 첫 결제, 기간 끝 갱신 작업, 해지 예약 (/api/v1/payments/subscriptions, 빌링키는 crypto 로 암호화).
 
 - 종류 · 상태: module · experimental — 위치 `modules/payment`
-- 켜는 법: `--modules payment` — `payment-toss` | `payment-kakaopay` | `payment-stripe` | `payment-paddle` 중 하나 이상 고른다
+- 켜는 법: `--modules payment` — `payment-toss` | `payment-kakaopay` | `payment-naverpay` | `payment-stripe` | `payment-paddle` 중 하나 이상 고른다
 - 의존 한 줄: `implementation(project(":modules:payment"))`
 - 자동으로 따라온다: `crypto`
-- 하나 이상 고른다: `payment-toss` | `payment-kakaopay` | `payment-stripe` | `payment-paddle`
+- 하나 이상 고른다: `payment-toss` | `payment-kakaopay` | `payment-naverpay` | `payment-stripe` | `payment-paddle`
 - 설정 접두사 `skeleton.payment` — 키와 기본값 `docs/config/modules/payment.yml`
 - HTTP 경로: `/api/v1/payments`, `/api/v1/admin/payments`, `/api/v1/payments/webhooks`
 - 비밀 · 환경변수: `<P>_PAYMENT_WEBHOOK_PATH_TOKEN` — 빠지면: 서명 없는 결제사(토스의 결제 이벤트)의 웹훅 경로가 늘 404 이다 — 보호 환경(stage · prod)에서는 비었거나 약하면(24자 미만) 기동 실패
@@ -758,7 +759,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 짝 프런트(react-skeleton): 항목 `payment` · 패키지 `@skeleton/payment` · 조각 `--packages payment`
 - 쓰지 않는 경우:
   - payment 없이는 쓰지 않는다(따라온다)
-  - 결제사 모듈(payment-toss | payment-kakaopay | payment-stripe | payment-paddle)이 따로 필요하다 — 이 모듈은 저장소다
+  - 결제사 모듈(payment-toss | payment-kakaopay | payment-naverpay | payment-stripe | payment-paddle)이 따로 필요하다 — 이 모듈은 저장소다
   - job-queue-jdbc 가 켜져 있어야 한다(꺼 두면 시작에 실패한다)
   - 다른 DB(JPA · jOOQ)로 저장하려면 payment 의 저장 포트(PaymentLedgerStore · PaymentTasks)를 앱이 구현한다
 - 키워드: 결제 장부, 주문 장부, 결제 저장소, 결제 DB / payment ledger, payment storage, payment repository, order ledger
@@ -778,6 +779,23 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 정기 결제(SID) · 웹훅은 아직 없다 — 결과는 승인 응답과 주문 조회로 맞춘다
   - 토스 계약이 있고 카카오페이를 간편결제 단추로만 받으면 payment-toss 의 easy-pays 로 충분하다
 - 키워드: 카카오페이, 카카오페이 결제, 간편 결제, 토스 없이 결제 / kakaopay, kakao pay, korean easy pay, payment without toss
+
+### `payment-naverpay` — 네이버페이 직접 연동 단건 결제 — 토스 계약 없이 네이버페이 계약만 있어도 쓰는 별도 결제사(기본 꺼짐). 구매자 브라우저가 네이버 SDK 로 결제창을 열고 → 서버 승인(apply) → 취소 · 환불 · 결제 내역 조회. 정기 결제(자동결제) · 웹훅은 없다.
+
+- 종류 · 상태: module · experimental — 위치 `modules/payment-naverpay`
+- 켜는 법: `--modules payment-naverpay`
+- 의존 한 줄: `implementation(project(":modules:payment-naverpay"))`
+- 자동으로 따라온다: `crypto`, `payment`
+- 설정 접두사 `skeleton.payment-naverpay` — 키와 기본값 `docs/config/modules/payment-naverpay.yml`
+- 비밀 · 환경변수: `<P>_PAYMENT_NAVERPAY_ENABLED=true`, `<P>_PAYMENT_NAVERPAY_CLIENT_SECRET` — 빠지면: 제공자 빈이 없다 — 결제 라우팅이 그 제공자를 못 찾는다. 클라이언트 시크릿 · 아이디 · 체인 아이디가 비면 보호 환경(stage · prod)에서는 기동 실패, 그 밖의 환경은 경고
+- 문서: `docs/modules/payment-naverpay.md`
+- 짝 프런트(react-skeleton): 항목 `payment` · 패키지 `@skeleton/payment` · 조각 `--packages payment`
+- 쓰지 않는 경우:
+  - payment 없이는 쓰지 않는다(따라온다)
+  - 정기 결제(자동결제) · 웹훅은 아직 없다 — 결과는 승인 응답과 결제 내역 조회로 맞춘다
+  - 토스 계약이 있고 네이버페이를 간편결제 단추로만 받으면 payment-toss 의 easy-pays 로 충분하다
+  - 네이버페이 인증값은 가맹 심사 뒤에 나온다 — 그 전에는 가짜 서버로만 시험된다
+- 키워드: 네이버페이, 네이버페이 결제, 간편 결제, 토스 없이 결제 / naverpay, naver pay, korean easy pay, payment without toss
 
 ### `payment-paddle` — Paddle 해외 결제(판매 대행) — 서명된 웹훅으로 결제 · 구독 상태를 장부에 옮기고, 결제 · 갱신은 Paddle 이 한다. 구독 해지는 Paddle API.
 
@@ -1001,7 +1019,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 - 종류 · 상태: app · stable — 위치 `apps/sample`
 - 켜는 법: `--with-sample`
-- 자동으로 따라온다: `alert-jdbc`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `board`, `board-jdbc`, `crypto`, `json`, `notification`, `notification-jdbc`, `notification-sse`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-paddle`, `payment-toss`, `storage`, `storage-s3`
+- 자동으로 따라온다: `alert-jdbc`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `board`, `board-jdbc`, `crypto`, `json`, `notification`, `notification-jdbc`, `notification-sse`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-toss`, `storage`, `storage-s3`
 - HTTP 경로: `/api/v1/cheers`, `/api/v1/notes`
 - 문서: `docs/sample.md`
 - 짝 프런트(react-skeleton): 항목 `app-sample` · 조각 `--with-sample`
@@ -1014,7 +1032,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 - 종류 · 상태: app · stable — 위치 `apps/workbench`
 - 켜는 법: `--with-workbench`
-- 자동으로 따라온다: `alert-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `board`, `board-jdbc`, `config-aws-ssm`, `crypto`, `db-mysql`, `event-kafka`, `json`, `notification`, `notification-jdbc`, `notification-slack`, `notification-sse`, `notification-websocket`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-stripe`, `payment-paddle`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `scheduler`, `storage`, `storage-s3`
+- 자동으로 따라온다: `alert-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `board`, `board-jdbc`, `config-aws-ssm`, `crypto`, `db-mysql`, `event-kafka`, `json`, `notification`, `notification-jdbc`, `notification-slack`, `notification-sse`, `notification-websocket`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-stripe`, `payment-paddle`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `scheduler`, `storage`, `storage-s3`
 - HTTP 경로: `/api/v1`, `/api/v1/examples`, `/api/v1/skeleton`, `/api/v1/skeleton/enums`, `/api/v1/skeleton/json`, `/api/v1/skeleton/payments`, `/api/v1/skeleton/polymorphic/contents`
 - 문서: `docs/minimal-composition.md`, `docs/modules/README.md`
 - 짝 프런트(react-skeleton): 항목 `app-workbench` · 조각 `--with-workbench`

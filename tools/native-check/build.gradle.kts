@@ -29,6 +29,7 @@ dependencies {
     implementation(project(":modules:auth-social-x"))
     implementation(project(":modules:payment-toss"))
     implementation(project(":modules:payment-kakaopay"))
+    implementation(project(":modules:payment-naverpay"))
     implementation(project(":modules:payment-paddle"))
     implementation(testFixtures(project(":modules:payment")))   // ScriptedGateway — 가짜 결제사. 이 앱에서만 main 클래스패스에 올린다
 

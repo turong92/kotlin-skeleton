@@ -54,7 +54,7 @@ skeleton:
 ```
 
 Adapter modules expose the contract they implement with `api(project(...))`, so one line is enough:
-`payment-toss`/`payment-kakaopay`/`payment-stripe`/`payment-paddle`/`payment-jdbc` → `payment`, `notification-jdbc`/`-sse`/`-slack`/`-websocket` → `notification`,
+`payment-toss`/`payment-kakaopay`/`payment-naverpay`/`payment-stripe`/`payment-paddle`/`payment-jdbc` → `payment`, `notification-jdbc`/`-sse`/`-slack`/`-websocket` → `notification`,
 `storage-s3` → `storage`, `auth-social` → `auth`, `auth-social-google`/`-kakao`/`-naver`/`-oidc`/`-x` → `auth-social`,
 `redis-lock`/`-cache`/`-rate-limit` → `redis-core`, `board-jdbc` → `board`. You never edit a module to compose it.
 `board` alone has no storage — name `board-jdbc` too (`--modules board,board-jdbc`); `board` never depends on its adapter, as `notification` does not on `notification-jdbc`.
@@ -124,6 +124,7 @@ fails when this table and the prefixes found in module code differ.
 | `notification-websocket` | `skeleton.notification-websocket` |
 | `payment` | `skeleton.payment` |
 | `payment-kakaopay` | `skeleton.payment-kakaopay` |
+| `payment-naverpay` | `skeleton.payment-naverpay` |
 | `payment-paddle` | `skeleton.payment-paddle` |
 | `payment-stripe` | `skeleton.payment-stripe` |
 | `payment-toss` | `skeleton.payment-toss` |
@@ -189,7 +190,7 @@ test proving a context with only that module (and its declared dependencies) boo
 | `notification-websocket` | yes (in-process simple broker; the endpoint is open until `authentication.enabled=true`) | a servlet web app | — |
 | `payment` | yes (routing only) | nothing | a provider module |
 | `payment-jdbc` | yes (turns the `payment` order ledger on) | a `DataSource` + one `db-*` module + `job-queue-jdbc` enabled (+ its migration `payment_ledger`, as above) | a provider module (`payment-toss`) to take money |
-| `payment-toss` / `payment-kakaopay` / `payment-stripe` / `payment-paddle` | off until `enabled=true` | nothing | secret key, internet |
+| `payment-toss` / `payment-kakaopay` / `payment-naverpay` / `payment-stripe` / `payment-paddle` | off until `enabled=true` | nothing | secret key, internet |
 | `persistence-jdbc` | yes (the optional first-connection wait is off) | a `DataSource` + one `db-*` module | — |
 | `persistence-jpa` | yes | a `DataSource` + JPA starter | — |
 | `persistence-jooq` | yes | a `DataSource` (code generation needs no database) | — |

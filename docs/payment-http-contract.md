@@ -64,6 +64,8 @@
 
 카카오페이(`payment-kakaopay`)의 결제창 값은 `"kind": "KAKAOPAY_REDIRECT"`, `clientKey: null`(공개 키가 없다), `attributes` = `{ pcUrl, mobileUrl, appUrl? }` - 프론트가 **구매자를 그 주소로 보낸다**(PC · 모바일에 맞는 것). 서버가 `ready` 를 부르고 받은 거래 번호(`tid`)는 이 주문의 결제사 결제 번호로 박힌다(사용자 응답에는 나오지 않는다 - 승인 요청이 번호 없이 간다). 구매자가 인증을 마치면 카카오페이가 서버 설정 `return-url` 에 `?kind=KAKAOPAY_REDIRECT&provider=<결제사 id>&order=<주문 id>&result=success&pg_token=…` 을 붙여 돌려보낸다(취소 · 실패는 `result=cancel` · `fail`) - 프론트가 이 `pg_token` 을 `/confirm` 의 `approvalToken` 으로 보낸다.
 
+네이버페이(`payment-naverpay`)의 결제창 값은 `"kind": "NAVERPAY_SDK"`, `clientKey` = 클라이언트 아이디(SDK 가 공개 값으로 정의한다 - 시크릿은 나가지 않는다), `attributes` = `{ chainId, mode("development"\|"production"), returnUrl, taxScopeAmount, taxExScopeAmount }` - 프론트가 **네이버 SDK(`https://nsp.pay.naver.com/sdk/js/naverpay.min.js`, 누른 그때 불러온다)로 결제창을 연다**. 서버는 결제를 미리 만들지 않는다(`ready` 같은 호출이 없다) - 주문의 결제 번호는 비어 있고, 구매자가 결제를 마치면 네이버페이가 `returnUrl`(= 서버 설정 `return-url` + `?kind=NAVERPAY_SDK&provider=naverpay&order=<주문 id>`)에 `&resultCode=Success&paymentId=…` 을 붙여 돌려보낸다(실패는 `resultCode` · `resultMessage` · `reserveId`) - 프론트가 이 `paymentId` 를 `/confirm` 의 `providerPaymentId` 로 보낸다(토스의 `paymentKey` 와 같은 자리, `approvalToken` 은 없다). 승인 API 는 결제 번호만 받아 금액은 결제창이 정한다 - 서버는 승인 응답의 총액 · 주문 번호가 주문과 다르면 주문을 `PAID` 로 두지 않고 확인이 필요하다고 표시한다.
+
 `clientKey` 는 `string | null` 이다 — 결제사 모듈이 정하고, 낼 수 없으면(토스: 공개 키가 비었거나 시크릿 키와 모드가 다름) `null` 이다. 그때 `GET /config` 의 `available` 도 `false` 다(§2). 돌아올 주소(`successUrl` · `failUrl`)는 프론트가 정해 결제창에 넘긴다 — **서버는 받지도 저장하지도 않는다.** 구매자 이름 · 이메일 · 전화는 결제창에 넘기지 않는다.
 
 ### 1.4 운영자 주문 `AdminOrder`

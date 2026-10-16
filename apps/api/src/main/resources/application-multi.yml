@@ -22,6 +22,7 @@ skeleton:
       #   crypto: { primary-key-id: a1, keys: { a1: ${A_CRYPTO_KEY} } }                                   # 프로젝트마다 다른 키 바이트(같으면 기동 실패). base64 AES 키
       #   payment-toss: { enabled: true, secret-key: ${A_TOSS_SECRET}, client-key: ${A_TOSS_CLIENT} }    # 결제사 키는 프로젝트마다 — B 가 안 켠 결제사는 B 의 결제 화면에 없다
       #   payment-kakaopay: { enabled: true, secret-key: ${A_KAKAOPAY_SECRET}, cid: ${A_KAKAOPAY_CID}, return-url: https://a.example.com/payments/return }   # 토스 계약 없이 카카오페이만 — 시크릿 키 · 가맹점 코드 · 돌아올 주소 모두 프로젝트마다
+      #   payment-naverpay: { enabled: true, mode: production, client-id: ${A_NAVERPAY_CLIENT_ID}, client-secret: ${A_NAVERPAY_SECRET}, chain-id: ${A_NAVERPAY_CHAIN_ID}, return-url: https://a.example.com/payments/return }   # 토스 계약 없이 네이버페이만 — 아이디 · 시크릿 · 체인 아이디 · 돌아올 주소 모두 프로젝트마다
       #   payment-paddle: { enabled: true, api-key: ${A_PADDLE_API}, client-token: ..., webhook-secret: ${A_PADDLE_WEBHOOK} }
       #   payment: { default-provider: toss, routing: { country-providers: { KR: toss, US: paddle } }, webhook: { path-token: ${A_PAYMENT_WEBHOOK_TOKEN} } }  # 비밀 조각 24자+ (서명 없는 결제사의 웹훅 주소)
       config:
