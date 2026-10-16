@@ -1,6 +1,10 @@
 package dev.sumin.skeleton.payment
 
+import dev.sumin.skeleton.common.deploy.DeployContext
+import dev.sumin.skeleton.common.deploy.DeployGuard
 import dev.sumin.skeleton.common.erasure.AccountDataExporter
+import dev.sumin.skeleton.common.project.ProjectsConfigured
+import dev.sumin.skeleton.common.project.ProjectsNotConfigured
 import dev.sumin.skeleton.crypto.TextEncryptor
 import dev.sumin.skeleton.common.erasure.AccountErasureListener
 import dev.sumin.skeleton.common.time.TimeProvider
@@ -10,6 +14,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.context.annotation.Bean
+import org.springframework.context.annotation.Conditional
 
 /**
  * 결제 장부 서비스(스펙 §4.3). **[PaymentLedgerStore] 빈이 없으면 이 설정은 통째로 빠진다 — `payment` 는 장부가 생기기 전과 한 글자도 다르지 않다.**
@@ -171,10 +176,28 @@ class PaymentLedgerAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(name = ["paymentWebhookDeployGuard"])
     @ConditionalOnProperty(prefix = "skeleton.payment.webhook", name = ["enabled"], havingValue = "true", matchIfMissing = true)
+    @Conditional(ProjectsNotConfigured::class)
     fun paymentWebhookDeployGuard(properties: PaymentProperties, gateways: ObjectProvider<PaymentWebhookGateway>): PaymentWebhookDeployGuard =
         PaymentWebhookDeployGuard(properties) {
             gateways.orderedStream().filter { !it.signed && (properties.providers[it.providerId.trim().lowercase()]?.enabled ?: true) }.map { it.providerId }.toList()
         }
+
+    /** 프로젝트 모드: 프로젝트마다 그 프로젝트의 결제사 · 비밀 조각으로 같은 규칙을 본다 — 메시지 앞에 `project '<id>': ` */
+    @Bean
+    @ConditionalOnMissingBean(name = ["paymentProjectWebhookDeployGuard"])
+    @ConditionalOnProperty(prefix = "skeleton.payment.webhook", name = ["enabled"], havingValue = "true", matchIfMissing = true)
+    @Conditional(ProjectsConfigured::class)
+    fun paymentProjectWebhookDeployGuard(router: PaymentProviderRouter): DeployGuard = object : DeployGuard {
+        override val name = "payment"
+        override fun problems(context: DeployContext) = perProject { it.problems(context) }
+        override fun warnings(context: DeployContext) = perProject { it.warnings(context) }
+        private fun perProject(of: (PaymentWebhookDeployGuard) -> List<String>) = router.allRoutes().flatMap { routes ->
+            val guard = PaymentWebhookDeployGuard(routes.properties) {
+                routes.gateways.filterIsInstance<PaymentWebhookGateway>().filter { !it.signed && (routes.properties.providers[it.providerId.trim().lowercase()]?.enabled ?: true) }.map { it.providerId }
+            }
+            of(guard).map { "project '${routes.projectId}': $it" }
+        }
+    }
 
     /** 로컬 나라 스위치가 보호 환경에서 켜져 있으면 기동 실패. */
     @Bean

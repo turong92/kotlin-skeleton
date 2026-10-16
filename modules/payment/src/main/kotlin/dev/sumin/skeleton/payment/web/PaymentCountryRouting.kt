@@ -26,10 +26,14 @@ data class RequestRoute(val country: String?, val provider: String?, val cancelP
  * @param openable 결제창을 열 수 있는 결제사 id - 부를 때마다 읽는다
  */
 class PaymentCountryRouting(
-    private val properties: PaymentProperties,
+    private val propertiesOf: () -> PaymentProperties,
     private val clientIps: ClientIps,
     private val openable: () -> List<String>,
 ) {
+    constructor(properties: PaymentProperties, clientIps: ClientIps, openable: () -> List<String>) : this({ properties }, clientIps, openable)
+
+    private val properties: PaymentProperties get() = propertiesOf()
+
     fun of(request: HttpServletRequest): RequestRoute {
         val devSwitch = properties.routing.devCountrySwitch
         val country = (if (devSwitch) devHeader(request) else null) ?: properties.routing.devCountry ?: clientIps.of(request).country ?: properties.subscription.cancel.defaultCountry

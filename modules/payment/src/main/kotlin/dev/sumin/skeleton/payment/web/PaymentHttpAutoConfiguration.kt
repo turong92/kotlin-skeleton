@@ -52,8 +52,9 @@ class PaymentHttpAutoConfiguration {
     /** 접속 나라로 결제사 · 해지·환불 정책을 서버가 정한다. 클라이언트 IP 풀이는 플랫폼의 [ClientIps] 를 쓴다(모드가 cloudflare 일 때만 `CF-IPCountry` 를 믿는다). */
     @Bean
     @ConditionalOnMissingBean
-    fun paymentCountryRouting(orders: PaymentOrders, properties: PaymentProperties, clientIps: ObjectProvider<ClientIps>): PaymentCountryRouting =
-        PaymentCountryRouting(properties, clientIps.getIfAvailable { ClientIps() }) { orders.openableProviders() }
+    fun paymentCountryRouting(orders: PaymentOrders, router: PaymentProviderRouter, clientIps: ObjectProvider<ClientIps>): PaymentCountryRouting =
+        // 나라 지도 · 기본 결제사는 프로젝트마다 다르다 - 부를 때 지금 프로젝트의 설정으로
+        PaymentCountryRouting({ router.properties() }, clientIps.getIfAvailable { ClientIps() }) { orders.openableProviders() }
 
     @Bean
     @ConditionalOnMissingBean

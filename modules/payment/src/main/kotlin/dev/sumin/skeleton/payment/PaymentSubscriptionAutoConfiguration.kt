@@ -1,5 +1,7 @@
 package dev.sumin.skeleton.payment
 
+import dev.sumin.skeleton.common.project.ProjectContext
+import dev.sumin.skeleton.common.project.ProjectRegistry
 import dev.sumin.skeleton.crypto.TextEncryptor
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.autoconfigure.AutoConfiguration
@@ -33,8 +35,7 @@ class PaymentSubscriptionAutoConfiguration {
         router: PaymentProviderRouter,
         plans: ObjectProvider<SubscriptionPlans>,
         encryptor: ObjectProvider<TextEncryptor>,
-        billing: ObjectProvider<PaymentBillingGateway>,
-        hosted: ObjectProvider<PaymentHostedSubscriptionGateway>,
+        projects: ObjectProvider<ProjectRegistry>,
         lifecycle: SubscriptionLifecycle,
         charges: SubscriptionCharges,
         tasks: PaymentTasks,
@@ -44,8 +45,19 @@ class PaymentSubscriptionAutoConfiguration {
         val plansBean = plans.getIfAvailable() ?: error("skeleton.payment.subscription.enabled=true needs a SubscriptionPlans bean (the app owns the plans and prices)")
         val encryptorBean = encryptor.getIfAvailable()
             ?: error("skeleton.payment.subscription.enabled=true needs an encryption key to store billing keys: set skeleton.crypto.keys (the crypto module's TextEncryptor)")
-        check(billing.orderedStream().findAny().isPresent || hosted.orderedStream().findAny().isPresent) {
+        check(router.anyGateway(PaymentBillingGateway::class) || router.anyGateway(PaymentHostedSubscriptionGateway::class)) {
             "skeleton.payment.subscription.enabled=true needs a payment provider with the billing capability (PaymentBillingGateway, e.g. payment-toss) or one that renews by itself (PaymentHostedSubscriptionGateway, e.g. payment-paddle)"
+        }
+        // 프로젝트 모드: 빌링키를 받는 결제사를 켠 프로젝트는 빌링키를 암호화할 자기 키가 있어야 한다 — 카드를 받은 뒤에야 못 저장하는 일이 없게 기동 때 막는다
+        projects.getIfAvailable()?.let { registry ->
+            router.allRoutes().filter { routes -> routes.gateways.any { it is PaymentBillingGateway } }.forEach { routes ->
+                val project = registry.active.single { it.id == routes.projectId }
+                try {
+                    ProjectContext.runIn(project) { encryptorBean.encrypt("probe") }
+                } catch (ex: RuntimeException) {
+                    throw IllegalStateException("project '${project.id}' has a billing payment provider but no usable crypto key for the billing keys (skeleton.projects.${project.id}.config.crypto.keys): ${ex.message}", ex)
+                }
+            }
         }
         return PaymentSubscriptions(store, router, plansBean, encryptorBean, lifecycle, charges, tasks, writer, properties)
     }

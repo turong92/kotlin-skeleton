@@ -11,7 +11,6 @@ object ProjectUnawareFeatures {
     data class Feature(val label: String, val marker: String)
 
     val DEFAULT = listOf(
-        Feature("payment", "dev.sumin.skeleton.payment.PaymentAutoConfiguration"),
         Feature("event-kafka", "dev.sumin.skeleton.event.kafka.EventKafkaAutoConfiguration"),
     )
 
