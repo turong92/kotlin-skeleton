@@ -68,6 +68,17 @@ hook. Set the grace longer than a deploy takes. (Before, the old worker marked s
 
 Handlers run **outside** the claim transaction so long jobs do not hold row locks.
 
+## Waking and concurrency
+
+Polling (`poll-interval`) is the safety net, not the latency. When a transaction that called `enqueue` **commits** (or at once when there is no
+transaction), the worker of the same process is woken and takes the job without waiting for the next poll; a failed wake is swallowed (the poll
+still finds the job). A batch that came back full (`batch-size` jobs) means more may be waiting, so the worker claims again immediately instead of
+sleeping. Jobs enqueued by *another* instance (or a job whose `runAt` is later) are still found by the poll — there is no cross-instance signal.
+
+`skeleton.job-queue.concurrency` (default `1`, the same as before) is the number of worker threads in this process. Each thread runs the same claim loop;
+`FOR UPDATE SKIP LOCKED` keeps two threads from taking the same job. Handlers must be safe to run at the same time (they already must be idempotent), and each
+thread holds a database connection while its handler runs. It has no meaning in `mode=on-request` (no worker threads).
+
 ## Lease rules
 
 A claimed job belongs to the worker that claimed it (`locked_by` + `attempts`):

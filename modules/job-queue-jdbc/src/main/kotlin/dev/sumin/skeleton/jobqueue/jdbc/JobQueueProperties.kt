@@ -10,6 +10,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties
  *     enabled: true
  *     poll-interval: 2s
  *     batch-size: 10
+ *     concurrency: 1             # 이 프로세스가 동시에 돌리는 일꾼 스레드 수. 기본 1 = 한 번에 한 묶음 (같은 잡을 둘이 집지는 않는다)
  *     max-attempts: 10
  *     backoff:
  *       initial: 30s
@@ -36,6 +37,8 @@ data class JobQueueProperties(
     val workerEnabled: Boolean = true,
     val pollInterval: Duration = Duration.ofSeconds(2),
     val batchSize: Int = 10,
+    /** 이 프로세스의 일꾼 스레드 수 — 각자 묶음을 집어 돌린다. 기본 1(지금까지와 같다). 처리기는 동시에 불려도 안전해야 하고, DB 연결을 이 수만큼 더 쓴다. [Mode.ON_REQUEST] 에는 뜻이 없다 */
+    val concurrency: Int = 1,
     val maxAttempts: Int = 10,
     val backoff: Backoff = Backoff(),
     val staleLockTimeout: Duration = Duration.ofMinutes(10),
@@ -53,6 +56,10 @@ data class JobQueueProperties(
     val mode: Mode = Mode.POLLING,
     val wake: Wake = Wake(),
 ) {
+    init {
+        require(concurrency >= 1) { "skeleton.job-queue.concurrency must be at least 1" }
+    }
+
     enum class Mode { POLLING, ON_REQUEST }
 
     /** 요청 구동 모드의 깨우기 주소 (Cloud Scheduler 같은 밖의 호출자가 부른다) */

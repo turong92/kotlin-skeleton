@@ -3,7 +3,8 @@ skeleton:
   job-queue:
     enabled: true                  # false 면 모듈이 빈을 만들지 않는다
     worker-enabled: true           # false 면 enqueue 만 되고 워커는 돌지 않는다 (테스트 · 배치 전용 인스턴스)
-    poll-interval: 2s              # 워커가 큐를 보는 간격
+    poll-interval: 2s              # 워커가 큐를 보는 간격 (안전망 — 같은 프로세스에서 넣은 잡은 커밋 즉시 깨워 바로 돈다)
+    concurrency: 1                 # 이 프로세스의 일꾼 스레드 수 (기본 1 = 한 번에 한 묶음). 처리기가 동시에 불려도 안전해야 하고 DB 연결을 이 수만큼 더 쓴다
     batch-size: 10                 # 한 번에 가져오는 작업 수
     max-attempts: 10               # 최대 시도 횟수
     backoff:

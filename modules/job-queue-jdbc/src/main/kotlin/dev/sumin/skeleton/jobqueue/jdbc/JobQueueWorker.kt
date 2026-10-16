@@ -6,9 +6,11 @@ import dev.sumin.skeleton.common.project.ProjectRegistry
 import dev.sumin.skeleton.common.time.TimeProvider
 import java.net.InetAddress
 import java.util.UUID
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
-import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicBoolean
 import org.slf4j.LoggerFactory
 import org.slf4j.MDC
@@ -16,6 +18,8 @@ import org.slf4j.MDC
 /**
  * 폴링 워커. [JobQueueProperties.pollInterval] 마다 [JdbcJobRepository.claim] → 핸들러 실행 → DONE / 재시도(백오프) / DEAD.
  *
+ * - 폴링은 안전망이다: 같은 프로세스에서 잡을 넣은 트랜잭션이 커밋되면 [wake] 가 바로 깨우고([JdbcJobQueue]), 묶음이 가득 찼으면(밀린 일감이 더 있을 수 있다) 기다리지 않고 바로 다시 집는다
+ * - [JobQueueProperties.concurrency] 개의 스레드가 각자 이 고리를 돈다(기본 1). 같은 잡을 둘이 집지 않는 것은 SKIP LOCKED 가 지킨다
  * - 단일 인스턴스면 그냥 돌고, 여러 인스턴스면 SKIP LOCKED 가 분배한다 (Redis 락 없음)
  * - 핸들러 실행은 claim 트랜잭션 **밖** — 긴 작업이 행 락을 오래 잡지 않게
  * - 워커가 죽어 RUNNING 으로 남은 잡은 [JobQueueProperties.staleLockTimeout] 뒤 PENDING 으로 복구 (시도를 다 썼으면 DEAD)
@@ -39,7 +43,9 @@ class JobQueueWorker(
     private val handlerByType = handlers.associateBy { it.type }
     val workerId: String = properties.workerId.ifBlank { defaultWorkerId() }
     private val running = AtomicBoolean(false)
-    private var executor: ScheduledExecutorService? = null
+    private var executor: ExecutorService? = null
+    /** 깨우기 표 — [wake] 가 한 장 더하고, 쉬고 있는 스레드 하나가 한 장을 가져가 바로 판을 돈다. 스레드 수보다 쌓이지 않는다 */
+    private val wakeups = Semaphore(0)
 
     fun start() {
         if (!running.compareAndSet(false, true)) return
@@ -48,9 +54,36 @@ class JobQueueWorker(
             log.info("Job queue worker is on-request (no polling thread): workerId={} batchSize={}", workerId, properties.batchSize)
             return
         }
-        executor = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "skeleton-job-queue").apply { isDaemon = true } }
-            .also { it.scheduleWithFixedDelay(::safePoll, properties.pollInterval.toMillis(), properties.pollInterval.toMillis(), TimeUnit.MILLISECONDS) }
-        log.info("Job queue worker started: workerId={} pollInterval={} batchSize={}", workerId, properties.pollInterval, properties.batchSize)
+        val threads = AtomicInteger()
+        val pool = Executors.newFixedThreadPool(properties.concurrency) { r ->
+            Thread(r, if (properties.concurrency == 1) "skeleton-job-queue" else "skeleton-job-queue-${threads.incrementAndGet()}").apply { isDaemon = true }
+        }
+        executor = pool
+        repeat(properties.concurrency) { pool.execute(::loop) }
+        log.info(
+            "Job queue worker started: workerId={} pollInterval={} batchSize={} concurrency={}",
+            workerId, properties.pollInterval, properties.batchSize, properties.concurrency,
+        )
+    }
+
+    /** 같은 프로세스의 잡 넣기가 커밋됐다 — 쉬는 스레드가 있으면 기다리던 폴링 간격을 건너뛰고 바로 판을 돌게 한다. 폴링 스레드가 없는 모드에서는 아무 일도 없다 */
+    fun wake() {
+        if (!running.get() || properties.mode == JobQueueProperties.Mode.ON_REQUEST) return
+        if (wakeups.availablePermits() < properties.concurrency) wakeups.release()
+    }
+
+    /** 스레드 하나의 고리: 간격 동안(또는 깨우기 전까지) 쉬고, 판을 돌되 묶음이 가득 찼으면 쉬지 않고 이어 돈다 */
+    private fun loop() {
+        try {
+            while (running.get()) {
+                wakeups.tryAcquire(properties.pollInterval.toMillis(), TimeUnit.MILLISECONDS)
+                do {
+                    val handled = safePoll()
+                } while (handled >= properties.batchSize && running.get())
+            }
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+        }
     }
 
     fun stop() {
@@ -80,13 +113,13 @@ class JobQueueWorker(
         return DrainResult(processed, rounds, timedOut, (System.nanoTime() - started) / 1_000_000)
     }
 
-    private fun safePoll() {
+    private fun safePoll(): Int =
         try {
             pollOnce()
         } catch (ex: Exception) {
             log.error("Job queue poll failed", ex)
+            0
         }
-    }
 
     /**
      * 한 번 폴링. 테스트에서 직접 호출할 수 있다. 처리한 잡 수를 돌려준다.

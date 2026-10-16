@@ -42,7 +42,11 @@ class JobQueueJdbcAutoConfiguration {
         properties: JobQueueProperties,
         timeProvider: ObjectProvider<TimeProvider>,
         propagator: JobContextPropagator,
-    ): JobQueue = JdbcJobQueue(repository, properties, timeProvider.getIfAvailable { TimeProvider.systemUtc() }, propagator)
+        worker: ObjectProvider<JobQueueWorker>,
+    ): JobQueue = JdbcJobQueue(
+        repository, properties, timeProvider.getIfAvailable { TimeProvider.systemUtc() }, propagator,
+        onCommitted = { worker.getIfAvailable()?.wake() }, // 일꾼은 처리기(큐를 부를 수 있는 빈)를 모으므로 늦게 찾는다 — 빈 순환을 피한다
+    )
 
     @Bean
     @ConditionalOnMissingBean

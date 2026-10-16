@@ -94,6 +94,7 @@ skeleton:
   #   LINE: <PREFIX>_AUTH_SOCIAL_OIDC_PROVIDERS_LINE_CLIENT_ID / _CLIENT_SECRET   X: <PREFIX>_AUTH_SOCIAL_X_CLIENT_ID / _CLIENT_SECRET   (docs/modules/auth-social-oidc.md · auth-social-x.md)
   job-queue:
     poll-interval: 1s                 # 내보내기가 몇 초 안에 끝나 보이도록 (모듈 기본값은 2s)
+    concurrency: 4                    # 일꾼 스레드 넷 - 웹훅 · 지급 · 메일이 서로 기다리지 않게 (모듈 기본은 1)
     retention:
       enabled: true                   # 끝난 작업 줄이 쌓이지 않게 (모듈 기본은 꺼짐 — 보관 정책은 앱이 정한다)
   alert:
