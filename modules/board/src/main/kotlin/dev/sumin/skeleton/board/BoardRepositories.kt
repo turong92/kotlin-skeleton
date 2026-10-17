@@ -13,6 +13,14 @@ interface BoardRepository {
 
     /** 이미 있으면 false (같은 코드 · 동시 생성에도 한 쪽만 true). */
     fun create(code: String, name: String, description: String?, now: Instant): Boolean
+
+    /**
+     * 설정을 정해 만든다 (시드 · 운영자). 기본 구현은 설정이 기본값(새 기능 모두 꺼짐)일 때만 위의 [create] 로 이어지고, 아니면 **닫힌 쪽으로** 실패한다 —
+     * 설정 열이 없는 자기 저장소가 설정을 조용히 버리지 않게. `board-jdbc` 가 구현한다.
+     */
+    fun create(code: String, name: String, description: String?, now: Instant, settings: BoardSettings): Boolean =
+        if (settings == BoardSettings()) create(code, name, description, now)
+        else throw UnsupportedOperationException("This BoardRepository does not store board settings - use board-jdbc or implement create(…, settings)")
 }
 
 interface PostRepository {
@@ -26,6 +34,12 @@ interface PostRepository {
     fun incrementViews(id: Long)
 
     fun page(query: PostQuery): PageResult<PostListItem>
+
+    /**
+     * 비회원 글의 비밀 해시 (비회원 행이 아니거나 글이 없으면 null). 해시는 모델에 싣지 않으므로 확인할 때만 읽는다.
+     * 기본 구현은 null — 늘 불일치다. 비회원 쓰기를 모르는 자기 저장소는 **닫힌 쪽으로** 실패한다.
+     */
+    fun guestSecretHash(id: Long): String? = null
 }
 
 interface CommentRepository {
@@ -44,6 +58,9 @@ interface CommentRepository {
 
     /** 주어진 최상위 댓글들의 모든 자손 — 쿼리 한 번 (root_id IN …), 작성 순. */
     fun descendants(rootIds: Collection<Long>): List<Comment>
+
+    /** 비회원 댓글의 비밀 해시 — [PostRepository.guestSecretHash] 와 같은 규칙 (기본 null = 늘 불일치) */
+    fun guestSecretHash(id: Long): String? = null
 }
 
 interface ReactionRepository {

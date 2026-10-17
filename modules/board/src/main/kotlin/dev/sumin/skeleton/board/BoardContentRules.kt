@@ -10,6 +10,10 @@ class BoardContentRules(private val properties: BoardProperties) {
         return text.also { checkLength("title", it, properties.titleMaxLength) }
     }
 
+    /** 비회원 이름 — 한 줄로 정리하고 1..[max] 코드 포인트 */
+    fun guestName(raw: String?, max: Int): String =
+        clean(raw, multiline = false).also { checkLength("guest name", it, max) }
+
     fun postBody(raw: String?): String =
         clean(raw, multiline = true).also { checkLength("body", it, properties.bodyMaxLength) }
 

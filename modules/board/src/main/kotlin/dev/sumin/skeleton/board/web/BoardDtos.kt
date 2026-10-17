@@ -1,10 +1,14 @@
 package dev.sumin.skeleton.board.web
 
 import com.fasterxml.jackson.annotation.JsonInclude
+import dev.sumin.skeleton.board.ApprovalMode
 import dev.sumin.skeleton.board.Board
+import dev.sumin.skeleton.board.BoardAuthors
 import dev.sumin.skeleton.board.BoardConfigView
 import dev.sumin.skeleton.board.CommentStatus
 import dev.sumin.skeleton.board.CommentView
+import dev.sumin.skeleton.board.GuestSecretMode
+import dev.sumin.skeleton.board.GuestWrite
 import dev.sumin.skeleton.board.PostDetailView
 import dev.sumin.skeleton.board.PostStatus
 import dev.sumin.skeleton.board.PostSummaryView
@@ -23,9 +27,30 @@ data class BoardConfigResponse(
     val canModerate: Boolean,
     /** true 면 글 · 댓글을 쓸 때 본문에 `authorId`(작성 프로필 id)가 필수다 */
     val authorRequired: Boolean,
+    /** 비회원 쓰기가 켜져 있다 — 게시판마다 `settings.guestWrite` 가 실제로 정한다 */
+    val guestEnabled: Boolean,
+    /** 비회원 비밀의 종류 — PASSWORD(사람이 치는 값) · TOKEN(앱이 만든 무작위 값) */
+    val guestSecret: GuestSecretMode,
+    val guestNameMaxLength: Int,
+    /** true 면 비회원의 만들기 본문에 `captchaToken` 이 필요하다 */
+    val captchaRequired: Boolean,
 )
 
-data class BoardResponse(val code: String, val name: String, val description: String?, val postCount: Long, val createdAt: Instant)
+data class BoardSettingsResponse(
+    val guestWrite: GuestWrite,
+    val postApproval: ApprovalMode,
+    val commentApproval: ApprovalMode,
+    val ownerModeratesComments: Boolean,
+)
+
+data class BoardResponse(
+    val code: String,
+    val name: String,
+    val description: String?,
+    val postCount: Long,
+    val createdAt: Instant,
+    val settings: BoardSettingsResponse,
+)
 
 data class PostSummaryResponse(
     val id: Long,
@@ -51,6 +76,8 @@ data class PostSummaryResponse(
     val authorTag: String? = null,
     /** 호출자의 계정이 쓴 글이다 (프로필과 무관 · 익명은 항상 false) — 수정 · 삭제 단추는 이것으로 판단한다 */
     val mine: Boolean,
+    /** 비회원이 쓴 글이다 — 이름은 `authorName` 이고, 화면은 「(비회원)」 으로 회원 닉네임 사칭을 가른다 */
+    val authorGuest: Boolean = false,
 )
 
 data class PostDetailResponse(
@@ -79,6 +106,8 @@ data class PostDetailResponse(
     val authorTag: String? = null,
     /** 호출자의 계정이 쓴 글이다 (프로필과 무관 · 익명은 항상 false) — 수정 · 삭제 단추는 이것으로 판단한다 */
     val mine: Boolean,
+    /** 비회원이 쓴 글이다 — 이름은 `authorName` 이고, 화면은 「(비회원)」 으로 회원 닉네임 사칭을 가른다 */
+    val authorGuest: Boolean = false,
 )
 
 /** 목록의 한 줄이면 replies 가 있다 (최상위: 모든 자손 작성 순 평평하게, 답글: 빈 배열). 한 댓글만 돌려주는 응답에는 replies 가 없다. */
@@ -108,6 +137,8 @@ data class CommentResponse(
     @get:JsonInclude(JsonInclude.Include.ALWAYS) val authorTag: String? = null,
     /** 호출자의 계정이 쓴 댓글이다 (프로필과 무관 · 익명은 항상 false) */
     val mine: Boolean,
+    /** 비회원이 쓴 댓글이다 — 이름은 `authorName` */
+    val authorGuest: Boolean = false,
 )
 
 data class ReactionStateResponse(val counts: Map<String, Long>, val myReactions: Set<String>)
@@ -121,6 +152,10 @@ data class CreatePostRequest(
     val status: PostStatus? = null,
     /** 작성 프로필 id — 작성자 신원 빈이 있는 앱에서만 (필수), 없는 앱에서 보내면 403 */
     val authorId: String? = null,
+    /** 비회원의 이름 — 로그인하지 않은 쓰기에서만 (필수). 로그인한 사람이 보내면 400. 비밀값은 헤더 `X-Board-Guest-Secret` */
+    val guestName: String? = null,
+    /** 비회원의 캡차 토큰 — `captchaRequired` 일 때. 멱등 지문에는 넣지 않는다 */
+    val captchaToken: String? = null,
 )
 
 data class UpdatePostRequest(
@@ -132,7 +167,14 @@ data class UpdatePostRequest(
 
 data class PostModerationRequest(val status: PostStatus? = null, val pinned: Boolean? = null)
 
-data class CreateCommentRequest(val body: String? = null, val parentId: Long? = null, val authorId: String? = null)
+data class CreateCommentRequest(
+    val body: String? = null,
+    val parentId: Long? = null,
+    val authorId: String? = null,
+    /** 비회원의 이름 (로그인하지 않은 쓰기에서만 필수) — 비밀값은 헤더 `X-Board-Guest-Secret` */
+    val guestName: String? = null,
+    val captchaToken: String? = null,
+)
 
 data class UpdateCommentRequest(val body: String? = null)
 
@@ -141,15 +183,19 @@ data class CommentModerationRequest(val status: CommentStatus? = null)
 data class ReactionRequest(val type: String? = null)
 
 internal fun BoardConfigView.toResponse() =
-    BoardConfigResponse(reactionTypes, reactionMode, maxCommentDepth, titleMaxLength, bodyMaxLength, commentMaxLength, maxPageSize, canModerate, authorRequired)
+    BoardConfigResponse(
+        reactionTypes, reactionMode, maxCommentDepth, titleMaxLength, bodyMaxLength, commentMaxLength, maxPageSize, canModerate, authorRequired,
+        guestEnabled, guestSecret, guestNameMaxLength, captchaRequired,
+    )
 
-internal fun Board.toResponse() = BoardResponse(code, name, description, postCount, createdAt)
+internal fun Board.toResponse() =
+    BoardResponse(code, name, description, postCount, createdAt, BoardSettingsResponse(settings.guestWrite, settings.postApproval, settings.commentApproval, settings.ownerModeratesComments))
 
 internal fun PostSummaryView.toResponse() = with(item) {
     PostSummaryResponse(
         id, boardCode, publicAuthorId, title, excerpt, status, pinned, viewCount, commentCount,
         reactions.counts, reactions.myReactions, attachmentCount, createdAt, updatedAt,
-        authorDeleted, authorName = author?.name, authorTag = author?.tag, mine = mine,
+        authorDeleted, authorName = author?.name, authorTag = author?.tag, mine = mine, authorGuest = BoardAuthors.isGuest(authorId),
     )
 }
 
@@ -157,7 +203,7 @@ internal fun PostDetailView.toResponse(excerptLength: Int) = with(post) {
     PostDetailResponse(
         id, boardCode, publicAuthorId, title, body.take(excerptLength), body, attachments, status, pinned, viewCount, commentCount,
         reactions.counts, reactions.myReactions, attachments.size, createdAt, updatedAt,
-        authorDeleted, authorName = author?.name, authorTag = author?.tag, mine = mine,
+        authorDeleted, authorName = author?.name, authorTag = author?.tag, mine = mine, authorGuest = BoardAuthors.isGuest(authorId),
     )
 }
 
@@ -167,7 +213,7 @@ internal fun CommentView.toResponse(thread: Boolean = false): CommentResponse = 
         id, postId, parentId, rootId, depth, publicAuthorId, this@toResponse.body, status,
         reactions.counts, reactions.myReactions, replyCount, createdAt, updatedAt,
         replies = if (thread) replies.map { it.toResponse(thread = true) } else null,
-        authorDeleted = authorDeleted, authorName = author?.name, authorTag = author?.tag, mine = mine,
+        authorDeleted = authorDeleted, authorName = author?.name, authorTag = author?.tag, mine = mine, authorGuest = BoardAuthors.isGuest(authorId),
     )
 }
 

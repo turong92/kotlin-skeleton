@@ -4,11 +4,13 @@ import dev.sumin.skeleton.board.Board
 import dev.sumin.skeleton.board.BoardAuthors
 import dev.sumin.skeleton.board.BoardErasureRepository
 import dev.sumin.skeleton.board.BoardRepository
+import dev.sumin.skeleton.board.BoardSettings
 import dev.sumin.skeleton.board.Comment
 import dev.sumin.skeleton.board.CommentRepository
 import dev.sumin.skeleton.board.CommentRootQuery
 import dev.sumin.skeleton.board.CommentSort
 import dev.sumin.skeleton.board.CommentStatus
+import dev.sumin.skeleton.board.GuestWrite
 import dev.sumin.skeleton.board.NewComment
 import dev.sumin.skeleton.board.NewPost
 import dev.sumin.skeleton.board.PageResult
@@ -35,6 +37,7 @@ import org.springframework.transaction.support.TransactionTemplate
 /*
  * 동시성 규칙 (docs/modules/board.md "카운터와 반응 규칙"):
  *  - 카운터(comment_count · reaction_count · view_count)는 항상 `set x = x + :delta` 원자적 UPDATE 이고, 바꾸는 행과 같은 트랜잭션이다.
+ *  - 승인 대기(PENDING) 댓글은 카운터에 넣지 않는다 — 삽입은 +0 으로 글 행을 잠그고, 승인(setStatus)이 +1 한다.
  *  - 행을 잠그는 순서는 글 → 댓글 하나뿐이다. 반응은 대상 행(글 또는 댓글) 하나만 잠근다. 그래서 교착이 없다.
  *  - 댓글 삽입은 삽입 전에 글의 카운터를 올린다 (InnoDB 는 FK 검사가 부모 행에 공유 락을 걸어, 삽입 뒤에 UPDATE 하면 락 업그레이드 교착이 난다).
  */
@@ -50,13 +53,15 @@ class JdbcBoardRepository(private val jdbc: NamedParameterJdbcTemplate, private 
     override fun find(code: String): Board? =
         jdbc.query("$SELECT where b.code = :code", mapOf("code" to code)) { rs, _ -> rs.board() }.firstOrNull()
 
+    override fun create(code: String, name: String, description: String?, now: Instant): Boolean = create(code, name, description, now, BoardSettings())
+
     /** 같은 코드가 동시에 들어와도 유니크 키가 한 쪽만 통과시킨다 — 졌으면 false */
-    override fun create(code: String, name: String, description: String?, now: Instant): Boolean =
+    override fun create(code: String, name: String, description: String?, now: Instant, settings: BoardSettings): Boolean =
         try {
             jdbc.update(
-                "insert into boards (code, name, description, created_at) values (:code, :name, :description, :now)",
+                "insert into boards (code, name, description, created_at, guest_write) values (:code, :name, :description, :now, :guestWrite)",
                 MapSqlParameterSource().addValue("code", code).addValue("name", name).addValue("description", description)
-                    .addValue("now", dialect.instantParam(now)),
+                    .addValue("now", dialect.instantParam(now)).addValue("guestWrite", settings.guestWrite.name),
             )
             true
         } catch (e: DuplicateKeyException) {
@@ -64,11 +69,14 @@ class JdbcBoardRepository(private val jdbc: NamedParameterJdbcTemplate, private 
         }
 
     private fun ResultSet.board() =
-        Board(getString("code"), getString("name"), getString("description"), long(this, "post_count"), instant(dialect, "created_at"))
+        Board(
+            getString("code"), getString("name"), getString("description"), long(this, "post_count"), instant(dialect, "created_at"),
+            BoardSettings(guestWrite = GuestWrite.valueOf(getString("guest_write"))),
+        )
 
     private companion object {
         const val SELECT = """
-            select b.code, b.name, b.description, b.created_at, coalesce(c.cnt, 0) as post_count
+            select b.code, b.name, b.description, b.created_at, b.guest_write, coalesce(c.cnt, 0) as post_count
             from boards b
             left join (select board_code, count(*) as cnt from board_posts where status = 'PUBLISHED' group by board_code) c
                 on c.board_code = b.code
@@ -87,10 +95,11 @@ class JdbcPostRepository(
             jdbc.update(
                 """
                 insert into board_posts
-                    (board_code, author_id, author_ref, title, body, status, pinned, view_count, comment_count, reaction_count, attachment_count, created_at, updated_at)
-                values (:board, :author, :authorRef, :title, :body, :status, :pinned, 0, 0, 0, :attachmentCount, :now, :now)
+                    (board_code, author_id, author_ref, guest_name, guest_secret_hash, title, body, status, pinned, view_count, comment_count, reaction_count, attachment_count, created_at, updated_at)
+                values (:board, :author, :authorRef, :guestName, :guestHash, :title, :body, :status, :pinned, 0, 0, 0, :attachmentCount, :now, :now)
                 """.trimIndent(),
-                MapSqlParameterSource().addValue("board", post.boardCode).addValue("author", post.authorId).addValue("authorRef", post.authorRef).addValue("title", post.title)
+                MapSqlParameterSource().addValue("board", post.boardCode).addValue("author", post.authorId).addValue("authorRef", post.authorRef)
+                    .addValue("guestName", post.guestName).addValue("guestHash", post.guestSecretHash).addValue("title", post.title)
                     .addValue("body", post.body).addValue("status", post.status.name).addValue("pinned", false)
                     .addValue("attachmentCount", post.attachments.size).addValue("now", dialect.instantParam(post.now)),
                 keys,
@@ -129,6 +138,9 @@ class JdbcPostRepository(
         return if (updated == 0) null else find(id)
     }
 
+    override fun guestSecretHash(id: Long): String? =
+        jdbc.queryForList("select guest_secret_hash from board_posts where id = :id", mapOf("id" to id), String::class.java).firstOrNull()
+
     override fun incrementViews(id: Long) {
         jdbc.update("update board_posts set view_count = view_count + 1 where id = :id", mapOf("id" to id))
     }
@@ -156,7 +168,7 @@ class JdbcPostRepository(
         params.addValue("excerpt", query.excerptLength).addValue("limit", query.size).addValue("offset", query.page * query.size)
         val rows = jdbc.query(
             """
-            select p.id, p.board_code, p.author_id, p.author_ref, p.title, left(p.body, :excerpt) as excerpt, p.status, p.pinned, p.view_count,
+            select p.id, p.board_code, p.author_id, p.author_ref, p.guest_name, p.title, left(p.body, :excerpt) as excerpt, p.status, p.pinned, p.view_count,
                    p.comment_count, p.reaction_count, p.attachment_count, p.created_at, p.updated_at
             from board_posts p
             where $where
@@ -166,7 +178,7 @@ class JdbcPostRepository(
             params,
         ) { rs, _ ->
             PostListItem(
-                id = rs.getLong("id"), boardCode = rs.getString("board_code"), authorId = rs.getString("author_id"), authorRef = rs.getString("author_ref"), title = rs.getString("title"),
+                id = rs.getLong("id"), boardCode = rs.getString("board_code"), authorId = rs.getString("author_id"), authorRef = rs.getString("author_ref"), guestName = rs.getString("guest_name"), title = rs.getString("title"),
                 excerpt = rs.getString("excerpt"), status = PostStatus.valueOf(rs.getString("status")), pinned = rs.getBoolean("pinned"),
                 viewCount = rs.getLong("view_count"), commentCount = rs.getLong("comment_count"), reactionCount = rs.getLong("reaction_count"),
                 attachmentCount = rs.getInt("attachment_count"), createdAt = rs.instant(dialect, "created_at"), updatedAt = rs.instant(dialect, "updated_at"),
@@ -187,7 +199,7 @@ class JdbcPostRepository(
 
     private fun ResultSet.post(attachments: List<String>) =
         Post(
-            id = getLong("id"), boardCode = getString("board_code"), authorId = getString("author_id"), authorRef = getString("author_ref"), title = getString("title"), body = getString("body"),
+            id = getLong("id"), boardCode = getString("board_code"), authorId = getString("author_id"), authorRef = getString("author_ref"), guestName = getString("guest_name"), title = getString("title"), body = getString("body"),
             status = PostStatus.valueOf(getString("status")), pinned = getBoolean("pinned"), viewCount = getLong("view_count"),
             commentCount = getLong("comment_count"), reactionCount = getLong("reaction_count"), attachments = attachments,
             createdAt = instant(dialect, "created_at"), updatedAt = instant(dialect, "updated_at"),
@@ -205,18 +217,22 @@ class JdbcCommentRepository(
     override fun insert(comment: NewComment): Comment? {
         val id = tx.execute {
             // 글 행을 먼저 잠그며 카운터를 올린다 (잠금 순서 규칙). 글이 없으면 0 행.
-            val bumped = jdbc.update("update board_posts set comment_count = comment_count + 1 where id = :post", mapOf("post" to comment.postId))
+            // PENDING 은 세지 않는다 (+0 으로 글 행만 잠근다 — 승인될 때 setStatus 가 +1)
+            val bumped = jdbc.update(
+                "update board_posts set comment_count = comment_count + :delta where id = :post",
+                mapOf("post" to comment.postId, "delta" to if (comment.status == CommentStatus.PUBLISHED) 1 else 0),
+            )
             if (bumped == 0) return@execute null
             val keys = GeneratedKeyHolder()
             jdbc.update(
                 """
-                insert into board_comments (post_id, parent_id, root_id, depth, author_id, author_ref, body, status, reaction_count, created_at, updated_at)
-                values (:post, :parent, :root, :depth, :author, :authorRef, :body, 'PUBLISHED', 0, :now, :now)
+                insert into board_comments (post_id, parent_id, root_id, depth, author_id, author_ref, guest_name, guest_secret_hash, body, status, reaction_count, created_at, updated_at)
+                values (:post, :parent, :root, :depth, :author, :authorRef, :guestName, :guestHash, :body, :status, 0, :now, :now)
                 """.trimIndent(),
                 MapSqlParameterSource().addValue("post", comment.postId).addValue("parent", comment.parentId, java.sql.Types.BIGINT)
                     .addValue("root", comment.rootId, java.sql.Types.BIGINT).addValue("depth", comment.depth).addValue("author", comment.authorId)
-                    .addValue("authorRef", comment.authorRef)
-                    .addValue("body", comment.body).addValue("now", dialect.instantParam(comment.now)),
+                    .addValue("authorRef", comment.authorRef).addValue("guestName", comment.guestName).addValue("guestHash", comment.guestSecretHash)
+                    .addValue("status", comment.status.name).addValue("body", comment.body).addValue("now", dialect.instantParam(comment.now)),
                 keys,
                 arrayOf("id"),
             )
@@ -227,6 +243,9 @@ class JdbcCommentRepository(
 
     override fun find(id: Long): Comment? =
         jdbc.query("select * from board_comments where id = :id", mapOf("id" to id)) { rs, _ -> rs.comment() }.firstOrNull()
+
+    override fun guestSecretHash(id: Long): String? =
+        jdbc.queryForList("select guest_secret_hash from board_comments where id = :id", mapOf("id" to id), String::class.java).firstOrNull()
 
     override fun updateBody(id: Long, body: String, now: Instant): Comment? {
         val rows = jdbc.update(
@@ -284,7 +303,7 @@ class JdbcCommentRepository(
         val root = getLong("root_id").takeUnless { wasNull() }
         return Comment(
             id = id, postId = getLong("post_id"), parentId = parent, rootId = root ?: id, depth = getInt("depth"), authorId = getString("author_id"),
-            authorRef = getString("author_ref"),
+            authorRef = getString("author_ref"), guestName = getString("guest_name"),
             body = getString("body"), status = CommentStatus.valueOf(getString("status")), reactionCount = getLong("reaction_count"),
             createdAt = instant(dialect, "created_at"), updatedAt = instant(dialect, "updated_at"),
         )
@@ -393,14 +412,14 @@ class JdbcBoardAuthorAdoption(private val jdbc: NamedParameterJdbcTemplate) : Au
         jdbc.queryForList(
             """
             select author_id from (
-                select author_id from board_posts where author_ref is null and author_id > :after and author_id not like :tombstone escape '!'
+                select author_id from board_posts where author_ref is null and author_id > :after and author_id not like :tombstone escape '!' and author_id not like :guest escape '!'
                 union
-                select author_id from board_comments where author_ref is null and author_id > :after and author_id not like :tombstone escape '!'
+                select author_id from board_comments where author_ref is null and author_id > :after and author_id not like :tombstone escape '!' and author_id not like :guest escape '!'
             ) pending
             order by author_id
             limit :limit
             """.trimIndent(),
-            mapOf("tombstone" to escapeLike(BoardAuthors.DELETED_PREFIX) + "%", "limit" to limit, "after" to (after ?: "")),
+            mapOf("tombstone" to escapeLike(BoardAuthors.DELETED_PREFIX) + "%", "guest" to escapeLike(BoardAuthors.GUEST_PREFIX) + "%", "limit" to limit, "after" to (after ?: "")),
             String::class.java,
         ).filterNotNull()
 

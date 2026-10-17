@@ -51,9 +51,23 @@ data class BoardConfigView(
     val canModerate: Boolean,
     /** [dev.sumin.skeleton.common.author.AuthorIdentities] 빈이 있다 — 글 · 댓글을 쓸 때 `authorId` 가 필수 */
     val authorRequired: Boolean,
+    /** 비회원 쓰기가 켜져 있다 (`skeleton.board.guest.enabled`) — 게시판마다 `settings.guestWrite` 가 실제로 정한다 */
+    val guestEnabled: Boolean = false,
+    val guestSecret: GuestSecretMode = GuestSecretMode.PASSWORD,
+    val guestNameMaxLength: Int = 20,
+    /** 비회원의 만들기에 `captchaToken` 이 필요하다 */
+    val captchaRequired: Boolean = false,
 )
 
-data class CreatePost(val title: String?, val body: String?, val attachments: List<String>?, val status: PostStatus?, val authorId: String? = null)
+data class CreatePost(
+    val title: String?,
+    val body: String?,
+    val attachments: List<String>?,
+    val status: PostStatus?,
+    val authorId: String? = null,
+    /** 비회원의 이름 — 로그인한 사람이 보내면 400 */
+    val guestName: String? = null,
+)
 
 data class UpdatePost(val title: String?, val body: String?, val attachments: List<String>?, val status: PostStatus?)
 

@@ -4,9 +4,13 @@ dependencies {
     // idempotency: 글 · 댓글 만들기의 @IdempotentOperation 표시 (없으면 JVM 이 이 애너테이션을 건너뛴다)
     compileOnly(project(":modules:notification"))
     compileOnly(project(":modules:idempotency"))
+    // captcha-turnstile: 비회원 쓰기의 캡차 (skeleton.board.guest.captcha=REQUIRED) — BoardCaptchaAutoConfiguration 이 클래스패스에 있을 때만 잇는다
+    compileOnly(project(":modules:captcha-turnstile"))
     compileOnly("org.springframework.security:spring-security-core")   // 호출자(Authentication) — 없으면 엔드포인트를 등록하지 않는다
 
     implementation("org.springframework:spring-tx")   // 커밋 뒤에 이벤트 내보내기 (TransactionSynchronization) — DB 드라이버는 필요 없다
+
+    implementation("org.springframework.security:spring-security-crypto")   // 비회원 비밀의 bcrypt (account 와 같은 인코더 — 의존이 없는 작은 jar)
 
     api(project(":modules:platform"))   // 타입(ApplicationException · TimeProvider · RateLimitStore)이 이 모듈의 공개 API 에 나온다
 
@@ -19,6 +23,7 @@ dependencies {
 
     testImplementation(project(":modules:notification"))   // 알림 훅 시험 (compileOnly 와 같은 모듈 — storage-s3 의 crypto 와 같다)
     testImplementation(project(":modules:idempotency"))
+    testImplementation(project(":modules:captcha-turnstile"))
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("org.springframework.security:spring-security-core")
     testImplementation("org.assertj:assertj-core")

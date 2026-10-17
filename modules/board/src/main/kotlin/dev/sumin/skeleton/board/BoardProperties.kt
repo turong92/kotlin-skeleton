@@ -22,6 +22,7 @@ data class BoardProperties(
     val http: Http = Http(),
     val rateLimit: RateLimit = RateLimit(),
     val notification: Notification = Notification(),
+    val guest: Guest = Guest(),
 ) {
     init {
         require(moderatorRole.isNotBlank()) { "skeleton.board.moderator-role must not be blank" }
@@ -35,7 +36,7 @@ data class BoardProperties(
     /** 요청한 페이지 크기를 1..[maxPageSize] 로 */
     fun pageSize(requested: Int): Int = requested.coerceIn(1, maxPageSize)
 
-    data class SeedBoard(val code: String, val name: String, val description: String? = null) {
+    data class SeedBoard(val code: String, val name: String, val description: String? = null, val settings: BoardSettings = BoardSettings()) {
         init {
             require(BoardCodes.isValid(code)) { "skeleton.board.seed-boards: invalid board code '$code' (${BoardCodes.PATTERN}, not '${BoardCodes.RESERVED}')" }
             require(name.isNotBlank()) { "skeleton.board.seed-boards: name of '$code' must not be blank" }
@@ -75,10 +76,44 @@ data class BoardProperties(
         val topic: String = "board",
     )
 
+    /** 비회원 작성 (닉네임 + 비밀값). **꺼진 채 시작한다** — 켜는 것은 앱의 명시값이고, 게시판마다 `guest_write` 가 실제로 정한다 */
+    data class Guest(
+        val enabled: Boolean = false,
+        /** 새로 받는 비밀의 모양과 새 해시 방식 — PASSWORD(사람이 치는 값, bcrypt) · TOKEN(앱이 만든 무작위 값, SHA-256). 옛 행은 저장된 방식대로 확인된다 */
+        val secret: GuestSecretMode = GuestSecretMode.PASSWORD,
+        val nameMaxLength: Int = 20,
+        /** OFF(기본) · REQUIRED — 켜면 비회원의 만들기에 `captchaToken` 이 필요하고 `BoardCaptcha` 가 없으면 기동 실패 */
+        val captcha: GuestCaptcha = GuestCaptcha.OFF,
+        /** 비회원 쓰기 한도 (`guest:<IP>` 별) — `rate-limit.enabled` 와 무관하게 `enabled` 면 늘 걸린다 */
+        val rateLimit: WriteLimit = WriteLimit(),
+        /** 비밀 대입 한도 — 행마다 + IP 마다, 해시를 계산하기 전에 센다 */
+        val secretAttempts: AttemptLimit = AttemptLimit(),
+    ) {
+        init {
+            require(nameMaxLength in 1..64) { "skeleton.board.guest.name-max-length must be 1..64 (the guest_name column is varchar(64))" }
+        }
+    }
+
+    data class WriteLimit(val capacity: Int = 5, val window: Duration = Duration.ofMinutes(1)) {
+        init {
+            require(capacity > 0 && !window.isZero && !window.isNegative) { "skeleton.board.guest.rate-limit: capacity and window must be positive" }
+        }
+    }
+
+    data class AttemptLimit(val capacity: Int = 10, val window: Duration = Duration.ofMinutes(10)) {
+        init {
+            require(capacity > 0 && !window.isZero && !window.isNegative) { "skeleton.board.guest.secret-attempts: capacity and window must be positive" }
+        }
+    }
+
     companion object {
         val REACTION_CODE = Regex("^[A-Z][A-Z0-9_]{1,31}$")
     }
 }
+
+enum class GuestSecretMode { PASSWORD, TOKEN }
+
+enum class GuestCaptcha { OFF, REQUIRED }
 
 /** 게시판 코드 규칙 — 경로에 그대로 들어가므로 소문자 · 숫자 · 하이픈. `config` 는 설정 보고 경로라 예약. */
 object BoardCodes {

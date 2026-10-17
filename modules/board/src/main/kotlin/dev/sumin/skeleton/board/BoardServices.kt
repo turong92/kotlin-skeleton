@@ -20,6 +20,10 @@ class BoardService(
             maxPageSize = properties.maxPageSize,
             canModerate = caller != null && policy.canModerate(caller),
             authorRequired = authorRules.active,
+            guestEnabled = properties.guest.enabled,
+            guestSecret = properties.guest.secret,
+            guestNameMaxLength = properties.guest.nameMaxLength,
+            captchaRequired = properties.guest.enabled && properties.guest.captcha == GuestCaptcha.REQUIRED,
         )
 
     fun list(): List<Board> = boards.findAll()
@@ -37,5 +41,5 @@ class BoardService(
     }
 
     /** 설정의 seed-boards 를 없을 때만 만든다 — 만든 개수 */
-    fun seed(): Int = properties.seedBoards.count { boards.create(it.code, it.name.trim(), it.description, time.now()) }
+    fun seed(): Int = properties.seedBoards.count { boards.create(it.code, it.name.trim(), it.description, time.now(), it.settings) }
 }

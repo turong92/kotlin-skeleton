@@ -22,6 +22,7 @@ import dev.sumin.skeleton.common.openapi.NoContentOperation
 import dev.sumin.skeleton.idempotency.IdempotentOperation
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
+import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
 import org.springdoc.core.annotations.ParameterObject
 import org.springframework.security.core.Authentication
@@ -82,35 +83,42 @@ class PostController(
     fun get(authentication: Authentication?, @PathVariable code: String, @PathVariable postId: Long): DataResponse<PostDetailResponse> =
         Response.ok(service.get(callers.reader(authentication), code, postId).toResponse(properties.excerptLength))
 
-    @Operation(summary = "Create a post")
+    @Operation(
+        summary = "Create a post",
+        description = "Signed-out writers (skeleton.board.guest.enabled and the board's guestWrite=ALL) send guestName and the header X-Board-Guest-Secret instead of signing in.",
+    )
     @CreatedOperation
-    @IdempotentOperation
+    @IdempotentOperation(ignoredBodyFields = ["captchaToken"])
     @PostMapping
-    fun create(authentication: Authentication?, @PathVariable code: String, @RequestBody request: CreatePostRequest) =
-        service.create(callers.require(authentication), code, CreatePost(request.title, request.body, request.attachments, request.status, request.authorId))
-            .toResponse(properties.excerptLength).let { post ->
-                Response.created(ServletUriComponentsBuilder.fromCurrentRequest().path("/{id}").buildAndExpand(post.id).toUri(), post)
-            }
+    fun create(authentication: Authentication?, http: HttpServletRequest, @PathVariable code: String, @RequestBody request: CreatePostRequest) =
+        callers.writer(authentication, http, request.captchaToken).let { w ->
+            service.create(w.caller, code, CreatePost(request.title, request.body, request.attachments, request.status, request.authorId, request.guestName), w.guest)
+        }.toResponse(properties.excerptLength).let { post ->
+            Response.created(ServletUriComponentsBuilder.fromCurrentRequest().path("/{id}").buildAndExpand(post.id).toUri(), post)
+        }
 
-    @Operation(summary = "Edit a post (author or moderator)")
+    @Operation(summary = "Edit a post (author or moderator; a signed-out author proves the post with the X-Board-Guest-Secret header)")
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = PostDetailResponse::class)
     @PatchMapping("/{postId}")
     fun update(
         authentication: Authentication?,
+        http: HttpServletRequest,
         @PathVariable code: String,
         @PathVariable postId: Long,
         @RequestBody request: UpdatePostRequest,
     ): DataResponse<PostDetailResponse> =
-        Response.ok(
-            service.update(callers.require(authentication), code, postId, UpdatePost(request.title, request.body, request.attachments, request.status))
-                .toResponse(properties.excerptLength),
-        )
+        callers.writer(authentication, http).let { w ->
+            Response.ok(
+                service.update(w.caller, code, postId, UpdatePost(request.title, request.body, request.attachments, request.status), w.guest)
+                    .toResponse(properties.excerptLength),
+            )
+        }
 
     @Operation(summary = "Delete a post (author or moderator; soft delete)")
     @NoContentOperation
     @DeleteMapping("/{postId}")
-    fun delete(authentication: Authentication?, @PathVariable code: String, @PathVariable postId: Long) =
-        service.delete(callers.require(authentication), code, postId).let { Response.noContent() }
+    fun delete(authentication: Authentication?, http: HttpServletRequest, @PathVariable code: String, @PathVariable postId: Long) =
+        callers.writer(authentication, http).let { w -> service.delete(w.caller, code, postId, w.guest) }.let { Response.noContent() }
 
     @Operation(summary = "Moderate a post (moderator): hide, restore, delete, pin")
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = PostDetailResponse::class)

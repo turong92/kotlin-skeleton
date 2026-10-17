@@ -3,6 +3,7 @@ package dev.sumin.skeleton.board
 import dev.sumin.skeleton.common.author.AuthorDirectory
 import dev.sumin.skeleton.common.author.AuthorIdentities
 import dev.sumin.skeleton.common.time.TimeProvider
+import dev.sumin.skeleton.common.web.InMemoryFixedWindowRateLimitStore
 import kotlin.test.assertFailsWith
 
 /** 서비스 시험 바탕 — 같은 메모리 저장소 위에 서비스들을 조립한다. */
@@ -17,6 +18,12 @@ class ServiceHarness(
     val identities: AuthorIdentities? = null,
     /** 커밋 뒤 이벤트를 받는 리스너 — 기본은 없음 */
     listeners: List<BoardEventListener> = emptyList(),
+    /** `general` 게시판의 설정 — 기본은 새 기능이 모두 꺼진 채 */
+    val settings: BoardSettings = BoardSettings(),
+    /** 비회원 캡차 검증기 — 기본은 없음 */
+    val captcha: BoardCaptcha? = null,
+    /** 비밀 해시 방식 — 기본은 설정(`props.guest.secret`)을 따르는 구현 */
+    val secrets: BoardGuestSecrets = DefaultBoardGuestSecrets(props.guest.secret),
     /** 댓글 저장소를 감싼다 — 저장소가 author_ref 를 남기지 않는 경우 같은 것을 흉내 낸다 */
     wrapComments: (CommentRepository) -> CommentRepository = { it },
 ) {
@@ -32,12 +39,16 @@ class ServiceHarness(
     private val authors = AuthorNames { directory }
     private val authorRules = BoardAuthorRules { identities }
     private val events = BoardEvents { listeners }
+    /** 하네스마다 새 저장소 — 시험끼리 한도를 나눠 쓰지 않는다 */
+    private val guestStore = InMemoryFixedWindowRateLimitStore()
+    val guestLimiter: BoardGuestLimiter = StoreBoardGuestLimiter({ guestStore }, props.guest)
+    private val guests = BoardGuests(props, secrets, guestLimiter, { captcha })
     val boardService = BoardService(boards, policy, props, time, authorRules)
-    val postService = PostService(access, posts, support, authors, policy, rules, props, limiter, time, authorRules, events)
-    val commentService = CommentService(access, wrapComments(comments), support, authors, policy, rules, props, limiter, notifier, time, authorRules, events)
+    val postService = PostService(access, posts, support, authors, policy, rules, props, limiter, time, authorRules, events, guests)
+    val commentService = CommentService(access, wrapComments(comments), support, authors, policy, rules, props, limiter, notifier, time, authorRules, events, guests)
     val reactionService = ReactionService(access, comments, reactionRepo, support, policy, props, limiter, time)
 
-    init { boardService.create(moderator, "general", "General", null) }
+    init { boards.create("general", "General", null, T0, settings) }
 
     fun failure(block: () -> Unit): BoardErrorCode = assertFailsWith<BoardException> { block() }.errorCode as BoardErrorCode
 

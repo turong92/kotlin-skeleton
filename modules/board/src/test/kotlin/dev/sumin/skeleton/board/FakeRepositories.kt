@@ -13,6 +13,8 @@ class FakeStore {
     val comments = linkedMapOf<Long, Comment>()
     val reactions = mutableListOf<Reaction>()
     val ids = AtomicLong(100)
+    val postHashes = mutableMapOf<Long, String>()
+    val commentHashes = mutableMapOf<Long, String>()
 
     data class Reaction(val target: ReactionTarget, val targetId: Long, val accountId: String, val type: String)
 
@@ -29,17 +31,23 @@ class FakeBoardRepository(private val s: FakeStore) : BoardRepository {
 
     override fun find(code: String): Board? = findAll().firstOrNull { it.code == code }
 
-    override fun create(code: String, name: String, description: String?, now: Instant): Boolean = s.locked {
-        if (code in s.boards) false else { s.boards[code] = Board(code, name, description, 0, now); true }
+    override fun create(code: String, name: String, description: String?, now: Instant): Boolean = create(code, name, description, now, BoardSettings())
+
+    override fun create(code: String, name: String, description: String?, now: Instant, settings: BoardSettings): Boolean = s.locked {
+        if (code in s.boards) false else { s.boards[code] = Board(code, name, description, 0, now, settings); true }
     }
 }
 
 class FakePostRepository(private val s: FakeStore) : PostRepository {
     override fun insert(post: NewPost): Post = s.locked {
         val id = s.ids.incrementAndGet()
-        Post(id, post.boardCode, post.authorId, post.title, post.body, post.status, false, 0, 0, 0, post.attachments, post.now, post.now, post.authorRef)
-            .also { s.posts[id] = it }
+        Post(
+            id, post.boardCode, post.authorId, post.title, post.body, post.status, false, 0, 0, 0, post.attachments, post.now, post.now, post.authorRef,
+            post.guestName, post.commentApproval,
+        ).also { s.posts[id] = it; post.guestSecretHash?.let { h -> s.postHashes[id] = h } }
     }
+
+    override fun guestSecretHash(id: Long): String? = s.locked { s.postHashes[id] }
 
     override fun find(id: Long): Post? = s.locked { s.posts[id] }
 
@@ -68,7 +76,7 @@ class FakePostRepository(private val s: FakeStore) : PostRepository {
         val sorted = filtered.sortedWith(compareByDescending<Post> { it.pinned }.then(key).thenByDescending { it.createdAt }.thenByDescending { it.id })
         val rows = sorted.drop(query.page * query.size).take(query.size).map {
             PostListItem(it.id, it.boardCode, it.authorId, it.title, it.body.take(query.excerptLength), it.status, it.pinned, it.viewCount,
-                it.commentCount, it.reactionCount, it.attachments.size, it.createdAt, it.updatedAt, it.authorRef)
+                it.commentCount, it.reactionCount, it.attachments.size, it.createdAt, it.updatedAt, it.authorRef, it.guestName)
         }
         PageResult(rows, filtered.size.toLong())
     }
@@ -77,11 +85,14 @@ class FakePostRepository(private val s: FakeStore) : PostRepository {
 class FakeCommentRepository(private val s: FakeStore) : CommentRepository {
     override fun insert(comment: NewComment): Comment? = s.locked {
         val post = s.posts[comment.postId] ?: return@locked null
-        s.posts[post.id] = post.copy(commentCount = post.commentCount + 1)
+        if (comment.status == CommentStatus.PUBLISHED) s.posts[post.id] = post.copy(commentCount = post.commentCount + 1)
         val id = s.ids.incrementAndGet()
         Comment(id, comment.postId, comment.parentId, comment.rootId ?: id, comment.depth, comment.authorId, comment.body,
-            CommentStatus.PUBLISHED, 0, comment.now, comment.now, comment.authorRef).also { s.comments[id] = it }
+            comment.status, 0, comment.now, comment.now, comment.authorRef, comment.guestName)
+            .also { s.comments[id] = it; comment.guestSecretHash?.let { h -> s.commentHashes[id] = h } }
     }
+
+    override fun guestSecretHash(id: Long): String? = s.locked { s.commentHashes[id] }
 
     override fun find(id: Long): Comment? = s.locked { s.comments[id] }
 

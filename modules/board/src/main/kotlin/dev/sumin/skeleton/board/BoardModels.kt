@@ -2,11 +2,38 @@ package dev.sumin.skeleton.board
 
 import java.time.Instant
 
-/** 글 상태. 지우기는 행을 남기는 소프트 삭제다 (DELETED). DRAFT 는 작성자 · 운영자만 본다. */
-enum class PostStatus { DRAFT, PUBLISHED, HIDDEN, DELETED }
+/**
+ * 글 상태. 지우기는 행을 남기는 소프트 삭제다 (DELETED). DRAFT 는 작성자 · 운영자만 본다.
+ * PENDING 은 승인을 기다리는 새 글 — 운영자 · 회원 작성자만 본다 (승인 거절 = HIDDEN, 새 상태는 없다).
+ */
+enum class PostStatus { DRAFT, PENDING, PUBLISHED, HIDDEN, DELETED }
 
-/** 댓글 상태. PUBLISHED 가 아니면 본문은 모두에게 숨기고 스레드 모양만 남긴다. */
-enum class CommentStatus { PUBLISHED, HIDDEN, DELETED }
+/**
+ * 댓글 상태. PENDING · PUBLISHED 가 아니면 본문은 모두에게 숨기고 스레드 모양만 남긴다.
+ * PENDING(승인 대기)은 운영자 · 관리하는 글 주인 · 회원 작성자에게만 보이고, 그 밖의 사람에게는 스레드에 자리도 없다.
+ */
+enum class CommentStatus { PENDING, PUBLISHED, HIDDEN, DELETED }
+
+/** 비회원 쓰기 허용 범위 — 게시판 설정 (기본 NONE) */
+enum class GuestWrite { NONE, COMMENTS, ALL }
+
+/** 승인을 거쳐야 하는 작성자 — OFF 거치지 않음 · GUESTS 비회원만 · ALL 운영자 외 모두 */
+enum class ApprovalMode { OFF, GUESTS, ALL }
+
+/** 승인 규칙이 걸린 대상 */
+enum class ApprovalTarget { POST, COMMENT }
+
+/** 마지막으로 상태를 바꾼 쪽 — 글 주인이 운영자가 가린 댓글을 되살리지 못하게 한다 */
+enum class ModeratedBy { OWNER, MODERATOR }
+
+/** 게시판 설정 — 새 기능은 모두 꺼진 채 시작한다 */
+data class BoardSettings(
+    val guestWrite: GuestWrite = GuestWrite.NONE,
+    val postApproval: ApprovalMode = ApprovalMode.OFF,
+    val commentApproval: ApprovalMode = ApprovalMode.OFF,
+    /** 글 주인이 자기 글의 댓글을 승인 · 가린다 */
+    val ownerModeratesComments: Boolean = false,
+)
 
 enum class ReactionTarget { POST, COMMENT }
 
@@ -30,6 +57,7 @@ data class Board(
     val description: String?,
     val postCount: Long = 0,
     val createdAt: Instant,
+    val settings: BoardSettings = BoardSettings(),
 )
 
 data class Post(
@@ -48,6 +76,11 @@ data class Post(
     val updatedAt: Instant,
     /** 공개 작성자 id. null = 이 기능 이전의 행 (공개 id = authorId) */
     val authorRef: String? = null,
+    /** 비회원 글의 이름 (author_id 가 guest: 로 시작). 비밀 해시는 모델에 싣지 않는다 — [PostRepository.guestSecretHash] */
+    val guestName: String? = null,
+    /** 이 글의 댓글 승인 규칙 — null 이면 게시판 값 */
+    val commentApproval: ApprovalMode? = null,
+    val moderatedBy: ModeratedBy? = null,
 )
 
 /** 목록용 — 본문 대신 앞부분(excerpt)과 첨부 개수만. */
@@ -67,6 +100,7 @@ data class PostListItem(
     val updatedAt: Instant,
     /** 공개 작성자 id. null = 이 기능 이전의 행 (공개 id = authorId) */
     val authorRef: String? = null,
+    val guestName: String? = null,
 )
 
 data class Comment(
@@ -84,6 +118,8 @@ data class Comment(
     val updatedAt: Instant,
     /** 공개 작성자 id. null = 이 기능 이전의 행 (공개 id = authorId) */
     val authorRef: String? = null,
+    val guestName: String? = null,
+    val moderatedBy: ModeratedBy? = null,
 )
 
 data class ReactionCounts(val counts: Map<String, Long>)
@@ -102,7 +138,13 @@ data class NewPost(
     val now: Instant,
     /** 공개 작성자 id. null = 이 기능 이전의 행 (공개 id = authorId) */
     val authorRef: String? = null,
-)
+    val guestName: String? = null,
+    /** 저장할 비밀 해시 — 모델 · 로그에 남지 않게 이 입력에만 있다 */
+    val guestSecretHash: String? = null,
+    val commentApproval: ApprovalMode? = null,
+) {
+    override fun toString() = "NewPost(boardCode=, status=127)"
+}
 
 /** null 인 칸은 바꾸지 않는다. */
 data class PostChange(
@@ -111,6 +153,9 @@ data class PostChange(
     val attachments: List<String>? = null,
     val status: PostStatus? = null,
     val pinned: Boolean? = null,
+    val commentApproval: ApprovalMode? = null,
+    /** 상태를 바꾼 쪽 — 상태가 바뀔 때만 의미가 있다 */
+    val moderatedBy: ModeratedBy? = null,
 )
 
 data class NewComment(
@@ -123,7 +168,13 @@ data class NewComment(
     val now: Instant,
     /** 공개 작성자 id. null = 이 기능 이전의 행 (공개 id = authorId) */
     val authorRef: String? = null,
-)
+    /** PUBLISHED 가 아니면(PENDING) 글의 comment_count 를 올리지 않는다 */
+    val status: CommentStatus = CommentStatus.PUBLISHED,
+    val guestName: String? = null,
+    val guestSecretHash: String? = null,
+) {
+    override fun toString() = "NewComment(postId=, status=127)"
+}
 
 data class PostQuery(
     val boardCode: String,
@@ -138,4 +189,24 @@ data class PostQuery(
     val excerptLength: Int = 140,
 )
 
-data class CommentRootQuery(val postId: Long, val page: Int, val size: Int, val sort: CommentSort)
+/**
+ * 최상위 댓글 한 페이지. PENDING 댓글은 [pendingFor] 가 허락한 사람에게만 — 그 밖에는 쿼리가 걸러 쪽 수 · 전체 수에도 들어가지 않는다.
+ */
+data class CommentRootQuery(
+    val postId: Long,
+    val page: Int,
+    val size: Int,
+    val sort: CommentSort,
+    val pendingFor: PendingVisibility = PendingVisibility.NONE,
+)
+
+/** PENDING 댓글을 누구에게 보이나 — [all] 이면 전부(운영자 · 관리하는 글 주인), 아니면 author_id 가 [authorId] 인 것만(회원 작성자) */
+data class PendingVisibility(val all: Boolean = false, val authorId: String? = null) {
+    fun sees(comment: Comment): Boolean = comment.status != CommentStatus.PENDING || all || (authorId != null && authorId == comment.authorId)
+
+    companion object {
+        val NONE = PendingVisibility()
+    }
+}
+
+data class BoardChange(val name: String? = null, val description: String? = null, val settings: BoardSettings? = null)

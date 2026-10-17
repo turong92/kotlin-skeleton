@@ -7,7 +7,8 @@ import dev.sumin.skeleton.common.author.AuthorIdentities
  * 공개 작성자 id 규칙 — **한 곳**. 응답 DTO · 알림 payload · [AuthorNames] 조회가 모두 이것을 쓴다.
  *
  * ```
- * 공개 id = author_ref
+ * 공개 id = author_id                  (비회원 행 `guest:<ULID>` — 맨 앞 갈래. 행마다 새 값이라 계정과도 무관하다)
+ *           ?: author_ref
  *           ?: author_id                 (AuthorIdentities 없음)
  *           ?: "pending:<행 종류><행 id>"   (AuthorIdentities 있음 + 아직 넘겨받지 않은 행 — 계정 id · 톰스톤을 내지 않는다)
  * ```
@@ -21,15 +22,21 @@ object BoardAuthors {
     /** 아직 프로필로 넘겨받지 않은 행의 공개 id 접두사 — `pending:p123`(글 123) · `pending:c45`(댓글 45). 이름을 묻지 않는다 */
     const val PENDING_PREFIX = "pending:"
 
+    /** 비회원 행의 `author_id` 는 `guest:<ULID>` — 행마다 새 값이라 계정 id(`acc_…`)와 겹치지 않고 같은 비회원의 두 글도 이어지지 않는다 */
+    const val GUEST_PREFIX = "guest:"
+
     const val POST_ROW = 'p'
     const val COMMENT_ROW = 'c'
 
     fun isDeleted(authorId: String?): Boolean = authorId != null && authorId.startsWith(DELETED_PREFIX)
 
+    fun isGuest(authorId: String?): Boolean = authorId != null && authorId.startsWith(GUEST_PREFIX)
+
     fun isPending(publicId: String?): Boolean = publicId != null && publicId.startsWith(PENDING_PREFIX)
 
     /** [identitiesPresent] = [AuthorIdentities] 빈이 있는가. [rowKind] 는 [POST_ROW] · [COMMENT_ROW] */
     fun publicId(authorRef: String?, authorId: String, rowKind: Char, rowId: Long, identitiesPresent: Boolean): String = when {
+        isGuest(authorId) -> authorId
         authorRef != null -> authorRef
         !identitiesPresent -> authorId
         else -> "$PENDING_PREFIX$rowKind$rowId"

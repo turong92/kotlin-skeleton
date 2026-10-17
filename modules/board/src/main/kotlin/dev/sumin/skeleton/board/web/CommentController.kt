@@ -17,6 +17,7 @@ import dev.sumin.skeleton.common.openapi.NoContentOperation
 import dev.sumin.skeleton.idempotency.IdempotentOperation
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
+import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
 import org.springdoc.core.annotations.ParameterObject
 import org.springframework.security.core.Authentication
@@ -64,12 +65,23 @@ class CommentController(
         return Response.ok(page.values.map { it.toResponse(thread = true) }, PaginationMeta.of(pageQuery.page, properties.pageSize(pageQuery.size), page.totalElements))
     }
 
-    @Operation(summary = "Comment on a post, or reply when parentId is given (beyond max-comment-depth: 422 BOARD.COMMENT_TOO_DEEP)")
+    @Operation(
+        summary = "Comment on a post, or reply when parentId is given (beyond max-comment-depth: 422 BOARD.COMMENT_TOO_DEEP)",
+        description = "Signed-out writers (skeleton.board.guest.enabled and the board's guestWrite != NONE) send guestName and the header X-Board-Guest-Secret instead of signing in.",
+    )
     @CreatedOperation
-    @IdempotentOperation
+    @IdempotentOperation(ignoredBodyFields = ["captchaToken"])
     @PostMapping
-    fun create(authentication: Authentication?, @PathVariable code: String, @PathVariable postId: Long, @RequestBody request: CreateCommentRequest) =
-        service.create(callers.require(authentication), code, postId, request.parentId, request.body, request.authorId).toResponse().let { comment ->
+    fun create(
+        authentication: Authentication?,
+        http: HttpServletRequest,
+        @PathVariable code: String,
+        @PathVariable postId: Long,
+        @RequestBody request: CreateCommentRequest,
+    ) =
+        callers.writer(authentication, http, request.captchaToken).let { w ->
+            service.create(w.caller, code, postId, request.parentId, request.body, request.authorId, request.guestName, w.guest)
+        }.toResponse().let { comment ->
             Response.created(ServletUriComponentsBuilder.fromCurrentRequest().path("/{id}").buildAndExpand(comment.id).toUri(), comment)
         }
 
@@ -78,18 +90,19 @@ class CommentController(
     @PatchMapping("/{commentId}")
     fun update(
         authentication: Authentication?,
+        http: HttpServletRequest,
         @PathVariable code: String,
         @PathVariable postId: Long,
         @PathVariable commentId: Long,
         @RequestBody request: UpdateCommentRequest,
     ): DataResponse<CommentResponse> =
-        Response.ok(service.update(callers.require(authentication), code, postId, commentId, request.body).toResponse())
+        callers.writer(authentication, http).let { w -> Response.ok(service.update(w.caller, code, postId, commentId, request.body, w.guest).toResponse()) }
 
     @Operation(summary = "Delete a comment (author or moderator; soft — the thread keeps its shape)")
     @NoContentOperation
     @DeleteMapping("/{commentId}")
-    fun delete(authentication: Authentication?, @PathVariable code: String, @PathVariable postId: Long, @PathVariable commentId: Long) =
-        service.delete(callers.require(authentication), code, postId, commentId).let { Response.noContent() }
+    fun delete(authentication: Authentication?, http: HttpServletRequest, @PathVariable code: String, @PathVariable postId: Long, @PathVariable commentId: Long) =
+        callers.writer(authentication, http).let { w -> service.delete(w.caller, code, postId, commentId, w.guest) }.let { Response.noContent() }
 
     @Operation(summary = "Moderate a comment (moderator): hide, restore, delete")
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = CommentResponse::class)

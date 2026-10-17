@@ -6,7 +6,9 @@ import dev.sumin.skeleton.board.BoardService
 import dev.sumin.skeleton.board.CommentService
 import dev.sumin.skeleton.board.PostService
 import dev.sumin.skeleton.board.ReactionService
+import dev.sumin.skeleton.common.web.ClientIps
 import dev.sumin.skeleton.common.web.PublicEndpointContributor
+import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
@@ -26,7 +28,8 @@ import org.springframework.context.annotation.Bean
 class BoardWebAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
-    fun boardCallers(properties: BoardProperties): BoardCallers = BoardCallers(properties)
+    fun boardCallers(properties: BoardProperties, clientIps: ObjectProvider<ClientIps>): BoardCallers =
+        BoardCallers(properties, clientIps.getIfAvailable { ClientIps() })
 
     @Bean
     @ConditionalOnMissingBean
@@ -49,5 +52,23 @@ class BoardWebAutoConfiguration {
         PublicEndpointContributor { registry ->
             registry.add("GET", properties.http.basePath)
             registry.add("GET", "${properties.http.basePath}/**")
+        }
+
+    /**
+     * `skeleton.board.guest.enabled=true` 일 때만 쓰기 경로를 인증 없이 연다 — 그래도 게시판의 `guest_write` 가 실제로 정한다 (NONE 이면 서비스가 지금과 같은 401).
+     * 열린 경로에서도 인증된 요청은 지금처럼 인증된다.
+     */
+    @Bean
+    @ConditionalOnMissingBean(name = ["boardGuestPublicEndpointContributor"])
+    @ConditionalOnProperty(prefix = "skeleton.board.guest", name = ["enabled"], havingValue = "true")
+    fun boardGuestPublicEndpointContributor(properties: BoardProperties): PublicEndpointContributor =
+        PublicEndpointContributor { registry ->
+            val base = properties.http.basePath
+            registry.add("POST", "$base/*/posts")
+            registry.add("PATCH", "$base/*/posts/*")
+            registry.add("DELETE", "$base/*/posts/*")
+            registry.add("POST", "$base/*/posts/*/comments")
+            registry.add("PATCH", "$base/*/posts/*/comments/*")
+            registry.add("DELETE", "$base/*/posts/*/comments/*")
         }
 }

@@ -36,6 +36,33 @@ class BoardAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
+    fun boardGuestSecrets(properties: BoardProperties): BoardGuestSecrets = DefaultBoardGuestSecrets(properties.guest.secret)
+
+    /** 비회원 한도 — `rate-limit.enabled` 와 무관하게 늘 걸린다 (`guest.enabled` 일 때만 쓰인다). platform 의 [RateLimitStore] 빈이 있으면 그것(Redis), 없으면 인메모리 */
+    @Bean
+    @ConditionalOnMissingBean
+    fun boardGuestLimiter(properties: BoardProperties, stores: ObjectProvider<RateLimitStore>): BoardGuestLimiter {
+        val fallback by lazy { InMemoryFixedWindowRateLimitStore() }
+        return StoreBoardGuestLimiter({ stores.getIfAvailable { fallback } }, properties.guest)
+    }
+
+    /** `guest.captcha=REQUIRED` 인데 [BoardCaptcha] 가 없으면 기동이 실패한다 — 켠 줄 알고 검증 없이 도는 사고를 막는다 */
+    @Bean
+    @ConditionalOnMissingBean
+    fun boardGuests(
+        properties: BoardProperties,
+        secrets: BoardGuestSecrets,
+        limiter: BoardGuestLimiter,
+        captchas: ObjectProvider<BoardCaptcha>,
+    ): BoardGuests {
+        check(!(properties.guest.enabled && properties.guest.captcha == GuestCaptcha.REQUIRED) || captchas.getIfAvailable() != null) {
+            "skeleton.board.guest.captcha=REQUIRED needs a BoardCaptcha bean (add captcha-turnstile and enable it, or define your own)"
+        }
+        return BoardGuests(properties, secrets, limiter, { captchas.getIfAvailable() })
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
     fun boardNotifier(): BoardNotifier = NoopBoardNotifier
 
     /** 앱의 [BoardEventListener] 빈들(여러 개 가능, 순서는 `@Order`)에 커밋 뒤 이벤트를 내보낸다. 부를 때마다 찾는다 */
@@ -91,8 +118,9 @@ class BoardAutoConfiguration {
         time: ObjectProvider<TimeProvider>,
         authorRules: BoardAuthorRules,
         events: BoardEvents,
+        guests: BoardGuests,
     ): PostService =
-        PostService(access, posts, reactions, authors, policy, rules, properties, limiter, time.getIfAvailable { TimeProvider.systemUtc() }, authorRules, events)
+        PostService(access, posts, reactions, authors, policy, rules, properties, limiter, time.getIfAvailable { TimeProvider.systemUtc() }, authorRules, events, guests)
 
     @Bean
     @ConditionalOnMissingBean
@@ -109,8 +137,9 @@ class BoardAutoConfiguration {
         time: ObjectProvider<TimeProvider>,
         authorRules: BoardAuthorRules,
         events: BoardEvents,
+        guests: BoardGuests,
     ): CommentService =
-        CommentService(access, comments, reactions, authors, policy, rules, properties, limiter, notifier, time.getIfAvailable { TimeProvider.systemUtc() }, authorRules, events)
+        CommentService(access, comments, reactions, authors, policy, rules, properties, limiter, notifier, time.getIfAvailable { TimeProvider.systemUtc() }, authorRules, events, guests)
 
     @Bean
     @ConditionalOnMissingBean
