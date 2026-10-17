@@ -72,6 +72,14 @@ interface CommentRepository {
     /** 주어진 최상위 댓글들의 모든 자손 — 쿼리 한 번 (root_id IN …), 작성 순. */
     fun descendants(rootIds: Collection<Long>): List<Comment>
 
+    /** 댓글들의 첨부 키 — 쿼리 한 번 (id → 키들, 순서대로). 첨부를 저장하지 않는 자기 저장소는 비어 있다 */
+    fun attachments(ids: Collection<Long>): Map<Long, List<String>> = emptyMap()
+
+    /** 본문과(널이 아니면) 첨부를 함께 고친다. 기본 구현은 첨부를 못 고치는 저장소에서 **닫힌 쪽으로** 실패한다 */
+    fun updateContent(id: Long, body: String, attachments: List<String>?, now: Instant): Comment? =
+        if (attachments == null) updateBody(id, body, now)
+        else throw UnsupportedOperationException("This CommentRepository does not store comment attachments - use board-jdbc or implement updateContent")
+
     /** 비회원 댓글의 비밀 해시 — [PostRepository.guestSecretHash] 와 같은 규칙 (기본 null = 늘 불일치) */
     fun guestSecretHash(id: Long): String? = null
 }

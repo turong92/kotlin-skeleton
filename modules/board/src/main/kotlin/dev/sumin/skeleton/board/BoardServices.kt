@@ -24,6 +24,7 @@ class BoardService(
             guestSecret = properties.guest.secret,
             guestNameMaxLength = properties.guest.nameMaxLength,
             captchaRequired = properties.guest.enabled && properties.guest.captcha == GuestCaptcha.REQUIRED,
+            commentMaxAttachments = properties.commentMaxAttachments,
         )
 
     fun list(): List<Board> = boards.findAll()

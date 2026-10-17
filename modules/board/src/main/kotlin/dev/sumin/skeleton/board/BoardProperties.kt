@@ -13,6 +13,8 @@ data class BoardProperties(
     val bodyMaxLength: Int = 20_000,
     val commentMaxLength: Int = 2_000,
     val maxAttachments: Int = 10,
+    /** 댓글 하나의 첨부 키 수 — 0(기본)이면 댓글 첨부가 꺼진 것이라 키를 보내면 400. 업로드는 앱이 한다(저장 키 문자열만 든다) */
+    val commentMaxAttachments: Int = 0,
     val excerptLength: Int = 140,
     /** 목록 한 페이지 상한 (platform 의 PageQuery 상한 100 과 둘 중 작은 값) */
     val maxPageSize: Int = 100,
@@ -30,6 +32,7 @@ data class BoardProperties(
         require(titleMaxLength > 0 && bodyMaxLength > 0 && commentMaxLength > 0) { "skeleton.board.*-max-length must be > 0" }
         require(titleMaxLength <= 255) { "skeleton.board.title-max-length must be <= 255 (the title column is varchar(255))" }
         require(maxAttachments >= 0) { "skeleton.board.max-attachments must be >= 0" }
+        require(commentMaxAttachments >= 0) { "skeleton.board.comment-max-attachments must be >= 0" }
         require(excerptLength > 0 && maxPageSize > 0) { "skeleton.board.excerpt-length and max-page-size must be > 0" }
     }
 

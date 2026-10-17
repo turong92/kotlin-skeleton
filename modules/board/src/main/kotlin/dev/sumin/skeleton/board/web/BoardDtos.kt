@@ -36,6 +36,8 @@ data class BoardConfigResponse(
     val guestNameMaxLength: Int,
     /** true 면 비회원의 만들기 본문에 `captchaToken` 이 필요하다 */
     val captchaRequired: Boolean,
+    /** 댓글 하나의 첨부 수 상한 — 0 이면 댓글 첨부가 꺼져 있다 */
+    val commentMaxAttachments: Int,
 )
 
 data class BoardSettingsResponse(
@@ -151,6 +153,8 @@ data class CommentResponse(
     val authorGuest: Boolean = false,
     /** 대기 중인 고친 내용 — 쓴 회원 · 운영자 · 관리하는 글 주인에게만 (남에게는 늘 null) */
     @get:JsonInclude(JsonInclude.Include.ALWAYS) val pendingRevision: RevisionResponse? = null,
+    /** 보이는 댓글의 첨부 저장 키 — 가린 · 지운 댓글은 `[]` (본문이 null 인 것과 같은 이유) */
+    val attachments: List<String> = emptyList(),
 )
 
 data class RevisionResponse(val title: String?, val body: String, val attachments: List<String>, val submittedAt: Instant)
@@ -203,9 +207,11 @@ data class CreateCommentRequest(
     /** 비회원의 이름 (로그인하지 않은 쓰기에서만 필수) — 비밀값은 헤더 `X-Board-Guest-Secret` */
     val guestName: String? = null,
     val captchaToken: String? = null,
+    /** 첨부 저장 키 — `commentMaxAttachments` 가 0 이면 보낼 수 없다 (400) */
+    val attachments: List<String>? = null,
 )
 
-data class UpdateCommentRequest(val body: String? = null)
+data class UpdateCommentRequest(val body: String? = null, val attachments: List<String>? = null)
 
 data class CommentModerationRequest(val status: CommentStatus? = null)
 
@@ -214,7 +220,7 @@ data class ReactionRequest(val type: String? = null)
 internal fun BoardConfigView.toResponse() =
     BoardConfigResponse(
         reactionTypes, reactionMode, maxCommentDepth, titleMaxLength, bodyMaxLength, commentMaxLength, maxPageSize, canModerate, authorRequired,
-        guestEnabled, guestSecret, guestNameMaxLength, captchaRequired,
+        guestEnabled, guestSecret, guestNameMaxLength, captchaRequired, commentMaxAttachments,
     )
 
 internal fun Board.toResponse() =
@@ -245,7 +251,7 @@ internal fun CommentView.toResponse(thread: Boolean = false): CommentResponse = 
         reactions.counts, reactions.myReactions, replyCount, createdAt, updatedAt,
         replies = if (thread) replies.map { it.toResponse(thread = true) } else null,
         authorDeleted = authorDeleted, authorName = author?.name, authorTag = author?.tag, mine = mine, authorGuest = BoardAuthors.isGuest(authorId),
-        pendingRevision = pendingRevision?.toResponse(),
+        pendingRevision = pendingRevision?.toResponse(), attachments = this@toResponse.attachments,
     )
 }
 

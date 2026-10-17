@@ -49,6 +49,8 @@ data class CommentView(
     /** 작성자 이름 · 꼬리표 — [AuthorDirectory] 가 모르거나 지워진 작성자면 null */
     val author: AuthorCard? = null,
     val pendingRevision: RevisionView? = null,
+    /** 보이는 댓글(PUBLISHED, 또는 보는 사람에게 남아 있는 PENDING)의 첨부 키 — 가린 · 지운 댓글은 비어 있다 */
+    val attachments: List<String> = emptyList(),
 )
 
 data class BoardConfigView(
@@ -68,6 +70,8 @@ data class BoardConfigView(
     val guestNameMaxLength: Int = 20,
     /** 비회원의 만들기에 `captchaToken` 이 필요하다 */
     val captchaRequired: Boolean = false,
+    /** 댓글 하나의 첨부 수 상한 — 0 이면 댓글 첨부가 꺼져 있다 */
+    val commentMaxAttachments: Int = 0,
 )
 
 data class CreatePost(

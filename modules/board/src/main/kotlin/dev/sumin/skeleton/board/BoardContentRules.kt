@@ -20,11 +20,16 @@ class BoardContentRules(private val properties: BoardProperties) {
     fun commentBody(raw: String?): String =
         clean(raw, multiline = true).also { checkLength("comment body", it, properties.commentMaxLength) }
 
-    fun attachments(raw: List<String>?): List<String> {
+    fun attachments(raw: List<String>?): List<String> = keys(raw, properties.maxAttachments)
+
+    /** 댓글 첨부 — 상한은 `comment-max-attachments`(기본 0 = 꺼짐: 키가 하나라도 있으면 400) */
+    fun commentAttachments(raw: List<String>?): List<String> = keys(raw, properties.commentMaxAttachments)
+
+    private fun keys(raw: List<String>?, max: Int): List<String> {
         val keys = raw.orEmpty().map { it.trim() }
         if (keys.any { it.isEmpty() || it.length > MAX_KEY_LENGTH }) invalid("attachment keys must be 1..$MAX_KEY_LENGTH characters")
         val distinct = keys.distinct()
-        if (distinct.size > properties.maxAttachments) invalid("at most ${properties.maxAttachments} attachments")
+        if (distinct.size > max) invalid(if (max == 0) "attachments are not enabled for this kind" else "at most $max attachments")
         return distinct
     }
 

@@ -109,10 +109,10 @@ class NoOptionalGoldenKeysTest {
         const val AUTHOR_REQUIRED = "authorRequired"
         /** 비회원 · 승인 대기 · 글 주인 관리가 덧붙인 칸 (스펙 docs/superpowers/specs/2026-10-17-board-guest-moderation-design.md §8) — 기본 설정에서는 모두 꺼진 값이다 */
         val BOARD_PLUS = setOf("settings")
-        val CONFIG_PLUS = setOf("guestEnabled", "guestSecret", "guestNameMaxLength", "captchaRequired")
+        val CONFIG_PLUS = setOf("guestEnabled", "guestSecret", "guestNameMaxLength", "captchaRequired", "commentMaxAttachments")
         val SUMMARY_PLUS = setOf("authorGuest")
         val DETAIL_PLUS = setOf("authorGuest", "canManageComments", "commentApproval", "pendingRevision")
-        val COMMENT_PLUS = setOf("authorGuest", "pendingRevision")
+        val COMMENT_PLUS = setOf("authorGuest", "pendingRevision", "attachments")
     }
 
     private fun keys(json: String, path: String): Set<String> = JsonPath.read<Map<String, Any?>>(json, path).keys

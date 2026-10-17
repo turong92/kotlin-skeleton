@@ -14,12 +14,13 @@ class FakeStore {
     val reactions = mutableListOf<Reaction>()
     val ids = AtomicLong(100)
     val revisions = linkedMapOf<Pair<RevisionTarget, Long>, Revision>()
+    val commentFiles = mutableMapOf<Long, List<String>>()
     val postHashes = mutableMapOf<Long, String>()
     val commentHashes = mutableMapOf<Long, String>()
 
     data class Reaction(val target: ReactionTarget, val targetId: Long, val accountId: String, val type: String)
 
-    fun clear() { boards.clear(); posts.clear(); comments.clear(); reactions.clear(); revisions.clear() }
+    fun clear() { boards.clear(); posts.clear(); comments.clear(); reactions.clear(); revisions.clear(); commentFiles.clear() }
 }
 
 @Synchronized
@@ -98,7 +99,19 @@ class FakeCommentRepository(private val s: FakeStore) : CommentRepository {
         val id = s.ids.incrementAndGet()
         Comment(id, comment.postId, comment.parentId, comment.rootId ?: id, comment.depth, comment.authorId, comment.body,
             comment.status, 0, comment.now, comment.now, comment.authorRef, comment.guestName)
-            .also { s.comments[id] = it; comment.guestSecretHash?.let { h -> s.commentHashes[id] = h } }
+            .also {
+                s.comments[id] = it
+                comment.guestSecretHash?.let { h -> s.commentHashes[id] = h }
+                if (comment.attachments.isNotEmpty()) s.commentFiles[id] = comment.attachments
+            }
+    }
+
+    override fun attachments(ids: Collection<Long>): Map<Long, List<String>> = s.locked { ids.mapNotNull { id -> s.commentFiles[id]?.let { id to it } }.toMap() }
+
+    override fun updateContent(id: Long, body: String, attachments: List<String>?, now: Instant): Comment? = s.locked {
+        val c = s.comments[id] ?: return@locked null
+        if (attachments != null) s.commentFiles[id] = attachments
+        c.copy(body = body, updatedAt = now).also { s.comments[id] = it }
     }
 
     override fun guestSecretHash(id: Long): String? = s.locked { s.commentHashes[id] }
@@ -195,6 +208,7 @@ class FakeRevisionRepository(private val s: FakeStore) : BoardRevisionRepository
             val c = s.comments[id]
             if (c == null || c.status != CommentStatus.PUBLISHED) { s.revisions.remove(target to id); return@locked false }
             s.comments[id] = c.copy(body = rev.body, updatedAt = now)
+            s.commentFiles[id] = rev.attachments
         }
         s.revisions.remove(target to id)
         true

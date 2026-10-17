@@ -108,7 +108,7 @@ class BoardWebTest {
             setOf(
                 "id", "postId", "parentId", "rootId", "depth", "authorId", "body", "status", "reactionCounts", "myReactions", "replyCount",
                 "createdAt", "updatedAt", "replies", "authorDeleted", "authorName", "authorTag", "mine",
-                "authorGuest", "pendingRevision",   // 비회원 · 고친 판 (스펙 §8)
+                "authorGuest", "pendingRevision", "attachments",   // 비회원 · 고친 판 · 댓글 첨부 (스펙 §8)
             ),
             commentKeys, "comment: before this feature plus mine, and the guest key",
         )

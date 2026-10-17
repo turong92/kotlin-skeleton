@@ -266,19 +266,56 @@ class JdbcCommentRepository(
             val keys = GeneratedKeyHolder()
             jdbc.update(
                 """
-                insert into board_comments (post_id, parent_id, root_id, depth, author_id, author_ref, guest_name, guest_secret_hash, body, status, reaction_count, created_at, updated_at)
-                values (:post, :parent, :root, :depth, :author, :authorRef, :guestName, :guestHash, :body, :status, 0, :now, :now)
+                insert into board_comments (post_id, parent_id, root_id, depth, author_id, author_ref, guest_name, guest_secret_hash, body, status, attachment_count, reaction_count, created_at, updated_at)
+                values (:post, :parent, :root, :depth, :author, :authorRef, :guestName, :guestHash, :body, :status, :attachmentCount, 0, :now, :now)
                 """.trimIndent(),
                 MapSqlParameterSource().addValue("post", comment.postId).addValue("parent", comment.parentId, java.sql.Types.BIGINT)
                     .addValue("root", comment.rootId, java.sql.Types.BIGINT).addValue("depth", comment.depth).addValue("author", comment.authorId)
                     .addValue("authorRef", comment.authorRef).addValue("guestName", comment.guestName).addValue("guestHash", comment.guestSecretHash)
-                    .addValue("status", comment.status.name).addValue("body", comment.body).addValue("now", dialect.instantParam(comment.now)),
+                    .addValue("status", comment.status.name).addValue("attachmentCount", comment.attachments.size).addValue("body", comment.body).addValue("now", dialect.instantParam(comment.now)),
                 keys,
                 arrayOf("id"),
             )
-            keys.key!!.toLong()
+            val newId = keys.key!!.toLong()
+            insertAttachments(newId, comment.attachments)
+            newId
         } ?: return null
         return find(id)
+    }
+
+    override fun attachments(ids: Collection<Long>): Map<Long, List<String>> {
+        if (ids.isEmpty()) return emptyMap()
+        val result = linkedMapOf<Long, MutableList<String>>()
+        jdbc.query(
+            "select comment_id, storage_key from board_comment_attachments where comment_id in (:ids) order by comment_id, sort_order", mapOf("ids" to ids),
+        ) { rs -> result.getOrPut(rs.getLong("comment_id")) { mutableListOf() } += rs.getString("storage_key") }
+        return result
+    }
+
+    override fun updateContent(id: Long, body: String, attachments: List<String>?, now: Instant): Comment? {
+        if (attachments == null) return updateBody(id, body, now)
+        val rows = tx.execute {
+            val updated = jdbc.update(
+                "update board_comments set body = :body, attachment_count = :count, updated_at = :now where id = :id",
+                MapSqlParameterSource().addValue("id", id).addValue("body", body).addValue("count", attachments.size).addValue("now", dialect.instantParam(now)),
+            )
+            if (updated > 0) replaceAttachments(id, attachments)
+            updated
+        }!!
+        return if (rows == 0) null else find(id)
+    }
+
+    private fun replaceAttachments(commentId: Long, keys: List<String>) {
+        jdbc.update("delete from board_comment_attachments where comment_id = :id", mapOf("id" to commentId))
+        insertAttachments(commentId, keys)
+    }
+
+    private fun insertAttachments(commentId: Long, keys: List<String>) {
+        if (keys.isEmpty()) return
+        jdbc.batchUpdate(
+            "insert into board_comment_attachments (comment_id, sort_order, storage_key) values (:id, :order, :key)",
+            keys.mapIndexed { i, key -> MapSqlParameterSource().addValue("id", commentId).addValue("order", i).addValue("key", key) }.toTypedArray(),
+        )
     }
 
     override fun find(id: Long): Comment? =

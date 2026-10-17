@@ -99,7 +99,7 @@ class CommentController(
         @RequestBody request: CreateCommentRequest,
     ) =
         callers.writer(authentication, http, request.captchaToken).let { w ->
-            service.create(w.caller, code, postId, request.parentId, request.body, request.authorId, request.guestName, w.guest)
+            service.create(w.caller, code, postId, request.parentId, request.body, request.authorId, request.guestName, w.guest, request.attachments)
         }.toResponse().let { comment ->
             Response.created(ServletUriComponentsBuilder.fromCurrentRequest().path("/{id}").buildAndExpand(comment.id).toUri(), comment)
         }
@@ -115,7 +115,7 @@ class CommentController(
         @PathVariable commentId: Long,
         @RequestBody request: UpdateCommentRequest,
     ): DataResponse<CommentResponse> =
-        callers.writer(authentication, http).let { w -> Response.ok(service.update(w.caller, code, postId, commentId, request.body, w.guest).toResponse()) }
+        callers.writer(authentication, http).let { w -> Response.ok(service.update(w.caller, code, postId, commentId, request.body, w.guest, request.attachments).toResponse()) }
 
     @Operation(summary = "Delete a comment (author or moderator; soft — the thread keeps its shape)")
     @NoContentOperation

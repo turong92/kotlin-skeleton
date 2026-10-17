@@ -78,7 +78,11 @@ class JdbcBoardRevisionRepository(
                     jdbc.update("insert into board_post_attachments (post_id, sort_order, storage_key) values (:id, :order, :key)", MapSqlParameterSource().addValue("id", id).addValue("order", i).addValue("key", key))
                 }
             } else {
-                jdbc.update("update board_comments set body = :body, updated_at = :now where id = :id", params)
+                jdbc.update("update board_comments set body = :body, attachment_count = :count, updated_at = :now where id = :id", params)
+                jdbc.update("delete from board_comment_attachments where comment_id = :id", params)
+                rev.attachments.forEachIndexed { i, key ->
+                    jdbc.update("insert into board_comment_attachments (comment_id, sort_order, storage_key) values (:id, :order, :key)", MapSqlParameterSource().addValue("id", id).addValue("order", i).addValue("key", key))
+                }
             }
             discardRevision(jdbc, target, id)
             true

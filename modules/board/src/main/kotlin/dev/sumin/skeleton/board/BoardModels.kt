@@ -192,6 +192,7 @@ data class NewComment(
     val status: CommentStatus = CommentStatus.PUBLISHED,
     val guestName: String? = null,
     val guestSecretHash: String? = null,
+    val attachments: List<String> = emptyList(),
 ) {
     override fun toString() = "NewComment(postId=, status=127)"
 }

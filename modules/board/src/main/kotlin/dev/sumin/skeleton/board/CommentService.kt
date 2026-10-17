@@ -29,7 +29,7 @@ class CommentService(
     /** [caller] 가 null 이면 로그인하지 않은 쓰기 — [guest] 가 있고 게시판이 허락하면 비회원 댓글, 아니면 401 */
     fun create(
         caller: BoardCaller?, boardCode: String, postId: Long, parentId: Long?, body: String?, authorId: String? = null,
-        guestName: String? = null, guest: GuestContext? = null,
+        guestName: String? = null, guest: GuestContext? = null, attachments: List<String>? = null,
     ): CommentView {
         val board = access.board(boardCode)
         val post = access.post(caller, boardCode, postId)
@@ -54,22 +54,29 @@ class CommentService(
             throw BoardException(BoardErrorCode.COMMENT_TOO_DEEP, "Replies can be nested ${properties.maxCommentDepth} levels below a top-level comment")
         }
         val text = rules.commentBody(body)
+        val keys = rules.commentAttachments(attachments)
+        if (caller != null) {
+            authorRules.rejectAccountIdKeys(caller, keys)
+            if (keys.isNotEmpty() && !policy.canAttach(caller, keys)) throw BoardException(BoardErrorCode.FORBIDDEN, "Not allowed to attach these files")
+        } else if (keys.isNotEmpty() && !policy.canGuestAttach(keys)) {
+            throw BoardException(BoardErrorCode.FORBIDDEN, "Not allowed to attach these files")
+        }
         val status = if (policy.needsApproval(board, post, caller, ApprovalTarget.COMMENT)) CommentStatus.PENDING else CommentStatus.PUBLISHED
         val new = if (ctx == null) {
             if (!limiter.tryAcquire(caller!!.accountId, "comment")) throw BoardException(BoardErrorCode.RATE_LIMITED, "Too many comments, slow down")
-            NewComment(post.id, parent?.id, parent?.rootId, depth, caller.accountId, text, time.now(), authorRef, status)
+            NewComment(post.id, parent?.id, parent?.rootId, depth, caller.accountId, text, time.now(), authorRef, status, attachments = keys)
         } else {
             val name = guests.name(guestName, rules)
             val secret = guests.validateNewSecret(ctx)
             guests.admit(ctx, checkCaptcha = true)
-            NewComment(post.id, parent?.id, parent?.rootId, depth, guests.newAuthorId(), text, time.now(), null, status, guestName = name, guestSecretHash = guests.hash(secret))
+            NewComment(post.id, parent?.id, parent?.rootId, depth, guests.newAuthorId(), text, time.now(), null, status, guestName = name, guestSecretHash = guests.hash(secret), attachments = keys)
         }
         val created = comments.insert(new) ?: throw BoardException(BoardErrorCode.POST_NOT_FOUND, "Post not found: $postId")
         events.publish(CommentCreated(created, boardCode, if (caller != null) actorOf(caller) else GUEST))
         val publicId = publicId(created, authorRules.active)
         val author = card(created, authors.one(boardCode, publicId))   // 응답과 알림이 한 번의 조회를 같이 쓴다
         if (created.status == CommentStatus.PUBLISHED) notify(post, created, parent, publicId, author?.name) else notifyPending(board, post, created, parent, publicId, author?.name)
-        return view(caller, created, publicId, author, created.body, reactions.state(ReactionTarget.COMMENT, created.id, caller), 0)
+        return view(caller, created, publicId, author, created.body, reactions.state(ReactionTarget.COMMENT, created.id, caller), 0, attachments = keys)
     }
 
     fun list(caller: BoardCaller?, boardCode: String, postId: Long, page: Int, size: Int, sort: CommentSort): PageResult<CommentView> {
@@ -86,10 +93,11 @@ class CommentService(
         val childrenOf = descendants.groupBy { it.parentId }
         val repliesOf = descendants.groupBy { it.rootId }
         val revs = if (caller == null) emptyMap() else revisions.find(RevisionTarget.COMMENT, (roots.values + descendants).map { it.id })
+        val files = attachmentsOf((roots.values + descendants).map { it.id })
         fun view(c: Comment, replies: List<CommentView>) =
             view(
                 caller, c, publicIds.getValue(c.id), card(c, names[publicIds.getValue(c.id)]), visibleBody(c), states.getValue(c.id), descendantCount(c.id, childrenOf), replies,
-                revs[c.id]?.takeIf { pending.all || caller?.accountId == c.authorId },
+                revs[c.id]?.takeIf { pending.all || caller?.accountId == c.authorId }, files[c.id].orEmpty(),
             )
         val threads = roots.values.map { root ->
             view(root, repliesOf[root.id].orEmpty().map { view(it, emptyList()) })
@@ -97,39 +105,58 @@ class CommentService(
         return PageResult(threads, roots.totalElements)
     }
 
-    fun update(caller: BoardCaller?, boardCode: String, postId: Long, commentId: Long, body: String?, guest: GuestContext? = null): CommentView {
+    fun update(
+        caller: BoardCaller?, boardCode: String, postId: Long, commentId: Long, body: String?, guest: GuestContext? = null, attachments: List<String>? = null,
+    ): CommentView {
         val post = access.post(caller, boardCode, postId)
-        if (caller == null) return updateAsGuest(boardCode, post, commentId, body, guest)
+        if (caller == null) return updateAsGuest(boardCode, post, commentId, body, guest, attachments)
         val comment = access.comment(post, commentId)
         if (!policy.canEditComment(caller, comment)) throw BoardException(BoardErrorCode.FORBIDDEN, "Not allowed to edit comment $commentId")
         val board = access.board(boardCode)
-        val text = rules.commentBody(body)
+        val text = editedText(body, attachments, comment)
+        val keys = attachments?.let { rules.commentAttachments(it) }
+        val existing = revisions.find(RevisionTarget.COMMENT, listOf(comment.id))[comment.id]
+        if (keys != null) {
+            val known = attachmentsOf(listOf(comment.id))[comment.id].orEmpty() + existing?.attachments.orEmpty()
+            authorRules.rejectAccountIdKeys(caller, keys.filterNot { it in known })   // 옛 키를 그대로 다시 보낸 수정은 통과 — 새 키만 본다
+            if (keys.isNotEmpty() && !policy.canAttach(caller, keys)) throw BoardException(BoardErrorCode.FORBIDDEN, "Not allowed to attach these files")
+        }
         val pending = pendingVisibility(caller, board, post)
         // 승인 대상 작성자가 공개된 댓글을 고치면 공개본은 그대로 두고 고친 내용만 판으로 대기한다
         if (comment.status == CommentStatus.PUBLISHED && policy.needsApproval(board, post, caller, ApprovalTarget.COMMENT)) {
-            val rev = submitRevision(board, post, comment, text, actorOf(caller))
+            val rev = submitRevision(board, post, comment, text, keys, actorOf(caller))
             return single(caller, boardCode, comment, pending, rev)
         }
-        val hadRevision = revisions.find(RevisionTarget.COMMENT, listOf(comment.id)).isNotEmpty()
-        val updated = comments.updateBody(comment.id, text, time.now()) ?: notFound(commentId)
+        val hadRevision = existing != null
+        val updated = comments.updateContent(comment.id, text, keys, time.now()) ?: notFound(commentId)
         events.publish(CommentUpdated(updated, boardCode, actorOf(caller)))
         if (hadRevision) { revisions.delete(RevisionTarget.COMMENT, comment.id); announceDiscard(boardCode, updated, actorOf(caller)) }
         return single(caller, boardCode, updated, pending)
     }
 
-    private fun updateAsGuest(boardCode: String, post: Post, commentId: Long, body: String?, guest: GuestContext?): CommentView {
+    /** 본문이 없고 첨부만 보낸 수정은 본문을 그대로 둔다 */
+    private fun editedText(body: String?, attachments: List<String>?, comment: Comment): String =
+        if (body == null && attachments != null) comment.body else rules.commentBody(body)
+
+    private fun updateAsGuest(boardCode: String, post: Post, commentId: Long, body: String?, guest: GuestContext?, attachments: List<String>?): CommentView {
         val ctx = guestWriter(access.board(boardCode), guest)
         guests.admit(ctx, checkCaptcha = false)
         val comment = guestOwned(post, commentId, ctx)
         if (comment.status !in GUEST_EDITABLE) throw BoardException(BoardErrorCode.FORBIDDEN, BoardGuests.FORBIDDEN_MESSAGE)
         val board = access.board(boardCode)
-        val text = rules.commentBody(body)
+        val text = editedText(body, attachments, comment)
+        val keys = attachments?.let { rules.commentAttachments(it) }
+        val existing = revisions.find(RevisionTarget.COMMENT, listOf(comment.id))[comment.id]
+        if (!keys.isNullOrEmpty()) {
+            val known = attachmentsOf(listOf(comment.id))[comment.id].orEmpty() + existing?.attachments.orEmpty()
+            if (!policy.canGuestAttach(keys.filterNot { it in known })) throw BoardException(BoardErrorCode.FORBIDDEN, "Not allowed to attach these files")
+        }
         if (comment.status == CommentStatus.PUBLISHED && policy.needsApproval(board, post, null, ApprovalTarget.COMMENT)) {
-            val rev = submitRevision(board, post, comment, text, GUEST)
+            val rev = submitRevision(board, post, comment, text, keys, GUEST)
             return single(null, boardCode, comment, PendingVisibility.NONE, rev)   // 비회원은 다시 읽을 때 판을 보지 못한다 — 이 응답을 화면이 들고 있는다
         }
-        val hadRevision = revisions.find(RevisionTarget.COMMENT, listOf(comment.id)).isNotEmpty()
-        val updated = comments.updateBody(comment.id, text, time.now()) ?: notFound(commentId)
+        val hadRevision = existing != null
+        val updated = comments.updateContent(comment.id, text, keys, time.now()) ?: notFound(commentId)
         events.publish(CommentUpdated(updated, boardCode, GUEST))
         if (hadRevision) { revisions.delete(RevisionTarget.COMMENT, comment.id); announceDiscard(boardCode, updated, GUEST) }
         return single(null, boardCode, updated, PendingVisibility.NONE)
@@ -199,7 +226,7 @@ class CommentService(
         val publicIds = rows.values.associate { it.id to publicId(it, active) }
         val names = authors.of(boardCode, publicIds.values)
         return PageResult(
-            rows.values.map { view(caller, it, publicIds.getValue(it.id), card(it, names[publicIds.getValue(it.id)]), it.body, states.getValue(it.id), 0) },
+            rows.values.let { list -> val files = attachmentsOf(list.map { it.id }); list.map { view(caller, it, publicIds.getValue(it.id), card(it, names[publicIds.getValue(it.id)]), it.body, states.getValue(it.id), 0, attachments = files[it.id].orEmpty()) } },
             rows.totalElements,
         )
     }
@@ -240,15 +267,16 @@ class CommentService(
         val publicIds = rows.associate { it.first.id to publicId(it.first, active) }
         val names = authors.of(boardCode, publicIds.values)
         return PageResult(
-            rows.map { (c, r) -> view(caller, c, publicIds.getValue(c.id), card(c, names[publicIds.getValue(c.id)]), visibleBody(c), states.getValue(c.id), 0, revision = r) },
+            rows.let { list -> val files = attachmentsOf(list.map { it.first.id }); list.map { (c, r) -> view(caller, c, publicIds.getValue(c.id), card(c, names[publicIds.getValue(c.id)]), visibleBody(c), states.getValue(c.id), 0, revision = r, attachments = files[c.id].orEmpty()) } },
             revs.totalElements,
         )
     }
 
-    private fun submitRevision(board: Board, post: Post, comment: Comment, text: String, actor: BoardActor): Revision {
+    private fun submitRevision(board: Board, post: Post, comment: Comment, text: String, keys: List<String>?, actor: BoardActor): Revision {
         val existing = revisions.find(RevisionTarget.COMMENT, listOf(comment.id))[comment.id]
         val now = time.now()
-        val rev = Revision(RevisionTarget.COMMENT, comment.id, board.code, post.id, null, text, emptyList(), existing?.createdAt ?: now, now)
+        val publicKeys = attachmentsOf(listOf(comment.id))[comment.id].orEmpty()
+        val rev = Revision(RevisionTarget.COMMENT, comment.id, board.code, post.id, null, text, keys ?: existing?.attachments ?: publicKeys, existing?.createdAt ?: now, now)
         val replaced = revisions.submit(rev)
         events.publish(RevisionSubmitted(RevisionTarget.COMMENT, comment.id, board.code, post.id, replaced, actor))
         notifyRevision(board, post, comment)
@@ -318,7 +346,7 @@ class CommentService(
         val publicId = publicId(comment, authorRules.active)
         return view(
             caller, comment, publicId, card(comment, authors.one(boardCode, publicId)), visibleBody(comment),
-            reactions.state(ReactionTarget.COMMENT, comment.id, caller), descendantCount(comment.id, childrenOf), revision = shown,
+            reactions.state(ReactionTarget.COMMENT, comment.id, caller), descendantCount(comment.id, childrenOf), revision = shown, attachments = attachmentsOf(listOf(comment.id))[comment.id].orEmpty(),
         )
     }
 
@@ -326,8 +354,16 @@ class CommentService(
 
     private fun view(
         caller: BoardCaller?, c: Comment, publicId: String, card: AuthorCard?, body: String?,
-        state: ReactionState, replyCount: Int, replies: List<CommentView> = emptyList(), revision: Revision? = null,
-    ) = CommentView(c, publicId, BoardAuthors.isDeleted(c.authorId) || card?.deleted == true, caller?.accountId == c.authorId, body, state, replyCount, replies, card, revision?.view())
+        state: ReactionState, replyCount: Int, replies: List<CommentView> = emptyList(), revision: Revision? = null, attachments: List<String> = emptyList(),
+    ) = CommentView(
+        c, publicId, BoardAuthors.isDeleted(c.authorId) || card?.deleted == true, caller?.accountId == c.authorId, body, state, replyCount, replies, card, revision?.view(),
+        // 가린 · 지운 댓글의 사진은 본문처럼 나가지 않는다
+        if (body != null) attachments else emptyList(),
+    )
+
+    /** 댓글 첨부는 켜져 있을 때만 읽는다 (기본 꺼짐 — 기존 쿼리 수 그대로). 쪽의 모든 댓글을 쿼리 한 번으로 */
+    private fun attachmentsOf(ids: Collection<Long>): Map<Long, List<String>> =
+        if (properties.commentMaxAttachments > 0 && ids.isNotEmpty()) comments.attachments(ids) else emptyMap()
 
     /** PUBLISHED 와 (보이는 사람에게만 남아 있는) PENDING 의 본문. 가림 · 삭제는 모두에게 null */
     private fun visibleBody(c: Comment): String? = c.body.takeIf { c.status == CommentStatus.PUBLISHED || c.status == CommentStatus.PENDING }
