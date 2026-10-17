@@ -21,6 +21,9 @@ class StoragePublicUploads(
 
     override fun publicKeyOf(privateKey: String): String = keys.publicKeyOf(privateKey)
 
+    override fun mayPublish(privateKey: String): Boolean =
+        privateKey.substringAfterLast('/').substringAfterLast('.', missingDelimiterValue = "").lowercase() in PUBLISHABLE_EXTENSIONS
+
     override fun publish(privateKey: String): Boolean {
         val pub = keys.properties().`public`
         // 원본의 Content-Type 을 그대로 쓴다 (확장자로 짐작하지 않는다) - 허용 밖이면 공개하지 않는다
@@ -58,6 +61,7 @@ class StoragePublicUploads(
 
     private companion object {
         /** 공개해도 되는 형식 - 이미지(SVG 제외: 스크립트를 담을 수 있다)와 PDF. 그 밖은 비공개로만 둔다 */
+        val PUBLISHABLE_EXTENSIONS = setOf("jpg", "jpeg", "png", "webp", "gif", "avif", "heic", "pdf")
         val PUBLISHABLE_TYPES = setOf("image/jpeg", "image/png", "image/webp", "image/gif", "image/avif", "image/heic", "application/pdf")
     }
 }

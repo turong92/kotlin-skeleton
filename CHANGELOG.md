@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - (수정) 사진 공개 영역: 복사 뒤 공개 조건을 다시 읽어 그 사이 가려졌으면 거두고, 시간 초과로 끊긴 복사의 줄을 지우지 않으며, 드문 전체 대조(기본 하루, 한 인스턴스만)가 줄이 가리키지 않는 객체를 지운다. 매분 조정은 실패해 표(`board_public_attachment_queue`)에 적힌 항목만 본다. 서명 열람은 `?index=`(+`from=edit`, `as=owner|author`)로 바뀌고 비회원 쓰기 한도를 먹지 않으며, 가린 · 지운 항목의 사진은 운영자만 받는다. 비회원 글 주인이 비밀로 대기 댓글의 사진을 본다. 공개 전 원본 Content-Type 확인(허용 형식만). 새 V 파일 `…18100200`.
 
+- (수정) 사진 공개 영역이 아웃박스 꼴이 됐다: 공개 여부에 영향을 주는 쓰기가 같은 트랜잭션에서 `board_public_attachment_queue` 에 적고(공개 영역이 꺼져 있으면 적지 않는다) 커밋 뒤 리스너가 맞추고 지운다 - 프로세스가 죽어도 매분 조정이 맞춘다. 공개할 수 없는 형식(확장자)의 첨부에는 `attachmentUrls` 를 싣지 않는다. 자기 저장소를 둔 앱이 `BoardPublicAttachmentRepository` 를 구현하지 않으면 공개 주소를 싣지 않는다.
+
 ### 게시판 사진 공개 영역 (2026-10-18)
 
 - `storage`: **꺼진 채 시작하는** `skeleton.storage.web.public.*` - 공개된 글 · 댓글의 첨부만 공개 영역(`<prefix>/<hmac32>.<ext>`, 비공개 키에서 HMAC 으로 계산)에 `Cache-Control` 을 붙여 복사하고 `base-url`(CDN) 주소로 낸다. 비밀 `<P>_STORAGE_WEB_PUBLIC_SECRET`(32자 이상, 프로젝트마다 달라야 한다). `CopyObjectRequest.cacheControl` 추가(S3 어댑터는 메타데이터를 새로 쓴다). `StoragePublicUploads` · `StoragePrivateUploadAccess`.

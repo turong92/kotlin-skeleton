@@ -123,8 +123,13 @@ class BoardAutoConfiguration {
     /** storage 의 공개 영역 · 서명 읽기 - 둘 다 없으면(기본) board 는 키만 낸다. 부를 때마다 찾는다 */
     @Bean
     @ConditionalOnMissingBean
-    fun boardUploads(publicUploads: ObjectProvider<PublicUploads>, access: ObjectProvider<PrivateUploadAccess>): BoardUploads =
-        BoardUploads({ publicUploads.getIfAvailable() }, { access.getIfAvailable() })
+    fun boardUploads(
+        publicUploads: ObjectProvider<PublicUploads>,
+        access: ObjectProvider<PrivateUploadAccess>,
+        reconciler: ObjectProvider<BoardPublicAttachments>,
+    ): BoardUploads =
+        // 공개 주소는 조정자(저장소 포트가 있어야 생긴다)가 있을 때만 낸다 - 앱이 자기 저장소를 두고 포트를 구현하지 않았다면 복사하는 이가 없어 주소가 404 가 된다
+        BoardUploads({ if (reconciler.getIfAvailable() != null) publicUploads.getIfAvailable() else null }, { access.getIfAvailable() })
 
     /** 공개 영역을 board 상태에 맞추는 조정자 - 저장소 포트(board-jdbc)가 있을 때만. `skeleton.storage.web.public` 이 꺼져 있으면 아무것도 하지 않는다 */
     @Bean

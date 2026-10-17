@@ -26,10 +26,13 @@ class BoardPublicAttachments(
 ) {
     private val log = LoggerFactory.getLogger(BoardPublicAttachments::class.java)
 
-    /** 이 항목 하나를 맞춘다 - 이벤트(커밋 뒤)가 부른다. 실패는 삼키고 표에 적어 둔다 */
+    /**
+     * 이 항목 하나를 맞춘다 - 커밋 뒤 이벤트가 부른다. 맞추면 큐의 줄을 지운다(저장소가 쓰기와 **같은 트랜잭션에서** 적어 둔 줄 - 아웃박스).
+     * 실패하거나 리스너가 돌기 전에 프로세스가 죽으면 줄이 남아 매분 [processQueue] 가 맞춘다.
+     */
     fun reconcile(target: RevisionTarget, id: Long) {
         if (uploads() == null) return
-        if (!tryReconcile(target, id)) runCatching { repository.enqueue(target, id, time.now()) }
+        if (tryReconcile(target, id)) runCatching { repository.dequeue(target, id) } else runCatching { repository.enqueue(target, id, time.now()) }
     }
 
     /** 글이 공개를 떠나거나 돌아올 때 - 글 자신과 그 댓글들 */
@@ -40,13 +43,21 @@ class BoardPublicAttachments(
         comments.forEach { reconcile(RevisionTarget.COMMENT, it) }
     }
 
+    /** 글 한 줄을 맞춘다 - 글이 공개를 떠나거나 돌아오면 그 댓글들의 공개 여부도 바뀐다. 모두 맞췄을 때만 참 */
+    private fun tryReconcilePost(postId: Long, repair: Boolean): Boolean {
+        val post = tryReconcile(RevisionTarget.POST, postId, repair)
+        val comments = try { repository.commentsWithCopies(postId) } catch (e: Exception) { return false }
+        return comments.map { tryReconcile(RevisionTarget.COMMENT, it, repair) }.all { it } && post
+    }
+
     /** 표에 적힌 항목을 다시 맞춘다 (매분). 맞추면 줄을 지운다 - 처리한 수 */
     fun processQueue(limit: Int = 200): Int {
         if (uploads() == null) return 0
         var done = 0
         val each = { _: Unit ->
             for ((target, id) in repository.claimQueued(limit, time.now(), Duration.ofMinutes(2))) {
-                if (tryReconcile(target, id, repair = true)) { repository.dequeue(target, id); done++ }
+                val ok = if (target == RevisionTarget.POST) tryReconcilePost(id, repair = true) else tryReconcile(target, id, repair = true)
+                if (ok) { repository.dequeue(target, id); done++ }
             }
         }
         if (projects == null) each(Unit) else projects.forEachProject { each(Unit) }

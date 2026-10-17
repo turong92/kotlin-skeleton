@@ -23,6 +23,7 @@ class JdbcBoardRevisionRepository(
     private val jdbc: NamedParameterJdbcTemplate,
     private val tx: TransactionTemplate,
     private val dialect: SqlDialect,
+    private val publicQueue: PublicQueueWriter? = null,
 ) : BoardRevisionRepository {
     override fun submit(revision: Revision): RevisionSubmit =
         tx.execute {
@@ -111,6 +112,7 @@ class JdbcBoardRevisionRepository(
                 }
             }
             discardRevision(jdbc, target, id)
+            publicQueue?.enqueue(target, id, now)   // 판 승인으로 첨부가 바뀌었다 - 같은 트랜잭션에서 큐에 적는다
             RevisionWrite.DONE
         }!!
     }

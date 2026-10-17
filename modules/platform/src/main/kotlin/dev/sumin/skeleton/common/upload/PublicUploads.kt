@@ -10,6 +10,12 @@ interface PublicUploads {
     /** 이 비공개 키의 공개 주소 - 복사가 되어 있다는 뜻은 아니다 */
     fun urlOf(privateKey: String): String
 
+    /**
+     * 이 키의 형식(확장자)이 공개할 수 있는 것인가 - 읽기마다 저장소를 묻지 않고 키만 보고 판정한다. 아니면 응답에 공개 주소를 싣지 않는다.
+     * (실제 복사는 원본의 Content-Type 으로 한 번 더 확인한다.) 기본은 참.
+     */
+    fun mayPublish(privateKey: String): Boolean = true
+
     /** 이 비공개 키가 공개 영역에서 갖는 키 - 전체 대조가 「줄들이 가리키는 키의 집합」을 만들 때 쓴다 */
     fun publicKeyOf(privateKey: String): String
 

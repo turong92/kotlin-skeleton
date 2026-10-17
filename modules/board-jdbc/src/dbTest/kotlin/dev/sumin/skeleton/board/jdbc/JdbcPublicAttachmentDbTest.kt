@@ -185,4 +185,66 @@ class JdbcPublicAttachmentDbTest {
         assertEquals(emptySet(), mine())
         assertEquals(0L, db.scalar("select count(*) from board_public_attachments where target_id = :id", "id" to c.id), "nothing is noted for a copy that was never made")
     }
+
+    // ---- 아웃박스: 쓰기와 같은 트랜잭션에서 큐에 적고, 리스너가 돌기 전에 죽어도 다음 조정이 맞춘다 ----
+
+    private val queued = PublicQueueWriter(db.jdbc, DbTestDatabase.dialect) { true }
+    private val comments = JdbcCommentRepository(db.jdbc, db.tx, DbTestDatabase.dialect, queued)
+    private fun queueSize(target: RevisionTarget, id: Long) =
+        db.scalar("select count(*) from board_public_attachment_queue where target_type = :t and target_id = :id", "t" to target.name, "id" to id)
+
+    @Test
+    fun `the process dies after the commit and before the listener - the next sweep still takes a hidden picture down`() {
+        val post = db.newPost(db.newBoard())
+        val c = comments.insert(NewComment(post.id, null, null, 0, "acc_a", "c", T0, attachments = listOf("${tag}outbox.png")))!!
+        assertEquals(1L, queueSize(RevisionTarget.COMMENT, c.id), "the insert wrote the queue line in its own transaction")
+        sync.processQueue()   // 게시 - 리스너 없이 큐만으로 공개된다
+        assertEquals(setOf("outbox.png"), mine())
+        assertEquals(0L, queueSize(RevisionTarget.COMMENT, c.id))
+
+        comments.setStatus(c.id, CommentStatus.HIDDEN, T0)   // 커밋됐고, 리스너(이벤트)는 돌지 않는다 = 프로세스가 죽었다
+        assertEquals(setOf("outbox.png"), mine(), "still public: nobody reconciled yet")
+        assertEquals(1L, queueSize(RevisionTarget.COMMENT, c.id))
+        sync.processQueue()   // 다음 조정
+        assertEquals(emptySet(), mine(), "the sweep takes it down within a minute")
+        assertEquals(0L, queueSize(RevisionTarget.COMMENT, c.id))
+    }
+
+    @Test
+    fun `hiding a post enqueues the post and its comments' pictures leave with the next sweep`() {
+        val postRepo = JdbcPostRepository(db.jdbc, db.tx, DbTestDatabase.dialect, queued)
+        val post = db.newPost(db.newBoard())
+        val c = comments.insert(NewComment(post.id, null, null, 0, "acc_a", "c", T0, attachments = listOf("${tag}under-post.png")))!!
+        sync.processQueue()
+        assertEquals(setOf("under-post.png"), mine())
+        postRepo.update(post.id, PostChange(status = PostStatus.HIDDEN), T0)
+        sync.processQueue()
+        assertEquals(emptySet(), mine(), "the comment's picture leaves with its post - one queue line for the post is enough")
+        assertEquals(0L, queueSize(RevisionTarget.POST, post.id))
+        assertEquals(0L, queueSize(RevisionTarget.COMMENT, c.id))
+    }
+
+    @Test
+    fun `with the public area off nothing is written to the queue`() {
+        val off = JdbcCommentRepository(db.jdbc, db.tx, DbTestDatabase.dialect, PublicQueueWriter(db.jdbc, DbTestDatabase.dialect) { false })
+        val post = db.newPost(db.newBoard())
+        val c = off.insert(NewComment(post.id, null, null, 0, "acc_a", "c", T0, attachments = listOf("${tag}off.png")))!!
+        off.setStatus(c.id, CommentStatus.HIDDEN, T0)
+        assertEquals(0L, queueSize(RevisionTarget.COMMENT, c.id), "default settings: no extra write queries, no queue rows")
+    }
+
+    @Test
+    fun `approving an edit version queues the target in the same transaction`() {
+        val board = db.newBoard()
+        val post = db.newPost(board)
+        val c = comments.insert(NewComment(post.id, null, null, 0, "acc_a", "c", T0, attachments = listOf("${tag}before.png")))!!
+        sync.processQueue()
+        val revs = JdbcBoardRevisionRepository(db.jdbc, db.tx, DbTestDatabase.dialect, queued)
+        revs.submit(Revision(RevisionTarget.COMMENT, c.id, board, post.id, null, "new", listOf("${tag}after.png"), T0, T0))
+        assertEquals(0L, queueSize(RevisionTarget.COMMENT, c.id), "submitting changes nothing public")
+        revs.apply(RevisionTarget.COMMENT, c.id, T0.plusSeconds(1), revs.find(RevisionTarget.COMMENT, listOf(c.id)).getValue(c.id).updatedAt)
+        assertEquals(1L, queueSize(RevisionTarget.COMMENT, c.id))
+        sync.processQueue()
+        assertEquals(setOf("after.png"), mine())
+    }
 }

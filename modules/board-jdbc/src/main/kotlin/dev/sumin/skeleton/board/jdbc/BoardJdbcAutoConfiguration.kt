@@ -12,7 +12,9 @@ import dev.sumin.skeleton.common.author.AuthorAdoptionListener
 import dev.sumin.skeleton.persistence.jdbc.SqlDialect
 import javax.sql.DataSource
 import org.springframework.boot.autoconfigure.AutoConfiguration
+import dev.sumin.skeleton.common.upload.PublicUploads
 import dev.sumin.skeleton.common.upload.UploadedKeyUsage
+import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
@@ -37,6 +39,12 @@ import org.springframework.transaction.support.TransactionTemplate
 @ConditionalOnClass(NamedParameterJdbcTemplate::class)
 @ConditionalOnBean(DataSource::class)
 class BoardJdbcAutoConfiguration {
+    /** 공개 영역이 켜져 있을 때만 쓴다 (`PublicUploads` 빈이 있을 때) - 꺼진 기본 설정에서는 쓰기 쿼리가 늘지 않는다. 부를 때마다 찾는다 */
+    @Bean
+    @ConditionalOnMissingBean
+    fun boardPublicQueueWriter(dataSource: DataSource, dialect: SqlDialect, uploads: ObjectProvider<PublicUploads>): PublicQueueWriter =
+        PublicQueueWriter(NamedParameterJdbcTemplate(dataSource), dialect) { uploads.getIfAvailable() != null }
+
     @Bean
     @ConditionalOnMissingBean(BoardRepository::class)
     fun jdbcBoardRepository(dataSource: DataSource, dialect: SqlDialect): BoardRepository =
@@ -44,13 +52,13 @@ class BoardJdbcAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(PostRepository::class)
-    fun jdbcPostRepository(dataSource: DataSource, transactionManager: PlatformTransactionManager, dialect: SqlDialect): PostRepository =
-        JdbcPostRepository(NamedParameterJdbcTemplate(dataSource), TransactionTemplate(transactionManager), dialect)
+    fun jdbcPostRepository(dataSource: DataSource, transactionManager: PlatformTransactionManager, dialect: SqlDialect, publicQueue: PublicQueueWriter): PostRepository =
+        JdbcPostRepository(NamedParameterJdbcTemplate(dataSource), TransactionTemplate(transactionManager), dialect, publicQueue)
 
     @Bean
     @ConditionalOnMissingBean(CommentRepository::class)
-    fun jdbcCommentRepository(dataSource: DataSource, transactionManager: PlatformTransactionManager, dialect: SqlDialect): CommentRepository =
-        JdbcCommentRepository(NamedParameterJdbcTemplate(dataSource), TransactionTemplate(transactionManager), dialect)
+    fun jdbcCommentRepository(dataSource: DataSource, transactionManager: PlatformTransactionManager, dialect: SqlDialect, publicQueue: PublicQueueWriter): CommentRepository =
+        JdbcCommentRepository(NamedParameterJdbcTemplate(dataSource), TransactionTemplate(transactionManager), dialect, publicQueue)
 
     @Bean
     @ConditionalOnMissingBean(ReactionRepository::class)
@@ -59,8 +67,8 @@ class BoardJdbcAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(BoardRevisionRepository::class)
-    fun jdbcBoardRevisionRepository(dataSource: DataSource, transactionManager: PlatformTransactionManager, dialect: SqlDialect): BoardRevisionRepository =
-        JdbcBoardRevisionRepository(NamedParameterJdbcTemplate(dataSource), TransactionTemplate(transactionManager), dialect)
+    fun jdbcBoardRevisionRepository(dataSource: DataSource, transactionManager: PlatformTransactionManager, dialect: SqlDialect, publicQueue: PublicQueueWriter): BoardRevisionRepository =
+        JdbcBoardRevisionRepository(NamedParameterJdbcTemplate(dataSource), TransactionTemplate(transactionManager), dialect, publicQueue)
 
     /** storage 의 공개 영역을 board 상태에 맞추는 조정자의 저장소 - 공개 영역이 꺼져 있으면 아무도 부르지 않는다 */
     @Bean

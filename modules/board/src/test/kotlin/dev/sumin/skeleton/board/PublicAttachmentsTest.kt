@@ -17,6 +17,7 @@ class PublicAttachmentsTest {
     private val on = BoardUploads(
         publicUploads = { object : PublicUploads {
             override fun urlOf(privateKey: String) = "https://cdn.example/${privateKey.hashCode()}"
+            override fun mayPublish(privateKey: String) = !privateKey.endsWith(".txt")
             override fun publicKeyOf(privateKey: String) = "public/${privateKey.hashCode()}"
             override fun publish(privateKey: String) = true
             override fun unpublish(privateKey: String) = Unit
@@ -112,5 +113,16 @@ class PublicAttachmentsTest {
         assertTrue(h.postService.attachmentAccess(moderator, "general", post.id, 0).url.contains("k/p.png"))
         assertTrue(h.failure { h.postService.attachmentAccess(stranger, "general", post.id, 0) } in setOf(BoardErrorCode.POST_NOT_FOUND, BoardErrorCode.FORBIDDEN))
         kotlin.test.assertFailsWith<dev.sumin.skeleton.common.ApplicationException> { h.postService.attachmentAccess(null, "general", post.id, 0) }   // 로그인도 비밀도 없다 -> 401
+    }
+
+    @Test
+    fun `a picture of a type that cannot be public gets no address, the others do`() {
+        val h = ServiceHarness(props = props, settings = settings, uploads = on)
+        val post = h.postService.create(other, "general", CreatePost("제목", "본문", null, null)).post
+        h.postService.moderate(moderator, "general", post.id, PostStatus.PUBLISHED, null)
+        val c = h.commentService.create(other, "general", post.id, null, "둘", attachments = listOf("k/a.png", "k/notes.txt")).comment
+        val shown = h.commentService.list(stranger, "general", post.id, 0, 10, CommentSort.OLDEST).values.single { it.comment.id == c.id }
+        assertEquals(setOf("k/a.png"), shown.attachmentUrls.keys, "the text file would answer 404 - no address for it")
+        assertEquals(listOf("k/a.png", "k/notes.txt"), shown.attachments, "the keys stay")
     }
 }

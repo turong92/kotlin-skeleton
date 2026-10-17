@@ -93,4 +93,11 @@ class StoragePublicUploadsTest {
         assertEquals(listOf("public/aaa.png"), storage.deleted)
         assertEquals(listOf("https://cdn.example.com/public/aaa.png"), purged)
     }
+
+    @Test
+    fun `a key's extension decides whether an address is worth giving out - images and pdf yes, text and unknown no`() {
+        val uploads = StoragePublicUploads(Recording(), StorageKeyScheme(web()))
+        listOf("a.png", "a.JPG", "x/file.webp", "x/file.pdf", "x/file.heic").forEach { assertTrue(uploads.mayPublish(it), it) }
+        listOf("a.txt", "a.svg", "noext", "x/file.exe").forEach { assertFalse(uploads.mayPublish(it), it) }
+    }
 }

@@ -116,6 +116,7 @@ class JdbcPostRepository(
     private val jdbc: NamedParameterJdbcTemplate,
     private val tx: TransactionTemplate,
     private val dialect: SqlDialect,
+    private val publicQueue: PublicQueueWriter? = null,
 ) : PostRepository {
     override fun insert(post: NewPost): Post {
         val id = tx.execute {
@@ -136,6 +137,7 @@ class JdbcPostRepository(
             )
             val newId = keys.key!!.toLong()   // MySQL 은 키 칼럼 이름이 "GENERATED_KEY" 라 이름이 아니라 첫 키로 읽는다
             replaceAttachments(newId, post.attachments)
+            publicQueue?.enqueue(RevisionTarget.POST, newId, post.now)   // 공개 여부가 걸린 쓰기 - 같은 트랜잭션에서 큐에 적는다
             newId
         }!!
         return find(id)!!
@@ -168,6 +170,7 @@ class JdbcPostRepository(
             if (rows > 0 && change.status != null && change.status != PostStatus.PUBLISHED) discardRevision(jdbc, RevisionTarget.POST, id)
             // 승인 대상이 아닌 사람의 직접 수정(운영자 포함)이 이긴다 - 대기 중이던 판은 같은 트랜잭션에서 버린다 (남으면 나중에 승인해 새 내용을 덮어쓴다)
             if (rows > 0 && (change.title != null || change.body != null || change.attachments != null)) discardRevision(jdbc, RevisionTarget.POST, id)
+            if (rows > 0 && (change.status != null || change.attachments != null)) publicQueue?.enqueue(RevisionTarget.POST, id, now)
             rows
         }!!
         return if (updated == 0) null else find(id)
@@ -255,6 +258,7 @@ class JdbcCommentRepository(
     private val jdbc: NamedParameterJdbcTemplate,
     private val tx: TransactionTemplate,
     private val dialect: SqlDialect,
+    private val publicQueue: PublicQueueWriter? = null,
 ) : CommentRepository {
     override fun insert(comment: NewComment): Comment? {
         val id = tx.execute {
@@ -282,6 +286,7 @@ class JdbcCommentRepository(
             )
             val newId = keys.key!!.toLong()
             insertAttachments(newId, comment.attachments)
+            if (comment.attachments.isNotEmpty()) publicQueue?.enqueue(RevisionTarget.COMMENT, newId, comment.now)
             newId
         } ?: return null
         return find(id)
@@ -306,6 +311,7 @@ class JdbcCommentRepository(
             if (updated > 0) {
                 if (attachments != null) replaceAttachments(id, attachments)
                 discardRevision(jdbc, RevisionTarget.COMMENT, id)
+                if (attachments != null) publicQueue?.enqueue(RevisionTarget.COMMENT, id, now)
             }
             updated
         }!!
@@ -352,6 +358,7 @@ class JdbcCommentRepository(
             if (status != CommentStatus.PUBLISHED) discardRevision(jdbc, RevisionTarget.COMMENT, id)
             val delta = (if (status == CommentStatus.PUBLISHED) 1 else 0) - (if (old == CommentStatus.PUBLISHED.name) 1 else 0)
             if (delta != 0) jdbc.update("update board_posts set comment_count = comment_count + :delta where id = :post", mapOf("delta" to delta, "post" to postId))
+            publicQueue?.enqueue(RevisionTarget.COMMENT, id, now)
             Unit
         } ?: return null
         return find(id)
