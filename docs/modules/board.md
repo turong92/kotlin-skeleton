@@ -132,7 +132,7 @@ HTTP 는 `skeleton.board.http.base-path`(기본 `/api/v1/boards`)에 열린다 (
 
 **커밋 뒤 이벤트 `BoardEventListener`** — 앱이 이 타입의 빈을 만들면(여러 개 가능) 쓰기마다 `PostCreated` · `PostUpdated` · `PostStatusChanged` · `CommentCreated` · `CommentUpdated` · `CommentStatusChanged` · `RevisionSubmitted` · `RevisionDecided`(승인이면 `…Updated` 도 함께)를 받는다. 트랜잭션 동기화가 열려 있으면(앱이 자기 `@Transactional` 안에서 서비스를 불렀을 때) `afterCommit`, 아니면 저장소 호출이 커밋하고 돌아온 바로 뒤에 같은 스레드에서 부른다. 롤백되면 부르지 않는다. 리스너가 던져도 요청은 성공한다(경고 로그). **`afterCommit` 안에서 DB 를 쓰려면 `REQUIRES_NEW`** 여야 한다(끝난 트랜잭션이 아직 묶여 있다는 Spring 규칙). 내구성은 없다(커밋과 리스너 사이에 죽으면 잃는다) — 반드시 남아야 하는 앱 데이터는 아래 「댓글에 앱 칸」 길로 같은 트랜잭션에 넣는다. 이벤트의 `Post` · `Comment` 에 비밀 해시는 없고, `authorId` 는 계정 id 일 수 있으니 공개 자리에는 `BoardAuthors.publicId` 를 쓴다.
 
-**댓글에 앱 칸(번호 · 받는 멤버 · 언어 …)** — board 표에 싣지 않는다. 앱 표를 `board_comments(id)` 를 기본 키 · FK 로 1:1 로 두고(`ovation_cheers(comment_id bigint primary key references board_comments(id), seq, member_id, lang, …)`), 앱이 자기 `@Transactional` 안에서 `CommentService.create` 를 부르고 같은 트랜잭션에서 행을 넣는다. 앱이 자기 컨트롤러로 감싸도 비회원 확인 · 캡차 · 한도 · 판 규칙은 서비스 안에 있어 그대로 걸린다. `Idempotency-Key` 는 앱 경로에 `@IdempotentOperation` 을 다시 단다.
+**댓글에 앱 칸(번호 · 받는 멤버 · 언어 …)** — board 표에 싣지 않는다. 앱 표를 `board_comments(id)` 를 기본 키 · FK 로 1:1 로 두고(`app_cheers(comment_id bigint primary key references board_comments(id), seq, member_id, lang, …)`), 앱이 자기 `@Transactional` 안에서 `CommentService.create` 를 부르고 같은 트랜잭션에서 행을 넣는다. 앱이 자기 컨트롤러로 감싸도 비회원 확인 · 캡차 · 한도 · 판 규칙은 서비스 안에 있어 그대로 걸린다. `Idempotency-Key` 는 앱 경로에 `@IdempotentOperation` 을 다시 단다.
 
 ## 앱이 바꾸는 곳
 

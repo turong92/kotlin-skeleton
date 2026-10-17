@@ -1,7 +1,7 @@
 # 게시판 — 비회원 작성 · 승인 대기(고친 판 포함) · 신고 · 댓글 첨부 · 확장 자리 — 설계
 
 - 날짜: 2026-10-17
-- 요청: Ovation(팬덤 축하 페이지) 세션 → 지휘 세션. 축전 = board 의 **댓글**(글 = 축전 페이지). 주인 원문: 「게시판도 비회원이라고 글 못쓰거나 하는 구조면 안되잖아」 · 「스켈레톤에 넣고. 사진 첨부는 기본적으로 다 되는거겠지?」
+- 요청: 앱(팬덤 축하 페이지 서비스) 세션 → 지휘 세션. 축전 = board 의 **댓글**(글 = 축전 페이지). 주인 원문: 「게시판도 비회원이라고 글 못쓰거나 하는 구조면 안되잖아」 · 「스켈레톤에 넣고. 사진 첨부는 기본적으로 다 되는거겠지?」
 - 기준 커밋: kotlin-skeleton `b8dd8d9c`(브랜치 `feat/board-guest`) · react-skeleton `c0ad1e8`
 - 상태: **승인됨(2026-10-17, 형 「들어가」)** — 결정은 모두 §1.1. 구현은 §12 순서
 - 경로 줄임: `B/` = `modules/board/src/main/kotlin/dev/sumin/skeleton/board/` · `BJ/` = `modules/board-jdbc/src/main/` · `R:` = react-skeleton 의 `packages/board/src/`
@@ -24,7 +24,7 @@
 
 | # | 결정 | 형 원문 · 메모 | 반영 |
 |---|---|---|---|
-| 1 | 비밀 해시 기본 `PASSWORD`(bcrypt). ovation 은 `TOKEN` 을 명시 | 추천대로 | §2.3 |
+| 1 | 비밀 해시 기본 `PASSWORD`(bcrypt). 앱은 `TOKEN` 을 명시 | 추천대로 | §2.3 |
 | 2 | 비회원 캡차 **기본 꺼짐**. 앱이 켜야 걸린다 | 추천(켜면 필수)과 다름 → 보안 절에 스팸 경고 + 켜는 예시 | §7 · §10 |
 | 3 | 승인된 것을 고치면 재승인. **옛 승인본은 계속 공개, 고친 내용은 대기 판으로** | 「글 수정하면 승인전꺼 보여주고 고친건 대기로 놓자」 | §3.5 |
 | 4 | 신고 이메일은 **`crypto` 로 암호화해 보관** | — | §4 |
@@ -76,7 +76,7 @@
 | `skeleton.board.guest.secret` | 받는 값 | 저장 | 근거 |
 |---|---|---|---|
 | **`PASSWORD`(기본 — 형 결정 1)** | 사람이 치는 짧은 값, 4자 이상 · 72바이트 이하 | `{bcrypt}` + bcrypt(cost 10, `spring-security-crypto` — 의존 없는 작은 jar, `account` 와 같은 인코더) | 엔트로피가 낮은 값에는 느린 해시가 관행이다(OWASP Password Storage). 한국 비회원 게시판의 「비밀번호」가 이 모양 |
-| `TOKEN`(ovation) | 기계가 만든 무작위 값, `[A-Za-z0-9_-]{32,128}`(43자 base64url = 256비트) | `{sha256}` + 16진수 SHA-256, 비교는 `MessageDigest.isEqual` | 256비트 무작위 값은 무차별 대입이 불가능해 느린 해시가 지킬 것이 없다. API 토큰 저장의 관행 |
+| `TOKEN`(앱) | 기계가 만든 무작위 값, `[A-Za-z0-9_-]{32,128}`(43자 base64url = 256비트) | `{sha256}` + 16진수 SHA-256, 비교는 `MessageDigest.isEqual` | 256비트 무작위 값은 무차별 대입이 불가능해 느린 해시가 지킬 것이 없다. API 토큰 저장의 관행 |
 
 - 접두사가 방식을 적으므로 설정을 바꿔도 옛 행은 저장된 방식대로 확인된다. 교체 지점은 `BoardGuestSecrets`(`hash` · `matches`) — argon2 등을 앱이 끼운다.
 - **비밀은 헤더 `X-Board-Guest-Secret` 로만 받는다**(만들기 · 고치기 · 지우기 · 글 주인 관리 · 판 결정). 헤더인 이유: `DELETE` 는 본문이 없고, 멱등 지문은 본문만 담으므로 비밀이 지문 저장소에 남지 않고, 요청 로그는 헤더를 싣지 않는다. 쿼리 문자열과 쿠키는 쓰지 않는다(주소 기록에 남고, 쿠키는 CSRF 위험). platform CORS 기본 `allowed-headers` 에 이 이름을 더한다(`X-Break-Glass-Secret` 과 같은 모양).
@@ -182,7 +182,7 @@
 | 표 `board_reports` | `id` · `board_code` · `post_id` · `target_type` · `target_id` · `reporter_id`(계정, 비회원은 NULL) · `reason` · `detail` · **`contact_email_enc varchar(512) null`** · `contact_cleared_at` · `status`(OPEN · RESOLVED · DISMISSED) · `resolved_by` · `resolved_at` · `created_at`. 유니크 `(target_type, target_id, reporter_id)` — NULL 은 두 방언 모두 여러 개를 허용하므로, 회원은 한 대상에 한 번이고 비회원은 캡차 · 한도로 막는다. 인덱스 `(board_code, status, created_at, id)` |
 | 쓰기 | `POST /{code}/posts/{id}/reports` · `…/comments/{cid}/reports` `{reason, detail?, contactEmail?, captchaToken?}` → **늘 `202 {status: ACCEPTED}`**(중복이어도 같은 답). 못 보는 대상은 404(보기 규칙 그대로). 비회원은 그 게시판이 `guest_write != NONE` 일 때만 |
 | 운영자 | `GET /{code}/reports?status=OPEN&page&size`(대상 요약 + 복호화한 이메일) · `PUT /{code}/reports/{id}` `{status?: RESOLVED\|DISMISSED, hideTarget?: boolean, clearContact?: boolean}`. 경로를 게시판 아래에 두는 이유: 최상위 `/reports` 는 기존 `GET /{code}` 와 겹쳐 `reports` 를 예약어로 만들어야 하고, 그 이름의 게시판이 깨진다 |
-| 자동 가리기 | 없음(ovation 정책). 자리는 이벤트 `ReportCreated(report, openCount)` — 앱 리스너가 수를 보고 가린다 |
+| 자동 가리기 | 없음(앱의 정책). 자리는 이벤트 `ReportCreated(report, openCount)` — 앱 리스너가 수를 보고 가린다 |
 
 **이메일 암호화(형 결정 4)**
 
@@ -193,7 +193,7 @@
 ## 5. 댓글 첨부
 
 - 새 표 `board_comment_attachments(comment_id, sort_order, storage_key, pk(comment_id, sort_order))` + `board_comments.attachment_count int not null default 0`. 글 첨부와 같은 모양이다(저장 키 문자열만, 업로드는 앱).
-- 설정 `skeleton.board.comment-max-attachments: 0`(기본 = 꺼짐 — 보내면 `400 BOARD.CONTENT_INVALID`). ovation 과 견본은 `4`. 검사는 글과 같은 `BoardContentRules.attachments` · `canAttach` · `rejectAccountIdKeys` 이고, 비회원은 `canGuestAttach` 다.
+- 설정 `skeleton.board.comment-max-attachments: 0`(기본 = 꺼짐 — 보내면 `400 BOARD.CONTENT_INVALID`). 앱과 견본은 `4`. 검사는 글과 같은 `BoardContentRules.attachments` · `canAttach` · `rejectAccountIdKeys` 이고, 비회원은 `canGuestAttach` 다.
 - 스레드 응답은 쪽의 모든 댓글 키를 **쿼리 한 번**(`comment_id in (…)`)으로 붙인다 — `JdbcQueryCountDbTest` 의 쿼리 수 약속을 지킨다. `CommentResponse.attachments: string[]`(새 키)는 **`PUBLISHED` 가 아니면 `[]`** 다 — 본문이 `null` 인 것과 같은 이유로, 가린 댓글의 사진이 새면 안 된다.
 - 수정: `PATCH …/comments/{cid}` 가 `attachments?` 를 받는다(승인 대상이면 §3.5 의 판으로 간다).
 
@@ -239,7 +239,7 @@ sealed interface BoardEvent { val boardCode: String; val postId: Long; val actor
 
 | 안 | 판단 |
 |---|---|
-| **앱 표** `ovation_cheers(comment_id bigint primary key references board_comments(id), seq, member_id, lang, …)`. 앱이 자기 `@Transactional` 안에서 `CommentService.create` 를 부르고 같은 트랜잭션에서 행을 넣는다 | **권고.** 두 방언에서 같은 DDL · 유니크(`(post_id, seq)`) · FK · 인덱스를 앱이 마음대로 건다. board 는 앱 칸을 모른다(조립식 원칙). 원자성은 트랜잭션 합류로, 부가 일은 §6.1 로 |
+| **앱 표** `app_cheers(comment_id bigint primary key references board_comments(id), seq, member_id, lang, …)`. 앱이 자기 `@Transactional` 안에서 `CommentService.create` 를 부르고 같은 트랜잭션에서 행을 넣는다 | **권고.** 두 방언에서 같은 DDL · 유니크(`(post_id, seq)`) · FK · 인덱스를 앱이 마음대로 건다. board 는 앱 칸을 모른다(조립식 원칙). 원자성은 트랜잭션 합류로, 부가 일은 §6.1 로 |
 | board 가 1:1 빈 표(`board_comment_ext`)를 둔다 | 칸 이름 · 타입을 board 가 정할 수 없어 결국 key/value 나 jsonb 가 된다 |
 | `board_comments.extra` jsonb(MySQL `JSON`) | PostgreSQL `jsonb` 와 MySQL `JSON` 의 연산자 · 인덱스(생성 열) 문법이 갈린다. 유니크 · FK(받는 멤버)를 못 걸고, 모든 응답 · 모델이 불투명 덩어리를 싣는다 |
 
