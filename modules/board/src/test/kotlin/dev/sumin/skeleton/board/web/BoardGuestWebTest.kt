@@ -90,4 +90,26 @@ class BoardGuestWebTest {
             .andExpect(jsonPath("$.value.guestNameMaxLength").value(20))
             .andExpect(jsonPath("$.value.captchaRequired").value(false))
     }
+
+    @Test
+    fun `only a moderator edits board settings over HTTP and a waiting-comment list needs a manager`() {
+        val admin = org.springframework.security.authentication.TestingAuthenticationToken("acc_admin", "n/a", "ROLE_USER", "ROLE_MODERATOR")
+        val user = org.springframework.security.authentication.TestingAuthenticationToken("acc_user", "n/a", "ROLE_USER")
+        val body = """{"settings":{"commentApproval":"GUESTS","ownerModeratesComments":true}}"""
+        mvc.perform(patch("/api/v1/boards/general").principal(user).json(body)).andExpect(status().isForbidden)
+        mvc.perform(patch("/api/v1/boards/general").principal(admin).json(body)).andExpect(status().isOk)
+            .andExpect(jsonPath("$.value.settings.guestWrite").value("ALL"))
+            .andExpect(jsonPath("$.value.settings.commentApproval").value("GUESTS"))
+            .andExpect(jsonPath("$.value.settings.ownerModeratesComments").value(true))
+
+        val postId = JsonPath.read<Number>(guestPost("right-secret").andReturn().response.contentAsString, "$.value.id")
+        mvc.perform(
+            post("/api/v1/boards/general/posts/$postId/comments").idem().json("""{"body":"대기","guestName":"손님"}""").header("X-Board-Guest-Secret", "comment-secret"),
+        ).andExpect(status().isCreated).andExpect(jsonPath("$.value.status").value("PENDING")).andExpect(jsonPath("$.value.authorGuest").value(true))
+        mvc.perform(get("/api/v1/boards/general/posts/$postId/comments").param("status", "PENDING").principal(user)).andExpect(status().isForbidden)
+        mvc.perform(get("/api/v1/boards/general/posts/$postId/comments").param("status", "PENDING").principal(admin))
+            .andExpect(status().isOk).andExpect(jsonPath("$.values[0].body").value("대기"))
+        mvc.perform(get("/api/v1/boards/general/posts/$postId/comments").param("status", "PENDING").header("X-Board-Guest-Secret", "right-secret"))
+            .andExpect(status().isOk).andExpect(jsonPath("$.values[0].status").value("PENDING"))
+    }
 }

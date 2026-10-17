@@ -9,7 +9,7 @@ skeleton:
     max-attachments: 10            # 글 하나의 첨부 키 수
     excerpt-length: 140            # 목록의 본문 미리보기 길이
     max-page-size: 100             # 목록 한 페이지 상한 (platform PageQuery 상한 100 과 둘 중 작은 값)
-    seed-boards: []                # 기동할 때 없으면 만드는 게시판 — 예: [{ code: general, name: General, description: 자유 게시판 }]
+    seed-boards: []                # 기동할 때 없으면 만드는 게시판 — 예: [{ code: general, name: General, description: 자유 게시판, settings: { guest-write: ALL, post-approval: GUESTS, comment-approval: GUESTS, owner-moderates-comments: true } }]. settings 는 만들 때만 적용된다(있는 게시판은 운영자가 PATCH /{code} 로 고친다). 모두 꺼진 채가 기본
     reaction:
       types: [LIKE, DISLIKE]       # 허용하는 반응 종류 코드 (대문자 · 숫자 · _). 늘리려면 여기에 적기만 하면 된다 — 예: [LIKE, EMPATHY, SAD]
       mode: SINGLE                 # SINGLE: 대상 하나에 계정당 반응 하나(바꾸면 교체) | PER_TYPE: 종류마다 하나씩 여러 종류 함께
@@ -24,3 +24,14 @@ skeleton:
     notification:
       enabled: true                # notification 모듈이 있을 때 댓글 · 답글 알림을 보낸다 (false 면 안 보낸다)
       topic: board                 # 알림 토픽
+    guest:                         # 비회원 글 · 댓글 (닉네임 + 비밀값). 꺼진 채 시작한다 — 게시판의 settings.guestWrite(NONE · COMMENTS · ALL)가 실제로 정한다
+      enabled: false               # true 면 쓰기 경로를 인증 없이 연다 (비밀은 헤더 X-Board-Guest-Secret). 스팸 경고: 캡차 없이 공개 서비스에서 켜지 않는다
+      secret: PASSWORD             # PASSWORD: 사람이 치는 4..72바이트 값(bcrypt) | TOKEN: 앱이 만든 [A-Za-z0-9_-]{32,128} 무작위 값(SHA-256). 옛 행은 저장된 방식대로 확인된다
+      name-max-length: 20          # 비회원 이름 길이 (1..64)
+      captcha: OFF                 # OFF | REQUIRED — REQUIRED 면 비회원의 만들기에 captchaToken 이 필요하고 BoardCaptcha 빈(captcha-turnstile)이 없으면 기동 실패
+      rate-limit:                  # 비회원 쓰기 한도 (guest:<IP> 별) — 위의 rate-limit.enabled 와 무관하게 guest.enabled 면 늘 걸린다
+        capacity: 5
+        window: 1m
+      secret-attempts:             # 비밀 대입 한도 — 행마다 + IP 마다, 해시를 계산하기 전에 센다 (넘으면 429 BOARD.RATE_LIMITED)
+        capacity: 10
+        window: 10m

@@ -18,6 +18,9 @@ class BoardAccess(
         return post
     }
 
+    /** 비회원 글의 비밀 해시 — 비회원 글이 아니면 null */
+    fun guestSecretHash(post: Post): String? = if (BoardAuthors.isGuest(post.authorId)) posts.guestSecretHash(post.id) else null
+
     fun comment(post: Post, commentId: Long): Comment =
         comments.find(commentId)?.takeIf { it.postId == post.id }
             ?: throw BoardException(BoardErrorCode.COMMENT_NOT_FOUND, "Comment not found: $commentId")

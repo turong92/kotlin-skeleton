@@ -31,6 +31,12 @@ class FakeBoardRepository(private val s: FakeStore) : BoardRepository {
 
     override fun find(code: String): Board? = findAll().firstOrNull { it.code == code }
 
+    override fun update(code: String, change: BoardChange): Board? = s.locked {
+        val b = s.boards[code] ?: return@locked null
+        b.copy(name = change.name ?: b.name, description = change.description ?: b.description, settings = change.settings ?: b.settings)
+            .also { s.boards[code] = it }
+    }
+
     override fun create(code: String, name: String, description: String?, now: Instant): Boolean = create(code, name, description, now, BoardSettings())
 
     override fun create(code: String, name: String, description: String?, now: Instant, settings: BoardSettings): Boolean = s.locked {
@@ -56,6 +62,7 @@ class FakePostRepository(private val s: FakeStore) : PostRepository {
         p.copy(
             title = change.title ?: p.title, body = change.body ?: p.body, attachments = change.attachments ?: p.attachments,
             status = change.status ?: p.status, pinned = change.pinned ?: p.pinned, updatedAt = now,
+            commentApproval = change.commentApproval ?: p.commentApproval, moderatedBy = change.moderatedBy ?: p.moderatedBy,
         ).also { s.posts[id] = it }
     }
 
@@ -100,15 +107,22 @@ class FakeCommentRepository(private val s: FakeStore) : CommentRepository {
         s.comments[id]?.copy(body = body, updatedAt = now)?.also { s.comments[id] = it }
     }
 
-    override fun setStatus(id: Long, status: CommentStatus, now: Instant): Comment? = s.locked {
+    override fun setStatus(id: Long, status: CommentStatus, now: Instant): Comment? = setStatus(id, status, now, null)
+
+    override fun setStatus(id: Long, status: CommentStatus, now: Instant, moderatedBy: ModeratedBy?): Comment? = s.locked {
         val c = s.comments[id] ?: return@locked null
         val delta = (if (status == CommentStatus.PUBLISHED) 1 else 0) - (if (c.status == CommentStatus.PUBLISHED) 1 else 0)
         s.posts[c.postId]?.let { s.posts[c.postId] = it.copy(commentCount = it.commentCount + delta) }
-        c.copy(status = status, updatedAt = now).also { s.comments[id] = it }
+        c.copy(status = status, updatedAt = now, moderatedBy = moderatedBy ?: c.moderatedBy).also { s.comments[id] = it }
+    }
+
+    override fun pendingPage(postId: Long, page: Int, size: Int): PageResult<Comment> = s.locked {
+        val rows = s.comments.values.filter { it.postId == postId && it.status == CommentStatus.PENDING }.sortedWith(compareBy<Comment> { it.createdAt }.thenBy { it.id })
+        PageResult(rows.drop(page * size).take(size), rows.size.toLong())
     }
 
     override fun rootPage(query: CommentRootQuery): PageResult<Comment> = s.locked {
-        val roots = s.comments.values.filter { it.postId == query.postId && it.parentId == null }
+        val roots = s.comments.values.filter { it.postId == query.postId && it.parentId == null && query.pendingFor.sees(it) }
         val sorted = when (query.sort) {
             CommentSort.OLDEST -> roots.sortedWith(compareBy<Comment> { it.createdAt }.thenBy { it.id })
             CommentSort.LATEST -> roots.sortedWith(compareByDescending<Comment> { it.createdAt }.thenByDescending { it.id })

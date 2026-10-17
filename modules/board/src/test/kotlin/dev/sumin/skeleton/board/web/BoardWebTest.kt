@@ -84,16 +84,18 @@ class BoardWebTest {
             setOf(
                 "id", "boardCode", "authorId", "title", "excerpt", "body", "attachments", "status", "pinned", "viewCount", "commentCount", "reactionCounts",
                 "myReactions", "attachmentCount", "createdAt", "updatedAt", "authorDeleted", "authorName", "authorTag", "mine",
+                "authorGuest", "canManageComments", "commentApproval",   // 비회원 · 승인 (스펙 §8)
             ),
-            keys, "before this feature plus mine only",
+            keys, "before this feature plus mine, and the guest/approval keys",
         )
         val summaryKeys = JsonPath.read<Map<String, Any?>>(call(get("/api/v1/boards/general/posts"), user).andReturn().response.contentAsString, "$.values[0]").keys
         assertEquals(
             setOf(
                 "id", "boardCode", "authorId", "title", "excerpt", "status", "pinned", "viewCount", "commentCount", "reactionCounts",
                 "myReactions", "attachmentCount", "createdAt", "updatedAt", "authorDeleted", "authorName", "authorTag", "mine",
+                "authorGuest",   // 비회원 (스펙 §8)
             ),
-            summaryKeys, "summary: before this feature plus mine only",
+            summaryKeys, "summary: before this feature plus mine, and the guest key",
         )
         call(get("/api/v1/boards/general/posts/$id"), third).andExpect(jsonPath("$.value.mine").value(false))
         call(get("/api/v1/boards/general/posts"), user).andExpect(jsonPath("$.values[0].mine").value(true))
@@ -106,8 +108,9 @@ class BoardWebTest {
             setOf(
                 "id", "postId", "parentId", "rootId", "depth", "authorId", "body", "status", "reactionCounts", "myReactions", "replyCount",
                 "createdAt", "updatedAt", "replies", "authorDeleted", "authorName", "authorTag", "mine",
+                "authorGuest",   // 비회원 (스펙 §8)
             ),
-            commentKeys, "comment: before this feature plus mine only",
+            commentKeys, "comment: before this feature plus mine, and the guest key",
         )
         call(post("/api/v1/boards/general/posts").idem().json("""{"title":"t","body":"b","authorId":"prf_x"}"""), user)
             .andExpect(status().isForbidden).andExpect(jsonPath("$.code").value("BOARD.AUTHOR_NOT_ALLOWED")).andExpect(jsonPath("$.detail").value("Not allowed to write as this author"))

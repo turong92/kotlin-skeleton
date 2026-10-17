@@ -107,6 +107,12 @@ class NoOptionalGoldenKeysTest {
         /** 작성자 프로필 기능이 덧붙인 칸 */
         const val MINE = "mine"
         const val AUTHOR_REQUIRED = "authorRequired"
+        /** 비회원 · 승인 대기 · 글 주인 관리가 덧붙인 칸 (스펙 docs/superpowers/specs/2026-10-17-board-guest-moderation-design.md §8) — 기본 설정에서는 모두 꺼진 값이다 */
+        val BOARD_PLUS = setOf("settings")
+        val CONFIG_PLUS = setOf("guestEnabled", "guestSecret", "guestNameMaxLength", "captchaRequired")
+        val SUMMARY_PLUS = setOf("authorGuest")
+        val DETAIL_PLUS = setOf("authorGuest", "canManageComments", "commentApproval")
+        val COMMENT_PLUS = setOf("authorGuest")
     }
 
     private fun keys(json: String, path: String): Set<String> = JsonPath.read<Map<String, Any?>>(json, path).keys
@@ -115,19 +121,19 @@ class NoOptionalGoldenKeysTest {
 
     @Test
     fun `without the author beans every response has the keys of e76e8e7 plus mine and authorRequired and nothing else`() {
-        assertEquals(E76E8E7_BOARD, keys(body(get("/api/v1/boards")), "$.values[0]"), "boards list")
-        assertEquals(E76E8E7_CONFIG + AUTHOR_REQUIRED, keys(body(get("/api/v1/boards/config")), "$.value"), "config")
-        assertEquals(E76E8E7_SUMMARY + MINE, keys(body(get("/api/v1/boards/general/posts")), "$.values[0]"), "post summary")
-        assertEquals(E76E8E7_DETAIL + MINE, keys(body(get("/api/v1/boards/general/posts/1")), "$.value"), "post detail")
+        assertEquals(E76E8E7_BOARD + BOARD_PLUS, keys(body(get("/api/v1/boards")), "$.values[0]"), "boards list")
+        assertEquals(E76E8E7_CONFIG + AUTHOR_REQUIRED + CONFIG_PLUS, keys(body(get("/api/v1/boards/config")), "$.value"), "config")
+        assertEquals(E76E8E7_SUMMARY + MINE + SUMMARY_PLUS, keys(body(get("/api/v1/boards/general/posts")), "$.values[0]"), "post summary")
+        assertEquals(E76E8E7_DETAIL + MINE + DETAIL_PLUS, keys(body(get("/api/v1/boards/general/posts/1")), "$.value"), "post detail")
         val thread = body(get("/api/v1/boards/general/posts/1/comments"))
-        assertEquals(E76E8E7_COMMENT + THREAD_ONLY + MINE, keys(thread, "$.values[0]"), "comment thread line")
-        assertEquals(E76E8E7_COMMENT + THREAD_ONLY + MINE, keys(thread, "$.values[0].replies[0]"), "reply inside a thread")
+        assertEquals(E76E8E7_COMMENT + THREAD_ONLY + MINE + COMMENT_PLUS, keys(thread, "$.values[0]"), "comment thread line")
+        assertEquals(E76E8E7_COMMENT + THREAD_ONLY + MINE + COMMENT_PLUS, keys(thread, "$.values[0].replies[0]"), "reply inside a thread")
     }
 
     @Test
     fun `the responses to a create carry the same keys as the reads`() {
         val json = MediaType.APPLICATION_JSON
-        assertEquals(E76E8E7_DETAIL + MINE, keys(body(post("/api/v1/boards/general/posts").contentType(json).content("""{"title":"t","body":"b"}""")), "$.value"), "created post")
-        assertEquals(E76E8E7_COMMENT + MINE, keys(body(post("/api/v1/boards/general/posts/1/comments").contentType(json).content("""{"body":"b"}""")), "$.value"), "created comment (no replies key)")
+        assertEquals(E76E8E7_DETAIL + MINE + DETAIL_PLUS, keys(body(post("/api/v1/boards/general/posts").contentType(json).content("""{"title":"t","body":"b"}""")), "$.value"), "created post")
+        assertEquals(E76E8E7_COMMENT + MINE + COMMENT_PLUS, keys(body(post("/api/v1/boards/general/posts/1/comments").contentType(json).content("""{"body":"b"}""")), "$.value"), "created comment (no replies key)")
     }
 }

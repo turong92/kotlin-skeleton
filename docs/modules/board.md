@@ -32,7 +32,7 @@ HTTP 는 `skeleton.board.http.base-path`(기본 `/api/v1/boards`)에 열린다 (
 |---|---|
 | 의존성 한 줄 | `implementation(project(":modules:board"))` |
 | 함께 오는 모듈 | `platform` |
-| 컴파일 전용 | `notification`, `idempotency` |
+| 컴파일 전용 | `notification`, `idempotency`, `captcha-turnstile` |
 | 설정 접두사 | `skeleton.board` — [docs/config/modules/board.yml](../config/modules/board.yml) |
 | 기본 동작 | 켜짐. 게시판은 `seed-boards` 로 심거나 운영자가 만든다 — 아무것도 심지 않으면 비어 있다. 반응은 LIKE · DISLIKE, SINGLE 모드. 알림 · 한도는 없는 것과 같다. |
 | 부팅에 필요한 것 | 저장소 포트 네 개(`BoardRepository` · `PostRepository` · `CommentRepository` · `ReactionRepository`) — `board-jdbc` 가 내거나 앱이 직접 구현한다. 없으면 시작이 실패하고 메시지가 빠진 빈 이름을 적는다. |

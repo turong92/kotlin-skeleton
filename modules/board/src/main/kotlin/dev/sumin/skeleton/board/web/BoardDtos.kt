@@ -108,6 +108,10 @@ data class PostDetailResponse(
     val mine: Boolean,
     /** 비회원이 쓴 글이다 — 이름은 `authorName` 이고, 화면은 「(비회원)」 으로 회원 닉네임 사칭을 가른다 */
     val authorGuest: Boolean = false,
+    /** 호출자가 이 글의 댓글을 승인 · 가릴 수 있다 (운영자, 댓글 관리가 켜진 게시판의 글 주인) — 화면은 단추를 이것으로 그린다 */
+    val canManageComments: Boolean = false,
+    /** 이 글의 댓글 승인 규칙 — null 이면 게시판 값 */
+    val commentApproval: ApprovalMode? = null,
 )
 
 /** 목록의 한 줄이면 replies 가 있다 (최상위: 모든 자손 작성 순 평평하게, 답글: 빈 배열). 한 댓글만 돌려주는 응답에는 replies 가 없다. */
@@ -156,6 +160,8 @@ data class CreatePostRequest(
     val guestName: String? = null,
     /** 비회원의 캡차 토큰 — `captchaRequired` 일 때. 멱등 지문에는 넣지 않는다 */
     val captchaToken: String? = null,
+    /** 이 글의 댓글 승인 규칙 — 댓글 관리가 켜진 게시판에서만 (아니면 400) */
+    val commentApproval: ApprovalMode? = null,
 )
 
 data class UpdatePostRequest(
@@ -163,6 +169,17 @@ data class UpdatePostRequest(
     val body: String? = null,
     val attachments: List<String>? = null,
     val status: PostStatus? = null,
+    /** 이 글의 댓글 승인 규칙 — 댓글 관리가 켜진 게시판에서만 */
+    val commentApproval: ApprovalMode? = null,
+)
+
+data class UpdateBoardRequest(val name: String? = null, val description: String? = null, val settings: UpdateBoardSettingsRequest? = null)
+
+data class UpdateBoardSettingsRequest(
+    val guestWrite: GuestWrite? = null,
+    val postApproval: ApprovalMode? = null,
+    val commentApproval: ApprovalMode? = null,
+    val ownerModeratesComments: Boolean? = null,
 )
 
 data class PostModerationRequest(val status: PostStatus? = null, val pinned: Boolean? = null)
@@ -204,6 +221,7 @@ internal fun PostDetailView.toResponse(excerptLength: Int) = with(post) {
         id, boardCode, publicAuthorId, title, body.take(excerptLength), body, attachments, status, pinned, viewCount, commentCount,
         reactions.counts, reactions.myReactions, attachments.size, createdAt, updatedAt,
         authorDeleted, authorName = author?.name, authorTag = author?.tag, mine = mine, authorGuest = BoardAuthors.isGuest(authorId),
+        canManageComments = canManageComments, commentApproval = commentApproval,
     )
 }
 

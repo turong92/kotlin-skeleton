@@ -23,6 +23,8 @@ data class PostDetailView(
     val authorDeleted: Boolean,
     val mine: Boolean,
     val author: AuthorCard? = null,
+    /** 호출자가 이 글의 댓글을 승인 · 가릴 수 있다 — 화면은 승인 · 가리기 단추를 이것으로 그린다 */
+    val canManageComments: Boolean = false,
 )
 
 /** 최상위 댓글이면 [replies] 에 모든 자손이 작성 순으로 평평하게 들어 있다 (답글의 replies 는 항상 비어 있다). body 는 PUBLISHED 가 아니면 null. */
@@ -67,9 +69,27 @@ data class CreatePost(
     val authorId: String? = null,
     /** 비회원의 이름 — 로그인한 사람이 보내면 400 */
     val guestName: String? = null,
+    /** 이 글의 댓글 승인 규칙 — `owner_moderates_comments` 인 게시판만 받는다 (아니면 400). null 이면 게시판 값 */
+    val commentApproval: ApprovalMode? = null,
 )
 
-data class UpdatePost(val title: String?, val body: String?, val attachments: List<String>?, val status: PostStatus?)
+data class UpdatePost(
+    val title: String?,
+    val body: String?,
+    val attachments: List<String>?,
+    val status: PostStatus?,
+    val commentApproval: ApprovalMode? = null,
+)
+
+/** 운영자의 게시판 고치기 — null 인 칸은 그대로. [settings] 의 null 칸도 현재 값을 유지한다 */
+data class UpdateBoard(val name: String? = null, val description: String? = null, val settings: UpdateBoardSettings? = null)
+
+data class UpdateBoardSettings(
+    val guestWrite: GuestWrite? = null,
+    val postApproval: ApprovalMode? = null,
+    val commentApproval: ApprovalMode? = null,
+    val ownerModeratesComments: Boolean? = null,
+)
 
 data class PostListRequest(
     val page: Int,
@@ -93,7 +113,11 @@ data class BoardCommentNotice(
 )
 
 fun interface BoardNotifier {
+    /** 댓글이 **공개되었다** (바로 공개되었거나 승인되었다) — 글 작성자 · 부모 댓글 작성자에게 */
     fun commentCreated(notice: BoardCommentNotice)
+
+    /** 승인 대기로 들어온 댓글 — 댓글을 관리하는 글 주인에게만. 기본은 보내지 않는다 */
+    fun commentPending(notice: BoardCommentNotice) = Unit
 }
 
 object NoopBoardNotifier : BoardNotifier {

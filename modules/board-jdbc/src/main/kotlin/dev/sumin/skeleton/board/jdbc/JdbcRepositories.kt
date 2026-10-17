@@ -1,6 +1,8 @@
 package dev.sumin.skeleton.board.jdbc
 
+import dev.sumin.skeleton.board.ApprovalMode
 import dev.sumin.skeleton.board.Board
+import dev.sumin.skeleton.board.BoardChange
 import dev.sumin.skeleton.board.BoardAuthors
 import dev.sumin.skeleton.board.BoardErasureRepository
 import dev.sumin.skeleton.board.BoardRepository
@@ -11,6 +13,7 @@ import dev.sumin.skeleton.board.CommentRootQuery
 import dev.sumin.skeleton.board.CommentSort
 import dev.sumin.skeleton.board.CommentStatus
 import dev.sumin.skeleton.board.GuestWrite
+import dev.sumin.skeleton.board.ModeratedBy
 import dev.sumin.skeleton.board.NewComment
 import dev.sumin.skeleton.board.NewPost
 import dev.sumin.skeleton.board.PageResult
@@ -59,24 +62,48 @@ class JdbcBoardRepository(private val jdbc: NamedParameterJdbcTemplate, private 
     override fun create(code: String, name: String, description: String?, now: Instant, settings: BoardSettings): Boolean =
         try {
             jdbc.update(
-                "insert into boards (code, name, description, created_at, guest_write) values (:code, :name, :description, :now, :guestWrite)",
+                """
+                insert into boards (code, name, description, created_at, guest_write, post_approval, comment_approval, owner_moderates_comments)
+                values (:code, :name, :description, :now, :guestWrite, :postApproval, :commentApproval, :ownerModerates)
+                """.trimIndent(),
                 MapSqlParameterSource().addValue("code", code).addValue("name", name).addValue("description", description)
-                    .addValue("now", dialect.instantParam(now)).addValue("guestWrite", settings.guestWrite.name),
+                    .addValue("now", dialect.instantParam(now)).addValue("guestWrite", settings.guestWrite.name)
+                    .addValue("postApproval", settings.postApproval.name).addValue("commentApproval", settings.commentApproval.name)
+                    .addValue("ownerModerates", settings.ownerModeratesComments),
             )
             true
         } catch (e: DuplicateKeyException) {
             false
         }
 
+    override fun update(code: String, change: BoardChange): Board? {
+        val sets = mutableListOf<String>()
+        val params = MapSqlParameterSource().addValue("code", code)
+        change.name?.let { sets += "name = :name"; params.addValue("name", it) }
+        change.description?.let { sets += "description = :description"; params.addValue("description", it) }
+        change.settings?.let {
+            sets += listOf("guest_write = :guestWrite", "post_approval = :postApproval", "comment_approval = :commentApproval", "owner_moderates_comments = :ownerModerates")
+            params.addValue("guestWrite", it.guestWrite.name).addValue("postApproval", it.postApproval.name)
+                .addValue("commentApproval", it.commentApproval.name).addValue("ownerModerates", it.ownerModeratesComments)
+        }
+        if (sets.isNotEmpty() && jdbc.update("update boards set ${sets.joinToString()} where code = :code", params) == 0) return null
+        return find(code)
+    }
+
     private fun ResultSet.board() =
         Board(
             getString("code"), getString("name"), getString("description"), long(this, "post_count"), instant(dialect, "created_at"),
-            BoardSettings(guestWrite = GuestWrite.valueOf(getString("guest_write"))),
+            BoardSettings(
+                guestWrite = GuestWrite.valueOf(getString("guest_write")),
+                postApproval = ApprovalMode.valueOf(getString("post_approval")),
+                commentApproval = ApprovalMode.valueOf(getString("comment_approval")),
+                ownerModeratesComments = getBoolean("owner_moderates_comments"),
+            ),
         )
 
     private companion object {
         const val SELECT = """
-            select b.code, b.name, b.description, b.created_at, b.guest_write, coalesce(c.cnt, 0) as post_count
+            select b.code, b.name, b.description, b.created_at, b.guest_write, b.post_approval, b.comment_approval, b.owner_moderates_comments, coalesce(c.cnt, 0) as post_count
             from boards b
             left join (select board_code, count(*) as cnt from board_posts where status = 'PUBLISHED' group by board_code) c
                 on c.board_code = b.code
@@ -95,11 +122,12 @@ class JdbcPostRepository(
             jdbc.update(
                 """
                 insert into board_posts
-                    (board_code, author_id, author_ref, guest_name, guest_secret_hash, title, body, status, pinned, view_count, comment_count, reaction_count, attachment_count, created_at, updated_at)
-                values (:board, :author, :authorRef, :guestName, :guestHash, :title, :body, :status, :pinned, 0, 0, 0, :attachmentCount, :now, :now)
+                    (board_code, author_id, author_ref, guest_name, guest_secret_hash, comment_approval, title, body, status, pinned, view_count, comment_count, reaction_count, attachment_count, created_at, updated_at)
+                values (:board, :author, :authorRef, :guestName, :guestHash, :commentApproval, :title, :body, :status, :pinned, 0, 0, 0, :attachmentCount, :now, :now)
                 """.trimIndent(),
                 MapSqlParameterSource().addValue("board", post.boardCode).addValue("author", post.authorId).addValue("authorRef", post.authorRef)
-                    .addValue("guestName", post.guestName).addValue("guestHash", post.guestSecretHash).addValue("title", post.title)
+                    .addValue("guestName", post.guestName).addValue("guestHash", post.guestSecretHash).addValue("commentApproval", post.commentApproval?.name)
+                    .addValue("title", post.title)
                     .addValue("body", post.body).addValue("status", post.status.name).addValue("pinned", false)
                     .addValue("attachmentCount", post.attachments.size).addValue("now", dialect.instantParam(post.now)),
                 keys,
@@ -129,6 +157,8 @@ class JdbcPostRepository(
         change.body?.let { sets += "body = :body"; params.addValue("body", it) }
         change.status?.let { sets += "status = :status"; params.addValue("status", it.name) }
         change.pinned?.let { sets += "pinned = :pinned"; params.addValue("pinned", it) }
+        change.commentApproval?.let { sets += "comment_approval = :commentApproval"; params.addValue("commentApproval", it.name) }
+        change.moderatedBy?.let { sets += "moderated_by = :moderatedBy"; params.addValue("moderatedBy", it.name) }
         change.attachments?.let { sets += "attachment_count = :attachmentCount"; params.addValue("attachmentCount", it.size) }
         val updated = tx.execute {
             val rows = jdbc.update("update board_posts set ${sets.joinToString()} where id = :id", params)
@@ -199,7 +229,8 @@ class JdbcPostRepository(
 
     private fun ResultSet.post(attachments: List<String>) =
         Post(
-            id = getLong("id"), boardCode = getString("board_code"), authorId = getString("author_id"), authorRef = getString("author_ref"), guestName = getString("guest_name"), title = getString("title"), body = getString("body"),
+            id = getLong("id"), boardCode = getString("board_code"), authorId = getString("author_id"), authorRef = getString("author_ref"), guestName = getString("guest_name"), commentApproval = getString("comment_approval")?.let { ApprovalMode.valueOf(it) },
+            moderatedBy = getString("moderated_by")?.let { ModeratedBy.valueOf(it) }, title = getString("title"), body = getString("body"),
             status = PostStatus.valueOf(getString("status")), pinned = getBoolean("pinned"), viewCount = getLong("view_count"),
             commentCount = getLong("comment_count"), reactionCount = getLong("reaction_count"), attachments = attachments,
             createdAt = instant(dialect, "created_at"), updatedAt = instant(dialect, "updated_at"),
@@ -255,7 +286,9 @@ class JdbcCommentRepository(
         return if (rows == 0) null else find(id)
     }
 
-    override fun setStatus(id: Long, status: CommentStatus, now: Instant): Comment? {
+    override fun setStatus(id: Long, status: CommentStatus, now: Instant): Comment? = setStatus(id, status, now, null)
+
+    override fun setStatus(id: Long, status: CommentStatus, now: Instant, moderatedBy: ModeratedBy?): Comment? {
         tx.execute {
             val postId = jdbc.queryForList("select post_id from board_comments where id = :id", mapOf("id" to id), Long::class.java).firstOrNull()
                 ?: return@execute null
@@ -263,8 +296,9 @@ class JdbcCommentRepository(
             jdbc.queryForList("select id from board_posts where id = :post for update", mapOf("post" to postId), Long::class.java)
             val old = jdbc.queryForObject("select status from board_comments where id = :id for update", mapOf("id" to id), String::class.java)!!
             jdbc.update(
-                "update board_comments set status = :status, updated_at = :now where id = :id",
-                MapSqlParameterSource().addValue("id", id).addValue("status", status.name).addValue("now", dialect.instantParam(now)),
+                "update board_comments set status = :status, updated_at = :now" + (if (moderatedBy != null) ", moderated_by = :by" else "") + " where id = :id",
+                MapSqlParameterSource().addValue("id", id).addValue("status", status.name).addValue("now", dialect.instantParam(now))
+                    .addValue("by", moderatedBy?.name),
             )
             val delta = (if (status == CommentStatus.PUBLISHED) 1 else 0) - (if (old == CommentStatus.PUBLISHED.name) 1 else 0)
             if (delta != 0) jdbc.update("update board_posts set comment_count = comment_count + :delta where id = :post", mapOf("delta" to delta, "post" to postId))
@@ -274,9 +308,15 @@ class JdbcCommentRepository(
     }
 
     override fun rootPage(query: CommentRootQuery): PageResult<Comment> {
-        val params = mapOf("post" to query.postId, "limit" to query.size, "offset" to query.page * query.size)
+        val params = MapSqlParameterSource().addValue("post", query.postId).addValue("limit", query.size).addValue("offset", query.page * query.size)
+        // 승인 대기는 허락된 사람에게만 — 쪽 수 · 전체 수에도 들어가지 않는다
+        val visible = when {
+            query.pendingFor.all -> ""
+            query.pendingFor.authorId != null -> " and (status <> 'PENDING' or author_id = :viewer)".also { params.addValue("viewer", query.pendingFor.authorId) }
+            else -> " and status <> 'PENDING'"
+        }
         val total = jdbc.queryForObject(
-            "select count(*) from board_comments where post_id = :post and parent_id is null", params, Long::class.java,
+            "select count(*) from board_comments where post_id = :post and parent_id is null$visible", params, Long::class.java,
         ) ?: 0L
         val order = when (query.sort) {
             CommentSort.OLDEST -> "created_at, id"
@@ -284,8 +324,17 @@ class JdbcCommentRepository(
             CommentSort.REACTIONS -> "reaction_count desc, created_at, id"
         }
         val rows = jdbc.query(
-            "select * from board_comments where post_id = :post and parent_id is null order by $order limit :limit offset :offset",
+            "select * from board_comments where post_id = :post and parent_id is null$visible order by $order limit :limit offset :offset",
             params,
+        ) { rs, _ -> rs.comment() }
+        return PageResult(rows, total)
+    }
+
+    override fun pendingPage(postId: Long, page: Int, size: Int): PageResult<Comment> {
+        val params = mapOf("post" to postId, "limit" to size, "offset" to page * size)
+        val total = jdbc.queryForObject("select count(*) from board_comments where post_id = :post and status = 'PENDING'", params, Long::class.java) ?: 0L
+        val rows = jdbc.query(
+            "select * from board_comments where post_id = :post and status = 'PENDING' order by created_at, id limit :limit offset :offset", params,
         ) { rs, _ -> rs.comment() }
         return PageResult(rows, total)
     }
@@ -303,7 +352,7 @@ class JdbcCommentRepository(
         val root = getLong("root_id").takeUnless { wasNull() }
         return Comment(
             id = id, postId = getLong("post_id"), parentId = parent, rootId = root ?: id, depth = getInt("depth"), authorId = getString("author_id"),
-            authorRef = getString("author_ref"), guestName = getString("guest_name"),
+            authorRef = getString("author_ref"), guestName = getString("guest_name"), moderatedBy = getString("moderated_by")?.let { ModeratedBy.valueOf(it) },
             body = getString("body"), status = CommentStatus.valueOf(getString("status")), reactionCount = getLong("reaction_count"),
             createdAt = instant(dialect, "created_at"), updatedAt = instant(dialect, "updated_at"),
         )

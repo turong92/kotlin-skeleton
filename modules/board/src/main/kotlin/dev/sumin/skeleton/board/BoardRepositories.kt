@@ -21,6 +21,10 @@ interface BoardRepository {
     fun create(code: String, name: String, description: String?, now: Instant, settings: BoardSettings): Boolean =
         if (settings == BoardSettings()) create(code, name, description, now)
         else throw UnsupportedOperationException("This BoardRepository does not store board settings - use board-jdbc or implement create(…, settings)")
+
+    /** 이름 · 설명 · 설정을 고친다 (null 인 칸은 그대로). 없는 게시판이면 null. 기본 구현은 닫힌 쪽으로 실패한다 — `board-jdbc` 가 구현한다 */
+    fun update(code: String, change: BoardChange): Board? =
+        throw UnsupportedOperationException("This BoardRepository cannot update boards - use board-jdbc or implement update(code, change)")
 }
 
 interface PostRepository {
@@ -52,6 +56,15 @@ interface CommentRepository {
 
     /** PUBLISHED 로 드나들면 글의 comment_count 가 같은 트랜잭션에서 ±1 된다. */
     fun setStatus(id: Long, status: CommentStatus, now: Instant): Comment?
+
+    /**
+     * 상태를 바꾸며 **바꾼 쪽**([moderatedBy])도 남긴다 — null 이면 [setStatus] 와 같다. 글 주인이 운영자가 가린 댓글을 되살리지 못하게 하는 규칙이 이 값을 읽는다.
+     * 기본 구현은 [setStatus] 로 이어진다 (열이 없는 자기 저장소는 값을 남기지 못한다 — 글 주인 관리는 설정을 저장하는 `board-jdbc` 에서만 켜진다).
+     */
+    fun setStatus(id: Long, status: CommentStatus, now: Instant, moderatedBy: ModeratedBy?): Comment? = setStatus(id, status, now)
+
+    /** 승인 대기 댓글 한 페이지 — 한 글의 PENDING 만, 오래된 순 평평하게 (관리자용). 기본 구현은 비어 있다 */
+    fun pendingPage(postId: Long, page: Int, size: Int): PageResult<Comment> = PageResult(emptyList(), 0)
 
     /** 최상위 댓글 한 페이지. */
     fun rootPage(query: CommentRootQuery): PageResult<Comment>

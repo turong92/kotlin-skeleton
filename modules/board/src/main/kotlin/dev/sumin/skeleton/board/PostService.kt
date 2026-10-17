@@ -31,8 +31,10 @@ class PostService(
         val attachments = rules.attachments(request.attachments)
         authorRules.rejectAccountIdKeys(caller, attachments)
         if (attachments.isNotEmpty() && !policy.canAttach(caller, attachments)) forbidden("Not allowed to attach these files")
+        val commentApproval = request.commentApproval?.also { requireOwnerModerates(board) }
         rateLimit(caller)
-        val post = posts.insert(NewPost(boardCode, caller.accountId, title, body, status, attachments, time.now(), authorRef))
+        val stored = if (status == PostStatus.PUBLISHED && policy.needsApproval(board, null, caller, ApprovalTarget.POST)) PostStatus.PENDING else status
+        val post = posts.insert(NewPost(boardCode, caller.accountId, title, body, stored, attachments, time.now(), authorRef, commentApproval = commentApproval))
         events.publish(PostCreated(post, actorOf(caller)))
         return detail(caller, post)
     }
@@ -41,8 +43,9 @@ class PostService(
         val ctx = guestWriter(board, guest)
         if (!policy.canGuestPost(board)) forbidden("Guests cannot post in ${board.code}")
         if (request.authorId != null) throw BoardException(BoardErrorCode.AUTHOR_NOT_ALLOWED, "Not allowed to write as this author")
-        val status = request.status ?: PostStatus.PUBLISHED
-        if (status != PostStatus.PUBLISHED) invalid("guest posts cannot be drafts")
+        if ((request.status ?: PostStatus.PUBLISHED) != PostStatus.PUBLISHED) invalid("guest posts cannot be drafts")
+        if (request.commentApproval != null) invalid("guests cannot choose how comments on their post are approved")
+        val status = if (policy.needsApproval(board, null, null, ApprovalTarget.POST)) PostStatus.PENDING else PostStatus.PUBLISHED
         val title = rules.title(request.title)
         val body = rules.postBody(request.body)
         val attachments = rules.attachments(request.attachments)
@@ -102,11 +105,17 @@ class PostService(
         val attachments = request.attachments?.let { rules.attachments(it) }
         authorRules.rejectAccountIdKeys(caller, attachments.orEmpty().filterNot { it in post.attachments })   // 옛 키를 그대로 다시 보낸 수정은 통과 — 새로 붙는 키만 본다
         if (!attachments.isNullOrEmpty() && !policy.canAttach(caller, attachments)) forbidden("Not allowed to attach these files")
+        request.commentApproval?.let { requireOwnerModerates(access.board(boardCode)) }
+        // 임시저장을 공개로 바꾸는 것은 새 글이 나오는 순간이라 승인 대상이면 대기로 간다
+        val status = if (request.status == PostStatus.PUBLISHED && post.status == PostStatus.DRAFT &&
+            policy.needsApproval(access.board(boardCode), null, caller, ApprovalTarget.POST)
+        ) PostStatus.PENDING else request.status
         val change = PostChange(
             title = request.title?.let { rules.title(it) },
             body = request.body?.let { rules.postBody(it) },
             attachments = attachments,
-            status = request.status,
+            status = status,
+            commentApproval = request.commentApproval,
         )
         val updated = posts.update(post.id, change, time.now()) ?: notFound(postId)
         events.publish(PostUpdated(updated, actorOf(caller)))
@@ -158,7 +167,7 @@ class PostService(
         if (!policy.canModerate(caller)) forbidden("Only moderators moderate")
         val post = access.post(caller, boardCode, postId)
         if (status != null && status !in MODERATION_STATUSES) invalid("moderation status must be PUBLISHED, HIDDEN or DELETED")
-        val updated = posts.update(post.id, PostChange(status = status, pinned = pinned), time.now()) ?: notFound(postId)
+        val updated = posts.update(post.id, PostChange(status = status, pinned = pinned, moderatedBy = if (status != null) ModeratedBy.MODERATOR else null), time.now()) ?: notFound(postId)
         if (updated.status != post.status) events.publish(PostStatusChanged(updated, post.status, updated.status, actorOf(caller)))
         if (updated.pinned != post.pinned) events.publish(PostUpdated(updated, actorOf(caller)))
         return detail(caller, updated)
@@ -167,7 +176,7 @@ class PostService(
     private fun scope(caller: BoardCaller?, request: PostListRequest): Pair<String?, Set<PostStatus>> {
         if (request.mine) {
             val me = caller ?: forbidden("Sign in to list your posts")
-            return me.accountId to (request.status?.let { setOf(it) } ?: setOf(PostStatus.DRAFT, PostStatus.PUBLISHED, PostStatus.HIDDEN))
+            return me.accountId to (request.status?.let { setOf(it) } ?: setOf(PostStatus.DRAFT, PostStatus.PENDING, PostStatus.PUBLISHED, PostStatus.HIDDEN))
         }
         val status = request.status ?: PostStatus.PUBLISHED
         if (status != PostStatus.PUBLISHED && (caller == null || !policy.canModerate(caller))) forbidden("Only moderators list $status posts")
@@ -177,10 +186,16 @@ class PostService(
     private fun detail(caller: BoardCaller?, post: Post): PostDetailView {
         val publicId = BoardAuthors.publicId(post.authorRef, post.authorId, BoardAuthors.POST_ROW, post.id, authorRules.active)
         val card = if (BoardAuthors.isGuest(post.authorId)) AuthorCard(post.guestName) else authors.one(post.boardCode, publicId)
+        val manage = caller != null && policy.canManageComments(caller, post, access.board(post.boardCode))
         return PostDetailView(
             post, reactions.state(ReactionTarget.POST, post.id, caller), publicId,
-            BoardAuthors.isDeleted(post.authorId) || card?.deleted == true, caller?.accountId == post.authorId, card,
+            BoardAuthors.isDeleted(post.authorId) || card?.deleted == true, caller?.accountId == post.authorId, card, manage,
         )
+    }
+
+    /** 글마다 댓글 승인 규칙을 고르는 것은 글 주인이 댓글을 관리하는 게시판에서만 */
+    private fun requireOwnerModerates(board: Board) {
+        if (!board.settings.ownerModeratesComments) invalid("commentApproval needs a board where owners moderate their comments")
     }
 
     private fun rateLimit(caller: BoardCaller) {

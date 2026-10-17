@@ -1,6 +1,8 @@
 package dev.sumin.skeleton.board.web
 
 import dev.sumin.skeleton.board.BoardService
+import dev.sumin.skeleton.board.UpdateBoard
+import dev.sumin.skeleton.board.UpdateBoardSettings
 import dev.sumin.skeleton.common.DataResponse
 import dev.sumin.skeleton.common.ListResponse
 import dev.sumin.skeleton.common.Response
@@ -11,6 +13,7 @@ import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
@@ -47,6 +50,20 @@ class BoardController(private val service: BoardService, private val callers: Bo
         callers.reader(authentication)
         return Response.ok(service.get(code).toResponse())
     }
+
+    @Operation(summary = "Edit a board's name, description and settings (moderator); only the settings you send change")
+    @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = BoardResponse::class)
+    @PatchMapping("/{code}")
+    fun update(authentication: Authentication?, @PathVariable code: String, @RequestBody request: UpdateBoardRequest): DataResponse<BoardResponse> =
+        Response.ok(
+            service.update(
+                callers.require(authentication), code,
+                UpdateBoard(
+                    request.name, request.description,
+                    request.settings?.let { UpdateBoardSettings(it.guestWrite, it.postApproval, it.commentApproval, it.ownerModeratesComments) },
+                ),
+            ).toResponse(),
+        )
 
     @Operation(summary = "Create a board (moderator)")
     @CreatedOperation

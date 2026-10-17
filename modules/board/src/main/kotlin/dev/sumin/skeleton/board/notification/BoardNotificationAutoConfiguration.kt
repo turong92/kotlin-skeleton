@@ -38,12 +38,17 @@ class NotificationBoardNotifier(
     private val formatter: BoardNotificationFormatter,
     private val topic: String,
 ) : BoardNotifier {
-    override fun commentCreated(notice: BoardCommentNotice) {
+    override fun commentCreated(notice: BoardCommentNotice) = send(notice, if (notice.parent == null) "comment.created" else "comment.replied")
+
+    /** 승인 대기 댓글 — 댓글을 관리하는 글 주인에게만 (같은 payload, type 만 `comment.pending`) */
+    override fun commentPending(notice: BoardCommentNotice) = send(notice, "comment.pending")
+
+    private fun send(notice: BoardCommentNotice, type: String) {
         val text = formatter.format(notice)
         publisher.publish(
             NotificationEvent(
                 topic = topic,
-                type = if (notice.parent == null) "comment.created" else "comment.replied",
+                type = type,
                 recipientIds = setOf(notice.recipientId),
                 title = text.title,
                 message = text.message,

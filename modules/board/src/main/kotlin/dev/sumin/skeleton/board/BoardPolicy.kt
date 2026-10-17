@@ -41,6 +41,27 @@ interface BoardPolicy {
      * 업로드를 받는 앱은 이 메서드로 앱이 발급한 키만 통과시킨다 (docs/modules/board.md 「비회원 첨부」).
      */
     fun canGuestAttach(keys: List<String>): Boolean = true
+
+    /**
+     * 이 작성자의 새 글 · 새 댓글이 승인을 거쳐야 하는가 — "승인 대상 작성자" 판정 **한 곳**. [writer] 가 null 이면 비회원. [post] 는 댓글일 때 그 글(글 설정이 게시판 값을 덮는다).
+     * 운영자는 늘 면제다. 글 주인이 댓글을 관리하는 게시판에서는 자기 글의 댓글에 대해 대상이 아니다.
+     */
+    fun needsApproval(board: Board, post: Post?, writer: BoardCaller?, target: ApprovalTarget): Boolean {
+        if (writer != null && writer.moderator) return false
+        val mode = when (target) {
+            ApprovalTarget.POST -> board.settings.postApproval
+            ApprovalTarget.COMMENT -> post?.commentApproval ?: board.settings.commentApproval
+        }
+        return when (mode) {
+            ApprovalMode.OFF -> false
+            ApprovalMode.GUESTS -> writer == null
+            ApprovalMode.ALL -> !(target == ApprovalTarget.COMMENT && writer != null && post != null && canManageComments(writer, post, board))
+        }
+    }
+
+    /** 이 글의 댓글을 승인 · 가릴 수 있는가 — 운영자, 그리고 `owner_moderates_comments` 인 게시판의 글 주인. (비회원 글 주인은 서비스가 비밀로 같은 판단을 한다) */
+    fun canManageComments(caller: BoardCaller, post: Post, board: Board): Boolean =
+        caller.moderator || (board.settings.ownerModeratesComments && caller.accountId == post.authorId)
 }
 
 class DefaultBoardPolicy : BoardPolicy {

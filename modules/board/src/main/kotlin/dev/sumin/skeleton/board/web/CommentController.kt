@@ -1,5 +1,7 @@
 package dev.sumin.skeleton.board.web
 
+import dev.sumin.skeleton.board.BoardErrorCode
+import dev.sumin.skeleton.board.BoardException
 import dev.sumin.skeleton.board.BoardProperties
 import dev.sumin.skeleton.board.CommentService
 import dev.sumin.skeleton.board.CommentSort
@@ -47,17 +49,27 @@ class CommentController(
     @Operation(
         summary = "List comment threads",
         description = "Pages the top-level comments (sort=oldest|latest|reactions). Each carries ALL its descendants flattened in creation order in `replies`; " +
-            "use parentId and depth to nest. Deleted and hidden comments stay with body=null.",
+            "use parentId and depth to nest. Deleted and hidden comments stay with body=null. Comments waiting for approval have no place in the thread " +
+            "unless you are a moderator, the managing post owner or their author. status=PENDING lists the waiting comments flat, oldest first (managers only; " +
+            "a signed-out post owner proves the post with the X-Board-Guest-Secret header).",
     )
     @ApiResponseEnvelope(type = ApiEnvelopeType.PAGE, value = CommentResponse::class)
     @GetMapping
     fun list(
         authentication: Authentication?,
+        http: HttpServletRequest,
         @PathVariable code: String,
         @PathVariable postId: Long,
         @Valid @ParameterObject @ModelAttribute pageQuery: PageQuery,
         @RequestParam(required = false) sort: String?,
+        @RequestParam(required = false) status: String?,
     ): PageResponse<CommentResponse> {
+        if (enumParam<CommentStatus>("status", status) == CommentStatus.PENDING) {
+            val w = callers.writer(authentication, http)
+            val pending = service.listPending(w.caller, code, postId, pageQuery.page, pageQuery.size, w.guest)
+            return Response.ok(pending.values.map { it.toResponse() }, PaginationMeta.of(pageQuery.page, properties.pageSize(pageQuery.size), pending.totalElements))
+        }
+        if (status != null && status.isNotBlank()) throw BoardException(BoardErrorCode.CONTENT_INVALID, "status must be pending when given")
         val page = service.list(
             callers.reader(authentication), code, postId, pageQuery.page, pageQuery.size,
             enumParam<CommentSort>("sort", sort) ?: CommentSort.OLDEST,
@@ -104,19 +116,24 @@ class CommentController(
     fun delete(authentication: Authentication?, http: HttpServletRequest, @PathVariable code: String, @PathVariable postId: Long, @PathVariable commentId: Long) =
         callers.writer(authentication, http).let { w -> service.delete(w.caller, code, postId, commentId, w.guest) }.let { Response.noContent() }
 
-    @Operation(summary = "Moderate a comment (moderator): hide, restore, delete")
+    @Operation(
+        summary = "Moderate a comment: approve (PENDING to PUBLISHED), hide, restore, delete",
+        description = "Moderators choose any of PUBLISHED, HIDDEN, DELETED. A managing post owner (board setting ownerModeratesComments) chooses PUBLISHED or HIDDEN " +
+            "and cannot restore a comment a moderator hid; a signed-out owner proves the post with the X-Board-Guest-Secret header.",
+    )
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = CommentResponse::class)
     @PutMapping("/{commentId}/moderation")
     fun moderate(
         authentication: Authentication?,
+        http: HttpServletRequest,
         @PathVariable code: String,
         @PathVariable postId: Long,
         @PathVariable commentId: Long,
         @RequestBody request: CommentModerationRequest,
     ): DataResponse<CommentResponse> =
-        Response.ok(
-            service.moderate(callers.require(authentication), code, postId, commentId, request.status ?: CommentStatus.PUBLISHED).toResponse(),
-        )
+        callers.writer(authentication, http).let { w ->
+            Response.ok(service.moderate(w.caller, code, postId, commentId, request.status ?: CommentStatus.PUBLISHED, w.guest).toResponse())
+        }
 
     @Operation(summary = "React to a comment")
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = ReactionStateResponse::class)

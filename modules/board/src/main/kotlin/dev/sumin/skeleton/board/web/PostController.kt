@@ -92,7 +92,7 @@ class PostController(
     @PostMapping
     fun create(authentication: Authentication?, http: HttpServletRequest, @PathVariable code: String, @RequestBody request: CreatePostRequest) =
         callers.writer(authentication, http, request.captchaToken).let { w ->
-            service.create(w.caller, code, CreatePost(request.title, request.body, request.attachments, request.status, request.authorId, request.guestName), w.guest)
+            service.create(w.caller, code, CreatePost(request.title, request.body, request.attachments, request.status, request.authorId, request.guestName, request.commentApproval), w.guest)
         }.toResponse(properties.excerptLength).let { post ->
             Response.created(ServletUriComponentsBuilder.fromCurrentRequest().path("/{id}").buildAndExpand(post.id).toUri(), post)
         }
@@ -109,7 +109,7 @@ class PostController(
     ): DataResponse<PostDetailResponse> =
         callers.writer(authentication, http).let { w ->
             Response.ok(
-                service.update(w.caller, code, postId, UpdatePost(request.title, request.body, request.attachments, request.status), w.guest)
+                service.update(w.caller, code, postId, UpdatePost(request.title, request.body, request.attachments, request.status, request.commentApproval), w.guest)
                     .toResponse(properties.excerptLength),
             )
         }
