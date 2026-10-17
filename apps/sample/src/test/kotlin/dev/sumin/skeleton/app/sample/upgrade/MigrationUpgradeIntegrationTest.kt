@@ -82,6 +82,7 @@ class MigrationUpgradeIntegrationTest {
     @Autowired lateinit var reactions: ReactionRepository
     @Autowired lateinit var inbox: NotificationInboxRepository
     @Autowired lateinit var authors: AuthorDirectory
+    @Autowired @org.springframework.beans.factory.annotation.Qualifier("boardAuthorAdoptionListener") lateinit var adoption: dev.sumin.skeleton.common.author.AuthorAdoptionListener
     @Autowired lateinit var mockMvc: MockMvc
     @Autowired lateinit var erasures: List<AccountErasureListener>
     @Autowired lateinit var ledger: dev.sumin.skeleton.payment.PaymentLedgerStore
@@ -176,6 +177,26 @@ class MigrationUpgradeIntegrationTest {
         val added = assertNotNull(comments.insert(NewComment(postId, null, null, 0, "acc_upgrade", "after the upgrade", now)))
         assertEquals("after the upgrade", assertNotNull(comments.find(added.id)).body)
         assertEquals(mapOf("LIKE" to 1L), reactions.counts(ReactionTarget.POST, listOf(postId))[postId])
+    }
+
+    @Test
+    fun `board - the new guest, approval, revision and comment attachment columns read as everything off on baseline rows, and adoption never picks a guest row`() {
+        val settings = jdbc.sql("select guest_write, post_approval, comment_approval, owner_moderates_comments from boards where code = 'upgrade'").query().singleRow()
+        assertEquals(listOf("NONE", "OFF", "OFF", false), listOf(settings["guest_write"], settings["post_approval"], settings["comment_approval"], settings["owner_moderates_comments"]))
+        val postId = jdbc.sql("select id from board_posts where board_code = 'upgrade'").query(Long::class.java).single()
+        val post = assertNotNull(posts.find(postId))
+        assertNull(post.guestName)
+        assertNull(post.commentApproval)
+        assertNull(post.moderatedBy)
+        assertNull(posts.guestSecretHash(postId), "a baseline row has no guest secret")
+        val commentId = jdbc.sql("select min(id) from board_comments where post_id = :p and author_id = 'acc_upgrade'").param("p", postId).query(Long::class.java).single()
+        assertNull(assertNotNull(comments.find(commentId)).moderatedBy)
+        assertEquals(emptyMap(), comments.attachments(listOf(commentId)))
+        assertEquals(0L, jdbc.sql("select count(*) from board_revisions").query(Long::class.java).single())
+
+        jdbc.sql("insert into boards (code, name, created_at) values ('upgrade-guests', 'Guests', now()) on conflict do nothing").update()   // 다른 시험이 'upgrade' 게시판의 글을 하나로 센다
+        posts.insert(dev.sumin.skeleton.board.NewPost("upgrade-guests", "guest:01upgradeguest", "t", "b", dev.sumin.skeleton.board.PostStatus.PUBLISHED, emptyList(), now, null, "손님", "{bcrypt}x"))
+        assertTrue(adoption.pendingAccounts(100_000).none { it.startsWith("guest:") }, "guest rows are not accounts")
     }
 
     @Test

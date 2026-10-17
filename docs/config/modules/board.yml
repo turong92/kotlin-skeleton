@@ -7,6 +7,7 @@ skeleton:
     body-max-length: 20000         # 글 본문
     comment-max-length: 2000       # 댓글 본문
     max-attachments: 10            # 글 하나의 첨부 키 수
+    comment-max-attachments: 0     # 댓글 하나의 첨부 키 수 — 0(기본)이면 댓글 첨부가 꺼진 것이라 키를 보내면 400. 업로드는 앱이 한다(저장 키 문자열만 든다)
     excerpt-length: 140            # 목록의 본문 미리보기 길이
     max-page-size: 100             # 목록 한 페이지 상한 (platform PageQuery 상한 100 과 둘 중 작은 값)
     seed-boards: []                # 기동할 때 없으면 만드는 게시판 — 예: [{ code: general, name: General, description: 자유 게시판, settings: { guest-write: ALL, post-approval: GUESTS, comment-approval: GUESTS, owner-moderates-comments: true } }]. settings 는 만들 때만 적용된다(있는 게시판은 운영자가 PATCH /{code} 로 고친다). 모두 꺼진 채가 기본

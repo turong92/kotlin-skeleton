@@ -36,7 +36,7 @@ HTTP 는 `skeleton.board.http.base-path`(기본 `/api/v1/boards`)에 열린다 (
 | 설정 접두사 | `skeleton.board` — [docs/config/modules/board.yml](../config/modules/board.yml) |
 | 기본 동작 | 켜짐. 게시판은 `seed-boards` 로 심거나 운영자가 만든다 — 아무것도 심지 않으면 비어 있다. 반응은 LIKE · DISLIKE, SINGLE 모드. 알림 · 한도는 없는 것과 같다. |
 | 부팅에 필요한 것 | 저장소 포트 네 개(`BoardRepository` · `PostRepository` · `CommentRepository` · `ReactionRepository`) — `board-jdbc` 가 내거나 앱이 직접 구현한다. 없으면 시작이 실패하고 메시지가 빠진 빈 이름을 적는다. |
-| 교체 지점 | `BoardErasureRepository`, `BoardPolicy`, `BoardRateLimiter`, `BoardNotifier`, `BoardNotificationFormatter`, `AuthorDirectory`, `AuthorNames`, `BoardAuthorRules`, `BoardRepository`, `PostRepository`, `CommentRepository`, `ReactionRepository`, `BoardController`, `PostController`, `CommentController` |
+| 교체 지점 | `BoardErasureRepository`, `BoardPolicy`(새 기본 메서드: `canGuestPost` · `canGuestComment` · `canGuestAttach` · `needsApproval` · `canManageComments`), `BoardRateLimiter`, `BoardNotifier`, `BoardNotificationFormatter`, `AuthorDirectory`, `AuthorNames`, `BoardAuthorRules`, `BoardRepository`, `PostRepository`, `CommentRepository`, `ReactionRepository`, `BoardRevisionRepository`, `BoardEventListener`(여러 개), `BoardCaptcha`, `BoardGuestSecrets`, `BoardGuestLimiter`, `BoardController`, `PostController`, `CommentController` |
 | 마이그레이션 | 없음 (스키마는 `board-jdbc`) |
 | 프론트 짝 | `@skeleton/board` |
 | 테스트 | `modules/board/src/test`, `modules/board/src/noOptionalTest` (`notification` · `idempotency` 가 클래스패스에 없을 때) |
@@ -81,12 +81,60 @@ HTTP 는 `skeleton.board.http.base-path`(기본 `/api/v1/boards`)에 열린다 (
 코드 · 스키마 변경 없이 설정만: `skeleton.board.reaction.types: [LIKE, EMPATHY, SAD]` (대문자 코드). 서버는 `GET /config` 의 `reactionTypes` 로 프론트에 알리고, 모르는 코드는 `400 BOARD.REACTION_TYPE_INVALID`.
 설정에서 뺀 종류의 옛 반응은 DB 에 남지만 응답의 `counts` · `myReactions` 에는 나오지 않는다 (합계 `reaction_count` 에는 남는다). `mode: PER_TYPE` 으로 바꾸면 종류마다 하나씩 여러 종류를 함께 누를 수 있다 (역방향 전환은 SINGLE 이 다음 반응 때 그 사람의 다른 종류를 지운다).
 
+## 비회원 작성 · 승인 대기 · 고친 판 · 댓글 첨부 (새 기능은 모두 꺼진 채 시작한다)
+
+설계 · 근거: `docs/superpowers/specs/2026-10-17-board-guest-moderation-design.md`. **기본 설정에서 기존 사용처의 동작은 바뀌지 않는다** — 응답에 덧붙는 키만 있다(`authorGuest` · `canManageComments` · `commentApproval` · `pendingRevision` · 댓글 `attachments` · 게시판 `settings` · `GET /config` 의 `guestEnabled` · `guestSecret` · `guestNameMaxLength` · `captchaRequired` · `commentMaxAttachments`). 프론트가 읽는 계약: [board-http-contract](../board-http-contract.md).
+
+**비회원 작성** (`skeleton.board.guest.enabled=true` + 게시판 설정 `guestWrite`: `NONE`(기본) · `COMMENTS` · `ALL`). 로그인 없이 글 · 댓글을 쓰고 닉네임(`guestName`)과 비밀값으로 자기 것을 고치고 지운다. 비회원 행의 `author_id` 는 `guest:<ULID>`(행마다 새 값 — 같은 비회원의 두 글이 이어지지 않고, 탈퇴 고리 · 넘겨받기에 걸리지 않는다).
+- **비밀은 헤더 `X-Board-Guest-Secret` 로만** 받는다(만들기 · 고치기 · 지우기 · 댓글 승인 · 판 결정). 본문 · 쿼리 · 쿠키에는 두지 않는다. 저장은 해시만(`PASSWORD`(기본): 사람이 치는 4..72바이트, bcrypt / `TOKEN`: 앱이 만든 `[A-Za-z0-9_-]{32,128}`, SHA-256 — 접두사가 방식을 적어 설정을 바꿔도 옛 행은 그대로 확인된다). 해시는 모델 · 응답 · 이벤트 · 로그 · `toString` 에 없고 `PostRepository.guestSecretHash` · `CommentRepository.guestSecretHash` 로만 읽는다(기본 구현은 null = 늘 불일치, 닫힌 쪽).
+- 비밀이 틀린 경우 · 다른 비회원의 행 · 회원 행 · 헤더 없음은 **같은 `403 BOARD.FORBIDDEN`**(같은 문구). 아직 공개되지 않은 행(승인 대기 · 가림)은 존재를 알리지 않으려고 404.
+- 남용: 비밀 대입은 **해시를 계산하기 전에** 행마다 + IP 마다 센다(`guest.secret-attempts`, 기본 10 / 10분 → `429 BOARD.RATE_LIMITED`). 쓰기는 `guest.rate-limit`(기본 5 / 1분, `guest:<IP>`)로 — `rate-limit.enabled` 와 무관하게 `guest.enabled` 면 늘 걸린다. 같은 `Idempotency-Key` 는 익명이면 IP 범위로 묶인다(`captchaToken` 은 지문에서 뺀다). 재시도 사이에 IP 가 바뀌면(모바일 망 전환) 두 장이 될 수 있다.
+- 로그인한 호출자가 `guestName` 을 보내면 `400`, 비회원이 `authorId` 를 보내면 `403 AUTHOR_NOT_ALLOWED`. 비회원 글은 임시저장 불가, 반응은 불가(로그인 필요 그대로), 알림은 받지 않는다(받는 사람이 `guest:` 면 건너뜀).
+- 쓰기 경로는 `guest.enabled=true` 일 때만 인증 없이 열린다(그래도 게시판의 `guestWrite` 가 정한다 — `NONE` 이면 지금과 같은 `401`). 읽기는 `http.allow-anonymous-read` 가 정한다(비회원 화면을 쓰려면 앱이 함께 켠다). platform CORS 기본 허용 헤더에 `X-Board-Guest-Secret` 이 추가됐다.
+
+> **경고 — 캡차 없이 비회원 쓰기를 켜면 스팸 위험이 크다(기본은 캡차 꺼짐).** IP 한도는 봇넷 · 프록시를 넘지 못하고, 승인 대기(`GUESTS`)는 공개를 막을 뿐 들어오는 양은 막지 못한다. 공개 서비스에서는 캡차를 함께 켠다:
+>
+> ```yaml
+> skeleton:
+>   captcha-turnstile:
+>     enabled: true
+>     secret-key: ${SKELETON_CAPTCHA_TURNSTILE_SECRET_KEY}   # 프로젝트 모드는 skeleton.projects.<id>.config.captcha-turnstile.secret-key
+>   board:
+>     guest:
+>       enabled: true
+>       captcha: REQUIRED      # 비회원의 만들기에 captchaToken 필수 → 실패는 400 BOARD.CAPTCHA_FAILED. BoardCaptcha 빈이 없으면 기동 실패
+> ```
+
+> **남는 위험 — 비회원 첨부는 회원처럼 허용된다(`canGuestAttach` 기본 true).** 비회원은 소유를 확인할 계정이 없어 **아무 키나** 실을 수 있다. 공개된 남의 첨부 키를 복사해 다시 실을 수 있어 원래 글이 가려진 뒤에도 그 그림이 비회원 댓글로 되살아나고, `ACCOUNT_ID` 키 방식에서는 남의 비공개 업로드 키를 맞히면 그것도 실린다. 비회원 업로드를 받는 앱은 정책으로 좁힌다:
+>
+> ```kotlin
+> @Bean fun boardPolicy(tickets: GuestUploadTickets): BoardPolicy = object : BoardPolicy by DefaultBoardPolicy() {
+>     // 비회원 업로드는 앱이 발급한 guest-uploads/ 아래 키만, 그리고 이 업로드 표가 아직 아무 글에도 쓰이지 않은 키만
+>     override fun canGuestAttach(keys: List<String>) = keys.all { it.startsWith("guest-uploads/") && tickets.claim(it) }
+> }
+> ```
+
+**승인 대기 · 글 주인의 댓글 관리** (게시판 설정 `postApproval` · `commentApproval`: `OFF`(기본) · `GUESTS` · `ALL`, `ownerModeratesComments`; 글마다 `commentApproval` 로 게시판 값을 덮어쓸 수 있다 — 댓글 관리가 켜진 게시판만, 아니면 `400`). `PATCH /{code}`(운영자)로 고친다; `seed-boards[].settings` 는 만들 때만 적용된다.
+- 「승인 대상 작성자」 판정은 `BoardPolicy.needsApproval` 한 곳(운영자는 늘 면제, 댓글을 관리하는 글 주인은 자기 글의 댓글에 대해 대상이 아님). 대상이 쓰면 `PENDING`, 승인 = 기존 `PUT …/moderation {status: PUBLISHED}`, 거절 = 가리기(`HIDDEN`).
+- `PENDING` 글은 운영자 · 회원 작성자만 본다(그 밖은 404 · 목록에 없음). `PENDING` 댓글은 운영자 · 관리하는 글 주인 · 회원 작성자에게만 보이고(본문 포함) **그 밖의 사람에게는 스레드에 자리도 없고 `replyCount` · `comment_count` 에도 들어가지 않는다.** 목록: 글 `GET /{code}/posts?status=PENDING`(운영자), 댓글 `GET …/comments?status=PENDING`(관리자, 오래된 순 평평하게).
+- 글 주인은 `PUBLISHED` · `HIDDEN` 만 고르고 `DELETED` 는 못 한다. **운영자가 가린 댓글은 되살리지 못한다**(`moderated_by`). 비회원 글 주인은 글의 비밀로 같은 일을 한다. 글 상세의 `canManageComments` 가 단추를 그리는 기준이다.
+- 알림: 댓글이 `PUBLISHED` 가 될 때(바로 공개되거나 승인될 때) 기존 `comment.created` · `comment.replied`. 승인 대기로 들어오면 댓글을 관리하는 글 주인에게만 `comment.pending`(`BoardNotifier.commentPending` — 기본 구현은 보내지 않는다).
+
+**고친 판 (revision)** — 승인된 것을 승인 대상 작성자가 고치면 **옛 공개본은 그대로 두고 고친 내용만 대기**한다(대상마다 판 하나, `board_revisions`). 대기 중에 또 고치면 판을 덮어쓴다. 판 승인 · 거절은 `PUT …/posts/{id}/revision`(운영자) · `PUT …/comments/{cid}/revision`(관리자) `{decision: APPROVE|REJECT}`; 대기 목록은 `GET /{code}/posts?revision=pending` · `GET …/comments?revision=pending`. 공개본이 `PUBLISHED` 를 떠나면(가림 · 삭제) 판은 버려지고, 운영자의 직접 수정이 이기며(판을 버린다), 승인 시 판의 내용 · **첨부**가 원래 행으로 옮겨진다. 모두에게는 공개본만 보이고 `pendingRevision` 은 쓴 회원 · 운영자 · 관리하는 글 주인에게만(비회원 작성자는 고친 응답에서만). 판 저장소 포트 `BoardRevisionRepository` 는 `board-jdbc` 가 구현하고, 자기 저장소를 둔 앱이 이것 없이 승인을 켜면 판이 필요한 첫 수정에서 「board-jdbc 를 두거나 구현하라」 오류가 난다.
+
+**댓글 첨부** — `skeleton.board.comment-max-attachments`(기본 0 = 꺼짐, 키를 보내면 `400`). 글 첨부와 같은 모양(저장 키 문자열만, 업로드는 앱). 쪽의 모든 댓글 키를 쿼리 한 번으로 읽고, **가린 · 지운 댓글의 `attachments` 는 `[]`**. 검사는 글과 같다(`canAttach` · `rejectAccountIdKeys`, 비회원은 `canGuestAttach`).
+
+**커밋 뒤 이벤트 `BoardEventListener`** — 앱이 이 타입의 빈을 만들면(여러 개 가능) 쓰기마다 `PostCreated` · `PostUpdated` · `PostStatusChanged` · `CommentCreated` · `CommentUpdated` · `CommentStatusChanged` · `RevisionSubmitted` · `RevisionDecided`(승인이면 `…Updated` 도 함께)를 받는다. 트랜잭션 동기화가 열려 있으면(앱이 자기 `@Transactional` 안에서 서비스를 불렀을 때) `afterCommit`, 아니면 저장소 호출이 커밋하고 돌아온 바로 뒤에 같은 스레드에서 부른다. 롤백되면 부르지 않는다. 리스너가 던져도 요청은 성공한다(경고 로그). **`afterCommit` 안에서 DB 를 쓰려면 `REQUIRES_NEW`** 여야 한다(끝난 트랜잭션이 아직 묶여 있다는 Spring 규칙). 내구성은 없다(커밋과 리스너 사이에 죽으면 잃는다) — 반드시 남아야 하는 앱 데이터는 아래 「댓글에 앱 칸」 길로 같은 트랜잭션에 넣는다. 이벤트의 `Post` · `Comment` 에 비밀 해시는 없고, `authorId` 는 계정 id 일 수 있으니 공개 자리에는 `BoardAuthors.publicId` 를 쓴다.
+
+**댓글에 앱 칸(번호 · 받는 멤버 · 언어 …)** — board 표에 싣지 않는다. 앱 표를 `board_comments(id)` 를 기본 키 · FK 로 1:1 로 두고(`ovation_cheers(comment_id bigint primary key references board_comments(id), seq, member_id, lang, …)`), 앱이 자기 `@Transactional` 안에서 `CommentService.create` 를 부르고 같은 트랜잭션에서 행을 넣는다. 앱이 자기 컨트롤러로 감싸도 비회원 확인 · 캡차 · 한도 · 판 규칙은 서비스 안에 있어 그대로 걸린다. `Idempotency-Key` 는 앱 경로에 `@IdempotentOperation` 을 다시 단다.
+
 ## 앱이 바꾸는 곳
 
 - 누가 무엇을 하는지: `BoardPolicy` (기본: 작성자 · `moderator-role`). 상태 규칙(숨겨진 글엔 댓글 불가 등)은 서비스에 있다.
 - 첨부 키 검사: `BoardPolicy.canAttach` — 기본은 허용이다. 키 규칙은 앱의 저장소 설정이 안다. **`AuthorIdentities` 가 없을 때만** `storage` 의 키(`<접두사>/<계정 id>/…`)를 `startsWith` 한 줄로 막으면 된다. 있으면 키에 계정 id 가 없어야 하므로(`skeleton.storage.web.key-owner=OPAQUE`) `storage` 가 내는 `StorageKeyOwnership` 빈의 `owns(caller.accountId, key)` 로 소유를 확인한다 — `OPAQUE` 키는 접두사 비교가 안 되고, 이 빈은 `key-owner` 방식(옛 `ACCOUNT_ID` 꼴 포함)을 알아서 따른다. 예: `override fun canAttach(caller: BoardCaller, keys: List<String>) = keys.all { ownership.owns(caller.accountId, it) }` (`storage`).
 - 글 · 댓글 텍스트: **HTML 은 해석하지 않는다.** 제어문자(줄바꿈 · 탭 제외) · 글자 방향 덮어쓰기 문자를 지우고 공백을 다듬어 저장하며, 그릴 때 클라이언트가 이스케이프한다.
 - 한도: `skeleton.board.rate-limit.enabled=true` 면 platform 의 `RateLimitStore`(redis-rate-limit 이 있으면 Redis)에 계정 · 동작별 고정 창. 한도 로직을 바꾸려면 `BoardRateLimiter`.
+- 비회원 · 승인: `BoardPolicy.canGuestPost` · `canGuestComment` · `canGuestAttach` · `needsApproval` · `canManageComments`(본문 있는 기본 메서드 — 구현한 앱은 다시 컴파일만 하면 된다). 해시 방식은 `BoardGuestSecrets`(argon2 등을 끼운다), 비회원 한도는 `BoardGuestLimiter`, 캡차는 `BoardCaptcha`(`captcha-turnstile` 이 켜져 있으면 자동으로 이어진다).
 - 알림 문구: `BoardNotificationFormatter` (제목 · 본문). 보내는 곳 자체는 `BoardNotifier`.
 - 검색은 제목 · 본문 `LIKE '%q%'`(와일드카드 이스케이프, 대소문자 무시)다. 데이터가 커지면 PostgreSQL `tsvector`/GIN 이나 MySQL `FULLTEXT`, 또는 외부 검색으로 `PostRepository.page` 만 바꾸면 된다.
 
