@@ -95,7 +95,7 @@ class CommentService(
         val names = authors.of(boardCode, publicIds.values)
         val childrenOf = descendants.groupBy { it.parentId }
         val repliesOf = descendants.groupBy { it.rootId }
-        val revs = if (caller == null || !revisionsOn(board)) emptyMap() else revisions.find(RevisionTarget.COMMENT, (roots.values + descendants).map { it.id })
+        val revs = if (caller == null || !revisionsOn(board, post)) emptyMap() else revisions.find(RevisionTarget.COMMENT, (roots.values + descendants).map { it.id })
         val files = attachmentsOf((roots.values + descendants).map { it.id })
         fun view(c: Comment, replies: List<CommentView>) =
             view(
@@ -120,7 +120,7 @@ class CommentService(
         val text = editedText(body, attachments, comment)
         // 첨부를 끈 게시판(상한 0)에서는 빈 목록도 「첨부를 건드리지 않음」이다 - 첨부를 모르는 저장소가 빈 목록에 500 을 내지 않고, 저장된 옛 첨부를 지우지도 않는다
         val keys = attachments?.let { rules.commentAttachments(it) }?.takeIf { properties.commentMaxAttachments > 0 }
-        val existing = if (revisionsOn(board)) revisions.find(RevisionTarget.COMMENT, listOf(comment.id))[comment.id] else null
+        val existing = if (revisionsOn(board, post)) revisions.find(RevisionTarget.COMMENT, listOf(comment.id))[comment.id] else null
         if (keys != null) {
             val known = attachmentsOf(listOf(comment.id))[comment.id].orEmpty() + existing?.attachments.orEmpty()
             authorRules.rejectAccountIdKeys(caller, keys.filterNot { it in known })   // 옛 키를 그대로 다시 보낸 수정은 통과 — 새 키만 본다
@@ -151,7 +151,7 @@ class CommentService(
         val board = access.board(boardCode)
         val text = editedText(body, attachments, comment)
         val keys = attachments?.let { rules.commentAttachments(it) }?.takeIf { properties.commentMaxAttachments > 0 }
-        val existing = if (revisionsOn(board)) revisions.find(RevisionTarget.COMMENT, listOf(comment.id))[comment.id] else null
+        val existing = if (revisionsOn(board, post)) revisions.find(RevisionTarget.COMMENT, listOf(comment.id))[comment.id] else null
         if (!keys.isNullOrEmpty()) {
             val known = attachmentsOf(listOf(comment.id))[comment.id].orEmpty() + existing?.attachments.orEmpty()
             if (!policy.canGuestAttach(keys.filterNot { it in known })) throw BoardException(BoardErrorCode.FORBIDDEN, "Not allowed to attach these files")
@@ -304,7 +304,10 @@ class CommentService(
         return revisions.find(RevisionTarget.COMMENT, listOf(comment.id))[comment.id] ?: rev
     }
 
-    private fun revisionsOn(board: Board) = board.settings.postApproval != ApprovalMode.OFF || board.settings.commentApproval != ApprovalMode.OFF
+    /** 글마다 켠 댓글 승인(`post.commentApproval`)도 판을 만든다 - 게시판 설정이 꺼져 있어도 */
+    private fun revisionsOn(board: Board, post: Post) =
+        board.settings.postApproval != ApprovalMode.OFF || board.settings.commentApproval != ApprovalMode.OFF ||
+            (post.commentApproval != null && post.commentApproval != ApprovalMode.OFF)
 
     private fun hadRevisionBeingDropped(comment: Comment, newStatus: CommentStatus): Boolean =
         comment.status == CommentStatus.PUBLISHED && newStatus != CommentStatus.PUBLISHED &&

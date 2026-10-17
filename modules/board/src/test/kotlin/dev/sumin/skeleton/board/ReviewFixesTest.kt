@@ -126,6 +126,21 @@ class ReviewFixesTest {
         assertEquals(mapOf(ownerHid.id to null, modHid.id to null, shown.id to null), flags(null))
     }
 
+    // ---- N1 글마다 켠 댓글 승인 ----
+
+    @Test
+    fun `comment approval switched on for one post only still shows the edit version in the thread`() {
+        val h = ServiceHarness(props = props, settings = BoardSettings(guestWrite = GuestWrite.ALL, ownerModeratesComments = true))   // 게시판 승인은 모두 꺼짐
+        val post = h.postService.create(other, "general", CreatePost("제목", "본문", null, null, commentApproval = ApprovalMode.ALL)).post.id
+        val c = h.commentService.create(third, "general", post, null, "공개").comment
+        h.commentService.moderate(other, "general", post, c.id, CommentStatus.PUBLISHED)
+        h.commentService.update(third, "general", post, c.id, "고친 말")
+        fun shown(who: BoardCaller) = h.commentService.list(who, "general", post, 0, 10, CommentSort.OLDEST).values.single().pendingRevision?.body
+        assertEquals("고친 말", shown(other), "the post owner sees the waiting edit")
+        assertEquals("고친 말", shown(third), "and so does its writer")
+        assertEquals(h.v(RevisionTarget.COMMENT, c.id), h.commentService.list(other, "general", post, 0, 10, CommentSort.OLDEST).values.single().pendingRevision!!.submittedAt)
+    }
+
     // ---- M-f 못 보는 행은 한 가지 답 ----
 
     @Test

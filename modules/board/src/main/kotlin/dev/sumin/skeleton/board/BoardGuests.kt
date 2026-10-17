@@ -7,6 +7,7 @@ import dev.sumin.skeleton.common.web.InMemoryFixedWindowRateLimitStore
 import dev.sumin.skeleton.common.web.RateLimitStore
 import java.security.MessageDigest
 import java.time.Clock
+import java.time.Instant
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder
 
 /**
@@ -81,10 +82,10 @@ interface BoardGuestLimiter {
      * 비밀을 확인해 봐도 되는가 — **해시를 계산하기 전에 원자적으로 센다**(동시에 몰려도 한도 밖은 해시를 돌리지 못한다). [row] 는 `p<id>` · `c<id>`, 행마다와 IP 마다 따로 센다.
      * 맞았으면 [releaseSecretAttempt] 로 되돌린다 — 맞는 비밀로 승인 · 관리를 거듭해도 한도가 닳지 않는다(저장소가 `release` 를 지원할 때; 아니면 성공도 센 채 남는다).
      */
-    fun trySecretAttempt(row: String, limitKey: String): Boolean
+    fun trySecretAttempt(row: String, limitKey: String, at: Instant): Boolean
 
-    /** [trySecretAttempt] 가 센 한 번을 되돌린다 — 비밀이 **맞았을 때만** */
-    fun releaseSecretAttempt(row: String, limitKey: String)
+    /** [trySecretAttempt] 가 센 한 번을 되돌린다 — 비밀이 **맞았을 때만**. [at] 은 센 때의 시각 - 그때의 창에서 되돌린다(해시 계산 사이에 창이 넘어가도 새 창을 깎지 않는다) */
+    fun releaseSecretAttempt(row: String, limitKey: String, at: Instant)
 }
 
 class StoreBoardGuestLimiter(
@@ -95,22 +96,21 @@ class StoreBoardGuestLimiter(
     override fun tryWrite(limitKey: String): Boolean =
         consume("board:guest-write:$limitKey", properties.rateLimit.capacity, properties.rateLimit.window.toMillis())
 
-    override fun trySecretAttempt(row: String, limitKey: String): Boolean {
+    override fun trySecretAttempt(row: String, limitKey: String, at: Instant): Boolean {
         val a = properties.secretAttempts
-        val perRow = consume("board:guest-secret:row:$row", a.capacity, a.window.toMillis())
-        val perIp = consume("board:guest-secret:ip:$limitKey", a.capacity, a.window.toMillis())
+        val perRow = consume("board:guest-secret:row:$row", a.capacity, a.window.toMillis(), at)
+        val perIp = consume("board:guest-secret:ip:$limitKey", a.capacity, a.window.toMillis(), at)
         return perRow && perIp
     }
 
-    override fun releaseSecretAttempt(row: String, limitKey: String) {
+    override fun releaseSecretAttempt(row: String, limitKey: String, at: Instant) {
         val a = properties.secretAttempts
-        val now = clock.instant()
-        store().release("board:guest-secret:row:$row", a.window.toMillis(), now)
-        store().release("board:guest-secret:ip:$limitKey", a.window.toMillis(), now)
+        store().release("board:guest-secret:row:$row", a.window.toMillis(), at)
+        store().release("board:guest-secret:ip:$limitKey", a.window.toMillis(), at)
     }
 
-    private fun consume(key: String, capacity: Int, windowMillis: Long): Boolean =
-        store().consume(key = key, capacity = capacity, windowMillis = windowMillis, now = clock.instant()).allowed
+    private fun consume(key: String, capacity: Int, windowMillis: Long, at: Instant = clock.instant()): Boolean =
+        store().consume(key = key, capacity = capacity, windowMillis = windowMillis, now = at).allowed
 }
 
 /** 비회원 만들기의 캡차 확인 고리 — `captcha-turnstile` 이 있으면 그 검증기로 이어진다. 켜는 것은 `guest.captcha=REQUIRED` */
@@ -128,6 +128,7 @@ class BoardGuests(
     private val limiter: BoardGuestLimiter = StoreBoardGuestLimiter({ FALLBACK_STORE }, properties.guest),
     private val captcha: () -> BoardCaptcha? = { null },
     private val ids: SortableIds = SortableIds.system,
+    private val clock: () -> Instant = Instant::now,
 ) {
     /** `guest:<ULID>` — 행마다 새 값 */
     fun newAuthorId(): String = BoardAuthors.GUEST_PREFIX + ids.newId()
@@ -162,9 +163,10 @@ class BoardGuests(
     fun verify(guest: GuestContext, row: String, storedHash: String?): Boolean {
         val raw = guest.secret
         if (storedHash == null || raw == null) return false
-        if (!limiter.trySecretAttempt(row, guest.limitKey)) throw BoardException(BoardErrorCode.RATE_LIMITED, "Too many attempts, try later")
+        val at = clock()
+        if (!limiter.trySecretAttempt(row, guest.limitKey, at)) throw BoardException(BoardErrorCode.RATE_LIMITED, "Too many attempts, try later")
         val ok = secrets.matches(raw, storedHash)
-        if (ok) limiter.releaseSecretAttempt(row, guest.limitKey)
+        if (ok) limiter.releaseSecretAttempt(row, guest.limitKey, at)
         return ok
     }
 
