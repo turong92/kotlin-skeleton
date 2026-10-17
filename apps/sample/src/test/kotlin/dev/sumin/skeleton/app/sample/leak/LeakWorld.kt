@@ -40,6 +40,8 @@ class LeakWorld(private val http: LeakHttp, registry: NotificationSubscriptionRe
     var cg = 0L; private set   // 비회원이 Y 의 글에 쓴 댓글 (승인되어 공개) — 그 비밀은 어떤 응답에도 없어야 한다
     var cgWaiting = 0L; private set   // 비회원의 승인 대기 댓글
     val guestSecret = "guest-secret-$nonce"
+    /** 비회원이 공개된 자기 댓글을 고친 내용 - 판(대기)으로만 있어야 한다: 관리하는 쪽 · 쓴 사람 말고는 어디에도 나가면 안 된다 */
+    val guestEditText = "손님이 고친 내용 $nonce"
     val keys = mutableListOf<String>()
     /** 구독해 둔 알림 — SSE 가 흘리는 것과 같은 이벤트 */
     val events = CopyOnWriteArrayList<NotificationEvent>()
@@ -80,6 +82,7 @@ class LeakWorld(private val http: LeakHttp, registry: NotificationSubscriptionRe
         c4 = createComment(xToken, c, yPost, "C 가 단 댓글 $nonce")
         cg = guestComment("지나가던 손님 $nonce")
         http.put("/api/v1/boards/general/posts/$yPost/comments/$cg/moderation", modToken, """{"status":"PUBLISHED"}""").ok()
+        guestEdit(cg, guestEditText)
         cgWaiting = guestComment("대기 중인 손님 $nonce")
         react(yToken, "posts/$postA", "EMPATHY"); react(yToken, "posts/$postB", "LIKE"); react(yToken, "posts/$yPost/comments/$c1", "LIKE")
         react(adminToken, "posts/$postA", "LIKE"); react(adminToken, "posts/$yPost/comments/$c2", "LIKE")
@@ -145,6 +148,15 @@ class LeakWorld(private val http: LeakHttp, registry: NotificationSubscriptionRe
             org.springframework.http.HttpMethod.POST, "/api/v1/boards/general/posts/$yPost/comments", null,
             """{"body":${json(text)},"guestName":"Guest$nonce"}""", idem = true, headers = mapOf("X-Board-Guest-Secret" to guestSecret),
         ).ok().read<Number>("$.value.id").toLong()
+    }
+
+    /** 비회원이 자기 댓글을 고친다 - 승인 대상이라 공개본은 그대로고 고친 내용은 판으로 대기한다 */
+    fun guestEdit(comment: Long, text: String) {
+        tick()
+        http.call(
+            org.springframework.http.HttpMethod.PATCH, "/api/v1/boards/general/posts/$yPost/comments/$comment", null,
+            """{"body":${json(text)}}""", headers = mapOf("X-Board-Guest-Secret" to guestSecret),
+        ).ok()
     }
 
     private fun react(token: String, path: String, type: String) { tick(); http.put("/api/v1/boards/general/$path/reactions", token, """{"type":"$type"}""").ok() }

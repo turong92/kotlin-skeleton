@@ -220,6 +220,32 @@ class AuthorLinkLeakIntegrationTest {
     }
 
     @Test
+    @Order(2)
+    fun `a guest's waiting edit reaches the managers and nobody else - not other members, not signed-out readers`() {
+        fun thread(token: String?) = http.get("/api/v1/boards/general/posts/${w.yPost}/comments", token, record = false).ok()
+        val text = w.guestEditText
+        // 관리하는 쪽(운영자 · 글 주인 Y)에게는 판이 있고, 공개본(옛 본문)은 그대로다
+        for (manager in listOf(w.modToken, w.yToken)) {
+            val body = thread(manager).body
+            assertTrue(text in body, "a manager sees the waiting edit")
+        }
+        // 남(다른 회원 · 로그인하지 않은 사람)의 응답 어디에도 없다 - 판은 응답 본문 · 알림 · 목록 어디로도 새지 않는다
+        for ((who, token) in listOf("other member" to w.xToken, "signed-out" to null)) {
+            val r = thread(token)
+            assertTrue(text !in r.body, "$who must not read the waiting edit")
+            assertTrue("지나가던 손님 ${w.nonce}" in r.body, "$who still reads the public text")
+        }
+        val everythingElse = listOf(
+            http.get("/api/v1/boards/general/posts/${w.yPost}", w.xToken, record = false).ok(),
+            http.get("/api/v1/boards/general/posts?revision=pending", w.xToken, record = false),
+            http.get("/api/v1/notifications", w.xToken, record = false),
+        )
+        everythingElse.forEach { assertTrue(text !in it.body, "${it.label}: the waiting edit is not in any other member's view") }
+        assertTrue(w.events.none { text in it.toString() && it.recipientIds.any { id -> id != w.yAcc } }, "and no board notification to anyone but the post owner carries it")
+        assertTrue(w.events.any { text in it.toString() && w.yAcc in it.recipientIds }, "positive control: the post owner is told about the edit")
+    }
+
+    @Test
     @Order(3)
     fun `every board, notification and author profile column is classified public or private`() {
         assertEquals(emptyList(), AuthorLinkColumns.problems(AuthorLinkColumns.columnsOf(jdbc, "current_schema()")))
