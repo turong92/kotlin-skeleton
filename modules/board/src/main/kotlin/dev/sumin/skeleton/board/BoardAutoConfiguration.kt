@@ -132,10 +132,12 @@ class BoardAutoConfiguration {
     @ConditionalOnMissingBean
     fun boardPublicAttachments(
         repository: BoardPublicAttachmentRepository,
+        properties: BoardProperties,
         publicUploads: ObjectProvider<PublicUploads>,
         time: ObjectProvider<TimeProvider>,
         projects: ObjectProvider<ProjectRegistry>,
-    ): BoardPublicAttachments = BoardPublicAttachments(repository, { publicUploads.getIfAvailable() }, time.getIfAvailable { TimeProvider.systemUtc() }, projects.getIfAvailable())
+    ): BoardPublicAttachments =
+        BoardPublicAttachments(repository, { publicUploads.getIfAvailable() }, time.getIfAvailable { TimeProvider.systemUtc() }, projects.getIfAvailable(), properties.publicAttachments.fullPassInterval)
 
     @Bean
     @ConditionalOnBean(BoardPublicAttachments::class)
@@ -143,8 +145,8 @@ class BoardAutoConfiguration {
     fun boardPublicAttachmentListener(attachments: BoardPublicAttachments): BoardEventListener = BoardPublicAttachmentListener(attachments)
 
     /**
-     * 1분마다 조정한다(실패 · 놓친 이벤트를 결국 맞춘다) - `scheduler` 모듈의 `skeletonTaskScheduler` 가 있어야 돈다(없으면 이벤트로만 맞춘다).
-     * 락 없이 인스턴스마다 돌아도 안전하다: 모든 단계가 멱등이다.
+     * 1분마다 실패한 항목만 다시 맞추고(표에 적힌 것 - 전체를 훑지 않는다), 한 시간마다 전체 대조를 시도한다(마지막 실행이 `full-pass-interval`(기본 하루)보다 오래됐을 때 DB 의 원자적
+     * 비교-교체로 **한 인스턴스만** 돈다). `scheduler` 모듈의 `skeletonTaskScheduler` 가 있어야 돈다(없으면 이벤트로만 맞춘다). 단일 실행 장치는 scheduler 모듈의 락 매니저가 아니라 DB 한 줄이다.
      */
     @Bean
     @ConditionalOnBean(BoardPublicAttachments::class)
@@ -161,9 +163,14 @@ class BoardAutoConfiguration {
                 log.warn("storage public uploads are on but there is no skeletonTaskScheduler bean (add the scheduler module) - public copies are only kept in step by board events")
             } else {
                 scheduler.scheduleWithFixedDelay(
-                    { try { attachments.sweep() } catch (e: Exception) { log.warn("board public attachment sweep failed: {}", e.toString()) } },
+                    { try { attachments.processQueue() } catch (e: Exception) { log.warn("board public attachment queue failed: {}", e.toString()) } },
                     Instant.now().plus(Duration.ofMinutes(1)),
                     Duration.ofMinutes(1),
+                )
+                scheduler.scheduleWithFixedDelay(
+                    { try { attachments.fullPass() } catch (e: Exception) { log.warn("board public attachment full pass failed: {}", e.toString()) } },
+                    Instant.now().plus(Duration.ofMinutes(5)),
+                    Duration.ofHours(1),
                 )
             }
         }

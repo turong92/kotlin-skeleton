@@ -25,6 +25,8 @@ data class BoardProperties(
     val rateLimit: RateLimit = RateLimit(),
     val notification: Notification = Notification(),
     val guest: Guest = Guest(),
+    /** 사진 공개 영역 조정(`skeleton.storage.web.public` 이 켜졌을 때) */
+    val publicAttachments: PublicAttachments = PublicAttachments(),
 ) {
     init {
         require(moderatorRole.isNotBlank()) { "skeleton.board.moderator-role must not be blank" }
@@ -94,6 +96,13 @@ data class BoardProperties(
     ) {
         init {
             require(nameMaxLength in 1..64) { "skeleton.board.guest.name-max-length must be 1..64 (the guest_name column is varchar(64))" }
+        }
+    }
+
+    /** 공개 영역 조정 - 매분은 실패한 항목만, 드문 전체 대조(모자란 복사 · 남은 복사 · 줄이 가리키지 않는 객체)는 [fullPassInterval] 마다 한 인스턴스만 */
+    data class PublicAttachments(val fullPassInterval: Duration = Duration.ofHours(24)) {
+        init {
+            require(!fullPassInterval.isZero && !fullPassInterval.isNegative) { "skeleton.board.public-attachments.full-pass-interval must be positive" }
         }
     }
 

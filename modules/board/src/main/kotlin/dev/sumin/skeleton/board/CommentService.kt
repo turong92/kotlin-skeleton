@@ -111,25 +111,39 @@ class CommentService(
     }
 
     /**
-     * 이 댓글(또는 대기 중인 고친 판)의 첨부를 짧은 서명 주소로 본다 - 공개 영역에 없는 사진(승인 대기 · 판)을 보는 길.
-     * 운영자 · 댓글을 관리하는 글 주인(비회원 글 주인은 글의 비밀) · 댓글 작성자 본인(비회원은 댓글의 비밀)만. 못 보는 댓글은 404, 그 댓글의 첨부가 아닌 키도 404.
+     * 이 댓글(또는 대기 중인 고친 판)의 [index] 번째 첨부를 짧은 서명 주소로 본다 - 공개 영역에 없는 사진(승인 대기 · 판)을 보는 길.
+     * 운영자 · 댓글을 관리하는 글 주인 · 댓글 작성자 본인만. 가린 · 지운 댓글은 **운영자만**(본문 규칙과 같다), 나머지는 PUBLISHED · PENDING 일 때만.
+     * 비회원은 [role] 로 증명할 비밀을 **하나** 정한다(OWNER: 글의 비밀, AUTHOR: 댓글의 비밀) - 둘 다 시도해 남의 행에 틀린 시도를 쌓지 않는다.
+     * 비회원 쓰기 한도(admit)는 먹지 않고 비밀 대입 한도만 센다. 비밀부터 확인한다: 증명된 사람에게는 승인 대기 댓글도 보인다.
      */
-    fun attachmentAccess(caller: BoardCaller?, boardCode: String, postId: Long, commentId: Long, key: String, guest: GuestContext? = null): SignedAttachment {
+    fun attachmentAccess(
+        caller: BoardCaller?, boardCode: String, postId: Long, commentId: Long, index: Int,
+        source: AttachmentSource = AttachmentSource.CURRENT, role: AttachmentRole = AttachmentRole.AUTHOR, guest: GuestContext? = null,
+    ): SignedAttachment {
         val board = access.board(boardCode)
         val post = access.post(caller, boardCode, postId)
         val comment = access.comment(post, commentId)
-        if (!pendingVisibility(caller, board, post).sees(comment)) notFound(commentId)
-        val allowed = if (caller != null) {
-            policy.canManageComments(caller, post, board) || caller.accountId == comment.authorId
+        val moderator = caller != null && policy.canModerate(caller)
+        if (caller != null) {
+            if (!pendingVisibility(caller, board, post).sees(comment)) notFound(commentId)
+            if (!(policy.canManageComments(caller, post, board) || caller.accountId == comment.authorId)) throw BoardException(BoardErrorCode.FORBIDDEN, BoardGuests.FORBIDDEN_MESSAGE)
         } else {
             val ctx = guestWriter(board, guest)
-            guests.admit(ctx, checkCaptcha = false)
-            (board.settings.ownerModeratesComments && guests.verify(ctx, "p${post.id}", access.guestSecretHash(post))) ||
-                (BoardAuthors.isGuest(comment.authorId) && guests.verify(ctx, "c${comment.id}", comments.guestSecretHash(comment.id)))
+            val proven = when (role) {
+                AttachmentRole.OWNER -> board.settings.ownerModeratesComments && guests.verify(ctx, "p${post.id}", access.guestSecretHash(post))
+                AttachmentRole.AUTHOR -> BoardAuthors.isGuest(comment.authorId) && guests.verify(ctx, "c${comment.id}", comments.guestSecretHash(comment.id))
+            }
+            if (!proven) {
+                if (comment.status == CommentStatus.PENDING || !comment.everPublished) notFound(commentId)   // 공개된 적 없는 행은 존재를 알리지 않는다
+                throw BoardException(BoardErrorCode.FORBIDDEN, BoardGuests.FORBIDDEN_MESSAGE)
+            }
         }
-        if (!allowed) throw BoardException(BoardErrorCode.FORBIDDEN, BoardGuests.FORBIDDEN_MESSAGE)
-        val keys = attachmentsOf(listOf(comment.id))[comment.id].orEmpty() + revisions.find(RevisionTarget.COMMENT, listOf(comment.id))[comment.id]?.attachments.orEmpty()
-        if (key !in keys) notFound(commentId)
+        if (!moderator && comment.status !in setOf(CommentStatus.PUBLISHED, CommentStatus.PENDING)) notFound(commentId)
+        val keys = when (source) {
+            AttachmentSource.CURRENT -> attachmentsOf(listOf(comment.id))[comment.id].orEmpty()
+            AttachmentSource.EDIT -> revisions.find(RevisionTarget.COMMENT, listOf(comment.id))[comment.id]?.attachments.orEmpty()
+        }
+        val key = keys.getOrNull(index) ?: notFound(commentId)
         return uploads.signed(key) ?: notFound(commentId)
     }
 

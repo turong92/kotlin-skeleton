@@ -70,21 +70,24 @@ class PostService(
     }
 
     /**
-     * 이 글(또는 대기 중인 고친 판)의 첨부를 짧은 서명 주소로 본다 - 공개 영역에 없는 사진(승인 전 · 판)을 **관리하는 사람 · 작성자 본인**이 볼 때.
-     * 운영자 · 글 작성자(비회원은 비밀 헤더)만. 그 글의 첨부가 아닌 키는 404.
+     * 이 글(또는 대기 중인 고친 판)의 [index] 번째 첨부를 짧은 서명 주소로 본다 - 공개 영역에 없는 사진(승인 전 · 판)을 **관리하는 사람 · 작성자 본인**이 볼 때.
+     * 운영자 · 글 작성자(비회원은 비밀 헤더)만. 가린 · 지운 글은 운영자만. 없는 순번은 404. 비회원 쓰기 한도는 먹지 않는다(비밀 대입 한도만).
      */
-    fun attachmentAccess(caller: BoardCaller?, boardCode: String, postId: Long, key: String, guest: GuestContext? = null): SignedAttachment {
+    fun attachmentAccess(caller: BoardCaller?, boardCode: String, postId: Long, index: Int, source: AttachmentSource = AttachmentSource.CURRENT, guest: GuestContext? = null): SignedAttachment {
+        val moderator = caller != null && policy.canModerate(caller)
         val post = if (caller == null) {
-            val ctx = guestWriter(access.board(boardCode), guest)
-            guests.admit(ctx, checkCaptcha = false)
-            guestOwned(boardCode, postId, ctx)
+            guestOwned(boardCode, postId, guestWriter(access.board(boardCode), guest))
         } else {
             access.post(caller, boardCode, postId).also {
-                if (!policy.canModerate(caller) && caller.accountId != it.authorId) forbidden("Not allowed to read the attachments of post $postId")
+                if (!moderator && caller.accountId != it.authorId) forbidden("Not allowed to read the attachments of post $postId")
             }
         }
-        val keys = post.attachments + revisions.find(RevisionTarget.POST, listOf(post.id))[post.id]?.attachments.orEmpty()
-        if (key !in keys) notFound(postId)
+        if (!moderator && post.status in setOf(PostStatus.HIDDEN, PostStatus.DELETED)) notFound(postId)   // 가린 · 지운 글의 사진은 운영자만 (본문 규칙과 같다)
+        val keys = when (source) {
+            AttachmentSource.CURRENT -> post.attachments
+            AttachmentSource.EDIT -> revisions.find(RevisionTarget.POST, listOf(post.id))[post.id]?.attachments.orEmpty()
+        }
+        val key = keys.getOrNull(index) ?: notFound(postId)
         return uploads.signed(key) ?: notFound(postId)
     }
 

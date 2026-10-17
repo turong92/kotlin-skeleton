@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.board.web
 
+import dev.sumin.skeleton.board.AttachmentSource
 import dev.sumin.skeleton.board.BoardErrorCode
 import dev.sumin.skeleton.board.BoardException
 import dev.sumin.skeleton.board.BoardProperties
@@ -90,12 +91,19 @@ class PostController(
 
     @Operation(
         summary = "Short-lived signed URL for one attachment of this post (or of its waiting edit)",
-        description = "Moderators and the post's author (signed-out authors send X-Board-Guest-Secret). Published attachments are served from the public area (attachmentUrls) instead.",
+        description = "The index-th attachment (from=current, default) or of the waiting edit (from=edit). Moderators and the post's author (signed-out authors send X-Board-Guest-Secret). Published attachments are served from the public area (attachmentUrls) instead.",
     )
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = AttachmentAccessResponse::class)
     @GetMapping("/{postId}/attachments")
-    fun attachment(authentication: Authentication?, http: HttpServletRequest, @PathVariable code: String, @PathVariable postId: Long, @RequestParam key: String): DataResponse<AttachmentAccessResponse> =
-        callers.writer(authentication, http).let { w -> service.attachmentAccess(w.caller, code, postId, key, w.guest) }.let { Response.ok(AttachmentAccessResponse(it.url, it.expiresInSeconds)) }
+    fun attachment(
+        authentication: Authentication?,
+        http: HttpServletRequest,
+        @PathVariable code: String,
+        @PathVariable postId: Long,
+        @RequestParam index: Int,
+        @RequestParam(required = false) from: String?,
+    ): DataResponse<AttachmentAccessResponse> =
+        callers.writer(authentication, http).let { w -> service.attachmentAccess(w.caller, code, postId, index, enumParam<AttachmentSource>("from", from) ?: AttachmentSource.CURRENT, w.guest) }.let { Response.ok(AttachmentAccessResponse(it.url, it.expiresInSeconds)) }
 
     @Operation(
         summary = "Create a post",

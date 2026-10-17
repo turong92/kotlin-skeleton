@@ -5,15 +5,21 @@ import dev.sumin.skeleton.board.PublicCopy
 import dev.sumin.skeleton.board.RevisionTarget
 import dev.sumin.skeleton.persistence.jdbc.SqlDialect
 import java.security.MessageDigest
+import java.time.Duration
 import java.time.Instant
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
+import org.springframework.transaction.support.TransactionTemplate
 
 /**
  * 공개 영역 조정자의 저장소. 공개 조건: 글 PUBLISHED, 댓글 PUBLISHED + 그 글 PUBLISHED. 고친 판의 첨부 표(board_revision_attachments)는 어디에서도 읽지 않는다.
  * 줄의 키는 sha256(storage_key) - 긴 키를 기본 키에 넣지 않으려고.
  */
-class JdbcPublicAttachmentRepository(private val jdbc: NamedParameterJdbcTemplate, private val dialect: SqlDialect) : BoardPublicAttachmentRepository {
+class JdbcPublicAttachmentRepository(
+    private val jdbc: NamedParameterJdbcTemplate,
+    private val tx: TransactionTemplate,
+    private val dialect: SqlDialect,
+) : BoardPublicAttachmentRepository {
     override fun eligible(target: RevisionTarget, id: Long): List<String> =
         when (target) {
             RevisionTarget.POST -> jdbc.queryForList(
@@ -34,14 +40,10 @@ class JdbcPublicAttachmentRepository(private val jdbc: NamedParameterJdbcTemplat
         jdbc.queryForList("select storage_key from board_public_attachments where target_type = :t and target_id = :id", mapOf("t" to target.name, "id" to id), String::class.java).filterNotNull()
 
     override fun mark(copy: PublicCopy, now: Instant) {
-        val exists = jdbc.queryForObject(
-            "select count(*) from board_public_attachments where target_type = :t and target_id = :id and key_hash = :h",
-            params(copy), Long::class.java,
-        ) ?: 0L
-        if (exists > 0) return
         jdbc.update(
-            "insert into board_public_attachments (target_type, target_id, key_hash, storage_key, created_at) values (:t, :id, :h, :k, :now)",
-            params(copy).addValue("k", copy.key).addValue("now", dialect.instantParam(now)),
+            dialect.insertIgnore("board_public_attachments", listOf("target_type", "target_id", "key_hash", "storage_key", "created_at"), listOf("target_type", "target_id", "key_hash")),
+            MapSqlParameterSource().addValue("target_type", copy.target.name).addValue("target_id", copy.targetId).addValue("key_hash", hash(copy.key))
+                .addValue("storage_key", copy.key).addValue("created_at", dialect.instantParam(now)),
         )
     }
 
@@ -104,6 +106,55 @@ class JdbcPublicAttachmentRepository(private val jdbc: NamedParameterJdbcTemplat
             mapOf("limit" to limit),
         ) { rs, _ -> PublicCopy(RevisionTarget.COMMENT, rs.getLong(1), rs.getString(2)) }
         return posts + comments
+    }
+
+    override fun enqueue(target: RevisionTarget, id: Long, now: Instant) {
+        jdbc.update(
+            dialect.insertIgnore("board_public_attachment_queue", listOf("target_type", "target_id", "queued_at"), listOf("target_type", "target_id")),
+            MapSqlParameterSource().addValue("target_type", target.name).addValue("target_id", id).addValue("queued_at", dialect.instantParam(now)),
+        )
+    }
+
+    override fun claimQueued(limit: Int, now: Instant, lease: Duration): List<Pair<RevisionTarget, Long>> =
+        tx.execute {
+            val rows = jdbc.query(
+                "select target_type, target_id from board_public_attachment_queue where claimed_until is null or claimed_until < :now order by queued_at limit :limit for update skip locked",
+                MapSqlParameterSource().addValue("now", dialect.instantParam(now)).addValue("limit", limit),
+            ) { rs, _ -> RevisionTarget.valueOf(rs.getString(1)) to rs.getLong(2) }
+            rows.forEach { (target, id) ->
+                jdbc.update(
+                    "update board_public_attachment_queue set claimed_until = :until where target_type = :t and target_id = :id",
+                    MapSqlParameterSource().addValue("until", dialect.instantParam(now.plus(lease))).addValue("t", target.name).addValue("id", id),
+                )
+            }
+            rows
+        } ?: emptyList()
+
+    override fun dequeue(target: RevisionTarget, id: Long) {
+        jdbc.update("delete from board_public_attachment_queue where target_type = :t and target_id = :id", mapOf("t" to target.name, "id" to id))
+    }
+
+    override fun tryStartRun(name: String, now: Instant, minInterval: Duration): Boolean {
+        // 줄이 없으면 「오래전에 돌았다」로 만든다(여럿이 동시에 넣어도 하나만 들어간다) - 그리고 모두 같은 비교-교체로 가른다: 갱신에 성공한 한 인스턴스만 돈다
+        jdbc.update(
+            dialect.insertIgnore("board_public_attachment_runs", listOf("name", "last_run_at"), listOf("name")),
+            MapSqlParameterSource().addValue("name", name).addValue("last_run_at", dialect.instantParam(now.minus(minInterval).minusSeconds(60))),
+        )
+        return jdbc.update(
+            "update board_public_attachment_runs set last_run_at = :now where name = :n and last_run_at < :limit",
+            MapSqlParameterSource().addValue("now", dialect.instantParam(now)).addValue("n", name).addValue("limit", dialect.instantParam(now.minus(minInterval))),
+        ) > 0
+    }
+
+    override fun copiesPage(after: PublicCopy?, limit: Int): List<PublicCopy> {
+        val params = MapSqlParameterSource().addValue("limit", limit)
+        val where = if (after == null) "" else {
+            params.addValue("t", after.target.name).addValue("id", after.targetId).addValue("h", hash(after.key))
+            "where (target_type, target_id, key_hash) > (:t, :id, :h)"
+        }
+        return jdbc.query("select target_type, target_id, storage_key from board_public_attachments $where order by target_type, target_id, key_hash limit :limit", params) { rs, _ ->
+            PublicCopy(RevisionTarget.valueOf(rs.getString(1)), rs.getLong(2), rs.getString(3))
+        }
     }
 
     private fun params(copy: PublicCopy) = MapSqlParameterSource().addValue("t", copy.target.name).addValue("id", copy.targetId).addValue("h", hash(copy.key))

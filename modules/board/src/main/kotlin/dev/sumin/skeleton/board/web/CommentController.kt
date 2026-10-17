@@ -1,5 +1,7 @@
 package dev.sumin.skeleton.board.web
 
+import dev.sumin.skeleton.board.AttachmentRole
+import dev.sumin.skeleton.board.AttachmentSource
 import dev.sumin.skeleton.board.BoardErrorCode
 import dev.sumin.skeleton.board.BoardException
 import dev.sumin.skeleton.board.BoardProperties
@@ -105,7 +107,7 @@ class CommentController(
 
     @Operation(
         summary = "Short-lived signed URL for one attachment of this comment (or of its waiting edit)",
-        description = "Moderators, the managing post owner (signed-out owners send the post's secret) and the comment's author. Published attachments are served from the public area (attachmentUrls) instead.",
+        description = "The index-th attachment (from=current, default) or of the waiting edit (from=edit). Moderators, the managing post owner (signed-out owners send the post's secret with as=owner) and the comment's author (as=author, the default). Published attachments are served from the public area (attachmentUrls) instead.",
     )
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = AttachmentAccessResponse::class)
     @GetMapping("/{commentId}/attachments")
@@ -115,9 +117,17 @@ class CommentController(
         @PathVariable code: String,
         @PathVariable postId: Long,
         @PathVariable commentId: Long,
-        @RequestParam key: String,
+        @RequestParam index: Int,
+        @RequestParam(required = false) from: String?,
+        @RequestParam(name = "as", required = false) role: String?,
     ): DataResponse<AttachmentAccessResponse> =
-        callers.writer(authentication, http).let { w -> service.attachmentAccess(w.caller, code, postId, commentId, key, w.guest) }.let { Response.ok(AttachmentAccessResponse(it.url, it.expiresInSeconds)) }
+        callers.writer(authentication, http).let { w ->
+            service.attachmentAccess(
+                w.caller, code, postId, commentId, index,
+                enumParam<AttachmentSource>("from", from) ?: AttachmentSource.CURRENT,
+                enumParam<AttachmentRole>("as", role) ?: AttachmentRole.AUTHOR, w.guest,
+            )
+        }.let { Response.ok(AttachmentAccessResponse(it.url, it.expiresInSeconds)) }
 
     @Operation(summary = "Edit a comment (author)")
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = CommentResponse::class)

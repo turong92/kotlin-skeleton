@@ -185,4 +185,19 @@ interface BoardPublicAttachmentRepository {
 
     /** 공개 조건에 드는데 복사가 없는 것 */
     fun missing(limit: Int): List<PublicCopy>
+
+    /** 맞추다 실패한 항목을 적어 둔다 - 주기 작업이 이것만 다시 맞춘다 (멱등) */
+    fun enqueue(target: RevisionTarget, id: Long, now: java.time.Instant)
+
+    /** 적힌 항목을 [limit] 개 잡는다 - 잡힌 줄은 [lease] 동안 다른 인스턴스가 잡지 않는다 (`for update skip locked`) */
+    fun claimQueued(limit: Int, now: java.time.Instant, lease: java.time.Duration): List<Pair<RevisionTarget, Long>>
+
+    /** 맞췄으면 적힌 줄을 지운다 */
+    fun dequeue(target: RevisionTarget, id: Long)
+
+    /** [name] 작업을 지금 이 인스턴스가 해도 되는가 - 마지막 실행이 [minInterval] 보다 오래됐을 때만 한 인스턴스에게 참을 준다 (원자적 비교-교체) */
+    fun tryStartRun(name: String, now: java.time.Instant, minInterval: java.time.Duration): Boolean
+
+    /** 모든 줄을 한 쪽씩 - [after] 는 앞 쪽의 마지막 줄 (null 이면 처음). 전체 대조가 「줄이 가리키는 키」의 집합을 만든다 */
+    fun copiesPage(after: PublicCopy?, limit: Int): List<PublicCopy>
 }

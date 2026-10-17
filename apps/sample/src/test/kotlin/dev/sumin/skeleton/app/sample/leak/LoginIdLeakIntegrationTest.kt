@@ -104,8 +104,8 @@ class LoginIdLeakIntegrationTest {
             if (values == null) return null
             paths = paths.flatMap { p -> values.map { v -> p.replaceFirst(Regex("\\{$name(?::[^}]*)?}"), java.util.regex.Matcher.quoteReplacement(v)) } }
         }
-        // 사진 열람 경로는 `key` 가 필수다 - 여정의 모든 사진 키로 채운다
-        if (template.endsWith("/attachments")) paths = paths.flatMap { p -> w.pictureKeys.map { "$p?key=$it" } }
+        // 사진 열람 경로는 `index` 가 필수다 - 첫 번째 사진 · 없는 순번 · 고친 판의 목록으로 채운다
+        if (template.endsWith("/attachments")) paths = paths.flatMap { p -> listOf("$p?index=0", "$p?index=1", "$p?index=0&from=edit") }
         return paths
     }
 

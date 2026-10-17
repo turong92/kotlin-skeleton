@@ -35,6 +35,7 @@ class AppBoardPolicy(private val keys: StorageKeyOwnership) : BoardPolicy by Def
 - **공개 키** `<prefix>/<hmac32>.<ext>`, `hmac32 = HMAC-SHA256(public.secret, "public\n" + 비공개 키)` 의 앞 32자. 비공개 키(계정 id · 비회원 표시 · 원래 이름)가 드러나지 않고 비밀 없이는 추측할 수 없다. 키에서 다시 계산되므로 따로 대응표 없이 지울 수 있다. 같은 사진을 두 곳에 붙이면 공개 객체 하나를 나눠 쓴다(마지막으로 내려가는 곳이 지운다).
 - **구성 요소** platform 포트 `PublicUploads`(공개 주소 계산 · 복사 · 삭제 - storage 의 `StoragePublicUploads` 가 구현) · `PrivateUploadAccess`(비공개 사진의 서명 주소 - `StoragePrivateUploadAccess`) · `PublicUploadPurger`(공개 객체를 지운 뒤 CDN 캐시를 비우는 자리). board 가 이 포트만 안다.
 - **읽기 공개는 인프라가 정한다** - 이 모듈은 공개 영역의 읽기를 열지 않는다. 버킷 정책이나 CDN 원본 경로로 `<prefix>/` 아래만 익명 읽기로 연다(업로드 영역은 닫힌 채). 로컬 SeaweedFS 는 `docker-compose.yml` 의 s3 신원 설정에 익명 읽기 `Read:app/public/*` 한 줄([storage-s3.md](../storage-s3.md)).
+- **형식** 복사 전에 원본 HEAD 로 Content-Type 을 읽어 그대로 쓰고(확장자로 짐작하지 않는다), image/jpeg · png · webp · gif · avif · heic · application/pdf 밖이면 공개하지 않는다(SVG · 텍스트 · 알 수 없음). 공개 객체에 `X-Content-Type-Options: nosniff` 를 붙이는 것은 CDN · 버킷 설정의 몫이다(업로더가 올린 형식을 브라우저가 다시 짐작하지 못하게).
 - **CDN 캐시** 가려도 CDN 에 남는 시간은 공개 객체의 `Cache-Control` max-age 이내다(기본 1시간). 즉시 지우려면 앱이 `PublicUploadPurger` 를 구현해(CDN 의 purge API 호출) 빈으로 둔다 - 이 레포에는 구현이 없다. 프로젝트 모드: `public.secret`(프로젝트끼리 같으면 기동 실패) · `base-url` · `prefix` 를 프로젝트마다 두고 버킷은 프로젝트의 저장소를 따른다.
 
 버킷을 정하지 않으면 저장소 빈이 없어 이 엔드포인트도 없다(404). 앱이 자기 컨트롤러를 두거나 끄려면 `skeleton.storage.web.enabled=false`.

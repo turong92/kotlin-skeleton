@@ -18,6 +18,8 @@ skeleton:
       enabled: true                # false 면 컨트롤러를 등록하지 않는다 (서블릿 웹 앱 + Spring Security 가 있을 때만 등록)
       base-path: /api/v1/boards    # 프론트 @skeleton/board 의 basePath 와 맞춘다
       allow-anonymous-read: false  # true 면 GET 은 로그인 없이 (쓰기는 항상 로그인)
+    public-attachments:            # 사진 공개 영역 조정 (skeleton.storage.web.public 이 켜졌을 때만 의미가 있다)
+      full-pass-interval: 24h      # 드문 전체 대조의 간격 - 한 인스턴스만 돈다 (매분은 실패한 항목만 다시 맞춘다)
     rate-limit:
       enabled: false               # 켜면 글 · 댓글 · 반응 쓰기에 계정별 한도 (platform RateLimitStore — redis-rate-limit 이 있으면 Redis)
       capacity: 30                 # 창 안에서 허용하는 쓰기 횟수 (동작별 · 계정별)

@@ -19,35 +19,47 @@ class StoragePublicUploads(
         return pub.baseUrl.trimEnd('/') + "/" + keys.publicKeyOf(privateKey)
     }
 
-    override fun publish(privateKey: String) {
+    override fun publicKeyOf(privateKey: String): String = keys.publicKeyOf(privateKey)
+
+    override fun publish(privateKey: String): Boolean {
         val pub = keys.properties().`public`
+        // 원본의 Content-Type 을 그대로 쓴다 (확장자로 짐작하지 않는다) - 허용 밖이면 공개하지 않는다
+        val type = storage.metadata(ObjectKey(privateKey))?.contentType?.substringBefore(';')?.trim()?.lowercase() ?: return false
+        if (type !in PUBLISHABLE_TYPES) return false
         storage.copy(
             CopyObjectRequest(
                 sourceKey = ObjectKey(privateKey),
                 destinationKey = ObjectKey(keys.publicKeyOf(privateKey)),
-                contentType = contentTypeOf(privateKey),
+                contentType = type,
                 cacheControl = pub.cacheControl,
             ),
         )
+        return true
     }
 
-    override fun unpublish(privateKey: String) {
-        storage.delete(ObjectKey(keys.publicKeyOf(privateKey)))
-        purger()?.purge(listOf(urlOf(privateKey)))
+    override fun unpublish(privateKey: String) = deletePublicKey(keys.publicKeyOf(privateKey))
+
+    override fun deletePublicKey(publicKey: String) {
+        storage.delete(ObjectKey(publicKey))
+        purger()?.purge(listOf(keys.properties().`public`.baseUrl.trimEnd('/') + "/" + publicKey))
     }
 
-    private fun contentTypeOf(key: String): String =
-        when (key.substringAfterLast('.', missingDelimiterValue = "").lowercase()) {
-            "jpg", "jpeg" -> "image/jpeg"
-            "png" -> "image/png"
-            "gif" -> "image/gif"
-            "webp" -> "image/webp"
-            "avif" -> "image/avif"
-            "bmp" -> "image/bmp"
-            "pdf" -> "application/pdf"
-            "txt" -> "text/plain"
-            else -> "application/octet-stream"
-        }
+    override fun listPublicKeys(): List<String> {
+        val prefix = keys.properties().`public`.prefix.trim('/') + "/"
+        val found = mutableListOf<String>()
+        var token: String? = null
+        do {
+            val page = storage.list(ListObjectsRequest(prefix, token, 1000))
+            page.objects.forEach { found += it.key.value }
+            token = page.nextContinuationToken.takeIf { page.truncated }
+        } while (token != null)
+        return found
+    }
+
+    private companion object {
+        /** 공개해도 되는 형식 - 이미지(SVG 제외: 스크립트를 담을 수 있다)와 PDF. 그 밖은 비공개로만 둔다 */
+        val PUBLISHABLE_TYPES = setOf("image/jpeg", "image/png", "image/webp", "image/gif", "image/avif", "image/heic", "application/pdf")
+    }
 }
 
 /** 비공개 업로드의 짧은 서명 읽기 주소 */

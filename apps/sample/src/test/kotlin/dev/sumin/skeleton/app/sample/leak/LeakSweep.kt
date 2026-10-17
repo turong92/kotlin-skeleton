@@ -59,8 +59,8 @@ class LeakSweep(private val http: LeakHttp, private val w: LeakWorld, private va
 
     /** 서명 읽기 주소 경로 - 글 · 댓글의 사진을 볼 수 있는 사람(운영자)이 읽는다. 응답은 키가 든 서명 주소뿐이어야 한다 */
     fun attachmentReads(token: String) {
-        val post = http.get("$base/posts/${w.postA}/attachments?key=${w.keys[0]}", token)
-        val comment = http.get("$base/posts/${w.yPost}/comments/${w.cPicture}/attachments?key=${w.cPictureKey}", token)
+        val post = http.get("$base/posts/${w.postA}/attachments?index=0", token)
+        val comment = http.get("$base/posts/${w.yPost}/comments/${w.cPicture}/attachments?index=0", token)
         check(post.status == 200 && comment.status == 200) { "attachment access for the moderator: ${post.status} ${post.body} / ${comment.status} ${comment.body}" }
     }
 
