@@ -41,11 +41,15 @@ class JdbcPublicAttachmentDbTest {
             if (afterCopyTimeout) error("timeout after the copy went through")
             return true
         }
+        var failUnpublish = false
         var purgeOn = false
         var purgeFails = false
         val purged = mutableListOf<String>()
         override fun purgeEnabled() = purgeOn
-        override fun unpublish(privateKey: String) { objects -= privateKey }   // 객체 삭제만 (동기)
+        override fun unpublish(privateKey: String) {   // 객체 삭제만 (동기)
+            if (failUnpublish) error("S3 delete failed")
+            objects -= privateKey
+        }
         override fun purgePublicKey(publicKey: String) {
             if (purgeFails) error("CDN purge failed")
             purged += publicKey
@@ -368,4 +372,24 @@ class JdbcPublicAttachmentDbTest {
         assertEquals(setOf("stuck.png"), mine())
     }
 
+
+    @Test
+    fun `an item that still has something to take down is retried at most five minutes apart - not an hour`() {
+        val post = db.newPost(db.newBoard())
+        val c = comments.insert(NewComment(post.id, null, null, 0, "acc_a", "c", T0, attachments = listOf("${tag}stuck-delete.png")))!!
+        sync.reconcile(RevisionTarget.COMMENT, c.id)
+        assertEquals(setOf("stuck-delete.png"), mine())
+        uploads.failUnpublish = true
+        comments.setStatus(c.id, CommentStatus.HIDDEN, now)
+        sync.reconcile(RevisionTarget.COMMENT, c.id)   // 지우기가 실패했다
+        fun attempts() = db.scalar("select attempts from board_public_attachment_queue where target_type = 'COMMENT' and target_id = :id", "id" to c.id)
+        assertEquals(1L, attempts())
+        // 열 번 연달아 실패해도 6분마다 다시 시도된다 - 상한이 없으면 4번째부터 8분 · 16분 … 으로 벌어져 6분 뒤엔 시도되지 않는다
+        repeat(9) { now = now.plus(Duration.ofMinutes(6)); sync.processQueue() }
+        assertEquals(10L, attempts(), "retried every time the five-minute cap allowed")
+        assertEquals(setOf("stuck-delete.png"), mine())
+        uploads.failUnpublish = false
+        now = now.plus(Duration.ofMinutes(6)); sync.processQueue()
+        assertEquals(emptySet(), mine(), "taken down as soon as the storage works again")
+    }
 }

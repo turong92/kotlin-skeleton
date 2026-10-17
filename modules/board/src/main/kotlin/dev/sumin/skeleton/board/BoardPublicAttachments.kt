@@ -189,7 +189,11 @@ class BoardPublicAttachments(
 
     /** 맞추기 실패 - 횟수를 세어 간격을 늘리고, 상한을 넘으면 알린다. 지우는 쪽(객체 삭제)은 이와 상관없이 이미 시도됐다 */
     private fun failed(target: RevisionTarget, id: Long) {
-        val attempts = runCatching { repository.recordFailure(target, id, time.now()) }.getOrNull() ?: return
+        // 지울 것이 남았으면(복사는 있는데 공개 조건에서 빠졌다) 간격 상한을 5분으로 - 공개 영역에 남으면 안 되는 쪽이라 한 시간씩 늦추지 않는다
+        val removing = runCatching { (repository.copied(target, id).toSet() - repository.eligible(target, id).toSet()).isNotEmpty() }.getOrDefault(true)
+        val attempts = runCatching {
+            repository.recordFailure(target, id, time.now(), if (removing) PublicSyncBackoff.MAX_WHEN_REMOVING else PublicSyncBackoff.MAX)
+        }.getOrNull() ?: return
         if (attempts >= alertAfterAttempts) alerts.stuck("${target.name.lowercase()}:$id", attempts, "reconcile")
     }
 

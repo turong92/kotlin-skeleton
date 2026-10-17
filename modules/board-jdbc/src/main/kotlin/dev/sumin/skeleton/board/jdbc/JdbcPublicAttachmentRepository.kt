@@ -135,14 +135,14 @@ class JdbcPublicAttachmentRepository(
             rows
         } ?: emptyList()
 
-    override fun recordFailure(target: RevisionTarget, id: Long, now: Instant): Int {
+    override fun recordFailure(target: RevisionTarget, id: Long, now: Instant, maxBackoff: Duration): Int {
         val params = MapSqlParameterSource().addValue("target_type", target.name).addValue("target_id", id).addValue("queued_at", dialect.instantParam(now)).addValue("version", 0L)
         jdbc.update(dialect.insertIgnore("board_public_attachment_queue", listOf("target_type", "target_id", "queued_at", "version"), listOf("target_type", "target_id")), params)
         jdbc.update("update board_public_attachment_queue set attempts = attempts + 1 where target_type = :target_type and target_id = :target_id", params)
         val attempts = jdbc.queryForObject("select attempts from board_public_attachment_queue where target_type = :target_type and target_id = :target_id", params, Int::class.java) ?: 1
         jdbc.update(
             "update board_public_attachment_queue set next_attempt_at = :next where target_type = :target_type and target_id = :target_id",
-            params.addValue("next", dialect.instantParam(PublicSyncBackoff.next(now, attempts))),
+            params.addValue("next", dialect.instantParam(PublicSyncBackoff.next(now, attempts, maxBackoff))),
         )
         return attempts
     }

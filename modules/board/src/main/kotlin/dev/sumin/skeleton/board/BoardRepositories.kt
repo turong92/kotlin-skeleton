@@ -157,11 +157,14 @@ object NoBoardRevisions : BoardRevisionRepository
 
 /** 실패한 시도의 다음 시도 시각 - 지수(1분, 2분, 4분 …)이고 최대 1시간 */
 object PublicSyncBackoff {
-    private val MAX = java.time.Duration.ofHours(1)
+    val MAX: java.time.Duration = java.time.Duration.ofHours(1)
 
-    fun next(now: java.time.Instant, attempts: Int): java.time.Instant {
+    /** 지울 것이 남은 항목(공개 영역에 남으면 안 되는 쪽)의 상한 - 공개 쪽 보장이라 늦게 다시 하지 않는다 */
+    val MAX_WHEN_REMOVING: java.time.Duration = java.time.Duration.ofMinutes(5)
+
+    fun next(now: java.time.Instant, attempts: Int, max: java.time.Duration = MAX): java.time.Instant {
         val minutes = 1L shl (attempts - 1).coerceIn(0, 12)
-        return now.plus(java.time.Duration.ofMinutes(minutes).coerceAtMost(MAX))
+        return now.plus(java.time.Duration.ofMinutes(minutes).coerceAtMost(max))
     }
 
     private fun java.time.Duration.coerceAtMost(max: java.time.Duration) = if (this > max) max else this
@@ -214,7 +217,7 @@ interface BoardPublicAttachmentRepository {
      * 맞추기에 실패했다 - 줄이 없으면 만들고(번호는 그대로) 시도 횟수를 +1, 다음 시도를 [PublicSyncBackoff] 만큼 늦춘다. 새 시도 횟수를 돌려준다.
      * 새 쓰기가 줄을 다시 적으면([enqueue]의 쓰는 쪽) 횟수는 0 으로 돌아가고 바로 다시 시도된다.
      */
-    fun recordFailure(target: RevisionTarget, id: Long, now: java.time.Instant): Int
+    fun recordFailure(target: RevisionTarget, id: Long, now: java.time.Instant, maxBackoff: java.time.Duration = PublicSyncBackoff.MAX): Int
 
     /** 공개 객체를 지웠으니 CDN 캐시를 비울 공개 키를 적는다(멱등) - 요청 스레드가 외부 CDN 을 기다리지 않는다 */
     fun enqueuePurge(publicKey: String, now: java.time.Instant)
