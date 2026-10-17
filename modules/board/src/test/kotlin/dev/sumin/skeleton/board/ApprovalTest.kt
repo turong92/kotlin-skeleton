@@ -289,4 +289,104 @@ class ApprovalTest {
         assertEquals(CommentStatus.PUBLISHED, plain.commentService.create(other, "general", p.id, null, "c").comment.status)
         assertFalse(plain.postService.get(owner, "general", p.id).canManageComments, "owner management is off by default")
     }
+
+    // ---- 리뷰 지적(C1 · C2 · I1 · I2 · I3 · M4 · M5 · M6) ----
+
+    @Test
+    fun `an author cannot publish their own waiting post - the status stays PENDING and nothing is announced`() {
+        val h = harness(guestsApproved.copy(postApproval = ApprovalMode.ALL))
+        val waiting = h.newPost(other)
+        assertEquals(PostStatus.PENDING, waiting.status)
+        events.clear()
+        val view = h.postService.update(other, "general", waiting.id, UpdatePost("고침", null, null, PostStatus.PUBLISHED))
+        assertEquals(PostStatus.PENDING, view.post.status)
+        assertEquals("고침", view.post.title)
+        assertEquals(PostStatus.PENDING, h.store.posts.getValue(waiting.id).status)
+        assertTrue(events.none { it is PostStatusChanged })
+        assertEquals(BoardErrorCode.POST_NOT_FOUND, h.failure { h.postService.get(BoardCaller("acc_third"), "general", waiting.id) })
+    }
+
+    @Test
+    fun `hiding again never lets an owner take over a moderator's hide, and old hidden rows with no recorded side stay closed`() {
+        val h = harness(guestsApproved)
+        val post = h.newPost(owner).id
+        val c = h.commentService.create(other, "general", post, null, "공개").comment
+        h.commentService.moderate(moderator, "general", post, c.id, CommentStatus.HIDDEN)
+        for (target in listOf(CommentStatus.HIDDEN, CommentStatus.PUBLISHED)) {
+            assertEquals(BoardErrorCode.FORBIDDEN, h.failure { h.commentService.moderate(owner, "general", post, c.id, target) }, "target=$target")
+        }
+        assertEquals(ModeratedBy.MODERATOR, h.store.comments.getValue(c.id).moderatedBy, "a repeated hide must not rewrite who hid it")
+        assertEquals(CommentStatus.HIDDEN, h.store.comments.getValue(c.id).status)
+
+        // 옛 행: 숨김인데 누가 숨겼는지 기록이 없다
+        h.store.comments[c.id] = h.store.comments.getValue(c.id).copy(moderatedBy = null)
+        assertEquals(BoardErrorCode.FORBIDDEN, h.failure { h.commentService.moderate(owner, "general", post, c.id, CommentStatus.PUBLISHED) })
+    }
+
+    @Test
+    fun `a comment that was never public has no slot for the public after a rejection or a delete, but managers and its writer still see it`() {
+        val h = harness(guestsApproved)
+        val post = h.newPost(owner).id
+        val parent = h.commentService.create(other, "general", post, null, "공개 부모").comment
+        val rejected = h.guestComment(post, parent = parent.id).comment
+        val deleted = h.guestComment(post, secret = "del-secret", parent = parent.id).comment
+        h.commentService.moderate(owner, "general", post, rejected.id, CommentStatus.HIDDEN)
+        h.commentService.delete(null, "general", post, deleted.id, ctx("del-secret"))
+
+        for (viewer in listOf(null, BoardCaller("acc_third"), other)) {
+            val root = h.threads(viewer, post).values.single()
+            assertEquals(0, root.replyCount, "viewer=$viewer")
+            assertTrue(root.replies.isEmpty(), "no name-bearing placeholder for viewer=$viewer")
+        }
+        for (viewer in listOf(owner, moderator)) {
+            assertEquals(2, h.threads(viewer, post).values.single().replies.size, "managers still see both, viewer=${viewer.accountId}")
+        }
+
+        // 한 번이라도 공개된 댓글은 가려져도 자리가 남는다 (옛 동작)
+        h.commentService.moderate(moderator, "general", post, parent.id, CommentStatus.HIDDEN)
+        assertEquals(parent.id, h.threads(null, post).values.single().comment.id)
+    }
+
+    @Test
+    fun `a signed-out owner can keep managing - right secrets and pending-list reads do not use up the limits`() {
+        val h = harness(guestsApproved.copy(postApproval = ApprovalMode.OFF))
+        val own = h.postService.create(null, "general", CreatePost("내 글", "본문", null, null, guestName = "주인"), ctx("owner-secret")).post.id
+        val comments = (1..12).map { h.guestComment(own).comment.id }
+        val same = GuestContext("owner-secret", "one-address", "10.0.0.1")
+        repeat(15) { h.commentService.listPending(null, "general", own, 0, 20, same) }   // 쓰기 한도(5/분) · 대입 한도(10)보다 많이 읽어도 막히지 않는다
+        comments.forEach { h.commentService.moderate(null, "general", own, it, CommentStatus.PUBLISHED, ctx("owner-secret")) }   // 행 대입 한도(10)보다 많이 맞는 비밀로 승인해도 막히지 않는다
+        assertEquals(12L, h.store.posts.getValue(own).commentCount)
+        // 틀린 비밀은 여전히 센다
+        repeat(10) { assertEquals(BoardErrorCode.FORBIDDEN, h.failure { h.commentService.listPending(null, "general", own, 0, 20, GuestContext("wrong-secret", "w$it", "10.0.0.1")) }) }
+        assertEquals(BoardErrorCode.RATE_LIMITED, h.failure { h.commentService.listPending(null, "general", own, 0, 20, ctx("owner-secret")) })
+    }
+
+    @Test
+    fun `an anonymous comment on a board that does not allow guests is the usual 401 even when the post cannot be read, and a reply to a parent you cannot see is 404`() {
+        val closed = ServiceHarness(props = guestOn)
+        val hidden = closed.newPost(owner).id
+        closed.postService.moderate(moderator, "general", hidden, PostStatus.HIDDEN, null)
+        assertEquals(
+            dev.sumin.skeleton.common.PlatformErrorCode.UNAUTHORIZED,
+            kotlin.test.assertFailsWith<dev.sumin.skeleton.common.ApplicationException> {
+                closed.commentService.create(null, "general", hidden, null, "x", guestName = "손님", guest = ctx())
+            }.errorCode,
+        )
+
+        val h = harness(guestsApproved)
+        val post = h.newPost(owner).id
+        val waiting = h.guestComment(post).comment
+        assertEquals(BoardErrorCode.COMMENT_NOT_FOUND, h.failure { h.commentService.create(BoardCaller("acc_third"), "general", post, waiting.id, "답") })
+    }
+
+    @Test
+    fun `an empty description clears it`() {
+        val h = harness(guestsApproved)
+        h.boardService.update(moderator, "general", UpdateBoard(description = "설명"))
+        assertEquals("설명", h.boardService.get("general").description)
+        h.boardService.update(moderator, "general", UpdateBoard(description = ""))
+        assertEquals(null, h.boardService.get("general").description)
+        h.boardService.update(moderator, "general", UpdateBoard(name = "새 이름"))
+        assertEquals("새 이름", h.boardService.get("general").name)
+    }
 }

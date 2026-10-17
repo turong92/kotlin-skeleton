@@ -82,6 +82,13 @@ class BoardGuestWebTest {
     }
 
     @Test
+    fun `an unknown status filter on the comment list is ignored like before`() {
+        val admin = org.springframework.security.authentication.TestingAuthenticationToken("acc_admin", "n/a", "ROLE_USER", "ROLE_MODERATOR")
+        val id = JsonPath.read<Number>(guestPost("right-secret").andReturn().response.contentAsString, "$.value.id")
+        mvc.perform(get("/api/v1/boards/general/posts/$id/comments").param("status", "whatever").principal(admin)).andExpect(status().isOk)
+    }
+
+    @Test
     fun `config announces the guest keys`() {
         val principal = org.springframework.security.authentication.TestingAuthenticationToken("acc_user", "n/a", "ROLE_USER")
         mvc.perform(get("/api/v1/boards/config").principal(principal)).andExpect(status().isOk)

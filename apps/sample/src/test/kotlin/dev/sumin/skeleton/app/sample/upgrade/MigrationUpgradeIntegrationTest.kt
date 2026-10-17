@@ -191,6 +191,7 @@ class MigrationUpgradeIntegrationTest {
         assertNull(posts.guestSecretHash(postId), "a baseline row has no guest secret")
         val commentId = jdbc.sql("select min(id) from board_comments where post_id = :p and author_id = 'acc_upgrade'").param("p", postId).query(Long::class.java).single()
         assertNull(assertNotNull(comments.find(commentId)).moderatedBy)
+        assertTrue(assertNotNull(comments.find(commentId)).everPublished, "baseline comments were public - the published_at backfill keeps them in the thread")
         assertEquals(emptyMap(), comments.attachments(listOf(commentId)))
         assertEquals(0L, jdbc.sql("select count(*) from board_revisions").query(Long::class.java).single())
 

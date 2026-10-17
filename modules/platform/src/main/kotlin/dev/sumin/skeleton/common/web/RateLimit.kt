@@ -33,6 +33,17 @@ interface RateLimitStore {
         windowMillis: Long,
         now: Instant,
     ): RateLimitDecision
+
+    /**
+     * 세지 않고 지금 상태만 본다 — `allowed` 는 「다음 [consume] 이 통과하겠는가」. 지원하지 않는 저장소는 null (기본) —
+     * 부른 쪽은 미리 세는 방식으로 물러난다. 맞은 시도는 세지 않고 틀린 시도만 세려는 곳(비밀 대입 한도)이 쓴다.
+     */
+    fun peek(
+        key: String,
+        capacity: Int,
+        windowMillis: Long,
+        now: Instant,
+    ): RateLimitDecision? = null
 }
 
 /**
@@ -67,6 +78,16 @@ class InMemoryFixedWindowRateLimitStore(
             remaining = (capacity - counter.count).coerceAtLeast(0),
             resetAt = Instant.ofEpochMilli(windowEnd),
         )
+    }
+
+    @Synchronized
+    override fun peek(key: String, capacity: Int, windowMillis: Long, now: Instant): RateLimitDecision {
+        val effectiveWindowMillis = windowMillis.coerceAtLeast(1)
+        val currentMillis = now.toEpochMilli()
+        val windowStart = (currentMillis / effectiveWindowMillis) * effectiveWindowMillis
+        val counter = counters["${dev.sumin.skeleton.common.project.ProjectContext.scopedKey(key)}:$windowStart"]
+        val count = counter?.count ?: 0
+        return RateLimitDecision(count < capacity, capacity, (capacity - count).coerceAtLeast(0), Instant.ofEpochMilli(windowStart + effectiveWindowMillis))
     }
 
     /** 끝난 창의 카운터를 지우고 지운 수를 돌려준다. [now] 를 생략하면 생성자의 시계 */

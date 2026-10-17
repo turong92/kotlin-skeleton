@@ -8,6 +8,9 @@ fun interface RedisFixedWindowCounter {
         key: String,
         windowMillis: Long,
     ): Long
+
+    /** 세지 않고 지금 값을 읽는다. 지원하지 않으면 null (기본) */
+    fun current(key: String): Long? = null
 }
 
 class StringRedisFixedWindowCounter(
@@ -19,6 +22,8 @@ class StringRedisFixedWindowCounter(
     ): Long =
         stringRedisTemplate.execute(SCRIPT, listOf(key), windowMillis.coerceAtLeast(1).toString())
             ?: throw IllegalStateException("Redis rate limit script returned no count")
+
+    override fun current(key: String): Long? = stringRedisTemplate.opsForValue().get(key)?.toLongOrNull() ?: 0L
 
     companion object {
         private val SCRIPT: RedisScript<Long> = RedisScript.of(

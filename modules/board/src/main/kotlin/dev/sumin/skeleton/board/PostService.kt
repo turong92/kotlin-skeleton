@@ -151,7 +151,8 @@ class PostService(
             return detail(caller, posts.find(post.id) ?: post, rev)
         }
         // 임시저장을 공개로 바꾸는 것은 새 글이 나오는 순간이라 승인 대상이면 대기로 간다
-        val status = if (request.status == PostStatus.PUBLISHED && post.status == PostStatus.DRAFT &&
+        // 대기 중인 글을 쓴 사람이 스스로 공개로 바꿀 수는 없다 — 대기 그대로 (공개는 운영자 승인)
+        val status = if (request.status == PostStatus.PUBLISHED && post.status != PostStatus.PUBLISHED &&
             policy.needsApproval(board, null, caller, ApprovalTarget.POST)
         ) PostStatus.PENDING else request.status
         val change = PostChange(

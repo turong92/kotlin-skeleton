@@ -16,7 +16,9 @@ import dev.sumin.skeleton.board.PostStatus
 import dev.sumin.skeleton.board.jdbc.BoardDb.T0
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /** 승인 대기 · 글 주인 관리의 SQL: 설정 열, 보는 사람별 PENDING 걸러내기(쪽 수 포함), 대기 목록, 바꾼 쪽 기록 */
 class JdbcModerationDbTest {
@@ -55,6 +57,36 @@ class JdbcModerationDbTest {
         assertEquals(listOf(published.id, mineWaiting.id) to 2L, ids(PendingVisibility(authorId = "acc_me")))
         assertEquals(listOf(published.id, mineWaiting.id, theirsWaiting.id) to 3L, ids(PendingVisibility(all = true)))
         assertEquals(1L, db.posts.find(post.id)!!.commentCount, "waiting comments are not counted")
+    }
+
+    @Test
+    fun `a never-public comment stays out of the public page after a rejection, and first publication is remembered`() {
+        val board = db.newBoard()
+        val post = db.newPost(board)
+        val everPublic = db.comments.insert(NewComment(post.id, null, null, 0, "acc_a", "공개", T0))!!
+        val rejected = db.comments.insert(NewComment(post.id, null, null, 0, "acc_me", "거절", T0.plusSeconds(1), status = CommentStatus.PENDING))!!
+        assertFalse(rejected.everPublished)
+        assertTrue(everPublic.everPublished)
+        db.comments.setStatus(rejected.id, CommentStatus.HIDDEN, T0.plusSeconds(2), ModeratedBy.OWNER)
+        assertFalse(db.comments.find(rejected.id)!!.everPublished, "rejecting does not make it public")
+        fun ids(p: PendingVisibility) = db.comments.rootPage(CommentRootQuery(post.id, 0, 10, CommentSort.OLDEST, p)).let { it.values.map { c -> c.id } to it.totalElements }
+        assertEquals(listOf(everPublic.id) to 1L, ids(PendingVisibility.NONE))
+        assertEquals(listOf(everPublic.id, rejected.id) to 2L, ids(PendingVisibility(authorId = "acc_me")))
+        assertEquals(listOf(everPublic.id, rejected.id) to 2L, ids(PendingVisibility(all = true)))
+        db.comments.setStatus(everPublic.id, CommentStatus.HIDDEN, T0.plusSeconds(3))
+        assertEquals(listOf(everPublic.id) to 1L, ids(PendingVisibility.NONE), "a once-public comment keeps its placeholder")
+        db.comments.setStatus(rejected.id, CommentStatus.PUBLISHED, T0.plusSeconds(4))
+        db.comments.setStatus(rejected.id, CommentStatus.HIDDEN, T0.plusSeconds(5))
+        assertTrue(db.comments.find(rejected.id)!!.everPublished)
+    }
+
+    @Test
+    fun `the hiding side is only rewritten when the status really changes`() {
+        val board = db.newBoard()
+        val post = db.newPost(board)
+        val c = db.comments.insert(NewComment(post.id, null, null, 0, "acc_a", "c", T0))!!
+        db.comments.setStatus(c.id, CommentStatus.HIDDEN, T0.plusSeconds(1), ModeratedBy.MODERATOR)
+        assertEquals(ModeratedBy.MODERATOR, db.comments.setStatus(c.id, CommentStatus.HIDDEN, T0.plusSeconds(2), ModeratedBy.OWNER)!!.moderatedBy)
     }
 
     @Test

@@ -81,7 +81,7 @@ class JdbcBoardRepository(private val jdbc: NamedParameterJdbcTemplate, private 
         val sets = mutableListOf<String>()
         val params = MapSqlParameterSource().addValue("code", code)
         change.name?.let { sets += "name = :name"; params.addValue("name", it) }
-        change.description?.let { sets += "description = :description"; params.addValue("description", it) }
+        change.description?.let { sets += "description = :description"; params.addValue("description", it.ifEmpty { null }) }
         change.settings?.let {
             sets += listOf("guest_write = :guestWrite", "post_approval = :postApproval", "comment_approval = :commentApproval", "owner_moderates_comments = :ownerModerates")
             params.addValue("guestWrite", it.guestWrite.name).addValue("postApproval", it.postApproval.name)
@@ -264,10 +264,12 @@ class JdbcCommentRepository(
             )
             if (bumped == 0) return@execute null
             val keys = GeneratedKeyHolder()
+            val published = if (comment.status == CommentStatus.PUBLISHED) ", published_at" else ""
+            val publishedValue = if (comment.status == CommentStatus.PUBLISHED) ", :now" else ""
             jdbc.update(
                 """
-                insert into board_comments (post_id, parent_id, root_id, depth, author_id, author_ref, guest_name, guest_secret_hash, body, status, attachment_count, reaction_count, created_at, updated_at)
-                values (:post, :parent, :root, :depth, :author, :authorRef, :guestName, :guestHash, :body, :status, :attachmentCount, 0, :now, :now)
+                insert into board_comments (post_id, parent_id, root_id, depth, author_id, author_ref, guest_name, guest_secret_hash, body, status, attachment_count, reaction_count, created_at, updated_at$published)
+                values (:post, :parent, :root, :depth, :author, :authorRef, :guestName, :guestHash, :body, :status, :attachmentCount, 0, :now, :now$publishedValue)
                 """.trimIndent(),
                 MapSqlParameterSource().addValue("post", comment.postId).addValue("parent", comment.parentId, java.sql.Types.BIGINT)
                     .addValue("root", comment.rootId, java.sql.Types.BIGINT).addValue("depth", comment.depth).addValue("author", comment.authorId)
@@ -342,7 +344,9 @@ class JdbcCommentRepository(
             jdbc.queryForList("select id from board_posts where id = :post for update", mapOf("post" to postId), Long::class.java)
             val old = jdbc.queryForObject("select status from board_comments where id = :id for update", mapOf("id" to id), String::class.java)!!
             jdbc.update(
-                "update board_comments set status = :status, updated_at = :now" + (if (moderatedBy != null) ", moderated_by = :by" else "") + " where id = :id",
+                // 바꾼 쪽은 상태가 실제로 바뀔 때만 쓴다 (같은 상태를 다시 보내 운영자의 표시를 덮지 못하게) · 처음 공개되는 순간을 남긴다
+                "update board_comments set status = :status, updated_at = :now" + (if (moderatedBy != null && old != status.name) ", moderated_by = :by" else "") +
+                    (if (status == CommentStatus.PUBLISHED) ", published_at = coalesce(published_at, :now)" else "") + " where id = :id",
                 MapSqlParameterSource().addValue("id", id).addValue("status", status.name).addValue("now", dialect.instantParam(now))
                     .addValue("by", moderatedBy?.name),
             )
@@ -359,8 +363,9 @@ class JdbcCommentRepository(
         // 승인 대기는 허락된 사람에게만 — 쪽 수 · 전체 수에도 들어가지 않는다
         val visible = when {
             query.pendingFor.all -> ""
-            query.pendingFor.authorId != null -> " and (status <> 'PENDING' or author_id = :viewer)".also { params.addValue("viewer", query.pendingFor.authorId) }
-            else -> " and status <> 'PENDING'"
+            // 한 번도 공개된 적 없는 행(대기 · 거절 · 대기 중 삭제)은 관리하는 쪽과 쓴 회원 말고는 자리조차 없다
+            query.pendingFor.authorId != null -> " and (published_at is not null or author_id = :viewer)".also { params.addValue("viewer", query.pendingFor.authorId) }
+            else -> " and published_at is not null"
         }
         val total = jdbc.queryForObject(
             "select count(*) from board_comments where post_id = :post and parent_id is null$visible", params, Long::class.java,
@@ -399,7 +404,7 @@ class JdbcCommentRepository(
         val root = getLong("root_id").takeUnless { wasNull() }
         return Comment(
             id = id, postId = getLong("post_id"), parentId = parent, rootId = root ?: id, depth = getInt("depth"), authorId = getString("author_id"),
-            authorRef = getString("author_ref"), guestName = getString("guest_name"), moderatedBy = getString("moderated_by")?.let { ModeratedBy.valueOf(it) },
+            authorRef = getString("author_ref"), guestName = getString("guest_name"), moderatedBy = getString("moderated_by")?.let { ModeratedBy.valueOf(it) }, everPublished = getString("published_at") != null,
             body = getString("body"), status = CommentStatus.valueOf(getString("status")), reactionCount = getLong("reaction_count"),
             createdAt = instant(dialect, "created_at"), updatedAt = instant(dialect, "updated_at"),
         )

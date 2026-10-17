@@ -36,6 +36,7 @@
 | 10 | 비회원 작성자는 다시 읽을 때 자기 승인 대기 글 · 고친 판을 **보지 못한다** — 만들기 · 고치기 응답을 화면이 들고 있는다 | 추천대로(읽기마다 비밀 확인 · 해시를 돌리지 않는다) | §3.5 |
 | 11 | 신고 이메일 보관 기한은 **설정만 두고 기본 꺼짐** — 앱이 켜야 주기 작업이 지운다 | 추천(기본 90일)과 다름 | §4 |
 | 12 | 기존 DB 의 `general` 에 설정을 넣는 길은 **견본 앱 마이그레이션 한 장** | 추천대로 | §9 · §11 |
+| 13 | (지휘 세션 결정, 리뷰 I2) **한 번도 공개된 적 없는 댓글은 거절 · 대기 중 삭제 뒤에도** 관리자(운영자 · 관리하는 글 주인) · 쓴 회원 말고는 스레드에 자리조차 보이지 않는다. 「공개된 적 있음」은 `board_comments.published_at`(처음 PUBLISHED 가 된 순간)으로 남기고 옛 PUBLISHED · HIDDEN · DELETED 행은 공개된 적 있음으로 채운다. 글은 가려진 글이 원래 작성자 · 운영자 말고는 404 라 같은 규칙이 필요 없다 | — | §3.4 · §9 |
 
 ## 2. 비회원 작성자
 
@@ -70,7 +71,7 @@
 
 | `skeleton.board.guest.secret` | 받는 값 | 저장 | 근거 |
 |---|---|---|---|
-| **`PASSWORD`(기본 — 형 결정 1)** | 사람이 치는 짧은 값, 4..72바이트 | `{bcrypt}` + bcrypt(cost 10, `spring-security-crypto` — 의존 없는 작은 jar, `account` 와 같은 인코더) | 엔트로피가 낮은 값에는 느린 해시가 관행이다(OWASP Password Storage). 한국 비회원 게시판의 「비밀번호」가 이 모양 |
+| **`PASSWORD`(기본 — 형 결정 1)** | 사람이 치는 짧은 값, 4자 이상 · 72바이트 이하 | `{bcrypt}` + bcrypt(cost 10, `spring-security-crypto` — 의존 없는 작은 jar, `account` 와 같은 인코더) | 엔트로피가 낮은 값에는 느린 해시가 관행이다(OWASP Password Storage). 한국 비회원 게시판의 「비밀번호」가 이 모양 |
 | `TOKEN`(ovation) | 기계가 만든 무작위 값, `[A-Za-z0-9_-]{32,128}`(43자 base64url = 256비트) | `{sha256}` + 16진수 SHA-256, 비교는 `MessageDigest.isEqual` | 256비트 무작위 값은 무차별 대입이 불가능해 느린 해시가 지킬 것이 없다. API 토큰 저장의 관행 |
 
 - 접두사가 방식을 적으므로 설정을 바꿔도 옛 행은 저장된 방식대로 확인된다. 교체 지점은 `BoardGuestSecrets`(`hash` · `matches`) — argon2 등을 앱이 끼운다.
@@ -123,7 +124,7 @@
 | 대상 | 누구에게 보이나 | 그 밖의 사람에게 |
 |---|---|---|
 | `PENDING` 글 | 운영자 · 회원 작성자(`mine=true` 목록 기본 상태에 `PENDING` 추가) | 지금 `canViewPost` 규칙 그대로 404, 목록에 없음 |
-| `PENDING` 댓글 | 운영자 · 관리하는 글 주인 · 회원 작성자 — **본문 포함**(읽어야 승인한다) | **스레드에 자리도 없다.** `HIDDEN` 처럼 자리 표시로 남기면 개수와 존재가 샌다. 최상위 페이지 쿼리가 거르고(`rootPage` 에 보는 사람 조건) 자손은 서비스가 거른다. `replyCount` 도 뺀 수 |
+| `PENDING` 댓글 | 운영자 · 관리하는 글 주인 · 회원 작성자 — **본문 포함**(읽어야 승인한다) | **스레드에 자리도 없다.** `HIDDEN` 처럼 자리 표시로 남기면 개수와 존재가 샌다. 최상위 페이지 쿼리가 거르고(`rootPage` 에 보는 사람 조건) 자손은 서비스가 거른다. `replyCount` 도 뺀 수. **거절(PENDING → HIDDEN) · 대기 중 삭제 뒤에도 같다**(한 번도 공개된 적 없는 행 — `published_at` 이 NULL — 은 자리 표시도 없다. 한 번이라도 공개된 댓글을 가리면 자리 표시가 남는 옛 동작 그대로) |
 | 대기 목록 | 글: 기존 `GET /{code}/posts?status=PENDING`(운영자). 댓글: `GET …/posts/{id}/comments?status=PENDING` → 관리자에게 평평한 페이지(오래된 순) | `403` |
 
 - 알림: 댓글이 **`PUBLISHED` 가 될 때**(바로 공개되거나 승인될 때) 지금의 `comment.created` · `comment.replied` 를 보낸다. `PENDING` 으로 들어오면 관리하는 글 주인에게만 `comment.pending`(새 type, 같은 payload)을 보낸다. 받는 사람이 비회원이면 건너뛴다.
@@ -269,6 +270,7 @@ sealed interface BoardEvent { val boardCode: String; val postId: Long; val actor
 | S3 | `V…__board_revisions.sql` | `board_revisions` · `board_revision_attachments`(기존 표는 건드리지 않는다) |
 | S4 | `V…__board_comment_attachments.sql` | 새 표 + `board_comments.attachment_count` |
 | S5 | `V…__board_reports.sql` | 새 표 + 인덱스 |
+| 리뷰 | `V…__board_comment_published_at.sql` | `board_comments.published_at` + 옛 행 백필 (결정 13) |
 | 견본 | `apps/sample/…/postgresql/V…__sample_board_general_settings.sql` | 기존 DB 의 `general` 에 설정을 켠다(형 결정 12) |
 
 - MySQL 은 새 표의 인라인 인덱스를 `[jooq ignore]` 표시 안에 둔다(기존 파일과 같은 모양). MySQL 8.4 에는 `add column if not exists` 가 없으므로 Flyway 가 한 번만 돈다.

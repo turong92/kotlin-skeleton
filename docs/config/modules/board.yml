@@ -27,7 +27,7 @@ skeleton:
       topic: board                 # 알림 토픽
     guest:                         # 비회원 글 · 댓글 (닉네임 + 비밀값). 꺼진 채 시작한다 — 게시판의 settings.guestWrite(NONE · COMMENTS · ALL)가 실제로 정한다
       enabled: false               # true 면 쓰기 경로를 인증 없이 연다 (비밀은 헤더 X-Board-Guest-Secret). 스팸 경고: 캡차 없이 공개 서비스에서 켜지 않는다
-      secret: PASSWORD             # PASSWORD: 사람이 치는 4..72바이트 값(bcrypt) | TOKEN: 앱이 만든 [A-Za-z0-9_-]{32,128} 무작위 값(SHA-256). 옛 행은 저장된 방식대로 확인된다
+      secret: PASSWORD             # PASSWORD: 사람이 치는 4자 이상 · 72바이트 이하 값(bcrypt) | TOKEN: 앱이 만든 [A-Za-z0-9_-]{32,128} 무작위 값(SHA-256). 옛 행은 저장된 방식대로 확인된다
       name-max-length: 20          # 비회원 이름 길이 (1..64)
       captcha: OFF                 # OFF | REQUIRED — REQUIRED 면 비회원의 만들기에 captchaToken 이 필요하고 BoardCaptcha 빈(captcha-turnstile)이 없으면 기동 실패
       rate-limit:                  # 비회원 쓰기 한도 (guest:<IP> 별) — 위의 rate-limit.enabled 와 무관하게 guest.enabled 면 늘 걸린다

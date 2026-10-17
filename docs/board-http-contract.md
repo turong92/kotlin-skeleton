@@ -22,7 +22,7 @@ Status values gain `PENDING` (post and comment). A guest row's `authorId` is `gu
 No login. Create/edit/delete with the same paths as members:
 
 - body: `guestName` (required on create, at most `guestNameMaxLength`), plus `captchaToken` when `captchaRequired`;
-- header **`X-Board-Guest-Secret: <secret>`** on create, edit, delete, comment approval and revision decisions. Never put it in the URL, a cookie or the body. `PASSWORD`: the person types 4..72 bytes (do not store it); `TOKEN`: the app generates 32..128 characters of `[A-Za-z0-9_-]` (43 chars of base64url) and keeps it.
+- header **`X-Board-Guest-Secret: <secret>`** on create, edit, delete, comment approval and revision decisions. Never put it in the URL, a cookie or the body. `PASSWORD`: the person types at least 4 characters, at most 72 bytes (do not store it); `TOKEN`: the app generates 32..128 characters of `[A-Za-z0-9_-]` (43 chars of base64url) and keeps it.
 - a board answers an anonymous write with `401 COMMON.UNAUTHORIZED` unless its `guestWrite` allows it (`COMMENTS`: comments only; `ALL`: posts too). A signed-in caller that sends `guestName` gets `400`; a guest cannot send `authorId` (`403`) or save a draft.
 - errors: wrong secret / someone else's row / a member's row / no header → the same `403 BOARD.FORBIDDEN` (do not try to tell them apart); too many guesses or writes → `429 BOARD.RATE_LIMITED`; captcha → `400 BOARD.CAPTCHA_FAILED`.
 - A guest cannot read their own waiting post/comment back (reads never look at the secret): **keep the create/edit response** and show it.

@@ -35,7 +35,7 @@ class FakeBoardRepository(private val s: FakeStore) : BoardRepository {
 
     override fun update(code: String, change: BoardChange): Board? = s.locked {
         val b = s.boards[code] ?: return@locked null
-        b.copy(name = change.name ?: b.name, description = change.description ?: b.description, settings = change.settings ?: b.settings)
+        b.copy(name = change.name ?: b.name, description = change.description?.ifEmpty { null } ?: if (change.description == null) b.description else null, settings = change.settings ?: b.settings)
             .also { s.boards[code] = it }
     }
 
@@ -98,7 +98,8 @@ class FakeCommentRepository(private val s: FakeStore) : CommentRepository {
         if (comment.status == CommentStatus.PUBLISHED) s.posts[post.id] = post.copy(commentCount = post.commentCount + 1)
         val id = s.ids.incrementAndGet()
         Comment(id, comment.postId, comment.parentId, comment.rootId ?: id, comment.depth, comment.authorId, comment.body,
-            comment.status, 0, comment.now, comment.now, comment.authorRef, comment.guestName)
+            comment.status, 0, comment.now, comment.now, comment.authorRef, comment.guestName,
+            everPublished = comment.status == CommentStatus.PUBLISHED)
             .also {
                 s.comments[id] = it
                 comment.guestSecretHash?.let { h -> s.commentHashes[id] = h }
@@ -129,7 +130,10 @@ class FakeCommentRepository(private val s: FakeStore) : CommentRepository {
         if (status != CommentStatus.PUBLISHED) s.revisions.remove(RevisionTarget.COMMENT to id)
         val delta = (if (status == CommentStatus.PUBLISHED) 1 else 0) - (if (c.status == CommentStatus.PUBLISHED) 1 else 0)
         s.posts[c.postId]?.let { s.posts[c.postId] = it.copy(commentCount = it.commentCount + delta) }
-        c.copy(status = status, updatedAt = now, moderatedBy = moderatedBy ?: c.moderatedBy).also { s.comments[id] = it }
+        c.copy(
+            status = status, updatedAt = now, everPublished = c.everPublished || status == CommentStatus.PUBLISHED,
+            moderatedBy = if (status != c.status) moderatedBy ?: c.moderatedBy else c.moderatedBy,
+        ).also { s.comments[id] = it }
     }
 
     override fun pendingPage(postId: Long, page: Int, size: Int): PageResult<Comment> = s.locked {

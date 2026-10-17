@@ -140,6 +140,8 @@ data class Comment(
     val authorRef: String? = null,
     val guestName: String? = null,
     val moderatedBy: ModeratedBy? = null,
+    /** 한 번이라도 공개된 적 있는가. false(승인 대기 → 거절 · 대기 중 삭제)인 행은 관리하는 쪽과 쓴 회원 말고는 스레드에 자리도 안 보인다. 이 열을 모르는 자기 저장소는 true 로 읽힌다(옛 동작) */
+    val everPublished: Boolean = true,
 )
 
 data class ReactionCounts(val counts: Map<String, Long>)
@@ -163,7 +165,7 @@ data class NewPost(
     val guestSecretHash: String? = null,
     val commentApproval: ApprovalMode? = null,
 ) {
-    override fun toString() = "NewPost(boardCode=, status=127)"
+    override fun toString() = "NewPost(boardCode=$boardCode, status=$status)"
 }
 
 /** null 인 칸은 바꾸지 않는다. */
@@ -194,7 +196,7 @@ data class NewComment(
     val guestSecretHash: String? = null,
     val attachments: List<String> = emptyList(),
 ) {
-    override fun toString() = "NewComment(postId=, status=127)"
+    override fun toString() = "NewComment(postId=$postId, status=$status)"
 }
 
 data class PostQuery(
@@ -223,7 +225,8 @@ data class CommentRootQuery(
 
 /** PENDING 댓글을 누구에게 보이나 — [all] 이면 전부(운영자 · 관리하는 글 주인), 아니면 author_id 가 [authorId] 인 것만(회원 작성자) */
 data class PendingVisibility(val all: Boolean = false, val authorId: String? = null) {
-    fun sees(comment: Comment): Boolean = comment.status != CommentStatus.PENDING || all || (authorId != null && authorId == comment.authorId)
+    fun sees(comment: Comment): Boolean =
+        (comment.status != CommentStatus.PENDING && comment.everPublished) || all || (authorId != null && authorId == comment.authorId)
 
     companion object {
         val NONE = PendingVisibility()

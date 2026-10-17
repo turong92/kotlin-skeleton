@@ -71,12 +71,11 @@ class CommentController(
             val edits = service.listRevisions(w.caller, code, postId, pageQuery.page, pageQuery.size, w.guest)
             return Response.ok(edits.values.map { it.toResponse() }, PaginationMeta.of(pageQuery.page, properties.pageSize(pageQuery.size), edits.totalElements))
         }
-        if (enumParam<CommentStatus>("status", status) == CommentStatus.PENDING) {
+        if (status?.trim().equals("pending", ignoreCase = true)) {
             val w = callers.writer(authentication, http)
             val pending = service.listPending(w.caller, code, postId, pageQuery.page, pageQuery.size, w.guest)
             return Response.ok(pending.values.map { it.toResponse() }, PaginationMeta.of(pageQuery.page, properties.pageSize(pageQuery.size), pending.totalElements))
         }
-        if (status != null && status.isNotBlank()) throw BoardException(BoardErrorCode.CONTENT_INVALID, "status must be pending when given")
         val page = service.list(
             callers.reader(authentication), code, postId, pageQuery.page, pageQuery.size,
             enumParam<CommentSort>("sort", sort) ?: CommentSort.OLDEST,

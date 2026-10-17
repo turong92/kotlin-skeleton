@@ -44,6 +44,20 @@ class RedisFixedWindowRateLimitStore(
         }
     }
 
+    override fun peek(key: String, capacity: Int, windowMillis: Long, now: Instant): RateLimitDecision? {
+        val effectiveWindowMillis = windowMillis.coerceAtLeast(1)
+        val windowStart = (now.toEpochMilli() / effectiveWindowMillis) * effectiveWindowMillis
+        val resetAt = Instant.ofEpochMilli(windowStart + effectiveWindowMillis)
+        val redisKey = redisKeyPrefixer.key("rate-limit", properties.keyNamespace, key, windowStart.toString())
+        return try {
+            val count = counter.current(redisKey) ?: return null
+            RateLimitDecision(count < capacity, capacity, (capacity - count).coerceAtLeast(0).toInt(), resetAt)
+        } catch (exception: RuntimeException) {
+            log.warn("Redis rate limit peek failure for key={}", redisKey, exception)
+            failureDecision(capacity, resetAt)
+        }
+    }
+
     private fun failureDecision(
         capacity: Int,
         resetAt: Instant,

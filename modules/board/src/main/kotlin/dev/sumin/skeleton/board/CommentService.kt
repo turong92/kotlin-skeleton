@@ -32,8 +32,8 @@ class CommentService(
         guestName: String? = null, guest: GuestContext? = null, attachments: List<String>? = null,
     ): CommentView {
         val board = access.board(boardCode)
+        val ctx = if (caller == null) guestWriter(board, guest) else null   // 글을 찾기 전에 — 비회원이 못 쓰는 게시판은 지금과 같은 401
         val post = access.post(caller, boardCode, postId)
-        val ctx = if (caller == null) guestWriter(board, guest) else null
         if (caller != null) {
             if (guestName != null) throw BoardException(BoardErrorCode.CONTENT_INVALID, "guestName is for signed-out writers only")
             if (!policy.canComment(caller, post)) throw BoardException(BoardErrorCode.FORBIDDEN, "Not allowed to comment")
@@ -46,6 +46,7 @@ class CommentService(
             null
         }
         val parent = parentId?.let { access.comment(post, it) }
+        if (parent != null && !pendingVisibility(caller, board, post).sees(parent)) throw BoardException(BoardErrorCode.COMMENT_NOT_FOUND, "Comment not found: ${parent.id}")   // 못 보는 대기 · 거절 댓글은 없는 것과 같다
         if (parent != null && parent.status != CommentStatus.PUBLISHED) {
             throw BoardException(BoardErrorCode.POST_NOT_COMMENTABLE, "Comment ${parent.id} does not take replies")
         }
@@ -200,8 +201,9 @@ class CommentService(
         if (status == CommentStatus.PENDING) throw BoardException(BoardErrorCode.CONTENT_INVALID, "moderation status must be PUBLISHED, HIDDEN or DELETED")
         val comment = access.comment(post, commentId)
         if (by == ModeratedBy.OWNER) {
+            // 가려진 댓글은 **주인이 직접 가린 것**(moderatedBy == OWNER)만 다루고, 운영자가 가렸거나 누가 가렸는지 모르는 옛 행은 목표 상태와 무관하게 막는다 (닫힌 쪽)
             val blocked = status == CommentStatus.DELETED || comment.status == CommentStatus.DELETED ||
-                (status == CommentStatus.PUBLISHED && comment.status == CommentStatus.HIDDEN && comment.moderatedBy == ModeratedBy.MODERATOR)
+                (comment.status == CommentStatus.HIDDEN && comment.moderatedBy != ModeratedBy.OWNER)
             if (blocked) throw BoardException(BoardErrorCode.FORBIDDEN, "Not allowed to moderate comment $commentId")
         }
         val dropped = hadRevisionBeingDropped(comment, status)
@@ -218,7 +220,7 @@ class CommentService(
     fun listPending(caller: BoardCaller?, boardCode: String, postId: Long, page: Int, size: Int, guest: GuestContext? = null): PageResult<CommentView> {
         val board = access.board(boardCode)
         val post = access.post(caller, boardCode, postId)
-        manager(caller, board, post, guest)
+        manager(caller, board, post, guest, countsAsWrite = false)
         val rows = comments.pendingPage(post.id, page, properties.pageSize(size))
         if (rows.values.isEmpty()) return PageResult(emptyList(), rows.totalElements)
         val states = reactions.states(ReactionTarget.COMMENT, rows.values.map { it.id }, caller)
@@ -258,7 +260,7 @@ class CommentService(
     fun listRevisions(caller: BoardCaller?, boardCode: String, postId: Long, page: Int, size: Int, guest: GuestContext? = null): PageResult<CommentView> {
         val board = access.board(boardCode)
         val post = access.post(caller, boardCode, postId)
-        manager(caller, board, post, guest)
+        manager(caller, board, post, guest, countsAsWrite = false)
         val revs = revisions.pending(RevisionTarget.COMMENT, null, post.id, page, properties.pageSize(size))
         val rows = revs.values.mapNotNull { r -> comments.find(r.targetId)?.let { it to r } }
         if (rows.isEmpty()) return PageResult(emptyList(), revs.totalElements)
@@ -306,14 +308,14 @@ class CommentService(
      * 이 글의 댓글을 관리하는 쪽: 운영자 → [ModeratedBy.MODERATOR], 댓글 관리가 켜진 게시판의 글 주인 → [ModeratedBy.OWNER].
      * 비회원 글 주인은 비밀이 글의 것과 맞아야 한다 (대입 한도는 해시 전에). 아니면 403 — 로그인하지 않은 쪽이 비회원도 못 쓰는 요청이면 401.
      */
-    private fun manager(caller: BoardCaller?, board: Board, post: Post, guest: GuestContext?): ModeratedBy {
+    private fun manager(caller: BoardCaller?, board: Board, post: Post, guest: GuestContext?, countsAsWrite: Boolean = true): ModeratedBy {
         if (caller != null) {
             if (policy.canModerate(caller)) return ModeratedBy.MODERATOR
             if (policy.canManageComments(caller, post, board)) return ModeratedBy.OWNER
             throw BoardException(BoardErrorCode.FORBIDDEN, "Only moderators and managing post owners moderate")
         }
         val ctx = guestWriter(board, guest)
-        guests.admit(ctx, checkCaptcha = false)
+        if (countsAsWrite) guests.admit(ctx, checkCaptcha = false)   // 목록 읽기는 쓰기 한도를 먹지 않는다 (비밀 대입 한도는 그대로)
         if (board.settings.ownerModeratesComments && guests.verify(ctx, "p${post.id}", access.guestSecretHash(post))) return ModeratedBy.OWNER
         throw BoardException(BoardErrorCode.FORBIDDEN, BoardGuests.FORBIDDEN_MESSAGE)
     }

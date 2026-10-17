@@ -56,7 +56,7 @@ class BoardService(
                 ownerModeratesComments = it.ownerModeratesComments ?: board.settings.ownerModeratesComments,
             )
         }
-        val change = BoardChange(name, request.description?.trim()?.ifEmpty { null }, settings)
+        val change = BoardChange(name, request.description?.trim(), settings)
         return boards.update(code, change) ?: throw BoardException(BoardErrorCode.NOT_FOUND, "Board not found: $code")
     }
 
