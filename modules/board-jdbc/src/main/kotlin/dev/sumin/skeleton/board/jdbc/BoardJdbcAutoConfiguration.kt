@@ -70,7 +70,7 @@ class BoardJdbcAutoConfiguration {
 
     /** storage 의 비회원 업로드 회수가 붙은 키를 알아보는 데 쓴다 (storage 가 켜져 있지 않으면 아무도 부르지 않는다) */
     @Bean
-    @ConditionalOnMissingBean(UploadedKeyUsage::class)
+    @ConditionalOnMissingBean(name = ["jdbcUploadedKeyUsage"])   // 타입으로 비키지 않는다 - 앱의 구현과 합집합으로 쓰인다 (UploadedKeyUsages)
     fun jdbcUploadedKeyUsage(dataSource: DataSource): UploadedKeyUsage = JdbcUploadedKeyUsage(NamedParameterJdbcTemplate(dataSource))
 
     @Bean

@@ -57,7 +57,14 @@ class StorageGuestKeysTest {
     /** 목록과 삭제만 흉내 낸다 */
     private class ListingStorage(private val objects: List<StoredObjectSummary>) : PresignedStorage by FakePresignedStorage() {
         val deleted = mutableListOf<String>()
-        override fun list(request: ListObjectsRequest) = ListedObjects(objects.filter { it.key.value.startsWith(request.prefix) })
+        /** 세 개씩 쪽으로 나눠 준다 - 이어 읽기를 시험한다 */
+        override fun list(request: ListObjectsRequest): ListedObjects {
+            val all = objects.filter { it.key.value.startsWith(request.prefix) }
+            val from = request.continuationToken?.toInt() ?: 0
+            val page = all.drop(from).take(3)
+            val more = from + 3 < all.size
+            return ListedObjects(page, nextContinuationToken = if (more) (from + 3).toString() else null, truncated = more)
+        }
         override fun deleteAll(keys: Collection<ObjectKey>) { deleted += keys.map { it.value } }
     }
 
@@ -86,5 +93,20 @@ class StorageGuestKeysTest {
         val storage = ListingStorage(listOf(StoredObjectSummary(ObjectKey(s.issueGuest("image/png")), lastModified = old)))
         assertEquals(0, StorageGuestCleanup(storage, s, { null }, TimeProvider.fixed(Instant.parse("2026-10-18T12:00:00Z"))).run())
         assertTrue(storage.deleted.isEmpty())
+    }
+
+    @Test
+    fun `attached keys filling the front of the listing do not hide the orphans behind them`() {
+        val s = scheme()
+        val now = Instant.parse("2026-10-18T12:00:00Z")
+        val old = now.minus(Duration.ofHours(30))
+        val attached = (1..7).map { s.issueGuest("image/png") }
+        val orphans = (1..2).map { s.issueGuest("image/png") }
+        val storage = ListingStorage((attached + orphans).map { StoredObjectSummary(ObjectKey(it), lastModified = old) })
+        val small = StorageKeyScheme(StorageWebProperties(guest = StorageGuestProperties(enabled = true, secret = secret, cleanup = StorageGuestProperties.GuestCleanup(enabled = true, batchSize = 2))))
+        // 비밀이 같아야 s 가 만든 키가 small 에서도 맞는다
+        val cleanup = StorageGuestCleanup(storage, small, { UploadedKeyUsage { keys -> keys.filter { it in attached }.toSet() } }, TimeProvider.fixed(now))
+        assertEquals(2, cleanup.run())
+        assertEquals(orphans.toSet(), storage.deleted.toSet(), "the orphans past the attached ones are deleted")
     }
 }

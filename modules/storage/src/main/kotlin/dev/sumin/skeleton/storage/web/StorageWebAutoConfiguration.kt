@@ -7,6 +7,7 @@ import dev.sumin.skeleton.common.upload.PrivateUploadAccess
 import dev.sumin.skeleton.common.upload.PublicUploadPurger
 import dev.sumin.skeleton.common.upload.PublicUploads
 import dev.sumin.skeleton.common.upload.UploadedKeyUsage
+import dev.sumin.skeleton.common.upload.UploadedKeyUsages
 import dev.sumin.skeleton.common.web.ClientIps
 import dev.sumin.skeleton.common.web.InMemoryFixedWindowRateLimitStore
 import dev.sumin.skeleton.common.web.PublicEndpointContributor
@@ -113,7 +114,7 @@ class StorageWebAutoConfiguration {
         usage: ObjectProvider<UploadedKeyUsage>,
         time: ObjectProvider<TimeProvider>,
         projects: ObjectProvider<ProjectRegistry>,
-    ): StorageGuestCleanup = StorageGuestCleanup(storage, StorageKeySchemes.create(properties, projects.getIfAvailable()), { usage.getIfAvailable() }, time.getIfAvailable { TimeProvider.systemUtc() }, projects.getIfAvailable())
+    ): StorageGuestCleanup = StorageGuestCleanup(storage, StorageKeySchemes.create(properties, projects.getIfAvailable()), { UploadedKeyUsages.union(usage.orderedStream().toList()) }, time.getIfAvailable { TimeProvider.systemUtc() }, projects.getIfAvailable())
 
     /**
      * 한 시간마다(처음은 5분 뒤) 회수를 돌린다 - `scheduler` 모듈의 `skeletonTaskScheduler` 빈이 있어야 돈다 (없으면 경고만 하고 돌지 않는다).

@@ -274,6 +274,7 @@ sealed interface BoardEvent { val boardCode: String; val postId: Long; val actor
 | 글 요약 · 상세 · 댓글 | `authorGuest: false` · 상세에 `canManageComments`(운영자만 true) · `commentApproval: null` · 상세 · 댓글에 `pendingRevision: null` · 댓글에 `attachments: []` | 덧붙음만(`mine` 을 늘 실은 선례와 같다) |
 | 상태 값 · 목록 인자 | `PENDING` 은 승인을 켠 게시판에서만 나온다. `?revision=pending` 은 새 인자 | 없음 |
 | 새 경로 | `PATCH /{code}`(운영자) · `PUT …/revision` 둘 · 신고 넷(꺼지면 404) | `WriteGateCensusTest`: 새 변경 경로는 주소 없는 계정에게 막히는 쪽이라 「열린 목록」이 그대로여야 한다 — 시험이 확인한다 |
+| 비회원 첨부 | **storage(`GuestUploadKeys`)가 있으면 기본 `canGuestAttach` 가 비회원 업로드로 발급한 키만 허용한다**(없으면 지금처럼 모두). storage 가 있고 비회원 업로드가 꺼져 있으면 비회원은 사진을 붙일 수 없다 - 기존에 임의 키를 실던 앱은 `canGuestAttach` 를 직접 둔다 | 비회원 쓰기를 켠 앱만(기본 꺼짐) |
 | 쓰기 경로의 인증 | `guest.enabled=false` 면 공개 경로를 더하지 않는다 — 지금과 같다 | 없음 |
 | platform CORS 기본 `allowed-headers` | `X-Board-Guest-Secret` 추가 | 덧붙음만 |
 | 알림 | 승인 · 판이 없으면 지금과 같다. `comment.pending` 은 승인 켠 게시판에서만 | 없음 |

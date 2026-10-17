@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `platform`: CORS 기본 허용 헤더에 `X-Board-Guest-Secret` 추가, `RateLimitStore.release`(센 시도 하나 되돌리기 — 기본 아무 일도 안 함, 인메모리 · Redis 구현) 추가. 기존 구현체는 그대로 컴파일된다.
 - 응답 키 골든 시험(`BoardWebTest` · `NoOptionalGoldenKeysTest`)의 기대 집합에 새 키를 더했다.
 
+- (수정) 비회원 업로드 회수가 쪽마다 붙었는지 묻고 고아가 모일 때까지 넘긴다(붙은 키가 목록 앞을 막아도 뒤쪽 고아가 지워진다). `UploadedKeyUsage` 는 여러 빈의 합집합. board 첨부 세 표에 `storage_key` 색인(새 V 파일 `…18100100`).
+
 ### 게시판 사진 공개 영역 (2026-10-18)
 
 - `storage`: **꺼진 채 시작하는** `skeleton.storage.web.public.*` - 공개된 글 · 댓글의 첨부만 공개 영역(`<prefix>/<hmac32>.<ext>`, 비공개 키에서 HMAC 으로 계산)에 `Cache-Control` 을 붙여 복사하고 `base-url`(CDN) 주소로 낸다. 비밀 `<P>_STORAGE_WEB_PUBLIC_SECRET`(32자 이상, 프로젝트마다 달라야 한다). `CopyObjectRequest.cacheControl` 추가(S3 어댑터는 메타데이터를 새로 쓴다). `StoragePublicUploads` · `StoragePrivateUploadAccess`.

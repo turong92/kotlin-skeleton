@@ -67,4 +67,19 @@ class StorageWebAutoConfigurationTest {
                 assertThat(context.startupFailure!!.stackTraceToString()).doesNotContain("tooshort-value")
             }
     }
+
+    @Test
+    fun `two UploadedKeyUsage beans (the app's next to board-jdbc's) both start and both count`() {
+        runner.withBean(FakePresignedStorage::class.java, Supplier { FakePresignedStorage() })
+            .withBean("boardUsage", dev.sumin.skeleton.common.upload.UploadedKeyUsage::class.java, Supplier { dev.sumin.skeleton.common.upload.UploadedKeyUsage { k -> k.filter { it == "a" }.toSet() } })
+            .withBean("appUsage", dev.sumin.skeleton.common.upload.UploadedKeyUsage::class.java, Supplier { dev.sumin.skeleton.common.upload.UploadedKeyUsage { k -> k.filter { it == "b" }.toSet() } })
+            .withPropertyValues(
+                "skeleton.storage.web.guest.enabled=true", "skeleton.storage.web.guest.secret=guest-secret-for-tests-0123456789abcdef",
+                "skeleton.storage.web.guest.cleanup.enabled=true",
+            )
+            .run { context ->
+                assertThat(context).hasNotFailed()
+                assertThat(context).hasSingleBean(dev.sumin.skeleton.storage.StorageGuestCleanup::class.java)
+            }
+    }
 }
