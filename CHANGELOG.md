@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `board`: 꺼진 채 시작하는 새 기능들. **비회원 작성**(`skeleton.board.guest.*`, 게시판 `guestWrite`) — 닉네임 + 비밀값(헤더 `X-Board-Guest-Secret`, bcrypt / 토큰 SHA-256), 비밀 대입 한도(틀린 시도만 센다) · 쓰기 한도 · 선택 캡차(`guest.captcha=REQUIRED`, `BoardCaptcha` ← `captcha-turnstile`). **승인 대기** `PENDING`(`postApproval` · `commentApproval` · `ownerModeratesComments`, `BoardPolicy.needsApproval`) · 글 주인의 댓글 승인 · 가리기 · `PATCH /{code}`. **고친 판** — 승인된 글 · 댓글을 승인 대상이 고치면 공개본은 그대로 두고 고친 내용만 대기(`PUT …/revision`). **댓글 첨부**(`comment-max-attachments`, 기본 0). **커밋 뒤 이벤트** `BoardEventListener`. 응답에 덧붙는 키만 있다 — [docs/board-http-contract.md](docs/board-http-contract.md), [docs/modules/board.md](docs/modules/board.md).
 - `board-jdbc`: 새 V 파일 다섯 개(두 방언): `…100000__board_guest_authors` · `…100100__board_moderation` · `…100200__board_revisions` · `…100300__board_comment_attachments` · `…100400__board_comment_published_at`. 잠긴 파일은 고치지 않았다. 새 포트 메서드는 모두 본문 있는 기본 구현이라 자기 저장소를 둔 앱은 다시 컴파일만 하면 되고, 새 기능이 꺼져 있으면 동작이 같다.
+- 견본 앱(`apps/sample`): 기존 `general` 게시판이 새 기능을 켠 채 돈다(비회원 쓰기 ALL · 비회원 글/댓글 승인 · 글 주인의 댓글 관리 · 댓글 사진 4장 · 비회원 읽기). 기존 DB 는 견본 마이그레이션 `V20261017110000__sample_board_general_settings` 가 켠다. 캡차는 끈 채(스팸 경고는 `application.yml` 주석과 `docs/modules/board.md`). 누출 시험은 `guest:` 공개 id 를 허용하고 비회원 비밀이 어떤 응답에도 없음을 본다.
 - `platform`: CORS 기본 허용 헤더에 `X-Board-Guest-Secret` 추가, `RateLimitStore.peek`(세지 않고 보기 — 기본 null, 인메모리 · Redis 구현) 추가. 기존 구현체는 그대로 컴파일된다.
 - 응답 키 골든 시험(`BoardWebTest` · `NoOptionalGoldenKeysTest`)의 기대 집합에 새 키를 더했다.
 
