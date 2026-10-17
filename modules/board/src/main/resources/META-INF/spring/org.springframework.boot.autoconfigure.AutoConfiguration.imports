@@ -3,3 +3,4 @@ dev.sumin.skeleton.board.captcha.BoardCaptchaAutoConfiguration
 dev.sumin.skeleton.board.notification.BoardNotificationAutoConfiguration
 dev.sumin.skeleton.board.web.BoardWebAutoConfiguration
 dev.sumin.skeleton.board.erasure.BoardErasureAutoConfiguration
+dev.sumin.skeleton.board.alert.BoardAlertAutoConfiguration

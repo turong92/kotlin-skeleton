@@ -18,10 +18,10 @@ data class SignedAttachment(val url: String, val expiresInSeconds: Long)
  */
 class BoardUploads(private val publicUploads: () -> PublicUploads? = { null }, private val access: () -> PrivateUploadAccess? = { null }) {
     fun publicUrls(keys: List<String>): Map<String, String> =
-        if (keys.isEmpty()) emptyMap() else publicUploads()?.let { uploads -> keys.filter { uploads.mayPublish(it) }.associateWith { uploads.urlOf(it) } } ?: emptyMap()
+        if (keys.isEmpty()) emptyMap() else publicUploads()?.takeIf { it.enabled() }?.let { uploads -> keys.filter { uploads.mayPublish(it) }.associateWith { uploads.urlOf(it) } } ?: emptyMap()
 
     fun signed(key: String): SignedAttachment? =
-        access()?.let { reader -> SignedAttachment(reader.downloadUrl(key, reader.defaultTtl), reader.defaultTtl.seconds) }
+        access()?.takeIf { it.enabled() }?.let { reader -> SignedAttachment(reader.downloadUrl(key, reader.defaultTtl), reader.defaultTtl.seconds) }
 
     companion object {
         val NONE = BoardUploads()

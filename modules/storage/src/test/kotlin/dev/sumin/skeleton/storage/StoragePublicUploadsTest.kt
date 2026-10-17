@@ -62,6 +62,8 @@ class StoragePublicUploadsTest {
         assertEquals("https://cdn.example.com/" + scheme.publicKeyOf(key), uploads.urlOf(key))
         uploads.unpublish(key)
         assertEquals(listOf(scheme.publicKeyOf(key)), storage.deleted)
+        assertTrue(purged.isEmpty(), "unpublish deletes the object only - the CDN purge is a separate, asynchronous step")
+        uploads.purgePublicKey(scheme.publicKeyOf(key))
         assertEquals(listOf(uploads.urlOf(key)), purged)
     }
 
@@ -91,6 +93,8 @@ class StoragePublicUploadsTest {
         assertEquals(listOf("public/b/aaa.png", "public/b/bbb.png"), uploads.listPublicKeys(), "only the board sub-prefix is looked at - another use of the public prefix is never swept")
         uploads.deletePublicKey("public/b/aaa.png")
         assertEquals(listOf("public/b/aaa.png"), storage.deleted)
+        assertTrue(purged.isEmpty())
+        uploads.purgePublicKey("public/b/aaa.png")
         assertEquals(listOf("https://cdn.example.com/public/b/aaa.png"), purged)
     }
 

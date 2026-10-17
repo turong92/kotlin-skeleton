@@ -2,6 +2,7 @@ package dev.sumin.skeleton.board.jdbc
 
 import dev.sumin.skeleton.board.BoardPublicAttachmentRepository
 import dev.sumin.skeleton.board.PublicCopy
+import dev.sumin.skeleton.board.PublicSyncBackoff
 import dev.sumin.skeleton.board.QueuedItem
 import dev.sumin.skeleton.board.RevisionTarget
 import dev.sumin.skeleton.persistence.jdbc.SqlDialect
@@ -122,7 +123,7 @@ class JdbcPublicAttachmentRepository(
     override fun claimQueued(limit: Int, now: Instant, lease: Duration): List<QueuedItem> =
         tx.execute {
             val rows = jdbc.query(
-                "select target_type, target_id, version from board_public_attachment_queue where claimed_until is null or claimed_until < :now order by queued_at limit :limit for update skip locked",
+                "select target_type, target_id, version from board_public_attachment_queue where (claimed_until is null or claimed_until < :now) and (next_attempt_at is null or next_attempt_at <= :now) order by queued_at limit :limit for update skip locked",
                 MapSqlParameterSource().addValue("now", dialect.instantParam(now)).addValue("limit", limit),
             ) { rs, _ -> QueuedItem(RevisionTarget.valueOf(rs.getString(1)), rs.getLong(2), rs.getLong(3)) }
             rows.forEach { (target, id, _) ->
@@ -133,6 +134,47 @@ class JdbcPublicAttachmentRepository(
             }
             rows
         } ?: emptyList()
+
+    override fun recordFailure(target: RevisionTarget, id: Long, now: Instant): Int {
+        val params = MapSqlParameterSource().addValue("target_type", target.name).addValue("target_id", id).addValue("queued_at", dialect.instantParam(now)).addValue("version", 0L)
+        jdbc.update(dialect.insertIgnore("board_public_attachment_queue", listOf("target_type", "target_id", "queued_at", "version"), listOf("target_type", "target_id")), params)
+        jdbc.update("update board_public_attachment_queue set attempts = attempts + 1 where target_type = :target_type and target_id = :target_id", params)
+        val attempts = jdbc.queryForObject("select attempts from board_public_attachment_queue where target_type = :target_type and target_id = :target_id", params, Int::class.java) ?: 1
+        jdbc.update(
+            "update board_public_attachment_queue set next_attempt_at = :next where target_type = :target_type and target_id = :target_id",
+            params.addValue("next", dialect.instantParam(PublicSyncBackoff.next(now, attempts))),
+        )
+        return attempts
+    }
+
+    override fun enqueuePurge(publicKey: String, now: Instant) {
+        jdbc.update(
+            dialect.insertIgnore("board_public_purge_queue", listOf("key_hash", "public_key", "queued_at"), listOf("key_hash")),
+            MapSqlParameterSource().addValue("key_hash", hash(publicKey)).addValue("public_key", publicKey).addValue("queued_at", dialect.instantParam(now)),
+        )
+    }
+
+    override fun claimPurges(limit: Int, now: Instant, lease: Duration): List<String> =
+        tx.execute {
+            val keys = jdbc.query(
+                "select public_key from board_public_purge_queue where (claimed_until is null or claimed_until < :now) and (next_attempt_at is null or next_attempt_at <= :now) order by queued_at limit :limit for update skip locked",
+                MapSqlParameterSource().addValue("now", dialect.instantParam(now)).addValue("limit", limit),
+            ) { rs, _ -> rs.getString(1) }
+            keys.forEach { jdbc.update("update board_public_purge_queue set claimed_until = :until where key_hash = :h", MapSqlParameterSource().addValue("until", dialect.instantParam(now.plus(lease))).addValue("h", hash(it))) }
+            keys
+        } ?: emptyList()
+
+    override fun finishPurge(publicKey: String) {
+        jdbc.update("delete from board_public_purge_queue where key_hash = :h", mapOf("h" to hash(publicKey)))
+    }
+
+    override fun failPurge(publicKey: String, now: Instant): Int {
+        val params = MapSqlParameterSource().addValue("h", hash(publicKey))
+        jdbc.update("update board_public_purge_queue set attempts = attempts + 1 where key_hash = :h", params)
+        val attempts = jdbc.queryForObject("select attempts from board_public_purge_queue where key_hash = :h", params, Int::class.java) ?: 1
+        jdbc.update("update board_public_purge_queue set next_attempt_at = :next where key_hash = :h", params.addValue("next", dialect.instantParam(PublicSyncBackoff.next(now, attempts))))
+        return attempts
+    }
 
     override fun queueVersion(target: RevisionTarget, id: Long): Long? =
         jdbc.queryForList(

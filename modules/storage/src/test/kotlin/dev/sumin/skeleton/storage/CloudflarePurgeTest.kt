@@ -67,7 +67,7 @@ class CloudflarePurgeTest {
     }
 
     @Test
-    fun `deleting a public object purges its absolute address after the delete, and a failed purge is reported to the caller`() {
+    fun `the object delete is separate from the purge, which names the absolute address and reports failure to the caller`() {
         val order = mutableListOf<String>()
         val storage = object : PresignedStorage by dev.sumin.skeleton.storagetest.FakePresignedStorage() {
             override fun delete(key: ObjectKey) { order += "delete:${key.value}" }
@@ -75,8 +75,10 @@ class CloudflarePurgeTest {
         val scheme = StorageKeyScheme(StorageWebProperties(keyOwner = StorageKeyOwner.OPAQUE, keySecret = "x".repeat(32), `public` = pub("/files", cf.copy(publicOrigin = "https://app.example.com"))))
         val uploads = StoragePublicUploads(storage, scheme) { PublicUploadPurger { urls -> order += "purge:${urls.single()}" } }
         uploads.deletePublicKey("public/b/a.png")
+        uploads.purgePublicKey("public/b/a.png")
         assertEquals(listOf("delete:public/b/a.png", "purge:https://app.example.com/files/public/b/a.png"), order)
         val failing = StoragePublicUploads(storage, scheme) { PublicUploadPurger { error("cloudflare down") } }
-        assertFailsWith<IllegalStateException> { failing.deletePublicKey("public/b/a.png") }
+        failing.deletePublicKey("public/b/a.png")   // 삭제는 purge 와 상관없이 끝난다
+        assertFailsWith<IllegalStateException> { failing.purgePublicKey("public/b/a.png") }
     }
 }

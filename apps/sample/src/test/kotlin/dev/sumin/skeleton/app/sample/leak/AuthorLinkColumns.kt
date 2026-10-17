@@ -17,7 +17,8 @@ object AuthorLinkColumns {
         // 공개 영역에 복사해 둔 첨부의 기억 - 원래 저장 키(업로드 키)를 담는다: 어떤 응답에도 나가지 않는다 (응답에는 키에서 계산한 공개 주소만 간다)
         "board_public_attachments" to setOf("target_type", "target_id", "key_hash", "storage_key", "created_at"),
         // 공개 영역 조정의 부기 - 대상 번호와 시각뿐이고 응답에는 나가지 않는다
-        "board_public_attachment_queue" to setOf("target_type", "target_id", "queued_at", "claimed_until", "version"),
+        "board_public_attachment_queue" to setOf("target_type", "target_id", "queued_at", "claimed_until", "version", "attempts", "next_attempt_at"),
+        "board_public_purge_queue" to setOf("key_hash", "public_key", "queued_at", "claimed_until", "attempts", "next_attempt_at"),
         "board_public_attachment_runs" to setOf("name", "last_run_at"),
         "board_reactions" to setOf("account_id"),
         "notification_inbox" to setOf("recipient_id", "recipient_ids_json"),

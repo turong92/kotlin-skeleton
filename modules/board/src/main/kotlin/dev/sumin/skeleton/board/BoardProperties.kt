@@ -104,8 +104,13 @@ data class BoardProperties(
     }
 
     /** 공개 영역 조정 - 매분은 실패한 항목만, 드문 전체 대조(모자란 복사 · 남은 복사 · 줄이 가리키지 않는 객체)는 [fullPassInterval] 마다 한 인스턴스만 */
-    data class PublicAttachments(val fullPassInterval: Duration = Duration.ofHours(24)) {
+    data class PublicAttachments(
+        val fullPassInterval: Duration = Duration.ofHours(24),
+        /** 한 항목이 이 횟수만큼 연달아 실패하면 주인에게 알린다(`alert` 모듈이 있으면). 시도 사이는 점점 늘어난다(지수, 최대 1시간) */
+        val alertAfterAttempts: Int = 10,
+    ) {
         init {
+            require(alertAfterAttempts >= 1) { "skeleton.board.public-attachments.alert-after-attempts must be 1 or more" }
             require(!fullPassInterval.isZero && !fullPassInterval.isNegative) { "skeleton.board.public-attachments.full-pass-interval must be positive" }
         }
     }

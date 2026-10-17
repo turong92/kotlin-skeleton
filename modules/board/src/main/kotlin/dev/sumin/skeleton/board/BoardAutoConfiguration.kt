@@ -139,10 +139,14 @@ class BoardAutoConfiguration {
         repository: BoardPublicAttachmentRepository,
         properties: BoardProperties,
         publicUploads: ObjectProvider<PublicUploads>,
+        alerts: ObjectProvider<BoardPublicSyncAlerts>,
         time: ObjectProvider<TimeProvider>,
         projects: ObjectProvider<ProjectRegistry>,
     ): BoardPublicAttachments =
-        BoardPublicAttachments(repository, { publicUploads.getIfAvailable() }, time.getIfAvailable { TimeProvider.systemUtc() }, projects.getIfAvailable(), properties.publicAttachments.fullPassInterval)
+        BoardPublicAttachments(
+            repository, { publicUploads.getIfAvailable()?.takeIf { it.enabled() } }, time.getIfAvailable { TimeProvider.systemUtc() }, projects.getIfAvailable(),
+            properties.publicAttachments.fullPassInterval, alerts.getIfAvailable { BoardPublicSyncAlerts.NONE }, properties.publicAttachments.alertAfterAttempts,
+        )
 
     @Bean
     @ConditionalOnBean(BoardPublicAttachments::class)
@@ -169,8 +173,8 @@ class BoardAutoConfiguration {
             } else {
                 scheduler.scheduleWithFixedDelay(
                     { try { attachments.processQueue() } catch (e: Exception) { log.warn("board public attachment queue failed: {}", e.toString()) } },
-                    Instant.now().plus(Duration.ofMinutes(1)),
-                    Duration.ofMinutes(1),
+                    Instant.now().plus(BoardPublicAttachments.TICK),
+                    BoardPublicAttachments.TICK,
                 )
                 scheduler.scheduleWithFixedDelay(
                     { try { attachments.fullPass() } catch (e: Exception) { log.warn("board public attachment full pass failed: {}", e.toString()) } },

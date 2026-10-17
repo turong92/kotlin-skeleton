@@ -5,6 +5,7 @@ dependencies {
     compileOnly(project(":modules:notification"))
     compileOnly(project(":modules:idempotency"))
     // captcha-turnstile: 비회원 쓰기의 캡차 (skeleton.board.guest.captcha=REQUIRED) — BoardCaptchaAutoConfiguration 이 클래스패스에 있을 때만 잇는다
+    compileOnly(project(":modules:alert"))   // 공개 영역 조정이 계속 실패하면 주인에게 알린다 (BoardAlertAutoConfiguration 이 클래스패스에 있을 때만)
     compileOnly(project(":modules:captcha-turnstile"))
     compileOnly("org.springframework.security:spring-security-core")   // 호출자(Authentication) — 없으면 엔드포인트를 등록하지 않는다
 

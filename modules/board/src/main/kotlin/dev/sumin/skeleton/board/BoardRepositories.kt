@@ -155,6 +155,18 @@ interface BoardRevisionRepository {
 /** 판이 없는 기본 구현 — `board-jdbc` 가 없으면 이것이다 */
 object NoBoardRevisions : BoardRevisionRepository
 
+/** 실패한 시도의 다음 시도 시각 - 지수(1분, 2분, 4분 …)이고 최대 1시간 */
+object PublicSyncBackoff {
+    private val MAX = java.time.Duration.ofHours(1)
+
+    fun next(now: java.time.Instant, attempts: Int): java.time.Instant {
+        val minutes = 1L shl (attempts - 1).coerceIn(0, 12)
+        return now.plus(java.time.Duration.ofMinutes(minutes).coerceAtMost(MAX))
+    }
+
+    private fun java.time.Duration.coerceAtMost(max: java.time.Duration) = if (this > max) max else this
+}
+
 /** 조정 큐의 한 줄 - 대상과 그 줄의 번호 */
 data class QueuedItem(val target: RevisionTarget, val id: Long, val version: Long)
 
@@ -197,6 +209,24 @@ interface BoardPublicAttachmentRepository {
 
     /** 적힌 항목을 [limit] 개 잡는다 - 잡힌 줄은 [lease] 동안 다른 인스턴스가 잡지 않는다 (`for update skip locked`). 줄의 번호(version)를 함께 준다 */
     fun claimQueued(limit: Int, now: java.time.Instant, lease: java.time.Duration): List<QueuedItem>
+
+    /**
+     * 맞추기에 실패했다 - 줄이 없으면 만들고(번호는 그대로) 시도 횟수를 +1, 다음 시도를 [PublicSyncBackoff] 만큼 늦춘다. 새 시도 횟수를 돌려준다.
+     * 새 쓰기가 줄을 다시 적으면([enqueue]의 쓰는 쪽) 횟수는 0 으로 돌아가고 바로 다시 시도된다.
+     */
+    fun recordFailure(target: RevisionTarget, id: Long, now: java.time.Instant): Int
+
+    /** 공개 객체를 지웠으니 CDN 캐시를 비울 공개 키를 적는다(멱등) - 요청 스레드가 외부 CDN 을 기다리지 않는다 */
+    fun enqueuePurge(publicKey: String, now: java.time.Instant)
+
+    /** 비울 공개 키를 [limit] 개 잡는다 (임대 [lease], 늦춘 것은 때가 될 때까지 제외) */
+    fun claimPurges(limit: Int, now: java.time.Instant, lease: java.time.Duration): List<String>
+
+    /** 비웠다 - 줄을 지운다 */
+    fun finishPurge(publicKey: String)
+
+    /** 비우기에 실패했다 - 시도 횟수 +1, 다음 시도를 늦춘다. 새 횟수 */
+    fun failPurge(publicKey: String, now: java.time.Instant): Int
 
     /** 이 항목의 줄의 번호 - 줄이 없으면 null. 맞추기 **시작할 때** 읽는다 */
     fun queueVersion(target: RevisionTarget, id: Long): Long?

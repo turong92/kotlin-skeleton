@@ -86,11 +86,13 @@ class StorageWebAutoConfiguration {
     fun storageGuestPublicEndpointContributor(): PublicEndpointContributor =
         PublicEndpointContributor { registry -> registry.add("POST", "/api/v1/storage/guest/presign") }
 
-    /** 공개 영역 - `public.enabled=true` 일 때만. 꺼져 있으면 빈이 없어 board 는 지금처럼 키만 낸다 */
+    /**
+     * 공개 영역 - 빈은 저장소가 있으면 늘 만들고(프로젝트 모드에서는 어느 프로젝트가 켰는지를 시작 때 알 수 없다), **켜졌는지는 부를 때마다 지금 프로젝트의 설정으로** 묻는다([PublicUploads.enabled]).
+     * 꺼져 있으면 board 는 지금처럼 키만 낸다.
+     */
     @Bean
     @ConditionalOnBean(PresignedStorage::class)
     @ConditionalOnMissingBean(PublicUploads::class)
-    @ConditionalOnProperty(prefix = "skeleton.storage.web.public", name = ["enabled"], havingValue = "true")
     fun publicUploads(
         storage: PresignedStorage,
         properties: StorageProperties,
@@ -101,15 +103,13 @@ class StorageWebAutoConfiguration {
     @Bean
     @ConditionalOnBean(PresignedStorage::class)
     @ConditionalOnMissingBean(PrivateUploadAccess::class)
-    @ConditionalOnProperty(prefix = "skeleton.storage.web.public", name = ["enabled"], havingValue = "true")
     fun privateUploadAccess(storage: PresignedStorage, properties: StorageProperties, projects: ObjectProvider<ProjectRegistry>): PrivateUploadAccess =
         StoragePrivateUploadAccess(storage, StorageKeySchemes.create(properties, projects.getIfAvailable()))
 
-    /** Cloudflare CDN 캐시 비우기 - 기본 꺼짐. 지운 공개 객체의 주소를 지운 뒤에 비운다 (`PublicUploadPurger` 를 앱이 직접 두면 그것이 쓰인다) */
+    /** Cloudflare CDN 캐시 비우기 - 빈은 외부 HTTP 가 있으면 만들고, 켜졌는지는 부를 때마다 지금 프로젝트의 `purge.cloudflare.enabled` 로 묻는다. 기본 꺼짐. 지운 공개 객체의 주소를 지운 뒤에 비운다 (`PublicUploadPurger` 를 앱이 직접 두면 그것이 쓰인다) */
     @Bean
     @ConditionalOnBean(ExternalHttpClient::class)
     @ConditionalOnMissingBean(PublicUploadPurger::class)
-    @ConditionalOnProperty(prefix = "skeleton.storage.web.public.purge.cloudflare", name = ["enabled"], havingValue = "true")
     fun cloudflarePublicUploadPurger(http: ExternalHttpClient, properties: StorageProperties, projects: ObjectProvider<ProjectRegistry>): PublicUploadPurger {
         val keys = StorageKeySchemes.create(properties, projects.getIfAvailable())
         return CloudflarePublicUploadPurger(http) { keys.properties().`public` }

@@ -19,12 +19,21 @@ class StoragePublicUploads(
         return pub.baseUrl.trimEnd('/') + "/" + keys.publicKeyOf(privateKey)
     }
 
+    override fun enabled(): Boolean = keys.publicEnabled()
+
+    override fun purgeEnabled(): Boolean {
+        val purger = purger() ?: return false
+        return enabled() && (purger !is CloudflarePublicUploadPurger || keys.properties().`public`.purge.cloudflare.enabled)
+    }
+
     override fun publicKeyOf(privateKey: String): String = keys.publicKeyOf(privateKey)
 
     override fun mayPublish(privateKey: String): Boolean =
-        privateKey.substringAfterLast('/').substringAfterLast('.', missingDelimiterValue = "").lowercase() in PUBLISHABLE_EXTENSIONS
+        keys.properties().`public`.enabled &&
+            privateKey.substringAfterLast('/').substringAfterLast('.', missingDelimiterValue = "").lowercase() in PUBLISHABLE_EXTENSIONS
 
     override fun publish(privateKey: String): Boolean {
+        if (!keys.properties().`public`.enabled) return false   // 이 프로젝트에서 꺼져 있으면 복사하지 않는다 (앱 단에서만 켜고 프로젝트가 끈 경우)
         val pub = keys.properties().`public`
         // 원본의 Content-Type 을 그대로 쓴다 (확장자로 짐작하지 않는다) - 허용 밖이면 공개하지 않는다
         val type = storage.metadata(ObjectKey(privateKey))?.contentType?.substringBefore(';')?.trim()?.lowercase() ?: return false
@@ -43,8 +52,11 @@ class StoragePublicUploads(
     override fun unpublish(privateKey: String) = deletePublicKey(keys.publicKeyOf(privateKey))
 
     override fun deletePublicKey(publicKey: String) {
-        storage.delete(ObjectKey(publicKey))
-        purger()?.purge(listOf(keys.properties().`public`.absoluteUrl(publicKey)))   // 객체를 지운 **뒤**에 - 실패하면 예외로 알린다(조정자가 큐로 다시 시도)
+        storage.delete(ObjectKey(publicKey))   // 객체 삭제가 먼저이고 동기다 - 공개 쪽 보장
+    }
+
+    override fun purgePublicKey(publicKey: String) {
+        purger()?.purge(listOf(keys.properties().`public`.absoluteUrl(publicKey)))
     }
 
     override fun listPublicKeys(): List<String> {
@@ -69,6 +81,8 @@ class StoragePublicUploads(
 
 /** 비공개 업로드의 짧은 서명 읽기 주소 */
 class StoragePrivateUploadAccess(private val storage: PresignedStorage, private val keys: StorageKeyScheme) : PrivateUploadAccess {
+    override fun enabled(): Boolean = keys.publicEnabled()
+
     override val defaultTtl: Duration get() = keys.properties().`public`.accessTtl
 
     override fun downloadUrl(privateKey: String, ttl: Duration): String =

@@ -24,6 +24,6 @@ class PublicQueueWriter(
         if (!enabled()) return
         val params = MapSqlParameterSource().addValue("target_type", target.name).addValue("target_id", id).addValue("queued_at", dialect.instantParam(now)).addValue("version", 0L)
         jdbc.update(dialect.insertIgnore("board_public_attachment_queue", listOf("target_type", "target_id", "queued_at", "version"), listOf("target_type", "target_id")), params)
-        jdbc.update("update board_public_attachment_queue set queued_at = :queued_at, version = version + 1 where target_type = :target_type and target_id = :target_id", params)
+        jdbc.update("update board_public_attachment_queue set queued_at = :queued_at, version = version + 1, attempts = 0, next_attempt_at = null where target_type = :target_type and target_id = :target_id", params)
     }
 }

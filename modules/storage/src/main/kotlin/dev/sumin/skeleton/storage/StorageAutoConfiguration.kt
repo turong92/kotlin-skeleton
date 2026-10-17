@@ -57,9 +57,16 @@ object StorageKeySchemes {
         }
         registry.active.forEach { project ->
             val cf = webs.of(project).`public`.purge.cloudflare
-            // 프로젝트 모드: purge 를 켰으면 그 프로젝트가 자기 zone-id · api-token 을 가져야 한다 (프로젝트의 init 가 이미 비어 있으면 실패시킨다 - 메시지에 프로젝트 id)
-            if (cf.enabled) require(cf.zoneId.isNotBlank() && cf.apiToken.isNotBlank()) { "Project '${project.id}': skeleton.projects.${project.id}.config.storage.web.public.purge.cloudflare needs zone-id and api-token" }
+            // 프로젝트 모드: 켠 프로젝트는 자기 zone-id · api-token 을 자기 config 에 적어야 한다 - 공통에서 물려받으면 기동 실패 (한 토큰이 다른 프로젝트의 존을 비우지 않게; 결제 모듈과 같은 규칙)
+            if (cf.enabled) {
+                listOf("zone-id", "api-token").forEach { leaf ->
+                    val key = "storage.web.public.purge.cloudflare.$leaf"
+                    check(registry.ownValue(project, key) != null) {
+                        "project '${project.id}': skeleton.$key is inherited from the shared settings (or missing) — every project needs its own Cloudflare zone and token (set skeleton.projects.${project.id}.config.$key)"
+                    }
+                }
+            }
         }
-        return StorageKeyScheme { webs.get() }
+        return StorageKeyScheme({ webs.get() }, { registry.active.any { webs.of(it).`public`.enabled } })
     }
 }

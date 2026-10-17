@@ -30,8 +30,16 @@ fun interface StorageKeyOwnership {
  *
  * 프로젝트 모드에서는 규칙(접두사 · 소유 방식 · 비밀)을 **부를 때마다** 지금 프로젝트의 것으로 읽는다 — A 의 비밀로 만든 OPAQUE 키는 B 에서 소유로 인정되지 않는다.
  */
-class StorageKeyScheme(private val webOf: () -> StorageWebProperties) : StorageKeyOwnership {
+class StorageKeyScheme(
+    private val webOf: () -> StorageWebProperties,
+    /** 프로젝트 문맥이 없을 때 「어느 프로젝트든 공개 영역이 켜졌는가」 - 기본은 [webOf] 의 값(프로젝트 없는 앱) */
+    private val anyPublic: () -> Boolean = { webOf().`public`.enabled },
+) : StorageKeyOwnership {
     constructor(web: StorageWebProperties) : this({ web })
+
+    /** 지금 프로젝트에서 공개 영역이 켜졌는가 - 프로젝트 문맥이 없으면 어느 프로젝트든 켜졌는가 */
+    fun publicEnabled(): Boolean =
+        if (dev.sumin.skeleton.common.project.ProjectContext.currentOrNull() != null) webOf().`public`.enabled else anyPublic()
 
     fun issue(accountId: String, fileName: String): String {
         val web = webOf()

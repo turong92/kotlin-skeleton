@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.board.jdbc
 
 import dev.sumin.skeleton.board.BoardPublicAttachments
+import dev.sumin.skeleton.board.BoardPublicSyncAlerts
 import dev.sumin.skeleton.board.CommentStatus
 import dev.sumin.skeleton.board.NewComment
 import dev.sumin.skeleton.board.PostChange
@@ -40,10 +41,14 @@ class JdbcPublicAttachmentDbTest {
             if (afterCopyTimeout) error("timeout after the copy went through")
             return true
         }
-        var purgeFailsOnce = false
-        override fun unpublish(privateKey: String) {
-            objects -= privateKey   // 객체 삭제가 먼저
-            if (purgeFailsOnce) { purgeFailsOnce = false; error("CDN purge failed") }
+        var purgeOn = false
+        var purgeFails = false
+        val purged = mutableListOf<String>()
+        override fun purgeEnabled() = purgeOn
+        override fun unpublish(privateKey: String) { objects -= privateKey }   // 객체 삭제만 (동기)
+        override fun purgePublicKey(publicKey: String) {
+            if (purgeFails) error("CDN purge failed")
+            purged += publicKey
         }
         override fun listPublicKeys() = objects.map { "pub/$it" }
         override fun deletePublicKey(publicKey: String) { objects.removeIf { "pub/$it" == publicKey } }
@@ -55,7 +60,12 @@ class JdbcPublicAttachmentDbTest {
     init {
         db.jdbc.update("delete from board_public_attachment_runs", emptyMap<String, Any>())   // 같은 DB 를 쓰는 다른 시험의 「방금 돌았다」를 지운다
     }
-    private val sync = BoardPublicAttachments(repo, { uploads }, TimeProvider { now }, null, Duration.ofHours(24))
+    private val stuck = mutableListOf<String>()
+    private val sync = BoardPublicAttachments(
+        repo, { uploads }, TimeProvider { now }, null, Duration.ofHours(24),
+        alerts = BoardPublicSyncAlerts { what, attempts, _ -> stuck += "$what#$attempts" }, alertAfterAttempts = 3,
+        async = { it.run() },   // 시험은 곧바로 돌린다
+    )
 
     /** 이 시험의 키 표지 - 같은 DB 의 다른 시험이 남긴 줄을 조정자가 함께 처리해도 이 시험의 단언은 자기 키만 본다 */
     private val tag = "t${System.nanoTime()}/"
@@ -128,6 +138,7 @@ class JdbcPublicAttachmentDbTest {
         sync.reconcile(RevisionTarget.COMMENT, a.id)
         assertEquals(emptySet(), mine())
         uploads.failPublish = null
+        now = now.plus(Duration.ofMinutes(3))   // 늦춘 때(1분)와 임대(2분)가 지난 뒤
         assertTrue(sync.processQueue() >= 1, "the failed item was written down and is retried")
         assertEquals(setOf("shared.png"), mine())
         sync.reconcile(RevisionTarget.COMMENT, b.id)   // 둘 다 줄이 있다
@@ -295,20 +306,66 @@ class JdbcPublicAttachmentDbTest {
         assertEquals(0L, queueSize(RevisionTarget.COMMENT, c.id))
     }
 
+    private fun purgeQueueSize() = db.scalar("select count(*) from board_public_purge_queue")
+
     @Test
-    fun `the object is deleted first, and a failed CDN purge is retried from the queue until it goes through`() {
+    fun `the object is deleted first and the CDN purge runs after, off the request - a hide leaves a purge line that the async kick takes`() {
+        uploads.purgeOn = true
         val post = db.newPost(db.newBoard())
-        val c = comments.insert(NewComment(post.id, null, null, 0, "acc_a", "c", T0, attachments = listOf("${tag}purge.png")))!!
-        sync.processQueue()
-        assertEquals(setOf("purge.png"), mine())
-        uploads.purgeFailsOnce = true
-        comments.setStatus(c.id, CommentStatus.HIDDEN, T0)
-        sync.reconcile(RevisionTarget.COMMENT, c.id)   // 지우기는 됐고 purge 가 실패했다
-        assertEquals(emptySet(), mine(), "the guarantee on the public side: the object is gone first")
-        assertEquals(1L, db.scalar("select count(*) from board_public_attachments where target_id = :id", "id" to c.id), "the note stays - the purge still has to be redone")
-        assertEquals(1L, queueSize(RevisionTarget.COMMENT, c.id))
-        sync.processQueue()   // 다시 지우고 purge 한다
-        assertEquals(0L, db.scalar("select count(*) from board_public_attachments where target_id = :id", "id" to c.id))
-        assertEquals(0L, queueSize(RevisionTarget.COMMENT, c.id))
+        val c = comment(post.id, CommentStatus.PUBLISHED, "purge.png")
+        sync.reconcile(RevisionTarget.COMMENT, c.id)
+        db.comments.setStatus(c.id, CommentStatus.HIDDEN, T0)
+        sync.reconcile(RevisionTarget.COMMENT, c.id)
+        assertEquals(emptySet(), mine(), "the object is gone first")
+        assertTrue(uploads.purged.contains("pub/${tag}purge.png"), "and the cache purge ran for its public key")
+        assertEquals(0L, db.scalar("select count(*) from board_public_purge_queue where public_key = :k", "k" to "pub/${tag}purge.png"))
     }
+
+    @Test
+    fun `a failing purge keeps the object gone, backs off exponentially, alerts after N attempts and goes through once the CDN is back`() {
+        uploads.purgeOn = true
+        uploads.purgeFails = true
+        val post = db.newPost(db.newBoard())
+        val c = comment(post.id, CommentStatus.PUBLISHED, "slow-purge.png")
+        sync.reconcile(RevisionTarget.COMMENT, c.id)
+        db.comments.setStatus(c.id, CommentStatus.HIDDEN, T0)
+        sync.reconcile(RevisionTarget.COMMENT, c.id)
+        val key = "pub/${tag}slow-purge.png"
+        assertEquals(emptySet(), mine(), "purge trouble never un-deletes the object")
+        fun attempts() = db.scalar("select attempts from board_public_purge_queue where public_key = :k", "k" to key)
+        assertEquals(1L, attempts())
+        sync.processPurges()   // 같은 시각: 아직 늦춘 때가 아니다
+        assertEquals(1L, attempts(), "backed off: no retry before its time")
+        now = now.plus(Duration.ofMinutes(3)); sync.processPurges()
+        assertEquals(2L, attempts())
+        now = now.plus(Duration.ofMinutes(10)); sync.processPurges()
+        assertEquals(3L, attempts())
+        assertTrue(stuck.any { it == "purge:$key#3" }, "the owner is told once it has failed 3 times: $stuck")
+        uploads.purgeFails = false
+        now = now.plus(Duration.ofHours(2)); sync.processPurges()
+        assertTrue(uploads.purged.contains(key))
+        assertEquals(0L, db.scalar("select count(*) from board_public_purge_queue where public_key = :k", "k" to key))
+    }
+
+    @Test
+    fun `a reconcile that keeps failing counts its attempts, spaces them out and alerts - and a new write starts over`() {
+        val post = db.newPost(db.newBoard())
+        val c = comments.insert(NewComment(post.id, null, null, 0, "acc_a", "c", T0, attachments = listOf("${tag}stuck.png")))!!
+        uploads.failPublish = { error("S3 down") }
+        sync.reconcile(RevisionTarget.COMMENT, c.id)
+        fun attempts() = db.scalar("select attempts from board_public_attachment_queue where target_type = 'COMMENT' and target_id = :id", "id" to c.id)
+        assertEquals(1L, attempts())
+        assertEquals(0, sync.processQueue().let { sync.processQueue() }, "still backed off")
+        now = now.plus(Duration.ofMinutes(3)); sync.processQueue()
+        now = now.plus(Duration.ofMinutes(10)); sync.processQueue()
+        assertEquals(3L, attempts())
+        assertTrue(stuck.any { it == "comment:${c.id}#3" }, "alert at the 3rd failure: $stuck")
+        uploads.failPublish = null
+        comments.setStatus(c.id, CommentStatus.PUBLISHED, now)   // 새 쓰기 - 횟수가 0 으로 돌아가고 곧바로 다시 시도된다
+        assertEquals(0L, attempts())
+        now = now.plus(Duration.ofMinutes(3))
+        sync.processQueue()
+        assertEquals(setOf("stuck.png"), mine())
+    }
+
 }

@@ -43,7 +43,7 @@ class BoardJdbcAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     fun boardPublicQueueWriter(dataSource: DataSource, dialect: SqlDialect, uploads: ObjectProvider<PublicUploads>): PublicQueueWriter =
-        PublicQueueWriter(NamedParameterJdbcTemplate(dataSource), dialect) { uploads.getIfAvailable() != null }
+        PublicQueueWriter(NamedParameterJdbcTemplate(dataSource), dialect) { uploads.getIfAvailable()?.enabled() == true }
 
     @Bean
     @ConditionalOnMissingBean(BoardRepository::class)

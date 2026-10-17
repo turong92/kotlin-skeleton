@@ -32,7 +32,7 @@ HTTP 는 `skeleton.board.http.base-path`(기본 `/api/v1/boards`)에 열린다 (
 |---|---|
 | 의존성 한 줄 | `implementation(project(":modules:board"))` |
 | 함께 오는 모듈 | `platform` |
-| 컴파일 전용 | `notification`, `idempotency`, `captcha-turnstile` |
+| 컴파일 전용 | `notification`, `idempotency`, `captcha-turnstile`, `alert` |
 | 설정 접두사 | `skeleton.board` — [docs/config/modules/board.yml](../config/modules/board.yml) |
 | 기본 동작 | 켜짐. 게시판은 `seed-boards` 로 심거나 운영자가 만든다 — 아무것도 심지 않으면 비어 있다. 반응은 LIKE · DISLIKE, SINGLE 모드. 알림 · 한도는 없는 것과 같다. |
 | 부팅에 필요한 것 | 저장소 포트 네 개(`BoardRepository` · `PostRepository` · `CommentRepository` · `ReactionRepository`) — `board-jdbc` 가 내거나 앱이 직접 구현한다. 없으면 시작이 실패하고 메시지가 빠진 빈 이름을 적는다. |
@@ -124,6 +124,9 @@ HTTP 는 `skeleton.board.http.base-path`(기본 `/api/v1/boards`)에 열린다 (
 - **아웃박스**: 공개 여부에 영향을 주는 쓰기(글 · 댓글 만들기 · 첨부 변경 · 상태 변경(승인 · 가림 · 삭제 · 글 숨김) · 판 승인)는 **같은 트랜잭션 안에서** `board_public_attachment_queue` 에 대상 한 줄을 적는다(이미 있으면 그대로). 커밋 뒤 리스너가 맞추고 줄을 지우며, 리스너가 돌기 전에 프로세스가 죽어도 **매분** 조정이 남은 줄을 맞춘다(`for update skip locked`) - 1분 안에 맞춰진다. 전체 대조는 진짜 그물로만 남는다. 공개 영역이 꺼져 있으면(기본) 줄을 적지 않아 쓰기 쿼리가 늘지 않는다. **자기 저장소를 둔 앱**(board-jdbc 를 쓰지 않는 앱)은 `BoardPublicAttachmentRepository` 를 구현해야 하고(쓰기와 같은 트랜잭션에서 `enqueue` 를 부르는 책임도 앱의 저장소에 있다), 구현이 없으면 조정자가 없어 응답에 공개 주소(`attachmentUrls`)를 싣지 않는다 - 복사하는 이가 없는 주소는 404 이기 때문이다.
 - 공개 주소는 키의 형식(확장자)이 공개할 수 있는 것(이미지 · PDF)일 때만 싣는다 - 텍스트 같은 첨부는 비공개로만 남고 주소가 없다(저장소를 묻지 않는 판정이다).
 - **남는 한계**: 전체 대조가 객체를 나열한 뒤 줄 커서가 지나간 자리에서 「해제 → 다시 복사」가 일어나면 방금 다시 복사한 객체를 지울 수 있다. 그러면 다음 대조(또는 그 항목의 다음 쓰기)까지 사진이 깨진다 - 깨지는 쪽이지 공개되는 쪽이 아니다.
+- **영구 실패에는 상한이 있다**: 큐 줄은 시도 횟수를 세고 실패할수록 다음 시도를 늦춘다(1분, 2분, 4분 … 최대 1시간). `alert-after-attempts`(기본 10)회부터 `alert` 모듈이 있으면 주인에게 알린다(`BoardAlertKind.PUBLIC_ATTACHMENT_STUCK`, 6시간 간격으로 접힘). 객체 삭제(공개 쪽 보장)는 이와 상관없이 먼저 끝난다. 새 쓰기가 줄을 다시 적으면 횟수는 0 으로 돌아간다.
+- **CDN 캐시 비우기는 요청 스레드 밖**: 객체는 동기로 지우고, 비울 공개 키만 `board_public_purge_queue` 에 적어 비동기(가상 스레드로 곧바로 한 번 + 매 틱)로 돌린다. 틱은 1분이고 큐 줄의 임대는 그 두 배(2분)다 - 잡은 인스턴스가 죽으면 그 뒤에 다른 인스턴스가 이어받고, 한 틱을 넘겨 처리해도 다음 틱이 같은 줄을 겹쳐 잡지 않는다. 비우기가 실패하면 같은 식으로 횟수를 세어 늦춘다.
+- **프로젝트 모드**: 공개 영역의 켜짐은 부를 때마다 지금 프로젝트의 설정으로 묻는다 - 어느 프로젝트든 켜졌으면 빈이 있고, 꺼진 프로젝트는 주소 · 복사 · 큐 줄이 모두 없다(앱 단에서 켜고 프로젝트가 꺼도 같다).
 - 복사 전에 원본의 Content-Type 을 읽어 그대로 쓰고 허용 형식(image/jpeg · png · webp · gif · avif · heic, application/pdf) 밖이면 공개하지 않는다. `nosniff` 는 CDN · 버킷 설정에서 붙인다.
 - 승인 전 · 판 사진은 `GET …/posts/{id}/attachments?index=N` · `…/comments/{cid}/attachments?index=N`(`from=edit` 이면 대기 판의 순번, 비회원은 `as=owner|author`)가 짧은 서명 주소(`{url, expiresInSeconds}`, 기본 5분)로 준다 - 운영자 · 댓글을 관리하는 글 주인 · 작성자 본인(비회원은 비밀 헤더 `X-Board-Guest-Secret`, 증명할 비밀은 `as` 로 **하나**)만. 가린 · 지운 글 · 댓글의 사진은 운영자만. 못 보는 댓글 · 없는 순번은 `404`, 권한이 없으면 `403`. 비회원 쓰기 한도는 먹지 않는다.
 - 이어짐: platform 포트 `PublicUploads` · `PrivateUploadAccess` 가 있으면 켜지고 없으면 board 는 키만 낸다.
