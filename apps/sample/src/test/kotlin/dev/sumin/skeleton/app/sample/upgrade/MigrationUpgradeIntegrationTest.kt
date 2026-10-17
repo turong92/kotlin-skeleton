@@ -193,7 +193,10 @@ class MigrationUpgradeIntegrationTest {
         assertNull(posts.guestSecretHash(postId), "a baseline row has no guest secret")
         val commentId = jdbc.sql("select min(id) from board_comments where post_id = :p and author_id = 'acc_upgrade'").param("p", postId).query(Long::class.java).single()
         assertNull(assertNotNull(comments.find(commentId)).moderatedBy)
-        assertTrue(assertNotNull(comments.find(commentId)).everPublished, "baseline comments were public - the published_at backfill keeps them in the thread")
+        // 옛 행 채우기(published_at)는 기준선이 그 V 파일보다 앞일 때만 일어난다 - 새 프로젝트로 찍으면 기준선이 최신으로 옮겨 가 열이 이미 있는 스키마에 행을 넣으므로 채울 것이 없다
+        if (UpgradeBaseline.baselineVersion < "20261017100400") {
+            assertTrue(assertNotNull(comments.find(commentId)).everPublished, "baseline comments were public - the published_at backfill keeps them in the thread")
+        }
         assertEquals(emptyMap(), comments.attachments(listOf(commentId)))
         assertEquals(0L, jdbc.sql("select count(*) from board_revisions").query(Long::class.java).single())
 

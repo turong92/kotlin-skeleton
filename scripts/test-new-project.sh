@@ -40,8 +40,10 @@ deploy_env_shape() {
   done <<<"$fns"
   # 그래도 실행은 5초 알람 안에서만 한다 (스크립트 본문 · docker 는 실행하지 않는다)
   run() { perl -e 'alarm 5; exec @ARGV' bash -c "$fns; $1"; }
-  [ "$(DBNAME=x run 'secret_env | wc -l | tr -d " "')" = 2 ] || return 1
-  [ "$(DBNAME=x run contract_env | grep -c '^-e$')" = 4 ] || return 1
+  # 비밀은 `-e NAME=값` 한 쌍(두 줄)씩 - 첨부 키 · 비회원 업로드 · 공개 영역 비밀 …이 늘어도 쌍이어야 하고, contract_env 는 DB 세 쌍 + 그 비밀들이다
+  local secrets; secrets="$(DBNAME=x run 'secret_env | wc -l | tr -d " "')"
+  [ "${secrets:-0}" -ge 2 ] && [ $((secrets % 2)) = 0 ] || return 1
+  [ "$(DBNAME=x run contract_env | grep -c '^-e$')" = $((3 + secrets / 2)) ] || return 1
   DBNAME=x run contract_env | grep -q '^[A-Z0-9_]*_STORAGE_WEB_KEY_SECRET=.\{32,\}'
 }
 check() { # check "<설명>" <명령...>  — 명령이 성공하면 통과
@@ -230,7 +232,7 @@ expect_exit 0 "persistence-jooq + 형제 마이그레이션 모듈을 찍는다"
 echo "== 7. --with-sample (샘플 앱 \"Notes\" 은 요청할 때만 남는다)"
 G="$TMP/g"
 expect_exit 0 "조합 5 를 찍는다 (rename 잔여 검사 포함)" stamp "$G" --with-sample
-want=":apps:api :apps:sample :modules:account :modules:account-jdbc :modules:alert :modules:alert-jdbc :modules:auth :modules:auth-magic-link :modules:auth-session :modules:auth-session-jdbc :modules:auth-social :modules:auth-social-google :modules:auth-social-kakao :modules:auth-social-naver :modules:auth-social-oidc :modules:auth-social-x :modules:author-profile :modules:author-profile-jdbc :modules:board :modules:board-jdbc :modules:captcha-turnstile :modules:crypto :modules:db-postgresql :modules:idempotency :modules:job-queue-jdbc :modules:json :modules:legal :modules:legal-jdbc :modules:migration :modules:migration-flyway :modules:notification :modules:notification-jdbc :modules:notification-mail :modules:notification-sse :modules:payment :modules:payment-jdbc :modules:payment-kakaopay :modules:payment-naverpay :modules:payment-paddle :modules:payment-toss :modules:persistence-jdbc :modules:platform :modules:storage :modules:storage-s3 :modules:time"
+want=":apps:api :apps:sample :modules:account :modules:account-jdbc :modules:alert :modules:alert-jdbc :modules:auth :modules:auth-magic-link :modules:auth-session :modules:auth-session-jdbc :modules:auth-social :modules:auth-social-google :modules:auth-social-kakao :modules:auth-social-naver :modules:auth-social-oidc :modules:auth-social-x :modules:author-profile :modules:author-profile-jdbc :modules:board :modules:board-jdbc :modules:captcha-turnstile :modules:crypto :modules:db-postgresql :modules:idempotency :modules:job-queue-jdbc :modules:json :modules:legal :modules:legal-jdbc :modules:migration :modules:migration-flyway :modules:notification :modules:notification-jdbc :modules:notification-mail :modules:notification-sse :modules:payment :modules:payment-jdbc :modules:payment-kakaopay :modules:payment-naverpay :modules:payment-paddle :modules:payment-toss :modules:persistence-jdbc :modules:platform :modules:scheduler :modules:storage :modules:storage-s3 :modules:time"
 got="$(includes "$G/settings.gradle.kts")"
 [ "$got" = "$want" ] && pass "settings.gradle.kts 는 스타터 + 샘플 앱의 모듈과 그 닫힘을 포함한다" || fail "settings includes: [$got] expected [$want]"
 check "샘플 앱 소스가 새 패키지로 옮겨진다" test -f "$G/apps/sample/src/main/kotlin/com/acme/shop/app/sample/SampleApplication.kt"
