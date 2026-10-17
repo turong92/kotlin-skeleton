@@ -46,7 +46,7 @@ abstract class SampleIntegrationTest {
     fun cleanNotes() {
         jdbc.sql("delete from notes").update()
         // 게시판 — 자식부터 (시드 게시판 general 은 남긴다)
-        listOf("board_reactions", "board_comments", "board_post_attachments", "board_posts").forEach { jdbc.sql("delete from $it").update() }
+        listOf("board_reactions", "board_public_attachments", "board_comments", "board_post_attachments", "board_posts").forEach { jdbc.sql("delete from $it").update() }
         jdbc.sql("delete from notification_inbox").update()
         jdbc.sql("delete from jobs").update()
         user = login("user@example.com")

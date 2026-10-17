@@ -37,6 +37,8 @@ class LeakWorld(private val http: LeakHttp, registry: NotificationSubscriptionRe
     var c2 = 0L; private set   // B 의 답글 (c1 아래 — 자작)
     var c3 = 0L; private set   // B 의 답글 (c0 아래 — Y 에게 알림)
     var c4 = 0L; private set   // C 의 댓글
+    var cPictureKey = ""; private set
+    var cPicture = 0L; private set   // Y 가 자기 글에 단 사진 댓글 - 공개 주소 · 서명 주소 경로가 키 말고 아무것도 내지 않는지 본다
     var cg = 0L; private set   // 비회원이 Y 의 글에 쓴 댓글 (승인되어 공개) — 그 비밀은 어떤 응답에도 없어야 한다
     var cgWaiting = 0L; private set   // 비회원의 승인 대기 댓글
     val guestSecret = "guest-secret-$nonce"
@@ -80,6 +82,8 @@ class LeakWorld(private val http: LeakHttp, registry: NotificationSubscriptionRe
         c2 = createComment(xToken, b, yPost, "B 가 자기 댓글에 답글 $nonce", c1)
         c3 = createComment(xToken, b, yPost, "B 가 Y 에게 답글 $nonce", c0)
         c4 = createComment(xToken, c, yPost, "C 가 단 댓글 $nonce")
+        cPictureKey = attach(yToken, track = false).single()
+        cPicture = createComment(yToken, yProfile, yPost, "Y 의 사진 댓글 $nonce", attachments = listOf(cPictureKey))   // Y 자신의 글이라 알림이 없다 - 작성자 짝 스캔(A · B)에 끼지 않는다
         cg = guestComment("지나가던 손님 $nonce")
         http.put("/api/v1/boards/general/posts/$yPost/comments/$cg/moderation", modToken, """{"status":"PUBLISHED"}""").ok()
         guestEdit(cg, guestEditText)
@@ -121,9 +125,12 @@ class LeakWorld(private val http: LeakHttp, registry: NotificationSubscriptionRe
         }
     }
 
-    private fun attach(): List<String> {
-        val r = http.post("/api/v1/storage/presign", xToken, """{"fileName":"photo.png","contentType":"image/png","sizeBytes":1024}""").ok()
-        return listOf(r.read<String>("$.value.key").also { keys += it })
+    /** 사진 키를 가진 모든 항목의 키 - 글 둘의 것(`keys`)과 사진 댓글의 것 */
+    val pictureKeys: List<String> get() = keys + cPictureKey
+
+    private fun attach(token: String = xToken, track: Boolean = true): List<String> {
+        val r = http.post("/api/v1/storage/presign", token, """{"fileName":"photo.png","contentType":"image/png","sizeBytes":1024}""").ok()
+        return listOf(r.read<String>("$.value.key").also { if (track) keys += it })
     }
 
     private fun tick() = Thread.sleep(4)   // 시각 값이 두 쓰기에서 우연히 같아지지 않게
@@ -135,10 +142,11 @@ class LeakWorld(private val http: LeakHttp, registry: NotificationSubscriptionRe
         return http.post("/api/v1/boards/general/posts", token, """{"title":${json(title)},"body":${json(body)},"authorId":"${author.id}","attachments":$files$st}""").ok().read<Number>("$.value.id").toLong()
     }
 
-    fun createComment(token: String, author: Profile, post: Long, text: String, parent: Long? = null): Long {
+    fun createComment(token: String, author: Profile, post: Long, text: String, parent: Long? = null, attachments: List<String> = emptyList()): Long {
         tick()
         val p = parent?.let { ""","parentId":$it""" } ?: ""
-        return http.post("/api/v1/boards/general/posts/$post/comments", token, """{"body":${json(text)},"authorId":"${author.id}"$p}""").ok().read<Number>("$.value.id").toLong()
+        val files = if (attachments.isEmpty()) "" else attachments.joinToString(",", ""","attachments":[""", "]") { json(it) }
+        return http.post("/api/v1/boards/general/posts/$post/comments", token, """{"body":${json(text)},"authorId":"${author.id}"$p$files}""").ok().read<Number>("$.value.id").toLong()
     }
 
     /** 로그인하지 않은 쓰기 — 이름은 본문, 비밀은 헤더로만 (응답에 어느 쪽도 비밀이 없어야 한다) */

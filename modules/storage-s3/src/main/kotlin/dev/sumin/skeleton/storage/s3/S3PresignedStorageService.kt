@@ -90,12 +90,13 @@ class S3PresignedStorageService(
             .destinationBucket(bucket)
             .destinationKey(request.destinationKey.value)
             .apply {
-                if (request.metadata.isNotEmpty() || request.contentType != null) {
+                if (request.metadata.isNotEmpty() || request.contentType != null || request.cacheControl != null) {
                     metadataDirective(MetadataDirective.REPLACE)
                     if (request.metadata.isNotEmpty()) {
                         metadata(request.metadata)
                     }
                     request.contentType?.let { contentType(it) }
+                    request.cacheControl?.let { cacheControl(it) }
                 }
             }
             .build()

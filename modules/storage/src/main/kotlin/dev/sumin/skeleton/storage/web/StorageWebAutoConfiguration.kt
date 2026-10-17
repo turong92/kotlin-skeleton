@@ -3,6 +3,9 @@ package dev.sumin.skeleton.storage.web
 import dev.sumin.skeleton.common.project.ProjectRegistry
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.common.time.asClock
+import dev.sumin.skeleton.common.upload.PrivateUploadAccess
+import dev.sumin.skeleton.common.upload.PublicUploadPurger
+import dev.sumin.skeleton.common.upload.PublicUploads
 import dev.sumin.skeleton.common.upload.UploadedKeyUsage
 import dev.sumin.skeleton.common.web.ClientIps
 import dev.sumin.skeleton.common.web.InMemoryFixedWindowRateLimitStore
@@ -17,7 +20,9 @@ import dev.sumin.skeleton.storage.StorageGuestCaptchaMode
 import dev.sumin.skeleton.storage.StorageGuestCleanup
 import dev.sumin.skeleton.storage.StorageGuestUploads
 import dev.sumin.skeleton.storage.StorageKeySchemes
+import dev.sumin.skeleton.storage.StoragePrivateUploadAccess
 import dev.sumin.skeleton.storage.StorageProperties
+import dev.sumin.skeleton.storage.StoragePublicUploads
 import java.time.Duration
 import java.time.Instant
 import org.slf4j.LoggerFactory
@@ -77,6 +82,25 @@ class StorageWebAutoConfiguration {
     @ConditionalOnProperty(prefix = "skeleton.storage.web.guest", name = ["enabled"], havingValue = "true")
     fun storageGuestPublicEndpointContributor(): PublicEndpointContributor =
         PublicEndpointContributor { registry -> registry.add("POST", "/api/v1/storage/guest/presign") }
+
+    /** 공개 영역 - `public.enabled=true` 일 때만. 꺼져 있으면 빈이 없어 board 는 지금처럼 키만 낸다 */
+    @Bean
+    @ConditionalOnBean(PresignedStorage::class)
+    @ConditionalOnMissingBean(PublicUploads::class)
+    @ConditionalOnProperty(prefix = "skeleton.storage.web.public", name = ["enabled"], havingValue = "true")
+    fun publicUploads(
+        storage: PresignedStorage,
+        properties: StorageProperties,
+        projects: ObjectProvider<ProjectRegistry>,
+        purgers: ObjectProvider<PublicUploadPurger>,
+    ): PublicUploads = StoragePublicUploads(storage, StorageKeySchemes.create(properties, projects.getIfAvailable())) { purgers.getIfAvailable() }
+
+    @Bean
+    @ConditionalOnBean(PresignedStorage::class)
+    @ConditionalOnMissingBean(PrivateUploadAccess::class)
+    @ConditionalOnProperty(prefix = "skeleton.storage.web.public", name = ["enabled"], havingValue = "true")
+    fun privateUploadAccess(storage: PresignedStorage, properties: StorageProperties, projects: ObjectProvider<ProjectRegistry>): PrivateUploadAccess =
+        StoragePrivateUploadAccess(storage, StorageKeySchemes.create(properties, projects.getIfAvailable()))
 
     /** 붙지 않은 비회원 업로드 회수 - `guest.cleanup.enabled=true` 일 때만. 주기는 [StorageGuestCleanupJob] (scheduler 모듈이 있어야 돈다) */
     @Bean

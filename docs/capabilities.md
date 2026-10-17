@@ -965,6 +965,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 설정 접두사 `skeleton.storage` — 키와 기본값 `docs/config/modules/storage.yml`
 - HTTP 경로: `/api/v1/storage`
 - 비밀 · 환경변수: `<P>_STORAGE_WEB_KEY_SECRET` — 빠지면: key-owner=OPAQUE 인데 비었거나 32자보다 짧으면 기동 실패 · 기본(ACCOUNT_ID)에서는 쓰지 않는다 · 무작위로 충분하지만 바꾸면 발급한 OPAQUE 키가 맞지 않게 된다
+- 비밀 · 환경변수: `<P>_STORAGE_WEB_PUBLIC_SECRET` — 빠지면: public.enabled=true(게시판 사진 공개 영역) 인데 비었거나 32자보다 짧으면 기동 실패(base-url 도 필요) · 기본(꺼짐)에서는 쓰지 않는다 · 무작위로 충분하지만 바꾸면 공개 영역 사진의 주소가 달라진다 · 프로젝트마다 달라야 한다
 - 비밀 · 환경변수: `<P>_STORAGE_WEB_GUEST_SECRET` — 빠지면: guest.enabled=true(비회원 업로드) 인데 비었거나 32자보다 짧으면 기동 실패 · 기본(꺼짐)에서는 쓰지 않는다 · 무작위로 충분하지만 바꾸면 발급했지만 아직 안 붙은 비회원 키가 맞지 않게 된다 · 프로젝트마다 달라야 한다
 - 문서: `docs/modules/storage.md`
 - 짝 프런트(react-skeleton): 항목 `storage` · 패키지 `@skeleton/storage` · 조각 `--packages storage`

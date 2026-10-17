@@ -24,6 +24,7 @@ class CommentService(
     private val events: BoardEvents = BoardEvents.NONE,
     private val guests: BoardGuests = BoardGuests(properties),
     private val revisions: BoardRevisionRepository = NoBoardRevisions,
+    private val uploads: BoardUploads = BoardUploads.NONE,
 ) {
     private val log = LoggerFactory.getLogger(CommentService::class.java)
 
@@ -78,7 +79,7 @@ class CommentService(
         val publicId = publicId(created, authorRules.active)
         val author = card(created, authors.one(boardCode, publicId))   // 응답과 알림이 한 번의 조회를 같이 쓴다
         if (created.status == CommentStatus.PUBLISHED) notify(post, created, parent, publicId, author?.name) else notifyPending(board, post, created, parent, publicId, author?.name)
-        return view(caller, created, publicId, author, created.body, reactions.state(ReactionTarget.COMMENT, created.id, caller), 0, attachments = keys)
+        return view(caller, created, publicId, author, created.body, reactions.state(ReactionTarget.COMMENT, created.id, caller), 0, attachments = keys, postPublic = post.status == PostStatus.PUBLISHED)
     }
 
     fun list(caller: BoardCaller?, boardCode: String, postId: Long, page: Int, size: Int, sort: CommentSort): PageResult<CommentView> {
@@ -101,11 +102,35 @@ class CommentService(
             view(
                 caller, c, publicIds.getValue(c.id), card(c, names[publicIds.getValue(c.id)]), visibleBody(c), states.getValue(c.id), descendantCount(c.id, childrenOf), replies,
                 revs[c.id]?.takeIf { pending.all || caller?.accountId == c.authorId }, files[c.id].orEmpty(), pending,
+                post.status == PostStatus.PUBLISHED,
             )
         val threads = roots.values.map { root ->
             view(root, repliesOf[root.id].orEmpty().map { view(it, emptyList()) })
         }
         return PageResult(threads, roots.totalElements)
+    }
+
+    /**
+     * 이 댓글(또는 대기 중인 고친 판)의 첨부를 짧은 서명 주소로 본다 - 공개 영역에 없는 사진(승인 대기 · 판)을 보는 길.
+     * 운영자 · 댓글을 관리하는 글 주인(비회원 글 주인은 글의 비밀) · 댓글 작성자 본인(비회원은 댓글의 비밀)만. 못 보는 댓글은 404, 그 댓글의 첨부가 아닌 키도 404.
+     */
+    fun attachmentAccess(caller: BoardCaller?, boardCode: String, postId: Long, commentId: Long, key: String, guest: GuestContext? = null): SignedAttachment {
+        val board = access.board(boardCode)
+        val post = access.post(caller, boardCode, postId)
+        val comment = access.comment(post, commentId)
+        if (!pendingVisibility(caller, board, post).sees(comment)) notFound(commentId)
+        val allowed = if (caller != null) {
+            policy.canManageComments(caller, post, board) || caller.accountId == comment.authorId
+        } else {
+            val ctx = guestWriter(board, guest)
+            guests.admit(ctx, checkCaptcha = false)
+            (board.settings.ownerModeratesComments && guests.verify(ctx, "p${post.id}", access.guestSecretHash(post))) ||
+                (BoardAuthors.isGuest(comment.authorId) && guests.verify(ctx, "c${comment.id}", comments.guestSecretHash(comment.id)))
+        }
+        if (!allowed) throw BoardException(BoardErrorCode.FORBIDDEN, BoardGuests.FORBIDDEN_MESSAGE)
+        val keys = attachmentsOf(listOf(comment.id))[comment.id].orEmpty() + revisions.find(RevisionTarget.COMMENT, listOf(comment.id))[comment.id]?.attachments.orEmpty()
+        if (key !in keys) notFound(commentId)
+        return uploads.signed(key) ?: notFound(commentId)
     }
 
     fun update(
@@ -130,13 +155,13 @@ class CommentService(
         // 승인 대상 작성자가 공개된 댓글을 고치면 공개본은 그대로 두고 고친 내용만 판으로 대기한다
         if (comment.status == CommentStatus.PUBLISHED && policy.needsApproval(board, post, caller, ApprovalTarget.COMMENT)) {
             val rev = submitRevision(board, post, comment, text, keys, actorOf(caller))
-            return single(caller, boardCode, comment, pending, rev)
+            return single(caller, boardCode, post, comment, pending, rev)
         }
         val hadRevision = existing != null
         val updated = comments.updateContent(comment.id, text, keys, time.now()) ?: notFound(commentId)
         events.publish(CommentUpdated(updated, boardCode, actorOf(caller)))
         if (hadRevision) announceDiscard(boardCode, updated, actorOf(caller))   // 판은 저장소가 같은 트랜잭션에서 지웠다
-        return single(caller, boardCode, updated, pending)
+        return single(caller, boardCode, post, updated, pending)
     }
 
     /** 본문이 없고 첨부만 보낸 수정은 본문을 그대로 둔다 */
@@ -158,13 +183,13 @@ class CommentService(
         }
         if (comment.status == CommentStatus.PUBLISHED && policy.needsApproval(board, post, null, ApprovalTarget.COMMENT)) {
             val rev = submitRevision(board, post, comment, text, keys, GUEST)
-            return single(null, boardCode, comment, PendingVisibility.NONE, rev)   // 비회원은 다시 읽을 때 판을 보지 못한다 — 이 응답을 화면이 들고 있는다
+            return single(null, boardCode, post, comment, PendingVisibility.NONE, rev)   // 비회원은 다시 읽을 때 판을 보지 못한다 — 이 응답을 화면이 들고 있는다
         }
         val hadRevision = existing != null
         val updated = comments.updateContent(comment.id, text, keys, time.now()) ?: notFound(commentId)
         events.publish(CommentUpdated(updated, boardCode, GUEST))
         if (hadRevision) announceDiscard(boardCode, updated, GUEST)
-        return single(null, boardCode, updated, PendingVisibility.NONE)
+        return single(null, boardCode, post, updated, PendingVisibility.NONE)
     }
 
     fun delete(caller: BoardCaller?, boardCode: String, postId: Long, commentId: Long, guest: GuestContext? = null) {
@@ -218,7 +243,7 @@ class CommentService(
             events.publish(CommentStatusChanged(updated, boardCode, comment.status, updated.status, BoardActor(if (by == ModeratedBy.OWNER) BoardActorKind.OWNER else BoardActorKind.MODERATOR, caller?.accountId)))
             if (comment.status == CommentStatus.PENDING && updated.status == CommentStatus.PUBLISHED) notifyApproved(post, updated)
         }
-        return single(caller, boardCode, updated, pendingVisibility(caller, board, post))
+        return single(caller, boardCode, post, updated, pendingVisibility(caller, board, post))
     }
 
     /** 승인 대기 댓글 목록(오래된 순, 평평하게) — 댓글을 관리하는 사람(운영자 · 글 주인)에게만 */
@@ -269,7 +294,7 @@ class CommentService(
             RevisionOutcome.REJECTED
         }
         events.publish(RevisionDecided(RevisionTarget.COMMENT, comment.id, boardCode, post.id, outcome, actor))
-        return single(caller, boardCode, current, pendingVisibility(caller, board, post))
+        return single(caller, boardCode, post, current, pendingVisibility(caller, board, post))
     }
 
     /** 고친 댓글 목록(공개본 + 대기 판) — 댓글을 관리하는 쪽에게만, 오래된 순 평평하게 */
@@ -366,13 +391,14 @@ class CommentService(
 
     private fun card(c: Comment, fromDirectory: AuthorCard?): AuthorCard? = if (BoardAuthors.isGuest(c.authorId)) AuthorCard(c.guestName) else fromDirectory
 
-    private fun single(caller: BoardCaller?, boardCode: String, comment: Comment, pending: PendingVisibility, revision: Revision? = null): CommentView {
+    private fun single(caller: BoardCaller?, boardCode: String, post: Post, comment: Comment, pending: PendingVisibility, revision: Revision? = null): CommentView {
         val shown = revision ?: if (caller != null && (pending.all || caller.accountId == comment.authorId)) revisions.find(RevisionTarget.COMMENT, listOf(comment.id))[comment.id] else null
         val childrenOf = comments.descendants(listOf(comment.rootId)).filter { pending.sees(it) }.groupBy { it.parentId }
         val publicId = publicId(comment, authorRules.active)
         return view(
             caller, comment, publicId, card(comment, authors.one(boardCode, publicId)), visibleBody(comment),
             reactions.state(ReactionTarget.COMMENT, comment.id, caller), descendantCount(comment.id, childrenOf), revision = shown, attachments = attachmentsOf(listOf(comment.id))[comment.id].orEmpty(), pending = pending,
+            postPublic = post.status == PostStatus.PUBLISHED,
         )
     }
 
@@ -380,12 +406,13 @@ class CommentService(
 
     private fun view(
         caller: BoardCaller?, c: Comment, publicId: String, card: AuthorCard?, body: String?,
-        state: ReactionState, replyCount: Int, replies: List<CommentView> = emptyList(), revision: Revision? = null, attachments: List<String> = emptyList(), pending: PendingVisibility? = null,
+        state: ReactionState, replyCount: Int, replies: List<CommentView> = emptyList(), revision: Revision? = null, attachments: List<String> = emptyList(), pending: PendingVisibility? = null, postPublic: Boolean = false,
     ) = CommentView(
         c, publicId, BoardAuthors.isDeleted(c.authorId) || card?.deleted == true, caller?.accountId == c.authorId, body, state, replyCount, replies, card, revision?.view(),
         // 가린 · 지운 댓글의 사진은 본문처럼 나가지 않는다
         if (body != null) attachments else emptyList(),
         canManage = if (caller != null && pending?.all == true) caller.moderator || ownerMayTouch(c) else null,
+        attachmentUrls = if (postPublic && body != null && c.status == CommentStatus.PUBLISHED) uploads.publicUrls(attachments) else emptyMap(),
     )
 
     /** 운영자가 아닌 관리자(글 주인)가 이 댓글의 상태를 바꿀 수 있는가 - [moderate] 의 막는 규칙과 같다(운영자가 가렸거나 모르는 옛 행 · 삭제된 행은 못 건드린다) */

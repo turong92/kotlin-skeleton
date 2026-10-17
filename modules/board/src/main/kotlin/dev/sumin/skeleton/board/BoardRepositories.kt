@@ -154,3 +154,35 @@ interface BoardRevisionRepository {
 
 /** 판이 없는 기본 구현 — `board-jdbc` 가 없으면 이것이다 */
 object NoBoardRevisions : BoardRevisionRepository
+
+/** 공개 영역에 복사해 둔 첨부 한 줄 - 어느 글 · 댓글의 어느 비공개 키인가 */
+data class PublicCopy(val target: RevisionTarget, val targetId: Long, val key: String)
+
+/**
+ * 공개 영역의 복사본을 board 상태에 맞추는 조정자의 저장소 - `skeleton.storage.web.public` 이 켜져 있을 때만 쓰인다(없으면 조정자가 없다).
+ * 「공개 조건」: 글은 PUBLISHED, 댓글은 PUBLISHED 이고 그 글도 PUBLISHED. 고친 판의 첨부는 어떤 경우에도 해당하지 않는다.
+ */
+interface BoardPublicAttachmentRepository {
+    /** 지금 공개 조건에 드는 이 항목의 첨부 키 */
+    fun eligible(target: RevisionTarget, id: Long): List<String>
+
+    /** 공개 영역에 복사해 둔(복사했을 수 있는) 이 항목의 키 */
+    fun copied(target: RevisionTarget, id: Long): List<String>
+
+    /** 「복사했을 수 있다」를 먼저 적는다 - 복사가 실패해도 지우는 쪽이 찾을 수 있게 (멱등) */
+    fun mark(copy: PublicCopy, now: java.time.Instant)
+
+    fun unmark(copy: PublicCopy)
+
+    /** 같은 비공개 키를 쥔 다른 항목의 줄이 남아 있다 - 있으면 공개 객체를 지우면 안 된다 */
+    fun heldElsewhere(copy: PublicCopy): Boolean
+
+    /** 이 글의 댓글 중 복사가 있는 것 - 글이 공개를 떠나면 그 댓글들의 복사도 정리한다 */
+    fun commentsWithCopies(postId: Long): List<Long>
+
+    /** 복사가 있는데 공개 조건에서 빠진 것(가림 · 삭제 · 판으로 빠짐 · 글 숨김 · 탈퇴 …) */
+    fun stale(limit: Int): List<PublicCopy>
+
+    /** 공개 조건에 드는데 복사가 없는 것 */
+    fun missing(limit: Int): List<PublicCopy>
+}

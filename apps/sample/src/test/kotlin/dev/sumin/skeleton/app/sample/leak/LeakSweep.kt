@@ -15,6 +15,8 @@ class LeakSweep(private val http: LeakHttp, private val w: LeakWorld, private va
     val allow: LeakAllow by lazy {
         LeakAllow(
             strings = setOf("general", "PUBLISHED", "HIDDEN", "DRAFT", "DELETED", "LIKE", "DISLIKE", "EMPATHY", "board", "comment.created", "comment.replied", "INFO", w.yPostTitle, w.yAcc,
+                "http:", "cdn.test", "cdn", "test", "app", "public",   // 공개 사진 주소의 앞부분(CDN 주소 · 공개 접두사)은 모두에게 같은 어휘다 - 뒤의 키는 첨부마다 다르다
+
                 "New comment on your post: ${w.yPostTitle}",   // 알림 제목: Y 의 글 제목이 들어간다 — 두 알림이 같은 글에 달렸다는 구조
             ),
             // 숫자는 종류.칸 별로만: 댓글이 놓인 글(Y 의 것)과, 자작 스레드의 뿌리(A 의 댓글 c1)와 Y 의 댓글(c0)이 답글의 parentId · rootId 로 보이는 구조
@@ -34,6 +36,7 @@ class LeakSweep(private val http: LeakHttp, private val w: LeakWorld, private va
             "$base/posts?size=1&page=0", "$base/posts?size=1&page=1", "$base/posts?size=1&page=2", "$base/posts?mine=true",
         ).forEach { http.get(it, token) }
         listOf(w.yPost, w.postA, w.postB).forEach { http.get("$base/posts/$it", token) }
+
         listOf("oldest", "latest", "reactions").forEach { http.get("$base/posts/${w.yPost}/comments?sort=$it", token) }
         listOf("$base/posts/999999", "$base/posts/${w.yPost}/comments/999999", "$base/posts?sort=zzz", "/api/v1/boards/nope", "$base/posts/${w.yPost}/comments?sort=zzz").forEach { http.get(it, token) }
         http.get("/api/v1/author-profiles", token)   // 비로그인이면 401
@@ -46,11 +49,19 @@ class LeakSweep(private val http: LeakHttp, private val w: LeakWorld, private va
         listOf("$base/posts?status=HIDDEN", "$base/posts?status=DRAFT", "$base/posts?status=DRAFT&sort=reactions", "$base/posts/${w.postDraft}").forEach { http.get(it, w.modToken) }
         http.put("$base/posts/${w.postA}/moderation", w.modToken, """{"status":"HIDDEN","pinned":true}""")
         http.get("$base/posts?status=HIDDEN", w.modToken)
+        attachmentReads(w.modToken)
         http.put("$base/posts/${w.postA}/moderation", w.modToken, """{"status":"PUBLISHED","pinned":false}""")
         http.put("$base/posts/${w.yPost}/comments/${w.c2}/moderation", w.modToken, """{"status":"HIDDEN"}""")
         http.get("$base/posts/${w.yPost}/comments", w.modToken)
         http.put("$base/posts/${w.yPost}/comments/${w.c2}/moderation", w.modToken, """{"status":"PUBLISHED"}""")
         return http.since(m) + boardReads(w.modToken)
+    }
+
+    /** 서명 읽기 주소 경로 - 글 · 댓글의 사진을 볼 수 있는 사람(운영자)이 읽는다. 응답은 키가 든 서명 주소뿐이어야 한다 */
+    fun attachmentReads(token: String) {
+        val post = http.get("$base/posts/${w.postA}/attachments?key=${w.keys[0]}", token)
+        val comment = http.get("$base/posts/${w.yPost}/comments/${w.cPicture}/attachments?key=${w.cPictureKey}", token)
+        check(post.status == 200 && comment.status == 200) { "attachment access for the moderator: ${post.status} ${post.body} / ${comment.status} ${comment.body}" }
     }
 
     /** 반응을 누르고 거두는 응답 (개수와 `myReactions` 뿐이지만 헤더 · 오류까지 같은 스캔을 받는다) — 끝나면 처음 상태로 돌려 둔다 */

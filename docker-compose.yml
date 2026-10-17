@@ -107,7 +107,7 @@ services:
 configs:
   s3-identity:
     content: |
-      {"identities":[{"name":"dev","credentials":[{"accessKey":"dev","secretKey":"dev-secret"}],"actions":["Admin","Read","Write","List","Tagging"]}]}
+      {"identities":[{"name":"dev","credentials":[{"accessKey":"dev","secretKey":"dev-secret"}],"actions":["Admin","Read","Write","List","Tagging"]},{"name":"anonymous","actions":["Read:app/public/*"]}]}
   s3-cors:
     content: |
       {"CORSRules":[{"AllowedOrigins":["*"],"AllowedMethods":["GET","PUT","HEAD"],"AllowedHeaders":["*"],"ExposeHeaders":["ETag"],"MaxAgeSeconds":600}]}

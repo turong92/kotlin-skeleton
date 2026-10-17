@@ -73,6 +73,14 @@ val listed = storage.list(ListObjectsRequest(prefix = "avatars/", maxKeys = 100)
 Result DTOs include the object key, ETag/version when the provider returns them,
 and `publicUrl` when a resolver is configured.
 
+## Public area for board pictures
+
+`skeleton.storage.web.public.*` (module `storage`) copies the attachments of **published** posts and comments to `<public prefix>/<hmac>.<ext>` with a
+`Cache-Control` header (`CopyObjectRequest.cacheControl` makes the S3 copy REPLACE the metadata) and deletes the copy when the item is hidden, deleted
+or loses the picture. The adapter does not open the prefix for reading: do that in the bucket policy or as the CDN origin path, for the public prefix only.
+Local SeaweedFS: the anonymous identity `{"name":"anonymous","actions":["Read:app/public/*"]}` in `docker-compose.yml` (anonymous reads work for that
+prefix, everything else answers 403 - verified). Details: [docs/modules/storage.md](modules/storage.md).
+
 ## Public URL Strategies
 
 `public-url.strategy=RAW` keeps the existing behavior:

@@ -246,6 +246,18 @@ class AuthorLinkLeakIntegrationTest {
     }
 
     @Test
+    @Order(2)
+    fun `a published picture's public address shows neither the account, a profile nor any part of the original key`() {
+        val urls = http.get("/api/v1/boards/general/posts/${w.postA}", w.yToken, record = false).ok().read<Map<String, String>>("$.value.attachmentUrls")
+        assertEquals(1, urls.size, "the published post's picture has a public address")
+        val (privateKey, url) = urls.entries.single()
+        assertTrue(url.startsWith("http"), url)
+        val parts = privateKey.split('/', '.').filter { it.length >= 8 } + listOf(w.xAcc, w.a.id, w.b.id, w.c.id, "uploads")
+        parts.forEach { assertTrue(it !in url, "the public address must not contain '$it': $url") }
+        assertTrue(Regex("/public/[0-9a-f]{32}\\.png$").containsMatchIn(url), url)
+    }
+
+    @Test
     @Order(3)
     fun `every board, notification and author profile column is classified public or private`() {
         assertEquals(emptyList(), AuthorLinkColumns.problems(AuthorLinkColumns.columnsOf(jdbc, "current_schema()")))

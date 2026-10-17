@@ -103,6 +103,22 @@ class CommentController(
             Response.created(ServletUriComponentsBuilder.fromCurrentRequest().path("/{id}").buildAndExpand(comment.id).toUri(), comment)
         }
 
+    @Operation(
+        summary = "Short-lived signed URL for one attachment of this comment (or of its waiting edit)",
+        description = "Moderators, the managing post owner (signed-out owners send the post's secret) and the comment's author. Published attachments are served from the public area (attachmentUrls) instead.",
+    )
+    @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = AttachmentAccessResponse::class)
+    @GetMapping("/{commentId}/attachments")
+    fun attachment(
+        authentication: Authentication?,
+        http: HttpServletRequest,
+        @PathVariable code: String,
+        @PathVariable postId: Long,
+        @PathVariable commentId: Long,
+        @RequestParam key: String,
+    ): DataResponse<AttachmentAccessResponse> =
+        callers.writer(authentication, http).let { w -> service.attachmentAccess(w.caller, code, postId, commentId, key, w.guest) }.let { Response.ok(AttachmentAccessResponse(it.url, it.expiresInSeconds)) }
+
     @Operation(summary = "Edit a comment (author)")
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = CommentResponse::class)
     @PatchMapping("/{commentId}")

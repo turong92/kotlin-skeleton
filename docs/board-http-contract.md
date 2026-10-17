@@ -41,6 +41,10 @@ A new post/comment from a writer the board makes wait comes back with `status: P
 
 If the writer must wait, editing something already public does **not** change the public text: `PATCH` returns the public item plus `pendingRevision: {title?, body, attachments, submittedAt}`. Say 「고친 내용은 승인 뒤에 보여요」. A second edit overwrites the waiting one. Managers compare public vs `pendingRevision` and decide with `PUT …/posts/{id}/revision` or `PUT …/comments/{cid}/revision` `{decision: "APPROVE"|"REJECT", submittedAt}` — **`submittedAt` is the version of the edit on screen** (`pendingRevision.submittedAt`, required). If the writer overwrote the edit meanwhile the answer is `409 BOARD.REVISION_CHANGED` and nothing happens: show the new edit and decide again. Editing a post or comment that was hidden or deleted in the meantime is `404` (no revision is stored). Lists: `GET /{code}/posts?revision=pending` (moderator; summary + `pendingRevision`), `GET …/comments?revision=pending` (managers). Hiding/deleting the public item throws the waiting edit away.
 
+## Picture addresses (when the server enables the public area)
+
+Posts and comments may carry `attachmentUrls: {key: url}` next to `attachments` - **only for published items** (a comment counts as published when its post is too). Draw those pictures from the URL (it is a CDN address, not signed, cacheable for about an hour). For waiting / rejected / hidden items and for the picture of an edit version there is no address: managers and the author call `GET …/posts/{id}/attachments?key=` or `GET …/comments/{cid}/attachments?key=` (guests send `X-Board-Guest-Secret`) and get `{url, expiresInSeconds}`; anyone else gets `403` (or `404` when the item is invisible to them). Without `attachmentUrls` (feature off) the app draws pictures its own way, as before.
+
 ## Comment pictures
 
 When `commentMaxAttachments > 0`, create/edit comment bodies accept `attachments: string[]` (storage keys the app uploaded itself; at most that many). Render with the app's own key → URL function. Hidden/deleted comments carry `[]`.

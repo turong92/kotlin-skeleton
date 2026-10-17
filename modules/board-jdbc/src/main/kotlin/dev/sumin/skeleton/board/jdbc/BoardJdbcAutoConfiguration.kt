@@ -2,6 +2,7 @@ package dev.sumin.skeleton.board.jdbc
 
 import dev.sumin.skeleton.board.BoardAutoConfiguration
 import dev.sumin.skeleton.board.BoardErasureRepository
+import dev.sumin.skeleton.board.BoardPublicAttachmentRepository
 import dev.sumin.skeleton.board.BoardRepository
 import dev.sumin.skeleton.board.BoardRevisionRepository
 import dev.sumin.skeleton.board.CommentRepository
@@ -60,6 +61,12 @@ class BoardJdbcAutoConfiguration {
     @ConditionalOnMissingBean(BoardRevisionRepository::class)
     fun jdbcBoardRevisionRepository(dataSource: DataSource, transactionManager: PlatformTransactionManager, dialect: SqlDialect): BoardRevisionRepository =
         JdbcBoardRevisionRepository(NamedParameterJdbcTemplate(dataSource), TransactionTemplate(transactionManager), dialect)
+
+    /** storage 의 공개 영역을 board 상태에 맞추는 조정자의 저장소 - 공개 영역이 꺼져 있으면 아무도 부르지 않는다 */
+    @Bean
+    @ConditionalOnMissingBean(BoardPublicAttachmentRepository::class)
+    fun jdbcPublicAttachmentRepository(dataSource: DataSource, dialect: SqlDialect): BoardPublicAttachmentRepository =
+        JdbcPublicAttachmentRepository(NamedParameterJdbcTemplate(dataSource), dialect)
 
     /** storage 의 비회원 업로드 회수가 붙은 키를 알아보는 데 쓴다 (storage 가 켜져 있지 않으면 아무도 부르지 않는다) */
     @Bean

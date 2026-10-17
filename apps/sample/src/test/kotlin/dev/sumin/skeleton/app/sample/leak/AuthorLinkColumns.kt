@@ -14,6 +14,8 @@ object AuthorLinkColumns {
         // 비회원 비밀 해시 · 마지막으로 상태를 바꾼 쪽 · 처음 공개된 시각은 어떤 응답에도 나가지 않는다
         "board_posts" to setOf("author_id", "guest_secret_hash", "moderated_by"),
         "board_comments" to setOf("author_id", "guest_secret_hash", "moderated_by", "published_at"),
+        // 공개 영역에 복사해 둔 첨부의 기억 - 원래 저장 키(업로드 키)를 담는다: 어떤 응답에도 나가지 않는다 (응답에는 키에서 계산한 공개 주소만 간다)
+        "board_public_attachments" to setOf("target_type", "target_id", "key_hash", "storage_key", "created_at"),
         "board_reactions" to setOf("account_id"),
         "notification_inbox" to setOf("recipient_id", "recipient_ids_json"),
         "author_profiles" to setOf("account_id", "primary_of"),

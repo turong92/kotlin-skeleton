@@ -54,6 +54,16 @@ class StorageKeyScheme(private val webOf: () -> StorageWebProperties) : StorageK
         return "${web.keyPrefix.trim('/')}/$GUEST_SEGMENT/$uuid.${guestMac(web, uuid)}/file.$ext"
     }
 
+    /** 비공개 키의 공개 영역 키 `<prefix>/<hmac32>.<ext>` - 비공개 키에서만 계산된다(대응표 없음). 확장자는 알려진 것만 남는다 */
+    fun publicKeyOf(privateKey: String): String {
+        val pub = webOf().`public`
+        val hmac = Mac.getInstance("HmacSHA256")
+        hmac.init(SecretKeySpec(pub.secret.toByteArray(Charsets.UTF_8), "HmacSHA256"))
+        val id = hmac.doFinal("public\n$privateKey".toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }.take(MAC_LENGTH)
+        val ext = privateKey.substringAfterLast('/').substringAfterLast('.', missingDelimiterValue = "").lowercase()
+        return "${pub.prefix.trim('/')}/$id" + if (ext in KNOWN_EXTENSIONS) ".$ext" else ""
+    }
+
     /** 비회원 업로드 키인가 - 꼴 + MAC. 꺼져 있으면 참이 되는 키가 없다 */
     fun isGuestKey(key: String): Boolean {
         val web = webOf()
@@ -73,6 +83,8 @@ class StorageKeyScheme(private val webOf: () -> StorageWebProperties) : StorageK
         if (runCatching { ObjectKey(key) }.isFailure) return false
         val web = webOf()
         val prefix = web.keyPrefix.trim('/')
+        // 공개 영역의 키는 누구의 업로드 키도 아니다
+        if (web.`public`.enabled && key.startsWith(web.`public`.prefix.trim('/') + "/")) return false
         // 비회원 업로드 접두사는 누구의 계정 키도 아니다 (계정 id 가 `g` 인 계정이 남의 비회원 키를 주장하지 못하게)
         if (web.guest.enabled && key.startsWith("$prefix/$GUEST_SEGMENT/")) return false
         val opaquePrefix = "$prefix/$OPAQUE_SEGMENT/"

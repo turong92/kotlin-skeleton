@@ -29,6 +29,13 @@ class AppBoardPolicy(private val keys: StorageKeyOwnership) : BoardPolicy by Def
 - **고아 회수** `guest.cleanup.enabled=true`(기본 꺼짐)면 `cleanup.ttl`(24시간) 안에 글 · 댓글(고친 판 포함)에 붙지 않은 비회원 키를 한 시간마다 지운다(`scheduler` 모듈의 `skeletonTaskScheduler` 에 예약 - 모듈이 없으면 경고만 하고 돌지 않는다, 락 없이 인스턴스마다 돌아도 안전하다(지우기는 멱등), 한 번에 `batch-size` 개, 프로젝트 모드에서는 프로젝트마다). 지우는 조건은 비회원 꼴 + MAC 이 맞고(남이 둔 파일은 안 건드린다) · 만든 지 ttl 이 지났고 · platform 의 `UploadedKeyUsage`(board-jdbc 가 구현)가 사용 중이라고 하지 않은 것 - **구현이 없으면 아무것도 지우지 않는다.** 올린 뒤 ttl 이 지나서야 붙이는 키는 이미 지워졌을 수 있다(그 글의 사진이 깨진다).
 - **남는 위험** 익명 업로드는 IP 한도 안에서 저장소 용량을 쓴다(10 MB × 20 / 시간 / IP) - 캡차 · 회수 · 버킷 수명 규칙을 함께 둔다. IP 한도는 같은 망의 다른 사용자에게 번진다.
 
+**게시판 사진의 공개 영역 `skeleton.storage.web.public.*`** — **기본 꺼짐**. 켜면 board 가 **공개된 글 · 댓글(PUBLISHED)의 첨부만** 공개 영역에 복사해 공개 주소(CDN)로 내보내고, 승인 대기 · 거절 · 가림 · 삭제 · 고친 판의 사진은 비공개(업로드 영역)에만 둔다. 승인하면 복사하고, 가리거나 지우거나 판으로 빠지면 공개 영역에서 지운다(원본은 비공개에 남는다).
+- **설정** `enabled`, `secret`(공개 키 HMAC 비밀, 32자 이상, 환경변수 `<P>_STORAGE_WEB_PUBLIC_SECRET`), `prefix`(`public` - 업로드 접두사 `key-prefix` 와 겹치면 기동 실패), `base-url`(공개 영역 앞의 CDN 또는 공개 읽기 버킷 주소 - 켜면 필수, 주소는 `<base-url>/<공개 키>`), `cache-control`(공개 객체에 붙는 `Cache-Control`, 기본 `public, max-age=3600`), `access-ttl`(관리하는 사람의 서명 읽기 주소 수명, 기본 5분).
+- **공개 키** `<prefix>/<hmac32>.<ext>`, `hmac32 = HMAC-SHA256(public.secret, "public\n" + 비공개 키)` 의 앞 32자. 비공개 키(계정 id · 비회원 표시 · 원래 이름)가 드러나지 않고 비밀 없이는 추측할 수 없다. 키에서 다시 계산되므로 따로 대응표 없이 지울 수 있다. 같은 사진을 두 곳에 붙이면 공개 객체 하나를 나눠 쓴다(마지막으로 내려가는 곳이 지운다).
+- **구성 요소** platform 포트 `PublicUploads`(공개 주소 계산 · 복사 · 삭제 - storage 의 `StoragePublicUploads` 가 구현) · `PrivateUploadAccess`(비공개 사진의 서명 주소 - `StoragePrivateUploadAccess`) · `PublicUploadPurger`(공개 객체를 지운 뒤 CDN 캐시를 비우는 자리). board 가 이 포트만 안다.
+- **읽기 공개는 인프라가 정한다** - 이 모듈은 공개 영역의 읽기를 열지 않는다. 버킷 정책이나 CDN 원본 경로로 `<prefix>/` 아래만 익명 읽기로 연다(업로드 영역은 닫힌 채). 로컬 SeaweedFS 는 `docker-compose.yml` 의 s3 신원 설정에 익명 읽기 `Read:app/public/*` 한 줄([storage-s3.md](../storage-s3.md)).
+- **CDN 캐시** 가려도 CDN 에 남는 시간은 공개 객체의 `Cache-Control` max-age 이내다(기본 1시간). 즉시 지우려면 앱이 `PublicUploadPurger` 를 구현해(CDN 의 purge API 호출) 빈으로 둔다 - 이 레포에는 구현이 없다. 프로젝트 모드: `public.secret`(프로젝트끼리 같으면 기동 실패) · `base-url` · `prefix` 를 프로젝트마다 두고 버킷은 프로젝트의 저장소를 따른다.
+
 버킷을 정하지 않으면 저장소 빈이 없어 이 엔드포인트도 없다(404). 앱이 자기 컨트롤러를 두거나 끄려면 `skeleton.storage.web.enabled=false`.
 
 | 항목 | 내용 |

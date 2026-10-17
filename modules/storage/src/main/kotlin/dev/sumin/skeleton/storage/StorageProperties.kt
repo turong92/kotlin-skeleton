@@ -20,7 +20,19 @@ data class StorageWebProperties(
     val keySecret: String = "",
     /** 로그인하지 않은 사람의 이미지 업로드 - **기본 꺼짐**, 앱 yml 이 명시해야 켜진다 */
     val guest: StorageGuestProperties = StorageGuestProperties(),
+    /** 게시판 사진의 공개 영역 - **기본 꺼짐** */
+    val `public`: StoragePublicProperties = StoragePublicProperties(),
 ) {
+    init {
+        if (`public`.enabled) {
+            val up = keyPrefix.trim('/')
+            val pub = `public`.prefix.trim('/')
+            require(pub != up && !pub.startsWith("$up/") && !up.startsWith("$pub/")) {
+                "skeleton.storage.web.public.prefix ('$pub') must not overlap skeleton.storage.web.key-prefix ('$up') - the public area must hold only published copies"
+            }
+        }
+    }
+
     init {
         if (keyOwner == StorageKeyOwner.OPAQUE) {
             require(keySecret.length >= MIN_KEY_SECRET_LENGTH) {
@@ -37,6 +49,39 @@ data class StorageWebProperties(
     companion object {
         const val MIN_KEY_SECRET_LENGTH = 32
     }
+}
+
+/**
+ * 공개 영역(`skeleton.storage.web.public.*`). 공개 객체의 키는 비공개 키에서 HMAC 으로 계산된다: `<prefix>/<hmac32>.<ext>`.
+ * 공개 영역 앞의 읽기 공개(버킷 정책 · CDN 원본 경로)는 인프라가 정한다 - 이 설정은 주소(`base-url`)와 복사만 안다.
+ */
+data class StoragePublicProperties(
+    val enabled: Boolean = false,
+    /** 공개 키 HMAC 의 서버 비밀 - 켜면 32자 이상, 프로젝트마다 달라야 한다. 환경변수 `<P>_STORAGE_WEB_PUBLIC_SECRET` */
+    val secret: String = "",
+    /** 공개 영역의 접두사 - 업로드 접두사(`key-prefix`)와 겹치면 기동 실패 */
+    val prefix: String = "public",
+    /** 공개 주소의 앞부분(CDN 또는 공개 버킷 주소) - 주소는 `<base-url>/<공개 키>`. 켜면 필수 */
+    val baseUrl: String = "",
+    /** 공개 객체에 붙는 `Cache-Control` - 가린 뒤에도 CDN 에 남는 시간의 상한 */
+    val cacheControl: String = "public, max-age=3600",
+    /** 승인 전 · 판 사진을 관리하는 사람이 볼 때의 서명 주소 수명 */
+    val accessTtl: java.time.Duration = java.time.Duration.ofMinutes(5),
+) {
+    init {
+        if (enabled) {
+            require(secret.length >= StorageWebProperties.MIN_KEY_SECRET_LENGTH) {
+                "skeleton.storage.web.public.secret must be at least ${StorageWebProperties.MIN_KEY_SECRET_LENGTH} characters when skeleton.storage.web.public.enabled=true " +
+                    "(env <P>_STORAGE_WEB_PUBLIC_SECRET - list it under secrets:)"
+            }
+            require(baseUrl.isNotBlank()) { "skeleton.storage.web.public.base-url is required when skeleton.storage.web.public.enabled=true (the CDN or public bucket address in front of the public prefix)" }
+            require(prefix.trim('/').isNotEmpty()) { "skeleton.storage.web.public.prefix must not be blank" }
+        }
+        require(!accessTtl.isZero && !accessTtl.isNegative) { "skeleton.storage.web.public.access-ttl must be positive" }
+    }
+
+    /** 비밀은 로그 · 오류 메시지에 나오지 않는다 */
+    override fun toString(): String = "StoragePublicProperties(enabled=$enabled, secret=${if (secret.isEmpty()) "" else "****"}, prefix=$prefix, baseUrl=$baseUrl)"
 }
 
 enum class StorageKeyOwner {

@@ -15,6 +15,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `platform`: CORS 기본 허용 헤더에 `X-Board-Guest-Secret` 추가, `RateLimitStore.release`(센 시도 하나 되돌리기 — 기본 아무 일도 안 함, 인메모리 · Redis 구현) 추가. 기존 구현체는 그대로 컴파일된다.
 - 응답 키 골든 시험(`BoardWebTest` · `NoOptionalGoldenKeysTest`)의 기대 집합에 새 키를 더했다.
 
+### 게시판 사진 공개 영역 (2026-10-18)
+
+- `storage`: **꺼진 채 시작하는** `skeleton.storage.web.public.*` - 공개된 글 · 댓글의 첨부만 공개 영역(`<prefix>/<hmac32>.<ext>`, 비공개 키에서 HMAC 으로 계산)에 `Cache-Control` 을 붙여 복사하고 `base-url`(CDN) 주소로 낸다. 비밀 `<P>_STORAGE_WEB_PUBLIC_SECRET`(32자 이상, 프로젝트마다 달라야 한다). `CopyObjectRequest.cacheControl` 추가(S3 어댑터는 메타데이터를 새로 쓴다). `StoragePublicUploads` · `StoragePrivateUploadAccess`.
+- `platform`: 포트 `PublicUploads` · `PrivateUploadAccess` · `PublicUploadPurger`(CDN 제거 자리 - 구현 없음).
+- `board` / `board-jdbc`: 응답에 `attachmentUrls`(공개된 항목만, 켰을 때만), `GET …/attachments?key=` 두 개(승인 전 · 판 사진의 5분 서명 주소 - 운영자 · 관리하는 글 주인 · 작성자), 공개 영역 조정자(커밋 뒤 이벤트 + 1분 조정, 지우는 쪽 먼저)와 새 V 파일 `…18100000__board_public_attachments`(두 방언).
+- 견본: 켠다(`SKELETON_STORAGE_WEB_PUBLIC_SECRET` · `_BASE_URL` 필요 - docs/deploy.md §7). 로컬 SeaweedFS 는 `public/` 접두사만 익명 읽기. 비회원 쓰기 한도는 로컬에서 200/1분(e2e).
+
 ### 비회원 사진 업로드 (2026-10-18)
 
 - `storage`: **꺼진 채 시작하는** 익명 이미지 업로드 `skeleton.storage.web.guest.*` - `POST /api/v1/storage/guest/presign` 하나만 로그인 없이 열린다(켰을 때만). 키 `<prefix>/g/<uuid>.<mac>/file.<ext>`(MAC 비밀 `<P>_STORAGE_WEB_GUEST_SECRET`, 32자 이상 · 프로젝트마다 달라야 한다), jpeg · png · webp · gif 만(SVG 는 설정으로도 못 연다), 10 MB, IP 별 20 / 1시간, 선택 캡차, 붙지 않은 키 회수 주기 작업(`cleanup.enabled`, `scheduler` 모듈의 `skeletonTaskScheduler` 필요). `StorageKeyScheme.isGuestKey`, `StorageGuestUploads` · `StorageGuestCleanup`. 매직 바이트 검사는 직접 업로드라 할 수 없다. 회원 경로의 호출자 판정이 익명 인증 토큰(`AnonymousAuthenticationToken`)을 계정으로 보지 않도록 고쳤다.

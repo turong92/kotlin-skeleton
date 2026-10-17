@@ -79,7 +79,7 @@ class LoginIdLeakIntegrationTest {
         mapOf(
             "code" to listOf("general"),
             "postId" to listOf(w.yPost, w.postA, w.postB, w.postDraft).map { it.toString() },
-            "commentId" to listOf(w.c0, w.c1, w.c2, w.c3, w.c4).map { it.toString() },
+            "commentId" to listOf(w.c0, w.c1, w.c2, w.c3, w.c4, w.cPicture).map { it.toString() },
             "eventId" to listOf(eventId),
             "type" to listOf("terms", "privacy"),
         )
@@ -104,6 +104,8 @@ class LoginIdLeakIntegrationTest {
             if (values == null) return null
             paths = paths.flatMap { p -> values.map { v -> p.replaceFirst(Regex("\\{$name(?::[^}]*)?}"), java.util.regex.Matcher.quoteReplacement(v)) } }
         }
+        // 사진 열람 경로는 `key` 가 필수다 - 여정의 모든 사진 키로 채운다
+        if (template.endsWith("/attachments")) paths = paths.flatMap { p -> w.pictureKeys.map { "$p?key=$it" } }
         return paths
     }
 

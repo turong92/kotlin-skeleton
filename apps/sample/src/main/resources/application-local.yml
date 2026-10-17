@@ -55,8 +55,15 @@ skeleton:
       enabled: false                    # 로컬 전용: 시드 계정은 가입 화면을 거치지 않아 동의 기록이 없다 — 켜 둔 채로는 e2e(Playwright)가 403 이다. 동의 흐름을 시험하려면 true (docs/legal.md)
   migration:
     clean-on-validation-error: false  # 동결된 마이그레이션(migrations.lock)은 로컬에서도 조용히 DB 를 지우지 않는다 — 검증 오류면 기동이 실패한다. 정말 버릴 로컬 DB 만: SKELETON_MIGRATION_CLEAN_ON_VALIDATION_ERROR=true (docs/schema-management.md)
+  board:
+    guest:
+      rate-limit:
+        capacity: 200                   # 로컬 · e2e 전용: 한 IP(localhost)에서 비회원 시연 단계가 연달아 쓴다 - 모듈 기본 5 / 1분이면 429 (운영은 기본 그대로)
   storage:
     web:
+      public:
+        secret: local-dev-only-storage-public-secret-0123456789   # 로컬 · e2e 전용 고정 값(32자 이상) - 공개 키 HMAC
+        base-url: http://localhost:${S3_PORT:8333}/app   # 로컬 S3(SeaweedFS)의 공개 읽기 접두사 앞 - docker-compose.yml 의 익명 읽기 규칙
       guest:
         secret: local-dev-only-storage-guest-secret-0123456789   # 로컬 · e2e 전용 고정 값(32자 이상) - 비회원 업로드 키의 HMAC. 운영 값은 환경변수 SKELETON_STORAGE_WEB_GUEST_SECRET
       key-secret: local-dev-only-storage-key-secret-0123456789   # 로컬 · e2e 전용 고정 값(32자 이상) — OPAQUE 첨부 키의 HMAC. 운영 값은 환경변수 SKELETON_STORAGE_WEB_KEY_SECRET (docs/deploy.md §7)

@@ -26,6 +26,8 @@ class ServiceHarness(
     val secrets: BoardGuestSecrets = DefaultBoardGuestSecrets(props.guest.secret),
     /** 판 저장소를 감싼다 - 겹침(경쟁) 시험이 사이에 끼어든다 */
     wrapRevisions: (BoardRevisionRepository) -> BoardRevisionRepository = { it },
+    /** 업로드 모듈과 이어지는 자리 - 기본은 없음(키만) */
+    uploads: BoardUploads = BoardUploads.NONE,
     /** 댓글 저장소를 감싼다 — 저장소가 author_ref 를 남기지 않는 경우 같은 것을 흉내 낸다 */
     wrapComments: (CommentRepository) -> CommentRepository = { it },
 ) {
@@ -47,8 +49,8 @@ class ServiceHarness(
     val guestLimiter: BoardGuestLimiter = StoreBoardGuestLimiter({ guestStore }, props.guest)
     private val guests = BoardGuests(props, secrets, guestLimiter, { captcha })
     val boardService = BoardService(boards, policy, props, time, authorRules)
-    val postService = PostService(access, posts, support, authors, policy, rules, props, limiter, time, authorRules, events, guests, revisionRepo)
-    val commentService = CommentService(access, wrapComments(comments), support, authors, policy, rules, props, limiter, notifier, time, authorRules, events, guests, revisionRepo)
+    val postService = PostService(access, posts, support, authors, policy, rules, props, limiter, time, authorRules, events, guests, revisionRepo, uploads)
+    val commentService = CommentService(access, wrapComments(comments), support, authors, policy, rules, props, limiter, notifier, time, authorRules, events, guests, revisionRepo, uploads)
     val reactionService = ReactionService(access, comments, reactionRepo, support, policy, props, limiter, time)
 
     init { boards.create("general", "General", null, T0, settings) }

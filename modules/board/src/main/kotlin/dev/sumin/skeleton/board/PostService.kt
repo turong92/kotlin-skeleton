@@ -18,6 +18,7 @@ class PostService(
     private val events: BoardEvents = BoardEvents.NONE,
     private val guests: BoardGuests = BoardGuests(properties),
     private val revisions: BoardRevisionRepository = NoBoardRevisions,
+    private val uploads: BoardUploads = BoardUploads.NONE,
 ) {
     /** [caller] 가 null 이면 로그인하지 않은 쓰기 — [guest] 가 있고 게시판이 허락하면 비회원 글, 아니면 401 */
     fun create(caller: BoardCaller?, boardCode: String, request: CreatePost, guest: GuestContext? = null): PostDetailView {
@@ -66,6 +67,25 @@ class PostService(
         val post = access.post(caller, boardCode, postId)
         posts.incrementViews(post.id)
         return detail(caller, post.copy(viewCount = post.viewCount + 1))
+    }
+
+    /**
+     * 이 글(또는 대기 중인 고친 판)의 첨부를 짧은 서명 주소로 본다 - 공개 영역에 없는 사진(승인 전 · 판)을 **관리하는 사람 · 작성자 본인**이 볼 때.
+     * 운영자 · 글 작성자(비회원은 비밀 헤더)만. 그 글의 첨부가 아닌 키는 404.
+     */
+    fun attachmentAccess(caller: BoardCaller?, boardCode: String, postId: Long, key: String, guest: GuestContext? = null): SignedAttachment {
+        val post = if (caller == null) {
+            val ctx = guestWriter(access.board(boardCode), guest)
+            guests.admit(ctx, checkCaptcha = false)
+            guestOwned(boardCode, postId, ctx)
+        } else {
+            access.post(caller, boardCode, postId).also {
+                if (!policy.canModerate(caller) && caller.accountId != it.authorId) forbidden("Not allowed to read the attachments of post $postId")
+            }
+        }
+        val keys = post.attachments + revisions.find(RevisionTarget.POST, listOf(post.id))[post.id]?.attachments.orEmpty()
+        if (key !in keys) notFound(postId)
+        return uploads.signed(key) ?: notFound(postId)
     }
 
     fun list(caller: BoardCaller?, boardCode: String, request: PostListRequest): PageResult<PostSummaryView> {
@@ -293,6 +313,7 @@ class PostService(
             post, reactions.state(ReactionTarget.POST, post.id, caller), publicId,
             BoardAuthors.isDeleted(post.authorId) || card?.deleted == true, caller?.accountId == post.authorId, card, manage,
             (revision ?: board?.let { visibleRevision(caller, post, it) })?.view(),
+            if (post.status == PostStatus.PUBLISHED) uploads.publicUrls(post.attachments) else emptyMap(),
         )
     }
 

@@ -5,7 +5,17 @@ import dev.sumin.skeleton.common.author.AuthorIdentities
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.common.web.InMemoryFixedWindowRateLimitStore
 import dev.sumin.skeleton.common.web.RateLimitStore
+import dev.sumin.skeleton.common.project.ProjectRegistry
 import dev.sumin.skeleton.common.upload.GuestUploadKeys
+import dev.sumin.skeleton.common.upload.PrivateUploadAccess
+import dev.sumin.skeleton.common.upload.PublicUploads
+import java.time.Duration
+import java.time.Instant
+import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.SmartInitializingSingleton
+import org.springframework.beans.factory.annotation.Qualifier
+import org.springframework.scheduling.TaskScheduler
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.ApplicationRunner
 import org.springframework.boot.autoconfigure.AutoConfiguration
@@ -110,6 +120,55 @@ class BoardAutoConfiguration {
         authorRules: BoardAuthorRules,
     ): BoardService = BoardService(boards, policy, properties, time.getIfAvailable { TimeProvider.systemUtc() }, authorRules)
 
+    /** storage 의 공개 영역 · 서명 읽기 - 둘 다 없으면(기본) board 는 키만 낸다. 부를 때마다 찾는다 */
+    @Bean
+    @ConditionalOnMissingBean
+    fun boardUploads(publicUploads: ObjectProvider<PublicUploads>, access: ObjectProvider<PrivateUploadAccess>): BoardUploads =
+        BoardUploads({ publicUploads.getIfAvailable() }, { access.getIfAvailable() })
+
+    /** 공개 영역을 board 상태에 맞추는 조정자 - 저장소 포트(board-jdbc)가 있을 때만. `skeleton.storage.web.public` 이 꺼져 있으면 아무것도 하지 않는다 */
+    @Bean
+    @ConditionalOnBean(BoardPublicAttachmentRepository::class)
+    @ConditionalOnMissingBean
+    fun boardPublicAttachments(
+        repository: BoardPublicAttachmentRepository,
+        publicUploads: ObjectProvider<PublicUploads>,
+        time: ObjectProvider<TimeProvider>,
+        projects: ObjectProvider<ProjectRegistry>,
+    ): BoardPublicAttachments = BoardPublicAttachments(repository, { publicUploads.getIfAvailable() }, time.getIfAvailable { TimeProvider.systemUtc() }, projects.getIfAvailable())
+
+    @Bean
+    @ConditionalOnBean(BoardPublicAttachments::class)
+    @ConditionalOnMissingBean(name = ["boardPublicAttachmentListener"])
+    fun boardPublicAttachmentListener(attachments: BoardPublicAttachments): BoardEventListener = BoardPublicAttachmentListener(attachments)
+
+    /**
+     * 1분마다 조정한다(실패 · 놓친 이벤트를 결국 맞춘다) - `scheduler` 모듈의 `skeletonTaskScheduler` 가 있어야 돈다(없으면 이벤트로만 맞춘다).
+     * 락 없이 인스턴스마다 돌아도 안전하다: 모든 단계가 멱등이다.
+     */
+    @Bean
+    @ConditionalOnBean(BoardPublicAttachments::class)
+    @ConditionalOnMissingBean(name = ["boardPublicAttachmentSweep"])
+    fun boardPublicAttachmentSweep(
+        attachments: BoardPublicAttachments,
+        publicUploads: ObjectProvider<PublicUploads>,
+        @Qualifier("skeletonTaskScheduler") schedulers: ObjectProvider<TaskScheduler>,
+    ): SmartInitializingSingleton = SmartInitializingSingleton {
+        val log = LoggerFactory.getLogger(BoardPublicAttachments::class.java)
+        val scheduler = schedulers.getIfAvailable()
+        if (publicUploads.getIfAvailable() != null) {
+            if (scheduler == null) {
+                log.warn("storage public uploads are on but there is no skeletonTaskScheduler bean (add the scheduler module) - public copies are only kept in step by board events")
+            } else {
+                scheduler.scheduleWithFixedDelay(
+                    { try { attachments.sweep() } catch (e: Exception) { log.warn("board public attachment sweep failed: {}", e.toString()) } },
+                    Instant.now().plus(Duration.ofMinutes(1)),
+                    Duration.ofMinutes(1),
+                )
+            }
+        }
+    }
+
     @Bean
     @ConditionalOnMissingBean
     fun postService(
@@ -126,8 +185,9 @@ class BoardAutoConfiguration {
         events: BoardEvents,
         guests: BoardGuests,
         revisions: BoardRevisionRepository,
+        uploads: BoardUploads,
     ): PostService =
-        PostService(access, posts, reactions, authors, policy, rules, properties, limiter, time.getIfAvailable { TimeProvider.systemUtc() }, authorRules, events, guests, revisions)
+        PostService(access, posts, reactions, authors, policy, rules, properties, limiter, time.getIfAvailable { TimeProvider.systemUtc() }, authorRules, events, guests, revisions, uploads)
 
     @Bean
     @ConditionalOnMissingBean
@@ -146,8 +206,9 @@ class BoardAutoConfiguration {
         events: BoardEvents,
         guests: BoardGuests,
         revisions: BoardRevisionRepository,
+        uploads: BoardUploads,
     ): CommentService =
-        CommentService(access, comments, reactions, authors, policy, rules, properties, limiter, notifier, time.getIfAvailable { TimeProvider.systemUtc() }, authorRules, events, guests, revisions)
+        CommentService(access, comments, reactions, authors, policy, rules, properties, limiter, notifier, time.getIfAvailable { TimeProvider.systemUtc() }, authorRules, events, guests, revisions, uploads)
 
     @Bean
     @ConditionalOnMissingBean

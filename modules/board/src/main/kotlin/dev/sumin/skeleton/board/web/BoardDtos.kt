@@ -120,6 +120,8 @@ data class PostDetailResponse(
     val commentApproval: ApprovalMode? = null,
     /** 대기 중인 고친 내용 — 쓴 회원 · 운영자에게만 (남에게는 늘 null). 비회원 작성자는 고친 응답에서만 본다 */
     val pendingRevision: RevisionResponse? = null,
+    /** 공개 영역이 켜져 있고 이 글이 공개일 때, 첨부 키 -> 공개 주소 (아니면 키가 없다) */
+    @get:JsonInclude(JsonInclude.Include.NON_NULL) val attachmentUrls: Map<String, String>? = null,
 )
 
 /** 목록의 한 줄이면 replies 가 있다 (최상위: 모든 자손 작성 순 평평하게, 답글: 빈 배열). 한 댓글만 돌려주는 응답에는 replies 가 없다. */
@@ -157,7 +159,12 @@ data class CommentResponse(
     val attachments: List<String> = emptyList(),
     /** 댓글을 관리하는 사람에게만 - 이 댓글의 상태를 지금 바꿀 수 있는가(복원 · 숨김 단추의 근거). 관리자가 아니면 키가 없다 */
     val canManage: Boolean? = null,
+    /** 공개 영역이 켜져 있을 때, 공개된 항목의 첨부 키 -> 공개 주소 (없으면 키가 없다) */
+    val attachmentUrls: Map<String, String>? = null,
 )
+
+/** 승인 전 · 판 사진을 관리하는 사람이 짧게 읽는 서명 주소 */
+data class AttachmentAccessResponse(val url: String, val expiresInSeconds: Long)
 
 data class RevisionResponse(val title: String?, val body: String, val attachments: List<String>, val submittedAt: Instant)
 
@@ -244,6 +251,7 @@ internal fun PostDetailView.toResponse(excerptLength: Int) = with(post) {
         reactions.counts, reactions.myReactions, attachments.size, createdAt, updatedAt,
         authorDeleted, authorName = author?.name, authorTag = author?.tag, mine = mine, authorGuest = BoardAuthors.isGuest(authorId),
         canManageComments = canManageComments, commentApproval = commentApproval, pendingRevision = pendingRevision?.toResponse(),
+        attachmentUrls = attachmentUrls.ifEmpty { null },
     )
 }
 
@@ -254,7 +262,7 @@ internal fun CommentView.toResponse(thread: Boolean = false): CommentResponse = 
         reactions.counts, reactions.myReactions, replyCount, createdAt, updatedAt,
         replies = if (thread) replies.map { it.toResponse(thread = true) } else null,
         authorDeleted = authorDeleted, authorName = author?.name, authorTag = author?.tag, mine = mine, authorGuest = BoardAuthors.isGuest(authorId),
-        pendingRevision = pendingRevision?.toResponse(), attachments = this@toResponse.attachments, canManage = canManage,
+        pendingRevision = pendingRevision?.toResponse(), attachments = this@toResponse.attachments, canManage = canManage, attachmentUrls = attachmentUrls.ifEmpty { null },
     )
 }
 

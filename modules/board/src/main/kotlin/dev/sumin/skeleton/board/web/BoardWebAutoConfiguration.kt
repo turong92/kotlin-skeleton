@@ -72,5 +72,7 @@ class BoardWebAutoConfiguration {
             registry.add("DELETE", "$base/*/posts/*/comments/*")
             registry.add("PUT", "$base/*/posts/*/comments/*/moderation")
             registry.add("PUT", "$base/*/posts/*/comments/*/revision")
+            registry.add("GET", "$base/*/posts/*/attachments")   // 비회원 글 주인 · 작성자가 승인 전 사진을 비밀 헤더로 본다
+            registry.add("GET", "$base/*/posts/*/comments/*/attachments")
         }
 }

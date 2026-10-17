@@ -89,6 +89,15 @@ class PostController(
         Response.ok(service.get(callers.reader(authentication), code, postId).toResponse(properties.excerptLength))
 
     @Operation(
+        summary = "Short-lived signed URL for one attachment of this post (or of its waiting edit)",
+        description = "Moderators and the post's author (signed-out authors send X-Board-Guest-Secret). Published attachments are served from the public area (attachmentUrls) instead.",
+    )
+    @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = AttachmentAccessResponse::class)
+    @GetMapping("/{postId}/attachments")
+    fun attachment(authentication: Authentication?, http: HttpServletRequest, @PathVariable code: String, @PathVariable postId: Long, @RequestParam key: String): DataResponse<AttachmentAccessResponse> =
+        callers.writer(authentication, http).let { w -> service.attachmentAccess(w.caller, code, postId, key, w.guest) }.let { Response.ok(AttachmentAccessResponse(it.url, it.expiresInSeconds)) }
+
+    @Operation(
         summary = "Create a post",
         description = "Signed-out writers (skeleton.board.guest.enabled and the board's guestWrite=ALL) send guestName and the header X-Board-Guest-Secret instead of signing in.",
     )

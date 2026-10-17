@@ -25,6 +25,8 @@ data class CopyObjectRequest(
     val destinationKey: ObjectKey,
     val metadata: Map<String, String> = emptyMap(),
     val contentType: String? = null,
+    /** 복사본에 붙는 `Cache-Control` - 주면 메타데이터를 새로 쓴다(REPLACE) */
+    val cacheControl: String? = null,
 ) {
     init {
         require(sourceKey != destinationKey) { "Copy source and destination keys must differ." }

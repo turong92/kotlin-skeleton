@@ -109,6 +109,9 @@ skeleton:
         # 캡차는 끈 채(captcha: OFF)다 - 견본에는 Turnstile 키가 없다. **공개 서비스에서는 board 의 guest.captcha 와 함께 REQUIRED 로 켠다**(익명 스토리지 쓰기이므로 스팸 위험이 같다)
         cleanup:
           enabled: true                 # 24시간 안에 글 · 댓글에 붙지 않은 비회원 업로드를 한 시간마다 지운다(scheduler 모듈 필요 - 위 build.gradle.kts)
+      public:
+        enabled: true                   # 이 앱의 선택: 공개된 글 · 댓글의 사진은 공개 주소(CDN)로, 승인 전 · 거절 · 가림 · 판의 사진은 비공개로 둔다 - 승인하면 공개 영역으로 복사하고 가리면 지운다 (docs/modules/storage.md "게시판 사진의 공개 영역"). 모듈 기본은 꺼짐
+        base-url: ${SKELETON_STORAGE_WEB_PUBLIC_BASE_URL:}   # 공개 영역 앞의 주소(CDN 또는 공개 읽기 버킷). 비밀이 아니다 - 비면 기동 실패. 로컬은 application-local.yml. 비밀(공개 키 HMAC)은 환경변수 SKELETON_STORAGE_WEB_PUBLIC_SECRET (선언의 secrets:)
     validation:                       # 첨부 규칙 — 서버가 presign 전에 검사한다 (프론트도 같은 규칙을 미리 보여 준다)
       max-size-bytes: 5242880         # 5 MB
       allowed-content-types: [image/png, image/jpeg, image/gif, image/webp, application/pdf, text/plain]

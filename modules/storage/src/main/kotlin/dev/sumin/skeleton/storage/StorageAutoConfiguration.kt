@@ -51,6 +51,10 @@ object StorageKeySchemes {
         guestSecrets.groupBy({ it.second }, { it.first }).values.firstOrNull { it.size > 1 }?.let { same ->
             error("Projects ${same.joinToString { "'$it'" }} use the same skeleton.storage.web.guest.secret — every project needs its own (a guest key made with one project's secret would be accepted in the other)")
         }
+        val publicSecrets = registry.active.mapNotNull { project -> webs.of(project).takeIf { it.`public`.enabled }?.let { project.id to it.`public`.secret } }
+        publicSecrets.groupBy({ it.second }, { it.first }).values.firstOrNull { it.size > 1 }?.let { same ->
+            error("Projects ${same.joinToString { "'$it'" }} use the same skeleton.storage.web.public.secret — every project needs its own")
+        }
         return StorageKeyScheme { webs.get() }
     }
 }

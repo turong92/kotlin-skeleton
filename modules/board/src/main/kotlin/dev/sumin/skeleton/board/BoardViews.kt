@@ -33,6 +33,8 @@ data class PostDetailView(
     /** 호출자가 이 글의 댓글을 승인 · 가릴 수 있다 — 화면은 승인 · 가리기 단추를 이것으로 그린다 */
     val canManageComments: Boolean = false,
     val pendingRevision: RevisionView? = null,
+    /** 공개 영역이 켜져 있고 이 글이 공개(PUBLISHED)일 때만: 첨부 키 -> 공개 주소 */
+    val attachmentUrls: Map<String, String> = emptyMap(),
 )
 
 /** 최상위 댓글이면 [replies] 에 모든 자손이 작성 순으로 평평하게 들어 있다 (답글의 replies 는 항상 비어 있다). body 는 PUBLISHED 가 아니면 null. */
@@ -53,6 +55,8 @@ data class CommentView(
     val attachments: List<String> = emptyList(),
     /** 호출자가 댓글을 관리하는 사람(운영자 · 글 주인)일 때만 채운다 - 이 댓글의 상태를 지금 바꿀 수 있는가(주인은 운영자가 가린 댓글을 되살릴 수 없다). 관리자가 아니면 null */
     val canManage: Boolean? = null,
+    /** 공개 영역이 켜져 있고 이 댓글이 공개(PUBLISHED, 글도 PUBLISHED)일 때만: 첨부 키 -> 공개 주소 */
+    val attachmentUrls: Map<String, String> = emptyMap(),
 )
 
 data class BoardConfigView(
