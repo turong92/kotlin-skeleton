@@ -20,6 +20,7 @@ class CommentService(
     private val notifier: BoardNotifier,
     private val time: TimeProvider,
     private val authorRules: BoardAuthorRules,
+    private val events: BoardEvents = BoardEvents.NONE,
 ) {
     private val log = LoggerFactory.getLogger(CommentService::class.java)
 
@@ -40,6 +41,7 @@ class CommentService(
         if (!limiter.tryAcquire(caller.accountId, "comment")) throw BoardException(BoardErrorCode.RATE_LIMITED, "Too many comments, slow down")
         val created = comments.insert(NewComment(post.id, parent?.id, parent?.rootId, depth, caller.accountId, text, time.now(), authorRef))
             ?: throw BoardException(BoardErrorCode.POST_NOT_FOUND, "Post not found: $postId")
+        events.publish(CommentCreated(created, boardCode, actorOf(caller)))
         val publicId = publicId(created, authorRules.active)
         val author = authors.one(boardCode, publicId)   // 응답과 알림이 한 번의 조회를 같이 쓴다
         notify(post, created, parent, publicId, author?.name)
@@ -70,6 +72,7 @@ class CommentService(
         val comment = access.comment(post, commentId)
         if (!policy.canEditComment(caller, comment)) throw BoardException(BoardErrorCode.FORBIDDEN, "Not allowed to edit comment $commentId")
         val updated = comments.updateBody(comment.id, rules.commentBody(body), time.now()) ?: notFound(commentId)
+        events.publish(CommentUpdated(updated, boardCode, actorOf(caller)))
         return single(caller, boardCode, updated)
     }
 
@@ -77,7 +80,11 @@ class CommentService(
         val post = access.post(caller, boardCode, postId)
         val comment = access.comment(post, commentId)
         if (!policy.canDeleteComment(caller, comment)) throw BoardException(BoardErrorCode.FORBIDDEN, "Not allowed to delete comment $commentId")
-        if (comment.status != CommentStatus.DELETED) comments.setStatus(comment.id, CommentStatus.DELETED, time.now())
+        if (comment.status != CommentStatus.DELETED) {
+            comments.setStatus(comment.id, CommentStatus.DELETED, time.now())?.let {
+                events.publish(CommentStatusChanged(it, boardCode, comment.status, CommentStatus.DELETED, actorOf(caller)))
+            }
+        }
     }
 
     fun moderate(caller: BoardCaller, boardCode: String, postId: Long, commentId: Long, status: CommentStatus): CommentView {
@@ -85,8 +92,11 @@ class CommentService(
         val post = access.post(caller, boardCode, postId)
         val comment = access.comment(post, commentId)
         val updated = comments.setStatus(comment.id, status, time.now()) ?: notFound(commentId)
+        if (updated.status != comment.status) events.publish(CommentStatusChanged(updated, boardCode, comment.status, updated.status, actorOf(caller)))
         return single(caller, boardCode, updated)
     }
+
+    private fun actorOf(caller: BoardCaller) = BoardActor(if (caller.moderator) BoardActorKind.MODERATOR else BoardActorKind.MEMBER, caller.accountId)
 
     private fun single(caller: BoardCaller, boardCode: String, comment: Comment): CommentView {
         val childrenOf = comments.descendants(listOf(comment.rootId)).groupBy { it.parentId }

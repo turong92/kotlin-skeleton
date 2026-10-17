@@ -6,6 +6,8 @@ dependencies {
     compileOnly(project(":modules:idempotency"))
     compileOnly("org.springframework.security:spring-security-core")   // 호출자(Authentication) — 없으면 엔드포인트를 등록하지 않는다
 
+    implementation("org.springframework:spring-tx")   // 커밋 뒤에 이벤트 내보내기 (TransactionSynchronization) — DB 드라이버는 필요 없다
+
     api(project(":modules:platform"))   // 타입(ApplicationException · TimeProvider · RateLimitStore)이 이 모듈의 공개 API 에 나온다
 
     implementation("org.springframework.boot:spring-boot-starter")

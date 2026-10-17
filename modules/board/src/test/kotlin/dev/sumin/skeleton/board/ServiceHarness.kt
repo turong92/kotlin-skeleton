@@ -15,6 +15,8 @@ class ServiceHarness(
     val directory: AuthorDirectory = AuthorDirectory.NONE,
     /** 작성자 신원 고리 — 기본은 없음(이 기능 이전의 동작) */
     val identities: AuthorIdentities? = null,
+    /** 커밋 뒤 이벤트를 받는 리스너 — 기본은 없음 */
+    listeners: List<BoardEventListener> = emptyList(),
     /** 댓글 저장소를 감싼다 — 저장소가 author_ref 를 남기지 않는 경우 같은 것을 흉내 낸다 */
     wrapComments: (CommentRepository) -> CommentRepository = { it },
 ) {
@@ -29,9 +31,10 @@ class ServiceHarness(
     private val support = ReactionSupport(reactionRepo, props)
     private val authors = AuthorNames { directory }
     private val authorRules = BoardAuthorRules { identities }
+    private val events = BoardEvents { listeners }
     val boardService = BoardService(boards, policy, props, time, authorRules)
-    val postService = PostService(access, posts, support, authors, policy, rules, props, limiter, time, authorRules)
-    val commentService = CommentService(access, wrapComments(comments), support, authors, policy, rules, props, limiter, notifier, time, authorRules)
+    val postService = PostService(access, posts, support, authors, policy, rules, props, limiter, time, authorRules, events)
+    val commentService = CommentService(access, wrapComments(comments), support, authors, policy, rules, props, limiter, notifier, time, authorRules, events)
     val reactionService = ReactionService(access, comments, reactionRepo, support, policy, props, limiter, time)
 
     init { boardService.create(moderator, "general", "General", null) }

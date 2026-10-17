@@ -38,6 +38,11 @@ class BoardAutoConfiguration {
     @ConditionalOnMissingBean
     fun boardNotifier(): BoardNotifier = NoopBoardNotifier
 
+    /** 앱의 [BoardEventListener] 빈들(여러 개 가능, 순서는 `@Order`)에 커밋 뒤 이벤트를 내보낸다. 부를 때마다 찾는다 */
+    @Bean
+    @ConditionalOnMissingBean
+    fun boardEvents(listeners: ObjectProvider<BoardEventListener>): BoardEvents = BoardEvents { listeners.orderedStream().toList() }
+
     @Bean
     @ConditionalOnMissingBean
     fun boardContentRules(properties: BoardProperties): BoardContentRules = BoardContentRules(properties)
@@ -85,8 +90,9 @@ class BoardAutoConfiguration {
         limiter: BoardRateLimiter,
         time: ObjectProvider<TimeProvider>,
         authorRules: BoardAuthorRules,
+        events: BoardEvents,
     ): PostService =
-        PostService(access, posts, reactions, authors, policy, rules, properties, limiter, time.getIfAvailable { TimeProvider.systemUtc() }, authorRules)
+        PostService(access, posts, reactions, authors, policy, rules, properties, limiter, time.getIfAvailable { TimeProvider.systemUtc() }, authorRules, events)
 
     @Bean
     @ConditionalOnMissingBean
@@ -102,8 +108,9 @@ class BoardAutoConfiguration {
         notifier: BoardNotifier,
         time: ObjectProvider<TimeProvider>,
         authorRules: BoardAuthorRules,
+        events: BoardEvents,
     ): CommentService =
-        CommentService(access, comments, reactions, authors, policy, rules, properties, limiter, notifier, time.getIfAvailable { TimeProvider.systemUtc() }, authorRules)
+        CommentService(access, comments, reactions, authors, policy, rules, properties, limiter, notifier, time.getIfAvailable { TimeProvider.systemUtc() }, authorRules, events)
 
     @Bean
     @ConditionalOnMissingBean

@@ -13,6 +13,7 @@ class PostService(
     private val limiter: BoardRateLimiter,
     private val time: TimeProvider,
     private val authorRules: BoardAuthorRules,
+    private val events: BoardEvents = BoardEvents.NONE,
 ) {
     fun create(caller: BoardCaller, boardCode: String, request: CreatePost): PostDetailView {
         val board = access.board(boardCode)
@@ -27,6 +28,7 @@ class PostService(
         if (attachments.isNotEmpty() && !policy.canAttach(caller, attachments)) forbidden("Not allowed to attach these files")
         rateLimit(caller)
         val post = posts.insert(NewPost(boardCode, caller.accountId, title, body, status, attachments, time.now(), authorRef))
+        events.publish(PostCreated(post, actorOf(caller)))
         return detail(caller, post)
     }
 
@@ -81,13 +83,19 @@ class PostService(
             status = request.status,
         )
         val updated = posts.update(post.id, change, time.now()) ?: notFound(postId)
+        events.publish(PostUpdated(updated, actorOf(caller)))
+        if (updated.status != post.status) events.publish(PostStatusChanged(updated, post.status, updated.status, actorOf(caller)))
         return detail(caller, updated)
     }
 
     fun delete(caller: BoardCaller, boardCode: String, postId: Long) {
         val post = access.post(caller, boardCode, postId)
         if (!policy.canDeletePost(caller, post)) forbidden("Not allowed to delete post $postId")
-        if (post.status != PostStatus.DELETED) posts.update(post.id, PostChange(status = PostStatus.DELETED), time.now())
+        if (post.status != PostStatus.DELETED) {
+            posts.update(post.id, PostChange(status = PostStatus.DELETED), time.now())?.let {
+                events.publish(PostStatusChanged(it, post.status, PostStatus.DELETED, actorOf(caller)))
+            }
+        }
     }
 
     fun moderate(caller: BoardCaller, boardCode: String, postId: Long, status: PostStatus?, pinned: Boolean?): PostDetailView {
@@ -95,6 +103,8 @@ class PostService(
         val post = access.post(caller, boardCode, postId)
         if (status != null && status !in MODERATION_STATUSES) invalid("moderation status must be PUBLISHED, HIDDEN or DELETED")
         val updated = posts.update(post.id, PostChange(status = status, pinned = pinned), time.now()) ?: notFound(postId)
+        if (updated.status != post.status) events.publish(PostStatusChanged(updated, post.status, updated.status, actorOf(caller)))
+        if (updated.pinned != post.pinned) events.publish(PostUpdated(updated, actorOf(caller)))
         return detail(caller, updated)
     }
 
@@ -120,6 +130,8 @@ class PostService(
     private fun rateLimit(caller: BoardCaller) {
         if (!limiter.tryAcquire(caller.accountId, "post")) throw BoardException(BoardErrorCode.RATE_LIMITED, "Too many posts, slow down")
     }
+
+    private fun actorOf(caller: BoardCaller) = BoardActor(if (caller.moderator) BoardActorKind.MODERATOR else BoardActorKind.MEMBER, caller.accountId)
 
     private fun forbidden(message: String): Nothing = throw BoardException(BoardErrorCode.FORBIDDEN, message)
 
