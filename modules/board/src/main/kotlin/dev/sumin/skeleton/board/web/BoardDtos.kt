@@ -8,6 +8,8 @@ import dev.sumin.skeleton.board.BoardConfigView
 import dev.sumin.skeleton.board.CommentStatus
 import dev.sumin.skeleton.board.CommentView
 import dev.sumin.skeleton.board.GuestSecretMode
+import dev.sumin.skeleton.board.RevisionDecision
+import dev.sumin.skeleton.board.RevisionView
 import dev.sumin.skeleton.board.GuestWrite
 import dev.sumin.skeleton.board.PostDetailView
 import dev.sumin.skeleton.board.PostStatus
@@ -78,6 +80,8 @@ data class PostSummaryResponse(
     val mine: Boolean,
     /** 비회원이 쓴 글이다 — 이름은 `authorName` 이고, 화면은 「(비회원)」 으로 회원 닉네임 사칭을 가른다 */
     val authorGuest: Boolean = false,
+    /** 고친 글 목록(`?revision=pending`)에서만 실린다 — 공개본(위 칸)과 나란히 비교한다 */
+    @get:JsonInclude(JsonInclude.Include.NON_NULL) val pendingRevision: RevisionResponse? = null,
 )
 
 data class PostDetailResponse(
@@ -112,6 +116,8 @@ data class PostDetailResponse(
     val canManageComments: Boolean = false,
     /** 이 글의 댓글 승인 규칙 — null 이면 게시판 값 */
     val commentApproval: ApprovalMode? = null,
+    /** 대기 중인 고친 내용 — 쓴 회원 · 운영자에게만 (남에게는 늘 null). 비회원 작성자는 고친 응답에서만 본다 */
+    val pendingRevision: RevisionResponse? = null,
 )
 
 /** 목록의 한 줄이면 replies 가 있다 (최상위: 모든 자손 작성 순 평평하게, 답글: 빈 배열). 한 댓글만 돌려주는 응답에는 replies 가 없다. */
@@ -143,7 +149,13 @@ data class CommentResponse(
     val mine: Boolean,
     /** 비회원이 쓴 댓글이다 — 이름은 `authorName` */
     val authorGuest: Boolean = false,
+    /** 대기 중인 고친 내용 — 쓴 회원 · 운영자 · 관리하는 글 주인에게만 (남에게는 늘 null) */
+    @get:JsonInclude(JsonInclude.Include.ALWAYS) val pendingRevision: RevisionResponse? = null,
 )
+
+data class RevisionResponse(val title: String?, val body: String, val attachments: List<String>, val submittedAt: Instant)
+
+data class RevisionDecisionRequest(val decision: RevisionDecision? = null)
 
 data class ReactionStateResponse(val counts: Map<String, Long>, val myReactions: Set<String>)
 
@@ -213,6 +225,7 @@ internal fun PostSummaryView.toResponse() = with(item) {
         id, boardCode, publicAuthorId, title, excerpt, status, pinned, viewCount, commentCount,
         reactions.counts, reactions.myReactions, attachmentCount, createdAt, updatedAt,
         authorDeleted, authorName = author?.name, authorTag = author?.tag, mine = mine, authorGuest = BoardAuthors.isGuest(authorId),
+        pendingRevision = pendingRevision?.toResponse(),
     )
 }
 
@@ -221,7 +234,7 @@ internal fun PostDetailView.toResponse(excerptLength: Int) = with(post) {
         id, boardCode, publicAuthorId, title, body.take(excerptLength), body, attachments, status, pinned, viewCount, commentCount,
         reactions.counts, reactions.myReactions, attachments.size, createdAt, updatedAt,
         authorDeleted, authorName = author?.name, authorTag = author?.tag, mine = mine, authorGuest = BoardAuthors.isGuest(authorId),
-        canManageComments = canManageComments, commentApproval = commentApproval,
+        canManageComments = canManageComments, commentApproval = commentApproval, pendingRevision = pendingRevision?.toResponse(),
     )
 }
 
@@ -232,7 +245,10 @@ internal fun CommentView.toResponse(thread: Boolean = false): CommentResponse = 
         reactions.counts, reactions.myReactions, replyCount, createdAt, updatedAt,
         replies = if (thread) replies.map { it.toResponse(thread = true) } else null,
         authorDeleted = authorDeleted, authorName = author?.name, authorTag = author?.tag, mine = mine, authorGuest = BoardAuthors.isGuest(authorId),
+        pendingRevision = pendingRevision?.toResponse(),
     )
 }
 
 internal fun ReactionState.toResponse() = ReactionStateResponse(counts, myReactions)
+
+internal fun RevisionView.toResponse() = RevisionResponse(title, body, attachments, submittedAt)

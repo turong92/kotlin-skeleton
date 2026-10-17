@@ -32,6 +32,7 @@ class ServiceHarness(
     val posts = FakePostRepository(store)
     val comments = FakeCommentRepository(store)
     val reactionRepo = FakeReactionRepository(store)
+    val revisionRepo = FakeRevisionRepository(store)
     private val time = TimeProvider.fixed(T0)
     private val rules = BoardContentRules(props)
     private val access = BoardAccess(boards, posts, comments, policy)
@@ -44,8 +45,8 @@ class ServiceHarness(
     val guestLimiter: BoardGuestLimiter = StoreBoardGuestLimiter({ guestStore }, props.guest)
     private val guests = BoardGuests(props, secrets, guestLimiter, { captcha })
     val boardService = BoardService(boards, policy, props, time, authorRules)
-    val postService = PostService(access, posts, support, authors, policy, rules, props, limiter, time, authorRules, events, guests)
-    val commentService = CommentService(access, wrapComments(comments), support, authors, policy, rules, props, limiter, notifier, time, authorRules, events, guests)
+    val postService = PostService(access, posts, support, authors, policy, rules, props, limiter, time, authorRules, events, guests, revisionRepo)
+    val commentService = CommentService(access, wrapComments(comments), support, authors, policy, rules, props, limiter, notifier, time, authorRules, events, guests, revisionRepo)
     val reactionService = ReactionService(access, comments, reactionRepo, support, policy, props, limiter, time)
 
     init { boards.create("general", "General", null, T0, settings) }

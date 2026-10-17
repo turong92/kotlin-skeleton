@@ -111,8 +111,8 @@ class NoOptionalGoldenKeysTest {
         val BOARD_PLUS = setOf("settings")
         val CONFIG_PLUS = setOf("guestEnabled", "guestSecret", "guestNameMaxLength", "captchaRequired")
         val SUMMARY_PLUS = setOf("authorGuest")
-        val DETAIL_PLUS = setOf("authorGuest", "canManageComments", "commentApproval")
-        val COMMENT_PLUS = setOf("authorGuest")
+        val DETAIL_PLUS = setOf("authorGuest", "canManageComments", "commentApproval", "pendingRevision")
+        val COMMENT_PLUS = setOf("authorGuest", "pendingRevision")
     }
 
     private fun keys(json: String, path: String): Set<String> = JsonPath.read<Map<String, Any?>>(json, path).keys

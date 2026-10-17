@@ -27,6 +27,7 @@ import dev.sumin.skeleton.board.PostStatus
 import dev.sumin.skeleton.board.ReactionMode
 import dev.sumin.skeleton.board.ReactionRepository
 import dev.sumin.skeleton.board.ReactionTarget
+import dev.sumin.skeleton.board.RevisionTarget
 import dev.sumin.skeleton.common.author.AuthorAdoptionListener
 import dev.sumin.skeleton.persistence.jdbc.SqlDialect
 import java.sql.ResultSet
@@ -163,6 +164,8 @@ class JdbcPostRepository(
         val updated = tx.execute {
             val rows = jdbc.update("update board_posts set ${sets.joinToString()} where id = :id", params)
             if (rows > 0 && change.attachments != null) replaceAttachments(id, change.attachments!!)
+            // 공개를 떠나는 글의 판은 같은 트랜잭션에서 버린다 (가려진 것의 판을 나중에 승인해 되살리는 길을 막는다)
+            if (rows > 0 && change.status != null && change.status != PostStatus.PUBLISHED) discardRevision(jdbc, RevisionTarget.POST, id)
             rows
         }!!
         return if (updated == 0) null else find(id)
@@ -237,6 +240,12 @@ class JdbcPostRepository(
         )
 }
 
+internal fun discardRevision(jdbc: NamedParameterJdbcTemplate, target: RevisionTarget, id: Long): Int {
+    val key = mapOf("t" to target.name, "id" to id)
+    jdbc.update("delete from board_revision_attachments where target_type = :t and target_id = :id", key)
+    return jdbc.update("delete from board_revisions where target_type = :t and target_id = :id", key)
+}
+
 /** LIKE 의 와일드카드(`%` `_`)와 이스케이프 문자(`!`)를 글자 그대로 찾게 한다 — 두 DB 에 똑같이 통하는 `escape '!'` */
 internal fun escapeLike(term: String): String = term.replace("!", "!!").replace("%", "!%").replace("_", "!_")
 
@@ -300,6 +309,7 @@ class JdbcCommentRepository(
                 MapSqlParameterSource().addValue("id", id).addValue("status", status.name).addValue("now", dialect.instantParam(now))
                     .addValue("by", moderatedBy?.name),
             )
+            if (status != CommentStatus.PUBLISHED) discardRevision(jdbc, RevisionTarget.COMMENT, id)
             val delta = (if (status == CommentStatus.PUBLISHED) 1 else 0) - (if (old == CommentStatus.PUBLISHED.name) 1 else 0)
             if (delta != 0) jdbc.update("update board_posts set comment_count = comment_count + :delta where id = :post", mapOf("delta" to delta, "post" to postId))
             Unit

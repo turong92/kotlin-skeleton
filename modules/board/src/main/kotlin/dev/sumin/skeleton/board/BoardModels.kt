@@ -26,6 +26,26 @@ enum class ApprovalTarget { POST, COMMENT }
 /** 마지막으로 상태를 바꾼 쪽 — 글 주인이 운영자가 가린 댓글을 되살리지 못하게 한다 */
 enum class ModeratedBy { OWNER, MODERATOR }
 
+/** 고친 판의 대상 종류 */
+enum class RevisionTarget { POST, COMMENT }
+
+enum class RevisionDecision { APPROVE, REJECT }
+
+enum class RevisionOutcome { APPROVED, REJECTED, DISCARDED }
+
+/** 공개본 위에 대기 중인 고친 내용 — 대상마다 하나. [title] 은 글만 */
+data class Revision(
+    val target: RevisionTarget,
+    val targetId: Long,
+    val boardCode: String,
+    val postId: Long,
+    val title: String?,
+    val body: String,
+    val attachments: List<String>,
+    val createdAt: Instant,
+    val updatedAt: Instant,
+)
+
 /** 게시판 설정 — 새 기능은 모두 꺼진 채 시작한다 */
 data class BoardSettings(
     val guestWrite: GuestWrite = GuestWrite.NONE,

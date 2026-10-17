@@ -70,6 +70,11 @@ class BoardAutoConfiguration {
     @ConditionalOnMissingBean
     fun boardEvents(listeners: ObjectProvider<BoardEventListener>): BoardEvents = BoardEvents { listeners.orderedStream().toList() }
 
+    /** 고친 판 저장소 — `board-jdbc` 가 있으면 그것이 먼저 등록되고, 아니면 판이 없는 기본값 (판이 필요한 첫 수정에서 닫힌 쪽으로 실패) */
+    @Bean
+    @ConditionalOnMissingBean
+    fun boardRevisionRepository(): BoardRevisionRepository = NoBoardRevisions
+
     @Bean
     @ConditionalOnMissingBean
     fun boardContentRules(properties: BoardProperties): BoardContentRules = BoardContentRules(properties)
@@ -119,8 +124,9 @@ class BoardAutoConfiguration {
         authorRules: BoardAuthorRules,
         events: BoardEvents,
         guests: BoardGuests,
+        revisions: BoardRevisionRepository,
     ): PostService =
-        PostService(access, posts, reactions, authors, policy, rules, properties, limiter, time.getIfAvailable { TimeProvider.systemUtc() }, authorRules, events, guests)
+        PostService(access, posts, reactions, authors, policy, rules, properties, limiter, time.getIfAvailable { TimeProvider.systemUtc() }, authorRules, events, guests, revisions)
 
     @Bean
     @ConditionalOnMissingBean
@@ -138,8 +144,9 @@ class BoardAutoConfiguration {
         authorRules: BoardAuthorRules,
         events: BoardEvents,
         guests: BoardGuests,
+        revisions: BoardRevisionRepository,
     ): CommentService =
-        CommentService(access, comments, reactions, authors, policy, rules, properties, limiter, notifier, time.getIfAvailable { TimeProvider.systemUtc() }, authorRules, events, guests)
+        CommentService(access, comments, reactions, authors, policy, rules, properties, limiter, notifier, time.getIfAvailable { TimeProvider.systemUtc() }, authorRules, events, guests, revisions)
 
     @Bean
     @ConditionalOnMissingBean

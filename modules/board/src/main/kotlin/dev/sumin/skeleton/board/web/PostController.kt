@@ -65,13 +65,18 @@ class PostController(
         @RequestParam(required = false) reaction: String?,
         @RequestParam(required = false) status: String?,
         @RequestParam(required = false) mine: Boolean?,
+        @RequestParam(required = false) revision: String?,
     ): PageResponse<PostSummaryResponse> {
+        if (revision != null && revision.isNotBlank() && !revision.equals("pending", ignoreCase = true)) {
+            throw BoardException(BoardErrorCode.CONTENT_INVALID, "revision must be pending when given")
+        }
         val page = service.list(
             callers.reader(authentication), code,
             PostListRequest(
                 page = pageQuery.page, size = pageQuery.size,
                 sort = enumParam<PostSort>("sort", sort) ?: PostSort.LATEST,
                 q = q, reaction = reaction, status = enumParam<PostStatus>("status", status), mine = mine ?: false,
+                revision = !revision.isNullOrBlank(),
             ),
         )
         return Response.ok(page.values.map { it.toResponse() }, PaginationMeta.of(pageQuery.page, properties.pageSize(pageQuery.size), page.totalElements))
@@ -130,6 +135,22 @@ class PostController(
         @RequestBody request: PostModerationRequest,
     ): DataResponse<PostDetailResponse> =
         Response.ok(service.moderate(callers.require(authentication), code, postId, request.status, request.pinned).toResponse(properties.excerptLength))
+
+    @Operation(summary = "Approve or reject a post's pending edit (moderator)", description = "decision=APPROVE copies the waiting title, body and attachments onto the post; REJECT drops them. The public post is unchanged until then.")
+    @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = PostDetailResponse::class)
+    @PutMapping("/{postId}/revision")
+    fun decideRevision(
+        authentication: Authentication?,
+        @PathVariable code: String,
+        @PathVariable postId: Long,
+        @RequestBody request: RevisionDecisionRequest,
+    ): DataResponse<PostDetailResponse> =
+        Response.ok(
+            service.decideRevision(
+                callers.require(authentication), code, postId,
+                request.decision ?: throw BoardException(BoardErrorCode.CONTENT_INVALID, "decision must be APPROVE or REJECT"),
+            ).toResponse(properties.excerptLength),
+        )
 
     @Operation(summary = "React to a post", description = "type must be one of the configured reaction types (GET …/config). SINGLE mode switches the caller's reaction.")
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = ReactionStateResponse::class)

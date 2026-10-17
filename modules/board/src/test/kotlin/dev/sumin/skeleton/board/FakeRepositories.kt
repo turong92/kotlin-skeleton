@@ -13,12 +13,13 @@ class FakeStore {
     val comments = linkedMapOf<Long, Comment>()
     val reactions = mutableListOf<Reaction>()
     val ids = AtomicLong(100)
+    val revisions = linkedMapOf<Pair<RevisionTarget, Long>, Revision>()
     val postHashes = mutableMapOf<Long, String>()
     val commentHashes = mutableMapOf<Long, String>()
 
     data class Reaction(val target: ReactionTarget, val targetId: Long, val accountId: String, val type: String)
 
-    fun clear() { boards.clear(); posts.clear(); comments.clear(); reactions.clear() }
+    fun clear() { boards.clear(); posts.clear(); comments.clear(); reactions.clear(); revisions.clear() }
 }
 
 @Synchronized
@@ -59,6 +60,7 @@ class FakePostRepository(private val s: FakeStore) : PostRepository {
 
     override fun update(id: Long, change: PostChange, now: Instant): Post? = s.locked {
         val p = s.posts[id] ?: return@locked null
+        if (change.status != null && change.status != PostStatus.PUBLISHED) s.revisions.remove(RevisionTarget.POST to id)   // 공개를 떠나는 글의 판은 같은 트랜잭션에서 버린다
         p.copy(
             title = change.title ?: p.title, body = change.body ?: p.body, attachments = change.attachments ?: p.attachments,
             status = change.status ?: p.status, pinned = change.pinned ?: p.pinned, updatedAt = now,
@@ -111,6 +113,7 @@ class FakeCommentRepository(private val s: FakeStore) : CommentRepository {
 
     override fun setStatus(id: Long, status: CommentStatus, now: Instant, moderatedBy: ModeratedBy?): Comment? = s.locked {
         val c = s.comments[id] ?: return@locked null
+        if (status != CommentStatus.PUBLISHED) s.revisions.remove(RevisionTarget.COMMENT to id)
         val delta = (if (status == CommentStatus.PUBLISHED) 1 else 0) - (if (c.status == CommentStatus.PUBLISHED) 1 else 0)
         s.posts[c.postId]?.let { s.posts[c.postId] = it.copy(commentCount = it.commentCount + delta) }
         c.copy(status = status, updatedAt = now, moderatedBy = moderatedBy ?: c.moderatedBy).also { s.comments[id] = it }
@@ -170,5 +173,36 @@ class FakeReactionRepository(private val s: FakeStore) : ReactionRepository {
     override fun mine(target: ReactionTarget, targetIds: Collection<Long>, accountId: String): Map<Long, Set<String>> = s.locked {
         s.reactions.filter { it.target == target && it.targetId in targetIds && it.accountId == accountId }
             .groupBy { it.targetId }.mapValues { (_, rs) -> rs.map { it.type }.toSet() }
+    }
+}
+
+class FakeRevisionRepository(private val s: FakeStore) : BoardRevisionRepository {
+    override fun submit(revision: Revision): Boolean = s.locked { (s.revisions.put(revision.target to revision.targetId, revision) != null) }
+
+    override fun find(target: RevisionTarget, ids: Collection<Long>): Map<Long, Revision> = s.locked {
+        ids.mapNotNull { id -> s.revisions[target to id]?.let { id to it } }.toMap()
+    }
+
+    override fun delete(target: RevisionTarget, id: Long): Boolean = s.locked { s.revisions.remove(target to id) != null }
+
+    override fun apply(target: RevisionTarget, id: Long, now: Instant): Boolean = s.locked {
+        val rev = s.revisions[target to id] ?: return@locked false
+        if (target == RevisionTarget.POST) {
+            val p = s.posts[id]
+            if (p == null || p.status != PostStatus.PUBLISHED) { s.revisions.remove(target to id); return@locked false }
+            s.posts[id] = p.copy(title = rev.title ?: p.title, body = rev.body, attachments = rev.attachments, updatedAt = now)
+        } else {
+            val c = s.comments[id]
+            if (c == null || c.status != CommentStatus.PUBLISHED) { s.revisions.remove(target to id); return@locked false }
+            s.comments[id] = c.copy(body = rev.body, updatedAt = now)
+        }
+        s.revisions.remove(target to id)
+        true
+    }
+
+    override fun pending(target: RevisionTarget, boardCode: String?, postId: Long?, page: Int, size: Int): PageResult<Revision> = s.locked {
+        val rows = s.revisions.values.filter { it.target == target && (if (target == RevisionTarget.POST) it.boardCode == boardCode else it.postId == postId) }
+            .sortedWith(compareBy<Revision> { it.updatedAt }.thenBy { it.targetId })
+        PageResult(rows.drop(page * size).take(size), rows.size.toLong())
     }
 }

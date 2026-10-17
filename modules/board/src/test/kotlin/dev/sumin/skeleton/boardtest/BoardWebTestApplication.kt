@@ -1,6 +1,8 @@
 package dev.sumin.skeleton.boardtest
 
 import dev.sumin.skeleton.board.BoardRepository
+import dev.sumin.skeleton.board.BoardRevisionRepository
+import dev.sumin.skeleton.board.FakeRevisionRepository
 import dev.sumin.skeleton.board.CommentRepository
 import dev.sumin.skeleton.board.FakeBoardRepository
 import dev.sumin.skeleton.board.FakeCommentRepository
@@ -24,4 +26,5 @@ class FakeBoardRepositories {
     @Bean fun postRepository(s: FakeStore): PostRepository = FakePostRepository(s)
     @Bean fun commentRepository(s: FakeStore): CommentRepository = FakeCommentRepository(s)
     @Bean fun reactionRepository(s: FakeStore): ReactionRepository = FakeReactionRepository(s)
+    @Bean fun revisionRepository(s: FakeStore): BoardRevisionRepository = FakeRevisionRepository(s)
 }

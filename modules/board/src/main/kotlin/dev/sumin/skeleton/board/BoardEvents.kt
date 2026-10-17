@@ -88,3 +88,23 @@ class BoardEvents(private val listeners: () -> List<BoardEventListener>) {
         val NONE = BoardEvents { emptyList() }
     }
 }
+
+/** 승인 대상 작성자가 고쳐 판이 생겼다 (대기 중에 또 고쳐 덮어썼으면 [replaced]) */
+data class RevisionSubmitted(
+    val target: RevisionTarget,
+    val targetId: Long,
+    override val boardCode: String,
+    override val postId: Long,
+    val replaced: Boolean,
+    override val actor: BoardActor,
+) : BoardEvent
+
+/** 판이 승인 · 거절 · 버려졌다. 승인이면 공개본이 바뀌었으므로 `…Updated` 도 함께 나간다 — 내용을 옮겨 두는 리스너는 `…Updated` 만 들으면 된다 */
+data class RevisionDecided(
+    val target: RevisionTarget,
+    val targetId: Long,
+    override val boardCode: String,
+    override val postId: Long,
+    val outcome: RevisionOutcome,
+    override val actor: BoardActor,
+) : BoardEvent

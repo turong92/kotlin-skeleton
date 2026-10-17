@@ -84,7 +84,7 @@ class BoardWebTest {
             setOf(
                 "id", "boardCode", "authorId", "title", "excerpt", "body", "attachments", "status", "pinned", "viewCount", "commentCount", "reactionCounts",
                 "myReactions", "attachmentCount", "createdAt", "updatedAt", "authorDeleted", "authorName", "authorTag", "mine",
-                "authorGuest", "canManageComments", "commentApproval",   // 비회원 · 승인 (스펙 §8)
+                "authorGuest", "canManageComments", "commentApproval", "pendingRevision",   // 비회원 · 승인 · 고친 판 (스펙 §8)
             ),
             keys, "before this feature plus mine, and the guest/approval keys",
         )
@@ -108,7 +108,7 @@ class BoardWebTest {
             setOf(
                 "id", "postId", "parentId", "rootId", "depth", "authorId", "body", "status", "reactionCounts", "myReactions", "replyCount",
                 "createdAt", "updatedAt", "replies", "authorDeleted", "authorName", "authorTag", "mine",
-                "authorGuest",   // 비회원 (스펙 §8)
+                "authorGuest", "pendingRevision",   // 비회원 · 고친 판 (스펙 §8)
             ),
             commentKeys, "comment: before this feature plus mine, and the guest key",
         )

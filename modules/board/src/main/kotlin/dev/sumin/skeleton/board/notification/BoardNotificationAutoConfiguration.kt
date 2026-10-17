@@ -59,7 +59,7 @@ class NotificationBoardNotifier(
                     "parentId" to notice.parent?.id,
                     // 이름은 싣지 않는다 — 받은편지함에 남은 이름은 작성자가 탈퇴(익명화)해도 지워지지 않는다. 읽는 쪽이 authorId 로 이름을 푼다. authorId 는 공개 작성자 id 다 — 계정 id 가 아니다 (docs/modules/board.md)
                     "authorId" to notice.publicAuthorId,
-                ),
+                ) + if (notice.revision) mapOf("revision" to true) else emptyMap(),
             ),
         )
     }

@@ -63,7 +63,14 @@ class CommentController(
         @Valid @ParameterObject @ModelAttribute pageQuery: PageQuery,
         @RequestParam(required = false) sort: String?,
         @RequestParam(required = false) status: String?,
+        @RequestParam(required = false) revision: String?,
     ): PageResponse<CommentResponse> {
+        if (revision != null && revision.isNotBlank()) {
+            if (!revision.equals("pending", ignoreCase = true)) throw BoardException(BoardErrorCode.CONTENT_INVALID, "revision must be pending when given")
+            val w = callers.writer(authentication, http)
+            val edits = service.listRevisions(w.caller, code, postId, pageQuery.page, pageQuery.size, w.guest)
+            return Response.ok(edits.values.map { it.toResponse() }, PaginationMeta.of(pageQuery.page, properties.pageSize(pageQuery.size), edits.totalElements))
+        }
         if (enumParam<CommentStatus>("status", status) == CommentStatus.PENDING) {
             val w = callers.writer(authentication, http)
             val pending = service.listPending(w.caller, code, postId, pageQuery.page, pageQuery.size, w.guest)
@@ -133,6 +140,29 @@ class CommentController(
     ): DataResponse<CommentResponse> =
         callers.writer(authentication, http).let { w ->
             Response.ok(service.moderate(w.caller, code, postId, commentId, request.status ?: CommentStatus.PUBLISHED, w.guest).toResponse())
+        }
+
+    @Operation(
+        summary = "Approve or reject a comment's pending edit",
+        description = "Managers only (moderator, or the managing post owner; a signed-out owner sends X-Board-Guest-Secret). decision=APPROVE publishes the waiting text.",
+    )
+    @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = CommentResponse::class)
+    @PutMapping("/{commentId}/revision")
+    fun decideRevision(
+        authentication: Authentication?,
+        http: HttpServletRequest,
+        @PathVariable code: String,
+        @PathVariable postId: Long,
+        @PathVariable commentId: Long,
+        @RequestBody request: RevisionDecisionRequest,
+    ): DataResponse<CommentResponse> =
+        callers.writer(authentication, http).let { w ->
+            Response.ok(
+                service.decideRevision(
+                    w.caller, code, postId, commentId,
+                    request.decision ?: throw BoardException(BoardErrorCode.CONTENT_INVALID, "decision must be APPROVE or REJECT"), w.guest,
+                ).toResponse(),
+            )
         }
 
     @Operation(summary = "React to a comment")

@@ -71,5 +71,6 @@ class BoardWebAutoConfiguration {
             registry.add("PATCH", "$base/*/posts/*/comments/*")
             registry.add("DELETE", "$base/*/posts/*/comments/*")
             registry.add("PUT", "$base/*/posts/*/comments/*/moderation")
+            registry.add("PUT", "$base/*/posts/*/comments/*/revision")
         }
 }

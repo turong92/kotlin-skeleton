@@ -58,7 +58,7 @@ object BoardDb {
 
     val dataSource = CountingDataSource(raw)
     val jdbc = NamedParameterJdbcTemplate(dataSource)
-    private val tx = TransactionTemplate(DataSourceTransactionManager(dataSource))
+    val tx = TransactionTemplate(DataSourceTransactionManager(dataSource))
     val boards = JdbcBoardRepository(jdbc, DbTestDatabase.dialect)
     val posts = JdbcPostRepository(jdbc, tx, DbTestDatabase.dialect)
     val comments = JdbcCommentRepository(jdbc, tx, DbTestDatabase.dialect)

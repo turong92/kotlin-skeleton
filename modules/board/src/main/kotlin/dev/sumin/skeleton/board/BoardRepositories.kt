@@ -101,3 +101,30 @@ interface BoardErasureRepository {
     /** 바꾼 행 수. **멱등** — 다시 불러도 같은 결과 (이미 바뀐 행은 대상이 아니다) */
     fun anonymizeAuthor(accountId: String, tombstone: String): Int
 }
+
+/**
+ * 고친 판 저장소 포트 — `board-jdbc` 가 구현한다. 기본 구현은 판이 없는 것으로 읽고, **판을 만들려는 첫 수정에서 닫힌 쪽으로 실패한다**
+ * (자기 저장소를 둔 앱이 이것 없이 승인을 켜면 "board-jdbc 를 두거나 구현하라" 오류).
+ */
+interface BoardRevisionRepository {
+    /** 대상 행을 잠그고 옛 판을 지운 뒤 넣는다 (upsert 문법이 방언마다 달라서). 덮어썼으면 true */
+    fun submit(revision: Revision): Boolean =
+        throw UnsupportedOperationException("This app has no BoardRevisionRepository - use board-jdbc or implement it to turn on approval for edits")
+
+    fun find(target: RevisionTarget, ids: Collection<Long>): Map<Long, Revision> = emptyMap()
+
+    /** 판만 지운다 — 있었으면 true */
+    fun delete(target: RevisionTarget, id: Long): Boolean = false
+
+    /**
+     * 한 트랜잭션에서 대상을 잠그고 판의 제목 · 본문 · 첨부를 원래 행에 옮긴 뒤(`updated_at` 갱신) 판을 지운다. 판이 없거나 대상이 PUBLISHED 가 아니면
+     * (그 경우 남은 판도 지운다) 아무것도 옮기지 않고 false
+     */
+    fun apply(target: RevisionTarget, id: Long, now: Instant): Boolean = false
+
+    /** 대기 중인 판 한 페이지 (오래된 것부터). 글: [boardCode] 의 모든 글 · 댓글: [postId] 의 모든 댓글 */
+    fun pending(target: RevisionTarget, boardCode: String?, postId: Long?, page: Int, size: Int): PageResult<Revision> = PageResult(emptyList(), 0)
+}
+
+/** 판이 없는 기본 구현 — `board-jdbc` 가 없으면 이것이다 */
+object NoBoardRevisions : BoardRevisionRepository
