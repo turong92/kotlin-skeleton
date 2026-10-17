@@ -39,6 +39,7 @@
 | 14 | (지휘 세션 결정) 게시판 승인을 OFF 로 바꿔도 **이미 대기 중인 글 · 댓글은 대기에 남는다.** 작성자가 스스로 공개할 수 없고 운영자(댓글은 관리하는 글 주인도)가 처리한다 — 닫힌 쪽, 업계 관행 | — | §3.2 |
 | 15 | (지휘 세션 결정, 리뷰 B1 · B2) 판의 **버전**은 판의 `updated_at`(응답의 `pendingRevision.submittedAt`)이다. 승인 · 거절은 운영자가 본 버전을 함께 보내고, 잠근 뒤 같을 때만 한다 — 다르면 `409 BOARD.REVISION_CHANGED`(보는 사이 작성자가 덮어쓴 판이 몰래 공개되지 않는다). 판 만들기는 잠근 뒤 대상이 PUBLISHED 가 아니면 판을 넣지 않고 `404`(더 이상 고칠 수 없는 대상) | — | §3.5 |
 | 13 | (지휘 세션 결정, 리뷰 I2) **한 번도 공개된 적 없는 댓글은 거절 · 대기 중 삭제 뒤에도** 관리자(운영자 · 관리하는 글 주인) · 쓴 회원 말고는 스레드에 자리조차 보이지 않는다. 「공개된 적 있음」은 `board_comments.published_at`(처음 PUBLISHED 가 된 순간)으로 남기고 옛 PUBLISHED · HIDDEN · DELETED 행은 공개된 적 있음으로 채운다. 글은 가려진 글이 원래 작성자 · 운영자 말고는 404 라 같은 규칙이 필요 없다 | — | §3.4 · §9 |
+| 16 | (형 결정 「지금 1차에 넣기」, 지휘 세션이 번호를 붙임 - 앞의 15 와 겹치지 않게) **비회원 사진 업로드를 1차에 넣는다.** storage 가 익명 업로드를 받되 **기본 꺼짐**, 앱 yml 이 명시해야 켜진다. 익명은 이미지 업로드 발급만 받고 다른 경로는 그대로다 | 업계 관행 · 닫힌 쪽 | §5.1 |
 
 ## 2. 비회원 작성자
 
@@ -194,6 +195,15 @@
 - 설정 `skeleton.board.comment-max-attachments: 0`(기본 = 꺼짐 — 보내면 `400 BOARD.CONTENT_INVALID`). ovation 과 견본은 `4`. 검사는 글과 같은 `BoardContentRules.attachments` · `canAttach` · `rejectAccountIdKeys` 이고, 비회원은 `canGuestAttach` 다.
 - 스레드 응답은 쪽의 모든 댓글 키를 **쿼리 한 번**(`comment_id in (…)`)으로 붙인다 — `JdbcQueryCountDbTest` 의 쿼리 수 약속을 지킨다. `CommentResponse.attachments: string[]`(새 키)는 **`PUBLISHED` 가 아니면 `[]`** 다 — 본문이 `null` 인 것과 같은 이유로, 가린 댓글의 사진이 새면 안 된다.
 - 수정: `PATCH …/comments/{cid}` 가 `attachments?` 를 받는다(승인 대상이면 §3.5 의 판으로 간다).
+
+## 5.1 비회원 업로드 (storage, 결정 16)
+
+- **설정** `skeleton.storage.web.guest.*` - `enabled`(기본 **false**), `secret`(키 MAC 의 서버 비밀, 켜면 32자 이상 - 프로젝트마다 달라야 한다. 환경변수 `<P>_STORAGE_WEB_GUEST_SECRET`), `allowed-content-types`(기본 jpeg · png · webp · gif, 이 넷 안에서만 고를 수 있다 - **SVG 는 설정으로도 못 연다**), `max-size-bytes`(기본 10 MB), `rate-limit`(IP 별 20 / 1시간), `captcha`(OFF · REQUIRED, REQUIRED 면 검증기 빈이 없을 때 기동 실패), `cleanup.*`(아래).
+- **경로** `POST /api/v1/storage/guest/presign` 하나뿐이다(본문 `fileName` · `contentType` · `sizeBytes` · `captchaToken?`, 요청 하나에 파일 하나). 켜져 있을 때만 `PublicEndpointContributor` 가 이 경로를 익명에 연다 - **다운로드 · 멀티파트 · 검증 등 다른 경로는 지금처럼 로그인이 필요하다.** 꺼져 있으면 지금과 같은 401.
+- **키** `<prefix>/g/<uuid>.<mac>/file.<ext>`, `mac = HMAC-SHA256(guest.secret, "guest\n" + uuid)` 의 앞 32자, 확장자는 **클라이언트 파일 이름이 아니라 허용한 Content-Type 에서** 정한다(jpg · png · webp · gif). 파일 이름 확장자가 Content-Type 과 맞지 않으면 거절한다. presign 은 Content-Type · 크기를 서명에 넣으므로 저장소가 선언과 다른 업로드를 거절한다. **매직 바이트 검사는 브라우저가 저장소로 직접 올리는 길이라 서버가 할 수 없다** - 대신 위 서명 + 이미지 Content-Type 만 허용 + SVG 금지가 한계선이다.
+- **소유 확인** `StorageKeyOwnership` 에 익명 꼴이 더해진다(`isGuestKey`: 꼴과 MAC 이 맞아야 참). 회원의 `owns` 는 익명 접두사(`<prefix>/g/`)를 소유로 인정하지 않는다. 비회원 글 · 댓글의 기본 `canGuestAttach` 는 **익명 키 꼴이고 MAC 이 맞는 것만** 허용한다 - 회원 키를 비회원이 다시 싣는 길이 막힌다. 결정 7 「회원처럼 허용」과 어긋나 보이지만, 업로드 소유 확인이 생겼으므로 회원이 `canAttach`(자기 키만)로 받는 확인과 같은 수준이다(저장소 연결이 없는 앱은 `canGuestAttach` 가 지금처럼 `true`: storage 의 익명 키 확인 빈이 없으면 그대로).
+- **고아 회수** 익명 키가 `cleanup.ttl`(기본 24시간) 안에 글 · 댓글(고친 판 포함)에 붙지 않으면 주기 작업이 지운다. 기본 꺼짐, `cleanup.enabled=true` 일 때만 돈다(`scheduler` 모듈의 `skeletonTaskScheduler` 에 예약, 프로젝트마다). 붙었는지는 platform 의 포트 `UploadedKeyUsage` 가 알려 준다 - 구현이 없으면(board-jdbc 없음) 아무것도 지우지 않는다. 사용 중인 키는 지우지 않는다.
+- **시험** MAC 위조 키 거절 · 회원 키를 비회원이 실으면 거절 · SVG · 크기 초과 거절 · 꺼진 기본 설정에서 익명 발급 401 · 한도 초과 429 · 회수가 붙은 키를 안 지움.
 
 ## 6. 확장 자리
 

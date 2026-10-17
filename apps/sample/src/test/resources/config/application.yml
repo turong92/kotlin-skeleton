@@ -13,6 +13,8 @@ skeleton:
       enabled: false   # notes · board 시험은 시드 계정으로 보호된 엔드포인트를 부른다 — 동의는 이 시험들의 주제가 아니다. 재동의 흐름은 LegalJourneyIntegrationTest 가 켜서 시험한다
   storage:
     web:
+      guest:
+        secret: test-only-storage-guest-secret-0123456789abcdef   # 비회원 업로드(main application.yml 이 켠다)의 HMAC 비밀 - 시험 전용 고정 값
       key-secret: test-only-storage-key-secret-0123456789abcdef   # key-owner=OPAQUE(main application.yml)의 HMAC 비밀 — 시험 전용 고정 값
   crypto:
     primary-key-id: test

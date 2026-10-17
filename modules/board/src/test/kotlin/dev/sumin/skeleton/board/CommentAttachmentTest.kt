@@ -1,5 +1,7 @@
 package dev.sumin.skeleton.board
 
+import dev.sumin.skeleton.common.upload.GuestUploadKeys
+
 import dev.sumin.skeleton.common.author.AuthorContext
 import dev.sumin.skeleton.common.author.AuthorIdentities
 import kotlin.test.Test
@@ -75,6 +77,22 @@ class CommentAttachmentTest {
         })
         val ok = guestOnly.commentService.create(null, "general", p, null, "x", guestName = "손님", guest = GuestContext("pass1234", "ip-b", "1.1.1.1"), attachments = listOf("guest-uploads/1.png"))
         assertEquals(listOf("guest-uploads/1.png"), ok.attachments)
+    }
+
+    @Test
+    fun `with the upload module's guest key check the default policy lets a guest attach only guest-issued keys - never a member's key`() {
+        val issued = "uploads/g/u.m/file.png"
+        val h = ServiceHarness(
+            props = on, settings = BoardSettings(guestWrite = GuestWrite.ALL),
+            policy = DefaultBoardPolicy { GuestUploadKeys { it == issued } },
+        )
+        val p = h.newPost(owner).id
+        assertEquals(BoardErrorCode.FORBIDDEN, h.failure {
+            h.commentService.create(null, "general", p, null, "x", guestName = "손님", guest = GuestContext("pass1234", "ip-a", "1.1.1.1"), attachments = listOf("uploads/acc_other/u/a.png"))
+        })
+        val ok = h.commentService.create(null, "general", p, null, "x", guestName = "손님", guest = GuestContext("pass1234", "ip-b", "1.1.1.1"), attachments = listOf(issued))
+        assertEquals(listOf(issued), ok.attachments)
+        assertEquals(true, DefaultBoardPolicy().canGuestAttach(listOf("anything")), "no upload module: as before")
     }
 
     @Test

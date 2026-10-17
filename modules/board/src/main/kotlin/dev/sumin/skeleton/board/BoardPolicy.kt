@@ -1,5 +1,7 @@
 package dev.sumin.skeleton.board
 
+import dev.sumin.skeleton.common.upload.GuestUploadKeys
+
 /**
  * 누가 무엇을 할 수 있는지 — 앱이 같은 타입의 빈을 만들면 이 기본 구현이 물러난다.
  * 상태 규칙(숨겨진 글에는 댓글을 못 단다 등)은 서비스가 따로 본다. 여기는 사람(호출자)만 본다.
@@ -64,7 +66,13 @@ interface BoardPolicy {
         caller.moderator || (board.settings.ownerModeratesComments && caller.accountId == post.authorId)
 }
 
-class DefaultBoardPolicy : BoardPolicy {
+/**
+ * 기본 정책. [guestKeys] 는 storage 의 비회원 업로드 키 확인(platform `GuestUploadKeys`) - **있으면** 비회원 첨부는 그 확인을 통과한 키(발급한 꼴 + MAC)만 허용한다.
+ * 회원의 [canAttach](자기 키만)와 같은 수준의 확인이다: 회원 키 · 임의 문자열을 비회원이 실을 수 없다. 없으면(업로드 모듈이 없는 앱) 지금까지처럼 모두 허용한다.
+ */
+class DefaultBoardPolicy(private val guestKeys: () -> GuestUploadKeys? = { null }) : BoardPolicy {
+    override fun canGuestAttach(keys: List<String>): Boolean = guestKeys()?.let { verifier -> keys.all { verifier.isGuestKey(it) } } ?: true
+
     override fun canCreateBoard(caller: BoardCaller): Boolean = caller.moderator
 
     override fun canCreatePost(caller: BoardCaller, board: Board): Boolean = true

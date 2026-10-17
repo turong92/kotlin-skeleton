@@ -2161,6 +2161,10 @@
         {
           "env": ["<P>_STORAGE_WEB_KEY_SECRET"],
           "whenMissing": "key-owner=OPAQUE 인데 비었거나 32자보다 짧으면 기동 실패 · 기본(ACCOUNT_ID)에서는 쓰지 않는다 · 무작위로 충분하지만 바꾸면 발급한 OPAQUE 키가 맞지 않게 된다"
+        },
+        {
+          "env": ["<P>_STORAGE_WEB_GUEST_SECRET"],
+          "whenMissing": "guest.enabled=true(비회원 업로드) 인데 비었거나 32자보다 짧으면 기동 실패 · 기본(꺼짐)에서는 쓰지 않는다 · 무작위로 충분하지만 바꾸면 발급했지만 아직 안 붙은 비회원 키가 맞지 않게 된다 · 프로젝트마다 달라야 한다"
         }
       ],
       "docs": ["docs/modules/storage.md"],
@@ -2324,6 +2328,7 @@
         "payment-naverpay",
         "payment-paddle",
         "payment-toss",
+        "scheduler",
         "storage",
         "storage-s3"
       ],

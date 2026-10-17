@@ -54,4 +54,15 @@ class JdbcCommentAttachmentDbTest {
         assertEquals("a-new", db.comments.find(a.id)!!.body)
         assertEquals(2L, db.scalar("select attachment_count from board_comments where id = :id", "id" to a.id))
     }
+
+    @Test
+    fun `usage says a key is in use when a comment or a waiting revision holds it, not otherwise`() {
+        val board = db.newBoard()
+        val post = db.newPost(board)
+        val a = db.comments.insert(NewComment(post.id, null, null, 0, "acc_a", "a", T0, attachments = listOf("u/on-comment")))!!
+        revisions.submit(Revision(RevisionTarget.COMMENT, a.id, board, post.id, null, "a2", listOf("u/on-revision"), T0, T0))
+        val usage = JdbcUploadedKeyUsage(db.jdbc)
+        assertEquals(setOf("u/on-comment", "u/on-revision"), usage.inUse(listOf("u/on-comment", "u/on-revision", "u/nowhere")))
+        assertEquals(emptySet(), usage.inUse(emptyList()))
+    }
 }

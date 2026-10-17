@@ -11,6 +11,7 @@ import dev.sumin.skeleton.common.author.AuthorAdoptionListener
 import dev.sumin.skeleton.persistence.jdbc.SqlDialect
 import javax.sql.DataSource
 import org.springframework.boot.autoconfigure.AutoConfiguration
+import dev.sumin.skeleton.common.upload.UploadedKeyUsage
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
@@ -59,6 +60,11 @@ class BoardJdbcAutoConfiguration {
     @ConditionalOnMissingBean(BoardRevisionRepository::class)
     fun jdbcBoardRevisionRepository(dataSource: DataSource, transactionManager: PlatformTransactionManager, dialect: SqlDialect): BoardRevisionRepository =
         JdbcBoardRevisionRepository(NamedParameterJdbcTemplate(dataSource), TransactionTemplate(transactionManager), dialect)
+
+    /** storage 의 비회원 업로드 회수가 붙은 키를 알아보는 데 쓴다 (storage 가 켜져 있지 않으면 아무도 부르지 않는다) */
+    @Bean
+    @ConditionalOnMissingBean(UploadedKeyUsage::class)
+    fun jdbcUploadedKeyUsage(dataSource: DataSource): UploadedKeyUsage = JdbcUploadedKeyUsage(NamedParameterJdbcTemplate(dataSource))
 
     @Bean
     @ConditionalOnMissingBean(BoardErasureRepository::class)

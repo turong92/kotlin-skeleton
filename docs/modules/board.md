@@ -105,14 +105,7 @@ HTTP 는 `skeleton.board.http.base-path`(기본 `/api/v1/boards`)에 열린다 (
 >       captcha: REQUIRED      # 비회원의 만들기에 captchaToken 필수 → 실패는 400 BOARD.CAPTCHA_FAILED. BoardCaptcha 빈이 없으면 기동 실패
 > ```
 
-> **남는 위험 — 비회원 첨부는 회원처럼 허용된다(`canGuestAttach` 기본 true).** 비회원은 소유를 확인할 계정이 없어 **아무 키나** 실을 수 있다. 공개된 남의 첨부 키를 복사해 다시 실을 수 있어 원래 글이 가려진 뒤에도 그 그림이 비회원 댓글로 되살아나고, `ACCOUNT_ID` 키 방식에서는 남의 비공개 업로드 키를 맞히면 그것도 실린다. 비회원 업로드를 받는 앱은 정책으로 좁힌다:
->
-> ```kotlin
-> @Bean fun boardPolicy(tickets: GuestUploadTickets): BoardPolicy = object : BoardPolicy by DefaultBoardPolicy() {
->     // 비회원 업로드는 앱이 발급한 guest-uploads/ 아래 키만, 그리고 이 업로드 표가 아직 아무 글에도 쓰이지 않은 키만
->     override fun canGuestAttach(keys: List<String>) = keys.all { it.startsWith("guest-uploads/") && tickets.claim(it) }
-> }
-> ```
+> **비회원 첨부** — 기본 `canGuestAttach` 는 platform 의 `GuestUploadKeys`(storage 가 내놓는다)가 있으면 **storage 의 비회원 업로드로 발급한 키(`<prefix>/g/<uuid>.<mac>/file.<ext>`, MAC 이 맞는 것)만** 허용한다. 회원 키 · 남의 키 · 임의 문자열을 비회원이 다시 싣는 길이 막힌다. 결정 7 「회원처럼 허용」과 어긋나 보이지만, 회원의 `canAttach`(자기 업로드 키만)와 같은 수준의 업로드 소유 확인이 생겼기 때문이다 - 비회원 업로드를 켜지 않으면(`skeleton.storage.web.guest.enabled=false`) 비회원은 사진을 붙일 수 없다. 업로드 모듈이 없는 앱은 지금까지처럼 모두 허용되므로(**남는 위험**: 공개된 남의 키를 다시 실을 수 있다) 앱이 `canGuestAttach` 로 좁힌다. 키는 한 번 붙은 뒤에도 같은 글 · 다른 댓글에 다시 실을 수 있다(공개된 그림이므로 새로운 노출은 아니다). 켜는 법 · 제한 · 고아 회수: [storage.md](storage.md).
 
 **승인 대기 · 글 주인의 댓글 관리** (게시판 설정 `postApproval` · `commentApproval`: `OFF`(기본) · `GUESTS` · `ALL`, `ownerModeratesComments`; 글마다 `commentApproval` 로 게시판 값을 덮어쓸 수 있다 — 댓글 관리가 켜진 게시판만, 아니면 `400`). `PATCH /{code}`(운영자)로 고친다; `seed-boards[].settings` 는 만들 때만 적용된다.
 - 「승인 대상 작성자」 판정은 `BoardPolicy.needsApproval` 한 곳(운영자는 늘 면제, 댓글을 관리하는 글 주인은 자기 글의 댓글에 대해 대상이 아님). 대상이 쓰면 `PENDING`, 승인 = 기존 `PUT …/moderation {status: PUBLISHED}`, 거절 = 가리기(`HIDDEN`).

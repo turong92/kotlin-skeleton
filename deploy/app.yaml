@@ -47,6 +47,7 @@ secrets:
   - SKELETON_PAYMENT_PADDLE_API_KEY                        # [payment-paddle] 운영자 (.local.env)
   - SKELETON_PAYMENT_PADDLE_WEBHOOK_SECRET                 # [payment-paddle] 운영자 (.local.env) — 웹훅 엔드포인트 비밀값(pdl_ntfset_…)
   - SKELETON_STORAGE_WEB_KEY_SECRET                       # [storage] 무작위로 충분 — OPAQUE 첨부 키의 HMAC 키(key-owner=OPAQUE 일 때만 필요, 안 쓰면 이 줄을 지운다; 바꾸면 발급한 OPAQUE 키가 맞지 않게 된다)
+  - SKELETON_STORAGE_WEB_GUEST_SECRET                     # [storage] 무작위로 충분 — 비회원 업로드 키의 HMAC 키(32자 이상, skeleton.storage.web.guest.enabled=true 일 때만 필요 - 샘플은 켠다; 안 쓰면 이 줄을 지운다; 바꾸면 발급했지만 아직 안 붙은 키가 맞지 않게 된다)
   - SKELETON_STORAGE_S3_CREDENTIALS_ACCESS_KEY_ID         # [storage-s3] 운영자 (.local.env)
   - SKELETON_STORAGE_S3_CREDENTIALS_SECRET_ACCESS_KEY     # [storage-s3] 운영자 (.local.env)
   - SPRING_MAIL_PASSWORD                                  # [notification-mail] 운영자 (.local.env) — 인증 없는 릴레이면 이 줄을 지운다
@@ -73,6 +74,7 @@ secrets:
 #   [payment-naverpay] (env:) SKELETON_PAYMENT_NAVERPAY_ENABLED=true · SKELETON_PAYMENT_NAVERPAY_MODE=production · SKELETON_PAYMENT_NAVERPAY_CLIENT_ID · SKELETON_PAYMENT_NAVERPAY_CHAIN_ID (가맹 심사 뒤 받는 식별키 — 비밀 아님) · SKELETON_PAYMENT_NAVERPAY_RETURN_URL (구매자를 돌려보낼 우리 화면 주소 — 비밀 아님)   클라이언트 시크릿 · 아이디 · 체인 아이디가 비면 제공자 빈이 없다 — stage|prod 에서는 기동 실패 (그 밖은 경고). 개발 모드인데 stage|prod 이면 기동 실패
 #   [payment-stripe] (env:) SKELETON_PAYMENT_STRIPE_ENABLED=true   비밀이 비면 제공자 빈이 없다
 #   [payment-paddle] (env:) SKELETON_PAYMENT_PADDLE_ENABLED=true · SKELETON_PAYMENT_PADDLE_CLIENT_TOKEN (비밀 아님) · SKELETON_PAYMENT_PADDLE_ENVIRONMENT=sandbox|live   세 비밀이 하나라도 비면 이 제공자만 없다 (서버는 뜬다)
+#   [storage] SKELETON_STORAGE_WEB_GUEST_SECRET  guest.enabled=true 인데 비었거나 32자보다 짧으면 기동 실패 (기본은 꺼짐)
 #   [storage] SKELETON_STORAGE_WEB_KEY_SECRET   key-owner=OPAQUE 인데 비었거나 32자보다 짧으면 기동 실패 (기본 ACCOUNT_ID 에서는 쓰지 않는다)
 #   [storage-s3] (env:) SKELETON_STORAGE_S3_BUCKET · _ENDPOINT_OVERRIDE   버킷이 비면 저장소 빈이 없다 · 키가 비면 AWS 기본 자격 증명 체인으로 가서 첫 사용에서 실패 (기동은 된다)
 #   [notification-mail] (env:) SKELETON_NOTIFICATION_MAIL_ENABLED=true · _FROM · SPRING_MAIL_HOST · SPRING_MAIL_USERNAME   host · from 이 비면 발송기 빈이 없다 · 비밀번호가 틀리면 첫 발송에서 실패

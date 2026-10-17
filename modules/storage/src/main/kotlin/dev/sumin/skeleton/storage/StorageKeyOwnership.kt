@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.storage
 
+import dev.sumin.skeleton.common.upload.GuestUploadKeys
 import java.security.MessageDigest
 import java.util.UUID
 import javax.crypto.Mac
@@ -42,10 +43,38 @@ class StorageKeyScheme(private val webOf: () -> StorageWebProperties) : StorageK
         }
     }
 
+    /** 지금 프로젝트의 규칙 */
+    fun properties(): StorageWebProperties = webOf()
+
+    /** 비회원 업로드 키 `<prefix>/g/<uuid>.<mac>/file.<ext>` - 확장자는 허용한 Content-Type 에서 정한다 */
+    fun issueGuest(contentType: String): String {
+        val web = webOf()
+        val ext = StorageGuestProperties.IMAGE_EXTENSIONS.getValue(contentType.trim().lowercase())
+        val uuid = UUID.randomUUID().toString()
+        return "${web.keyPrefix.trim('/')}/$GUEST_SEGMENT/$uuid.${guestMac(web, uuid)}/file.$ext"
+    }
+
+    /** 비회원 업로드 키인가 - 꼴 + MAC. 꺼져 있으면 참이 되는 키가 없다 */
+    fun isGuestKey(key: String): Boolean {
+        val web = webOf()
+        if (!web.guest.enabled || runCatching { ObjectKey(key) }.isFailure) return false
+        val guestPrefix = "${web.keyPrefix.trim('/')}/$GUEST_SEGMENT/"
+        if (!key.startsWith(guestPrefix)) return false
+        val rest = key.removePrefix(guestPrefix)
+        val segment = rest.substringBefore('/', missingDelimiterValue = "")
+        val tail = rest.substringAfter('/', missingDelimiterValue = "")
+        val uuid = segment.substringBefore('.')
+        val presented = segment.substringAfter('.', missingDelimiterValue = "")
+        if (!GUEST_TAIL_FORMAT.matches(tail) || !UUID_FORMAT.matches(uuid) || !MAC_FORMAT.matches(presented)) return false
+        return MessageDigest.isEqual(guestMac(web, uuid).toByteArray(), presented.toByteArray())
+    }
+
     override fun owns(accountId: String, key: String): Boolean {
         if (runCatching { ObjectKey(key) }.isFailure) return false
         val web = webOf()
         val prefix = web.keyPrefix.trim('/')
+        // 비회원 업로드 접두사는 누구의 계정 키도 아니다 (계정 id 가 `g` 인 계정이 남의 비회원 키를 주장하지 못하게)
+        if (web.guest.enabled && key.startsWith("$prefix/$GUEST_SEGMENT/")) return false
         val opaquePrefix = "$prefix/$OPAQUE_SEGMENT/"
         if (web.keyOwner == StorageKeyOwner.OPAQUE && key.startsWith(opaquePrefix)) return ownsOpaque(web, opaquePrefix, accountId, key)
         val own = "$prefix/$accountId/"
@@ -82,7 +111,15 @@ class StorageKeyScheme(private val webOf: () -> StorageWebProperties) : StorageK
         return hmac.doFinal("$accountId\n$uuid".toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }.take(MAC_LENGTH)
     }
 
+    private fun guestMac(web: StorageWebProperties, uuid: String): String {
+        val hmac = Mac.getInstance("HmacSHA256")
+        hmac.init(SecretKeySpec(web.guest.secret.toByteArray(Charsets.UTF_8), "HmacSHA256"))
+        return hmac.doFinal("guest\n$uuid".toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }.take(MAC_LENGTH)
+    }
+
     private companion object {
+        const val GUEST_SEGMENT = "g"
+        val GUEST_TAIL_FORMAT = Regex("file\\.(jpg|png|webp|gif)")
         const val OPAQUE_SEGMENT = "o"
         const val MAC_LENGTH = 32
         val UUID_FORMAT = Regex("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
@@ -93,4 +130,9 @@ class StorageKeyScheme(private val webOf: () -> StorageWebProperties) : StorageK
             "zip", "gz", "mp3", "wav", "m4a", "mp4", "mov", "webm", "docx", "xlsx", "pptx", "hwp",
         )
     }
+}
+
+/** platform 의 [GuestUploadKeys] 를 [StorageKeyScheme] 의 비회원 키 확인으로 잇는다 (키 방식 타입과 한 빈이 되지 않게 따로 둔다) */
+class StorageGuestKeys(private val scheme: StorageKeyScheme) : GuestUploadKeys {
+    override fun isGuestKey(key: String): Boolean = scheme.isGuestKey(key)
 }

@@ -9,4 +9,17 @@ skeleton:
       enabled: true                         # false 면 /api/v1/storage 엔드포인트를 등록하지 않는다 (PresignedStorage 빈 = 버킷 설정이 있을 때만 등록)
       key-prefix: uploads                   # 서버가 정하는 키: <key-prefix>/<계정 id>/<uuid>/<파일 이름> (key-owner=OPAQUE 면 <key-prefix>/o/<uuid>.<mac>/file[.<ext>])
       key-owner: ACCOUNT_ID                 # ACCOUNT_ID: 키에 계정 id 가 든다 | OPAQUE: 키에서 계정 id 를 알 수 없다 (작성자 프로필을 쓰는 앱) — key-secret 필요
+      guest:                                # 로그인하지 않은 사람의 이미지 업로드 - POST /api/v1/storage/guest/presign 하나만 익명에 열린다 (docs/modules/storage.md)
+        enabled: false                      # 기본 꺼짐 - 앱 yml 이 명시해야 켜진다 (꺼진 채에서는 익명 발급이 401)
+        secret: ""                          # 키 MAC 의 서버 비밀(32자 이상, 비밀 - env <P>_STORAGE_WEB_GUEST_SECRET). enabled 인데 비면 기동 실패. 프로젝트마다 달라야 한다
+        allowed-content-types: [image/jpeg, image/png, image/webp, image/gif]   # 이 넷 안에서만 고를 수 있다 (SVG 는 설정으로도 열 수 없다)
+        max-size-bytes: 10485760            # 파일 하나의 상한 (10 MB)
+        rate-limit:
+          capacity: 20                      # IP 별 발급 한도
+          window: 1h
+        captcha: OFF                        # OFF | REQUIRED - REQUIRED 면 발급에 captchaToken 이 필요하고 검증기(captcha-turnstile)가 없으면 기동 실패
+        cleanup:
+          enabled: false                    # true 면 ttl 안에 글 · 댓글에 붙지 않은 비회원 업로드를 주기 작업(scheduler 모듈 필요)이 지운다
+          ttl: 24h
+          batch-size: 500
       key-secret: ""                        # OPAQUE 키의 HMAC 비밀(32자 이상, 비밀 — env <P>_STORAGE_WEB_KEY_SECRET). OPAQUE 인데 비면 기동 실패. 바꾸면 발급한 OPAQUE 키가 맞지 않게 된다

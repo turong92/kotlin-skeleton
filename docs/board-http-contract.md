@@ -44,3 +44,5 @@ If the writer must wait, editing something already public does **not** change th
 ## Comment pictures
 
 When `commentMaxAttachments > 0`, create/edit comment bodies accept `attachments: string[]` (storage keys the app uploaded itself; at most that many). Render with the app's own key → URL function. Hidden/deleted comments carry `[]`.
+
+Guests (signed out) may attach pictures too when the server enables guest uploads: first `POST /api/v1/storage/guest/presign` `{fileName, contentType, sizeBytes, captchaToken?}` (one image, jpeg/png/webp/gif, ≤ 10 MB, no SVG; `401` when guest uploads are off, `429 STORAGE.RATE_LIMITED`, `400 STORAGE.FILE_REJECTED` / `STORAGE.CAPTCHA_FAILED`), `PUT` the file to the returned URL with the returned headers, then send the returned `key` in `attachments`. The server accepts only keys it issued for guests - a member's key is `403`. Unattached uploads are deleted after about a day.

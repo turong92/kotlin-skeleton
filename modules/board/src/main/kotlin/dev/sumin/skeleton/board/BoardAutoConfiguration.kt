@@ -5,6 +5,7 @@ import dev.sumin.skeleton.common.author.AuthorIdentities
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.common.web.InMemoryFixedWindowRateLimitStore
 import dev.sumin.skeleton.common.web.RateLimitStore
+import dev.sumin.skeleton.common.upload.GuestUploadKeys
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.ApplicationRunner
 import org.springframework.boot.autoconfigure.AutoConfiguration
@@ -22,7 +23,7 @@ import org.springframework.context.annotation.Bean
 class BoardAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
-    fun boardPolicy(): BoardPolicy = DefaultBoardPolicy()
+    fun boardPolicy(guestKeys: ObjectProvider<GuestUploadKeys>): BoardPolicy = DefaultBoardPolicy { guestKeys.getIfAvailable() }
 
     /** 꺼져 있으면 아무것도 막지 않는다. 켜면 platform 의 [RateLimitStore] 빈(redis-rate-limit 이 있으면 Redis, 없으면 인메모리)에 계정별 한도를 건다. */
     @Bean

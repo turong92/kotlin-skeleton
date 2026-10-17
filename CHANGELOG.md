@@ -12,8 +12,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `board`: 꺼진 채 시작하는 새 기능들. **비회원 작성**(`skeleton.board.guest.*`, 게시판 `guestWrite`) — 닉네임 + 비밀값(헤더 `X-Board-Guest-Secret`, bcrypt / 토큰 SHA-256), 비밀 대입 한도(틀린 시도만 센다) · 쓰기 한도 · 선택 캡차(`guest.captcha=REQUIRED`, `BoardCaptcha` ← `captcha-turnstile`). **승인 대기** `PENDING`(`postApproval` · `commentApproval` · `ownerModeratesComments`, `BoardPolicy.needsApproval`) · 글 주인의 댓글 승인 · 가리기 · `PATCH /{code}`. **고친 판** — 승인된 글 · 댓글을 승인 대상이 고치면 공개본은 그대로 두고 고친 내용만 대기(`PUT …/revision`). **댓글 첨부**(`comment-max-attachments`, 기본 0). **커밋 뒤 이벤트** `BoardEventListener`. 응답에 덧붙는 키만 있다 — [docs/board-http-contract.md](docs/board-http-contract.md), [docs/modules/board.md](docs/modules/board.md).
 - `board-jdbc`: 새 V 파일 다섯 개(두 방언): `…100000__board_guest_authors` · `…100100__board_moderation` · `…100200__board_revisions` · `…100300__board_comment_attachments` · `…100400__board_comment_published_at`. 잠긴 파일은 고치지 않았다. 새 포트 메서드는 모두 본문 있는 기본 구현이라 자기 저장소를 둔 앱은 다시 컴파일만 하면 되고, 새 기능이 꺼져 있으면 동작이 같다.
 - 견본 앱(`apps/sample`): 기존 `general` 게시판이 새 기능을 켠 채 돈다(비회원 쓰기 ALL · 비회원 글/댓글 승인 · 글 주인의 댓글 관리 · 댓글 사진 4장 · 비회원 읽기). 기존 DB 는 견본 마이그레이션 `V20261017110000__sample_board_general_settings` 가 켠다. 캡차는 끈 채(스팸 경고는 `application.yml` 주석과 `docs/modules/board.md`). 누출 시험은 `guest:` 공개 id 를 허용하고 비회원 비밀이 어떤 응답에도 없음을 본다.
-- `platform`: CORS 기본 허용 헤더에 `X-Board-Guest-Secret` 추가, `RateLimitStore.peek`(세지 않고 보기 — 기본 null, 인메모리 · Redis 구현) 추가. 기존 구현체는 그대로 컴파일된다.
+- `platform`: CORS 기본 허용 헤더에 `X-Board-Guest-Secret` 추가, `RateLimitStore.release`(센 시도 하나 되돌리기 — 기본 아무 일도 안 함, 인메모리 · Redis 구현) 추가. 기존 구현체는 그대로 컴파일된다.
 - 응답 키 골든 시험(`BoardWebTest` · `NoOptionalGoldenKeysTest`)의 기대 집합에 새 키를 더했다.
+
+### 비회원 사진 업로드 (2026-10-18)
+
+- `storage`: **꺼진 채 시작하는** 익명 이미지 업로드 `skeleton.storage.web.guest.*` - `POST /api/v1/storage/guest/presign` 하나만 로그인 없이 열린다(켰을 때만). 키 `<prefix>/g/<uuid>.<mac>/file.<ext>`(MAC 비밀 `<P>_STORAGE_WEB_GUEST_SECRET`, 32자 이상 · 프로젝트마다 달라야 한다), jpeg · png · webp · gif 만(SVG 는 설정으로도 못 연다), 10 MB, IP 별 20 / 1시간, 선택 캡차, 붙지 않은 키 회수 주기 작업(`cleanup.enabled`, `scheduler` 모듈의 `skeletonTaskScheduler` 필요). `StorageKeyScheme.isGuestKey`, `StorageGuestUploads` · `StorageGuestCleanup`. 매직 바이트 검사는 직접 업로드라 할 수 없다. 회원 경로의 호출자 판정이 익명 인증 토큰(`AnonymousAuthenticationToken`)을 계정으로 보지 않도록 고쳤다.
+- `platform`: 새 포트 `GuestUploadKeys`(비회원 업로드 키 확인) · `UploadedKeyUsage`(저장 키가 붙어 있는가).
+- `board`: 기본 `canGuestAttach` 가 `GuestUploadKeys` 가 있으면 비회원 업로드로 발급한 키만 허용한다(없으면 지금처럼 모두). `board-jdbc`: `UploadedKeyUsage` 구현(글 · 댓글 · 고친 판의 첨부 표).
+- 견본: 비회원 업로드와 회수를 켠다. 배포 선언에 `SKELETON_STORAGE_WEB_GUEST_SECRET` 이 **필요하다**(없으면 기동 실패 - docs/deploy.md §7).
 
 ### 네이버페이 직접 연동 `payment-naverpay` — 단건 결제 · 취소 · 환불 (2026-10-17)
 

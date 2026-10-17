@@ -20,12 +20,17 @@ import dev.sumin.skeleton.storage.StorageKeyScheme
 import dev.sumin.skeleton.storage.StorageWebProperties
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
+import dev.sumin.skeleton.common.web.ClientIps
+import dev.sumin.skeleton.storage.StorageCandidateInput
+import dev.sumin.skeleton.storage.StorageGuestUploads
+import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotEmpty
 import java.time.Instant
 import org.springframework.http.HttpStatus
+import org.springframework.security.authentication.AnonymousAuthenticationToken
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
@@ -48,6 +53,14 @@ data class StoragePresignedResponse(
     val url: String,
     val headers: Map<String, String>,
     val expiresAt: Instant,
+)
+
+/** 비회원 업로드 발급 - 파일 하나. [captchaToken] 은 `guest.captcha=REQUIRED` 일 때만 쓴다 */
+data class StorageGuestCandidateRequest(
+    @field:NotBlank val fileName: String,
+    val contentType: String? = null,
+    @field:Min(0) val sizeBytes: Long,
+    val captchaToken: String? = null,
 )
 
 data class StorageKeyRequest(@field:NotBlank val key: String)
@@ -93,6 +106,8 @@ enum class StorageErrorCode(
     FILE_REJECTED("STORAGE.FILE_REJECTED", HttpStatus.BAD_REQUEST, "File rejected"),
     OBJECT_NOT_FOUND("STORAGE.OBJECT_NOT_FOUND", HttpStatus.NOT_FOUND, "Object not found"),
     UNAUTHENTICATED("STORAGE.UNAUTHENTICATED", HttpStatus.UNAUTHORIZED, "Authentication required"),
+    RATE_LIMITED("STORAGE.RATE_LIMITED", HttpStatus.TOO_MANY_REQUESTS, "Too many uploads"),
+    CAPTCHA_FAILED("STORAGE.CAPTCHA_FAILED", HttpStatus.BAD_REQUEST, "Captcha failed"),
 }
 
 /**
@@ -113,7 +128,24 @@ class StorageController(
     private val validator: StorageFileValidator,
     private val web: StorageWebProperties,
     private val keys: StorageKeyScheme = StorageKeyScheme(web),
+    private val guestUploads: StorageGuestUploads? = null,
+    private val clientIps: ClientIps = ClientIps(),
 ) {
+    @Operation(
+        summary = "Presign a direct image upload without signing in",
+        description = "Only when skeleton.storage.web.guest.enabled (else 401). One image, an IP rate limit, no SVG; the key is `<prefix>/g/<uuid>.<mac>/file.<ext>`.",
+    )
+    @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = StoragePresignedResponse::class)
+    @PostMapping("/guest/presign")
+    fun presignGuest(authentication: Authentication?, http: HttpServletRequest, @Valid @RequestBody request: StorageGuestCandidateRequest): Any {
+        // 로그인한 사람은 회원 경로를 쓴다 - 이 경로는 비회원 전용이라 로그인 여부와 무관하게 같은 규칙으로 돈다
+        val uploads = guestUploads ?: throw ApplicationException("Authentication required", StorageErrorCode.UNAUTHENTICATED)
+        val address = clientIps.of(http)
+        val key = uploads.issue(StorageCandidateInput(request.fileName, request.contentType, request.sizeBytes), request.captchaToken, address.ip, address.limitKey)
+        val presigned = storage.presignUpload(PresignedUploadRequest(key, request.contentType!!.trim().lowercase(), request.sizeBytes))
+        return Response.ok(StoragePresignedResponse(presigned.key.value, presigned.method, presigned.url.toString(), presigned.headers, presigned.expiresAt))
+    }
+
     @Operation(summary = "Check a file against the server's upload rules", description = "Never fails for a rejected file; answers valid=false with the reasons.")
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = StorageValidationResponse::class)
     @PostMapping("/validate")
@@ -210,6 +242,6 @@ class StorageController(
     private fun StorageCandidateRequest.toCandidate() = StorageFileCandidate(fileName, contentType, sizeBytes)
 
     private fun Authentication?.accountId(): String =
-        this?.takeIf { it.isAuthenticated }?.name
+        this?.takeIf { it.isAuthenticated && it !is AnonymousAuthenticationToken }?.name
             ?: throw ApplicationException("Authentication required", StorageErrorCode.UNAUTHENTICATED)
 }

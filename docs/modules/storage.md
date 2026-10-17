@@ -20,7 +20,14 @@ class AppBoardPolicy(private val keys: StorageKeyOwnership) : BoardPolicy by Def
 }
 ```
 
-**프로젝트 여럿([multi-project](../multi-project.md))**: `storage.web.key-prefix` · `key-owner` · `key-secret` 을 프로젝트마다 둘 수 있고(`skeleton.projects.<id>.config.storage.web.*`) 발급 · 소유 확인이 지금 프로젝트의 규칙으로 돈다. `OPAQUE` 비밀은 프로젝트마다 달라야 한다 — 같으면 기동 실패(A 의 비밀로 B 의 키를 만들 수 있다). 비밀은 키의 MAC 에만 쓰이고 프로젝트 id 는 섞지 않는다(한 프로젝트를 떼어 혼자 띄워도 발급한 키가 그대로 맞는다). 프로젝트마다 저장소(`ProjectRoutedStorage`)와 같은 버킷을 나눠 쓰는 접두사 장식(`KeyPrefixedPresignedStorage`)은 어댑터 문서 참고. 목록이 비면 지금과 같다.
+**프로젝트 여럿([multi-project](../multi-project.md))**: `storage.web.key-prefix` · `key-owner` · `key-secret` · `guest.*`(`guest.secret` 은 프로젝트끼리 같으면 기동 실패) 를 프로젝트마다 둘 수 있고(`skeleton.projects.<id>.config.storage.web.*`) 발급 · 소유 확인이 지금 프로젝트의 규칙으로 돈다. `OPAQUE` 비밀은 프로젝트마다 달라야 한다 — 같으면 기동 실패(A 의 비밀로 B 의 키를 만들 수 있다). 비밀은 키의 MAC 에만 쓰이고 프로젝트 id 는 섞지 않는다(한 프로젝트를 떼어 혼자 띄워도 발급한 키가 그대로 맞는다). 프로젝트마다 저장소(`ProjectRoutedStorage`)와 같은 버킷을 나눠 쓰는 접두사 장식(`KeyPrefixedPresignedStorage`)은 어댑터 문서 참고. 목록이 비면 지금과 같다.
+
+**비회원 업로드 `skeleton.storage.web.guest.*`** — **기본 꺼짐**(앱 yml 이 명시해야 켜진다). 켜면 `POST /api/v1/storage/guest/presign` **하나만** 로그인 없이 열린다(`PublicEndpointContributor`) - 다운로드(`presign-download`) · 멀티파트 · `validate` 는 지금처럼 로그인이 필요하고, 꺼진 채에서는 이 경로도 401(`STORAGE.UNAUTHENTICATED`)이다. 본문 `{fileName, contentType, sizeBytes, captchaToken?}` 의 파일 **하나**, 응답은 `presign` 과 같다.
+- **키** `<key-prefix>/g/<uuid>.<mac>/file.<ext>`, `mac = HMAC-SHA256(guest.secret, "guest\n" + uuid)` 의 앞 32자(회원 키의 `key-secret` 과 별개 비밀, 프로젝트마다 달라야 한다). `<ext>` 는 파일 이름이 아니라 허용한 Content-Type 에서 정한다 (jpg · png · webp · gif). `StorageKeyScheme.isGuestKey(key)`(꼴 + MAC 상수시간 비교)가 소유 확인이고, platform 의 `GuestUploadKeys` 로 board 에 이어진다. 회원의 `owns` 는 `<key-prefix>/g/` 를 누구의 키로도 인정하지 않는다(계정 id 가 `g` 인 계정도).
+- **제한(설정, 기본)** 이미지 형식 `allowed-content-types`(jpeg · png · webp · gif 안에서만 고를 수 있다 - **SVG 는 설정으로도 못 연다**, 스크립트가 든 이미지로 저장형 XSS 가 되기 때문) · `max-size-bytes` 10 MB · `rate-limit` IP 별 20 / 1시간(`RateLimitStore` - Redis 가 있으면 공유, `rate-limit.enabled` 와 무관하게 `guest.enabled` 면 늘 걸린다; 거절된 요청도 센다 → `429 STORAGE.RATE_LIMITED`) · 파일 이름 확장자는 Content-Type 과 맞아야 한다(`EXTENSION_CONTENT_TYPE_MISMATCH`, `400 STORAGE.FILE_REJECTED`). presign 이 Content-Type · 크기를 서명에 넣으므로 저장소가 선언과 다른 업로드를 거절한다. **매직 바이트는 서버가 볼 수 없다** - 브라우저가 저장소로 직접 올리는 길이라서, 위 서명 + 이미지 형식만 허용 + SVG 금지가 한계선이다.
+- **캡차** `guest.captcha=REQUIRED` 면 발급에 `captchaToken` 이 필요하다(`400 STORAGE.CAPTCHA_FAILED`) - `captcha-turnstile` 이 있으면 그 검증기, 없으면 `StorageGuestCaptcha` 빈이 필요하고 둘 다 없으면 기동 실패. **공개 서비스에서는 board 의 `guest.captcha` 와 함께 켠다** (익명 스토리지 쓰기 = 스팸 · 비용 위험).
+- **고아 회수** `guest.cleanup.enabled=true`(기본 꺼짐)면 `cleanup.ttl`(24시간) 안에 글 · 댓글(고친 판 포함)에 붙지 않은 비회원 키를 한 시간마다 지운다(`scheduler` 모듈의 `skeletonTaskScheduler` 에 예약 - 모듈이 없으면 경고만 하고 돌지 않는다, 락 없이 인스턴스마다 돌아도 안전하다(지우기는 멱등), 한 번에 `batch-size` 개, 프로젝트 모드에서는 프로젝트마다). 지우는 조건은 비회원 꼴 + MAC 이 맞고(남이 둔 파일은 안 건드린다) · 만든 지 ttl 이 지났고 · platform 의 `UploadedKeyUsage`(board-jdbc 가 구현)가 사용 중이라고 하지 않은 것 - **구현이 없으면 아무것도 지우지 않는다.** 올린 뒤 ttl 이 지나서야 붙이는 키는 이미 지워졌을 수 있다(그 글의 사진이 깨진다).
+- **남는 위험** 익명 업로드는 IP 한도 안에서 저장소 용량을 쓴다(10 MB × 20 / 시간 / IP) - 캡차 · 회수 · 버킷 수명 규칙을 함께 둔다. IP 한도는 같은 망의 다른 사용자에게 번진다.
 
 버킷을 정하지 않으면 저장소 빈이 없어 이 엔드포인트도 없다(404). 앱이 자기 컨트롤러를 두거나 끄려면 `skeleton.storage.web.enabled=false`.
 
@@ -28,7 +35,7 @@ class AppBoardPolicy(private val keys: StorageKeyOwnership) : BoardPolicy by Def
 |---|---|
 | 의존성 한 줄 | `implementation(project(":modules:storage"))` |
 | 함께 오는 모듈 | `platform` |
-| 컴파일 전용 | 없음 |
+| 컴파일 전용 | `captcha-turnstile` |
 | 설정 접두사 | `skeleton.storage` — [docs/config/modules/storage.yml](../config/modules/storage.yml) |
 | 기본 동작 | 켜짐. |
 | 부팅에 필요한 것 | 없음. |

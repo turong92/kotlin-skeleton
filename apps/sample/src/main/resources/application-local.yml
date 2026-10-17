@@ -57,6 +57,8 @@ skeleton:
     clean-on-validation-error: false  # 동결된 마이그레이션(migrations.lock)은 로컬에서도 조용히 DB 를 지우지 않는다 — 검증 오류면 기동이 실패한다. 정말 버릴 로컬 DB 만: SKELETON_MIGRATION_CLEAN_ON_VALIDATION_ERROR=true (docs/schema-management.md)
   storage:
     web:
+      guest:
+        secret: local-dev-only-storage-guest-secret-0123456789   # 로컬 · e2e 전용 고정 값(32자 이상) - 비회원 업로드 키의 HMAC. 운영 값은 환경변수 SKELETON_STORAGE_WEB_GUEST_SECRET
       key-secret: local-dev-only-storage-key-secret-0123456789   # 로컬 · e2e 전용 고정 값(32자 이상) — OPAQUE 첨부 키의 HMAC. 운영 값은 환경변수 SKELETON_STORAGE_WEB_KEY_SECRET (docs/deploy.md §7)
   storage-s3:
     bucket: app
