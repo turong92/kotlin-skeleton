@@ -67,6 +67,8 @@ data class StoragePublicProperties(
     val cacheControl: String = "public, max-age=3600",
     /** 승인 전 · 판 사진을 관리하는 사람이 볼 때의 서명 주소 수명 */
     val accessTtl: java.time.Duration = java.time.Duration.ofMinutes(5),
+    /** 공개 객체를 지운 뒤 CDN 캐시를 비우는 곳 - **기본 꺼짐** */
+    val purge: PublicPurgeProperties = PublicPurgeProperties(),
 ) {
     init {
         if (enabled) {
@@ -75,13 +77,55 @@ data class StoragePublicProperties(
                     "(env <P>_STORAGE_WEB_PUBLIC_SECRET - list it under secrets:)"
             }
             require(baseUrl.isNotBlank()) { "skeleton.storage.web.public.base-url is required when skeleton.storage.web.public.enabled=true (the CDN or public bucket address in front of the public prefix)" }
+            require(baseUrl.startsWith("http://") || baseUrl.startsWith("https://") || baseUrl.startsWith("/")) {
+                "skeleton.storage.web.public.base-url must be an absolute address (https://cdn.example.com/app) or a same-origin path (/files)"
+            }
             require(prefix.trim('/').isNotEmpty()) { "skeleton.storage.web.public.prefix must not be blank" }
         }
         require(!accessTtl.isZero && !accessTtl.isNegative) { "skeleton.storage.web.public.access-ttl must be positive" }
+        if (purge.cloudflare.enabled) {
+            require(enabled) { "skeleton.storage.web.public.purge.cloudflare.enabled needs skeleton.storage.web.public.enabled=true" }
+            // 상대 경로 주소는 CDN 이 모르는 주소다 - purge 에는 CDN 이 캐시한 **절대 주소**가 필요하다
+            require(!baseUrl.startsWith("/") || purge.cloudflare.publicOrigin.startsWith("http://") || purge.cloudflare.publicOrigin.startsWith("https://")) {
+                "skeleton.storage.web.public.base-url is a same-origin path ($baseUrl): set skeleton.storage.web.public.purge.cloudflare.public-origin (e.g. https://app.example.com) so purge can name the cached absolute URLs"
+            }
+        }
+    }
+
+    /** CDN 이 캐시한 공개 객체의 **절대 주소** - purge 에 보낸다. 상대 경로 base-url 이면 [PublicPurgeProperties.CloudflarePurge.publicOrigin] 을 앞에 붙인다 */
+    fun absoluteUrl(publicKey: String): String {
+        val origin = if (baseUrl.startsWith("/")) purge.cloudflare.publicOrigin.trimEnd('/') else ""
+        return origin + baseUrl.trimEnd('/') + "/" + publicKey
     }
 
     /** 비밀은 로그 · 오류 메시지에 나오지 않는다 */
     override fun toString(): String = "StoragePublicProperties(enabled=$enabled, secret=${if (secret.isEmpty()) "" else "****"}, prefix=$prefix, baseUrl=$baseUrl)"
+}
+
+/** 공개 객체를 지운 뒤 CDN 캐시를 비우는 설정 (`skeleton.storage.web.public.purge.*`) */
+data class PublicPurgeProperties(val cloudflare: CloudflarePurge = CloudflarePurge()) {
+    /**
+     * Cloudflare `POST {api-url}/zones/{zone-id}/purge_cache` `{"files":[...]}` (한 번에 30개까지). API 토큰은 **Zone -> Cache Purge 권한만** 준 것을 쓴다. 기본 꺼짐.
+     */
+    data class CloudflarePurge(
+        val enabled: Boolean = false,
+        val zoneId: String = "",
+        /** 비밀 - 환경변수 `<P>_STORAGE_WEB_PUBLIC_PURGE_CLOUDFLARE_API_TOKEN`. 로그 · toString 에 나가지 않는다 */
+        val apiToken: String = "",
+        /** `base-url` 이 상대 경로(`/files`)일 때 purge 가 부를 절대 주소의 앞부분 (예: `https://app.example.com`) */
+        val publicOrigin: String = "",
+        val apiUrl: String = "https://api.cloudflare.com/client/v4",
+        val timeout: java.time.Duration = java.time.Duration.ofSeconds(5),
+    ) {
+        init {
+            if (enabled) {
+                require(zoneId.isNotBlank()) { "skeleton.storage.web.public.purge.cloudflare.zone-id is required when purge is enabled (env <P>_STORAGE_WEB_PUBLIC_PURGE_CLOUDFLARE_ZONE_ID)" }
+                require(apiToken.isNotBlank()) { "skeleton.storage.web.public.purge.cloudflare.api-token is required when purge is enabled (env <P>_STORAGE_WEB_PUBLIC_PURGE_CLOUDFLARE_API_TOKEN - list it under secrets:)" }
+            }
+        }
+
+        override fun toString(): String = "CloudflarePurge(enabled=$enabled, zoneId=$zoneId, apiToken=${if (apiToken.isEmpty()) "" else "****"}, publicOrigin=$publicOrigin)"
+    }
 }
 
 enum class StorageKeyOwner {

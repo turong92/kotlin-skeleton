@@ -600,3 +600,9 @@ SKELETON_PAYMENT_NAVERPAY_RETURN_URL=http://localhost:5173/payments/return
 
 정기 결제(자동결제)는 이 모듈에 없다 - 클라이언트 · 체인 아이디가 단건과 따로이고 결제 방식이 다르다(다음 일).
 <!-- payment-naverpay:end -->
+
+## 게시판 사진의 CDN 캐시 비우기 (Cloudflare)
+
+공개된 글 · 댓글의 사진을 Cloudflare CDN 으로 내보내고 가린 뒤에도 캐시에 남지 않게 하려면 `skeleton.storage.web.public.purge.cloudflare` 를 켠다([storage.md](modules/storage.md)).
+
+**API 토큰 만드는 법: Zone → Cache Purge 권한만.** Cloudflare 대시보드 → 내 프로필 → API 토큰 → 토큰 만들기 → 「사용자 지정 토큰」 → 권한 `Zone` · `Cache Purge` · `Purge`, 영역 리소스는 이 도메인(zone) 하나만. 다른 권한(DNS 편집 등)은 주지 않는다. 토큰은 홈서버의 `data/secrets/<name>.local.env` 에 `SKELETON_STORAGE_WEB_PUBLIC_PURGE_CLOUDFLARE_API_TOKEN=<토큰>` 으로 적는다(선언의 `secrets:` 에 이름이 있다). zone id 는 대시보드 도메인 개요 오른쪽 아래의 「영역 ID」이고 비밀이 아니라 선언의 `env:` 에 `SKELETON_STORAGE_WEB_PUBLIC_PURGE_CLOUDFLARE_ZONE_ID` 로 적는다. `ENABLED=true` 를 함께 준다. 키를 넣은 진짜 호출은 이 레포의 시험이 하지 않는다(가짜 클라이언트로 시험) - 켠 뒤 사진을 가려 보고 캐시가 비는지 직접 확인한다.

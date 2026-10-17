@@ -13,9 +13,17 @@ skeleton:
         enabled: false                      # 기본 꺼짐 - 앱 yml 이 명시해야 켜진다 (꺼진 채에서는 응답에 attachmentUrls 가 없다)
         secret: ""                          # 공개 키 HMAC 의 서버 비밀(32자 이상, 비밀 - env <P>_STORAGE_WEB_PUBLIC_SECRET). enabled 인데 비면 기동 실패. 프로젝트마다 달라야 한다
         prefix: public                      # 공개 영역의 접두사 - 업로드 접두사(key-prefix)와 겹치면 기동 실패. 이 접두사만 읽기 공개로 연다
-        base-url: ""                        # 공개 주소의 앞부분(CDN 또는 공개 읽기 버킷 주소) - <base-url>/<공개 키>. enabled 면 필수
+        base-url: ""                        # 공개 주소의 앞부분 - <base-url>/<공개 키>. enabled 면 필수. CDN 절대 주소(https://cdn.example.com/app) 또는 같은 출처의 상대 경로(/files - 프록시가 공개 접두사로 넘긴다)
         cache-control: "public, max-age=3600"   # 공개 객체의 Cache-Control - 가린 뒤에도 CDN 에 남는 시간의 상한 (즉시 제거는 PublicUploadPurger)
         access-ttl: 5m                      # 승인 전 · 판 사진을 관리하는 사람이 볼 때의 서명 주소 수명
+        purge:                              # 공개 객체를 지운 뒤 CDN 캐시를 비운다 (기본 꺼짐; 구현은 Cloudflare 하나, 다른 CDN 은 PublicUploadPurger 빈을 둔다)
+          cloudflare:
+            enabled: false                  # true 면 zone-id · api-token 이 필요하다. 객체 삭제가 먼저이고, purge 가 실패하면 조정자가 큐로 다시 시도한다
+            zone-id: ""                     # Cloudflare 존 id (비밀 아님 - env <P>_STORAGE_WEB_PUBLIC_PURGE_CLOUDFLARE_ZONE_ID)
+            api-token: ""                   # 비밀 - env <P>_STORAGE_WEB_PUBLIC_PURGE_CLOUDFLARE_API_TOKEN. Zone -> Cache Purge 권한만 준 토큰
+            public-origin: ""               # base-url 이 상대 경로(/files)일 때 필요: purge 가 CDN 에 이름 붙일 절대 주소의 앞부분 (https://app.example.com)
+            api-url: https://api.cloudflare.com/client/v4
+            timeout: 5s
       guest:                                # 로그인하지 않은 사람의 이미지 업로드 - POST /api/v1/storage/guest/presign 하나만 익명에 열린다 (docs/modules/storage.md)
         enabled: false                      # 기본 꺼짐 - 앱 yml 이 명시해야 켜진다 (꺼진 채에서는 익명 발급이 401)
         secret: ""                          # 키 MAC 의 서버 비밀(32자 이상, 비밀 - env <P>_STORAGE_WEB_GUEST_SECRET). enabled 인데 비면 기동 실패. 프로젝트마다 달라야 한다

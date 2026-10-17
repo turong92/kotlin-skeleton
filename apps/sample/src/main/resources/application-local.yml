@@ -63,7 +63,7 @@ skeleton:
     web:
       public:
         secret: local-dev-only-storage-public-secret-0123456789   # 로컬 · e2e 전용 고정 값(32자 이상) - 공개 키 HMAC
-        base-url: http://localhost:${S3_PORT:8333}/app   # 로컬 S3(SeaweedFS)의 공개 읽기 접두사 앞 - docker-compose.yml 의 익명 읽기 규칙
+        base-url: /files   # 같은 출처의 상대 경로 - 프런트 dev 서버(vite)가 /files 를 로컬 S3(SeaweedFS, docker-compose.yml 의 익명 읽기 규칙)의 공개 접두사로 넘긴다. 폰이 터널로 열어도 사진이 깨지지 않는다
       guest:
         secret: local-dev-only-storage-guest-secret-0123456789   # 로컬 · e2e 전용 고정 값(32자 이상) - 비회원 업로드 키의 HMAC. 운영 값은 환경변수 SKELETON_STORAGE_WEB_GUEST_SECRET
       key-secret: local-dev-only-storage-key-secret-0123456789   # 로컬 · e2e 전용 고정 값(32자 이상) — OPAQUE 첨부 키의 HMAC. 운영 값은 환경변수 SKELETON_STORAGE_WEB_KEY_SECRET (docs/deploy.md §7)

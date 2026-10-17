@@ -25,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 이 묶음 전 개발 DB · 로컬 저장소의 `public/` 직속 객체(옛 키 꼴 `public/<hmac>.<ext>`)는 지워도 된다 - 공개 키는 이제 `public/b/…` 아래에 있고 옛 객체는 아무 것도 가리키지 않는다. 공개 영역 조정 큐 줄에는 번호(version) 칸이 더해졌다(새 V 파일 `…18100300`) - 쓰기마다 +1, 맞춘 쪽은 시작할 때 읽은 번호와 같을 때만 줄을 지운다.
 
+- `storage`: **Cloudflare CDN 캐시 비우기** `skeleton.storage.web.public.purge.cloudflare.{enabled, zone-id, api-token, public-origin}`(기본 꺼짐, 토큰은 비밀 `<P>_STORAGE_WEB_PUBLIC_PURGE_CLOUDFLARE_API_TOKEN`): 공개 객체를 지운 **뒤** `purge_cache` 를 30개씩 부르고, 실패하면 조정자가 큐로 다시 시도한다. **`public.base-url` 에 같은 출처의 상대 경로(`/files`)를 허용**한다(응답 주소가 `/files/public/b/…` - 터널로 열어도 사진이 깨지지 않는다; 상대 경로 + purge 면 `public-origin` 필요, 없으면 기동 실패). 프로젝트 `config` 가 `storage.web.guest.*` · `storage.web.public.*` 를 받는다. 견본의 로컬 base-url 은 `/files`(프런트 dev 서버가 로컬 S3 로 넘긴다).
+
 ### 게시판 사진 공개 영역 (2026-10-18)
 
 - `storage`: **꺼진 채 시작하는** `skeleton.storage.web.public.*` - 공개된 글 · 댓글의 첨부만 공개 영역(`<prefix>/<hmac32>.<ext>`, 비공개 키에서 HMAC 으로 계산)에 `Cache-Control` 을 붙여 복사하고 `base-url`(CDN) 주소로 낸다. 비밀 `<P>_STORAGE_WEB_PUBLIC_SECRET`(32자 이상, 프로젝트마다 달라야 한다). `CopyObjectRequest.cacheControl` 추가(S3 어댑터는 메타데이터를 새로 쓴다). `StoragePublicUploads` · `StoragePrivateUploadAccess`.

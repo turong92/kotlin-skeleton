@@ -2163,6 +2163,10 @@
           "whenMissing": "key-owner=OPAQUE 인데 비었거나 32자보다 짧으면 기동 실패 · 기본(ACCOUNT_ID)에서는 쓰지 않는다 · 무작위로 충분하지만 바꾸면 발급한 OPAQUE 키가 맞지 않게 된다"
         },
         {
+          "env": ["<P>_STORAGE_WEB_PUBLIC_PURGE_CLOUDFLARE_API_TOKEN"],
+          "whenMissing": "purge.cloudflare.enabled=true(공개 객체를 지운 뒤 CDN 캐시 비우기) 인데 비면 기동 실패 · 기본(꺼짐)에서는 쓰지 않는다 · Cloudflare API 토큰(Zone -> Cache Purge 권한만)이고 운영자가 정한다(.local.env)"
+        },
+        {
           "env": ["<P>_STORAGE_WEB_PUBLIC_SECRET"],
           "whenMissing": "public.enabled=true(게시판 사진 공개 영역) 인데 비었거나 32자보다 짧으면 기동 실패(base-url 도 필요) · 기본(꺼짐)에서는 쓰지 않는다 · 무작위로 충분하지만 바꾸면 공개 영역 사진의 주소가 달라진다 · 프로젝트마다 달라야 한다"
         },

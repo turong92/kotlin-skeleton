@@ -44,7 +44,7 @@ class StoragePublicUploads(
 
     override fun deletePublicKey(publicKey: String) {
         storage.delete(ObjectKey(publicKey))
-        purger()?.purge(listOf(keys.properties().`public`.baseUrl.trimEnd('/') + "/" + publicKey))
+        purger()?.purge(listOf(keys.properties().`public`.absoluteUrl(publicKey)))   // 객체를 지운 **뒤**에 - 실패하면 예외로 알린다(조정자가 큐로 다시 시도)
     }
 
     override fun listPublicKeys(): List<String> {

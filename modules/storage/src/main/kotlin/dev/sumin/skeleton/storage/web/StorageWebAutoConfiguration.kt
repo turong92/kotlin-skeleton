@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.storage.web
 
+import dev.sumin.skeleton.common.http.ExternalHttpClient
 import dev.sumin.skeleton.common.project.ProjectRegistry
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.common.time.asClock
@@ -12,6 +13,7 @@ import dev.sumin.skeleton.common.web.ClientIps
 import dev.sumin.skeleton.common.web.InMemoryFixedWindowRateLimitStore
 import dev.sumin.skeleton.common.web.PublicEndpointContributor
 import dev.sumin.skeleton.common.web.RateLimitStore
+import dev.sumin.skeleton.storage.CloudflarePublicUploadPurger
 import dev.sumin.skeleton.storage.ObjectStorage
 import dev.sumin.skeleton.storage.PresignedStorage
 import dev.sumin.skeleton.storage.StorageAutoConfiguration
@@ -43,7 +45,7 @@ import org.springframework.context.annotation.Bean
  * `/api/v1/storage` 아래 엔드포인트 - 서블릿 웹 앱 · Spring Security(호출자) 가 클래스패스에 있고 · [PresignedStorage] 빈이 있을 때만.
  * 저장소 어댑터(`storage-s3`)보다 뒤에 평가한다 - 버킷을 정하지 않으면 저장소 빈이 없고 이 엔드포인트도 없다.
  */
-@AutoConfiguration(after = [StorageAutoConfiguration::class], afterName = ["dev.sumin.skeleton.storage.s3.S3StorageAutoConfiguration", "dev.sumin.skeleton.storage.StorageCaptchaAutoConfiguration"])
+@AutoConfiguration(after = [StorageAutoConfiguration::class], afterName = ["dev.sumin.skeleton.storage.s3.S3StorageAutoConfiguration", "dev.sumin.skeleton.storage.StorageCaptchaAutoConfiguration", "dev.sumin.skeleton.common.http.OutboundHttpAutoConfiguration"])
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 @ConditionalOnClass(name = ["org.springframework.security.core.Authentication"])
 @ConditionalOnProperty(prefix = "skeleton.storage.web", name = ["enabled"], havingValue = "true", matchIfMissing = true)
@@ -102,6 +104,16 @@ class StorageWebAutoConfiguration {
     @ConditionalOnProperty(prefix = "skeleton.storage.web.public", name = ["enabled"], havingValue = "true")
     fun privateUploadAccess(storage: PresignedStorage, properties: StorageProperties, projects: ObjectProvider<ProjectRegistry>): PrivateUploadAccess =
         StoragePrivateUploadAccess(storage, StorageKeySchemes.create(properties, projects.getIfAvailable()))
+
+    /** Cloudflare CDN 캐시 비우기 - 기본 꺼짐. 지운 공개 객체의 주소를 지운 뒤에 비운다 (`PublicUploadPurger` 를 앱이 직접 두면 그것이 쓰인다) */
+    @Bean
+    @ConditionalOnBean(ExternalHttpClient::class)
+    @ConditionalOnMissingBean(PublicUploadPurger::class)
+    @ConditionalOnProperty(prefix = "skeleton.storage.web.public.purge.cloudflare", name = ["enabled"], havingValue = "true")
+    fun cloudflarePublicUploadPurger(http: ExternalHttpClient, properties: StorageProperties, projects: ObjectProvider<ProjectRegistry>): PublicUploadPurger {
+        val keys = StorageKeySchemes.create(properties, projects.getIfAvailable())
+        return CloudflarePublicUploadPurger(http) { keys.properties().`public` }
+    }
 
     /** 붙지 않은 비회원 업로드 회수 - `guest.cleanup.enabled=true` 일 때만. 주기는 [StorageGuestCleanupJob] (scheduler 모듈이 있어야 돈다) */
     @Bean

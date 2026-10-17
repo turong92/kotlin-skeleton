@@ -40,7 +40,11 @@ class JdbcPublicAttachmentDbTest {
             if (afterCopyTimeout) error("timeout after the copy went through")
             return true
         }
-        override fun unpublish(privateKey: String) { objects -= privateKey }
+        var purgeFailsOnce = false
+        override fun unpublish(privateKey: String) {
+            objects -= privateKey   // 객체 삭제가 먼저
+            if (purgeFailsOnce) { purgeFailsOnce = false; error("CDN purge failed") }
+        }
         override fun listPublicKeys() = objects.map { "pub/$it" }
         override fun deletePublicKey(publicKey: String) { objects.removeIf { "pub/$it" == publicKey } }
     }
@@ -288,6 +292,23 @@ class JdbcPublicAttachmentDbTest {
         assertEquals(emptySet(), mine(), "taken back by the re-read after the copy")
         assertEquals(1L, queueSize(RevisionTarget.COMMENT, c.id), "and the line of the write that landed meanwhile stays for the sweep")
         sync.processQueue()
+        assertEquals(0L, queueSize(RevisionTarget.COMMENT, c.id))
+    }
+
+    @Test
+    fun `the object is deleted first, and a failed CDN purge is retried from the queue until it goes through`() {
+        val post = db.newPost(db.newBoard())
+        val c = comments.insert(NewComment(post.id, null, null, 0, "acc_a", "c", T0, attachments = listOf("${tag}purge.png")))!!
+        sync.processQueue()
+        assertEquals(setOf("purge.png"), mine())
+        uploads.purgeFailsOnce = true
+        comments.setStatus(c.id, CommentStatus.HIDDEN, T0)
+        sync.reconcile(RevisionTarget.COMMENT, c.id)   // 지우기는 됐고 purge 가 실패했다
+        assertEquals(emptySet(), mine(), "the guarantee on the public side: the object is gone first")
+        assertEquals(1L, db.scalar("select count(*) from board_public_attachments where target_id = :id", "id" to c.id), "the note stays - the purge still has to be redone")
+        assertEquals(1L, queueSize(RevisionTarget.COMMENT, c.id))
+        sync.processQueue()   // 다시 지우고 purge 한다
+        assertEquals(0L, db.scalar("select count(*) from board_public_attachments where target_id = :id", "id" to c.id))
         assertEquals(0L, queueSize(RevisionTarget.COMMENT, c.id))
     }
 }

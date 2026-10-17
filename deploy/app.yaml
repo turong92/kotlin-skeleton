@@ -48,6 +48,7 @@ secrets:
   - SKELETON_PAYMENT_PADDLE_WEBHOOK_SECRET                 # [payment-paddle] 운영자 (.local.env) — 웹훅 엔드포인트 비밀값(pdl_ntfset_…)
   - SKELETON_STORAGE_WEB_KEY_SECRET                       # [storage] 무작위로 충분 — OPAQUE 첨부 키의 HMAC 키(key-owner=OPAQUE 일 때만 필요, 안 쓰면 이 줄을 지운다; 바꾸면 발급한 OPAQUE 키가 맞지 않게 된다)
   - SKELETON_STORAGE_WEB_PUBLIC_SECRET                    # [storage] 무작위로 충분 — 공개 영역(게시판 사진) 키의 HMAC 키(32자 이상, skeleton.storage.web.public.enabled=true 일 때만 필요 - 샘플은 켠다; 안 쓰면 이 줄을 지운다; 바꾸면 공개 영역의 기존 사진 주소가 달라진다)
+  - SKELETON_STORAGE_WEB_PUBLIC_PURGE_CLOUDFLARE_API_TOKEN # [storage] 운영자 (.local.env) — Cloudflare API 토큰(Zone -> Cache Purge 권한만, docs/real-provider-setup.md). skeleton.storage.web.public.purge.cloudflare.enabled=true 일 때만 필요; 안 쓰면 이 줄을 지운다
   - SKELETON_STORAGE_WEB_GUEST_SECRET                     # [storage] 무작위로 충분 — 비회원 업로드 키의 HMAC 키(32자 이상, skeleton.storage.web.guest.enabled=true 일 때만 필요 - 샘플은 켠다; 안 쓰면 이 줄을 지운다; 바꾸면 발급했지만 아직 안 붙은 키가 맞지 않게 된다)
   - SKELETON_STORAGE_S3_CREDENTIALS_ACCESS_KEY_ID         # [storage-s3] 운영자 (.local.env)
   - SKELETON_STORAGE_S3_CREDENTIALS_SECRET_ACCESS_KEY     # [storage-s3] 운영자 (.local.env)
@@ -89,5 +90,7 @@ secrets:
 env:
   SKELETON_ENV: prod             # 배포 가드 스위치 (local | stage | prod). 가드가 stage|prod 규칙을 켠다 — docs/deploy.md
   # SKELETON_LEGAL_ACKNOWLEDGE_TEMPLATE: "true"   # 시험 배포만: 모듈의 예시(TEMPLATE) 약관을 일부러 허락한다. 실사용자 전에 src/main/resources/legal/ 의 자기 문서로 바꾸고 이 줄을 지운다 — 없으면 prod 가 legal 가드로 기동을 거부한다 (docs/legal.md)
+  # SKELETON_STORAGE_WEB_PUBLIC_PURGE_CLOUDFLARE_ENABLED: "true"     # 가린 · 지운 사진의 CDN 캐시를 Cloudflare 에서 비운다 (기본 꺼짐) - 아래 ZONE_ID 와 위 secrets: 의 API_TOKEN 이 필요하다
+  # SKELETON_STORAGE_WEB_PUBLIC_PURGE_CLOUDFLARE_ZONE_ID: <zone id>    # 비밀 아님 (Cloudflare 대시보드 -> 도메인 개요). PUBLIC_BASE_URL 이 상대 경로(/files)면 ..._PUBLIC_ORIGIN=https://app.example.com 도 필요
   # SKELETON_STORAGE_WEB_PUBLIC_BASE_URL: https://cdn.example.com/app   # ★ apps/sample 은 필수 - 게시판 사진 공개 영역 앞의 CDN(또는 공개 읽기 버킷) 주소. 비밀 아님. 비면 기동 실패. 공개 접두사(public/)만 익명 읽기로 열어 둔다 (docs/modules/storage.md)
   SPRING_PROFILES_ACTIVE: prod   # 스프링 프로필은 따로 정한다 (스위치가 프로필을 켜지는 않는다). 계정은 DB(account-jdbc)에 있다 — 시드 계정은 로컬 프로필 전용이라 prod 에는 없다

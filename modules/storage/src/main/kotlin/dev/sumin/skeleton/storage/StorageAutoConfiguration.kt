@@ -55,6 +55,11 @@ object StorageKeySchemes {
         publicSecrets.groupBy({ it.second }, { it.first }).values.firstOrNull { it.size > 1 }?.let { same ->
             error("Projects ${same.joinToString { "'$it'" }} use the same skeleton.storage.web.public.secret — every project needs its own")
         }
+        registry.active.forEach { project ->
+            val cf = webs.of(project).`public`.purge.cloudflare
+            // 프로젝트 모드: purge 를 켰으면 그 프로젝트가 자기 zone-id · api-token 을 가져야 한다 (프로젝트의 init 가 이미 비어 있으면 실패시킨다 - 메시지에 프로젝트 id)
+            if (cf.enabled) require(cf.zoneId.isNotBlank() && cf.apiToken.isNotBlank()) { "Project '${project.id}': skeleton.projects.${project.id}.config.storage.web.public.purge.cloudflare needs zone-id and api-token" }
+        }
         return StorageKeyScheme { webs.get() }
     }
 }
