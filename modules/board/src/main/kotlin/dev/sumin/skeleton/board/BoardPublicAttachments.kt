@@ -32,21 +32,28 @@ class BoardPublicAttachments(
      */
     fun reconcile(target: RevisionTarget, id: Long) {
         if (uploads() == null) return
-        if (tryReconcile(target, id)) runCatching { repository.dequeue(target, id) } else runCatching { repository.enqueue(target, id, time.now()) }
+        val started = time.now()
+        if (tryReconcile(target, id)) runCatching { repository.dequeue(target, id, started) } else runCatching { repository.enqueue(target, id, time.now()) }
     }
+
+    /**
+     * 글이 공개를 떠나거나 **돌아올 때** 맞출 댓글 - 복사가 있는 것(내려야 한다)과 첨부가 있는 것(올려야 한다) 모두.
+     * 복사가 있는 것만 보면 숨겼다 다시 공개한 글의 댓글 사진은 하루 동안 복사되지 않는다. 알 수 없으면 null.
+     */
+    private fun commentsOf(postId: Long): List<Long>? =
+        try { (repository.commentsWithCopies(postId) + repository.commentsWithAttachments(postId)).distinct() } catch (e: Exception) { log.warn("public attachment: comments of post {} unknown: {}", postId, e.toString()); null }
 
     /** 글이 공개를 떠나거나 돌아올 때 - 글 자신과 그 댓글들 */
     fun reconcilePost(postId: Long) {
         if (uploads() == null) return
         reconcile(RevisionTarget.POST, postId)
-        val comments = try { repository.commentsWithCopies(postId) } catch (e: Exception) { log.warn("public attachment: comments of post {} unknown: {}", postId, e.toString()); emptyList() }
-        comments.forEach { reconcile(RevisionTarget.COMMENT, it) }
+        commentsOf(postId)?.forEach { reconcile(RevisionTarget.COMMENT, it) }
     }
 
     /** 글 한 줄을 맞춘다 - 글이 공개를 떠나거나 돌아오면 그 댓글들의 공개 여부도 바뀐다. 모두 맞췄을 때만 참 */
     private fun tryReconcilePost(postId: Long, repair: Boolean): Boolean {
         val post = tryReconcile(RevisionTarget.POST, postId, repair)
-        val comments = try { repository.commentsWithCopies(postId) } catch (e: Exception) { return false }
+        val comments = commentsOf(postId) ?: return false
         return comments.map { tryReconcile(RevisionTarget.COMMENT, it, repair) }.all { it } && post
     }
 
@@ -55,9 +62,10 @@ class BoardPublicAttachments(
         if (uploads() == null) return 0
         var done = 0
         val each = { _: Unit ->
-            for ((target, id) in repository.claimQueued(limit, time.now(), Duration.ofMinutes(2))) {
+            val started = time.now()
+            for ((target, id) in repository.claimQueued(limit, started, Duration.ofMinutes(2))) {
                 val ok = if (target == RevisionTarget.POST) tryReconcilePost(id, repair = true) else tryReconcile(target, id, repair = true)
-                if (ok) { repository.dequeue(target, id); done++ }
+                if (ok) { repository.dequeue(target, id, started); done++ }
             }
         }
         if (projects == null) each(Unit) else projects.forEachProject { each(Unit) }

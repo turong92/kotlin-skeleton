@@ -48,7 +48,8 @@ class StoragePublicUploads(
     }
 
     override fun listPublicKeys(): List<String> {
-        val prefix = keys.properties().`public`.prefix.trim('/') + "/"
+        // board 가 쓰는 하위 접두사 안만 본다 - 같은 공개 접두사를 다른 용도가 써도 전체 대조가 지우지 않는다
+        val prefix = keys.properties().`public`.prefix.trim('/') + "/" + StorageKeyScheme.BOARD_PUBLIC_SEGMENT + "/"
         val found = mutableListOf<String>()
         var token: String? = null
         do {

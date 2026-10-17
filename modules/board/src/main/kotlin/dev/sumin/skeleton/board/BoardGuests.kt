@@ -86,6 +86,12 @@ interface BoardGuestLimiter {
 
     /** [trySecretAttempt] 가 센 한 번을 되돌린다 — 비밀이 **맞았을 때만**. [at] 은 센 때의 시각 - 그때의 창에서 되돌린다(해시 계산 사이에 창이 넘어가도 새 창을 깎지 않는다) */
     fun releaseSecretAttempt(row: String, limitKey: String, at: Instant)
+
+    /**
+     * 비밀을 확인하는 일(해시 계산) 자체의 IP 별 한도 - **맞아도 되돌리지 않는다**. 대입 한도는 맞는 비밀을 되돌려 주므로 맞는 비밀로 계속 보내면 bcrypt 를 한도 없이 돌릴 수 있다.
+     * 기본 구현은 제한하지 않는다(기존 구현체가 그대로 컴파일된다).
+     */
+    fun tryVerification(limitKey: String, at: Instant): Boolean = true
 }
 
 class StoreBoardGuestLimiter(
@@ -101,6 +107,11 @@ class StoreBoardGuestLimiter(
         val perRow = consume("board:guest-secret:row:$row", a.capacity, a.window.toMillis(), at)
         val perIp = consume("board:guest-secret:ip:$limitKey", a.capacity, a.window.toMillis(), at)
         return perRow && perIp
+    }
+
+    override fun tryVerification(limitKey: String, at: Instant): Boolean {
+        val v = properties.secretVerifications
+        return consume("board:guest-verify:$limitKey", v.capacity, v.window.toMillis(), at)
     }
 
     override fun releaseSecretAttempt(row: String, limitKey: String, at: Instant) {
@@ -164,11 +175,41 @@ class BoardGuests(
         val raw = guest.secret
         if (storedHash == null || raw == null) return false
         val at = clock()
+        val remembered = verifiedKey(row, raw)
+        if (remembered != null && verified[remembered]?.isAfter(at) == true) return true   // 방금 맞은 비밀 - 다시 해시하지 않는다
+        // 해시를 돌리기 전에: 확인 한도(맞아도 되돌리지 않는다) -> 대입 한도(맞으면 되돌린다)
+        if (!limiter.tryVerification(guest.limitKey, at)) throw BoardException(BoardErrorCode.RATE_LIMITED, "Too many requests, slow down")
         if (!limiter.trySecretAttempt(row, guest.limitKey, at)) throw BoardException(BoardErrorCode.RATE_LIMITED, "Too many attempts, try later")
         val ok = secrets.matches(raw, storedHash)
-        if (ok) limiter.releaseSecretAttempt(row, guest.limitKey, at)
+        if (ok) {
+            limiter.releaseSecretAttempt(row, guest.limitKey, at)
+            remember(remembered, at)
+        }
         return ok
     }
+
+    /**
+     * 맞은 (행, 비밀) 의 기억 - 키는 이 프로세스만 아는 무작위 키로 만든 HMAC 이다(비밀 원문은 어디에도 두지 않는다). 프로젝트마다 따로 센다.
+     * 지금 켜져 있으면 키를, 꺼져 있으면 null.
+     */
+    private fun verifiedKey(row: String, raw: String): String? {
+        if (properties.guest.verifiedCacheTtl.isZero) return null
+        val project = dev.sumin.skeleton.common.project.ProjectContext.currentOrNull()?.id.orEmpty()
+        val mac = javax.crypto.Mac.getInstance("HmacSHA256").apply { init(javax.crypto.spec.SecretKeySpec(cacheKey, "HmacSHA256")) }
+        return mac.doFinal("$project\n$row\n$raw".toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+    }
+
+    private fun remember(key: String?, at: Instant) {
+        key ?: return
+        if (verified.size >= VERIFIED_MAX) {
+            verified.entries.removeIf { !it.value.isAfter(at) }
+            if (verified.size >= VERIFIED_MAX) verified.clear()
+        }
+        verified[key] = at.plus(properties.guest.verifiedCacheTtl)
+    }
+
+    private val cacheKey: ByteArray = ByteArray(32).also { java.security.SecureRandom().nextBytes(it) }
+    private val verified = java.util.concurrent.ConcurrentHashMap<String, Instant>()
 
     /** 이름: 한 줄로 정리하고 1..[BoardProperties.Guest.nameMaxLength] 코드 포인트 */
     fun name(raw: String?, rules: BoardContentRules): String = rules.guestName(raw, properties.guest.nameMaxLength)
@@ -178,6 +219,7 @@ class BoardGuests(
     companion object {
         /** 비밀이 틀린 경우 · 남의 행 · 회원 행 · 헤더 없음이 모두 같은 문구로 답한다 */
         const val FORBIDDEN_MESSAGE = "Not allowed"
+        private const val VERIFIED_MAX = 10_000
         private val FALLBACK_STORE by lazy { InMemoryFixedWindowRateLimitStore() }
     }
 }

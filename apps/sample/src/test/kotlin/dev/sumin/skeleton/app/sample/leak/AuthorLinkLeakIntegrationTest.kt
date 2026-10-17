@@ -254,7 +254,7 @@ class AuthorLinkLeakIntegrationTest {
         assertTrue(url.startsWith("http"), url)
         val parts = privateKey.split('/', '.').filter { it.length >= 8 } + listOf(w.xAcc, w.a.id, w.b.id, w.c.id, "uploads")
         parts.forEach { assertTrue(it !in url, "the public address must not contain '$it': $url") }
-        assertTrue(Regex("/public/[0-9a-f]{32}\\.png$").containsMatchIn(url), url)
+        assertTrue(Regex("/public/b/[0-9a-f]{32}\\.png$").containsMatchIn(url), url)
     }
 
     @Test

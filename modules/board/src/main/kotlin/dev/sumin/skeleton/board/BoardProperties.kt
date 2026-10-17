@@ -93,6 +93,10 @@ data class BoardProperties(
         val rateLimit: WriteLimit = WriteLimit(),
         /** 비밀 대입 한도 — 행마다 + IP 마다, 해시를 계산하기 전에 센다 */
         val secretAttempts: AttemptLimit = AttemptLimit(),
+        /** 비밀 확인(해시 계산) 한도 - IP 마다, **맞아도 되돌리지 않는다**(맞는 비밀로 무제한 bcrypt 를 돌려 CPU 를 고갈시키지 못하게). 기본 60 / 1분 */
+        val secretVerifications: AttemptLimit = AttemptLimit(capacity = 60, window = Duration.ofMinutes(1)),
+        /** 맞은 비밀을 이 시간 동안 기억해 다시 해시하지 않는다(행 + 비밀의 HMAC 만 메모리에 둔다, 원문은 두지 않는다). 0 이면 끈다 */
+        val verifiedCacheTtl: Duration = Duration.ofMinutes(5),
     ) {
         init {
             require(nameMaxLength in 1..64) { "skeleton.board.guest.name-max-length must be 1..64 (the guest_name column is varchar(64))" }

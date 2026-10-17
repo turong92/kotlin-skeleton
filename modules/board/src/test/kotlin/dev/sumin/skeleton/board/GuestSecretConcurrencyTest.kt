@@ -10,7 +10,7 @@ import kotlin.test.assertTrue
 
 /** 비밀 대입 한도(스펙 §7): 동시에 몰려도 한도만큼만 해시를 돌린다 - 세고 나서 해시한다. 맞는 시도는 되돌려 한도를 닳게 하지 않는다 */
 class GuestSecretConcurrencyTest {
-    private val props = BoardProperties(guest = BoardProperties.Guest(enabled = true))
+    private val props = BoardProperties(guest = BoardProperties.Guest(enabled = true, verifiedCacheTtl = java.time.Duration.ZERO))   // 맞은 비밀의 기억을 끈다 - 이 시험은 대입 한도를 센다
     private val hashes = AtomicInteger()
     private val real = DefaultBoardGuestSecrets(GuestSecretMode.PASSWORD)
     private val counting = object : BoardGuestSecrets by real {

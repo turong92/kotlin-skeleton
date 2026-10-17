@@ -180,20 +180,23 @@ interface BoardPublicAttachmentRepository {
     /** 이 글의 댓글 중 복사가 있는 것 - 글이 공개를 떠나면 그 댓글들의 복사도 정리한다 */
     fun commentsWithCopies(postId: Long): List<Long>
 
+    /** 이 글의 댓글 중 첨부가 있는 것 - 글이 공개로 돌아오면 그 댓글들의 사진을 다시 복사해야 한다(복사가 없는 댓글도) */
+    fun commentsWithAttachments(postId: Long): List<Long>
+
     /** 복사가 있는데 공개 조건에서 빠진 것(가림 · 삭제 · 판으로 빠짐 · 글 숨김 · 탈퇴 …) */
     fun stale(limit: Int): List<PublicCopy>
 
     /** 공개 조건에 드는데 복사가 없는 것 */
     fun missing(limit: Int): List<PublicCopy>
 
-    /** 맞추다 실패한 항목을 적어 둔다 - 주기 작업이 이것만 다시 맞춘다 (멱등) */
+    /** 맞추다 실패한 항목을 적어 둔다 - 주기 작업이 이것만 다시 맞춘다 (이미 있으면 적은 시각을 [now] 로 갱신한다) */
     fun enqueue(target: RevisionTarget, id: Long, now: java.time.Instant)
 
     /** 적힌 항목을 [limit] 개 잡는다 - 잡힌 줄은 [lease] 동안 다른 인스턴스가 잡지 않는다 (`for update skip locked`) */
     fun claimQueued(limit: Int, now: java.time.Instant, lease: java.time.Duration): List<Pair<RevisionTarget, Long>>
 
-    /** 맞췄으면 적힌 줄을 지운다 */
-    fun dequeue(target: RevisionTarget, id: Long)
+    /** 맞췄으면 적힌 줄을 지운다 - 맞추기 **시작한 시각 [upTo] 이전에 적힌** 줄만. 그 뒤에 새로 적힌 줄(맞추는 사이 들어온 쓰기)은 남겨 다음 조정이 맞춘다 */
+    fun dequeue(target: RevisionTarget, id: Long, upTo: java.time.Instant)
 
     /** [name] 작업을 지금 이 인스턴스가 해도 되는가 - 마지막 실행이 [minInterval] 보다 오래됐을 때만 한 인스턴스에게 참을 준다 (원자적 비교-교체) */
     fun tryStartRun(name: String, now: java.time.Instant, minInterval: java.time.Duration): Boolean

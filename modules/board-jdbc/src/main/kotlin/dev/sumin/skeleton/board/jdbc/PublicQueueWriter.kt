@@ -16,11 +16,13 @@ class PublicQueueWriter(
     private val dialect: SqlDialect,
     private val enabled: () -> Boolean,
 ) {
+    /** 줄이 없으면 만들고, 있으면 적은 시각만 [now] 로 갱신한다 - 맞추는 중에 새로 들어온 쓰기를 맞춘 쪽이 지우지 않게(지울 때 시각을 비교한다) */
     fun enqueue(target: RevisionTarget, id: Long, now: Instant) {
         if (!enabled()) return
-        jdbc.update(
-            dialect.insertIgnore("board_public_attachment_queue", listOf("target_type", "target_id", "queued_at"), listOf("target_type", "target_id")),
-            MapSqlParameterSource().addValue("target_type", target.name).addValue("target_id", id).addValue("queued_at", dialect.instantParam(now)),
-        )
+        val params = MapSqlParameterSource().addValue("target_type", target.name).addValue("target_id", id).addValue("queued_at", dialect.instantParam(now))
+        val touched = jdbc.update("update board_public_attachment_queue set queued_at = :queued_at where target_type = :target_type and target_id = :target_id", params)
+        if (touched == 0) {
+            jdbc.update(dialect.insertIgnore("board_public_attachment_queue", listOf("target_type", "target_id", "queued_at"), listOf("target_type", "target_id")), params)
+        }
     }
 }

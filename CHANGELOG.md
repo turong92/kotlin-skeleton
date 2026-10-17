@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - (수정) 사진 공개 영역이 아웃박스 꼴이 됐다: 공개 여부에 영향을 주는 쓰기가 같은 트랜잭션에서 `board_public_attachment_queue` 에 적고(공개 영역이 꺼져 있으면 적지 않는다) 커밋 뒤 리스너가 맞추고 지운다 - 프로세스가 죽어도 매분 조정이 맞춘다. 공개할 수 없는 형식(확장자)의 첨부에는 `attachmentUrls` 를 싣지 않는다. 자기 저장소를 둔 앱이 `BoardPublicAttachmentRepository` 를 구현하지 않으면 공개 주소를 싣지 않는다.
 
+- (수정) 맞는 비밀로도 bcrypt 를 무제한 돌릴 수 있던 길을 닫았다: 비밀 확인 한도(IP 별 60 / 1분, 되돌리지 않음, `guest.secret-verifications`)와 맞은 비밀의 짧은 기억(`guest.verified-cache-ttl` 5분, HMAC 만). 숨겼다 다시 공개한 글의 댓글 사진을 곧바로 다시 복사한다. 공개 큐 줄은 적은 시각을 갱신하고 맞추기 시작한 시각 이전 것만 지운다. 공개 키는 `<prefix>/b/…` 아래에 두고 전체 대조는 그 안만 본다.
+
 ### 게시판 사진 공개 영역 (2026-10-18)
 
 - `storage`: **꺼진 채 시작하는** `skeleton.storage.web.public.*` - 공개된 글 · 댓글의 첨부만 공개 영역(`<prefix>/<hmac32>.<ext>`, 비공개 키에서 HMAC 으로 계산)에 `Cache-Control` 을 붙여 복사하고 `base-url`(CDN) 주소로 낸다. 비밀 `<P>_STORAGE_WEB_PUBLIC_SECRET`(32자 이상, 프로젝트마다 달라야 한다). `CopyObjectRequest.cacheControl` 추가(S3 어댑터는 메타데이터를 새로 쓴다). `StoragePublicUploads` · `StoragePrivateUploadAccess`.

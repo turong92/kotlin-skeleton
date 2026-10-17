@@ -247,4 +247,34 @@ class JdbcPublicAttachmentDbTest {
         sync.processQueue()
         assertEquals(setOf("after.png"), mine())
     }
+
+    @Test
+    fun `a post hidden and published again gets its comments' pictures back - not a day later`() {
+        val post = db.newPost(db.newBoard())
+        val c = comment(post.id, CommentStatus.PUBLISHED, "again.png")
+        sync.reconcile(RevisionTarget.COMMENT, c.id)
+        assertEquals(setOf("again.png"), mine())
+        db.posts.update(post.id, PostChange(status = PostStatus.HIDDEN), T0)
+        sync.reconcilePost(post.id)
+        assertEquals(emptySet(), mine())
+        assertEquals(0L, db.scalar("select count(*) from board_public_attachments where target_id = :id", "id" to c.id), "no copy row is left for the comment")
+        db.posts.update(post.id, PostChange(status = PostStatus.PUBLISHED), T0)
+        sync.reconcilePost(post.id)
+        assertEquals(setOf("again.png"), mine(), "back at once: the comment had no copy any more, and it is still found by its attachments")
+    }
+
+    @Test
+    fun `a write that lands while we reconcile keeps its queue line - only lines older than the start of the reconcile are removed`() {
+        val post = db.newPost(db.newBoard())
+        val c = comment(post.id, CommentStatus.PUBLISHED, "race-queue.png")
+        val early = T0.plusSeconds(10)
+        val late = T0.plusSeconds(20)
+        repo.enqueue(RevisionTarget.COMMENT, c.id, early)
+        repo.enqueue(RevisionTarget.COMMENT, c.id, late)   // 같은 항목에 또 쓰기 - 줄은 하나고 적은 시각이 갱신된다
+        assertEquals(1L, queueSize(RevisionTarget.COMMENT, c.id))
+        repo.dequeue(RevisionTarget.COMMENT, c.id, T0.plusSeconds(15))   // 맞추기 시작한 시각이 둘 사이였다
+        assertEquals(1L, queueSize(RevisionTarget.COMMENT, c.id), "the newer write is not lost")
+        repo.dequeue(RevisionTarget.COMMENT, c.id, T0.plusSeconds(25))
+        assertEquals(0L, queueSize(RevisionTarget.COMMENT, c.id))
+    }
 }

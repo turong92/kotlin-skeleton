@@ -20,7 +20,7 @@ class StoragePublicUploadsTest {
         val deleted = mutableListOf<String>()
         var contentType: String? = "image/png"
         override fun metadata(key: ObjectKey) = contentType?.let { StoredObjectMetadata(key, contentType = it) }
-        override fun list(request: ListObjectsRequest) = ListedObjects(listOf(StoredObjectSummary(ObjectKey("public/aaa.png")), StoredObjectSummary(ObjectKey("public/bbb.png"))).filter { it.key.value.startsWith(request.prefix) })
+        override fun list(request: ListObjectsRequest) = ListedObjects(listOf(StoredObjectSummary(ObjectKey("public/b/aaa.png")), StoredObjectSummary(ObjectKey("public/other/zzz.png")), StoredObjectSummary(ObjectKey("public/b/bbb.png"))).filter { it.key.value.startsWith(request.prefix) })
         override fun copy(request: CopyObjectRequest): StoredObjectWriteResult { copies += request; return StoredObjectWriteResult(request.destinationKey) }
         override fun delete(key: ObjectKey) { deleted += key.value }
     }
@@ -30,7 +30,7 @@ class StoragePublicUploadsTest {
         val scheme = StorageKeyScheme(web())
         val privateKey = scheme.issue("acc_secret_account", "photo.PNG")
         val publicKey = scheme.publicKeyOf(privateKey)
-        assertTrue(Regex("public/[0-9a-f]{32}\\.png").matches(publicKey), publicKey)
+        assertTrue(Regex("public/b/[0-9a-f]{32}\\.png").matches(publicKey), publicKey)
         assertFalse("acc_secret_account" in publicKey)
         assertFalse(privateKey.substringAfter("uploads/") in publicKey, "the private key's parts do not leak")
         assertEquals(publicKey, scheme.publicKeyOf(privateKey), "same input, same key - so it can be deleted without a lookup table")
@@ -88,10 +88,10 @@ class StoragePublicUploadsTest {
         val storage = Recording()
         val purged = mutableListOf<String>()
         val uploads = StoragePublicUploads(storage, StorageKeyScheme(web())) { PublicUploadPurger { purged += it } }
-        assertEquals(listOf("public/aaa.png", "public/bbb.png"), uploads.listPublicKeys())
-        uploads.deletePublicKey("public/aaa.png")
-        assertEquals(listOf("public/aaa.png"), storage.deleted)
-        assertEquals(listOf("https://cdn.example.com/public/aaa.png"), purged)
+        assertEquals(listOf("public/b/aaa.png", "public/b/bbb.png"), uploads.listPublicKeys(), "only the board sub-prefix is looked at - another use of the public prefix is never swept")
+        uploads.deletePublicKey("public/b/aaa.png")
+        assertEquals(listOf("public/b/aaa.png"), storage.deleted)
+        assertEquals(listOf("https://cdn.example.com/public/b/aaa.png"), purged)
     }
 
     @Test

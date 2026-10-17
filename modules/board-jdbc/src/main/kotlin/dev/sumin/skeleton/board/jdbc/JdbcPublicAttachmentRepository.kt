@@ -63,6 +63,12 @@ class JdbcPublicAttachmentRepository(
             mapOf("id" to postId), Long::class.java,
         ).filterNotNull()
 
+    override fun commentsWithAttachments(postId: Long): List<Long> =
+        jdbc.queryForList(
+            "select distinct a.comment_id from board_comment_attachments a join board_comments c on c.id = a.comment_id where c.post_id = :id",
+            mapOf("id" to postId), Long::class.java,
+        ).filterNotNull()
+
     override fun stale(limit: Int): List<PublicCopy> {
         val posts = jdbc.query(
             """
@@ -109,10 +115,7 @@ class JdbcPublicAttachmentRepository(
     }
 
     override fun enqueue(target: RevisionTarget, id: Long, now: Instant) {
-        jdbc.update(
-            dialect.insertIgnore("board_public_attachment_queue", listOf("target_type", "target_id", "queued_at"), listOf("target_type", "target_id")),
-            MapSqlParameterSource().addValue("target_type", target.name).addValue("target_id", id).addValue("queued_at", dialect.instantParam(now)),
-        )
+        PublicQueueWriter(jdbc, dialect) { true }.enqueue(target, id, now)
     }
 
     override fun claimQueued(limit: Int, now: Instant, lease: Duration): List<Pair<RevisionTarget, Long>> =
@@ -130,8 +133,11 @@ class JdbcPublicAttachmentRepository(
             rows
         } ?: emptyList()
 
-    override fun dequeue(target: RevisionTarget, id: Long) {
-        jdbc.update("delete from board_public_attachment_queue where target_type = :t and target_id = :id", mapOf("t" to target.name, "id" to id))
+    override fun dequeue(target: RevisionTarget, id: Long, upTo: Instant) {
+        jdbc.update(
+            "delete from board_public_attachment_queue where target_type = :t and target_id = :id and queued_at <= :upTo",
+            MapSqlParameterSource().addValue("t", target.name).addValue("id", id).addValue("upTo", dialect.instantParam(upTo)),
+        )
     }
 
     override fun tryStartRun(name: String, now: Instant, minInterval: Duration): Boolean {

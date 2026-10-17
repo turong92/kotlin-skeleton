@@ -7,7 +7,7 @@ import kotlin.test.assertTrue
 
 /** 승인 대기 · 글 주인의 댓글 관리 (스펙 §3.1–3.4 · §10): 승인 전 노출, 주인 권한 넘기, 승인 순간의 개수 · 알림 */
 class ApprovalTest {
-    private val guestOn = BoardProperties(guest = BoardProperties.Guest(enabled = true))
+    private val guestOn = BoardProperties(guest = BoardProperties.Guest(enabled = true, verifiedCacheTtl = java.time.Duration.ZERO))   // 맞은 비밀의 기억을 끈다 - 이 시험은 대입 한도를 센다
     private val created = mutableListOf<BoardCommentNotice>()
     private val pending = mutableListOf<BoardCommentNotice>()
     private val events = mutableListOf<BoardEvent>()

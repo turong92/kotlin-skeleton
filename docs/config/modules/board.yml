@@ -35,6 +35,10 @@ skeleton:
       rate-limit:                  # 비회원 쓰기 한도 (guest:<IP> 별) — 위의 rate-limit.enabled 와 무관하게 guest.enabled 면 늘 걸린다
         capacity: 5
         window: 1m
+      secret-verifications:        # 비밀 확인(해시 계산) 한도 - IP 마다, 맞아도 되돌리지 않는다 (맞는 비밀로 bcrypt 를 한도 없이 돌려 CPU 를 고갈시키지 못하게)
+        capacity: 60
+        window: 1m
+      verified-cache-ttl: 5m       # 맞은 비밀(행 + 비밀의 HMAC, 원문 아님)을 메모리에 이 시간 기억해 다시 해시하지 않는다. 0 이면 끈다
       secret-attempts:             # 비밀 대입 한도 — 행마다 + IP 마다, 해시를 계산하기 전에 센다 (넘으면 429 BOARD.RATE_LIMITED)
         capacity: 10
         window: 10m

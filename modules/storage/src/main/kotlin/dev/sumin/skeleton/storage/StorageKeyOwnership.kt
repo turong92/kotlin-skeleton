@@ -54,14 +54,14 @@ class StorageKeyScheme(private val webOf: () -> StorageWebProperties) : StorageK
         return "${web.keyPrefix.trim('/')}/$GUEST_SEGMENT/$uuid.${guestMac(web, uuid)}/file.$ext"
     }
 
-    /** 비공개 키의 공개 영역 키 `<prefix>/<hmac32>.<ext>` - 비공개 키에서만 계산된다(대응표 없음). 확장자는 알려진 것만 남는다 */
+    /** 비공개 키의 공개 영역 키 `<prefix>/b/<hmac32>.<ext>` (`b/` = board 가 쓰는 하위 접두사 - 전체 대조는 그 안만 본다) - 비공개 키에서만 계산된다(대응표 없음). 확장자는 알려진 것만 남는다 */
     fun publicKeyOf(privateKey: String): String {
         val pub = webOf().`public`
         val hmac = Mac.getInstance("HmacSHA256")
         hmac.init(SecretKeySpec(pub.secret.toByteArray(Charsets.UTF_8), "HmacSHA256"))
         val id = hmac.doFinal("public\n$privateKey".toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }.take(MAC_LENGTH)
         val ext = privateKey.substringAfterLast('/').substringAfterLast('.', missingDelimiterValue = "").lowercase()
-        return "${pub.prefix.trim('/')}/$id" + if (ext in KNOWN_EXTENSIONS) ".$ext" else ""
+        return "${pub.prefix.trim('/')}/$BOARD_PUBLIC_SEGMENT/$id" + if (ext in KNOWN_EXTENSIONS) ".$ext" else ""
     }
 
     /** 비회원 업로드 키인가 - 꼴 + MAC. 꺼져 있으면 참이 되는 키가 없다 */
@@ -129,8 +129,10 @@ class StorageKeyScheme(private val webOf: () -> StorageWebProperties) : StorageK
         return hmac.doFinal("guest\n$uuid".toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }.take(MAC_LENGTH)
     }
 
-    private companion object {
-        const val GUEST_SEGMENT = "g"
+    companion object {
+        /** 공개 접두사 아래 board 가 쓰는 하위 접두사 */
+        const val BOARD_PUBLIC_SEGMENT = "b"
+        private const val GUEST_SEGMENT = "g"
         val GUEST_TAIL_FORMAT = Regex("file\\.(jpg|png|webp|gif)")
         const val OPAQUE_SEGMENT = "o"
         const val MAC_LENGTH = 32

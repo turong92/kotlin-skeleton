@@ -15,7 +15,7 @@ class LeakSweep(private val http: LeakHttp, private val w: LeakWorld, private va
     val allow: LeakAllow by lazy {
         LeakAllow(
             strings = setOf("general", "PUBLISHED", "HIDDEN", "DRAFT", "DELETED", "LIKE", "DISLIKE", "EMPATHY", "board", "comment.created", "comment.replied", "INFO", w.yPostTitle, w.yAcc,
-                "http:", "cdn.test", "cdn", "test", "app", "public",   // 공개 사진 주소의 앞부분(CDN 주소 · 공개 접두사)은 모두에게 같은 어휘다 - 뒤의 키는 첨부마다 다르다
+                "http:", "cdn.test", "cdn", "test", "app", "public", "b",   // 공개 사진 주소의 앞부분(CDN 주소 · 공개 접두사)은 모두에게 같은 어휘다 - 뒤의 키는 첨부마다 다르다
 
                 "New comment on your post: ${w.yPostTitle}",   // 알림 제목: Y 의 글 제목이 들어간다 — 두 알림이 같은 글에 달렸다는 구조
             ),
