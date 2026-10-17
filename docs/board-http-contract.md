@@ -10,6 +10,7 @@ Paths are under `skeleton.board.http.base-path` (default `/api/v1/boards`).
 |---|---|
 | `GET /config` | `guestEnabled` · `guestSecret` (`PASSWORD` \| `TOKEN`) · `guestNameMaxLength` · `captchaRequired` · `commentMaxAttachments` (0 = comment pictures off) |
 | board | `settings: {guestWrite: NONE\|COMMENTS\|ALL, postApproval: OFF\|GUESTS\|ALL, commentApproval: OFF\|GUESTS\|ALL, ownerModeratesComments}` |
+| comment | `canManage` (only for callers who manage comments — operators and the post owner where owner moderation is on; absent otherwise. `false` = this comment's status can no longer be changed by you, e.g. an owner cannot restore what an operator hid — do not draw the restore button) |
 | post summary / detail, comment | `authorGuest` (draw 「(비회원)」 — `authorName` is the guest's typed name, not an account nickname) |
 | post detail | `canManageComments` · `commentApproval` (`null` = board value) · `pendingRevision` |
 | comment | `pendingRevision` · `attachments` (`[]` unless the comment is visible) |

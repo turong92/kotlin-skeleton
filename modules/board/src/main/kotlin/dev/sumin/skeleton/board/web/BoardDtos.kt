@@ -155,6 +155,8 @@ data class CommentResponse(
     @get:JsonInclude(JsonInclude.Include.ALWAYS) val pendingRevision: RevisionResponse? = null,
     /** 보이는 댓글의 첨부 저장 키 — 가린 · 지운 댓글은 `[]` (본문이 null 인 것과 같은 이유) */
     val attachments: List<String> = emptyList(),
+    /** 댓글을 관리하는 사람에게만 - 이 댓글의 상태를 지금 바꿀 수 있는가(복원 · 숨김 단추의 근거). 관리자가 아니면 키가 없다 */
+    val canManage: Boolean? = null,
 )
 
 data class RevisionResponse(val title: String?, val body: String, val attachments: List<String>, val submittedAt: Instant)
@@ -252,7 +254,7 @@ internal fun CommentView.toResponse(thread: Boolean = false): CommentResponse = 
         reactions.counts, reactions.myReactions, replyCount, createdAt, updatedAt,
         replies = if (thread) replies.map { it.toResponse(thread = true) } else null,
         authorDeleted = authorDeleted, authorName = author?.name, authorTag = author?.tag, mine = mine, authorGuest = BoardAuthors.isGuest(authorId),
-        pendingRevision = pendingRevision?.toResponse(), attachments = this@toResponse.attachments,
+        pendingRevision = pendingRevision?.toResponse(), attachments = this@toResponse.attachments, canManage = canManage,
     )
 }
 

@@ -108,6 +108,24 @@ class ReviewFixesTest {
         assertEquals(BoardErrorCode.FORBIDDEN, h.failure { h.commentService.moderate(other, "general", post, c.id, CommentStatus.PUBLISHED) })
     }
 
+    // ---- 관리 가능 여부: 되살릴 수 없는 댓글에 단추를 그리지 않게 ----
+
+    @Test
+    fun `canManage tells an owner which comments the owner can still change, moderators always, and others nothing`() {
+        val h = ServiceHarness(props = props, settings = settings.copy(commentApproval = ApprovalMode.OFF))
+        val post = publishedPost(h).id   // 글 주인 = other(ownerModeratesComments)
+        val ownerHid = h.commentService.create(third, "general", post, null, "a").comment
+        val modHid = h.commentService.create(third, "general", post, null, "b").comment
+        val shown = h.commentService.create(third, "general", post, null, "c").comment
+        h.commentService.moderate(other, "general", post, ownerHid.id, CommentStatus.HIDDEN)
+        h.commentService.moderate(moderator, "general", post, modHid.id, CommentStatus.HIDDEN)
+        fun flags(who: BoardCaller?) = h.commentService.list(who, "general", post, 0, 10, CommentSort.OLDEST).values.associate { it.comment.id to it.canManage }
+        assertEquals(mapOf(ownerHid.id to true, modHid.id to false, shown.id to true), flags(other))
+        assertEquals(mapOf(ownerHid.id to true, modHid.id to true, shown.id to true), flags(moderator))
+        assertEquals(mapOf(ownerHid.id to null, modHid.id to null, shown.id to null), flags(third))
+        assertEquals(mapOf(ownerHid.id to null, modHid.id to null, shown.id to null), flags(null))
+    }
+
     // ---- M-f 못 보는 행은 한 가지 답 ----
 
     @Test

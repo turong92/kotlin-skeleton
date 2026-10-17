@@ -51,6 +51,8 @@ data class CommentView(
     val pendingRevision: RevisionView? = null,
     /** 보이는 댓글(PUBLISHED, 또는 보는 사람에게 남아 있는 PENDING)의 첨부 키 — 가린 · 지운 댓글은 비어 있다 */
     val attachments: List<String> = emptyList(),
+    /** 호출자가 댓글을 관리하는 사람(운영자 · 글 주인)일 때만 채운다 - 이 댓글의 상태를 지금 바꿀 수 있는가(주인은 운영자가 가린 댓글을 되살릴 수 없다). 관리자가 아니면 null */
+    val canManage: Boolean? = null,
 )
 
 data class BoardConfigView(

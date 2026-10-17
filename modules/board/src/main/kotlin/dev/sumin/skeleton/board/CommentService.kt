@@ -100,7 +100,7 @@ class CommentService(
         fun view(c: Comment, replies: List<CommentView>) =
             view(
                 caller, c, publicIds.getValue(c.id), card(c, names[publicIds.getValue(c.id)]), visibleBody(c), states.getValue(c.id), descendantCount(c.id, childrenOf), replies,
-                revs[c.id]?.takeIf { pending.all || caller?.accountId == c.authorId }, files[c.id].orEmpty(),
+                revs[c.id]?.takeIf { pending.all || caller?.accountId == c.authorId }, files[c.id].orEmpty(), pending,
             )
         val threads = roots.values.map { root ->
             view(root, repliesOf[root.id].orEmpty().map { view(it, emptyList()) })
@@ -233,7 +233,7 @@ class CommentService(
         val publicIds = rows.values.associate { it.id to publicId(it, active) }
         val names = authors.of(boardCode, publicIds.values)
         return PageResult(
-            rows.values.let { list -> val files = attachmentsOf(list.map { it.id }); list.map { view(caller, it, publicIds.getValue(it.id), card(it, names[publicIds.getValue(it.id)]), it.body, states.getValue(it.id), 0, attachments = files[it.id].orEmpty()) } },
+            rows.values.let { list -> val files = attachmentsOf(list.map { it.id }); list.map { view(caller, it, publicIds.getValue(it.id), card(it, names[publicIds.getValue(it.id)]), it.body, states.getValue(it.id), 0, attachments = files[it.id].orEmpty(), pending = PendingVisibility(all = true)) } },
             rows.totalElements,
         )
     }
@@ -285,7 +285,7 @@ class CommentService(
         val publicIds = rows.associate { it.first.id to publicId(it.first, active) }
         val names = authors.of(boardCode, publicIds.values)
         return PageResult(
-            rows.let { list -> val files = attachmentsOf(list.map { it.first.id }); list.map { (c, r) -> view(caller, c, publicIds.getValue(c.id), card(c, names[publicIds.getValue(c.id)]), visibleBody(c), states.getValue(c.id), 0, revision = r, attachments = files[c.id].orEmpty()) } },
+            rows.let { list -> val files = attachmentsOf(list.map { it.first.id }); list.map { (c, r) -> view(caller, c, publicIds.getValue(c.id), card(c, names[publicIds.getValue(c.id)]), visibleBody(c), states.getValue(c.id), 0, revision = r, attachments = files[c.id].orEmpty(), pending = PendingVisibility(all = true)) } },
             revs.totalElements,
         )
     }
@@ -369,7 +369,7 @@ class CommentService(
         val publicId = publicId(comment, authorRules.active)
         return view(
             caller, comment, publicId, card(comment, authors.one(boardCode, publicId)), visibleBody(comment),
-            reactions.state(ReactionTarget.COMMENT, comment.id, caller), descendantCount(comment.id, childrenOf), revision = shown, attachments = attachmentsOf(listOf(comment.id))[comment.id].orEmpty(),
+            reactions.state(ReactionTarget.COMMENT, comment.id, caller), descendantCount(comment.id, childrenOf), revision = shown, attachments = attachmentsOf(listOf(comment.id))[comment.id].orEmpty(), pending = pending,
         )
     }
 
@@ -377,12 +377,16 @@ class CommentService(
 
     private fun view(
         caller: BoardCaller?, c: Comment, publicId: String, card: AuthorCard?, body: String?,
-        state: ReactionState, replyCount: Int, replies: List<CommentView> = emptyList(), revision: Revision? = null, attachments: List<String> = emptyList(),
+        state: ReactionState, replyCount: Int, replies: List<CommentView> = emptyList(), revision: Revision? = null, attachments: List<String> = emptyList(), pending: PendingVisibility? = null,
     ) = CommentView(
         c, publicId, BoardAuthors.isDeleted(c.authorId) || card?.deleted == true, caller?.accountId == c.authorId, body, state, replyCount, replies, card, revision?.view(),
         // 가린 · 지운 댓글의 사진은 본문처럼 나가지 않는다
         if (body != null) attachments else emptyList(),
+        canManage = if (caller != null && pending?.all == true) caller.moderator || ownerMayTouch(c) else null,
     )
+
+    /** 운영자가 아닌 관리자(글 주인)가 이 댓글의 상태를 바꿀 수 있는가 - [moderate] 의 막는 규칙과 같다(운영자가 가렸거나 모르는 옛 행 · 삭제된 행은 못 건드린다) */
+    private fun ownerMayTouch(c: Comment) = c.status != CommentStatus.DELETED && !(c.status == CommentStatus.HIDDEN && c.moderatedBy != ModeratedBy.OWNER)
 
     /** 댓글 첨부는 켜져 있을 때만 읽는다 (기본 꺼짐 — 기존 쿼리 수 그대로). 쪽의 모든 댓글을 쿼리 한 번으로 */
     private fun attachmentsOf(ids: Collection<Long>): Map<Long, List<String>> =
