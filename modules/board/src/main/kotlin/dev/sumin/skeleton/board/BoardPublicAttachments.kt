@@ -32,8 +32,8 @@ class BoardPublicAttachments(
      */
     fun reconcile(target: RevisionTarget, id: Long) {
         if (uploads() == null) return
-        val started = time.now()
-        if (tryReconcile(target, id)) runCatching { repository.dequeue(target, id, started) } else runCatching { repository.enqueue(target, id, time.now()) }
+        val version = runCatching { repository.queueVersion(target, id) }.getOrNull()   // 시작할 때 읽는다 - 그 뒤 쓰기가 줄을 다시 적으면 번호가 올라 줄이 남는다
+        if (tryReconcile(target, id)) version?.let { runCatching { repository.dequeue(target, id, it) } } else runCatching { repository.enqueue(target, id, time.now()) }
     }
 
     /**
@@ -62,10 +62,9 @@ class BoardPublicAttachments(
         if (uploads() == null) return 0
         var done = 0
         val each = { _: Unit ->
-            val started = time.now()
-            for ((target, id) in repository.claimQueued(limit, started, Duration.ofMinutes(2))) {
+            for ((target, id, version) in repository.claimQueued(limit, time.now(), Duration.ofMinutes(2))) {
                 val ok = if (target == RevisionTarget.POST) tryReconcilePost(id, repair = true) else tryReconcile(target, id, repair = true)
-                if (ok) { repository.dequeue(target, id, started); done++ }
+                if (ok) { repository.dequeue(target, id, version); done++ }
             }
         }
         if (projects == null) each(Unit) else projects.forEachProject { each(Unit) }

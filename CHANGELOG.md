@@ -23,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - (수정) 맞는 비밀로도 bcrypt 를 무제한 돌릴 수 있던 길을 닫았다: 비밀 확인 한도(IP 별 60 / 1분, 되돌리지 않음, `guest.secret-verifications`)와 맞은 비밀의 짧은 기억(`guest.verified-cache-ttl` 5분, HMAC 만). 숨겼다 다시 공개한 글의 댓글 사진을 곧바로 다시 복사한다. 공개 큐 줄은 적은 시각을 갱신하고 맞추기 시작한 시각 이전 것만 지운다. 공개 키는 `<prefix>/b/…` 아래에 두고 전체 대조는 그 안만 본다.
 
+- 이 묶음 전 개발 DB · 로컬 저장소의 `public/` 직속 객체(옛 키 꼴 `public/<hmac>.<ext>`)는 지워도 된다 - 공개 키는 이제 `public/b/…` 아래에 있고 옛 객체는 아무 것도 가리키지 않는다. 공개 영역 조정 큐 줄에는 번호(version) 칸이 더해졌다(새 V 파일 `…18100300`) - 쓰기마다 +1, 맞춘 쪽은 시작할 때 읽은 번호와 같을 때만 줄을 지운다.
+
 ### 게시판 사진 공개 영역 (2026-10-18)
 
 - `storage`: **꺼진 채 시작하는** `skeleton.storage.web.public.*` - 공개된 글 · 댓글의 첨부만 공개 영역(`<prefix>/<hmac32>.<ext>`, 비공개 키에서 HMAC 으로 계산)에 `Cache-Control` 을 붙여 복사하고 `base-url`(CDN) 주소로 낸다. 비밀 `<P>_STORAGE_WEB_PUBLIC_SECRET`(32자 이상, 프로젝트마다 달라야 한다). `CopyObjectRequest.cacheControl` 추가(S3 어댑터는 메타데이터를 새로 쓴다). `StoragePublicUploads` · `StoragePrivateUploadAccess`.

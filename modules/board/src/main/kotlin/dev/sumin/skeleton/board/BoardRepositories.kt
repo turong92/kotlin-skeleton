@@ -155,6 +155,9 @@ interface BoardRevisionRepository {
 /** 판이 없는 기본 구현 — `board-jdbc` 가 없으면 이것이다 */
 object NoBoardRevisions : BoardRevisionRepository
 
+/** 조정 큐의 한 줄 - 대상과 그 줄의 번호 */
+data class QueuedItem(val target: RevisionTarget, val id: Long, val version: Long)
+
 /** 공개 영역에 복사해 둔 첨부 한 줄 - 어느 글 · 댓글의 어느 비공개 키인가 */
 data class PublicCopy(val target: RevisionTarget, val targetId: Long, val key: String)
 
@@ -189,14 +192,17 @@ interface BoardPublicAttachmentRepository {
     /** 공개 조건에 드는데 복사가 없는 것 */
     fun missing(limit: Int): List<PublicCopy>
 
-    /** 맞추다 실패한 항목을 적어 둔다 - 주기 작업이 이것만 다시 맞춘다 (이미 있으면 적은 시각을 [now] 로 갱신한다) */
+    /** 맞추다 실패한 항목을 적어 둔다 - 주기 작업이 이것만 다시 맞춘다 (이미 있으면 줄의 번호를 +1 한다) */
     fun enqueue(target: RevisionTarget, id: Long, now: java.time.Instant)
 
-    /** 적힌 항목을 [limit] 개 잡는다 - 잡힌 줄은 [lease] 동안 다른 인스턴스가 잡지 않는다 (`for update skip locked`) */
-    fun claimQueued(limit: Int, now: java.time.Instant, lease: java.time.Duration): List<Pair<RevisionTarget, Long>>
+    /** 적힌 항목을 [limit] 개 잡는다 - 잡힌 줄은 [lease] 동안 다른 인스턴스가 잡지 않는다 (`for update skip locked`). 줄의 번호(version)를 함께 준다 */
+    fun claimQueued(limit: Int, now: java.time.Instant, lease: java.time.Duration): List<QueuedItem>
 
-    /** 맞췄으면 적힌 줄을 지운다 - 맞추기 **시작한 시각 [upTo] 이전에 적힌** 줄만. 그 뒤에 새로 적힌 줄(맞추는 사이 들어온 쓰기)은 남겨 다음 조정이 맞춘다 */
-    fun dequeue(target: RevisionTarget, id: Long, upTo: java.time.Instant)
+    /** 이 항목의 줄의 번호 - 줄이 없으면 null. 맞추기 **시작할 때** 읽는다 */
+    fun queueVersion(target: RevisionTarget, id: Long): Long?
+
+    /** 맞췄으면 줄을 지운다 - 시작할 때 읽은 [version] 과 **같을 때만**. 그 뒤 쓰기가 줄을 다시 적었으면(번호가 올랐으면) 줄이 남아 다음 조정이 맞춘다 */
+    fun dequeue(target: RevisionTarget, id: Long, version: Long)
 
     /** [name] 작업을 지금 이 인스턴스가 해도 되는가 - 마지막 실행이 [minInterval] 보다 오래됐을 때만 한 인스턴스에게 참을 준다 (원자적 비교-교체) */
     fun tryStartRun(name: String, now: java.time.Instant, minInterval: java.time.Duration): Boolean

@@ -2,6 +2,7 @@ package dev.sumin.skeleton.board.jdbc
 
 import dev.sumin.skeleton.board.BoardPublicAttachmentRepository
 import dev.sumin.skeleton.board.PublicCopy
+import dev.sumin.skeleton.board.QueuedItem
 import dev.sumin.skeleton.board.RevisionTarget
 import dev.sumin.skeleton.persistence.jdbc.SqlDialect
 import java.security.MessageDigest
@@ -118,13 +119,13 @@ class JdbcPublicAttachmentRepository(
         PublicQueueWriter(jdbc, dialect) { true }.enqueue(target, id, now)
     }
 
-    override fun claimQueued(limit: Int, now: Instant, lease: Duration): List<Pair<RevisionTarget, Long>> =
+    override fun claimQueued(limit: Int, now: Instant, lease: Duration): List<QueuedItem> =
         tx.execute {
             val rows = jdbc.query(
-                "select target_type, target_id from board_public_attachment_queue where claimed_until is null or claimed_until < :now order by queued_at limit :limit for update skip locked",
+                "select target_type, target_id, version from board_public_attachment_queue where claimed_until is null or claimed_until < :now order by queued_at limit :limit for update skip locked",
                 MapSqlParameterSource().addValue("now", dialect.instantParam(now)).addValue("limit", limit),
-            ) { rs, _ -> RevisionTarget.valueOf(rs.getString(1)) to rs.getLong(2) }
-            rows.forEach { (target, id) ->
+            ) { rs, _ -> QueuedItem(RevisionTarget.valueOf(rs.getString(1)), rs.getLong(2), rs.getLong(3)) }
+            rows.forEach { (target, id, _) ->
                 jdbc.update(
                     "update board_public_attachment_queue set claimed_until = :until where target_type = :t and target_id = :id",
                     MapSqlParameterSource().addValue("until", dialect.instantParam(now.plus(lease))).addValue("t", target.name).addValue("id", id),
@@ -133,10 +134,16 @@ class JdbcPublicAttachmentRepository(
             rows
         } ?: emptyList()
 
-    override fun dequeue(target: RevisionTarget, id: Long, upTo: Instant) {
+    override fun queueVersion(target: RevisionTarget, id: Long): Long? =
+        jdbc.queryForList(
+            "select version from board_public_attachment_queue where target_type = :t and target_id = :id",
+            mapOf("t" to target.name, "id" to id), Long::class.java,
+        ).firstOrNull()
+
+    override fun dequeue(target: RevisionTarget, id: Long, version: Long) {
         jdbc.update(
-            "delete from board_public_attachment_queue where target_type = :t and target_id = :id and queued_at <= :upTo",
-            MapSqlParameterSource().addValue("t", target.name).addValue("id", id).addValue("upTo", dialect.instantParam(upTo)),
+            "delete from board_public_attachment_queue where target_type = :t and target_id = :id and version = :v",
+            MapSqlParameterSource().addValue("t", target.name).addValue("id", id).addValue("v", version),
         )
     }
 

@@ -264,17 +264,30 @@ class JdbcPublicAttachmentDbTest {
     }
 
     @Test
-    fun `a write that lands while we reconcile keeps its queue line - only lines older than the start of the reconcile are removed`() {
+    fun `a write that lands while we reconcile keeps its queue line - the line goes only if its number is still the one we read`() {
         val post = db.newPost(db.newBoard())
         val c = comment(post.id, CommentStatus.PUBLISHED, "race-queue.png")
-        val early = T0.plusSeconds(10)
-        val late = T0.plusSeconds(20)
-        repo.enqueue(RevisionTarget.COMMENT, c.id, early)
-        repo.enqueue(RevisionTarget.COMMENT, c.id, late)   // 같은 항목에 또 쓰기 - 줄은 하나고 적은 시각이 갱신된다
+        repo.enqueue(RevisionTarget.COMMENT, c.id, T0)
+        val read = repo.queueVersion(RevisionTarget.COMMENT, c.id)!!
+        repo.enqueue(RevisionTarget.COMMENT, c.id, T0)   // 읽은 뒤 또 쓰기 - 줄은 하나고 번호만 오른다
         assertEquals(1L, queueSize(RevisionTarget.COMMENT, c.id))
-        repo.dequeue(RevisionTarget.COMMENT, c.id, T0.plusSeconds(15))   // 맞추기 시작한 시각이 둘 사이였다
+        assertTrue(repo.queueVersion(RevisionTarget.COMMENT, c.id)!! > read)
+        repo.dequeue(RevisionTarget.COMMENT, c.id, read)
         assertEquals(1L, queueSize(RevisionTarget.COMMENT, c.id), "the newer write is not lost")
-        repo.dequeue(RevisionTarget.COMMENT, c.id, T0.plusSeconds(25))
+        repo.dequeue(RevisionTarget.COMMENT, c.id, repo.queueVersion(RevisionTarget.COMMENT, c.id)!!)
+        assertEquals(0L, queueSize(RevisionTarget.COMMENT, c.id))
+    }
+
+    @Test
+    fun `a hide that is written while the listener is copying is still taken care of by the next sweep`() {
+        val post = db.newPost(db.newBoard())
+        val c = comments.insert(NewComment(post.id, null, null, 0, "acc_a", "c", T0, attachments = listOf("${tag}during.png")))!!
+        // 리스너(reconcile)가 복사하는 동안 다른 요청이 가린다 - 줄이 다시 적힌다
+        uploads.duringPublish = { comments.setStatus(c.id, CommentStatus.HIDDEN, T0); uploads.duringPublish = null }
+        sync.reconcile(RevisionTarget.COMMENT, c.id)
+        assertEquals(emptySet(), mine(), "taken back by the re-read after the copy")
+        assertEquals(1L, queueSize(RevisionTarget.COMMENT, c.id), "and the line of the write that landed meanwhile stays for the sweep")
+        sync.processQueue()
         assertEquals(0L, queueSize(RevisionTarget.COMMENT, c.id))
     }
 }
