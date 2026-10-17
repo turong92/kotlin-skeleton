@@ -104,7 +104,8 @@ class AuthorLinkLeakIntegrationTest {
         assertEquals(2, w.keys.size)
         assertTrue(w.keys.all { k -> (board.of(w.a.id) + board.of(w.b.id)).any { it.value == k } }, "$phase / $reader: the attachment keys of A's and B's posts were scanned (opaque, so they share nothing)")
         assertPairsClean("$phase / $reader", board, sweep.allow)
-        (board.owners()).forEach { assertTrue(it.startsWith("prf_") || it == plantedOwner, "$phase / $reader: author id $it is a profile id (or the planted pending row)") }
+        // 비회원 행의 공개 id 는 `guest:<ULID>` - 행마다 새 값이라 계정 · 프로필 어느 쪽과도 이어지지 않는다 (같은 비회원의 두 글도 이어지지 않는다)
+        (board.owners()).forEach { assertTrue(it.startsWith("prf_") || it.startsWith("guest:") || it == plantedOwner, "$phase / $reader: author id $it is a profile id (or the planted pending row, or a guest id)") }
         assertTrue(all.none { "deleted:" in it.body }, "$phase / $reader: no tombstone value in any response")
         if (notices) {
             val notice = sweep.noticePieces(all)

@@ -173,7 +173,17 @@ class BoardIntegrationTest : SampleIntegrationTest() {
     }
 
     @Test
-    fun `without a token the board is closed`() {
-        mockMvc.get("/api/v1/boards").andExpect { status { isUnauthorized() } }
+    fun `without a token the board can be read but not written - the sample opens anonymous reads for its guest-writing board`() {
+        mockMvc.get("/api/v1/boards").andExpect { status { isOk() } }
+        // 쓰기는 비회원 규칙을 탄다 - 이름 · 비밀값 없이는 거절, 반응은 로그인이 필요하다
+        mockMvc.post("/api/v1/boards/general/posts") {
+            contentType = MediaType.APPLICATION_JSON
+            header("Idempotency-Key", "anon-1")
+            content = """{"title":"t","body":"b"}"""
+        }.andExpect { status { isBadRequest() } }
+        mockMvc.put("/api/v1/boards/general/posts/1/reactions") {
+            contentType = MediaType.APPLICATION_JSON
+            content = """{"type":"LIKE"}"""
+        }.andExpect { status { isUnauthorized() } }
     }
 }

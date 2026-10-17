@@ -11,21 +11,31 @@ import org.springframework.jdbc.core.simple.JdbcClient
  */
 object AuthorLinkColumns {
     val PRIVATE: Map<String, Set<String>> = mapOf(
-        "board_posts" to setOf("author_id"),
-        "board_comments" to setOf("author_id"),
+        // 비회원 비밀 해시 · 마지막으로 상태를 바꾼 쪽 · 처음 공개된 시각은 어떤 응답에도 나가지 않는다
+        "board_posts" to setOf("author_id", "guest_secret_hash", "moderated_by"),
+        "board_comments" to setOf("author_id", "guest_secret_hash", "moderated_by", "published_at"),
         "board_reactions" to setOf("account_id"),
         "notification_inbox" to setOf("recipient_id", "recipient_ids_json"),
         "author_profiles" to setOf("account_id", "primary_of"),
     )
 
     val PUBLIC: Map<String, Set<String>> = mapOf(
-        "boards" to setOf("code", "name", "description", "created_at"),
+        "boards" to setOf(
+            "code", "name", "description", "created_at", "guest_write", "post_approval", "comment_approval", "owner_moderates_comments",
+        ),
         "board_posts" to setOf(
             "id", "board_code", "title", "body", "status", "pinned", "view_count", "comment_count", "reaction_count", "attachment_count",
-            "created_at", "updated_at", "author_ref",
+            "created_at", "updated_at", "author_ref", "guest_name", "comment_approval",
         ),
         "board_post_attachments" to setOf("post_id", "sort_order", "storage_key"),
-        "board_comments" to setOf("id", "post_id", "parent_id", "root_id", "depth", "body", "status", "reaction_count", "created_at", "updated_at", "author_ref"),
+        "board_comments" to setOf(
+            "id", "post_id", "parent_id", "root_id", "depth", "body", "status", "reaction_count", "created_at", "updated_at", "author_ref",
+            "guest_name", "attachment_count",
+        ),
+        "board_comment_attachments" to setOf("comment_id", "sort_order", "storage_key"),
+        // 고친 판 - 글 · 댓글의 제목 · 본문 · 첨부(쓴 사람 · 운영자 · 관리하는 글 주인에게만 응답에 오른다)
+        "board_revisions" to setOf("target_type", "target_id", "board_code", "post_id", "title", "body", "attachment_count", "created_at", "updated_at"),
+        "board_revision_attachments" to setOf("target_type", "target_id", "sort_order", "storage_key"),
         "board_reactions" to setOf("target_type", "target_id", "reaction_type", "created_at"),
         "notification_inbox" to setOf(
             "event_id", "topic", "type", "severity", "title", "message", "payload_json", "event_created_at", "read_at", "created_at", "updated_at",

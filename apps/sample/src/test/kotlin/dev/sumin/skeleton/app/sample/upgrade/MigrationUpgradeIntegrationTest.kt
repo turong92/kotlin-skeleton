@@ -183,6 +183,8 @@ class MigrationUpgradeIntegrationTest {
     fun `board - the new guest, approval, revision and comment attachment columns read as everything off on baseline rows, and adoption never picks a guest row`() {
         val settings = jdbc.sql("select guest_write, post_approval, comment_approval, owner_moderates_comments from boards where code = 'upgrade'").query().singleRow()
         assertEquals(listOf("NONE", "OFF", "OFF", false), listOf(settings["guest_write"], settings["post_approval"], settings["comment_approval"], settings["owner_moderates_comments"]))
+        val general = jdbc.sql("select guest_write, post_approval, comment_approval, owner_moderates_comments from boards where code = 'general'").query().singleRow()
+        assertEquals(listOf("ALL", "GUESTS", "GUESTS", true), listOf(general["guest_write"], general["post_approval"], general["comment_approval"], general["owner_moderates_comments"]), "the sample's general board reads as upgraded (seed on a new DB, the sample migration on an old one)")
         val postId = jdbc.sql("select id from board_posts where board_code = 'upgrade'").query(Long::class.java).single()
         val post = assertNotNull(posts.find(postId))
         assertNull(post.guestName)

@@ -37,6 +37,9 @@ class LeakWorld(private val http: LeakHttp, registry: NotificationSubscriptionRe
     var c2 = 0L; private set   // B 의 답글 (c1 아래 — 자작)
     var c3 = 0L; private set   // B 의 답글 (c0 아래 — Y 에게 알림)
     var c4 = 0L; private set   // C 의 댓글
+    var cg = 0L; private set   // 비회원이 Y 의 글에 쓴 댓글 (승인되어 공개) — 그 비밀은 어떤 응답에도 없어야 한다
+    var cgWaiting = 0L; private set   // 비회원의 승인 대기 댓글
+    val guestSecret = "guest-secret-$nonce"
     val keys = mutableListOf<String>()
     /** 구독해 둔 알림 — SSE 가 흘리는 것과 같은 이벤트 */
     val events = CopyOnWriteArrayList<NotificationEvent>()
@@ -46,7 +49,10 @@ class LeakWorld(private val http: LeakHttp, registry: NotificationSubscriptionRe
 
     /** 어디에도 없어야 하는 값 (X 의 계정 id · 이메일 · 계정 톰스톤 · 현재 계정 이름) */
     val forbidden: Map<String, String> by lazy {
-        mapOf("account id" to xAcc, "email" to xEmail, "tombstone" to AccountTombstone.of(xAcc), "account name" to xAccountName)
+        mapOf(
+            "account id" to xAcc, "email" to xEmail, "tombstone" to AccountTombstone.of(xAcc), "account name" to xAccountName,
+            "guest secret" to guestSecret, "guest secret hash" to "{bcrypt}",
+        )
     }
 
     init {
@@ -72,6 +78,9 @@ class LeakWorld(private val http: LeakHttp, registry: NotificationSubscriptionRe
         c2 = createComment(xToken, b, yPost, "B 가 자기 댓글에 답글 $nonce", c1)
         c3 = createComment(xToken, b, yPost, "B 가 Y 에게 답글 $nonce", c0)
         c4 = createComment(xToken, c, yPost, "C 가 단 댓글 $nonce")
+        cg = guestComment("지나가던 손님 $nonce")
+        http.put("/api/v1/boards/general/posts/$yPost/comments/$cg/moderation", modToken, """{"status":"PUBLISHED"}""").ok()
+        cgWaiting = guestComment("대기 중인 손님 $nonce")
         react(yToken, "posts/$postA", "EMPATHY"); react(yToken, "posts/$postB", "LIKE"); react(yToken, "posts/$yPost/comments/$c1", "LIKE")
         react(adminToken, "posts/$postA", "LIKE"); react(adminToken, "posts/$yPost/comments/$c2", "LIKE")
         react(xToken, "posts/$yPost", "LIKE"); react(xToken, "posts/$yPost/comments/$c0", "EMPATHY")   // X 자신의 반응 — 계정 키 행
@@ -127,6 +136,15 @@ class LeakWorld(private val http: LeakHttp, registry: NotificationSubscriptionRe
         tick()
         val p = parent?.let { ""","parentId":$it""" } ?: ""
         return http.post("/api/v1/boards/general/posts/$post/comments", token, """{"body":${json(text)},"authorId":"${author.id}"$p}""").ok().read<Number>("$.value.id").toLong()
+    }
+
+    /** 로그인하지 않은 쓰기 — 이름은 본문, 비밀은 헤더로만 (응답에 어느 쪽도 비밀이 없어야 한다) */
+    fun guestComment(text: String): Long {
+        tick()
+        return http.call(
+            org.springframework.http.HttpMethod.POST, "/api/v1/boards/general/posts/$yPost/comments", null,
+            """{"body":${json(text)},"guestName":"Guest$nonce"}""", idem = true, headers = mapOf("X-Board-Guest-Secret" to guestSecret),
+        ).ok().read<Number>("$.value.id").toLong()
     }
 
     private fun react(token: String, path: String, type: String) { tick(); http.put("/api/v1/boards/general/$path/reactions", token, """{"type":"$type"}""").ok() }

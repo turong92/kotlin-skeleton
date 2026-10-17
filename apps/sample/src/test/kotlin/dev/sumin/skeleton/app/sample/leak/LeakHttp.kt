@@ -16,10 +16,14 @@ class LeakHttp(private val mvc: MockMvc) {
 
     fun since(mark: Int): List<Captured> = log.drop(mark)
 
-    fun call(method: HttpMethod, path: String, token: String? = null, body: String? = null, idem: Boolean = false, record: Boolean = true): Captured {
+    fun call(
+        method: HttpMethod, path: String, token: String? = null, body: String? = null, idem: Boolean = false, record: Boolean = true,
+        headers: Map<String, String> = emptyMap(),
+    ): Captured {
         val request = MockMvcRequestBuilders.request(method, path)
         token?.let { request.header("Authorization", "Bearer $it") }
         if (idem) request.header("Idempotency-Key", UUID.randomUUID().toString())
+        headers.forEach { (name, value) -> request.header(name, value) }
         if (body != null) request.contentType(MediaType.APPLICATION_JSON).content(body)
         val response = mvc.perform(request).andReturn().response
         val headers = response.headerNames.associateWith { name -> response.getHeaders(name).joinToString(",") }
