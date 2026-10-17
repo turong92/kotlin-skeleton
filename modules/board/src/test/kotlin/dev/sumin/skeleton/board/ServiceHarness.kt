@@ -24,6 +24,8 @@ class ServiceHarness(
     val captcha: BoardCaptcha? = null,
     /** 비밀 해시 방식 — 기본은 설정(`props.guest.secret`)을 따르는 구현 */
     val secrets: BoardGuestSecrets = DefaultBoardGuestSecrets(props.guest.secret),
+    /** 판 저장소를 감싼다 - 겹침(경쟁) 시험이 사이에 끼어든다 */
+    wrapRevisions: (BoardRevisionRepository) -> BoardRevisionRepository = { it },
     /** 댓글 저장소를 감싼다 — 저장소가 author_ref 를 남기지 않는 경우 같은 것을 흉내 낸다 */
     wrapComments: (CommentRepository) -> CommentRepository = { it },
 ) {
@@ -32,7 +34,7 @@ class ServiceHarness(
     val posts = FakePostRepository(store)
     val comments = FakeCommentRepository(store)
     val reactionRepo = FakeReactionRepository(store)
-    val revisionRepo = FakeRevisionRepository(store)
+    val revisionRepo: BoardRevisionRepository = wrapRevisions(FakeRevisionRepository(store))
     private val time = TimeProvider.fixed(T0)
     private val rules = BoardContentRules(props)
     private val access = BoardAccess(boards, posts, comments, policy)
@@ -50,6 +52,9 @@ class ServiceHarness(
     val reactionService = ReactionService(access, comments, reactionRepo, support, policy, props, limiter, time)
 
     init { boards.create("general", "General", null, T0, settings) }
+
+    /** 지금 대기 중인 판의 버전(운영자가 본 값) - 판이 없으면 아무 값 */
+    fun v(target: RevisionTarget, id: Long): java.time.Instant = store.revisions[target to id]?.updatedAt ?: T0
 
     fun failure(block: () -> Unit): BoardErrorCode = assertFailsWith<BoardException> { block() }.errorCode as BoardErrorCode
 

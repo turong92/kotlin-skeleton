@@ -166,6 +166,8 @@ class JdbcPostRepository(
             if (rows > 0 && change.attachments != null) replaceAttachments(id, change.attachments!!)
             // 공개를 떠나는 글의 판은 같은 트랜잭션에서 버린다 (가려진 것의 판을 나중에 승인해 되살리는 길을 막는다)
             if (rows > 0 && change.status != null && change.status != PostStatus.PUBLISHED) discardRevision(jdbc, RevisionTarget.POST, id)
+            // 승인 대상이 아닌 사람의 직접 수정(운영자 포함)이 이긴다 - 대기 중이던 판은 같은 트랜잭션에서 버린다 (남으면 나중에 승인해 새 내용을 덮어쓴다)
+            if (rows > 0 && (change.title != null || change.body != null || change.attachments != null)) discardRevision(jdbc, RevisionTarget.POST, id)
             rows
         }!!
         return if (updated == 0) null else find(id)
@@ -294,14 +296,17 @@ class JdbcCommentRepository(
         return result
     }
 
+    /** 본문(과 첨부)을 고치고, 대기 중이던 판은 같은 트랜잭션에서 버린다 - 직접 수정이 이긴다 (남으면 나중에 승인해 새 내용을 덮어쓴다) */
     override fun updateContent(id: Long, body: String, attachments: List<String>?, now: Instant): Comment? {
-        if (attachments == null) return updateBody(id, body, now)
         val rows = tx.execute {
             val updated = jdbc.update(
-                "update board_comments set body = :body, attachment_count = :count, updated_at = :now where id = :id",
-                MapSqlParameterSource().addValue("id", id).addValue("body", body).addValue("count", attachments.size).addValue("now", dialect.instantParam(now)),
+                "update board_comments set body = :body, updated_at = :now" + (if (attachments != null) ", attachment_count = :count" else "") + " where id = :id",
+                MapSqlParameterSource().addValue("id", id).addValue("body", body).addValue("count", attachments?.size ?: 0).addValue("now", dialect.instantParam(now)),
             )
-            if (updated > 0) replaceAttachments(id, attachments)
+            if (updated > 0) {
+                if (attachments != null) replaceAttachments(id, attachments)
+                discardRevision(jdbc, RevisionTarget.COMMENT, id)
+            }
             updated
         }!!
         return if (rows == 0) null else find(id)
@@ -326,13 +331,7 @@ class JdbcCommentRepository(
     override fun guestSecretHash(id: Long): String? =
         jdbc.queryForList("select guest_secret_hash from board_comments where id = :id", mapOf("id" to id), String::class.java).firstOrNull()
 
-    override fun updateBody(id: Long, body: String, now: Instant): Comment? {
-        val rows = jdbc.update(
-            "update board_comments set body = :body, updated_at = :now where id = :id",
-            MapSqlParameterSource().addValue("id", id).addValue("body", body).addValue("now", dialect.instantParam(now)),
-        )
-        return if (rows == 0) null else find(id)
-    }
+    override fun updateBody(id: Long, body: String, now: Instant): Comment? = updateContent(id, body, null, now)
 
     override fun setStatus(id: Long, status: CommentStatus, now: Instant): Comment? = setStatus(id, status, now, null)
 
@@ -344,8 +343,8 @@ class JdbcCommentRepository(
             jdbc.queryForList("select id from board_posts where id = :post for update", mapOf("post" to postId), Long::class.java)
             val old = jdbc.queryForObject("select status from board_comments where id = :id for update", mapOf("id" to id), String::class.java)!!
             jdbc.update(
-                // 바꾼 쪽은 상태가 실제로 바뀔 때만 쓴다 (같은 상태를 다시 보내 운영자의 표시를 덮지 못하게) · 처음 공개되는 순간을 남긴다
-                "update board_comments set status = :status, updated_at = :now" + (if (moderatedBy != null && old != status.name) ", moderated_by = :by" else "") +
+                // 바꾼 쪽은 상태가 실제로 바뀔 때만 쓴다 (같은 상태를 다시 보내 운영자의 표시를 덮지 못하게) - 운영자의 결정은 상태가 같아도 기록한다(주인이 가린 것을 운영자가 다시 정하면 운영자의 것) · 처음 공개되는 순간을 남긴다
+                "update board_comments set status = :status, updated_at = :now" + (if (moderatedBy != null && (old != status.name || moderatedBy == ModeratedBy.MODERATOR)) ", moderated_by = :by" else "") +
                     (if (status == CommentStatus.PUBLISHED) ", published_at = coalesce(published_at, :now)" else "") + " where id = :id",
                 MapSqlParameterSource().addValue("id", id).addValue("status", status.name).addValue("now", dialect.instantParam(now))
                     .addValue("by", moderatedBy?.name),

@@ -46,6 +46,10 @@ data class Revision(
     val updatedAt: Instant,
 )
 
+/** 판의 버전 비교 — DB 시각의 정밀도(마이크로초)로 맞춘다 */
+fun Revision.sameVersion(other: Instant): Boolean =
+    updatedAt.truncatedTo(java.time.temporal.ChronoUnit.MICROS) == other.truncatedTo(java.time.temporal.ChronoUnit.MICROS)
+
 /** 게시판 설정 — 새 기능은 모두 꺼진 채 시작한다 */
 data class BoardSettings(
     val guestWrite: GuestWrite = GuestWrite.NONE,

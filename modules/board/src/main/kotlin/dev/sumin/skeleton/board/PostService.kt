@@ -2,6 +2,7 @@ package dev.sumin.skeleton.board
 
 import dev.sumin.skeleton.common.author.AuthorCard
 import dev.sumin.skeleton.common.time.TimeProvider
+import java.time.Instant
 
 class PostService(
     private val access: BoardAccess,
@@ -113,19 +114,29 @@ class PostService(
         PostListItem(id, boardCode, authorId, title, body.take(properties.excerptLength), status, pinned, viewCount, commentCount, reactionCount, attachments.size, createdAt, updatedAt, authorRef, guestName)
 
     /** 판 승인 · 거절(운영자). 승인이면 공개본이 바뀌므로 `PostUpdated` 도 나간다 */
-    fun decideRevision(caller: BoardCaller, boardCode: String, postId: Long, decision: RevisionDecision): PostDetailView {
+    fun decideRevision(caller: BoardCaller, boardCode: String, postId: Long, decision: RevisionDecision, version: Instant?): PostDetailView {
         if (!policy.canModerate(caller)) forbidden("Only moderators decide revisions")
         val post = access.post(caller, boardCode, postId)
+        val seen = version ?: invalid("submittedAt (the version of the edit you reviewed) is required")
         val actor = actorOf(caller)
-        if (revisions.find(RevisionTarget.POST, listOf(post.id)).isEmpty()) throw BoardException(BoardErrorCode.POST_NOT_FOUND, "No pending revision for post $postId")
+        val none = BoardException(BoardErrorCode.POST_NOT_FOUND, "No pending revision for post $postId")
+        val changed = BoardException(BoardErrorCode.REVISION_CHANGED, "The edit changed while you were reviewing it - review it again")
         if (decision == RevisionDecision.APPROVE) {
-            if (!revisions.apply(RevisionTarget.POST, post.id, time.now())) throw BoardException(BoardErrorCode.POST_NOT_FOUND, "No pending revision for post $postId")
+            when (revisions.apply(RevisionTarget.POST, post.id, time.now(), seen)) {
+                RevisionWrite.NONE -> throw none
+                RevisionWrite.CHANGED -> throw changed
+                RevisionWrite.DONE -> Unit
+            }
             val updated = posts.find(post.id) ?: notFound(postId)
             events.publish(PostUpdated(updated, actor))
             events.publish(RevisionDecided(RevisionTarget.POST, post.id, boardCode, post.id, RevisionOutcome.APPROVED, actor))
             return detail(caller, updated)
         }
-        revisions.delete(RevisionTarget.POST, post.id)
+        when (revisions.reject(RevisionTarget.POST, post.id, seen)) {
+            RevisionWrite.NONE -> throw none
+            RevisionWrite.CHANGED -> throw changed
+            RevisionWrite.DONE -> Unit
+        }
         events.publish(RevisionDecided(RevisionTarget.POST, post.id, boardCode, post.id, RevisionOutcome.REJECTED, actor))
         return detail(caller, post)
     }
@@ -136,11 +147,12 @@ class PostService(
         if (!policy.canEditPost(caller, post)) forbidden("Not allowed to edit post $postId")
         request.status?.let { if (it !in WRITABLE_STATUSES) invalid("status must be DRAFT or PUBLISHED (moderators use /moderation)") }
         val attachments = request.attachments?.let { rules.attachments(it) }
-        val existing = revisions.find(RevisionTarget.POST, listOf(post.id))[post.id]
+        val board = access.board(boardCode)
+        // 판이 있을 수 있는 게시판(승인 설정이 켜진)에서만 묻는다 - 기본 설정의 수정은 쿼리가 늘지 않는다. 꺼진 뒤 남은 판은 직접 수정이 저장소 트랜잭션에서 함께 지운다
+        val existing = if (revisionsOn(board)) revisions.find(RevisionTarget.POST, listOf(post.id))[post.id] else null
         // 옛 키를 그대로 다시 보낸 수정은 통과 — 공개본에도 판에도 없던 새 키만 본다
         authorRules.rejectAccountIdKeys(caller, attachments.orEmpty().filterNot { it in post.attachments || (existing != null && it in existing.attachments) })
         if (!attachments.isNullOrEmpty() && !policy.canAttach(caller, attachments)) forbidden("Not allowed to attach these files")
-        val board = access.board(boardCode)
         request.commentApproval?.let { requireOwnerModerates(board) }
         val content = request.title != null || request.body != null || attachments != null
         // 승인 대상 작성자가 공개된 글을 고치면 공개본은 그대로 두고 고친 내용만 판으로 대기한다
@@ -152,9 +164,12 @@ class PostService(
         }
         // 임시저장을 공개로 바꾸는 것은 새 글이 나오는 순간이라 승인 대상이면 대기로 간다
         // 대기 중인 글을 쓴 사람이 스스로 공개로 바꿀 수는 없다 — 대기 그대로 (공개는 운영자 승인)
-        val status = if (request.status == PostStatus.PUBLISHED && post.status != PostStatus.PUBLISHED &&
-            policy.needsApproval(board, null, caller, ApprovalTarget.POST)
-        ) PostStatus.PENDING else request.status
+        // 승인 설정을 끈 뒤에도 이미 대기 중인 글은 대기에 남는다(결정 14) - 스스로 공개할 수 없다
+        val status = when {
+            request.status == PostStatus.PUBLISHED && post.status == PostStatus.PENDING && !policy.canModerate(caller) -> PostStatus.PENDING
+            request.status == PostStatus.PUBLISHED && post.status == PostStatus.DRAFT && policy.needsApproval(board, null, caller, ApprovalTarget.POST) -> PostStatus.PENDING
+            else -> request.status
+        }
         val change = PostChange(
             title = request.title?.let { rules.title(it) },
             body = request.body?.let { rules.postBody(it) },
@@ -165,8 +180,8 @@ class PostService(
         val updated = posts.update(post.id, change, time.now()) ?: notFound(postId)
         events.publish(PostUpdated(updated, actorOf(caller)))
         if (updated.status != post.status) events.publish(PostStatusChanged(updated, post.status, updated.status, actorOf(caller)))
-        // 승인 대상이 아닌 사람의 수정(운영자 포함)이 이긴다 — 대기 중이던 판은 함께 버린다
-        if (existing != null && (content || updated.status != PostStatus.PUBLISHED)) discardRevision(post, actorOf(caller))
+        // 승인 대상이 아닌 사람의 수정(운영자 포함)이 이긴다 — 대기 중이던 판은 저장소가 같은 트랜잭션에서 버렸고, 여기서는 알린다
+        if (existing != null && (content || updated.status != PostStatus.PUBLISHED)) announceDiscard(post, actorOf(caller))
         return detail(caller, updated)
     }
 
@@ -177,15 +192,15 @@ class PostService(
             title ?: existing?.title ?: post.title, body ?: existing?.body ?: post.body, attachments ?: existing?.attachments ?: post.attachments,
             existing?.createdAt ?: now, now,
         )
-        val replaced = revisions.submit(rev)
-        events.publish(RevisionSubmitted(RevisionTarget.POST, post.id, post.boardCode, post.id, replaced, actor))
-        return rev
+        val result = revisions.submit(rev)
+        // 잠근 뒤 보니 글이 이미 가려졌거나 지워졌다 - 판을 넣지 않는다. 더 이상 고칠 수 없는 글이라 없는 것과 같게 답한다
+        if (result == RevisionSubmit.TARGET_GONE) throw BoardException(BoardErrorCode.POST_NOT_FOUND, "Post is no longer public: ${post.id}")
+        events.publish(RevisionSubmitted(RevisionTarget.POST, post.id, post.boardCode, post.id, result == RevisionSubmit.REPLACED, actor))
+        // 저장된 판(DB 가 매긴 시각 = 버전)을 돌려준다
+        return revisions.find(RevisionTarget.POST, listOf(post.id))[post.id] ?: rev
     }
 
-    private fun discardRevision(post: Post, actor: BoardActor) {
-        revisions.delete(RevisionTarget.POST, post.id)
-        events.publish(RevisionDecided(RevisionTarget.POST, post.id, post.boardCode, post.id, RevisionOutcome.DISCARDED, actor))
-    }
+    private fun revisionsOn(board: Board) = board.settings.postApproval != ApprovalMode.OFF || board.settings.commentApproval != ApprovalMode.OFF
 
     /** 공개를 떠나는 글에 대기 중인 판이 있는가 — 저장소가 같은 트랜잭션에서 지우므로 바꾸기 **전에** 본다 */
     private fun hadRevisionBeingDropped(post: Post, newStatus: PostStatus?): Boolean =
@@ -202,10 +217,10 @@ class PostService(
         if (post.status !in GUEST_EDITABLE) forbidden(BoardGuests.FORBIDDEN_MESSAGE)
         if (request.status != null && request.status != post.status) invalid("guest posts cannot change status")
         val attachments = request.attachments?.let { rules.attachments(it) }
-        val existing = revisions.find(RevisionTarget.POST, listOf(post.id))[post.id]
+        val board = access.board(boardCode)
+        val existing = if (revisionsOn(board)) revisions.find(RevisionTarget.POST, listOf(post.id))[post.id] else null
         if (!attachments.isNullOrEmpty() && !policy.canGuestAttach(attachments.filterNot { it in post.attachments || (existing != null && it in existing.attachments) })) forbidden("Not allowed to attach these files")
         val content = request.title != null || request.body != null || attachments != null
-        val board = access.board(boardCode)
         if (content && post.status == PostStatus.PUBLISHED && policy.needsApproval(board, null, null, ApprovalTarget.POST)) {
             val rev = submitRevision(post, existing, request.title?.let { rules.title(it) }, request.body?.let { rules.postBody(it) }, attachments, GUEST)
             return detail(null, post, rev)   // 비회원은 다시 읽을 때 판을 보지 못한다 — 이 응답을 화면이 들고 있는다
@@ -217,7 +232,7 @@ class PostService(
         )
         val updated = posts.update(post.id, change, time.now()) ?: notFound(postId)
         events.publish(PostUpdated(updated, GUEST))
-        if (existing != null && content) discardRevision(post, GUEST)
+        if (existing != null && content) announceDiscard(post, GUEST)
         return detail(null, updated)
     }
 
@@ -272,17 +287,18 @@ class PostService(
     private fun detail(caller: BoardCaller?, post: Post, revision: Revision? = null): PostDetailView {
         val publicId = BoardAuthors.publicId(post.authorRef, post.authorId, BoardAuthors.POST_ROW, post.id, authorRules.active)
         val card = if (BoardAuthors.isGuest(post.authorId)) AuthorCard(post.guestName) else authors.one(post.boardCode, publicId)
-        val manage = caller != null && policy.canManageComments(caller, post, access.board(post.boardCode))
+        val board = if (caller != null) access.board(post.boardCode) else null
+        val manage = caller != null && board != null && policy.canManageComments(caller, post, board)
         return PostDetailView(
             post, reactions.state(ReactionTarget.POST, post.id, caller), publicId,
             BoardAuthors.isDeleted(post.authorId) || card?.deleted == true, caller?.accountId == post.authorId, card, manage,
-            (revision ?: visibleRevision(caller, post))?.view(),
+            (revision ?: board?.let { visibleRevision(caller, post, it) })?.view(),
         )
     }
 
     /** 쓴 회원 · 운영자에게만 판을 보인다 (남에게는 null — 판이 있다는 표시도 없다) */
-    private fun visibleRevision(caller: BoardCaller?, post: Post): Revision? =
-        if (caller != null && (caller.moderator || caller.accountId == post.authorId)) revisions.find(RevisionTarget.POST, listOf(post.id))[post.id] else null
+    private fun visibleRevision(caller: BoardCaller?, post: Post, board: Board): Revision? =
+        if (revisionsOn(board) && caller != null && (caller.moderator || caller.accountId == post.authorId)) revisions.find(RevisionTarget.POST, listOf(post.id))[post.id] else null
 
     /** 글마다 댓글 승인 규칙을 고르는 것은 글 주인이 댓글을 관리하는 게시판에서만 */
     private fun requireOwnerModerates(board: Board) {

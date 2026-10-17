@@ -35,7 +35,7 @@ class ReactionService(
     fun reactToComment(caller: BoardCaller, boardCode: String, postId: Long, commentId: Long, type: String?): ReactionState {
         val code = support.requireType(type)
         val post = access.post(caller, boardCode, postId)
-        val comment = access.comment(post, commentId)
+        val comment = visibleComment(caller, boardCode, post, commentId)
         open(caller, post.status == PostStatus.PUBLISHED && comment.status == CommentStatus.PUBLISHED)
         if (!reactions.react(ReactionTarget.COMMENT, comment.id, caller.accountId, code, properties.reaction.mode, time.now())) {
             throw BoardException(BoardErrorCode.COMMENT_NOT_FOUND, "Comment not found: $commentId")
@@ -46,11 +46,19 @@ class ReactionService(
     fun removeFromComment(caller: BoardCaller, boardCode: String, postId: Long, commentId: Long, type: String?): ReactionState {
         val code = type?.let { support.requireType(it) }
         val post = access.post(caller, boardCode, postId)
-        val comment = access.comment(post, commentId)
+        val comment = visibleComment(caller, boardCode, post, commentId)
         if (!reactions.remove(ReactionTarget.COMMENT, comment.id, caller.accountId, code)) {
             throw BoardException(BoardErrorCode.COMMENT_NOT_FOUND, "Comment not found: $commentId")
         }
         return support.state(ReactionTarget.COMMENT, comment.id, caller)
+    }
+
+    /** 못 보는 행(대기 · 한 번도 공개된 적 없는 거절 · 지움)은 없는 것과 같은 답 - 다른 곳(수정 · 지우기)과 같다 */
+    private fun visibleComment(caller: BoardCaller, boardCode: String, post: Post, commentId: Long): Comment {
+        val comment = access.comment(post, commentId)
+        val sees = PendingVisibility(all = policy.canManageComments(caller, post, access.board(boardCode)), authorId = caller.accountId).sees(comment)
+        if (!sees) throw BoardException(BoardErrorCode.COMMENT_NOT_FOUND, "Comment not found: $commentId")
+        return comment
     }
 
     private fun open(caller: BoardCaller, targetOpen: Boolean) {

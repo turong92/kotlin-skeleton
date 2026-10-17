@@ -2,6 +2,7 @@ package dev.sumin.skeleton.board
 
 import dev.sumin.skeleton.common.author.AuthorCard
 import dev.sumin.skeleton.common.time.TimeProvider
+import java.time.Instant
 import org.slf4j.LoggerFactory
 
 /**
@@ -83,7 +84,8 @@ class CommentService(
     fun list(caller: BoardCaller?, boardCode: String, postId: Long, page: Int, size: Int, sort: CommentSort): PageResult<CommentView> {
         val post = access.post(caller, boardCode, postId)
         // 승인 대기 댓글은 운영자 · 관리하는 글 주인 · 쓴 회원에게만 — 그 밖의 사람에게는 스레드에 자리도 없고 replyCount 에도 들어가지 않는다
-        val pending = pendingVisibility(caller, access.board(boardCode), post)
+        val board = access.board(boardCode)
+        val pending = pendingVisibility(caller, board, post)
         val roots = comments.rootPage(CommentRootQuery(post.id, page, properties.pageSize(size), sort, pending))
         if (roots.values.isEmpty()) return PageResult(emptyList(), roots.totalElements)
         val descendants = comments.descendants(roots.values.map { it.id }).filter { pending.sees(it) }
@@ -93,7 +95,7 @@ class CommentService(
         val names = authors.of(boardCode, publicIds.values)
         val childrenOf = descendants.groupBy { it.parentId }
         val repliesOf = descendants.groupBy { it.rootId }
-        val revs = if (caller == null) emptyMap() else revisions.find(RevisionTarget.COMMENT, (roots.values + descendants).map { it.id })
+        val revs = if (caller == null || !revisionsOn(board)) emptyMap() else revisions.find(RevisionTarget.COMMENT, (roots.values + descendants).map { it.id })
         val files = attachmentsOf((roots.values + descendants).map { it.id })
         fun view(c: Comment, replies: List<CommentView>) =
             view(
@@ -112,11 +114,13 @@ class CommentService(
         val post = access.post(caller, boardCode, postId)
         if (caller == null) return updateAsGuest(boardCode, post, commentId, body, guest, attachments)
         val comment = access.comment(post, commentId)
-        if (!policy.canEditComment(caller, comment)) throw BoardException(BoardErrorCode.FORBIDDEN, "Not allowed to edit comment $commentId")
         val board = access.board(boardCode)
+        if (!pendingVisibility(caller, board, post).sees(comment)) notFound(commentId)   // 못 보는 행(거절 · 대기 중 지움)은 없는 것과 같은 답
+        if (!policy.canEditComment(caller, comment)) throw BoardException(BoardErrorCode.FORBIDDEN, "Not allowed to edit comment $commentId")
         val text = editedText(body, attachments, comment)
-        val keys = attachments?.let { rules.commentAttachments(it) }
-        val existing = revisions.find(RevisionTarget.COMMENT, listOf(comment.id))[comment.id]
+        // 첨부를 끈 게시판(상한 0)에서는 빈 목록도 「첨부를 건드리지 않음」이다 - 첨부를 모르는 저장소가 빈 목록에 500 을 내지 않고, 저장된 옛 첨부를 지우지도 않는다
+        val keys = attachments?.let { rules.commentAttachments(it) }?.takeIf { properties.commentMaxAttachments > 0 }
+        val existing = if (revisionsOn(board)) revisions.find(RevisionTarget.COMMENT, listOf(comment.id))[comment.id] else null
         if (keys != null) {
             val known = attachmentsOf(listOf(comment.id))[comment.id].orEmpty() + existing?.attachments.orEmpty()
             authorRules.rejectAccountIdKeys(caller, keys.filterNot { it in known })   // 옛 키를 그대로 다시 보낸 수정은 통과 — 새 키만 본다
@@ -131,7 +135,7 @@ class CommentService(
         val hadRevision = existing != null
         val updated = comments.updateContent(comment.id, text, keys, time.now()) ?: notFound(commentId)
         events.publish(CommentUpdated(updated, boardCode, actorOf(caller)))
-        if (hadRevision) { revisions.delete(RevisionTarget.COMMENT, comment.id); announceDiscard(boardCode, updated, actorOf(caller)) }
+        if (hadRevision) announceDiscard(boardCode, updated, actorOf(caller))   // 판은 저장소가 같은 트랜잭션에서 지웠다
         return single(caller, boardCode, updated, pending)
     }
 
@@ -146,8 +150,8 @@ class CommentService(
         if (comment.status !in GUEST_EDITABLE) throw BoardException(BoardErrorCode.FORBIDDEN, BoardGuests.FORBIDDEN_MESSAGE)
         val board = access.board(boardCode)
         val text = editedText(body, attachments, comment)
-        val keys = attachments?.let { rules.commentAttachments(it) }
-        val existing = revisions.find(RevisionTarget.COMMENT, listOf(comment.id))[comment.id]
+        val keys = attachments?.let { rules.commentAttachments(it) }?.takeIf { properties.commentMaxAttachments > 0 }
+        val existing = if (revisionsOn(board)) revisions.find(RevisionTarget.COMMENT, listOf(comment.id))[comment.id] else null
         if (!keys.isNullOrEmpty()) {
             val known = attachmentsOf(listOf(comment.id))[comment.id].orEmpty() + existing?.attachments.orEmpty()
             if (!policy.canGuestAttach(keys.filterNot { it in known })) throw BoardException(BoardErrorCode.FORBIDDEN, "Not allowed to attach these files")
@@ -159,7 +163,7 @@ class CommentService(
         val hadRevision = existing != null
         val updated = comments.updateContent(comment.id, text, keys, time.now()) ?: notFound(commentId)
         events.publish(CommentUpdated(updated, boardCode, GUEST))
-        if (hadRevision) { revisions.delete(RevisionTarget.COMMENT, comment.id); announceDiscard(boardCode, updated, GUEST) }
+        if (hadRevision) announceDiscard(boardCode, updated, GUEST)
         return single(null, boardCode, updated, PendingVisibility.NONE)
     }
 
@@ -167,6 +171,7 @@ class CommentService(
         val post = access.post(caller, boardCode, postId)
         if (caller == null) return deleteAsGuest(boardCode, post, commentId, guest)
         val comment = access.comment(post, commentId)
+        if (!pendingVisibility(caller, access.board(boardCode), post).sees(comment)) notFound(commentId)
         if (!policy.canDeleteComment(caller, comment)) throw BoardException(BoardErrorCode.FORBIDDEN, "Not allowed to delete comment $commentId")
         if (comment.status != CommentStatus.DELETED) {
             val dropped = hadRevisionBeingDropped(comment, CommentStatus.DELETED)
@@ -234,22 +239,33 @@ class CommentService(
     }
 
     /** 판 승인 · 거절 — 댓글을 관리하는 쪽(운영자 · 글 주인)만. 승인이면 공개본이 바뀌므로 `CommentUpdated` 도 나간다 */
-    fun decideRevision(caller: BoardCaller?, boardCode: String, postId: Long, commentId: Long, decision: RevisionDecision, guest: GuestContext? = null): CommentView {
+    fun decideRevision(
+        caller: BoardCaller?, boardCode: String, postId: Long, commentId: Long, decision: RevisionDecision, version: Instant?, guest: GuestContext? = null,
+    ): CommentView {
         val board = access.board(boardCode)
         val post = access.post(caller, boardCode, postId)
         val by = manager(caller, board, post, guest)
         val comment = access.comment(post, commentId)
+        val seen = version ?: throw BoardException(BoardErrorCode.CONTENT_INVALID, "submittedAt (the version of the edit you reviewed) is required")
         val actor = BoardActor(if (by == ModeratedBy.OWNER) BoardActorKind.OWNER else BoardActorKind.MODERATOR, caller?.accountId)
         val none = BoardException(BoardErrorCode.COMMENT_NOT_FOUND, "No pending revision for comment $commentId")
-        if (revisions.find(RevisionTarget.COMMENT, listOf(comment.id)).isEmpty()) throw none
+        val changed = BoardException(BoardErrorCode.REVISION_CHANGED, "The edit changed while you were reviewing it - review it again")
         var current = comment
         val outcome = if (decision == RevisionDecision.APPROVE) {
-            if (!revisions.apply(RevisionTarget.COMMENT, comment.id, time.now())) throw none
+            when (revisions.apply(RevisionTarget.COMMENT, comment.id, time.now(), seen)) {
+                RevisionWrite.NONE -> throw none
+                RevisionWrite.CHANGED -> throw changed
+                RevisionWrite.DONE -> Unit
+            }
             current = comments.find(comment.id) ?: notFound(commentId)
             events.publish(CommentUpdated(current, boardCode, actor))
             RevisionOutcome.APPROVED
         } else {
-            revisions.delete(RevisionTarget.COMMENT, comment.id)
+            when (revisions.reject(RevisionTarget.COMMENT, comment.id, seen)) {
+                RevisionWrite.NONE -> throw none
+                RevisionWrite.CHANGED -> throw changed
+                RevisionWrite.DONE -> Unit
+            }
             RevisionOutcome.REJECTED
         }
         events.publish(RevisionDecided(RevisionTarget.COMMENT, comment.id, boardCode, post.id, outcome, actor))
@@ -277,13 +293,18 @@ class CommentService(
     private fun submitRevision(board: Board, post: Post, comment: Comment, text: String, keys: List<String>?, actor: BoardActor): Revision {
         val existing = revisions.find(RevisionTarget.COMMENT, listOf(comment.id))[comment.id]
         val now = time.now()
-        val publicKeys = attachmentsOf(listOf(comment.id))[comment.id].orEmpty()
+        // 저장된 공개 첨부를 설정과 무관하게 읽는다 - 첨부 상한을 0 으로 되돌린 뒤에도 본문만 고친 판이 승인될 때 첨부가 지워지지 않게
+        val publicKeys = comments.attachments(listOf(comment.id))[comment.id].orEmpty()
         val rev = Revision(RevisionTarget.COMMENT, comment.id, board.code, post.id, null, text, keys ?: existing?.attachments ?: publicKeys, existing?.createdAt ?: now, now)
-        val replaced = revisions.submit(rev)
-        events.publish(RevisionSubmitted(RevisionTarget.COMMENT, comment.id, board.code, post.id, replaced, actor))
-        notifyRevision(board, post, comment)
-        return rev
+        val result = revisions.submit(rev)
+        // 잠근 뒤 보니 댓글이 이미 가려졌거나 지워졌다 - 판을 넣지 않는다(없는 것과 같게 답한다)
+        if (result == RevisionSubmit.TARGET_GONE) notFound(comment.id)
+        events.publish(RevisionSubmitted(RevisionTarget.COMMENT, comment.id, board.code, post.id, result == RevisionSubmit.REPLACED, actor))
+        notifyRevision(board, post, comment, text)
+        return revisions.find(RevisionTarget.COMMENT, listOf(comment.id))[comment.id] ?: rev
     }
+
+    private fun revisionsOn(board: Board) = board.settings.postApproval != ApprovalMode.OFF || board.settings.commentApproval != ApprovalMode.OFF
 
     private fun hadRevisionBeingDropped(comment: Comment, newStatus: CommentStatus): Boolean =
         comment.status == CommentStatus.PUBLISHED && newStatus != CommentStatus.PUBLISHED &&
@@ -293,12 +314,12 @@ class CommentService(
         events.publish(RevisionDecided(RevisionTarget.COMMENT, comment.id, boardCode, comment.postId, RevisionOutcome.DISCARDED, actor))
 
     /** 고친 내용이 대기로 들어왔다 — 댓글을 관리하는 글 주인(회원)에게만 `comment.pending` (payload `revision: true`) */
-    private fun notifyRevision(board: Board, post: Post, comment: Comment) {
+    private fun notifyRevision(board: Board, post: Post, comment: Comment, revisionText: String) {
         val recipient = post.authorId
         if (!board.settings.ownerModeratesComments || recipient == comment.authorId || BoardAuthors.isGuest(recipient)) return
         try {
             val publicId = publicId(comment, authorRules.active)
-            notifier.commentPending(BoardCommentNotice(recipient, post, comment, comment.parentId?.let { comments.find(it) }, publicId, card(comment, authors.one(board.code, publicId))?.name, revision = true))
+            notifier.commentPending(BoardCommentNotice(recipient, post, comment, comment.parentId?.let { comments.find(it) }, publicId, card(comment, authors.one(board.code, publicId))?.name, revision = true, revisionBody = revisionText))
         } catch (e: Exception) {
             log.warn("board revision notification failed (comment {}): {}", comment.id, e.toString())
         }
@@ -336,7 +357,7 @@ class CommentService(
     private fun guestOwned(post: Post, commentId: Long, ctx: GuestContext): Comment {
         val comment = access.comment(post, commentId)
         if (guests.verify(ctx, "c${comment.id}", if (BoardAuthors.isGuest(comment.authorId)) comments.guestSecretHash(comment.id) else null)) return comment
-        if (comment.status == CommentStatus.PENDING) notFound(commentId)
+        if (comment.status == CommentStatus.PENDING || !comment.everPublished) notFound(commentId)   // 한 번도 공개된 적 없는 행은 존재를 알리지 않는다
         throw BoardException(BoardErrorCode.FORBIDDEN, BoardGuests.FORBIDDEN_MESSAGE)
     }
 

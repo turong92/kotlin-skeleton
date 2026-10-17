@@ -33,6 +33,30 @@ class RedisFixedWindowRateLimitStoreTest {
     }
 
     @Test
+    fun `release gives one count back on the same prefixed key as the consume, and a failing Redis never throws`() {
+        val released = mutableListOf<String>()
+        val counter = object : RedisFixedWindowCounter {
+            override fun increment(key: String, windowMillis: Long): Long = 1
+            override fun decrement(key: String) { released += key }
+        }
+        val store = RedisFixedWindowRateLimitStore(counter, RedisKeyPrefixer("app"), RedisRateLimitProperties(keyNamespace = "api"))
+        store.release("board:guest-secret:row:p1", 1000, Instant.ofEpochMilli(2345))
+        assertThat(released).containsExactly("app:rate-limit:api:board:guest-secret:row:p1:2000")
+
+        val broken = object : RedisFixedWindowCounter {
+            override fun increment(key: String, windowMillis: Long): Long = 1
+            override fun decrement(key: String) = throw IllegalStateException("down")
+        }
+        RedisFixedWindowRateLimitStore(broken, RedisKeyPrefixer("app"), RedisRateLimitProperties()).release("k", 1000, Instant.ofEpochMilli(1))
+    }
+
+    @Test
+    fun `a counter that cannot give a count back leaves the store consuming as before`() {
+        val store = RedisFixedWindowRateLimitStore(RecordingCounter(1), RedisKeyPrefixer("app"), RedisRateLimitProperties())
+        store.release("k", 1000, Instant.ofEpochMilli(1))   // 기본 decrement 는 아무것도 하지 않는다
+    }
+
+    @Test
     fun `the same key in two projects is two counters`() {
         val counter = RecordingCounter(1)
         val store = RedisFixedWindowRateLimitStore(counter, RedisKeyPrefixer("app"), RedisRateLimitProperties(keyNamespace = "api"))

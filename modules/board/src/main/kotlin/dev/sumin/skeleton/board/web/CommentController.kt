@@ -159,7 +159,7 @@ class CommentController(
             Response.ok(
                 service.decideRevision(
                     w.caller, code, postId, commentId,
-                    request.decision ?: throw BoardException(BoardErrorCode.CONTENT_INVALID, "decision must be APPROVE or REJECT"), w.guest,
+                    request.decision ?: throw BoardException(BoardErrorCode.CONTENT_INVALID, "decision must be APPROVE or REJECT"), request.submittedAt, w.guest,
                 ).toResponse(),
             )
         }

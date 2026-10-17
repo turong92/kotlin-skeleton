@@ -90,7 +90,7 @@ class CommentAttachmentTest {
         assertEquals("사진", edited.pendingRevision!!.body, "a pictures-only edit keeps the text")
         assertEquals(listOf("k/old.png"), h.commentService.list(BoardCaller("acc_third"), "general", post, 0, 10, CommentSort.OLDEST).values.single().attachments)
 
-        val approved = h.commentService.decideRevision(owner, "general", post, c.id, RevisionDecision.APPROVE)
+        val approved = h.commentService.decideRevision(owner, "general", post, c.id, RevisionDecision.APPROVE, h.v(RevisionTarget.COMMENT, c.id))
         assertEquals(listOf("k/new.png"), approved.attachments)
         assertTrue(h.store.revisions.isEmpty())
     }

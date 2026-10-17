@@ -49,7 +49,7 @@ class JdbcCommentAttachmentDbTest {
         val post = db.newPost(board)
         val a = db.comments.insert(NewComment(post.id, null, null, 0, "acc_a", "a", T0, attachments = listOf("old")))!!
         revisions.submit(Revision(RevisionTarget.COMMENT, a.id, board, post.id, null, "a-new", listOf("new1", "new2"), T0, T0))
-        revisions.apply(RevisionTarget.COMMENT, a.id, T0.plusSeconds(5))
+        revisions.apply(RevisionTarget.COMMENT, a.id, T0.plusSeconds(5), revisions.find(RevisionTarget.COMMENT, listOf(a.id)).getValue(a.id).updatedAt)
         assertEquals(listOf("new1", "new2"), db.comments.attachments(listOf(a.id))[a.id])
         assertEquals("a-new", db.comments.find(a.id)!!.body)
         assertEquals(2L, db.scalar("select attachment_count from board_comments where id = :id", "id" to a.id))

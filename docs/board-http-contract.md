@@ -25,6 +25,7 @@ No login. Create/edit/delete with the same paths as members:
 - header **`X-Board-Guest-Secret: <secret>`** on create, edit, delete, comment approval and revision decisions. Never put it in the URL, a cookie or the body. `PASSWORD`: the person types at least 4 characters, at most 72 bytes (do not store it); `TOKEN`: the app generates 32..128 characters of `[A-Za-z0-9_-]` (43 chars of base64url) and keeps it.
 - a board answers an anonymous write with `401 COMMON.UNAUTHORIZED` unless its `guestWrite` allows it (`COMMENTS`: comments only; `ALL`: posts too). A signed-in caller that sends `guestName` gets `400`; a guest cannot send `authorId` (`403`) or save a draft.
 - errors: wrong secret / someone else's row / a member's row / no header → the same `403 BOARD.FORBIDDEN` (do not try to tell them apart); too many guesses or writes → `429 BOARD.RATE_LIMITED`; captcha → `400 BOARD.CAPTCHA_FAILED`.
+- A comment that was never public (waiting, rejected, deleted while waiting) is `404` for everyone but its writer and the managers — also for edit, delete and reactions; a guest's wrong secret on such a row reads `404`, not `403`.
 - A guest cannot read their own waiting post/comment back (reads never look at the secret): **keep the create/edit response** and show it.
 - Create is idempotent per `Idempotency-Key`; send a fresh key per user action (a new `captchaToken` on a retry still counts as the same request).
 
@@ -37,7 +38,7 @@ A new post/comment from a writer the board makes wait comes back with `status: P
 
 ## Edited versions
 
-If the writer must wait, editing something already public does **not** change the public text: `PATCH` returns the public item plus `pendingRevision: {title?, body, attachments, submittedAt}`. Say 「고친 내용은 승인 뒤에 보여요」. A second edit overwrites the waiting one. Managers compare public vs `pendingRevision` and decide with `PUT …/posts/{id}/revision` or `PUT …/comments/{cid}/revision` `{decision: "APPROVE"|"REJECT"}`. Lists: `GET /{code}/posts?revision=pending` (moderator; summary + `pendingRevision`), `GET …/comments?revision=pending` (managers). Hiding/deleting the public item throws the waiting edit away.
+If the writer must wait, editing something already public does **not** change the public text: `PATCH` returns the public item plus `pendingRevision: {title?, body, attachments, submittedAt}`. Say 「고친 내용은 승인 뒤에 보여요」. A second edit overwrites the waiting one. Managers compare public vs `pendingRevision` and decide with `PUT …/posts/{id}/revision` or `PUT …/comments/{cid}/revision` `{decision: "APPROVE"|"REJECT", submittedAt}` — **`submittedAt` is the version of the edit on screen** (`pendingRevision.submittedAt`, required). If the writer overwrote the edit meanwhile the answer is `409 BOARD.REVISION_CHANGED` and nothing happens: show the new edit and decide again. Editing a post or comment that was hidden or deleted in the meantime is `404` (no revision is stored). Lists: `GET /{code}/posts?revision=pending` (moderator; summary + `pendingRevision`), `GET …/comments?revision=pending` (managers). Hiding/deleting the public item throws the waiting edit away.
 
 ## Comment pictures
 

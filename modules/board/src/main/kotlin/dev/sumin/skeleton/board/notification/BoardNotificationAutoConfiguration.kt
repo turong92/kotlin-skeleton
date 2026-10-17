@@ -23,7 +23,7 @@ fun interface BoardNotificationFormatter {
 class DefaultBoardNotificationFormatter : BoardNotificationFormatter {
     override fun format(notice: BoardCommentNotice): BoardNotificationMessage {
         val title = if (notice.parent == null) "New comment on your post: ${shorten(notice.post.title, 60)}" else "New reply to your comment"
-        return BoardNotificationMessage(title, shorten(notice.comment.body, 140))
+        return BoardNotificationMessage(title, shorten(notice.revisionBody ?: notice.comment.body, 140))
     }
 
     private fun shorten(text: String, max: Int): String {

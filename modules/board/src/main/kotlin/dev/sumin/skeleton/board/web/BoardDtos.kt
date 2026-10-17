@@ -159,7 +159,8 @@ data class CommentResponse(
 
 data class RevisionResponse(val title: String?, val body: String, val attachments: List<String>, val submittedAt: Instant)
 
-data class RevisionDecisionRequest(val decision: RevisionDecision? = null)
+/** [submittedAt] 은 운영자가 본 판의 버전(응답의 `pendingRevision.submittedAt`) - 그 사이 작성자가 덮어썼으면 `409 BOARD.REVISION_CHANGED` */
+data class RevisionDecisionRequest(val decision: RevisionDecision? = null, val submittedAt: Instant? = null)
 
 data class ReactionStateResponse(val counts: Map<String, Long>, val myReactions: Set<String>)
 

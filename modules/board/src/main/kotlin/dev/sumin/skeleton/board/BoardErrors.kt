@@ -22,6 +22,7 @@ enum class BoardErrorCode(
     AUTHOR_REQUIRED("BOARD.AUTHOR_REQUIRED", HttpStatus.BAD_REQUEST, "Author required"),
     AUTHOR_NOT_ALLOWED("BOARD.AUTHOR_NOT_ALLOWED", HttpStatus.FORBIDDEN, "Author not allowed"),
     CAPTCHA_FAILED("BOARD.CAPTCHA_FAILED", HttpStatus.BAD_REQUEST, "Captcha verification failed"),
+    REVISION_CHANGED("BOARD.REVISION_CHANGED", HttpStatus.CONFLICT, "The edit changed while you were reviewing it"),
     RATE_LIMITED("BOARD.RATE_LIMITED", HttpStatus.TOO_MANY_REQUESTS, "Too many requests"),
 }
 

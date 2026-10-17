@@ -78,14 +78,13 @@ interface BoardGuestLimiter {
     fun tryWrite(limitKey: String): Boolean
 
     /**
-     * 비밀을 확인해 봐도 되는가. [row] 는 `p<id>` · `c<id>` — 행마다와 IP 마다 따로 센다. 해시를 계산하기 **전에** 부른다.
-     * **틀린 시도만 센다**([recordSecretFailure]) — 맞는 비밀로 승인 · 관리를 거듭해도 한도가 닳지 않는다. 저장소가 세지 않고 보기(`peek`)를 지원하지 않으면
-     * 미리 세는 방식(맞는 시도도 센다)으로 물러난다.
+     * 비밀을 확인해 봐도 되는가 — **해시를 계산하기 전에 원자적으로 센다**(동시에 몰려도 한도 밖은 해시를 돌리지 못한다). [row] 는 `p<id>` · `c<id>`, 행마다와 IP 마다 따로 센다.
+     * 맞았으면 [releaseSecretAttempt] 로 되돌린다 — 맞는 비밀로 승인 · 관리를 거듭해도 한도가 닳지 않는다(저장소가 `release` 를 지원할 때; 아니면 성공도 센 채 남는다).
      */
-    fun mayTrySecret(row: String, limitKey: String): Boolean
+    fun trySecretAttempt(row: String, limitKey: String): Boolean
 
-    /** 틀린 비밀 한 번 */
-    fun recordSecretFailure(row: String, limitKey: String)
+    /** [trySecretAttempt] 가 센 한 번을 되돌린다 — 비밀이 **맞았을 때만** */
+    fun releaseSecretAttempt(row: String, limitKey: String)
 }
 
 class StoreBoardGuestLimiter(
@@ -96,28 +95,18 @@ class StoreBoardGuestLimiter(
     override fun tryWrite(limitKey: String): Boolean =
         consume("board:guest-write:$limitKey", properties.rateLimit.capacity, properties.rateLimit.window.toMillis())
 
-    override fun mayTrySecret(row: String, limitKey: String): Boolean {
+    override fun trySecretAttempt(row: String, limitKey: String): Boolean {
         val a = properties.secretAttempts
-        val now = clock.instant()
-        val rowKey = "board:guest-secret:row:$row"
-        val ipKey = "board:guest-secret:ip:$limitKey"
-        val peekRow = store().peek(rowKey, a.capacity, a.window.toMillis(), now)
-        val peekIp = store().peek(ipKey, a.capacity, a.window.toMillis(), now)
-        if (peekRow == null || peekIp == null) {   // 세지 않고 볼 수 없는 저장소 — 미리 센다
-            val perRow = consume(rowKey, a.capacity, a.window.toMillis())
-            val perIp = consume(ipKey, a.capacity, a.window.toMillis())
-            return perRow && perIp
-        }
-        return peekRow.allowed && peekIp.allowed
+        val perRow = consume("board:guest-secret:row:$row", a.capacity, a.window.toMillis())
+        val perIp = consume("board:guest-secret:ip:$limitKey", a.capacity, a.window.toMillis())
+        return perRow && perIp
     }
 
-    override fun recordSecretFailure(row: String, limitKey: String) {
+    override fun releaseSecretAttempt(row: String, limitKey: String) {
         val a = properties.secretAttempts
         val now = clock.instant()
-        val rowKey = "board:guest-secret:row:$row"
-        if (store().peek(rowKey, a.capacity, a.window.toMillis(), now) == null) return   // 미리 센 저장소는 이미 셌다
-        consume(rowKey, a.capacity, a.window.toMillis())
-        consume("board:guest-secret:ip:$limitKey", a.capacity, a.window.toMillis())
+        store().release("board:guest-secret:row:$row", a.window.toMillis(), now)
+        store().release("board:guest-secret:ip:$limitKey", a.window.toMillis(), now)
     }
 
     private fun consume(key: String, capacity: Int, windowMillis: Long): Boolean =
@@ -173,9 +162,9 @@ class BoardGuests(
     fun verify(guest: GuestContext, row: String, storedHash: String?): Boolean {
         val raw = guest.secret
         if (storedHash == null || raw == null) return false
-        if (!limiter.mayTrySecret(row, guest.limitKey)) throw BoardException(BoardErrorCode.RATE_LIMITED, "Too many attempts, try later")
+        if (!limiter.trySecretAttempt(row, guest.limitKey)) throw BoardException(BoardErrorCode.RATE_LIMITED, "Too many attempts, try later")
         val ok = secrets.matches(raw, storedHash)
-        if (!ok) limiter.recordSecretFailure(row, guest.limitKey)
+        if (ok) limiter.releaseSecretAttempt(row, guest.limitKey)
         return ok
     }
 

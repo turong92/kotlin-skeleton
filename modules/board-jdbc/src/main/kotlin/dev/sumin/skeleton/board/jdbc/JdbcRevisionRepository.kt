@@ -3,10 +3,14 @@ package dev.sumin.skeleton.board.jdbc
 import dev.sumin.skeleton.board.BoardRevisionRepository
 import dev.sumin.skeleton.board.PageResult
 import dev.sumin.skeleton.board.Revision
+import dev.sumin.skeleton.board.RevisionSubmit
+import dev.sumin.skeleton.board.RevisionWrite
+import dev.sumin.skeleton.board.sameVersion
 import dev.sumin.skeleton.board.RevisionTarget
 import dev.sumin.skeleton.persistence.jdbc.SqlDialect
 import java.sql.ResultSet
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
 import org.springframework.transaction.support.TransactionTemplate
@@ -20,9 +24,16 @@ class JdbcBoardRevisionRepository(
     private val tx: TransactionTemplate,
     private val dialect: SqlDialect,
 ) : BoardRevisionRepository {
-    override fun submit(revision: Revision): Boolean =
+    override fun submit(revision: Revision): RevisionSubmit =
         tx.execute {
             lockTarget(revision.target, revision.targetId, revision.postId)
+            // 잠근 뒤에 처음 읽는다 - 상태 변경과 겹쳐 가려진 대상에 판이 남지 않게 (apply 와 같은 모양)
+            val table = if (revision.target == RevisionTarget.POST) "board_posts" else "board_comments"
+            val status = jdbc.queryForList("select status from $table where id = :id", mapOf("id" to revision.targetId), String::class.java).firstOrNull()
+            if (status != "PUBLISHED") return@execute RevisionSubmit.TARGET_GONE
+            // 판의 버전 = updated_at - 덮어쓸 때마다 반드시 커진다(같은 마이크로초에 덮어써도 결정하는 쪽이 바뀐 것을 알아본다)
+            val previous = find(revision.target, listOf(revision.targetId))[revision.targetId]?.updatedAt
+            val stamp = if (previous != null && !revision.updatedAt.isAfter(previous)) previous.plus(1, ChronoUnit.MICROS) else revision.updatedAt
             val replaced = discardRevision(jdbc, revision.target, revision.targetId) > 0
             jdbc.update(
                 """
@@ -31,7 +42,7 @@ class JdbcBoardRevisionRepository(
                 """.trimIndent(),
                 MapSqlParameterSource().addValue("t", revision.target.name).addValue("id", revision.targetId).addValue("board", revision.boardCode)
                     .addValue("post", revision.postId).addValue("title", revision.title).addValue("body", revision.body)
-                    .addValue("count", revision.attachments.size).addValue("now", dialect.instantParam(revision.updatedAt)),
+                    .addValue("count", revision.attachments.size).addValue("now", dialect.instantParam(stamp)),
             )
             if (revision.attachments.isNotEmpty()) {
                 jdbc.batchUpdate(
@@ -41,7 +52,7 @@ class JdbcBoardRevisionRepository(
                     }.toTypedArray(),
                 )
             }
-            replaced
+            if (replaced) RevisionSubmit.REPLACED else RevisionSubmit.CREATED
         }!!
 
     override fun find(target: RevisionTarget, ids: Collection<Long>): Map<Long, Revision> {
@@ -54,20 +65,35 @@ class JdbcBoardRevisionRepository(
 
     override fun delete(target: RevisionTarget, id: Long): Boolean = tx.execute { discardRevision(jdbc, target, id) > 0 }!!
 
-    override fun apply(target: RevisionTarget, id: Long, now: Instant): Boolean {
+    override fun reject(target: RevisionTarget, id: Long, expectedVersion: Instant): RevisionWrite {
+        val postId = postIdOf(target, id) ?: return RevisionWrite.NONE
+        return tx.execute {
+            lockTarget(target, id, postId)
+            val rev = find(target, listOf(id))[id] ?: return@execute RevisionWrite.NONE
+            if (!rev.sameVersion(expectedVersion)) return@execute RevisionWrite.CHANGED
+            discardRevision(jdbc, target, id)
+            RevisionWrite.DONE
+        }!!
+    }
+
+    private fun postIdOf(target: RevisionTarget, id: Long): Long? =
+        if (target == RevisionTarget.POST) id
+        else jdbc.queryForList("select post_id from board_comments where id = :id", mapOf("id" to id), Long::class.java).firstOrNull()
+
+    override fun apply(target: RevisionTarget, id: Long, now: Instant, expectedVersion: Instant): RevisionWrite {
         // 글 id 는 바뀌지 않는 값이라 트랜잭션 밖에서 읽는다 — 안에서 먼저 읽으면 MySQL(REPEATABLE READ)의 스냅샷이 잠금 전에 잡혀, 기다린 뒤에도 옛 판이 보인다
-        val postId = (if (target == RevisionTarget.POST) id else jdbc.queryForList(
-            "select post_id from board_comments where id = :id", mapOf("id" to id), Long::class.java,
-        ).firstOrNull()) ?: return false
+        val postId = postIdOf(target, id) ?: return RevisionWrite.NONE
         return tx.execute {
             lockTarget(target, id, postId)
             // 잠근 뒤에 처음 읽는다 — 기다리는 사이 덮어써졌거나 지워졌을 수 있다
-            val rev = find(target, listOf(id))[id] ?: return@execute false
+            val rev = find(target, listOf(id))[id] ?: return@execute RevisionWrite.NONE
+            // 운영자가 본 판이 아니다(그 사이 작성자가 덮어썼다) - 다른 판을 공개하지 않는다
+            if (!rev.sameVersion(expectedVersion)) return@execute RevisionWrite.CHANGED
             val table = if (target == RevisionTarget.POST) "board_posts" else "board_comments"
             val status = jdbc.queryForList("select status from $table where id = :id", mapOf("id" to id), String::class.java).firstOrNull()
             if (status != "PUBLISHED") {
                 discardRevision(jdbc, target, id)
-                return@execute false
+                return@execute RevisionWrite.NONE
             }
             val params = MapSqlParameterSource().addValue("id", id).addValue("body", rev.body).addValue("now", dialect.instantParam(now))
                 .addValue("count", rev.attachments.size)
@@ -85,7 +111,7 @@ class JdbcBoardRevisionRepository(
                 }
             }
             discardRevision(jdbc, target, id)
-            true
+            RevisionWrite.DONE
         }!!
     }
 

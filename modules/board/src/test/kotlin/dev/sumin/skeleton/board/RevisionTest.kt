@@ -73,7 +73,7 @@ class RevisionTest {
         val post = publishedPost(listOf("k/old.png"))
         edit(post, attachments = listOf("k/new.png"))
         events.clear()
-        val view = h.postService.decideRevision(moderator, "general", post.id, RevisionDecision.APPROVE)
+        val view = h.postService.decideRevision(moderator, "general", post.id, RevisionDecision.APPROVE, h.v(RevisionTarget.POST, post.id))
         assertEquals("새 제목", view.post.title)
         assertEquals("새 본문", view.post.body)
         assertEquals(listOf("k/new.png"), view.post.attachments)
@@ -88,7 +88,7 @@ class RevisionTest {
         val post = publishedPost()
         edit(post)
         events.clear()
-        val view = h.postService.decideRevision(moderator, "general", post.id, RevisionDecision.REJECT)
+        val view = h.postService.decideRevision(moderator, "general", post.id, RevisionDecision.REJECT, h.v(RevisionTarget.POST, post.id))
         assertEquals("제목", view.post.title)
         assertEquals("본문", h.store.posts.getValue(post.id).body)
         assertTrue(h.store.revisions.isEmpty())
@@ -103,7 +103,7 @@ class RevisionTest {
         h.postService.moderate(moderator, "general", post.id, PostStatus.HIDDEN, null)
         assertTrue(h.store.revisions.isEmpty())
         assertEquals(RevisionOutcome.DISCARDED, events.filterIsInstance<RevisionDecided>().single().outcome)
-        assertEquals(BoardErrorCode.POST_NOT_FOUND, h.failure { h.postService.decideRevision(moderator, "general", post.id, RevisionDecision.APPROVE) })
+        assertEquals(BoardErrorCode.POST_NOT_FOUND, h.failure { h.postService.decideRevision(moderator, "general", post.id, RevisionDecision.APPROVE, h.v(RevisionTarget.POST, post.id)) })
         assertEquals(PostStatus.HIDDEN, h.store.posts.getValue(post.id).status)
 
         h.postService.moderate(moderator, "general", post.id, PostStatus.PUBLISHED, null)
@@ -116,14 +116,14 @@ class RevisionTest {
     fun `a moderator's own edit wins over a waiting revision, and only moderators decide`() {
         val post = publishedPost()
         edit(post)
-        assertEquals(BoardErrorCode.FORBIDDEN, h.failure { h.postService.decideRevision(other, "general", post.id, RevisionDecision.APPROVE) })
+        assertEquals(BoardErrorCode.FORBIDDEN, h.failure { h.postService.decideRevision(other, "general", post.id, RevisionDecision.APPROVE, h.v(RevisionTarget.POST, post.id)) })
         assertEquals(1, h.store.revisions.size)
         events.clear()
         h.postService.update(moderator, "general", post.id, UpdatePost("운영자 제목", null, null, null))
         assertEquals("운영자 제목", h.store.posts.getValue(post.id).title)
         assertTrue(h.store.revisions.isEmpty())
         assertEquals(RevisionOutcome.DISCARDED, events.filterIsInstance<RevisionDecided>().single().outcome)
-        assertEquals(BoardErrorCode.POST_NOT_FOUND, h.failure { h.postService.decideRevision(moderator, "general", post.id, RevisionDecision.REJECT) })
+        assertEquals(BoardErrorCode.POST_NOT_FOUND, h.failure { h.postService.decideRevision(moderator, "general", post.id, RevisionDecision.REJECT, h.v(RevisionTarget.POST, post.id)) })
     }
 
     @Test
@@ -173,14 +173,14 @@ class RevisionTest {
 
         val strangersPost = h.postService.create(owner, "general", CreatePost("남의 글", "본문", null, null)).post.id
         h.postService.moderate(moderator, "general", strangersPost, PostStatus.PUBLISHED, null)
-        assertEquals(BoardErrorCode.FORBIDDEN, h.failure { h.commentService.decideRevision(owner, "general", mine, c.id, RevisionDecision.APPROVE) })
+        assertEquals(BoardErrorCode.FORBIDDEN, h.failure { h.commentService.decideRevision(owner, "general", mine, c.id, RevisionDecision.APPROVE, h.v(RevisionTarget.COMMENT, c.id)) })
 
         events.clear()
-        val view = h.commentService.decideRevision(other, "general", mine, c.id, RevisionDecision.APPROVE)
+        val view = h.commentService.decideRevision(other, "general", mine, c.id, RevisionDecision.APPROVE, h.v(RevisionTarget.COMMENT, c.id))
         assertEquals("고친 댓글", view.body)
         assertNull(view.pendingRevision)
         assertEquals(listOf("CommentUpdated", "RevisionDecided"), events.map { it::class.simpleName })
-        assertEquals(BoardErrorCode.COMMENT_NOT_FOUND, h.failure { h.commentService.decideRevision(other, "general", mine, c.id, RevisionDecision.APPROVE) })
+        assertEquals(BoardErrorCode.COMMENT_NOT_FOUND, h.failure { h.commentService.decideRevision(other, "general", mine, c.id, RevisionDecision.APPROVE, h.v(RevisionTarget.COMMENT, c.id)) })
     }
 
     @Test
@@ -199,7 +199,7 @@ class RevisionTest {
         h.commentService.moderate(moderator, "general", post, a.id, CommentStatus.HIDDEN)
         assertEquals(1, h.store.revisions.size)
         assertEquals(RevisionOutcome.DISCARDED, events.filterIsInstance<RevisionDecided>().single().outcome)
-        assertEquals(BoardErrorCode.COMMENT_NOT_FOUND, h.failure { h.commentService.decideRevision(moderator, "general", post, a.id, RevisionDecision.APPROVE) })
+        assertEquals(BoardErrorCode.COMMENT_NOT_FOUND, h.failure { h.commentService.decideRevision(moderator, "general", post, a.id, RevisionDecision.APPROVE, h.v(RevisionTarget.COMMENT, a.id)) })
     }
 
     // ---- 비회원 ----

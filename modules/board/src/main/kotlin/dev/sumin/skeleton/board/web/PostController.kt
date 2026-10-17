@@ -149,6 +149,7 @@ class PostController(
             service.decideRevision(
                 callers.require(authentication), code, postId,
                 request.decision ?: throw BoardException(BoardErrorCode.CONTENT_INVALID, "decision must be APPROVE or REJECT"),
+                request.submittedAt,
             ).toResponse(properties.excerptLength),
         )
 

@@ -114,21 +114,39 @@ interface BoardErasureRepository {
  * 고친 판 저장소 포트 — `board-jdbc` 가 구현한다. 기본 구현은 판이 없는 것으로 읽고, **판을 만들려는 첫 수정에서 닫힌 쪽으로 실패한다**
  * (자기 저장소를 둔 앱이 이것 없이 승인을 켜면 "board-jdbc 를 두거나 구현하라" 오류).
  */
+/** 판 만들기의 결과 — [TARGET_GONE] 은 잠근 뒤 보니 대상이 더 이상 PUBLISHED 가 아니다(가려지거나 지워졌다): 판을 넣지 않았다 */
+enum class RevisionSubmit { CREATED, REPLACED, TARGET_GONE }
+
+/** 판 승인 · 거절의 결과 — [CHANGED] 는 결정하려던 판이 그 사이 다른 판으로 바뀌었다(작성자가 덮어썼다): 아무것도 하지 않았다 */
+enum class RevisionWrite { DONE, NONE, CHANGED }
+
+/**
+ * 고친 판 저장소 포트 — `board-jdbc` 가 구현한다. 기본 구현은 판이 없는 것으로 읽고, **판을 만들려는 첫 수정에서 닫힌 쪽으로 실패한다**
+ * (자기 저장소를 둔 앱이 이것 없이 승인을 켜면 "board-jdbc 를 두거나 구현하라" 오류).
+ * 판의 **버전**은 판의 `updatedAt` 이다 — 결정(승인 · 거절)은 운영자가 본 버전을 함께 보내고, 잠근 뒤에 같을 때만 한다(보는 사이 덮어쓴 판이 공개되지 않게).
+ */
 interface BoardRevisionRepository {
-    /** 대상 행을 잠그고 옛 판을 지운 뒤 넣는다 (upsert 문법이 방언마다 달라서). 덮어썼으면 true */
-    fun submit(revision: Revision): Boolean =
+    /** 대상 행을 잠그고 **PUBLISHED 인지 다시 본 뒤** 옛 판을 지우고 넣는다 (upsert 문법이 방언마다 달라서) */
+    fun submit(revision: Revision): RevisionSubmit =
         throw UnsupportedOperationException("This app has no BoardRevisionRepository - use board-jdbc or implement it to turn on approval for edits")
 
     fun find(target: RevisionTarget, ids: Collection<Long>): Map<Long, Revision> = emptyMap()
 
-    /** 판만 지운다 — 있었으면 true */
+    /** 판만 지운다(버전 상관없이 — 직접 수정 · 버림용) — 있었으면 true */
     fun delete(target: RevisionTarget, id: Long): Boolean = false
 
     /**
      * 한 트랜잭션에서 대상을 잠그고 판의 제목 · 본문 · 첨부를 원래 행에 옮긴 뒤(`updated_at` 갱신) 판을 지운다. 판이 없거나 대상이 PUBLISHED 가 아니면
-     * (그 경우 남은 판도 지운다) 아무것도 옮기지 않고 false
+     * (그 경우 남은 판도 지운다) 아무것도 옮기지 않고 [RevisionWrite.NONE]. [expectedVersion] 이 지금 판의 버전과 다르면 [RevisionWrite.CHANGED].
      */
-    fun apply(target: RevisionTarget, id: Long, now: Instant): Boolean = false
+    fun apply(target: RevisionTarget, id: Long, now: Instant, expectedVersion: Instant): RevisionWrite = RevisionWrite.NONE
+
+    /** 판을 거절(지움) — [apply] 와 같은 버전 확인 */
+    fun reject(target: RevisionTarget, id: Long, expectedVersion: Instant): RevisionWrite {
+        val current = find(target, listOf(id))[id] ?: return RevisionWrite.NONE
+        if (!current.sameVersion(expectedVersion)) return RevisionWrite.CHANGED
+        return if (delete(target, id)) RevisionWrite.DONE else RevisionWrite.NONE
+    }
 
     /** 대기 중인 판 한 페이지 (오래된 것부터). 글: [boardCode] 의 모든 글 · 댓글: [postId] 의 모든 댓글 */
     fun pending(target: RevisionTarget, boardCode: String?, postId: Long?, page: Int, size: Int): PageResult<Revision> = PageResult(emptyList(), 0)

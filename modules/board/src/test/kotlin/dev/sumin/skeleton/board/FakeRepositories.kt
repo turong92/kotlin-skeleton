@@ -62,6 +62,7 @@ class FakePostRepository(private val s: FakeStore) : PostRepository {
     override fun update(id: Long, change: PostChange, now: Instant): Post? = s.locked {
         val p = s.posts[id] ?: return@locked null
         if (change.status != null && change.status != PostStatus.PUBLISHED) s.revisions.remove(RevisionTarget.POST to id)   // 공개를 떠나는 글의 판은 같은 트랜잭션에서 버린다
+        if (change.title != null || change.body != null || change.attachments != null) s.revisions.remove(RevisionTarget.POST to id)   // 직접 수정이 이긴다
         p.copy(
             title = change.title ?: p.title, body = change.body ?: p.body, attachments = change.attachments ?: p.attachments,
             status = change.status ?: p.status, pinned = change.pinned ?: p.pinned, updatedAt = now,
@@ -112,6 +113,7 @@ class FakeCommentRepository(private val s: FakeStore) : CommentRepository {
     override fun updateContent(id: Long, body: String, attachments: List<String>?, now: Instant): Comment? = s.locked {
         val c = s.comments[id] ?: return@locked null
         if (attachments != null) s.commentFiles[id] = attachments
+        s.revisions.remove(RevisionTarget.COMMENT to id)   // 직접 수정이 이긴다
         c.copy(body = body, updatedAt = now).also { s.comments[id] = it }
     }
 
@@ -120,7 +122,7 @@ class FakeCommentRepository(private val s: FakeStore) : CommentRepository {
     override fun find(id: Long): Comment? = s.locked { s.comments[id] }
 
     override fun updateBody(id: Long, body: String, now: Instant): Comment? = s.locked {
-        s.comments[id]?.copy(body = body, updatedAt = now)?.also { s.comments[id] = it }
+        s.comments[id]?.copy(body = body, updatedAt = now)?.also { s.comments[id] = it; s.revisions.remove(RevisionTarget.COMMENT to id) }
     }
 
     override fun setStatus(id: Long, status: CommentStatus, now: Instant): Comment? = setStatus(id, status, now, null)
@@ -132,7 +134,7 @@ class FakeCommentRepository(private val s: FakeStore) : CommentRepository {
         s.posts[c.postId]?.let { s.posts[c.postId] = it.copy(commentCount = it.commentCount + delta) }
         c.copy(
             status = status, updatedAt = now, everPublished = c.everPublished || status == CommentStatus.PUBLISHED,
-            moderatedBy = if (status != c.status) moderatedBy ?: c.moderatedBy else c.moderatedBy,
+            moderatedBy = if (status != c.status || moderatedBy == ModeratedBy.MODERATOR) moderatedBy ?: c.moderatedBy else c.moderatedBy,
         ).also { s.comments[id] = it }
     }
 
@@ -194,7 +196,15 @@ class FakeReactionRepository(private val s: FakeStore) : ReactionRepository {
 }
 
 class FakeRevisionRepository(private val s: FakeStore) : BoardRevisionRepository {
-    override fun submit(revision: Revision): Boolean = s.locked { (s.revisions.put(revision.target to revision.targetId, revision) != null) }
+    private var versions = 0L
+
+    override fun submit(revision: Revision): RevisionSubmit = s.locked {
+        // 저장소가 판의 버전을 매긴다 - 덮어쓸 때마다 커진다
+        val status = if (revision.target == RevisionTarget.POST) s.posts[revision.targetId]?.status else s.comments[revision.targetId]?.status?.name?.let { PostStatus.valueOf(it) }
+        if (status != PostStatus.PUBLISHED) return@locked RevisionSubmit.TARGET_GONE
+        val stamped = revision.copy(updatedAt = revision.updatedAt.plusNanos(1_000L * ++versions))
+        if (s.revisions.put(revision.target to revision.targetId, stamped) != null) RevisionSubmit.REPLACED else RevisionSubmit.CREATED
+    }
 
     override fun find(target: RevisionTarget, ids: Collection<Long>): Map<Long, Revision> = s.locked {
         ids.mapNotNull { id -> s.revisions[target to id]?.let { id to it } }.toMap()
@@ -202,20 +212,28 @@ class FakeRevisionRepository(private val s: FakeStore) : BoardRevisionRepository
 
     override fun delete(target: RevisionTarget, id: Long): Boolean = s.locked { s.revisions.remove(target to id) != null }
 
-    override fun apply(target: RevisionTarget, id: Long, now: Instant): Boolean = s.locked {
-        val rev = s.revisions[target to id] ?: return@locked false
+    override fun reject(target: RevisionTarget, id: Long, expectedVersion: Instant): RevisionWrite = s.locked {
+        val rev = s.revisions[target to id] ?: return@locked RevisionWrite.NONE
+        if (!rev.sameVersion(expectedVersion)) return@locked RevisionWrite.CHANGED
+        s.revisions.remove(target to id)
+        RevisionWrite.DONE
+    }
+
+    override fun apply(target: RevisionTarget, id: Long, now: Instant, expectedVersion: Instant): RevisionWrite = s.locked {
+        val rev = s.revisions[target to id] ?: return@locked RevisionWrite.NONE
+        if (!rev.sameVersion(expectedVersion)) return@locked RevisionWrite.CHANGED
         if (target == RevisionTarget.POST) {
             val p = s.posts[id]
-            if (p == null || p.status != PostStatus.PUBLISHED) { s.revisions.remove(target to id); return@locked false }
+            if (p == null || p.status != PostStatus.PUBLISHED) { s.revisions.remove(target to id); return@locked RevisionWrite.NONE }
             s.posts[id] = p.copy(title = rev.title ?: p.title, body = rev.body, attachments = rev.attachments, updatedAt = now)
         } else {
             val c = s.comments[id]
-            if (c == null || c.status != CommentStatus.PUBLISHED) { s.revisions.remove(target to id); return@locked false }
+            if (c == null || c.status != CommentStatus.PUBLISHED) { s.revisions.remove(target to id); return@locked RevisionWrite.NONE }
             s.comments[id] = c.copy(body = rev.body, updatedAt = now)
             s.commentFiles[id] = rev.attachments
         }
         s.revisions.remove(target to id)
-        true
+        RevisionWrite.DONE
     }
 
     override fun pending(target: RevisionTarget, boardCode: String?, postId: Long?, page: Int, size: Int): PageResult<Revision> = s.locked {

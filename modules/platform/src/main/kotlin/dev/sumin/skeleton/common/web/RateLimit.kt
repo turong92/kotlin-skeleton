@@ -35,15 +35,15 @@ interface RateLimitStore {
     ): RateLimitDecision
 
     /**
-     * 세지 않고 지금 상태만 본다 — `allowed` 는 「다음 [consume] 이 통과하겠는가」. 지원하지 않는 저장소는 null (기본) —
-     * 부른 쪽은 미리 세는 방식으로 물러난다. 맞은 시도는 세지 않고 틀린 시도만 세려는 곳(비밀 대입 한도)이 쓴다.
+     * [consume] 으로 센 한 번을 되돌린다 — 맞는 시도는 한도를 닳게 하지 않으려는 곳(비밀 대입 한도: 틀린 시도만 센다)이 **먼저 센 뒤** 맞으면 부른다.
+     * 먼저 세므로 동시에 몰려도 한도 밖은 통과하지 못한다. 지원하지 않는 저장소는 되돌리지 않는다(기본 — 성공도 센 것으로 남는다, 예전과 같다).
      */
-    fun peek(
+    fun release(
         key: String,
-        capacity: Int,
         windowMillis: Long,
         now: Instant,
-    ): RateLimitDecision? = null
+    ) {
+    }
 }
 
 /**
@@ -81,13 +81,12 @@ class InMemoryFixedWindowRateLimitStore(
     }
 
     @Synchronized
-    override fun peek(key: String, capacity: Int, windowMillis: Long, now: Instant): RateLimitDecision {
+    override fun release(key: String, windowMillis: Long, now: Instant) {
         val effectiveWindowMillis = windowMillis.coerceAtLeast(1)
-        val currentMillis = now.toEpochMilli()
-        val windowStart = (currentMillis / effectiveWindowMillis) * effectiveWindowMillis
-        val counter = counters["${dev.sumin.skeleton.common.project.ProjectContext.scopedKey(key)}:$windowStart"]
-        val count = counter?.count ?: 0
-        return RateLimitDecision(count < capacity, capacity, (capacity - count).coerceAtLeast(0), Instant.ofEpochMilli(windowStart + effectiveWindowMillis))
+        val windowStart = (now.toEpochMilli() / effectiveWindowMillis) * effectiveWindowMillis
+        counters.computeIfPresent("${dev.sumin.skeleton.common.project.ProjectContext.scopedKey(key)}:$windowStart") { _, current ->
+            if (current.count > 0) current.copy(count = current.count - 1) else current
+        }
     }
 
     /** 끝난 창의 카운터를 지우고 지운 수를 돌려준다. [now] 를 생략하면 생성자의 시계 */

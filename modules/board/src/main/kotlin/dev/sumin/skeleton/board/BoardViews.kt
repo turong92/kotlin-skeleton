@@ -114,6 +114,8 @@ data class PostListRequest(
     val mine: Boolean = false,
     /** true 면 대기 중인 고친 글 목록 (운영자) */
     val revision: Boolean = false,
+    /** 고친 내용의 본문 — [revision] 일 때 알림 문구가 옛 본문이 아니라 이것을 쓴다 */
+    val revisionBody: String? = null,
 )
 
 /** 댓글이 달렸을 때 알림 받을 사람과 그 맥락. 보내는 쪽(notification 모듈)은 [BoardNotifier] 구현이 안다. */
@@ -127,6 +129,8 @@ data class BoardCommentNotice(
     val authorName: String? = null,
     /** 고친 내용이 승인 대기로 들어왔다는 알림이다 (type 은 같은 `comment.pending`, payload 에 `revision: true`) */
     val revision: Boolean = false,
+    /** 고친 판의 본문 — [revision] 일 때만. [comment] 는 아직 옛 본문이다 */
+    val revisionBody: String? = null,
 )
 
 fun interface BoardNotifier {
