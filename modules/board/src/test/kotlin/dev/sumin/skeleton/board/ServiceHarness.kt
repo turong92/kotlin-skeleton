@@ -46,8 +46,8 @@ class ServiceHarness(
     private val events = BoardEvents { listeners }
     /** 하네스마다 새 저장소 — 시험끼리 한도를 나눠 쓰지 않는다 */
     private val guestStore = InMemoryFixedWindowRateLimitStore()
-    val guestLimiter: BoardGuestLimiter = StoreBoardGuestLimiter({ guestStore }, props.guest)
-    private val guests = BoardGuests(props, secrets, guestLimiter, { captcha })
+    val guestLimiter: BoardGuestLimiter = StoreBoardGuestLimiter({ guestStore }, props.guest, MidWindowClock.clock)
+    private val guests = BoardGuests(props, secrets, guestLimiter, { captcha }, clock = { MidWindowClock.NOW })
     val boardService = BoardService(boards, policy, props, time, authorRules)
     val postService = PostService(access, posts, support, authors, policy, rules, props, limiter, time, authorRules, events, guests, revisionRepo, uploads)
     val commentService = CommentService(access, wrapComments(comments), support, authors, policy, rules, props, limiter, notifier, time, authorRules, events, guests, revisionRepo, uploads)

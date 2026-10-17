@@ -18,7 +18,7 @@ class GuestVerifyLimitTest {
     private fun guests(secrets: CountingSecrets, ttl: Duration, verifyCapacity: Int = 60): BoardGuests {
         val props = BoardProperties(guest = BoardProperties.Guest(enabled = true, secretVerifications = BoardProperties.AttemptLimit(verifyCapacity, Duration.ofMinutes(1)), verifiedCacheTtl = ttl))
         val store = dev.sumin.skeleton.common.web.InMemoryFixedWindowRateLimitStore()
-        return BoardGuests(props, secrets, StoreBoardGuestLimiter({ store }, props.guest))
+        return BoardGuests(props, secrets, StoreBoardGuestLimiter({ store }, props.guest, MidWindowClock.clock), clock = { MidWindowClock.NOW })
     }
 
     private val stored = DefaultBoardGuestSecrets(GuestSecretMode.PASSWORD).hash("right-secret")

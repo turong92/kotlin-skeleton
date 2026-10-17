@@ -17,7 +17,7 @@ class GuestSecretConcurrencyTest {
         override fun matches(raw: String, stored: String): Boolean { hashes.incrementAndGet(); return real.matches(raw, stored) }
     }
     private val store = InMemoryFixedWindowRateLimitStore()
-    private val guests = BoardGuests(props, counting, StoreBoardGuestLimiter({ store }, props.guest))
+    private val guests = BoardGuests(props, counting, StoreBoardGuestLimiter({ store }, props.guest, MidWindowClock.clock), clock = { MidWindowClock.NOW })
     private val stored = real.hash("right-secret")
 
     private fun burst(threads: Int, ctx: (Int) -> GuestContext): List<Result<Boolean>> {
