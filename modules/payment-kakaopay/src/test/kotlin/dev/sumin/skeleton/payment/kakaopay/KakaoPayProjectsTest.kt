@@ -72,6 +72,7 @@ class KakaoPayProjectsTest {
             "skeleton.payment-kakaopay.secret-key=shared-key" to "payment-kakaopay.secret-key",
             "skeleton.payment-kakaopay.cid=TC0ONETIME" to "payment-kakaopay.cid",
             "skeleton.payment-kakaopay.return-url=https://shared.test/return" to "payment-kakaopay.return-url",
+            "skeleton.payment-kakaopay.allowed-return-origins=https://shared.test" to "payment-kakaopay.allowed-return-origins",
         )) {
             val own = arrayOf("skeleton.projects.a.config.payment-kakaopay.enabled=true", "skeleton.projects.a.config.payment-kakaopay.secret-key=key-a", "skeleton.projects.a.config.payment-kakaopay.cid=TC0ONETIME", "skeleton.projects.a.config.payment-kakaopay.return-url=https://a.test/r")
             val ownWithoutShadowed = own.filterNot { shared.substringBefore('=').substringAfter('.') in it }.toTypedArray()

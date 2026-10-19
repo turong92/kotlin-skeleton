@@ -85,6 +85,7 @@ class NaverPayProjectsTest {
             "skeleton.payment-naverpay.client-id=shared-id" to "payment-naverpay.client-id",
             "skeleton.payment-naverpay.chain-id=shared-chain" to "payment-naverpay.chain-id",
             "skeleton.payment-naverpay.return-url=https://shared.test/return" to "payment-naverpay.return-url",
+            "skeleton.payment-naverpay.allowed-return-origins=https://shared.test" to "payment-naverpay.allowed-return-origins",
         )) {
             val own = arrayOf(
                 "skeleton.projects.a.config.payment-naverpay.enabled=true", "skeleton.projects.a.config.payment-naverpay.client-secret=secret-a", "skeleton.projects.a.config.payment-naverpay.client-id=id-a",

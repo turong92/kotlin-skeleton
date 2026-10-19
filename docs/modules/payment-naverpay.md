@@ -19,7 +19,7 @@
 | 설정 접두사 | `skeleton.payment-naverpay` — [docs/config/modules/payment-naverpay.yml](../config/modules/payment-naverpay.yml) |
 | 기본 동작 | 꺼짐. `enabled=true` 로 켠다. 켜도 클라이언트 아이디 · 시크릿 · 체인 아이디가 하나라도 비면 제공자 빈이 없다 — 보호 환경(`skeleton.env=stage\|prod`)에서는 기동 실패, 그 밖은 기동은 되고 배포 가드가 경고한다. |
 | 부팅에 필요한 것 | 없음. 켤 때 인증값 셋과 인터넷이 필요하다. 결제창을 열려면 돌아올 주소(`return-url`)도 필요하다. |
-| 돌아올 주소 | `return-url` 이 기본. `allowed-return-origins`(기본 빈 목록 = 늘 `return-url`)에 든 origin 으로 시작한 결제만 그 origin 으로 돌아온다(주문 만들기의 `returnOrigin`). 목록 밖 origin 은 조용히 `return-url` |
+| 돌아올 주소 | `return-url` 이 기본. `allowed-return-origins`(기본 빈 목록 = 늘 `return-url`)에 든 origin 으로 시작한 결제만 그 origin 으로 돌아온다(주문 만들기의 `returnOrigin`). 목록 밖 origin 은 조용히 `return-url`. origin 모양이 아닌 줄은 경고(stage · prod 는 기동 실패), stage · prod 는 https 만 |
 | 교체 지점 | `NaverPayProvider` |
 | 마이그레이션 | 없음 |
 | 프론트 짝 | `@skeleton/payment` |

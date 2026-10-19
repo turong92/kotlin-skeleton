@@ -15,7 +15,7 @@
 | 설정 접두사 | `skeleton.payment-kakaopay` — [docs/config/modules/payment-kakaopay.yml](../config/modules/payment-kakaopay.yml) |
 | 기본 동작 | 꺼짐. `enabled=true` 로 켠다. 켜도 시크릿 키나 가맹점 코드가 비면 제공자 빈이 없다 — 보호 환경(`skeleton.env=stage\|prod`)에서는 기동 실패, 그 밖은 기동은 되고 배포 가드가 경고한다. |
 | 부팅에 필요한 것 | 없음. 켤 때 시크릿 키 · 가맹점 코드와 인터넷이 필요하다. 결제창을 열려면 돌아올 주소(`return-url`)도 필요하다. |
-| 돌아올 주소 | `return-url` 이 기본. `allowed-return-origins`(기본 빈 목록 = 늘 `return-url`)에 든 origin 으로 시작한 결제만 그 origin 으로 돌아온다 - 로그인 저장소가 origin 마다 따로라 다른 주소로 돌아오면 로그인이 풀린다. 목록 밖 origin 은 조용히 `return-url` |
+| 돌아올 주소 | `return-url` 이 기본. `allowed-return-origins`(기본 빈 목록 = 늘 `return-url`)에 든 origin 으로 시작한 결제만 그 origin 으로 돌아온다 - 로그인 저장소가 origin 마다 따로라 다른 주소로 돌아오면 로그인이 풀린다. 목록 밖 origin 은 조용히 `return-url`. 허락한 origin 마다 개발자센터 「플랫폼 > Web > 사이트도메인」 등록이 필요하고(안 하면 `ready` -400), origin 모양이 아닌 줄은 경고(stage · prod 는 기동 실패), stage · prod 는 https 만 |
 | 교체 지점 | `KakaoPayProvider` |
 | 마이그레이션 | 없음 |
 | 프론트 짝 | `@skeleton/payment` |

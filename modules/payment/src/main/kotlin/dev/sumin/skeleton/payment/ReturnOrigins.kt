@@ -17,7 +17,7 @@ object ReturnOrigins {
     }
 
     /** `scheme://host[:port]` 만 받는다(경로 · 질의 · 조각 · 사용자 정보 · 공백 없음; 허용 목록의 끝 `/` 하나는 눈감는다). 소문자로 맞춰 돌려준다. */
-    internal fun originOf(raw: String?): String? {
+    fun originOf(raw: String?): String? {
         val text = raw?.removeSuffix("/")?.takeIf { it.isNotEmpty() && it.none(Char::isWhitespace) && '\\' !in it } ?: return null
         val uri = runCatching { URI.create(text) }.getOrNull() ?: return null
         val scheme = uri.scheme?.lowercase()?.takeIf { it == "http" || it == "https" } ?: return null

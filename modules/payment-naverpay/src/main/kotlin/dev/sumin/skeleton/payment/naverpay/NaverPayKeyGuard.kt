@@ -4,6 +4,7 @@ import dev.sumin.skeleton.common.deploy.DeployContext
 import dev.sumin.skeleton.common.deploy.DeployEnv
 import dev.sumin.skeleton.common.deploy.DeployGuard
 import dev.sumin.skeleton.payment.PaymentProperties
+import dev.sumin.skeleton.payment.ReturnOrigins
 import java.net.URI
 import java.time.Duration
 
@@ -49,6 +50,10 @@ class NaverPayKeyGuard(
         if (context.protectedEnv && ledgerPresent() && !isWebUrl(properties.returnUrl)) {
             add("$RETURN_PROPERTY ($RETURN_ENV) is not an absolute http(s) address but the payment ledger is present: NaverPay returns the buyer there, so the payment window cannot open")
         }
+        if (context.protectedEnv) {
+            malformedOrigins().forEach { add("$ALLOWED_PROPERTY has an entry that is not a bare origin (scheme://host[:port], no path, query or user info): $it - it would be ignored and the buyer would keep returning to the fixed address") }
+            properties.allowedReturnOrigins.filter { ReturnOrigins.originOf(it)?.startsWith("https://") == false }.forEach { add("$ALLOWED_PROPERTY has a non-https origin in a protected environment (skeleton.env=stage|prod): $it - the buyer would come back with the payment token over an unencrypted connection") }
+        }
         if (ledgerPresent()) {
             val limit = responseTimeout()
             val delay = reconcileFirstDelay()
@@ -63,6 +68,9 @@ class NaverPayKeyGuard(
     }
 
     override fun warnings(context: DeployContext): List<String> = buildList {
+        if (!context.protectedEnv) {
+            malformedOrigins().forEach { add("$ALLOWED_PROPERTY has an entry that is not a bare origin (scheme://host[:port], no path, query or user info): $it - it is ignored and the buyer keeps returning to the fixed address") }
+        }
         val ledger = ledgerPresent()
 
         if (!context.protectedEnv) {
@@ -89,6 +97,8 @@ class NaverPayKeyGuard(
             add("$RESPONSE_TIMEOUT_PROPERTY is shorter than ${MIN_APPLY_RESPONSE_TIMEOUT.seconds}s while the payment ledger is present: NaverPay documents up to 60 seconds for an apply or a cancel, so a normal one could end as 'unknown' and wait for a lookup")
         }
     }
+
+    private fun malformedOrigins(): List<String> = properties.allowedReturnOrigins.filter { ReturnOrigins.originOf(it) == null }
 
     private fun isWebUrl(raw: String): Boolean {
         val uri = runCatching { URI.create(raw.trim()) }.getOrNull() ?: return false
@@ -123,6 +133,7 @@ class NaverPayKeyGuard(
         const val CLIENT_ID_PROPERTY = "skeleton.payment-naverpay.client-id"
         const val CHAIN_ID_PROPERTY = "skeleton.payment-naverpay.chain-id"
         const val RETURN_PROPERTY = "skeleton.payment-naverpay.return-url"
+        const val ALLOWED_PROPERTY = "skeleton.payment-naverpay.allowed-return-origins"
         const val BASE_URL_PROPERTY = "skeleton.payment-naverpay.base-url"
         const val WINDOW_BASE_URL_PROPERTY = "skeleton.payment-naverpay.window-base-url"
         const val FIRST_DELAY_PROPERTY = "skeleton.payment.reconcile.first-delay"

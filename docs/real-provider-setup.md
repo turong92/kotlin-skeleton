@@ -522,7 +522,10 @@ SKELETON_PAYMENT_KAKAOPAY_ENABLED=true
 SKELETON_PAYMENT_KAKAOPAY_SECRET_KEY=<Secret key(dev)>      # 비밀
 SKELETON_PAYMENT_KAKAOPAY_CID=TC0ONETIME
 SKELETON_PAYMENT_KAKAOPAY_RETURN_URL=http://localhost:5173/payments/return
+SKELETON_PAYMENT_KAKAOPAY_ALLOWED_RETURN_ORIGINS=         # 선택, 쉼표로 이은 origin(예: http://localhost:5173)
 ```
+
+`ALLOWED_RETURN_ORIGINS` 는 결제를 시작한 화면의 origin 으로 돌아오게 하는 허락 목록이다(로그인 저장소가 origin 마다 따로라, 공개 주소로 돌아오면 로그인이 풀린다). 비면 늘 `RETURN_URL`. **허락한 origin 마다 카카오 개발자센터 「플랫폼 > Web > 사이트도메인」에 등록해야 한다** - 안 하면 `ready` 가 -400 으로 거절된다(서버 로그에 `등록된 도메인 … 존재하지 않아` 이유가 남는다). 등록이 반영되는 데 몇 분 걸렸다. stage · prod 는 https origin 만, origin 모양이 아닌 줄(경로 붙임 · 포트 `:` 만 등)은 기동 실패.
 
 테스트 가맹점 코드(`TC0ONETIME`)는 stage · prod 에서 기동 실패, 실결제 코드는 로컬 계열에서 기동 실패한다(키는 모양으로 테스트와 실결제를 가르지 않아서 **가맹점 코드가 가른다**). 토스도 켜져 있으면 결제 화면에 「결제 방법」 고르기가 생긴다(같은 나라의 결제사가 둘 이상이므로).
 
@@ -567,6 +570,7 @@ SKELETON_PAYMENT_NAVERPAY_CLIENT_ID=<클라이언트 아이디>        # 비밀 
 SKELETON_PAYMENT_NAVERPAY_CLIENT_SECRET=<클라이언트 시크릿>    # 비밀
 SKELETON_PAYMENT_NAVERPAY_CHAIN_ID=<체인 아이디>              # 비밀 아님
 SKELETON_PAYMENT_NAVERPAY_RETURN_URL=http://localhost:5173/payments/return
+SKELETON_PAYMENT_NAVERPAY_ALLOWED_RETURN_ORIGINS=         # 선택, 쉼표로 이은 origin — 뜻은 카카오페이와 같다
 ```
 
 개발 · 운영은 키 모양이 아니라 **`mode` 설정**이 가른다(API 서버 `dev-pay.paygate.naver.com` / `pay.paygate.naver.com`, 결제창 `test-m.pay.naver.com` / `m.pay.naver.com`). 개발 모드는 stage · prod 에서 기동 실패, 운영 모드는 로컬 계열에서 기동 실패한다. 응답 제한은 문서가 60초를 권하므로 샘플 앱이 `skeleton.http.clients.payment-naverpay.response-timeout: 60s` 로 두고 `reconcile.first-delay` 를 90초로 늘렸다(둘 다 가드가 본다). 같은 나라(KR)의 나라 지도가 토스를 가리키는데 토스가 꺼져 있으면(네이버페이만 쓰는 배포) 지도의 KR 을 `naverpay` 로 고친다 - 지도에 있는 나라는 그 결제사만 쓴다. 토스 · 카카오페이도 켜져 있으면 결제 화면에 「결제 방법」 고르기가 생긴다.

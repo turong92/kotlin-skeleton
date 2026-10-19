@@ -59,7 +59,7 @@ class NaverPayAutoConfiguration {
         credentialAlert: ObjectProvider<PaymentProviderCredentialAlert>,
         mismatchAlert: ObjectProvider<PaymentProviderMismatchAlert>,
     ): PaymentGatewaySource =
-        PaymentGatewaySource.of(listOf("payment-naverpay.client-secret"), listOf("payment-naverpay.client-id", "payment-naverpay.chain-id", "payment-naverpay.return-url")) { settings ->
+        PaymentGatewaySource.of(listOf("payment-naverpay.client-secret"), listOf("payment-naverpay.client-id", "payment-naverpay.chain-id", "payment-naverpay.return-url", "payment-naverpay.allowed-return-origins")) { settings ->
             val properties = settings.bind("skeleton.payment-naverpay", NaverPayProperties::class.java)
             if (!properties.enabled || properties.clientSecret.isBlank() || properties.clientId.isBlank() || properties.chainId.isBlank()) {
                 null

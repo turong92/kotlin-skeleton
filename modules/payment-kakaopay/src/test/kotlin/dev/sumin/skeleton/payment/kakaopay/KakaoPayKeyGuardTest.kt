@@ -30,8 +30,9 @@ class KakaoPayKeyGuardTest {
         firstDelay: Duration = Duration.ofSeconds(60),
         settleDelay: Duration = Duration.ofMinutes(2),
         baseUrl: String = KakaoPayProperties().baseUrl,
+        origins: Set<String> = emptySet(),
     ) = KakaoPayKeyGuard(
-        properties = KakaoPayProperties(enabled = true, secretKey = secretKey, cid = cid, cidSecret = cidSecret, returnUrl = returnUrl, baseUrl = baseUrl, allowTestKeysInProtectedEnv = allowTest),
+        properties = KakaoPayProperties(enabled = true, secretKey = secretKey, cid = cid, cidSecret = cidSecret, returnUrl = returnUrl, baseUrl = baseUrl, allowTestKeysInProtectedEnv = allowTest, allowedReturnOrigins = origins),
         ledgerPresent = { ledger },
         jobQueueWorkerRunning = { workerRunning },
         responseTimeout = { responseTimeout },
@@ -103,5 +104,15 @@ class KakaoPayKeyGuardTest {
                 }
             }
         }
+    }
+
+    @Test
+    fun `an allowed return origin that is not a bare origin or is not https in a protected environment stops the start - elsewhere it only warns`() {
+        val live = "1234567890"
+        assertTrue(guard(cid = live, origins = setOf("https://app.example.test/path")).problems(prod).any { "allowed-return-origins" in it })
+        assertTrue(guard(cid = live, origins = setOf("http://app.example.test")).problems(prod).any { "non-https" in it })
+        assertEquals(emptyList(), guard(cid = live, origins = setOf("https://app.example.test", "https://dev.example.test/")).problems(prod))
+        assertEquals(emptyList(), guard(origins = setOf("http://localhost:5173")).problems(local))
+        assertTrue(guard(origins = setOf("localhost:5173")).warnings(local).any { "allowed-return-origins" in it })
     }
 }

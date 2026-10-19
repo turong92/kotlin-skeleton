@@ -48,7 +48,7 @@ class KakaoPayAutoConfiguration {
     @ConditionalOnMissingBean(name = ["kakaoPayGatewaySource"])
     @Conditional(ProjectsConfigured::class)
     fun kakaoPayGatewaySource(httpClient: ExternalHttpClient, credentialAlert: ObjectProvider<PaymentProviderCredentialAlert>): PaymentGatewaySource =
-        PaymentGatewaySource.of(listOf("payment-kakaopay.secret-key", "payment-kakaopay.cid-secret"), listOf("payment-kakaopay.cid", "payment-kakaopay.return-url")) { settings ->
+        PaymentGatewaySource.of(listOf("payment-kakaopay.secret-key", "payment-kakaopay.cid-secret"), listOf("payment-kakaopay.cid", "payment-kakaopay.return-url", "payment-kakaopay.allowed-return-origins")) { settings ->
             val properties = settings.bind("skeleton.payment-kakaopay", KakaoPayProperties::class.java)
             if (!properties.enabled || properties.secretKey.isBlank() || properties.cid.isBlank()) {
                 null

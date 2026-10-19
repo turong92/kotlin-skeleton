@@ -34,8 +34,9 @@ class NaverPayKeyGuardTest {
         settleDelay: Duration = Duration.ofMinutes(3),
         baseUrl: String = "",
         windowBaseUrl: String = "",
+        origins: Set<String> = emptySet(),
     ) = NaverPayKeyGuard(
-        properties = NaverPayProperties(enabled = true, mode = mode, clientId = id, clientSecret = clientSecret, chainId = chain, returnUrl = returnUrl, baseUrl = baseUrl, windowBaseUrl = windowBaseUrl, allowDevelopmentModeInProtectedEnv = allowDevelopment),
+        properties = NaverPayProperties(enabled = true, mode = mode, clientId = id, clientSecret = clientSecret, chainId = chain, returnUrl = returnUrl, baseUrl = baseUrl, windowBaseUrl = windowBaseUrl, allowDevelopmentModeInProtectedEnv = allowDevelopment, allowedReturnOrigins = origins),
         ledgerPresent = { ledger },
         jobQueueWorkerRunning = { workerRunning },
         responseTimeout = { responseTimeout },
@@ -121,5 +122,15 @@ class NaverPayKeyGuardTest {
                 }
             }
         }
+    }
+
+    @Test
+    fun `an allowed return origin that is not a bare origin or is not https in a protected environment stops the start - elsewhere it only warns`() {
+        val live = NaverPayMode.PRODUCTION
+        assertTrue(guard(mode = live, origins = setOf("https://app.example.test/path")).problems(prod).any { "allowed-return-origins" in it })
+        assertTrue(guard(mode = live, origins = setOf("http://app.example.test")).problems(prod).any { "non-https" in it })
+        assertEquals(emptyList(), guard(mode = live, origins = setOf("https://app.example.test", "https://dev.example.test/")).problems(prod))
+        assertEquals(emptyList(), guard(origins = setOf("http://localhost:5173")).problems(local))
+        assertTrue(guard(origins = setOf("localhost:5173")).warnings(local).any { "allowed-return-origins" in it })
     }
 }
