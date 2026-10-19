@@ -133,6 +133,8 @@ data class PaymentRefund(
     val updatedAt: Instant,
     /** 운영자가 금액을 고쳐 승인했다면 처음 요청한 금액(그때 [amount] 는 승인한 금액), 아니면 null. */
     val requestedAmount: Long? = null,
+    /** 운영자가 「구독도 해지」를 끄고 보낸 환불 - 이 줄이 주문을 전액 환불로 만들어도 구독을 끝내지 않는다. 환불이 끝나는 때(결제사는 며칠 뒤)에 적용되므로 줄에 남는다. */
+    val keepSubscription: Boolean = false,
 ) {
     override fun toString(): String =
         "PaymentRefund(id=$id, orderId=$orderId, status=$status, origin=$origin, amount=${amount.amount} ${amount.normalizedCurrency}, reason=$reasonCode)"

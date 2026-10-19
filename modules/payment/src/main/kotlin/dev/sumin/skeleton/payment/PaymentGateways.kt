@@ -73,6 +73,13 @@ interface PaymentRefundGateway : PaymentGateway {
 /** 결제사가 아는 지금 상태. 결제가 없으면 null. */
 interface PaymentLookupGateway : PaymentGateway {
     fun lookup(query: PaymentLookupQuery): PaymentSnapshot?
+
+    /**
+     * 주문 번호([PaymentLookupQuery.orderId])만으로 결제를 찾을 수 있는가. 거래 번호로만 조회되는 결제사(Paddle)는 false - 주문 번호만 든 조회는 결제사를 부르지 않고 「결제 없음」(null)이다.
+     * 만료 작업은 false 인 결제사의 `PENDING` 을 조회 없이 마감 뒤 닫는다(조회 능력이 없는 결제사와 같은 길). 기본 true.
+     */
+    val answersByOrderId: Boolean
+        get() = true
 }
 
 /**
@@ -157,12 +164,14 @@ data class PaymentSnapshot(
     val remaining: PaymentAmount,
     val method: String?,
     val paidAt: Instant?,
-    /** 결제사가 아는 취소 전부. */
+    /** 결제사가 아는 취소 전부(이뤄진 것). */
     val refunds: List<ProviderRefund>,
     /** 카드 결제일 때만. */
     val card: PaymentCard? = null,
     /** 간편결제일 때 결제사 중립 브랜드 코드(`KAKAOPAY` …) - [LedgerValues.easyPayBrand] 가 거른다. */
     val easyPayBrand: String? = null,
+    /** 결제사가 **접수해 검토 중**으로 쥔 환불(Paddle `pending_approval`) - 아직 이뤄지지 않았으니 [refunds] 에 없고, 정산이 그 환불 줄을 「적용 안 됨」으로 닫지 않게 한다. */
+    val pendingRefunds: List<ProviderRefund> = emptyList(),
 )
 
 /** 웹훅 요청 그대로. [body] 는 서명 확인을 위한 원문 바이트다. */

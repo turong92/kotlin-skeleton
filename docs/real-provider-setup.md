@@ -47,6 +47,9 @@
 <!-- payment-naverpay:start -->
 | §13 | 네이버페이 직접 연동(단건 결제): 가맹 심사 · 인증값 · 개발 환경 시험 카드 · 못 잰 가정(진짜 키로 확인할 것) | 심사 대기 + 30분 |
 <!-- payment-naverpay:end -->
+<!-- payment-paddle:start -->
+| §14 | Paddle 환불(결제 장부): 샌드박스 권한 · 알림 대상 · 눌러 볼 순서 · 못 잰 가정 | 15분 + 샌드박스 승인 대기(최대 10분) |
+<!-- payment-paddle:end -->
 
 > **환경변수 이름은 한 규칙**이다(`docs/deploy.md` §7): Google · Kakao · Naver 는 `SKELETON_AUTH_SOCIAL_PROVIDERS_<제공자>_{ENABLED,CLIENT_ID,CLIENT_SECRET,REDIRECT_URI}`, LINE 은 `SKELETON_AUTH_SOCIAL_OIDC_PROVIDERS_LINE_{CLIENT_ID,CLIENT_SECRET,REDIRECT_URI,SCOPES}`, X 는 `SKELETON_AUTH_SOCIAL_X_{CLIENT_ID,CLIENT_SECRET,REDIRECT_URI,REQUEST_EMAIL}`. 진짜 환경변수만으로 `apps/sample` 을 띄워 셋이 `/auth/methods` 에 나오는 것은 `SocialEnvironmentOnlyBootTest` 가 증명한다. 콘솔에서 만드는 준비(§1 · §2 · §3)는 코드와 무관하니 먼저 해 둔다.
 
@@ -604,6 +607,38 @@ SKELETON_PAYMENT_NAVERPAY_ALLOWED_RETURN_ORIGINS=         # 선택, 쉼표로 �
 
 정기 결제(자동결제)는 이 모듈에 없다 - 클라이언트 · 체인 아이디가 단건과 따로이고 결제 방식이 다르다(다음 일).
 <!-- payment-naverpay:end -->
+
+<!-- payment-paddle:start -->
+## 14. Paddle 환불 (결제 장부)
+
+`payment-paddle` 의 환불(`POST /adjustments`)과 환불 전 확인의 거래 조회(`GET /transactions/{id}?include=adjustments`)가 기대는 가정을 **진짜 Paddle 샌드박스로 재 보는** 절차와 목록이다. 모듈 설명은 [docs/modules/payment-paddle.md](modules/payment-paddle.md), HTTP 계약은 [docs/payment-http-contract.md](payment-http-contract.md). 공식 문서: [Create an adjustment](https://developer.paddle.com/api-reference/adjustments/create-adjustment) · [Refund or credit a transaction](https://developer.paddle.com/build/transactions/create-transaction-adjustments) · [adjustment.updated](https://developer.paddle.com/webhooks/adjustments/adjustment-updated) · [Get a transaction](https://developer.paddle.com/api-reference/transactions/get-transaction) · [오류 코드](https://developer.paddle.com/llms/errors.txt) (2026-10-20 에 본문을 읽었다).
+
+**이 환불 길은 문서만 보고 만들었고 진짜 Paddle 로는 아직 한 번도 재 보지 않았다** - 모듈 시험은 문서 모양을 따라 만든 가짜 Paddle 서버로만 돈다. 이 절의 14.3 표가 그 대가다.
+
+### 14.1 준비 - 샌드박스에서
+
+1. 샌드박스 대시보드(Developer tools > Authentication)에서 서버 API 키의 **권한에 `adjustment.write` · `adjustment.read` · `transaction.read` 를 더한다**(거래 만들기 · 구독 해지 권한은 그대로). 권한이 없으면 환불이 `403 forbidden` 으로 확정 거절된다.
+2. 알림 대상(Developer tools > Notifications 의 웹훅 대상)에서 **`adjustment.created` · `adjustment.updated`** 를 켠다. 켜지 않으면 Paddle 이 환불을 승인해도 장부가 모른다(「결제사와 맞추기」가 조회로 잡는다).
+3. 환경변수는 기존 Paddle 값 그대로다(`SKELETON_PAYMENT_PADDLE_*`). 새 설정은 선택 `lookup-timeout`(5s) · `refund-timeout`(10s) 뿐이다.
+
+### 14.2 눌러 보기 (사람이 하는 단계)
+
+운영자 화면의 환불 요청(또는 주문의 「바로 환불」)을 승인한다 → 환불 줄이 `PENDING`(결제사 검토 중)으로 남는다 → **샌드박스는 10분마다 모든 환불을 자동 승인한다** → `adjustment.updated` 웹훅이 오면 줄이 `SUCCEEDED` 가 되고 주문이 `REFUNDED`(부분이면 `PARTIALLY_REFUNDED`)가 된다. 10분이 지나도 `PENDING` 이면 「결제사와 맞추기」를 눌러 본다(웹훅을 놓쳤을 때 조회가 잡는다). 실계정은 금액이 크면 사람이 검토하므로 며칠이 걸릴 수 있다.
+
+### 14.3 못 잰 가정 (진짜 Paddle 이 있어야 잰다)
+
+| 못 잰 가정 | 틀리면 신호 | 재려면 |
+|---|---|---|
+| 샌드박스는 10분마다 모든 환불을 자동 승인한다 (문서) | 환불 줄이 오래 `PENDING` 으로 남는다 | 승인 뒤 10분 기다린다 |
+| `adjustment.created` · `adjustment.updated` 본문에 `data.currency_code`(없으면 `data.totals.currency_code`) 와 `data.totals.total`(문자열) · `data.transaction_id` · `data.status` 가 있다 | 환불 사건이 「읽을 수 없는 본문」으로 수신함 줄이 `DEAD` | 샌드박스 웹훅 전송 내역(대시보드)에서 본문을 본다 |
+| 거래 조회 `include=adjustments` 가 `data.adjustments[]`(`id` · `action` · `status` · `created_at` · `totals.total`)를 준다 | 환불 전 확인이 「읽을 수 없는 답」으로 실패해 환불을 못 보낸다 | 환불 뒤 같은 거래를 조회한다 |
+| 오류 코드 이름: 인증 · 권한 거절이 `invalid_token` · `forbidden` 이다 (문서의 이름) | 키 문제가 확정 거절이 아니라 모름으로 읽혀 `202 PENDING` 이 되고 정산이 닫는다 | 권한을 뺀 키로 환불을 한 번 보낸다 |
+| 부분 환불의 `items[].amount` 가 **세금 포함** 금액이다(`tax_mode` 기본 `internal`) | Paddle 이 환불한 금액이 장부와 달라 `REFUND_MISMATCH` | 부분 환불 한 번 뒤 대시보드 금액 |
+| 서버가 만든 거래의 `details.line_items` 가 하나이고 그 `id`(`txnitm_…`)로 부분 환불이 된다 | 부분 환불이 `adjustment_transaction_item_invalid` 로 거절된다 | 부분 환불 한 번 |
+| 환불 호출에는 멱등 키가 없다 (문서에서 못 찾았다) | 응답을 잃은 호출을 다시 보내면 이중 환불 - 우리는 다시 보내지 않고 `created` 웹훅 · 조회로 가린다(설계가 여기에 기대지 않는다) | — |
+| 같은 거래의 검토 중 환불이 하나뿐이다 (`adjustment_pending_refund_request`) | 응답을 잃은 호출의 짝지어 붙이기가 다른 환불에 붙는다 | 검토 중에 둘째 환불을 시도해 본다 |
+| 환불이 구독에 미치는 영향은 Paddle 문서에 없다 | 전액 환불한 구독이 Paddle 에서 계속 과금된다 - 그래서 우리가 환불로 끝낸 구독에 즉시 해지(`POST /subscriptions/{id}/cancel`)를 보낸다 | 구독 첫 결제를 전액 환불하고 구독 상태를 본다 |
+<!-- payment-paddle:end -->
 
 ## 게시판 사진의 CDN 캐시 비우기 (Cloudflare)
 

@@ -30,6 +30,13 @@ internal object PaymentRequests {
         return node.longValue()
     }
 
+    /** 없으면 [default]. 있으면 true · false 여야 한다. */
+    fun flag(node: JsonNode?, field: String, default: Boolean): Boolean {
+        if (node == null || node.isNull || node.isMissingNode) return default
+        if (!node.isBoolean) throw FieldValidationException(field, "Pattern", "$field must be true or false")
+        return node.booleanValue()
+    }
+
     fun requiredWholeNumber(node: JsonNode?, field: String): Long = wholeNumber(node, field) ?: throw FieldValidationException(field, "Required", "$field is required")
 
     fun size(value: Int?): Int = (value ?: dev.sumin.skeleton.payment.PaymentQueries.DEFAULT_PAGE).coerceIn(1, dev.sumin.skeleton.payment.PaymentQueries.MAX_PAGE)

@@ -42,12 +42,20 @@ internal class FakePaddleApi : AutoCloseable {
     val requests: MutableList<Req> = Collections.synchronizedList(mutableListOf())
     var status = 200
     var responseBody = "{\"data\":{}}"
+
+    /** `메서드 경로` 별 답 - 없으면 [status] · [responseBody]. */
+    private val routes = java.util.concurrent.ConcurrentHashMap<String, Pair<Int, String>>()
+
+    fun on(method: String, path: String, status: Int, body: String) {
+        routes["$method $path"] = status to body
+    }
     private val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
         createContext("/") { ex ->
             requests += Req(ex.requestMethod, ex.requestURI.path, ex.requestHeaders.getFirst("Authorization"), ex.requestBody.readBytes().decodeToString())
-            val out = responseBody.toByteArray()
+            val route = routes["${ex.requestMethod} ${ex.requestURI.path}"]
+            val out = (route?.second ?: responseBody).toByteArray()
             ex.responseHeaders.add("Content-Type", "application/json")
-            ex.sendResponseHeaders(status, out.size.toLong())
+            ex.sendResponseHeaders(route?.first ?: status, out.size.toLong())
             ex.responseBody.use { it.write(out) }
         }
         start()
@@ -75,4 +83,22 @@ internal fun paymentFailed(custom: String = """{"orderId":"ord_1","accountId":"a
 {"event_id":"evt_f1","event_type":"transaction.payment_failed","occurred_at":"2026-10-13T09:59:59Z",
  "data":{"id":"txn_1","status":"ready","currency_code":"USD","custom_data":$custom,
   "payments":[{"status":"error","error_code":"$errorCode"}]}}
+""".trim()
+
+/** Paddle 의 거래 조회(`include=adjustments`) 답 - 금액은 최소 단위의 문자열이다. [adjustments] 는 `(id, action, status, total)`. */
+internal fun transactionBody(
+    status: String = "completed", total: String = "499", currency: String = "USD", items: Int = 1,
+    adjustments: List<List<String>> = emptyList(),
+) = """
+{"data":{"id":"txn_1","status":"$status","currency_code":"$currency","billed_at":"2026-10-13T09:59:00Z",
+ "details":{"totals":{"total":"$total","currency_code":"$currency"},
+  "line_items":[${(1..items).joinToString(",") { """{"id":"txnitm_$it","price_id":"pri_cheer","quantity":1}""" }}]},
+ "adjustments":[${adjustments.joinToString(",") { (id, action, st, amount) -> """{"id":"$id","action":"$action","status":"$st","transaction_id":"txn_1","created_at":"2026-10-14T01:00:00Z","totals":{"total":"$amount"}}""" }}]}}
+""".trim()
+
+internal fun adjustmentEvent(
+    type: String = "adjustment.created", id: String = "adj_1", action: String = "refund", status: String = "approved", total: String = "499", eventId: String = "evt_a1",
+) = """
+{"event_id":"$eventId","event_type":"$type","occurred_at":"2026-10-14T01:00:00Z",
+ "data":{"id":"$id","action":"$action","status":"$status","transaction_id":"txn_1","currency_code":"USD","totals":{"total":"$total"}}}
 """.trim()

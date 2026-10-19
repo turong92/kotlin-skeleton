@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Paddle 환불 · 구독 결제 환불의 「구독도 해지」 선택 (2026-10-20)
+
+- `payment-paddle`: 서버가 Paddle 에 환불(`POST /adjustments`)을 시키고 거래를 조회한다(`PaymentRefundGateway` · `PaymentLookupGateway` 추가, `GET /transactions/{id}?include=adjustments`). 전액은 `type: full`, 부분은 거래 품목 하나 + 세금 포함 금액. 환불은 대개 Paddle 이 검토한 뒤(`pending_approval`) `adjustment.created` · `adjustment.updated` 웹훅(서명 확인은 기존과 같다)으로 승인 · 거절을 알리고 장부가 그 사건으로 줄을 끝낸다. 확정 거절은 허용 목록(`PaddleErrorMapper`)뿐, 모름이면 다시 보내지 않는다. 새 설정 `lookup-timeout`(5s) · `refund-timeout`(10s). **API 키 권한에 `adjustment.write` · `adjustment.read` · `transaction.read` 를, 알림 대상에 `adjustment.created` · `adjustment.updated` 를 더한다**(샌드박스 확인: `docs/real-provider-setup.md` §14). 진짜 Paddle 로는 아직 재지 않았다.
+- `payment`: `PaymentSnapshot.pendingRefunds`(결제사가 검토 중으로 쥔 환불 - 정산이 닫지 않는다) · `PaymentLookupGateway.answersByOrderId`(기본 true) · `PushedRefund`(서명된 웹훅 사건) · 환불 줄 거래 키를 접수 때 박는다. Paddle 은 주문 번호만 든 조회를 결제사에 보내지 않는다(만료 작업은 조회 능력이 없던 때와 같은 길). 운영자 환불의 두 입구가 선택 본문 `endSubscription`(생략 = `true` = 지금 동작)을 받는다 - `false` 면 구독 결제를 전액 환불해도 구독을 끝내지 않는다(줄의 `keepSubscription`). 결제사가 갱신하는 구독이 환불로 끝나면 결제사에도 즉시 해지 작업을 넣는다. 운영자 응답에 `refundBlock`(`UNSUPPORTED` · `PROVIDER_OFF` · `MODE_MISMATCH` | null) · 환불 줄에 `keepSubscription` · `orderKind` 칸. 환불 · 조회 능력이 없는 결제사의 환불 · 승인은 결제사를 부르기 전에 `409 PAYMENT.REFUND_UNSUPPORTED`(전에는 `503 UNAVAILABLE`).
+- `payment-jdbc`: 새 V 파일 `V20261020120000__payment_refunds_keep_subscription`(두 방언, `payment_refunds.keep_subscription boolean not null default false` - 옛 줄은 지금 동작 그대로). 잠긴 파일은 고치지 않았다.
+
 ### 결제 돌아오기 · 표시 수정 (2026-10-19)
 
 - `payment` · `payment-kakaopay` · `payment-naverpay`: 주문 만들기 본문에 선택 칸 `returnOrigin`(결제를 시작한 화면의 origin). 새 설정 `skeleton.payment-kakaopay.allowed-return-origins` · `skeleton.payment-naverpay.allowed-return-origins`(기본 빈 목록 = 기존 동작 그대로)에 든 origin 이면 돌아올 주소의 scheme · host 가 그 origin 으로 바뀐다 - 목록 밖은 `return-url`(열린 리다이렉트 없음). `CheckoutOrder`/`CreateOrderCommand` 에 기본값 있는 칸 `returnOrigin` 추가, 공용 `ReturnOrigins`.

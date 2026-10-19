@@ -10,15 +10,30 @@ data class OrderView(val order: PaymentOrder, val refunds: List<PaymentRefund>) 
 data class OrderPage(val values: List<OrderView>, val next: OrderCursor?)
 
 /** 운영자가 보는 주문 — [reviewReason] 은 줄에 찍힌 이유가 있으면 그것, 없으면 [ReviewReasons] 가 오래됨 · 지급 · 회수로 파생한 것. */
-data class OperatorOrderView(val order: PaymentOrder, val refunds: List<PaymentRefund>, val reviewReason: String?) {
+data class OperatorOrderView(val order: PaymentOrder, val refunds: List<PaymentRefund>, val reviewReason: String?, val refundBlock: RefundBlock? = null) {
     val summary: PaymentRefundSummary get() = PaymentRefundSummary.of(order, refunds)
 }
+
+/** 서버에서 환불을 보낼 수 없는 이유(설정만 보고 계산한다 - 외부 호출 없음). null 이면 막힘 없음. */
+enum class RefundBlock {
+    /** 그 결제사에 환불 · 조회 능력이 없다. */
+    UNSUPPORTED,
+
+    /** 결제사 빈이 지금 없다(꺼짐 · 키 없음). */
+    PROVIDER_OFF,
+
+    /** 지금 끼운 키의 모드가 주문과 다르다. */
+    MODE_MISMATCH,
+}
+
+/** 환불 줄이 가리키는 주문의 종류와 환불이 막힌 이유 - 환불 요청 목록이 주문을 따로 열지 않고도 단추를 정할 수 있게. */
+data class RefundOrderInfo(val kind: PaymentOrderKind, val block: RefundBlock?)
 
 data class OperatorOrderPage(val values: List<OperatorOrderView>, val next: OrderCursor?)
 
 data class OperatorOrderDetail(val view: OperatorOrderView, val events: List<PaymentEvent>)
 
-data class RefundPage(val values: List<PaymentRefund>, val next: RefundCursor?)
+data class RefundPage(val values: List<PaymentRefund>, val next: RefundCursor?, val orders: Map<String, RefundOrderInfo> = emptyMap())
 
 /** 운영자 주문 목록의 질문. [q] 는 주문 id 또는 결제사 결제 번호의 **정확한** 값이다. */
 data class OperatorOrderQuery(
@@ -93,7 +108,7 @@ class PaymentQueries(
         val rows = if (query.review) reviewRows(filter.copy(hideErased = false), query.before, limit + 1, now) else store.listOrdersForOperator(OperatorOrderScope.ALL, filter, null, query.before, limit + 1)
         val page = rows.take(limit)
         val refunds = refundsOf(page)
-        return OperatorOrderPage(page.map { OperatorOrderView(it, refunds[it.id].orEmpty(), reasons.of(it, refunds[it.id].orEmpty(), now)) }, nextOf(rows.size > limit, page.lastOrNull()))
+        return OperatorOrderPage(page.map { OperatorOrderView(it, refunds[it.id].orEmpty(), reasons.of(it, refunds[it.id].orEmpty(), now), refundBlockOf(it)) }, nextOf(rows.size > limit, page.lastOrNull()))
     }
 
     /** 주문 id 또는 결제사 결제 번호의 정확한 값 — 한두 줄이라 커서가 없다. 결제 번호는 `provider in (아는 결제사)` 와 같이 찾아 유니크 인덱스를 탄다. */
@@ -102,7 +117,7 @@ class PaymentQueries(
             .filter { query.status == null || it.status == query.status }
             .filter { query.accountId == null || it.accountId == query.accountId }
         val refunds = refundsOf(found)
-        val views = found.map { OperatorOrderView(it, refunds[it.id].orEmpty(), reasons.of(it, refunds[it.id].orEmpty(), now)) }
+        val views = found.map { OperatorOrderView(it, refunds[it.id].orEmpty(), reasons.of(it, refunds[it.id].orEmpty(), now), refundBlockOf(it)) }
             .filter { !query.review || it.reviewReason != null }
             .sortedWith(compareByDescending<OperatorOrderView> { it.order.createdAt }.thenByDescending { it.order.id })
             .take(limit)
@@ -136,7 +151,7 @@ class PaymentQueries(
 
     fun operatorView(order: PaymentOrder): OperatorOrderView {
         val refunds = store.listRefunds(order.id)
-        return OperatorOrderView(order, refunds, reasons.of(order, refunds, writer.now()))
+        return OperatorOrderView(order, refunds, reasons.of(order, refunds, writer.now()), refundBlockOf(order))
     }
 
     /** 환불 줄 목록, 최신순. */
@@ -144,8 +159,26 @@ class PaymentQueries(
         val limit = clamp(size)
         val rows = store.listRefundsByStatus(status, before, limit + 1)
         val page = rows.take(limit)
-        return RefundPage(page, if (rows.size > limit) page.lastOrNull()?.let { RefundCursor(it.requestedAt, it.id) } else null)
+        val orders = store.listOrdersByIds(page.map { it.orderId }.toSet()).associate { it.id to refundInfo(it) }
+        return RefundPage(page, if (rows.size > limit) page.lastOrNull()?.let { RefundCursor(it.requestedAt, it.id) } else null, orders)
     }
+
+    fun refundInfo(order: PaymentOrder): RefundOrderInfo = RefundOrderInfo(order.kind, refundBlockOf(order))
+
+    /**
+     * 서버에서 환불을 보낼 수 없는 이유 - 환불 전 확인과 같은 판정을 **설정만 보고** 한다(외부 호출 없음). 환불·조회 능력이 둘 다 있어야 하고(없으면 [RefundBlock.UNSUPPORTED]),
+     * 결제사 빈이 지금 있어야 하고([RefundBlock.PROVIDER_OFF]), 키 모드가 주문과 같아야 한다([RefundBlock.MODE_MISMATCH]).
+     */
+    fun refundBlockOf(order: PaymentOrder): RefundBlock? =
+        try {
+            val refund = router.gateway(order.provider, PaymentRefundGateway::class)
+            val lookup = router.gateway(order.provider, PaymentLookupGateway::class)
+            if (refund.mode != order.providerMode || lookup.mode != order.providerMode) RefundBlock.MODE_MISMATCH else null
+        } catch (_: PaymentProviderNotFoundException) {
+            RefundBlock.PROVIDER_OFF
+        } catch (_: PaymentCapabilityUnsupportedException) {
+            RefundBlock.UNSUPPORTED
+        }
 
     private fun refundsOf(orders: List<PaymentOrder>): Map<String, List<PaymentRefund>> =
         store.listRefundsOfOrders(orders.map { it.id }).groupBy { it.orderId }

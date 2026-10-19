@@ -24,12 +24,14 @@ class PaymentPushedEvents(
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val flags = PaymentReviewFlags(writer, review)
+    private val refundLines = RefundLines(writer, tasks)
 
     fun apply(tx: PaymentLedgerTx, gateway: PaymentPushGateway, event: PushedPaymentEvent): String? =
         when (event) {
             is PushedPayment -> payment(tx, gateway, event)
             is PushedSubscription -> subscriptionState(tx, gateway, event)
             is PushedPaymentFailure -> paymentFailure(tx, gateway, event)
+            is PushedRefund -> refund(tx, gateway, event)
         }
 
     /**
@@ -199,6 +201,51 @@ class PaymentPushedEvents(
         if (providerSubscriptionId != null) tasks.enqueue(PaymentTask(PaymentTaskTypes.PROVIDER_SUBSCRIPTION_CANCEL, "${provider.trim().lowercase()}:$providerSubscriptionId"))
     }
 
+    /**
+     * 결제사가 환불에 내린 결정. 서명된 본문이 사실이라 조회하지 않는다. 줄은 **번호**(접수 때 박은 것)로 찾고, 번호가 없으면 같은 금액의 열린 `PENDING` 줄 하나에 붙인다
+     * (응답을 잃은 호출 - 결제사는 거래당 검토 중 환불이 하나뿐이고 장부는 주문당 열린 환불이 하나뿐이라 짝이 하나다). 우리 줄이 없는 승인은 결제사 관리 화면의 환불이라 `PROVIDER` 줄로 넣는다.
+     */
+    private fun refund(tx: PaymentLedgerTx, gateway: PaymentPushGateway, event: PushedRefund): String? {
+        val provider = gateway.providerId.trim().lowercase()
+        val known = tx.findOrderByProviderPayment(provider, event.providerPaymentId) ?: return UNKNOWN_TRANSACTION
+        val order = tx.lockOrder(known.id) ?: return UNKNOWN_ORDER
+        val context = ConvergeContext(gateway.mode, ConvergeSource.WEBHOOK, PaymentActor.PROVIDER)
+        if (order.providerMode != gateway.mode) {
+            flags.flag(tx, order, PaymentReviewReason.MODE_MISMATCH, context)
+            return MODE_MISMATCH
+        }
+        if (!order.status.isPaidFamily) return ORDER_NOT_PAID
+        val number = LedgerValues.code(event.providerRefundId) ?: return UNREADABLE_REFUND
+        val lines = tx.listRefunds(order.id)
+        val line = lines.firstOrNull { it.providerRefundId == number }
+            ?: lines.firstOrNull { it.status == PaymentRefundStatus.PENDING && it.providerRefundId == null && it.amount.sameAs(event.amount) }
+        when (event.status) {
+            PushedRefundStatus.PENDING_APPROVAL ->
+                if (line != null && line.status == PaymentRefundStatus.PENDING && line.providerRefundId == null) {
+                    writer.transitionRefund(tx, line, PaymentRefundStatus.PENDING, PaymentEventType.REFUND_UNKNOWN, PaymentActor.PROVIDER, null, RefundSettlement.PROVIDER_PENDING) {
+                        it.copy(providerRefundId = number, failureCode = it.failureCode ?: RefundSettlement.PROVIDER_PENDING)
+                    }
+                }
+            PushedRefundStatus.APPROVED -> {
+                if (line != null && line.status != PaymentRefundStatus.PENDING) return null // 끝 상태가 된 줄은 다시 움직이지 않는다
+                val amount = line?.amount ?: event.amount
+                if (!refundLines.fits(order, amount) || (line != null && !line.amount.sameAs(event.amount))) {
+                    flags.flag(tx, order, PaymentReviewReason.REFUND_MISMATCH, context)
+                    return REFUND_MISMATCH
+                }
+                if (line != null) refundLines.succeed(tx, order, line, number, event.occurredAt, PaymentActor.PROVIDER, null)
+                else refundLines.addFromProvider(tx, order, ProviderRefund(number, event.amount, event.occurredAt))
+            }
+            PushedRefundStatus.REJECTED ->
+                if (line != null && line.status == PaymentRefundStatus.PENDING) {
+                    writer.transitionRefund(tx, line, PaymentRefundStatus.FAILED, PaymentEventType.REFUND_FAILED, PaymentActor.PROVIDER, null, PROVIDER_REJECTED) {
+                        it.copy(providerRefundId = number, failureCode = PROVIDER_REJECTED, completedAt = writer.now())
+                    }
+                }
+        }
+        return null
+    }
+
     private fun subscriptionState(tx: PaymentLedgerTx, gateway: PaymentPushGateway, event: PushedSubscription): String? {
         val provider = gateway.providerId.trim().lowercase()
         val lifecycle = subscriptions ?: return SUBSCRIPTIONS_OFF
@@ -282,5 +329,11 @@ class PaymentPushedEvents(
         const val PRICE_MISMATCH = "PRICE_MISMATCH"
         const val SEAT_TAKEN = "SEAT_TAKEN"
         const val NOT_HANDLED = "NOT_HANDLED"
+        const val ORDER_NOT_PAID = "ORDER_NOT_PAID"
+        const val UNREADABLE_REFUND = "UNREADABLE_REFUND"
+        const val REFUND_MISMATCH = "REFUND_MISMATCH"
+
+        /** 환불 줄의 `failure_code` · 이력의 `provider_code`: 결제사가 환불 요청을 거절했다 - 돈은 움직이지 않았고 주문은 다시 환불할 수 있다. */
+        const val PROVIDER_REJECTED = "PROVIDER_REJECTED"
     }
 }

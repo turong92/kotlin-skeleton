@@ -72,6 +72,11 @@ class OrderExpireTaskHandler(
             closeWithoutLookup(id, ConvergeContext(order.providerMode, ConvergeSource.EXPIRE), "Order $id is still open for payment")
             return
         }
+        if (!gateway.answersByOrderId) {
+            // 거래 번호로만 조회되는 결제사(Paddle) - 주문 번호로 물을 수 없으니 조회 능력이 없는 결제사와 같은 길이다
+            closeWithoutLookup(id, ConvergeContext(order.providerMode, ConvergeSource.EXPIRE), "Order $id is still open for payment")
+            return
+        }
         val context = ConvergeContext(gateway.mode, ConvergeSource.EXPIRE)
         if (gateway.mode != order.providerMode) {
             // `PENDING` 은 승인을 선점한 적이 없다 — 돈이 움직였을 수 없으니 표시도 경보도 없이 마감이 지나면 닫는다(다른 모드 키로는 물을 수도 없다).

@@ -71,12 +71,12 @@
 
 ### 1.4 운영자 주문 `AdminOrder`
 
-`Order` 의 모든 칸 **에 더해**(같은 객체에 펼쳐서): `accountId`(주문한 계정. `TOMBSTONE` 모드로 지워진 계정이면 대체 값) · `provider` · `providerPaymentId`(결제사 결제 번호, 없을 수 있음) · `reviewReason`(§7, 없으면 `null`) · `accountErasedAt`(계정이 탈퇴한 시각 `string | null` — 탈퇴 전이면 `null`, **칸은 늘 온다**). 목록 줄 · 한 건 · `sync` 응답 모두 같다.
+`Order` 의 모든 칸 **에 더해**(같은 객체에 펼쳐서): `accountId`(주문한 계정. `TOMBSTONE` 모드로 지워진 계정이면 대체 값) · `provider` · `providerPaymentId`(결제사 결제 번호, 없을 수 있음) · `reviewReason`(§7, 없으면 `null`) · `accountErasedAt`(계정이 탈퇴한 시각 `string | null` — 탈퇴 전이면 `null`, **칸은 늘 온다**) · `refundBlock`(서버에서 환불을 보낼 수 없는 이유 `"UNSUPPORTED" | "PROVIDER_OFF" | "MODE_MISMATCH" | null`, **칸은 늘 온다** — `UNSUPPORTED` = 그 결제사에 환불·조회 능력이 없다 · `PROVIDER_OFF` = 결제사 빈이 지금 없다(꺼짐 · 키 없음) · `MODE_MISMATCH` = 지금 끼운 키의 모드가 주문과 다르다. 설정만 보고 계산하며 외부 호출은 없다). 목록 줄 · 한 건 · `sync` 응답 모두 같다.
 `accountId` 는 `TOMBSTONE` 모드로 지워진 계정이면 `deleted:` + 16진수 16자(계정 id 의 SHA-256 앞자리 — 계정마다 하나, 되돌릴 수 없다) 다.
 
 ### 1.5 운영자 환불 `AdminRefund`
 
-`Refund` 의 모든 칸에 더해: `requestedBy`(요청한 사람 — 본인 요청이면 계정 id, 운영자 직접 환불이면 운영자 id) · `decidedBy`(보낸 · 거절한 운영자) · `failureCode`(§6.1).
+`Refund` 의 모든 칸에 더해: `requestedBy`(요청한 사람 — 본인 요청이면 계정 id, 운영자 직접 환불이면 운영자 id) · `decidedBy`(보낸 · 거절한 운영자) · `failureCode`(§6.1) · `keepSubscription`(`true` = 운영자가 「구독도 해지」를 끄고 보낸 환불, **칸은 늘 온다**) · `orderKind`(그 주문의 `kind` — 화면이 「구독도 해지」 선택을 보일지 정한다) · `refundBlock`(그 주문의 것, `AdminOrder.refundBlock` 과 같다). 결제사가 검토 중으로 쥔 환불(Paddle)은 `PENDING` 이고 `failureCode` 가 `PROVIDER_PENDING` 이다. 결제사가 거절한 환불은 `FAILED` + `failureCode` `PROVIDER_REJECTED`.
 
 ### 1.6 이력 `Event` (운영자 한 건 응답에만)
 
@@ -184,7 +184,7 @@
 `200 { value: { order: AdminOrder, refunds: AdminRefund[], events: Event[] } }`. `refunds` 는 오래된 순, `events` 는 **오래된 순**(§1.6). 없으면 `404 PAYMENT.ORDER_NOT_FOUND`. 파생 사유(`STALE_CONFIRMING` · `STALE_REFUND` 등, §7)는 목록 줄뿐 아니라 여기와 `sync` 응답의 `order.reviewReason` 에도 실린다.
 
 ### POST /orders/{id}/refunds — 바로 환불
-헤더 `Idempotency-Key`. 본문 `{ "reasonCode": "OPERATOR", "amount": 1000 }` — `reasonCode` 는 `OPERATOR` · `CUSTOMER_REQUEST` · `DUPLICATE` · `NOT_DELIVERED`(그 밖은 `400`), `amount` 생략하면 남은 전액. 실행 순서는 **환불 전 확인(결제사 조회 → 맞추기) → 선점(`PENDING`, 커밋) → 결제사 호출 → 확정**이다. 서버가 조회와 환불을 둘 다 하므로 프론트는 **45초**를 기다린다.
+헤더 `Idempotency-Key`. 본문 `{ "reasonCode": "OPERATOR", "amount": 1000, "endSubscription": true }` — `reasonCode` 는 `OPERATOR` · `CUSTOMER_REQUEST` · `DUPLICATE` · `NOT_DELIVERED`(그 밖은 `400`), `amount` 생략하면 남은 전액. `endSubscription`(선택, 생략 = `true`)은 **구독 결제를 전액 환불하면 구독도 해지**할지다 — `false` 면 환불만 하고 구독은 다음 갱신에서 계속 과금된다(지금 기간의 구독 결제를 전액 환불할 때만 뜻이 있다; 부분 환불은 어느 쪽이든 구독을 건드리지 않는다). 선택은 환불 줄에 남아(`keepSubscription`) 결제사가 며칠 뒤 끝내는 환불에도 그대로 적용된다. 같은 `Idempotency-Key` 에 다른 값이면 `409 IDEMPOTENCY_CONFLICT`. 칸이 `true`/`false` 가 아니면 `400 COMMON.VALIDATION_FAILED`. **Paddle 은 대개 `202 PENDING`** 이다 — Paddle 이 검토한 뒤 승인 · 거절을 웹훅으로 알린다(`PROVIDER_PENDING`). 실행 순서는 **환불 전 확인(결제사 조회 → 맞추기) → 선점(`PENDING`, 커밋) → 결제사 호출 → 확정**이다. 서버가 조회와 환불을 둘 다 하므로 프론트는 **45초**를 기다린다.
 
 | 응답 | 뜻 |
 |---|---|
@@ -195,17 +195,18 @@
 | `400 COMMON.MALFORMED_REQUEST` · `COMMON.PARAMETER_VALIDATION_FAILED` | 깨진 JSON 본문 / 타입이 틀린 쿼리(§10). **이 세 검증 코드는 모두 환불 줄을 선점하기 전에만 나간다** — 프론트는 "아무것도 안 나갔다"로 읽고 멱등 키를 놓는다 |
 | `402 PAYMENT.REFUND_DECLINED` | 결제사가 확정 거절. 줄은 `FAILED` 로 닫히고 주문은 다시 환불할 수 있다. `data.category`: `ALREADY_REFUNDED` · `AMOUNT_EXCEEDED` · `PARTIAL_NOT_ALLOWED` · `PERIOD_EXPIRED` · `TEMPORARY` · `OTHER`, `data.providerCode`(코드 없는 거절이면 줄의 `failureCode` 는 `REFUND_DECLINED`) |
 | `404 PAYMENT.ORDER_NOT_FOUND` | |
-| `409 PAYMENT.REFUND_IN_PROGRESS` | 이 주문에 열린 환불이 있다(본인의 `REQUESTED` 요청 포함 — 그것은 승인 · 거절로 처리한다) |
+| `409 PAYMENT.REFUND_IN_PROGRESS` | 이 주문에 열린 환불이 있다(본인의 `REQUESTED` 요청 포함 — 그것은 승인 · 거절로 처리한다) · **결제사가 검토 중으로 쥔 환불이 있는 거래**(Paddle — 환불 전 확인이 알아내고 보내지 않는다) |
+| `409 PAYMENT.REFUND_UNSUPPORTED` | 그 결제사는 서버에서 환불을 못 한다(환불 · 조회 능력이 없다 — 예 `payment-stripe`). **결제사를 부르기 전에** 나간다. 결제사 관리 화면에서 환불한 뒤 요청을 거절한다 — 응답의 `refundBlock` 이 미리 말해 준다 |
 | `409 PAYMENT.REFUND_NOT_ALLOWED` | 결제된 주문이 아니다 · 결제사 결제 번호가 없다 · **`REFUND_MISMATCH` 표시가 있다 · 또는 환불 전 확인에서 결제사에 그 결제가 없거나 「받지 않았다」(진행 중 · 실패 · 만료)고 했거나 결제사의 남은 금액이 장부와 달랐다**(이 어긋남에는 `REFUND_MISMATCH` 가 찍히고 환불 호출 · 환불 줄은 없다) — 이때는 먼저 「결제사와 맞추기」 |
 | `409 PAYMENT.MODE_MISMATCH` | 주문의 키 모드와 지금 키의 모드가 다르다 |
 | `409 PAYMENT.IDEMPOTENCY_CONFLICT` | 같은 키에 주문 · 사유 · 금액이 다르다 |
-| `503 PAYMENT.UNAVAILABLE` | **아무것도 보내지 않았다** — 환불 전 확인 조회가 실패했거나 결제사를 고를 수 없다(§4). 다시 누르면 새 줄이다 |
+| `503 PAYMENT.UNAVAILABLE` | **아무것도 보내지 않았다** — 환불 전 확인 조회가 실패했거나 결제사 빈이 지금 없다(§4). 다시 누르면 새 줄이다 |
 
 ### GET /refunds?status=&cursor=&size=
 `200 { values: AdminRefund[], cursor }`, **`status` 가 없으면 `REQUESTED`**(필터 없는 전체 목록은 없다). 최신순(요청한 시각). 모르는 `status` 는 `400`. 줄은 주문 이름 · 금액 없이 `orderId` 만 갖는다.
 
 ### POST /refunds/{id}/approve — 요청대로(또는 고친 금액으로) 환불
-선택 본문 `{ "amount": <최소 단위 정수> }` — 없으면 요청 금액, 있으면 `0 < amount ≤ min(요청 금액, 환불 가능액)`(넘으면 결제사를 부르지 않고 `400 PAYMENT.REFUND_AMOUNT_EXCEEDED`). 결제사에는 고친 금액이 가고, 줄의 `amount` 는 승인 금액이며 처음 요청한 금액은 `requestedAmount`(고치지 않았으면 `null`)로 남는다 — 사용자 · 운영자의 환불 줄 응답 모두. **`Idempotency-Key` 없음** — 줄의 상태가 방어다(같은 요청 id 의 동시 승인은 서버가 한 건만 실행하고 나머지는 `409 PAYMENT.REFUND_NOT_ALLOWED`). 응답은 직접 환불과 같다: `200 SUCCEEDED` · `202 PENDING` · `402 PAYMENT.REFUND_DECLINED`(**요청 줄은 `FAILED` 로 닫힌다** — 다시 시도하려면 직접 환불) · `400 PAYMENT.REFUND_AMOUNT_EXCEEDED`(**요청 줄은 `REQUESTED` 로 남는다** — 거절하거나 직접 환불) · `409 PAYMENT.MODE_MISMATCH` · `404 PAYMENT.REFUND_NOT_FOUND` · `503 PAYMENT.UNAVAILABLE`.
+선택 본문 `{ "amount": <최소 단위 정수>, "endSubscription": true }` — `endSubscription` 은 바로 환불과 같다(생략 = `true`, 승인에는 멱등 키가 없다). `amount` 는 없으면 요청 금액, 있으면 `0 < amount ≤ min(요청 금액, 환불 가능액)`(넘으면 결제사를 부르지 않고 `400 PAYMENT.REFUND_AMOUNT_EXCEEDED`). 결제사에는 고친 금액이 가고, 줄의 `amount` 는 승인 금액이며 처음 요청한 금액은 `requestedAmount`(고치지 않았으면 `null`)로 남는다 — 사용자 · 운영자의 환불 줄 응답 모두. **`Idempotency-Key` 없음** — 줄의 상태가 방어다(같은 요청 id 의 동시 승인은 서버가 한 건만 실행하고 나머지는 `409 PAYMENT.REFUND_NOT_ALLOWED`). 응답은 직접 환불과 같다: `200 SUCCEEDED` · `202 PENDING` · `402 PAYMENT.REFUND_DECLINED`(**요청 줄은 `FAILED` 로 닫힌다** — 다시 시도하려면 직접 환불) · `400 PAYMENT.REFUND_AMOUNT_EXCEEDED`(**요청 줄은 `REQUESTED` 로 남는다** — 거절하거나 직접 환불) · `409 PAYMENT.MODE_MISMATCH` · `409 PAYMENT.REFUND_UNSUPPORTED`(**요청 줄은 `REQUESTED` 로 남는다** — 거절한다) · `404 PAYMENT.REFUND_NOT_FOUND` · `503 PAYMENT.UNAVAILABLE`.
 **`409 PAYMENT.REFUND_NOT_ALLOWED` 는 두 뜻이다**: 요청이 이미 결정됐다, 또는 주문이 환불할 수 없다(결제 안 됨 · `REFUND_MISMATCH` · 환불 전 확인의 불일치 — 결제사가 그 결제를 모르거나 받지 않았다고 하는 것 포함). 화면은 중립 문구로 말한다.
 
 ### POST /refunds/{id}/reject

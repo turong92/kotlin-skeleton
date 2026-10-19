@@ -12,6 +12,7 @@ import dev.sumin.skeleton.payment.PaymentOrder
 import dev.sumin.skeleton.payment.PaymentRefund
 import dev.sumin.skeleton.payment.PaymentRefundStatus
 import dev.sumin.skeleton.payment.PaymentWebhookEvent
+import dev.sumin.skeleton.payment.RefundOrderInfo
 import java.time.Instant
 
 /*
@@ -210,6 +211,8 @@ data class AdminOrderResponse(
     val reviewReason: String?,
     /** 계정이 탈퇴한 시각 — 탈퇴 전이면 `null`. 칸은 늘 온다. */
     val accountErasedAt: Instant?,
+    /** 서버에서 환불을 보낼 수 없는 이유 - `UNSUPPORTED` · `PROVIDER_OFF` · `MODE_MISMATCH`, 막힘이 없으면 `null`. 칸은 늘 온다. */
+    val refundBlock: String?,
 ) {
     companion object {
         fun of(view: OperatorOrderView): AdminOrderResponse {
@@ -223,6 +226,7 @@ data class AdminOrderResponse(
                 providerPaymentId = view.order.providerPaymentId,
                 reviewReason = view.reviewReason,
                 accountErasedAt = view.order.accountErasedAt,
+                refundBlock = view.refundBlock?.name,
             )
         }
     }
@@ -243,13 +247,20 @@ data class AdminRefundResponse(
     val decidedBy: String?,
     val failureCode: String?,
     val requestedAmount: AmountResponse?,
+    /** 「구독도 해지」를 끄고 보낸 환불이면 `true`. 칸은 늘 온다. */
+    val keepSubscription: Boolean,
+    /** 그 주문의 종류(`SUBSCRIPTION_INITIAL` …) - 화면이 「구독도 해지」 선택을 보일지 정한다. */
+    val orderKind: String?,
+    /** 그 주문에 서버에서 환불을 보낼 수 없는 이유 - [AdminOrderResponse.refundBlock] 과 같다. */
+    val refundBlock: String?,
 ) {
     companion object {
-        fun of(refund: PaymentRefund): AdminRefundResponse {
+        fun of(refund: PaymentRefund, order: RefundOrderInfo? = null): AdminRefundResponse {
             val r = RefundResponse.of(refund)
             return AdminRefundResponse(
                 id = r.id, orderId = r.orderId, status = r.status, amount = r.amount, reasonCode = r.reasonCode, origin = r.origin, requestedAt = r.requestedAt, completedAt = r.completedAt,
                 closedBy = r.closedBy, requestedBy = refund.requestedBy, decidedBy = refund.decidedBy, failureCode = refund.failureCode, requestedAmount = r.requestedAmount,
+                keepSubscription = refund.keepSubscription, orderKind = order?.kind?.name, refundBlock = order?.block?.name,
             )
         }
     }
@@ -290,7 +301,7 @@ data class AdminOrderDetailResponse(val order: AdminOrderResponse, val refunds: 
     companion object {
         fun of(detail: OperatorOrderDetail) = AdminOrderDetailResponse(
             order = AdminOrderResponse.of(detail.view),
-            refunds = detail.view.refunds.map(AdminRefundResponse::of),
+            refunds = detail.view.refunds.map { AdminRefundResponse.of(it, RefundOrderInfo(detail.view.order.kind, detail.view.refundBlock)) },
             events = detail.events.mapIndexed { index, event -> EventResponse.of(index + 1, event) },
         )
     }

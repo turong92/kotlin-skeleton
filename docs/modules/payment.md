@@ -36,8 +36,8 @@
 | 능력 | 하는 일 |
 |---|---|
 | `PaymentConfirmGateway` | 승인. `acceptsPaymentKey`(결제 키 **모양** 확인 — 선점 전에 불리고 **락 안이라 I/O 금지**) · `confirmDeclineCategory`(확정 거절 코드 → `DECLINED` 의 `data.category`) |
-| `PaymentRefundGateway` | 전액 · 부분 환불. `refundDeclineCategory`(확정 거절 코드 → `REFUND_DECLINED` 의 `data.category`) |
-| `PaymentLookupGateway` | 결제사가 아는 지금 상태(취소 목록 포함). 결제가 없으면 null |
+| `PaymentRefundGateway` | 전액 · 부분 환불. `refundDeclineCategory`(확정 거절 코드 → `REFUND_DECLINED` 의 `data.category`). **환불은 이 능력과 `PaymentLookupGateway`(환불 전 확인) 둘 다 있어야 한다** — 하나라도 없으면 운영자 환불 · 승인은 결제사를 부르기 전에 `409 REFUND_UNSUPPORTED`, 운영자 응답의 `refundBlock` 이 미리 말한다 |
+| `PaymentLookupGateway` | 결제사가 아는 지금 상태(이뤄진 취소 `refunds`, 결제사가 **검토 중으로 쥔** 환불 `pendingRefunds` 포함). 결제가 없으면 null. `answersByOrderId`(기본 true)가 false 인 결제사(거래 번호로만 조회되는 Paddle)는 주문 번호만 든 조회가 결제사를 부르지 않고 null 이고, 만료 작업은 그 결제사의 `PENDING` 을 조회 없이 마감 뒤 닫는다 |
 | `PaymentCheckoutGateway` | 결제창을 여는 데 프론트가 필요한 공개 값. **계약: 결제창 결제사는 서버 승인 없이 돈을 움직이지 않는다** — 모드가 다르거나 결제사 빈이 없는 `PENDING` 을 조회 없이 닫는 규칙이 이것에 기댄다. 서버 승인 없이 결제가 끝나는 결제사를 붙이려면 그 규칙을 먼저 고친다 |
 | `PaymentWebhookGateway` | 웹훅의 진위를 확인하고 「어느 자원의 어떤 일」만 꺼낸다. `signed=false` 면 주소의 비밀 조각이 필수 |
 | `mode` | 지금 끼운 키가 테스트 · 실결제 — 주문 줄에 박히고 배포 가드가 본다 |
@@ -82,6 +82,10 @@
 
 **주문**: `PENDING` → `CONFIRMING` · `CANCELED` · `EXPIRED` · `PAID` / `CONFIRMING` → `PAID` · `FAILED` / `PAID` → `PARTIALLY_REFUNDED` · `REFUNDED` / `PARTIALLY_REFUNDED` → `PARTIALLY_REFUNDED` · `REFUNDED`.
 `FAILED` · `EXPIRED` · `CANCELED` → `PAID` 는 있지만 **결제사 조회 증거로만**이다(늦게 온 결제). **`PAID` 이후에서 `FAILED` · `EXPIRED` · `CANCELED` 로 가는 길은 없다** — 늦게 온 실패 신호가 받은 돈을 되돌리지 못한다.
+
+**결제사가 결정하는 환불(Paddle)**: 호출이 `pending_approval` 로 답하면 줄이 `PENDING` 으로 남고 접수 번호(`adj_…`)가 줄의 `provider_refund_id` 에 박힌다(`failure_code=PROVIDER_PENDING`). 서명된 웹훅 `adjustment.created` · `adjustment.updated` 가 `PushedRefund` 사건으로 `PaymentPushedEvents` 에 닿아 줄을 끝낸다: `approved` → `SUCCEEDED`(`onRefunded` 한 번, 전액이면 주문 `REFUNDED`), `rejected` → `FAILED` + `failure_code=PROVIDER_REJECTED`(주문은 다시 환불할 수 있다). 줄은 번호로, 번호가 없으면 같은 금액의 열린 `PENDING` 줄 하나로 찾는다(응답을 잃은 호출). 우리 줄이 없는 승인(결제사 대시보드의 환불)은 `PROVIDER` 줄로 넣는다. 끝 상태가 된 줄은 다시 움직이지 않는다. 정산(`RefundSettlement`)은 결제사가 `pendingRefunds` 로 쥔 줄을 「적용 안 됨」으로 닫지 않는다.
+
+**구독 결제 환불의 「구독도 해지」**: 운영자 환불의 두 입구(`refund` · `approve`)가 `endSubscription`(생략 = `true`)을 받고, `false` 면 환불 줄에 `keep_subscription=true` 를 쓴다. 그 줄이 `SUCCEEDED` 가 돼 지금 기간의 구독 주문이 전액 환불돼도 구독을 끝내지 않는다(환불이 끝나는 때 적용되므로 줄에 남는다). 운영자가 아닌 환불(결제사 콘솔 취소)은 지금처럼 구독을 끝낸다. 결제사가 갱신하는 구독이 환불로 끝나면 결제사에도 즉시 해지 작업(`payment-provider-subscription-cancel`)을 넣는다.
 
 **환불**: `REQUESTED` → `PENDING` · `REJECTED` · `WITHDRAWN` / `PENDING` → `SUCCEEDED` · `FAILED`. 줄이 처음 생길 때의 상태는 `REQUESTED`(본인 요청) · `PENDING`(운영자 직접 환불) · `SUCCEEDED`(결제사 쪽 취소를 장부에 맞춰 넣은 줄). 주문당 열린 환불(`REQUESTED` · `PENDING`)은 하나뿐이다(`open_key` 유니크).
 

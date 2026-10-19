@@ -206,7 +206,7 @@ class PaymentSchemaDbTest {
             putAll(cols("payment_subscriptions", ColumnClass.SECRET, "customer_key", "billing_token"))
 
             putAll(cols("payment_refunds", ColumnClass.IDENTIFIER, "id", "order_id", "open_key", "dedupe_key", "provider_refund_id", "requested_by", "decided_by"))
-            putAll(cols("payment_refunds", ColumnClass.CODE, "status", "origin", "currency", "reason_code", "failure_code"))
+            putAll(cols("payment_refunds", ColumnClass.CODE, "status", "origin", "currency", "reason_code", "failure_code", "keep_subscription"))
             putAll(cols("payment_refunds", ColumnClass.AMOUNT, "amount", "expected_remaining", "requested_amount"))
             putAll(cols("payment_refunds", ColumnClass.TIME, "requested_at", "sent_at", "completed_at", "applied_at", "created_at", "updated_at"))
 

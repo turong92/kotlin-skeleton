@@ -29,7 +29,7 @@ class PaymentRefundApplier(
             if (order.fulfilledAt == null) fulfillment.fulfil(orderId)
             val current = checkNotNull(tx.lockOrder(orderId))
             listener.onRefunded(current, refund)
-            if (current.originType == PaymentOriginType.SUBSCRIPTION && current.status == PaymentOrderStatus.REFUNDED) subscriptions?.onOrderRefunded(tx, current)
+            if (current.originType == PaymentOriginType.SUBSCRIPTION && current.status == PaymentOrderStatus.REFUNDED) subscriptions?.onOrderRefunded(tx, current, keepSubscription = refund.keepSubscription)
             val at = writer.now()
             tx.updateRefund(refund.copy(appliedAt = at, updatedAt = at))
             tx.appendEvent(writer.refundEvent(orderId, refundId, PaymentEventType.REFUND_APPLIED, PaymentActor.SYSTEM))

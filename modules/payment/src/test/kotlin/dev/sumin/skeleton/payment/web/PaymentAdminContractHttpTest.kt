@@ -97,7 +97,7 @@ class PaymentAdminContractHttpTest {
     }
 
     @Test
-    fun `a refund or an approval whose provider cannot be found or cannot refund is 503 unavailable - nothing was sent and no pending line stays`() {
+    fun `a refund or an approval whose provider cannot be found is 503 unavailable and one that cannot refund from the server is 409 unsupported - nothing was sent and no pending line stays`() {
         val account = account()
         val ghost = paid(account)
         val ghostRequest = userRequest(account, ghost)
@@ -111,13 +111,49 @@ class PaymentAdminContractHttpTest {
         val calls = gateway.refundCalls.size
 
         refundNow(ghost).andExpect(status().isServiceUnavailable).andExpect(jsonPath("$.code").value("PAYMENT.UNAVAILABLE"))
-        refundNow(noRefund).andExpect(status().isServiceUnavailable).andExpect(jsonPath("$.code").value("PAYMENT.UNAVAILABLE"))
+        refundNow(noRefund).andExpect(status().isConflict).andExpect(jsonPath("$.code").value("PAYMENT.REFUND_UNSUPPORTED"))
         mvc.perform(post("$admin/refunds/$ghostRequest/approve").asOperator()).andExpect(status().isServiceUnavailable).andExpect(jsonPath("$.code").value("PAYMENT.UNAVAILABLE"))
-        mvc.perform(post("$admin/refunds/$noRefundRequest/approve").asOperator()).andExpect(status().isServiceUnavailable).andExpect(jsonPath("$.code").value("PAYMENT.UNAVAILABLE"))
+        mvc.perform(post("$admin/refunds/$noRefundRequest/approve").asOperator()).andExpect(status().isConflict).andExpect(jsonPath("$.code").value("PAYMENT.REFUND_UNSUPPORTED"))
 
         assertEquals(calls, gateway.refundCalls.size)
         assertEquals(PaymentRefundStatus.REQUESTED, store.findRefund(ghostRequest)!!.status)
         assertEquals(emptyList(), store.listRefunds(ghost).filter { it.status == PaymentRefundStatus.PENDING })
+    }
+
+    @Test
+    fun `the operator views say why a server refund is blocked - unsupported, provider off, key mode - and nothing when it can be sent`() {
+        val account = account()
+        val ok = paid(account)
+        val okRequest = userRequest(account, ok)
+        val ghost = paid(account())
+        changeOrder(ghost) { it.copy(provider = "ghost") }
+        val noRefund = paid(account())
+        changeOrder(noRefund) { it.copy(provider = "lookuponly") }
+        val live = paid(account())
+        changeOrder(live) { it.copy(providerMode = PaymentMode.LIVE) }
+
+        mvc.perform(get("$admin/orders/$ok").asOperator()).andExpect(jsonPath("$.value.order.refundBlock").isEmpty).andExpect(jsonPath("$.value.refunds[0].refundBlock").isEmpty)
+        mvc.perform(get("$admin/orders/$ghost").asOperator()).andExpect(jsonPath("$.value.order.refundBlock").value("PROVIDER_OFF"))
+        mvc.perform(get("$admin/orders/$noRefund").asOperator()).andExpect(jsonPath("$.value.order.refundBlock").value("UNSUPPORTED"))
+        mvc.perform(get("$admin/orders/$live").asOperator()).andExpect(jsonPath("$.value.order.refundBlock").value("MODE_MISMATCH"))
+        mvc.perform(get("$admin/orders?q=$noRefund").asOperator()).andExpect(jsonPath("$.values[0].refundBlock").value("UNSUPPORTED"))
+        // 환불 요청 목록의 줄에도 같은 칸과 주문 종류가 있다
+        val request = read(mvc.perform(get("$admin/refunds").asOperator()).andExpect(status().isOk).andReturn().response.contentAsString)["values"].toList().first { it["id"].asString() == okRequest }
+        assertEquals("ONE_TIME", request["orderKind"].asString())
+        assertTrue(request["refundBlock"].isNull)
+        assertEquals(false, request["keepSubscription"].asBoolean())
+    }
+
+    @Test
+    fun `endSubscription must be true or false, and it is checked before any line or provider call`() {
+        val id = paid()
+        val lookups = gateway.lookupCalls.size
+
+        refundNow(id, body = """{"reasonCode":"OPERATOR","endSubscription":"no"}""").andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("COMMON.VALIDATION_FAILED"))
+
+        assertEquals(lookups, gateway.lookupCalls.size)
+        assertEquals(emptyList(), store.listRefunds(id))
+        refundNow(id, body = """{"reasonCode":"OPERATOR","amount":1000,"endSubscription":false}""").andExpect(status().isOk).andExpect(jsonPath("$.value.keepSubscription").value(true))
     }
 
     @Test

@@ -104,8 +104,9 @@ class PaymentAdminController(
     ): ResponseEntity<DataResponse<AdminRefundResponse>> {
         val reason = PaymentRequests.text(body["reasonCode"], "reasonCode", 40)
         val amount = PaymentRequests.wholeNumber(body["amount"], "amount")
+        val endSubscription = PaymentRequests.flag(body["endSubscription"], "endSubscription", default = true)
         val idempotency = idempotencyKey(key)
-        return outcome(refunds.refund(operator, id, reason, amount, idempotency))
+        return outcome(refunds.refund(operator, id, reason, amount, idempotency, endSubscription))
     }
 
     @Operation(summary = "Refund requests, newest first (operator)", description = "status defaults to REQUESTED.")
@@ -117,24 +118,25 @@ class PaymentAdminController(
         @RequestParam(required = false) size: Int?,
     ): CursorResponse<AdminRefundResponse> {
         val page = queries.operatorRefunds(enumParam<PaymentRefundStatus>("status", status) ?: PaymentRefundStatus.REQUESTED, PaymentCursors.refund(cursor), PaymentRequests.size(size))
-        return Response.cursor(page.values.map(AdminRefundResponse::of), page.next?.let(PaymentCursors::refund))
+        return Response.cursor(page.values.map { AdminRefundResponse.of(it, page.orders[it.orderId]) }, page.next?.let(PaymentCursors::refund))
     }
 
     @Operation(
         summary = "Approve a refund request, optionally with a corrected amount (operator)",
-        description = "Optional body { amount } (smallest unit): without it the requested amount is refunded; with it 0 < amount <= min(requested, refundable) or 400 REFUND_AMOUNT_EXCEEDED before the provider is called. " +
+        description = "Optional body { amount, endSubscription } (amount in the smallest unit; endSubscription defaults to true): without amount the requested amount is refunded; with it 0 < amount <= min(requested, refundable) or 400 REFUND_AMOUNT_EXCEEDED before the provider is called. " +
+            "endSubscription=false refunds without ending the subscription when a subscription charge is refunded in full. " +
             "The provider gets the corrected amount; the line shows it as amount and keeps the first one as requestedAmount. Same answers as refunding directly. No Idempotency-Key: the line's state is the guard — a second approval is 409 REFUND_NOT_ALLOWED.",
     )
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = AdminRefundResponse::class)
     @PostMapping("/refunds/{id}/approve")
     fun approve(@RequestAttribute(OPERATOR_ATTRIBUTE) operator: String, @PathVariable id: String, @RequestBody(required = false) body: JsonNode?): ResponseEntity<DataResponse<AdminRefundResponse>> =
-        outcome(refunds.approve(operator, id, PaymentRequests.wholeNumber(body?.get("amount"), "amount")))
+        outcome(refunds.approve(operator, id, PaymentRequests.wholeNumber(body?.get("amount"), "amount"), PaymentRequests.flag(body?.get("endSubscription"), "endSubscription", default = true)))
 
     @Operation(summary = "Reject a refund request (operator)", description = "Only a REQUESTED line; an already decided one is 409 REFUND_NOT_ALLOWED.")
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = AdminRefundResponse::class)
     @PostMapping("/refunds/{id}/reject")
     fun reject(@RequestAttribute(OPERATOR_ATTRIBUTE) operator: String, @PathVariable id: String): DataResponse<AdminRefundResponse> =
-        Response.ok(AdminRefundResponse.of(refunds.reject(operator, id)))
+        Response.ok(refundResponse(refunds.reject(operator, id)))
 
     @Operation(summary = "Match the ledger with the provider (operator)", description = "Asks the provider and converges; returns the updated order. 404 PROVIDER_PAYMENT_NOT_FOUND when the provider does not know the payment (the ledger is left as it was) · 400 CAPABILITY_UNSUPPORTED · 409 MODE_MISMATCH · 502 PROVIDER_ERROR · 503 UNAVAILABLE.")
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = AdminOrderResponse::class)
@@ -178,9 +180,12 @@ class PaymentAdminController(
 
     /** 200 = 끝났거나 닫힌 줄(재전송의 FAILED · REJECTED 포함), 202 = 결제사의 답을 모른다(`PENDING`). */
     private fun outcome(outcome: RefundOutcome): ResponseEntity<DataResponse<AdminRefundResponse>> {
-        val response = Response.ok(AdminRefundResponse.of(outcome.refund))
+        val response = Response.ok(AdminRefundResponse.of(outcome.refund, queries.refundInfo(outcome.order)))
         return if (outcome.refund.status == PaymentRefundStatus.PENDING) ResponseEntity.accepted().body(response) else ResponseEntity.ok(response)
     }
+
+    private fun refundResponse(refund: dev.sumin.skeleton.payment.PaymentRefund): AdminRefundResponse =
+        AdminRefundResponse.of(refund, queries.operatorOrder(refund.orderId).view.let { dev.sumin.skeleton.payment.RefundOrderInfo(it.order.kind, it.refundBlock) })
 
     private inline fun <reified E : Enum<E>> enumParam(name: String, value: String?): E? {
         if (value.isNullOrBlank()) return null

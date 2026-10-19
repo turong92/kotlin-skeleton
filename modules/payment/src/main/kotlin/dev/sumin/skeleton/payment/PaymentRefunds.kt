@@ -96,12 +96,13 @@ class PaymentRefunds(
     /**
      * 요청 없이 바로 환불한다(origin `OPERATOR`). 같은 `Idempotency-Key` 로 다시 오면 **그 환불 줄을 지금 상태 그대로**(거절돼 `FAILED` 여도) 돌려주고 결제사를 부르지 않는다.
      * 결과의 줄이 `SUCCEEDED` 면 끝, `PENDING` 이면 모름(조회 작업이 정산). 확정 거절은 [PaymentRefundDeclinedException].
+     * [endSubscription] 이 false 면 이 환불이 구독 결제를 전액 환불로 만들어도 구독을 끝내지 않는다(줄에 남는다) - 같은 키에 다른 값은 [PaymentIdempotencyConflictException].
      */
-    fun refund(operatorId: String, orderId: String, reasonCode: String, amount: Long?, key: IdempotencyKey): RefundOutcome {
+    fun refund(operatorId: String, orderId: String, reasonCode: String, amount: Long?, key: IdempotencyKey, endSubscription: Boolean = true): RefundOutcome {
         store.requireNoOpenTransaction("PaymentRefunds.refund")
         val reason = reasonOf(reasonCode, forOperator = true)
         requirePositive(amount)
-        return send(operatorId, PaymentRefundOrigin.OPERATOR, reason, orderId, amount, PaymentOrderIds.dedupeKey(operatorId, key))
+        return send(operatorId, PaymentRefundOrigin.OPERATOR, reason, orderId, amount, PaymentOrderIds.dedupeKey(operatorId, key), keepSubscription = !endSubscription)
     }
 
     /**
@@ -117,25 +118,25 @@ class PaymentRefunds(
         return send(accountId, PaymentRefundOrigin.USER, PaymentRefundReason.SUBSCRIPTION_CANCEL, orderId, amount, dedupe)
     }
 
-    private fun send(operatorId: String, origin: PaymentRefundOrigin, reason: PaymentRefundReason, orderId: String, amount: Long?, dedupe: String): RefundOutcome {
-        store.findRefundByDedupeKey(dedupe)?.let { return outcomeOf(replayed(it, orderId, reason, amount, origin), replayed = true) }
+    private fun send(operatorId: String, origin: PaymentRefundOrigin, reason: PaymentRefundReason, orderId: String, amount: Long?, dedupe: String, keepSubscription: Boolean = false): RefundOutcome {
+        store.findRefundByDedupeKey(dedupe)?.let { return outcomeOf(replayed(it, orderId, reason, amount, origin, keepSubscription), replayed = true) }
         val order0 = store.findOrder(orderId) ?: throw PaymentOrderNotFoundException()
         val gateways = precheck(order0, operatorId)
         val claimed = store.inTransaction { tx ->
             val order = tx.lockOrder(orderId) ?: throw PaymentOrderNotFoundException()
-            tx.findRefundByDedupeKey(dedupe)?.let { return@inTransaction Claimed(order, replayed(it, orderId, reason, amount, origin), true) }
+            tx.findRefundByDedupeKey(dedupe)?.let { return@inTransaction Claimed(order, replayed(it, orderId, reason, amount, origin, keepSubscription), true) }
             val refunds = openable(order, tx.listRefunds(orderId))
             requireNoRefundMismatch(order)
             requireMode(gateways, order)
             val value = amountFor(order, refunds, amount, excluding = null)
             val now = writer.now()
             val line = newLine(order, PaymentRefundStatus.PENDING, origin, value, reason, dedupe, operatorId, now)
-                .copy(decidedBy = operatorId, expectedRemaining = RefundLines.baseOf(order) - order.refundedAmount - value, sentAt = now)
+                .copy(decidedBy = operatorId, expectedRemaining = RefundLines.baseOf(order) - order.refundedAmount - value, sentAt = now, keepSubscription = keepSubscription)
             val stored = writer.createRefund(tx, line, PaymentEventType.REFUND_SENT, PaymentActor.OPERATOR, operatorId)
             if (stored == null) {
                 // 유니크가 무시했다: 같은 요청(dedupe_key)을 먼저, 그다음 열린 자리(open_key) 순서로 가른다
                 val winner = tx.findRefundByDedupeKey(dedupe)
-                if (winner != null) return@inTransaction Claimed(order, replayed(winner, orderId, reason, amount, origin), true)
+                if (winner != null) return@inTransaction Claimed(order, replayed(winner, orderId, reason, amount, origin, keepSubscription), true)
                 throw PaymentRefundInProgressException()
             }
             enqueueSettle(stored)
@@ -148,9 +149,9 @@ class PaymentRefunds(
     /**
      * 본인의 요청을 승인해 실행한다. [amount] 가 없으면 요청 금액, 있으면 `0 < amount ≤ min(요청 금액, 환불 가능액)` — 넘으면 결제사를 부르지 않고 [PaymentRefundAmountExceededException].
      * 고친 금액이면 줄의 금액을 승인 금액으로 바꾸고 처음 요청한 금액은 [PaymentRefund.requestedAmount] 에 남긴다.
-     * 이미 결정된 요청(동시 승인의 뒤쪽 포함)은 [PaymentRefundNotAllowedException].
+     * 이미 결정된 요청(동시 승인의 뒤쪽 포함)은 [PaymentRefundNotAllowedException]. [endSubscription] 은 [refund] 와 같다(승인에는 멱등 키가 없다 - 줄의 상태가 가드).
      */
-    fun approve(operatorId: String, refundId: String, amount: Long? = null): RefundOutcome {
+    fun approve(operatorId: String, refundId: String, amount: Long? = null, endSubscription: Boolean = true): RefundOutcome {
         store.requireNoOpenTransaction("PaymentRefunds.approve")
         val refund0 = store.findRefund(refundId) ?: throw PaymentRefundNotFoundException()
         if (refund0.status != PaymentRefundStatus.REQUESTED) throw PaymentRefundNotAllowedException()
@@ -169,7 +170,10 @@ class PaymentRefunds(
             if (value > asked) throw PaymentRefundAmountExceededException() // 요청한 것보다 많이는 돌려주지 않는다
             val now = writer.now()
             val sent = writer.transitionRefund(tx, refund, PaymentRefundStatus.PENDING, PaymentEventType.REFUND_SENT, PaymentActor.OPERATOR, operatorId) {
-                it.copy(amount = PaymentAmount(value, it.amount.currency), requestedAmount = asked.takeIf { _ -> value != asked }, decidedBy = operatorId, expectedRemaining = RefundLines.baseOf(order) - order.refundedAmount - value, sentAt = now)
+                it.copy(
+                    amount = PaymentAmount(value, it.amount.currency), requestedAmount = asked.takeIf { _ -> value != asked }, decidedBy = operatorId,
+                    expectedRemaining = RefundLines.baseOf(order) - order.refundedAmount - value, sentAt = now, keepSubscription = !endSubscription,
+                )
             }
             enqueueSettle(sent)
             Claimed(order, sent, false)
@@ -334,11 +338,13 @@ class PaymentRefunds(
             converged.reviewReason == PaymentReviewReason.REFUND_MISMATCH || !RefundLines.remainingAgrees(converged, snapshot)
         }
         if (blocked) throw PaymentRefundNotAllowedException()
+        // 결제사가 검토 중으로 쥔 환불이 있는 거래에는 새 환불을 만들 수 없다(Paddle) - 보내지 않는다
+        if (snapshot?.pendingRefunds?.isNotEmpty() == true) throw PaymentRefundInProgressException()
         return gateways
     }
 
     /**
-     * 환불 전 확인 구간 **안에서만** 결제사를 고르지 못한 실패(없음 · 길 못 찾음 · 능력 없음)를 `503 UNAVAILABLE`("아무것도 보내지 않았다")로 옮긴다 — 장부 코드(`PROVIDER_NOT_FOUND` 등)가
+     * 환불 전 확인 구간 **안에서만** 결제사를 고르지 못한 실패(없음 · 길 못 찾음)를 `503 UNAVAILABLE`("아무것도 보내지 않았다")로, 능력이 없는 결제사는 `409 REFUND_UNSUPPORTED` 로 옮긴다 — 장부 코드(`PROVIDER_NOT_FOUND` 등)가
      * 프론트에서 "모름"으로 읽히는 일이 없게. 이 함수는 [precheck] 에서만 불리므로 **환불 줄을 선점한 뒤에는 이 번역이 걸릴 수 없다**(위치가 보증한다).
      */
     private inline fun <T> notSent(call: () -> T): T =
@@ -352,7 +358,7 @@ class PaymentRefunds(
             throw PaymentUnavailableException()
         } catch (e: PaymentCapabilityUnsupportedException) {
             log.warn("refund not sent: {}", e.message)
-            throw PaymentUnavailableException()
+            throw PaymentRefundUnsupportedException()
         }
 
     /** 선점 락 안: 확인과 선점 사이에 `REFUND_MISMATCH` 가 찍혔으면 보내지 않는다. */
@@ -469,8 +475,9 @@ class PaymentRefunds(
                     }
                 }
                 result.status == PaymentOperationStatus.PENDING && samePayment && current.failureCode == null ->
+                    // 접수 번호를 준 결제사(Paddle)면 줄에 박는다 - 웹훅이 그 번호로 이 줄을 끝낸다
                     writer.transitionRefund(tx, current, PaymentRefundStatus.PENDING, PaymentEventType.REFUND_UNKNOWN, PaymentActor.OPERATOR, operatorId, RefundSettlement.PROVIDER_PENDING) {
-                        it.copy(failureCode = RefundSettlement.PROVIDER_PENDING)
+                        it.copy(failureCode = RefundSettlement.PROVIDER_PENDING, providerRefundId = it.providerRefundId ?: transaction)
                     }
                 else -> tx.appendEvent(writer.refundEvent(order.id, refund.id, PaymentEventType.REFUND_UNKNOWN, PaymentActor.OPERATOR, operatorId, null, current.status, current.status))
             }
@@ -519,8 +526,8 @@ class PaymentRefunds(
         return RefundOutcome(current, checkNotNull(store.findOrder(current.orderId)), replayed)
     }
 
-    private fun replayed(existing: PaymentRefund, orderId: String, reason: PaymentRefundReason, amount: Long?, origin: PaymentRefundOrigin): PaymentRefund {
-        if (existing.orderId != orderId || existing.origin != origin || existing.reasonCode != reason.name || (amount != null && existing.amount.amount != amount)) {
+    private fun replayed(existing: PaymentRefund, orderId: String, reason: PaymentRefundReason, amount: Long?, origin: PaymentRefundOrigin, keepSubscription: Boolean = false): PaymentRefund {
+        if (existing.orderId != orderId || existing.origin != origin || existing.reasonCode != reason.name || (amount != null && existing.amount.amount != amount) || existing.keepSubscription != keepSubscription) {
             throw PaymentIdempotencyConflictException()
         }
         return existing

@@ -68,6 +68,26 @@ data class PushedPaymentFailure(
     val ourOrderId: String? = null,
 ) : PushedPaymentEvent
 
+/** 결제사가 말하는 환불 한 건의 종류. */
+enum class PushedRefundKind { REFUND }
+
+/** 결제사가 그 환불에 내린 결정 - 접수만 했다 · 이뤄졌다 · 거절했다. */
+enum class PushedRefundStatus { PENDING_APPROVAL, APPROVED, REJECTED }
+
+/**
+ * 결제사가 환불에 대해 알려 왔다(Paddle `adjustment.created` · `adjustment.updated`). 접수 · 승인 · 거절이 모두 이 사건이고, 몇 번 와도 같은 결과다 -
+ * 끝 상태가 된 줄은 다시 움직이지 않는다. [providerPaymentId] 는 환불이 걸린 거래, [providerRefundId] 는 그 환불의 번호다.
+ */
+data class PushedRefund(
+    override val eventId: String,
+    override val occurredAt: Instant,
+    val kind: PushedRefundKind,
+    val providerRefundId: String,
+    val providerPaymentId: String,
+    val status: PushedRefundStatus,
+    val amount: PaymentAmount,
+) : PushedPaymentEvent
+
 enum class PushedSubscriptionStatus { ACTIVE, PAST_DUE, CANCELING, ENDED }
 
 /** 결제사가 아는 구독의 지금 모습. 사건 순서가 뒤바뀌어도 [occurredAt] 이 가장 새로운 것만 반영된다. */

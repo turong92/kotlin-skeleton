@@ -48,8 +48,8 @@ class SubscriptionLifecycle(
             )
         }
         if (hasToken) tasks.enqueue(PaymentTask(PaymentTaskTypes.SUBSCRIPTION_REVOKE, current.id))
-        // 결제사가 갱신하는 구독은 우리가 끝내도 결제사는 계속 과금한다 - 탈퇴하면 결제사에도 즉시 해지를 보낸다
-        if (reason == SubscriptionEndReason.ACCOUNT_ERASED) current.providerSubscriptionId?.let { tasks.enqueue(PaymentTask(PaymentTaskTypes.PROVIDER_SUBSCRIPTION_CANCEL, "${current.provider}:$it")) }
+        // 결제사가 갱신하는 구독은 우리가 끝내도 결제사는 계속 과금한다 - 탈퇴하거나 환불로 끝나면 결제사에도 즉시 해지를 보낸다
+        if (reason == SubscriptionEndReason.ACCOUNT_ERASED || reason == SubscriptionEndReason.REFUNDED) current.providerSubscriptionId?.let { tasks.enqueue(PaymentTask(PaymentTaskTypes.PROVIDER_SUBSCRIPTION_CANCEL, "${current.provider}:$it")) }
         return ended
     }
 
@@ -194,9 +194,10 @@ class SubscriptionLifecycle(
 
     /**
      * 구독 주문이 전액 환불됐다 — 지금 과금 주문이면 구독을 바로 끝낸다(환불했는데 다음 달 또 과금되지 않게). **주문 줄 락 안에서** 불린다([PaymentRefundApplier]).
-     * 지금 과금 주문이 아니거나 이미 끝난 구독이면 아무것도 하지 않는다.
+     * 지금 과금 주문이 아니거나 이미 끝난 구독이면 아무것도 하지 않는다. [keepSubscription] 이면 환불만 하고 구독은 그대로 둔다(운영자가 「구독도 해지」를 껐다).
      */
-    fun onOrderRefunded(tx: PaymentLedgerTx, order: PaymentOrder) {
+    fun onOrderRefunded(tx: PaymentLedgerTx, order: PaymentOrder, keepSubscription: Boolean = false) {
+        if (keepSubscription) return
         val subscription = tx.lockSubscription(order.originRef ?: return) ?: return
         // 변경 결제의 환불은 그 기간의 구독을 끝내지 않는다(기간의 결제는 따로 있다) — 플랜은 되돌리지 않으니 운영자가 본다
         if (subscription.status == SubscriptionStatus.ENDED || order.kind == PaymentOrderKind.SUBSCRIPTION_CHANGE) return

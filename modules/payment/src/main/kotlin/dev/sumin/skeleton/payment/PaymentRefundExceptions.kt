@@ -20,6 +20,12 @@ class PaymentRefundInProgressException : ApplicationException(
     errorCode = PaymentErrorCode.REFUND_IN_PROGRESS,
 )
 
+/** 그 결제사는 서버에서 환불을 못 한다(환불 · 조회 능력이 없다) - 결제사를 부르지 않았다. 결제사 관리 화면에서 환불한 뒤 요청을 거절한다. */
+class PaymentRefundUnsupportedException : ApplicationException(
+    message = "The payment provider cannot refund from the server.",
+    errorCode = PaymentErrorCode.REFUND_UNSUPPORTED,
+)
+
 /** 요청한 금액이 환불할 수 있는 금액(`총액 - 환불된 금액 - 열린 환불`)을 넘는다 — 결제사를 부르지 않았다. */
 class PaymentRefundAmountExceededException : ApplicationException(
     message = "The refund amount exceeds the refundable amount.",

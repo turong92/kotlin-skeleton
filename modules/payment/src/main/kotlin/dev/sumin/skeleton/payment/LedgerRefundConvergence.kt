@@ -33,8 +33,15 @@ class LedgerRefundConvergence(
         val staleSnapshot = context.snapshotAt?.let { at -> existing.any { !it.updatedAt.isBefore(at) } } ?: false
         val known = existing.mapNotNull { it.providerRefundId }.toMutableSet()
         var unmatchedPending = existing.firstOrNull { it.status == PaymentRefundStatus.PENDING && it.providerRefundId == null }
-        for (cancel in usable(order.id, snapshot.refunds).filter { it.providerRefundId !in known }.sortedBy { it.at }) {
+        // 결제사가 접수할 때 거래 번호를 준 우리 줄(Paddle 의 검토 중 환불) - 번호가 같은 취소가 이뤄졌다면 그 줄이 이뤄진 것이다
+        val numbered = existing.filter { it.status == PaymentRefundStatus.PENDING && it.providerRefundId != null }.associateBy { it.providerRefundId }
+        for (cancel in usable(order.id, snapshot.refunds).filter { it.providerRefundId !in known || it.providerRefundId in numbered }.sortedBy { it.at }) {
             if (!lines.fits(current, cancel.amount)) return flags.flag(tx, current, PaymentReviewReason.REFUND_MISMATCH, context)
+            numbered[cancel.providerRefundId]?.let { own ->
+                if (!own.amount.sameAs(cancel.amount)) return flags.flag(tx, current, PaymentReviewReason.REFUND_MISMATCH, context)
+                current = lines.succeed(tx, current, own, cancel.providerRefundId, cancel.at, context.actor, context.actorId)
+                continue
+            }
             val match = unmatchedPending?.takeIf { it.amount.sameAs(cancel.amount) }
             current = if (match != null) {
                 unmatchedPending = null

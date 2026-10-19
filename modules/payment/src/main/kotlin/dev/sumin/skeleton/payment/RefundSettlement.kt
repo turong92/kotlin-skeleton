@@ -46,6 +46,8 @@ internal class RefundSettlement(
             convergence.flagReview(tx, converged, PaymentReviewReason.REFUND_MISMATCH, context)
             return Result.MISMATCH
         }
+        // 결제사가 검토 중으로 쥔 환불(Paddle)은 아직 이뤄지지 않았을 뿐 「적용 안 됨」이 아니다 - 닫지 않고 결제사의 결정(웹훅)을 기다린다
+        if (snapshot.pendingRefunds.any { pending -> if (after.providerRefundId != null) pending.providerRefundId == after.providerRefundId else pending.amount.sameAs(after.amount) }) return Result.PROVIDER_PENDING
         if (RefundLines.received(snapshot) && snapshot.remaining.amount == RefundLines.baseOf(converged) - converged.refundedAmount) {
             val sentAt = after.sentAt ?: after.requestedAt
             if (after.failureCode == PROVIDER_PENDING) {

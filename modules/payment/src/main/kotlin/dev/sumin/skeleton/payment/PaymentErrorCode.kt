@@ -109,6 +109,11 @@ enum class PaymentErrorCode(
         status = HttpStatus.BAD_REQUEST,
         title = "Refund amount exceeds the refundable amount",
     ),
+    REFUND_UNSUPPORTED(
+        code = "PAYMENT.REFUND_UNSUPPORTED",
+        status = HttpStatus.CONFLICT,
+        title = "The payment provider cannot refund from the server",
+    ),
     REFUND_DECLINED(
         code = "PAYMENT.REFUND_DECLINED",
         status = HttpStatus.PAYMENT_REQUIRED,

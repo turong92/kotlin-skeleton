@@ -286,6 +286,10 @@ while IFS= read -r m; do
   if [ "$m" = payment-naverpay ]; then
     [ ! -f docs/real-provider-setup.md ] || perl -0pi -e 's/^<!-- payment-naverpay:start -->\n.*?^<!-- payment-naverpay:end -->\n//gms; s/\n+\z/\n/' docs/real-provider-setup.md
   fi
+  # Paddle 환불 절(## 14)도 같은 방식 - payment-paddle 을 고른 프로젝트에만 남는다
+  if [ "$m" = payment-paddle ]; then
+    [ ! -f docs/real-provider-setup.md ] || perl -0pi -e 's/^<!-- payment-paddle:start -->\n.*?^<!-- payment-paddle:end -->\n//gms; s/\n+\z/\n/' docs/real-provider-setup.md
+  fi
   M="$m" perl -ni -e 'print unless /^include\(":modules:\Q$ENV{M}\E"\)\s*$/' settings.gradle.kts
   [ ! -f docs/modules/README.md ] || M="$m" perl -ni -e 'print unless /\]\(\Q$ENV{M}\E\.md\)/' docs/modules/README.md
 done <<EOF
@@ -304,6 +308,11 @@ fi
 # payment-naverpay 를 고른 프로젝트: 안내 문서의 표식 줄만 걷어 낸다
 if ! grep -qx payment-naverpay <<<"$REMOVED"; then
   [ ! -f docs/real-provider-setup.md ] || perl -0pi -e 's/^<!-- payment-naverpay:(start|end) -->\n//gm' docs/real-provider-setup.md
+fi
+
+# payment-paddle 을 고른 프로젝트: 안내 문서의 표식 줄만 걷어 낸다
+if ! grep -qx payment-paddle <<<"$REMOVED"; then
+  [ ! -f docs/real-provider-setup.md ] || perl -0pi -e 's/^<!-- payment-paddle:(start|end) -->\n//gm' docs/real-provider-setup.md
 fi
 
 # 루트 build.gradle.kts: DB 통합 테스트 묶음 (선택된 모듈 · 선택된 방언만)

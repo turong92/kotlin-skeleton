@@ -26,6 +26,10 @@ data class PaddleProperties(
     val signatureTolerance: Duration = Duration.ofSeconds(60),
     /** 거래 만들기(요청 한 번)의 제한 시간 - 주문 · 구독 시작이 이 호출을 기다린다. */
     val createTransactionTimeout: Duration = Duration.ofSeconds(5),
+    /** 거래 조회(환불 전 확인 · 맞추기)의 제한 시간. */
+    val lookupTimeout: Duration = Duration.ofSeconds(5),
+    /** 환불(adjustment 만들기) 호출의 제한 시간. 넘으면 결과를 모르는 것으로 읽고 다시 보내지 않는다. */
+    val refundTimeout: Duration = Duration.ofSeconds(10),
     /** 플랜 코드(구독) 또는 상품 코드(단건) → Paddle 가격 id(`pri_…`). 금액은 Paddle 가격이 정한다. */
     val prices: Map<String, String> = emptyMap(),
     val supportedCurrencies: Set<String> = emptySet(),

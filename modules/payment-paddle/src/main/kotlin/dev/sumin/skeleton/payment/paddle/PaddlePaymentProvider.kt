@@ -10,6 +10,23 @@ import dev.sumin.skeleton.payment.HostedSubscriptionRequest
 import dev.sumin.skeleton.payment.PaymentAmount
 import dev.sumin.skeleton.payment.PaymentCard
 import dev.sumin.skeleton.payment.PaymentCheckoutGateway
+import dev.sumin.skeleton.payment.IdempotencyKey
+import dev.sumin.skeleton.payment.PaymentLookupGateway
+import dev.sumin.skeleton.payment.PaymentLookupQuery
+import dev.sumin.skeleton.payment.PaymentOperationResult
+import dev.sumin.skeleton.payment.PaymentOperationStatus
+import dev.sumin.skeleton.payment.PaymentProviderError
+import dev.sumin.skeleton.payment.PaymentProviderException
+import dev.sumin.skeleton.payment.PaymentRefundGateway
+import dev.sumin.skeleton.payment.PaymentRefundRequest
+import dev.sumin.skeleton.payment.PaymentSnapshot
+import dev.sumin.skeleton.payment.ProviderPaymentStatus
+import dev.sumin.skeleton.payment.ProviderRefund
+import dev.sumin.skeleton.payment.ProviderTrace
+import dev.sumin.skeleton.payment.PushedRefund
+import dev.sumin.skeleton.payment.PushedRefundKind
+import dev.sumin.skeleton.payment.PushedRefundStatus
+import dev.sumin.skeleton.payment.RefundDeclineCategory
 import dev.sumin.skeleton.payment.PaymentHostedSubscriptionGateway
 import dev.sumin.skeleton.payment.PaymentMode
 import dev.sumin.skeleton.payment.PaymentPricePreviewGateway
@@ -34,19 +51,26 @@ import tools.jackson.databind.json.JsonMapper
 import tools.jackson.module.kotlin.kotlinModule
 
 /**
- * Paddle(판매 대행) — 결제창은 프론트의 Paddle.js, 결제 · 갱신은 Paddle 이 하고 우리는 **서명된 웹훅**으로 결과를 받는다. 서버가 Paddle API 를 부르는 것은 구독 해지뿐이다.
- * 결제 · 환불을 서버가 시키는 능력(승인 · 환불 · 조회)은 없다. 웹훅 본문의 금액 · 통화가 그대로 장부에 간다.
+ * Paddle(판매 대행) — 결제창은 프론트의 Paddle.js, 결제 · 갱신은 Paddle 이 하고 우리는 **서명된 웹훅**으로 결과를 받는다. 서버가 Paddle API 를 부르는 것은 거래 만들기 · 구독 해지 · 환불 · 거래 조회다.
+ * 결제를 서버가 승인하는 능력은 없다. 웹훅 본문의 금액 · 통화가 그대로 장부에 간다.
+ *
+ * **환불**은 거래에 adjustment(`action=refund`)를 만든다. 실계정은 대부분 Paddle 이 검토한 뒤(`pending_approval` → `approved` · `rejected`) 결과를 웹훅으로 알린다(샌드박스는 10분마다 자동 승인).
+ * Paddle 에는 멱등 키 헤더가 없다 - 「환불 한 줄에 호출 한 번」을 장부가 지킨다. **조회**는 거래 번호로만 된다([answersByOrderId] = false).
  */
 class PaddlePaymentProvider(
     private val httpClient: ExternalHttpClient,
     private val properties: PaddleProperties,
     private val time: TimeProvider = TimeProvider.systemUtc(),
-) : PaymentPushGateway, PaymentCheckoutGateway, PaymentHostedSubscriptionGateway, PaymentTransactionGateway, PaymentPricePreviewGateway, PaymentBuyerCountryGateway {
+) : PaymentPushGateway, PaymentCheckoutGateway, PaymentHostedSubscriptionGateway, PaymentTransactionGateway, PaymentPricePreviewGateway, PaymentBuyerCountryGateway, PaymentRefundGateway, PaymentLookupGateway {
     override val providerId: String = properties.providerId
     override val supportedCurrencies: Set<String> = properties.supportedCurrencies
     override val supportedCountries: Set<String> = properties.supportedCountries
     override val mode: PaymentMode = if (properties.sandbox) PaymentMode.TEST else PaymentMode.LIVE
     override val signed: Boolean = true
+    override val answersByOrderId: Boolean = false
+
+    private val lookupMapper = PaddleErrorMapper(providerId, definitiveAllowed = false)
+    private val refundMapper = PaddleErrorMapper(providerId, definitiveAllowed = true)
 
     private val mapper = JsonMapper.builder().addModule(kotlinModule()).build()
 
@@ -79,9 +103,36 @@ class PaddlePaymentProvider(
         return when (val type = root.text("event_type")) {
             "transaction.completed" -> payment(eventId, occurredAt, data, custom)
             "transaction.payment_failed" -> paymentFailure(eventId, occurredAt, data, custom)
+            in ADJUSTMENT_EVENTS -> adjustment(eventId, occurredAt, data)
             in SUBSCRIPTION_EVENTS -> subscription(eventId, occurredAt, data, custom, type)
             else -> null
         }
+    }
+
+    /**
+     * 환불 결정 - `refund` 만 읽는다(`credit` · `credit_reverse` 와 차지백은 장부가 다루지 않는다 → null). 상태: `pending_approval`(접수) · `approved` · `rejected`.
+     * 금액 · 통화는 Paddle 이 말한 그대로(세금 포함 총액)다.
+     */
+    private fun adjustment(eventId: String, occurredAt: Instant, data: JsonNode): PushedRefund? {
+        if (data.text("action") != "refund") return null
+        val status = when (data.text("status")) {
+            "pending_approval" -> PushedRefundStatus.PENDING_APPROVAL
+            "approved" -> PushedRefundStatus.APPROVED
+            "rejected" -> PushedRefundStatus.REJECTED
+            else -> return null
+        }
+        return PushedRefund(
+            eventId = eventId,
+            occurredAt = occurredAt,
+            kind = PushedRefundKind.REFUND,
+            providerRefundId = data.text("id") ?: error("Paddle adjustment without id"),
+            providerPaymentId = data.text("transaction_id") ?: error("Paddle adjustment without transaction_id"),
+            status = status,
+            amount = PaymentAmount(
+                data["totals"]?.text("total")?.toLongOrNull() ?: error("Paddle adjustment without a total"),
+                data.text("currency_code") ?: data["totals"]?.text("currency_code") ?: error("Paddle adjustment without a currency"),
+            ),
+        )
     }
 
     /** 사유 코드만(`payments[].error_code`, 가장 마지막 실패 시도) - 설명 문장 · 카드 정보는 읽지 않는다. */
@@ -249,6 +300,156 @@ class PaddlePaymentProvider(
         )
     }
 
+    // --- 거래 조회 · 환불 ---
+
+    /** 거래 번호로만 묻는다 - 주문 번호만 든 조회는 부르지 않고 「결제 없음」이다. Paddle 이 모르는 거래(404)도 null. 그 밖의 실패는 던진다(모름 - 돈에 대해 아무것도 말하지 않는다). */
+    override fun lookup(query: PaymentLookupQuery): PaymentSnapshot? {
+        val id = query.providerPaymentId?.takeIf { SAFE_ID.matches(it) } ?: return null
+        val transaction = try {
+            transaction(id)
+        } catch (e: PaymentProviderException) {
+            if (e.providerError.upstreamStatus == 404) return null
+            throw e
+        }
+        val taken = transaction.adjustments.filter { it.approved && it.action in TAKEN_ACTIONS }
+        val takenTotal = taken.sumOf { it.total }
+        return PaymentSnapshot(
+            providerPaymentId = id,
+            orderId = null,
+            status = when (transaction.status) {
+                "completed" -> if (takenTotal == 0L) ProviderPaymentStatus.PAID else if (takenTotal >= transaction.total) ProviderPaymentStatus.REFUNDED else ProviderPaymentStatus.PARTIALLY_REFUNDED
+                "canceled" -> ProviderPaymentStatus.FAILED
+                else -> ProviderPaymentStatus.IN_PROGRESS
+            },
+            total = PaymentAmount(transaction.total, transaction.currency),
+            remaining = PaymentAmount((transaction.total - takenTotal).coerceAtLeast(0), transaction.currency),
+            method = null,
+            paidAt = transaction.billedAt,
+            refunds = taken.map { ProviderRefund(it.id, PaymentAmount(it.total, transaction.currency), it.createdAt ?: transaction.billedAt ?: time.now()) },
+            pendingRefunds = transaction.adjustments.filter { it.pending && it.action == REFUND }.map { ProviderRefund(it.id, PaymentAmount(it.total, transaction.currency), it.createdAt ?: transaction.billedAt ?: time.now()) },
+        )
+    }
+
+    /**
+     * 환불 한 건을 adjustment 로 만든다. 요청 금액이 거래 총액이고 승인 · 검토 중 환불이 없으면 `type: full`, 아니면 `partial` + 품목 하나(서버가 만든 거래는 품목이 하나다 - 둘 이상이면 확정 거절 `PARTIAL_NOT_ALLOWED`).
+     * 금액은 구매자가 낸 세금 포함 총액 그대로다(`tax_mode` 를 보내지 않는다 - 기본 `internal`). `reason` 은 장부의 고정 문구와 환불 줄 id 뿐이다(개인정보 없음).
+     * 결과: `approved` → 환불됨, `pending_approval` → 검토 중(번호를 돌려준다), `rejected` → 실패. 읽을 수 없는 답은 던진다(모름).
+     */
+    override fun refund(request: PaymentRefundRequest): PaymentOperationResult {
+        val id = request.providerPaymentId
+        val transaction = transaction(id)
+        if (transaction.currency != request.amount.normalizedCurrency) throw refusal(CURRENCY_MISMATCH)
+        val held = transaction.adjustments.filter { (it.approved && it.action in TAKEN_ACTIONS) || (it.pending && it.action == REFUND) }
+        val whole = held.isEmpty() && request.amount.amount == transaction.total
+        val body = linkedMapOf<String, Any?>("action" to REFUND, "transaction_id" to id, "reason" to reasonOf(request), "type" to if (whole) "full" else "partial")
+        if (!whole) {
+            val item = transaction.lineItems.singleOrNull() ?: throw refusal(PARTIAL_NOT_ALLOWED)
+            body["items"] = listOf(mapOf("item_id" to item, "type" to "partial", "amount" to request.amount.amount.toString()))
+        }
+        val response = requireNotNull(
+            httpClient.post(
+                clientName = properties.clientName,
+                path = "/adjustments",
+                body = body,
+                responseType = String::class.java,
+            ) {
+                baseUrl(properties.resolvedBaseUrl)
+                header(HttpHeaders.AUTHORIZATION, "Bearer ${properties.apiKey}")
+                timeout(properties.refundTimeout)
+                loggingTag("payment.paddle.refund")
+                errorMapper(refundMapper)
+            }.block(),
+        )
+        val data = read(response)?.get("data") ?: throw unreadable()
+        val adjustmentId = data.text("id") ?: throw unreadable()
+        val status = data.text("status")
+        val total = data["totals"]?.text("total")?.toLongOrNull() ?: throw unreadable()
+        return PaymentOperationResult(
+            provider = providerId,
+            providerPaymentId = id,
+            status = when (status) {
+                "approved" -> PaymentOperationStatus.REFUNDED
+                "pending_approval" -> PaymentOperationStatus.PENDING
+                "rejected" -> PaymentOperationStatus.FAILED
+                else -> PaymentOperationStatus.UNKNOWN
+            },
+            amount = PaymentAmount(total, transaction.currency),
+            trace = ProviderTrace(provider = providerId, providerOperationId = adjustmentId, rawStatus = status),
+        )
+    }
+
+    override fun refundDeclineCategory(providerCode: String?): RefundDeclineCategory =
+        when (providerCode) {
+            PARTIAL_NOT_ALLOWED, "adjustment_transaction_item_invalid", "adjustment_invalid_combination_of_types" -> RefundDeclineCategory.PARTIAL_NOT_ALLOWED
+            else -> RefundDeclineCategory.OTHER
+        }
+
+    private class Adjustment(val id: String, val action: String, val status: String, val total: Long, val createdAt: Instant?) {
+        val approved: Boolean get() = status == "approved"
+        val pending: Boolean get() = status == "pending_approval"
+    }
+
+    private class PaddleTransaction(val status: String, val currency: String, val total: Long, val billedAt: Instant?, val lineItems: List<String>, val adjustments: List<Adjustment>)
+
+    private fun transaction(id: String): PaddleTransaction {
+        val response = requireNotNull(
+            httpClient.get(
+                clientName = properties.clientName,
+                path = "/transactions/{id}",
+                responseType = String::class.java,
+            ) {
+                baseUrl(properties.resolvedBaseUrl)
+                uriVariable("id", id)
+                queryParam("include", "adjustments")
+                header(HttpHeaders.AUTHORIZATION, "Bearer ${properties.apiKey}")
+                timeout(properties.lookupTimeout)
+                loggingTag("payment.paddle.lookup")
+                errorMapper(lookupMapper)
+            }.block(),
+        )
+        val data = read(response)?.get("data") ?: throw unreadable()
+        if (data.text("id") != id) throw unreadable() // 물은 거래가 맞는지 확인한다
+        val totals = data["details"]?.get("totals")
+        return PaddleTransaction(
+            status = data.text("status") ?: throw unreadable(),
+            currency = (data.text("currency_code") ?: totals.text("currency_code"))?.uppercase() ?: throw unreadable(),
+            total = totals.text("total")?.toLongOrNull() ?: throw unreadable(),
+            billedAt = data.text("billed_at")?.let { runCatching { Instant.parse(it) }.getOrNull() },
+            lineItems = data["details"]?.get("line_items")?.toList().orEmpty().mapNotNull { it.text("id") },
+            adjustments = data["adjustments"]?.toList().orEmpty().map {
+                Adjustment(
+                    id = it.text("id") ?: throw unreadable(), action = it.text("action") ?: throw unreadable(), status = it.text("status") ?: throw unreadable(),
+                    total = it["totals"]?.text("total")?.toLongOrNull() ?: throw unreadable(), createdAt = it.text("created_at")?.let { at -> runCatching { Instant.parse(at) }.getOrNull() },
+                )
+            },
+        )
+    }
+
+    private fun reasonOf(request: PaymentRefundRequest): String =
+        listOfNotNull(request.reason?.takeIf { it.isNotBlank() }, request.idempotencyKey?.value).joinToString(" ").ifBlank { "Refund" }.take(REASON_MAX)
+
+    /** 우리가 먼저 거절하는 환불(Paddle 을 부르지 않는다) - 돈이 움직이지 않았으니 확정이다. */
+    private fun refusal(code: String): PaymentProviderException =
+        PaymentProviderException(
+            providerError = PaymentProviderError(
+                provider = providerId, code = code, message = null, trace = ProviderTrace(provider = providerId, rawCode = code), upstreamStatus = 422, retryable = false, definitive = true,
+            ),
+            clientName = properties.clientName,
+            method = "POST",
+            uri = java.net.URI.create(properties.resolvedBaseUrl),
+        )
+
+    /** 읽을 수 없는 답 - 모름이다(확정이 아니다). */
+    private fun unreadable(): PaymentProviderException =
+        PaymentProviderException(
+            providerError = PaymentProviderError(
+                provider = providerId, code = UNREADABLE_RESPONSE, message = null, trace = ProviderTrace(provider = providerId, rawCode = UNREADABLE_RESPONSE), upstreamStatus = 200, retryable = true,
+            ),
+            clientName = properties.clientName,
+            method = "HTTP",
+            uri = java.net.URI.create(properties.resolvedBaseUrl),
+        )
+
     private fun read(text: String): JsonNode? = try {
         mapper.readTree(text)?.takeIf { it.isObject }
     } catch (_: Exception) {
@@ -260,6 +461,16 @@ class PaddlePaymentProvider(
     private companion object {
         const val KIND = "PADDLE_CHECKOUT"
         val SUBSCRIPTION_EVENTS = setOf("subscription.created", "subscription.activated", "subscription.updated", "subscription.canceled", "subscription.past_due")
-        val HANDLED = SUBSCRIPTION_EVENTS + setOf("transaction.completed", "transaction.payment_failed")
+        val ADJUSTMENT_EVENTS = setOf("adjustment.created", "adjustment.updated")
+        val HANDLED = SUBSCRIPTION_EVENTS + ADJUSTMENT_EVENTS + setOf("transaction.completed", "transaction.payment_failed")
+        const val REFUND = "refund"
+
+        /** 구매자에게 돌아간 돈으로 세는 adjustment 종류(이뤄진 것만) - 환불과 차지백(경고 포함: 이의 금액은 환불된다). */
+        val TAKEN_ACTIONS = setOf(REFUND, "chargeback", "chargeback_warning")
+        val SAFE_ID = Regex("[A-Za-z0-9_-]{1,100}")
+        const val PARTIAL_NOT_ALLOWED = "PARTIAL_NOT_ALLOWED"
+        const val CURRENCY_MISMATCH = "CURRENCY_MISMATCH"
+        const val UNREADABLE_RESPONSE = "UNREADABLE_RESPONSE"
+        const val REASON_MAX = 200
     }
 }
