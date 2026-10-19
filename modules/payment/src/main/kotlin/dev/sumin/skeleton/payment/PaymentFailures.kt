@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.payment
 
 import dev.sumin.skeleton.common.http.ExternalHttpException
+import dev.sumin.skeleton.common.logging.LogMasker
 import dev.sumin.skeleton.common.http.ExternalHttpStatusException
 import tools.jackson.databind.json.JsonMapper
 
@@ -98,10 +99,38 @@ object PaymentFailures {
         null
     }
 
-    /** 로그용 한 줄 - `status=400 code=transaction_default_checkout_url_not_set` (없는 칸은 `-`). */
+    private val REASON_MASKER = LogMasker(maskEmails = true)
+    // `LogMasker` 는 이름이 token · secret · password 로 끝나는 쌍만 가린다 - `secret_key=…` · `Authorization: KakaoAK …` 같은 키 쌍은 여기서 더 가린다
+    private val KEY_PAIR = Regex("(?i)([a-z0-9_-]{0,32}(?:key|auth|credential)[a-z0-9_-]{0,16}\\s*[=:]\\s*)\\S+")
+    private val LONG_DIGITS = Regex("[0-9]{6,}")
+    private val CONTROL = Regex("\\p{Cntrl}+")
+    private const val REASON_MAX = 200
+
+    /**
+     * 결제사가 준 이유 글을 로그에 남길 만큼만 남긴다: 토큰 · 비밀 · 이메일 모양은 가리고 6자리 이상 숫자(카드 · 전화 · 계정 번호)는 `***`, 제어 문자는 공백, 길이는 [REASON_MAX]자.
+     * 가릴 게 없는 글이 아니면 쓰지 않는 쪽이 낫다 - 부르는 쪽은 개인정보가 섞일 수 없는 오류(공통 오류 코드)에만 쓴다.
+     */
+    fun safeReason(text: String?): String? {
+        val raw = text?.take(REASON_MAX * 3)?.replace(CONTROL, " ")?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        return LONG_DIGITS.replace(KEY_PAIR.replace(REASON_MASKER.mask(raw)) { "${it.groupValues[1]}[REDACTED]" }, "***").take(REASON_MAX)
+    }
+
+    private fun reasonOf(exception: Throwable): String? {
+        var current: Throwable? = exception
+        var depth = 0
+        while (current != null && depth < MAX_CAUSE_DEPTH) {
+            if (current is PaymentProviderException) return current.providerError.reason
+            current = current.cause
+            depth++
+        }
+        return null
+    }
+
+    /** 로그용 한 줄 - `status=400 code=transaction_default_checkout_url_not_set` (없는 칸은 `-`). 결제사가 이유를 줬으면 ` reason="…"` 이 붙는다([PaymentProviderError.reason]). */
     fun describe(exception: Throwable): String {
         val (status, code) = statusAndCode(exception)
-        return "status=${status ?: "-"} code=${code ?: "-"}"
+        val reason = reasonOf(exception)?.let { " reason=\"$it\"" }.orEmpty()
+        return "status=${status ?: "-"} code=${code ?: "-"}$reason"
     }
 
     /** 이력(`payment_events.provider_code`, 64자)에 남길 한 칸 - `400:코드` · 코드가 없으면 `HTTP_상태` · HTTP 실패가 아니면 예외 종류 이름. */

@@ -194,6 +194,8 @@ data class CheckoutOrder(
     val accountId: String? = null,
     /** 서버가 결제사에 미리 만든 거래 id(거래를 먼저 만드는 결제사) - 결제창은 이것만 연다. */
     val providerTransactionId: String? = null,
+    /** 결제를 시작한 화면의 origin(`scheme://host[:port]`, 브라우저가 보낸 값). 결제사가 구매자를 돌려보낼 주소를 이 origin 으로 맞출 때만 쓴다([ReturnOrigins]) - 신뢰하지 않는 입력이라 허용 목록에 없으면 버려진다. */
+    val returnOrigin: String? = null,
 )
 
 /** `checkout` 응답의 결제사 몫. 프론트가 [kind] 로 갈라 결제창을 연다. 공개해도 되는 값만 담는다. */

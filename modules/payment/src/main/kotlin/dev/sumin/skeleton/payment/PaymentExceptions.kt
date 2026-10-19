@@ -128,6 +128,11 @@ data class PaymentProviderError(
      * 장부가 그 사이 조회로 찍은 「결제사가 받았다」 표시(`AMOUNT_MISMATCH` · `ORDER_MISMATCH`)를 주문을 닫을 때 비운다 - 돈이 이미 돌아와 사람이 볼 일이 없다. 기본 false.
      */
     val moneyReturned: Boolean = false,
+    /**
+     * 결제사가 준 거절 이유 글을 [PaymentFailures.safeReason] 으로 가려 둔 것 - **로그 한 줄([PaymentFailures.describe])에만** 쓴다. 예외 메시지 · 응답 `data` · 이력에는 싣지 않는다.
+     * 결제사 모듈이 이유가 사람 개인정보와 무관한 오류에만 채운다(카카오페이: 공통 오류 -400 · -401 · -403).
+     */
+    val reason: String? = null,
 )
 
 class PaymentProviderException(

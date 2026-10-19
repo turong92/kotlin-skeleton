@@ -3,7 +3,7 @@
 `payment` 의 제공자로 **카카오페이 직접 연동(온라인 결제 REST)** 의 **단건 결제**를 구현한다 - 토스 계약 없이 카카오페이 계약만 있는 사업자를 위한 별도 결제사다(기본 꺼짐, 토스와 함께 켜면 결제 화면에서 고른다). 외부 호출은 `platform` 의 `ExternalHttpClient` 를 쓰고 카카오 SDK 는 받지 않는다(REST 직접).
 한 빈(`KakaoPayProvider`)이 능력을 모두 맡아 라우터에는 결제사가 하나로 보인다: 결제창 값(`ready`) · 승인(`approve`) · 취소 · 환불 · 조회. **정기 결제(SID)와 웹훅은 없다** - 카카오페이 문서에서 결제 이벤트 웹훅을 찾지 못해 승인 응답과 주문 조회로 맞춘다.
 
-흐름(토스의 결제창 → 돌아온 주소 → 서버 승인과 닮았다): ① 주문을 만들면 서버가 `ready` 를 부른다(`partner_order_id` = 우리 주문 id, `partner_user_id` = 계정 id, 성공 · 취소 · 실패 주소 = `return-url` + 조각) → 받은 `tid` 를 **주문의 결제 키 자리에 박는다**(`CheckoutInstruction.providerPaymentId`) · 결제창 주소(PC · 모바일 · 앱)는 checkout 응답 `attributes` 로 프론트에 간다 ② 구매자가 카카오톡에서 인증을 마치면 카카오페이가 `return-url` 로 `pg_token` 을 붙여 돌려보낸다 ③ 프론트가 `POST /orders/{id}/confirm` 에 `approvalToken`(= `pg_token`)과 금액을 실어 보내면(거래 번호는 주문에 박혀 있어 보내지 않아도 된다) 서버가 `approve` 를 부른다(총액은 장부의 주문 금액 - 다르면 카카오페이가 거절) ④ 장부 `PAID`. **서버 승인 없이는 돈이 움직이지 않는다** - 구매자가 승인하지 않은 `PENDING` 주문은 조회 없이(거래 번호가 있어도 `READY`) 마감 뒤 `EXPIRED` 로 닫힌다.
+흐름(토스의 결제창 → 돌아온 주소 → 서버 승인과 닮았다): ① 주문을 만들면 서버가 `ready` 를 부른다(`partner_order_id` = 우리 주문 id, `partner_user_id` = 계정 id, 성공 · 취소 · 실패 주소 = `return-url` + 조각 - 주문 만들기가 `returnOrigin` 을 보냈고 그 origin 이 `allowed-return-origins` 에 있으면 `return-url` 의 scheme · host 만 그 origin 으로 바뀐다) → 받은 `tid` 를 **주문의 결제 키 자리에 박는다**(`CheckoutInstruction.providerPaymentId`) · 결제창 주소(PC · 모바일 · 앱)는 checkout 응답 `attributes` 로 프론트에 간다 ② 구매자가 카카오톡에서 인증을 마치면 카카오페이가 `return-url` 로 `pg_token` 을 붙여 돌려보낸다 ③ 프론트가 `POST /orders/{id}/confirm` 에 `approvalToken`(= `pg_token`)과 금액을 실어 보내면(거래 번호는 주문에 박혀 있어 보내지 않아도 된다) 서버가 `approve` 를 부른다(총액은 장부의 주문 금액 - 다르면 카카오페이가 거절) ④ 장부 `PAID`. **서버 승인 없이는 돈이 움직이지 않는다** - 구매자가 승인하지 않은 `PENDING` 주문은 조회 없이(거래 번호가 있어도 `READY`) 마감 뒤 `EXPIRED` 로 닫힌다.
 
 프로젝트 여럿([multi-project](../multi-project.md) "결제"): 프로젝트마다 자기 `payment-kakaopay.*`(시크릿 키 · 가맹점 코드 · 돌아올 주소 …)로 게이트웨이를 만든다 - 켜지 않았거나 시크릿 키 · 가맹점 코드가 비면 그 프로젝트에는 카카오페이가 없다. 시크릿 키 · 가맹점 코드 · 돌아올 주소를 공통에서 물려받으면 기동 실패. 키 가드(보호 환경)는 카카오페이를 켠 프로젝트마다 돈다.
 
@@ -15,6 +15,7 @@
 | 설정 접두사 | `skeleton.payment-kakaopay` — [docs/config/modules/payment-kakaopay.yml](../config/modules/payment-kakaopay.yml) |
 | 기본 동작 | 꺼짐. `enabled=true` 로 켠다. 켜도 시크릿 키나 가맹점 코드가 비면 제공자 빈이 없다 — 보호 환경(`skeleton.env=stage\|prod`)에서는 기동 실패, 그 밖은 기동은 되고 배포 가드가 경고한다. |
 | 부팅에 필요한 것 | 없음. 켤 때 시크릿 키 · 가맹점 코드와 인터넷이 필요하다. 결제창을 열려면 돌아올 주소(`return-url`)도 필요하다. |
+| 돌아올 주소 | `return-url` 이 기본. `allowed-return-origins`(기본 빈 목록 = 늘 `return-url`)에 든 origin 으로 시작한 결제만 그 origin 으로 돌아온다 - 로그인 저장소가 origin 마다 따로라 다른 주소로 돌아오면 로그인이 풀린다. 목록 밖 origin 은 조용히 `return-url` |
 | 교체 지점 | `KakaoPayProvider` |
 | 마이그레이션 | 없음 |
 | 프론트 짝 | `@skeleton/payment` |
@@ -32,7 +33,7 @@
 
 ## 실패 분류 - 확정 / 모름
 
-허용 목록 방식이다. 4xx 의 **공통 오류 -400(잘못된 요청) · -401(키 오류) · -403(사용 API 없음)** 만 확정(요청을 받아들이지 않았다)이고 **그 밖은 전부 모름** - 다시 보내지 말고 조회한다. 승인 실패(-780) · 취소 실패(-781)는 일부러 확정에서 뺐다: 문서의 예시(`USER_LOCKED` 「진행중인 거래가 있습니다」 · `6666` 「원거래없음」)가 앞선 요청이 처리 중이거나 이미 처리됐다는 뜻일 수 있어 돈이 움직이지 않았다고 말할 근거가 없다(진짜 키로 `extras.method_result_code` 를 재면 카드 거절 코드를 더할 수 있다 - [real-provider-setup](../real-provider-setup.md) 카카오페이 절의 「못 잰 가정」). 응답 본문(`error_message` · `method_result_message`)은 예외 · 로그에 싣지 않는다 - 코드만.
+허용 목록 방식이다. 4xx 의 **공통 오류 -400(잘못된 요청) · -401(키 오류) · -403(사용 API 없음)** 만 확정(요청을 받아들이지 않았다)이고 **그 밖은 전부 모름** - 다시 보내지 말고 조회한다. 승인 실패(-780) · 취소 실패(-781)는 일부러 확정에서 뺐다: 문서의 예시(`USER_LOCKED` 「진행중인 거래가 있습니다」 · `6666` 「원거래없음」)가 앞선 요청이 처리 중이거나 이미 처리됐다는 뜻일 수 있어 돈이 움직이지 않았다고 말할 근거가 없다(진짜 키로 `extras.method_result_code` 를 재면 카드 거절 코드를 더할 수 있다 - [real-provider-setup](../real-provider-setup.md) 카카오페이 절의 「못 잰 가정」). 응답 본문은 예외 · 응답에 싣지 않는다 - 코드만. 다만 공통 오류(-400 · -401 · -403)의 `error_message`(예: 등록되지 않은 도메인)는 가려서(`PaymentFailures.safeReason` - 토큰 · 비밀 · 키 쌍 · 이메일 · 6자리 이상 숫자 가림, 200자) `ready` 실패 로그 한 줄에만 남긴다. 승인 · 취소 오류(-780 · -781)와 `method_result_message` 는 사람 정보가 섞일 수 있어 싣지 않는다.
 
 ## 지켜지는 것 (시험)
 

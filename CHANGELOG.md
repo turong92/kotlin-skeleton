@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 결제 돌아오기 · 표시 수정 (2026-10-19)
+
+- `payment` · `payment-kakaopay` · `payment-naverpay`: 주문 만들기 본문에 선택 칸 `returnOrigin`(결제를 시작한 화면의 origin). 새 설정 `skeleton.payment-kakaopay.allowed-return-origins` · `skeleton.payment-naverpay.allowed-return-origins`(기본 빈 목록 = 기존 동작 그대로)에 든 origin 이면 돌아올 주소의 scheme · host 가 그 origin 으로 바뀐다 - 목록 밖은 `return-url`(열린 리다이렉트 없음). `CheckoutOrder`/`CreateOrderCommand` 에 기본값 있는 칸 `returnOrigin` 추가, 공용 `ReturnOrigins`.
+- `payment`: 결제사 거절 이유 로그 - `PaymentProviderError.reason`(가린 글, 로그 한 줄 `describe` 에만). 카카오페이 공통 오류(-400 · -401 · -403)의 `error_message` 와 네이버페이 확정 거절의 `message` 를 `PaymentFailures.safeReason` 으로 가려 `ready`/`reserve` 실패 로그에 싣는다. 예외 · 응답에는 여전히 코드뿐.
+- `payment`: 주문 응답(사용자 · 운영자)에 중립 칸 `easyPayBrand`(`KAKAOPAY` · `NAVERPAY` · `null`). 견본 `GET /cheers/me` 도 같은 칸. 마이그레이션 없음.
+
 ### 게시판 확장 — 비회원 작성 · 승인 대기 · 고친 판 · 댓글 첨부 · 이벤트 자리 (2026-10-17)
 
 - `board`: 꺼진 채 시작하는 새 기능들. **비회원 작성**(`skeleton.board.guest.*`, 게시판 `guestWrite`) — 닉네임 + 비밀값(헤더 `X-Board-Guest-Secret`, bcrypt / 토큰 SHA-256), 비밀 대입 한도(틀린 시도만 센다) · 쓰기 한도 · 선택 캡차(`guest.captcha=REQUIRED`, `BoardCaptcha` ← `captcha-turnstile`). **승인 대기** `PENDING`(`postApproval` · `commentApproval` · `ownerModeratesComments`, `BoardPolicy.needsApproval`) · 글 주인의 댓글 승인 · 가리기 · `PATCH /{code}`. **고친 판** — 승인된 글 · 댓글을 승인 대상이 고치면 공개본은 그대로 두고 고친 내용만 대기(`PUT …/revision`). **댓글 첨부**(`comment-max-attachments`, 기본 0). **커밋 뒤 이벤트** `BoardEventListener`. 응답에 덧붙는 키만 있다 — [docs/board-http-contract.md](docs/board-http-contract.md), [docs/modules/board.md](docs/modules/board.md).

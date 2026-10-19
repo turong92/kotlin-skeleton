@@ -19,6 +19,7 @@
 | 설정 접두사 | `skeleton.payment-naverpay` — [docs/config/modules/payment-naverpay.yml](../config/modules/payment-naverpay.yml) |
 | 기본 동작 | 꺼짐. `enabled=true` 로 켠다. 켜도 클라이언트 아이디 · 시크릿 · 체인 아이디가 하나라도 비면 제공자 빈이 없다 — 보호 환경(`skeleton.env=stage\|prod`)에서는 기동 실패, 그 밖은 기동은 되고 배포 가드가 경고한다. |
 | 부팅에 필요한 것 | 없음. 켤 때 인증값 셋과 인터넷이 필요하다. 결제창을 열려면 돌아올 주소(`return-url`)도 필요하다. |
+| 돌아올 주소 | `return-url` 이 기본. `allowed-return-origins`(기본 빈 목록 = 늘 `return-url`)에 든 origin 으로 시작한 결제만 그 origin 으로 돌아온다(주문 만들기의 `returnOrigin`). 목록 밖 origin 은 조용히 `return-url` |
 | 교체 지점 | `NaverPayProvider` |
 | 마이그레이션 | 없음 |
 | 프론트 짝 | `@skeleton/payment` |
@@ -36,7 +37,7 @@
 
 ## 실패 분류 - 확정 / 모름
 
-허용 목록 방식이다. **HTTP 4xx** 이면서 문서가 「요청 자체를 받아들이지 않았다」고 말하는 코드(`Unauthorized`(401) · `RequireParameter` · `InvalidParameter` · `InvalidMerchant` · `InvalidPaymentId` · `TimeExpired` · `OwnerAuthFail` · `NotEnoughAccountBalance` · `CancelDeadlineExpired` · `TaxScope*Error` · `InvalidDiscountCancelCondition`)만 확정이고 **그 밖은 전부 모름** - 다시 보내지 말고 조회한다. 앞선 요청이 적용됐을 수 있는 코드(`AlreadyComplete` · `AlreadyOnGoing` · `AlreadyCanceled` · `OverRemainAmount` · `PreCancelNotComplete` · 멱등 키 재요청의 `409`)와 확신하지 못한 `Fail` 은 모름이다. **HTTP 200 안의 업무 오류는 확정으로 쓰지 않는다** - 업무 오류가 200 으로 오는지 4xx 인지 문서가 밝히지 않았다([real-provider-setup](../real-provider-setup.md) §13 「못 잰 가정」). 응답 본문(`message`)은 예외 · 로그에 싣지 않는다 - 코드만.
+허용 목록 방식이다. **HTTP 4xx** 이면서 문서가 「요청 자체를 받아들이지 않았다」고 말하는 코드(`Unauthorized`(401) · `RequireParameter` · `InvalidParameter` · `InvalidMerchant` · `InvalidPaymentId` · `TimeExpired` · `OwnerAuthFail` · `NotEnoughAccountBalance` · `CancelDeadlineExpired` · `TaxScope*Error` · `InvalidDiscountCancelCondition`)만 확정이고 **그 밖은 전부 모름** - 다시 보내지 말고 조회한다. 앞선 요청이 적용됐을 수 있는 코드(`AlreadyComplete` · `AlreadyOnGoing` · `AlreadyCanceled` · `OverRemainAmount` · `PreCancelNotComplete` · 멱등 키 재요청의 `409`)와 확신하지 못한 `Fail` 은 모름이다. **HTTP 200 안의 업무 오류는 확정으로 쓰지 않는다** - 업무 오류가 200 으로 오는지 4xx 인지 문서가 밝히지 않았다([real-provider-setup](../real-provider-setup.md) §13 「못 잰 가정」). 응답 본문은 예외 · 응답에 싣지 않는다 - 코드만. 다만 확정 거절 코드의 `message`(예: 등록되지 않은 가맹점)는 가려서(`PaymentFailures.safeReason`, 200자) 예약 실패 로그 한 줄에만 남긴다.
 
 ## 지켜지는 것 (시험)
 

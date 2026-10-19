@@ -106,6 +106,49 @@ class KakaoPayProviderTest {
     }
 
     @Test
+    fun `the buyer comes back to the origin the checkout started from when it is on the allow list`() {
+        val allowing = KakaoPayProvider(dev.sumin.skeleton.payment.kakaopay.support.realHttpClient(), dev.sumin.skeleton.payment.kakaopay.support.kakaoProperties(server).copy(allowedReturnOrigins = setOf("http://localhost:5173")))
+
+        allowing.checkout(checkoutOrder().copy(returnOrigin = "http://localhost:5173"))
+
+        val body = json.readValue(server.requests.single().body, Map::class.java)
+        assertEquals("http://localhost:5173/payments/return?kind=KAKAOPAY_REDIRECT&provider=kakaopay&order=ord_abcdef123456&result=success", body["approval_url"])
+        assertEquals("http://localhost:5173/payments/return?kind=KAKAOPAY_REDIRECT&provider=kakaopay&order=ord_abcdef123456&result=cancel", body["cancel_url"])
+        assertEquals("http://localhost:5173/payments/return?kind=KAKAOPAY_REDIRECT&provider=kakaopay&order=ord_abcdef123456&result=fail", body["fail_url"])
+    }
+
+    @Test
+    fun `an origin outside the allow list - or any origin when the list is empty - never reaches the provider`() {
+        val allowing = KakaoPayProvider(dev.sumin.skeleton.payment.kakaopay.support.realHttpClient(), dev.sumin.skeleton.payment.kakaopay.support.kakaoProperties(server).copy(allowedReturnOrigins = setOf("http://localhost:5173")))
+
+        allowing.checkout(checkoutOrder().copy(returnOrigin = "https://evil.example.net"))
+        provider.checkout(checkoutOrder().copy(returnOrigin = "http://localhost:5173"))
+
+        server.requests.forEach {
+            val body = json.readValue(it.body, Map::class.java)
+            listOf("approval_url", "cancel_url", "fail_url").forEach { key -> assertTrue((body[key] as String).startsWith("https://app.example.test/payments/return?"), key) }
+        }
+    }
+
+    @Test
+    fun `the log line of a refused ready carries the reason the provider gave, with secrets, emails and long numbers masked`() {
+        val logger = org.slf4j.LoggerFactory.getLogger(KakaoPayProvider::class.java) as ch.qos.logback.classic.Logger
+        val appender = ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>().also { it.start() }
+        logger.addAppender(appender)
+        try {
+            server.failNext("ready", Fail.REJECT_REQUEST)
+            assertFailsWith<dev.sumin.skeleton.payment.PaymentUnavailableException> { provider.checkout(checkoutOrder()) }
+        } finally {
+            logger.detachAppender(appender)
+        }
+
+        val line = appender.list.joinToString("\n") { it.formattedMessage }
+        assertTrue("등록된 도메인(플랫폼 > Web > 사이트도메인)이 존재하지 않아" in line, line)
+        assertTrue("status=400 code=-400" in line, line)
+        listOf("LEAKME-SECRET", "owner@example.com", "01012345678", server.secretKey).forEach { assertFalse(it in line, "leaked $it in: $line") }
+    }
+
+    @Test
     fun `an account id that looks like an email is not sent to the provider - the order id stands in, the same on ready and approve`() {
         val tid = checkNotNull(provider.checkout(checkoutOrder(accountId = "someone@example.test")).providerPaymentId)
         val token = server.userApproves(tid)

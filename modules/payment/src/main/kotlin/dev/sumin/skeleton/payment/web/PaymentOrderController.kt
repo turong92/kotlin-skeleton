@@ -65,7 +65,7 @@ class PaymentOrderController(
         val route = routing.of(request)
         // 같은 나라의 결제사가 둘 이상 열려 있으면 구매자가 고른 것(`provider`)을 받는다 - 나라 · 후보는 서버가 정한 것 안에서만(`PaymentCountryRouting.chosen`)
         val provider = routing.chosen(route, body["provider"]?.takeIf { it.isString }?.stringValue())
-        val created = orders.create(CreateOrderCommand(account, itemType, itemRef, idempotencyKey(key), quantity.coerceIn(0, Int.MAX_VALUE.toLong()).toInt(), country = route.country, provider = provider, providerClosed = route.providerClosed, providerChosen = provider != null && provider != route.provider))
+        val created = orders.create(CreateOrderCommand(account, itemType, itemRef, idempotencyKey(key), quantity.coerceIn(0, Int.MAX_VALUE.toLong()).toInt(), country = route.country, provider = provider, providerClosed = route.providerClosed, providerChosen = provider != null && provider != route.provider, returnOrigin = body["returnOrigin"]?.takeIf { it.isString }?.stringValue()))
         val response = Response.ok(CreateOrderResponse(OrderResponse.of(OrderView(created.order, created.refunds)), created.checkout?.let(CheckoutResponse::of)))
         return if (created.replayed) ResponseEntity.ok(response) else ResponseEntity.status(201).body(response)
     }

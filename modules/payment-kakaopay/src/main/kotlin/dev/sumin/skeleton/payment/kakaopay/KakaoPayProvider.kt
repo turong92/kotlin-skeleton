@@ -27,6 +27,7 @@ import dev.sumin.skeleton.payment.PaymentFailures
 import dev.sumin.skeleton.payment.ProviderPaymentStatus
 import dev.sumin.skeleton.payment.ProviderRefund
 import dev.sumin.skeleton.payment.ProviderTrace
+import dev.sumin.skeleton.payment.ReturnOrigins
 import java.net.URI
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -85,7 +86,7 @@ class KakaoPayProvider(
      * 같은 키로 다시 열면 그때 다시 부른다. 모든 `ready` 가 새 `tid` 를 만든다(이전 것은 결제되지 않은 채 카카오페이에 남는다 - 수용).
      */
     override fun checkout(order: CheckoutOrder): CheckoutInstruction {
-        val base = returnBase() ?: throw PaymentUnavailableException()
+        val base = returnBase()?.let { ReturnOrigins.resolve(it, order.returnOrigin, properties.allowedReturnOrigins) } ?: throw PaymentUnavailableException()
         // 카카오페이는 원화만 받는다 - 다른 통화의 금액을 `total_amount` 로 보내지 않는다(구매자가 고른 결제사일 때의 마지막 방어)
         if (order.amount.normalizedCurrency != KRW) throw PaymentUnavailableException()
         val orderId = KakaoPayIdentifiers.orderId(order.orderId)

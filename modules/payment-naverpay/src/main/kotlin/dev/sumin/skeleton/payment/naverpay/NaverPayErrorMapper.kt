@@ -3,6 +3,7 @@ package dev.sumin.skeleton.payment.naverpay
 import dev.sumin.skeleton.common.http.ExternalHttpErrorContext
 import dev.sumin.skeleton.common.http.ExternalHttpErrorMapper
 import dev.sumin.skeleton.payment.ConfirmDeclineCategory
+import dev.sumin.skeleton.payment.PaymentFailures
 import dev.sumin.skeleton.payment.PaymentProviderCredentialAlert
 import dev.sumin.skeleton.payment.PaymentProviderError
 import dev.sumin.skeleton.payment.PaymentProviderException
@@ -15,7 +16,7 @@ import tools.jackson.module.kotlin.kotlinModule
  * 네이버페이의 오류를 [PaymentProviderException] 으로 옮긴다. 오류는 두 곳에서 온다 - HTTP 오류 상태(이 클래스의 [map], 본문 `{"code": "...", "message": "..."}`)와
  * HTTP 200 안의 `code` 가 `Success` 가 아닌 업무 오류([exceptionFor] 를 모듈이 직접 부른다).
  *
- * **응답 본문은 예외에 싣지 않는다** - `message` 는 사람 글이라 버리고, 꺼내 쓰는 것은 **결과 코드뿐**이며 모양이 맞을 때만 쓴다.
+ * **응답 본문은 예외에 싣지 않는다** - `message` 는 사람 글이라 확정 거절 코드일 때만 가려서 [PaymentProviderError.reason](로그 한 줄용)에 두고, 꺼내 쓰는 것은 **결과 코드뿐**이며 모양이 맞을 때만 쓴다.
  *
  * **확정 거절은 허용 목록으로만 정한다**([DEFINITIVE_CODES]): 요청 자체를 받아들이지 않았거나 결제를 만들지 않았다고 문서가 말하는 코드이고 **상태가 4xx 일 때만** `definitive=true`.
  * 업무 오류가 HTTP 200 으로 오는지 4xx 로 오는지 문서가 밝히지 않았다(**못 잰 가정**) - 200 안의 오류는 [exceptionFor] 가 상태를 그대로 받아 확정으로 쓰지 않고, 모듈이 [DEFINITIVE_CODES] 의 코드만 4xx 로 옮겨 부른다(`NaverPayProvider.requireSuccess`). 앞선 요청이 적용됐을 수 있는 코드(`AlreadyComplete` · `AlreadyOnGoing` ·
@@ -32,6 +33,7 @@ class NaverPayErrorMapper(
     override fun map(context: ExternalHttpErrorContext): PaymentProviderException =
         exceptionFor(
             code = parse(context.upstreamBody)?.code,
+            message = parse(context.upstreamBody)?.message,
             upstreamStatus = context.upstreamStatus,
             traceId = context.trace.traceId,
             clientName = context.clientName,
@@ -39,7 +41,7 @@ class NaverPayErrorMapper(
             uri = context.uri,
         )
 
-    fun exceptionFor(code: String?, upstreamStatus: Int, traceId: String?, clientName: String, method: String, uri: URI): PaymentProviderException {
+    fun exceptionFor(code: String?, upstreamStatus: Int, traceId: String?, clientName: String, method: String, uri: URI, message: String? = null): PaymentProviderException {
         // 상태가 먼저다: 401 은 본문이 없을 수 있고, 409 는 처음 응답(`Success`)을 되돌려 줄 수 있다 - 둘 다 이 요청은 적용되지 않았다는 말이 아니다
         val resolved = when (upstreamStatus) {
             401 -> UNAUTHORIZED
@@ -60,6 +62,8 @@ class NaverPayErrorMapper(
                 retryable = upstreamStatus == 429 || upstreamStatus >= 500,
                 definitive = definitiveAllowed && upstreamStatus in 400..499 && resolved in DEFINITIVE_CODES,
                 rawBody = null,
+                // 요청 · 설정 문제를 말하는 거절(확정 코드)의 `message` 만 가려서 로그 한 줄에 싣는다(예: 등록되지 않은 가맹점) - 그 밖은 싣지 않는다
+                reason = if (resolved in DEFINITIVE_CODES) PaymentFailures.safeReason(message) else null,
             ),
             clientName = clientName,
             method = method,
@@ -69,8 +73,8 @@ class NaverPayErrorMapper(
 
     private fun parse(body: String): NaverPayErrorBody? = runCatching { mapper.readValue(body, NaverPayErrorBody::class.java) }.getOrNull()
 
-    /** 네이버페이 오류 본문 중 읽는 칸만 - 선언하지 않은 칸(`message` · `body`)은 버려진다. */
-    internal data class NaverPayErrorBody(val code: String? = null)
+    /** 네이버페이 오류 본문 중 읽는 칸만 - 선언하지 않은 칸(`body`)은 버려진다. */
+    internal data class NaverPayErrorBody(val code: String? = null, val message: String? = null)
 
     companion object {
         private val SAFE_CODE = Regex("[A-Za-z0-9_]{1,40}")

@@ -95,6 +95,25 @@ class NaverPayProviderTest {
     }
 
     @Test
+    fun `the buyer comes back to the origin the checkout started from when it is on the allow list`() {
+        val allowing = NaverPayProvider(httpClient = dev.sumin.skeleton.payment.naverpay.support.realHttpClient(), properties = dev.sumin.skeleton.payment.naverpay.support.naverProperties(server).copy(allowedReturnOrigins = setOf("http://localhost:5173")))
+
+        allowing.checkout(checkoutOrder().copy(returnOrigin = "http://localhost:5173"))
+
+        assertEquals("http://localhost:5173/payments/return?kind=NAVERPAY_REDIRECT&provider=naverpay&order=ord_abcdef123456", tools.jackson.databind.json.JsonMapper.builder().build().readValue(server.requests.single().body, Map::class.java)["returnUrl"])
+    }
+
+    @Test
+    fun `an origin outside the allow list - or any origin when the list is empty - never reaches the provider`() {
+        val allowing = NaverPayProvider(httpClient = dev.sumin.skeleton.payment.naverpay.support.realHttpClient(), properties = dev.sumin.skeleton.payment.naverpay.support.naverProperties(server).copy(allowedReturnOrigins = setOf("http://localhost:5173")))
+
+        allowing.checkout(checkoutOrder().copy(returnOrigin = "https://evil.example.net"))
+        provider.checkout(checkoutOrder().copy(returnOrigin = "http://localhost:5173"))
+
+        server.requests.forEach { assertTrue((tools.jackson.databind.json.JsonMapper.builder().build().readValue(it.body, Map::class.java)["returnUrl"] as String).startsWith("https://app.example.test/payments/return?")) }
+    }
+
+    @Test
     fun `a purchase in another currency than KRW is never reserved - 503 and no request`() {
         val usd = checkoutOrder().copy(amount = PaymentAmount(3_000, "USD"))
 

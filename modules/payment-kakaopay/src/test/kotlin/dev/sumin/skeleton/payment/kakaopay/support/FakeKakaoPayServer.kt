@@ -30,7 +30,7 @@ internal class FakeKakaoPayServer(
         fun header(name: String): String? = headers[name.lowercase()]?.firstOrNull()
     }
 
-    enum class Fail { DECLINE, DELAY, LOSE, ERROR }
+    enum class Fail { DECLINE, DELAY, LOSE, ERROR, REJECT_REQUEST }
 
     /** 응답에 심는 값 - 이 모듈이 읽지 않는 칸에 들어 있다. 결과 · 예외 · 로그 어디에도 나오면 안 된다. */
     object PLANTED {
@@ -121,6 +121,8 @@ internal class FakeKakaoPayServer(
             Fail.DELAY -> Reply.Hang
             Fail.LOSE -> normal().also { return Reply.Drop }
             Fail.ERROR -> error(500, -500, "internal")
+            // 진짜 카카오페이가 도메인 미등록으로 `ready` 를 거절할 때의 모양 - 글에 비밀 · 이메일 · 긴 숫자가 섞여 와도 로그에서 가려지는지 본다
+            Fail.REJECT_REQUEST -> json(400, mapOf("error_code" to -400, "error_message" to REJECT_MESSAGE))
         }
     }
 
@@ -278,5 +280,6 @@ internal class FakeKakaoPayServer(
 
     private companion object {
         const val HANG_LIMIT_SECONDS = 30L
+        const val REJECT_MESSAGE = "등록된 도메인(플랫폼 > Web > 사이트도메인)이 존재하지 않아 요청을 처리할 수 없습니다. secret_key=LEAKME-SECRET owner@example.com 01012345678"
     }
 }

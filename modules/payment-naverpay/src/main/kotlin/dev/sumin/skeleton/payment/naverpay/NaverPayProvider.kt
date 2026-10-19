@@ -28,6 +28,7 @@ import dev.sumin.skeleton.payment.PaymentUnavailableException
 import dev.sumin.skeleton.payment.ProviderPaymentStatus
 import dev.sumin.skeleton.payment.ProviderRefund
 import dev.sumin.skeleton.payment.ProviderTrace
+import dev.sumin.skeleton.payment.ReturnOrigins
 import java.net.URI
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -93,7 +94,7 @@ class NaverPayProvider(
      * 결제 번호는 아직 없다 - 구매자가 결제를 마치면 돌아온 주소에 실려 온다.
      */
     override fun checkout(order: CheckoutOrder): CheckoutInstruction {
-        val base = returnBase() ?: throw PaymentUnavailableException()
+        val base = returnBase()?.let { ReturnOrigins.resolve(it, order.returnOrigin, properties.allowedReturnOrigins) } ?: throw PaymentUnavailableException()
         // 네이버페이는 원화만 받는다 - 다른 통화의 금액을 예약하지 않는다(구매자가 고른 결제사일 때의 마지막 방어)
         if (order.amount.normalizedCurrency != KRW) throw PaymentUnavailableException()
         val orderId = NaverPayIdentifiers.orderId(order.orderId)
@@ -112,7 +113,7 @@ class NaverPayProvider(
                     }.block(),
                 )
                 seen.status = response.statusCode
-                requireSuccess(response.body.code, errorMapper, setOf(SUCCESS))
+                requireSuccess(response.body.code, errorMapper, setOf(SUCCESS), response.body.message)
                 response.body.body?.reserveId?.takeIf(NaverPayIdentifiers::isReserveId).need("reserveId")
             }
         } catch (e: Exception) {
@@ -423,12 +424,12 @@ class NaverPayProvider(
     }
 
     /** HTTP 200 안의 결과 코드가 성공이 아니면 오류로 올린다 - 코드가 없으면 읽을 수 없는 응답이다. */
-    private fun requireSuccess(code: String?, mapper: NaverPayErrorMapper, ok: Set<String>) {
+    private fun requireSuccess(code: String?, mapper: NaverPayErrorMapper, ok: Set<String>, message: String? = null) {
         val value = code ?: throw UnreadableAnswer("code")
         if (value in ok) return
         // 업무 오류가 HTTP 200 으로 온다(문서의 결과 코드 표) - 결제가 일어나지 않은 게 분명한 코드(`DEFINITIVE_CODES`)만 4xx 거절로 옮겨 확정 거절로 이어지게 하고, 그 밖은 200 그대로 둬 모름이다
         val status = if (value in NaverPayErrorMapper.DEFINITIVE_CODES) BUSINESS_REFUSAL_STATUS else 200
-        throw mapper.exceptionFor(value, upstreamStatus = status, traceId = null, clientName = properties.clientName, method = "POST", uri = apiUri())
+        throw mapper.exceptionFor(value, upstreamStatus = status, traceId = null, clientName = properties.clientName, method = "POST", uri = apiUri(), message = message)
     }
 
     private fun apiUri(): URI = runCatching { URI.create(properties.apiBaseUrl) }.getOrDefault(URI.create("about:blank"))
@@ -512,7 +513,7 @@ class NaverPayProvider(
 }
 
 /** 결제 예약(`v2/reserve`)에서 읽는 칸. */
-data class NaverPayReserveResponse(val code: String? = null, val body: NaverPayReserveBody? = null)
+data class NaverPayReserveResponse(val code: String? = null, val message: String? = null, val body: NaverPayReserveBody? = null)
 
 data class NaverPayReserveBody(val reserveId: String? = null)
 

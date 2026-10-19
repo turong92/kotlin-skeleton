@@ -3,6 +3,7 @@ package dev.sumin.skeleton.payment.kakaopay
 import com.fasterxml.jackson.annotation.JsonProperty
 import dev.sumin.skeleton.common.http.ExternalHttpErrorContext
 import dev.sumin.skeleton.common.http.ExternalHttpErrorMapper
+import dev.sumin.skeleton.payment.PaymentFailures
 import dev.sumin.skeleton.payment.PaymentProviderCredentialAlert
 import dev.sumin.skeleton.payment.PaymentProviderError
 import dev.sumin.skeleton.payment.PaymentProviderException
@@ -13,7 +14,7 @@ import tools.jackson.module.kotlin.kotlinModule
 /**
  * 카카오페이의 오류 응답(`{"error_code": -780, "error_message": "…", "extras": {"method_result_code": "…"}}`)을 [PaymentProviderException] 으로 옮긴다.
  *
- * **응답 본문은 예외에 싣지 않는다** - `error_message` · `extras.method_result_message` 는 사람 글이라 버리고, 꺼내 쓰는 것은 **오류 코드와 결제 수단의 결과 코드뿐**이며 모양이 맞을 때만 쓴다.
+ * **응답 본문은 예외에 싣지 않는다** - `extras.method_result_message` 는 사람 글이라 버리고(`error_message` 는 공통 오류일 때만 가려서 [PaymentProviderError.reason] 에 - 로그 한 줄용), 꺼내 쓰는 것은 **오류 코드와 결제 수단의 결과 코드뿐**이며 모양이 맞을 때만 쓴다.
  *
  * **확정 거절은 허용 목록으로만 정한다**([DEFINITIVE_CODES]): 요청 자체를 받아들이지 않은 공통 오류(-400 잘못된 요청 · -401 키 오류 · -403 사용 API 없음)이고 상태가 4xx 일 때만 `definitive=true`.
  * **승인 실패(-780) · 취소 실패(-781)는 일부러 뺐다** - 문서의 예시(`USER_LOCKED` 「진행중인 거래가 있습니다」 · `6666` 「원거래없음」)가 앞선 요청이 처리 중이거나 이미 처리됐다는 뜻일 수 있어, 돈이 움직이지 않았다고 말할 근거가 없다.
@@ -51,6 +52,8 @@ class KakaoPayErrorMapper(
                 retryable = context.upstreamStatus == 429 || context.upstreamStatus >= 500,
                 definitive = definitiveAllowed && context.upstreamStatus in 400..499 && code in DEFINITIVE_CODES,
                 rawBody = null,
+                // 공통 오류(-400 · -401 · -403)의 `error_message` 는 요청 · 설정 문제를 말하는 글이라(예: 등록되지 않은 도메인) 로그 한 줄에만 가려서 싣는다. 그 밖(-780 · -781 …)은 사람 정보가 섞일 수 있어 싣지 않는다
+                reason = if (code in DEFINITIVE_CODES) PaymentFailures.safeReason(response?.errorMessage) else null,
             ),
             clientName = context.clientName,
             method = context.method,
@@ -60,9 +63,10 @@ class KakaoPayErrorMapper(
 
     private fun parse(body: String): KakaoPayErrorBody? = runCatching { mapper.readValue(body, KakaoPayErrorBody::class.java) }.getOrNull()
 
-    /** 카카오페이 오류 본문 중 읽는 칸만 - 선언하지 않은 칸(`error_message` · `extras.method_result_message`)은 버려진다. */
+    /** 카카오페이 오류 본문 중 읽는 칸만 - 선언하지 않은 칸(`extras.method_result_message` …)은 버려진다. `error_message` 는 공통 오류일 때만 가려서 로그용으로 쓴다. */
     internal data class KakaoPayErrorBody(
         @JsonProperty("error_code") val errorCode: Int? = null,
+        @JsonProperty("error_message") val errorMessage: String? = null,
         val extras: Extras? = null,
     ) {
         data class Extras(@JsonProperty("method_result_code") val methodResultCode: String? = null)

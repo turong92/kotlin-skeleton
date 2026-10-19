@@ -26,6 +26,11 @@ data class KakaoPayProperties(
      * 구매자가 정하는 값이 아니라 설정이다(열린 리다이렉트를 만들지 않는다). 모듈이 `provider` · `order` · `result` 조각을 붙이고 성공일 때 카카오페이가 `pg_token` 을 붙인다. 프로젝트마다 자기 것.
      */
     val returnUrl: String = "",
+    /**
+     * 결제를 시작한 화면의 origin(예: `http://localhost:5173`)으로 돌아오게 허락하는 origin 목록. 주문 만들기가 보낸 `returnOrigin` 이 여기 있을 때만 [returnUrl] 의 scheme · host 를 그 origin 으로 바꾼다 -
+     * 목록 밖이거나 비어 있으면 [returnUrl] 그대로(열린 리다이렉트가 되지 않는다). 로그인 저장소가 origin 마다 따로라 다른 origin 으로 돌아오면 로그인이 풀리는 것을 막는 용도다.
+     */
+    val allowedReturnOrigins: Set<String> = emptySet(),
     /** `ready` · 조회 한 번의 제한 시간(요청 단위). 클라이언트 단위 `skeleton.http.clients.payment-kakaopay.response-timeout` 보다 짧을 때만 뜻이 있다. */
     val readyTimeout: Duration = Duration.ofSeconds(10),
     val lookupTimeout: Duration = Duration.ofSeconds(10),
@@ -36,7 +41,7 @@ data class KakaoPayProperties(
     override fun toString(): String =
         "KakaoPayProperties(enabled=$enabled, providerId=$providerId, clientName=$clientName, secretKey=${redacted(secretKey)}, cid=$cid, cidSecret=${redacted(cidSecret)}, " +
             "baseUrl=${if (baseUrl == DEFAULT_BASE_URL) "<default>" else "<set>"}, supportedCurrencies=$supportedCurrencies, supportedCountries=$supportedCountries, " +
-            "returnUrl=${if (returnUrl.isBlank()) "<unset>" else "<set>"}, readyTimeout=$readyTimeout, lookupTimeout=$lookupTimeout, allowTestKeysInProtectedEnv=$allowTestKeysInProtectedEnv)"
+            "returnUrl=${if (returnUrl.isBlank()) "<unset>" else "<set>"}, allowedReturnOrigins=${allowedReturnOrigins.size}, readyTimeout=$readyTimeout, lookupTimeout=$lookupTimeout, allowTestKeysInProtectedEnv=$allowTestKeysInProtectedEnv)"
 
     private fun redacted(value: String) = if (value.isBlank()) "<unset>" else "<redacted>"
 }

@@ -18,6 +18,8 @@ data class CreateOrderCommand(
     val providerClosed: Boolean = false,
     /** [provider] 는 구매자가 `choices` 에서 고른 것이다(서버 몫이 아니다) - 그 결제사가 견적 통화를 받는지 본다. 서버가 정한 결제사는 보지 않는다(Paddle 은 자기 가격 통화로 바꾼다). */
     val providerChosen: Boolean = false,
+    /** 결제를 시작한 화면의 origin - 돌아올 주소를 그 origin 으로 맞추는 결제사(카카오페이 · 네이버페이)에게만 [CheckoutOrder.returnOrigin] 으로 간다. */
+    val returnOrigin: String? = null,
 )
 
 /**
@@ -117,7 +119,7 @@ class PaymentOrders(
         // 거래를 먼저 만드는 결제사(Paddle): 밖에서 서버가 정한 가격 · 수량 · 우리 줄 id 로 거래를 만들어 주문의 결제 키 자리에 박는다. 만들기가 실패하면 주문은 거래 id 없이 남는다
         // (만료 작업이 닫는다; 같은 키로 다시 열면 그때 만든다)
         val created = if (creator != null) ensureTransaction(order, creator) else order
-        val instruction = checkout.checkout(CheckoutOrder(created.id, created.orderName, created.amount, created.itemRef, created.accountId, created.providerPaymentId))
+        val instruction = checkout.checkout(CheckoutOrder(created.id, created.orderName, created.amount, created.itemRef, created.accountId, created.providerPaymentId, returnOrigin = command.returnOrigin))
         return CreatedOrder(remember(created, instruction), instruction, replayed = false)
     }
 
@@ -381,7 +383,7 @@ class PaymentOrders(
                 throw PaymentUnavailableException()
             }
             val ready = (gateway as? PaymentTransactionGateway)?.let { ensureTransaction(existing, it) } ?: existing // 거래 id 가 아직 없는 주문을 다시 열면 그때 만든다
-            gateway.checkout(CheckoutOrder(ready.id, ready.orderName, ready.amount, ready.itemRef, ready.accountId, ready.providerPaymentId))
+            gateway.checkout(CheckoutOrder(ready.id, ready.orderName, ready.amount, ready.itemRef, ready.accountId, ready.providerPaymentId, returnOrigin = command.returnOrigin))
         } else {
             null
         }

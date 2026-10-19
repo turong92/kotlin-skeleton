@@ -39,6 +39,8 @@ data class NaverPayProperties(
      * 서버가 결제를 예약할 때 이 주소를 넘긴다. 모듈이 `kind` · `provider` · `order` 조각을 붙이고 네이버페이가 `resultCode` · `paymentId`(실패면 `resultMessage` · `reserveId`)를 이어 붙인다. 프로젝트마다 자기 것.
      */
     val returnUrl: String = "",
+    /** 결제를 시작한 화면의 origin 으로 돌아오게 허락하는 origin 목록 - 뜻은 카카오페이의 같은 이름 설정과 같다. 목록 밖이거나 비어 있으면 [returnUrl] 그대로. */
+    val allowedReturnOrigins: Set<String> = emptySet(),
     /** 결제 예약 한 번의 제한 시간(요청 단위). 실패하면 결제창을 열지 않는다(503). */
     val reserveTimeout: Duration = Duration.ofSeconds(10),
 
@@ -61,7 +63,7 @@ data class NaverPayProperties(
     override fun toString(): String =
         "NaverPayProperties(enabled=$enabled, providerId=$providerId, clientName=$clientName, mode=$mode, clientId=${redacted(clientId)}, clientSecret=${redacted(clientSecret)}, chainId=${redacted(chainId)}, " +
             "baseUrl=${if (baseUrl.isBlank()) "<default>" else "<set>"}, supportedCurrencies=$supportedCurrencies, supportedCountries=$supportedCountries, " +
-            "returnUrl=${if (returnUrl.isBlank()) "<unset>" else "<set>"}, applyTimeout=$applyTimeout, lookupTimeout=$lookupTimeout, allowDevelopmentModeInProtectedEnv=$allowDevelopmentModeInProtectedEnv)"
+            "returnUrl=${if (returnUrl.isBlank()) "<unset>" else "<set>"}, allowedReturnOrigins=${allowedReturnOrigins.size}, applyTimeout=$applyTimeout, lookupTimeout=$lookupTimeout, allowDevelopmentModeInProtectedEnv=$allowDevelopmentModeInProtectedEnv)"
 
     private fun redacted(value: String) = if (value.isBlank()) "<unset>" else "<redacted>"
 }

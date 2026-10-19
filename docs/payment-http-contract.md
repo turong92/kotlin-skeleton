@@ -28,7 +28,7 @@
 { "id": "ord_…", "status": "PAID", "kind": "ONE_TIME", "itemType": "cheer", "itemRef": "cheer-3000", "quantity": 1,
   "orderName": "응원하기 3,000원", "amount": { "amount": 3000, "currency": "KRW" },
   "refundedAmount": 0, "refundableAmount": 3000, "refundPending": false, "openRefundStatus": null,
-  "method": "CARD", "card": { "issuer": "HYUNDAI", "last4": "1234" } /* | null */, "testMode": true,
+  "method": "CARD", "card": { "issuer": "HYUNDAI", "last4": "1234" } /* | null */, "easyPayBrand": null /* | "KAKAOPAY" | "NAVERPAY" */, "testMode": true,
   "failureCode": null, "createdAt": "…Z", "paidAt": "…Z" /* | null */, "fulfilled": true }
 ```
 
@@ -37,6 +37,7 @@
 - `refundPending`: 열린 환불(요청됨 · 환불 중)이 있다. `openRefundStatus`: `"REQUESTED"`(본인이 요청함) · `"PENDING"`(환불 중) · 없으면 `null` — 화면이 「환불 요청함」과 「환불 중」을 가르는 칸.
 - `method`: 결제 수단 **종류 코드**(`CARD` · `EASY_PAY` · `VIRTUAL_ACCOUNT` · `TRANSFER` · `MOBILE_PHONE` …, 영문 대문자로 시작하는 코드만 — 모르는 수단이면 `null`). 한글 라벨이 오지 않는다.
 - `card`: 카드 결제일 때만 `{ issuer, last4 }`(각각 `null` 일 수 있다). `issuer` 는 결제사 중립의 대문자 영문 코드, `last4` 는 숫자 또는 `*` 최대 네 글자. 카드가 아니거나 **계정이 지워져 두 칸이 비워졌으면 `card` 자체가 `null`**.
+- `easyPayBrand`: 결제사가 **직접 받은** 간편결제(`method` 가 `EASY_PAY` 이고 결제사가 카카오페이 · 네이버페이 모듈)일 때만 `"KAKAOPAY"` · `"NAVERPAY"`, 그 밖(토스 경유 간편결제 포함)은 `null` - 화면이 「간편결제」 대신 앱 이름을 쓴다. 결제사 이름 `provider` 대신 나가는 중립 코드다(카드사 코드처럼; §5). **칸은 늘 온다.** 결제사 모듈의 `provider-id` 를 기본값에서 바꾼 배포는 브랜드 없이 `null`.
 - `testMode`: 이 주문이 테스트 키로 만들어졌다(화면은 늘 「테스트 결제」 띠를 보인다).
 - `failureCode`(주문): 결제사가 승인을 거절한 코드(식별자 모양만, 코드를 못 읽으면 `DECLINED`) · `PROVIDER_EXPIRED` · `PROVIDER_ABORTED`(결제사가 만료 · 중단으로 끝냈다) · `EXPIRED_UNPAID`(결제 없이 시간이 지났다). 결제된 주문은 `null`.
 - `fulfilled`: 앱의 지급(`PaymentOrderListener.onPaid`)이 끝났다.
@@ -104,7 +105,7 @@
 ### POST /orders — 주문 만들기 (`PaymentCatalog` 빈이 있을 때만)
 
 선택 본문 칸 `provider`(결제사 id, 소문자) - **`GET /config` 의 `choices` 안에 있을 때만 받는다**(같은 나라에 결제사가 둘 이상 켜져 있고 구매자가 고른 것). 비우거나 후보 밖이면 서버가 정한 결제사(나라 지도 → 기본 결제사 → 열린 결제사가 하나뿐이면 그것)를 쓴다. 서명된 웹훅이 곧 사실인 결제사(Paddle)는 승인 호출(`/confirm`)이 없다 — 결제창이 끝나면 웹훅이 주문을 `PAID` 로 옮기므로 화면은 `GET /orders/{id}` 를 폴링한다. 그 주문의 금액 · 통화는 결제사가 받은 값으로 바뀐다(여러 통화).
-헤더 `Idempotency-Key`. 본문 `{ "itemType": "cheer", "itemRef": "cheer-3000", "quantity": 1 }`(`itemType` 1~40자 · `itemRef` 1~128자 · `quantity` 생략하면 1).
+헤더 `Idempotency-Key`. 본문 `{ "itemType": "cheer", "itemRef": "cheer-3000", "quantity": 1 }`(+ 선택 `returnOrigin`: 결제를 시작한 화면의 origin, 예 `"http://localhost:5173"` - 카카오페이 · 네이버페이가 돌아올 주소를 서버 설정 `allowed-return-origins` 안의 origin 으로 맞출 때만 쓰고, 목록 밖이거나 origin 모양이 아니면 읽지 않는다 = 설정의 `return-url`. 토스 · Paddle 은 읽지 않는다)(`itemType` 1~40자 · `itemRef` 1~128자 · `quantity` 생략하면 1).
 **금액은 본문에 없다** — 앱의 카탈로그가 `(itemType, itemRef, quantity)` 로 정한다. 브라우저가 금액을 정하는 길은 없다.
 
 | 응답 | 뜻 |
@@ -289,7 +290,7 @@
 
 | 칸 | |
 |---|---|
-| 결제사 이름 `provider` · 결제사 결제 번호 `providerPaymentId` · 결제사 환불 번호 `providerRefundId` | ⊕ 앞의 둘 |
+| 결제사 이름 `provider`(대신 `easyPayBrand` 중립 코드 하나가 나간다) · 결제사 결제 번호 `providerPaymentId` · 결제사 환불 번호 `providerRefundId` | ⊕ 앞의 둘 |
 | 검토 이유 `reviewReason` | ⊕ |
 | 요청한 · 결정한 운영자 `requestedBy` · `decidedBy` · 이력의 `actorId` | ⊕ |
 | 환불 줄의 `failureCode`(결제사 코드이거나 우리 코드) | ⊕ — 사용자에게는 `closedBy`(`USER` \| `SYSTEM`) 중립 칸만 |
