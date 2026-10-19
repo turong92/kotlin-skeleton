@@ -130,7 +130,8 @@ class FakePushGateway(override val providerId: String = "paddle", override val m
         val id = query.providerPaymentId ?: return null
         val txn = txns[id] ?: return null
         val approved = txn.adjustments.filter { it.status == "approved" }
-        val refunded = approved.sumOf { it.amount.amount }
+        // 같은 금액의 경고와 차지백은 한 이의 - 남은 금액에는 한 번만(Paddle 모듈과 같은 가정)
+        val refunded = approved.filterNot { c -> c.chargeback && !c.warning && approved.any { w -> w.warning && w.amount.amount == c.amount.amount } }.sumOf { it.amount.amount }
         val remaining = txn.total.amount - refunded
         return PaymentSnapshot(
             providerPaymentId = id, orderId = null,

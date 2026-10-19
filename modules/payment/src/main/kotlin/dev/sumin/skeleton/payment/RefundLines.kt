@@ -42,6 +42,19 @@ internal class RefundLines(private val writer: PaymentLedgerWriter, private val 
     }
 
     /**
+     * 차지백 한 건이 **이미 센 이의**(같은 금액의 경고 ↔ 차지백)인가 - 웹훅 기록과 결제사 맞추기가 함께 쓰는 단 하나의 규칙이다. 맞으면 true(새 줄을 넣지 않는다).
+     * 경고 줄에 차지백이 접히면 줄을 그 차지백의 번호로 옮긴다(경고가 나중에 되돌려져도 차지백이 살아 있으면 줄은 그대로여야 한다). 차지백이 먼저 있던 줄에 경고가 오면 그대로 둔다.
+     */
+    fun foldChargeback(tx: PaymentLedgerTx, orderId: String, providerRefundId: String, amount: PaymentAmount, warning: Boolean): Boolean {
+        val other = tx.listRefunds(orderId).firstOrNull {
+            it.reasonCode == PaymentRefundReason.CHARGEBACK.name && it.origin == PaymentRefundOrigin.PROVIDER && it.status == PaymentRefundStatus.SUCCEEDED &&
+                it.amount.sameAs(amount) && (it.failureCode == CHARGEBACK_WARNING) != warning
+        } ?: return false
+        if (!warning) tx.updateRefund(other.copy(providerRefundId = providerRefundId, failureCode = null, updatedAt = writer.now()))
+        return true
+    }
+
+    /**
      * 이뤄졌던 환불 줄이 결제사 증거로 되돌려졌다(차지백 분쟁에서 이김) - 줄은 `REVERSED`, 주문의 환불된 금액에서 빠지고 상태가 `PARTIALLY_REFUNDED`/`PAID` 로 간다([PaymentOrderTransitions] 의 증거 길).
      * 지급(이용권) · 끝난 구독은 되살리지 않는다 - 운영자가 판단한다.
      */

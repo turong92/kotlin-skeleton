@@ -18,7 +18,7 @@ internal class RefundSettlement(
     private val convergence: PaymentConvergence,
     private val writer: PaymentLedgerWriter,
 ) {
-    enum class Result { DONE, WAIT, MISMATCH, PROVIDER_PENDING, STALE_SNAPSHOT }
+    enum class Result { DONE, WAIT, MISMATCH, PROVIDER_PENDING, STALE_SNAPSHOT, HELD_BY_PROVIDER }
 
     /** [snapshotAt] 은 결제사에 묻기 **시작한** 시각 — 빠뜨릴 수 없다(기한 판정 · 낡은 스냅샷 판정이 모두 이 시각으로 한다). */
     fun settle(
@@ -46,8 +46,8 @@ internal class RefundSettlement(
             convergence.flagReview(tx, converged, PaymentReviewReason.REFUND_MISMATCH, context)
             return Result.MISMATCH
         }
-        // 결제사가 검토 중으로 쥔 환불(Paddle)은 아직 이뤄지지 않았을 뿐 「적용 안 됨」이 아니다 - 닫지 않고 결제사의 결정(웹훅)을 기다린다
-        if (snapshot.pendingRefunds.any { pending -> if (after.providerRefundId != null) pending.providerRefundId == after.providerRefundId else pending.amount.sameAs(after.amount) }) return Result.PROVIDER_PENDING
+        // 결제사가 검토 중으로 쥔 환불(Paddle)은 아직 이뤄지지 않았을 뿐 「적용 안 됨」이 아니다 - 닫지 않고 결제사의 결정(웹훅)을 기다린다. 며칠 걸릴 수 있어 정산 작업은 재시도하지 않고 끝나며 표시도 찍지 않는다(검토가 길어진 줄은 오래 `PENDING` 인 파생 사유로 보인다)
+        if (snapshot.pendingRefunds.any { pending -> if (after.providerRefundId != null) pending.providerRefundId == after.providerRefundId else pending.amount.sameAs(after.amount) }) return Result.HELD_BY_PROVIDER
         if (RefundLines.received(snapshot) && snapshot.remaining.amount == RefundLines.baseOf(converged) - converged.refundedAmount) {
             val sentAt = after.sentAt ?: after.requestedAt
             if (after.failureCode == PROVIDER_PENDING) {

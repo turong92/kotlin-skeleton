@@ -41,8 +41,8 @@ class PaddleChargebackLedgerTest {
     private fun chargeback(order: PaymentOrder, id: String, amount: Long = 499, warning: Boolean = false, status: PushedRefundStatus = PushedRefundStatus.APPROVED) =
         PushedRefund("evt_${++seq}", t0.plusSeconds(120), PushedRefundKind.CHARGEBACK, id, checkNotNull(order.providerPaymentId), status, usd(amount), warning)
 
-    private fun reversal(order: PaymentOrder, id: String, amount: Long = 499) =
-        PushedRefund("evt_${++seq}", t0.plusSeconds(600), PushedRefundKind.CHARGEBACK_REVERSAL, id, checkNotNull(order.providerPaymentId), PushedRefundStatus.APPROVED, usd(amount))
+    private fun reversal(order: PaymentOrder, id: String, amount: Long = 499, warning: Boolean = false) =
+        PushedRefund("evt_${++seq}", t0.plusSeconds(600), PushedRefundKind.CHARGEBACK_REVERSAL, id, checkNotNull(order.providerPaymentId), PushedRefundStatus.APPROVED, usd(amount), warning)
 
     private fun lines(order: PaymentOrder) = kit.store.listRefunds(order.id)
 
@@ -76,6 +76,52 @@ class PaddleChargebackLedgerTest {
         assertEquals(499, kit.order(order.id).refundedAmount)
         assertEquals(PaymentOrderStatus.REFUNDED, kit.order(order.id).status)
         assertEquals(1, kit.listener.refunded.size)
+    }
+
+    @Test
+    fun `the chargeback coming before its warning is the same dispute too, and matching with the provider that lists both adds nothing`() {
+        val order = paidOrder()
+        feed(chargeback(order, "adj_cb"))
+        feed(chargeback(order, "adj_warn", warning = true))
+        push.consoleRefund(checkNotNull(order.providerPaymentId), usd(499), chargeback = true, warning = true)
+
+        kit.refunds.sync("op_1", order.id)
+
+        assertEquals(1, lines(order).size)
+        assertEquals(499, kit.order(order.id).refundedAmount)
+        assertEquals(1, kit.listener.refunded.size)
+    }
+
+    @Test
+    fun `matching with the provider folds a warning and its chargeback into one line, in either order the provider lists them`() {
+        val order = paidOrder()
+        val txn = checkNotNull(order.providerPaymentId)
+        push.consoleRefund(txn, usd(100), chargeback = true, warning = true)
+        push.consoleRefund(txn, usd(100), chargeback = true)
+
+        kit.refunds.sync("op_1", order.id)
+        kit.refunds.sync("op_1", order.id)
+
+        assertEquals(1, lines(order).size)
+        assertEquals(100, kit.order(order.id).refundedAmount)
+        assertEquals(null, kit.order(order.id).reviewReason)
+    }
+
+    @Test
+    fun `the warning being reversed while its chargeback stands changes nothing, and the chargeback reversed later reverses the line`() {
+        val order = paidOrder()
+        feed(chargeback(order, "adj_warn", warning = true))
+        feed(chargeback(order, "adj_cb"))
+
+        feed(reversal(order, "adj_warn_rev", warning = true))
+
+        assertEquals(PaymentRefundStatus.SUCCEEDED, lines(order).single().status)
+        assertEquals(PaymentOrderStatus.REFUNDED, kit.order(order.id).status)
+        assertTrue(alerts.reversals.isEmpty())
+
+        feed(chargeback(order, "adj_cb", status = PushedRefundStatus.REVERSED))
+        assertEquals(PaymentRefundStatus.REVERSED, lines(order).single().status)
+        assertEquals(PaymentOrderStatus.PAID, kit.order(order.id).status)
     }
 
     @Test

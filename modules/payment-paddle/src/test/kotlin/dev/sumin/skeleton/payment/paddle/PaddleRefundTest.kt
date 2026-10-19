@@ -208,6 +208,8 @@ class PaddleRefundTest {
         assertThat(event("chargeback", "reversed")!!.status).isEqualTo(PushedRefundStatus.REVERSED)
         assertThat(event("chargeback_reverse", "approved", id = "adj_r1")!!.kind).isEqualTo(PushedRefundKind.CHARGEBACK_REVERSAL)
         assertThat(event("chargeback_warning_reverse", "approved", id = "adj_r2")!!.kind).isEqualTo(PushedRefundKind.CHARGEBACK_REVERSAL)
+        assertThat(event("chargeback_warning_reverse", "approved", id = "adj_r2")!!.warning).isTrue()
+        assertThat(event("chargeback_reverse", "approved", id = "adj_r1")!!.warning).isFalse()
         // 그 밖: 접수 중인 차지백 · 환불의 reversed · 크레딧
         assertThat(event("chargeback", "pending_approval")).isNull()
         assertThat(event("refund", "reversed")).isNull()
@@ -215,7 +217,7 @@ class PaddleRefundTest {
     }
 
     @Test
-    fun `a lookup counts a chargeback as money taken back, marks it a chargeback, and counts a warning and its chargeback of the same amount once`() {
+    fun `a lookup lists every taken adjustment as a chargeback, and counts a warning and its chargeback of the same amount once in what is left`() {
         FakePaddleApi().use { api ->
             api.on(
                 "GET", "/transactions/txn_1", 200,
@@ -230,10 +232,8 @@ class PaddleRefundTest {
 
             assertThat(snapshot.status).isEqualTo(ProviderPaymentStatus.REFUNDED)
             assertThat(snapshot.remaining).isEqualTo(PaymentAmount(0, "USD"))
-            val only = snapshot.refunds.single()
-            assertThat(only.providerRefundId).isEqualTo("adj_w")
-            assertThat(only.chargeback).isTrue()
-            assertThat(only.warning).isTrue()
+            assertThat(snapshot.refunds.map { it.providerRefundId to it.warning }).containsExactlyInAnyOrder("adj_w" to true, "adj_c" to false)
+            assertThat(snapshot.refunds.all { it.chargeback }).isTrue()
         }
     }
 

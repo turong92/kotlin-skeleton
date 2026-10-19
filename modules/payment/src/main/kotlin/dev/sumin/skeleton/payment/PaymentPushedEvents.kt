@@ -229,7 +229,14 @@ class PaymentPushedEvents(
                     }
                 }
             PushedRefundStatus.APPROVED -> {
-                if (line != null && line.status != PaymentRefundStatus.PENDING) return null // 끝 상태가 된 줄은 다시 움직이지 않는다
+                if (line != null && line.status == PaymentRefundStatus.FAILED) {
+                    // 우리가 「적용 안 됨」으로 닫은 뒤에 결제사의 승인이 왔다 - 돈이 나갔다. 닫힌 줄은 열지 않고(번호가 같아 새 줄도 못 넣는다) 사람이 보게 표시한다(응답 경로의 `lateResult` 와 같다)
+                    tx.appendEvent(writer.refundEvent(order.id, line.id, PaymentEventType.REFUND_UNKNOWN, PaymentActor.PROVIDER, null, RefundSettlement.LATE_RESULT, line.status, line.status))
+                    tx.updateRefund(line.copy(failureCode = RefundSettlement.LATE_RESULT, updatedAt = writer.now()))
+                    flags.flag(tx, order, PaymentReviewReason.REFUND_MISMATCH, context)
+                    return REFUND_MISMATCH
+                }
+                if (line != null && line.status != PaymentRefundStatus.PENDING) return null // 이뤄진 · 되돌려진 줄은 다시 움직이지 않는다
                 val amount = line?.amount ?: event.amount
                 if (!refundLines.fits(order, amount) || (line != null && !line.amount.sameAs(event.amount))) {
                     flags.flag(tx, order, PaymentReviewReason.REFUND_MISMATCH, context)
@@ -260,11 +267,7 @@ class PaymentPushedEvents(
         when {
             event.kind == PushedRefundKind.CHARGEBACK && event.status == PushedRefundStatus.APPROVED -> {
                 if (chargebackLines.any { it.providerRefundId == number }) return null // 같은 사건의 재전송
-                val sameDispute = chargebackLines.any {
-                    it.status == PaymentRefundStatus.SUCCEEDED && it.amount.sameAs(event.amount) &&
-                        (it.failureCode == RefundLines.CHARGEBACK_WARNING) != event.warning
-                }
-                if (sameDispute) return null // 경고와 차지백 - 이미 센 이의다
+                if (refundLines.foldChargeback(tx, order.id, number, event.amount, event.warning)) return null // 경고와 차지백 - 이미 센 이의다(맞추기와 같은 규칙)
                 if (!refundLines.fits(order, event.amount)) {
                     flags.flag(tx, order, PaymentReviewReason.REFUND_MISMATCH, context)
                     return REFUND_MISMATCH
@@ -278,10 +281,12 @@ class PaymentPushedEvents(
             }
             event.kind == PushedRefundKind.CHARGEBACK_REVERSAL || (event.kind == PushedRefundKind.CHARGEBACK && event.status == PushedRefundStatus.REVERSED) -> {
                 // 원래 번호로 오면 번호로, 되돌림 adjustment 로 오면(번호가 다르다) 같은 금액의 이뤄진 차지백 줄로 짝짓는다
-                val pair = chargebackLines.firstOrNull { it.providerRefundId == number && event.kind == PushedRefundKind.CHARGEBACK }
-                    ?: chargebackLines.firstOrNull { it.status == PaymentRefundStatus.SUCCEEDED && it.amount.sameAs(event.amount) }
+                // 같은 종류(경고 ↔ 차지백)의 줄과만 짝짓는다 - 경고의 되돌림이 접힌 차지백의 줄을 되돌리면 돈이 빠져 있는데 PAID 가 된다
+                val sameKind = chargebackLines.filter { (it.failureCode == RefundLines.CHARGEBACK_WARNING) == event.warning }
+                val pair = sameKind.firstOrNull { it.providerRefundId == number && event.kind == PushedRefundKind.CHARGEBACK }
+                    ?: sameKind.firstOrNull { it.status == PaymentRefundStatus.SUCCEEDED && it.amount.sameAs(event.amount) }
                 if (pair == null) {
-                    if (chargebackLines.any { it.status == PaymentRefundStatus.REVERSED && it.amount.sameAs(event.amount) }) return null // 이미 되돌렸다(다른 쪽 웹훅이 먼저 왔다)
+                    if (chargebackLines.any { it.amount.sameAs(event.amount) && (it.status == PaymentRefundStatus.REVERSED || it.status == PaymentRefundStatus.SUCCEEDED) }) return null // 이미 되돌렸다 · 또는 접힌 이의가 살아 있다
                     error("no chargeback line to reverse yet for webhook event ${event.eventId}")
                 }
                 if (pair.status != PaymentRefundStatus.SUCCEEDED) return null

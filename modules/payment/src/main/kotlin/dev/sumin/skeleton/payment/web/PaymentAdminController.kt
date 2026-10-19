@@ -185,7 +185,7 @@ class PaymentAdminController(
     }
 
     private fun refundResponse(refund: dev.sumin.skeleton.payment.PaymentRefund): AdminRefundResponse =
-        AdminRefundResponse.of(refund, queries.operatorOrder(refund.orderId).view.let { dev.sumin.skeleton.payment.RefundOrderInfo(it.order.kind, it.refundBlock) })
+        AdminRefundResponse.of(refund, queries.refundInfo(queries.operatorOrder(refund.orderId).view.order))
 
     private inline fun <reified E : Enum<E>> enumParam(name: String, value: String?): E? {
         if (value.isNullOrBlank()) return null

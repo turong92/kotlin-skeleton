@@ -10,7 +10,6 @@ import dev.sumin.skeleton.payment.HostedSubscriptionRequest
 import dev.sumin.skeleton.payment.PaymentAmount
 import dev.sumin.skeleton.payment.PaymentCard
 import dev.sumin.skeleton.payment.PaymentCheckoutGateway
-import dev.sumin.skeleton.payment.IdempotencyKey
 import dev.sumin.skeleton.payment.PaymentLookupGateway
 import dev.sumin.skeleton.payment.PaymentLookupQuery
 import dev.sumin.skeleton.payment.PaymentOperationResult
@@ -133,7 +132,7 @@ class PaddlePaymentProvider(
             eventId = eventId,
             occurredAt = occurredAt,
             kind = kind,
-            warning = action == "chargeback_warning",
+            warning = action == "chargeback_warning" || action == "chargeback_warning_reverse",
             providerRefundId = data.text("id") ?: error("Paddle adjustment without id"),
             providerPaymentId = data.text("transaction_id") ?: error("Paddle adjustment without transaction_id"),
             status = status,
@@ -323,8 +322,9 @@ class PaddlePaymentProvider(
         // 같은 이의의 경고와 차지백(같은 금액)은 한 번만 센다 - 장부가 같은 규칙으로 한 줄로 넣는다
         val approved = transaction.adjustments.filter { it.approved && it.action in TAKEN_ACTIONS }
         val warnings = approved.filter { it.action == CHARGEBACK_WARNING }
-        val taken = approved.filterNot { it.action == CHARGEBACK && warnings.any { warning -> warning.total == it.total } }
-        val takenTotal = taken.sumOf { it.total }
+        // 남은 금액만 접어 센다 - 취소 목록에는 모두 싣고 같은 이의인지는 장부가 한 규칙으로 가린다(웹훅 기록과 같은 규칙)
+        val takenTotal = approved.filterNot { it.action == CHARGEBACK && warnings.any { warning -> warning.total == it.total } }.sumOf { it.total }
+        val taken = approved
         return PaymentSnapshot(
             providerPaymentId = id,
             orderId = null,

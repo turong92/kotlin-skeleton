@@ -99,6 +99,29 @@ class RefundEndsSubscriptionChoiceTest {
         assertEquals(SubscriptionStatus.ACTIVE, sub(kept.id).status)
     }
 
+    @Test
+    fun `a Paddle approval that comes days later follows the choice on the line - kept stays, the default ends`() {
+        val kept = providerSubscription("acc_1", "k1", "txn_k", "psub_k")
+        val ended = providerSubscription("acc_2", "k2", "txn_e", "psub_e")
+        kit.push.refundScript = dev.sumin.skeleton.payment.testing.FakePushGateway.RefundScript.PENDING_APPROVAL
+        val keptOrder = kit.store.listSubscriptionOrders(kept.id, 1).single()
+        val endedOrder = kit.store.listSubscriptionOrders(ended.id, 1).single()
+        kit.refunds.refund("op_1", keptOrder.id, "OPERATOR", null, IdempotencyKey("r-k"), endSubscription = false)
+        kit.refunds.refund("op_1", endedOrder.id, "OPERATOR", null, IdempotencyKey("r-e"))
+        assertEquals(SubscriptionStatus.ACTIVE, sub(ended.id).status, "nothing ends while the provider is still reviewing")
+
+        kit.advance(java.time.Duration.ofDays(3))
+        for ((order, number) in listOf(keptOrder to "adj_s1", endedOrder to "adj_s2")) {
+            val event = PushedRefund("evt_$number", kit.time.now(), PushedRefundKind.REFUND, number, checkNotNull(order.providerPaymentId), PushedRefundStatus.APPROVED, PaymentAmount(3_900, "KRW"))
+            kit.deliver(kit.push.delivery(event), token = null, provider = "paddle")
+        }
+        repeat(2) { kit.runWebhooks(); kit.runTasks(setOf(PaymentTaskTypes.REFUND_APPLY, PaymentTaskTypes.PROVIDER_SUBSCRIPTION_CANCEL)) }
+
+        assertEquals(SubscriptionStatus.ACTIVE, sub(kept.id).status)
+        assertEquals(SubscriptionEndReason.REFUNDED, sub(ended.id).endReason)
+        assertEquals(listOf("psub_e"), kit.push.cancelCalls.map { it.first })
+    }
+
     /** 결제사가 갱신하는 구독(Paddle 모양) - 첫 결제가 웹훅으로 들어와 켜진 줄. 환불은 결제사 환불 능력이 필요해 이 대역의 환불 대본을 쓴다. */
     private fun providerSubscription(account: String, key: String, txn: String, providerSub: String): PaymentSubscription {
         val pending = kit.subscriptions.start(account, "basic", IdempotencyKey(key), provider = "paddle").subscription

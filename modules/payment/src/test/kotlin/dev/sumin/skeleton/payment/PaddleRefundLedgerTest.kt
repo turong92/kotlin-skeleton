@@ -95,6 +95,30 @@ class PaddleRefundLedgerTest {
 
         assertEquals(PaymentRefundStatus.FAILED, lines(order).single().status)
         assertEquals(0, kit.order(order.id).refundedAmount)
+        // 거절된 줄에 승인이 왔다 - 돈이 나갔을 수 있으니 조용히 버리지 않고 사람이 보게 표시한다(줄은 다시 열지 않는다)
+        assertEquals(PaymentReviewReason.REFUND_MISMATCH, kit.order(order.id).reviewReason)
+        assertEquals(RefundSettlement.LATE_RESULT, lines(order).single().failureCode)
+    }
+
+    @Test
+    fun `a review Paddle holds for days is not retried to death or flagged as a mismatch, and its approval later leaves the order refundable`() {
+        val order = paidOrder()
+        push.refundScript = RefundScript.PENDING_APPROVAL
+        refundNow(order, amount = 100)
+
+        repeat(14) {
+            kit.advance(Duration.ofHours(2))
+            kit.runTasks(setOf(PaymentTaskTypes.REFUND_RECONCILE))
+        }
+
+        assertNull(kit.order(order.id).reviewReason, "the provider is still looking - nothing for a person yet")
+        assertTrue(kit.tasks.dead(PaymentTaskTypes.REFUND_RECONCILE).isEmpty())
+        assertTrue(kit.review.flagged.isEmpty())
+        push.decide(checkNotNull(order.providerPaymentId), "adj_s1", "approved")
+        feed(adjustment(order, "adj_s1", PushedRefundStatus.APPROVED, amount = 100))
+        assertEquals(PaymentRefundStatus.SUCCEEDED, lines(order).single().status)
+        push.refundScript = RefundScript.APPROVED
+        assertEquals(PaymentRefundStatus.SUCCEEDED, refundNow(order, key = "r2", amount = 100).refund.status)
     }
 
     @Test

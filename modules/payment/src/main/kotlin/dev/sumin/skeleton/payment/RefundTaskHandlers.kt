@@ -56,6 +56,7 @@ class RefundReconcileTaskHandler(
             RefundSettlement.Result.WAIT -> throw PaymentTaskRetryException("Refund ${refund.id} is not due for settlement yet")
             RefundSettlement.Result.PROVIDER_PENDING -> throw retryAndFlagAtEnd(run, order, gateway.mode, "Refund ${refund.id} was accepted by the payment provider but does not show in the lookup yet")
             RefundSettlement.Result.MISMATCH -> throw PaymentTaskPermanentException("Refund ${refund.id} needs a person to review it")
+            RefundSettlement.Result.HELD_BY_PROVIDER -> Unit // 결제사가 검토 중으로 쥐고 있다 - 결정은 웹훅이 끝낸다(헛도는 재시도 · 거짓 표시 없음)
             RefundSettlement.Result.STALE_SNAPSHOT -> throw PaymentTaskRetryException("Refund ${refund.id} changed while its lookup was running")
         }
     }
