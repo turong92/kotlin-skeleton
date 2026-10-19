@@ -876,6 +876,7 @@ abstract class PaymentLedgerStoreContract {
             accountErasedAt = t.plusSeconds(15),
             createdAt = t.plusSeconds(1),
             updatedAt = t.plusSeconds(16),
+            easyPayBrand = "TOSSPAY",
         )
     }
 

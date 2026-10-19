@@ -37,7 +37,7 @@
 - `refundPending`: 열린 환불(요청됨 · 환불 중)이 있다. `openRefundStatus`: `"REQUESTED"`(본인이 요청함) · `"PENDING"`(환불 중) · 없으면 `null` — 화면이 「환불 요청함」과 「환불 중」을 가르는 칸.
 - `method`: 결제 수단 **종류 코드**(`CARD` · `EASY_PAY` · `VIRTUAL_ACCOUNT` · `TRANSFER` · `MOBILE_PHONE` …, 영문 대문자로 시작하는 코드만 — 모르는 수단이면 `null`). 한글 라벨이 오지 않는다.
 - `card`: 카드 결제일 때만 `{ issuer, last4 }`(각각 `null` 일 수 있다). `issuer` 는 결제사 중립의 대문자 영문 코드, `last4` 는 숫자 또는 `*` 최대 네 글자. 카드가 아니거나 **계정이 지워져 두 칸이 비워졌으면 `card` 자체가 `null`**.
-- `easyPayBrand`: 결제사가 **직접 받은** 간편결제(`method` 가 `EASY_PAY` 이고 결제사가 카카오페이 · 네이버페이 모듈)일 때만 `"KAKAOPAY"` · `"NAVERPAY"`, 그 밖(토스 경유 간편결제 포함)은 `null` - 화면이 「간편결제」 대신 앱 이름을 쓴다. 결제사 이름 `provider` 대신 나가는 중립 코드다(카드사 코드처럼; §5). **칸은 늘 온다.** 결제사 모듈의 `provider-id` 를 기본값에서 바꾼 배포는 브랜드 없이 `null`.
+- `easyPayBrand`: 간편결제의 **브랜드**(`"KAKAOPAY"` · `"NAVERPAY"` · `"TOSSPAY"` · `"SAMSUNGPAY"` …, 결제사 중립 대문자 코드; 그 밖의 값은 영문 코드 모양일 때만) - 화면이 「간편결제」 대신 앱 이름을 쓴다. 토스 경유는 확인 응답의 `easyPay.provider`(상호명)를 코드로 옮긴 것이고, 카카오페이 · 네이버페이 직접 연동은 결제사 자신이다. **경로(어느 결제사로 갔나)와 별개다** - 경로는 운영자 응답의 `provider`. 간편결제가 아니거나 모르면(이 칸이 생기기 전의 주문 포함) `null`. **칸은 늘 온다.**
 - `testMode`: 이 주문이 테스트 키로 만들어졌다(화면은 늘 「테스트 결제」 띠를 보인다).
 - `failureCode`(주문): 결제사가 승인을 거절한 코드(식별자 모양만, 코드를 못 읽으면 `DECLINED`) · `PROVIDER_EXPIRED` · `PROVIDER_ABORTED`(결제사가 만료 · 중단으로 끝냈다) · `EXPIRED_UNPAID`(결제 없이 시간이 지났다). 결제된 주문은 `null`.
 - `fulfilled`: 앱의 지급(`PaymentOrderListener.onPaid`)이 끝났다.
@@ -290,7 +290,7 @@
 
 | 칸 | |
 |---|---|
-| 결제사 이름 `provider`(대신 `easyPayBrand` 중립 코드 하나가 나간다) · 결제사 결제 번호 `providerPaymentId` · 결제사 환불 번호 `providerRefundId` | ⊕ 앞의 둘 |
+| 결제사 이름 `provider`(경로 - 구매자에게는 간편결제 브랜드 `easyPayBrand` 만 나간다) · 결제사 결제 번호 `providerPaymentId` · 결제사 환불 번호 `providerRefundId` | ⊕ 앞의 둘 |
 | 검토 이유 `reviewReason` | ⊕ |
 | 요청한 · 결정한 운영자 `requestedBy` · `decidedBy` · 이력의 `actorId` | ⊕ |
 | 환불 줄의 `failureCode`(결제사 코드이거나 우리 코드) | ⊕ — 사용자에게는 `closedBy`(`USER` \| `SYSTEM`) 중립 칸만 |

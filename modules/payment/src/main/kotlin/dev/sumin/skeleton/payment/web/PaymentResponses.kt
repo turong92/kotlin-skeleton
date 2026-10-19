@@ -43,7 +43,7 @@ data class OrderResponse(
     val openRefundStatus: String?,
     val method: String?,
     val card: CardResponse?,
-    /** 결제사가 직접 받은 간편결제의 브랜드 코드(`KAKAOPAY` · `NAVERPAY`) - 결제사 이름 대신 나가는 중립 코드다(카드사 코드처럼). 그 밖(토스 경유 간편결제 포함)은 `null`이고 화면은 「간편결제」라 쓴다. */
+    /** 간편결제의 브랜드 코드(`KAKAOPAY` · `NAVERPAY` · `TOSSPAY` …) - 경로(결제사)와 별개인 중립 코드다(카드사 코드처럼). 간편결제가 아니거나 모르면(옛 주문 포함) `null`이고 화면은 「간편결제」라 쓴다. */
     val easyPayBrand: String?,
     val testMode: Boolean,
     val failureCode: String?,
@@ -52,12 +52,6 @@ data class OrderResponse(
     val fulfilled: Boolean,
 ) {
     companion object {
-        /** 결제사 모듈의 기본 id 로 가른다(`provider-id` 를 바꾼 배포는 브랜드 없이 「간편결제」). */
-        private val DIRECT_EASY_PAY_BRANDS = mapOf("kakaopay" to "KAKAOPAY", "naverpay" to "NAVERPAY")
-
-        /** 주문의 결제사 · 결제 수단 종류로 [OrderResponse.easyPayBrand] 를 정한다(내 응원 내역처럼 주문 응답을 거치지 않는 목록도 같은 규칙을 쓰게). */
-        fun easyPayBrandOf(provider: String, method: String?): String? = if (method == "EASY_PAY") DIRECT_EASY_PAY_BRANDS[provider] else null
-
         fun of(view: OrderView): OrderResponse = of(view.order, view.summary.refundableAmount, view.summary.refundPending, view.summary.openRefundStatus?.name)
 
         internal fun of(order: PaymentOrder, refundable: Long, refundPending: Boolean, openRefundStatus: String?) = OrderResponse(
@@ -75,7 +69,7 @@ data class OrderResponse(
             openRefundStatus = openRefundStatus,
             method = order.method,
             card = if (order.cardIssuer == null && order.cardLast4 == null) null else CardResponse(order.cardIssuer, order.cardLast4),
-            easyPayBrand = easyPayBrandOf(order.provider, order.method),
+            easyPayBrand = order.easyPayBrand,
             testMode = order.providerMode == PaymentMode.TEST,
             failureCode = order.failureCode,
             createdAt = order.createdAt,

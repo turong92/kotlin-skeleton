@@ -262,6 +262,7 @@ class PaymentOrders(
             paidAt = result.paidAt,
             refunds = emptyList(),
             card = result.card,
+            easyPayBrand = result.attributes["easyPayBrand"],
         )
         if (result.card != null || result.paidAt != null) return fromResponse
         val looked = try {
@@ -271,7 +272,7 @@ class PaymentOrders(
             null
         }
         if (looked == null || looked.providerPaymentId != providerPaymentId || (looked.orderId != null && looked.orderId != order.id)) return fromResponse
-        return fromResponse.copy(card = looked.card, method = fromResponse.method ?: looked.method, paidAt = looked.paidAt)
+        return fromResponse.copy(card = looked.card, easyPayBrand = fromResponse.easyPayBrand ?: looked.easyPayBrand, method = fromResponse.method ?: looked.method, paidAt = looked.paidAt)
     }
 
     /**

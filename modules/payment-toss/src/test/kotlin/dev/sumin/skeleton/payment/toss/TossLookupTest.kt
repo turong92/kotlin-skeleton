@@ -148,6 +148,22 @@ class TossLookupTest {
     }
 
     @Test
+    fun `an easy pay shows which app it was - the provider's own name becomes a neutral code, an unknown name is dropped`() {
+        fun brandOf(easyPay: Map<String, Any?>?): String? {
+            server.on("GET", "/v1/payments/pay_key_1", Reply.Json(200, TossFixtures.payment(method = "간편결제", card = null, extra = if (easyPay == null) emptyMap() else mapOf("easyPay" to easyPay))))
+            return requireNotNull(lookup.lookup(byKey())).easyPayBrand
+        }
+
+        assertEquals("NAVERPAY", brandOf(mapOf("provider" to "네이버페이", "amount" to 3000)))
+        assertEquals("KAKAOPAY", brandOf(mapOf("provider" to "카카오페이")))
+        assertEquals("TOSSPAY", brandOf(mapOf("provider" to "토스페이")))
+        assertEquals("PAYCO", brandOf(mapOf("provider" to "페이코")))
+        assertEquals("SOMEPAY", brandOf(mapOf("provider" to "SOMEPAY")), "an unknown plain code is kept")
+        assertNull(brandOf(mapOf("provider" to "처음 보는 간편결제 <x>")))
+        assertNull(brandOf(null))
+    }
+
+    @Test
     fun `a lookup error says nothing about whether money moved - 401, 403 and 400 are unknown, never definitive`() {
         listOf(401 to "UNAUTHORIZED_KEY", 403 to "FORBIDDEN_REQUEST", 400 to "INVALID_REQUEST", 404 to "NOT_FOUND_PAYMENT_SESSION", 403 to "REJECT_CARD_PAYMENT").forEach { (status, code) ->
             server.on("GET", "/v1/payments/pay_key_1", TossFixtures.error(status, code))

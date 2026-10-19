@@ -161,6 +161,8 @@ data class PaymentSnapshot(
     val refunds: List<ProviderRefund>,
     /** 카드 결제일 때만. */
     val card: PaymentCard? = null,
+    /** 간편결제일 때 결제사 중립 브랜드 코드(`KAKAOPAY` …) - [LedgerValues.easyPayBrand] 가 거른다. */
+    val easyPayBrand: String? = null,
 )
 
 /** 웹훅 요청 그대로. [body] 는 서명 확인을 위한 원문 바이트다. */

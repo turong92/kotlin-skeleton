@@ -97,6 +97,8 @@ data class PaymentOrder(
     val updatedAt: Instant,
     /** 서버가 주문을 만들 때 정한 접속 나라(ISO-3166 두 글자) - 화면이 보낸 값이 아니다. 모르면 null. */
     val country: String? = null,
+    /** 간편결제의 브랜드 코드(`KAKAOPAY` · `NAVERPAY` · `TOSSPAY` …, 결제사 중립) - 간편결제가 아니거나 모르면 null(옛 주문 포함). 경로(어느 결제사로 갔나)는 [provider] 다. */
+    val easyPayBrand: String? = null,
 ) {
     override fun toString(): String =
         "PaymentOrder(id=$id, status=$status, amount=${amount.amount} ${amount.normalizedCurrency}, refunded=$refundedAmount, " +

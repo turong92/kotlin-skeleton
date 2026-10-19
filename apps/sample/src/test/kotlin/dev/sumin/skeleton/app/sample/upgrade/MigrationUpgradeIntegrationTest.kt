@@ -218,6 +218,9 @@ class MigrationUpgradeIntegrationTest {
         jdbc.sql("insert into cheers (order_id, account_id, amount, currency, status, created_at) values ('ord_upgrade', 'acc_upgrade', 3000, 'KRW', 'PAID', '2026-10-01 00:00:00')").update()
         fun count(sql: String) = jdbc.sql(sql).query(Long::class.java).single()
         assertEquals(1L, count("select count(*) from payment_orders where account_id = 'acc_upgrade' and card_issuer = 'HYUNDAI' and card_last4 = '1234'"))
+        // 새 열(easy_pay_brand)은 옛 줄에서 비어 있고, 저장소가 그 줄을 그대로 읽는다
+        assertEquals(1L, count("select count(*) from payment_orders where id = 'ord_upgrade' and easy_pay_brand is null"))
+        assertNull(ledger.findOrder("ord_upgrade")!!.easyPayBrand)
         // the baseline rows of every other module are still there next to the new tables
         UpgradeBaseline.TABLES.forEach { table -> assertTrue(count("select count(*) from $table") >= 1, "$table lost its baseline row") }
 

@@ -114,6 +114,7 @@ class PaymentConvergence(
                 paidAmount = snapshot.total.amount,
                 paidAt = snapshot.paidAt ?: writer.now(),
                 method = LedgerValues.method(snapshot.method),
+                easyPayBrand = LedgerValues.easyPayBrand(snapshot.easyPayBrand),
                 // 카드 두 칸은 PAID 가 될 때 한 번 채운다. 탈퇴한 계정의 줄에는 쓰지 않는다 — 나중에 PAID 가 되어도 지운 개인정보가 되살아나지 않게(스펙 §8.2)
                 cardIssuer = if (current.accountErasedAt == null) LedgerValues.cardIssuer(snapshot.card?.issuer) else null,
                 cardLast4 = if (current.accountErasedAt == null) LedgerValues.cardLast4(snapshot.card?.last4) else null,

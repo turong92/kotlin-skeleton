@@ -7,7 +7,6 @@ import dev.sumin.skeleton.common.Response
 import dev.sumin.skeleton.payment.PaymentLedgerStore
 import dev.sumin.skeleton.payment.web.AmountResponse
 import dev.sumin.skeleton.payment.web.CardResponse
-import dev.sumin.skeleton.payment.web.OrderResponse
 import io.swagger.v3.oas.annotations.tags.Tag
 import java.time.Instant
 import java.util.Base64
@@ -29,7 +28,7 @@ data class CheerResponse(
     val createdAt: Instant,
     val refundedAt: Instant?,
     val card: CardResponse?,
-    /** 결제사가 직접 받은 간편결제의 브랜드 코드(`KAKAOPAY` · `NAVERPAY`) - 그 밖은 `null`. 장부의 [OrderResponse.easyPayBrand] 와 같은 규칙. */
+    /** 결제사가 직접 받은 간편결제의 브랜드 코드(`KAKAOPAY` · `NAVERPAY`) - 없거나 모르면 `null`. 장부 주문의 `easyPayBrand` 그대로. */
     val easyPayBrand: String?,
 )
 
@@ -62,7 +61,7 @@ class CheerController(private val cheers: CheerRepository, private val ledger: P
                 createdAt = cheer.createdAt,
                 refundedAt = cheer.refundedAt,
                 card = order?.takeIf { it.cardIssuer != null || it.cardLast4 != null }?.let { CardResponse(it.cardIssuer, it.cardLast4) },
-                easyPayBrand = order?.let { OrderResponse.easyPayBrandOf(it.provider, it.method) },
+                easyPayBrand = order?.easyPayBrand,
             )
         }
         val hasNext = rows.size > limit

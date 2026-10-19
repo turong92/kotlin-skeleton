@@ -204,7 +204,7 @@ class NaverPayProvider(
                     rawStatus = "SUCCESS",
                     metadata = mapOf("orderId" to merchantPayKey),
                 ),
-                attributes = mapOf("method" to METHOD),
+                attributes = mapOf("method" to METHOD, "easyPayBrand" to BRAND),
                 paidAt = detail.admissionYmdt.toInstantOrNull(),
             )
         }
@@ -409,6 +409,7 @@ class NaverPayProvider(
             method = METHOD,
             paidAt = original.admissionYmdt.toInstantOrNull(),
             refunds = refunds,
+            easyPayBrand = BRAND,
         )
     }
 
@@ -488,6 +489,9 @@ class NaverPayProvider(
         const val CHECKOUT_KIND = "NAVERPAY_REDIRECT"
         const val NAME_MAX = 128
         const val METHOD = "EASY_PAY"
+
+        /** 이 결제사가 곧 브랜드다(토스 경유와 달리) - 장부 `easy_pay_brand`. */
+        const val BRAND = "NAVERPAY"
         const val KRW = "KRW"
         const val UNREADABLE_RESPONSE = "UNREADABLE_RESPONSE"
         const val SUCCESS = "Success"

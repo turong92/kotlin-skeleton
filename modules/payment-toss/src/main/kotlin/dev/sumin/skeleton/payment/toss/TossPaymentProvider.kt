@@ -126,7 +126,7 @@ class TossPaymentProvider(
             status = body.status.toConfirmStatus(),
             amount = PaymentAmount(total, currency),
             trace = body.trace(response, operationId = body.lastTransactionKey ?: body.transactionKey),
-            attributes = listOfNotNull(body.method.methodCode()?.let { "method" to it }).toMap(),
+            attributes = listOfNotNull(body.method.methodCode()?.let { "method" to it }, body.easyPay.brandCode()?.let { "easyPayBrand" to it }).toMap(),
             card = body.card.toCard(),
             paidAt = body.approvedAt.toInstantOrNull(),
         )
@@ -520,6 +520,7 @@ class TossPaymentProvider(
             paidAt = approvedAt.toInstantOrNull(),
             refunds = refunds,
             card = card.toCard(),
+            easyPayBrand = easyPay.brandCode(),
         )
     }
 
@@ -626,6 +627,9 @@ class TossPaymentProvider(
         }
 
     /** 토스의 결제 수단 값 → 결제사 중립의 종류 코드. 표에 없는 값(사람 이름 · 전화번호 모양 포함)은 null — 받은 값을 그대로 넘기지 않는다. */
+    /** 토스가 준 간편결제 상호명(`네이버페이`) → 결제사 중립 코드. 모르는 이름은 안전한 영문 코드일 때만 그대로(장부가 한 번 더 거른다). */
+    private fun TossEasyPay?.brandCode(): String? = this?.provider?.trim()?.let { EASY_PAY_BRANDS[it] ?: it.uppercase().takeIf { code -> BRAND_CODE.matches(code) } }
+
     private fun String?.methodCode(): String? = this?.trim()?.let { METHOD_CODES[it.uppercase()] }
 
     private fun TossCancel.isDone(): Boolean = cancelStatus == "DONE"
@@ -657,6 +661,11 @@ class TossPaymentProvider(
          * 토스 `method` 값 → 중립 코드. 한글 라벨(「카드」 등)과 영문 값을 둘 다 받는다. **실제 토스가 보내는 값은 아직 못 쟀다**(`docs/real-provider-setup.md` §11.6 「못 잰 가정」) —
          * 지금 표는 문서의 결제 수단 이름에 기댄 것이다. 표에 없으면 null(장부에는 수단이 비어 남는다).
          */
+        val BRAND_CODE = Regex("[A-Z][A-Z0-9_]{0,23}")
+        val EASY_PAY_BRANDS = mapOf(
+            "토스페이" to "TOSSPAY", "네이버페이" to "NAVERPAY", "카카오페이" to "KAKAOPAY", "삼성페이" to "SAMSUNGPAY",
+            "엘페이" to "LPAY", "페이코" to "PAYCO", "SSG페이" to "SSG", "애플페이" to "APPLEPAY", "핀페이" to "PINPAY",
+        )
         val METHOD_CODES = mapOf(
             "카드" to "CARD", "CARD" to "CARD",
             "간편결제" to "EASY_PAY", "EASY_PAY" to "EASY_PAY",
@@ -726,7 +735,11 @@ data class TossPaymentResponse(
     val lastTransactionKey: String? = null,
     val cancels: List<TossCancel>? = null,
     val card: TossCard? = null,
+    val easyPay: TossEasyPay? = null,
 )
+
+/** 간편결제 객체에서 읽는 한 칸 - 상호명(`네이버페이` …) 또는 코드. */
+data class TossEasyPay(val provider: String? = null)
 
 data class TossCancel(
     val transactionKey: String? = null,

@@ -198,7 +198,7 @@ class KakaoPayProvider(
                     rawStatus = "SUCCESS_PAYMENT",
                     metadata = mapOf("orderId" to orderId),
                 ),
-                attributes = mapOf("method" to METHOD),
+                attributes = mapOf("method" to METHOD, "easyPayBrand" to BRAND),
                 paidAt = body.approvedAt.toInstantOrNull(),
             )
         }
@@ -320,6 +320,7 @@ class KakaoPayProvider(
             method = METHOD,
             paidAt = approvedAt.toInstantOrNull(),
             refunds = refunds,
+            easyPayBrand = BRAND,
         )
     }
 
@@ -419,6 +420,9 @@ class KakaoPayProvider(
 
         const val CHECKOUT_KIND = "KAKAOPAY_REDIRECT"
         const val METHOD = "EASY_PAY"
+
+        /** 이 결제사가 곧 브랜드다(토스 경유와 달리) - 장부 `easy_pay_brand`. */
+        const val BRAND = "KAKAOPAY"
         const val KRW = "KRW"
         const val UNREADABLE_RESPONSE = "UNREADABLE_RESPONSE"
         const val ITEM_NAME_MAX = 100

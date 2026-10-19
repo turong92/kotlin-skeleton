@@ -7,6 +7,7 @@ package dev.sumin.skeleton.payment
 internal object LedgerValues {
     private val CODE = Regex("[A-Za-z0-9_.-]{1,64}")
     private val ISSUER = Regex("[A-Za-z0-9_-]{1,40}")
+    private val BRAND = Regex("[A-Z][A-Z0-9_]{0,23}")
     private val METHOD = Regex("[A-Z][A-Z0-9_]{0,39}")
     private val LAST4 = Regex("[0-9*]{1,4}")
 
@@ -14,6 +15,9 @@ internal object LedgerValues {
     fun code(value: String?): String? = value?.trim()?.takeIf { CODE.matches(it) }
 
     fun cardIssuer(value: String?): String? = value?.trim()?.takeIf { ISSUER.matches(it) }
+
+    /** 간편결제 브랜드 코드 - 결제사 중립 대문자 코드만(한글 이름 · 문장은 버린다). 모듈이 자기 값을 이 코드로 옮겨 보낸다. */
+    fun easyPayBrand(value: String?): String? = value?.trim()?.uppercase()?.takeIf { BRAND.matches(it) }
 
     /** 마지막 네 글자 — 숫자 또는 `*` 가 아니면 버린다. */
     fun cardLast4(value: String?): String? = value?.takeLast(4)?.takeIf { LAST4.matches(it) }

@@ -6,19 +6,16 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 class OrderResponseEasyPayBrandTest {
-    private fun brandOf(provider: String, method: String?) =
-        OrderResponse.of(PaymentTestOrders.order(provider = provider).copy(method = method), 0, false, null).easyPayBrand
+    private fun responseOf(brand: String?) =
+        OrderResponse.of(PaymentTestOrders.order(provider = "toss").copy(method = "EASY_PAY", easyPayBrand = brand), 0, false, null)
 
     @Test
-    fun `an easy pay the provider took directly shows its own brand, with no provider name in the response`() {
-        assertEquals("KAKAOPAY", brandOf("kakaopay", "EASY_PAY"))
-        assertEquals("NAVERPAY", brandOf("naverpay", "EASY_PAY"))
+    fun `the brand on the ledger row goes out as a neutral code, next to no provider name`() {
+        assertEquals("KAKAOPAY", responseOf("KAKAOPAY").easyPayBrand)
     }
 
     @Test
-    fun `any other provider or method has no brand - the screen keeps saying easy pay`() {
-        assertNull(brandOf("toss", "EASY_PAY"))
-        assertNull(brandOf("kakaopay", null))
-        assertNull(brandOf("kakaopay", "CARD"))
+    fun `an old row has no brand`() {
+        assertNull(responseOf(null).easyPayBrand)
     }
 }

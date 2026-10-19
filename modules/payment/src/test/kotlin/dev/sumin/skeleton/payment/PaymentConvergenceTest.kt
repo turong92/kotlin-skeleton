@@ -70,6 +70,18 @@ class PaymentConvergenceTest {
     }
 
     @Test
+    fun `the easy pay brand of a paid snapshot stays on the ledger row - only a plain code, anything else is dropped`() {
+        val kit = PaymentLedgerKit()
+        val order = confirming(kit)
+        converge(kit, order.id, snapshot(method = "EASY_PAY", card = null).copy(easyPayBrand = "naverpay"))
+        assertEquals("NAVERPAY", kit.order(order.id).easyPayBrand)
+
+        val other = confirming(kit)
+        converge(kit, other.id, snapshot(method = "EASY_PAY", card = null).copy(easyPayBrand = "<b>네이버페이</b>"))
+        assertEquals(null, kit.order(other.id).easyPayBrand)
+    }
+
+    @Test
     fun `converging twice with the same snapshot, paying or mismatching, changes nothing the second time and flags once`() {
         val kit = PaymentLedgerKit()
         val order = confirming(kit)

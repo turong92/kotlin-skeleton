@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `payment` · `payment-kakaopay` · `payment-naverpay`: 주문 만들기 본문에 선택 칸 `returnOrigin`(결제를 시작한 화면의 origin). 새 설정 `skeleton.payment-kakaopay.allowed-return-origins` · `skeleton.payment-naverpay.allowed-return-origins`(기본 빈 목록 = 기존 동작 그대로)에 든 origin 이면 돌아올 주소의 scheme · host 가 그 origin 으로 바뀐다 - 목록 밖은 `return-url`(열린 리다이렉트 없음). `CheckoutOrder`/`CreateOrderCommand` 에 기본값 있는 칸 `returnOrigin` 추가, 공용 `ReturnOrigins`.
 - `payment`: 결제사 거절 이유 로그 - `PaymentProviderError.reason`(가린 글, 로그 한 줄 `describe` 에만). 카카오페이 공통 오류(-400 · -401 · -403)의 `error_message` 와 네이버페이 확정 거절의 `message` 를 `PaymentFailures.safeReason` 으로 가려 `ready`/`reserve` 실패 로그에 싣는다. 예외 · 응답에는 여전히 코드뿐.
-- `payment`: 주문 응답(사용자 · 운영자)에 중립 칸 `easyPayBrand`(`KAKAOPAY` · `NAVERPAY` · `null`). 견본 `GET /cheers/me` 도 같은 칸. 마이그레이션 없음.
+- `payment` · `payment-jdbc`: 간편결제 브랜드. 새 V 파일 `V20261019120000__payment_orders_easy_pay_brand`(두 방언, `payment_orders.easy_pay_brand` null 허용 - 옛 줄은 비어 있다). 토스 경유는 확인 응답의 `easyPay.provider` 를 코드(`NAVERPAY` · `KAKAOPAY` · `TOSSPAY` …)로 옮겨 PAID 가 될 때 한 번 채우고, 카카오페이 · 네이버페이 직접은 결제사 자신이다. 주문 응답(사용자 · 운영자)과 견본 `GET /cheers/me` 에 중립 칸 `easyPayBrand`(경로는 `provider` 가 따로 말한다). `PaymentOrder` · `PaymentSnapshot` 에 기본값 있는 칸 추가 - 자기 저장소를 둔 앱은 열 하나를 더해야 한다.
 
 ### 게시판 확장 — 비회원 작성 · 승인 대기 · 고친 판 · 댓글 첨부 · 이벤트 자리 (2026-10-17)
 
