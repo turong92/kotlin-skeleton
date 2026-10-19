@@ -29,6 +29,27 @@ class PaymentLedgerWriter(private val time: TimeProvider) {
         return changed
     }
 
+    /**
+     * 환불이 결제사 증거로 되돌려졌다(차지백 분쟁에서 이김) - 주문이 `REFUNDED`/`PARTIALLY_REFUNDED` 에서 환불된 금액이 줄어든 상태로 간다. 전이표에 없는 길이라
+     * [PaymentOrderTransitions.requireByProviderEvidence] 가 따로 검사한다 - 이 함수만 쓴다.
+     */
+    fun reverseByProviderEvidence(
+        tx: PaymentLedgerTx,
+        order: PaymentOrder,
+        to: PaymentOrderStatus,
+        type: PaymentEventType,
+        actor: PaymentActor,
+        providerCode: String? = null,
+        refundId: String? = null,
+        mutate: (PaymentOrder) -> PaymentOrder = { it },
+    ): PaymentOrder {
+        PaymentOrderTransitions.requireByProviderEvidence(order.status, to)
+        val changed = mutate(order).copy(status = to, updatedAt = now())
+        tx.updateOrder(changed)
+        tx.appendEvent(event(order.id, type, actor, null, providerCode, order.status, to, refundId))
+        return changed
+    }
+
     /** 상태는 그대로 두고 다른 칸만 바꾼다(검토 표시 · 지급 시각). 이력 한 줄을 남긴다. */
     fun touch(
         tx: PaymentLedgerTx,

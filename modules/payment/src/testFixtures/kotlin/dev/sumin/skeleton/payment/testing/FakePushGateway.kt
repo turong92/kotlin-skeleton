@@ -74,7 +74,7 @@ class FakePushGateway(override val providerId: String = "paddle", override val m
     override val answersByOrderId: Boolean = false
 
     /** 결제사 쪽의 환불 한 건 - [status] 는 Paddle 의 `pending_approval` · `approved` · `rejected`. */
-    class Adjustment(val id: String, val amount: PaymentAmount, @Volatile var status: String)
+    class Adjustment(val id: String, val amount: PaymentAmount, @Volatile var status: String, val chargeback: Boolean = false, val warning: Boolean = false)
 
     private class Txn(val total: PaymentAmount, val paidAt: Instant, val adjustments: MutableList<Adjustment> = CopyOnWriteArrayList())
 
@@ -98,8 +98,8 @@ class FakePushGateway(override val providerId: String = "paddle", override val m
     }
 
     /** 결제사 대시보드에서 낸 환불 - 장부는 모른다. */
-    fun consoleRefund(txn: String, amount: PaymentAmount, status: String = "approved"): Adjustment =
-        Adjustment("adj_c${adjustmentSeq.incrementAndGet()}", amount, status).also { txns.getValue(txn).adjustments += it }
+    fun consoleRefund(txn: String, amount: PaymentAmount, status: String = "approved", chargeback: Boolean = false, warning: Boolean = false): Adjustment =
+        Adjustment("adj_c${adjustmentSeq.incrementAndGet()}", amount, status, chargeback, warning).also { txns.getValue(txn).adjustments += it }
 
     override fun refund(request: PaymentRefundRequest): PaymentOperationResult {
         refundCalls += request
@@ -136,7 +136,7 @@ class FakePushGateway(override val providerId: String = "paddle", override val m
             providerPaymentId = id, orderId = null,
             status = when { refunded == 0L -> ProviderPaymentStatus.PAID; remaining <= 0 -> ProviderPaymentStatus.REFUNDED; else -> ProviderPaymentStatus.PARTIALLY_REFUNDED },
             total = txn.total, remaining = PaymentAmount(remaining, txn.total.currency), method = null, paidAt = txn.paidAt,
-            refunds = approved.map { ProviderRefund(it.id, it.amount, txn.paidAt) },
+            refunds = approved.map { ProviderRefund(it.id, it.amount, txn.paidAt, it.chargeback, it.warning) },
             pendingRefunds = txn.adjustments.filter { it.status == "pending_approval" }.map { ProviderRefund(it.id, it.amount, txn.paidAt) },
         )
     }

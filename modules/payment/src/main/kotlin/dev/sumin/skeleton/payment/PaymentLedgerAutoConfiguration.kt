@@ -45,6 +45,11 @@ class PaymentLedgerAutoConfiguration {
     @ConditionalOnMissingBean
     fun paymentReviewNotifier(): PaymentReviewNotifier = PaymentReviewNotifier.NONE
 
+    /** 경보 연동(`alert`)이 없으면 차지백은 환불 줄과 이력에만 남는다. */
+    @Bean
+    @ConditionalOnMissingBean
+    fun paymentChargebackAlert(): PaymentChargebackAlert = PaymentChargebackAlert.NONE
+
     /** 환불 맞추기(스펙 §6.1 의 4 · 5) — 결제사의 취소 목록과 환불 줄을 맞춘다. */
     @Bean
     @ConditionalOnMissingBean
@@ -159,8 +164,14 @@ class PaymentLedgerAutoConfiguration {
     /** 서명된 웹훅이 곧 사실인 결제사(Paddle)의 사건을 장부에 옮긴다. 구독을 켠 조립이면 구독 사건도 반영한다. */
     @Bean
     @ConditionalOnMissingBean
-    fun paymentPushedEvents(store: PaymentLedgerStore, tasks: PaymentTasks, writer: PaymentLedgerWriter, subscriptions: ObjectProvider<SubscriptionLifecycle>, review: PaymentReviewNotifier): PaymentPushedEvents =
-        PaymentPushedEvents(store, tasks, writer, subscriptions.getIfAvailable(), review)
+    fun paymentPushedEvents(
+        store: PaymentLedgerStore,
+        tasks: PaymentTasks,
+        writer: PaymentLedgerWriter,
+        subscriptions: ObjectProvider<SubscriptionLifecycle>,
+        review: PaymentReviewNotifier,
+        chargebacks: PaymentChargebackAlert,
+    ): PaymentPushedEvents = PaymentPushedEvents(store, tasks, writer, subscriptions.getIfAvailable(), review, chargebacks)
 
     @Bean
     @ConditionalOnMissingBean

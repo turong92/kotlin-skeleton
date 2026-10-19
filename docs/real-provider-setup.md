@@ -637,6 +637,9 @@ SKELETON_PAYMENT_NAVERPAY_ALLOWED_RETURN_ORIGINS=         # 선택, 쉼표로 �
 | 서버가 만든 거래의 `details.line_items` 가 하나이고 그 `id`(`txnitm_…`)로 부분 환불이 된다 | 부분 환불이 `adjustment_transaction_item_invalid` 로 거절된다 | 부분 환불 한 번 |
 | 환불 호출에는 멱등 키가 없다 (문서에서 못 찾았다) | 응답을 잃은 호출을 다시 보내면 이중 환불 - 우리는 다시 보내지 않고 `created` 웹훅 · 조회로 가린다(설계가 여기에 기대지 않는다) | — |
 | 같은 거래의 검토 중 환불이 하나뿐이다 (`adjustment_pending_refund_request`) | 응답을 잃은 호출의 짝지어 붙이기가 다른 환불에 붙는다 | 검토 중에 둘째 환불을 시도해 본다 |
+| **차지백**의 adjustment 는 `action` 이 `chargeback`(경고는 `chargeback_warning`)이고 Paddle 이 `adjustment.created` 로 `approved` 상태로 알린다 (문서 - 이의 제기에 성공하면 자동으로 만든다) | 차지백이 장부에 안 들어온다 — 수신함 줄이 `IGNORED`/`NOT_HANDLED` | 샌드박스에서 차지백을 만들 수 있는지 확인한다(대시보드 · 지원 요청) |
+| 경고(`chargeback_warning`) 뒤의 차지백 금액이 경고와 **같다**, 그리고 두 adjustment 가 모두 환불된 금액으로 센다 | 금액이 다르면 줄 둘 + `REFUND_MISMATCH`; 둘 다 센다면 장부의 환불된 금액이 Paddle 의 `adjusted_totals` 와 어긋난다 | 경고를 받은 거래의 `GET /transactions/{id}?include=adjustments` 와 `details.adjusted_totals` 를 본다 |
+| 분쟁에서 이기면 원래 adjustment 가 `reversed` 로 바뀌고(`adjustment.updated`) **그리고/또는** `chargeback_reverse` 가 `adjustment.created` 로 온다 (문서 - 둘 다 와도 한 번만 되돌린다) | 이긴 분쟁이 장부에 되돌려지지 않고 주문이 `REFUNDED` 로 남는다 | 이긴 분쟁의 웹훅 전송 내역 |
 | 환불이 구독에 미치는 영향은 Paddle 문서에 없다 | 전액 환불한 구독이 Paddle 에서 계속 과금된다 - 그래서 우리가 환불로 끝낸 구독에 즉시 해지(`POST /subscriptions/{id}/cancel`)를 보낸다 | 구독 첫 결제를 전액 환불하고 구독 상태를 본다 |
 <!-- payment-paddle:end -->
 

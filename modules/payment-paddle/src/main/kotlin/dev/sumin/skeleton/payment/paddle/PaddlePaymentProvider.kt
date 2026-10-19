@@ -110,21 +110,30 @@ class PaddlePaymentProvider(
     }
 
     /**
-     * 환불 결정 - `refund` 만 읽는다(`credit` · `credit_reverse` 와 차지백은 장부가 다루지 않는다 → null). 상태: `pending_approval`(접수) · `approved` · `rejected`.
-     * 금액 · 통화는 Paddle 이 말한 그대로(세금 포함 총액)다.
+     * 환불 결정 - `refund`(상태 `pending_approval` 접수 · `approved` · `rejected`)와 차지백을 읽는다(`credit` · `credit_reverse` 는 장부가 다루지 않는다 → null).
+     * 차지백: `chargeback` · `chargeback_warning` 의 `approved`(Paddle 이 돈을 가져갔다)와 `reversed`(분쟁에서 이겨 되돌렸다 - 원래 adjustment 의 번호가 온다),
+     * 그리고 `chargeback_reverse` · `chargeback_warning_reverse` 의 `approved`(되돌림 adjustment 가 만들어졌다). 금액 · 통화는 Paddle 이 말한 그대로(세금 포함 총액)다.
      */
     private fun adjustment(eventId: String, occurredAt: Instant, data: JsonNode): PushedRefund? {
-        if (data.text("action") != "refund") return null
+        val action = data.text("action")
         val status = when (data.text("status")) {
             "pending_approval" -> PushedRefundStatus.PENDING_APPROVAL
             "approved" -> PushedRefundStatus.APPROVED
             "rejected" -> PushedRefundStatus.REJECTED
+            "reversed" -> PushedRefundStatus.REVERSED
             else -> return null
         }
+        val kind = when (action) {
+            REFUND -> PushedRefundKind.REFUND.takeIf { status != PushedRefundStatus.REVERSED }
+            "chargeback", "chargeback_warning" -> PushedRefundKind.CHARGEBACK.takeIf { status == PushedRefundStatus.APPROVED || status == PushedRefundStatus.REVERSED }
+            "chargeback_reverse", "chargeback_warning_reverse" -> PushedRefundKind.CHARGEBACK_REVERSAL.takeIf { status == PushedRefundStatus.APPROVED }
+            else -> null
+        } ?: return null
         return PushedRefund(
             eventId = eventId,
             occurredAt = occurredAt,
-            kind = PushedRefundKind.REFUND,
+            kind = kind,
+            warning = action == "chargeback_warning",
             providerRefundId = data.text("id") ?: error("Paddle adjustment without id"),
             providerPaymentId = data.text("transaction_id") ?: error("Paddle adjustment without transaction_id"),
             status = status,
@@ -311,7 +320,10 @@ class PaddlePaymentProvider(
             if (e.providerError.upstreamStatus == 404) return null
             throw e
         }
-        val taken = transaction.adjustments.filter { it.approved && it.action in TAKEN_ACTIONS }
+        // 같은 이의의 경고와 차지백(같은 금액)은 한 번만 센다 - 장부가 같은 규칙으로 한 줄로 넣는다
+        val approved = transaction.adjustments.filter { it.approved && it.action in TAKEN_ACTIONS }
+        val warnings = approved.filter { it.action == CHARGEBACK_WARNING }
+        val taken = approved.filterNot { it.action == CHARGEBACK && warnings.any { warning -> warning.total == it.total } }
         val takenTotal = taken.sumOf { it.total }
         return PaymentSnapshot(
             providerPaymentId = id,
@@ -325,7 +337,12 @@ class PaddlePaymentProvider(
             remaining = PaymentAmount((transaction.total - takenTotal).coerceAtLeast(0), transaction.currency),
             method = null,
             paidAt = transaction.billedAt,
-            refunds = taken.map { ProviderRefund(it.id, PaymentAmount(it.total, transaction.currency), it.createdAt ?: transaction.billedAt ?: time.now()) },
+            refunds = taken.map {
+                ProviderRefund(
+                    it.id, PaymentAmount(it.total, transaction.currency), it.createdAt ?: transaction.billedAt ?: time.now(),
+                    chargeback = it.action != REFUND, warning = it.action == CHARGEBACK_WARNING,
+                )
+            },
             pendingRefunds = transaction.adjustments.filter { it.pending && it.action == REFUND }.map { ProviderRefund(it.id, PaymentAmount(it.total, transaction.currency), it.createdAt ?: transaction.billedAt ?: time.now()) },
         )
     }
@@ -464,9 +481,11 @@ class PaddlePaymentProvider(
         val ADJUSTMENT_EVENTS = setOf("adjustment.created", "adjustment.updated")
         val HANDLED = SUBSCRIPTION_EVENTS + ADJUSTMENT_EVENTS + setOf("transaction.completed", "transaction.payment_failed")
         const val REFUND = "refund"
+        const val CHARGEBACK = "chargeback"
+        const val CHARGEBACK_WARNING = "chargeback_warning"
 
         /** 구매자에게 돌아간 돈으로 세는 adjustment 종류(이뤄진 것만) - 환불과 차지백(경고 포함: 이의 금액은 환불된다). */
-        val TAKEN_ACTIONS = setOf(REFUND, "chargeback", "chargeback_warning")
+        val TAKEN_ACTIONS = setOf(REFUND, CHARGEBACK, CHARGEBACK_WARNING)
         val SAFE_ID = Regex("[A-Za-z0-9_-]{1,100}")
         const val PARTIAL_NOT_ALLOWED = "PARTIAL_NOT_ALLOWED"
         const val CURRENCY_MISMATCH = "CURRENCY_MISMATCH"

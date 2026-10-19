@@ -28,7 +28,23 @@ object PaymentOrderTransitions {
         REFUNDED to emptySet(),
     )
 
+    /**
+     * **결제사 증거로만** 가는 길: 차지백 분쟁에서 이겨 환불이 되돌려졌다(Paddle) - 환불된 금액이 줄어 `REFUNDED` → `PARTIALLY_REFUNDED` · `PAID`, `PARTIALLY_REFUNDED` → `PAID`.
+     * 위 표([allowed])에는 없다 - 다른 어떤 길도 환불된 주문을 되돌리지 못한다. 이 길을 쓰는 곳은 [PaymentLedgerWriter.reverseByProviderEvidence] 뿐이다.
+     */
+    private val reversibleByEvidence: Map<PaymentOrderStatus, Set<PaymentOrderStatus>> = mapOf(
+        REFUNDED to setOf(PARTIALLY_REFUNDED, PAID),
+        PARTIALLY_REFUNDED to setOf(PAID),
+    )
+
     fun isAllowed(from: PaymentOrderStatus, to: PaymentOrderStatus): Boolean = to in allowed.getValue(from)
+
+    fun isAllowedByProviderEvidence(from: PaymentOrderStatus, to: PaymentOrderStatus): Boolean =
+        isAllowed(from, to) || to in reversibleByEvidence[from].orEmpty()
+
+    fun requireByProviderEvidence(from: PaymentOrderStatus, to: PaymentOrderStatus) {
+        check(isAllowedByProviderEvidence(from, to)) { "Order status transition $from -> $to is not allowed even by provider evidence" }
+    }
 
     fun require(from: PaymentOrderStatus, to: PaymentOrderStatus) {
         check(isAllowed(from, to)) { "Order status transition $from -> $to is not allowed" }

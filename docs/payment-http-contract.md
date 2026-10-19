@@ -49,8 +49,8 @@
   "reasonCode": "CUSTOMER_REQUEST", "origin": "USER", "requestedAt": "…Z", "completedAt": null, "closedBy": null }
 ```
 
-- `status`: `REQUESTED`(본인이 요청 — 돈은 안 움직임) · `PENDING`(결제사에 보냈고 답을 모른다 — 조회 작업이 맞춘다) · `SUCCEEDED` · `FAILED` · `REJECTED`(운영자가 거절) · `WITHDRAWN`(닫힘).
-- `origin`: `USER`(본인 요청) · `OPERATOR`(운영자 직접 환불) · `PROVIDER`(결제사 관리 화면의 취소를 장부에 맞춰 넣은 줄 — 이때 `reasonCode` 는 `PROVIDER_CONSOLE`).
+- `status`: `REQUESTED`(본인이 요청 — 돈은 안 움직임) · `PENDING`(결제사에 보냈고 답을 모른다 — 조회 작업이 맞춘다) · `SUCCEEDED` · `FAILED` · `REJECTED`(운영자가 거절) · `WITHDRAWN`(닫힘) · `REVERSED`(이뤄졌던 환불이 **결제사 증거로 되돌려졌다** — 차지백 분쟁에서 이겨 돈이 돌아왔다. 끝 상태이고 주문의 환불된 금액에서 빠진다. 사용자 한 건 응답에도 올 수 있다).
+- `origin`: `USER`(본인 요청) · `OPERATOR`(운영자 직접 환불) · `PROVIDER`(결제사 쪽에서 일어난 일을 장부에 넣은 줄 — 결제사 관리 화면의 취소는 `reasonCode` 가 `PROVIDER_CONSOLE`, 구매자의 이의 제기로 결제사가 돈을 가져간 **차지백**은 `CHARGEBACK`).
 - `reasonCode`: 본인은 `CUSTOMER_REQUEST` · `DUPLICATE` · `NOT_DELIVERED` 만 고른다(그 밖은 `400`). 운영자는 거기에 `OPERATOR`. **자유 문장은 받지도 저장하지도 않는다.**
 - `closedBy`: `WITHDRAWN` 줄만 값이 있다 — `"USER"`(본인이 거뒀다) · `"SYSTEM"`(주문이 전액 환불돼 요청이 닫혔다). 다른 상태는 `null`. 결제사 코드를 내보내지 않고 중립 칸 하나로만 알린다.
 
@@ -318,6 +318,8 @@
 | `ORDER_REFUNDED` | `WITHDRAWN` | 주문이 전액 환불돼 열린 요청을 시스템이 닫았다 |
 | `LATE_RESULT` | 닫힌 줄(`FAILED`) | 환불됨 응답이 줄이 이미 닫힌 뒤에 도착했다 — 돈이 나갔을 수 있다. 다른 환불 줄과 환불된 금액을 확인한다 |
 | `REFUND_DECLINED` | `FAILED` | 결제사가 **코드 없이** 확정 거절했다 |
+| `PROVIDER_REJECTED` | `FAILED` | 결제사(Paddle)가 검토한 뒤 환불을 **거절했다** — 돈은 움직이지 않았고 주문은 다시 환불할 수 있다 |
+| `CHARGEBACK_WARNING` | `SUCCEEDED` | 차지백 **경고**에서 온 줄(`reasonCode=CHARGEBACK`) — 이어서 같은 금액의 차지백이 와도 같은 이의라 두 번 세지 않는다 |
 | (결제사 코드) | `FAILED` | 결제사의 확정 거절 코드 그대로 |
 
 `PROVIDER_PENDING_EXPIRED` 는 **줄이 아니라 이력에만** 남는다(그렇게 닫힌 줄의 `failureCode` 는 `NOT_APPLIED`). 그렇게 닫은 주문에서 다시 환불하면 먼저 처리되던 요청이 늦게 적용됐을 수 있다는 경고가 맞다.
@@ -465,7 +467,7 @@
 5. 운영자 목록은 **탈퇴한 계정의 주문을 기본으로 숨긴다**(§3.1) — 쿼리 `includeErased=true` 가 새로 있다. 「전체」 탭에서 탈퇴자의 주문이 안 보이는 것은 오류가 아니다. `q` 로 찾거나 「확인 필요」(`review=true`)에서는 보인다.
 6. 수신함 `retry` 는 `FAILED` · `DEAD` 뿐 아니라 `RECEIVED` · `IGNORED` · 표식 줄에도 받는다(화면은 `FAILED` · `DEAD` 에만 단추를 두어도 된다). 표식 줄(`resourceType=LIMIT_MARKER`, `eventType=LIMIT_REACHED`)이 수신함 목록에 나온다 — 화면 문구가 필요하다(§8.2).
 7. 주문 만들기의 `429` 에는 `Retry-After` 헤더와 `data.retryAfterSeconds` 가 같이 온다(웹훅 경로의 `429` 도 같다).
-8. 환불 줄의 `origin` 에 `PROVIDER`, `reasonCode` 에 `PROVIDER_CONSOLE` 이 올 수 있다(결제사 관리 화면에서 취소한 것을 장부가 맞춰 넣은 줄). 운영자만 보는 줄이지만 사용자 한 건 응답에도 나올 수 있다.
+8. 환불 줄의 `origin` 에 `PROVIDER`, `reasonCode` 에 `PROVIDER_CONSOLE` 이 올 수 있다(결제사 관리 화면에서 취소한 것을 장부가 맞춰 넣은 줄). 운영자만 보는 줄이지만 사용자 한 건 응답에도 나올 수 있다. **`reasonCode` 에 `CHARGEBACK`(차지백 - 구매자가 카드사에 이의를 제기해 결제사가 돈을 가져갔다), `status` 에 `REVERSED`(분쟁에서 이겨 돌아옴), 이력 `type` 에 `CHARGEBACK_REVERSED` 도 올 수 있다**(Paddle - 화면은 모르는 코드도 중립 글자로 그린다).
 9. 같은 키로 다시 보낸 직접 환불이 `FAILED` · `REJECTED` 줄이면 `200` 이다 — 오류가 아니므로 응답 줄의 `status` 로 가른다(가정과 같다).
 
 ## 12. 시험이 이 계약의 증거

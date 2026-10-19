@@ -4,6 +4,7 @@ import dev.sumin.skeleton.payment.PaymentRefundStatus.FAILED
 import dev.sumin.skeleton.payment.PaymentRefundStatus.PENDING
 import dev.sumin.skeleton.payment.PaymentRefundStatus.REJECTED
 import dev.sumin.skeleton.payment.PaymentRefundStatus.REQUESTED
+import dev.sumin.skeleton.payment.PaymentRefundStatus.REVERSED
 import dev.sumin.skeleton.payment.PaymentRefundStatus.SUCCEEDED
 import dev.sumin.skeleton.payment.PaymentRefundStatus.WITHDRAWN
 import kotlin.test.Test
@@ -21,6 +22,7 @@ class PaymentRefundTransitionsTest {
         PENDING to SUCCEEDED, // 결제사가 환불됐다고 했다(응답 또는 조회)
         PENDING to FAILED, // 확정 거절 · 조회해 보니 적용되지 않았다
         PENDING to PENDING, // 모름
+        SUCCEEDED to REVERSED, // 차지백 분쟁에서 이겨 돈이 돌아왔다(결제사 증거로만 - 이 줄을 부르는 곳은 한 곳뿐이다)
     )
 
     @TestFactory
@@ -40,6 +42,6 @@ class PaymentRefundTransitionsTest {
         assertEquals(setOf(REQUESTED, PENDING), PaymentRefundStatus.entries.filter { PaymentRefundTransitions.isOpen(it) }.toSet())
         assertEquals("ord_x", PaymentRefundTransitions.openKeyFor(PENDING, "ord_x"))
         assertEquals("ord_x", PaymentRefundTransitions.openKeyFor(REQUESTED, "ord_x"))
-        listOf(SUCCEEDED, FAILED, REJECTED, WITHDRAWN).forEach { assertEquals(null, PaymentRefundTransitions.openKeyFor(it, "ord_x"), "$it") }
+        listOf(SUCCEEDED, FAILED, REJECTED, WITHDRAWN, REVERSED).forEach { assertEquals(null, PaymentRefundTransitions.openKeyFor(it, "ord_x"), "$it") }
     }
 }

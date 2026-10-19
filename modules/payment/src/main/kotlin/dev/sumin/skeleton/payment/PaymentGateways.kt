@@ -132,6 +132,10 @@ data class ProviderRefund(
     val providerRefundId: String,
     val amount: PaymentAmount,
     val at: Instant,
+    /** 구매자의 이의 제기로 결제사가 가져간 돈(차지백)이다 - 장부는 사유 `CHARGEBACK` 줄로 넣는다. */
+    val chargeback: Boolean = false,
+    /** 차지백이 될 수 있는 이의의 **경고**다 - 이어서 같은 금액의 차지백이 와도 같은 이의라 두 번 세지 않는다. */
+    val warning: Boolean = false,
 )
 
 /**

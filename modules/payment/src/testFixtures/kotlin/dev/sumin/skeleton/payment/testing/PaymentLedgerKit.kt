@@ -118,6 +118,20 @@ object ReversibleTestEncryptor : TextEncryptor {
     override fun decrypt(cipherText: String): String = cipherText.removePrefix("enc:").reversed()
 }
 
+/** 차지백 알림 대역 - 주문 id 만 받는다. */
+class RecordingChargebackAlert : dev.sumin.skeleton.payment.PaymentChargebackAlert {
+    val chargebacks = CopyOnWriteArrayList<String>()
+    val reversals = CopyOnWriteArrayList<String>()
+
+    override fun chargeback(orderId: String) {
+        chargebacks += orderId
+    }
+
+    override fun reversed(orderId: String) {
+        reversals += orderId
+    }
+}
+
 class RecordingReviewNotifier : PaymentReviewNotifier {
     val flagged = CopyOnWriteArrayList<Pair<String, PaymentReviewReason>>()
 
@@ -140,6 +154,8 @@ class PaymentLedgerKit(
     val usage: SubscriptionUsageCheck = SubscriptionUsageCheck.NEVER_USED,
     /** 시험 조립의 해지 정책 지도 - `KR` 은 한국 정책(위약금 10%), 그 밖은 기간 끝 해지만. */
     val cancelPolicies: SubscriptionCancelPolicies = SubscriptionCancelPolicies(listOf(KoreaConsumerCancelPolicy(penaltyPercent = 10, withdrawalDays = 7)), mapOf("KR" to KoreaConsumerCancelPolicy.NAME)),
+    /** 차지백 알림 대역(주문 id 만) - 기본은 알리지 않는 것. */
+    val chargebacks: dev.sumin.skeleton.payment.PaymentChargebackAlert = dev.sumin.skeleton.payment.PaymentChargebackAlert.NONE,
     /** 서명된 웹훅이 곧 사실인 결제사(Paddle 모양)의 대역 — 라우터에는 들어가지만 결제창 · 빌링 능력이 없어 다른 시험의 라우팅을 바꾸지 않는다. */
     val push: FakePushGateway = FakePushGateway(),
     /** 진짜 결제사 모듈(가짜 결제사 서버와 말하는 것)을 이 장부에 꽂는 자리 - 라우터에 더해진다. 주문은 `CreateOrderCommand.provider` 로 그 결제사를 고른다. */
@@ -167,7 +183,7 @@ class PaymentLedgerKit(
         store, tasks, router, writer, properties,
         inline = properties.webhook.inline.takeIf { it.enabled }?.let { PaymentWebhookInline(PaymentTasksNow { type, subject -> tasks.runNow(runner, time.now(), type, subject) }, it.timeBudget) },
     )
-    val pushed = PaymentPushedEvents(store, tasks, writer, lifecycle, review)
+    val pushed = PaymentPushedEvents(store, tasks, writer, lifecycle, review, chargebacks)
     val webhook = PaymentWebhookTaskHandler(store, router, convergence, writer, pushed)
     val charges = SubscriptionCharges(store, convergence, fulfillment, writer)
     val subscriptions = PaymentSubscriptions(store, router, plans, ReversibleTestEncryptor, lifecycle, charges, tasks, writer, properties)

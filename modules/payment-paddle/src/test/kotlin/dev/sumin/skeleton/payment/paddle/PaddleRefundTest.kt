@@ -198,5 +198,44 @@ class PaddleRefundTest {
         assertThatThrownBy { gateway.parse(WebhookDelivery(mapOf("Paddle-Signature" to sign(created)), created.replace("499", "1").toByteArray())) }.isInstanceOf(PaymentWebhookRejectedException::class.java)
     }
 
+    @Test
+    fun `chargebacks are read as chargeback events - taken, warned, reversed by the original turning reversed or by the reverse adjustment - and nothing else`() {
+        val gateway = gateway()
+        fun event(action: String, status: String, id: String = "adj_c1") = gateway.interpret(adjustmentEvent(type = "adjustment.updated", id = id, action = action, status = status)) as PushedRefund?
+
+        assertThat(event("chargeback", "approved")).satisfies({ e -> assertThat(e!!.kind).isEqualTo(PushedRefundKind.CHARGEBACK); assertThat(e.warning).isFalse(); assertThat(e.status).isEqualTo(PushedRefundStatus.APPROVED) })
+        assertThat(event("chargeback_warning", "approved")!!.warning).isTrue()
+        assertThat(event("chargeback", "reversed")!!.status).isEqualTo(PushedRefundStatus.REVERSED)
+        assertThat(event("chargeback_reverse", "approved", id = "adj_r1")!!.kind).isEqualTo(PushedRefundKind.CHARGEBACK_REVERSAL)
+        assertThat(event("chargeback_warning_reverse", "approved", id = "adj_r2")!!.kind).isEqualTo(PushedRefundKind.CHARGEBACK_REVERSAL)
+        // 그 밖: 접수 중인 차지백 · 환불의 reversed · 크레딧
+        assertThat(event("chargeback", "pending_approval")).isNull()
+        assertThat(event("refund", "reversed")).isNull()
+        assertThat(event("credit_reverse", "approved")).isNull()
+    }
+
+    @Test
+    fun `a lookup counts a chargeback as money taken back, marks it a chargeback, and counts a warning and its chargeback of the same amount once`() {
+        FakePaddleApi().use { api ->
+            api.on(
+                "GET", "/transactions/txn_1", 200,
+                transactionBody(
+                    adjustments = listOf(
+                        listOf("adj_w", "chargeback_warning", "approved", "499"), listOf("adj_c", "chargeback", "approved", "499"),
+                    ),
+                ),
+            )
+
+            val snapshot = checkNotNull(gateway(api.baseUrl).lookup(PaymentLookupQuery("txn_1", null)))
+
+            assertThat(snapshot.status).isEqualTo(ProviderPaymentStatus.REFUNDED)
+            assertThat(snapshot.remaining).isEqualTo(PaymentAmount(0, "USD"))
+            val only = snapshot.refunds.single()
+            assertThat(only.providerRefundId).isEqualTo("adj_w")
+            assertThat(only.chargeback).isTrue()
+            assertThat(only.warning).isTrue()
+        }
+    }
+
     private fun catchThrowable(block: () -> Any?): Throwable = runCatching { block() }.exceptionOrNull() ?: throw AssertionError("expected a failure")
 }

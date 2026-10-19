@@ -24,17 +24,34 @@ internal class RefundLines(private val writer: PaymentLedgerWriter, private val 
         return landed(tx, order, done, actor, actorId)
     }
 
-    /** 장부가 모르는 결제사 취소를 `origin=PROVIDER` 줄 하나로 넣는다. 같은 취소는 두 번 들어가지 못한다(`(order_id, provider_refund_id)` 유니크). */
+    /**
+     * 장부가 모르는 결제사 취소를 `origin=PROVIDER` 줄 하나로 넣는다. 같은 취소는 두 번 들어가지 못한다(`(order_id, provider_refund_id)` 유니크).
+     * 차지백이면([ProviderRefund.chargeback]) 사유 `CHARGEBACK` - 경고에서 온 줄은 `failure_code=CHARGEBACK_WARNING` 으로 가른다(같은 이의의 차지백이 와도 두 번 세지 않는다).
+     */
     fun addFromProvider(tx: PaymentLedgerTx, order: PaymentOrder, cancel: ProviderRefund): PaymentOrder {
         val now = writer.now()
         val line = PaymentRefund(
             id = newRefundId(), orderId = order.id, status = PaymentRefundStatus.SUCCEEDED, origin = PaymentRefundOrigin.PROVIDER, amount = cancel.amount,
-            reasonCode = PaymentRefundReason.PROVIDER_CONSOLE.name, openKey = null, dedupeKey = null, providerRefundId = cancel.providerRefundId, expectedRemaining = null,
-            requestedBy = null, decidedBy = null, failureCode = null, requestedAt = cancel.at, sentAt = null, completedAt = cancel.at, appliedAt = null, createdAt = now, updatedAt = now,
+            reasonCode = (if (cancel.chargeback) PaymentRefundReason.CHARGEBACK else PaymentRefundReason.PROVIDER_CONSOLE).name, openKey = null, dedupeKey = null,
+            providerRefundId = cancel.providerRefundId, expectedRemaining = null, requestedBy = null, decidedBy = null,
+            failureCode = CHARGEBACK_WARNING.takeIf { cancel.chargeback && cancel.warning }, requestedAt = cancel.at, sentAt = null, completedAt = cancel.at, appliedAt = null, createdAt = now, updatedAt = now,
         )
         // 락 안에서 이미 아는 취소는 걸러 넣으므로 여기서 거절되면 버그다 — 던져서 되돌린다
         val stored = checkNotNull(writer.createRefund(tx, line, PaymentEventType.REFUND_SYNCED, PaymentActor.PROVIDER)) { "the provider cancel could not be recorded as a refund line" }
         return landed(tx, order, stored, PaymentActor.PROVIDER, null)
+    }
+
+    /**
+     * 이뤄졌던 환불 줄이 결제사 증거로 되돌려졌다(차지백 분쟁에서 이김) - 줄은 `REVERSED`, 주문의 환불된 금액에서 빠지고 상태가 `PARTIALLY_REFUNDED`/`PAID` 로 간다([PaymentOrderTransitions] 의 증거 길).
+     * 지급(이용권) · 끝난 구독은 되살리지 않는다 - 운영자가 판단한다.
+     */
+    fun reverse(tx: PaymentLedgerTx, order: PaymentOrder, line: PaymentRefund): PaymentOrder {
+        writer.transitionRefund(tx, line, PaymentRefundStatus.REVERSED, PaymentEventType.CHARGEBACK_REVERSED, PaymentActor.PROVIDER, null, PaymentRefundReason.CHARGEBACK.name) {
+            it.copy(completedAt = writer.now())
+        }
+        val refunded = (order.refundedAmount - line.amount.amount).coerceAtLeast(0)
+        val to = if (refunded <= 0) PaymentOrderStatus.PAID else PaymentOrderStatus.PARTIALLY_REFUNDED
+        return writer.reverseByProviderEvidence(tx, order, to, PaymentEventType.CONVERGED, PaymentActor.PROVIDER, "REFUND_REVERSED", line.id) { it.copy(refundedAmount = refunded) }
     }
 
     private fun landed(tx: PaymentLedgerTx, order: PaymentOrder, line: PaymentRefund, actor: PaymentActor, actorId: String?): PaymentOrder {
@@ -60,6 +77,9 @@ internal class RefundLines(private val writer: PaymentLedgerWriter, private val 
     companion object {
         /** 열려 있던 요청 줄의 `failure_code` · 이력의 `provider_code`: 요청이 닫히기 전에 주문이 전액 환불됐다(결제사 관리 화면의 취소 등). */
         const val ORDER_REFUNDED = "ORDER_REFUNDED"
+
+        /** 환불 줄의 `failure_code`: 차지백 **경고**에서 온 줄 - 이어서 같은 금액의 차지백이 와도 같은 이의라 두 번 세지 않는다. */
+        const val CHARGEBACK_WARNING = "CHARGEBACK_WARNING"
 
         fun baseOf(order: PaymentOrder): Long = order.paidAmount ?: order.amount.amount
 

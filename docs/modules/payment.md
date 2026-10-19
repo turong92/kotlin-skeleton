@@ -69,6 +69,7 @@
 | 결제 확정 · 환불 확정 뒤 지급 · 회수 | `PaymentOrderListener.onPaid` · `onRefunded` — 던져도 「결제됨」은 그대로이고 지급 · 회수 작업이 재시도한다 |
 | 운영자 판정 | `PaymentOperatorPolicy` — 기본은 토큰의 `ROLE_<admin.role>`. 토큰이 낡았을 수 있으므로(≤15분) `account` 를 쓰는 앱은 매 호출 저장소의 역할을 읽는 빈으로 갈아 끼운다 |
 | (선택) 사람이 봐야 하는 일이 줄에 찍힐 때 알림 | `PaymentReviewNotifier` — `alert` 가 있으면 `PAYMENT_REVIEW_NEEDED`(주문 id 만 싣는다), 없으면 줄 · 로그에만 남는다 |
+| (선택) 차지백이 들어왔을 때 · 분쟁에서 이겨 돌아왔을 때 알림 | `PaymentChargebackAlert` — 장부 + `alert` 가 있으면 `PAYMENT_CHARGEBACK` · `PAYMENT_CHARGEBACK_REVERSED`(주문 id 만 싣는다), 없으면 줄과 이력에만 남는다 |
 | (선택) 결제사가 우리 키를 받아들이지 않았을 때 알림 | `PaymentProviderCredentialAlert` — 결제사 모듈이 키 거절(토스: 401 계열 `INVALID_API_KEY` · `UNAUTHORIZED_KEY` — `FORBIDDEN_REQUEST` 는 요청 불일치일 수도 있어 알리지 않는다)을 받으면 부른다. 장부 + `alert` 가 있으면 `PAYMENT_PROVIDER_CREDENTIALS_REJECTED`(결제사 id 만 싣는다 · 한 시간에 한 번으로 접힌다), 없으면 알리지 않는다. 고객에게는 여전히 「거절」이다 |
 | (선택) 결제사가 다른 주문 · 금액의 결제를 이 주문의 승인으로 받았을 때 알림 | `PaymentProviderMismatchAlert` — 승인 API 가 결제 번호만 받는 결제사(네이버페이)가 그 승인을 곧바로 취소했거나 취소하지 못했을 때 부른다. 장부 + `alert` 가 있으면 `PAYMENT_MISMATCH_CANCELLED` · `PAYMENT_MISMATCH_CANCEL_PENDING`(취소가 아직 끝나지 않음) · `PAYMENT_MISMATCH_CANCEL_FAILED`(주문 id 만 싣는다), 없으면 알리지 않는다 |
 | 성공/실패 리다이렉트 화면 · 웹훅 비밀 조각 | 앱 몫 — [HTTP](#http) 참고 |
@@ -84,6 +85,8 @@
 `FAILED` · `EXPIRED` · `CANCELED` → `PAID` 는 있지만 **결제사 조회 증거로만**이다(늦게 온 결제). **`PAID` 이후에서 `FAILED` · `EXPIRED` · `CANCELED` 로 가는 길은 없다** — 늦게 온 실패 신호가 받은 돈을 되돌리지 못한다.
 
 **결제사가 결정하는 환불(Paddle)**: 호출이 `pending_approval` 로 답하면 줄이 `PENDING` 으로 남고 접수 번호(`adj_…`)가 줄의 `provider_refund_id` 에 박힌다(`failure_code=PROVIDER_PENDING`). 서명된 웹훅 `adjustment.created` · `adjustment.updated` 가 `PushedRefund` 사건으로 `PaymentPushedEvents` 에 닿아 줄을 끝낸다: `approved` → `SUCCEEDED`(`onRefunded` 한 번, 전액이면 주문 `REFUNDED`), `rejected` → `FAILED` + `failure_code=PROVIDER_REJECTED`(주문은 다시 환불할 수 있다). 줄은 번호로, 번호가 없으면 같은 금액의 열린 `PENDING` 줄 하나로 찾는다(응답을 잃은 호출). 우리 줄이 없는 승인(결제사 대시보드의 환불)은 `PROVIDER` 줄로 넣는다. 끝 상태가 된 줄은 다시 움직이지 않는다. 정산(`RefundSettlement`)은 결제사가 `pendingRefunds` 로 쥔 줄을 「적용 안 됨」으로 닫지 않는다.
+
+**차지백(Paddle)**: 구매자가 카드사에 이의를 제기하면 Paddle 이 adjustment(`chargeback`, 경고는 `chargeback_warning`)를 **스스로 만들고** 같은 웹훅 둘(`adjustment.created` · `adjustment.updated`)로 알린다. 승인된 것은 `PROVIDER` 환불 줄 `SUCCEEDED`(사유 `CHARGEBACK`)로 들어가 환불과 같은 길로 회수 작업 · 전액이면 구독 끝 + 결제사 해지가 돈다. 경고와 같은 금액의 차지백은 같은 이의라 한 줄이다(금액이 다르면 둘 다 넣고 `REFUND_MISMATCH` 로 사람이 본다). 분쟁에서 이기면 원래 adjustment 가 `reversed` 로 바뀌거나 되돌림 adjustment(`chargeback_reverse`)가 만들어진다 — 어느 쪽이든(둘 다 와도) 짝 줄(같은 번호, 없으면 같은 거래 · 같은 금액의 차지백 줄)이 **한 번만** `REVERSED` 가 되고 주문의 환불된 금액에서 빠져 `PARTIALLY_REFUNDED`/`PAID` 로 돌아간다. 이 전이는 주문 전이표에 없는 **결제사 증거로만** 가는 길이다(`PaymentOrderTransitions.isAllowedByProviderEvidence`). 되돌림이 차지백보다 먼저 도착하면 처리 작업이 실패로 남아 재시도하다 짝이 생기면 맞춘다(다 쓰면 수신함 `DEAD` — 운영자 「다시 처리」). 지급(이용권) · 끝난 구독은 **되살리지 않는다**(운영자가 판단한다). 분쟁에서 졌을 때 Paddle 은 따로 알리지 않는다(줄은 `SUCCEEDED` 그대로). 알림은 `PaymentChargebackAlert`(주문 id 만).
 
 **구독 결제 환불의 「구독도 해지」**: 운영자 환불의 두 입구(`refund` · `approve`)가 `endSubscription`(생략 = `true`)을 받고, `false` 면 환불 줄에 `keep_subscription=true` 를 쓴다. 그 줄이 `SUCCEEDED` 가 돼 지금 기간의 구독 주문이 전액 환불돼도 구독을 끝내지 않는다(환불이 끝나는 때 적용되므로 줄에 남는다). 운영자가 아닌 환불(결제사 콘솔 취소)은 지금처럼 구독을 끝낸다. 결제사가 갱신하는 구독이 환불로 끝나면 결제사에도 즉시 해지 작업(`payment-provider-subscription-cancel`)을 넣는다.
 

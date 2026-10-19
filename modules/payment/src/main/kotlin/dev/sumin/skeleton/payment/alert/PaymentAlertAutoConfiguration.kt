@@ -3,6 +3,7 @@ package dev.sumin.skeleton.payment.alert
 import dev.sumin.skeleton.alert.AlertKind
 import dev.sumin.skeleton.alert.AlertSeverity
 import dev.sumin.skeleton.alert.OwnerAlerts
+import dev.sumin.skeleton.payment.PaymentChargebackAlert
 import dev.sumin.skeleton.payment.PaymentLedgerAutoConfiguration
 import dev.sumin.skeleton.payment.PaymentLedgerStore
 import dev.sumin.skeleton.payment.PaymentMismatchOutcome
@@ -36,12 +37,29 @@ enum class PaymentAlertKind(
 
     /** 위와 같은데 취소가 되지 않았다 - 돈이 결제사에 걸려 있다. 사람이 풀어야 한다. 키는 주문 id. */
     PAYMENT_MISMATCH_CANCEL_FAILED(AlertSeverity.ERROR, "A payment applied for another order or amount could not be cancelled"),
+
+    /** 구매자가 카드사에 이의를 제기해(차지백) 결제사가 돈을 가져갔다 - 장부에는 환불 줄로 들어갔다. 사람이 대응한다. 키는 주문 id. */
+    PAYMENT_CHARGEBACK(AlertSeverity.ERROR, "A buyer disputed a payment (chargeback)"),
+
+    /** 분쟁에서 이겨 가져갔던 돈이 돌아왔다 - 환불 줄이 되돌려졌다. 지급 · 구독은 자동으로 되살리지 않는다. 키는 주문 id. */
+    PAYMENT_CHARGEBACK_REVERSED(AlertSeverity.WARN, "A chargeback was won and the money came back"),
 }
 
 /** 주인 경보로 내보낸다. **주문 id 말고는 아무 값도 싣지 않는다** — 금액 · 계정 · 검토 이유 문구가 경보 채널에 흘러가지 않게(이유는 줄에 있다). */
 class OwnerAlertsPaymentReviewNotifier(private val alerts: OwnerAlerts) : PaymentReviewNotifier {
     override fun flagged(orderId: String, reason: PaymentReviewReason) {
         alerts.emit(PaymentAlertKind.PAYMENT_REVIEW_NEEDED, key = orderId)
+    }
+}
+
+/** 주문 id 만 싣는다. */
+class OwnerAlertsPaymentChargebackAlert(private val alerts: OwnerAlerts) : PaymentChargebackAlert {
+    override fun chargeback(orderId: String) {
+        alerts.emit(PaymentAlertKind.PAYMENT_CHARGEBACK, key = orderId)
+    }
+
+    override fun reversed(orderId: String) {
+        alerts.emit(PaymentAlertKind.PAYMENT_CHARGEBACK_REVERSED, key = orderId)
     }
 }
 
@@ -82,6 +100,11 @@ class PaymentAlertAutoConfiguration {
     @ConditionalOnBean(OwnerAlerts::class)
     @ConditionalOnMissingBean(PaymentReviewNotifier::class)
     fun ownerAlertsPaymentReviewNotifier(alerts: OwnerAlerts): PaymentReviewNotifier = OwnerAlertsPaymentReviewNotifier(alerts)
+
+    @Bean
+    @ConditionalOnBean(OwnerAlerts::class)
+    @ConditionalOnMissingBean(PaymentChargebackAlert::class)
+    fun ownerAlertsPaymentChargebackAlert(alerts: OwnerAlerts): PaymentChargebackAlert = OwnerAlertsPaymentChargebackAlert(alerts)
 
     @Bean
     @ConditionalOnBean(OwnerAlerts::class)

@@ -105,7 +105,10 @@ data class PaymentOrder(
             "card=${if (cardIssuer == null && cardLast4 == null) "none" else "masked"})"
 }
 
-enum class PaymentRefundStatus { REQUESTED, PENDING, SUCCEEDED, FAILED, REJECTED, WITHDRAWN }
+/**
+ * [REVERSED] = 이뤄졌던 환불이 결제사 증거로 **되돌려졌다**(차지백 분쟁에서 이겨 돈이 돌아왔다 - Paddle). 끝 상태이고 주문의 환불된 금액에서 빠진다. 환불 줄은 양수만 받으므로(`ck_payment_refunds_amount`) 음수 줄 대신 원래 줄을 되돌린다.
+ */
+enum class PaymentRefundStatus { REQUESTED, PENDING, SUCCEEDED, FAILED, REJECTED, WITHDRAWN, REVERSED }
 
 enum class PaymentRefundOrigin { USER, OPERATOR, PROVIDER }
 
@@ -206,6 +209,9 @@ enum class PaymentEventType {
 
     /** 결제 시도가 실패했다(결제사 웹훅, 카드 거절 등) - 주문 상태는 그대로이고 [PaymentEvent.providerCode] 는 결제사의 사유 코드. */
     PAYMENT_FAILED,
+
+    /** 차지백 분쟁에서 이겨 돈이 돌아왔다 - 환불 줄이 `SUCCEEDED` → `REVERSED`(환불 줄의 이력). 지급 · 구독은 되살리지 않는다. */
+    CHARGEBACK_REVERSED,
 }
 
 enum class PaymentActor { USER, OPERATOR, SYSTEM, PROVIDER }

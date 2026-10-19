@@ -66,6 +66,20 @@ fun interface PaymentReviewNotifier {
 }
 
 /**
+ * 구매자가 카드사에 이의를 제기해(차지백) 결제사가 돈을 가져갔다는 것, 그리고 분쟁에서 이겨 돌아왔다는 것을 밖에 알린다. **주문 id 말고는 아무 값도 싣지 않는다.**
+ * `alert` 모듈이 있고 장부가 있으면 `OwnerAlerts.emit(PAYMENT_CHARGEBACK | PAYMENT_CHARGEBACK_REVERSED, key = 주문 id)`, 없으면 알리지 않는다(줄과 이력에는 남는다).
+ */
+interface PaymentChargebackAlert {
+    fun chargeback(orderId: String) {}
+
+    fun reversed(orderId: String) {}
+
+    companion object {
+        val NONE: PaymentChargebackAlert = object : PaymentChargebackAlert {}
+    }
+}
+
+/**
  * 결제사가 **우리 키를 받아들이지 않았다**(폐기 · 오타 · 권한 없음 — 인증 계열 거절)는 것을 밖에 알린다. 그 거절은 확정 실패로 분류되어 고객 쪽에는 「거절」로만 보이므로
  * (키가 폐기된 배포는 모든 결제가 거절된다) 사람이 알아야 한다. **결제사 id 말고는 아무 값도 싣지 않는다.**
  * `alert` 모듈이 있고 장부가 있으면 `OwnerAlerts.emit(PAYMENT_PROVIDER_CREDENTIALS_REJECTED, key = 결제사 id)`(1시간에 한 번으로 접는다)가 되고, 없으면 알리지 않는다. 결제사 모듈이 부른다.

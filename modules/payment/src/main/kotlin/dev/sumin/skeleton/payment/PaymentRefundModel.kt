@@ -4,6 +4,7 @@ import dev.sumin.skeleton.payment.PaymentRefundStatus.FAILED
 import dev.sumin.skeleton.payment.PaymentRefundStatus.PENDING
 import dev.sumin.skeleton.payment.PaymentRefundStatus.REJECTED
 import dev.sumin.skeleton.payment.PaymentRefundStatus.REQUESTED
+import dev.sumin.skeleton.payment.PaymentRefundStatus.REVERSED
 import dev.sumin.skeleton.payment.PaymentRefundStatus.SUCCEEDED
 import dev.sumin.skeleton.payment.PaymentRefundStatus.WITHDRAWN
 
@@ -20,6 +21,9 @@ enum class PaymentRefundReason(val forCustomer: Boolean, val forOperator: Boolea
     OPERATOR(false, true, "Operator refund"),
     SUBSCRIPTION_CANCEL(false, false, "Subscription canceled"),
     PROVIDER_CONSOLE(false, false, "Canceled in the provider console"),
+
+    /** 구매자가 카드사에 이의를 제기해 결제사가 돈을 가져간 환불 줄(Paddle 차지백)에만 우리가 붙인다. */
+    CHARGEBACK(false, false, "Chargeback"),
     ;
 
     companion object {
@@ -43,10 +47,11 @@ object PaymentRefundTransitions {
     private val allowed: Map<PaymentRefundStatus, Set<PaymentRefundStatus>> = mapOf(
         REQUESTED to setOf(PENDING, REJECTED, WITHDRAWN),
         PENDING to setOf(SUCCEEDED, FAILED, PENDING),
-        SUCCEEDED to emptySet(),
+        SUCCEEDED to setOf(REVERSED),
         FAILED to emptySet(),
         REJECTED to emptySet(),
         WITHDRAWN to emptySet(),
+        REVERSED to emptySet(),
     )
 
     /** 줄이 처음 생길 때의 상태: 본인의 요청 · 운영자의 바로 환불 · 결제사 쪽에서 일어난 취소를 맞춰 넣은 줄. */

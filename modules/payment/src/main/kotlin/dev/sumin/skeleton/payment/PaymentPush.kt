@@ -69,14 +69,24 @@ data class PushedPaymentFailure(
 ) : PushedPaymentEvent
 
 /** 결제사가 말하는 환불 한 건의 종류. */
-enum class PushedRefundKind { REFUND }
+enum class PushedRefundKind {
+    REFUND,
 
-/** 결제사가 그 환불에 내린 결정 - 접수만 했다 · 이뤄졌다 · 거절했다. */
-enum class PushedRefundStatus { PENDING_APPROVAL, APPROVED, REJECTED }
+    /** 구매자의 이의 제기로 결제사가 돈을 가져갔다(Paddle `chargeback` · `chargeback_warning`) - 우리가 시킨 일이 아니다. */
+    CHARGEBACK,
+
+    /** 분쟁에서 이겨 가져갔던 돈이 돌아왔다(Paddle `chargeback_reverse` · `chargeback_warning_reverse`). 같은 거래 · 같은 금액의 차지백 줄과 짝지어진다. */
+    CHARGEBACK_REVERSAL,
+}
+
+/** 결제사가 그 환불에 내린 결정 - 접수만 했다 · 이뤄졌다 · 거절했다 · (차지백이) 되돌려졌다. */
+enum class PushedRefundStatus { PENDING_APPROVAL, APPROVED, REJECTED, REVERSED }
 
 /**
  * 결제사가 환불에 대해 알려 왔다(Paddle `adjustment.created` · `adjustment.updated`). 접수 · 승인 · 거절이 모두 이 사건이고, 몇 번 와도 같은 결과다 -
  * 끝 상태가 된 줄은 다시 움직이지 않는다. [providerPaymentId] 는 환불이 걸린 거래, [providerRefundId] 는 그 환불의 번호다.
+ * 차지백([PushedRefundKind.CHARGEBACK])은 `APPROVED`(결제사가 돈을 가져갔다) 또는 `REVERSED`(분쟁에서 이겨 되돌렸다 - 원래 번호가 온다)로 오고, [warning] 은 이의의 경고다.
+ * 되돌림 사건([PushedRefundKind.CHARGEBACK_REVERSAL])은 되돌림 adjustment 의 번호로 `APPROVED` 가 온다.
  */
 data class PushedRefund(
     override val eventId: String,
@@ -86,6 +96,7 @@ data class PushedRefund(
     val providerPaymentId: String,
     val status: PushedRefundStatus,
     val amount: PaymentAmount,
+    val warning: Boolean = false,
 ) : PushedPaymentEvent
 
 enum class PushedSubscriptionStatus { ACTIVE, PAST_DUE, CANCELING, ENDED }
