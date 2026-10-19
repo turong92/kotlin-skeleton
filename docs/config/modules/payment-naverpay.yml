@@ -9,7 +9,7 @@ skeleton:
     client-secret: ""                               # 클라이언트 시크릿 — 서버에만 있다 (env <P>_PAYMENT_NAVERPAY_CLIENT_SECRET — 배포 선언의 secrets:, 운영자 값). 보호 환경에서 비면 기동 실패
     chain-id: ""                                    # 가맹점 그룹 식별키(Chain ID) - 단건 값. 자동결제는 값이 다르다. env <P>_PAYMENT_NAVERPAY_CHAIN_ID (선언의 env:). 프로젝트마다 자기 것
     return-url: ""                                  # 구매자를 돌려보낼 우리 화면의 주소(예: https://app.example.com/payments/return) — 서버가 결제를 예약할 때 returnUrl 로 넘긴다. 모듈이 kind · provider · order 조각을 붙이고 네이버페이가 resultCode · paymentId 를 붙인다. 구매자가 정하는 값이 아니라 설정이다. 장부가 있는데 http(s) 절대 주소가 아니면 보호 환경에서 기동 실패(그 밖은 경고, GET /config 가 available:false). 프로젝트 모드는 프로젝트마다 자기 것(공통에서 물려받으면 기동 실패)
-    allowed-return-origins: []                      # 결제를 시작한 화면의 origin 으로 돌아오게 허락하는 목록(예: [http://localhost:5173]) — 뜻은 payment-kakaopay 의 같은 이름과 같다. 목록 밖이거나 비면 return-url 그대로. 프로젝트 모드는 프로젝트마다 자기 것
+    allowed-return-origins: []                      # 결제를 시작한 화면의 origin 으로 돌아오게 허락하는 목록(예: [http://localhost:5173]) — 뜻은 payment-kakaopay 의 같은 이름과 같다. 목록 밖이거나 비면 return-url 그대로. origin 모양이 아닌 줄은 무시되어 경고(stage|prod 는 기동 실패), stage|prod 는 https 만. 프로젝트 모드는 프로젝트마다 자기 것(공통에서 물려받으면 기동 실패)
     base-url: ""                                    # 비우면 mode 가 정한 네이버페이 API 주소. 프록시나 가짜 서버를 가리킬 때만
     window-base-url: ""                              # 비우면 mode 가 정한 결제창 주소(구매자가 <이 주소>/payments/{결제 예약 ID} 로 간다). 프런트 e2e 의 가짜 창을 가리킬 때만
     reserve-path: /naverpay-partner/naverpay/payments/v2/reserve         # 결제 예약 경로
