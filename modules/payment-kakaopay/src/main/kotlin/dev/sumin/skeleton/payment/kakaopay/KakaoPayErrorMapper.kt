@@ -27,6 +27,8 @@ class KakaoPayErrorMapper(
     private val definitiveAllowed: Boolean = true,
     private val mapper: JsonMapper = JsonMapper.builder().addModule(kotlinModule()).build(),
     private val credentialAlert: PaymentProviderCredentialAlert = PaymentProviderCredentialAlert.NONE,
+    /** 확정으로 읽는 오류 코드 - 정기 결제(`subscription`)는 [SUBSCRIPTION_DEFINITIVE_CODES]. */
+    private val definitiveCodes: Set<String> = DEFINITIVE_CODES,
 ) : ExternalHttpErrorMapper {
     override fun map(context: ExternalHttpErrorContext): PaymentProviderException {
         val response = parse(context.upstreamBody)
@@ -50,7 +52,7 @@ class KakaoPayErrorMapper(
                 ),
                 upstreamStatus = context.upstreamStatus,
                 retryable = context.upstreamStatus == 429 || context.upstreamStatus >= 500,
-                definitive = definitiveAllowed && context.upstreamStatus in 400..499 && code in DEFINITIVE_CODES,
+                definitive = definitiveAllowed && context.upstreamStatus in 400..499 && code in definitiveCodes,
                 rawBody = null,
                 // 공통 오류(-400 · -401 · -403)의 `error_message` 는 요청 · 설정 문제를 말하는 글이라(예: 등록되지 않은 도메인) 로그 한 줄에만 가려서 싣는다. 그 밖(-780 · -781 …)은 사람 정보가 섞일 수 있어 싣지 않는다
                 reason = if (code in DEFINITIVE_CODES) PaymentFailures.safeReason(response?.errorMessage) else null,
@@ -81,5 +83,11 @@ class KakaoPayErrorMapper(
 
         /** 공통 오류 중 요청 자체를 받아들이지 않은 것(문서: https://developers.kakaopay.com/docs/getting-started/api-common-guide/error-code, 2026-10-16 읽음). */
         val DEFINITIVE_CODES: Set<String> = setOf("-400", "-401", "-403")
+
+        /**
+         * 정기 결제 승인(2회차부터)의 확정 거절: 공통 오류에 더해 **`-782`**(정기 결제 실패 - `extras.method_result_code` 에 결제 수단의 사유). 우리는 한 주문에 이 호출을 **한 번만** 보내므로
+         * 「앞선 요청이 적용됐을 수 있다」는 걱정이 없다 - 이 호출이 실패했다는 뜻이다(문서: https://developers.kakaopay.com/docs/payment/online/subscription, 2026-10-20 읽음). 그 밖의 오류 · 시간 초과는 모름.
+         */
+        val SUBSCRIPTION_DEFINITIVE_CODES: Set<String> = DEFINITIVE_CODES + "-782"
     }
 }

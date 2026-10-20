@@ -31,8 +31,9 @@ class KakaoPayKeyGuardTest {
         settleDelay: Duration = Duration.ofMinutes(2),
         baseUrl: String = KakaoPayProperties().baseUrl,
         origins: Set<String> = emptySet(),
+        subscriptionCid: String = "",
     ) = KakaoPayKeyGuard(
-        properties = KakaoPayProperties(enabled = true, secretKey = secretKey, cid = cid, cidSecret = cidSecret, returnUrl = returnUrl, baseUrl = baseUrl, allowTestKeysInProtectedEnv = allowTest, allowedReturnOrigins = origins),
+        properties = KakaoPayProperties(enabled = true, secretKey = secretKey, cid = cid, subscriptionCid = subscriptionCid, cidSecret = cidSecret, returnUrl = returnUrl, baseUrl = baseUrl, allowTestKeysInProtectedEnv = allowTest, allowedReturnOrigins = origins),
         ledgerPresent = { ledger },
         jobQueueWorkerRunning = { workerRunning },
         responseTimeout = { responseTimeout },
@@ -114,5 +115,13 @@ class KakaoPayKeyGuardTest {
         assertEquals(emptyList(), guard(cid = live, origins = setOf("https://app.example.test", "https://dev.example.test/")).problems(prod))
         assertEquals(emptyList(), guard(origins = setOf("http://localhost:5173")).problems(local))
         assertTrue(guard(origins = setOf("localhost:5173")).warnings(local).any { "allowed-return-origins" in it })
+    }
+
+    @Test
+    fun `a subscription merchant code of the other mode stops the start - it would register in one world and charge in the other`() {
+        val mixed = guard(cid = "TC0ONETIME", subscriptionCid = "A010101010")
+        assertTrue(mixed.problems(local).any { "same mode" in it }, mixed.problems(local).toString())
+        assertEquals(emptyList(), guard(cid = "TC0ONETIME", subscriptionCid = "TCSUBSCRIP").problems(local))
+        assertFalse(mixed.problems(local).any { "A010101010" in it })
     }
 }

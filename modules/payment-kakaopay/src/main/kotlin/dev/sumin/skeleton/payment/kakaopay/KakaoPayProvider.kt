@@ -5,6 +5,14 @@ import dev.sumin.skeleton.common.http.ExternalHttpClient
 import dev.sumin.skeleton.common.http.ExternalHttpException
 import dev.sumin.skeleton.common.http.ExternalHttpRequestSpec
 import dev.sumin.skeleton.common.http.ExternalHttpResponse
+import dev.sumin.skeleton.payment.BillingIssue
+import dev.sumin.skeleton.payment.BillingChargeRequest
+import dev.sumin.skeleton.payment.BillingPrepareRequest
+import dev.sumin.skeleton.payment.BillingSetup
+import dev.sumin.skeleton.payment.PaymentCard
+import dev.sumin.skeleton.payment.PreparedBilling
+import dev.sumin.skeleton.payment.RegisterWithChargeRequest
+import dev.sumin.skeleton.payment.RegisteredCharge
 import dev.sumin.skeleton.payment.CheckoutInstruction
 import dev.sumin.skeleton.payment.CheckoutOrder
 import dev.sumin.skeleton.payment.PaymentAmount
@@ -38,7 +46,8 @@ import org.slf4j.LoggerFactory
 
 /**
  * 카카오페이 단건 결제(온라인 결제 REST, 결제 준비 → 구매자 승인 → 서버 승인 → 취소 · 조회). 한 빈이 결제창 값(`ready`) · 승인 · 환불 · 조회를 모두 맡는다(라우터에 결제사가 하나로 보이게).
- * 정기 결제(SID) · 웹훅은 이 모듈에 없다 - 카카오페이 문서에서 결제 이벤트 웹훅을 찾지 못했다(`docs/modules/payment-kakaopay.md`). 결과는 승인 응답과 주문 조회로 맞춘다.
+ * 웹훅은 이 모듈에 없다 - 카카오페이 문서에서 결제 이벤트 웹훅을 찾지 못했다(`docs/modules/payment-kakaopay.md`). 결과는 승인 응답과 주문 조회로 맞춘다.
+ * 정기 결제(SID)는 [KakaoPayBillingProvider] 하위 클래스가 능력으로 드러낸다(정기 가맹점 코드 `subscription-cid` 가 있을 때만 그 클래스로 만든다 - 능력은 인터페이스로 선언되므로 빈 자체가 달라야 한다). 이 클래스의 `internal` 정기 걸음을 부른다.
  *
  * **결제창 흐름**: [checkout] 이 `ready` 를 서버에서 부르고(`partner_order_id` = 우리 주문 id) 받은 `tid` 를 [CheckoutInstruction.providerPaymentId] 로 돌려줘 장부가 주문에 박는다. 결제창 주소(PC · 모바일 · 앱)는 checkout 응답에 실려 프론트가 구매자를
  * 보낸다. 구매자가 카카오톡에서 인증을 마치면 카카오페이가 우리 `return-url` 로 `pg_token` 을 붙여 돌려보내고, 프론트가 그 토큰으로 승인을 부른다([confirm] = `approve`). **서버 승인 없이는 돈이 움직이지 않는다**(결제창 결제사의 계약).
@@ -46,7 +55,7 @@ import org.slf4j.LoggerFactory
  * **응답 본문은 어디에도 싣지 않는다**: 응답은 아래 data class 가 선언한 칸만 읽고(나머지 - 카드 정보 · 상품명 · 회원 id - 는 버려진다), 오류는 코드만 예외에 담으며([KakaoPayErrorMapper]),
  * 읽지 못한 응답은 본문을 인용하지 않는 [PaymentProviderException] 으로 바꾼다.
  */
-class KakaoPayProvider(
+open class KakaoPayProvider(
     private val httpClient: ExternalHttpClient,
     private val properties: KakaoPayProperties,
     /** 인증 계열 거절(키 폐기 · 오타)을 주인에게 알린다 - 없으면 알리지 않는다. */
@@ -63,6 +72,12 @@ class KakaoPayProvider(
 
     /** 조회용: 조회의 오류는 확정으로 표시하지 않는다(`definitive` 는 늘 false). */
     private val lookupErrorMapper = KakaoPayErrorMapper(providerId = providerId, definitiveAllowed = false, credentialAlert = credentialAlert)
+
+    /** 정기 결제 승인용: `-782`(정기 결제 실패)도 확정 거절이다. */
+    private val subscriptionErrorMapper = KakaoPayErrorMapper(providerId = providerId, credentialAlert = credentialAlert, definitiveCodes = KakaoPayErrorMapper.SUBSCRIPTION_DEFINITIVE_CODES)
+
+    /** 거래 번호로만 조회된다 - 주문 번호만 든 조회는 결제사를 모른다고 답한다([lookup]). */
+    override val answersByOrderId: Boolean = false
 
     init {
         require(providerId.isNotBlank()) { "KakaoPay providerId must not be blank" }
@@ -215,20 +230,20 @@ class KakaoPayProvider(
 
     /** 부분 환불도 같은 호출이다. 응답의 `status` 가 `PART_CANCEL_PAYMENT` 면 일부, `CANCEL_PAYMENT` 면 전부이고 남은 금액은 `cancel_available_amount.total` 이다. */
     override fun refund(request: PaymentRefundRequest): PaymentOperationResult =
-        cancelOnce(KakaoPayIdentifiers.tid(request.providerPaymentId), request.amount.amount, "payment.kakaopay.refund", PaymentOperationStatus.REFUNDED)
+        cancelOnce(KakaoPayIdentifiers.tid(request.providerPaymentId), request.amount.amount, "payment.kakaopay.refund", PaymentOperationStatus.REFUNDED, request.recurring)
 
-    private fun cancelOnce(tid: String, amount: Long, tag: String, done: PaymentOperationStatus): PaymentOperationResult =
+    private fun cancelOnce(tid: String, amount: Long, tag: String, done: PaymentOperationStatus, recurring: Boolean = false): PaymentOperationResult =
         guarded("cancel") { seen ->
             val response = requireNotNull(
                 httpClient.postResponse(
                     clientName = properties.clientName,
                     path = properties.cancelPath,
                     body = linkedMapOf<String, Any?>(
-                        "cid" to properties.cid.trim(),
+                        "cid" to cidFor(recurring),
                         "tid" to tid,
                         "cancel_amount" to amount,
                         "cancel_tax_free_amount" to 0,
-                    ).also { withCidSecret(it) },
+                    ).also { if (!recurring) withCidSecret(it) },
                     responseType = KakaoPayCancelResponse::class.java,
                 ) {
                     common(tag, errorMapper)
@@ -279,7 +294,7 @@ class KakaoPayProvider(
                 httpClient.postResponse(
                     clientName = properties.clientName,
                     path = properties.orderPath,
-                    body = linkedMapOf<String, Any?>("cid" to properties.cid.trim(), "tid" to tid).also { withCidSecret(it) },
+                    body = linkedMapOf<String, Any?>("cid" to cidFor(query.recurring), "tid" to tid).also { if (!query.recurring) withCidSecret(it) },
                     responseType = KakaoPayOrderResponse::class.java,
                 ) {
                     // 조회의 오류는 돈에 대해 아무것도 말하지 않는다 - 확정으로 읽히지 않게 한다
@@ -343,6 +358,9 @@ class KakaoPayProvider(
         errorMapper(mapper)
     }
 
+    /** 정기 결제 주문은 정기 가맹점 코드로 묻고 취소한다(없으면 단건 코드). */
+    private fun cidFor(recurring: Boolean): String = if (recurring) properties.subscriptionCid.trim().ifEmpty { properties.cid.trim() } else properties.cid.trim()
+
     private fun withCidSecret(body: MutableMap<String, Any?>) {
         properties.cidSecret.trim().takeIf { it.isNotEmpty() }?.let { body["cid_secret"] = it }
     }
@@ -374,6 +392,170 @@ class KakaoPayProvider(
             log.warn("KakaoPay {} answer could not be read (HTTP status {}, {})", operation, seen.status, reason)
             throw unreadable(seen.status)
         }
+    }
+
+    // --- 정기 결제 (SID) - [KakaoPayBillingProvider] 가 능력으로 드러낸다 ---
+
+    /** `ready`(정기 가맹점 코드) - 첫 주문 번호가 `partner_order_id` 라 미리 정해져 있다. 창 값은 `ready` 가 준 주소들, 번호(`reference`)는 `tid`. 돌아올 주소가 없거나 원화가 아니면 null. */
+    internal fun prepareSubscription(request: BillingPrepareRequest): PreparedBilling? {
+        val base = returnBase()?.let { ReturnOrigins.resolve(it, request.returnOrigin, properties.allowedReturnOrigins) } ?: return null
+        if (request.amount.normalizedCurrency != KRW) return null
+        val orderId = KakaoPayIdentifiers.orderId(request.firstOrderId)
+        val ready = guarded("ready") { seen ->
+            val response = requireNotNull(
+                httpClient.postResponse(
+                    clientName = properties.clientName,
+                    path = properties.readyPath,
+                    body = linkedMapOf<String, Any?>(
+                        "cid" to cidFor(true),
+                        "partner_order_id" to orderId,
+                        "partner_user_id" to KakaoPayIdentifiers.partnerUserId(request.customerKey, orderId),
+                        "item_name" to request.planName.take(ITEM_NAME_MAX),
+                        "quantity" to 1,
+                        "total_amount" to request.amount.amount,
+                        "tax_free_amount" to 0,
+                        "approval_url" to billingReturnUrl(base, request.subscriptionId, "success"),
+                        "cancel_url" to billingReturnUrl(base, request.subscriptionId, "cancel"),
+                        "fail_url" to billingReturnUrl(base, request.subscriptionId, "fail"),
+                    ),
+                    responseType = KakaoPayReadyResponse::class.java,
+                ) {
+                    common("payment.kakaopay.subscription-ready", errorMapper)
+                    timeout(properties.readyTimeout)
+                }.block(),
+            )
+            seen.status = response.statusCode
+            response.body.toReady()
+        }
+        val setup = BillingSetup(
+            provider = providerId,
+            kind = BILLING_KIND,
+            testMode = mode == PaymentMode.TEST,
+            clientKey = null, // 공개 키가 없다 - 결제창 주소가 그 몫이다
+            customerKey = request.customerKey,
+            attributes = listOfNotNull("pcUrl" to ready.pcUrl, "mobileUrl" to ready.mobileUrl, ready.appUrl?.let { "appUrl" to it }).toMap(),
+        )
+        return PreparedBilling(setup, ready.tid)
+    }
+
+    /** 돌아온 창의 `pg_token` 과 예약 때의 `tid` 의 모양 - 장부가 자리를 선점하기 전에 묻는다. */
+    internal fun acceptsSubscriptionRegistration(providerPayload: Map<String, Any?>, reference: String?): Boolean =
+        reference != null && KakaoPayIdentifiers.isTid(reference) && KakaoPayIdentifiers.isApprovalToken(providerPayload["pg_token"] as? String)
+
+    /** 1회차 결제 = 등록: `approve`(정기 가맹점 코드)의 응답이 SID 를 준다. SID 를 못 읽으면 [RegisteredCharge.issue] 가 null(돈은 움직였다). */
+    internal fun registerSubscription(request: RegisterWithChargeRequest): RegisteredCharge {
+        val tid = KakaoPayIdentifiers.tid(request.reference.orEmpty())
+        val orderId = KakaoPayIdentifiers.orderId(request.orderId)
+        val token = KakaoPayIdentifiers.approvalToken(request.providerPayload["pg_token"] as? String)
+        return guarded("approve") { seen ->
+            val response = requireNotNull(
+                httpClient.postResponse(
+                    clientName = properties.clientName,
+                    path = properties.approvePath,
+                    body = linkedMapOf<String, Any?>(
+                        "cid" to cidFor(true),
+                        "tid" to tid,
+                        "partner_order_id" to orderId,
+                        "partner_user_id" to KakaoPayIdentifiers.partnerUserId(request.customerKey, orderId),
+                        "pg_token" to token,
+                        "total_amount" to request.amount.amount,
+                    ),
+                    responseType = KakaoPayApproveResponse::class.java,
+                ) {
+                    common("payment.kakaopay.subscription-register", errorMapper)
+                }.block(),
+            )
+            seen.status = response.statusCode
+            val body = response.body
+            if (body.tid != tid) throw UnreadableAnswer("tid")
+            if (body.partnerOrderId != orderId) throw UnreadableAnswer("partner_order_id")
+            val result = confirmedResult(body, tid, orderId, response.trace.traceId)
+            val sid = body.sid?.takeIf(SAFE_SID::matches)
+            RegisteredCharge(sid?.let { BillingIssue(it, PaymentCard(body.cardInfo?.issuerCode?.takeIf(SAFE_ISSUER::matches), null)) }, result)
+        }
+    }
+
+    /** 2회차부터: `subscription`(SID). 응답의 `tid` 가 이 주문의 결제 키다. `-782` 는 확정 거절, 그 밖은 모름(조회가 불가하니 사람이 본다). */
+    internal fun chargeSubscription(request: BillingChargeRequest): PaymentOperationResult {
+        val orderId = KakaoPayIdentifiers.orderId(request.orderId)
+        val sid = request.token.takeIf(SAFE_SID::matches) ?: throw KakaoPayIdentifierRejectedException()
+        return guarded("subscription") { seen ->
+            val response = requireNotNull(
+                httpClient.postResponse(
+                    clientName = properties.clientName,
+                    path = properties.subscriptionPath,
+                    body = linkedMapOf<String, Any?>(
+                        "cid" to cidFor(true),
+                        "sid" to sid,
+                        "partner_order_id" to orderId,
+                        "partner_user_id" to KakaoPayIdentifiers.partnerUserId(request.customerKey, orderId),
+                        "item_name" to request.orderName.take(ITEM_NAME_MAX),
+                        "quantity" to 1,
+                        "total_amount" to request.amount.amount,
+                        "tax_free_amount" to 0,
+                    ),
+                    responseType = KakaoPayApproveResponse::class.java,
+                ) {
+                    common("payment.kakaopay.subscription-charge", subscriptionErrorMapper)
+                }.block(),
+            )
+            seen.status = response.statusCode
+            val body = response.body
+            if (body.partnerOrderId != orderId) throw UnreadableAnswer("partner_order_id")
+            val tid = body.tid?.takeIf(KakaoPayIdentifiers::isTid).need("tid")
+            confirmedResult(body, tid, orderId, response.trace.traceId)
+        }
+    }
+
+    /** SID 를 비활성한다. 실패하면 상태를 물어 이미 비활성이면 정상(멱등)으로 읽고, 아니면 처음 오류를 던진다. */
+    internal fun revokeSubscription(token: String) {
+        val sid = token.takeIf(SAFE_SID::matches) ?: throw KakaoPayIdentifierRejectedException()
+        try {
+            httpClient.postResponse(
+                clientName = properties.clientName,
+                path = properties.inactivePath,
+                body = linkedMapOf<String, Any?>("cid" to cidFor(true), "sid" to sid),
+                responseType = KakaoPaySidResponse::class.java,
+            ) { common("payment.kakaopay.subscription-inactive", errorMapper) }.block()
+        } catch (e: ExternalHttpException) {
+            if (!sidInactive(sid)) throw e
+        }
+    }
+
+    private fun sidInactive(sid: String): Boolean =
+        try {
+            val body = httpClient.postResponse(
+                clientName = properties.clientName,
+                path = properties.statusPath,
+                body = linkedMapOf<String, Any?>("cid" to cidFor(true), "sid" to sid),
+                responseType = KakaoPaySidResponse::class.java,
+            ) { common("payment.kakaopay.subscription-status", lookupErrorMapper) }.block()?.body
+            body != null && (body.status == "INACTIVE" || body.available == false)
+        } catch (e: Exception) {
+            false
+        }
+
+    private fun confirmedResult(body: KakaoPayApproveResponse, tid: String, orderId: String, traceId: String?): PaymentOperationResult =
+        PaymentOperationResult(
+            provider = providerId,
+            providerPaymentId = tid,
+            status = PaymentOperationStatus.CONFIRMED,
+            amount = PaymentAmount(body.amount?.total.need("amount.total"), KRW),
+            trace = ProviderTrace(
+                provider = providerId,
+                providerRequestId = traceId?.takeIf(SAFE_TRACE::matches),
+                providerOperationId = body.aid?.takeIf(SAFE_ID::matches),
+                rawStatus = "SUCCESS_PAYMENT",
+                metadata = mapOf("orderId" to orderId),
+            ),
+            attributes = mapOf("method" to METHOD, "easyPayBrand" to BRAND),
+            paidAt = body.approvedAt.toInstantOrNull(),
+        )
+
+    /** 정기 등록의 돌아올 주소 - 단건과 같은 `return-url` 에 `kind=KAKAOPAY_BILLING_REDIRECT&provider=<id>&sub=<구독 id>&result=…` 를 붙인다. */
+    private fun billingReturnUrl(base: String, subscriptionId: String, result: String): String {
+        val separator = if ('?' in base) '&' else '?'
+        return "$base${separator}kind=$BILLING_KIND&provider=${properties.providerId.urlEncoded()}&sub=${subscriptionId.urlEncoded()}&result=$result"
     }
 
     private fun unreadable(upstreamStatus: Int): PaymentProviderException =
@@ -419,6 +601,7 @@ class KakaoPayProvider(
         val log = LoggerFactory.getLogger(KakaoPayProvider::class.java)
 
         const val CHECKOUT_KIND = "KAKAOPAY_REDIRECT"
+        const val BILLING_KIND = "KAKAOPAY_BILLING_REDIRECT"
         const val METHOD = "EASY_PAY"
 
         /** 이 결제사가 곧 브랜드다(토스 경유와 달리) - 장부 `easy_pay_brand`. */
@@ -431,6 +614,8 @@ class KakaoPayProvider(
         val CANCELLED_STATUSES = setOf("PART_CANCEL_PAYMENT", "CANCEL_PAYMENT")
 
         val SAFE_ID = Regex("[A-Za-z0-9_-]{1,64}")
+        val SAFE_SID = Regex("[A-Za-z0-9_-]{1,100}")
+        val SAFE_ISSUER = Regex("[A-Za-z0-9_]{1,40}")
         val SAFE_TRACE = Regex("[A-Za-z0-9_.:-]{1,100}")
         val SAFE_STATUS = Regex("[A-Z_]{1,40}")
     }
@@ -451,10 +636,21 @@ data class KakaoPayAmounts(val total: Long? = null)
 data class KakaoPayApproveResponse(
     val aid: String? = null,
     val tid: String? = null,
+    /** 정기 결제 가맹점 코드로 1회차를 승인하면 오는 빌링키(SID) - 비밀이라 어디에도 찍지 않는다([toString] 은 가린다). */
+    val sid: String? = null,
+    @JsonProperty("card_info") val cardInfo: KakaoPayCardInfo? = null,
     @JsonProperty("partner_order_id") val partnerOrderId: String? = null,
     val amount: KakaoPayAmounts? = null,
     @JsonProperty("approved_at") val approvedAt: String? = null,
-)
+) {
+    override fun toString(): String = "KakaoPayApproveResponse(tid=$tid, sid=${if (sid == null) "null" else "<redacted>"})"
+}
+
+/** 카드 정보 중 발급사 코드 한 칸만 읽는다(끝 네 글자 · bin 은 없다 - 읽지 않는다). */
+data class KakaoPayCardInfo(@JsonProperty("kakaopay_issuer_corp_code") val issuerCode: String? = null)
+
+/** `inactive` · `status` 응답에서 읽는 칸. */
+data class KakaoPaySidResponse(val available: Boolean? = null, val status: String? = null)
 
 /** `cancel` 응답에서 읽는 칸. */
 data class KakaoPayCancelResponse(

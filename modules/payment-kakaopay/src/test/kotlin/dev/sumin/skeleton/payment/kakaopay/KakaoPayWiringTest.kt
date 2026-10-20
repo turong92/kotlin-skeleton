@@ -2,6 +2,7 @@ package dev.sumin.skeleton.payment.kakaopay
 
 import dev.sumin.skeleton.common.http.OutboundHttpAutoConfiguration
 import dev.sumin.skeleton.payment.PaymentAutoConfiguration
+import dev.sumin.skeleton.payment.PaymentBillingGateway
 import dev.sumin.skeleton.payment.PaymentCheckoutGateway
 import dev.sumin.skeleton.payment.PaymentConfirmGateway
 import dev.sumin.skeleton.payment.PaymentLookupGateway
@@ -60,6 +61,20 @@ class KakaoPayWiringTest {
             assertThat(router.gateway("scripted", PaymentConfirmGateway::class)).isSameAs(scripted)
             assertThat(router.providerIds(PaymentCheckoutGateway::class)).containsExactly("scripted")
             assertThat(context.getBeansOfType(KakaoPayProvider::class.java)).isEmpty()
+        }
+    }
+
+    @Test
+    fun `the subscription capability appears only with a subscription merchant code, on the same single bean`() {
+        val base = arrayOf("skeleton.payment-kakaopay.enabled=true", "skeleton.payment-kakaopay.secret-key=k", "skeleton.payment-kakaopay.cid=TC0ONETIME", "skeleton.payment-kakaopay.return-url=https://x.test/r")
+        runner.withPropertyValues(*base).run { context ->
+            assertThat(context.getBean(PaymentProviderRouter::class.java).providerIds(PaymentBillingGateway::class)).doesNotContain("kakaopay")
+        }
+        runner.withPropertyValues(*base, "skeleton.payment-kakaopay.subscription-cid=TCSUBSCRIP").run { context ->
+            assertThat(context).hasNotFailed()
+            val router = context.getBean(PaymentProviderRouter::class.java)
+            assertThat(router.gateway("kakaopay", PaymentBillingGateway::class)).isSameAs(context.getBean(KakaoPayProvider::class.java))
+            assertThat(router.gateway("kakaopay", PaymentConfirmGateway::class)).isSameAs(router.gateway("kakaopay", PaymentBillingGateway::class))
         }
     }
 }

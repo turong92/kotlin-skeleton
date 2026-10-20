@@ -35,6 +35,12 @@ interface PaymentBillingGateway : PaymentGateway {
      */
     fun issue(customerKey: String, providerPayload: Map<String, Any?>): BillingIssue
 
+    /**
+     * 돌아온 창이 준 값([providerPayload])과 예약 번호가 결제사가 받을 **모양**인가 - `activate` 가 자리를 선점하기 **전에** 묻는다(문자열 검사만, 외부 호출 없음). false 면 선점 없이 400 이다 -
+     * 선점 뒤에 모양이 틀려 거절하면 「모름」으로 읽혀 구독이 자리를 쥔 채 굳는다. 기본은 늘 true(모양을 따로 아는 결제사만 겹쳐 쓴다).
+     */
+    fun acceptsRegistration(providerPayload: Map<String, Any?>, reference: String?): Boolean = true
+
     /** [prepareBilling] 이 준 [PreparedBilling.reference] 를 함께 받는 발급 - 돌아온 값이 그 예약의 것인지 결제사가 확인한다(네이버: 다르면 결제사를 부르지 않고 던진다). 토스는 무시한다. */
     fun issue(customerKey: String, providerPayload: Map<String, Any?>, reference: String?): BillingIssue = issue(customerKey, providerPayload)
 

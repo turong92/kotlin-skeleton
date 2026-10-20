@@ -1610,7 +1610,7 @@
       "module": "payment-kakaopay",
       "path": "modules/payment-kakaopay",
       "status": "experimental",
-      "summary": "카카오페이 직접 연동 단건 결제 — 토스 계약 없이 카카오페이 계약만 있어도 쓰는 별도 결제사(기본 꺼짐). 결제 준비(ready) → 카카오톡 인증 → 서버 승인(approve) → 취소 · 환불 · 조회. 정기 결제 · 웹훅은 없다.",
+      "summary": "카카오페이 직접 연동 단건 결제 — 토스 계약 없이 카카오페이 계약만 있어도 쓰는 별도 결제사(기본 꺼짐). 결제 준비(ready) → 카카오톡 인증 → 서버 승인(approve) → 취소 · 환불 · 조회. 정기 결제(정기 가맹점 코드를 설정하면 — 1회차 결제가 곧 등록, 2회차부터 SID 로 갱신)는 있고 웹훅은 없다.",
       "starter": false,
       "newProjectFlag": "--modules payment-kakaopay",
       "autoIncludes": ["crypto", "payment"],

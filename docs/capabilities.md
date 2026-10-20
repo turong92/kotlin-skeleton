@@ -108,7 +108,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `notification-websocket` | 알림을 STOMP over WebSocket(/ws/notifications)으로 전달한다 — 인증 · trace 인터셉터 · 하트비트를 갖춘 인프로세스 브로커. | `--modules notification-websocket` | 웹소켓, 실시간 알림, 양방향 통신, STOMP / websocket, stomp, realtime notification, two-way | `@skeleton/realtime` |
 | `payment` | 결제 계약 + 장부 HTTP — PaymentService · PaymentProviderRouter(제공자는 payment-toss \| payment-kakaopay \| payment-naverpay \| payment-stripe \| payment-paddle). 장부(payment-jdbc)가 있으면 사용자 경로(/api/v1/payments: 설정 · 주문 만들기(PaymentCatalog 빈이 있을 때) · 승인 · 환불 요청), 꺼 둔 운영자 경로(/api/v1/admin/payments), 결제사가 부르는 웹훅 수신 경로, 탈퇴 고리 · 내보내기 고리를 연다. 구독(skeleton.payment.subscription.enabled — 꺼짐이 기본): 카드 등록 + 첫 결제, 기간 끝 갱신 작업, 해지 예약 (/api/v1/payments/subscriptions, 빌링키는 crypto 로 암호화). | `--modules payment` — `payment-toss` \| `payment-kakaopay` \| `payment-naverpay` \| `payment-stripe` \| `payment-paddle` 중 하나 이상 고른다 | 결제, 결제 승인, 환불, 결제 취소, 유료 / payment, checkout, refund, payment confirm, paid | `@skeleton/payment` |
 | `payment-jdbc` | 결제 장부 저장소 — PostgreSQL · MySQL 로 payment 의 저장 포트(PaymentLedgerStore)와 작업 포트(PaymentTasks, job-queue-jdbc 에 싣는다)를 구현한다(payment_* 표 4개 · 주문 줄 락 · 유니크 · check 제약). | `--modules payment-jdbc` | 결제 장부, 주문 장부, 결제 저장소, 결제 DB / payment ledger, payment storage, payment repository, order ledger | `@skeleton/payment` |
-| `payment-kakaopay` | 카카오페이 직접 연동 단건 결제 — 토스 계약 없이 카카오페이 계약만 있어도 쓰는 별도 결제사(기본 꺼짐). 결제 준비(ready) → 카카오톡 인증 → 서버 승인(approve) → 취소 · 환불 · 조회. 정기 결제 · 웹훅은 없다. | `--modules payment-kakaopay` | 카카오페이, 카카오페이 결제, 간편 결제, 토스 없이 결제 / kakaopay, kakao pay, korean easy pay, payment without toss | `@skeleton/payment` |
+| `payment-kakaopay` | 카카오페이 직접 연동 단건 결제 — 토스 계약 없이 카카오페이 계약만 있어도 쓰는 별도 결제사(기본 꺼짐). 결제 준비(ready) → 카카오톡 인증 → 서버 승인(approve) → 취소 · 환불 · 조회. 정기 결제(정기 가맹점 코드를 설정하면 — 1회차 결제가 곧 등록, 2회차부터 SID 로 갱신)는 있고 웹훅은 없다. | `--modules payment-kakaopay` | 카카오페이, 카카오페이 결제, 간편 결제, 토스 없이 결제 / kakaopay, kakao pay, korean easy pay, payment without toss | `@skeleton/payment` |
 | `payment-naverpay` | 네이버페이 직접 연동 단건 결제 — 토스 계약 없이 네이버페이 계약만 있어도 쓰는 별도 결제사(기본 꺼짐). 서버 결제 예약(reserve) → 구매자가 예약한 결제창 → 서버 승인(apply) → 취소 · 환불 · 결제 내역 조회. 정기 결제(자동결제) · 웹훅은 없다. | `--modules payment-naverpay` | 네이버페이, 네이버페이 결제, 간편 결제, 토스 없이 결제 / naverpay, naver pay, korean easy pay, payment without toss | `@skeleton/payment` |
 | `payment-paddle` | Paddle 해외 결제(판매 대행) — 서명된 웹훅으로 결제 · 구독 상태를 장부에 옮기고, 결제 · 갱신은 Paddle 이 한다. 구독 해지는 Paddle API. | `--modules payment-paddle` | 패들, 해외 결제, 해외 구독, 다통화 / paddle, merchant of record, international subscription, multi-currency | `@skeleton/payment` |
 | `payment-stripe` | Stripe 결제 제공자 — 결제 승인 · 취소를 payment 의 제공자로 구현한다. | `--modules payment-stripe` | 스트라이프 결제, 해외 결제, 카드 결제 / stripe, stripe payments, card payment, international payment | `@skeleton/payment` |
@@ -764,7 +764,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 다른 DB(JPA · jOOQ)로 저장하려면 payment 의 저장 포트(PaymentLedgerStore · PaymentTasks)를 앱이 구현한다
 - 키워드: 결제 장부, 주문 장부, 결제 저장소, 결제 DB / payment ledger, payment storage, payment repository, order ledger
 
-### `payment-kakaopay` — 카카오페이 직접 연동 단건 결제 — 토스 계약 없이 카카오페이 계약만 있어도 쓰는 별도 결제사(기본 꺼짐). 결제 준비(ready) → 카카오톡 인증 → 서버 승인(approve) → 취소 · 환불 · 조회. 정기 결제 · 웹훅은 없다.
+### `payment-kakaopay` — 카카오페이 직접 연동 단건 결제 — 토스 계약 없이 카카오페이 계약만 있어도 쓰는 별도 결제사(기본 꺼짐). 결제 준비(ready) → 카카오톡 인증 → 서버 승인(approve) → 취소 · 환불 · 조회. 정기 결제(정기 가맹점 코드를 설정하면 — 1회차 결제가 곧 등록, 2회차부터 SID 로 갱신)는 있고 웹훅은 없다.
 
 - 종류 · 상태: module · experimental — 위치 `modules/payment-kakaopay`
 - 켜는 법: `--modules payment-kakaopay`

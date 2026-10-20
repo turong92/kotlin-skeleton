@@ -14,11 +14,19 @@ data class KakaoPayProperties(
     val cid: String = "",
     /** 가맹점 코드 인증키(선택, 24자). 발급받았을 때만. 비밀이라 [toString] 에 찍지 않는다. */
     val cidSecret: String = "",
+    /**
+     * 정기 결제 가맹점 코드(테스트 `TCSUBSCRIP`). **비면 정기 결제는 없다**(구독 능력이 서지 않는다). 모드는 [cid] 와 같아야 한다(다르면 기동 실패). 이 코드에는 `cid_secret` 을 보내지 않는다.
+     */
+    val subscriptionCid: String = "",
     val baseUrl: String = DEFAULT_BASE_URL,
     val readyPath: String = "/online/v1/payment/ready",
     val approvePath: String = "/online/v1/payment/approve",
     val cancelPath: String = "/online/v1/payment/cancel",
     val orderPath: String = "/online/v1/payment/order",
+    /** 정기 결제(2회차부터 SID 로 승인) · SID 비활성 · SID 상태 조회. */
+    val subscriptionPath: String = "/online/v1/payment/subscription",
+    val inactivePath: String = "/online/v1/payment/manage/subscription/inactive",
+    val statusPath: String = "/online/v1/payment/manage/subscription/status",
     val supportedCurrencies: Set<String> = setOf("KRW"),
     val supportedCountries: Set<String> = setOf("KR"),
     /**
@@ -39,7 +47,7 @@ data class KakaoPayProperties(
 ) {
     /** 비밀 둘을 찍지 않는다(`TossPaymentProperties` 와 같은 방식) - 설정을 로그 · 예외 메시지에 찍어도 새지 않게. 주소는 값 대신 기본값인지만 말한다. */
     override fun toString(): String =
-        "KakaoPayProperties(enabled=$enabled, providerId=$providerId, clientName=$clientName, secretKey=${redacted(secretKey)}, cid=$cid, cidSecret=${redacted(cidSecret)}, " +
+        "KakaoPayProperties(enabled=$enabled, providerId=$providerId, clientName=$clientName, secretKey=${redacted(secretKey)}, cid=$cid, subscriptionCid=${subscriptionCid.ifBlank { "<unset>" }}, cidSecret=${redacted(cidSecret)}, " +
             "baseUrl=${if (baseUrl == DEFAULT_BASE_URL) "<default>" else "<set>"}, supportedCurrencies=$supportedCurrencies, supportedCountries=$supportedCountries, " +
             "returnUrl=${if (returnUrl.isBlank()) "<unset>" else "<set>"}, allowedReturnOrigins=${allowedReturnOrigins.size}, readyTimeout=$readyTimeout, lookupTimeout=$lookupTimeout, allowTestKeysInProtectedEnv=$allowTestKeysInProtectedEnv)"
 

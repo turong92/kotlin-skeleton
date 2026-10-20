@@ -145,6 +145,9 @@ class PaymentSubscriptions(
         val gateway = router.gateway(subscription.provider, PaymentBillingGateway::class)
         if (gateway.mode != subscription.providerMode) throw PaymentModeMismatchException()
         val customerKey = checkNotNull(subscription.customerKey)
+        if (!gateway.acceptsRegistration(providerPayload, subscription.firstTransactionId)) {
+            throw dev.sumin.skeleton.common.FieldValidationException("providerPayload", "Pattern", "providerPayload is not in the form the payment provider accepts")
+        }
         if (gateway.registrationCharges) return activateByFirstCharge(accountId, subscription, gateway, customerKey, providerPayload)
 
         val issued = try {

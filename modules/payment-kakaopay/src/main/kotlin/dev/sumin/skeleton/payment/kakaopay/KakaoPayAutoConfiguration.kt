@@ -37,7 +37,7 @@ class KakaoPayAutoConfiguration {
         properties: KakaoPayProperties,
         credentialAlert: ObjectProvider<PaymentProviderCredentialAlert>,
     ): KakaoPayProvider =
-        KakaoPayProvider(httpClient = httpClient, properties = properties, credentialAlert = credentialAlert.getIfAvailable { PaymentProviderCredentialAlert.NONE })
+        newKakaoPayProvider(httpClient, properties, credentialAlert.getIfAvailable { PaymentProviderCredentialAlert.NONE })
 
     /**
      * 프로젝트 모드: 프로젝트마다 자기 `payment-kakaopay.*` (공통 위에 덮어)로 카카오페이 게이트웨이(= 그 프로젝트의 시크릿 키 · 가맹점 코드를 든 클라이언트)를 만든다.
@@ -48,14 +48,14 @@ class KakaoPayAutoConfiguration {
     @ConditionalOnMissingBean(name = ["kakaoPayGatewaySource"])
     @Conditional(ProjectsConfigured::class)
     fun kakaoPayGatewaySource(httpClient: ExternalHttpClient, credentialAlert: ObjectProvider<PaymentProviderCredentialAlert>): PaymentGatewaySource =
-        PaymentGatewaySource.of(listOf("payment-kakaopay.secret-key", "payment-kakaopay.cid-secret"), listOf("payment-kakaopay.cid", "payment-kakaopay.return-url", "payment-kakaopay.allowed-return-origins")) { settings ->
+        PaymentGatewaySource.of(listOf("payment-kakaopay.secret-key", "payment-kakaopay.cid-secret"), listOf("payment-kakaopay.cid", "payment-kakaopay.subscription-cid", "payment-kakaopay.return-url", "payment-kakaopay.allowed-return-origins")) { settings ->
             val properties = settings.bind("skeleton.payment-kakaopay", KakaoPayProperties::class.java)
             if (!properties.enabled || properties.secretKey.isBlank() || properties.cid.isBlank()) {
                 null
             } else {
                 // 키 거절 경보는 결제사 응답 스레드(프로젝트 문맥 없음)에서 불린다 - 만들 때 프로젝트를 잡아 두고 그 문맥으로 부른다
                 val alert = credentialAlert.getIfAvailable { PaymentProviderCredentialAlert.NONE }
-                KakaoPayProvider(httpClient = httpClient, properties = properties, credentialAlert = PaymentProviderCredentialAlert { id -> settings.inProject { alert.rejected(id) } })
+                newKakaoPayProvider(httpClient, properties, PaymentProviderCredentialAlert { id -> settings.inProject { alert.rejected(id) } })
             }
         }
 
