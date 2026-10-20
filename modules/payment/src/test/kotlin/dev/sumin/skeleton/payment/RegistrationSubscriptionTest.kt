@@ -62,6 +62,7 @@ class RegistrationSubscriptionTest {
         assertEquals("sid_1", ReversibleTestEncryptor.decrypt(stored))
         listOf(active.toString(), order.toString(), call.toString()).forEach { assertFalse(it.contains("sid_1"), it) }
         assertEquals("SHINHAN", sub(sub.id).cardIssuer)
+        assertNull(order.reviewReason, "a readable billing key is nothing to flag")
     }
 
     @Test
@@ -125,6 +126,8 @@ class RegistrationSubscriptionTest {
         val active = sub(sub.id)
         assertEquals(SubscriptionStatus.ACTIVE, active.status)
         assertNull(active.billingToken, "the lookup does not carry the token")
+        // 조회가 PAID 로 만들며 구독을 켠 그 자리에서 표시된다 - 갱신일까지 조용하지 않다
+        assertEquals(PaymentReviewReason.SUBSCRIPTION_TOKEN_MISSING, kit.order(PaymentOrderIds.initialOrderId(sub.id)).reviewReason)
         assertEquals(1, kit.gateway.registerCalls.size, "never sent again")
         assertTrue(kit.gateway.lookupCalls.all { it.recurring }, "a subscription order is asked as a recurring payment")
 
@@ -132,8 +135,7 @@ class RegistrationSubscriptionTest {
         kit.renew.handle(PaymentTaskRun(PaymentTaskTypes.SUBSCRIPTION_RENEW, sub.id, 1, 3))
         assertEquals(0, kit.gateway.chargeCalls.size)
         assertEquals(SubscriptionEndReason.PAYMENT_FAILED, sub(sub.id).endReason)
-        // 조용히 끝나지 않는다 - 갱신일에 첫 주문이 운영자에게 표시된다
-        assertEquals(PaymentReviewReason.SUBSCRIPTION_TOKEN_MISSING, kit.order(PaymentOrderIds.initialOrderId(sub.id)).reviewReason)
+
     }
 
     @Test

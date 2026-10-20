@@ -90,7 +90,6 @@ class SubscriptionRenewTaskHandler(
                     if (subscription.billingToken == null) {
                         // 첫 결제는 받았는데 결제사가 빌링키(SID)를 알려 주지 못했다(응답이 유실돼 조회가 닫았다) - 과금할 수단이 없다. 낸 기간은 썼고 새 과금 없이 끝낸다
                         log.warn("a subscription without a billing key reached its renewal; it ends without a charge subscription={}", subscription.id)
-                        charges.flagMissingToken(tx, subscription)
                         lifecycle.end(tx, subscription, SubscriptionEndReason.PAYMENT_FAILED)
                         return@inTransaction Step.Done
                     }

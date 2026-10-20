@@ -128,6 +128,8 @@ class SubscriptionLifecycle(
                     it.copy(anchorAt = anchor, periodSeq = 1, currentPeriodStart = anchor, currentPeriodEnd = period.after(anchor, 1), attempt = 1)
                 }
                 scheduleRenewal(active)
+                // 첫 결제를 받았는데 빌링키가 없다(결제사가 SID 를 못 알려 줬거나 응답이 유실돼 조회가 닫았다) - 갱신일에 조용히 끝나지 않게 지금 운영자에게 표시한다. 주문 락이 이미 잡힌 자리다
+                if (active.billingToken == null) flags.flag(tx, order, PaymentReviewReason.SUBSCRIPTION_TOKEN_MISSING, ConvergeContext(order.providerMode, ConvergeSource.RECONCILE))
             }
             order.kind == PaymentOrderKind.SUBSCRIPTION_RENEWAL && subscription.status != SubscriptionStatus.PENDING -> {
                 val anchor = subscription.anchorAt ?: return stale(tx, order)
