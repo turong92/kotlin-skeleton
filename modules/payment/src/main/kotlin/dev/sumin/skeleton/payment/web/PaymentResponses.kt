@@ -170,6 +170,8 @@ data class PaymentConfigResponse(
     val cancelPolicy: CancelPolicyResponse? = null,
     /** 개발용 나라 덮어쓰기가 켜져 있다(로컬만) - 켜져 있으면 요청의 `X-Dev-Country` 가 `country` 를 정한다. */
     val devCountrySwitch: Boolean = false,
+    /** 구독을 시작할 때 구매자가 고를 수 있는 결제사 - [choices] 가운데 **빌링 능력**을 가진 것(카드 등록 · 간편결제 정기). 둘 이상일 때만 화면이 고르기를 그린다(`POST /subscriptions` 의 `provider`). 칸은 늘 나간다. */
+    val subscriptionChoices: List<String> = emptyList(),
     /** 구매자가 고를 수 있는 결제사 - 이 나라를 자기 `supportedCountries` 에 적은 열린 결제사. 둘 이상일 때만 화면이 고르기를 그린다(주문을 만들 때 `provider` 로 보낸다). 하나 이하면 고르기가 없다. */
     val choices: List<String> = emptyList(),   // 칸은 늘 나간다(비어도 `[]`) - pricePreviews 와 같다
 )
@@ -375,6 +377,8 @@ data class SubscriptionResponse(
     val provider: String,
     /** 결제사가 갱신을 직접 하는 구독이다 - 플랜 변경 · 중도 해지(환불)는 열리지 않고 해지는 기간 끝에만 된다. */
     val providerManaged: Boolean,
+    /** 간편결제 정기 구독의 브랜드(`KAKAOPAY` · `NAVERPAY`) - 카드 끝 네 글자가 없는 구독의 「내 구독」 표시에 쓴다. 그 밖은 null. */
+    val easyPayBrand: String? = null,
 ) {
     companion object {
         fun of(subscription: dev.sumin.skeleton.payment.PaymentSubscription, planName: String?) = SubscriptionResponse(
@@ -395,6 +399,11 @@ data class SubscriptionResponse(
             country = subscription.country,
             provider = subscription.provider,
             providerManaged = subscription.isProviderManaged,
+            easyPayBrand = when (subscription.provider) {
+                "kakaopay" -> "KAKAOPAY"
+                "naverpay" -> "NAVERPAY"
+                else -> null
+            },
         )
     }
 }
@@ -439,7 +448,7 @@ data class CancelNowResponse(val subscription: SubscriptionResponse, val refund:
 }
 
 /** 카드 등록 창을 여는 값. 프론트가 [kind] 로 갈라 연다. */
-data class BillingAuthResponse(val provider: String, val kind: String, val testMode: Boolean, val clientKey: String, val customerKey: String, val attributes: Map<String, String>) {
+data class BillingAuthResponse(val provider: String, val kind: String, val testMode: Boolean, val clientKey: String?, val customerKey: String, val attributes: Map<String, String>) {
     companion object {
         fun of(setup: dev.sumin.skeleton.payment.BillingSetup) = BillingAuthResponse(setup.provider, setup.kind, setup.testMode, setup.clientKey, setup.customerKey, setup.attributes)
     }

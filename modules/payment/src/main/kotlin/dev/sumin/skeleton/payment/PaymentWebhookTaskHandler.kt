@@ -56,7 +56,7 @@ class PaymentWebhookTaskHandler(
             throw PaymentTaskPermanentException("Webhook event $id belongs to an order created under another payment mode")
         }
         val snapshot = try {
-            gateway.lookup(PaymentLookupQuery(providerPaymentId = order.providerPaymentId, orderId = if (order.providerPaymentId == null) order.id else null))
+            gateway.lookup(order.lookupQuery())
         } catch (e: Exception) {
             log.warn("payment lookup failed for webhook event={} attempt={}/{} exception={}", id, run.attempt, run.maxAttempts, e.javaClass.simpleName)
             throw retry(id, WebhookCodes.LOOKUP_UNAVAILABLE, "Payment lookup is unavailable for webhook event $id")

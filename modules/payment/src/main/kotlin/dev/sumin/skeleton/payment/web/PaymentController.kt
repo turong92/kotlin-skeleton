@@ -74,7 +74,8 @@ class PaymentController(
                 route.provider,
                 CancelPolicyResponse(route.cancelPolicy.key, route.cancelPolicy.penaltyPercent, route.cancelPolicy.withdrawalDays),
                 route.devSwitch,
-                routing.choices(route),
+                choices = routing.choices(route),
+                subscriptionChoices = routing.subscriptionChoices(route),
             ),
         )
     }

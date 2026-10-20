@@ -31,6 +31,8 @@ class PaymentCountryRouting(
     private val openable: () -> List<String>,
     /** 이 나라를 **자기 `supportedCountries` 에 적은** 결제사 id - 같은 나라의 결제사가 둘 이상 열려 있을 때 구매자가 고를 수 있는 후보의 출처. 기본은 없음(고르기 없음). */
     private val countryProviders: (String) -> List<String> = { emptyList() },
+    /** 빌링(카드 등록 · 간편결제 정기) 능력을 가진 결제사 id - [subscriptionChoices] 의 거름. 기본은 없음. */
+    private val billingProviders: () -> List<String> = { emptyList() },
 ) {
     constructor(properties: PaymentProperties, clientIps: ClientIps, openable: () -> List<String>) : this({ properties }, clientIps, openable)
 
@@ -60,6 +62,15 @@ class PaymentCountryRouting(
     fun chosen(route: RequestRoute, requested: String?): String? {
         val wanted = requested?.trim()?.lowercase()?.takeIf { it.isNotEmpty() } ?: return route.provider
         return if (wanted in choices(route)) wanted else route.provider
+    }
+
+    /** 구독을 시작할 때 구매자가 고를 수 있는 결제사 - [choices] 가운데 빌링 능력을 가진 것. */
+    fun subscriptionChoices(route: RequestRoute): List<String> = choices(route).filter { it in billingProviders() }
+
+    /** 화면이 보낸 `provider` 를 [subscriptionChoices] 안에 있을 때만 받는다. 아니면 서버가 정한 값. */
+    fun chosenForSubscription(route: RequestRoute, requested: String?): String? {
+        val wanted = requested?.trim()?.lowercase()?.takeIf { it.isNotEmpty() } ?: return route.provider
+        return if (wanted in subscriptionChoices(route)) wanted else route.provider
     }
 
     /** 개발용 스위치가 켜졌을 때만 읽는 요청별 나라 - 두 글자 영문이 아니면 없는 것으로 본다. */

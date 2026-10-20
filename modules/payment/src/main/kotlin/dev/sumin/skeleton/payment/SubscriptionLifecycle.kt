@@ -63,16 +63,20 @@ class SubscriptionLifecycle(
         amount: PaymentAmount = subscription.amount,
         itemRef: String = subscription.planCode,
         dedupeKey: String = currentKey(subscription),
+        /** 미리 정해진 주문 번호(첫 결제 - [PaymentOrderIds.initialOrderId]) - 없으면 새 번호. */
+        id: String? = null,
+        /** 결제사가 먼저 정한 거래 번호(카카오페이 `tid`) - 있으면 주문의 결제 키로 박는다. */
+        providerPaymentId: String? = null,
     ): PaymentOrder {
         val now = writer.now()
         return PaymentOrder(
-            id = ids.newId(PaymentOrderIds.ORDER_PREFIX),
+            id = id ?: ids.newId(PaymentOrderIds.ORDER_PREFIX),
             accountId = subscription.accountId,
             kind = kind,
             status = PaymentOrderStatus.CONFIRMING,
             provider = subscription.provider,
             providerMode = subscription.providerMode,
-            providerPaymentId = null,
+            providerPaymentId = providerPaymentId,
             amount = amount,
             paidAmount = null,
             taxAmount = null,

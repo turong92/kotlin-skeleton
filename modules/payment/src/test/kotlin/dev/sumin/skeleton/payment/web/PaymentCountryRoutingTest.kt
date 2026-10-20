@@ -132,4 +132,18 @@ class PaymentCountryRoutingTest {
         assertTrue(closedRoute.providerClosed)
         assertNull(closed.chosen(closedRoute, "kakaopay"), "the country map names toss and it is closed: no silent fallback, not even by a choice")
     }
+
+    @Test
+    fun `a subscription may be started with any open provider of the buyer's country that can register a card or an easy pay, and with nothing else`() {
+        val countries = mapOf("toss" to listOf("KR"), "kakaopay" to listOf("KR"), "naverpay" to listOf("KR"), "paddle" to listOf("US"))
+        val routing = PaymentCountryRouting({ properties() }, cloudflare, { listOf("paddle", "toss", "kakaopay", "naverpay") }, { c -> countries.filterValues { c in it }.keys.toList() }, { listOf("toss", "kakaopay") })
+        val kr = routing.of(request("KR"))
+
+        assertEquals(listOf("toss", "kakaopay"), routing.subscriptionChoices(kr), "naverpay is open for payments but has no billing here")
+        assertEquals("kakaopay", routing.chosenForSubscription(kr, " KakaoPay "))
+        assertEquals("toss", routing.chosenForSubscription(kr, "naverpay"), "not a subscription choice - the server's pick")
+        assertEquals("toss", routing.chosenForSubscription(kr, "paddle"))
+        assertEquals("toss", routing.chosenForSubscription(kr, null))
+        assertEquals(emptyList(), routing.subscriptionChoices(routing.of(request("US"))))
+    }
 }

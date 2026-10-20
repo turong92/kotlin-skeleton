@@ -21,6 +21,12 @@ object PaymentOrderIds {
         return hex(MessageDigest.getInstance("SHA-256").digest("$accountId\n${key.value}".toByteArray(Charsets.UTF_8)))
     }
 
+    /**
+     * 구독의 **첫 주문 번호**(미리 정해진다) - `sub_<26자>` → `ord_<같은 26자>`. 결제사가 결제 준비 때 주문 번호를 먼저 받는 결제사(카카오페이 `ready` 의 `partner_order_id`)가
+     * 구독을 만들 때 이 번호를 쓰고, `activate` 가 같은 번호로 첫 주문 줄을 넣는다. 구독마다 하나다.
+     */
+    fun initialOrderId(subscriptionId: String): String = ORDER_PREFIX + subscriptionId.removePrefix(SUBSCRIPTION_PREFIX)
+
     /** `cus_` + 16바이트 무작위의 16진수 32자 — 결제사에 대는 고객 키(행 id 가 아니다. 결제사에 묶이므로 시간순 id 로 바꾸지 않는다). 추측 가능한 값이 아니다. */
     fun newCustomerKey(random: Random = SecureRandom()): String = "cus_" + hex(ByteArray(16).also(random::nextBytes))
 

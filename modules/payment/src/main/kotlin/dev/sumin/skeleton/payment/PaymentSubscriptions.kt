@@ -37,9 +37,20 @@ class PaymentSubscriptions(
     fun recentOrders(subscriptionId: String, limit: Int = RECENT_ORDERS): List<PaymentOrder> = store.listSubscriptionOrders(subscriptionId, limit)
 
     /** `PENDING` 줄을 만들고 카드 등록 창 값을 돌려준다. 같은 키로 다시 부르면 같은 줄이다. [country] 가 비면 설정의 기본 나라(그것도 없으면 나라 없음). */
-    fun start(accountId: String, planCode: String, key: IdempotencyKey, country: String? = null, provider: String? = null, providerClosed: Boolean = false): StartedSubscription {
+    fun start(
+        accountId: String,
+        planCode: String,
+        key: IdempotencyKey,
+        country: String? = null,
+        provider: String? = null,
+        providerClosed: Boolean = false,
+        /** 화면이 보낸 origin - 돌아올 주소를 그 origin 으로 맞추는 결제사(카카오페이 · 네이버페이)만 허용 목록 안에서 쓴다. */
+        returnOrigin: String? = null,
+        /** 서버가 정한 결제사가 아니라 구매자가 고른 결제사다 - 플랜 통화를 받는지 확인한다. */
+        providerChosen: Boolean = false,
+    ): StartedSubscription {
         val dedupeKey = PaymentOrderIds.dedupeKey(accountId, key)
-        store.findSubscriptionByDedupeKey(dedupeKey)?.let { return replay(it, planCode) }
+        store.findSubscriptionByDedupeKey(dedupeKey)?.let { return replay(it, planCode, returnOrigin) }
         if (providerClosed) throw PaymentUnavailableException() // 나라 지도가 정한 결제사가 못 열린다 - 다른 결제사로 넘기지 않는다
 
         val plan = plans.find(planCode)?.takeIf { it.amount.amount > 0 } ?: throw PaymentItemNotPurchasableException()
@@ -51,15 +62,27 @@ class PaymentSubscriptions(
         val hosted = provider?.let(::hostedGateway)
         val gateway: PaymentGateway
         val setup: BillingSetup
+        var reference: String? = null
         val creator = hosted?.let { it as? PaymentTransactionGateway ?: throw PaymentUnavailableException() }
         if (hosted != null) {
             gateway = hosted
             // 결제창 값은 거래 id 가 정해진 뒤에 낸다(아래 — 줄을 넣는 트랜잭션 안에서 거래를 만든다). 설정이 모자라면 여기서 미리 거절하려고 거래 id 없이 한 번 물어 둔다
             setup = hosted.subscriptionSetup(HostedSubscriptionRequest(plan.code, accountId, subscriptionId, customerKey, country?.uppercase(), "pending")) ?: throw PaymentUnavailableException()
         } else {
+            // 구매자가 고른 결제사는 플랜 통화도 받아야 한다(주문 만들기와 같다)
+            if (providerChosen && provider != null && !router.servesCurrency(provider, plan.amount.currency)) throw PaymentRoutingException("The chosen payment provider does not serve the plan currency.")
             val billing = billingGateway(plan.amount, provider) ?: throw PaymentUnavailableException()
             gateway = billing
-            setup = billing.billingSetup(customerKey) ?: throw PaymentUnavailableException()
+            // 서버가 결제사를 먼저 불러 예약해야 창이 열리는 결제사(카카오페이 · 네이버페이)는 여기서(트랜잭션 밖) 예약하고 번호를 줄에 박는다
+            val prepared = try {
+                billing.prepareBilling(BillingPrepareRequest(subscriptionId, customerKey, plan.name, plan.amount, PaymentOrderIds.initialOrderId(subscriptionId), returnOrigin, accountId))
+            } catch (e: Exception) {
+                if (e is InterruptedException) throw e
+                log.warn("the provider could not prepare a card registration {}", PaymentFailures.describe(e))
+                throw PaymentUnavailableException()
+            } ?: throw PaymentUnavailableException()
+            setup = prepared.setup
+            reference = prepared.reference
         }
 
         val now = writer.now()
@@ -92,10 +115,11 @@ class PaymentSubscriptions(
             updatedAt = now,
             country = country?.uppercase() ?: properties.subscription.cancel.defaultCountry,
             dedupeKey = dedupeKey,
+            firstTransactionId = reference,
         )
         // 줄을 먼저 커밋한다(결제사 호출은 트랜잭션 밖). 같은 요청 키로 동시에 들어온 쪽은 dedupe_key 유니크로 `false` 를 받아 그 줄을 돌려받는다.
         if (!store.inTransaction { it.insertSubscriptionIfAbsent(subscription) }) {
-            return replay(checkNotNull(store.findSubscriptionByDedupeKey(dedupeKey)) { "the subscription for this idempotency key disappeared" }, planCode)
+            return replay(checkNotNull(store.findSubscriptionByDedupeKey(dedupeKey)) { "the subscription for this idempotency key disappeared" }, planCode, returnOrigin)
         }
         if (creator == null) return StartedSubscription(subscription, setup, replayed = false)
         // 거래를 만드는 결제사: 밖에서 만들어 줄에 박는다. 만들기가 실패하면 줄은 거래 id 없이 남는다(다시 열면 그때 만든다 - `PENDING` 은 「내 구독」에 보이지 않고 자리도 쥐지 않는다)
@@ -121,9 +145,10 @@ class PaymentSubscriptions(
         val gateway = router.gateway(subscription.provider, PaymentBillingGateway::class)
         if (gateway.mode != subscription.providerMode) throw PaymentModeMismatchException()
         val customerKey = checkNotNull(subscription.customerKey)
+        if (gateway.registrationCharges) return activateByFirstCharge(accountId, subscription, gateway, customerKey, providerPayload)
 
         val issued = try {
-            gateway.issue(customerKey, providerPayload)
+            gateway.issue(customerKey, providerPayload, subscription.firstTransactionId)
         } catch (e: Exception) {
             // 같은 authKey 로 겹친 요청 — 결제사가 둘째 발급을 거절해도 첫째가 이미 시작했으면 그 줄이 답이다(「결제 안 됨」으로 거짓을 말하지 않는다)
             store.findSubscription(subscriptionId)?.takeIf { owned(it, accountId) != null && (it.status != SubscriptionStatus.PENDING || it.chargeOrderId != null) }?.let { return it }
@@ -154,6 +179,41 @@ class PaymentSubscriptions(
         if (outcome is ChargeOutcome.Declined) {
             throw PaymentDeclinedException(outcome.providerCode, gateway.billingDeclineCategory(outcome.providerCode))
         }
+        return after
+    }
+
+    /**
+     * **등록이 곧 첫 결제**인 결제사(카카오페이)의 `activate`: ① 자리 + 첫 주문(`CONFIRMING`, 결제 키 = 예약 때의 거래 번호, 주문 번호 = 미리 정해진 [PaymentOrderIds.initialOrderId]) + 조회 작업을 커밋하고
+     * ② 락 밖에서 [PaymentBillingGateway.registerWithCharge] 를 **한 번** 부르고 ③ 결과로 주문을 확정하면서 같은 트랜잭션에 토큰(암호문) · 카드 표시를 쓴다. 자리에 지면 ②를 부르지 않는다(돈이 안 움직였다).
+     */
+    private fun activateByFirstCharge(accountId: String, subscription: PaymentSubscription, gateway: PaymentBillingGateway, customerKey: String, providerPayload: Map<String, Any?>): PaymentSubscription {
+        val claim = try {
+            store.inTransaction { tx ->
+                val locked = owned(tx.lockSubscription(subscription.id), accountId) ?: throw PaymentSubscriptionNotFoundException()
+                if (locked.status == SubscriptionStatus.ENDED) throw PaymentSubscriptionNotActivatableException()
+                if (locked.status != SubscriptionStatus.PENDING || locked.chargeOrderId != null) return@inTransaction Claim(locked, null)
+                val planName = plans.find(locked.planCode)?.name ?: locked.planCode
+                val order = lifecycle.chargeOrder(locked, PaymentOrderKind.SUBSCRIPTION_INITIAL, planName, ids, id = PaymentOrderIds.initialOrderId(locked.id), providerPaymentId = locked.firstTransactionId)
+                check(tx.insertOrderIfAbsent(order)) { "the first order of a subscription already exists" }
+                lifecycle.chargeStarted(tx, order, PaymentActor.USER, accountId)
+                lifecycle.scheduleReconcile(order)
+                val claimed = locked.copy(activeKey = accountId, chargeOrderId = order.id, attempt = 1, updatedAt = writer.now())
+                tx.updateSubscription(claimed)
+                Claim(claimed, order)
+            }
+        } catch (e: PaymentLedgerConflictException) {
+            throw PaymentAlreadySubscribedException()
+        }
+        val order = claim.order ?: return claim.subscription // 같은 구독을 동시에 시작한 다른 요청이 이겼다 - 결제사 호출은 한 번뿐이다
+        val outcome = charges.registerAndCharge(
+            gateway, claim.subscription, order,
+            RegisterWithChargeRequest(customerKey, providerPayload, claim.subscription.firstTransactionId, order.id, order.orderName, order.amount, IdempotencyKey(order.id), accountId),
+            PaymentActor.USER,
+        ) { locked, issued ->
+            locked.copy(billingToken = encryptor.encrypt(issued.token), cardIssuer = LedgerValues.cardIssuer(issued.card?.issuer), cardLast4 = LedgerValues.cardLast4(issued.card?.last4), updatedAt = writer.now())
+        }
+        val after = store.findSubscription(subscription.id) ?: claim.subscription
+        if (outcome is ChargeOutcome.Declined) throw PaymentDeclinedException(outcome.providerCode, gateway.billingDeclineCategory(outcome.providerCode))
         return after
     }
 
@@ -232,7 +292,7 @@ class PaymentSubscriptions(
         }
     }
 
-    private fun replay(existing: PaymentSubscription, planCode: String): StartedSubscription {
+    private fun replay(existing: PaymentSubscription, planCode: String, returnOrigin: String? = null): StartedSubscription {
         if (existing.planCode != planCode) throw PaymentIdempotencyConflictException()
         val setup = if (existing.status == SubscriptionStatus.PENDING && existing.chargeOrderId == null) {
             val hosted = hostedGateway(existing.provider)
@@ -245,7 +305,22 @@ class PaymentSubscriptions(
                 } catch (e: PaymentProviderNotFoundException) {
                     throw PaymentUnavailableException()
                 }
-                gateway.billingSetup(checkNotNull(existing.customerKey)) ?: throw PaymentUnavailableException()
+                // 카드 전의 재전송은 다시 예약한다 - 새 번호로 덮는다(앞 창의 결제는 모름이 되어 조회가 닫는 알려진 한계)
+                val planName = plans.find(existing.planCode)?.name ?: existing.planCode
+                val prepared = try {
+                    gateway.prepareBilling(BillingPrepareRequest(existing.id, checkNotNull(existing.customerKey), planName, existing.amount, PaymentOrderIds.initialOrderId(existing.id), returnOrigin, existing.accountId))
+                } catch (e: Exception) {
+                    if (e is InterruptedException) throw e
+                    log.warn("the provider could not prepare a card registration {}", PaymentFailures.describe(e))
+                    throw PaymentUnavailableException()
+                } ?: throw PaymentUnavailableException()
+                prepared.reference?.let { reference ->
+                    store.inTransaction { tx ->
+                        val locked = tx.lockSubscription(existing.id)
+                        if (locked != null && locked.status == SubscriptionStatus.PENDING && locked.chargeOrderId == null) tx.updateSubscription(locked.copy(firstTransactionId = reference, updatedAt = writer.now()))
+                    }
+                }
+                prepared.setup
             }
         } else {
             null

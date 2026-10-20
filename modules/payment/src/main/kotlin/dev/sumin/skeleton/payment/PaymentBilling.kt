@@ -13,10 +13,30 @@ interface PaymentBillingGateway : PaymentGateway {
     fun billingSetup(customerKey: String): BillingSetup?
 
     /**
+     * 등록 창 값을 낸다 - 토스는 [billingSetup] 그대로(창 값이 설정뿐이다). **서버가 먼저 결제사를 불러 예약해야 창을 열 수 있는 결제사**(카카오페이 `ready` · 네이버페이 등록 예약)는 겹쳐 쓴다.
+     * 결제사 호출이므로 **트랜잭션 밖**에서 불리고, 못 하면 던진다. [PreparedBilling.reference] 는 구독 줄의 첫 거래 번호 칸에 박혀 `activate` 에서 [issue] 로 돌아온다.
+     */
+    fun prepareBilling(request: BillingPrepareRequest): PreparedBilling? = billingSetup(request.customerKey)?.let { PreparedBilling(it, null) }
+
+    /**
+     * **등록이 곧 첫 결제**인 결제사(카카오페이: 1회차를 플랜 금액으로 결제하고 그 승인에서 SID 를 받는다). true 면 `activate` 는 [issue] 가 아니라 [registerWithCharge] 를 쓴다 -
+     * 자리 · 첫 주문을 먼저 커밋하고(락 밖에서) 한 번 부르며, 첫 주문 번호는 [BillingPrepareRequest.firstOrderId] 와 같다.
+     */
+    val registrationCharges: Boolean
+        get() = false
+
+    /** [registrationCharges] 인 결제사만. 돈이 움직이는 호출이라 [charge] 와 같은 실패 분류다(확정 거절 / 모름). 결과의 토큰이 없으면(SID 를 못 읽었다) 구독은 켜지되 토큰이 비어 있다. */
+    fun registerWithCharge(request: RegisterWithChargeRequest): RegisteredCharge =
+        throw UnsupportedOperationException("$providerId registers with a separate step")
+
+    /**
      * 등록 창이 돌려준 값([providerPayload], 토스는 `authKey`)을 토큰으로 바꾼다. 돈이 움직이지 않는다.
      * 결제사가 **확정 거절**하면 [PaymentProviderException]([PaymentProviderError.definitive]), 모르면 그 밖의 예외다.
      */
     fun issue(customerKey: String, providerPayload: Map<String, Any?>): BillingIssue
+
+    /** [prepareBilling] 이 준 [PreparedBilling.reference] 를 함께 받는 발급 - 돌아온 값이 그 예약의 것인지 결제사가 확인한다(네이버: 다르면 결제사를 부르지 않고 던진다). 토스는 무시한다. */
+    fun issue(customerKey: String, providerPayload: Map<String, Any?>, reference: String?): BillingIssue = issue(customerKey, providerPayload)
 
     /** 토큰으로 승인한다. 결과는 승인([PaymentConfirmGateway.confirm])과 같은 모양이고 실패 분류도 같다(확정 거절 / 모름). */
     fun charge(request: BillingChargeRequest): PaymentOperationResult
@@ -35,10 +55,44 @@ data class BillingSetup(
     val provider: String,
     val kind: String,
     val testMode: Boolean,
-    val clientKey: String,
+    /** 공개 키 - 리다이렉트 결제사(카카오페이 · 네이버페이)는 공개 키가 없어 null. */
+    val clientKey: String?,
     val customerKey: String,
     val attributes: Map<String, String> = emptyMap(),
 )
+
+/** [prepareBilling] 의 입력 - 구독 줄 · 플랜의 값. [firstOrderId] 는 첫 주문의 번호(`ready` 의 `partner_order_id` 처럼 미리 정해야 하는 결제사용), [returnOrigin] 은 화면이 보낸 origin(허용 목록에 있을 때만 쓰인다). */
+data class BillingPrepareRequest(
+    val subscriptionId: String,
+    val customerKey: String,
+    val planName: String,
+    val amount: PaymentAmount,
+    val firstOrderId: String,
+    val returnOrigin: String? = null,
+    val accountId: String? = null,
+) {
+    override fun toString(): String = "BillingPrepareRequest(subscriptionId=$subscriptionId, amount=${amount.amount} ${amount.normalizedCurrency}, customerKey=<redacted>)"
+}
+
+/** [reference] 는 결제사가 먼저 정한 번호(카카오 `tid` · 네이버 `reserveId`) - 구독 줄의 첫 거래 번호 칸에 박힌다. 없는 결제사(토스)는 null. */
+data class PreparedBilling(val setup: BillingSetup, val reference: String?)
+
+/** [registerWithCharge] 의 입력 - 승인 토큰은 돌아온 창이 준 값([providerPayload])이고 [reference] 는 예약 때의 번호다. */
+data class RegisterWithChargeRequest(
+    val customerKey: String,
+    val providerPayload: Map<String, Any?>,
+    val reference: String?,
+    val orderId: String,
+    val orderName: String,
+    val amount: PaymentAmount,
+    val idempotencyKey: IdempotencyKey,
+    val accountId: String? = null,
+) {
+    override fun toString(): String = "RegisterWithChargeRequest(orderId=$orderId, amount=${amount.amount} ${amount.normalizedCurrency}, customerKey=<redacted>)"
+}
+
+/** [issue] 는 SID 를 읽었으면 값이 있고 못 읽었으면 null(돈은 움직였다 - 결제 결과는 [result]). */
+data class RegisteredCharge(val issue: BillingIssue?, val result: PaymentOperationResult)
 
 /** [token] 은 비밀이라 [toString] 이 찍지 않는다. [card] 는 끝 네 글자만 가진 표시용. */
 data class BillingIssue(

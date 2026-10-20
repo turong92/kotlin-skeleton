@@ -41,7 +41,7 @@ class RefundReconcileTaskHandler(
         }
         val at = writer.now()
         val snapshot = try {
-            gateway.lookup(PaymentLookupQuery(providerPaymentId = order.providerPaymentId, orderId = if (order.providerPaymentId == null) order.id else null))
+            gateway.lookup(order.lookupQuery())
         } catch (e: Exception) {
             log.warn("payment lookup failed for refund settle refund={} attempt={}/{} exception={}", refund.id, run.attempt, run.maxAttempts, e.javaClass.simpleName)
             throw retryAndFlagAtEnd(run, order, gateway.mode, "Payment lookup is unavailable for refund ${refund.id}")

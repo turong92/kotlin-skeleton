@@ -202,7 +202,7 @@ class PaymentRefunds(
         if (gateway.mode != order0.providerMode) throw PaymentModeMismatchException()
         val at = writer.now()
         val snapshot = try {
-            gateway.lookup(PaymentLookupQuery(providerPaymentId = order0.providerPaymentId, orderId = if (order0.providerPaymentId == null) order0.id else null))
+            gateway.lookup(order0.lookupQuery())
         } catch (e: PaymentProviderException) {
             throw e
         } catch (e: Exception) {
@@ -246,7 +246,7 @@ class PaymentRefunds(
         }
         val at = writer.now()
         val snapshot = try {
-            gateway.lookup(PaymentLookupQuery(providerPaymentId = order0.providerPaymentId, orderId = if (order0.providerPaymentId == null) order0.id else null))
+            gateway.lookup(order0.lookupQuery())
         } catch (e: PaymentProviderException) {
             throw e
         } catch (e: Exception) {
@@ -320,7 +320,7 @@ class PaymentRefunds(
         requireMode(gateways, order)
         val at = writer.now()
         val snapshot = try {
-            gateways.lookup.lookup(PaymentLookupQuery(order.providerPaymentId, null))
+            gateways.lookup.lookup(PaymentLookupQuery(order.providerPaymentId, null, recurring = order.originType == PaymentOriginType.SUBSCRIPTION))
         } catch (e: Exception) {
             log.warn("refund pre-check lookup failed order={} exception={}; no refund was sent", order.id, e.javaClass.simpleName)
             throw PaymentRefundNotSentException()
@@ -401,7 +401,7 @@ class PaymentRefunds(
     private fun execute(order: PaymentOrder, refund: PaymentRefund, gateways: Gateways, operatorId: String): RefundOutcome {
         val request = PaymentRefundRequest(
             providerPaymentId = checkNotNull(order.providerPaymentId), amount = refund.amount, reason = PaymentRefundReason.parse(refund.reasonCode)?.providerText,
-            provider = order.provider, idempotencyKey = IdempotencyKey(refund.id),
+            provider = order.provider, idempotencyKey = IdempotencyKey(refund.id), recurring = order.originType == PaymentOriginType.SUBSCRIPTION,
         )
         val result = try {
             gateways.refund.refund(request)
@@ -515,7 +515,7 @@ class PaymentRefunds(
 
     private fun lookupQuietly(order: PaymentOrder, gateways: Gateways): PaymentSnapshot? =
         try {
-            gateways.lookup.lookup(PaymentLookupQuery(order.providerPaymentId, null))
+            gateways.lookup.lookup(PaymentLookupQuery(order.providerPaymentId, null, recurring = order.originType == PaymentOriginType.SUBSCRIPTION))
         } catch (e: Exception) {
             log.warn("payment refund late-result lookup failed order={} exception={}", order.id, e.javaClass.simpleName)
             null

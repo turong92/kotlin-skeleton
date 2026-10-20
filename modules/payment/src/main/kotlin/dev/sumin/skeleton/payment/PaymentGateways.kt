@@ -111,6 +111,8 @@ interface PaymentWebhookGateway : PaymentGateway {
 data class PaymentLookupQuery(
     val providerPaymentId: String?,
     val orderId: String?,
+    /** 정기 결제(구독 주문)의 조회다 - 정기용 가맹점 코드 · 인증값으로 묻는 결제사(카카오페이 · 네이버페이)가 쓴다. 장부가 `origin=SUBSCRIPTION` 인 주문에 true 로 넘긴다. 나머지는 무시한다. */
+    val recurring: Boolean = false,
 ) {
     init {
         require(!providerPaymentId.isNullOrBlank() || !orderId.isNullOrBlank()) {
@@ -118,6 +120,10 @@ data class PaymentLookupQuery(
         }
     }
 }
+
+/** 주문 하나를 묻는 조회 - 결제 키가 있으면 키로, 없으면 주문 번호로. 구독 주문이면 [PaymentLookupQuery.recurring]. */
+internal fun PaymentOrder.lookupQuery(): PaymentLookupQuery =
+    PaymentLookupQuery(providerPaymentId = providerPaymentId, orderId = if (providerPaymentId == null) id else null, recurring = originType == PaymentOriginType.SUBSCRIPTION)
 
 enum class ProviderPaymentStatus {
     IN_PROGRESS,

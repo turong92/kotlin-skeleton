@@ -79,6 +79,8 @@ data class PaymentRefundRequest(
     val country: String? = null,
     val idempotencyKey: IdempotencyKey? = null,
     val providerPayload: Map<String, Any?> = emptyMap(),
+    /** 정기 결제(구독 주문)의 환불이다 - 정기용 가맹점 코드 · 인증값으로 취소하는 결제사(카카오페이 `TCSUBSCRIP` · 네이버 자동결제)가 쓴다. 나머지는 무시한다. */
+    val recurring: Boolean = false,
 ) {
     init {
         require(providerPaymentId.isNotBlank()) { "Provider payment id must not be blank" }

@@ -58,7 +58,7 @@ class PaymentSubscriptionController(
     @Operation(
         summary = "Start a subscription and get the values for the card registration window",
         description = "201 with { subscription (PENDING), billingAuth }; the same Idempotency-Key again is 200 with the same subscription (billingAuth is null once the card was handed in). " +
-            "Body { planCode } - the buyer's country (and so the cancel / refund policy) and the provider are decided by the server (see GET /config); a body provider or country is ignored. A resend of the same key answers with the row as it was made. " +
+            "Body { planCode, provider?, returnOrigin? } - the buyer's country (and so the cancel / refund policy) is decided by the server (see GET /config); a body country is ignored and a body provider is taken only when it is one of GET /config subscriptionChoices. returnOrigin is the origin of the screen that starts it (used only when it is in the provider's allowed list). A resend of the same key answers with the row as it was made. " +
             "400 without the header · 409 ALREADY_SUBSCRIBED · 409 IDEMPOTENCY_CONFLICT for another plan · 422 ITEM_NOT_PURCHASABLE for an unknown plan · 429 over the per-account / per-IP limit · 503 UNAVAILABLE.",
     )
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = StartSubscriptionResponse::class)
@@ -77,7 +77,9 @@ class PaymentSubscriptionController(
         }
         val planCode = PaymentRequests.text(body["planCode"], "planCode", 64)
         val route = routing.of(request)
-        val started = subscriptions.start(account, planCode, idempotencyKey(key), route.country, route.provider, route.providerClosed)
+        // 같은 나라에 빌링 결제사가 둘 이상 열려 있으면 구매자가 고른 것(`provider`)을 받는다 - 후보 안에서만, 나머지는 서버 값
+        val provider = routing.chosenForSubscription(route, body["provider"]?.takeIf { it.isString }?.stringValue())
+        val started = subscriptions.start(account, planCode, idempotencyKey(key), route.country, provider, route.providerClosed, body["returnOrigin"]?.takeIf { it.isString }?.stringValue(), providerChosen = provider != null && provider != route.provider)
         val payload = Response.ok(StartSubscriptionResponse(view(started.subscription), started.billing?.let(BillingAuthResponse::of)))
         return if (started.replayed) ResponseEntity.ok(payload) else ResponseEntity.status(201).body(payload)
     }

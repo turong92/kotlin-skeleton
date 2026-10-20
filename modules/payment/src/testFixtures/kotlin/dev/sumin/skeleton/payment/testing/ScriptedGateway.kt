@@ -4,6 +4,10 @@ import dev.sumin.skeleton.common.ApplicationException
 import dev.sumin.skeleton.common.PlatformErrorCode
 import dev.sumin.skeleton.common.http.ExternalHttpTimeoutException
 import dev.sumin.skeleton.payment.BillingChargeRequest
+import dev.sumin.skeleton.payment.BillingPrepareRequest
+import dev.sumin.skeleton.payment.PreparedBilling
+import dev.sumin.skeleton.payment.RegisterWithChargeRequest
+import dev.sumin.skeleton.payment.RegisteredCharge
 import dev.sumin.skeleton.payment.BillingIssue
 import dev.sumin.skeleton.payment.BillingSetup
 import dev.sumin.skeleton.payment.CheckoutInstruction
@@ -236,6 +240,9 @@ class ScriptedGateway(
     val checkoutCalls = CopyOnWriteArrayList<CheckoutOrder>()
     val refundCalls = CopyOnWriteArrayList<RefundCall>()
 
+    /** 환불 요청 전체(`recurring` 포함) - [refundCalls] 가 담지 않는 칸을 보는 시험용. */
+    val refundRequests = CopyOnWriteArrayList<PaymentRefundRequest>()
+
     /** 결제사 코드 → `REFUND_DECLINED` 분류 — 실제로는 결제사 모듈이 정한다. */
     @Volatile var declineCategories: Map<String, RefundDeclineCategory> =
         mapOf("NOT_ALLOWED_PARTIAL_REFUND" to RefundDeclineCategory.PARTIAL_NOT_ALLOWED, "EXCEED_MAX_REFUND_DUE" to RefundDeclineCategory.PERIOD_EXPIRED)
@@ -349,6 +356,69 @@ class ScriptedGateway(
     /** 승인 호출 안에서(결제사 쪽 상태를 바꾸기 전에) 실행된다. */
     @Volatile var duringCharge: (() -> Unit)? = null
 
+    // --- 서버가 먼저 예약하는 결제사 · 등록이 곧 첫 결제인 결제사(카카오페이 모양)를 흉내 내는 스위치. 기본은 꺼짐(토스 모양) ---
+
+    /** true 면 `prepareBilling` 이 거래 번호(`ref_1` …)를 낸다 - 구독 줄의 첫 거래 번호에 박힌다. */
+    @Volatile var prepareReferences = false
+    val prepareCalls = CopyOnWriteArrayList<BillingPrepareRequest>()
+    private var prepareSequence = 0
+
+    /** true 면 `registrationCharges` - `activate` 가 `issue` 가 아니라 `registerWithCharge` 를 부른다. */
+    @Volatile var registering = false
+    override val registrationCharges: Boolean get() = registering
+    val registerCalls = CopyOnWriteArrayList<RegisterWithChargeRequest>()
+
+    /** true 면 `registerWithCharge` 가 SID 를 못 읽는다(돈은 움직였다). */
+    @Volatile var registerWithoutToken = false
+
+    /** false 면 주문 번호만 든 조회는 결제사를 모른다고 답한다(카카오페이처럼 거래 번호로만 조회된다). */
+    @Volatile var orderLookupAnswers = true
+    override val answersByOrderId: Boolean get() = orderLookupAnswers
+
+    /** `issue` 가 받은 예약 번호(`reference`). */
+    val issueReferences = CopyOnWriteArrayList<String?>()
+
+    /** 있으면 다음 `charge` 가 던지지 않고 「모름」(`UNKNOWN`) 결과와 이 결제 번호를 돌려준다(네이버: 승인이 모르는 답 + 예약으로 받은 paymentId). */
+    @Volatile var unknownChargeKey: String? = null
+
+    override fun prepareBilling(request: BillingPrepareRequest): PreparedBilling? {
+        refuseInsideTransaction("prepareBilling")
+        prepareCalls += request
+        val reference = if (prepareReferences) synchronized(lock) { "ref_${++prepareSequence}" } else null
+        return billingSetup(request.customerKey)?.let { PreparedBilling(it, reference) }
+    }
+
+    override fun issue(customerKey: String, providerPayload: Map<String, Any?>, reference: String?): BillingIssue {
+        issueReferences += reference
+        return issue(customerKey, providerPayload)
+    }
+
+    override fun registerWithCharge(request: RegisterWithChargeRequest): RegisteredCharge {
+        refuseInsideTransaction("registerWithCharge")
+        val script = synchronized(lock) {
+            registerCalls += request
+            scripts.removeFirstOrNull() ?: ConfirmScript.Approve
+        }
+        val asCharge = BillingChargeRequest("", request.customerKey, request.orderId, request.orderName, request.amount, request.idempotencyKey)
+        val key = request.reference
+        val result = when (script) {
+            is ConfirmScript.Approve -> charged(asCharge, request.amount, key)
+            is ConfirmScript.ApproveWithTotal -> charged(asCharge, script.total, key)
+            is ConfirmScript.Decline -> throw refusal(script.code)
+            is ConfirmScript.TimeoutApplied -> {
+                charged(asCharge, script.total ?: request.amount, key)
+                throw timeout()
+            }
+            is ConfirmScript.TimeoutNotApplied, is ConfirmScript.TimeoutAppliedLater -> {
+                register(asCharge, request.amount, ProviderPaymentStatus.IN_PROGRESS, key)
+                throw timeout()
+            }
+            is ConfirmScript.ServerError -> throw serverError()
+        }
+        val issue = if (registerWithoutToken) null else BillingIssue("sid_${synchronized(lock) { ++billingSequence }}", PaymentCard("SHINHAN", null))
+        return RegisteredCharge(issue, result)
+    }
+
     override fun billingSetup(customerKey: String): BillingSetup? =
         if (!checkoutReady) null else BillingSetup(providerId, "SCRIPTED_BILLING_AUTH", mode == PaymentMode.TEST, "scripted_ck", customerKey)
 
@@ -368,6 +438,9 @@ class ScriptedGateway(
             scripts.removeFirstOrNull() ?: ConfirmScript.Approve
         }
         duringCharge?.invoke()
+        unknownChargeKey?.let { key ->
+            return PaymentOperationResult(provider = providerId, providerPaymentId = key, status = PaymentOperationStatus.UNKNOWN, trace = ProviderTrace(provider = providerId, rawStatus = "UNKNOWN"))
+        }
         synchronized(lock) { chargesByKey[request.idempotencyKey.value] }?.let { return it } // 같은 멱등 키는 결제사가 한 번으로 본다
         return when (script) {
             is ConfirmScript.Approve -> charged(request, request.amount)
@@ -393,14 +466,14 @@ class ScriptedGateway(
     /** 결제사 쪽에 이 승인으로 생긴 결제가 있는가(주문 번호로) — 이중 승인 시험이 센다. */
     fun providerPaymentsOfOrder(orderId: String): List<ProviderPayment> = synchronized(lock) { payments.values.filter { it.orderId == orderId } }
 
-    private fun register(request: BillingChargeRequest, total: PaymentAmount, status: ProviderPaymentStatus): ProviderPayment = synchronized(lock) {
+    private fun register(request: BillingChargeRequest, total: PaymentAmount, status: ProviderPaymentStatus, key: String? = null): ProviderPayment = synchronized(lock) {
         val existing = payments.values.lastOrNull { it.orderId == request.orderId }
-        existing ?: ProviderPayment("pay_bill_${payments.size + 1}", request.orderId, total, status, PaymentCard("HYUNDAI", "1234"), paidAt = now().takeIf { status == ProviderPaymentStatus.PAID })
+        existing ?: ProviderPayment(key ?: "pay_bill_${payments.size + 1}", request.orderId, total, status, PaymentCard("HYUNDAI", "1234"), paidAt = now().takeIf { status == ProviderPaymentStatus.PAID })
             .also { payments[it.paymentKey] = it }
     }
 
-    private fun charged(request: BillingChargeRequest, total: PaymentAmount): PaymentOperationResult = synchronized(lock) {
-        val payment = register(request, total, ProviderPaymentStatus.PAID).let { registered ->
+    private fun charged(request: BillingChargeRequest, total: PaymentAmount, key: String? = null): PaymentOperationResult = synchronized(lock) {
+        val payment = register(request, total, ProviderPaymentStatus.PAID, key).let { registered ->
             registered.copy(total = total, status = ProviderPaymentStatus.PAID, paidAt = now()).also { payments[it.paymentKey] = it }
         }
         PaymentOperationResult(
@@ -457,7 +530,7 @@ class ScriptedGateway(
                 lookupFailures--
                 throw lookupFailure()
             }
-            query.providerPaymentId?.let { payments[it] } ?: query.orderId?.let { id -> payments.values.lastOrNull { it.orderId == id } }
+            query.providerPaymentId?.let { payments[it] } ?: if (orderLookupAnswers) query.orderId?.let { id -> payments.values.lastOrNull { it.orderId == id } } else null
         }
         afterLookup?.invoke()
         if (found == null) return null
@@ -484,6 +557,7 @@ class ScriptedGateway(
         val call = RefundCall(request.providerPaymentId, request.amount, request.reason, request.idempotencyKey)
         val script = synchronized(lock) {
             refundCalls += call
+            refundRequests += request
             refundScripts.removeFirstOrNull() ?: RefundScript.Approve
         }
         duringRefund?.invoke()

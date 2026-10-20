@@ -59,6 +59,7 @@ class PaymentHttpAutoConfiguration {
             clientIps.getIfAvailable { ClientIps() },
             { orders.openableProviders() },
             { country -> router.choosableProviders(country) },
+            { router.providerIds(dev.sumin.skeleton.payment.PaymentBillingGateway::class) },
         )
 
     @Bean

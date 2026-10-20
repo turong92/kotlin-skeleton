@@ -85,7 +85,7 @@ class OrderExpireTaskHandler(
             return
         }
         val snapshot = try {
-            gateway.lookup(PaymentLookupQuery(providerPaymentId = null, orderId = order.id))
+            gateway.lookup(PaymentLookupQuery(providerPaymentId = null, orderId = order.id, recurring = order.originType == PaymentOriginType.SUBSCRIPTION))
         } catch (e: Exception) {
             log.warn("payment lookup failed for expiry order={} exception={}", id, e.javaClass.simpleName)
             throw PaymentTaskRetryException("Payment lookup is unavailable for order $id")
@@ -167,7 +167,7 @@ class OrderReconcileTaskHandler(
         var lookupFailed = gateway == null
         val snapshot = gateway?.let {
             try {
-                it.lookup(PaymentLookupQuery(providerPaymentId = order.providerPaymentId, orderId = if (order.providerPaymentId == null) order.id else null))
+                it.lookup(order.lookupQuery())
             } catch (e: Exception) {
                 log.warn("payment lookup failed for reconcile order={} attempt={}/{} exception={}", id, run.attempt, run.maxAttempts, e.javaClass.simpleName)
                 lookupFailed = true
@@ -184,7 +184,9 @@ class OrderReconcileTaskHandler(
             }
             // 구독 과금: 마지막 시도에서 **결제사가 답으로 「그 결제를 모른다」(null)고 했을 때만** 구독이 거절로 반응한다(승인이 닿지 않았다 — 실측 404 NOT_FOUND_PAYMENT).
             // 조회가 던졌거나 결제사 빈이 없으면 · 어긋난 답이면 돈이 움직였는지 모르니 반응하지 않는다 — 사람이 볼 때까지 새 과금은 없다(스펙 5.4)
-            if (after.status == PaymentOrderStatus.CONFIRMING && run.lastAttempt && gateway != null && !lookupFailed && snapshot == null && after.originType == PaymentOriginType.SUBSCRIPTION) {
+            // 주문 번호로는 물을 수 없는 결제사(카카오페이)는 결제 키가 없으면 「모른다」(null)가 「결제가 없다」가 아니다 - 새로 과금하면 이중 과금이니 사람(`CONFIRM_UNRESOLVED`)에게 넘긴다
+            val answerable = gateway != null && (gateway.answersByOrderId || after.providerPaymentId != null)
+            if (after.status == PaymentOrderStatus.CONFIRMING && run.lastAttempt && gateway != null && answerable && !lookupFailed && snapshot == null && after.originType == PaymentOriginType.SUBSCRIPTION) {
                 subscriptions?.onOrderClosed(tx, after)
             }
             after
