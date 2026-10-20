@@ -47,6 +47,9 @@ class NaverPayKeyGuard(
             if (properties.clientId.isBlank()) add("$CLIENT_ID_PROPERTY ($CLIENT_ID_ENV) is empty but ${ENABLED} in a protected environment (skeleton.env=stage|prod): the NaverPay provider would not exist and payments would not work; set the id or turn the module off")
             if (properties.chainId.isBlank()) add("$CHAIN_ID_PROPERTY ($CHAIN_ID_ENV) is empty but ${ENABLED} in a protected environment (skeleton.env=stage|prod): the NaverPay provider would not exist and payments would not work; set the id or turn the module off")
         }
+        if (properties.recurrent.partial) {
+            add("$RECURRENT_PROPERTY has only some of client-id, client-secret and chain-id set: the subscription capability needs all three (they differ from the one-time values), so it would silently not exist")
+        }
         if (context.protectedEnv && ledgerPresent() && !isWebUrl(properties.returnUrl)) {
             add("$RETURN_PROPERTY ($RETURN_ENV) is not an absolute http(s) address but the payment ledger is present: NaverPay returns the buyer there, so the payment window cannot open")
         }
@@ -72,6 +75,9 @@ class NaverPayKeyGuard(
             malformedOrigins().forEach { add("$ALLOWED_PROPERTY has an entry that is not a bare origin (scheme://host[:port], no path, query or user info): $it - it is ignored and the buyer keeps returning to the fixed address") }
         }
         val ledger = ledgerPresent()
+        if (properties.recurrent.configured && properties.recurrent.clientId.trim() == properties.clientId.trim() && properties.recurrent.chainId.trim() == properties.chainId.trim()) {
+            add("$RECURRENT_PROPERTY has the same client id and chain id as the one-time values: NaverPay issues different ones for recurrent payments, so the recurrent calls may be refused")
+        }
 
         if (!context.protectedEnv) {
             if (properties.clientSecret.isBlank()) add("$ENABLED but $SECRET_PROPERTY ($SECRET_ENV) is empty: the NaverPay provider bean is not created and payment routing will not find it")
@@ -133,6 +139,7 @@ class NaverPayKeyGuard(
         const val CLIENT_ID_PROPERTY = "skeleton.payment-naverpay.client-id"
         const val CHAIN_ID_PROPERTY = "skeleton.payment-naverpay.chain-id"
         const val RETURN_PROPERTY = "skeleton.payment-naverpay.return-url"
+        const val RECURRENT_PROPERTY = "skeleton.payment-naverpay.recurrent.*"
         const val ALLOWED_PROPERTY = "skeleton.payment-naverpay.allowed-return-origins"
         const val BASE_URL_PROPERTY = "skeleton.payment-naverpay.base-url"
         const val WINDOW_BASE_URL_PROPERTY = "skeleton.payment-naverpay.window-base-url"

@@ -2,6 +2,7 @@ package dev.sumin.skeleton.payment.naverpay
 
 import dev.sumin.skeleton.common.http.OutboundHttpAutoConfiguration
 import dev.sumin.skeleton.payment.PaymentAutoConfiguration
+import dev.sumin.skeleton.payment.PaymentBillingGateway
 import dev.sumin.skeleton.payment.PaymentCheckoutGateway
 import dev.sumin.skeleton.payment.PaymentConfirmGateway
 import dev.sumin.skeleton.payment.PaymentLookupGateway
@@ -62,6 +63,26 @@ class NaverPayWiringTest {
             assertThat(router.gateway("scripted", PaymentConfirmGateway::class)).isSameAs(scripted)
             assertThat(router.providerIds(PaymentCheckoutGateway::class)).containsExactly("scripted")
             assertThat(context.getBeansOfType(NaverPayProvider::class.java)).isEmpty()
+        }
+    }
+
+    @Test
+    fun `the subscription capability appears only with all three recurrent credentials, on the same single bean`() {
+        val base = arrayOf(
+            "skeleton.payment-naverpay.enabled=true", "skeleton.payment-naverpay.client-id=id", "skeleton.payment-naverpay.client-secret=s",
+            "skeleton.payment-naverpay.chain-id=c", "skeleton.payment-naverpay.return-url=https://x.test/r",
+        )
+        runner.withPropertyValues(*base).run { context ->
+            assertThat(context.getBean(PaymentProviderRouter::class.java).providerIds(PaymentBillingGateway::class)).doesNotContain("naverpay")
+        }
+        runner.withPropertyValues(*base, "skeleton.payment-naverpay.recurrent.client-id=rid", "skeleton.payment-naverpay.recurrent.client-secret=rs").run { context ->
+            assertThat(context.getBean(PaymentProviderRouter::class.java).providerIds(PaymentBillingGateway::class)).doesNotContain("naverpay")
+        }
+        runner.withPropertyValues(*base, "skeleton.payment-naverpay.recurrent.client-id=rid", "skeleton.payment-naverpay.recurrent.client-secret=rs", "skeleton.payment-naverpay.recurrent.chain-id=rc").run { context ->
+            assertThat(context).hasNotFailed()
+            val router = context.getBean(PaymentProviderRouter::class.java)
+            assertThat(router.gateway("naverpay", PaymentBillingGateway::class)).isSameAs(context.getBean(NaverPayProvider::class.java))
+            assertThat(router.gateway("naverpay", PaymentConfirmGateway::class)).isSameAs(router.gateway("naverpay", PaymentBillingGateway::class))
         }
     }
 }

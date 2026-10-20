@@ -1656,7 +1656,7 @@
       "module": "payment-naverpay",
       "path": "modules/payment-naverpay",
       "status": "experimental",
-      "summary": "네이버페이 직접 연동 단건 결제 — 토스 계약 없이 네이버페이 계약만 있어도 쓰는 별도 결제사(기본 꺼짐). 서버 결제 예약(reserve) → 구매자가 예약한 결제창 → 서버 승인(apply) → 취소 · 환불 · 결제 내역 조회. 정기 결제(자동결제) · 웹훅은 없다.",
+      "summary": "네이버페이 직접 연동 단건 결제 — 토스 계약 없이 네이버페이 계약만 있어도 쓰는 별도 결제사(기본 꺼짐). 서버 결제 예약(reserve) → 구매자가 예약한 결제창 → 서버 승인(apply) → 취소 · 환불 · 결제 내역 조회. 정기 결제(자동결제)는 정기 인증값(recurrent.*)을 설정하면 있고 웹훅은 없다.",
       "starter": false,
       "newProjectFlag": "--modules payment-naverpay",
       "autoIncludes": ["crypto", "payment"],
@@ -1684,7 +1684,7 @@
       },
       "notFor": [
         "payment 없이는 쓰지 않는다(따라온다)",
-        "정기 결제(자동결제) · 웹훅은 아직 없다 — 결과는 승인 응답과 결제 내역 조회로 맞춘다",
+        "웹훅은 아직 없다 — 결과는 승인 응답과 결제 내역 조회로 맞춘다",
         "토스 계약이 있고 네이버페이를 간편결제 단추로만 받으면 payment-toss 의 easy-pays 로 충분하다",
         "네이버페이 인증값은 가맹 심사 뒤에 나온다 — 그 전에는 가짜 서버로만 시험된다"
       ],

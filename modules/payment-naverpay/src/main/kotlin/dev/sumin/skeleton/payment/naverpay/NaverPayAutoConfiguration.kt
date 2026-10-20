@@ -39,7 +39,7 @@ class NaverPayAutoConfiguration {
         credentialAlert: ObjectProvider<PaymentProviderCredentialAlert>,
         mismatchAlert: ObjectProvider<PaymentProviderMismatchAlert>,
     ): NaverPayProvider =
-        NaverPayProvider(
+        newNaverPayProvider(
             httpClient = httpClient,
             properties = properties,
             credentialAlert = credentialAlert.getIfAvailable { PaymentProviderCredentialAlert.NONE },
@@ -59,7 +59,7 @@ class NaverPayAutoConfiguration {
         credentialAlert: ObjectProvider<PaymentProviderCredentialAlert>,
         mismatchAlert: ObjectProvider<PaymentProviderMismatchAlert>,
     ): PaymentGatewaySource =
-        PaymentGatewaySource.of(listOf("payment-naverpay.client-secret"), listOf("payment-naverpay.client-id", "payment-naverpay.chain-id", "payment-naverpay.return-url", "payment-naverpay.allowed-return-origins")) { settings ->
+        PaymentGatewaySource.of(listOf("payment-naverpay.client-secret", "payment-naverpay.recurrent.client-secret"), listOf("payment-naverpay.client-id", "payment-naverpay.chain-id", "payment-naverpay.recurrent.client-id", "payment-naverpay.recurrent.chain-id", "payment-naverpay.return-url", "payment-naverpay.allowed-return-origins")) { settings ->
             val properties = settings.bind("skeleton.payment-naverpay", NaverPayProperties::class.java)
             if (!properties.enabled || properties.clientSecret.isBlank() || properties.clientId.isBlank() || properties.chainId.isBlank()) {
                 null
@@ -67,7 +67,7 @@ class NaverPayAutoConfiguration {
                 // 키 거절 경보는 결제사 응답 스레드(프로젝트 문맥 없음)에서 불린다 - 만들 때 프로젝트를 잡아 두고 그 문맥으로 부른다
                 val alert = credentialAlert.getIfAvailable { PaymentProviderCredentialAlert.NONE }
                 val mismatch = mismatchAlert.getIfAvailable { PaymentProviderMismatchAlert.NONE }
-                NaverPayProvider(
+                newNaverPayProvider(
                     httpClient = httpClient,
                     properties = properties,
                     credentialAlert = PaymentProviderCredentialAlert { id -> settings.inProject { alert.rejected(id) } },

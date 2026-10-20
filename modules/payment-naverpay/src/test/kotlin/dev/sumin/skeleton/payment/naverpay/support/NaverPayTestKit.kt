@@ -6,9 +6,11 @@ import dev.sumin.skeleton.common.http.ExternalHttpClient
 import dev.sumin.skeleton.common.http.OutboundHttpProperties
 import dev.sumin.skeleton.payment.CheckoutOrder
 import dev.sumin.skeleton.payment.PaymentAmount
+import dev.sumin.skeleton.payment.PaymentProviderCredentialAlert
 import dev.sumin.skeleton.payment.PaymentProviderMismatchAlert
 import dev.sumin.skeleton.payment.naverpay.NaverPayProperties
 import dev.sumin.skeleton.payment.naverpay.NaverPayProvider
+import dev.sumin.skeleton.payment.naverpay.newNaverPayProvider
 import java.time.Duration
 import org.springframework.web.reactive.function.client.WebClient
 
@@ -26,8 +28,15 @@ internal fun realHttpClient(responseTimeout: Duration = GENEROUS): ExternalHttpC
         customizers = emptyList(),
     )
 
-internal fun naverProperties(server: FakeNaverPayServer, returnUrl: String = RETURN_URL): NaverPayProperties =
-    NaverPayProperties(enabled = true, clientId = server.clientId, clientSecret = server.clientSecret, chainId = server.chainId, baseUrl = server.baseUrl, returnUrl = returnUrl)
+internal fun naverProperties(server: FakeNaverPayServer, returnUrl: String = RETURN_URL, recurrent: Boolean = false): NaverPayProperties =
+    NaverPayProperties(
+        enabled = true, clientId = server.clientId, clientSecret = server.clientSecret, chainId = server.chainId, baseUrl = server.baseUrl, returnUrl = returnUrl,
+        recurrent = if (recurrent) NaverPayProperties.Recurrent(server.recurrentClientId, server.recurrentClientSecret, server.recurrentChainId) else NaverPayProperties.Recurrent(),
+    )
+
+/** 정기 인증값이 설정된 모듈 - 구독 능력을 가진 하위 클래스가 선다. */
+internal fun naverBillingProvider(server: FakeNaverPayServer, returnUrl: String = RETURN_URL): NaverPayProvider =
+    newNaverPayProvider(realHttpClient(), naverProperties(server, returnUrl, recurrent = true), PaymentProviderCredentialAlert.NONE, PaymentProviderMismatchAlert.NONE)
 
 internal fun naverProvider(
     server: FakeNaverPayServer,

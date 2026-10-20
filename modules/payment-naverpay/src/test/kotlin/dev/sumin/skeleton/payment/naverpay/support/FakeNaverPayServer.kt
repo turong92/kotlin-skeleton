@@ -29,6 +29,10 @@ internal class FakeNaverPayServer(
     val clientId: String = "FAKECLIENTID0123456789",
     val clientSecret: String = "FAKE_CLIENT_SECRET_0123456789abcdef",
     val chainId: String = "FAKECHAINID0123",
+    /** 정기 결제(자동결제)는 인증값이 다르다 - 단건 값으로는 정기 호출이 `401` 이다(그리고 반대도). */
+    val recurrentClientId: String = "FAKERECURCLIENT0123456",
+    val recurrentClientSecret: String = "FAKE_RECUR_SECRET_0123456789abcdef",
+    val recurrentChainId: String = "FAKERECURCHAIN01",
 ) : AutoCloseable {
     data class Recorded(val method: String, val path: String, val headers: Map<String, List<String>>, val body: String) {
         fun header(name: String): String? = headers[name.lowercase()]?.firstOrNull()
@@ -50,7 +54,8 @@ internal class FakeNaverPayServer(
         const val CARD_NO = "5365-****-****-planted"
         const val USER_IDENTIFIER = "t1GLYqqJ05planted="
         const val PRODUCT = "초코파이-planted"
-        val ALL = listOf(USER_KEY, CARD_NO, USER_IDENTIFIER, PRODUCT)
+        const val EMAIL = "pl***@example.com"
+        val ALL = listOf(USER_KEY, CARD_NO, USER_IDENTIFIER, PRODUCT, EMAIL)
     }
 
     /** 서버가 예약한 결제. */
@@ -65,9 +70,35 @@ internal class FakeNaverPayServer(
         var appliedAt: String? = null,
         val cancels: MutableList<Pair<String, Long>> = mutableListOf(),
         var failed: Boolean = false,
+        val recurring: Boolean = false,
     ) {
         val canceledTotal: Long get() = cancels.sumOf { it.second }
         val available: Long get() = if (applied) total - canceledTotal else 0
+    }
+
+    /** 정기 등록 예약 - 구매자가 창에서 마치면(`buyerRegisters`) `tempReceiptId` 가 생기고, 등록 완료가 `recurrentId` 를 준다. */
+    class RegistReservation(val reserveId: String, val productCode: String, val merchantUserId: String, val total: Long, val returnUrl: String, var tempReceiptId: String? = null, var recurrentId: String? = null)
+
+    /** 정기 등록. 해지되면 `active=false`. */
+    class Recurrent(val recurrentId: String, val productCode: String, var active: Boolean = true)
+
+    /** 자동결제 예약(승인 전). */
+    class PayReservation(val paymentId: String, val recurrentId: String, val merchantPayKey: String, val total: Long, var approved: Boolean = false)
+
+    private val registReservations = Collections.synchronizedMap(linkedMapOf<String, RegistReservation>())
+    private val recurrents = Collections.synchronizedMap(linkedMapOf<String, Recurrent>())
+    private val payReservations = Collections.synchronizedMap(linkedMapOf<String, PayReservation>())
+
+    fun registReservations(): List<RegistReservation> = synchronized(registReservations) { registReservations.values.toList() }
+
+    fun recurrents(): Map<String, Boolean> = synchronized(recurrents) { recurrents.mapValues { it.value.active } }
+
+    fun payReservations(): List<PayReservation> = synchronized(payReservations) { payReservations.values.toList() }
+
+    /** 구매자가 등록창(`/payments/recurrent/{reserveId}`)에서 등록을 마쳤다 - 돌아온 주소에 붙는 `tempReceiptId` 를 돌려준다. */
+    fun buyerRegisters(reserveId: String): String {
+        val reservation = checkNotNull(registReservations[reserveId]) { "no such registration reservation" }
+        return "TR%08d".format(sequence.incrementAndGet()).also { reservation.tempReceiptId = it }
     }
 
     private val mapper: JsonMapper = JsonMapper.builder().build()
@@ -127,15 +158,37 @@ internal class FakeNaverPayServer(
 
         val operation = operationOf(request.path)
         val reply: Reply = when {
-            request.header("x-naver-client-id") != clientId || request.header("x-naver-client-secret") != clientSecret || request.header("x-naverpay-chain-id") != chainId -> Reply.Empty(401)
+            !authorized(request, operation) -> Reply.Empty(401)
             operation == null || request.method != "POST" -> Reply.Empty(404)
             else -> failureOr(operation) { route(operation, request) }
         }
         send(exchange, reply)
     }
 
+    private fun sentSingle(request: Recorded) = request.header("x-naver-client-id") == clientId && request.header("x-naver-client-secret") == clientSecret && request.header("x-naverpay-chain-id") == chainId
+
+    private fun sentRecurrent(request: Recorded) =
+        request.header("x-naver-client-id") == recurrentClientId && request.header("x-naver-client-secret") == recurrentClientSecret && request.header("x-naverpay-chain-id") == recurrentChainId
+
+    /** 정기 호출은 정기 인증값, 단건 호출은 단건 인증값 - 취소 · 내역 조회는 그 결제가 정기인지에 따라 갈린다. */
+    private fun authorized(request: Recorded, operation: String?): Boolean =
+        when (operation) {
+            null -> sentSingle(request) || sentRecurrent(request)
+            in RECURRENT_OPERATIONS -> sentRecurrent(request)
+            "cancel", "history" -> {
+                val paymentId = if (operation == "history") request.path.substringAfterLast('/') else request.form["paymentId"]
+                if (paymentId?.let { payments[it]?.recurring } == true) sentRecurrent(request) else sentSingle(request)
+            }
+            else -> sentSingle(request)
+        }
+
     private fun operationOf(path: String): String? =
         when {
+            path.endsWith("/recurrent/regist/v1/reserve") -> "regist-reserve"
+            path.endsWith("/recurrent/regist/v1/approval") -> "regist-approval"
+            path.endsWith("/recurrent/pay/v3/reserve") -> "pay-reserve"
+            path.endsWith("/recurrent/pay/v3/approval") -> "pay-approval"
+            path.endsWith("/recurrent/expire/v1/request") -> "expire"
             path.endsWith("/v2/reserve") -> "reserve"
             path.endsWith("/apply/payment") -> "apply"
             path.endsWith("/v1/cancel") -> "cancel"
@@ -162,6 +215,11 @@ internal class FakeNaverPayServer(
         if (key.isNullOrBlank() || key.length > 64 || !Regex("[A-Za-z0-9_-]+").matches(key)) return Reply.Empty(400)
         replies["$operation/$key"]?.let { return Reply.Json(409, it) }
         val reply = when (operation) {
+            "regist-reserve" -> registReserve(request.body)
+            "regist-approval" -> registApproval(request.body)
+            "pay-reserve" -> payReserve(request.body)
+            "pay-approval" -> payApproval(request.body)
+            "expire" -> expire(request.body)
             "reserve" -> reserve(request.body)
             "apply" -> apply(request.form)
             else -> {
@@ -191,6 +249,80 @@ internal class FakeNaverPayServer(
         return envelope("Success", "", linkedMapOf("reserveId" to reserveId))
     }
 
+    private fun json(body: String) = runCatching { mapper.readTree(body) }.getOrNull()
+
+    private fun tools.jackson.databind.JsonNode?.str(name: String): String? = this?.get(name)?.takeIf { it.isString }?.asString()
+
+    private fun tools.jackson.databind.JsonNode?.num(name: String): Long? = this?.get(name)?.takeIf { it.isIntegralNumber }?.longValue()
+
+    /** 등록 예약: 같은 `productCode` 로 이미 등록된 것이 있으면 `DataExist`(문서의 「중복 등록 불가」). */
+    private fun registReserve(body: String): Reply {
+        val node = json(body)
+        val code = node.str("productCode")
+        val user = node.str("merchantUserId")
+        val total = node.num("totalPayAmount")
+        val returnUrl = node.str("returnUrl")
+        if (code.isNullOrBlank() || user.isNullOrBlank() || total == null || total < 10 || returnUrl.isNullOrBlank() || node.str("productName").isNullOrBlank()) return envelope("InvalidParameter", "regist", null)
+        if (recurrents.values.any { it.productCode == code && it.active }) return envelope("DataExist", "registered", null)
+        val reserveId = "RGR%08d".format(sequence.incrementAndGet())
+        registReservations[reserveId] = RegistReservation(reserveId, code, user, total, returnUrl)
+        return envelope("Success", "", linkedMapOf("reserveId" to reserveId))
+    }
+
+    /** 등록 완료: 구매자가 창에서 마친 예약의 `tempReceiptId` 와 맞아야 하고 한 번만. 응답에 가려진 이메일을 심는다(저장 · 로그 금지). */
+    private fun registApproval(body: String): Reply {
+        val node = json(body)
+        val reservation = registReservations[node.str("reserveId")] ?: return envelope("InvalidParameter", "reserve", null)
+        synchronized(reservation) {
+            if (reservation.tempReceiptId == null || reservation.tempReceiptId != node.str("tempReceiptId") || reservation.recurrentId != null) return envelope("InvalidParameter", "receipt", null)
+            val recurrentId = "RC%010d".format(sequence.incrementAndGet())
+            reservation.recurrentId = recurrentId
+            recurrents[recurrentId] = Recurrent(recurrentId, reservation.productCode)
+        }
+        return envelope("Success", "", linkedMapOf("recurrentId" to reservation.recurrentId, "email" to PLANTED.EMAIL, "userIdentifier" to PLANTED.USER_IDENTIFIER))
+    }
+
+    /** 자동결제 예약: 활성 등록이어야 한다. 총액 10원 미만 · 과세 + 면세가 총액과 다르면 `InvalidParameter`. */
+    private fun payReserve(body: String): Reply {
+        val node = json(body)
+        val recurrent = recurrents[node.str("recurrentId")]?.takeIf { it.active } ?: return envelope("InvalidRecurrentId", "unknown", null)
+        val total = node.num("totalPayAmount")
+        val taxed = node.num("taxScopeAmount")
+        val exempt = node.num("taxExScopeAmount")
+        val key = node.str("merchantPayId")
+        if (total == null || total < 10 || taxed == null || exempt == null || taxed + exempt != total || key.isNullOrBlank() || key.length > 64 || node.str("productName").isNullOrBlank() || node.str("merchantUserId").isNullOrBlank()) {
+            return envelope("InvalidParameter", "pay", null)
+        }
+        val paymentId = "2026" + "1117NR" + "%08d".format(sequence.incrementAndGet())
+        payReservations[paymentId] = PayReservation(paymentId, recurrent.recurrentId, key, total)
+        return envelope("Success", "", linkedMapOf("paymentId" to paymentId))
+    }
+
+    /** 자동결제 승인: 예약된 결제만, 한 번만. 승인되면 단건과 같은 결제 이력(정기 결제 표시)이 생긴다. */
+    private fun payApproval(body: String): Reply {
+        val reservation = payReservations[json(body).str("paymentId")] ?: return envelope("InvalidMerchant", "unknown payment", null)
+        synchronized(reservation) {
+            if (reservation.approved) return envelope("AlreadyComplete", "already", null)
+            if (recurrents[reservation.recurrentId]?.active != true) return envelope("InvalidRecurrentId", "expired", null)
+            reservation.approved = true
+        }
+        val payment = Payment(reservation.paymentId, reservation.merchantPayKey, reservation.total, applied = true, appliedAt = "20261117151722", recurring = true)
+        payments[payment.paymentId] = payment
+        return envelope("Success", "", linkedMapOf("paymentId" to payment.paymentId, "detail" to applyDetail(payment)))
+    }
+
+    /** 등록 해지: 이미 해지된 등록은 `Expired`(정상으로 읽어야 한다). */
+    private fun expire(body: String): Reply {
+        val node = json(body)
+        val recurrent = recurrents[node.str("recurrentId")] ?: return envelope("InvalidRecurrentId", "unknown", null)
+        if (node.str("expireRequester").isNullOrBlank() || node.str("expireReason").isNullOrBlank()) return envelope("RequireParameter", "expire", null)
+        synchronized(recurrent) {
+            if (!recurrent.active) return envelope("Expired", "already", null)
+            recurrent.active = false
+        }
+        return envelope("Success", "", null)
+    }
+
     private fun apply(form: Map<String, String>): Reply {
         val payment = payments[form["paymentId"]] ?: return envelope("InvalidMerchant", "unknown payment", null)
         synchronized(payment) {
@@ -198,6 +330,10 @@ internal class FakeNaverPayServer(
             payment.applied = true
             payment.appliedAt = "20261017151722"
         }
+        return envelope("Success", "", linkedMapOf("paymentId" to payment.paymentId, "detail" to applyDetail(payment)))
+    }
+
+    private fun applyDetail(payment: Payment): Map<String, Any?> {
         val detail = linkedMapOf<String, Any?>(
             "paymentId" to payment.paymentId,
             "payHistId" to "H${payment.paymentId.takeLast(12)}",
@@ -234,7 +370,7 @@ internal class FakeNaverPayServer(
             "extraDeduction" to false,
             "useCfmYmdt" to "20261017",
         )
-        return envelope("Success", "", linkedMapOf("paymentId" to payment.paymentId, "detail" to detail))
+        return detail
     }
 
     private fun cancel(form: Map<String, String>): Reply {
@@ -341,5 +477,6 @@ internal class FakeNaverPayServer(
 
     private companion object {
         const val HANG_LIMIT_SECONDS = 30L
+        val RECURRENT_OPERATIONS = setOf("regist-reserve", "regist-approval", "pay-reserve", "pay-approval", "expire")
     }
 }

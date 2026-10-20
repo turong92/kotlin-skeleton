@@ -35,8 +35,9 @@ class NaverPayKeyGuardTest {
         baseUrl: String = "",
         windowBaseUrl: String = "",
         origins: Set<String> = emptySet(),
+        recurrent: NaverPayProperties.Recurrent = NaverPayProperties.Recurrent(),
     ) = NaverPayKeyGuard(
-        properties = NaverPayProperties(enabled = true, mode = mode, clientId = id, clientSecret = clientSecret, chainId = chain, returnUrl = returnUrl, baseUrl = baseUrl, windowBaseUrl = windowBaseUrl, allowDevelopmentModeInProtectedEnv = allowDevelopment, allowedReturnOrigins = origins),
+        properties = NaverPayProperties(enabled = true, recurrent = recurrent, mode = mode, clientId = id, clientSecret = clientSecret, chainId = chain, returnUrl = returnUrl, baseUrl = baseUrl, windowBaseUrl = windowBaseUrl, allowDevelopmentModeInProtectedEnv = allowDevelopment, allowedReturnOrigins = origins),
         ledgerPresent = { ledger },
         jobQueueWorkerRunning = { workerRunning },
         responseTimeout = { responseTimeout },
@@ -132,5 +133,14 @@ class NaverPayKeyGuardTest {
         assertEquals(emptyList(), guard(mode = live, origins = setOf("https://app.example.test", "https://dev.example.test/")).problems(prod))
         assertEquals(emptyList(), guard(origins = setOf("http://localhost:5173")).problems(local))
         assertTrue(guard(origins = setOf("localhost:5173")).warnings(local).any { "allowed-return-origins" in it })
+    }
+
+    @Test
+    fun `a half-set recurrent credential stops the start - the subscription capability would silently not exist - and the values are never in a message`() {
+        val half = guard(recurrent = NaverPayProperties.Recurrent(clientId = "RECURIDTAIL", clientSecret = "RECURSECRETTAIL"))
+        everyEnv.values.forEach { env -> assertTrue(half.problems(env).any { "recurrent" in it }, half.problems(env).toString()) }
+        assertFalse(half.problems(local).joinToString().contains("RECURSECRETTAIL"))
+        assertEquals(emptyList(), guard(recurrent = NaverPayProperties.Recurrent("RID", "RSECRET", "RCHAIN")).problems(local))
+        assertEquals(emptyList(), guard().problems(local), "no recurrent credentials at all is fine")
     }
 }

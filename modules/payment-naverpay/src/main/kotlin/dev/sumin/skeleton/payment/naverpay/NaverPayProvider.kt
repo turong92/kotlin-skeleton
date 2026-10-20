@@ -3,6 +3,12 @@ package dev.sumin.skeleton.payment.naverpay
 import dev.sumin.skeleton.common.http.ExternalHttpClient
 import dev.sumin.skeleton.common.http.ExternalHttpException
 import dev.sumin.skeleton.common.http.ExternalHttpRequestSpec
+import dev.sumin.skeleton.payment.BillingChargeRequest
+import dev.sumin.skeleton.payment.BillingIssue
+import dev.sumin.skeleton.payment.BillingPrepareRequest
+import dev.sumin.skeleton.payment.BillingSetup
+import dev.sumin.skeleton.payment.PaymentFailureOutcome
+import dev.sumin.skeleton.payment.PreparedBilling
 import dev.sumin.skeleton.payment.CheckoutInstruction
 import dev.sumin.skeleton.payment.CheckoutOrder
 import dev.sumin.skeleton.payment.ConfirmDeclineCategory
@@ -40,7 +46,8 @@ import org.slf4j.LoggerFactory
 
 /**
  * 네이버페이 단건 결제(결제형 REST, 결제 예약 → 결제창 → 서버 승인 → 취소 · 조회). 한 빈이 결제 예약 · 승인 · 환불 · 조회를 모두 맡는다(라우터에 결제사가 하나로 보이게).
- * 정기 결제(자동결제) · 웹훅은 이 모듈에 없다 - 이번에 읽은 문서에서 결제 이벤트 웹훅을 찾지 못했다(`docs/modules/payment-naverpay.md`). 결과는 승인 응답과 결제 내역 조회로 맞춘다.
+ * 웹훅은 이 모듈에 없다 - 이번에 읽은 문서에서 결제 이벤트 웹훅을 찾지 못했다(`docs/modules/payment-naverpay.md`). 결과는 승인 응답과 결제 내역 조회로 맞춘다.
+ * 정기 결제(자동결제)는 [NaverPayBillingProvider] 하위 클래스가 능력으로 드러낸다(`recurrent.*` 인증값이 모두 있을 때만 그 클래스로 만든다) - 이 클래스의 `internal` 정기 걸음을 부른다.
  *
  * **결제창 흐름**: [checkout] 이 결제를 서버에서 예약하고(`v2/reserve` - 금액 · 주문 번호는 장부의 값) 받은 예약 번호로 결제창 주소(`<결제창 도메인>/payments/{예약 번호}`)를 만들어 프론트에 준다. 네이버 SDK 는 쓰지 않는다 - 구매자 브라우저는 그 주소로 이동하기만 한다.
  * 구매자가 결제하면 네이버가 우리 `returnUrl` 로 `paymentId` 를 붙여 돌려보내고, 프론트가 그 번호로 승인을 부른다([confirm] = `apply/payment`). **서버 승인 없이는 돈이 움직이지 않는다**(승인은 결제창이 열린 지 10분 안에).
@@ -51,7 +58,7 @@ import org.slf4j.LoggerFactory
  * **응답 본문은 어디에도 싣지 않는다**: 응답은 아래 data class 가 선언한 칸만 읽고(나머지 - 카드 정보 · 상품명 · 사용자 키 - 는 버려진다), 오류는 코드만 예외에 담으며([NaverPayErrorMapper]),
  * 읽지 못한 응답은 본문을 인용하지 않는 [PaymentProviderException] 으로 바꾼다.
  */
-class NaverPayProvider(
+open class NaverPayProvider(
     private val httpClient: ExternalHttpClient,
     private val properties: NaverPayProperties,
     /** 인증 계열 거절(키 폐기 · 오타)을 주인에게 알린다 - 없으면 알리지 않는다. */
@@ -70,6 +77,12 @@ class NaverPayProvider(
 
     /** 조회용: 조회의 오류는 확정으로 표시하지 않는다(`definitive` 는 늘 false). */
     private val lookupErrorMapper = NaverPayErrorMapper(providerId = providerId, definitiveAllowed = false, credentialAlert = credentialAlert)
+
+    /** 자동결제 승인용: 문서가 결제가 일어나지 않았다고 말하는 코드가 더 있다([NaverPayErrorMapper.RECURRENT_APPROVAL_DEFINITIVE_CODES]). */
+    private val recurrentApprovalMapper = NaverPayErrorMapper(providerId = providerId, credentialAlert = credentialAlert, definitiveCodes = NaverPayErrorMapper.RECURRENT_APPROVAL_DEFINITIVE_CODES)
+
+    /** 결제 번호로만 조회된다 - 주문 번호만 든 조회는 결제사를 모른다고 답한다([lookup]). */
+    override val answersByOrderId: Boolean = false
 
     init {
         require(providerId.isNotBlank()) { "NaverPay providerId must not be blank" }
@@ -221,9 +234,9 @@ class NaverPayProvider(
 
     /** 부분 환불도 같은 호출이다. 응답의 `totalRestAmount` 가 남은 금액이다. */
     override fun refund(request: PaymentRefundRequest): PaymentOperationResult =
-        cancelOnce(NaverPayIdentifiers.paymentId(request.providerPaymentId), request.amount.amount, request.reason, request.idempotencyKey?.value, "payment.naverpay.refund", PaymentOperationStatus.REFUNDED)
+        cancelOnce(NaverPayIdentifiers.paymentId(request.providerPaymentId), request.amount.amount, request.reason, request.idempotencyKey?.value, "payment.naverpay.refund", PaymentOperationStatus.REFUNDED, request.recurring)
 
-    private fun cancelOnce(paymentId: String, amount: Long, reason: String?, idempotencyKey: String?, tag: String, done: PaymentOperationStatus): PaymentOperationResult =
+    private fun cancelOnce(paymentId: String, amount: Long, reason: String?, idempotencyKey: String?, tag: String, done: PaymentOperationStatus, recurring: Boolean = false): PaymentOperationResult =
         guarded("cancel") { seen ->
             val response = requireNotNull(
                 httpClient.postFormResponse(
@@ -240,7 +253,7 @@ class NaverPayProvider(
                     ),
                     responseType = NaverPayCancelResponse::class.java,
                 ) {
-                    common(tag, errorMapper)
+                    common(tag, errorMapper, recurring)
                     header(IDEMPOTENCY_HEADER, NaverPayIdentifiers.cancelKey(idempotencyKey))
                     timeout(properties.applyTimeout)
                 }.block(),
@@ -358,7 +371,7 @@ class NaverPayProvider(
                     responseType = NaverPayHistoryResponse::class.java,
                 ) {
                     // 조회의 오류는 돈에 대해 아무것도 말하지 않는다 - 확정으로 읽히지 않게 한다
-                    common("payment.naverpay.lookup", lookupErrorMapper)
+                    common("payment.naverpay.lookup", lookupErrorMapper, query.recurring)
                     timeout(properties.lookupTimeout)
                 }.block(),
             )
@@ -413,13 +426,233 @@ class NaverPayProvider(
         )
     }
 
+    // --- 정기 결제 (자동결제) - [NaverPayBillingProvider] 가 능력으로 드러낸다 ---
+
+    /**
+     * 등록 예약(`regist/v1/reserve`) - **돈이 움직이지 않는다**. `productCode` 는 구독 id(같은 코드는 중복 등록이 안 된다 - 다시 구독해도 겹치지 않게), `merchantUserId` 는 우리 고객 키(개인정보 아님).
+     * 돌아올 주소가 없거나 원화가 아니면 null. 받은 `reserveId` 가 [PreparedBilling.reference] 다.
+     */
+    internal fun prepareRecurrent(request: BillingPrepareRequest): PreparedBilling? {
+        val base = returnBase()?.let { ReturnOrigins.resolve(it, request.returnOrigin, properties.allowedReturnOrigins) } ?: return null
+        if (request.amount.normalizedCurrency != KRW) return null
+        val reserveId = guarded("regist-reserve") { seen ->
+            val response = requireNotNull(
+                httpClient.postResponse(
+                    clientName = properties.clientName,
+                    path = properties.recurrent.registerReservePath,
+                    body = linkedMapOf<String, Any?>(
+                        "productCode" to request.subscriptionId,
+                        "productName" to request.planName.take(NAME_MAX),
+                        "totalPayAmount" to request.amount.amount,
+                        "returnUrl" to billingReturnUrl(base, request.subscriptionId),
+                        "merchantUserId" to request.customerKey,
+                    ),
+                    responseType = NaverPayReserveResponse::class.java,
+                ) {
+                    common("payment.naverpay.regist-reserve", errorMapper, recurring = true)
+                    header(IDEMPOTENCY_HEADER, NaverPayIdentifiers.registerKey(request.subscriptionId))
+                    timeout(properties.reserveTimeout)
+                }.block(),
+            )
+            seen.status = response.statusCode
+            requireSuccess(response.body.code, errorMapper, setOf(SUCCESS), response.body.message)
+            response.body.body?.reserveId?.takeIf(NaverPayIdentifiers::isReserveId).need("reserveId")
+        }
+        val setup = BillingSetup(
+            provider = providerId,
+            kind = BILLING_KIND,
+            testMode = mode == PaymentMode.TEST,
+            clientKey = null, // 공개 키가 없다 - 등록창 주소가 그 몫이다
+            customerKey = request.customerKey,
+            attributes = mapOf("windowUrl" to "${properties.windowBase}/payments/recurrent/$reserveId"),
+        )
+        return PreparedBilling(setup, reserveId)
+    }
+
+    /** 돌아온 창의 값의 모양과 예약 번호가 같은지 - 자리를 선점하기 전에 묻는다. 다른 예약의 `reserveId` 로는 결제사를 부르지 않는다(남의 등록을 이 구독에 붙이는 길을 막는다). */
+    internal fun acceptsRecurrentRegistration(providerPayload: Map<String, Any?>, reference: String?): Boolean {
+        val reserveId = providerPayload["reserveId"] as? String
+        val receipt = providerPayload["tempReceiptId"] as? String
+        return reference != null && reserveId == reference && NaverPayIdentifiers.isReserveId(reference) && receipt != null && NaverPayIdentifiers.isTempReceiptId(receipt)
+    }
+
+    /** 등록 완료(`regist/v1/approval`) - 토큰 = `recurrentId`. 응답의 이메일 · 사용자 구분값은 선언하지 않았으니 읽지도 저장하지도 않는다. */
+    internal fun issueRecurrent(providerPayload: Map<String, Any?>, reference: String?): BillingIssue {
+        if (!acceptsRecurrentRegistration(providerPayload, reference)) throw NaverPayIdentifierRejectedException()
+        val reserveId = providerPayload["reserveId"] as String
+        val receipt = providerPayload["tempReceiptId"] as String
+        val recurrentId = guarded("regist-approval") { seen ->
+            val response = requireNotNull(
+                httpClient.postResponse(
+                    clientName = properties.clientName,
+                    path = properties.recurrent.registerApprovalPath,
+                    body = linkedMapOf<String, Any?>("reserveId" to reserveId, "tempReceiptId" to receipt),
+                    responseType = NaverPayRegisterApprovalResponse::class.java,
+                ) {
+                    common("payment.naverpay.regist-approval", errorMapper, recurring = true)
+                    header(IDEMPOTENCY_HEADER, "regist-approve-$reserveId".take(64))
+                    timeout(properties.applyTimeout)
+                }.block(),
+            )
+            seen.status = response.statusCode
+            requireSuccess(response.body.code, errorMapper, setOf(SUCCESS), response.body.message)
+            response.body.body?.recurrentId?.takeIf(NaverPayIdentifiers::isRecurrentId).need("recurrentId")
+        }
+        return BillingIssue(recurrentId, null)
+    }
+
+    /**
+     * 자동결제: 예약(`pay/v3/reserve`) → 승인(`pay/v3/approval`). **예약이 실패하면 확정 거절**이다 - 승인을 부르지 않았으니 돈이 움직이지 않았고 일시 오류로 분류한다.
+     * 승인이 **모름**이면 던지지 않고 [PaymentOperationStatus.UNKNOWN] 과 예약으로 받은 `paymentId` 를 돌려준다 - 장부가 주문의 결제 키 자리에 박아 두면 조회가 그 번호로 끝낸다. 확정 거절 코드는 던진다.
+     */
+    internal fun chargeRecurrent(request: BillingChargeRequest): PaymentOperationResult {
+        val orderId = NaverPayIdentifiers.orderId(request.orderId)
+        val recurrentId = request.token.takeIf(NaverPayIdentifiers::isRecurrentId) ?: throw NaverPayIdentifierRejectedException()
+        val paymentId = reserveCharge(request, orderId, recurrentId)
+        try {
+            return guarded("pay-approval") { seen ->
+                val response = requireNotNull(
+                    httpClient.postResponse(
+                        clientName = properties.clientName,
+                        path = properties.recurrent.payApprovalPath,
+                        body = linkedMapOf<String, Any?>("paymentId" to paymentId),
+                        responseType = NaverPayApplyResponse::class.java,
+                    ) {
+                        common("payment.naverpay.pay-approval", recurrentApprovalMapper, recurring = true)
+                        header(IDEMPOTENCY_HEADER, NaverPayIdentifiers.payApprovalKey(paymentId))
+                        timeout(properties.applyTimeout)
+                    }.block(),
+                )
+                seen.status = response.statusCode
+                val answer = response.body
+                requireSuccess(answer.code, recurrentApprovalMapper, setOf(SUCCESS))
+                val detail = answer.body?.detail.need("detail")
+                if (answer.body?.paymentId != paymentId || detail.paymentId != paymentId) throw UnreadableAnswer("paymentId")
+                if (detail.admissionTypeCode != "01" || detail.admissionState != "SUCCESS") throw UnreadableAnswer("admissionState")
+                val total = detail.totalPayAmount.need("totalPayAmount")
+                val merchantPayKey = detail.merchantPayKey?.takeIf(SAFE_ID::matches).need("merchantPayKey")
+                // 우리가 예약한 결제다 - 주문 번호 · 금액이 다르면 읽지 않는다(모름으로 두고 조회가 대조한다)
+                if (merchantPayKey != orderId || total != request.amount.amount) throw UnreadableAnswer("merchantPayKey")
+                PaymentOperationResult(
+                    provider = providerId,
+                    providerPaymentId = paymentId,
+                    status = PaymentOperationStatus.CONFIRMED,
+                    amount = PaymentAmount(total, KRW),
+                    trace = ProviderTrace(
+                        provider = providerId,
+                        providerRequestId = response.trace.traceId?.takeIf(SAFE_TRACE::matches),
+                        providerOperationId = detail.payHistId?.takeIf(SAFE_ID::matches),
+                        rawStatus = "SUCCESS",
+                        metadata = mapOf("orderId" to merchantPayKey),
+                    ),
+                    attributes = mapOf("method" to METHOD, "easyPayBrand" to BRAND),
+                    paidAt = detail.admissionYmdt.toInstantOrNull(),
+                )
+            }
+        } catch (e: Exception) {
+            if (generateSequence<Throwable>(e) { it.cause }.any { it is InterruptedException }) throw e
+            if (isCallerFault(e) || PaymentFailures.outcomeOf(e) == PaymentFailureOutcome.DEFINITIVE) throw e
+            log.warn("NaverPay recurrent approval outcome unknown order={} {}", orderId, PaymentFailures.describe(e))
+            return PaymentOperationResult(
+                provider = providerId,
+                providerPaymentId = paymentId,
+                status = PaymentOperationStatus.UNKNOWN,
+                amount = request.amount,
+                trace = ProviderTrace(provider = providerId, rawStatus = "UNKNOWN"),
+                attributes = mapOf("method" to METHOD),
+            )
+        }
+    }
+
+    /** 자동결제 예약 - 실패는 무엇이든(시간 초과 · 거절 · 읽을 수 없는 응답) 승인을 안 불렀으니 **확정 거절**로 바꾼다. */
+    private fun reserveCharge(request: BillingChargeRequest, orderId: String, recurrentId: String): String =
+        try {
+            guarded("pay-reserve") { seen ->
+                val response = requireNotNull(
+                    httpClient.postResponse(
+                        clientName = properties.clientName,
+                        path = properties.recurrent.payReservePath,
+                        body = linkedMapOf<String, Any?>(
+                            "recurrentId" to recurrentId,
+                            "totalPayAmount" to request.amount.amount,
+                            "taxScopeAmount" to request.amount.amount, // 모두 과세 - 면세 상품이 있는 가맹점은 계약에 맞춰 이 구분을 고친다
+                            "taxExScopeAmount" to 0,
+                            "productName" to request.orderName.take(NAME_MAX),
+                            "merchantPayId" to orderId,
+                            "merchantUserId" to request.customerKey,
+                        ),
+                        responseType = NaverPayPayReserveResponse::class.java,
+                    ) {
+                        common("payment.naverpay.pay-reserve", errorMapper, recurring = true)
+                        header(IDEMPOTENCY_HEADER, NaverPayIdentifiers.payReserveKey(orderId))
+                        timeout(properties.reserveTimeout)
+                    }.block(),
+                )
+                seen.status = response.statusCode
+                requireSuccess(response.body.code, errorMapper, setOf(SUCCESS), response.body.message)
+                response.body.body?.paymentId?.takeIf(NaverPayIdentifiers::isPaymentId).need("paymentId")
+            }
+        } catch (e: Exception) {
+            if (generateSequence<Throwable>(e) { it.cause }.any { it is InterruptedException } || isCallerFault(e)) throw e
+            val underlying = (e as? PaymentProviderException)?.providerError?.code
+            log.warn("NaverPay recurrent reserve failed order={} code={} {}", orderId, underlying, PaymentFailures.describe(e))
+            throw PaymentProviderException(
+                providerError = PaymentProviderError(
+                    provider = providerId,
+                    code = NaverPayErrorMapper.RESERVE_FAILED,
+                    message = null,
+                    trace = ProviderTrace(provider = providerId, rawCode = underlying),
+                    upstreamStatus = 400,
+                    retryable = false,
+                    definitive = true,
+                    rawBody = null,
+                ),
+                clientName = properties.clientName,
+                method = "HTTP",
+                uri = apiUri(),
+                cause = e,
+            )
+        }
+
+    /** 등록 해지(`expire/v1/request`) - `Expired`(이미 해지)도 정상이다(멱등). */
+    internal fun revokeRecurrent(recurrentId: String) {
+        val id = recurrentId.takeIf(NaverPayIdentifiers::isRecurrentId) ?: throw NaverPayIdentifierRejectedException()
+        guarded("expire") { seen ->
+            val response = requireNotNull(
+                httpClient.postResponse(
+                    clientName = properties.clientName,
+                    path = properties.recurrent.expirePath,
+                    body = linkedMapOf<String, Any?>("recurrentId" to id, "expireRequester" to EXPIRE_REQUESTER_MERCHANT, "expireReason" to EXPIRE_REASON),
+                    responseType = NaverPayCodeResponse::class.java,
+                ) {
+                    common("payment.naverpay.expire", errorMapper, recurring = true)
+                    header(IDEMPOTENCY_HEADER, NaverPayIdentifiers.expireKey()) // 이미 해지돼도 정상이라 멱등 키로 지킬 것이 없다 - 같은 키의 재요청이 409 로 돌아오면 오히려 실패로 보인다
+                    timeout(properties.reserveTimeout)
+                }.block(),
+            )
+            seen.status = response.statusCode
+            requireSuccess(response.body.code, errorMapper, setOf(SUCCESS, EXPIRED))
+        }
+    }
+
+    /** 호출자 잘못(400)이다 - 결제사 호출의 실패([ExternalHttpException])는 아니다. */
+    private fun isCallerFault(e: Throwable): Boolean = e is dev.sumin.skeleton.common.ApplicationException && e !is ExternalHttpException
+
+    /** 정기 등록의 돌아올 주소 - 단건과 같은 `return-url` 에 `kind=NAVERPAY_BILLING_REDIRECT&provider=<id>&sub=<구독 id>` 를 붙인다(네이버페이가 `resultCode` · `reserveId` · `tempReceiptId` 를 이어 붙인다). */
+    private fun billingReturnUrl(base: String, subscriptionId: String): String {
+        val separator = if ('?' in base) '&' else '?'
+        return "$base${separator}kind=$BILLING_KIND&provider=${providerId.urlEncoded()}&sub=${subscriptionId.urlEncoded()}"
+    }
+
     // --- 공통 ---
 
-    private fun ExternalHttpRequestSpec.common(loggingTag: String, mapper: NaverPayErrorMapper) {
+    /** [recurring] 이면 정기 인증값(`recurrent.*`)으로 부른다 - 정기 인증값이 없는 빈에서는 단건 인증값이다. */
+    private fun ExternalHttpRequestSpec.common(loggingTag: String, mapper: NaverPayErrorMapper, recurring: Boolean = false) {
+        val recurrent = properties.recurrent.takeIf { recurring && it.configured }
         baseUrl(properties.apiBaseUrl)
-        header("X-Naver-Client-Id", properties.clientId.trim())
-        header("X-Naver-Client-Secret", properties.clientSecret.trim())
-        header("X-NaverPay-Chain-Id", properties.chainId.trim())
+        header("X-Naver-Client-Id", (recurrent?.clientId ?: properties.clientId).trim())
+        header("X-Naver-Client-Secret", (recurrent?.clientSecret ?: properties.clientSecret).trim())
+        header("X-NaverPay-Chain-Id", (recurrent?.chainId ?: properties.chainId).trim())
         loggingTag(loggingTag)
         errorMapper(mapper)
     }
@@ -429,7 +662,7 @@ class NaverPayProvider(
         val value = code ?: throw UnreadableAnswer("code")
         if (value in ok) return
         // 업무 오류가 HTTP 200 으로 온다(문서의 결과 코드 표) - 결제가 일어나지 않은 게 분명한 코드(`DEFINITIVE_CODES`)만 4xx 거절로 옮겨 확정 거절로 이어지게 하고, 그 밖은 200 그대로 둬 모름이다
-        val status = if (value in NaverPayErrorMapper.DEFINITIVE_CODES) BUSINESS_REFUSAL_STATUS else 200
+        val status = if (value in mapper.definitiveCodes) BUSINESS_REFUSAL_STATUS else 200
         throw mapper.exceptionFor(value, upstreamStatus = status, traceId = null, clientName = properties.clientName, method = "POST", uri = apiUri(), message = message)
     }
 
@@ -487,6 +720,10 @@ class NaverPayProvider(
         val log = LoggerFactory.getLogger(NaverPayProvider::class.java)
 
         const val CHECKOUT_KIND = "NAVERPAY_REDIRECT"
+        const val BILLING_KIND = "NAVERPAY_BILLING_REDIRECT"
+        const val EXPIRED = "Expired"
+        const val EXPIRE_REQUESTER_MERCHANT = "2"
+        const val EXPIRE_REASON = "subscription ended"
         const val NAME_MAX = 128
         const val METHOD = "EASY_PAY"
 
@@ -520,6 +757,19 @@ class NaverPayProvider(
 data class NaverPayReserveResponse(val code: String? = null, val message: String? = null, val body: NaverPayReserveBody? = null)
 
 data class NaverPayReserveBody(val reserveId: String? = null)
+
+/** 등록 완료(`regist/v1/approval`)에서 읽는 칸 - 토큰 한 칸. 가려진 이메일 · 사용자 구분값은 선언하지 않았으니 버려진다. */
+data class NaverPayRegisterApprovalResponse(val code: String? = null, val message: String? = null, val body: NaverPayRegisterApprovalBody? = null)
+
+data class NaverPayRegisterApprovalBody(val recurrentId: String? = null)
+
+/** 자동결제 예약(`pay/v3/reserve`)에서 읽는 칸. */
+data class NaverPayPayReserveResponse(val code: String? = null, val message: String? = null, val body: NaverPayPayReserveBody? = null)
+
+data class NaverPayPayReserveBody(val paymentId: String? = null)
+
+/** 결과 코드만 있는 응답(등록 해지). */
+data class NaverPayCodeResponse(val code: String? = null, val message: String? = null)
 
 /** 결제 승인(`apply/payment`)에서 읽는 칸. 카드 정보 · 상품명 · 사용자 키 · 정산 칸은 선언하지 않았으니 버려진다. */
 data class NaverPayApplyResponse(val code: String? = null, val body: NaverPayApplyBody? = null)

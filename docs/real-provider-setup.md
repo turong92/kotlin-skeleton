@@ -610,7 +610,19 @@ SKELETON_PAYMENT_NAVERPAY_ALLOWED_RETURN_ORIGINS=         # 선택, 쉼표로 �
 | 응답 필드 이름 · 형(문서 예시 그대로 `Number` 가 정수) | 모듈이 읽는 칸이 비어 `UNREADABLE_RESPONSE` | 첫 승인 응답 |
 | 웹훅이 없다 | 결제 이벤트 웹훅이 있다면 응답 유실 · 창 닫힘을 더 빨리 알 수 있다 | 개발자센터 메뉴 확인 |
 
-정기 결제(자동결제)는 이 모듈에 없다 - 클라이언트 · 체인 아이디가 단건과 따로이고 결제 방식이 다르다(다음 일).
+### 13.x 정기 결제(자동결제) 못 잰 가정 (정기 인증값 `recurrent.*` 가 있어야 잰다)
+
+| 못 잰 가정 | 틀리면 신호 | 재려면 |
+|---|---|---|
+| 정기 경로가 `…/payments/recurrent/{regist/v1/reserve, regist/v1/approval, pay/v3/reserve, pay/v3/approval, expire/v1/request}` 이고 본문이 JSON 이다 (설정 키로 바꿀 수 있다) | 등록 예약이 404 · 400 이다 | 개발 인증값으로 등록 예약 한 번 |
+| 단건과 자동결제는 클라이언트 · 체인 아이디가 다르고, 취소 · 결제 내역 조회는 정기 결제에 정기 인증값을 쓴다 | 정기 주문의 환불 · 조회가 401 이다 | 자동결제 한 건을 취소 · 조회해 본다 |
+| 등록 예약의 `productCode` 를 구독 id 로 쓰면 다시 구독해도 `DataExist` 가 나지 않는다 | 해지 뒤 재구독의 등록 예약이 `DataExist` | 해지 뒤 재구독 |
+| 등록 완료 응답의 `recurrentId` 칸 이름 · 돌아온 주소의 `resultCode` · `reserveId` · `tempReceiptId` 이름 | 등록이 `UNREADABLE_RESPONSE` · 화면이 값을 못 찾는다 | 등록 한 번 |
+| 예약이 실패하면 승인을 부르지 않았으니 돈이 안 움직였다 (모든 예약 실패를 확정 거절로 읽는다) | 예약 시간 초과 뒤에도 예약이 살아 있어 중복 승인 | 같은 주문 번호 `merchantPayId` 로 두 번 예약 |
+| 자동결제 승인 응답이 단건 승인(`apply/payment`)과 같은 `detail` 모양이다 | 승인이 읽히지 않아 모름으로 남고 조회가 맞춘다 | 승인 응답 |
+| 확정 거절 승인 코드 표(`InvalidRecurrentId` 등)가 HTTP 4xx 로 오는지 200 안의 `code` 인지 | 200 으로 오면 모듈이 4xx 로 옮겨 읽는다(단건과 같음) | 일부러 잔액 부족 |
+| `Expired` 가 이미 해지된 등록의 해지 응답이다 | 해지가 영원히 실패로 보인다 | 해지 두 번 |
+| 정기 상품 최소 금액 10원, 과세 구분 전액 과세 | 면세 상품이 있는 계약이면 거절 | 계약 확인 |
 <!-- payment-naverpay:end -->
 
 <!-- payment-paddle:start -->

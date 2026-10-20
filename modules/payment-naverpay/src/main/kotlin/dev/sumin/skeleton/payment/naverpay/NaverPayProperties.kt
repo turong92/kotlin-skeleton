@@ -41,6 +41,8 @@ data class NaverPayProperties(
     val returnUrl: String = "",
     /** 결제를 시작한 화면의 origin 으로 돌아오게 허락하는 origin 목록 - 뜻은 카카오페이의 같은 이름 설정과 같다. 목록 밖이거나 비어 있으면 [returnUrl] 그대로. */
     val allowedReturnOrigins: Set<String> = emptySet(),
+    /** 정기 결제(자동결제) 인증값과 경로. **셋(client-id · client-secret · chain-id)이 모두 있을 때만** 정기 능력이 선다. 단건 값을 물려받지 않는다(네이버페이는 단건과 자동결제의 클라이언트 · 체인 아이디가 다르다). */
+    val recurrent: Recurrent = Recurrent(),
     /** 결제 예약 한 번의 제한 시간(요청 단위). 실패하면 결제창을 열지 않는다(503). */
     val reserveTimeout: Duration = Duration.ofSeconds(10),
 
@@ -63,7 +65,30 @@ data class NaverPayProperties(
     override fun toString(): String =
         "NaverPayProperties(enabled=$enabled, providerId=$providerId, clientName=$clientName, mode=$mode, clientId=${redacted(clientId)}, clientSecret=${redacted(clientSecret)}, chainId=${redacted(chainId)}, " +
             "baseUrl=${if (baseUrl.isBlank()) "<default>" else "<set>"}, supportedCurrencies=$supportedCurrencies, supportedCountries=$supportedCountries, " +
-            "returnUrl=${if (returnUrl.isBlank()) "<unset>" else "<set>"}, allowedReturnOrigins=${allowedReturnOrigins.size}, applyTimeout=$applyTimeout, lookupTimeout=$lookupTimeout, allowDevelopmentModeInProtectedEnv=$allowDevelopmentModeInProtectedEnv)"
+            "returnUrl=${if (returnUrl.isBlank()) "<unset>" else "<set>"}, allowedReturnOrigins=${allowedReturnOrigins.size}, applyTimeout=$applyTimeout, lookupTimeout=$lookupTimeout, allowDevelopmentModeInProtectedEnv=$allowDevelopmentModeInProtectedEnv, recurrent=$recurrent)"
 
     private fun redacted(value: String) = if (value.isBlank()) "<unset>" else "<redacted>"
+
+    /** 정기 결제 인증값 · 경로. 비밀과 아이디는 [toString] 에 찍지 않는다. */
+    data class Recurrent(
+        val clientId: String = "",
+        val clientSecret: String = "",
+        val chainId: String = "",
+        /** 등록 예약 · 등록 완료 · 등록 해지 · 자동결제 예약 · 자동결제 승인. */
+        val registerReservePath: String = "/naverpay-partner/naverpay/payments/recurrent/regist/v1/reserve",
+        val registerApprovalPath: String = "/naverpay-partner/naverpay/payments/recurrent/regist/v1/approval",
+        val expirePath: String = "/naverpay-partner/naverpay/payments/recurrent/expire/v1/request",
+        val payReservePath: String = "/naverpay-partner/naverpay/payments/recurrent/pay/v3/reserve",
+        val payApprovalPath: String = "/naverpay-partner/naverpay/payments/recurrent/pay/v3/approval",
+    ) {
+        /** 셋이 모두 있어야 정기 능력이 선다. */
+        val configured: Boolean get() = clientId.isNotBlank() && clientSecret.isNotBlank() && chainId.isNotBlank()
+
+        /** 하나라도 있는데 셋이 다 있지는 않다 - 설정 실수다. */
+        val partial: Boolean get() = !configured && (clientId.isNotBlank() || clientSecret.isNotBlank() || chainId.isNotBlank())
+
+        override fun toString(): String = "Recurrent(clientId=${mask(clientId)}, clientSecret=${mask(clientSecret)}, chainId=${mask(chainId)})"
+
+        private fun mask(value: String) = if (value.isBlank()) "<unset>" else "<redacted>"
+    }
 }

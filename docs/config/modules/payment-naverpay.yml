@@ -8,6 +8,15 @@ skeleton:
     client-id: ""                                   # 가맹점 식별키(Client ID) — 서버가 네이버페이를 부를 때 헤더로 싣는다(브라우저에 나가지 않는다). env <P>_PAYMENT_NAVERPAY_CLIENT_ID (선언의 env:). client-secret 과 짝이라 프로젝트 모드는 프로젝트마다 자기 것
     client-secret: ""                               # 클라이언트 시크릿 — 서버에만 있다 (env <P>_PAYMENT_NAVERPAY_CLIENT_SECRET — 배포 선언의 secrets:, 운영자 값). 보호 환경에서 비면 기동 실패
     chain-id: ""                                    # 가맹점 그룹 식별키(Chain ID) - 단건 값. 자동결제는 값이 다르다. env <P>_PAYMENT_NAVERPAY_CHAIN_ID (선언의 env:). 프로젝트마다 자기 것
+    recurrent:                                      # 정기 결제(자동결제) — 셋(client-id · client-secret · chain-id)이 모두 있을 때만 구독 능력이 선다. 단건 값을 물려받지 않는다(네이버페이는 단건과 자동결제의 클라이언트 · 체인 아이디가 다르다). 하나라도 비면 기동 가드가 알린다
+      client-id: ""                                 # 자동결제 가맹점 식별키 (env <P>_PAYMENT_NAVERPAY_RECURRENT_CLIENT_ID)
+      client-secret: ""                             # 자동결제 클라이언트 시크릿 — 비밀 (env <P>_PAYMENT_NAVERPAY_RECURRENT_CLIENT_SECRET)
+      chain-id: ""                                  # 자동결제 가맹점 그룹 식별키 (env <P>_PAYMENT_NAVERPAY_RECURRENT_CHAIN_ID)
+      register-reserve-path: /naverpay-partner/naverpay/payments/recurrent/regist/v1/reserve     # 등록 예약
+      register-approval-path: /naverpay-partner/naverpay/payments/recurrent/regist/v1/approval   # 등록 완료
+      expire-path: /naverpay-partner/naverpay/payments/recurrent/expire/v1/request               # 등록 해지
+      pay-reserve-path: /naverpay-partner/naverpay/payments/recurrent/pay/v3/reserve             # 자동결제 예약
+      pay-approval-path: /naverpay-partner/naverpay/payments/recurrent/pay/v3/approval           # 자동결제 승인
     return-url: ""                                  # 구매자를 돌려보낼 우리 화면의 주소(예: https://app.example.com/payments/return) — 서버가 결제를 예약할 때 returnUrl 로 넘긴다. 모듈이 kind · provider · order 조각을 붙이고 네이버페이가 resultCode · paymentId 를 붙인다. 구매자가 정하는 값이 아니라 설정이다. 장부가 있는데 http(s) 절대 주소가 아니면 보호 환경에서 기동 실패(그 밖은 경고, GET /config 가 available:false). 프로젝트 모드는 프로젝트마다 자기 것(공통에서 물려받으면 기동 실패)
     allowed-return-origins: []                      # 결제를 시작한 화면의 origin 으로 돌아오게 허락하는 목록(예: [http://localhost:5173]) — 뜻은 payment-kakaopay 의 같은 이름과 같다. 목록 밖이거나 비면 return-url 그대로. origin 모양이 아닌 줄은 무시되어 경고(stage|prod 는 기동 실패), stage|prod 는 https 만. 프로젝트 모드는 프로젝트마다 자기 것(공통에서 물려받으면 기동 실패)
     base-url: ""                                    # 비우면 mode 가 정한 네이버페이 API 주소. 프록시나 가짜 서버를 가리킬 때만

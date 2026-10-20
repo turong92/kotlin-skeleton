@@ -15,7 +15,24 @@ internal object NaverPayIdentifiers {
 
     private val RESERVE_ID = Regex("[A-Za-z0-9_-]{1,50}")
 
+    private val RECURRENT_ID = Regex("[A-Za-z0-9_-]{1,100}")
+    private val TEMP_RECEIPT_ID = Regex("[A-Za-z0-9_-]{1,100}")
+
     fun isReserveId(value: String): Boolean = RESERVE_ID.matches(value)
+
+    fun isRecurrentId(value: String): Boolean = RECURRENT_ID.matches(value)
+
+    fun isTempReceiptId(value: String): Boolean = TEMP_RECEIPT_ID.matches(value)
+
+    /** 정기 등록 예약의 멱등 키 - 같은 구독을 다시 예약하면 새 창이라 부를 때마다 달라야 한다(최대 64자). */
+    fun registerKey(subscriptionId: String): String = "regist-$subscriptionId-${java.util.UUID.randomUUID().toString().take(8)}".take(64)
+
+    /** 자동결제 예약은 주문마다 한 번이다 - 같은 주문의 재요청은 같은 키라서 네이버페이가 처음 응답(같은 paymentId)을 돌려준다. */
+    fun payReserveKey(orderId: String): String = "reserve-$orderId".take(64)
+
+    fun expireKey(): String = "expire-${java.util.UUID.randomUUID()}"
+
+    fun payApprovalKey(paymentId: String): String = "approve-$paymentId".take(64)
 
     fun isPaymentId(value: String): Boolean = PAYMENT_ID.matches(value)
 

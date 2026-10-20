@@ -29,6 +29,8 @@ class NaverPayErrorMapper(
     private val definitiveAllowed: Boolean = true,
     private val mapper: JsonMapper = JsonMapper.builder().addModule(kotlinModule()).build(),
     private val credentialAlert: PaymentProviderCredentialAlert = PaymentProviderCredentialAlert.NONE,
+    /** 확정으로 읽는 업무 코드 - 자동결제 승인은 [RECURRENT_APPROVAL_DEFINITIVE_CODES]. */
+    val definitiveCodes: Set<String> = DEFINITIVE_CODES,
 ) : ExternalHttpErrorMapper {
     override fun map(context: ExternalHttpErrorContext): PaymentProviderException =
         exceptionFor(
@@ -60,7 +62,7 @@ class NaverPayErrorMapper(
                 trace = ProviderTrace(provider = providerId, providerRequestId = traceId, rawCode = resolved, rawStatus = upstreamStatus.toString()),
                 upstreamStatus = upstreamStatus,
                 retryable = upstreamStatus == 429 || upstreamStatus >= 500,
-                definitive = definitiveAllowed && upstreamStatus in 400..499 && resolved in DEFINITIVE_CODES,
+                definitive = definitiveAllowed && upstreamStatus in 400..499 && resolved in definitiveCodes,
                 rawBody = null,
                 // 요청 · 설정 문제를 말하는 거절(확정 코드)의 `message` 만 가려서 로그 한 줄에 싣는다(예: 등록되지 않은 가맹점) - 그 밖은 싣지 않는다
                 reason = if (resolved in DEFINITIVE_CODES) PaymentFailures.safeReason(message) else null,
@@ -81,6 +83,9 @@ class NaverPayErrorMapper(
         const val UNAUTHORIZED = "Unauthorized"
         const val IDEMPOTENT_REPLAY = "IdempotentReplay"
 
+        /** 자동결제 예약이 실패했다 - 승인을 부르지 않았으니 돈은 움직이지 않았다(확정 거절, 일시 오류로 분류). */
+        const val RESERVE_FAILED = "RESERVE_FAILED"
+
         /** 문서가 요청 자체를 받아들이지 않았다고 말하는 코드(결제 승인 · 취소의 결과 코드 표, 2026-10-17 읽음). */
         val DEFINITIVE_CODES: Set<String> = setOf(
             UNAUTHORIZED, "RequireParameter", "InvalidParameter", "InvalidMerchant", "InvalidPaymentId",
@@ -88,11 +93,19 @@ class NaverPayErrorMapper(
             "CancelDeadlineExpired", "TaxScopeAmtGreaterThanRemainError", "TaxScopeAmountError", "InvalidDiscountCancelCondition",
         )
 
+        /** 자동결제 승인(`pay/v3/approval`)에서 결제가 일어나지 않았다고 문서가 말하는 코드. `Fail` · `AlreadyOnGoing` · 409 는 모름이다. */
+        val RECURRENT_APPROVAL_DEFINITIVE_CODES: Set<String> = DEFINITIVE_CODES + setOf(
+            "InvalidRecurrentId", "UnderAgeAmountLimit", "FailUnderAgeAmountLimitValidation", "PaymentBlocked",
+            "BankCheckTime", "BankMaintenance", "MaintenanceOngoing", "FaultCheckOngoing",
+        )
+
         /** 결제를 지지 못한 사유 → 화면이 문구를 고르는 분류. 코드는 결제사 모듈만 안다. */
         fun declineCategory(providerCode: String?): ConfirmDeclineCategory =
             when (providerCode) {
                 "NotEnoughAccountBalance" -> ConfirmDeclineCategory.LIMIT_OR_BALANCE
                 "OwnerAuthFail" -> ConfirmDeclineCategory.CARD_DECLINED
+                "PaymentBlocked", "UnderAgeAmountLimit", "FailUnderAgeAmountLimitValidation" -> ConfirmDeclineCategory.CARD_DECLINED
+                RESERVE_FAILED, "BankCheckTime", "BankMaintenance", "MaintenanceOngoing", "FaultCheckOngoing" -> ConfirmDeclineCategory.TEMPORARY
                 else -> ConfirmDeclineCategory.OTHER
             }
     }

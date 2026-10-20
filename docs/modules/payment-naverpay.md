@@ -1,7 +1,7 @@
 # payment-naverpay
 
 `payment` 의 제공자로 **네이버페이 직접 연동(결제형 REST)** 의 **단건 결제**를 구현한다 - 토스 계약 없이 네이버페이 계약만 있는 사업자를 위한 별도 결제사다(기본 꺼짐, 카카오페이 · 토스와 함께 켜면 결제 화면에서 고른다). 외부 호출은 `platform` 의 `ExternalHttpClient` 를 쓰고 네이버 SDK 는 어디에도 없다(REST 직접; 브라우저는 서버가 예약한 결제창 주소로 이동하기만 한다).
-한 빈(`NaverPayProvider`)이 능력을 모두 맡아 라우터에는 결제사가 하나로 보인다: 결제 예약(`v2/reserve`) · 승인(`apply/payment`) · 취소 · 환불 · 조회(결제 내역). **정기 결제(자동결제)와 웹훅은 없다** - 네이버페이 문서에서 결제 이벤트 웹훅을 찾지 못해 승인 응답과 결제 내역 조회로 맞춘다.
+한 빈(`NaverPayProvider`)이 능력을 모두 맡아 라우터에는 결제사가 하나로 보인다: 결제 예약(`v2/reserve`) · 승인(`apply/payment`) · 취소 · 환불 · 조회(결제 내역). **웹훅은 없다** - 네이버페이 문서에서 결제 이벤트 웹훅을 찾지 못해 승인 응답과 결제 내역 조회로 맞춘다. **정기 결제(자동결제)는 `recurrent.{client-id, client-secret, chain-id}` 셋이 모두 있을 때만** 하위 클래스(`NaverPayBillingProvider`)가 능력으로 드러낸다 - 아래 「정기 결제」.
 
 **이 모듈은 진짜 네이버페이 서버로 한 번도 재 보지 않았다** - 인증값이 가맹 심사 뒤에야 나온다. 문서를 따라 만들고 엄격한 가짜 서버로 끝까지 시험했으며, 못 잰 가정은 [real-provider-setup](../real-provider-setup.md) §13 에 「진짜 키로 확인할 것」으로 모았다.
 
@@ -34,6 +34,15 @@
 | 환불 `PaymentRefundGateway` · 취소 | `POST /naverpay-partner/naverpay/payments/v1/cancel` | 폼 `paymentId` · `cancelAmount` · `cancelReason`(장부의 고정 문구 - 개인정보 금지) · `cancelRequester=2` · `taxScopeAmount`=취소액 · `taxExScopeAmount=0`, 헤더 멱등 키 = 환불 줄 id. 응답의 취소 금액 합 > 0 이어야 `REFUNDED`, 아니면 모름. `remaining` = `totalRestAmount`, 일부면 `attributes["partial"]="true"`. `CancelNotComplete`(취소가 아직 끝나지 않았다)는 취소로 읽지 않고 `PENDING`(처리 중)으로 돌려준다 - 장부가 줄에 접수 표시만 남기고 NOT_APPLIED 로 닫지 않으며 조회가 취소를 보면 맞춘다. 문서가 권하는 `doCompareRest` 는 쓰지 않는다 - 이중 환불은 멱등 키와 장부의 「환불 한 건에 호출 한 번」으로 막는다 |
 | 조회 `PaymentLookupGateway` | `POST …/payments/v2.3/list/history/{paymentId}` | **결제 번호로만 묻는다.** 결제 번호 없이 주문 번호만 오면 결제를 모른다(null, 호출 없음) - 구매자가 승인 단계까지 오지 않았다는 뜻이 맞다. 승인 전 번호는 빈 목록이라 null. 승인 `01` 성공 → 받았다 / `03`(전체) · `04`(부분) 취소 성공 → 환불 줄(취소한 합이 결제액이면 전액 환불, 넘으면 읽을 수 없는 응답) / 승인 `FAIL` → 실패. 응답이 다른 결제 번호 · 다른 주문 번호면 읽을 수 없는 응답. 한 쪽(100건)을 넘는 내역은 읽을 수 없는 응답 |
 | 모드 | `mode: development` → TEST, `production` → LIVE | 키 모양이 아니라 설정이 가른다. API 서버 · 결제창 도메인이 함께 따른다. 주문 줄에 박고 가드가 본다 |
+
+## 정기 결제 (`recurrent.*` 가 있을 때만)
+
+등록은 **돈이 움직이지 않는다**. ① 구독을 시작하면 서버가 등록을 예약하고(`regist/v1/reserve` - `productCode` = 구독 id, `merchantUserId` = 우리 고객 키, 돌아올 주소 = `return-url` + `kind=NAVERPAY_BILLING_REDIRECT&provider=<id>&sub=<구독 id>`) 받은 `reserveId` 를 구독 줄에 박는다 · 등록창 주소는 `billing.attributes.windowUrl` = `<창 도메인>/payments/recurrent/<reserveId>` ② 구매자가 등록을 마치고 돌아오면 프론트가 `POST /subscriptions/{id}/activate` 에 `{providerPayload:{reserveId, tempReceiptId}}` 를 보낸다 - **돌아온 `reserveId` 가 줄에 박힌 것과 다르면 결제사를 부르지 않고 400**(남의 등록을 이 구독에 붙이는 길을 막는다) ③ 서버가 `regist/v1/approval` 로 `recurrentId` 를 받아 암호화해 저장한다(응답의 가려진 이메일 · 사용자 구분값은 읽지도 저장하지도 않는다) ④ 첫 결제와 갱신은 같은 과금 걸음이다: `pay/v3/reserve`(`merchantPayId` = 주문 id, 전액 과세) → `pay/v3/approval`(60초). 해지는 `expire/v1/request`(`Expired` = 이미 해지 = 정상).
+
+- **예약이 실패하면 확정 거절**이다(승인을 안 불렀으니 돈이 안 움직였다 - 일시 오류로 분류). 승인이 모름(시간 초과 · `Fail` · `AlreadyOnGoing` · 409 · 읽을 수 없는 응답)이면 던지지 않고 `UNKNOWN` 과 예약으로 받은 `paymentId` 를 돌려줘 장부가 주문의 결제 키 자리에 박는다 - 다시 보내지 않고 결제 내역 조회가 그 번호로 끝낸다. 확정 거절 승인 코드: `InvalidRecurrentId` · `UnderAgeAmountLimit` · `FailUnderAgeAmountLimitValidation` · `PaymentBlocked` · `NotEnoughAccountBalance` · `BankCheckTime` · `BankMaintenance` · `MaintenanceOngoing` · `FaultCheckOngoing` · `InvalidMerchant`.
+- 정기 주문의 환불 · 조회는 정기 인증값(`recurring`)으로 한다 - 단건 인증값으로는 401 이다. 정기 호출은 단건 인증값으로 가지 않는다.
+- 이 결제사는 주문 번호로 물을 수 없다(`answersByOrderId=false`) - 결제 키 없는 확인 중 주문은 거절로 읽지 않고 사람이 본다.
+- 정기 경로 · 본문 모양은 문서의 칸 이름을 따른 가정이다 - 진짜 인증값으로 확인: [real-provider-setup](../real-provider-setup.md) §13.
 
 ## 실패 분류 - 확정 / 모름
 
