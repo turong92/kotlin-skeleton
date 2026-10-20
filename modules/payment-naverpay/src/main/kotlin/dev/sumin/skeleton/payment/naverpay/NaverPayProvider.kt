@@ -507,7 +507,8 @@ open class NaverPayProvider(
      */
     internal fun chargeRecurrent(request: BillingChargeRequest): PaymentOperationResult {
         val orderId = NaverPayIdentifiers.orderId(request.orderId)
-        val recurrentId = request.token.takeIf(NaverPayIdentifiers::isRecurrentId) ?: throw NaverPayIdentifierRejectedException()
+        // 모양이 틀린 등록 번호는 결제사를 부르기 전에 막는다 - 돈이 움직이지 않았으니 모름이 아니라 확정 거절이다
+        val recurrentId = request.token.takeIf(NaverPayIdentifiers::isRecurrentId) ?: throw invalidBillingKey()
         val paymentId = reserveCharge(request, orderId, recurrentId)
         try {
             return guarded("pay-approval") { seen ->
@@ -635,6 +636,23 @@ open class NaverPayProvider(
         }
     }
 
+    private fun invalidBillingKey(): PaymentProviderException =
+        PaymentProviderException(
+            providerError = PaymentProviderError(
+                provider = providerId,
+                code = INVALID_BILLING_KEY,
+                message = null,
+                trace = ProviderTrace(provider = providerId, rawCode = INVALID_BILLING_KEY),
+                upstreamStatus = 400,
+                retryable = false,
+                definitive = true,
+                rawBody = null,
+            ),
+            clientName = properties.clientName,
+            method = "HTTP",
+            uri = apiUri(),
+        )
+
     /** 호출자 잘못(400)이다 - 결제사 호출의 실패([ExternalHttpException])는 아니다. */
     private fun isCallerFault(e: Throwable): Boolean = e is dev.sumin.skeleton.common.ApplicationException && e !is ExternalHttpException
 
@@ -722,6 +740,7 @@ open class NaverPayProvider(
         const val CHECKOUT_KIND = "NAVERPAY_REDIRECT"
         const val BILLING_KIND = "NAVERPAY_BILLING_REDIRECT"
         const val EXPIRED = "Expired"
+        const val INVALID_BILLING_KEY = "INVALID_BILLING_KEY"
         const val EXPIRE_REQUESTER_MERCHANT = "2"
         const val EXPIRE_REASON = "subscription ended"
         const val NAME_MAX = 128

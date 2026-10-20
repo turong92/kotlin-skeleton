@@ -131,6 +131,16 @@ class NaverPayBillingProviderTest {
     }
 
     @Test
+    fun `a registration number of the wrong shape is a definitive refusal before any call - no money moved, so it is not unknown`() {
+        server.clearRequests()
+
+        val refused = assertFailsWith<Exception> { charge("bad id with spaces") }
+
+        assertEquals(PaymentFailureOutcome.DEFINITIVE, PaymentFailures.outcomeOf(refused))
+        assertTrue(server.requests.isEmpty())
+    }
+
+    @Test
     fun `a failed reserve is a definitive refusal - the approval is never called and no money moved`() {
         val recurrentId = registered()
         billing.revoke("ck_1", recurrentId)

@@ -149,13 +149,18 @@ class PaymentAdminController(
     @Operation(
         summary = "Close a stuck subscription charge as not paid (operator)",
         description = "For a subscription charge the provider never answered (CONFIRMING). It asks the provider once more first: a payment that is found paid is settled as PAID and not closed; " +
-            "otherwise the order becomes FAILED (OPERATOR_CLOSED, with the operator on the history) and the subscription's seat is freed. 409 ORDER_NOT_CLOSABLE for any other order or while the provider is still processing · " +
+            "otherwise the order becomes FAILED (OPERATOR_CLOSED, with the operator on the history) and the subscription's seat is freed. A provider that cannot be asked by order number (KakaoPay) cannot say a keyless order has no payment: " +
+            "optional body { confirmedAtProvider: true } says the operator checked in the provider's own console - without it that case is 409 ORDER_CLOSE_NEEDS_CONFIRMATION and nothing is closed. 409 ORDER_NOT_CLOSABLE for any other order or while the provider is still processing · " +
             "404 · 409 MODE_MISMATCH · 502 PROVIDER_ERROR · 503 UNAVAILABLE (nothing is closed when the provider cannot be asked).",
     )
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = AdminOrderResponse::class)
     @PostMapping("/orders/{id}/close")
-    fun closeStuckCharge(@RequestAttribute(OPERATOR_ATTRIBUTE) operator: String, @PathVariable id: String): DataResponse<AdminOrderResponse> =
-        Response.ok(AdminOrderResponse.of(queries.operatorView(refunds.closeStuckSubscriptionCharge(operator, id))))
+    fun closeStuckCharge(@RequestAttribute(OPERATOR_ATTRIBUTE) operator: String, @PathVariable id: String, @RequestBody(required = false) body: JsonNode?): DataResponse<AdminOrderResponse> =
+        Response.ok(
+            AdminOrderResponse.of(
+                queries.operatorView(refunds.closeStuckSubscriptionCharge(operator, id, PaymentRequests.flag(body?.get("confirmedAtProvider"), "confirmedAtProvider", default = false))),
+            ),
+        )
 
     @Operation(
         summary = "Webhook inbox, newest first (operator)",

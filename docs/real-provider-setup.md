@@ -554,6 +554,7 @@ SKELETON_PAYMENT_KAKAOPAY_ALLOWED_RETURN_ORIGINS=         # 선택, 쉼표로 �
 | `inactive` 를 두 번 부르면 오는 오류 · `status` 의 칸(`available` / `status`) | 지금은 실패 뒤 `status` 가 비활성이라 읽히면 정상으로 본다. 칸 이름이 다르면 해지가 영원히 실패로 보인다 | 비활성 두 번 + 상태 조회 |
 | 정기 가맹점 코드가 `cid_secret` 을 요구하는지 | 요구하면 모든 정기 `ready` 가 -400 이다(설정 칸이 없다) | `TCSUBSCRIP` 로 `ready` 한 번 |
 | 정기 `ready` 로 연 창의 `tid` 는 다시 열면 쓸 수 없다 | 구독 시작을 같은 키로 다시 누르면 `tid` 가 새로 박혀 옛 창의 인증은 승인이 거절된다(단건과 같은 한계) | 같은 키로 두 번 시작 |
+| 카카오 `card_info.kakaopay_issuer_corp_code` 가 우리 장부의 카드사 코드 체계(토스 코드 · 라벨 대응표)와 같다 | 정기 구독의 카드사가 「카드」로만 보이거나 엉뚱한 카드사 이름이 붙는다(코드를 그대로 `card_issuer` 에 넣는다) | 승인 응답의 코드 값을 적고 대응표와 맞춘다 |
 | 운영 Secret key · 가맹점 코드(CID) · `cid_secret` 의 쓰임 | - | 제휴 뒤 |
 <!-- payment-kakaopay:end -->
 

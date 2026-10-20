@@ -42,6 +42,22 @@ class SubscriptionStuckChargeCloseTest {
     }
 
     @Test
+    fun `a provider that cannot be asked by order number - a keyless order is not closed on a bare no, only after the operator says they checked at the provider, so nothing is charged twice`() {
+        kit.gateway.orderLookupAnswers = false
+        val (sub, order) = stuckFirstCharge(ConfirmScript.ServerError)
+        assertNull(order.providerPaymentId)
+
+        assertFailsWith<PaymentOrderCloseNeedsConfirmationException> { kit.refunds.closeStuckSubscriptionCharge(op, order.id) }
+        assertFailsWith<PaymentOrderCloseNeedsConfirmationException> { kit.refunds.closeStuckSubscriptionCharge(op, order.id, confirmedAtProvider = false) }
+
+        assertEquals(PaymentOrderStatus.CONFIRMING, kit.order(order.id).status)
+        assertEquals(SubscriptionStatus.PENDING, checkNotNull(kit.store.findSubscription(sub.id)).status)
+
+        val closed = kit.refunds.closeStuckSubscriptionCharge(op, order.id, confirmedAtProvider = true)
+        assertEquals(PaymentOrderStatus.FAILED, closed.status)
+    }
+
+    @Test
     fun `an order the provider reports as paid is not closed - it is paid normally and the subscription starts`() {
         val (sub, order) = stuckFirstCharge(ConfirmScript.TimeoutApplied())
 

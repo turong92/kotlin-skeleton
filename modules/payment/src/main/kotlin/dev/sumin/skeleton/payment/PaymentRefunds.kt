@@ -184,9 +184,10 @@ class PaymentRefunds(
     /**
      * 운영자가 **막힌 구독 결제 주문**(결제사가 끝내 답하지 않아 `CONFIRMING` 으로 남은 것)을 「결제 안 됨」(`FAILED`)으로 닫는다 — 구독이 그 주문 때문에 쥔 자리가 풀린다.
      * **막 나간 승인은 닫지 않는다** - `CONFIRM_UNRESOLVED` 표시가 있거나 `admin.stale-after` 보다 오래 확인 중일 때만. 닫기 전에 결제사에 **한 번 더 묻는다**: 돈이 들어간 것으로 나오면 닫지 않고 정상 `PAID` 처리로 맞추고, 아직 처리 중이거나 주문이 어긋나 있으면 [PaymentOrderNotClosableException].
+     * 주문 번호로 물을 수 없는 결제사(카카오페이)의 결제 키 없는 주문은 「없다」는 대답을 믿지 않는다 - [confirmedAtProvider](운영자가 결제사 화면에서 확인했다)일 때만 닫고 아니면 [PaymentOrderCloseNeedsConfirmationException].
      * 물을 수 없으면(결제사 오류 · 대답 없음) 닫지 않는다 — [sync] 와 같은 예외. 이력에 운영자와 `OPERATOR_CLOSED` 가 남는다.
      */
-    fun closeStuckSubscriptionCharge(operatorId: String, orderId: String): PaymentOrder {
+    fun closeStuckSubscriptionCharge(operatorId: String, orderId: String, confirmedAtProvider: Boolean = false): PaymentOrder {
         store.requireNoOpenTransaction("PaymentRefunds.closeStuckSubscriptionCharge")
         val order0 = store.findOrder(orderId) ?: throw PaymentOrderNotFoundException()
         if (order0.originType != PaymentOriginType.SUBSCRIPTION || order0.status != PaymentOrderStatus.CONFIRMING) throw PaymentOrderNotClosableException()
@@ -213,7 +214,11 @@ class PaymentRefunds(
             val ctx = ConvergeContext(gateway.mode, ConvergeSource.SYNC, PaymentActor.OPERATOR, operatorId, at)
             val locked = tx.lockOrder(orderId) ?: throw PaymentOrderNotFoundException()
             if (locked.status != PaymentOrderStatus.CONFIRMING) return@inTransaction locked // 그 사이 다른 길이 끝냈다 — 닫을 것이 없다
-            if (snapshot == null) return@inTransaction convergence.declined(tx, locked, OPERATOR_CLOSED, ctx).order
+            if (snapshot == null) {
+                // 주문 번호로 물을 수 없는 결제사의 키 없는 주문은 「없다」가 답이 아니다 - 운영자가 결제사 화면에서 확인했다고 밝힐 때만 닫는다
+                if (!gateway.nullMeansNoPayment(locked) && !confirmedAtProvider) throw PaymentOrderCloseNeedsConfirmationException()
+                return@inTransaction convergence.declined(tx, locked, OPERATOR_CLOSED, ctx).order
+            }
             // 결제사가 아는 결제다 — 받았다면 정상 PAID, 실패 · 만료면 정상으로 닫힌다. 그 어느 쪽도 아니면(처리 중 · 어긋남) 닫지 않는다
             val converged = convergence.converge(tx, locked, snapshot, ctx).order
             if (converged.status == PaymentOrderStatus.CONFIRMING) throw PaymentOrderNotClosableException()

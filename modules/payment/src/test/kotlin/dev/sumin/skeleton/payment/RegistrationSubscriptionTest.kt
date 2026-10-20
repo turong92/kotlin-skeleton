@@ -65,6 +65,18 @@ class RegistrationSubscriptionTest {
     }
 
     @Test
+    fun `a first payment that is received without a readable billing key starts the subscription but marks the order for the operator at once`() {
+        val sub = started().subscription
+        kit.gateway.registerWithoutToken = true
+
+        val active = kit.subscriptions.activate("acc_1", sub.id, pgToken)
+
+        assertEquals(SubscriptionStatus.ACTIVE, active.status)
+        assertNull(sub(sub.id).billingToken)
+        assertEquals(PaymentReviewReason.SUBSCRIPTION_TOKEN_MISSING, kit.order(PaymentOrderIds.initialOrderId(sub.id)).reviewReason)
+    }
+
+    @Test
     fun `pressing activate again or from two threads reaches the provider once`() {
         val sub = started().subscription
 
@@ -120,6 +132,8 @@ class RegistrationSubscriptionTest {
         kit.renew.handle(PaymentTaskRun(PaymentTaskTypes.SUBSCRIPTION_RENEW, sub.id, 1, 3))
         assertEquals(0, kit.gateway.chargeCalls.size)
         assertEquals(SubscriptionEndReason.PAYMENT_FAILED, sub(sub.id).endReason)
+        // 조용히 끝나지 않는다 - 갱신일에 첫 주문이 운영자에게 표시된다
+        assertEquals(PaymentReviewReason.SUBSCRIPTION_TOKEN_MISSING, kit.order(PaymentOrderIds.initialOrderId(sub.id)).reviewReason)
     }
 
     @Test

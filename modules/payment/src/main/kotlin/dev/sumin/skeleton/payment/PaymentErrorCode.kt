@@ -94,6 +94,11 @@ enum class PaymentErrorCode(
         status = HttpStatus.CONFLICT,
         title = "The order cannot be closed",
     ),
+    ORDER_CLOSE_NEEDS_CONFIRMATION(
+        code = "PAYMENT.ORDER_CLOSE_NEEDS_CONFIRMATION",
+        status = HttpStatus.CONFLICT,
+        title = "Check the payment at the provider first",
+    ),
     REFUND_NOT_ALLOWED(
         code = "PAYMENT.REFUND_NOT_ALLOWED",
         status = HttpStatus.CONFLICT,

@@ -145,6 +145,16 @@ class KakaoPayBillingProviderTest {
     }
 
     @Test
+    fun `a billing key of the wrong shape is a definitive refusal before any call - no money moved, so it is not unknown`() {
+        server.clearRequests()
+
+        val refused = assertFailsWith<Exception> { billing.charge(renewal("bad key with spaces", "ord_x000000000000000000001")) }
+
+        assertEquals(PaymentFailureOutcome.DEFINITIVE, PaymentFailures.outcomeOf(refused))
+        assertTrue(server.requests.isEmpty())
+    }
+
+    @Test
     fun `a revoked SID is a definitive refusal on the renewal (-782), a server error is only unknown`() {
         val (sid, _) = registered()
         billing.revoke("ck_1", sid)

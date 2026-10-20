@@ -53,6 +53,15 @@ class PaymentRefundNotSentException : ApplicationException(
     errorCode = PaymentErrorCode.UNAVAILABLE,
 )
 
+/**
+ * 이 결제사는 주문 번호로 결제를 찾을 수 없고 이 주문에는 결제 키도 없다 - 「없다」는 대답이 결제가 없다는 뜻이 아니다(응답이 유실된 승인이 돈을 받았을 수 있다).
+ * 운영자가 결제사 화면에서 직접 확인했다고 밝힐 때만 닫는다.
+ */
+class PaymentOrderCloseNeedsConfirmationException : ApplicationException(
+    message = "This provider cannot be asked about the order. Check the payment in the provider's own console, then close it with the confirmation.",
+    errorCode = PaymentErrorCode.ORDER_CLOSE_NEEDS_CONFIRMATION,
+)
+
 /** 운영자가 닫을 수 없는 주문 — 구독 결제가 아니거나, 결제사의 답을 기다리는 중(`CONFIRMING`)이 아니거나, 결제사가 아직 처리 중이다. */
 class PaymentOrderNotClosableException : ApplicationException(
     message = "The order cannot be closed in its current state.",

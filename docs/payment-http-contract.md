@@ -214,7 +214,7 @@
 본문 없음. `200 { value: AdminRefund }`(`REJECTED`). `REQUESTED` 일 때만 — 이미 결정된 줄은 `409 PAYMENT.REFUND_NOT_ALLOWED`, 없으면 `404 PAYMENT.REFUND_NOT_FOUND`.
 
 ### POST /orders/{id}/close — 막힌 구독 결제를 「결제 안 됨」으로 닫기
-본문 없음. 결제사가 끝내 답하지 않아 `CONFIRMING` 으로 남은 **구독 결제 주문**만 - 그중에서도 `CONFIRM_UNRESOLVED` 표시가 있거나 `admin.stale-after` 보다 오래 확인 중인 것만(막 나간 승인은 `409`). 닫기 전에 결제사에 한 번 더 묻는다 — 결제된 것으로 나오면 닫지 않고 정상 `PAID` 로 맞추고(지급 작업이 이어진다), 결제사가 모르거나 실패 · 만료로 답하면 `FAILED`(`failureCode` `OPERATOR_CLOSED`, 이력에 운영자)로 닫아 구독의 자리를 푼다. `200 { value: AdminOrder }`. `409 PAYMENT.ORDER_NOT_CLOSABLE`(구독 결제가 아니다 · `CONFIRMING` 이 아니다 · 결제사가 아직 처리 중이다) · `404` · `409 MODE_MISMATCH` · `502` · `503`(결제사에 물을 수 없으면 닫지 않는다).
+선택 본문 `{ "confirmedAtProvider": true }`(운영자가 결제사 관리 화면에서 직접 확인했다). 결제사가 끝내 답하지 않아 `CONFIRMING` 으로 남은 **구독 결제 주문**만 - 그중에서도 `CONFIRM_UNRESOLVED` 표시가 있거나 `admin.stale-after` 보다 오래 확인 중인 것만(막 나간 승인은 `409`). 닫기 전에 결제사에 한 번 더 묻는다 — 결제된 것으로 나오면 닫지 않고 정상 `PAID` 로 맞추고(지급 작업이 이어진다), 결제사가 모르거나 실패 · 만료로 답하면 `FAILED`(`failureCode` `OPERATOR_CLOSED`, 이력에 운영자)로 닫아 구독의 자리를 푼다. `200 { value: AdminOrder }`. `409 PAYMENT.ORDER_NOT_CLOSABLE`(구독 결제가 아니다 · `CONFIRMING` 이 아니다 · 결제사가 아직 처리 중이다) 주문 번호로 물을 수 없는 결제사(카카오페이)의 **결제 키 없는 주문**은 결제사가 「모른다」고 해도 결제가 없다는 뜻이 아니므로 `confirmedAtProvider: true` 없이는 `409 PAYMENT.ORDER_CLOSE_NEEDS_CONFIRMATION` 이고 아무것도 닫지 않는다(닫으면 구독이 같은 기간을 다시 과금한다). · `404` · `409 MODE_MISMATCH` · `502` · `503`(결제사에 물을 수 없으면 닫지 않는다).
 
 ### POST /orders/{id}/sync — 결제사와 맞추기
 본문 없음. 결제사에 묻고 장부를 맞춘다(결제사 관리 화면의 취소 포함). `200 { value: AdminOrder }` — 맞춘 뒤의 주문(`reviewReason` 이 풀렸으면 `null`). 응답의 `reviewReason` 은 한 건 상세의 `order.reviewReason` 과 **같은 계산**(파생 사유 포함)이다.
@@ -439,6 +439,7 @@
 | `PAYMENT.ALREADY_SUBSCRIBED` | 409 | 구독 — 이미 살아 있는 구독이 있다(계정당 하나) · 카드 등록 뒤 선점에 졌다 |
 | `PAYMENT.SUBSCRIPTION_NOT_ACTIVATABLE` | 409 | 구독 — 이미 끝난 구독으로 카드 등록 · 첫 결제를 시도했다 |
 | `PAYMENT.SUBSCRIPTION_NOT_CANCELABLE` | 409 | 구독 — 카드를 내지 않은(`PENDING`) 구독은 해지할 수 없다 |
+| `PAYMENT.ORDER_CLOSE_NEEDS_CONFIRMATION` | 409 | 운영자 — 막힌 구독 결제 닫기: 주문 번호로 결제를 물을 수 없는 결제사(카카오페이)의 결제 키 없는 주문은 「없다」는 대답이 결제가 없다는 뜻이 아니다(응답이 유실된 승인이 돈을 받았을 수 있다) - 본문 `confirmedAtProvider: true` 없이는 닫지 않는다 |
 | `PAYMENT.ORDER_NOT_CLOSABLE` | 409 | 운영자 — 막힌 구독 결제 닫기: 구독 결제가 아니다 · `CONFIRMING` 이 아니다 · 결제사가 아직 처리 중이다 |
 | `PAYMENT.SUBSCRIPTION_CANCEL_NOT_ALLOWED` | 409 | 구독 중도 해지 - 이용 중(`ACTIVE` · `CANCELING`)이 아니다 · 이 구독의 나라 정책이 중도 해지를 닫았다 |
 | `PAYMENT.SUBSCRIPTION_CHARGE_IN_PROGRESS` | 409 | 구독 중도 해지 - 갱신 · 변경 결제가 아직 오가는 중이다(끝난 뒤 다시) |

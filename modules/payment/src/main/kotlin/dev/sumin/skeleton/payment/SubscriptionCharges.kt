@@ -87,6 +87,8 @@ class SubscriptionCharges(
         val settled = settle(order, registered.result, context) { tx, paid ->
             val issued = registered.issue
             if (issued != null && paid.status.isPaidFamily) tx.lockSubscription(subscription.id)?.let { locked -> tx.updateSubscription(onToken(locked, issued)) }
+            // 돈은 받았는데 빌링키를 못 읽었다 - 구독은 켜지되 갱신할 수단이 없다. 갱신일에 조용히 끝나지 않게 지금 운영자에게 표시한다
+            else if (issued == null && paid.status.isPaidFamily) flagMissingToken(tx, subscription.providerMode, paid)
         } ?: return unknown(order, null, context, registered.result)
         if (settled.status.isPaidFamily) fulfillment.tryFulfil(settled.id)
         return if (settled.status.isPaidFamily) ChargeOutcome.Paid else ChargeOutcome.Unknown
@@ -112,6 +114,17 @@ class SubscriptionCharges(
             if (locked.status != PaymentOrderStatus.CONFIRMING) return@inTransaction locked // 그 사이 조회 작업이 먼저 끝냈다
             convergence.converge(tx, locked, snapshot, context).order.also { inTransaction?.invoke(tx, it) }
         }
+    }
+
+    /** 첫 결제는 받았는데 구독에 빌링키가 없다 - 첫 주문에 `SUBSCRIPTION_TOKEN_MISSING` 을 표시한다(이미 다른 표시가 있으면 그대로). */
+    fun flagMissingToken(tx: PaymentLedgerTx, mode: PaymentMode, initialOrder: PaymentOrder) {
+        convergence.flagReview(tx, initialOrder, PaymentReviewReason.SUBSCRIPTION_TOKEN_MISSING, ConvergeContext(mode, ConvergeSource.CONFIRM))
+    }
+
+    /** 갱신일에 빌링키 없는 구독을 만났다 - 첫 주문(결정적 id)에 표시를 남긴다. 첫 주문이 없으면 로그뿐. */
+    fun flagMissingToken(tx: PaymentLedgerTx, subscription: PaymentSubscription) {
+        val initial = tx.lockOrder(PaymentOrderIds.initialOrderId(subscription.id)) ?: return
+        flagMissingToken(tx, subscription.providerMode, initial)
     }
 
     private fun decline(order: PaymentOrder, providerCode: String?, context: ConvergeContext): ChargeOutcome {

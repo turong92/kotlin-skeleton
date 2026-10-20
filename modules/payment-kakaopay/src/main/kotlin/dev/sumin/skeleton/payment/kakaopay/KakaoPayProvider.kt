@@ -478,7 +478,8 @@ open class KakaoPayProvider(
     /** 2회차부터: `subscription`(SID). 응답의 `tid` 가 이 주문의 결제 키다. `-782` 는 확정 거절, 그 밖은 모름(조회가 불가하니 사람이 본다). */
     internal fun chargeSubscription(request: BillingChargeRequest): PaymentOperationResult {
         val orderId = KakaoPayIdentifiers.orderId(request.orderId)
-        val sid = request.token.takeIf(SAFE_SID::matches) ?: throw KakaoPayIdentifierRejectedException()
+        // 모양이 틀린 빌링키는 결제사를 부르기 전에 막는다 - 돈이 움직이지 않았으니 모름이 아니라 확정 거절이다
+        val sid = request.token.takeIf(SAFE_SID::matches) ?: throw invalidBillingKey()
         return guarded("subscription") { seen ->
             val response = requireNotNull(
                 httpClient.postResponse(
@@ -558,6 +559,23 @@ open class KakaoPayProvider(
         return "$base${separator}kind=$BILLING_KIND&provider=${properties.providerId.urlEncoded()}&sub=${subscriptionId.urlEncoded()}&result=$result"
     }
 
+    private fun invalidBillingKey(): PaymentProviderException =
+        PaymentProviderException(
+            providerError = PaymentProviderError(
+                provider = providerId,
+                code = INVALID_BILLING_KEY,
+                message = null,
+                trace = ProviderTrace(provider = providerId, rawCode = INVALID_BILLING_KEY),
+                upstreamStatus = 400,
+                retryable = false,
+                definitive = true,
+                rawBody = null,
+            ),
+            clientName = properties.clientName,
+            method = "HTTP",
+            uri = URI.create(properties.baseUrl.ifBlank { DEFAULT_BASE_URL }),
+        )
+
     private fun unreadable(upstreamStatus: Int): PaymentProviderException =
         PaymentProviderException(
             providerError = PaymentProviderError(
@@ -602,6 +620,7 @@ open class KakaoPayProvider(
 
         const val CHECKOUT_KIND = "KAKAOPAY_REDIRECT"
         const val BILLING_KIND = "KAKAOPAY_BILLING_REDIRECT"
+        const val INVALID_BILLING_KEY = "INVALID_BILLING_KEY"
         const val METHOD = "EASY_PAY"
 
         /** 이 결제사가 곧 브랜드다(토스 경유와 달리) - 장부 `easy_pay_brand`. */

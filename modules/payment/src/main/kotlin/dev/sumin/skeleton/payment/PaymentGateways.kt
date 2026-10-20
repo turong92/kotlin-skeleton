@@ -125,6 +125,12 @@ data class PaymentLookupQuery(
 internal fun PaymentOrder.lookupQuery(): PaymentLookupQuery =
     PaymentLookupQuery(providerPaymentId = providerPaymentId, orderId = if (providerPaymentId == null) id else null, recurring = originType == PaymentOriginType.SUBSCRIPTION)
 
+/**
+ * 이 주문에 대해 조회가 `null` 을 주면 「결제사에 그 결제가 없다」는 뜻인가. 주문 번호로 물을 수 없는 결제사(카카오페이)는 결제 키가 없으면 아니다 -
+ * 응답이 유실된 승인이 돈을 받았을 수 있으니 새로 과금하거나 닫지 말고 사람에게 넘긴다. 조회 작업과 운영자 닫기가 같은 판단을 쓴다.
+ */
+internal fun PaymentLookupGateway.nullMeansNoPayment(order: PaymentOrder): Boolean = answersByOrderId || order.providerPaymentId != null
+
 enum class ProviderPaymentStatus {
     IN_PROGRESS,
     PAID,
