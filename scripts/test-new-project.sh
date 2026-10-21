@@ -110,6 +110,8 @@ echo "== 2. 기본값만"
 MARKER="$TMP/marker"; touch "$MARKER"; sleep 1
 A="$TMP/a"
 expect_exit 0 "기본 조합을 찍는다 (rename 잔여 검사 포함)" stamp "$A"
+grep -qF 'docker build -t <name>:<tag> .' <<<"$LAST_OUTPUT" && pass "완료 안내는 docker build 예시를 명령으로 실행하지 않고 그대로 보여 준다" || fail "완료 안내에서 docker build 예시가 사라졌거나 실행됐다: $LAST_OUTPUT"
+! grep -qF 'name: No such file or directory' <<<"$LAST_OUTPUT" && pass "완료 안내가 Markdown 백틱을 셸 명령 치환으로 실행하지 않는다" || fail "완료 안내의 백틱이 셸 명령으로 실행됐다: $LAST_OUTPUT"
 check "찍은 프로젝트의 마이그레이션 잠금이 맞다 (migrations-lock.pl --check) — 기본 조합" bash -c "cd '$A' && perl scripts/migrations-lock.pl --check"
 check "스타터 앱만 남는다 (apps/workbench 없음)" test -d "$A/apps/api" -a ! -e "$A/apps/workbench"
 check "build · .gradle · .git · .claude · .superpowers 는 복사하지 않는다" bash -c "! ls -d '$A/build' '$A/.gradle' '$A/.git' '$A/.claude' '$A/.superpowers' '$A/.kotlin' 2>/dev/null | grep -q ."

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 새 프로젝트 완료 안내 수정 (2026-10-21)
+
+- `scripts/new-project.sh`: 완료 안내의 Markdown 백틱이 셸 명령 치환으로 실행되어 `name: No such file or directory`를 남기고 Docker 빌드 예시를 지우던 문제를 고쳤다. 생성 결과와 종료 코드는 그대로이며 안내에는 일반 이미지 이름 예시가 온전히 출력된다.
+
 ### Paddle 환불 · 구독 결제 환불의 「구독도 해지」 선택 (2026-10-20)
 
 - `payment-paddle`: 서버가 Paddle 에 환불(`POST /adjustments`)을 시키고 거래를 조회한다(`PaymentRefundGateway` · `PaymentLookupGateway` 추가, `GET /transactions/{id}?include=adjustments`). 전액은 `type: full`, 부분은 거래 품목 하나 + 세금 포함 금액. 환불은 대개 Paddle 이 검토한 뒤(`pending_approval`) `adjustment.created` · `adjustment.updated` 웹훅(서명 확인은 기존과 같다)으로 승인 · 거절을 알리고 장부가 그 사건으로 줄을 끝낸다. 확정 거절은 허용 목록(`PaddleErrorMapper`)뿐, 모름이면 다시 보내지 않는다. 새 설정 `lookup-timeout`(5s) · `refund-timeout`(10s). **API 키 권한에 `adjustment.write` · `adjustment.read` · `transaction.read` 를, 알림 대상에 `adjustment.created` · `adjustment.updated` 를 더한다**(샌드박스 확인: `docs/real-provider-setup.md` §14). 진짜 Paddle 로는 아직 재지 않았다.

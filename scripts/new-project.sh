@@ -464,7 +464,7 @@ next:
   ./gradlew build                                  # Docker 가 필요하다 (Testcontainers)
   scripts/dev.sh                                    # 로컬 한 줄 실행: $DB_SERVICE$(in_list storage-s3 "$SELECTED_SORTED" && echo " + s3") 컨테이너 → 백엔드 (../web 이 있으면 프론트도)
 $SAMPLE_HINT  # 손으로: docker compose up -d $DB_SERVICE && ./gradlew :apps:api:bootRun --args='--spring.profiles.active=local'
-배포: docs/deploy.md 를 읽는다 — 홈서버에서 `docker build -t <name>:<tag> .` 로 로컬 빌드하고 deploy/app.yaml 의 tag 를 올리는 것이 배포다 (GHCR 는 쓰지 않는다. .github/workflows/image.yml 은 보류).
+배포: docs/deploy.md 를 읽는다 — 홈서버에서 \`docker build -t <name>:<tag> .\` 로 로컬 빌드하고 deploy/app.yaml 의 tag 를 올리는 것이 배포다 (GHCR 는 쓰지 않는다. .github/workflows/image.yml 은 보류).
 module 하나 더: apps/api/build.gradle.kts 에 implementation(project(":modules:<m>")) 한 줄 (모듈이 없으면 이 도구를 다시 쓰지 말고 스켈레톤에서 디렉토리를 복사한 뒤 settings.gradle.kts 에 include).
 한 서버에 프로젝트 여럿: docs/multi-project.md — 견본 apps/api/src/main/resources/application-multi.yml, scripts/dev-multi.sh, scripts/project-account.sql (켜는 순서는 그 문서의 "찍은 프로젝트에서 프로젝트 여럿 켜기").
 설정이 필요하면 docs/config/modules/<m>.yml 에서 바꿀 키만 apps/api application.yml 로 옮긴다. 환경변수는 .env.example 의 [모듈] 구역.
