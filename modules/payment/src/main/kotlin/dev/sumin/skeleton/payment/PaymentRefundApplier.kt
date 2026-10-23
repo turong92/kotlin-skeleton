@@ -29,7 +29,7 @@ class PaymentRefundApplier(
             if (order.fulfilledAt == null) fulfillment.fulfil(orderId)
             val current = checkNotNull(tx.lockOrder(orderId))
             listener.onRefunded(current, refund)
-            if (current.originType == PaymentOriginType.SUBSCRIPTION && madeFull(tx, current, refund)) subscriptions?.onOrderRefunded(tx, current, keepSubscription = refund.keepSubscription)
+            if (current.originType == PaymentOriginType.SUBSCRIPTION && current.status == PaymentOrderStatus.REFUNDED && madeFull(tx, current, refund)) subscriptions?.onOrderRefunded(tx, current, keepSubscription = refund.keepSubscription)
             val at = writer.now()
             tx.updateRefund(refund.copy(appliedAt = at, updatedAt = at))
             tx.appendEvent(writer.refundEvent(orderId, refundId, PaymentEventType.REFUND_APPLIED, PaymentActor.SYSTEM))
@@ -48,7 +48,7 @@ class PaymentRefundApplier(
      */
     private fun madeFull(tx: PaymentLedgerTx, order: PaymentOrder, refund: PaymentRefund): Boolean =
         store.listEvents(order.id).any {
-            it.type == PaymentEventType.CONVERGED && it.providerCode == "REFUND_LANDED" && it.refundId == refund.id && it.toStatus == PaymentOrderStatus.REFUNDED.name
+            it.type == PaymentEventType.CONVERGED && it.providerCode == RefundLines.LANDED && it.refundId == refund.id && it.toStatus == PaymentOrderStatus.REFUNDED.name
         }
 
     /** 던지지 않는다 — 요청 스레드가 확정 직후 한 번 시도한다. 실패하면 false 이고 회수 작업이 재시도한다. */

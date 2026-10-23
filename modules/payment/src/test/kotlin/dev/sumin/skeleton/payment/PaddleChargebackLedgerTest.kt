@@ -276,6 +276,33 @@ class PaddleChargebackLedgerTest {
     }
 
     @Test
+    fun `a line that made the order whole does not end the subscription when it applies after a reversal made the order partial again`() {
+        val pending = kit.subscriptions.start("acc_4", "basic", IdempotencyKey("k4"), provider = "paddle").subscription
+        feed(
+            PushedPayment(
+                "evt_${++seq}", t0, checkNotNull(pending.firstTransactionId), usd(399), null, t0, ourAccountId = "acc_4", providerSubscriptionId = "psub_4",
+                items = listOf(PushedItem("pri_basic", 1)),
+            ),
+        )
+        val order = kit.store.listSubscriptionOrders(pending.id, 1).single()
+        val txn = checkNotNull(order.providerPaymentId)
+        // 반영만 하고 적용(회수)은 밀린다
+        for (event in listOf(
+            PushedRefund("evt_${++seq}", t0.plusSeconds(60), PushedRefundKind.CHARGEBACK, "adj_x", txn, PushedRefundStatus.APPROVED, usd(100)),
+            PushedRefund("evt_${++seq}", t0.plusSeconds(61), PushedRefundKind.CHARGEBACK, "adj_y", txn, PushedRefundStatus.APPROVED, usd(299)),
+            PushedRefund("evt_${++seq}", t0.plusSeconds(62), PushedRefundKind.CHARGEBACK, "adj_x", txn, PushedRefundStatus.REVERSED, usd(100)),
+        )) {
+            kit.deliver(push.delivery(event), token = null, provider = "paddle")
+            kit.runWebhooks()
+        }
+        assertEquals(PaymentOrderStatus.PARTIALLY_REFUNDED, kit.order(order.id).status)
+
+        repeat(2) { kit.runTasks(setOf(PaymentTaskTypes.ORDER_FULFIL, PaymentTaskTypes.REFUND_APPLY, PaymentTaskTypes.PROVIDER_SUBSCRIPTION_CANCEL)) }
+
+        assertEquals(SubscriptionStatus.ACTIVE, checkNotNull(kit.store.findSubscription(pending.id)).status)
+    }
+
+    @Test
     fun `a full chargeback ends the subscription it paid for and cancels the provider's side, and winning does not bring either back`() {
         val pending = kit.subscriptions.start("acc_2", "basic", IdempotencyKey("k2"), provider = "paddle").subscription
         val first = PushedPayment(

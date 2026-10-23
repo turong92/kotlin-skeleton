@@ -69,7 +69,7 @@ internal class RefundLines(private val writer: PaymentLedgerWriter, private val 
     private fun landed(tx: PaymentLedgerTx, order: PaymentOrder, line: PaymentRefund, actor: PaymentActor, actorId: String?): PaymentOrder {
         val refunded = order.refundedAmount + line.amount.amount
         val to = if (refunded >= baseOf(order)) PaymentOrderStatus.REFUNDED else PaymentOrderStatus.PARTIALLY_REFUNDED
-        val changed = writer.transition(tx, order, to, PaymentEventType.CONVERGED, actor, actorId, "REFUND_LANDED", line.id) { it.copy(refundedAmount = refunded) }
+        val changed = writer.transition(tx, order, to, PaymentEventType.CONVERGED, actor, actorId, LANDED, line.id) { it.copy(refundedAmount = refunded) }
         tasks.enqueue(PaymentTask(PaymentTaskTypes.REFUND_APPLY, line.id))
         if (to == PaymentOrderStatus.REFUNDED) closeRequests(tx, order.id)
         return changed
@@ -87,6 +87,9 @@ internal class RefundLines(private val writer: PaymentLedgerWriter, private val 
     fun newRefundId(): String = ids.newId("rfd_")
 
     companion object {
+        /** 주문 이력(`CONVERGED`)의 `provider_code`: 이 환불 줄이 주문에 반영됐다. */
+        const val LANDED = "REFUND_LANDED"
+
         /** 열려 있던 요청 줄의 `failure_code` · 이력의 `provider_code`: 요청이 닫히기 전에 주문이 전액 환불됐다(결제사 관리 화면의 취소 등). */
         const val ORDER_REFUNDED = "ORDER_REFUNDED"
 
