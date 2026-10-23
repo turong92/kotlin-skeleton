@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.payment
 
+import dev.sumin.skeleton.common.FieldValidationException
 import dev.sumin.skeleton.common.id.SortableIds
 import dev.sumin.skeleton.crypto.TextEncryptor
 import java.security.SecureRandom
@@ -146,7 +147,7 @@ class PaymentSubscriptions(
         if (gateway.mode != subscription.providerMode) throw PaymentModeMismatchException()
         val customerKey = checkNotNull(subscription.customerKey)
         if (!gateway.acceptsRegistration(providerPayload, subscription.firstTransactionId)) {
-            throw dev.sumin.skeleton.common.FieldValidationException("providerPayload", "Pattern", "providerPayload is not in the form the payment provider accepts")
+            throw FieldValidationException("providerPayload", "Pattern", "providerPayload is not in the form the payment provider accepts")
         }
         if (gateway.registrationCharges) return activateByFirstCharge(accountId, subscription, gateway, customerKey, providerPayload)
 

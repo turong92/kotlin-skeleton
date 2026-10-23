@@ -208,14 +208,20 @@ class PaymentPushedEvents(
      */
     private fun refund(tx: PaymentLedgerTx, gateway: PaymentPushGateway, event: PushedRefund): String? {
         val provider = gateway.providerId.trim().lowercase()
-        val known = tx.findOrderByProviderPayment(provider, event.providerPaymentId) ?: return UNKNOWN_TRANSACTION
+        val known = tx.findOrderByProviderPayment(provider, event.providerPaymentId)
+            ?: run {
+                // 구독의 첫 거래는 우리가 만든 것이다 - 결제 완료 웹훅이 아직 반영되지 않았을 뿐이니 던져서 다시 한다. 그 밖(갱신 거래 등)은 우리 것인지 알 수 없어 무시한다
+                check(store.findSubscriptionByFirstTransaction(provider, event.providerPaymentId) == null) { "the payment of webhook event ${event.eventId} is not recorded yet" }
+                return UNKNOWN_TRANSACTION
+            }
         val order = tx.lockOrder(known.id) ?: return UNKNOWN_ORDER
         val context = ConvergeContext(gateway.mode, ConvergeSource.WEBHOOK, PaymentActor.PROVIDER)
         if (order.providerMode != gateway.mode) {
             flags.flag(tx, order, PaymentReviewReason.MODE_MISMATCH, context)
             return MODE_MISMATCH
         }
-        if (!order.status.isPaidFamily) return ORDER_NOT_PAID
+        // 우리 주문인데 결제 완료 웹훅이 아직 반영되지 않았다 - 던져서 처리 작업이 다시 하게 한다(되돌림이 차지백보다 먼저 온 경우와 같다)
+        check(order.status.isPaidFamily) { "the order of webhook event ${event.eventId} is not paid yet" }
         val number = LedgerValues.code(event.providerRefundId) ?: return UNREADABLE_REFUND
         val lines = tx.listRefunds(order.id)
         if (event.kind != PushedRefundKind.REFUND) return chargeback(tx, order, lines, number, event, context)
@@ -280,13 +286,20 @@ class PaymentPushedEvents(
                 chargebacks.chargeback(order.id)
             }
             event.kind == PushedRefundKind.CHARGEBACK_REVERSAL || (event.kind == PushedRefundKind.CHARGEBACK && event.status == PushedRefundStatus.REVERSED) -> {
-                // 원래 번호로 오면 번호로, 되돌림 adjustment 로 오면(번호가 다르다) 같은 금액의 이뤄진 차지백 줄로 짝짓는다
-                // 같은 종류(경고 ↔ 차지백)의 줄과만 짝짓는다 - 경고의 되돌림이 접힌 차지백의 줄을 되돌리면 돈이 빠져 있는데 PAID 가 된다
+                // 원래 번호로 오면 번호로 짝짓는다. 되돌림 adjustment 는 번호가 달라 같은 금액의 줄로만 짝지을 수 있다 - 같은 금액이 둘 이상이면 어느 줄인지 알 수 없어 사람이 본다
+                // (잘못 고르면 원래 번호의 되돌림이 다른 줄을 또 되돌려 이중 되돌림이 된다). 같은 종류(경고 ↔ 차지백)의 줄과만 짝짓는다 - 경고의 되돌림이 접힌 차지백의 줄을 되돌리면 돈이 빠져 있는데 PAID 가 된다
                 val sameKind = chargebackLines.filter { (it.failureCode == RefundLines.CHARGEBACK_WARNING) == event.warning }
-                val pair = sameKind.firstOrNull { it.providerRefundId == number && event.kind == PushedRefundKind.CHARGEBACK }
-                    ?: sameKind.firstOrNull { it.status == PaymentRefundStatus.SUCCEEDED && it.amount.sameAs(event.amount) }
+                val byNumber = sameKind.firstOrNull { it.providerRefundId == number && event.kind == PushedRefundKind.CHARGEBACK }
+                val sameAmount = sameKind.filter { it.amount.sameAs(event.amount) }
+                if (byNumber == null && sameAmount.size > 1) {
+                    if (sameAmount.none { it.status == PaymentRefundStatus.SUCCEEDED }) return null // 모두 이미 되돌렸다 - 같은 사건의 재전달
+                    flags.flag(tx, order, PaymentReviewReason.REFUND_MISMATCH, context)
+                    return REFUND_MISMATCH
+                }
+                val pair = byNumber ?: sameAmount.singleOrNull()
                 if (pair == null) {
-                    if (chargebackLines.any { it.amount.sameAs(event.amount) && (it.status == PaymentRefundStatus.REVERSED || it.status == PaymentRefundStatus.SUCCEEDED) }) return null // 이미 되돌렸다 · 또는 접힌 이의가 살아 있다
+                    // 짝이 없다: 다른 종류 줄로 번호가 옮겨져 접힌 이의가 살아 있을 때만 무시한다. 그 밖은 차지백이 아직 안 왔다 - 던져서 처리 작업이 다시 하게 한다
+                    if (chargebackLines.any { it.amount.sameAs(event.amount) && it.status == PaymentRefundStatus.SUCCEEDED }) return null
                     error("no chargeback line to reverse yet for webhook event ${event.eventId}")
                 }
                 if (pair.status != PaymentRefundStatus.SUCCEEDED) return null
@@ -380,7 +393,6 @@ class PaymentPushedEvents(
         const val PRICE_MISMATCH = "PRICE_MISMATCH"
         const val SEAT_TAKEN = "SEAT_TAKEN"
         const val NOT_HANDLED = "NOT_HANDLED"
-        const val ORDER_NOT_PAID = "ORDER_NOT_PAID"
         const val UNREADABLE_REFUND = "UNREADABLE_REFUND"
         const val REFUND_MISMATCH = "REFUND_MISMATCH"
 

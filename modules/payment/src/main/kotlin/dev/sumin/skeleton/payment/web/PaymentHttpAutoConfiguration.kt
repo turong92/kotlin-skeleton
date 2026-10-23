@@ -4,8 +4,11 @@ import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.common.web.ClientIps
 import dev.sumin.skeleton.common.web.InMemoryFixedWindowRateLimitStore
 import dev.sumin.skeleton.common.web.RateLimitStore
+import dev.sumin.skeleton.payment.PaymentBillingGateway
 import dev.sumin.skeleton.payment.PaymentCatalog
 import dev.sumin.skeleton.payment.PaymentLedgerAutoConfiguration
+import dev.sumin.skeleton.payment.PaymentLedgerStore
+import dev.sumin.skeleton.payment.PaymentLedgerWriter
 import dev.sumin.skeleton.payment.PaymentOperatorPolicy
 import dev.sumin.skeleton.payment.PaymentOrders
 import dev.sumin.skeleton.payment.PaymentProperties
@@ -14,11 +17,9 @@ import dev.sumin.skeleton.payment.PaymentQueries
 import dev.sumin.skeleton.payment.PaymentRefunds
 import dev.sumin.skeleton.payment.PaymentSubscriptionAutoConfiguration
 import dev.sumin.skeleton.payment.PaymentSubscriptions
+import dev.sumin.skeleton.payment.PaymentWebhookInbox
 import dev.sumin.skeleton.payment.SubscriptionCancellations
 import dev.sumin.skeleton.payment.SubscriptionPlanChanges
-import dev.sumin.skeleton.payment.PaymentWebhookInbox
-import dev.sumin.skeleton.payment.PaymentLedgerStore
-import dev.sumin.skeleton.payment.PaymentLedgerWriter
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean
@@ -59,7 +60,7 @@ class PaymentHttpAutoConfiguration {
             clientIps.getIfAvailable { ClientIps() },
             { orders.openableProviders() },
             { country -> router.choosableProviders(country) },
-            { router.providerIds(dev.sumin.skeleton.payment.PaymentBillingGateway::class) },
+            { router.providerIds(PaymentBillingGateway::class) },
         )
 
     @Bean

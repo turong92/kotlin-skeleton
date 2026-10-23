@@ -59,9 +59,8 @@ internal class RefundLines(private val writer: PaymentLedgerWriter, private val 
      * 지급(이용권) · 끝난 구독은 되살리지 않는다 - 운영자가 판단한다.
      */
     fun reverse(tx: PaymentLedgerTx, order: PaymentOrder, line: PaymentRefund): PaymentOrder {
-        writer.transitionRefund(tx, line, PaymentRefundStatus.REVERSED, PaymentEventType.CHARGEBACK_REVERSED, PaymentActor.PROVIDER, null, PaymentRefundReason.CHARGEBACK.name) {
-            it.copy(completedAt = writer.now())
-        }
+        writer.transitionRefund(tx, line, PaymentRefundStatus.REVERSED, PaymentEventType.CHARGEBACK_REVERSED, PaymentActor.PROVIDER, null, PaymentRefundReason.CHARGEBACK.name)
+        // 차지백이 이뤄진 시각(completedAt)은 그대로 둔다 - 되돌림 시각은 이력(CHARGEBACK_REVERSED)에 있다
         val refunded = (order.refundedAmount - line.amount.amount).coerceAtLeast(0)
         val to = if (refunded <= 0) PaymentOrderStatus.PAID else PaymentOrderStatus.PARTIALLY_REFUNDED
         return writer.reverseByProviderEvidence(tx, order, to, PaymentEventType.CONVERGED, PaymentActor.PROVIDER, "REFUND_REVERSED", line.id) { it.copy(refundedAmount = refunded) }

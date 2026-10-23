@@ -87,6 +87,22 @@ class RefundEndsSubscriptionChoiceTest {
     }
 
     @Test
+    fun `a partial refund applied late does not end the subscription because another line made the order whole in the meantime`() {
+        val active = activeSubscription()
+        val order = firstOrder(active).id
+        val partial = kit.refunds.refund("op_1", order, "OPERATOR", 1000, IdempotencyKey("r-a")).refund // 「구독도 해지」 켬, 부분
+        // 이 줄의 회수 적용이 밀렸다: 표시를 되돌려 미적용으로 둔다
+        kit.store.inTransaction { tx -> tx.lockOrder(order); tx.updateRefund(checkNotNull(tx.lockRefund(partial.id)).copy(appliedAt = null)) }
+        kit.refunds.refund("op_1", order, "OPERATOR", null, IdempotencyKey("r-b"), endSubscription = false) // 나머지 전액, 구독은 둔다
+        assertEquals(PaymentOrderStatus.REFUNDED, kit.order(order).status)
+
+        kit.applier.apply(partial.id)
+
+        assertEquals(SubscriptionStatus.ACTIVE, sub(active.id).status)
+        assertNull(sub(active.id).endReason)
+    }
+
+    @Test
     fun `ending a subscription the provider renews cancels it at the provider, and keeping it sends nothing`() {
         val kept = providerSubscription("acc_1", "k1", "txn_k", "psub_k")
         val ended = providerSubscription("acc_2", "k2", "txn_e", "psub_e")

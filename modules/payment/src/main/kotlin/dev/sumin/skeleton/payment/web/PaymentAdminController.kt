@@ -11,6 +11,7 @@ import dev.sumin.skeleton.common.openapi.ApiResponseEnvelope
 import dev.sumin.skeleton.payment.OperatorOrderQuery
 import dev.sumin.skeleton.payment.PaymentOrderStatus
 import dev.sumin.skeleton.payment.PaymentQueries
+import dev.sumin.skeleton.payment.PaymentRefund
 import dev.sumin.skeleton.payment.PaymentRefundStatus
 import dev.sumin.skeleton.payment.PaymentRefunds
 import dev.sumin.skeleton.payment.PaymentWebhookInbox
@@ -189,7 +190,7 @@ class PaymentAdminController(
         return if (outcome.refund.status == PaymentRefundStatus.PENDING) ResponseEntity.accepted().body(response) else ResponseEntity.ok(response)
     }
 
-    private fun refundResponse(refund: dev.sumin.skeleton.payment.PaymentRefund): AdminRefundResponse =
+    private fun refundResponse(refund: PaymentRefund): AdminRefundResponse =
         AdminRefundResponse.of(refund, queries.refundInfo(queries.operatorOrder(refund.orderId).view.order))
 
     private inline fun <reified E : Enum<E>> enumParam(name: String, value: String?): E? {

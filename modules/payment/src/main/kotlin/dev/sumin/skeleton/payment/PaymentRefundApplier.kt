@@ -29,7 +29,7 @@ class PaymentRefundApplier(
             if (order.fulfilledAt == null) fulfillment.fulfil(orderId)
             val current = checkNotNull(tx.lockOrder(orderId))
             listener.onRefunded(current, refund)
-            if (current.originType == PaymentOriginType.SUBSCRIPTION && current.status == PaymentOrderStatus.REFUNDED) subscriptions?.onOrderRefunded(tx, current, keepSubscription = refund.keepSubscription)
+            if (current.originType == PaymentOriginType.SUBSCRIPTION && madeFull(tx, current, refund)) subscriptions?.onOrderRefunded(tx, current, keepSubscription = refund.keepSubscription)
             val at = writer.now()
             tx.updateRefund(refund.copy(appliedAt = at, updatedAt = at))
             tx.appendEvent(writer.refundEvent(orderId, refundId, PaymentEventType.REFUND_APPLIED, PaymentActor.SYSTEM))
@@ -40,6 +40,20 @@ class PaymentRefundApplier(
             }
             true
         }
+    }
+
+    /**
+     * 이 줄이 주문을 전액 환불로 만들었는가 - 줄이 이뤄진 순서대로 쌓은 합이 이 줄에서 처음 결제액에 닿는다. 적용이 밀린 사이 다른 줄이 주문을 전액으로 만들었다면 이 줄은 구독을 끝내지 않는다
+     * (「구독도 해지」는 줄 자신의 선택이다).
+     */
+    private fun madeFull(tx: PaymentLedgerTx, order: PaymentOrder, refund: PaymentRefund): Boolean {
+        var sum = 0L
+        for (line in tx.listRefunds(order.id).filter { it.status == PaymentRefundStatus.SUCCEEDED }.sortedWith(compareBy({ it.completedAt ?: it.createdAt }, { it.id }))) {
+            val before = sum
+            sum += line.amount.amount
+            if (line.id == refund.id) return before < RefundLines.baseOf(order) && sum >= RefundLines.baseOf(order)
+        }
+        return false
     }
 
     /** 던지지 않는다 — 요청 스레드가 확정 직후 한 번 시도한다. 실패하면 false 이고 회수 작업이 재시도한다. */

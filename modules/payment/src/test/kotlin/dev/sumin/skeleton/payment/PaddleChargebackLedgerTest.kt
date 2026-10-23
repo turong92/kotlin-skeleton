@@ -177,6 +177,43 @@ class PaddleChargebackLedgerTest {
     }
 
     @Test
+    fun `a reverse adjustment that cannot tell which of two same-amount chargebacks it undoes reverses neither and a person is told - the original number then reverses exactly its own line`() {
+        val order = paidOrder()
+        feed(chargeback(order, "adj_cb1", amount = 100))
+        feed(chargeback(order, "adj_cb2", amount = 100))
+        assertEquals(200, kit.order(order.id).refundedAmount)
+
+        feed(reversal(order, "adj_rev", amount = 100))
+
+        assertTrue(lines(order).all { it.status == PaymentRefundStatus.SUCCEEDED })
+        assertEquals(200, kit.order(order.id).refundedAmount)
+        assertEquals(PaymentReviewReason.REFUND_MISMATCH, kit.order(order.id).reviewReason)
+
+        feed(chargeback(order, "adj_cb2", amount = 100, status = PushedRefundStatus.REVERSED))
+
+        assertEquals(PaymentRefundStatus.SUCCEEDED, lines(order).first { it.providerRefundId == "adj_cb1" }.status)
+        assertEquals(PaymentRefundStatus.REVERSED, lines(order).first { it.providerRefundId == "adj_cb2" }.status)
+        assertEquals(100, kit.order(order.id).refundedAmount)
+    }
+
+    @Test
+    fun `a refund decision that arrives before the payment webhook is retried and lands once the payment is recorded`() {
+        val order = kit.orders.create(CreateOrderCommand("acc_1", "cheer", "cheer-3000", IdempotencyKey("o-early"), provider = "paddle")).order
+        val txn = checkNotNull(kit.order(order.id).providerPaymentId)
+        val early = PushedRefund("evt_${++seq}", t0.plusSeconds(120), PushedRefundKind.CHARGEBACK, "adj_early", txn, PushedRefundStatus.APPROVED, usd(499))
+        kit.deliver(push.delivery(early), token = null, provider = "paddle")
+        kit.runWebhooks()
+        assertEquals(0, kit.order(order.id).refundedAmount)
+
+        feed(PushedPayment("evt_${++seq}", t0, txn, usd(499), 40, t0, ourOrderId = order.id, items = listOf(PushedItem("pri_cheer-3000", 1))))
+        kit.advance(Duration.ofHours(2))
+        kit.runWebhooks()
+
+        assertEquals(499, kit.order(order.id).refundedAmount)
+        assertEquals(PaymentOrderStatus.REFUNDED, kit.order(order.id).status)
+    }
+
+    @Test
     fun `a full chargeback ends the subscription it paid for and cancels the provider's side, and winning does not bring either back`() {
         val pending = kit.subscriptions.start("acc_2", "basic", IdempotencyKey("k2"), provider = "paddle").subscription
         val first = PushedPayment(

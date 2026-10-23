@@ -25,7 +25,7 @@ class PaddleErrorMapper(
                 provider = providerId,
                 code = code,
                 message = null,
-                trace = ProviderTrace(provider = providerId, providerRequestId = context.trace.traceId, rawCode = code, rawStatus = context.upstreamStatus.toString()),
+                trace = ProviderTrace(provider = providerId, providerRequestId = requestIdOf(context.upstreamBody), rawCode = code, rawStatus = context.upstreamStatus.toString()),
                 upstreamStatus = context.upstreamStatus,
                 retryable = context.upstreamStatus == 429 || context.upstreamStatus >= 500,
                 definitive = definitiveAllowed && context.upstreamStatus in 400..499 && code in DEFINITIVE_CODES,
@@ -44,8 +44,17 @@ class PaddleErrorMapper(
             null
         }
 
+    /** Paddle 응답의 요청 id(`meta.request_id`) - 모양이 맞을 때만 쓰고, 없으면 null(우리 traceId 를 대신 싣지 않는다). */
+    private fun requestIdOf(body: String): String? =
+        try {
+            mapper.readTree(body)?.get("meta")?.get("request_id")?.takeIf { it.isString }?.asString()?.takeIf(SAFE_REQUEST_ID::matches)
+        } catch (_: Exception) {
+            null
+        }
+
     companion object {
         private val SAFE_CODE = Regex("[a-z0-9_]{1,80}")
+        private val SAFE_REQUEST_ID = Regex("[A-Za-z0-9_\\-]{1,100}")
 
         /**
          * **돈이 움직이지 않았음이 문서로 분명한 거절 코드만** 확정이다(허용 목록). 출처: Paddle 오류 코드 목록(https://developer.paddle.com/llms/errors.txt, 2026-10-20 에 읽었다)의
