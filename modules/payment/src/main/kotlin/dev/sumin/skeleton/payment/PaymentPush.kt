@@ -97,6 +97,8 @@ data class PushedRefund(
     val status: PushedRefundStatus,
     val amount: PaymentAmount,
     val warning: Boolean = false,
+    /** 환불이 걸린 거래의 결제사 구독 id(구독 거래면). 결제 웹훅보다 먼저 온 갱신 거래의 환불이 우리 것인지 가리는 데만 쓴다. */
+    val providerSubscriptionId: String? = null,
 ) : PushedPaymentEvent
 
 enum class PushedSubscriptionStatus { ACTIVE, PAST_DUE, CANCELING, ENDED }

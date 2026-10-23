@@ -214,6 +214,68 @@ class PaddleChargebackLedgerTest {
     }
 
     @Test
+    fun `a plain reversal that comes before its chargeback while only the warning line exists is retried, and reverses the chargeback line once it is in`() {
+        val order = paidOrder()
+        feed(chargeback(order, "adj_warn", amount = 100, warning = true))
+        val early = reversal(order, "adj_rev", amount = 100)
+        kit.deliver(push.delivery(early), token = null, provider = "paddle")
+        kit.runWebhooks()
+        assertEquals(100, kit.order(order.id).refundedAmount)
+
+        feed(chargeback(order, "adj_cb", amount = 100))
+        kit.advance(Duration.ofHours(2))
+        kit.runWebhooks()
+
+        assertEquals(PaymentRefundStatus.REVERSED, lines(order).single().status)
+        assertEquals(0, kit.order(order.id).refundedAmount)
+    }
+
+    @Test
+    fun `a refund of a renewal transaction of our subscription that beats its payment webhook is retried`() {
+        val pending = kit.subscriptions.start("acc_2", "basic", IdempotencyKey("k2"), provider = "paddle").subscription
+        feed(
+            PushedPayment(
+                "evt_${++seq}", t0, checkNotNull(pending.firstTransactionId), usd(399), null, t0, ourAccountId = "acc_2", providerSubscriptionId = "psub_9",
+                items = listOf(PushedItem("pri_basic", 1)),
+            ),
+        )
+        val early = PushedRefund("evt_${++seq}", t0.plusSeconds(120), PushedRefundKind.CHARGEBACK, "adj_r", "txn_renewal", PushedRefundStatus.APPROVED, usd(399), providerSubscriptionId = "psub_9")
+        kit.deliver(push.delivery(early), token = null, provider = "paddle")
+        kit.runWebhooks()
+        feed(
+            PushedPayment(
+                "evt_${++seq}", t0.plusSeconds(60), "txn_renewal", usd(399), null, t0.plusSeconds(60), ourAccountId = "acc_2", providerSubscriptionId = "psub_9",
+                items = listOf(PushedItem("pri_basic", 1)),
+            ),
+        )
+        kit.advance(Duration.ofHours(2))
+        kit.runWebhooks()
+
+        val renewal = kit.store.listSubscriptionOrders(pending.id, 5).first { it.providerPaymentId == "txn_renewal" }
+        assertEquals(399, kit.order(renewal.id).refundedAmount)
+    }
+
+    @Test
+    fun `a chargeback whose provider time is earlier than a refund already applied still ends the subscription when it is the line that made the order whole`() {
+        val pending = kit.subscriptions.start("acc_3", "basic", IdempotencyKey("k3"), provider = "paddle").subscription
+        feed(
+            PushedPayment(
+                "evt_${++seq}", t0, checkNotNull(pending.firstTransactionId), usd(399), null, t0, ourAccountId = "acc_3", providerSubscriptionId = "psub_3",
+                items = listOf(PushedItem("pri_basic", 1)),
+            ),
+        )
+        val order = kit.store.listSubscriptionOrders(pending.id, 1).single()
+        val txn = checkNotNull(order.providerPaymentId)
+        feed(PushedRefund("evt_${++seq}", t0.plusSeconds(600), PushedRefundKind.REFUND, "adj_a", txn, PushedRefundStatus.APPROVED, usd(100)))
+        assertEquals(SubscriptionStatus.ACTIVE, checkNotNull(kit.store.findSubscription(pending.id)).status)
+
+        feed(PushedRefund("evt_${++seq}", t0.plusSeconds(60), PushedRefundKind.CHARGEBACK, "adj_c", txn, PushedRefundStatus.APPROVED, usd(299)))
+
+        assertEquals(PaymentOrderStatus.REFUNDED, kit.order(order.id).status)
+        assertEquals(SubscriptionEndReason.REFUNDED, checkNotNull(kit.store.findSubscription(pending.id)).endReason)
+    }
+
+    @Test
     fun `a full chargeback ends the subscription it paid for and cancels the provider's side, and winning does not bring either back`() {
         val pending = kit.subscriptions.start("acc_2", "basic", IdempotencyKey("k2"), provider = "paddle").subscription
         val first = PushedPayment(

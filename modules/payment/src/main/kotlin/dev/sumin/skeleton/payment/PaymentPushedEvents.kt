@@ -205,13 +205,16 @@ class PaymentPushedEvents(
     /**
      * 결제사가 환불에 내린 결정. 서명된 본문이 사실이라 조회하지 않는다. 줄은 **번호**(접수 때 박은 것)로 찾고, 번호가 없으면 같은 금액의 열린 `PENDING` 줄 하나에 붙인다
      * (응답을 잃은 호출 - 결제사는 거래당 검토 중 환불이 하나뿐이고 장부는 주문당 열린 환불이 하나뿐이라 짝이 하나다). 우리 줄이 없는 승인은 결제사 관리 화면의 환불이라 `PROVIDER` 줄로 넣는다.
+     * **미결제 주문이면 던져 재시도한다**(결제 완료 웹훅이 아직 반영되지 않았을 수 있다 - 품목 · 주문 불일치로 거절된 주문만 무시).
      */
     private fun refund(tx: PaymentLedgerTx, gateway: PaymentPushGateway, event: PushedRefund): String? {
         val provider = gateway.providerId.trim().lowercase()
         val known = tx.findOrderByProviderPayment(provider, event.providerPaymentId)
             ?: run {
-                // 구독의 첫 거래는 우리가 만든 것이다 - 결제 완료 웹훅이 아직 반영되지 않았을 뿐이니 던져서 다시 한다. 그 밖(갱신 거래 등)은 우리 것인지 알 수 없어 무시한다
-                check(store.findSubscriptionByFirstTransaction(provider, event.providerPaymentId) == null) { "the payment of webhook event ${event.eventId} is not recorded yet" }
+                // 구독의 첫 거래 · 우리 구독에 연결된 결제사 구독 id(Paddle adjustment 의 `subscription_id`)의 갱신 거래는 우리 것이다 - 결제 완료 웹훅이 아직 반영되지 않았을 뿐이니 던져서 다시 한다. 그 밖은 무시한다
+                val ours = store.findSubscriptionByFirstTransaction(provider, event.providerPaymentId) != null ||
+                    event.providerSubscriptionId?.let { store.findSubscriptionByProviderId(provider, it) } != null
+                check(!ours) { "the payment of webhook event ${event.eventId} is not recorded yet" }
                 return UNKNOWN_TRANSACTION
             }
         val order = tx.lockOrder(known.id) ?: return UNKNOWN_ORDER
@@ -221,7 +224,11 @@ class PaymentPushedEvents(
             return MODE_MISMATCH
         }
         // 우리 주문인데 결제 완료 웹훅이 아직 반영되지 않았다 - 던져서 처리 작업이 다시 하게 한다(되돌림이 차지백보다 먼저 온 경우와 같다)
-        check(order.status.isPaidFamily) { "the order of webhook event ${event.eventId} is not paid yet" }
+        if (!order.status.isPaidFamily) {
+            // 결제 웹훅이 품목 · 주문 불일치로 거절된 주문은 결제 완료가 끝내 오지 않는다 - 재시도해도 소용없으니 예전처럼 무시한다
+            if (order.reviewReason == PaymentReviewReason.AMOUNT_MISMATCH || order.reviewReason == PaymentReviewReason.ORDER_MISMATCH) return ORDER_NOT_PAID
+            error("the order of webhook event ${event.eventId} is not paid yet")
+        }
         val number = LedgerValues.code(event.providerRefundId) ?: return UNREADABLE_REFUND
         val lines = tx.listRefunds(order.id)
         if (event.kind != PushedRefundKind.REFUND) return chargeback(tx, order, lines, number, event, context)
@@ -266,6 +273,7 @@ class PaymentPushedEvents(
      * 차지백 - 우리가 시킨 일이 아니라 결제사가 구매자의 이의로 돈을 가져간 일. `APPROVED` 는 `CHARGEBACK` 사유의 `PROVIDER` 줄로 넣는다(회수 작업 · 전액이면 구독 끝 + 결제사 해지가 환불과 같은 길로 돈다).
      * **같은 이의를 두 번 세지 않는다**: 경고(`chargeback_warning`)와 같은 금액의 차지백(또는 그 반대 순서)은 한 줄이다 - 금액이 다르면 둘 다 넣고 `REFUND_MISMATCH` 로 사람이 본다.
      * 분쟁에서 이기면 원래 번호가 `REVERSED` 로 오거나 되돌림 adjustment 가 만들어진다 - 둘 중 어느 쪽이든(둘 다 와도) 짝 줄(같은 번호, 없으면 같은 거래 · 같은 금액의 차지백 줄)이 **한 번만** `REVERSED` 가 된다.
+     * **모호하면 사람이 본다**: 번호 없는 되돌림이 같은 금액의 이뤄진 줄 둘 이상에 걸리면 어느 것인지 몰라 아무것도 되돌리지 않고 `REFUND_MISMATCH` 로 표시한다.
      * 짝 줄이 아직 없으면(되돌림이 차지백보다 먼저 도착) 던져서 처리 작업이 다시 하게 한다 - 차지백이 들어온 뒤 짝지어진다.
      */
     private fun chargeback(tx: PaymentLedgerTx, order: PaymentOrder, lines: List<PaymentRefund>, number: String, event: PushedRefund, context: ConvergeContext): String? {
@@ -298,8 +306,8 @@ class PaymentPushedEvents(
                 }
                 val pair = byNumber ?: sameAmount.singleOrNull()
                 if (pair == null) {
-                    // 짝이 없다: 다른 종류 줄로 번호가 옮겨져 접힌 이의가 살아 있을 때만 무시한다. 그 밖은 차지백이 아직 안 왔다 - 던져서 처리 작업이 다시 하게 한다
-                    if (chargebackLines.any { it.amount.sameAs(event.amount) && it.status == PaymentRefundStatus.SUCCEEDED }) return null
+                    // 짝이 없다: 경고의 되돌림이 차지백으로 접힌 줄(번호가 차지백으로 옮겨졌다)을 만났을 때만 무시한다. 그 밖은 차지백이 아직 안 왔다 - 던져서 처리 작업이 다시 하게 한다
+                    if (event.warning && chargebackLines.any { it.failureCode != RefundLines.CHARGEBACK_WARNING && it.amount.sameAs(event.amount) && (it.status == PaymentRefundStatus.SUCCEEDED || it.status == PaymentRefundStatus.REVERSED) }) return null
                     error("no chargeback line to reverse yet for webhook event ${event.eventId}")
                 }
                 if (pair.status != PaymentRefundStatus.SUCCEEDED) return null
@@ -393,6 +401,7 @@ class PaymentPushedEvents(
         const val PRICE_MISMATCH = "PRICE_MISMATCH"
         const val SEAT_TAKEN = "SEAT_TAKEN"
         const val NOT_HANDLED = "NOT_HANDLED"
+        const val ORDER_NOT_PAID = "ORDER_NOT_PAID"
         const val UNREADABLE_REFUND = "UNREADABLE_REFUND"
         const val REFUND_MISMATCH = "REFUND_MISMATCH"
 

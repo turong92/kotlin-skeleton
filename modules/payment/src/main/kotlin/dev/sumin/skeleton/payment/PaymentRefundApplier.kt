@@ -43,18 +43,13 @@ class PaymentRefundApplier(
     }
 
     /**
-     * 이 줄이 주문을 전액 환불로 만들었는가 - 줄이 이뤄진 순서대로 쌓은 합이 이 줄에서 처음 결제액에 닿는다. 적용이 밀린 사이 다른 줄이 주문을 전액으로 만들었다면 이 줄은 구독을 끝내지 않는다
-     * (「구독도 해지」는 줄 자신의 선택이다).
+     * 이 줄의 반영이 주문을 `REFUNDED` 로 옮겼는가 - 장부에 들어간 순서로 본다(반영 때 남긴 `CONVERGED`/`REFUND_LANDED` 이력의 줄 id · 도착 상태).
+     * 줄마다 시각의 출처가 달라(운영자 · 결제사 · 맞추기) 시각으로 줄을 세우지 않는다. 적용이 밀린 사이 다른 줄이 주문을 전액으로 만들었다면 이 줄은 구독을 끝내지 않는다(「구독도 해지」는 줄 자신의 선택이다).
      */
-    private fun madeFull(tx: PaymentLedgerTx, order: PaymentOrder, refund: PaymentRefund): Boolean {
-        var sum = 0L
-        for (line in tx.listRefunds(order.id).filter { it.status == PaymentRefundStatus.SUCCEEDED }.sortedWith(compareBy({ it.completedAt ?: it.createdAt }, { it.id }))) {
-            val before = sum
-            sum += line.amount.amount
-            if (line.id == refund.id) return before < RefundLines.baseOf(order) && sum >= RefundLines.baseOf(order)
+    private fun madeFull(tx: PaymentLedgerTx, order: PaymentOrder, refund: PaymentRefund): Boolean =
+        store.listEvents(order.id).any {
+            it.type == PaymentEventType.CONVERGED && it.providerCode == "REFUND_LANDED" && it.refundId == refund.id && it.toStatus == PaymentOrderStatus.REFUNDED.name
         }
-        return false
-    }
 
     /** 던지지 않는다 — 요청 스레드가 확정 직후 한 번 시도한다. 실패하면 false 이고 회수 작업이 재시도한다. */
     fun tryApply(refundId: String): Boolean =

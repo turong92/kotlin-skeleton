@@ -205,6 +205,7 @@ class PaddleRefundTest {
 
         assertThat(event("chargeback", "approved")).satisfies({ e -> assertThat(e!!.kind).isEqualTo(PushedRefundKind.CHARGEBACK); assertThat(e.warning).isFalse(); assertThat(e.status).isEqualTo(PushedRefundStatus.APPROVED) })
         assertThat(event("chargeback_warning", "approved")!!.warning).isTrue()
+        assertThat(event("chargeback", "approved")!!.providerSubscriptionId).isEqualTo("sub_1")
         assertThat(event("chargeback", "reversed")!!.status).isEqualTo(PushedRefundStatus.REVERSED)
         assertThat(event("chargeback_reverse", "approved", id = "adj_r1")!!.kind).isEqualTo(PushedRefundKind.CHARGEBACK_REVERSAL)
         assertThat(event("chargeback_warning_reverse", "approved", id = "adj_r2")!!.kind).isEqualTo(PushedRefundKind.CHARGEBACK_REVERSAL)

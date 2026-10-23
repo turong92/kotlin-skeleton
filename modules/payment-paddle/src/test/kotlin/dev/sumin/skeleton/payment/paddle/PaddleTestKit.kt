@@ -100,5 +100,5 @@ internal fun adjustmentEvent(
     type: String = "adjustment.created", id: String = "adj_1", action: String = "refund", status: String = "approved", total: String = "499", eventId: String = "evt_a1",
 ) = """
 {"event_id":"$eventId","event_type":"$type","occurred_at":"2026-10-14T01:00:00Z",
- "data":{"id":"$id","action":"$action","status":"$status","transaction_id":"txn_1","currency_code":"USD","totals":{"total":"$total"}}}
+ "data":{"id":"$id","action":"$action","status":"$status","transaction_id":"txn_1","subscription_id":"sub_1","currency_code":"USD","totals":{"total":"$total"}}}
 """.trim()

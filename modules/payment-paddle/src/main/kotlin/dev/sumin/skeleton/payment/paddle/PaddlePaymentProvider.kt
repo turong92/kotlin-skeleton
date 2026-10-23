@@ -136,6 +136,7 @@ class PaddlePaymentProvider(
             providerRefundId = data.text("id") ?: error("Paddle adjustment without id"),
             providerPaymentId = data.text("transaction_id") ?: error("Paddle adjustment without transaction_id"),
             status = status,
+            providerSubscriptionId = data.text("subscription_id"),
             amount = PaymentAmount(
                 data["totals"]?.text("total")?.toLongOrNull() ?: error("Paddle adjustment without a total"),
                 data.text("currency_code") ?: data["totals"]?.text("currency_code") ?: error("Paddle adjustment without a currency"),
