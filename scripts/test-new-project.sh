@@ -89,6 +89,7 @@ stamp() { # stamp <dir> <옵션...>  — 항상 같은 이름으로 찍는다
 echo "== 1. 인자 검증"
 # set -o pipefail 에서 `값 | grep -q` 는 grep 이 먼저 끝나면 앞쪽이 SIGPIPE 로 죽어 가끔 거짓 실패한다(unknown module 오판이 실제로 났다) — here-string 을 쓴다
 check "스크립트에 값을 파이프로 grep -q 에 넘기는 곳이 없다 (here-string 을 쓴다)" bash -c "! grep -nE '(echo|printf)[^|]*[|] *grep -[a-zA-Z]*q' '$SRC/scripts/new-project.sh' '$SRC/scripts/test-new-project.sh' '$SRC/scripts/test-deploy-contract.sh'"
+check "찍는 스크립트들의 첫 줄이 셔뱅이다 (직접 실행 · /bin/sh 대체 실행 방지)" bash -c "for f in '$SRC/scripts/new-project.sh' '$SRC/scripts/test-new-project.sh'; do head -1 \"\$f\" | grep -q '^#!' || exit 1; done"
 expect_exit 2 "인자 없이 부르면 사용법과 함께 exit 2" bash "$SCRIPT"
 expect_exit 2 "없는 모듈은 exit 2" bash "$SCRIPT" "$TMP/x1" com.acme.shop acme Acme --modules no-such-module
 grep -q "job-queue-jdbc" <<<"$LAST_OUTPUT" && pass "없는 모듈 오류가 유효한 모듈 목록을 보여 준다" || fail "유효한 모듈 목록이 없다: $LAST_OUTPUT"

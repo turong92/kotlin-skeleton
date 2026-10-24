@@ -1,4 +1,3 @@
-  [ "$m" != authz ] || rm -f docs/authz-http-contract.md
 #!/usr/bin/env bash
 # 새 프로젝트 한 줄 찍어내기: 복사 → 모듈 고르기 → (선택) DB 바꾸기 → 의존성 · 설정 블록 더하기 → rename.
 #
