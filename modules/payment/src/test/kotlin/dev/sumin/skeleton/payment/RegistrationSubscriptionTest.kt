@@ -44,6 +44,41 @@ class RegistrationSubscriptionTest {
     }
 
     @Test
+    fun `a provider that keeps its window hands the first window back on a resend within its lifetime - one reservation, and the first window's approval works`() {
+        kit.gateway.windowLifetime = Duration.ofMinutes(10)
+        val first = started()
+        kit.advance(Duration.ofMinutes(5))
+
+        val again = started()
+
+        assertTrue(again.replayed)
+        assertEquals(1, kit.gateway.prepareCalls.size, "the provider is not asked to reserve again")
+        assertEquals(first.billing, again.billing, "the same window")
+        assertEquals("https://pay.example/ref_1", again.billing!!.attributes["pcUrl"])
+        assertEquals("ref_1", sub(first.subscription.id).firstTransactionId)
+        val active = kit.subscriptions.activate("acc_1", first.subscription.id, pgToken)
+        assertEquals(SubscriptionStatus.ACTIVE, active.status)
+        assertEquals("ref_1", kit.gateway.registerCalls.single().reference)
+    }
+
+    @Test
+    fun `a resend after the window's lifetime reserves a new window and the new number replaces the old one`() {
+        kit.gateway.windowLifetime = Duration.ofMinutes(10)
+        val first = started()
+        kit.advance(Duration.ofMinutes(11))
+
+        val again = started()
+
+        assertEquals(2, kit.gateway.prepareCalls.size)
+        assertEquals("https://pay.example/ref_2", again.billing!!.attributes["pcUrl"])
+        assertEquals("ref_2", sub(first.subscription.id).firstTransactionId)
+        // 새 창은 다시 유효시간을 센다
+        kit.advance(Duration.ofMinutes(5))
+        started()
+        assertEquals(2, kit.gateway.prepareCalls.size)
+    }
+
+    @Test
     fun `the first payment is the registration - one provider call with the reserved number, the token stored encrypted and never in a response string`() {
         val sub = started().subscription
 

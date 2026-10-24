@@ -906,6 +906,7 @@ abstract class PaymentLedgerStoreContract {
             billingToken = "enc:secret", cardIssuer = "HYUNDAI", cardLast4 = "123*", pendingPlanCode = "plus", pendingAmount = 6900,
             endReason = SubscriptionEndReason.PAYMENT_FAILED, endedAt = PaymentTestOrders.T0.plusSeconds(5), accountErasedAt = PaymentTestOrders.T0.plusSeconds(6), country = "KR", dedupeKey = "d".repeat(64),
             providerSubscriptionId = "psub_1", providerSyncedAt = PaymentTestOrders.T0.plusSeconds(7), firstTransactionId = "txn_first",
+            registrationWindow = """{"kind":"K","attributes":{"pcUrl":"https://pay.example/w"}}""", registrationWindowAt = PaymentTestOrders.T0.plusSeconds(8),
         )
 
         assertTrue(store.inTransaction { it.insertSubscriptionIfAbsent(full) })

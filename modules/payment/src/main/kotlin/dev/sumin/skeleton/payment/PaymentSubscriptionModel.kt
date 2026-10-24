@@ -101,6 +101,12 @@ data class PaymentSubscription(
     val providerSyncedAt: Instant? = null,
     /** 서버가 결제사에 미리 만든 첫 결제 거래 id(Paddle) - 웹훅의 첫 결제는 이 id 로 이 줄을 찾는다(결제사 + 이 id 유니크). */
     val firstTransactionId: String? = null,
+    /**
+     * 카드 등록 창을 서버가 결제사에 미리 예약해야 열리는 결제사(카카오페이)의 첫 창 값(`kind` · 모드 · 창 주소들, JSON) - 같은 요청 키의 재전송이 결제사를 다시 부르지 않고 같은 창을 돌려받는다.
+     * 창 주소는 비밀이 아니지만 로그에 싣지 않는다. [registrationWindowAt] 은 그 창을 예약한 시각이다([PaymentBillingGateway.registrationWindowLifetime] 안에서만 다시 쓴다).
+     */
+    val registrationWindow: String? = null,
+    val registrationWindowAt: Instant? = null,
 ) {
     /** 결제사가 갱신을 한다 — 우리 갱신 · 중도 해지 · 플랜 변경 길은 이 구독에 열리지 않는다. */
     val isProviderManaged: Boolean get() = providerSubscriptionId != null

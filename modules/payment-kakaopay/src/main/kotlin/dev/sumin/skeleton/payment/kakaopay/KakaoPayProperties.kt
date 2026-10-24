@@ -42,6 +42,8 @@ data class KakaoPayProperties(
     /** `ready` · 조회 한 번의 제한 시간(요청 단위). 클라이언트 단위 `skeleton.http.clients.payment-kakaopay.response-timeout` 보다 짧을 때만 뜻이 있다. */
     val readyTimeout: Duration = Duration.ofSeconds(10),
     val lookupTimeout: Duration = Duration.ofSeconds(10),
+    /** 구독 등록 창(`ready` 예약)을 같은 요청 키의 재전송에 그대로 돌려주는 시간. 카카오페이의 `ready` 유효시간(15분)보다 짧아야 한다. */
+    val registrationWindowLifetime: Duration = Duration.ofMinutes(10),
     /** 보호 환경(stage · prod)에서 테스트 가맹점 코드로 서는 것을 일부러 허락한다(사업자 제휴 전의 시연 배포). */
     val allowTestKeysInProtectedEnv: Boolean = false,
 ) {

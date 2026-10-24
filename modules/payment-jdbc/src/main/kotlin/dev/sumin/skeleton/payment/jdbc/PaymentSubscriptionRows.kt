@@ -49,6 +49,8 @@ internal class PaymentSubscriptionRows(private val dialect: SqlDialect) {
         providerSubscriptionId = rs.getString("provider_subscription_id"),
         providerSyncedAt = dialect.readInstant(rs, "provider_synced_at"),
         firstTransactionId = rs.getString("first_transaction_id"),
+        registrationWindow = rs.getString("registration_window"),
+        registrationWindowAt = dialect.readInstant(rs, "registration_window_at"),
     )
 
     fun params(s: PaymentSubscription): MapSqlParameterSource = MapSqlParameterSource()
@@ -84,6 +86,8 @@ internal class PaymentSubscriptionRows(private val dialect: SqlDialect) {
         .addValue("provider_subscription_id", s.providerSubscriptionId)
         .addValue("provider_synced_at", dialect.instantParam(s.providerSyncedAt))
         .addValue("first_transaction_id", s.firstTransactionId)
+        .addValue("registration_window", s.registrationWindow)
+        .addValue("registration_window_at", dialect.instantParam(s.registrationWindowAt))
 
     companion object {
         val COLUMNS = listOf(
@@ -91,6 +95,7 @@ internal class PaymentSubscriptionRows(private val dialect: SqlDialect) {
             "current_period_end", "charge_order_id", "attempt", "customer_key", "billing_token", "card_issuer", "card_last4", "active_key", "pending_plan_code",
             "pending_amount", "end_reason", "ended_at", "account_erased_at", "created_at", "updated_at", "country", "dedupe_key",
             "provider_subscription_id", "provider_synced_at", "first_transaction_id",
+            "registration_window", "registration_window_at",
         )
     }
 }

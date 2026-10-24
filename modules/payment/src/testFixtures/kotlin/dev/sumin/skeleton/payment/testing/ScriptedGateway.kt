@@ -363,6 +363,10 @@ class ScriptedGateway(
     val prepareCalls = CopyOnWriteArrayList<BillingPrepareRequest>()
     private var prepareSequence = 0
 
+    /** 있으면 `registrationWindowLifetime` - 같은 키의 재전송이 이 시간 안에서는 저장된 첫 창을 돌려받는다(카카오페이 모양). */
+    @Volatile var windowLifetime: java.time.Duration? = null
+    override val registrationWindowLifetime: java.time.Duration? get() = windowLifetime
+
     /** true 면 `registrationCharges` - `activate` 가 `issue` 가 아니라 `registerWithCharge` 를 부른다. */
     @Volatile var registering = false
     override val registrationCharges: Boolean get() = registering
@@ -385,7 +389,7 @@ class ScriptedGateway(
         refuseInsideTransaction("prepareBilling")
         prepareCalls += request
         val reference = if (prepareReferences) synchronized(lock) { "ref_${++prepareSequence}" } else null
-        return billingSetup(request.customerKey)?.let { PreparedBilling(it, reference) }
+        return billingSetup(request.customerKey)?.let { PreparedBilling(if (reference == null) it else it.copy(attributes = mapOf("pcUrl" to "https://pay.example/$reference")), reference) }
     }
 
     override fun issue(customerKey: String, providerPayload: Map<String, Any?>, reference: String?): BillingIssue {

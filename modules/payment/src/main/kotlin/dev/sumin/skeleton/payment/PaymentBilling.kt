@@ -19,6 +19,13 @@ interface PaymentBillingGateway : PaymentGateway {
     fun prepareBilling(request: BillingPrepareRequest): PreparedBilling? = billingSetup(request.customerKey)?.let { PreparedBilling(it, null) }
 
     /**
+     * [prepareBilling] 이 준 창(예약)이 유효한 시간 - 있으면 같은 요청 키의 재전송이 이 시간 안에서는 결제사를 다시 부르지 않고 **저장된 첫 창을 그대로** 돌려준다
+     * (예약을 다시 하면 번호가 바뀌어 앞 창의 승인이 실패한다). null 이면 재전송마다 다시 예약한다(기본 - 토스는 창 값이 설정뿐이고 네이버페이는 지금처럼 다시 예약한다).
+     */
+    val registrationWindowLifetime: java.time.Duration?
+        get() = null
+
+    /**
      * **등록이 곧 첫 결제**인 결제사(카카오페이: 1회차를 플랜 금액으로 결제하고 그 승인에서 SID 를 받는다). true 면 `activate` 는 [issue] 가 아니라 [registerWithCharge] 를 쓴다 -
      * 자리 · 첫 주문을 먼저 커밋하고(락 밖에서) 한 번 부르며, 첫 주문 번호는 [BillingPrepareRequest.firstOrderId] 와 같다.
      */

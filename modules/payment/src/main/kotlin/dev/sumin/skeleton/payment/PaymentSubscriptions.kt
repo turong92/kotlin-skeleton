@@ -64,6 +64,7 @@ class PaymentSubscriptions(
         val gateway: PaymentGateway
         val setup: BillingSetup
         var reference: String? = null
+        var window: String? = null
         val creator = hosted?.let { it as? PaymentTransactionGateway ?: throw PaymentUnavailableException() }
         if (hosted != null) {
             gateway = hosted
@@ -84,6 +85,7 @@ class PaymentSubscriptions(
             } ?: throw PaymentUnavailableException()
             setup = prepared.setup
             reference = prepared.reference
+            window = if (billing.registrationWindowLifetime != null) RegistrationWindows.encode(prepared.setup) else null
         }
 
         val now = writer.now()
@@ -117,6 +119,8 @@ class PaymentSubscriptions(
             country = country?.uppercase() ?: properties.subscription.cancel.defaultCountry,
             dedupeKey = dedupeKey,
             firstTransactionId = reference,
+            registrationWindow = window,
+            registrationWindowAt = window?.let { now },
         )
         // 줄을 먼저 커밋한다(결제사 호출은 트랜잭션 밖). 같은 요청 키로 동시에 들어온 쪽은 dedupe_key 유니크로 `false` 를 받아 그 줄을 돌려받는다.
         if (!store.inTransaction { it.insertSubscriptionIfAbsent(subscription) }) {
@@ -309,7 +313,15 @@ class PaymentSubscriptions(
                 } catch (e: PaymentProviderNotFoundException) {
                     throw PaymentUnavailableException()
                 }
-                // 카드 전의 재전송은 다시 예약한다 - 새 번호로 덮는다(앞 창의 결제는 모름이 되어 조회가 닫는 알려진 한계)
+                // 창을 저장해 두는 결제사(카카오페이)는 유효시간 안의 재전송에 저장된 첫 창을 그대로 돌려준다 - 예약을 다시 하면 번호가 바뀌어 앞 창의 승인이 실패한다
+                val lifetime = gateway.registrationWindowLifetime
+                val stored = if (lifetime != null && existing.registrationWindowAt != null && writer.now().isBefore(existing.registrationWindowAt.plus(lifetime))) {
+                    RegistrationWindows.decode(existing.registrationWindow, existing.provider, existing.customerKey)
+                } else {
+                    null
+                }
+                if (stored != null) return StartedSubscription(existing, stored, replayed = true)
+                // 유효시간이 지났거나 저장하지 않는 결제사의 재전송은 다시 예약한다 - 새 번호로 덮는다(앞 창의 결제는 모름이 되어 조회가 닫는 알려진 한계)
                 val planName = plans.find(existing.planCode)?.name ?: existing.planCode
                 val prepared = try {
                     gateway.prepareBilling(BillingPrepareRequest(existing.id, checkNotNull(existing.customerKey), planName, existing.amount, PaymentOrderIds.initialOrderId(existing.id), returnOrigin, existing.accountId))
@@ -319,9 +331,13 @@ class PaymentSubscriptions(
                     throw PaymentUnavailableException()
                 } ?: throw PaymentUnavailableException()
                 prepared.reference?.let { reference ->
+                    val window = if (lifetime != null) RegistrationWindows.encode(prepared.setup) else null
                     store.inTransaction { tx ->
                         val locked = tx.lockSubscription(existing.id)
-                        if (locked != null && locked.status == SubscriptionStatus.PENDING && locked.chargeOrderId == null) tx.updateSubscription(locked.copy(firstTransactionId = reference, updatedAt = writer.now()))
+                        if (locked != null && locked.status == SubscriptionStatus.PENDING && locked.chargeOrderId == null) {
+                            val at = writer.now()
+                            tx.updateSubscription(locked.copy(firstTransactionId = reference, registrationWindow = window, registrationWindowAt = window?.let { at }, updatedAt = at))
+                        }
                     }
                 }
                 prepared.setup
@@ -411,6 +427,30 @@ class SubscriptionRevokeTaskHandler(
             if (locked.status == SubscriptionStatus.ENDED && locked.billingToken != null) {
                 tx.updateSubscription(locked.copy(billingToken = null, customerKey = null, updatedAt = writer.now()))
             }
+        }
+    }
+}
+
+/**
+ * 카드 등록 창 값([BillingSetup])을 구독 줄의 한 칸에 담고 꺼낸다(JSON: 종류 · 모드 · 공개 키 · 창 주소들). 고객 키는 줄에 따로 있다.
+ * 칸에 들어가지 않을 만큼 길면 저장하지 않는다(null) - 재전송은 지금처럼 다시 예약한다. 창 주소는 로그에 싣지 않는다.
+ */
+internal object RegistrationWindows {
+    private const val MAX = 1000
+    private val mapper = tools.jackson.databind.json.JsonMapper.builder().build()
+
+    fun encode(setup: BillingSetup): String? =
+        mapper.writeValueAsString(mapOf("kind" to setup.kind, "testMode" to setup.testMode, "clientKey" to setup.clientKey, "attributes" to setup.attributes)).takeIf { it.length <= MAX }
+
+    /** 못 읽으면 null - 호출한 쪽이 다시 예약한다. */
+    fun decode(stored: String?, provider: String, customerKey: String?): BillingSetup? {
+        if (stored == null || customerKey == null) return null
+        return try {
+            val node = mapper.readTree(stored)
+            val attributes = node.get("attributes")?.properties()?.associate { it.key to it.value.asString() }.orEmpty()
+            BillingSetup(provider, node.get("kind").asString(), node.get("testMode").asBoolean(), node.get("clientKey")?.takeIf { it.isString }?.asString(), customerKey, attributes)
+        } catch (_: Exception) {
+            null
         }
     }
 }

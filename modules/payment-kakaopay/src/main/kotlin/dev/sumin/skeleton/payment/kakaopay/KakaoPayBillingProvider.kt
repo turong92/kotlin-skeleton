@@ -28,6 +28,8 @@ class KakaoPayBillingProvider(
 
     override val registrationCharges: Boolean = true
 
+    override val registrationWindowLifetime: java.time.Duration = kakaoProperties.registrationWindowLifetime
+
     /** 창 값 - 서버가 `ready` 를 부른 뒤에야 낸다([prepareBilling]). 설정만으로는 낼 수 없다. */
     override fun billingSetup(customerKey: String): BillingSetup? = null
 

@@ -168,7 +168,9 @@ class PaymentSchemaDbTest {
         assertEquals(listOf("payment_webhook_events.payload"), textColumns)
         assertEquals(ColumnClass.RAW, COLUMN_CLASSES["payment_webhook_events.payload"])
         // 빌링키의 암호문은 문장이 아니라 불투명한 값이다 — 길이 상한이 따로 있다
-        assertThat(actual.filter { it.third != null && it.first != "payment_webhook_events.payload" && it.first != "payment_subscriptions.billing_token" }.map { it.third!! }).allMatch { it <= 200 }
+        assertThat(actual.filter { it.third != null && it.first != "payment_webhook_events.payload" && it.first != "payment_subscriptions.billing_token" && COLUMN_CLASSES[it.first] != ColumnClass.WINDOW }.map { it.third!! }).allMatch { it <= 200 }
+        // 결제창 주소(JSON)는 결제사가 준 공개 값이다 - 사람이 쓴 글이 아니고 길이 상한이 따로 있다
+        assertThat(actual.single { it.first == "payment_subscriptions.registration_window" }.third!!).isLessThanOrEqualTo(1000)
         assertThat(actual.single { it.first == "payment_subscriptions.billing_token" }.third!!).isLessThanOrEqualTo(512)
     }
 
@@ -184,7 +186,7 @@ class PaymentSchemaDbTest {
     private fun schemaOfConnection(): String = if (DbTestDatabase.vendor == "postgresql") "current_schema()" else "database()"
 
     /** LABEL = 앱이 정하는 문장(결제창 · 내역에 보이는 이름) — 코드가 아니다. 개인정보를 넣지 않는 것은 앱(카탈로그)의 책임이다. */
-    private enum class ColumnClass { IDENTIFIER, CODE, AMOUNT, TIME, RAW, ERASED_PERSONAL, LABEL, SECRET }
+    private enum class ColumnClass { IDENTIFIER, CODE, AMOUNT, TIME, RAW, ERASED_PERSONAL, LABEL, SECRET, WINDOW }
 
     private companion object {
         private fun cols(table: String, kind: ColumnClass, vararg names: String) = names.associate { "$table.$it" to kind }
@@ -201,7 +203,8 @@ class PaymentSchemaDbTest {
             putAll(cols("payment_subscriptions", ColumnClass.IDENTIFIER, "id", "account_id", "charge_order_id", "active_key", "dedupe_key", "provider_subscription_id", "first_transaction_id"))
             putAll(cols("payment_subscriptions", ColumnClass.CODE, "provider", "provider_mode", "status", "plan_code", "currency", "period", "period_seq", "attempt", "pending_plan_code", "end_reason", "country"))
             putAll(cols("payment_subscriptions", ColumnClass.AMOUNT, "amount", "pending_amount"))
-            putAll(cols("payment_subscriptions", ColumnClass.TIME, "anchor_at", "current_period_start", "current_period_end", "ended_at", "account_erased_at", "created_at", "updated_at", "provider_synced_at"))
+            putAll(cols("payment_subscriptions", ColumnClass.TIME, "anchor_at", "current_period_start", "current_period_end", "ended_at", "account_erased_at", "created_at", "updated_at", "provider_synced_at", "registration_window_at"))
+            putAll(cols("payment_subscriptions", ColumnClass.WINDOW, "registration_window"))
             putAll(cols("payment_subscriptions", ColumnClass.ERASED_PERSONAL, "card_issuer", "card_last4"))
             putAll(cols("payment_subscriptions", ColumnClass.SECRET, "customer_key", "billing_token"))
 
