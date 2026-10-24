@@ -17,10 +17,13 @@ class AccountOperatorAccess(
     private val accounts: () -> AccountRepository,
     private val source: () -> RolePermissionSource,
 ) : AbstractOperatorAccess() {
-    override fun compute(ref: OperatorRef): Set<String> {
+    override fun compute(ref: OperatorRef): Set<String> = computeRoles(ref).flatMapTo(sortedSetOf()) { source().permissionsOf(it) }
+
+    /** 저장된 역할 — 토큰이 뭐라고 하든. `ACTIVE` 가 아니거나 없는 계정은 역할이 없다 */
+    override fun computeRoles(ref: OperatorRef): Set<String> {
         val stored = accounts().findById(ref.accountId)
         if (stored == null || stored.status != AccountStatus.ACTIVE) return emptySet()
-        return stored.roles.flatMapTo(sortedSetOf()) { source().permissionsOf(it) }
+        return stored.roles.toSortedSet()
     }
 }
 

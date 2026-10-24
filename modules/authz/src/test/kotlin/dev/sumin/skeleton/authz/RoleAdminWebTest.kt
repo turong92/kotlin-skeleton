@@ -241,3 +241,46 @@ class RoleAdminSwitchTest {
         mvc.perform(get("/api/v1/admin/permissions").principal(admin)).andExpect(status().isNotFound)
     }
 }
+
+/** 자기 잠금은 토큰이 아니라 판정 구현이 보는 역할(`OperatorAccess.rolesOf` — 계정 모듈이면 저장된 역할)로 가린다 */
+@SpringBootTest(
+    classes = [AuthzWebTestApplication::class],
+    properties = ["skeleton.authz.admin.enabled=true", "skeleton.authz.roles.ADMIN=*", "skeleton.authz.roles.OPS=authz.roles", "skeleton.authz.roles.BACKUP=authz.roles"],
+)
+@AutoConfigureMockMvc
+@Import(AuthzWebFakes::class, StoredRolesLockoutTest.StoredRoles::class)
+class StoredRolesLockoutTest {
+    @org.springframework.boot.test.context.TestConfiguration(proxyBeanMethods = false)
+    class StoredRoles {
+        /** 저장소의 역할 — 토큰과 다를 수 있다 */
+        val stored = mapOf("acc_stale" to setOf("BACKUP"), "acc_only_ops" to setOf("OPS"))
+
+        @org.springframework.context.annotation.Bean
+        fun access(source: dev.sumin.skeleton.common.authz.RolePermissionSource): dev.sumin.skeleton.common.authz.OperatorAccess =
+            object : dev.sumin.skeleton.common.authz.OperatorAccess {
+                override fun rolesOf(ref: dev.sumin.skeleton.common.authz.OperatorRef) = stored[ref.accountId].orEmpty()
+                override fun permissionsOf(ref: dev.sumin.skeleton.common.authz.OperatorRef) = rolesOf(ref).flatMapTo(sortedSetOf()) { source.permissionsOf(it) }
+            }
+    }
+
+    @Autowired lateinit var mvc: MockMvc
+    @Autowired lateinit var store: FakeRoleStore
+
+    private fun edit(who: TestingAuthenticationToken) =
+        mvc.perform(put("/api/v1/admin/roles/OPS").principal(who).contentType(MediaType.APPLICATION_JSON).content("""{"description":"d","permissions":[]}"""))
+
+    @BeforeEach
+    fun reset() {
+        store.rows["OPS"] = StoredRole("OPS", null, setOf("authz.roles"))
+    }
+
+    @Test
+    fun `a token that still names OPS does not lock out a caller whose stored role is BACKUP`() {
+        edit(TestingAuthenticationToken("acc_stale", "n/a", "ROLE_OPS")).andExpect(status().isOk)
+    }
+
+    @Test
+    fun `a token without roles still locks out a caller whose only stored role is OPS`() {
+        edit(TestingAuthenticationToken("acc_only_ops", "n/a", "ROLE_USER")).andExpect(status().isConflict).andExpect(jsonPath("$.code").value("AUTHZ.SELF_LOCKOUT"))
+    }
+}

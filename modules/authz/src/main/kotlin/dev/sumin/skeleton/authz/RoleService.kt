@@ -124,13 +124,14 @@ class RoleService(
     }
 
     /**
-     * 호출자가 가진 역할([OperatorRef.tokenRoles])을 고치거나 지워서 자기 `authz.roles` 를 잃으면 막는다 —
+     * 호출자가 가진 역할([OperatorAccess.rolesOf] — 계정 모듈이 있으면 저장된 역할)을 고치거나 지워서 자기 `authz.roles` 를 잃으면 막는다 —
      * 다른 역할이 계속 주거나, 고친 뒤에도 남으면 괜찮다.
      */
     private fun checkNoLockout(actor: OperatorRef, name: String, after: Set<String>) {
-        if (name !in actor.tokenRoles) return
+        val own = access.rolesOf(actor)
+        if (name !in own) return
         if (ALL_PERMISSIONS in after || AuthzPermissions.ROLES in after) return
-        val kept = (actor.tokenRoles - name).any { role ->
+        val kept = (own - name).any { role ->
             source.permissionsOf(role).let { ALL_PERMISSIONS in it || AuthzPermissions.ROLES in it }
         }
         if (!kept) throw exception(AuthzRoleErrorCode.SELF_LOCKOUT, "This change would remove your own ${AuthzPermissions.ROLES}")

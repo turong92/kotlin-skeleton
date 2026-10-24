@@ -54,6 +54,15 @@ class AccountOperatorAccessTest {
     }
 
     @Test
+    fun `rolesOf reads the stored roles, not the token`() {
+        store("acc_4", AccountStatus.ACTIVE, "USER", "VIEWER")
+        assertEquals(setOf("USER", "VIEWER"), access.rolesOf(OperatorRef("acc_4", setOf("ADMIN"))))
+        assertEquals(emptySet(), access.rolesOf(staleToken("acc_never")))
+        store("acc_5", AccountStatus.SUSPENDED, "ADMIN")
+        assertEquals(emptySet(), access.rolesOf(staleToken("acc_5")))
+    }
+
+    @Test
     fun `permissions of several roles are merged and sorted`() {
         store("acc_3", AccountStatus.ACTIVE, "VIEWER", "STAFF")
         assertEquals(listOf("account.manage", "account.read"), access.permissionsOf(OperatorRef("acc_3")).toList())

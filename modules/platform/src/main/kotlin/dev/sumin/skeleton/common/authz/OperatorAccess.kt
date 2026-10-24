@@ -14,6 +14,12 @@ interface OperatorAccess {
     /** 이 호출자의 권한 키(사전순). 전권이면 `["*"]` 그대로 */
     fun permissionsOf(ref: OperatorRef): Set<String>
 
+    /**
+     * 이 호출자가 지금 가진 역할 이름. 기본은 토큰의 역할([OperatorRef.tokenRoles]) — 저장소를 읽는 구현(`account`)은 저장된 역할로 덮는다.
+     * 「이 변경이 내 접근을 끊나」 같은 판정이 판정 구현과 같은 눈으로 호출자의 역할을 보게 한다.
+     */
+    fun rolesOf(ref: OperatorRef): Set<String> = ref.tokenRoles
+
     fun has(ref: OperatorRef, permission: String): Boolean =
         permissionsOf(ref).let { ALL_PERMISSIONS in it || permission in it }
 
