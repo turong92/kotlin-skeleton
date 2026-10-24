@@ -32,8 +32,9 @@ class KakaoPayKeyGuardTest {
         baseUrl: String = KakaoPayProperties().baseUrl,
         origins: Set<String> = emptySet(),
         subscriptionCid: String = "",
+        windowLifetime: Duration = Duration.ofMinutes(10),
     ) = KakaoPayKeyGuard(
-        properties = KakaoPayProperties(enabled = true, secretKey = secretKey, cid = cid, subscriptionCid = subscriptionCid, cidSecret = cidSecret, returnUrl = returnUrl, baseUrl = baseUrl, allowTestKeysInProtectedEnv = allowTest, allowedReturnOrigins = origins),
+        properties = KakaoPayProperties(enabled = true, secretKey = secretKey, cid = cid, subscriptionCid = subscriptionCid, cidSecret = cidSecret, returnUrl = returnUrl, baseUrl = baseUrl, allowTestKeysInProtectedEnv = allowTest, allowedReturnOrigins = origins, registrationWindowLifetime = windowLifetime),
         ledgerPresent = { ledger },
         jobQueueWorkerRunning = { workerRunning },
         responseTimeout = { responseTimeout },
@@ -49,6 +50,16 @@ class KakaoPayKeyGuardTest {
             assertTrue(guard(allowTest = true).warnings(env).any { "test merchant code" in it })
         }
         assertEquals(emptyList(), guard().problems(local), "a test code is what local wants")
+    }
+
+    @Test
+    fun `with subscriptions on, a window lifetime of zero or of the ready validity (15 minutes) or more stops the start`() {
+        val sub = "TCSUBSCRIP"
+        for (bad in listOf(Duration.ZERO, Duration.ofMinutes(15), Duration.ofHours(1))) {
+            assertTrue(guard(subscriptionCid = sub, windowLifetime = bad).problems(local).any { "registration-window-lifetime" in it }, bad.toString())
+        }
+        assertEquals(emptyList(), guard(subscriptionCid = sub, windowLifetime = Duration.ofMinutes(14)).problems(local))
+        assertEquals(emptyList(), guard(subscriptionCid = "", windowLifetime = Duration.ZERO).problems(local), "without subscriptions the value means nothing")
     }
 
     @Test

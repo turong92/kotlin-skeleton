@@ -42,6 +42,10 @@ class KakaoPayKeyGuard(
         if (subscriptionRaw.isNotEmpty() && cidRaw.isNotEmpty() && KakaoPayMerchant.modeOf(subscriptionRaw) != mode) {
             add("$SUBSCRIPTION_CID_PROPERTY and $CID_PROPERTY are not in the same mode (one is a test merchant code and the other a live one): a subscription would register in one world and charge in the other")
         }
+        val lifetime = properties.registrationWindowLifetime
+        if (subscriptionRaw.isNotEmpty() && (lifetime.isZero || lifetime.isNegative || lifetime >= READY_VALIDITY)) {
+            add("$WINDOW_LIFETIME_PROPERTY ($lifetime) must be longer than zero and shorter than ${READY_VALIDITY.toMinutes()} minutes (the validity of a KakaoPay ready): an expired window would be handed back and its approval would fail")
+        }
         if (context.protectedEnv && !properties.allowTestKeysInProtectedEnv && mode == PaymentMode.TEST) {
             add("$CID_PROPERTY holds a test merchant code in a protected environment (skeleton.env=stage|prod): use the live merchant code with the live Secret key, or set $ALLOW_PROPERTY=true to run a test-mode deployment on purpose")
         }
@@ -130,6 +134,8 @@ class KakaoPayKeyGuard(
         const val SECRET_PROPERTY = "skeleton.payment-kakaopay.secret-key"
         const val CID_PROPERTY = "skeleton.payment-kakaopay.cid"
         const val SUBSCRIPTION_CID_PROPERTY = "skeleton.payment-kakaopay.subscription-cid"
+        const val WINDOW_LIFETIME_PROPERTY = "skeleton.payment-kakaopay.registration-window-lifetime"
+        private val READY_VALIDITY: Duration = Duration.ofMinutes(15)
         const val RETURN_PROPERTY = "skeleton.payment-kakaopay.return-url"
         const val ALLOWED_PROPERTY = "skeleton.payment-kakaopay.allowed-return-origins"
         const val BASE_URL_PROPERTY = "skeleton.payment-kakaopay.base-url"

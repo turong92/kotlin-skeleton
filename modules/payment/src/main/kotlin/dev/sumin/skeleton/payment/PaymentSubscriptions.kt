@@ -6,6 +6,7 @@ import dev.sumin.skeleton.crypto.TextEncryptor
 import java.security.SecureRandom
 import java.util.Random
 import org.slf4j.LoggerFactory
+import tools.jackson.databind.json.JsonMapper
 
 /** [billing] 은 카드 등록 창을 여는 값. 같은 요청의 재전송이 이미 시작한 구독이면 null. */
 data class StartedSubscription(val subscription: PaymentSubscription, val billing: BillingSetup?, val replayed: Boolean)
@@ -437,7 +438,7 @@ class SubscriptionRevokeTaskHandler(
  */
 internal object RegistrationWindows {
     private const val MAX = 1000
-    private val mapper = tools.jackson.databind.json.JsonMapper.builder().build()
+    private val mapper = JsonMapper.builder().build()
 
     fun encode(setup: BillingSetup): String? =
         mapper.writeValueAsString(mapOf("kind" to setup.kind, "testMode" to setup.testMode, "clientKey" to setup.clientKey, "attributes" to setup.attributes)).takeIf { it.length <= MAX }

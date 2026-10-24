@@ -4,6 +4,7 @@ import dev.sumin.skeleton.payment.ConvergeContext
 import dev.sumin.skeleton.payment.ConvergeSource
 import dev.sumin.skeleton.payment.IdempotencyKey
 import dev.sumin.skeleton.payment.PaymentActor
+import dev.sumin.skeleton.payment.PaymentAmount
 import dev.sumin.skeleton.payment.PaymentEventType
 import dev.sumin.skeleton.payment.PaymentMode
 import dev.sumin.skeleton.payment.PaymentRefundNotAllowedException
@@ -99,7 +100,7 @@ class RefundReviewDbTest {
     fun `the mark of a late result survives an automatic reconcile on the real rows and a sync clears it`() {
         val kit = JdbcLedgerKit()
         val order = kit.paid()
-        kit.gateway.scriptRefund(dev.sumin.skeleton.payment.testing.ScriptedGateway.RefundScript.ApproveOtherAmount(dev.sumin.skeleton.payment.PaymentAmount(500, "KRW"))) // 다른 금액이라 닫힌 줄을 되살릴 수 없다
+        kit.gateway.scriptRefund(RefundScript.ApproveOtherAmount(PaymentAmount(500, "KRW"))) // 다른 금액이라 닫힌 줄을 되살릴 수 없다
         kit.gateway.duringRefund = {
             kit.gateway.duringRefund = null
             val line = kit.store.listRefunds(order.id).single()

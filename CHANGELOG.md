@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 닫힌 환불의 결제사 증거 전이 · 카카오 구독 창 재사용 (2026-10-24)
+
+- `payment`: 우리가 `FAILED` 로 닫은 환불 줄에 같은 번호 · 같은 금액의 환불을 결제사가 이뤄졌다고 알려 오면(웹훅 승인 · 맞추기 · 늦은 응답) 줄이 `SUCCEEDED` 가 되어 주문에 한 번 반영된다(`FAILED→SUCCEEDED` 증거 전이, 이력 `LATE_RESULT_APPLIED`). **배포 뒤 첫 맞추기에서 번호 있는 `FAILED` 줄 중 결제사가 이뤄졌다고 하는 것이 자동으로 되살아나 주문의 환불 금액 · 상태가 바뀔 수 있다.**
+- `payment-kakaopay` · `payment-jdbc`: 구독 시작을 같은 키로 다시 보내면 유효시간(`registration-window-lifetime`, 기본 10분, 0 초과 15분 미만) 안에서는 첫 결제창을 그대로 돌려준다. 새 V 파일 `V20261024120000__payment_subscriptions_registration_window`(두 방언, 열 둘 null 허용). 다른 결제사는 그대로.
+
 ### Paddle 환불 · 구독 결제 환불의 「구독도 해지」 선택 (2026-10-20)
 
 - `payment-paddle`: 서버가 Paddle 에 환불(`POST /adjustments`)을 시키고 거래를 조회한다(`PaymentRefundGateway` · `PaymentLookupGateway` 추가, `GET /transactions/{id}?include=adjustments`). 전액은 `type: full`, 부분은 거래 품목 하나 + 세금 포함 금액. 환불은 대개 Paddle 이 검토한 뒤(`pending_approval`) `adjustment.created` · `adjustment.updated` 웹훅(서명 확인은 기존과 같다)으로 승인 · 거절을 알리고 장부가 그 사건으로 줄을 끝낸다. 확정 거절은 허용 목록(`PaddleErrorMapper`)뿐, 모름이면 다시 보내지 않는다. 새 설정 `lookup-timeout`(5s) · `refund-timeout`(10s). **API 키 권한에 `adjustment.write` · `adjustment.read` · `transaction.read` 를, 알림 대상에 `adjustment.created` · `adjustment.updated` 를 더한다**(샌드박스 확인: `docs/real-provider-setup.md` §14). 진짜 Paddle 로는 아직 재지 않았다.

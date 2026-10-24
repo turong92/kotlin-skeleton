@@ -64,7 +64,7 @@
    - `approved`: 줄 `SUCCEEDED`(`RefundLines.succeed`, 금액이 다르면 지금처럼 `REFUND_MISMATCH` + `RESULT_MISMATCH`). 줄이 없으면(대시보드에서 낸 환불) `PROVIDER` 줄로 넣는다(`RefundLines.addFromProvider`, 사유 `PROVIDER_CONSOLE`).
    - `rejected`: 줄 `FAILED`, `failureCode=PROVIDER_REJECTED`(새 우리 코드) — 주문은 다시 환불할 수 있다. 줄이 없으면 무시.
    - `pending_approval`: 거래 키만 붙인다. `credit` · `credit_reverse` 는 `IGNORED`.
-   - 끝 상태가 된 줄은 다시 움직이지 않는다(뒤바뀐 순서 · 재전송은 같은 결과).
+   - 끝 상태가 된 줄은 다시 움직이지 않는다(뒤바뀐 순서 · 재전송은 같은 결과). **예외(pay4)**: 우리가 `FAILED` 로 닫은 줄에 같은 번호 · 같은 금액의 승인이 오면(웹훅 · 조회 맞추기 · 늦은 응답) 결제사 증거로 `SUCCEEDED` 가 된다 - 합계가 넘치면 되살리지 않고 표시만.
 6. **지급 회수 · 구독**: `SUCCEEDED` 는 지금처럼 `onRefunded` · 회수 작업, 구독 반응은 §3.4.
 
 오류 분류(허용 목록, 나머지는 모름): 확정 = 4xx 인증 · 권한(`invalid_token` · `forbidden`) · `adjustment_amount_cannot_be_zero` · `adjustment_payout_earnings_cannot_be_zero` · `adjustment_transaction_invalid_status_for_refund` · `adjustment_transaction_without_captured_payment` · `adjustment_transaction_item_invalid` · `adjustment_invalid_combination_of_types` · `adjustment_tax_mode_not_allowed` · `adjustment_transaction_missing_customer_id`. **모름**(앞선 요청이 적용됐을 수 있다) = `adjustment_pending_refund_request` · `adjustment_*_above_remaining_allowed` · `adjustment_transaction_item_has_already_been_fully_adjusted` · `adjustment_transaction_item_over_adjustment` · 5xx · 시간 초과. Paddle 에는 멱등 키 헤더가 없다(문서에서 못 찾음) — 장부의 「환불 한 줄에 호출 한 번」이 막는다.
@@ -101,7 +101,7 @@
 ### 4.2 코어 변경 (`payment`)
 
 - **결제 수단 고르기**: `GET /config` 에 `subscriptionChoices`(이 나라에서 빌링 능력을 가진, 지금 열 수 있는 결제사 id — `choices` 와 같은 규칙, 늘 온다). `POST /subscriptions` 가 선택 본문 `provider`(목록 안일 때만) · `returnOrigin` 을 받는다(목록 밖 · 비면 지금처럼 서버가 정한다).
-- **`prepareBilling(BillingPrepareRequest{subscriptionId, customerKey, planName, amount, firstOrderId, returnOrigin}): PreparedBilling{setup, reference}`** — 기본 구현은 `billingSetup(customerKey)` 그대로(토스 무변경). `POST /subscriptions` 가 **트랜잭션 밖에서** 부르고 `reference`(카카오 `tid` · 네이버 `reserveId`)를 `payment_subscriptions.first_transaction_id` 에 박는다(이미 있는 열 · 유니크). 같은 키 재전송이 카드 전이면 다시 예약한다(새 `reference` 로 덮는다 — 단건 카카오와 같은 한계, §8).
+- **`prepareBilling(BillingPrepareRequest{subscriptionId, customerKey, planName, amount, firstOrderId, returnOrigin}): PreparedBilling{setup, reference}`** — 기본 구현은 `billingSetup(customerKey)` 그대로(토스 무변경). `POST /subscriptions` 가 **트랜잭션 밖에서** 부르고 `reference`(카카오 `tid` · 네이버 `reserveId`)를 `payment_subscriptions.first_transaction_id` 에 박는다(이미 있는 열 · 유니크). 같은 키 재전송이 카드 전이면: 첫 창 값을 구독 줄에 저장해 두는 결제사(카카오, `registrationWindowLifetime` 기본 10분)는 유효시간 안에서 **저장된 첫 창을 그대로 돌려준다**(다시 예약하지 않는다). 유효시간이 지났거나 저장하지 않는 결제사(네이버)는 다시 예약한다(새 `reference` 로 덮는다 — 단건 카카오와 같은 한계, §8).
 - **`issue(customerKey, providerPayload, reference)`** — `reference` 를 더한다(토스는 무시). 네이버는 돌아온 `reserveId` 가 `reference` 와 다르면 결제사를 부르지 않고 400.
 - **등록이 곧 첫 결제(카카오, 결정 1)**: `registrationCharges=true` 인 결제사는 `activate` 순서가 바뀐다 — ① 자리 + 첫 주문(`CONFIRMING`, 결제 키 = `reference`, 주문 id = `PaymentOrderIds.initialOrderId(구독 id)` — `ready` 의 `partner_order_id` 와 같아야 해서 미리 정해지는 id) 커밋 → ② `registerWithCharge`(락 밖, 돈이 움직임) → ③ 결과로 주문 확정 + 같은 트랜잭션에서 토큰(SID, 암호문) · 카드 표시를 구독 줄에. 자리에 지면 ②를 부르지 않는다(돈이 안 움직였다). ②가 모름이면 `202`, 조회 작업이 `tid` 로 맞춘다 — 그때는 SID 를 모른다(조회 응답에 없다) → 구독은 `ACTIVE` 이되 토큰이 비고, 갱신 작업이 토큰 없는 구독을 만나면 과금 없이 `ENDED(PAYMENT_FAILED)` + 로그. 낸 기간은 쓴다.
 - **모름 보강 두 가지**: ⑴ 조회 작업의 구독 반응(마지막 시도 + 조회 null → 거절로 반응)을 **`answersByOrderId=false` 이고 주문에 결제 키가 없으면 하지 않는다** — `CONFIRM_UNRESOLVED` 로 사람에게. ⑵ `SubscriptionCharges` 가 상태 `UNKNOWN` 인 결과도 받아, 결제 키가 있으면 `CONFIRMING` 주문의 결제 키 자리에 박는다(네이버: 예약으로 받은 `paymentId`).
@@ -161,7 +161,7 @@
 | 차지백 웹훅 재전송 · 경고와 차지백 둘 다 옴 | 거래 키(`adj_`) 유니크 · 경고 짝 규칙으로 한 줄 |
 | 되돌림이 차지백보다 먼저 도착 | 짝 줄이 없으면 처리 작업이 실패로 남아 재시도 — 차지백이 들어온 뒤 짝짓는다(재시도를 다 쓰면 수신함 `DEAD`, 운영자 「다시 처리」) |
 | 카카오 갱신 과금 응답 유실 | `tid` 를 몰라 조회 불가 → **새 과금 없음**, `CONFIRM_UNRESOLVED`. 운영자는 카카오 가맹점 관리 화면에서 확인한 뒤 「결제 안 됨으로 닫기」(닫기 화면이 이 경우 「결제사 화면에서 먼저 확인」 문구) |
-| 카카오 창을 두 번 엶(같은 키 재전송) | 나중 `tid` 만 박힌다 — 앞 창의 `pg_token` 은 `-780`(모름) → 첫 주문 `CONFIRMING` → 조회가 `tid` 로 닫는다. 단건과 같은 알려진 한계 |
+| 카카오 창을 두 번 엶(같은 키 재전송) | 유효시간(기본 10분) 안의 재전송은 첫 창을 그대로 돌려줘 두 번 열리지 않는다. 유효시간이 지난 재전송은 새로 예약해 나중 `tid` 만 박힌다 — 앞 창의 `pg_token` 은 `-780`(모름) → 첫 주문 `CONFIRMING` → 조회가 `tid` 로 닫는다(단건과 같은 알려진 한계) |
 | `activate` 연타 | 자리 · 첫 주문 id 유니크 — 결제사 호출은 한 번, 뒤 요청은 같은 답 |
 | 네이버 승인 모름 | 결제 키(`paymentId`)가 박혀 내역 조회가 끝낸다 |
 | 해지 · 탈퇴 뒤 깨어난 갱신 | 지금과 같다(결제사를 부르지 않는다). 키 비활성은 기존 삭제 작업이 재시도 |

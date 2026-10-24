@@ -1,5 +1,7 @@
 package dev.sumin.skeleton.payment
 
+import java.time.Duration
+
 /**
  * 자동결제(빌링) 능력 — 카드를 한 번 등록해 두고 서버가 나중에 승인한다(스펙 `2026-10-09-subscription-design.md` §6).
  * 결제사의 스케줄러는 쓰지 않는다: **언제 얼마를 받을지는 우리 장부가 정하고** 이 능력은 등록 · 승인 · 삭제만 한다.
@@ -22,7 +24,7 @@ interface PaymentBillingGateway : PaymentGateway {
      * [prepareBilling] 이 준 창(예약)이 유효한 시간 - 있으면 같은 요청 키의 재전송이 이 시간 안에서는 결제사를 다시 부르지 않고 **저장된 첫 창을 그대로** 돌려준다
      * (예약을 다시 하면 번호가 바뀌어 앞 창의 승인이 실패한다). null 이면 재전송마다 다시 예약한다(기본 - 토스는 창 값이 설정뿐이고 네이버페이는 지금처럼 다시 예약한다).
      */
-    val registrationWindowLifetime: java.time.Duration?
+    val registrationWindowLifetime: Duration?
         get() = null
 
     /**

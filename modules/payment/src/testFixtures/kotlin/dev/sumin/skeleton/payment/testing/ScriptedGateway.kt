@@ -41,6 +41,7 @@ import dev.sumin.skeleton.payment.WebhookDelivery
 import dev.sumin.skeleton.payment.WebhookEnvelope
 import java.net.URI
 import java.security.MessageDigest
+import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.CopyOnWriteArrayList
 
@@ -364,8 +365,8 @@ class ScriptedGateway(
     private var prepareSequence = 0
 
     /** 있으면 `registrationWindowLifetime` - 같은 키의 재전송이 이 시간 안에서는 저장된 첫 창을 돌려받는다(카카오페이 모양). */
-    @Volatile var windowLifetime: java.time.Duration? = null
-    override val registrationWindowLifetime: java.time.Duration? get() = windowLifetime
+    @Volatile var windowLifetime: Duration? = null
+    override val registrationWindowLifetime: Duration? get() = windowLifetime
 
     /** true 면 `registrationCharges` - `activate` 가 `issue` 가 아니라 `registerWithCharge` 를 부른다. */
     @Volatile var registering = false

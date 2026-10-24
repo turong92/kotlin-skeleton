@@ -11,6 +11,7 @@ import dev.sumin.skeleton.payment.PaymentProviderCredentialAlert
 import dev.sumin.skeleton.payment.PreparedBilling
 import dev.sumin.skeleton.payment.RegisterWithChargeRequest
 import dev.sumin.skeleton.payment.RegisteredCharge
+import java.time.Duration
 
 /**
  * 카카오페이 정기 결제 능력을 더한 [KakaoPayProvider]. **정기 가맹점 코드(`subscription-cid`)가 있을 때만** 이 클래스로 만든다 - 능력은 인터페이스로 선언되고 라우터는 `is` 로 보므로,
@@ -28,7 +29,7 @@ class KakaoPayBillingProvider(
 
     override val registrationCharges: Boolean = true
 
-    override val registrationWindowLifetime: java.time.Duration = kakaoProperties.registrationWindowLifetime
+    override val registrationWindowLifetime: Duration = kakaoProperties.registrationWindowLifetime
 
     /** 창 값 - 서버가 `ready` 를 부른 뒤에야 낸다([prepareBilling]). 설정만으로는 낼 수 없다. */
     override fun billingSetup(customerKey: String): BillingSetup? = null

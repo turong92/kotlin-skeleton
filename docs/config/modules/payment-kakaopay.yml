@@ -20,6 +20,7 @@ skeleton:
     order-path: /online/v1/payment/order            # 주문 조회 경로 (거래 번호 tid 로만 묻는다)
     ready-timeout: 10s                              # 결제 준비 한 번의 제한 시간(요청 단위 — 클라이언트 단위 응답 제한보다 짧을 때만 뜻이 있다)
     lookup-timeout: 10s                             # 조회 한 번의 제한 시간(요청 단위)
+    registration-window-lifetime: 10m               # 구독 등록 창(ready 예약)을 같은 요청 키의 재전송에 그대로 돌려주는 시간 — 이 안에서는 ready 를 다시 부르지 않고 저장된 첫 창을 돌려준다(앞 창의 승인이 계속 된다). 지나면 새로 예약한다. 0 초과 · 카카오 ready 유효시간(15분) 미만이어야 하고 아니면 기동 실패(구독을 켠 때)
     allow-test-keys-in-protected-env: false         # true 면 skeleton.env=stage|prod 에서 테스트 가맹점 코드로 서는 것을 일부러 허락한다(경고로 내려간다)
     supported-currencies: [KRW]                     # 이 통화는 이 제공자로 라우팅
     supported-countries: [KR]                       # 이 국가는 이 제공자로 라우팅

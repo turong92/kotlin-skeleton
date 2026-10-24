@@ -317,7 +317,7 @@
 | `PROVIDER_PENDING` | `PENDING` | 결제사가 **접수했다(처리 중)**고 답했다 — 자동으로 닫지 않는다. 출구는 `provider-pending-timeout` 뒤 사람이 누른 `sync`. 줄이 닫히면 지워진다 |
 | `RESULT_MISMATCH` | `PENDING` · `SUCCEEDED` | 결제사가 요청과 다른 금액을 취소했다고 답했다 — 사람이 `sync` 로 풀 때까지 남는다(`SUCCEEDED` 가 된 뒤에도 남을 수 있고, 그때는 실패로 그리지 않는다) |
 | `ORDER_REFUNDED` | `WITHDRAWN` | 주문이 전액 환불돼 열린 요청을 시스템이 닫았다 |
-| `LATE_RESULT` | 닫힌 줄(`FAILED`) | 환불됨 응답이 줄이 이미 닫힌 뒤에 도착했다 — 돈이 나갔을 수 있다. 다른 환불 줄과 환불된 금액을 확인한다 |
+| `LATE_RESULT` | 닫힌 줄(`FAILED`) | 환불됨 응답이 줄이 이미 닫힌 뒤에 도착했다 — 같은 번호 · 같은 금액이고 합계가 맞으면 줄이 `SUCCEEDED` 로 되살아나 이 표시는 남지 않는다. 되살릴 수 없을 때(금액이 다르다 · 합계가 넘친다)만 남고, 돈이 나갔을 수 있으니 다른 환불 줄과 환불된 금액을 확인한다 |
 | `REFUND_DECLINED` | `FAILED` | 결제사가 **코드 없이** 확정 거절했다 |
 | `PROVIDER_REJECTED` | `FAILED` | 결제사(Paddle)가 검토한 뒤 환불을 **거절했다** — 돈은 움직이지 않았고 주문은 다시 환불할 수 있다 |
 | `CHARGEBACK_WARNING` | `SUCCEEDED` | 차지백 **경고**에서 온 줄(`reasonCode=CHARGEBACK`) — 이어서 같은 금액의 차지백이 와도 같은 이의라 두 번 세지 않는다 |
@@ -334,6 +334,7 @@
 | `PROVIDER_EXPIRED` · `PROVIDER_ABORTED` | `CONVERGED` | 결제사 조회가 만료 · 중단이라 `CONFIRMING` 주문을 닫았다 |
 | `REFUND_LANDED` | `CONVERGED` | 주문이 환불을 받아들였다(`refundId` 포함, `fromStatus`/`toStatus` 는 주문의 상태) |
 | `NOT_APPLIED` | `REFUND_FAILED` | 결제사에 적용되지 않았다고 닫음 |
+| `LATE_RESULT_APPLIED` | `REFUND_SUCCEEDED`(`fromStatus=FAILED`, `toStatus=SUCCEEDED`) | 닫혀 있던 줄을 결제사가 이뤄졌다고 알려 와 결제사 말대로 `SUCCEEDED` 로 고쳤다(같은 번호 · 같은 금액일 때) - 이어서 주문 이력에 `REFUND_LANDED` 가 붙는다 |
 | `PROVIDER_PENDING_EXPIRED` | `REFUND_FAILED` | 접수된 환불이 기한(`provider-pending-timeout`)이 지나도 조회에 안 보여 사람이 누른 `sync` 가 닫음 — 줄의 `failureCode` 는 `NOT_APPLIED` |
 | `PROVIDER_PENDING` | `REFUND_UNKNOWN` | 결제사가 환불을 접수했다고 답함 |
 | `RESULT_MISMATCH` | `REFUND_UNKNOWN` | 결제사가 요청과 다른 금액을 취소했다고 답함 |
@@ -344,6 +345,8 @@
 | `MODE_MISMATCH_CLEARED` · `REFUND_MISMATCH_CLEARED` · `FULFILMENT_UNRESOLVED_CLEARED` · `REFUND_APPLY_UNRESOLVED_CLEARED` | `CONVERGED` | 표시가 풀렸다(`<이유>_CLEARED`) |
 
 문장으로 읽는 값은 `PROVIDER_PENDING_EXPIRED` · `LATE_RESULT` 둘이고, 나머지는 참조 번호로 그대로 둔다.
+
+> 카카오 창에서 취소 · 실패로 돌아온 뒤 구독을 다시 시작할 때는 **새 멱등 키**를 쓴다(같은 키는 유효시간 안에서 같은 창을 돌려준다).
 
 ## 7. 검토 이유 아홉 개 · 누가 어떻게 푸는가
 
