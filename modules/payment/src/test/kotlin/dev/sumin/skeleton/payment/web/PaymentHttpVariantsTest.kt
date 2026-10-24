@@ -41,7 +41,7 @@ class PaymentHttpVariantsTest {
         var alone: Set<String> = emptySet()
         WebApplicationContextRunner()
             .withBean(ScriptedGateway::class.java, java.util.function.Supplier { gateway })
-            .withConfiguration(AutoConfigurations.of(PaymentAutoConfiguration::class.java))
+            .withConfiguration(AutoConfigurations.of(AuthzAutoConfiguration::class.java, PaymentAutoConfiguration::class.java))
             .run { alone = names(it) }
 
         all.withPropertyValues("skeleton.payment.admin.enabled=true").run { context ->
