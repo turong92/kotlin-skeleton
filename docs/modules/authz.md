@@ -12,7 +12,7 @@
 | `PUT /api/v1/admin/roles/{name}` | `{description, permissions}` 로 통째 교체 → 200 (이름은 못 바꾼다) | `authz.roles` |
 | `DELETE /api/v1/admin/roles/{name}` | 204 | `authz.roles` |
 
-안전장치(`AUTHZ.*` 에러 코드, 상태 코드는 계약 문서): 전권 역할(`skeleton.authz.super-role`) 고치기 · 지우기와 다른 역할에 `*` 주기 → 409 `ROLE_PROTECTED` · 자기에게 없는 권한을 역할에 더하기 → 403 `ESCALATION` · 자기가 가진 역할에서 `authz.roles` 를 잃는 변경 → 409 `SELF_LOCKOUT` · 활성 계정이 가진 역할 지우기 → 409 `ROLE_IN_USE` · 선언에 없는 권한 400 `PERMISSION_UNKNOWN` · 같은 이름 409 `ROLE_EXISTS` · 없는 역할 404 `ROLE_NOT_FOUND`.
+안전장치(`AUTHZ.*` 에러 코드, 상태 코드는 계약 문서): 전권 역할(`skeleton.authz.super-role`) 고치기 · 지우기와 다른 역할에 `*` 주기 → 409 `ROLE_PROTECTED` · 자기에게 없는 권한을 역할에 더하거나 빼기, 그런 권한을 가진 역할 지우기 → 403 `ESCALATION` · 자기가 가진 역할에서 `authz.roles` 를 잃는 변경 → 409 `SELF_LOCKOUT` · 활성 계정이 가진 역할 지우기 → 409 `ROLE_IN_USE` · 선언에 없는 권한 400 `PERMISSION_UNKNOWN` · 같은 이름 409 `ROLE_EXISTS` · 없는 역할 404 `ROLE_NOT_FOUND`.
 역할을 지우면 같은 트랜잭션에서 정지 · 대기 · 삭제 유예 계정을 포함한 모든 계정의 그 배정도 거둔다(`RoleHolders.revokeFromAll`, 계정마다 `ROLE_REVOKED`) — 같은 이름으로 다시 만든 역할을 아무도 주지 않은 계정이 물려받지 못한다. 고치기 · 지우기는 역할 줄을 `select … for update` 로 잠그고 판정해 동시 요청이 옛 목록으로 권한을 되살리지 못한다.
 성공한 만들기 · 고치기 · 지우기는 `OperatorAuditLog.record` 를 한 번씩 부른다(`authz.role.created` · `updated`[detail `added` · `removed`] · `deleted`). 기본 구현은 아무것도 하지 않는다 — 저장하려면 앱이 `OperatorAuditLog` 빈 하나를 둔다. 실패한 변경은 부르지 않는다.
 

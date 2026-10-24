@@ -138,6 +138,24 @@ class RoleAdminWebTest {
         editRole(ops, "CS", "\"payment.read\",\"authz.roles\"").andExpect(status().isOk)
     }
 
+    // ---- no escalation by removal either (account 의 회수도 상승 검사와 같다) ----
+
+    @Test
+    fun `an operator cannot take away a permission they do not hold, nor delete a role that has one`() {
+        // CS 는 payment.read 를 가진다 — ops(authz.roles 만)는 그것을 빼지도, 그 역할을 지우지도 못한다
+        editRole(ops, "CS", "").andExpect(status().isForbidden).andExpect(jsonPath("$.code").value("AUTHZ.ESCALATION"))
+        call(delete("/api/v1/admin/roles/CS"), ops).andExpect(status().isForbidden).andExpect(jsonPath("$.code").value("AUTHZ.ESCALATION"))
+        assertEquals(setOf("payment.read"), store.rows["CS"]!!.permissions)
+        assertEquals(0, audit.actions.size)
+    }
+
+    @Test
+    fun `an operator may delete or trim a role whose permissions they hold`() {
+        createRole(ops, "OPS_COPY", "\"authz.roles\"").andExpect(status().isCreated)
+        editRole(ops, "OPS_COPY", "").andExpect(status().isOk)
+        call(delete("/api/v1/admin/roles/OPS_COPY"), ops).andExpect(status().isNoContent)
+    }
+
     // ---- self lockout ----
 
     @Test

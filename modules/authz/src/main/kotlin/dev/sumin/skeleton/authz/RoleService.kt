@@ -69,6 +69,7 @@ class RoleService(
             val added = wanted - current.permissions
             val removed = current.permissions - wanted
             checkNoEscalation(actor, added)
+            checkNoEscalation(actor, removed)   // 회수도 같은 검사 — 자기 권한 밖 권한을 빼지 못한다(account 의 회수도 상승 검사와 같다)
             checkNoLockout(actor, name, wanted)
             if (!store.update(name, description, wanted)) throw notFound(name)
             audit.record(
@@ -85,6 +86,7 @@ class RoleService(
         tx.executeWithoutResult {
             val current = store.findForUpdate(name) ?: throw notFound(name)
             checkNotProtected(current)
+            checkNoEscalation(actor, current.permissions)   // 자기 권한 밖 권한을 가진 역할은 지우지도 못한다
             checkNoLockout(actor, name, emptySet())
             if ((holders?.holdersOf(name) ?: 0L) > 0) {
                 throw exception(AuthzRoleErrorCode.ROLE_IN_USE, "Accounts still hold role $name")
@@ -118,7 +120,7 @@ class RoleService(
         if (unknown.isNotEmpty()) throw exception(AuthzRoleErrorCode.PERMISSION_UNKNOWN, "Unknown permission: ${unknown.sorted().joinToString(", ")}")
     }
 
-    /** 자기에게 없는 권한을 역할에 더할 수 없다 (Kubernetes RBAC 의 escalation 규칙). 전권은 다 가진다 */
+    /** 자기에게 없는 권한을 역할에 더하거나 빼거나 그 권한을 가진 역할을 지울 수 없다 (Kubernetes RBAC 의 escalation 규칙). 전권은 다 가진다 */
     private fun checkNoEscalation(actor: OperatorRef, added: Set<String>) {
         val lacking = added.filter { !access.has(actor, it) }
         if (lacking.isNotEmpty()) throw exception(AuthzRoleErrorCode.ESCALATION, "You do not hold: ${lacking.sorted().joinToString(", ")}")

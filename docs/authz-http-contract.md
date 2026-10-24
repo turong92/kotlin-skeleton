@@ -53,7 +53,7 @@ Needs `authz.roles`. → `204`.
 | 400 | `AUTHZ.PERMISSION_UNKNOWN` | a permission no module on the classpath declares |
 | 401 | `COMMON.UNAUTHORIZED` | no / invalid token |
 | 403 | `COMMON.FORBIDDEN` | the caller lacks `authz.roles` (or `account.roles` for the list) |
-| 403 | `AUTHZ.ESCALATION` | the change adds a permission the caller does not hold (keeping what a role already has is fine) |
+| 403 | `AUTHZ.ESCALATION` | the change adds **or removes** a permission the caller does not hold, or `DELETE` of a role that has one (keeping what a role already has is fine) |
 | 404 | `AUTHZ.ROLE_NOT_FOUND` | no such role |
 | 409 | `AUTHZ.ROLE_EXISTS` | `POST` with a name that exists |
 | 409 | `AUTHZ.ROLE_PROTECTED` | editing / deleting the full-access role, or giving `*` to any other role |

@@ -15,7 +15,7 @@ enum class AuthzRoleErrorCode(
     ROLE_EXISTS("AUTHZ.ROLE_EXISTS", HttpStatus.CONFLICT, "Role already exists"),
     ROLE_NOT_FOUND("AUTHZ.ROLE_NOT_FOUND", HttpStatus.NOT_FOUND, "Role not found"),
     PERMISSION_UNKNOWN("AUTHZ.PERMISSION_UNKNOWN", HttpStatus.BAD_REQUEST, "Unknown permission"),
-    ESCALATION("AUTHZ.ESCALATION", HttpStatus.FORBIDDEN, "You cannot grant a permission you do not hold"),
+    ESCALATION("AUTHZ.ESCALATION", HttpStatus.FORBIDDEN, "You cannot grant or take away a permission you do not hold"),
     SELF_LOCKOUT("AUTHZ.SELF_LOCKOUT", HttpStatus.CONFLICT, "This change would remove your own access to role management"),
 }
 
