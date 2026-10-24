@@ -148,6 +148,60 @@ class JdbcAuthzDbTest {
         }
     }
 
+    // ---- a grant and a delete of the same role are put in a line ----
+
+    @Test
+    fun `a grant that starts while the delete holds the role row waits and then finds the role gone`() {
+        store.insert(StoredRole("RACE_GONE", null, setOf("payment.read")))
+        val deleting = CountDownLatch(1)
+        val finishDelete = CountDownLatch(1)
+        val pool = Executors.newFixedThreadPool(2)
+        try {
+            val delete = pool.submit {
+                tx.executeWithoutResult {
+                    store.findForUpdate("RACE_GONE")
+                    deleting.countDown()
+                    finishDelete.await(10, TimeUnit.SECONDS)
+                    store.delete("RACE_GONE")
+                }
+            }
+            assertTrue(deleting.await(10, TimeUnit.SECONDS))
+            val grant = pool.submit<Boolean?> { tx.execute { source.lockForGrant("RACE_GONE") } }
+            Thread.sleep(500)
+            assertFalse(grant.isDone, "the grant waits for the delete")
+            finishDelete.countDown()
+            delete.get(10, TimeUnit.SECONDS)
+            assertEquals(false, grant.get(10, TimeUnit.SECONDS), "the role is gone once the delete committed")
+        } finally {
+            finishDelete.countDown()
+            pool.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `a delete that starts after a grant holds the role row waits until the grant committed`() {
+        store.insert(StoredRole("RACE_HELD", null, setOf("payment.read")))
+        val granting = CountDownLatch(1)
+        val finishGrant = CountDownLatch(1)
+        val pool = Executors.newFixedThreadPool(2)
+        try {
+            val grant = pool.submit<Boolean?> {
+                tx.execute { source.lockForGrant("RACE_HELD").also { granting.countDown(); finishGrant.await(10, TimeUnit.SECONDS) } }
+            }
+            assertTrue(granting.await(10, TimeUnit.SECONDS))
+            val delete = pool.submit { tx.executeWithoutResult { store.findForUpdate("RACE_HELD"); store.delete("RACE_HELD") } }
+            Thread.sleep(500)
+            assertFalse(delete.isDone, "the delete waits for the grant, so its sweep sees the new assignment")
+            finishGrant.countDown()
+            assertEquals(true, grant.get(10, TimeUnit.SECONDS))
+            delete.get(10, TimeUnit.SECONDS)
+            assertNull(store.find("RACE_HELD"))
+        } finally {
+            finishGrant.countDown()
+            pool.shutdownNow()
+        }
+    }
+
     // ---- store contract ----
 
     @Test

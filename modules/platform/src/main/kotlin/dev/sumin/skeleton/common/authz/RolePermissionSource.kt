@@ -11,6 +11,13 @@ interface RolePermissionSource {
 
     /** 정의된 역할 이름(매핑의 키) */
     fun definedRoles(): Set<String>
+
+    /**
+     * 역할을 **계정에 주기 직전**, 주는 쪽의 열린 트랜잭션 안에서 부른다. 표가 있는 구현은 그 역할 줄을 공유 잠금으로 읽어 돌려준다 —
+     * 역할을 지우는 쪽(줄을 배타 잠금으로 잡는다)과 줄 세워서, 지운 역할이 계정에 남지 않게 한다. 줄이 없으면 false(이미 지워졌다).
+     * 표가 없는 구현(yml)은 null — 판단하지 않는다.
+     */
+    fun lockForGrant(role: String): Boolean? = null
 }
 
 class YmlRolePermissionSource(private val roles: Map<String, Set<String>>) : RolePermissionSource {
@@ -48,6 +55,8 @@ class CachingRolePermissionSource(
     }
 
     override fun definedRoles(): Set<String> = delegate.definedRoles()
+
+    override fun lockForGrant(role: String): Boolean? = delegate.lockForGrant(role)
 
     fun invalidate() {
         generation.incrementAndGet()

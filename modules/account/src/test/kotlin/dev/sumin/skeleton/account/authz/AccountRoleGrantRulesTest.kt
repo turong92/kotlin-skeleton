@@ -92,4 +92,26 @@ class AccountRoleGrantRulesTest {
         val plain = h.activeAccount("plain@example.com")
         h.admin.suspend("acc_cs", plain.id, null, cs)
     }
+
+    @Test
+    fun `a grant asks the table to lock the role inside the account transaction, and a role the table says is gone is 400 ROLE_UNKNOWN`() {
+        var inTransaction = false
+        val atomic = object : dev.sumin.skeleton.account.AccountTransaction {
+            override fun <T> run(block: () -> T): T { inTransaction = true; try { return block() } finally { inTransaction = false } }
+        }
+        val locked = mutableListOf<Pair<String, Boolean>>()
+        val gone = setOf("GONE")
+        val yml = dev.sumin.skeleton.common.authz.YmlRolePermissionSource(mapOf("ADMIN" to setOf("*"), "GONE" to setOf("account.read"), "KEPT" to setOf("account.read")))
+        val source = object : dev.sumin.skeleton.common.authz.RolePermissionSource by yml {
+            // 캐시에는 아직 보이지만 표에서는 이미 지워진 역할
+            override fun lockForGrant(role: String): Boolean? { locked += role to inTransaction; return role !in gone }
+        }
+        val x = AccountHarness(atomic = atomic, roleSource = source)
+        val target = x.activeAccount("t@example.com")
+        assertEquals("ACCOUNT.ROLE_UNKNOWN", code { x.admin.grantRole("acc_x", target.id, "GONE", setOf("*")) })
+        assertTrue("GONE" !in x.repo.findById(target.id)!!.roles)
+        x.admin.grantRole("acc_x", target.id, "KEPT", setOf("*"))
+        assertTrue("KEPT" in x.repo.findById(target.id)!!.roles)
+        assertEquals(listOf("GONE" to true, "KEPT" to true), locked, "locked inside the transaction, before the write")
+    }
 }

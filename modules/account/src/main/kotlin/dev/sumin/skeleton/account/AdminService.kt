@@ -88,8 +88,13 @@ class AdminService(private val core: AccountCore) {
         val source = roles()
         if (role !in source.definedRoles() && role !in core.props.defaultRoles) throw AccountException(AccountErrorCode.ROLE_UNKNOWN)
         requireWithin(role, actorPermissions)
-        if (live(targetId).status == AccountStatus.DELETED) throw AccountException(AccountErrorCode.NOT_FOUND)
-        if (core.accounts.grantRole(targetId, role, core.time.now())) core.events.publish(AccountEventType.ROLE_GRANTED, targetId, detail = mapOf("role" to role, "by" to actorId))
+        // 한 트랜잭션 안에서 역할 줄을 먼저 잠근다(표가 있는 구현만) — 역할을 지우는 쪽과 줄 세워, 지운 역할이 계정에 남지 않게. 자동 커밋이면 잠금이 바로 풀리므로 `core.atomic` 이 진짜 트랜잭션이어야 한다(account-jdbc)
+        val granted = core.atomic.run {
+            if (source.lockForGrant(role) == false && role !in core.props.defaultRoles) throw AccountException(AccountErrorCode.ROLE_UNKNOWN)
+            if (live(targetId).status == AccountStatus.DELETED) throw AccountException(AccountErrorCode.NOT_FOUND)
+            core.accounts.grantRole(targetId, role, core.time.now())
+        }
+        if (granted) core.events.publish(AccountEventType.ROLE_GRANTED, targetId, detail = mapOf("role" to role, "by" to actorId))
     }
 
     /** 회수도 부여와 같은 상승 검사 — 자기 권한 밖의 권한을 가진 역할은 회수도 403 `ACCOUNT.ROLE_ESCALATION` (높은 권한은 그 이상이 다룬다). 이미 정의에서 빠진 역할은 권한이 없으므로 누구나 회수할 수 있다 */

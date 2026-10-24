@@ -16,4 +16,10 @@ class JdbcRolePermissionSource(private val jdbc: JdbcClient, private val superRo
 
     override fun definedRoles(): Set<String> =
         (jdbc.sql("select name from authz_roles").query { rs, _ -> rs.getString("name") }.list() + superRole).toSet()
+
+    /** 역할 줄을 공유 잠금으로 읽는다(`for share`: PostgreSQL · MySQL 8) — 지우는 쪽의 `for update` 와 줄 세워, 지운 역할이 계정에 남지 않게 한다 */
+    override fun lockForGrant(role: String): Boolean {
+        if (role == superRole) return true   // 전권 역할은 지워지지 않는다
+        return jdbc.sql("select 1 from authz_roles where name = :role for share").param("role", role).query { rs, _ -> rs.getInt(1) }.list().isNotEmpty()
+    }
 }

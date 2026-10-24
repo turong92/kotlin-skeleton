@@ -67,6 +67,8 @@ class AccountHarness(
     socialReauth: SocialReauthVerifier? = null,
     consents: dev.sumin.skeleton.common.consent.SignUpConsentGate? = null,
     atomic: AccountTransaction = AccountTransaction.NONE,
+    /** 역할 → 권한 표를 바꿔 끼운다(기본은 super-role + [rolePermissions] 의 yml 모양) */
+    roleSource: dev.sumin.skeleton.common.authz.RolePermissionSource? = null,
     /** 매직 링크 수단(`auth-magic-link`)이 있을 때만 있는 고리 — "이미 계정이 있어요" 메일의 1회용 로그인 링크 */
     magicLinks: MagicLinkIssuer? = null,
     /** 꼬리표 · 자동 닉네임의 난수 — 시험이 고정하려고 */
@@ -103,7 +105,7 @@ class AccountHarness(
         AccountRateLimits({ limitStore }, time),
         CaptchaGate(captcha, captchaRequired), { revoker }, bootstrap, challenges, { socialReauth }, { consents }, atomic,
         AccountBlocks.local(time, props.blocks.retention), magicLinks = { magicLinks }, names = DisplayNames(props.displayName, random), sessionInspector = { sessions }, superRole = superRole,
-        roles = { dev.sumin.skeleton.common.authz.YmlRolePermissionSource(mapOf(superRole to setOf("*")) + rolePermissions) },
+        roles = { roleSource ?: dev.sumin.skeleton.common.authz.YmlRolePermissionSource(mapOf(superRole to setOf("*")) + rolePermissions) },
     )
     val registration = RegistrationService(core)
     val availability = LoginIdAvailabilityService(core)

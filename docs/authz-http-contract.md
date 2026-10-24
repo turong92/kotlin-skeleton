@@ -60,6 +60,8 @@ Needs `authz.roles`. → `204`.
 | 409 | `AUTHZ.ROLE_IN_USE` | deleting a role some active account still holds |
 | 409 | `AUTHZ.SELF_LOCKOUT` | the change would remove the caller's own `authz.roles` (edit or delete of a role that is what gives it to them) |
 
+Note: if a module was removed from the app, the keys it declared may still sit on a role. They are no longer in the catalog, so taking such a key off a role is also judged as escalation (the caller must hold it) — in practice only the full-access role can clear them.
+
 ## 4. When a change takes effect
 
 A role edit applies from the **next request** on the same server instance; other instances pick it up within `skeleton.authz.cache-ttl` (default 30 s). Nobody has to sign in again — the token only names the account, the permissions are read per request. A screen showing `principal.permissions` refetches `/auth/me` to see its own change.
