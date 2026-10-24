@@ -18,6 +18,7 @@ class AuthzAutoConfiguration {
     fun rolePermissionSource(properties: AuthzProperties, declarations: ObjectProvider<PermissionDeclaration>): RolePermissionSource {
         check(ROLE_NAME.matches(properties.superRole)) { "Invalid skeleton.authz.super-role '${properties.superRole}': not a role name ($ROLE_NAME)" }
         val declared = declarations.orderedStream().toList().flatMap { it.permissions }
+        checkDeclarations(declared)
         val roles: Map<String, Set<String>> =
             if (properties.roles.isEmpty()) defaultRoles(properties.superRole, declared)
             else explicitRoles(properties, declared.mapTo(HashSet()) { it.key })
@@ -56,6 +57,17 @@ class AuthzAutoConfiguration {
         }
         check(problems.isEmpty()) { "Invalid skeleton.authz.roles:\n  " + problems.joinToString("\n  ") }
         return properties.roles.mapValues { it.value.toSortedSet() }
+    }
+
+    private fun checkDeclarations(declared: List<DeclaredPermission>) {
+        val problems = mutableListOf<String>()
+        declared.groupBy { it.key }.filterValues { it.size > 1 }.keys.forEach { problems += "'$it' is declared twice" }
+        declared.forEach { permission ->
+            if (permission.key == ALL_PERMISSIONS) problems += "'*' cannot be declared - it belongs to the super role only"
+            else if (!PermissionKeys.isValid(permission.key)) problems += "'${permission.key}' is not a permission key (<module>.<verb>)"
+            permission.defaultRoles.filterNot { ROLE_NAME.matches(it) }.forEach { problems += "'${permission.key}': default role '$it' is not a role name" }
+        }
+        check(problems.isEmpty()) { "Invalid module permission declarations:\n  " + problems.joinToString("\n  ") }
     }
 
     private companion object {

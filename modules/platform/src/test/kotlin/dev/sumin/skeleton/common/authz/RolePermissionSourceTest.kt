@@ -38,6 +38,18 @@ class RolePermissionSourceTest {
     }
 
     @Test
+    fun `a module declaring the wildcard, a malformed or a duplicate key fails startup`() {
+        fun failsWith(declaration: PermissionDeclaration, expected: String) =
+            runner.withBean("extra", PermissionDeclaration::class.java, { declaration }).run { context: AssertableApplicationContext ->
+                assertThat(context).hasFailed()
+                assertThat(context.startupFailure).hasStackTraceContaining(expected)
+            }
+        failsWith(PermissionDeclaration("board", listOf(DeclaredPermission("*", setOf("MODERATOR")))), "'*' cannot be declared")
+        failsWith(PermissionDeclaration("board", listOf(DeclaredPermission("Board.Moderate"))), "Board.Moderate")
+        failsWith(PermissionDeclaration("payment", listOf(DeclaredPermission("payment.read"))), "declared twice")
+    }
+
+    @Test
     fun `a permission no module declares fails startup`() {
         fails("skeleton.authz.roles.CS=payment.read,payment.nope", expected = "payment.nope")
     }

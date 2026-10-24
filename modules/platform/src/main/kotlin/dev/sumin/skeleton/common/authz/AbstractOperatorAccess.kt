@@ -12,9 +12,14 @@ abstract class AbstractOperatorAccess : OperatorAccess {
 
     final override fun permissionsOf(ref: OperatorRef): Set<String> {
         val attributes = RequestContextHolder.getRequestAttributes() ?: return compute(ref)
-        val name = "${OperatorAccess::class.java.name}.${ref.accountId}"
-        @Suppress("UNCHECKED_CAST")
-        (attributes.getAttribute(name, RequestAttributes.SCOPE_REQUEST) as Set<String>?)?.let { return it }
-        return compute(ref).also { attributes.setAttribute(name, it, RequestAttributes.SCOPE_REQUEST) }
+        // 구현 · 토큰 역할까지 키에 넣는다 - 감싸는 구현 둘이나 같은 계정의 다른 토큰이 한 메모를 나눠 쓰지 않게
+        val name = "${OperatorAccess::class.java.name}.${javaClass.name}.${ref.accountId}.${ref.tokenRoles.sorted()}"
+        return try {
+            @Suppress("UNCHECKED_CAST")
+            (attributes.getAttribute(name, RequestAttributes.SCOPE_REQUEST) as Set<String>?)
+                ?: compute(ref).also { attributes.setAttribute(name, it, RequestAttributes.SCOPE_REQUEST) }
+        } catch (_: IllegalStateException) {
+            compute(ref) // 끝난 요청의 속성(상속된 자식 스레드) - 메모 없이 계산한다
+        }
     }
 }

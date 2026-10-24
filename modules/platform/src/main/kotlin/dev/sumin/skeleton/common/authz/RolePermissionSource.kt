@@ -30,15 +30,23 @@ class CachingRolePermissionSource(
     private class Entry(val permissions: Set<String>, val expiresAt: Instant)
 
     private val entries = java.util.concurrent.ConcurrentHashMap<String, Entry>()
+    private val generation = java.util.concurrent.atomic.AtomicLong()
 
     override fun permissionsOf(role: String): Set<String> {
         if (ttl.isZero || ttl.isNegative) return delegate.permissionsOf(role)
         val now = clock.instant()
         entries[role]?.takeIf { now.isBefore(it.expiresAt) }?.let { return it.permissions }
-        return delegate.permissionsOf(role).also { entries[role] = Entry(it, now.plus(ttl)) }
+        val started = generation.get()
+        val read = delegate.permissionsOf(role)
+        // 읽는 사이 무효화가 지나갔으면 옛 값을 다시 넣지 않는다
+        if (generation.get() == started) entries[role] = Entry(read, now.plus(ttl))
+        return read
     }
 
     override fun definedRoles(): Set<String> = delegate.definedRoles()
 
-    fun invalidate() = entries.clear()
+    fun invalidate() {
+        generation.incrementAndGet()
+        entries.clear()
+    }
 }
