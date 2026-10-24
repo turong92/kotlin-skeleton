@@ -128,8 +128,8 @@ when a **required** document is `MISSING` or `OUTDATED` (a newer version has bee
 - Never blocked (so a user can fix it, leave or delete themselves): `/api/v1/legal/**`, `/api/v1/auth/**`, `/api/v1/account/**` (configurable `skeleton.legal.reconsent.exclude-paths`). Anonymous requests are never filtered (they get the normal `401`).
 - Cost: one indexed read per protected request. It does not change any response body of calls that go through.
 
-## 5. Admin reading (role `ADMIN`; `skeleton.legal.admin-role`)
-`403 COMMON.FORBIDDEN` without the role, `401` anonymous.
+## 5. Admin reading (permission `legal.read`; who holds it is `skeleton.authz`)
+`403 COMMON.FORBIDDEN` without the permission, `401` anonymous. Checked on every call, so a revoked role stops working with the next call even while its token is still valid (with the `account` module).
 
 ### GET /api/v1/legal/admin/consents?subjectType=&subjectId=&type=&action=&page=&size=
 Page envelope, newest first. `values[]`: `{ "id", "subjectType", "subjectId", "type", "version", "sha256", "locale", "action", "source", "referenceId", "ip", "userAgent", "at" }` (`ip` / `userAgent` are `null` when not stored or already scrubbed; a subject erased with the account shows `subjectId: "deleted:<hash>"`).

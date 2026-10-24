@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.legal
 
+import dev.sumin.skeleton.common.authz.OperatorAccess
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.common.web.ClientIps
 import dev.sumin.skeleton.common.web.PublicEndpointContributor
@@ -29,7 +30,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer
 class LegalWebAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
-    fun legalCallers(properties: LegalProperties): LegalCallers = LegalCallers(properties.adminRole)
+    fun legalCallers(access: OperatorAccess): LegalCallers = LegalCallers(access)
 
     @Bean
     @ConditionalOnMissingBean

@@ -36,6 +36,7 @@ A new post/comment from a writer the board makes wait comes back with `status: P
 
 - `GET /{code}/posts?status=PENDING` (moderator) — new posts; `…/posts/{id}/comments?status=PENDING` (managers, flat, oldest first).
 - moderators set board settings with `PATCH /{code}` `{name?, description?, settings?: {…}}` (only the keys sent change).
+- Who counts as a moderator is the permission `board.moderate` (hide, pin, see hidden posts); creating a board and `PATCH /{code}` need `board.manage` (`403 BOARD.FORBIDDEN` without it). The all-powerful role (`ADMIN`, permission `*`) now has both; the default `MODERATOR` role gets both when `skeleton.authz.roles` is not set. `GET /config` `canModerate` is `board.moderate`.
 
 ## Edited versions
 

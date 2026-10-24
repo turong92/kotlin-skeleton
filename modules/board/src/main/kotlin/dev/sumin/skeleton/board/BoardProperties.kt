@@ -5,8 +5,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties
 
 @ConfigurationProperties("skeleton.board")
 data class BoardProperties(
-    /** 운영자 역할 이름 (`ROLE_` 접두사 없이). 글 숨기기 · 고정 · 남의 글/댓글 지우기 */
-    val moderatorRole: String = "MODERATOR",
     /** 댓글 깊이 상한 (최상위 = 0). 2 면 댓글 → 대댓글 → 대대댓글까지. 더 깊은 답글은 BOARD.COMMENT_TOO_DEEP */
     val maxCommentDepth: Int = 2,
     val titleMaxLength: Int = 200,
@@ -29,7 +27,6 @@ data class BoardProperties(
     val publicAttachments: PublicAttachments = PublicAttachments(),
 ) {
     init {
-        require(moderatorRole.isNotBlank()) { "skeleton.board.moderator-role must not be blank" }
         require(maxCommentDepth >= 0) { "skeleton.board.max-comment-depth must be >= 0" }
         require(titleMaxLength > 0 && bodyMaxLength > 0 && commentMaxLength > 0) { "skeleton.board.*-max-length must be > 0" }
         require(titleMaxLength <= 255) { "skeleton.board.title-max-length must be <= 255 (the title column is varchar(255))" }

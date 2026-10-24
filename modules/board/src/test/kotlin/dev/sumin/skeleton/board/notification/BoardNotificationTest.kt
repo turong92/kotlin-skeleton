@@ -26,7 +26,7 @@ import org.springframework.context.annotation.Bean
 class BoardNotificationTest {
     private val author = BoardCaller("acc_author")
     private val commenter = BoardCaller("acc_commenter")
-    private val mod = BoardCaller("acc_mod", moderator = true)
+    private val mod = BoardCaller("acc_mod", moderator = true, manager = true)
 
     private val runner = ApplicationContextRunner()
         .withConfiguration(AutoConfigurations.of(NotificationAutoConfiguration::class.java, BoardNotificationAutoConfiguration::class.java, BoardAutoConfiguration::class.java))

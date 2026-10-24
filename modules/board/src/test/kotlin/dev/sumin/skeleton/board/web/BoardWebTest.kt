@@ -380,18 +380,20 @@ class BoardWebDisabledTest {
     }
 }
 
-@SpringBootTest(classes = [BoardWebTestApplication::class], properties = ["skeleton.board.http.base-path=/api/v1/forum", "skeleton.board.moderator-role=ADMIN"])
+@SpringBootTest(classes = [BoardWebTestApplication::class], properties = ["skeleton.board.http.base-path=/api/v1/forum", "skeleton.authz.roles.ADMIN=*", "skeleton.authz.roles.EDITOR=board.moderate"])
 @AutoConfigureMockMvc
 @Import(FakeBoardRepositories::class)
 class BoardWebConfiguredPathTest {
     @Autowired lateinit var mvc: MockMvc
 
     @Test
-    fun `the base path and the moderator role are configuration`() {
+    fun `the base path and the role to permission mapping are configuration`() {
         mvc.perform(get("/api/v1/forum/config").principal(TestingAuthenticationToken("a", "n/a", "ROLE_ADMIN")))
             .andExpect(status().isOk).andExpect(jsonPath("$.value.canModerate").value(true))
         mvc.perform(get("/api/v1/forum/config").principal(TestingAuthenticationToken("b", "n/a", "ROLE_MODERATOR")))
-            .andExpect(jsonPath("$.value.canModerate").value(false))
+            .andExpect(jsonPath("$.value.canModerate").value(false))   // 매핑을 주면 통째로 이긴다 - 기본 MODERATOR 매핑은 없다
+        mvc.perform(get("/api/v1/forum/config").principal(TestingAuthenticationToken("c", "n/a", "ROLE_EDITOR")))
+            .andExpect(jsonPath("$.value.canModerate").value(true))
         mvc.perform(get("/api/v1/boards").principal(TestingAuthenticationToken("a", "n/a", "ROLE_ADMIN"))).andExpect(status().isNotFound)
     }
 }

@@ -4,7 +4,7 @@
 가입 동의 묶기 · 철회 · 재동의 필터 · 계정 삭제 때 익명화. 문서는 앱이 싣고(`skeleton.legal.location`), 없으면 모듈의 TEMPLATE 문서(ko/en)가 서되 stage · prod 에서는 DeployGuard 가 막는다.
 저장은 어댑터 `legal-jdbc`(PostgreSQL · MySQL)가 한다 — 이 모듈에는 메모리 구현이 없다(동의 기록은 증거다). 모델 · 흐름 · 법적으로 누구의 일인가 · 위협 표: [docs/legal.md](../legal.md). 프런트용 HTTP 계약: [legal-http-contract.md](../legal-http-contract.md).
 
-HTTP 는 `skeleton.legal.http.base-path`(기본 `/api/v1/legal`)에 열린다 (서블릿 웹 앱 + Spring Security 가 있을 때. 호출자는 `Authentication.name` = 계정 id, 운영자는 `ROLE_<admin-role>`):
+HTTP 는 `skeleton.legal.http.base-path`(기본 `/api/v1/legal`)에 열린다 (서블릿 웹 앱 + Spring Security 가 있을 때. 호출자는 `Authentication.name` = 계정 id, 운영자는 권한 `legal.read` — platform 의 `OperatorAccess` 가 매 호출 판정, 누가 갖는지는 `skeleton.authz`):
 
 | 메서드 · 경로 | 하는 일 | 누가 |
 |---|---|---|

@@ -45,9 +45,8 @@ skeleton:
         window: 10m
     # --- 운영자 HTTP (기본 꺼짐 — 꺼져 있으면 경로가 없어 404) ---
     admin:
-      enabled: false               # true 면 운영자 경로(주문 목록 · 직접 환불 · 승인 · 거절 · 결제사와 맞추기 · 웹훅 수신함)가 선다. 환경변수 <P>_PAYMENT_ADMIN_ENABLED. 켜지면 PaymentOperatorPolicy 를 매 호출 확인한다(거절은 403)
+      enabled: false               # true 면 운영자 경로(주문 목록 · 직접 환불 · 승인 · 거절 · 결제사와 맞추기 · 웹훅 수신함)가 선다. 환경변수 <P>_PAYMENT_ADMIN_ENABLED. 켜지면 핸들러의 권한(payment.read · payment.refund · payment.operate)을 매 호출 확인한다(거절은 403). 누가 어느 권한을 갖는지는 skeleton.authz
       base-path: /api/v1/admin/payments   # 운영자 경로의 기준. "/" 로 시작하고 "/" 로 끝나지 않는다
-      role: ADMIN                  # 기본 정책이 보는 역할(토큰의 ROLE_<role>). 앱이 PaymentOperatorPolicy 빈을 두면 쓰이지 않는다 — account 를 쓰는 앱은 매 호출 저장소의 역할을 읽는 빈으로 갈아 끼운다(토큰이 낡았을 수 있다)
       stale-after: 1h              # 「오래됨」의 기준 — 이보다 오래 CONFIRMING 인 주문(STALE_CONFIRMING) · PENDING 인 채 남은 환불(STALE_REFUND) · 지급 · 회수가 안 끝난 채 남은 주문이 「확인 필요」 목록에 오르고 상세에 이유로 붙는다. 양수여야 한다
     # --- 구독 (스펙 docs/superpowers/specs/2026-10-09-subscription-design.md) — 모듈은 기본값을 고르지 않는다: 꺼짐 ---
     subscription:

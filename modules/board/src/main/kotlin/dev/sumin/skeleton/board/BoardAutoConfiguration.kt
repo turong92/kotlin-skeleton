@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.board
 
+import dev.sumin.skeleton.common.authz.PermissionDeclaration
 import dev.sumin.skeleton.common.author.AuthorDirectory
 import dev.sumin.skeleton.common.author.AuthorIdentities
 import dev.sumin.skeleton.common.time.TimeProvider
@@ -31,6 +32,11 @@ import org.springframework.context.annotation.Bean
 @AutoConfiguration(afterName = ["dev.sumin.skeleton.board.jdbc.BoardJdbcAutoConfiguration"])
 @EnableConfigurationProperties(BoardProperties::class)
 class BoardAutoConfiguration {
+    /** 이 모듈이 가진 권한 — 모듈을 빼면 권한 카탈로그에서도 사라진다 */
+    @Bean
+    @ConditionalOnMissingBean(name = ["boardPermissionDeclaration"])
+    fun boardPermissionDeclaration(): PermissionDeclaration = BoardPermissions.declaration()
+
     @Bean
     @ConditionalOnMissingBean
     fun boardPolicy(guestKeys: ObjectProvider<GuestUploadKeys>): BoardPolicy = DefaultBoardPolicy { guestKeys.getIfAvailable() }

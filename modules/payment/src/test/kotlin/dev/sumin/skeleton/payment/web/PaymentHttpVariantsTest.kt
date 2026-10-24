@@ -12,6 +12,7 @@ import dev.sumin.skeleton.payment.testing.ScriptedGateway
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import dev.sumin.skeleton.common.authz.AuthzAutoConfiguration
 import org.springframework.boot.autoconfigure.AutoConfigurations
 import org.springframework.boot.test.context.assertj.AssertableWebApplicationContext
 import org.springframework.boot.test.context.runner.WebApplicationContextRunner
@@ -31,7 +32,7 @@ class PaymentHttpVariantsTest {
 
     private val all = WebApplicationContextRunner()
         .withBean(ScriptedGateway::class.java, java.util.function.Supplier { gateway })
-        .withConfiguration(AutoConfigurations.of(PaymentAutoConfiguration::class.java, PaymentLedgerAutoConfiguration::class.java, PaymentHttpAutoConfiguration::class.java))
+        .withConfiguration(AutoConfigurations.of(AuthzAutoConfiguration::class.java, PaymentAutoConfiguration::class.java, PaymentLedgerAutoConfiguration::class.java, PaymentHttpAutoConfiguration::class.java))
 
     private fun names(context: AssertableWebApplicationContext) = context.beanDefinitionNames.toSet()
 
@@ -40,7 +41,7 @@ class PaymentHttpVariantsTest {
         var alone: Set<String> = emptySet()
         WebApplicationContextRunner()
             .withBean(ScriptedGateway::class.java, java.util.function.Supplier { gateway })
-            .withConfiguration(AutoConfigurations.of(PaymentAutoConfiguration::class.java))
+            .withConfiguration(AutoConfigurations.of(AuthzAutoConfiguration::class.java, PaymentAutoConfiguration::class.java))
             .run { alone = names(it) }
 
         all.withPropertyValues("skeleton.payment.admin.enabled=true").run { context ->

@@ -108,12 +108,13 @@ class BoardIntegrationTest : SampleIntegrationTest() {
     @Test
     fun `a moderator hides a post, a normal user cannot, and only the author and moderators still see it`() {
         val post = createPost(user)
-        mockMvc.put("/api/v1/boards/general/posts/$post/moderation") { header("Authorization", "Bearer $other"); contentType = MediaType.APPLICATION_JSON; content = """{"status":"HIDDEN"}""" }
+        mockMvc.put("/api/v1/boards/general/posts/$post/moderation") { header("Authorization", "Bearer $user"); contentType = MediaType.APPLICATION_JSON; content = """{"status":"HIDDEN"}""" }
             .andExpect { status { isForbidden() }; jsonPath("$.code") { value("BOARD.FORBIDDEN") } }
         mockMvc.put("/api/v1/boards/general/posts/$post/moderation") { header("Authorization", "Bearer $moderator"); contentType = MediaType.APPLICATION_JSON; content = """{"status":"HIDDEN","pinned":true}""" }
             .andExpect { status { isOk() }; jsonPath("$.value.status") { value("HIDDEN") } }
-        mockMvc.get("/api/v1/boards/general/posts/$post") { header("Authorization", "Bearer $other") }.andExpect { status { isNotFound() } }
         mockMvc.get("/api/v1/boards/general/posts/$post") { header("Authorization", "Bearer $user") }.andExpect { status { isOk() } }
+        // ADMIN(전권 `*`)은 이제 게시판도 운영한다 - 숨은 글이 보인다
+        mockMvc.get("/api/v1/boards/general/posts/$post") { header("Authorization", "Bearer $other") }.andExpect { status { isOk() } }
     }
 
     @Test

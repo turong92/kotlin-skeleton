@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.payment
 
+import dev.sumin.skeleton.common.authz.PermissionDeclaration
 import dev.sumin.skeleton.common.deploy.DeployContext
 import dev.sumin.skeleton.common.deploy.DeployGuard
 import dev.sumin.skeleton.common.project.ProjectRegistry
@@ -14,6 +15,11 @@ import org.springframework.context.annotation.Conditional
 @AutoConfiguration
 @EnableConfigurationProperties(PaymentProperties::class)
 class PaymentAutoConfiguration {
+    /** 이 모듈이 가진 권한 — 모듈을 빼면 권한 카탈로그에서도 사라진다 */
+    @Bean
+    @ConditionalOnMissingBean(name = ["paymentPermissionDeclaration"])
+    fun paymentPermissionDeclaration(): PermissionDeclaration = PaymentPermissions.declaration()
+
     @Bean
     @ConditionalOnMissingBean
     fun paymentProviderRouter(

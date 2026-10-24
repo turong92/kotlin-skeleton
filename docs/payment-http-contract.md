@@ -8,7 +8,7 @@
 
 - **기준 경로** 셋 (모두 설정으로 바꿀 수 있고 프론트는 기본값을 쓴다):
   - 사용자 `/api/v1/payments` (`skeleton.payment.http.base-path`) — `skeleton.payment.http.enabled=false` 면 사용자 경로만 없어진다.
-  - 운영자 `/api/v1/admin/payments` (`skeleton.payment.admin.base-path`) — **`skeleton.payment.admin.enabled=true` 일 때만** 선다(기본 꺼짐: 경로가 없어 `404 COMMON.NOT_FOUND`). 켜져 있으면 매 호출 `PaymentOperatorPolicy` 를 확인하고 거절은 `403 COMMON.FORBIDDEN`.
+  - 운영자 `/api/v1/admin/payments` (`skeleton.payment.admin.base-path`) — **`skeleton.payment.admin.enabled=true` 일 때만** 선다(기본 꺼짐: 경로가 없어 `404 COMMON.NOT_FOUND`). 켜져 있으면 매 호출 핸들러의 권한(`payment.read` · `payment.refund` · `payment.operate`, §3 표)을 확인하고 거절은 `403 COMMON.FORBIDDEN`.
   - 웹훅 `POST /api/v1/payments/webhooks/{provider}` · `…/{provider}/{token}` (사용자 기준 경로 아래) — 결제사가 부르는 **공개** 경로이고 `skeleton.payment.webhook.enabled` 로만 닫는다(사용자 경로를 꺼도 이미 일어난 결제의 신호는 받아야 하므로 `http.enabled` 와 무관). 공개 OpenAPI 문서에서는 숨긴다. §8.
 - **장부(`payment-jdbc`)가 없으면 아무 경로도 열리지 않는다.** 주문 만들기(`POST /orders`)는 **앱이 `PaymentCatalog` 빈을 둘 때만** 있다 — 금액의 출처가 없으면 경로가 없다.
 - 사용자 경로는 **로그인 필요**(`Authentication.name` = 계정 id). 익명은 `401 COMMON.UNAUTHORIZED`. 인증 자체는 앱의 보안 설정이 건다.
@@ -165,7 +165,15 @@
 
 ## 3. 운영자 경로 (`skeleton.payment.admin.enabled=true`)
 
-기준 경로 `/api/v1/admin/payments`. 로그인 필요(익명 `401`), 정책이 거절하면 `403 COMMON.FORBIDDEN`. 기본 정책은 토큰의 `ROLE_<skeleton.payment.admin.role>`(기본 `ADMIN`) 권한이다 — **토큰이 낡았을 수 있으므로**(발급 뒤 역할이 바뀐 계정) `account` 를 쓰는 앱은 매 호출 저장소의 역할을 읽는 `PaymentOperatorPolicy` 빈으로 갈아 끼운다. 꺼져 있으면(기본) 아래 모든 경로가 `404 COMMON.NOT_FOUND` — 프론트의 「꺼짐」 판정은 이 코드가 `PAYMENT.ORDER_NOT_FOUND` · `PAYMENT.REFUND_NOT_FOUND` · `PAYMENT.WEBHOOK_EVENT_NOT_FOUND` · `PAYMENT.PROVIDER_PAYMENT_NOT_FOUND` 넷 중 어느 것도 아닌 404 라는 것으로 한다.
+기준 경로 `/api/v1/admin/payments`. 로그인 필요(익명 `401`), 권한이 없으면 `403 COMMON.FORBIDDEN`. 판정은 핸들러마다 권한 하나이고, 인터셉터와 컨트롤러 두 곳이 **같은 표**로 매 호출 확인한다:
+
+| 권한 | 경로 |
+|---|---|
+| `payment.read` | `GET /orders` · `GET /orders/{id}` · `GET /refunds` · `GET /webhook-events` |
+| `payment.refund` | `POST /orders/{id}/refunds`(직접 환불) · `POST /refunds/{id}/approve` · `POST /refunds/{id}/reject` |
+| `payment.operate` | `POST /orders/{id}/sync` · `POST /orders/{id}/close` · `POST /webhook-events/{id}/retry` |
+
+CS 처럼 `payment.read` + `payment.refund` 만 가진 역할은 환불 줄만 만지고 결제사와 맞추기 · 닫기 · 웹훅 다시 처리는 `403` 이다. 누가 어느 권한을 갖는지는 `skeleton.authz`(전권 역할 `ADMIN` 은 `*` 로 모두). `account` 를 쓰는 앱은 매 호출 저장소의 역할을 읽으므로 회수 · 정지가 토큰이 유효해도 다음 호출부터 먹는다. 앱이 `PaymentOperatorPolicy` 빈을 두면 그 판정이 대신한다(`isOperator` 만 구현하면 권한을 가르지 않고 전 경로를 허락 · 거절한다). 꺼져 있으면(기본) 아래 모든 경로가 `404 COMMON.NOT_FOUND` — 프론트의 「꺼짐」 판정은 이 코드가 `PAYMENT.ORDER_NOT_FOUND` · `PAYMENT.REFUND_NOT_FOUND` · `PAYMENT.WEBHOOK_EVENT_NOT_FOUND` · `PAYMENT.PROVIDER_PAYMENT_NOT_FOUND` 넷 중 어느 것도 아닌 404 라는 것으로 한다.
 
 ### GET /orders?status=&accountId=&q=&review=&includeErased=&cursor=&size=
 `200 { values: AdminOrder[], cursor }`, 최신순. 모든 쿼리는 선택.

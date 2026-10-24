@@ -25,4 +25,4 @@ fun aComment(
 val aBoard = Board("general", "General", null, 0, T0)
 val owner = BoardCaller("acc_author")
 val other = BoardCaller("acc_other")
-val moderator = BoardCaller("acc_mod", moderator = true)
+val moderator = BoardCaller("acc_mod", moderator = true, manager = true)
