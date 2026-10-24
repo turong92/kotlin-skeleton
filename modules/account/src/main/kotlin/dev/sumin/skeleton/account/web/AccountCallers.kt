@@ -22,7 +22,7 @@ class AccountCallers(private val access: () -> OperatorAccess) {
     }
 
     /**
-     * 권한이 없으면 403 `PLATFORM.FORBIDDEN` (로그인하지 않았으면 401). 토큰이 들고 온 역할은 **힌트일 뿐**이고 권한은 공용 검사기가 정한다 —
+     * 권한이 없으면 403 `COMMON.FORBIDDEN` (로그인하지 않았으면 401). 토큰이 들고 온 역할은 **힌트일 뿐**이고 권한은 공용 검사기가 정한다 —
      * `account` 가 있으면 지금 저장소의 계정이므로, 정지되거나 역할을 회수당한 운영자가 15분짜리 액세스 토큰으로 자기 조치를 되돌리지 못한다.
      */
     fun requirePermission(authentication: Authentication?, permission: String): AccountCaller {

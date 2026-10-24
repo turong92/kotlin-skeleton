@@ -58,7 +58,7 @@ class AccountAuthzWebTest {
         val admin = store("USER", "ADMIN")
         mvc.perform(get("/api/v1/admin/accounts").with(token(admin))).andExpect(status().isOk)
         accounts.revokeRole(admin, "ADMIN", now)
-        mvc.perform(get("/api/v1/admin/accounts").with(token(admin))).andExpect(status().isForbidden).andExpect(jsonPath("$.code").value("PLATFORM.FORBIDDEN"))
+        mvc.perform(get("/api/v1/admin/accounts").with(token(admin))).andExpect(status().isForbidden).andExpect(jsonPath("$.code").value("COMMON.FORBIDDEN"))
 
         val suspended = store("USER", "ADMIN", status = AccountStatus.SUSPENDED)
         mvc.perform(get("/api/v1/admin/accounts").with(token(suspended))).andExpect(status().isForbidden)
@@ -113,5 +113,18 @@ class AccountAuthzWebTest {
     fun `a signed-in caller with no permission is 403 and anonymous is 401`() {
         mvc.perform(get("/api/v1/admin/accounts").with(token(store("USER")))).andExpect(status().isForbidden)
         mvc.perform(get("/api/v1/admin/accounts")).andExpect(status().isUnauthorized)
+    }
+
+    @Test
+    fun `assignable roles list every defined role with its permissions - permission account roles only`() {
+        val roler = store("ROLER")
+        val body = mvc.perform(get("/api/v1/admin/accounts/assignable-roles").with(token(roler))).andExpect(status().isOk)
+            .andExpect(jsonPath("$.values[?(@.name=='ADMIN')].permissions[0]").value("*"))
+            .andExpect(jsonPath("$.values[?(@.name=='VIEWER')].permissions[0]").value("account.read"))
+            .andExpect(jsonPath("$.values[?(@.name=='ROLER')].permissions[0]").value("account.roles"))
+        // 자기 권한 밖 역할(ADMIN)도 목록에는 나온다 — 부여는 ROLE_ESCALATION 이 막는다
+        body.andExpect(jsonPath("$.values.length()").value(4))
+        mvc.perform(get("/api/v1/admin/accounts/assignable-roles").with(token(store("VIEWER")))).andExpect(status().isForbidden)
+        mvc.perform(get("/api/v1/admin/accounts/assignable-roles")).andExpect(status().isUnauthorized)
     }
 }

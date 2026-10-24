@@ -26,7 +26,7 @@ class AccountCallersTest {
     /** 토큰에는 ADMIN 이 들어 있다 (발급 뒤에 저장소에서 바뀌었을 수 있다) */
     private fun tokenFor(id: String) = UsernamePasswordAuthenticationToken(id, "n/a", listOf(SimpleGrantedAuthority("ROLE_ADMIN")))
 
-    private fun forbidden(block: () -> Unit) = assertEquals("PLATFORM.FORBIDDEN", assertFailsWith<ApplicationException> { block() }.errorCode.code)
+    private fun forbidden(block: () -> Unit) = assertEquals("COMMON.FORBIDDEN", assertFailsWith<ApplicationException> { block() }.errorCode.code)
 
     @Test
     fun `an operator who is still active and still has the role passes`() {

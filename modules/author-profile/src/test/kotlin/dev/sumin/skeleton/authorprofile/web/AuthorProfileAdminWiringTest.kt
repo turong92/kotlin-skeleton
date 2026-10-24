@@ -41,9 +41,9 @@ class AuthorProfileAdminWiringTest {
             stored("acc_boss", "USER", "ADMIN")
 
             assertEquals("COMMON.UNAUTHORIZED", assertFailsWith<ApplicationException> { controller.byAccount(null, "acc_user") }.errorCode.code)
-            assertEquals("PLATFORM.FORBIDDEN", assertFailsWith<ApplicationException> { controller.byAccount(TestingAuthenticationToken("acc_user", "n/a", "ROLE_USER"), "acc_user") }.errorCode.code)
+            assertEquals("COMMON.FORBIDDEN", assertFailsWith<ApplicationException> { controller.byAccount(TestingAuthenticationToken("acc_user", "n/a", "ROLE_USER"), "acc_user") }.errorCode.code)
             // 토큰이 ADMIN 이라 해도 저장소의 계정이 USER 뿐이면 거절
-            assertEquals("PLATFORM.FORBIDDEN", assertFailsWith<ApplicationException> { controller.byAccount(TestingAuthenticationToken("acc_user", "n/a", "ROLE_USER", "ROLE_ADMIN"), "acc_user") }.errorCode.code)
+            assertEquals("COMMON.FORBIDDEN", assertFailsWith<ApplicationException> { controller.byAccount(TestingAuthenticationToken("acc_user", "n/a", "ROLE_USER", "ROLE_ADMIN"), "acc_user") }.errorCode.code)
             val ok = controller.byAccount(TestingAuthenticationToken("acc_boss", "n/a", "ROLE_USER", "ROLE_ADMIN"), "acc_user")
             assertEquals("acc_user", ok.value.accountId)
         }

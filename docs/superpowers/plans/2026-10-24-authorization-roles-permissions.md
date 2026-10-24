@@ -78,6 +78,10 @@ DELETE /api/v1/admin/roles/{name}                                               
 - 오류(ApiError `code`): `AUTHZ.ROLE_PROTECTED` 409 · `AUTHZ.ROLE_IN_USE` 409 · `AUTHZ.ROLE_EXISTS` 409 · `AUTHZ.ROLE_NOT_FOUND` 404 · `AUTHZ.PERMISSION_UNKNOWN` 400 · `AUTHZ.ESCALATION` 403 · `AUTHZ.SELF_LOCKOUT` 409. 이름 규칙 위반은 기존 검증 400.
 - 계정 역할 부여(K2, 기존 경로 `PUT /api/v1/admin/accounts/{id}/roles/{role}`)의 새 오류: `ACCOUNT.ROLE_UNKNOWN` 400 · `ACCOUNT.ROLE_ESCALATION` 403.
 
+### C6. `GET /api/v1/admin/accounts/assignable-roles` (K2, `account.roles`)
+
+`ListResponse` 의 `values: [{ "name": "CS", "permissions": ["payment.read"] }]`(이름순, 전권 역할은 `["*"]`) — `RolePermissionSource.definedRoles()` 에서 읽으므로 `authz` 가 없어도 있다. 자기 권한 밖 역할도 나오고 부여는 `ACCOUNT.ROLE_ESCALATION` 이 막는다.
+
 ### C5. 운영 기록 계약 (K1, 기본 아무것도 안 함)
 
 `OperatorAuditLog.record(OperatorAction(actorId: String, action: String, targetType: String, targetId: String, detail: Map<String, String> = emptyMap()))`. 부르는 곳은 K4 의 역할 변경 셋(`authz.role.created` · `authz.role.updated`(detail `added` · `removed`) · `authz.role.deleted`)뿐.

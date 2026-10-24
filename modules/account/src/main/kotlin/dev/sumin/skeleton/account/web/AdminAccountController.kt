@@ -8,6 +8,7 @@ import dev.sumin.skeleton.account.AccountPurgeService
 import dev.sumin.skeleton.account.AdminService
 import dev.sumin.skeleton.account.authz.AccountPermissions
 import dev.sumin.skeleton.common.DataResponse
+import dev.sumin.skeleton.common.ListResponse
 import dev.sumin.skeleton.common.PageQuery
 import dev.sumin.skeleton.common.PageResponse
 import dev.sumin.skeleton.common.PaginationMeta
@@ -103,6 +104,13 @@ class AdminAccountController(private val callers: AccountCallers, private val ad
         return Response.noContent()
     }
 
+    @Operation(summary = "Roles that can be granted, with their permissions (full authority is [\"*\"])", description = "A role above the caller's own permissions is listed too; granting it is 403 ACCOUNT.ROLE_ESCALATION")
+    @GetMapping("/assignable-roles")
+    fun assignableRoles(authentication: Authentication?): ListResponse<AssignableRoleResponse> {
+        callers.requirePermission(authentication, AccountPermissions.ROLES)
+        return Response.ok(admin.assignableRoles().map { (name, permissions) -> AssignableRoleResponse(name, permissions) })
+    }
+
     @Operation(summary = "Grant a role", description = "400 ACCOUNT.ROLE_UNKNOWN for an undefined role, 403 ACCOUNT.ROLE_ESCALATION when the role holds permissions the caller does not")
     @PutMapping("/{id}/roles/{role}")
     fun grant(authentication: Authentication?, @PathVariable id: String, @PathVariable role: String): ResponseEntity<Void> {
@@ -120,3 +128,6 @@ class AdminAccountController(private val callers: AccountCallers, private val ad
 
     private fun Account.toAdmin() = AdminAccountResponse(id, email, status.name, roles, displayName, visibleTag, createdAt, lastLoginAt, suspendedReason, purgeAfter, erasedAt, if (admin.loginIdEnabled) java.util.Optional.ofNullable(loginId) else null)
 }
+
+/** `GET /admin/accounts/assignable-roles` 의 항목 — 전권 역할은 permissions `["*"]` */
+data class AssignableRoleResponse(val name: String, val permissions: List<String>)
