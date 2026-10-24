@@ -7,7 +7,7 @@ Conventions (envelope, error body, tokens): [account-http-contract.md](account-h
 
 - Base path `/api/v1/admin`. **Off by default**: the routes exist only when the app has `authz` + `authz-jdbc` and sets `skeleton.authz.admin.enabled=true`; otherwise every route below is `404`.
 - Envelope and errors are the platform ones: `{ value | values, meta }`, errors `{ code, title, status, detail?, traceId, spanId, timestamp, errors?, data? }`. Branch on `code`.
-- Signed-in only: no token is `401`, a signed-in caller without the needed permission is `403 PLATFORM.FORBIDDEN`. The caller's permissions come from `GET /api/v1/auth/me` (`principal.permissions`, `["*"]` = full access) — hide what the caller cannot use, the server checks anyway.
+- Signed-in only: no token is `401`, a signed-in caller without the needed permission is `403 COMMON.FORBIDDEN`. The caller's permissions come from `GET /api/v1/auth/me` (`principal.permissions`, `["*"]` = full access) — hide what the caller cannot use, the server checks anyway.
 - A **permission key** is `<module>.<verb>` (`payment.refund`). A **role name** matches `^[A-Z][A-Z0-9_]{1,31}$`. `*` is full access and belongs to the one fixed role (`skeleton.authz.super-role`, default `ADMIN`) only.
 
 ## 1. Permission catalog
@@ -52,7 +52,7 @@ Needs `authz.roles`. → `204`.
 | 400 | `COMMON.VALIDATION_FAILED` | bad role name (`errors[0].field = name`), description too long, a required field missing |
 | 400 | `AUTHZ.PERMISSION_UNKNOWN` | a permission no module on the classpath declares |
 | 401 | `COMMON.UNAUTHORIZED` | no / invalid token |
-| 403 | `PLATFORM.FORBIDDEN` | the caller lacks `authz.roles` (or `account.roles` for the list) |
+| 403 | `COMMON.FORBIDDEN` | the caller lacks `authz.roles` (or `account.roles` for the list) |
 | 403 | `AUTHZ.ESCALATION` | the change adds a permission the caller does not hold (keeping what a role already has is fine) |
 | 404 | `AUTHZ.ROLE_NOT_FOUND` | no such role |
 | 409 | `AUTHZ.ROLE_EXISTS` | `POST` with a name that exists |

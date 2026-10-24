@@ -4,7 +4,7 @@ import dev.sumin.skeleton.common.ApplicationException
 import dev.sumin.skeleton.common.ErrorCode
 import org.springframework.http.HttpStatus
 
-/** 역할 관리 에러 코드 — `AUTHZ.` 로 시작한다 (프론트는 이 문자열로 분기한다). 권한 부족 403 은 `PLATFORM.FORBIDDEN` */
+/** 역할 관리 에러 코드 — `AUTHZ.` 로 시작한다 (프론트는 이 문자열로 분기한다). 권한 부족 403 은 `COMMON.FORBIDDEN` */
 enum class AuthzRoleErrorCode(
     override val code: String,
     override val status: HttpStatus,

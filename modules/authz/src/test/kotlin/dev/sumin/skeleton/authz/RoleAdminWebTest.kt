@@ -79,7 +79,7 @@ class RoleAdminWebTest {
         call(get("/api/v1/admin/roles")).andExpect(status().isUnauthorized)
         call(get("/api/v1/admin/roles"), user).andExpect(status().isForbidden)
         call(get("/api/v1/admin/permissions"), acct).andExpect(status().isForbidden)
-        createRole(acct, "NEWROLE", "").andExpect(status().isForbidden)
+        createRole(acct, "NEWROLE", "").andExpect(status().isForbidden).andExpect(jsonPath("$.code").value("COMMON.FORBIDDEN"))
     }
 
     @Test
