@@ -45,8 +45,9 @@ class AccountAssignableRolesDefaultsTest {
         check(accounts.insert(Account("acc_defaults_admin", "d@example.com", true, AccountStatus.ACTIVE, setOf("USER", "ADMIN"), null, null, null, now, now), emptyList()))
         mvc.perform(get("/api/v1/admin/accounts/assignable-roles").with(authentication(TestingAuthenticationToken("acc_defaults_admin", "n/a", "ROLE_USER"))))
             .andExpect(status().isOk)
-            .andExpect(jsonPath("$.values.length()").value(2))
+            .andExpect(jsonPath("$.values.length()").value(3))
             .andExpect(jsonPath("$.values[0].name").value("ADMIN")).andExpect(jsonPath("$.values[0].permissions[0]").value("*"))
             .andExpect(jsonPath("$.values[1].name").value("MODERATOR")).andExpect(jsonPath("$.values[1].permissions[0]").value("board.manage"))
+            .andExpect(jsonPath("$.values[2].name").value("USER")).andExpect(jsonPath("$.values[2].permissions.length()").value(0))
     }
 }

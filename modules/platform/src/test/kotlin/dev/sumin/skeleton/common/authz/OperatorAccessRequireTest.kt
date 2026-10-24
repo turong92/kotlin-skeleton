@@ -49,4 +49,20 @@ class OperatorAccessRequireTest {
             RequestContextHolder.resetRequestAttributes()
         }
     }
+
+    @Test
+    fun `a request that ends while computing is computed once - the failed memo write does not compute twice`() {
+        val ended = object : org.springframework.web.context.request.RequestAttributes by ServletRequestAttributes(MockHttpServletRequest()) {
+            override fun getAttribute(name: String, scope: Int): Any? = null
+            override fun setAttribute(name: String, value: Any, scope: Int) = throw IllegalStateException("request completed")
+        }
+        RequestContextHolder.setRequestAttributes(ended)
+        try {
+            computed = 0
+            access.permissionsOf(OperatorRef("acc_1"))
+            assertEquals(1, computed)
+        } finally {
+            RequestContextHolder.resetRequestAttributes()
+        }
+    }
 }

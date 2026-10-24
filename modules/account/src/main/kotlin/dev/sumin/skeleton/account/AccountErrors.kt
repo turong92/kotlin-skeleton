@@ -25,7 +25,7 @@ enum class AccountErrorCode(
     IDENTITY_NOT_FOUND("ACCOUNT.IDENTITY_NOT_FOUND", HttpStatus.NOT_FOUND, "Sign-in method not found"),
     LAST_SIGN_IN_METHOD("ACCOUNT.LAST_SIGN_IN_METHOD", HttpStatus.CONFLICT, "Cannot remove the last sign-in method"),
     ROLE_UNKNOWN("ACCOUNT.ROLE_UNKNOWN", HttpStatus.BAD_REQUEST, "Unknown role"),
-    ROLE_ESCALATION("ACCOUNT.ROLE_ESCALATION", HttpStatus.FORBIDDEN, "You cannot grant a role with permissions you do not hold"),
+    ROLE_ESCALATION("ACCOUNT.ROLE_ESCALATION", HttpStatus.FORBIDDEN, "You cannot act on an account or role above your own permissions (grant, revoke, suspend, unsuspend, restore, erase)"),
     LAST_ADMIN("ACCOUNT.LAST_ADMIN", HttpStatus.CONFLICT, "Cannot remove the last administrator"),
     SELF_ACTION_FORBIDDEN("ACCOUNT.SELF_ACTION_FORBIDDEN", HttpStatus.CONFLICT, "You cannot do this to your own account"),
     NOT_FOUND("ACCOUNT.NOT_FOUND", HttpStatus.NOT_FOUND, "Account not found"),

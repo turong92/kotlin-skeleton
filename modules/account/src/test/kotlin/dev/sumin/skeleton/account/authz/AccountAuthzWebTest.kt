@@ -123,7 +123,9 @@ class AccountAuthzWebTest {
             .andExpect(jsonPath("$.values[?(@.name=='VIEWER')].permissions[0]").value("account.read"))
             .andExpect(jsonPath("$.values[?(@.name=='ROLER')].permissions[0]").value("account.roles"))
         // 자기 권한 밖 역할(ADMIN)도 목록에는 나온다 — 부여는 ROLE_ESCALATION 이 막는다
-        body.andExpect(jsonPath("$.values.length()").value(4))
+        // 기본 역할(USER)도 나온다 - 회수한 USER 를 화면에서 다시 줄 수 있게. 권한은 없으니 []
+        body.andExpect(jsonPath("$.values.length()").value(5))
+            .andExpect(jsonPath("$.values[?(@.name=='USER')].permissions.length()").value(0))
         mvc.perform(get("/api/v1/admin/accounts/assignable-roles").with(token(store("VIEWER")))).andExpect(status().isForbidden)
         mvc.perform(get("/api/v1/admin/accounts/assignable-roles")).andExpect(status().isUnauthorized)
     }

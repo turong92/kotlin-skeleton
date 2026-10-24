@@ -38,8 +38,12 @@ class CachingRolePermissionSource(
         entries[role]?.takeIf { now.isBefore(it.expiresAt) }?.let { return it.permissions }
         val started = generation.get()
         val read = delegate.permissionsOf(role)
-        // 읽는 사이 무효화가 지나갔으면 옛 값을 다시 넣지 않는다
-        if (generation.get() == started) entries[role] = Entry(read, now.plus(ttl))
+        // 읽는 사이 무효화가 지나갔으면 옛 값을 다시 넣지 않는다 — 넣은 뒤에 한 번 더 보고, 그 사이 지나갔으면 방금 넣은 것을 거둔다
+        if (generation.get() == started) {
+            val entry = Entry(read, now.plus(ttl))
+            entries[role] = entry
+            if (generation.get() != started) entries.remove(role, entry)
+        }
         return read
     }
 

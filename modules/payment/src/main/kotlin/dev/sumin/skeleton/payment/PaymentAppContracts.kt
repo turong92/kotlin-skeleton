@@ -47,6 +47,7 @@ interface PaymentOrderListener {
 
 /**
  * 운영자 경로를 쓸 수 있는가(HTTP 는 B7). 기본: platform 의 `OperatorAccess` 가 권한(`payment.read` · `payment.refund` · `payment.operate`)별로 판정한다.
+ * 한 운영 호출에서 인터셉터와 컨트롤러의 `requireOperator` 두 겹이 묻기 때문에 정책은 호출당 두 번 불린다 — 부수 효과가 있는 정책은 멱등이어야 한다.
  * 앱이 빈을 두면 갈아 끼운다 — [isOperator] 만 구현한 옛 정책은 [permits] 기본 구현 덕에 권한을 가르지 않고 모든 운영 경로를 한꺼번에 허락 · 거절한다.
  */
 fun interface PaymentOperatorPolicy {

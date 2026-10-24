@@ -81,9 +81,9 @@ class AdminService(
      * [actorPermissions] 는 호출자의 권한(전권이면 `*`). 정의되지 않은 역할은 400 `ACCOUNT.ROLE_UNKNOWN`(기본 역할 `default-roles` 는 정의된 것으로 친다),
      * 주려는 역할의 권한이 호출자 권한의 부분집합이 아니면 403 `ACCOUNT.ROLE_ESCALATION`.
      */
-    /** 줄 수 있는 역할 — 정의된 역할(매핑의 키)과 그 권한. 자기 권한 밖 역할도 나오고, 부여가 [AccountErrorCode.ROLE_ESCALATION] 으로 막는다 */
+    /** 줄 수 있는 역할 — 정의된 역할(매핑의 키)과 기본 역할(`default-roles`, 권한 없으면 `[]`) 및 그 권한. 자기 권한 밖 역할도 나오고, 부여가 [AccountErrorCode.ROLE_ESCALATION] 으로 막는다 */
     fun assignableRoles(): List<Pair<String, List<String>>> =
-        roles().let { source -> source.definedRoles().sorted().map { it to source.permissionsOf(it).sorted() } }
+        roles().let { source -> (source.definedRoles() + core.props.defaultRoles).sorted().map { it to source.permissionsOf(it).sorted() } }
 
     fun grantRole(actorId: String, targetId: String, role: String, actorPermissions: Set<String>) {
         validRole(role)
