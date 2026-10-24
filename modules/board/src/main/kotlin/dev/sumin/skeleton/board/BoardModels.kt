@@ -72,8 +72,8 @@ enum class PostSort { LATEST, REACTIONS, COMMENTS }
 
 enum class CommentSort { OLDEST, LATEST, REACTIONS }
 
-/** 호출자 — 계정 id 와 운영자 여부. 익명은 null 로 다룬다. */
-data class BoardCaller(val accountId: String, val moderator: Boolean = false)
+/** 호출자 — 계정 id 와 운영 권한([moderator] = `board.moderate`, [manager] = `board.manage`). 익명은 null 로 다룬다. */
+data class BoardCaller(val accountId: String, val moderator: Boolean = false, val manager: Boolean = false)
 
 data class Board(
     val code: String,

@@ -1,7 +1,6 @@
 # board — 게시판 (글 · 댓글 트리 · 종류가 있는 반응). 저장소는 board-jdbc 가 맡고 설정 접두사는 이것 하나다.
 skeleton:
   board:
-    moderator-role: MODERATOR      # 운영자 역할 이름 (ROLE_ 없이). 숨기기 · 고정 · 남의 글/댓글 지우기 · 게시판 만들기
     max-comment-depth: 2           # 댓글 깊이 상한 (최상위 = 0 → 댓글 · 대댓글 · 대대댓글). 더 깊으면 422 BOARD.COMMENT_TOO_DEEP
     title-max-length: 200          # 글 제목 (글자 수, 255 이하 — 칼럼이 varchar(255))
     body-max-length: 20000         # 글 본문

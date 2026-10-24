@@ -46,11 +46,14 @@ interface PaymentOrderListener {
 }
 
 /**
- * 운영자 경로를 쓸 수 있는가(HTTP 는 B7). 기본: 인증 토큰의 역할. 앱이 빈을 두면 갈아 끼운다
- * (토큰이 낡았을 수 있다 — `account` 를 쓰는 앱은 매 호출 저장소의 역할을 다시 읽는다).
+ * 운영자 경로를 쓸 수 있는가(HTTP 는 B7). 기본: platform 의 `OperatorAccess` 가 권한(`payment.read` · `payment.refund` · `payment.operate`)별로 판정한다.
+ * 앱이 빈을 두면 갈아 끼운다 — [isOperator] 만 구현한 옛 정책은 [permits] 기본 구현 덕에 권한을 가르지 않고 모든 운영 경로를 한꺼번에 허락 · 거절한다.
  */
 fun interface PaymentOperatorPolicy {
     fun isOperator(authentication: Authentication): Boolean
+
+    /** [permission] 이 필요한 운영 경로를 쓸 수 있는가. 기본은 [isOperator] 그대로 */
+    fun permits(authentication: Authentication, permission: String): Boolean = isOperator(authentication)
 }
 
 /**

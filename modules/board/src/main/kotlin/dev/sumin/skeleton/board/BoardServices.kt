@@ -32,7 +32,7 @@ class BoardService(
     fun get(code: String): Board = boards.find(code) ?: throw BoardException(BoardErrorCode.NOT_FOUND, "Board not found: $code")
 
     fun create(caller: BoardCaller, code: String, name: String, description: String?): Board {
-        if (!policy.canCreateBoard(caller)) throw BoardException(BoardErrorCode.FORBIDDEN, "Only moderators create boards")
+        if (!policy.canCreateBoard(caller)) throw BoardException(BoardErrorCode.FORBIDDEN, "Only board managers create boards")
         if (!BoardCodes.isValid(code)) throw BoardException(BoardErrorCode.CONTENT_INVALID, "Board code must match ${BoardCodes.PATTERN} and not be '${BoardCodes.RESERVED}'")
         if (name.isBlank()) throw BoardException(BoardErrorCode.CONTENT_INVALID, "Board name must not be blank")
         if (!boards.create(code, name.trim(), description?.trim()?.ifEmpty { null }, time.now())) {
@@ -43,7 +43,7 @@ class BoardService(
 
     /** 운영자가 이름 · 설명 · 설정을 고친다. 설정은 칸마다 보낸 것만 바꾼다 */
     fun update(caller: BoardCaller, code: String, request: UpdateBoard): Board {
-        if (!policy.canCreateBoard(caller)) throw BoardException(BoardErrorCode.FORBIDDEN, "Only moderators edit boards")
+        if (!policy.canCreateBoard(caller)) throw BoardException(BoardErrorCode.FORBIDDEN, "Only board managers edit boards")
         val board = get(code)
         val name = request.name?.trim()
         if (name != null && name.isEmpty()) throw BoardException(BoardErrorCode.CONTENT_INVALID, "Board name must not be blank")

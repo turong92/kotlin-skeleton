@@ -10,6 +10,7 @@ import dev.sumin.skeleton.common.openapi.ApiEnvelopeType
 import dev.sumin.skeleton.common.openapi.ApiResponseEnvelope
 import dev.sumin.skeleton.payment.OperatorOrderQuery
 import dev.sumin.skeleton.payment.PaymentOrderStatus
+import dev.sumin.skeleton.payment.PaymentPermissions
 import dev.sumin.skeleton.payment.PaymentQueries
 import dev.sumin.skeleton.payment.PaymentRefund
 import dev.sumin.skeleton.payment.PaymentRefundStatus
@@ -24,6 +25,8 @@ import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.servlet.http.HttpServletRequest
 import org.springframework.http.ResponseEntity
+import org.springframework.security.core.Authentication
+import org.springframework.web.method.HandlerMethod
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.ModelAttribute
 import org.springframework.web.bind.annotation.PathVariable
@@ -34,10 +37,11 @@ import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
+import org.springframework.web.servlet.HandlerMapping
 import tools.jackson.databind.JsonNode
 
 /**
- * 결제 운영자 경로(`skeleton.payment.admin.enabled=true` 일 때만 — 꺼져 있으면 경로가 없어 404). 접근 규칙(역할 없음 403 · 익명 401)은 핸들러가 아니라 [PaymentOperatorInterceptor] 가 걸고, 인터셉터가 안 걸린 조립에서는 [requireOperator] 가 모든 핸들러를 닫는다 — 핸들러는 운영자 id 가 필요할 때 인터셉터가 실은 값을 `@RequestAttribute` 로 받는다.
+ * 결제 운영자 경로(`skeleton.payment.admin.enabled=true` 일 때만 — 꺼져 있으면 경로가 없어 404). 접근 규칙(권한 없음 403 · 익명 401 — 핸들러마다 [OperatorPermission] 하나)은 핸들러가 아니라 [PaymentOperatorInterceptor] 가 걸고, 인터셉터가 안 걸린 조립에서는 [requireOperator] 가 같은 표로 다시 판정한다 — 핸들러는 운영자 id 가 필요할 때 인터셉터가 실은 값을 `@RequestAttribute` 로 받는다.
  * **`@Transactional` 없음**: 환불 · 승인 · 맞추기 · 웹훅 다시 처리는 결제사를 부르거나 작업을 넣는 입구라 바깥 트랜잭션 안에서 부르면 서비스가 던진다.
  *
  * 환불 · 승인 경로의 `PAYMENT.*` 오류는 **이 호출이 `PENDING` 줄을 남기지 않았을 때만** 낸다 — 선점 전에 결제사를 못 찾는 실패는 서비스의 환불 전 확인 구간이 `503 UNAVAILABLE`("보내지 않았다")로 옮긴다.
@@ -49,15 +53,18 @@ class PaymentAdminController(
     private val queries: PaymentQueries,
     private val refunds: PaymentRefunds,
     private val inbox: PaymentWebhookInbox,
+    private val callers: PaymentCallers,
 ) {
     /**
-     * 두 번째 잠금 — 인터셉터가 실은 운영자 속성이 없으면(인터셉터가 안 걸린 조립) **모든 핸들러**가 `403` 으로 닫힌다. `@ModelAttribute` 메서드는 핸들러의 인자(본문 · 쿼리)를 읽기 전에 돈다.
-     * 속성을 `@RequestAttribute` 로 받으면 없을 때 바인딩 오류(400)가 나므로 직접 보고 같은 `FORBIDDEN` 으로 던진다. 값은 핸들러 인자와 같은 기준(`String`)으로 읽는다.
+     * 두 번째 잠금 — 인터셉터가 안 걸린 조립에서도 **모든 핸들러**가 자기 [OperatorPermission] 으로 다시 판정된다(익명 `401` · 권한 없음 `403` · 권한을 말하지 않은 핸들러 `403`). `@ModelAttribute` 메서드는 핸들러의 인자(본문 · 쿼리)를 읽기 전에 돈다.
+     * 통과하면 운영자 id 를 요청 속성에 싣는다(누가 미리 실어 둔 값은 덮어쓴다).
      * **`final`** — kotlin-spring(allopen)이 `@RestController` 의 멤버를 열어 두므로, 앱이 이 컨트롤러를 상속해 이 메서드를 재정의하면 둘째 잠금이 꺼질 수 있다.
      */
     @ModelAttribute
     final fun requireOperator(request: HttpServletRequest) {
-        if (request.getAttribute(OPERATOR_ATTRIBUTE) as? String == null) throw ApplicationException("Operator role required", PlatformErrorCode.FORBIDDEN)
+        val handler = request.getAttribute(HandlerMapping.BEST_MATCHING_HANDLER_ATTRIBUTE) as? HandlerMethod
+            ?: throw ApplicationException("Operator permission required", PlatformErrorCode.FORBIDDEN)
+        request.setAttribute(OPERATOR_ATTRIBUTE, callers.operator(request.userPrincipal as? Authentication, handler))
     }
 
     @Operation(
@@ -66,6 +73,7 @@ class PaymentAdminController(
             "(STALE_CONFIRMING, STALE_REFUND, unfulfilled paid, unapplied refund). Erased accounts' rows are hidden unless includeErased=true, a q lookup or review=true.",
     )
     @ApiResponseEnvelope(type = ApiEnvelopeType.CURSOR, value = AdminOrderResponse::class)
+    @OperatorPermission(PaymentPermissions.READ)
     @GetMapping("/orders")
     fun orders(
         @RequestParam(required = false) status: String?,
@@ -87,6 +95,7 @@ class PaymentAdminController(
 
     @Operation(summary = "One payment with refunds and history, oldest first (operator)")
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = AdminOrderDetailResponse::class)
+    @OperatorPermission(PaymentPermissions.READ)
     @GetMapping("/orders/{id}")
     fun order(@PathVariable id: String): DataResponse<AdminOrderDetailResponse> = Response.ok(AdminOrderDetailResponse.of(queries.operatorOrder(id)))
 
@@ -96,6 +105,7 @@ class PaymentAdminController(
             "402 REFUND_DECLINED (data.category, data.providerCode) · 409 REFUND_IN_PROGRESS / REFUND_NOT_ALLOWED / MODE_MISMATCH / IDEMPOTENCY_CONFLICT · 400 REFUND_AMOUNT_EXCEEDED, or VALIDATION_FAILED for an amount of 0 or less · 503 UNAVAILABLE when nothing was sent.",
     )
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = AdminRefundResponse::class)
+    @OperatorPermission(PaymentPermissions.REFUND)
     @PostMapping("/orders/{id}/refunds")
     fun refund(
         @RequestAttribute(OPERATOR_ATTRIBUTE) operator: String,
@@ -112,6 +122,7 @@ class PaymentAdminController(
 
     @Operation(summary = "Refund requests, newest first (operator)", description = "status defaults to REQUESTED.")
     @ApiResponseEnvelope(type = ApiEnvelopeType.CURSOR, value = AdminRefundResponse::class)
+    @OperatorPermission(PaymentPermissions.READ)
     @GetMapping("/refunds")
     fun refundList(
         @RequestParam(required = false) status: String?,
@@ -129,18 +140,21 @@ class PaymentAdminController(
             "The provider gets the corrected amount; the line shows it as amount and keeps the first one as requestedAmount. Same answers as refunding directly. No Idempotency-Key: the line's state is the guard — a second approval is 409 REFUND_NOT_ALLOWED.",
     )
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = AdminRefundResponse::class)
+    @OperatorPermission(PaymentPermissions.REFUND)
     @PostMapping("/refunds/{id}/approve")
     fun approve(@RequestAttribute(OPERATOR_ATTRIBUTE) operator: String, @PathVariable id: String, @RequestBody(required = false) body: JsonNode?): ResponseEntity<DataResponse<AdminRefundResponse>> =
         outcome(refunds.approve(operator, id, PaymentRequests.wholeNumber(body?.get("amount"), "amount"), PaymentRequests.flag(body?.get("endSubscription"), "endSubscription", default = true)))
 
     @Operation(summary = "Reject a refund request (operator)", description = "Only a REQUESTED line; an already decided one is 409 REFUND_NOT_ALLOWED.")
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = AdminRefundResponse::class)
+    @OperatorPermission(PaymentPermissions.REFUND)
     @PostMapping("/refunds/{id}/reject")
     fun reject(@RequestAttribute(OPERATOR_ATTRIBUTE) operator: String, @PathVariable id: String): DataResponse<AdminRefundResponse> =
         Response.ok(refundResponse(refunds.reject(operator, id)))
 
     @Operation(summary = "Match the ledger with the provider (operator)", description = "Asks the provider and converges; returns the updated order. 404 PROVIDER_PAYMENT_NOT_FOUND when the provider does not know the payment (the ledger is left as it was) · 400 CAPABILITY_UNSUPPORTED · 409 MODE_MISMATCH · 502 PROVIDER_ERROR · 503 UNAVAILABLE.")
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = AdminOrderResponse::class)
+    @OperatorPermission(PaymentPermissions.OPERATE)
     @PostMapping("/orders/{id}/sync")
     fun sync(@RequestAttribute(OPERATOR_ATTRIBUTE) operator: String, @PathVariable id: String): DataResponse<AdminOrderResponse> {
         val order = refunds.sync(operator, id)
@@ -155,6 +169,7 @@ class PaymentAdminController(
             "404 · 409 MODE_MISMATCH · 502 PROVIDER_ERROR · 503 UNAVAILABLE (nothing is closed when the provider cannot be asked).",
     )
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = AdminOrderResponse::class)
+    @OperatorPermission(PaymentPermissions.OPERATE)
     @PostMapping("/orders/{id}/close")
     fun closeStuckCharge(@RequestAttribute(OPERATOR_ATTRIBUTE) operator: String, @PathVariable id: String, @RequestBody(required = false) body: JsonNode?): DataResponse<AdminOrderResponse> =
         Response.ok(
@@ -169,6 +184,7 @@ class PaymentAdminController(
             "Without status the list is by id; with a status it is by received time.",
     )
     @ApiResponseEnvelope(type = ApiEnvelopeType.CURSOR, value = WebhookEventResponse::class)
+    @OperatorPermission(PaymentPermissions.READ)
     @GetMapping("/webhook-events")
     fun webhookEvents(
         @RequestParam(required = false) status: String?,
@@ -181,6 +197,7 @@ class PaymentAdminController(
 
     @Operation(summary = "Process a webhook row again (operator)", description = "A row that is already PROCESSED comes back as it is (200, nothing happens). 404 WEBHOOK_EVENT_NOT_FOUND.")
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = WebhookEventResponse::class)
+    @OperatorPermission(PaymentPermissions.OPERATE)
     @PostMapping("/webhook-events/{id}/retry")
     fun retry(@PathVariable id: Long): DataResponse<WebhookEventResponse> = Response.ok(WebhookEventResponse.of(inbox.retry(id)))
 

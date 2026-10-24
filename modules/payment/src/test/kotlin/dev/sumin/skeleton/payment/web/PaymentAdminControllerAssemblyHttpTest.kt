@@ -3,7 +3,6 @@ package dev.sumin.skeleton.payment.web
 import dev.sumin.skeleton.payment.PaymentQueries
 import dev.sumin.skeleton.payment.PaymentRefunds
 import dev.sumin.skeleton.payment.PaymentWebhookInbox
-import dev.sumin.skeleton.payment.web.PaymentHttpSupport.asOperator
 import dev.sumin.skeleton.payment.web.PaymentHttpSupport.asUser
 import dev.sumin.skeleton.paymenttest.InMemoryLedgerBeans
 import dev.sumin.skeleton.paymenttest.PaymentWebTestApplication
@@ -26,17 +25,11 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping
 
 /** 운영자 컨트롤러를 앱이 상속해 갈아 끼운 빈 — 인터셉터가 "정확히 같은 타입"만 보면 건너뛴다. */
-class AppAdminController(queries: PaymentQueries, refunds: PaymentRefunds, inbox: PaymentWebhookInbox) : PaymentAdminController(queries, refunds, inbox)
+class AppAdminController(queries: PaymentQueries, refunds: PaymentRefunds, inbox: PaymentWebhookInbox, callers: PaymentCallers) : PaymentAdminController(queries, refunds, inbox, callers)
 
 @TestConfiguration(proxyBeanMethods = false)
 class SubclassedAdminBeans {
-    @Bean fun appAdminController(queries: PaymentQueries, refunds: PaymentRefunds, inbox: PaymentWebhookInbox): PaymentAdminController = AppAdminController(queries, refunds, inbox)
-}
-
-/** `admin.enabled` 없이 같은 클래스의 빈을 직접 등록한 앱 — 인터셉터도 정책 빈도 없다. */
-@TestConfiguration(proxyBeanMethods = false)
-class DirectAdminBeans {
-    @Bean fun directAdminController(queries: PaymentQueries, refunds: PaymentRefunds, inbox: PaymentWebhookInbox) = PaymentAdminController(queries, refunds, inbox)
+    @Bean fun appAdminController(queries: PaymentQueries, refunds: PaymentRefunds, inbox: PaymentWebhookInbox, callers: PaymentCallers): PaymentAdminController = AppAdminController(queries, refunds, inbox, callers)
 }
 
 private val ADMIN_ENDPOINTS = listOf(
@@ -72,25 +65,6 @@ class PaymentAdminSubclassHttpTest {
         }
     }
 
-}
-
-/** 인터셉터가 없는 조립(`admin.enabled` 없이 컨트롤러 빈만 · `WebMvcConfigurationSupport` 로 설정자를 읽지 않는 앱 — 둘 다 인터셉터가 안 걸린다)에서는 아홉 핸들러가 전부 닫힌다. */
-@SpringBootTest(classes = [PaymentWebTestApplication::class])
-@AutoConfigureMockMvc
-@Import(InMemoryLedgerBeans::class, DirectAdminBeans::class)
-class PaymentAdminWithoutInterceptorHttpTest {
-    @Autowired lateinit var mvc: MockMvc
-
-    @Test
-    fun `without the interceptor all nine operator handlers are closed - 403 even for a caller who has the role, and no data comes out`() {
-        assertEquals(9, ADMIN_ENDPOINTS.size)
-        ADMIN_ENDPOINTS.forEach { (method, path) ->
-            val body = mvc.perform(call(method, path).asOperator()).andExpect(status().isForbidden).andExpect(jsonPath("$.code").value("COMMON.FORBIDDEN")).andReturn().response.contentAsString
-            assertEquals(false, body.contains("providerPaymentId") || body.contains("\"values\""), "no data in a closed answer: $body")
-            // 인터셉터가 아닌 누가 같은 이름으로 다른 타입을 실어도 둘째 잠금은 열리지 않는다
-            mvc.perform(call(method, path).asOperator().requestAttr(PaymentOperatorInterceptor.OPERATOR_ATTRIBUTE, Any())).andExpect(status().isForbidden)
-        }
-    }
 }
 
 /** 둘째 잠금이 하위 클래스의 재정의로 꺼지지 않는다 - kotlin-spring(allopen)은 `@RestController` 의 멤버를 열어 두므로 `final` 을 직접 붙였다. */

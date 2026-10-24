@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.legal
 
+import dev.sumin.skeleton.common.authz.PermissionDeclaration
 import dev.sumin.skeleton.common.consent.SignUpConsentGate
 import dev.sumin.skeleton.common.deploy.DeployContext
 import dev.sumin.skeleton.common.deploy.DeployGuard
@@ -24,6 +25,11 @@ import org.springframework.core.io.ResourceLoader
 @AutoConfiguration(afterName = ["dev.sumin.skeleton.legal.jdbc.LegalJdbcAutoConfiguration"])
 @EnableConfigurationProperties(LegalProperties::class)
 class LegalAutoConfiguration {
+    /** 이 모듈이 가진 권한 — 모듈을 빼면 권한 카탈로그에서도 사라진다 */
+    @Bean
+    @ConditionalOnMissingBean(name = ["legalPermissionDeclaration"])
+    fun legalPermissionDeclaration(): PermissionDeclaration = LegalPermissions.declaration()
+
     @Bean
     @ConditionalOnMissingBean
     fun legalRules(properties: LegalProperties, projects: ObjectProvider<ProjectRegistry>): LegalRules {

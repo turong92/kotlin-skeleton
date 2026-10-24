@@ -8,7 +8,6 @@ skeleton:
     previous-version-grace: 0s       # 새 판이 시행된 뒤에도 바로 앞 판의 동의를 계속 받는 시간. 0 이면 시행되는 순간 앞 판 동의는 낡은 것
     facts: {}                        # 문서의 {{키}} 를 채운다 — 예: { company-name: ACME, contact-email: help@acme.example }
     acknowledge-template: false      # true 면 모듈의 TEMPLATE 문서를 stage · prod 에서도 일부러 허락한다 (시험 배포용)
-    admin-role: ADMIN                # 운영자 읽기 엔드포인트의 역할 이름 (ROLE_ 없이)
     record:
       store-ip: true                 # 동의 기록에 클라이언트 IP 를 남기나 (분쟁 때 증거 — 개인정보라 아래 기간 뒤 비운다)
       store-user-agent: true

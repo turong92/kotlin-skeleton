@@ -19,8 +19,6 @@ data class LegalProperties(
     val facts: Map<String, String> = emptyMap(),
     /** true 면 모듈의 TEMPLATE 문서를 stage · prod 에서도 내도록 일부러 허락한다 (시험 배포용) */
     val acknowledgeTemplate: Boolean = false,
-    /** 운영자 읽기 엔드포인트의 역할 이름 (`ROLE_` 없이) */
-    val adminRole: String = "ADMIN",
     val record: Record = Record(),
     val erasure: Erasure = Erasure(),
     val http: Http = Http(),
@@ -33,7 +31,6 @@ data class LegalProperties(
         facts.keys.filter { !FACT_KEY.matches(it) }.forEach { throw IllegalArgumentException("skeleton.legal.facts: key '$it' must match ${FACT_KEY.pattern}") }
         require(!previousVersionGrace.isNegative) { "skeleton.legal.previous-version-grace must not be negative" }
         require(LegalCatalog.LOCALE.matches(defaultLocale)) { "skeleton.legal.default-locale '$defaultLocale' must match ${LegalCatalog.LOCALE.pattern}" }
-        require(adminRole.isNotBlank()) { "skeleton.legal.admin-role must not be blank" }
         require(location.isNotBlank()) { "skeleton.legal.location must not be blank" }
     }
 

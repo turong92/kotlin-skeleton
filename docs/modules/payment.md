@@ -68,7 +68,7 @@
 |---|---|
 | 무엇을 얼마에 파는가 (**금액의 유일한 출처**) | `PaymentCatalog` — 없으면 주문 만들기 경로가 열리지 않는다(서비스는 `PAYMENT.UNAVAILABLE`). 주문 줄에 박힌 값만 결제사로 간다. 살 수 없으면 `PaymentItemNotPurchasableException`(`422`). 결제창에 보이는 `orderName` 에는 개인정보를 넣지 않는다(최대 100자) |
 | 결제 확정 · 환불 확정 뒤 지급 · 회수 | `PaymentOrderListener.onPaid` · `onRefunded` — 던져도 「결제됨」은 그대로이고 지급 · 회수 작업이 재시도한다 |
-| 운영자 판정 | `PaymentOperatorPolicy` — 기본은 토큰의 `ROLE_<admin.role>`. 토큰이 낡았을 수 있으므로(≤15분) `account` 를 쓰는 앱은 매 호출 저장소의 역할을 읽는 빈으로 갈아 끼운다 |
+| 운영자 판정 | 핸들러마다 권한 하나(`@OperatorPermission`): 읽기 `payment.read` · 환불 승인과 직접 환불 `payment.refund` · 맞추기 / 닫기 / 웹훅 다시 처리 `payment.operate`. 기본 `PaymentOperatorPolicy` 는 platform 의 `OperatorAccess` 로 판정한다(`account` 가 있으면 매 호출 저장소 — 회수가 바로 먹는다). 인터셉터와 컨트롤러가 같은 표로 두 번 확인한다. 옛 람다 정책은 `permits` 기본 구현 덕에 그대로 통한다 |
 | (선택) 사람이 봐야 하는 일이 줄에 찍힐 때 알림 | `PaymentReviewNotifier` — `alert` 가 있으면 `PAYMENT_REVIEW_NEEDED`(주문 id 만 싣는다), 없으면 줄 · 로그에만 남는다 |
 | (선택) 차지백이 들어왔을 때 · 분쟁에서 이겨 돌아왔을 때 알림 | `PaymentChargebackAlert` — 장부 + `alert` 가 있으면 `PAYMENT_CHARGEBACK` · `PAYMENT_CHARGEBACK_REVERSED`(주문 id 만 싣는다), 없으면 줄과 이력에만 남는다 |
 | (선택) 결제사가 우리 키를 받아들이지 않았을 때 알림 | `PaymentProviderCredentialAlert` — 결제사 모듈이 키 거절(토스: 401 계열 `INVALID_API_KEY` · `UNAUTHORIZED_KEY` — `FORBIDDEN_REQUEST` 는 요청 불일치일 수도 있어 알리지 않는다)을 받으면 부른다. 장부 + `alert` 가 있으면 `PAYMENT_PROVIDER_CREDENTIALS_REJECTED`(결제사 id 만 싣는다 · 한 시간에 한 번으로 접힌다), 없으면 알리지 않는다. 고객에게는 여전히 「거절」이다 |
@@ -147,7 +147,7 @@
 |---|---|
 | 사용자 `/api/v1/payments` — `config` · 주문 읽기 · 목록 · 승인 · 그만둠 · 환불 요청 · 요청 거둠 | `http.enabled`(기본 켜짐) |
 | 주문 만들기 `POST /api/v1/payments/orders` | 위 + **앱이 `PaymentCatalog` 빈을 둘 때만**. 계정 · IP 별 요청 수 한도(`http.order-rate-limit`) |
-| 운영자 `/api/v1/admin/payments` — 주문 목록 · 한 건 · 직접 환불 · 환불 요청 목록 · 승인 · 거절 · 결제사와 맞추기 · 웹훅 수신함 · 다시 처리 | `admin.enabled=true`(**기본 꺼짐 — 경로가 없어 404**). 켜지면 `PaymentOperatorPolicy` 를 매 호출 확인(거절 403) |
+| 운영자 `/api/v1/admin/payments` — 주문 목록 · 한 건 · 직접 환불 · 환불 요청 목록 · 승인 · 거절 · 결제사와 맞추기 · 웹훅 수신함 · 다시 처리 | `admin.enabled=true`(**기본 꺼짐 — 경로가 없어 404**). 켜지면 핸들러의 권한(`payment.read` · `payment.refund` · `payment.operate`)을 매 호출 확인(거절 403) |
 | 웹훅 `POST /api/v1/payments/webhooks/{provider}[/{token}]` | `webhook.enabled`(기본 켜짐). 공개 경로 — 공개 OpenAPI 문서에서 숨김 |
 
 **`WebMvcConfigurer` 를 읽지 않는 조립에서는 운영자 경로가 닫힌 채 뜬다.** 운영자 접근 규칙(`PaymentOperatorInterceptor`)은 `WebMvcConfigurer` 로 걸린다. `WebMvcConfigurationSupport` 를 직접 상속하는 앱처럼 설정자를 읽지 않는 조립에서 `admin.enabled=true` 로 켜면 인터셉터가 안 걸려, 컨트롤러의 둘째 잠금이 **운영자를 포함한 모든 호출을 `403`** 으로 막는다(데이터는 나가지 않는다). 열려면 앱이 `PaymentOperatorInterceptor` 를 직접 등록해야 한다(`admin.enabled=true` 이면 같은 이름의 빈이 이미 있으니 자기 설정의 `addInterceptors` 에서 그 빈을 걸면 된다).
@@ -211,7 +211,6 @@
 | `http.order-rate-limit.account-capacity` · `.ip-capacity` · `.window` | `10` · `30` · `10m` | 주문 만들기 요청 수 — 계정마다 · IP 마다. 넘으면 429 |
 | `admin.enabled` | `false` | 운영자 경로를 연다. 꺼져 있으면 404 |
 | `admin.base-path` | `/api/v1/admin/payments` | 운영자 경로의 기준 |
-| `admin.role` | `ADMIN` | 기본 정책이 보는 역할(`ROLE_<role>`). 앱이 `PaymentOperatorPolicy` 빈을 두면 쓰이지 않는다 |
 | `admin.stale-after` | `1h` | 「오래됨」의 기준 — 파생 검토 이유(`STALE_CONFIRMING` · `STALE_REFUND` · 지급 · 회수 안전망) |
 | `erasure.account-id` | `KEEP` | `KEEP`: 탈퇴해도 결제 줄의 계정 id 를 그대로 / `TOMBSTONE`: 그 계정이 산 주문의 줄에서만 바꾼다 |
 

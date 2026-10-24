@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.board.web
 
+import dev.sumin.skeleton.common.authz.OperatorAccess
 import dev.sumin.skeleton.board.BoardAutoConfiguration
 import dev.sumin.skeleton.board.BoardProperties
 import dev.sumin.skeleton.board.BoardService
@@ -28,8 +29,8 @@ import org.springframework.context.annotation.Bean
 class BoardWebAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
-    fun boardCallers(properties: BoardProperties, clientIps: ObjectProvider<ClientIps>): BoardCallers =
-        BoardCallers(properties, clientIps.getIfAvailable { ClientIps() })
+    fun boardCallers(properties: BoardProperties, access: OperatorAccess, clientIps: ObjectProvider<ClientIps>): BoardCallers =
+        BoardCallers(properties, access, clientIps.getIfAvailable { ClientIps() })
 
     @Bean
     @ConditionalOnMissingBean

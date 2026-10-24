@@ -16,7 +16,6 @@ class BoardPropertiesTest {
         assertEquals(listOf("LIKE", "DISLIKE"), p.reaction.types)
         assertEquals(ReactionMode.SINGLE, p.reaction.mode)
         assertEquals(2, p.maxCommentDepth)
-        assertEquals("MODERATOR", p.moderatorRole)
     }
 
     @Test

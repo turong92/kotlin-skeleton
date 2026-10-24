@@ -10,6 +10,7 @@ import dev.sumin.skeleton.legal.ConsentSearch
 import dev.sumin.skeleton.legal.ConsentStore
 import dev.sumin.skeleton.legal.LegalCatalog
 import dev.sumin.skeleton.legal.LegalLedger
+import dev.sumin.skeleton.legal.LegalPermissions
 import dev.sumin.skeleton.legal.LegalRules
 import dev.sumin.skeleton.legal.LegalText
 import io.swagger.v3.oas.annotations.Operation
@@ -23,7 +24,7 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 
-/** 운영자 읽기 — 모든 주체의 동의 사건과 매니페스트 상태. 역할은 `skeleton.legal.admin-role` */
+/** 운영자 읽기 — 모든 주체의 동의 사건과 매니페스트 상태. 권한은 `legal.read` */
 @RestController
 @RequestMapping("\${skeleton.legal.http.base-path:/api/v1/legal}/admin")
 @Tag(name = "Legal")
@@ -45,7 +46,7 @@ class LegalAdminController(
         @RequestParam(required = false) action: ConsentAction?,
         @Valid @ParameterObject @ModelAttribute pageQuery: PageQuery,
     ): PageResponse<AdminConsentResponse> {
-        callers.requireAdmin(authentication)
+        callers.requireOperator(authentication, LegalPermissions.READ)
         val page = store.search(ConsentSearch(subjectType, subjectId, type, action), pageQuery.page, pageQuery.size)
         return Response.ok(page.items.map { it.toAdmin() }, pageQuery.toPagination(page.total))
     }
@@ -53,7 +54,7 @@ class LegalAdminController(
     @Operation(summary = "Every version of every document with status, pin state and missing facts (admin)")
     @GetMapping("/documents")
     fun documents(authentication: Authentication?): ListResponse<AdminDocumentResponse> {
-        callers.requireAdmin(authentication)
+        callers.requireOperator(authentication, LegalPermissions.READ)
         val now = time.now()
         return Response.ok(
             catalog.all().map { v ->

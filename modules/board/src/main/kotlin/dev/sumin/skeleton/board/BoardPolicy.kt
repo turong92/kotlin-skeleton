@@ -73,7 +73,7 @@ interface BoardPolicy {
 class DefaultBoardPolicy(private val guestKeys: () -> GuestUploadKeys? = { null }) : BoardPolicy {
     override fun canGuestAttach(keys: List<String>): Boolean = guestKeys()?.let { verifier -> keys.all { verifier.isGuestKey(it) } } ?: true
 
-    override fun canCreateBoard(caller: BoardCaller): Boolean = caller.moderator
+    override fun canCreateBoard(caller: BoardCaller): Boolean = caller.manager
 
     override fun canCreatePost(caller: BoardCaller, board: Board): Boolean = true
 

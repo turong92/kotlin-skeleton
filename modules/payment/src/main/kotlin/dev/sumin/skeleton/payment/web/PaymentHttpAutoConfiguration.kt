@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.payment.web
 
+import dev.sumin.skeleton.common.authz.OperatorAccess
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.common.web.ClientIps
 import dev.sumin.skeleton.common.web.InMemoryFixedWindowRateLimitStore
@@ -115,8 +116,8 @@ class PaymentHttpAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     @ConditionalOnProperty(prefix = "skeleton.payment.admin", name = ["enabled"], havingValue = "true")
-    fun paymentAdminController(queries: PaymentQueries, refunds: PaymentRefunds, inbox: PaymentWebhookInbox): PaymentAdminController =
-        PaymentAdminController(queries, refunds, inbox)
+    fun paymentAdminController(queries: PaymentQueries, refunds: PaymentRefunds, inbox: PaymentWebhookInbox, callers: PaymentCallers): PaymentAdminController =
+        PaymentAdminController(queries, refunds, inbox, callers)
 
     /** 운영자 컨트롤러의 모든 핸들러에 접근 규칙을 거는 한 곳 — 핸들러가 손으로 부르지 않는다. */
     @Bean
@@ -135,5 +136,5 @@ class PaymentHttpAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(PaymentOperatorPolicy::class)
     @ConditionalOnProperty(prefix = "skeleton.payment.admin", name = ["enabled"], havingValue = "true")
-    fun paymentOperatorPolicy(properties: PaymentProperties): PaymentOperatorPolicy = RolePaymentOperatorPolicy(properties.admin.role)
+    fun paymentOperatorPolicy(access: OperatorAccess): PaymentOperatorPolicy = OperatorAccessPaymentOperatorPolicy(access)
 }

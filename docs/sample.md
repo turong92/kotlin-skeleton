@@ -45,7 +45,7 @@
 
 - `skeleton.board.reaction.types: [LIKE, DISLIKE, EMPATHY]` — 모듈 기본은 `[LIKE, DISLIKE]`. 공감(`EMPATHY`)은 이 한 줄이 전부다 (코드 · 스키마 변경 없음). `GET /api/v1/boards/config` 가 프론트에 종류를 알려 준다.
 - `skeleton.board.seed-boards` — 기동할 때 `general`(General) 게시판을 만든다.
-- 운영자: `moderator@example.com` / `password` (`MODERATOR` 역할 — `skeleton.board.moderator-role` 의 기본). 글 숨기기 · 고정 · 남의 글/댓글 삭제 · 게시판 만들기. 일반 사용자는 `user@example.com` · `admin@example.com`.
+- 운영자: `moderator@example.com` / `password` (`MODERATOR` 역할 — 게시판 권한 `board.moderate` · `board.manage` 의 기본 매핑). 글 숨기기 · 고정 · 남의 글/댓글 삭제 · 게시판 만들기. 일반 사용자는 `user@example.com` · `admin@example.com`.
 - 댓글 알림: 내 글에 댓글이 달리면 토픽 `board`, 타입 `comment.created`(답글은 `comment.replied`)가 받은편지함 · SSE 로 온다 — `notification` 이 클래스패스에 있어서 켜진 것이다.
 - 글 · 댓글 만들기는 `Idempotency-Key` 필수 (`idempotency` 가 있어서).
 - 경로 · 모양 · 에러 코드 · 결정 근거: [board](modules/board.md). 통합 테스트: `apps/sample/src/test/…/board/BoardIntegrationTest.kt`.
@@ -92,12 +92,11 @@
 주문은 `POST /api/v1/payments/orders` 에 `{itemType: "cheer", itemRef: "cheer-3000", quantity: 1}` 로 만든다(금액은 보내지 않는다). 목록에 없는 코드 · 수량이 1 이 아닌 주문 · 다른 상품 종류는 `422 PAYMENT.ITEM_NOT_PURCHASABLE`.
 `status` 는 `PAID` · `REFUNDED`(전액 환불)뿐이다 — 일부 환불은 `PAID` 에 `refundedAmount` 만 오른다. `card` 는 장부의 주문 줄에서 읽는다(카드 결제가 아니면 `null`).
 
-**앱이 결제 장부에 끼는 자리 네 곳** (`…/app/sample/cheer/`):
+**앱이 결제 장부에 끼는 자리 세 곳** (`…/app/sample/cheer/`):
 
 1. `CheerCatalog` — `PaymentCatalog`. **금액의 유일한 출처**다. `orderName` 에는 개인정보가 없다.
 2. `CheerOrderListener` — `PaymentOrderListener`. `onPaid` 가 응원 기록(`cheers` 표 한 줄)을 남기고(같은 주문이 두 번 와도 한 줄), `onRefunded` 가 환불된 금액을 올린다(전액이면 `REFUNDED` + 환불 시각; **지급한 적 없는 주문에도 불리므로 기록이 없으면 아무것도 하지 않는다**). **두 훅은 주문 줄 락 안에서 돈다** — 그동안 그 주문의 웹훅 · 승인 · 환불이 기다리므로 한 문장씩만 쓴다(알림 · 메일 · 외부 호출은 넣지 않았다. 필요하면 큐로).
-3. `CheerPaymentConfiguration` — `PaymentOperatorPolicy`. 기본은 **토큰의 역할**이라 낡은 토큰(≤15분)이 ADMIN 을 회수당한 뒤에도 통한다 — 이 앱은 계정 모듈을 쓰므로 운영자 계정 도구와 같은 `AccountCallers.requireAdmin`(매 호출 저장소의 계정을 다시 읽는다)으로 갈아 끼웠다.
-4. `CheerErasure` — `AccountErasureListener`. 탈퇴한 계정의 **응원 기록을 지운다**. 장부의 주문 줄은 법정 보존이라 남고, 장부 모듈의 탈퇴 고리가 카드 두 칸(`card_issuer` · `card_last4`)을 지운다.
+3. `CheerErasure` — `AccountErasureListener`. 탈퇴한 계정의 **응원 기록을 지운다**. 장부의 주문 줄은 법정 보존이라 남고, 장부 모듈의 탈퇴 고리가 카드 두 칸(`card_issuer` · `card_last4`)을 지운다.
    - **순서**: `CheerErasure` 는 `@Order(LOWEST_PRECEDENCE)` — 장부의 탈퇴 고리(`PaymentAccountErasure.ORDER` = 0)보다 **뒤**에 돈다. 장부 고리가 먼저 주문 줄에 `account_erased_at` 을 찍어야, 그 사이 `PAID` 가 되는 주문이 방금 지운 표에 줄을 되살리지 않는다(시험: `CheerErasureOrderIntegrationTest`). 계정 모듈은 고리를 `@Order` / `Ordered` 순으로 부른다.
    - **탈퇴한 계정의 주문이 뒤늦게 `PAID` 가 되면** 이 앱은 응원 기록을 **남기지 않는다**(`onPaid` 가 `order.accountErasedAt` 을 보고 건너뛴다) — 장부에는 지급됨(`PAID`)으로 찍히고, 운영자는 `includeErased=true` 로 그 주문을 본다. **이 조각을 물건을 파는 앱에 복사할 때는 `order.accountErasedAt` 을 보고 지급할지 환불할지를 정해야 한다** — 응원처럼 「기록만 안 남기면 되는」 앱이 아니면 돈만 받고 물건을 안 주는 주문이 된다.
 

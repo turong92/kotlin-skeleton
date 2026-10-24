@@ -195,13 +195,11 @@ data class PaymentProperties(
 
     /**
      * 운영자 HTTP(`<base-path>` 아래 주문 · 환불 · 수신함). **꺼져 있으면(기본) 경로가 없다 — 404.** 켜져 있으면 [PaymentOperatorPolicy] 를 매 호출 확인한다(거절은 403).
-     * 기본 정책은 토큰의 역할([role]).
+     * 기본 정책은 platform 의 권한 판정(`payment.read` · `payment.refund` · `payment.operate`) — 누가 어느 권한을 갖는지는 `skeleton.authz`.
      */
     data class Admin(
         val enabled: Boolean = false,
         val basePath: String = "/api/v1/admin/payments",
-        /** 기본 정책이 보는 역할(`ROLE_<role>`). 앱이 [PaymentOperatorPolicy] 빈을 두면 쓰이지 않는다. */
-        val role: String = "ADMIN",
         /**
          * 「오래됨」의 기준 — 이보다 오래 `CONFIRMING` 인 주문(`STALE_CONFIRMING`) · `PENDING` 인 채 남은 환불이 있는 주문(`STALE_REFUND`) ·
          * 지급 · 회수가 안 끝난 채 남은 주문 · 환불이 「확인 필요」 목록에 오르고 상세에 이유로 붙는다.
@@ -210,7 +208,6 @@ data class PaymentProperties(
     ) {
         init {
             require(basePath.startsWith("/") && !basePath.endsWith("/")) { "skeleton.payment.admin.base-path must start with / and must not end with /" }
-            require(role.isNotBlank()) { "skeleton.payment.admin.role must not be blank" }
             require(staleAfter > Duration.ZERO) { "skeleton.payment.admin.stale-after must be positive" }
         }
     }
