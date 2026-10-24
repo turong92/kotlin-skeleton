@@ -23,6 +23,7 @@ class WebhookKeepsReviewMarksTest {
     fun `a webhook does not clear the mark of a late refund result`() {
         val kit = PaymentLedgerKit()
         val order = kit.paid()
+        kit.gateway.scriptRefund(RefundScript.ApproveOtherAmount(PaymentAmount(500, "KRW"))) // 다른 금액이라 닫힌 줄을 되살릴 수 없다 - 표시가 남는다
         kit.gateway.duringRefund = {
             kit.gateway.duringRefund = null
             val line = kit.store.listRefunds(order.id).single()

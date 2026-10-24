@@ -25,6 +25,15 @@ internal class RefundLines(private val writer: PaymentLedgerWriter, private val 
     }
 
     /**
+     * `FAILED` 로 닫았던 줄을 결제사가 이뤄졌다고 알려 왔다 - 줄을 `SUCCEEDED` 로 되살리고 주문에 반영한다([landed] 와 같은 길: 환불된 금액 · 상태 · 회수 작업).
+     * 호출하는 쪽이 번호 · 금액이 같고 [fits] 임을 확인한다. 줄의 닫힘 표시(`NOT_APPLIED` · `LATE_RESULT` 등)는 지운다. 이미 `SUCCEEDED` 인 줄에는 부르지 않는다(한 번만 센다).
+     */
+    fun revive(tx: PaymentLedgerTx, order: PaymentOrder, line: PaymentRefund, at: Instant, actor: PaymentActor, actorId: String?): PaymentOrder {
+        val done = writer.reviveRefund(tx, line, actor, actorId, RefundSettlement.LATE_RESULT_APPLIED) { it.copy(failureCode = null, completedAt = at) }
+        return landed(tx, order, done, actor, actorId)
+    }
+
+    /**
      * 장부가 모르는 결제사 취소를 `origin=PROVIDER` 줄 하나로 넣는다. 같은 취소는 두 번 들어가지 못한다(`(order_id, provider_refund_id)` 유니크).
      * 차지백이면([ProviderRefund.chargeback]) 사유 `CHARGEBACK` - 경고에서 온 줄은 `failure_code=CHARGEBACK_WARNING` 으로 가른다(같은 이의의 차지백이 와도 두 번 세지 않는다).
      */

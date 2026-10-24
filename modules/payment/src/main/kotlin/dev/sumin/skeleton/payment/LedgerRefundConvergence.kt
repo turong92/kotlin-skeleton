@@ -35,7 +35,9 @@ class LedgerRefundConvergence(
         var unmatchedPending = existing.firstOrNull { it.status == PaymentRefundStatus.PENDING && it.providerRefundId == null }
         // 결제사가 접수할 때 거래 번호를 준 우리 줄(Paddle 의 검토 중 환불) - 번호가 같은 취소가 이뤄졌다면 그 줄이 이뤄진 것이다
         val numbered = existing.filter { it.status == PaymentRefundStatus.PENDING && it.providerRefundId != null }.associateBy { it.providerRefundId }
-        for (cancel in usable(order.id, snapshot.refunds).filter { it.providerRefundId !in known || it.providerRefundId in numbered }.sortedBy { it.at }) {
+        // 우리가 `FAILED` 로 닫은 줄의 번호로 결제사가 이뤄진 취소를 말한다 - 결제사 말대로 줄을 되살린다
+        val closed = existing.filter { it.status == PaymentRefundStatus.FAILED && it.providerRefundId != null }.associateBy { it.providerRefundId }
+        for (cancel in usable(order.id, snapshot.refunds).filter { it.providerRefundId !in known || it.providerRefundId in numbered || it.providerRefundId in closed }.sortedBy { it.at }) {
             if (cancel.chargeback) {
                 // 앞선 걸음이 이 번호로 줄을 옮겼을 수 있다 - 새로 읽고, 같은 이의의 경고 · 차지백은 한 줄로 접는다
                 if (tx.listRefunds(order.id).any { it.providerRefundId == cancel.providerRefundId }) continue
@@ -45,6 +47,11 @@ class LedgerRefundConvergence(
                 }
             }
             if (!lines.fits(current, cancel.amount)) return flags.flag(tx, current, PaymentReviewReason.REFUND_MISMATCH, context)
+            closed[cancel.providerRefundId]?.let { dead ->
+                if (!dead.amount.sameAs(cancel.amount)) return flags.flag(tx, current, PaymentReviewReason.REFUND_MISMATCH, context)
+                current = lines.revive(tx, current, dead, cancel.at, context.actor, context.actorId)
+                continue
+            }
             numbered[cancel.providerRefundId]?.let { own ->
                 if (!own.amount.sameAs(cancel.amount)) return flags.flag(tx, current, PaymentReviewReason.REFUND_MISMATCH, context)
                 current = lines.succeed(tx, current, own, cancel.providerRefundId, cancel.at, context.actor, context.actorId)

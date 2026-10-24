@@ -510,7 +510,14 @@ class PaymentRefunds(
             return
         }
         log.warn("payment refund result arrived after the line was closed refund={} order={} status={} withTransactionKey={}", current.id, order.id, current.status, transaction != null)
+        // 번호 없이 닫힌 줄에 같은 금액의 취소가 결제사 목록에 있다 - 그 취소의 번호를 줄에 붙이면 맞추기가 결제사 말대로 줄을 되살린다(새 줄을 따로 넣어 두 번 세지 않는다)
+        if (transaction != null && current.status == PaymentRefundStatus.FAILED && current.providerRefundId == null &&
+            snapshot?.refunds?.any { LedgerValues.code(it.providerRefundId) == transaction && it.amount.sameAs(current.amount) } == true
+        ) {
+            tx.updateRefund(current.copy(providerRefundId = transaction, updatedAt = writer.now()))
+        }
         val converged = if (snapshot != null) convergence.converge(tx, order, snapshot, context).order else order
+        if (tx.lockRefund(current.id)?.status == PaymentRefundStatus.SUCCEEDED) return // 결제사 말대로 되살렸다 - 표시할 것이 없다
         tx.appendEvent(writer.refundEvent(order.id, current.id, PaymentEventType.REFUND_UNKNOWN, PaymentActor.OPERATOR, operatorId, RefundSettlement.LATE_RESULT, current.status, current.status))
         tx.lockRefund(current.id)?.takeIf { it.failureCode == null || it.failureCode == RefundSettlement.NOT_APPLIED }?.let {
             tx.updateRefund(it.copy(failureCode = RefundSettlement.LATE_RESULT, updatedAt = writer.now()))

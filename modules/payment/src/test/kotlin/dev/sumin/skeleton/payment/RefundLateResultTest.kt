@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.payment
 
 import dev.sumin.skeleton.payment.testing.PaymentLedgerKit
+import dev.sumin.skeleton.payment.testing.ScriptedGateway.RefundScript
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -19,18 +20,39 @@ class RefundLateResultTest {
     }
 
     @Test
-    fun `a success that arrives after the line was closed as not-applied is kept - the cancel is booked, the order is flagged and the event trail says so`() {
+    fun `a success that arrives after the line was closed as not-applied revives that line as the provider says - counted once, no extra line, nothing to review`() {
         val kit = PaymentLedgerKit()
         val order = kit.paid()
 
         val outcome = closeLineDuringRefund(kit, order.id)
 
-        assertEquals(PaymentRefundStatus.FAILED, outcome.refund.status, "the closed line is not reopened")
-        val lines = kit.store.listRefunds(order.id)
-        val provider = lines.single { it.origin == PaymentRefundOrigin.PROVIDER }
-        assertEquals("txn_1", provider.providerRefundId, "the cancel that really happened is in the ledger")
+        assertEquals(PaymentRefundStatus.SUCCEEDED, outcome.refund.status, "the closed line follows the provider")
+        val line = kit.store.listRefunds(order.id).single()
+        assertEquals("txn_1", line.providerRefundId)
+        assertNull(line.failureCode)
         assertEquals(1000, kit.order(order.id).refundedAmount)
         assertEquals(kit.gateway.payment("pay_1")!!.refundedTotal, kit.order(order.id).refundedAmount)
+        assertNull(kit.order(order.id).reviewReason)
+        val history = kit.store.listEvents(order.id).filter { it.refundId == line.id && it.fromStatus == "FAILED" }
+        assertEquals(listOf(RefundSettlement.LATE_RESULT_APPLIED), history.map { it.providerCode })
+        // 한 번 더 맞춰도 늘지 않는다
+        kit.refunds.sync(op, order.id)
+        assertEquals(1000, kit.order(order.id).refundedAmount)
+        assertEquals(1, kit.store.listRefunds(order.id).size)
+    }
+
+    @Test
+    fun `a success of another amount than the closed line cannot revive it - the cancel is booked as its own line and the order is flagged`() {
+        val kit = PaymentLedgerKit()
+        val order = kit.paid()
+        kit.gateway.scriptRefund(RefundScript.ApproveOtherAmount(PaymentAmount(500, "KRW")))
+
+        val outcome = closeLineDuringRefund(kit, order.id)
+
+        assertEquals(PaymentRefundStatus.FAILED, outcome.refund.status, "the closed line is not reopened")
+        val provider = kit.store.listRefunds(order.id).single { it.origin == PaymentRefundOrigin.PROVIDER }
+        assertEquals(500, provider.amount.amount)
+        assertEquals(500, kit.order(order.id).refundedAmount)
         assertEquals(PaymentReviewReason.REFUND_MISMATCH, kit.order(order.id).reviewReason)
     }
 
@@ -88,6 +110,7 @@ class RefundLateResultTest {
     fun `the mark of a late result is not cleared by an automatic reconcile or a webhook - only sync clears it`() {
         val kit = PaymentLedgerKit()
         val order = kit.paid()
+        kit.gateway.scriptRefund(RefundScript.ApproveOtherAmount(PaymentAmount(500, "KRW")))
         closeLineDuringRefund(kit, order.id)
         assertEquals(PaymentReviewReason.REFUND_MISMATCH, kit.order(order.id).reviewReason)
 

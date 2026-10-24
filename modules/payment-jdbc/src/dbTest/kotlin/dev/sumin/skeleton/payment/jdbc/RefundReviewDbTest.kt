@@ -70,9 +70,36 @@ class RefundReviewDbTest {
     }
 
     @Test
+    fun `a success that arrives after the line was closed revives that line on the real rows - once, and no extra line`() {
+        val kit = JdbcLedgerKit()
+        val order = kit.paid()
+        kit.gateway.duringRefund = {
+            kit.gateway.duringRefund = null
+            val line = kit.store.listRefunds(order.id).single()
+            kit.store.inTransaction { tx ->
+                tx.lockOrder(order.id)
+                kit.writer.transitionRefund(tx, tx.lockRefund(line.id)!!, PaymentRefundStatus.FAILED, PaymentEventType.REFUND_FAILED, PaymentActor.SYSTEM, null, "NOT_APPLIED") {
+                    it.copy(failureCode = "NOT_APPLIED", completedAt = kit.time.now())
+                }
+            }
+        }
+
+        val outcome = kit.refunds.refund(op, order.id, "OPERATOR", 1000, IdempotencyKey("k-1"))
+        kit.refunds.sync(op, order.id)
+
+        assertEquals(PaymentRefundStatus.SUCCEEDED, outcome.refund.status)
+        val lines = kit.store.listRefunds(order.id)
+        assertEquals(1, lines.size)
+        assertEquals("txn_1", lines.single().providerRefundId)
+        assertEquals(1000, kit.order(order.id).refundedAmount)
+        assertNull(kit.order(order.id).reviewReason)
+    }
+
+    @Test
     fun `the mark of a late result survives an automatic reconcile on the real rows and a sync clears it`() {
         val kit = JdbcLedgerKit()
         val order = kit.paid()
+        kit.gateway.scriptRefund(dev.sumin.skeleton.payment.testing.ScriptedGateway.RefundScript.ApproveOtherAmount(dev.sumin.skeleton.payment.PaymentAmount(500, "KRW"))) // 다른 금액이라 닫힌 줄을 되살릴 수 없다
         kit.gateway.duringRefund = {
             kit.gateway.duringRefund = null
             val line = kit.store.listRefunds(order.id).single()

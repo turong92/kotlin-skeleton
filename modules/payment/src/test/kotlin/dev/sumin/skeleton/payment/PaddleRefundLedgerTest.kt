@@ -84,20 +84,77 @@ class PaddleRefundLedgerTest {
     }
 
     @Test
-    fun `a decision that arrives twice or after the line is closed changes nothing`() {
+    fun `a decision that arrives twice changes nothing, and an approval after a rejection makes the provider's word the ledger's - once`() {
         val order = paidOrder()
         push.refundScript = RefundScript.PENDING_APPROVAL
         refundNow(order)
         feed(adjustment(order, "adj_s1", PushedRefundStatus.REJECTED))
+        assertEquals(PaymentRefundStatus.FAILED, lines(order).single().status)
 
-        feed(adjustment(order, "adj_s1", PushedRefundStatus.APPROVED)) // 거절된 줄은 다시 움직이지 않는다
+        // 거절됐다던 줄에 같은 번호 · 같은 금액의 승인이 왔다 - 돈이 나갔으니 장부가 결제사 말대로 고친다
+        feed(adjustment(order, "adj_s1", PushedRefundStatus.APPROVED))
+        feed(adjustment(order, "adj_s1", PushedRefundStatus.APPROVED)) // 새 사건 id 로 다시
         feed(adjustment(order, "adj_s1", PushedRefundStatus.REJECTED))
+
+        val line = lines(order).single()
+        assertEquals(PaymentRefundStatus.SUCCEEDED, line.status)
+        assertNull(line.failureCode)
+        assertEquals(499, kit.order(order.id).refundedAmount)
+        assertEquals(PaymentOrderStatus.REFUNDED, kit.order(order.id).status)
+        assertEquals(1, kit.listener.refunded.size, "the app took the refund back once")
+        assertEquals(1, kit.store.listEvents(order.id).count { it.refundId == line.id && it.fromStatus == "FAILED" && it.toStatus == "SUCCEEDED" })
+    }
+
+    @Test
+    fun `an approval that cannot be booked - the amount differs or the total would pass what was paid - leaves the closed line closed and a person is told`() {
+        val order = paidOrder()
+        push.refundScript = RefundScript.PENDING_APPROVAL
+        refundNow(order, amount = 100)
+        feed(adjustment(order, "adj_s1", PushedRefundStatus.REJECTED, amount = 100))
+
+        feed(adjustment(order, "adj_s1", PushedRefundStatus.APPROVED, amount = 200)) // 다른 금액
 
         assertEquals(PaymentRefundStatus.FAILED, lines(order).single().status)
         assertEquals(0, kit.order(order.id).refundedAmount)
-        // 거절된 줄에 승인이 왔다 - 돈이 나갔을 수 있으니 조용히 버리지 않고 사람이 보게 표시한다(줄은 다시 열지 않는다)
         assertEquals(PaymentReviewReason.REFUND_MISMATCH, kit.order(order.id).reviewReason)
         assertEquals(RefundSettlement.LATE_RESULT, lines(order).single().failureCode)
+    }
+
+    @Test
+    fun `matching with the provider revives a closed line whose number the provider lists as approved - once, however often the operator matches`() {
+        val order = paidOrder()
+        push.refundScript = RefundScript.PENDING_APPROVAL
+        refundNow(order, amount = 100)
+        feed(adjustment(order, "adj_s1", PushedRefundStatus.REJECTED, amount = 100))
+        assertEquals(PaymentRefundStatus.FAILED, lines(order).single().status)
+        push.decide(checkNotNull(order.providerPaymentId), "adj_s1", "approved")
+
+        kit.refunds.sync("op_1", order.id)
+        kit.refunds.sync("op_1", order.id)
+
+        val line = lines(order).single()
+        assertEquals(PaymentRefundStatus.SUCCEEDED, line.status)
+        assertEquals(100, kit.order(order.id).refundedAmount)
+        assertEquals(PaymentOrderStatus.PARTIALLY_REFUNDED, kit.order(order.id).status)
+        assertNull(kit.order(order.id).reviewReason)
+    }
+
+    @Test
+    fun `a closed line is not revived past the paid amount - the order is flagged and the total stays`() {
+        val order = paidOrder()
+        push.refundScript = RefundScript.PENDING_APPROVAL
+        refundNow(order, amount = 300)
+        feed(adjustment(order, "adj_s1", PushedRefundStatus.REJECTED, amount = 300))
+        push.decide(checkNotNull(order.providerPaymentId), "adj_s1", "rejected")
+        push.refundScript = RefundScript.APPROVED
+        refundNow(order, key = "r2", amount = 400)
+        assertEquals(400, kit.order(order.id).refundedAmount)
+
+        feed(adjustment(order, "adj_s1", PushedRefundStatus.APPROVED, amount = 300)) // 400 + 300 > 499
+
+        assertEquals(PaymentRefundStatus.FAILED, lines(order).first { it.providerRefundId == "adj_s1" }.status)
+        assertEquals(400, kit.order(order.id).refundedAmount)
+        assertEquals(PaymentReviewReason.REFUND_MISMATCH, kit.order(order.id).reviewReason)
     }
 
     @Test

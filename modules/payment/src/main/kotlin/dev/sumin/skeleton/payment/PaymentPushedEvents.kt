@@ -242,8 +242,13 @@ class PaymentPushedEvents(
                     }
                 }
             PushedRefundStatus.APPROVED -> {
+                if (line != null && line.status == PaymentRefundStatus.FAILED && line.providerRefundId == number && line.amount.sameAs(event.amount) && refundLines.fits(order, line.amount)) {
+                    // 우리가 「적용 안 됨」으로 닫은 뒤에 결제사의 승인이 왔다 - 돈이 나갔다. 결제사 말대로 줄을 되살려 주문에 반영한다(같은 번호 · 같은 금액 · 합계가 넘치지 않을 때만)
+                    refundLines.revive(tx, order, line, event.occurredAt, PaymentActor.PROVIDER, null)
+                    return null
+                }
                 if (line != null && line.status == PaymentRefundStatus.FAILED) {
-                    // 우리가 「적용 안 됨」으로 닫은 뒤에 결제사의 승인이 왔다 - 돈이 나갔다. 닫힌 줄은 열지 않고(번호가 같아 새 줄도 못 넣는다) 사람이 보게 표시한다(응답 경로의 `lateResult` 와 같다)
+                    // 되살릴 수 없다(금액이 다르다 · 합계가 넘친다) - 우리가 「적용 안 됨」으로 닫은 뒤에 결제사의 승인이 왔다 - 돈이 나갔다. 닫힌 줄은 열지 않고(번호가 같아 새 줄도 못 넣는다) 사람이 보게 표시한다(응답 경로의 `lateResult` 와 같다)
                     tx.appendEvent(writer.refundEvent(order.id, line.id, PaymentEventType.REFUND_UNKNOWN, PaymentActor.PROVIDER, null, RefundSettlement.LATE_RESULT, line.status, line.status))
                     tx.updateRefund(line.copy(failureCode = RefundSettlement.LATE_RESULT, updatedAt = writer.now()))
                     flags.flag(tx, order, PaymentReviewReason.REFUND_MISMATCH, context)

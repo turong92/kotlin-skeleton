@@ -59,6 +59,12 @@ object PaymentRefundTransitions {
 
     fun isAllowed(from: PaymentRefundStatus, to: PaymentRefundStatus): Boolean = to in allowed.getValue(from)
 
+    /**
+     * 표에 없지만 **결제사의 증거**로만 가는 전이: 우리가 `FAILED` 로 닫은 환불을 결제사가 이뤄졌다고 알려 왔다(웹훅 승인 · 조회 · 늦게 온 응답). 돈이 이미 나갔으니 장부가 결제사 말대로 고친다 -
+     * 증거 없이 `FAILED` 를 여는 코드는 버그다. [PaymentLedgerWriter.reviveRefund] 만 쓴다.
+     */
+    fun isAllowedByProviderEvidence(from: PaymentRefundStatus, to: PaymentRefundStatus): Boolean = from == FAILED && to == SUCCEEDED
+
     fun require(from: PaymentRefundStatus, to: PaymentRefundStatus) {
         check(isAllowed(from, to)) { "Refund status transition $from -> $to is not allowed" }
     }

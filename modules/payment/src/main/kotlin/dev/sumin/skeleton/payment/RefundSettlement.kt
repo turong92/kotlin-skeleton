@@ -89,5 +89,8 @@ internal class RefundSettlement(
          * 줄의 표시는 이 주문의 `REFUND_MISMATCH` 가 자동 맞추기(웹훅 · 조회)로 풀리지 않게 한다 — 사람이 누른 맞추기만 푼다. 닫힌 줄의 `NOT_APPLIED` 는 이력(`REFUND_FAILED`)에 남아 있다.
          */
         const val LATE_RESULT = "LATE_RESULT"
+
+        /** 이력의 `provider_code`: 닫혀 있던(`FAILED`) 줄을 결제사가 이뤄졌다고 알려 와 `SUCCEEDED` 로 고쳤다. */
+        const val LATE_RESULT_APPLIED = "LATE_RESULT_APPLIED"
     }
 }

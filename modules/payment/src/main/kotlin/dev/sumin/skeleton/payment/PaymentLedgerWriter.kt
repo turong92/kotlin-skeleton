@@ -89,6 +89,18 @@ class PaymentLedgerWriter(private val time: TimeProvider) {
         return changed
     }
 
+    /**
+     * 닫힌(`FAILED`) 환불 줄이 결제사 증거로 `SUCCEEDED` 가 된다([PaymentRefundTransitions.isAllowedByProviderEvidence]). 이력은 환불 줄의 `FAILED → SUCCEEDED` 한 줄(이유 [providerCode])이다.
+     * 호출하는 쪽이 주문을 잠갔고 합계가 넘치지 않음을 확인했어야 한다 - 주문 쪽 반영은 [RefundLines.revive].
+     */
+    fun reviveRefund(tx: PaymentLedgerTx, refund: PaymentRefund, actor: PaymentActor, actorId: String?, providerCode: String, mutate: (PaymentRefund) -> PaymentRefund): PaymentRefund {
+        check(PaymentRefundTransitions.isAllowedByProviderEvidence(refund.status, PaymentRefundStatus.SUCCEEDED)) { "Refund status ${refund.status} cannot be revived by provider evidence" }
+        val changed = mutate(refund).copy(status = PaymentRefundStatus.SUCCEEDED, openKey = PaymentRefundTransitions.openKeyFor(PaymentRefundStatus.SUCCEEDED, refund.orderId), updatedAt = now())
+        tx.updateRefund(changed)
+        tx.appendEvent(refundEvent(refund.orderId, refund.id, PaymentEventType.REFUND_SUCCEEDED, actor, actorId, providerCode, refund.status, PaymentRefundStatus.SUCCEEDED))
+        return changed
+    }
+
     /** 새 환불 줄을 넣는다(상태는 [PaymentRefundTransitions.requireCreatable]). 넣은 줄(`open_key` 포함)을 돌려주고, 겹치는 유니크가 있으면 null 이며 이력도 남기지 않는다. */
     fun createRefund(
         tx: PaymentLedgerTx,
