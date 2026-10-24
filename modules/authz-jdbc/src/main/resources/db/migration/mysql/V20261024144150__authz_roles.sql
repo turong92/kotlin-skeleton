@@ -10,6 +10,8 @@ create table if not exists authz_roles (
 create table if not exists authz_role_permissions (
     role       varchar(40) not null,
     permission varchar(64) not null,
-    primary key (role, permission),
+    primary key (role, permission)
+    /* [jooq ignore start] */,
     constraint fk_authz_role_permissions_role foreign key (role) references authz_roles (name) on delete cascade
+    /* [jooq ignore stop] */
 );
