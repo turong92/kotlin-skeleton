@@ -335,7 +335,7 @@ Frontend flow for a "탈퇴를 취소할까요?" screen:
 The token is single-use, works only for this endpoint and is created only AFTER a successful authentication. With the setting off, `delete/cancel` answers `410 ACCOUNT.TOKEN_INVALID` and a deleted account signs in as `401` like before.
 Data export: no endpoint; `AccountDataExporter` is an interface only (not wired).
 
-## 9. Admin (module `account`, `skeleton.account.admin.enabled=true`; role `skeleton.account.admin.role`, default `ADMIN`; others -> `403 COMMON.FORBIDDEN`; the role is checked against the stored account on every call, so a suspended or demoted admin is refused even with an unexpired token)
+## 9. Admin (module `account`, `skeleton.account.admin.enabled=true`; one permission per endpoint — `account.read`: list / get / blocks list; `account.manage`: suspend, unsuspend, restore, erase, lift a block; `account.roles`: grant / revoke; missing permission -> `403 PLATFORM.FORBIDDEN`; the permissions come from the stored account on every request, so a suspended or demoted operator is refused even with an unexpired token; `skeleton.account.admin.role` is gone and setting it fails startup)
 
 - `GET /api/v1/admin/accounts?email=&loginId=&status=&page=0&size=20` (`page>=0`, `1<=size<=100`, else `400 COMMON.VALIDATION_FAILED`; `loginId=` is FINAL-7 L11, read only with login IDs on, exact match after normalising) -> page envelope `{ values: [...], pagination, meta }` of `{ id, email, loginId?, status, roles, displayName, displayTag, createdAt, lastLoginAt, suspendedReason, purgeAfter, erasedAt }` (`loginId` — key only with login IDs on).
   `status` is one of `ACTIVE | PENDING_VERIFICATION | SUSPENDED | DELETED | ERASED`. **Without `status`, `ERASED` accounts are left out**; `?status=ERASED` lists them — an erased row has `email`, `displayName`, `displayTag`, `lastLoginAt`, `suspendedReason`, `purgeAfter` all `null` and `roles: []`, `erasedAt` set.
@@ -345,7 +345,7 @@ Data export: no endpoint; `AccountDataExporter` is an interface only (not wired)
 - `POST /api/v1/admin/accounts/{id}/erase` `{ "reason"? }` -> `204` — erase a **SUSPENDED** account at once (no grace): same erasure as the purge job (`deletion.mode`) plus **re-registration blocks** (below). `409 ACCOUNT.NOT_SUSPENDED` for any other status, `410 ACCOUNT.ERASED` when already erased, `409 ACCOUNT.SELF_ACTION_FORBIDDEN` for yourself.
 - `GET /api/v1/admin/accounts/blocks?page=0&size=20` -> page of `{ id, kind: "email"|"identity", reason, createdAt, expiresAt, createdBy, accountId }` (newest first; **no hash, no address**); `DELETE /api/v1/admin/accounts/blocks/{id}` -> `204` / `404 ACCOUNT.NOT_FOUND`.
   A block makes `verify-email` (sign-up code), magic-link redeem and social sign-in for that email / provider account answer `403 ACCOUNT.REGISTRATION_BLOCKED`; the sign-up REQUEST itself still answers the same `202` (so existence and blocks cannot be probed without proving the mailbox / provider account). With `sign-up.email-verification=false` a blocked address answers like a taken one (`409 ACCOUNT.EMAIL_TAKEN`).
-- `PUT /api/v1/admin/accounts/{id}/roles/{role}` (grant) / `DELETE ...` (revoke) -> `204`. `409 ACCOUNT.LAST_ADMIN` when revoking/suspending the last ADMIN; `409 ACCOUNT.SELF_ACTION_FORBIDDEN` for suspending yourself.
+- `PUT /api/v1/admin/accounts/{id}/roles/{role}` (grant) / `DELETE ...` (revoke) -> `204`. `400 ACCOUNT.ROLE_UNKNOWN` for a role no one defined (`skeleton.authz.roles` keys or `default-roles`; grant only); `403 ACCOUNT.ROLE_ESCALATION` when the role holds a permission the caller does not (full authority `*` may grant anything; grant only); `409 ACCOUNT.LAST_ADMIN` when revoking/suspending the last holder of the super role (`skeleton.authz.super-role`); `409 ACCOUNT.SELF_ACTION_FORBIDDEN` for suspending yourself.
 
 ## 10. Error code table
 
@@ -357,6 +357,8 @@ Data export: no endpoint; `AccountDataExporter` is an interface only (not wired)
 | AUTH.ACCOUNT_SUSPENDED | 403 | login / refresh / magic link for a suspended account |
 | AUTH.ACCOUNT_DELETION_PENDING | 403 | (`deletion.self-restore=true`) correct sign-in of an account in its deletion grace — `data.purgeAfter`, `data.restoreToken`; see §8 |
 | AUTH.TOO_MANY_ATTEMPTS | 429 | login throttle |
+| ACCOUNT.ROLE_UNKNOWN | 400 | admin grant of a role no one defined |
+| ACCOUNT.ROLE_ESCALATION | 403 | admin grant of a role with permissions the caller lacks |
 | AUTH.REFRESH_INVALID | 401 | refresh token unknown/expired/revoked |
 | AUTH.REFRESH_REUSED | 401 | rotated-away refresh token replayed (family revoked) |
 | AUTH.SESSION_NOT_FOUND | 404 | revoke of a session that is not yours / does not exist |

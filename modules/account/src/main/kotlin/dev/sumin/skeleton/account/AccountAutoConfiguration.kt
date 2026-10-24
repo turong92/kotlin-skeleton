@@ -47,6 +47,15 @@ import dev.sumin.skeleton.auth.config.AuthAutoConfiguration
 import dev.sumin.skeleton.auth.config.AuthProperties
 import dev.sumin.skeleton.auth.session.SessionEventListener
 import dev.sumin.skeleton.auth.session.SessionRevoker
+import dev.sumin.skeleton.common.authz.AuthzAutoConfiguration
+import dev.sumin.skeleton.common.authz.AuthzProperties
+import dev.sumin.skeleton.common.authz.OperatorAccess
+import dev.sumin.skeleton.common.authz.PermissionDeclaration
+import dev.sumin.skeleton.common.authz.RoleHolders
+import dev.sumin.skeleton.common.authz.RolePermissionSource
+import dev.sumin.skeleton.account.authz.AccountOperatorAccess
+import dev.sumin.skeleton.account.authz.AccountPermissions
+import dev.sumin.skeleton.account.authz.AccountRoleHolders
 import dev.sumin.skeleton.common.deploy.DeployContext
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.common.web.ClientIps
@@ -67,7 +76,7 @@ import org.springframework.security.crypto.password.PasswordEncoder
  * `auth` 보다 먼저 평가해 `PasswordEncoder` 와 `AuthAccountRepository` 를 이 모듈이 정한다 — `auth` 는 그대로 진짜 계정으로 로그인한다.
  */
 @AutoConfiguration(
-    before = [AuthAutoConfiguration::class],
+    before = [AuthAutoConfiguration::class, AuthzAutoConfiguration::class],
     beforeName = ["dev.sumin.skeleton.auth.social.config.AuthSocialAutoConfiguration"],
     afterName = ["dev.sumin.skeleton.account.jdbc.AccountJdbcAutoConfiguration"],
 )
@@ -232,6 +241,19 @@ class AccountAutoConfiguration {
     fun oneTimeTokens(store: OneTimeTokenStore, time: ObjectProvider<TimeProvider>): OneTimeTokens =
         OneTimeTokens(store, time.getIfAvailable { TimeProvider.systemUtc() })
 
+    /** 운영자 판정 — 토큰의 역할이 아니라 매 요청 저장소의 계정 상태 · 역할로. platform 의 토큰 기반 기본 구현보다 먼저 선다 */
+    @Bean
+    @ConditionalOnMissingBean
+    fun accountOperatorAccess(accounts: ObjectProvider<AccountRepository>, source: ObjectProvider<RolePermissionSource>): OperatorAccess =
+        AccountOperatorAccess({ accounts.getObject() }) { source.getObject() }
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun accountRoleHolders(accounts: ObjectProvider<AccountRepository>): RoleHolders = AccountRoleHolders { accounts.getObject() }
+
+    @Bean
+    fun accountPermissions(): PermissionDeclaration = AccountPermissions.declaration
+
     @Bean
     @ConditionalOnMissingBean
     fun adminBootstrap(
@@ -239,8 +261,9 @@ class AccountAutoConfiguration {
         accounts: ObjectProvider<AccountRepository>,
         events: ObjectProvider<AccountEventPublisher>,
         time: ObjectProvider<TimeProvider>,
+        authz: ObjectProvider<AuthzProperties>,
     ): AdminBootstrap = AdminBootstrap(
-        properties.bootstrap, properties.admin.role, { accounts.getObject() }, { events.getObject() }, time.getIfAvailable { TimeProvider.systemUtc() },
+        properties.bootstrap, authz.getIfAvailable { AuthzProperties() }.superRole, { accounts.getObject() }, { events.getObject() }, time.getIfAvailable { TimeProvider.systemUtc() },
     )
 
     @Bean
@@ -269,11 +292,13 @@ class AccountAutoConfiguration {
         magicLinks: ObjectProvider<MagicLinkIssuer>,
         displayNameRules: DisplayNameRules,
         sessionInspector: ObjectProvider<dev.sumin.skeleton.auth.session.SessionInspector>,
+        authz: ObjectProvider<AuthzProperties>,
     ): AccountCore = AccountCore(
         accounts, properties, time.getIfAvailable { TimeProvider.systemUtc() }, events, hasher, policy, tokens, mailer, links, tasks, limits, captcha,
         { sessions.getIfAvailable() }, bootstrap, challenges, { socialReauth.getIfAvailable() },
         { consents.getIfAvailable() }, atomic.getIfAvailable { AccountTransaction.NONE }, blocks, lease, { magicLinks.getIfAvailable() },
         names = DisplayNames(properties.displayName, rules = displayNameRules), sessionInspector = { sessionInspector.getIfAvailable() },
+        superRole = authz.getIfAvailable { AuthzProperties() }.superRole,
     )
 
     /** 닉네임 규칙 — 앱이 같은 타입의 빈을 두면 그것이 쓰인다 (가입 · 프로필 수정 · 제공자 이름 · 시드 · 비교용 키 모두) */
@@ -324,7 +349,7 @@ class AccountAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    fun adminService(core: AccountCore): AdminService = AdminService(core)
+    fun adminService(core: AccountCore, source: ObjectProvider<RolePermissionSource>): AdminService = AdminService(core) { source.getObject() }
 
     @Bean
     @ConditionalOnMissingBean

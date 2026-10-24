@@ -9,5 +9,5 @@ skeleton:
       enabled: true                    # false 면 /author-profiles 엔드포인트를 등록하지 않는다 (서비스 · 디렉터리는 그대로)
       base-path: /api/v1/author-profiles
     admin:
-      enabled: false                   # true 면 프로필 ↔ 계정 연결 조회 GET /api/v1/admin/author-profiles 를 연다. 호출자는 skeleton.account.admin.role(기본 ADMIN)만 — 게시판 운영자 역할(skeleton.board.moderator-role)은 403.
+      enabled: false                   # true 면 프로필 ↔ 계정 연결 조회 GET /api/v1/admin/author-profiles 를 연다. 호출자는 권한 author-profile.read 가 있어야 한다(기본 매핑에서는 전권 역할만 — 게시판 운영자 MODERATOR 는 403).
                                        # 호출마다 AUTHOR_LINK_VIEWED 감사 이벤트. 기록이 남으려면 skeleton.account.audit.enabled=true(+ account-jdbc) 나 앱의 AccountEventListener 가 있어야 한다 — 없으면 stage · prod 에서 배포 가드가 경고한다. 기록 실패는 warn 로그만, 조회는 나간다

@@ -40,7 +40,7 @@ class DiscardService(private val core: AccountCore, private val purge: AccountPu
             Reauth(core).check(account, input, sessionId, passwordFailure = AccountErrorCode.REAUTH_FAILED)
         }
         val now = core.time.now()
-        when (core.accounts.updateUnlessLast(account.id, AccountPatch(status = AccountStatus.DELETED, deletedAt = now, purgeAfter = now), now, core.props.admin.role)) {
+        when (core.accounts.updateUnlessLast(account.id, AccountPatch(status = AccountStatus.DELETED, deletedAt = now, purgeAfter = now), now, core.superRole)) {
             GuardedResult.LAST -> throw AccountException(AccountErrorCode.LAST_ADMIN)
             GuardedResult.NOT_FOUND -> throw AccountException(AccountErrorCode.NOT_FOUND)
             GuardedResult.DONE -> Unit

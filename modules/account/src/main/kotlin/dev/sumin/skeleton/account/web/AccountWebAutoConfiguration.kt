@@ -12,6 +12,7 @@ import dev.sumin.skeleton.account.Reauth
 import dev.sumin.skeleton.account.RegistrationService
 import dev.sumin.skeleton.account.password.PasswordPolicy
 import dev.sumin.skeleton.account.signin.IdentityService
+import dev.sumin.skeleton.common.authz.OperatorAccess
 import dev.sumin.skeleton.common.web.ClientIps
 import dev.sumin.skeleton.common.web.PublicEndpointContributor
 import org.springframework.beans.factory.ObjectProvider
@@ -34,7 +35,7 @@ import org.springframework.context.annotation.Bean
 class AccountWebAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
-    fun accountCallers(properties: AccountProperties, accounts: ObjectProvider<AccountRepository>): AccountCallers = AccountCallers(properties.admin) { accounts.getObject() }
+    fun accountCallers(access: ObjectProvider<OperatorAccess>): AccountCallers = AccountCallers { access.getObject() }
 
     @Bean
     @ConditionalOnMissingBean

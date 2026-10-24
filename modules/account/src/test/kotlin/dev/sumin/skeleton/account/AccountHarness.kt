@@ -71,6 +71,10 @@ class AccountHarness(
     magicLinks: MagicLinkIssuer? = null,
     /** 꼬리표 · 자동 닉네임의 난수 — 시험이 고정하려고 */
     random: java.util.random.RandomGenerator = java.security.SecureRandom(),
+    /** 전권 역할 이름 (`skeleton.authz.super-role`) */
+    val superRole: String = "ADMIN",
+    /** 전권 역할 말고 정의된 역할 → 권한 (`skeleton.authz.roles`) */
+    rolePermissions: Map<String, Set<String>> = emptyMap(),
 ) {
     val time = MutableTime()
     val callLog = CallLog()
@@ -93,12 +97,12 @@ class AccountHarness(
     val tokens = OneTimeTokens(tokenStore, time)
     val publisher = DefaultAccountEventPublisher({ time.now() }) { listOf(events) }
     private val limitStore = dev.sumin.skeleton.common.web.InMemoryFixedWindowRateLimitStore()
-    val bootstrap = AdminBootstrap(props.bootstrap, props.admin.role, { repo }, { publisher }, time)
+    val bootstrap = AdminBootstrap(props.bootstrap, superRole, { repo }, { publisher }, time)
     val core = AccountCore(
         repo, props, time, publisher, hasher, policy, tokens, mailer, AccountLinks(props.mail), tasks,
         AccountRateLimits({ limitStore }, time),
         CaptchaGate(captcha, captchaRequired), { revoker }, bootstrap, challenges, { socialReauth }, { consents }, atomic,
-        AccountBlocks.local(time, props.blocks.retention), magicLinks = { magicLinks }, names = DisplayNames(props.displayName, random), sessionInspector = { sessions },
+        AccountBlocks.local(time, props.blocks.retention), magicLinks = { magicLinks }, names = DisplayNames(props.displayName, random), sessionInspector = { sessions }, superRole = superRole,
     )
     val registration = RegistrationService(core)
     val availability = LoginIdAvailabilityService(core)
@@ -112,7 +116,7 @@ class AccountHarness(
     val erasers = java.util.concurrent.CopyOnWriteArrayList<dev.sumin.skeleton.common.erasure.AccountErasureListener>()
     val deletion = DeletionService(core)
     val purge = AccountPurgeService(core) { erasers.toList() }
-    val admin = AdminService(core)
+    val admin = AdminService(core) { dev.sumin.skeleton.common.authz.YmlRolePermissionSource(mapOf(superRole to setOf("*")) + rolePermissions) }
     val discard = DiscardService(core, purge)
     val profile = ProfileService(core, dev.sumin.skeleton.account.signin.SignInMethodRegistry(listOf(dev.sumin.skeleton.account.signin.PasswordSignInMethod())))
 

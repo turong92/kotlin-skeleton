@@ -47,7 +47,7 @@ class DeletionService(private val core: AccountCore) {
 
         val now = core.time.now()
         val purgeAfter = now.plus(core.props.deletion.grace)
-        when (core.accounts.updateUnlessLast(accountId, AccountPatch(status = AccountStatus.DELETED, deletedAt = now, purgeAfter = purgeAfter), now, core.props.admin.role)) {
+        when (core.accounts.updateUnlessLast(accountId, AccountPatch(status = AccountStatus.DELETED, deletedAt = now, purgeAfter = purgeAfter), now, core.superRole)) {
             GuardedResult.LAST -> throw AccountException(AccountErrorCode.LAST_ADMIN)
             GuardedResult.NOT_FOUND -> throw AccountException(AccountErrorCode.NOT_FOUND)
             GuardedResult.DONE -> Unit

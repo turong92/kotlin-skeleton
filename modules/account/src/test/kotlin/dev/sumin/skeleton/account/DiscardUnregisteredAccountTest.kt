@@ -143,7 +143,7 @@ class DiscardUnregisteredAccountTest {
     fun `the last administrator cannot discard itself`() {
         val h = harness()
         val a = h.shell()
-        h.repo.grantRole(a.id, h.core.props.admin.role, h.time.now())
+        h.repo.grantRole(a.id, h.core.superRole, h.time.now())
         assertEquals("ACCOUNT.LAST_ADMIN", code { h.discard.discard(a.id, ReauthInput(), ses) })
         assertEquals(AccountStatus.ACTIVE, h.repo.findById(a.id)!!.status)
     }

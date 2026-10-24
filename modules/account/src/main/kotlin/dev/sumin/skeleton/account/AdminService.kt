@@ -3,10 +3,19 @@ package dev.sumin.skeleton.account
 import dev.sumin.skeleton.account.events.AccountEventType
 import dev.sumin.skeleton.common.ApplicationException
 import dev.sumin.skeleton.common.PlatformErrorCode
+import dev.sumin.skeleton.common.authz.ALL_PERMISSIONS
+import dev.sumin.skeleton.common.authz.RolePermissionSource
+import dev.sumin.skeleton.common.authz.YmlRolePermissionSource
 
-/** 운영자 연산 — 호출자가 관리자인지는 HTTP 층(`skeleton.account.admin.role`)이 본다. 여기서는 사고를 막는 규칙(자기 정지 · 마지막 관리자)만 */
-class AdminService(private val core: AccountCore) {
-    private val adminRole get() = core.props.admin.role
+/**
+ * 운영자 연산 — 호출자가 권한을 가졌는지는 HTTP 층(`OperatorAccess`)이 본다. 여기서는 사고를 막는 규칙(자기 정지 · 마지막 전권 · 정의된 역할만 · 권한 상승 막기)만.
+ * [roles] 는 역할 → 권한 매핑(기본은 전권 역할 하나뿐 — 앱에서는 platform 의 매핑이 들어온다).
+ */
+class AdminService(
+    private val core: AccountCore,
+    private val roles: () -> RolePermissionSource = { YmlRolePermissionSource(mapOf(core.superRole to setOf(ALL_PERMISSIONS))) },
+) {
+    private val adminRole get() = core.superRole
 
     /** 응답에 `loginId` 키를 싣는가 — `skeleton.account.login-id.enabled` */
     val loginIdEnabled get() = core.props.loginId.enabled
@@ -68,8 +77,17 @@ class AdminService(private val core: AccountCore) {
         core.events.publish(AccountEventType.REGISTRATION_BLOCK_REMOVED, null, detail = mapOf("by" to actorId, "block" to blockId.toString()))
     }
 
-    fun grantRole(actorId: String, targetId: String, role: String) {
+    /**
+     * [actorPermissions] 는 호출자의 권한(전권이면 `*`). 정의되지 않은 역할은 400 `ACCOUNT.ROLE_UNKNOWN`(기본 역할 `default-roles` 는 정의된 것으로 친다),
+     * 주려는 역할의 권한이 호출자 권한의 부분집합이 아니면 403 `ACCOUNT.ROLE_ESCALATION`.
+     */
+    fun grantRole(actorId: String, targetId: String, role: String, actorPermissions: Set<String>) {
         validRole(role)
+        val source = roles()
+        if (role !in source.definedRoles() && role !in core.props.defaultRoles) throw AccountException(AccountErrorCode.ROLE_UNKNOWN)
+        if (ALL_PERMISSIONS !in actorPermissions && !actorPermissions.containsAll(source.permissionsOf(role))) {
+            throw AccountException(AccountErrorCode.ROLE_ESCALATION)
+        }
         if (live(targetId).status == AccountStatus.DELETED) throw AccountException(AccountErrorCode.NOT_FOUND)
         if (core.accounts.grantRole(targetId, role, core.time.now())) core.events.publish(AccountEventType.ROLE_GRANTED, targetId, detail = mapOf("role" to role, "by" to actorId))
     }

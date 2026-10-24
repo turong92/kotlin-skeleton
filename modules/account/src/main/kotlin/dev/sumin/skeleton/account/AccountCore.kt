@@ -55,6 +55,8 @@ class AccountCore(
     val names: DisplayNames = DisplayNames(props.displayName),
     /** 세션이 로그인으로 열린 시각을 읽는 곳 — `auth-session` 이 없으면 null (그러면 "방금 로그인한 세션" 을 가릴 수 없다 → 그것에 기대는 면제는 없다) */
     val sessionInspector: () -> dev.sumin.skeleton.auth.session.SessionInspector? = { null },
+    /** 전권 역할 이름(`skeleton.authz.super-role`) — 첫 관리자 부트스트랩이 주고, 「마지막 하나」 판정과 닉네임 예약어 면제가 보는 역할 */
+    val superRole: String = "ADMIN",
 ) {
     /**
      * 메일함 증명 — [AccountRepository.proveMailbox] 에 **주인의 복구 동작 하나가 더 붙는다**: 연락 이메일을 비운다. 연락 이메일은 서비스 알림이 가는 곳인데 로그인 수단이 아니라서

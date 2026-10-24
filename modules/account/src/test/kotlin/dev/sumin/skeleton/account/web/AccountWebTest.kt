@@ -36,6 +36,8 @@ private val nextTestIp = java.util.concurrent.atomic.AtomicInteger()
         "skeleton.account.mail.link-base-url=https://app.example.com",
         "skeleton.account.password.bcrypt-strength=4",
         "skeleton.account.admin.enabled=true",
+        "skeleton.authz.roles.ADMIN=*",
+        "skeleton.authz.roles.MODERATOR=account.roles",
         "skeleton.account.bootstrap.admin-email=boss@example.com",
         "skeleton.account.login.per-account=5",
     ],

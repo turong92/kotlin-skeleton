@@ -38,6 +38,8 @@ class LoginIdAdminBeans {
     properties = [
         "skeleton.account.mail.link-base-url=https://app.example.com",
         "skeleton.account.password.bcrypt-strength=4",
+        "skeleton.authz.roles.ADMIN=*",
+        "skeleton.authz.roles.MODERATOR=account.roles",
         "skeleton.account.login-id.enabled=true",
         "skeleton.account.admin.enabled=true",
         "skeleton.account.bootstrap.admin-email=boss@example.com",
