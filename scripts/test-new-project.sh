@@ -15,6 +15,7 @@
 #   7. --modules redis-core,redis-lock   (Redis 환경변수 테스트가 프로젝트 접두사로 찍혀 돈다 — 배포 계약의 <ENV_PREFIX>_REDIS_*)
 #      (1 · 3 · 5 · 6 은 스타터의 약관 · 동의(legal-jdbc)를 함께 빌드한다 — 3 은 MySQL 트리거 마이그레이션, 5 는 앱 소유 문서 · 재동의 여정 시험)
 #   9. --modules payment,payment-jdbc,payment-toss   (결제 장부: payment 의 testFixtures[저장소 계약 시험 · 가짜 결제사]가 찍히고 payment-jdbc 의 dbTest 가 두 DB 로 돈다 — `8-payment`)
+#  10. --modules authz,authz-jdbc   (운영자 역할 관리: 스타터의 account-jdbc 와 함께 — RoleHolders 가 붙는 조립, authz-jdbc 의 dbTest 가 두 DB 로 돈다 — `10-authz`. 「authz 를 뺀」 조합은 `1-defaults`)
 #   8. docs/new-project-recipe.md 의 작업 예 3개(<!-- kotlin-stamp: … --> 블록의 명령 그대로) — 커뮤니티 · 유료 SaaS(--db mysql) · 콘텐츠 SSR(스타터 그대로)
 # macOS bash 3.2 와 GNU bash 에서 돈다. 임시 디렉토리는 끝나면 지운다 (KEEP=1 이면 남긴다).
 set -euo pipefail
@@ -232,7 +233,7 @@ expect_exit 0 "persistence-jooq + 형제 마이그레이션 모듈을 찍는다"
 echo "== 7. --with-sample (샘플 앱 \"Notes\" 은 요청할 때만 남는다)"
 G="$TMP/g"
 expect_exit 0 "조합 5 를 찍는다 (rename 잔여 검사 포함)" stamp "$G" --with-sample
-want=":apps:api :apps:sample :modules:account :modules:account-jdbc :modules:alert :modules:alert-jdbc :modules:auth :modules:auth-magic-link :modules:auth-session :modules:auth-session-jdbc :modules:auth-social :modules:auth-social-google :modules:auth-social-kakao :modules:auth-social-naver :modules:auth-social-oidc :modules:auth-social-x :modules:author-profile :modules:author-profile-jdbc :modules:board :modules:board-jdbc :modules:captcha-turnstile :modules:crypto :modules:db-postgresql :modules:idempotency :modules:job-queue-jdbc :modules:json :modules:legal :modules:legal-jdbc :modules:migration :modules:migration-flyway :modules:notification :modules:notification-jdbc :modules:notification-mail :modules:notification-sse :modules:payment :modules:payment-jdbc :modules:payment-kakaopay :modules:payment-naverpay :modules:payment-paddle :modules:payment-toss :modules:persistence-jdbc :modules:platform :modules:scheduler :modules:storage :modules:storage-s3 :modules:time"
+want=":apps:api :apps:sample :modules:account :modules:account-jdbc :modules:alert :modules:alert-jdbc :modules:auth :modules:auth-magic-link :modules:auth-session :modules:auth-session-jdbc :modules:auth-social :modules:auth-social-google :modules:auth-social-kakao :modules:auth-social-naver :modules:auth-social-oidc :modules:auth-social-x :modules:author-profile :modules:author-profile-jdbc :modules:authz :modules:authz-jdbc :modules:board :modules:board-jdbc :modules:captcha-turnstile :modules:crypto :modules:db-postgresql :modules:idempotency :modules:job-queue-jdbc :modules:json :modules:legal :modules:legal-jdbc :modules:migration :modules:migration-flyway :modules:notification :modules:notification-jdbc :modules:notification-mail :modules:notification-sse :modules:payment :modules:payment-jdbc :modules:payment-kakaopay :modules:payment-naverpay :modules:payment-paddle :modules:payment-toss :modules:persistence-jdbc :modules:platform :modules:scheduler :modules:storage :modules:storage-s3 :modules:time"
 got="$(includes "$G/settings.gradle.kts")"
 [ "$got" = "$want" ] && pass "settings.gradle.kts 는 스타터 + 샘플 앱의 모듈과 그 닫힘을 포함한다" || fail "settings includes: [$got] expected [$want]"
 check "샘플 앱 소스가 새 패키지로 옮겨진다" test -f "$G/apps/sample/src/main/kotlin/com/acme/shop/app/sample/SampleApplication.kt"
@@ -241,7 +242,7 @@ check "샘플 문서 · 실행 스크립트가 남고 안내 문서의 표식 �
 check "스타터 apps/api 는 그대로다 — 샘플 앱의 모듈을 얹지 않는다" bash -c "! grep -q 'storage-s3\|notification\|idempotency\|board\|magic-link' '$G/apps/api/build.gradle.kts'"
 check "스타터 테스트의 부재 단언(S3 클라이언트)은 그대로다 — 스타터 클래스패스에는 여전히 없다" has_line 'software.amazon.awssdk.services.s3.S3Client' "$G/apps/api/src/test/kotlin/com/acme/shop/app/api/StarterCompositionIntegrationTest.kt"
 check "스타터 설정에 샘플 모듈의 설정 블록이 붙지 않는다" lacks_line 'new-project: module config blocks' "$G/apps/api/src/main/resources/application.yml"
-check "dbTestModules 에 샘플이 쓰는 DB 모듈이 들어간다" has_line 'val dbTestModules = setOf\(":modules:account-jdbc", ":modules:alert-jdbc", ":modules:auth-session-jdbc", ":modules:author-profile-jdbc", ":modules:board-jdbc", ":modules:job-queue-jdbc", ":modules:legal-jdbc", ":modules:notification-jdbc", ":modules:payment-jdbc"\)' "$G/build.gradle.kts"
+check "dbTestModules 에 샘플이 쓰는 DB 모듈이 들어간다" has_line 'val dbTestModules = setOf\(":modules:account-jdbc", ":modules:alert-jdbc", ":modules:auth-session-jdbc", ":modules:author-profile-jdbc", ":modules:authz-jdbc", ":modules:board-jdbc", ":modules:job-queue-jdbc", ":modules:legal-jdbc", ":modules:notification-jdbc", ":modules:payment-jdbc"\)' "$G/build.gradle.kts"
 check "dev.sh 는 APP=sample 을 알고 문법 검사를 통과한다" bash -c "grep -q 'APP' '$G/scripts/dev.sh' && bash -n '$G/scripts/dev.sh' && bash -n '$G/scripts/dev-sample.sh' && bash -n '$G/scripts/sample-e2e-backend.sh'"
 
 echo "== 7b. --modules auth-social-oidc,auth-social-x (글로벌 소셜: LINE · X · 그 외 OIDC)"
@@ -326,6 +327,20 @@ PM="$TMP/pm"
 expect_exit 0 "MySQL 로도 결제 장부 조합을 찍는다" stamp "$PM" --db mysql --modules payment,payment-jdbc,payment-toss
 check "MySQL 로 찍으면 mysqlTest 묶음만 남고(postgresTest 소스는 지워진다) MySQL 판 마이그레이션이 잠금에 올라 있다" bash -c "test -d '$PM/modules/payment-jdbc/src/mysqlTest' && test ! -d '$PM/modules/payment-jdbc/src/postgresTest' && grep -q 'modules/payment-jdbc/src/main/resources/db/migration/mysql/V.*__payment_ledger.sql' '$PM/migrations.lock'"
 
+echo "== 8d. --modules authz,authz-jdbc (운영자 역할 관리 — authz 는 저장소를 모르고 authz-jdbc 가 포트와 표를 가진다. account 에 기대지 않는다)"
+AZ="$TMP/az"
+expect_exit 0 "역할 관리 조합을 찍는다 (rename 잔여 검사 포함)" stamp "$AZ" --modules authz,authz-jdbc
+for m in authz authz-jdbc platform; do
+  check "모듈 $m 이 포함된다" bash -c "grep -q 'include(\":modules:$m\")' '$AZ/settings.gradle.kts' && test -d '$AZ/modules/$m'"
+done
+check "닫힘에 platform 만 따라오고 account 는 따라오지 않는다 (authz · authz-jdbc 의 build 파일에 account 의존이 없다)" bash -c "grep -q 'tests of authz-jdbc need platform' <<<\"\$1\" && ! grep -Eq 'account \(.*authz' <<<\"\$1\" && ! grep -q 'modules:account' '$SRC/modules/authz/build.gradle.kts' '$SRC/modules/authz-jdbc/build.gradle.kts'" _ "$LAST_OUTPUT"
+check "dbTestModules 에 authz-jdbc 가 들어간다 (src/dbTest 가 있는 모듈)" has_line '":modules:authz-jdbc"' "$AZ/build.gradle.kts"
+check "두 모듈의 문서 쪽 · 계약 문서 · 설정 블록 · 카탈로그 항목이 남고 접두사가 새 이름이다" bash -c "test -f '$AZ/docs/modules/authz.md' && test -f '$AZ/docs/modules/authz-jdbc.md' && test -f '$AZ/docs/authz-http-contract.md' && grep -q 'modules/authz-jdbc/' '$AZ/migrations.lock' && grep -q '\"acme.authz.admin\"' '$AZ/capabilities.json' && ! grep -q 'skeleton\.authz\.admin' '$AZ/modules/authz/src/main'"
+check "authz 를 고르지 않은 기본 프로젝트에는 authz 디렉터리 · 문서 행 · 카탈로그 항목이 남지 않는다" bash -c "! ls '$A/modules' | grep -q '^authz' && ! grep -q '](authz' '$A/docs/modules/README.md' && ! test -e '$A/docs/modules/authz.md' && ! test -e '$A/docs/authz-http-contract.md' && ! grep -q '\"path\": \"modules/authz' '$A/capabilities.json' && ! grep -q 'modules/authz' '$A/migrations.lock'"
+AZN="$TMP/azn"
+expect_exit 0 "authz 만 요청하면 찍히되 authz-jdbc 를 더하라고 알려 준다" stamp "$AZN" --modules authz
+grep -q 'authz has no storage of its own' <<<"$LAST_OUTPUT" && pass "저장소 없음 안내가 나온다" || fail "authz 만 요청했는데 authz-jdbc 안내가 없다"
+
 echo "== 9. --modules redis-core,redis-lock (Redis 환경변수 이름이 프로젝트 접두사를 따라간다 — 배포 계약)"
 J="$TMP/j"
 expect_exit 0 "redis 조합을 찍는다" stamp "$J" --modules redis-core,redis-lock
@@ -391,6 +406,7 @@ if [ "$MODE" = "--full" ]; then
   build_composition "$H" "6-board"
   build_composition "$PJ" "8-payment"
   build_composition "$J" "7-redis"
+  build_composition "$AZ" "10-authz"
   for rid in $RECIPE_DIRS; do   # 레시피의 작업 예 — 문서의 명령이 낡으면 여기서 깨진다
     build_composition "$TMP/recipe-$rid" "recipe-$rid"
   done

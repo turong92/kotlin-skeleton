@@ -1,3 +1,4 @@
+  [ "$m" != authz ] || rm -f docs/authz-http-contract.md
 #!/usr/bin/env bash
 # 새 프로젝트 한 줄 찍어내기: 복사 → 모듈 고르기 → (선택) DB 바꾸기 → 의존성 · 설정 블록 더하기 → rename.
 #
@@ -194,6 +195,11 @@ if in_list author-profile "$SELECTED_SORTED" && ! in_list author-profile-jdbc "$
   NOTES="${NOTES:+$NOTES$'\n'}author-profile has no storage of its own: add author-profile-jdbc too (--modules author-profile,author-profile-jdbc) unless you implement its AuthorProfileRepository port yourself — without it the app fails to start"
 fi
 
+# authz 도 저장소를 모른다 (authz-jdbc 가 포트를 구현한다) — 없어도 앱은 뜬다(역할 관리 API 는 기본 꺼짐): 켜는 순간(skeleton.authz.admin.enabled=true) 저장소가 없으면 시작이 실패한다
+if in_list authz "$SELECTED_SORTED" && ! in_list authz-jdbc "$SELECTED_SORTED"; then
+  NOTES="${NOTES:+$NOTES$'\n'}authz has no storage of its own: add authz-jdbc too (--modules authz,authz-jdbc) unless you implement its AuthzRoleStore port yourself — with skeleton.authz.admin.enabled=true and no store the app fails to start"
+fi
+
 # payment 도 저장소를 모른다 (payment-jdbc 가 포트를 구현한다) — 없어도 앱은 뜬다: 결제 승인 파사드뿐이고 주문 장부(표)가 없다
 if in_list payment "$SELECTED_SORTED" && ! in_list payment-jdbc "$SELECTED_SORTED"; then
   NOTES="${NOTES:+$NOTES$'\n'}payment alone is the provider facade with no order ledger and no tables: add payment-jdbc too (--modules payment,payment-jdbc,payment-toss) to get orders, the event history and the delayed jobs"
@@ -272,6 +278,7 @@ while IFS= read -r m; do
   rm -rf "modules/$m" "docs/config/modules/$m.yml" "docs/modules/$m.md"
   [ "$m" != author-profile ] || rm -f docs/author-profile-http-contract.md   # 프론트 계약 문서는 모듈을 고른 프로젝트에만 남는다
   [ "$m" != payment ] || rm -f docs/payment-http-contract.md
+  [ "$m" != authz ] || rm -f docs/authz-http-contract.md
   # 토스 손 시험 도구 · 안내 문서의 토스 구역(제목 조각 · 목차 줄 · ## 11 본문 — 각각 <!-- payment-toss:start --> … <!-- payment-toss:end --> 표식으로 감쌌다)은 payment-toss 를 고른 프로젝트에만 남는다 — payment 를 안 고르면 payment-toss 도 빠지므로 둘 다 이 줄이 덮는다. 카탈로그 항목은 스크립트 파일이 없으면 stamp-capabilities.pl 이 거른다
   if [ "$m" = payment-toss ]; then
     rm -f scripts/payment-webhook.sh

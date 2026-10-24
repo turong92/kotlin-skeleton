@@ -27,6 +27,8 @@ dependencies {
     implementation(project(":modules:board-jdbc"))         // 게시판 저장소 (board 는 저장소를 모른다)
     implementation(project(":modules:author-profile"))     // 작성자 프로필: 한 계정이 닉네임을 여러 개 만들어 글 · 댓글마다 골라 쓴다 (+ /api/v1/author-profiles). board 가 이것을 보고 공개 작성자 id 를 prf_… 로 낸다 — docs/modules/author-profile.md
     implementation(project(":modules:author-profile-jdbc")) // 프로필 저장소 (author-profile 은 저장소를 모른다)
+    implementation(project(":modules:authz"))              // 운영자 역할 관리: 역할 만들기 · 권한 고르기 (/api/v1/admin/roles) — 켜기 skeleton.authz.admin.enabled. 문서 docs/modules/authz.md
+    implementation(project(":modules:authz-jdbc"))         // 역할 → 권한 표 (authz 는 저장소를 모른다). 첫 기동에 yml 매핑을 한 번 옮긴다
     implementation(project(":modules:auth-social-google")) // 소셜 로그인 — 꺼진 채 시작한다: 제공자마다 SKELETON_AUTH_SOCIAL_PROVIDERS_<X>_ENABLED=true + client id/secret (docs/real-provider-setup.md)
     implementation(project(":modules:auth-social-kakao"))
     implementation(project(":modules:auth-social-naver"))

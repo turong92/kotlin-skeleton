@@ -45,6 +45,7 @@ dependencies {
     implementation(project(":modules:author-profile-jdbc"))   // + author-profile — account 와 같이 클래스패스에만 둔다 (설정 스니펫 · 모듈 목록 시험). 자동설정은 application.yml 에서 꺼 둔다. 실제 흐름은 apps/sample
     implementation(project(":modules:author-profile"))
     implementation(project(":modules:legal-jdbc"))          // + legal — account 와 같이 클래스패스에만 둔다 (설정 스니펫 · 모듈 목록 시험). 자동설정은 application.yml 에서 꺼 둔다. 실제 흐름은 apps/sample
+    implementation(project(":modules:authz-jdbc"))          // + authz — 클래스패스에만 둔다 (설정 스니펫 · 모듈 목록 시험). 표 자동설정은 application.yml 에서 꺼 둔다. 실제 흐름은 apps/sample
     implementation(project(":modules:db-postgresql"))
     implementation(project(":modules:migration-flyway"))
 

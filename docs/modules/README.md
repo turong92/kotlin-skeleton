@@ -34,6 +34,8 @@
 | `author-profile-jdbc` | 작성자 프로필 저장소 (PostgreSQL · MySQL) | [author-profile-jdbc](author-profile-jdbc.md) |
 | `legal` | 약관 · 개인정보 처리방침 · 동의 기록: 판 · 시행일 · 해시 못 박기 · 가입 동의 · 철회 · 재동의 (문서는 앱이 싣는다, 예시 TEMPLATE 은 prod 에서 막는다) | [legal](legal.md) |
 | `legal-jdbc` | 약관 · 동의 저장소 (PostgreSQL · MySQL, 더하기만 하는 트리거) | [legal-jdbc](legal-jdbc.md) |
+| `authz` | 운영자 역할 관리 API: 역할 만들기 · 권한 고르기, 권한 카탈로그, 전권 고정 · 권한 상승 막기 · 자기 잠금 막기 (기본 꺼짐) | [authz](authz.md) |
+| `authz-jdbc` | 역할 → 권한 표 저장소 (PostgreSQL · MySQL) + 첫 기동 씨앗 | [authz-jdbc](authz-jdbc.md) |
 | `payment` | 결제 계약 · 제공자 라우팅 | [payment](payment.md) |
 | `payment-jdbc` | 결제 장부 저장소 + 작업 어댑터 (PostgreSQL · MySQL) | [payment-jdbc](payment-jdbc.md) |
 | `payment-toss` | Toss 결제 제공자 | [payment-toss](payment-toss.md) |

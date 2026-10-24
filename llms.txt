@@ -60,6 +60,7 @@
 - 검색 노출 · 링크 미리보기 · 서버 렌더링 → kotlin 덧붙일 것 없음 · react `--packages seo --ssr` — 손으로: 백엔드는 할 일이 없다.
 - 다크 모드 · 디자인 토큰 · 화면 부품 · 대시보드/목록/폼 화면 틀 → kotlin 덧붙일 것 없음 · react 기본 포함 — 손으로: 백엔드는 할 일이 없다
 - 이용약관 · 개인정보 처리방침 · 가입 동의 기록 · 새 판 재동의 · 마케팅 수신 동의(선택, 철회) [legal, legal-jdbc] → kotlin 덧붙일 것 없음 · react 기본 포함 — 손으로: 스타터에 기본 포함(legal-jdbc)
+- 운영자 역할을 화면에서 만들고 권한을 고른다 (예: CS 담당자는 결제 보기 + 환불만) [authz, authz-jdbc] → kotlin `--modules authz,authz-jdbc` · react 기본 포함 — 손으로: 켜기 skeleton.authz.admin.enabled=true(기본 꺼짐 → 404).
 
 ## 작업 예 (두 레포의 명령 — 순서 · 설정 · 검증 · 배포는 docs/new-project-recipe.md)
 
@@ -93,6 +94,8 @@
 - auth-social-x: X(Twitter) 로그인 제공자 — OAuth 2.0… [X 로그인, 엑스 로그인]
 - author-profile: 작성자 프로필 — 한 계정이 닉네임(프로필)을 여러 개 만들어 글 ·… [작성자 프로필, 닉네임 여러 개]
 - author-profile-jdbc: 작성자 프로필 저장소 — PostgreSQL · MySQL 로… [작성자 프로필 저장소, 프로필 DB]
+- authz: 운영자 역할 관리 — 역할 만들기 · 고치기 · 지우기(역할 → 권한… [역할 관리, 권한 관리]
+- authz-jdbc: 역할 → 권한 표 저장소 — PostgreSQL · MySQL 로… [역할 권한 저장소, 권한 표]
 - board: 게시판 — 글 · 중첩 댓글(대댓글) [게시판, 커뮤니티]
 - board-jdbc: 게시판 저장소 — PostgreSQL · MySQL 로 board 의… [게시판 저장소, 게시판 DB]
 - captcha-turnstile: 봇 방지 — Cloudflare Turnstile 토큰을 서버에서… [캡차, 봇 방지]
