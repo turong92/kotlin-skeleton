@@ -59,21 +59,24 @@ class AdminAccountController(private val callers: AccountCallers, private val ad
     @Operation(summary = "Suspend (signs the account out of every session)")
     @PostMapping("/{id}/suspend")
     fun suspend(authentication: Authentication?, @PathVariable id: String, @Valid @RequestBody(required = false) request: SuspendRequest?): ResponseEntity<Void> {
-        admin.suspend(callers.requirePermission(authentication, AccountPermissions.MANAGE).accountId, id, request?.reason)
+        val caller = manager(authentication, id)
+        admin.suspend(caller.accountId, id, request?.reason)
         return Response.noContent()
     }
 
     @Operation(summary = "Unsuspend")
     @PostMapping("/{id}/unsuspend")
     fun unsuspend(authentication: Authentication?, @PathVariable id: String): ResponseEntity<Void> {
-        admin.unsuspend(callers.requirePermission(authentication, AccountPermissions.MANAGE).accountId, id)
+        val caller = manager(authentication, id)
+        admin.unsuspend(caller.accountId, id)
         return Response.noContent()
     }
 
     @Operation(summary = "Undo a deletion inside the grace period")
     @PostMapping("/{id}/restore")
     fun restore(authentication: Authentication?, @PathVariable id: String): ResponseEntity<Void> {
-        admin.restore(callers.requirePermission(authentication, AccountPermissions.MANAGE).accountId, id)
+        val caller = manager(authentication, id)
+        admin.restore(caller.accountId, id)
         return Response.noContent()
     }
 
@@ -85,7 +88,7 @@ class AdminAccountController(private val callers: AccountCallers, private val ad
     @PostMapping("/{id}/erase")
     fun erase(authentication: Authentication?, @PathVariable id: String, @Valid @RequestBody(required = false) request: AdminEraseRequest?): ResponseEntity<Void> {
         // 지워지지 않았다면(그 사이 상태가 바뀜) 204 로 거짓말하지 않는다
-        if (!purge.eraseSuspended(callers.requirePermission(authentication, AccountPermissions.MANAGE).accountId, id, request?.reason)) throw AccountException(AccountErrorCode.NOT_SUSPENDED)
+        if (!purge.eraseSuspended(manager(authentication, id).accountId, id, request?.reason)) throw AccountException(AccountErrorCode.NOT_SUSPENDED)
         return Response.noContent()
     }
 
@@ -125,6 +128,13 @@ class AdminAccountController(private val callers: AccountCallers, private val ad
         val caller = callers.requirePermission(authentication, AccountPermissions.ROLES)
         admin.revokeRole(caller.accountId, id, role, callers.permissionsOf(caller))
         return Response.noContent()
+    }
+
+    /** `account.manage` + 대상 계정이 호출자 권한 안에 있는가 ([AdminService.requireCanManage]) */
+    private fun manager(authentication: Authentication?, targetId: String): AccountCaller {
+        val caller = callers.requirePermission(authentication, AccountPermissions.MANAGE)
+        admin.requireCanManage(targetId, callers.permissionsOf(caller))
+        return caller
     }
 
     private fun Account.toAdmin() = AdminAccountResponse(id, email, status.name, roles, displayName, visibleTag, createdAt, lastLoginAt, suspendedReason, purgeAfter, erasedAt, if (admin.loginIdEnabled) java.util.Optional.ofNullable(loginId) else null)

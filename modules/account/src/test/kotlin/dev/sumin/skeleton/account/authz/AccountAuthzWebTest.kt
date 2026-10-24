@@ -140,4 +140,33 @@ class AccountAuthzWebTest {
         mvc.perform(delete("/api/v1/admin/accounts/$viewer/roles/ROLER").with(token(roler))).andExpect(status().isNoContent)
         mvc.perform(delete("/api/v1/admin/accounts/$boss/roles/ADMIN").with(token(store("ADMIN")))).andExpect(status().isNoContent)
     }
+
+    @Test
+    fun `state commands on an account holding more than the caller are 403 ROLE_ESCALATION - on an ordinary user they pass`() {
+        val staff = store("STAFF")           // account.read + account.manage
+        val boss = store("USER", "ADMIN")
+        val suspendedBoss = store("USER", "ADMIN", status = AccountStatus.SUSPENDED)
+        val deletedBoss = store("USER", "ADMIN", status = AccountStatus.DELETED)
+        fun escalation(r: org.springframework.test.web.servlet.ResultActions) =
+            r.andExpect(status().isForbidden).andExpect(jsonPath("$.code").value("ACCOUNT.ROLE_ESCALATION"))
+        escalation(mvc.perform(post("/api/v1/admin/accounts/$boss/suspend").with(token(staff))))
+        escalation(mvc.perform(post("/api/v1/admin/accounts/$suspendedBoss/unsuspend").with(token(staff))))
+        escalation(mvc.perform(post("/api/v1/admin/accounts/$suspendedBoss/erase").with(token(staff))))
+        escalation(mvc.perform(post("/api/v1/admin/accounts/$deletedBoss/restore").with(token(staff))))
+        assertTrue(accounts.findById(boss)!!.status == AccountStatus.ACTIVE)
+        assertTrue(accounts.findById(suspendedBoss)!!.status == AccountStatus.SUSPENDED)
+
+        val user = store("USER")
+        mvc.perform(post("/api/v1/admin/accounts/$user/suspend").with(token(staff))).andExpect(status().isNoContent)
+        mvc.perform(post("/api/v1/admin/accounts/$user/unsuspend").with(token(staff))).andExpect(status().isNoContent)
+        // 전권은 전권을 다룬다
+        mvc.perform(post("/api/v1/admin/accounts/$boss/suspend").with(token(store("ADMIN")))).andExpect(status().isNoContent)
+    }
+
+    @Test
+    fun `a target holding a role beyond the caller but not the wildcard is refused too`() {
+        val staff = store("STAFF")
+        val roler = store("USER", "ROLER")   // account.roles — STAFF 에 없다
+        mvc.perform(post("/api/v1/admin/accounts/$roler/suspend").with(token(staff))).andExpect(status().isForbidden).andExpect(jsonPath("$.code").value("ACCOUNT.ROLE_ESCALATION"))
+    }
 }

@@ -120,6 +120,19 @@ class AdminService(
         },
     )
 
+    /**
+     * 상태 명령(정지 · 해제 · 복구 · 지우기)의 대상 검사 — 대상 계정이 가진 역할들의 권한 합집합이 호출자 권한의 부분집합이 아니거나,
+     * 대상이 전권 역할이면 호출자에게 `*` 가 없을 때 403 `ACCOUNT.ROLE_ESCALATION` (부여 · 회수와 같은 규칙: 높은 권한은 그 이상이 다룬다).
+     * 없는 계정은 여기서 거르지 않는다 — 명령 자신이 404 로 답한다.
+     */
+    fun requireCanManage(targetId: String, actorPermissions: Set<String>) {
+        if (ALL_PERMISSIONS in actorPermissions) return
+        val target = core.accounts.findById(targetId) ?: return
+        val source = roles()
+        val needed = target.roles.flatMapTo(HashSet()) { source.permissionsOf(it) }
+        if (core.superRole in target.roles || !actorPermissions.containsAll(needed)) throw AccountException(AccountErrorCode.ROLE_ESCALATION)
+    }
+
     private fun requireWithin(role: String, actorPermissions: Set<String>) {
         if (ALL_PERMISSIONS !in actorPermissions && !actorPermissions.containsAll(roles().permissionsOf(role))) {
             throw AccountException(AccountErrorCode.ROLE_ESCALATION)
