@@ -54,7 +54,7 @@ class AccountRoleGrantRulesTest {
         o.repo.grantRole(owner.id, "OWNER", o.time.now())
         val other = o.activeAccount("other@example.com")
         assertEquals("ACCOUNT.LAST_ADMIN", code { o.admin.revokeRole(other.id, owner.id, "OWNER", setOf("*")) })
-        assertEquals("ACCOUNT.LAST_ADMIN", code { o.admin.suspend(other.id, owner.id, null) })
+        assertEquals("ACCOUNT.LAST_ADMIN", code { o.admin.suspend(other.id, owner.id, null, setOf("*")) })
         assertEquals("ACCOUNT.LAST_ADMIN", code { o.deletion.delete(owner.id, dev.sumin.skeleton.account.ReauthInput("tangerine-42-moon"), null) })
         assertEquals(AccountStatus.ACTIVE, o.repo.findById(owner.id)!!.status)
         // ADMIN 은 더 이상 특별하지 않다
@@ -75,5 +75,21 @@ class AccountRoleGrantRulesTest {
         val boss = o.activeAccount("boss@example.com")
         assertTrue("OWNER" in o.repo.findById(boss.id)!!.roles)
         assertTrue("ADMIN" !in o.repo.findById(boss.id)!!.roles)
+    }
+
+    @Test
+    fun `the service itself refuses state commands on a target above the caller - not only the controller`() {
+        val boss = h.activeAccount("boss@example.com").also { h.repo.grantRole(it.id, "ADMIN", h.time.now()) }
+        val other = h.activeAccount("other@example.com").also { h.repo.grantRole(it.id, "ADMIN", h.time.now()) }
+        val cs = setOf("account.read", "account.manage")
+        assertEquals("ACCOUNT.ROLE_ESCALATION", code { h.admin.suspend("acc_cs", boss.id, null, cs) })
+        h.admin.suspend(other.id, boss.id, null, setOf("*"))   // 전권은 전권을 다룬다
+        assertEquals("ACCOUNT.ROLE_ESCALATION", code { h.admin.unsuspend("acc_cs", boss.id, cs) })
+        assertEquals("ACCOUNT.ROLE_ESCALATION", code { h.purge.eraseSuspended("acc_cs", boss.id, null, cs) })
+        assertEquals("ACCOUNT.ROLE_ESCALATION", code { h.admin.restore("acc_cs", boss.id, cs) })
+        assertEquals(AccountStatus.SUSPENDED, h.repo.findById(boss.id)!!.status)
+        // 일반 계정은 그대로 다룬다
+        val plain = h.activeAccount("plain@example.com")
+        h.admin.suspend("acc_cs", plain.id, null, cs)
     }
 }

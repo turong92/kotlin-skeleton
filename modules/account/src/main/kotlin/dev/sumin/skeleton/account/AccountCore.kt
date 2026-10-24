@@ -57,7 +57,24 @@ class AccountCore(
     val sessionInspector: () -> dev.sumin.skeleton.auth.session.SessionInspector? = { null },
     /** 전권 역할 이름(`skeleton.authz.super-role`) — 첫 관리자 부트스트랩이 주고, 「마지막 하나」 판정과 닉네임 예약어 면제가 보는 역할 */
     val superRole: String = "ADMIN",
+    /** 역할 → 권한 매핑 (`RolePermissionSource`) — 기본은 전권 역할 하나뿐, 앱에서는 platform 의 매핑이 들어온다 */
+    val roles: () -> dev.sumin.skeleton.common.authz.RolePermissionSource = {
+        dev.sumin.skeleton.common.authz.YmlRolePermissionSource(mapOf(superRole to setOf(dev.sumin.skeleton.common.authz.ALL_PERMISSIONS)))
+    },
 ) {
+    /**
+     * 운영자의 상태 명령(정지 · 해제 · 복구 · 지우기)이 대상 계정에 닿기 전에 거는 검사 — 대상이 가진 역할들의 권한 합집합이 호출자 권한([actorPermissions])의 부분집합이 아니거나,
+     * 대상이 전권 역할인데 호출자에게 `*` 가 없으면 403 `ACCOUNT.ROLE_ESCALATION` (부여 · 회수와 같은 규칙: 높은 권한은 그 이상이 다룬다).
+     * 없는 계정은 여기서 거르지 않는다 — 명령 자신이 404 로 답한다. 시스템이 부르는 정리 작업(기한이 지난 삭제의 지우기 등)은 운영자 호출이 아니므로 이 검사를 거치지 않는다.
+     */
+    fun requireCanManage(targetId: String, actorPermissions: Set<String>) {
+        if (dev.sumin.skeleton.common.authz.ALL_PERMISSIONS in actorPermissions) return
+        val target = accounts.findById(targetId) ?: return
+        val source = roles()
+        val needed = target.roles.flatMapTo(HashSet()) { source.permissionsOf(it) }
+        if (superRole in target.roles || !actorPermissions.containsAll(needed)) throw AccountException(AccountErrorCode.ROLE_ESCALATION)
+    }
+
     /**
      * 메일함 증명 — [AccountRepository.proveMailbox] 에 **주인의 복구 동작 하나가 더 붙는다**: 연락 이메일을 비운다. 연락 이메일은 서비스 알림이 가는 곳인데 로그인 수단이 아니라서
      * 탈취된 세션이 공격자 주소를 심어 둘 수 있다(재인증 없음) — 주인이 메일함을 증명해 계정을 되찾았다면 그 주소도 함께 버린다 (docs/accounts.md "연락 이메일").

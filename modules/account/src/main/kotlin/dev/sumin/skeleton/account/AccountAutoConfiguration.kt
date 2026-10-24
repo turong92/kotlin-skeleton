@@ -293,12 +293,14 @@ class AccountAutoConfiguration {
         displayNameRules: DisplayNameRules,
         sessionInspector: ObjectProvider<dev.sumin.skeleton.auth.session.SessionInspector>,
         authz: ObjectProvider<AuthzProperties>,
+        rolePermissions: ObjectProvider<RolePermissionSource>,
     ): AccountCore = AccountCore(
         accounts, properties, time.getIfAvailable { TimeProvider.systemUtc() }, events, hasher, policy, tokens, mailer, links, tasks, limits, captcha,
         { sessions.getIfAvailable() }, bootstrap, challenges, { socialReauth.getIfAvailable() },
         { consents.getIfAvailable() }, atomic.getIfAvailable { AccountTransaction.NONE }, blocks, lease, { magicLinks.getIfAvailable() },
         names = DisplayNames(properties.displayName, rules = displayNameRules), sessionInspector = { sessionInspector.getIfAvailable() },
         superRole = authz.getIfAvailable { AuthzProperties() }.superRole,
+        roles = { rolePermissions.getObject() },
     )
 
     /** 닉네임 규칙 — 앱이 같은 타입의 빈을 두면 그것이 쓰인다 (가입 · 프로필 수정 · 제공자 이름 · 시드 · 비교용 키 모두) */
@@ -349,7 +351,7 @@ class AccountAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    fun adminService(core: AccountCore, source: ObjectProvider<RolePermissionSource>): AdminService = AdminService(core) { source.getObject() }
+    fun adminService(core: AccountCore): AdminService = AdminService(core)
 
     @Bean
     @ConditionalOnMissingBean

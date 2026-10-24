@@ -111,7 +111,7 @@ class SelfRestoreTest {
 
         // an operator's restore and the end of a suspension reopen the same way
         h.deletion.delete(a.id, PW, null)
-        h.admin.restore("acc_admin", a.id)
+        h.admin.restore("acc_admin", a.id, setOf("*"))
         assertEquals(AccountStatus.ACTIVE, h.repo.findById(a.id)!!.status)
     }
 
@@ -120,7 +120,7 @@ class SelfRestoreTest {
         val h = harness()
         val unproven = Account("acc_u", "unproven@example.com", false, AccountStatus.DELETED, setOf("USER"), null, null, null, h.time.now(), h.time.now(), deletedAt = h.time.now(), purgeAfter = h.time.now().plus(Duration.ofDays(30)))
         h.repo.insert(unproven, listOf(Identity("idn_u", "acc_u", "password", "unproven@example.com", false, secret = "x", createdAt = h.time.now())))
-        h.admin.restore("acc_admin", "acc_u")
+        h.admin.restore("acc_admin", "acc_u", setOf("*"))
         assertEquals(AccountStatus.PENDING_VERIFICATION, h.repo.findById("acc_u")!!.status)
     }
 
@@ -163,7 +163,7 @@ class SelfRestoreTest {
         val admin = h.activeAccount("admin@example.com").also { h.repo.grantRole(it.id, "ADMIN", h.time.now()) }
         val a = h.pending()
         val token = h.stateOf()!!.blockData!!().token()
-        h.admin.suspend(admin.id, a.id, "abuse")
+        h.admin.suspend(admin.id, a.id, "abuse", setOf("*"))
         assertEquals(LoginBlock.SUSPENDED, h.stateOf()!!.loginBlock)
         assertEquals("ACCOUNT.TOKEN_INVALID", code { h.deletion.cancel(token, null) })
         assertEquals(AccountStatus.SUSPENDED, h.repo.findById(a.id)!!.status)

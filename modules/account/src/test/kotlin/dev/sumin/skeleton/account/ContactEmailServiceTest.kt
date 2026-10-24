@@ -86,8 +86,8 @@ class ContactEmailServiceTest {
     fun `an address the operator erased can be a contact address - it is not a registration`() {
         val admin = h.activeAccount("admin@example.com").also { h.repo.grantRole(it.id, "ADMIN", h.time.now()) }
         val gone = h.activeAccount("gone@example.com")
-        h.admin.suspend(admin.id, gone.id, "fraud")
-        assertTrue(h.purge.eraseSuspended(admin.id, gone.id, "fraud"))
+        h.admin.suspend(admin.id, gone.id, "fraud", setOf("*"))
+        assertTrue(h.purge.eraseSuspended(admin.id, gone.id, "fraud", setOf("*")))
         val a = h.activeAccount()
         h.contact.request(a.id, "gone@example.com", ses)
         h.contact.confirm(a.id, ses, sentCode())

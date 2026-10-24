@@ -167,7 +167,7 @@ class AlreadyRegisteredMailTest {
         val h = harness(links = true, magic = MagicLinkIssuer { IssuedLink("https://x/magic?token=abcdefghijklmnopqrstuv", 15) })
         val admin = h.activeAccount("admin@example.com").also { h.repo.grantRole(it.id, "ADMIN", h.time.now()) }
         val a = h.activeAccount()
-        h.admin.suspend(admin.id, a.id, "abuse")
+        h.admin.suspend(admin.id, a.id, "abuse", setOf("*"))
         h.mailer.sent.clear()
         h.again()
         val mail = h.alreadyMail()

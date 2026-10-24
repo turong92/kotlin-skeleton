@@ -52,9 +52,9 @@ class ErasedRowStaysErasedTest {
         val h = harness()
         val admin = h.activeAccount("admin@example.com").also { h.repo.grantRole(it.id, "ADMIN", h.time.now()) }
         val a = h.activeAccount("ann@example.com")
-        h.admin.suspend(admin.id, a.id, "abuse")
+        h.admin.suspend(admin.id, a.id, "abuse", setOf("*"))
         val seen = h.admin.get(a.id)                                  // the unsuspend read this ...
-        assertTrue(h.purge.eraseSuspended(admin.id, a.id, null))      // ... then the erasure won ...
+        assertTrue(h.purge.eraseSuspended(admin.id, a.id, null, setOf("*")))      // ... then the erasure won ...
         h.repo.update(seen.id, AccountPatch(status = AccountStatus.ACTIVE, clearSuspendedReason = true), h.time.now())   // ... and its write arrives late
         assertEquals(AccountStatus.ERASED, h.repo.findById(a.id)!!.status)
     }

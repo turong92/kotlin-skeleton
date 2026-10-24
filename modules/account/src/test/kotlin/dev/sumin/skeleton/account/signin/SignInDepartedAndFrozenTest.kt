@@ -71,7 +71,7 @@ class SignInDepartedAndFrozenTest {
         val h = harness()
         val admin = h.activeAccount("admin@example.com").also { h.repo.grantRole(it.id, "ADMIN", h.time.now()) }
         val a = h.activeAccount()
-        h.admin.suspend(admin.id, a.id, "abuse")
+        h.admin.suspend(admin.id, a.id, "abuse", setOf("*"))
         val eventsBefore = h.events.all.size
         val auth = assertNotNull(h.service().signIn(magic()))
         assertEquals(LoginBlock.SUSPENDED, auth.loginBlock)
@@ -86,7 +86,7 @@ class SignInDepartedAndFrozenTest {
         val admin = h.activeAccount("admin@example.com").also { h.repo.grantRole(it.id, "ADMIN", h.time.now()) }
         val a = h.activeAccount()
         h.repo.addIdentity(dev.sumin.skeleton.account.Identity(h.core.newIdentityId(), a.id, "google", "g-ann", true, createdAt = h.time.now()))
-        h.admin.suspend(admin.id, a.id, "abuse")
+        h.admin.suspend(admin.id, a.id, "abuse", setOf("*"))
         h.time.advance(java.time.Duration.ofMinutes(5))
         val auth = assertNotNull(h.service().signIn(google("g-ann", null)))
         assertEquals(LoginBlock.SUSPENDED, auth.loginBlock)
@@ -100,7 +100,7 @@ class SignInDepartedAndFrozenTest {
         val h = harness(merge = true)
         val admin = h.activeAccount("admin@example.com").also { h.repo.grantRole(it.id, "ADMIN", h.time.now()) }
         val a = h.activeAccount()
-        h.admin.suspend(admin.id, a.id, "abuse")
+        h.admin.suspend(admin.id, a.id, "abuse", setOf("*"))
         val auth = assertNotNull(h.service().signIn(google("g-new", "ann@example.com")))
         assertEquals(LoginBlock.SUSPENDED, auth.loginBlock)
         assertNull(h.repo.findIdentity("google", "g-new"))

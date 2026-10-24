@@ -103,6 +103,7 @@ class AccountHarness(
         AccountRateLimits({ limitStore }, time),
         CaptchaGate(captcha, captchaRequired), { revoker }, bootstrap, challenges, { socialReauth }, { consents }, atomic,
         AccountBlocks.local(time, props.blocks.retention), magicLinks = { magicLinks }, names = DisplayNames(props.displayName, random), sessionInspector = { sessions }, superRole = superRole,
+        roles = { dev.sumin.skeleton.common.authz.YmlRolePermissionSource(mapOf(superRole to setOf("*")) + rolePermissions) },
     )
     val registration = RegistrationService(core)
     val availability = LoginIdAvailabilityService(core)
@@ -116,7 +117,7 @@ class AccountHarness(
     val erasers = java.util.concurrent.CopyOnWriteArrayList<dev.sumin.skeleton.common.erasure.AccountErasureListener>()
     val deletion = DeletionService(core)
     val purge = AccountPurgeService(core) { erasers.toList() }
-    val admin = AdminService(core) { dev.sumin.skeleton.common.authz.YmlRolePermissionSource(mapOf(superRole to setOf("*")) + rolePermissions) }
+    val admin = AdminService(core)
     val discard = DiscardService(core, purge)
     val profile = ProfileService(core, dev.sumin.skeleton.account.signin.SignInMethodRegistry(listOf(dev.sumin.skeleton.account.signin.PasswordSignInMethod())))
 

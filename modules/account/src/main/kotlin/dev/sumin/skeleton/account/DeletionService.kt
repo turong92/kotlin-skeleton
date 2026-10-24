@@ -167,7 +167,8 @@ class AccountPurgeService(
      * 실패한 고리 **앞에서 성공한 고리가 없으면** 선점을 되돌린다(아무것도 지워지지 않았다 — 정지 해제가 그대로 된다). 일부가 성공한 뒤 실패했으면 선점을 **유지**한다:
      * 이미 지워진 것이 있으니 정지를 풀 수 없고([AccountErrorCode.ERASURE_IN_PROGRESS], 409) 같은 지우기 호출을 다시 불러 끝낸다 — 선점은 정지 상태에서 다시 잡히고 고리는 처음부터 다시 돈다.
      */
-    fun eraseSuspended(actorId: String, accountId: String, reason: String?): Boolean {
+    fun eraseSuspended(actorId: String, accountId: String, reason: String?, actorPermissions: Set<String>): Boolean {
+        core.requireCanManage(accountId, actorPermissions)
         if (actorId == accountId) throw AccountException(AccountErrorCode.SELF_ACTION_FORBIDDEN)
         val account = core.accounts.findById(accountId) ?: throw AccountException(AccountErrorCode.NOT_FOUND)
         if (account.status == AccountStatus.ERASED) throw AccountException(AccountErrorCode.ERASED)

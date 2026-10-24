@@ -30,8 +30,8 @@ class BlockedAddressBypassTest {
         val admin = activeAccount("admin@example.com").also { repo.grantRole(it.id, "ADMIN", time.now()) }
         val ann = activeAccount("ann@example.com")
         repo.addIdentity(Identity(core.newIdentityId(), ann.id, "google", "g-ann", true, createdAt = time.now()))
-        this.admin.suspend(admin.id, ann.id, "fraud")
-        assertTrue(purge.eraseSuspended(admin.id, ann.id, "fraud"))
+        this.admin.suspend(admin.id, ann.id, "fraud", setOf("*"))
+        assertTrue(purge.eraseSuspended(admin.id, ann.id, "fraud", setOf("*")))
     }
 
     @Test

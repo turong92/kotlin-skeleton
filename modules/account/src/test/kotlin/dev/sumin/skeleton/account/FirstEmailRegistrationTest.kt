@@ -173,8 +173,8 @@ class FirstEmailRegistrationTest {
         val a = h.emailless()
         val admin = h.activeAccount("admin@example.com").also { h.repo.grantRole(it.id, "ADMIN", h.time.now()) }
         val gone = h.activeAccount("gone@example.com")
-        h.admin.suspend(admin.id, gone.id, "fraud")
-        assertTrue(h.purge.eraseSuspended(admin.id, gone.id, "fraud"))
+        h.admin.suspend(admin.id, gone.id, "fraud", setOf("*"))
+        assertTrue(h.purge.eraseSuspended(admin.id, gone.id, "fraud", setOf("*")))
         h.emailChange.request(a.id, "gone@example.com", ReauthInput(), ses)
         assertEquals("ACCOUNT.REGISTRATION_BLOCKED", code { h.emailChange.confirm(a.id, ses, h.sentCode()) })
         assertNull(h.repo.findById(a.id)!!.email)

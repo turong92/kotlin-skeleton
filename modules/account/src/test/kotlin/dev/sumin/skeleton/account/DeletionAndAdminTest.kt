@@ -66,7 +66,7 @@ class DeletionAndAdminTest {
         val fresh = h.mailer.of(MailKind.DELETE_CODE).last().vars.getValue("code")
         h.deletion.delete("acc_s", ReauthInput(confirmationCode = fresh), "ses_1")
         assertEquals(AccountStatus.DELETED, h.repo.findById("acc_s")!!.status)
-        h.admin.restore("acc_admin", "acc_s")
+        h.admin.restore("acc_admin", "acc_s", setOf("*"))
         assertEquals("ACCOUNT.CODE_EXPIRED", code { h.deletion.delete("acc_s", ReauthInput(confirmationCode = fresh), "ses_1") }, "the code is single use")
     }
 
@@ -92,7 +92,7 @@ class DeletionAndAdminTest {
     fun `an admin restores a deleted account within the grace, not after the purge`() {
         val a = h.activeAccount()
         h.deletion.delete(a.id, ReauthInput("tangerine-42-moon"), null)
-        h.admin.restore("acc_admin", a.id)
+        h.admin.restore("acc_admin", a.id, setOf("*"))
         val back = h.repo.findById(a.id)!!
         assertEquals(AccountStatus.ACTIVE, back.status)
         assertNull(back.purgeAfter)
@@ -101,7 +101,7 @@ class DeletionAndAdminTest {
         h.deletion.delete(a.id, ReauthInput("tangerine-42-moon"), null)
         h.time.advance(Duration.ofDays(31))
         h.purge.purgeDue()
-        assertEquals("ACCOUNT.ERASED", code { h.admin.restore("acc_admin", a.id) })
+        assertEquals("ACCOUNT.ERASED", code { h.admin.restore("acc_admin", a.id, setOf("*")) })
     }
 
     // ---- purge + erasure
@@ -165,13 +165,13 @@ class DeletionAndAdminTest {
     fun `suspending closes sessions, unsuspending reopens, both are recorded`() {
         val admin = admin()
         val user = h.activeAccount("ann@example.com")
-        h.admin.suspend(admin.id, user.id, "spam")
+        h.admin.suspend(admin.id, user.id, "spam", setOf("*"))
         assertEquals(AccountStatus.SUSPENDED, h.repo.findById(user.id)!!.status)
         assertEquals("spam", h.repo.findById(user.id)!!.suspendedReason)
         assertTrue(h.revoker.calls.contains(user.id to null))
         assertTrue(AccountEventType.ACCOUNT_SUSPENDED in h.events.types())
 
-        h.admin.unsuspend(admin.id, user.id)
+        h.admin.unsuspend(admin.id, user.id, setOf("*"))
         assertEquals(AccountStatus.ACTIVE, h.repo.findById(user.id)!!.status)
         assertNull(h.repo.findById(user.id)!!.suspendedReason)
         assertTrue(AccountEventType.ACCOUNT_UNSUSPENDED in h.events.types())
@@ -180,14 +180,14 @@ class DeletionAndAdminTest {
     @Test
     fun `an admin cannot suspend themself and the last admin cannot be suspended`() {
         val admin = admin()
-        assertEquals("ACCOUNT.SELF_ACTION_FORBIDDEN", code { h.admin.suspend(admin.id, admin.id, null) })
+        assertEquals("ACCOUNT.SELF_ACTION_FORBIDDEN", code { h.admin.suspend(admin.id, admin.id, null, setOf("*")) })
         val other = h.activeAccount("other@example.com")
         h.admin.grantRole(admin.id, other.id, "ADMIN", setOf("*"))
-        h.admin.suspend(admin.id, other.id, null)
+        h.admin.suspend(admin.id, other.id, null, setOf("*"))
         val third = h.activeAccount("third@example.com")
         h.admin.grantRole(admin.id, third.id, "ADMIN", setOf("*"))
-        h.admin.suspend(third.id, admin.id, null)
-        assertEquals("ACCOUNT.LAST_ADMIN", code { h.admin.suspend("someone-else", third.id, null) })
+        h.admin.suspend(third.id, admin.id, null, setOf("*"))
+        assertEquals("ACCOUNT.LAST_ADMIN", code { h.admin.suspend("someone-else", third.id, null, setOf("*")) })
     }
 
     @Test
@@ -222,7 +222,7 @@ class DeletionAndAdminTest {
             val go = java.util.concurrent.CountDownLatch(1)
             val suspend = round % 2 == 0
             val jobs = listOf(a.id to b.id, b.id to a.id).map { (actor, target) ->
-                pool.submit { go.await(); runCatching { if (suspend) x.admin.suspend(actor, target, null) else x.admin.revokeRole(actor, target, "ADMIN", setOf("*")) } }
+                pool.submit { go.await(); runCatching { if (suspend) x.admin.suspend(actor, target, null, setOf("*")) else x.admin.revokeRole(actor, target, "ADMIN", setOf("*")) } }
             }
             go.countDown(); jobs.forEach { it.get() }; pool.shutdown()
             assertEquals(1L, x.repo.countActiveWithRole("ADMIN"), "round $round: the last-administrator check was a read followed by a write")
@@ -234,7 +234,7 @@ class DeletionAndAdminTest {
         val a = h.activeAccount()
         h.deletion.delete(a.id, ReauthInput("tangerine-42-moon"), null)
         h.time.advance(Duration.ofDays(31))
-        assertEquals("ACCOUNT.NOT_FOUND", code { h.admin.restore("acc_admin", a.id) })
+        assertEquals("ACCOUNT.NOT_FOUND", code { h.admin.restore("acc_admin", a.id, setOf("*")) })
         assertEquals(AccountStatus.DELETED, h.repo.findById(a.id)!!.status)
     }
 
@@ -251,7 +251,7 @@ class DeletionAndAdminTest {
     @Test
     fun `unknown targets are not found`() {
         val admin = admin()
-        assertEquals("ACCOUNT.NOT_FOUND", code { h.admin.suspend(admin.id, "acc_nope", null) })
+        assertEquals("ACCOUNT.NOT_FOUND", code { h.admin.suspend(admin.id, "acc_nope", null, setOf("*")) })
         assertEquals("ACCOUNT.NOT_FOUND", code { h.admin.get("acc_nope") })
     }
 

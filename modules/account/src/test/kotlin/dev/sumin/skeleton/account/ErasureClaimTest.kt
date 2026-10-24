@@ -80,13 +80,13 @@ class ErasureClaimTest {
         val h = harness()
         val admin = h.activeAccount("admin@example.com").also { h.repo.grantRole(it.id, "ADMIN", h.time.now()) }
         val a = h.activeAccount("ann@example.com")
-        h.admin.suspend(admin.id, a.id, "fraud")
+        h.admin.suspend(admin.id, a.id, "fraud", setOf("*"))
         var updated: Account? = a
         h.erasers += object : AccountErasureListener {
             override val name = "probe"
             override fun erase(request: ErasureRequest) { updated = h.repo.update(a.id, AccountPatch(status = AccountStatus.ACTIVE, clearSuspendedReason = true), h.time.now()) }
         }
-        assertTrue(h.purge.eraseSuspended(admin.id, a.id, "fraud"))
+        assertTrue(h.purge.eraseSuspended(admin.id, a.id, "fraud", setOf("*")))
         assertNull(updated, "the claim refuses a status change")
         assertEquals(AccountStatus.ERASED, h.repo.findById(a.id)!!.status)
     }
@@ -96,22 +96,22 @@ class ErasureClaimTest {
         val h = harness()
         val admin = h.activeAccount("admin@example.com").also { h.repo.grantRole(it.id, "ADMIN", h.time.now()) }
         val a = h.activeAccount("ann@example.com")
-        h.admin.suspend(admin.id, a.id, "fraud")
+        h.admin.suspend(admin.id, a.id, "fraud", setOf("*"))
         var broken = true
         h.erasers += object : AccountErasureListener { override val name = "flaky"; override fun erase(request: ErasureRequest) { if (broken) error("db down") } }
-        val e = assertFailsWith<ApplicationException> { h.purge.eraseSuspended(admin.id, a.id, "fraud") }
+        val e = assertFailsWith<ApplicationException> { h.purge.eraseSuspended(admin.id, a.id, "fraud", setOf("*")) }
         assertEquals("ACCOUNT.ERASURE_RETRY", e.errorCode.code, "a retryable 503, not an internal error")
         assertEquals(AccountStatus.SUSPENDED, h.repo.findById(a.id)!!.status)
         assertEquals(0, h.admin.listBlocks(0, 10).total, "no block is recorded for an erase that did not happen")
         broken = false
-        assertTrue(h.purge.eraseSuspended(admin.id, a.id, "fraud"))
+        assertTrue(h.purge.eraseSuspended(admin.id, a.id, "fraud", setOf("*")))
         assertEquals(AccountStatus.ERASED, h.repo.findById(a.id)!!.status)
     }
 
     private fun AccountHarness.suspendedVictim(): Pair<Account, Account> {
         val admin = activeAccount("admin@example.com").also { repo.grantRole(it.id, "ADMIN", time.now()) }
         val a = activeAccount("ann@example.com")
-        this.admin.suspend(admin.id, a.id, "fraud")
+        this.admin.suspend(admin.id, a.id, "fraud", setOf("*"))
         return admin to a
     }
 
@@ -120,9 +120,9 @@ class ErasureClaimTest {
         val h = harness()
         val (admin, a) = h.suspendedVictim()
         h.erasers += object : AccountErasureListener { override val name = "down"; override fun erase(request: ErasureRequest) = error("db down") }
-        assertFailsWith<ApplicationException> { h.purge.eraseSuspended(admin.id, a.id, "fraud") }
+        assertFailsWith<ApplicationException> { h.purge.eraseSuspended(admin.id, a.id, "fraud", setOf("*")) }
         h.events.all.clear()
-        h.admin.unsuspend(admin.id, a.id)
+        h.admin.unsuspend(admin.id, a.id, setOf("*"))
         assertEquals(AccountStatus.ACTIVE, h.repo.findById(a.id)!!.status, "no listener had run, so nothing was lost and the account is not stuck")
         assertTrue(AccountEventType.ACCOUNT_UNSUSPENDED in h.events.types())
     }
@@ -135,14 +135,14 @@ class ErasureClaimTest {
         var broken = true
         h.erasers += object : AccountErasureListener { override val name = "first"; override fun erase(request: ErasureRequest) { ranFirst++ } }
         h.erasers += object : AccountErasureListener { override val name = "flaky"; override fun erase(request: ErasureRequest) { if (broken) error("db down") } }
-        assertFailsWith<ApplicationException> { h.purge.eraseSuspended(admin.id, a.id, "fraud") }
+        assertFailsWith<ApplicationException> { h.purge.eraseSuspended(admin.id, a.id, "fraud", setOf("*")) }
         h.events.all.clear()
-        val refused = assertFailsWith<ApplicationException> { h.admin.unsuspend(admin.id, a.id) }
+        val refused = assertFailsWith<ApplicationException> { h.admin.unsuspend(admin.id, a.id, setOf("*")) }
         assertEquals("ACCOUNT.ERASURE_IN_PROGRESS", refused.errorCode.code)
         assertTrue(AccountEventType.ACCOUNT_UNSUSPENDED !in h.events.types(), "a refused unsuspend announces nothing")
         assertEquals(AccountStatus.SUSPENDED, h.repo.findById(a.id)!!.status)
         broken = false
-        assertTrue(h.purge.eraseSuspended(admin.id, a.id, "fraud"), "the same call resumes: listeners are idempotent and run again")
+        assertTrue(h.purge.eraseSuspended(admin.id, a.id, "fraud", setOf("*")), "the same call resumes: listeners are idempotent and run again")
         assertEquals(2, ranFirst)
         assertEquals(AccountStatus.ERASED, h.repo.findById(a.id)!!.status)
     }
@@ -153,7 +153,7 @@ class ErasureClaimTest {
         val admin = h.activeAccount("admin@example.com").also { h.repo.grantRole(it.id, "ADMIN", h.time.now()) }
         val a = h.leave()
         h.repo.claimErasure(a.id, h.time.now())
-        val refused = assertFailsWith<ApplicationException> { h.admin.suspend(admin.id, a.id, "x") }
+        val refused = assertFailsWith<ApplicationException> { h.admin.suspend(admin.id, a.id, "x", setOf("*")) }
         assertEquals("ACCOUNT.ERASURE_IN_PROGRESS", refused.errorCode.code)
     }
 }

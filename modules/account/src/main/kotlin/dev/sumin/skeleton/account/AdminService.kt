@@ -4,17 +4,12 @@ import dev.sumin.skeleton.account.events.AccountEventType
 import dev.sumin.skeleton.common.ApplicationException
 import dev.sumin.skeleton.common.PlatformErrorCode
 import dev.sumin.skeleton.common.authz.ALL_PERMISSIONS
-import dev.sumin.skeleton.common.authz.RolePermissionSource
-import dev.sumin.skeleton.common.authz.YmlRolePermissionSource
 
 /**
  * 운영자 연산 — 호출자가 권한을 가졌는지는 HTTP 층(`OperatorAccess`)이 본다. 여기서는 사고를 막는 규칙(자기 정지 · 마지막 전권 · 정의된 역할만 · 권한 상승 막기)만.
- * [roles] 는 역할 → 권한 매핑(기본은 전권 역할 하나뿐 — 앱에서는 platform 의 매핑이 들어온다).
  */
-class AdminService(
-    private val core: AccountCore,
-    private val roles: () -> RolePermissionSource = { YmlRolePermissionSource(mapOf(core.superRole to setOf(ALL_PERMISSIONS))) },
-) {
+class AdminService(private val core: AccountCore) {
+    private val roles get() = core.roles
     private val adminRole get() = core.superRole
 
     /** 응답에 `loginId` 키를 싣는가 — `skeleton.account.login-id.enabled` */
@@ -32,7 +27,8 @@ class AdminService(
     /** 지워진 계정에는 아무것도 못 한다 (읽기만) — 없는 계정(404)과 구별되는 410 으로 */
     private fun live(id: String): Account = get(id).also { if (it.status == AccountStatus.ERASED) throw AccountException(AccountErrorCode.ERASED) }
 
-    fun suspend(actorId: String, targetId: String, reason: String?) {
+    fun suspend(actorId: String, targetId: String, reason: String?, actorPermissions: Set<String>) {
+        core.requireCanManage(targetId, actorPermissions)
         if (actorId == targetId) throw AccountException(AccountErrorCode.SELF_ACTION_FORBIDDEN)
         val target = live(targetId)   // 탈퇴 유예 중인 계정도 정지할 수 있다 — 유예가 끝나도 지워지지 않고 박제된다
         if (target.status == AccountStatus.SUSPENDED) return
@@ -45,7 +41,8 @@ class AdminService(
         core.events.publish(AccountEventType.ACCOUNT_SUSPENDED, targetId, detail = mapOf("by" to actorId))
     }
 
-    fun unsuspend(actorId: String, targetId: String) {
+    fun unsuspend(actorId: String, targetId: String, actorPermissions: Set<String>) {
+        core.requireCanManage(targetId, actorPermissions)
         val target = get(targetId)
         if (target.status != AccountStatus.SUSPENDED) return
         val now = core.time.now()
@@ -62,7 +59,8 @@ class AdminService(
     }
 
     /** 삭제 유예 안의 계정을 되살린다. 이미 지워졌으면(행이 없다) NOT_FOUND */
-    fun restore(actorId: String, targetId: String) {
+    fun restore(actorId: String, targetId: String, actorPermissions: Set<String>) {
+        core.requireCanManage(targetId, actorPermissions)
         val target = live(targetId)
         if (target.status != AccountStatus.DELETED) throw AccountException(AccountErrorCode.NOT_FOUND)
         // 유예가 끝났으면 되살릴 수 없다 — 지우기와 되살리기 중 하나만 이긴다 (저장소가 한 문장으로 판정한다)
@@ -119,19 +117,6 @@ class AdminService(
             else -> AccountErrorCode.ERASURE_IN_PROGRESS
         },
     )
-
-    /**
-     * 상태 명령(정지 · 해제 · 복구 · 지우기)의 대상 검사 — 대상 계정이 가진 역할들의 권한 합집합이 호출자 권한의 부분집합이 아니거나,
-     * 대상이 전권 역할이면 호출자에게 `*` 가 없을 때 403 `ACCOUNT.ROLE_ESCALATION` (부여 · 회수와 같은 규칙: 높은 권한은 그 이상이 다룬다).
-     * 없는 계정은 여기서 거르지 않는다 — 명령 자신이 404 로 답한다.
-     */
-    fun requireCanManage(targetId: String, actorPermissions: Set<String>) {
-        if (ALL_PERMISSIONS in actorPermissions) return
-        val target = core.accounts.findById(targetId) ?: return
-        val source = roles()
-        val needed = target.roles.flatMapTo(HashSet()) { source.permissionsOf(it) }
-        if (core.superRole in target.roles || !actorPermissions.containsAll(needed)) throw AccountException(AccountErrorCode.ROLE_ESCALATION)
-    }
 
     private fun requireWithin(role: String, actorPermissions: Set<String>) {
         if (ALL_PERMISSIONS !in actorPermissions && !actorPermissions.containsAll(roles().permissionsOf(role))) {

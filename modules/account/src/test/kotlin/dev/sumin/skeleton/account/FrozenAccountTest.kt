@@ -37,7 +37,7 @@ class FrozenAccountTest {
         val admin = admin()
         val a = activeAccount("ann@example.com")
         repo.addIdentity(Identity(core.newIdentityId(), a.id, "google", "g-ann", true, createdAt = time.now()))
-        this.admin.suspend(admin.id, a.id, "abuse")
+        this.admin.suspend(admin.id, a.id, "abuse", setOf("*"))
         return a
     }
 
@@ -56,14 +56,14 @@ class FrozenAccountTest {
         val admin = h.admin()
         val a = h.activeAccount("ann@example.com")
         h.deletion.delete(a.id, PW, null)
-        h.admin.suspend(admin.id, a.id, "abuse")
+        h.admin.suspend(admin.id, a.id, "abuse", setOf("*"))
         h.time.advance(Duration.ofDays(40))
         assertEquals(0, h.purge.purgeDue())
         val frozen = h.repo.findById(a.id)!!
         assertEquals(AccountStatus.SUSPENDED, frozen.status)
         assertEquals("ann@example.com", frozen.email)
 
-        h.admin.unsuspend(admin.id, a.id)
+        h.admin.unsuspend(admin.id, a.id, setOf("*"))
         val resumed = h.repo.findById(a.id)!!
         assertEquals(AccountStatus.DELETED, resumed.status, "the owner still wanted to leave")
         assertTrue(resumed.purgeAfter!!.isAfter(h.time.now()), "a fresh grace, so a wrongful suspension can still be undone by a restore")
@@ -99,7 +99,7 @@ class FrozenAccountTest {
         val h = harness()
         val admin = h.admin()
         val a = h.suspendedWithGoogle()
-        assertTrue(h.purge.eraseSuspended(admin.id, a.id, "fraud"))
+        assertTrue(h.purge.eraseSuspended(admin.id, a.id, "fraud", setOf("*")))
 
         assertEquals(AccountStatus.ERASED, h.repo.findById(a.id)!!.status)
         val blocks = h.admin.listBlocks(0, 20)
@@ -128,10 +128,10 @@ class FrozenAccountTest {
         val h = harness()
         val admin = h.admin()
         val active = h.activeAccount("bob@example.com")
-        assertEquals("ACCOUNT.NOT_SUSPENDED", code { h.purge.eraseSuspended(admin.id, active.id, null) })
-        assertEquals("ACCOUNT.NOT_FOUND", code { h.purge.eraseSuspended(admin.id, "acc_missing", null) })
-        h.admin.suspend(admin.id, active.id, null)
-        assertEquals("ACCOUNT.SELF_ACTION_FORBIDDEN", code { h.purge.eraseSuspended(active.id, active.id, null) })
+        assertEquals("ACCOUNT.NOT_SUSPENDED", code { h.purge.eraseSuspended(admin.id, active.id, null, setOf("*")) })
+        assertEquals("ACCOUNT.NOT_FOUND", code { h.purge.eraseSuspended(admin.id, "acc_missing", null, setOf("*")) })
+        h.admin.suspend(admin.id, active.id, null, setOf("*"))
+        assertEquals("ACCOUNT.SELF_ACTION_FORBIDDEN", code { h.purge.eraseSuspended(active.id, active.id, null, setOf("*")) })
     }
 
     @Test
@@ -150,7 +150,7 @@ class FrozenAccountTest {
         val h = harness(AccountProperties.Blocks(retention = Duration.ofDays(10)))
         val admin = h.admin()
         val a = h.suspendedWithGoogle()
-        h.purge.eraseSuspended(admin.id, a.id, null)
+        h.purge.eraseSuspended(admin.id, a.id, null, setOf("*"))
         assertEquals("ACCOUNT.REGISTRATION_BLOCKED", code { h.service().signIn(proof("g-ann")) })
         h.time.advance(Duration.ofDays(11))
         assertNotNull(h.service().signIn(proof("g-ann")))
@@ -163,8 +163,8 @@ class FrozenAccountTest {
         val h = harness()
         val admin = h.admin()
         val a = h.suspendedWithGoogle()
-        assertTrue(h.purge.eraseSuspended(admin.id, a.id, null))
-        assertEquals("ACCOUNT.ERASED", code { h.purge.eraseSuspended(admin.id, a.id, null) })
+        assertTrue(h.purge.eraseSuspended(admin.id, a.id, null, setOf("*")))
+        assertEquals("ACCOUNT.ERASED", code { h.purge.eraseSuspended(admin.id, a.id, null, setOf("*")) })
         assertEquals(2, h.admin.listBlocks(0, 20).total)
     }
 
@@ -192,7 +192,7 @@ class FrozenAccountTest {
         val admin = h.admin()
         val now = h.time.now()
         h.repo.insert(Account("acc_np", "np@example.com", true, AccountStatus.ACTIVE, setOf("USER"), null, null, null, now, now), listOf(Identity(h.core.newIdentityId(), "acc_np", "google", "g-np", true, createdAt = now)))
-        h.admin.suspend(admin.id, "acc_np", "abuse")
+        h.admin.suspend(admin.id, "acc_np", "abuse", setOf("*"))
         h.reauth.requestConfirmation("acc_np", "ses_1")
         val mailed = h.mailer.of(dev.sumin.skeleton.account.mail.MailKind.REAUTH_CODE).single().vars.getValue("code")
         assertEquals("ACCOUNT.NOT_ACTIVE", code { h.passwords.change("acc_np", null, "tangerine-42-moon", "ses_1", mailed) })
