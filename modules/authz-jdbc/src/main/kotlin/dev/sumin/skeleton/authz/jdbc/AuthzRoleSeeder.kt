@@ -22,6 +22,7 @@ class AuthzRoleSeeder(
 ) : SmartInitializingSingleton {
     override fun afterSingletonsInstantiated() {
         tx.executeWithoutResult {
+            checkProtectedRowIsSuperRole()
             if (jdbc.sql("select count(*) from authz_roles").query(Long::class.java).single() > 0) return@executeWithoutResult
             val at = dialect.instantParam(time.now())
             val roleSql = dialect.insertIgnore("authz_roles", listOf("name", "description", "protected", "created_at", "updated_at"), listOf("name"))
@@ -33,6 +34,17 @@ class AuthzRoleSeeder(
                 val permissions = if (isSuper) setOf(ALL_PERMISSIONS) else seed.permissionsOf(role)
                 permissions.forEach { jdbc.sql(permissionSql).param("role", role).param("permission", it).update() }
             }
+        }
+    }
+
+    /** 전권 역할 이름(`skeleton.authz.super-role`)을 첫 기동 뒤 바꾸면 표의 옛 protected 줄이 이름만 바뀐 채 전권으로 남는다 — 조용히 두지 않고 멈춘다 */
+    private fun checkProtectedRowIsSuperRole() {
+        val stale = jdbc.sql("select name from authz_roles where protected = true and name <> :super order by name").param("super", superRole)
+            .query { rs, _ -> rs.getString("name") }.list()
+        check(stale.isEmpty()) {
+            "authz_roles has protected role(s) ${stale.joinToString()} but skeleton.authz.super-role is '$superRole'. " +
+                "The super role is fixed after the first start: set skeleton.authz.super-role back, or move the role by hand " +
+                "(rename the row, then update authz_roles set protected = false where name = '<old>' once nothing relies on it)."
         }
     }
 }

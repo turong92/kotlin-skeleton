@@ -134,6 +134,20 @@ class JdbcAuthzDbTest {
         assertNull(store.find("NEWCOMER"))
     }
 
+    @Test
+    fun `a protected row whose name is not the super role stops the start with a hint`() {
+        jdbc.sql("insert into authz_roles (name, description, protected, created_at, updated_at) values ('OLD_ADMIN', null, true, :at, :at)")
+            .param("at", dialect.instantParam(time.now())).update()
+        try {
+            val failure = kotlin.test.assertFailsWith<IllegalStateException> {
+                AuthzRoleSeeder(jdbc, dialect, tx, time, YmlRolePermissionSource(mapOf("ADMIN" to setOf("*"))), "ADMIN").afterSingletonsInstantiated()
+            }
+            assertTrue("OLD_ADMIN" in failure.message.orEmpty() && "super-role" in failure.message.orEmpty(), failure.message)
+        } finally {
+            jdbc.sql("delete from authz_roles where name = 'OLD_ADMIN'").update()
+        }
+    }
+
     // ---- store contract ----
 
     @Test
