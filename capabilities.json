@@ -1914,6 +1914,7 @@
       },
       "config": {
         "prefixes": [
+          "skeleton.authz",
           "skeleton.config.validation",
           "skeleton.deploy",
           "skeleton.http",

@@ -882,7 +882,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 종류 · 상태: module · stable — 위치 `modules/platform`
 - 켜는 법: 스타터(apps/api)에 기본 포함
 - 의존 한 줄: `implementation(project(":modules:platform"))`
-- 설정 접두사 `skeleton.config.validation`, `skeleton.deploy`, `skeleton.http`, `skeleton.observability.links`, `skeleton.openapi`, `skeleton.redaction`, `skeleton.web` — 키와 기본값 `docs/config/modules/platform.yml`
+- 설정 접두사 `skeleton.authz`, `skeleton.config.validation`, `skeleton.deploy`, `skeleton.http`, `skeleton.observability.links`, `skeleton.openapi`, `skeleton.redaction`, `skeleton.web` — 키와 기본값 `docs/config/modules/platform.yml`
 - 문서: `docs/modules/platform.md`, `docs/errors.md`, `docs/logging.md`, `docs/openapi.md`, `docs/external-http.md`, `docs/client-ip.md`, `docs/configuration.md`, `docs/observability-links.md`, `docs/deploy.md`, `docs/multi-project.md`
 - 짝 프런트(react-skeleton): 항목 `api-client` · 패키지 `@skeleton/api-client` · 조각 기본 포함(덧붙일 것 없음)
 - 쓰지 않는 경우:
