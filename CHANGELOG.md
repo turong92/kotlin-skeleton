@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 운영자 권한 — 공용 판정 · 역할 → 권한 · 옛 역할 키 4개 삭제 (2026-10-24)
+
+- **Breaking — 옛 역할 키 네 개를 지웠다. 값이 하나라도 있으면 기동이 실패하고 메시지가 새 자리를 알려 준다.**
+
+  | 옛 키 | 새 자리 |
+  |---|---|
+  | `skeleton.account.admin.role` | `skeleton.authz.super-role` |
+  | `skeleton.payment.admin.role` | `skeleton.authz.roles.<역할>: [payment.read, payment.refund, payment.operate]` |
+  | `skeleton.legal.admin-role` | `skeleton.authz.roles.<역할>: [legal.read]` |
+  | `skeleton.board.moderator-role` | `skeleton.authz.roles.<역할>: [board.moderate, board.manage]` |
+
+- `platform`: 운영자 판정 계약(`common/authz`) — `OperatorAccess`(`permissionsOf` · `has` · `require`: 익명 401, 권한 없음 403 `PLATFORM.FORBIDDEN`), `OperatorRef`, `PermissionDeclaration`(모듈이 자기 권한 선언), `RolePermissionSource`(기본 yml `skeleton.authz.roles`), `RoleHolders`, `OperatorAuditLog`(기본 아무것도 하지 않음 — 공용 운영 기록 표는 만들지 않았다). 새 설정 `skeleton.authz.roles` · `super-role`(기본 `ADMIN`) · `cache-ttl`(기본 30s). 기본 판정 `TokenOperatorAccess` 는 토큰 역할을 매핑에 통과시킨다.
+- `auth`: `GET /api/v1/auth/me` 응답에 `permissions: string[]` 추가(늘 있다, 사전순, 전권이면 `["*"]`) — 기존 필드는 그대로. react-skeleton 의 `RequirePermission` · 메뉴 숨김이 이것을 읽는다.
+- 이번 일의 나머지(account · payment · board · legal 이 이 판정을 쓰고 권한으로 나뉘는 것, 새 `authz` · `authz-jdbc` 모듈과 역할 관리 API)는 뒤따르는 조각에서 이 블록에 더한다. **행동 변화(뒤따르는 조각)**: `ADMIN`(전권)이 게시판도 관리한다 — 지금은 `MODERATOR` 만 된다.
+
 ### 닫힌 환불의 결제사 증거 전이 · 카카오 구독 창 재사용 (2026-10-24)
 
 - `payment`: 우리가 `FAILED` 로 닫은 환불 줄에 같은 번호 · 같은 금액의 환불을 결제사가 이뤄졌다고 알려 오면(웹훅 승인 · 맞추기 · 늦은 응답) 줄이 `SUCCEEDED` 가 되어 주문에 한 번 반영된다(`FAILED→SUCCEEDED` 증거 전이, 이력 `LATE_RESULT_APPLIED`). **배포 뒤 첫 맞추기에서 번호 있는 `FAILED` 줄 중 결제사가 이뤄졌다고 하는 것이 자동으로 되살아나 주문의 환불 금액 · 상태가 바뀔 수 있다.**

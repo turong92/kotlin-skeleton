@@ -40,6 +40,13 @@ skeleton:
       include-headers: false
       include-body: false
     clients: {}                                # 이름 → { base-url, connect-timeout, response-timeout, default-headers, vendor-trace-headers }
+  authz:
+    # roles:                                   # 역할 → 권한 목록. 주면 기본 매핑을 통째로 이긴다 (전권 `*` 는 super-role 만, 키는 붙은 모듈이 선언한 것만)
+    #   CS: [payment.read, payment.refund]
+    #   MODERATOR: [board.moderate, board.manage]
+    # 비우면 기본 매핑: super-role → ["*"] + 붙은 모듈이 선언한 기본 역할 (board: MODERATOR → board.moderate, board.manage)
+    super-role: ADMIN                          # 전권(`*`)을 가진 단 하나의 역할
+    cache-ttl: 30s                             # 역할 → 권한 캐시 수명 (authz-jdbc 가 쓴다). 0 = 캐시 끔
   redaction:
     replacement: "[REDACTED]"                  # 마스킹 대체 문자열
     additional-sensitive-names: []             # 기본 민감 이름(password, secret, token …)에 더할 이름

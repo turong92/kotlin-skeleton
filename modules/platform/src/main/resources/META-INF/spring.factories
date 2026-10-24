@@ -1,2 +1,3 @@
 org.springframework.boot.diagnostics.FailureAnalyzer=\
-dev.sumin.skeleton.common.deploy.DeployGuardFailureAnalyzer
+dev.sumin.skeleton.common.deploy.DeployGuardFailureAnalyzer,\
+dev.sumin.skeleton.common.authz.LegacyRoleKeysFailureAnalyzer

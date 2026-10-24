@@ -246,6 +246,9 @@ Mail link: `<link-base-url>/magic-link?token=<token>` (15 min, single use).
 Req `{ "token" }` -> `200` AuthTokenResponse (creates the account on first use if `skeleton.auth-magic-link.sign-up=true`; marks the email verified).
 `410 ACCOUNT.TOKEN_INVALID` (also: an address without an account while sign-up is closed); `403 AUTH.ACCOUNT_SUSPENDED`. Redeeming on a still-unverified account (verification-off apps only) removes every sign-in method someone else planted and closes that account's sessions and open codes (password login then fails with `401 AUTH.INVALID_CREDENTIALS` until a password is reset or set).
 
+### GET /api/v1/auth/me  (signed in) -> `{ "value": { "accountId", "username", "email", "roles": ["USER"], "permissions": ["payment.read", "payment.refund"], "sessionId"? } }`
+`permissions` is **always present** (`[]` when none), sorted, and `["*"]` as it is for full authority — the result of `OperatorAccess` (`platform`, docs/modules/platform.md "운영자 권한"). The screen hides menus by it; the server still checks every call. Added only: the other fields and the `sessionId` rule are unchanged.
+
 ### GET /api/v1/auth/methods  (public, no auth; `Cache-Control: public, max-age=300`; the same answer for everyone)
 `200 { "value": { "loginId"?: { "minLength": 4, "maxLength": 20 } (FINAL-7 L1 — key only with login IDs on), "methods": ["password", "magic_link"], "signUp": { "password": true, "emailVerification": true, "social": true }, "social": [ { "provider": "google", "clientId": "…"|null, "redirectUri": "…"|null } ], "captchaRequired": false, "refreshDelivery": "body"|"cookie"|null } }`
 `methods` lists the non-social methods the backend registered (`password` first); `social` the enabled providers with the PUBLIC values needed to start the redirect (the client id is in the authorization URL anyway; no secret, no account data); `refreshDelivery` is null when `auth-session` is not installed. Use it instead of hand-synced env vars.

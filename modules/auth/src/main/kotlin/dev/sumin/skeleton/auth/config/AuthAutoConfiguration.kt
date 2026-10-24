@@ -9,6 +9,7 @@ import dev.sumin.skeleton.auth.jwt.JwtTokenService
 import dev.sumin.skeleton.auth.login.LoginHooks
 import dev.sumin.skeleton.auth.login.PasswordLoginService
 import dev.sumin.skeleton.auth.session.LoginSessionIssuer
+import dev.sumin.skeleton.common.authz.OperatorAccess
 import dev.sumin.skeleton.common.project.ProjectRegistry
 import dev.sumin.skeleton.common.web.ClientIps
 import dev.sumin.skeleton.auth.security.AuthErrorWriter
@@ -99,8 +100,12 @@ class AuthAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    fun authController(loginService: PasswordLoginService, clientIps: ObjectProvider<ClientIps>): AuthController =
-        AuthController(loginService, clientIps.getIfAvailable { ClientIps() })
+    fun authController(
+        loginService: PasswordLoginService,
+        clientIps: ObjectProvider<ClientIps>,
+        operatorAccess: ObjectProvider<OperatorAccess>,
+    ): AuthController =
+        AuthController(loginService, clientIps.getIfAvailable { ClientIps() }, operatorAccess.getIfAvailable())
 
     /** 같은 규칙을 DeployGuard 로 내놓는다 — 플랫폼의 기동 요약에 보이고, `skeleton.env` 로도 보호된다 */
     @Bean

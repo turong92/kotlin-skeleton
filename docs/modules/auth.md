@@ -6,6 +6,8 @@
 **계정 · 세션을 얹는 고리** (모두 선택 — `auth` 만 쓰면 그대로다): `LoginHooks`(비밀번호 로그인 앞뒤 — `account` 가 한도 · 이벤트를 건다), `LoginSessionIssuer`/`SessionRevoker`(`auth-session` 이 구현 — 어떤 로그인 방법이든 세션이 열린다),
 `AuthAccount.loginBlock`(이메일 미확인 · 정지는 비밀번호가 맞은 뒤에 403), `upgradePasswordHash`(로그인 때 해시를 새 방식으로), 계정이 없어도 해시 비교를 한 번 한다(응답 시간으로 존재가 드러나지 않게). 진짜 계정: [account](account.md) · [계정 수명주기](../accounts.md).
 
+`GET /api/v1/auth/me` 는 `permissions`(운영자 권한 키, 사전순, 전권이면 `["*"]`, 늘 있다)를 함께 준다 — 공용 검사기 `OperatorAccess` 의 결과이고 화면이 메뉴를 숨기는 데만 쓴다. [platform](platform.md) 「운영자 권한」.
+
 | 항목 | 내용 |
 |---|---|
 | 의존성 한 줄 | `implementation(project(":modules:auth"))` |

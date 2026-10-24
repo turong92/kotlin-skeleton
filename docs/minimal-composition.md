@@ -128,6 +128,7 @@ fails when this table and the prefixes found in module code differ.
 | `payment-paddle` | `skeleton.payment-paddle` |
 | `payment-stripe` | `skeleton.payment-stripe` |
 | `payment-toss` | `skeleton.payment-toss` |
+| `platform` | `skeleton.authz` |
 | `platform` | `skeleton.config.validation` |
 | `platform` | `skeleton.deploy` |
 | `platform` | `skeleton.http` |
