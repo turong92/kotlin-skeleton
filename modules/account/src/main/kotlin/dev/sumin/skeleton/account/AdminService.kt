@@ -89,15 +89,15 @@ class AdminService(
         validRole(role)
         val source = roles()
         if (role !in source.definedRoles() && role !in core.props.defaultRoles) throw AccountException(AccountErrorCode.ROLE_UNKNOWN)
-        if (ALL_PERMISSIONS !in actorPermissions && !actorPermissions.containsAll(source.permissionsOf(role))) {
-            throw AccountException(AccountErrorCode.ROLE_ESCALATION)
-        }
+        requireWithin(role, actorPermissions)
         if (live(targetId).status == AccountStatus.DELETED) throw AccountException(AccountErrorCode.NOT_FOUND)
         if (core.accounts.grantRole(targetId, role, core.time.now())) core.events.publish(AccountEventType.ROLE_GRANTED, targetId, detail = mapOf("role" to role, "by" to actorId))
     }
 
-    fun revokeRole(actorId: String, targetId: String, role: String) {
+    /** 회수도 부여와 같은 상승 검사 — 자기 권한 밖의 권한을 가진 역할은 회수도 403 `ACCOUNT.ROLE_ESCALATION` (높은 권한은 그 이상이 다룬다). 이미 정의에서 빠진 역할은 권한이 없으므로 누구나 회수할 수 있다 */
+    fun revokeRole(actorId: String, targetId: String, role: String, actorPermissions: Set<String>) {
         validRole(role)
+        requireWithin(role, actorPermissions)
         get(targetId)
         val revoked = if (role == adminRole) {
             when (core.accounts.revokeRoleUnlessLast(targetId, role, core.time.now())) {
@@ -119,6 +119,12 @@ class AdminService(
             else -> AccountErrorCode.ERASURE_IN_PROGRESS
         },
     )
+
+    private fun requireWithin(role: String, actorPermissions: Set<String>) {
+        if (ALL_PERMISSIONS !in actorPermissions && !actorPermissions.containsAll(roles().permissionsOf(role))) {
+            throw AccountException(AccountErrorCode.ROLE_ESCALATION)
+        }
+    }
 
     private fun validRole(role: String) {
         if (!ROLE.matches(role)) throw ApplicationException("Invalid role name", PlatformErrorCode.VALIDATION_FAILED)

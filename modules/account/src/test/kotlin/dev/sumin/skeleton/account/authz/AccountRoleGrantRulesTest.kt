@@ -53,13 +53,13 @@ class AccountRoleGrantRulesTest {
         val owner = o.activeAccount("owner@example.com")
         o.repo.grantRole(owner.id, "OWNER", o.time.now())
         val other = o.activeAccount("other@example.com")
-        assertEquals("ACCOUNT.LAST_ADMIN", code { o.admin.revokeRole(other.id, owner.id, "OWNER") })
+        assertEquals("ACCOUNT.LAST_ADMIN", code { o.admin.revokeRole(other.id, owner.id, "OWNER", setOf("*")) })
         assertEquals("ACCOUNT.LAST_ADMIN", code { o.admin.suspend(other.id, owner.id, null) })
         assertEquals("ACCOUNT.LAST_ADMIN", code { o.deletion.delete(owner.id, dev.sumin.skeleton.account.ReauthInput("tangerine-42-moon"), null) })
         assertEquals(AccountStatus.ACTIVE, o.repo.findById(owner.id)!!.status)
         // ADMIN 은 더 이상 특별하지 않다
         o.repo.grantRole(other.id, "ADMIN", o.time.now())
-        o.admin.revokeRole(owner.id, other.id, "ADMIN")
+        o.admin.revokeRole(owner.id, other.id, "ADMIN", setOf("*"))
     }
 
     @Test

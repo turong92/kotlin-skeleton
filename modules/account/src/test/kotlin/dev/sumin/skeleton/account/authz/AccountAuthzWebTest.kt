@@ -127,4 +127,17 @@ class AccountAuthzWebTest {
         mvc.perform(get("/api/v1/admin/accounts/assignable-roles").with(token(store("VIEWER")))).andExpect(status().isForbidden)
         mvc.perform(get("/api/v1/admin/accounts/assignable-roles")).andExpect(status().isUnauthorized)
     }
+
+    @Test
+    fun `revoking a role above the callers own permissions is 403 ROLE_ESCALATION - one inside passes`() {
+        val roler = store("ROLER")
+        val boss = store("USER", "ADMIN")
+        store("USER", "ADMIN")   // 마지막 전권이 아니게 — 막는 것은 마지막 전권 검사가 아니라 상승 검사여야 한다
+        val viewer = store("USER", "VIEWER", "ROLER")
+        mvc.perform(delete("/api/v1/admin/accounts/$boss/roles/ADMIN").with(token(roler))).andExpect(status().isForbidden).andExpect(jsonPath("$.code").value("ACCOUNT.ROLE_ESCALATION"))
+        mvc.perform(delete("/api/v1/admin/accounts/$viewer/roles/VIEWER").with(token(roler))).andExpect(status().isForbidden).andExpect(jsonPath("$.code").value("ACCOUNT.ROLE_ESCALATION"))
+        assertTrue("ADMIN" in accounts.findById(boss)!!.roles)
+        mvc.perform(delete("/api/v1/admin/accounts/$viewer/roles/ROLER").with(token(roler))).andExpect(status().isNoContent)
+        mvc.perform(delete("/api/v1/admin/accounts/$boss/roles/ADMIN").with(token(store("ADMIN")))).andExpect(status().isNoContent)
+    }
 }

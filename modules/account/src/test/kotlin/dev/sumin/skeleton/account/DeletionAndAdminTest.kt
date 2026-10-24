@@ -197,9 +197,9 @@ class DeletionAndAdminTest {
         h.admin.grantRole(admin.id, user.id, "MODERATOR", setOf("*"))
         assertTrue("MODERATOR" in h.repo.findById(user.id)!!.roles)
         assertTrue(AccountEventType.ROLE_GRANTED in h.events.types())
-        h.admin.revokeRole(admin.id, user.id, "MODERATOR")
+        h.admin.revokeRole(admin.id, user.id, "MODERATOR", setOf("*"))
         assertTrue("MODERATOR" !in h.repo.findById(user.id)!!.roles)
-        assertEquals("ACCOUNT.LAST_ADMIN", code { h.admin.revokeRole(user.id, admin.id, "ADMIN") })
+        assertEquals("ACCOUNT.LAST_ADMIN", code { h.admin.revokeRole(user.id, admin.id, "ADMIN", setOf("*")) })
         assertFailsWith<ApplicationException> { h.admin.grantRole(admin.id, user.id, "bad role!", setOf("*")) }
     }
 
@@ -222,7 +222,7 @@ class DeletionAndAdminTest {
             val go = java.util.concurrent.CountDownLatch(1)
             val suspend = round % 2 == 0
             val jobs = listOf(a.id to b.id, b.id to a.id).map { (actor, target) ->
-                pool.submit { go.await(); runCatching { if (suspend) x.admin.suspend(actor, target, null) else x.admin.revokeRole(actor, target, "ADMIN") } }
+                pool.submit { go.await(); runCatching { if (suspend) x.admin.suspend(actor, target, null) else x.admin.revokeRole(actor, target, "ADMIN", setOf("*")) } }
             }
             go.countDown(); jobs.forEach { it.get() }; pool.shutdown()
             assertEquals(1L, x.repo.countActiveWithRole("ADMIN"), "round $round: the last-administrator check was a read followed by a write")

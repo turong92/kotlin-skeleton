@@ -119,10 +119,11 @@ class AdminAccountController(private val callers: AccountCallers, private val ad
         return Response.noContent()
     }
 
-    @Operation(summary = "Revoke a role (409 ACCOUNT.LAST_ADMIN for the last administrator)")
+    @Operation(summary = "Revoke a role (409 ACCOUNT.LAST_ADMIN for the last administrator, 403 ACCOUNT.ROLE_ESCALATION for a role above the caller)")
     @DeleteMapping("/{id}/roles/{role}")
     fun revoke(authentication: Authentication?, @PathVariable id: String, @PathVariable role: String): ResponseEntity<Void> {
-        admin.revokeRole(callers.requirePermission(authentication, AccountPermissions.ROLES).accountId, id, role)
+        val caller = callers.requirePermission(authentication, AccountPermissions.ROLES)
+        admin.revokeRole(caller.accountId, id, role, callers.permissionsOf(caller))
         return Response.noContent()
     }
 
