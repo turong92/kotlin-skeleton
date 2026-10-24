@@ -6,6 +6,7 @@ import dev.sumin.skeleton.auth.jwt.JwtTokenService
 import dev.sumin.skeleton.auth.principal.CurrentPrincipal
 import dev.sumin.skeleton.auth.session.LoginSessionIssuer
 import dev.sumin.skeleton.auth.session.OpenedSession
+import dev.sumin.skeleton.common.authz.OperatorAccess
 
 /** 계정이 있지만 지금은 토큰을 낼 수 없다 (이메일 미확인 · 정지). 비밀번호가 맞은 뒤에만 던지므로 계정 존재를 새로 알려 주지 않는다 */
 class AccountBlockedException(block: LoginBlock, data: Map<String, Any?>? = null) : dev.sumin.skeleton.common.ApplicationException(
@@ -24,6 +25,7 @@ class AccountBlockedException(block: LoginBlock, data: Map<String, Any?>? = null
  */
 class AuthTokenResponseFactory(
     private val jwtTokenService: JwtTokenService,
+    private val operatorAccess: () -> OperatorAccess? = { null },
     private val sessions: () -> LoginSessionIssuer? = { null },
 ) {
     fun issue(account: AuthAccount): AuthTokenResponse {
@@ -39,7 +41,7 @@ class AuthTokenResponseFactory(
         return AuthTokenResponse(
             accessToken = token.accessToken,
             expiresAt = token.expiresAt,
-            principal = principal,
+            principal = principal.withPermissions(operatorAccess()),
             refreshToken = session?.refreshToken,
             refreshExpiresAt = session?.refreshExpiresAt,
             sessionId = session?.sessionId,

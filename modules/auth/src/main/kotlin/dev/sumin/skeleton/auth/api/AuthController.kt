@@ -7,7 +7,6 @@ import dev.sumin.skeleton.common.ApplicationException
 import dev.sumin.skeleton.common.DataResponse
 import dev.sumin.skeleton.common.Response
 import dev.sumin.skeleton.common.authz.OperatorAccess
-import dev.sumin.skeleton.common.authz.OperatorRef
 import dev.sumin.skeleton.common.web.ClientIps
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.validation.Valid
@@ -59,28 +58,6 @@ class InvalidCredentialsException : ApplicationException(
     errorCode = AuthErrorCode.INVALID_CREDENTIALS,
 )
 
-/** `GET /auth/me` 응답 — [CurrentPrincipal] 에 `permissions`(공용 검사기의 결과, 사전순, 전권이면 `["*"]`, 없으면 `[]`)를 더했다 */
-data class MeResponse(
-    val accountId: String,
-    val username: String?,
-    val email: String?,
-    val roles: Set<String>,
-    val permissions: List<String>,
-    @get:JsonInclude(JsonInclude.Include.NON_NULL)
-    val sessionId: String?,
-) {
-    companion object {
-        fun of(principal: CurrentPrincipal, access: OperatorAccess?): MeResponse = MeResponse(
-            accountId = principal.accountId,
-            username = principal.username,
-            email = principal.email,
-            roles = principal.roles,
-            permissions = access?.permissionsOf(OperatorRef(principal.accountId, principal.roles))?.sorted().orEmpty(),
-            sessionId = principal.sessionId,
-        )
-    }
-}
-
 @RestController
 @RequestMapping("/api/v1/auth")
 class AuthController(
@@ -96,6 +73,6 @@ class AuthController(
         clientIps.of(httpRequest).let { Response.ok(loginService.login(request, it.ip, it.limitKey)) }
 
     @GetMapping("/me")
-    fun me(authentication: Authentication): DataResponse<MeResponse> =
-        Response.ok(MeResponse.of(authentication.principal as CurrentPrincipal, operatorAccess))
+    fun me(authentication: Authentication): DataResponse<CurrentPrincipal> =
+        Response.ok((authentication.principal as CurrentPrincipal).withPermissions(operatorAccess))
 }

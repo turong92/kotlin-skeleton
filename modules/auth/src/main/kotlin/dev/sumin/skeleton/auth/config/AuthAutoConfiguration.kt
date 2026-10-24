@@ -85,8 +85,12 @@ class AuthAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    fun authTokenResponseFactory(jwtTokenService: JwtTokenService, sessions: ObjectProvider<LoginSessionIssuer>): AuthTokenResponseFactory =
-        AuthTokenResponseFactory(jwtTokenService) { sessions.getIfAvailable() }
+    fun authTokenResponseFactory(
+        jwtTokenService: JwtTokenService,
+        sessions: ObjectProvider<LoginSessionIssuer>,
+        operatorAccess: ObjectProvider<OperatorAccess>,
+    ): AuthTokenResponseFactory =
+        AuthTokenResponseFactory(jwtTokenService, { operatorAccess.getIfAvailable() }) { sessions.getIfAvailable() }
 
     @Bean
     @ConditionalOnMissingBean

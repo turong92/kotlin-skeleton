@@ -57,11 +57,12 @@
 
 - 접두사 겹침(`skeleton.authz` = platform, `skeleton.authz.admin` = authz)을 `CapabilitiesCatalogTest` · `ConfigPrefixDocumentationTest` 가 거부하면 K1 · K4 developer 는 이름을 임의로 바꾸지 말고 지휘에 알린다.
 
-### C3. `GET /api/v1/auth/me` (K1, 추가만)
+### C3. `GET /api/v1/auth/me` + 로그인·갱신 응답의 `principal` (K1, 추가만)
 
 ```json
 { "value": { "accountId": "acc_user", "username": "…", "email": "…", "roles": ["USER"], "permissions": ["payment.read", "payment.refund"] }, "meta": { … } }
 ```
+- 같은 모양(`permissions` 포함)을 로그인 · 소셜 · 매직링크 · 토큰 갱신 응답의 `value.principal` 도 돌려준다(액세스 토큰 자체에는 싣지 않는다).
 - `permissions` 는 **늘 있다**(없으면 `[]`), 전권이면 `["*"]` 그대로. 순서 정렬(사전순). 나머지 필드 · `sessionId` 규칙 불변.
 
 ### C4. 역할 관리 API (K4, `authz.admin.enabled=true` 일 때)
