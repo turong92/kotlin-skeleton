@@ -1,0 +1,6 @@
+# authz — 운영자 역할 관리 API. 저장소는 authz-jdbc 가 맡는다. 이 접두사는 스위치 하나다.
+# 역할 → 권한 매핑 자체(skeleton.authz.roles · super-role · cache-ttl)는 platform 의 설정이다.
+skeleton:
+  authz:
+    admin:
+      enabled: false   # true 면 /api/v1/admin/roles · /api/v1/admin/permissions 를 연다 (꺼짐 → 404). 켜려면 저장소(authz-jdbc)가 필요하다

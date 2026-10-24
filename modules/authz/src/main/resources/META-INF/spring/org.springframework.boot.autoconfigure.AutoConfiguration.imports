@@ -1,1 +1,2 @@
 dev.sumin.skeleton.authz.AuthzModuleAutoConfiguration
+dev.sumin.skeleton.authz.AuthzWebAutoConfiguration

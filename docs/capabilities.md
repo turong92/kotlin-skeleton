@@ -60,6 +60,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | 검색 노출 · 링크 미리보기 · 서버 렌더링 | (백엔드 모듈 없음) | (덧붙일 것 없음) | `--packages seo --ssr` — react `seo` `app-starter-ssr` | 백엔드는 할 일이 없다. SSR 앱은 배포 선언이 따로 필요하다 — deploy/app.yaml 의 web: 은 정적 파일 서빙뿐(docs/deploy.md §8). |
 | 다크 모드 · 디자인 토큰 · 화면 부품 · 대시보드/목록/폼 화면 틀 | (백엔드 모듈 없음) | (덧붙일 것 없음) | (기본 포함) — react `theme` `tokens` `ui` `screen-patterns` | 백엔드는 할 일이 없다 — react-skeleton 에 기본 포함. |
 | 이용약관 · 개인정보 처리방침 · 가입 동의 기록 · 새 판 재동의 · 마케팅 수신 동의(선택, 철회) | `legal` + `legal-jdbc` | (덧붙일 것 없음) | (기본 포함) — react `legal` | 스타터에 기본 포함(legal-jdbc) — 문서는 모듈의 TEMPLATE(ko/en)이라 stage · prod 에서는 기동이 거부된다: src/main/resources/legal/ 에 자기 문서와 manifest.json 을 두고(검토 끝난 판은 REVIEWED + sha256), skeleton.legal.facts.* 를 채운다. 시험 배포는 <P>_LEGAL_ACKNOWLEDGE_TEMPLATE=true. MySQL 은 log_bin_trust_function_creators=1. 동의 화면 · 가입 폼 체크박스는 프런트(docs/legal-http-contract.md). |
+| 운영자 역할을 화면에서 만들고 권한을 고른다 (예: CS 담당자는 결제 보기 + 환불만) | `authz` + `authz-jdbc` | `--modules authz,authz-jdbc` | (기본 포함) — react `account-admin` | 켜기 skeleton.authz.admin.enabled=true(기본 꺼짐 → 404). 없으면 역할 → 권한은 skeleton.authz.roles(yml)로 고정. 첫 기동에 yml 매핑이 표로 한 번 옮겨지고 그 뒤는 표가 진실이다. 계정에 역할을 주는 건 account 의 관리자 API. 역할 표 화면은 프런트 @skeleton/auth/admin. |
 
 ## 전체 목록
 
@@ -85,6 +86,8 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `auth-social-x` | X(Twitter) 로그인 제공자 — OAuth 2.0 Authorization Code + PKCE(필수), 기밀 클라이언트(Basic), GET /2/users/me. client-id 를 적으면 켜진다. | `--modules auth-social-x` | X 로그인, 엑스 로그인, 트위터 로그인, 글로벌 소셜 로그인, 소셜 로그인 / x login, twitter login, sign in with x, social login, global social login | `@skeleton/auth` |
 | `author-profile` | 작성자 프로필 — 한 계정이 닉네임(프로필)을 여러 개 만들어 글 · 댓글마다 골라 쓰고, 두 프로필이 같은 사람이라는 사실이 다른 사용자에게 드러나지 않게 한다(공개 작성자 id prf_…, 독립 꼬리표, 즉시 삭제, 옛 글을 첫 프로필로 넘겨받기). 도메인 · 서비스 · 디렉터리 · 신원 확인 · 탈퇴 고리 · 내 프로필 HTTP(/api/v1/author-profiles: config · 목록 · 만들기 · 이름 바꾸기 · 지우기)까지이고 저장소는 author-profile-jdbc 가 맡는다. | `--modules author-profile,author-profile-jdbc` | 작성자 프로필, 닉네임 여러 개, 부캐, 익명 프로필, 프로필 선택, 글마다 닉네임 / author profile, multiple nicknames, pseudonym, alias, persona, unlinkable identities | `@skeleton/author-profile` |
 | `author-profile-jdbc` | 작성자 프로필 저장소 — PostgreSQL · MySQL 로 author-profile 의 저장 포트를 구현한다(author_profiles 표 · (이름 키, 꼬리표)와 첫 프로필 유니크 · 첫 프로필 줄을 잠그는 원자적 상한). | `--modules author-profile-jdbc` | 작성자 프로필 저장소, 프로필 DB / author profile storage, author profile repository, profile database | `@skeleton/author-profile` |
+| `authz` | 운영자 역할 관리 — 역할 만들기 · 고치기 · 지우기(역할 → 권한 묶음)와 붙은 모듈이 선언한 권한 카탈로그 API(/api/v1/admin/roles · /api/v1/admin/permissions). 안전장치: 전권 역할 고정 · 자기에게 없는 권한은 못 줌(403) · 쓰는 계정이 있는 역할은 못 지움 · 자기 잠금 막기. 역할 변경은 OperatorAuditLog 계약으로만 알린다(기본 아무것도 안 함). 기본 꺼짐(skeleton.authz.admin.enabled). | `--modules authz,authz-jdbc` | 역할 관리, 권한 관리, 역할 만들기, 권한 묶음, 운영자 권한, CS 담당자 역할, 환불만 허용 / role management, permissions, role based access, admin roles, least privilege, custom role | `@skeleton/auth` |
+| `authz-jdbc` | 역할 → 권한 표 저장소 — PostgreSQL · MySQL 로 authz 의 저장 포트를 구현하고(authz_roles · authz_role_permissions, 전권 역할은 표를 못 바꾼다) 판정이 읽는 역할 → 권한 매핑을 yml 에서 이 표로 바꾼다(캐시: 같은 인스턴스는 즉시, 다른 인스턴스는 skeleton.authz.cache-ttl). 첫 기동에 yml 매핑을 한 번만 옮긴다. | `--modules authz-jdbc` | 역할 권한 저장소, 권한 표 / role permission storage, authz database | `@skeleton/auth` |
 | `board` | 게시판 — 글 · 중첩 댓글(대댓글) · 설정으로 늘리는 반응(좋아요 · 공감 …) · 운영자 숨김/고정 · 댓글 알림 · 작성자 닉네임(authorName · authorTag, AuthorDirectory 로 요청당 한 번 조회), HTTP /api/v1/boards 까지. | `--modules board,board-jdbc` | 게시판, 커뮤니티, 글쓰기, 댓글, 대댓글, 공감, 좋아요, 반응, 운영자 숨김, 공지 고정 / board, forum, community, post, comment, reply, reaction, like, moderation | `@skeleton/board` |
 | `board-jdbc` | 게시판 저장소 — PostgreSQL · MySQL 로 board 의 저장 포트 네 개를 구현한다(boards · board_* 테이블 · 원자적 카운터). | `--modules board-jdbc` | 게시판 저장소, 게시판 DB / board storage, board repository, board database | `@skeleton/board` |
 | `captcha-turnstile` | 봇 방지 — Cloudflare Turnstile 토큰을 서버에서 검증한다(TurnstileVerifier). | 스타터(apps/api)에 기본 포함 | 캡차, 봇 방지, 스팸 방지, 로봇 확인, 가입 폼 보호 / captcha, turnstile, bot protection, spam protection, cloudflare turnstile | `@skeleton/captcha-turnstile` |
@@ -448,6 +451,36 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - author-profile 없이는 쓰지 않는다(따라온다)
   - 다른 DB(JPA · jOOQ)로 저장하려면 author-profile 의 저장 포트(AuthorProfileRepository)를 앱이 구현한다
 - 키워드: 작성자 프로필 저장소, 프로필 DB / author profile storage, author profile repository, profile database
+
+### `authz` — 운영자 역할 관리 — 역할 만들기 · 고치기 · 지우기(역할 → 권한 묶음)와 붙은 모듈이 선언한 권한 카탈로그 API(/api/v1/admin/roles · /api/v1/admin/permissions). 안전장치: 전권 역할 고정 · 자기에게 없는 권한은 못 줌(403) · 쓰는 계정이 있는 역할은 못 지움 · 자기 잠금 막기. 역할 변경은 OperatorAuditLog 계약으로만 알린다(기본 아무것도 안 함). 기본 꺼짐(skeleton.authz.admin.enabled).
+
+- 종류 · 상태: module · experimental — 위치 `modules/authz`
+- 켜는 법: `--modules authz,authz-jdbc`
+- 의존 한 줄: `implementation(project(":modules:authz"))`
+- 함께 골라야 한다: `authz-jdbc`
+- 설정 접두사 `skeleton.authz.admin` — 키와 기본값 `docs/config/modules/authz.yml`
+- HTTP 경로: `/api/v1/admin`
+- 문서: `docs/modules/authz.md`, `docs/authz-http-contract.md`
+- 짝 프런트(react-skeleton): 항목 `account-admin` · 패키지 `@skeleton/auth` · 조각 기본 포함(덧붙일 것 없음)
+- 쓰지 않는 경우:
+  - authz 는 저장소를 모른다 — authz-jdbc 를 같이 고른다(켰는데 없으면 시작에 실패한다)
+  - 역할 이름을 계정에 주는 일은 account 의 관리자 API(PUT /api/v1/admin/accounts/{id}/roles/{role}) — 이 모듈은 역할 → 권한 표만 다룬다
+  - 운영 기록(누가 · 언제 · 무엇을) 표 · 조회 화면은 없다 — 역할 변경이 OperatorAuditLog.record 를 부를 뿐이다
+  - 대상별 권한(이 게시판만) · 역할 상속 · 거절 규칙은 없다
+- 키워드: 역할 관리, 권한 관리, 역할 만들기, 권한 묶음, 운영자 권한, CS 담당자 역할, 환불만 허용 / role management, permissions, role based access, admin roles, least privilege, custom role
+
+### `authz-jdbc` — 역할 → 권한 표 저장소 — PostgreSQL · MySQL 로 authz 의 저장 포트를 구현하고(authz_roles · authz_role_permissions, 전권 역할은 표를 못 바꾼다) 판정이 읽는 역할 → 권한 매핑을 yml 에서 이 표로 바꾼다(캐시: 같은 인스턴스는 즉시, 다른 인스턴스는 skeleton.authz.cache-ttl). 첫 기동에 yml 매핑을 한 번만 옮긴다.
+
+- 종류 · 상태: module · experimental — 위치 `modules/authz-jdbc`
+- 켜는 법: `--modules authz-jdbc`
+- 의존 한 줄: `implementation(project(":modules:authz-jdbc"))`
+- 자동으로 따라온다: `authz`
+- 문서: `docs/modules/authz-jdbc.md`
+- 짝 프런트(react-skeleton): 항목 `account-admin` · 패키지 `@skeleton/auth` · 조각 기본 포함(덧붙일 것 없음)
+- 쓰지 않는 경우:
+  - authz 없이는 쓰지 않는다(따라온다)
+  - 다른 DB(JPA · jOOQ)로 저장하려면 authz 의 저장 포트(AuthzRoleStore)와 RolePermissionSource 를 앱이 구현한다
+- 키워드: 역할 권한 저장소, 권한 표 / role permission storage, authz database
 
 ### `board` — 게시판 — 글 · 중첩 댓글(대댓글) · 설정으로 늘리는 반응(좋아요 · 공감 …) · 운영자 숨김/고정 · 댓글 알림 · 작성자 닉네임(authorName · authorTag, AuthorDirectory 로 요청당 한 번 조회), HTTP /api/v1/boards 까지.
 
@@ -1022,7 +1055,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 - 종류 · 상태: app · stable — 위치 `apps/sample`
 - 켜는 법: `--with-sample`
-- 자동으로 따라온다: `alert-jdbc`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `board`, `board-jdbc`, `crypto`, `json`, `notification`, `notification-jdbc`, `notification-sse`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-toss`, `scheduler`, `storage`, `storage-s3`
+- 자동으로 따라온다: `alert-jdbc`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `board`, `board-jdbc`, `crypto`, `json`, `notification`, `notification-jdbc`, `notification-sse`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-toss`, `scheduler`, `storage`, `storage-s3`
 - HTTP 경로: `/api/v1/cheers`, `/api/v1/notes`
 - 문서: `docs/sample.md`
 - 짝 프런트(react-skeleton): 항목 `app-sample` · 조각 `--with-sample`
@@ -1035,7 +1068,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 - 종류 · 상태: app · stable — 위치 `apps/workbench`
 - 켜는 법: `--with-workbench`
-- 자동으로 따라온다: `alert-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `board`, `board-jdbc`, `config-aws-ssm`, `crypto`, `db-mysql`, `event-kafka`, `json`, `notification`, `notification-jdbc`, `notification-slack`, `notification-sse`, `notification-websocket`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-stripe`, `payment-paddle`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `scheduler`, `storage`, `storage-s3`
+- 자동으로 따라온다: `alert-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `board`, `board-jdbc`, `config-aws-ssm`, `crypto`, `db-mysql`, `event-kafka`, `json`, `notification`, `notification-jdbc`, `notification-slack`, `notification-sse`, `notification-websocket`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `scheduler`, `storage`, `storage-s3`
 - HTTP 경로: `/api/v1`, `/api/v1/examples`, `/api/v1/skeleton`, `/api/v1/skeleton/enums`, `/api/v1/skeleton/json`, `/api/v1/skeleton/payments`, `/api/v1/skeleton/polymorphic/contents`
 - 문서: `docs/minimal-composition.md`, `docs/modules/README.md`
 - 짝 프런트(react-skeleton): 항목 `app-workbench` · 조각 `--with-workbench`

@@ -107,6 +107,7 @@ fails when this table and the prefixes found in module code differ.
 | `auth-social-oidc` | `skeleton.auth-social-oidc` |
 | `auth-social-x` | `skeleton.auth-social-x` |
 | `author-profile` | `skeleton.author-profile` |
+| `authz` | `skeleton.authz.admin` |
 | `board` | `skeleton.board` |
 | `captcha-turnstile` | `skeleton.captcha-turnstile` |
 | `config-aws-ssm` | `skeleton.config.aws.ssm` |
@@ -174,6 +175,8 @@ test proving a context with only that module (and its declared dependencies) boo
 | `author-profile-jdbc` | yes | a `DataSource` + one `db-*` module (+ its migration `author_profiles`, as above) | — |
 | `legal` | yes (HTTP `/api/v1/legal`; the module's TEMPLATE documents until the app brings its own — stage · prod refuse them) | a `ConsentStore` · `LegalLedger` pair — `legal-jdbc` provides it, or write your own; startup fails naming the missing bean | `spring-security-core` (HTTP + re-consent filter; compile-only) |
 | `legal-jdbc` | yes | a `DataSource` + one `db-*` module (+ its migration `legal`; MySQL with binlog needs `log_bin_trust_function_creators=1` for its triggers) | — |
+| `authz` | off until `skeleton.authz.admin.enabled=true` (then HTTP `/api/v1/admin/roles` · `/permissions`; off = 404) | when switched on: an `AuthzRoleStore` — `authz-jdbc` provides it, or write your own; startup fails naming the missing bean. Needs neither `account` (without it `holders` is `null` and role deletion is not guarded) nor Spring Security (without it no routes) | — |
+| `authz-jdbc` | yes (replaces the yml role → permission mapping with the table; seeds it once from the yml) | a `DataSource` + one `db-*` module (+ its migration `authz_roles`, as above) | — |
 | `captcha-turnstile` | off until `enabled=true` + `secret-key` | nothing | Turnstile secret, internet |
 | `config-aws-ssm` | loads only once `paths` are set (dev / staging / prod) or `credential-profile` is set | nothing | AWS credentials when it loads (`fail-fast` decides) |
 | `crypto` | beans only when `skeleton.crypto.keys` has a key | nothing | AES keys |
@@ -222,6 +225,7 @@ with an ambiguous injection — it now owns a `skeletonTaskScheduler`. The other
 | Notifications | in-memory broker | `notification-jdbc`, `-sse`, `-websocket`, `-slack`, `-mail` |
 | Boards (posts · nested comments · typed reactions) | none — there is no in-memory board | `board` + `board-jdbc` |
 | Accounts (sign-up · verification · reset · sessions) | in-memory accounts + log-only mail for local/tests (guarded out of stage · prod) | `account` + `account-jdbc`, `auth-session` + `auth-session-jdbc`, `notification-mail`, `auth-magic-link` |
+| Operator roles (create a role, pick its permissions) | the yml mapping `skeleton.authz.roles` (fixed; `platform`) | `authz` + `authz-jdbc` |
 | Legal documents · consent records | none — consent records are evidence, there is no in-memory store | `legal` + `legal-jdbc` (in the starter) |
 | Events | `event-kafka` off unless enabled | — |
 
