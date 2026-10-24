@@ -20,7 +20,7 @@
 
 ## 운영자 권한 (`common/authz`)
 
-모든 운영 경로의 판정을 한 곳으로 모으는 계약이다. 모듈은 호출자를 `OperatorRef(accountId, tokenRoles, ip)` 로 풀어 `OperatorAccess.require(ref, "payment.refund")` 한 줄로 묻는다(익명 `null` → 401, 권한 없음 → 403 `PLATFORM.FORBIDDEN`). 교체 지점도 `OperatorAccess` 빈 하나다.
+모든 운영 경로의 판정을 한 곳으로 모으는 계약이다. 모듈은 호출자를 `OperatorRef(accountId, tokenRoles, ip)` 로 풀어 `OperatorAccess.require(ref, "payment.refund")` 한 줄로 묻는다(익명 `null` → 401, 권한 없음 → 403 `COMMON.FORBIDDEN`(지금까지와 같은 코드)). 교체 지점도 `OperatorAccess` 빈 하나다.
 
 - **권한 키**: `<모듈>.<동사>` (`^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+$`, 64자 이하). `*` 는 전권으로 `skeleton.authz.super-role` 의 역할 전용이다. 모듈은 `PermissionDeclaration(module, [DeclaredPermission(key, defaultRoles)])` 빈으로 자기 권한을 선언한다 — 모듈을 빼면 권한도 사라진다.
 - **역할 → 권한**: `RolePermissionSource`. 기본은 yml(`skeleton.authz.roles`, 맵 역할 → 권한 목록). 주지 않으면 `super-role: ["*"]` 에 선언의 `defaultRoles` 를 더한 매핑(board 가 붙으면 `MODERATOR: [board.moderate, board.manage]`). 주면 그 맵이 통째로 이긴다 — 다른 역할의 `*`, 선언에 없는 키, 키 규칙 위반은 기동 실패. 매핑에 없는 역할은 권한이 없다(오류 아님). `authz-jdbc` 가 DB 로 교체하고 `CachingRolePermissionSource` 로 `cache-ttl`(기본 30초, 0 = 끔)만큼 메모리에 담는다.

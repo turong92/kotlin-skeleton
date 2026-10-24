@@ -1,16 +1,10 @@
 package dev.sumin.skeleton.common.authz
 
 import dev.sumin.skeleton.common.ApplicationException
-import dev.sumin.skeleton.common.ErrorCode
 import dev.sumin.skeleton.common.PlatformErrorCode
-import org.springframework.http.HttpStatus
 
 /** 전권 — `skeleton.authz.super-role` 의 권한 전용 */
 const val ALL_PERMISSIONS = "*"
-
-enum class AuthzErrorCode(override val code: String, override val status: HttpStatus, override val title: String) : ErrorCode {
-    FORBIDDEN("PLATFORM.FORBIDDEN", HttpStatus.FORBIDDEN, "Forbidden"),
-}
 
 /**
  * 모든 운영 경로의 판정 한 곳. 모듈은 호출자를 [OperatorRef] 로 풀어 [require] 한 줄로 묻는다.
@@ -23,11 +17,11 @@ interface OperatorAccess {
     fun has(ref: OperatorRef, permission: String): Boolean =
         permissionsOf(ref).let { ALL_PERMISSIONS in it || permission in it }
 
-    /** [ref] 가 null 이면 익명 → 401, 권한이 없으면 403 `PLATFORM.FORBIDDEN` */
+    /** [ref] 가 null 이면 익명 → 401, 권한이 없으면 지금까지와 같은 403 `COMMON.FORBIDDEN` */
     fun require(ref: OperatorRef?, permission: String) {
         if (ref == null) throw ApplicationException("Authentication required", PlatformErrorCode.UNAUTHORIZED)
         if (!has(ref, permission)) {
-            throw ApplicationException("Missing permission: $permission", AuthzErrorCode.FORBIDDEN)
+            throw ApplicationException("Missing permission: $permission", PlatformErrorCode.FORBIDDEN)
         }
     }
 }

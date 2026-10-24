@@ -16,10 +16,10 @@ class OperatorAccessRequireTest {
     }
 
     @Test
-    fun `a missing permission is 403 PLATFORM FORBIDDEN`() {
+    fun `a missing permission is the existing 403 COMMON FORBIDDEN, so clients keep reading it`() {
         val e = assertFailsWith<ApplicationException> { access.require(OperatorRef("acc_1"), "payment.refund") }
         assertEquals(HttpStatus.FORBIDDEN, e.status)
-        assertEquals("PLATFORM.FORBIDDEN", e.errorCode.code)
+        assertEquals("COMMON.FORBIDDEN", e.errorCode.code)
     }
 
     @Test

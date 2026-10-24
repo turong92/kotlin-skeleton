@@ -123,7 +123,7 @@
 | legal | `LegalCallers` 토큰 `ROLE_ADMIN` | `requirePermission(legal.read)` |
 | authz(새) | — | 자기 API 를 `authz.roles` 로 |
 
-거절은 지금과 같이 401(익명) · 403(`PLATFORM.FORBIDDEN`). 응답 모양 불변.
+거절은 지금과 같이 401(익명) · 403(`COMMON.FORBIDDEN`). 응답 모양 불변.
 
 ## 5. 운영 기록 자리 (결정 3)
 

@@ -116,7 +116,7 @@ DELETE /api/v1/admin/roles/{name}                                               
 **목표:** C1~C3 · C5 를 코드로. 다른 모듈은 아직 그대로 돈다(토큰 기본 구현).
 
 **Files:**
-- Create: `modules/platform/src/main/kotlin/dev/sumin/skeleton/common/authz/` — `OperatorAccess.kt`(인터페이스 + `require` 의 403 `PLATFORM.FORBIDDEN`), `OperatorRef.kt`, `PermissionDeclaration.kt`, `RolePermissionSource.kt`(+ yml 구현 · 캐시), `RoleHolders.kt`, `OperatorAuditLog.kt`(+ `NoOpOperatorAuditLog`), `TokenOperatorAccess.kt`, `AuthzProperties.kt`(`skeleton.authz`), `LegacyRoleKeysGuard.kt`(옛 키 네 개 — 기동 실패), `AuthzAutoConfiguration.kt` + `.imports` 등록
+- Create: `modules/platform/src/main/kotlin/dev/sumin/skeleton/common/authz/` — `OperatorAccess.kt`(인터페이스 + `require` 의 403 `COMMON.FORBIDDEN`), `OperatorRef.kt`, `PermissionDeclaration.kt`, `RolePermissionSource.kt`(+ yml 구현 · 캐시), `RoleHolders.kt`, `OperatorAuditLog.kt`(+ `NoOpOperatorAuditLog`), `TokenOperatorAccess.kt`, `AuthzProperties.kt`(`skeleton.authz`), `LegacyRoleKeysGuard.kt`(옛 키 네 개 — 기동 실패), `AuthzAutoConfiguration.kt` + `.imports` 등록
 - Modify: `modules/auth/src/main/kotlin/dev/sumin/skeleton/auth/api/AuthController.kt`(`me` 응답에 `permissions`), 필요하면 `auth/principal/CurrentPrincipal.kt` 또는 응답 DTO
 - Docs: `docs/modules/platform.md`(authz 절) · `docs/config/modules/platform.yml`(C2 의 platform 키) · `docs/modules/auth.md` · `docs/account-http-contract.md`(`/auth/me` 필드) · `CHANGELOG.md`(위 표의 블록)
 
@@ -126,7 +126,7 @@ DELETE /api/v1/admin/roles/{name}                                               
 - [ ] `LegacyRoleKeysGuardTest`: 네 키 각각 값이 있으면 컨텍스트 기동 실패, 메시지에 옛 키 이름과 새 자리(스펙 §3.4 의 줄)가 있다. 키가 없으면 기동.
 - [ ] `TokenOperatorAccessTest`: 토큰 `ROLE_ADMIN` → `*` 로 모든 권한 `has`=true; `ROLE_MODERATOR` → `board.moderate` 만; 매핑에 없는 역할 → 빈 집합; `skeleton.authz.roles` 를 주면 기본 매핑이 통째로 바뀐다(ADMIN 을 안 적으면 ADMIN 은 권한 없음).
 - [ ] `RolePermissionSourceTest`: 다른 역할에 `*` 를 적은 yml → 기동 실패(전권은 super-role 전용); 선언에 없는 권한 키 → 기동 실패; 키 규칙 위반 → 기동 실패.
-- [ ] `OperatorAccessRequireTest`: `require` 거절은 403 `PLATFORM.FORBIDDEN`, 익명은 401.
+- [ ] `OperatorAccessRequireTest`: `require` 거절은 403 `COMMON.FORBIDDEN`, 익명은 401.
 - [ ] `NoOpOperatorAuditLogTest`: 기본 빈이 등록되고 아무것도 쓰지 않는다(로그 출력 없음 — 캡처로 확인), 앱 빈이 있으면 물러난다.
 - [ ] auth `MeEndpointTest`(기존 시험 파일이 있으면 거기에): `permissions` 키가 늘 있고 정렬, 토큰 ADMIN → `["*"]`.
 

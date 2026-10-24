@@ -32,6 +32,12 @@ class RolePermissionSourceTest {
     }
 
     @Test
+    fun `a role name off the account rule fails startup - an env var binds the map key in lower case`() {
+        fails("skeleton.authz.roles.cs=payment.read", expected = "cs")
+        fails("skeleton.authz.super-role=admin", expected = "admin")
+    }
+
+    @Test
     fun `a permission no module declares fails startup`() {
         fails("skeleton.authz.roles.CS=payment.read,payment.nope", expected = "payment.nope")
     }
