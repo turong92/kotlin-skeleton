@@ -195,6 +195,15 @@ class RoleAdminWebTest {
         createRole(admin, "lower", "").andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("COMMON.VALIDATION_FAILED"))
     }
 
+    @Test
+    fun `the request body is validated by the framework before the service sees it`() {
+        call(post("/api/v1/admin/roles").json("""{"name":"NEWROLE","permissions":[${(1..201).joinToString(",") { "\"p.$it\"" }}]}"""), admin)
+            .andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("COMMON.VALIDATION_FAILED"))
+        call(post("/api/v1/admin/roles").json("""{"name":"NEWROLE"}"""), admin).andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("COMMON.VALIDATION_FAILED"))
+        call(put("/api/v1/admin/roles/CS").json("""{"description":"${"x".repeat(201)}","permissions":[]}"""), admin)
+            .andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("COMMON.VALIDATION_FAILED"))
+    }
+
     // ---- the audit hook ----
 
     @Test

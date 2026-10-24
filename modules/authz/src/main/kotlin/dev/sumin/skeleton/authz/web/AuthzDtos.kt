@@ -2,10 +2,21 @@ package dev.sumin.skeleton.authz.web
 
 import dev.sumin.skeleton.authz.PermissionInfo
 import dev.sumin.skeleton.authz.Role
+import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.NotNull
+import jakarta.validation.constraints.Pattern
+import jakarta.validation.constraints.Size
 
-data class CreateRoleRequest(val name: String? = null, val description: String? = null, val permissions: List<String>? = null)
+data class CreateRoleRequest(
+    @field:NotBlank @field:Pattern(regexp = "^[A-Z][A-Z0-9_]{1,31}$") val name: String? = null,
+    @field:Size(max = 200) val description: String? = null,
+    @field:NotNull @field:Size(max = 200) val permissions: List<String>? = null,
+)
 
-data class UpdateRoleRequest(val description: String? = null, val permissions: List<String>? = null)
+data class UpdateRoleRequest(
+    @field:Size(max = 200) val description: String? = null,
+    @field:NotNull @field:Size(max = 200) val permissions: List<String>? = null,
+)
 
 data class PermissionResponse(val key: String, val module: String)
 

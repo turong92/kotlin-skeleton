@@ -13,6 +13,7 @@ import dev.sumin.skeleton.common.openapi.CreatedOperation
 import dev.sumin.skeleton.common.openapi.NoContentOperation
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
+import jakarta.validation.Valid
 import org.springframework.http.ResponseEntity
 import org.springframework.security.authentication.AnonymousAuthenticationToken
 import org.springframework.security.core.Authentication
@@ -54,7 +55,7 @@ class AuthzAdminController(private val service: RoleService, private val access:
     @Operation(summary = "Create a role (authz.roles); you can only grant permissions you hold")
     @CreatedOperation
     @PostMapping("/roles")
-    fun create(authentication: Authentication?, @RequestBody request: CreateRoleRequest): ResponseEntity<DataResponse<RoleResponse>> {
+    fun create(authentication: Authentication?, @Valid @RequestBody request: CreateRoleRequest): ResponseEntity<DataResponse<RoleResponse>> {
         val ref = required(authentication)
         val role = service.create(ref, request.name, request.description, request.permissions).toResponse()
         return Response.created(ServletUriComponentsBuilder.fromCurrentRequest().path("/{name}").buildAndExpand(role.name).toUri(), role)
@@ -63,7 +64,7 @@ class AuthzAdminController(private val service: RoleService, private val access:
     @Operation(summary = "Replace a role's description and permissions (authz.roles)")
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = RoleResponse::class)
     @PutMapping("/roles/{name}")
-    fun update(authentication: Authentication?, @PathVariable name: String, @RequestBody request: UpdateRoleRequest): DataResponse<RoleResponse> =
+    fun update(authentication: Authentication?, @PathVariable name: String, @Valid @RequestBody request: UpdateRoleRequest): DataResponse<RoleResponse> =
         Response.ok(service.update(required(authentication), name, request.description, request.permissions).toResponse())
 
     @Operation(summary = "Delete a role nobody holds (authz.roles)")
