@@ -160,6 +160,7 @@ class RefundEndsSubscriptionChoiceTest {
         repeat(2) { kit.runWebhooks(); kit.runTasks(setOf(PaymentTaskTypes.REFUND_APPLY, PaymentTaskTypes.PROVIDER_SUBSCRIPTION_CANCEL)) }
 
         assertEquals(PaymentOrderStatus.REFUNDED, kit.order(endedOrder.id).status)
+        assertEquals(PaymentOrderStatus.REFUNDED, kit.order(keptOrder.id).status, "the kept line came back too")
         assertEquals(SubscriptionStatus.ACTIVE, sub(kept.id).status)
         assertEquals(SubscriptionEndReason.REFUNDED, sub(ended.id).endReason)
         assertEquals(listOf("psub_e"), kit.push.cancelCalls.map { it.first })

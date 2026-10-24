@@ -14,7 +14,8 @@ import java.time.Duration
  * 카카오페이는 키 모양으로 테스트와 실결제를 가르지 않는다 - **가맹점 코드(CID)** 가 가른다([KakaoPayMerchant]: `TC0ONETIME` 등 문서의 테스트 코드 = TEST).
  *
  * 기동 실패: 로컬 계열에서 실결제 가맹점 코드 / 보호 환경(stage · prod)에서 테스트 가맹점 코드(허락 스위치가 없으면) / 보호 환경에서 시크릿 키 · 가맹점 코드가 비어 있음 /
- * 장부가 있는데 보호 환경에서 돌아올 주소(`return-url`)가 http(s) 절대 주소가 아님 / 장부가 있는데 `reconcile.first-delay` · `refund.settle-delay` 가 응답 제한보다 길지 않음.
+ * 장부가 있는데 보호 환경에서 돌아올 주소(`return-url`)가 http(s) 절대 주소가 아님 / 장부가 있는데 `reconcile.first-delay` · `refund.settle-delay` 가 응답 제한보다 길지 않음 /
+ * 정기 가맹점 코드(`subscription-cid`)가 있는데 `registration-window-lifetime` 이 0 이하이거나 15분 이상(카카오 ready 창이 먼저 만료된다).
  * 경고: 시크릿 키 · 가맹점 코드 없음(보호 환경 밖) · 허락한 테스트 가맹점 코드 · 장부가 있는데 돌아올 주소 없음(보호 환경 밖) · 보호 환경에서 카카오페이 주소가 아닌 `base-url`(주소 값은 적지 않는다) ·
  * 보호 환경에서 http 로 돌아오는 주소 · 장부가 있는데 작업 워커가 꺼짐 · 장부가 있는데 응답 제한이 10초보다 짧음.
  *
