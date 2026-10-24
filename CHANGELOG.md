@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `platform`: 운영자 판정 계약(`common/authz`) — `OperatorAccess`(`permissionsOf` · `has` · `require`: 익명 401, 권한 없음 403 `COMMON.FORBIDDEN`(기존 코드 그대로)), `OperatorRef`, `PermissionDeclaration`(모듈이 자기 권한 선언), `RolePermissionSource`(기본 yml `skeleton.authz.roles`), `RoleHolders`, `OperatorAuditLog`(기본 아무것도 하지 않음 — 공용 운영 기록 표는 만들지 않았다). 새 설정 `skeleton.authz.roles` · `super-role`(기본 `ADMIN`) · `cache-ttl`(기본 30s). 기본 판정 `TokenOperatorAccess` 는 토큰 역할을 매핑에 통과시킨다.
 - `auth`: `GET /api/v1/auth/me` 와 로그인 · 소셜 · 매직링크 · 토큰 갱신 응답의 `principal` 에 `permissions: string[]` 추가(늘 있다, 사전순, 전권이면 `["*"]`) — 기존 필드는 그대로. react-skeleton 의 `RequirePermission` · 메뉴 숨김이 이것을 읽는다.
+- 새 `authz` + `authz-jdbc`: 운영자 역할 관리 API(`/api/v1/admin/roles` · `/permissions`, `skeleton.authz.admin.enabled` 기본 꺼짐)와 역할 → 권한 표(`authz_roles` · `authz_role_permissions`, 두 방언 새 V 파일). 첫 기동에 yml 매핑을 한 번만 표로 옮긴다. 전권 역할 고정 · 권한 상승 막기 403 · 자기 잠금 막기 · 쓰는 계정이 있는 역할 삭제 막기, 변경은 `OperatorAuditLog.record` 로 알린다. 계약: `docs/authz-http-contract.md`.
 - 이번 일의 나머지(account · payment · board · legal 이 이 판정을 쓰고 권한으로 나뉘는 것, 새 `authz` · `authz-jdbc` 모듈과 역할 관리 API)는 뒤따르는 조각에서 이 블록에 더한다. **행동 변화(뒤따르는 조각)**: `ADMIN`(전권)이 게시판도 관리한다 — 지금은 `MODERATOR` 만 된다.
 
 ### 닫힌 환불의 결제사 증거 전이 · 카카오 구독 창 재사용 (2026-10-24)
