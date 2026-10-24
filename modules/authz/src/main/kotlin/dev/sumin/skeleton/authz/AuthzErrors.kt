@@ -1,0 +1,22 @@
+package dev.sumin.skeleton.authz
+
+import dev.sumin.skeleton.common.ApplicationException
+import dev.sumin.skeleton.common.ErrorCode
+import org.springframework.http.HttpStatus
+
+/** 역할 관리 에러 코드 — `AUTHZ.` 로 시작한다 (프론트는 이 문자열로 분기한다). 권한 부족 403 은 `PLATFORM.FORBIDDEN` */
+enum class AuthzRoleErrorCode(
+    override val code: String,
+    override val status: HttpStatus,
+    override val title: String,
+) : ErrorCode {
+    ROLE_PROTECTED("AUTHZ.ROLE_PROTECTED", HttpStatus.CONFLICT, "The full-access role is fixed"),
+    ROLE_IN_USE("AUTHZ.ROLE_IN_USE", HttpStatus.CONFLICT, "Accounts still hold this role"),
+    ROLE_EXISTS("AUTHZ.ROLE_EXISTS", HttpStatus.CONFLICT, "Role already exists"),
+    ROLE_NOT_FOUND("AUTHZ.ROLE_NOT_FOUND", HttpStatus.NOT_FOUND, "Role not found"),
+    PERMISSION_UNKNOWN("AUTHZ.PERMISSION_UNKNOWN", HttpStatus.BAD_REQUEST, "Unknown permission"),
+    ESCALATION("AUTHZ.ESCALATION", HttpStatus.FORBIDDEN, "You cannot grant a permission you do not hold"),
+    SELF_LOCKOUT("AUTHZ.SELF_LOCKOUT", HttpStatus.CONFLICT, "This change would remove your own access to role management"),
+}
+
+class AuthzRoleException(errorCode: AuthzRoleErrorCode, message: String) : ApplicationException(message, errorCode)
