@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.authorprofile
 
+import dev.sumin.skeleton.common.authz.PermissionDeclaration
 import dev.sumin.skeleton.account.AccountAuthorDirectory
 import dev.sumin.skeleton.account.AccountAutoConfiguration
 import dev.sumin.skeleton.account.AccountProperties
@@ -48,6 +49,11 @@ class AuthorProfileAutoConfiguration {
         limits, properties, time.getIfAvailable { TimeProvider.systemUtc() },
         { listeners.orderedStream().toList() },
     )
+
+    /** 이 모듈의 권한 — 붙으면 권한 카탈로그에 `author-profile.read` 가 나타난다 */
+    @Bean
+    @ConditionalOnMissingBean(name = ["authorProfilePermissions"])
+    fun authorProfilePermissions(): PermissionDeclaration = AuthorProfilePermissions.declaration
 
     /** 쓰기 직전에 "이 계정이 이 프로필로 써도 되는가" — 이 빈이 있으면 board 가 쓰기 규칙 · 공개 작성자 id 를 켠다 (스펙 §7.1) */
     @Bean

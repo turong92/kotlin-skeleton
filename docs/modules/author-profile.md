@@ -53,7 +53,7 @@
 | `GET /api/v1/admin/author-profiles?accountId=` | 계정의 프로필들 (`accountId` 가 없으면 `400`) |
 
 - 응답 `{ value: { accountId, profiles: [{ id, name, tag, status, createdAt, updatedAt, deletedAt }] } }` — 만든 순, **지워진 것 포함**(`status` `DELETED`: `name` · `tag` 는 null, `deletedAt` 있음). 계정 이메일은 싣지 않는다 — 필요하면 `GET /api/v1/admin/accounts/{id}`(account 의 관리자 조회).
-- **권한**: `AccountCallers.requireAdmin` — `skeleton.account.admin.role`(기본 `ADMIN`)만, 매 호출 저장소의 계정 역할 · 상태를 다시 읽는다(토큰의 역할은 힌트). `MODERATOR`(또는 `skeleton.board.moderator-role`) · 일반 사용자 · 정지된 관리자 `403`, 익명 `401`. 게시판 운영자는 연결을 보지 못한다(글 숨김 · 삭제는 연결 없이 되고, 계정 제재는 관리자의 일).
+- **권한**: `AccountCallers.requirePermission(author-profile.read)` — 모듈이 `author-profile.read` 를 선언하고(`AuthorProfilePermissions`), 판정은 공용 검사기 `OperatorAccess`: `account` 가 있으면 매 호출 저장소의 계정 역할 · 상태를 다시 읽는다(토큰의 역할은 힌트). 기본 매핑에서는 전권 역할(`skeleton.authz.super-role`)만 갖고, 다른 역할에 주려면 `skeleton.authz.roles.<역할>: [author-profile.read]`. `MODERATOR` · 일반 사용자 · 정지된 운영자 `403 COMMON.FORBIDDEN`, 익명 `401`. 게시판 운영자는 연결을 보지 못한다(글 숨김 · 삭제는 연결 없이 되고, 계정 제재는 관리자의 일).
 - **감사**: 성공한 호출마다 `AccountEventType.AUTHOR_LINK_VIEWED` 를 낸다 — 대상 계정 id, `detail = { by: <관리자 계정 id> }`. **detail 에 프로필 id 가 없고 로그 한 줄에도 없다**(기본 로거는 `account=<대상> detail={by=…}` 만 찍는다). 이 이벤트는 계정 이벤트 한 종류가 늘어난 것이 `account` 의 유일한 변경이다 — `account_audit.type` 은 `varchar(40)` 문자열이라(제약 · enum 열 없음) 마이그레이션은 없다.
   - **전제**: 조회 기록이 남으려면 로그 리스너 밖의 이벤트 길이 있어야 한다 — `skeleton.account.audit.enabled=true`(+ `account-jdbc`, `account_audit` 표) 또는 앱의 `AccountEventListener`. 없으면 기록은 로그 한 줄뿐이라 stage · prod 에서 배포 가드(`AuthorProfileAdminDeployGuard`, 이름 `author-profile`)가 **경고**한다(기동은 막지 않는다).
   - **기록 실패**: 듣는 쪽이 던지면 발행자가 warn 로그만 남기고 삼킨다 — **조회는 그대로 나간다**(기록 실패로 조회를 실패시키는 것은 하지 않았다; 주인 결정 항목).

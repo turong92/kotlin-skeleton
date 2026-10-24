@@ -1,10 +1,11 @@
 package dev.sumin.skeleton.account.web
 
 import dev.sumin.skeleton.account.Account
-import dev.sumin.skeleton.account.AccountProperties
 import dev.sumin.skeleton.account.AccountStatus
 import dev.sumin.skeleton.account.InMemoryAccountRepository
+import dev.sumin.skeleton.account.authz.AccountOperatorAccess
 import dev.sumin.skeleton.common.ApplicationException
+import dev.sumin.skeleton.common.authz.YmlRolePermissionSource
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -12,10 +13,11 @@ import kotlin.test.assertFailsWith
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
 import org.springframework.security.core.authority.SimpleGrantedAuthority
 
-/** I2 — 관리자 권한은 토큰이 들고 온 역할이 아니라 **지금 저장소의 계정**이 정한다 (정지 · 회수된 관리자가 남은 액세스 토큰으로 조치를 되돌리지 못하게) */
+/** I2 — 운영 권한은 토큰이 들고 온 역할이 아니라 **지금 저장소의 계정**이 정한다 (정지 · 회수된 운영자가 남은 액세스 토큰으로 조치를 되돌리지 못하게) */
 class AccountCallersTest {
     private val repo = InMemoryAccountRepository()
-    private val callers = AccountCallers(AccountProperties.Admin(enabled = true)) { repo }
+    private val source = YmlRolePermissionSource(mapOf("ADMIN" to setOf("*"), "VIEWER" to setOf("account.read")))
+    private val callers = AccountCallers { AccountOperatorAccess({ repo }, { source }) }
     private val now = Instant.parse("2026-10-06T00:00:00Z")
 
     private fun store(id: String, status: AccountStatus, roles: Set<String>) =
@@ -27,27 +29,35 @@ class AccountCallersTest {
     private fun forbidden(block: () -> Unit) = assertEquals("COMMON.FORBIDDEN", assertFailsWith<ApplicationException> { block() }.errorCode.code)
 
     @Test
-    fun `an administrator who is still active and still has the role passes`() {
+    fun `an operator who is still active and still has the role passes`() {
         store("acc_ok", AccountStatus.ACTIVE, setOf("USER", "ADMIN"))
-        assertEquals("acc_ok", callers.requireAdmin(tokenFor("acc_ok")).accountId)
+        assertEquals("acc_ok", callers.requirePermission(tokenFor("acc_ok"), "account.manage").accountId)
     }
 
     @Test
-    fun `a suspended administrator is refused with the token still in hand`() {
+    fun `a suspended operator is refused with the token still in hand`() {
         store("acc_susp", AccountStatus.SUSPENDED, setOf("USER", "ADMIN"))
-        forbidden { callers.requireAdmin(tokenFor("acc_susp")) }
+        forbidden { callers.requirePermission(tokenFor("acc_susp"), "account.read") }
     }
 
     @Test
-    fun `an administrator whose role was revoked is refused with the token still in hand`() {
+    fun `an operator whose role was revoked is refused with the token still in hand`() {
         store("acc_demoted", AccountStatus.ACTIVE, setOf("USER"))
-        forbidden { callers.requireAdmin(tokenFor("acc_demoted")) }
+        forbidden { callers.requirePermission(tokenFor("acc_demoted"), "account.read") }
     }
 
     @Test
     fun `a deleted or missing account is refused`() {
         store("acc_gone", AccountStatus.DELETED, setOf("USER", "ADMIN"))
-        forbidden { callers.requireAdmin(tokenFor("acc_gone")) }
-        forbidden { callers.requireAdmin(tokenFor("acc_never")) }
+        forbidden { callers.requirePermission(tokenFor("acc_gone"), "account.read") }
+        forbidden { callers.requirePermission(tokenFor("acc_never"), "account.read") }
+    }
+
+    @Test
+    fun `a permission the stored role lacks is refused, one it has passes, anonymous is 401`() {
+        store("acc_view", AccountStatus.ACTIVE, setOf("VIEWER"))
+        callers.requirePermission(tokenFor("acc_view"), "account.read")
+        forbidden { callers.requirePermission(tokenFor("acc_view"), "account.manage") }
+        assertEquals("COMMON.UNAUTHORIZED", assertFailsWith<ApplicationException> { callers.requirePermission(null, "account.read") }.errorCode.code)
     }
 }

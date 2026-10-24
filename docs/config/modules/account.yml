@@ -85,10 +85,9 @@ skeleton:
         footer: ""                     # 바닥글에 덧붙일 한 줄
       log-links: OFF                   # 메일 모듈이 없을 때 링크(토큰 포함)를 로그에 남길까: AUTO(보호 환경이 아니면) | ON | OFF — 보호 환경에서 ON 은 DeployGuard 문제
     admin:
-      enabled: false                   # true 면 /api/v1/admin/accounts (목록 · 정지 · 역할) 를 연다
-      role: ADMIN                      # 이 역할이 있는 호출자만. 첫 관리자 부트스트랩이 주는 역할이기도 하다
+      enabled: false                   # true 면 /api/v1/admin/accounts (목록 · 정지 · 역할) 를 연다. 호출자는 권한 account.read · account.manage · account.roles 로 나뉜다 (skeleton.authz — docs/modules/platform.md). 옛 admin.role 은 없다: 값이 있으면 기동 실패, 전권 역할 이름은 skeleton.authz.super-role
     bootstrap:
-      admin-email: ""                  # 이 이메일이 처음으로 확인되고 활성 ADMIN 이 아직 없으면 ADMIN 역할을 준다 (비밀번호 기본값 없음)
+      admin-email: ""                  # 이 이메일이 처음으로 확인되고 활성 전권 역할 보유자(skeleton.authz.super-role, 기본 ADMIN)가 아직 없으면 그 역할을 준다 (비밀번호 기본값 없음)
     social:
       sign-up: false                   # true 면 연결된 적 없는 소셜 계정이 첫 로그인에 계정을 만든다
       import-display-name: true        # true(기본) 제공자가 준 이름(Google 실명 · Kakao 닉네임 …)을 새 계정의 닉네임으로 쓴다 | false 면 버리고 이름 없는 계정으로 만든다(display-name.fallback 은 그대로 적용). 재로그인 · 연결은 원래 이름을 쓰지 않는다

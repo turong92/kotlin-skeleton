@@ -3,10 +3,19 @@ package dev.sumin.skeleton.account
 import dev.sumin.skeleton.account.events.AccountEventType
 import dev.sumin.skeleton.common.ApplicationException
 import dev.sumin.skeleton.common.PlatformErrorCode
+import dev.sumin.skeleton.common.authz.ALL_PERMISSIONS
+import dev.sumin.skeleton.common.authz.RolePermissionSource
+import dev.sumin.skeleton.common.authz.YmlRolePermissionSource
 
-/** 운영자 연산 — 호출자가 관리자인지는 HTTP 층(`skeleton.account.admin.role`)이 본다. 여기서는 사고를 막는 규칙(자기 정지 · 마지막 관리자)만 */
-class AdminService(private val core: AccountCore) {
-    private val adminRole get() = core.props.admin.role
+/**
+ * 운영자 연산 — 호출자가 권한을 가졌는지는 HTTP 층(`OperatorAccess`)이 본다. 여기서는 사고를 막는 규칙(자기 정지 · 마지막 전권 · 정의된 역할만 · 권한 상승 막기)만.
+ * [roles] 는 역할 → 권한 매핑(기본은 전권 역할 하나뿐 — 앱에서는 platform 의 매핑이 들어온다).
+ */
+class AdminService(
+    private val core: AccountCore,
+    private val roles: () -> RolePermissionSource = { YmlRolePermissionSource(mapOf(core.superRole to setOf(ALL_PERMISSIONS))) },
+) {
+    private val adminRole get() = core.superRole
 
     /** 응답에 `loginId` 키를 싣는가 — `skeleton.account.login-id.enabled` */
     val loginIdEnabled get() = core.props.loginId.enabled
@@ -68,14 +77,27 @@ class AdminService(private val core: AccountCore) {
         core.events.publish(AccountEventType.REGISTRATION_BLOCK_REMOVED, null, detail = mapOf("by" to actorId, "block" to blockId.toString()))
     }
 
-    fun grantRole(actorId: String, targetId: String, role: String) {
+    /**
+     * [actorPermissions] 는 호출자의 권한(전권이면 `*`). 정의되지 않은 역할은 400 `ACCOUNT.ROLE_UNKNOWN`(기본 역할 `default-roles` 는 정의된 것으로 친다),
+     * 주려는 역할의 권한이 호출자 권한의 부분집합이 아니면 403 `ACCOUNT.ROLE_ESCALATION`.
+     */
+    /** 줄 수 있는 역할 — 정의된 역할(매핑의 키)과 그 권한. 자기 권한 밖 역할도 나오고, 부여가 [AccountErrorCode.ROLE_ESCALATION] 으로 막는다 */
+    fun assignableRoles(): List<Pair<String, List<String>>> =
+        roles().let { source -> source.definedRoles().sorted().map { it to source.permissionsOf(it).sorted() } }
+
+    fun grantRole(actorId: String, targetId: String, role: String, actorPermissions: Set<String>) {
         validRole(role)
+        val source = roles()
+        if (role !in source.definedRoles() && role !in core.props.defaultRoles) throw AccountException(AccountErrorCode.ROLE_UNKNOWN)
+        requireWithin(role, actorPermissions)
         if (live(targetId).status == AccountStatus.DELETED) throw AccountException(AccountErrorCode.NOT_FOUND)
         if (core.accounts.grantRole(targetId, role, core.time.now())) core.events.publish(AccountEventType.ROLE_GRANTED, targetId, detail = mapOf("role" to role, "by" to actorId))
     }
 
-    fun revokeRole(actorId: String, targetId: String, role: String) {
+    /** 회수도 부여와 같은 상승 검사 — 자기 권한 밖의 권한을 가진 역할은 회수도 403 `ACCOUNT.ROLE_ESCALATION` (높은 권한은 그 이상이 다룬다). 이미 정의에서 빠진 역할은 권한이 없으므로 누구나 회수할 수 있다 */
+    fun revokeRole(actorId: String, targetId: String, role: String, actorPermissions: Set<String>) {
         validRole(role)
+        requireWithin(role, actorPermissions)
         get(targetId)
         val revoked = if (role == adminRole) {
             when (core.accounts.revokeRoleUnlessLast(targetId, role, core.time.now())) {
@@ -97,6 +119,12 @@ class AdminService(private val core: AccountCore) {
             else -> AccountErrorCode.ERASURE_IN_PROGRESS
         },
     )
+
+    private fun requireWithin(role: String, actorPermissions: Set<String>) {
+        if (ALL_PERMISSIONS !in actorPermissions && !actorPermissions.containsAll(roles().permissionsOf(role))) {
+            throw AccountException(AccountErrorCode.ROLE_ESCALATION)
+        }
+    }
 
     private fun validRole(role: String) {
         if (!ROLE.matches(role)) throw ApplicationException("Invalid role name", PlatformErrorCode.VALIDATION_FAILED)

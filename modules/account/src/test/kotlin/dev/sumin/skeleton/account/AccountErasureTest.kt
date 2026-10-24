@@ -91,7 +91,7 @@ class AccountErasureTest {
         val a = h.leave()
         h.purge.purgeDue()
         assertEquals("ACCOUNT.ERASED", code { h.admin.restore("acc_admin", a.id) })
-        assertEquals("ACCOUNT.ERASED", code { h.admin.grantRole("acc_admin", a.id, "ADMIN") })
+        assertEquals("ACCOUNT.ERASED", code { h.admin.grantRole("acc_admin", a.id, "ADMIN", setOf("*")) })
         assertEquals("ACCOUNT.ERASED", code { h.admin.suspend("acc_admin", a.id, null) })
         assertEquals(AccountStatus.ERASED, h.repo.findById(a.id)!!.status)
         assertTrue(h.repo.findById(a.id)!!.roles.isEmpty())

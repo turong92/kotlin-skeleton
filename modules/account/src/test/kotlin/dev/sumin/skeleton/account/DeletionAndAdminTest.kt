@@ -15,7 +15,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class DeletionAndAdminTest {
-    private val h = AccountHarness()
+    private val h = AccountHarness(rolePermissions = mapOf("MODERATOR" to setOf("board.moderate")))
     private fun code(block: () -> Unit) = assertFailsWith<ApplicationException> { block() }.errorCode.code
 
     // ---- deletion
@@ -182,10 +182,10 @@ class DeletionAndAdminTest {
         val admin = admin()
         assertEquals("ACCOUNT.SELF_ACTION_FORBIDDEN", code { h.admin.suspend(admin.id, admin.id, null) })
         val other = h.activeAccount("other@example.com")
-        h.admin.grantRole(admin.id, other.id, "ADMIN")
+        h.admin.grantRole(admin.id, other.id, "ADMIN", setOf("*"))
         h.admin.suspend(admin.id, other.id, null)
         val third = h.activeAccount("third@example.com")
-        h.admin.grantRole(admin.id, third.id, "ADMIN")
+        h.admin.grantRole(admin.id, third.id, "ADMIN", setOf("*"))
         h.admin.suspend(third.id, admin.id, null)
         assertEquals("ACCOUNT.LAST_ADMIN", code { h.admin.suspend("someone-else", third.id, null) })
     }
@@ -194,13 +194,13 @@ class DeletionAndAdminTest {
     fun `roles are granted and revoked, the last ADMIN cannot be revoked, and role names are validated`() {
         val admin = admin()
         val user = h.activeAccount("ann@example.com")
-        h.admin.grantRole(admin.id, user.id, "MODERATOR")
+        h.admin.grantRole(admin.id, user.id, "MODERATOR", setOf("*"))
         assertTrue("MODERATOR" in h.repo.findById(user.id)!!.roles)
         assertTrue(AccountEventType.ROLE_GRANTED in h.events.types())
-        h.admin.revokeRole(admin.id, user.id, "MODERATOR")
+        h.admin.revokeRole(admin.id, user.id, "MODERATOR", setOf("*"))
         assertTrue("MODERATOR" !in h.repo.findById(user.id)!!.roles)
-        assertEquals("ACCOUNT.LAST_ADMIN", code { h.admin.revokeRole(user.id, admin.id, "ADMIN") })
-        assertFailsWith<ApplicationException> { h.admin.grantRole(admin.id, user.id, "bad role!") }
+        assertEquals("ACCOUNT.LAST_ADMIN", code { h.admin.revokeRole(user.id, admin.id, "ADMIN", setOf("*")) })
+        assertFailsWith<ApplicationException> { h.admin.grantRole(admin.id, user.id, "bad role!", setOf("*")) }
     }
 
     @Test
@@ -208,7 +208,7 @@ class DeletionAndAdminTest {
         val admin = admin()
         val gone = h.activeAccount("gone@example.com")
         h.deletion.delete(gone.id, ReauthInput("tangerine-42-moon"), null)
-        assertEquals("ACCOUNT.NOT_FOUND", code { h.admin.grantRole(admin.id, gone.id, "ADMIN") })
+        assertEquals("ACCOUNT.NOT_FOUND", code { h.admin.grantRole(admin.id, gone.id, "ADMIN", setOf("*")) })
         assertTrue("ADMIN" !in h.repo.findById(gone.id)!!.roles)
     }
 
@@ -222,7 +222,7 @@ class DeletionAndAdminTest {
             val go = java.util.concurrent.CountDownLatch(1)
             val suspend = round % 2 == 0
             val jobs = listOf(a.id to b.id, b.id to a.id).map { (actor, target) ->
-                pool.submit { go.await(); runCatching { if (suspend) x.admin.suspend(actor, target, null) else x.admin.revokeRole(actor, target, "ADMIN") } }
+                pool.submit { go.await(); runCatching { if (suspend) x.admin.suspend(actor, target, null) else x.admin.revokeRole(actor, target, "ADMIN", setOf("*")) } }
             }
             go.countDown(); jobs.forEach { it.get() }; pool.shutdown()
             assertEquals(1L, x.repo.countActiveWithRole("ADMIN"), "round $round: the last-administrator check was a read followed by a write")

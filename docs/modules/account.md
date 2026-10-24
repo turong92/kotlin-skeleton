@@ -23,7 +23,7 @@
 | `POST /api/v1/account/reauth/confirmation` | 비밀번호 없는 계정의 다시 인증 코드(6자리, 이 세션에서만) | 로그인 |
 | `POST /api/v1/account/delete/confirmation` · `POST /api/v1/account/delete` | 삭제 확인 코드(비밀번호 없는 계정) · 삭제 예약(202, 다시 인증). 정지된 계정은 403 | 로그인 |
 | `POST /api/v1/account/delete/cancel` | 탈퇴 대기 중 로그인 성공 뒤 받은 취소 토큰으로 탈퇴 취소 → 로그인 응답 (`deletion.self-restore=true` 일 때) | 공개 |
-| `/api/v1/admin/accounts` … | 목록(켠 앱은 `loginId` 칸 + `?loginId=` 정확히 일치 검색 · 지워진 계정은 `status=ERASED` 로만) · 정지 · 복구 · 역할 부여/회수 · 정지 계정 즉시 지우기(`/{id}/erase`) · 재가입 차단 목록 · 해제(`/blocks`) (`skeleton.account.admin.enabled=true`) | 관리자 역할 |
+| `/api/v1/admin/accounts` … | 목록(켠 앱은 `loginId` 칸 + `?loginId=` 정확히 일치 검색 · 지워진 계정은 `status=ERASED` 로만) · 정지 · 복구 · 역할 부여/회수 · 정지 계정 즉시 지우기(`/{id}/erase`) · 재가입 차단 목록 · 해제(`/blocks`) (`skeleton.account.admin.enabled=true`) | 권한 `account.read`(목록 · 상세 · 차단 목록) · `account.manage`(정지 · 해제 · 복구 · 지우기 · 차단 해제) · `account.roles`(역할 부여 · 회수) |
 
 **닉네임**(`skeleton.account.display-name.*`): `uniqueness`(`NONE` 기본 · `UNIQUE` · `TAGGED` 꼬리표) · `required-on-sign-up` · `fallback`(`GENERATED` → `user-1a2b3c`) · `reserved`. 규칙(`DisplayNameRules` — 같은 타입의 빈으로 **교체 가능**, 기본 `DefaultDisplayNameRules`: 1..60자 · 보이지 않는 문자(이모지의 ZWJ · 변형 선택자만 허용) · `#` `@` · `deleted:` 거부 · NFKC+소문자+보이지 않는 글자 무시 비교 키)은 가입 · 프로필 수정 · 제공자 이름이 모두 거친다. `change-limit`(기본 10/일)이 닉네임 변경 횟수를 묶는다.
 스키마(`accounts.display_name_key` · `display_tag` · 유니크 `(키, 꼬리표)`)는 방식과 무관하다 — 방식을 바꾸는 법 · 탈퇴 때의 풀림: [docs/accounts.md](../accounts.md) "닉네임".

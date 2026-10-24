@@ -4,6 +4,7 @@ import dev.sumin.skeleton.account.web.AccountCallers
 import dev.sumin.skeleton.authorprofile.AuthorLinkLookup
 import dev.sumin.skeleton.authorprofile.AuthorLinks
 import dev.sumin.skeleton.authorprofile.AuthorProfile
+import dev.sumin.skeleton.authorprofile.AuthorProfilePermissions
 import dev.sumin.skeleton.common.DataResponse
 import dev.sumin.skeleton.common.Response
 import dev.sumin.skeleton.common.openapi.ApiEnvelopeType
@@ -39,8 +40,8 @@ private fun AuthorProfile.toAdmin() = AdminAuthorProfileResponse(id, name, visib
 private fun AuthorLinks.toResponse() = AdminAuthorLinksResponse(accountId, profiles.map { it.toAdmin() })
 
 /**
- * 프로필 ↔ 계정 연결 조회 — **`ADMIN` 만**(게시판 운영자 `MODERATOR` 는 403), 호출마다 `AUTHOR_LINK_VIEWED` 감사 이벤트. `skeleton.author-profile.admin.enabled=true` 일 때만
- * [AuthorProfileAdminWebAutoConfiguration] 이 등록한다. 권한은 매 호출 저장소의 역할을 다시 읽는다([AccountCallers.requireAdmin]).
+ * 프로필 ↔ 계정 연결 조회 — 권한 `author-profile.read` 가 있어야 한다(기본 매핑에서는 전권 역할만, 게시판 운영자 `MODERATOR` 는 403), 호출마다 `AUTHOR_LINK_VIEWED` 감사 이벤트. `skeleton.author-profile.admin.enabled=true` 일 때만
+ * [AuthorProfileAdminWebAutoConfiguration] 이 등록한다. 권한은 매 호출 저장소의 역할을 다시 읽는다([AccountCallers.requirePermission]).
  */
 @RestController
 @RequestMapping("/api/v1/admin/author-profiles")
@@ -48,12 +49,12 @@ private fun AuthorLinks.toResponse() = AdminAuthorLinksResponse(accountId, profi
 class AuthorProfileAdminController(private val callers: AccountCallers, private val lookup: AuthorLinkLookup) {
     @Operation(
         summary = "The profiles of the account behind a profile (deleted ones and times included)",
-        description = "403 for anyone but an administrator (a MODERATOR too), 404 AUTHOR_PROFILE.NOT_FOUND for an unknown profile id. Every successful call is audited as AUTHOR_LINK_VIEWED.",
+        description = "403 for anyone without the author-profile.read permission (a MODERATOR too), 404 AUTHOR_PROFILE.NOT_FOUND for an unknown profile id. Every successful call is audited as AUTHOR_LINK_VIEWED.",
     )
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = AdminAuthorLinksResponse::class)
     @GetMapping("/{id}")
     fun byProfile(authentication: Authentication?, @PathVariable id: String): DataResponse<AdminAuthorLinksResponse> =
-        Response.ok(lookup.byProfile(callers.requireAdmin(authentication).accountId, id).toResponse())
+        Response.ok(lookup.byProfile(callers.requirePermission(authentication, AuthorProfilePermissions.READ).accountId, id).toResponse())
 
     @Operation(
         summary = "The profiles of an account (deleted ones and times included)",
@@ -62,5 +63,5 @@ class AuthorProfileAdminController(private val callers: AccountCallers, private 
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = AdminAuthorLinksResponse::class)
     @GetMapping
     fun byAccount(authentication: Authentication?, @RequestParam accountId: String): DataResponse<AdminAuthorLinksResponse> =
-        Response.ok(lookup.byAccount(callers.requireAdmin(authentication).accountId, accountId).toResponse())
+        Response.ok(lookup.byAccount(callers.requirePermission(authentication, AuthorProfilePermissions.READ).accountId, accountId).toResponse())
 }

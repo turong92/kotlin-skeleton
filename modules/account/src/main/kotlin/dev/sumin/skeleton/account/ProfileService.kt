@@ -74,7 +74,7 @@ class ProfileService(private val core: AccountCore, registry: SignInMethodRegist
         // 지운 계정의 옛 액세스 토큰으로는 아무것도 쓰지 못한다 — 저장소도 같은 조건으로 막는다(검사와 쓰기 사이 틈)
         val current = core.accounts.findById(accountId)?.takeIf { it.status != AccountStatus.ERASED } ?: throw AccountException(AccountErrorCode.NOT_FOUND)
         // 값 검사는 모두 쓰기 전에 — 하나라도 어긋나면 아무것도 바꾸지 않는다. 운영자 역할 계정은 예약어도 쓸 수 있다
-        val name = change.displayName?.let { core.names.accept(it, required = true, exemptReserved = core.props.admin.role in current.roles) }
+        val name = change.displayName?.let { core.names.accept(it, required = true, exemptReserved = core.superRole in current.roles) }
         change.locale?.let { if (ProfileRules.locale(it) == null) invalid("locale") }
         change.timeZone?.let { if (ProfileRules.timeZone(it) == null) invalid("timeZone") }
         // 이름이 겹치면 409 — 다른 필드를 바꾸기 전에. 한도는 **값 검사를 통과한 실제 변경**만 센다 (같은 값 · 거절된 요청은 안 센다)
