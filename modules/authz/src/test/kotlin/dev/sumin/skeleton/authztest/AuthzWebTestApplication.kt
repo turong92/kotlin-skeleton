@@ -26,7 +26,9 @@ class RecordingAudit : OperatorAuditLog {
 
 class StubHolders : RoleHolders {
     val counts = HashMap<String, Long>()
+    val revoked = CopyOnWriteArrayList<Pair<String, String>>()
     override fun holdersOf(role: String): Long = counts[role] ?: 0L
+    override fun revokeFromAll(role: String, by: String): Int { revoked += role to by; return 0 }
 }
 
 @TestConfiguration(proxyBeanMethods = false)

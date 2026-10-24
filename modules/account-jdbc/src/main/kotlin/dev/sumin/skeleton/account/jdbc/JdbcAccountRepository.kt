@@ -241,6 +241,12 @@ class JdbcAccountRepository(
     override fun revokeRole(id: String, role: String, now: Instant): Boolean =
         jdbc.update("delete from account_roles where account_id = :a and role = :r", mapOf("a" to id, "r" to role)) == 1
 
+    override fun revokeRoleFromAll(role: String, now: Instant): List<String> {
+        val ids = jdbc.query("select account_id from account_roles where role = :r order by account_id for update", mapOf("r" to role)) { rs, _ -> rs.getString(1) }
+        jdbc.update("delete from account_roles where role = :r", mapOf("r" to role))
+        return ids
+    }
+
     override fun countActiveWithRole(role: String): Long =
         jdbc.queryForObject(
             "select count(*) from accounts a join account_roles r on r.account_id = a.id where r.role = :role and a.status = 'ACTIVE'",

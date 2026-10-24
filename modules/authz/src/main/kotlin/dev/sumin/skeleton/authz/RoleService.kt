@@ -62,7 +62,7 @@ class RoleService(
         validDescription(description)
         val wanted = validPermissions(permissions)
         return tx.execute {
-            val current = store.find(name) ?: throw notFound(name)
+            val current = store.findForUpdate(name) ?: throw notFound(name)
             checkNotProtected(current)
             checkNoFullAccess(wanted)
             checkKnown(wanted)
@@ -83,12 +83,13 @@ class RoleService(
 
     fun delete(actor: OperatorRef, name: String) {
         tx.executeWithoutResult {
-            val current = store.find(name) ?: throw notFound(name)
+            val current = store.findForUpdate(name) ?: throw notFound(name)
             checkNotProtected(current)
             checkNoLockout(actor, name, emptySet())
             if ((holders?.holdersOf(name) ?: 0L) > 0) {
                 throw exception(AuthzRoleErrorCode.ROLE_IN_USE, "Accounts still hold role $name")
             }
+            holders?.revokeFromAll(name, actor.accountId)
             if (!store.delete(name)) throw notFound(name)
             audit.record(OperatorAction(actor.accountId, "authz.role.deleted", "role", name))
         }

@@ -63,6 +63,21 @@ class AccountOperatorAccessTest {
     }
 
     @Test
+    fun `revokeFromAll takes the role from suspended and deleted accounts too and says so per account`() {
+        store("acc_a", AccountStatus.ACTIVE, "CS")
+        store("acc_s", AccountStatus.SUSPENDED, "CS", "USER")
+        store("acc_d", AccountStatus.DELETED, "CS")
+        store("acc_other", AccountStatus.ACTIVE, "VIEWER")
+        val holders = AccountRoleHolders({ h.repo }, { h.publisher }, { now })
+        assertEquals(1L, holders.holdersOf("CS"))   // 막기는 활성 계정만 센다
+        assertEquals(3, holders.revokeFromAll("CS", "acc_op"))
+        listOf("acc_a", "acc_s", "acc_d").forEach { assertTrue("CS" !in h.repo.findById(it)!!.roles, it) }
+        assertEquals(setOf("USER"), h.repo.findById("acc_s")!!.roles)
+        assertEquals(setOf("VIEWER"), h.repo.findById("acc_other")!!.roles)
+        assertEquals(3, h.events.all.count { it.type.name == "ROLE_REVOKED" && it.detail["by"] == "acc_op" && it.detail["role"] == "CS" })
+    }
+
+    @Test
     fun `permissions of several roles are merged and sorted`() {
         store("acc_3", AccountStatus.ACTIVE, "VIEWER", "STAFF")
         assertEquals(listOf("account.manage", "account.read"), access.permissionsOf(OperatorRef("acc_3")).toList())

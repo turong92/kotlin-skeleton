@@ -249,7 +249,8 @@ class AccountAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    fun accountRoleHolders(accounts: ObjectProvider<AccountRepository>): RoleHolders = AccountRoleHolders { accounts.getObject() }
+    fun accountRoleHolders(accounts: ObjectProvider<AccountRepository>, events: ObjectProvider<AccountEventPublisher>, time: ObjectProvider<TimeProvider>): RoleHolders =
+        AccountRoleHolders({ accounts.getObject() }, { events.getIfAvailable { AccountEventPublisher.NONE } }) { time.getIfAvailable { TimeProvider.systemUtc() }.now() }
 
     @Bean
     fun accountPermissions(): PermissionDeclaration = AccountPermissions.declaration

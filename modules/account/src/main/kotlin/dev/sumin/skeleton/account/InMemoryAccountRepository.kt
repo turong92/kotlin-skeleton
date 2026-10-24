@@ -135,6 +135,12 @@ class InMemoryAccountRepository : AccountRepository {
         return true
     }
 
+    @Synchronized override fun revokeRoleFromAll(role: String, now: Instant): List<String> {
+        val holders = accounts.values.filter { role in it.roles }
+        holders.forEach { accounts[it.id] = it.copy(roles = it.roles - role, updatedAt = now) }
+        return holders.map { it.id }
+    }
+
     @Synchronized override fun countActiveWithRole(role: String): Long =
         accounts.values.count { it.status == AccountStatus.ACTIVE && role in it.roles }.toLong()
 

@@ -1,6 +1,8 @@
 package dev.sumin.skeleton.authz.jdbc
 
+import dev.sumin.skeleton.authz.AuthzRoleException
 import dev.sumin.skeleton.authz.AuthzRoleStore
+import dev.sumin.skeleton.authz.RoleService
 import dev.sumin.skeleton.authz.StoredRole
 import dev.sumin.skeleton.common.authz.CachingRolePermissionSource
 import dev.sumin.skeleton.common.authz.DeclaredPermission
@@ -18,6 +20,8 @@ import java.time.Duration
 import java.time.Instant
 import java.time.ZoneOffset
 import java.util.concurrent.Callable
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CyclicBarrier
 import java.util.concurrent.Executors
@@ -52,6 +56,7 @@ import org.springframework.web.context.request.RequestContextHolder
         "skeleton.authz.roles.ADMIN=*",
         "skeleton.authz.roles.MODERATOR=board.moderate,board.manage",
         "skeleton.authz.roles.CS=payment.read,payment.refund",
+        "skeleton.authz.roles.LIMITED=authz.roles,payment.read",
     ],
 )
 @AutoConfigureMockMvc
@@ -66,8 +71,12 @@ class JdbcAuthzDbTest {
 
     class RecordingAudit : OperatorAuditLog {
         val actions = CopyOnWriteArrayList<OperatorAction>()
+
+        /** 시험이 쓰기 트랜잭션을 커밋 직전에 붙잡아 두는 자리 */
+        @Volatile var onRecord: (OperatorAction) -> Unit = {}
         override fun record(action: OperatorAction) {
             actions += action
+            onRecord(action)
         }
     }
 
@@ -79,6 +88,7 @@ class JdbcAuthzDbTest {
     @Autowired lateinit var tx: TransactionOperations
     @Autowired lateinit var mvc: MockMvc
     @Autowired lateinit var audit: RecordingAudit
+    @Autowired lateinit var service: RoleService
 
     private val time = TimeProvider.fixed(Instant.parse("2026-10-24T00:00:00Z"))
 
@@ -206,6 +216,35 @@ class JdbcAuthzDbTest {
         assertFalse(can(cs, "payment.refund"))
         assertTrue(can(cs, "payment.read"))
         assertEquals(listOf("authz.role.updated"), audit.actions.map { it.action })
+    }
+
+    @Test
+    fun `an edit that races a removal cannot bring the removed permission back`() {
+        val upper = OperatorRef("acc_upper", setOf("ADMIN"))
+        val limited = OperatorRef("acc_limited", setOf("LIMITED"))   // authz.roles 와 payment.read 만 — payment.refund 는 줄 수 없다
+        val upperInTransaction = CountDownLatch(1)
+        val releaseUpper = CountDownLatch(1)
+        audit.onRecord = { if (it.actorId == "acc_upper") { upperInTransaction.countDown(); releaseUpper.await(10, TimeUnit.SECONDS) } }
+        val pool = Executors.newFixedThreadPool(2)
+        try {
+            // 상위가 payment.refund 를 빼는 트랜잭션을 커밋 직전에 붙잡는다
+            val removal = pool.submit { service.update(upper, "CS", null, setOf("payment.read")) }
+            assertTrue(upperInTransaction.await(10, TimeUnit.SECONDS))
+            // 아래 사람이 설명만 바꾸려고 예전 목록(payment.refund 포함)을 그대로 보낸다
+            val stale = pool.submit<Throwable?> {
+                try { service.update(limited, "CS", "new text", setOf("payment.read", "payment.refund")); null } catch (e: AuthzRoleException) { e }
+            }
+            Thread.sleep(500)
+            releaseUpper.countDown()
+            removal.get(10, TimeUnit.SECONDS)
+            val refused = stale.get(10, TimeUnit.SECONDS)
+            assertEquals("AUTHZ.ESCALATION", (refused as? AuthzRoleException)?.errorCode?.code, "the stale edit must be judged against the committed removal")
+            assertEquals(setOf("payment.read"), store.find("CS")!!.permissions)
+        } finally {
+            releaseUpper.countDown()
+            audit.onRecord = {}
+            pool.shutdownNow()
+        }
     }
 
     /** 스프링 시험은 시험 내내 요청 하나를 열어 두므로 요청 단위 메모(AbstractOperatorAccess)를 매번 비워 「다음 요청」을 흉내 낸다 */

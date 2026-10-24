@@ -31,10 +31,17 @@ class JdbcAuthzRoleStore(
             .map { it.copy(permissions = permissions[it.name].orEmpty().toSortedSet()) }
     }
 
-    override fun find(name: String): StoredRole? =
-        jdbc.sql("select name, description, protected from authz_roles where name = :name").param("name", name)
+    override fun find(name: String): StoredRole? = read(name, lock = false)
+
+    /** 두 방언 모두 `for update` 가 최신 커밋을 읽는다 — 권한 줄도 잠가 읽어 MySQL 의 반복 읽기 스냅샷에 옛 값이 남지 않게 한다 */
+    override fun findForUpdate(name: String): StoredRole? = read(name, lock = true)
+
+    private fun read(name: String, lock: Boolean): StoredRole? {
+        val suffix = if (lock) " for update" else ""
+        return jdbc.sql("select name, description, protected from authz_roles where name = :name$suffix").param("name", name)
             .query { rs, _ -> StoredRole(rs.getString("name"), rs.getString("description"), emptySet(), rs.getBoolean("protected")) }.optional().orElse(null)
-            ?.let { it.copy(permissions = permissionsOf(it.name)) }
+            ?.let { it.copy(permissions = permissionsOf(it.name, suffix)) }
+    }
 
     /**
      * 같은 이름이 이미 있으면 false. 유니크 위반은 트랜잭션 밖으로 나온 뒤에 잡는다 — PostgreSQL 은 위반한 트랜잭션을 더 쓰지 못하므로
@@ -70,8 +77,8 @@ class JdbcAuthzRoleStore(
         true
     }!!
 
-    private fun permissionsOf(role: String): Set<String> =
-        jdbc.sql("select permission from authz_role_permissions where role = :role order by permission").param("role", role)
+    private fun permissionsOf(role: String, suffix: String): Set<String> =
+        jdbc.sql("select permission from authz_role_permissions where role = :role order by permission$suffix").param("role", role)
             .query { rs, _ -> rs.getString("permission") }.list().toSortedSet<String>()
 
     private fun insertPermissions(role: String, permissions: Set<String>) =

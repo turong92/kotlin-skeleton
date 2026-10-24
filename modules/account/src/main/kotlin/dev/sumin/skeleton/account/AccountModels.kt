@@ -210,6 +210,9 @@ interface AccountRepository {
 
     fun revokeRole(id: String, role: String, now: Instant): Boolean
 
+    /** [role] 의 배정을 **모든** 계정에서 거두고(상태 무관) 거둔 계정 id 를 돌려준다 — 역할을 지울 때(`authz`)의 같은 트랜잭션 안에서 부른다 */
+    fun revokeRoleFromAll(role: String, now: Instant): List<String>
+
     /** [role] 을 가진 ACTIVE 계정 수 — 마지막 관리자 보호 · 첫 관리자 부트스트랩 */
     fun countActiveWithRole(role: String): Long
 

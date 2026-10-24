@@ -59,6 +59,7 @@ class RoleAdminWebTest {
         store.rows["CS"] = StoredRole("CS", "Support", setOf("payment.read"))
         audit.actions.clear()
         holders.counts.clear()
+        holders.revoked.clear()
     }
 
     private fun call(builder: MockHttpServletRequestBuilder, who: TestingAuthenticationToken? = null): ResultActions =
@@ -159,8 +160,10 @@ class RoleAdminWebTest {
         call(delete("/api/v1/admin/roles/CS"), admin).andExpect(status().isConflict).andExpect(jsonPath("$.code").value("AUTHZ.ROLE_IN_USE"))
         assertTrue("CS" in store.rows)
         holders.counts["CS"] = 0
+        assertEquals(0, holders.revoked.size, "a refused delete takes nothing from anyone")
         call(delete("/api/v1/admin/roles/CS"), admin).andExpect(status().isNoContent)
         assertTrue("CS" !in store.rows)
+        assertEquals(listOf("CS" to "acc_admin"), holders.revoked, "the delete takes the role from the non-active holders in the same transaction")
     }
 
     // ---- validation ----

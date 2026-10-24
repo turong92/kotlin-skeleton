@@ -2,6 +2,9 @@ package dev.sumin.skeleton.account.authz
 
 import dev.sumin.skeleton.account.AccountRepository
 import dev.sumin.skeleton.account.AccountStatus
+import dev.sumin.skeleton.account.events.AccountEventPublisher
+import dev.sumin.skeleton.account.events.AccountEventType
+import java.time.Instant
 import dev.sumin.skeleton.common.authz.AbstractOperatorAccess
 import dev.sumin.skeleton.common.authz.OperatorRef
 import dev.sumin.skeleton.common.authz.PermissionDeclaration
@@ -28,8 +31,18 @@ class AccountOperatorAccess(
 }
 
 /** 역할을 가진 활성 계정 수 — `authz` 가 「가진 계정이 있으면 역할 삭제 불가」를 판정하는 데 쓴다 */
-class AccountRoleHolders(private val accounts: () -> AccountRepository) : RoleHolders {
+class AccountRoleHolders(
+    private val accounts: () -> AccountRepository,
+    private val events: () -> AccountEventPublisher,
+    private val now: () -> Instant,
+) : RoleHolders {
     override fun holdersOf(role: String): Long = accounts().countActiveWithRole(role)
+
+    /** 지운 역할의 배정을 모든 계정에서 거둔다 — 계정마다 `ROLE_REVOKED`(by = 지운 운영자) */
+    override fun revokeFromAll(role: String, by: String): Int =
+        accounts().revokeRoleFromAll(role, now()).onEach {
+            events().publish(AccountEventType.ROLE_REVOKED, it, detail = mapOf("role" to role, "by" to by))
+        }.size
 }
 
 object AccountPermissions {
