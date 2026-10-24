@@ -1,5 +1,7 @@
 # authz-jdbc
 
+> **이 모듈을 붙이는 순간 yml 의 역할 → 권한 매핑(`skeleton.authz.roles`)은 첫 기동의 씨앗일 뿐이다. 그 뒤로는 표(`authz_roles` · `authz_role_permissions`)가 진실이고, yml 을 바꿔도 반영되지 않는다 — 바꾸려면 관리 API 를 쓴다.**
+
 `authz` 의 저장소 포트(`AuthzRoleStore`)를 JDBC(PostgreSQL · MySQL)로 구현하고, 판정이 읽는 역할 → 권한 매핑(`RolePermissionSource`)을 yml 에서 **이 표**로 바꾼다. 테이블 2 개: `authz_roles`(역할 · `protected` 는 전권 역할) · `authz_role_permissions`(역할이 가진 권한 키, 역할을 지우면 같이 지워진다).
 시각은 `SqlDialect` 로 바인딩한다. 전권 역할 줄은 고치기 · 지우기 문장이 `protected = false` 조건을 달고 있어 동시 호출에도 바뀌지 않고, 판정 쪽도 표의 줄과 상관없이 전권 역할을 `*` 로 읽는다.
 
