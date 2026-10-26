@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Logger
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import dev.sumin.skeleton.common.GlobalExceptionHandler
+import java.security.Principal
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import org.slf4j.LoggerFactory
@@ -18,14 +19,14 @@ class AuthErrorWriterTest {
         val appender = ListAppender<ILoggingEvent>().also { it.start() }
         logger.addAppender(appender)
         try {
-            val request = MockHttpServletRequest("GET", "/api/admin/x").apply { queryString = "token=secret" }
+            val request = MockHttpServletRequest("GET", "/api/admin/x").apply { queryString = "token=secret"; userPrincipal = Principal { "acc_user" } }
             val response = MockHttpServletResponse()
 
             AuthErrorWriter(JsonMapper.builder().build()).writeForbidden(request, response)
 
             assertEquals(403, response.status)
             assertEquals(
-                "Forbidden: GET /api/admin/x principal=anonymous code=COMMON.FORBIDDEN message=Access denied",
+                "Forbidden: GET /api/admin/x principal=acc_user code=COMMON.FORBIDDEN message=Access denied",
                 appender.list.single().formattedMessage,
             )
         } finally {

@@ -106,4 +106,4 @@ class OrderNotFoundException(orderId: String) : ApplicationException(
 )
 ```
 
-A 403 is logged as one WARN line starting `Forbidden:` (method, path without the query string, caller account id or `anonymous`, error code, message); the trace id comes from the log context. It is an application log line, not an audit record.
+A 403 (except a break-glass refusal, which has its own WARN line) is logged as one WARN line starting `Forbidden:` (method, path without the query string, caller `Authentication.name` — the account id with the default auth, so an app that swaps the security chain should keep it that way — or `anonymous`, error code, message); the trace id comes from the log context. It is an application log line, not an audit record.
