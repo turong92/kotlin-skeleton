@@ -4,13 +4,11 @@ name: new-project
 on:
   push:
     branches: [main]
-    paths: ['scripts/**', 'modules/*/build.gradle.kts', 'apps/**', 'settings.gradle.kts', 'build.gradle.kts', 'docs/config/modules/**', 'docker-compose.yml', '.env.example', '.github/workflows/new-project.yml']
   pull_request:
-    paths: ['scripts/**', 'modules/*/build.gradle.kts', 'apps/**', 'settings.gradle.kts', 'build.gradle.kts', 'docs/config/modules/**', 'docker-compose.yml', '.env.example', '.github/workflows/new-project.yml']
 
 concurrency:
   group: new-project-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   quick:

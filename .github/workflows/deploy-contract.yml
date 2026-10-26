@@ -5,13 +5,13 @@ name: deploy-contract
 on:
   push:
     branches: [main]
-    paths: ['Dockerfile', 'apps/*/src/main/**', 'apps/*/build.gradle.kts', 'modules/platform/src/main/**', 'modules/platform/build.gradle.kts', 'modules/auth/src/main/**', 'modules/migration/src/main/**', 'scripts/test-deploy-contract.sh', 'deploy/**', 'build.gradle.kts', 'settings.gradle.kts', '.github/workflows/deploy-contract.yml']
+    paths: ['Dockerfile', 'apps/*/src/main/**', 'apps/*/build.gradle.kts', 'modules/platform/src/main/**', 'modules/platform/build.gradle.kts', 'modules/auth/src/main/**', 'modules/auth/build.gradle.kts', 'modules/migration/src/main/**', 'modules/migration/build.gradle.kts', 'scripts/test-deploy-contract.sh', 'deploy/**', 'build.gradle.kts', 'settings.gradle.kts', '.github/workflows/deploy-contract.yml']
   pull_request:
-    paths: ['Dockerfile', 'apps/*/src/main/**', 'apps/*/build.gradle.kts', 'modules/platform/src/main/**', 'modules/platform/build.gradle.kts', 'modules/auth/src/main/**', 'modules/migration/src/main/**', 'scripts/test-deploy-contract.sh', 'deploy/**', 'build.gradle.kts', 'settings.gradle.kts', '.github/workflows/deploy-contract.yml']
+    paths: ['Dockerfile', 'apps/*/src/main/**', 'apps/*/build.gradle.kts', 'modules/platform/src/main/**', 'modules/platform/build.gradle.kts', 'modules/auth/src/main/**', 'modules/auth/build.gradle.kts', 'modules/migration/src/main/**', 'modules/migration/build.gradle.kts', 'scripts/test-deploy-contract.sh', 'deploy/**', 'build.gradle.kts', 'settings.gradle.kts', '.github/workflows/deploy-contract.yml']
 
 concurrency:
   group: deploy-contract-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   contract:

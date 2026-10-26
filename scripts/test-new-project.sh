@@ -140,6 +140,7 @@ check "찍은 스타터의 약관 시험은 새 패키지 · 접두사로 찍힌
 check "legal 의 TEMPLATE 문서(모듈 리소스)가 남고, 시험 배포 안내(ACKNOWLEDGE_TEMPLATE)가 배포 선언에 찍힌 접두사로 있다" bash -c "test -f '$A/modules/legal/src/main/resources/legal-templates/manifest.json' && grep -q 'ACME_LEGAL_ACKNOWLEDGE_TEMPLATE' '$A/deploy/app.yaml'"
 check "찍은 legal 의 TEMPLATE 위치(Kotlin 상수)가 실제 리소스 디렉터리를 가리킨다 (rename 이 skeleton-<소문자> 를 바꿔도 깨지지 않는다)" bash -c "loc=\$(sed -n 's/.*TEMPLATE_LOCATION = \"classpath:\\(.*\\)\".*/\\1/p' '$A/modules/legal/src/main/kotlin/com/acme/shop/legal/LegalAutoConfiguration.kt'); test -n \"\$loc\" && test -f \"$A/modules/legal/src/main/resources/\${loc}manifest.json\""
 check "새 프로젝트에는 new-project 도구가 따라오지 않는다" bash -c "! ls '$A/scripts/new-project.sh' '$A/scripts/test-new-project.sh' '$A/.github/workflows/new-project.yml' 2>/dev/null | grep -q ."
+check "새 프로젝트에는 스켈레톤의 nightly.yml 이 없고 ci.yml 은 -x 없이 전체 build 를 돈다 (없는 태스크의 -x 는 실패한다)" bash -c "test ! -e '$A/.github/workflows/nightly.yml' && grep -q -- '- run: ./gradlew build\$' '$A/.github/workflows/ci.yml' && ! grep -q -- ' -x ' '$A/.github/workflows/ci.yml'"
 check "rootProject.name 이 바뀐다" has_line 'rootProject.name = "acme"' "$A/settings.gradle.kts"
 check "패키지가 바뀐다" test -f "$A/apps/api/src/main/kotlin/com/acme/shop/app/api/ApiApplication.kt"
 check "starter 테스트의 부재 단언은 그대로 (모듈을 더하지 않았다)" has_line 'software.amazon.awssdk.services.s3.S3Client' "$A/apps/api/src/test/kotlin/com/acme/shop/app/api/StarterCompositionIntegrationTest.kt"
@@ -374,6 +375,7 @@ RECIPE_LIST="$TMP/recipe-commands.txt"
 perl -0ne 'while (/<!-- kotlin-stamp: ([a-z0-9-]+) -->\s*```bash\n(.*?)\n```/gs) { print "$1\t$2\n" }' "$SRC/docs/new-project-recipe.md" > "$RECIPE_LIST"
 [ "$(wc -l < "$RECIPE_LIST" | tr -d ' ')" -ge 3 ] && pass "레시피에 kotlin-stamp 예가 3개 이상 있다" || fail "레시피의 kotlin-stamp 예가 3개 미만이다"
 RECIPE_DIRS=""
+RECIPE_PLAIN=" "   # 옵션 없이 찍는 레시피 id (공백으로 감싼 목록)
 while IFS="$(printf '\t')" read -r rid rcmd; do
   [ -n "$rid" ] || continue
   # 'scripts/new-project.sh <target> <pkg> <prefix> <Class> [옵션...]' — 대상 경로만 임시 폴더로 바꿔 그대로 부른다
@@ -383,6 +385,7 @@ while IFS="$(printf '\t')" read -r rid rcmd; do
   expect_exit 0 "레시피 예 $rid: 실제로 찍는다" bash "$SCRIPT" "$TMP/recipe-$rid" "$@"
   check "레시피 예 $rid: 찍은 프로젝트의 카탈로그 생성물이 맞다" bash -c "cd '$TMP/recipe-$rid' && perl scripts/build-capabilities.pl --check"
   RECIPE_DIRS="$RECIPE_DIRS $rid"
+  [ "$#" -le 3 ] && RECIPE_PLAIN="$RECIPE_PLAIN$rid "
 done < "$RECIPE_LIST"
 
 if [ "$MODE" = "--full" ]; then
@@ -409,7 +412,7 @@ if [ "$MODE" = "--full" ]; then
   build_composition "$J" "7-redis"
   build_composition "$AZ" "10-authz"
   for rid in $RECIPE_DIRS; do   # 레시피의 작업 예 — 문서의 명령이 낡으면 여기서 깨진다 (stamp · dry-run 은 위에서 이미 했다)
-    [ "$rid" = "content-ssr" ] && continue   # 플래그 없는 스타터 그대로 = 1-defaults 와 모듈 구성이 같아 빌드는 반복하지 않는다
+    [ "${RECIPE_PLAIN#* $rid }" != "$RECIPE_PLAIN" ] && continue   # 위치 인자 뒤에 옵션이 없는 레시피 = 스타터 그대로 = 1-defaults 와 같은 구성이라 빌드는 반복하지 않는다
     build_composition "$TMP/recipe-$rid" "recipe-$rid"
   done
 fi

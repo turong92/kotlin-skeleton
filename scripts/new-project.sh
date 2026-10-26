@@ -226,7 +226,9 @@ export COPYFILE_DISABLE=1   # macOS tar 가 ._* 파일을 만들지 않게
 cd "$TARGET"
 
 # 새 프로젝트에는 찍어내는 도구가 필요 없다 (CI 워크플로가 그 도구를 시험한다)
-rm -rf scripts/new-project.sh scripts/test-new-project.sh scripts/new-project.d .github/workflows/new-project.yml docs/new-project-recipe.md
+rm -rf scripts/new-project.sh scripts/test-new-project.sh scripts/new-project.d .github/workflows/new-project.yml .github/workflows/nightly.yml docs/new-project-recipe.md
+# 스켈레톤의 ci.yml 은 위 도구가 없는 것을 전제로 push 검사를 줄여 둔다(-x newProjectChecks -x mysqlTest) — 찍은 프로젝트에는 그 태스크가 없거나(없는 태스크의 -x 는 실패) DB 묶음이 하나뿐이다. 전체 build 로 되돌린다
+perl -pi -e 's/^(\s*- run: \.\/gradlew build) -x newProjectChecks -x mysqlTest\s*$/$1\n/; $_ = "" if /^# (push · PR 은 빠른 검사만|전체 build\(둘 다)/' .github/workflows/ci.yml
 # 카탈로그 가드가 정말 무는지 보는 시험은 스켈레톤의 모든 모듈을 전제한다 (찍은 프로젝트에는 CapabilitiesCatalogTest 만 남는다)
 rm -f modules/platform/src/test/kotlin/dev/sumin/skeleton/common/capabilities/CapabilitiesGuardsTest.kt
 # 한 프로세스에 프로젝트 둘을 띄워 보는 apps/api 시험(docs/multi-project.md)은 스타터 조합 + PostgreSQL 전제다 — 모듈을 더하면(프로젝트를 모르는 기능은 둘 이상일 때 기동을 막는다)

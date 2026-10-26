@@ -8,6 +8,9 @@ on:
     - cron: '0 18 * * *'   # UTC 18:00 = KST 03:00
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   full-build:
     runs-on: ubuntu-latest
@@ -19,7 +22,7 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
       - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew build
+      - run: ./gradlew build -x newProjectChecks   # --quick 은 compositions 잡의 test-new-project.sh --full 이 이미 돈다
 
   compositions:
     runs-on: ubuntu-latest

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### CI 줄이기 · 테스트 덜어내기 (2026-10-26)
+
+- `ci.yml`: push · PR 은 `./gradlew build -x newProjectChecks -x mysqlTest` 로 빠른 검사만(PR 은 새로 올라오면 이전 실행을 멈춘다). MySQL 묶음과 새 프로젝트 빠른 검사(`new-project.yml` 이 `--quick` 을 따로 돈다)는 새 `nightly.yml`(하루 한 번 + 수동)이 전체 `./gradlew build` 와 `test-new-project.sh --full` 로 돈다. `new-project.yml` 은 `--quick` 만, 레시피 `content-ssr`(옵션 없음)의 빌드는 `1-defaults` 와 같아 건너뛴다. `deploy-contract.yml` 은 테스트 소스만 바뀌면 건너뛴다.
+- **찍은 프로젝트**: `new-project.sh` 가 `nightly.yml` 을 지우고 `ci.yml` 의 build 를 `./gradlew build` 로 되돌려 쓴다(찍은 프로젝트에는 `newProjectChecks` 가 없어 `-x` 가 실패한다). 이미 찍은 프로젝트는 영향 없음; 스켈레톤의 ci.yml 을 손으로 가져갈 때는 `-x …` 를 빼고 가져간다.
+- 테스트: `GateRequestsTest` 신설(두 게이트 인터셉터가 공유하는 요청 규칙 5건을 한 벌로 — 인터셉터 테스트의 같은 단정 10개 삭제), `WorkbenchApplicationTests.contextLoads` · `apps/sample` 의 `ClientIpPlatformEnvTest` 복사본 삭제, `JdbcQueryCountDbTest` 는 `src/postgresTest`(Postgres 한 벌).
+
 ### 운영자 권한 — 공용 판정 · 역할 → 권한 · 옛 역할 키 4개 삭제 (2026-10-24)
 
 - **Breaking — 옛 역할 키 네 개를 지웠다. 값이 하나라도 있으면 기동이 실패하고 메시지가 새 자리를 알려 준다.**

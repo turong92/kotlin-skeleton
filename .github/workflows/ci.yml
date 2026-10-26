@@ -4,10 +4,10 @@ on:
     branches: [main]
   pull_request:
 
-# 같은 브랜치에 새로 올라오면 돌던 검사는 멈춘다.
+# 같은 PR 에 새로 올라오면 돌던 검사는 멈춘다 (main push 는 커밋마다 결과를 남긴다).
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # push · PR 은 빠른 검사만: MySQL 두 번째 벌(mysqlTest)과 새 프로젝트 빠른 검사(newProjectChecks, new-project.yml 이 따로 돈다)는 뺀다.
 # 전체 build(둘 다 포함)와 조합 전체 빌드는 하루 한 번 nightly.yml 이 돈다.
