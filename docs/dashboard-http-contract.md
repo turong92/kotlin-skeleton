@@ -36,9 +36,11 @@ Conventions (envelope, error body, tokens): [account-http-contract.md](account-h
 
 - `previous`, `previousValue`, `previousSeries` are `null` unless `compare=true`. Even with `compare=true` a metric that cannot be compared (`auth-session.active` — its past values are overwritten) has `previousValue` and `previousSeries` `null`: show "not comparable" instead of a delta.
 - `unit`: `PEOPLE` · `COUNT` · `MONEY` · `PERCENT`. Not money → `value` has one element with `currency: null`. Money → one element per currency, **never summed**; the configured currency (`skeleton.dashboard.currency`) first, the rest by amount. `series` is the first currency only.
+- `PERCENT` values are **integers in basis points** (1% = 100, 38.2% = 3820); the screen divides by 100. The funnel `rate`s are plain fractions (0.5 = 50%), not basis points.
 - `status`: `OK` · `NOT_CONNECTED` (no key configured) · `NO_HISTORY` (a past period without `dashboard-jdbc`) · `ERROR` (the source failed — the response is still `200`). Anything but `OK` has an empty `value` / `series` / `rows` and, mostly, `freshness: null`.
 - `freshness.kind`: `LIVE` (`asOf` = when the server computed it) · `CACHED` (`asOf` = when it was fetched from the outside) · `DAILY` (`asOf` = when the daily load ran).
 - `rankings` hold the top 10 rows; `group` is `traffic` · `pages` · `geo` · `app` (a card per group, a tab per ranking). `funnel` is `null` when the app has no cohort source; its first step is the cohort itself (`rate` 1.0), the other `rate`s are against the cohort size. `reference` (anonymous visits, not part of the cohort) is `null` when the app has no such metric or it is not `OK`; its `rate` is cohort size / visits.
+- `ga.returning` is a **ranking**, not a tile: group `traffic`, columns `["Users"]`, exactly two rows `New` and `Returning` with the user counts (`values: [n]`). The screen computes the share from the two counts. (Five GA rankings in all, as in the key list below.)
 - Tile keys: `cloudflare.visits` · `cloudflare.pageviews` · `account.signed-up` · `auth-session.active` · `payment.net-revenue` · `payment.paid-count`. Ranking keys: `cloudflare.{referrers,paths,countries,devices}` · `ga.{channels,campaigns,landing-pages,page-transitions,returning}` · `app.*`.
 
 ## 2. One ranking
