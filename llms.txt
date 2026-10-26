@@ -103,6 +103,7 @@
 - crypto: AES-GCM 텍스트 암호화 · 키 회전용 키 id 봉투 · URL 에… [암호화, 복호화]
 - dashboard: 관리자 대시보드 조립기 — 다른 모듈이 빈으로 기여한 숫자 타일 ·… [관리자 대시보드, 어드민 대시보드]
 - dashboard-cloudflare: 대시보드에 접속 숫자를 얹는다 — Cloudflare Web… [접속 통계, 방문자 수]
+- dashboard-ga: 대시보드에 흐름을 얹는다 — GA4 의 유입 채널 · 캠페인 · 첫… [구글 애널리틱스, GA4]
 - dashboard-jdbc: 대시보드 저장소 — PostgreSQL · MySQL 로… [대시보드 저장소, 일별 집계 표]
 - db-mysql: MySQL 방언 — 드라이버 · Flyway MySQL 지원 ·… [MySQL, 마이SQL]
 - db-postgresql: PostgreSQL 방언(기본) [PostgreSQL, 포스트그레스]

@@ -231,3 +231,9 @@ skeleton:
     account-id: ""
     site-tag: ""
     api-token: ""
+  dashboard-ga:
+    # 이 앱의 선택: 유입 · 흐름 카드와 「지금 N명」 을 GA4 로 채운다. 값은 커밋하지 않는다 — 환경변수로만(SKELETON_DASHBOARD_GA_{PROPERTY_ID,CREDENTIALS,KEY_EVENT}, 키는 배포 선언의 secrets:).
+    # 비워 두면 앱은 그대로 뜨고 GA 카드만 「연결하면 보입니다」.
+    property-id: ""
+    credentials: ""
+    key-event: ""

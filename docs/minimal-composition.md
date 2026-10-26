@@ -114,6 +114,7 @@ fails when this table and the prefixes found in module code differ.
 | `crypto` | `skeleton.crypto` |
 | `dashboard` | `skeleton.dashboard` |
 | `dashboard-cloudflare` | `skeleton.dashboard-cloudflare` |
+| `dashboard-ga` | `skeleton.dashboard-ga` |
 | `event-kafka` | `skeleton.event-kafka` |
 | `legal` | `skeleton.legal` |
 | `idempotency` | `skeleton.idempotency` |
@@ -182,6 +183,7 @@ test proving a context with only that module (and its declared dependencies) boo
 | `dashboard` | off until `skeleton.dashboard.admin.enabled=true` (then HTTP `/api/v1/admin/dashboard`; off = 404) | nothing | cards: add `account-jdbc` · `auth-session-jdbc` · `payment-jdbc` or your own `DashboardMetric` beans |
 | `dashboard-jdbc` | yes (daily table + per-account screen settings; turns the daily load job on) | a `DataSource` + one `db-*` module (+ its migration `dashboard`, as above) | — |
 | `dashboard-cloudflare` | yes (visits · page views · sources · pages · countries · devices cards; each card says not-connected until the three values are set) | nothing | Cloudflare account id + Web Analytics site tag + API token (Account Analytics Read), internet; past days need `dashboard-jdbc` |
+| `dashboard-ga` | yes (channel · campaign · landing page · page flow · new/returning cards from the daily table, live visitors from the Realtime API; each card says not-connected until the property id and key are set) | nothing | GA4 property id + service-account key (Viewer on the property), internet; past days need `dashboard-jdbc` |
 | `captcha-turnstile` | off until `enabled=true` + `secret-key` | nothing | Turnstile secret, internet |
 | `config-aws-ssm` | loads only once `paths` are set (dev / staging / prod) or `credential-profile` is set | nothing | AWS credentials when it loads (`fail-fast` decides) |
 | `crypto` | beans only when `skeleton.crypto.keys` has a key | nothing | AES keys |

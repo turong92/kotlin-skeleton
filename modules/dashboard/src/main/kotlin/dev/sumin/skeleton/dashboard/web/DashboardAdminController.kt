@@ -3,7 +3,6 @@ package dev.sumin.skeleton.dashboard.web
 import dev.sumin.skeleton.common.DataResponse
 import dev.sumin.skeleton.common.Response
 import dev.sumin.skeleton.common.authz.OperatorAccess
-import dev.sumin.skeleton.common.authz.OperatorRef
 import dev.sumin.skeleton.common.openapi.ApiEnvelopeType
 import dev.sumin.skeleton.common.openapi.ApiResponseEnvelope
 import dev.sumin.skeleton.dashboard.DashboardAssembler
@@ -11,7 +10,6 @@ import dev.sumin.skeleton.dashboard.DashboardPermissions
 import dev.sumin.skeleton.dashboard.DashboardRangeParser
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
-import org.springframework.security.authentication.AnonymousAuthenticationToken
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -37,7 +35,7 @@ class DashboardAdminController(
         @RequestParam(required = false) to: String?,
         @RequestParam(defaultValue = "false") compare: Boolean,
     ): DataResponse<DashboardOverviewResponse> {
-        access.require(operator(authentication), DashboardPermissions.READ)
+        access.require(DashboardCallers.operatorOf(authentication), DashboardPermissions.READ)
         return Response.ok(assembler.overview(parser.parse(from, to), compare))
     }
 
@@ -51,14 +49,8 @@ class DashboardAdminController(
         @RequestParam(required = false) to: String?,
         @RequestParam(defaultValue = "100") limit: Int,
     ): DataResponse<DashboardRankingResponse> {
-        access.require(operator(authentication), DashboardPermissions.READ)
+        access.require(DashboardCallers.operatorOf(authentication), DashboardPermissions.READ)
         return Response.ok(assembler.ranking(key, parser.parse(from, to), limit.coerceIn(1, MAX_LIMIT)))
-    }
-
-    /** `Authentication` → [OperatorRef]. 호출자 id 는 `Authentication.name`, 토큰 역할은 `ROLE_` 를 뗀 권한 이름 */
-    private fun operator(authentication: Authentication?): OperatorRef? {
-        if (authentication == null || authentication is AnonymousAuthenticationToken || !authentication.isAuthenticated) return null
-        return OperatorRef(authentication.name, authentication.authorities.mapTo(HashSet()) { it.authority.orEmpty().removePrefix("ROLE_") })
     }
 
     private companion object {

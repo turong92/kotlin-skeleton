@@ -1,0 +1,12 @@
+# dashboard-ga — Google Analytics 4 에서 채널 · 캠페인 · 첫 페이지 · 페이지 이동 · 새/재방문 순위(어제까지, 새벽 적재)와 현재 방문자(실시간)를 읽는다.
+# 속성 id 와 서비스 계정 키가 모두 있어야 연결된 것이다 (아니면 그 카드만 「연결하면 보입니다」). 프로젝트 모드(skeleton.projects)에서는 프로젝트마다 자기 config 에 둘을 적는다 — 공통 값을 물려받지 않는다.
+skeleton:
+  dashboard-ga:
+    property-id: ""                                       # GA4 속성 id (숫자)
+    credentials: ""                                       # 비밀 — 서비스 계정 키 JSON 의 base64. 환경변수 SKELETON_DASHBOARD_GA_CREDENTIALS
+    key-event: ""                                         # 전환으로 셀 핵심 이벤트 이름(예: purchase). 비면 전환 열을 숨긴다
+    realtime-cache: 60s                                   # 현재 방문자의 서버 캐시 수명 — 운영자가 여럿 열어도 외부 호출은 이 주기당 프로젝트당 한 번
+    base-url: https://analyticsdata.googleapis.com        # 시험의 가짜 GA 는 여기에 적는다
+    token-url: https://oauth2.googleapis.com/token        # 서비스 계정 JWT 를 접근 토큰으로 바꾸는 주소. 시험의 가짜 GA 는 여기에 적는다
+    client-name: dashboard-ga                             # ExternalHttpClient 의 클라이언트 이름 (skeleton.http.clients.<이름> 로 제한 시간 등을 바꾼다)
+    timeout: 10s

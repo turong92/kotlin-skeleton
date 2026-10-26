@@ -1160,6 +1160,57 @@
       }
     },
     {
+      "id": "dashboard-ga",
+      "kind": "module",
+      "module": "dashboard-ga",
+      "path": "modules/dashboard-ga",
+      "status": "experimental",
+      "summary": "대시보드에 흐름을 얹는다 — GA4 의 유입 채널 · 캠페인 · 첫 페이지 · 페이지 이동 · 새/재방문 순위(핵심 이벤트를 주면 전환 열까지)를 새벽 적재 일별 표에서 읽고(오늘은 GA 가 확정하기 전이라 비운다), 헤더의 현재 방문자 · 지금 보는 페이지 · 국가를 Realtime API 로 60초 서버 캐시를 거쳐 보여 준다(GET /api/v1/admin/dashboard/realtime). 서비스 계정 키는 라이브러리 없이 JWT 로 토큰을 받는다. 키가 없으면 기동은 하고 그 카드만 「연결하면 보입니다」. 프로젝트 모드는 프로젝트마다 자기 속성 id · 키.",
+      "starter": false,
+      "newProjectFlag": "--modules dashboard-ga",
+      "autoIncludes": ["dashboard"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": ["dashboard-jdbc"]
+      },
+      "config": {
+        "prefixes": ["skeleton.dashboard-ga"],
+        "snippet": "docs/config/modules/dashboard-ga.yml"
+      },
+      "basePaths": ["/api/v1/admin/dashboard"],
+      "secrets": [
+        {
+          "env": ["<P>_DASHBOARD_GA_CREDENTIALS", "<P>_DASHBOARD_GA_PROPERTY_ID"],
+          "whenMissing": "둘 중 하나라도 비면 GA 카드만 「연결하면 보입니다」 — 서버는 뜬다"
+        }
+      ],
+      "docs": ["docs/modules/dashboard-ga.md"],
+      "frontend": {
+        "capabilities": ["admin-dashboard"],
+        "newProjectFlag": null,
+        "packages": ["@skeleton/dashboard"]
+      },
+      "notFor": [
+        "지난 기간(어제까지)을 보려면 dashboard-jdbc 도 같이 — 없으면 지난 날이 걸린 기간은 「기록 없음」이다",
+        "전체 방문 수는 세지 않는다 — Cloudflare(dashboard-cloudflare)가 센다. GA 는 쿠키에 동의한 방문자만 본다",
+        "오늘의 순위 숫자는 없다 — GA 일반 보고서가 몇 시간 늦게 확정되므로 어제까지만",
+        "원본 이벤트를 쌓지 않는다 — 집계 숫자만 일별 표에 옮긴다"
+      ],
+      "keywords": {
+        "ko": ["구글 애널리틱스", "GA4", "유입 채널", "캠페인 성과", "페이지 이동", "재방문율", "지금 접속자"],
+        "en": [
+          "google analytics",
+          "ga4",
+          "channels",
+          "campaigns",
+          "landing pages",
+          "returning visitors",
+          "realtime visitors"
+        ]
+      }
+    },
+    {
       "id": "dashboard-jdbc",
       "kind": "module",
       "module": "dashboard-jdbc",
@@ -2528,6 +2579,7 @@
         "crypto",
         "dashboard",
         "dashboard-cloudflare",
+        "dashboard-ga",
         "dashboard-jdbc",
         "json",
         "notification",
@@ -2592,6 +2644,7 @@
         "crypto",
         "dashboard",
         "dashboard-cloudflare",
+        "dashboard-ga",
         "dashboard-jdbc",
         "db-mysql",
         "event-kafka",

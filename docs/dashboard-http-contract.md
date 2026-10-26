@@ -50,6 +50,19 @@ Conventions (envelope, error body, tokens): [account-http-contract.md](account-h
 ### GET /api/v1/admin/dashboard/rankings/{key}?from&to&limit=100
 `limit` is clamped to 1..500. Response `{ "value": <ranking as above> }`. Unknown key → `404 DASHBOARD.RANKING_NOT_FOUND`.
 
+### GET /api/v1/admin/dashboard/realtime
+Needs `dashboard.read`. Provided by `dashboard-ga`; **`404` when the app does not have it — hide the "N online" badge.** Visitors who accepted analytics cookies only (GA), last 30 minutes.
+
+```json
+{ "value": { "status": "OK", "freshness": { "kind": "CACHED", "asOf": "2026-10-27T03:00:00Z" },
+             "activeUsers": 7,
+             "pages":     [ { "label": "Home", "values": [4] } ],
+             "countries": [ { "label": "KR",   "values": [5] } ] } }
+```
+`status` as for the cards (`NOT_CONNECTED` = answer `200` with zeros and empty lists). Cached on the server for 60 seconds per project.
+
+**GA rankings** (`ga.*`) are filled from the daily table only: today is not loaded (GA settles its numbers hours later), so a range ending today shows data up to yesterday; `freshness` is `DAILY` with the time of the last load ("GA as of hh:mm"). `ga.returning` has exactly two rows `New` and `Returning` (`values: [users]`). With a configured key event the sessions-based rankings get a second column `Conversions` (`columns` and `values` have two entries then).
+
 ## 3. Errors
 
 | `code` | status | when |

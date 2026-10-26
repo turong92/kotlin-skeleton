@@ -32,6 +32,7 @@ dependencies {
     implementation(project(":modules:dashboard"))          // 관리자 대시보드: 가입 · 활성 · 순매출 · 결제 · 퍼널 카드를 모아 준다 (/api/v1/admin/dashboard) — 켜기 skeleton.dashboard.admin.enabled. 카드는 account-jdbc · auth-session-jdbc · payment-jdbc 가 기여한다. 문서 docs/modules/dashboard.md
     implementation(project(":modules:dashboard-jdbc"))     // 대시보드 일별 집계 · 화면 설정 표 + 일별 적재 작업 (dashboard 는 저장소를 모른다)
     implementation(project(":modules:dashboard-cloudflare")) // 대시보드의 방문 · 페이지뷰 · 유입 카드 (Cloudflare Web Analytics) — 키(SKELETON_DASHBOARD_CLOUDFLARE_*)가 없으면 그 카드만 비어 있다. 문서 docs/modules/dashboard-cloudflare.md
+    implementation(project(":modules:dashboard-ga"))        // 대시보드의 유입 채널 · 캠페인 · 첫 페이지 · 페이지 이동 · 재방문 순위와 현재 방문자 (GA4) — 키(SKELETON_DASHBOARD_GA_*)가 없으면 그 카드만 비어 있다. 문서 docs/modules/dashboard-ga.md
     implementation(project(":modules:auth-social-google")) // 소셜 로그인 — 꺼진 채 시작한다: 제공자마다 SKELETON_AUTH_SOCIAL_PROVIDERS_<X>_ENABLED=true + client id/secret (docs/real-provider-setup.md)
     implementation(project(":modules:auth-social-kakao"))
     implementation(project(":modules:auth-social-naver"))

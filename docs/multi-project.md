@@ -49,6 +49,7 @@ skeleton:
 | 알림 웹소켓 (STOMP) | (설정 없음) | 세션의 프로젝트 = 연결 요청의 Host. 사용자 이름(`Principal.name`)이 `<프로젝트>\|<계정 id>` 라 앱 핸들러가 받는 이름도 그 꼴이고, 사용자 알림이 프로젝트 사이에 섞이지 않고, 공개 토픽은 구독 선택자로 프로젝트마다 나뉜다 |
 | 대시보드 시간대 · 통화 | `dashboard.{zone, currency}` | 「오늘」 · 일별 경계의 시간대와 돈 타일이 먼저 보여 줄 통화가 프로젝트마다. 관리 API 스위치 · 캐시 수명 · 적재 시각은 서버 공통. 캐시 키 · 일별 표 · 새벽 적재(프로젝트마다 그 시간대의 「어제」)도 프로젝트마다 |
 | Cloudflare 접속 숫자 | `dashboard-cloudflare.{account-id, site-tag, api-token}` | 프로젝트가 **자기 `config` 에 셋 다** 적어야 연결된다 — 공통 값을 물려받지 않는다(안 적은 프로젝트는 카드가 「연결 안 됨」). 오늘 숫자 캐시 · 외부 호출 단위도 프로젝트마다 |
+| GA 흐름 · 현재 방문자 | `dashboard-ga.{property-id, credentials, key-event}` | 프로젝트가 **자기 `config` 에 속성 id 와 키를** 적어야 연결된다 — 공통 값을 물려받지 않는다(안 적은 프로젝트는 카드가 「연결 안 됨」). 토큰 캐시 · 실시간 캐시(외부 호출 단위) · 일별 표도 프로젝트마다 |
 | (공통 값으로 내려가지 않는 것) | 약관 `legal.location` · `legal.facts.*`, 소셜 `auth-social.providers.<id>.{enabled, redirect-uri}`, X `client-id` · `client-secret` · `redirect-uri`, OIDC `providers.*` 전체, 메일 `from`, 계정 메일 `link-base-url` | 프로젝트가 자기 값만 읽는다 — 한 서비스 시절의 공통 값이 남아 있어도 값을 빠뜨린 프로젝트가 남의 약관 · 소셜 앱 · 주소를 물려받지 않는다(약관은 안 주면 TEMPLATE 문서라 stage · prod 가 막고, 소셜은 안 주면 꺼진다) |
 | 범용 OIDC | `auth-social-oidc.providers.<코드>.*` | 프로젝트마다 제공자를 만든다 — discovery · JWKS 보관도 제공자 안이라 프로젝트끼리 섞이지 않는다 |
 | 암호화 키 | `crypto.{primary-key-id, keys.<id>}` | `TextEncryptor` 가 지금 프로젝트의 키로 넘어간다(변환기 · `OpaqueUrlTokenCodec` · 빌링키 모두 이 빈을 지난다). 프로젝트끼리 **같은 키 바이트**면 기동 실패, 키 없는 프로젝트는 쓰는 순간 그 프로젝트 이름의 오류. 아래 "결제" |
