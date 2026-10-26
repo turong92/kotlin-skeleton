@@ -29,6 +29,13 @@
 - **`OperatorAuditLog`**: 운영 행동 기록 자리. 기본(`NoOpOperatorAuditLog`)은 아무것도 하지 않고 로그도 쓰지 않는다 — 저장하려면 앱이 빈 하나를 둔다. 공용 기록 표는 없다.
 - **옛 키 네 개는 지웠다**: `skeleton.account.admin.role` → `skeleton.authz.super-role`, `skeleton.payment.admin.role` → `skeleton.authz.roles.<역할>: [payment.read, payment.refund, payment.operate]`, `skeleton.legal.admin-role` → `skeleton.authz.roles.<역할>: [legal.read]`, `skeleton.board.moderator-role` → `skeleton.authz.roles.<역할>: [board.moderate, board.manage]`. 값이 하나라도 있으면 기동이 실패하고 메시지가 새 자리를 알려 준다(`LegacyRoleKeysGuard`). 화면은 `GET /auth/me` 의 `permissions` 로 받는다.
 
+## 대시보드 기여 계약 (`common/dashboard`)
+
+관리자 대시보드(`dashboard` 모듈)가 모으는 카드의 **타입만** 있고 빈은 없다 — `account-jdbc` · `auth-session-jdbc` · `payment-jdbc` 가 `dashboard` 를 컴파일에 끌어오지 않고 카드를 기여하게 하려는 자리다(기여 모듈은 자기 자동 설정을 `@ConditionalOnClass(name = …dashboard…)` 로 등록한다 — `dashboard` 를 안 붙인 앱에는 아무것도 생기지 않는다).
+
+- `DashboardMetric`(숫자 타일: `value(range)` · `series(range, interval)`, `comparable = false` 면 직전 기간 없음) · `DashboardRanking`(순위 탭: `top(range, limit)`) · 퍼널(`DashboardCohortSource` 가 묶음을, `DashboardFunnelStep` 이 단계를, `DashboardFunnel` 이 묶어 앱이 바꾼다).
+- 기여는 예외 대신 `DashboardResult(status = OK | NOT_CONNECTED | NO_HISTORY | ERROR, data, freshness)` 로 말한다. 범위 `DashboardRange` 는 `[from, to)` 와 대시보드 시간대다. 사용법과 카드 더하는 법: [dashboard.md](dashboard.md).
+
 자세히: [배포 계약 · 배포 가드](../deploy.md) · [설정 키 설명](../configuration.md) · [클라이언트 IP](../client-ip.md) · [에러 계약](../errors.md) · [외부 HTTP](../external-http.md) · [로깅](../logging.md) · [관측 링크](../observability-links.md) · [OpenAPI](../openapi.md)
 
 [모듈 색인](README.md) · [최소 구성 가이드](../minimal-composition.md)

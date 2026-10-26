@@ -1,0 +1,9 @@
+# dashboard — 관리자 대시보드(타일 · 그래프 · 순위 · 퍼널). 카드는 다른 모듈이 기여한다.
+skeleton:
+  dashboard:
+    admin:
+      enabled: false   # true 면 /api/v1/admin/dashboard 를 연다 (꺼짐 → 404). 보려면 권한 dashboard.read 가 있어야 한다
+    zone: ""           # 대시보드 시간대. 비면 skeleton.time.default-zone, 그것도 없으면 UTC
+    currency: ""       # 돈 타일이 먼저 보여 줄 통화(예: KRW). 비면 금액이 큰 통화부터
+    cache:
+      db: 30s          # 우리 DB 숫자의 캐시 수명 — 같은 범위 질의는 이 시간 안에 기여를 한 번만 부른다 (0 = 끔)

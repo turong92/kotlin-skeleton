@@ -112,6 +112,7 @@ fails when this table and the prefixes found in module code differ.
 | `captcha-turnstile` | `skeleton.captcha-turnstile` |
 | `config-aws-ssm` | `skeleton.config.aws.ssm` |
 | `crypto` | `skeleton.crypto` |
+| `dashboard` | `skeleton.dashboard` |
 | `event-kafka` | `skeleton.event-kafka` |
 | `legal` | `skeleton.legal` |
 | `idempotency` | `skeleton.idempotency` |

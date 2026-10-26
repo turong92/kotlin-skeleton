@@ -280,6 +280,7 @@ while IFS= read -r m; do
   [ "$m" != author-profile ] || rm -f docs/author-profile-http-contract.md   # 프론트 계약 문서는 모듈을 고른 프로젝트에만 남는다
   [ "$m" != payment ] || rm -f docs/payment-http-contract.md
   [ "$m" != authz ] || rm -f docs/authz-http-contract.md
+  [ "$m" != dashboard ] || rm -f docs/dashboard-http-contract.md
   # 토스 손 시험 도구 · 안내 문서의 토스 구역(제목 조각 · 목차 줄 · ## 11 본문 — 각각 <!-- payment-toss:start --> … <!-- payment-toss:end --> 표식으로 감쌌다)은 payment-toss 를 고른 프로젝트에만 남는다 — payment 를 안 고르면 payment-toss 도 빠지므로 둘 다 이 줄이 덮는다. 카탈로그 항목은 스크립트 파일이 없으면 stamp-capabilities.pl 이 거른다
   if [ "$m" = payment-toss ]; then
     rm -f scripts/payment-webhook.sh

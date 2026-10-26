@@ -1075,6 +1075,44 @@
       }
     },
     {
+      "id": "dashboard",
+      "kind": "module",
+      "module": "dashboard",
+      "path": "modules/dashboard",
+      "status": "experimental",
+      "summary": "관리자 대시보드 조립기 — 다른 모듈이 빈으로 기여한 숫자 타일 · 순위 탭 · 같은 사람 묶음 퍼널을 모아 한 화면 분량(직전 기간 비교 · 그래프 시리즈 포함)으로 돌려주는 API(/api/v1/admin/dashboard). 계산은 프로젝트별 짧은 캐시를 지나 운영자가 여럿 열어도 DB · 외부 호출은 캐시 주기당 한 번이고, 카드 하나가 실패해도 그 카드만 상태로 말한다. 카드는 account-jdbc · auth-session-jdbc · payment-jdbc 나 앱이 기여한다. 권한 dashboard.read, 기본 꺼짐(skeleton.dashboard.admin.enabled).",
+      "starter": false,
+      "newProjectFlag": "--modules dashboard",
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": ["skeleton.dashboard"],
+        "snippet": "docs/config/modules/dashboard.yml"
+      },
+      "basePaths": ["/api/v1/admin/dashboard"],
+      "secrets": [],
+      "docs": ["docs/modules/dashboard.md", "docs/dashboard-http-contract.md"],
+      "frontend": {
+        "capabilities": ["admin-dashboard"],
+        "newProjectFlag": null,
+        "packages": ["@skeleton/dashboard"]
+      },
+      "notFor": [
+        "이 모듈에는 카드가 없다 — 가입 · 활성 · 매출 숫자는 account-jdbc · auth-session-jdbc · payment-jdbc 를 같이 고르면 기여되고, 앱 고유 숫자는 앱이 DashboardMetric · DashboardRanking 빈으로 더한다",
+        "방문 · 유입 같은 접속 통계는 직접 세지 않는다 — Cloudflare · GA 출처 모듈이 기여한다",
+        "원본 이벤트를 쌓는 분석 저장소가 아니다 — 집계 숫자만 다룬다",
+        "여러 프로젝트를 합쳐 보는 총괄 화면은 없다(프로젝트마다 따로)"
+      ],
+      "keywords": {
+        "ko": ["관리자 대시보드", "어드민 대시보드", "통계 화면", "매출 가입 숫자", "퍼널", "지표 카드"],
+        "en": ["admin dashboard", "metrics", "kpi tiles", "funnel", "analytics overview"]
+      }
+    },
+    {
       "id": "db-mysql",
       "kind": "module",
       "module": "db-mysql",
@@ -2468,6 +2506,7 @@
         "board-jdbc",
         "config-aws-ssm",
         "crypto",
+        "dashboard",
         "db-mysql",
         "event-kafka",
         "json",

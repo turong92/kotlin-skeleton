@@ -1,0 +1,64 @@
+package dev.sumin.skeleton.dashboard
+
+import dev.sumin.skeleton.common.authz.AuthzAutoConfiguration
+import dev.sumin.skeleton.common.authz.PermissionDeclaration
+import dev.sumin.skeleton.common.dashboard.DashboardCohortSource
+import dev.sumin.skeleton.common.dashboard.DashboardFunnel
+import dev.sumin.skeleton.common.dashboard.DashboardFunnelStep
+import dev.sumin.skeleton.common.dashboard.DashboardMetric
+import dev.sumin.skeleton.common.dashboard.DashboardRanking
+import dev.sumin.skeleton.common.time.TimeProvider
+import java.time.ZoneId
+import org.springframework.beans.factory.ObjectProvider
+import org.springframework.boot.autoconfigure.AutoConfiguration
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
+import org.springframework.boot.context.properties.EnableConfigurationProperties
+import org.springframework.context.annotation.Bean
+import org.springframework.core.env.Environment
+
+/**
+ * 기여 빈(`DashboardMetric` · `DashboardRanking` · 퍼널)을 모아 조립하는 부품. 권한 `dashboard.read` 선언은 모듈이 클래스패스에 있으면 늘 낸다 (스위치와 무관 — 카탈로그와 yml 매핑 검증이 본다).
+ * 관리 API 는 [DashboardWebAutoConfiguration].
+ *
+ * 퍼널은 앱이 `DashboardFunnel` 빈을 두면 그것이, 없으면 `DashboardCohortSource` 하나 + `DashboardFunnelStep` 들로 부를 때마다 만든다 —
+ * 기여 모듈의 자동 설정과 등록 순서를 따지지 않으려고 빈 조건이 아니라 조립 때 본다.
+ */
+@AutoConfiguration(after = [AuthzAutoConfiguration::class])
+@EnableConfigurationProperties(DashboardProperties::class)
+class DashboardAutoConfiguration {
+    @Bean
+    @ConditionalOnMissingBean(name = ["dashboardPermissionDeclaration"])
+    fun dashboardPermissionDeclaration(): PermissionDeclaration = DashboardPermissions.declaration
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun dashboardRangeParser(properties: DashboardProperties, environment: Environment, time: TimeProvider): DashboardRangeParser {
+        val zone = properties.zone.ifBlank { environment.getProperty("skeleton.time.default-zone", "UTC") }
+        return DashboardRangeParser(ZoneId.of(zone), time::now)
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun dashboardCache(properties: DashboardProperties, time: TimeProvider): DashboardCache =
+        DashboardCache(properties.cache.db, now = time::now)
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun dashboardAssembler(
+        properties: DashboardProperties,
+        cache: DashboardCache,
+        metrics: ObjectProvider<DashboardMetric>,
+        rankings: ObjectProvider<DashboardRanking>,
+        funnel: ObjectProvider<DashboardFunnel>,
+        cohorts: ObjectProvider<DashboardCohortSource>,
+        steps: ObjectProvider<DashboardFunnelStep>,
+    ): DashboardAssembler = DashboardAssembler(
+        metrics = { metrics.orderedStream().toList() },
+        rankings = { rankings.orderedStream().toList() },
+        funnel = {
+            funnel.getIfAvailable() ?: cohorts.orderedStream().findFirst().map { DashboardFunnel(it, steps.orderedStream().toList()) }.orElse(null)
+        },
+        cache = cache,
+        currency = properties.currency,
+    )
+}
