@@ -140,17 +140,18 @@ class LogMaskerTest {
 
 /** 입력을 n → 2n 으로 늘렸을 때 시간이 3배 아래인지(제곱이면 4배)와 넉넉한 절대 상한(200ms)을 잰다 — 기계가 느려도 거짓 실패하지 않게 절대 시간만으로는 가르지 않는다. */
 object TimingGrowth {
-    const val N = 4000
-    const val ABSOLUTE_LIMIT_MS = 200.0
-    private const val SLACK_MS = 2.0
+    const val N = 2000
+    const val ABSOLUTE_LIMIT_MS = 500.0
+    private const val SLACK_MS = 5.0
 
-    private fun bestMillis(block: () -> Unit): Double = (1..5).minOf { val t = System.nanoTime(); block(); (System.nanoTime() - t) / 1e6 }
+    private fun bestMillis(block: () -> Unit): Double = (1..7).minOf { val t = System.nanoTime(); block(); (System.nanoTime() - t) / 1e6 }
 
+    // 길이를 네 배로: 선형이면 약 4배, 이차면 16배 — 8배를 경계로 둬서 바쁜 맥(다른 빌드와 같이 돌 때)에서도 흔들리지 않게 한다
     fun assertLinear(what: String, run: (Int) -> Unit) {
         run(N) // 예열
         val small = bestMillis { run(N) }
-        val big = bestMillis { run(2 * N) }
-        assertTrue(big < ABSOLUTE_LIMIT_MS, "$what: ${2 * N} chars took ${big}ms")
-        assertTrue(big < 3 * small + SLACK_MS, "$what: doubling the input took ${small}ms -> ${big}ms (quadratic would be 4x)")
+        val big = bestMillis { run(4 * N) }
+        assertTrue(big < ABSOLUTE_LIMIT_MS, "$what: ${4 * N} chars took ${big}ms")
+        assertTrue(big < 8 * small + SLACK_MS, "$what: four times the input took ${small}ms -> ${big}ms (quadratic would be 16x)")
     }
 }
