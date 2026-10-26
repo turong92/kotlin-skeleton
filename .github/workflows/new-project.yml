@@ -1,16 +1,21 @@
 name: new-project
-# scripts/new-project.sh 로 네 조합을 찍어 각각 ./gradlew build (Docker/Testcontainers 필요 — ubuntu-latest 에 있다). 순차로 돈다.
+# push · PR 은 scripts/test-new-project.sh --quick 만 돈다(인자 검증 · 모듈 닫힘 · 파일 가지치기 · rename 잔여 · 레시피 stamp, 수 분).
+# 조합을 실제로 찍어 각각 ./gradlew build 하는 --full 은 하루 한 번 nightly.yml 로 옮겼다.
 on:
   push:
     branches: [main]
-    paths: ['scripts/**', 'modules/*/build.gradle.kts', 'apps/**', 'settings.gradle.kts', 'build.gradle.kts', 'docs/config/modules/**', 'docker-compose.yml', '.github/workflows/new-project.yml']
+    paths: ['scripts/**', 'modules/*/build.gradle.kts', 'apps/**', 'settings.gradle.kts', 'build.gradle.kts', 'docs/config/modules/**', 'docker-compose.yml', '.env.example', '.github/workflows/new-project.yml']
   pull_request:
-    paths: ['scripts/**', 'modules/*/build.gradle.kts', 'apps/**', 'settings.gradle.kts', 'build.gradle.kts', 'docs/config/modules/**', 'docker-compose.yml', '.github/workflows/new-project.yml']
+    paths: ['scripts/**', 'modules/*/build.gradle.kts', 'apps/**', 'settings.gradle.kts', 'build.gradle.kts', 'docs/config/modules/**', 'docker-compose.yml', '.env.example', '.github/workflows/new-project.yml']
+
+concurrency:
+  group: new-project-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  stamp-and-build:
+  quick:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -18,4 +23,4 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
       - uses: gradle/actions/setup-gradle@v4
-      - run: bash scripts/test-new-project.sh --full
+      - run: bash scripts/test-new-project.sh --quick

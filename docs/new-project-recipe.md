@@ -2,7 +2,7 @@
 
 에이전트가 「X, Y, Z 가 필요한 새 프로젝트를 세팅해」를 받았을 때 **그대로 따라 하는** 순서다. 먼저 이미 있는 것을 찾고(만들지 않는다), `scripts/new-project.sh` 를 한 번 돌리고, 설정 · 비밀을 채우고, 돌려 보고, 배포 선언을 채운다.
 프런트는 형제 레포 `react-skeleton` 이 같은 모양의 레시피를 가진다 — [react-skeleton/docs/new-project-recipe.md](../../react-skeleton/docs/new-project-recipe.md)(화면마다 복사할 Pattern · 프런트 환경변수). 두 레시피의 작업 예는 같은 제품 3개이고 서로의 명령을 담고 있다.
-명령 조각은 `capabilities.json` 에서 계산한 것이고, 아래 작업 예의 명령은 `CapabilitiesCatalogTest` 가 카탈로그와 비교하고 `bash scripts/test-new-project.sh --full` 이 실제로 찍어 `./gradlew build` 한다 — 이 문서가 낡으면 빌드가 실패한다.
+명령 조각은 `capabilities.json` 에서 계산한 것이고, 아래 작업 예의 명령은 `CapabilitiesCatalogTest` 가 카탈로그와 비교하고 `bash scripts/test-new-project.sh --full`(하루 한 번 nightly) 이 실제로 찍어 `./gradlew build` 한다 — 이 문서가 낡으면 빌드가 실패한다.
 
 ## 0. 놓는 곳
 

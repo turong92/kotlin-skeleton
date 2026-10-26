@@ -269,7 +269,7 @@ unknown option, `--db` other than `postgresql` / `mysql`, a `db-*` name in `--mo
 macOS bash 3.2 and GNU bash. `scripts/test-new-project.sh` tests it (`--quick` runs inside `./gradlew check`; `--full` stamps these compositions —
 defaults; `--modules job-queue-jdbc,notification-mail,storage-s3,scheduler`; `--db mysql --modules job-queue-jdbc`;
 `--modules persistence-jooq,job-queue-jdbc,notification-jdbc`; `--modules board,board-jdbc`; `--with-sample` — and runs `./gradlew build` in each,
-needing Docker; CI: `.github/workflows/new-project.yml`).
+needing Docker; CI: `new-project.yml` runs `--quick` on push/PR, `nightly.yml` runs `--full` once a day).
 
 ### Rename only
 

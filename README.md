@@ -196,7 +196,7 @@ scripts/new-project.sh ~/work/acme com.acme.shop acme Acme --db mysql --modules 
 - 고르지 않은 모듈은 디렉토리, `settings.gradle.kts` include, `docs/config/modules/<m>.yml`, `docs/modules/<m>.md`(와 색인 행), 루트 `dbTestModules`, 스타터 테스트의 부재 단언에서 모두 빠진다. `--with-workbench` 는 워크벤치가 모든 모듈을 쓰므로 모든 모듈이 남고 PostgreSQL 전용이다.
 - `--modules` 로 요청한 모듈은 `apps/api/build.gradle.kts` 에 `implementation(project(":modules:<m>"))` 한 줄이 생기고, `docs/config/modules/<m>.yml` 이 `apps/api/src/main/resources/application.yml` 끝의 `new-project: module config blocks` 구역에 **주석으로** 붙는다. 모듈은 기본값으로 동작하니 바꿀 키만 주석을 풀어 위 설정에 합친다.
 - 끝에 `scripts/rename-skeleton.sh` 가 돌고 잔여 흔적이 있으면 실패한다. 대상 디렉토리 밖에는 아무것도 쓰지 않고, 대상이 이미 있으면 거부한다.
-- 시험: `scripts/test-new-project.sh` (빠른 검사 — `./gradlew check` 가 돈다) / `--full` (네 조합을 찍어 각각 `./gradlew build`, Docker 필요 — `.github/workflows/new-project.yml`).
+- 시험: `scripts/test-new-project.sh` (빠른 검사 — `./gradlew check` 가 돈다) / `--full` (조합을 찍어 각각 `./gradlew build`, Docker 필요 — 하루 한 번 `.github/workflows/nightly.yml`).
 
 - 찍힌 프로젝트에는 배포 선언 `deploy/app.yaml`(이름 · 이미지 · `env_prefix` · DB · Redis 를 채운다), 로컬 빌드 이미지(`image_local: true`, GHCR 는 쓰지 않는다 — 이미지 워크플로는 수동 실행만 · 보류), 계약 증명 `scripts/test-deploy-contract.sh` 가 따라온다 — **[배포 계약 · 배포 가드 · 모듈별 비밀: docs/deploy.md](docs/deploy.md)**.
 

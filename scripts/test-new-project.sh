@@ -3,9 +3,9 @@
 #
 #   scripts/test-new-project.sh            # 빠른 검사 (기본, 수 초~수십 초): 인자 검증 · 모듈 닫힘 · 파일 가지치기 · rename 잔여 검사
 #   scripts/test-new-project.sh --quick    # 위와 같다 (./gradlew check 가 부른다)
-#   scripts/test-new-project.sh --full     # 위 + 열 조합을 임시 디렉토리에 찍어 각각 ./gradlew build (Docker/Testcontainers 필요, 순차, 수 분)
+#   scripts/test-new-project.sh --full     # 위 + 열한 조합을 임시 디렉토리에 찍어 각각 ./gradlew build (Docker/Testcontainers 필요, 순차, 수 분)
 #
-# --full 은 CI 의 별도 워크플로(.github/workflows/new-project.yml)가 돈다. 조합:
+# --full 은 하루 한 번 CI 의 nightly 워크플로(.github/workflows/nightly.yml)가 돈다 (push · PR 의 new-project.yml 은 --quick 만). 조합:
 #   1. 기본값만
 #   2. --modules job-queue-jdbc,notification-mail,storage-s3,scheduler
 #   3. --db mysql --modules job-queue-jdbc,alert-jdbc   (주인 경보 + 그 DB 기록을 MySQL 로 — compileOnly 연동 모듈이 닫힘에 따라온다)
@@ -408,7 +408,8 @@ if [ "$MODE" = "--full" ]; then
   build_composition "$PJ" "8-payment"
   build_composition "$J" "7-redis"
   build_composition "$AZ" "10-authz"
-  for rid in $RECIPE_DIRS; do   # 레시피의 작업 예 — 문서의 명령이 낡으면 여기서 깨진다
+  for rid in $RECIPE_DIRS; do   # 레시피의 작업 예 — 문서의 명령이 낡으면 여기서 깨진다 (stamp · dry-run 은 위에서 이미 했다)
+    [ "$rid" = "content-ssr" ] && continue   # 플래그 없는 스타터 그대로 = 1-defaults 와 모듈 구성이 같아 빌드는 반복하지 않는다
     build_composition "$TMP/recipe-$rid" "recipe-$rid"
   done
 fi

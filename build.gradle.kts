@@ -138,7 +138,8 @@ tasks.register("newMigration") {
 }
 
 // scripts/new-project.sh 의 빠른 검사: 인자 검증 · 모듈 닫힘 · 파일 가지치기 · rename 잔여 검사 (Gradle 을 부르지 않는다).
-// 네 조합을 실제로 찍어 각각 ./gradlew build 하는 `scripts/test-new-project.sh --full` 은 CI 워크플로(.github/workflows/new-project.yml)가 돈다.
+// 조합을 실제로 찍어 각각 ./gradlew build 하는 `scripts/test-new-project.sh --full` 은 하루 한 번 CI 의 nightly 워크플로(.github/workflows/nightly.yml)가 돈다.
+// 그래서 push 의 ci.yml 은 `-x newProjectChecks` 로 이 태스크를 건너뛴다 (같은 --quick 을 new-project.yml 이 돈다).
 // 찍어 낸 프로젝트에는 이 도구가 없으므로 스크립트가 있을 때만 건다.
 if (file("scripts/test-new-project.sh").isFile) {
     val newProjectChecks by tasks.registering(Exec::class) {

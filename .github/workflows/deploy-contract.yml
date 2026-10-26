@@ -1,13 +1,17 @@
 name: deploy-contract
 # 이미지가 홈서버 배포 계약(docs/deploy.md)을 지키는지 진짜 컨테이너로 증명한다: scripts/test-deploy-contract.sh
 # (계약의 환경변수만으로 기동 · 컨테이너 안 wget 헬스체크 · 0.0.0.0 · stdout 로그 · 쓰지 않는 모듈 설정을 요구하지 않음 · 보호 환경 가드).
-# Dockerfile · 앱 설정 · 가드가 바뀌면 돈다. Docker 는 ubuntu-latest 에 있다.
+# Dockerfile · 앱 설정 · 가드가 바뀌면 돈다 (테스트 소스만 바뀌면 이미지가 같으므로 건너뛴다). Docker 는 ubuntu-latest 에 있다.
 on:
   push:
     branches: [main]
-    paths: ['Dockerfile', 'apps/**', 'modules/platform/**', 'modules/auth/**', 'modules/migration/**', 'scripts/test-deploy-contract.sh', 'deploy/**', 'build.gradle.kts', 'settings.gradle.kts', '.github/workflows/deploy-contract.yml']
+    paths: ['Dockerfile', 'apps/*/src/main/**', 'apps/*/build.gradle.kts', 'modules/platform/src/main/**', 'modules/platform/build.gradle.kts', 'modules/auth/src/main/**', 'modules/migration/src/main/**', 'scripts/test-deploy-contract.sh', 'deploy/**', 'build.gradle.kts', 'settings.gradle.kts', '.github/workflows/deploy-contract.yml']
   pull_request:
-    paths: ['Dockerfile', 'apps/**', 'modules/platform/**', 'modules/auth/**', 'modules/migration/**', 'scripts/test-deploy-contract.sh', 'deploy/**', 'build.gradle.kts', 'settings.gradle.kts', '.github/workflows/deploy-contract.yml']
+    paths: ['Dockerfile', 'apps/*/src/main/**', 'apps/*/build.gradle.kts', 'modules/platform/src/main/**', 'modules/platform/build.gradle.kts', 'modules/auth/src/main/**', 'modules/migration/src/main/**', 'scripts/test-deploy-contract.sh', 'deploy/**', 'build.gradle.kts', 'settings.gradle.kts', '.github/workflows/deploy-contract.yml']
+
+concurrency:
+  group: deploy-contract-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   contract:

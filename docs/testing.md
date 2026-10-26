@@ -38,3 +38,9 @@
 
 base64url 의 **마지막 글자만** 바꾸면 버려지는 하위 비트만 건드려 디코드된 바이트가 그대로일 수 있다(길이에 따라 5~25%) — 변조 시험이 가끔 "통과"한다.
 서명 영역 · 페이로드 영역의 바이트를 디코드해 뒤집고 다시 인코드한다(`OpaqueUrlTokenCodecTest`). `OpaqueUrlTokenCodec` · `AesGcmTextEncryptor` 는 정규형(패딩 없음, 버려지는 비트 0)이 아닌 base64url 을 거부한다 — 한 값에 문자열이 하나여야 한다.
+
+## CI 가 도는 것
+
+- push · PR (`ci.yml`): `./gradlew build -x newProjectChecks -x mysqlTest` — 단위 · 웹 · Postgres DB 시험. 새 프로젝트 빠른 검사는 `new-project.yml`(`--quick`)이, 배포 계약은 `deploy-contract.yml` 이 따로 돈다. 같은 브랜치에 새로 올라오면 돌던 것은 멈춘다.
+- 하루 한 번 + 수동 (`nightly.yml`): 전체 `./gradlew build`(MySQL `mysqlTest` · `newProjectChecks` 포함)와 `scripts/test-new-project.sh --full`(조합을 찍어 각각 `./gradlew build`)을 별도 잡으로 나란히 돈다.
+- MySQL 에서만 드러나는 문제는 다음 날 새벽에야 잡힌다. 급하면 `Actions > nightly > Run workflow` 로 바로 돌린다.
