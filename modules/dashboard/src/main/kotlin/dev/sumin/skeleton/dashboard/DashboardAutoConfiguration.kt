@@ -7,6 +7,7 @@ import dev.sumin.skeleton.common.dashboard.DashboardFunnel
 import dev.sumin.skeleton.common.dashboard.DashboardFunnelStep
 import dev.sumin.skeleton.common.dashboard.DashboardMetric
 import dev.sumin.skeleton.common.dashboard.DashboardRanking
+import dev.sumin.skeleton.common.project.ProjectRegistry
 import dev.sumin.skeleton.common.time.TimeProvider
 import java.time.ZoneId
 import org.springframework.beans.factory.ObjectProvider
@@ -60,5 +61,35 @@ class DashboardAutoConfiguration {
         },
         cache = cache,
         currency = properties.currency,
+    )
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun dashboardDailySeries(store: ObjectProvider<DashboardDailyStore>, parser: DashboardRangeParser, time: TimeProvider): DailySeries =
+        DailySeries({ store.getIfAvailable() }, parser.zone, time::now)
+
+    /** 로그만 남기는 기본 — `alert` 가 있으면 [DashboardAlertAutoConfiguration] 의 것이 먼저 서서 이쪽이 물러난다 */
+    @Bean
+    @ConditionalOnMissingBean
+    fun dashboardIngestReporter(): DashboardIngestReporter = DashboardIngestReporter { _, _ -> }
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun dashboardIngestRunner(
+        properties: DashboardProperties,
+        parser: DashboardRangeParser,
+        time: TimeProvider,
+        store: ObjectProvider<DashboardDailyStore>,
+        ingestors: ObjectProvider<DashboardIngestor>,
+        projects: ObjectProvider<ProjectRegistry>,
+        reporter: DashboardIngestReporter,
+    ): DashboardIngestRunner = DashboardIngestRunner(
+        ingestors = { ingestors.orderedStream().toList() },
+        store = { store.getIfAvailable() },
+        zone = parser.zone,
+        properties = properties.ingest,
+        projects = projects.getIfAvailable(),
+        reporter = reporter,
+        now = time::now,
     )
 }

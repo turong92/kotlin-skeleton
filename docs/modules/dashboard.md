@@ -14,7 +14,7 @@
 |---|---|
 | 의존성 한 줄 | `implementation(project(":modules:dashboard"))` |
 | 함께 오는 모듈 | `platform` |
-| 컴파일 전용 | 없음 |
+| 컴파일 전용 | `alert` (있으면 적재 실패를 알린다) |
 | 설정 접두사 | `skeleton.dashboard` — [docs/config/modules/dashboard.yml](../config/modules/dashboard.yml) |
 | 기본 동작 | 꺼짐. `skeleton.dashboard.admin.enabled=true` 이고 서블릿 웹 앱 + Spring Security 가 있을 때만 컨트롤러가 선다. 켜도 권한 `dashboard.read`(전권 역할은 늘 가진다)가 있어야 부른다. 권한 선언 `dashboard.read` 는 모듈이 클래스패스에 있으면 켜지 않아도 낸다 |
 | 부팅에 필요한 것 | 없다. 기여 빈이 없으면 카드가 비어 있을 뿐이다 |
@@ -34,7 +34,9 @@
   - 기여하는 쪽 모듈의 자동 설정은 `@ConditionalOnClass(name = ["dev.sumin.skeleton.dashboard.DashboardAutoConfiguration"])` 로 등록한다. 기여 모듈이 `dashboard` 를 `compileOnly` 로도 끌어오지 않아야 `new-project.sh` 가 대시보드 소스를 안 따라 보낸다.
   - 프로젝트 모드(`skeleton.projects`)에서는 `value`/`series`/`top` 이 요청의 프로젝트 문맥 안에서 불린다 — 자기 프로젝트의 숫자만 돌려준다. 캐시 키가 프로젝트마다 따로다.
 - **퍼널 바꾸기**: 기본은 `DashboardCohortSource` 빈 하나(묶음: 기간 안에 들어온 계정)와 `DashboardFunnelStep` 빈들(`order` 순, 단계마다 「묶음 중 닿은 사람 수」)이다. 앱이 `DashboardFunnel` 빈을 두면 그것이 이긴다. 묶음은 계정 id 목록을 메모리로만 넘기고 저장하지 않으며, 단계 구현은 id 를 1000 개씩 끊어 질의한다. 비율은 묶음 크기 기준이다.
-- 저장 포트(`DashboardDailyStore` · `DashboardIngestor` · `DashboardLayoutStore`)는 이 모듈이 타입만 가진다 — 구현은 `dashboard-jdbc`(일별 집계 · 화면 설정), 외부 출처의 적재는 각 출처 모듈이 한다. 이 모듈에는 메모리 구현이 없다.
+- 저장 포트(`DashboardDailyStore` · `DashboardIngestor` · `DashboardLayoutStore`)는 이 모듈이 타입만 가진다 — 구현은 `dashboard-jdbc`(일별 집계 · 화면 설정), 외부 출처의 적재기(`DashboardIngestor` 빈)는 각 출처 모듈이 낸다. 이 모듈에는 메모리 구현이 없다.
+- **일별 적재 작업**(`DashboardIngestRunner`, `skeleton.dashboard.ingest`): 저장소와 적재기 빈이 있을 때만 일한다 — 기동 직후 한 번, 그다음 매일 `ingest.at`(대시보드 시간대)에 어제부터 `backfill-days` 일을 다시 적재한다. 프로젝트 모드에서는 프로젝트마다. 적재기 하나가 실패해도 다른 적재기는 돌고 기동은 막지 않으며, 실패는 로그와(`alert` 가 있으면 출처당 하루 한 번) 알림으로 알린다 — 예외 메시지는 싣지 않는다. 여러 인스턴스가 같은 시각에 돌 수 있지만 같은 날을 다시 써도 같은 행(upsert)이라 결과가 같다.
+- **지난 날짜 읽기**(`DailySeries`): 외부 출처 카드가 기간을 「표에서 읽는 어제까지」와 「오늘(실시간)」로 가를 때 쓴다.
 
 ## Decisions and rejected alternatives
 

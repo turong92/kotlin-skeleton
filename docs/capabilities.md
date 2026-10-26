@@ -94,6 +94,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `config-aws-ssm` | AWS SSM Parameter Store 의 값을 시작할 때 스프링 프로퍼티로 불러온다. | `--modules config-aws-ssm` | AWS 설정, 파라미터 스토어, SSM, 비밀 불러오기 / aws ssm, parameter store, remote config, aws secrets | — |
 | `crypto` | AES-GCM 텍스트 암호화 · 키 회전용 키 id 봉투 · URL 에 안전한 불투명 토큰 · 선택적 영속 변환기. | `--modules crypto` | 암호화, 복호화, 비밀 저장, 불투명 URL, 키 회전 / encryption, aes gcm, opaque token, key rotation, encrypt at rest | — |
 | `dashboard` | 관리자 대시보드 조립기 — 다른 모듈이 빈으로 기여한 숫자 타일 · 순위 탭 · 같은 사람 묶음 퍼널을 모아 한 화면 분량(직전 기간 비교 · 그래프 시리즈 포함)으로 돌려주는 API(/api/v1/admin/dashboard). 계산은 프로젝트별 짧은 캐시를 지나 운영자가 여럿 열어도 DB · 외부 호출은 캐시 주기당 한 번이고, 카드 하나가 실패해도 그 카드만 상태로 말한다. 카드는 account-jdbc · auth-session-jdbc · payment-jdbc 나 앱이 기여한다. 권한 dashboard.read, 기본 꺼짐(skeleton.dashboard.admin.enabled). | `--modules dashboard` | 관리자 대시보드, 어드민 대시보드, 통계 화면, 매출 가입 숫자, 퍼널, 지표 카드 / admin dashboard, metrics, kpi tiles, funnel, analytics overview | `@skeleton/dashboard` |
+| `dashboard-jdbc` | 대시보드 저장소 — PostgreSQL · MySQL 로 dashboard 의 저장 포트를 구현한다: 외부 출처의 일별 집계 표(dashboard_daily, 같은 날을 다시 적재해도 같은 행, 집계 숫자만)와 계정별 화면 설정 표(dashboard_layouts, 계정이 지워지면 같이 지운다). 붙이면 새벽 일별 적재 작업이 켜진다(적재기가 있을 때). | `--modules dashboard-jdbc` | 대시보드 저장소, 일별 집계 표, 화면 설정 저장 / dashboard storage, daily aggregates, dashboard layout storage | `@skeleton/dashboard` |
 | `db-mysql` | MySQL 방언 — 드라이버 · Flyway MySQL 지원 · SqlDialect · Data JDBC 시간 변환, 세션을 UTC 로 고정한다. | `--db mysql` | MySQL, 마이SQL, DB 변경, MySQL 로 바꾸기 / mysql, mariadb, use mysql, switch database | — |
 | `db-postgresql` | PostgreSQL 방언(기본) — 드라이버 · Flyway PostgreSQL 지원 · SqlDialect · Data JDBC 시간 변환. | 스타터(apps/api)에 기본 포함 | PostgreSQL, 포스트그레스, DB 방언, 데이터베이스 / postgresql, postgres, database dialect, database | — |
 | `event-kafka` | 이벤트를 Kafka 로 발행하는 KafkaEventPublisher 와 키 · 메시지 · 직렬화 전략(켜기 전에는 로그만 남긴다). | `--modules event-kafka` | 카프카, 이벤트 발행, 메시지 큐, 이벤트 스트림 / kafka, event publishing, message broker, event stream | — |
@@ -568,6 +569,20 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 원본 이벤트를 쌓는 분석 저장소가 아니다 — 집계 숫자만 다룬다
   - 여러 프로젝트를 합쳐 보는 총괄 화면은 없다(프로젝트마다 따로)
 - 키워드: 관리자 대시보드, 어드민 대시보드, 통계 화면, 매출 가입 숫자, 퍼널, 지표 카드 / admin dashboard, metrics, kpi tiles, funnel, analytics overview
+
+### `dashboard-jdbc` — 대시보드 저장소 — PostgreSQL · MySQL 로 dashboard 의 저장 포트를 구현한다: 외부 출처의 일별 집계 표(dashboard_daily, 같은 날을 다시 적재해도 같은 행, 집계 숫자만)와 계정별 화면 설정 표(dashboard_layouts, 계정이 지워지면 같이 지운다). 붙이면 새벽 일별 적재 작업이 켜진다(적재기가 있을 때).
+
+- 종류 · 상태: module · experimental — 위치 `modules/dashboard-jdbc`
+- 켜는 법: `--modules dashboard-jdbc`
+- 의존 한 줄: `implementation(project(":modules:dashboard-jdbc"))`
+- 자동으로 따라온다: `dashboard`
+- 문서: `docs/modules/dashboard-jdbc.md`
+- 짝 프런트(react-skeleton): 항목 `admin-dashboard` · 패키지 `@skeleton/dashboard` · 조각 기본 포함(덧붙일 것 없음)
+- 쓰지 않는 경우:
+  - dashboard 없이는 쓰지 않는다(따라온다)
+  - dashboard 만으로도 우리 DB 숫자 카드는 돈다 — 이 모듈은 외부 출처(Cloudflare · GA)의 지난 기간 숫자와 기기 간 화면 설정이 필요할 때
+  - 다른 DB(JPA · jOOQ)로 저장하려면 dashboard 의 저장 포트(DashboardDailyStore · DashboardLayoutStore)를 앱이 구현한다
+- 키워드: 대시보드 저장소, 일별 집계 표, 화면 설정 저장 / dashboard storage, daily aggregates, dashboard layout storage
 
 ### `db-mysql` — MySQL 방언 — 드라이버 · Flyway MySQL 지원 · SqlDialect · Data JDBC 시간 변환, 세션을 UTC 로 고정한다.
 
@@ -1072,7 +1087,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 - 종류 · 상태: app · stable — 위치 `apps/sample`
 - 켜는 법: `--with-sample`
-- 자동으로 따라온다: `alert-jdbc`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `board`, `board-jdbc`, `crypto`, `dashboard`, `json`, `notification`, `notification-jdbc`, `notification-sse`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-toss`, `scheduler`, `storage`, `storage-s3`
+- 자동으로 따라온다: `alert-jdbc`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `board`, `board-jdbc`, `crypto`, `dashboard`, `dashboard-jdbc`, `json`, `notification`, `notification-jdbc`, `notification-sse`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-toss`, `scheduler`, `storage`, `storage-s3`
 - HTTP 경로: `/api/v1/cheers`, `/api/v1/notes`
 - 문서: `docs/sample.md`
 - 짝 프런트(react-skeleton): 항목 `app-sample` · 조각 `--with-sample`
@@ -1085,7 +1100,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 - 종류 · 상태: app · stable — 위치 `apps/workbench`
 - 켜는 법: `--with-workbench`
-- 자동으로 따라온다: `alert-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `board`, `board-jdbc`, `config-aws-ssm`, `crypto`, `dashboard`, `db-mysql`, `event-kafka`, `json`, `notification`, `notification-jdbc`, `notification-slack`, `notification-sse`, `notification-websocket`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `scheduler`, `storage`, `storage-s3`
+- 자동으로 따라온다: `alert-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `board`, `board-jdbc`, `config-aws-ssm`, `crypto`, `dashboard`, `dashboard-jdbc`, `db-mysql`, `event-kafka`, `json`, `notification`, `notification-jdbc`, `notification-slack`, `notification-sse`, `notification-websocket`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `scheduler`, `storage`, `storage-s3`
 - HTTP 경로: `/api/v1`, `/api/v1/examples`, `/api/v1/skeleton`, `/api/v1/skeleton/enums`, `/api/v1/skeleton/json`, `/api/v1/skeleton/payments`, `/api/v1/skeleton/polymorphic/contents`
 - 문서: `docs/minimal-composition.md`, `docs/modules/README.md`
 - 짝 프런트(react-skeleton): 항목 `app-workbench` · 조각 `--with-workbench`

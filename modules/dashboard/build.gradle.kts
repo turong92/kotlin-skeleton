@@ -3,6 +3,9 @@ dependencies {
     // spring-security-core: 호출자(Authentication) — 없으면 HTTP 엔드포인트를 등록하지 않는다 (noOptionalTest 가 증명)
     compileOnly("org.springframework.security:spring-security-core")
 
+    // 선택 연동 — 컴파일에만 걸고 런타임 전이는 하지 않는다. 앱이 alert 를 가졌을 때만 적재 실패를 알리는 자동 설정이 붙는다 (클래스 이름 조건)
+    compileOnly(project(":modules:alert"))
+
     api(project(":modules:platform"))   // 기여 계약 타입(DashboardMetric · DashboardRanking …)과 OperatorAccess · ApplicationException 이 이 모듈의 공개 API 에 나온다
 
     implementation("org.springframework.boot:spring-boot-starter")

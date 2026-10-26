@@ -102,6 +102,7 @@
 - config-aws-ssm: AWS SSM Parameter Store 의 값을 시작할 때 스프링… [AWS 설정, 파라미터 스토어]
 - crypto: AES-GCM 텍스트 암호화 · 키 회전용 키 id 봉투 · URL 에… [암호화, 복호화]
 - dashboard: 관리자 대시보드 조립기 — 다른 모듈이 빈으로 기여한 숫자 타일 ·… [관리자 대시보드, 어드민 대시보드]
+- dashboard-jdbc: 대시보드 저장소 — PostgreSQL · MySQL 로… [대시보드 저장소, 일별 집계 표]
 - db-mysql: MySQL 방언 — 드라이버 · Flyway MySQL 지원 ·… [MySQL, 마이SQL]
 - db-postgresql: PostgreSQL 방언(기본) [PostgreSQL, 포스트그레스]
 - event-kafka: 이벤트를 Kafka 로 발행하는 KafkaEventPublisher 와… [카프카, 이벤트 발행]

@@ -178,6 +178,8 @@ test proving a context with only that module (and its declared dependencies) boo
 | `legal-jdbc` | yes | a `DataSource` + one `db-*` module (+ its migration `legal`; MySQL with binlog needs `log_bin_trust_function_creators=1` for its triggers) | — |
 | `authz` | off until `skeleton.authz.admin.enabled=true` (then HTTP `/api/v1/admin/roles` · `/permissions`; off = 404) | when switched on: an `AuthzRoleStore` — `authz-jdbc` provides it, or write your own; startup fails naming the missing bean. Needs neither `account` (without it `holders` is `null` and role deletion is not guarded) nor Spring Security (without it no routes) | — |
 | `authz-jdbc` | yes (replaces the yml role → permission mapping with the table; seeds it once from the yml) | a `DataSource` + one `db-*` module (+ its migration `authz_roles`, as above) | — |
+| `dashboard` | off until `skeleton.dashboard.admin.enabled=true` (then HTTP `/api/v1/admin/dashboard`; off = 404) | nothing | cards: add `account-jdbc` · `auth-session-jdbc` · `payment-jdbc` or your own `DashboardMetric` beans |
+| `dashboard-jdbc` | yes (daily table + per-account screen settings; turns the daily load job on) | a `DataSource` + one `db-*` module (+ its migration `dashboard`, as above) | — |
 | `captcha-turnstile` | off until `enabled=true` + `secret-key` | nothing | Turnstile secret, internet |
 | `config-aws-ssm` | loads only once `paths` are set (dev / staging / prod) or `credential-profile` is set | nothing | AWS credentials when it loads (`fail-fast` decides) |
 | `crypto` | beans only when `skeleton.crypto.keys` has a key | nothing | AES keys |

@@ -1,2 +1,3 @@
 dev.sumin.skeleton.dashboard.DashboardAutoConfiguration
 dev.sumin.skeleton.dashboard.DashboardWebAutoConfiguration
+dev.sumin.skeleton.dashboard.DashboardAlertAutoConfiguration

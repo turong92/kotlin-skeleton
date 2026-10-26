@@ -37,6 +37,7 @@
 | `authz` | 운영자 역할 관리 API: 역할 만들기 · 권한 고르기, 권한 카탈로그, 전권 고정 · 권한 상승 막기 · 자기 잠금 막기 (기본 꺼짐) | [authz](authz.md) |
 | `authz-jdbc` | 역할 → 권한 표 저장소 (PostgreSQL · MySQL) + 첫 기동 씨앗 | [authz-jdbc](authz-jdbc.md) |
 | `dashboard` | 관리자 대시보드 조립기: 다른 모듈이 기여한 타일 · 순위 · 퍼널을 모아 한 화면 분량으로, 짧은 캐시(프로젝트별) (기본 꺼짐) | [dashboard](dashboard.md) |
+| `dashboard-jdbc` | 대시보드 일별 집계 · 화면 설정 저장소 (PostgreSQL · MySQL) + 일별 적재 작업을 켠다 | [dashboard-jdbc](dashboard-jdbc.md) |
 | `payment` | 결제 계약 · 제공자 라우팅 | [payment](payment.md) |
 | `payment-jdbc` | 결제 장부 저장소 + 작업 어댑터 (PostgreSQL · MySQL) | [payment-jdbc](payment-jdbc.md) |
 | `payment-toss` | Toss 결제 제공자 | [payment-toss](payment-toss.md) |

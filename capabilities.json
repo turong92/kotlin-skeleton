@@ -1113,6 +1113,40 @@
       }
     },
     {
+      "id": "dashboard-jdbc",
+      "kind": "module",
+      "module": "dashboard-jdbc",
+      "path": "modules/dashboard-jdbc",
+      "status": "experimental",
+      "summary": "대시보드 저장소 — PostgreSQL · MySQL 로 dashboard 의 저장 포트를 구현한다: 외부 출처의 일별 집계 표(dashboard_daily, 같은 날을 다시 적재해도 같은 행, 집계 숫자만)와 계정별 화면 설정 표(dashboard_layouts, 계정이 지워지면 같이 지운다). 붙이면 새벽 일별 적재 작업이 켜진다(적재기가 있을 때).",
+      "starter": false,
+      "newProjectFlag": "--modules dashboard-jdbc",
+      "autoIncludes": ["dashboard"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/dashboard-jdbc.md"],
+      "frontend": {
+        "capabilities": ["admin-dashboard"],
+        "newProjectFlag": null,
+        "packages": ["@skeleton/dashboard"]
+      },
+      "notFor": [
+        "dashboard 없이는 쓰지 않는다(따라온다)",
+        "dashboard 만으로도 우리 DB 숫자 카드는 돈다 — 이 모듈은 외부 출처(Cloudflare · GA)의 지난 기간 숫자와 기기 간 화면 설정이 필요할 때",
+        "다른 DB(JPA · jOOQ)로 저장하려면 dashboard 의 저장 포트(DashboardDailyStore · DashboardLayoutStore)를 앱이 구현한다"
+      ],
+      "keywords": {
+        "ko": ["대시보드 저장소", "일별 집계 표", "화면 설정 저장"],
+        "en": ["dashboard storage", "daily aggregates", "dashboard layout storage"]
+      }
+    },
+    {
       "id": "db-mysql",
       "kind": "module",
       "module": "db-mysql",
@@ -2446,6 +2480,7 @@
         "board-jdbc",
         "crypto",
         "dashboard",
+        "dashboard-jdbc",
         "json",
         "notification",
         "notification-jdbc",
@@ -2508,6 +2543,7 @@
         "config-aws-ssm",
         "crypto",
         "dashboard",
+        "dashboard-jdbc",
         "db-mysql",
         "event-kafka",
         "json",
