@@ -142,7 +142,7 @@ class LogMaskerTest {
 object TimingGrowth {
     const val N = 2000
     const val ABSOLUTE_LIMIT_MS = 500.0
-    private const val SLACK_MS = 5.0
+    private const val SLACK_MS = 25.0   // 입력이 작아 잡음이 비율을 지배한다(0.7ms → 12ms 가 나온 적이 있다) — 제곱이면 수백 ms~초라 이 여유로도 잡힌다
 
     private fun bestMillis(block: () -> Unit): Double = (1..7).minOf { val t = System.nanoTime(); block(); (System.nanoTime() - t) / 1e6 }
 
