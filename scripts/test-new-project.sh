@@ -16,6 +16,7 @@
 #      (1 · 3 · 5 · 6 은 스타터의 약관 · 동의(legal-jdbc)를 함께 빌드한다 — 3 은 MySQL 트리거 마이그레이션, 5 는 앱 소유 문서 · 재동의 여정 시험)
 #   9. --modules payment,payment-jdbc,payment-toss   (결제 장부: payment 의 testFixtures[저장소 계약 시험 · 가짜 결제사]가 찍히고 payment-jdbc 의 dbTest 가 두 DB 로 돈다 — `8-payment`)
 #  10. --modules authz,authz-jdbc   (운영자 역할 관리: 스타터의 account-jdbc 와 함께 — RoleHolders 가 붙는 조립, authz-jdbc 의 dbTest 가 두 DB 로 돈다 — `10-authz`. 「authz 를 뺀」 조합은 `1-defaults`)
+#  11. --modules dashboard,dashboard-jdbc,dashboard-cloudflare,dashboard-ga   (관리자 대시보드: 스타터의 account-jdbc · auth-session-jdbc 가 가입 · 활성 카드를 기여하고 dashboard-jdbc 의 dbTest 가 두 DB 로 돈다 — `11-dashboard`. 「dashboard 를 뺀」 조합은 `1-defaults`)
 #   8. docs/new-project-recipe.md 의 작업 예 3개(<!-- kotlin-stamp: … --> 블록의 명령 그대로) — 커뮤니티 · 유료 SaaS(--db mysql) · 콘텐츠 SSR(스타터 그대로)
 # macOS bash 3.2 와 GNU bash 에서 돈다. 임시 디렉토리는 끝나면 지운다 (KEEP=1 이면 남긴다).
 set -euo pipefail
@@ -264,7 +265,7 @@ for m in board board-jdbc; do
   check "apps/api 의존성에 $m 한 줄이 생긴다" has_line "implementation\\(project\\(\":modules:$m\"\\)\\)" "$H/apps/api/build.gradle.kts"
 done
 check "닫힘으로 따라온 컴파일 전용 모듈은 앱 의존성에 줄을 더하지 않는다 (notification · idempotency)" bash -c "! grep -q 'modules:notification\|modules:idempotency' '$H/apps/api/build.gradle.kts'"
-check "dbTestModules 에 board-jdbc 가 들어간다 (src/dbTest 가 있는 모듈 전부)" has_line 'val dbTestModules = setOf\(":modules:account-jdbc", ":modules:auth-session-jdbc", ":modules:board-jdbc", ":modules:dashboard-jdbc", ":modules:job-queue-jdbc", ":modules:legal-jdbc"\)' "$H/build.gradle.kts"
+check "dbTestModules 에 board-jdbc 가 들어간다 (src/dbTest 가 있는 모듈 전부)" has_line 'val dbTestModules = setOf\(":modules:account-jdbc", ":modules:auth-session-jdbc", ":modules:board-jdbc", ":modules:job-queue-jdbc", ":modules:legal-jdbc"\)' "$H/build.gradle.kts"
 check "게시판 문서 쪽과 설정 블록이 남고 새 접두사로 붙는다" bash -c "test -f '$H/docs/modules/board.md' && test -f '$H/docs/modules/board-jdbc.md' && grep -q '^# acme.board\|^#   board:' '$H/apps/api/src/main/resources/application.yml' && grep -q 'acme.board' '$H/modules/board/src/main/kotlin/com/acme/shop/board/BoardProperties.kt'"
 check "찍은 프로젝트에 skeleton 이름 흔적이 없다 (BoardController 경로 속성 포함)" bash -c "! grep -rq 'skeleton\.board' '$H/modules/board/src/main'"
 I="$TMP/i"
@@ -343,6 +344,21 @@ AZN="$TMP/azn"
 expect_exit 0 "authz 만 요청하면 찍히되 authz-jdbc 를 더하라고 알려 준다" stamp "$AZN" --modules authz
 grep -q 'authz has no storage of its own' <<<"$LAST_OUTPUT" && pass "저장소 없음 안내가 나온다" || fail "authz 만 요청했는데 authz-jdbc 안내가 없다"
 
+echo "== 8e. --modules dashboard,dashboard-jdbc,dashboard-cloudflare,dashboard-ga (관리자 대시보드 — 카드는 다른 모듈이 기여하고, 외부 출처는 일별 표[dashboard-jdbc]에 기대지만 없어도 뜬다)"
+DB="$TMP/dash"
+expect_exit 0 "대시보드 조합을 찍는다 (rename 잔여 검사 포함)" stamp "$DB" --modules dashboard,dashboard-jdbc,dashboard-cloudflare,dashboard-ga
+for m in dashboard dashboard-jdbc dashboard-cloudflare dashboard-ga platform; do
+  check "모듈 $m 이 포함된다" bash -c "grep -q 'include(\":modules:$m\")' '$DB/settings.gradle.kts' && test -d '$DB/modules/$m'"
+done
+check "dbTestModules 에 dashboard-jdbc 가 들어간다 (src/dbTest 가 있는 모듈)" has_line '":modules:dashboard-jdbc"' "$DB/build.gradle.kts"
+check "문서 쪽 · 계약 문서 · 설정 블록 · 카탈로그 항목이 남고 접두사가 새 이름이다" bash -c "test -f '$DB/docs/modules/dashboard.md' && test -f '$DB/docs/modules/dashboard-ga.md' && test -f '$DB/docs/dashboard-http-contract.md' && grep -q 'modules/dashboard-jdbc/' '$DB/migrations.lock' && grep -q '\"acme.dashboard\"' '$DB/capabilities.json' && grep -q '\"acme.dashboard-cloudflare\"' '$DB/capabilities.json' && cd '$DB' && perl scripts/build-capabilities.pl --check"
+DC="$TMP/dashcf"
+expect_exit 0 "dashboard-cloudflare 만 요청하면 찍히되 dashboard-jdbc 를 더하라고 알려 준다" stamp "$DC" --modules dashboard-cloudflare
+grep -q 'add dashboard-jdbc too' <<<"$LAST_OUTPUT" && pass "일별 표 안내가 나온다" || fail "dashboard-cloudflare 만 요청했는데 dashboard-jdbc 안내가 없다"
+dc_includes="$(includes "$DC/settings.gradle.kts")"
+check "dashboard-cloudflare 의 닫힘에는 dashboard · platform 만 더해진다 (jdbc · ga · 다른 출처는 따라오지 않는다)" bash -c "grep -q ':modules:dashboard-cloudflare' <<<\"\$1\" && grep -q ':modules:dashboard ' <<<\"\$1 \" && grep -q ':modules:platform' <<<\"\$1\" && ! grep -q 'dashboard-jdbc\|dashboard-ga' <<<\"\$1\"" _ "$dc_includes"
+check "dashboard 를 고르지 않은 기본 프로젝트에는 dashboard* 디렉터리 · 문서 행 · 카탈로그 항목 · 잠금 줄이 남지 않는다" bash -c "! ls '$A/modules' | grep -q '^dashboard' && ! grep -q '](dashboard' '$A/docs/modules/README.md' && ! test -e '$A/docs/modules/dashboard.md' && ! test -e '$A/docs/dashboard-http-contract.md' && ! grep -q '\"path\": \"modules/dashboard' '$A/capabilities.json' && ! grep -q 'modules/dashboard' '$A/migrations.lock' && ! grep -q 'DASHBOARD' '$A/deploy/app.yaml'"
+
 echo "== 9. --modules redis-core,redis-lock (Redis 환경변수 이름이 프로젝트 접두사를 따라간다 — 배포 계약)"
 J="$TMP/j"
 expect_exit 0 "redis 조합을 찍는다" stamp "$J" --modules redis-core,redis-lock
@@ -411,6 +427,7 @@ if [ "$MODE" = "--full" ]; then
   build_composition "$PJ" "8-payment"
   build_composition "$J" "7-redis"
   build_composition "$AZ" "10-authz"
+  build_composition "$DB" "11-dashboard"
   for rid in $RECIPE_DIRS; do   # 레시피의 작업 예 — 문서의 명령이 낡으면 여기서 깨진다 (stamp · dry-run 은 위에서 이미 했다)
     [ "${RECIPE_PLAIN#* $rid }" != "$RECIPE_PLAIN" ] && continue   # 위치 인자 뒤에 옵션이 없는 레시피 = 스타터 그대로 = 1-defaults 와 같은 구성이라 빌드는 반복하지 않는다
     build_composition "$TMP/recipe-$rid" "recipe-$rid"

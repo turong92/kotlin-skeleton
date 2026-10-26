@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 관리자 대시보드 — 방문 · 흐름 · 장사 · 앱 통계 한 화면 (2026-10-27)
+
+- 새 모듈 넷: `dashboard`(조립기 + 관리 API `/api/v1/admin/dashboard` · `/rankings/{key}` · `/layout`, 기본 꺼짐 `skeleton.dashboard.admin.enabled`, 권한 `dashboard.read`), `dashboard-jdbc`(일별 집계 표 `dashboard_daily` · 계정별 화면 설정 `dashboard_layouts` + 새벽 적재 작업, 계정 삭제 때 설정 삭제), `dashboard-cloudflare`(Cloudflare Web Analytics: 방문 · 페이지뷰 · 유입 · 경로 · 국가 · 기기), `dashboard-ga`(GA4: 채널 · 캠페인 · 첫 페이지 · 페이지 이동 · 새/재방문 + 현재 방문자 `GET …/realtime`). 키가 없으면 기동하고 그 카드만 `NOT_CONNECTED`. 화면 요청은 외부 API 를 직접 부르지 않는다(어제까지는 일별 표, 오늘은 서버 캐시 — 프로젝트마다 한 번).
+- 기여 계약은 `platform` 의 `common/dashboard`(타입만): `DashboardMetric` · `DashboardRanking` · `DashboardCohortSource` · `DashboardFunnelStep` · `DashboardFunnel` · `DashboardBuckets`. 기여 셋: `account-jdbc`(신규 가입 · 퍼널 묶음), `auth-session-jdbc`(활성 이용자 — 근사치라 증감 없음 · 「돌아옴」 단계), `payment-jdbc`(순매출 = 기간 안 결제 − 기간 안 성공 환불, **통화별로 따로**, 지금 끼운 결제사 키의 모드와 같은 모드의 주문만 · 결제 건수 · 「결제」 단계). 기여 모듈은 `dashboard` 를 컴파일에 끌어오지 않는다(클래스 이름 조건) — 안 붙인 앱은 아무것도 달라지지 않는다. 카드 더하는 법: `docs/modules/dashboard.md`.
+- **인덱스 마이그레이션 셋(예외)**: `accounts(created_at)` · `auth_sessions(last_used_at)` · `payment_orders(paid_at)` + `payment_refunds(completed_at)` — `dashboard` 를 안 붙인 앱에도 들어간다(범위 질의가 표 전체를 훑지 않게). 두 방언 새 V 파일, `migrations.lock` 갱신.
+- 프로젝트 모드(`skeleton.projects`): 대시보드 시간대 · 통화(`dashboard.{zone, currency}`)와 Cloudflare(`account-id` · `site-tag` · `api-token`) · GA(`property-id` · `credentials`)는 프로젝트마다. Cloudflare · GA 키는 **공통 값을 물려받지 않는다**(프로젝트 `config` 에 직접 적지 않으면 그 프로젝트의 카드만 연결 안 됨). `ProjectConfigKeys.SUPPORTED` 에 `dashboard.zone` · `dashboard.currency` · `dashboard-cloudflare.` · `dashboard-ga.`.
+- 견본 앱(`apps/sample`): `dashboard` 계열 조립 + 앱 통계 카드 예시(게시판별 글 수 · 반응 종류별 수). 조합 시험 `11-dashboard`, `--quick` 단정 둘, `deploy/app.yaml` 비밀(`SKELETON_DASHBOARD_CLOUDFLARE_API_TOKEN` · `SKELETON_DASHBOARD_GA_CREDENTIALS`), 레시피 SaaS 예에 `dashboard,dashboard-jdbc`.
+- 프런트 짝: react-skeleton 의 `@skeleton/dashboard`(HTTP 계약 `docs/dashboard-http-contract.md`) · `@skeleton/marketing` 의 분석 스크립트 켜기.
+- **확인 못 한 것**: Cloudflare GraphQL 필드 · 무료 계정의 데이터셋, GA 차원 · 지표 이름(`keyEvents:<이벤트>` 등)은 추측이다 — 실제 토큰 · 속성으로 재서 맞춘다.
+
 ### CI 줄이기 · 테스트 덜어내기 (2026-10-26)
 
 - `ci.yml`: push · PR 은 `./gradlew build -x newProjectChecks -x mysqlTest` 로 빠른 검사만(PR 은 새로 올라오면 이전 실행을 멈춘다). MySQL 묶음과 새 프로젝트 빠른 검사(`new-project.yml` 이 `--quick` 을 따로 돈다)는 새 `nightly.yml`(하루 한 번 + 수동)이 전체 `./gradlew build` 와 `test-new-project.sh --full` 로 돈다. `new-project.yml` 은 `--quick` 만, 레시피 `content-ssr`(옵션 없음)의 빌드는 `1-defaults` 와 같아 건너뛴다. `deploy-contract.yml` 은 테스트 소스만 바뀌면 건너뛴다.

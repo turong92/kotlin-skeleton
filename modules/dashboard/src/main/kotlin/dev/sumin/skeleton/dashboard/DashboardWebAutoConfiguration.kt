@@ -2,6 +2,7 @@ package dev.sumin.skeleton.dashboard
 
 import dev.sumin.skeleton.common.authz.OperatorAccess
 import dev.sumin.skeleton.dashboard.web.DashboardAdminController
+import dev.sumin.skeleton.dashboard.web.DashboardLayoutController
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
@@ -22,4 +23,8 @@ class DashboardWebAutoConfiguration {
     @ConditionalOnMissingBean
     fun dashboardAdminController(assembler: DashboardAssembler, parser: DashboardRangeParser, access: OperatorAccess): DashboardAdminController =
         DashboardAdminController(assembler, parser, access)
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun dashboardLayoutController(layouts: DashboardLayouts, access: OperatorAccess): DashboardLayoutController = DashboardLayoutController(layouts, access)
 }

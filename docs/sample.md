@@ -200,4 +200,4 @@ APP=sample scripts/dev.sh    # 백엔드(+프론트 WEB_DIR)만 같은 방식으
 
 ## 관리자 대시보드
 
-`dashboard` 한 줄과 `application.yml` 의 `skeleton.dashboard`(`admin.enabled: true` · `zone: Asia/Seoul` · `currency: KRW`)가 이 앱의 선택이다. 카드는 이 앱이 이미 가진 모듈이 기여한다 — 신규 가입(`account-jdbc`), 활성 이용자(`auth-session-jdbc`), 순매출 · 결제 건수(`payment-jdbc`), 그리고 가입 → 돌아옴 → 결제 퍼널. `ADMIN` 은 권한 `dashboard.read` 를 늘 가진다: `GET /api/v1/admin/dashboard`. 문서: [modules/dashboard.md](modules/dashboard.md).
+`dashboard` 한 줄과 `application.yml` 의 `skeleton.dashboard`(`admin.enabled: true` · `zone: Asia/Seoul` · `currency: KRW`)가 이 앱의 선택이다. 카드는 이 앱이 이미 가진 모듈이 기여한다 — 신규 가입(`account-jdbc`), 활성 이용자(`auth-session-jdbc`), 순매출 · 결제 건수(`payment-jdbc`), 그리고 가입 → 돌아옴 → 결제 퍼널. `ADMIN` 은 권한 `dashboard.read` 를 늘 가진다: `GET /api/v1/admin/dashboard`. 앱 통계 탭은 앱 코드 한 파일(`SampleDashboardConfiguration`: 게시판별 글 수 · 반응 종류별 수 — 예시일 뿐, 남의 모듈 표를 읽는 것은 정석이 아니다)이다. 키 없이 띄우면 Cloudflare · GA 카드는 「연결하면 보입니다」이고 우리 DB 숫자는 나온다(`SKELETON_DASHBOARD_CLOUDFLARE_*` · `SKELETON_DASHBOARD_GA_*` 를 넣으면 채워진다). 문서: [modules/dashboard.md](modules/dashboard.md).

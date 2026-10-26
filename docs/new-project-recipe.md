@@ -127,12 +127,12 @@ scripts/dev.sh
 
 > 월 구독으로 쓰는 업무 도구. 로그인 후 대시보드 · 목록 · 상세 · 설정 화면이 있고, 요금제 페이지에서 플랜을 골라 토스로 결제하며, 가입 폼은 봇을 막고, 결제 · 작업 완료 알림을 받는다.
 
-고르기(백엔드): `auth`(스타터) · `payment` + `payment-jdbc`(장부) + `payment-toss` · `notification` + `notification-jdbc`; `captcha-turnstile` 은 스타터에 들어 있어 켜기만 한다(SAAS_CAPTCHA_TURNSTILE_*). DB 는 MySQL 로 둔다(`--db mysql`).
+고르기(백엔드): `auth`(스타터) · `payment` + `payment-jdbc`(장부) + `payment-toss` · `notification` + `notification-jdbc` · `dashboard` + `dashboard-jdbc`(운영자 대시보드: 가입 · 활성 · 순매출 · 결제 · 퍼널 — 켜기 `SAAS_DASHBOARD_ADMIN_ENABLED=true`); `captcha-turnstile` 은 스타터에 들어 있어 켜기만 한다(SAAS_CAPTCHA_TURNSTILE_*). DB 는 MySQL 로 둔다(`--db mysql`).
 
 <!-- kotlin-stamp: saas -->
 
 ```bash
-scripts/new-project.sh ~/work/saas/api dev.example.saas saas Saas --modules payment,payment-jdbc,payment-toss,notification,notification-jdbc --db mysql
+scripts/new-project.sh ~/work/saas/api dev.example.saas saas Saas --modules payment,payment-jdbc,payment-toss,notification,notification-jdbc,dashboard,dashboard-jdbc --db mysql
 ```
 
 그다음:

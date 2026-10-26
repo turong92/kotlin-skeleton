@@ -7,6 +7,7 @@
 |---|---|---|
 | `GET /api/v1/admin/dashboard?from&to&compare` | 기간의 타일 · 시리즈 · 순위(상위 10) · 퍼널 | `dashboard.read` |
 | `GET /api/v1/admin/dashboard/rankings/{key}?from&to&limit` | 순위 하나를 더 길게(「전체 보기」, `limit` ≤ 500) | `dashboard.read` |
+| `GET` · `PUT /api/v1/admin/dashboard/layout` | **자기** 화면 설정(꺼진 카드 · 타일, 카드 순서) 읽기 · 통째 저장. 저장소(`dashboard-jdbc`)가 없으면 404 `DASHBOARD.LAYOUT_UNAVAILABLE` → 프런트는 브라우저 저장 | `dashboard.read` |
 
 `from` · `to` 는 대시보드 시간대의 날짜(양 끝 포함), 둘 다 없으면 오늘. 하루면 시간별, 92일까지 일별, 그 위는 주별, 최대 366일. 잘못된 기간은 400 `DASHBOARD.RANGE_INVALID`, 없는 순위는 404 `DASHBOARD.RANKING_NOT_FOUND`. 카드 하나가 터지거나 키가 없어도 그 카드만 `status`(`ERROR` · `NOT_CONNECTED` · `NO_HISTORY`)로 말하고 응답 전체는 200 이다.
 
@@ -36,6 +37,7 @@
   - 프로젝트 모드(`skeleton.projects`)에서는 `value`/`series`/`top` 이 요청의 프로젝트 문맥 안에서 불린다 — 자기 프로젝트의 숫자만 돌려준다. 캐시 키가 프로젝트마다 따로다.
 - **퍼널 비용**: 묶음은 많아야 `funnel.max-cohort`(5만)+1 명만 읽고(`members(range, limit)`), 넘으면 그 퍼널만 `TOO_LARGE` 다. 결과는 5분 캐시된다(`cache.funnel`). 구현은 `limit` 을 질의에 걸어야 한다.
 - **그래프는 질의 한 번**: `series` 는 칸마다 질의하지 않는다 — 범위의 (시각, 값)을 한 번 읽어 `DashboardBuckets.series` 로 칸에 나눈다. 돈 타일의 `series` 는 조립기가 정해 넘기는 통화(`value[0].currency`) 한 통화만 돌려준다.
+- **앱 통계**: 앱 고유 숫자는 `DashboardRanking` 빈 하나(`group = "app"` 이 「앱 통계」 카드의 탭이 된다)로 붙인다. 견본 앱(`apps/sample/…/dashboard/SampleDashboardConfiguration.kt`)이 게시판별 글 수 · 반응 종류별 수를 예로 든다. 그 예는 게시판 모듈의 표를 읽기 전용으로 읽는데, **남의 모듈 표를 읽는 것은 정석이 아니다** — 정석은 앱 자기 표(또는 모듈의 서비스)에서 세는 것이다.
 - **퍼널 바꾸기**: 기본은 `DashboardCohortSource` 빈 하나(묶음: 기간 안에 들어온 계정)와 `DashboardFunnelStep` 빈들(`order` 순, 단계마다 「묶음 중 닿은 사람 수」)이다. 앱이 `DashboardFunnel` 빈을 두면 그것이 이긴다. 묶음은 계정 id 목록을 메모리로만 넘기고 저장하지 않으며, 단계 구현은 id 를 1000 개씩 끊어 질의한다. 비율은 묶음 크기 기준이다.
 - 저장 포트(`DashboardDailyStore` · `DashboardIngestor` · `DashboardLayoutStore`)는 이 모듈이 타입만 가진다 — 구현은 `dashboard-jdbc`(일별 집계 · 화면 설정), 외부 출처의 적재기(`DashboardIngestor` 빈)는 각 출처 모듈이 낸다. 이 모듈에는 메모리 구현이 없다.
 - **일별 적재 작업**(`DashboardIngestRunner`, `skeleton.dashboard.ingest`): 저장소와 적재기 빈이 있을 때만 일한다 — 기동 직후 한 번, 그다음 매일 `ingest.at`(대시보드 시간대)에 어제부터 `backfill-days` 일을 다시 적재한다. 프로젝트 모드에서는 프로젝트마다. 적재기 하나가 실패해도 다른 적재기는 돌고 기동은 막지 않으며, 실패는 로그와(`alert` 가 있으면 출처당 하루 한 번) 알림으로 알린다 — 예외 메시지는 싣지 않는다. 여러 인스턴스가 같은 시각에 돌 수 있지만 같은 날을 다시 써도 같은 행(upsert)이라 결과가 같다.

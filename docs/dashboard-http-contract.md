@@ -63,10 +63,24 @@ Needs `dashboard.read`. Provided by `dashboard-ga`; **`404` when the app does no
 
 **GA rankings** (`ga.*`) are filled from the daily table only: today is not loaded (GA settles its numbers hours later), so a range ending today shows data up to yesterday; `freshness` is `DAILY` with the time of the last load ("GA as of hh:mm"). `ga.returning` has exactly two rows `New` and `Returning` (`values: [users]`). With a configured key event the sessions-based rankings get a second column `Conversions` (`columns` and `values` have two entries then).
 
-## 3. Errors
+## 3. Screen settings (your own)
+
+### GET /api/v1/admin/dashboard/layout · PUT (same path)
+Needs `dashboard.read`. **Your own settings only** — there is no account id in the path, the caller is the signed-in account. Stored by `dashboard-jdbc`; without it both calls are `404 DASHBOARD.LAYOUT_UNAVAILABLE` and the screen keeps its settings in the browser (key by account id).
+
+```json
+{ "value": { "hidden": ["cloudflare.pageviews", "funnel"], "order": ["tiles", "chart", "rankings.traffic", "rankings.pages", "rankings.geo", "funnel", "app"] } }
+```
+- `hidden`: card keys and tile / ranking keys that are switched off. `order`: card keys in display order. Card keys: `tiles` · `chart` · `rankings.traffic` · `rankings.pages` · `rankings.geo` · `funnel` · `app`.
+- GET before any save answers the empty default `{ "hidden": [], "order": [] }`. PUT replaces everything (body `{ hidden, order }`, missing = empty) and answers what was stored.
+- `400 DASHBOARD.LAYOUT_INVALID`: a key the app does not know (not a card key and not a tile / ranking of this app), a duplicate, an `order` entry that is not a card key, too many keys, or more than 4000 characters when stored.
+
+## 4. Errors
 
 | `code` | status | when |
 |---|---|---|
 | `DASHBOARD.RANGE_INVALID` | 400 | the date range cannot be used |
 | `DASHBOARD.RANKING_NOT_FOUND` | 404 | no ranking with that key |
+| `DASHBOARD.LAYOUT_UNAVAILABLE` | 404 | the app has no server-side screen settings store (no `dashboard-jdbc`) — keep them in the browser |
+| `DASHBOARD.LAYOUT_INVALID` | 400 | the screen settings cannot be stored |
 | `COMMON.FORBIDDEN` | 403 | no `dashboard.read` |

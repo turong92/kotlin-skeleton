@@ -12,6 +12,8 @@ enum class DashboardErrorCode(
 ) : ErrorCode {
     RANGE_INVALID("DASHBOARD.RANGE_INVALID", HttpStatus.BAD_REQUEST, "Invalid date range"),
     RANKING_NOT_FOUND("DASHBOARD.RANKING_NOT_FOUND", HttpStatus.NOT_FOUND, "Ranking not found"),
+    LAYOUT_UNAVAILABLE("DASHBOARD.LAYOUT_UNAVAILABLE", HttpStatus.NOT_FOUND, "Screen settings are not stored on the server"),
+    LAYOUT_INVALID("DASHBOARD.LAYOUT_INVALID", HttpStatus.BAD_REQUEST, "Invalid screen settings"),
 }
 
 class DashboardException(errorCode: DashboardErrorCode, message: String) : ApplicationException(message, errorCode)

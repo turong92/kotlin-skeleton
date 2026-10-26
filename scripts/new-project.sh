@@ -199,6 +199,11 @@ if in_list authz "$SELECTED_SORTED" && ! in_list authz-jdbc "$SELECTED_SORTED"; 
   NOTES="${NOTES:+$NOTES$'\n'}authz has no storage of its own: add authz-jdbc too (--modules authz,authz-jdbc) unless you implement its AuthzRoleStore port yourself — with skeleton.authz.admin.enabled=true and no store the app fails to start"
 fi
 
+# 대시보드의 외부 출처(dashboard-cloudflare · dashboard-ga)는 지난 기간 숫자를 일별 표(dashboard-jdbc)에서 읽는다 — 없어도 앱은 뜬다(오늘 숫자와 현재 방문자만, 지난 날이 걸린 기간은 「기록 없음」)
+if { in_list dashboard-cloudflare "$SELECTED_SORTED" || in_list dashboard-ga "$SELECTED_SORTED"; } && ! in_list dashboard-jdbc "$SELECTED_SORTED"; then
+  NOTES="${NOTES:+$NOTES$'\n'}dashboard-cloudflare / dashboard-ga read past days from the daily table: add dashboard-jdbc too (--modules dashboard-jdbc,...) — without it ranges that reach before today show no history (and per-account screen settings fall back to the browser)"
+fi
+
 # payment 도 저장소를 모른다 (payment-jdbc 가 포트를 구현한다) — 없어도 앱은 뜬다: 결제 승인 파사드뿐이고 주문 장부(표)가 없다
 if in_list payment "$SELECTED_SORTED" && ! in_list payment-jdbc "$SELECTED_SORTED"; then
   NOTES="${NOTES:+$NOTES$'\n'}payment alone is the provider facade with no order ledger and no tables: add payment-jdbc too (--modules payment,payment-jdbc,payment-toss) to get orders, the event history and the delayed jobs"

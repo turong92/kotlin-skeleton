@@ -68,7 +68,7 @@
   - kotlin: `scripts/new-project.sh ~/work/community/api dev.example.community community Community --modules auth-social-google,board,board-jdbc,notification,notification-jdbc,notification-sse`
   - react: `scripts/new-project.sh ~/work/community/web community --packages board,notifications,realtime,i18n,marketing,seo --with-sample`
 - 유료 SaaS 대시보드 — 로그인 · 대시보드/목록/설정 · 요금제 · 결제 · 알림
-  - kotlin: `scripts/new-project.sh ~/work/saas/api dev.example.saas saas Saas --modules payment,payment-jdbc,payment-toss,notification,notification-jdbc --db mysql`
+  - kotlin: `scripts/new-project.sh ~/work/saas/api dev.example.saas saas Saas --modules payment,payment-jdbc,payment-toss,notification,notification-jdbc,dashboard,dashboard-jdbc --db mysql`
   - react: `scripts/new-project.sh ~/work/saas/web saas --packages marketing,payment,notifications,captcha-turnstile --scope @acme`
 - 콘텐츠 · 랜딩 사이트 (서버 렌더링) — 검색에 노출되는 소개 · 요금 · 약관 사이트
   - kotlin: `scripts/new-project.sh ~/work/site/api dev.example.site site Site`

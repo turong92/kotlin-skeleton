@@ -38,6 +38,8 @@ secrets:
   - SKELETON_AUTH_SOCIAL_PROVIDERS_KAKAO_CLIENT_SECRET    # [auth-social-kakao] 운영자 (.local.env)
   - SKELETON_AUTH_SOCIAL_PROVIDERS_NAVER_CLIENT_SECRET    # [auth-social-naver] 운영자 (.local.env)
   - SKELETON_CAPTCHA_TURNSTILE_SECRET_KEY                 # [captcha-turnstile] 운영자 (.local.env)
+  - SKELETON_DASHBOARD_CLOUDFLARE_API_TOKEN               # [dashboard-cloudflare] 운영자 (.local.env) — 권한 Account / Account Analytics / Read 하나. 계정 id · 사이트 태그는 env: 에 적는다
+  - SKELETON_DASHBOARD_GA_CREDENTIALS                     # [dashboard-ga] 운영자 (.local.env) — 서비스 계정 키 JSON 의 base64 (속성에 「뷰어」로 추가된 계정). 속성 id 는 env: 에 적는다
   - SKELETON_PAYMENT_TOSS_SECRET_KEY                      # [payment-toss] 운영자 (.local.env)
   - SKELETON_PAYMENT_WEBHOOK_PATH_TOKEN                   # [payment] 운영자 (.local.env) — 결제사 개발자센터에 등록하는 웹훅 주소 끝의 비밀 조각, 24자 이상 (약하면 stage|prod 에서 기동 실패)
   - SKELETON_PAYMENT_STRIPE_SECRET_KEY                    # [payment-stripe] 운영자 (.local.env)
@@ -67,6 +69,8 @@ secrets:
 #   [auth-social-kakao] (env:) SKELETON_AUTH_SOCIAL_PROVIDERS_KAKAO_ENABLED=true · _CLIENT_ID     켰는데 비면 기동 실패
 #   [auth-social-naver] (env:) SKELETON_AUTH_SOCIAL_PROVIDERS_NAVER_ENABLED=true · _CLIENT_ID     켰는데 비면 기동 실패
 #   [captcha-turnstile] (env:) SKELETON_CAPTCHA_TURNSTILE_ENABLED=true   비밀(secret key)이 비면 검증기 빈이 없다 (기동은 된다)
+#   [dashboard-cloudflare] (env:) SKELETON_DASHBOARD_CLOUDFLARE_ACCOUNT_ID · _SITE_TAG (비밀 아님)   셋 중 하나라도 비면 Cloudflare 카드만 「연결하면 보입니다」 (기동은 된다)
+#   [dashboard-ga] (env:) SKELETON_DASHBOARD_GA_PROPERTY_ID (비밀 아님) · 선택 SKELETON_DASHBOARD_GA_KEY_EVENT   둘 중 하나라도 비면 GA 카드만 「연결하면 보입니다」 (기동은 된다)
 #   [payment] SKELETON_PAYMENT_WEBHOOK_PATH_TOKEN   (비밀 — 운영자, secrets: 에 이름이 있다) 서명 없는 결제사(토스)의 웹훅 경로가 열리려면 필요 — 비면 그 경로는 늘 404, stage|prod 에서는 비었거나 약하면(24자 미만 등) 기동 실패. 웹훅 주소: https://<도메인>/api/v1/payments/webhooks/toss/<값>
 #   [payment] 선택 (env:) SKELETON_PAYMENT_ADMIN_ENABLED=true   운영자 경로(/api/v1/admin/payments)를 연다 — 기본 꺼짐(404)
 #   [payment] 위 변수들로 결제를 켠다 — 토스 승인 · 환불은 느릴 수 있어 앱의 application.yml 이 skeleton.http.clients.payment-toss.response-timeout 을 플랫폼 기본(5초)보다 길게 정한다(토스를 켰을 때 reconcile.first-delay · refund.settle-delay 가 이보다 길어야 기동). 토스를 안 켜면 앱은 뜨고 결제만 "지금은 결제할 수 없어요"

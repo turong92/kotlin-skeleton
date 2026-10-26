@@ -1093,7 +1093,7 @@
         "prefixes": ["skeleton.dashboard"],
         "snippet": "docs/config/modules/dashboard.yml"
       },
-      "basePaths": ["/api/v1/admin/dashboard"],
+      "basePaths": ["/api/v1/admin/dashboard", "/api/v1/admin/dashboard/layout"],
       "secrets": [],
       "docs": ["docs/modules/dashboard.md", "docs/dashboard-http-contract.md"],
       "frontend": {
@@ -3560,7 +3560,15 @@
     },
     {
       "id": "saas",
-      "modules": ["payment", "payment-jdbc", "payment-toss", "notification", "notification-jdbc"],
+      "modules": [
+        "payment",
+        "payment-jdbc",
+        "payment-toss",
+        "notification",
+        "notification-jdbc",
+        "dashboard",
+        "dashboard-jdbc"
+      ],
       "title": "유료 SaaS 대시보드 — 로그인 · 대시보드/목록/설정 · 요금제 · 결제 · 알림",
       "product": "월 구독으로 쓰는 업무 도구. 로그인 후 대시보드 · 목록 · 상세 · 설정 화면이 있고, 요금제 페이지에서 플랜을 골라 토스로 결제하며, 가입 폼은 봇을 막고, 결제 · 작업 완료 알림을 받는다.",
       "extraFlags": ["--db mysql"],

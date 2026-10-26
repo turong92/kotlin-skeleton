@@ -177,7 +177,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 > 월 구독으로 쓰는 업무 도구. 로그인 후 대시보드 · 목록 · 상세 · 설정 화면이 있고, 요금제 페이지에서 플랜을 골라 토스로 결제하며, 가입 폼은 봇을 막고, 결제 · 작업 완료 알림을 받는다.
 
-- kotlin(이 레포): `scripts/new-project.sh ~/work/saas/api dev.example.saas saas Saas --modules payment,payment-jdbc,payment-toss,notification,notification-jdbc --db mysql`
+- kotlin(이 레포): `scripts/new-project.sh ~/work/saas/api dev.example.saas saas Saas --modules payment,payment-jdbc,payment-toss,notification,notification-jdbc,dashboard,dashboard-jdbc --db mysql`
 - react: `scripts/new-project.sh ~/work/saas/web saas --packages marketing,payment,notifications,captcha-turnstile --scope @acme`
 - 짝 프런트 항목: `account-lifecycle`, `auth`, `screen-patterns`, `pricing-page`, `payment`, `notifications`, `captcha-turnstile`
 
@@ -562,7 +562,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 켜는 법: `--modules dashboard`
 - 의존 한 줄: `implementation(project(":modules:dashboard"))`
 - 설정 접두사 `skeleton.dashboard` — 키와 기본값 `docs/config/modules/dashboard.yml`
-- HTTP 경로: `/api/v1/admin/dashboard`
+- HTTP 경로: `/api/v1/admin/dashboard`, `/api/v1/admin/dashboard/layout`
 - 문서: `docs/modules/dashboard.md`, `docs/dashboard-http-contract.md`
 - 짝 프런트(react-skeleton): 항목 `admin-dashboard` · 패키지 `@skeleton/dashboard` · 조각 기본 포함(덧붙일 것 없음)
 - 쓰지 않는 경우:

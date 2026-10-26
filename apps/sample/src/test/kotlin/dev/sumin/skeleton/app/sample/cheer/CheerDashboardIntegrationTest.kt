@@ -28,5 +28,9 @@ class CheerDashboardIntegrationTest : CheerIntegrationBase() {
         assertTrue(JsonPath.read<Number>(body, "$.value.metrics[3].value[0].amount").toLong() >= 1)   // 로그인한 계정들
         assertEquals(listOf("account.signed-up", "auth-session.returned", "payment.paid"), JsonPath.read<List<String>>(body, "$.value.funnel.steps[*].key"))
         assertTrue(JsonPath.read<Number>(body, "$.value.funnel.steps[2].reached").toLong() >= 1)
+        // 앱 통계 카드(앱이 붙인 DashboardRanking 빈)
+        val rankings = JsonPath.read<List<String>>(body, "$.value.rankings[?(@.group=='app')].key")
+        assertEquals(setOf("app.board-posts", "app.board-reactions"), rankings.toSet())
+        assertEquals(listOf("OK", "OK"), JsonPath.read<List<String>>(body, "$.value.rankings[?(@.group=='app')].status"))
     }
 }
