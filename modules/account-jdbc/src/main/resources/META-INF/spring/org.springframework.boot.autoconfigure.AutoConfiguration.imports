@@ -1,1 +1,2 @@
 dev.sumin.skeleton.account.jdbc.AccountJdbcAutoConfiguration
+dev.sumin.skeleton.account.jdbc.AccountDashboardAutoConfiguration

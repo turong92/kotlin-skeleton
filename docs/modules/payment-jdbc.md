@@ -34,6 +34,8 @@
 **스키마 관리**: Flyway 가 모듈 마이그레이션을 적용한다. `schema.sql` 모드에서는 PostgreSQL 판 · MySQL 판 모두 `create table if not exists` 와 표 안의 인덱스라 두 번 돌아도 된다 (MySQL 판의 `/* [jooq ignore start] */` 표식은 jOOQ 코드 생성용 — MySQL 은 그대로 읽는다).
 별도 작업 표는 없다 — 작업 줄은 `job-queue-jdbc` 의 `jobs` 표(같은 스키마)에 들어간다.
 
+- **대시보드 기여**: `dashboard` 모듈이 클래스패스에 있으면 순매출(`payment.net-revenue`) · 결제 건수(`payment.paid-count`) 타일과 퍼널 단계 `payment.paid`를 기여한다. 순매출 = 기간 안 `paid_at` 의 `paid_amount` 합 − 기간 안 `completed_at` 의 성공 환불 합, **통화별로 따로**(합치지 않음) — 부분 환불 · 결제사 쪽 취소(`origin=PROVIDER`)도 빼고 실패 · 대기 · 거절 환불은 안 뺀다. 그래프는 `skeleton.dashboard.currency`(없으면 큰 통화) 한 통화. 인덱스 `idx_payment_orders_paid` · `idx_payment_refunds_completed`.
+
 | 항목 | 내용 |
 |---|---|
 | 의존성 한 줄 | `implementation(project(":modules:payment-jdbc"))` |

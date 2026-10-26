@@ -2445,6 +2445,7 @@
         "board",
         "board-jdbc",
         "crypto",
+        "dashboard",
         "json",
         "notification",
         "notification-jdbc",

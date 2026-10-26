@@ -1,1 +1,2 @@
 dev.sumin.skeleton.auth.sessions.jdbc.AuthSessionJdbcAutoConfiguration
+dev.sumin.skeleton.auth.sessions.jdbc.AuthSessionDashboardAutoConfiguration

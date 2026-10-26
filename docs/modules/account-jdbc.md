@@ -4,6 +4,8 @@
 계정 행의 `display_name_key` · `display_tag`(닉네임의 비교용 키 · 꼬리표 — 유니크 `(키, 꼬리표)` 하나로 `NONE` · `UNIQUE` · `TAGGED` 를 모두 받는다, NULL 은 겹치지 않는다 — `JdbcDisplayNameDbTest` 두 DB) · `erased_at`(지운 시각) · `erase_claimed_at`(지우기 선점)은 `ANONYMIZE` 지우기 · 선점이 쓴다.
 유일성은 일반 insert 의 **유니크 위반**으로 판정하고(`insertIgnore` 의 행 수는 MySQL 에서 믿을 수 없다), 토큰 소비는 조건부 UPDATE 한 문장, 마지막 수단 보호는 계정 행 락이다 — 둘 다 16 스레드 경쟁으로 두 DB 에서 시험한다.
 
+- **대시보드 기여**: `dashboard` 모듈이 클래스패스에 있으면 신규 가입 타일(`account.signed-up`, 기간 안 `created_at` — 탈퇴로 지운 ERASED 계정도 센다)과 퍼널의 묶음(기간 안 가입자의 계정 id + 가입 시각, 메모리에서만)을 기여한다. 질의는 인덱스 `idx_accounts_created` 로 범위를 끊는다.
+
 | 항목 | 내용 |
 |---|---|
 | 의존성 한 줄 | `implementation(project(":modules:account-jdbc"))` |

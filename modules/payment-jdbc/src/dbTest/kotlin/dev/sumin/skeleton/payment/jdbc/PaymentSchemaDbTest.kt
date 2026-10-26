@@ -88,6 +88,7 @@ class PaymentSchemaDbTest {
                 "idx_payment_orders_review" to listOf("review_reason", "created_at", "id"),           // 확인 필요 목록 (커서 = created_at, id)
                 "idx_payment_orders_created" to listOf("created_at", "id"),                           // 운영자 기본 목록 (필터 없음, 최신순 커서)
                 "idx_payment_orders_unfulfilled" to listOf("fulfilled_at", "status", "created_at", "id"),   // 확인 필요: 돈은 받았는데 지급이 안 끝난 줄
+                "idx_payment_orders_paid" to listOf("paid_at"),                                       // 대시보드: 기간 안 결제 (순매출 · 건수)
                 "uq_payment_orders_provider_payment" to listOf("provider", "provider_payment_id"),
                 "uq_payment_orders_dedupe" to listOf("dedupe_key"),
             ),
@@ -95,6 +96,7 @@ class PaymentSchemaDbTest {
                 "idx_payment_refunds_order" to listOf("order_id", "created_at"),
                 "idx_payment_refunds_status" to listOf("status", "requested_at", "id"),               // 환불 요청 목록 (커서)
                 "idx_payment_refunds_unapplied" to listOf("applied_at", "status", "requested_at", "id"),   // 확인 필요: 환불은 됐는데 회수가 안 끝난 줄
+                "idx_payment_refunds_completed" to listOf("completed_at"),                            // 대시보드: 기간 안 완료된 환불
                 "uq_payment_refunds_provider" to listOf("order_id", "provider_refund_id"),
                 "uq_payment_refunds_open" to listOf("open_key"),
                 "uq_payment_refunds_dedupe" to listOf("dedupe_key"),

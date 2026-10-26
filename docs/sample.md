@@ -197,3 +197,7 @@ APP=sample scripts/dev.sh    # 백엔드(+프론트 WEB_DIR)만 같은 방식으
 
 `scripts/new-project.sh <dir> <package> <prefix> <Class>` 는 샘플을 **넣지 않는다**. 예시를 같이 보고 싶으면 `--with-sample`(샘플이 쓰는 모듈이 닫힘에 더해진다).
 샘플 없이 시작한 뒤에는 이 문서의 1–10 순서로 자기 도메인을 `apps/api` 에 얹는다 — 샘플 코드를 복사해 이름만 바꿔도 된다.
+
+## 관리자 대시보드
+
+`dashboard` 한 줄과 `application.yml` 의 `skeleton.dashboard`(`admin.enabled: true` · `zone: Asia/Seoul` · `currency: KRW`)가 이 앱의 선택이다. 카드는 이 앱이 이미 가진 모듈이 기여한다 — 신규 가입(`account-jdbc`), 활성 이용자(`auth-session-jdbc`), 순매출 · 결제 건수(`payment-jdbc`), 그리고 가입 → 돌아옴 → 결제 퍼널. `ADMIN` 은 권한 `dashboard.read` 를 늘 가진다: `GET /api/v1/admin/dashboard`. 문서: [modules/dashboard.md](modules/dashboard.md).

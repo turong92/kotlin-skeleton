@@ -220,3 +220,8 @@ skeleton:
   authz:
     admin:
       enabled: true   # 이 앱의 선택: 역할 관리 API(/api/v1/admin/roles) 를 켠다 — 스켈레톤 기본은 꺼짐(404)
+  dashboard:
+    admin:
+      enabled: true   # 이 앱의 선택: 관리자 대시보드 API(/api/v1/admin/dashboard) 를 켠다 — 스켈레톤 기본은 꺼짐(404). 보려면 권한 dashboard.read (ADMIN 은 늘 가진다)
+    zone: Asia/Seoul  # 이 앱의 선택: 「오늘」 · 일별 경계의 시간대
+    currency: KRW     # 이 앱의 선택: 순매출 타일이 먼저 보여 줄 통화
