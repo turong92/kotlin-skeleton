@@ -39,8 +39,8 @@ deploy_env_shape() {
     name="${line%%()*}"; body="${line#*()}"
     case "$body" in *"$name"*) return 1 ;; esac
   done <<<"$fns"
-  # 그래도 실행은 5초 알람 안에서만 한다 (스크립트 본문 · docker 는 실행하지 않는다)
-  run() { perl -e 'alarm 5; exec @ARGV' bash -c "$fns; $1"; }
+  # 그래도 실행은 30초 알람 안에서만(5초는 빌드가 맥을 꽉 채울 때 걸렸다) 한다 (스크립트 본문 · docker 는 실행하지 않는다)
+  run() { perl -e 'alarm 30; exec @ARGV' bash -c "$fns; $1"; }
   # 비밀은 `-e NAME=값` 한 쌍(두 줄)씩 - 첨부 키 · 비회원 업로드 · 공개 영역 비밀 …이 늘어도 쌍이어야 하고, contract_env 는 DB 세 쌍 + 그 비밀들이다
   local secrets; secrets="$(DBNAME=x run 'secret_env | wc -l | tr -d " "')"
   [ "${secrets:-0}" -ge 2 ] && [ $((secrets % 2)) = 0 ] || return 1

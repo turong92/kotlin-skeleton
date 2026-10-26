@@ -19,7 +19,7 @@
 | 교체 지점 | `BoardRepository`, `PostRepository`, `CommentRepository`, `ReactionRepository`, `BoardRevisionRepository`, `BoardErasureRepository`, 넘겨받기 고리는 빈 이름 `boardAuthorAdoptionListener` (고리는 모듈마다 하나씩이라 타입이 아니라 이름으로 비킨다) |
 | 마이그레이션 | `modules/board-jdbc/src/main/resources/db/migration/postgresql`, `modules/board-jdbc/src/main/resources/db/migration/mysql` |
 | 프론트 짝 | `@skeleton/board` |
-| 테스트 | `modules/board-jdbc/src/test`, `modules/board-jdbc/src/dbTest` (PostgreSQL · MySQL 컨테이너로 두 번 돈다 (`postgresTest`, `mysqlTest`) — 병렬 반응 · 병렬 댓글 카운터 · 검색 이스케이프; N+1 없는 목록은 `src/postgresTest` 에서 PostgreSQL 한 벌만 — MySQL 로 찍은 프로젝트에는 없다) |
+| 테스트 | `modules/board-jdbc/src/test`, `modules/board-jdbc/src/dbTest` (PostgreSQL · MySQL 컨테이너로 두 번 돈다 (`postgresTest`, `mysqlTest`) — 병렬 반응 · 병렬 댓글 카운터 · 검색 이스케이프; N+1 없는 목록은 `modules/board-jdbc/src/postgresTest` 에서 PostgreSQL 한 벌만 — MySQL 로 찍은 프로젝트에는 없다) |
 
 자세히: [스키마 관리](../schema-management.md)
 
