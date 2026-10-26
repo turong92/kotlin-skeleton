@@ -61,10 +61,10 @@ class DashboardAssembler(
         var amounts = amounts(m, current.value)
         var previousAmounts = previous?.takeIf { it.status == DashboardResult.Status.OK }?.let { amounts(m, it) }
         if (m.unit == DashboardUnit.MONEY && current.value.status == DashboardResult.Status.OK) {
-            // 돈이 없는 기간은 빈 목록이 아니라 0 한 줄 — 통화는 설정 통화, 없으면 직전 기간의 통화 (둘 다 없으면 통화를 모른다: 빈 목록)
+            // 돈이 없는 기간은 빈 목록이 아니라 0 한 줄 — 통화는 이번 기간의 첫 통화(이번엔 없고 직전만 비었을 때), 없으면 설정 통화, 그것도 없으면 직전 기간의 통화 (둘 다 없으면 통화를 모른다: 빈 목록)
             if (amounts.isEmpty() || previousAmounts?.isEmpty() == true) {
-                val zero = currency().ifBlank { null }
-                    ?: amounts.firstOrNull()?.currency
+                val zero = amounts.firstOrNull()?.currency
+                    ?: currency().ifBlank { null }
                     ?: previousAmounts?.firstOrNull()?.currency
                     ?: value(m, period.previous).value.takeIf { it.status == DashboardResult.Status.OK }?.let { amounts(m, it) }?.firstOrNull()?.currency
                 if (zero != null) {

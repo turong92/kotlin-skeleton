@@ -29,8 +29,8 @@ data class DashboardProperties(
     )
 
     data class Cache(
-        /** 우리 DB 숫자의 캐시 수명 — 같은 범위 질의는 이 시간 안에 한 번만 계산한다 (0 = 끔). 화면 폴링(60초) 이상이어야 열어 두기만 해도 매번 다시 계산하지 않는다 */
-        val db: Duration = Duration.ofSeconds(60),
+        /** 우리 DB 숫자의 캐시 수명 — 같은 범위 질의는 이 시간 안에 한 번만 계산한다 (0 = 끔). 화면 폴링(60초)보다 길어야 열어 두기만 해도 매번 다시 계산하지 않는다 */
+        val db: Duration = Duration.ofSeconds(75),
         /** 퍼널의 캐시 수명 — 묶음을 만드는 질의가 무거워 따로 길다 */
         val funnel: Duration = Duration.ofMinutes(5),
     )

@@ -57,4 +57,13 @@ class DashboardAssemblerTest {
         assertEquals(emptyList(), response.funnel!!.steps)
         assertEquals("OK", response.metrics.single().status.name)
     }
+
+    @Test
+    fun `a previous period without money gets a zero line in this period's currency even when another currency is configured`() {
+        val onlyUsd = FakeMetric("m", unit = DashboardUnit.MONEY) { range -> if (range.from == period.range.from) ok(DashboardAmount(990, "USD")) else ok() }
+        val response = assembler(onlyUsd, currency = "KRW").overview(period, compare = true).metrics.single()
+
+        assertEquals(listOf(DashboardAmount(990, "USD")), response.value)
+        assertEquals(listOf(DashboardAmount(0, "USD")), response.previousValue)
+    }
 }
