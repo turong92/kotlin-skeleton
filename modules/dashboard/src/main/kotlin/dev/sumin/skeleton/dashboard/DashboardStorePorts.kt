@@ -16,8 +16,16 @@ data class DashboardDailyRow(
 )
 
 interface DashboardDailyStore {
-    /** 넘긴 행이 그 (day, source, kind) 의 전부가 된다 — 같은 날을 다시 적재하면 같은 행이고, 이번 결과에서 빠진 차원의 옛 줄은 지워진다. (day, source, kind) 단위로 한 트랜잭션 */
-    fun upsert(rows: List<DashboardDailyRow>)
+    /**
+     * 넘긴 [rows] 가 [day] · [source] 의 [kinds] 의 전부가 된다 — 같은 날을 다시 적재하면 같은 행이고, 이번 결과에서 빠진 차원의 옛 줄은 지워진다.
+     * **[kinds] 에 든 종류는 이번 결과에 줄이 하나도 없어도 옛 줄을 지운다**(통째로 빈 종류). 한 트랜잭션. [rows] 에 나온 종류는 [kinds] 에 없어도 같이 다룬다
+     */
+    fun replace(day: LocalDate, source: String, kinds: Collection<String>, rows: List<DashboardDailyRow>)
+
+    /** 행에 나온 (날짜 · 출처)마다 그 행들의 종류만 [replace] 한다 — 빈 종류를 비우려면 [replace] 를 직접 부른다 */
+    fun upsert(rows: List<DashboardDailyRow>) {
+        rows.groupBy { it.day to it.source }.forEach { (key, group) -> replace(key.first, key.second, emptySet(), group) }
+    }
 
     fun read(source: String, kind: String, fromDay: LocalDate, toDay: LocalDate): List<DashboardDailyRow>
 
@@ -28,6 +36,12 @@ interface DashboardDailyStore {
 /** 외부 출처 하나의 하루치를 읽어 일별 행으로 만든다. 적재 작업이 새벽마다 부른다 */
 interface DashboardIngestor {
     val source: String
+
+    /** 이 적재기가 하루에 채우는 종류 전부 — 이번에 한 줄도 없는 종류의 옛 줄도 지우려고 알린다 */
+    val kinds: Set<String> get() = emptySet()
+
+    /** 지금(프로젝트 문맥 안에서) 적재할 수 있는가 — 키가 비면 false, 이때는 아무것도 부르지도 지우지도 않는다 */
+    fun active(): Boolean = true
 
     fun ingest(day: LocalDate, zone: ZoneId): List<DashboardDailyRow>
 }

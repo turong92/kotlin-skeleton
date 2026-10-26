@@ -19,8 +19,10 @@ class DashboardIngestRunnerTest {
     private class MemoryStore : DashboardDailyStore {
         val rows = linkedMapOf<List<Any>, DashboardDailyRow>()
         val projects = mutableListOf<String?>()
-        override fun upsert(rows: List<DashboardDailyRow>) {
+        override fun replace(day: LocalDate, source: String, kinds: Collection<String>, rows: List<DashboardDailyRow>) {
             projects += ProjectContext.currentOrNull()?.id
+            val replaced = kinds + rows.map { it.kind }
+            this.rows.keys.removeIf { it[0] == day && it[1] == source && it[2] in replaced }
             rows.forEach { this.rows[listOf(it.day, it.source, it.kind, it.dimension)] = it }
         }
         override fun read(source: String, kind: String, fromDay: LocalDate, toDay: LocalDate) = rows.values.filter { it.source == source && it.kind == kind && it.day in fromDay..toDay }
@@ -69,5 +71,32 @@ class DashboardIngestRunnerTest {
         runner(store, listOf(Constant("cloudflare")), backfill = 1, projects = ProjectRegistry.from(env, null)).runOnce()
 
         assertTrue(store.projects.toSet() == setOf("alpha", "beta"), store.projects.toString())
+    }
+
+    @Test
+    fun `a kind that comes back empty clears its old lines, and an inactive ingestor deletes nothing`() {
+        val store = MemoryStore()
+        var second = false
+        val twoKinds = object : DashboardIngestor {
+            override val source = "cloudflare"
+            override val kinds = setOf("referrer", "path")
+            override fun ingest(day: LocalDate, zone: ZoneId) =
+                listOf(DashboardDailyRow(day, source, "path", "/a", 1)) + if (second) emptyList() else listOf(DashboardDailyRow(day, source, "referrer", "google.com", 2))
+        }
+        val off = object : DashboardIngestor {
+            override val source = "ga"
+            override val kinds = setOf("channel")
+            override fun active() = false
+            override fun ingest(day: LocalDate, zone: ZoneId): List<DashboardDailyRow> = error("not connected")
+        }
+        store.upsert(listOf(DashboardDailyRow(LocalDate.parse("2026-10-26"), "ga", "channel", "Direct", 5)))
+        val run = runner(store, listOf(twoKinds, off), backfill = 1)
+        run.runOnce()
+        assertEquals(setOf("path", "referrer"), store.rows.values.filter { it.source == "cloudflare" }.map { it.kind }.toSet())
+        second = true
+        run.runOnce()
+
+        assertEquals(setOf("path"), store.rows.values.filter { it.source == "cloudflare" }.map { it.kind }.toSet())
+        assertEquals(1, store.rows.values.count { it.source == "ga" })
     }
 }

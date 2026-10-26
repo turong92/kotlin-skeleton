@@ -12,6 +12,13 @@ import java.time.ZoneId
  */
 class GaIngestor(private val client: GaDataClient, private val settings: GaSettings) : DashboardIngestor {
     override val source = GaKinds.SOURCE
+    override val kinds = setOf(
+        GaKinds.CHANNEL, GaKinds.CAMPAIGN, GaKinds.LANDING, GaKinds.TRANSITION, GaKinds.RETURNING,
+        // 핵심 이벤트를 껐다 켜도 옛 전환 줄이 남지 않게 늘 비운다
+        GaKinds.CHANNEL + GaKinds.CONVERSION_SUFFIX, GaKinds.CAMPAIGN + GaKinds.CONVERSION_SUFFIX, GaKinds.LANDING + GaKinds.CONVERSION_SUFFIX,
+    )
+
+    override fun active() = settings.current().connected
 
     override fun ingest(day: LocalDate, zone: ZoneId): List<DashboardDailyRow> {
         val properties = settings.current()

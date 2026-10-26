@@ -27,7 +27,11 @@ internal fun httpClient() = DefaultExternalHttpClient(
 /** 키가 (day, source, kind, dimension) 인 메모리 표 — 저장소 포트의 upsert 규칙(같은 키는 덮어쓴다) 그대로 */
 internal class MemoryStore : DashboardDailyStore {
     val rows = ConcurrentHashMap<List<Any>, DashboardDailyRow>()
-    override fun upsert(rows: List<DashboardDailyRow>) = rows.forEach { this.rows[listOf(it.day, it.source, it.kind, it.dimension)] = it }
+    override fun replace(day: LocalDate, source: String, kinds: Collection<String>, rows: List<DashboardDailyRow>) {
+        val replaced = kinds + rows.map { it.kind }
+        this.rows.keys.removeIf { it[0] == day && it[1] == source && it[2] in replaced }
+        rows.forEach { this.rows[listOf(it.day, it.source, it.kind, it.dimension)] = it }
+    }
     override fun read(source: String, kind: String, fromDay: LocalDate, toDay: LocalDate) =
         rows.values.filter { it.source == source && it.kind == kind && it.day in fromDay..toDay }.sortedWith(compareBy({ it.day }, { it.dimension }))
     override fun lastIngested(source: String): Instant? = if (rows.isEmpty()) null else NOW

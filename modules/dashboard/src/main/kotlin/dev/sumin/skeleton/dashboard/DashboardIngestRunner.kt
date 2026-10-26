@@ -78,8 +78,8 @@ class DashboardIngestRunner(
             var failure: Exception? = null
             days.forEach { day ->
                 try {
-                    val rows = ingestor.ingest(day, zone)
-                    if (rows.isNotEmpty()) target.upsert(rows)
+                    if (!ingestor.active()) return@forEach
+                    target.replace(day, ingestor.source, ingestor.kinds, ingestor.ingest(day, zone))
                 } catch (e: Exception) {
                     failure = failure ?: e
                 }

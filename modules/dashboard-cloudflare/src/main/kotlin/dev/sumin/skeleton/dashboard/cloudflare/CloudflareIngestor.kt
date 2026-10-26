@@ -11,6 +11,9 @@ import java.time.ZoneId
  */
 class CloudflareIngestor(private val data: CloudflareSource) : DashboardIngestor {
     override val source = CloudflareKinds.SOURCE
+    override val kinds = setOf(CloudflareKinds.VISITS, CloudflareKinds.PAGEVIEWS, CloudflareKinds.REFERRER, CloudflareKinds.PATH, CloudflareKinds.COUNTRY, CloudflareKinds.DEVICE)
+
+    override fun active() = data.connected()
 
     override fun ingest(day: LocalDate, zone: ZoneId): List<DashboardDailyRow> {
         if (!data.connected()) return emptyList()

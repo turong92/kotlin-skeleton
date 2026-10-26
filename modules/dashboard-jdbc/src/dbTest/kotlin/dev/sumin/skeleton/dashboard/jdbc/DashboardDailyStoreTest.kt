@@ -68,6 +68,18 @@ class DashboardDailyStoreTest {
     }
 
     @Test
+    fun `a kind that is empty in the new result is cleared when the loader names it`() {
+        store.upsert(listOf(row(10, "google.com"), row(9, "/a", kind = "path"), row(7, "/b", d = day.minusDays(1), kind = "path")))
+        store.replace(day, "cloudflare", setOf("referrer", "path"), listOf(row(10, "google.com")))   // path 가 통째로 비었다
+
+        assertEquals(emptyList(), store.read("cloudflare", "path", day, day))
+        assertEquals(10, store.read("cloudflare", "referrer", day, day).single().value)
+        assertEquals(7, store.read("cloudflare", "path", day.minusDays(1), day.minusDays(1)).single().value)   // 다른 날은 그대로
+        store.replace(day, "cloudflare", setOf("referrer"), emptyList())
+        assertEquals(emptyList(), store.read("cloudflare", "referrer", day, day))
+    }
+
+    @Test
     fun `a changed value overwrites and bumps the load time`() {
         store.upsert(listOf(row(10, "google.com")))
         val first = store.lastIngested("cloudflare")

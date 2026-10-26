@@ -117,7 +117,7 @@ class CloudflareSource(
                 Outcome(null)
             }
         }
-        val data = cached.value.data ?: throw CloudflareQueryException("Cloudflare analytics is failing (retrying after a short pause)")
+        val data = cached.value.data ?: throw CloudflareCachedFailure()
         return Cached(data, cached.computedAt)
     }
 
@@ -148,6 +148,8 @@ class CloudflareSource(
             DashboardResult(DashboardResult.Status.OK, composed.data, freshness)
         } catch (e: NoHistory) {
             DashboardResult(DashboardResult.Status.NO_HISTORY)
+        } catch (e: CloudflareCachedFailure) {
+            DashboardResult(DashboardResult.Status.ERROR)   // 처음 실패는 이미 warn 으로 남겼다 — 캐시된 실패를 다시 던질 때는 로그하지 않는다
         } catch (e: Exception) {
             log.warn("Cloudflare analytics failed: {}", e.javaClass.simpleName)
             log.debug("Cloudflare analytics failure", e)
@@ -156,6 +158,9 @@ class CloudflareSource(
     }
 
     private class NoHistory : RuntimeException(null, null, false, false)
+
+    /** 이미 로그한 외부 호출 실패가 캐시에서 다시 나왔다 */
+    private class CloudflareCachedFailure : RuntimeException("Cloudflare analytics is failing (retrying after a short pause)", null, false, false)
 
     companion object {
         private val FAILURE_TTL: java.time.Duration = java.time.Duration.ofSeconds(60)
