@@ -1,7 +1,7 @@
 # 관리자 대시보드 — 방문 · 흐름 · 장사 · 앱 통계 한 화면 — 설계
 
 > 2026-10-26. 요청(형 원문 요지): 「어드민 대시보드 같은 거도 만들까 싶어. 도메인별로. 축하 페이지 앱 같은 경우는 템플릿 뭐 썼는지나 샘플에서 넘어가는 게 어디 게 많은지 어떤 태그가 많은지 등 … 접속 현황이나 이런 거도 있음 좋고. 그냥 보통 대시보드 느낌으로」.
-> 대상: kotlin-skeleton(새 `dashboard` · `dashboard-jdbc` · `dashboard-cloudflare` · `dashboard-ga`, 기존 `account` · `payment` 가 카드 기여, `apps/sample`) + react-skeleton(새 `@skeleton/dashboard`, `@skeleton/marketing` 에 GA · CF 비콘 켜기, `apps/sample`).
+> 대상: kotlin-skeleton(새 `dashboard` · `dashboard-jdbc` · `dashboard-cloudflare` · `dashboard-ga`, 기존 `account-jdbc` · `auth-session-jdbc` · `payment-jdbc` 가 카드 기여(계약 타입은 `platform`), `apps/sample`) + react-skeleton(새 `@skeleton/dashboard`, `@skeleton/marketing` 에 GA · CF 비콘 켜기, `apps/sample`).
 > 화면 시안: 시안 E(실제 대시보드 관행을 따른 것) — 홈서버 `.share/dashboard-mock/e.html`. A~D 는 거쳐 간 시안.
 > 사례 조사(2026-10-26 researcher): Plausible · Vercel · PostHog · GA4 · Stripe · Shopify · shadcn 예시. 공통 패턴은 §4.
 
@@ -16,6 +16,16 @@
 | 5 | 화면 모양 | 「그래프 같은 거로 해서 묶어 놓으면 되잖아 … 누르면 바뀌게」 → 「그냥 다른 대시보드들 참고하고 와」 | 시안 E: 숫자 타일 → 누르면 바뀌는 큰 그래프 → 탭 달린 순위 카드 → 퍼널 → 앱 통계 |
 | 6 | 실시간 | 「실시간 최대한 반영해 줘」 | 출처마다 가능한 만큼 당긴다(§3.4) |
 | 7 | 여러 프로젝트 모드(`skeleton.projects`) | (추천대로) 「프로젝트별로 따로」 | 다른 모듈처럼 **프로젝트마다 따로**(§3.6). 여러 프로젝트를 합쳐 보는 총괄 화면은 만들지 않는다 |
+
+## 계획 단계에서 지휘가 정한 것 (2026-10-26, 계획 `plans/2026-10-26-admin-dashboard.md` 초안의 추천안)
+
+| # | 물음 | 결정 | 이유 |
+|---|---|---|---|
+| 1 | 카드 기여 계약을 어디에 두나 | 타입만 `platform` `common/dashboard` 에. `account-jdbc` · `auth-session-jdbc` · `payment-jdbc` 의 기여는 `@ConditionalOnClass(name = …dashboard…)` 로 등록 | `compileOnly(dashboard)` 면 `new-project.sh` 가 그 소스를 끌고 와 스타터로 찍는 모든 프로젝트에 대시보드 소스가 따라간다. authz `PermissionDeclaration` 과 같은 선례 |
+| 2 | 퍼널 묶음을 넘기는 꼴 | 계정 id + 가입 시각 목록을 메모리로만 넘긴다(저장 안 함, 각 모듈이 1000개씩 끊어 질의) | 결제 표에는 가입 시각이 없어 「가입 시각 범위」 조건만으로는 거를 수 없다 |
+| 3 | 관리 API 기본값 | `skeleton.dashboard.admin.enabled=false`(→ 404), 견본 앱 yml 에서 켬 | 레포 관례 「관리 API 기본 꺼짐」(authz · payment · account 와 같다) |
+| 4 | 활성 이용자의 직전 기간 비교 | 1차는 근사치(`auth_sessions.last_used_at`), **활성 타일만 증감을 숨기고 「비교 불가」**. 정확한 일별 활동 표는 다음에 넓힐 것 | 갱신 시각을 덮어써서 지난 기간 활성이 적게 나온다(증감이 늘 + 로 기운다) |
+| 5 | GA 실시간을 1차에 넣나 | 넣는다(결정 6 그대로) | 형 원문 「실시간 최대한 반영」, 비용 작음 |
 
 ## 0. 목표 · 비목표 · 반목표
 
@@ -50,20 +60,21 @@
 
 | 모듈 | 하는 일 | 빼면 |
 |---|---|---|
-| `dashboard` | 계약(아래) · 관리 API · 권한 `dashboard.read` 선언 · 카드 조립 · 짧은 캐시 | 대시보드 없음 |
+| `dashboard` | 계약(아래 — 타입은 `platform`)을 모아 조립 · 관리 API · 권한 `dashboard.read` 선언 · 카드 조립 · 짧은 캐시 | 대시보드 없음 |
 | `dashboard-jdbc` | 일별 적재 표(`dashboard_traffic_daily` 등 — §3.3) · 계정별 화면 설정 표 | 외부 출처(CF · GA)의 지난 기간이 없다(오늘 · 실시간만), 화면 설정은 기기별(브라우저 저장)로 물러난다 |
 | `dashboard-cloudflare` | CF GraphQL Analytics 읽기 — 새벽 적재 작업 + 오늘 근실시간 | 방문 타일 · 유입/페이지/국가/기기 카드의 CF 탭이 빈 상태 |
 | `dashboard-ga` | GA4 Data API(일별 적재) + Realtime API(현재 방문자) | GA 탭 · 재방문율 · 현재 방문자가 빈 상태 |
 
-**계약(`dashboard`)** — 모듈 · 앱이 빈으로 기여한다. 카드 꼴은 셋뿐(시안 E):
+**계약(타입은 `platform` `common/dashboard`, 모으고 그리는 것은 `dashboard` — 지휘 결정 1)** — 모듈 · 앱이 빈으로 기여한다. 기존 모듈의 기여는 `@ConditionalOnClass(name = …dashboard…)` 라 `dashboard` 를 안 붙인 앱엔 등록되지 않는다. 카드 꼴은 셋뿐(시안 E):
 - `DashboardMetric` — 타일 하나: `key` · 이름 · 단위(명 · 건 · 원 · %) · `value(range)` · `series(range, interval)`(시간/일/주 — 「오늘」 · 하루 범위는 시간별, 내 판단: 시안 E 와 실제 대시보드 모두 오늘을 시간별로 그린다. GA 는 오늘 숫자가 없어 오늘 시간별 그래프에서 빠지고 빈 상태 안내). 직전 기간 값은 같은 함수에 직전 범위를 넣어 얻는다. 출처 배지 · 신선도(`freshness`: 실시간 / n분 전 / 어제치) 를 같이 돌려준다.
 - `DashboardRanking` — 순위 카드의 탭 하나: `key` · 카드 묶음(`traffic` · `pages` · `geo` · `app`) · 열 이름 · `top(range, limit)` · 신선도.
-- `DashboardFunnel` — 같은 사람 묶음 퍼널(내 판단 — 형이 받아들인 설명 「샘플 봄 → 만들기 → 결제까지 단계별로 몇 % 가 남나」가 같은 사람 기준이고, 타일 숫자를 나란히 놓으면 128 → 912 → 87 처럼 뒤 단계가 커져 퍼널로 읽히지 않는다). 첫 단계가 묶음(기간 안에 들어온 계정)을 정하고, 다음 단계마다 「그 묶음 중 이 단계에 닿은 계정 수」를 센다. 단계는 `DashboardFunnelStep` 빈(이름 · `reached(cohort, range)`)이고 타일 key 와 따로다. 기본 빈은 가입 → 활성 → 결제 — 가입 · 활성 단계는 `account` 가, 결제 단계는 `payment` 가 기여하고, 묶음은 계정 id 목록이 아니라 「가입 시각 범위」 조건으로 넘겨 모듈끼리 서로를 모르게 한다(각 모듈이 자기 표에서 계정 id 로 거른다 — 정확한 질의 모양은 빌더 몫). 방문(CF)은 익명이라 퍼널 앞에 참고 숫자로만 붙인다. 앱이 같은 이름 빈을 두면 기본 퍼널이 물러난다(축하 페이지 앱: 샘플 봄 → 만들기 → 발행 → 결제 — 「샘플 봄」이 익명이면 같은 방식으로 참고 숫자).
+- `DashboardFunnel` — 같은 사람 묶음 퍼널(내 판단 — 형이 받아들인 설명 「샘플 봄 → 만들기 → 결제까지 단계별로 몇 % 가 남나」가 같은 사람 기준이고, 타일 숫자를 나란히 놓으면 128 → 912 → 87 처럼 뒤 단계가 커져 퍼널로 읽히지 않는다). 첫 단계가 묶음(기간 안에 들어온 계정)을 정하고, 다음 단계마다 「그 묶음 중 이 단계에 닿은 계정 수」를 센다. 단계는 `DashboardFunnelStep` 빈(이름 · `reached(cohort, range)`)이고 타일 key 와 따로다. 기본 빈은 가입 → 활성 → 결제 — 가입(묶음)은 `account-jdbc`, 활성은 `auth-session-jdbc`, 결제는 `payment-jdbc` 가 기여한다. 묶음은 **계정 id + 가입 시각 목록을 메모리로만** 넘기고(저장하지 않는다), 각 모듈이 자기 표에서 그 id 로 끊어 거른다(지휘 결정 2 — 결제 표에는 가입 시각이 없어 범위 조건만으로는 거를 수 없다). 모듈끼리는 여전히 서로의 코드 · 표를 모른다. 방문(CF)은 익명이라 퍼널 앞에 참고 숫자로만 붙인다. 앱이 같은 이름 빈을 두면 기본 퍼널이 물러난다(축하 페이지 앱: 샘플 봄 → 만들기 → 발행 → 결제 — 「샘플 봄」이 익명이면 같은 방식으로 참고 숫자).
 - 권한: `dashboard.read` 하나(앞선 권한 체계의 `PermissionDeclaration`). 매출 숫자를 가릴 세부 권한은 두지 않는다 — 1차 비목표.
 
 **기본 기여**
-- `account`: 신규 가입(기간 내 가입 수 · 누적), 활성 이용자(기간 내 로그인 · 토큰 갱신이 있었던 계정 수 — 정의는 §6 빌더 몫).
-- `payment`: 순매출(결제 − 환불, 통화별 — §6), 결제 건수. 타일에 「정확한 금액은 결제 내역」 링크(Stripe 관행: 홈 숫자는 요약).
+- `account-jdbc`: 신규 가입(기간 내 가입 수 · 누적).
+- `auth-session-jdbc`: 활성 이용자(기간 내 세션을 쓴 계정 수 — 근사치, §6 · 지휘 결정 4).
+- `payment-jdbc`: 순매출(결제 − 환불, 통화별 — §6), 결제 건수. 타일에 「정확한 금액은 결제 내역」 링크(Stripe 관행: 홈 숫자는 요약).
 - `dashboard-cloudflare`: 방문 · 페이지뷰(타일 · 그래프), 유입 소스 · 많이 본 페이지 · 국가 · 기기(순위).
 - `dashboard-ga`: 채널 · 전환, 캠페인(UTM), 첫 페이지, 페이지 이동(A→B: `pageReferrer` → `pagePath` 쌍 상위), 재방문율, 현재 방문자.
 
@@ -122,7 +133,7 @@
 
 ## 5. 설정 (키는 모두 `skeleton.dashboard.*`, 비밀은 env)
 
-- `dashboard`: `enabled`(모듈을 붙이면 켜짐), 캐시 주기(DB 30s · CF 오늘 5m · GA 실시간 60s — 기본값만, 앱이 바꿀 수 있음), 시간대(앱 시간대 따름).
+- `dashboard`: `admin.enabled`(기본 `false` → 관리 API 404, 견본 앱 yml 에서 켬 — 지휘 결정 3), 캐시 주기(DB 30s · CF 오늘 5m · GA 실시간 60s — 기본값만, 앱이 바꿀 수 있음), 시간대(앱 시간대 따름).
 - `dashboard-cloudflare`: 계정 id, 사이트 태그(Web Analytics), API 토큰(env).
 - `dashboard-ga`: 속성 id, 서비스 계정 키(env, base64 JSON), 전환 이벤트 이름.
 - 프런트: `VITE_GA_MEASUREMENT_ID`(있으면 동의 뒤 gtag), `VITE_CF_BEACON_TOKEN`(CF 프록시를 안 거치는 배포에서만).
@@ -130,7 +141,7 @@
 
 ## 6. 빌더에게 맡기는 것 (내가 정한 기본값 표시)
 
-- **활성 이용자 정의**: 기간 내 로그인 또는 토큰 갱신이 있었던 계정 수(내 판단). 근거 데이터(`auth-session` 세션 표의 갱신 시각 등)가 없으면 가장 가까운 것을 쓰고 문서에 적는다.
+- **활성 이용자 정의**(지휘 결정 4): 기간 내 세션을 쓴(`auth_sessions.last_used_at` — 로그인 · 토큰 갱신 모두 남는다) 서로 다른 계정 수. 갱신 시각을 덮어써서 지난 기간 값은 적게 나오므로 **활성 타일만 직전 기간 증감을 숨기고 「비교 불가」**로 둔다. 정확한 일별 활동 표(계정 · 날짜)는 다음에 넓힐 것. 문서에 근사치라고 적는다.
 - **순매출 통화**: 여러 통화가 섞이면 통화별로 따로 보여 주고 합치지 않는다(환율 변환은 하지 않는다 — 업계 관행: 결제사 대시보드도 통화별). 타일은 앱 기본 통화, 나머지는 타일 아래 작은 줄.
 - 일별 표 모양, 캐시 구현, CF · GA 클라이언트 구조, 새벽 적재 시각(스케줄러 모듈 사용).
 - 견본 앱의 「앱 통계」 예시 카드 내용(이미 있는 데이터로).
