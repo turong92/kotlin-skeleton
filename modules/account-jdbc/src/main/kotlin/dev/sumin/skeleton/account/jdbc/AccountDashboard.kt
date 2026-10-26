@@ -26,8 +26,14 @@ class SignedUpMetric(private val jdbc: NamedParameterJdbcTemplate, private val d
 
     override fun value(range: DashboardRange) = DashboardResult(DashboardResult.Status.OK, listOf(DashboardAmount(count(range))))
 
-    override fun series(range: DashboardRange, interval: DashboardInterval) =
-        DashboardResult(DashboardResult.Status.OK, DashboardBuckets.series(range, interval, ::count))
+    override fun series(range: DashboardRange, interval: DashboardInterval, currency: String?): DashboardResult<List<DashboardPoint>> {
+        // 칸마다 세지 않는다 — 가입 시각만 한 번 읽어 칸에 나눈다
+        val times = jdbc.query(
+            "select created_at from accounts where created_at >= :from and created_at < :to",
+            mapOf("from" to dialect.instantParam(range.from), "to" to dialect.instantParam(range.to)),
+        ) { rs, _ -> dialect.readInstant(rs, "created_at")!! to 1 }
+        return DashboardResult(DashboardResult.Status.OK, DashboardBuckets.series(range, interval, times) { it.size.toLong() })
+    }
 
     private fun count(range: DashboardRange): Long =
         jdbc.queryForObject(
@@ -41,9 +47,9 @@ class SignedUpCohort(private val jdbc: NamedParameterJdbcTemplate, private val d
     override val key = "account.signed-up"
     override val label = "Signed up"
 
-    override fun members(range: DashboardRange): List<DashboardCohortMember> =
+    override fun members(range: DashboardRange, limit: Int): List<DashboardCohortMember> =
         jdbc.query(
-            "select id, created_at from accounts where created_at >= :from and created_at < :to",
-            mapOf("from" to dialect.instantParam(range.from), "to" to dialect.instantParam(range.to)),
+            "select id, created_at from accounts where created_at >= :from and created_at < :to limit :limit",
+            mapOf("from" to dialect.instantParam(range.from), "to" to dialect.instantParam(range.to), "limit" to limit + 1),
         ) { rs, _ -> DashboardCohortMember(rs.getString("id"), dialect.readInstant(rs, "created_at")!!) }
 }

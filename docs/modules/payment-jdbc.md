@@ -34,7 +34,7 @@
 **스키마 관리**: Flyway 가 모듈 마이그레이션을 적용한다. `schema.sql` 모드에서는 PostgreSQL 판 · MySQL 판 모두 `create table if not exists` 와 표 안의 인덱스라 두 번 돌아도 된다 (MySQL 판의 `/* [jooq ignore start] */` 표식은 jOOQ 코드 생성용 — MySQL 은 그대로 읽는다).
 별도 작업 표는 없다 — 작업 줄은 `job-queue-jdbc` 의 `jobs` 표(같은 스키마)에 들어간다.
 
-- **대시보드 기여**: `dashboard` 모듈이 클래스패스에 있으면 순매출(`payment.net-revenue`) · 결제 건수(`payment.paid-count`) 타일과 퍼널 단계 `payment.paid`를 기여한다. 순매출 = 기간 안 `paid_at` 의 `paid_amount` 합 − 기간 안 `completed_at` 의 성공 환불 합, **통화별로 따로**(합치지 않음) — 부분 환불 · 결제사 쪽 취소(`origin=PROVIDER`)도 빼고 실패 · 대기 · 거절 환불은 안 뺀다. 그래프는 `skeleton.dashboard.currency`(없으면 큰 통화) 한 통화. 인덱스 `idx_payment_orders_paid` · `idx_payment_refunds_completed`.
+- **대시보드 기여**(모드·되돌림 규칙 포함): `dashboard` 모듈이 클래스패스에 있으면 순매출(`payment.net-revenue`) · 결제 건수(`payment.paid-count`) 타일과 퍼널 단계 `payment.paid`를 기여한다. 순매출 = 기간 안 `paid_at` 의 `paid_amount` 합 − 기간 안 `completed_at` 의 성공 환불 합, **통화별로 따로**(합치지 않음) — 부분 환불 · 결제사 쪽 취소(`origin=PROVIDER`)도 빼고 실패 · 대기 · 거절 환불은 안 뺀다. 그래프는 `skeleton.dashboard.currency`(없으면 큰 통화) 한 통화. 인덱스 `idx_payment_orders_paid`(마이그레이션이라 `dashboard` 를 안 붙인 앱에도 들어간다) · `idx_payment_refunds_completed`. **지금 끼운 결제사 키의 모드(`TEST` · `LIVE` · `UNKNOWN`)와 같은 모드로 만든 주문만 센다** — 테스트 키로 시작했다가 실키로 바꾼 앱의 테스트 매출이 남지 않는다(환불은 주문과 조인해 같은 기준). 켜져 있지 않은 결제사의 주문은 `LIVE` 만 센다. 값은 지금 상태 기준이다: 차지백 환불이 이겨 `REVERSED` 로 바뀌면 그 환불이 완료됐던 기간의 순매출이 소급해서 올라간다(되돌림 시각의 기간이 아니다). 그래프는 범위당 질의 둘(결제 · 환불)로 읽고 조립기가 정한 통화 한 개만 그린다.
 
 | 항목 | 내용 |
 |---|---|

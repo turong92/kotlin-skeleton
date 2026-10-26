@@ -3,6 +3,7 @@ package dev.sumin.skeleton.dashboard
 import dev.sumin.skeleton.dashboardtest.DashboardFakes
 import dev.sumin.skeleton.dashboardtest.DashboardTestApplication
 import dev.sumin.skeleton.dashboardtest.operator
+import kotlin.test.assertFalse
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
@@ -46,7 +47,7 @@ class DashboardAccessTest {
 
     @Test
     fun `dashboard read opens the overview and a ranking, and the full-access role always has it`() {
-        mvc.perform(get("$BASE?$DAY&compare=true").principal(viewer))
+        val response = mvc.perform(get("$BASE?$DAY&compare=true").principal(viewer))
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.value.range.interval").value("DAY"))
             .andExpect(jsonPath("$.value.previous.from").value("2026-10-13"))
@@ -60,7 +61,10 @@ class DashboardAccessTest {
             .andExpect(jsonPath("$.value.metrics[1].previousValue").value(null as Any?))
             // 기여가 터져도 그 카드만 ERROR, 응답은 200 — 예외 메시지(비밀)는 응답에 없다
             .andExpect(jsonPath("$.value.metrics[2].status").value("ERROR"))
+            .andExpect(jsonPath("$.value.funnel.status").value("OK"))
             .andExpect(jsonPath("$.value.funnel.steps[1].rate").value(0.5))
+            .andReturn().response.contentAsString
+        assertFalse("secret-value" in response, "a failing contributor's message must not reach the response")
         mvc.perform(get("$BASE/rankings/fake.pages?$DAY&limit=1").principal(admin))
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.value.rows.length()").value(1))

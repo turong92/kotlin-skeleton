@@ -33,6 +33,8 @@
   - 기여는 예외 대신 `DashboardResult(status = NOT_CONNECTED | NO_HISTORY | ERROR)` 로 말하게 한다. 던져도 그 카드만 `ERROR` 가 되고 로그에는 예외 종류만 남는다 — 메시지에 비밀이 있을 수 있어서다.
   - 기여하는 쪽 모듈의 자동 설정은 `@ConditionalOnClass(name = ["dev.sumin.skeleton.dashboard.DashboardAutoConfiguration"])` 로 등록한다. 기여 모듈이 `dashboard` 를 `compileOnly` 로도 끌어오지 않아야 `new-project.sh` 가 대시보드 소스를 안 따라 보낸다.
   - 프로젝트 모드(`skeleton.projects`)에서는 `value`/`series`/`top` 이 요청의 프로젝트 문맥 안에서 불린다 — 자기 프로젝트의 숫자만 돌려준다. 캐시 키가 프로젝트마다 따로다.
+- **퍼널 비용**: 묶음은 많아야 `funnel.max-cohort`(5만)+1 명만 읽고(`members(range, limit)`), 넘으면 그 퍼널만 `TOO_LARGE` 다. 결과는 5분 캐시된다(`cache.funnel`). 구현은 `limit` 을 질의에 걸어야 한다.
+- **그래프는 질의 한 번**: `series` 는 칸마다 질의하지 않는다 — 범위의 (시각, 값)을 한 번 읽어 `DashboardBuckets.series` 로 칸에 나눈다. 돈 타일의 `series` 는 조립기가 정해 넘기는 통화(`value[0].currency`) 한 통화만 돌려준다.
 - **퍼널 바꾸기**: 기본은 `DashboardCohortSource` 빈 하나(묶음: 기간 안에 들어온 계정)와 `DashboardFunnelStep` 빈들(`order` 순, 단계마다 「묶음 중 닿은 사람 수」)이다. 앱이 `DashboardFunnel` 빈을 두면 그것이 이긴다. 묶음은 계정 id 목록을 메모리로만 넘기고 저장하지 않으며, 단계 구현은 id 를 1000 개씩 끊어 질의한다. 비율은 묶음 크기 기준이다.
 - 저장 포트(`DashboardDailyStore` · `DashboardIngestor` · `DashboardLayoutStore`)는 이 모듈이 타입만 가진다 — 구현은 `dashboard-jdbc`(일별 집계 · 화면 설정), 외부 출처의 적재기(`DashboardIngestor` 빈)는 각 출처 모듈이 낸다. 이 모듈에는 메모리 구현이 없다.
 - **일별 적재 작업**(`DashboardIngestRunner`, `skeleton.dashboard.ingest`): 저장소와 적재기 빈이 있을 때만 일한다 — 기동 직후 한 번, 그다음 매일 `ingest.at`(대시보드 시간대)에 어제부터 `backfill-days` 일을 다시 적재한다. 프로젝트 모드에서는 프로젝트마다. 적재기 하나가 실패해도 다른 적재기는 돌고 기동은 막지 않으며, 실패는 로그와(`alert` 가 있으면 출처당 하루 한 번) 알림으로 알린다 — 예외 메시지는 싣지 않는다. 여러 인스턴스가 같은 시각에 돌 수 있지만 같은 날을 다시 써도 같은 행(upsert)이라 결과가 같다.
@@ -43,6 +45,8 @@
 **기여 계약 타입은 `platform` 에.** `account-jdbc` 가 `dashboard` 를 컴파일에 걸면 `new-project.sh` 가 스타터로 찍는 모든 프로젝트에 대시보드 소스를 끌고 간다. authz 의 `PermissionDeclaration` 과 같은 선례다. 버린 것: *기여 모듈이 `compileOnly(dashboard)`*.
 
 **캐시는 조립기에, 키는 프로젝트마다.** 화면 요청이 DB · 외부 API 를 직접 두드리지 않게 한다. 같은 키가 동시에 와도 계산은 한 번(single-flight). 오류 결과는 담지 않아 다음 요청이 다시 시도한다.
+
+**스켈레톤 중립의 예외 하나 — 인덱스.** 기여 모듈의 범위 인덱스(`accounts.created_at` · `auth_sessions.last_used_at` · `payment_orders.paid_at` · `payment_refunds.completed_at`)는 마이그레이션이라 `dashboard` 를 안 붙인 앱에도 들어간다. 특히 `auth_sessions.last_used_at` 은 토큰 갱신마다 바뀌는 열이라 그 인덱스 유지 비용이 생긴다. 이 예외를 빼면 기여 질의가 표 전체를 훑는다.
 
 **관리 API 는 기본 꺼짐.** 스켈레톤은 사용법을 고르지 않는다(authz · payment · account 와 같다) — 켜는 것은 앱 설정이다.
 

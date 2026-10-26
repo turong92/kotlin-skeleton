@@ -24,9 +24,26 @@ object DashboardBuckets {
         return buckets
     }
 
-    /** 칸마다 [count] 를 불러 점을 만든다 */
-    fun series(range: DashboardRange, interval: DashboardInterval, count: (DashboardRange) -> Long): List<DashboardPoint> =
-        of(range, interval).map { DashboardPoint(it.from, count(it)) }
+    /**
+     * 시각이 붙은 표본([samples])을 칸에 나눠 칸마다 [reduce] 로 숫자 하나를 만든다 — 범위를 질의 한 번으로 읽고 여기서 나누므로 칸 수만큼 질의하지 않는다.
+     * 범위 밖 표본은 버린다. 예: 건수 `{ it.size.toLong() }`, 합 `{ it.sum() }`, 서로 다른 사람 `{ it.distinct().size.toLong() }`
+     */
+    fun <T> series(range: DashboardRange, interval: DashboardInterval, samples: List<Pair<Instant, T>>, reduce: (List<T>) -> Long): List<DashboardPoint> {
+        val buckets = of(range, interval)
+        val starts = buckets.map { it.from }
+        val groups = List(buckets.size) { ArrayList<T>() }
+        samples.forEach { (at, item) ->
+            if (at.isBefore(range.from) || !at.isBefore(range.to)) return@forEach
+            var low = 0
+            var high = starts.size - 1
+            while (low < high) {
+                val mid = (low + high + 1) / 2
+                if (starts[mid].isAfter(at)) high = mid - 1 else low = mid
+            }
+            groups[low] += item
+        }
+        return buckets.mapIndexed { i, bucket -> DashboardPoint(bucket.from, reduce(groups[i])) }
+    }
 
     private fun minOf(a: Instant, b: Instant) = if (a.isBefore(b)) a else b
 }

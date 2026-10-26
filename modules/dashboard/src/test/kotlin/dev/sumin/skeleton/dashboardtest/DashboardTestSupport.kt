@@ -31,19 +31,22 @@ class FakeMetric(
     override val order: Int = 0,
     override val unit: DashboardUnit = DashboardUnit.COUNT,
     override val comparable: Boolean = true,
-    private val value: () -> DashboardResult<List<DashboardAmount>>,
+    private val compute: (DashboardRange) -> DashboardResult<List<DashboardAmount>>,
 ) : DashboardMetric {
     override val label = key
     override val source = "db"
     val valueCalls = AtomicInteger()
+    val seriesCurrencies = java.util.concurrent.CopyOnWriteArrayList<String?>()
 
     override fun value(range: DashboardRange): DashboardResult<List<DashboardAmount>> {
         valueCalls.incrementAndGet()
-        return value()
+        return compute(range)
     }
 
-    override fun series(range: DashboardRange, interval: DashboardInterval): DashboardResult<List<DashboardPoint>> =
-        DashboardResult(DashboardResult.Status.OK, listOf(DashboardPoint(range.from, 3)))
+    override fun series(range: DashboardRange, interval: DashboardInterval, currency: String?): DashboardResult<List<DashboardPoint>> {
+        seriesCurrencies += currency
+        return DashboardResult(DashboardResult.Status.OK, listOf(DashboardPoint(range.from, 3)))
+    }
 }
 
 fun ok(vararg amounts: DashboardAmount) = DashboardResult(DashboardResult.Status.OK, amounts.toList())
@@ -72,7 +75,7 @@ class DashboardFakes {
     @Bean fun cohort() = object : DashboardCohortSource {
         override val key = "fake.signed-up"
         override val label = "Signed up"
-        override fun members(range: DashboardRange) = (1..4).map { DashboardCohortMember("acc_$it", Instant.EPOCH) }
+        override fun members(range: DashboardRange, limit: Int) = (1..4).map { DashboardCohortMember("acc_$it", Instant.EPOCH) }
     }
 
     @Bean fun returned() = object : DashboardFunnelStep {

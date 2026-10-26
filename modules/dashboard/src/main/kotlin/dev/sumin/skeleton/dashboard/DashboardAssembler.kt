@@ -19,6 +19,7 @@ import dev.sumin.skeleton.dashboard.web.DashboardPointResponse
 import dev.sumin.skeleton.dashboard.web.DashboardPreviousResponse
 import dev.sumin.skeleton.dashboard.web.DashboardRangeResponse
 import dev.sumin.skeleton.dashboard.web.DashboardRankingResponse
+import java.time.Duration
 import org.slf4j.LoggerFactory
 
 /**
@@ -31,16 +32,18 @@ class DashboardAssembler(
     private val funnel: () -> DashboardFunnel?,
     private val cache: DashboardCache,
     private val currency: String,
+    private val funnelTtl: Duration = Duration.ofMinutes(5),
+    private val maxCohort: Int = 50_000,
 ) {
     fun overview(period: DashboardPeriod, compare: Boolean): DashboardOverviewResponse {
         val tiles = metrics().sortedWith(compareBy({ it.order }, { it.key }))
-        val values = tiles.associate { it.key to value(it, period.range) }
+        val responses = tiles.map { metric(it, period, compare) }
         return DashboardOverviewResponse(
             range = DashboardRangeResponse(period.fromDate.toString(), period.toDate.toString(), period.zone.id, period.interval),
             previous = if (compare) DashboardPreviousResponse(period.previousFromDate.toString(), period.previousToDate.toString()) else null,
-            metrics = tiles.map { metric(it, period, compare, values.getValue(it.key)) },
+            metrics = responses,
             rankings = rankings().sortedWith(compareBy({ it.group }, { it.order }, { it.key })).map { ranking(it, period.range, OVERVIEW_ROWS) },
-            funnel = funnel(period.range, tiles, values),
+            funnel = funnel(period.range, responses),
         )
     }
 
@@ -51,10 +54,27 @@ class DashboardAssembler(
         return ranking(ranking, period.range, limit)
     }
 
-    private fun metric(m: DashboardMetric, period: DashboardPeriod, compare: Boolean, current: Cached<DashboardResult<List<DashboardAmount>>>): DashboardMetricResponse {
-        val range = period.range
+    private fun metric(m: DashboardMetric, period: DashboardPeriod, compare: Boolean): DashboardMetricResponse {
+        val current = value(m, period.range)
         val withPrevious = compare && m.comparable
-        val previous = if (withPrevious) value(m, period.previous).value else null
+        var previous = if (withPrevious) value(m, period.previous).value else null
+        var amounts = amounts(m, current.value)
+        var previousAmounts = previous?.takeIf { it.status == DashboardResult.Status.OK }?.let { amounts(m, it) }
+        if (m.unit == DashboardUnit.MONEY && current.value.status == DashboardResult.Status.OK) {
+            // 돈이 없는 기간은 빈 목록이 아니라 0 한 줄 — 통화는 설정 통화, 없으면 직전 기간의 통화 (둘 다 없으면 통화를 모른다: 빈 목록)
+            if (amounts.isEmpty() || previousAmounts?.isEmpty() == true) {
+                val zero = currency.ifBlank { null }
+                    ?: amounts.firstOrNull()?.currency
+                    ?: previousAmounts?.firstOrNull()?.currency
+                    ?: value(m, period.previous).value.takeIf { it.status == DashboardResult.Status.OK }?.let { amounts(m, it) }?.firstOrNull()?.currency
+                if (zero != null) {
+                    if (amounts.isEmpty()) amounts = listOf(DashboardAmount(0, zero))
+                    if (previousAmounts?.isEmpty() == true) previousAmounts = listOf(DashboardAmount(0, zero))
+                }
+            }
+        }
+        // 그래프 통화는 한 번만 정한다: 타일의 첫 통화. 이번 · 직전 기간이 같은 통화로 그려진다
+        val seriesCurrency = if (m.unit == DashboardUnit.MONEY) amounts.firstOrNull()?.currency else null
         return DashboardMetricResponse(
             key = m.key,
             label = m.label,
@@ -62,10 +82,10 @@ class DashboardAssembler(
             source = m.source,
             status = current.value.status,
             freshness = freshness(current),
-            value = amounts(m, current.value),
-            previousValue = previous?.takeIf { it.status == DashboardResult.Status.OK }?.let { amounts(m, it) },
-            series = points(m, range, period),
-            previousSeries = if (withPrevious && previous?.status == DashboardResult.Status.OK) points(m, period.previous, period) else null,
+            value = amounts,
+            previousValue = previousAmounts,
+            series = points(m, period.range, period, seriesCurrency),
+            previousSeries = if (withPrevious && previousAmounts != null) points(m, period.previous, period, seriesCurrency) else null,
             link = m.link,
         )
     }
@@ -75,9 +95,9 @@ class DashboardAssembler(
             safe(m.key) { m.value(range) }
         }
 
-    private fun points(m: DashboardMetric, range: DashboardRange, period: DashboardPeriod): List<DashboardPointResponse> {
-        val result = cache.get("m|${m.key}|s|${range.from}|${range.to}|${period.interval}", cacheable = ::cacheable) {
-            safe(m.key) { m.series(range, period.interval) }
+    private fun points(m: DashboardMetric, range: DashboardRange, period: DashboardPeriod, seriesCurrency: String?): List<DashboardPointResponse> {
+        val result = cache.get("m|${m.key}|s|${range.from}|${range.to}|${period.interval}|${seriesCurrency.orEmpty()}", cacheable = ::cacheable) {
+            safe(m.key) { m.series(range, period.interval, seriesCurrency) }
         }.value
         return if (result.status == DashboardResult.Status.OK) result.data.orEmpty().map { DashboardPointResponse(it.at, it.value) } else emptyList()
     }
@@ -99,39 +119,53 @@ class DashboardAssembler(
         )
     }
 
-    private fun funnel(range: DashboardRange, tiles: List<DashboardMetric>, values: Map<String, Cached<DashboardResult<List<DashboardAmount>>>>): DashboardFunnelResponse? {
+    private fun funnel(range: DashboardRange, tiles: List<DashboardMetricResponse>): DashboardFunnelResponse? {
         val definition = funnel() ?: return null
-        val steps = cache.get("f|${range.from}|${range.to}", cacheable = { it != null }) {
+        val counts = cache.get("f|${range.from}|${range.to}", ttl = funnelTtl, cacheable = { it !is FunnelResult.Failed }) {
             try {
-                val cohort = definition.cohort.members(range)
-                FunnelCounts(cohort.size.toLong(), definition.steps.sortedWith(compareBy({ it.order }, { it.key })).map { it to it.reached(cohort) })
+                val cohort = definition.cohort.members(range, maxCohort)
+                if (cohort.size > maxCohort) {
+                    FunnelResult.TooLarge
+                } else {
+                    FunnelResult.Counted(cohort.size.toLong(), definition.steps.sortedWith(compareBy({ it.order }, { it.key })).map { it to it.reached(cohort) })
+                }
             } catch (e: Exception) {
                 log.warn("Dashboard funnel failed: {}", e.javaClass.simpleName)
-                null
+                log.debug("Dashboard funnel failure", e)
+                FunnelResult.Failed
             }
-        }.value ?: return null
-        val size = steps.size
+        }.value
+        val counted = when (counts) {
+            is FunnelResult.Counted -> counts
+            FunnelResult.TooLarge -> return DashboardFunnelResponse("TOO_LARGE", emptyList(), null)
+            FunnelResult.Failed -> return DashboardFunnelResponse("ERROR", emptyList(), null)
+        }
+        val size = counted.size
         val reference = definition.referenceMetricKey?.let { key ->
-            val tile = tiles.firstOrNull { it.key == key } ?: return@let null
-            val result = values.getValue(tile.key).value
-            val visits = result.data?.firstOrNull()?.amount?.takeIf { result.status == DashboardResult.Status.OK } ?: return@let null
+            val tile = tiles.firstOrNull { it.key == key && it.status == DashboardResult.Status.OK } ?: return@let null
+            val visits = tile.value.firstOrNull()?.amount ?: return@let null
             DashboardFunnelReferenceResponse(tile.key, tile.label, visits, if (visits > 0) size.toDouble() / visits else 0.0)
         }
         return DashboardFunnelResponse(
+            status = "OK",
             steps = listOf(DashboardFunnelStepResponse(definition.cohort.key, definition.cohort.label, size, if (size > 0) 1.0 else 0.0)) +
-                steps.reached.map { (step, n) -> DashboardFunnelStepResponse(step.key, step.label, n, if (size > 0) n.toDouble() / size else 0.0) },
+                counted.reached.map { (step, n) -> DashboardFunnelStepResponse(step.key, step.label, n, if (size > 0) n.toDouble() / size else 0.0) },
             reference = reference,
         )
     }
 
-    private class FunnelCounts(val size: Long, val reached: List<Pair<DashboardFunnelStep, Long>>)
+    private sealed interface FunnelResult {
+        class Counted(val size: Long, val reached: List<Pair<DashboardFunnelStep, Long>>) : FunnelResult
+        data object TooLarge : FunnelResult
+        data object Failed : FunnelResult
+    }
 
-    /** 돈은 설정 통화가 먼저, 나머지는 금액이 큰 순. 돈이 아니거나 숫자가 없으면 그대로 */
+    /** 돈은 설정 통화가 먼저, 나머지는 금액(절댓값)이 큰 순 — 첫 줄 통화가 그래프 통화다. 돈이 아니거나 숫자가 없으면 그대로 */
     private fun amounts(m: DashboardMetric, result: DashboardResult<List<DashboardAmount>>): List<DashboardAmount> {
         if (result.status != DashboardResult.Status.OK) return emptyList()
         val data = result.data.orEmpty()
         if (m.unit != DashboardUnit.MONEY) return data
-        return data.sortedWith(compareBy<DashboardAmount> { it.currency != currency }.thenByDescending { it.amount })
+        return data.sortedWith(compareBy<DashboardAmount> { it.currency != currency }.thenByDescending { kotlin.math.abs(it.amount) })
     }
 
     private fun <T> freshness(cached: Cached<DashboardResult<T>>): DashboardFreshnessResponse? {
@@ -147,6 +181,7 @@ class DashboardAssembler(
             call()
         } catch (e: Exception) {
             log.warn("Dashboard card {} failed: {}", key, e.javaClass.simpleName)
+            log.debug("Dashboard card {} failure", key, e)
             DashboardResult(DashboardResult.Status.ERROR)
         }
 

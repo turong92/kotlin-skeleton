@@ -15,22 +15,23 @@ class DashboardRevenueTest {
     private val week1 = range("2026-10-12T00:00:00Z", "2026-10-19T00:00:00Z")
     private val week2 = range("2026-10-19T00:00:00Z", "2026-10-26T00:00:00Z")
 
-    private fun metric(currency: String = "") = NetRevenueMetric(PaymentDb.jdbc, DbTestDatabase.dialect, currency)
-    private val count = PaidCountMetric(PaymentDb.jdbc, DbTestDatabase.dialect)
+    private val orders = CurrentModeOrders { listOf("scripted" to "TEST") }   // 지금 끼운 결제사 키는 테스트 모드
+    private fun metric() = NetRevenueMetric(PaymentDb.jdbc, DbTestDatabase.dialect, orders)
+    private val count = PaidCountMetric(PaymentDb.jdbc, DbTestDatabase.dialect, orders)
 
     @BeforeTest
     fun clean() = PaymentDb.clean()
 
     private fun range(from: String, to: String) = DashboardRange(Instant.parse(from), Instant.parse(to), ZoneOffset.UTC)
 
-    private fun paid(id: String, currency: String, amount: Long, at: String?, status: String = "PAID") {
+    private fun paid(id: String, currency: String, amount: Long, at: String?, status: String = "PAID", provider: String = "scripted", mode: String = "TEST") {
         val ts = at?.let { DbTestDatabase.dialect.instantParam(Instant.parse(it)) }
         val now = DbTestDatabase.dialect.instantParam(Instant.parse("2026-10-01T00:00:00Z"))
         PaymentDb.jdbc.update(
             """insert into payment_orders (id, account_id, kind, status, provider, provider_mode, currency, amount, paid_amount, item_type, item_ref, order_name,
                                            origin_type, checkout_expires_at, paid_at, created_at, updated_at)
-               values (:id, 'acc_1', 'ONE_TIME', :status, 'scripted', 'TEST', :currency, :amount, :paidAmount, 'cheer', 'c', 'Cheer', 'CHECKOUT', :now, :paidAt, :now, :now)""",
-            MapSqlParameterSource().addValue("id", id).addValue("status", status).addValue("currency", currency).addValue("amount", amount)
+               values (:id, 'acc_1', 'ONE_TIME', :status, :provider, :mode, :currency, :amount, :paidAmount, 'cheer', 'c', 'Cheer', 'CHECKOUT', :now, :paidAt, :now, :now)""",
+            MapSqlParameterSource().addValue("id", id).addValue("status", status).addValue("provider", provider).addValue("mode", mode).addValue("currency", currency).addValue("amount", amount)
                 .addValue("paidAmount", if (at != null) amount else null).addValue("paidAt", ts).addValue("now", now),
         )
     }
@@ -46,7 +47,7 @@ class DashboardRevenueTest {
         )
     }
 
-    private fun net(range: DashboardRange, currency: String = "") = metric(currency).value(range).data!!
+    private fun net(range: DashboardRange) = metric().value(range).data!!
     private fun krw(amount: Long) = DashboardAmount(amount, "KRW")
 
     @Test
@@ -88,10 +89,10 @@ class DashboardRevenueTest {
         paid("ord_2", "USD", 990, "2026-10-13T02:00:00Z")
 
         assertEquals(listOf(krw(10000), DashboardAmount(990, "USD")), net(week1))
-        val daily = { currency: String -> metric(currency).series(week1, DashboardInterval.DAY).data!!.map { it.value } }
-        assertEquals(listOf(0L, 10000L, 0L, 0L, 0L, 0L, 0L), daily("KRW"))
+        val daily = { currency: String? -> metric().series(week1, DashboardInterval.DAY, currency).data!!.map { it.value } }
+        assertEquals(listOf(0L, 10000L, 0L, 0L, 0L, 0L, 0L), daily("KRW"))       // 시리즈 통화는 조립기가 정해 넘긴다
         assertEquals(listOf(0L, 990L, 0L, 0L, 0L, 0L, 0L), daily("USD"))
-        assertEquals(daily("KRW"), daily(""))                                    // 설정이 없으면 금액이 큰 통화
+        assertEquals(List(7) { 0L }, daily(null))
     }
 
     @Test
@@ -105,5 +106,19 @@ class DashboardRevenueTest {
         assertEquals(listOf(krw(1000)), net(week1))
         assertEquals(listOf(krw(2000)), net(week2))
         assertEquals(listOf(DashboardAmount(1)), count.value(week1).data)
+    }
+
+    @Test
+    fun `an order made with another mode is not counted, nor is its refund subtracted - a provider that is not wired counts live orders only`() {
+        paid("ord_1", "KRW", 10000, "2026-10-13T01:00:00Z")                                   // 지금 모드(TEST)
+        paid("ord_2", "KRW", 5000, "2026-10-13T02:00:00Z", mode = "LIVE")                      // 키를 바꾸기 전 · 다른 모드
+        paid("ord_3", "KRW", 7000, "2026-10-13T03:00:00Z", mode = "UNKNOWN")
+        paid("ord_4", "KRW", 900, "2026-10-13T04:00:00Z", provider = "retired", mode = "LIVE")  // 꺼진 결제사의 실결제는 센다
+        paid("ord_5", "KRW", 800, "2026-10-13T05:00:00Z", provider = "retired", mode = "TEST")  // 꺼진 결제사의 테스트는 안 센다
+        refund("ord_1", 1000, "KRW", "SUCCEEDED", "2026-10-14T01:00:00Z")
+        refund("ord_2", 2000, "KRW", "SUCCEEDED", "2026-10-14T01:00:00Z")                      // 다른 모드 주문의 환불은 뺄 것이 아니다
+
+        assertEquals(listOf(krw(10000 - 1000 + 900)), net(week1))
+        assertEquals(listOf(DashboardAmount(2)), count.value(week1).data)
     }
 }

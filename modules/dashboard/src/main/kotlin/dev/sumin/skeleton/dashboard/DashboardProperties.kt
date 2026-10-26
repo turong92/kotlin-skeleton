@@ -6,12 +6,13 @@ import org.springframework.boot.context.properties.ConfigurationProperties
 @ConfigurationProperties("skeleton.dashboard")
 data class DashboardProperties(
     val admin: Admin = Admin(),
-    /** 대시보드 시간대. 비면 `skeleton.time.default-zone`, 그것도 없으면 UTC */
+    /** 대시보드 시간대. 비면 `skeleton.time.default-zone`, 그것도 없으면 `time` 모듈의 기본(Asia/Seoul) */
     val zone: String = "",
     /** 돈 타일이 먼저 보여 줄 통화(ISO 코드). 비면 금액이 큰 통화부터 */
     val currency: String = "",
     val cache: Cache = Cache(),
     val ingest: Ingest = Ingest(),
+    val funnel: Funnel = Funnel(),
 ) {
     data class Admin(
         /** 관리 API(`/api/v1/admin/dashboard`). 꺼져 있으면 404 */
@@ -28,7 +29,14 @@ data class DashboardProperties(
     )
 
     data class Cache(
-        /** 우리 DB 숫자의 캐시 수명 — 같은 범위 질의는 이 시간 안에 한 번만 계산한다 (0 = 끔) */
-        val db: Duration = Duration.ofSeconds(30),
+        /** 우리 DB 숫자의 캐시 수명 — 같은 범위 질의는 이 시간 안에 한 번만 계산한다 (0 = 끔). 화면 폴링(60초) 이상이어야 열어 두기만 해도 매번 다시 계산하지 않는다 */
+        val db: Duration = Duration.ofSeconds(60),
+        /** 퍼널의 캐시 수명 — 묶음을 만드는 질의가 무거워 따로 길다 */
+        val funnel: Duration = Duration.ofMinutes(5),
+    )
+
+    data class Funnel(
+        /** 퍼널 묶음의 상한(계정 수). 넘으면 그 퍼널만 `TOO_LARGE` 로 말한다 — 기간을 줄이면 된다 */
+        val maxCohort: Int = 50_000,
     )
 }

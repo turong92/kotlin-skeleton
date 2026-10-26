@@ -14,7 +14,7 @@ enum class DashboardInterval { HOUR, DAY, WEEK }
 
 enum class DashboardUnit { PEOPLE, COUNT, MONEY, PERCENT }
 
-/** 돈이 아닌 지표는 [currency] 가 null */
+/** 돈이 아닌 지표는 [currency] 가 null. [amount] 는 통화 최소 단위(원 · 센트 …)의 정수 */
 data class DashboardAmount(val amount: Long, val currency: String? = null)
 
 data class DashboardPoint(val at: Instant, val value: Long)
@@ -45,7 +45,11 @@ interface DashboardMetric {
 
     fun value(range: DashboardRange): DashboardResult<List<DashboardAmount>>
 
-    fun series(range: DashboardRange, interval: DashboardInterval): DashboardResult<List<DashboardPoint>>
+    /**
+     * 그래프 점들. 돈 타일([unit] 이 `MONEY`)은 [currency] 한 통화의 점만 — 조립기가 타일 첫 통화(`value[0].currency`)를 정해 이번 · 직전 기간에 같이 넘긴다.
+     * 돈이 아니면 [currency] 는 null. 칸마다 질의하지 않는다: 범위를 한 번 읽어 [DashboardBuckets] 로 칸에 나눈다
+     */
+    fun series(range: DashboardRange, interval: DashboardInterval, currency: String? = null): DashboardResult<List<DashboardPoint>>
 }
 
 /** 순위 카드의 탭 하나. [group] 은 카드 묶음(`traffic` · `pages` · `geo` · `app`) */
@@ -68,7 +72,8 @@ interface DashboardCohortSource {
     val key: String
     val label: String
 
-    fun members(range: DashboardRange): List<DashboardCohortMember>
+    /** 기간 안에 들어온 사람, **많아야 [limit] + 1 명** — 호출자가 [limit] 를 넘었는지 알 수 있을 만큼만 읽는다 (퍼널은 묶음 상한을 넘으면 계산하지 않는다) */
+    fun members(range: DashboardRange, limit: Int): List<DashboardCohortMember>
 }
 
 /** 묶음 중 이 단계에 닿은 사람 수. 구현은 계정 id 를 1000 개씩 끊어 IN 질의한다 */

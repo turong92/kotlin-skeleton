@@ -3,11 +3,14 @@ skeleton:
   dashboard:
     admin:
       enabled: false   # true 면 /api/v1/admin/dashboard 를 연다 (꺼짐 → 404). 보려면 권한 dashboard.read 가 있어야 한다
-    zone: ""           # 대시보드 시간대. 비면 skeleton.time.default-zone, 그것도 없으면 UTC
+    zone: ""           # 대시보드 시간대. 비면 skeleton.time.default-zone, 그것도 없으면 time 모듈의 기본(Asia/Seoul)
     currency: ""       # 돈 타일이 먼저 보여 줄 통화(예: KRW). 비면 금액이 큰 통화부터
     cache:
-      db: 30s          # 우리 DB 숫자의 캐시 수명 — 같은 범위 질의는 이 시간 안에 기여를 한 번만 부른다 (0 = 끔)
+      db: 60s          # 우리 DB 숫자의 캐시 수명 — 같은 범위 질의는 이 시간 안에 기여를 한 번만 부른다 (0 = 끔). 화면 폴링(60초) 이상이어야 한다
+      funnel: 5m       # 퍼널의 캐시 수명 — 묶음을 만드는 질의가 무거워 따로 길다
     ingest:
       enabled: true    # 외부 출처의 일별 적재 작업. 저장소(dashboard-jdbc)와 적재기(출처 모듈)가 있을 때만 일을 한다
       at: "04:00"      # 매일 이 시각(대시보드 시간대)에 돈다. 기동 직후에도 한 번 돈다
       backfill-days: 3 # 한 번에 어제부터 거슬러 몇 일을 다시 적재하나 — 같은 날을 다시 적재해도 같은 행이다
+    funnel:
+      max-cohort: 50000   # 퍼널 묶음의 상한(계정 수). 넘으면 그 퍼널만 TOO_LARGE 로 말한다 — 기간을 줄이면 된다

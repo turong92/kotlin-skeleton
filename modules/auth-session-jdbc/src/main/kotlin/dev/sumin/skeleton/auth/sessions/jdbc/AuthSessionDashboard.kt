@@ -6,6 +6,7 @@ import dev.sumin.skeleton.common.dashboard.DashboardCohortMember
 import dev.sumin.skeleton.common.dashboard.DashboardFunnelStep
 import dev.sumin.skeleton.common.dashboard.DashboardInterval
 import dev.sumin.skeleton.common.dashboard.DashboardMetric
+import dev.sumin.skeleton.common.dashboard.DashboardPoint
 import dev.sumin.skeleton.common.dashboard.DashboardRange
 import dev.sumin.skeleton.common.dashboard.DashboardResult
 import dev.sumin.skeleton.common.dashboard.DashboardUnit
@@ -27,8 +28,14 @@ class ActiveUsersMetric(private val jdbc: NamedParameterJdbcTemplate, private va
 
     override fun value(range: DashboardRange) = DashboardResult(DashboardResult.Status.OK, listOf(DashboardAmount(active(range))))
 
-    override fun series(range: DashboardRange, interval: DashboardInterval) =
-        DashboardResult(DashboardResult.Status.OK, DashboardBuckets.series(range, interval, ::active))
+    override fun series(range: DashboardRange, interval: DashboardInterval, currency: String?): DashboardResult<List<DashboardPoint>> {
+        // 칸마다 세지 않는다 — (마지막 사용 시각, 계정) 만 한 번 읽어 칸마다 서로 다른 계정을 센다
+        val used = jdbc.query(
+            "select account_id, last_used_at from auth_sessions where last_used_at >= :from and last_used_at < :to",
+            mapOf("from" to dialect.instantParam(range.from), "to" to dialect.instantParam(range.to)),
+        ) { rs, _ -> dialect.readInstant(rs, "last_used_at")!! to rs.getString("account_id") }
+        return DashboardResult(DashboardResult.Status.OK, DashboardBuckets.series(range, interval, used) { it.distinct().size.toLong() })
+    }
 
     private fun active(range: DashboardRange): Long =
         jdbc.queryForObject(

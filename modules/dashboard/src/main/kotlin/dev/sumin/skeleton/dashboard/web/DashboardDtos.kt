@@ -48,7 +48,8 @@ data class DashboardFunnelStepResponse(val key: String, val label: String, val r
 
 data class DashboardFunnelReferenceResponse(val key: String, val label: String, val value: Long, val rate: Double)
 
-data class DashboardFunnelResponse(val steps: List<DashboardFunnelStepResponse>, val reference: DashboardFunnelReferenceResponse?)
+/** `status` — `OK` · `TOO_LARGE`(묶음이 상한을 넘었다, `steps` 는 비어 있다 — 기간을 줄인다) · `ERROR`(계산이 실패했다, `steps` 는 비어 있다) */
+data class DashboardFunnelResponse(val status: String, val steps: List<DashboardFunnelStepResponse>, val reference: DashboardFunnelReferenceResponse?)
 
 data class DashboardOverviewResponse(
     val range: DashboardRangeResponse,

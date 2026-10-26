@@ -46,7 +46,7 @@ dependencies {
     implementation(project(":modules:author-profile"))
     implementation(project(":modules:legal-jdbc"))          // + legal — account 와 같이 클래스패스에만 둔다 (설정 스니펫 · 모듈 목록 시험). 자동설정은 application.yml 에서 꺼 둔다. 실제 흐름은 apps/sample
     implementation(project(":modules:authz-jdbc"))          // + authz — 클래스패스에만 둔다 (설정 스니펫 · 모듈 목록 시험). 표 자동설정은 application.yml 에서 꺼 둔다. 실제 흐름은 apps/sample
-    implementation(project(":modules:dashboard"))           // 클래스패스에만 둔다 (설정 스니펫 · 모듈 목록 시험). 기여 빈이 없어 카드는 비어 있다. 실제 흐름은 apps/sample
+    implementation(project(":modules:dashboard"))           // 클래스패스에만 둔다 (설정 스니펫 · 모듈 목록 시험). 기여 빈(가입 · 활성 · 결제)은 서지만 관리 API 가 꺼져 있다. 실제 흐름은 apps/sample
     implementation(project(":modules:dashboard-jdbc"))      // + dashboard 저장소 — 일별 집계 · 화면 설정 표
     implementation(project(":modules:db-postgresql"))
     implementation(project(":modules:migration-flyway"))

@@ -34,7 +34,7 @@ class DashboardAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     fun dashboardRangeParser(properties: DashboardProperties, environment: Environment, time: TimeProvider): DashboardRangeParser {
-        val zone = properties.zone.ifBlank { environment.getProperty("skeleton.time.default-zone", "UTC") }
+        val zone = properties.zone.ifBlank { environment.getProperty("skeleton.time.default-zone", DEFAULT_ZONE) }
         return DashboardRangeParser(ZoneId.of(zone), time::now)
     }
 
@@ -61,6 +61,8 @@ class DashboardAutoConfiguration {
         },
         cache = cache,
         currency = properties.currency,
+        funnelTtl = properties.cache.funnel,
+        maxCohort = properties.funnel.maxCohort,
     )
 
     @Bean
@@ -92,4 +94,9 @@ class DashboardAutoConfiguration {
         reporter = reporter,
         now = time::now,
     )
+
+    private companion object {
+        /** `time` 모듈의 `skeleton.time.default-zone` 코드 기본값과 같다 — 둘 다 안 주면 앱 시간대와 대시보드 하루 경계가 어긋나지 않는다 */
+        const val DEFAULT_ZONE = "Asia/Seoul"
+    }
 }
