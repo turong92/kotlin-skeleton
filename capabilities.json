@@ -1113,6 +1113,53 @@
       }
     },
     {
+      "id": "dashboard-cloudflare",
+      "kind": "module",
+      "module": "dashboard-cloudflare",
+      "path": "modules/dashboard-cloudflare",
+      "status": "experimental",
+      "summary": "대시보드에 접속 숫자를 얹는다 — Cloudflare Web Analytics(쿠키 없음 · 정적 페이지 포함)의 방문 · 페이지뷰 타일과 유입 · 많이 본 페이지 · 국가 · 기기 순위. 어제까지는 새벽 적재 작업이 일별 표에 옮긴 값, 오늘은 5분 서버 캐시(운영자가 여럿이어도 외부 호출은 주기당 한 번). 키가 없으면 기동은 하고 그 카드만 「연결하면 보입니다」. 프로젝트 모드는 프로젝트마다 자기 계정 id · 사이트 태그 · 토큰.",
+      "starter": false,
+      "newProjectFlag": "--modules dashboard-cloudflare",
+      "autoIncludes": ["dashboard"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": ["dashboard-jdbc"]
+      },
+      "config": {
+        "prefixes": ["skeleton.dashboard-cloudflare"],
+        "snippet": "docs/config/modules/dashboard-cloudflare.yml"
+      },
+      "basePaths": [],
+      "secrets": [
+        {
+          "env": [
+            "<P>_DASHBOARD_CLOUDFLARE_API_TOKEN",
+            "<P>_DASHBOARD_CLOUDFLARE_ACCOUNT_ID",
+            "<P>_DASHBOARD_CLOUDFLARE_SITE_TAG"
+          ],
+          "whenMissing": "셋 중 하나라도 비면 Cloudflare 카드만 「연결하면 보입니다」 — 서버는 뜬다"
+        }
+      ],
+      "docs": ["docs/modules/dashboard-cloudflare.md"],
+      "frontend": {
+        "capabilities": ["admin-dashboard"],
+        "newProjectFlag": null,
+        "packages": ["@skeleton/dashboard"]
+      },
+      "notFor": [
+        "지난 기간(어제까지)을 보려면 dashboard-jdbc 도 같이 — 없으면 지난 날이 걸린 기간은 「기록 없음」이다",
+        "프런트가 직접 세는 것(GA 의 페이지 이동 · 재방문 · 전환)은 dashboard-ga 몫이다",
+        "원본 이벤트를 쌓지 않는다 — 집계 숫자만 일별 표에 옮긴다",
+        "존 HTTP 분석(봇 · 이미지가 섞인 요청 수)은 읽지 않는다 — Web Analytics(RUM)만"
+      ],
+      "keywords": {
+        "ko": ["접속 통계", "방문자 수", "클라우드플레어 분석", "페이지뷰", "유입 경로", "국가별 방문"],
+        "en": ["cloudflare web analytics", "visits", "page views", "referrers", "traffic stats"]
+      }
+    },
+    {
       "id": "dashboard-jdbc",
       "kind": "module",
       "module": "dashboard-jdbc",
@@ -2480,6 +2527,7 @@
         "board-jdbc",
         "crypto",
         "dashboard",
+        "dashboard-cloudflare",
         "dashboard-jdbc",
         "json",
         "notification",
@@ -2543,6 +2591,7 @@
         "config-aws-ssm",
         "crypto",
         "dashboard",
+        "dashboard-cloudflare",
         "dashboard-jdbc",
         "db-mysql",
         "event-kafka",

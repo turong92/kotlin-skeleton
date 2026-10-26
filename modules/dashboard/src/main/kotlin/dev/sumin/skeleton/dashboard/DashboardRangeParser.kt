@@ -22,8 +22,14 @@ data class DashboardPeriod(
 )
 
 /** `from` · `to` 날짜 문자열 → [DashboardPeriod]. 둘 다 없으면 오늘 하루, 하나만 있거나 날짜가 아니거나 거꾸로거나 366일을 넘으면 `DASHBOARD.RANGE_INVALID` */
-class DashboardRangeParser(val zone: ZoneId, private val now: () -> Instant) {
+class DashboardRangeParser(private val zoneSource: () -> ZoneId, private val now: () -> Instant) {
+    constructor(zone: ZoneId, now: () -> Instant) : this({ zone }, now)
+
+    /** 지금 프로젝트의 대시보드 시간대 */
+    val zone: ZoneId get() = zoneSource()
+
     fun parse(from: String?, to: String?): DashboardPeriod {
+        val zone = zoneSource()
         val fromDate: LocalDate
         val toDate: LocalDate
         if (from == null && to == null) {
@@ -42,8 +48,8 @@ class DashboardRangeParser(val zone: ZoneId, private val now: () -> Instant) {
         return DashboardPeriod(
             fromDate = fromDate,
             toDate = toDate,
-            range = rangeOf(fromDate, toDate),
-            previous = rangeOf(previousFrom, previousTo),
+            range = rangeOf(zone, fromDate, toDate),
+            previous = rangeOf(zone, previousFrom, previousTo),
             previousFromDate = previousFrom,
             previousToDate = previousTo,
             interval = when {
@@ -55,7 +61,7 @@ class DashboardRangeParser(val zone: ZoneId, private val now: () -> Instant) {
         )
     }
 
-    private fun rangeOf(from: LocalDate, to: LocalDate) =
+    private fun rangeOf(zone: ZoneId, from: LocalDate, to: LocalDate) =
         DashboardRange(from.atStartOfDay(zone).toInstant(), to.plusDays(1).atStartOfDay(zone).toInstant(), zone)
 
     private fun date(name: String, value: String): LocalDate =

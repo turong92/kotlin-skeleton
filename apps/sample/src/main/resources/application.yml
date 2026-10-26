@@ -225,3 +225,9 @@ skeleton:
       enabled: true   # 이 앱의 선택: 관리자 대시보드 API(/api/v1/admin/dashboard) 를 켠다 — 스켈레톤 기본은 꺼짐(404). 보려면 권한 dashboard.read (ADMIN 은 늘 가진다)
     zone: Asia/Seoul  # 이 앱의 선택: 「오늘」 · 일별 경계의 시간대
     currency: KRW     # 이 앱의 선택: 순매출 타일이 먼저 보여 줄 통화
+  dashboard-cloudflare:
+    # 이 앱의 선택: 방문 · 유입 카드를 Cloudflare Web Analytics 로 채운다. 값은 커밋하지 않는다 — 환경변수로만(SKELETON_DASHBOARD_CLOUDFLARE_{ACCOUNT_ID,SITE_TAG,API_TOKEN}, 토큰은 배포 선언의 secrets:).
+    # 비워 두면 앱은 그대로 뜨고 Cloudflare 카드만 「연결하면 보입니다」 — 우리 DB 숫자(가입 · 활성 · 매출 · 결제)는 키 없이 나온다.
+    account-id: ""
+    site-tag: ""
+    api-token: ""

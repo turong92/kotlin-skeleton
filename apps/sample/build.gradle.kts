@@ -31,6 +31,7 @@ dependencies {
     implementation(project(":modules:authz-jdbc"))         // 역할 → 권한 표 (authz 는 저장소를 모른다). 첫 기동에 yml 매핑을 한 번 옮긴다
     implementation(project(":modules:dashboard"))          // 관리자 대시보드: 가입 · 활성 · 순매출 · 결제 · 퍼널 카드를 모아 준다 (/api/v1/admin/dashboard) — 켜기 skeleton.dashboard.admin.enabled. 카드는 account-jdbc · auth-session-jdbc · payment-jdbc 가 기여한다. 문서 docs/modules/dashboard.md
     implementation(project(":modules:dashboard-jdbc"))     // 대시보드 일별 집계 · 화면 설정 표 + 일별 적재 작업 (dashboard 는 저장소를 모른다)
+    implementation(project(":modules:dashboard-cloudflare")) // 대시보드의 방문 · 페이지뷰 · 유입 카드 (Cloudflare Web Analytics) — 키(SKELETON_DASHBOARD_CLOUDFLARE_*)가 없으면 그 카드만 비어 있다. 문서 docs/modules/dashboard-cloudflare.md
     implementation(project(":modules:auth-social-google")) // 소셜 로그인 — 꺼진 채 시작한다: 제공자마다 SKELETON_AUTH_SOCIAL_PROVIDERS_<X>_ENABLED=true + client id/secret (docs/real-provider-setup.md)
     implementation(project(":modules:auth-social-kakao"))
     implementation(project(":modules:auth-social-naver"))

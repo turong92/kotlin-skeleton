@@ -9,7 +9,6 @@ import dev.sumin.skeleton.common.dashboard.DashboardMetric
 import dev.sumin.skeleton.common.dashboard.DashboardRanking
 import dev.sumin.skeleton.common.project.ProjectRegistry
 import dev.sumin.skeleton.common.time.TimeProvider
-import java.time.ZoneId
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
@@ -33,10 +32,12 @@ class DashboardAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    fun dashboardRangeParser(properties: DashboardProperties, environment: Environment, time: TimeProvider): DashboardRangeParser {
-        val zone = properties.zone.ifBlank { environment.getProperty("skeleton.time.default-zone", DEFAULT_ZONE) }
-        return DashboardRangeParser(ZoneId.of(zone), time::now)
-    }
+    fun dashboardSettings(properties: DashboardProperties, environment: Environment, projects: ObjectProvider<ProjectRegistry>): DashboardSettings =
+        DashboardSettings(properties, environment.getProperty("skeleton.time.default-zone", DEFAULT_ZONE), projects.getIfAvailable())
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun dashboardRangeParser(settings: DashboardSettings, time: TimeProvider): DashboardRangeParser = DashboardRangeParser(settings::zone, time::now)
 
     @Bean
     @ConditionalOnMissingBean
@@ -47,6 +48,7 @@ class DashboardAutoConfiguration {
     @ConditionalOnMissingBean
     fun dashboardAssembler(
         properties: DashboardProperties,
+        settings: DashboardSettings,
         cache: DashboardCache,
         metrics: ObjectProvider<DashboardMetric>,
         rankings: ObjectProvider<DashboardRanking>,
@@ -60,7 +62,7 @@ class DashboardAutoConfiguration {
             funnel.getIfAvailable() ?: cohorts.orderedStream().findFirst().map { DashboardFunnel(it, steps.orderedStream().toList()) }.orElse(null)
         },
         cache = cache,
-        currency = properties.currency,
+        currency = settings::currency,
         funnelTtl = properties.cache.funnel,
         maxCohort = properties.funnel.maxCohort,
     )
@@ -68,7 +70,7 @@ class DashboardAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     fun dashboardDailySeries(store: ObjectProvider<DashboardDailyStore>, parser: DashboardRangeParser, time: TimeProvider): DailySeries =
-        DailySeries({ store.getIfAvailable() }, parser.zone, time::now)
+        DailySeries({ store.getIfAvailable() }, parser::zone, time::now)
 
     /** 로그만 남기는 기본 — `alert` 가 있으면 [DashboardAlertAutoConfiguration] 의 것이 먼저 서서 이쪽이 물러난다 */
     @Bean
@@ -79,16 +81,16 @@ class DashboardAutoConfiguration {
     @ConditionalOnMissingBean
     fun dashboardIngestRunner(
         properties: DashboardProperties,
-        parser: DashboardRangeParser,
         time: TimeProvider,
         store: ObjectProvider<DashboardDailyStore>,
         ingestors: ObjectProvider<DashboardIngestor>,
         projects: ObjectProvider<ProjectRegistry>,
+        settings: DashboardSettings,
         reporter: DashboardIngestReporter,
     ): DashboardIngestRunner = DashboardIngestRunner(
         ingestors = { ingestors.orderedStream().toList() },
         store = { store.getIfAvailable() },
-        zone = parser.zone,
+        zone = settings::zone,
         properties = properties.ingest,
         projects = projects.getIfAvailable(),
         reporter = reporter,

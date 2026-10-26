@@ -32,7 +32,7 @@ class DashboardIngestRunnerTest {
     }
 
     private fun runner(store: MemoryStore, ingestors: List<DashboardIngestor>, backfill: Int = 3, projects: ProjectRegistry? = null, failures: MutableList<String> = mutableListOf()) =
-        DashboardIngestRunner({ ingestors }, { store }, zone, DashboardProperties.Ingest(backfillDays = backfill), projects, { source, _ -> failures += source }) { now }
+        DashboardIngestRunner({ ingestors }, { store }, { zone }, DashboardProperties.Ingest(backfillDays = backfill), projects, { source, _ -> failures += source }) { now }
 
     @Test
     fun `three backfill days end yesterday and a second run leaves the same table`() {

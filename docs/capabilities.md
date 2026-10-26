@@ -94,6 +94,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `config-aws-ssm` | AWS SSM Parameter Store 의 값을 시작할 때 스프링 프로퍼티로 불러온다. | `--modules config-aws-ssm` | AWS 설정, 파라미터 스토어, SSM, 비밀 불러오기 / aws ssm, parameter store, remote config, aws secrets | — |
 | `crypto` | AES-GCM 텍스트 암호화 · 키 회전용 키 id 봉투 · URL 에 안전한 불투명 토큰 · 선택적 영속 변환기. | `--modules crypto` | 암호화, 복호화, 비밀 저장, 불투명 URL, 키 회전 / encryption, aes gcm, opaque token, key rotation, encrypt at rest | — |
 | `dashboard` | 관리자 대시보드 조립기 — 다른 모듈이 빈으로 기여한 숫자 타일 · 순위 탭 · 같은 사람 묶음 퍼널을 모아 한 화면 분량(직전 기간 비교 · 그래프 시리즈 포함)으로 돌려주는 API(/api/v1/admin/dashboard). 계산은 프로젝트별 짧은 캐시를 지나 운영자가 여럿 열어도 DB · 외부 호출은 캐시 주기당 한 번이고, 카드 하나가 실패해도 그 카드만 상태로 말한다. 카드는 account-jdbc · auth-session-jdbc · payment-jdbc 나 앱이 기여한다. 권한 dashboard.read, 기본 꺼짐(skeleton.dashboard.admin.enabled). | `--modules dashboard` | 관리자 대시보드, 어드민 대시보드, 통계 화면, 매출 가입 숫자, 퍼널, 지표 카드 / admin dashboard, metrics, kpi tiles, funnel, analytics overview | `@skeleton/dashboard` |
+| `dashboard-cloudflare` | 대시보드에 접속 숫자를 얹는다 — Cloudflare Web Analytics(쿠키 없음 · 정적 페이지 포함)의 방문 · 페이지뷰 타일과 유입 · 많이 본 페이지 · 국가 · 기기 순위. 어제까지는 새벽 적재 작업이 일별 표에 옮긴 값, 오늘은 5분 서버 캐시(운영자가 여럿이어도 외부 호출은 주기당 한 번). 키가 없으면 기동은 하고 그 카드만 「연결하면 보입니다」. 프로젝트 모드는 프로젝트마다 자기 계정 id · 사이트 태그 · 토큰. | `--modules dashboard-cloudflare` | 접속 통계, 방문자 수, 클라우드플레어 분석, 페이지뷰, 유입 경로, 국가별 방문 / cloudflare web analytics, visits, page views, referrers, traffic stats | `@skeleton/dashboard` |
 | `dashboard-jdbc` | 대시보드 저장소 — PostgreSQL · MySQL 로 dashboard 의 저장 포트를 구현한다: 외부 출처의 일별 집계 표(dashboard_daily, 같은 날을 다시 적재해도 같은 행, 집계 숫자만)와 계정별 화면 설정 표(dashboard_layouts, 계정이 지워지면 같이 지운다). 붙이면 새벽 일별 적재 작업이 켜진다(적재기가 있을 때). | `--modules dashboard-jdbc` | 대시보드 저장소, 일별 집계 표, 화면 설정 저장 / dashboard storage, daily aggregates, dashboard layout storage | `@skeleton/dashboard` |
 | `db-mysql` | MySQL 방언 — 드라이버 · Flyway MySQL 지원 · SqlDialect · Data JDBC 시간 변환, 세션을 UTC 로 고정한다. | `--db mysql` | MySQL, 마이SQL, DB 변경, MySQL 로 바꾸기 / mysql, mariadb, use mysql, switch database | — |
 | `db-postgresql` | PostgreSQL 방언(기본) — 드라이버 · Flyway PostgreSQL 지원 · SqlDialect · Data JDBC 시간 변환. | 스타터(apps/api)에 기본 포함 | PostgreSQL, 포스트그레스, DB 방언, 데이터베이스 / postgresql, postgres, database dialect, database | — |
@@ -569,6 +570,23 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 원본 이벤트를 쌓는 분석 저장소가 아니다 — 집계 숫자만 다룬다
   - 여러 프로젝트를 합쳐 보는 총괄 화면은 없다(프로젝트마다 따로)
 - 키워드: 관리자 대시보드, 어드민 대시보드, 통계 화면, 매출 가입 숫자, 퍼널, 지표 카드 / admin dashboard, metrics, kpi tiles, funnel, analytics overview
+
+### `dashboard-cloudflare` — 대시보드에 접속 숫자를 얹는다 — Cloudflare Web Analytics(쿠키 없음 · 정적 페이지 포함)의 방문 · 페이지뷰 타일과 유입 · 많이 본 페이지 · 국가 · 기기 순위. 어제까지는 새벽 적재 작업이 일별 표에 옮긴 값, 오늘은 5분 서버 캐시(운영자가 여럿이어도 외부 호출은 주기당 한 번). 키가 없으면 기동은 하고 그 카드만 「연결하면 보입니다」. 프로젝트 모드는 프로젝트마다 자기 계정 id · 사이트 태그 · 토큰.
+
+- 종류 · 상태: module · experimental — 위치 `modules/dashboard-cloudflare`
+- 켜는 법: `--modules dashboard-cloudflare`
+- 의존 한 줄: `implementation(project(":modules:dashboard-cloudflare"))`
+- 자동으로 따라온다: `dashboard`
+- 설정 접두사 `skeleton.dashboard-cloudflare` — 키와 기본값 `docs/config/modules/dashboard-cloudflare.yml`
+- 비밀 · 환경변수: `<P>_DASHBOARD_CLOUDFLARE_API_TOKEN`, `<P>_DASHBOARD_CLOUDFLARE_ACCOUNT_ID`, `<P>_DASHBOARD_CLOUDFLARE_SITE_TAG` — 빠지면: 셋 중 하나라도 비면 Cloudflare 카드만 「연결하면 보입니다」 — 서버는 뜬다
+- 문서: `docs/modules/dashboard-cloudflare.md`
+- 짝 프런트(react-skeleton): 항목 `admin-dashboard` · 패키지 `@skeleton/dashboard` · 조각 기본 포함(덧붙일 것 없음)
+- 쓰지 않는 경우:
+  - 지난 기간(어제까지)을 보려면 dashboard-jdbc 도 같이 — 없으면 지난 날이 걸린 기간은 「기록 없음」이다
+  - 프런트가 직접 세는 것(GA 의 페이지 이동 · 재방문 · 전환)은 dashboard-ga 몫이다
+  - 원본 이벤트를 쌓지 않는다 — 집계 숫자만 일별 표에 옮긴다
+  - 존 HTTP 분석(봇 · 이미지가 섞인 요청 수)은 읽지 않는다 — Web Analytics(RUM)만
+- 키워드: 접속 통계, 방문자 수, 클라우드플레어 분석, 페이지뷰, 유입 경로, 국가별 방문 / cloudflare web analytics, visits, page views, referrers, traffic stats
 
 ### `dashboard-jdbc` — 대시보드 저장소 — PostgreSQL · MySQL 로 dashboard 의 저장 포트를 구현한다: 외부 출처의 일별 집계 표(dashboard_daily, 같은 날을 다시 적재해도 같은 행, 집계 숫자만)와 계정별 화면 설정 표(dashboard_layouts, 계정이 지워지면 같이 지운다). 붙이면 새벽 일별 적재 작업이 켜진다(적재기가 있을 때).
 
@@ -1087,7 +1105,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 - 종류 · 상태: app · stable — 위치 `apps/sample`
 - 켜는 법: `--with-sample`
-- 자동으로 따라온다: `alert-jdbc`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `board`, `board-jdbc`, `crypto`, `dashboard`, `dashboard-jdbc`, `json`, `notification`, `notification-jdbc`, `notification-sse`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-toss`, `scheduler`, `storage`, `storage-s3`
+- 자동으로 따라온다: `alert-jdbc`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `board`, `board-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-jdbc`, `json`, `notification`, `notification-jdbc`, `notification-sse`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-toss`, `scheduler`, `storage`, `storage-s3`
 - HTTP 경로: `/api/v1/cheers`, `/api/v1/notes`
 - 문서: `docs/sample.md`
 - 짝 프런트(react-skeleton): 항목 `app-sample` · 조각 `--with-sample`
@@ -1100,7 +1118,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 - 종류 · 상태: app · stable — 위치 `apps/workbench`
 - 켜는 법: `--with-workbench`
-- 자동으로 따라온다: `alert-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `board`, `board-jdbc`, `config-aws-ssm`, `crypto`, `dashboard`, `dashboard-jdbc`, `db-mysql`, `event-kafka`, `json`, `notification`, `notification-jdbc`, `notification-slack`, `notification-sse`, `notification-websocket`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `scheduler`, `storage`, `storage-s3`
+- 자동으로 따라온다: `alert-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `board`, `board-jdbc`, `config-aws-ssm`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-jdbc`, `db-mysql`, `event-kafka`, `json`, `notification`, `notification-jdbc`, `notification-slack`, `notification-sse`, `notification-websocket`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `scheduler`, `storage`, `storage-s3`
 - HTTP 경로: `/api/v1`, `/api/v1/examples`, `/api/v1/skeleton`, `/api/v1/skeleton/enums`, `/api/v1/skeleton/json`, `/api/v1/skeleton/payments`, `/api/v1/skeleton/polymorphic/contents`
 - 문서: `docs/minimal-composition.md`, `docs/modules/README.md`
 - 짝 프런트(react-skeleton): 항목 `app-workbench` · 조각 `--with-workbench`

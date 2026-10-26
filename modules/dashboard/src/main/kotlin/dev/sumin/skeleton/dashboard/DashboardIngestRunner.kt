@@ -26,7 +26,7 @@ fun interface DashboardIngestReporter {
 class DashboardIngestRunner(
     private val ingestors: () -> List<DashboardIngestor>,
     private val store: () -> DashboardDailyStore?,
-    private val zone: ZoneId,
+    private val zone: () -> ZoneId,
     private val properties: DashboardProperties.Ingest,
     private val projects: ProjectRegistry?,
     private val reporter: DashboardIngestReporter,
@@ -55,6 +55,7 @@ class DashboardIngestRunner(
     }
 
     private fun untilNextRun(): Duration {
+        val zone = zone()
         val current = now().atZone(zone)
         var next = current.toLocalDate().atTime(properties.at).atZone(zone)
         if (!next.isAfter(current)) next = current.toLocalDate().plusDays(1).atTime(properties.at).atZone(zone)
@@ -65,12 +66,14 @@ class DashboardIngestRunner(
     fun runOnce() {
         val target = store() ?: return
         val list = ingestors()
-        val today = now().atZone(zone).toLocalDate()
-        val days = (properties.backfillDays.coerceAtLeast(1) downTo 1).map { today.minusDays(it.toLong()) }
-        if (projects == null) ingestAll(target, list, days) else projects.forEachProject { ingestAll(target, list, days) }
+        if (projects == null) ingestAll(target, list) else projects.forEachProject { ingestAll(target, list) }
     }
 
-    private fun ingestAll(target: DashboardDailyStore, list: List<DashboardIngestor>, days: List<LocalDate>) {
+    /** 프로젝트마다 그 프로젝트의 시간대로 「어제」를 센다 */
+    private fun ingestAll(target: DashboardDailyStore, list: List<DashboardIngestor>) {
+        val zone = zone()
+        val today = now().atZone(zone).toLocalDate()
+        val days = (properties.backfillDays.coerceAtLeast(1) downTo 1).map { today.minusDays(it.toLong()) }
         list.forEach { ingestor ->
             var failure: Exception? = null
             days.forEach { day ->

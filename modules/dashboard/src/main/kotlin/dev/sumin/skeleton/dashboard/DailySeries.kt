@@ -11,11 +11,12 @@ import java.time.ZoneId
  * 외부 출처 카드가 기간을 가르는 도우미 — 오늘은 실시간(출처를 직접, 캐시를 거쳐) 부르고, 어제까지는 일별 표에서 읽는다.
  * [split] 이 기간을 「표에서 읽을 지난 날」과 「오늘」로 가르고, [past] 가 지난 날의 행을 읽는다 (저장소가 없으면 `NO_HISTORY`).
  */
-class DailySeries(private val store: () -> DashboardDailyStore?, private val zone: ZoneId, private val now: () -> Instant) {
+class DailySeries(private val store: () -> DashboardDailyStore?, private val zoneSource: () -> ZoneId, private val now: () -> Instant) {
     /** [pastFrom]..[pastTo] 는 양 끝 포함 날짜(없으면 null), [today] 는 기간이 오늘을 포함할 때 오늘 칸(기간 끝에서 잘림) */
     data class Split(val pastFrom: LocalDate?, val pastTo: LocalDate?, val today: DashboardRange?)
 
     fun split(range: DashboardRange): Split {
+        val zone = zoneSource()
         val today = now().atZone(zone).toLocalDate()
         val first = range.from.atZone(zone).toLocalDate()
         val last = range.to.minusNanos(1).atZone(zone).toLocalDate()

@@ -38,6 +38,7 @@
 | `authz-jdbc` | 역할 → 권한 표 저장소 (PostgreSQL · MySQL) + 첫 기동 씨앗 | [authz-jdbc](authz-jdbc.md) |
 | `dashboard` | 관리자 대시보드 조립기: 다른 모듈이 기여한 타일 · 순위 · 퍼널을 모아 한 화면 분량으로, 짧은 캐시(프로젝트별) (기본 꺼짐) | [dashboard](dashboard.md) |
 | `dashboard-jdbc` | 대시보드 일별 집계 · 화면 설정 저장소 (PostgreSQL · MySQL) + 일별 적재 작업을 켠다 | [dashboard-jdbc](dashboard-jdbc.md) |
+| `dashboard-cloudflare` | 대시보드에 방문 · 페이지뷰 · 유입 · 경로 · 국가 · 기기 (Cloudflare Web Analytics) — 어제까지는 일별 표, 오늘은 5분 캐시, 키가 없으면 그 카드만 비어 있다 | [dashboard-cloudflare](dashboard-cloudflare.md) |
 | `payment` | 결제 계약 · 제공자 라우팅 | [payment](payment.md) |
 | `payment-jdbc` | 결제 장부 저장소 + 작업 어댑터 (PostgreSQL · MySQL) | [payment-jdbc](payment-jdbc.md) |
 | `payment-toss` | Toss 결제 제공자 | [payment-toss](payment-toss.md) |

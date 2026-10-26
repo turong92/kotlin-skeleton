@@ -31,7 +31,7 @@ class DashboardAssembler(
     private val rankings: () -> List<DashboardRanking>,
     private val funnel: () -> DashboardFunnel?,
     private val cache: DashboardCache,
-    private val currency: String,
+    private val currency: () -> String,
     private val funnelTtl: Duration = Duration.ofMinutes(5),
     private val maxCohort: Int = 50_000,
 ) {
@@ -63,7 +63,7 @@ class DashboardAssembler(
         if (m.unit == DashboardUnit.MONEY && current.value.status == DashboardResult.Status.OK) {
             // 돈이 없는 기간은 빈 목록이 아니라 0 한 줄 — 통화는 설정 통화, 없으면 직전 기간의 통화 (둘 다 없으면 통화를 모른다: 빈 목록)
             if (amounts.isEmpty() || previousAmounts?.isEmpty() == true) {
-                val zero = currency.ifBlank { null }
+                val zero = currency().ifBlank { null }
                     ?: amounts.firstOrNull()?.currency
                     ?: previousAmounts?.firstOrNull()?.currency
                     ?: value(m, period.previous).value.takeIf { it.status == DashboardResult.Status.OK }?.let { amounts(m, it) }?.firstOrNull()?.currency
@@ -165,7 +165,7 @@ class DashboardAssembler(
         if (result.status != DashboardResult.Status.OK) return emptyList()
         val data = result.data.orEmpty()
         if (m.unit != DashboardUnit.MONEY) return data
-        return data.sortedWith(compareBy<DashboardAmount> { it.currency != currency }.thenByDescending { kotlin.math.abs(it.amount) })
+        return data.sortedWith(compareBy<DashboardAmount> { it.currency != currency() }.thenByDescending { kotlin.math.abs(it.amount) })
     }
 
     private fun <T> freshness(cached: Cached<DashboardResult<T>>): DashboardFreshnessResponse? {

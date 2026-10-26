@@ -27,6 +27,7 @@
 
 - 켜기: `skeleton.dashboard.admin.enabled=true`, 보는 사람에게 `dashboard.read` 를 역할로 준다(`skeleton.authz.roles.<역할>: [dashboard.read]` 또는 `authz-jdbc` 의 역할 화면).
 - `skeleton.dashboard.zone` · `currency` · `cache.db` — [dashboard.yml](../config/modules/dashboard.yml). 여러 통화가 섞이는 돈 타일은 합치지 않고 통화마다 한 줄로 돌려주며 `currency` 통화가 맨 앞이다.
+- **프로젝트 모드(`skeleton.projects`)**: 시간대 · 돈 타일의 통화는 프로젝트마다 `config.dashboard.{zone, currency}` 로 정한다(안 적으면 공통 값). 캐시 키 · 일별 표 · 새벽 적재(프로젝트마다 그 시간대의 「어제」)도 프로젝트마다다. 관리 API 스위치 · 캐시 수명 · 적재 시각은 서버 공통이다.
 - **카드 더하기**: 계약 타입은 `platform` 의 `dev.sumin.skeleton.common.dashboard` 에 있다(모듈이 `dashboard` 를 컴파일에 끌어오지 않고 기여하려고). 빈으로 두면 끝이다.
   - 타일: `DashboardMetric` — `key` · `label` · `unit` · `source` · `order` · `value(range)` · `series(range, interval)`. `comparable = false` 면 직전 기간을 계산하지 않는다.
   - 순위 탭: `DashboardRanking` — `group`(`traffic` · `pages` · `geo` · `app`) · `columns` · `top(range, limit)`.

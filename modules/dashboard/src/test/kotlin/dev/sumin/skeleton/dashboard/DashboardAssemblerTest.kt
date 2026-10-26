@@ -20,7 +20,7 @@ class DashboardAssemblerTest {
     private val period = DashboardRangeParser(zone) { Instant.parse("2026-10-26T03:00:00Z") }.parse("2026-10-20", "2026-10-26")
 
     private fun assembler(vararg metrics: FakeMetric, currency: String = "", funnel: DashboardFunnel? = null, maxCohort: Int = 50_000) =
-        DashboardAssembler({ metrics.toList() }, { emptyList() }, { funnel }, DashboardCache(Duration.ZERO), currency, Duration.ZERO, maxCohort)
+        DashboardAssembler({ metrics.toList() }, { emptyList() }, { funnel }, DashboardCache(Duration.ZERO), { currency }, Duration.ZERO, maxCohort)
 
     @Test
     fun `the series uses the first currency of the tile for this and the previous period`() {
