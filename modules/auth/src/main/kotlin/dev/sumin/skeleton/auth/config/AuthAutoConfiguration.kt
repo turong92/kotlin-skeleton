@@ -193,8 +193,8 @@ class AuthAutoConfiguration {
                 exceptions.authenticationEntryPoint { _, response, _ ->
                     authErrorWriter.writeUnauthorized(response)
                 }
-                exceptions.accessDeniedHandler { _, response, _ ->
-                    authErrorWriter.writeForbidden(response)
+                exceptions.accessDeniedHandler { request, response, _ ->
+                    authErrorWriter.writeForbidden(request, response)
                 }
             }
             .authorizeHttpRequests { authorize ->

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 403 거절 로그 (2026-10-26)
+
+- 권한 때문에 거절된 요청(403)은 WARN 한 줄 `Forbidden: <메서드> <경로> principal=<계정 id | anonymous> code=<에러 코드> message=<메시지>` 로 남는다. 쿼리 문자열·토큰·이메일은 없고, traceId 는 MDC 로 붙는다. `ApplicationException` 403 은 기존 `Application exception:` 줄을 대신하고, 보안 체인 accessDeniedHandler 403 도 같은 줄이다. DB 기록은 없다.
+
 ### 운영자 권한 — 공용 판정 · 역할 → 권한 · 옛 역할 키 4개 삭제 (2026-10-24)
 
 - **Breaking — 옛 역할 키 네 개를 지웠다. 값이 하나라도 있으면 기동이 실패하고 메시지가 새 자리를 알려 준다.**

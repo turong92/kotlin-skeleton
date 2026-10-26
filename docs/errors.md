@@ -105,3 +105,5 @@ class OrderNotFoundException(orderId: String) : ApplicationException(
     data = mapOf("orderId" to orderId),
 )
 ```
+
+A 403 is logged as one WARN line starting `Forbidden:` (method, path without the query string, caller account id or `anonymous`, error code, message); the trace id comes from the log context. It is an application log line, not an audit record.
