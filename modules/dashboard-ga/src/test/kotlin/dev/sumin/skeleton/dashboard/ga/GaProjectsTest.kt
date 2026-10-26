@@ -77,6 +77,8 @@ class GaProjectsTest {
     fun `a failing Google makes the card an error and the key is in no message`() {
         api.status = 500
         assertEquals(DashboardResult.Status.ERROR, realtime("a").status)
+        repeat(4) { assertEquals(DashboardResult.Status.ERROR, realtime("a").status) }
+        assertEquals(1, api.requests.size)   // 실패도 짧게 캐시된다 — 장애 중에 폴링마다 다시 부르지 않는다
 
         val properties = ProjectContext.runIn(registry.projects.single { it.id == "a" }) { settings.current() }
         val failure = runCatching { client.realtime(properties, emptyList(), listOf("activeUsers"), 1) }.exceptionOrNull()

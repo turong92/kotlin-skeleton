@@ -11,7 +11,7 @@ data class Cached<T>(val value: T, val computedAt: Instant)
 /**
  * 짧은 메모리 캐시. 키는 프로젝트마다 따로(`ProjectContext.scopedKey`)이고, 같은 키가 동시에 와도 계산은 한 번이다 (single-flight) —
  * 운영자 열 명이 동시에 열어도 DB · 외부 호출은 캐시 주기당 한 번. [cacheable] 이 false 인 값(오류)은 담지 않는다.
- * [ttl] 이 0 이면 캐시하지 않고 늘 계산한다 (기본 수명은 생성자, 키마다 [get] 이 따로 줄 수 있다).
+ * [ttlOf] 가 있으면 값마다 수명을 달리 준다(예: 실패는 짧게). [ttl] 이 0 이면 캐시하지 않고 늘 계산한다 (기본 수명은 생성자, 키마다 [get] 이 따로 줄 수 있다).
  */
 class DashboardCache(
     private val ttl: Duration,
@@ -31,7 +31,7 @@ class DashboardCache(
     private val slots = ConcurrentHashMap<String, Slot>()
 
     @Suppress("UNCHECKED_CAST")
-    fun <T> get(key: String, ttl: Duration = this.ttl, cacheable: (T) -> Boolean = { true }, compute: () -> T): Cached<T> {
+    fun <T> get(key: String, ttl: Duration = this.ttl, ttlOf: ((T) -> Duration)? = null, cacheable: (T) -> Boolean = { true }, compute: () -> T): Cached<T> {
         if (ttl.isZero || ttl.isNegative) return Cached(compute(), now())
         val scoped = ProjectContext.scopedKey(key)
         val slot = slots.computeIfAbsent(scoped) { Slot() }
@@ -42,7 +42,7 @@ class DashboardCache(
             if (cacheable(value)) {
                 slot.value = value
                 slot.computedAt = at
-                slot.expiresAtNanos = nanoTime() + ttl.toNanos()
+                slot.expiresAtNanos = nanoTime() + (ttlOf?.invoke(value) ?: ttl).toNanos()
                 slot.filled = true
             } else {
                 slot.filled = false

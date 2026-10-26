@@ -20,7 +20,7 @@ class CloudflareIngestor(private val data: CloudflareSource) : DashboardIngestor
         rows += row(day, CloudflareKinds.VISITS, "", total.sumOf { it.visits })
         rows += row(day, CloudflareKinds.PAGEVIEWS, "", total.sumOf { it.pageviews })
         rows += dimensional(day, CloudflareKinds.REFERRER, loaded[CloudflareAnalyticsClient.Grouping.REFERRER].orEmpty(), { it }, { it.visits })
-        rows += dimensional(day, CloudflareKinds.PATH, loaded[CloudflareAnalyticsClient.Grouping.PATH].orEmpty(), ::withoutQuery, { it.pageviews })
+        rows += dimensional(day, CloudflareKinds.PATH, loaded[CloudflareAnalyticsClient.Grouping.PATH].orEmpty(), CloudflareKinds::withoutQuery, { it.pageviews })
         rows += dimensional(day, CloudflareKinds.COUNTRY, loaded[CloudflareAnalyticsClient.Grouping.COUNTRY].orEmpty(), { it }, { it.visits })
         rows += dimensional(day, CloudflareKinds.DEVICE, loaded[CloudflareAnalyticsClient.Grouping.DEVICE].orEmpty(), { it }, { it.visits })
         return rows
@@ -33,8 +33,6 @@ class CloudflareIngestor(private val data: CloudflareSource) : DashboardIngestor
     }
 
     private fun row(day: LocalDate, kind: String, dimension: String, value: Long) = DashboardDailyRow(day, CloudflareKinds.SOURCE, kind, dimension, value)
-
-    private fun withoutQuery(path: String) = path.substringBefore('?').substringBefore('#')
 
     private companion object {
         const val MAX_DIMENSION = 200

@@ -1,7 +1,7 @@
 # dashboard-cloudflare
 
 대시보드에 **접속 숫자**를 얹는다: 방문 · 페이지뷰 타일(`cloudflare.visits` · `cloudflare.pageviews`)과 순위 탭 넷(유입 `cloudflare.referrers` · 많이 본 페이지 `cloudflare.paths` · 국가 `cloudflare.countries` · 기기 `cloudflare.devices`). 숫자는 Cloudflare **Web Analytics(RUM)** 가 센다 — 쿠키 없음, 정적 페이지 포함, 우리 서버 부담 없음(주황 구름이면 Cloudflare 가 비콘을 자동으로 넣는다).
-읽기는 GraphQL Analytics API(`rumPageloadEventsAdaptiveGroups`)이고, 표본 추출된 값은 `sampleInterval` 로 환산한다. **화면 요청은 Cloudflare 를 직접 부르지 않는다**: 어제까지는 새벽 적재 작업이 `dashboard-jdbc` 의 일별 표에 옮겨 둔 값을 읽고(`DAILY`), 오늘은 서버 캐시(`live-cache`, 기본 5분, 프로젝트마다 한 번)를 거쳐 직접 질의한다(`CACHED`). 운영자가 열 명이어도 외부 호출은 캐시 주기당 한 번이다. 표가 없는 앱(`dashboard-jdbc` 없음)에서 지난 날이 걸린 기간은 `NO_HISTORY`, 키가 비면 `NOT_CONNECTED`(기동은 막지 않는다), 외부 호출이 실패하면 `ERROR`(그 카드만).
+읽기는 GraphQL Analytics API(`rumPageloadEventsAdaptiveGroups`)이고, 표본 추출된 값은 `sampleInterval` 로 환산한다. **화면 요청은 Cloudflare 를 직접 부르지 않는다**: 어제까지는 새벽 적재 작업이 `dashboard-jdbc` 의 일별 표에 옮겨 둔 값을 읽고(`DAILY`), 오늘은 서버 캐시(`live-cache`, 기본 5분, 프로젝트마다 한 번)를 거쳐 직접 질의한다(`CACHED`). 운영자가 열 명이어도 외부 호출은 캐시 주기당 한 번이다. 실패한 호출도 60초 동안 캐시해(장애 중에 폴링마다 다시 부르지 않는다) 그 사이에는 카드가 `ERROR` 로 답한다. 오늘 직접 질의한 경로도 적재분과 같이 쿼리 문자열을 뗀다. 표가 없는 앱(`dashboard-jdbc` 없음)에서 지난 날이 걸린 기간은 `NO_HISTORY`, 키가 비면 `NOT_CONNECTED`(기동은 막지 않는다), 외부 호출이 실패하면 `ERROR`(그 카드만).
 일별 표에는 **집계 숫자만** 담는다 — 경로는 쿼리 문자열과 조각을 뗀 것, 빈 유입은 `(none)`, 차원은 상위 50개.
 
 | 항목 | 내용 |

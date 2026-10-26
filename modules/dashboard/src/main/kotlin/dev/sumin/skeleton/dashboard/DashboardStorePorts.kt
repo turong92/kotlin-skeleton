@@ -16,7 +16,7 @@ data class DashboardDailyRow(
 )
 
 interface DashboardDailyStore {
-    /** (day, source, kind, dimension) 이 같으면 덮어쓴다 — 같은 날을 두 번 적재해도 같은 행 */
+    /** 넘긴 행이 그 (day, source, kind) 의 전부가 된다 — 같은 날을 다시 적재하면 같은 행이고, 이번 결과에서 빠진 차원의 옛 줄은 지워진다. (day, source, kind) 단위로 한 트랜잭션 */
     fun upsert(rows: List<DashboardDailyRow>)
 
     fun read(source: String, kind: String, fromDay: LocalDate, toDay: LocalDate): List<DashboardDailyRow>

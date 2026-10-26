@@ -42,7 +42,7 @@ Conventions (envelope, error body, tokens): [account-http-contract.md](account-h
 - `status`: `OK` · `NOT_CONNECTED` (no key configured) · `NO_HISTORY` (a past period without `dashboard-jdbc`) · `ERROR` (the source failed — the response is still `200`). Anything but `OK` has an empty `value` / `series` / `rows` and, mostly, `freshness: null`.
 - `freshness.kind`: `LIVE` (`asOf` = when the server computed it) · `CACHED` (`asOf` = when it was fetched from the outside) · `DAILY` (`asOf` = when the daily load ran).
 - `rankings` hold the top 10 rows; `group` is `traffic` · `pages` · `geo` · `app` (a card per group, a tab per ranking). `funnel` is `null` when the app has no cohort source; otherwise it has a `status`: `OK` · `TOO_LARGE` (the cohort of the period exceeds 50,000 accounts — `steps` is empty, shorten the period) · `ERROR` (the calculation failed — `steps` is empty). With `OK` the first step is the cohort itself (`rate` 1.0), the other `rate`s are against the cohort size. The funnel is cached for 5 minutes, the other numbers for 75 seconds (`skeleton.dashboard.cache`). `reference` (anonymous visits, not part of the cohort) is `null` when the app has no such metric or it is not `OK`; its `rate` is cohort size / visits.
-- `ga.returning` is a **ranking**, not a tile: group `traffic`, columns `["Users"]`, exactly two rows `New` and `Returning` with the user counts (`values: [n]`). The screen computes the share from the two counts. (Five GA rankings in all, as in the key list below.)
+- `ga.returning` is a **ranking**, not a tile: group `traffic`, columns `["Visitors", "Users"]`, exactly two rows `New` and `Returning` with the user counts (`values: [n]`). The screen computes the share from the two counts. (Five GA rankings in all, as in the key list below.)
 - Tile keys: `cloudflare.visits` · `cloudflare.pageviews` · `account.signed-up` · `auth-session.active` · `payment.net-revenue` · `payment.paid-count`. Ranking keys: `cloudflare.{referrers,paths,countries,devices}` · `ga.{channels,campaigns,landing-pages,page-transitions,returning}` · `app.*`.
 
 ## 2. One ranking
@@ -61,7 +61,7 @@ Needs `dashboard.read`. Provided by `dashboard-ga`; **`404` when the app does no
 ```
 `status` as for the cards (`NOT_CONNECTED` = answer `200` with zeros and empty lists). Cached on the server for 60 seconds per project.
 
-**GA rankings** (`ga.*`) are filled from the daily table only: today is not loaded (GA settles its numbers hours later), so a range ending today shows data up to yesterday; `freshness` is `DAILY` with the time of the last load ("GA as of hh:mm"). `ga.returning` has exactly two rows `New` and `Returning` (`values: [users]`). With a configured key event the sessions-based rankings get a second column `Conversions` (`columns` and `values` have two entries then).
+**GA rankings** (`ga.*`) are filled from the daily table only: today is not loaded (GA settles its numbers hours later), so a range ending today shows data up to yesterday; `freshness` is `DAILY` with the time of the last load ("GA as of hh:mm"). `ga.returning` has `columns: ["Visitors", "Users"]` (first column is the row label, like every ranking) and exactly two rows `New` and `Returning` (`values: [users]`); read the rows by name. The users are summed over the days of the range, so someone who came on several days counts several times — treat the share as approximate. With a configured key event the sessions-based rankings get a second column `Conversions` (`columns` then has three entries — label, Sessions, Conversions — and each row's `values` two).
 
 ## 3. Screen settings (your own)
 
@@ -71,7 +71,8 @@ Needs `dashboard.read`. **Your own settings only** — there is no account id in
 ```json
 { "value": { "hidden": ["cloudflare.pageviews", "funnel"], "order": ["tiles", "chart", "rankings.traffic", "rankings.pages", "rankings.geo", "funnel", "app"] } }
 ```
-- `hidden`: card keys and tile / ranking keys that are switched off. `order`: card keys in display order. Card keys: `tiles` · `chart` · `rankings.traffic` · `rankings.pages` · `rankings.geo` · `funnel` · `app`.
+- `hidden`: card keys and tile / ranking keys that are switched off. `order`: card keys in display order.
+- **Card keys (canonical)**: `tiles` · `chart` · `funnel` · `app` · `returning` (the small new / returning card, drawn only when `ga.returning` exists) · `rankings.<group>` for the ranking groups — `rankings.traffic`, `rankings.pages`, `rankings.geo` always, and `rankings.<group>` for any `group` a ranking of this app has in the overview response. The `app` ranking group is drawn as the `app` card. A card key the server does not know is `400`.
 - GET before any save answers the empty default `{ "hidden": [], "order": [] }`. PUT replaces everything (body `{ hidden, order }`, missing = empty) and answers what was stored.
 - `400 DASHBOARD.LAYOUT_INVALID`: a key the app does not know (not a card key and not a tile / ranking of this app), a duplicate, an `order` entry that is not a card key, too many keys, or more than 4000 characters when stored.
 

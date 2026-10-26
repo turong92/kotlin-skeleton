@@ -25,6 +25,9 @@ object CloudflareKinds {
     const val PATH = "path"
     const val COUNTRY = "country"
     const val DEVICE = "device"
+
+    /** 경로는 쿼리 문자열과 조각을 뗀다 — 적재분과 오늘 직접 질의분이 같은 키로 합쳐진다 */
+    fun withoutQuery(path: String) = path.substringBefore('?').substringBefore('#')
 }
 
 /**
@@ -84,7 +87,7 @@ class CloudflareSource(
             val sums = HashMap<String, Long>()
             past(kind).forEach { if (it.dimension.isNotEmpty()) sums.merge(it.dimension, it.value, Long::plus) }
             val today = split.today?.let { live(it, listOf(grouping)) }
-            today?.value?.get(grouping)?.forEach { sums.merge(label(it.dimension), if (kind == CloudflareKinds.PATH) it.pageviews else it.visits, Long::plus) }
+            today?.value?.get(grouping)?.forEach { sums.merge(label(if (kind == CloudflareKinds.PATH) CloudflareKinds.withoutQuery(it.dimension) else it.dimension), if (kind == CloudflareKinds.PATH) it.pageviews else it.visits, Long::plus) }
             Composed(sums.entries.sortedWith(compareByDescending<Map.Entry<String, Long>> { it.value }.thenBy { it.key }).take(limit).map { DashboardRow(it.key, listOf(it.value)) }, today?.computedAt)
         }
 
@@ -98,11 +101,28 @@ class CloudflareSource(
         ))
     }
 
+    /** 외부 호출 결과(또는 실패)를 캐시한다 — 실패도 [FAILURE_TTL] 동안 담아 장애 중에 폴링마다 Cloudflare 를 다시 부르지 않는다 */
     private fun live(range: DashboardRange, groupings: List<CloudflareAnalyticsClient.Grouping>): Cached<Map<CloudflareAnalyticsClient.Grouping, List<CloudflareRow>>> {
         val properties = settings.current()
-        return cache.get("cf|${properties.siteTag}|${range.from}|${range.to}|${groupings.joinToString { it.alias }}", ttl = properties.liveCache) {
-            client.query(properties, range.from, range.to, groupings)
+        val cached = cache.get<Outcome>(
+            "cf|${properties.siteTag}|${range.from}|${range.to}|${groupings.joinToString { it.alias }}",
+            ttl = properties.liveCache,
+            ttlOf = { if (it.failed) FAILURE_TTL else properties.liveCache },
+        ) {
+            try {
+                Outcome(client.query(properties, range.from, range.to, groupings))
+            } catch (e: Exception) {
+                log.warn("Cloudflare analytics failed: {}", e.javaClass.simpleName)
+                log.debug("Cloudflare analytics failure", e)
+                Outcome(null)
+            }
         }
+        val data = cached.value.data ?: throw CloudflareQueryException("Cloudflare analytics is failing (retrying after a short pause)")
+        return Cached(data, cached.computedAt)
+    }
+
+    private class Outcome(val data: Map<CloudflareAnalyticsClient.Grouping, List<CloudflareRow>>?) {
+        val failed: Boolean get() = data == null
     }
 
     private class Composed<T>(val data: T, val fetchedAt: Instant?)
@@ -138,6 +158,8 @@ class CloudflareSource(
     private class NoHistory : RuntimeException(null, null, false, false)
 
     companion object {
+        private val FAILURE_TTL: java.time.Duration = java.time.Duration.ofSeconds(60)
+
         /** 차원 값이 비면 「(none)」 — 빈 문자열은 표에서 전체 값이라 차원으로 쓸 수 없다 */
         fun label(raw: String): String = raw.ifBlank { "(none)" }
     }

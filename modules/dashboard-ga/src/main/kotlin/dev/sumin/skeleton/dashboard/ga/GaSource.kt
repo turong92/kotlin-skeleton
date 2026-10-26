@@ -71,13 +71,21 @@ class GaSource(
         val properties = settings.current()
         if (!properties.connected) return DashboardResult(DashboardResult.Status.NOT_CONNECTED)
         return try {
-            val cached = cache.get("ga-realtime|${properties.propertyId}", ttl = properties.realtimeCache) {
-                val total = client.realtime(properties, emptyList(), listOf("activeUsers"), 1).firstOrNull()?.metrics?.firstOrNull() ?: 0L
-                val pages = client.realtime(properties, listOf("unifiedScreenName"), listOf("activeUsers"), REALTIME_ROWS).map { DashboardRow(it.dimensions.first().ifBlank { "(none)" }, it.metrics) }
-                val countries = client.realtime(properties, listOf("country"), listOf("activeUsers"), REALTIME_ROWS).map { DashboardRow(it.dimensions.first().ifBlank { "(none)" }, it.metrics) }
-                GaRealtimeSnapshot(total, pages, countries)
+            // 성공도 실패도 캐시한다 — 실패는 짧게(FAILURE_TTL) 담아 장애 중에 폴링마다 Google 을 다시 부르지 않는다
+            val cached = cache.get<RealtimeOutcome>("ga-realtime|${properties.propertyId}", ttl = properties.realtimeCache, ttlOf = { if (it.snapshot == null) FAILURE_TTL else properties.realtimeCache }) {
+                try {
+                    val total = client.realtime(properties, emptyList(), listOf("activeUsers"), 1).firstOrNull()?.metrics?.firstOrNull() ?: 0L
+                    val pages = client.realtime(properties, listOf("unifiedScreenName"), listOf("activeUsers"), REALTIME_ROWS).map { DashboardRow(it.dimensions.first().ifBlank { "(none)" }, it.metrics) }
+                    val countries = client.realtime(properties, listOf("country"), listOf("activeUsers"), REALTIME_ROWS).map { DashboardRow(it.dimensions.first().ifBlank { "(none)" }, it.metrics) }
+                    RealtimeOutcome(GaRealtimeSnapshot(total, pages, countries))
+                } catch (e: Exception) {
+                    log.warn("GA realtime failed: {}", e.javaClass.simpleName)
+                    log.debug("GA realtime failure", e)
+                    RealtimeOutcome(null)
+                }
             }
-            DashboardResult(DashboardResult.Status.OK, cached.value, DashboardFreshness(DashboardFreshness.Kind.CACHED, cached.computedAt))
+            val snapshot = cached.value.snapshot ?: return DashboardResult(DashboardResult.Status.ERROR)
+            DashboardResult(DashboardResult.Status.OK, snapshot, DashboardFreshness(DashboardFreshness.Kind.CACHED, cached.computedAt))
         } catch (e: Exception) {
             log.warn("GA realtime failed: {}", e.javaClass.simpleName)
             log.debug("GA realtime failure", e)
@@ -85,7 +93,10 @@ class GaSource(
         }
     }
 
+    private class RealtimeOutcome(val snapshot: GaRealtimeSnapshot?)
+
     private companion object {
         const val REALTIME_ROWS = 10
+        val FAILURE_TTL: java.time.Duration = java.time.Duration.ofSeconds(60)
     }
 }

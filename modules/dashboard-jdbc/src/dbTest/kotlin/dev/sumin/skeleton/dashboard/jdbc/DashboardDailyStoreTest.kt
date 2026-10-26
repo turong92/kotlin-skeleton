@@ -55,6 +55,19 @@ class DashboardDailyStoreTest {
     }
 
     @Test
+    fun `reloading a day where a dimension dropped out leaves no old line for it, and other kinds, days and sources are untouched`() {
+        store.upsert(listOf(row(10, "google.com"), row(4, "bing.com"), row(14), row(9, "/a", kind = "path"), row(5, "google.com", d = day.minusDays(1))))
+        store.upsert(listOf(DashboardDailyRow(day, "ga", "referrer", "x", 1)))
+        store.upsert(listOf(row(12, "google.com"), row(12)))   // 둘째 적재: bing.com 이 상위 밖으로 밀렸다
+
+        val referrers = store.read("cloudflare", "referrer", day, day).associate { it.dimension to it.value }
+        assertEquals(mapOf("google.com" to 12L, "" to 12L), referrers)
+        assertEquals(9, store.read("cloudflare", "path", day, day).single().value)
+        assertEquals(5, store.read("cloudflare", "referrer", day.minusDays(1), day.minusDays(1)).single().value)
+        assertEquals(1, store.read("ga", "referrer", day, day).single().value)
+    }
+
+    @Test
     fun `a changed value overwrites and bumps the load time`() {
         store.upsert(listOf(row(10, "google.com")))
         val first = store.lastIngested("cloudflare")

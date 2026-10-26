@@ -1134,12 +1134,8 @@
       "basePaths": [],
       "secrets": [
         {
-          "env": [
-            "<P>_DASHBOARD_CLOUDFLARE_API_TOKEN",
-            "<P>_DASHBOARD_CLOUDFLARE_ACCOUNT_ID",
-            "<P>_DASHBOARD_CLOUDFLARE_SITE_TAG"
-          ],
-          "whenMissing": "셋 중 하나라도 비면 Cloudflare 카드만 「연결하면 보입니다」 — 서버는 뜬다"
+          "env": ["<P>_DASHBOARD_CLOUDFLARE_API_TOKEN"],
+          "whenMissing": "토큰이 비거나 계정 id · 사이트 태그(설정, 비밀 아님)가 비면 Cloudflare 카드만 「연결하면 보입니다」 — 서버는 뜬다"
         }
       ],
       "docs": ["docs/modules/dashboard-cloudflare.md"],
@@ -1181,8 +1177,8 @@
       "basePaths": ["/api/v1/admin/dashboard"],
       "secrets": [
         {
-          "env": ["<P>_DASHBOARD_GA_CREDENTIALS", "<P>_DASHBOARD_GA_PROPERTY_ID"],
-          "whenMissing": "둘 중 하나라도 비면 GA 카드만 「연결하면 보입니다」 — 서버는 뜬다"
+          "env": ["<P>_DASHBOARD_GA_CREDENTIALS"],
+          "whenMissing": "키가 비거나 속성 id(설정, 비밀 아님)가 비면 GA 카드만 「연결하면 보입니다」 — 서버는 뜬다"
         }
       ],
       "docs": ["docs/modules/dashboard-ga.md"],

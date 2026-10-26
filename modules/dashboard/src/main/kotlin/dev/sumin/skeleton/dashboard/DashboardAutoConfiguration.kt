@@ -80,7 +80,11 @@ class DashboardAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     fun dashboardLayouts(store: ObjectProvider<DashboardLayoutStore>, metrics: ObjectProvider<DashboardMetric>, rankings: ObjectProvider<DashboardRanking>): DashboardLayouts =
-        DashboardLayouts({ store.getIfAvailable() }, { metrics.orderedStream().map { it.key }.toList().toSet() + rankings.orderedStream().map { it.key }.toList() })
+        DashboardLayouts(
+            { store.getIfAvailable() },
+            { metrics.orderedStream().map { it.key }.toList().toSet() + rankings.orderedStream().map { it.key }.toList() },
+            { rankings.orderedStream().map { it.group }.toList().toSet() },
+        )
 
     @Bean
     @ConditionalOnMissingBean

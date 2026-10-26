@@ -75,6 +75,8 @@ class CloudflareProjectsTest {
         api.status = 500
         val result = totals("a")
         assertEquals(DashboardResult.Status.ERROR, result.status)
+        repeat(4) { assertEquals(DashboardResult.Status.ERROR, totals("a").status) }
+        assertEquals(1, api.requests.size)   // 실패도 짧게 캐시된다 — 장애 중에 폴링마다 다시 부르지 않는다
 
         val failure = runCatching { CloudflareAnalyticsClient(httpClient()).query(inProject("a").let { ProjectContext.runIn(it) { CloudflareSettings(shared, registry).current() } }, today.from, today.to, listOf(CloudflareAnalyticsClient.Grouping.TOTAL)) }.exceptionOrNull()
         assertNotNull(failure)

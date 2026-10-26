@@ -579,7 +579,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 의존 한 줄: `implementation(project(":modules:dashboard-cloudflare"))`
 - 자동으로 따라온다: `dashboard`
 - 설정 접두사 `skeleton.dashboard-cloudflare` — 키와 기본값 `docs/config/modules/dashboard-cloudflare.yml`
-- 비밀 · 환경변수: `<P>_DASHBOARD_CLOUDFLARE_API_TOKEN`, `<P>_DASHBOARD_CLOUDFLARE_ACCOUNT_ID`, `<P>_DASHBOARD_CLOUDFLARE_SITE_TAG` — 빠지면: 셋 중 하나라도 비면 Cloudflare 카드만 「연결하면 보입니다」 — 서버는 뜬다
+- 비밀 · 환경변수: `<P>_DASHBOARD_CLOUDFLARE_API_TOKEN` — 빠지면: 토큰이 비거나 계정 id · 사이트 태그(설정, 비밀 아님)가 비면 Cloudflare 카드만 「연결하면 보입니다」 — 서버는 뜬다
 - 문서: `docs/modules/dashboard-cloudflare.md`
 - 짝 프런트(react-skeleton): 항목 `admin-dashboard` · 패키지 `@skeleton/dashboard` · 조각 기본 포함(덧붙일 것 없음)
 - 쓰지 않는 경우:
@@ -597,7 +597,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 자동으로 따라온다: `dashboard`
 - 설정 접두사 `skeleton.dashboard-ga` — 키와 기본값 `docs/config/modules/dashboard-ga.yml`
 - HTTP 경로: `/api/v1/admin/dashboard`
-- 비밀 · 환경변수: `<P>_DASHBOARD_GA_CREDENTIALS`, `<P>_DASHBOARD_GA_PROPERTY_ID` — 빠지면: 둘 중 하나라도 비면 GA 카드만 「연결하면 보입니다」 — 서버는 뜬다
+- 비밀 · 환경변수: `<P>_DASHBOARD_GA_CREDENTIALS` — 빠지면: 키가 비거나 속성 id(설정, 비밀 아님)가 비면 GA 카드만 「연결하면 보입니다」 — 서버는 뜬다
 - 문서: `docs/modules/dashboard-ga.md`
 - 짝 프런트(react-skeleton): 항목 `admin-dashboard` · 패키지 `@skeleton/dashboard` · 조각 기본 포함(덧붙일 것 없음)
 - 쓰지 않는 경우:

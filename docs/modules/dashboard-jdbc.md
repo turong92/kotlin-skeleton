@@ -2,7 +2,7 @@
 
 `dashboard` 의 저장 포트 둘을 JDBC(PostgreSQL · MySQL)로 구현한다. 테이블 2 개: `dashboard_daily`(외부 출처의 하루치 집계 — `(day, source, kind, dimension)` 이 기본키, 값은 `bigint`, 마지막 적재 시각 `updated_at`) · `dashboard_layouts`(계정별 화면 설정 JSON 한 줄).
 **집계 숫자만 담는다** — IP · 이메일 · 계정 id 목록은 일별 표에 없고, 경로는 쿼리 문자열을 뗀 것만 저장한다(적재기의 몫). 계정 id 는 화면 설정 표에만 있고, 계정이 지워질 때 `AccountErasureListener`(`dashboard-jdbc`) 가 그 줄을 지운다.
-쓰기는 방언 문법(`on conflict`/`on duplicate key`)에 기대지 않는 두 문장이다: 충돌하면 아무것도 하지 않는 insert(`SqlDialect.insertIgnore`) 다음 값을 덮어쓰는 update. 같은 날을 두 번 적재해도 같은 행이고 값이 바뀌었으면 마지막 값이 남는다(두 DB 에서 시험). MySQL 의 `dimension` · `account_id` 는 이진 정렬이라 `Google.com` 과 `google.com` 이 한 줄로 합쳐지지 않는다.
+쓰기는 방언 문법(`on conflict`/`on duplicate key`)에 기대지 않는 두 문장이다: 충돌하면 아무것도 하지 않는 insert(`SqlDialect.insertIgnore`) 다음 값을 덮어쓰는 update. 같은 날을 두 번 적재해도 같은 행이고 값이 바뀌었으면 마지막 값이 남는다. 쓰기는 (날짜 · 출처 · 종류)마다 한 트랜잭션에서 **지우고 넣기**라, 다시 적재했을 때 이번 결과에서 빠진 차원(상위 50 밖으로 밀린 유입처 …)의 옛 줄이 남지 않는다(두 DB 에서 시험). MySQL 의 `dimension` · `account_id` 는 이진 정렬이라 `Google.com` 과 `google.com` 이 한 줄로 합쳐지지 않는다.
 
 이 모듈을 붙이면 `dashboard` 의 적재 작업(`DashboardIngestRunner`)이 켜진다 — 적재기(`DashboardIngestor`) 빈이 있을 때만 일을 한다(출처 모듈이 낸다): 기동 직후 한 번, 그다음 매일 `ingest.at`(대시보드 시간대, `dashboard` 의 설정)에 어제부터 `backfill-days` 일을 다시 적재한다. 없으면 외부 출처의 지난 기간은 `NO_HISTORY` 이고 화면 설정은 브라우저 저장으로 물러난다.
 

@@ -1,5 +1,9 @@
 package dev.sumin.skeleton.dashboard
 
+import dev.sumin.skeleton.common.dashboard.DashboardRange
+import dev.sumin.skeleton.common.dashboard.DashboardRanking
+import dev.sumin.skeleton.common.dashboard.DashboardResult
+import dev.sumin.skeleton.common.dashboard.DashboardRow
 import dev.sumin.skeleton.dashboardtest.DashboardFakes
 import dev.sumin.skeleton.dashboardtest.DashboardTestApplication
 import dev.sumin.skeleton.dashboardtest.operator
@@ -36,7 +40,7 @@ class MemoryLayoutStore {
     properties = ["skeleton.dashboard.admin.enabled=true", "skeleton.authz.roles.VIEWER=dashboard.read"],
 )
 @AutoConfigureMockMvc
-@Import(DashboardFakes::class, MemoryLayoutStore::class)
+@Import(DashboardFakes::class, MemoryLayoutStore::class, ExtraRankings::class)
 class DashboardLayoutTest {
     @Autowired lateinit var mvc: MockMvc
 
@@ -57,6 +61,16 @@ class DashboardLayoutTest {
     }
 
     @Test
+    fun `a layout with the returning card, the app group and a group of this app saves and loads back`() {
+        val body = """{"hidden":["fake.pages","ga.returning","funnel","rankings.zzz"],"order":["tiles","chart","rankings.traffic","returning","rankings.pages","rankings.zzz","funnel","app"]}"""
+        save(a, body).andExpect(status().isOk)
+
+        mvc.perform(get(LAYOUT).principal(a)).andExpect(status().isOk)
+            .andExpect(jsonPath("$.value.order.length()").value(8)).andExpect(jsonPath("$.value.order[3]").value("returning"))
+            .andExpect(jsonPath("$.value.hidden[1]").value("ga.returning"))
+    }
+
+    @Test
     fun `without dashboard read it is 403, anonymous 401`() {
         val other = operator("acc_other", "USER")
         mvc.perform(get(LAYOUT)).andExpect(status().isUnauthorized)
@@ -73,6 +87,22 @@ class DashboardLayoutTest {
             """{"hidden":[${(1..200).joinToString(",") { "\"fake.count\"" }}],"order":[]}""",
         ).forEach { body -> save(a, body).andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("DASHBOARD.LAYOUT_INVALID")) }
     }
+}
+
+@TestConfiguration(proxyBeanMethods = false)
+class ExtraRankings {
+    private fun ranking(rankingKey: String, rankingGroup: String) = object : DashboardRanking {
+        override val key = rankingKey
+        override val group = rankingGroup
+        override val label = rankingKey
+        override val columns = listOf("A", "B")
+        override val source = "app"
+        override val order = 1
+        override fun top(range: DashboardRange, limit: Int) = DashboardResult(DashboardResult.Status.OK, emptyList<DashboardRow>())
+    }
+
+    @Bean fun gaReturning(): DashboardRanking = ranking("ga.returning", "traffic")
+    @Bean fun appGroup(): DashboardRanking = ranking("app.stats", "zzz")
 }
 
 /** 저장소(dashboard-jdbc)가 없으면 404 LAYOUT_UNAVAILABLE — 프런트는 브라우저 저장으로 물러난다 */
