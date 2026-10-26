@@ -44,4 +44,4 @@ base64url 의 **마지막 글자만** 바꾸면 버려지는 하위 비트만 �
 - push · PR (`ci.yml`): `./gradlew build -x newProjectChecks -x mysqlTest` — 단위 · 웹 · Postgres DB 시험. 새 프로젝트 빠른 검사는 `new-project.yml`(`--quick`)이, 배포 계약은 `deploy-contract.yml` 이 따로 돈다. 같은 브랜치에 새로 올라오면 돌던 것은 멈춘다.
 - 하루 한 번 + 수동 (`nightly.yml`): 전체 `./gradlew build`(MySQL `mysqlTest` · `newProjectChecks` 포함)와 `scripts/test-new-project.sh --full`(조합을 찍어 각각 `./gradlew build`)을 별도 잡으로 나란히 돈다.
 - MySQL 에서만 드러나는 문제는 다음 날 새벽에야 잡힌다. 급하면 `Actions > nightly > Run workflow` 로 바로 돌린다.
-- DB 방언과 무관한 서비스 · 스프링 동작만 보는 DB 시험(`JdbcQueryCountDbTest` · `JdbcEventsDbTest` · `JdbcAccountTransactionDbTest`)은 `src/postgresTest` 에 둬서 Postgres 한 벌만 돈다. SQL · 방언 · 락 · 동시성이 걸린 시험은 `src/dbTest` 에서 두 DB 로 돈다.
+- N+1 가드 `JdbcQueryCountDbTest`(board-jdbc)만 `src/postgresTest` 에 둬서 Postgres 한 벌로 돈다(문장 수는 방언과 무관). 그래서 MySQL 로 찍은 프로젝트(`src/postgresTest` 를 지운다)에는 이 N+1 가드가 없다. 트랜잭션 · 롤백 · 락 · 동시성 같은 데이터 무결성 시험은 `src/dbTest` 에서 두 DB 로 돈다.

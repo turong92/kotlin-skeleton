@@ -79,7 +79,7 @@ if (providers.gradleProperty("native").isPresent) {
     }
 }
 
-// DB 통합 테스트를 PostgreSQL · MySQL 두 벌로 돈다. 같은 테스트 소스(src/dbTest), 묶음마다 방언 모듈 하나만 끼운다
+// DB 통합 테스트를 PostgreSQL · MySQL 두 벌로 돈다. 같은 테스트 소스(src/dbTest), 묶음마다 방언 모듈 하나만 끼운다 (한 DB 로 충분한 시험은 src/postgresTest)
 // (실제 앱처럼 db-* 모듈은 정확히 하나여야 하므로 한 클래스패스에 둘을 넣지 않는다)
 val dbTestModules = setOf(":modules:job-queue-jdbc", ":modules:notification-jdbc", ":modules:board-jdbc", ":modules:alert-jdbc", ":modules:legal-jdbc", ":modules:authz-jdbc", ":modules:auth-session-jdbc", ":modules:account-jdbc", ":modules:author-profile-jdbc", ":modules:payment-jdbc")
 val dbSuites = mapOf(
