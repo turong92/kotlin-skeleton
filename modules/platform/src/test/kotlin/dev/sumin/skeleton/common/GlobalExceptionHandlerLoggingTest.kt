@@ -9,7 +9,11 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import org.slf4j.LoggerFactory
+import java.security.Principal
 import org.springframework.http.HttpStatus
+import org.springframework.mock.web.MockHttpServletRequest
+import org.springframework.web.context.request.RequestContextHolder
+import org.springframework.web.context.request.ServletRequestAttributes
 
 class GlobalExceptionHandlerLoggingTest {
     @Test
@@ -29,6 +33,34 @@ class GlobalExceptionHandlerLoggingTest {
             val event = captured.events.single()
             assertEquals(Level.WARN, event.level)
             assertNull(event.throwableProxy)
+        }
+    }
+
+    @Test
+    fun `forbidden exceptions log one Forbidden line with caller and path but no query`() {
+        val request = MockHttpServletRequest("POST", "/api/payments/refund").apply {
+            queryString = "email=a@b.com&token=secret"
+            userPrincipal = Principal { "acc_op" }
+        }
+        RequestContextHolder.setRequestAttributes(ServletRequestAttributes(request))
+        try {
+            captureLogger().use { captured ->
+                GlobalExceptionHandler().handleApplication(
+                    ApplicationException(
+                        message = "Missing permission: payment.refund",
+                        errorCode = PlatformErrorCode.FORBIDDEN,
+                    ),
+                )
+
+                val event = captured.events.single()
+                assertEquals(Level.WARN, event.level)
+                assertEquals(
+                    "Forbidden: POST /api/payments/refund principal=acc_op code=COMMON.FORBIDDEN message=Missing permission: payment.refund",
+                    event.formattedMessage,
+                )
+            }
+        } finally {
+            RequestContextHolder.resetRequestAttributes()
         }
     }
 

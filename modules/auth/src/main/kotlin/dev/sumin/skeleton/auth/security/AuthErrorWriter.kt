@@ -1,8 +1,10 @@
 package dev.sumin.skeleton.auth.security
 
 import dev.sumin.skeleton.common.ApiError
+import dev.sumin.skeleton.common.ForbiddenLog
 import dev.sumin.skeleton.common.PlatformErrorCode
 import dev.sumin.skeleton.common.TraceIdFilter
+import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.slf4j.MDC
 import org.springframework.http.MediaType
@@ -13,6 +15,12 @@ class AuthErrorWriter(
 ) {
     fun writeUnauthorized(response: HttpServletResponse, detail: String? = null) {
         write(response, PlatformErrorCode.UNAUTHORIZED, detail)
+    }
+
+    /** 보안 체인이 권한으로 거절한 요청 — 403 을 쓰기 전에 `Forbidden:` 한 줄을 남긴다 */
+    fun writeForbidden(request: HttpServletRequest, response: HttpServletResponse) {
+        ForbiddenLog.warn(request, PlatformErrorCode.FORBIDDEN.code, "Access denied")
+        writeForbidden(response)
     }
 
     fun writeForbidden(response: HttpServletResponse, detail: String? = null) {

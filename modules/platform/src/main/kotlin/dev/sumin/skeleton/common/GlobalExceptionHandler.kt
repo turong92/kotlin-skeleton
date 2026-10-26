@@ -14,6 +14,8 @@ import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
 import org.springframework.web.method.annotation.HandlerMethodValidationException
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException
+import org.springframework.web.context.request.RequestContextHolder
+import org.springframework.web.context.request.ServletRequestAttributes
 import org.springframework.web.servlet.resource.NoResourceFoundException
 
 /**
@@ -26,6 +28,8 @@ import org.springframework.web.servlet.resource.NoResourceFoundException
 @RestControllerAdvice
 class GlobalExceptionHandler {
     private val log = LoggerFactory.getLogger(javaClass)
+
+    private fun currentRequest() = (RequestContextHolder.getRequestAttributes() as? ServletRequestAttributes)?.request
 
     @ExceptionHandler(MethodArgumentNotValidException::class)
     fun handleValidation(ex: MethodArgumentNotValidException): ResponseEntity<ApiError> {
@@ -137,6 +141,8 @@ class GlobalExceptionHandler {
     fun handleApplication(ex: ApplicationException): ResponseEntity<ApiError> {
         if (ex.status.is5xxServerError) {
             log.error("Application exception: {}", ex.message, ex)
+        } else if (ex.status == HttpStatus.FORBIDDEN) {
+            ForbiddenLog.warn(currentRequest(), ex.errorCode.code, ex.message)
         } else {
             log.warn("Application exception: {}", ex.message)
         }

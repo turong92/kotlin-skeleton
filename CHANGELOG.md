@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **찍은 프로젝트**: `new-project.sh` 가 `nightly.yml` 을 지우고 `ci.yml` 의 build 를 `./gradlew build` 로 되돌려 쓴다(찍은 프로젝트에는 `newProjectChecks` 가 없어 `-x` 가 실패한다). 이미 찍은 프로젝트는 영향 없음; 스켈레톤의 ci.yml 을 손으로 가져갈 때는 `-x …` 를 빼고 가져간다.
 - 테스트: `GateRequestsTest` 신설(두 게이트 인터셉터가 공유하는 요청 규칙 5건을 한 벌로 — 인터셉터 테스트의 같은 단정 10개 삭제), `WorkbenchApplicationTests.contextLoads` · `apps/sample` 의 `ClientIpPlatformEnvTest` 복사본 삭제, `JdbcQueryCountDbTest` 는 `src/postgresTest`(Postgres 한 벌).
 
+### 403 거절 로그 (2026-10-26)
+
+- 권한 때문에 거절된 요청(403)은 WARN 한 줄 `Forbidden: <메서드> <경로> principal=<Authentication.name | anonymous> code=<에러 코드> message=<메시지>` 로 남는다. 쿼리 문자열·토큰·이메일은 없고(기본 auth 에서 `Authentication.name` 은 계정 id — 체인을 바꾸는 앱은 name 이 계정 id 를 돌려주게 할 것), 경로는 요청 로그와 같은 마스킹을 거치고, traceId 는 MDC 로 붙는다. `ApplicationException` 403 은 기존 `Application exception:` 줄을 대신하고, 보안 체인 accessDeniedHandler 403 도 같은 줄이다(break-glass 거절은 자기 WARN 줄을 쓴다). DB 기록은 없다.
+
 ### 운영자 권한 — 공용 판정 · 역할 → 권한 · 옛 역할 키 4개 삭제 (2026-10-24)
 
 - **Breaking — 옛 역할 키 네 개를 지웠다. 값이 하나라도 있으면 기동이 실패하고 메시지가 새 자리를 알려 준다.**

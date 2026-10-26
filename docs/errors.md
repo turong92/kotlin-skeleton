@@ -105,3 +105,5 @@ class OrderNotFoundException(orderId: String) : ApplicationException(
     data = mapOf("orderId" to orderId),
 )
 ```
+
+A 403 (except a break-glass refusal, which has its own WARN line) is logged as one WARN line starting `Forbidden:` (method, path without the query string, caller `Authentication.name` — the account id with the default auth, so an app that swaps the security chain should keep it that way — or `anonymous`, error code, message); the trace id comes from the log context. It is an application log line, not an audit record.
