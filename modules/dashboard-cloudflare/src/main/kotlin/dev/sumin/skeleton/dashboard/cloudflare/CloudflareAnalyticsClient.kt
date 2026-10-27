@@ -9,22 +9,25 @@ import tools.jackson.databind.json.JsonMapper
 /** Cloudflare 가 오류를 답했거나 답을 읽을 수 없다. 메시지에 토큰 · 응답 본문을 싣지 않는다 */
 class CloudflareQueryException(message: String) : RuntimeException(message)
 
-/** 그룹 하나의 한 줄 — [visits] · [pageviews] 는 표본 간격으로 환산한 값, [dimension] 은 그룹 차원의 값(전체 그룹이면 빈 문자열) */
+/** 그룹 하나의 한 줄 — [visits] · [pageviews] 는 Cloudflare 가 돌려준 추정값 그대로, [dimension] 은 그룹 차원의 값(전체 그룹이면 빈 문자열) */
 data class CloudflareRow(val dimension: String, val visits: Long, val pageviews: Long)
 
 /**
  * Web Analytics(RUM) GraphQL — `rumPageloadEventsAdaptiveGroups`(계정 범위, 사이트 태그와 시각 범위로 거른다). 그룹 여러 개를 별칭으로 한 요청에 싣는다.
- * 환산: 값 × `avg.sampleInterval`(반올림) — 표본 추출된 이벤트를 원래 규모로. 페이지뷰 = `count`, 방문 = `sum.visits`.
- * 응답 모양은 계획 C4 의 추측이다 — 실제 토큰으로 재서 맞춘다.
+ * 페이지뷰 = `count`, 방문 = `sum.visits`. **표본 간격(`avg.sampleInterval`)으로 다시 곱하지 않는다** — 실측(2026-10-27, 무료 계정): `sampleInterval` 이 10 인 줄의 `count` · `visits` 는
+ * 모두 10 의 배수(표본 하나가 `count: 10`)라 Cloudflare 가 이미 추정값으로 돌려준다. 표본 간격은 질의 범위가 클수록 커진다(하루 질의는 1, 한 달 질의는 10) — 그래서 큰 범위의 숫자는 거칠다.
+ * 같은 호스트에서 온 이동(내부 이동)은 `refererHost` 가 자기 호스트이고 `visits` 가 0 이다(`count` 만 있다) — 유입 순위는 방문 기준이라 방문 0 줄을 뺀다.
+ * 질의 모양(변수 이름 · 타입 · 필터)은 실측으로 맞다.
  */
 class CloudflareAnalyticsClient(private val http: ExternalHttpClient) {
-    enum class Grouping(val alias: String, val dimension: String?, val limit: Int) {
-        TOTAL("total", null, 1),
-        HOUR("hour", "datetimeHour", 48),
-        REFERRER("referrer", "refererHost", TOP),
-        PATH("path", "requestPath", TOP),
-        COUNTRY("country", "countryName", TOP),
-        DEVICE("device", "deviceType", TOP),
+    /** [orderBy] — 상위 [limit] 를 고르는 기준. 방문 기준 순위는 방문으로 정렬해야 방문 0 인 내부 이동 줄이 상위 칸을 차지하지 않는다 */
+    enum class Grouping(val alias: String, val dimension: String?, val limit: Int, val orderBy: String?) {
+        TOTAL("total", null, 1, null),
+        HOUR("hour", "datetimeHour", 48, null),
+        REFERRER("referrer", "refererHost", TOP, "sum_visits_DESC"),
+        PATH("path", "requestPath", TOP, "count_DESC"),
+        COUNTRY("country", "countryName", TOP, "sum_visits_DESC"),
+        DEVICE("device", "deviceType", TOP, "sum_visits_DESC"),
     }
 
     private val mapper = JsonMapper.builder().build()
@@ -50,18 +53,16 @@ class CloudflareAnalyticsClient(private val http: ExternalHttpClient) {
     }
 
     private fun row(grouping: Grouping, node: JsonNode): CloudflareRow {
-        val interval = node["avg"]?.get("sampleInterval")?.asDouble()?.takeIf { it > 0 } ?: 1.0
-        fun scaled(value: Double) = Math.round(value * interval)
         return CloudflareRow(
             dimension = grouping.dimension?.let { node["dimensions"]?.get(it)?.asString() ?: "" } ?: "",
-            visits = scaled(node["sum"]?.get("visits")?.asDouble() ?: 0.0),
-            pageviews = scaled(node["count"]?.asDouble() ?: 0.0),
+            visits = Math.round(node["sum"]?.get("visits")?.asDouble() ?: 0.0),
+            pageviews = Math.round(node["count"]?.asDouble() ?: 0.0),
         )
     }
 
     private fun queryText(groupings: List<Grouping>): String {
         val blocks = groupings.joinToString("\n") { g ->
-            val order = if (g.dimension == null) "" else ", orderBy: [count_DESC]"
+            val order = g.orderBy?.let { ", orderBy: [$it]" }.orEmpty()
             val dims = g.dimension?.let { " dimensions { $it }" }.orEmpty()
             "      ${g.alias}: rumPageloadEventsAdaptiveGroups(filter: \$filter, limit: ${g.limit}$order) { count sum { visits } avg { sampleInterval }$dims }"
         }

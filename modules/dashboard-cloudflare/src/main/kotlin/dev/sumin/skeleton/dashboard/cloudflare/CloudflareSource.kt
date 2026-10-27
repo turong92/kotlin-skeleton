@@ -28,6 +28,19 @@ object CloudflareKinds {
 
     /** 경로는 쿼리 문자열과 조각을 뗀다 — 적재분과 오늘 직접 질의분이 같은 키로 합쳐진다 */
     fun withoutQuery(path: String) = path.substringBefore('?').substringBefore('#')
+
+    /**
+     * 표에 쓰는 차원 값 — 빈 값은 전체 값(빈 문자열)과 섞이지 않게 이름을 준다: 유입은 「(direct)」(리퍼러 없음), 나머지는 「(none)」. 경로는 쿼리를 뗀다.
+     * 적재분과 오늘 직접 질의분이 같은 키가 되도록 한 곳에서 정한다
+     */
+    fun dimension(kind: String, raw: String): String = when (kind) {
+        REFERRER -> raw.ifBlank { "(direct)" }
+        PATH -> withoutQuery(raw).ifBlank { "(none)" }
+        else -> raw.ifBlank { "(none)" }
+    }
+
+    /** 순위 줄의 값 — 유입 · 국가 · 기기는 방문, 경로는 페이지뷰. 방문이 0 인 줄(자기 사이트 안의 이동)은 순위에 넣지 않는다 */
+    fun value(kind: String, row: CloudflareRow): Long = if (kind == PATH) row.pageviews else row.visits
 }
 
 /**
@@ -87,7 +100,7 @@ class CloudflareSource(
             val sums = HashMap<String, Long>()
             past(kind).forEach { if (it.dimension.isNotEmpty()) sums.merge(it.dimension, it.value, Long::plus) }
             val today = split.today?.let { live(it, listOf(grouping)) }
-            today?.value?.get(grouping)?.forEach { sums.merge(label(if (kind == CloudflareKinds.PATH) CloudflareKinds.withoutQuery(it.dimension) else it.dimension), if (kind == CloudflareKinds.PATH) it.pageviews else it.visits, Long::plus) }
+            today?.value?.get(grouping)?.forEach { row -> CloudflareKinds.value(kind, row).takeIf { it > 0 }?.let { sums.merge(CloudflareKinds.dimension(kind, row.dimension), it, Long::plus) } }
             Composed(sums.entries.sortedWith(compareByDescending<Map.Entry<String, Long>> { it.value }.thenBy { it.key }).take(limit).map { DashboardRow(it.key, listOf(it.value)) }, today?.computedAt)
         }
 
@@ -162,10 +175,7 @@ class CloudflareSource(
     /** 이미 로그한 외부 호출 실패가 캐시에서 다시 나왔다 */
     private class CloudflareCachedFailure : RuntimeException("Cloudflare analytics is failing (retrying after a short pause)", null, false, false)
 
-    companion object {
-        private val FAILURE_TTL: java.time.Duration = java.time.Duration.ofSeconds(60)
-
-        /** 차원 값이 비면 「(none)」 — 빈 문자열은 표에서 전체 값이라 차원으로 쓸 수 없다 */
-        fun label(raw: String): String = raw.ifBlank { "(none)" }
+    private companion object {
+        val FAILURE_TTL: java.time.Duration = java.time.Duration.ofSeconds(60)
     }
 }

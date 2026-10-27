@@ -25,14 +25,15 @@ class CloudflareIngestTest {
 
     private fun scripted() {
         api.rows["total"] = listOf(FakeCloudflareApi.Row(count = 10, visits = 4, sampleInterval = 10.0))
-        api.rows["referrer"] = listOf(FakeCloudflareApi.Row("google.com", 7, 3), FakeCloudflareApi.Row("", 3, 1))
+        // 실측 모양: 리퍼러 없음은 빈 문자열, 자기 사이트 안의 이동은 자기 호스트 + 방문 0 (페이지뷰만 있다)
+        api.rows["referrer"] = listOf(FakeCloudflareApi.Row("google.com", 7, 3), FakeCloudflareApi.Row("", 3, 1), FakeCloudflareApi.Row("shop.example.test", 90, 0))
         api.rows["path"] = listOf(FakeCloudflareApi.Row("/a?token=abc", 3, 2), FakeCloudflareApi.Row("/a?x=1#top", 2, 1), FakeCloudflareApi.Row("/b", 5, 3))
         api.rows["country"] = listOf(FakeCloudflareApi.Row("KR", 8, 3))
         api.rows["device"] = listOf(FakeCloudflareApi.Row("mobile", 9, 4))
     }
 
     @Test
-    fun `loading the same day twice leaves the same rows, scaled by the sample interval`() {
+    fun `loading the same day twice leaves the same rows, and the values are Cloudflare's estimates as they are`() {
         scripted()
         store.upsert(ingestor.ingest(day, zone))
         val first = store.rows.toMap()
@@ -40,10 +41,11 @@ class CloudflareIngestTest {
 
         assertEquals(first, store.rows)
         fun value(kind: String, dimension: String = "") = store.rows[listOf(day, "cloudflare", kind, dimension)]!!.value
-        assertEquals(40, value("visits"))          // 4 × 10
-        assertEquals(100, value("pageviews"))      // 10 × 10
+        assertEquals(4, value("visits"))           // sampleInterval 10 이어도 다시 곱하지 않는다 — count · visits 는 이미 추정값이다(실측)
+        assertEquals(10, value("pageviews"))
         assertEquals(3, value("referrer", "google.com"))
-        assertEquals(1, value("referrer", "(none)"))   // 빈 차원은 전체 값(빈 문자열)과 섞이지 않는다
+        assertEquals(1, value("referrer", "(direct)"))   // 리퍼러 없음: 빈 차원은 전체 값(빈 문자열)과 섞이지 않는다
+        assertTrue(store.rows.values.none { it.kind == "referrer" && it.dimension == "shop.example.test" }, "visits 0 (internal navigation) is not a source")
     }
 
     @Test
