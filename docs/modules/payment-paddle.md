@@ -17,7 +17,7 @@ Paddle Billing(v2 API)을 `payment` 의 제공자로 구현한다. Paddle 이 �
 | 기본 동작 | 꺼짐. `enabled=true` 와 세 비밀(`api-key` · `client-token` · `webhook-secret`)이 모두 있어야 켜진다 — 하나라도 비면 이 결제사만 없다(서버는 뜬다). |
 | 부팅에 필요한 것 | 없음. |
 | 교체 지점 | `PaddlePaymentProvider` |
-| 필요한 API 키 권한 | 거래 만들기 · 구독 해지에 더해 **`adjustment.write` · `adjustment.read` · `transaction.read`**. 알림 대상(웹훅)에 **`adjustment.created` · `adjustment.updated`** 도 켠다 |
+| 필요한 API 키 권한 | 거래 만들기 · 구독 해지에 더해 **`adjustment.write` · `adjustment.read` · `transaction.read`**, 그리고 결제한 사람의 나라를 읽는 **`customer.read` · `address.read`**(없으면 결제 뒤 `could not look up the buyer address country` 로 나라를 못 읽는다). 알림 대상(웹훅)에 **`adjustment.created` · `adjustment.updated`** 도 켠다 |
 | 마이그레이션 | 없음 (`payment-jdbc` 의 구독 열 두 개를 쓴다) |
 | 프론트 짝 | `@skeleton/payment` (Paddle.js 결제창) |
 | 테스트 | `modules/payment-paddle/src/test` |

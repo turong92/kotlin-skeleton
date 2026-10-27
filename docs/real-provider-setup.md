@@ -635,13 +635,14 @@ SKELETON_PAYMENT_NAVERPAY_ALLOWED_RETURN_ORIGINS=         # 선택, 쉼표로 �
 
 ### 14.1 준비 - 샌드박스에서
 
-1. 샌드박스 대시보드(Developer tools > Authentication)에서 서버 API 키의 **권한에 `adjustment.write` · `adjustment.read` · `transaction.read` 를 더한다**(거래 만들기 · 구독 해지 권한은 그대로). 권한이 없으면 환불이 `403 forbidden` 으로 확정 거절된다.
+1. 샌드박스 대시보드(Developer tools > Authentication)에서 서버 API 키의 **권한에 `adjustment.write` · `adjustment.read` · `transaction.read` 를 더한다**(거래 만들기 · 구독 해지 권한은 그대로). 권한이 없으면 환불이 `403 forbidden` 으로 확정 거절된다. 결제한 사람의 나라(주소)를 읽는 **`customer.read` · `address.read`** 도 있어야 한다 — 없으면 결제 뒤 나라를 읽는 호출(`GET /customers/{id}/addresses/{id}`)이 실패해 로그에 `could not look up the buyer address country` 가 남는다(결제 자체는 된다).
 2. 알림 대상(Developer tools > Notifications 의 웹훅 대상)에서 **`adjustment.created` · `adjustment.updated`** 를 켠다. 켜지 않으면 Paddle 이 환불을 승인해도 장부가 모른다(「결제사와 맞추기」가 조회로 잡는다).
 3. 환경변수는 기존 Paddle 값 그대로다(`SKELETON_PAYMENT_PADDLE_*`). 새 설정은 선택 `lookup-timeout`(5s) · `refund-timeout`(10s) 뿐이다.
 
 ### 14.2 눌러 보기 (사람이 하는 단계)
 
 운영자 화면의 환불 요청(또는 주문의 「바로 환불」)을 승인한다 → 환불 줄이 `PENDING`(결제사 검토 중)으로 남는다 → **샌드박스는 10분마다 모든 환불을 자동 승인한다** → `adjustment.updated` 웹훅이 오면 줄이 `SUCCEEDED` 가 되고 주문이 `REFUNDED`(부분이면 `PARTIALLY_REFUNDED`)가 된다. 10분이 지나도 `PENDING` 이면 「결제사와 맞추기」를 눌러 본다(웹훅을 놓쳤을 때 조회가 잡는다). 실계정은 금액이 크면 사람이 검토하므로 며칠이 걸릴 수 있다.
+   **실측(2026-10-27, 샌드박스)**: 환불을 접수하면 `POST /adjustments` 는 성공하고 adjustment 는 `pending_approval` 이다(Paddle 대시보드는 접수 직후부터 「Full refund issued」 로 보여도 상태는 아직 검토 중). `adjustment.created`(pending_approval)가 바로 오고, **4분 뒤 `adjustment.updated`(approved)** 가 와서 줄이 `SUCCEEDED`, 주문이 `REFUNDED` 가 됐다. 그 사이 몇 분은 「Refund in progress」 가 정상이다. 본문 모양(`totals` 가 숫자, `subscription_id: null`, `items` · `payout_totals` 등)은 `PaddleRefundTest` 에 실제 모양으로 박아 두었다.
 
 ### 14.3 못 잰 가정 (진짜 Paddle 이 있어야 잰다)
 

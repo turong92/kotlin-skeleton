@@ -178,6 +178,32 @@ class PaddleRefundTest {
         }
     }
 
+    /** 진짜 Paddle 샌드박스가 보낸 모양(2026-10-27에 받은 본문의 id 만 바꿨다): 접수 때는 `pending_approval`, 몇 분 뒤 `adjustment.updated` 로 `approved` — 금액 · 번호는 `data` 에서 읽는다 */
+    private fun realShape(type: String, status: String) = """
+{"data":{"id":"adj_real_1","type":"full","items":[{"id":"adjitm_real_1","type":"full","amount":"108","totals":{"tax":"9","total":"108","subtotal":"99"},"item_id":"txnitm_real_1","proration":null}],
+ "action":"refund","reason":"Operator refund rfd_real_1","status":"$status","totals":{"fee":55,"tax":9,"total":108,"earnings":44,"subtotal":99,"retained_fee":0,"currency_code":"USD"},
+ "created_at":"2026-10-27T03:05:59.378368Z","updated_at":"2026-10-27T03:10:04.000000Z","customer_id":"ctm_real_1","currency_code":"USD","payout_totals":{"fee":55,"tax":9,"total":108,"earnings":44,"subtotal":99,"retained_fee":0,"currency_code":"USD"},
+ "tax_rates_used":[{"totals":{"tax":"9","total":"108","subtotal":"99"},"tax_rate":"0.08875"}],"transaction_id":"txn_real_1","subscription_id":null,"credit_applied_to_balance":null},
+ "event_id":"evt_real_$status","event_type":"$type","occurred_at":"2026-10-27T03:10:04.386047Z","notification_id":"ntf_real_1"}
+""".trim()
+
+    @Test
+    fun `the refund decisions Paddle really sends - pending then approved, totals as numbers, null subscription - land as refund decisions of the same adjustment`() {
+        val gateway = gateway()
+        val pending = gateway.interpret(realShape("adjustment.created", "pending_approval")) as PushedRefund
+        val approved = gateway.interpret(realShape("adjustment.updated", "approved")) as PushedRefund
+
+        assertThat(pending.status).isEqualTo(PushedRefundStatus.PENDING_APPROVAL)
+        assertThat(approved.status).isEqualTo(PushedRefundStatus.APPROVED)
+        listOf(pending, approved).forEach {
+            assertThat(it.kind).isEqualTo(PushedRefundKind.REFUND)
+            assertThat(it.providerRefundId).isEqualTo("adj_real_1")
+            assertThat(it.providerPaymentId).isEqualTo("txn_real_1")
+            assertThat(it.providerSubscriptionId).isNull()
+            assertThat(it.amount).isEqualTo(PaymentAmount(108, "USD"))
+        }
+    }
+
     @Test
     fun `an adjustment webhook is verified like the others and becomes a refund decision, and credits and other kinds are not handled`() {
         val gateway = gateway()
