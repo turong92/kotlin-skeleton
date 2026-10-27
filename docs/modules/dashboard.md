@@ -49,7 +49,7 @@
 
 **캐시는 조립기에, 키는 프로젝트마다.** 화면 요청이 DB · 외부 API 를 직접 두드리지 않게 한다. 같은 키가 동시에 와도 계산은 한 번(single-flight). 오류 결과는 담지 않아 다음 요청이 다시 시도한다.
 
-**스켈레톤 중립의 예외 하나 — 인덱스.** 기여 모듈의 범위 인덱스(`accounts.created_at` · `auth_sessions.last_used_at` · `payment_orders.paid_at` · `payment_refunds.completed_at`)는 마이그레이션이라 `dashboard` 를 안 붙인 앱에도 들어간다. 특히 `auth_sessions.last_used_at` 은 토큰 갱신마다 바뀌는 열이라 그 인덱스 유지 비용이 생긴다. 이 예외를 빼면 기여 질의가 표 전체를 훑는다.
+**스켈레톤 중립의 예외 하나 — 인덱스.** 기여 모듈의 범위 인덱스(`accounts.created_at` · `payment_orders.paid_at` · `payment_refunds.completed_at`)와 일별 활동 표 `auth_account_activity`(`auth-session-jdbc`)는 마이그레이션이라 `dashboard` 를 안 붙인 앱에도 들어간다 — 활동 표는 로그인 · 새로고침마다 하루에 한 번 쓴다. 이 예외를 빼면 기여 질의가 표 전체를 훑는다. (`auth_sessions.last_used_at` 인덱스는 활동 표로 바꾸면서 지웠다.)
 
 **관리 API 는 기본 꺼짐.** 스켈레톤은 사용법을 고르지 않는다(authz · payment · account 와 같다) — 켜는 것은 앱 설정이다.
 

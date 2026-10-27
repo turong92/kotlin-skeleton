@@ -33,6 +33,21 @@ class AuthSessionAutoConfiguration {
     @ConditionalOnMissingBean(SessionStore::class)
     fun inMemorySessionStore(): SessionStore = InMemorySessionStore()
 
+    /** 일별 활동 기록의 기본은 아무것도 하지 않는다 — `auth-session-jdbc` 가 표로 채운다 */
+    @Bean
+    @ConditionalOnMissingBean(AccountActivityStore::class)
+    fun noAccountActivityStore(): AccountActivityStore = AccountActivityStore.NONE
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun activityZone(properties: AuthSessionProperties, environment: org.springframework.core.env.Environment, projects: ObjectProvider<ProjectRegistry>): ActivityZone =
+        ActivityZone(properties, environment.getProperty("skeleton.time.default-zone", "Asia/Seoul"), projects.getIfAvailable())
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun accountActivityRecorder(store: AccountActivityStore, zone: ActivityZone, time: ObjectProvider<TimeProvider>): AccountActivityRecorder =
+        AccountActivityRecorder(store, zone::zone, time.getIfAvailable { TimeProvider.systemUtc() })
+
     @Bean
     @ConditionalOnMissingBean
     fun sessionService(
@@ -42,12 +57,14 @@ class AuthSessionAutoConfiguration {
         listeners: ObjectProvider<SessionEventListener>,
         auth: ObjectProvider<AuthProperties>,
         limits: ObjectProvider<dev.sumin.skeleton.common.web.RateLimitStore>,
+        activity: AccountActivityRecorder,
     ): SessionService = SessionService(
         store, properties, time.getIfAvailable { TimeProvider.systemUtc() },
         // 인스턴스끼리 같은 키 — JWT 비밀에서 용도 접두사를 붙여 만든다 (비밀 자체를 다른 용도에 쓰지 않는다)
         ("session-rotation/" + auth.getIfAvailable { AuthProperties() }.jwt.secret).toByteArray(Charsets.UTF_8),
         rotationLimiter = rotationLimiter(properties.rotation, limits, time),
         onEvent = SessionEventDispatch { listeners.orderedStream().toList() },
+        activity = activity,
     )
 
     private fun rotationLimiter(
@@ -70,8 +87,8 @@ class AuthSessionAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    fun sessionPurge(store: SessionStore, properties: AuthSessionProperties, time: ObjectProvider<TimeProvider>): SessionPurge =
-        SessionPurge(store, time.getIfAvailable { TimeProvider.systemUtc() }, properties.purge)
+    fun sessionPurge(store: SessionStore, properties: AuthSessionProperties, time: ObjectProvider<TimeProvider>, activity: AccountActivityStore): SessionPurge =
+        SessionPurge(store, time.getIfAvailable { TimeProvider.systemUtc() }, properties.purge, activity, properties.activity.retention)
 
     /** 끝난 세션 행을 주기로 지운다 (`skeleton.auth-session.purge.interval`, 0 이면 끔) */
     @Bean(initMethod = "start", destroyMethod = "close")
@@ -91,7 +108,7 @@ class AuthSessionAutoConfiguration {
     /** 계정 삭제가 끝나면 그 계정의 세션 행을 지운다 */
     @Bean
     @ConditionalOnMissingBean(name = ["sessionErasureListener"])
-    fun sessionErasureListener(store: SessionStore): AccountErasureListener = SessionErasureListener(store)
+    fun sessionErasureListener(store: SessionStore, activity: AccountActivityStore): AccountErasureListener = SessionErasureListener(store, activity)
 
     @Bean
     @ConditionalOnMissingBean(name = ["refreshDeliveryInfo"])

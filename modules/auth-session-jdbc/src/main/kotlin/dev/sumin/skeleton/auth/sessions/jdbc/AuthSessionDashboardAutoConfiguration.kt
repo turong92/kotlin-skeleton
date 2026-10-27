@@ -1,6 +1,6 @@
 package dev.sumin.skeleton.auth.sessions.jdbc
 
-import dev.sumin.skeleton.persistence.jdbc.SqlDialect
+import dev.sumin.skeleton.auth.sessions.ActivityZone
 import javax.sql.DataSource
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean
@@ -17,9 +17,9 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
 class AuthSessionDashboardAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(name = ["authSessionActiveUsersMetric"])
-    fun authSessionActiveUsersMetric(dataSource: DataSource, dialect: SqlDialect): ActiveUsersMetric = ActiveUsersMetric(NamedParameterJdbcTemplate(dataSource), dialect)
+    fun authSessionActiveUsersMetric(dataSource: DataSource): ActiveUsersMetric = ActiveUsersMetric(NamedParameterJdbcTemplate(dataSource))
 
     @Bean
     @ConditionalOnMissingBean(name = ["authSessionReturnedStep"])
-    fun authSessionReturnedStep(dataSource: DataSource, dialect: SqlDialect): ReturnedStep = ReturnedStep(NamedParameterJdbcTemplate(dataSource), dialect)
+    fun authSessionReturnedStep(dataSource: DataSource, zone: ActivityZone): ReturnedStep = ReturnedStep(NamedParameterJdbcTemplate(dataSource), zone::zone)
 }

@@ -21,3 +21,6 @@ skeleton:
       retention: 7d                    # 끝난 뒤 이 기간이 지난 세션 행을 지운다
     http:
       enabled: true                    # false 면 /api/v1/auth/refresh · logout · sessions 를 등록하지 않는다
+    activity:
+      zone: ""                         # 일별 활동 기록의 날짜를 세는 시간대. 비면 skeleton.time.default-zone, 그것도 없으면 Asia/Seoul. 대시보드 시간대와 같게 둔다
+      retention: 400d                  # 일별 활동 기록(auth-session-jdbc)을 이 기간만 둔다

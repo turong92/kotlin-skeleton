@@ -29,6 +29,8 @@ class SessionService(
     /** 회전의 후속 토큰을 만드는 서버 키 — 같은 옛 토큰은 같은 후속 토큰을 낳지만 옛 토큰만으로는 계산할 수 없다. 인스턴스끼리 같아야 한다 (자동설정이 JWT 비밀에서 만든다) */
     tokenKey: ByteArray = ByteArray(32).also { SecureRandom().nextBytes(it) },
     private val rotationLimiter: RotationLimiter = RotationLimiter.NONE,
+    /** 로그인 · 새로고침 때 오늘의 활동을 남긴다(실패해도 로그인은 막지 않는다) */
+    private val activity: AccountActivityRecorder = AccountActivityRecorder.NONE,
     private val onEvent: (SessionEvent) -> Unit = {},
 ) {
     private val random = SecureRandom()
@@ -46,6 +48,7 @@ class SessionService(
             ),
             hash(token),
         )
+        activity.record(accountId)
         return OpenedSession(id, token, now.plus(properties.absoluteTtl))
     }
 
@@ -76,6 +79,7 @@ class SessionService(
         store.addToken(session.id, hash(next), now)   // 멱등 — 같은 후속 토큰이 이미 있으면 그대로
         store.touch(session.id, now, client.ip, client.userAgent)
         properties.reuseMemory?.let { store.pruneUsedTokens(session.id, now.minus(it)) }
+        activity.record(session.accountId)
         return RefreshResult(session.accountId, OpenedSession(session.id, next, session.expiresAt))
     }
 

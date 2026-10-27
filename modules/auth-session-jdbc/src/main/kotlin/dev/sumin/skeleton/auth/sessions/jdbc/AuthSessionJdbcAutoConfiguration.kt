@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.auth.sessions.jdbc
 
+import dev.sumin.skeleton.auth.sessions.AccountActivityStore
 import dev.sumin.skeleton.auth.sessions.AuthSessionAutoConfiguration
 import dev.sumin.skeleton.auth.sessions.SessionStore
 import dev.sumin.skeleton.persistence.jdbc.SqlDialect
@@ -26,6 +27,11 @@ import org.springframework.transaction.support.TransactionTemplate
 @ConditionalOnClass(NamedParameterJdbcTemplate::class)
 @ConditionalOnBean(DataSource::class)
 class AuthSessionJdbcAutoConfiguration {
+    /** 계정별 일별 활동 기록 — 로그인 · 새로고침 때 쓰고, 대시보드의 활성 이용자가 읽는다 */
+    @Bean
+    @ConditionalOnMissingBean(AccountActivityStore::class)
+    fun jdbcAccountActivityStore(dataSource: DataSource, dialect: SqlDialect): AccountActivityStore = JdbcAccountActivityStore(NamedParameterJdbcTemplate(dataSource), dialect)
+
     @Bean
     @ConditionalOnMissingBean(SessionStore::class)
     fun jdbcSessionStore(dataSource: DataSource, transactionManager: PlatformTransactionManager, dialect: SqlDialect): SessionStore =

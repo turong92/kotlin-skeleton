@@ -10,9 +10,22 @@ import java.util.concurrent.TimeUnit
 import org.slf4j.LoggerFactory
 
 /** 끝난 세션(철회 · 만료)과 토큰을 [AuthSessionProperties.Purge.retention] 이 지난 뒤 지운다 — 표가 무한히 쌓이지 않게 */
-class SessionPurge(private val store: SessionStore, private val time: TimeProvider, private val props: AuthSessionProperties.Purge) {
+class SessionPurge(
+    private val store: SessionStore,
+    private val time: TimeProvider,
+    private val props: AuthSessionProperties.Purge,
+    /** 일별 활동 기록의 보존 기간도 같이 청소한다 */
+    private val activity: AccountActivityStore = AccountActivityStore.NONE,
+    private val activityRetention: Duration = AuthSessionProperties.Activity().retention,
+) {
     /** 이번에 지운 세션 수 */
-    fun runOnce(): Int = store.purge(time.now().minus(props.retention))
+    fun runOnce(): Int {
+        val now = time.now()
+        val purged = store.purge(now.minus(props.retention))
+        // 날짜 경계의 시간대를 몰라도 하루 여유를 둔다 — 보존 기간보다 하루 늦게 지울 뿐이다
+        activity.purgeBefore(now.minus(activityRetention).atZone(java.time.ZoneOffset.UTC).toLocalDate().minusDays(1))
+        return purged
+    }
 }
 
 /** [SessionPurge] 를 주기마다 돌린다. 여러 인스턴스가 동시에 돌려도 삭제는 멱등이다 */
@@ -36,9 +49,12 @@ class SessionPurgeScheduler(private val interval: Duration, private val run: () 
     override fun close() { executor?.shutdownNow() }
 }
 
-/** 계정이 완전히 지워질 때 그 계정의 세션 행(IP · UA · 기기 이름)을 지운다 — `account` 의 `AccountPurgeService` 가 모아 부른다 */
-class SessionErasureListener(private val store: SessionStore) : AccountErasureListener {
+/** 계정이 완전히 지워질 때 그 계정의 세션 행(IP · UA · 기기 이름)과 일별 활동 기록을 지운다 — `account` 의 `AccountPurgeService` 가 모아 부른다 */
+class SessionErasureListener(private val store: SessionStore, private val activity: AccountActivityStore = AccountActivityStore.NONE) : AccountErasureListener {
     override val name: String = "auth-session"
 
-    override fun erase(request: ErasureRequest) { store.eraseAccount(request.accountId) }
+    override fun erase(request: ErasureRequest) {
+        store.eraseAccount(request.accountId)
+        activity.eraseAccount(request.accountId)   // 일별 활동 기록(계정 id 뿐이지만 계정이 지워지면 같이)
+    }
 }

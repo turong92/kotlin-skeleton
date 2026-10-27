@@ -4,6 +4,8 @@
 액세스 토큰은 그대로 JWT(15분)이고 `sid` 클레임으로 세션을 가리킨다. `auth` 만 있으면 지금까지처럼 액세스 토큰만 나가고, 이 모듈을 더하면 어떤 로그인 방법이든(`AuthTokenResponseFactory` 를 지나는 모든 것) 세션이 열린다.
 전달 방식 기본은 **body**(응답 JSON ↔ 요청 본문 — 쿠키가 없어 CSRF 면이 없다). `cookie` 는 HttpOnly · Secure · SameSite=Strict + CSRF 헤더를 요구한다 ([docs/accounts.md](../accounts.md) CSRF).
 
+**일별 활동 기록**: 로그인과 새로고침이 오늘의 활동을 한 번 남긴다(포트 `AccountActivityStore`, 같은 계정 · 같은 날은 저장소를 부르지 않고, 저장이 실패해도 로그인은 막지 않는다). 기본 구현은 아무것도 하지 않고 `auth-session-jdbc` 가 표(`auth_account_activity`, 하루에 한 줄)로 채운다 — 대시보드의 활성 이용자가 읽는다. 시간대 · 보존 기간은 `activity.zone` · `activity.retention`.
+
 | 메서드 · 경로 | 하는 일 | 누가 |
 |---|---|---|
 | `POST /api/v1/auth/refresh` | 리프레시 토큰 → 새 액세스 토큰 + 회전된 리프레시 토큰 (`AUTH.REFRESH_INVALID` · `AUTH.REFRESH_REUSED`) | 토큰이 곧 자격 |

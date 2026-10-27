@@ -33,6 +33,7 @@ data class AuthSessionProperties(
     val cookie: Cookie = Cookie(),
     val http: Http = Http(),
     val purge: Purge = Purge(),
+    val activity: Activity = Activity(),
 ) {
     init {
         require(!absoluteTtl.isNegative && !absoluteTtl.isZero && !idleTtl.isNegative && !idleTtl.isZero) { "skeleton.auth-session.*-ttl must be > 0" }
@@ -61,6 +62,15 @@ data class AuthSessionProperties(
         val csrfHeader: String = "X-Requested-With",
     ) {
         init { require(sameSite.lowercase() in setOf("strict", "lax", "none")) { "skeleton.auth-session.cookie.same-site must be Strict, Lax or None" } }
+    }
+
+    data class Activity(
+        /** 활동 날짜를 세는 시간대. 비면 `skeleton.time.default-zone`, 그것도 없으면 `time` 모듈의 기본(Asia/Seoul). 대시보드의 시간대와 같게 둔다 */
+        val zone: String = "",
+        /** 일별 활동 기록(`auth-session-jdbc`)을 이 기간만 둔다 — 활성 이용자 지표가 거슬러 볼 수 있는 길이다. 대시보드가 최대 366일을 보므로 그보다 길게 */
+        val retention: Duration = Duration.ofDays(400),
+    ) {
+        init { require(!retention.isNegative && !retention.isZero) { "skeleton.auth-session.activity.retention must be > 0" } }
     }
 
     data class Purge(
