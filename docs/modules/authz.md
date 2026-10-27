@@ -34,6 +34,7 @@
 - 역할 → 권한 매핑 자체(`skeleton.authz.roles` · `super-role` · `cache-ttl`)는 `platform` 의 설정이다. 이 모듈의 접두사는 스위치 하나다. 역할 표 화면은 프런트 `@skeleton/auth` 의 admin 하위 경로.
 - 켜기: `skeleton.authz.admin.enabled=true` + 저장소(`authz-jdbc`).
 - `holders`(역할을 가진 계정 수)와 「쓰는 계정이 있는 역할 삭제 막기」는 `account` 가 `RoleHolders` 빈을 내면 켜진다. `account` 가 없으면 `holders` 는 `null` 이고 삭제 검사는 없다.
+- 역할 만들기 · 고치기 · 지우기는 이 프로세스 안에서 한 줄로 선다(`RoleService` 의 잠금) — 행 잠금이 없는 저장소(메모리)에서도 같은 역할의 동시 편집 · 마지막 `authz.roles` 보호가 지켜진다. 여러 인스턴스 사이는 저장소의 행 잠금(`authz-jdbc` 의 `for update`)이 맡는다.
 - 호출자의 「자기 잠금」은 요청이 싣고 온 역할(토큰의 역할)로 판정한다.
 
 ## Decisions and rejected alternatives

@@ -844,7 +844,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 짝 프런트(react-skeleton): 항목 `payment` · 패키지 `@skeleton/payment` · 조각 `--packages payment`
 - 쓰지 않는 경우:
   - 금액은 앱의 PaymentCatalog 빈이 정한다 — 브라우저가 금액을 정하는 길은 없다(카탈로그 빈이 없으면 주문 만들기 경로가 열리지 않는다)
-  - 운영자 경로(skeleton.payment.admin.enabled)는 기본 꺼짐이고, 켜면 PaymentOperatorPolicy(기본: 토큰의 ADMIN 역할)를 매 호출 확인한다
+  - 운영자 경로(skeleton.payment.admin.enabled)는 기본 꺼짐이고, 켜면 PaymentOperatorPolicy(기본: OperatorAccess 의 권한 payment.read · payment.refund · payment.operate)를 매 호출 확인한다
   - 본인은 환불을 요청만 한다 — 돈을 움직이는 환불 · 승인은 운영자 경로뿐이다
   - 구독 · 정기 결제 관리는 없다
   - 제공자 모듈 없이는 결제할 수 없다

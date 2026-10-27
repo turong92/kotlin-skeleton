@@ -9,7 +9,9 @@ import dev.sumin.skeleton.common.authz.OperatorRef
 import dev.sumin.skeleton.common.authz.PermissionDeclaration
 import dev.sumin.skeleton.common.authz.RoleHolders
 import dev.sumin.skeleton.common.authz.RolePermissionSource
+import java.util.concurrent.locks.ReentrantLock
 import org.springframework.transaction.support.TransactionOperations
+import kotlin.concurrent.withLock
 
 data class Role(
     val name: String,
@@ -36,6 +38,12 @@ class RoleService(
     private val superRole: String,
     private val tx: TransactionOperations,
 ) {
+    /**
+     * 변경 셋을 이 프로세스 안에서 한 줄로 세운다 — 행 잠금이 없는 저장소(메모리)에서도 같은 역할의 동시 고치기 · 지우기, 마지막 `authz.roles` 보호가
+     * 지켜지게. 트랜잭션 바깥에서 잡아 커밋 뒤에 풀린다. 여러 인스턴스 사이는 저장소의 행 잠금(`for update`)이 맡는다
+     */
+    private val writes = ReentrantLock()
+
     fun permissions(): List<PermissionInfo> =
         declarations().flatMap { d -> d.permissions.map { PermissionInfo(it.key, d.module) } }.sortedBy { it.key }
 
@@ -45,7 +53,7 @@ class RoleService(
         val roleName = validName(name)
         validDescription(description)
         val wanted = validPermissions(permissions)
-        return tx.execute {
+        return writes.withLock { tx.execute {
             if (store.find(roleName) != null) throw exception(AuthzRoleErrorCode.ROLE_EXISTS, "Role already exists: $roleName")
             checkNoFullAccess(wanted)
             checkKnown(wanted)
@@ -55,13 +63,13 @@ class RoleService(
             }
             audit.record(OperatorAction(actor.accountId, "authz.role.created", "role", roleName))
             StoredRole(roleName, description, wanted).toRole()
-        }
+        } }
     }
 
     fun update(actor: OperatorRef, name: String, description: String?, permissions: Collection<String>?): Role {
         validDescription(description)
         val wanted = validPermissions(permissions)
-        return tx.execute {
+        return writes.withLock { tx.execute {
             val current = store.findForUpdate(name) ?: throw notFound(name)
             checkNotProtected(current)
             checkNoFullAccess(wanted)
@@ -79,11 +87,11 @@ class RoleService(
                 ),
             )
             StoredRole(name, description, wanted).toRole()
-        }
+        } }
     }
 
     fun delete(actor: OperatorRef, name: String) {
-        tx.executeWithoutResult {
+        writes.withLock { tx.executeWithoutResult {
             val current = store.findForUpdate(name) ?: throw notFound(name)
             checkNotProtected(current)
             checkNoEscalation(actor, current.permissions)   // 자기 권한 밖 권한을 가진 역할은 지우지도 못한다
@@ -94,7 +102,7 @@ class RoleService(
             holders?.revokeFromAll(name, actor.accountId)
             if (!store.delete(name)) throw notFound(name)
             audit.record(OperatorAction(actor.accountId, "authz.role.deleted", "role", name))
-        }
+        } }
     }
 
     private fun StoredRole.toRole() = Role(
