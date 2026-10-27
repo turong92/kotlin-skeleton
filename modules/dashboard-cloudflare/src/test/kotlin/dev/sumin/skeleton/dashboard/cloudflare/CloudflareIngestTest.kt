@@ -2,6 +2,7 @@ package dev.sumin.skeleton.dashboard.cloudflare
 
 import dev.sumin.skeleton.dashboard.DailySeries
 import dev.sumin.skeleton.dashboard.DashboardCache
+import dev.sumin.skeleton.common.logging.LogMasker
 import java.time.Duration
 import java.time.LocalDate
 import java.time.ZoneId
@@ -56,6 +57,23 @@ class CloudflareIngestTest {
         val paths = store.rows.values.filter { it.kind == "path" }.associate { it.dimension to it.value }
         assertEquals(mapOf("/a" to 5L, "/b" to 5L), paths)
         assertTrue(store.rows.values.none { '?' in it.dimension || '#' in it.dimension })
+    }
+
+    @Test
+    fun `a share-link token in a path is masked with the app's request-path rule, so differing tokens merge under one masked key`() {
+        api.rows["path"] = listOf(FakeCloudflareApi.Row("/e/tokenAAAA1111?x=1", 3, 2), FakeCloudflareApi.Row("/e/tokenBBBB2222", 4, 3), FakeCloudflareApi.Row("/pricing", 5, 4))
+        val previous = LogMasker.current
+        LogMasker.install(LogMasker(pathPatterns = listOf("/e/(?<value>[^/?#]+)"), patterns = listOf("/e/(?<value>[^/?#]+)")))
+        try {
+            store.upsert(ingestor.ingest(day, zone))
+        } finally {
+            LogMasker.install(previous)
+        }
+
+        val paths = store.rows.values.filter { it.kind == "path" }.associate { it.dimension to it.value }
+        assertTrue(paths.keys.none { "token" in it }, paths.toString())
+        assertEquals(7L, paths.entries.single { it.key.startsWith("/e/") }.value)   // 3 + 4: 같은 가려진 키로 합쳐진다
+        assertEquals(5L, paths["/pricing"])
     }
 
     @Test

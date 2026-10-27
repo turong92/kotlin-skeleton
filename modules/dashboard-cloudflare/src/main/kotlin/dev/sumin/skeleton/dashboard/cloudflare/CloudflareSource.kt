@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.dashboard.cloudflare
 
 import dev.sumin.skeleton.common.dashboard.DashboardBuckets
+import dev.sumin.skeleton.common.logging.LogMasker
 import dev.sumin.skeleton.common.dashboard.DashboardFreshness
 import dev.sumin.skeleton.common.dashboard.DashboardInterval
 import dev.sumin.skeleton.common.dashboard.DashboardPoint
@@ -31,11 +32,12 @@ object CloudflareKinds {
 
     /**
      * 표에 쓰는 차원 값 — 빈 값은 전체 값(빈 문자열)과 섞이지 않게 이름을 준다: 유입은 「(direct)」(리퍼러 없음), 나머지는 「(none)」. 경로는 쿼리를 뗀다.
+     * 경로는 요청 로그와 같은 규칙(`LogMasker.maskRequestPath` — 앱이 `LogMaskingContributor` 로 더한 주소 속 비밀 조각 규칙, 없으면 경로 그대로)을 거쳐 공유 링크 토큰 같은 값이 표 · 화면에 남지 않게 한다.
      * 적재분과 오늘 직접 질의분이 같은 키가 되도록 한 곳에서 정한다
      */
     fun dimension(kind: String, raw: String): String = when (kind) {
         REFERRER -> raw.ifBlank { "(direct)" }
-        PATH -> withoutQuery(raw).ifBlank { "(none)" }
+        PATH -> LogMasker.current.maskRequestPath(withoutQuery(raw)).ifBlank { "(none)" }
         else -> raw.ifBlank { "(none)" }
     }
 

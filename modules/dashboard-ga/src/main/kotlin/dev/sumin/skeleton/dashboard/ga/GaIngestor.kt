@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.dashboard.ga
 
+import dev.sumin.skeleton.common.logging.LogMasker
 import dev.sumin.skeleton.dashboard.DashboardDailyRow
 import dev.sumin.skeleton.dashboard.DashboardIngestor
 import java.time.LocalDate
@@ -48,7 +49,8 @@ class GaIngestor(private val client: GaDataClient, private val settings: GaSetti
     /** 빈 차원은 「(none)」 — 빈 문자열은 표에서 전체 값이라 차원으로 쓸 수 없다 */
     private fun label(raw: String) = raw.ifBlank { "(none)" }
 
-    private fun withoutQuery(url: String) = url.substringBefore('?').substringBefore('#')
+    /** 쿼리 · 조각을 떼고, 요청 로그와 같은 규칙(`LogMasker.maskRequestPath` — 앱이 더한 주소 속 비밀 조각 규칙, 없으면 그대로)으로 공유 링크 토큰 같은 값을 가린다 */
+    private fun withoutQuery(url: String) = LogMasker.current.maskRequestPath(url.substringBefore('?').substringBefore('#'))
 
     private companion object {
         const val LIMIT = 50
