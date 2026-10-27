@@ -3,6 +3,7 @@ package dev.sumin.skeleton.auth.sessions
 import dev.sumin.skeleton.common.project.ProjectContext
 import dev.sumin.skeleton.common.project.ProjectRegistry
 import dev.sumin.skeleton.common.time.TimeProvider
+import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.concurrent.ConcurrentHashMap
@@ -54,22 +55,29 @@ class AccountActivityRecorder(
     private val log = LoggerFactory.getLogger(javaClass)
     private val lastRecorded = ConcurrentHashMap<String, LocalDate>()
 
+    /** 기록이 실패하면 이 시각까지 저장소를 다시 부르지 않는다 — DB 가 죽었거나 표가 없을 때 로그인 · 새로고침마다 부르고 WARN 을 쏟지 않게 */
+    @Volatile private var pausedUntil: Instant = Instant.MIN
+
     fun record(accountId: String) {
         if (store === AccountActivityStore.NONE) return
         try {
-            val day = time.now().atZone(zone()).toLocalDate()
+            val now = time.now()
+            if (now.isBefore(pausedUntil)) return
+            val day = now.atZone(zone()).toLocalDate()
             val key = ProjectContext.scopedKey(accountId)
             if (lastRecorded[key] == day) return
             store.recordActive(accountId, day)
             if (lastRecorded.size >= MAX_REMEMBERED) lastRecorded.clear()   // 메모리 상한 — 비워도 저장소가 멱등이라 한 번씩 더 부를 뿐이다
             lastRecorded[key] = day
         } catch (e: Exception) {
-            log.warn("account activity was not recorded: {}", e.javaClass.simpleName)
+            pausedUntil = time.now().plus(PAUSE_AFTER_FAILURE)
+            log.warn("account activity was not recorded (paused for {}s): {}", PAUSE_AFTER_FAILURE.seconds, e.javaClass.simpleName)
         }
     }
 
     companion object {
         val NONE = AccountActivityRecorder(AccountActivityStore.NONE, { ZoneId.of("UTC") }, TimeProvider.systemUtc())
         private const val MAX_REMEMBERED = 50_000
+        private val PAUSE_AFTER_FAILURE: java.time.Duration = java.time.Duration.ofSeconds(30)
     }
 }

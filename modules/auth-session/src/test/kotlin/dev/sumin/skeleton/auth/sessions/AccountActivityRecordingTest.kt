@@ -59,6 +59,26 @@ class AccountActivityRecordingTest {
     }
 
     @Test
+    fun `after a failure the store is left alone for a while, then tried again`() {
+        class Flaky : AccountActivityStore {
+            var calls = 0
+            var failing = true
+            override fun recordActive(accountId: String, day: LocalDate) { calls++; if (failing) error("down") }
+            override fun eraseAccount(accountId: String) = Unit
+            override fun purgeBefore(day: LocalDate) = 0
+        }
+        val store = Flaky()
+        val service = service(store)
+        repeat(5) { service.open("acc_$it", client) }
+        assertEquals(1, store.calls, "one failure pauses the writes - not a call and a WARN per login")
+
+        store.failing = false
+        time.at = time.at.plus(Duration.ofSeconds(31))
+        service.open("acc_9", client)
+        assertEquals(2, store.calls)
+    }
+
+    @Test
     fun `a failing activity store never blocks the login or the refresh`() {
         val service = service(RecordingStore(fail = true))
         val opened = service.open("acc_1", client)

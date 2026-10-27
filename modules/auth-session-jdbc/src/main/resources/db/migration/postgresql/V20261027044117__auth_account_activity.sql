@@ -7,5 +7,5 @@ create table if not exists auth_account_activity (
 );
 create index if not exists idx_auth_account_activity_day on auth_account_activity (day);   -- 기간 질의 · 보존 기간 청소
 
--- 대시보드가 마지막 사용 시각 인덱스를 더는 쓰지 않는다 (활동 기록으로 바꿨다) — 토큰을 새로고침할 때마다 갱신되는 열의 인덱스 유지 비용을 없앤다
-drop index if exists idx_auth_sessions_last_used;
+-- 참고: V20261026135601 의 idx_auth_sessions_last_used 는 대시보드가 더는 쓰지 않는다(활동 기록으로 바꿨다). 마이그레이션은 서로 기대지 않으므로(docs/schema-management.md) 여기서 지우지 않는다 —
+-- 쓰기 비용이 걸리면 직접 `drop index idx_auth_sessions_last_used;` 한다.

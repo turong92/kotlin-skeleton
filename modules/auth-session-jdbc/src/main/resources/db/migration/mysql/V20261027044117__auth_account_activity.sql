@@ -8,4 +8,5 @@ create table if not exists auth_account_activity (
     /* [jooq ignore stop] */
 );
 
-drop index idx_auth_sessions_last_used on auth_sessions;
+-- 참고: V20261026135601 의 idx_auth_sessions_last_used 는 대시보드가 더는 쓰지 않는다. 마이그레이션은 서로 기대지 않으므로(docs/schema-management.md) 여기서 지우지 않는다 —
+-- 쓰기 비용이 걸리면 직접 `drop index idx_auth_sessions_last_used on auth_sessions;` 한다.

@@ -10,7 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### 대시보드 「활성 이용자」를 정확하게 — 계정별 일별 활동 기록 (2026-10-27)
 
 - `auth-session` + `auth-session-jdbc`: 하루에 한 줄 `(account_id, day)` 인 표 `auth_account_activity`(새 V 파일 두 방언, `migrations.lock`). 로그인 · 토큰 새로고침 때 남기고(같은 계정이 같은 날 이미 기록됐으면 저장소를 부르지 않는다), **쓰기가 실패해도 로그인은 막지 않는다**. 계정 삭제 때 같이 지우고, 주기 청소(`SessionPurge`)가 보존 기간 `skeleton.auth-session.activity.retention`(기본 400일) 밖을 지운다. 날짜를 세는 시간대 `skeleton.auth-session.activity.zone`(프로젝트별 가능, `ProjectConfigKeys.SUPPORTED` 에 `auth-session.activity.`). 새 포트 `AccountActivityStore`(기본은 아무것도 안 함).
-- 대시보드 활성 이용자 타일 · 「돌아옴」 단계가 이 표를 읽는다 — 이제 정확하고 `comparable = true`(직전 기간과 비교). 시간별 그래프는 날 단위 기록이라 그날의 합계 한 점이다. 세션 마지막 사용 시각 인덱스(`idx_auth_sessions_last_used`)는 같은 마이그레이션에서 지운다.
+- 대시보드 활성 이용자 타일 · 「돌아옴」 단계가 이 표를 읽는다 — 이제 정확하고 `comparable = true`(직전 기간과 비교). 시간별 그래프는 날 단위 기록이라 그날의 합계 한 점이다. 세션 마지막 사용 시각 인덱스(`idx_auth_sessions_last_used`)는 더는 쓰지 않는다 — 마이그레이션은 서로 기대지 않아 자동으로 지우지 않으니 쓰기 비용이 걸리면 직접 지운다.
+- **업그레이드**: 활동 기록은 이 마이그레이션을 적용한 날부터 쌓이므로 직전 기간이 비어 있으면 활성 이용자의 증감이 크게 보인다(`docs/modules/auth-session-jdbc.md` 에 세션 기반 근사 백필 SQL 을 적었다). **`schema.sql` 로 스키마를 관리하는 앱(Mode B)은 새 표 `auth_account_activity` 를 복사해 넣어야 한다** — 없으면 기록이 실패하고(로그인은 된다) 활성 이용자 타일은 오류가 된다.
 - 개인정보: 계정별 「이용한 날짜」가 새로 저장된다(계정 id 뿐). 처리방침의 보유 항목에 적는다 — `docs/modules/auth-session-jdbc.md`.
 
 ### 관리자 대시보드 — 방문 · 흐름 · 장사 · 앱 통계 한 화면 (2026-10-27)

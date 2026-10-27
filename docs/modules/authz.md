@@ -34,7 +34,7 @@
 - 역할 → 권한 매핑 자체(`skeleton.authz.roles` · `super-role` · `cache-ttl`)는 `platform` 의 설정이다. 이 모듈의 접두사는 스위치 하나다. 역할 표 화면은 프런트 `@skeleton/auth` 의 admin 하위 경로.
 - 켜기: `skeleton.authz.admin.enabled=true` + 저장소(`authz-jdbc`).
 - `holders`(역할을 가진 계정 수)와 「쓰는 계정이 있는 역할 삭제 막기」는 `account` 가 `RoleHolders` 빈을 내면 켜진다. `account` 가 없으면 `holders` 는 `null` 이고 삭제 검사는 없다.
-- 역할 만들기 · 고치기 · 지우기는 이 프로세스 안에서 한 줄로 선다(`RoleService` 의 잠금) — 행 잠금이 없는 저장소(메모리)에서도 같은 역할의 동시 편집 · 마지막 `authz.roles` 보호가 지켜진다. 여러 인스턴스 사이는 저장소의 행 잠금(`authz-jdbc` 의 `for update`)이 맡는다.
+- 역할 만들기 · 고치기 · 지우기는 이 프로세스 안에서 한 줄로 선다(`RoleService` 의 잠금) — 행 잠금이 없는 저장소(메모리)에서도 같은 역할의 동시 편집 · 마지막 `authz.roles` 보호가 지켜진다. 잠금은 메서드가 끝나면 풀리므로 앱이 `RoleService` 를 자기 `@Transactional` 안에서 부르면 안 된다(바깥 트랜잭션에 합류해 커밋 전에 풀린다). 여러 인스턴스 사이는 저장소의 행 잠금(`authz-jdbc` 의 `for update`)이 **같은 역할 한 줄**의 동시 고치기 · 지우기만 직렬화한다 — 「마지막 `authz.roles` 보호」가 보는 호출자의 **다른 역할** 권한은 캐시(`cache-ttl`)에서 잠금 없이 읽으므로, 서로 다른 인스턴스에서 두 역할을 동시에 지우면 둘 다 통과할 수 있다(전권 역할 `ADMIN` 은 고정이라 완전히 잠기지는 않는다).
 - 호출자의 「자기 잠금」은 요청이 싣고 온 역할(토큰의 역할)로 판정한다.
 
 ## Decisions and rejected alternatives
