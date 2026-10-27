@@ -4,14 +4,46 @@ import dev.sumin.skeleton.notification.NotificationEvent
 import dev.sumin.skeleton.notification.NotificationSubscription
 import dev.sumin.skeleton.notification.NotificationSubscriptionRegistry
 import java.time.Instant
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
+import org.springframework.context.SmartLifecycle
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter
 
+/**
+ * 열린 SSE 연결은 끝나지 않는 요청이라 서버의 우아한 종료(graceful shutdown)가 「진행 중인 요청이 끝나기를」 `timeout-per-shutdown-phase`(30초) 꽉 채워 기다린다 —
+ * 놀고 있는 서버도 재시작마다 30초가 걸린다. 그래서 종료가 시작되면 **웹 서버의 종료 단계보다 먼저** 열린 연결을 모두 닫는다([stop], 위상 `SmartLifecycle.DEFAULT_PHASE` = 가장 먼저 멈춘다).
+ * 클라이언트(`EventSource`)는 알아서 다시 붙는다 — 배포에서는 다른 인스턴스에 붙는다.
+ */
 class NotificationSseService(
     private val subscriptionRegistry: NotificationSubscriptionRegistry,
     private val properties: NotificationSseProperties,
-) {
+) : SmartLifecycle {
+    private val open: MutableSet<SseEmitter> = ConcurrentHashMap.newKeySet()
+    private val running = AtomicBoolean(false)
+
+    override fun start() {
+        running.set(true)
+    }
+
+    override fun stop() {
+        if (!running.compareAndSet(true, false)) return
+        // 복사본을 돈다 — complete() 가 완료 콜백으로 [open] 에서 자기를 뺀다
+        open.toList().forEach { emitter ->
+            try {
+                emitter.complete()
+            } catch (_: Exception) {
+                // 이미 끊긴 연결 — 닫으려는 것이므로 무시한다
+            }
+        }
+        open.clear()
+    }
+
+    override fun isRunning(): Boolean = running.get()
+
+    /** 웹 서버의 종료 단계(`SmartLifecycle.DEFAULT_PHASE` 보다 작다)보다 먼저 멈춘다 */
+    override fun getPhase(): Int = SmartLifecycle.DEFAULT_PHASE
+
     /**
      * [recipientId] 는 연결한 호출자(`Principal.name`)다. 받는 사람이 정해진 알림(`recipientIds` 가 비어 있지 않음)은
      * 그 사람에게만 흘리고, 받는 사람이 없는 알림(전체 공지)은 모두에게 흘린다. 인증 없는 연결(공개 엔드포인트)은 후자만 받는다.
@@ -29,12 +61,19 @@ class NotificationSseService(
         }
         subscriptionRef.set(subscription)
 
-        emitter.onCompletion { emitter.closeSubscription() }
+        open += emitter
+        emitter.onCompletion {
+            open -= emitter
+            emitter.closeSubscription()
+        }
         emitter.onTimeout {
             emitter.closeSubscription()
             emitter.complete()
         }
-        emitter.onError { _: Throwable -> emitter.closeSubscription() }
+        emitter.onError { _: Throwable ->
+            open -= emitter
+            emitter.closeSubscription()
+        }
 
         emitter.sendConnectedEvent(normalizedTopics)
         return emitter

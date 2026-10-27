@@ -28,6 +28,21 @@ class NotificationSseServiceTest {
     }
 
     @Test
+    fun `stopping the application closes every open stream and its subscription, so the server's graceful shutdown does not wait for them`() {
+        val registry = RecordingSubscriptionRegistry()
+        val service = NotificationSseService(subscriptionRegistry = registry, properties = NotificationSseProperties())
+        service.start()
+        service.connect(listOf("demo"))
+        assertTrue(!registry.subscription.closed)
+
+        service.stop()
+
+        assertTrue(registry.subscription.closed)
+        assertFalse(service.isRunning)
+        assertTrue(service.phase > 2147482623, "must stop before the web server's graceful shutdown phase")
+    }
+
+    @Test
     fun `connect allows all topics when topic list is empty`() {
         val registry = RecordingSubscriptionRegistry()
         val service = NotificationSseService(
