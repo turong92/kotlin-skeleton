@@ -35,13 +35,16 @@ class WebhookLogMaskingTest {
         }
     }
 
-    /** 입력을 n → 2n 으로 늘렸을 때 시간이 3배 아래(제곱이면 4배)이고 넉넉한 절대 상한(200ms) 안인지 — 기계가 느려도 거짓 실패하지 않게 절대 시간만으로는 가르지 않는다 */
+    /**
+     * 입력을 n → 4n 으로 늘렸을 때 시간이 8배 아래(선형이면 약 4배, 제곱이면 16배)이고 넉넉한 절대 상한 안인지 — 기계가 느려도 거짓 실패하지 않게 절대 시간만으로는 가르지 않는다.
+     * 입력이 작으면 잡음이 비율을 지배하므로(바쁜 맥에서 14ms → 56ms 가 나온 적이 있다) 네 배로 늘리고 여유를 둔다 — `LogMaskerTest` 의 `TimingGrowth` 와 같은 방식이다
+     */
     private fun assertLinear(what: String, run: (Int) -> Unit) {
-        fun best(block: () -> Unit) = (1..5).minOf { val t = System.nanoTime(); block(); (System.nanoTime() - t) / 1e6 }
+        fun best(block: () -> Unit) = (1..7).minOf { val t = System.nanoTime(); block(); (System.nanoTime() - t) / 1e6 }
         run(4000) // 예열
         val small = best { run(4000) }
-        val big = best { run(8000) }
-        assertTrue(big < 200.0, "$what: 8000 chars took ${big}ms")
-        assertTrue(big < 3 * small + 2.0, "$what: doubling the input took ${small}ms -> ${big}ms (quadratic would be 4x)")
+        val big = best { run(16000) }
+        assertTrue(big < 500.0, "$what: 16000 chars took ${big}ms")
+        assertTrue(big < 8 * small + 25.0, "$what: four times the input took ${small}ms -> ${big}ms (quadratic would be 16x)")
     }
 }
