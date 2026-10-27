@@ -31,6 +31,10 @@ class GlobalExceptionHandlerHttpStatusTest {
         @PostMapping("/json-only", consumes = ["application/json"])
         fun jsonOnly(@RequestBody body: Map<String, String>) = body
 
+        /** 클라이언트가 이미 끊은 SSE 연결에 쓰다 난 예외 — 실제로는 `ServletResponse failed to flushBuffer: Broken pipe` */
+        @GetMapping("/stream", produces = ["text/event-stream"])
+        fun stream(): Map<String, Any> = throw org.springframework.web.context.request.async.AsyncRequestNotUsableException("ServletResponse failed to flushBuffer: java.io.IOException: Broken pipe")
+
         @GetMapping("/needs-param")
         fun needsParam(@RequestParam q: String) = mapOf("q" to q)
     }
@@ -72,6 +76,23 @@ class GlobalExceptionHandlerHttpStatusTest {
             assertTrue(appender.list.none { it.level == Level.ERROR }, "a client Accept mistake must not log ERROR: ${appender.list.map { it.formattedMessage }}")
         } finally {
             logger.detachAppender(appender)
+        }
+    }
+
+    @Test
+    fun `a client that closed an event stream is not an error - no ERROR log, no second failure writing an error body to an event stream`() {
+        val handlerLogger = LoggerFactory.getLogger(GlobalExceptionHandler::class.java) as Logger
+        val resolverLogger = LoggerFactory.getLogger("org.springframework.web.servlet.mvc.method.annotation.ExceptionHandlerExceptionResolver") as Logger
+        val appender = ListAppender<ILoggingEvent>().also { it.start() }
+        handlerLogger.addAppender(appender)
+        resolverLogger.addAppender(appender)
+        try {
+            val response = mvc.perform(get("/stream").accept(MediaType.TEXT_EVENT_STREAM)).andReturn().response
+            assertTrue(response.contentAsString.isEmpty(), "nothing is written to a connection the client already closed")
+            assertTrue(appender.list.none { it.level.isGreaterOrEqual(Level.WARN) }, "no WARN/ERROR expected: ${appender.list.map { it.formattedMessage }}")
+        } finally {
+            handlerLogger.detachAppender(appender)
+            resolverLogger.detachAppender(appender)
         }
     }
 

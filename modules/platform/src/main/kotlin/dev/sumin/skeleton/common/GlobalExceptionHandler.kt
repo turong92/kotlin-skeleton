@@ -11,6 +11,7 @@ import org.springframework.web.HttpRequestMethodNotSupportedException
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.MissingServletRequestParameterException
 import org.springframework.web.bind.annotation.ExceptionHandler
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException
 import org.springframework.web.bind.annotation.RestControllerAdvice
 import org.springframework.web.method.annotation.HandlerMethodValidationException
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException
@@ -156,6 +157,15 @@ class GlobalExceptionHandler {
                 data = ex.data,
             ),
         )
+    }
+
+    /**
+     * 비동기 응답(SSE 등)을 쓰는 중에 **클라이언트가 먼저 끊었다**(탭을 닫음 · 네트워크 끊김 — `Broken pipe`). 서버 잘못이 아니고 답할 상대도 없다:
+     * ERROR 로그도, 쓸 수 없는 응답에 오류 본문을 쓰려다 나는 두 번째 실패(`text/event-stream` 에는 `ApiError` 변환기가 없다)도 만들지 않는다.
+     */
+    @ExceptionHandler(AsyncRequestNotUsableException::class)
+    fun handleClientGone(ex: AsyncRequestNotUsableException) {
+        log.debug("The client closed the connection before the response was complete: {}", ex.message)
     }
 
     @ExceptionHandler(Exception::class)
