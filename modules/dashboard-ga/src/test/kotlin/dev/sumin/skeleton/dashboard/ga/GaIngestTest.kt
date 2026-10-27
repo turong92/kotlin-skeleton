@@ -2,6 +2,7 @@ package dev.sumin.skeleton.dashboard.ga
 
 import dev.sumin.skeleton.dashboard.DailySeries
 import dev.sumin.skeleton.dashboard.DashboardCache
+import dev.sumin.skeleton.common.logging.LogMasker
 import java.time.Duration
 import java.time.LocalDate
 import java.time.ZoneId
@@ -83,6 +84,27 @@ class GaIngestTest {
         assertEquals(mapOf("/a" to 5L, "/b" to 5L), store.rows.values.filter { it.kind == "landing" }.associate { it.dimension to it.value })
         assertEquals(mapOf("https://site.test/p → /a" to 8L), store.rows.values.filter { it.kind == "transition" }.associate { it.dimension to it.value })
         assertTrue(store.rows.values.none { '?' in it.dimension || '#' in it.dimension })
+    }
+
+    @Test
+    fun `a share-link token is masked in landing pages and in the path of a full referrer url, with the host kept`() {
+        api.reports["report:landingPage"] = listOf(FakeGaApi.Out(listOf("/e/tokenAAAA1111?x=1"), listOf(3, 0)), FakeGaApi.Out(listOf("/e/tokenBBBB2222"), listOf(4, 0)))
+        api.reports["report:pageReferrer,pagePath"] = listOf(FakeGaApi.Out(listOf("https://site.test/e/tokenCCCC3333?q=1", "/e/tokenDDDD4444"), listOf(2)), FakeGaApi.Out(listOf("https://site.test", "/a"), listOf(1)))
+        val previous = LogMasker.current
+        LogMasker.install(LogMasker(pathPatterns = listOf("^/e/(?<value>[^/?#]+)"), patterns = listOf("^/e/(?<value>[^/?#]+)")))
+        try {
+            store.upsert(ingestor().ingest(day, zone))
+        } finally {
+            LogMasker.install(previous)
+        }
+
+        val landing = store.rows.values.filter { it.kind == "landing" }.associate { it.dimension to it.value }
+        assertEquals(1, landing.size, landing.toString())
+        assertEquals(7L, landing.values.single())
+        val transitions = store.rows.values.filter { it.kind == "transition" }.associate { it.dimension to it.value }
+        assertTrue(transitions.keys.none { "token" in it }, transitions.toString())
+        assertTrue(transitions.keys.any { it.startsWith("https://site.test/e/") }, transitions.toString())   // 호스트는 남는다
+        assertEquals(1L, transitions["https://site.test → /a"])
     }
 
     @Test

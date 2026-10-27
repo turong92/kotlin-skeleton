@@ -50,9 +50,16 @@ class GaIngestor(private val client: GaDataClient, private val settings: GaSetti
     private fun label(raw: String) = raw.ifBlank { "(none)" }
 
     /** 쿼리 · 조각을 떼고, 요청 로그와 같은 규칙(`LogMasker.maskRequestPath` — 앱이 더한 주소 속 비밀 조각 규칙, 없으면 그대로)으로 공유 링크 토큰 같은 값을 가린다 */
-    private fun withoutQuery(url: String) = LogMasker.current.maskRequestPath(url.substringBefore('?').substringBefore('#'))
+    private fun withoutQuery(url: String): String {
+        val bare = url.substringBefore('?').substringBefore('#')
+        // `pageReferrer` 는 전체 주소(`https://호스트/경로`)라 앱의 `^/e/…` 같은 경로 규칙이 걸리도록 호스트는 따로 두고 경로 부분만 마스킹한다
+        val absolute = ABSOLUTE.matchEntire(bare) ?: return LogMasker.current.maskRequestPath(bare)
+        val (origin, path) = absolute.destructured
+        return origin + if (path.isEmpty()) "" else LogMasker.current.maskRequestPath(path)
+    }
 
     private companion object {
+        val ABSOLUTE = Regex("^([a-zA-Z][a-zA-Z0-9+.-]*://[^/]+)(.*)$")
         const val LIMIT = 50
         const val MAX_DIMENSION = 200
     }
