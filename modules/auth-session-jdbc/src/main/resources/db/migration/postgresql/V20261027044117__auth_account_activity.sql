@@ -8,4 +8,4 @@ create table if not exists auth_account_activity (
 create index if not exists idx_auth_account_activity_day on auth_account_activity (day);   -- 기간 질의 · 보존 기간 청소
 
 -- 참고: V20261026135601 의 idx_auth_sessions_last_used 는 대시보드가 더는 쓰지 않는다(활동 기록으로 바꿨다). 마이그레이션은 서로 기대지 않으므로(docs/schema-management.md) 여기서 지우지 않는다 —
--- 쓰기 비용이 걸리면 직접 `drop index idx_auth_sessions_last_used;` 한다.
+-- 쓰기 비용이 걸리면 앱이 자기 V 파일로 `drop index idx_auth_sessions_last_used;` 한다.

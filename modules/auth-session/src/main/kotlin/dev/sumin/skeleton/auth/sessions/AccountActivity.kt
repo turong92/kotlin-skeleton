@@ -55,14 +55,15 @@ class AccountActivityRecorder(
     private val log = LoggerFactory.getLogger(javaClass)
     private val lastRecorded = ConcurrentHashMap<String, LocalDate>()
 
-    /** 기록이 실패하면 이 시각까지 저장소를 다시 부르지 않는다 — DB 가 죽었거나 표가 없을 때 로그인 · 새로고침마다 부르고 WARN 을 쏟지 않게 */
-    @Volatile private var pausedUntil: Instant = Instant.MIN
+    /** 기록이 실패하면 이 시각까지 저장소를 다시 부르지 않는다 — DB 가 죽었거나 표가 없을 때 로그인 · 새로고침마다 부르고 WARN 을 쏟지 않게. 프로젝트마다(한 프로젝트의 표 문제가 다른 프로젝트의 기록을 멈추지 않게) */
+    private val pausedUntil = ConcurrentHashMap<String, Instant>()
 
     fun record(accountId: String) {
         if (store === AccountActivityStore.NONE) return
         try {
             val now = time.now()
-            if (now.isBefore(pausedUntil)) return
+            val project = ProjectContext.scopedKey("")
+            if (pausedUntil[project]?.let { now.isBefore(it) } == true) return
             val day = now.atZone(zone()).toLocalDate()
             val key = ProjectContext.scopedKey(accountId)
             if (lastRecorded[key] == day) return
@@ -70,7 +71,7 @@ class AccountActivityRecorder(
             if (lastRecorded.size >= MAX_REMEMBERED) lastRecorded.clear()   // 메모리 상한 — 비워도 저장소가 멱등이라 한 번씩 더 부를 뿐이다
             lastRecorded[key] = day
         } catch (e: Exception) {
-            pausedUntil = time.now().plus(PAUSE_AFTER_FAILURE)
+            pausedUntil[ProjectContext.scopedKey("")] = time.now().plus(PAUSE_AFTER_FAILURE)
             log.warn("account activity was not recorded (paused for {}s): {}", PAUSE_AFTER_FAILURE.seconds, e.javaClass.simpleName)
         }
     }

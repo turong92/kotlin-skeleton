@@ -43,6 +43,18 @@ class NotificationSseServiceTest {
     }
 
     @Test
+    fun `a connection that arrives after stop is closed at once, so it does not hold the shutdown`() {
+        val registry = RecordingSubscriptionRegistry()
+        val service = NotificationSseService(subscriptionRegistry = registry, properties = NotificationSseProperties())
+        service.start()
+        service.stop()
+
+        service.connect(listOf("demo"))
+
+        assertTrue(registry.subscription.closed)
+    }
+
+    @Test
     fun `connect allows all topics when topic list is empty`() {
         val registry = RecordingSubscriptionRegistry()
         val service = NotificationSseService(

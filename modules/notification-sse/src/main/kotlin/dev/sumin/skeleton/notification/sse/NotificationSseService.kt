@@ -21,12 +21,15 @@ class NotificationSseService(
 ) : SmartLifecycle {
     private val open: MutableSet<SseEmitter> = ConcurrentHashMap.newKeySet()
     private val running = AtomicBoolean(false)
+    private val stopped = AtomicBoolean(false)
 
     override fun start() {
+        stopped.set(false)
         running.set(true)
     }
 
     override fun stop() {
+        stopped.set(true)
         if (!running.compareAndSet(true, false)) return
         // 복사본을 돈다 — complete() 가 완료 콜백으로 [open] 에서 자기를 뺀다
         open.toList().forEach { emitter ->
@@ -62,6 +65,8 @@ class NotificationSseService(
         subscriptionRef.set(subscription)
 
         open += emitter
+        // 종료가 이미 시작됐다면(stop 뒤에 들어온 연결) 아무도 닫아 주지 않아 서버의 우아한 종료를 다시 붙잡는다 — 바로 닫는다
+        if (stopped.get()) emitter.complete()
         emitter.onCompletion {
             open -= emitter
             emitter.closeSubscription()

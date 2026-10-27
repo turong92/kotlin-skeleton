@@ -79,6 +79,22 @@ class AccountActivityRecordingTest {
     }
 
     @Test
+    fun `a failure in one project does not pause the other project's records`() {
+        val failing = RecordingStore(fail = true)
+        val working = RecordingStore()
+        fun project(id: String) = dev.sumin.skeleton.common.project.Project(id, listOf("$id.test"), id, dev.sumin.skeleton.common.project.ProjectDatasource(), emptyMap())
+        // 한 기록기를 두 프로젝트가 나눠 쓴다 — 저장소는 프로젝트마다 다른 스키마를 본다
+        var current: AccountActivityStore = failing
+        val shared = AccountActivityRecorder(object : AccountActivityStore by failing { override fun recordActive(accountId: String, day: LocalDate) = current.recordActive(accountId, day) }, { zone }, time)
+
+        dev.sumin.skeleton.common.project.ProjectContext.runIn(project("a")) { shared.record("acc_1") }   // a 의 표가 없다 → a 만 멈춘다
+        current = working
+        dev.sumin.skeleton.common.project.ProjectContext.runIn(project("b")) { shared.record("acc_2") }
+
+        assertEquals(listOf("acc_2" to LocalDate.parse("2026-10-26")), working.written)
+    }
+
+    @Test
     fun `a failing activity store never blocks the login or the refresh`() {
         val service = service(RecordingStore(fail = true))
         val opened = service.open("acc_1", client)
