@@ -35,7 +35,7 @@ object SharedMySql {
     @Synchronized
     fun newDatabase(): JdbcConnectionDetails {
         val name = "ctx_${sequence.incrementAndGet()}_${UUID.randomUUID().toString().take(8)}"
-        DriverManager.getConnection(container.jdbcUrl.replace(container.databaseName, ""), "root", container.password).use { connection ->
+        DriverManager.getConnection(container.jdbcUrl.replaceFirst("/" + container.databaseName, "/"), "root", container.password).use { connection ->
             connection.createStatement().use { it.execute("create database `$name`") }
         }
         val url = container.jdbcUrl.replaceFirst("/" + container.databaseName, "/$name") +

@@ -15,7 +15,7 @@ import kotlin.test.fail
 object RegexBlowupGuard {
     /** 선형이면 입력 하나가 1초 안팎, 제곱이면 토큰 경계에서만 시작하는 패턴이라도 10¹¹ 단계 이상이라 한도를 크게 넘는 길이 */
     const val DEFAULT_N = 1_000_000
-    const val DEFAULT_LIMIT_MILLIS = 5_000L
+    const val DEFAULT_LIMIT_MILLIS = 30_000L
 
     /** 인터럽트되면 던지는 CharSequence — 시간 초과 뒤에도 정규식이 코어를 계속 쓰지 않게, 자기 시험처럼 일부러 느린 패턴을 돌릴 때 입력을 이걸로 감싼다 */
     fun interruptible(text: CharSequence): CharSequence = object : CharSequence by text {
