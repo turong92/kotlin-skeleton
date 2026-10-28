@@ -1,0 +1,3 @@
+dev.sumin.skeleton.reward.RewardAutoConfiguration
+dev.sumin.skeleton.reward.notification.RewardNotificationAutoConfiguration
+dev.sumin.skeleton.reward.web.RewardWebAutoConfiguration

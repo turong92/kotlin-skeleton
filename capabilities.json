@@ -2354,6 +2354,68 @@
       }
     },
     {
+      "id": "reward",
+      "kind": "module",
+      "module": "reward",
+      "path": "modules/reward",
+      "status": "experimental",
+      "summary": "보상 지급의 허리 — 이벤트가 기록한 지급 건을 일꾼이 쿠폰 · 포인트 지급기로 주고(재시도 · 멱등), 받았어요 알림과 운영자 다시 지급 · 취소까지.",
+      "starter": false,
+      "newProjectFlag": "--modules reward,reward-jdbc",
+      "autoIncludes": ["json", "notification"],
+      "needs": {
+        "requires": ["reward-jdbc"],
+        "oneOf": [],
+        "optional": ["notification"]
+      },
+      "config": {
+        "prefixes": ["skeleton.reward"],
+        "snippet": "docs/config/modules/reward.yml"
+      },
+      "basePaths": ["/api/v1/admin/reward-grants"],
+      "secrets": [],
+      "docs": ["docs/modules/reward.md"],
+      "frontend": null,
+      "notFor": [
+        "reward 는 저장소를 모른다 — reward-jdbc 를 같이 고른다",
+        "지급기(쿠폰 · 포인트)는 별도 모듈이다 — 이 모듈만으로는 아무것도 주지 못한다",
+        "조건 판정(출석 · 친구초대)은 이벤트 모듈의 몫"
+      ],
+      "keywords": {
+        "ko": ["보상 지급", "지급 건", "쿠폰 지급", "포인트 지급", "다시 지급", "받았어요 알림"],
+        "en": ["reward grant", "reward issuer", "payout worker", "retry grant"]
+      }
+    },
+    {
+      "id": "reward-jdbc",
+      "kind": "module",
+      "module": "reward-jdbc",
+      "path": "modules/reward-jdbc",
+      "status": "experimental",
+      "summary": "지급 건 저장과 지급 작업을 DB 에 두고 일꾼을 job-queue-jdbc 에 얹는다 (PostgreSQL · MySQL).",
+      "starter": false,
+      "newProjectFlag": "--modules reward-jdbc",
+      "autoIncludes": ["json", "notification", "reward"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": [],
+        "snippet": null
+      },
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/reward-jdbc.md"],
+      "frontend": null,
+      "notFor": ["DataSource · db-* 모듈과 job-queue-jdbc 스키마, 이 모듈의 마이그레이션이 적용된 스키마가 필요하다"],
+      "keywords": {
+        "ko": ["지급 건 저장", "지급 작업 큐"],
+        "en": ["reward grant store", "reward job"]
+      }
+    },
+    {
       "id": "scheduler",
       "kind": "module",
       "module": "scheduler",
@@ -2663,6 +2725,8 @@
         "redis-core",
         "redis-lock",
         "redis-rate-limit",
+        "reward",
+        "reward-jdbc",
         "scheduler",
         "storage",
         "storage-s3"

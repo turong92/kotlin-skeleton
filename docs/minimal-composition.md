@@ -144,6 +144,7 @@ fails when this table and the prefixes found in module code differ.
 | `redis-core` | `skeleton.redis` |
 | `redis-lock` | `skeleton.redis-lock` |
 | `redis-rate-limit` | `skeleton.redis-rate-limit` |
+| `reward` | `skeleton.reward` |
 | `scheduler` | `skeleton.scheduler` |
 | `storage` | `skeleton.storage` |
 | `storage-s3` | `skeleton.storage-s3` |
