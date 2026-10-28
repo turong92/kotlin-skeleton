@@ -65,6 +65,42 @@ class NotificationInboxWebTest {
     }
 
     @Test
+    fun `rows carry link and collapsed count`() {
+        val first = NotificationEvent(topic = "fold-e", type = "t", link = "/notes/1", collapseKey = "k")
+        inbox.save(first, setOf("acc_e"))
+        inbox.save(NotificationEvent(topic = "fold-e", type = "t", link = "/notes/1", collapseKey = "k"), setOf("acc_e"))
+        saveFor("acc_e", "fold-e")
+
+        mockMvc.perform(get("/api/v1/notifications").param("topic", "fold-e").principal(caller("acc_e")))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.values", hasSize<Any>(2)))
+            .andExpect(jsonPath("$.values[?(@.eventId == '${first.id}')].collapsedCount").value(2))
+            .andExpect(jsonPath("$.values[?(@.eventId == '${first.id}')].link").value("/notes/1"))
+            .andExpect(jsonPath("$.values[?(@.collapsedCount == 1)].link").value(org.hamcrest.Matchers.contains(org.hamcrest.Matchers.nullValue())))
+    }
+
+    @Test
+    fun `unread-count is the caller's own unread number in the value envelope`() {
+        val id = saveFor("acc_f", "uc-f")
+        saveFor("acc_f", "uc-f")
+        saveFor("acc_g", "uc-f")
+
+        mockMvc.perform(get("/api/v1/notifications/unread-count").principal(caller("acc_f")))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.value.count").value(2))
+        inbox.markRead("acc_f", id)
+        mockMvc.perform(get("/api/v1/notifications/unread-count").principal(caller("acc_f")))
+            .andExpect(jsonPath("$.value.count").value(1))
+        mockMvc.perform(get("/api/v1/notifications/unread-count").principal(caller("acc_nobody")))
+            .andExpect(jsonPath("$.value.count").value(0))
+    }
+
+    @Test
+    fun `unread-count without an authenticated caller is 401`() {
+        mockMvc.perform(get("/api/v1/notifications/unread-count")).andExpect(status().isUnauthorized)
+    }
+
+    @Test
     fun `without an authenticated caller it is 401`() {
         mockMvc.perform(get("/api/v1/notifications")).andExpect(status().isUnauthorized)
     }
@@ -78,6 +114,8 @@ class NotificationInboxWebDisabledTest {
     @Test
     fun `the endpoints are gone when disabled`() {
         mockMvc.perform(get("/api/v1/notifications").principal(TestingAuthenticationToken("acc", "x", "ROLE_USER")))
+            .andExpect(status().isNotFound)
+        mockMvc.perform(get("/api/v1/notifications/unread-count").principal(TestingAuthenticationToken("acc", "x", "ROLE_USER")))
             .andExpect(status().isNotFound)
     }
 }

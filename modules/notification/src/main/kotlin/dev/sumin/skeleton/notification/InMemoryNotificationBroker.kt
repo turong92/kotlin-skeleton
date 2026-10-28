@@ -9,6 +9,11 @@ import java.util.concurrent.atomic.AtomicBoolean
  * 프로젝트 모드: 구독은 **구독한 프로젝트**를 기억하고, 알림은 그 프로젝트에서 발행된 것만 받는다 — 계정 id 가 프로젝트 사이에 겹쳐도 알림이 새지 않는다.
  * 프로젝트 밖에서 구독한 쪽(서버 전체 리스너 — 슬랙 전달 등)은 모든 프로젝트의 알림을 듣는다. 프로젝트 없이 발행한 알림은 서버 전체 리스너만 듣는다.
  * 프로젝트가 없으면(한 서비스) 지금과 같다.
+ *
+ * 받은편지함 저장은 호출자 트랜잭션 안에서 바로 한다(롤백되면 알림도 없다, 실패는 호출자에게 던져진다).
+ * 구독자 전달은 트랜잭션 동기화가 켜져 있으면 **커밋 뒤**로 미룬다 - 롤백된 알림이 SSE 로 새지 않게. 트랜잭션 밖이거나 `spring-tx` 가 없으면 바로 전달한다.
+ * 미뤄진 발행의 [NotificationPublishResult.deliveredSubscribers] 는 0 이다(아직 전달하지 않았다).
+ * 알림 실패가 업무를 실패시키면 안 되는 호출자는 커밋 뒤에 부르고 잡는다.
  */
 class InMemoryNotificationBroker(
     private val inboxRepository: NotificationInboxRepository = NoopNotificationInboxRepository,
@@ -18,8 +23,18 @@ class InMemoryNotificationBroker(
 
     override fun publish(event: NotificationEvent): NotificationPublishResult {
         inboxRepository.save(event, recipientResolver.resolveRecipients(event))
-        var delivered = 0
         val project = ProjectContext.currentOrNull()?.id
+        if (AfterCommit.runAfterCommit { deliver(event, project) }) {
+            return NotificationPublishResult(eventId = event.id, deliveredSubscribers = 0)
+        }
+        return NotificationPublishResult(eventId = event.id, deliveredSubscribers = deliver(event, project))
+    }
+
+    private fun deliver(
+        event: NotificationEvent,
+        project: String?,
+    ): Int {
+        var delivered = 0
         subscriptions.values.forEach { subscription ->
             if (subscription.matches(event.topic) && subscription.hears(project)) {
                 runCatching {
@@ -31,7 +46,7 @@ class InMemoryNotificationBroker(
                 }
             }
         }
-        return NotificationPublishResult(eventId = event.id, deliveredSubscribers = delivered)
+        return delivered
     }
 
     override fun subscribe(

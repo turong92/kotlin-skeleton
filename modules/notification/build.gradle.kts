@@ -5,11 +5,13 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-api:3.0.3")
+    compileOnly("org.springframework:spring-tx")   // 커밋 뒤 전달 - 없으면 바로 전달한다
     compileOnly("org.springframework.security:spring-security-core")   // 호출자(Authentication) — 없으면 엔드포인트를 등록하지 않는다
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("tools.jackson.module:jackson-module-kotlin")
 
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
+    testImplementation("org.springframework:spring-tx")
     testImplementation("org.springframework.security:spring-security-core")
     testImplementation("tools.jackson.module:jackson-module-kotlin")
     testImplementation("org.assertj:assertj-core")

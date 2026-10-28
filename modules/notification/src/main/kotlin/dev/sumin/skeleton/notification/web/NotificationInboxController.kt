@@ -38,6 +38,12 @@ data class NotificationInboxItemResponse(
     val payload: Map<String, Any?>,
     val createdAt: Instant,
     val readAt: Instant?,
+    val link: String?,
+    val collapsedCount: Int,
+)
+
+data class NotificationUnreadCountResponse(
+    val count: Long,
 )
 
 data class NotificationReadResponse(
@@ -86,6 +92,15 @@ class NotificationInboxController(
         )
     }
 
+    @Operation(
+        summary = "Count my unread notifications",
+        description = "Returns the number of unread rows (a folded row counts once). Cheaper than listing with size=1.",
+    )
+    @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = NotificationUnreadCountResponse::class)
+    @GetMapping("/unread-count")
+    fun unreadCount(authentication: Authentication?) =
+        Response.ok(NotificationUnreadCountResponse(count = inboxRepository.countUnread(authentication.recipientId())))
+
     @Operation(summary = "Mark notification read")
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = NotificationReadResponse::class)
     @PatchMapping("/{eventId}/read")
@@ -117,6 +132,8 @@ class NotificationInboxController(
             payload = event.payload,
             createdAt = event.createdAt,
             readAt = readAt,
+            link = event.link,
+            collapsedCount = collapsedCount,
         )
 
     private fun Authentication?.recipientId(): String =

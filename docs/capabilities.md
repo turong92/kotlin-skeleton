@@ -112,7 +112,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `legal-jdbc` | 약관 · 동의 저장소 — PostgreSQL · MySQL 로 legal 의 저장 포트 둘(동의 사건 · 판 장부)을 구현한다(legal_consents · legal_document_versions, 트리거로 더하기만). | 스타터(apps/api)에 기본 포함 | 동의 저장소, 약관 DB / consent storage, consent repository, legal database | `@skeleton/legal` |
 | `migration` | 마이그레이션 공통 규칙 — DB 를 지우는 설정이 허용 프로필 밖에서 켜지면 시작을 막는 가드(도구 중립). | 스타터(apps/api)에 기본 포함 | 마이그레이션 가드, DB 초기화 방지, 스키마 보호 / migration guard, prevent db wipe, schema safety | — |
 | `migration-flyway` | Flyway 구현 — 로컬 clean 옵트인 · 마이그레이션 파일 이름 규칙(V<UTC 14자리>__snake_case.sql) 검사. | 스타터(apps/api)에 기본 포함 | Flyway, 마이그레이션, DB 스키마 버전, 스키마 변경 / flyway, database migration, schema migration, schema version | — |
-| `notification` | 알림 계약 · 수신자 해석 · 인메모리 브로커 + 로그인한 사람의 받은편지함 HTTP(/api/v1/notifications: 목록 · 읽음 · 모두 읽음). | `--modules notification` | 알림, 알림 목록, 받은편지함, 안 읽은 알림, 알림 읽음, 알림 보내기 / notification, inbox, unread, mark as read, publish notification | `@skeleton/notifications` |
+| `notification` | 알림 계약 · 수신자 해석 · 인메모리 브로커 + 로그인한 사람의 받은편지함 HTTP(/api/v1/notifications: 목록 · 안 읽은 수 · 읽음 · 모두 읽음). 클릭 이동 링크 · 같은 열쇠 묶기 · 보관 정리(기본 꺼짐) · 커밋 뒤 전달. | `--modules notification` | 알림, 알림 목록, 받은편지함, 안 읽은 알림, 알림 읽음, 알림 보내기, 알림 묶기, 알림 링크, 알림 보관 정리 / notification, inbox, unread, mark as read, publish notification, collapse notifications, notification link, notification retention | `@skeleton/notifications` |
 | `notification-jdbc` | 알림 받은편지함을 DB 테이블에 저장한다(notification_inbox). | `--modules notification-jdbc` | 알림 저장, 알림 DB, 알림 기록 유지 / notification storage, persist notifications, inbox database | `@skeleton/notifications` |
 | `notification-mail` | SMTP 로 메일을 보내는 MailSender (spring.mail.* 위에). | 스타터(apps/api)에 기본 포함 | 메일 발송, 이메일 보내기, SMTP, 메일 / send email, smtp, mail sender, email | — |
 | `notification-slack` | 알림과 @SlackException 예외 알림을 Slack 웹훅으로 보낸다. | `--modules notification-slack` | 슬랙 알림, 슬랙, 예외 알림 / slack notification, slack webhook, exception alert | — |
@@ -811,12 +811,12 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - Flyway 기본값을 바꾸지 않는다 — out-of-order 같은 선택은 앱 yml 의 명시적 override
 - 키워드: Flyway, 마이그레이션, DB 스키마 버전, 스키마 변경 / flyway, database migration, schema migration, schema version
 
-### `notification` — 알림 계약 · 수신자 해석 · 인메모리 브로커 + 로그인한 사람의 받은편지함 HTTP(/api/v1/notifications: 목록 · 읽음 · 모두 읽음).
+### `notification` — 알림 계약 · 수신자 해석 · 인메모리 브로커 + 로그인한 사람의 받은편지함 HTTP(/api/v1/notifications: 목록 · 안 읽은 수 · 읽음 · 모두 읽음). 클릭 이동 링크 · 같은 열쇠 묶기 · 보관 정리(기본 꺼짐) · 커밋 뒤 전달.
 
 - 종류 · 상태: module · stable — 위치 `modules/notification`
 - 켜는 법: `--modules notification`
 - 의존 한 줄: `implementation(project(":modules:notification"))`
-- 설정 접두사 `skeleton.notification.inbox` — 키와 기본값 `docs/config/modules/notification.yml`
+- 설정 접두사 `skeleton.notification.inbox`, `skeleton.notification.retention` — 키와 기본값 `docs/config/modules/notification.yml`
 - HTTP 경로: `/api/v1/notifications`
 - 문서: `docs/modules/notification.md`
 - 짝 프런트(react-skeleton): 항목 `notifications` · 패키지 `@skeleton/notifications` · 조각 `--packages notifications`
@@ -824,7 +824,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 영속은 notification-jdbc, 실시간 전달은 notification-sse | -websocket, 메일은 notification-mail — 어댑터를 따로 고른다
   - 기본 브로커는 프로세스 안에서만 전달한다
   - 알림을 만드는 쪽(NotificationPublisher.publish)은 앱 코드가 부른다
-- 키워드: 알림, 알림 목록, 받은편지함, 안 읽은 알림, 알림 읽음, 알림 보내기 / notification, inbox, unread, mark as read, publish notification
+- 키워드: 알림, 알림 목록, 받은편지함, 안 읽은 알림, 알림 읽음, 알림 보내기, 알림 묶기, 알림 링크, 알림 보관 정리 / notification, inbox, unread, mark as read, publish notification, collapse notifications, notification link, notification retention
 
 ### `notification-jdbc` — 알림 받은편지함을 DB 테이블에 저장한다(notification_inbox).
 

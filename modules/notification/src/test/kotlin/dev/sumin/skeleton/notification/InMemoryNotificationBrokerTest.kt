@@ -3,6 +3,8 @@ package dev.sumin.skeleton.notification
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
 
 class InMemoryNotificationBrokerTest {
     @Test
@@ -124,5 +126,72 @@ class InMemoryNotificationBrokerTest {
         broker.publish(NotificationEvent(topic = "t", type = "x"))
 
         assertEquals(0, heardInA.size)
+    }
+
+    @Test
+    fun `inside a transaction subscribers are told only after commit and a rollback tells nobody`() {
+        val inbox = InMemoryNotificationInboxRepository()
+        val broker = InMemoryNotificationBroker(inbox)
+        val heard = mutableListOf<NotificationEvent>()
+        broker.subscribe(emptySet()) { heard += it }
+
+        // 롤백
+        TransactionSynchronizationManager.initSynchronization()
+        try {
+            val result = broker.publish(NotificationEvent(topic = "t", type = "x", recipientIds = setOf("acc_user")))
+            assertEquals(0, result.deliveredSubscribers)   // 미뤄진 발행은 0
+            assertEquals(0, heard.size)
+            // 저장은 호출자 트랜잭션 안에서 바로 — 롤백이면 같이 사라지는 것은 저장소(DB)의 몫이다
+            assertEquals(1, inbox.findByRecipient("acc_user").totalElements)
+            TransactionSynchronizationManager.getSynchronizations().forEach { it.afterCompletion(TransactionSynchronization.STATUS_ROLLED_BACK) }
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization()
+        }
+        assertEquals(0, heard.size)
+
+        // 커밋
+        TransactionSynchronizationManager.initSynchronization()
+        try {
+            broker.publish(NotificationEvent(topic = "t", type = "x", recipientIds = setOf("acc_user")))
+            assertEquals(0, heard.size)
+            val syncs = TransactionSynchronizationManager.getSynchronizations()
+            syncs.forEach { it.afterCommit() }
+            syncs.forEach { it.afterCompletion(TransactionSynchronization.STATUS_COMMITTED) }
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization()
+        }
+        assertEquals(1, heard.size)
+    }
+
+    @Test
+    fun `outside a transaction delivery is immediate`() {
+        val broker = InMemoryNotificationBroker()
+        val heard = mutableListOf<NotificationEvent>()
+        broker.subscribe(emptySet()) { heard += it }
+
+        val result = broker.publish(NotificationEvent(topic = "t", type = "x"))
+
+        assertEquals(1, result.deliveredSubscribers)
+        assertEquals(1, heard.size)
+    }
+
+    @Test
+    fun `a deferred delivery still respects the project the event was published in`() {
+        val broker = InMemoryNotificationBroker()
+        val heardInA = mutableListOf<NotificationEvent>()
+        val heardInB = mutableListOf<NotificationEvent>()
+        inProject("a") { broker.subscribe(emptySet()) { heardInA += it } }
+        inProject("b") { broker.subscribe(emptySet()) { heardInB += it } }
+
+        TransactionSynchronizationManager.initSynchronization()
+        try {
+            inProject("a") { broker.publish(NotificationEvent(topic = "t", type = "x")) }
+            // afterCommit 이 프로젝트 문맥 밖에서 불려도 발행한 프로젝트로 전달된다
+            TransactionSynchronizationManager.getSynchronizations().forEach { it.afterCommit() }
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization()
+        }
+        assertEquals(1, heardInA.size)
+        assertEquals(0, heardInB.size)
     }
 }

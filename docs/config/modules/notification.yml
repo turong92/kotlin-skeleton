@@ -1,5 +1,9 @@
-# notification — 받은편지함 HTTP 엔드포인트 (GET /api/v1/notifications · PATCH …/{eventId}/read · PATCH …/read-all). 접두사는 skeleton.notification.inbox.
+# notification — 받은편지함 HTTP 엔드포인트 (GET /api/v1/notifications · GET …/unread-count · PATCH …/{eventId}/read · PATCH …/read-all)와 보관 정리. 접두사는 skeleton.notification.inbox · skeleton.notification.retention.
 skeleton:
   notification:
     inbox:
       enabled: true                # false 면 엔드포인트를 등록하지 않는다 (서블릿 앱 + Spring Security 가 있을 때만 등록)
+    retention:
+      enabled: false               # true 면 interval 마다 max-age 가 지난 받은편지함 줄을 지운다 (기본 꺼짐 - 보관 정책은 앱이 정한다). scheduler 모듈의 skeletonTaskScheduler 가 있어야 돈다
+      max-age: 90d                 # 알림 시각이 이 기간보다 오래된 줄을 읽음 여부와 무관하게 지운다
+      interval: 1h                 # 정리를 도는 간격

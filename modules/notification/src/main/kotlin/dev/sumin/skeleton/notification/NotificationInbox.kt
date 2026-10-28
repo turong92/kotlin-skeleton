@@ -7,6 +7,8 @@ data class NotificationInboxRecord(
     val recipientId: String,
     val event: NotificationEvent,
     val readAt: Instant? = null,
+    /** 같은 [NotificationEvent.collapseKey] 로 접힌 알림 수. 접히지 않았으면 1 */
+    val collapsedCount: Int = 1,
 ) {
     val id: String = "$recipientId:${event.id}"
 }
@@ -31,6 +33,11 @@ data class NotificationInboxPage(
 )
 
 interface NotificationInboxRepository {
+    /**
+     * 받는 사람마다 한 줄을 넣는다. [NotificationEvent.collapseKey] 가 있으면 그 사람의 **안 읽은** 같은 열쇠 줄에 접는다:
+     * 내용(`type` · `severity` · `title` · `message` · `payload` · `link`)과 시각은 새 것, `collapsedCount` +1, `eventId` 는 처음 것 그대로(읽음 주소가 바뀌지 않게).
+     * 읽은 줄은 건드리지 않고 새 줄을 만든다. 같은 이벤트 id 를 다시 저장해도 수는 오르지 않는다.
+     */
     fun save(
         event: NotificationEvent,
         recipientIds: Set<String>,
@@ -50,6 +57,21 @@ interface NotificationInboxRepository {
     fun markAllRead(
         recipientId: String,
         readAt: Instant = Instant.now(),
+    ): Int
+
+    /** 안 읽은 줄 수. 기본 구현은 목록 조회의 전체 수라 직접 만든 저장소도 깨지지 않는다 - 저장소가 더 싸게 셀 수 있으면 덮는다 */
+    fun countUnread(recipientId: String): Long =
+        findByRecipient(recipientId, NotificationInboxQuery(size = 1, unreadOnly = true)).totalElements
+
+    /** `event_created_at < cutoff`(같은 시각은 남긴다)인 줄을 읽음 여부와 무관하게 지운다. 지운 줄 수를 돌려준다 */
+    fun deleteOlderThan(cutoff: Instant): Int
+
+    /** 그 주제의 모든 사람의 줄을 지운다 (서버 API 만 - HTTP 로는 열지 않는다) */
+    fun deleteByTopic(topic: String): Int
+
+    fun deleteByRecipientAndTopic(
+        recipientId: String,
+        topic: String,
     ): Int
 }
 
@@ -88,17 +110,35 @@ class DefaultNotificationRecipientResolver : NotificationRecipientResolver {
 class InMemoryNotificationInboxRepository : NotificationInboxRepository {
     private val records = ConcurrentHashMap<NotificationInboxKey, NotificationInboxRecord>()
 
+    /** 묶기는 「안 읽은 같은 열쇠 줄을 찾고 고친다」가 한 덩어리여야 해서 저장을 줄 세운다 (DB 판은 유니크 색인이 같은 일을 한다) */
+    @Synchronized
     override fun save(
         event: NotificationEvent,
         recipientIds: Set<String>,
     ): List<NotificationInboxRecord> =
         recipientIds.mapNotNull { recipientId ->
             val normalizedRecipientId = recipientId.trim().takeIf { it.isNotBlank() } ?: return@mapNotNull null
-            val key = NotificationInboxKey(normalizedRecipientId, event.id, project())
-            records.computeIfAbsent(key) {
-                NotificationInboxRecord(recipientId = normalizedRecipientId, event = event)
+            val project = project()
+            val key = NotificationInboxKey(normalizedRecipientId, event.id, project)
+            records[key]?.let { return@mapNotNull it }
+            val folded = event.collapseKey?.let { collapseKey -> findUnreadFolding(normalizedRecipientId, collapseKey, project) }
+            if (folded == null) {
+                NotificationInboxRecord(recipientId = normalizedRecipientId, event = event).also { records[key] = it }
+            } else {
+                folded.copy(event = event.copy(id = folded.event.id), collapsedCount = folded.collapsedCount + 1)
+                    .also { records[NotificationInboxKey(normalizedRecipientId, folded.event.id, project)] = it }
             }
         }
+
+    private fun findUnreadFolding(
+        recipientId: String,
+        collapseKey: String,
+        project: String?,
+    ): NotificationInboxRecord? =
+        records.entries.asSequence()
+            .filter { it.key.project == project && it.key.recipientId == recipientId }
+            .map { it.value }
+            .firstOrNull { it.readAt == null && it.event.collapseKey == collapseKey }
 
     override fun findByRecipient(
         recipientId: String,
@@ -123,6 +163,7 @@ class InMemoryNotificationInboxRepository : NotificationInboxRepository {
         )
     }
 
+    @Synchronized
     override fun markRead(
         recipientId: String,
         eventId: String,
@@ -134,6 +175,7 @@ class InMemoryNotificationInboxRepository : NotificationInboxRepository {
         }
     }
 
+    @Synchronized
     override fun markAllRead(
         recipientId: String,
         readAt: Instant,
@@ -154,6 +196,24 @@ class InMemoryNotificationInboxRepository : NotificationInboxRepository {
                 }
             }
         return updated
+    }
+
+    override fun deleteOlderThan(cutoff: Instant): Int = removeIf { it.event.createdAt.isBefore(cutoff) }
+
+    override fun deleteByTopic(topic: String): Int = removeIf { it.event.topic == topic }
+
+    override fun deleteByRecipientAndTopic(
+        recipientId: String,
+        topic: String,
+    ): Int = removeIf { it.recipientId == recipientId.trim() && it.event.topic == topic }
+
+    /** 지금 프로젝트의 줄만 지운다 - 정리는 프로젝트마다 따로 돈다 */
+    @Synchronized
+    private fun removeIf(predicate: (NotificationInboxRecord) -> Boolean): Int {
+        val project = project()
+        val doomed = records.entries.filter { it.key.project == project && predicate(it.value) }.map { it.key }
+        doomed.forEach { records.remove(it) }
+        return doomed.size
     }
 
     /** 프로젝트 모드: 같은 계정 id 가 프로젝트 사이에서 겹쳐도 받은편지함이 섞이지 않는다. 프로젝트 밖(한 서비스)이면 null */
@@ -186,5 +246,14 @@ object NoopNotificationInboxRepository : NotificationInboxRepository {
     override fun markAllRead(
         recipientId: String,
         readAt: Instant,
+    ): Int = 0
+
+    override fun deleteOlderThan(cutoff: Instant): Int = 0
+
+    override fun deleteByTopic(topic: String): Int = 0
+
+    override fun deleteByRecipientAndTopic(
+        recipientId: String,
+        topic: String,
     ): Int = 0
 }
