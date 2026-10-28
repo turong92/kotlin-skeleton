@@ -110,6 +110,9 @@ class DefaultNotificationRecipientResolver : NotificationRecipientResolver {
 class InMemoryNotificationInboxRepository : NotificationInboxRepository {
     private val records = ConcurrentHashMap<NotificationInboxKey, NotificationInboxRecord>()
 
+    /** 다른 줄에 접힌 이벤트 id → 그 줄의 처음 이벤트 id. 접힌 id 를 다시 저장해도 수가 오르지 않게 하는 기억 (DB 판은 마지막 id 하나만 기억한다) */
+    private val foldedInto = ConcurrentHashMap<NotificationInboxKey, String>()
+
     /** 묶기는 「안 읽은 같은 열쇠 줄을 찾고 고친다」가 한 덩어리여야 해서 저장을 줄 세운다 (DB 판은 유니크 색인이 같은 일을 한다) */
     @Synchronized
     override fun save(
@@ -121,10 +124,12 @@ class InMemoryNotificationInboxRepository : NotificationInboxRepository {
             val project = project()
             val key = NotificationInboxKey(normalizedRecipientId, event.id, project)
             records[key]?.let { return@mapNotNull it }
+            foldedInto[key]?.let { firstId -> records[NotificationInboxKey(normalizedRecipientId, firstId, project)] }?.let { return@mapNotNull it }
             val folded = event.collapseKey?.let { collapseKey -> findUnreadFolding(normalizedRecipientId, collapseKey, project) }
             if (folded == null) {
                 NotificationInboxRecord(recipientId = normalizedRecipientId, event = event).also { records[key] = it }
             } else {
+                foldedInto[key] = folded.event.id
                 folded.copy(event = event.copy(id = folded.event.id), collapsedCount = folded.collapsedCount + 1)
                     .also { records[NotificationInboxKey(normalizedRecipientId, folded.event.id, project)] = it }
             }
@@ -213,6 +218,7 @@ class InMemoryNotificationInboxRepository : NotificationInboxRepository {
         val project = project()
         val doomed = records.entries.filter { it.key.project == project && predicate(it.value) }.map { it.key }
         doomed.forEach { records.remove(it) }
+        foldedInto.entries.removeIf { (key, firstId) -> key.project == project && NotificationInboxKey(key.recipientId, firstId, project) in doomed }
         return doomed.size
     }
 

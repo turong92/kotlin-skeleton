@@ -65,6 +65,17 @@ class NotificationMuteTest {
     }
 
     @Test
+    fun `a muted person is dropped from the live event too, even when the payload names the recipients`() {
+        val f = Fixture()
+        f.mutes.setMuted("acc_a", "NOTE_UPDATED", true)
+
+        f.broker.publish(NotificationEvent(topic = "t", type = "NOTE_UPDATED", payload = mapOf("recipientIds" to listOf("acc_a", "acc_b"))))
+
+        assertEquals(setOf("acc_b"), f.heard.single().recipientIds)
+        assertEquals(0, f.inboxSize("acc_a"))
+    }
+
+    @Test
     fun `a type outside the mutable list ignores any mute row`() {
         val f = Fixture()
         f.mutes.setMuted("acc_a", "SECURITY_ALERT", true)

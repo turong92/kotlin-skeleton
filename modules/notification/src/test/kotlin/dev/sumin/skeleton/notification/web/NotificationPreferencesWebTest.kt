@@ -72,11 +72,11 @@ class NotificationPreferencesWebTest {
     }
 
     @Test
-    fun `a body without muted is a client error`() {
+    fun `a body without muted is 400`() {
         mockMvc.perform(
             put("/api/v1/notifications/preferences/NOTE_UPDATED").principal(caller("acc_pref_d"))
                 .contentType(MediaType.APPLICATION_JSON).content("{}"),
-        ).andExpect(status().is4xxClientError)
+        ).andExpect(status().isBadRequest)
     }
 }
 

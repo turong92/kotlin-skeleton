@@ -15,8 +15,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  * 미뤄진 발행의 [NotificationPublishResult.deliveredSubscribers] 는 0 이다(아직 전달하지 않았다).
  * 알림 실패가 업무를 실패시키면 안 되는 호출자는 커밋 뒤에 부르고 잡는다.
  *
- * 끌 수 있는 종류([NotificationPreferencesProperties])이면 받는 사람에서 그 종류를 끈 사람을 뺀다. 받는 사람이 정해진 알림(`recipientIds` 가 비어 있지 않음)은
- * 전달하는 이벤트도 남은 사람으로 줄이고, **받는 사람을 모두 끈 알림은 저장도 전달도 하지 않는다**(빈 `recipientIds` 는 전체 공지라 그대로 넘기면 모두에게 간다).
+ * 끌 수 있는 종류([NotificationPreferencesProperties])이면 받는 사람에서 그 종류를 끈 사람을 뺀다. 받는 사람이 있는 알림은
+ * 전달하는 이벤트의 받는 사람도 남은 사람으로 좁히고(끈 사람은 SSE 도 못 받는다; 좁힌 목록이 비면 전체 공지로 읽히므로 모두 끈 알림은 아예 보내지 않는다), **받는 사람을 모두 끈 알림은 저장도 전달도 하지 않는다**(빈 `recipientIds` 는 전체 공지라 그대로 넘기면 모두에게 간다).
  * 받는 사람이 없는 전체 공지는 끌 수 없다.
  */
 class InMemoryNotificationBroker(
@@ -36,7 +36,7 @@ class InMemoryNotificationBroker(
         if (muted.isNotEmpty() && remaining.isEmpty()) {
             return NotificationPublishResult(eventId = event.id, deliveredSubscribers = 0)
         }
-        val effective = if (muted.isEmpty() || event.recipientIds.isEmpty()) event else event.withoutMuted(muted, remaining)
+        val effective = if (muted.isEmpty()) event else event.copy(recipientIds = remaining)
         inboxRepository.save(effective, remaining)
         val project = ProjectContext.currentOrNull()?.id
         if (AfterCommit.runAfterCommit { deliver(effective, project) }) {
@@ -50,15 +50,6 @@ class InMemoryNotificationBroker(
         recipients: Set<String>,
     ): Set<String> =
         if (event.type in mutableTypes && recipients.isNotEmpty()) muteRepository.mutedAmong(event.type, recipients) else emptySet()
-
-    /**
-     * 끈 사람을 뺀 이벤트. 뺀 뒤 `recipientIds` 가 비면 전체 공지로 읽히므로, 그때는 남은 받는 사람(payload 에서 해석된 사람)으로 채운다 -
-     * 끈 사람이 있는 알림이 모두에게 새지 않는다.
-     */
-    private fun NotificationEvent.withoutMuted(
-        muted: Set<String>,
-        remaining: Set<String>,
-    ): NotificationEvent = copy(recipientIds = (recipientIds - muted).ifEmpty { remaining })
 
     private fun deliver(
         event: NotificationEvent,

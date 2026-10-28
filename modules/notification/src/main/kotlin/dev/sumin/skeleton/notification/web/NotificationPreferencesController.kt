@@ -9,6 +9,8 @@ import dev.sumin.skeleton.notification.NotificationMuteRepository
 import dev.sumin.skeleton.notification.NotificationPreferencesProperties
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
+import jakarta.validation.Valid
+import jakarta.validation.constraints.NotNull
 import org.springframework.http.HttpStatus
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.GetMapping
@@ -28,7 +30,8 @@ data class NotificationPreferencesResponse(
 )
 
 data class NotificationPreferenceRequest(
-    val muted: Boolean,
+    @field:NotNull
+    val muted: Boolean?,
 )
 
 /**
@@ -59,12 +62,13 @@ class NotificationPreferencesController(
     fun set(
         authentication: Authentication?,
         @PathVariable type: String,
-        @RequestBody request: NotificationPreferenceRequest,
+        @Valid @RequestBody request: NotificationPreferenceRequest,
     ): DataResponse<NotificationPreferenceResponse> {
         val recipientId = authentication.recipientId()
         if (type !in types) throw NotificationPreferenceNotFoundException(type)
-        muteRepository.setMuted(recipientId, type, request.muted)
-        return Response.ok(NotificationPreferenceResponse(type, request.muted))
+        val muted = requireNotNull(request.muted)
+        muteRepository.setMuted(recipientId, type, muted)
+        return Response.ok(NotificationPreferenceResponse(type, muted))
     }
 
     private fun Authentication?.recipientId(): String =

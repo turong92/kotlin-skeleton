@@ -194,4 +194,42 @@ class InMemoryNotificationBrokerTest {
         assertEquals(1, heardInA.size)
         assertEquals(0, heardInB.size)
     }
+
+    private class NoopTransactionManager : org.springframework.transaction.support.AbstractPlatformTransactionManager() {
+        override fun doGetTransaction(): Any = Any()
+        override fun doBegin(transaction: Any, definition: org.springframework.transaction.TransactionDefinition) = Unit
+        override fun doCommit(status: org.springframework.transaction.support.DefaultTransactionStatus) = Unit
+        override fun doRollback(status: org.springframework.transaction.support.DefaultTransactionStatus) = Unit
+    }
+
+    @Test
+    fun `publishing from inside another afterCommit callback still delivers once the transaction is committed`() {
+        val broker = InMemoryNotificationBroker()
+        val heard = mutableListOf<NotificationEvent>()
+        broker.subscribe(emptySet()) { heard += it }
+        val tx = org.springframework.transaction.support.TransactionTemplate(NoopTransactionManager())
+
+        tx.executeWithoutResult {
+            TransactionSynchronizationManager.registerSynchronization(object : TransactionSynchronization {
+                override fun afterCommit() {
+                    val result = broker.publish(NotificationEvent(topic = "t", type = "x"))
+                    assertEquals(0, result.deliveredSubscribers)   // 아직 미뤄진 상태
+                }
+            })
+        }
+
+        assertEquals(1, heard.size)   // 같은 트랜잭션이 끝나기 전에 afterCompletion 에서 전달됐다
+    }
+
+    @Test
+    fun `a rollback delivers nothing even through the real transaction template`() {
+        val broker = InMemoryNotificationBroker()
+        val heard = mutableListOf<NotificationEvent>()
+        broker.subscribe(emptySet()) { heard += it }
+        val tx = org.springframework.transaction.support.TransactionTemplate(NoopTransactionManager())
+
+        runCatching { tx.executeWithoutResult { broker.publish(NotificationEvent(topic = "t", type = "x")); error("boom") } }
+
+        assertEquals(0, heard.size)
+    }
 }

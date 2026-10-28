@@ -104,6 +104,36 @@ class JdbcNotificationInboxRepositoryDbTest {
     }
 
     @Test
+    fun `republishing a folded event id keeps the count, also after the row is read and for several recipients`() {
+        val a = "acc_${UUID.randomUUID()}"
+        val b = "acc_${UUID.randomUUID()}"
+        val e1 = collapsing("e1-$a", "k")
+        val e2 = collapsing("e2-$a", "k", at = "2026-03-01T00:35:00Z")
+        repository.save(e1, setOf(a, b))
+        repository.save(e2, setOf(a, b))
+        repository.save(e2, setOf(a, b))   // 재시도
+        assertEquals(2, repository.findByRecipient(a, NotificationInboxQuery()).values.single().collapsedCount)
+
+        repository.markRead(a, e1.id)
+        repository.save(e2, setOf(a, b))   // 읽은 뒤 재시도 - 새 줄도 수 증가도 없다
+        val rows = repository.findByRecipient(a, NotificationInboxQuery())
+        assertEquals(1, rows.totalElements)
+        assertEquals(2, rows.values.single().collapsedCount)
+        assertEquals(2, repository.findByRecipient(b, NotificationInboxQuery()).values.single().collapsedCount)
+    }
+
+    @Test
+    fun `a collapse key differing only by case is a different key, and a folded row follows the newest topic`() {
+        val a = "acc_${UUID.randomUUID()}"
+        repository.save(collapsing("e1-$a", "Key", topic = "t1"), setOf(a))
+        repository.save(collapsing("e2-$a", "key", topic = "t1"), setOf(a))
+        assertEquals(2, repository.findByRecipient(a, NotificationInboxQuery()).totalElements)
+
+        repository.save(collapsing("e3-$a", "key", topic = "t2"), setOf(a))
+        assertEquals(1, repository.findByRecipient(a, NotificationInboxQuery(topic = "t2")).totalElements)
+    }
+
+    @Test
     fun `after the row is read the same collapse key starts a new row, and a read row is never folded into`() {
         val recipient = "acc_${UUID.randomUUID()}"
         repository.save(collapsing("e1-$recipient", "k"), setOf(recipient))

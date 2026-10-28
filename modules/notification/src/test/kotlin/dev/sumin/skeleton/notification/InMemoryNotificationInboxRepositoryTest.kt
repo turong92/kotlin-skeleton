@@ -180,4 +180,20 @@ class InMemoryNotificationInboxRepositoryTest {
         assertEquals(3, repository.deleteByTopic("x").let { it + repository.deleteByTopic("y") })
         assertEquals(0, repository.findByRecipient("acc_2").totalElements)
     }
+
+    @Test
+    fun `republishing a folded event id changes nothing, even after the row is read`() {
+        val repository = InMemoryNotificationInboxRepository()
+        repository.save(ev("e1"), setOf("acc_user"))
+        repository.save(ev("e2", at = "2026-06-17T00:01:00Z"), setOf("acc_user"))
+        repository.save(ev("e2", at = "2026-06-17T00:01:00Z"), setOf("acc_user"))
+        assertEquals(2, repository.findByRecipient("acc_user").values.single().collapsedCount)
+
+        repository.markRead("acc_user", "e1")
+        repository.save(ev("e2", at = "2026-06-17T00:01:00Z"), setOf("acc_user"))
+
+        val rows = repository.findByRecipient("acc_user")
+        assertEquals(1, rows.totalElements)
+        assertEquals(2, rows.values.single().collapsedCount)
+    }
 }

@@ -31,7 +31,8 @@ class JdbcNotificationInboxRepository(
         event: NotificationEvent,
         recipientIds: Set<String>,
     ): List<NotificationInboxRecord> =
-        recipientIds.mapNotNull { recipientId ->
+        // 여러 받는 사람을 늘 같은 순서로 저장한다 - 겹치는 발행끼리 서로 반대 순서로 잠그다 교착하지 않게
+        recipientIds.map { it.trim() }.sorted().mapNotNull { recipientId ->
             val normalizedRecipientId = recipientId.trim().takeIf { it.isNotBlank() } ?: return@mapNotNull null
             val collapseKey = event.collapseKey
             if (collapseKey == null) {
@@ -47,6 +48,8 @@ class JdbcNotificationInboxRepository(
         recipientId: String,
         collapseKey: String,
     ): NotificationInboxRecord? {
+        // 이미 저장했거나 이 열쇠 줄에 접힌 이벤트 id 의 재발행(재시도)은 아무것도 바꾸지 않는다 - 접힌 뒤 읽혔어도 새 줄이 생기지 않는다
+        findSeen(recipientId, event.id)?.let { return it }
         repeat(MAX_COLLAPSE_ATTEMPTS) {
             insertIfAbsent(event, recipientId)
             findOne(recipientId, event.id)?.let { return it }
@@ -55,7 +58,21 @@ class JdbcNotificationInboxRepository(
         throw IllegalStateException("could not store a collapsing notification for $recipientId after $MAX_COLLAPSE_ATTEMPTS attempts")
     }
 
-    /** 안 읽은 같은 열쇠 줄을 새 내용으로 고치고 수를 올린다. `event_id <> :eventId` - 그 줄 자신의 이벤트를 다시 발행해도 수가 오르지 않는다 */
+    /** 그 이벤트 id 가 줄의 처음 id(`event_id`)이거나 마지막으로 접힌 id(`last_event_id`)인 줄 */
+    private fun findSeen(
+        recipientId: String,
+        eventId: String,
+    ): NotificationInboxRecord? =
+        jdbc.query(
+            "select * from notification_inbox where recipient_id = :recipientId and (event_id = :eventId or last_event_id = :eventId)",
+            MapSqlParameterSource().addValue("recipientId", recipientId).addValue("eventId", eventId),
+        ) { rs, _ -> rs.toRecord() }
+            .firstOrNull()
+
+    /**
+     * 안 읽은 같은 열쇠 줄을 새 내용으로 고치고 수를 올린다. `event_id <> :eventId` 와 `last_event_id <> :eventId` - 그 줄의 처음 이벤트나
+     * 방금 접힌 이벤트를 다시 발행해도(동시 재시도) 수가 오르지 않는다.
+     */
     private fun foldIntoUnread(
         event: NotificationEvent,
         recipientId: String,
@@ -64,7 +81,8 @@ class JdbcNotificationInboxRepository(
         jdbc.update(
             """
             update notification_inbox
-            set type = :type,
+            set topic = :topic,
+                type = :type,
                 severity = :severity,
                 title = :title,
                 message = :message,
@@ -72,15 +90,18 @@ class JdbcNotificationInboxRepository(
                 link = :link,
                 event_created_at = :event_created_at,
                 updated_at = :updated_at,
+                last_event_id = :event_id,
                 collapsed_count = collapsed_count + 1
             where recipient_id = :recipient_id
               and unread_collapse_key = :collapse_key
               and event_id <> :event_id
+              and (last_event_id is null or last_event_id <> :event_id)
             """.trimIndent(),
             MapSqlParameterSource()
                 .addValue("recipient_id", recipientId)
                 .addValue("collapse_key", collapseKey)
                 .addValue("event_id", event.id)
+                .addValue("topic", event.topic)
                 .addValue("type", event.type)
                 .addValue("severity", event.severity.name)
                 .addValue("title", event.title)
@@ -233,6 +254,7 @@ class JdbcNotificationInboxRepository(
                 .addValue("link", event.link)
                 .addValue("collapse_key", event.collapseKey)
                 .addValue("unread_collapse_key", event.collapseKey)
+                .addValue("last_event_id", event.collapseKey?.let { event.id })
                 .addValue("collapsed_count", 1)
                 .addValue("created_at", dialect.instantParam(now))
                 .addValue("updated_at", dialect.instantParam(now)),
@@ -307,7 +329,7 @@ class JdbcNotificationInboxRepository(
         val INSERT_COLUMNS = listOf(
             "recipient_id", "event_id", "topic", "type", "severity", "title", "message",
             "payload_json", "recipient_ids_json", "event_created_at", "link", "collapse_key", "unread_collapse_key",
-            "collapsed_count", "created_at", "updated_at",
+            "collapsed_count", "last_event_id", "created_at", "updated_at",
         )
 
         /** 넣기와 접기 사이에 그 줄이 읽혀 열쇠가 풀리는 경우만 다시 돈다 - 보통 한 번이면 끝난다 */

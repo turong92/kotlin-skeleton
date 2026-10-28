@@ -4,9 +4,15 @@
 -- null 은 유니크에서 겹쳐도 되므로 부분 색인 · 생성 칸 없이 PostgreSQL 과 MySQL 이 같은 모양이다. collapse_key 는 마지막 이벤트의 열쇠(참고용).
 alter table notification_inbox add column link varchar(1000);
 alter table notification_inbox add column collapse_key varchar(255);
-alter table notification_inbox add column unread_collapse_key varchar(255);
+-- 이진 정렬: MySQL 기본 정렬은 대소문자를 같게 봐서 다른 열쇠가 한 줄로 접힌다 (login_id 와 같은 이유 · 같은 마커)
+alter table notification_inbox add column unread_collapse_key varchar(255) /* [jooq ignore start] */ character set utf8mb4 collate utf8mb4_bin /* [jooq ignore stop] */;
+-- last_event_id: 마지막으로 접힌 이벤트 id - 그 id 의 재발행(재시도)이 수를 올리지도 새 줄을 만들지도 않게 한다
+alter table notification_inbox add column last_event_id varchar(128);
 alter table notification_inbox add column collapsed_count int not null default 1;
 alter table notification_inbox add constraint uk_notification_inbox_unread_collapse unique (recipient_id, unread_collapse_key);
+-- 재발행 확인(recipient_id, last_event_id)
+create index idx_notification_inbox_last_event on notification_inbox (recipient_id, last_event_id);
 -- 보관 정리(deleteOlderThan) · 주제 지우기(deleteByTopic)
 create index idx_notification_inbox_created on notification_inbox (event_created_at);
 create index idx_notification_inbox_topic on notification_inbox (topic);
+-- 줄이 아주 많은 표에서는 유니크 · 색인 만들기가 표 크기에 비례해 오래 걸리고 그동안 쓰기가 느려지거나 막힐 수 있다 - 한가한 시간에 배포한다

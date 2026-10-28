@@ -11,14 +11,17 @@
 **클릭 이동 · 묶기**(둘 다 기본 null — 발행하는 쪽이 정하고, 모듈은 기본으로 묶지도 링크를 만들지도 않는다):
 - `NotificationEvent.link` — 클릭하면 갈 **앱 안** 경로. `/` 로 시작하고 `//` 로 시작하지 않으며 1000자 이하(역슬래시 · 제어 문자도 거절 — 열린 리다이렉트 막이).
 - `NotificationEvent.collapseKey` — 받는 사람의 **안 읽은** 같은 열쇠 줄에 접는다: 내용은 새 것, `collapsedCount` +1, `eventId`(읽음 주소)는 처음 것 그대로. 읽은 줄은 건드리지 않고 새 줄. 같은 이벤트 id 재발행은 수가 오르지 않는다.
+- 접힌 줄의 `eventId` 는 처음 이벤트 id 라, SSE 로 오는 사건의 `id` 와 목록 줄의 `eventId` 가 다를 수 있다 — 읽음 처리는 줄의 `eventId` 로 한다. 접힌 id 의 재발행(재시도)은 수도 줄도 바꾸지 않는다(DB 는 마지막 접힌 id 를 `last_event_id` 에 기억한다).
 - `NotificationInboxRepository` 의 새 메서드: `countUnread`(기본 구현 있음) · `deleteOlderThan(cutoff)` · `deleteByTopic` · `deleteByRecipientAndTopic`(지우기 셋은 추상 — 저장소를 직접 구현했다면 구현해야 한다). 서버 API 만, HTTP 로는 열지 않는다.
+
+**마이그레이션 주의**: `notification_inbox` 에 칼럼 · 유니크 · 색인 셋을 더한다. 줄이 아주 많은 표에서는 색인 만들기가 표 크기에 비례해 오래 걸리고 그동안 쓰기가 느려질 수 있다 — 한가한 시간에 배포한다.
 
 **보관 정리**: `skeleton.notification.retention.enabled=true` 면 `interval` 마다 `max-age`(기본 90일)보다 오래된 줄을 지운다. 기본 꺼짐. `scheduler` 모듈의 `skeletonTaskScheduler` 가 없으면 경고 한 줄만 남기고 돌지 않으며, 앱이 `NotificationInboxRetention.run(now)` 을 직접 부를 수 있다. 프로젝트 모드(`skeleton.projects`)면 서비스 중인 프로젝트마다 돈다.
 
 **종류별 수신 끄기**: 끌 수 있는 종류는 제품이 `skeleton.notification.preferences.types` 로 정한다(기본 빈 목록 = 끌 수 있는 것 없음 — 보안 · 결제 알림처럼 목록에 없는 종류는 끄기 줄이 있어도 무시된다). 사람이 종류를 끄면 브로커가 받는 사람에서 그 사람을 빼고(받은편지함 + 실시간 전달 한 길만),
 받는 사람이 정해진 알림을 **모두** 끄면 저장도 전달도 하지 않는다(빈 `recipientIds` 는 전체 공지라 그대로 넘기면 모두에게 간다). 받는 사람이 없는 전체 공지는 끌 수 없다. 끄기 저장소는 `NotificationMuteRepository`(기본 인메모리, `notification-jdbc` 는 표 `notification_mutes`) - 목록이 비면 조회조차 하지 않는다.
 
-**커밋 뒤 전달**: 받은편지함 저장은 호출자 트랜잭션 안에서 바로 하고(롤백되면 알림도 없다), 구독자 전달(SSE · WebSocket · Slack)은 트랜잭션 동기화가 켜져 있으면(`spring-tx` 는 선택 의존 — 클래스가 없으면 바로 전달) **커밋 뒤**에 한다 — 롤백된 알림이 실시간으로 새지 않는다. 미뤄진 발행의 `deliveredSubscribers` 는 0 이고, 트랜잭션 밖 발행은 지금처럼 바로 전달한다. 알림 실패가 업무를 실패시키면 안 되면 커밋 뒤에 부르고 예외를 잡는다.
+**커밋 뒤 전달**: 받은편지함 저장은 호출자 트랜잭션 안에서 바로 하고(롤백되면 알림도 없다), 구독자 전달(SSE · WebSocket · Slack)은 트랜잭션 동기화가 켜져 있으면(`spring-tx` 클래스가 없는 앱이면 바로 전달) **커밋 뒤**에 한다 — 롤백된 알림이 실시간으로 새지 않는다. 미뤄진 발행의 `deliveredSubscribers` 는 0 이고, 트랜잭션 밖 발행은 지금처럼 바로 전달한다. 다른 `afterCommit` 콜백 안에서 발행해도 그 트랜잭션이 끝나는 `afterCompletion` 에서 전달된다(롤백이면 안 한다). 알림 실패가 업무를 실패시키면 안 되면 커밋 뒤에 부르고 예외를 잡는다.
 
 | 항목 | 내용 |
 |---|---|

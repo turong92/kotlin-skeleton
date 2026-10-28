@@ -108,6 +108,8 @@
 | `PUT /preferences/{type}` 본문 `{ muted: boolean }` | `{ value: { type, muted } }`. 목록에 없는 종류 404 | **새** |
 | SSE `GET /sse` 사건 `data` | `NotificationEvent` + **`link` · `collapseKey`**(null 가능). 심장박동은 주석 줄 | 칸 추가 |
 
+접힌 줄의 `eventId` 는 처음 이벤트 id 라 SSE 사건의 `id` 와 다를 수 있다(읽음 처리는 줄의 `eventId` 로). 접힌 id 를 다시 발행해도 수 · 줄은 그대로다(`last_event_id`).
+
 모두 인증 필요 · 호출자 = `Authentication.name`(지금 받은편지함과 같다), `skeleton.notification.inbox.enabled=false` 면 새 경로도 함께 꺼진다.
 
 `@skeleton/notifications`(1.1.0 → 1.2.0) 공개 표면에 더하는 것:
