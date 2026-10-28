@@ -151,6 +151,10 @@ class PaymentOrders(
         if (command.providerChosen && (command.provider == null || !router.servesCurrency(command.provider, quote.amount.currency))) {
             throw PaymentRoutingException("The chosen payment provider does not take the currency of this purchase.")
         }
+        // 나라가 정한 결제사도 이 가격의 통화를 받아야 한다(통화별 가격을 파는 앱에서 한 나라에 다른 통화 가격 코드가 올 수 있다)
+        if (command.provider != null && !router.takesCurrency(command.provider, quote.amount.currency)) {
+            throw PaymentRoutingException("The payment provider of this country does not take the currency of this purchase.")
+        }
         val checkout = findOpenableCheckout(command.provider, plan.charged, command.country, warn = true) ?: throw PaymentUnavailableException()
         if (plan.discount.lines.isNotEmpty()) requireDiscountable(checkout, plan.charged)
         val orderId = ids.newId(PaymentOrderIds.ORDER_PREFIX)

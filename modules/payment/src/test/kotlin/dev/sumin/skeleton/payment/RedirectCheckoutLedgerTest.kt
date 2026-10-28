@@ -117,7 +117,7 @@ class RedirectCheckoutLedgerTest {
     }
 
     @Test
-    fun `a provider the buyer picked must serve the quote currency - the server's own pick is not checked`() {
+    fun `a provider must serve the quote currency, the buyer's pick and the server's own pick alike - when it lists no currency nothing is checked`() {
         val props = PaymentProperties(
             webhook = PaymentProperties.Webhook(pathToken = PaymentLedgerKit.WEBHOOK_TOKEN),
             providers = mapOf("scripted" to PaymentProperties.Provider(currencies = setOf("USD"), countries = setOf("US"))),
@@ -128,8 +128,10 @@ class RedirectCheckoutLedgerTest {
             strict.orders.create(CreateOrderCommand("acc_1", "cheer", "cheer-3000", IdempotencyKey("c1"), provider = "scripted", providerChosen = true))
         }
         assertEquals(0, strict.store.allOrders().size)
-        strict.orders.create(CreateOrderCommand("acc_1", "cheer", "cheer-3000", IdempotencyKey("c2"), provider = "scripted"))
-        assertEquals(1, strict.store.allOrders().size)
+        assertFailsWith<PaymentRoutingException> {
+            strict.orders.create(CreateOrderCommand("acc_1", "cheer", "cheer-3000", IdempotencyKey("c2"), provider = "scripted"))
+        }
+        assertEquals(0, strict.store.allOrders().size)
         assertEquals(false, strict.router.servesCountry("scripted", "KR"), "the operator's countries override is the effective list")
         assertEquals(true, strict.router.servesCountry("scripted", "us"))
     }

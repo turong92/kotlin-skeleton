@@ -80,6 +80,8 @@ class PaymentSubscriptions(
         if (providerClosed) throw PaymentUnavailableException() // 나라 지도가 정한 결제사가 못 열린다 - 다른 결제사로 넘기지 않는다
 
         val plan = plans.find(planCode)?.takeIf { it.amount.amount > 0 && it.purchasable } ?: throw PaymentItemNotPurchasableException()
+        // 나라가 정한 결제사도 플랜 통화를 받아야 한다(결제사를 부르기 전에 거절 - 줄을 만들지 않는다)
+        if (provider != null && !router.takesCurrency(provider, plan.amount.currency)) throw PaymentRoutingException("The payment provider of this country does not take the plan currency.")
         SubscriptionPeriod.parse(plan.period)
         // 무료 첫 결제를 선점해 놓고 죽은 구독이 자리를 쥐고 있으면 이어서 끝낸다 - 안 그러면 새 구독이 영영 막힌다(끝나면 ACTIVE 라 아래 판정이 「이미 구독 중」이 된다)
         store.findLiveSubscription(accountId)?.let(::finishFreeFirstCharge)

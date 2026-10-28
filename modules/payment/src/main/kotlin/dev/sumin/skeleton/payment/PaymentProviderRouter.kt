@@ -59,6 +59,12 @@ class PaymentProviderRouter internal constructor(
     fun servesCurrency(providerId: String, currency: String): Boolean =
         providerId.normalizeProviderId()?.let { providersById[it] }?.route()?.currencies?.contains(currency.trim().uppercase()) == true
 
+    /**
+     * 서버가 나라로 정한 결제사가 이 통화의 결제를 받을 수 있는가 - 받는 통화를 **적지 않은** 결제사(가격이 통화를 정하는 Paddle)는 거르지 않는다.
+     * 구매자가 고른 결제사는 더 엄격한 [servesCurrency] 로 본다(목록에 없으면 안 받는다).
+     */
+    fun takesCurrency(providerId: String, currency: String): Boolean = currenciesOf(providerId).let { it.isEmpty() || currency.trim().uppercase() in it }
+
     /** 이 결제사가 **실효 설정으로** 받는 통화(대문자) - 모르는 결제사는 빈 집합. */
     fun currenciesOf(providerId: String): Set<String> =
         providerId.normalizeProviderId()?.let { providersById[it] }?.route()?.currencies.orEmpty()
