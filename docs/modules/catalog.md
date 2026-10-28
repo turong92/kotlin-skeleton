@@ -58,6 +58,6 @@
 | 프론트 짝 | `@skeleton/payment` |
 | 테스트 | `modules/catalog/src/test` |
 
-자세히: [payment](payment.md) · [coupon](coupon.md)
+자세히: [payment](payment.md) · `coupon` 모듈 문서(붙였을 때)
 
 [모듈 색인](README.md) · [최소 구성 가이드](../minimal-composition.md)
