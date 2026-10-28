@@ -23,7 +23,7 @@ import org.springframework.transaction.PlatformTransactionManager
 
 /**
  * 지급 건 저장([RewardGrantStore])과 작업 포트([RewardTasks])를 JDBC(PostgreSQL · MySQL)로 구현하고, 일꾼을 `job-queue-jdbc` 에 얹는다.
- * 스키마는 모듈 마이그레이션 `db/migration/<vendor>/V20261028120000__reward_grants.sql` 을 앱의 `spring.flyway.locations=classpath:db/migration/{vendor}` 가 고른다.
+ * 스키마는 모듈 마이그레이션 `db/migration/<vendor>/V20261028140600__reward_grants.sql` 을 앱의 `spring.flyway.locations=classpath:db/migration/{vendor}` 가 고른다.
  *
  * **이 클래스의 이름(`dev.sumin.skeleton.reward.jdbc.RewardJdbcAutoConfiguration`)을 `reward` 의 `RewardAutoConfiguration` 이 문자열로 가리킨다** - 그쪽은 저장소 빈이 있어야 켜진다.
  * 큐(`job-queue-jdbc`)가 꺼져 있으면(`skeleton.job-queue.enabled=false`) 시작이 실패하고 `JobQueue` 빈이 없다고 말한다 - 뒷일 없이 지급을 약속할 수 없다.
