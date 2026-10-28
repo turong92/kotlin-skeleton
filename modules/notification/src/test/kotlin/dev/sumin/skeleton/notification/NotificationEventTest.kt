@@ -30,6 +30,15 @@ class NotificationEventTest {
     }
 
     @Test
+    fun `link whose normalized path starts with two slashes or that does not parse is rejected`() {
+        listOf("/a/..//evil.example", "/..//evil.example", "/a/%2e%2e//evil.example", "/.//evil.example", "/a b", "/%zz").forEach { bad ->
+            assertFailsWith<IllegalArgumentException>(bad) { event(link = bad) }
+        }
+        assertEquals("/a/../b?x=//y", event(link = "/a/../b?x=//y").link)
+        assertEquals("/a/../../b", event(link = "/a/../../b").link)
+    }
+
+    @Test
     fun `link longer than 1000 characters is rejected`() {
         assertFailsWith<IllegalArgumentException> { event(link = "/" + "a".repeat(1000)) }
     }

@@ -9,7 +9,7 @@
 알림을 보내는 쪽(`NotificationPublisher.publish`)은 앱 코드가 부른다 — 받는 사람은 `NotificationEvent.recipientIds`.
 
 **클릭 이동 · 묶기**(둘 다 기본 null — 발행하는 쪽이 정하고, 모듈은 기본으로 묶지도 링크를 만들지도 않는다):
-- `NotificationEvent.link` — 클릭하면 갈 **앱 안** 경로. `/` 로 시작하고 `//` 로 시작하지 않으며 1000자 이하(역슬래시 · 제어 문자도 거절 — 열린 리다이렉트 막이).
+- `NotificationEvent.link` — 클릭하면 갈 **앱 안** 경로. `/` 로 시작하고 `//` 로 시작하지 않으며 1000자 이하(역슬래시 · 제어 문자도 거절, `.` · `..` 를 풀어 경로가 `//` 로 시작하게 되는 `/a/..//x` 꼴과 파싱이 안 되는 링크도 거절 — 열린 리다이렉트 막이).
 - `NotificationEvent.collapseKey` — 받는 사람의 **안 읽은** 같은 열쇠 줄에 접는다: 내용은 새 것, `collapsedCount` +1, `eventId`(읽음 주소)는 처음 것 그대로. 읽은 줄은 건드리지 않고 새 줄. 같은 이벤트 id 재발행은 수가 오르지 않는다.
 - 접힌 줄의 `eventId` 는 처음 이벤트 id 라, SSE 로 오는 사건의 `id` 와 목록 줄의 `eventId` 가 다를 수 있다 — 읽음 처리는 줄의 `eventId` 로 한다. 접힌 id 의 재발행(재시도)은 수도 줄도 바꾸지 않는다(DB 는 마지막 접힌 id 를 `last_event_id` 에 기억한다).
 - `NotificationInboxRepository` 의 새 메서드: `countUnread`(기본 구현 있음) · `deleteOlderThan(cutoff)` · `deleteByTopic` · `deleteByRecipientAndTopic`(지우기 셋은 추상 — 저장소를 직접 구현했다면 구현해야 한다). 서버 API 만, HTTP 로는 열지 않는다.

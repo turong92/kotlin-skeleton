@@ -45,7 +45,28 @@ data class NotificationEvent(
         /** [link] 로 쓸 수 있는 글자인가 - 남이 준 링크(보상 지급기 …)를 알림에 싣기 전에 거를 때 쓴다 */
         fun isValidLink(link: String): Boolean =
             link.length <= MAX_LINK_LENGTH && link.startsWith("/") && !link.startsWith("//") &&
-                link.none { it == '\\' || it.isISOControl() }
+                link.none { it == '\\' || it.isISOControl() } && !normalizesToProtocolRelative(link)
+
+        /**
+         * `/a/..//evil.example` 처럼 `.` · `..` 마디를 브라우저처럼 풀면(빈 마디는 남긴다 - `java.net.URI.normalize` 는 `//` 를 합쳐 버려 못 쓴다)
+         * 경로가 `//` 로 시작하는 링크, 그리고 파싱이 안 되는 링크. `%2e` 도 점으로 센다.
+         */
+        private fun normalizesToProtocolRelative(link: String): Boolean {
+            if (runCatching { java.net.URI(link) }.isFailure) return true
+            val path = link.substringBefore('?').substringBefore('#')
+            val out = ArrayDeque<String>()
+            val segments = path.removePrefix("/").split('/')
+            segments.forEachIndexed { index, raw ->
+                val segment = raw.replace("%2e", ".", ignoreCase = true)
+                val last = index == segments.lastIndex
+                when {
+                    segment == "." -> if (last) out.addLast("")
+                    segment == ".." -> { out.removeLastOrNull(); if (last) out.addLast("") }
+                    else -> out.addLast(raw)
+                }
+            }
+            return out.size >= 2 && out.first().isEmpty()   // "/" + 합친 경로 가 "//" 로 시작
+        }
     }
 }
 
