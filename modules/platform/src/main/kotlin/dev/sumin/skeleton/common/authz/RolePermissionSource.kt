@@ -6,8 +6,14 @@ import java.time.Instant
 
 /** 역할 → 권한 매핑. 기본은 yml([YmlRolePermissionSource]), `authz-jdbc` 가 DB 로 교체한다 */
 interface RolePermissionSource {
-    /** 매핑에 없는 역할은 빈 집합 — 오류 아님 */
+    /**
+     * 역할의 권한 — **물려받은 것까지 펼친 값**([includesOf] 를 [RoleClosure] 로 따라간 모든 역할의 권한). 모든 판정이 이 한 곳을 읽으므로 위계를 따로 알 필요가 없다.
+     * 매핑에 없는 역할은 빈 집합 — 오류 아님
+     */
     fun permissionsOf(role: String): Set<String>
+
+    /** 이 역할이 직접 물려받는 역할(펼치지 않은 한 걸음). 위계가 없는 구현은 빈 집합 */
+    fun includesOf(role: String): Set<String> = emptySet()
 
     /** 정의된 역할 이름(매핑의 키) */
     fun definedRoles(): Set<String>
@@ -20,14 +26,25 @@ interface RolePermissionSource {
     fun lockForGrant(role: String): Boolean? = null
 }
 
-class YmlRolePermissionSource(private val roles: Map<String, Set<String>>) : RolePermissionSource {
-    override fun permissionsOf(role: String): Set<String> = roles[role].orEmpty()
+/** [roles] 는 역할이 **직접** 가진 권한, [includes] 는 역할 → 물려받는 역할. [permissionsOf] 가 펼친 값을 돌려준다 */
+class YmlRolePermissionSource(
+    private val roles: Map<String, Set<String>>,
+    private val includes: Map<String, Set<String>> = emptyMap(),
+) : RolePermissionSource {
+    override fun permissionsOf(role: String): Set<String> =
+        RoleClosure.expand(setOf(role), ::includesOf).flatMapTo(sortedSetOf()) { ownPermissionsOf(it) }
+
+    override fun includesOf(role: String): Set<String> = includes[role].orEmpty()
+
+    /** 펼치지 않은, 이 역할이 직접 가진 권한 — 첫 기동 씨앗이 표에 옮길 때 쓴다 */
+    fun ownPermissionsOf(role: String): Set<String> = roles[role].orEmpty()
+
     override fun definedRoles(): Set<String> = roles.keys
 }
 
 /**
  * 역할 → 권한만 프로세스 메모리에 담는 감싸개(`authz-jdbc` 용). [ttl] 이 지나면 다시 읽고, [invalidate] 는 같은 인스턴스의 변경을 즉시 반영한다.
- * `ttl` 이 0 이면 캐시를 끈다.
+ * `ttl` 이 0 이면 캐시를 끈다. 담는 값은 펼친 권한이라 아래 역할이 바뀌면 위 역할의 값도 바뀐다 — [invalidate] 는 늘 전체를 비운다.
  */
 class CachingRolePermissionSource(
     private val delegate: RolePermissionSource,
@@ -53,6 +70,8 @@ class CachingRolePermissionSource(
         }
         return read
     }
+
+    override fun includesOf(role: String): Set<String> = delegate.includesOf(role)
 
     override fun definedRoles(): Set<String> = delegate.definedRoles()
 
