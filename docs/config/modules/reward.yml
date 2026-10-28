@@ -8,4 +8,4 @@ skeleton:
       enabled: true                # false 면 받았어요 알림을 안 보낸다 (notification 이 있을 때만 뜻이 있다)
       topic: rewards               # 알림 주제
     worker:
-      max-attempts:                # 지급 작업의 최대 시도 수 — 비우면 job-queue 의 기본(skeleton.job-queue.max-attempts)을 따른다
+      # max-attempts: 5           # 지급 작업의 최대 시도 수 — 비우면 job-queue 의 기본(skeleton.job-queue.max-attempts)을 따른다
