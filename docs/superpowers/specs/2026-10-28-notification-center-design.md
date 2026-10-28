@@ -75,8 +75,8 @@
 
 **JDBC 묶음의 원자성** — 앞선 사용처는 「같은 열쇠 쓰기를 줄 세우는 것은 부르는 쪽 몫」이었다. 스켈레톤은 DB 가 막는다:
 - 칸 `unread_collapse_key`(안 읽은 묶음 줄만 값, 읽으면 null) + 유니크 색인 `(recipient_id, unread_collapse_key)` — PG · MySQL 모두 null 은 겹쳐도 된다. 부분 색인 · 생성 칸 없이 두 방언이 같다.
-- 저장 순서: ① `update … set …, collapsed_count = collapsed_count + 1 where recipient_id = ? and unread_collapse_key = ? and event_id <> ?` 가 한 줄이면 끝 ② 아니면 넣기(**어느 유니크 충돌이든 무시**) ③ `(recipient_id, event_id)` 줄이 있으면 끝, 없으면(같은 열쇠를 동시에 넣은 쪽에 졌다) ①을 한 번 더. 갱신 수(affected rows)에 기대지 않는다 — MySQL 의 found-rows 차이 때문.
-- ②를 위해 `SqlDialect.insertIgnore` 가 `conflictColumns` 빈 목록을 「아무 유니크 충돌」로 받는다(PG `on conflict do nothing` — 대상 없는 꼴, MySQL 은 지금 꼴 그대로). PG 는 트랜잭션 안의 유니크 위반이 트랜잭션을 죽이므로 예외를 잡는 길은 쓰지 않는다.
+- 저장 순서(구현 기준, 2026-10-28 실측으로 고침): ① 넣기(**어느 유니크 충돌이든 무시**) ② `(recipient_id, event_id)` 줄이 있으면 끝(새로 넣었거나 같은 이벤트 재발행) ③ 없으면 안 읽은 같은 열쇠 줄이 있다는 뜻이라 `update … set …, collapsed_count = collapsed_count + 1 where recipient_id = ? and unread_collapse_key = ? and event_id <> ?` 로 접고, 0 줄이면(그 사이 읽혀 열쇠가 풀렸다) ① 부터 다시(최대 3번). 접기 update 의 갱신 수는 값이 실제로 바뀌므로 믿을 수 있고, 넣기의 갱신 수(MySQL found-rows)에는 기대지 않는다. **접기를 먼저 하지 않는 이유**: 없는 열쇠를 찾는 update 가 MySQL 8.4 REPEATABLE READ 에서 간격 잠금을 걸어, 같은 열쇠를 동시에 저장하는 두 트랜잭션이 교착한다(실측, `CannotAcquireLockException`).
+- ①을 위해 `SqlDialect.insertIgnore` 가 `conflictColumns` 빈 목록을 「아무 유니크 충돌」로 받는다(PG `on conflict do nothing` — 대상 없는 꼴, MySQL 은 지금 꼴 그대로). PG 는 트랜잭션 안의 유니크 위반이 트랜잭션을 죽이므로 예외를 잡는 길은 쓰지 않는다.
 - `markRead` · `markAllRead` 는 `unread_collapse_key = null` 도 같이 쓴다.
 
 ### 4.3 보관 정리 (`notification`)
@@ -165,3 +165,10 @@ SSE 여러 서버 릴레이 · 연결 상한 · 재검증 · 힌트만 보내기
 | R1 | react | 패키지 전부 + 견본 앱(종 이동 · 설정 화면 · 유휴 감시) · 스토리 · README · 카탈로그 · CHANGELOG | — (§5 계약으로 가짜 API) | 중대(3~4시간) |
 
 개발 조각 3 + 리뷰 2(kotlin · react) + qa 1 = 에이전트 6. 벽시계 약 7~8시간(N1→N2 가 긴 줄, R1 은 나란히).
+
+## 12. 구현 중 확정한 보충 (2026-10-28)
+
+- 보상 기본 알림기는 `label.link` 가 앱 안 경로(`NotificationEvent.isValidLink`)일 때만 `link` 칸에 싣고, 아니면 칸에서 빼 `payload.link` 에만 남긴다 — 검증 예외로 알림이 사라지지 않게.
+- 끄기로 `recipientIds` 가 비게 되면 전체 공지로 읽히므로, 남은 받는 사람(payload 에서 해석된 사람)으로 채워 전달한다.
+- `link` 는 역슬래시 · 제어 문자도 거절한다(브라우저가 `/\` 를 `//` 로 읽는다).
+- `PUT /preferences/{type}` 는 이메일 없는 계정에게도 열려 있다(견본 `email.extra-exclude-paths`) — 수신 끄기는 남에게 영향을 주지 않는 자기 설정이다.

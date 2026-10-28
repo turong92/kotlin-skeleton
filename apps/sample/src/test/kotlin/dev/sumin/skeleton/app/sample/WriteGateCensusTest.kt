@@ -74,6 +74,7 @@ class WriteGateCensusTest {
             // 이 앱이 yml(email.extra-exclude-paths)로 연 사소한 쓰기 · 읽기처럼 보이는 POST
             "PATCH /api/v1/notifications/{eventId}/read",
             "PATCH /api/v1/notifications/read-all",
+            "PUT /api/v1/notifications/preferences/{type}",
             "POST /api/v1/storage/presign-download",
         )
 

@@ -82,6 +82,7 @@ skeleton:
       extra-exclude-paths:                # 이메일 없이도 되는 사소한 쓰기 · 읽기처럼 보이는 POST — 기본은 막힘이라 여기 적은 것만 열린다 (WriteGateCensusTest 가 목록을 고정한다. 결제 경로는 절대 적지 않는다)
         - PATCH /api/v1/notifications/*/read   # 알림함을 여는 것은 읽기인데 화면이 읽음 표시를 보낸다
         - PATCH /api/v1/notifications/read-all
+        - PUT /api/v1/notifications/preferences/*   # 알림 끄기는 자기 설정일 뿐 남에게 영향이 없다 - 이메일 없는 계정도 끌 수 있어야 한다
         - POST /api/v1/storage/presign-download  # 글의 첨부를 보려면 필요하다 — 읽기처럼 보이는 POST
     login-id:
       enabled: true                       # 이 앱의 선택: 이메일이 바뀌어도 안 바뀌는 로그인 아이디 — 가입 때 받고, 소셜 첫 로그인 · 아이디 없는 기존 계정은 403 ACCOUNT.LOGIN_ID_REQUIRED 로 정하게 한다 (docs/accounts.md). 서버 비밀 <PREFIX>_ACCOUNT_BLOCKS_SECRET 이 stage · prod 에서 필요하다
