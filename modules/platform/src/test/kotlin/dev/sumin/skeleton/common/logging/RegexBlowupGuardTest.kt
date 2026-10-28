@@ -11,7 +11,7 @@ class RegexBlowupGuardTest {
         val quadratic = Regex("\\s*$")
         val failure = assertFailsWith<AssertionError> {
             // 공백이 길게 이어지고 끝이 다르면 시작 위치마다 끝까지 다시 훑는다 — 제곱
-            RegexBlowupGuard.assertFinishesInTime("quadratic", n = 60_000, limitMillis = 1_500) { quadratic.find(" ".repeat(it) + "x") }
+            RegexBlowupGuard.assertFinishesInTime("quadratic", n = 60_000, limitMillis = 1_500) { quadratic.find(RegexBlowupGuard.interruptible(" ".repeat(it) + "x")) }
         }
         assertTrue("ReDoS" in failure.message.orEmpty(), failure.message)
 

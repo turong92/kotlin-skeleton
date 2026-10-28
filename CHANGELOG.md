@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 흔들리는 시험 정리 (2026-10-28)
+
+- ReDoS 시험: 입력을 2배·4배로 늘려 벽시계 **비율**을 재던 방식(부하에서 거짓 실패)을 없애고, `platform` 의 test fixture `RegexBlowupGuard`(입력 1,000,000자가 5초 안에 끝나는지만 본다)로 바꿨다. `platform` 에 `java-test-fixtures` 플러그인이 붙었고, `LogMaskerTest` · payment `WebhookLogMaskingTest` 가 쓴다.
+- `persistence-jooq` 시험이 코드 생성 방언(`-Pskeleton.jooq.dialect`)의 DB 에 읽고 쓴다(MySQL 이면 MySQL 컨테이너). 이전에는 늘 PostgreSQL 에 붙어 mysql 방언에서 실패했다.
+- `nightly.yml` 에 `jooq-mysql` 잡 추가: `:modules:persistence-jooq:test -Pskeleton.jooq.dialect=mysql`.
+
 ### 대시보드 「활성 이용자」를 정확하게 — 계정별 일별 활동 기록 (2026-10-27)
 
 - `auth-session` + `auth-session-jdbc`: 하루에 한 줄 `(account_id, day)` 인 표 `auth_account_activity`(새 V 파일 두 방언, `migrations.lock`). 로그인 · 토큰 새로고침 때 남기고(같은 계정이 같은 날 이미 기록됐으면 저장소를 부르지 않는다), **쓰기가 실패해도 로그인은 막지 않는다**. 계정 삭제 때 같이 지우고, 주기 청소(`SessionPurge`)가 보존 기간 `skeleton.auth-session.activity.retention`(기본 400일) 밖을 지운다. 날짜를 세는 시간대 `skeleton.auth-session.activity.zone`(프로젝트별 가능, `ProjectConfigKeys.SUPPORTED` 에 `auth-session.activity.`). 새 포트 `AccountActivityStore`(기본은 아무것도 안 함).
