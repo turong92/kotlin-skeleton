@@ -69,6 +69,7 @@
 | 무엇을 얼마에 파는가 (**금액의 유일한 출처**) | `PaymentCatalog` — 없으면 주문 만들기 경로가 열리지 않는다(서비스는 `PAYMENT.UNAVAILABLE`). 주문 줄에 박힌 값만 결제사로 간다. 살 수 없으면 `PaymentItemNotPurchasableException`(`422`). 결제창에 보이는 `orderName` 에는 개인정보를 넣지 않는다(최대 100자) |
 | 결제 확정 · 환불 확정 뒤 지급 · 회수 | `PaymentOrderListener.onPaid` · `onRefunded` — 던져도 「결제됨」은 그대로이고 지급 · 회수 작업이 재시도한다 |
 | 운영자 판정 | 핸들러마다 권한 하나(`@OperatorPermission`): 읽기 `payment.read` · 환불 승인과 직접 환불 `payment.refund` · 맞추기 / 닫기 / 웹훅 다시 처리 `payment.operate`. 기본 `PaymentOperatorPolicy` 는 platform 의 `OperatorAccess` 로 판정한다(`account` 가 있으면 매 호출 저장소 — 회수가 바로 먹는다). 인터셉터와 컨트롤러가 같은 표로 두 번 확인한다. 옛 람다 정책은 `permits` 기본 구현 덕에 그대로 통한다 |
+| (선택) 쿠폰 같은 할인 수단 · 결제 면제 | 할인: `platform` 의 `DiscountSource` 빈(쿠폰 모듈이 낸다)을 `PaymentDiscounts` 가 `order` 순으로 모은다 - 아래 「할인 · 0원 · 결제 면제」. 면제: 권한 `payment.exempt` 를 가진 계정 — 앱은 「구매했나 / 구독 중인가」 검사에 `|| exemption.isExempt(accountId)` 한 줄 |
 | (선택) 사람이 봐야 하는 일이 줄에 찍힐 때 알림 | `PaymentReviewNotifier` — `alert` 가 있으면 `PAYMENT_REVIEW_NEEDED`(주문 id 만 싣는다), 없으면 줄 · 로그에만 남는다 |
 | (선택) 차지백이 들어왔을 때 · 분쟁에서 이겨 돌아왔을 때 알림 | `PaymentChargebackAlert` — 장부 + `alert` 가 있으면 `PAYMENT_CHARGEBACK` · `PAYMENT_CHARGEBACK_REVERSED`(주문 id 만 싣는다), 없으면 줄과 이력에만 남는다 |
 | (선택) 결제사가 우리 키를 받아들이지 않았을 때 알림 | `PaymentProviderCredentialAlert` — 결제사 모듈이 키 거절(토스: 401 계열 `INVALID_API_KEY` · `UNAUTHORIZED_KEY` — `FORBIDDEN_REQUEST` 는 요청 불일치일 수도 있어 알리지 않는다)을 받으면 부른다. 장부 + `alert` 가 있으면 `PAYMENT_PROVIDER_CREDENTIALS_REJECTED`(결제사 id 만 싣는다 · 한 시간에 한 번으로 접힌다), 없으면 알리지 않는다. 고객에게는 여전히 「거절」이다 |
@@ -77,6 +78,17 @@
 
 **`PaymentOrderListener` 를 짧게 쓴다.** `onPaid` · `onRefunded` 는 **주문 줄 락 안에서 한 번** 돈다 — 같은 DB 를 쓰는 지급이 정확히 한 번인 이유다. 그동안 **그 주문의 웹훅 수신 · 승인 · 환불이 기다린다**(PostgreSQL 은 락 대기에 시간 제한이 없다). 느린 일(메일 · 외부 호출)은 리스너에서 직접 하지 말고 큐로 넘긴다(알림은 `NotificationPublisher`, 외부 시스템 호출은 작업으로).
 드물게 다시 불릴 수 있으니 멱등하게 쓴다. **지급한 적 없는 주문에도 `onRefunded` 가 온다**(지급 전에 전액 환불되면 `onPaid` 는 건너뛰고 `onRefunded` 만) — 지급했는지는 `order.fulfilledAt == null` 로 가른다. `onRefunded` 가 `onPaid` 보다 앞서지 않는다(일부만 환불된 미지급 주문은 먼저 `onPaid` 가 불린다).
+
+## 할인 · 0원 · 결제 면제
+
+**금액은 여전히 서버만 정한다**: 카탈로그 가격 → (면제 또는 할인) → 최종가. 브라우저가 보내는 것은 어떤 할인 수단의 어느 것인지(`discounts: [{type:"coupon", ref}]`)뿐이다. `payment_orders.amount` 는 **최종 금액**으로 그대로 — 승인 대조 · 환불 상한(`paidAmount ?: amount`) · 중도 해지 환불이 맞는다. 새 칸 `original_amount`(할인 전, 없으면 null) · `discount_amount` 와 할인 내역 표 `payment_order_discounts`(주문 · 순번 · 수단 · 쿠폰 id · 금액 · 상태 `RESERVED → CONFIRMED / RELEASED / RESTORED`).
+
+- **견적** `PaymentOrders.quote` ↔ `POST /payments/quote`: 주문과 같은 계산, 아무것도 안 쥔다. **주문** `create`: 줄을 먼저 넣고(같은 키의 동시 요청이 쿠폰을 두고 다투지 않고 승자의 주문을 받는다) 같은 트랜잭션에서 `reserve(holderRef = 주문 id)`. 한 주문에 할인 하나(첫 판).
+- **한살이**(할인 수단은 `reserve → confirm / release / restore`): 지급 `PaymentFulfillment.fulfil` 이 앱 리스너보다 **먼저** `confirm`(리스너가 던지면 같이 되돌려져 재시도에 한 번) · 끝 상태(`FAILED` · `EXPIRED` · `CANCELED`)로 가는 모든 전이는 `PaymentLedgerWriter.transition` 한 곳이라 같은 트랜잭션에서 `release` · 늦은 `PAID` 는 같은 `fulfil` 의 `confirm` 이 다시 잡고, 그사이 다른 주문이 쥐었으면(`CONFLICT`) 둘 다 그대로 두고 이 주문에 `DISCOUNT_CONFLICT` 검토 표시(지급은 나간다) · **전액 환불**(`RefundLines` 의 `REFUNDED` 전이)은 `restore`(지급 전이라 아직 쥐고만 있던 쿠폰은 `release`), 부분 환불은 복원 없음 · 차지백 되돌림(`REVERSED`)은 쿠폰도 되살리지 않는다.
+- **0원** (`provider = "free"`): 결제사를 부르지 않고 한 트랜잭션에서 `PENDING → PAID` + 지급 작업(만료 작업 · 결제창 없음). 지급 훅은 평소처럼 돈다. 환불 대상이 아니다(`NOTHING_TO_REFUND`). 결제 건수에는 들고 매출은 0. 모드는 열 수 있는 결제사의 모드.
+- **결제 면제** (`provider = "exempt"`): 권한 `payment.exempt`([PaymentPermissions.EXEMPT], 기본 역할 없음 — 전권 `*` 는 배정 없이 가진다)를 가진 계정의 단건 주문은 결제사 없이 `ORDER_CREATED → EXEMPTED(행위자 = 그 계정) → PENDING → PAID` 로 끝난다. `original_amount` = 카탈로그 가격, `amount` 0, 할인 줄 없음, 쿠폰을 같이 보내도 쥐지 않는다. 대시보드 순매출 · 결제 건수 · 퍼널 「결제」(`payment-jdbc` 의 `CurrentModeOrders` 가 `provider <> 'exempt'`), 환불, 「첫 결제만」 판정(`hasPaidOrder` 는 `free` · `exempt` 를 세지 않는다)에서 빠진다. 판정은 요청마다 `PaymentExemption`(platform `OperatorAccess` — 계정 모듈이 있으면 저장된 역할을 매번 읽어 회수가 다음 요청부터 먹고, 역할 위계가 있으면 물려받은 권한도 따른다). 앱이 면제 주문을 가르려면 `order.provider == PaymentOrders.EXEMPT_PROVIDER`(`settlement`).
+- **결제사 최소 금액**: `PaymentCheckoutGateway.minimumAmount(currency)`(기본 null) — 0 < 최종가 < 최소 금액이면 `PAYMENT.DISCOUNT_BELOW_MINIMUM`. 토스: 원화 100원(토스페이먼츠 오류 메시지 「신용카드는 100원 이상」에서 확인, 공식 문서 페이지로 확정하지 못했다 — 운영 전 계약으로 확인). 카카오페이 · 네이버페이는 공식 값을 찾지 못해 null(제한 없음으로 본다).
+- **지원하지 않는 길**: 금액을 결제사가 직접 정하는 경로(거래를 먼저 만드는 결제사 — Paddle)는 `PAYMENT.DISCOUNT_NOT_SUPPORTED`. 구독 할인(`SubscriptionDiscounts`)은 별도 작업이다.
 
 ## 상태 전이
 
