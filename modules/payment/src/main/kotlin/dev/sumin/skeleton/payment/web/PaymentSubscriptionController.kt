@@ -103,7 +103,7 @@ class PaymentSubscriptionController(
     fun me(authentication: Authentication?): DataResponse<MySubscriptionResponse> {
         val account = callers.account(authentication)
         val current = subscriptions.current(account)
-        val orders = current?.let { subscriptions.recentOrders(it.id) }.orEmpty().map { OrderResponse.of(dev.sumin.skeleton.payment.OrderView(it, emptyList())) }
+        val orders = current?.let { subscriptions.recentOrderViews(it.id) }.orEmpty().map(OrderResponse::of)
         return Response.ok(MySubscriptionResponse(current?.let(::view), orders))
     }
 

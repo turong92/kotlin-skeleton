@@ -73,6 +73,9 @@ class PaymentSubscriptionDiscountHttpTest {
             .andExpect(jsonPath("$.value.subscription.discount.nextAmount").value(1950))
             .andExpect(jsonPath("$.value.orders[0].settlement").value("FREE"))
             .andExpect(jsonPath("$.value.orders[0].originalAmount").value(3900))
+            .andExpect(jsonPath("$.value.orders[0].discounts[0].type").value("coupon"))
+            .andExpect(jsonPath("$.value.orders[0].discounts[0].label").value("1 free then half"))
+            .andExpect(jsonPath("$.value.orders[0].discounts[0].amount").value(3900))
             .andExpect(jsonPath("$.value.subscription.amount.amount").value(3900))
     }
 

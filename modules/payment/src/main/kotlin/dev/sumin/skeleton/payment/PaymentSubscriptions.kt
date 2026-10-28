@@ -43,6 +43,13 @@ class PaymentSubscriptions(
 
     fun recentOrders(subscriptionId: String, limit: Int = RECENT_ORDERS): List<PaymentOrder> = store.listSubscriptionOrders(subscriptionId, limit)
 
+    /** [recentOrders] 에 주문마다 할인 내역(첫 결제의 쿠폰 줄)을 붙인 읽기 모델 - 「내 구독」이 원가 · 할인 줄을 그린다. 한 번의 질의로 모은다. */
+    fun recentOrderViews(subscriptionId: String, limit: Int = RECENT_ORDERS): List<OrderView> {
+        val orders = recentOrders(subscriptionId, limit)
+        val discounts = store.listOrderDiscounts(orders.map { it.id }).groupBy { it.orderId }
+        return orders.map { OrderView(it, emptyList(), discounts[it.id].orEmpty()) }
+    }
+
     /** `PENDING` 줄을 만들고 카드 등록 창 값을 돌려준다. 같은 키로 다시 부르면 같은 줄이다. [country] 가 비면 설정의 기본 나라(그것도 없으면 나라 없음). */
     fun start(
         accountId: String,
