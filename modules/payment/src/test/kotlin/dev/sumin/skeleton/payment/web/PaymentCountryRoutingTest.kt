@@ -6,6 +6,7 @@ import dev.sumin.skeleton.common.web.WebProperties
 import dev.sumin.skeleton.payment.PaymentProperties
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.test.assertNull
@@ -145,5 +146,53 @@ class PaymentCountryRoutingTest {
         assertEquals("toss", routing.chosenForSubscription(kr, "paddle"))
         assertEquals("toss", routing.chosenForSubscription(kr, null))
         assertEquals(emptyList(), routing.subscriptionChoices(routing.of(request("US"))))
+    }
+
+    // --- 이 요청의 통화: 라우팅이 고른 결제사의 통화 ---
+
+    private fun currencies(
+        providerCurrencies: Map<String, String> = mapOf("paddle" to "USD"),
+        defaultCurrency: String? = null,
+        accepted: Map<String, Set<String>> = mapOf("toss" to setOf("KRW"), "paddle" to setOf("USD", "EUR")),
+        defaultProvider: String? = "paddle",
+        openable: List<String> = listOf("paddle", "toss"),
+    ): PaymentCountryRouting {
+        val properties = PaymentProperties(
+            defaultProvider = defaultProvider,
+            routing = PaymentProperties.Routing(countryProviders = mapOf("KR" to "toss"), providerCurrencies = providerCurrencies, defaultCurrency = defaultCurrency),
+        )
+        return PaymentCountryRouting({ properties }, cloudflare, { openable }, { emptyList() }, { emptyList() }, { id -> accepted[id].orEmpty() })
+    }
+
+    @Test
+    fun `the request currency is the routed provider's - the configured one first, else the only one it accepts`() {
+        val routing = currencies()
+        assertEquals("KRW", routing.currencyOf(routing.of(request("KR"))), "Toss takes only KRW")
+        assertEquals("USD", routing.currencyOf(routing.of(request("US"))), "Paddle takes several - the setting names it")
+    }
+
+    @Test
+    fun `a provider with several currencies and no setting falls to the default currency, then to none`() {
+        val none = currencies(providerCurrencies = emptyMap())
+        assertNull(none.currencyOf(none.of(request("US"))))
+        val fallback = currencies(providerCurrencies = emptyMap(), defaultCurrency = "USD")
+        assertEquals("USD", fallback.currencyOf(fallback.of(request("US"))))
+        assertEquals("KRW", fallback.currencyOf(fallback.of(request("KR"))), "a single accepted currency needs no setting")
+    }
+
+    @Test
+    fun `without a provider the default currency decides, and a closed provider is not replaced by another currency`() {
+        val noProvider = currencies(defaultProvider = null, openable = listOf("paddle", "toss"), defaultCurrency = "KRW")
+        val route = noProvider.of(request("US"))
+        assertNull(route.provider)
+        assertEquals("KRW", noProvider.currencyOf(route))
+        val bare = currencies(defaultProvider = null, openable = listOf("paddle", "toss"))
+        assertNull(bare.currencyOf(bare.of(request("US"))))
+    }
+
+    @Test
+    fun `the settings are validated - currency codes are three capital letters`() {
+        assertFailsWith<IllegalArgumentException> { PaymentProperties.Routing(providerCurrencies = mapOf("paddle" to "usd")) }
+        assertFailsWith<IllegalArgumentException> { PaymentProperties.Routing(defaultCurrency = "US") }
     }
 }

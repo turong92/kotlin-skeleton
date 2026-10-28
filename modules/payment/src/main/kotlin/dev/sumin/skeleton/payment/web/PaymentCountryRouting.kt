@@ -33,6 +33,8 @@ class PaymentCountryRouting(
     private val countryProviders: (String) -> List<String> = { emptyList() },
     /** 빌링(카드 등록 · 간편결제 정기) 능력을 가진 결제사 id - [subscriptionChoices] 의 거름. 기본은 없음. */
     private val billingProviders: () -> List<String> = { emptyList() },
+    /** 이 결제사가 **실효 설정으로** 받는 통화 - [currencyOf] 가 「받는 통화가 하나뿐」을 판정하는 출처. 기본은 모름. */
+    private val currenciesOf: (String) -> Set<String> = { emptySet() },
 ) {
     constructor(properties: PaymentProperties, clientIps: ClientIps, openable: () -> List<String>) : this({ properties }, clientIps, openable)
 
@@ -71,6 +73,19 @@ class PaymentCountryRouting(
     fun chosenForSubscription(route: RequestRoute, requested: String?): String? {
         val wanted = requested?.trim()?.lowercase()?.takeIf { it.isNotEmpty() } ?: return route.provider
         return if (wanted in subscriptionChoices(route)) wanted else route.provider
+    }
+
+    /**
+     * 이 요청이 결제할 통화 - 라우팅이 고른 결제사의 통화다(결제 화면과 카탈로그가 같은 답을 쓴다). 순서: `routing.provider-currencies.<결제사>` → 그 결제사가 받는 통화가 **하나뿐**이면 그것 →
+     * `routing.default-currency` → 없음. 결제사를 못 정했으면(`provider == null`) 곧바로 기본 통화.
+     */
+    fun currencyOf(route: RequestRoute): String? {
+        val provider = route.provider
+        if (provider != null) {
+            properties.routing.providerCurrencies[provider]?.let { return it }
+            currenciesOf(provider).singleOrNull()?.let { return it }
+        }
+        return properties.routing.defaultCurrency
     }
 
     /** 개발용 스위치가 켜졌을 때만 읽는 요청별 나라 - 두 글자 영문이 아니면 없는 것으로 본다. */

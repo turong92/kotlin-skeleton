@@ -5,6 +5,8 @@ skeleton:
     routing:
       country-providers: {}        # 접속 나라(ISO-3166 두 글자 대문자) → 결제사 id. 예 KR: toss — 지도에 있는 나라는 그 결제사만(못 열면 503, 다른 결제사로 넘기지 않는다), 그 밖의 나라는 default-provider. 화면이 보낸 provider 는 읽지 않는다
       # dev-country-switch: false # 로컬 개발 전용: true 면 요청의 X-Dev-Country 헤더가 그 요청의 나라다(꺼져 있으면 헤더 무시). 보호 환경(stage · prod)에서 켜져 있으면 기동 실패
+      provider-currencies: {}       # 결제사 id → 그 결제사로 결제할 통화(세 글자 대문자). 결제사가 통화를 여럿 받을 때 정한다 — 예 paddle: USD. 없으면 그 결제사가 받는 통화가 하나일 때 그것
+      # default-currency:           # 결제사를 못 정했거나, 정한 결제사가 통화를 여럿 받는데 provider-currencies 에 없을 때 쓰는 통화. 없으면 통화를 모르는 요청(GET /config 의 currency 가 null)
       # dev-country: US            # 로컬 개발 전용: 모든 요청을 이 나라로 고정한다. 보호 환경(stage · prod)에서 정해져 있으면 기동 실패
     providers: {}                  # 제공자 ID → { enabled, currencies, countries } — 제공자 기본 지원 범위를 덮어쓴다
 #     toss:

@@ -63,6 +63,7 @@ class PaymentHttpAutoConfiguration {
             { orders.openableProviders() },
             { country -> router.choosableProviders(country) },
             { router.providerIds(PaymentBillingGateway::class) },
+            { provider -> router.currenciesOf(provider) },
         )
 
     @Bean

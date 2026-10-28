@@ -49,14 +49,24 @@ data class PaymentProperties(
          * 보호 환경(stage · prod)에서 켜져 있으면 기동 실패(`PaymentCountryDeployGuard`). `GET /config` 가 켜져 있음을 알린다.
          */
         val devCountrySwitch: Boolean = false,
+        /**
+         * 결제사 id → 그 결제사로 결제할 때의 통화(세 글자 대문자). 결제사가 통화를 여럿 받을 때 어느 것을 쓸지 정한다(Paddle 은 여러 통화를 받는다 - 예: `paddle: USD`).
+         * 없으면 그 결제사가 받는 통화가 하나일 때 그것이다. 이 요청의 통화는 나라 → 결제사를 정하는 라우팅이 같이 정한다(`PaymentCountryRouting.currencyOf`).
+         */
+        val providerCurrencies: Map<String, String> = emptyMap(),
+        /** 결제사를 못 정했거나 정한 결제사가 통화를 여럿 받는데 [providerCurrencies] 에 없을 때 쓰는 통화(세 글자 대문자). 없으면 통화를 모르는 요청이다. */
+        val defaultCurrency: String? = null,
     ) {
         init {
+            providerCurrencies.forEach { (provider, currency) -> require(CURRENCY.matches(currency)) { "skeleton.payment.routing.provider-currencies.$provider must be a currency code (three capital letters): $currency" } }
+            require(defaultCurrency == null || CURRENCY.matches(defaultCurrency)) { "skeleton.payment.routing.default-currency must be a currency code (three capital letters)" }
             countryProviders.keys.forEach { require(COUNTRY.matches(it)) { "skeleton.payment.routing.country-providers keys must be ISO-3166 alpha-2 codes (two capital letters): $it" } }
             require(devCountry == null || COUNTRY.matches(devCountry)) { "skeleton.payment.routing.dev-country must be an ISO-3166 alpha-2 code (two capital letters)" }
         }
 
         private companion object {
             val COUNTRY = Regex("[A-Z]{2}")
+            val CURRENCY = Regex("[A-Z]{3}")
         }
     }
 

@@ -18,10 +18,14 @@ data class PurchaseRequest(
     val country: String?,
 )
 
-/** [orderName] 은 결제창에 보이는 이름이다 — 개인정보를 넣지 않는다(최대 100자). */
+/**
+ * [orderName] 은 결제창에 보이는 이름이다 — 개인정보를 넣지 않는다(최대 100자).
+ * [productCode] 는 이 품목이 속한 상품이다 - 쿠폰 범위(`itemRefs`)가 품목 코드 대신 상품 코드로도 맞는다. 없으면 [PurchaseRequest.itemRef] 가 곧 상품이다.
+ */
 data class PurchaseQuote(
     val amount: PaymentAmount,
     val orderName: String,
+    val productCode: String? = null,
 )
 
 /**
@@ -112,13 +116,22 @@ fun interface PaymentProviderMismatchAlert {
     }
 }
 
-/** 구독 플랜 하나. [period] 는 ISO-8601(`P1M` · `PT3M`), [level] 은 높을수록 윗등급이다(2차의 위로만 바꾸기가 쓴다). */
+/**
+ * 구독 플랜 하나. [period] 는 ISO-8601(`P1M` · `PT3M`), [level] 은 높을수록 윗등급이다(2차의 위로만 바꾸기가 쓴다).
+ * 세 칸은 기본값이 있어 코드로 플랜을 두는 앱은 그대로다.
+ */
 data class SubscriptionPlan(
     val code: String,
     val name: String,
     val amount: PaymentAmount,
     val period: String,
     val level: Int,
+    /** 같은 상품의 가격들이 같은 값이다 - 쿠폰 범위 · 화면 묶음. 코드 플랜은 코드 그대로 */
+    val productCode: String = code,
+    /** 지금 새로 살 수 있는가 - 판매 중지 · 기간 지난 가격은 false(기존 구독자가 찾을 때만 나온다) */
+    val purchasable: Boolean = true,
+    /** 정가(행사가의 비교가) - 연간 해지의 쓴 몫 · 화면 취소선. 없으면 [amount] 가 정가다 */
+    val regularAmount: Long? = null,
 )
 
 /**
@@ -128,6 +141,7 @@ data class SubscriptionPlan(
 interface SubscriptionPlans {
     fun list(): List<SubscriptionPlan>
 
+    /** 코드로 찾는다 - 판매 중이 아닌 플랜도 돌려줄 수 있다(기존 구독자의 이름 · 등급 · 주기). 새로 살 수 있는지는 [SubscriptionPlan.purchasable] 이 가른다. */
     fun find(code: String): SubscriptionPlan? = list().firstOrNull { it.code == code }
 }
 
@@ -140,5 +154,23 @@ fun interface SubscriptionRenewalGuard {
 
     companion object {
         val ALLOW_ALL: SubscriptionRenewalGuard = SubscriptionRenewalGuard { true }
+    }
+}
+
+/**
+ * 결제사 쪽 가격 id(Paddle 의 `pri_…`)의 출처 - 품목 코드([PurchaseRequest.itemRef] · 플랜 코드)마다 결제사가 아는 id. 기본은 [NONE]이고 카탈로그 모듈이 DB 의 링크로 구현한다.
+ * 결제사 모듈은 여기서 먼저 찾고 없으면 자기 설정 지도를 본다.
+ */
+interface ProviderPriceRefs {
+    fun priceIdOf(provider: String, itemRef: String): String?
+
+    fun all(provider: String): Map<String, String>
+
+    companion object {
+        val NONE: ProviderPriceRefs = object : ProviderPriceRefs {
+            override fun priceIdOf(provider: String, itemRef: String): String? = null
+
+            override fun all(provider: String): Map<String, String> = emptyMap()
+        }
     }
 }
