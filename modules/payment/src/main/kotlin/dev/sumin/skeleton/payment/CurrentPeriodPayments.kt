@@ -47,8 +47,11 @@ class CurrentPeriodPayments(private val store: PaymentLedgerStore) {
     companion object {
         private const val ORDERS_LOOKED_AT = 20
 
-        /** 이 변경 주문이 주기를 늘려 **지금 기간을 열었나** - 공제분이 박혀 있고(`discount_amount`) 결제 시각이 기간 시작이다 */
+        /**
+         * 이 변경 주문이 **지금 기간을 열었나** - 결제 시각이 기간 시작이다(새 주기를 시작하는 변경만 기준 시각을 결제 시각으로 옮긴다: 주기를 늘리는 변경 · 전액 결제하고 새 주기).
+         * 공제 없는 변경(첫 달 무료 쿠폰 기간 등)도 기간을 산 주문이다. 차액만 내는 같은 주기 변경은 기간 중에 내므로 해당하지 않는다.
+         */
         fun opensPeriod(subscription: PaymentSubscription, order: PaymentOrder): Boolean =
-            order.kind == PaymentOrderKind.SUBSCRIPTION_CHANGE && order.originalAmount != null && order.discountAmount > 0 && order.paidAt != null && order.paidAt == subscription.currentPeriodStart
+            order.kind == PaymentOrderKind.SUBSCRIPTION_CHANGE && order.paidAt != null && order.paidAt == subscription.currentPeriodStart
     }
 }

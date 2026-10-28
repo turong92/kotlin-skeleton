@@ -86,10 +86,8 @@ class SubscriptionPlanChanges(
             }
             val newPeriod = quote.kind == PlanChangeKind.IMMEDIATE_NEW_PERIOD
             if (quote.charge.amount == 0L && !newPeriod) {
-                // 차액이 최소 금액 미만이다(또는 낸 돈의 남은 몫이 새 가격을 덮는다) — 과금 없이 바꾼다. 주기를 늘리는 변경은 오늘부터 새 주기
-                val changed = lifecycle.save(tx, locked, locked.status) { lifecycle.switched(it, quote.plan.code, quote.plan.amount.amount, if (newPeriod) quote.plan.period else it.period, restartAt = if (newPeriod) writer.now() else null) }
-                if (newPeriod) lifecycle.scheduleRenewal(changed)
-                return@inTransaction Claim(changed, null)
+                // 차액이 최소 금액 미만이다 — 과금 없이 바꾼다(기간은 그대로). 주기를 늘리는 변경은 공제가 덮어도 아래의 0원 주문으로 간다
+                return@inTransaction Claim(lifecycle.save(tx, locked, locked.status) { lifecycle.switched(it, quote.plan.code, quote.plan.amount.amount, it.period) }, null)
             }
             // 주기를 늘리는 변경은 공제액을 주문에 박는다(원래 가격 = 결제액 + 공제액) - 중도 해지가 새 가격 전체를 이번 기간의 돈으로 센다. 공제로 결제액이 0이면 결제사 없이 끝나는 주문이다
             val credit = quote.credit?.amount?.takeIf { newPeriod && it > 0 }
@@ -102,6 +100,8 @@ class SubscriptionPlanChanges(
             if (quote.charge.amount > 0) lifecycle.scheduleReconcile(order)
             val claimed = locked.copy(chargeOrderId = order.id, pendingPlanCode = quote.plan.code, pendingAmount = quote.plan.amount.amount, pendingPeriod = if (newPeriod) quote.plan.period else null, updatedAt = writer.now())
             tx.updateSubscription(claimed)
+            // 0원 주문은 이 트랜잭션 뒤 곧바로 끝내는데, 그 사이 죽으면 갱신 작업이 지금 깨어 이어서 끝낸다([SubscriptionRenewTaskHandler])
+            if (order.provider == PaymentOrders.FREE_PROVIDER) lifecycle.scheduleRenewal(claimed, runAt = writer.now())
             Claim(claimed, order)
         }
         val order = claim.order ?: return claim.subscription

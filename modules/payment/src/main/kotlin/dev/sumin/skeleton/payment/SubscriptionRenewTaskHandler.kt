@@ -50,6 +50,11 @@ class SubscriptionRenewTaskHandler(
         val id = run.subjectId
         val before = store.findSubscription(id) ?: return
         if (before.isProviderManaged) return // 결제사가 갱신한다 — 우리는 과금하지 않는다(이중 과금 방지)
+        // 공제가 새 가격을 덮은 0원 변경 주문을 선점해 놓고 끝내기 전에 죽었다 - 기간 끝을 기다리지 않고 지금 이어서 끝낸다(`settleFree` 는 멱등)
+        before.chargeOrderId?.let(store::findOrder)?.takeIf { it.kind == PaymentOrderKind.SUBSCRIPTION_CHANGE && it.provider == PaymentOrders.FREE_PROVIDER && it.status == PaymentOrderStatus.CONFIRMING }?.let {
+            charges.settleFree(it)
+            return
+        }
         val chargeable = (before.status == SubscriptionStatus.ACTIVE || before.status == SubscriptionStatus.PAST_DUE) && due(before)
         // 결제사 · 모드는 주문을 선점하기 **전에** 확인한다 — 보낼 수 없는 과금의 주문이 남지 않게(테스트 키 → 실결제 키 전환 같은 길)
         // 무료인 기간이면 결제사가 필요 없다(빌링 결제사가 꺼져 있어도 기간은 넘어간다) - 과금액은 락 안에서 다시 정하고, 여기서는 지금 값으로 어림한다

@@ -205,4 +205,73 @@ class PlanChangeNewPeriodTest {
         assertEquals(39_000 - quote.charge.amount, quote.credit?.amount)
         assertNull(kit.planChanges.preview("acc_1", active.id, "plus").credit)
     }
+
+    @Test
+    fun `a month to year change with nothing to credit still ends the subscription when its payment is refunded in full`() {
+        val kit = newKit()
+        val active = kit.activeIn()
+        // 낸 돈이 없는 기간(첫 달 무료 쿠폰 같은 것)을 만든다 - 공제가 0
+        val order = kit.store.listSubscriptionOrders(active.id, 1).single()
+        kit.store.inTransaction { tx -> tx.lockOrder(order.id); tx.updateOrder(order.copy(paidAmount = 0)) }
+        kit.time.advance(Duration.ofDays(15))
+        val quote = kit.planChanges.preview("acc_1", active.id, "basic-yearly")
+        assertNull(quote.credit)
+
+        val changed = kit.planChanges.change("acc_1", active.id, "basic-yearly", quote.charge.amount, IdempotencyKey("chg-1"))
+        val changeOrder = kit.store.listSubscriptionOrders(active.id, 1).single()
+        assertNull(changeOrder.originalAmount, "no credit was carried")
+        kit.refunds.refund("op_1", changeOrder.id, "OPERATOR", null, IdempotencyKey("r-1"))
+
+        val after = checkNotNull(kit.store.findSubscription(changed.id))
+        assertEquals(listOf(SubscriptionStatus.ENDED, SubscriptionEndReason.REFUNDED), listOf(after.status, after.endReason))
+    }
+
+    @Test
+    fun `a full-restart change in the same period opens a period too, and a difference-only one does not`() {
+        val restart = PaymentLedgerKit(
+            properties = PaymentProperties(
+                webhook = PaymentProperties.Webhook(pathToken = PaymentLedgerKit.WEBHOOK_TOKEN),
+                subscription = PaymentProperties.Subscription(enabled = true, planChange = PaymentProperties.Subscription.PlanChange(true, Charge.FULL_RESTART, 0)),
+            ),
+        )
+        val active = restart.active()
+        restart.time.advance(Duration.ofDays(5))
+        val changed = restart.planChanges.change("acc_1", active.id, "plus", 99_999, IdempotencyKey("chg-1"))
+        val order = restart.store.listSubscriptionOrders(active.id, 1).single()
+        assertEquals(true, CurrentPeriodPayments.opensPeriod(changed, order))
+
+        val diff = newKit()
+        val active2 = diff.active()
+        diff.time.advance(Duration.ofDays(5))
+        val changed2 = diff.planChanges.change("acc_1", active2.id, "plus", 99_999, IdempotencyKey("chg-1"))
+        assertEquals(false, CurrentPeriodPayments.opensPeriod(changed2, diff.store.listSubscriptionOrders(active2.id, 1).single()))
+    }
+
+    @Test
+    fun `a free change order that was claimed but never settled is finished by the renewal task that was woken for it`() {
+        val kit = newKit()
+        kit.plans.plans += SubscriptionPlan("cheap-yearly", "Cheap yearly", PaymentAmount(1_500, "KRW"), "P1Y", 1, productCode = "basic")
+        val active = kit.activeIn()
+        kit.time.advance(Duration.ofDays(15))
+        // change() 가 하는 선점까지만 재현한다: 0원 주문을 넣고 구독에 대기 값을 건다 - settleFree 전에 죽은 상태
+        val claimedOrder = kit.store.inTransaction { tx ->
+            val locked = checkNotNull(tx.lockSubscription(active.id))
+            val order = kit.lifecycle.chargeOrder(
+                locked, PaymentOrderKind.SUBSCRIPTION_CHANGE, "Cheap yearly", amount = PaymentAmount(0, "KRW"), itemRef = "cheap-yearly",
+                dedupeKey = "subchg:crash", originalAmount = 1_500, offProvider = true,
+            )
+            tx.insertOrderIfAbsent(order)
+            val claimed = locked.copy(chargeOrderId = order.id, pendingPlanCode = "cheap-yearly", pendingAmount = 1_500, pendingPeriod = "P1Y")
+            tx.updateSubscription(claimed)
+            kit.lifecycle.scheduleRenewal(claimed, runAt = kit.time.now())   // change() 가 같은 트랜잭션에서 거는 깨우기
+            order
+        }
+        assertEquals(PaymentOrderStatus.CONFIRMING, kit.order(claimedOrder.id).status)
+
+        kit.runTasks(setOf(PaymentTaskTypes.SUBSCRIPTION_RENEW))
+        kit.runTasks(setOf(PaymentTaskTypes.ORDER_FULFIL))
+
+        val after = checkNotNull(kit.store.findSubscription(active.id))
+        assertEquals(listOf("cheap-yearly", "P1Y", PaymentOrderStatus.PAID), listOf(after.planCode, after.period, kit.order(claimedOrder.id).status))
+    }
 }
