@@ -15,8 +15,8 @@ import org.junit.jupiter.api.BeforeEach
 import org.springframework.beans.factory.annotation.Autowired
 
 /**
- * 이벤트 · 보상 · 쿠폰 · 결제 면제가 견본 앱 안에서 서로 맞물리는지(진짜 PostgreSQL · 보안 체인 · 큐 일꾼, 결제사만 가짜) - 스펙 §10 의 1 · 2 · 3 · 5.
- * 씨앗은 [RewardsSeed] 를 직접 돌린다(로컬 프로필의 같은 코드). 구독 쿠폰은 구독 할인 조각(K7) 뒤에 이어 본다.
+ * 이벤트 · 보상 · 쿠폰 · 결제 면제가 견본 앱 안에서 서로 맞물리는지(진짜 PostgreSQL · 보안 체인 · 큐 일꾼, 결제사만 가짜) - 스펙 §10 의 1 · 2 · 3 · 4 · 5.
+ * 씨앗은 [RewardsSeed] 를 직접 돌린다(로컬 프로필의 같은 코드).
  */
 class RewardsFlowIntegrationTest : CheerIntegrationBase() {
     @Autowired lateinit var definitions: CouponDefinitions
@@ -156,9 +156,36 @@ class RewardsFlowIntegrationTest : CheerIntegrationBase() {
     }
 
     @Test
+    fun `a first-month-free subscription coupon is only looked at on start and taken on the first payment - no charge, then half price`() {
+        val coupon = giveCoupon(RewardsSeed.FIRST_MONTH_FREE, userId)
+        val started = post("$PAYMENTS/subscriptions", user, """{"planCode":"standard","discounts":[{"type":"coupon","ref":"$coupon"}]}""", UUID.randomUUID().toString())
+            .andExpect { status { isCreated() } }
+        val id = read(started, "$.value.subscription.id")
+        assertEquals("AVAILABLE", JsonPath.read<String>(coupons(user, "AVAILABLE"), "$.values[0].status"), "start only looks - the coupon is held at the first payment")
+
+        post("$PAYMENTS/subscriptions/$id/activate", user, """{"providerPayload":{"authKey":"auth_1"}}""")
+            .andExpect { status { isOk() }; jsonPath("$.value.status") { value("ACTIVE") } }
+        assertTrue(gateway.chargeCalls.isEmpty(), "a free first period does not charge the card")
+        assertEquals("USED", JsonPath.read<String>(coupons(user, "PAST"), "$.values[0].status"))
+        assertEquals("free", jdbc.sql("select provider from payment_orders where kind = 'SUBSCRIPTION_INITIAL'").query(String::class.java).single())
+        val me = get("$PAYMENTS/subscriptions/me", user).andExpect { status { isOk() } }
+        assertEquals(3450, JsonPath.read<Int>(me.andReturn().response.contentAsString, "$.value.subscription.discount.nextAmount"))
+        assertEquals(3, JsonPath.read<Int>(me.andReturn().response.contentAsString, "$.value.subscription.discount.remainingPeriods"))
+    }
+
+    @Test
+    fun `a coupon that is not for subscriptions is refused at start`() {
+        post("/api/v1/admin/coupon-definitions", operator, """{"name":"one-time only","stages":[{"type":"FREE","periods":1}],"scope":{"purposes":["ONE_TIME"]}}""").andExpect { status { isCreated() } }
+        val coupon = giveCoupon("one-time only", userId)
+        post("$PAYMENTS/subscriptions", user, """{"planCode":"standard","discounts":[{"type":"coupon","ref":"$coupon"}]}""", UUID.randomUUID().toString())
+            .andExpect { status { isBadRequest() }; jsonPath("$.code") { value("PAYMENT.DISCOUNT_NOT_APPLICABLE") } }
+        assertEquals("AVAILABLE", JsonPath.read<String>(coupons(user, "AVAILABLE"), "$.values[0].status"))
+    }
+
+    @Test
     fun `the seed is idempotent and the shared WELCOME code lands a coupon once per account`() {
         RewardsSeed(definitions, codes, campaigns).run()
-        assertEquals(3, definitions.list().size)
+        assertEquals(4, definitions.list().size)
         assertEquals(2, campaigns.list().size)
 
         post("/api/v1/coupons/redeem", user, """{"code":"welcome"}""").andExpect { status { isCreated() }; jsonPath("$.value.name") { value(RewardsSeed.CHEER_30) } }

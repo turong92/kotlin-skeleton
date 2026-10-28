@@ -160,7 +160,9 @@ local 프로필은 주문 만들기 한도(기본 계정당 10 / 10분)를 풀�
 
 **결제와 맞물리는 곳**: `coupon` 이 결제 할인 수단 빈으로 서 있으므로 `POST /api/v1/payments/orders` 의 `discounts: [{type: "coupon", ref: <쿠폰 id>}]` 가 그대로 먹는다(견적은 `POST /api/v1/payments/quote`). 100% 쿠폰(무료 이용권)이면 결제사를 부르지 않고 바로 `PAID`(`settlement: FREE`). `payment.exempt` 를 가진 계정의 응원은 결제사 없이 `PAID`(`settlement: EXEMPT`, 매출 · 환불에서 빠진다). 이 앱의 자리는 한 곳 — `CheerOrderListener.onPaid` 끝의 `referrals.qualify(order.accountId)`: **돈이 오간 첫 결제**(`settlement == PROVIDER`)가 친구초대의 초대자 보상(`qualifyOn: SIGNAL`)을 연다. 0원 · 면제 주문은 부르지 않는다. 몇 번 불러도 한 번만 먹는다.
 
-**씨앗**(`local` 프로필만, 이름으로 찾아 없는 것만 만든다 — `RewardsSeed`): 쿠폰 정의 「1,000원 할인」 · 「응원 30%」(최대 5,000원) · 「무료 이용권」, 공용 코드 `WELCOME`(→ 응원 30%), 출석 이벤트(매일 10포인트, 누적 3일 「1,000원 할인」), 친구초대 이벤트(초대받은 사람 「응원 30%」, 초대자 500포인트는 그 친구의 첫 응원 결제 때). 포인트 유효기간 · 초대자 보상 시점은 스켈레톤 기본이 아니라 **이 앱의 선택**이다. 시험: `RewardsFlowIntegrationTest`(진짜 PostgreSQL · 보안 체인 · 큐 일꾼, 가짜 결제사).
+구독에도 쿠폰을 쓴다: `POST /api/v1/payments/subscriptions` 의 `discounts` 는 시작 때 **보기만** 하고 쿠폰은 첫 결제(activate)에서 쥔다. 첫 기간이 무료면 카드는 등록받되 결제 없이 넘어가고(`provider = free`), 단계는 시작 때 복사돼 정의를 고쳐도 진행 중인 구독은 그대로다.
+
+**씨앗**(`local` 프로필만, 이름으로 찾아 없는 것만 만든다 — `RewardsSeed`): 쿠폰 정의 「1,000원 할인」 · 「응원 30%」(최대 5,000원) · 「무료 이용권」 · 「첫 달 무료 + 3달 50%」(구독용), 공용 코드 `WELCOME`(→ 응원 30%), 출석 이벤트(매일 10포인트, 누적 3일 「1,000원 할인」), 친구초대 이벤트(초대받은 사람 「응원 30%」, 초대자 500포인트는 그 친구의 첫 응원 결제 때). 포인트 유효기간 · 초대자 보상 시점은 스켈레톤 기본이 아니라 **이 앱의 선택**이다. 시험: `RewardsFlowIntegrationTest`(진짜 PostgreSQL · 보안 체인 · 큐 일꾼, 가짜 결제사).
 
 ## 구독 — 플랜과 자동결제 (`/api/v1/payments/subscriptions`)
 

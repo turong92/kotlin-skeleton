@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 견본 앱(`apps/sample`): 위 네 쌍을 조립하고 운영 경로를 켠다(`application.yml`), 로컬 프로필 씨앗 `RewardsSeed`(쿠폰 정의 셋 · 공용 코드 `WELCOME` · 출석 이벤트 · 친구초대 이벤트), `CheerOrderListener.onPaid` 끝의 `referrals.qualify`(돈이 오간 첫 결제만). 시험 `RewardsFlowIntegrationTest`. 조합 시험 `12-coupon` · `13-point` · `14-campaign`(`scripts/test-new-project.sh --full`).
 - 프런트 짝: react-skeleton 의 `@skeleton/rewards`(`/admin` 서브경로 포함) · `@skeleton/payment` 의 할인 표시 · `@skeleton/auth` 의 역할 위계 화면.
 - **Breaking 없음**: 모든 변경은 새 모듈이거나 기존 응답에 칸을 더하는 것이다. 결제 응답의 새 칸은 선택으로 읽는 클라이언트에 안전하다.
-- **남은 것(구독 할인 조각 뒤)**: 구독에 쿠폰(`POST /api/v1/payments/subscriptions` 의 `discounts` · n달 무료 · 매 갱신 할인)은 아직 없다.
+- 구독 쿠폰: `POST /api/v1/payments/subscriptions` 의 `discounts`(단계 복사, 첫 결제에서 쥔다 · n달 무료 · 매 갱신 할인 회차). 구독 응답의 `discount`.
 
 ### 대시보드 「활성 이용자」를 정확하게 — 계정별 일별 활동 기록 (2026-10-27)
 

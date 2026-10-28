@@ -8,6 +8,7 @@ import dev.sumin.skeleton.coupon.CouponException
 import dev.sumin.skeleton.coupon.CouponDefinition
 import dev.sumin.skeleton.coupon.CouponDefinitionInput
 import dev.sumin.skeleton.coupon.CouponDefinitions
+import dev.sumin.skeleton.coupon.CouponScopeInput
 import dev.sumin.skeleton.coupon.CouponStageInput
 import java.time.Instant
 import java.time.temporal.ChronoUnit
@@ -17,7 +18,7 @@ import org.springframework.context.annotation.Profile
 import org.springframework.stereotype.Component
 
 /**
- * 로컬 프로필의 씨앗(스펙 §10) - 쿠폰 정의 셋과 공용 코드, 출석 이벤트(매일 10포인트, 누적 3일 「1,000원 할인」), 친구초대 이벤트(초대받은 사람 「응원 30%」, 초대자 500포인트는
+ * 로컬 프로필의 씨앗(스펙 §10) - 쿠폰 정의 넷(구독용 「첫 달 무료 + 3달 50%」 포함)과 공용 코드, 출석 이벤트(매일 10포인트, 누적 3일 「1,000원 할인」), 친구초대 이벤트(초대받은 사람 「응원 30%」, 초대자 500포인트는
  * 첫 응원 결제 때 - `CheerOrderListener` 가 `qualify` 를 부른다). 이름으로 찾아 **없는 것만** 만든다 - 다시 떠도 늘지 않고, 운영 화면에서 고친 것을 덮지 않는다.
  * 보상 종류의 선택(포인트 유효기간 없음 · 초대자 보상 시점 `SIGNAL`)은 스켈레톤 기본이 아니라 이 앱의 선택이다.
  */
@@ -41,6 +42,7 @@ class RewardsSeed(
         val won1000 = definition(WON_1000, listOf(CouponStageInput("FIXED", 1000, null, 1)), currency = "KRW", validDays = 30)
         val cheer30 = definition(CHEER_30, listOf(CouponStageInput("PERCENT", 30, 5000, 1)), validDays = 30)
         definition(FREE_PASS, listOf(CouponStageInput("FREE", periods = 1)), validDays = 30)
+        definition(FIRST_MONTH_FREE, listOf(CouponStageInput("FREE", periods = 1), CouponStageInput("PERCENT", 50, null, 3)), validDays = 30, purposes = listOf("SUBSCRIPTION"))
         ensureCode(cheer30)
 
         val started = now().truncatedTo(ChronoUnit.SECONDS).minus(1, ChronoUnit.MINUTES)
@@ -72,9 +74,9 @@ class RewardsSeed(
         }
     }
 
-    private fun definition(name: String, stages: List<CouponStageInput>, currency: String? = null, validDays: Int): CouponDefinition =
+    private fun definition(name: String, stages: List<CouponStageInput>, currency: String? = null, validDays: Int, purposes: List<String> = emptyList()): CouponDefinition =
         definitions.list().firstOrNull { it.name == name }
-            ?: definitions.create(CouponDefinitionInput(name = name, stages = stages, currency = currency, validDays = validDays, perAccountLimit = 5))
+            ?: definitions.create(CouponDefinitionInput(name = name, stages = stages, currency = currency, scope = CouponScopeInput(purposes = purposes), validDays = validDays, perAccountLimit = 5))
 
     private fun ensureCode(definition: CouponDefinition) {
         try {
@@ -90,6 +92,7 @@ class RewardsSeed(
         const val WON_1000 = "1,000원 할인"
         const val CHEER_30 = "응원 30%"
         const val FREE_PASS = "무료 이용권"
+        const val FIRST_MONTH_FREE = "첫 달 무료 + 3달 50%"
         const val WELCOME_CODE = "WELCOME"
         const val ATTENDANCE = "매일 출석"
         const val REFERRAL = "친구 초대"
