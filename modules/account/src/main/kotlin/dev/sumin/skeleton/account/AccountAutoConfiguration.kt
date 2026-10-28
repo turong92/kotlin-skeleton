@@ -51,6 +51,7 @@ import dev.sumin.skeleton.common.authz.AuthzAutoConfiguration
 import dev.sumin.skeleton.common.authz.AuthzProperties
 import dev.sumin.skeleton.common.authz.OperatorAccess
 import dev.sumin.skeleton.common.authz.PermissionDeclaration
+import dev.sumin.skeleton.common.account.AccountFacts
 import dev.sumin.skeleton.common.authz.RoleHolders
 import dev.sumin.skeleton.common.authz.RolePermissionSource
 import dev.sumin.skeleton.account.authz.AccountOperatorAccess
@@ -251,6 +252,11 @@ class AccountAutoConfiguration {
     @ConditionalOnMissingBean
     fun accountRoleHolders(accounts: ObjectProvider<AccountRepository>, events: ObjectProvider<AccountEventPublisher>, time: ObjectProvider<TimeProvider>): RoleHolders =
         AccountRoleHolders({ accounts.getObject() }, { events.getIfAvailable { AccountEventPublisher.NONE } }) { time.getIfAvailable { TimeProvider.systemUtc() }.now() }
+
+    /** 가입 시각 — 다른 모듈이 `account` 를 모르고 「새 계정만」 판정을 한다(이벤트의 친구초대) */
+    @Bean
+    @ConditionalOnMissingBean
+    fun accountFacts(accounts: ObjectProvider<AccountRepository>): AccountFacts = RepositoryAccountFacts { accounts.getObject() }
 
     @Bean
     fun accountPermissions(): PermissionDeclaration = AccountPermissions.declaration

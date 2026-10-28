@@ -1,0 +1,11 @@
+# reward — 보상 지급 건 · 일꾼 · 받았어요 알림 · 운영자 경로. 저장은 reward-jdbc.
+skeleton:
+  reward:
+    admin:
+      enabled: false               # true 면 운영자 경로(reward.operate)가 열린다. 꺼져 있으면 404
+      base-path: /api/v1/admin/reward-grants
+    notify:
+      enabled: true                # false 면 받았어요 알림을 안 보낸다 (notification 이 있을 때만 뜻이 있다)
+      topic: rewards               # 알림 주제
+    worker:
+      # max-attempts: 5           # 지급 작업의 최대 시도 수 — 비우면 job-queue 의 기본(skeleton.job-queue.max-attempts)을 따른다
