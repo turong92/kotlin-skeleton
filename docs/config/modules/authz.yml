@@ -3,6 +3,7 @@
 #     roles: {}          # 역할 → 권한 목록 (비면 ADMIN = * + 모듈 선언의 기본 역할)
 #     super-role: ADMIN  # 전권 역할 이름
 #     cache-ttl: 30s     # 역할 → 권한 캐시 수명
+#     role-includes: {}  # 역할 위계 - 역할 → 물려받는 역할(전이적, 순환 금지; authz-jdbc 에서는 첫 기동 씨앗). 설정 접두사는 skeleton.authz.role-includes
 skeleton:
   authz:
     admin:
