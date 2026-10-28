@@ -158,7 +158,7 @@ class SubscriptionLifecycle(
                 val amount = subscription.pendingAmount ?: return stale(tx, order)
                 val restart = properties.subscription.planChange.charge == PaymentProperties.Subscription.PlanChange.Charge.FULL_RESTART
                 val changed = save(tx, subscription, subscription.status) {
-                    val switched = it.copy(planCode = planCode, amount = PaymentAmount(amount, it.amount.currency), pendingPlanCode = null, pendingAmount = null)
+                    val switched = it.copy(planCode = planCode, amount = PaymentAmount(amount, it.amount.currency), pendingPlanCode = null, pendingAmount = null, regularMonthlyAmount = null)
                     // 전액 결제하고 새 주기: 지금부터 한 주기(남은 기간은 버린다). 차액만: 기간은 그대로
                     if (restart) {
                         val anchor = order.paidAt ?: now

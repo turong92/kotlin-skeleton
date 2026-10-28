@@ -137,16 +137,9 @@ class SubscriptionCancellations(
         return policies.forCountry(subscription.country).quote(context)
     }
 
-    /** 월보다 긴 주기의 구독이 쓴 몫을 셀 때 쓰는 **같은 등급의 월 가격** - 없으면 null(일할로 센다). */
-    private fun monthlyPrice(subscription: PaymentSubscription): Long? {
-        val months = runCatching { SubscriptionPeriod.parse(subscription.period).calendarMonths }.getOrNull()
-        if (months == null || months <= 1) return null
-        val current = plans.find(subscription.planCode) ?: return null
-        // 행사가가 아니라 정가로 센다 - 월 플랜이 행사 중일 때 연간을 해지해도 쓴 몫이 줄어 환불이 부풀지 않게
-        return plans.list().firstOrNull {
-            it.level == current.level && it.amount.currency == subscription.amount.currency && runCatching { SubscriptionPeriod.parse(it.period).calendarMonths }.getOrNull() == 1
-        }?.let { it.regularAmount ?: it.amount.amount }
-    }
+    /** 월보다 긴 주기의 구독이 쓴 몫을 셀 때 쓰는 **같은 등급의 월 정가** - 시작 때 줄에 박은 값이 먼저, 없으면(옛 줄 · 코드 플랜 · 플랜을 바꾼 뒤) 지금 표에서 찾는다. 없으면 null(일할로 센다). */
+    private fun monthlyPrice(subscription: PaymentSubscription): Long? =
+        subscription.regularMonthlyAmount ?: plans.find(subscription.planCode)?.let { RegularMonthlyPrice.of(plans, it) }
 
     private fun owned(subscription: PaymentSubscription?, accountId: String): PaymentSubscription? = subscription?.takeIf { it.accountId == accountId }
 
@@ -169,5 +162,18 @@ class SubscriptionCancelRefundTaskHandler(private val store: PaymentLedgerStore,
     /** 시도를 다 써도 못 보낸 환불은 조용히 사라지지 않게 주문을 「확인 필요」로 올린다. */
     override fun onDead(run: PaymentTaskRun) {
         store.findSubscription(run.subjectId)?.takeIf { it.status == SubscriptionStatus.ENDED && it.endReason == SubscriptionEndReason.USER_CANCELED_NOW }?.let(cancellations::flagUnrefunded)
+    }
+}
+
+/**
+ * 월보다 긴 주기의 플랜이 쓴 몫을 셀 때 쓰는 **같은 등급의 월 정가**(통화가 같은 월 플랜의 [SubscriptionPlan.regularAmount] ?: 금액 - 행사가가 아니라 정가라 월 플랜이 행사 중이어도 환불이 부풀지 않는다).
+ * 월 이하 주기의 플랜이거나 같은 등급의 월 플랜이 지금 표에 없으면 null.
+ */
+object RegularMonthlyPrice {
+    fun of(plans: SubscriptionPlans, plan: SubscriptionPlan): Long? {
+        fun months(period: String) = runCatching { SubscriptionPeriod.parse(period).calendarMonths }.getOrNull()
+        val own = months(plan.period)
+        if (own == null || own <= 1) return null
+        return plans.list().firstOrNull { it.level == plan.level && it.amount.currency == plan.amount.currency && months(it.period) == 1 }?.let { it.regularAmount ?: it.amount.amount }
     }
 }

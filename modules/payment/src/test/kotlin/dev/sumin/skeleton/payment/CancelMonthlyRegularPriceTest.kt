@@ -35,4 +35,20 @@ class CancelMonthlyRegularPriceTest {
         assertEquals(28_080, refundAfterTwoMonthsBegun(onSale), "39,000 - 2 x 3,900 used = 31,200 left, minus the kit's 10% penalty")
         assertEquals(refundAfterTwoMonthsBegun(plain), refundAfterTwoMonthsBegun(onSale), "a sale on the monthly plan changes nothing")
     }
+
+    @Test
+    fun `the monthly list price is written into the subscription when it starts - stopping or repricing the monthly plan later does not move the refund`() {
+        val onSale = SubscriptionPlan("basic", "Basic", PaymentAmount(2_900, "KRW"), "P1M", 1, regularAmount = 3_900)
+        val kit = newKit(onSale)
+        val id = kit.subscriptions.start("acc_1", "basic-yearly", IdempotencyKey("k1"), "KR").subscription.id
+        val active = kit.subscriptions.activate("acc_1", id, mapOf("authKey" to "auth_1"))
+        assertEquals(3_900L, active.regularMonthlyAmount)
+        kit.time.advance(Duration.ofDays(40))
+        val before = kit.cancellations.preview("acc_1", active.id).quote.refund
+
+        kit.plans.plans.removeAll { it.code == "basic" }   // 월 가격이 판매 중지돼 표에서 사라졌다
+        assertEquals(before, kit.cancellations.preview("acc_1", active.id).quote.refund)
+        kit.plans.plans += SubscriptionPlan("basic-new", "Basic", PaymentAmount(9_000, "KRW"), "P1M", 1)   // 월 가격이 교체됐다
+        assertEquals(before, kit.cancellations.preview("acc_1", active.id).quote.refund)
+    }
 }

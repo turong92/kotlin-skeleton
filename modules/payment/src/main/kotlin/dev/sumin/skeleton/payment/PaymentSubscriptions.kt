@@ -160,6 +160,7 @@ class PaymentSubscriptions(
             firstTransactionId = reference,
             registrationWindow = window,
             registrationWindowAt = window?.let { now },
+            regularMonthlyAmount = RegularMonthlyPrice.of(plans, plan),
         )
         // 줄을 먼저 커밋한다(결제사 호출은 트랜잭션 밖). 같은 요청 키로 동시에 들어온 쪽은 dedupe_key 유니크로 `false` 를 받아 그 줄을 돌려받는다.
         val inserted = store.inTransaction { tx ->
