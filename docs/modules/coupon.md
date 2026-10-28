@@ -10,7 +10,7 @@
 
 **발급**(`CouponIssuance.issue(definitionId, accountId, source, sourceRef): Coupon?`): 정의 줄을 잠그고 발급 한도 · 계정당 한도를 센 뒤 한 장을 넣는다 — 같은 `(source, sourceRef)` 는 한 장으로 접히고(같은 장을 돌려준다), 한도에 막히면 `null`.
 출처는 `GRANT`(지급 건 id) · `CODE`(`<코드>:<계정>`) · `ADMIN`. 열린 트랜잭션에 합류하므로 지급기가 일꾼의 트랜잭션 안에서 불러도 된다.
-**공용 코드**(`CouponCodes`): 코드 하나를 계정당 한 번 등록해 쿠폰함으로 받는다 — 없는/끝난/멈춘 코드 400 `CODE_INVALID`, 이미 등록 409 `CODE_USED`, 한도 다 참 409 `CODE_EXHAUSTED`. 코드는 대문자로 맞춘다. `create(definitionId, code?, maxRedemptions?, expiresAt?)` 는 코드를 주면 그 글자(앱의 씨앗용), 아니면 읽기 쉬운 열 글자를 만든다.
+**공용 코드**(`CouponCodes`) - 운영자가 글자를 정하는 코드는 발행 기간 밖에서 등록하면 `ISSUE_CLOSED` 로 거절되므로 코드가 있다는 사실이 드러난다(동작은 그대로다): **운영자 지정 코드는 공개 직전에 만들 것**: 코드 하나를 계정당 한 번 등록해 쿠폰함으로 받는다 — 없는/끝난/멈춘 코드 400 `CODE_INVALID`, 이미 등록 409 `CODE_USED`, 한도 다 참 409 `CODE_EXHAUSTED`. 코드는 대문자로 맞춘다. `create(definitionId, code?, maxRedemptions?, expiresAt?)` 는 코드를 주면 그 글자(앱의 씨앗용), 아니면 읽기 쉬운 열 글자를 만든다.
 
 **지급기 `coupon`**: params `definitionId`. `validate` 는 정의가 있는지 본다(이벤트 설정 저장 때). `issue` 는 `(GRANT, 지급 건 id)` 로 멱등. 정의가 없거나 발급 중이 아니거나 한도에 막히면 `RewardPermanentFailure`(운영자가 풀고 「다시 지급」).
 
@@ -25,11 +25,11 @@
 결제 할인의 견적 · 예약은 그 시각 전까지 `UNAVAILABLE` 이다(클라이언트는 `usableFrom` 이 지난 것만 결제 선택지에 보인다). `validUntil` / `validDays` 의 만료와는 별개다.
 
 **현황 · 발급 내역**(운영): 한 정의의 쿠폰 수를 지금 시각으로 읽은 상태별로(`issued` · `available` · `reserved` · `used` · `expired` · `revoked`; 기한이 지난 `AVAILABLE` 은 `expired`)와 `discountTotals`(확정된 쿠폰이 실제로 깎은 금액, 통화별).
-**금액의 출처**: 쿠폰 표에는 할인액이 없다 — 금액은 결제 장부에만 있고, `platform` 의 읽기 전용 조회 포트 `DiscountTotals.confirmedTotals(kind, sourceRefs)`(`common/discount`)로 묻는다. `payment-jdbc` 가 장부의 확정(`CONFIRMED`) 할인 줄로 답하는 빈을 낸다(전액 환불로 복원된 줄은 빠진다). 쓰인(`USED`) 쿠폰 id 를 1000 개씩 끊어 묻고 통화별로 합친다. 그 빈이 없는 조립(`payment-jdbc` 미사용)은 빈 목록이다 - 「0원」이 아니라 「모른다」. 모듈끼리 표 이름에 기대지 않는다.
+**금액의 출처**: 쿠폰 표에는 할인액이 없다 — 금액은 결제 장부에만 있고, `platform` 의 읽기 전용 조회 포트 `DiscountTotals.confirmedTotals(kind, sourceRefs)`(`common/discount`)로 묻는다. `payment-jdbc` 가 장부의 확정(`CONFIRMED`) 할인 줄로 답하는 빈을 낸다(전액 환불로 복원된 줄은 빠진다). 쓰인(`USED`) 쿠폰 id 를 1000 개씩 끊어 묻고 통화별로 합친다. 구독 쿠폰은 첫 주문의 할인 줄에 더해 **갱신 주문의 할인액**(결제된 갱신의 `discount_amount`)도 합쳐, 「첫 달 무료 + 3달 50%」면 실제로 깎아 준 전부가 나온다(전액 환불된 갱신은 뺀다). 그 빈이 없는 조립(`payment-jdbc` 미사용)은 빈 목록이다 - 「0원」이 아니라 「모른다」. 모듈끼리 표 이름에 기대지 않는다.
 
 **대시보드 기여**(`coupon-jdbc`, 기본 꺼짐 `skeleton.coupon.dashboard.enabled=true` + `dashboard` 모듈이 있을 때만): 타일 `coupon.used`(기간 안 쿠폰 사용 수, 일별 그래프 — 전액 환불로 되돌려진 것은 세지 않는다)와 순위 `coupon.top-used`(「앱 통계」 그룹, 많이 쓰인 쿠폰). 모듈은 메커니즘만 내고 켜는 것은 앱이다.
 
-**탈퇴**: `AccountErasureListener` 가 그 계정의 쿠폰과 코드 등록 줄을 지운다(결제 장부의 할인 내역은 장부라 남는다).
+**탈퇴**: `AccountErasureListener` 가 그 계정의 쿠폰 줄을 **지우지 않고** `account_id` 만 비식별값(`ErasureRequest.tombstone`)으로 바꾼다 - 결제 장부의 `TOMBSTONE` 과 같은 방식이라 과거의 발급 · 사용 현황과 합계 · 대시보드 수가 줄지 않는다. 쓰지 않은(`AVAILABLE`) 쿠폰은 `REVOKED` 로 둬서 현황의 「쓸 수 있는」 수에 죽은 쿠폰이 남지 않게 한다(쥔 `RESERVED` 는 그 주문이 풀거나 확정하고, 쓴 `USED` 는 그대로). 공용 코드로 받은 줄의 출처 키(`<코드>:<계정>`)는 지우고, 코드 등록 줄은 삭제한다. 결제 장부의 할인 내역은 장부라 남는다.
 
 사용자 경로(서블릿 웹 앱 + Spring Security 필요, `skeleton.coupon.http.enabled` 기본 켜짐, 호출자 = `Authentication.name`):
 
@@ -47,7 +47,7 @@
 | `PATCH /api/v1/admin/coupon-definitions/{id}/status {status}` | 상태 바꾸기 |
 | `GET /api/v1/admin/coupon-definitions/{id}/stats` | 현황 `{issued, available, reserved, used, expired, revoked, discountTotals: [{currency, amount}]}`. 없는 정의 404 `DEFINITION_NOT_FOUND` |
 | `GET /api/v1/admin/coupon-definitions/{id}/coupons?status&cursor&size` | 이 정의로 발급된 쿠폰, 새것부터 커서(`size` 기본 50, 최대 200). `{id, accountId, status, issuedAt, expiresAt, usableFrom, usedAt, orderRef}` - `orderRef` 는 쥐고 있거나(`RESERVED`) 쓴(`USED`) 주문. `status` 는 지금 시각으로 읽은 상태(`EXPIRED` 는 기한 지난 `AVAILABLE` 포함) |
-| `POST /api/v1/admin/coupon-definitions/{id}/issue {accountIds}` | 계정마다 한 장 → `{issued[], skipped[]}`(한도에 막힌 계정은 건너뜀, 발급 중이 아니면 409 `DEFINITION_NOT_ACTIVE`). 운영 기록 `coupon.issued` |
+| `POST /api/v1/admin/coupon-definitions/{id}/issue {accountIds}` | 계정마다 한 장 → `{issued[], skipped[]}`(한도에 막힌 계정은 건너뜀, 발급 중이 아니면 409 `DEFINITION_NOT_ACTIVE`, 발행 기간 밖이면 409 `ISSUE_CLOSED`). 운영 기록 `coupon.issued` |
 | `POST /api/v1/admin/coupon-definitions/{id}/codes {code?, maxRedemptions?, expiresAt?}` | 공용 코드 → 201 `{code}` (본문 생략 가능) |
 | `GET /api/v1/admin/coupons?accountId=` | 한 계정의 쿠폰 전부(사용자 쿠폰 꼴 + `accountId` · `definitionId`) |
 | `POST /api/v1/admin/coupons/{id}/revoke` | `AVAILABLE` 만 회수(그 밖 409 `NOT_REVOCABLE`) |

@@ -69,5 +69,5 @@ class CouponAutoConfiguration {
     @Bean
     @ConditionalOnBean(CouponStore::class)
     @ConditionalOnMissingBean(name = ["couponAccountErasureListener"])
-    fun couponAccountErasureListener(store: CouponStore): AccountErasureListener = CouponAccountErasureListener(store)
+    fun couponAccountErasureListener(store: CouponStore, time: ObjectProvider<TimeProvider>): AccountErasureListener = CouponAccountErasureListener(store) { time.getIfAvailable { TimeProvider.systemUtc() }.now() }
 }

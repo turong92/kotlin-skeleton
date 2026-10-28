@@ -89,6 +89,36 @@ class CouponIssueWindowTest {
     }
 
     @Test
+    fun `retrying the same grant after the window closed returns the same coupon, and a repeated code redemption stays CODE_USED`() {
+        val d = windowed()
+        time.current = opens.plusSeconds(10)
+        val grant = RewardGrantView("grant_retry", "acc_1", "coupon", mapOf("definitionId" to d.id), "attendance", "k")
+        val first = issuer.issue(grant)
+        val code = codes.create(d.id, "ONCE")
+        val redeemed = codes.redeem("acc_2", code)
+
+        time.current = closes.plusSeconds(3600)
+        assertEquals(first.resultRef, issuer.issue(grant).resultRef, "the worker's retry finds the coupon its first attempt made")
+        assertEquals(redeemed.id, issuance.issue(d.id, "acc_2", CouponSource.CODE, "ONCE:acc_2")?.id)
+        assertEquals(CouponErrorCode.CODE_USED, assertFailsWith<CouponException> { codes.redeem("acc_2", code) }.couponError)
+        assertClosed { issuance.issue(d.id, "acc_3", CouponSource.ADMIN, "fresh") }
+        assertEquals(2, store.coupons.size)
+        assertEquals(2, store.definitions.getValue(d.id).issuedCount)
+    }
+
+    @Test
+    fun `a per-account validity that ends before the use start for everyone is refused`() {
+        fun create(validDays: Int) = definitions.create(
+            CouponDefinitionInput(name = "w", stages = listOf(CouponStageInput("FREE", periods = 1)), validDays = validDays, issueEndsAt = closes, validFrom = closes.plus(Duration.ofDays(10))),
+        )
+        assertEquals("COUPON.DEFINITION_INVALID", assertFailsWith<CouponException> { create(10) }.errorCode.code)
+        assertEquals("COUPON.DEFINITION_INVALID", assertFailsWith<CouponException> { create(3) }.errorCode.code)
+        assertEquals(0, store.definitions.size)
+        create(11)
+        assertEquals(1, store.definitions.size)
+    }
+
+    @Test
     fun `a window must run forward and a use start must come before the use end`() {
         fun create(start: java.time.Instant?, end: java.time.Instant?, from: java.time.Instant?, until: java.time.Instant?) = definitions.create(
             CouponDefinitionInput(name = "w", stages = listOf(CouponStageInput("FREE", periods = 1)), validUntil = until, issueStartsAt = start, issueEndsAt = end, validFrom = from),

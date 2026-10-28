@@ -1,6 +1,9 @@
 package dev.sumin.skeleton.coupon.web
 
 import dev.sumin.skeleton.common.ApplicationException
+import dev.sumin.skeleton.common.CursorResponse
+import dev.sumin.skeleton.common.DataResponse
+import dev.sumin.skeleton.common.ListResponse
 import dev.sumin.skeleton.common.PlatformErrorCode
 import dev.sumin.skeleton.common.Response
 import dev.sumin.skeleton.common.authz.OperatorAccess
@@ -79,20 +82,20 @@ class CouponAdminController(
     private val audit: OperatorAuditLog,
 ) {
     @GetMapping("/coupon-definitions")
-    fun listDefinitions(authentication: Authentication?): Any {
+    fun listDefinitions(authentication: Authentication?): ListResponse<CouponDefinitionResponse> {
         operator(authentication)
         return Response.ok(definitions.list().map { it.toResponse() })
     }
 
     @PostMapping("/coupon-definitions")
-    fun createDefinition(authentication: Authentication?, @RequestBody request: CouponDefinitionRequest): ResponseEntity<*> {
+    fun createDefinition(authentication: Authentication?, @RequestBody request: CouponDefinitionRequest): ResponseEntity<DataResponse<CouponDefinitionResponse>> {
         operator(authentication)
         val created = definitions.create(request.toInput())
         return ResponseEntity.status(HttpStatus.CREATED).body(Response.ok(created.toResponse()))
     }
 
     @PatchMapping("/coupon-definitions/{id}/status")
-    fun setStatus(authentication: Authentication?, @PathVariable id: String, @RequestBody request: StatusRequest): Any {
+    fun setStatus(authentication: Authentication?, @PathVariable id: String, @RequestBody request: StatusRequest): DataResponse<CouponDefinitionResponse> {
         operator(authentication)
         val status = CouponDefinitionStatus.entries.firstOrNull { it.name == request.status?.trim()?.uppercase() }
             ?: throw ApplicationException("status is ACTIVE, PAUSED or ARCHIVED", PlatformErrorCode.PARAMETER_VALIDATION_FAILED)
@@ -100,7 +103,7 @@ class CouponAdminController(
     }
 
     @PostMapping("/coupon-definitions/{id}/issue")
-    fun issue(authentication: Authentication?, @PathVariable id: String, @RequestBody request: IssueRequest): Any {
+    fun issue(authentication: Authentication?, @PathVariable id: String, @RequestBody request: IssueRequest): DataResponse<IssueResponse> {
         val operator = operator(authentication)
         val accountIds = request.accountIds?.takeIf { it.isNotEmpty() }
             ?: throw ApplicationException("accountIds is required", PlatformErrorCode.PARAMETER_VALIDATION_FAILED)
@@ -111,14 +114,14 @@ class CouponAdminController(
     }
 
     @PostMapping("/coupon-definitions/{id}/codes")
-    fun createCode(authentication: Authentication?, @PathVariable id: String, @RequestBody(required = false) request: CodeRequest?): ResponseEntity<*> {
+    fun createCode(authentication: Authentication?, @PathVariable id: String, @RequestBody(required = false) request: CodeRequest?): ResponseEntity<DataResponse<CouponCodeResponse>> {
         operator(authentication)
         val code = codes.create(id, request?.code, request?.maxRedemptions, request?.expiresAt)
         return ResponseEntity.status(HttpStatus.CREATED).body(Response.ok(CouponCodeResponse(code)))
     }
 
     @GetMapping("/coupon-definitions/{id}/stats")
-    fun stats(authentication: Authentication?, @PathVariable id: String): Any {
+    fun stats(authentication: Authentication?, @PathVariable id: String): DataResponse<CouponStatsResponse> {
         operator(authentication)
         return Response.ok(reports.stats(id).toResponse())
     }
@@ -130,7 +133,7 @@ class CouponAdminController(
         @RequestParam(required = false) status: String?,
         @RequestParam(required = false) cursor: String?,
         @RequestParam(required = false) size: Int?,
-    ): Any {
+    ): CursorResponse<IssuedCouponResponse> {
         operator(authentication)
         val wanted = status?.takeIf { it.isNotBlank() }?.let { raw ->
             CouponStatus.entries.firstOrNull { it.name == raw.trim().uppercase() }
@@ -141,13 +144,13 @@ class CouponAdminController(
     }
 
     @GetMapping("/coupons")
-    fun listCoupons(authentication: Authentication?, @RequestParam accountId: String): Any {
+    fun listCoupons(authentication: Authentication?, @RequestParam accountId: String): ListResponse<AdminCouponResponse> {
         operator(authentication)
         return Response.ok(wallet.all(accountId).map { it.toAdminResponse() })
     }
 
     @PostMapping("/coupons/{id}/revoke")
-    fun revoke(authentication: Authentication?, @PathVariable id: String): Any {
+    fun revoke(authentication: Authentication?, @PathVariable id: String): DataResponse<AdminCouponResponse> {
         operator(authentication)
         return Response.ok(wallet.revoke(id).toAdminResponse())
     }

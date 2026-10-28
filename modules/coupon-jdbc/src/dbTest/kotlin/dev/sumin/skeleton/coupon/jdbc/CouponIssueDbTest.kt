@@ -3,7 +3,10 @@ package dev.sumin.skeleton.coupon.jdbc
 import dev.sumin.skeleton.common.reward.RewardGrantView
 import dev.sumin.skeleton.common.reward.RewardIssuer
 import dev.sumin.skeleton.common.reward.RewardPermanentFailure
+import dev.sumin.skeleton.common.erasure.AccountTombstone
+import dev.sumin.skeleton.common.erasure.ErasureRequest
 import dev.sumin.skeleton.coupon.Coupon
+import dev.sumin.skeleton.coupon.erasure.CouponAccountErasureListener
 import dev.sumin.skeleton.coupon.CouponCodes
 import dev.sumin.skeleton.coupon.CouponDefinition
 import dev.sumin.skeleton.coupon.CouponDefinitionInput
@@ -39,6 +42,7 @@ class CouponIssueDbTest {
     @Autowired lateinit var issuance: CouponIssuance
     @Autowired lateinit var codes: CouponCodes
     @Autowired lateinit var wallet: CouponWallet
+    @Autowired lateinit var reports: dev.sumin.skeleton.coupon.CouponReports
     @Autowired lateinit var store: CouponStore
     @Autowired lateinit var issuer: RewardIssuer
     @Autowired lateinit var jdbc: JdbcClient
@@ -164,13 +168,22 @@ class CouponIssueDbTest {
     }
 
     @Test
-    fun `an account's coupons and code redemptions go away with the account`() {
+    fun `an erased account's coupons stay as anonymous rows and its code redemptions go`() {
         val def = define()
         val code = codes.create(def.id)
         codes.redeem("acc_$seq", code)
-        assertEquals(2, store.deleteByAccount("acc_$seq"))
+        val before = reports.stats(def.id)
+        CouponAccountErasureListener(store).erase(ErasureRequest("acc_$seq", AccountTombstone.of("acc_$seq")))
         assertEquals(0, wallet.all("acc_$seq").size)
         assertEquals(false, store.hasRedeemed(code, "acc_$seq"))
+        val after = reports.stats(def.id)
+        assertEquals(before.issued, after.issued, "the row stays - only the person is cut loose")
+        assertEquals(before.available - 1, after.available)
+        assertEquals(before.revoked + 1, after.revoked, "an unused coupon of an erased account can not be used")
+        val row = reports.coupons(def.id, null, null, 10).items.single().coupon
+        assertEquals(AccountTombstone.of("acc_$seq"), row.accountId)
+        assertEquals("erased:${row.id}", row.sourceRef, "the code-redemption source key carried the account id")
+        CouponAccountErasureListener(store).erase(ErasureRequest("acc_$seq", AccountTombstone.of("acc_$seq")))   // 멱등
     }
 
     @Test

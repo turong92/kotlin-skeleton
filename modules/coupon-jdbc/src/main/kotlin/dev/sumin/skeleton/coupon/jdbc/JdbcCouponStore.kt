@@ -104,18 +104,16 @@ class JdbcCouponStore(
 
     override fun countByStatus(definitionId: String, now: Instant): Map<CouponStatus, Int> {
         val counts = EnumMap<CouponStatus, Int>(CouponStatus::class.java)
-        jdbc.query("select status, count(*) as n from coupons where definition_id = :d group by status", mapOf("d" to definitionId)) { rs ->
-            counts[CouponStatus.valueOf(rs.getString("status"))] = rs.getInt("n")
-        }
-        // 기한이 지났지만 아직 `AVAILABLE` 로 적혀 있는 것은 읽는 쪽에서 `EXPIRED`
-        val lapsed = jdbc.queryForObject(
-            "select count(*) from coupons where definition_id = :d and status = 'AVAILABLE' and expires_at is not null and expires_at <= :now",
+        // 한 문장으로 읽는다 - 상태별 수와 「기한이 지났지만 아직 AVAILABLE 로 적힌」 수가 같은 시점이다
+        jdbc.query(
+            "select status, count(*) as n, sum(case when status = 'AVAILABLE' and expires_at is not null and expires_at <= :now then 1 else 0 end) as lapsed " +
+                "from coupons where definition_id = :d group by status",
             mapOf("d" to definitionId, "now" to instant(now)),
-            Int::class.java,
-        ) ?: 0
-        if (lapsed > 0) {
-            counts[CouponStatus.AVAILABLE] = (counts[CouponStatus.AVAILABLE] ?: 0) - lapsed
-            counts[CouponStatus.EXPIRED] = (counts[CouponStatus.EXPIRED] ?: 0) + lapsed
+        ) { rs ->
+            val status = CouponStatus.valueOf(rs.getString("status"))
+            val lapsed = rs.getInt("lapsed")   // AVAILABLE 줄만 0 이 아닐 수 있다
+            counts[status] = (counts[status] ?: 0) + rs.getInt("n") - lapsed
+            if (lapsed > 0) counts[CouponStatus.EXPIRED] = (counts[CouponStatus.EXPIRED] ?: 0) + lapsed
         }
         return counts
     }
@@ -245,9 +243,16 @@ class JdbcCouponStore(
 
     // 탈퇴
 
-    override fun deleteByAccount(accountId: String): Int =
-        jdbc.update("delete from coupons where account_id = :a", mapOf("a" to accountId)) +
-            jdbc.update("delete from coupon_code_redemptions where account_id = :a", mapOf("a" to accountId))
+    override fun anonymizeAccount(accountId: String, tombstone: String, now: Instant): Int {
+        // 쓰지 않은 쿠폰을 먼저 쓸 수 없게 하고(주인이 바뀌기 전에 - 아래 갱신이 계정 id 를 바꾼다), 그 뒤 계정 id 를 지운다. 공용 코드로 받은 줄의 출처 키(`<코드>:<계정 id>`)에도 계정 id 가 있어 함께 지운다
+        jdbc.update("update coupons set status = 'REVOKED', updated_at = :now where account_id = :a and status = 'AVAILABLE'", mapOf("a" to accountId, "now" to instant(now)))
+        val changed = jdbc.update(
+            "update coupons set source_ref = case when source_type = 'CODE' then concat('erased:', id) else source_ref end, account_id = :t where account_id = :a",
+            mapOf("a" to accountId, "t" to tombstone),
+        )
+        jdbc.update("delete from coupon_code_redemptions where account_id = :a", mapOf("a" to accountId))
+        return changed
+    }
 
     // 읽기
 

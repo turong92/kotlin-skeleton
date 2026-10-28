@@ -91,6 +91,10 @@ interface CouponStore {
 
     // 탈퇴
 
-    /** 계정이 지워질 때 그 계정의 쿠폰과 코드 등록 줄을 지운다 */
-    fun deleteByAccount(accountId: String): Int
+    /**
+     * 계정이 지워질 때: 그 계정의 쿠폰 줄은 지우지 않고 `account_id` 만 [tombstone] 으로 바꾼다(발급 · 사용 통계와 결제 장부와의 연결을 남기고 개인 연결만 끊는다).
+     * 아직 쓰지 않은(`AVAILABLE`) 쿠폰은 쓸 수 없게 `REVOKED` 로 둔다 - 현황의 「쓸 수 있는」 수에 죽은 쿠폰이 남지 않게. 주문이 쥔(`RESERVED`) 쿠폰은 그 주문이 풀거나 확정한다.
+     * 공용 코드 등록 줄(계정과의 연결뿐)은 지운다. 바꾼 쿠폰 수를 돌려주며 두 번 불러도 같다.
+     */
+    fun anonymizeAccount(accountId: String, tombstone: String, now: Instant): Int
 }

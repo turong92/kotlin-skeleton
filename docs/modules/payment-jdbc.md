@@ -7,7 +7,7 @@
 규칙: 락은 DB 의 **주문 줄 하나**다(`select … for update` 로 잠그고 새 문장으로 다시 읽은 값으로 판단 — PostgreSQL 은 기다리는 동안의 변경을 같은 문장에서 놓칠 수 있다) · 한 트랜잭션에는 주문 하나(범위는 가장 바깥 `inTransaction` **블록**이지 물리 트랜잭션이 아니다 — 앱의 바깥 트랜잭션에 합류해 블록을 여러 번 열면 블록마다 다른 주문을 잠글 수 있고, 락은 바깥이 끝날 때 풀리며 락 순서[주문 id 오름차순]는 호출자의 몫) ·
 "하나만 있어야 한다"는 유니크 열이 지킨다(`dedupe_key` · `(provider, provider_payment_id)` · 환불의 `open_key` · `dedupe_key` · `(order_id, provider_refund_id)` · 웹훅의 `(provider, event_key)`) ·
 금액은 `bigint` 통화 최소 단위(`check` 제약이 음수 · 결제액을 넘는 환불 합을 막는다) · MySQL 은 결제사가 준 값과 우리 키 열이 `utf8mb4_bin`(대소문자 구분) ·
-**할인 합계 조회**: 빈 `DiscountTotals`(`platform` 의 읽기 전용 포트, `JdbcDiscountTotals`)가 할인 수단 모듈(예: `coupon` 의 운영 현황)에 확정(`CONFIRMED`) 할인 줄의 금액 합을 통화별로 답한다 - 복원(`RESTORED`) · 쥠(`RESERVED`) · 풀림(`RELEASED`)은 뺀다; 식별 목록은 1000 개씩 끊는다 ·
+**할인 합계 조회**: 빈 `DiscountTotals`(`platform` 의 읽기 전용 포트, `JdbcDiscountTotals`)가 할인 수단 모듈(예: `coupon` 의 운영 현황)에 확정(`CONFIRMED`) 할인 줄의 금액 합에 구독 갱신 주문(결제된 것)의 `discount_amount` 를 더해 통화별로 답한다 - 복원(`RESTORED`) · 쥠(`RESERVED`) · 풀림(`RELEASED`) · 전액 환불된 갱신은 뺀다; 식별 목록은 1000 개씩 끊는다 ·
 탈퇴(`TOMBSTONE`)는 **그 계정이 산 주문의 줄에서만** 계정 id 를 바꾼다 — 운영자로서 남의 주문에 남긴 `decided_by` · `requested_by` · `actor_id` 는 남는다(누가 환불을 결정했는가의 기록) ·
 지워지는 개인정보 칸은 `payment_orders.card_issuer` · `card_last4` 둘뿐(그 밖의 열은 식별자 · 코드 · 금액 · 시각 · 수신함 원문 — `PaymentSchemaDbTest` 의 열 분류 시험이 새 열을 막는다). `order_name` 은 코드가 아니라 **앱 카탈로그가 정하는 문장**(분류 `LABEL`)이다 — 거기에 개인정보를 넣지 않는 것은 앱의 책임이다.
 

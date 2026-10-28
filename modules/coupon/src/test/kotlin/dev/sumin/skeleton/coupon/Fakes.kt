@@ -103,11 +103,11 @@ class FakeCouponStore : CouponStore {
         codes[code] = codes.getValue(code).let { it.copy(redeemedCount = it.redeemedCount + 1) }
     }
 
-    override fun deleteByAccount(accountId: String): Int {
-        val ids = coupons.values.filter { it.accountId == accountId }.map { it.id }
-        ids.forEach(coupons::remove)
+    override fun anonymizeAccount(accountId: String, tombstone: String, now: Instant): Int {
+        val mine = coupons.values.filter { it.accountId == accountId }
+        mine.forEach { coupons[it.id] = it.copy(accountId = tombstone, status = if (it.status == CouponStatus.AVAILABLE) CouponStatus.REVOKED else it.status, updatedAt = now) }
         redemptions.removeIf { it.second == accountId }
-        return ids.size
+        return mine.size
     }
 }
 

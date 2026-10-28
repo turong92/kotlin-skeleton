@@ -1,6 +1,8 @@
 package dev.sumin.skeleton.coupon.web
 
 import dev.sumin.skeleton.common.ApplicationException
+import dev.sumin.skeleton.common.DataResponse
+import dev.sumin.skeleton.common.ListResponse
 import dev.sumin.skeleton.common.PlatformErrorCode
 import dev.sumin.skeleton.common.Response
 import dev.sumin.skeleton.coupon.CouponCodes
@@ -31,7 +33,7 @@ class CouponController(
     private val codes: CouponCodes,
 ) {
     @GetMapping
-    fun list(authentication: Authentication?, @RequestParam(required = false) status: String?): Any {
+    fun list(authentication: Authentication?, @RequestParam(required = false) status: String?): ListResponse<CouponResponse> {
         val tab = status?.takeIf { it.isNotBlank() }?.let { raw ->
             CouponTab.entries.firstOrNull { it.name == raw.uppercase() }
                 ?: throw ApplicationException("Unknown status '$raw'", PlatformErrorCode.PARAMETER_VALIDATION_FAILED)
@@ -40,7 +42,7 @@ class CouponController(
     }
 
     @PostMapping("/redeem")
-    fun redeem(authentication: Authentication?, @RequestBody request: RedeemRequest): ResponseEntity<*> {
+    fun redeem(authentication: Authentication?, @RequestBody request: RedeemRequest): ResponseEntity<DataResponse<CouponResponse>> {
         val code = request.code?.takeIf { it.isNotBlank() }
             ?: throw ApplicationException("code is required", PlatformErrorCode.PARAMETER_VALIDATION_FAILED)
         val coupon = codes.redeem(accountId(authentication), code)

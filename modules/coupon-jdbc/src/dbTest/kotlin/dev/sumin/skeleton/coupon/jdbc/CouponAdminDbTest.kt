@@ -4,6 +4,9 @@ import dev.sumin.skeleton.common.dashboard.DashboardInterval
 import dev.sumin.skeleton.common.dashboard.DashboardRange
 import dev.sumin.skeleton.common.dashboard.DashboardResult
 import dev.sumin.skeleton.common.discount.CurrencyAmount
+import dev.sumin.skeleton.common.erasure.AccountTombstone
+import dev.sumin.skeleton.common.erasure.ErasureRequest
+import dev.sumin.skeleton.coupon.erasure.CouponAccountErasureListener
 import dev.sumin.skeleton.common.discount.DiscountClaim
 import dev.sumin.skeleton.common.discount.DiscountTotals
 import dev.sumin.skeleton.common.discount.DiscountPurpose
@@ -193,8 +196,10 @@ class CouponAdminDbTest {
         time.current = Instant.parse("2031-03-03T10:00:00Z")
         val popular = define(name = "popular $seq")
         val quiet = define(name = "quiet $seq")
+        val popularAccounts = mutableListOf<String>()
         fun use(def: CouponDefinition, at: Instant): Coupon {
             val c = give(def)
+            if (def.id == popular.id) popularAccounts += c.accountId
             source.reserve(DiscountClaim("coupon", c.id), target(c.accountId), "ord_${c.id}")
             time.current = at
             source.confirm("ord_${c.id}")
@@ -211,6 +216,14 @@ class CouponAdminDbTest {
         source.restore("ord_${restored.id}")
 
         val template = NamedParameterJdbcTemplate(dataSource)
+        val range0 = DashboardRange(day0, day0.plus(Duration.ofDays(2)), zone)
+        val usedBefore = CouponUsedMetric(template, dialect).value(range0).data!!.single().amount
+        val statsBefore = reports.stats(popular.id)
+        // 탈퇴한 계정의 쿠폰 줄은 남아 과거 수가 줄지 않는다
+        popularAccounts.forEach { CouponAccountErasureListener(store).erase(ErasureRequest(it, AccountTombstone.of(it))) }
+        assertEquals(usedBefore, CouponUsedMetric(template, dialect).value(range0).data!!.single().amount, "usage counts survive an erased account")
+        val statsAfter = reports.stats(popular.id)
+        assertEquals(listOf(statsBefore.issued, statsBefore.used), listOf(statsAfter.issued, statsAfter.used))
         val range = DashboardRange(day0, day0.plus(Duration.ofDays(2)), zone)
         val metric = CouponUsedMetric(template, dialect)
         assertEquals(4L, metric.value(range).data!!.single().amount, "a restored coupon is not a use")

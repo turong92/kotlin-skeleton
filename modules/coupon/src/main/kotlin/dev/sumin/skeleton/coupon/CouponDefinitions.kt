@@ -75,6 +75,12 @@ class CouponDefinitions(
         invalid(input.issueLimit != null && input.issueLimit < 1, "issueLimit is at least 1")
         invalid(input.perAccountLimit < 1, "perAccountLimit is at least 1")
         invalid(input.issueStartsAt != null && input.issueEndsAt != null && !input.issueStartsAt.isBefore(input.issueEndsAt), "issueStartsAt must be before issueEndsAt")
+        // 받은 날부터 N일 만료인데 가장 늦게 받아도(발행 끝) 쓸 수 있게 되기 전에 끝난다면 어떤 쿠폰도 못 쓴다
+        invalid(
+            input.validFrom != null && input.issueEndsAt != null && input.validDays != null &&
+                !input.issueEndsAt.plus(input.validDays.toLong(), java.time.temporal.ChronoUnit.DAYS).isAfter(input.validFrom),
+            "every coupon would expire (issueEndsAt + validDays) before validFrom",
+        )
         invalid(input.validFrom != null && input.validUntil != null && !input.validFrom.isBefore(input.validUntil), "validFrom must be before validUntil")
 
         return CouponDefinition(
