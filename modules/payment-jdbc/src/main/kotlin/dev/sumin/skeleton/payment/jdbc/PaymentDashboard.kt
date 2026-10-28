@@ -10,6 +10,7 @@ import dev.sumin.skeleton.common.dashboard.DashboardPoint
 import dev.sumin.skeleton.common.dashboard.DashboardRange
 import dev.sumin.skeleton.common.dashboard.DashboardResult
 import dev.sumin.skeleton.common.dashboard.DashboardUnit
+import dev.sumin.skeleton.payment.PaymentOrders
 import dev.sumin.skeleton.persistence.jdbc.SqlDialect
 import java.time.Instant
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
@@ -35,7 +36,10 @@ class CurrentModeOrders(private val modes: () -> List<Pair<String, String>>) {
             params["wired"] = wired.map { it.first }
             parts += "(o.provider not in (:wired) and o.provider_mode = 'LIVE')"
         }
-        return parts.joinToString(" or ", prefix = "(", postfix = ")") to params
+        // 결제사 없이 끝난 쿠폰 0원 주문(free)은 열린 결제사의 모드를 따른다 - 시험 키 앱에서도 건수 1 · 매출 0 으로 보이게. 결제 면제(exempt)는 매출 · 건수 · 퍼널 어디에도 들어가지 않는다
+        params["freeModes"] = wired.map { it.second }.distinct().ifEmpty { listOf("LIVE") }
+        parts += "(o.provider = '${PaymentOrders.FREE_PROVIDER}' and o.provider_mode in (:freeModes))"
+        return parts.joinToString(" or ", prefix = "((", postfix = ") and o.provider <> '${PaymentOrders.EXEMPT_PROVIDER}')") to params
     }
 }
 

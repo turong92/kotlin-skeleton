@@ -3,14 +3,14 @@ package dev.sumin.skeleton.payment
 import java.time.Instant
 
 /** 주문 하나와 그 환불 줄(오래된 순) — 응답의 `refundableAmount` · `openRefundStatus` · `refundPending` 이 여기서 나온다. */
-data class OrderView(val order: PaymentOrder, val refunds: List<PaymentRefund>) {
+data class OrderView(val order: PaymentOrder, val refunds: List<PaymentRefund>, val discounts: List<OrderDiscount> = emptyList()) {
     val summary: PaymentRefundSummary get() = PaymentRefundSummary.of(order, refunds)
 }
 
 data class OrderPage(val values: List<OrderView>, val next: OrderCursor?)
 
 /** 운영자가 보는 주문 — [reviewReason] 은 줄에 찍힌 이유가 있으면 그것, 없으면 [ReviewReasons] 가 오래됨 · 지급 · 회수로 파생한 것. */
-data class OperatorOrderView(val order: PaymentOrder, val refunds: List<PaymentRefund>, val reviewReason: String?, val refundBlock: RefundBlock? = null) {
+data class OperatorOrderView(val order: PaymentOrder, val refunds: List<PaymentRefund>, val reviewReason: String?, val refundBlock: RefundBlock? = null, val discounts: List<OrderDiscount> = emptyList()) {
     val summary: PaymentRefundSummary get() = PaymentRefundSummary.of(order, refunds)
 }
 
@@ -42,6 +42,8 @@ data class OperatorOrderQuery(
     val q: String? = null,
     val review: Boolean = false,
     val includeErased: Boolean = false,
+    /** 정산 방식으로 거른다(`EXEMPT` = 결제 면제 주문만). */
+    val settlement: PaymentSettlement? = null,
     val before: OrderCursor? = null,
     val size: Int = PaymentQueries.DEFAULT_PAGE,
 )
@@ -97,18 +99,20 @@ class PaymentQueries(
         val rows = store.listAccountOrders(accountId, before, limit + 1)
         val page = rows.take(limit)
         val refunds = refundsOf(page)
-        return OrderPage(page.map { OrderView(it, refunds[it.id].orEmpty()) }, nextOf(rows.size > limit, page.lastOrNull()))
+        val discounts = discountsOf(page)
+        return OrderPage(page.map { OrderView(it, refunds[it.id].orEmpty(), discounts[it.id].orEmpty()) }, nextOf(rows.size > limit, page.lastOrNull()))
     }
 
     fun operatorOrders(query: OperatorOrderQuery): OperatorOrderPage {
         val limit = clamp(query.size)
         val now = writer.now()
-        val filter = OperatorOrderFilter(query.status, query.accountId, hideErased = !query.includeErased)
+        val filter = OperatorOrderFilter(query.status, query.accountId, hideErased = !query.includeErased, settlement = query.settlement)
         if (!query.q.isNullOrBlank()) return exact(query.q.trim(), query, limit, now)
         val rows = if (query.review) reviewRows(filter.copy(hideErased = false), query.before, limit + 1, now) else store.listOrdersForOperator(OperatorOrderScope.ALL, filter, null, query.before, limit + 1)
         val page = rows.take(limit)
         val refunds = refundsOf(page)
-        return OperatorOrderPage(page.map { OperatorOrderView(it, refunds[it.id].orEmpty(), reasons.of(it, refunds[it.id].orEmpty(), now), refundBlockOf(it)) }, nextOf(rows.size > limit, page.lastOrNull()))
+        val discounts = discountsOf(page)
+        return OperatorOrderPage(page.map { OperatorOrderView(it, refunds[it.id].orEmpty(), reasons.of(it, refunds[it.id].orEmpty(), now), refundBlockOf(it), discounts[it.id].orEmpty()) }, nextOf(rows.size > limit, page.lastOrNull()))
     }
 
     /** 주문 id 또는 결제사 결제 번호의 정확한 값 — 한두 줄이라 커서가 없다. 결제 번호는 `provider in (아는 결제사)` 와 같이 찾아 유니크 인덱스를 탄다. */
@@ -116,8 +120,10 @@ class PaymentQueries(
         val found = (listOfNotNull(store.findOrder(q)) + store.findOrdersByProviderPayment(router.providerIds(), q)).distinctBy { it.id }
             .filter { query.status == null || it.status == query.status }
             .filter { query.accountId == null || it.accountId == query.accountId }
+            .filter { query.settlement == null || it.settlement == query.settlement }
         val refunds = refundsOf(found)
-        val views = found.map { OperatorOrderView(it, refunds[it.id].orEmpty(), reasons.of(it, refunds[it.id].orEmpty(), now), refundBlockOf(it)) }
+        val discounts = discountsOf(found)
+        val views = found.map { OperatorOrderView(it, refunds[it.id].orEmpty(), reasons.of(it, refunds[it.id].orEmpty(), now), refundBlockOf(it), discounts[it.id].orEmpty()) }
             .filter { !query.review || it.reviewReason != null }
             .sortedWith(compareByDescending<OperatorOrderView> { it.order.createdAt }.thenByDescending { it.order.id })
             .take(limit)
@@ -151,7 +157,7 @@ class PaymentQueries(
 
     fun operatorView(order: PaymentOrder): OperatorOrderView {
         val refunds = store.listRefunds(order.id)
-        return OperatorOrderView(order, refunds, reasons.of(order, refunds, writer.now()), refundBlockOf(order))
+        return OperatorOrderView(order, refunds, reasons.of(order, refunds, writer.now()), refundBlockOf(order), store.listOrderDiscounts(listOf(order.id)))
     }
 
     /** 환불 줄 목록, 최신순. */
@@ -170,7 +176,7 @@ class PaymentQueries(
      * 결제사 빈이 지금 있어야 하고([RefundBlock.PROVIDER_OFF]), 키 모드가 주문과 같아야 한다([RefundBlock.MODE_MISMATCH]).
      */
     fun refundBlockOf(order: PaymentOrder): RefundBlock? =
-        try {
+        if (order.settlement.isOffProvider) null else try {
             val refund = router.gateway(order.provider, PaymentRefundGateway::class)
             val lookup = router.gateway(order.provider, PaymentLookupGateway::class)
             if (refund.mode != order.providerMode || lookup.mode != order.providerMode) RefundBlock.MODE_MISMATCH else null
@@ -179,6 +185,9 @@ class PaymentQueries(
         } catch (_: PaymentCapabilityUnsupportedException) {
             RefundBlock.UNSUPPORTED
         }
+
+    private fun discountsOf(orders: List<PaymentOrder>): Map<String, List<OrderDiscount>> =
+        store.listOrderDiscounts(orders.map { it.id }).groupBy { it.orderId }
 
     private fun refundsOf(orders: List<PaymentOrder>): Map<String, List<PaymentRefund>> =
         store.listRefundsOfOrders(orders.map { it.id }).groupBy { it.orderId }

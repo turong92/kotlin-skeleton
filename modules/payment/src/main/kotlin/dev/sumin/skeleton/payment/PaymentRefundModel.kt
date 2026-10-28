@@ -112,6 +112,8 @@ data class OrderRefunds(
     val order: PaymentOrder,
     val refunds: List<PaymentRefund>,
     val summary: PaymentRefundSummary,
+    /** 주문에 붙은 할인 내역. */
+    val discounts: List<OrderDiscount> = emptyList(),
 )
 
 /** 환불 실행의 결과. [refund] 가 `SUCCEEDED` 면 끝(HTTP 200), `PENDING` 이면 결과를 모름(HTTP 202 — 조회 작업이 맞춘다). */

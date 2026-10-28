@@ -1,6 +1,8 @@
 package dev.sumin.skeleton.payment
 
+import dev.sumin.skeleton.common.authz.OperatorAccess
 import dev.sumin.skeleton.common.deploy.DeployContext
+import dev.sumin.skeleton.common.discount.DiscountSource
 import dev.sumin.skeleton.common.deploy.DeployGuard
 import dev.sumin.skeleton.common.erasure.AccountDataExporter
 import dev.sumin.skeleton.common.project.ProjectsConfigured
@@ -30,10 +32,24 @@ import org.springframework.context.annotation.Conditional
 )
 @ConditionalOnBean(PaymentLedgerStore::class)
 class PaymentLedgerAutoConfiguration {
+    /** 할인 수단([DiscountSource] 빈 - 쿠폰 등)을 모은다. 수단이 하나도 없으면 아무것도 하지 않는다 - 이 모듈들을 안 붙인 앱의 결제는 그대로다. */
     @Bean
     @ConditionalOnMissingBean
-    fun paymentLedgerWriter(time: ObjectProvider<TimeProvider>): PaymentLedgerWriter =
-        PaymentLedgerWriter(time.getIfAvailable { TimeProvider.systemUtc() })
+    fun paymentDiscounts(sources: ObjectProvider<DiscountSource>, store: PaymentLedgerStore, time: ObjectProvider<TimeProvider>): PaymentDiscounts {
+        val clock = time.getIfAvailable { TimeProvider.systemUtc() }
+        return PaymentDiscounts({ sources.orderedStream().toList() }, store) { clock.now() }
+    }
+
+    /** 결제 면제 판정 - 권한 `payment.exempt` 를 platform 의 [OperatorAccess] 에 묻는다. */
+    @Bean
+    @ConditionalOnMissingBean
+    fun paymentExemption(access: ObjectProvider<OperatorAccess>): PaymentExemption =
+        PaymentExemption(access.getIfAvailable { NobodyIsExempt })   // 판정기(platform 의 OperatorAccess)가 없는 조립은 아무도 면제하지 않는다
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun paymentLedgerWriter(time: ObjectProvider<TimeProvider>, discounts: ObjectProvider<PaymentDiscounts>): PaymentLedgerWriter =
+        PaymentLedgerWriter(time.getIfAvailable { TimeProvider.systemUtc() }).also { it.discounts = discounts.getIfAvailable() }
 
     /** 지급 · 회수를 하는 앱 리스너가 없으면 아무것도 하지 않는다. */
     @Bean
@@ -73,7 +89,8 @@ class PaymentLedgerAutoConfiguration {
         listener: PaymentOrderListener,
         writer: PaymentLedgerWriter,
         subscriptions: ObjectProvider<SubscriptionLifecycle>,
-    ): PaymentFulfillment = PaymentFulfillment(store, listener, writer, subscriptions.getIfAvailable())
+        discounts: ObjectProvider<PaymentDiscounts>,
+    ): PaymentFulfillment = PaymentFulfillment(store, listener, writer, subscriptions.getIfAvailable(), discounts.getIfAvailable())
 
     /** [PaymentCatalog] 빈이 없으면 서비스는 있되 주문 만들기가 [PaymentUnavailableException] 이다. */
     @Bean
@@ -87,7 +104,9 @@ class PaymentLedgerAutoConfiguration {
         fulfillment: PaymentFulfillment,
         writer: PaymentLedgerWriter,
         properties: PaymentProperties,
-    ): PaymentOrders = PaymentOrders(store, tasks, router, catalog.getIfAvailable(), convergence, fulfillment, writer, properties)
+        discounts: ObjectProvider<PaymentDiscounts>,
+        exemption: ObjectProvider<PaymentExemption>,
+    ): PaymentOrders = PaymentOrders(store, tasks, router, catalog.getIfAvailable(), convergence, fulfillment, writer, properties, discounts = discounts.getIfAvailable(), exemption = exemption.getIfAvailable())
 
     @Bean
     @ConditionalOnMissingBean
@@ -230,4 +249,9 @@ class PaymentLedgerAutoConfiguration {
     @ConditionalOnMissingBean(name = ["paymentAccountDataExporter"])
     fun paymentAccountDataExporter(store: PaymentLedgerStore, router: PaymentProviderRouter, writer: PaymentLedgerWriter, properties: PaymentProperties): AccountDataExporter =
         PaymentAccountDataExporter(PaymentQueries(store, router, writer, properties))
+}
+
+/** 판정기가 없는 조립의 기본 - 권한을 아무에게도 주지 않는다. */
+private object NobodyIsExempt : OperatorAccess {
+    override fun permissionsOf(ref: dev.sumin.skeleton.common.authz.OperatorRef): Set<String> = emptySet()
 }

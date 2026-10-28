@@ -2,6 +2,9 @@ package dev.sumin.skeleton.payment.web
 
 import com.fasterxml.jackson.annotation.JsonInclude
 import dev.sumin.skeleton.payment.CheckoutInstruction
+import dev.sumin.skeleton.payment.DiscountDraft
+import dev.sumin.skeleton.payment.OrderDiscount
+import dev.sumin.skeleton.payment.OrderQuote
 import dev.sumin.skeleton.payment.OperatorOrderDetail
 import dev.sumin.skeleton.payment.OperatorOrderView
 import dev.sumin.skeleton.payment.OrderView
@@ -51,11 +54,18 @@ data class OrderResponse(
     val createdAt: Instant,
     val paidAt: Instant?,
     val fulfilled: Boolean,
+    /** 할인 전 금액(`amount` 는 할인 뒤) - 할인도 면제도 없는 주문은 `null`. 면제 주문은 카탈로그 가격(얼마어치를 면제했나). */
+    val originalAmount: Long?,
+    /** 깎인 금액의 합(면제는 할인이 아니라 0). */
+    val discountAmount: Long,
+    val discounts: List<DiscountLineResponse>,
+    /** `PROVIDER`(결제사가 받았다) · `FREE`(쿠폰으로 0원 - 결제사 없이 끝남) · `EXEMPT`(결제 면제 - 결제사 없이 끝남). `FREE` · `EXEMPT` 는 처음부터 `PAID`, 결제창 없음, `refundableAmount` 0. */
+    val settlement: String,
 ) {
     companion object {
-        fun of(view: OrderView): OrderResponse = of(view.order, view.summary.refundableAmount, view.summary.refundPending, view.summary.openRefundStatus?.name)
+        fun of(view: OrderView): OrderResponse = of(view.order, view.summary.refundableAmount, view.summary.refundPending, view.summary.openRefundStatus?.name, view.discounts)
 
-        internal fun of(order: PaymentOrder, refundable: Long, refundPending: Boolean, openRefundStatus: String?) = OrderResponse(
+        internal fun of(order: PaymentOrder, refundable: Long, refundPending: Boolean, openRefundStatus: String?, discounts: List<OrderDiscount> = emptyList()) = OrderResponse(
             id = order.id,
             status = order.status.name,
             kind = order.kind.name,
@@ -76,7 +86,26 @@ data class OrderResponse(
             createdAt = order.createdAt,
             paidAt = order.paidAt,
             fulfilled = order.fulfilledAt != null,
+            originalAmount = order.originalAmount,
+            discountAmount = order.discountAmount,
+            discounts = discounts.map(DiscountLineResponse::of),
+            settlement = order.settlement.name,
         )
+    }
+}
+
+/** 주문에 붙은 할인 한 줄 - [type] 은 할인 수단(`coupon`), [ref] 는 그 수단 안의 식별(쿠폰 id), [amount] 는 깎인 금액(최소 단위, 양수). */
+data class DiscountLineResponse(val type: String, val ref: String, val label: String, val amount: Long) {
+    companion object {
+        fun of(line: OrderDiscount) = DiscountLineResponse(line.kind, line.sourceRef, line.label, line.amount)
+        fun of(draft: DiscountDraft) = DiscountLineResponse(draft.kind, draft.sourceRef, draft.label, draft.amount)
+    }
+}
+
+/** `POST /quote` 의 응답 - 주문을 만들지 않고 본 금액. `settlement` 가 `FREE` · `EXEMPT` 면 결제창 없이 끝난다. */
+data class QuoteResponse(val originalAmount: Long, val amount: Long, val currency: String, val discounts: List<DiscountLineResponse>, val settlement: String) {
+    companion object {
+        fun of(quote: OrderQuote) = QuoteResponse(quote.originalAmount, quote.amount, quote.currency, quote.discounts.map(DiscountLineResponse::of), quote.settlement.name)
     }
 }
 
@@ -215,10 +244,14 @@ data class AdminOrderResponse(
     val accountErasedAt: Instant?,
     /** 서버에서 환불을 보낼 수 없는 이유 - `UNSUPPORTED` · `PROVIDER_OFF` · `MODE_MISMATCH`, 막힘이 없으면 `null`. 칸은 늘 온다. */
     val refundBlock: String?,
+    val originalAmount: Long?,
+    val discountAmount: Long,
+    val discounts: List<DiscountLineResponse>,
+    val settlement: String,
 ) {
     companion object {
         fun of(view: OperatorOrderView): AdminOrderResponse {
-            val o = OrderResponse.of(view.order, view.summary.refundableAmount, view.summary.refundPending, view.summary.openRefundStatus?.name)
+            val o = OrderResponse.of(view.order, view.summary.refundableAmount, view.summary.refundPending, view.summary.openRefundStatus?.name, view.discounts)
             return AdminOrderResponse(
                 id = o.id, status = o.status, kind = o.kind, itemType = o.itemType, itemRef = o.itemRef, quantity = o.quantity, orderName = o.orderName, amount = o.amount,
                 refundedAmount = o.refundedAmount, refundableAmount = o.refundableAmount, refundPending = o.refundPending, openRefundStatus = o.openRefundStatus,
@@ -229,6 +262,7 @@ data class AdminOrderResponse(
                 reviewReason = view.reviewReason,
                 accountErasedAt = view.order.accountErasedAt,
                 refundBlock = view.refundBlock?.name,
+                originalAmount = o.originalAmount, discountAmount = o.discountAmount, discounts = o.discounts, settlement = o.settlement,
             )
         }
     }

@@ -40,4 +40,6 @@ data class OperatorOrderFilter(
     val status: PaymentOrderStatus? = null,
     val accountId: String? = null,
     val hideErased: Boolean = false,
+    /** 정산 방식으로 거른다 - `EXEMPT` 면 결제 면제 주문만(운영자 목록의 「결제 면제」 필터). null 이면 거르지 않는다. */
+    val settlement: PaymentSettlement? = null,
 )

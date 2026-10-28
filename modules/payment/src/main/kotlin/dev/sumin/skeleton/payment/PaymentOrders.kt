@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.payment
 
 import dev.sumin.skeleton.common.FieldValidationException
+import dev.sumin.skeleton.common.discount.DiscountClaim
 import dev.sumin.skeleton.common.id.SortableIds
 import org.slf4j.LoggerFactory
 
@@ -20,6 +21,34 @@ data class CreateOrderCommand(
     val providerChosen: Boolean = false,
     /** 결제를 시작한 화면의 origin - 돌아올 주소를 그 origin 으로 맞추는 결제사(카카오페이 · 네이버페이)에게만 [CheckoutOrder.returnOrigin] 으로 간다. */
     val returnOrigin: String? = null,
+    /** 쿠폰 같은 할인 수단 지정(첫 판은 하나). 금액은 서버가 계산한다 - 여기에는 어떤 수단의 어느 것인지만 있다. */
+    val discounts: List<DiscountClaim> = emptyList(),
+    /** 호출자가 결제 면제 권한을 가졌다(컨트롤러가 요청의 `Authentication` 으로 [PaymentExemption] 에 물어 채운다). 면제가 이기므로 [discounts] 는 쓰지 않는다. */
+    val exempt: Boolean = false,
+)
+
+/** 주문을 만들지 않고 금액을 본다([PaymentOrders.quote]) - 만들 때와 같은 계산이다. 할인 지정이 없으면 일반 견적과 같다. */
+data class QuoteCommand(
+    val accountId: String,
+    val itemType: String,
+    val itemRef: String,
+    val quantity: Int = 1,
+    val country: String? = null,
+    val provider: String? = null,
+    val discounts: List<DiscountClaim> = emptyList(),
+    val exempt: Boolean = false,
+)
+
+/**
+ * 견적 - [originalAmount] 는 카탈로그 가격, [amount] 는 할인 뒤 최종가(면제면 0), [settlement] 는 이 주문이 어떻게 끝나는지(`FREE` · `EXEMPT` 면 결제창이 없다).
+ * 면제가 아닌 [discounts] 의 금액 합이 `originalAmount - amount` 다.
+ */
+data class OrderQuote(
+    val originalAmount: Long,
+    val amount: Long,
+    val currency: String,
+    val discounts: List<DiscountDraft>,
+    val settlement: PaymentSettlement,
 )
 
 /**
@@ -31,6 +60,8 @@ data class CreatedOrder(
     val checkout: CheckoutInstruction?,
     val replayed: Boolean,
     val refunds: List<PaymentRefund> = emptyList(),
+    /** 이 주문에 붙은 할인 내역 - 새 주문은 방금 쥔 줄, 같은 키의 재전송은 저장된 줄. */
+    val discounts: List<OrderDiscount> = emptyList(),
 )
 
 /**
@@ -49,36 +80,92 @@ class PaymentOrders(
     private val writer: PaymentLedgerWriter,
     private val properties: PaymentProperties,
     private val ids: SortableIds = SortableIds.system,
+    /** 할인 수단을 모으는 곳 - 없으면 할인 지정은 모두 거절된다. */
+    private val discounts: PaymentDiscounts? = null,
+    /** 결제 면제 판정 - 없으면 [CreateOrderCommand.exempt] 만 본다. */
+    private val exemption: PaymentExemption? = null,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
+
+    /** 주문을 만들지 않고 금액을 본다 - 부수 효과가 없다. 할인 오류(`PAYMENT.DISCOUNT_*`)는 주문 만들기와 같다. */
+    fun quote(command: QuoteCommand): OrderQuote {
+        val catalog = catalog ?: throw PaymentUnavailableException()
+        if (command.itemType.isBlank() || command.itemType.length > ITEM_TYPE_MAX || command.itemRef.isBlank() || command.itemRef.length > ITEM_REF_MAX || command.quantity < 1) {
+            throw PaymentItemNotPurchasableException()
+        }
+        val plan = plan(catalog, command.accountId, command.itemType, command.itemRef, command.quantity, command.country, command.discounts, command.exempt)
+        if (plan.settlement == PaymentSettlement.PROVIDER && plan.discount.lines.isNotEmpty()) {
+            // 결제사를 조용히 찾는다 - 못 찾아도 견적은 낸다(주문 만들기가 그때 503 로 답한다)
+            findOpenableCheckout(command.provider, plan.charged, command.country, warn = false)?.let { requireDiscountable(it, plan.charged) }
+        }
+        return OrderQuote(plan.discount.originalAmount, plan.discount.amount, plan.discount.currency, plan.discount.lines, plan.settlement)
+    }
+
+    /** 이 호출이 면제 계정의 것인가 - 요청이 이미 판정했거나(`command.exempt`) 계정 id 로 물어 면제다. */
+    private fun isExempt(accountId: String, claimed: Boolean): Boolean = claimed || exemption?.isExempt(accountId) == true
+
+    private class Plan(val purchase: PurchaseQuote, val discount: DiscountQuote, val settlement: PaymentSettlement) {
+        /** 결제사에 청구할 금액(면제 · 0원이면 0). */
+        val charged: PaymentAmount get() = PaymentAmount(discount.amount, purchase.amount.currency)
+    }
+
+    /** 카탈로그 가격 → 면제 또는 할인 → 최종가. 만들기와 견적이 같은 계산을 쓴다. */
+    private fun plan(catalog: PaymentCatalog, accountId: String, itemType: String, itemRef: String, quantity: Int, country: String?, claims: List<DiscountClaim>, exemptClaimed: Boolean): Plan {
+        val purchase = catalog.quote(PurchaseRequest(accountId, itemType, itemRef, quantity, country))
+        if (purchase.amount.amount <= 0) throw PaymentItemNotPurchasableException()
+        check(purchase.orderName.isNotBlank()) { "The payment catalog returned a blank order name" }
+        val original = purchase.amount
+        if (isExempt(accountId, exemptClaimed)) {
+            // 면제가 이긴다 - 쿠폰은 보지도 잡지도 않는다
+            return Plan(purchase, DiscountQuote(original.amount, 0, original.normalizedCurrency, emptyList()), PaymentSettlement.EXEMPT)
+        }
+        val quoted = if (claims.isEmpty()) {
+            DiscountQuote(original.amount, original.amount, original.normalizedCurrency, emptyList())
+        } else {
+            val source = discounts ?: throw PaymentDiscountNotApplicableException("This discount is not offered here.")
+            source.quote(claims, source.targetFor(accountId, itemType, itemRef, original))
+        }
+        return Plan(purchase, quoted, if (quoted.amount == 0L) PaymentSettlement.FREE else PaymentSettlement.PROVIDER)
+    }
+
+    /** 할인이 붙은 주문이 갈 결제사가 받을 수 있는가 - 금액을 직접 정하는 결제사 · 최소 금액 미만. */
+    private fun requireDiscountable(checkout: PaymentCheckoutGateway, charged: PaymentAmount) {
+        if (checkout is PaymentTransactionGateway) throw PaymentDiscountNotSupportedException()
+        val minimum = checkout.minimumAmount(charged.normalizedCurrency)
+        if (minimum != null && charged.amount < minimum) throw PaymentDiscountBelowMinimumException(minimum)
+    }
 
     fun create(command: CreateOrderCommand): CreatedOrder {
         val catalog = catalog ?: throw PaymentUnavailableException()
         validate(command)
         val dedupeKey = PaymentOrderIds.dedupeKey(command.accountId, command.idempotencyKey)
         store.findOrderByDedupeKey(dedupeKey)?.let { return replay(it, command) }
-        if (command.providerClosed) throw PaymentUnavailableException()
+        // 결제사 없이 끝날 수 있는 주문(면제 · 할인)은 닫힌 결제사와 상관없다 - 그 밖의 주문은 지금까지처럼 카탈로그를 부르기도 전에 거절한다
+        val mayBeOffProvider = command.discounts.isNotEmpty() || isExempt(command.accountId, command.exempt)
+        if (command.providerClosed && !mayBeOffProvider) throw PaymentUnavailableException()
 
-        val quote = catalog.quote(PurchaseRequest(command.accountId, command.itemType, command.itemRef, command.quantity, command.country))
-        if (quote.amount.amount <= 0) throw PaymentItemNotPurchasableException()
-        check(quote.orderName.isNotBlank()) { "The payment catalog returned a blank order name" }
+        val plan = plan(catalog, command.accountId, command.itemType, command.itemRef, command.quantity, command.country, command.discounts, command.exempt)
+        val quote = plan.purchase
+        if (plan.settlement != PaymentSettlement.PROVIDER) return createOffProvider(command, plan, dedupeKey)
+        if (command.providerClosed) throw PaymentUnavailableException()
         if (command.providerChosen && (command.provider == null || !router.servesCurrency(command.provider, quote.amount.currency))) {
             throw PaymentRoutingException("The chosen payment provider does not take the currency of this purchase.")
         }
-        val checkout = findOpenableCheckout(command.provider, quote.amount, command.country, warn = true) ?: throw PaymentUnavailableException()
+        val checkout = findOpenableCheckout(command.provider, plan.charged, command.country, warn = true) ?: throw PaymentUnavailableException()
+        if (plan.discount.lines.isNotEmpty()) requireDiscountable(checkout, plan.charged)
         val orderId = ids.newId(PaymentOrderIds.ORDER_PREFIX)
         val creator = checkout as? PaymentTransactionGateway
 
         val now = writer.now()
         val order = PaymentOrder(
-            id = ids.newId(PaymentOrderIds.ORDER_PREFIX),
+            id = orderId,
             accountId = command.accountId,
             kind = PaymentOrderKind.ONE_TIME,
             status = PaymentOrderStatus.PENDING,
             provider = checkout.providerId.trim().lowercase(),
             providerMode = checkout.mode,
             providerPaymentId = null,
-            amount = quote.amount,
+            amount = plan.charged,
             paidAmount = null,
             taxAmount = null,
             refundedAmount = 0,
@@ -103,11 +190,16 @@ class PaymentOrders(
             createdAt = now,
             updatedAt = now,
             country = command.country?.uppercase(),
+            originalAmount = quote.amount.amount.takeIf { plan.discount.lines.isNotEmpty() },
+            discountAmount = plan.discount.discountAmount,
         )
-        // 주문을 먼저 커밋한다(결제사 호출은 트랜잭션 밖) - 같은 요청 키로 동시에 들어온 쪽은 dedupe_key 유니크로 `false` 를 받아 그 주문을 돌려받는다
+        // 주문을 먼저 커밋한다(결제사 호출은 트랜잭션 밖) - 같은 요청 키로 동시에 들어온 쪽은 dedupe_key 유니크로 `false` 를 받아 그 주문을 돌려받는다.
+        // 할인은 줄을 넣은 **뒤에** 쥔다 - 같은 키의 동시 요청이 쿠폰을 두고 다투지 않고 승자의 주문을 돌려받는다
+        var held: List<OrderDiscount> = emptyList()
         val inserted = store.inTransaction { tx ->
             if (!tx.insertOrderIfAbsent(order)) return@inTransaction false
             tx.appendEvent(writer.event(order.id, PaymentEventType.ORDER_CREATED, PaymentActor.USER, command.accountId, to = order.status))
+            held = reserve(tx, order, command, plan)
             tasks.enqueue(PaymentTask(PaymentTaskTypes.ORDER_EXPIRE, order.id, runAt = order.checkoutExpiresAt, maxAttempts = properties.reconcile.maxAttempts))
             true
         }
@@ -120,7 +212,83 @@ class PaymentOrders(
         // (만료 작업이 닫는다; 같은 키로 다시 열면 그때 만든다)
         val created = if (creator != null) ensureTransaction(order, creator) else order
         val instruction = checkout.checkout(CheckoutOrder(created.id, created.orderName, created.amount, created.itemRef, created.accountId, created.providerPaymentId, returnOrigin = command.returnOrigin))
-        return CreatedOrder(remember(created, instruction), instruction, replayed = false)
+        return CreatedOrder(remember(created, instruction), instruction, replayed = false, discounts = held)
+    }
+
+    /**
+     * 결제사 없이 끝나는 주문 - 쿠폰으로 최종가가 0원(`free`)이거나 결제 면제 계정(`exempt`). 한 트랜잭션에서 줄을 넣고 · 할인을 쥐고 · `PENDING → PAID` 로 옮기고 · 지급 작업을 넣는다.
+     * 결제창도 만료 작업도 없다. 지급 훅은 평소처럼 돈다(상품은 나간다) - 커밋 뒤 요청 스레드가 한 번 시도하고, 실패하면 지급 작업이 재시도한다.
+     */
+    private fun createOffProvider(command: CreateOrderCommand, plan: Plan, dedupeKey: String): CreatedOrder {
+        val exempt = plan.settlement == PaymentSettlement.EXEMPT
+        val now = writer.now()
+        val order = PaymentOrder(
+            id = ids.newId(PaymentOrderIds.ORDER_PREFIX),
+            accountId = command.accountId,
+            kind = PaymentOrderKind.ONE_TIME,
+            status = PaymentOrderStatus.PENDING,
+            provider = if (exempt) EXEMPT_PROVIDER else FREE_PROVIDER,
+            providerMode = offProviderMode(command, plan),
+            providerPaymentId = null,
+            amount = plan.charged,
+            paidAmount = null,
+            taxAmount = null,
+            refundedAmount = 0,
+            itemType = command.itemType,
+            itemRef = command.itemRef,
+            quantity = command.quantity,
+            orderName = plan.purchase.orderName.trim().take(ORDER_NAME_MAX),
+            originType = PaymentOriginType.CHECKOUT,
+            originRef = null,
+            dedupeKey = dedupeKey,
+            method = null,
+            cardIssuer = null,
+            cardLast4 = null,
+            failureCode = null,
+            reviewReason = null,
+            checkoutExpiresAt = now,
+            confirmStartedAt = null,
+            paidAt = null,
+            fulfilledAt = null,
+            closedAt = null,
+            accountErasedAt = null,
+            createdAt = now,
+            updatedAt = now,
+            country = command.country?.uppercase(),
+            originalAmount = plan.purchase.amount.amount,
+            discountAmount = if (exempt) 0 else plan.discount.discountAmount,   // 면제는 할인이 아니다
+        )
+        var held: List<OrderDiscount> = emptyList()
+        val inserted = store.inTransaction { tx ->
+            if (!tx.insertOrderIfAbsent(order)) return@inTransaction false
+            tx.appendEvent(writer.event(order.id, PaymentEventType.ORDER_CREATED, PaymentActor.USER, command.accountId, to = order.status))
+            if (exempt) tx.appendEvent(writer.event(order.id, PaymentEventType.EXEMPTED, PaymentActor.USER, command.accountId, PaymentPermissions.EXEMPT))
+            held = reserve(tx, order, command, plan)
+            writer.transition(tx, order, PaymentOrderStatus.PAID, PaymentEventType.CONVERGED, PaymentActor.SYSTEM, null, if (exempt) "EXEMPT_ORDER" else "FREE_ORDER") {
+                it.copy(paidAmount = 0, paidAt = writer.now())
+            }
+            tasks.enqueue(PaymentTask(PaymentTaskTypes.ORDER_FULFIL, order.id))
+            true
+        }
+        if (!inserted) return replay(checkNotNull(store.findOrderByDedupeKey(dedupeKey)) { "the order for this idempotency key disappeared" }, command)
+        fulfillment.tryFulfil(order.id)
+        return CreatedOrder(store.findOrder(order.id) ?: order, null, replayed = false, discounts = store.listOrderDiscounts(listOf(order.id)).ifEmpty { held })
+    }
+
+    /** 결제사 없이 끝나는 주문의 모드 - 결제사가 열 수 있으면 그 모드(기본 결제사의 모드), 하나도 없으면 LIVE(진짜 돈이 아니어도 시험 키 앱의 대시보드는 열린 결제사의 모드를 따른다). */
+    private fun offProviderMode(command: CreateOrderCommand, plan: Plan): PaymentMode =
+        findOpenableCheckout(command.provider, plan.purchase.amount, command.country, warn = false)?.mode ?: PaymentMode.LIVE
+
+    /** 할인을 쥐고 내역 줄을 넣는다(주문 줄을 넣은 트랜잭션 안). 지정이 없거나 면제면 아무것도 하지 않는다. 미리 본 금액과 달라졌으면 쿠폰이 그사이 바뀐 것이다 - 되돌린다. */
+    private fun reserve(tx: PaymentLedgerTx, order: PaymentOrder, command: CreateOrderCommand, plan: Plan): List<OrderDiscount> {
+        if (plan.settlement == PaymentSettlement.EXEMPT || command.discounts.isEmpty()) return emptyList()
+        val source = checkNotNull(discounts) { "a discount was planned without a discount collection" }
+        val reserved = source.reserve(command.discounts, source.targetFor(order.accountId, order.itemType, order.itemRef, plan.purchase.amount), order.id)
+        if (reserved.amount != plan.discount.amount) throw PaymentDiscountUnavailableException()
+        val now = writer.now()
+        return reserved.lines.mapIndexed { index, line ->
+            OrderDiscount(order.id, index + 1, line.kind, line.sourceRef, line.label, line.amount, order.amount.normalizedCurrency, OrderDiscountStatus.RESERVED, now, now)
+        }.onEach(tx::insertOrderDiscount)
     }
 
     /**
@@ -389,7 +557,7 @@ class PaymentOrders(
             null
         }
         val shown = if (checkout != null) remember(existing, checkout) else existing
-        return CreatedOrder(shown, checkout, replayed = true, refunds = store.listRefunds(existing.id))
+        return CreatedOrder(shown, checkout, replayed = true, refunds = store.listRefunds(existing.id), discounts = store.listOrderDiscounts(listOf(existing.id)))
     }
 
     private fun validate(command: CreateOrderCommand) {
@@ -402,10 +570,16 @@ class PaymentOrders(
 
     private fun ownedOrNull(order: PaymentOrder?, accountId: String): PaymentOrder? = order?.takeIf { it.accountId == accountId }
 
-    private companion object {
-        const val ORDER_NAME_MAX = 100
-        const val PAYMENT_ID_MAX = 200
-        const val ITEM_TYPE_MAX = 40
-        const val ITEM_REF_MAX = 128
+    companion object {
+        /** 예약 결제사 id - 쿠폰으로 최종가가 0원이라 결제사 없이 끝난 주문. 라우터가 고르지 않는다. */
+        const val FREE_PROVIDER = "free"
+
+        /** 예약 결제사 id - 결제 면제 계정의 주문(결제사 없이 끝남, 할인이 아니다). 앱이 면제 주문을 가르고 싶으면 `order.provider == EXEMPT_PROVIDER`. */
+        const val EXEMPT_PROVIDER = "exempt"
+
+        private const val ORDER_NAME_MAX = 100
+        private const val PAYMENT_ID_MAX = 200
+        private const val ITEM_TYPE_MAX = 40
+        private const val ITEM_REF_MAX = 128
     }
 }

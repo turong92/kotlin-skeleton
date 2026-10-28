@@ -10,6 +10,12 @@ import org.slf4j.MDC
 class PaymentLedgerWriter(private val time: TimeProvider) {
     fun now() = time.now()
 
+    /**
+     * 할인 수단을 모으는 곳(할인 수단이 붙은 조립에서만). 주문이 끝 상태(`FAILED` · `EXPIRED` · `CANCELED`)로 가는 **같은 트랜잭션**에서 쥔 할인을 푼다 - 상태를 바꾸는 코드는 모두
+     * [transition] 을 거치므로 풀리지 않고 남는 길이 없다. 전액 환불의 복원은 [RefundLines] 가 같은 곳을 쓴다. 조립이 만든 뒤에 끼운다.
+     */
+    var discounts: PaymentDiscounts? = null
+
     /** 상태를 [to] 로 옮기고 [mutate] 로 나머지 칸을 바꾼 뒤 저장하고 이력 한 줄을 남긴다. 표에 없는 전이는 [IllegalStateException]. */
     fun transition(
         tx: PaymentLedgerTx,
@@ -26,6 +32,7 @@ class PaymentLedgerWriter(private val time: TimeProvider) {
         val changed = mutate(order).copy(status = to, updatedAt = now())
         tx.updateOrder(changed)
         tx.appendEvent(event(order.id, type, actor, actorId, providerCode, order.status, to, refundId))
+        if (to.isClosed) discounts?.release(tx, order.id)
         return changed
     }
 

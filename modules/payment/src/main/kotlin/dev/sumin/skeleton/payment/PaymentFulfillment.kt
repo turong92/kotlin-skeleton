@@ -12,6 +12,8 @@ class PaymentFulfillment(
     private val writer: PaymentLedgerWriter,
     /** 구독 주문이면 기간을 넘기는 고리(구독을 켠 조립에서만). 앱 리스너보다 먼저, 같은 주문 줄 락 안에서 돈다. */
     private val subscriptions: SubscriptionLifecycle? = null,
+    /** 주문에 붙은 할인(쿠폰)을 쓴 것으로 굳히는 고리(할인 수단이 붙은 조립에서만) - 앱 리스너보다 먼저, 같은 주문 줄 락 안에서 돈다. */
+    private val discounts: PaymentDiscounts? = null,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -23,10 +25,16 @@ class PaymentFulfillment(
             // 지급 전에 전액 환불된 주문은 지급하지 않는다 — 돌려준 돈의 물건을 내주지 않는다. `fulfilled_at` 은 비어 있는 채(물건이 나간 적 없다)이고,
             // 앱은 그래도 `onRefunded` 를 받는다(지급한 적이 없으면 되돌릴 것이 없다 — 앱의 회수는 "있으면 되돌린다"로 쓴다)
             if (order.status == PaymentOrderStatus.REFUNDED) return@inTransaction false
+            // 할인은 앱 리스너보다 먼저 굳힌다 - 리스너가 던지면 이 트랜잭션과 함께 되돌려지고 재시도가 한 번 더 굳힌다. 늦은 PAID 라 쿠폰을 다른 주문이 쥐었으면 충돌(검토 표시, 지급은 그대로)
+            val discountConflict = discounts?.confirm(tx, orderId) == true
             if (order.originType == PaymentOriginType.SUBSCRIPTION) subscriptions?.onOrderPaid(tx, order)
             listener.onPaid(order)
             // 구독 고리가 주문 줄에 「확인 필요」를 찍었을 수 있다 — 낡은 값으로 덮지 않게 다시 읽는다
             val fulfilled = writer.touch(tx, checkNotNull(tx.lockOrder(orderId)), PaymentEventType.FULFILLED, PaymentActor.SYSTEM) { it.copy(fulfilledAt = writer.now()) }
+            if (discountConflict && fulfilled.reviewReason == null) {
+                writer.touch(tx, fulfilled, PaymentEventType.REVIEW_FLAGGED, PaymentActor.SYSTEM, null, PaymentReviewReason.DISCOUNT_CONFLICT.name) { it.copy(reviewReason = PaymentReviewReason.DISCOUNT_CONFLICT) }
+                return@inTransaction true
+            }
             // 다른 길로(작업이 죽은 뒤 요청 스레드 · 사람의 맞추기가 다시 넣은 작업) 지급이 성공하면 낡은 지급 표시는 그 자리에서 푼다. 돈 이유는 건드리지 않는다
             if (fulfilled.reviewReason == PaymentReviewReason.FULFILMENT_UNRESOLVED) {
                 writer.touch(tx, fulfilled, PaymentEventType.CONVERGED, PaymentActor.SYSTEM, null, "FULFILMENT_UNRESOLVED_CLEARED") { it.copy(reviewReason = null) }

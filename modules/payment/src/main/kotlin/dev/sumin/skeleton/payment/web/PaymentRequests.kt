@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.payment.web
 
 import dev.sumin.skeleton.common.FieldValidationException
+import dev.sumin.skeleton.common.discount.DiscountClaim
 import dev.sumin.skeleton.payment.IdempotencyKey
 import tools.jackson.databind.JsonNode
 
@@ -13,6 +14,17 @@ internal object PaymentRequests {
             throw FieldValidationException("Idempotency-Key", "Pattern", "The Idempotency-Key header must be 1 to $KEY_MAX printable ASCII characters")
         }
         return IdempotencyKey(value)
+    }
+
+    /** 할인 수단 지정 `[{ "type": "coupon", "ref": "…" }]` - 없으면 빈 목록. 몇 개까지 받을지는 서버가 정한다([dev.sumin.skeleton.payment.PaymentDiscounts.MAX_CLAIMS]); 여기서는 모양과 크기만 본다. */
+    fun discounts(node: JsonNode?): List<DiscountClaim> {
+        if (node == null || node.isNull || node.isMissingNode) return emptyList()
+        if (!node.isArray) throw FieldValidationException("discounts", "Pattern", "discounts must be a list")
+        if (node.size() > DISCOUNTS_MAX) throw FieldValidationException("discounts", "Size", "discounts must have at most $DISCOUNTS_MAX entries")
+        return (0 until node.size()).map { node[it] }.map { entry ->
+            if (!entry.isObject) throw FieldValidationException("discounts", "Pattern", "each discount must be an object")
+            DiscountClaim(text(entry["type"], "discounts.type", 16), text(entry["ref"], "discounts.ref", 128))
+        }
     }
 
     fun text(node: JsonNode?, field: String, max: Int): String {
@@ -42,4 +54,5 @@ internal object PaymentRequests {
     fun size(value: Int?): Int = (value ?: dev.sumin.skeleton.payment.PaymentQueries.DEFAULT_PAGE).coerceIn(1, dev.sumin.skeleton.payment.PaymentQueries.MAX_PAGE)
 
     private const val KEY_MAX = 200
+    private const val DISCOUNTS_MAX = 5
 }

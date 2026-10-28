@@ -214,3 +214,34 @@ class PaymentPlanChangeChargeChangedException : ApplicationException(
     message = "The charge for the plan change is higher than the one shown.",
     errorCode = PaymentErrorCode.PLAN_CHANGE_CHARGE_CHANGED,
 )
+
+/** 이 할인은 이 구매에 쓸 수 없다 - 범위 밖 · 최소 금액 미달 · 통화 불일치 · 「첫 결제만」인데 결제한 적 있음 · 모르는 할인 수단 · 한 주문에 쓸 수 있는 수 초과. */
+class PaymentDiscountNotApplicableException(message: String = "The discount does not apply to this purchase.") : ApplicationException(
+    message = message,
+    errorCode = PaymentErrorCode.DISCOUNT_NOT_APPLICABLE,
+)
+
+/** 이 할인은 이미 다른 주문이 쥐었거나 썼거나 만료됐다. */
+class PaymentDiscountUnavailableException(message: String = "The discount is not available any more.") : ApplicationException(
+    message = message,
+    errorCode = PaymentErrorCode.DISCOUNT_UNAVAILABLE,
+)
+
+/** 이 구매의 결제사는 할인을 받지 않는다 - 결제사가 금액을 직접 정하는 경로(거래를 먼저 만드는 결제사). */
+class PaymentDiscountNotSupportedException : ApplicationException(
+    message = "The payment provider of this purchase does not take discounts.",
+    errorCode = PaymentErrorCode.DISCOUNT_NOT_SUPPORTED,
+)
+
+/** 0 < 할인 뒤 금액 < 결제사 최소 금액 - 결제사가 그 금액은 받지 못한다. [minimumAmount] 는 그 통화의 최소 금액(최소 단위). */
+class PaymentDiscountBelowMinimumException(minimumAmount: Long) : ApplicationException(
+    message = "The amount after the discount is below the minimum the payment provider can charge.",
+    errorCode = PaymentErrorCode.DISCOUNT_BELOW_MINIMUM,
+    data = mapOf("minimumAmount" to minimumAmount),
+)
+
+/** 결제사 없이 끝난 주문(쿠폰 0원 · 결제 면제)은 돌려줄 돈이 없다. */
+class PaymentNothingToRefundException : ApplicationException(
+    message = "No money was paid to a payment provider for this order.",
+    errorCode = PaymentErrorCode.NOTHING_TO_REFUND,
+)

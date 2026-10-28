@@ -1,6 +1,9 @@
 package dev.sumin.skeleton.payment.testing
 
 import dev.sumin.skeleton.payment.OperatorOrderFilter
+import dev.sumin.skeleton.payment.OrderDiscount
+import dev.sumin.skeleton.payment.OrderDiscountStatus
+import dev.sumin.skeleton.payment.PaymentSettlement
 import dev.sumin.skeleton.payment.OperatorOrderScope
 import dev.sumin.skeleton.payment.OrderCursor
 import dev.sumin.skeleton.payment.PaymentEvent
@@ -35,6 +38,7 @@ class InMemoryPaymentLedgerStore : PaymentLedgerStore {
     private val commitMutex = Any()
     private val committed = LinkedHashMap<String, PaymentOrder>()
     private val committedEvents = ArrayList<PaymentEvent>()
+    private val committedDiscounts = LinkedHashMap<Pair<String, Int>, OrderDiscount>()
     private val committedRefunds = LinkedHashMap<String, PaymentRefund>()
     private val committedWebhooks = LinkedHashMap<Long, PaymentWebhookEvent>()
     private val committedSubscriptions = LinkedHashMap<String, PaymentSubscription>()
@@ -72,6 +76,12 @@ class InMemoryPaymentLedgerStore : PaymentLedgerStore {
 
     override fun listEvents(orderId: String): List<PaymentEvent> =
         synchronized(commitMutex) { committedEvents.filter { it.orderId == orderId } }
+
+    override fun listOrderDiscounts(orderIds: Collection<String>): List<OrderDiscount> =
+        synchronized(commitMutex) { committedDiscounts.values.filter { it.orderId in orderIds }.sortedWith(compareBy({ it.orderId }, { it.seq })) }
+
+    override fun hasPaidOrder(accountId: String): Boolean =
+        synchronized(commitMutex) { committed.values.any { it.accountId == accountId && it.paidAt != null && it.settlement == PaymentSettlement.PROVIDER } }
 
     override fun findRefund(id: String): PaymentRefund? = synchronized(commitMutex) { committedRefunds[id] }
 
@@ -133,6 +143,7 @@ class InMemoryPaymentLedgerStore : PaymentLedgerStore {
                 .filter { filter.status == null || it.status == filter.status }
                 .filter { filter.accountId == null || it.accountId == filter.accountId }
                 .filter { !filter.hideErased || it.accountErasedAt == null }
+                .filter { filter.settlement == null || it.settlement == filter.settlement }
                 .newestFirst(before)
                 .take(limit)
         }
@@ -233,6 +244,7 @@ class InMemoryPaymentLedgerStore : PaymentLedgerStore {
         private val pending = LinkedHashMap<String, PaymentOrder>()
         private val pendingRefunds = LinkedHashMap<String, PaymentRefund>()
         private val pendingEvents = ArrayList<PaymentEvent>()
+        private val pendingDiscounts = LinkedHashMap<Pair<String, Int>, OrderDiscount>()
         private val pendingWebhooks = LinkedHashMap<Long, PaymentWebhookEvent>()
         private val pendingSubscriptions = LinkedHashMap<String, PaymentSubscription>()
         private var ownedSubscriptionId: String? = null
@@ -289,6 +301,23 @@ class InMemoryPaymentLedgerStore : PaymentLedgerStore {
 
         override fun appendEvent(event: PaymentEvent) {
             pendingEvents += event
+        }
+
+        override fun listOrderDiscounts(orderId: String): List<OrderDiscount> {
+            val saved = synchronized(commitMutex) { committedDiscounts.values.filter { it.orderId == orderId && (it.orderId to it.seq) !in pendingDiscounts } }
+            return (saved + pendingDiscounts.values.filter { it.orderId == orderId }).sortedBy { it.seq }
+        }
+
+        override fun insertOrderDiscount(line: OrderDiscount) {
+            check(line.orderId in ownedOrderIds) { "the order must be locked in this transaction before a discount line is inserted" }
+            check(listOrderDiscounts(line.orderId).none { it.seq == line.seq }) { "duplicate discount line" }
+            pendingDiscounts[line.orderId to line.seq] = line
+        }
+
+        override fun updateOrderDiscountStatus(orderId: String, seq: Int, status: OrderDiscountStatus, at: Instant) {
+            check(orderId in ownedOrderIds) { "the order must be locked in this transaction before a discount line is updated" }
+            val line = checkNotNull(listOrderDiscounts(orderId).firstOrNull { it.seq == seq }) { "no such discount line" }
+            pendingDiscounts[orderId to seq] = line.copy(status = status, updatedAt = at)
         }
 
         override fun lockRefund(id: String): PaymentRefund? {
@@ -437,6 +466,7 @@ class InMemoryPaymentLedgerStore : PaymentLedgerStore {
                 committedWebhooks.putAll(pendingWebhooks)
                 committedSubscriptions.putAll(pendingSubscriptions)
                 committedEvents += pendingEvents
+                committedDiscounts.putAll(pendingDiscounts)
                 onCommit.toList()
             }
             hooks.forEach { it() }
@@ -448,6 +478,7 @@ class InMemoryPaymentLedgerStore : PaymentLedgerStore {
             pendingWebhooks.clear()
             pendingSubscriptions.clear()
             pendingEvents.clear()
+            pendingDiscounts.clear()
             onCommit.clear()
         }
 

@@ -40,6 +40,7 @@ class PaymentRefunds(
         return store.inTransaction { tx ->
             val order = tx.lockOrder(orderId)?.takeIf { it.accountId == accountId } ?: throw PaymentOrderNotFoundException()
             tx.findRefundByDedupeKey(dedupe)?.let { return@inTransaction RequestedRefund(replayed(it, orderId, reason, amount, PaymentRefundOrigin.USER), true) }
+            requireMoneyPaid(order)
             val refunds = openable(order, tx.listRefunds(orderId))
             val value = amountFor(order, refunds, amount, excluding = null)
             val now = writer.now()
@@ -75,7 +76,7 @@ class PaymentRefunds(
 
     fun view(order: PaymentOrder): OrderRefunds {
         val refunds = store.listRefunds(order.id)
-        return OrderRefunds(order, refunds, PaymentRefundSummary.of(order, refunds))
+        return OrderRefunds(order, refunds, PaymentRefundSummary.of(order, refunds), store.listOrderDiscounts(listOf(order.id)))
     }
 
     // --- 운영자 ---
@@ -121,6 +122,7 @@ class PaymentRefunds(
     private fun send(operatorId: String, origin: PaymentRefundOrigin, reason: PaymentRefundReason, orderId: String, amount: Long?, dedupe: String, keepSubscription: Boolean = false): RefundOutcome {
         store.findRefundByDedupeKey(dedupe)?.let { return outcomeOf(replayed(it, orderId, reason, amount, origin, keepSubscription), replayed = true) }
         val order0 = store.findOrder(orderId) ?: throw PaymentOrderNotFoundException()
+        requireMoneyPaid(order0)
         val gateways = precheck(order0, operatorId)
         val claimed = store.inTransaction { tx ->
             val order = tx.lockOrder(orderId) ?: throw PaymentOrderNotFoundException()
@@ -156,6 +158,7 @@ class PaymentRefunds(
         val refund0 = store.findRefund(refundId) ?: throw PaymentRefundNotFoundException()
         if (refund0.status != PaymentRefundStatus.REQUESTED) throw PaymentRefundNotAllowedException()
         val order0 = store.findOrder(refund0.orderId) ?: throw PaymentRefundNotFoundException()
+        requireMoneyPaid(order0)
         val gateways = precheck(order0, operatorId)
         val claimed = store.inTransaction { tx ->
             val order = tx.lockOrder(order0.id) ?: throw PaymentRefundNotFoundException()
@@ -234,6 +237,7 @@ class PaymentRefunds(
     fun sync(operatorId: String, orderId: String): PaymentOrder {
         store.requireNoOpenTransaction("PaymentRefunds.sync")
         val order0 = store.findOrder(orderId) ?: throw PaymentOrderNotFoundException()
+        if (order0.settlement.isOffProvider) return order0   // 결제사가 모르는 주문 - 맞출 것이 없다
         val gateway = try {
             router.gateway(order0.provider, PaymentLookupGateway::class)
         } catch (e: PaymentProviderNotFoundException) {
@@ -373,6 +377,11 @@ class PaymentRefunds(
 
     private fun requireMode(gateways: Gateways, order: PaymentOrder) {
         if (gateways.refund.mode != order.providerMode || gateways.lookup.mode != order.providerMode) throw PaymentModeMismatchException()
+    }
+
+    /** 결제사 없이 끝난 주문(쿠폰 0원 · 결제 면제)은 돌려줄 돈이 없다 - 다른 어떤 검사보다 먼저 이 이유로 거절한다. */
+    private fun requireMoneyPaid(order: PaymentOrder) {
+        if (order.settlement.isOffProvider) throw PaymentNothingToRefundException()
     }
 
     /** 락 안: 환불할 수 있는 상태이고 열린 환불이 없어야 한다. 돌려주는 것은 이 주문의 환불 줄. */

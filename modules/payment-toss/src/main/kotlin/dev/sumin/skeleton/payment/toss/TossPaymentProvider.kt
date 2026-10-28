@@ -346,6 +346,12 @@ class TossPaymentProvider(
     /** 공개 클라이언트 키를 낼 수 없으면(비었거나 모양 · 모드가 시크릿 키와 다름) 결제창이 열리지 않는다. */
     override fun canOpenCheckout(): Boolean = publicClientKey() != null
 
+    /**
+     * 원화 카드 결제는 100원 이상이다(토스페이먼츠 오류 메시지 「신용카드는 100원 이상」 - 기술 상담 게시판 문의글에서 확인; 퀵계좌이체는 200원, 가맹점 계약에 따라 다를 수 있다).
+     * 공식 문서 페이지에서 확정하지 못했다 - 운영 전 계약으로 확인한다(`docs/real-provider-setup.md`). 다른 통화는 모른다(null).
+     */
+    override fun minimumAmount(currency: String): Long? = if (currency.equals("KRW", ignoreCase = true)) KRW_CARD_MINIMUM else null
+
     override fun easyPays(): List<String> = TossEasyPays.normalize(properties.easyPays)
 
     override fun checkout(order: CheckoutOrder): CheckoutInstruction =
@@ -638,6 +644,7 @@ class TossPaymentProvider(
         MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
 
     private companion object {
+        private const val KRW_CARD_MINIMUM = 100L
         val log = LoggerFactory.getLogger(TossPaymentProvider::class.java)
 
         const val CHECKOUT_KIND = "TOSS_PAYMENT_WINDOW"

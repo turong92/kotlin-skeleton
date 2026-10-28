@@ -80,7 +80,10 @@ internal class RefundLines(private val writer: PaymentLedgerWriter, private val 
         val to = if (refunded >= baseOf(order)) PaymentOrderStatus.REFUNDED else PaymentOrderStatus.PARTIALLY_REFUNDED
         val changed = writer.transition(tx, order, to, PaymentEventType.CONVERGED, actor, actorId, LANDED, line.id) { it.copy(refundedAmount = refunded) }
         tasks.enqueue(PaymentTask(PaymentTaskTypes.REFUND_APPLY, line.id))
-        if (to == PaymentOrderStatus.REFUNDED) closeRequests(tx, order.id)
+        if (to == PaymentOrderStatus.REFUNDED) {
+            closeRequests(tx, order.id)
+            writer.discounts?.restore(tx, order.id)   // 전액 환불 - 쓴 쿠폰을 돌려준다(부분 환불은 복원 없음)
+        }
         return changed
     }
 
