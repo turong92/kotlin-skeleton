@@ -25,6 +25,7 @@ dependencies {
     testFixturesImplementation("org.jetbrains.kotlin:kotlin-reflect")
     testFixturesApi("org.jetbrains.kotlin:kotlin-test-junit5")   // PaymentLedgerStoreContract(저장소가 지킬 약속의 시험)를 다른 모듈이 상속한다
 
+    testImplementation(testFixtures(project(":modules:platform")))   // RegexBlowupGuard — 웹훅 경로 마스킹이 제곱으로 느려지지 않는지
     testImplementation(project(":modules:alert"))   // 경보 연동 시험용 — compileOnly 와 같은 모듈. 부재는 noOptionalTest 가 증명한다
     testImplementation("org.springframework.security:spring-security-core")
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")   // 웹훅 경로 시험 (MockMvc)

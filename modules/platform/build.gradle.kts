@@ -1,4 +1,10 @@
+plugins {
+    `java-test-fixtures`   // 시험 도우미(RegexBlowupGuard)를 다른 모듈의 시험이 다시 쓴다 — main 에는 없다 (src/testFixtures)
+}
+
 dependencies {
+    testFixturesApi("org.jetbrains.kotlin:kotlin-test-junit5")
+
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-api:3.0.3")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
