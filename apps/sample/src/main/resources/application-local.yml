@@ -36,6 +36,7 @@ skeleton:
   sample:
     subscription:
       period: PT3M                       # 로컬: 갱신 · 재시도 · 종료를 몇 분 안에 눌러 본다 (기본 P1M)
+      yearly-period: PT36M               # 로컬: 연 가격도 같은 비율로 줄인다 (기본 P1Y)
   payment:
     routing:
       dev-country-switch: true           # 로컬 전용: 요청의 X-Dev-Country 헤더로 나라를 오간다(견본 화면의 「개발용 나라」 고르기) - 보호 환경에서 켜면 기동 실패

@@ -21,6 +21,7 @@
 3. 고른 항목의 `id`(= 모듈 이름)를 모은다. 결정표의 조각이 이미 짝(예: `board` → `board-jdbc`)을 포함한다. `자동으로 따라온다` 는 적지 않는다.
 4. 항목의 `notFor` 를 읽는다 — 이 제품에 안 맞으면 다른 항목이다. `status: experimental`(결제 · Kafka · SSM)은 실제 외부 서비스에 붙여 확인한 증거가 없으니 쓰기 전에 직접 확인한다.
    - 출석 · 친구초대 같은 **이벤트로 쿠폰 · 포인트를 주고**, 쿠폰으로 결제 금액을 깎고, 운영자가 쿠폰 · 포인트를 관리하는 제품이면: `campaign,campaign-jdbc,reward,reward-jdbc` 에 주고 싶은 보상 모듈(`coupon,coupon-jdbc` · `point,point-jdbc`)을 더한다 — 모듈마다 단독으로도 돈다(쿠폰만 · 포인트만). 쿠폰을 결제 할인으로 쓰려면 `payment,payment-jdbc` 가 같이 있어야 하고(`DiscountSource` 빈만 있으면 켜진다), 친구초대의 초대자 보상을 첫 결제에 걸려면 앱의 결제 리스너 끝에서 `Referrals.qualify(계정)` 를 부른다(`docs/sample.md` 「이벤트 · 보상 · 쿠폰 · 결제 면제」). 운영 경로는 꺼져 있다 — `<P>.campaign.admin.enabled` 처럼 모듈마다 켠다.
+   - 운영자가 **화면에서 상품 · 가격(월 · 연 · 단건 · 행사가 · 통화별)을 관리**하고 가격표 · 구독 화면 · 결제가 그 표를 읽는 제품이면: 결제 모듈(`payment,payment-jdbc,<결제사>`)에 `catalog,catalog-jdbc` 를 더한다 — 코드로 플랜 빈을 두는 대신 표가 `SubscriptionPlans` · `PaymentCatalog` 를 낸다(월 가격 코드를 옛 플랜 코드로 만들면 기존 구독이 그대로 맞는다). 운영 경로 `skeleton.<접두사>.catalog.admin.enabled` · 공개 읽기 `…catalog.http.enabled` 는 꺼져 있다. 짝 프런트는 `payment`(+ 운영 화면).
 5. **카탈로그에 없는 것은 만들기 전에** `docs/modules/README.md` 와 `docs/minimal-composition.md` 에 있는지 본다. 그래도 없을 때만 새로 만든다 — 모듈 규칙은 CLAUDE.md.
 
 ## 2. 명령 만들기

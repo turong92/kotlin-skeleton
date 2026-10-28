@@ -18,9 +18,12 @@ class SubscriptionJourneyIntegrationTest : CheerIntegrationBase() {
     fun `plans, start, first payment, my subscription and a reserved end - and no cheer line for the charge`() {
         get("$PAYMENTS/subscriptions/plans", user).andExpect {
             status { isOk() }
-            jsonPath("$.value.plans.length()") { value(3) }
+            jsonPath("$.value.plans.length()") { value(6) }   // 이 요청(KR → 가짜 결제사)의 통화 KRW 의 현재 가격: 월 셋 + 연 셋
             jsonPath("$.value.plans[0].code") { value("basic") }
-            jsonPath("$.value.plans[2].amount.amount") { value(9900) }
+            jsonPath("$.value.plans[0].productCode") { value("basic") }
+            jsonPath("$.value.plans[0].name") { value("베이직") }
+            jsonPath("$.value.plans[4].amount.amount") { value(9900) }
+            jsonPath("$.value.plans[5].code") { value("pro-yearly") }
         }
         val started = post("$PAYMENTS/subscriptions", user, """{"planCode":"standard"}""", key = "sub-key-1").andExpect { status { isCreated() } }
         val id = read(started, "$.value.subscription.id")

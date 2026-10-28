@@ -150,6 +150,8 @@ skeleton:
     routing:
       country-providers:
         KR: toss
+      provider-currencies:                   # 이 요청의 통화 = 라우팅이 고른 결제사의 통화: 토스는 KRW 하나뿐이라 적지 않아도 되고, Paddle 은 여러 통화를 받아 USD 로 정한다(카탈로그의 USD 가격)
+        paddle: USD
     # 운영자 경로(/api/v1/admin/payments)는 모듈 기본대로 꺼 둔다 — 켜려면 SKELETON_PAYMENT_ADMIN_ENABLED=true (로컬 프로필은 application-local.yml 이 켠다).
     # 켜도 판정은 platform 의 권한 판정(payment.read · payment.refund · payment.operate) — 계정 모듈이 있어 토큰의 역할이 아니라 매 호출 저장소의 역할을 다시 읽는다(회수가 바로 먹는다). 누가 어느 권한을 갖는지는 skeleton.authz.
     reconcile:
@@ -159,7 +161,7 @@ skeleton:
         enabled: true                  # 웹훅을 받은 요청 안에서 바로 한 번 반영해 본다(짧은 시간 한도, 실패하면 일꾼이 지금처럼) - 결제 직후 화면이 일꾼의 차례를 안 기다린다. 모듈 기본은 꺼짐
       path-token: ${SKELETON_PAYMENT_WEBHOOK_PATH_TOKEN:}   # 값은 커밋하지 않는다 — 환경변수로만(배포 선언의 secrets:). 비면 서명 없는 결제사(토스)의 웹훅 경로는 늘 404 이고, 보호 환경에서는 기동 실패. 24자 이상
     # 구독(자동결제) — 모듈 기본은 꺼짐이고 이 앱도 환경변수로 켠다: SKELETON_PAYMENT_SUBSCRIPTION_ENABLED=true. 켜면 빌링키를 암호화할 키(아래 crypto)와 빌링을 하는 결제사(토스)가 있어야 한다 —
-    # 없으면 기동 실패(카드를 받고도 과금할 수 없는 구독이 뜨지 않게). 플랜은 subscription/SubscriptionConfiguration, 주기는 skeleton.sample.subscription.period. 로컬 프로필은 토스를 켰을 때 함께 켠다(application-local.yml).
+    # 없으면 기동 실패(카드를 받고도 과금할 수 없는 구독이 뜨지 않게). 플랜은 catalog 의 표(씨앗 catalog/CatalogSeed, 운영 화면에서 고친다), 주기는 skeleton.sample.subscription.period · yearly-period. 로컬 프로필은 토스를 켰을 때 함께 켠다(application-local.yml).
     subscription:
       enabled: ${SKELETON_PAYMENT_SUBSCRIPTION_ENABLED:false}
       plan-change:                            # 위 등급으로 바로 바꾸기 — 모듈은 과금 방식을 고르지 않는다. 이 앱의 선택: 남은 기간의 차액만(PRORATED_DIFFERENCE), 100원 미만이면 과금 없이 (전액 결제 후 새 주기는 FULL_RESTART)
@@ -179,7 +181,8 @@ skeleton:
       main: ${SKELETON_CRYPTO_KEYS_MAIN:}   # base64 로 인코딩한 32바이트 AES 키 — 비밀이라 커밋하지 않는다(배포는 선언의 secrets:). 구독을 켰는데 비면 기동 실패
   sample:
     subscription:
-      period: ${SKELETON_SAMPLE_SUBSCRIPTION_PERIOD:P1M}   # 견본 플랜의 갱신 주기(ISO-8601). 로컬 프로필은 PT3M
+      period: ${SKELETON_SAMPLE_SUBSCRIPTION_PERIOD:P1M}   # 견본 월 가격의 갱신 주기(ISO-8601). 로컬 프로필은 PT3M
+      yearly-period: ${SKELETON_SAMPLE_SUBSCRIPTION_YEARLY_PERIOD:P1Y}   # 견본 연 가격의 갱신 주기. 로컬 프로필은 PT36M. 가격은 만든 뒤 못 고치니 씨앗이 이미 뿌려진 DB 에는 새 값이 먹지 않는다
   payment-toss:
     secret-key: ${TOSS_PAYMENTS_SECRET_KEY:}                # 벤더 표준 이름 별칭 (모듈의 이름은 SKELETON_PAYMENT_TOSS_SECRET_KEY — 둘 다 먹고, 모듈 이름이 이긴다). 비밀 — 커밋하지 않는다
     easy-pays: [NAVERPAY, KAKAOPAY, TOSSPAY]                # 결제창의 카드 단추 옆에 간편결제 단추(상점 계약에 있는 것만 열린다). 스켈레톤 기본은 빈 목록
@@ -205,10 +208,13 @@ skeleton:
     environment: ${PADDLE_ENVIRONMENT:sandbox}              # sandbox | live
     base-url: ${PADDLE_BASE_URL:}                           # 비우면 환경의 기본 주소. e2e 의 가짜 Paddle 만 적는다
     signature-tolerance: ${PADDLE_SIGNATURE_TOLERANCE:60s}
-    prices:                                                 # 플랜 코드 · 응원 상품 코드 → Paddle 가격 id (금액 · 통화는 Paddle 가격이 정한다)
-      basic: ${PADDLE_PRICE_BASIC:}
-      standard: ${PADDLE_PRICE_STANDARD:}
-      pro: ${PADDLE_PRICE_PRO:}
+    prices:                                                 # 가격 코드 · 응원 상품 코드 → Paddle 가격 id (금액 · 통화는 Paddle 가격이 정한다). 카탈로그의 USD 가격 줄에 운영 화면에서 붙인 링크가 있으면 그쪽이 이긴다
+      basic-usd: ${PADDLE_PRICE_BASIC:}
+      standard-usd: ${PADDLE_PRICE_STANDARD:}
+      pro-usd: ${PADDLE_PRICE_PRO:}
+      basic-yearly-usd: ${PADDLE_PRICE_BASIC_YEARLY:}
+      standard-yearly-usd: ${PADDLE_PRICE_STANDARD_YEARLY:}
+      pro-yearly-usd: ${PADDLE_PRICE_PRO_YEARLY:}
       cheer-1000: ${PADDLE_PRICE_CHEER_1000:}
       cheer-3000: ${PADDLE_PRICE_CHEER_3000:}
       cheer-5000: ${PADDLE_PRICE_CHEER_5000:}
@@ -233,6 +239,12 @@ skeleton:
     admin:
       enabled: true
     zone: Asia/Seoul   # 이 앱의 선택: 「오늘」 출석의 날짜 경계 (비우면 skeleton.time.default-zone)
+  catalog:
+    default-locale: ko   # 이 앱의 선택: 결제창 · 플랜 이름은 한국어 이름 (모듈 기본 en)
+    http:
+      enabled: true      # 이 앱의 선택: 로그인 없이 읽는 가격표(랜딩) - 스켈레톤 기본은 꺼짐(404)
+    admin:
+      enabled: true      # 이 앱의 선택: 운영 화면(상품 · 가격)이 쓰는 경로 - 권한 catalog.manage 는 기본 역할 없이 ADMIN 전권만
   coupon:
     admin:
       enabled: true

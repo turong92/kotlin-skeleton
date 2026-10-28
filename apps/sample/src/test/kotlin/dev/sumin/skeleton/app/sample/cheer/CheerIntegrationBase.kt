@@ -46,6 +46,7 @@ abstract class CheerIntegrationBase {
     @TestConfiguration(proxyBeanMethods = false)
     class Provider {
         @Bean
+        @org.springframework.context.annotation.Primary   // 다른 가짜 결제사를 더하는 시험(CatalogJourneyIntegrationTest)에서도 `gateway` 필드는 이 빈이다
         fun scriptedGateway(store: PaymentLedgerStore): ScriptedGateway =
             ScriptedGateway(now = { java.time.Instant.now() }, openTransaction = store::hasOpenTransaction).also { it.confirmCarriesDetails = true }
     }

@@ -2955,6 +2955,8 @@
         "board-jdbc",
         "campaign",
         "campaign-jdbc",
+        "catalog",
+        "catalog-jdbc",
         "coupon",
         "coupon-jdbc",
         "crypto",

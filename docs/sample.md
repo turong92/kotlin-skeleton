@@ -167,13 +167,13 @@ local 프로필은 주문 만들기 한도(기본 계정당 10 / 10분)를 풀�
 
 ## 구독 — 플랜과 자동결제 (`/api/v1/payments/subscriptions`)
 
-`payment` 의 구독(`docs/modules/payment.md` 「구독」)을 이 앱이 켠다. 코드는 `subscription/SubscriptionConfiguration.kt` 두 빈 — `SubscriptionPlans`(Basic 3,900 · Standard 6,900 · Pro 9,900원, 주기는 `skeleton.sample.subscription.period`)와 `SubscriptionRenewalGuard`(정상 `ACTIVE` 계정만 갱신 — 정지 · 삭제 유예 · 없는 계정은 그 기간 끝에 구독이 끝난다).
+`payment` 의 구독(`docs/modules/payment.md` 「구독」)을 이 앱이 켠다. 플랜은 코드가 아니라 `catalog` 의 표가 낸다 - 씨앗 `catalog/CatalogSeed`(모든 프로필, 없는 코드만): basic 3,900 · standard 6,900 · pro 9,900원(월, 코드 `basic` · `standard` · `pro`)과 연 39,000 · 69,000 · 99,000원(`*-yearly`), 달러 월 $3 · $5 · $8 · 연 $30 · $50 · $80(`*-usd` · `*-yearly-usd`). 운영자가 화면에서 가격을 더하고 행사가를 붙인다(`/api/v1/admin/catalog`, 권한 `catalog.manage`). 방문 나라가 통화를 정한다(KR → 토스 → KRW, 그 밖 → Paddle → USD, `skeleton.payment.routing.provider-currencies`). `catalog/SampleCatalog` 가 `PaymentCatalog` 하나로 응원하기와 표의 단건을 `itemType` 으로 잇는다. 주기는 `skeleton.sample.subscription.period` · `yearly-period`. 코드는 `subscription/SubscriptionConfiguration.kt` 한 빈 — `SubscriptionRenewalGuard`(정상 `ACTIVE` 계정만 갱신 — 정지 · 삭제 유예 · 없는 계정은 그 기간 끝에 구독이 끝난다).
 
 | 값 | 이름 |
 |---|---|
 | 켜기 | `SKELETON_PAYMENT_SUBSCRIPTION_ENABLED=true` (로컬 프로필은 토스를 켰을 때 함께 켠다) |
 | 빌링키 암호화 키 | `SKELETON_CRYPTO_KEYS_MAIN` — base64 로 인코딩한 32바이트(비밀, 배포 선언의 `secrets:` 에 이름을 더한다). 켰는데 없으면 기동 실패 |
-| 주기 | `SKELETON_SAMPLE_SUBSCRIPTION_PERIOD` (ISO-8601, 기본 `P1M`; 로컬 프로필 `PT3M`) |
+| 주기 | `SKELETON_SAMPLE_SUBSCRIPTION_PERIOD` (ISO-8601, 기본 `P1M`; 로컬 프로필 `PT3M`) · 연 가격 `SKELETON_SAMPLE_SUBSCRIPTION_YEARLY_PERIOD` (기본 `P1Y`; 로컬 `PT36M`) - 씨앗을 뿌릴 때만 먹는다(가격은 만든 뒤 못 고친다) |
 
 로컬은 갱신 · 재시도를 몇 분 안에 볼 수 있다: 주기 3분, 거절되면 1분 뒤 다시(`skeleton.payment.subscription.renewal.retry-interval`), 세 번 거절되면 구독이 끝난다. 토스 테스트 키로 카드 등록 창은 인증 번호 `000000` 과 국내 카드만 받는다([real-provider-setup §11.7](real-provider-setup.md)).
 `CheerOrderListener` 는 `itemType == cheer` 인 주문만 응원 기록으로 남긴다 — 구독 결제는 응원이 아니다.

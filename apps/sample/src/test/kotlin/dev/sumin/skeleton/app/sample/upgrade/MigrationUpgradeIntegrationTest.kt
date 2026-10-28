@@ -86,6 +86,7 @@ class MigrationUpgradeIntegrationTest {
     @Autowired lateinit var mockMvc: MockMvc
     @Autowired lateinit var erasures: List<AccountErasureListener>
     @Autowired lateinit var ledger: dev.sumin.skeleton.payment.PaymentLedgerStore
+    @Autowired lateinit var plans: dev.sumin.skeleton.payment.SubscriptionPlans
 
     private val now = Instant.parse("2026-10-07T00:00:00Z")
 
@@ -253,6 +254,14 @@ class MigrationUpgradeIntegrationTest {
         ledger.inTransaction { tx -> tx.updateSubscription(checkNotNull(tx.lockSubscription("sub_upgrade_1")).copy(activeKey = "acc_upgrade")) }
         assertTrue(runCatching { ledger.inTransaction { tx -> tx.updateSubscription(checkNotNull(tx.lockSubscription("sub_upgrade_2")).copy(activeKey = "acc_upgrade")) } }.isFailure, "a second live subscription for the account is refused")
         assertEquals("sub_upgrade_1", ledger.findLiveSubscription("acc_upgrade")?.id)
+    }
+
+    @Test
+    fun `catalog - the seeded table came up on the baseline schema and the plan code of a subscription row from the code-plan days still finds its price`() {
+        val plan = checkNotNull(plans.find("basic")) { "the monthly price code is the old plan code" }
+        assertEquals(listOf(3_900L, "KRW", "P1M", 1, true), listOf(plan.amount.amount, plan.amount.currency, plan.period, plan.level, plan.purchasable))
+        assertEquals(12L, jdbc.sql("select count(*) from catalog_prices").query(Long::class.java).single(), "three products x month and year x KRW and USD")
+        assertEquals(3L, jdbc.sql("select count(*) from catalog_products").query(Long::class.java).single())
     }
 
     @Test

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 상품 · 가격 카탈로그 (2026-10-29)
+
+- 새 모듈 `catalog` + `catalog-jdbc`: 운영자가 화면에서 상품 · 가격(월 · 연 · 단건 · 행사가 · 통화별)을 만들고 결제가 그 표를 읽는다. **가격은 만든 뒤 고치지 않는다**(새 줄 + 판매 중지, 고칠 수 있는 것은 행사 끝 시각과 결제사 링크뿐). 열쇠(상품, 주기, 통화)마다 「지금 살 수 있는 가격」이 하나(행사 우선, 끝은 열린 구간), 상시는 하나 · 행사는 겹치지 않게(상품 줄 잠금). 결제 계약 구현 `SubscriptionPlans` · `PaymentCatalog`(`CatalogPaymentCatalog` 공개 클래스) · `ProviderPriceRefs`는 앱이 같은 타입의 빈을 두면 앱 것이 이긴다. 공개 읽기 `GET /api/v1/catalog/products`(`skeleton.catalog.http.enabled`, 기본 꺼짐 · 개인 캐시 60초 + `Vary: CF-IPCountry`) · 운영 `/api/v1/admin/catalog/**`(`skeleton.catalog.admin.enabled`, 기본 꺼짐, 권한 `catalog.manage` 는 기본 역할 없음). 새 V 파일 `catalog`(네 표), 오류 `CATALOG.CODE_TAKEN` · `LEVEL_TAKEN` · `PRICE_OVERLAP` · `PRICE_INVALID` · `NOT_FOUND`.
+- `payment`: `SubscriptionPlan` 에 `productCode`(기본 = 코드) · `purchasable`(기본 true) · `regularAmount`(정가, 기본 없음) — 기본값이 있어 코드 플랜 앱은 그대로. 지금 살 수 없는 플랜으로 시작 · 갈아타기는 `422 ITEM_NOT_PURCHASABLE`(기존 구독자의 갱신 · 이름 · 해지는 그대로). 연간 해지의 쓴 몫은 같은 등급 월 플랜의 정가로 센다. `PurchaseQuote.productCode`, 새 계약 `ProviderPriceRefs`(기본 `NONE`).
+- `payment`: 이 요청의 통화 — `routing.provider-currencies`(결제사 → 통화) · `routing.default-currency`, `PaymentCountryRouting.currencyOf`. `GET /config` 에 `currency`, `GET /subscriptions/plans` 는 그 통화의 플랜만(그 통화 플랜이 없으면 전부) + 각 줄 `productCode` · `regularAmount`. **동작 변경**: 나라가 정한 결제사도 받는 통화를 적어 둔 결제사라면 가격 통화를 받아야 한다(아니면 `400 ROUTING_FAILED`) - 이전에는 구매자가 고른 결제사만 검사했다. 받는 통화를 적지 않은 결제사(Paddle)는 그대로.
+- `payment-paddle`: 가격 id 는 `ProviderPriceRefs`(카탈로그 링크) → 설정 `prices` 지도 순, 둘 다 없으면 `503 UNAVAILABLE`(전에는 500). `pricePreview().prices` 는 둘을 합친다. 결제사가 확정한 금액은 그대로 기록하고, 같은 통화인데 세전 금액이 우리 가격과 다르면 `WARN payment.price-drift`(단건 · 구독 첫 결제, 지급은 그대로).
+- `platform` + `coupon`: `DiscountTarget.productCode`(마지막 칸, 기본 없음) — 쿠폰 범위 `itemRefs` · `planCodes` 가 가격 코드 또는 상품 코드에 맞는다.
+- 견본 앱: 코드 플랜 빈(`samplePlans`)을 빼고 `catalog-jdbc` 를 붙였다. 씨앗(`CatalogSeed`, 모든 프로필, 없는 코드만): basic · standard · pro 의 KRW 월 `basic` … · 연 `basic-yearly` … 과 USD `basic-usd` · `basic-yearly-usd` …, `PaymentCatalog` 는 `SampleCatalog` 가 `itemType` 으로 응원하기와 표를 잇는다. **환경변수 변경**: Paddle 가격 id 지도 키가 USD 가격 코드로 옮겼다(`PADDLE_PRICE_BASIC` → `basic-usd` …) + 연 가격용 `PADDLE_PRICE_{BASIC,STANDARD,PRO}_YEARLY` 셋 추가 - 운영 화면의 링크가 있으면 그쪽이 이긴다. `skeleton.sample.subscription.yearly-period`(기본 `P1Y`, 로컬 `PT36M`). 이름은 `skeleton.catalog.default-locale: ko`.
+
 ### 알림센터 보강 (2026-10-28)
 
 - `notification`: `NotificationEvent` 에 `link`(앱 안 경로 — `/` 로 시작, `//` · 역슬래시 · 제어 문자 · 1000자 초과 거절)와 `collapseKey`(같은 열쇠 안 읽은 알림 묶기). 받은편지함 줄에 `collapsedCount`, `GET /api/v1/notifications/unread-count`(`{ value: { count } }`), 줄 응답의 `link` · `collapsedCount`. 둘 다 기본 null 이라 발행 코드는 그대로 돈다.
