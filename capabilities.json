@@ -2222,6 +2222,74 @@
       }
     },
     {
+      "id": "point",
+      "kind": "module",
+      "module": "point",
+      "path": "modules/point",
+      "status": "experimental",
+      "summary": "포인트 원장 — 적립(유효기간 선택) · 소멸이 가까운 묶음부터 차감 · 하루 한 번 소멸 · 운영자 조정. 보상 지급기(RewardIssuer, 종류 point)를 내 이벤트가 「포인트 n점」을 줄 수 있고, 같은 지급 건 · 같은 주문을 두 번 처리해도 한 번만 반영되며 잔액보다 큰 차감은 거절된다. 포인트를 쓰는 길은 서버 API(PointWallet.spend)뿐이고, 내 잔액 · 내역 읽기(/api/v1/points)와 운영 조정(/api/v1/admin/points, 권한 point.manage, 기본 꺼짐 skeleton.point.admin.enabled)이 있다. 저장소는 point-jdbc.",
+      "starter": false,
+      "newProjectFlag": "--modules point",
+      "autoIncludes": ["scheduler"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": ["scheduler"]
+      },
+      "config": {
+        "prefixes": ["skeleton.point"],
+        "snippet": "docs/config/modules/point.yml"
+      },
+      "basePaths": ["/api/v1/admin/points", "/api/v1/points"],
+      "secrets": [],
+      "docs": ["docs/modules/point.md"],
+      "frontend": {
+        "capabilities": ["rewards", "rewards-admin"],
+        "newProjectFlag": "--packages rewards",
+        "packages": ["@skeleton/rewards"]
+      },
+      "notFor": [
+        "저장소가 없다 — point-jdbc 를 같이 고른다(다른 DB 는 PointStore 를 앱이 구현)",
+        "포인트 결제 차감(결제 금액에서 깎기)은 이 판에 없다 — 서버 API PointWallet.spend 를 앱이 부른다",
+        "유효기간 기본값이 없다 — 보상 설정(expiresInDays) · 운영자 조정에서 고른다",
+        "이벤트(출석 · 친구초대)는 campaign 이 한다 — 이 모듈은 줄 수 있는 보상 한 종류일 뿐"
+      ],
+      "keywords": {
+        "ko": ["포인트", "적립금", "포인트 적립", "포인트 소멸", "포인트 차감", "포인트 조정"],
+        "en": ["points", "loyalty points", "point ledger", "reward points", "point expiry"]
+      }
+    },
+    {
+      "id": "point-jdbc",
+      "kind": "module",
+      "module": "point-jdbc",
+      "path": "modules/point-jdbc",
+      "status": "experimental",
+      "summary": "포인트 저장소 — PostgreSQL · MySQL 로 point 의 저장 포트를 구현한다: 계정마다 잔액 한 줄(음수 불가)과 원장 표(적립 묶음의 남은 양 · 차감 · 소멸 · 조정, 같은 출처 키는 한 줄). 같은 계정의 쓰기는 잔액 줄을 잠가 직렬로 돌아 동시 차감이 같은 잔액을 두 번 쓰지 못한다.",
+      "starter": false,
+      "newProjectFlag": "--modules point-jdbc",
+      "autoIncludes": ["point", "scheduler"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/point-jdbc.md"],
+      "frontend": {
+        "capabilities": ["rewards", "rewards-admin"],
+        "newProjectFlag": "--packages rewards",
+        "packages": ["@skeleton/rewards"]
+      },
+      "notFor": ["point 없이는 쓰지 않는다(따라온다)", "다른 DB(JPA · jOOQ)로 저장하려면 point 의 저장 포트(PointStore)를 앱이 구현한다"],
+      "keywords": {
+        "ko": ["포인트 저장소", "포인트 원장 표"],
+        "en": ["point storage", "point ledger tables"]
+      }
+    },
+    {
       "id": "redis-cache",
       "kind": "module",
       "module": "redis-cache",
@@ -2721,6 +2789,8 @@
         "payment-toss",
         "persistence-jooq",
         "persistence-jpa",
+        "point",
+        "point-jdbc",
         "redis-cache",
         "redis-core",
         "redis-lock",

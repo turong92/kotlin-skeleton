@@ -49,6 +49,7 @@ dependencies {
     implementation(project(":modules:authz-jdbc"))          // + authz — 클래스패스에만 둔다 (설정 스니펫 · 모듈 목록 시험). 표 자동설정은 application.yml 에서 꺼 둔다. 실제 흐름은 apps/sample
     implementation(project(":modules:dashboard"))           // 클래스패스에만 둔다 (설정 스니펫 · 모듈 목록 시험). 기여 빈(가입 · 활성 · 결제)은 서지만 관리 API 가 꺼져 있다. 실제 흐름은 apps/sample
     implementation(project(":modules:dashboard-jdbc"))      // + dashboard 저장소 — 일별 집계 · 화면 설정 표
+    implementation(project(":modules:point-jdbc"))          // + point — 포인트 원장(적립 · FIFO 차감 · 소멸). 클래스패스에만 둔다 (설정 스니펫 · 모듈 목록 시험), 운영 API 는 꺼져 있다
     implementation(project(":modules:dashboard-cloudflare")) // + dashboard 의 Cloudflare 카드 — 키가 없어 카드는 비어 있다
     implementation(project(":modules:dashboard-ga"))        // + dashboard 의 GA 카드 · 현재 방문자 — 키가 없어 카드는 비어 있다
     implementation(project(":modules:db-postgresql"))

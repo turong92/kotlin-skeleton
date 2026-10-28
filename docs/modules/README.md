@@ -40,6 +40,8 @@
 | `dashboard-jdbc` | 대시보드 일별 집계 · 화면 설정 저장소 (PostgreSQL · MySQL) + 일별 적재 작업을 켠다 | [dashboard-jdbc](dashboard-jdbc.md) |
 | `dashboard-cloudflare` | 대시보드에 방문 · 페이지뷰 · 유입 · 경로 · 국가 · 기기 (Cloudflare Web Analytics) — 어제까지는 일별 표, 오늘은 5분 캐시, 키가 없으면 그 카드만 비어 있다 | [dashboard-cloudflare](dashboard-cloudflare.md) |
 | `dashboard-ga` | 대시보드에 유입 채널 · 캠페인 · 첫 페이지 · 페이지 이동 · 새/재방문 (GA4, 어제까지 새벽 적재)와 현재 방문자(실시간, 60초 캐시) — 키가 없으면 그 카드만 비어 있다 | [dashboard-ga](dashboard-ga.md) |
+| `point` | 포인트 원장: 적립(유효기간 선택) · 소멸 임박 순 차감 · 하루 한 번 소멸 · 운영자 조정, 보상 지급기 `point` (사용은 서버 API 뿐, 운영 경로 기본 꺼짐) | [point](point.md) |
+| `point-jdbc` | 포인트 원장 저장소 (PostgreSQL · MySQL): 잔액 줄 잠금 · 지급 건 멱등 · 음수 잔액 금지 | [point-jdbc](point-jdbc.md) |
 | `payment` | 결제 계약 · 제공자 라우팅 | [payment](payment.md) |
 | `payment-jdbc` | 결제 장부 저장소 + 작업 어댑터 (PostgreSQL · MySQL) | [payment-jdbc](payment-jdbc.md) |
 | `payment-toss` | Toss 결제 제공자 | [payment-toss](payment-toss.md) |

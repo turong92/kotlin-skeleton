@@ -124,6 +124,8 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `persistence-jooq` | jOOQ 연결 — audit 리스너 · MySQL UTC Instant 변환기, DDL 파일에서 코드 생성(빌드에 DB 불필요). | `--modules persistence-jooq` | jOOQ, 타입 안전 SQL, 쿼리 빌더 / jooq, type-safe sql, query builder, code generation | — |
 | `persistence-jpa` | JPA 엔티티의 created_at · updated_at 자동 채움과 부분 수정 · fetch graph 도우미. | `--modules persistence-jpa` | JPA, 하이버네이트, 엔티티 audit, ORM / jpa, hibernate, entity audit, orm | — |
 | `platform` | 모든 모듈의 공용 기반 — 표준 응답/에러 봉투 · 전역 예외 처리(필드 오류 FieldValidationException) · 모듈끼리 만나는 계약(AuthorDirectory · AccountErasureListener) · trace id · 요청 로깅 · CORS · rate limit · 외부 HTTP 클라이언트 · OpenAPI · 배포 가드 · 한 프로세스에 프로젝트 여럿(skeleton.projects: Host 로 프로젝트 판정 · 프로젝트별 스키마/풀/로그인 설정 · @ProjectApi — docs/multi-project.md). | 스타터(apps/api)에 기본 포함 | 에러 응답, 표준 응답, 예외 처리, 요청 로깅, 트레이스, CORS, 요청 제한, 외부 API 호출, 스웨거, 배포 가드, 프로젝트 여럿, 멀티 프로젝트, 도메인별 서비스 / error response, exception handling, request logging, trace id, cors, rate limit, http client, openapi, swagger, deploy guard, multi project, multi tenant host | `@skeleton/api-client` |
+| `point` | 포인트 원장 — 적립(유효기간 선택) · 소멸이 가까운 묶음부터 차감 · 하루 한 번 소멸 · 운영자 조정. 보상 지급기(RewardIssuer, 종류 point)를 내 이벤트가 「포인트 n점」을 줄 수 있고, 같은 지급 건 · 같은 주문을 두 번 처리해도 한 번만 반영되며 잔액보다 큰 차감은 거절된다. 포인트를 쓰는 길은 서버 API(PointWallet.spend)뿐이고, 내 잔액 · 내역 읽기(/api/v1/points)와 운영 조정(/api/v1/admin/points, 권한 point.manage, 기본 꺼짐 skeleton.point.admin.enabled)이 있다. 저장소는 point-jdbc. | `--modules point` | 포인트, 적립금, 포인트 적립, 포인트 소멸, 포인트 차감, 포인트 조정 / points, loyalty points, point ledger, reward points, point expiry | `@skeleton/rewards` |
+| `point-jdbc` | 포인트 저장소 — PostgreSQL · MySQL 로 point 의 저장 포트를 구현한다: 계정마다 잔액 한 줄(음수 불가)과 원장 표(적립 묶음의 남은 양 · 차감 · 소멸 · 조정, 같은 출처 키는 한 줄). 같은 계정의 쓰기는 잔액 줄을 잠가 직렬로 돌아 동시 차감이 같은 잔액을 두 번 쓰지 못한다. | `--modules point-jdbc` | 포인트 저장소, 포인트 원장 표 / point storage, point ledger tables | `@skeleton/rewards` |
 | `redis-cache` | 이름 있는 Redis 캐시(TTL · 접두사) · 안정적인 키 생성기 · 캐시 오류 정책(기본 FAIL_OPEN). | `--modules redis-cache` | 캐시, Redis 캐시, 캐싱, 응답 캐시 / cache, redis cache, caching, ttl | — |
 | `redis-core` | Redis 연결 · StringRedisTemplate · JSON 템플릿 · 키 접두사 — 다른 redis-* 모듈의 바탕. | `--modules redis-core` | Redis, 레디스, 키 접두사 / redis, redis connection, key prefix | — |
 | `redis-lock` | Redisson 기반 분산 락 — @DistributedLock 어노테이션과 락 실행기. | `--modules redis-lock` | 분산 락, 락, 동시 실행 방지, 중복 실행 방지 / distributed lock, lock, mutex, redisson | — |
@@ -994,6 +996,36 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 스타터가 이미 가진다 — 따로 켜는 줄이 없다
 - 키워드: 에러 응답, 표준 응답, 예외 처리, 요청 로깅, 트레이스, CORS, 요청 제한, 외부 API 호출, 스웨거, 배포 가드, 프로젝트 여럿, 멀티 프로젝트, 도메인별 서비스 / error response, exception handling, request logging, trace id, cors, rate limit, http client, openapi, swagger, deploy guard, multi project, multi tenant host
 
+### `point` — 포인트 원장 — 적립(유효기간 선택) · 소멸이 가까운 묶음부터 차감 · 하루 한 번 소멸 · 운영자 조정. 보상 지급기(RewardIssuer, 종류 point)를 내 이벤트가 「포인트 n점」을 줄 수 있고, 같은 지급 건 · 같은 주문을 두 번 처리해도 한 번만 반영되며 잔액보다 큰 차감은 거절된다. 포인트를 쓰는 길은 서버 API(PointWallet.spend)뿐이고, 내 잔액 · 내역 읽기(/api/v1/points)와 운영 조정(/api/v1/admin/points, 권한 point.manage, 기본 꺼짐 skeleton.point.admin.enabled)이 있다. 저장소는 point-jdbc.
+
+- 종류 · 상태: module · experimental — 위치 `modules/point`
+- 켜는 법: `--modules point`
+- 의존 한 줄: `implementation(project(":modules:point"))`
+- 소스만 따라온다(컴파일 전용 — 런타임 클래스패스에는 없다. 쓰려면 apps/api 에 의존 한 줄을 더한다): `scheduler`
+- 설정 접두사 `skeleton.point` — 키와 기본값 `docs/config/modules/point.yml`
+- HTTP 경로: `/api/v1/admin/points`, `/api/v1/points`
+- 문서: `docs/modules/point.md`
+- 짝 프런트(react-skeleton): 항목 `rewards`, `rewards-admin` · 패키지 `@skeleton/rewards` · 조각 `--packages rewards`
+- 쓰지 않는 경우:
+  - 저장소가 없다 — point-jdbc 를 같이 고른다(다른 DB 는 PointStore 를 앱이 구현)
+  - 포인트 결제 차감(결제 금액에서 깎기)은 이 판에 없다 — 서버 API PointWallet.spend 를 앱이 부른다
+  - 유효기간 기본값이 없다 — 보상 설정(expiresInDays) · 운영자 조정에서 고른다
+  - 이벤트(출석 · 친구초대)는 campaign 이 한다 — 이 모듈은 줄 수 있는 보상 한 종류일 뿐
+- 키워드: 포인트, 적립금, 포인트 적립, 포인트 소멸, 포인트 차감, 포인트 조정 / points, loyalty points, point ledger, reward points, point expiry
+
+### `point-jdbc` — 포인트 저장소 — PostgreSQL · MySQL 로 point 의 저장 포트를 구현한다: 계정마다 잔액 한 줄(음수 불가)과 원장 표(적립 묶음의 남은 양 · 차감 · 소멸 · 조정, 같은 출처 키는 한 줄). 같은 계정의 쓰기는 잔액 줄을 잠가 직렬로 돌아 동시 차감이 같은 잔액을 두 번 쓰지 못한다.
+
+- 종류 · 상태: module · experimental — 위치 `modules/point-jdbc`
+- 켜는 법: `--modules point-jdbc`
+- 의존 한 줄: `implementation(project(":modules:point-jdbc"))`
+- 자동으로 따라온다: `point`, `scheduler`
+- 문서: `docs/modules/point-jdbc.md`
+- 짝 프런트(react-skeleton): 항목 `rewards`, `rewards-admin` · 패키지 `@skeleton/rewards` · 조각 `--packages rewards`
+- 쓰지 않는 경우:
+  - point 없이는 쓰지 않는다(따라온다)
+  - 다른 DB(JPA · jOOQ)로 저장하려면 point 의 저장 포트(PointStore)를 앱이 구현한다
+- 키워드: 포인트 저장소, 포인트 원장 표 / point storage, point ledger tables
+
 ### `redis-cache` — 이름 있는 Redis 캐시(TTL · 접두사) · 안정적인 키 생성기 · 캐시 오류 정책(기본 FAIL_OPEN).
 
 - 종류 · 상태: module · stable — 위치 `modules/redis-cache`
@@ -1168,7 +1200,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 - 종류 · 상태: app · stable — 위치 `apps/workbench`
 - 켜는 법: `--with-workbench`
-- 자동으로 따라온다: `alert-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `board`, `board-jdbc`, `config-aws-ssm`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `db-mysql`, `event-kafka`, `json`, `notification`, `notification-jdbc`, `notification-slack`, `notification-sse`, `notification-websocket`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `reward`, `reward-jdbc`, `scheduler`, `storage`, `storage-s3`
+- 자동으로 따라온다: `alert-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `board`, `board-jdbc`, `config-aws-ssm`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `db-mysql`, `event-kafka`, `json`, `notification`, `notification-jdbc`, `notification-slack`, `notification-sse`, `notification-websocket`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `point`, `point-jdbc`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `reward`, `reward-jdbc`, `scheduler`, `storage`, `storage-s3`
 - HTTP 경로: `/api/v1`, `/api/v1/examples`, `/api/v1/skeleton`, `/api/v1/skeleton/enums`, `/api/v1/skeleton/json`, `/api/v1/skeleton/payments`, `/api/v1/skeleton/polymorphic/contents`
 - 문서: `docs/minimal-composition.md`, `docs/modules/README.md`
 - 짝 프런트(react-skeleton): 항목 `app-workbench` · 조각 `--with-workbench`
