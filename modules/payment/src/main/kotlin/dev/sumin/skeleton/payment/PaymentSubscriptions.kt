@@ -91,6 +91,7 @@ class PaymentSubscriptions(
             // 구매자가 고른 결제사는 플랜 통화도 받아야 한다(주문 만들기와 같다)
             if (providerChosen && provider != null && !router.servesCurrency(provider, plan.amount.currency)) throw PaymentRoutingException("The chosen payment provider does not serve the plan currency.")
             val billing = billingGateway(plan.amount, provider) ?: throw PaymentUnavailableException()
+            offer?.let { requireStagesChargeable(billing, plan.amount, it.offer.stages) }
             gateway = billing
             // 서버가 결제사를 먼저 불러 예약해야 창이 열리는 결제사(카카오페이 · 네이버페이)는 여기서(트랜잭션 밖) 예약하고 번호를 줄에 박는다
             val prepared = try {
@@ -165,7 +166,7 @@ class PaymentSubscriptions(
         val subscription = owned(store.findSubscription(subscriptionId), accountId) ?: throw PaymentSubscriptionNotFoundException()
         when {
             subscription.status == SubscriptionStatus.ENDED -> throw PaymentSubscriptionNotActivatableException()
-            subscription.status != SubscriptionStatus.PENDING || subscription.chargeOrderId != null -> return subscription // 같은 요청의 재전송 — 이미 시작했거나 확인 중이다
+            subscription.status != SubscriptionStatus.PENDING || subscription.chargeOrderId != null -> return finishFreeFirstCharge(subscription) // 같은 요청의 재전송 — 이미 시작했거나 확인 중이다
         }
         val gateway = router.gateway(subscription.provider, PaymentBillingGateway::class)
         if (gateway.mode != subscription.providerMode) throw PaymentModeMismatchException()
@@ -249,6 +250,31 @@ class PaymentSubscriptions(
         val after = store.findSubscription(subscription.id) ?: claim.subscription
         if (outcome is ChargeOutcome.Declined) throw PaymentDeclinedException(outcome.providerCode, gateway.billingDeclineCategory(outcome.providerCode))
         return after
+    }
+
+    /**
+     * 할인이 만드는 **모든 단계의 과금액**(0 은 결제사를 안 부르니 제외)이 결제사 최소 금액 이상인가 - 시작 때 한 번 본다. 단건이 주문 만들 때 보는 것과 같은 규칙이다
+     * (첫 달만 통과하고 셋째 달 갱신에서야 결제사가 거절해 구독이 `PAST_DUE` 로 떨어지는 일이 없게).
+     */
+    private fun requireStagesChargeable(billing: PaymentBillingGateway, price: PaymentAmount, stages: List<dev.sumin.skeleton.common.discount.DiscountStage>) {
+        val minimum = billing.minimumAmount(price.normalizedCurrency) ?: return
+        val scale = try { java.util.Currency.getInstance(price.normalizedCurrency).defaultFractionDigits.coerceAtLeast(0) } catch (_: IllegalArgumentException) { 2 }
+        stages.forEach { stage ->
+            val charged = price.amount - dev.sumin.skeleton.common.discount.DiscountMath.discount(price.amount, stage, scale)
+            if (charged in 1 until minimum) throw PaymentDiscountBelowMinimumException(minimum)
+        }
+    }
+
+    /**
+     * 결제사 없이 끝나는 0원 첫 주문(`free`)을 선점만 해 두고 그 뒤가 끊겼으면(`settleFree` 전에 죽었다) 재전송이 이어서 끝낸다 - 안 그러면 `PENDING` 구독이 자리를 쥔 채 굳고 쿠폰이 영영 `RESERVED` 다.
+     * `settleFree` 는 멱등이다(이미 `PAID` 면 지급만 시도한다).
+     */
+    private fun finishFreeFirstCharge(subscription: PaymentSubscription): PaymentSubscription {
+        if (subscription.status != SubscriptionStatus.PENDING) return subscription
+        val order = subscription.chargeOrderId?.let(store::findOrder) ?: return subscription
+        if (order.provider != PaymentOrders.FREE_PROVIDER || order.status != PaymentOrderStatus.CONFIRMING) return subscription
+        charges.settleFree(order)
+        return store.findSubscription(subscription.id) ?: subscription
     }
 
     /** 첫 주문 - 금액은 구독에 복사된 할인의 첫 단계가 정한다(할인이 없으면 플랜 금액). 무료(0원)이고 [offProviderWhenFree] 면 결제사 없는 주문(`free`)으로 만든다. */

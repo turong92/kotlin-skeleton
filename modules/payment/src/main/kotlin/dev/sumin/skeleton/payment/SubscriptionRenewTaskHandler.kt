@@ -57,7 +57,7 @@ class SubscriptionRenewTaskHandler(
         val gateway = if (chargeable && !free) billingGateway(before) else null
         // 앱의 판단은 락 밖에서 받는다(앱이 DB 를 읽는다) — 기한이 아니거나 끝난 구독에는 묻지 않는다
         val allowed = if (chargeable) guard.allows(before.accountId) else true
-        val step = step(id, allowed)
+        val step = step(id, allowed, expectedFree = free)
         if (step is Step.Free) {
             log.info("subscription renewal without a charge subscription={} order={} outcome={}", id, step.order.id, charges.settleFree(step.order)::class.simpleName)
         }
@@ -82,7 +82,7 @@ class SubscriptionRenewTaskHandler(
 
     private fun due(subscription: PaymentSubscription): Boolean = subscription.currentPeriodEnd?.let { !writer.now().isBefore(it) } ?: false
 
-    private fun step(id: String, allowed: Boolean): Step =
+    private fun step(id: String, allowed: Boolean, expectedFree: Boolean): Step =
         store.inTransaction { tx ->
             val subscription = tx.lockSubscription(id) ?: return@inTransaction Step.Done
             if (subscription.isProviderManaged) return@inTransaction Step.Done
@@ -100,6 +100,12 @@ class SubscriptionRenewTaskHandler(
                     }
                     // 이번 과금액 - 할인 단계가 정한다. 0원이면 빌링키가 없어도 기간은 넘어간다
                     val amount = discounts?.amountFor(tx, subscription) ?: subscription.amount
+                    // 락 밖에서는 무료로 어림해 결제사를 확인하지 않았는데 락 안에서는 유료다(그사이 플랜이 바뀌었다 …) - 결제사 · 모드를 확인하지 않고 과금하지 않는다.
+                    // 선점 전 사전 검사는 그대로 두고, 이 작업을 지금 다시 깨워 다음 걸음이 제대로 확인하게 한다
+                    if (expectedFree && amount.amount > 0) {
+                        lifecycle.scheduleRenewal(subscription, runAt = writer.now())
+                        return@inTransaction Step.Done
+                    }
                     if (subscription.billingToken == null && amount.amount > 0) {
                         // 첫 결제는 받았는데 결제사가 빌링키(SID)를 알려 주지 못했다(응답이 유실돼 조회가 닫았다) - 과금할 수단이 없다. 낸 기간은 썼고 새 과금 없이 끝낸다
                         log.warn("a subscription without a billing key reached its renewal; it ends without a charge subscription={}", subscription.id)
@@ -113,6 +119,8 @@ class SubscriptionRenewTaskHandler(
 
     private fun renew(tx: PaymentLedgerTx, subscription: PaymentSubscription, amount: PaymentAmount): Step {
         val chargeOrder = subscription.chargeOrderId?.let(store::findOrder)
+        // 무료 과금 주문을 선점해 놓고 `settleFree` 전에 죽었다 - 새 주문을 만들거나 영영 기다리지 않고 이어서 끝낸다(`settleFree` 는 멱등)
+        if (chargeOrder != null && chargeOrder.provider == PaymentOrders.FREE_PROVIDER && chargeOrder.status == PaymentOrderStatus.CONFIRMING) return Step.Free(chargeOrder)
         // 지금 시도의 주문이 이미 있다 — 진행 중이거나 지급(기간 넘기기)이 아직이다. 새 주문을 만들지 않는다. 끝 상태가 되면 그 트랜잭션에서 구독이 반응한다
         // (변경 결제가 오가는 중일 때도 같다 - 끝나면 지급 · 실패 쪽이 이 작업을 다시 깨운다: [SubscriptionLifecycle.onOrderPaid] · onOrderClosed)
         if (!lifecycle.isSettled(chargeOrder)) return Step.Done

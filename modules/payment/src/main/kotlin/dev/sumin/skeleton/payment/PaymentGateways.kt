@@ -23,6 +23,12 @@ interface PaymentGateway {
     /** 주문 줄에 박고 배포 가드가 본다. */
     val mode: PaymentMode
         get() = PaymentMode.UNKNOWN
+
+    /**
+     * 이 통화로 결제사가 **받을 수 있는 가장 작은 금액**(최소 단위) - 모르면 null(제한 없음으로 본다). 할인 뒤 금액이 0 초과 이 값 미만이면 주문을 만들지 않고
+     * `PAYMENT.DISCOUNT_BELOW_MINIMUM` 으로 거절한다(결제창이 열린 뒤에야 결제사가 거절하는 일이 없게; 구독은 시작 때 모든 할인 단계의 금액을 이 값과 견준다). 설정만 보고 답한다 - 외부 호출 없음.
+     */
+    fun minimumAmount(currency: String): Long? = null
 }
 
 /** 브라우저가 받아 온 결제 키를 서버가 승인한다. */
@@ -97,12 +103,6 @@ interface PaymentCheckoutGateway : PaymentGateway {
      * 기본은 항상 true. 공개 키가 비었거나 시크릿과 모드가 다르면 값을 못 내는 결제사가 false 로 겹쳐 쓴다. 설정만 보고 답한다 — 외부 호출 없음.
      */
     fun canOpenCheckout(): Boolean = true
-
-    /**
-     * 이 통화로 결제사가 **받을 수 있는 가장 작은 금액**(최소 단위) - 모르면 null(제한 없음으로 본다). 할인 뒤 금액이 0 초과 이 값 미만이면 주문을 만들지 않고
-     * `PAYMENT.DISCOUNT_BELOW_MINIMUM` 으로 거절한다(결제창이 열린 뒤에야 결제사가 거절하는 일이 없게). 설정만 보고 답한다 - 외부 호출 없음.
-     */
-    fun minimumAmount(currency: String): Long? = null
 }
 
 /** 웹훅 한 건의 진위를 확인하고 "어느 자원의 어떤 일"인지만 꺼낸다. 진위가 틀리거나 읽을 수 없으면 [PaymentWebhookRejectedException] 을 던진다. */

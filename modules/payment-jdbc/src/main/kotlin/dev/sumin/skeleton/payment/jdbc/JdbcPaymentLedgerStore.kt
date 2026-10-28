@@ -132,7 +132,7 @@ class JdbcPaymentLedgerStore(
 
     override fun hasPaidOrder(accountId: String): Boolean =
         jdbc.queryForList(
-            "select 1 from payment_orders where account_id = :account and paid_at is not null and provider not in ('${PaymentOrders.FREE_PROVIDER}', '${PaymentOrders.EXEMPT_PROVIDER}') limit 1",
+            "select 1 from payment_orders where account_id = :account and paid_at is not null and coalesce(paid_amount, amount) > 0 and provider not in ('${PaymentOrders.FREE_PROVIDER}', '${PaymentOrders.EXEMPT_PROVIDER}') limit 1",
             mapOf("account" to accountId), Int::class.java,
         ).isNotEmpty()
 

@@ -30,7 +30,11 @@ class InMemoryPaymentTasks(
 
     private val records = CopyOnWriteArrayList<Record>()
 
+    /** 시험이 심는 고장: 이 조건에 맞는 작업을 넣으려 하면 던진다(넣는 트랜잭션이 되돌려진다 - 「중간에 죽었다」를 흉내 낸다). */
+    @Volatile var failEnqueueWhen: ((PaymentTask) -> Boolean)? = null
+
     override fun enqueue(task: PaymentTask) {
+        if (failEnqueueWhen?.invoke(task) == true) throw IllegalStateException("planted queue failure")
         val tx = checkNotNull(store.currentTransaction()) { "PaymentTasks.enqueue must be called inside PaymentLedgerStore.inTransaction" }
         tx.afterCommit { records += Record(task, task.maxAttempts ?: defaultMaxAttempts) }
     }

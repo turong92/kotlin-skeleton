@@ -1087,6 +1087,10 @@ abstract class PaymentLedgerStoreContract {
         store.inTransaction { tx -> tx.insertOrderIfAbsent(first.copy(id = id32("ord_", 5), provider = "exempt", status = PaymentOrderStatus.PAID, paidAt = PaymentTestOrders.T0, dedupeKey = "d-exempt")) }
         assertFalse(store.hasPaidOrder("acc_1"))
 
+        // 결제사가 돈을 받은 적이 없는 0원 주문(카카오페이의 무료 첫 기간 등)도 「결제한 적」이 아니다
+        store.inTransaction { tx -> tx.insertOrderIfAbsent(first.copy(id = id32("ord_", 11), status = PaymentOrderStatus.PAID, paidAt = PaymentTestOrders.T0, amount = PaymentAmount(0, "KRW"), paidAmount = 0, dedupeKey = "d-zero")) }
+        assertFalse(store.hasPaidOrder("acc_1"))
+
         store.inTransaction { tx -> tx.insertOrderIfAbsent(first.copy(id = id32("ord_", 6), status = PaymentOrderStatus.PAID, paidAt = PaymentTestOrders.T0, dedupeKey = "d-real")) }
         assertTrue(store.hasPaidOrder("acc_1"))
         assertFalse(store.hasPaidOrder("acc_other"))
