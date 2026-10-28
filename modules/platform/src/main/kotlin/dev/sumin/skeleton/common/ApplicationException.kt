@@ -46,7 +46,8 @@ open class ApplicationException(
 
 /**
  * 서비스 규칙이 한 입력 필드를 거절했다 — Bean Validation 실패와 같은 모양의 `400 COMMON.VALIDATION_FAILED` + `errors[{field, code, message}]` 로 나간다.
+ * 모듈이 자기 에러 코드로 같은 모양(`errors[]`)을 내고 싶으면 [errorCode] 를 준다(예: `CATALOG.PRICE_INVALID`).
  * [fieldCode] 는 프론트가 문구를 고르는 코드 (`Required` · `Size` · `Pattern` 처럼 Bean Validation 의 이름을 따른다).
  */
-class FieldValidationException(val field: String, val fieldCode: String, message: String) :
-    ApplicationException(message = message, errorCode = PlatformErrorCode.VALIDATION_FAILED)
+open class FieldValidationException(val field: String, val fieldCode: String, message: String, errorCode: ErrorCode = PlatformErrorCode.VALIDATION_FAILED) :
+    ApplicationException(message = message, errorCode = errorCode)

@@ -1,7 +1,6 @@
 package dev.sumin.skeleton.catalog
 
-import dev.sumin.skeleton.common.ApplicationException
-import dev.sumin.skeleton.common.PlatformErrorCode
+import dev.sumin.skeleton.common.FieldValidationException
 import dev.sumin.skeleton.common.authz.OperatorAction
 import dev.sumin.skeleton.common.authz.OperatorAuditLog
 import dev.sumin.skeleton.common.id.SortableIds
@@ -65,10 +64,10 @@ class CatalogAdmin(
     fun createProduct(actorId: String, input: ProductInput): CatalogEntry {
         val code = codeOf(input.code, "code")
         val kind = ProductKind.entries.firstOrNull { it.name == input.kind?.trim()?.uppercase() }
-            ?: throw invalid("kind is SUBSCRIPTION or ONE_TIME")
+            ?: throw field("kind", "Pattern", "kind is SUBSCRIPTION or ONE_TIME")
         val level = when (kind) {
-            ProductKind.SUBSCRIPTION -> input.level?.takeIf { it >= 1 } ?: throw invalid("a subscription product needs a level of 1 or more")
-            ProductKind.ONE_TIME -> if (input.level != null) throw invalid("a one-time product has no level") else null
+            ProductKind.SUBSCRIPTION -> input.level?.takeIf { it >= 1 } ?: throw field("level", if (input.level == null) "Required" else "Min", "a subscription product needs a level of 1 or more")
+            ProductKind.ONE_TIME -> if (input.level != null) throw field("level", "Invalid", "a one-time product has no level") else null
         }
         val texts = textsOf(input.texts)
         val now = time.now()
@@ -89,9 +88,9 @@ class CatalogAdmin(
             val current = store.lockProduct(code) ?: throw notFound("product", code)
             val level = when (current.kind) {
                 ProductKind.SUBSCRIPTION -> patch.level ?: current.level
-                ProductKind.ONE_TIME -> if (patch.level != null) throw invalid("a one-time product has no level") else null
+                ProductKind.ONE_TIME -> if (patch.level != null) throw field("level", "Invalid", "a one-time product has no level") else null
             }
-            if (level != null && level < 1) throw invalid("a subscription level is 1 or more")
+            if (level != null && level < 1) throw field("level", "Min", "a subscription level is 1 or more")
             if (level != null && level != current.level) requireLevelFree(level, code)
             val updated = current.copy(
                 level = level,
@@ -112,11 +111,11 @@ class CatalogAdmin(
         return store.inTransaction {
             val product = store.lockProduct(productCode) ?: throw notFound("product", productCode)
             val period = periodOf(product.kind, input.period)
-            val amount = input.amount?.takeIf { it > 0 } ?: throw priceInvalid("amount must be positive (the smallest unit of the currency)")
-            val currency = input.currency?.trim()?.uppercase()?.takeIf { CURRENCY.matches(it) } ?: throw priceInvalid("currency is three letters")
-            val compareAt = input.compareAtAmount?.also { if (it <= amount) throw priceInvalid("compareAtAmount (the list price) must be more than amount") }
-            if (input.saleStartsAt != null && input.saleEndsAt != null && !input.saleStartsAt.isBefore(input.saleEndsAt)) throw priceInvalid("saleStartsAt must be before saleEndsAt")
-            if (input.saleEndsAt != null && !input.saleEndsAt.isAfter(now)) throw priceInvalid("saleEndsAt is already past")
+            val amount = input.amount?.takeIf { it > 0 } ?: throw priceField("amount", if (input.amount == null) "Required" else "Min", "amount must be positive (the smallest unit of the currency)")
+            val currency = input.currency?.trim()?.uppercase()?.takeIf { CURRENCY.matches(it) } ?: throw priceField("currency", "Pattern", "currency is three letters")
+            val compareAt = input.compareAtAmount?.also { if (it <= amount) throw priceField("compareAtAmount", "Min", "compareAtAmount (the list price) must be more than amount") }
+            if (input.saleStartsAt != null && input.saleEndsAt != null && !input.saleStartsAt.isBefore(input.saleEndsAt)) throw priceField("saleEndsAt", "Invalid", "saleStartsAt must be before saleEndsAt")
+            if (input.saleEndsAt != null && !input.saleEndsAt.isAfter(now)) throw priceField("saleEndsAt", "Invalid", "saleEndsAt is already past")
             val siblings = store.listPricesOf(product.id)
             val code = input.code?.let { codeOf(it, "price code") }?.also { if (store.findPrice(it) != null) throw CatalogException(CatalogErrorCode.CODE_TAKEN, "price code $it is taken") }
                 ?: freeCode(product, period, currency)
@@ -143,9 +142,9 @@ class CatalogAdmin(
         val now = time.now()
         return withPriceLocked(priceCode) { price, siblings ->
             if (!price.selling) throw priceInvalid("a stopped price cannot be changed")
-            if (!price.windowed) throw priceInvalid("only a sale price has an end to change")
-            if (endsAt == null && price.saleStartsAt == null) throw priceInvalid("a sale needs a start or an end")
-            if (endsAt != null && price.saleStartsAt != null && !price.saleStartsAt.isBefore(endsAt)) throw priceInvalid("saleEndsAt must be after saleStartsAt")
+            if (!price.windowed) throw priceField("saleEndsAt", "Invalid", "only a sale price has an end to change")
+            if (endsAt == null && price.saleStartsAt == null) throw priceField("saleEndsAt", "Required", "a sale needs a start or an end")
+            if (endsAt != null && price.saleStartsAt != null && !price.saleStartsAt.isBefore(endsAt)) throw priceField("saleEndsAt", "Invalid", "saleEndsAt must be after saleStartsAt")
             val changed = price.copy(saleEndsAt = endsAt, updatedAt = now)
             if (CurrentPrices.overlaps(siblings, changed)) throw CatalogException(CatalogErrorCode.PRICE_OVERLAP, "that end would overlap another price of the product")
             store.updateSaleEnd(priceCode, endsAt, now)
@@ -155,8 +154,8 @@ class CatalogAdmin(
     }
 
     fun setProviderRef(actorId: String, priceCode: String, provider: String, externalId: String?): CatalogPrice {
-        val providerId = provider.trim().lowercase().takeIf { PROVIDER.matches(it) } ?: throw invalid("provider is a provider id")
-        val external = externalId?.trim()?.takeIf { EXTERNAL_ID.matches(it) } ?: throw invalid("externalId is 1 to 128 characters without spaces")
+        val providerId = provider.trim().lowercase().takeIf { PROVIDER.matches(it) } ?: throw field("provider", "Pattern", "provider is a provider id")
+        val external = externalId?.trim()?.takeIf { EXTERNAL_ID.matches(it) } ?: throw field("externalId", if (externalId.isNullOrBlank()) "Required" else "Pattern", "externalId is 1 to 128 characters without spaces")
         val now = time.now()
         return withPriceLocked(priceCode) { price, _ ->
             if (!store.putProviderRef(priceCode, providerId, external, now)) throw CatalogException(CatalogErrorCode.CODE_TAKEN, "that $providerId price id is already linked to another price")
@@ -166,7 +165,7 @@ class CatalogAdmin(
     }
 
     fun removeProviderRef(actorId: String, priceCode: String, provider: String): CatalogPrice {
-        val providerId = provider.trim().lowercase().takeIf { PROVIDER.matches(it) } ?: throw invalid("provider is a provider id")
+        val providerId = provider.trim().lowercase().takeIf { PROVIDER.matches(it) } ?: throw field("provider", "Pattern", "provider is a provider id")
         return withPriceLocked(priceCode) { price, _ ->
             if (store.deleteProviderRef(priceCode, providerId)) audit.record(OperatorAction(actorId, "catalog.price.link-removed", TARGET_PRICE, priceCode, mapOf("provider" to providerId)))
             price.copy(providerRefs = price.providerRefs - providerId)
@@ -188,13 +187,13 @@ class CatalogAdmin(
     }
 
     private fun periodOf(kind: ProductKind, raw: String?): String? = when (kind) {
-        ProductKind.ONE_TIME -> if (raw != null) throw priceInvalid("a one-time product has no period") else null
+        ProductKind.ONE_TIME -> if (raw != null) throw priceField("period", "Invalid", "a one-time product has no period") else null
         ProductKind.SUBSCRIPTION -> {
-            val text = raw?.trim()?.uppercase()?.takeIf { it.isNotEmpty() } ?: throw priceInvalid("a subscription price needs a period (ISO-8601: P1M, P1Y)")
+            val text = raw?.trim()?.uppercase()?.takeIf { it.isNotEmpty() } ?: throw priceField("period", "Required", "a subscription price needs a period (ISO-8601: P1M, P1Y)")
             try {
                 SubscriptionPeriod.parse(text)
             } catch (e: IllegalArgumentException) {
-                throw priceInvalid("period must be an ISO-8601 period or duration (P1M, P1Y, PT3M)")
+                throw priceField("period", "Pattern", "period must be an ISO-8601 period or duration (P1M, P1Y, PT3M)")
             }
             text
         }
@@ -206,21 +205,26 @@ class CatalogAdmin(
         return generateSequence(1) { it + 1 }.map { if (it == 1) base else "$base-$it" }.first { store.findPrice(it) == null }
     }
 
-    private fun codeOf(raw: String?, what: String): String = raw?.trim()?.takeIf { CODE.matches(it) } ?: throw invalid("$what is lowercase letters, digits, - or _ (1 to $MAX_CODE characters)")
+    private fun codeOf(raw: String?, what: String): String =
+        raw?.trim()?.takeIf { CODE.matches(it) } ?: throw field("code", if (raw.isNullOrBlank()) "Required" else "Pattern", "$what is lowercase letters, digits, - or _ (1 to $MAX_CODE characters)")
 
     private fun textsOf(raw: Map<String, ProductTextInput>): List<CatalogProductText> {
-        if (raw.isEmpty()) throw invalid("texts needs at least one language")
+        if (raw.isEmpty()) throw field("texts", "Required", "texts needs at least one language")
         return raw.entries.map { (locale, text) ->
-            val tag = locale.trim().takeIf { LOCALE.matches(it) } ?: throw invalid("language '$locale' is a language tag (en, ko, pt-BR)")
-            val name = text.name?.trim()?.takeIf { it.isNotEmpty() && it.length <= NAME_MAX } ?: throw invalid("name of '$tag' is 1 to $NAME_MAX characters")
-            val description = text.description?.trim()?.takeIf { it.isNotEmpty() }?.also { if (it.length > DESCRIPTION_MAX) throw invalid("description of '$tag' is at most $DESCRIPTION_MAX characters") }
+            val tag = locale.trim().takeIf { LOCALE.matches(it) } ?: throw field("texts", "Pattern", "language '$locale' is a language tag (en, ko, pt-BR)")
+            val name = text.name?.trim()?.takeIf { it.isNotEmpty() && it.length <= NAME_MAX } ?: throw field("texts.$tag.name", if (text.name.isNullOrBlank()) "Required" else "Size", "name of '$tag' is 1 to $NAME_MAX characters")
+            val description = text.description?.trim()?.takeIf { it.isNotEmpty() }?.also { if (it.length > DESCRIPTION_MAX) throw field("texts.$tag.description", "Size", "description of '$tag' is at most $DESCRIPTION_MAX characters") }
             CatalogProductText(tag, name, description)
         }.sortedBy { it.locale }
     }
 
     private fun newestFirst(prices: List<CatalogPrice>) = prices.sortedWith(compareByDescending<CatalogPrice> { it.createdAt }.thenByDescending { it.code })
 
-    private fun invalid(message: String) = ApplicationException(message, PlatformErrorCode.PARAMETER_VALIDATION_FAILED)
+    /** 요청 본문의 한 칸이 틀렸다 - `400 COMMON.VALIDATION_FAILED` + `errors[{field, code, message}]`. 칸 이름은 요청 본문 이름이다 */
+    private fun field(field: String, fieldCode: String, message: String) = FieldValidationException(field, fieldCode, message)
+
+    /** 가격 입력의 한 칸이 틀렸다 - 같은 `errors[]` 모양에 에러 코드는 `CATALOG.PRICE_INVALID` */
+    private fun priceField(field: String, fieldCode: String, message: String) = FieldValidationException(field, fieldCode, message, CatalogErrorCode.PRICE_INVALID)
 
     private fun priceInvalid(message: String) = CatalogException(CatalogErrorCode.PRICE_INVALID, message)
 

@@ -40,7 +40,7 @@
 | `PUT` · `DELETE /api/v1/admin/catalog/prices/{code}/provider-refs/{provider}` `{externalId}` | 결제사 가격 id 링크 |
 | `GET /api/v1/admin/catalog/providers` | 가격 id 를 쓰는 켜진 결제사(링크 칸을 그릴지) |
 
-오류: `409 CATALOG.CODE_TAKEN`(상품 · 가격 코드, 이미 다른 가격에 걸린 결제사 가격 id) · `409 LEVEL_TAKEN` · `409 PRICE_OVERLAP` · `400 PRICE_INVALID`(금액 0 이하 · 통화 · 주기 · 정가 ≤ 금액 · 시작 ≥ 끝 · 이미 지난 끝 · 중지된 가격을 고침) · `404 NOT_FOUND`. 상품 쪽 입력이 틀리면(코드 모양 · 종류 · 등급 · 언어 이름) `400 COMMON.PARAMETER_VALIDATION_FAILED`.
+오류: `409 CATALOG.CODE_TAKEN`(상품 · 가격 코드, 이미 다른 가격에 걸린 결제사 가격 id) · `409 LEVEL_TAKEN` · `409 PRICE_OVERLAP` · `400 PRICE_INVALID`(금액 0 이하 · 통화 · 주기 · 정가 ≤ 금액 · 시작 ≥ 끝 · 이미 지난 끝 · 중지된 가격을 고침) · `404 NOT_FOUND`. 입력이 틀리면 `errors[{field, code, message}]` 로 어느 칸인지 알린다(`field` 는 요청 본문 이름, 가격은 `CATALOG.PRICE_INVALID`, 상품 쪽(코드 모양 · 종류 · 등급 · 언어 이름)은 `400 COMMON.VALIDATION_FAILED`).
 
 **코드 플랜에서 옮기는 법**: 옛 `SubscriptionPlans` 빈의 월 가격 코드를 그대로 가격 코드로 만든다(예: `basic` · `standard` · `pro`) - 기존 구독 줄의 `plan_code` · 쿠폰 범위가 그대로 맞는다. 연 가격은 새 코드(`basic-yearly`), 달러 가격은 `basic-usd` 처럼 통화별 줄을 더하고, 옛 플랜 빈은 지운다.
 단건(응원하기 같은 코드 상품)은 앱이 `PaymentCatalog` 빈을 두고 `itemType` 이 표 상품이면 `CatalogPaymentCatalog` 를 부른다.

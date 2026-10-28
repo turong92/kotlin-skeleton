@@ -25,13 +25,13 @@ class CatalogAdminTest {
     private fun krw(product: String = "basic", amount: Long = 3_900, period: String? = "P1M", code: String? = null, compareAt: Long? = null, starts: Instant? = null, ends: Instant? = null) =
         admin.addPrice("adm_1", product, PriceInput(code, period, amount, "KRW", compareAt, starts, ends))
 
-    private fun <T : Throwable> code(error: T) = (error as CatalogException).catalogError
+    private fun <T : Throwable> code(error: T) = (error as ApplicationException).errorCode
 
     @Test
     fun `a product code and a subscription level can be used once`() {
         basic()
-        assertEquals(CatalogErrorCode.CODE_TAKEN, code(assertFailsWith<CatalogException> { basic(level = 2) }))
-        assertEquals(CatalogErrorCode.LEVEL_TAKEN, code(assertFailsWith<CatalogException> { basic(level = 1, code = "standard") }))
+        assertEquals(CatalogErrorCode.CODE_TAKEN, code(assertFailsWith<ApplicationException> { basic(level = 2) }))
+        assertEquals(CatalogErrorCode.LEVEL_TAKEN, code(assertFailsWith<ApplicationException> { basic(level = 1, code = "standard") }))
         assertEquals(listOf("basic"), store.products.keys.toList(), "the refused ones left nothing")
     }
 
@@ -50,7 +50,7 @@ class CatalogAdminTest {
     fun `a second evergreen price of the same product period and currency is refused, other periods and currencies are fine`() {
         basic()
         krw()
-        assertEquals(CatalogErrorCode.PRICE_OVERLAP, code(assertFailsWith<CatalogException> { krw(amount = 4_900) }))
+        assertEquals(CatalogErrorCode.PRICE_OVERLAP, code(assertFailsWith<ApplicationException> { krw(amount = 4_900) }))
         krw(amount = 39_000, period = "P1Y")
         admin.addPrice("adm_1", "basic", PriceInput(period = "P1M", amount = 300, currency = "usd"))
         assertEquals(3, store.prices.size)
@@ -61,7 +61,7 @@ class CatalogAdminTest {
         basic()
         krw()
         krw(amount = 2_900, compareAt = 3_900, starts = now.plus(day), ends = now.plus(day.multipliedBy(3)))
-        assertEquals(CatalogErrorCode.PRICE_OVERLAP, code(assertFailsWith<CatalogException> { krw(amount = 2_500, starts = now.plus(day.multipliedBy(2)), ends = now.plus(day.multipliedBy(4))) }))
+        assertEquals(CatalogErrorCode.PRICE_OVERLAP, code(assertFailsWith<ApplicationException> { krw(amount = 2_500, starts = now.plus(day.multipliedBy(2)), ends = now.plus(day.multipliedBy(4))) }))
         krw(amount = 2_500, starts = now.plus(day.multipliedBy(3)), ends = now.plus(day.multipliedBy(4)))
         assertEquals(3, store.prices.size)
     }
@@ -79,7 +79,7 @@ class CatalogAdminTest {
     fun `price inputs are checked - amount, currency, period for the kind, list price above the amount, start before end, an end that is not past`() {
         basic()
         admin.createProduct("adm_1", ProductInput("sticker", "ONE_TIME", null, texts = TEXTS))
-        fun bad(block: () -> Unit) = assertEquals(CatalogErrorCode.PRICE_INVALID, code(assertFailsWith<CatalogException> { block() }))
+        fun bad(block: () -> Unit) = assertEquals(CatalogErrorCode.PRICE_INVALID, code(assertFailsWith<ApplicationException> { block() }))
 
         bad { krw(amount = 0) }
         bad { admin.addPrice("adm_1", "basic", PriceInput(period = "P1M", amount = 100, currency = "KR")) }
@@ -100,7 +100,7 @@ class CatalogAdminTest {
         val sale = krw(amount = 2_900, starts = now.plus(day), ends = now.plus(day.multipliedBy(2)))
         assertEquals("basic-p1m-krw", first.code)
         assertEquals("basic-p1m-krw-2", sale.code)
-        assertEquals(CatalogErrorCode.CODE_TAKEN, code(assertFailsWith<CatalogException> { krw(amount = 5_000, code = "basic-p1m-krw") }))
+        assertEquals(CatalogErrorCode.CODE_TAKEN, code(assertFailsWith<ApplicationException> { krw(amount = 5_000, code = "basic-p1m-krw") }))
     }
 
     @Test
@@ -123,12 +123,12 @@ class CatalogAdminTest {
         krw(amount = 2_500, starts = now.plus(day.multipliedBy(3)), ends = now.plus(day.multipliedBy(4)))
         val evergreen = krw()
 
-        assertEquals(CatalogErrorCode.PRICE_OVERLAP, code(assertFailsWith<CatalogException> { admin.updateSaleEnd("adm_1", first.code, now.plus(day.multipliedBy(3)).plusSeconds(1)) }))
-        assertEquals(CatalogErrorCode.PRICE_INVALID, code(assertFailsWith<CatalogException> { admin.updateSaleEnd("adm_1", evergreen.code, now.plus(day)) }))
-        assertEquals(CatalogErrorCode.PRICE_INVALID, code(assertFailsWith<CatalogException> { admin.updateSaleEnd("adm_1", first.code, now) }), "an end before the start")
+        assertEquals(CatalogErrorCode.PRICE_OVERLAP, code(assertFailsWith<ApplicationException> { admin.updateSaleEnd("adm_1", first.code, now.plus(day.multipliedBy(3)).plusSeconds(1)) }))
+        assertEquals(CatalogErrorCode.PRICE_INVALID, code(assertFailsWith<ApplicationException> { admin.updateSaleEnd("adm_1", evergreen.code, now.plus(day)) }))
+        assertEquals(CatalogErrorCode.PRICE_INVALID, code(assertFailsWith<ApplicationException> { admin.updateSaleEnd("adm_1", first.code, now) }), "an end before the start")
         admin.stopPrice("adm_1", first.code)
-        assertEquals(CatalogErrorCode.PRICE_INVALID, code(assertFailsWith<CatalogException> { admin.updateSaleEnd("adm_1", first.code, now.plus(day.multipliedBy(2))) }))
-        assertEquals(CatalogErrorCode.NOT_FOUND, code(assertFailsWith<CatalogException> { admin.updateSaleEnd("adm_1", "missing", null) }))
+        assertEquals(CatalogErrorCode.PRICE_INVALID, code(assertFailsWith<ApplicationException> { admin.updateSaleEnd("adm_1", first.code, now.plus(day.multipliedBy(2))) }))
+        assertEquals(CatalogErrorCode.NOT_FOUND, code(assertFailsWith<ApplicationException> { admin.updateSaleEnd("adm_1", "missing", null) }))
     }
 
     @Test
@@ -153,7 +153,7 @@ class CatalogAdminTest {
 
         assertEquals(mapOf("paddle" to "pri_1"), admin.setProviderRef("adm_1", usd.code, "Paddle", "pri_1").providerRefs)
         assertEquals(mapOf("paddle" to "pri_2"), admin.setProviderRef("adm_1", usd.code, "paddle", "pri_2").providerRefs)
-        assertEquals(CatalogErrorCode.CODE_TAKEN, code(assertFailsWith<CatalogException> { admin.setProviderRef("adm_1", monthly.code, "paddle", "pri_2") }))
+        assertEquals(CatalogErrorCode.CODE_TAKEN, code(assertFailsWith<ApplicationException> { admin.setProviderRef("adm_1", monthly.code, "paddle", "pri_2") }))
         assertEquals(emptyMap(), admin.removeProviderRef("adm_1", usd.code, "paddle").providerRefs)
         assertFailsWith<ApplicationException> { admin.setProviderRef("adm_1", usd.code, "paddle", "has space") }
     }
@@ -170,9 +170,9 @@ class CatalogAdminTest {
         assertFalse(edited.product.selling)
         assertEquals(listOf("Basic plan"), edited.product.texts.map { it.name })
         assertEquals(1, edited.prices.size)
-        assertEquals(CatalogErrorCode.LEVEL_TAKEN, code(assertFailsWith<CatalogException> { admin.updateProduct("adm_1", "basic", ProductPatch(level = 2)) }))
+        assertEquals(CatalogErrorCode.LEVEL_TAKEN, code(assertFailsWith<ApplicationException> { admin.updateProduct("adm_1", "basic", ProductPatch(level = 2)) }))
         assertEquals(1, store.products.getValue("basic").level)
-        assertEquals(CatalogErrorCode.NOT_FOUND, code(assertFailsWith<CatalogException> { admin.updateProduct("adm_1", "missing", ProductPatch()) }))
+        assertEquals(CatalogErrorCode.NOT_FOUND, code(assertFailsWith<ApplicationException> { admin.updateProduct("adm_1", "missing", ProductPatch()) }))
     }
 
     @Test
@@ -181,7 +181,7 @@ class CatalogAdminTest {
         val price = krw()
         admin.setProviderRef("adm_1", price.code, "paddle", "pri_1")
         admin.stopPrice("adm_1", price.code)
-        assertFailsWith<CatalogException> { krw(amount = 0) }
+        assertFailsWith<ApplicationException> { krw(amount = 0) }
 
         assertEquals(listOf("catalog.product.created", "catalog.price.created", "catalog.price.link-set", "catalog.price.stopped"), audit.actions.map { it.action })
         assertTrue(audit.actions.all { it.actorId == "adm_1" })

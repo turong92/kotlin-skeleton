@@ -7,6 +7,7 @@ import dev.sumin.skeleton.catalog.ProductInput
 import dev.sumin.skeleton.catalog.ProductPatch
 import dev.sumin.skeleton.catalog.ProductTextInput
 import dev.sumin.skeleton.common.ApplicationException
+import dev.sumin.skeleton.common.FieldValidationException
 import dev.sumin.skeleton.common.DataResponse
 import dev.sumin.skeleton.common.ListResponse
 import dev.sumin.skeleton.common.PlatformErrorCode
@@ -114,12 +115,12 @@ class CatalogAdminController(
     @PatchMapping("/prices/{code}")
     fun updatePrice(authentication: Authentication?, @PathVariable code: String, @RequestBody body: JsonNode): DataResponse<AdminPriceResponse> {
         val actor = operator(authentication)
-        if (!body.has("saleEndsAt")) throw ApplicationException("saleEndsAt is required (an ISO-8601 time, or null to remove the end)", PlatformErrorCode.PARAMETER_VALIDATION_FAILED)
+        if (!body.has("saleEndsAt")) throw FieldValidationException("saleEndsAt", "Required", "saleEndsAt is required (an ISO-8601 time, or null to remove the end)")
         val raw = body["saleEndsAt"]
         val endsAt = if (raw == null || raw.isNull) null else try {
             Instant.parse(raw.stringValue())
         } catch (e: DateTimeParseException) {
-            throw ApplicationException("saleEndsAt is an ISO-8601 time", PlatformErrorCode.PARAMETER_VALIDATION_FAILED)
+            throw FieldValidationException("saleEndsAt", "Pattern", "saleEndsAt is an ISO-8601 time")
         }
         admin.updateSaleEnd(actor.accountId, code, endsAt)
         return Response.ok(priceView(code))

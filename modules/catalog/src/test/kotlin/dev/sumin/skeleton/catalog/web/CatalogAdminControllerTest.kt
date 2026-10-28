@@ -92,6 +92,18 @@ class CatalogAdminControllerTest {
     }
 
     @Test
+    fun `a wrong input names the field it is about - errors array with the request body's field name`() {
+        send(post("$base/products"), """{"code":"basic","kind":"SUBSCRIPTION","texts":{"en":{"name":"Basic"}}}""").andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.code").value("COMMON.VALIDATION_FAILED")).andExpect(jsonPath("$.errors[0].field").value("level")).andExpect(jsonPath("$.errors[0].code").value("Required"))
+        send(post("$base/products"), """{"code":"Bad Code","kind":"ONE_TIME","texts":{"en":{"name":"x"}}}""").andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.errors[0].field").value("code")).andExpect(jsonPath("$.errors[0].code").value("Pattern"))
+        product()
+        price("""{"period":"P1M","amount":0,"currency":"KRW"}""").andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.code").value("CATALOG.PRICE_INVALID")).andExpect(jsonPath("$.errors[0].field").value("amount"))
+        send(patch("$base/prices/basic"), """{}""").andExpect(status().isBadRequest).andExpect(jsonPath("$.errors[0].field").value("saleEndsAt"))
+    }
+
+    @Test
     fun `price errors carry their catalog codes - overlap 409, invalid 400, missing 404`() {
         product()
         price("""{"code":"basic","period":"P1M","amount":3900,"currency":"KRW"}""").andExpect(status().isCreated)
