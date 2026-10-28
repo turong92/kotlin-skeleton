@@ -57,15 +57,15 @@ class AuthzAdminController(private val service: RoleService, private val access:
     @PostMapping("/roles")
     fun create(authentication: Authentication?, @Valid @RequestBody request: CreateRoleRequest): ResponseEntity<DataResponse<RoleResponse>> {
         val ref = required(authentication)
-        val role = service.create(ref, request.name, request.description, request.permissions).toResponse()
+        val role = service.create(ref, request.name, request.description, request.permissions, request.includes).toResponse()
         return Response.created(ServletUriComponentsBuilder.fromCurrentRequest().path("/{name}").buildAndExpand(role.name).toUri(), role)
     }
 
-    @Operation(summary = "Replace a role's description and permissions (authz.roles)")
+    @Operation(summary = "Replace a role's description, permissions and included roles (authz.roles); omitted includes stay")
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = RoleResponse::class)
     @PutMapping("/roles/{name}")
     fun update(authentication: Authentication?, @PathVariable name: String, @Valid @RequestBody request: UpdateRoleRequest): DataResponse<RoleResponse> =
-        Response.ok(service.update(required(authentication), name, request.description, request.permissions).toResponse())
+        Response.ok(service.update(required(authentication), name, request.description, request.permissions, request.includes).toResponse())
 
     @Operation(summary = "Delete a role nobody holds (authz.roles)")
     @NoContentOperation

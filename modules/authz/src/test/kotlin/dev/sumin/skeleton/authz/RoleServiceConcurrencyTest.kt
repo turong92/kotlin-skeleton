@@ -56,4 +56,23 @@ class RoleServiceConcurrencyTest {
             pool.shutdownNow()
         }
     }
+
+    @Test
+    fun `two operators including each other's role at the same time cannot both succeed - no cycle`() {
+        val admin = OperatorRef("admin", setOf("ADMIN"))
+        val pool = Executors.newFixedThreadPool(2)
+        try {
+            val results = listOf("R1" to "R2", "R2" to "R1").map { (role, included) ->
+                pool.submit<Throwable?> { runCatching { service.update(admin, role, null, emptyList(), listOf(included)) }.exceptionOrNull() }
+            }.map { it.get(10, TimeUnit.SECONDS) }
+
+            assertThat(results.count { it == null }).isEqualTo(1)
+            assertThat(results.filterNotNull().single()).isInstanceOfSatisfying(AuthzRoleException::class.java) {
+                assertThat(it.errorCode.code).isEqualTo("AUTHZ.ROLE_CYCLE")
+            }
+            assertThat(store.list().sumOf { it.includes.size }).isEqualTo(1)
+        } finally {
+            pool.shutdownNow()
+        }
+    }
 }

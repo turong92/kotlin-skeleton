@@ -255,6 +255,23 @@ class RoleAdminWebTest {
             pool.shutdownNow()
         }
     }
+
+    // ---- hierarchy ----
+
+    @Test
+    fun `a role is created with includes, shows its effective permissions, and the error codes come out as the contract says`() {
+        call(post("/api/v1/admin/roles").json("""{"name":"LEAD","permissions":["payment.refund"],"includes":["CS"]}"""), admin)
+            .andExpect(status().isCreated)
+            .andExpect(jsonPath("$.value.includes[0]").value("CS"))
+            .andExpect(jsonPath("$.value.effectivePermissions[0]").value("payment.read"))
+            .andExpect(jsonPath("$.value.effectivePermissions[1]").value("payment.refund"))
+        call(put("/api/v1/admin/roles/CS").json("""{"permissions":["payment.read"],"includes":["LEAD"]}"""), admin)
+            .andExpect(status().isConflict).andExpect(jsonPath("$.code").value("AUTHZ.ROLE_CYCLE"))
+        call(put("/api/v1/admin/roles/CS").json("""{"permissions":["payment.read"],"includes":["GHOST"]}"""), admin)
+            .andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("AUTHZ.INCLUDE_UNKNOWN"))
+        call(delete("/api/v1/admin/roles/CS"), admin)
+            .andExpect(status().isConflict).andExpect(jsonPath("$.code").value("AUTHZ.ROLE_INCLUDED"))
+    }
 }
 
 /** 스위치를 켜지 않으면 404 — 스켈레톤 기본은 관리 API 꺼짐 */
