@@ -22,7 +22,8 @@ class MySqlSqlDialect : SqlDialect {
         rs.getObject(column, LocalDateTime::class.java)?.toInstant(ZoneOffset.UTC)
 
     override fun insertIgnore(table: String, columns: List<String>, conflictColumns: List<String>): String {
-        val noop = conflictColumns.first()
+        // 빈 목록 = 어느 유니크 충돌이든: MySQL 의 `on duplicate key update` 는 원래 어느 유니크 키든 받으니 noop 대입만 첫 칼럼으로 한다
+        val noop = conflictColumns.firstOrNull() ?: columns.first()
         return "insert into $table (${columns.joinToString()}) values (${columns.joinToString { ":$it" }}) " +
             "on duplicate key update $noop = $noop"
     }

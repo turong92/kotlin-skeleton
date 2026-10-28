@@ -46,6 +46,17 @@ class MySqlTimeRoundTripTest {
         assertEquals(1, jdbc.sql("select v from u where k = 'a'").query(Int::class.java).single())
     }
 
+    @Test
+    fun `insertIgnore with no conflict columns ignores a conflict on any unique key`() {
+        jdbc.sql("create table if not exists u2 (a varchar(10), b varchar(10), v int, primary key (a), unique key uk_b (b))").update()
+        val sql = dialect.insertIgnore("u2", listOf("a", "b", "v"), emptyList())
+        assertEquals("insert into u2 (a, b, v) values (:a, :b, :v) on duplicate key update a = a", sql)
+        jdbc.sql(sql).param("a", "1").param("b", "x").param("v", 1).update()
+        jdbc.sql(sql).param("a", "1").param("b", "y").param("v", 2).update()   // 기본 키 충돌
+        jdbc.sql(sql).param("a", "2").param("b", "x").param("v", 3).update()   // 유니크 충돌
+        assertEquals(1, jdbc.sql("select count(*) from u2").query(Int::class.java).single())
+    }
+
     companion object {
         val db = MySQLContainer(DockerImageName.parse("mysql:8.4"))
         private lateinit var original: TimeZone

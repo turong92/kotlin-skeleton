@@ -17,5 +17,6 @@ class PostgresSqlDialect : SqlDialect {
 
     override fun insertIgnore(table: String, columns: List<String>, conflictColumns: List<String>): String =
         "insert into $table (${columns.joinToString()}) values (${columns.joinToString { ":$it" }}) " +
-            "on conflict (${conflictColumns.joinToString()}) do nothing"
+            // 빈 목록 = 어느 유니크 충돌이든 (대상 없는 `on conflict do nothing`)
+            if (conflictColumns.isEmpty()) "on conflict do nothing" else "on conflict (${conflictColumns.joinToString()}) do nothing"
 }
