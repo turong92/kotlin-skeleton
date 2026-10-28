@@ -21,7 +21,9 @@ object AuthorLinkColumns {
         "board_public_purge_queue" to setOf("key_hash", "public_key", "queued_at", "claimed_until", "attempts", "next_attempt_at"),
         "board_public_attachment_runs" to setOf("name", "last_run_at"),
         "board_reactions" to setOf("account_id"),
-        "notification_inbox" to setOf("recipient_id", "recipient_ids_json"),
+        // 안 읽은 줄의 묶음 열쇠 사본 - 유니크 제약용 내부 칸이라 응답에 나가지 않는다
+        "notification_inbox" to setOf("recipient_id", "recipient_ids_json", "unread_collapse_key"),
+        "notification_mutes" to setOf("recipient_id"),
         "author_profiles" to setOf("account_id", "primary_of"),
     )
 
@@ -45,7 +47,9 @@ object AuthorLinkColumns {
         "board_reactions" to setOf("target_type", "target_id", "reaction_type", "created_at"),
         "notification_inbox" to setOf(
             "event_id", "topic", "type", "severity", "title", "message", "payload_json", "event_created_at", "read_at", "created_at", "updated_at",
+            "link", "collapse_key", "collapsed_count", "last_event_id",
         ),
+        "notification_mutes" to setOf("type", "created_at"),
         "author_profiles" to setOf("id", "name", "name_key", "tag", "status", "adopted_at", "created_at", "updated_at", "deleted_at"),
     )
 
