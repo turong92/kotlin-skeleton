@@ -5,6 +5,9 @@ import dev.sumin.skeleton.notification.NotificationSubscription
 import dev.sumin.skeleton.notification.NotificationSubscriptionRegistry
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import org.springframework.context.SmartLifecycle
@@ -14,6 +17,8 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter
  * 열린 SSE 연결은 끝나지 않는 요청이라 서버의 우아한 종료(graceful shutdown)가 「진행 중인 요청이 끝나기를」 `timeout-per-shutdown-phase`(30초) 꽉 채워 기다린다 —
  * 놀고 있는 서버도 재시작마다 30초가 걸린다. 그래서 종료가 시작되면 **웹 서버의 종료 단계보다 먼저** 열린 연결을 모두 닫는다([stop], 위상 `SmartLifecycle.DEFAULT_PHASE` = 가장 먼저 멈춘다).
  * 클라이언트(`EventSource`)는 알아서 다시 붙는다 — 배포에서는 다른 인스턴스에 붙는다.
+ *
+ * `heartbeat` 가 켜져 있으면 [start] 가 데몬 스레드 하나를 띄워 열린 연결마다 주기적으로 SSE 주석(`:` 한 줄)을 보낸다. 보내기에 실패한 연결은 그 연결만 닫는다. [stop] 이 스레드도 멈춘다.
  */
 class NotificationSseService(
     private val subscriptionRegistry: NotificationSubscriptionRegistry,
@@ -23,12 +28,44 @@ class NotificationSseService(
     private val running = AtomicBoolean(false)
     private val stopped = AtomicBoolean(false)
 
+    private var heartbeatExecutor: ScheduledExecutorService? = null
+
+    /** 지금 열려 있는 연결 수 (시험용) */
+    internal val openConnections: Int get() = open.size
+
+    @Synchronized
     override fun start() {
         stopped.set(false)
         running.set(true)
+        val interval = properties.heartbeat ?: return
+        heartbeatExecutor?.shutdownNow()
+        heartbeatExecutor = Executors.newSingleThreadScheduledExecutor { task ->
+            Thread(task, HEARTBEAT_THREAD).apply { isDaemon = true }
+        }.also { executor ->
+            executor.scheduleWithFixedDelay(::sendHeartbeats, interval.toMillis(), interval.toMillis(), TimeUnit.MILLISECONDS)
+        }
     }
 
+    /** 열린 연결마다 주석 한 줄. 실패한 연결은 [open] 에서 빠지고 닫힌다 - 한 연결의 실패가 다른 연결의 주기를 막지 않는다 */
+    private fun sendHeartbeats() {
+        open.toList().forEach { emitter ->
+            try {
+                emitter.send(SseEmitter.event().comment(""))
+            } catch (ex: Exception) {
+                open -= emitter
+                try {
+                    emitter.completeWithError(ex)
+                } catch (_: Exception) {
+                    // 이미 끊긴 연결 - 닫으려는 것이므로 무시한다
+                }
+            }
+        }
+    }
+
+    @Synchronized
     override fun stop() {
+        heartbeatExecutor?.shutdownNow()
+        heartbeatExecutor = null
         stopped.set(true)
         if (!running.compareAndSet(true, false)) return
         // 복사본을 돈다 — complete() 가 완료 콜백으로 [open] 에서 자기를 뺀다
@@ -85,6 +122,8 @@ class NotificationSseService(
     }
 
     companion object {
+        const val HEARTBEAT_THREAD = "notification-sse-heartbeat"
+
         fun isVisibleTo(event: NotificationEvent, recipientId: String?): Boolean =
             event.recipientIds.isEmpty() || (recipientId != null && recipientId in event.recipientIds)
     }

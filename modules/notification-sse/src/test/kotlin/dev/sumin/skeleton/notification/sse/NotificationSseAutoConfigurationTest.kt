@@ -8,6 +8,7 @@ import dev.sumin.skeleton.notification.NotificationSubscriptionRegistry
 import java.util.function.Supplier
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.springframework.boot.autoconfigure.AutoConfigurations
 import org.springframework.boot.test.context.runner.ApplicationContextRunner
@@ -34,6 +35,14 @@ class NotificationSseAutoConfigurationTest {
             assertEquals(1, context.getBeansOfType(NotificationSseController::class.java).size)
             assertEquals(1, context.getBeansOfType(NotificationSseService::class.java).size)
         }
+    }
+
+    @Test
+    fun `heartbeat binds from properties and is off when unset`() {
+        contextRunner.run { context -> assertNull(context.getBean(NotificationSseProperties::class.java).heartbeat) }
+        contextRunner
+            .withPropertyValues("skeleton.notification.sse.heartbeat=15s")
+            .run { context -> assertEquals(java.time.Duration.ofSeconds(15), context.getBean(NotificationSseProperties::class.java).heartbeat) }
     }
 
     @Test
