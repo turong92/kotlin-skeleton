@@ -131,6 +131,7 @@ reward ··compileOnly··▶ notification (board 와 같은 선택 연동, noOp
 - 미리보기: `POST /api/v1/payments/quote {itemType, itemRef, quantity, discounts:[{type:"coupon", ref}]}` → `{originalAmount, discounts:[{type, label, amount}], amount, currency}`. 부수 효과 없음. 쿠폰함 화면은 각 쿠폰의 적용 가능 여부를 이걸로 본다.
 - 주문 만들기: 요청 본문에 같은 `discounts`(첫 판은 쿠폰 1장). 한 트랜잭션: `catalog.quote` → 수단을 `order` 순(쿠폰 100 → 포인트 200, 국룰: 쿠폰 먼저 포인트 나중)으로 `reserve(holderRef = 주문 id)` → 최종가 = 원가 − 할인(0 미만 없음) → 주문 줄(`amount` = 최종가) + 할인 내역 줄 → 커밋. 같은 `Idempotency-Key` 재전송은 처음 줄을 돌려준다.
 - 할인 계산(`DiscountMath`, 국룰): 정률은 할인액의 최소 단위 미만 버림 + `maxDiscount` 상한, 정액은 통화가 같아야 적용, `min_amount` 미달 · 범위 밖 · `first_purchase_only` 인데 결제한 적 있음 → `PAYMENT.DISCOUNT_NOT_APPLICABLE`. 쿠폰이 이미 예약 · 사용 · 만료 → `PAYMENT.DISCOUNT_UNAVAILABLE`.
+- 쿠폰은 한 장 = 한 개(국룰): `quantity > 1` 이어도 할인은 단가 한 개분에만 걸린다 - 무료 · 100% 쿠폰 한 장으로 수량 1000 개가 0원이 되지 않는다.
 - 0 < 최종가 < 결제사 최소 금액 → `PAYMENT.DISCOUNT_BELOW_MINIMUM`(결제사 모듈이 최소 금액을 알려 준다 — 값은 구현 첫 작업으로 각 결제사 문서에서 확인).
 - 결제사: 토스 · 카카오페이 · 네이버페이는 줄의 금액을 그대로 넘기므로 손댈 곳이 없다. 페이들 · 스트라이프 경로로 가는 주문에 할인이 있으면 `PAYMENT.DISCOUNT_NOT_SUPPORTED`(페이들은 웹훅 금액으로 `amount` 를 덮어쓰기 때문).
 

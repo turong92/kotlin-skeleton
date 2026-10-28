@@ -123,7 +123,7 @@ class PaymentOrders(
             DiscountQuote(original.amount, original.amount, original.normalizedCurrency, emptyList())
         } else {
             val source = discounts ?: throw PaymentDiscountNotApplicableException("This discount is not offered here.")
-            source.quote(claims, source.targetFor(accountId, itemType, itemRef, original))
+            source.quote(claims, source.targetFor(accountId, itemType, itemRef, original), quantity)
         }
         return Plan(purchase, quoted, if (quoted.amount == 0L) PaymentSettlement.FREE else PaymentSettlement.PROVIDER)
     }
@@ -283,7 +283,7 @@ class PaymentOrders(
     private fun reserve(tx: PaymentLedgerTx, order: PaymentOrder, command: CreateOrderCommand, plan: Plan): List<OrderDiscount> {
         if (plan.settlement == PaymentSettlement.EXEMPT || command.discounts.isEmpty()) return emptyList()
         val source = checkNotNull(discounts) { "a discount was planned without a discount collection" }
-        val reserved = source.reserve(command.discounts, source.targetFor(order.accountId, order.itemType, order.itemRef, plan.purchase.amount), order.id)
+        val reserved = source.reserve(command.discounts, source.targetFor(order.accountId, order.itemType, order.itemRef, plan.purchase.amount), order.id, order.quantity)
         if (reserved.amount != plan.discount.amount) throw PaymentDiscountUnavailableException()
         val now = writer.now()
         return reserved.lines.mapIndexed { index, line ->

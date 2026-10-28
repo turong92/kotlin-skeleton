@@ -83,7 +83,7 @@ class InMemoryPaymentLedgerStore : PaymentLedgerStore {
         synchronized(commitMutex) { committedDiscounts.values.filter { it.orderId in orderIds }.sortedWith(compareBy({ it.orderId }, { it.seq })) }
 
     override fun hasPaidOrder(accountId: String): Boolean =
-        synchronized(commitMutex) { committed.values.any { it.accountId == accountId && it.paidAt != null && it.settlement == PaymentSettlement.PROVIDER } }
+        synchronized(commitMutex) { committed.values.any { it.accountId == accountId && it.paidAt != null && (it.paidAmount ?: it.amount.amount) > 0 && it.settlement == PaymentSettlement.PROVIDER } }
 
     override fun findRefund(id: String): PaymentRefund? = synchronized(commitMutex) { committedRefunds[id] }
 

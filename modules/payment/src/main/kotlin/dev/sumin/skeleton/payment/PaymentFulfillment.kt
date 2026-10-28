@@ -31,8 +31,13 @@ class PaymentFulfillment(
             listener.onPaid(order)
             // 구독 고리가 주문 줄에 「확인 필요」를 찍었을 수 있다 — 낡은 값으로 덮지 않게 다시 읽는다
             val fulfilled = writer.touch(tx, checkNotNull(tx.lockOrder(orderId)), PaymentEventType.FULFILLED, PaymentActor.SYSTEM) { it.copy(fulfilledAt = writer.now()) }
-            if (discountConflict && fulfilled.reviewReason == null) {
-                writer.touch(tx, fulfilled, PaymentEventType.REVIEW_FLAGGED, PaymentActor.SYSTEM, null, PaymentReviewReason.DISCOUNT_CONFLICT.name) { it.copy(reviewReason = PaymentReviewReason.DISCOUNT_CONFLICT) }
+            if (discountConflict) {
+                // 낡은 지급 표시(이 지급이 방금 성공해 푼다)는 덮어쓴다. 돈 쪽 이유가 이미 찍혀 있으면 그 표시는 두되 충돌은 이력에 남긴다 - 운영자가 놓치지 않게
+                if (fulfilled.reviewReason == null || fulfilled.reviewReason == PaymentReviewReason.FULFILMENT_UNRESOLVED) {
+                    writer.touch(tx, fulfilled, PaymentEventType.REVIEW_FLAGGED, PaymentActor.SYSTEM, null, PaymentReviewReason.DISCOUNT_CONFLICT.name) { it.copy(reviewReason = PaymentReviewReason.DISCOUNT_CONFLICT) }
+                } else {
+                    tx.appendEvent(writer.event(orderId, PaymentEventType.REVIEW_FLAGGED, PaymentActor.SYSTEM, null, PaymentReviewReason.DISCOUNT_CONFLICT.name, fulfilled.status, fulfilled.status))
+                }
                 return@inTransaction true
             }
             // 다른 길로(작업이 죽은 뒤 요청 스레드 · 사람의 맞추기가 다시 넣은 작업) 지급이 성공하면 낡은 지급 표시는 그 자리에서 푼다. 돈 이유는 건드리지 않는다
