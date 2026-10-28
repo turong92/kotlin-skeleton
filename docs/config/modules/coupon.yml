@@ -1,0 +1,9 @@
+# coupon — 쿠폰 정의 · 쿠폰함 · 공용 코드 · 보상 지급기 · 결제 할인 수단. 저장은 coupon-jdbc.
+skeleton:
+  coupon:
+    admin:
+      enabled: false               # true 면 운영자 경로(coupon.manage)가 열린다. 꺼져 있으면 404
+      base-path: /api/v1/admin     # 아래에 /coupon-definitions · /coupons
+    http:
+      enabled: true                # false 면 사용자 경로(쿠폰함 · 코드 등록)를 닫는다
+      base-path: /api/v1/coupons

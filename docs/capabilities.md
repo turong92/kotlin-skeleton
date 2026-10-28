@@ -92,6 +92,8 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `board-jdbc` | 게시판 저장소 — PostgreSQL · MySQL 로 board 의 저장 포트 네 개를 구현한다(boards · board_* 테이블 · 원자적 카운터). | `--modules board-jdbc` | 게시판 저장소, 게시판 DB / board storage, board repository, board database | `@skeleton/board` |
 | `captcha-turnstile` | 봇 방지 — Cloudflare Turnstile 토큰을 서버에서 검증한다(TurnstileVerifier). | 스타터(apps/api)에 기본 포함 | 캡차, 봇 방지, 스팸 방지, 로봇 확인, 가입 폼 보호 / captcha, turnstile, bot protection, spam protection, cloudflare turnstile | `@skeleton/captcha-turnstile` |
 | `config-aws-ssm` | AWS SSM Parameter Store 의 값을 시작할 때 스프링 프로퍼티로 불러온다. | `--modules config-aws-ssm` | AWS 설정, 파라미터 스토어, SSM, 비밀 불러오기 / aws ssm, parameter store, remote config, aws secrets | — |
+| `coupon` | 쿠폰 — 단계 목록(무료 · 정률 · 정액, n회차)으로 마케팅이 행 하나로 만드는 정의, 쿠폰함, 공용 코드 등록, 보상 지급기 `coupon` 과 결제 할인 수단 `coupon`(예약 · 확정 · 해제 · 복원). | `--modules coupon,coupon-jdbc` | 쿠폰, 할인 코드, 프로모션 코드, 무료 이용권, n달 무료, 쿠폰함 / coupon, promo code, discount code, voucher, coupon wallet | — |
+| `coupon-jdbc` | 쿠폰 정의 · 쿠폰함 · 공용 코드를 DB 에 둔다 (PostgreSQL · MySQL) — 예약 · 확정은 조건부 갱신, 발급 한도는 정의 줄 잠금. | `--modules coupon-jdbc` | 쿠폰 저장소, 쿠폰 DB / coupon storage, coupon repository | — |
 | `crypto` | AES-GCM 텍스트 암호화 · 키 회전용 키 id 봉투 · URL 에 안전한 불투명 토큰 · 선택적 영속 변환기. | `--modules crypto` | 암호화, 복호화, 비밀 저장, 불투명 URL, 키 회전 / encryption, aes gcm, opaque token, key rotation, encrypt at rest | — |
 | `dashboard` | 관리자 대시보드 조립기 — 다른 모듈이 빈으로 기여한 숫자 타일 · 순위 탭 · 같은 사람 묶음 퍼널을 모아 한 화면 분량(직전 기간 비교 · 그래프 시리즈 포함)으로 돌려주는 API(/api/v1/admin/dashboard). 계산은 프로젝트별 짧은 캐시를 지나 운영자가 여럿 열어도 DB · 외부 호출은 캐시 주기당 한 번이고, 카드 하나가 실패해도 그 카드만 상태로 말한다. 카드는 account-jdbc · auth-session-jdbc · payment-jdbc 나 앱이 기여한다. 권한 dashboard.read, 기본 꺼짐(skeleton.dashboard.admin.enabled). | `--modules dashboard` | 관리자 대시보드, 어드민 대시보드, 통계 화면, 매출 가입 숫자, 퍼널, 지표 카드 / admin dashboard, metrics, kpi tiles, funnel, analytics overview | `@skeleton/dashboard` |
 | `dashboard-cloudflare` | 대시보드에 접속 숫자를 얹는다 — Cloudflare Web Analytics(쿠키 없음 · 정적 페이지 포함)의 방문 · 페이지뷰 타일과 유입 · 많이 본 페이지 · 국가 · 기기 순위. 어제까지는 새벽 적재 작업이 일별 표에 옮긴 값, 오늘은 5분 서버 캐시(운영자가 여럿이어도 외부 호출은 주기당 한 번). 키가 없으면 기동은 하고 그 카드만 「연결하면 보입니다」. 프로젝트 모드는 프로젝트마다 자기 계정 id · 사이트 태그 · 토큰. | `--modules dashboard-cloudflare` | 접속 통계, 방문자 수, 클라우드플레어 분석, 페이지뷰, 유입 경로, 국가별 방문 / cloudflare web analytics, visits, page views, referrers, traffic stats | `@skeleton/dashboard` |
@@ -544,6 +546,34 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 홈서버 배포에는 AWS 가 없다 — 고르지 않는다(deploy.md)
   - paths 를 정하면 부팅에서 AWS 자격 증명을 찾는다
 - 키워드: AWS 설정, 파라미터 스토어, SSM, 비밀 불러오기 / aws ssm, parameter store, remote config, aws secrets
+
+### `coupon` — 쿠폰 — 단계 목록(무료 · 정률 · 정액, n회차)으로 마케팅이 행 하나로 만드는 정의, 쿠폰함, 공용 코드 등록, 보상 지급기 `coupon` 과 결제 할인 수단 `coupon`(예약 · 확정 · 해제 · 복원).
+
+- 종류 · 상태: module · experimental — 위치 `modules/coupon`
+- 켜는 법: `--modules coupon,coupon-jdbc`
+- 의존 한 줄: `implementation(project(":modules:coupon"))`
+- 자동으로 따라온다: `json`
+- 함께 골라야 한다: `coupon-jdbc`
+- 설정 접두사 `skeleton.coupon` — 키와 기본값 `docs/config/modules/coupon.yml`
+- HTTP 경로: `/api/v1/admin`, `/api/v1/coupons`
+- 문서: `docs/modules/coupon.md`
+- 쓰지 않는 경우:
+  - coupon 은 저장소를 모른다 — coupon-jdbc 를 같이 고른다
+  - 쿠폰을 언제 주는지(출석 · 친구초대)는 이벤트 모듈의 몫이다 — 이 모듈은 지급기로 받기만 한다
+  - 결제 금액을 깎는 일은 payment 의 몫이다 — 이 모듈은 할인 수단으로 쓸 수 있는지 판정하고 쥐었다 놓을 뿐이다
+- 키워드: 쿠폰, 할인 코드, 프로모션 코드, 무료 이용권, n달 무료, 쿠폰함 / coupon, promo code, discount code, voucher, coupon wallet
+
+### `coupon-jdbc` — 쿠폰 정의 · 쿠폰함 · 공용 코드를 DB 에 둔다 (PostgreSQL · MySQL) — 예약 · 확정은 조건부 갱신, 발급 한도는 정의 줄 잠금.
+
+- 종류 · 상태: module · experimental — 위치 `modules/coupon-jdbc`
+- 켜는 법: `--modules coupon-jdbc`
+- 의존 한 줄: `implementation(project(":modules:coupon-jdbc"))`
+- 자동으로 따라온다: `coupon`, `json`
+- 설정 접두사 없음
+- 문서: `docs/modules/coupon-jdbc.md`
+- 쓰지 않는 경우:
+  - DataSource · db-* 모듈과 이 모듈의 마이그레이션이 적용된 스키마가 필요하다
+- 키워드: 쿠폰 저장소, 쿠폰 DB / coupon storage, coupon repository
 
 ### `crypto` — AES-GCM 텍스트 암호화 · 키 회전용 키 id 봉투 · URL 에 안전한 불투명 토큰 · 선택적 영속 변환기.
 
@@ -1168,7 +1198,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 - 종류 · 상태: app · stable — 위치 `apps/workbench`
 - 켜는 법: `--with-workbench`
-- 자동으로 따라온다: `alert-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `board`, `board-jdbc`, `config-aws-ssm`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `db-mysql`, `event-kafka`, `json`, `notification`, `notification-jdbc`, `notification-slack`, `notification-sse`, `notification-websocket`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `reward`, `reward-jdbc`, `scheduler`, `storage`, `storage-s3`
+- 자동으로 따라온다: `alert-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `board`, `board-jdbc`, `config-aws-ssm`, `coupon`, `coupon-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `db-mysql`, `event-kafka`, `json`, `notification`, `notification-jdbc`, `notification-slack`, `notification-sse`, `notification-websocket`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `reward`, `reward-jdbc`, `scheduler`, `storage`, `storage-s3`
 - HTTP 경로: `/api/v1`, `/api/v1/examples`, `/api/v1/skeleton`, `/api/v1/skeleton/enums`, `/api/v1/skeleton/json`, `/api/v1/skeleton/payments`, `/api/v1/skeleton/polymorphic/contents`
 - 문서: `docs/minimal-composition.md`, `docs/modules/README.md`
 - 짝 프런트(react-skeleton): 항목 `app-workbench` · 조각 `--with-workbench`
