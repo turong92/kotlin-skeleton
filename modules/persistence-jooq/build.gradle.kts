@@ -19,6 +19,8 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-testcontainers")
     testImplementation("org.testcontainers:testcontainers-junit-jupiter")
     testImplementation("org.testcontainers:testcontainers-postgresql")
+    testImplementation("org.testcontainers:testcontainers-mysql")   // -Pskeleton.jooq.dialect=mysql 이면 시험이 MySQL 컨테이너에 읽고 쓴다
+    testRuntimeOnly("com.mysql:mysql-connector-j")
     testRuntimeOnly("org.postgresql:postgresql")   // 방언 모듈(db-postgresql)이 아니라 드라이버만: 이 모듈은 다른 모듈에 기대지 않는다
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
@@ -88,6 +90,8 @@ afterEvaluate {
 }
 
 tasks.test {
+    // 시험은 생성에 쓴 방언의 DB 에 읽고 쓴다 — mysql 로 생성한 코드(UtcInstantConverter)를 PostgreSQL 에 쓰면 시간이 어긋난다
+    systemProperty("skeleton.jooq.dialect", jooqDialect)
     // 형제 모듈 마이그레이션이 있었다면 그 테이블이 실제로 생성됐는지 확인한다 (입력이 조용히 비는 것을 막는다)
     systemProperty("skeleton.jooq.expectedModuleTables", presentSiblings.values.joinToString(","))
 }

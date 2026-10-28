@@ -106,7 +106,7 @@ class LogMaskerTest {
     }
 
     @Test
-    fun `masking time grows about linearly with the line length for every default rule`() {
+    fun `masking a very long hostile line finishes in time for every default rule - no quadratic or worse backtracking`() {
         val lines = listOf<(Int) -> String>(
             { n -> "/" + "a-".repeat(n / 2) },
             { n -> "/" + "eyJ-".repeat(n / 4) },
@@ -118,7 +118,7 @@ class LogMaskerTest {
             { n -> "a.".repeat(n / 2) },
         )
         listOf(LogMasker(), LogMasker(maskEmails = true)).forEach { m ->
-            lines.forEachIndexed { i, line -> TimingGrowth.assertLinear("rule line #$i") { m.mask(line(it)) } }
+            lines.forEachIndexed { i, line -> RegexBlowupGuard.assertFinishesInTime("rule line #$i") { m.mask(line(it)) } }
         }
     }
 
@@ -135,23 +135,5 @@ class LogMaskerTest {
         assertEquals("/a/token=abc/APPSECRET", m.maskRequestPath("/a/token=abc/APPSECRET"), "default and app rules do not run on a path")
         val cut = m.maskRequestPath("/p" + "y".repeat(600))
         assertEquals(("/p" + "y".repeat(510)) + LogMasker.TRUNCATED_MARK, cut)
-    }
-}
-
-/** 입력을 n → 2n 으로 늘렸을 때 시간이 3배 아래인지(제곱이면 4배)와 넉넉한 절대 상한(200ms)을 잰다 — 기계가 느려도 거짓 실패하지 않게 절대 시간만으로는 가르지 않는다. */
-object TimingGrowth {
-    const val N = 2000
-    const val ABSOLUTE_LIMIT_MS = 500.0
-    private const val SLACK_MS = 25.0   // 입력이 작아 잡음이 비율을 지배한다(0.7ms → 12ms 가 나온 적이 있다) — 제곱이면 수백 ms~초라 이 여유로도 잡힌다
-
-    private fun bestMillis(block: () -> Unit): Double = (1..7).minOf { val t = System.nanoTime(); block(); (System.nanoTime() - t) / 1e6 }
-
-    // 길이를 네 배로: 선형이면 약 4배, 이차면 16배 — 8배를 경계로 둬서 바쁜 맥(다른 빌드와 같이 돌 때)에서도 흔들리지 않게 한다
-    fun assertLinear(what: String, run: (Int) -> Unit) {
-        run(N) // 예열
-        val small = bestMillis { run(N) }
-        val big = bestMillis { run(4 * N) }
-        assertTrue(big < ABSOLUTE_LIMIT_MS, "$what: ${4 * N} chars took ${big}ms")
-        assertTrue(big < 8 * small + SLACK_MS, "$what: four times the input took ${small}ms -> ${big}ms (quadratic would be 16x)")
     }
 }

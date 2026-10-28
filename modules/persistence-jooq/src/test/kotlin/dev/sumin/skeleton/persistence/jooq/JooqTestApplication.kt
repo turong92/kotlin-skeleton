@@ -7,6 +7,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication
 import org.springframework.boot.jdbc.autoconfigure.JdbcConnectionDetails
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
+import org.testcontainers.mysql.MySQLContainer
 import org.testcontainers.postgresql.PostgreSQLContainer
 import org.testcontainers.utility.DockerImageName
 
@@ -16,8 +17,24 @@ class JooqTestApplication
 /** JVM 하나에 PostgreSQL 컨테이너 하나, 컨텍스트마다 그 안의 새 데이터베이스 하나 (이유: 앱의 TestcontainersConfiguration · `TestContainerRulesTest`). */
 @TestConfiguration(proxyBeanMethods = false)
 class JooqTestcontainers {
+    /** 코드 생성에 쓴 방언(`-Pskeleton.jooq.dialect`, 기본 postgresql)의 DB — 생성물과 같은 DB 에 써야 시간 왕복이 의미가 있다 */
     @Bean
-    fun db(): JdbcConnectionDetails = SharedPostgres.newDatabase()
+    fun db(): JdbcConnectionDetails = if (JooqDialect.current == "mysql") SharedMySql.details() else SharedPostgres.newDatabase()
+}
+
+object JooqDialect {
+    val current: String = System.getProperty("skeleton.jooq.dialect", "postgresql")
+}
+
+/** JVM 하나에 MySQL 컨테이너 하나 (이 모듈의 DB 시험 컨텍스트는 하나다). 세션 시간대는 UTC 로 고정한다 — db-mysql 모듈이 앱에 하는 일과 같다 */
+object SharedMySql {
+    private val container: MySQLContainer by lazy { MySQLContainer(DockerImageName.parse("mysql:8.4")).also { it.start() } }
+
+    fun details(): JdbcConnectionDetails = object : JdbcConnectionDetails {
+        override fun getUsername(): String = container.username
+        override fun getPassword(): String = container.password
+        override fun getJdbcUrl(): String = container.jdbcUrl + "?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true&preserveInstants=false"
+    }
 }
 
 object SharedPostgres {

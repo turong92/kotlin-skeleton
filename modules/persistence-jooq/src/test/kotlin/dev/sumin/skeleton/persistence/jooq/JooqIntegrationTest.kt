@@ -18,7 +18,7 @@ import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
 
 /**
- * DB 없이 생성한 코드(DDLDatabase) 로 실제 PostgreSQL(Testcontainers) 에 읽고 쓴다.
+ * DB 없이 생성한 코드(DDLDatabase) 로 실제 DB(Testcontainers)에 읽고 쓴다 — 코드 생성에 쓴 방언의 DB: 기본 PostgreSQL, `-Pskeleton.jooq.dialect=mysql` 이면 MySQL.
  * - *_at 컬럼은 Instant 로 생성됐고 JVM 이 서울이어도 UTC 리터럴로 왕복
  * - created_at/updated_at 은 리스너가 채움
  */
@@ -51,10 +51,13 @@ class JooqIntegrationTest {
         assertEquals(NOW, loaded.createdAt)
         assertEquals(NOW, loaded.updatedAt)
 
-        val raw = dsl.fetchValue(
-            "select (happened_at at time zone 'UTC')::text || '|' || local_wall::text || '|' || (created_at at time zone 'UTC')::text from jooq_probe where id = ?",
-            record.id,
-        ) as String
+        // 저장된 글자를 방언의 SQL 로 직접 읽는다 — Instant 는 UTC 리터럴로, 벽시계는 그대로 들어갔는가
+        val rawSql = if (JooqDialect.current == "mysql") {
+            "select concat(date_format(happened_at, '%Y-%m-%d %H:%i:%s.%f'), '|', date_format(local_wall, '%Y-%m-%d %H:%i:%s'), '|', date_format(created_at, '%Y-%m-%d %H:%i:%s')) from jooq_probe where id = ?"
+        } else {
+            "select (happened_at at time zone 'UTC')::text || '|' || local_wall::text || '|' || (created_at at time zone 'UTC')::text from jooq_probe where id = ?"
+        }
+        val raw = dsl.fetchValue(rawSql, record.id) as String
         assertEquals("2026-03-01 12:00:00.123456|2026-10-05 21:00:00|2026-09-10 00:00:00", raw)
     }
 
