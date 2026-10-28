@@ -107,7 +107,7 @@ data class PaymentSubscription(
      */
     val registrationWindow: String? = null,
     val registrationWindowAt: Instant? = null,
-    /** 시작 때 박은 「같은 등급 월 정가」(월보다 긴 주기의 구독만) - 해지의 쓴 몫이 쓴다. 가격표가 나중에 바뀌어도 그대로다. 없으면(옛 줄 · 코드 플랜) 해지 때 지금 표에서 찾는다. 플랜을 바꾸면 비운다. */
+    /** 시작 때 박은 「같은 등급 월 정가」(월보다 긴 주기의 구독만) - 해지의 쓴 몫이 쓴다. 가격표가 나중에 바뀌어도 그대로다. 없으면(옛 줄 · 코드 플랜) 해지 때 지금 표에서 찾는다. 플랜을 바꾸면 새 플랜 값으로 다시 박는다. */
     val regularMonthlyAmount: Long? = null,
 ) {
     /** 결제사가 갱신을 한다 — 우리 갱신 · 중도 해지 · 플랜 변경 길은 이 구독에 열리지 않는다. */

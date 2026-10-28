@@ -51,4 +51,24 @@ class CancelMonthlyRegularPriceTest {
         kit.plans.plans += SubscriptionPlan("basic-new", "Basic", PaymentAmount(9_000, "KRW"), "P1M", 1)   // 월 가격이 교체됐다
         assertEquals(before, kit.cancellations.preview("acc_1", active.id).quote.refund)
     }
+
+    @Test
+    fun `after a same-period upgrade the list price of the new tier is written, and the refund keeps it when that monthly plan is stopped`() {
+        val kit = newKit(SubscriptionPlan("basic", "Basic", PaymentAmount(3_900, "KRW"), "P1M", 1))
+        kit.plans.plans += SubscriptionPlan("plus", "Plus", PaymentAmount(5_900, "KRW"), "P1M", 2, regularAmount = 6_900)
+        kit.plans.plans += SubscriptionPlan("plus-yearly", "Plus yearly", PaymentAmount(69_000, "KRW"), "P1Y", 2, productCode = "plus")
+        val id = kit.subscriptions.start("acc_1", "basic-yearly", IdempotencyKey("k1"), "KR").subscription.id
+        val active = kit.subscriptions.activate("acc_1", id, mapOf("authKey" to "auth_1"))
+        assertEquals(3_900L, active.regularMonthlyAmount)
+        kit.time.advance(Duration.ofDays(40))
+        val quote = kit.planChanges.preview("acc_1", id, "plus-yearly")
+
+        val upgraded = kit.planChanges.change("acc_1", id, "plus-yearly", quote.charge.amount, IdempotencyKey("chg-1"))
+
+        assertEquals("plus-yearly", upgraded.planCode)
+        assertEquals(6_900L, upgraded.regularMonthlyAmount, "the new tier's monthly list price, not the old tier's")
+        val before = kit.cancellations.preview("acc_1", id).quote.refund
+        kit.plans.plans.removeAll { it.code == "plus" }
+        assertEquals(before, kit.cancellations.preview("acc_1", id).quote.refund)
+    }
 }

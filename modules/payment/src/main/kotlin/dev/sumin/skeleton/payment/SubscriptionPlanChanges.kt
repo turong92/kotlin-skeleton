@@ -66,7 +66,7 @@ class SubscriptionPlanChanges(
             if (quote.charge.amount > expectedCharge) throw PaymentPlanChangeChargeChangedException()
             if (quote.charge.amount == 0L) {
                 // 차액이 최소 금액 미만이다 — 과금 없이 바꾼다
-                return@inTransaction Claim(lifecycle.save(tx, locked, locked.status) { it.copy(planCode = quote.plan.code, amount = quote.plan.amount) }, null)
+                return@inTransaction Claim(lifecycle.save(tx, locked, locked.status) { it.copy(planCode = quote.plan.code, amount = quote.plan.amount, regularMonthlyAmount = lifecycle.regularMonthlyOf(quote.plan)) }, null)
             }
             val order = lifecycle.chargeOrder(locked, PaymentOrderKind.SUBSCRIPTION_CHANGE, quote.plan.name, ids, quote.charge, quote.plan.code, dedupeKey)
             if (!tx.insertOrderIfAbsent(order)) return@inTransaction Claim(locked, null) // 같은 키로 동시에 들어온 요청이 먼저 넣었다

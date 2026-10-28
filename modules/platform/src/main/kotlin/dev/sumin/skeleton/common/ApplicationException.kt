@@ -49,5 +49,5 @@ open class ApplicationException(
  * 모듈이 자기 에러 코드로 같은 모양(`errors[]`)을 내고 싶으면 [errorCode] 를 준다(예: `CATALOG.PRICE_INVALID`).
  * [fieldCode] 는 프론트가 문구를 고르는 코드 (`Required` · `Size` · `Pattern` 처럼 Bean Validation 의 이름을 따른다).
  */
-open class FieldValidationException(val field: String, val fieldCode: String, message: String, errorCode: ErrorCode = PlatformErrorCode.VALIDATION_FAILED) :
+class FieldValidationException(val field: String, val fieldCode: String, message: String, errorCode: ErrorCode = PlatformErrorCode.VALIDATION_FAILED) :
     ApplicationException(message = message, errorCode = errorCode)

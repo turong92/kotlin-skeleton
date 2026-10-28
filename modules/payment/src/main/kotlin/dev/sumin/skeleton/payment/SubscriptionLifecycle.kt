@@ -19,6 +19,12 @@ class SubscriptionLifecycle(
     /** 구독 할인 일정(할인 수단이 붙은 조립에서만) - 주문이 `PAID` 가 되면 회차를 쓰고, 구독이 끝나면 할인도 끝낸다. 조립이 만든 뒤에 끼운다. */
     var discounts: SubscriptionDiscounts? = null
 
+    /** 플랜 목록 - 플랜을 바꿀 때 새 플랜의 「같은 등급 월 정가」를 줄에 다시 박으려고 읽는다. 없으면 비운다(해지 때 지금 표에서 찾는다). */
+    var plans: () -> SubscriptionPlans? = { null }
+
+    /** 새 플랜으로 바꾸는 줄에 박을 월 정가 */
+    fun regularMonthlyOf(plan: SubscriptionPlan?): Long? = plan?.let { p -> plans()?.let { RegularMonthlyPrice.of(it, p) } }
+
     /** 상태를 [to] 로 옮기고 [mutate] 로 나머지 칸을 바꿔 저장한다. 표에 없는 전이는 [IllegalStateException]. */
     fun save(
         tx: PaymentLedgerTx,
@@ -158,7 +164,7 @@ class SubscriptionLifecycle(
                 val amount = subscription.pendingAmount ?: return stale(tx, order)
                 val restart = properties.subscription.planChange.charge == PaymentProperties.Subscription.PlanChange.Charge.FULL_RESTART
                 val changed = save(tx, subscription, subscription.status) {
-                    val switched = it.copy(planCode = planCode, amount = PaymentAmount(amount, it.amount.currency), pendingPlanCode = null, pendingAmount = null, regularMonthlyAmount = null)
+                    val switched = it.copy(planCode = planCode, amount = PaymentAmount(amount, it.amount.currency), pendingPlanCode = null, pendingAmount = null, regularMonthlyAmount = regularMonthlyOf(plans()?.find(planCode)))
                     // 전액 결제하고 새 주기: 지금부터 한 주기(남은 기간은 버린다). 차액만: 기간은 그대로
                     if (restart) {
                         val anchor = order.paidAt ?: now

@@ -28,8 +28,8 @@ class PaymentSubscriptionAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    fun subscriptionLifecycle(tasks: PaymentTasks, writer: PaymentLedgerWriter, properties: PaymentProperties, review: PaymentReviewNotifier, discounts: SubscriptionDiscounts): SubscriptionLifecycle =
-        SubscriptionLifecycle(tasks, writer, properties, review).also { it.discounts = discounts }
+    fun subscriptionLifecycle(tasks: PaymentTasks, writer: PaymentLedgerWriter, properties: PaymentProperties, review: PaymentReviewNotifier, discounts: SubscriptionDiscounts, plans: ObjectProvider<SubscriptionPlans>): SubscriptionLifecycle =
+        SubscriptionLifecycle(tasks, writer, properties, review).also { it.discounts = discounts; it.plans = { plans.getIfAvailable() } }
 
     @Bean
     @ConditionalOnMissingBean

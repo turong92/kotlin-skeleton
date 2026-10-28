@@ -241,9 +241,10 @@ class InMemoryPaymentLedgerStore : PaymentLedgerStore {
         sortedWith(compareByDescending<PaymentRefund> { it.requestedAt }.thenByDescending { it.id })
             .filter { before == null || it.requestedAt < before.requestedAt || (it.requestedAt == before.requestedAt && it.id < before.id) }
 
-    /** 커밋된 모든 줄 — 시험이 상태를 한눈에 보려고. */
+    /** 커밋된 모든 구독 줄 — 시험이 상태를 한눈에 보려고. */
     fun allSubscriptions(): List<PaymentSubscription> = synchronized(commitMutex) { committedSubscriptions.values.toList() }
 
+    /** 커밋된 모든 주문 줄 — 시험이 상태를 한눈에 보려고. */
     fun allOrders(): List<PaymentOrder> = synchronized(commitMutex) { committed.values.toList() }
 
     inner class Tx : PaymentLedgerTx {

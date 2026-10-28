@@ -180,7 +180,7 @@ class PaymentLedgerKit(
         },
     )
     val subscriptionDiscounts = dev.sumin.skeleton.payment.SubscriptionDiscounts(store) { time.now() }
-    val lifecycle = SubscriptionLifecycle(tasks, writer, properties, review).also { it.discounts = subscriptionDiscounts }
+    val lifecycle = SubscriptionLifecycle(tasks, writer, properties, review).also { it.discounts = subscriptionDiscounts; it.plans = { plans } }
     val convergence = PaymentConvergence(writer, tasks, review, LedgerRefundConvergence(writer, tasks, review)).also { it.subscriptions = lifecycle }
     val plans = TestSubscriptionPlans()
     val fulfillment = PaymentFulfillment(store, listener, writer, lifecycle, discounts)
