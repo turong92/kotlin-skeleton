@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.payment
 
 import dev.sumin.skeleton.common.FieldValidationException
+import dev.sumin.skeleton.common.discount.DiscountClaim
 import dev.sumin.skeleton.common.id.SortableIds
 import dev.sumin.skeleton.crypto.TextEncryptor
 import java.security.SecureRandom
@@ -28,6 +29,10 @@ class PaymentSubscriptions(
     private val properties: PaymentProperties,
     private val random: Random = SecureRandom(),
     private val ids: SortableIds = SortableIds.system,
+    /** 쿠폰 같은 할인 수단을 모으는 곳 - 없으면 구독의 할인 지정은 모두 거절된다. */
+    private val couponDiscounts: PaymentDiscounts? = null,
+    /** 구독의 할인 일정(단계 복사 · 회차) - 없으면 할인 없는 구독만. */
+    private val scheduleDiscounts: SubscriptionDiscounts? = null,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -50,6 +55,8 @@ class PaymentSubscriptions(
         returnOrigin: String? = null,
         /** 서버가 정한 결제사가 아니라 구매자가 고른 결제사다 - 플랜 통화를 받는지 확인한다. */
         providerChosen: Boolean = false,
+        /** 쿠폰 같은 할인 수단 지정(첫 판은 하나). 쿠폰은 첫 결제 때 첫 주문 이름으로 쥐고, 단계는 지금 복사한다. */
+        discounts: List<DiscountClaim> = emptyList(),
     ): StartedSubscription {
         val dedupeKey = PaymentOrderIds.dedupeKey(accountId, key)
         store.findSubscriptionByDedupeKey(dedupeKey)?.let { return replay(it, planCode, returnOrigin) }
@@ -62,6 +69,15 @@ class PaymentSubscriptions(
         val customerKey = PaymentOrderIds.newCustomerKey(random)
         // 결제사가 갱신까지 하는 결제사(Paddle)를 골랐으면 그 결제창 값, 아니면 카드 등록 창 값
         val hosted = provider?.let(::hostedGateway)
+        // 쿠폰 - 결제사가 갱신까지 하는 구독(Paddle)은 금액을 결제사가 정하므로 받지 않는다. 지금은 보기만 한다(아무것도 안 쥔다): 첫 과금액과 단계를 얻는다
+        var offer: SubscriptionOffer? = null
+        if (discounts.isNotEmpty()) {
+            if (hosted != null) throw PaymentDiscountNotSupportedException()
+            val collection = couponDiscounts ?: throw PaymentDiscountNotApplicableException("This discount is not offered here.")
+            checkNotNull(scheduleDiscounts) { "subscription discounts need SubscriptionDiscounts" }
+            offer = collection.subscriptionOffer(discounts, collection.subscriptionTarget(accountId, plan))
+        }
+        val firstAmount = PaymentAmount(plan.amount.amount - (offer?.firstDiscount ?: 0), plan.amount.currency)
         val gateway: PaymentGateway
         val setup: BillingSetup
         var reference: String? = null
@@ -78,7 +94,7 @@ class PaymentSubscriptions(
             gateway = billing
             // 서버가 결제사를 먼저 불러 예약해야 창이 열리는 결제사(카카오페이 · 네이버페이)는 여기서(트랜잭션 밖) 예약하고 번호를 줄에 박는다
             val prepared = try {
-                billing.prepareBilling(BillingPrepareRequest(subscriptionId, customerKey, plan.name, plan.amount, PaymentOrderIds.initialOrderId(subscriptionId), returnOrigin, accountId))
+                billing.prepareBilling(BillingPrepareRequest(subscriptionId, customerKey, plan.name, firstAmount, PaymentOrderIds.initialOrderId(subscriptionId), returnOrigin, accountId))
             } catch (e: Exception) {
                 if (e is InterruptedException) throw e
                 log.warn("the provider could not prepare a card registration {}", PaymentFailures.describe(e))
@@ -124,7 +140,10 @@ class PaymentSubscriptions(
             registrationWindowAt = window?.let { now },
         )
         // 줄을 먼저 커밋한다(결제사 호출은 트랜잭션 밖). 같은 요청 키로 동시에 들어온 쪽은 dedupe_key 유니크로 `false` 를 받아 그 줄을 돌려받는다.
-        if (!store.inTransaction { it.insertSubscriptionIfAbsent(subscription) }) {
+        val inserted = store.inTransaction { tx ->
+            tx.insertSubscriptionIfAbsent(subscription).also { added -> if (added && offer != null) checkNotNull(scheduleDiscounts).attach(tx, subscription, offer.offer, offer.kind) }
+        }
+        if (!inserted) {
             return replay(checkNotNull(store.findSubscriptionByDedupeKey(dedupeKey)) { "the subscription for this idempotency key disappeared" }, planCode, returnOrigin)
         }
         if (creator == null) return StartedSubscription(subscription, setup, replayed = false)
@@ -183,6 +202,10 @@ class PaymentSubscriptions(
             return claim.subscription
         }
 
+        if (claim.order.provider == PaymentOrders.FREE_PROVIDER) {
+            charges.settleFree(claim.order)
+            return store.findSubscription(subscriptionId) ?: claim.subscription
+        }
         val outcome = charges.charge(gateway, claim.subscription, claim.order, issued.token, PaymentActor.USER)
         val after = store.findSubscription(subscriptionId) ?: claim.subscription
         if (outcome is ChargeOutcome.Declined) {
@@ -202,8 +225,10 @@ class PaymentSubscriptions(
                 if (locked.status == SubscriptionStatus.ENDED) throw PaymentSubscriptionNotActivatableException()
                 if (locked.status != SubscriptionStatus.PENDING || locked.chargeOrderId != null) return@inTransaction Claim(locked, null)
                 val planName = plans.find(locked.planCode)?.name ?: locked.planCode
-                val order = lifecycle.chargeOrder(locked, PaymentOrderKind.SUBSCRIPTION_INITIAL, planName, ids, id = PaymentOrderIds.initialOrderId(locked.id), providerPaymentId = locked.firstTransactionId)
+                // 등록이 곧 첫 결제인 결제사는 0원 1회차도 결제사를 거친다(승인 없이 빌링키만 발급 - 카카오페이 공식 문서) - 내부 0원 주문이 아니다
+                val order = firstOrder(tx, locked, planName, offProviderWhenFree = false, id = PaymentOrderIds.initialOrderId(locked.id), providerPaymentId = locked.firstTransactionId)
                 check(tx.insertOrderIfAbsent(order)) { "the first order of a subscription already exists" }
+                reserveCoupon(tx, locked, order)
                 lifecycle.chargeStarted(tx, order, PaymentActor.USER, accountId)
                 lifecycle.scheduleReconcile(order)
                 val claimed = locked.copy(activeKey = accountId, chargeOrderId = order.id, attempt = 1, updatedAt = writer.now())
@@ -225,6 +250,34 @@ class PaymentSubscriptions(
         if (outcome is ChargeOutcome.Declined) throw PaymentDeclinedException(outcome.providerCode, gateway.billingDeclineCategory(outcome.providerCode))
         return after
     }
+
+    /** 첫 주문 - 금액은 구독에 복사된 할인의 첫 단계가 정한다(할인이 없으면 플랜 금액). 무료(0원)이고 [offProviderWhenFree] 면 결제사 없는 주문(`free`)으로 만든다. */
+    private fun firstOrder(tx: PaymentLedgerTx, locked: PaymentSubscription, planName: String, offProviderWhenFree: Boolean, id: String?, providerPaymentId: String?): PaymentOrder {
+        val amount = scheduleDiscounts?.amountFor(tx, locked) ?: locked.amount
+        val discounted = amount.amount < locked.amount.amount
+        return lifecycle.chargeOrder(
+            locked, PaymentOrderKind.SUBSCRIPTION_INITIAL, planName, ids, amount = amount, id = id, providerPaymentId = providerPaymentId,
+            originalAmount = locked.amount.amount.takeIf { discounted }, offProvider = offProviderWhenFree && amount.amount == 0L,
+        )
+    }
+
+    /** 첫 주문 이름으로 쿠폰을 쥐고 내역 줄을 넣는다(구독 줄을 잠근 트랜잭션 안). 시작 때 본 첫 과금액과 달라졌으면 쿠폰이 그사이 바뀐 것이다 - 되돌린다. */
+    private fun reserveCoupon(tx: PaymentLedgerTx, locked: PaymentSubscription, order: PaymentOrder) {
+        val discount = tx.subscriptionDiscount(locked.id)?.takeIf { it.status == SubscriptionDiscountStatus.ACTIVE } ?: return
+        val collection = checkNotNull(couponDiscounts) { "a subscription discount needs the discount collection" }
+        val plan = SubscriptionPlan(locked.planCode, locked.planCode, locked.amount, locked.period, 0)
+        val reserved = collection.subscriptionOffer(listOf(DiscountClaim(discount.kind, discount.sourceRef)), collection.subscriptionTarget(locked.accountId, plan), holderRef = order.id)
+        if (reserved.firstDiscount != locked.amount.amount - order.amount.amount) throw PaymentDiscountUnavailableException()
+        val now = writer.now()
+        tx.insertOrderDiscount(OrderDiscount(order.id, 1, reserved.kind, reserved.offer.sourceRef, discount.label, reserved.firstDiscount, order.amount.normalizedCurrency, OrderDiscountStatus.RESERVED, now, now))
+    }
+
+    /** 이 구독이 지금 과금할 금액 - 재전송이 카드 등록 창을 다시 예약할 때 첫 결제액으로 쓴다. */
+    private fun firstAmountOf(subscription: PaymentSubscription): PaymentAmount =
+        scheduleDiscounts?.amountFor(subscription, store.findSubscriptionDiscount(subscription.id)) ?: subscription.amount
+
+    /** 「내 구독」에 보이는 할인 - 없거나 끝났으면 null. */
+    fun discountOf(subscription: PaymentSubscription): SubscriptionDiscountView? = scheduleDiscounts?.view(subscription)
 
     /** 해지 예약 — `ACTIVE` → `CANCELING`(기간 끝까지 이용), `PAST_DUE` 는 바로 끝. 다시 눌러도 같은 답. 시작하지 않은 구독은 [PaymentSubscriptionNotCancelableException]. */
     fun cancel(accountId: String, subscriptionId: String): PaymentSubscription {
@@ -263,10 +316,12 @@ class PaymentSubscriptions(
             if (locked.status != SubscriptionStatus.PENDING || locked.chargeOrderId != null) return@inTransaction Claim(locked, null)
 
             val planName = plans.find(locked.planCode)?.name ?: locked.planCode
-            val order = lifecycle.chargeOrder(locked, PaymentOrderKind.SUBSCRIPTION_INITIAL, planName, ids)
+            // 첫 기간이 무료면(0원) 결제사를 부르지 않는다 - 카드는 이미 등록했다. 결제사 없이 끝나는 주문(`free`)이라 조회 작업도 없다
+            val order = firstOrder(tx, locked, planName, offProviderWhenFree = true, id = null, providerPaymentId = null)
             check(tx.insertOrderIfAbsent(order)) { "the first order of a subscription already exists" }
+            reserveCoupon(tx, locked, order)
             lifecycle.chargeStarted(tx, order, PaymentActor.USER, accountId)
-            lifecycle.scheduleReconcile(order)
+            if (order.provider != PaymentOrders.FREE_PROVIDER) lifecycle.scheduleReconcile(order)
             // 상태는 `PENDING` 그대로다(첫 결제가 끝나야 `ACTIVE`) — 자리 · 빌링키 · 과금 주문만 박는다. 자리가 겹치면 저장소가 [PaymentLedgerConflictException] 으로 이 트랜잭션을 되돌린다
             val claimed = locked.copy(
                 activeKey = accountId,
@@ -325,7 +380,7 @@ class PaymentSubscriptions(
                 // 유효시간이 지났거나 저장하지 않는 결제사의 재전송은 다시 예약한다 - 새 번호로 덮는다(앞 창의 결제는 모름이 되어 조회가 닫는 알려진 한계)
                 val planName = plans.find(existing.planCode)?.name ?: existing.planCode
                 val prepared = try {
-                    gateway.prepareBilling(BillingPrepareRequest(existing.id, checkNotNull(existing.customerKey), planName, existing.amount, PaymentOrderIds.initialOrderId(existing.id), returnOrigin, existing.accountId))
+                    gateway.prepareBilling(BillingPrepareRequest(existing.id, checkNotNull(existing.customerKey), planName, firstAmountOf(existing), PaymentOrderIds.initialOrderId(existing.id), returnOrigin, existing.accountId))
                 } catch (e: Exception) {
                     if (e is InterruptedException) throw e
                     log.warn("the provider could not prepare a card registration {}", PaymentFailures.describe(e))

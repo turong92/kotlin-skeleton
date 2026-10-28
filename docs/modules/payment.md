@@ -88,7 +88,20 @@
 - **0원** (`provider = "free"`): 결제사를 부르지 않고 한 트랜잭션에서 `PENDING → PAID` + 지급 작업(만료 작업 · 결제창 없음). 지급 훅은 평소처럼 돈다. 환불 대상이 아니다(`NOTHING_TO_REFUND`). 결제 건수에는 들고 매출은 0. 모드는 열 수 있는 결제사의 모드.
 - **결제 면제** (`provider = "exempt"`): 권한 `payment.exempt`([PaymentPermissions.EXEMPT], 기본 역할 없음 — 전권 `*` 는 배정 없이 가진다)를 가진 계정의 단건 주문은 결제사 없이 `ORDER_CREATED → EXEMPTED(행위자 = 그 계정) → PENDING → PAID` 로 끝난다. `original_amount` = 카탈로그 가격, `amount` 0, 할인 줄 없음, 쿠폰을 같이 보내도 쥐지 않는다. 대시보드 순매출 · 결제 건수 · 퍼널 「결제」(`payment-jdbc` 의 `CurrentModeOrders` 가 `provider <> 'exempt'`), 환불, 「첫 결제만」 판정(`hasPaidOrder` 는 `free` · `exempt` 를 세지 않는다)에서 빠진다. 판정은 요청마다 `PaymentExemption`(platform `OperatorAccess` — 계정 모듈이 있으면 저장된 역할을 매번 읽어 회수가 다음 요청부터 먹고, 역할 위계가 있으면 물려받은 권한도 따른다). 앱이 면제 주문을 가르려면 `order.provider == PaymentOrders.EXEMPT_PROVIDER`(`settlement`).
 - **결제사 최소 금액**: `PaymentCheckoutGateway.minimumAmount(currency)`(기본 null) — 0 < 최종가 < 최소 금액이면 `PAYMENT.DISCOUNT_BELOW_MINIMUM`. 토스: 원화 100원(토스페이먼츠 오류 메시지 「신용카드는 100원 이상」에서 확인, 공식 문서 페이지로 확정하지 못했다 — 운영 전 계약으로 확인). 카카오페이 · 네이버페이는 공식 값을 찾지 못해 null(제한 없음으로 본다).
-- **지원하지 않는 길**: 금액을 결제사가 직접 정하는 경로(거래를 먼저 만드는 결제사 — Paddle)는 `PAYMENT.DISCOUNT_NOT_SUPPORTED`. 구독 할인(`SubscriptionDiscounts`)은 별도 작업이다.
+- **지원하지 않는 길**: 금액을 결제사가 직접 정하는 경로(거래를 먼저 만드는 결제사 — Paddle)는 `PAYMENT.DISCOUNT_NOT_SUPPORTED`. 구독 할인은 아래 「구독 할인」.
+
+## 구독 할인 (쿠폰의 단계 일정 - 첫 달 무료 · n개월 반값 · 영원히 n%)
+
+`POST /payments/subscriptions` 에 `discounts: [{type:"coupon", ref}]`(첫 판은 한 장). 쿠폰의 **단계 목록**(`[FREE×1, PERCENT50×3, …]`)을 시작 때 구독에 **복사**한다(`payment_subscription_discounts` + `_stages` - 쿠폰 정의를 고쳐도 진행 중인 구독은 그대로, Stripe 관행). 구독의 `SubscriptionDiscounts` 가 일정을 맡는다.
+
+- **회차 = `periods_used`**: 할인이 붙은 구독 주문(첫 결제 · 갱신)이 `PAID` 될 때만 지급 고리(`SubscriptionLifecycle.onOrderPaid`, 구독 락 안)에서 1 오른다. 그래서 같은 기간의 재시도는 같은 금액이고 실패한 시도는 회차를 쓰지 않는다. 단계를 다 쓰면 `ENDED` → 정가. 이번 과금액 = 구독 줄의 금액에 `periods_used` 위치의 단계를 적용(`SubscriptionDiscounts.amountFor`).
+- **첫 결제**: 시작 때는 쿠폰을 **보기만** 한다(첫 과금액 · 단계 얻기 - 아무것도 안 쥔다). `prepareBilling` 의 금액이 첫 과금액이다. 첫 결제(`activate`) 때 첫 주문 이름(`PaymentOrderIds.initialOrderId`)으로 쿠폰을 **쥐고** 일반 주문과 같은 `payment_order_discounts` 줄을 넣는다 - 확정(지급) · 해제(첫 결제 거절) · 복원(첫 주문 전액 환불)이 단건과 같은 길이다. 그 사이 쿠폰이 팔렸거나 정의가 바뀌어 첫 과금액이 달라졌으면 `409 DISCOUNT_UNAVAILABLE` 로 거절한다(방금 발급한 빌링키는 지운다).
+- **첫 기간 무료**: 카드는 그래도 등록받는다. 토스 · 네이버페이(등록이 따로)는 빌링키를 받은 뒤 결제사 승인 대신 **내부 0원 주문**(`provider = "free"`, 조회 작업 없음)을 `PAID` 로 - 지급 고리가 평소처럼 기간을 연다. 카카오페이(등록이 곧 첫 결제)는 1회차를 **0원으로** 보내 승인 없이 빌링키(SID)만 받는다(공식 문서 「total_amount 0원으로 처리하면 승인은 발생하지 않고 SID만 발급」 - https://developers.kakaopay.com/docs/payment/online/subscription); 그 주문은 카카오페이 주문으로 남는다.
+- **갱신**: `SubscriptionRenewTaskHandler` 가 락 안에서 이번 과금액을 정한다. 0원(무료 기간)이면 결제사를 부르지 않고 내부 0원 주문을 `PAID` 로 - **빌링키가 없는 구독도 무료 기간은 넘어간다**. 주문에는 `originalAmount`(정가) · `discountAmount` 가 찍힌다.
+- **플랜 변경**: 남은 단계는 새 플랜 금액에 이어서 적용된다(과금액이 구독 줄의 금액에서 나온다; 정액은 새 금액을 넘지 않는다). 변경 차액 결제(`SUBSCRIPTION_CHANGE`)에는 할인도 회차도 없다(차액은 일할 계산이라 두 번 깎으면 안 된다). `FULL_RESTART` 로 `periodSeq` 가 1 로 돌아가도 `periods_used` 는 따로라 이어진다.
+- **끝**: 해지 예약(`CANCELING`) 중에는 단계가 보존되고, 구독이 `ENDED` 가 되면(`SubscriptionLifecycle.end`) 할인도 `ENDED` - 다시 구독하면 새 줄이고 쿠폰은 되살아나지 않는다. 환불 · 중도 해지 환불은 그 주문의 **실제 결제액** 기준이라 따로 할 일이 없다; 소진한 회차는 돌려주지 않는다. 첫 주문 전액 환불(7일 철회)은 쿠폰을 돌려준다.
+- **응답**: 구독 응답에 `discount: { label, stages[{type,value,maxDiscount,periods}], periodsUsed, nextAmount, remainingPeriods|null(영원) } | null`(끝난 할인은 `null`).
+- **안 받는 길**: 결제사가 갱신까지 하는 구독(Paddle 등 `isProviderManaged`)은 `DISCOUNT_NOT_SUPPORTED`; 쿠폰 범위에 `SUBSCRIPTION` · 그 플랜이 없으면 `DISCOUNT_NOT_APPLICABLE`.
 
 ## 상태 전이
 

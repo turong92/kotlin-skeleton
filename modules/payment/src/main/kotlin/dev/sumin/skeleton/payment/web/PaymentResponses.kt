@@ -413,9 +413,11 @@ data class SubscriptionResponse(
     val providerManaged: Boolean,
     /** 간편결제 정기 구독의 브랜드(`KAKAOPAY` · `NAVERPAY`) - 카드 끝 네 글자가 없는 구독의 「내 구독」 표시에 쓴다. 그 밖은 null. */
     val easyPayBrand: String? = null,
+    /** 할인이 붙은 구독이면 그 내용(다음 결제액 · 남은 할인 횟수), 아니면 `null`. 칸은 늘 온다. */
+    val discount: SubscriptionDiscountResponse? = null,
 ) {
     companion object {
-        fun of(subscription: dev.sumin.skeleton.payment.PaymentSubscription, planName: String?) = SubscriptionResponse(
+        fun of(subscription: dev.sumin.skeleton.payment.PaymentSubscription, planName: String?, discount: dev.sumin.skeleton.payment.SubscriptionDiscountView? = null) = SubscriptionResponse(
             id = subscription.id,
             status = subscription.status.name,
             planCode = subscription.planCode,
@@ -438,9 +440,20 @@ data class SubscriptionResponse(
                 "naverpay" -> "NAVERPAY"
                 else -> null
             },
+            discount = discount?.let(SubscriptionDiscountResponse::of),
         )
     }
 }
+
+/** 구독에 붙은 할인 - [stages] 는 시작 때 복사한 단계(쿠폰 정의를 고쳐도 그대로), [nextAmount] 는 다음 결제액(최소 단위, 구독 통화), [remainingPeriods] 는 남은 할인 횟수(영원이면 `null`). */
+data class SubscriptionDiscountResponse(val label: String, val stages: List<DiscountStageResponse>, val periodsUsed: Int, val nextAmount: Long, val remainingPeriods: Int?) {
+    companion object {
+        fun of(view: dev.sumin.skeleton.payment.SubscriptionDiscountView) =
+            SubscriptionDiscountResponse(view.label, view.stages.map { DiscountStageResponse(it.type.name, it.value, it.maxDiscount, it.periods) }, view.periodsUsed, view.nextAmount.amount, view.remainingPeriods)
+    }
+}
+
+data class DiscountStageResponse(val type: String, val value: Long, val maxDiscount: Long?, val periods: Int?)
 
 /** `GET /subscriptions/{id}/change-preview` — [charge] 는 지금 결제될 금액(0 이면 과금 없이 바뀐다), [amount] 는 새 플랜의 전체 가격, [restartsPeriod] 면 오늘부터 새 주기. */
 data class PlanChangePreviewResponse(val planCode: String, val planName: String, val charge: AmountResponse, val amount: AmountResponse, val period: String, val restartsPeriod: Boolean) {

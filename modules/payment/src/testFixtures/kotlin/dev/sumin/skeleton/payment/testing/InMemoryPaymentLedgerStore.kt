@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.payment.testing
 
 import dev.sumin.skeleton.payment.OperatorOrderFilter
+import dev.sumin.skeleton.payment.SubscriptionDiscount
 import dev.sumin.skeleton.payment.OrderDiscount
 import dev.sumin.skeleton.payment.OrderDiscountStatus
 import dev.sumin.skeleton.payment.PaymentSettlement
@@ -39,6 +40,7 @@ class InMemoryPaymentLedgerStore : PaymentLedgerStore {
     private val committed = LinkedHashMap<String, PaymentOrder>()
     private val committedEvents = ArrayList<PaymentEvent>()
     private val committedDiscounts = LinkedHashMap<Pair<String, Int>, OrderDiscount>()
+    private val committedSubscriptionDiscounts = LinkedHashMap<String, SubscriptionDiscount>()
     private val committedRefunds = LinkedHashMap<String, PaymentRefund>()
     private val committedWebhooks = LinkedHashMap<Long, PaymentWebhookEvent>()
     private val committedSubscriptions = LinkedHashMap<String, PaymentSubscription>()
@@ -160,6 +162,8 @@ class InMemoryPaymentLedgerStore : PaymentLedgerStore {
     override fun listRefundsByStatus(status: PaymentRefundStatus, before: RefundCursor?, limit: Int): List<PaymentRefund> =
         synchronized(commitMutex) { committedRefunds.values.filter { it.status == status }.refundsNewestFirst(before).take(limit) }
 
+    override fun findSubscriptionDiscount(subscriptionId: String): SubscriptionDiscount? = synchronized(commitMutex) { committedSubscriptionDiscounts[subscriptionId] }
+
     override fun findSubscription(id: String): PaymentSubscription? = synchronized(commitMutex) { committedSubscriptions[id] }
 
     override fun findSubscriptionByDedupeKey(dedupeKey: String): PaymentSubscription? =
@@ -245,6 +249,7 @@ class InMemoryPaymentLedgerStore : PaymentLedgerStore {
         private val pendingRefunds = LinkedHashMap<String, PaymentRefund>()
         private val pendingEvents = ArrayList<PaymentEvent>()
         private val pendingDiscounts = LinkedHashMap<Pair<String, Int>, OrderDiscount>()
+        private val pendingSubscriptionDiscounts = LinkedHashMap<String, SubscriptionDiscount>()
         private val pendingWebhooks = LinkedHashMap<Long, PaymentWebhookEvent>()
         private val pendingSubscriptions = LinkedHashMap<String, PaymentSubscription>()
         private var ownedSubscriptionId: String? = null
@@ -402,6 +407,21 @@ class InMemoryPaymentLedgerStore : PaymentLedgerStore {
             return row
         }
 
+        override fun subscriptionDiscount(subscriptionId: String): SubscriptionDiscount? =
+            pendingSubscriptionDiscounts[subscriptionId] ?: synchronized(commitMutex) { committedSubscriptionDiscounts[subscriptionId] }
+
+        override fun insertSubscriptionDiscount(discount: SubscriptionDiscount) {
+            check(discount.subscriptionId == ownedSubscriptionId) { "the subscription must be locked in this transaction before its discount is inserted" }
+            check(subscriptionDiscount(discount.subscriptionId) == null) { "the subscription already has a discount" }
+            pendingSubscriptionDiscounts[discount.subscriptionId] = discount
+        }
+
+        override fun updateSubscriptionDiscount(discount: SubscriptionDiscount) {
+            check(discount.subscriptionId == ownedSubscriptionId) { "the subscription must be locked in this transaction before its discount is updated" }
+            val stored = checkNotNull(subscriptionDiscount(discount.subscriptionId)) { "no such subscription discount" }
+            pendingSubscriptionDiscounts[discount.subscriptionId] = stored.copy(periodsUsed = discount.periodsUsed, status = discount.status, updatedAt = discount.updatedAt)
+        }
+
         override fun insertSubscriptionIfAbsent(subscription: PaymentSubscription): Boolean {
             check(ownedSubscriptionId == null) { "one subscription per transaction: already holds $ownedSubscriptionId" }
             subscription.dedupeKey?.let { key ->
@@ -467,6 +487,7 @@ class InMemoryPaymentLedgerStore : PaymentLedgerStore {
                 committedSubscriptions.putAll(pendingSubscriptions)
                 committedEvents += pendingEvents
                 committedDiscounts.putAll(pendingDiscounts)
+                committedSubscriptionDiscounts.putAll(pendingSubscriptionDiscounts)
                 onCommit.toList()
             }
             hooks.forEach { it() }
@@ -479,6 +500,7 @@ class InMemoryPaymentLedgerStore : PaymentLedgerStore {
             pendingSubscriptions.clear()
             pendingEvents.clear()
             pendingDiscounts.clear()
+            pendingSubscriptionDiscounts.clear()
             onCommit.clear()
         }
 

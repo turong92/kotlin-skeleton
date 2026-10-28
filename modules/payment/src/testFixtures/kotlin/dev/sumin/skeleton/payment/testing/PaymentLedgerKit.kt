@@ -179,7 +179,8 @@ class PaymentLedgerKit(
                 if (ref.accountId in exemptAccounts) setOf(dev.sumin.skeleton.payment.PaymentPermissions.EXEMPT) else emptySet()
         },
     )
-    val lifecycle = SubscriptionLifecycle(tasks, writer, properties, review)
+    val subscriptionDiscounts = dev.sumin.skeleton.payment.SubscriptionDiscounts(store) { time.now() }
+    val lifecycle = SubscriptionLifecycle(tasks, writer, properties, review).also { it.discounts = subscriptionDiscounts }
     val convergence = PaymentConvergence(writer, tasks, review, LedgerRefundConvergence(writer, tasks, review)).also { it.subscriptions = lifecycle }
     val plans = TestSubscriptionPlans()
     val fulfillment = PaymentFulfillment(store, listener, writer, lifecycle, discounts)
@@ -198,7 +199,7 @@ class PaymentLedgerKit(
     val pushed = PaymentPushedEvents(store, tasks, writer, lifecycle, review, chargebacks)
     val webhook = PaymentWebhookTaskHandler(store, router, convergence, writer, pushed)
     val charges = SubscriptionCharges(store, convergence, fulfillment, writer)
-    val subscriptions = PaymentSubscriptions(store, router, plans, ReversibleTestEncryptor, lifecycle, charges, tasks, writer, properties)
+    val subscriptions = PaymentSubscriptions(store, router, plans, ReversibleTestEncryptor, lifecycle, charges, tasks, writer, properties, couponDiscounts = discounts, scheduleDiscounts = subscriptionDiscounts)
     val planChanges = SubscriptionPlanChanges(store, router, plans, ReversibleTestEncryptor, lifecycle, charges, writer, properties)
     val revoke = SubscriptionRevokeTaskHandler(store, router, ReversibleTestEncryptor, writer)
     val cancellations = SubscriptionCancellations(store, plans, cancelPolicies, usage, lifecycle, refunds, convergence, tasks, writer, properties)
@@ -207,7 +208,7 @@ class PaymentLedgerKit(
     /** 앱의 갱신 판단 대역 — [blocked] 에 든 계정은 갱신하지 않는다. */
     val blocked: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
     val cancelAtProvider = dev.sumin.skeleton.payment.ProviderSubscriptionCancelTaskHandler(store, router)
-    val renew = SubscriptionRenewTaskHandler(store, router, plans, ReversibleTestEncryptor, lifecycle, charges, SubscriptionRenewalGuard { it !in blocked }, writer, properties.subscription.renewal.retryInterval)
+    val renew = SubscriptionRenewTaskHandler(store, router, plans, ReversibleTestEncryptor, lifecycle, charges, SubscriptionRenewalGuard { it !in blocked }, writer, properties.subscription.renewal.retryInterval, subscriptionDiscounts)
     val erasure = PaymentAccountErasure(store, writer, properties.erasure.accountId, lifecycle)
     val runner: PaymentTaskRunner = DefaultPaymentTaskRunner(listOf(expire, reconcile, fulfil, refundReconcile, refundApply, webhook, revoke, renew, cancelRefund, cancelAtProvider))
 

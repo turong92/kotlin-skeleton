@@ -37,7 +37,7 @@ object PaymentDb {
 
     /** 이 시험이 쓰는 표의 줄을 모두 비운다 — 시험마다 깨끗한 표에서 시작한다(자식 표부터). */
     fun clean() {
-        listOf("payment_webhook_events", "payment_events", "payment_refunds", "payment_order_discounts", "payment_orders", "payment_subscriptions", "jobs").forEach { jdbc.update("delete from $it", emptyMap<String, Any>()) }
+        listOf("payment_webhook_events", "payment_events", "payment_refunds", "payment_order_discounts", "payment_orders", "payment_subscription_discount_stages", "payment_subscription_discounts", "payment_subscriptions", "jobs").forEach { jdbc.update("delete from $it", emptyMap<String, Any>()) }
     }
 
     fun count(sql: String, vararg params: Pair<String, Any?>): Long = jdbc.queryForObject(sql, params.toMap(), Long::class.java) ?: 0L

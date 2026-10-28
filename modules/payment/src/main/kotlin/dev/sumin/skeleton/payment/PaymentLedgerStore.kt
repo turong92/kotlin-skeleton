@@ -111,6 +111,9 @@ interface PaymentLedgerStore {
     /** 서버가 미리 만든 첫 결제 거래 id([PaymentSubscription.firstTransactionId])로 찾는다. */
     fun findSubscriptionByFirstTransaction(provider: String, transactionId: String): PaymentSubscription?
 
+    /** 구독에 붙은 할인(없으면 null) - 잠그지 않는다. 보여 주기용이다. */
+    fun findSubscriptionDiscount(subscriptionId: String): SubscriptionDiscount?
+
     /** 계정의 **살아 있는** 구독(`active_key` 의 주인) — 없으면 null. */
     fun findLiveSubscription(accountId: String): PaymentSubscription?
 
@@ -234,6 +237,15 @@ interface PaymentLedgerTx {
 
     /** 새 구독 줄을 넣는다. 같은 id 나 같은 [PaymentSubscription.dedupeKey] 가 이미 있으면 넣지 않고 false(같은 요청의 재전송). 넣은 줄은 이 트랜잭션이 잠근 것으로 본다. */
     fun insertSubscriptionIfAbsent(subscription: PaymentSubscription): Boolean
+
+    /** 이 트랜잭션에서 보이는 구독의 할인(없으면 null) - 구독을 잠근(또는 넣은) 트랜잭션에서 읽는다. */
+    fun subscriptionDiscount(subscriptionId: String): SubscriptionDiscount?
+
+    /** 구독 할인을 넣는다(단계 복사 포함). 이 트랜잭션이 잠갔거나 넣은 구독의 것만 - 아니면 [IllegalStateException]. 구독마다 하나. */
+    fun insertSubscriptionDiscount(discount: SubscriptionDiscount)
+
+    /** 구독 할인의 [SubscriptionDiscount.periodsUsed] · [SubscriptionDiscount.status] 만 바꾼다(단계 · 수단은 시작 때 박힌 그대로). 이 트랜잭션이 잠근 구독의 것만. */
+    fun updateSubscriptionDiscount(discount: SubscriptionDiscount)
 
     /**
      * 구독 줄 전체를 바꾼다. 이 트랜잭션이 [lockSubscription] 으로 잠갔거나 [insertSubscriptionIfAbsent] 로 넣은 줄만 — 아니면 [IllegalStateException].
