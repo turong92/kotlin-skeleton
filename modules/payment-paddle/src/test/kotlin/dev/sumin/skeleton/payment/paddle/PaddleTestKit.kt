@@ -5,6 +5,7 @@ import dev.sumin.skeleton.common.http.DefaultExternalHttpClient
 import dev.sumin.skeleton.common.http.DefaultExternalHttpErrorMapper
 import dev.sumin.skeleton.common.http.OutboundHttpProperties
 import dev.sumin.skeleton.common.time.TimeProvider
+import dev.sumin.skeleton.payment.ProviderPriceRefs
 import java.net.InetSocketAddress
 import java.time.Duration
 import java.time.Instant
@@ -24,7 +25,7 @@ internal fun sign(body: String, ts: Long = NOW.epochSecond, secret: String = SEC
 internal fun properties(baseUrl: String = "", prices: Map<String, String> = mapOf("basic" to "pri_basic", "cheer" to "pri_cheer")) =
     PaddleProperties(enabled = true, apiKey = "pdl_sdbx_apikey_x", clientToken = "test_clienttoken", webhookSecret = SECRET, baseUrl = baseUrl, prices = prices)
 
-internal fun gateway(baseUrl: String = "", props: PaddleProperties = properties(baseUrl)) = PaddlePaymentProvider(
+internal fun gateway(baseUrl: String = "", props: PaddleProperties = properties(baseUrl), refs: ProviderPriceRefs = ProviderPriceRefs.NONE) = PaddlePaymentProvider(
     httpClient = DefaultExternalHttpClient(
         webClientBuilder = WebClient.builder(),
         properties = OutboundHttpProperties(defaultConnectTimeout = Duration.ofSeconds(30), defaultResponseTimeout = Duration.ofSeconds(30)),
@@ -33,6 +34,7 @@ internal fun gateway(baseUrl: String = "", props: PaddleProperties = properties(
     ),
     properties = props,
     time = TimeProvider { NOW },
+    priceRefs = refs,
 )
 
 /** 루프백에만 묶는 가짜 Paddle API. 받은 요청을 남긴다. */

@@ -89,7 +89,7 @@ class SubscriptionPlanChanges(
     private fun quote(subscription: PaymentSubscription, planCode: String): PlanChangeQuote {
         val option = properties.subscription.planChange.takeIf { it.enabled }?.charge ?: throw PaymentPlanChangeNotAllowedException()
         if (subscription.status != SubscriptionStatus.ACTIVE) throw PaymentPlanChangeNotAllowedException()
-        val target = plans.find(planCode)?.takeIf { it.amount.amount > 0 } ?: throw PaymentItemNotPurchasableException()
+        val target = plans.find(planCode)?.takeIf { it.amount.amount > 0 && it.purchasable } ?: throw PaymentItemNotPurchasableException()
         val current = plans.find(subscription.planCode) ?: throw PaymentPlanChangeNotAllowedException()
         if (!isUpgrade(current, target, subscription)) throw PaymentPlanChangeNotAllowedException()
         // 과금 중인(안 끝난) 주문이 있으면 시작하지 않는다 — 갱신이 나가 있거나 앞선 변경이 확인 중이다

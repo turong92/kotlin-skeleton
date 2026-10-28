@@ -76,6 +76,7 @@ class PaymentController(
                 route.devSwitch,
                 choices = routing.choices(route),
                 subscriptionChoices = routing.subscriptionChoices(route),
+                currency = routing.currencyOf(route),
             ),
         )
     }

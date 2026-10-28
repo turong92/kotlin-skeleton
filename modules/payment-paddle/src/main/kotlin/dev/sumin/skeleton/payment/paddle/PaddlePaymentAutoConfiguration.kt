@@ -5,6 +5,7 @@ import dev.sumin.skeleton.common.project.ProjectsConfigured
 import dev.sumin.skeleton.common.project.ProjectsNotConfigured
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.payment.PaymentGatewaySource
+import dev.sumin.skeleton.payment.ProviderPriceRefs
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionOutcome
@@ -25,20 +26,20 @@ class PaddlePaymentAutoConfiguration {
     @ConditionalOnProperty(prefix = "skeleton.payment-paddle", name = ["enabled"], havingValue = "true")
     @Conditional(PaddleSecretsConfigured::class, ProjectsNotConfigured::class)
     @ConditionalOnMissingBean(name = ["paddlePaymentProvider"])
-    fun paddlePaymentProvider(httpClient: ExternalHttpClient, properties: PaddleProperties, time: ObjectProvider<TimeProvider>): PaddlePaymentProvider =
-        PaddlePaymentProvider(httpClient, properties, time.getIfAvailable { TimeProvider.systemUtc() })
+    fun paddlePaymentProvider(httpClient: ExternalHttpClient, properties: PaddleProperties, time: ObjectProvider<TimeProvider>, priceRefs: ObjectProvider<ProviderPriceRefs>): PaddlePaymentProvider =
+        PaddlePaymentProvider(httpClient, properties, time.getIfAvailable { TimeProvider.systemUtc() }, priceRefs.getIfAvailable { ProviderPriceRefs.NONE })
 
     /** 프로젝트 모드: 프로젝트마다 자기 `payment-paddle.*` (API 키 · 클라이언트 토큰 · 웹훅 비밀값)로 만든다. 세 비밀 중 하나라도 비었거나 켜지 않은 프로젝트에는 없다. */
     @Bean
     @ConditionalOnMissingBean(name = ["paddleGatewaySource"])
     @Conditional(ProjectsConfigured::class)
-    fun paddleGatewaySource(httpClient: ExternalHttpClient, time: ObjectProvider<TimeProvider>): PaymentGatewaySource =
+    fun paddleGatewaySource(httpClient: ExternalHttpClient, time: ObjectProvider<TimeProvider>, priceRefs: ObjectProvider<ProviderPriceRefs>): PaymentGatewaySource =
         PaymentGatewaySource.of(listOf("payment-paddle.api-key", "payment-paddle.webhook-secret"), listOf("payment-paddle.client-token")) { settings ->
             val properties = settings.bind("skeleton.payment-paddle", PaddleProperties::class.java)
             if (!properties.enabled || listOf(properties.apiKey, properties.clientToken, properties.webhookSecret).any { it.isBlank() }) {
                 null
             } else {
-                PaddlePaymentProvider(httpClient, properties, time.getIfAvailable { TimeProvider.systemUtc() })
+                PaddlePaymentProvider(httpClient, properties, time.getIfAvailable { TimeProvider.systemUtc() }, priceRefs.getIfAvailable { ProviderPriceRefs.NONE })
             }
         }
 

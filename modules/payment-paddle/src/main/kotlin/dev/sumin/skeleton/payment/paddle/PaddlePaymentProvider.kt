@@ -32,6 +32,8 @@ import dev.sumin.skeleton.payment.PaymentPricePreviewGateway
 import dev.sumin.skeleton.payment.PricePreviewSetup
 import dev.sumin.skeleton.payment.PaymentPushGateway
 import dev.sumin.skeleton.payment.PaymentTransactionGateway
+import dev.sumin.skeleton.payment.PaymentUnavailableException
+import dev.sumin.skeleton.payment.ProviderPriceRefs
 import dev.sumin.skeleton.payment.TransactionRequest
 import dev.sumin.skeleton.payment.PaymentWebhookRejectedException
 import dev.sumin.skeleton.payment.PushedEvents
@@ -60,6 +62,8 @@ class PaddlePaymentProvider(
     private val httpClient: ExternalHttpClient,
     private val properties: PaddleProperties,
     private val time: TimeProvider = TimeProvider.systemUtc(),
+    /** 결제사 가격 id 의 출처(카탈로그의 링크) - 여기서 먼저 찾고 없으면 [PaddleProperties.prices] 지도. 기본은 링크 없음. */
+    private val priceRefs: ProviderPriceRefs = ProviderPriceRefs.NONE,
 ) : PaymentPushGateway, PaymentCheckoutGateway, PaymentHostedSubscriptionGateway, PaymentTransactionGateway, PaymentPricePreviewGateway, PaymentBuyerCountryGateway, PaymentRefundGateway, PaymentLookupGateway {
     override val providerId: String = properties.providerId
     override val supportedCurrencies: Set<String> = properties.supportedCurrencies
@@ -215,11 +219,15 @@ class PaddlePaymentProvider(
 
     override fun pricePreview(): PricePreviewSetup? {
         if (properties.clientToken.isBlank()) return null
-        val prices = properties.prices.filterValues { it.isNotBlank() }
+        val prices = properties.prices.filterValues { it.isNotBlank() } + priceRefs.all(providerId.normalizedId())
         return PricePreviewSetup(properties.clientToken, properties.environment.trim().lowercase(), prices)
     }
 
-    override fun priceIdOf(itemRef: String): String? = properties.prices[itemRef]?.takeIf { it.isNotBlank() }
+    /** 가격 id 를 찾는 순서: 카탈로그의 링크 → 설정 지도(`prices`). 링크를 바꾸면 그때 열려 있던 결제창의 품목 대조가 「확인 필요」로 간다(설정을 바꿔도 같다). */
+    override fun priceIdOf(itemRef: String): String? =
+        priceRefs.priceIdOf(providerId.normalizedId(), itemRef)?.takeIf { it.isNotBlank() } ?: properties.prices[itemRef]?.takeIf { it.isNotBlank() }
+
+    private fun String.normalizedId() = trim().lowercase()
 
     private fun subscription(eventId: String, occurredAt: Instant, data: JsonNode, custom: JsonNode?, type: String?): PushedSubscription? {
         val scheduledCancel = data["scheduled_change"]?.text("action") == "cancel"
@@ -249,7 +257,8 @@ class PaddlePaymentProvider(
 
     /** 거래를 서버가 먼저 만든다 - 품목(가격 · 수량)과 `custom_data`(우리 줄 id)는 서버가 정한 값이다. 가격이 설정에 없으면 던진다. */
     override fun createTransaction(request: TransactionRequest): String {
-        val price = priceIdOf(request.itemRef) ?: error("no Paddle price is configured for ${request.itemRef}")
+        // 가격 id 가 없으면 팔 수 없다 - 이 결제사로는 503 이고 거래는 만들지 않는다
+        val price = priceIdOf(request.itemRef) ?: throw PaymentUnavailableException()
         val response = requireNotNull(
             httpClient.post(
                 clientName = properties.clientName,

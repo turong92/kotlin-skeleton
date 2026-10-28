@@ -28,7 +28,8 @@ class CouponDiscountSourceTest {
         currency: String = "KRW",
         purpose: DiscountPurpose = DiscountPurpose.ONE_TIME,
         firstPurchase: Boolean = true,
-    ) = DiscountTarget(accountId, itemType, itemRef, planCode, amount, currency, purpose, firstPurchase)
+        productCode: String? = null,
+    ) = DiscountTarget(accountId, itemType, itemRef, planCode, amount, currency, purpose, firstPurchase, productCode)
 
     private fun given(def: CouponDefinition = definition(), c: Coupon = coupon()): DiscountClaim {
         store.definitions[def.id] = def
@@ -65,6 +66,19 @@ class CouponDiscountSourceTest {
         assertRejected(DiscountRejection.NOT_APPLICABLE, claim, target(planCode = "basic"))
         assertRejected(DiscountRejection.NOT_APPLICABLE, claim, target(planCode = null))
         source.quote(claim, target(planCode = "pro"))
+    }
+
+    @Test
+    fun `a scope on a plan code also fits every price of that product, and a scope on an item ref fits every item of that product`() {
+        val plan = given(definition(scope = CouponScope(planCodes = listOf("basic"))))
+        source.quote(plan, target(planCode = "basic-yearly", productCode = "basic"))
+        source.quote(plan, target(planCode = "basic"))
+        assertRejected(DiscountRejection.NOT_APPLICABLE, plan, target(planCode = "pro-yearly", productCode = "pro"))
+        assertRejected(DiscountRejection.NOT_APPLICABLE, plan, target(planCode = "basic-yearly", productCode = null))
+
+        val item = given(definition(scope = CouponScope(itemRefs = listOf("sticker"))), coupon("cpn_2"))
+        source.quote(item, target(itemRef = "sticker-2026", productCode = "sticker"))
+        assertRejected(DiscountRejection.NOT_APPLICABLE, item, target(itemRef = "sticker-2026", productCode = "poster"))
     }
 
     @Test

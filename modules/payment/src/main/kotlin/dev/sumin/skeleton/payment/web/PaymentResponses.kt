@@ -203,6 +203,8 @@ data class PaymentConfigResponse(
     val subscriptionChoices: List<String> = emptyList(),
     /** 구매자가 고를 수 있는 결제사 - 이 나라를 자기 `supportedCountries` 에 적은 열린 결제사. 둘 이상일 때만 화면이 고르기를 그린다(주문을 만들 때 `provider` 로 보낸다). 하나 이하면 고르기가 없다. */
     val choices: List<String> = emptyList(),   // 칸은 늘 나간다(비어도 `[]`) - pricePreviews 와 같다
+    /** 이 요청의 결제 통화(ISO-4217) - 나라 → 결제사를 정하는 라우팅이 같이 정한다. 정할 수 없으면 null(칸은 늘 나간다). */
+    val currency: String? = null,
 )
 
 /** [key] 는 정책 이름(`korea` · `period-end-only` …) - 화면이 요약 문구를 고른다. 숫자는 한국 정책일 때만(설정값). */
@@ -376,9 +378,9 @@ data class WebhookEventResponse(
 
 // --- 구독 (스펙 `2026-10-09-subscription-design.md` §7) — 빌링키 · 고객 키는 어떤 응답에도 없다(카드 등록 창 값만 예외: 고객 키는 창이 필요로 하고 공개해도 되는 값이다) ---
 
-data class SubscriptionPlanResponse(val code: String, val name: String, val amount: AmountResponse, val period: String, val level: Int) {
+data class SubscriptionPlanResponse(val code: String, val name: String, val amount: AmountResponse, val period: String, val level: Int, val productCode: String, val regularAmount: Long?) {
     companion object {
-        fun of(plan: dev.sumin.skeleton.payment.SubscriptionPlan) = SubscriptionPlanResponse(plan.code, plan.name, plan.amount.toResponse(), plan.period, plan.level)
+        fun of(plan: dev.sumin.skeleton.payment.SubscriptionPlan) = SubscriptionPlanResponse(plan.code, plan.name, plan.amount.toResponse(), plan.period, plan.level, plan.productCode, plan.regularAmount)
     }
 }
 

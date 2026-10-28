@@ -38,6 +38,16 @@ class PaymentSubscriptions(
 
     fun plans(): List<SubscriptionPlan> = plans.list()
 
+    /** 이 요청의 통화([currency])로 거른 플랜 - 그 통화 플랜이 하나도 없거나 통화를 모르면 거르지 않는다(통화 하나짜리 코드 플랜 앱 · 통화를 못 정한 요청은 지금처럼). */
+    fun plansFor(currency: String?): List<SubscriptionPlan> {
+        val all = plans.list()
+        val wanted = currency?.trim()?.uppercase() ?: return all
+        return all.filter { it.amount.normalizedCurrency == wanted }.ifEmpty { all }
+    }
+
+    /** 코드로 찾는다 - 판매가 끝난 가격도 나온다(기존 구독자의 이름을 보이려고). */
+    fun plan(code: String): SubscriptionPlan? = plans.find(code)
+
     /** 이 계정의 가장 최근 구독(끝난 것 포함, 시작하지 않은 시도는 제외). 앱은 이것을 **읽을 때** `status.isInUse` 로 판단한다. */
     fun current(accountId: String): PaymentSubscription? = store.findLatestSubscription(accountId)
 
@@ -69,7 +79,7 @@ class PaymentSubscriptions(
         store.findSubscriptionByDedupeKey(dedupeKey)?.let { return replay(it, planCode, returnOrigin) }
         if (providerClosed) throw PaymentUnavailableException() // 나라 지도가 정한 결제사가 못 열린다 - 다른 결제사로 넘기지 않는다
 
-        val plan = plans.find(planCode)?.takeIf { it.amount.amount > 0 } ?: throw PaymentItemNotPurchasableException()
+        val plan = plans.find(planCode)?.takeIf { it.amount.amount > 0 && it.purchasable } ?: throw PaymentItemNotPurchasableException()
         SubscriptionPeriod.parse(plan.period)
         // 무료 첫 결제를 선점해 놓고 죽은 구독이 자리를 쥐고 있으면 이어서 끝낸다 - 안 그러면 새 구독이 영영 막힌다(끝나면 ACTIVE 라 아래 판정이 「이미 구독 중」이 된다)
         store.findLiveSubscription(accountId)?.let(::finishFreeFirstCharge)

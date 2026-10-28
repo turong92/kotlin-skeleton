@@ -41,7 +41,7 @@ class PaymentDiscounts(
     val active: Boolean get() = sources().isNotEmpty()
 
     /** [accountId] 가 [amount] 짜리 [itemType]/[itemRef] 를 한 번 사는 일의 할인 대상. 「첫 결제만」 판정은 장부가 안다 - 결제사로 돈을 낸 적이 없으면 첫 결제. */
-    fun targetFor(accountId: String, itemType: String, itemRef: String, amount: PaymentAmount): DiscountTarget =
+    fun targetFor(accountId: String, itemType: String, itemRef: String, amount: PaymentAmount, productCode: String? = null): DiscountTarget =
         DiscountTarget(
             accountId = accountId,
             itemType = itemType,
@@ -51,11 +51,12 @@ class PaymentDiscounts(
             currency = amount.normalizedCurrency,
             purpose = DiscountPurpose.ONE_TIME,
             firstPurchase = !store.hasPaidOrder(accountId),
+            productCode = productCode,
         )
 
     /** 구독을 시작하는 일의 할인 대상 - 플랜 코드가 쿠폰 범위의 열쇠다. 「첫 결제만」은 단건과 같은 판정. */
     fun subscriptionTarget(accountId: String, plan: SubscriptionPlan): DiscountTarget =
-        DiscountTarget(accountId, SubscriptionLifecycle.ITEM_TYPE, plan.code, plan.code, plan.amount.amount, plan.amount.normalizedCurrency, DiscountPurpose.SUBSCRIPTION, firstPurchase = !store.hasPaidOrder(accountId))
+        DiscountTarget(accountId, SubscriptionLifecycle.ITEM_TYPE, plan.code, plan.code, plan.amount.amount, plan.amount.normalizedCurrency, DiscountPurpose.SUBSCRIPTION, firstPurchase = !store.hasPaidOrder(accountId), productCode = plan.productCode)
 
     /**
      * 구독 쿠폰 - 수단이 낸 제안(단계 목록)과 첫 과금에 걸리는 할인. [holderRef] 가 null 이면 미리보기(아무것도 안 쥔다, 시작 때), 있으면 그 주문이 쥔다(첫 결제 때).

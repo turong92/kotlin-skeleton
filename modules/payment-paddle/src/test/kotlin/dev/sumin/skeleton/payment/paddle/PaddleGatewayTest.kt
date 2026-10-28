@@ -4,6 +4,8 @@ import dev.sumin.skeleton.payment.CheckoutOrder
 import dev.sumin.skeleton.payment.HostedSubscriptionRequest
 import dev.sumin.skeleton.payment.PaymentAmount
 import dev.sumin.skeleton.payment.PaymentMode
+import dev.sumin.skeleton.payment.PaymentUnavailableException
+import dev.sumin.skeleton.payment.ProviderPriceRefs
 import dev.sumin.skeleton.payment.TransactionRequest
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
@@ -26,11 +28,41 @@ class PaddleGatewayTest {
     @Test
     fun `no transaction is created for a product without a configured price, and a refusal throws`() {
         FakePaddleApi().use { api ->
-            assertThatThrownBy { gateway(api.baseUrl).createTransaction(TransactionRequest("unknown", 1, emptyMap())) }.isInstanceOf(IllegalStateException::class.java)
+            assertThatThrownBy { gateway(api.baseUrl).createTransaction(TransactionRequest("unknown", 1, emptyMap())) }.isInstanceOf(PaymentUnavailableException::class.java)
             assertThat(api.requests).isEmpty()
             api.status = 403
             assertThatThrownBy { gateway(api.baseUrl).createTransaction(TransactionRequest("cheer", 1, emptyMap())) }.isInstanceOf(Exception::class.java)
         }
+    }
+
+    private fun refs(vararg links: Pair<String, String>) = object : ProviderPriceRefs {
+        override fun priceIdOf(provider: String, itemRef: String): String? = links.toMap()[itemRef]?.takeIf { provider == "paddle" }
+
+        override fun all(provider: String): Map<String, String> = if (provider == "paddle") links.toMap() else emptyMap()
+    }
+
+    @Test
+    fun `a price link beats the configured map, the map is the fallback, and a price in neither is not sold`() {
+        FakePaddleApi().use { api ->
+            api.responseBody = """{"data":{"id":"txn_abc","status":"draft"}}"""
+            val gateway = gateway(api.baseUrl, properties(api.baseUrl, prices = mapOf("basic" to "pri_yml", "cheer" to "pri_cheer")), refs("basic" to "pri_db", "basic-usd" to "pri_usd"))
+
+            assertThat(gateway.priceIdOf("basic")).isEqualTo("pri_db")
+            assertThat(gateway.priceIdOf("cheer")).isEqualTo("pri_cheer")
+            assertThat(gateway.priceIdOf("basic-usd")).isEqualTo("pri_usd")
+            assertThat(gateway.priceIdOf("unknown")).isNull()
+            gateway.createTransaction(TransactionRequest("basic", 1, emptyMap()))
+            assertThat(api.requests.single().body).contains("\"price_id\":\"pri_db\"")
+            assertThatThrownBy { gateway.createTransaction(TransactionRequest("unknown", 1, emptyMap())) }.isInstanceOf(PaymentUnavailableException::class.java)
+            assertThat(api.requests).hasSize(1)
+        }
+    }
+
+    @Test
+    fun `the price preview carries the links over the configured map, links first`() {
+        val setup = gateway(props = properties(prices = mapOf("basic" to "pri_yml", "cheer" to "pri_cheer")), refs = refs("basic" to "pri_db", "basic-usd" to "pri_usd")).pricePreview()!!
+
+        assertThat(setup.prices).isEqualTo(mapOf("basic" to "pri_db", "cheer" to "pri_cheer", "basic-usd" to "pri_usd"))
     }
 
     @Test

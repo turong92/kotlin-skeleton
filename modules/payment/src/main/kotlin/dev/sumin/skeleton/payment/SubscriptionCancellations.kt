@@ -142,9 +142,10 @@ class SubscriptionCancellations(
         val months = runCatching { SubscriptionPeriod.parse(subscription.period).calendarMonths }.getOrNull()
         if (months == null || months <= 1) return null
         val current = plans.find(subscription.planCode) ?: return null
+        // 행사가가 아니라 정가로 센다 - 월 플랜이 행사 중일 때 연간을 해지해도 쓴 몫이 줄어 환불이 부풀지 않게
         return plans.list().firstOrNull {
             it.level == current.level && it.amount.currency == subscription.amount.currency && runCatching { SubscriptionPeriod.parse(it.period).calendarMonths }.getOrNull() == 1
-        }?.amount?.amount
+        }?.let { it.regularAmount ?: it.amount.amount }
     }
 
     private fun owned(subscription: PaymentSubscription?, accountId: String): PaymentSubscription? = subscription?.takeIf { it.accountId == accountId }

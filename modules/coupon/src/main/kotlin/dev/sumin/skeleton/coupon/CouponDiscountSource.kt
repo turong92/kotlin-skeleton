@@ -70,8 +70,8 @@ class CouponDiscountSource(
         val scope = definition.scope
         return (scope.purposes.isEmpty() || target.purpose in scope.purposes) &&
             (scope.itemTypes.isEmpty() || target.itemType in scope.itemTypes) &&
-            (scope.itemRefs.isEmpty() || target.itemRef in scope.itemRefs) &&
-            (scope.planCodes.isEmpty() || (target.planCode != null && target.planCode in scope.planCodes)) &&
+            (scope.itemRefs.isEmpty() || target.itemRef in scope.itemRefs || target.productCode in scope.itemRefs) &&
+            (scope.planCodes.isEmpty() || (target.planCode != null && (target.planCode in scope.planCodes || target.productCode in scope.planCodes))) &&
             (definition.currency == null || definition.currency == target.currency) &&
             (definition.minAmount == null || target.amount >= definition.minAmount) &&
             (!definition.firstPurchaseOnly || target.firstPurchase)

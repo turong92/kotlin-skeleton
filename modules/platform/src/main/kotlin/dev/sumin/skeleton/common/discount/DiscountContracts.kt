@@ -21,7 +21,9 @@ data class DiscountStage(val type: DiscountStageType, val value: Long = 0, val m
 
 enum class DiscountPurpose { ONE_TIME, SUBSCRIPTION }
 
-/** 할인을 얹을 결제 대상 */
+/**
+ * 할인을 얹을 결제 대상. [productCode] 는 이 품목이 속한 상품이다(가격이 바뀌어도 안 바뀐다) - 쿠폰 범위를 가격 코드(바뀐다)가 아니라 상품 코드로도 걸 수 있게 한다. 없으면 [itemRef] · [planCode] 만 본다.
+ */
 data class DiscountTarget(
     val accountId: String,
     val itemType: String,
@@ -31,6 +33,7 @@ data class DiscountTarget(
     val currency: String,
     val purpose: DiscountPurpose,
     val firstPurchase: Boolean,
+    val productCode: String? = null,
 )
 
 /** 주문이 가져온 할인 수단 지정 — [kind] 는 [DiscountSource.kind], [ref] 는 그 수단 안의 식별(쿠폰 id · 코드) */

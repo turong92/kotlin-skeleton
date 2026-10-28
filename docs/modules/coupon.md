@@ -5,7 +5,7 @@
 
 **정의**(`CouponDefinitions`): `stages` = 순서대로 이어지는 혜택 단계 `[{type: FREE|PERCENT|FIXED, value, maxDiscount?, periods}]`, 5개까지, `periods` 가 `null`(영원)인 단계는 마지막만. 정률은 1~100, 정액은 `currency` 필요, `minAmount` 도 `currency` 필요.
 예: 1,000원 `[FIXED 1000 ×1]` · 30%(최대 5,000) `[PERCENT 30 max 5000 ×1]` · 무료 이용권 `[FREE ×1]` · 3달 무료 `[FREE ×3]` · 첫 결제 무료 + 이후 3달 50% `[FREE ×1, PERCENT 50 ×3]` · 평생 10% `[PERCENT 10 ×영원]`. 단건 결제는 첫 단계만 본다.
-범위 `scope{purposes: ONE_TIME|SUBSCRIPTION, itemTypes, itemRefs, planCodes}`(빈 목록 = 전부) · `firstPurchaseOnly` · `validDays`/`validUntil`(이른 쪽이 만료) · `issueLimit` · `perAccountLimit`(기본 1). 정의는 만들면 내용을 고치지 않는다 — 상태(`ACTIVE`·`PAUSED`·`ARCHIVED`)만 바꾼다. 발급만 `ACTIVE` 에서 한다; 이미 발급된 쿠폰은 정의가 멈춰도 쓸 수 있다.
+범위 `scope{purposes: ONE_TIME|SUBSCRIPTION, itemTypes, itemRefs, planCodes}`(빈 목록 = 전부 · `itemRefs` · `planCodes` 는 가격 코드 **또는 상품 코드**에 맞는다 — 상품 코드로 건 범위는 그 상품의 월 · 연 · 행사 가격 모두에 맞는다) · `firstPurchaseOnly` · `validDays`/`validUntil`(이른 쪽이 만료) · `issueLimit` · `perAccountLimit`(기본 1). 정의는 만들면 내용을 고치지 않는다 — 상태(`ACTIVE`·`PAUSED`·`ARCHIVED`)만 바꾼다. 발급만 `ACTIVE` 에서 한다; 이미 발급된 쿠폰은 정의가 멈춰도 쓸 수 있다.
 잘못된 정의는 400 `COUPON.DEFINITION_INVALID`.
 
 **발급**(`CouponIssuance.issue(definitionId, accountId, source, sourceRef): Coupon?`): 정의 줄을 잠그고 발급 한도 · 계정당 한도를 센 뒤 한 장을 넣는다 — 같은 `(source, sourceRef)` 는 한 장으로 접히고(같은 장을 돌려준다), 한도에 막히면 `null`.

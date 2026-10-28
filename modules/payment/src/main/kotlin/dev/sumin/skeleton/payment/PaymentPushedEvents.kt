@@ -90,6 +90,7 @@ class PaymentPushedEvents(
             flags.flag(tx, order, PaymentReviewReason.AMOUNT_MISMATCH, context)
             return PRICE_MISMATCH
         }
+        warnOnDrift(order.id, order.itemRef, order.amount, event)
         // 금액 · 통화는 결제사가 받은 그대로다(구매자가 낸 통화)
         val paid = writer.transition(tx, order, PaymentOrderStatus.PAID, PaymentEventType.CONVERGED, PaymentActor.PROVIDER, providerCode = WEBHOOK) {
             it.copy(
@@ -108,6 +109,16 @@ class PaymentPushedEvents(
         tasks.enqueue(PaymentTask(PaymentTaskTypes.ORDER_FULFIL, order.id))
         if (event.buyerCountry == KOREA) flags.flag(tx, paid, PaymentReviewReason.BUYER_COUNTRY_KR, context)
         return null
+    }
+
+    /**
+     * 결제사가 확정한 금액(세전)이 우리 DB 가격과 다르면 경고 한 줄 - **같은 통화일 때만**(구매자 통화로 환산됐으면 비교할 수 없다). 막지 않는다: 기록은 결제사 금액 그대로, 지급도 그대로.
+     * 결제사 쪽 가격을 운영자가 따로 관리하는 한 어긋날 수 있으니(링크가 가리키는 가격이 바뀌었다 등) 사람이 알아채게만 한다.
+     */
+    private fun warnOnDrift(orderId: String, item: String, expected: PaymentAmount, event: PushedPayment) {
+        if (expected.normalizedCurrency != event.total.normalizedCurrency) return
+        val paid = event.total.amount - (event.tax ?: 0)
+        if (paid != expected.amount) log.warn("payment.price-drift order={} item={} expected={} paid={}", orderId, item, expected.amount, paid)
     }
 
     private fun boughtExactly(items: List<PushedItem>, expectedPrice: String?, quantity: Int): Boolean =
@@ -143,6 +154,7 @@ class PaymentPushedEvents(
         val koreanBuyer = event.buyerCountry == KOREA && subscription.status == SubscriptionStatus.PENDING // 첫 결제에서 한 번만 - 갱신마다 찍지 않는다
         val order = paidOrder(lifecycle, subscription, event).let { if (koreanBuyer) it.copy(reviewReason = PaymentReviewReason.BUYER_COUNTRY_KR) else it }
         if (!tx.insertOrderIfAbsent(order)) return null
+        if (subscription.status == SubscriptionStatus.PENDING) warnOnDrift(order.id, subscription.planCode, subscription.amount, event) // 첫 결제만 - 갱신은 결제사 쪽 가격이 따로 움직일 수 있다
         tx.appendEvent(writer.event(order.id, PaymentEventType.CONVERGED, PaymentActor.PROVIDER, providerCode = WEBHOOK, to = PaymentOrderStatus.PAID))
         if (koreanBuyer) {
             tx.appendEvent(writer.event(order.id, PaymentEventType.REVIEW_FLAGGED, PaymentActor.PROVIDER, providerCode = PaymentReviewReason.BUYER_COUNTRY_KR.name, from = order.status, to = order.status))

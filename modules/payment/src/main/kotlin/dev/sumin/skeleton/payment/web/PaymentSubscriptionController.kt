@@ -47,12 +47,13 @@ class PaymentSubscriptionController(
     private val clientIps: ClientIps,
     private val routing: PaymentCountryRouting,
 ) {
-    @Operation(summary = "The subscription plans", description = "code, name, amount, period (ISO-8601, P1M or PT3M) and level (higher is a higher tier).")
+    @Operation(summary = "The subscription plans", description = "code, name, amount, period (ISO-8601, P1M or PT3M), level (higher is a higher tier), productCode (plans of one product share it) and regularAmount (the list price when amount is a sale price, else null). Only the plans in the currency of this request (GET /config currency); all of them when there is no plan in that currency.")
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = SubscriptionPlansResponse::class)
     @GetMapping("/subscriptions/plans")
-    fun plans(authentication: Authentication?): DataResponse<SubscriptionPlansResponse> {
+    fun plans(authentication: Authentication?, request: HttpServletRequest): DataResponse<SubscriptionPlansResponse> {
         callers.account(authentication)
-        return Response.ok(SubscriptionPlansResponse(subscriptions.plans().map(SubscriptionPlanResponse::of)))
+        // 이 요청의 통화(라우팅이 정한다)의 플랜만 - 브라우저가 통화를 고르는 길은 없다
+        return Response.ok(SubscriptionPlansResponse(subscriptions.plansFor(routing.currencyOf(routing.of(request))).map(SubscriptionPlanResponse::of)))
     }
 
     @Operation(
@@ -133,7 +134,7 @@ class PaymentSubscriptionController(
     @PostMapping("/subscriptions/{id}/cancel-now")
     fun cancelNow(authentication: Authentication?, @PathVariable id: String): DataResponse<CancelNowResponse> {
         val result = cancellations.cancelNow(callers.account(authentication), id)
-        return Response.ok(CancelNowResponse.of(result, subscriptions.plans().firstOrNull { it.code == result.subscription.planCode }?.name))
+        return Response.ok(CancelNowResponse.of(result, subscriptions.plan(result.subscription.planCode)?.name))
     }
 
     @Operation(
@@ -174,7 +175,7 @@ class PaymentSubscriptionController(
     }
 
     private fun view(subscription: PaymentSubscription): SubscriptionResponse =
-        SubscriptionResponse.of(subscription, subscriptions.plans().firstOrNull { it.code == subscription.planCode }?.name, subscriptions.discountOf(subscription))
+        SubscriptionResponse.of(subscription, subscriptions.plan(subscription.planCode)?.name, subscriptions.discountOf(subscription))
 
     /** 카드 등록 창이 돌려준 값 — 문자열 칸만, 여덟 개까지, 칸마다 512자까지. 모양은 결제사가 확인한다. */
     private fun providerPayload(node: JsonNode?): Map<String, Any?> {
