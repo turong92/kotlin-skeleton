@@ -111,6 +111,7 @@ fails when this table and the prefixes found in module code differ.
 | `board` | `skeleton.board` |
 | `captcha-turnstile` | `skeleton.captcha-turnstile` |
 | `config-aws-ssm` | `skeleton.config.aws.ssm` |
+| `coupon` | `skeleton.coupon` |
 | `crypto` | `skeleton.crypto` |
 | `dashboard` | `skeleton.dashboard` |
 | `dashboard-cloudflare` | `skeleton.dashboard-cloudflare` |

@@ -1041,6 +1041,68 @@
       }
     },
     {
+      "id": "coupon",
+      "kind": "module",
+      "module": "coupon",
+      "path": "modules/coupon",
+      "status": "experimental",
+      "summary": "쿠폰 — 단계 목록(무료 · 정률 · 정액, n회차)으로 마케팅이 행 하나로 만드는 정의, 쿠폰함, 공용 코드 등록, 보상 지급기 `coupon` 과 결제 할인 수단 `coupon`(예약 · 확정 · 해제 · 복원).",
+      "starter": false,
+      "newProjectFlag": "--modules coupon,coupon-jdbc",
+      "autoIncludes": ["json"],
+      "needs": {
+        "requires": ["coupon-jdbc"],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": ["skeleton.coupon"],
+        "snippet": "docs/config/modules/coupon.yml"
+      },
+      "basePaths": ["/api/v1/admin", "/api/v1/coupons"],
+      "secrets": [],
+      "docs": ["docs/modules/coupon.md"],
+      "frontend": null,
+      "notFor": [
+        "coupon 은 저장소를 모른다 — coupon-jdbc 를 같이 고른다",
+        "쿠폰을 언제 주는지(출석 · 친구초대)는 이벤트 모듈의 몫이다 — 이 모듈은 지급기로 받기만 한다",
+        "결제 금액을 깎는 일은 payment 의 몫이다 — 이 모듈은 할인 수단으로 쓸 수 있는지 판정하고 쥐었다 놓을 뿐이다"
+      ],
+      "keywords": {
+        "ko": ["쿠폰", "할인 코드", "프로모션 코드", "무료 이용권", "n달 무료", "쿠폰함"],
+        "en": ["coupon", "promo code", "discount code", "voucher", "coupon wallet"]
+      }
+    },
+    {
+      "id": "coupon-jdbc",
+      "kind": "module",
+      "module": "coupon-jdbc",
+      "path": "modules/coupon-jdbc",
+      "status": "experimental",
+      "summary": "쿠폰 정의 · 쿠폰함 · 공용 코드를 DB 에 둔다 (PostgreSQL · MySQL) — 예약 · 확정은 조건부 갱신, 발급 한도는 정의 줄 잠금.",
+      "starter": false,
+      "newProjectFlag": "--modules coupon-jdbc",
+      "autoIncludes": ["coupon", "json"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": [],
+        "snippet": null
+      },
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/coupon-jdbc.md"],
+      "frontend": null,
+      "notFor": ["DataSource · db-* 모듈과 이 모듈의 마이그레이션이 적용된 스키마가 필요하다"],
+      "keywords": {
+        "ko": ["쿠폰 저장소", "쿠폰 DB"],
+        "en": ["coupon storage", "coupon repository"]
+      }
+    },
+    {
       "id": "crypto",
       "kind": "module",
       "module": "crypto",
@@ -2767,6 +2829,8 @@
         "board",
         "board-jdbc",
         "config-aws-ssm",
+        "coupon",
+        "coupon-jdbc",
         "crypto",
         "dashboard",
         "dashboard-cloudflare",
