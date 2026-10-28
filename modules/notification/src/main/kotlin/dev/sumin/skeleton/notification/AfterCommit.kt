@@ -4,7 +4,7 @@ import org.springframework.transaction.support.TransactionSynchronization
 import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.util.ClassUtils
 
-/** `spring-tx` 는 선택 의존(`compileOnly`)이라 클래스가 있을 때만 [Synchronizations] 를 건드린다 */
+/** `spring-tx` 클래스가 없는 앱에서도 뜰 수 있게(예: 직접 구성) 클래스가 있을 때만 [Synchronizations] 를 건드린다 */
 internal object AfterCommit {
     private val available = ClassUtils.isPresent(
         "org.springframework.transaction.support.TransactionSynchronizationManager",

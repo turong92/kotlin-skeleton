@@ -193,6 +193,44 @@ class JdbcNotificationInboxRepositoryDbTest {
         }
     }
 
+    private fun saveConcurrently(recipient: String, event: NotificationEvent) {
+        val tx = TransactionTemplate(DataSourceTransactionManager(dataSource))
+        val pool = Executors.newFixedThreadPool(2)
+        try {
+            val start = CountDownLatch(1)
+            val futures = (1..2).map {
+                pool.submit {
+                    start.await()
+                    tx.execute {
+                        repository.save(event, setOf(recipient))
+                        Thread.sleep(80)
+                    }
+                }
+            }
+            start.countDown()
+            futures.forEach { it.get(30, TimeUnit.SECONDS) }   // 둘 다 예외 없이 끝나야 한다
+        } finally {
+            pool.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `the same event stored by two transactions at once never throws and counts once`() {
+        repeat(5) { round ->
+            // 새 열쇠의 첫 이벤트를 동시에
+            val fresh = "acc_${UUID.randomUUID()}"
+            saveConcurrently(fresh, collapsing("x1-$fresh", "k-$round"))
+            assertEquals(1, repository.findByRecipient(fresh, NotificationInboxQuery()).values.single().collapsedCount, "fresh round $round")
+
+            // 이미 접힌 이벤트의 재발행을 동시에
+            val folded = "acc_${UUID.randomUUID()}"
+            repository.save(collapsing("x1-$folded", "k"), setOf(folded))
+            repository.save(collapsing("x2-$folded", "k", at = "2026-03-01T00:35:00Z"), setOf(folded))
+            saveConcurrently(folded, collapsing("x2-$folded", "k", at = "2026-03-01T00:35:00Z"))
+            assertEquals(2, repository.findByRecipient(folded, NotificationInboxQuery()).values.single().collapsedCount, "folded round $round")
+        }
+    }
+
     @Test
     fun `countUnread counts unread rows of one recipient`() {
         val recipient = "acc_${UUID.randomUUID()}"

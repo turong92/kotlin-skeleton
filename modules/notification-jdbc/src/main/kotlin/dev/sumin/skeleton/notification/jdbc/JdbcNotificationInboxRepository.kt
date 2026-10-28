@@ -54,17 +54,23 @@ class JdbcNotificationInboxRepository(
             insertIfAbsent(event, recipientId)
             findOne(recipientId, event.id)?.let { return it }
             if (foldIntoUnread(event, recipientId, collapseKey)) return findUnreadByKey(recipientId, collapseKey)
+            // 접기가 0 줄: 같은 이벤트를 동시에 저장한 쪽이 먼저 반영했을 수 있다. MySQL REPEATABLE READ 의 일반 읽기는 스냅샷이라 못 보므로 잠그는 읽기(최신)로 다시 본다
+            findSeen(recipientId, event.id, forShare = true)?.let { return it }
         }
-        throw IllegalStateException("could not store a collapsing notification for $recipientId after $MAX_COLLAPSE_ATTEMPTS attempts")
+        // 알림이 업무 트랜잭션을 깨면 안 된다 - 경고만 남기고 이 받는 사람의 저장을 건너뛴다
+        log.warn("notification {} was not stored for {}: the collapse row kept changing under it", event.id, recipientId)
+        return null
     }
 
     /** 그 이벤트 id 가 줄의 처음 id(`event_id`)이거나 마지막으로 접힌 id(`last_event_id`)인 줄 */
     private fun findSeen(
         recipientId: String,
         eventId: String,
+        forShare: Boolean = false,
     ): NotificationInboxRecord? =
         jdbc.query(
-            "select * from notification_inbox where recipient_id = :recipientId and (event_id = :eventId or last_event_id = :eventId)",
+            "select * from notification_inbox where recipient_id = :recipientId and (event_id = :eventId or last_event_id = :eventId)" +
+                if (forShare) " for share" else "",
             MapSqlParameterSource().addValue("recipientId", recipientId).addValue("eventId", eventId),
         ) { rs, _ -> rs.toRecord() }
             .firstOrNull()
@@ -323,6 +329,7 @@ class JdbcNotificationInboxRepository(
             }
 
     private companion object {
+        private val log = org.slf4j.LoggerFactory.getLogger(JdbcNotificationInboxRepository::class.java)
         const val TABLE = "notification_inbox"
 
         /** read_at 은 빼서 칼럼 기본값(null) — PG 는 타입 없는 null 파라미터를 추론하지 못할 수 있다 */

@@ -36,7 +36,7 @@ interface NotificationInboxRepository {
     /**
      * 받는 사람마다 한 줄을 넣는다. [NotificationEvent.collapseKey] 가 있으면 그 사람의 **안 읽은** 같은 열쇠 줄에 접는다:
      * 내용(`type` · `severity` · `title` · `message` · `payload` · `link`)과 시각은 새 것, `collapsedCount` +1, `eventId` 는 처음 것 그대로(읽음 주소가 바뀌지 않게).
-     * 읽은 줄은 건드리지 않고 새 줄을 만든다. 같은 이벤트 id 를 다시 저장해도 수는 오르지 않는다.
+     * 읽은 줄은 건드리지 않고 새 줄을 만든다. 줄의 처음 이벤트 id 와 마지막으로 접힌 id 를 다시 저장해도 수는 오르지 않는다(그 사이 접힌 id 의 재저장은 보장하지 않는다 - DB 판).
      */
     fun save(
         event: NotificationEvent,
