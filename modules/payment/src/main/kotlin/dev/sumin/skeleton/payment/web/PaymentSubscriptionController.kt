@@ -53,12 +53,17 @@ class PaymentSubscriptionController(
     fun plans(authentication: Authentication?, request: HttpServletRequest): DataResponse<SubscriptionPlansResponse> {
         callers.account(authentication)
         // 이 요청의 통화(라우팅이 정한다)의 플랜만 - 브라우저가 통화를 고르는 길은 없다
-        return Response.ok(SubscriptionPlansResponse(subscriptions.plansFor(routing.currencyOf(routing.of(request))).map { SubscriptionPlanResponse.of(it, languages(request)) }))
+        return Response.ok(SubscriptionPlansResponse(subscriptions.plansFor(routing.currencyOf(routing.of(request))).map { SubscriptionPlanResponse.of(it, languages()) }))
     }
 
     /** 요청 언어(`Accept-Language`, 우선순위 순)의 언어 태그 - 헤더가 없으면 비어 있어 플랜의 기본 이름이 나간다 */
-    private fun languages(request: HttpServletRequest): List<String> =
-        if (request.getHeader("Accept-Language") == null) emptyList() else request.locales.toList().flatMap { listOf(it.toLanguageTag(), it.language) }.distinct()
+    private fun languages(): List<String> {
+        val request = (org.springframework.web.context.request.RequestContextHolder.getRequestAttributes() as? org.springframework.web.context.request.ServletRequestAttributes)?.request ?: return emptyList()
+        return if (request.getHeader("Accept-Language") == null) emptyList() else request.locales.toList().flatMap { listOf(it.toLanguageTag(), it.language) }.distinct()
+    }
+
+    /** 플랜 이름 - 요청 언어의 이름, 없으면 기본 이름(플랜 목록과 같은 규칙) */
+    private fun nameOf(plan: dev.sumin.skeleton.payment.SubscriptionPlan?): String? = plan?.let { p -> languages().firstNotNullOfOrNull { p.names[it] } ?: p.name }
 
     @Operation(
         summary = "Start a subscription and get the values for the card registration window",
@@ -138,7 +143,7 @@ class PaymentSubscriptionController(
     @PostMapping("/subscriptions/{id}/cancel-now")
     fun cancelNow(authentication: Authentication?, @PathVariable id: String): DataResponse<CancelNowResponse> {
         val result = cancellations.cancelNow(callers.account(authentication), id)
-        return Response.ok(CancelNowResponse.of(result, subscriptions.plan(result.subscription.planCode)?.name))
+        return Response.ok(CancelNowResponse.of(result, nameOf(subscriptions.plan(result.subscription.planCode))))
     }
 
     @Operation(
@@ -149,7 +154,7 @@ class PaymentSubscriptionController(
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = PlanChangePreviewResponse::class)
     @GetMapping("/subscriptions/{id}/change-preview")
     fun changePreview(authentication: Authentication?, @PathVariable id: String, @RequestParam planCode: String): DataResponse<PlanChangePreviewResponse> =
-        Response.ok(PlanChangePreviewResponse.of(planChanges.preview(callers.account(authentication), id, planCode)))
+        Response.ok(planChanges.preview(callers.account(authentication), id, planCode).let { PlanChangePreviewResponse.of(it, nameOf(it.plan) ?: it.plan.name) })
 
     @Operation(
         summary = "Change to a higher plan at once",
@@ -179,7 +184,7 @@ class PaymentSubscriptionController(
     }
 
     private fun view(subscription: PaymentSubscription): SubscriptionResponse =
-        SubscriptionResponse.of(subscription, subscriptions.plan(subscription.planCode)?.name, subscriptions.discountOf(subscription))
+        SubscriptionResponse.of(subscription, nameOf(subscriptions.plan(subscription.planCode)), subscriptions.discountOf(subscription))
 
     /** 카드 등록 창이 돌려준 값 — 문자열 칸만, 여덟 개까지, 칸마다 512자까지. 모양은 결제사가 확인한다. */
     private fun providerPayload(node: JsonNode?): Map<String, Any?> {

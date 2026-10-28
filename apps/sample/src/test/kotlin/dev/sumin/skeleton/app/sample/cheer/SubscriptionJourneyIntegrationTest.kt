@@ -39,6 +39,8 @@ class SubscriptionJourneyIntegrationTest : CheerIntegrationBase() {
         }
         val me = get("$PAYMENTS/subscriptions/me", user).andExpect { status { isOk() }; jsonPath("$.value.orders.length()") { value(1) } }
         assertEquals("standard", read(me, "$.value.subscription.planCode"))
+        assertEquals("스탠다드", read(me, "$.value.subscription.planName"), "no language header - the default name")
+        mvc.get("$PAYMENTS/subscriptions/me") { header("Authorization", "Bearer $user"); header("Accept-Language", "en-US,en;q=0.8") }.andExpect { jsonPath("$.value.subscription.planName") { value("Standard") } }
         assertEquals("1234", read(me, "$.value.subscription.card.last4"))
         assertEquals(1, gateway.chargeCalls.size)
         assertEquals(0, jdbc.sql("select count(*) from cheers").query(Long::class.java).single().toInt(), "a subscription charge is not a cheer")
