@@ -63,7 +63,7 @@ class PaymentSubscriptionController(
     }
 
     /** 플랜 이름 - 요청 언어의 이름, 없으면 기본 이름(플랜 목록과 같은 규칙) */
-    private fun nameOf(plan: dev.sumin.skeleton.payment.SubscriptionPlan?): String? = plan?.let { p -> languages().firstNotNullOfOrNull { p.names[it] } ?: p.name }
+    private fun nameOf(plan: dev.sumin.skeleton.payment.SubscriptionPlan?): String? = plan?.nameFor(languages())
 
     @Operation(
         summary = "Start a subscription and get the values for the card registration window",
@@ -143,7 +143,7 @@ class PaymentSubscriptionController(
     @PostMapping("/subscriptions/{id}/cancel-now")
     fun cancelNow(authentication: Authentication?, @PathVariable id: String): DataResponse<CancelNowResponse> {
         val result = cancellations.cancelNow(callers.account(authentication), id)
-        return Response.ok(CancelNowResponse.of(result, nameOf(subscriptions.plan(result.subscription.planCode))))
+        return Response.ok(subscriptions.plan(result.subscription.planCode).let { plan -> CancelNowResponse.of(result, nameOf(plan), plan) })
     }
 
     @Operation(
@@ -184,7 +184,7 @@ class PaymentSubscriptionController(
     }
 
     private fun view(subscription: PaymentSubscription): SubscriptionResponse =
-        SubscriptionResponse.of(subscription, nameOf(subscriptions.plan(subscription.planCode)), subscriptions.discountOf(subscription))
+        subscriptions.plan(subscription.planCode).let { plan -> SubscriptionResponse.of(subscription, nameOf(plan), subscriptions.discountOf(subscription), plan) }
 
     /** 카드 등록 창이 돌려준 값 — 문자열 칸만, 여덟 개까지, 칸마다 512자까지. 모양은 결제사가 확인한다. */
     private fun providerPayload(node: JsonNode?): Map<String, Any?> {

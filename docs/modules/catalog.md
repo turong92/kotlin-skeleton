@@ -15,7 +15,7 @@
 쿠폰은 행사가 위에 얹힌다(최소 금액 · 정률은 행사가 기준) - 쿠폰 범위는 가격 코드 또는 **상품 코드**로 걸 수 있어 가격을 바꿔도 쿠폰이 깨지지 않는다.
 
 **결제 계약 구현**:
-- `CatalogSubscriptionPlans`(`SubscriptionPlans`): `list()` = 판매 중 구독 상품의 현재 가격들(모든 통화 - 요청 통화로 거르는 것은 결제 쪽, `GET /payments/subscriptions/plans`), 플랜 한 줄 = 가격 하나, 플랜 코드 = 가격 코드. 이름은 `skeleton.catalog.default-locale` → 첫 언어.
+- `CatalogSubscriptionPlans`(`SubscriptionPlans`): `list()` = 판매 중 구독 상품의 현재 가격들(모든 통화 - 요청 통화로 거르는 것은 결제 쪽, `GET /payments/subscriptions/plans`), 플랜 한 줄 = 가격 하나, 플랜 코드 = 가격 코드. 플랜 이름은 요청 언어(`Accept-Language`, 플랜 목록 · 내 구독 · 해지 · 변경 미리보기 응답) → `skeleton.catalog.default-locale` → 첫 언어 순으로 고른다(`SubscriptionPlan.names` 에 상품의 모든 언어 이름이 실린다). 갱신 알림처럼 **서버가 만드는 이름은 받는 사람의 언어를 모르니 기본 언어 이름 그대로**다.
 - `CatalogPaymentCatalog`(`PaymentCatalog`, 공개 클래스): `itemType` = `skeleton.catalog.item-type`(기본 `product`), `itemRef` = 단건 가격 코드, 수량 1, 금액 = 현재 가격, 결제창 이름 = 기본 언어 상품 이름. `PaymentCatalog` 빈은 하나뿐이라 앱이 코드 상품(응원하기)을 따로 두면 자기 빈에서 `itemType` 으로 갈라 이 클래스를 부른다.
 - `CatalogProviderPriceRefs`(`ProviderPriceRefs`): 운영자가 Paddle 대시보드에서 만든 `pri_…` 를 **그 통화의 가격 줄**에 붙인다. Paddle 모듈이 이 링크를 먼저 보고 없으면 자기 설정 지도를 본다. 링크 없는 가격을 Paddle 로 사면 `503 UNAVAILABLE`.
   링크를 결제창이 열린 동안 바꾸면 그 결제는 품목 대조에서 「확인 필요」로 간다.

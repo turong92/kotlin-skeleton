@@ -380,7 +380,7 @@ data class WebhookEventResponse(
 
 data class SubscriptionPlanResponse(val code: String, val name: String, val amount: AmountResponse, val period: String, val level: Int, val productCode: String, val regularAmount: Long?) {
     companion object {
-        fun of(plan: dev.sumin.skeleton.payment.SubscriptionPlan, languages: List<String> = emptyList()) = SubscriptionPlanResponse(plan.code, languages.firstNotNullOfOrNull { plan.names[it] } ?: plan.name, plan.amount.toResponse(), plan.period, plan.level, plan.productCode, plan.regularAmount)
+        fun of(plan: dev.sumin.skeleton.payment.SubscriptionPlan, languages: List<String> = emptyList()) = SubscriptionPlanResponse(plan.code, plan.nameFor(languages), plan.amount.toResponse(), plan.period, plan.level, plan.productCode, plan.regularAmount)
     }
 }
 
@@ -417,9 +417,15 @@ data class SubscriptionResponse(
     val easyPayBrand: String? = null,
     /** 할인이 붙은 구독이면 그 내용(다음 결제액 · 남은 할인 횟수), 아니면 `null`. 칸은 늘 온다. */
     val discount: SubscriptionDiscountResponse? = null,
+    /** 이 구독의 플랜이 속한 상품 - 같은 상품의 다른 가격(옛 가격 구독자의 업그레이드 단추)을 찾는 열쇠. 플랜이 목록에서 사라졌으면 `planCode`. */
+    val productCode: String = planCode,
+    /** 플랜의 등급(높을수록 윗등급) - 플랜을 모르면 null. */
+    val level: Int? = null,
 ) {
     companion object {
-        fun of(subscription: dev.sumin.skeleton.payment.PaymentSubscription, planName: String?, discount: dev.sumin.skeleton.payment.SubscriptionDiscountView? = null) = SubscriptionResponse(
+        fun of(subscription: dev.sumin.skeleton.payment.PaymentSubscription, planName: String?, discount: dev.sumin.skeleton.payment.SubscriptionDiscountView? = null, plan: dev.sumin.skeleton.payment.SubscriptionPlan? = null) = SubscriptionResponse(
+            productCode = plan?.productCode ?: subscription.planCode,
+            level = plan?.level,
             id = subscription.id,
             status = subscription.status.name,
             planCode = subscription.planCode,
@@ -483,10 +489,10 @@ data class CancelRefundResponse(val orderId: String, val amount: AmountResponse,
 
 data class CancelNowResponse(val subscription: SubscriptionResponse, val refund: AmountResponse, val withdrawal: Boolean, val lines: List<CancelLineResponse>, val refunds: List<CancelRefundResponse>) {
     companion object {
-        fun of(result: dev.sumin.skeleton.payment.CancelNowResult, planName: String?): CancelNowResponse {
+        fun of(result: dev.sumin.skeleton.payment.CancelNowResult, planName: String?, plan: dev.sumin.skeleton.payment.SubscriptionPlan? = null): CancelNowResponse {
             val currency = result.subscription.amount.currency
             return CancelNowResponse(
-                SubscriptionResponse.of(result.subscription, planName),
+                SubscriptionResponse.of(result.subscription, planName, plan = plan),
                 PaymentAmount(result.quote.refund, currency).toResponse(),
                 result.quote.withdrawal,
                 result.quote.lines.map { CancelLineResponse(it.code.name, it.amount) },
@@ -507,3 +513,12 @@ data class StartSubscriptionResponse(val subscription: SubscriptionResponse, val
 
 /** `GET /subscriptions/me` — 지금 구독(없으면 `null`)과 최근 결제 다섯 건. */
 data class MySubscriptionResponse(val subscription: SubscriptionResponse?, val orders: List<OrderResponse>)
+
+private fun canonicalTag(tag: String): String = java.util.Locale.forLanguageTag(tag).toLanguageTag()
+
+/** 요청 언어(우선순위 순)에 맞는 이름 - 태그는 BCP-47 꼴로 맞춰 비교하고, 없으면 플랜의 기본 이름 */
+fun dev.sumin.skeleton.payment.SubscriptionPlan.nameFor(languages: List<String>): String {
+    if (names.isEmpty() || languages.isEmpty()) return name
+    val byTag = names.entries.associate { canonicalTag(it.key) to it.value }
+    return languages.firstNotNullOfOrNull { byTag[canonicalTag(it)] } ?: name
+}

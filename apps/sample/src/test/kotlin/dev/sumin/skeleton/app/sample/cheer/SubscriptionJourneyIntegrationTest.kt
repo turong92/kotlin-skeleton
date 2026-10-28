@@ -27,6 +27,7 @@ class SubscriptionJourneyIntegrationTest : CheerIntegrationBase() {
             jsonPath("$.value.plans[5].code") { value("pro-yearly") }
         }
         mvc.get("$PAYMENTS/subscriptions/plans") { header("Authorization", "Bearer $user"); header("Accept-Language", "en") }.andExpect { jsonPath("$.value.plans[0].name") { value("Basic") }; jsonPath("$.value.plans[2].name") { value("Standard") } }
+        mvc.get("$PAYMENTS/subscriptions/plans") { header("Authorization", "Bearer $user"); header("Accept-Language", "EN") }.andExpect { jsonPath("$.value.plans[0].name") { value("Basic") } }   // 태그 대소문자는 가리지 않는다
         val started = post("$PAYMENTS/subscriptions", user, """{"planCode":"standard"}""", key = "sub-key-1").andExpect { status { isCreated() } }
         val id = read(started, "$.value.subscription.id")
         assertEquals("PENDING", read(started, "$.value.subscription.status"))
@@ -40,6 +41,8 @@ class SubscriptionJourneyIntegrationTest : CheerIntegrationBase() {
         val me = get("$PAYMENTS/subscriptions/me", user).andExpect { status { isOk() }; jsonPath("$.value.orders.length()") { value(1) } }
         assertEquals("standard", read(me, "$.value.subscription.planCode"))
         assertEquals("스탠다드", read(me, "$.value.subscription.planName"), "no language header - the default name")
+        assertEquals("standard", read(me, "$.value.subscription.productCode"))
+        assertEquals("2", read(me, "$.value.subscription.level"))
         mvc.get("$PAYMENTS/subscriptions/me") { header("Authorization", "Bearer $user"); header("Accept-Language", "en-US,en;q=0.8") }.andExpect { jsonPath("$.value.subscription.planName") { value("Standard") } }
         assertEquals("1234", read(me, "$.value.subscription.card.last4"))
         assertEquals(1, gateway.chargeCalls.size)
