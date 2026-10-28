@@ -129,6 +129,8 @@ class CatalogAdmin(
             if (input.saleEndsAt != null && !input.saleEndsAt.isAfter(now)) throw priceField("saleEndsAt", "Invalid", "saleEndsAt is already past")
             val all = store.listPricesOf(product.id)
             val old = input.replaces?.let { oldCode -> all.firstOrNull { it.code == oldCode } ?: throw priceField("replaces", "Invalid", "replaces is a price code of the same product") }
+            // 행사가 상시 가격을 대신하면 행사가 끝난 뒤 그 열쇠에 현재 가격이 없어 가격이 조용히 사라진다
+            if (windowed && old != null && !old.windowed) throw priceField("replaces", "Invalid", "a sale price cannot replace an evergreen price - add the sale next to it, or replace the evergreen price with another evergreen price")
             val siblings = all.map { if (it.code == old?.code) it.copy(selling = false) else it }   // 대신하는 옛 가격은 겹침 검사에서 빠진다
             val code = input.code?.let { codeOf(it, "price code") }?.also { if (store.findPrice(it) != null) throw CatalogException(CatalogErrorCode.CODE_TAKEN, "price code $it is taken") }
                 ?: freeCode(product, period, currency)

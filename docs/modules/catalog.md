@@ -34,7 +34,7 @@
 | `GET /api/v1/admin/catalog/products` | 상품 + 가격 전부(모든 통화 · 중지된 것 · 지난 가격, 최신 먼저). `Price.current` = 지금 살 수 있다 |
 | `POST /api/v1/admin/catalog/products` `{code, kind, level?, highlighted?, sortOrder?, texts}` | 상품 만들기 → 201 |
 | `PUT /api/v1/admin/catalog/products/{code}` `{level?, highlighted?, selling?, sortOrder?, texts?}` | 고치기(코드 · 종류는 못 바꾼다) |
-| `POST /api/v1/admin/catalog/products/{code}/prices` `{code?, period?, amount, currency, compareAtAmount?, saleStartsAt?, saleEndsAt?, replaces?}` | 가격 추가 → 201. `replaces`(같은 상품의 옛 가격 코드)를 주면 같은 잠금 안에서 옛 가격 판매 중지 + 새 가격 추가가 한 번에(가격 교체) |
+| `POST /api/v1/admin/catalog/products/{code}/prices` `{code?, period?, amount, currency, compareAtAmount?, saleStartsAt?, saleEndsAt?, replaces?}` | 가격 추가 → 201. `replaces`(같은 상품의 옛 가격 코드)를 주면 같은 잠금 안에서 옛 가격 판매 중지 + 새 가격 추가가 한 번에(가격 교체). 행사가는 상시 가격을 대신할 수 없다(행사가 끝나면 현재 가격이 없어진다 - `PRICE_INVALID`, field `replaces`) |
 | `POST /api/v1/admin/catalog/prices/{code}/stop` | 판매 중지(되돌리지 않는다, 두 번 눌러도 같다) |
 | `PATCH /api/v1/admin/catalog/prices/{code}` `{saleEndsAt: <시각 \| null>}` | 행사 끝 시각 바꾸기(키가 없으면 400) |
 | `PUT` · `DELETE /api/v1/admin/catalog/prices/{code}/provider-refs/{provider}` `{externalId}` | 결제사 가격 id 링크(`PUT` 은 `GET …/providers` 에 있는 결제사만) |

@@ -232,6 +232,23 @@ class CatalogAdminPriceRulesTest {
     }
 
     @Test
+    fun `a sale may not replace an evergreen price, but a sale may replace a sale and an evergreen price may replace an evergreen price`() {
+        val evergreen = admin.addPrice("a", "basic", PriceInput(period = "P1M", amount = 3_900, currency = "KRW"))
+        val saleInput = { replaces: String? -> PriceInput(period = "P1M", amount = 2_900, currency = "KRW", compareAtAmount = 3_900, saleEndsAt = time.now().plus(day), replaces = replaces) }
+
+        val refused = assertFailsWith<ApplicationException> { admin.addPrice("a", "basic", saleInput(evergreen.code)) }
+        assertEquals("replaces", field(refused))
+        assertEquals(CatalogErrorCode.PRICE_INVALID, refused.errorCode)
+        assertTrue(store.prices.getValue(evergreen.code).selling, "the refused replacement left the evergreen price selling")
+
+        val sale = admin.addPrice("a", "basic", saleInput(null))
+        val newerSale = admin.addPrice("a", "basic", saleInput(sale.code))
+        assertFalse(store.prices.getValue(sale.code).selling)
+        admin.addPrice("a", "basic", PriceInput(period = "P1M", amount = 5_900, currency = "KRW", replaces = evergreen.code))
+        assertFalse(store.prices.getValue(evergreen.code).selling)
+    }
+
+    @Test
     fun `language tags are made canonical and a duplicate after that is refused`() {
         val product = admin.createProduct("a", ProductInput("pro", "SUBSCRIPTION", 2, texts = mapOf("EN-us" to ProductTextInput("Pro"), "ko" to ProductTextInput("프로")))).product
         assertEquals(listOf("en-US", "ko"), product.texts.map { it.locale })
