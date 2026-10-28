@@ -11,7 +11,7 @@ import org.springframework.transaction.support.TransactionSynchronization
 import org.springframework.transaction.support.TransactionSynchronizationManager
 
 /**
- * `authz_roles` · `authz_role_permissions`. 쓰기는 한 트랜잭션 안에서(호출자의 트랜잭션이 있으면 거기에 합류) 하고,
+ * `authz_roles` · `authz_role_permissions` · `authz_role_includes`. 쓰기는 한 트랜잭션 안에서(호출자의 트랜잭션이 있으면 거기에 합류) 하고,
  * [onChange](역할 → 권한 캐시 비우기)는 커밋 뒤에 부른다 — 커밋 전에 비우면 다른 요청이 옛 값을 다시 캐시에 올릴 수 있다.
  * 보호 역할(`protected`)은 [update] · [delete] 문장 자체가 건드리지 않는다.
  */
@@ -26,10 +26,22 @@ class JdbcAuthzRoleStore(
         val permissions = jdbc.sql("select role, permission from authz_role_permissions")
             .query { rs, _ -> rs.getString("role") to rs.getString("permission") }.list()
             .groupBy({ it.first }, { it.second })
+        val includes = jdbc.sql("select role, included from authz_role_includes")
+            .query { rs, _ -> rs.getString("role") to rs.getString("included") }.list()
+            .groupBy({ it.first }, { it.second })
         return jdbc.sql("select name, description, protected from authz_roles order by name")
             .query { rs, _ -> StoredRole(rs.getString("name"), rs.getString("description"), emptySet(), rs.getBoolean("protected")) }.list()
-            .map { it.copy(permissions = permissions[it.name].orEmpty().toSortedSet()) }
+            .map { it.copy(permissions = permissions[it.name].orEmpty().toSortedSet(), includes = includes[it.name].orEmpty().toSortedSet()) }
     }
+
+    /** 전권 역할(`protected`) 줄 하나를 잠근다 - 위계를 바꾸는 모든 편집이 이 줄 앞에서 줄을 선다(여러 인스턴스 포함). 이 줄은 늘 있고 아무도 고치지 않는다 */
+    override fun lockHierarchy() {
+        jdbc.sql("select name from authz_roles where protected = true order by name for update").query { rs, _ -> rs.getString(1) }.list()
+    }
+
+    override fun includedBy(name: String): Set<String> =
+        jdbc.sql("select role from authz_role_includes where included = :name for update").param("name", name)
+            .query { rs, _ -> rs.getString("role") }.list().toSortedSet()
 
     override fun find(name: String): StoredRole? = read(name, lock = false)
 
@@ -40,7 +52,7 @@ class JdbcAuthzRoleStore(
         val suffix = if (lock) " for update" else ""
         return jdbc.sql("select name, description, protected from authz_roles where name = :name$suffix").param("name", name)
             .query { rs, _ -> StoredRole(rs.getString("name"), rs.getString("description"), emptySet(), rs.getBoolean("protected")) }.optional().orElse(null)
-            ?.let { it.copy(permissions = permissionsOf(it.name, suffix)) }
+            ?.let { it.copy(permissions = permissionsOf(it.name, suffix), includes = includesOf(it.name, suffix)) }
     }
 
     /**
@@ -53,6 +65,7 @@ class JdbcAuthzRoleStore(
             jdbc.sql("insert into authz_roles (name, description, protected, created_at, updated_at) values (:name, :description, :protected, :at, :at)")
                 .param("name", role.name).param("description", role.description, java.sql.Types.VARCHAR).param("protected", role.protected).param("at", now).update()
             insertPermissions(role.name, role.permissions)
+            insertIncludes(role.name, role.includes)
             changed()
             true
         }!!
@@ -60,12 +73,16 @@ class JdbcAuthzRoleStore(
         false
     }
 
-    override fun update(name: String, description: String?, permissions: Set<String>): Boolean = tx.execute {
+    override fun update(name: String, description: String?, permissions: Set<String>, includes: Set<String>?): Boolean = tx.execute {
         val rows = jdbc.sql("update authz_roles set description = :description, updated_at = :at where name = :name and protected = false")
             .param("description", description, java.sql.Types.VARCHAR).param("at", dialect.instantParam(time.now())).param("name", name).update()
         if (rows == 0) return@execute false
         jdbc.sql("delete from authz_role_permissions where role = :name").param("name", name).update()
         insertPermissions(name, permissions)
+        if (includes != null) {
+            jdbc.sql("delete from authz_role_includes where role = :name").param("name", name).update()
+            insertIncludes(name, includes)
+        }
         changed()
         true
     }!!
@@ -80,6 +97,15 @@ class JdbcAuthzRoleStore(
     private fun permissionsOf(role: String, suffix: String): Set<String> =
         jdbc.sql("select permission from authz_role_permissions where role = :role order by permission$suffix").param("role", role)
             .query { rs, _ -> rs.getString("permission") }.list().toSortedSet<String>()
+
+    private fun includesOf(role: String, suffix: String): Set<String> =
+        jdbc.sql("select included from authz_role_includes where role = :role order by included$suffix").param("role", role)
+            .query { rs, _ -> rs.getString("included") }.list().toSortedSet<String>()
+
+    private fun insertIncludes(role: String, includes: Set<String>) =
+        includes.forEach {
+            jdbc.sql("insert into authz_role_includes (role, included) values (:role, :included)").param("role", role).param("included", it).update()
+        }
 
     private fun insertPermissions(role: String, permissions: Set<String>) =
         permissions.forEach {
