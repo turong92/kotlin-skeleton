@@ -38,6 +38,8 @@ data class PriceInput(
     val compareAtAmount: Long? = null,
     val saleStartsAt: Instant? = null,
     val saleEndsAt: Instant? = null,
+    /** 이 가격이 대신하는 옛 가격 코드(같은 상품) - 같은 잠금 안에서 옛 가격을 판매 중지하고 새 가격을 만든다(둘이 같이 되거나 같이 안 된다) */
+    val replaces: String? = null,
 )
 
 /**
@@ -49,7 +51,11 @@ class CatalogAdmin(
     private val time: TimeProvider,
     private val audit: OperatorAuditLog,
     private val ids: SortableIds = SortableIds.system,
+    /** 가격 id 를 쓰는 켜진 결제사 - 결제사 링크는 이 id 에만 둘 수 있다 */
+    private val providers: () -> List<String> = { emptyList() },
 ) {
+    fun linkableProviders(): List<String> = providers()
+
     /** 모든 상품과 그 가격 전부(지난 가격 · 판매 중지까지, 최신 먼저) */
     fun entries(): List<CatalogEntry> {
         val prices = store.listPrices().groupBy { it.productId }
@@ -114,13 +120,21 @@ class CatalogAdmin(
             val amount = input.amount?.takeIf { it > 0 } ?: throw priceField("amount", if (input.amount == null) "Required" else "Min", "amount must be positive (the smallest unit of the currency)")
             val currency = input.currency?.trim()?.uppercase()?.takeIf { CURRENCY.matches(it) } ?: throw priceField("currency", "Pattern", "currency is three letters")
             val compareAt = input.compareAtAmount?.also { if (it <= amount) throw priceField("compareAtAmount", "Min", "compareAtAmount (the list price) must be more than amount") }
-            if (input.saleStartsAt != null && input.saleEndsAt != null && !input.saleStartsAt.isBefore(input.saleEndsAt)) throw priceField("saleEndsAt", "Invalid", "saleStartsAt must be before saleEndsAt")
+            // 행사 = 정가와 기간을 단 가격 줄: 기간이 있으면 정가가 있어야 하고(화면의 취소선 · 해지의 정가), 상시 가격에는 정가가 없다
+            val windowed = input.saleStartsAt != null || input.saleEndsAt != null
+            if (windowed && compareAt == null) throw priceField("compareAtAmount", "Required", "a sale price (with saleStartsAt or saleEndsAt) needs compareAtAmount, the list price")
+            if (!windowed && compareAt != null) throw priceField("compareAtAmount", "Invalid", "an evergreen price has no compareAtAmount - add saleStartsAt or saleEndsAt to make it a sale")
+            val saleStartsAt = input.saleStartsAt ?: if (input.saleEndsAt != null) now else null   // 끝만 있는 행사는 지금 시작한다
+            if (saleStartsAt != null && input.saleEndsAt != null && !saleStartsAt.isBefore(input.saleEndsAt)) throw priceField("saleEndsAt", "Invalid", "saleStartsAt must be before saleEndsAt")
             if (input.saleEndsAt != null && !input.saleEndsAt.isAfter(now)) throw priceField("saleEndsAt", "Invalid", "saleEndsAt is already past")
-            val siblings = store.listPricesOf(product.id)
+            val all = store.listPricesOf(product.id)
+            val old = input.replaces?.let { oldCode -> all.firstOrNull { it.code == oldCode } ?: throw priceField("replaces", "Invalid", "replaces is a price code of the same product") }
+            val siblings = all.map { if (it.code == old?.code) it.copy(selling = false) else it }   // 대신하는 옛 가격은 겹침 검사에서 빠진다
             val code = input.code?.let { codeOf(it, "price code") }?.also { if (store.findPrice(it) != null) throw CatalogException(CatalogErrorCode.CODE_TAKEN, "price code $it is taken") }
                 ?: freeCode(product, period, currency)
-            val price = CatalogPrice(ids.newId(PRICE_PREFIX), product.id, code, period, amount, currency, compareAt, input.saleStartsAt, input.saleEndsAt, true, null, now, now)
+            val price = CatalogPrice(ids.newId(PRICE_PREFIX), product.id, code, period, amount, currency, compareAt, saleStartsAt, input.saleEndsAt, true, null, now, now)
             if (CurrentPrices.overlaps(siblings, price)) throw CatalogException(CatalogErrorCode.PRICE_OVERLAP, "another $currency price of ${product.code} already covers that period")
+            if (old != null && store.stopPrice(old.code, now)) audit.record(OperatorAction(actorId, "catalog.price.stopped", TARGET_PRICE, old.code, mapOf("replacedBy" to code)))
             store.insertPrice(price)
             audit.record(OperatorAction(actorId, "catalog.price.created", TARGET_PRICE, code, mapOf("product" to product.code, "amount" to "$amount $currency")))
             price
@@ -156,6 +170,7 @@ class CatalogAdmin(
     fun setProviderRef(actorId: String, priceCode: String, provider: String, externalId: String?): CatalogPrice {
         val providerId = provider.trim().lowercase().takeIf { PROVIDER.matches(it) } ?: throw field("provider", "Pattern", "provider is a provider id")
         val external = externalId?.trim()?.takeIf { EXTERNAL_ID.matches(it) } ?: throw field("externalId", if (externalId.isNullOrBlank()) "Required" else "Pattern", "externalId is 1 to 128 characters without spaces")
+        if (providerId !in providers()) throw field("provider", "Invalid", "provider $providerId is not a provider that uses price ids")
         val now = time.now()
         return withPriceLocked(priceCode) { price, _ ->
             if (!store.putProviderRef(priceCode, providerId, external, now)) throw CatalogException(CatalogErrorCode.CODE_TAKEN, "that $providerId price id is already linked to another price")
@@ -211,11 +226,11 @@ class CatalogAdmin(
     private fun textsOf(raw: Map<String, ProductTextInput>): List<CatalogProductText> {
         if (raw.isEmpty()) throw field("texts", "Required", "texts needs at least one language")
         return raw.entries.map { (locale, text) ->
-            val tag = locale.trim().takeIf { LOCALE.matches(it) } ?: throw field("texts", "Pattern", "language '$locale' is a language tag (en, ko, pt-BR)")
+            val tag = locale.trim().takeIf { LOCALE.matches(it) }?.let { java.util.Locale.forLanguageTag(it).toLanguageTag() }?.takeIf { it != "und" } ?: throw field("texts", "Pattern", "language '$locale' is a language tag (en, ko, pt-BR)")
             val name = text.name?.trim()?.takeIf { it.isNotEmpty() && it.length <= NAME_MAX } ?: throw field("texts.$tag.name", if (text.name.isNullOrBlank()) "Required" else "Size", "name of '$tag' is 1 to $NAME_MAX characters")
             val description = text.description?.trim()?.takeIf { it.isNotEmpty() }?.also { if (it.length > DESCRIPTION_MAX) throw field("texts.$tag.description", "Size", "description of '$tag' is at most $DESCRIPTION_MAX characters") }
             CatalogProductText(tag, name, description)
-        }.sortedBy { it.locale }
+        }.also { list -> list.groupBy { it.locale }.filterValues { it.size > 1 }.keys.firstOrNull()?.let { throw field("texts", "Invalid", "language '$it' is given twice (tags are compared in their canonical form)") } }.sortedBy { it.locale }
     }
 
     private fun newestFirst(prices: List<CatalogPrice>) = prices.sortedWith(compareByDescending<CatalogPrice> { it.createdAt }.thenByDescending { it.code })
@@ -240,7 +255,7 @@ class CatalogAdmin(
         private const val TARGET_PRICE = "catalog-price"
         private val CODE = Regex("[a-z0-9][a-z0-9_-]{0,63}")
         private val CURRENCY = Regex("[A-Z]{3}")
-        private val LOCALE = Regex("[a-z]{2,3}(-[A-Za-z0-9]{2,8})?")
+        private val LOCALE = Regex("[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})?")
         private val PROVIDER = Regex("[a-z0-9][a-z0-9-]{0,31}")
         private val EXTERNAL_ID = Regex("\\S{1,128}")
     }

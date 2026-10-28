@@ -159,6 +159,8 @@ class PaymentOrders(
         if (plan.discount.lines.isNotEmpty()) requireDiscountable(checkout, plan.charged)
         val orderId = ids.newId(PaymentOrderIds.ORDER_PREFIX)
         val creator = checkout as? PaymentTransactionGateway
+        // 결제사 쪽 가격 id 가 없는 품목은 줄을 넣기 전에 거절한다 - 거래를 만들 수 없는 PENDING 줄이 남지 않게
+        if (checkout is PaymentPushGateway && checkout.priceIdOf(command.itemRef) == null) throw PaymentUnavailableException()
 
         val now = writer.now()
         val order = PaymentOrder(

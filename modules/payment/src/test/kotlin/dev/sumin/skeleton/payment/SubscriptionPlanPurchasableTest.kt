@@ -70,10 +70,10 @@ class PlansForCurrencyTest {
     }
 
     @Test
-    fun `only the plans of the request currency are listed, and all of them when there is none of that currency or the currency is unknown`() {
+    fun `only the plans of the request currency are listed, and each product's first currency when there is none of that currency or the currency is unknown`() {
         assertEquals(listOf("basic", "plus"), kit.subscriptions.plansFor("KRW").map { it.code })
         assertEquals(listOf("basic-usd"), kit.subscriptions.plansFor("USD").map { it.code })
-        assertEquals(listOf("basic", "plus", "basic-usd"), kit.subscriptions.plansFor("JPY").map { it.code }, "no plan in that currency - nothing is filtered")
-        assertEquals(listOf("basic", "plus", "basic-usd"), kit.subscriptions.plansFor(null).map { it.code })
+        assertEquals(listOf("basic", "plus"), kit.subscriptions.plansFor("JPY").map { it.code }, "no plan in that currency - each product shows its first currency")
+        assertEquals(listOf("basic", "plus"), kit.subscriptions.plansFor(null).map { it.code }, "an unknown currency is the same rule")
     }
 }

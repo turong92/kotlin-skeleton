@@ -162,7 +162,10 @@ class FakePushGateway(override val providerId: String = "paddle", override val m
     override fun interpret(payload: String): PushedPaymentEvent? = events[payload]
 
     /** 서버가 거래에 넣는 가격 id - 기본은 `pri_<코드>`. */
-    override fun priceIdOf(itemRef: String): String? = "pri_$itemRef"
+    /** 결제사 쪽 가격 id 가 없는 품목 코드 - 시험이 넣는다 */
+    val unpriced: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
+    override fun priceIdOf(itemRef: String): String? = if (itemRef in unpriced) null else "pri_$itemRef"
 
     override fun createTransaction(request: TransactionRequest): String {
         createFailure?.let { throw it }

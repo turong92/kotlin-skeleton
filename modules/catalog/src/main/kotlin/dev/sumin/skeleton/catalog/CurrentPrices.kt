@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.catalog
 
+import dev.sumin.skeleton.payment.SubscriptionPeriod
 import java.time.Instant
 
 /**
@@ -14,7 +15,7 @@ object CurrentPrices {
             .groupBy { key(it) }
             .values
             .map { group -> group.filter { it.windowed }.maxWithOrNull(compareBy<CatalogPrice> { it.saleStartsAt ?: Instant.MIN }.thenBy { it.code }) ?: group.minBy { it.code } }
-            .sortedWith(compareBy<CatalogPrice> { it.period.orEmpty() }.thenBy { it.currency })
+            .sortedWith(compareBy<CatalogPrice> { periodLength(it.period) }.thenBy { it.currency })
 
     fun isCurrent(price: CatalogPrice, siblings: List<CatalogPrice>, now: Instant): Boolean = current(siblings, now).any { it.code == price.code }
 
@@ -33,6 +34,11 @@ object CurrentPrices {
 
     private fun inWindow(price: CatalogPrice, now: Instant): Boolean =
         (price.saleStartsAt == null || !now.isBefore(price.saleStartsAt)) && (price.saleEndsAt == null || now.isBefore(price.saleEndsAt))
+
+    /** 주기의 길이 순(짧은 것 먼저, 주기 없는 단건은 맨 앞) - 같은 기준 시각에서 한 주기 뒤로 잰다 */
+    private fun periodLength(period: String?): Instant = period?.let { SubscriptionPeriod.parse(it).after(LENGTH_ANCHOR, 1) } ?: Instant.MIN
+
+    private val LENGTH_ANCHOR: Instant = Instant.parse("2000-01-01T00:00:00Z")
 
     private fun key(price: CatalogPrice) = price.period to price.currency
 }

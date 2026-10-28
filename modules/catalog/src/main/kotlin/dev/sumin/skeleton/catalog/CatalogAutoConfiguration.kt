@@ -6,6 +6,8 @@ import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.payment.PaymentCatalog
 import dev.sumin.skeleton.payment.PaymentLedgerAutoConfiguration
 import dev.sumin.skeleton.payment.PaymentSubscriptionAutoConfiguration
+import dev.sumin.skeleton.payment.PaymentProviderRouter
+import dev.sumin.skeleton.payment.PaymentPushGateway
 import dev.sumin.skeleton.payment.ProviderPriceRefs
 import dev.sumin.skeleton.payment.SubscriptionPlans
 import dev.sumin.skeleton.payment.web.PaymentHttpAutoConfiguration
@@ -35,8 +37,11 @@ class CatalogAutoConfiguration {
     @Bean
     @ConditionalOnBean(CatalogStore::class)
     @ConditionalOnMissingBean
-    fun catalogAdmin(store: CatalogStore, time: ObjectProvider<TimeProvider>, audit: ObjectProvider<OperatorAuditLog>): CatalogAdmin =
-        CatalogAdmin(store, time.getIfAvailable { TimeProvider.systemUtc() }, audit.getIfAvailable { OperatorAuditLog { } })
+    fun catalogAdmin(store: CatalogStore, time: ObjectProvider<TimeProvider>, audit: ObjectProvider<OperatorAuditLog>, router: ObjectProvider<PaymentProviderRouter>): CatalogAdmin =
+        CatalogAdmin(store, time.getIfAvailable { TimeProvider.systemUtc() }, audit.getIfAvailable { OperatorAuditLog { } }, providers = {
+            // 가격 id 를 쓰는 켜진 결제사 = 서명된 웹훅이 곧 사실인 결제사(거래를 먼저 만드는 Paddle 꼴)
+            router.getIfAvailable()?.providerIds(PaymentPushGateway::class).orEmpty()
+        })
 
     @Bean
     @ConditionalOnBean(CatalogStore::class)

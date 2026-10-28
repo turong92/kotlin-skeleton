@@ -101,6 +101,17 @@ class CatalogAdminControllerTest {
         price("""{"period":"P1M","amount":0,"currency":"KRW"}""").andExpect(status().isBadRequest)
             .andExpect(jsonPath("$.code").value("CATALOG.PRICE_INVALID")).andExpect(jsonPath("$.errors[0].field").value("amount"))
         send(patch("$base/prices/basic"), """{}""").andExpect(status().isBadRequest).andExpect(jsonPath("$.errors[0].field").value("saleEndsAt"))
+        send(patch("$base/prices/basic"), """{"saleEndsAt":123}""").andExpect(status().isBadRequest).andExpect(jsonPath("$.errors[0].field").value("saleEndsAt"))
+    }
+
+    @Test
+    fun `a price can replace an old one in one call, and a link goes only to a provider that uses price ids`() {
+        product()
+        price("""{"code":"basic","period":"P1M","amount":3900,"currency":"KRW"}""").andExpect(status().isCreated)
+        price("""{"code":"basic-v2","period":"P1M","amount":4900,"currency":"KRW","replaces":"basic"}""").andExpect(status().isCreated).andExpect(jsonPath("$.value.current").value(true))
+        send(get("$base/products")).andExpect(jsonPath("$.values[0].prices[?(@.code=='basic')].selling").value(false))
+        price("""{"code":"basic-v3","period":"P1M","amount":5900,"currency":"KRW","replaces":"nope"}""").andExpect(status().isBadRequest).andExpect(jsonPath("$.errors[0].field").value("replaces"))
+        send(put("$base/prices/basic-v2/provider-refs/toss"), """{"externalId":"x"}""").andExpect(status().isBadRequest).andExpect(jsonPath("$.errors[0].field").value("provider"))
     }
 
     @Test

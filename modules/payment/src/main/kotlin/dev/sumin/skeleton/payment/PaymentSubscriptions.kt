@@ -38,11 +38,17 @@ class PaymentSubscriptions(
 
     fun plans(): List<SubscriptionPlan> = plans.list()
 
-    /** 이 요청의 통화([currency])로 거른 플랜 - 그 통화 플랜이 하나도 없거나 통화를 모르면 거르지 않는다(통화 하나짜리 코드 플랜 앱 · 통화를 못 정한 요청은 지금처럼). */
+    /**
+     * 이 요청의 통화([currency])로 거른 플랜. 그 통화 플랜이 하나도 없거나 통화를 모르면(결제사를 못 정한 요청 포함) **상품마다 사전순 첫 통화**의 플랜을 낸다 -
+     * 공개 카탈로그와 같은 규칙이다. 코드 플랜은 플랜마다 상품이 따로라 거르는 것이 없다.
+     */
     fun plansFor(currency: String?): List<SubscriptionPlan> {
         val all = plans.list()
-        val wanted = currency?.trim()?.uppercase() ?: return all
-        return all.filter { it.amount.normalizedCurrency == wanted }.ifEmpty { all }
+        val wanted = currency?.trim()?.uppercase()
+        val inWanted = wanted?.let { w -> all.filter { it.amount.normalizedCurrency == w } }.orEmpty()
+        if (inWanted.isNotEmpty()) return inWanted
+        val firstCurrency = all.groupBy { it.productCode }.mapValues { (_, plans) -> plans.minOf { it.amount.normalizedCurrency } }
+        return all.filter { it.amount.normalizedCurrency == firstCurrency[it.productCode] }
     }
 
     /** 코드로 찾는다 - 판매가 끝난 가격도 나온다(기존 구독자의 이름을 보이려고). */
@@ -104,6 +110,8 @@ class PaymentSubscriptions(
         var reference: String? = null
         var window: String? = null
         val creator = hosted?.let { it as? PaymentTransactionGateway ?: throw PaymentUnavailableException() }
+        // 결제사 쪽 가격 id 가 없는 플랜은 줄을 넣기 전에 거절한다 - 거래를 만들 수 없는 PENDING 줄이 남지 않게
+        if (hosted is PaymentPushGateway && hosted.priceIdOf(plan.code) == null) throw PaymentUnavailableException()
         if (hosted != null) {
             gateway = hosted
             // 결제창 값은 거래 id 가 정해진 뒤에 낸다(아래 — 줄을 넣는 트랜잭션 안에서 거래를 만든다). 설정이 모자라면 여기서 미리 거절하려고 거래 id 없이 한 번 물어 둔다

@@ -242,6 +242,8 @@ class InMemoryPaymentLedgerStore : PaymentLedgerStore {
             .filter { before == null || it.requestedAt < before.requestedAt || (it.requestedAt == before.requestedAt && it.id < before.id) }
 
     /** 커밋된 모든 줄 — 시험이 상태를 한눈에 보려고. */
+    fun allSubscriptions(): List<PaymentSubscription> = synchronized(commitMutex) { committedSubscriptions.values.toList() }
+
     fun allOrders(): List<PaymentOrder> = synchronized(commitMutex) { committed.values.toList() }
 
     inner class Tx : PaymentLedgerTx {

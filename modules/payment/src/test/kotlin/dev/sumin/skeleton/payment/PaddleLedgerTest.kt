@@ -50,6 +50,18 @@ class PaddleLedgerTest {
     }
 
     @Test
+    fun `an item without a provider price id is refused before any row is written - no pending row is left behind`() {
+        push.unpriced += listOf("basic", "cheer-3000")
+
+        assertFailsWith<PaymentUnavailableException> { pending() }
+        assertFailsWith<PaymentUnavailableException> { kit.orders.create(CreateOrderCommand("acc_1", "cheer", "cheer-3000", IdempotencyKey("o1"), provider = "paddle")) }
+
+        assertEquals(emptyList(), kit.store.allSubscriptions())
+        assertEquals(emptyList(), kit.store.allOrders())
+        assertEquals(0, push.transactions.size)
+    }
+
+    @Test
     fun `opening the same pending subscription again gives the same transaction and creates no new one`() {
         val first = kit.subscriptions.start("acc_1", "basic", IdempotencyKey("k1"), provider = "paddle")
         val again = kit.subscriptions.start("acc_1", "basic", IdempotencyKey("k1"), provider = "paddle")

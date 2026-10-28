@@ -59,6 +59,7 @@ data class PriceCreateRequest(
     val compareAtAmount: Long? = null,
     val saleStartsAt: Instant? = null,
     val saleEndsAt: Instant? = null,
+    val replaces: String? = null,
 )
 
 data class ProviderRefRequest(val externalId: String? = null)
@@ -73,8 +74,6 @@ class CatalogAdminController(
     private val admin: CatalogAdmin,
     private val access: OperatorAccess,
     private val time: TimeProvider,
-    /** 가격 id 를 쓰는 켜진 결제사 - 링크 칸을 그릴지 */
-    private val providers: () -> List<String>,
 ) {
     @GetMapping("/products")
     fun products(authentication: Authentication?): ListResponse<AdminProductResponse> {
@@ -100,7 +99,7 @@ class CatalogAdminController(
     @PostMapping("/products/{code}/prices")
     fun addPrice(authentication: Authentication?, @PathVariable code: String, @RequestBody request: PriceCreateRequest): ResponseEntity<DataResponse<AdminPriceResponse>> {
         val actor = operator(authentication)
-        val price = admin.addPrice(actor.accountId, code, PriceInput(request.code, request.period, request.amount, request.currency, request.compareAtAmount, request.saleStartsAt, request.saleEndsAt))
+        val price = admin.addPrice(actor.accountId, code, PriceInput(request.code, request.period, request.amount, request.currency, request.compareAtAmount, request.saleStartsAt, request.saleEndsAt, request.replaces))
         return ResponseEntity.status(HttpStatus.CREATED).body(Response.ok(priceView(price.code)))
     }
 
@@ -117,6 +116,7 @@ class CatalogAdminController(
         val actor = operator(authentication)
         if (!body.has("saleEndsAt")) throw FieldValidationException("saleEndsAt", "Required", "saleEndsAt is required (an ISO-8601 time, or null to remove the end)")
         val raw = body["saleEndsAt"]
+        if (raw != null && !raw.isNull && !raw.isString) throw FieldValidationException("saleEndsAt", "Pattern", "saleEndsAt is an ISO-8601 time or null")
         val endsAt = if (raw == null || raw.isNull) null else try {
             Instant.parse(raw.stringValue())
         } catch (e: DateTimeParseException) {
@@ -143,7 +143,7 @@ class CatalogAdminController(
     @GetMapping("/providers")
     fun providers(authentication: Authentication?): ListResponse<String> {
         operator(authentication)
-        return Response.ok(providers())
+        return Response.ok(admin.linkableProviders())
     }
 
     /** 바꾼 뒤의 가격 한 줄을 다시 읽어 `current` 까지 채운다 */

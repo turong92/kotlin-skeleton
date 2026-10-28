@@ -195,4 +195,21 @@ class PaymentCountryRoutingTest {
         assertFailsWith<IllegalArgumentException> { PaymentProperties.Routing(providerCurrencies = mapOf("paddle" to "usd")) }
         assertFailsWith<IllegalArgumentException> { PaymentProperties.Routing(defaultCurrency = "US") }
     }
+
+    @Test
+    fun `provider currencies keys are matched without case, and a currency the provider does not take is refused at startup`() {
+        val mixed = PaymentProperties(routing = PaymentProperties.Routing(providerCurrencies = mapOf("Paddle" to "USD")), defaultProvider = "paddle")
+        val routing = PaymentCountryRouting({ mixed }, cloudflare, { listOf("paddle") })
+        assertEquals("USD", routing.currencyOf(routing.of(request("US"))))
+
+        fun router(currencies: Map<String, String>, provider: PaymentProperties.Provider? = null) = dev.sumin.skeleton.payment.PaymentProviderRouter(
+            listOf(dev.sumin.skeleton.payment.testing.ScriptedGateway()),
+            PaymentProperties(routing = PaymentProperties.Routing(providerCurrencies = currencies), providers = provider?.let { mapOf("scripted" to it) } ?: emptyMap()),
+        )
+        router(mapOf("Scripted" to "KRW")).requireProviderCurrenciesServed()
+        router(mapOf("paddle" to "USD")).requireProviderCurrenciesServed()   // 이 라우터에 없는 결제사는 거르지 않는다
+        assertFailsWith<IllegalStateException> { router(mapOf("scripted" to "USD")).requireProviderCurrenciesServed() }
+        assertFailsWith<IllegalStateException> { router(mapOf("SCRIPTED" to "USD"), PaymentProperties.Provider(currencies = setOf("KRW"))).requireProviderCurrenciesServed() }
+        router(mapOf("scripted" to "USD"), PaymentProperties.Provider(currencies = setOf("USD"))).requireProviderCurrenciesServed()   // 운영자가 받는 통화를 덮어쓴 값이 먼저다
+    }
 }

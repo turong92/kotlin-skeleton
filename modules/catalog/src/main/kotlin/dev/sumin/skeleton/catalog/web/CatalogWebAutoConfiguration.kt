@@ -7,8 +7,6 @@ import dev.sumin.skeleton.catalog.CatalogReader
 import dev.sumin.skeleton.common.authz.OperatorAccess
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.common.web.PublicEndpointContributor
-import dev.sumin.skeleton.payment.PaymentProviderRouter
-import dev.sumin.skeleton.payment.PaymentPushGateway
 import dev.sumin.skeleton.payment.web.PaymentCountryRouting
 import dev.sumin.skeleton.payment.web.PaymentHttpAutoConfiguration
 import org.springframework.beans.factory.ObjectProvider
@@ -46,9 +44,6 @@ class CatalogWebAutoConfiguration {
     @ConditionalOnBean(CatalogAdmin::class)
     @ConditionalOnProperty(prefix = "skeleton.catalog.admin", name = ["enabled"], havingValue = "true")
     @ConditionalOnMissingBean
-    fun catalogAdminController(admin: CatalogAdmin, access: OperatorAccess, time: ObjectProvider<TimeProvider>, router: ObjectProvider<PaymentProviderRouter>): CatalogAdminController =
-        CatalogAdminController(admin, access, time.getIfAvailable { TimeProvider.systemUtc() }) {
-            // 가격 id 를 쓰는 켜진 결제사 = 서명된 웹훅이 곧 사실인 결제사(거래를 먼저 만드는 Paddle 꼴)
-            router.getIfAvailable()?.providerIds(PaymentPushGateway::class).orEmpty()
-        }
+    fun catalogAdminController(admin: CatalogAdmin, access: OperatorAccess, time: ObjectProvider<TimeProvider>): CatalogAdminController =
+        CatalogAdminController(admin, access, time.getIfAvailable { TimeProvider.systemUtc() })
 }

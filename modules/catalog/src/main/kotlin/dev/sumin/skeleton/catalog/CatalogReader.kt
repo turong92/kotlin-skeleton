@@ -27,8 +27,8 @@ data class PublicCatalog(val currency: String?, val products: List<PublicProduct
 
 /**
  * 로그인 없이 보이는 카탈로그 - 판매 중인 상품과 그 **현재 가격**만. 가격은 이 요청의 통화로 거른다.
- * - 통화를 알면: 그 통화의 현재 가격이 하나라도 있으면 그 통화 가격만(가격이 없어진 상품은 뺀다), 하나도 없으면 거르지 않는다(통화를 못 맞추는 앱은 지금처럼 다 보인다).
- * - 통화를 모르면: 상품마다 가진 현재 가격 가운데 사전순 첫 통화.
+ * - 통화를 알고 그 통화의 현재 가격이 하나라도 있으면: 그 통화 가격만(가격이 없어진 상품은 뺀다).
+ * - 통화를 모르거나 그 통화 가격이 하나도 없으면: 상품마다 가진 현재 가격 가운데 사전순 첫 통화 (`/payments/subscriptions/plans` 와 같은 규칙).
  */
 class CatalogReader(private val store: CatalogStore, private val time: TimeProvider) {
     fun read(kind: ProductKind?, currency: String?): PublicCatalog {
@@ -42,7 +42,6 @@ class CatalogReader(private val store: CatalogStore, private val time: TimeProvi
         val products = current.mapNotNull { (product, list) ->
             val shown = when {
                 inWanted -> list.filter { it.currency == wanted }
-                wanted != null -> list
                 else -> list.minOfOrNull { it.currency }?.let { first -> list.filter { it.currency == first } }.orEmpty()
             }
             if (shown.isEmpty()) null else PublicProduct(product.code, product.kind, product.level, product.highlighted, product.sortOrder, product.texts, shown.map { it.toPublic() })

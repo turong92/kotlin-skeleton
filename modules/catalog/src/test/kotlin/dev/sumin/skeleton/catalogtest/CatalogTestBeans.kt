@@ -33,10 +33,10 @@ class CatalogTestBeans {
 
     @Bean fun paymentRouter(): PaymentProviderRouter = PaymentProviderRouter(listOf(FakePushGateway()), PaymentProperties())
 
-    @Bean fun routing(): PaymentCountryRouting {
+    @Bean fun routing(@org.springframework.beans.factory.annotation.Value("\${catalogtest.dev-switch:true}") devSwitch: Boolean): PaymentCountryRouting {
         val properties = PaymentProperties(
             defaultProvider = "paddle",
-            routing = PaymentProperties.Routing(countryProviders = mapOf("KR" to "toss"), providerCurrencies = mapOf("paddle" to "USD"), devCountrySwitch = true),
+            routing = PaymentProperties.Routing(countryProviders = mapOf("KR" to "toss"), providerCurrencies = mapOf("paddle" to "USD"), devCountrySwitch = devSwitch),
         )
         val ips = ClientIps(WebProperties.ClientIp(mode = ClientIpMode.CLOUDFLARE, trustedProxies = listOf("127.0.0.1/32")))
         return PaymentCountryRouting({ properties }, ips, { listOf("toss", "paddle") }, { emptyList() }, { emptyList() }, { id -> mapOf("toss" to setOf("KRW"))[id].orEmpty() })

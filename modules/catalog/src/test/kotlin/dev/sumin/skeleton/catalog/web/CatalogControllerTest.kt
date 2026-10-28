@@ -67,7 +67,7 @@ class CatalogControllerTest {
     }
 
     @Test
-    fun `the answer is a private cache for sixty seconds that varies by the country headers, and by the dev header too when the local switch is on`() {
+    fun `with the local switch on the answer is a private cache for sixty seconds that varies by the country header and by the dev header`() {
         mvc.perform(get("/api/v1/catalog/products").header("CF-IPCountry", "KR")).andExpect(status().isOk)
             .andExpect(header().string("Cache-Control", "max-age=60, private"))
             .andExpect(header().string("Vary", "CF-IPCountry, X-Dev-Country"))
@@ -98,5 +98,21 @@ class CatalogDisabledTest {
     fun `without the switches the public read and the operator paths are 404`() {
         mvc.perform(get("/api/v1/catalog/products")).andExpect(status().isNotFound)
         mvc.perform(get("/api/v1/admin/catalog/products")).andExpect(status().isNotFound)
+    }
+}
+
+/** 로컬 스위치가 꺼진 조립 - 개발용 헤더는 읽히지 않고 Vary 에도 오르지 않는다 */
+@SpringBootTest(classes = [CatalogWebTestApplication::class], properties = ["skeleton.catalog.http.enabled=true", "catalogtest.dev-switch=false"])
+@AutoConfigureMockMvc
+@Import(CatalogTestBeans::class)
+class CatalogNoDevSwitchTest {
+    @Autowired lateinit var mvc: MockMvc
+
+    @Test
+    fun `without the switch the dev header changes nothing and is not in Vary`() {
+        mvc.perform(get("/api/v1/catalog/products").header("CF-IPCountry", "KR").header("X-Dev-Country", "US")).andExpect(status().isOk)
+            .andExpect(jsonPath("$.value.currency").value("KRW"))
+            .andExpect(header().string("Vary", "CF-IPCountry"))
+            .andExpect(header().string("Cache-Control", "max-age=60, private"))
     }
 }

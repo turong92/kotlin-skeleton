@@ -11,7 +11,7 @@
 가격이 중지돼도 갱신 · 이름 · 해지 계산이 그대로다(`SubscriptionPlans.find` 는 판매가 끝난 가격도 돌려주되 `purchasable=false`).
 
 **지금 살 수 있는 가격**: 열쇠 = (상품, 주기, 통화) - 열쇠마다 하나. 현재 가격 = 판매 중이고 지금이 판매 기간 안인 가격 가운데 **기간이 있는 것(행사)이 먼저**, 없으면 상시. 기간은 `[시작, 끝)` 열린 구간이다(시작 정각에 행사가, 끝 정각에 상시).
-상시는 하나, 행사는 기간이 겹치지 않게(상품 줄을 잠그고 검사 → `409 CATALOG.PRICE_OVERLAP`, 동시에 둘을 만들어도 하나만). **현재 가격만 산다** - 행사 중에는 상시(정가) 가격으로 사는 길이 없다(`422 ITEM_NOT_PURCHASABLE`). 정가(`compareAtAmount`)와 기간을 단 새 가격 줄이 행사다.
+상시는 하나, 행사는 기간이 겹치지 않게(상품 줄을 잠그고 검사 → `409 CATALOG.PRICE_OVERLAP`, 동시에 둘을 만들어도 하나만). **현재 가격만 산다** - 행사 중에는 상시(정가) 가격으로 사는 길이 없다(`422 ITEM_NOT_PURCHASABLE`). 정가(`compareAtAmount`)와 기간을 단 새 가격 줄이 행사다 - 기간(`saleStartsAt` · `saleEndsAt`)이 있으면 정가가 필수이고 상시 가격에는 정가를 줄 수 없다(`PRICE_INVALID` + `errors[].field = compareAtAmount`). 끝만 주면 시작은 만드는 지금이다.
 쿠폰은 행사가 위에 얹힌다(최소 금액 · 정률은 행사가 기준) - 쿠폰 범위는 가격 코드 또는 **상품 코드**로 걸 수 있어 가격을 바꿔도 쿠폰이 깨지지 않는다.
 
 **결제 계약 구현**:
@@ -21,7 +21,7 @@
   링크를 결제창이 열린 동안 바꾸면 그 결제는 품목 대조에서 「확인 필요」로 간다.
 
 **통화**: 화면에 보이는 상품 · 가격의 원본은 우리 DB 이고 결제사는 뒤에서 붙는다. 이 요청의 통화는 결제의 나라 라우팅이 정한다(`PaymentCountryRouting.currencyOf` - `payment.routing.provider-currencies` · `default-currency`, 예: KR → 토스 → KRW, 그 밖 → Paddle → USD). 공개 읽기는 그 통화의 현재 가격만 낸다 -
-그 통화 가격이 하나도 없으면 거르지 않고, 통화를 모르면 상품마다 사전순 첫 통화다. 브라우저가 통화를 고르는 길은 없다.
+통화를 모르거나 그 통화 가격이 하나도 없으면 상품마다 사전순 첫 통화다(`/payments/subscriptions/plans` 도 같은 규칙). 브라우저가 통화를 고르는 길은 없다.
 
 **공개 읽기**(`skeleton.catalog.http.enabled=true` 일 때만, 로그인 없이, 꺼져 있으면 404): `GET /api/v1/catalog/products?kind=SUBSCRIPTION|ONE_TIME` →
 `{ currency|null, products: [{ code, kind, level|null, highlighted, sortOrder, texts: { <locale>: { name, description|null } }, prices: [{ code, period|null, amount, currency, compareAtAmount|null, saleEndsAt|null }] }] }`.
@@ -34,10 +34,10 @@
 | `GET /api/v1/admin/catalog/products` | 상품 + 가격 전부(모든 통화 · 중지된 것 · 지난 가격, 최신 먼저). `Price.current` = 지금 살 수 있다 |
 | `POST /api/v1/admin/catalog/products` `{code, kind, level?, highlighted?, sortOrder?, texts}` | 상품 만들기 → 201 |
 | `PUT /api/v1/admin/catalog/products/{code}` `{level?, highlighted?, selling?, sortOrder?, texts?}` | 고치기(코드 · 종류는 못 바꾼다) |
-| `POST /api/v1/admin/catalog/products/{code}/prices` `{code?, period?, amount, currency, compareAtAmount?, saleStartsAt?, saleEndsAt?}` | 가격 추가 → 201 |
+| `POST /api/v1/admin/catalog/products/{code}/prices` `{code?, period?, amount, currency, compareAtAmount?, saleStartsAt?, saleEndsAt?, replaces?}` | 가격 추가 → 201. `replaces`(같은 상품의 옛 가격 코드)를 주면 같은 잠금 안에서 옛 가격 판매 중지 + 새 가격 추가가 한 번에(가격 교체) |
 | `POST /api/v1/admin/catalog/prices/{code}/stop` | 판매 중지(되돌리지 않는다, 두 번 눌러도 같다) |
 | `PATCH /api/v1/admin/catalog/prices/{code}` `{saleEndsAt: <시각 \| null>}` | 행사 끝 시각 바꾸기(키가 없으면 400) |
-| `PUT` · `DELETE /api/v1/admin/catalog/prices/{code}/provider-refs/{provider}` `{externalId}` | 결제사 가격 id 링크 |
+| `PUT` · `DELETE /api/v1/admin/catalog/prices/{code}/provider-refs/{provider}` `{externalId}` | 결제사 가격 id 링크(`PUT` 은 `GET …/providers` 에 있는 결제사만) |
 | `GET /api/v1/admin/catalog/providers` | 가격 id 를 쓰는 켜진 결제사(링크 칸을 그릴지) |
 
 오류: `409 CATALOG.CODE_TAKEN`(상품 · 가격 코드, 이미 다른 가격에 걸린 결제사 가격 id) · `409 LEVEL_TAKEN` · `409 PRICE_OVERLAP` · `400 PRICE_INVALID`(금액 0 이하 · 통화 · 주기 · 정가 ≤ 금액 · 시작 ≥ 끝 · 이미 지난 끝 · 중지된 가격을 고침) · `404 NOT_FOUND`. 입력이 틀리면 `errors[{field, code, message}]` 로 어느 칸인지 알린다(`field` 는 요청 본문 이름, 가격은 `CATALOG.PRICE_INVALID`, 상품 쪽(코드 모양 · 종류 · 등급 · 언어 이름)은 `400 COMMON.VALIDATION_FAILED`).

@@ -39,8 +39,9 @@ class CatalogReaderTest {
     }
 
     @Test
-    fun `a currency nothing is priced in filters nothing`() {
-        assertEquals(setOf("basic", "basic-yearly", "basic-usd", "pro", "pro-usd", "sticker-usd"), reader.read(null, "JPY").products.flatMap { it.prices }.map { it.code }.toSet())
+    fun `a currency nothing is priced in falls to the unknown-currency rule`() {
+        assertEquals(codes(null), codes("JPY"))
+        assertEquals("JPY", reader.read(null, "JPY").currency)
     }
 
     @Test

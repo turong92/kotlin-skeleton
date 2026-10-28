@@ -65,6 +65,24 @@ class PaymentProviderRouter internal constructor(
      */
     fun takesCurrency(providerId: String, currency: String): Boolean = currenciesOf(providerId).let { it.isEmpty() || currency.trim().uppercase() in it }
 
+    /**
+     * `routing.provider-currencies` 가 적은 통화를 그 결제사가 받는지 기동 때 본다(켜진 모든 프로젝트) - 결제사가 받는 통화 목록(실효)을 적어 뒀는데 거기 없는 통화를 적으면 [IllegalStateException].
+     * 받는 통화를 적지 않은 결제사(Paddle)나 이 라우터에 없는 결제사는 거르지 않는다. 키의 대소문자는 가리지 않는다.
+     */
+    fun requireProviderCurrenciesServed() {
+        allRoutes().forEach { routes ->
+            routes.properties.routing.providerCurrencies.forEach { (key, currency) ->
+                val id = key.trim().lowercase()
+                val gateway = routes.providersById[id] ?: return@forEach
+                val configured = routes.properties.providers[id]?.currencies ?: gateway.supportedCurrencies
+                val accepted = configured.mapNotNull { it.trim().takeIf(String::isNotEmpty)?.uppercase() }.toSet()
+                check(accepted.isEmpty() || currency in accepted) {
+                    "skeleton.payment.routing.provider-currencies.$key=$currency is not a currency the provider '$id' takes (${accepted.sorted().joinToString()})"
+                }
+            }
+        }
+    }
+
     /** 이 결제사가 **실효 설정으로** 받는 통화(대문자) - 모르는 결제사는 빈 집합. */
     fun currenciesOf(providerId: String): Set<String> =
         providerId.normalizeProviderId()?.let { providersById[it] }?.route()?.currencies.orEmpty()

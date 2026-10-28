@@ -99,7 +99,7 @@ class JdbcCatalogStoreDbTest {
     fun `two sales of one product and currency added at once overlap - exactly one is created, the other is PRICE_OVERLAP`() {
         val product = subscription()
         val from = Instant.now().plus(Duration.ofHours(1))
-        val results = concurrently(5) { i -> admin.addPrice("adm_1", product.code, PriceInput("${product.code}-s$i", "P1M", 2_000L + i, "KRW", null, from, from.plus(Duration.ofDays(1)))) }
+        val results = concurrently(5) { i -> admin.addPrice("adm_1", product.code, PriceInput("${product.code}-s$i", "P1M", 2_000L + i, "KRW", 9_000L, from, from.plus(Duration.ofDays(1)))) }
 
         assertEquals(1, results.count { it.isSuccess })
         assertTrue(results.filter { it.isFailure }.all { (it.exceptionOrNull() as CatalogException).catalogError == CatalogErrorCode.PRICE_OVERLAP })
@@ -120,7 +120,7 @@ class JdbcCatalogStoreDbTest {
     @Test
     fun `a stop is final and keeps its time, a sale end can move`() {
         val product = subscription()
-        val sale = admin.addPrice("adm_1", product.code, PriceInput(null, "P1M", 2_000, "KRW", null, Instant.now().plusSeconds(60), Instant.now().plusSeconds(3_600)))
+        val sale = admin.addPrice("adm_1", product.code, PriceInput(null, "P1M", 2_000, "KRW", 3_000, Instant.now().plusSeconds(60), Instant.now().plusSeconds(3_600)))
         val moved = Instant.now().plusSeconds(7_200).truncatedTo(ChronoUnit.MICROS)
 
         admin.updateSaleEnd("adm_1", sale.code, moved)
@@ -140,6 +140,7 @@ class JdbcCatalogStoreDbTest {
         val first = admin.addPrice("adm_1", product.code, PriceInput("${product.code}-usd", "P1M", 300, "USD"))
         val second = admin.addPrice("adm_1", product.code, PriceInput("${product.code}-usd-y", "P1Y", 3_000, "USD"))
 
+        val admin = CatalogAdmin(store, TimeProvider.systemUtc(), { }, providers = { listOf("paddle") })   // 가격 id 를 쓰는 결제사가 있는 조립
         admin.setProviderRef("adm_1", first.code, "paddle", "pri_$seq")
         assertEquals(CatalogErrorCode.CODE_TAKEN, assertFailsWith<CatalogException> { admin.setProviderRef("adm_1", second.code, "paddle", "pri_$seq") }.catalogError)
         admin.setProviderRef("adm_1", first.code, "paddle", "pri_${seq}_b")

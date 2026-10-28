@@ -15,7 +15,7 @@ import kotlin.test.assertTrue
 class CatalogSubscriptionPlansTest {
     private val store = FakeCatalogStore()
     private val time = MutableTime()
-    private val admin = CatalogAdmin(store, time, RecordingAudit())
+    private val admin = CatalogAdmin(store, time, RecordingAudit(), providers = { listOf("paddle") })
     private val properties = CatalogProperties(defaultLocale = "ko")
     private val plans = CatalogSubscriptionPlans(store, time, properties)
     private val catalog = CatalogPaymentCatalog(store, time, properties)
@@ -24,7 +24,7 @@ class CatalogSubscriptionPlansTest {
     private fun subscription(code: String = "basic", level: Int = 1) = admin.createProduct("a", ProductInput(code, "SUBSCRIPTION", level, texts = TEXTS)).product
 
     private fun price(product: String, amount: Long, currency: String = "KRW", period: String? = "P1M", code: String? = null, compareAt: Long? = null, sale: Pair<Long, Long>? = null) =
-        admin.addPrice("a", product, PriceInput(code, period, amount, currency, compareAt, sale?.let { time.now().plus(day.multipliedBy(it.first)) }, sale?.let { time.now().plus(day.multipliedBy(it.second)) }))
+        admin.addPrice("a", product, PriceInput(code, period, amount, currency, compareAt ?: sale?.let { amount + 1_000 }, sale?.let { time.now().plus(day.multipliedBy(it.first)) }, sale?.let { time.now().plus(day.multipliedBy(it.second)) }))
 
     @Test
     fun `list is the current price of each selling subscription product in every currency, and nothing else`() {

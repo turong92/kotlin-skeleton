@@ -82,7 +82,7 @@ class PaymentCountryRouting(
     fun currencyOf(route: RequestRoute): String? {
         val provider = route.provider
         if (provider != null) {
-            properties.routing.providerCurrencies[provider]?.let { return it }
+            properties.routing.providerCurrencies.entries.firstOrNull { it.key.trim().lowercase() == provider }?.let { return it.value }
             currenciesOf(provider).singleOrNull()?.let { return it }
         }
         return properties.routing.defaultCurrency

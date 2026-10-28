@@ -16,14 +16,14 @@ class CatalogAdminTest {
     private val store = FakeCatalogStore()
     private val time = MutableTime()
     private val audit = RecordingAudit()
-    private val admin = CatalogAdmin(store, time, audit)
+    private val admin = CatalogAdmin(store, time, audit, providers = { listOf("paddle") })
     private val now get() = time.now()
     private val day = Duration.ofDays(1)
 
     private fun basic(level: Int = 1, code: String = "basic") = admin.createProduct("adm_1", ProductInput(code, "subscription", level, texts = TEXTS)).product
 
     private fun krw(product: String = "basic", amount: Long = 3_900, period: String? = "P1M", code: String? = null, compareAt: Long? = null, starts: Instant? = null, ends: Instant? = null) =
-        admin.addPrice("adm_1", product, PriceInput(code, period, amount, "KRW", compareAt, starts, ends))
+        admin.addPrice("adm_1", product, PriceInput(code, period, amount, "KRW", compareAt ?: if (starts != null || ends != null) amount + 1_000 else null, starts, ends))
 
     private fun <T : Throwable> code(error: T) = (error as ApplicationException).errorCode
 
@@ -186,5 +186,62 @@ class CatalogAdminTest {
         assertEquals(listOf("catalog.product.created", "catalog.price.created", "catalog.price.link-set", "catalog.price.stopped"), audit.actions.map { it.action })
         assertTrue(audit.actions.all { it.actorId == "adm_1" })
         assertNull(audit.actions.firstOrNull { it.action == "catalog.price.created" }?.detail?.get("secret"))
+    }
+}
+
+/** 가격 입력의 규칙 둘 - 행사에는 정가가 있고 상시에는 없다 · 끝만 있는 행사는 지금 시작한다 · 옛 가격을 대신하는 새 가격은 한 번에 · 언어 태그는 정규화 · 링크는 가격 id 를 쓰는 결제사에만. */
+class CatalogAdminPriceRulesTest {
+    private val store = FakeCatalogStore()
+    private val time = MutableTime()
+    private val admin = CatalogAdmin(store, time, RecordingAudit(), providers = { listOf("paddle") })
+    private val day = Duration.ofDays(1)
+
+    init {
+        admin.createProduct("a", ProductInput("basic", "SUBSCRIPTION", 1, texts = TEXTS))
+    }
+
+    private fun field(error: Throwable) = (error as dev.sumin.skeleton.common.FieldValidationException).field
+
+    @Test
+    fun `a sale needs its list price and an evergreen price may not have one`() {
+        val noList = assertFailsWith<ApplicationException> { admin.addPrice("a", "basic", PriceInput(period = "P1M", amount = 2_900, currency = "KRW", saleEndsAt = time.now().plus(day))) }
+        assertEquals("compareAtAmount", field(noList))
+        assertEquals(CatalogErrorCode.PRICE_INVALID, noList.errorCode)
+        val evergreenWithList = assertFailsWith<ApplicationException> { admin.addPrice("a", "basic", PriceInput(period = "P1M", amount = 2_900, currency = "KRW", compareAtAmount = 3_900)) }
+        assertEquals("compareAtAmount", field(evergreenWithList))
+        assertEquals(emptyMap(), store.prices)
+    }
+
+    @Test
+    fun `a sale with only an end starts now`() {
+        val sale = admin.addPrice("a", "basic", PriceInput(period = "P1M", amount = 2_900, currency = "KRW", compareAtAmount = 3_900, saleEndsAt = time.now().plus(day)))
+        assertEquals(time.now(), sale.saleStartsAt)
+    }
+
+    @Test
+    fun `a replacing price stops the old one and is created in one step, and a failed replacement stops nothing`() {
+        val old = admin.addPrice("a", "basic", PriceInput(period = "P1M", amount = 3_900, currency = "KRW"))
+
+        val fresh = admin.addPrice("a", "basic", PriceInput(period = "P1M", amount = 4_900, currency = "KRW", replaces = old.code))
+
+        assertFalse(store.prices.getValue(old.code).selling)
+        assertTrue(store.prices.getValue(fresh.code).selling)
+        assertFailsWith<ApplicationException> { admin.addPrice("a", "basic", PriceInput(period = "P1M", amount = 0, currency = "KRW", replaces = fresh.code)) }
+        assertTrue(store.prices.getValue(fresh.code).selling, "the refused replacement left the old price selling")
+        assertEquals("replaces", field(assertFailsWith<ApplicationException> { admin.addPrice("a", "basic", PriceInput(period = "P1M", amount = 5_000, currency = "KRW", replaces = "missing")) }))
+    }
+
+    @Test
+    fun `language tags are made canonical and a duplicate after that is refused`() {
+        val product = admin.createProduct("a", ProductInput("pro", "SUBSCRIPTION", 2, texts = mapOf("EN-us" to ProductTextInput("Pro"), "ko" to ProductTextInput("프로")))).product
+        assertEquals(listOf("en-US", "ko"), product.texts.map { it.locale })
+        assertEquals("texts", field(assertFailsWith<ApplicationException> { admin.createProduct("a", ProductInput("x", "ONE_TIME", null, texts = mapOf("en" to ProductTextInput("A"), "EN" to ProductTextInput("B")))) }))
+    }
+
+    @Test
+    fun `a provider link only goes to a provider that uses price ids`() {
+        val price = admin.addPrice("a", "basic", PriceInput(period = "P1M", amount = 300, currency = "USD"))
+        assertEquals("provider", field(assertFailsWith<ApplicationException> { admin.setProviderRef("a", price.code, "toss", "pri_1") }))
+        assertEquals(mapOf("paddle" to "pri_1"), admin.setProviderRef("a", price.code, "paddle", "pri_1").providerRefs)
     }
 }

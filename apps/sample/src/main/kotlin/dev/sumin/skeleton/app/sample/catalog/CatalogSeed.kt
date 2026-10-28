@@ -1,11 +1,12 @@
 package dev.sumin.skeleton.app.sample.catalog
 
 import dev.sumin.skeleton.catalog.CatalogAdmin
-import dev.sumin.skeleton.catalog.CatalogException
+import dev.sumin.skeleton.catalog.CatalogErrorCode
 import dev.sumin.skeleton.catalog.CatalogStore
 import dev.sumin.skeleton.catalog.PriceInput
 import dev.sumin.skeleton.catalog.ProductInput
 import dev.sumin.skeleton.catalog.ProductTextInput
+import dev.sumin.skeleton.common.ApplicationException
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.ApplicationArguments
@@ -64,13 +65,15 @@ class CatalogSeed(
     private fun attempt(what: String, block: () -> Unit) {
         try {
             block()
-        } catch (e: CatalogException) {
-            log.info("catalog seed skipped {}: {}", what, e.catalogError.code)
+        } catch (e: ApplicationException) {
+            // 이미 있는 칸(코드 · 등급 · 겹침)은 평범한 일이고, 씨앗이 잘못된 값을 내는 것(입력 오류)은 눈에 띄어야 한다
+            if (e.errorCode in TAKEN) log.info("catalog seed skipped {}: {}", what, e.errorCode.code) else log.warn("catalog seed could not create {}: {} {}", what, e.errorCode.code, e.message)
         }
     }
 
     companion object {
         const val ACTOR = "system:catalog-seed"
+        private val TAKEN = setOf<dev.sumin.skeleton.common.ErrorCode>(CatalogErrorCode.CODE_TAKEN, CatalogErrorCode.LEVEL_TAKEN, CatalogErrorCode.PRICE_OVERLAP)
         private val TIERS = listOf(
             Tier("basic", 1, "Basic", "베이직", false, 3_900, 300),
             Tier("standard", 2, "Standard", "스탠다드", false, 6_900, 500),
