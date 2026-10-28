@@ -93,6 +93,7 @@ class RewardAdminWebTest {
     fun `retry only takes a failed grant, anything else is 409 NOT_RETRYABLE`() {
         val failed = failedGrant()
         mvc.perform(post("/api/v1/admin/reward-grants/$failed/retry").principal(operator)).andExpect(status().isOk)
+            .andExpect(jsonPath("$.value.id").value(failed)).andExpect(jsonPath("$.value.status").value("PENDING"))
         assertEquals(RewardGrantStatus.PENDING, store.find(failed)!!.status)
 
         mvc.perform(post("/api/v1/admin/reward-grants/$failed/retry").principal(operator))

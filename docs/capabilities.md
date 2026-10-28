@@ -90,6 +90,8 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `authz-jdbc` | 역할 → 권한 표 저장소 — PostgreSQL · MySQL 로 authz 의 저장 포트를 구현하고(authz_roles · authz_role_permissions, 전권 역할은 표를 못 바꾼다) 판정이 읽는 역할 → 권한 매핑을 yml 에서 이 표로 바꾼다(캐시: 같은 인스턴스는 즉시, 다른 인스턴스는 skeleton.authz.cache-ttl). 첫 기동에 yml 매핑을 한 번만 옮긴다. | `--modules authz-jdbc` | 역할 권한 저장소, 권한 표 / role permission storage, authz database | `@skeleton/auth` |
 | `board` | 게시판 — 글 · 중첩 댓글(대댓글) · 설정으로 늘리는 반응(좋아요 · 공감 …) · 운영자 숨김/고정 · 댓글 알림 · 작성자 닉네임(authorName · authorTag, AuthorDirectory 로 요청당 한 번 조회), HTTP /api/v1/boards 까지. | `--modules board,board-jdbc` | 게시판, 커뮤니티, 글쓰기, 댓글, 대댓글, 공감, 좋아요, 반응, 운영자 숨김, 공지 고정 / board, forum, community, post, comment, reply, reaction, like, moderation | `@skeleton/board` |
 | `board-jdbc` | 게시판 저장소 — PostgreSQL · MySQL 로 board 의 저장 포트 네 개를 구현한다(boards · board_* 테이블 · 원자적 카운터). | `--modules board-jdbc` | 게시판 저장소, 게시판 DB / board storage, board repository, board database | `@skeleton/board` |
+| `campaign` | 이벤트 — 출석(매일 · 누적 · 연속 달성)과 친구초대(양쪽 보상)를 판정해 보상 지급 건으로 기록하고, 운영자가 이벤트를 만들고 켜고 끈다. | `--modules campaign,campaign-jdbc,reward-jdbc` | 이벤트, 출석 체크, 출석 보상, 친구 초대, 초대 코드, 초대 보상, 연속 출석 / campaign, event, attendance, check-in, referral, invite, streak | — |
+| `campaign-jdbc` | 이벤트 · 출석 · 초대 코드 · 초대 관계 저장을 DB 에 둔다 (PostgreSQL · MySQL). | `--modules campaign-jdbc` | 이벤트 저장, 출석 저장 / campaign store, attendance store | — |
 | `captcha-turnstile` | 봇 방지 — Cloudflare Turnstile 토큰을 서버에서 검증한다(TurnstileVerifier). | 스타터(apps/api)에 기본 포함 | 캡차, 봇 방지, 스팸 방지, 로봇 확인, 가입 폼 보호 / captcha, turnstile, bot protection, spam protection, cloudflare turnstile | `@skeleton/captcha-turnstile` |
 | `config-aws-ssm` | AWS SSM Parameter Store 의 값을 시작할 때 스프링 프로퍼티로 불러온다. | `--modules config-aws-ssm` | AWS 설정, 파라미터 스토어, SSM, 비밀 불러오기 / aws ssm, parameter store, remote config, aws secrets | — |
 | `coupon` | 쿠폰 — 단계 목록(무료 · 정률 · 정액, n회차)으로 마케팅이 행 하나로 만드는 정의, 쿠폰함, 공용 코드 등록, 보상 지급기 `coupon` 과 결제 할인 수단 `coupon`(예약 · 확정 · 해제 · 복원). | `--modules coupon,coupon-jdbc` | 쿠폰, 할인 코드, 프로모션 코드, 무료 이용권, n달 무료, 쿠폰함 / coupon, promo code, discount code, voucher, coupon wallet | — |
@@ -521,6 +523,34 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - board 없이는 쓰지 않는다(따라온다)
   - 다른 DB(JPA · jOOQ)로 저장하려면 board 의 저장 포트 네 개를 앱이 구현한다
 - 키워드: 게시판 저장소, 게시판 DB / board storage, board repository, board database
+
+### `campaign` — 이벤트 — 출석(매일 · 누적 · 연속 달성)과 친구초대(양쪽 보상)를 판정해 보상 지급 건으로 기록하고, 운영자가 이벤트를 만들고 켜고 끈다.
+
+- 종류 · 상태: module · experimental — 위치 `modules/campaign`
+- 켜는 법: `--modules campaign,campaign-jdbc,reward-jdbc`
+- 의존 한 줄: `implementation(project(":modules:campaign"))`
+- 자동으로 따라온다: `json`, `notification`, `reward`
+- 함께 골라야 한다: `campaign-jdbc`, `reward-jdbc`
+- 설정 접두사 `skeleton.campaign` — 키와 기본값 `docs/config/modules/campaign.yml`
+- HTTP 경로: `/api/v1/admin/campaigns`, `/api/v1/campaigns`, `/api/v1/referrals`
+- 문서: `docs/modules/campaign.md`
+- 쓰지 않는 경우:
+  - campaign 은 저장소와 지급 기록을 모른다 — campaign-jdbc 와 reward-jdbc 를 같이 고른다(없으면 서비스가 켜지지 않는다)
+  - 보상을 직접 주지 않는다 — 쿠폰 · 포인트 지급기는 별도 모듈이다(지급기가 없으면 지급 건이 FAILED 로 남는다)
+  - 기념일 · 공유 · 달성 · 배지 이벤트는 다음 판
+- 키워드: 이벤트, 출석 체크, 출석 보상, 친구 초대, 초대 코드, 초대 보상, 연속 출석 / campaign, event, attendance, check-in, referral, invite, streak
+
+### `campaign-jdbc` — 이벤트 · 출석 · 초대 코드 · 초대 관계 저장을 DB 에 둔다 (PostgreSQL · MySQL).
+
+- 종류 · 상태: module · experimental — 위치 `modules/campaign-jdbc`
+- 켜는 법: `--modules campaign-jdbc`
+- 의존 한 줄: `implementation(project(":modules:campaign-jdbc"))`
+- 자동으로 따라온다: `campaign`, `json`, `notification`, `reward`
+- 설정 접두사 없음
+- 문서: `docs/modules/campaign-jdbc.md`
+- 쓰지 않는 경우:
+  - DataSource · db-* 모듈과 이 모듈의 마이그레이션이 적용된 스키마가 필요하다
+- 키워드: 이벤트 저장, 출석 저장 / campaign store, attendance store
 
 ### `captcha-turnstile` — 봇 방지 — Cloudflare Turnstile 토큰을 서버에서 검증한다(TurnstileVerifier).
 
@@ -1230,7 +1260,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 - 종류 · 상태: app · stable — 위치 `apps/workbench`
 - 켜는 법: `--with-workbench`
-- 자동으로 따라온다: `alert-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `board`, `board-jdbc`, `config-aws-ssm`, `coupon`, `coupon-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `db-mysql`, `event-kafka`, `json`, `notification`, `notification-jdbc`, `notification-slack`, `notification-sse`, `notification-websocket`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `point`, `point-jdbc`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `reward`, `reward-jdbc`, `scheduler`, `storage`, `storage-s3`
+- 자동으로 따라온다: `alert-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `board`, `board-jdbc`, `campaign`, `campaign-jdbc`, `config-aws-ssm`, `coupon`, `coupon-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `db-mysql`, `event-kafka`, `json`, `notification`, `notification-jdbc`, `notification-slack`, `notification-sse`, `notification-websocket`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `point`, `point-jdbc`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `reward`, `reward-jdbc`, `scheduler`, `storage`, `storage-s3`
 - HTTP 경로: `/api/v1`, `/api/v1/examples`, `/api/v1/skeleton`, `/api/v1/skeleton/enums`, `/api/v1/skeleton/json`, `/api/v1/skeleton/payments`, `/api/v1/skeleton/polymorphic/contents`
 - 문서: `docs/minimal-composition.md`, `docs/modules/README.md`
 - 짝 프런트(react-skeleton): 항목 `app-workbench` · 조각 `--with-workbench`

@@ -4,7 +4,7 @@ import dev.sumin.skeleton.common.ApplicationException
 import dev.sumin.skeleton.common.CursorResponse
 import dev.sumin.skeleton.common.PlatformErrorCode
 import dev.sumin.skeleton.common.Response
-import dev.sumin.skeleton.common.BasicResponse
+import dev.sumin.skeleton.common.DataResponse
 import dev.sumin.skeleton.common.authz.OperatorAccess
 import dev.sumin.skeleton.common.authz.OperatorAction
 import dev.sumin.skeleton.common.authz.OperatorAuditLog
@@ -65,17 +65,17 @@ class RewardAdminController(
     }
 
     @PostMapping("/{id}/retry")
-    fun retry(authentication: Authentication?, @PathVariable id: String): BasicResponse {
+    fun retry(authentication: Authentication?, @PathVariable id: String): DataResponse<RewardGrantResponse> {
         val operator = operator(authentication)
         service.retry(id) { audit.record(OperatorAction(operator.accountId, "reward.retried", "reward-grant", id)) }
-        return Response.ok()
+        return Response.ok(service.find(id)!!.toResponse())
     }
 
     @PostMapping("/{id}/cancel")
-    fun cancel(authentication: Authentication?, @PathVariable id: String): BasicResponse {
+    fun cancel(authentication: Authentication?, @PathVariable id: String): DataResponse<RewardGrantResponse> {
         operator(authentication)
         service.cancel(id)
-        return Response.ok()
+        return Response.ok(service.find(id)!!.toResponse())
     }
 
     private fun operator(authentication: Authentication?): OperatorRef {

@@ -67,6 +67,8 @@
 | `notification-mail` | SMTP 메일 발송 | [notification-mail](notification-mail.md) |
 | `alert` | 주인 경보 — 5xx 몰림 · 기동 실패 · 죽은 작업을 Discord 웹훅(+메일)으로 (에러 수집의 답) | [alert](alert.md) |
 | `alert-jdbc` | 경보 기록을 DB 에 두어 여러 인스턴스를 가로질러 접기 | [alert-jdbc](alert-jdbc.md) |
+| `campaign` | 이벤트 — 출석 · 친구초대를 판정해 보상 지급 건으로 기록 (쿠폰 · 포인트를 모른다) | [campaign](campaign.md) |
+| `campaign-jdbc` | 이벤트 · 출석 · 초대 저장을 DB 에 | [campaign-jdbc](campaign-jdbc.md) |
 | `reward` | 보상 지급의 허리 — 이벤트가 기록한 지급 건을 일꾼이 쿠폰 · 포인트 지급기로 주고 받았어요 알림까지 | [reward](reward.md) |
 | `reward-jdbc` | 지급 건 저장 · 작업을 DB 에 두고 일꾼을 job-queue 에 얹기 | [reward-jdbc](reward-jdbc.md) |
 | `captcha-turnstile` | Cloudflare Turnstile 토큰 검증 | [captcha-turnstile](captcha-turnstile.md) |

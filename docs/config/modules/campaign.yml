@@ -1,0 +1,9 @@
+# campaign — 이벤트(출석 · 친구초대). 저장은 campaign-jdbc, 지급은 reward.
+skeleton:
+  campaign:
+    # zone: Asia/Seoul             # 「오늘」을 가르는 서비스 시간대. 비면 skeleton.time.default-zone, 그것도 없으면 Asia/Seoul
+    admin:
+      enabled: false               # true 면 운영자 경로(campaign.manage)가 열린다. 꺼져 있으면 404
+      base-path: /api/v1/admin/campaigns
+    http:
+      enabled: true                # false 면 사용자 경로(출석 · 초대)를 열지 않는다
