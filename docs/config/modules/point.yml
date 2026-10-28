@@ -1,0 +1,7 @@
+# point — 포인트 원장(적립 · 소멸 임박 순 차감 · 소멸 · 운영자 조정). 저장소는 point-jdbc.
+skeleton:
+  point:
+    admin:
+      enabled: false   # true 면 /api/v1/admin/points 를 연다 (꺼짐 → 404). 쓰려면 권한 point.manage 가 있어야 한다
+    http:
+      enabled: true    # false 면 사용자 경로 /api/v1/points 를 닫는다 (포인트를 쓰는 길은 서버 API PointWallet 뿐이라 읽기만 있다)
