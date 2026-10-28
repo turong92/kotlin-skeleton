@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 프런트 짝: react-skeleton 의 `@skeleton/rewards`(`/admin` 서브경로 포함) · `@skeleton/payment` 의 할인 표시 · `@skeleton/auth` 의 역할 위계 화면.
 - **Breaking 없음**: 모든 변경은 새 모듈이거나 기존 응답에 칸을 더하는 것이다. 결제 응답의 새 칸은 선택으로 읽는 클라이언트에 안전하다.
 - 구독 쿠폰: `POST /api/v1/payments/subscriptions` 의 `discounts`(단계 복사, 첫 결제에서 쥔다 · n달 무료 · 매 갱신 할인 회차). 구독 응답의 `discount`.
+
 ### 흔들리는 시험 정리 (2026-10-28)
 
 - ReDoS 시험: 입력을 2배·4배로 늘려 벽시계 **비율**을 재던 방식(부하에서 거짓 실패)을 없애고, `platform` 의 test fixture `RegexBlowupGuard`(입력 1,000,000자가 30초 안에 끝나는지만 본다)로 바꿨다. `platform` 에 `java-test-fixtures` 플러그인이 붙었고, `LogMaskerTest` · payment `WebhookLogMaskingTest` 가 쓴다.
