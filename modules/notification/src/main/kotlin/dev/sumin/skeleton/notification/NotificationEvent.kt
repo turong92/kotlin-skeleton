@@ -28,9 +28,9 @@ data class NotificationEvent(
         require(id.isNotBlank()) { "id must not be blank" }
         require(recipientIds.none { it.isBlank() }) { "recipientIds must not contain blank values" }
         link?.let {
-            require(it.length <= MAX_LINK_LENGTH) { "link must be at most $MAX_LINK_LENGTH characters" }
-            require(it.startsWith("/") && !it.startsWith("//")) { "link must be an in-app path starting with a single '/'" }
-            require(it.none { c -> c == '\\' || c.isISOControl() }) { "link must not contain backslashes or control characters" }
+            require(isValidLink(it)) {
+                "link must be an in-app path: a single leading '/', at most $MAX_LINK_LENGTH characters, no backslash or control character"
+            }
         }
         collapseKey?.let {
             require(it.isNotBlank()) { "collapseKey must not be blank" }
@@ -38,9 +38,14 @@ data class NotificationEvent(
         }
     }
 
-    private companion object {
-        const val MAX_LINK_LENGTH = 1000
-        const val MAX_COLLAPSE_KEY_LENGTH = 255
+    companion object {
+        private const val MAX_LINK_LENGTH = 1000
+        private const val MAX_COLLAPSE_KEY_LENGTH = 255
+
+        /** [link] 로 쓸 수 있는 글자인가 - 남이 준 링크(보상 지급기 …)를 알림에 싣기 전에 거를 때 쓴다 */
+        fun isValidLink(link: String): Boolean =
+            link.length <= MAX_LINK_LENGTH && link.startsWith("/") && !link.startsWith("//") &&
+                link.none { it == '\\' || it.isISOControl() }
     }
 }
 

@@ -209,6 +209,9 @@ class MigrationUpgradeIntegrationTest {
     fun `notifications - the baseline inbox row is listed and can be marked read`() {
         val page = inbox.findByRecipient("acc_upgrade")
         assertEquals(listOf("evt_upgrade"), page.values.map { it.event.id })
+        assertEquals(1, page.values.single().collapsedCount, "a row from before the link/collapse columns reads as one notification")
+        assertNull(page.values.single().event.link)
+        assertNull(page.values.single().event.collapseKey)
         assertNotNull(inbox.markRead("acc_upgrade", "evt_upgrade", now)?.readAt)
     }
 

@@ -150,9 +150,9 @@ reward ··compileOnly··▶ notification (board 와 같은 선택 연동, noOp
 ### 4.6 받았어요 알림
 - 일꾼이 `ISSUED` 를 커밋한 **뒤** `RewardNotifier` 를 부른다. 기본 구현: `NotificationPublisher.publish(topic "rewards", type "reward.granted", id = "rwd_" + 지급 건 id, recipient = 계정, title/message = 지급기의 `describe` 문구, payload {rewardType, label, link})`. 실패는 로그만(보상은 이미 쿠폰함 · 포인트 내역에 있다).
 - 알림 모듈 빈틈 중 이번이 기대는 것(고치는 것은 범위 밖):
-  - ⑦ 브로커가 커밋 뒤에 전달하지 않고 받은편지함 저장 실패가 호출자로 던져진다 → 그래서 우리가 커밋 뒤에 직접 부르고 잡는다. id 를 지급 건에서 만들어 받은편지함의 `(recipient_id, event_id)` insert-ignore 가 중복을 접는다.
-  - ⑤ 받는 쪽 번역 렌더가 없다 → 첫 판 문구는 앱 기본 언어로 서버가 만든다. 렌더 자리가 생기면 `type` + `payload` 로 바꾼다.
-  - ⑥ 클릭 이동이 없다 → `payload.link`(`/rewards/coupons` 등)는 실어 두지만 지금은 눌리지 않는다.
+  - ⑦ 브로커가 커밋 뒤에 전달하지 않고 받은편지함 저장 실패가 호출자로 던져진다 → 그래서 우리가 커밋 뒤에 직접 부르고 잡는다. id 를 지급 건에서 만들어 받은편지함의 `(recipient_id, event_id)` insert-ignore 가 중복을 접는다. (알림센터 보강에서 해결: 구독자 전달은 커밋 뒤로 미뤄진다. 저장 실패 격리는 그대로 호출자 몫.)
+  - ⑤ 받는 쪽 번역 렌더가 없다 → 첫 판 문구는 앱 기본 언어로 서버가 만든다. 렌더 자리가 생기면 `type` + `payload` 로 바꾼다. (알림센터 보강에서 해결: 웹 `describe` 자리.)
+  - ⑥ 클릭 이동이 없다 → `payload.link`(`/rewards/coupons` 등)는 실어 두지만 지금은 눌리지 않는다. (알림센터 보강에서 해결: `NotificationEvent.link` 칸에도 싣는다.)
 
 ## 5. 구독 쿠폰 (1차 포함 — 결정 7)
 

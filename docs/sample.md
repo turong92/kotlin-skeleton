@@ -30,7 +30,7 @@
 | `PUT /api/v1/notes/{id}` | 통째로 바꾸기 `{title, body, status, pinned, attachmentKey, attachmentName}` | `{value: Note}` |
 | `DELETE /api/v1/notes/{id}` | 지우기 (첨부 파일도 지운다) | 204 |
 | `POST /api/v1/notes/{id}/export` | 마크다운으로 내보내기 시작 | 202 `{value: {jobId}}` — 끝나면 알림 `NOTE_EXPORTED` (`payload.exportKey` 를 `/storage/presign-download` 에 넘겨 받는다) |
-| `/api/v1/notifications` · `…/{eventId}/read` · `…/read-all` · `/sse` | 받은편지함 · 실시간 (`notification` · `notification-sse` 모듈이 연다) | |
+| `/api/v1/notifications` · `…/unread-count` · `…/{eventId}/read` · `…/read-all` · `…/preferences` · `/sse` | 받은편지함 · 실시간 (`notification` · `notification-sse` 모듈이 연다) | |
 | `/api/v1/storage/presign` · `presign-download` · `multipart/*` | 첨부 업로드 · 다운로드 (`storage` 모듈이 연다) | |
 
 `Note` = `{id, title, body, status: DRAFT|ACTIVE|ARCHIVED, pinned, attachmentKey, attachmentName, createdAt, updatedAt}` (시각은 ISO-8601 `…Z`).
@@ -46,6 +46,7 @@
 - `skeleton.board.reaction.types: [LIKE, DISLIKE, EMPATHY]` — 모듈 기본은 `[LIKE, DISLIKE]`. 공감(`EMPATHY`)은 이 한 줄이 전부다 (코드 · 스키마 변경 없음). `GET /api/v1/boards/config` 가 프론트에 종류를 알려 준다.
 - `skeleton.board.seed-boards` — 기동할 때 `general`(General) 게시판을 만든다.
 - 운영자: `moderator@example.com` / `password` (`MODERATOR` 역할 — 게시판 권한 `board.moderate` · `board.manage` 의 기본 매핑). 글 숨기기 · 고정 · 남의 글/댓글 삭제 · 게시판 만들기. 일반 사용자는 `user@example.com` · `admin@example.com`.
+- 알림 설정(이 앱의 선택, `application.yml`): 90일 지난 알림 정리(`retention`), 끌 수 있는 종류 넷(`preferences.types` — 노트 수정 · 댓글 · 답글 · 보상), SSE 심장박동 15초(`sse.heartbeat`).
 - 댓글 알림: 내 글에 댓글이 달리면 토픽 `board`, 타입 `comment.created`(답글은 `comment.replied`)가 받은편지함 · SSE 로 온다 — `notification` 이 클래스패스에 있어서 켜진 것이다.
 - 글 · 댓글 만들기는 `Idempotency-Key` 필수 (`idempotency` 가 있어서).
 - 경로 · 모양 · 에러 코드 · 결정 근거: [board](modules/board.md). 통합 테스트: `apps/sample/src/test/…/board/BoardIntegrationTest.kt`.
@@ -198,7 +199,7 @@ APP=sample scripts/dev.sh    # 백엔드(+프론트 WEB_DIR)만 같은 방식으
 4. **서비스** — `…/NoteService.kt`: 모든 규칙(소유자 확인 · 알림 · 잡 · 첨부 정리). 쓰기는 한 트랜잭션이라 알림 저장과 잡 등록이 노트 저장과 함께 커밋/롤백된다.
 5. **DTO · 검증** — `…/NoteDtos.kt`(Bean Validation), `…/OwnAttachmentKey.kt`(구조 규칙을 커스텀 제약으로: 어기면 `errors[attachmentKey]`), `…/NoteErrors.kt`(`NOTES.NOT_FOUND`).
 6. **컨트롤러** — `…/NoteController.kt`: HTTP 변환만. `@CreatedOperation` + `@IdempotentOperation`, `@AcceptedOperation`, `@NoContentOperation`, `PageQuery` → platform 표준 envelope.
-7. **알림** — `…/NoteNotifier.kt`: `NotificationPublisher.publish` 한 번이 받은편지함 저장 + SSE 전달. 계약(토픽 · 타입 · payload)이 이 파일 맨 위 주석에 있다.
+7. **알림** — `…/NoteNotifier.kt`: `NotificationPublisher.publish` 한 번이 받은편지함 저장 + SSE 전달. 계약(토픽 · 타입 · payload · `link` · `collapseKey`)이 이 파일 맨 위 주석에 있다 - 수정 알림은 같은 노트를 읽기 전에 또 고치면 한 줄로 접히고, 설정 화면에서 끌 수 있다(`skeleton.notification.preferences.types`).
 8. **잡** — `…/NoteExportJobHandler.kt`(`JobHandler`, 멱등) + `NoteService.startExport`(같은 트랜잭션에서 `JobQueue.enqueue`). 영구 실패는 `PermanentJobFailureException`.
 9. **설정** — `apps/sample/src/main/resources/application.yml`: 모듈 기본값과 다른 값만(잡 폴링 1s, 첨부 규칙). 로컬 S3 는 `application-local.yml`.
 10. **테스트** — `apps/sample/src/test/…/notes/`: `SampleIntegrationTest`(진짜 PostgreSQL · 보안 체인 · Flyway, 저장소만 메모리 `FakePresignedStorage`) 위에 `NoteCrudIntegrationTest` · `NoteListIntegrationTest` · `NoteOwnershipIntegrationTest` · `NoteNotificationIntegrationTest` · `NoteExportIntegrationTest`. 규칙마다 테스트를 먼저 썼다(빨강 → 초록).

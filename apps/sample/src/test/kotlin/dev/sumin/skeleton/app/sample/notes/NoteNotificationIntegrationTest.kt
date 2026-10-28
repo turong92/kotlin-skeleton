@@ -6,6 +6,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import org.springframework.http.MediaType
+import org.springframework.test.web.servlet.get
+import org.springframework.test.web.servlet.put
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.request
 
@@ -27,6 +29,60 @@ class NoteNotificationIntegrationTest : SampleIntegrationTest() {
         assertTrue((created["message"] as String).contains("알림 노트"))
         assertEquals("알림 노트", (created["payload"] as Map<*, *>)["noteTitle"])
         assertEquals(null, created["readAt"])
+    }
+
+    @Test
+    fun `created and updated notifications link to the note, a deleted one links nowhere`() {
+        val id = createdId(user, title = "링크 노트")
+        putNote(user, id, """{"title":"링크 노트 2","body":"","status":"ACTIVE","pinned":false}""").andReturn()
+        deleteNote(user, id).andReturn()
+
+        val mine = items(user).filter { (it["payload"] as Map<*, *>)["noteId"] == id }.associateBy { it["type"] }
+        assertEquals("/notes/$id", mine.getValue("NOTE_CREATED")["link"])
+        assertEquals("/notes/$id", mine.getValue("NOTE_UPDATED")["link"])
+        assertEquals(null, mine.getValue("NOTE_DELETED")["link"])
+    }
+
+    @Test
+    fun `editing the same note again before it is read folds into one NOTE_UPDATED row with a count, and unread-count counts it once`() {
+        val id = createdId(user, title = "접히는 노트")
+        repeat(2) { n -> putNote(user, id, """{"title":"접히는 노트 ${n + 1}","body":"","status":"ACTIVE","pinned":false}""").andReturn() }
+
+        val updated = items(user).filter { it["type"] == "NOTE_UPDATED" && (it["payload"] as Map<*, *>)["noteId"] == id }
+        assertEquals(1, updated.size)
+        assertEquals(2, updated.single()["collapsedCount"])
+        assertTrue((updated.single()["message"] as String).contains("접히는 노트 2"), "the newest content wins")
+        val unread = mockMvc.get("/api/v1/notifications/unread-count") { header("Authorization", "Bearer $user") }.andReturn().response.contentAsString
+        assertEquals(2, JsonPath.read<Int>(unread, "$.value.count"), "created + the folded update")
+    }
+
+    @Test
+    fun `muting NOTE_UPDATED stops its notifications but not the others, and unmuting brings them back`() {
+        fun mute(muted: Boolean) = mockMvc.put("/api/v1/notifications/preferences/NOTE_UPDATED") {
+            header("Authorization", "Bearer $user")
+            contentType = MediaType.APPLICATION_JSON
+            content = """{"muted":$muted}"""
+        }
+        val id = createdId(user, title = "끄는 노트")
+        mute(true).andExpect { status { isOk() } }
+        putNote(user, id, """{"title":"끈 뒤 수정","body":"","status":"ACTIVE","pinned":false}""").andReturn()
+        assertTrue(items(user).none { it["type"] == "NOTE_UPDATED" })
+        assertTrue(items(user).any { it["type"] == "NOTE_CREATED" })
+
+        mute(false).andExpect { status { isOk() } }
+        putNote(user, id, """{"title":"켠 뒤 수정","body":"","status":"ACTIVE","pinned":false}""").andReturn()
+        assertEquals(1, items(user).count { it["type"] == "NOTE_UPDATED" })
+    }
+
+    @Test
+    fun `only the types the app lists can be muted`() {
+        mockMvc.put("/api/v1/notifications/preferences/NOTE_CREATED") {
+            header("Authorization", "Bearer $user")
+            contentType = MediaType.APPLICATION_JSON
+            content = """{"muted":true}"""
+        }.andExpect { status { isNotFound() } }
+        val list = mockMvc.get("/api/v1/notifications/preferences") { header("Authorization", "Bearer $user") }.andReturn().response.contentAsString
+        assertEquals(listOf("NOTE_UPDATED", "comment.created", "comment.replied", "reward.granted"), JsonPath.read<List<String>>(list, "$.value.items[*].type"))
     }
 
     @Test

@@ -88,6 +88,21 @@ class RewardWorkerTest {
         assertEquals("reward.granted", event.type)
         assertEquals("You got 100 points", event.message)
         assertEquals("/rewards/points", event.payload["link"])
+        assertEquals("/rewards/points", event.link)
+    }
+
+    @Test
+    fun `a label link that is not an in-app path stays out of the link field and does not lose the notification`() {
+        val published = mutableListOf<NotificationEvent>()
+        val notifier = NotificationRewardNotifier({ published += it; NotificationPublishResult(it.id, 0) }, "rewards")
+        val grant = RewardGrantView("g1", "acc_1", "point", emptyMap(), "s", "k")
+
+        notifier.issued(grant, RewardLabel("t", "m", link = "https://elsewhere.example/x"))
+        notifier.issued(grant, RewardLabel("t", "m", link = "//elsewhere.example"))
+        notifier.issued(grant, RewardLabel("t", "m", link = null))
+
+        assertEquals(listOf(null, null, null), published.map { it.link })
+        assertEquals("https://elsewhere.example/x", published.first().payload["link"])
     }
 
     @Test

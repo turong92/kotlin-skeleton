@@ -76,6 +76,10 @@ class MySqlMigrationUpgradeTest {
         ledgerErasureClearsTheCard(dataSource, jdbc)
         assertEquals("v1", jdbc.sql("select version from legal_consents where subject_id = 'acc_upgrade'").query(String::class.java).single())
         assertEquals("{\"k\": \"v\"}".replace(" ", ""), jdbc.sql("select payload_json from notification_inbox where event_id = 'evt_upgrade'").query(String::class.java).single().replace(" ", ""))
+        // 링크 · 묶기 칸(V20261028170000): 기준선 줄은 수 1, 나머지 null - 읽은 뒤에도 묶이지 않는다
+        assertEquals(1, jdbc.sql("select collapsed_count from notification_inbox where event_id = 'evt_upgrade'").query(Int::class.java).single())
+        assertEquals(null, jdbc.sql("select link from notification_inbox where event_id = 'evt_upgrade'").query(String::class.java).optional().orElse(null))
+        assertEquals(null, jdbc.sql("select unread_collapse_key from notification_inbox where event_id = 'evt_upgrade'").query(String::class.java).optional().orElse(null))
     }
 
     /**

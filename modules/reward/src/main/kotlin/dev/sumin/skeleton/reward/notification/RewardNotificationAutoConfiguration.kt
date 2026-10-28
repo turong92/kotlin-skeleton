@@ -17,7 +17,7 @@ import org.springframework.context.annotation.Bean
 
 /**
  * 받았어요 알림을 받은편지함으로 — 알림 id 는 지급 건에서 만든다(`rwd_<건 id>`)라 받은편지함의 `(받는 사람, 이벤트 id)` 가 중복을 접는다.
- * 문구는 지급기의 `describe`, 링크는 payload 에 실어 둔다(지금은 눌리지 않는다).
+ * 문구는 지급기의 `describe`, 링크는 `link` 칸(눌러서 이동)과 payload(옛 클라이언트용)에 함께 싣는다. 앱 안 경로가 아닌 링크는 칸에서 빼고 payload 에만 남긴다 - 알림 자체를 잃지 않게.
  */
 class NotificationRewardNotifier(private val publisher: NotificationPublisher, private val topic: String) : RewardNotifier {
     override fun issued(grant: RewardGrantView, label: RewardLabel) {
@@ -31,6 +31,7 @@ class NotificationRewardNotifier(private val publisher: NotificationPublisher, p
                 title = label.title,
                 message = label.message,
                 payload = mapOf("rewardType" to grant.type, "label" to label.title, "link" to label.link),
+                link = label.link?.takeIf { NotificationEvent.isValidLink(it) },
             ),
         )
     }
