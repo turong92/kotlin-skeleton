@@ -1,9 +1,11 @@
 package dev.sumin.skeleton.app.sample.cheer
 
+import dev.sumin.skeleton.campaign.Referrals
 import dev.sumin.skeleton.payment.PaymentOrder
 import dev.sumin.skeleton.payment.PaymentOrderListener
 import dev.sumin.skeleton.payment.PaymentOrderStatus
 import dev.sumin.skeleton.payment.PaymentRefund
+import dev.sumin.skeleton.payment.PaymentSettlement
 import org.springframework.stereotype.Component
 
 /**
@@ -11,7 +13,7 @@ import org.springframework.stereotype.Component
  * (알림 · 메일 · 외부 호출을 넣지 않는다. 필요하면 큐로 — 예: `NoteService` 의 내보내기). 둘 다 **멱등**이다.
  */
 @Component
-class CheerOrderListener(private val cheers: CheerRepository) : PaymentOrderListener {
+class CheerOrderListener(private val cheers: CheerRepository, private val referrals: Referrals) : PaymentOrderListener {
     /** 응원 기록 한 줄. 같은 주문이 두 번 와도 한 줄이다. 계정이 이미 지워진 주문(탈퇴 뒤 늦게 `PAID` 가 된 경우)은 기록을 남기지 않는다 — 지워진 계정의 줄을 되살리지 않는다. */
     override fun onPaid(order: PaymentOrder) {
         if (order.itemType != CheerCatalog.ITEM_TYPE) return // 구독 같은 다른 상품의 주문에는 응원 기록을 남기지 않는다
@@ -28,6 +30,9 @@ class CheerOrderListener(private val cheers: CheerRepository) : PaymentOrderList
                 refundedAt = null,
             ),
         )
+        // 첫 응원 결제가 친구초대의 초대자 보상(`qualifyOn: SIGNAL`)을 연다 - 몇 번 불러도 한 번만 먹는다. 돈이 오간 주문만: 쿠폰으로 0원이 된 주문 · 결제 면제 주문은 「결제」가 아니다.
+        // (같은 트랜잭션 안에서 지급 건 줄과 작업만 넣는다 - 외부 호출이 아니다)
+        if (order.settlement == PaymentSettlement.PROVIDER) referrals.qualify(order.accountId)
     }
 
     /**

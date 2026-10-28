@@ -61,7 +61,7 @@ abstract class CheerIntegrationBase {
     @BeforeEach
     fun cleanLedger() {
         // 자식부터 — 장부의 표 넷 · 응원 기록 · 작업
-        listOf("payment_events", "payment_refunds", "payment_webhook_events", "payment_orders", "payment_subscriptions", "cheers", "jobs").forEach { jdbc.sql("delete from $it").update() }
+        listOf("payment_events", "payment_refunds", "payment_webhook_events", "payment_order_discounts", "payment_orders", "payment_subscriptions", "cheers", "jobs").forEach { jdbc.sql("delete from $it").update() }
         gateway.confirmCarriesDetails = true
         // 가짜 결제사는 컨텍스트 하나를 시험 여럿이 나눠 쓴다 — 호출 기록은 시험마다 비운다
         listOf(gateway.confirmCalls, gateway.lookupCalls, gateway.checkoutCalls, gateway.refundCalls, gateway.issueCalls, gateway.chargeCalls, gateway.revokeCalls).forEach { it.clear() }

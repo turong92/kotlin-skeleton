@@ -145,6 +145,23 @@ local 프로필은 주문 만들기 한도(기본 계정당 10 / 10분)를 풀�
 
 통합 시험(`apps/sample/src/test/…/cheer/` — 진짜 PostgreSQL · 보안 체인 · 결제 장부, 결제사만 시험 소스의 `ScriptedGateway` 빈): `CheerJourneyIntegrationTest`(가입 → 주문 → 승인 → 응원 기록 → 환불 요청 → 운영자 환불 → 「환불됨」 · 일부 환불 · 금액 목록 밖 · 승인이 "모름"으로 끝난 뒤 조회 작업이 기록을 만든다) · `CheerAccessIntegrationTest`(남의 주문 404 · 본인은 환불을 실행할 수 없다 · 운영자 판정이 저장소의 지금 역할 · 웹훅 경로가 익명으로 닿되 POST 두 모양뿐 · 사용자 응답에 운영자 칸 · 심은 값 없음) · `CheerOrderListenerIntegrationTest` · `CheerOrderRateLimitIntegrationTest`(429) · `CheerOperatorDisabledIntegrationTest`(꺼져 있으면 404) · `CheerWithoutProviderIntegrationTest`(토스 없이 기동) · `PaymentEnvironmentOnlyBootTest`(환경변수만으로 기동) · `AccountJourneyIntegrationTest`(탈퇴 뒤 전체 표 스캔 — 카드 두 칸이 비고 응원 기록이 지워지고 심은 값이 없고, 운영자는 여전히 환불할 수 있다) · `MigrationUpgradeIntegrationTest` · `MySqlMigrationUpgradeTest`(기준선 데이터 위에서 새 표가 올라가고 탈퇴 고리가 카드 두 칸을 비운다).
 
+## 이벤트 · 보상 · 쿠폰 · 결제 면제
+
+네 줄(`reward-jdbc` · `coupon-jdbc` · `point-jdbc` · `campaign-jdbc`)과 이 앱의 작은 조각 `rewards/RewardsSeed` 가 전부다. 흐름: **이벤트가 조건을 판정해 「지급 건」을 기록**(`campaign`, 자기 트랜잭션에서 끝) → **일꾼이 건마다 지급기를 불러 준다**(`reward`, 작업 큐 위, 재시도 · 멱등) → **쿠폰 · 포인트가 각자 지급기로 받는다**(`coupon` · `point`). 이벤트는 쿠폰 · 포인트를 모른다 — 모듈 문서: [campaign](modules/campaign.md) · [reward](modules/reward.md) · [coupon](modules/coupon.md) · [point](modules/point.md).
+
+| 사용자 경로 | 하는 일 |
+|---|---|
+| `GET /api/v1/campaigns` · `POST /{id}/attendance` · `GET /{id}/attendance?month` | 진행 중 이벤트 · 출석 체크(서버 시간대 `skeleton.campaign.zone` 의 날짜로 하루 한 번) · 달력 |
+| `GET /api/v1/referrals/me` · `POST /api/v1/referrals/claim {code}` | 내 초대 코드 · 친구의 코드 쓰기 |
+| `GET /api/v1/coupons?status=AVAILABLE\|PAST` · `POST /api/v1/coupons/redeem {code}` | 쿠폰함 · 공용 코드 등록 |
+| `GET /api/v1/points` · `GET /api/v1/points/history` | 포인트 잔액 · 내역 |
+
+운영 경로는 모듈 기본이 꺼짐이고 이 앱이 `application.yml` 에서 켠다(`skeleton.{campaign,coupon,point,reward}.admin.enabled: true`). 권한 `campaign.manage` · `coupon.manage` · `point.manage` · `reward.operate` · `payment.exempt` 는 **기본 역할이 없고 전권(`ADMIN`)만** 가진다 — 역할 관리(`/api/v1/admin/roles`)에서 나눠 준다.
+
+**결제와 맞물리는 곳**: `coupon` 이 결제 할인 수단 빈으로 서 있으므로 `POST /api/v1/payments/orders` 의 `discounts: [{type: "coupon", ref: <쿠폰 id>}]` 가 그대로 먹는다(견적은 `POST /api/v1/payments/quote`). 100% 쿠폰(무료 이용권)이면 결제사를 부르지 않고 바로 `PAID`(`settlement: FREE`). `payment.exempt` 를 가진 계정의 응원은 결제사 없이 `PAID`(`settlement: EXEMPT`, 매출 · 환불에서 빠진다). 이 앱의 자리는 한 곳 — `CheerOrderListener.onPaid` 끝의 `referrals.qualify(order.accountId)`: **돈이 오간 첫 결제**(`settlement == PROVIDER`)가 친구초대의 초대자 보상(`qualifyOn: SIGNAL`)을 연다. 0원 · 면제 주문은 부르지 않는다. 몇 번 불러도 한 번만 먹는다.
+
+**씨앗**(`local` 프로필만, 이름으로 찾아 없는 것만 만든다 — `RewardsSeed`): 쿠폰 정의 「1,000원 할인」 · 「응원 30%」(최대 5,000원) · 「무료 이용권」, 공용 코드 `WELCOME`(→ 응원 30%), 출석 이벤트(매일 10포인트, 누적 3일 「1,000원 할인」), 친구초대 이벤트(초대받은 사람 「응원 30%」, 초대자 500포인트는 그 친구의 첫 응원 결제 때). 포인트 유효기간 · 초대자 보상 시점은 스켈레톤 기본이 아니라 **이 앱의 선택**이다. 시험: `RewardsFlowIntegrationTest`(진짜 PostgreSQL · 보안 체인 · 큐 일꾼, 가짜 결제사).
+
 ## 구독 — 플랜과 자동결제 (`/api/v1/payments/subscriptions`)
 
 `payment` 의 구독(`docs/modules/payment.md` 「구독」)을 이 앱이 켠다. 코드는 `subscription/SubscriptionConfiguration.kt` 두 빈 — `SubscriptionPlans`(Basic 3,900 · Standard 6,900 · Pro 9,900원, 주기는 `skeleton.sample.subscription.period`)와 `SubscriptionRenewalGuard`(정상 `ACTIVE` 계정만 갱신 — 정지 · 삭제 유예 · 없는 계정은 그 기간 끝에 구독이 끝난다).

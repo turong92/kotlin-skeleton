@@ -220,6 +220,20 @@ skeleton:
   authz:
     admin:
       enabled: true   # 이 앱의 선택: 역할 관리 API(/api/v1/admin/roles) 를 켠다 — 스켈레톤 기본은 꺼짐(404)
+  # 이벤트 · 보상 - 운영 경로는 모듈 기본대로 꺼져 있고 이 앱이 켠다(권한 campaign.manage · coupon.manage · point.manage · reward.operate 는 기본 역할 없이 ADMIN 전권만 - 역할 관리에서 나눠 준다)
+  campaign:
+    admin:
+      enabled: true
+    zone: Asia/Seoul   # 이 앱의 선택: 「오늘」 출석의 날짜 경계 (비우면 skeleton.time.default-zone)
+  coupon:
+    admin:
+      enabled: true
+  point:
+    admin:
+      enabled: true
+  reward:
+    admin:
+      enabled: true
   dashboard:
     admin:
       enabled: true   # 이 앱의 선택: 관리자 대시보드 API(/api/v1/admin/dashboard) 를 켠다 — 스켈레톤 기본은 꺼짐(404). 보려면 권한 dashboard.read (ADMIN 은 늘 가진다)

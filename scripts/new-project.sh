@@ -209,6 +209,16 @@ if in_list payment "$SELECTED_SORTED" && ! in_list payment-jdbc "$SELECTED_SORTE
   NOTES="${NOTES:+$NOTES$'\n'}payment alone is the provider facade with no order ledger and no tables: add payment-jdbc too (--modules payment,payment-jdbc,payment-toss) to get orders, the event history and the delayed jobs"
 fi
 
+# 쿠폰 · 포인트 · 이벤트 · 보상 지급도 저장소를 모른다 (각 -jdbc 가 포트를 구현한다) - 지급 건을 일꾼이 쿠폰 · 포인트 지급기로 준다: 이벤트(campaign)는 지급 건을 남기는 reward 가 필요하다
+for pair in coupon point campaign reward; do
+  if in_list "$pair" "$SELECTED_SORTED" && ! in_list "$pair-jdbc" "$SELECTED_SORTED"; then
+    NOTES="${NOTES:+$NOTES$'\n'}$pair has no storage of its own: add $pair-jdbc too (--modules $pair,$pair-jdbc) unless you implement its store port yourself — without it the $pair services do not start"
+  fi
+done
+if in_list campaign "$SELECTED_SORTED"; then
+  NOTES="${NOTES:+$NOTES$'\n'}campaign records reward grants: it needs reward + reward-jdbc, and coupon / point (with their -jdbc) as the rewards it can give — a reward type nobody issues is refused when you save the event"
+fi
+
 echo "→ $TARGET"
 echo "  package $PKG, prefix $PREFIX, class prefix $CLASS, db $DB$([ "$WITH_WORKBENCH" = 1 ] && echo ', with workbench')$([ "$WITH_SAMPLE" = 1 ] && echo ', with sample')"
 echo "  modules ($(printf '%s\n' "$SELECTED_SORTED" | wc -l | tr -d ' ')): $(printf '%s\n' "$SELECTED_SORTED" | tr '\n' ' ')"

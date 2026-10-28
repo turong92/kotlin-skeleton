@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 이벤트 · 보상(쿠폰 · 포인트) · 결제 할인 · 0원 · 결제 면제 · 역할 위계 (2026-10-28)
+
+- 새 모듈 여덟 — **허리는 `platform` 의 계약 타입**(`common/reward` `RewardIssuer`, `common/discount` `DiscountSource` · `DiscountMath`, `common/account` `AccountFacts`)이라 서로 `compileOnly` 로 걸지 않고 각자 단독으로 돈다:
+  - `campaign` + `campaign-jdbc`: 이벤트 틀(기간 · 켜고 끄기 · 보상 목록) + 출석(매일 · 누적/연속 달성 · 서버 시간대의 날짜) + 친구초대(양쪽 보상, 초대자 보상 시점 `CLAIM`/`SIGNAL` — `Referrals.qualify`). 조건을 판정해 **지급 건을 기록하는 데서 트랜잭션이 끝난다**. 운영 `/api/v1/admin/campaigns`(`campaign.manage`).
+  - `reward` + `reward-jdbc`: 지급 건 장부 + 일꾼(`job-queue-jdbc` 위, 지급기 호출 · 재시도 · 멱등 · DEAD → `FAILED` → 「다시 지급」) + 받았어요 알림(`notification` 이 있으면). 운영 `/api/v1/admin/reward-grants`(`reward.operate`).
+  - `coupon` + `coupon-jdbc`: 마케팅이 행 하나로 만드는 조합형 정의(혜택 단계 목록 `[{FREE|PERCENT|FIXED, value, maxDiscount?, periods}]`), 쿠폰함, 공용 코드, 보상 지급기 `coupon`, 결제 할인 수단 `coupon`(예약 · 확정 · 해제 · 복원 — 조건부 갱신). 운영 `/api/v1/admin/coupon-definitions` · `/coupons`(`coupon.manage`).
+  - `point` + `point-jdbc`: 적립 · 차감(먼저 소멸할 것부터) · 소멸 작업 · 지급기 `point`. 포인트 사용은 서버 API `PointWallet.spend` 뿐(HTTP 없음). 운영 `/api/v1/admin/points`(`point.manage`).
+- `payment` + `payment-jdbc`: 단건 주문에 `discounts`(쿠폰) — 견적 `POST /api/v1/payments/quote`, 주문의 `originalAmount` · `discountAmount` · `discounts[]` · `settlement`. 최종가 0 은 결제사 없이 `provider = "free"`, `payment.exempt` 권한이 있는 계정의 주문은 `provider = "exempt"`(매출 · 건수 · 퍼널 · 환불 · 「첫 결제」 판정에서 빠진다). 새 오류 `PAYMENT.DISCOUNT_*` · `PAYMENT.NOTHING_TO_REFUND`, 새 권한 `payment.exempt`. 할인 수단 빈이 없으면 `discounts` 는 `DISCOUNT_NOT_APPLICABLE` — **이 모듈들을 안 붙인 앱의 결제 · 권한 동작은 그대로다**. 마이그레이션: `payment_orders` 두 칸 + `payment_order_discounts`(새 V 파일).
+- `authz` + `authz-jdbc` + `platform`: 역할 위계(`includes`) — `RolePermissionSource.permissionsOf` 가 물려받은 것까지 펼친 값이라 모든 판정이 고치지 않고 따른다. 순환 · 모르는 포함 · 포함된 역할 삭제 · 에스컬레이션 거절(`AUTHZ.ROLE_CYCLE` 외). 새 V 파일.
+- 견본 앱(`apps/sample`): 위 네 쌍을 조립하고 운영 경로를 켠다(`application.yml`), 로컬 프로필 씨앗 `RewardsSeed`(쿠폰 정의 셋 · 공용 코드 `WELCOME` · 출석 이벤트 · 친구초대 이벤트), `CheerOrderListener.onPaid` 끝의 `referrals.qualify`(돈이 오간 첫 결제만). 시험 `RewardsFlowIntegrationTest`. 조합 시험 `12-coupon` · `13-point` · `14-campaign`(`scripts/test-new-project.sh --full`).
+- 프런트 짝: react-skeleton 의 `@skeleton/rewards`(`/admin` 서브경로 포함) · `@skeleton/payment` 의 할인 표시 · `@skeleton/auth` 의 역할 위계 화면.
+- **Breaking 없음**: 모든 변경은 새 모듈이거나 기존 응답에 칸을 더하는 것이다. 결제 응답의 새 칸은 선택으로 읽는 클라이언트에 안전하다.
+- **남은 것(구독 할인 조각 뒤)**: 구독에 쿠폰(`POST /api/v1/payments/subscriptions` 의 `discounts` · n달 무료 · 매 갱신 할인)은 아직 없다.
+
 ### 대시보드 「활성 이용자」를 정확하게 — 계정별 일별 활동 기록 (2026-10-27)
 
 - `auth-session` + `auth-session-jdbc`: 하루에 한 줄 `(account_id, day)` 인 표 `auth_account_activity`(새 V 파일 두 방언, `migrations.lock`). 로그인 · 토큰 새로고침 때 남기고(같은 계정이 같은 날 이미 기록됐으면 저장소를 부르지 않는다), **쓰기가 실패해도 로그인은 막지 않는다**. 계정 삭제 때 같이 지우고, 주기 청소(`SessionPurge`)가 보존 기간 `skeleton.auth-session.activity.retention`(기본 400일) 밖을 지운다. 날짜를 세는 시간대 `skeleton.auth-session.activity.zone`(프로젝트별 가능, `ProjectConfigKeys.SUPPORTED` 에 `auth-session.activity.`). 새 포트 `AccountActivityStore`(기본은 아무것도 안 함).

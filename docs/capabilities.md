@@ -35,6 +35,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | 알림이 새로고침 없이 즉시 뜬다 (실시간) | `notification` + `notification-jdbc` + (`notification-sse` \| `notification-websocket`) | `--modules notification,notification-jdbc,notification-sse` — `notification-sse` \| `notification-websocket` 중 하나 이상 고른다 | `--packages notifications,realtime` — react `live-notifications` | SSE(단방향, 더 단순) 또는 WebSocket(양방향) 중 고른다. 둘 다 프로세스 안 브로커라 인스턴스가 여럿이면 다른 인스턴스의 알림을 못 받는다. 프런트 연결 훅. |
 | 파일 업로드 (이미지 · 첨부) | `storage` + `storage-s3` | `--modules storage,storage-s3` | `--packages storage` — react `storage` | 버킷 · 키(환경변수), 업로드 규칙(skeleton.storage.validation — 확장자 · 크기), 업로드한 파일 키를 도메인에 저장하는 코드(앱). 로컬 개발은 compose 의 S3 를 scripts/dev.sh 가 올린다. |
 | 결제 (토스 · 스트라이프) | `payment` + (`payment-toss` \| `payment-kakaopay` \| `payment-naverpay` \| `payment-stripe` \| `payment-paddle`) | `--modules payment,payment-toss` — `payment-toss` \| `payment-kakaopay` \| `payment-naverpay` \| `payment-stripe` \| `payment-paddle` 중 하나 이상 고른다 | `--packages payment` — react `payment` | HTTP 엔드포인트가 없다 — 주문 · 금액 검증 컨트롤러 · 성공/실패 리다이렉트 처리 · 웹훅 서명 검증을 앱이 쓴다(PaymentService.confirm 은 받은 금액을 그대로 넘긴다). enabled=true + secret-key(환경변수). 중복 결제 방지에는 idempotency. |
+| 이벤트 (출석 · 친구초대) · 쿠폰 · 포인트 · 쿠폰으로 결제 할인 · 무료 이용권 | `campaign` + `reward` + `coupon` + `point` | `--modules campaign,campaign-jdbc,reward,reward-jdbc,coupon,coupon-jdbc,point,point-jdbc` | `--packages rewards` — react `rewards` `rewards-admin` | 보상 모듈은 서로를 모르고 각자 단독으로 돈다(쿠폰만 · 포인트만 · 이벤트 + 일꾼만). 운영 경로는 꺼져 있다(skeleton.<module>.admin.enabled). 결제 할인은 payment-jdbc 와 같이 있으면 coupon 이 할인 수단으로 서고, 친구초대의 초대자 보상을 첫 결제에 걸려면 앱의 결제 리스너 끝에서 Referrals.qualify(계정)를 부른다. 이벤트 설정(어떤 보상을 줄지)은 운영 화면 또는 Campaigns 서비스로 넣는다 - 씨앗 예: apps/sample 의 RewardsSeed. |
 | 봇 방지 (캡차) | `captcha-turnstile` | `--modules captcha-turnstile` | `--packages captcha-turnstile` — react `captcha-turnstile` | 가입 · 로그인 요청에서 TurnstileVerifier 로 토큰을 검증하는 코드(앱)와 enabled=true + secret-key(환경변수). |
 | 메일 보내기 (SMTP) | `notification-mail` | `--modules notification-mail` | (프런트 없음) | SMTP 환경변수(host · username · password · from)와 메일 본문 · 템플릿(앱). |
 | 슬랙으로 알림 | `notification-slack` | `--modules notification-slack` | (프런트 없음) | 웹훅 URL(환경변수)과 보낼 알림 종류(앱). |
@@ -90,12 +91,12 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `authz-jdbc` | 역할 → 권한 표 저장소 — PostgreSQL · MySQL 로 authz 의 저장 포트를 구현하고(authz_roles · authz_role_permissions, 전권 역할은 표를 못 바꾼다) 판정이 읽는 역할 → 권한 매핑을 yml 에서 이 표로 바꾼다(캐시: 같은 인스턴스는 즉시, 다른 인스턴스는 skeleton.authz.cache-ttl). 첫 기동에 yml 매핑을 한 번만 옮긴다. | `--modules authz-jdbc` | 역할 권한 저장소, 권한 표 / role permission storage, authz database | `@skeleton/auth` |
 | `board` | 게시판 — 글 · 중첩 댓글(대댓글) · 설정으로 늘리는 반응(좋아요 · 공감 …) · 운영자 숨김/고정 · 댓글 알림 · 작성자 닉네임(authorName · authorTag, AuthorDirectory 로 요청당 한 번 조회), HTTP /api/v1/boards 까지. | `--modules board,board-jdbc` | 게시판, 커뮤니티, 글쓰기, 댓글, 대댓글, 공감, 좋아요, 반응, 운영자 숨김, 공지 고정 / board, forum, community, post, comment, reply, reaction, like, moderation | `@skeleton/board` |
 | `board-jdbc` | 게시판 저장소 — PostgreSQL · MySQL 로 board 의 저장 포트 네 개를 구현한다(boards · board_* 테이블 · 원자적 카운터). | `--modules board-jdbc` | 게시판 저장소, 게시판 DB / board storage, board repository, board database | `@skeleton/board` |
-| `campaign` | 이벤트 — 출석(매일 · 누적 · 연속 달성)과 친구초대(양쪽 보상)를 판정해 보상 지급 건으로 기록하고, 운영자가 이벤트를 만들고 켜고 끈다. | `--modules campaign,campaign-jdbc,reward-jdbc` | 이벤트, 출석 체크, 출석 보상, 친구 초대, 초대 코드, 초대 보상, 연속 출석 / campaign, event, attendance, check-in, referral, invite, streak | — |
-| `campaign-jdbc` | 이벤트 · 출석 · 초대 코드 · 초대 관계 저장을 DB 에 둔다 (PostgreSQL · MySQL). | `--modules campaign-jdbc` | 이벤트 저장, 출석 저장 / campaign store, attendance store | — |
+| `campaign` | 이벤트 — 출석(매일 · 누적 · 연속 달성)과 친구초대(양쪽 보상)를 판정해 보상 지급 건으로 기록하고, 운영자가 이벤트를 만들고 켜고 끈다. | `--modules campaign,campaign-jdbc,reward-jdbc` | 이벤트, 출석 체크, 출석 보상, 친구 초대, 초대 코드, 초대 보상, 연속 출석 / campaign, event, attendance, check-in, referral, invite, streak | `@skeleton/rewards` |
+| `campaign-jdbc` | 이벤트 · 출석 · 초대 코드 · 초대 관계 저장을 DB 에 둔다 (PostgreSQL · MySQL). | `--modules campaign-jdbc` | 이벤트 저장, 출석 저장 / campaign store, attendance store | `@skeleton/rewards` |
 | `captcha-turnstile` | 봇 방지 — Cloudflare Turnstile 토큰을 서버에서 검증한다(TurnstileVerifier). | 스타터(apps/api)에 기본 포함 | 캡차, 봇 방지, 스팸 방지, 로봇 확인, 가입 폼 보호 / captcha, turnstile, bot protection, spam protection, cloudflare turnstile | `@skeleton/captcha-turnstile` |
 | `config-aws-ssm` | AWS SSM Parameter Store 의 값을 시작할 때 스프링 프로퍼티로 불러온다. | `--modules config-aws-ssm` | AWS 설정, 파라미터 스토어, SSM, 비밀 불러오기 / aws ssm, parameter store, remote config, aws secrets | — |
-| `coupon` | 쿠폰 — 단계 목록(무료 · 정률 · 정액, n회차)으로 마케팅이 행 하나로 만드는 정의, 쿠폰함, 공용 코드 등록, 보상 지급기 `coupon` 과 결제 할인 수단 `coupon`(예약 · 확정 · 해제 · 복원). | `--modules coupon,coupon-jdbc` | 쿠폰, 할인 코드, 프로모션 코드, 무료 이용권, n달 무료, 쿠폰함 / coupon, promo code, discount code, voucher, coupon wallet | — |
-| `coupon-jdbc` | 쿠폰 정의 · 쿠폰함 · 공용 코드를 DB 에 둔다 (PostgreSQL · MySQL) — 예약 · 확정은 조건부 갱신, 발급 한도는 정의 줄 잠금. | `--modules coupon-jdbc` | 쿠폰 저장소, 쿠폰 DB / coupon storage, coupon repository | — |
+| `coupon` | 쿠폰 — 단계 목록(무료 · 정률 · 정액, n회차)으로 마케팅이 행 하나로 만드는 정의, 쿠폰함, 공용 코드 등록, 보상 지급기 `coupon` 과 결제 할인 수단 `coupon`(예약 · 확정 · 해제 · 복원). | `--modules coupon,coupon-jdbc` | 쿠폰, 할인 코드, 프로모션 코드, 무료 이용권, n달 무료, 쿠폰함 / coupon, promo code, discount code, voucher, coupon wallet | `@skeleton/rewards` |
+| `coupon-jdbc` | 쿠폰 정의 · 쿠폰함 · 공용 코드를 DB 에 둔다 (PostgreSQL · MySQL) — 예약 · 확정은 조건부 갱신, 발급 한도는 정의 줄 잠금. | `--modules coupon-jdbc` | 쿠폰 저장소, 쿠폰 DB / coupon storage, coupon repository | `@skeleton/rewards` |
 | `crypto` | AES-GCM 텍스트 암호화 · 키 회전용 키 id 봉투 · URL 에 안전한 불투명 토큰 · 선택적 영속 변환기. | `--modules crypto` | 암호화, 복호화, 비밀 저장, 불투명 URL, 키 회전 / encryption, aes gcm, opaque token, key rotation, encrypt at rest | — |
 | `dashboard` | 관리자 대시보드 조립기 — 다른 모듈이 빈으로 기여한 숫자 타일 · 순위 탭 · 같은 사람 묶음 퍼널을 모아 한 화면 분량(직전 기간 비교 · 그래프 시리즈 포함)으로 돌려주는 API(/api/v1/admin/dashboard). 계산은 프로젝트별 짧은 캐시를 지나 운영자가 여럿 열어도 DB · 외부 호출은 캐시 주기당 한 번이고, 카드 하나가 실패해도 그 카드만 상태로 말한다. 카드는 account-jdbc · auth-session-jdbc · payment-jdbc 나 앱이 기여한다. 권한 dashboard.read, 기본 꺼짐(skeleton.dashboard.admin.enabled). | `--modules dashboard` | 관리자 대시보드, 어드민 대시보드, 통계 화면, 매출 가입 숫자, 퍼널, 지표 카드 / admin dashboard, metrics, kpi tiles, funnel, analytics overview | `@skeleton/dashboard` |
 | `dashboard-cloudflare` | 대시보드에 접속 숫자를 얹는다 — Cloudflare Web Analytics(쿠키 없음 · 정적 페이지 포함)의 방문 · 페이지뷰 타일과 유입 · 많이 본 페이지 · 국가 · 기기 순위. 어제까지는 새벽 적재 작업이 일별 표에 옮긴 값, 오늘은 5분 서버 캐시(운영자가 여럿이어도 외부 호출은 주기당 한 번). 키가 없으면 기동은 하고 그 카드만 「연결하면 보입니다」. 프로젝트 모드는 프로젝트마다 자기 계정 id · 사이트 태그 · 토큰. | `--modules dashboard-cloudflare` | 접속 통계, 방문자 수, 클라우드플레어 분석, 페이지뷰, 유입 경로, 국가별 방문 / cloudflare web analytics, visits, page views, referrers, traffic stats | `@skeleton/dashboard` |
@@ -134,8 +135,8 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `redis-core` | Redis 연결 · StringRedisTemplate · JSON 템플릿 · 키 접두사 — 다른 redis-* 모듈의 바탕. | `--modules redis-core` | Redis, 레디스, 키 접두사 / redis, redis connection, key prefix | — |
 | `redis-lock` | Redisson 기반 분산 락 — @DistributedLock 어노테이션과 락 실행기. | `--modules redis-lock` | 분산 락, 락, 동시 실행 방지, 중복 실행 방지 / distributed lock, lock, mutex, redisson | — |
 | `redis-rate-limit` | platform 의 rate limit 저장소를 Redis 고정 윈도 카운터로 바꾼다(여러 인스턴스에서 한도 공유). | `--modules redis-rate-limit` | 요청 제한, 속도 제한, API 호출 제한, 도배 방지 / rate limit, throttling, request limit, redis rate limit | — |
-| `reward` | 보상 지급의 허리 — 이벤트가 기록한 지급 건을 일꾼이 쿠폰 · 포인트 지급기로 주고(재시도 · 멱등), 받았어요 알림과 운영자 다시 지급 · 취소까지. | `--modules reward,reward-jdbc` | 보상 지급, 지급 건, 쿠폰 지급, 포인트 지급, 다시 지급, 받았어요 알림 / reward grant, reward issuer, payout worker, retry grant | — |
-| `reward-jdbc` | 지급 건 저장과 지급 작업을 DB 에 두고 일꾼을 job-queue-jdbc 에 얹는다 (PostgreSQL · MySQL). | `--modules reward-jdbc` | 지급 건 저장, 지급 작업 큐 / reward grant store, reward job | — |
+| `reward` | 보상 지급의 허리 — 이벤트가 기록한 지급 건을 일꾼이 쿠폰 · 포인트 지급기로 주고(재시도 · 멱등), 받았어요 알림과 운영자 다시 지급 · 취소까지. | `--modules reward,reward-jdbc` | 보상 지급, 지급 건, 쿠폰 지급, 포인트 지급, 다시 지급, 받았어요 알림 / reward grant, reward issuer, payout worker, retry grant | `@skeleton/rewards` |
+| `reward-jdbc` | 지급 건 저장과 지급 작업을 DB 에 두고 일꾼을 job-queue-jdbc 에 얹는다 (PostgreSQL · MySQL). | `--modules reward-jdbc` | 지급 건 저장, 지급 작업 큐 / reward grant store, reward job | `@skeleton/rewards` |
 | `scheduler` | 어노테이션 기반 스케줄러 — 실행 가드 · 락 매니저 · 실패 핸들러(기본 락은 no-op, 단일 인스턴스용). | `--modules scheduler` | 스케줄러, 정기 작업, 크론, 주기 실행, 배치 / scheduler, cron, scheduled job, periodic task, batch | — |
 | `storage` | 저장소 계약(ObjectStorage · PresignedStorage) · 파일 크기/확장자/content-type 검증 + 브라우저 직접 업로드 HTTP(/api/v1/storage: presign · 멀티파트). | `--modules storage,storage-s3` | 파일 업로드, 이미지 업로드, 첨부파일, 프리사인, 파일 검증 / file upload, image upload, attachment, presigned url, multipart upload | `@skeleton/storage` |
 | `storage-s3` | S3 호환 저장소(AWS S3 · Cloudflare R2 · MinIO) — presign PUT/GET · 멀티파트 · 복사 · 일괄 삭제, 공개 URL RAW \| OPAQUE. | `--modules storage-s3` | S3, R2, 클라우드 스토리지, 파일 저장소, 이미지 저장 / s3, r2, cloudflare r2, minio, object storage | `@skeleton/storage` |
@@ -534,6 +535,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 설정 접두사 `skeleton.campaign` — 키와 기본값 `docs/config/modules/campaign.yml`
 - HTTP 경로: `/api/v1/admin/campaigns`, `/api/v1/campaigns`, `/api/v1/referrals`
 - 문서: `docs/modules/campaign.md`
+- 짝 프런트(react-skeleton): 항목 `rewards`, `rewards-admin` · 패키지 `@skeleton/rewards` · 조각 `--packages rewards`
 - 쓰지 않는 경우:
   - campaign 은 저장소와 지급 기록을 모른다 — campaign-jdbc 와 reward-jdbc 를 같이 고른다(없으면 서비스가 켜지지 않는다)
   - 보상을 직접 주지 않는다 — 쿠폰 · 포인트 지급기는 별도 모듈이다(지급기가 없으면 지급 건이 FAILED 로 남는다)
@@ -548,6 +550,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 자동으로 따라온다: `campaign`, `json`, `notification`, `reward`
 - 설정 접두사 없음
 - 문서: `docs/modules/campaign-jdbc.md`
+- 짝 프런트(react-skeleton): 항목 `rewards`, `rewards-admin` · 패키지 `@skeleton/rewards` · 조각 `--packages rewards`
 - 쓰지 않는 경우:
   - DataSource · db-* 모듈과 이 모듈의 마이그레이션이 적용된 스키마가 필요하다
 - 키워드: 이벤트 저장, 출석 저장 / campaign store, attendance store
@@ -589,6 +592,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 설정 접두사 `skeleton.coupon` — 키와 기본값 `docs/config/modules/coupon.yml`
 - HTTP 경로: `/api/v1/admin`, `/api/v1/coupons`
 - 문서: `docs/modules/coupon.md`
+- 짝 프런트(react-skeleton): 항목 `rewards`, `rewards-admin` · 패키지 `@skeleton/rewards` · 조각 `--packages rewards`
 - 쓰지 않는 경우:
   - coupon 은 저장소를 모른다 — coupon-jdbc 를 같이 고른다
   - 쿠폰을 언제 주는지(출석 · 친구초대)는 이벤트 모듈의 몫이다 — 이 모듈은 지급기로 받기만 한다
@@ -603,6 +607,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 자동으로 따라온다: `coupon`, `json`
 - 설정 접두사 없음
 - 문서: `docs/modules/coupon-jdbc.md`
+- 짝 프런트(react-skeleton): 항목 `rewards`, `rewards-admin` · 패키지 `@skeleton/rewards` · 조각 `--packages rewards`
 - 쓰지 않는 경우:
   - DataSource · db-* 모듈과 이 모듈의 마이그레이션이 적용된 스키마가 필요하다
 - 키워드: 쿠폰 저장소, 쿠폰 DB / coupon storage, coupon repository
@@ -1150,6 +1155,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 설정 접두사 `skeleton.reward` — 키와 기본값 `docs/config/modules/reward.yml`
 - HTTP 경로: `/api/v1/admin/reward-grants`
 - 문서: `docs/modules/reward.md`
+- 짝 프런트(react-skeleton): 항목 `rewards`, `rewards-admin` · 패키지 `@skeleton/rewards` · 조각 `--packages rewards`
 - 쓰지 않는 경우:
   - reward 는 저장소를 모른다 — reward-jdbc 를 같이 고른다
   - 지급기(쿠폰 · 포인트)는 별도 모듈이다 — 이 모듈만으로는 아무것도 주지 못한다
@@ -1164,6 +1170,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 자동으로 따라온다: `json`, `notification`, `reward`
 - 설정 접두사 없음
 - 문서: `docs/modules/reward-jdbc.md`
+- 짝 프런트(react-skeleton): 항목 `rewards`, `rewards-admin` · 패키지 `@skeleton/rewards` · 조각 `--packages rewards`
 - 쓰지 않는 경우:
   - DataSource · db-* 모듈과 job-queue-jdbc 스키마, 이 모듈의 마이그레이션이 적용된 스키마가 필요하다
 - 키워드: 지급 건 저장, 지급 작업 큐 / reward grant store, reward job
@@ -1247,7 +1254,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 - 종류 · 상태: app · stable — 위치 `apps/sample`
 - 켜는 법: `--with-sample`
-- 자동으로 따라온다: `alert-jdbc`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `board`, `board-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `json`, `notification`, `notification-jdbc`, `notification-sse`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-toss`, `scheduler`, `storage`, `storage-s3`
+- 자동으로 따라온다: `alert-jdbc`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `board`, `board-jdbc`, `campaign`, `campaign-jdbc`, `coupon`, `coupon-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `json`, `notification`, `notification-jdbc`, `notification-sse`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-toss`, `point`, `point-jdbc`, `reward`, `reward-jdbc`, `scheduler`, `storage`, `storage-s3`
 - HTTP 경로: `/api/v1/cheers`, `/api/v1/notes`
 - 문서: `docs/sample.md`
 - 짝 프런트(react-skeleton): 항목 `app-sample` · 조각 `--with-sample`

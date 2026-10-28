@@ -17,6 +17,9 @@
 #   9. --modules payment,payment-jdbc,payment-toss   (결제 장부: payment 의 testFixtures[저장소 계약 시험 · 가짜 결제사]가 찍히고 payment-jdbc 의 dbTest 가 두 DB 로 돈다 — `8-payment`)
 #  10. --modules authz,authz-jdbc   (운영자 역할 관리: 스타터의 account-jdbc 와 함께 — RoleHolders 가 붙는 조립, authz-jdbc 의 dbTest 가 두 DB 로 돈다 — `10-authz`. 「authz 를 뺀」 조합은 `1-defaults`)
 #  11. --modules dashboard,dashboard-jdbc,dashboard-cloudflare,dashboard-ga   (관리자 대시보드: 스타터의 account-jdbc · auth-session-jdbc 가 가입 · 활성 카드를 기여하고 dashboard-jdbc 의 dbTest 가 두 DB 로 돈다 — `11-dashboard`. 「dashboard 를 뺀」 조합은 `1-defaults`)
+#  12. --modules coupon,coupon-jdbc   (쿠폰만 - 정의 · 쿠폰함 · 공용 코드 · 지급기 · 할인 수단, coupon-jdbc 의 dbTest 가 두 DB 로 돈다 - `12-coupon`)
+#  13. --modules point,point-jdbc   (포인트만 - 적립 · 차감 · 소멸 · 지급기, point-jdbc 의 dbTest 가 두 DB 로 돈다 - `13-point`)
+#  14. --modules campaign,campaign-jdbc,reward,reward-jdbc   (이벤트 + 지급 일꾼만 - 지급기(쿠폰 · 포인트) 없이 건이 FAILED 로 남고 기동은 된다 - `14-campaign`)
 #   8. docs/new-project-recipe.md 의 작업 예 3개(<!-- kotlin-stamp: … --> 블록의 명령 그대로) — 커뮤니티 · 유료 SaaS(--db mysql) · 콘텐츠 SSR(스타터 그대로)
 # macOS bash 3.2 와 GNU bash 에서 돈다. 임시 디렉토리는 끝나면 지운다 (KEEP=1 이면 남긴다).
 set -euo pipefail
@@ -236,7 +239,7 @@ expect_exit 0 "persistence-jooq + 형제 마이그레이션 모듈을 찍는다"
 echo "== 7. --with-sample (샘플 앱 \"Notes\" 은 요청할 때만 남는다)"
 G="$TMP/g"
 expect_exit 0 "조합 5 를 찍는다 (rename 잔여 검사 포함)" stamp "$G" --with-sample
-want=":apps:api :apps:sample :modules:account :modules:account-jdbc :modules:alert :modules:alert-jdbc :modules:auth :modules:auth-magic-link :modules:auth-session :modules:auth-session-jdbc :modules:auth-social :modules:auth-social-google :modules:auth-social-kakao :modules:auth-social-naver :modules:auth-social-oidc :modules:auth-social-x :modules:author-profile :modules:author-profile-jdbc :modules:authz :modules:authz-jdbc :modules:board :modules:board-jdbc :modules:captcha-turnstile :modules:crypto :modules:dashboard :modules:dashboard-cloudflare :modules:dashboard-ga :modules:dashboard-jdbc :modules:db-postgresql :modules:idempotency :modules:job-queue-jdbc :modules:json :modules:legal :modules:legal-jdbc :modules:migration :modules:migration-flyway :modules:notification :modules:notification-jdbc :modules:notification-mail :modules:notification-sse :modules:payment :modules:payment-jdbc :modules:payment-kakaopay :modules:payment-naverpay :modules:payment-paddle :modules:payment-toss :modules:persistence-jdbc :modules:platform :modules:scheduler :modules:storage :modules:storage-s3 :modules:time"
+want=":apps:api :apps:sample :modules:account :modules:account-jdbc :modules:alert :modules:alert-jdbc :modules:auth :modules:auth-magic-link :modules:auth-session :modules:auth-session-jdbc :modules:auth-social :modules:auth-social-google :modules:auth-social-kakao :modules:auth-social-naver :modules:auth-social-oidc :modules:auth-social-x :modules:author-profile :modules:author-profile-jdbc :modules:authz :modules:authz-jdbc :modules:board :modules:board-jdbc :modules:campaign :modules:campaign-jdbc :modules:captcha-turnstile :modules:coupon :modules:coupon-jdbc :modules:crypto :modules:dashboard :modules:dashboard-cloudflare :modules:dashboard-ga :modules:dashboard-jdbc :modules:db-postgresql :modules:idempotency :modules:job-queue-jdbc :modules:json :modules:legal :modules:legal-jdbc :modules:migration :modules:migration-flyway :modules:notification :modules:notification-jdbc :modules:notification-mail :modules:notification-sse :modules:payment :modules:payment-jdbc :modules:payment-kakaopay :modules:payment-naverpay :modules:payment-paddle :modules:payment-toss :modules:persistence-jdbc :modules:platform :modules:point :modules:point-jdbc :modules:reward :modules:reward-jdbc :modules:scheduler :modules:storage :modules:storage-s3 :modules:time"
 got="$(includes "$G/settings.gradle.kts")"
 [ "$got" = "$want" ] && pass "settings.gradle.kts 는 스타터 + 샘플 앱의 모듈과 그 닫힘을 포함한다" || fail "settings includes: [$got] expected [$want]"
 check "샘플 앱 소스가 새 패키지로 옮겨진다" test -f "$G/apps/sample/src/main/kotlin/com/acme/shop/app/sample/SampleApplication.kt"
@@ -245,7 +248,7 @@ check "샘플 문서 · 실행 스크립트가 남고 안내 문서의 표식 �
 check "스타터 apps/api 는 그대로다 — 샘플 앱의 모듈을 얹지 않는다" bash -c "! grep -q 'storage-s3\|notification\|idempotency\|board\|magic-link' '$G/apps/api/build.gradle.kts'"
 check "스타터 테스트의 부재 단언(S3 클라이언트)은 그대로다 — 스타터 클래스패스에는 여전히 없다" has_line 'software.amazon.awssdk.services.s3.S3Client' "$G/apps/api/src/test/kotlin/com/acme/shop/app/api/StarterCompositionIntegrationTest.kt"
 check "스타터 설정에 샘플 모듈의 설정 블록이 붙지 않는다" lacks_line 'new-project: module config blocks' "$G/apps/api/src/main/resources/application.yml"
-check "dbTestModules 에 샘플이 쓰는 DB 모듈이 들어간다" has_line 'val dbTestModules = setOf\(":modules:account-jdbc", ":modules:alert-jdbc", ":modules:auth-session-jdbc", ":modules:author-profile-jdbc", ":modules:authz-jdbc", ":modules:board-jdbc", ":modules:dashboard-jdbc", ":modules:job-queue-jdbc", ":modules:legal-jdbc", ":modules:notification-jdbc", ":modules:payment-jdbc"\)' "$G/build.gradle.kts"
+check "dbTestModules 에 샘플이 쓰는 DB 모듈이 들어간다" has_line 'val dbTestModules = setOf\(":modules:account-jdbc", ":modules:alert-jdbc", ":modules:auth-session-jdbc", ":modules:author-profile-jdbc", ":modules:authz-jdbc", ":modules:board-jdbc", ":modules:campaign-jdbc", ":modules:coupon-jdbc", ":modules:dashboard-jdbc", ":modules:job-queue-jdbc", ":modules:legal-jdbc", ":modules:notification-jdbc", ":modules:payment-jdbc", ":modules:point-jdbc", ":modules:reward-jdbc"\)' "$G/build.gradle.kts"
 check "dev.sh 는 APP=sample 을 알고 문법 검사를 통과한다" bash -c "grep -q 'APP' '$G/scripts/dev.sh' && bash -n '$G/scripts/dev.sh' && bash -n '$G/scripts/dev-sample.sh' && bash -n '$G/scripts/sample-e2e-backend.sh'"
 
 echo "== 7b. --modules auth-social-oidc,auth-social-x (글로벌 소셜: LINE · X · 그 외 OIDC)"
@@ -359,6 +362,24 @@ dc_includes="$(includes "$DC/settings.gradle.kts")"
 check "dashboard-cloudflare 의 닫힘에는 dashboard · platform 만 더해진다 (jdbc · ga · 다른 출처는 따라오지 않는다)" bash -c "grep -q ':modules:dashboard-cloudflare' <<<\"\$1\" && grep -q ':modules:dashboard ' <<<\"\$1 \" && grep -q ':modules:platform' <<<\"\$1\" && ! grep -q 'dashboard-jdbc\|dashboard-ga' <<<\"\$1\"" _ "$dc_includes"
 check "dashboard 를 고르지 않은 기본 프로젝트에는 dashboard* 디렉터리 · 문서 행 · 카탈로그 항목 · 잠금 줄이 남지 않는다" bash -c "! ls '$A/modules' | grep -q '^dashboard' && ! grep -q '](dashboard' '$A/docs/modules/README.md' && ! test -e '$A/docs/modules/dashboard.md' && ! test -e '$A/docs/dashboard-http-contract.md' && ! grep -q '\"path\": \"modules/dashboard' '$A/capabilities.json' && ! grep -q 'modules/dashboard' '$A/migrations.lock' && ! grep -q 'DASHBOARD' '$A/deploy/app.yaml'"
 
+echo "== 8f. --modules coupon,coupon-jdbc / point,point-jdbc / campaign,campaign-jdbc,reward,reward-jdbc (보상 모듈은 단독으로 돈다 - 서로 compileOnly 로 걸지 않는다)"
+CP="$TMP/coupon"; PT="$TMP/point"; CM="$TMP/campaign"
+expect_exit 0 "쿠폰 조합을 찍는다 (rename 잔여 검사 포함)" stamp "$CP" --modules coupon,coupon-jdbc
+expect_exit 0 "포인트 조합을 찍는다" stamp "$PT" --modules point,point-jdbc
+expect_exit 0 "이벤트 + 지급 일꾼 조합을 찍는다" stamp "$CM" --modules campaign,campaign-jdbc,reward,reward-jdbc
+for m in coupon coupon-jdbc platform; do
+  check "쿠폰 조합에 모듈 $m 이 포함된다" bash -c "grep -q 'include(\":modules:$m\")' '$CP/settings.gradle.kts' && test -d '$CP/modules/$m'"
+done
+check "쿠폰 조합은 point · campaign · reward · payment 를 끌어오지 않는다 (계약은 platform 에 있다)" bash -c "! ls '$CP/modules' | grep -Eq '^(point|campaign|reward|payment)'"
+check "포인트 조합은 coupon · campaign · reward · payment 를 끌어오지 않는다" bash -c "! ls '$PT/modules' | grep -Eq '^(coupon|campaign|reward|payment)'"
+check "이벤트 조합은 coupon · point 를 끌어오지 않는다 (지급기 없이도 뜬다)" bash -c "! ls '$CM/modules' | grep -Eq '^(coupon|point)'"
+check "dbTestModules 에 각 -jdbc 가 들어간다 (src/dbTest 가 있는 모듈)" bash -c "grep -q '\":modules:coupon-jdbc\"' '$CP/build.gradle.kts' && grep -q '\":modules:point-jdbc\"' '$PT/build.gradle.kts' && grep -q '\":modules:campaign-jdbc\"' '$CM/build.gradle.kts' && grep -q '\":modules:reward-jdbc\"' '$CM/build.gradle.kts'"
+check "문서 쪽 · 설정 블록 · 카탈로그 항목 · 잠금 줄이 남는다" bash -c "test -f '$CP/docs/modules/coupon.md' && test -f '$PT/docs/modules/point.md' && test -f '$CM/docs/modules/campaign.md' && grep -q 'modules/coupon-jdbc/' '$CP/migrations.lock' && grep -q 'modules/point-jdbc/' '$PT/migrations.lock' && grep -q 'modules/campaign-jdbc/' '$CM/migrations.lock' && cd '$CP' && perl scripts/build-capabilities.pl --check"
+check "보상 모듈을 고르지 않은 기본 프로젝트에는 디렉터리 · 문서 행 · 카탈로그 항목 · 잠금 줄이 남지 않는다" bash -c "! ls '$A/modules' | grep -Eq '^(coupon|point|campaign|reward)' && ! grep -Eq '\]\((coupon|point|campaign|reward)' '$A/docs/modules/README.md' && ! grep -Eq 'modules/(coupon|point|campaign|reward)' '$A/capabilities.json' '$A/migrations.lock'"
+CPN="$TMP/couponnojdbc"
+expect_exit 0 "coupon 만 요청하면 찍히되 coupon-jdbc 를 더하라고 알려 준다" stamp "$CPN" --modules coupon
+grep -q 'coupon has no storage of its own' <<<"$LAST_OUTPUT" && pass "저장소 없음 안내가 나온다" || fail "coupon 만 골랐는데 coupon-jdbc 안내가 없다"
+
 echo "== 9. --modules redis-core,redis-lock (Redis 환경변수 이름이 프로젝트 접두사를 따라간다 — 배포 계약)"
 J="$TMP/j"
 expect_exit 0 "redis 조합을 찍는다" stamp "$J" --modules redis-core,redis-lock
@@ -428,6 +449,9 @@ if [ "$MODE" = "--full" ]; then
   build_composition "$J" "7-redis"
   build_composition "$AZ" "10-authz"
   build_composition "$DB" "11-dashboard"
+  build_composition "$CP" "12-coupon"
+  build_composition "$PT" "13-point"
+  build_composition "$CM" "14-campaign"
   for rid in $RECIPE_DIRS; do   # 레시피의 작업 예 — 문서의 명령이 낡으면 여기서 깨진다 (stamp · dry-run 은 위에서 이미 했다)
     [ "${RECIPE_PLAIN#* $rid }" != "$RECIPE_PLAIN" ] && continue   # 위치 인자 뒤에 옵션이 없는 레시피 = 스타터 그대로 = 1-defaults 와 같은 구성이라 빌드는 반복하지 않는다
     build_composition "$TMP/recipe-$rid" "recipe-$rid"

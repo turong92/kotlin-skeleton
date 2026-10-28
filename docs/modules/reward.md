@@ -33,7 +33,7 @@
 | 부팅에 필요한 것 | 저장소 · 작업 포트(`RewardGrantStore` · `RewardTasks`) — `reward-jdbc` 가 낸다. 없으면 지급 건 서비스 빈이 켜지지 않는다. |
 | 교체 지점 | `RewardNotifier`, `RewardGrantStore`, `RewardTasks`, `RewardGrants`, `RewardGrantService`, `RewardWorker`, `RewardAdminController`, `RewardIssuer`(보상 종류마다 하나, 여러 개) |
 | 마이그레이션 | 없음 (스키마는 `reward-jdbc`) |
-| 프론트 짝 | 없음 |
+| 프론트 짝 | `@skeleton/rewards` |
 | 테스트 | `modules/reward/src/test`, `modules/reward/src/noOptionalTest` (`notification` 이 클래스패스에 없을 때) |
 
 [모듈 색인](README.md) · [최소 구성 가이드](../minimal-composition.md)

@@ -990,7 +990,11 @@
       "basePaths": ["/api/v1/admin/campaigns", "/api/v1/campaigns", "/api/v1/referrals"],
       "secrets": [],
       "docs": ["docs/modules/campaign.md"],
-      "frontend": null,
+      "frontend": {
+        "capabilities": ["rewards", "rewards-admin"],
+        "newProjectFlag": "--packages rewards",
+        "packages": ["@skeleton/rewards"]
+      },
       "notFor": [
         "campaign 은 저장소와 지급 기록을 모른다 — campaign-jdbc 와 reward-jdbc 를 같이 고른다(없으면 서비스가 켜지지 않는다)",
         "보상을 직접 주지 않는다 — 쿠폰 · 포인트 지급기는 별도 모듈이다(지급기가 없으면 지급 건이 FAILED 로 남는다)",
@@ -1023,7 +1027,11 @@
       "basePaths": [],
       "secrets": [],
       "docs": ["docs/modules/campaign-jdbc.md"],
-      "frontend": null,
+      "frontend": {
+        "capabilities": ["rewards", "rewards-admin"],
+        "newProjectFlag": "--packages rewards",
+        "packages": ["@skeleton/rewards"]
+      },
       "notFor": ["DataSource · db-* 모듈과 이 모듈의 마이그레이션이 적용된 스키마가 필요하다"],
       "keywords": {
         "ko": ["이벤트 저장", "출석 저장"],
@@ -1124,7 +1132,11 @@
       "basePaths": ["/api/v1/admin", "/api/v1/coupons"],
       "secrets": [],
       "docs": ["docs/modules/coupon.md"],
-      "frontend": null,
+      "frontend": {
+        "capabilities": ["rewards", "rewards-admin"],
+        "newProjectFlag": "--packages rewards",
+        "packages": ["@skeleton/rewards"]
+      },
       "notFor": [
         "coupon 은 저장소를 모른다 — coupon-jdbc 를 같이 고른다",
         "쿠폰을 언제 주는지(출석 · 친구초대)는 이벤트 모듈의 몫이다 — 이 모듈은 지급기로 받기만 한다",
@@ -1157,7 +1169,11 @@
       "basePaths": [],
       "secrets": [],
       "docs": ["docs/modules/coupon-jdbc.md"],
-      "frontend": null,
+      "frontend": {
+        "capabilities": ["rewards", "rewards-admin"],
+        "newProjectFlag": "--packages rewards",
+        "packages": ["@skeleton/rewards"]
+      },
       "notFor": ["DataSource · db-* 모듈과 이 모듈의 마이그레이션이 적용된 스키마가 필요하다"],
       "keywords": {
         "ko": ["쿠폰 저장소", "쿠폰 DB"],
@@ -2567,7 +2583,11 @@
       "basePaths": ["/api/v1/admin/reward-grants"],
       "secrets": [],
       "docs": ["docs/modules/reward.md"],
-      "frontend": null,
+      "frontend": {
+        "capabilities": ["rewards", "rewards-admin"],
+        "newProjectFlag": "--packages rewards",
+        "packages": ["@skeleton/rewards"]
+      },
       "notFor": [
         "reward 는 저장소를 모른다 — reward-jdbc 를 같이 고른다",
         "지급기(쿠폰 · 포인트)는 별도 모듈이다 — 이 모듈만으로는 아무것도 주지 못한다",
@@ -2600,7 +2620,11 @@
       "basePaths": [],
       "secrets": [],
       "docs": ["docs/modules/reward-jdbc.md"],
-      "frontend": null,
+      "frontend": {
+        "capabilities": ["rewards", "rewards-admin"],
+        "newProjectFlag": "--packages rewards",
+        "packages": ["@skeleton/rewards"]
+      },
       "notFor": ["DataSource · db-* 모듈과 job-queue-jdbc 스키마, 이 모듈의 마이그레이션이 적용된 스키마가 필요하다"],
       "keywords": {
         "ko": ["지급 건 저장", "지급 작업 큐"],
@@ -2826,6 +2850,10 @@
         "authz-jdbc",
         "board",
         "board-jdbc",
+        "campaign",
+        "campaign-jdbc",
+        "coupon",
+        "coupon-jdbc",
         "crypto",
         "dashboard",
         "dashboard-cloudflare",
@@ -2841,6 +2869,10 @@
         "payment-naverpay",
         "payment-paddle",
         "payment-toss",
+        "point",
+        "point-jdbc",
+        "reward",
+        "reward-jdbc",
         "scheduler",
         "storage",
         "storage-s3"
@@ -3542,6 +3574,17 @@
       "modules": ["payment"],
       "flag": "--modules payment,payment-toss",
       "byHand": "HTTP 엔드포인트가 없다 — 주문 · 금액 검증 컨트롤러 · 성공/실패 리다이렉트 처리 · 웹훅 서명 검증을 앱이 쓴다(PaymentService.confirm 은 받은 금액을 그대로 넘긴다). enabled=true + secret-key(환경변수). 중복 결제 방지에는 idempotency."
+    },
+    {
+      "frontend": {
+        "capabilities": ["rewards", "rewards-admin"],
+        "flag": "--packages rewards"
+      },
+      "oneOf": [],
+      "need": "이벤트 (출석 · 친구초대) · 쿠폰 · 포인트 · 쿠폰으로 결제 할인 · 무료 이용권",
+      "modules": ["campaign", "reward", "coupon", "point"],
+      "flag": "--modules campaign,campaign-jdbc,reward,reward-jdbc,coupon,coupon-jdbc,point,point-jdbc",
+      "byHand": "보상 모듈은 서로를 모르고 각자 단독으로 돈다(쿠폰만 · 포인트만 · 이벤트 + 일꾼만). 운영 경로는 꺼져 있다(skeleton.<module>.admin.enabled). 결제 할인은 payment-jdbc 와 같이 있으면 coupon 이 할인 수단으로 서고, 친구초대의 초대자 보상을 첫 결제에 걸려면 앱의 결제 리스너 끝에서 Referrals.qualify(계정)를 부른다. 이벤트 설정(어떤 보상을 줄지)은 운영 화면 또는 Campaigns 서비스로 넣는다 - 씨앗 예: apps/sample 의 RewardsSeed."
     },
     {
       "frontend": {

@@ -1,0 +1,168 @@
+package dev.sumin.skeleton.app.sample.rewards
+
+import com.jayway.jsonpath.JsonPath
+import dev.sumin.skeleton.app.sample.cheer.ADMIN
+import dev.sumin.skeleton.app.sample.cheer.CheerIntegrationBase
+import dev.sumin.skeleton.app.sample.cheer.PAYMENTS
+import dev.sumin.skeleton.campaign.Campaigns
+import dev.sumin.skeleton.coupon.CouponCodes
+import dev.sumin.skeleton.coupon.CouponDefinitions
+import java.util.UUID
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+import org.junit.jupiter.api.BeforeEach
+import org.springframework.beans.factory.annotation.Autowired
+
+/**
+ * 이벤트 · 보상 · 쿠폰 · 결제 면제가 견본 앱 안에서 서로 맞물리는지(진짜 PostgreSQL · 보안 체인 · 큐 일꾼, 결제사만 가짜) - 스펙 §10 의 1 · 2 · 3 · 5.
+ * 씨앗은 [RewardsSeed] 를 직접 돌린다(로컬 프로필의 같은 코드). 구독 쿠폰은 구독 할인 조각(K7) 뒤에 이어 본다.
+ */
+class RewardsFlowIntegrationTest : CheerIntegrationBase() {
+    @Autowired lateinit var definitions: CouponDefinitions
+    @Autowired lateinit var codes: CouponCodes
+    @Autowired lateinit var campaigns: Campaigns
+
+    private lateinit var userId: String
+
+    @BeforeEach
+    fun seedWorld() {
+        listOf(
+            "reward_grants", "coupons", "coupon_code_redemptions", "coupon_codes", "coupon_definitions", "point_entries", "point_balances",
+            "campaign_attendance", "campaign_referral_codes", "campaign_referrals", "campaigns", "notification_inbox",
+        ).forEach { jdbc.sql("delete from $it").update() }
+        jdbc.sql("delete from account_roles where role = 'WAIVED'").update()
+        jdbc.sql("delete from authz_roles where name = 'WAIVED'").update()
+        RewardsSeed(definitions, codes, campaigns).run()
+        userId = accountOf("user@example.com")
+    }
+
+    private fun balance(token: String): Long = JsonPath.read<Number>(get("/api/v1/points", token).andExpect { status { isOk() } }.andReturn().response.contentAsString, "$.value.balance").toLong()
+
+    private fun coupons(token: String, tab: String): String =
+        get("/api/v1/coupons?status=$tab", token).andExpect { status { isOk() } }.andReturn().response.contentAsString
+
+    private fun couponId(token: String, tab: String, name: String): String? =
+        JsonPath.read<List<String>>(coupons(token, tab), "$.values[?(@.name=='$name')].id").firstOrNull()
+
+    private fun giveCoupon(name: String, accountId: String): String {
+        val definitionId = JsonPath.read<List<String>>(
+            get("/api/v1/admin/coupon-definitions", operator).andExpect { status { isOk() } }.andReturn().response.contentAsString,
+            "$.values[?(@.name=='$name')].id",
+        ).single()
+        post("/api/v1/admin/coupon-definitions/$definitionId/issue", operator, """{"accountIds":["$accountId"]}""")
+            .andExpect { status { isOk() }; jsonPath("$.value.issued.length()") { value(1) } }
+        return couponId(if (accountId == userId) user else stranger, "AVAILABLE", name)!!
+    }
+
+    private fun orderWith(token: String, couponId: String): Pair<String, org.springframework.test.web.servlet.ResultActionsDsl> {
+        val result = post(
+            "$PAYMENTS/orders", token,
+            """{"itemType":"cheer","itemRef":"cheer-3000","quantity":1,"discounts":[{"type":"coupon","ref":"$couponId"}]}""",
+            UUID.randomUUID().toString(),
+        ).andExpect { status { isCreated() } }
+        return read(result, "$.value.order.id") to result
+    }
+
+    @Test
+    fun `an attendance check-in becomes a grant, ten points and one inbox notice through the worker`() {
+        val campaignId = JsonPath.read<List<String>>(get("/api/v1/campaigns", user).andExpect { status { isOk() } }.andReturn().response.contentAsString, "$.values[?(@.kind=='attendance')].id").single()
+        post("/api/v1/campaigns/$campaignId/attendance", user).andExpect { status { isOk() }; jsonPath("$.value.alreadyChecked") { value(false) } }
+        post("/api/v1/campaigns/$campaignId/attendance", user).andExpect { status { isOk() }; jsonPath("$.value.alreadyChecked") { value(true) } }
+
+        await { balance(user).takeIf { it == 10L } }
+        val inbox = await { get("/api/v1/notifications", user).andReturn().response.contentAsString.takeIf { JsonPath.read<Int>(it, "$.pagination.totalElements") >= 1 } }
+        assertEquals(1, JsonPath.read<Int>(inbox, "$.pagination.totalElements"), "a second check-in the same day pays and tells nothing more")
+        assertEquals(1L, jdbc.sql("select count(*) from reward_grants where account_id = :a and status = 'ISSUED'").param("a", userId).query(Long::class.java).single())
+    }
+
+    @Test
+    fun `a claimed invite gives the invitee a coupon, and the invitee's first paid cheer gives the inviter 500 points - once`() {
+        val code = JsonPath.read<String>(get("/api/v1/referrals/me", user).andExpect { status { isOk() } }.andReturn().response.contentAsString, "$.value.code")
+        post("/api/v1/referrals/claim", stranger, """{"code":"$code"}""").andExpect { status { isNoContent() } }
+
+        await { couponId(stranger, "AVAILABLE", RewardsSeed.CHEER_30) }
+        assertEquals(0L, balance(user), "the inviter is paid on the first purchase, not on the claim")
+
+        buy(stranger)
+        await { balance(user).takeIf { it == 500L } }
+        buy(stranger)
+        Thread.sleep(1500)
+        assertEquals(500L, balance(user), "the second purchase pays the inviter nothing more")
+    }
+
+    @Test
+    fun `a coupon cheer is cheaper by the coupon, uses it up on paid, and a full refund brings it back`() {
+        val coupon = giveCoupon(RewardsSeed.CHEER_30, userId)
+        val (orderId, created) = orderWith(user, coupon)
+        assertEquals(2100, JsonPath.read<Int>(created.andReturn().response.contentAsString, "$.value.order.amount.amount"))
+        assertEquals(900, JsonPath.read<Int>(created.andReturn().response.contentAsString, "$.value.order.discountAmount"))
+        assertEquals("RESERVED", JsonPath.read<String>(coupons(user, "AVAILABLE"), "$.values[0].status"), "an order in flight holds the coupon")
+
+        confirm(user, orderId, 2100).andExpect { status { isOk() }; jsonPath("$.value.status") { value("PAID") } }
+        assertEquals(null, couponId(user, "AVAILABLE", RewardsSeed.CHEER_30))
+        assertEquals("USED", JsonPath.read<String>(coupons(user, "PAST"), "$.values[0].status"))
+
+        val refundId = read(post("$PAYMENTS/orders/$orderId/refund-requests", user, """{"reasonCode":"CUSTOMER_REQUEST"}""", UUID.randomUUID().toString()).andExpect { status { isCreated() } }, "$.value.id")
+        post("$ADMIN/refunds/$refundId/approve", operator).andExpect { status { isOk() } }
+        await { couponId(user, "AVAILABLE", RewardsSeed.CHEER_30) }
+    }
+
+    @Test
+    fun `a coupon held by an order in flight cannot be spent on a second order`() {
+        val coupon = giveCoupon(RewardsSeed.CHEER_30, userId)
+        orderWith(user, coupon)
+        post(
+            "$PAYMENTS/orders", user,
+            """{"itemType":"cheer","itemRef":"cheer-3000","quantity":1,"discounts":[{"type":"coupon","ref":"$coupon"}]}""", UUID.randomUUID().toString(),
+        ).andExpect { status { isConflict() }; jsonPath("$.code") { value("PAYMENT.DISCOUNT_UNAVAILABLE") } }
+    }
+
+    @Test
+    fun `a free voucher finishes the cheer at zero without touching the provider`() {
+        val voucher = giveCoupon(RewardsSeed.FREE_PASS, userId)
+        val (orderId, created) = orderWith(user, voucher)
+        val body = created.andReturn().response.contentAsString
+        assertEquals(0, JsonPath.read<Int>(body, "$.value.order.amount.amount"))
+        assertEquals("FREE", JsonPath.read<String>(body, "$.value.order.settlement"))
+        assertEquals("PAID", JsonPath.read<String>(body, "$.value.order.status"))
+        assertTrue(gateway.checkoutCalls.isEmpty() && gateway.confirmCalls.isEmpty())
+        await { myCheers(user).takeIf { it.contains(orderId) } }
+        assertEquals("USED", JsonPath.read<String>(coupons(user, "PAST"), "$.values[0].status"))
+    }
+
+    @Test
+    fun `an account holding payment exempt gets the cheer without a provider, and a free or exempt purchase does not open the invite reward`() {
+        post("/api/v1/admin/roles", operator, """{"name":"WAIVED","description":"x","permissions":["payment.exempt"]}""").andExpect { status { isCreated() } }
+        jdbc.sql("insert into account_roles (account_id, role) values (:a, 'WAIVED')").param("a", userId).update()
+
+        val code = JsonPath.read<String>(get("/api/v1/referrals/me", stranger).andExpect { status { isOk() } }.andReturn().response.contentAsString, "$.value.code")
+        post("/api/v1/referrals/claim", user, """{"code":"$code"}""").andExpect { status { isNoContent() } }
+
+        val result = post("$PAYMENTS/orders", user, """{"itemType":"cheer","itemRef":"cheer-3000","quantity":1}""", UUID.randomUUID().toString()).andExpect { status { isCreated() } }
+        val body = result.andReturn().response.contentAsString
+        assertEquals("EXEMPT", JsonPath.read<String>(body, "$.value.order.settlement"))
+        assertEquals("PAID", JsonPath.read<String>(body, "$.value.order.status"))
+        assertTrue(gateway.checkoutCalls.isEmpty())
+        await { myCheers(user).takeIf { it.contains(JsonPath.read<String>(body, "$.value.order.id")) } }
+        assertEquals("exempt", jdbc.sql("select provider from payment_orders").query(String::class.java).single())
+
+        Thread.sleep(1500)
+        assertEquals(0L, balance(stranger), "an exempt order is not a purchase - the inviter gets nothing")
+
+        jdbc.sql("delete from account_roles where role = 'WAIVED'").update()
+        val next = post("$PAYMENTS/orders", user, """{"itemType":"cheer","itemRef":"cheer-3000","quantity":1}""", UUID.randomUUID().toString()).andExpect { status { isCreated() } }
+        assertEquals("PROVIDER", JsonPath.read<String>(next.andReturn().response.contentAsString, "$.value.order.settlement"), "taking the role back brings the payment window again")
+    }
+
+    @Test
+    fun `the seed is idempotent and the shared WELCOME code lands a coupon once per account`() {
+        RewardsSeed(definitions, codes, campaigns).run()
+        assertEquals(3, definitions.list().size)
+        assertEquals(2, campaigns.list().size)
+
+        post("/api/v1/coupons/redeem", user, """{"code":"welcome"}""").andExpect { status { isCreated() }; jsonPath("$.value.name") { value(RewardsSeed.CHEER_30) } }
+        post("/api/v1/coupons/redeem", user, """{"code":"WELCOME"}""").andExpect { status { isConflict() }; jsonPath("$.code") { value("COUPON.CODE_USED") } }
+        post("/api/v1/coupons/redeem", user, """{"code":"NOPE"}""").andExpect { status { isBadRequest() }; jsonPath("$.code") { value("COUPON.CODE_INVALID") } }
+    }
+}

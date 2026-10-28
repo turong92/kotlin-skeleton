@@ -51,7 +51,7 @@
 | 부팅에 필요한 것 | 저장소 포트 `CouponStore` — `coupon-jdbc` 가 낸다. 없으면 서비스 빈이 켜지지 않는다. |
 | 교체 지점 | `CouponStore`, `CouponDefinitions`, `CouponIssuance`, `CouponCodes`, `CouponWallet`, `CouponController`, `CouponAdminController`, 지급기 `couponRewardIssuer`, 할인 수단 `couponDiscountSource` |
 | 마이그레이션 | 없음 (스키마는 `coupon-jdbc`) |
-| 프론트 짝 | 없음 |
+| 프론트 짝 | `@skeleton/rewards` |
 | 테스트 | `modules/coupon/src/test` |
 
 [모듈 색인](README.md) · [최소 구성 가이드](../minimal-composition.md)
