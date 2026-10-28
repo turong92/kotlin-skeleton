@@ -149,7 +149,7 @@ class PaymentProjectsTest {
         val e = assertFailsWith<IllegalStateException> {
             PaymentSubscriptionAutoConfiguration().paymentSubscriptions(
                 kit.store, router, beans.getBeanProvider(SubscriptionPlans::class.java), beans.getBeanProvider(dev.sumin.skeleton.crypto.TextEncryptor::class.java), beans.getBeanProvider(ProjectRegistry::class.java),
-                kit.lifecycle, kit.charges, kit.tasks, kit.writer, kit.properties,
+                kit.lifecycle, kit.charges, kit.tasks, kit.writer, kit.properties, beans.getBeanProvider(PaymentDiscounts::class.java), kit.subscriptionDiscounts,
             )
         }
         assertTrue("project 'b'" in e.message!!, e.message)

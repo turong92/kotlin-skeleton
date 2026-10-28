@@ -1108,4 +1108,55 @@ abstract class PaymentLedgerStoreContract {
         assertEquals(setOf(real.id), ids(dev.sumin.skeleton.payment.PaymentSettlement.PROVIDER))
         assertEquals(setOf(exempt.id, free.id, real.id), ids(null))
     }
+
+    // --- 구독의 할인 일정 ---
+
+    private fun scheduleOf(subscriptionId: String) = dev.sumin.skeleton.payment.SubscriptionDiscount(
+        subscriptionId, "coupon", "cpn_1", "Half price", listOf(
+            dev.sumin.skeleton.common.discount.DiscountStage(dev.sumin.skeleton.common.discount.DiscountStageType.FREE, 0, null, 1),
+            dev.sumin.skeleton.common.discount.DiscountStage(dev.sumin.skeleton.common.discount.DiscountStageType.PERCENT, 50, 3000, 3),
+            dev.sumin.skeleton.common.discount.DiscountStage(dev.sumin.skeleton.common.discount.DiscountStageType.FIXED, 500),
+        ),
+        0, dev.sumin.skeleton.payment.SubscriptionDiscountStatus.ACTIVE, PaymentTestOrders.T0, PaymentTestOrders.T0,
+    )
+
+    @Test
+    fun `a subscription discount round-trips with its copied stages in order, and only the count and the status move afterwards`() {
+        val store = newStore()
+        store.inTransaction { tx -> tx.insertSubscriptionIfAbsent(sub1); tx.insertSubscriptionDiscount(scheduleOf(sub1.id)) }
+
+        assertEquals(scheduleOf(sub1.id), store.findSubscriptionDiscount(sub1.id))
+        assertNull(store.findSubscriptionDiscount(sub2.id))
+
+        store.inTransaction { tx ->
+            tx.lockSubscription(sub1.id)
+            assertEquals(scheduleOf(sub1.id), tx.subscriptionDiscount(sub1.id))
+            // 단계 · 수단을 바꾸려는 시도는 먹지 않는다 - 시작 때 박힌 복사본이다
+            tx.updateSubscriptionDiscount(scheduleOf(sub1.id).copy(periodsUsed = 2, status = dev.sumin.skeleton.payment.SubscriptionDiscountStatus.ENDED, label = "changed", stages = emptyList(), updatedAt = PaymentTestOrders.T0.plusSeconds(9)))
+        }
+        val after = checkNotNull(store.findSubscriptionDiscount(sub1.id))
+        assertEquals(2, after.periodsUsed)
+        assertEquals(dev.sumin.skeleton.payment.SubscriptionDiscountStatus.ENDED, after.status)
+        assertEquals("Half price", after.label)
+        assertEquals(scheduleOf(sub1.id).stages, after.stages)
+        assertEquals(PaymentTestOrders.T0.plusSeconds(9), after.updatedAt)
+    }
+
+    @Test
+    fun `a subscription discount is written only under the subscription lock, once, and a rollback takes it away`() {
+        val store = newStore()
+        store.inTransaction { it.insertSubscriptionIfAbsent(sub1) }
+
+        assertFailsWith<IllegalStateException> { store.inTransaction { tx -> tx.insertSubscriptionDiscount(scheduleOf(sub1.id)) } }
+        assertFailsWith<IllegalStateException> {
+            store.inTransaction { tx ->
+                tx.lockSubscription(sub1.id)
+                tx.insertSubscriptionDiscount(scheduleOf(sub1.id))
+                error("boom")
+            }
+        }
+        assertNull(store.findSubscriptionDiscount(sub1.id))
+        store.inTransaction { tx -> tx.lockSubscription(sub1.id); tx.insertSubscriptionDiscount(scheduleOf(sub1.id)) }
+        assertFailsWith<Exception> { store.inTransaction { tx -> tx.lockSubscription(sub1.id); tx.insertSubscriptionDiscount(scheduleOf(sub1.id)) } }
+    }
 }

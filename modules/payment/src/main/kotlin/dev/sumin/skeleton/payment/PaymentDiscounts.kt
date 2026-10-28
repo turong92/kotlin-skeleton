@@ -14,6 +14,9 @@ import org.slf4j.LoggerFactory
 /** 할인 수단이 내놓은 한 줄 - 장부의 [OrderDiscount] 가 되기 전 모양. [sourceRef] 는 확정 · 복원이 쓰는 원천 식별(쿠폰 id). */
 data class DiscountDraft(val kind: String, val sourceRef: String, val label: String, val amount: Long)
 
+/** 구독 쿠폰의 제안 - [firstDiscount] 는 첫 과금에서 깎이는 금액이다. */
+data class SubscriptionOffer(val kind: String, val offer: DiscountOffer, val firstDiscount: Long)
+
 /** 할인 뒤 금액의 미리보기(또는 예약 결과) - [amount] 는 최종가, [originalAmount] 는 정가. [amount] 가 0 이면 결제사 없이 끝나는 주문이다. */
 data class DiscountQuote(val originalAmount: Long, val amount: Long, val currency: String, val lines: List<DiscountDraft>) {
     val discountAmount: Long get() = originalAmount - amount
@@ -48,6 +51,25 @@ class PaymentDiscounts(
             purpose = DiscountPurpose.ONE_TIME,
             firstPurchase = !store.hasPaidOrder(accountId),
         )
+
+    /** 구독을 시작하는 일의 할인 대상 - 플랜 코드가 쿠폰 범위의 열쇠다. 「첫 결제만」은 단건과 같은 판정. */
+    fun subscriptionTarget(accountId: String, plan: SubscriptionPlan): DiscountTarget =
+        DiscountTarget(accountId, SubscriptionLifecycle.ITEM_TYPE, plan.code, plan.code, plan.amount.amount, plan.amount.normalizedCurrency, DiscountPurpose.SUBSCRIPTION, firstPurchase = !store.hasPaidOrder(accountId))
+
+    /**
+     * 구독 쿠폰 - 수단이 낸 제안(단계 목록)과 첫 과금에 걸리는 할인. [holderRef] 가 null 이면 미리보기(아무것도 안 쥔다, 시작 때), 있으면 그 주문이 쥔다(첫 결제 때).
+     * 첫 단계가 깎는 것이 없으면 못 쓰는 쿠폰이다.
+     */
+    fun subscriptionOffer(claims: List<DiscountClaim>, target: DiscountTarget, holderRef: String? = null): SubscriptionOffer {
+        if (claims.size != MAX_CLAIMS) throw PaymentDiscountNotApplicableException("Only $MAX_CLAIMS discount can be used on a subscription for now.")
+        val claim = claims.single()
+        val source = sources().firstOrNull { it.kind == claim.kind } ?: throw PaymentDiscountNotApplicableException("This discount is not offered here.")
+        val offer = rejected { if (holderRef == null) source.quote(claim, target) else source.reserve(claim, target, holderRef) }
+        val stage = DiscountMath.stageAt(offer.stages, 0) ?: throw PaymentDiscountNotApplicableException()
+        val off = DiscountMath.discount(target.amount, stage, scaleOf(target.currency))
+        if (off <= 0) throw PaymentDiscountNotApplicableException("The discount takes nothing off this purchase.")
+        return SubscriptionOffer(claim.kind, offer, off)
+    }
 
     /** 부수 효과 없는 미리보기 - 아무것도 잡지 않는다. 못 쓰는 할인이면 [PaymentDiscountNotApplicableException] · [PaymentDiscountUnavailableException]. */
     fun quote(claims: List<DiscountClaim>, target: DiscountTarget): DiscountQuote = apply(claims, target) { source, claim, at -> source.quote(claim, at) }

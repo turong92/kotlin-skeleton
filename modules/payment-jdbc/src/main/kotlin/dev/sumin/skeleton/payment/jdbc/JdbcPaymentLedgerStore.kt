@@ -16,6 +16,7 @@ import dev.sumin.skeleton.payment.PaymentOrderStatus
 import dev.sumin.skeleton.payment.PaymentRefund
 import dev.sumin.skeleton.payment.PaymentRefundStatus
 import dev.sumin.skeleton.payment.PaymentSubscription
+import dev.sumin.skeleton.payment.SubscriptionDiscount
 import dev.sumin.skeleton.payment.RefundCursor
 import dev.sumin.skeleton.payment.PaymentWebhookEvent
 import dev.sumin.skeleton.payment.PaymentWebhookStatus
@@ -55,6 +56,7 @@ class JdbcPaymentLedgerStore(
     private val refundRows = PaymentRefundRows(dialect)
     private val subscriptionRows = PaymentSubscriptionRows(dialect)
     private val discountRows = PaymentDiscountRows(dialect)
+    private val subscriptionDiscountRows = PaymentSubscriptionDiscountRows(dialect)
     private val webhook = JdbcWebhookInbox(jdbc, dialect)
     private val template = TransactionTemplate(transactionManager).also { it.isolationLevel = TransactionDefinition.ISOLATION_READ_COMMITTED }
 
@@ -280,6 +282,15 @@ class JdbcPaymentLedgerStore(
 
     // --- 계정 탈퇴 (벌크). 한 문장 · 멱등 — 이미 지워진 줄은 where 에서 걸러져 두 번째 호출은 아무것도 바꾸지 않는다. ---
 
+    override fun findSubscriptionDiscount(subscriptionId: String): SubscriptionDiscount? = readSubscriptionDiscount(subscriptionId)
+
+    private fun readSubscriptionDiscount(subscriptionId: String, lock: Boolean = false): SubscriptionDiscount? {
+        val suffix = if (lock) " for update" else ""
+        val head = jdbc.query("${subscriptionDiscountRows.select}$suffix", mapOf("id" to subscriptionId)) { rs, _ -> subscriptionDiscountRows.discount(rs, emptyList()) }.firstOrNull() ?: return null
+        val stages = jdbc.query(subscriptionDiscountRows.stageSelect, mapOf("id" to subscriptionId)) { rs, _ -> subscriptionDiscountRows.stage(rs) }
+        return head.copy(stages = stages)
+    }
+
     override fun findSubscription(id: String): PaymentSubscription? =
         jdbc.query("${subscriptionRows.select} where id = :id", mapOf("id" to id)) { rs, _ -> subscriptionRows.subscription(rs) }.firstOrNull()
 
@@ -488,6 +499,23 @@ class JdbcPaymentLedgerStore(
 
         private fun readLockedSubscription(id: String): PaymentSubscription? =
             jdbc.query("${subscriptionRows.select} where id = :id for update", mapOf("id" to id)) { rs, _ -> subscriptionRows.subscription(rs) }.firstOrNull()
+
+        override fun subscriptionDiscount(subscriptionId: String): SubscriptionDiscount? = readSubscriptionDiscount(subscriptionId, lock = subscriptionId == ownedSubscriptionId)
+
+        override fun insertSubscriptionDiscount(discount: SubscriptionDiscount) {
+            check(discount.subscriptionId == ownedSubscriptionId) { "the subscription must be locked in this transaction before its discount is inserted" }
+            jdbc.update(subscriptionDiscountRows.insert, subscriptionDiscountRows.params(discount))
+            discount.stages.forEachIndexed { seq, stage -> jdbc.update(subscriptionDiscountRows.stageInsert, subscriptionDiscountRows.stageParams(discount.subscriptionId, seq, stage)) }
+        }
+
+        override fun updateSubscriptionDiscount(discount: SubscriptionDiscount) {
+            check(discount.subscriptionId == ownedSubscriptionId) { "the subscription must be locked in this transaction before its discount is updated" }
+            val updated = jdbc.update(
+                "update payment_subscription_discounts set periods_used = :periods_used, status = :status, updated_at = :updated_at where subscription_id = :subscription_id",
+                subscriptionDiscountRows.params(discount),
+            )
+            check(updated == 1) { "no such subscription discount" }
+        }
 
         override fun insertSubscriptionIfAbsent(subscription: PaymentSubscription): Boolean {
             check(ownedSubscriptionId == null) { "one subscription per transaction: already holds ${ownedSubscriptionId}" }

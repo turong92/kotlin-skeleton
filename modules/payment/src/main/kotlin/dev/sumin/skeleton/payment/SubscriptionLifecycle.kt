@@ -16,6 +16,9 @@ class SubscriptionLifecycle(
     private val log = LoggerFactory.getLogger(javaClass)
     private val flags = PaymentReviewFlags(writer, review)
 
+    /** 구독 할인 일정(할인 수단이 붙은 조립에서만) - 주문이 `PAID` 가 되면 회차를 쓰고, 구독이 끝나면 할인도 끝낸다. 조립이 만든 뒤에 끼운다. */
+    var discounts: SubscriptionDiscounts? = null
+
     /** 상태를 [to] 로 옮기고 [mutate] 로 나머지 칸을 바꿔 저장한다. 표에 없는 전이는 [IllegalStateException]. */
     fun save(
         tx: PaymentLedgerTx,
@@ -35,6 +38,7 @@ class SubscriptionLifecycle(
      */
     fun end(tx: PaymentLedgerTx, current: PaymentSubscription, reason: SubscriptionEndReason): PaymentSubscription {
         val now = writer.now()
+        discounts?.end(tx, current.id)
         val hasToken = current.billingToken != null
         val ended = save(tx, current, SubscriptionStatus.ENDED) {
             it.copy(
@@ -67,6 +71,10 @@ class SubscriptionLifecycle(
         id: String? = null,
         /** 결제사가 먼저 정한 거래 번호(카카오페이 `tid`) - 있으면 주문의 결제 키로 박는다. */
         providerPaymentId: String? = null,
+        /** 할인 전 금액(정가) - 할인이 붙은 과금만. 없으면 null. */
+        originalAmount: Long? = null,
+        /** 결제사 없이 끝나는 0원 과금이면 true - 예약 결제사 `free` 로 만든다(결제사에 물을 거래가 없다). */
+        offProvider: Boolean = false,
     ): PaymentOrder {
         val now = writer.now()
         return PaymentOrder(
@@ -74,7 +82,7 @@ class SubscriptionLifecycle(
             accountId = subscription.accountId,
             kind = kind,
             status = PaymentOrderStatus.CONFIRMING,
-            provider = subscription.provider,
+            provider = if (offProvider) PaymentOrders.FREE_PROVIDER else subscription.provider,
             providerMode = subscription.providerMode,
             providerPaymentId = providerPaymentId,
             amount = amount,
@@ -102,6 +110,8 @@ class SubscriptionLifecycle(
             createdAt = now,
             updatedAt = now,
             country = subscription.country,
+            originalAmount = originalAmount,
+            discountAmount = originalAmount?.let { it - amount.amount } ?: 0,
         )
     }
 
@@ -127,6 +137,7 @@ class SubscriptionLifecycle(
                 val active = save(tx, subscription, SubscriptionStatus.ACTIVE) {
                     it.copy(anchorAt = anchor, periodSeq = 1, currentPeriodStart = anchor, currentPeriodEnd = period.after(anchor, 1), attempt = 1)
                 }
+                discounts?.onPaid(tx, active, order)
                 scheduleRenewal(active)
                 // 첫 결제를 받았는데 빌링키가 없다(결제사가 SID 를 못 알려 줬거나 응답이 유실돼 조회가 닫았다) - 갱신일에 조용히 끝나지 않게 지금 운영자에게 표시한다. 주문 락이 이미 잡힌 자리다
                 if (active.billingToken == null) flags.flag(tx, order, PaymentReviewReason.SUBSCRIPTION_TOKEN_MISSING, ConvergeContext(order.providerMode, ConvergeSource.RECONCILE))
@@ -139,6 +150,7 @@ class SubscriptionLifecycle(
                 val next = save(tx, subscription, to) {
                     it.copy(periodSeq = sequence, currentPeriodStart = period.after(anchor, sequence - 1), currentPeriodEnd = period.after(anchor, sequence), attempt = 1)
                 }
+                discounts?.onPaid(tx, next, order)
                 scheduleRenewal(next)
             }
             order.kind == PaymentOrderKind.SUBSCRIPTION_CHANGE && (subscription.status == SubscriptionStatus.ACTIVE || subscription.status == SubscriptionStatus.CANCELING) -> {

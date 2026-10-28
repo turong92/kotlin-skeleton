@@ -18,10 +18,18 @@ import org.springframework.context.annotation.Bean
 @ConditionalOnBean(PaymentLedgerStore::class)
 @ConditionalOnProperty(prefix = "skeleton.payment.subscription", name = ["enabled"], havingValue = "true")
 class PaymentSubscriptionAutoConfiguration {
+    /** 구독의 할인 일정(단계 복사 · 회차 · 금액) - 할인 수단이 없어도 서 있다(할인 지정이 없으면 아무 일도 하지 않는다). */
     @Bean
     @ConditionalOnMissingBean
-    fun subscriptionLifecycle(tasks: PaymentTasks, writer: PaymentLedgerWriter, properties: PaymentProperties, review: PaymentReviewNotifier): SubscriptionLifecycle =
-        SubscriptionLifecycle(tasks, writer, properties, review)
+    fun subscriptionDiscounts(store: PaymentLedgerStore, time: ObjectProvider<dev.sumin.skeleton.common.time.TimeProvider>): SubscriptionDiscounts {
+        val clock = time.getIfAvailable { dev.sumin.skeleton.common.time.TimeProvider.systemUtc() }
+        return SubscriptionDiscounts(store) { clock.now() }
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun subscriptionLifecycle(tasks: PaymentTasks, writer: PaymentLedgerWriter, properties: PaymentProperties, review: PaymentReviewNotifier, discounts: SubscriptionDiscounts): SubscriptionLifecycle =
+        SubscriptionLifecycle(tasks, writer, properties, review).also { it.discounts = discounts }
 
     @Bean
     @ConditionalOnMissingBean
@@ -41,6 +49,8 @@ class PaymentSubscriptionAutoConfiguration {
         tasks: PaymentTasks,
         writer: PaymentLedgerWriter,
         properties: PaymentProperties,
+        couponDiscounts: ObjectProvider<PaymentDiscounts>,
+        scheduleDiscounts: SubscriptionDiscounts,
     ): PaymentSubscriptions {
         val plansBean = plans.getIfAvailable() ?: error("skeleton.payment.subscription.enabled=true needs a SubscriptionPlans bean (the app owns the plans and prices)")
         val encryptorBean = encryptor.getIfAvailable()
@@ -59,7 +69,7 @@ class PaymentSubscriptionAutoConfiguration {
                 }
             }
         }
-        return PaymentSubscriptions(store, router, plansBean, encryptorBean, lifecycle, charges, tasks, writer, properties)
+        return PaymentSubscriptions(store, router, plansBean, encryptorBean, lifecycle, charges, tasks, writer, properties, couponDiscounts = couponDiscounts.getIfAvailable(), scheduleDiscounts = scheduleDiscounts)
     }
 
     @Bean
@@ -101,6 +111,7 @@ class PaymentSubscriptionAutoConfiguration {
         guard: SubscriptionRenewalGuard,
         writer: PaymentLedgerWriter,
         properties: PaymentProperties,
+        discounts: SubscriptionDiscounts,
     ): SubscriptionRenewTaskHandler = SubscriptionRenewTaskHandler(
         store,
         router,
@@ -111,6 +122,7 @@ class PaymentSubscriptionAutoConfiguration {
         guard,
         writer,
         properties.subscription.renewal.retryInterval,
+        discounts,
     )
 
     @Bean

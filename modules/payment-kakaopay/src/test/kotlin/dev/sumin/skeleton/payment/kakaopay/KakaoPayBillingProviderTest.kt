@@ -70,6 +70,20 @@ class KakaoPayBillingProviderTest {
         BillingChargeRequest(sid, "ck_1", orderId, "Basic", PaymentAmount(3_900, "KRW"), IdempotencyKey(orderId))
 
     @Test
+    fun `a free first period - ready and the first payment are 0 won, the registration still gives the billing key and the answer says 0`() {
+        val prepared = checkNotNull(billing.prepareBilling(BillingPrepareRequest(subId, "ck_1", "Basic", PaymentAmount(0, "KRW"), firstOrderId, null, "acc_1")))
+        val reference = checkNotNull(prepared.reference)
+
+        val charge = billing.registerWithCharge(
+            RegisterWithChargeRequest("ck_1", mapOf("pg_token" to server.userApproves(reference)), reference, firstOrderId, "Basic", PaymentAmount(0, "KRW"), IdempotencyKey(firstOrderId), "acc_1"),
+        )
+
+        assertTrue(checkNotNull(charge.issue).token.isNotBlank(), "the billing key is issued without any money moving")
+        assertEquals(0, charge.result.amount?.amount)
+        assertEquals(PaymentOperationStatus.CONFIRMED, charge.result.status)
+    }
+
+    @Test
     fun `without the subscription merchant code the module has no subscription capability at all`() {
         val oneTime = kakaoProvider(server)
 
