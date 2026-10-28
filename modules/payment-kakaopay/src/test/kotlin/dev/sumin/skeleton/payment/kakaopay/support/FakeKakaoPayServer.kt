@@ -150,7 +150,9 @@ internal class FakeKakaoPayServer(
     private fun ready(node: JsonNode): Reply {
         val required = listOf("partner_order_id", "partner_user_id", "item_name", "approval_url", "cancel_url", "fail_url")
         if (required.any { node.text(it).isNullOrBlank() } || node.long("total_amount") == null || node.long("quantity") == null || node.long("tax_free_amount") == null) return error(400, -400, "missing field")
-        if (node.long("total_amount")!! <= 0) return error(400, -400, "bad amount")
+        // 정기 가맹점 코드의 1회차는 0원이어도 된다 - 승인 없이 SID 만 발급받는다(공식 문서: 「프로모션 등으로 인한 결제금액이 없이 SID만 발급할 경우 1회차 금액을 0원으로」). 단건은 0원이 안 된다
+        val total = node.long("total_amount")!!
+        if (total < 0 || (total == 0L && node.text("cid") != subscriptionCid)) return error(400, -400, "bad amount")
         val tid = "T" + "%019d".format(sequence.incrementAndGet())
         payments[tid] = Payment(tid, node.text("partner_order_id")!!, node.text("partner_user_id")!!, node.long("total_amount")!!, node.text("item_name")!!, node.text("approval_url")!!, node.text("cid")!!)
         return json(

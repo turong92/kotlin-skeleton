@@ -115,6 +115,24 @@ data class PaymentSubscription(
         "PaymentSubscription(id=$id, status=$status, plan=$planCode, amount=${amount.amount} ${amount.normalizedCurrency}, seq=$periodSeq, attempt=$attempt)"
 }
 
+enum class SubscriptionDiscountStatus { ACTIVE, ENDED }
+
+/**
+ * 구독에 붙은 할인(쿠폰의 단계 목록을 **복사한** 것 - 쿠폰 정의를 고쳐도 진행 중인 구독은 그대로다, Stripe 관행). [periodsUsed] 는 할인이 붙은 구독 주문이 `PAID` 된 횟수 -
+ * 이번 과금이 몇 번째 할인 회차인지가 곧 [periodsUsed] 이고, 실패한 시도는 회차를 쓰지 않는다([SubscriptionDiscounts.onPaid]). 단계를 다 쓰면 [status] 가 `ENDED` 가 되어 정가로 돌아간다.
+ */
+data class SubscriptionDiscount(
+    val subscriptionId: String,
+    val kind: String,
+    val sourceRef: String,
+    val label: String,
+    val stages: List<dev.sumin.skeleton.common.discount.DiscountStage>,
+    val periodsUsed: Int,
+    val status: SubscriptionDiscountStatus,
+    val createdAt: Instant,
+    val updatedAt: Instant,
+)
+
 /** 구독 상태 전이표(스펙 §3) — 표 밖 전이는 버그다([IllegalStateException]). */
 object SubscriptionTransitions {
     private val allowed: Map<SubscriptionStatus, Set<SubscriptionStatus>> = mapOf(

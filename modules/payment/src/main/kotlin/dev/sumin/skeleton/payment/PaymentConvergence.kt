@@ -49,6 +49,11 @@ class PaymentConvergence(
     /** 구독을 켠 조립에서만 — 구독 주문이 끝 상태(`FAILED`)가 되는 **같은 트랜잭션**에서 구독이 반응한다([SubscriptionLifecycle.onOrderClosed]). */
     var subscriptions: SubscriptionLifecycle? = null
 
+    /** 결제사 없이 `PAID` 가 된 주문(0원 구독 과금)의 지급 작업을 넣는다 - 결제사 증거로 `PAID` 가 될 때 넣는 것과 같은 작업이다. 주문 락 안에서 부른다. */
+    fun enqueueFulfil(orderId: String) {
+        tasks.enqueue(PaymentTask(PaymentTaskTypes.ORDER_FULFIL, orderId))
+    }
+
     fun converge(tx: PaymentLedgerTx, order: PaymentOrder, snapshot: PaymentSnapshot, context: ConvergeContext): ConvergeResult {
         if (order.providerMode != context.currentMode) return result(order, flag(tx, order, PaymentReviewReason.MODE_MISMATCH, context))
         val afterPayment = when (snapshot.status) {

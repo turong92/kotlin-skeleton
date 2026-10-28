@@ -63,6 +63,23 @@ class SubscriptionCharges(
     }
 
     /**
+     * 0원 과금(할인으로 무료인 기간) - 결제사를 부르지 않고 선점한 주문(`CONFIRMING`, 결제사 `free`)을 내부에서 `PAID` 로 옮긴다. 지급 고리가 평소처럼 기간을 넘기고 회차를 쓴다.
+     * 결제사에 물을 거래가 없으므로 조회 작업은 걸려 있지 않다. 이미 끝난 주문(재시도)이면 아무것도 하지 않고 지급만 시도한다.
+     */
+    fun settleFree(order: PaymentOrder): ChargeOutcome {
+        require(order.amount.amount == 0L && order.provider == PaymentOrders.FREE_PROVIDER) { "only a free subscription charge is settled without a provider" }
+        val settled = store.inTransaction { tx ->
+            val locked = tx.lockOrder(order.id) ?: return@inTransaction order
+            if (locked.status != PaymentOrderStatus.CONFIRMING) return@inTransaction locked
+            val paid = writer.transition(tx, locked, PaymentOrderStatus.PAID, PaymentEventType.CONVERGED, PaymentActor.SYSTEM, null, "FREE_ORDER") { it.copy(paidAmount = 0, paidAt = writer.now(), closedAt = null) }
+            convergence.enqueueFulfil(paid.id)
+            paid
+        }
+        if (settled.status.isPaidFamily) fulfillment.tryFulfil(settled.id)
+        return if (settled.status.isPaidFamily) ChargeOutcome.Paid else ChargeOutcome.Unknown
+    }
+
+    /**
      * **등록이 곧 첫 결제**인 결제사(카카오페이)의 첫 걸음 - 선점한 첫 주문을 [PaymentBillingGateway.registerWithCharge] 로 승인하고, 받았으면 **같은 트랜잭션에서** 토큰(SID, [onToken] 이 암호화한다) ·
      * 카드 표시를 구독 줄에 쓴다. 토큰을 못 읽었으면([RegisteredCharge.issue] 가 null) 구독은 켜지되 토큰이 비어 있다. 돈이 움직이는 호출이라 실패 분류는 [charge] 와 같다(확정 거절 → 구독 종료 / 모름 → 다시 보내지 않고 조회).
      */

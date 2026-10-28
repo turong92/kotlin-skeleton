@@ -79,7 +79,7 @@ class PaymentSubscriptionController(
         val route = routing.of(request)
         // 같은 나라에 빌링 결제사가 둘 이상 열려 있으면 구매자가 고른 것(`provider`)을 받는다 - 후보 안에서만, 나머지는 서버 값
         val provider = routing.chosenForSubscription(route, body["provider"]?.takeIf { it.isString }?.stringValue())
-        val started = subscriptions.start(account, planCode, idempotencyKey(key), route.country, provider, route.providerClosed, body["returnOrigin"]?.takeIf { it.isString }?.stringValue(), providerChosen = provider != null && provider != route.provider)
+        val started = subscriptions.start(account, planCode, idempotencyKey(key), route.country, provider, route.providerClosed, body["returnOrigin"]?.takeIf { it.isString }?.stringValue(), providerChosen = provider != null && provider != route.provider, discounts = PaymentRequests.discounts(body["discounts"]))
         val payload = Response.ok(StartSubscriptionResponse(view(started.subscription), started.billing?.let(BillingAuthResponse::of)))
         return if (started.replayed) ResponseEntity.ok(payload) else ResponseEntity.status(201).body(payload)
     }
@@ -174,7 +174,7 @@ class PaymentSubscriptionController(
     }
 
     private fun view(subscription: PaymentSubscription): SubscriptionResponse =
-        SubscriptionResponse.of(subscription, subscriptions.plans().firstOrNull { it.code == subscription.planCode }?.name)
+        SubscriptionResponse.of(subscription, subscriptions.plans().firstOrNull { it.code == subscription.planCode }?.name, subscriptions.discountOf(subscription))
 
     /** 카드 등록 창이 돌려준 값 — 문자열 칸만, 여덟 개까지, 칸마다 512자까지. 모양은 결제사가 확인한다. */
     private fun providerPayload(node: JsonNode?): Map<String, Any?> {

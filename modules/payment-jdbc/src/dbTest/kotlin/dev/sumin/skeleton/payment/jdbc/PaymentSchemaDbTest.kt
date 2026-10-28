@@ -163,7 +163,7 @@ class PaymentSchemaDbTest {
 
         // 앱이 쓰는 문장은 이름 하나뿐이다 - 코드 칸으로 분류해 두면 "코드니까 문장이 아니다"로 읽힌다
         val labels = COLUMN_CLASSES.filterValues { it == ColumnClass.LABEL }.keys
-        assertEquals(setOf("payment_orders.order_name", "payment_order_discounts.label"), labels)
+        assertEquals(setOf("payment_orders.order_name", "payment_order_discounts.label", "payment_subscription_discounts.label"), labels)
 
         // 자유 문장이 들어올 자리가 없다: 글 칸은 수신함의 payload(원문) 하나뿐이고 문자열 칸은 모두 짧다
         val textColumns = actual.filter { it.second in setOf("text", "mediumtext", "longtext") }.map { it.first }
@@ -216,6 +216,15 @@ class PaymentSchemaDbTest {
             putAll(cols("payment_order_discounts", ColumnClass.LABEL, "label"))
             putAll(cols("payment_order_discounts", ColumnClass.AMOUNT, "amount"))
             putAll(cols("payment_order_discounts", ColumnClass.TIME, "created_at", "updated_at"))
+
+            // 구독의 할인 일정 - 이름(label)은 쿠폰 정의가 정한 문장이다. 단계 복사본은 숫자와 코드뿐이다
+            putAll(cols("payment_subscription_discounts", ColumnClass.IDENTIFIER, "subscription_id", "source_ref"))
+            putAll(cols("payment_subscription_discounts", ColumnClass.CODE, "kind", "periods_used", "status"))
+            putAll(cols("payment_subscription_discounts", ColumnClass.LABEL, "label"))
+            putAll(cols("payment_subscription_discounts", ColumnClass.TIME, "created_at", "updated_at"))
+            putAll(cols("payment_subscription_discount_stages", ColumnClass.IDENTIFIER, "subscription_id"))
+            putAll(cols("payment_subscription_discount_stages", ColumnClass.CODE, "seq", "type", "periods"))
+            putAll(cols("payment_subscription_discount_stages", ColumnClass.AMOUNT, "value", "max_discount"))
 
             putAll(cols("payment_refunds", ColumnClass.IDENTIFIER, "id", "order_id", "open_key", "dedupe_key", "provider_refund_id", "requested_by", "decided_by"))
             putAll(cols("payment_refunds", ColumnClass.CODE, "status", "origin", "currency", "reason_code", "failure_code", "keep_subscription"))
