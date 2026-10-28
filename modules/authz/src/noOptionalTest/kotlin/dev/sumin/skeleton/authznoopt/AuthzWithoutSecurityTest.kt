@@ -27,7 +27,7 @@ class Ports {
         override fun list() = rows.values.toList()
         override fun find(name: String) = rows[name]
         override fun insert(role: StoredRole) = rows.putIfAbsent(role.name, role) == null
-        override fun update(name: String, description: String?, permissions: Set<String>) = false
+        override fun update(name: String, description: String?, permissions: Set<String>, includes: Set<String>?) = false
         override fun delete(name: String) = rows.remove(name) != null
     }
 }

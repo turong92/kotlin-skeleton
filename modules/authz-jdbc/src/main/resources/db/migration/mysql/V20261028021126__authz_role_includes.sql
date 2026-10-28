@@ -2,9 +2,9 @@
 create table if not exists authz_role_includes (
     role     varchar(40) not null,
     included varchar(40) not null,
-    primary key (role, included),
-    index ix_authz_role_includes_included (included)
+    primary key (role, included)
     /* [jooq ignore start] */,
+    index ix_authz_role_includes_included (included),
     constraint fk_authz_role_includes_role foreign key (role) references authz_roles (name) on delete cascade,
     constraint fk_authz_role_includes_included foreign key (included) references authz_roles (name)
     /* [jooq ignore stop] */

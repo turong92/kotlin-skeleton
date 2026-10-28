@@ -83,6 +83,7 @@ class LoginIdLeakIntegrationTest {
             "eventId" to listOf(eventId),
             "type" to listOf("terms", "privacy"),
             "key" to listOf("app.board-posts", "app.board-reactions"),   // 대시보드 순위 하나 (/api/v1/admin/dashboard/rankings/{key}) - 견본 앱에 실제로 붙은 앱 통계 순위
+            "accountId" to listOf(w.xAcc, w.yAcc),   // 운영자의 포인트 잔액 조회 (/api/v1/admin/points/{accountId})
         )
     }
 
@@ -92,6 +93,7 @@ class LoginIdLeakIntegrationTest {
             "/api/v1/author-profiles/" to listOf(w.yProfile.id, w.a.id, w.b.id),
             "/api/v1/admin/accounts/" to listOf(w.xAcc, w.yAcc),
             "/api/v1/admin/author-profiles/" to listOf(w.a.id, w.yProfile.id),
+            "/api/v1/campaigns/" to listOf(http.post("/api/v1/admin/campaigns", w.adminToken, """{"kind":"attendance","name":"Leak ${w.nonce}","startsAt":"2026-01-01T00:00:00Z","config":{"daily":[{"type":"point","params":{"amount":"10"}}]}}""", record = false).ok().read<String>("$.value.id")),   // 출석 캠페인 하나 - 운영자가 만든다
             "/api/v1/payments/orders/" to listOf(http.post("/api/v1/payments/orders", w.yToken, """{"itemType":"cheer","itemRef":"cheer-1000","quantity":1}""", record = false).ok().read<String>("$.value.order.id")),   // 결제 장부의 주문 한 건 읽기 - Y 의 주문(결제사는 시험 소스의 가짜)
         )
     }
@@ -107,6 +109,10 @@ class LoginIdLeakIntegrationTest {
         }
         // 사진 열람 경로는 `index` 가 필수다 - 첫 번째 사진 · 없는 순번 · 고친 판의 목록으로 채운다
         if (template.endsWith("/attachments")) paths = paths.flatMap { p -> listOf("$p?index=0", "$p?index=1", "$p?index=0&from=edit") }
+        // 운영자의 계정별 쿠폰 목록은 `accountId` 가 필수다
+        if (template == "/api/v1/admin/coupons") paths = listOf(w.xAcc, w.yAcc).map { "$template?accountId=$it" }
+        // 출석 달력은 `month` 가 필수다
+        if (template.endsWith("/attendance")) paths = paths.map { "$it?month=${java.time.YearMonth.now()}" }
         return paths
     }
 

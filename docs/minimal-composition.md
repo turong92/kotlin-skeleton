@@ -142,6 +142,7 @@ fails when this table and the prefixes found in module code differ.
 | `platform` | `skeleton.openapi` |
 | `platform` | `skeleton.redaction` |
 | `platform` | `skeleton.web` |
+| `point` | `skeleton.point` |
 | `redis-cache` | `skeleton.redis-cache` |
 | `redis-core` | `skeleton.redis` |
 | `redis-lock` | `skeleton.redis-lock` |
