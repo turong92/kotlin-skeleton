@@ -103,9 +103,22 @@ class RewardsFlowIntegrationTest : CheerIntegrationBase() {
         assertEquals(null, couponId(user, "AVAILABLE", RewardsSeed.CHEER_30))
         assertEquals("USED", JsonPath.read<String>(coupons(user, "PAST"), "$.values[0].status"))
 
+        // 운영 현황: 쓴 쿠폰 한 장과 그 할인액(결제 장부의 확정 줄) - 환불로 복원되면 사라진다
+        val definitionId = JsonPath.read<List<String>>(get("/api/v1/admin/coupon-definitions", operator).andReturn().response.contentAsString, "$.values[?(@.name=='${RewardsSeed.CHEER_30}')].id").single()
+        get("/api/v1/admin/coupon-definitions/$definitionId/stats", operator).andExpect {
+            status { isOk() }
+            jsonPath("$.value.used") { value(1) }
+            jsonPath("$.value.discountTotals[0].currency") { value("KRW") }
+            jsonPath("$.value.discountTotals[0].amount") { value(900) }
+        }
+
         val refundId = read(post("$PAYMENTS/orders/$orderId/refund-requests", user, """{"reasonCode":"CUSTOMER_REQUEST"}""", UUID.randomUUID().toString()).andExpect { status { isCreated() } }, "$.value.id")
         post("$ADMIN/refunds/$refundId/approve", operator).andExpect { status { isOk() } }
         await { couponId(user, "AVAILABLE", RewardsSeed.CHEER_30) }
+        get("/api/v1/admin/coupon-definitions/$definitionId/stats", operator).andExpect {
+            jsonPath("$.value.used") { value(0) }
+            jsonPath("$.value.discountTotals.length()") { value(0) }
+        }
     }
 
     @Test

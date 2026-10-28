@@ -3,7 +3,9 @@ package dev.sumin.skeleton.coupon.jdbc
 import dev.sumin.skeleton.common.dashboard.DashboardInterval
 import dev.sumin.skeleton.common.dashboard.DashboardRange
 import dev.sumin.skeleton.common.dashboard.DashboardResult
+import dev.sumin.skeleton.common.discount.CurrencyAmount
 import dev.sumin.skeleton.common.discount.DiscountClaim
+import dev.sumin.skeleton.common.discount.DiscountTotals
 import dev.sumin.skeleton.common.discount.DiscountPurpose
 import dev.sumin.skeleton.common.discount.DiscountRejectedException
 import dev.sumin.skeleton.common.discount.DiscountRejection
@@ -157,34 +159,32 @@ class CouponAdminDbTest {
     }
 
     @Test
-    fun `discount totals come from the confirmed ledger lines per currency, and are empty where there is no ledger`() {
+    fun `used coupon ids page by id for one definition, and the report sums what the ledger says per chunk`() {
         val def = define()
-        val used1 = give(def)
-        val used2 = give(def)
-        val refunded = give(def)
-        val held = give(def)
+        val used = (1..5).map { give(def) }
+        val open = give(def)
         val other = give(define())
-        assertEquals(emptyList(), store.discountTotals(def.id), "no payment ledger tables in this assembly")
-
-        jdbc.sql(
-            "create table payment_order_discounts (order_id varchar(40) not null, seq int not null, kind varchar(16) not null, source_ref varchar(64) not null, " +
-                "label varchar(100) not null, amount bigint not null, currency char(3) not null, status varchar(16) not null, primary key (order_id, seq))",
-        ).update()
-        try {
-            fun line(order: String, ref: String, amount: Long, currency: String, status: String) =
-                jdbc.sql("insert into payment_order_discounts values (:o, 1, 'coupon', :r, 'x', :a, :c, :s)").param("o", order).param("r", ref).param("a", amount).param("c", currency).param("s", status).update()
-            line("o1_$seq", used1.id, 900, "KRW", "CONFIRMED")
-            line("o2_$seq", used2.id, 600, "KRW", "CONFIRMED")
-            line("o3_$seq", refunded.id, 5000, "KRW", "RESTORED")
-            line("o4_$seq", held.id, 700, "KRW", "RESERVED")
-            line("o5_$seq", other.id, 800, "KRW", "CONFIRMED")
-            jdbc.sql("insert into payment_order_discounts values ('o6_$seq', 1, 'coupon', :r, 'x', 5, 'USD', 'CONFIRMED')").param("r", used1.id).update()
-
-            assertEquals(listOf(CouponMoney("KRW", 1500), CouponMoney("USD", 5)), store.discountTotals(def.id))
-            assertEquals(listOf(CouponMoney("KRW", 1500), CouponMoney("USD", 5)), reports.stats(def.id).discountTotals)
-        } finally {
-            jdbc.sql("drop table payment_order_discounts").update()
+        used.forEach {
+            source.reserve(DiscountClaim("coupon", it.id), target(it.accountId), "ord_${it.id}")
+            source.confirm("ord_${it.id}")
         }
+        val sorted = used.map { it.id }.sorted()
+        assertEquals(sorted.take(2), store.usedCouponIds(def.id, null, 2))
+        assertEquals(sorted.drop(2).take(2), store.usedCouponIds(def.id, sorted[1], 2))
+        assertEquals(sorted.drop(4), store.usedCouponIds(def.id, sorted[3], 2))
+        assertEquals(emptyList(), store.usedCouponIds(def.id, sorted.last(), 2))
+        assertEquals(false, store.usedCouponIds(def.id, null, 50).any { it == open.id || it == other.id }, "only used coupons of this definition")
+
+        val asked = mutableListOf<List<String>>()
+        val ledger = DiscountTotals { kind, refs ->
+            assertEquals("coupon", kind)
+            asked += refs.toList()
+            listOf(CurrencyAmount("KRW", 100L * refs.size))
+        }
+        val stats = CouponReports(store, time) { ledger }.stats(def.id)
+        assertEquals(listOf(CouponMoney("KRW", 500)), stats.discountTotals)
+        assertEquals(sorted, asked.flatten())
+        assertEquals(emptyList(), reports.stats(def.id).discountTotals, "the sample assembly has no ledger bean here - unknown, not zero")
     }
 
     @Test

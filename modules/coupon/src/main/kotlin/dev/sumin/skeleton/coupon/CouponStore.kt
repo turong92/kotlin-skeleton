@@ -33,8 +33,8 @@ interface CouponStore {
     /** 한 정의의 쿠폰 수를 [now] 로 읽은 상태별로(기한이 지난 `AVAILABLE` 은 `EXPIRED`). 줄이 없는 상태는 빠진다 */
     fun countByStatus(definitionId: String, now: Instant): Map<CouponStatus, Int>
 
-    /** 확정된(`USED`) 쿠폰이 실제로 깎은 금액을 통화별로. 금액을 아는 곳(결제 장부)이 없으면 빈 목록 */
-    fun discountTotals(definitionId: String): List<CouponMoney>
+    /** 한 정의에서 쓰인(`USED`) 쿠폰의 id 를 [after] 다음부터 id 순으로 [limit] 개 - 할인 합계를 덩어리로 물으려고 쪽을 넘긴다 */
+    fun usedCouponIds(definitionId: String, after: String?, limit: Int): List<String>
 
     /** 한 정의의 쿠폰, 새것부터. [status] 는 [now] 로 읽은 상태. [before] 는 직전 쪽의 마지막 id */
     fun pageByDefinition(definitionId: String, status: CouponStatus?, before: String?, limit: Int, now: Instant): List<Coupon>

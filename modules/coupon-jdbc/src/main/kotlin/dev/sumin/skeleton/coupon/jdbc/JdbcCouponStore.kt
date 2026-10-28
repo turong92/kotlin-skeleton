@@ -7,7 +7,6 @@ import dev.sumin.skeleton.coupon.Coupon
 import dev.sumin.skeleton.coupon.CouponCodeRecord
 import dev.sumin.skeleton.coupon.CouponDefinition
 import dev.sumin.skeleton.coupon.CouponDefinitionStatus
-import dev.sumin.skeleton.coupon.CouponMoney
 import dev.sumin.skeleton.coupon.CouponScope
 import dev.sumin.skeleton.coupon.CouponSource
 import dev.sumin.skeleton.coupon.CouponStatus
@@ -18,7 +17,6 @@ import java.sql.ResultSet
 import java.sql.Types
 import java.time.Instant
 import java.util.EnumMap
-import org.springframework.jdbc.BadSqlGrammarException
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
 import org.springframework.transaction.PlatformTransactionManager
@@ -122,19 +120,12 @@ class JdbcCouponStore(
         return counts
     }
 
-    /**
-     * 확정된 쿠폰이 실제로 깎은 금액은 결제 장부의 `payment_order_discounts`(`kind = 'coupon'`, `status = 'CONFIRMED'`)에만 있다 - 전액 환불로 되돌려진 줄(`RESTORED`)은 자연히 빠진다.
-     * 그 표를 읽기 전용으로만 쓰고 코드 의존은 없다. `payment-jdbc` 를 안 붙인 조립에는 표가 없어 빈 목록이다.
-     */
-    override fun discountTotals(definitionId: String): List<CouponMoney> = try {
-        jdbc.query(
-            "select d.currency as currency, sum(d.amount) as total from payment_order_discounts d join coupons c on c.id = d.source_ref " +
-                "where d.kind = 'coupon' and d.status = 'CONFIRMED' and c.definition_id = :d group by d.currency order by d.currency",
-            mapOf("d" to definitionId),
-        ) { rs, _ -> CouponMoney(rs.getString("currency").trim(), rs.getLong("total")) }
-    } catch (_: BadSqlGrammarException) {
-        emptyList()   // 결제 장부 표가 없다
-    }
+    override fun usedCouponIds(definitionId: String, after: String?, limit: Int): List<String> =
+        jdbc.queryForList(
+            "select id from coupons where definition_id = :d and status = 'USED' and (:after is null or id > :after) order by id limit :limit",
+            MapSqlParameterSource().addValue("d", definitionId).addValue("after", after, Types.VARCHAR).addValue("limit", limit),
+            String::class.java,
+        ).filterNotNull()
 
     override fun pageByDefinition(definitionId: String, status: CouponStatus?, before: String?, limit: Int, now: Instant): List<Coupon> {
         val effective = when (status) {

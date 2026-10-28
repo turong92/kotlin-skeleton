@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.payment.jdbc
 
+import dev.sumin.skeleton.common.discount.DiscountTotals
 import dev.sumin.skeleton.jobqueue.jdbc.JobHandler
 import dev.sumin.skeleton.jobqueue.jdbc.JobQueue
 import dev.sumin.skeleton.jobqueue.jdbc.JobQueueJdbcAutoConfiguration
@@ -47,6 +48,11 @@ class PaymentJdbcAutoConfiguration {
         JdbcPaymentLedgerStore(NamedParameterJdbcTemplate(dataSource), transactionManager, dialect)
 
     /** 큐(`job-queue-jdbc`)가 꺼져 있으면(`skeleton.job-queue.enabled=false`) 시작이 실패하고 `JobQueue` 빈이 없다고 말한다 — 뒷일 없이 돈을 받을 수 없다. */
+    /** 할인 수단 모듈(`coupon`)이 현황의 할인 합계를 물을 때 쓰는 읽기 전용 조회 - 장부의 할인 줄로 답한다 */
+    @Bean
+    @ConditionalOnMissingBean(DiscountTotals::class)
+    fun jdbcDiscountTotals(dataSource: DataSource): DiscountTotals = JdbcDiscountTotals(NamedParameterJdbcTemplate(dataSource))
+
     @Bean
     @ConditionalOnMissingBean(PaymentTasks::class)
     fun jdbcPaymentTasks(queue: JobQueue, store: PaymentLedgerStore): PaymentTasks = JdbcPaymentTasks(queue, store)

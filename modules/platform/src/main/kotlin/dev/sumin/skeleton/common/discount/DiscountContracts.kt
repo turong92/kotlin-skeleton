@@ -68,3 +68,15 @@ interface DiscountSource {
     /** 쓴 것을 되돌린다(전액 환불 · 구독 첫 주문 철회) */
     fun restore(holderRef: String)
 }
+
+/** 통화별 금액 - [amount] 는 통화 최소 단위 */
+data class CurrencyAmount(val currency: String, val amount: Long)
+
+/**
+ * 할인 수단이 실제로 깎아 준 금액을 묻는 읽기 전용 조회 - 할인액은 결제 장부(`payment`)에만 있으므로 수단 모듈(`coupon`)이 장부의 표를 모르고도 현황을 만들 수 있게 한다.
+ * `payment-jdbc` 가 낸다; 없는 조립에서는 이 빈이 없고 묻는 쪽이 「모른다」(빈 목록)로 읽는다.
+ */
+fun interface DiscountTotals {
+    /** 할인 수단 [kind] 의 [sourceRefs](수단 안의 식별 - 쿠폰 id)에 대해 **확정되어 아직 되돌려지지 않은** 할인액의 합을 통화별로(통화 순). 전액 환불로 복원된 줄은 뺀다 */
+    fun confirmedTotals(kind: String, sourceRefs: Collection<String>): List<CurrencyAmount>
+}

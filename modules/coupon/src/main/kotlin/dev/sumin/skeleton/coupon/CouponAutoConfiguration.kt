@@ -2,6 +2,7 @@ package dev.sumin.skeleton.coupon
 
 import dev.sumin.skeleton.common.authz.PermissionDeclaration
 import dev.sumin.skeleton.common.discount.DiscountSource
+import dev.sumin.skeleton.common.discount.DiscountTotals
 import dev.sumin.skeleton.common.erasure.AccountErasureListener
 import dev.sumin.skeleton.common.reward.RewardIssuer
 import dev.sumin.skeleton.common.time.TimeProvider
@@ -51,8 +52,8 @@ class CouponAutoConfiguration {
     @Bean
     @ConditionalOnBean(CouponStore::class)
     @ConditionalOnMissingBean
-    fun couponReports(store: CouponStore, time: ObjectProvider<TimeProvider>): CouponReports =
-        CouponReports(store, time.getIfAvailable { TimeProvider.systemUtc() })
+    fun couponReports(store: CouponStore, time: ObjectProvider<TimeProvider>, totals: ObjectProvider<DiscountTotals>): CouponReports =
+        CouponReports(store, time.getIfAvailable { TimeProvider.systemUtc() }) { totals.getIfAvailable() }
 
     @Bean
     @ConditionalOnBean(CouponDefinitions::class, CouponIssuance::class)

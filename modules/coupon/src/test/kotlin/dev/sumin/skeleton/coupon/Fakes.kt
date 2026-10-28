@@ -37,14 +37,13 @@ class FakeCouponStore : CouponStore {
         definitions[id] = definitions.getValue(id).let { it.copy(issuedCount = it.issuedCount + 1, updatedAt = at) }
     }
 
-    var totals: List<CouponMoney> = emptyList()
-
     private fun effective(c: Coupon, now: Instant) = CouponExpiry.statusAt(c, now)
 
     override fun countByStatus(definitionId: String, now: Instant) =
         coupons.values.filter { it.definitionId == definitionId }.groupingBy { effective(it, now) }.eachCount()
 
-    override fun discountTotals(definitionId: String) = totals
+    override fun usedCouponIds(definitionId: String, after: String?, limit: Int) =
+        coupons.values.filter { it.definitionId == definitionId && it.status == CouponStatus.USED && (after == null || it.id > after) }.map { it.id }.sorted().take(limit)
 
     override fun pageByDefinition(definitionId: String, status: CouponStatus?, before: String?, limit: Int, now: Instant) =
         coupons.values.filter { it.definitionId == definitionId && (status == null || effective(it, now) == status) && (before == null || it.id < before) }

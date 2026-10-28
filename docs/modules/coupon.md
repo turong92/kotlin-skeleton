@@ -25,7 +25,7 @@
 결제 할인의 견적 · 예약은 그 시각 전까지 `UNAVAILABLE` 이다(클라이언트는 `usableFrom` 이 지난 것만 결제 선택지에 보인다). `validUntil` / `validDays` 의 만료와는 별개다.
 
 **현황 · 발급 내역**(운영): 한 정의의 쿠폰 수를 지금 시각으로 읽은 상태별로(`issued` · `available` · `reserved` · `used` · `expired` · `revoked`; 기한이 지난 `AVAILABLE` 은 `expired`)와 `discountTotals`(확정된 쿠폰이 실제로 깎은 금액, 통화별).
-**금액의 출처**: 쿠폰 표에는 할인액이 없다 — `coupon-jdbc` 가 결제 장부의 `payment_order_discounts`(`kind = coupon`, `CONFIRMED`)를 읽기 전용으로 합산한다(전액 환불로 되돌려진 줄은 빠진다). 결제 장부 표가 없는 조립(`payment-jdbc` 미사용)은 빈 목록이다. 코드 의존은 없고 표 이름에만 기댄다.
+**금액의 출처**: 쿠폰 표에는 할인액이 없다 — 금액은 결제 장부에만 있고, `platform` 의 읽기 전용 조회 포트 `DiscountTotals.confirmedTotals(kind, sourceRefs)`(`common/discount`)로 묻는다. `payment-jdbc` 가 장부의 확정(`CONFIRMED`) 할인 줄로 답하는 빈을 낸다(전액 환불로 복원된 줄은 빠진다). 쓰인(`USED`) 쿠폰 id 를 1000 개씩 끊어 묻고 통화별로 합친다. 그 빈이 없는 조립(`payment-jdbc` 미사용)은 빈 목록이다 - 「0원」이 아니라 「모른다」. 모듈끼리 표 이름에 기대지 않는다.
 
 **대시보드 기여**(`coupon-jdbc`, 기본 꺼짐 `skeleton.coupon.dashboard.enabled=true` + `dashboard` 모듈이 있을 때만): 타일 `coupon.used`(기간 안 쿠폰 사용 수, 일별 그래프 — 전액 환불로 되돌려진 것은 세지 않는다)와 순위 `coupon.top-used`(「앱 통계」 그룹, 많이 쓰인 쿠폰). 모듈은 메커니즘만 내고 켜는 것은 앱이다.
 

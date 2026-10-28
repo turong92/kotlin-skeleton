@@ -6,7 +6,6 @@ import dev.sumin.skeleton.common.authz.OperatorAuditLog
 import dev.sumin.skeleton.common.authz.OperatorRef
 import dev.sumin.skeleton.coupon.Coupon
 import dev.sumin.skeleton.coupon.CouponDefinitionStatus
-import dev.sumin.skeleton.coupon.CouponMoney
 import dev.sumin.skeleton.coupon.CouponSource
 import dev.sumin.skeleton.coupon.CouponStatus
 import dev.sumin.skeleton.coupon.CouponStore
@@ -192,7 +191,6 @@ class CouponAdminWebTest {
         put(4, CouponStatus.USED, holder = "ord_4")
         put(5, CouponStatus.USED, holder = "ord_5")
         put(6, CouponStatus.REVOKED, holder = "ord_old")
-        store.totals = listOf(CouponMoney("KRW", 1500))
         assertEquals(CouponDefinitionStatus.ACTIVE, definition.status)
 
         mvc.perform(get("/api/v1/admin/coupon-definitions/$id/stats").principal(operator))
@@ -203,8 +201,7 @@ class CouponAdminWebTest {
             .andExpect(jsonPath("$.value.used").value(2))
             .andExpect(jsonPath("$.value.expired").value(1))
             .andExpect(jsonPath("$.value.revoked").value(1))
-            .andExpect(jsonPath("$.value.discountTotals[0].currency").value("KRW"))
-            .andExpect(jsonPath("$.value.discountTotals[0].amount").value(1500))
+            .andExpect(jsonPath("$.value.discountTotals.length()").value(0))   // 결제 장부(DiscountTotals 빈)가 없는 조립 - 모르니 빈 배열
 
         mvc.perform(get("/api/v1/admin/coupon-definitions/$id/coupons?size=4").principal(operator))
             .andExpect(status().isOk)
