@@ -421,9 +421,18 @@ data class SubscriptionResponse(
     val productCode: String = planCode,
     /** 플랜의 등급(높을수록 윗등급) - 플랜을 모르면 null. */
     val level: Int? = null,
+    /** 다음 갱신부터 적용될 예약(등급 내리기 · 주기 줄이기) - 없으면 null. 칸은 늘 온다. */
+    val scheduledChange: ScheduledChangeResponse? = null,
 ) {
     companion object {
-        fun of(subscription: dev.sumin.skeleton.payment.PaymentSubscription, planName: String?, discount: dev.sumin.skeleton.payment.SubscriptionDiscountView? = null, plan: dev.sumin.skeleton.payment.SubscriptionPlan? = null) = SubscriptionResponse(
+        fun of(
+            subscription: dev.sumin.skeleton.payment.PaymentSubscription,
+            planName: String?,
+            discount: dev.sumin.skeleton.payment.SubscriptionDiscountView? = null,
+            plan: dev.sumin.skeleton.payment.SubscriptionPlan? = null,
+            scheduledChange: ScheduledChangeResponse? = null,
+        ) = SubscriptionResponse(
+            scheduledChange = scheduledChange,
             productCode = plan?.productCode ?: subscription.planCode,
             level = plan?.level,
             id = subscription.id,
@@ -464,10 +473,21 @@ data class SubscriptionDiscountResponse(val label: String, val stages: List<Disc
 data class DiscountStageResponse(val type: String, val value: Long, val maxDiscount: Long?, val periods: Int?)
 
 /** `GET /subscriptions/{id}/change-preview` — [charge] 는 지금 결제될 금액(0 이면 과금 없이 바뀐다), [amount] 는 새 플랜의 전체 가격, [restartsPeriod] 면 오늘부터 새 주기. */
-data class PlanChangePreviewResponse(val planCode: String, val planName: String, val charge: AmountResponse, val amount: AmountResponse, val period: String, val restartsPeriod: Boolean) {
+/** 예약된 갈아타기 - [effectiveAt] 은 바뀔 시각(이번 기간 끝 = 다음 결제일), [amount] 는 예약한 때 박힌 새 금액이다. */
+data class ScheduledChangeResponse(val planCode: String, val planName: String, val amount: AmountResponse, val period: String, val effectiveAt: Instant?) {
+    companion object {
+        fun of(planCode: String, planName: String, amount: PaymentAmount, period: String, effectiveAt: Instant?) = ScheduledChangeResponse(planCode, planName, amount.toResponse(), period, effectiveAt)
+    }
+}
+
+/** [timing] `NOW`(바로) · `NEXT_RENEWAL`(다음 갱신부터 - 지금 결제는 0, [effectiveAt] 에 바뀐다). [restartsPeriod] 면 오늘부터 새 주기. */
+data class PlanChangePreviewResponse(val planCode: String, val planName: String, val charge: AmountResponse, val amount: AmountResponse, val period: String, val restartsPeriod: Boolean, val timing: String = "NOW", val effectiveAt: Instant? = null) {
     companion object {
         fun of(quote: dev.sumin.skeleton.payment.PlanChangeQuote, planName: String = quote.plan.name) =
-            PlanChangePreviewResponse(quote.plan.code, planName, quote.charge.toResponse(), quote.plan.amount.toResponse(), quote.plan.period, quote.restartsPeriod)
+            PlanChangePreviewResponse(
+                quote.plan.code, planName, quote.charge.toResponse(), quote.plan.amount.toResponse(), quote.plan.period, quote.restartsPeriod,
+                if (quote.kind == dev.sumin.skeleton.payment.PlanChangeKind.SCHEDULED) "NEXT_RENEWAL" else "NOW", quote.effectiveAt,
+            )
     }
 }
 

@@ -75,7 +75,7 @@ class SubscriptionPlanChangeTest {
     }
 
     @Test
-    fun `the same plan, a lower plan and a charge higher than the caller expected are refused and nothing is charged`() {
+    fun `the same plan and a charge higher than the caller expected are refused and nothing is charged, a lower plan is only scheduled`() {
         val kit = newKit()
         val active = kit.active()
         kit.time.advance(Duration.ofDays(1))
@@ -85,12 +85,9 @@ class SubscriptionPlanChangeTest {
         assertFailsWith<PaymentPlanChangeChargeChangedException> { kit.change(active.id, 1) }
         assertEquals(charges, kit.gateway.chargeCalls.size)
 
-        kit.plans.plans += SubscriptionPlan("yearly", "Yearly", PaymentAmount(69_000, "KRW"), "P1Y", 3)
-        assertFailsWith<PaymentPlanChangeNotAllowedException> { kit.change(active.id, 99_999, plan = "yearly") }
-
         val up = kit.change(active.id, 9_999)
         assertEquals("plus", up.planCode)
-        assertFailsWith<PaymentPlanChangeNotAllowedException> { kit.change(up.id, 9_999, key = "chg-2", plan = "basic") }
+        assertEquals("basic", checkNotNull(kit.change(up.id, 0, key = "chg-2", plan = "basic").scheduledPlanCode), "a lower tier is scheduled, not refused")
         assertFailsWith<PaymentPlanChangeNotAllowedException> { kit.change(up.id, 9_999, key = "chg-3", plan = "plus") }
         assertEquals(charges + 1, kit.gateway.chargeCalls.size)
     }

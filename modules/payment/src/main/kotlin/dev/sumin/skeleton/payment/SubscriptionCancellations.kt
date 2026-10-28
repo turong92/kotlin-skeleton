@@ -33,6 +33,7 @@ class SubscriptionCancellations(
     private val properties: PaymentProperties,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
+    private val currentPayments = CurrentPeriodPayments(store)
 
     fun preview(accountId: String, subscriptionId: String): CancelPreview {
         val subscription = owned(store.findSubscription(subscriptionId), accountId) ?: throw PaymentSubscriptionNotFoundException()
@@ -114,25 +115,12 @@ class SubscriptionCancellations(
         }
     }
 
-    /** 이번 기간에 돈을 낸 주문과 각각의 **순액**(결제사 기준 총액 - 이 해지가 아닌 환불). 이 해지가 이미 돌려준 몫은 빼지 않는다 - 다시 계산해도 같은 값이 나오게. */
-    private class PeriodPayment(val order: PaymentOrder, val net: Long)
-
-    private fun periodPayments(subscription: PaymentSubscription): List<PeriodPayment> {
-        val start = subscription.currentPeriodStart ?: return emptyList()
-        val end = subscription.currentPeriodEnd ?: return emptyList()
-        return store.listSubscriptionOrders(subscription.id, ORDERS_LOOKED_AT)
-            .filter { it.status.isPaidFamily && it.paidAt != null && !it.paidAt.isBefore(start) && it.paidAt.isBefore(end) }
-            .map { order ->
-                val ours = store.listRefunds(order.id).filter { it.reasonCode == PaymentRefundReason.SUBSCRIPTION_CANCEL.name && it.status == PaymentRefundStatus.SUCCEEDED }.sumOf { it.amount.amount }
-                PeriodPayment(order, RefundLines.baseOf(order) - (order.refundedAmount - ours))
-            }
-            .filter { it.net > 0 }
-    }
+    private fun periodPayments(subscription: PaymentSubscription): List<PeriodPayment> = currentPayments.of(subscription)
 
     private fun quote(subscription: PaymentSubscription, at: java.time.Instant, payments: List<PeriodPayment> = periodPayments(subscription)): CancelQuote {
         if (subscription.isProviderManaged) return CancelQuote.CLOSED // 결제사가 갱신하는 구독은 결제사의 정책을 따른다(기간 끝 해지만)
         val start = subscription.currentPeriodStart ?: return CancelQuote.CLOSED
-        val covers = payments.map { CancelPayment(it.net, if (it.order.kind == PaymentOrderKind.SUBSCRIPTION_CHANGE) it.order.paidAt ?: start else start) }
+        val covers = payments.map { CancelPayment(it.net, it.coversFrom(start)) }
         val context = CancelContext(subscription, payments.sumOf { it.net }, at, monthlyPrice(subscription), usage.used(subscription, start, at), properties.subscription.prorationZone, covers)
         return policies.forCountry(subscription.country).quote(context)
     }
@@ -142,10 +130,6 @@ class SubscriptionCancellations(
         subscription.regularMonthlyAmount ?: plans.find(subscription.planCode)?.let { RegularMonthlyPrice.of(plans, it) }
 
     private fun owned(subscription: PaymentSubscription?, accountId: String): PaymentSubscription? = subscription?.takeIf { it.accountId == accountId }
-
-    private companion object {
-        const val ORDERS_LOOKED_AT = 20
-    }
 }
 
 /** `payment-subscription-cancel-refund` - 중도 해지로 끝난 구독의 환불 중 보내지 못한 것을 다시 보낸다. 다 보냈으면 끝, 못 보낸 것이 남으면 다시(큐의 재시도). */

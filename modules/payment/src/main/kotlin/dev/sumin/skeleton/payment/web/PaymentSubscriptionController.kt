@@ -8,6 +8,7 @@ import dev.sumin.skeleton.common.Response
 import dev.sumin.skeleton.common.openapi.ApiEnvelopeType
 import dev.sumin.skeleton.common.openapi.ApiResponseEnvelope
 import dev.sumin.skeleton.common.web.ClientIps
+import dev.sumin.skeleton.payment.PaymentAmount
 import dev.sumin.skeleton.payment.PaymentSubscription
 import dev.sumin.skeleton.payment.PaymentSubscriptions
 import dev.sumin.skeleton.payment.SubscriptionCancellations
@@ -21,6 +22,7 @@ import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.Authentication
+import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
@@ -133,6 +135,12 @@ class PaymentSubscriptionController(
     fun cancelPreview(authentication: Authentication?, @PathVariable id: String): DataResponse<CancelPreviewResponse> =
         Response.ok(CancelPreviewResponse.of(cancellations.preview(callers.account(authentication), id)))
 
+    @Operation(summary = "Take back a scheduled plan change", description = "Removes the change set for the next renewal (a lower tier or a shorter period). Without a scheduled change it answers the subscription as it is.")
+    @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = SubscriptionResponse::class)
+    @DeleteMapping("/subscriptions/{id}/scheduled-change")
+    fun cancelScheduledChange(authentication: Authentication?, @PathVariable id: String): DataResponse<SubscriptionResponse> =
+        Response.ok(view(planChanges.cancelScheduled(callers.account(authentication), id)))
+
     @Operation(
         summary = "Cancel now and refund the unused rest of this period",
         description = "Ends the subscription at once (ENDED, endReason USER_CANCELED_NOW) and refunds through the refund ledger, order by order; the card is removed. Pressing again answers the same and refunds once. " +
@@ -147,9 +155,9 @@ class PaymentSubscriptionController(
     }
 
     @Operation(
-        summary = "What a change to a higher plan would charge now",
-        description = "charge is what is paid at once (0 = changed for free), amount is the new plan's full price, restartsPeriod tells that a new period starts today. " +
-            "409 PLAN_CHANGE_NOT_ALLOWED when the plan is not higher / the subscription is not in use / a charge is in flight / plan change is off · 422 ITEM_NOT_PURCHASABLE for an unknown plan.",
+        summary = "What a plan change would charge, and when it happens",
+        description = "timing NOW (a higher tier of the same period, or a longer period: charge is what is paid at once, 0 = changed for free, restartsPeriod tells that a new period starts today) or NEXT_RENEWAL (a lower tier or a shorter period: charge is 0, effectiveAt is the end of this period). amount is the new plan's full price. " +
+            "409 PLAN_CHANGE_NOT_ALLOWED when the plan is the same / another currency / the subscription is not in use / a charge is in flight / plan change is off / the subscription is not in use / a charge is in flight / plan change is off · 422 ITEM_NOT_PURCHASABLE for an unknown plan.",
     )
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = PlanChangePreviewResponse::class)
     @GetMapping("/subscriptions/{id}/change-preview")
@@ -157,8 +165,8 @@ class PaymentSubscriptionController(
         Response.ok(planChanges.preview(callers.account(authentication), id, planCode).let { PlanChangePreviewResponse.of(it, nameOf(it.plan) ?: it.plan.name) })
 
     @Operation(
-        summary = "Change to a higher plan at once",
-        description = "Body { planCode, expectedCharge } + Idempotency-Key. 200 changed · 202 the charge is unconfirmed (subscription.pendingPlanCode is set — poll GET /subscriptions/me) · " +
+        summary = "Change plan - at once, or scheduled for the next renewal",
+        description = "Body { planCode, expectedCharge } + Idempotency-Key. 200 changed (or scheduled: subscription.scheduledChange is set and nothing is charged, expectedCharge 0) · 202 the charge is unconfirmed (subscription.pendingPlanCode is set — poll GET /subscriptions/me) · " +
             "402 DECLINED (the plan stays) · 409 PLAN_CHANGE_CHARGE_CHANGED when the charge is now higher than expectedCharge (preview again) · 409 PLAN_CHANGE_NOT_ALLOWED · 429.",
     )
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = SubscriptionResponse::class)
@@ -184,7 +192,14 @@ class PaymentSubscriptionController(
     }
 
     private fun view(subscription: PaymentSubscription): SubscriptionResponse =
-        subscriptions.plan(subscription.planCode).let { plan -> SubscriptionResponse.of(subscription, nameOf(plan), subscriptions.discountOf(subscription), plan) }
+        subscriptions.plan(subscription.planCode).let { plan -> SubscriptionResponse.of(subscription, nameOf(plan), subscriptions.discountOf(subscription), plan, scheduledOf(subscription)) }
+
+    private fun scheduledOf(subscription: PaymentSubscription): ScheduledChangeResponse? {
+        val code = subscription.scheduledPlanCode ?: return null
+        val amount = subscription.scheduledAmount ?: return null
+        val plan = subscriptions.plan(code)
+        return ScheduledChangeResponse.of(code, nameOf(plan) ?: code, PaymentAmount(amount, subscription.amount.currency), subscription.scheduledPeriod ?: subscription.period, subscription.currentPeriodEnd)
+    }
 
     /** 카드 등록 창이 돌려준 값 — 문자열 칸만, 여덟 개까지, 칸마다 512자까지. 모양은 결제사가 확인한다. */
     private fun providerPayload(node: JsonNode?): Map<String, Any?> {

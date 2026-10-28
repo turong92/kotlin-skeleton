@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 갈아타기 넓히기 (2026-10-29)
+
+- `payment` + `payment-jdbc`: 갈아타기 판정 한 곳 `PlanChangeRules.classify` — 같은 주기의 윗등급(바로, 기존 과금 방식) · **더 긴 주기로(월 → 연)**(바로, 새 가격 − 이번 기간에 실제로 낸 돈의 남은 몫, 오늘부터 새 주기, 설정의 과금 방식과 상관없다) · **등급 내리기 · 주기 줄이기(등급↑ + 주기↓ 포함)는 다음 갱신으로 예약**(결제 없음). 새 V 파일 `payment_subscriptions_plan_schedule`(`pending_period` · `scheduled_plan_code` · `scheduled_amount` · `scheduled_period`). 갱신 작업이 예약을 과금 주문을 넣는 같은 트랜잭션에서 적용한다(예약한 때의 금액, 실패한 갱신의 재시도도 새 금액, 주기가 바뀌면 기준 시각 = 옛 기간 끝). 예약 중 올리기 · 해지 예약은 예약을 지운다.
+- `payment` HTTP(더하기만): `GET …/change-preview` 에 `timing`(`NOW` · `NEXT_RENEWAL`) · `effectiveAt`, 예약이면 `POST …/change` 가 결제 없이 200 + 구독의 `scheduledChange`, `DELETE /subscriptions/{id}/scheduled-change`, 구독 응답에 `scheduledChange`. **동작 변경**: 전에는 거절(`409 PLAN_CHANGE_NOT_ALLOWED`)이던 아래 등급 · 다른 주기 플랜이 이제 받아들여진다(같은 플랜 · 다른 통화 · 등급도 주기도 같은 플랜은 그대로 거절).
+- `payment`: 중도 해지의 「이번 기간에 낸 돈」을 `CurrentPeriodPayments` 로 꺼내 해지와 주기를 늘리는 갈아타기가 같이 쓴다.
+
 ### 상품 · 가격 카탈로그 (2026-10-29)
 
 - 새 모듈 `catalog` + `catalog-jdbc`: 운영자가 화면에서 상품 · 가격(월 · 연 · 단건 · 행사가 · 통화별)을 만들고 결제가 그 표를 읽는다. **가격은 만든 뒤 고치지 않는다**(새 줄 + 판매 중지, 고칠 수 있는 것은 행사 끝 시각과 결제사 링크뿐). 열쇠(상품, 주기, 통화)마다 「지금 살 수 있는 가격」이 하나(행사 우선, 끝은 열린 구간), 상시는 하나 · 행사는 겹치지 않게(상품 줄 잠금). 결제 계약 구현 `SubscriptionPlans` · `PaymentCatalog`(`CatalogPaymentCatalog` 공개 클래스) · `ProviderPriceRefs`는 앱이 같은 타입의 빈을 두면 앱 것이 이긴다. 공개 읽기 `GET /api/v1/catalog/products`(`skeleton.catalog.http.enabled`, 기본 꺼짐 · 개인 캐시 60초 + `Vary: CF-IPCountry`) · 운영 `/api/v1/admin/catalog/**`(`skeleton.catalog.admin.enabled`, 기본 꺼짐, 권한 `catalog.manage` 는 기본 역할 없음). 새 V 파일 `catalog`(네 표), 오류 `CATALOG.CODE_TAKEN` · `LEVEL_TAKEN` · `PRICE_OVERLAP` · `PRICE_INVALID` · `NOT_FOUND`.

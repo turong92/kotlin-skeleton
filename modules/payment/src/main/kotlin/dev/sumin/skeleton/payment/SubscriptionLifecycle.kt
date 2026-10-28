@@ -25,6 +25,35 @@ class SubscriptionLifecycle(
     /** 새 플랜으로 바꾸는 줄에 박을 월 정가 */
     fun regularMonthlyOf(plan: SubscriptionPlan?): Long? = plan?.let { p -> plans()?.let { RegularMonthlyPrice.of(it, p) } }
 
+    /**
+     * 플랜을 바꾼 줄 - 새 플랜의 코드 · 금액 · 주기와 「같은 등급 월 정가」를 박고 대기 값 · 예약을 비운다. [restartAt] 이 있으면 그 시각부터 한 주기로 새로 시작한다(전액 결제하고 새 주기 · 주기를 늘리는 갈아타기).
+     * 변경 결제 확정 · 결제 없는 즉시 변경 · 예약 적용이 모두 이 한 곳을 지난다.
+     */
+    fun switched(subscription: PaymentSubscription, planCode: String, amount: Long, period: String, restartAt: java.time.Instant? = null): PaymentSubscription {
+        val switched = subscription.copy(
+            planCode = planCode, amount = PaymentAmount(amount, subscription.amount.currency), period = period,
+            pendingPlanCode = null, pendingAmount = null, pendingPeriod = null, scheduledPlanCode = null, scheduledAmount = null, scheduledPeriod = null,
+            regularMonthlyAmount = regularMonthlyOf(plans()?.find(planCode)),
+        )
+        if (restartAt == null) return switched
+        return switched.copy(anchorAt = restartAt, periodSeq = 1, currentPeriodStart = restartAt, currentPeriodEnd = SubscriptionPeriod.parse(period).after(restartAt, 1), attempt = 1)
+    }
+
+    /**
+     * 갱신 때가 됐다 - 예약해 둔 플랜 · 금액 · 주기를 **이 트랜잭션에서** 적용한다(갱신 작업이 같은 트랜잭션에서 새 금액으로 과금 주문을 넣는다). 주기가 바뀌면 기준 시각 = 옛 기간 끝, 기간 번호 0이라
+     * 이번 갱신 결제가 새 주기의 첫 기간을 연다. 적용한 뒤에는 예약이 없으니 실패한 갱신의 재시도도 새 금액이다.
+     */
+    fun applyScheduled(tx: PaymentLedgerTx, subscription: PaymentSubscription): PaymentSubscription {
+        val code = subscription.scheduledPlanCode ?: return subscription
+        val amount = subscription.scheduledAmount ?: return subscription
+        val period = subscription.scheduledPeriod ?: subscription.period
+        var next = switched(subscription, code, amount, period)
+        if (period != subscription.period) next = next.copy(anchorAt = subscription.currentPeriodEnd, periodSeq = 0)
+        next = next.copy(updatedAt = writer.now())
+        tx.updateSubscription(next)
+        return next
+    }
+
     /** 상태를 [to] 로 옮기고 [mutate] 로 나머지 칸을 바꿔 저장한다. 표에 없는 전이는 [IllegalStateException]. */
     fun save(
         tx: PaymentLedgerTx,
@@ -162,17 +191,9 @@ class SubscriptionLifecycle(
             order.kind == PaymentOrderKind.SUBSCRIPTION_CHANGE && (subscription.status == SubscriptionStatus.ACTIVE || subscription.status == SubscriptionStatus.CANCELING) -> {
                 val planCode = subscription.pendingPlanCode ?: order.itemRef
                 val amount = subscription.pendingAmount ?: return stale(tx, order)
-                val restart = properties.subscription.planChange.charge == PaymentProperties.Subscription.PlanChange.Charge.FULL_RESTART
-                val changed = save(tx, subscription, subscription.status) {
-                    val switched = it.copy(planCode = planCode, amount = PaymentAmount(amount, it.amount.currency), pendingPlanCode = null, pendingAmount = null, regularMonthlyAmount = regularMonthlyOf(plans()?.find(planCode)))
-                    // 전액 결제하고 새 주기: 지금부터 한 주기(남은 기간은 버린다). 차액만: 기간은 그대로
-                    if (restart) {
-                        val anchor = order.paidAt ?: now
-                        switched.copy(anchorAt = anchor, periodSeq = 1, currentPeriodStart = anchor, currentPeriodEnd = period.after(anchor, 1), attempt = 1)
-                    } else {
-                        switched
-                    }
-                }
+                val restart = subscription.pendingPeriod != null || properties.subscription.planChange.charge == PaymentProperties.Subscription.PlanChange.Charge.FULL_RESTART
+                // 전액 결제하고 새 주기 · 주기를 늘리는 갈아타기: 지금부터 한 주기(남은 기간은 버린다). 차액만: 기간은 그대로. 올리기가 확정되면 예약해 둔 내리기는 지워진다
+                val changed = save(tx, subscription, subscription.status) { switched(it, planCode, amount, it.pendingPeriod ?: it.period, restartAt = if (restart) order.paidAt ?: now else null) }
                 // 변경이 도는 동안 깨어난 갱신 작업은 과금하지 않고 물러났다 — 다시 깨운다(차액만이면 기간 끝이 이미 지났을 수 있다)
                 scheduleRenewal(changed)
             }
@@ -195,7 +216,7 @@ class SubscriptionLifecycle(
     /** 변경 결제가 실패로 닫혔다 — 플랜은 그대로 두고 대기 값을 비운 뒤, 변경 때문에 물러났던 갱신 작업을 지금 다시 깨운다. */
     private fun onChangeClosed(tx: PaymentLedgerTx, subscription: PaymentSubscription, order: PaymentOrder) {
         if (subscription.chargeOrderId != order.id) return
-        val cleared = save(tx, subscription, subscription.status) { it.copy(pendingPlanCode = null, pendingAmount = null) }
+        val cleared = save(tx, subscription, subscription.status) { it.copy(pendingPlanCode = null, pendingAmount = null, pendingPeriod = null) }
         scheduleRenewal(cleared, runAt = writer.now())
     }
 

@@ -19,6 +19,7 @@ import org.springframework.context.annotation.Import
 import org.springframework.http.MediaType
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.ResultActions
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
@@ -120,6 +121,31 @@ class PaymentSubscriptionHttpTest {
         change("""{"planCode":"plus","expectedCharge":100}""").andExpect(status().isConflict)
         change("""{"planCode":"plus","expectedCharge":6900}""").andExpect(status().isOk)
             .andExpect(jsonPath("$.value.planCode").value("plus")).andExpect(jsonPath("$.value.pendingPlanCode").value(null as Any?))
+    }
+
+    @Test
+    fun `a lower plan is scheduled - preview says NEXT_RENEWAL, the change is 200 with scheduledChange and no charge, me shows it and DELETE takes it back`() {
+        val owner = account()
+        val id = read(start(owner, plan = "plus").andExpect(status().isCreated).andReturn().response.contentAsString)["value"]["subscription"]["id"].asString()
+        activate(owner, id).andExpect(status().isOk)
+
+        mvc.perform(get("$base/subscriptions/$id/change-preview").param("planCode", "basic").asUser(owner)).andExpect(status().isOk)
+            .andExpect(jsonPath("$.value.timing").value("NEXT_RENEWAL")).andExpect(jsonPath("$.value.charge.amount").value(0)).andExpect(jsonPath("$.value.effectiveAt").isNotEmpty)
+        mvc.perform(get("$base/subscriptions/$id/change-preview").param("planCode", "plus").asUser(owner)).andExpect(status().isConflict)
+
+        mvc.perform(post("$base/subscriptions/$id/change").asUser(owner).header("Idempotency-Key", "sched-1").contentType(MediaType.APPLICATION_JSON).content("""{"planCode":"basic","expectedCharge":0}"""))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.value.planCode").value("plus"))
+            .andExpect(jsonPath("$.value.scheduledChange.planCode").value("basic"))
+            .andExpect(jsonPath("$.value.scheduledChange.amount.amount").value(3_900))
+            .andExpect(jsonPath("$.value.scheduledChange.period").value("P1M"))
+            .andExpect(jsonPath("$.value.scheduledChange.effectiveAt").isNotEmpty)
+        mvc.perform(get("$base/subscriptions/me").asUser(owner)).andExpect(jsonPath("$.value.subscription.scheduledChange.planCode").value("basic"))
+
+        mvc.perform(delete("$base/subscriptions/$id/scheduled-change").asUser(account())).andExpect(status().isNotFound)
+        mvc.perform(delete("$base/subscriptions/$id/scheduled-change").asUser(owner)).andExpect(status().isOk).andExpect(jsonPath("$.value.scheduledChange").value(null as Any?))
+        mvc.perform(delete("$base/subscriptions/$id/scheduled-change").asUser(owner)).andExpect(status().isOk)
+        mvc.perform(get("$base/subscriptions/me").asUser(owner)).andExpect(jsonPath("$.value.subscription.scheduledChange").value(null as Any?))
     }
 
     /** 접속 나라는 Cloudflare 가 붙인 헤더로만 온다 - 본문의 `country` 는 받지 않는다. */

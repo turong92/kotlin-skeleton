@@ -341,7 +341,7 @@ class PaymentSubscriptions(
         return store.inTransaction { tx ->
             val subscription = owned(tx.lockSubscription(subscriptionId), accountId) ?: throw PaymentSubscriptionNotFoundException()
             when (subscription.status) {
-                SubscriptionStatus.ACTIVE -> lifecycle.save(tx, subscription, SubscriptionStatus.CANCELING)
+                SubscriptionStatus.ACTIVE -> lifecycle.save(tx, subscription, SubscriptionStatus.CANCELING) { it.copy(scheduledPlanCode = null, scheduledAmount = null, scheduledPeriod = null) }   // 해지 예약은 갈아타기 예약을 지운다
                 SubscriptionStatus.PAST_DUE -> lifecycle.end(tx, subscription, SubscriptionEndReason.USER_CANCELED)
                 SubscriptionStatus.CANCELING, SubscriptionStatus.ENDED -> subscription
                 SubscriptionStatus.PENDING -> throw PaymentSubscriptionNotCancelableException()

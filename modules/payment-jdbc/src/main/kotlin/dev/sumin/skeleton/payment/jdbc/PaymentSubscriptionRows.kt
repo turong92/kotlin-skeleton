@@ -52,6 +52,10 @@ internal class PaymentSubscriptionRows(private val dialect: SqlDialect) {
         registrationWindow = rs.getString("registration_window"),
         registrationWindowAt = dialect.readInstant(rs, "registration_window_at"),
         regularMonthlyAmount = rs.getLong("regular_monthly_amount").takeUnless { rs.wasNull() },
+        pendingPeriod = rs.getString("pending_period"),
+        scheduledPlanCode = rs.getString("scheduled_plan_code"),
+        scheduledAmount = rs.getLong("scheduled_amount").takeUnless { rs.wasNull() },
+        scheduledPeriod = rs.getString("scheduled_period"),
     )
 
     fun params(s: PaymentSubscription): MapSqlParameterSource = MapSqlParameterSource()
@@ -90,6 +94,10 @@ internal class PaymentSubscriptionRows(private val dialect: SqlDialect) {
         .addValue("registration_window", s.registrationWindow)
         .addValue("registration_window_at", dialect.instantParam(s.registrationWindowAt))
         .addValue("regular_monthly_amount", s.regularMonthlyAmount, java.sql.Types.BIGINT)
+        .addValue("pending_period", s.pendingPeriod)
+        .addValue("scheduled_plan_code", s.scheduledPlanCode)
+        .addValue("scheduled_amount", s.scheduledAmount, java.sql.Types.BIGINT)
+        .addValue("scheduled_period", s.scheduledPeriod)
 
     companion object {
         val COLUMNS = listOf(
@@ -97,7 +105,7 @@ internal class PaymentSubscriptionRows(private val dialect: SqlDialect) {
             "current_period_end", "charge_order_id", "attempt", "customer_key", "billing_token", "card_issuer", "card_last4", "active_key", "pending_plan_code",
             "pending_amount", "end_reason", "ended_at", "account_erased_at", "created_at", "updated_at", "country", "dedupe_key",
             "provider_subscription_id", "provider_synced_at", "first_transaction_id",
-            "registration_window", "registration_window_at", "regular_monthly_amount",
+            "registration_window", "registration_window_at", "regular_monthly_amount", "pending_period", "scheduled_plan_code", "scheduled_amount", "scheduled_period",
         )
     }
 }
