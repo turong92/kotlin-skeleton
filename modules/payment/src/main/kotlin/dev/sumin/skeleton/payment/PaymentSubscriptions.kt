@@ -71,6 +71,8 @@ class PaymentSubscriptions(
 
         val plan = plans.find(planCode)?.takeIf { it.amount.amount > 0 } ?: throw PaymentItemNotPurchasableException()
         SubscriptionPeriod.parse(plan.period)
+        // 무료 첫 결제를 선점해 놓고 죽은 구독이 자리를 쥐고 있으면 이어서 끝낸다 - 안 그러면 새 구독이 영영 막힌다(끝나면 ACTIVE 라 아래 판정이 「이미 구독 중」이 된다)
+        store.findLiveSubscription(accountId)?.let(::finishFreeFirstCharge)
         if (store.findLiveSubscription(accountId) != null) throw PaymentAlreadySubscribedException()
         val subscriptionId = ids.newId(PaymentOrderIds.SUBSCRIPTION_PREFIX)
         val customerKey = PaymentOrderIds.newCustomerKey(random)

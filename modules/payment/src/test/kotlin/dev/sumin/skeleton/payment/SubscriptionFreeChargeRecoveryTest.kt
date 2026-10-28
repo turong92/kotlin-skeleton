@@ -43,6 +43,19 @@ class SubscriptionFreeChargeRecoveryTest {
     }
 
     @Test
+    fun `starting another subscription meets the stuck free first payment, finishes it, and is told the account is already subscribed`() {
+        val id = kit.subscriptions.start("acc_1", "plus", IdempotencyKey("k1"), discounts = claim("free1")).subscription.id
+        killFreeSettlement()
+        assertFailsWith<IllegalStateException> { kit.subscriptions.activate("acc_1", id, auth) }
+        reviveSystem()
+
+        assertFailsWith<PaymentAlreadySubscribedException> { kit.subscriptions.start("acc_1", "basic", IdempotencyKey("k2")) }
+
+        assertEquals(SubscriptionStatus.ACTIVE, kit.store.findSubscription(id)!!.status, "the stuck one was finished on the way")
+        assertEquals("USED", coupons.stateOf("free1"))
+    }
+
+    @Test
     fun `a free renewal that died after the claim is finished by the next run of the renewal task - the period moves and nobody uses the service for free forever`() {
         val id = kit.subscriptions.start("acc_1", "plus", IdempotencyKey("k1"), discounts = claim("free2")).subscription.id
         kit.subscriptions.activate("acc_1", id, auth)

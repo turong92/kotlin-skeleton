@@ -8,6 +8,7 @@ import dev.sumin.skeleton.common.discount.DiscountPurpose
 import dev.sumin.skeleton.common.discount.DiscountRejectedException
 import dev.sumin.skeleton.common.discount.DiscountRejection
 import dev.sumin.skeleton.common.discount.DiscountSource
+import dev.sumin.skeleton.common.discount.DiscountStageType
 import dev.sumin.skeleton.common.discount.DiscountTarget
 import org.slf4j.LoggerFactory
 
@@ -141,8 +142,9 @@ class PaymentDiscounts(
         sources().firstOrNull { it.kind == kind }.also { if (it == null) log.warn("a discount line names a discount source that is not wired kind={}", kind) }
 
     /**
-     * 쿠폰은 한 장 = 한 개다(국룰): [units] 개를 한꺼번에 사도 할인은 **단가 한 개분**에만 걸린다 - 무료 · 100% 쿠폰 한 장으로 수량 1000 개가 0원이 되지 않는다.
-     * 수단은 단가를 대상 금액으로 보고(최소 금액 · 범위 판정도 단가), 깎은 금액은 합계에서 뺀다.
+     * 쿠폰은 한 장 = 한 개다(국룰): [units] 개를 한꺼번에 사도 **무료 · 정률** 할인은 단가 한 개분에만 걸린다 - 무료 · 100% 쿠폰 한 장으로 수량 1000 개가 0원이 되지 않는다.
+     * 정액은 합계에서 그대로 깎는다(합계를 넘지 않게). 수단에는 늘 **주문 합계**를 대상 금액으로 넘긴다 - 최소 금액 · 범위 판정은 합계 기준이다
+     * (「5만원 이상 5천원 할인」을 1만원 × 5 주문에 쓸 수 있다).
      */
     private fun apply(claims: List<DiscountClaim>, target: DiscountTarget, units: Int, call: (DiscountSource, DiscountClaim, DiscountTarget) -> DiscountOffer): DiscountQuote {
         require(units >= 1) { "units is at least 1" }
@@ -152,18 +154,18 @@ class PaymentDiscounts(
         val ordered = claims.map { claim -> claim to (wired.firstOrNull { it.kind == claim.kind } ?: throw PaymentDiscountNotApplicableException("This discount is not offered here.")) }
             .sortedBy { it.second.order }
         val scale = scaleOf(target.currency)
-        val unitTarget = target.copy(amount = target.amount / units)
-        var running = unitTarget.amount
+        var running = target.amount
         val lines = ArrayList<DiscountDraft>()
         for ((claim, source) in ordered) {
-            val offer = rejected { call(source, claim, unitTarget.copy(amount = running)) }
+            val offer = rejected { call(source, claim, target.copy(amount = running)) }
             val stage = DiscountMath.stageAt(offer.stages, 0) ?: throw PaymentDiscountNotApplicableException()
-            val off = DiscountMath.discount(running, stage, scale)
+            val base = if (stage.type == DiscountStageType.FIXED) running else running / units   // 무료 · 정률은 단가 한 개분, 정액은 합계에서
+            val off = minOf(DiscountMath.discount(base, stage, scale), running)
             if (off <= 0) throw PaymentDiscountNotApplicableException("The discount takes nothing off this purchase.")
             running -= off
             lines += DiscountDraft(source.kind, offer.sourceRef, offer.label.take(LABEL_MAX), off)
         }
-        return DiscountQuote(target.amount, target.amount - (unitTarget.amount - running), target.currency, lines)
+        return DiscountQuote(target.amount, running, target.currency, lines)
     }
 
     private inline fun <T> rejected(block: () -> T): T =

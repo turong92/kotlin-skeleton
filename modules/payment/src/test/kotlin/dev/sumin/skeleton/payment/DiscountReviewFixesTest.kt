@@ -19,6 +19,7 @@ class DiscountReviewFixesTest {
         add("full", DiscountStage(DiscountStageType.PERCENT, 100))
         add("half", DiscountStage(DiscountStageType.PERCENT, 50))
         add("leave50", DiscountStage(DiscountStageType.FIXED, 3_850))   // 3,900 -> 50
+        add("fiveK", DiscountStage(DiscountStageType.FIXED, 5_000), applies = { it.amount >= 50_000 })
         add("third", listOf(DiscountStage(DiscountStageType.PERCENT, 10, null, 1), DiscountStage(DiscountStageType.FIXED, 3_850, null, 1)))
     }
     private fun claim(id: String) = listOf(DiscountClaim("coupon", id))
@@ -36,6 +37,15 @@ class DiscountReviewFixesTest {
         assertEquals(2_000, order.amount.amount)
         assertEquals(1_000, order.discountAmount)
         assertEquals(PaymentSettlement.PROVIDER, order.settlement)
+    }
+
+    @Test
+    fun `the minimum and the scope of a coupon are judged on the order total, and a fixed amount comes off the total`() {
+        val kit = PaymentLedgerKit(catalog = PaymentCatalog { r -> PurchaseQuote(PaymentAmount(10_000L * r.quantity, "KRW"), "Units") }, discountSources = listOf(coupons))
+
+        val five = kit.orders.quote(QuoteCommand("acc_1", "cheer", "unit", quantity = 5, discounts = claim("fiveK")))
+        assertEquals(45_000, five.amount, "5,000 off the 50,000 total - the coupon needs a 50,000 order and 10,000 x 5 is one")
+        assertFailsWith<PaymentDiscountNotApplicableException> { kit.orders.quote(QuoteCommand("acc_1", "cheer", "unit", quantity = 4, discounts = claim("fiveK"))) }
     }
 
     @Test

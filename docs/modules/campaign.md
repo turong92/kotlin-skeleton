@@ -12,6 +12,7 @@
 `UNKNOWN_CODE` · `OWN_CODE`(자기 코드) · `ALREADY_INVITED`(초대받은 사람은 평생 한 번) · `MUTUAL`(내가 초대한 사람의 코드) · `NOT_NEW_ACCOUNT`(가입 후 `claimWithinDays`, 기본 7일이 지난 계정; `AccountFacts` 빈이 없으면 이 판정만 건너뛴다).
 통과하면 관계 줄 + 초대받은 사람 보상. 초대자 보상 시점은 설정 `qualifyOn` 이고 **기본값이 없다**(설정 필수): `CLAIM` 이면 같은 트랜잭션, `SIGNAL` 이면 앱이 `Referrals.qualify(inviteeId)` 를 부를 때(예: 첫 결제 — 몇 번 불러도 한 번).
 `inviterCap` 을 넘은 초대는 관계만 남고(`CAPPED`) 보상이 없다 — `CLAIM` 에서는 양쪽 모두, `SIGNAL` 에서는 초대자 쪽만(초대받은 쪽 보상은 claim 때 이미 나갔다). 상한 판정과 맞초대(A↔B 동시 claim) 판정은 두 계정의 초대 코드 줄을 정렬된 순서로 `for update` 잡아 직렬화한 뒤 잠금 읽기로 센다 - 같은 코드로 동시에 몰려도 상한을 넘지 않고, 정렬된 순서라 교착하지 않는다.
+`qualify` 는 환불로 되돌리지 않는다 - 환불 기간이 지난 뒤에 부르거나 앱이 판단한다(환불된 첫 결제로 초대자 보상이 이미 나갔어도 회수하지 않는다).
 설정: `{invitee: [..], inviter: [..], qualifyOn: CLAIM|SIGNAL, claimWithinDays: 7, inviterCap: null}`.
 
 사용자 경로(`skeleton.campaign.http.enabled=false` 로 끈다; 서블릿 웹 앱 + Spring Security, 익명 401): `GET /api/v1/campaigns`(진행 중 + 내 출석 현황) · `POST /api/v1/campaigns/{id}/attendance` · `GET /api/v1/campaigns/{id}/attendance?month=YYYY-MM` · `GET /api/v1/referrals/me` · `POST /api/v1/referrals/claim {code}`(204).

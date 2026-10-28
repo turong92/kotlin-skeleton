@@ -68,6 +68,7 @@ class RewardsSeed(
                         "inviter" to listOf(reward("point", "amount" to "500")),
                         "qualifyOn" to "SIGNAL",
                         "claimWithinDays" to 7,
+                        "inviterCap" to 10,
                     ),
                 ),
             )
