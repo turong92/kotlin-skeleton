@@ -56,7 +56,7 @@ class PaymentHttpAccessTest {
         val user = endpointsOf(PaymentController::class.java, PaymentOrderController::class.java)
 
         assertEquals(10, operator.size, "operator handlers: ${operator.map { it.handler }}")
-        assertEquals(8, user.size, "user handlers: ${user.map { it.handler }}")
+        assertEquals(9, user.size, "user handlers: ${user.map { it.handler }}")
     }
 
     @Test

@@ -169,6 +169,31 @@ enum class PaymentErrorCode(
         status = HttpStatus.CONFLICT,
         title = "The charge for the plan change changed",
     ),
+    DISCOUNT_NOT_APPLICABLE(
+        code = "PAYMENT.DISCOUNT_NOT_APPLICABLE",
+        status = HttpStatus.BAD_REQUEST,
+        title = "The discount does not apply to this purchase",
+    ),
+    DISCOUNT_UNAVAILABLE(
+        code = "PAYMENT.DISCOUNT_UNAVAILABLE",
+        status = HttpStatus.CONFLICT,
+        title = "The discount is not available any more",
+    ),
+    DISCOUNT_NOT_SUPPORTED(
+        code = "PAYMENT.DISCOUNT_NOT_SUPPORTED",
+        status = HttpStatus.BAD_REQUEST,
+        title = "The payment provider of this purchase does not take discounts",
+    ),
+    DISCOUNT_BELOW_MINIMUM(
+        code = "PAYMENT.DISCOUNT_BELOW_MINIMUM",
+        status = HttpStatus.BAD_REQUEST,
+        title = "The amount after the discount is below what the payment provider can charge",
+    ),
+    NOTHING_TO_REFUND(
+        code = "PAYMENT.NOTHING_TO_REFUND",
+        status = HttpStatus.CONFLICT,
+        title = "No money was paid to a payment provider for this order",
+    ),
     UNAVAILABLE(
         code = "PAYMENT.UNAVAILABLE",
         status = HttpStatus.SERVICE_UNAVAILABLE,

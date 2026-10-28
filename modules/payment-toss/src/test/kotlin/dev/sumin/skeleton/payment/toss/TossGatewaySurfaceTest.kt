@@ -25,6 +25,13 @@ class TossGatewaySurfaceTest {
         TossPaymentProvider(noHttp, TossPaymentProperties(enabled = true, secretKey = secretKey, clientKey = clientKey))
 
     @Test
+    fun `the smallest won amount the checkout takes is 100 - other currencies are unknown`() {
+        assertEquals(100L, provider().minimumAmount("KRW"))
+        assertEquals(100L, provider().minimumAmount("krw"))
+        assertNull(provider().minimumAmount("USD"))
+    }
+
+    @Test
     fun `mode comes from the secret key prefix`() {
         assertEquals(PaymentMode.TEST, provider("test_sk_x").mode)
         assertEquals(PaymentMode.LIVE, provider("live_sk_x").mode)

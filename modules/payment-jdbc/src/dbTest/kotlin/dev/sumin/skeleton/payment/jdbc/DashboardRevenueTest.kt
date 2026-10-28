@@ -121,4 +121,20 @@ class DashboardRevenueTest {
         assertEquals(listOf(krw(10000 - 1000 + 900)), net(week1))
         assertEquals(listOf(DashboardAmount(2)), count.value(week1).data)
     }
+
+    @Test
+    fun `an exempt order is in no number, a coupon-free order is one payment and no revenue, and funnel steps ignore exempt orders`() {
+        paid("ord_1", "KRW", 10000, "2026-10-13T01:00:00Z")
+        paid("ord_free", "KRW", 0, "2026-10-13T02:00:00Z", provider = "free")                    // 쿠폰 0원 - 시험 키 앱에서도 건수에 든다
+        paid("ord_exempt", "KRW", 0, "2026-10-13T03:00:00Z", provider = "exempt", mode = "LIVE")  // 결제 면제 - 어디에도 없다
+        paid("ord_exempt2", "KRW", 0, "2026-10-13T04:00:00Z", provider = "exempt", mode = "TEST")
+
+        assertEquals(listOf(krw(10000)), net(week1))
+        assertEquals(listOf(DashboardAmount(2)), count.value(week1).data)
+        assertEquals(2L, count.series(week1, DashboardInterval.DAY, null).data!!.sumOf { it.value })
+        val account = dev.sumin.skeleton.common.dashboard.DashboardCohortMember("acc_1", Instant.parse("2026-10-01T00:00:00Z"))
+        assertEquals(1L, PaidStep(PaymentDb.jdbc, orders).reached(listOf(account)))
+        PaymentDb.jdbc.update("delete from payment_orders where provider <> 'exempt'", emptyMap<String, Any>())
+        assertEquals(0L, PaidStep(PaymentDb.jdbc, orders).reached(listOf(account)), "only exempt orders left: nobody paid")
+    }
 }

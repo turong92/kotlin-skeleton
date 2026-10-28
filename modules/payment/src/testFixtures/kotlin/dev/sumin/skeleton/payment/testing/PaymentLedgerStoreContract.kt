@@ -3,6 +3,8 @@ package dev.sumin.skeleton.payment.testing
 import dev.sumin.skeleton.payment.OperatorOrderFilter
 import dev.sumin.skeleton.payment.OperatorOrderScope
 import dev.sumin.skeleton.payment.OrderCursor
+import dev.sumin.skeleton.payment.OrderDiscount
+import dev.sumin.skeleton.payment.OrderDiscountStatus
 import dev.sumin.skeleton.payment.PaymentActor
 import dev.sumin.skeleton.payment.PaymentAmount
 import dev.sumin.skeleton.payment.PaymentEvent
@@ -1021,5 +1023,89 @@ abstract class PaymentLedgerStoreContract {
         assertEquals("deleted:abc", store.findSubscription(sub1.id)?.accountId)
         assertEquals("acc_other", store.findSubscription(sub2.id)?.accountId, "somebody else's line is not touched")
         assertEquals(0, store.replaceAccountReferences("acc_1", "deleted:abc"))
+    }
+
+    // --- 할인 내역 · 정산 방식 ---
+
+    private fun discountLine(orderId: String, seq: Int = 1, amount: Long = 900, status: OrderDiscountStatus = OrderDiscountStatus.RESERVED) =
+        OrderDiscount(orderId, seq, "coupon", "cpn_1", "30% off", amount, "KRW", status, PaymentTestOrders.T0, PaymentTestOrders.T0)
+
+    @Test
+    fun `the original and discount amounts and the discount lines round-trip, in order, for one order and for many`() {
+        val store = newStore()
+        val discounted = first.copy(amount = PaymentAmount(2100, "KRW"), originalAmount = 3000, discountAmount = 900)
+        assertTrue(store.inTransaction { tx -> tx.insertOrderIfAbsent(discounted).also { tx.insertOrderDiscount(discountLine(first.id)) } })
+        assertTrue(store.inTransaction { tx -> tx.insertOrderIfAbsent(second).also { tx.insertOrderDiscount(discountLine(second.id, 1, 100)); tx.insertOrderDiscount(discountLine(second.id, 2, 200)) } })
+
+        val read = assertNotNull(store.findOrder(first.id))
+        assertEquals(3000, read.originalAmount)
+        assertEquals(900, read.discountAmount)
+        assertNull(store.findOrder(second.id)!!.originalAmount)
+        assertEquals(0, store.findOrder(second.id)!!.discountAmount)
+        assertEquals(listOf(discountLine(first.id)), store.listOrderDiscounts(listOf(first.id)))
+        assertEquals(listOf(first.id to 1, second.id to 1, second.id to 2), store.listOrderDiscounts(listOf(second.id, first.id)).map { it.orderId to it.seq }.sortedWith(compareBy({ it.first }, { it.second })))
+        assertEquals(emptyList(), store.listOrderDiscounts(emptyList()))
+        store.inTransaction { tx ->
+            tx.lockOrder(first.id)
+            assertEquals(listOf(discountLine(first.id)), tx.listOrderDiscounts(first.id))
+        }
+    }
+
+    @Test
+    fun `a discount line is written only under the order lock, its status moves, and a rollback takes it away`() {
+        val store = newStore()
+        store.inTransaction { it.insertOrderIfAbsent(first) }
+
+        assertFailsWith<IllegalStateException> { store.inTransaction { tx -> tx.insertOrderDiscount(discountLine(first.id)) } }
+        assertFailsWith<IllegalStateException> {
+            store.inTransaction { tx ->
+                tx.lockOrder(first.id)
+                tx.insertOrderDiscount(discountLine(first.id))
+                error("boom")
+            }
+        }
+        assertEquals(emptyList(), store.listOrderDiscounts(listOf(first.id)))
+
+        store.inTransaction { tx -> tx.lockOrder(first.id); tx.insertOrderDiscount(discountLine(first.id)) }
+        store.inTransaction { tx ->
+            tx.lockOrder(first.id)
+            tx.updateOrderDiscountStatus(first.id, 1, OrderDiscountStatus.CONFIRMED, PaymentTestOrders.T0.plusSeconds(5))
+        }
+        val line = store.listOrderDiscounts(listOf(first.id)).single()
+        assertEquals(OrderDiscountStatus.CONFIRMED, line.status)
+        assertEquals(PaymentTestOrders.T0.plusSeconds(5), line.updatedAt)
+        assertFailsWith<IllegalStateException> { store.inTransaction { tx -> tx.lockOrder(first.id); tx.updateOrderDiscountStatus(first.id, 9, OrderDiscountStatus.RELEASED, PaymentTestOrders.T0) } }
+    }
+
+    @Test
+    fun `hasPaidOrder counts orders a provider received money for - not unpaid ones, not free or exempt ones`() {
+        val store = newStore()
+        store.inTransaction { it.insertOrderIfAbsent(first) }
+        assertFalse(store.hasPaidOrder("acc_1"))
+
+        store.inTransaction { tx -> tx.insertOrderIfAbsent(second.copy(provider = "free", status = PaymentOrderStatus.PAID, paidAt = PaymentTestOrders.T0, dedupeKey = "d-free")) }
+        store.inTransaction { tx -> tx.insertOrderIfAbsent(first.copy(id = id32("ord_", 5), provider = "exempt", status = PaymentOrderStatus.PAID, paidAt = PaymentTestOrders.T0, dedupeKey = "d-exempt")) }
+        assertFalse(store.hasPaidOrder("acc_1"))
+
+        store.inTransaction { tx -> tx.insertOrderIfAbsent(first.copy(id = id32("ord_", 6), status = PaymentOrderStatus.PAID, paidAt = PaymentTestOrders.T0, dedupeKey = "d-real")) }
+        assertTrue(store.hasPaidOrder("acc_1"))
+        assertFalse(store.hasPaidOrder("acc_other"))
+    }
+
+    @Test
+    fun `the operator list can be narrowed to exempt, free or provider orders`() {
+        val store = newStore()
+        val exempt = first.copy(id = id32("ord_", 7), provider = "exempt", dedupeKey = "d7")
+        val free = first.copy(id = id32("ord_", 8), provider = "free", dedupeKey = "d8")
+        val real = first.copy(id = id32("ord_", 9), dedupeKey = "d9")
+        listOf(exempt, free, real).forEach { order -> store.inTransaction { it.insertOrderIfAbsent(order) } }
+
+        fun ids(settlement: dev.sumin.skeleton.payment.PaymentSettlement?) =
+            store.listOrdersForOperator(OperatorOrderScope.ALL, OperatorOrderFilter(settlement = settlement), null, null, 10).map { it.id }.toSet()
+
+        assertEquals(setOf(exempt.id), ids(dev.sumin.skeleton.payment.PaymentSettlement.EXEMPT))
+        assertEquals(setOf(free.id), ids(dev.sumin.skeleton.payment.PaymentSettlement.FREE))
+        assertEquals(setOf(real.id), ids(dev.sumin.skeleton.payment.PaymentSettlement.PROVIDER))
+        assertEquals(setOf(exempt.id, free.id, real.id), ids(null))
     }
 }

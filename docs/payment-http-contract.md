@@ -29,7 +29,8 @@
   "orderName": "응원하기 3,000원", "amount": { "amount": 3000, "currency": "KRW" },
   "refundedAmount": 0, "refundableAmount": 3000, "refundPending": false, "openRefundStatus": null,
   "method": "CARD", "card": { "issuer": "HYUNDAI", "last4": "1234" } /* | null */, "easyPayBrand": null /* | "KAKAOPAY" | "NAVERPAY" */, "testMode": true,
-  "failureCode": null, "createdAt": "…Z", "paidAt": "…Z" /* | null */, "fulfilled": true }
+  "failureCode": null, "createdAt": "…Z", "paidAt": "…Z" /* | null */, "fulfilled": true,
+  "originalAmount": 3000 /* | null */, "discountAmount": 0, "discounts": [ { "type": "coupon", "ref": "cpn_1", "label": "30% off", "amount": 900 } ], "settlement": "PROVIDER" /* | "FREE" | "EXEMPT" */ }
 ```
 
 - `status`: `PENDING`(결제창 대기) · `CONFIRMING`(승인 확인 중) · `PAID` · `PARTIALLY_REFUNDED` · `REFUNDED` · `FAILED` · `EXPIRED` · `CANCELED`. `kind`: `ONE_TIME`(1단계는 이것뿐).
@@ -41,6 +42,7 @@
 - `testMode`: 이 주문이 테스트 키로 만들어졌다(화면은 늘 「테스트 결제」 띠를 보인다).
 - `failureCode`(주문): 결제사가 승인을 거절한 코드(식별자 모양만, 코드를 못 읽으면 `DECLINED`) · `PROVIDER_EXPIRED` · `PROVIDER_ABORTED`(결제사가 만료 · 중단으로 끝냈다) · `EXPIRED_UNPAID`(결제 없이 시간이 지났다). 결제된 주문은 `null`.
 - `fulfilled`: 앱의 지급(`PaymentOrderListener.onPaid`)이 끝났다.
+- `originalAmount`(할인 전 금액 · 칸은 늘 온다)·`discountAmount`·`discounts`·`settlement` (C-P — 기존 칸에 **더하기만**): `amount` 는 늘 **최종 금액**(결제사가 받는 값 · 환불 상한)이다. 할인도 면제도 없는 주문(옛 줄 포함)은 `originalAmount: null` · `discountAmount: 0` · `discounts: []` · `settlement: "PROVIDER"`. `discounts[]` 의 `type` 은 할인 수단(`coupon`), `ref` 는 그 수단 안의 식별(쿠폰 id), `amount` 는 깎인 금액(양수) — 금액은 서버가 계산한 값이다. `settlement`: `PROVIDER`(결제사가 받았다) · `FREE`(쿠폰으로 0원 — **결제사 없이** 처음부터 `PAID`, `checkout: null`, `refundableAmount: 0`) · `EXEMPT`(결제 면제 권한 `payment.exempt` 계정 — 결제사 없이 `PAID`, `originalAmount` = 카탈로그 가격, `amount: 0`, `discountAmount: 0`, 할인 줄 없음). 운영자 응답은 같은 칸에 `provider` 가 `free` · `exempt` 로 보인다.
 
 ### 1.2 환불 `Refund` (사용자 응답)
 
@@ -121,6 +123,11 @@
 
 주문은 `skeleton.payment.checkout-ttl`(기본 30분) 동안만 결제할 수 있다. 지나면 만료 작업이 결제사에 물어 `EXPIRED` 로 닫거나(결제가 있었으면 `PAID`), 늦게 온 결제를 `PAID` 로 맞춘다.
 
+선택 본문 칸 `discounts: [{ "type": "coupon", "ref": "<쿠폰 id>" }]` — 첫 판은 **최대 1개**(더 보내면 `400 DISCOUNT_NOT_APPLICABLE`). 서버가 카탈로그 가격에 할인을 적용해 **최종가를 정하고**(브라우저가 보낸 금액·할인액은 어디에도 없다), 쿠폰을 그 주문 이름으로 **예약**한다(같은 쿠폰을 두 주문이 쥘 수 없다 — 진 쪽은 `409 DISCOUNT_UNAVAILABLE`). 최종가가 0 이면 결제사를 부르지 않고 `201 { order(status PAID, settlement FREE), checkout: null }`. 호출자가 `payment.exempt` 를 가졌으면 쿠폰은 보지도 않고 `settlement EXEMPT` 로 끝난다. 같은 `Idempotency-Key` 의 재전송은 처음 줄을 돌려준다(예약은 한 번). 결제를 시작하지 않은 주문은 만료 · 그만둠 · 거절 때 쿠폰을 풀고, 늦게 `PAID` 가 된 주문은 쿠폰을 다시 잡으며 그사이 다른 주문이 쥐었으면 둘 다 그대로 두고 운영자 응답의 `reviewReason` 에 `DISCOUNT_CONFLICT` 가 찍힌다(지급은 평소처럼 나간다). 전액 환불은 쿠폰을 돌려주고 부분 환불은 돌려주지 않는다.
+
+### POST /quote — 주문을 만들지 않고 금액 보기 (`PaymentCatalog` 빈이 있을 때만)
+본문 `{ "itemType", "itemRef", "quantity"?, "provider"?, "discounts"? }`(주문 만들기와 같은 칸, `Idempotency-Key` 없음) → `200 { value: { originalAmount, amount, currency, discounts: [{ type, ref, label, amount }], settlement } }`. **주문 만들기와 같은 계산**이라 견적의 `amount` 가 주문의 `amount` 다. 아무것도 쥐거나 쓰지 않는다. `settlement: "FREE"` 면 결제창 없이 끝나는 0원, `"EXEMPT"` 면 호출자가 결제 면제(`amount: 0`). 오류는 주문 만들기와 같은 `PAYMENT.DISCOUNT_*` · `422 ITEM_NOT_PURCHASABLE`. 요청 수 한도는 걸지 않는다(쿠폰함이 쿠폰마다 부른다).
+
 ### POST /orders/{id}/confirm — 결제창에서 돌아온 결제를 승인
 본문 `{ "providerPaymentId": "…", "amount": 3000 }`(`providerPaymentId` 1~200자 - 아래 예외를 빼면 필수 · `amount` 정수) + 선택 `"approvalToken"`(1~200자 문자열 - 돌아온 결제창이 승인을 허락한 증거, 카카오페이의 `pg_token`. 토스는 보내지 않는다). **주문에 결제사가 먼저 정한 거래 번호가 박혀 있으면(카카오페이) `providerPaymentId` 는 생략할 수 있다** - 서버가 박힌 번호를 쓴다. 보냈는데 박힌 번호와 다르면 결제사를 부르기 전에 `409 ORDER_NOT_PAYABLE`. `approvalToken` 이 결제사가 받는 모양이 아니거나(카카오페이는 필수) 없으면 **선점 전에** `400 VALIDATION_FAILED`(field `approvalToken`) - 주문은 `PENDING` 그대로다. 박힌 번호가 없는 주문(토스)에서 생략하면 `400 VALIDATION_FAILED`. **`amount` 는 비교만 한다** — 결제사에는 주문 줄의 금액이 간다.
 
@@ -175,7 +182,7 @@
 
 CS 처럼 `payment.read` + `payment.refund` 만 가진 역할은 환불 줄만 만지고 결제사와 맞추기 · 닫기 · 웹훅 다시 처리는 `403` 이다. 누가 어느 권한을 갖는지는 `skeleton.authz`(전권 역할 `ADMIN` 은 `*` 로 모두). `account` 를 쓰는 앱은 매 호출 저장소의 역할을 읽으므로 회수 · 정지가 토큰이 유효해도 다음 호출부터 먹는다. 앱이 `PaymentOperatorPolicy` 빈을 두면 그 판정이 대신한다(`isOperator` 만 구현하면 권한을 가르지 않고 전 경로를 허락 · 거절한다). 꺼져 있으면(기본) 아래 모든 경로가 `404 COMMON.NOT_FOUND` — 프론트의 「꺼짐」 판정은 이 코드가 `PAYMENT.ORDER_NOT_FOUND` · `PAYMENT.REFUND_NOT_FOUND` · `PAYMENT.WEBHOOK_EVENT_NOT_FOUND` · `PAYMENT.PROVIDER_PAYMENT_NOT_FOUND` 넷 중 어느 것도 아닌 404 라는 것으로 한다.
 
-### GET /orders?status=&accountId=&q=&review=&includeErased=&cursor=&size=
+### GET /orders?status=&accountId=&q=&review=&includeErased=&settlement=&cursor=&size=
 `200 { values: AdminOrder[], cursor }`, 최신순. 모든 쿼리는 선택.
 
 | 쿼리 | 뜻 |
@@ -442,6 +449,11 @@ CS 처럼 `payment.read` + `payment.refund` 만 가진 역할은 환불 줄만 �
 | `PAYMENT.ORDER_NOT_PAYABLE` | 409 | 승인 — 지금 상태에서는 결제할 수 없는 주문 |
 | `PAYMENT.MODE_MISMATCH` | 409 | 키의 모드(테스트 · 실결제) 불일치 — 승인 · 직접 환불 · 승인 · `sync` |
 | `PAYMENT.DECLINED` | 402 | 승인 확정 거절. `data.providerCode` · `data.category` |
+| `PAYMENT.DISCOUNT_NOT_APPLICABLE` | 400 | 주문 · 견적 — 이 구매에 쓸 수 없는 할인(범위 밖 · 최소 금액 미달 · 통화 불일치 · 「첫 결제만」인데 결제한 적 있음 · 모르는 수단 · 한 주문에 둘 이상 · 깎는 것이 없음) |
+| `PAYMENT.DISCOUNT_UNAVAILABLE` | 409 | 주문 · 견적 — 쿠폰이 이미 다른 주문이 쥐었거나 썼거나 만료됐다 |
+| `PAYMENT.DISCOUNT_NOT_SUPPORTED` | 400 | 주문 · 견적 — 결제사가 금액을 직접 정하는 경로(거래를 먼저 만드는 결제사 · Paddle)는 할인을 받지 않는다 |
+| `PAYMENT.DISCOUNT_BELOW_MINIMUM` | 400 | 주문 — 0 < 할인 뒤 금액 < 결제사 최소 금액. `data.minimumAmount` |
+| `PAYMENT.NOTHING_TO_REFUND` | 409 | 환불 요청 · 직접 환불 · 승인 — 결제사 없이 끝난 주문(`settlement` FREE · EXEMPT)은 돌려줄 돈이 없다. 다른 환불 검사보다 먼저 이 코드로 거절한다 |
 | `PAYMENT.REFUND_NOT_ALLOWED` | 409 | 환불할 수 없는 상태 · 이미 결정된 요청 · 「먼저 결제사와 맞추기」 |
 | `PAYMENT.REFUND_IN_PROGRESS` | 409 | 이 주문에 열린 환불이 있다 |
 | `PAYMENT.REFUND_AMOUNT_EXCEEDED` | 400 | 환불할 수 있는 금액 초과 |

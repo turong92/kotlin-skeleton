@@ -76,6 +76,12 @@ class ScriptedGateway(
 
     override fun easyPays(): List<String> = easyPays
 
+    /** 이 결제사가 받는 가장 작은 금액(원화) - 기본은 제한 없음. 할인 뒤 금액이 이 값 미만이면 주문을 만들지 않는 시험이 바꾼다. */
+    @Volatile
+    var minimum: Long? = null
+
+    override fun minimumAmount(currency: String): Long? = minimum
+
     /** 이 결제사가 받는 결제 키의 모양 — 기본은 전부 받는다. 시험이 바꾼다. */
     @Volatile
     var acceptsPaymentKey: (String) -> Boolean = { true }

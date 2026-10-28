@@ -102,7 +102,7 @@ class PaymentController(
         // 결제사가 결제창을 열 때 거래 번호를 먼저 정한 주문(카카오페이)은 번호를 브라우저가 몰라도 된다 - 박힌 번호를 쓴다. 보냈다면 장부가 박힌 번호와 같은지 본다
         val paymentKey = sentKey ?: current.providerPaymentId ?: throw dev.sumin.skeleton.common.FieldValidationException("providerPaymentId", "Required", "providerPaymentId is required")
         val order = orders.confirm(account, id, paymentKey, PaymentAmount(amount, current.amount.currency), approvalToken)
-        val response = Response.ok(OrderResponse.of(refunds.get(account, order.id).let { dev.sumin.skeleton.payment.OrderView(it.order, it.refunds) }))
+        val response = Response.ok(OrderResponse.of(refunds.get(account, order.id).let { dev.sumin.skeleton.payment.OrderView(it.order, it.refunds, it.discounts) }))
         return if (order.status == PaymentOrderStatus.CONFIRMING) ResponseEntity.accepted().body(response) else ResponseEntity.ok(response)
     }
 
@@ -153,5 +153,5 @@ class PaymentController(
         Response.ok(RefundResponse.of(refunds.withdraw(callers.account(authentication), id)))
 
     private fun view(account: String, orderId: String): dev.sumin.skeleton.payment.OrderView =
-        refunds.get(account, orderId).let { dev.sumin.skeleton.payment.OrderView(it.order, it.refunds) }
+        refunds.get(account, orderId).let { dev.sumin.skeleton.payment.OrderView(it.order, it.refunds, it.discounts) }
 }

@@ -37,6 +37,15 @@ interface PaymentLedgerStore {
     /** 주문의 이력, 오래된 것부터. */
     fun listEvents(orderId: String): List<PaymentEvent>
 
+    /** 주문들의 할인 내역 한꺼번에(주문별로 `seq` 순). 잠그지 않는다 - 보여 주기용이다. 목록 줄마다 묻지 않으려고 여럿을 받는다. */
+    fun listOrderDiscounts(orderIds: Collection<String>): List<OrderDiscount>
+
+    /**
+     * 이 계정이 **결제사에 돈을 낸 적이 있는가** - 쿠폰의 「첫 결제만」 판정이 쓴다. 결제사 없이 끝난 주문(쿠폰 0원 `free` · 결제 면제 `exempt`)은 「결제한 적」이 아니다.
+     * 잠그지 않는다. 구독의 첫 결제도 센다.
+     */
+    fun hasPaidOrder(accountId: String): Boolean
+
     /** 잠그지 않고 커밋된 환불 줄을 읽는다 — 어느 주문의 줄인지 알아내기 · 보여 주기용. 이 값으로 상태를 바꾸는 판단을 하지 않는다. */
     fun findRefund(id: String): PaymentRefund?
 
@@ -162,6 +171,15 @@ interface PaymentLedgerTx {
     fun updateOrder(order: PaymentOrder)
 
     fun appendEvent(event: PaymentEvent)
+
+    /** 이 트랜잭션에서 보이는 한 주문의 할인 내역(`seq` 순). 잠그지 않는다. */
+    fun listOrderDiscounts(orderId: String): List<OrderDiscount>
+
+    /** 할인 내역 줄을 넣는다. 이 트랜잭션이 [lockOrder] 로 잠갔거나 [insertOrderIfAbsent] 로 넣은 주문의 줄만 - 아니면 [IllegalStateException]. 같은 `(orderId, seq)` 는 던진다(버그). */
+    fun insertOrderDiscount(line: OrderDiscount)
+
+    /** 할인 내역 줄의 상태만 바꾼다(주문을 잠갔어야 한다). 줄이 없으면 [IllegalStateException]. */
+    fun updateOrderDiscountStatus(orderId: String, seq: Int, status: OrderDiscountStatus, at: Instant)
 
     /**
      * 환불 줄을 읽는다(없으면 null). **그 줄의 주문을 이 트랜잭션이 이미 잠갔어야 한다**(아니면 [IllegalStateException]) — 락 순서는 늘 주문 → 환불이다.

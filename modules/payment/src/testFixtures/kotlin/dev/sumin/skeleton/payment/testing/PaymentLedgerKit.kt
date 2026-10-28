@@ -160,18 +160,30 @@ class PaymentLedgerKit(
     val push: FakePushGateway = FakePushGateway(),
     /** 진짜 결제사 모듈(가짜 결제사 서버와 말하는 것)을 이 장부에 꽂는 자리 - 라우터에 더해진다. 주문은 `CreateOrderCommand.provider` 로 그 결제사를 고른다. */
     extraGateways: List<dev.sumin.skeleton.payment.PaymentGateway> = emptyList(),
+    /** 할인 수단 대역(쿠폰 등) - 비어 있으면 할인 지정은 모두 `DISCOUNT_NOT_APPLICABLE` 이다. */
+    val discountSources: List<dev.sumin.skeleton.common.discount.DiscountSource> = emptyList(),
 ) {
     val time = MutableTime()
     val store = InMemoryPaymentLedgerStore()
     val gateway = ScriptedGateway(mode = mode, now = { time.now() }, openTransaction = store::hasOpenTransaction)
     val tasks = InMemoryPaymentTasks(store)
     val router = PaymentProviderRouter(listOf(gateway, push) + extraGateways, properties)
-    val writer = PaymentLedgerWriter(time)
+    val discounts = dev.sumin.skeleton.payment.PaymentDiscounts({ discountSources }, store) { time.now() }
+    val writer = PaymentLedgerWriter(time).also { it.discounts = discounts }
+
+    /** 결제 면제 권한을 가진 계정 - 시험이 넣고 뺀다(권한 회수 뒤 다음 주문을 보려고). */
+    val exemptAccounts: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+    val exemption = dev.sumin.skeleton.payment.PaymentExemption(
+        object : dev.sumin.skeleton.common.authz.OperatorAccess {
+            override fun permissionsOf(ref: dev.sumin.skeleton.common.authz.OperatorRef): Set<String> =
+                if (ref.accountId in exemptAccounts) setOf(dev.sumin.skeleton.payment.PaymentPermissions.EXEMPT) else emptySet()
+        },
+    )
     val lifecycle = SubscriptionLifecycle(tasks, writer, properties, review)
     val convergence = PaymentConvergence(writer, tasks, review, LedgerRefundConvergence(writer, tasks, review)).also { it.subscriptions = lifecycle }
     val plans = TestSubscriptionPlans()
-    val fulfillment = PaymentFulfillment(store, listener, writer, lifecycle)
-    val orders = PaymentOrders(store, tasks, router, catalog, convergence, fulfillment, writer, properties)
+    val fulfillment = PaymentFulfillment(store, listener, writer, lifecycle, discounts)
+    val orders = PaymentOrders(store, tasks, router, catalog, convergence, fulfillment, writer, properties, discounts = discounts, exemption = exemption)
     val expire = OrderExpireTaskHandler(store, router, convergence)
     val reconcile = OrderReconcileTaskHandler(store, router, convergence).also { it.subscriptions = lifecycle }
     val fulfil = OrderFulfilTaskHandler(fulfillment, store, convergence)
@@ -216,7 +228,8 @@ class PaymentLedgerKit(
         itemRef: String = "cheer-3000",
         key: String = "key-1",
         quantity: Int = 1,
-    ): CreatedOrder = orders.create(CreateOrderCommand(accountId, "cheer", itemRef, IdempotencyKey(key), quantity))
+        claims: List<dev.sumin.skeleton.common.discount.DiscountClaim> = emptyList(),
+    ): CreatedOrder = orders.create(CreateOrderCommand(accountId, "cheer", itemRef, IdempotencyKey(key), quantity, discounts = claims))
 
     /** 주문을 만들고 브라우저가 결제창에서 인증까지 마친 상태로 만든다. */
     fun createAuthenticated(

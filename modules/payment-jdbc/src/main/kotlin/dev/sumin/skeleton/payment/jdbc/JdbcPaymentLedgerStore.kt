@@ -3,6 +3,10 @@ package dev.sumin.skeleton.payment.jdbc
 import dev.sumin.skeleton.payment.OperatorOrderFilter
 import dev.sumin.skeleton.payment.OperatorOrderScope
 import dev.sumin.skeleton.payment.OrderCursor
+import dev.sumin.skeleton.payment.OrderDiscount
+import dev.sumin.skeleton.payment.OrderDiscountStatus
+import dev.sumin.skeleton.payment.PaymentOrders
+import dev.sumin.skeleton.payment.PaymentSettlement
 import dev.sumin.skeleton.payment.PaymentEvent
 import dev.sumin.skeleton.payment.PaymentLedgerConflictException
 import dev.sumin.skeleton.payment.PaymentLedgerStore
@@ -50,6 +54,7 @@ class JdbcPaymentLedgerStore(
     private val rows = PaymentOrderRows(dialect)
     private val refundRows = PaymentRefundRows(dialect)
     private val subscriptionRows = PaymentSubscriptionRows(dialect)
+    private val discountRows = PaymentDiscountRows(dialect)
     private val webhook = JdbcWebhookInbox(jdbc, dialect)
     private val template = TransactionTemplate(transactionManager).also { it.isolationLevel = TransactionDefinition.ISOLATION_READ_COMMITTED }
 
@@ -117,6 +122,17 @@ class JdbcPaymentLedgerStore(
 
     override fun listEvents(orderId: String): List<PaymentEvent> =
         jdbc.query("${rows.eventSelect} where order_id = :order order by id", mapOf("order" to orderId)) { rs, _ -> rows.event(rs) }
+
+    override fun listOrderDiscounts(orderIds: Collection<String>): List<OrderDiscount> {
+        if (orderIds.isEmpty()) return emptyList()
+        return jdbc.query("${discountRows.select} where order_id in (:ids) order by order_id, seq", mapOf("ids" to orderIds)) { rs, _ -> discountRows.line(rs) }
+    }
+
+    override fun hasPaidOrder(accountId: String): Boolean =
+        jdbc.queryForList(
+            "select 1 from payment_orders where account_id = :account and paid_at is not null and provider not in ('${PaymentOrders.FREE_PROVIDER}', '${PaymentOrders.EXEMPT_PROVIDER}') limit 1",
+            mapOf("account" to accountId), Int::class.java,
+        ).isNotEmpty()
 
     override fun findRefund(id: String): PaymentRefund? =
         jdbc.query("${refundRows.refundSelect} where id = :id", mapOf("id" to id)) { rs, _ -> refundRows.refund(rs) }.firstOrNull()
@@ -205,6 +221,13 @@ class JdbcPaymentLedgerStore(
         status?.let { where += "status = :status"; params["status"] = it.name }
         filter.accountId?.let { where += "account_id = :account"; params["account"] = it }
         if (filter.hideErased) where += "account_erased_at is null"
+        filter.settlement?.let { settlement ->
+            where += when (settlement) {
+                PaymentSettlement.EXEMPT -> "provider = '${PaymentOrders.EXEMPT_PROVIDER}'"
+                PaymentSettlement.FREE -> "provider = '${PaymentOrders.FREE_PROVIDER}'"
+                PaymentSettlement.PROVIDER -> "provider not in ('${PaymentOrders.FREE_PROVIDER}', '${PaymentOrders.EXEMPT_PROVIDER}')"
+            }
+        }
         val cursor = orderCursor(before, params).removePrefix(" and ")
         val order = "order by created_at desc, id desc limit :limit"
         if (postgres && scope == OperatorOrderScope.UNFULFILLED) {
@@ -379,6 +402,23 @@ class JdbcPaymentLedgerStore(
                 // 고칠 수 있는 유니크는 (provider, provider_payment_id) 뿐이다. PostgreSQL 은 이 문장 때문에 트랜잭션이 못 쓰게 되므로 호출자가 이 트랜잭션을 끝내야 한다(서비스는 던져서 되돌린다)
                 throw PaymentLedgerConflictException("provider payment id is already attached to another order")
             }
+        }
+
+        override fun listOrderDiscounts(orderId: String): List<OrderDiscount> =
+            jdbc.query("${discountRows.select} where order_id = :order order by seq", mapOf("order" to orderId)) { rs, _ -> discountRows.line(rs) }
+
+        override fun insertOrderDiscount(line: OrderDiscount) {
+            check(line.orderId == ownedOrderId) { "the order must be locked in this transaction before a discount line is inserted" }
+            jdbc.update(discountRows.insert, discountRows.params(line))
+        }
+
+        override fun updateOrderDiscountStatus(orderId: String, seq: Int, status: OrderDiscountStatus, at: Instant) {
+            check(orderId == ownedOrderId) { "the order must be locked in this transaction before a discount line is updated" }
+            val updated = jdbc.update(
+                "update payment_order_discounts set status = :status, updated_at = :at where order_id = :order and seq = :seq",
+                mapOf("status" to status.name, "at" to dialect.instantParam(at), "order" to orderId, "seq" to seq),
+            )
+            check(updated == 1) { "no such discount line" }
         }
 
         override fun lockRefund(id: String): PaymentRefund? {

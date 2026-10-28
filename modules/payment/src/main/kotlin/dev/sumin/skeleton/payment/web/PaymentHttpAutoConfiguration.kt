@@ -7,6 +7,7 @@ import dev.sumin.skeleton.common.web.InMemoryFixedWindowRateLimitStore
 import dev.sumin.skeleton.common.web.RateLimitStore
 import dev.sumin.skeleton.payment.PaymentBillingGateway
 import dev.sumin.skeleton.payment.PaymentCatalog
+import dev.sumin.skeleton.payment.PaymentExemption
 import dev.sumin.skeleton.payment.PaymentLedgerAutoConfiguration
 import dev.sumin.skeleton.payment.PaymentLedgerStore
 import dev.sumin.skeleton.payment.PaymentLedgerWriter
@@ -88,7 +89,8 @@ class PaymentHttpAutoConfiguration {
         limiter: PaymentOrderRateLimiter,
         clientIps: ObjectProvider<ClientIps>,
         routing: PaymentCountryRouting,
-    ): PaymentOrderController = PaymentOrderController(orders, callers, limiter, clientIps.getIfAvailable { ClientIps() }, routing)
+        exemption: ObjectProvider<PaymentExemption>,
+    ): PaymentOrderController = PaymentOrderController(orders, callers, limiter, clientIps.getIfAvailable { ClientIps() }, routing, exemption.getIfAvailable())
 
     /** 구독 경로 — 구독을 켠 앱([PaymentSubscriptions] 빈)에서만. 만들기는 주문 만들기와 같은 요청 수 한도를 쓴다. */
     @Bean

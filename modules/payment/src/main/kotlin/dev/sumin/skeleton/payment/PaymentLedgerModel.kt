@@ -21,6 +21,48 @@ enum class PaymentOrderStatus {
     val isClosed: Boolean get() = this == FAILED || this == EXPIRED || this == CANCELED
 }
 
+/**
+ * 주문의 정산 방식(파생값 - 새 칸이 아니라 [PaymentOrder.provider] 가 정한다). [FREE] 쿠폰으로 최종가가 0원이라 결제사 없이 끝났다 ·
+ * [EXEMPT] 결제 면제 권한 계정이라 결제사 없이 끝났다(할인이 아니다). 둘 다 처음부터 `PAID` 이고 결제창이 없고 환불할 것이 없다.
+ */
+enum class PaymentSettlement {
+    PROVIDER,
+    FREE,
+    EXEMPT,
+    ;
+
+    /** 결제사 모듈이 없는 정산 - 환불 · 결제사와 맞추기의 대상이 아니다. */
+    val isOffProvider: Boolean get() = this != PROVIDER
+
+    companion object {
+        fun of(provider: String): PaymentSettlement = when (provider) {
+            PaymentOrders.FREE_PROVIDER -> FREE
+            PaymentOrders.EXEMPT_PROVIDER -> EXEMPT
+            else -> PROVIDER
+        }
+    }
+}
+
+/** 주문에 붙은 할인 한 줄의 상태 - 예약(주문이 쥐고 있다) → 확정(결제가 끝나 썼다) / 해제(결제가 안 됐다) / 복원(전액 환불로 돌려줬다). */
+enum class OrderDiscountStatus { RESERVED, CONFIRMED, RELEASED, RESTORED }
+
+/**
+ * 주문에 붙은 할인 내역 한 줄 - [kind] 는 할인 수단(`coupon`), [sourceRef] 는 그 수단 안의 식별(쿠폰 id), [amount] 는 깎인 금액(양수, 최소 단위).
+ * 결제사 모듈이 아니라 장부의 것이다 - 금액은 서버가 계산한 값이고 브라우저가 보낸 값이 아니다.
+ */
+data class OrderDiscount(
+    val orderId: String,
+    val seq: Int,
+    val kind: String,
+    val sourceRef: String,
+    val label: String,
+    val amount: Long,
+    val currency: String,
+    val status: OrderDiscountStatus,
+    val createdAt: Instant,
+    val updatedAt: Instant,
+)
+
 enum class PaymentOrderKind { ONE_TIME, SUBSCRIPTION_INITIAL, SUBSCRIPTION_RENEWAL, SUBSCRIPTION_CHANGE }
 
 /** 이 주문을 만든 것. 1단계는 [CHECKOUT] 뿐이다. */
@@ -48,6 +90,12 @@ enum class PaymentReviewReason(val isMoney: Boolean) {
 
     /** 해외 결제사(Paddle)로 결제한 구매자의 주소 나라가 한국이다 - 한국 구매자는 토스 + 한국 정책이 맞다. 막지 않았고 돈은 받았다; 운영자가 본다. */
     BUYER_COUNTRY_KR(false),
+
+    /**
+     * 쿠폰 같은 할인 수단이 늦게 `PAID` 가 된 주문에 자기 것을 다시 내주지 못했다 - 그사이 다른 주문이 그 쿠폰을 쥐었다. 두 주문 모두 그대로 두고(손님은 이미 할인가로 냈다),
+     * 이 주문에 표시만 한다. 지급은 평소처럼 나간다. 운영자가 판단한다.
+     */
+    DISCOUNT_CONFLICT(false),
 
     /** 지급 작업이 죽었다 — 돈은 받았는데 `fulfilled_at` 이 비어 있다. 운영자의 맞추기가 지급 작업을 다시 넣고 푼다. */
     FULFILMENT_UNRESOLVED(false),
@@ -102,7 +150,14 @@ data class PaymentOrder(
     val country: String? = null,
     /** 간편결제의 브랜드 코드(`KAKAOPAY` · `NAVERPAY` · `TOSSPAY` …, 결제사 중립) - 간편결제가 아니거나 모르면 null(옛 주문 포함). 경로(어느 결제사로 갔나)는 [provider] 다. */
     val easyPayBrand: String? = null,
+    /** 할인 전 금액(최소 단위). 할인도 면제도 없는 옛 줄 · 일반 주문은 null - 그때 [amount] 가 곧 정가다. 면제 주문은 카탈로그 가격(얼마어치를 면제했나). */
+    val originalAmount: Long? = null,
+    /** 깎인 금액의 합(최소 단위). 할인 내역 줄의 합과 같다 - 면제는 할인이 아니라 0. */
+    val discountAmount: Long = 0,
 ) {
+    /** 어떻게 정산됐나 - 결제사 id 가 예약 id(`free` · `exempt`)이면 결제사 없이 끝난 주문이다. */
+    val settlement: PaymentSettlement get() = PaymentSettlement.of(provider)
+
     override fun toString(): String =
         "PaymentOrder(id=$id, status=$status, amount=${amount.amount} ${amount.normalizedCurrency}, refunded=$refundedAmount, " +
             "card=${if (cardIssuer == null && cardLast4 == null) "none" else "masked"})"
@@ -215,6 +270,9 @@ enum class PaymentEventType {
 
     /** 차지백 분쟁에서 이겨 돈이 돌아왔다 - 환불 줄이 `SUCCEEDED` → `REVERSED`(환불 줄의 이력). 지급 · 구독은 되살리지 않는다. */
     CHARGEBACK_REVERSED,
+
+    /** 결제 면제 권한(`payment.exempt`)을 가진 계정의 주문이라 결제사 없이 완료됐다 - 행위자는 그 계정이다. 이어서 `PENDING → PAID` 이력이 남는다. */
+    EXEMPTED,
 }
 
 enum class PaymentActor { USER, OPERATOR, SYSTEM, PROVIDER }

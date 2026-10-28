@@ -9,7 +9,9 @@ import dev.sumin.skeleton.common.openapi.ApiResponseEnvelope
 import dev.sumin.skeleton.common.web.ClientIps
 import dev.sumin.skeleton.payment.CreateOrderCommand
 import dev.sumin.skeleton.payment.OrderView
+import dev.sumin.skeleton.payment.PaymentExemption
 import dev.sumin.skeleton.payment.PaymentOrders
+import dev.sumin.skeleton.payment.QuoteCommand
 import dev.sumin.skeleton.payment.web.PaymentRequests.idempotencyKey
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
@@ -38,6 +40,7 @@ class PaymentOrderController(
     private val limiter: PaymentOrderRateLimiter,
     private val clientIps: ClientIps,
     private val routing: PaymentCountryRouting,
+    private val exemption: PaymentExemption? = null,
 ) {
     @Operation(
         summary = "Create an order and get the values for the checkout window",
@@ -63,10 +66,36 @@ class PaymentOrderController(
         val itemRef = PaymentRequests.text(body["itemRef"], "itemRef", 128)
         val quantity = PaymentRequests.wholeNumber(body["quantity"], "quantity") ?: 1
         val route = routing.of(request)
+        val discounts = PaymentRequests.discounts(body["discounts"])
+        val exempt = exemption?.isExempt(authentication!!) == true   // 서버가 요청의 호출자로 판정한다 - 본문의 값이 아니다
         // 같은 나라의 결제사가 둘 이상 열려 있으면 구매자가 고른 것(`provider`)을 받는다 - 나라 · 후보는 서버가 정한 것 안에서만(`PaymentCountryRouting.chosen`)
         val provider = routing.chosen(route, body["provider"]?.takeIf { it.isString }?.stringValue())
-        val created = orders.create(CreateOrderCommand(account, itemType, itemRef, idempotencyKey(key), quantity.coerceIn(0, Int.MAX_VALUE.toLong()).toInt(), country = route.country, provider = provider, providerClosed = route.providerClosed, providerChosen = provider != null && provider != route.provider, returnOrigin = body["returnOrigin"]?.takeIf { it.isString }?.stringValue()))
-        val response = Response.ok(CreateOrderResponse(OrderResponse.of(OrderView(created.order, created.refunds)), created.checkout?.let(CheckoutResponse::of)))
+        val created = orders.create(CreateOrderCommand(account, itemType, itemRef, idempotencyKey(key), quantity.coerceIn(0, Int.MAX_VALUE.toLong()).toInt(), country = route.country, provider = provider, providerClosed = route.providerClosed, providerChosen = provider != null && provider != route.provider, returnOrigin = body["returnOrigin"]?.takeIf { it.isString }?.stringValue(), discounts = discounts, exempt = exempt))
+        val response = Response.ok(CreateOrderResponse(OrderResponse.of(OrderView(created.order, created.refunds, created.discounts)), created.checkout?.let(CheckoutResponse::of)))
         return if (created.replayed) ResponseEntity.ok(response) else ResponseEntity.status(201).body(response)
+    }
+
+    @Operation(
+        summary = "See the amount of a purchase before creating the order",
+        description = "Nothing is held or written. discounts: [{ type: \"coupon\", ref }] are applied in the same way as when the order is created, so the amount here is the amount of the order. " +
+            "settlement PROVIDER (the provider takes the amount) · FREE (the coupon brings it to 0 - the order ends without a provider) · EXEMPT (the caller holds payment.exempt - the order ends without a provider, amount 0). " +
+            "400 DISCOUNT_NOT_APPLICABLE / DISCOUNT_NOT_SUPPORTED / DISCOUNT_BELOW_MINIMUM · 409 DISCOUNT_UNAVAILABLE · 422 ITEM_NOT_PURCHASABLE.",
+    )
+    @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = QuoteResponse::class)
+    @PostMapping("/quote")
+    fun quote(authentication: Authentication?, request: HttpServletRequest, @RequestBody body: JsonNode): DataResponse<QuoteResponse> {
+        val account = callers.account(authentication)
+        val itemType = PaymentRequests.text(body["itemType"], "itemType", 40)
+        val itemRef = PaymentRequests.text(body["itemRef"], "itemRef", 128)
+        val quantity = PaymentRequests.wholeNumber(body["quantity"], "quantity") ?: 1
+        val route = routing.of(request)
+        val provider = routing.chosen(route, body["provider"]?.takeIf { it.isString }?.stringValue())
+        val quote = orders.quote(
+            QuoteCommand(
+                account, itemType, itemRef, quantity.coerceIn(0, Int.MAX_VALUE.toLong()).toInt(), country = route.country, provider = provider,
+                discounts = PaymentRequests.discounts(body["discounts"]), exempt = exemption?.isExempt(authentication!!) == true,
+            ),
+        )
+        return Response.ok(QuoteResponse.of(quote))
     }
 }

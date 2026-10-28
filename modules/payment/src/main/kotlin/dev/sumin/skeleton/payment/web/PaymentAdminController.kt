@@ -10,6 +10,7 @@ import dev.sumin.skeleton.common.openapi.ApiEnvelopeType
 import dev.sumin.skeleton.common.openapi.ApiResponseEnvelope
 import dev.sumin.skeleton.payment.OperatorOrderQuery
 import dev.sumin.skeleton.payment.PaymentOrderStatus
+import dev.sumin.skeleton.payment.PaymentSettlement
 import dev.sumin.skeleton.payment.PaymentPermissions
 import dev.sumin.skeleton.payment.PaymentQueries
 import dev.sumin.skeleton.payment.PaymentRefund
@@ -81,13 +82,14 @@ class PaymentAdminController(
         @RequestParam(required = false) q: String?,
         @RequestParam(required = false) review: Boolean?,
         @RequestParam(required = false) includeErased: Boolean?,
+        @RequestParam(required = false) settlement: String?,
         @RequestParam(required = false) cursor: String?,
         @RequestParam(required = false) size: Int?,
     ): CursorResponse<AdminOrderResponse> {
         val page = queries.operatorOrders(
             OperatorOrderQuery(
                 status = enumParam<PaymentOrderStatus>("status", status), accountId = accountId?.takeIf { it.isNotBlank() }, q = q, review = review == true,
-                includeErased = includeErased == true, before = PaymentCursors.order(cursor), size = PaymentRequests.size(size),
+                includeErased = includeErased == true, settlement = enumParam<PaymentSettlement>("settlement", settlement), before = PaymentCursors.order(cursor), size = PaymentRequests.size(size),
             ),
         )
         return Response.cursor(page.values.map(AdminOrderResponse::of), page.next?.let(PaymentCursors::order))
