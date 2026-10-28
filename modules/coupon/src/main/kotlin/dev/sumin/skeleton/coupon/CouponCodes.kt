@@ -38,8 +38,9 @@ class CouponCodes(
 
         val outcome = try {
             issuance.outcome(record.definitionId, accountId, CouponSource.CODE, "$code:$accountId")
-        } catch (_: CouponException) {
-            // 정의가 멈췄거나 사라졌다 - 손님에게는 쓸 수 없는 코드다
+        } catch (e: CouponException) {
+            // 발행 기간 밖은 그대로 알린다. 정의가 멈췄거나 사라졌다면 손님에게는 쓸 수 없는 코드다
+            if (e.couponError == CouponErrorCode.ISSUE_CLOSED) throw e
             throw failure(CouponErrorCode.CODE_INVALID)
         }
         val coupon = when (outcome) {

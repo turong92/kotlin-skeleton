@@ -13,7 +13,7 @@ import dev.sumin.skeleton.common.time.TimeProvider
  * 결제 할인 수단 `coupon`(`order` 100 — 쿠폰이 포인트보다 먼저). 쿠폰 id 가 [DiscountClaim.ref] 다.
  * 상태 전이는 주문이 쥔 쿠폰([Coupon.holderRef])을 기준으로 하는 조건부 갱신이라 동시에 와도 한쪽만 이긴다.
  *
- * - 쓸 수 있는 조건은 쿠폰이 이 계정의 것이고 `AVAILABLE` 이며 기한 안일 때. 아니면 [DiscountRejection.UNAVAILABLE].
+ * - 쓸 수 있는 조건은 쿠폰이 이 계정의 것이고 `AVAILABLE` 이며 기한 안이고 사용 시작(`validFrom`) 뒤일 때. 아니면 [DiscountRejection.UNAVAILABLE].
  * - 범위(목적 · 항목 · 플랜) · 최소 금액 · 통화 · 첫 결제 한정이 안 맞으면 [DiscountRejection.NOT_APPLICABLE].
  * - 이미 발급된 쿠폰은 정의가 멈추거나 보관돼도 쓸 수 있다(발급만 막는다).
  */
@@ -60,6 +60,8 @@ class CouponDiscountSource(
         if (CouponExpiry.statusAt(coupon, now) != CouponStatus.AVAILABLE) throw DiscountRejectedException(DiscountRejection.UNAVAILABLE, "coupon is not available")
         val definition = store.findDefinition(coupon.definitionId)
             ?: throw DiscountRejectedException(DiscountRejection.UNAVAILABLE, "coupon is not available")
+        // 사용 시작 전 - 쿠폰함에는 보이지만 결제에는 아직 쓸 수 없다
+        if (!CouponExpiry.usable(definition, now)) throw DiscountRejectedException(DiscountRejection.UNAVAILABLE, "coupon can not be used yet")
         if (!applies(definition, target)) throw DiscountRejectedException(DiscountRejection.NOT_APPLICABLE, "coupon does not apply to this purchase")
         return coupon to definition
     }

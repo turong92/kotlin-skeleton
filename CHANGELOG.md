@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 견본 앱(`apps/sample`): 위 네 쌍을 조립하고 운영 경로를 켠다(`application.yml`), 로컬 프로필 씨앗 `RewardsSeed`(쿠폰 정의 셋 · 공용 코드 `WELCOME` · 출석 이벤트 · 친구초대 이벤트), `CheerOrderListener.onPaid` 끝의 `referrals.qualify`(돈이 오간 첫 결제만). 시험 `RewardsFlowIntegrationTest`. 조합 시험 `12-coupon` · `13-point` · `14-campaign`(`scripts/test-new-project.sh --full`).
 - 프런트 짝: react-skeleton 의 `@skeleton/rewards`(`/admin` 서브경로 포함) · `@skeleton/payment` 의 할인 표시 · `@skeleton/auth` 의 역할 위계 화면.
 - **Breaking 없음**: 모든 변경은 새 모듈이거나 기존 응답에 칸을 더하는 것이다. 결제 응답의 새 칸은 선택으로 읽는 클라이언트에 안전하다.
+- 쿠폰 운영 보강(`coupon` + `coupon-jdbc`): 정의에 발행 기간 `issueStartsAt`/`issueEndsAt`(밖이면 운영자 발급 · 코드 등록 · 보상 지급 409 `COUPON.ISSUE_CLOSED`)과 사용 시작 `validFrom`(그 전에는 결제 할인 견적 · 예약 `UNAVAILABLE`, 쿠폰 응답에 `usableFrom`), 운영 `GET …/coupon-definitions/{id}/stats`(상태별 수 + 통화별 할인 합계 - 금액은 결제 장부 `payment_order_discounts` 를 읽기 전용으로) · `GET …/coupon-definitions/{id}/coupons`(발급 내역 커서 목록), 대시보드 기여(쿠폰 사용 수 · 많이 쓰인 쿠폰 순위, `skeleton.coupon.dashboard.enabled` 기본 꺼짐, 견본 앱이 켠다). 새 V 파일(`coupon_definitions` 세 칸, 두 방언).
 - 구독 쿠폰: `POST /api/v1/payments/subscriptions` 의 `discounts`(단계 복사, 첫 결제에서 쥔다 · n달 무료 · 매 갱신 할인 회차). 구독 응답의 `discount`.
 
 ### 흔들리는 시험 정리 (2026-10-28)

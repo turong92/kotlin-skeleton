@@ -13,8 +13,10 @@ import dev.sumin.skeleton.coupon.CouponDefinitionStatus
 import dev.sumin.skeleton.coupon.CouponDefinitions
 import dev.sumin.skeleton.coupon.CouponIssuance
 import dev.sumin.skeleton.coupon.CouponPermissions
+import dev.sumin.skeleton.coupon.CouponReports
 import dev.sumin.skeleton.coupon.CouponScopeInput
 import dev.sumin.skeleton.coupon.CouponStageInput
+import dev.sumin.skeleton.coupon.CouponStatus
 import dev.sumin.skeleton.coupon.CouponWallet
 import java.time.Instant
 import org.springframework.http.HttpStatus
@@ -50,6 +52,9 @@ data class CouponDefinitionRequest(
     val validUntil: Instant? = null,
     val issueLimit: Int? = null,
     val perAccountLimit: Int? = null,
+    val issueStartsAt: Instant? = null,
+    val issueEndsAt: Instant? = null,
+    val validFrom: Instant? = null,
 )
 
 data class StatusRequest(val status: String? = null)
@@ -69,6 +74,7 @@ class CouponAdminController(
     private val issuance: CouponIssuance,
     private val codes: CouponCodes,
     private val wallet: CouponWallet,
+    private val reports: CouponReports,
     private val access: OperatorAccess,
     private val audit: OperatorAuditLog,
 ) {
@@ -111,6 +117,29 @@ class CouponAdminController(
         return ResponseEntity.status(HttpStatus.CREATED).body(Response.ok(CouponCodeResponse(code)))
     }
 
+    @GetMapping("/coupon-definitions/{id}/stats")
+    fun stats(authentication: Authentication?, @PathVariable id: String): Any {
+        operator(authentication)
+        return Response.ok(reports.stats(id).toResponse())
+    }
+
+    @GetMapping("/coupon-definitions/{id}/coupons")
+    fun issuedCoupons(
+        authentication: Authentication?,
+        @PathVariable id: String,
+        @RequestParam(required = false) status: String?,
+        @RequestParam(required = false) cursor: String?,
+        @RequestParam(required = false) size: Int?,
+    ): Any {
+        operator(authentication)
+        val wanted = status?.takeIf { it.isNotBlank() }?.let { raw ->
+            CouponStatus.entries.firstOrNull { it.name == raw.trim().uppercase() }
+                ?: throw ApplicationException("Unknown status '$raw'", PlatformErrorCode.PARAMETER_VALIDATION_FAILED)
+        }
+        val page = reports.coupons(id, wanted, cursor?.takeIf { it.isNotBlank() }, size ?: CouponReports.DEFAULT_SIZE)
+        return Response.ok(page.items.map { it.toIssuedResponse() }, nextCursor = page.nextCursor)
+    }
+
     @GetMapping("/coupons")
     fun listCoupons(authentication: Authentication?, @RequestParam accountId: String): Any {
         operator(authentication)
@@ -142,5 +171,8 @@ class CouponAdminController(
         validUntil = validUntil,
         issueLimit = issueLimit,
         perAccountLimit = perAccountLimit ?: 1,
+        issueStartsAt = issueStartsAt,
+        issueEndsAt = issueEndsAt,
+        validFrom = validFrom,
     )
 }

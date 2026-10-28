@@ -7,6 +7,7 @@ import dev.sumin.skeleton.coupon.Coupon
 import dev.sumin.skeleton.coupon.CouponCodeRecord
 import dev.sumin.skeleton.coupon.CouponDefinition
 import dev.sumin.skeleton.coupon.CouponDefinitionStatus
+import dev.sumin.skeleton.coupon.CouponMoney
 import dev.sumin.skeleton.coupon.CouponScope
 import dev.sumin.skeleton.coupon.CouponSource
 import dev.sumin.skeleton.coupon.CouponStatus
@@ -16,6 +17,8 @@ import dev.sumin.skeleton.persistence.jdbc.SqlDialect
 import java.sql.ResultSet
 import java.sql.Types
 import java.time.Instant
+import java.util.EnumMap
+import org.springframework.jdbc.BadSqlGrammarException
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
 import org.springframework.transaction.PlatformTransactionManager
@@ -52,9 +55,9 @@ class JdbcCouponStore(
         jdbc.update(
             """
             insert into coupon_definitions (id, name, status, stages_json, currency, min_amount, scope_json, first_purchase_only, valid_days, valid_until,
-                issue_limit, issued_count, per_account_limit, created_at, updated_at)
+                issue_limit, issued_count, per_account_limit, created_at, updated_at, issue_starts_at, issue_ends_at, valid_from)
             values (:id, :name, :status, :stages, :currency, :min_amount, :scope, :first_purchase_only, :valid_days, :valid_until,
-                :issue_limit, :issued_count, :per_account_limit, :created_at, :updated_at)
+                :issue_limit, :issued_count, :per_account_limit, :created_at, :updated_at, :issue_starts_at, :issue_ends_at, :valid_from)
             """.trimIndent(),
             MapSqlParameterSource()
                 .addValue("id", definition.id)
@@ -71,7 +74,10 @@ class JdbcCouponStore(
                 .addValue("issued_count", definition.issuedCount)
                 .addValue("per_account_limit", definition.perAccountLimit)
                 .addValue("created_at", instant(definition.createdAt))
-                .addValue("updated_at", instant(definition.updatedAt)),
+                .addValue("updated_at", instant(definition.updatedAt))
+                .addValue("issue_starts_at", instant(definition.issueStartsAt))
+                .addValue("issue_ends_at", instant(definition.issueEndsAt))
+                .addValue("valid_from", instant(definition.validFrom)),
         )
     }
 
@@ -94,6 +100,53 @@ class JdbcCouponStore(
 
     override fun incrementIssued(id: String, at: Instant) {
         jdbc.update("update coupon_definitions set issued_count = issued_count + 1, updated_at = :at where id = :id", mapOf("id" to id, "at" to instant(at)))
+    }
+
+    // 현황
+
+    override fun countByStatus(definitionId: String, now: Instant): Map<CouponStatus, Int> {
+        val counts = EnumMap<CouponStatus, Int>(CouponStatus::class.java)
+        jdbc.query("select status, count(*) as n from coupons where definition_id = :d group by status", mapOf("d" to definitionId)) { rs ->
+            counts[CouponStatus.valueOf(rs.getString("status"))] = rs.getInt("n")
+        }
+        // 기한이 지났지만 아직 `AVAILABLE` 로 적혀 있는 것은 읽는 쪽에서 `EXPIRED`
+        val lapsed = jdbc.queryForObject(
+            "select count(*) from coupons where definition_id = :d and status = 'AVAILABLE' and expires_at is not null and expires_at <= :now",
+            mapOf("d" to definitionId, "now" to instant(now)),
+            Int::class.java,
+        ) ?: 0
+        if (lapsed > 0) {
+            counts[CouponStatus.AVAILABLE] = (counts[CouponStatus.AVAILABLE] ?: 0) - lapsed
+            counts[CouponStatus.EXPIRED] = (counts[CouponStatus.EXPIRED] ?: 0) + lapsed
+        }
+        return counts
+    }
+
+    /**
+     * 확정된 쿠폰이 실제로 깎은 금액은 결제 장부의 `payment_order_discounts`(`kind = 'coupon'`, `status = 'CONFIRMED'`)에만 있다 - 전액 환불로 되돌려진 줄(`RESTORED`)은 자연히 빠진다.
+     * 그 표를 읽기 전용으로만 쓰고 코드 의존은 없다. `payment-jdbc` 를 안 붙인 조립에는 표가 없어 빈 목록이다.
+     */
+    override fun discountTotals(definitionId: String): List<CouponMoney> = try {
+        jdbc.query(
+            "select d.currency as currency, sum(d.amount) as total from payment_order_discounts d join coupons c on c.id = d.source_ref " +
+                "where d.kind = 'coupon' and d.status = 'CONFIRMED' and c.definition_id = :d group by d.currency order by d.currency",
+            mapOf("d" to definitionId),
+        ) { rs, _ -> CouponMoney(rs.getString("currency").trim(), rs.getLong("total")) }
+    } catch (_: BadSqlGrammarException) {
+        emptyList()   // 결제 장부 표가 없다
+    }
+
+    override fun pageByDefinition(definitionId: String, status: CouponStatus?, before: String?, limit: Int, now: Instant): List<Coupon> {
+        val effective = when (status) {
+            null -> ""
+            CouponStatus.AVAILABLE -> " and status = 'AVAILABLE' and (expires_at is null or expires_at > :now)"
+            CouponStatus.EXPIRED -> " and (status = 'EXPIRED' or (status = 'AVAILABLE' and expires_at is not null and expires_at <= :now))"
+            else -> " and status = '${status.name}'"
+        }
+        return jdbc.query(
+            "select * from coupons where definition_id = :d$effective and (:before is null or id < :before) order by id desc limit :limit",
+            MapSqlParameterSource().addValue("d", definitionId).addValue("now", instant(now)).addValue("before", before, Types.VARCHAR).addValue("limit", limit),
+        ) { rs, _ -> rs.toCoupon() }
     }
 
     // 쿠폰
@@ -230,6 +283,9 @@ class JdbcCouponStore(
             perAccountLimit = getInt("per_account_limit"),
             createdAt = dialect.readInstant(this, "created_at")!!,
             updatedAt = dialect.readInstant(this, "updated_at")!!,
+            issueStartsAt = dialect.readInstant(this, "issue_starts_at"),
+            issueEndsAt = dialect.readInstant(this, "issue_ends_at"),
+            validFrom = dialect.readInstant(this, "valid_from"),
         )
     }
 

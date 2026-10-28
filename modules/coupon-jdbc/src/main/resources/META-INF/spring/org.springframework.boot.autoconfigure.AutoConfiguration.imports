@@ -1,1 +1,2 @@
 dev.sumin.skeleton.coupon.jdbc.CouponJdbcAutoConfiguration
+dev.sumin.skeleton.coupon.jdbc.CouponDashboardAutoConfiguration

@@ -4,6 +4,8 @@ skeleton:
     admin:
       enabled: false               # true 면 운영자 경로(coupon.manage)가 열린다. 꺼져 있으면 404
       base-path: /api/v1/admin     # 아래에 /coupon-definitions · /coupons
+    dashboard:
+      enabled: false               # true 면 관리자 대시보드(dashboard 모듈이 있을 때)에 쿠폰 사용 수 타일과 많이 쓰인 쿠폰 순위를 기여한다 (coupon-jdbc 가 낸다)
     http:
       enabled: true                # false 면 사용자 경로(쿠폰함 · 코드 등록)를 닫는다
       base-path: /api/v1/coupons

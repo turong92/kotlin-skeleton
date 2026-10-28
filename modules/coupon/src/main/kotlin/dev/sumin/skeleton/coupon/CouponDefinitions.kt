@@ -28,6 +28,9 @@ data class CouponDefinitionInput(
     val validUntil: Instant? = null,
     val issueLimit: Int? = null,
     val perAccountLimit: Int = 1,
+    val issueStartsAt: Instant? = null,
+    val issueEndsAt: Instant? = null,
+    val validFrom: Instant? = null,
 )
 
 /**
@@ -71,6 +74,8 @@ class CouponDefinitions(
         invalid(input.validDays != null && input.validDays < 1, "validDays is at least 1")
         invalid(input.issueLimit != null && input.issueLimit < 1, "issueLimit is at least 1")
         invalid(input.perAccountLimit < 1, "perAccountLimit is at least 1")
+        invalid(input.issueStartsAt != null && input.issueEndsAt != null && !input.issueStartsAt.isBefore(input.issueEndsAt), "issueStartsAt must be before issueEndsAt")
+        invalid(input.validFrom != null && input.validUntil != null && !input.validFrom.isBefore(input.validUntil), "validFrom must be before validUntil")
 
         return CouponDefinition(
             id = ids.newId(ID_PREFIX),
@@ -88,6 +93,9 @@ class CouponDefinitions(
             perAccountLimit = input.perAccountLimit,
             createdAt = now,
             updatedAt = now,
+            issueStartsAt = input.issueStartsAt,
+            issueEndsAt = input.issueEndsAt,
+            validFrom = input.validFrom,
         )
     }
 

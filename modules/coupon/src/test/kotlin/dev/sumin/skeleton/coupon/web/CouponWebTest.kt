@@ -4,6 +4,11 @@ import dev.sumin.skeleton.common.authz.OperatorAccess
 import dev.sumin.skeleton.common.authz.OperatorAction
 import dev.sumin.skeleton.common.authz.OperatorAuditLog
 import dev.sumin.skeleton.common.authz.OperatorRef
+import dev.sumin.skeleton.coupon.Coupon
+import dev.sumin.skeleton.coupon.CouponDefinitionStatus
+import dev.sumin.skeleton.coupon.CouponMoney
+import dev.sumin.skeleton.coupon.CouponSource
+import dev.sumin.skeleton.coupon.CouponStatus
 import dev.sumin.skeleton.coupon.CouponStore
 import dev.sumin.skeleton.coupon.FakeCouponStore
 import dev.sumin.skeleton.coupontest.CouponWebTestApplication
@@ -129,6 +134,100 @@ class CouponAdminWebTest {
         mvc.perform(post("/api/v1/admin/coupon-definitions/$id/issue").principal(operator).contentType(json).content("""{"accountIds":["acc_1"]}"""))
             .andExpect(status().isConflict).andExpect(jsonPath("$.code").value("COUPON.DEFINITION_NOT_ACTIVE"))
         assertEquals(0, CouponTestBeans.AUDIT.size)
+    }
+
+    @Test
+    fun `the window and the use start round trip, a bad window is a 400, and a closed window is a 409 ISSUE_CLOSED`() {
+        val past = "2020-01-01T00:00:00Z"
+        val future = "2999-01-01T00:00:00Z"
+        mvc.perform(
+            post("/api/v1/admin/coupon-definitions").principal(operator).contentType(json)
+                .content("""{"name":"window","stages":[{"type":"FREE","periods":1}],"issueStartsAt":"$future","issueEndsAt":"2999-02-01T00:00:00Z","validFrom":"$future"}"""),
+        ).andExpect(status().isCreated)
+            .andExpect(jsonPath("$.value.issueStartsAt").value(future))
+            .andExpect(jsonPath("$.value.issueEndsAt").value("2999-02-01T00:00:00Z"))
+            .andExpect(jsonPath("$.value.validFrom").value(future))
+        val id = store.definitions.keys.single()
+        mvc.perform(post("/api/v1/admin/coupon-definitions/$id/issue").principal(operator).contentType(json).content("""{"accountIds":["acc_1"]}"""))
+            .andExpect(status().isConflict).andExpect(jsonPath("$.code").value("COUPON.ISSUE_CLOSED"))
+        assertEquals(0, CouponTestBeans.AUDIT.size)
+
+        mvc.perform(
+            post("/api/v1/admin/coupon-definitions").principal(operator).contentType(json)
+                .content("""{"name":"bad","stages":[{"type":"FREE","periods":1}],"issueStartsAt":"$future","issueEndsAt":"$past"}"""),
+        ).andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("COUPON.DEFINITION_INVALID"))
+        mvc.perform(
+            post("/api/v1/admin/coupon-definitions").principal(operator).contentType(json)
+                .content("""{"name":"bad","stages":[{"type":"FREE","periods":1}],"validFrom":"$future","validUntil":"$past"}"""),
+        ).andExpect(status().isBadRequest).andExpect(jsonPath("$.code").value("COUPON.DEFINITION_INVALID"))
+    }
+
+    @Test
+    fun `a coupon carries usableFrom so the wallet can say from when it can be used`() {
+        val start = "2999-01-01T00:00:00Z"
+        val body = mvc.perform(
+            post("/api/v1/admin/coupon-definitions").principal(operator).contentType(json)
+                .content("""{"name":"later","stages":[{"type":"FREE","periods":1}],"validFrom":"$start"}"""),
+        ).andReturn().response.contentAsString
+        val id = Regex(""""id":"(cpd_[^"]+)"""").find(body)!!.groupValues[1]
+        mvc.perform(post("/api/v1/admin/coupon-definitions/$id/issue").principal(operator).contentType(json).content("""{"accountIds":["acc_1"]}"""))
+            .andExpect(status().isOk)
+        mvc.perform(get("/api/v1/coupons").principal(user))
+            .andExpect(jsonPath("$.values[0].status").value("AVAILABLE"))
+            .andExpect(jsonPath("$.values[0].usableFrom").value(start))
+        mvc.perform(get("/api/v1/admin/coupons?accountId=acc_1").principal(operator)).andExpect(jsonPath("$.values[0].usableFrom").value(start))
+    }
+
+    @Test
+    fun `stats count the issued coupons by status with the discount totals, and the list pages newest first with a status filter`() {
+        val id = createFreePass()
+        val definition = store.definitions.getValue(id)
+        val now = java.time.Instant.now()
+        fun put(n: Int, status: CouponStatus, holder: String? = null, expiresAt: java.time.Instant? = null) {
+            store.coupons["cpn_$n"] = Coupon("cpn_$n", id, "acc_$n", status, holder, CouponSource.ADMIN, "r$n", expiresAt, if (status == CouponStatus.USED) now else null, now, now)
+        }
+        put(1, CouponStatus.AVAILABLE)
+        put(2, CouponStatus.AVAILABLE, expiresAt = now.minusSeconds(60))
+        put(3, CouponStatus.RESERVED, holder = "ord_3")
+        put(4, CouponStatus.USED, holder = "ord_4")
+        put(5, CouponStatus.USED, holder = "ord_5")
+        put(6, CouponStatus.REVOKED, holder = "ord_old")
+        store.totals = listOf(CouponMoney("KRW", 1500))
+        assertEquals(CouponDefinitionStatus.ACTIVE, definition.status)
+
+        mvc.perform(get("/api/v1/admin/coupon-definitions/$id/stats").principal(operator))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.value.issued").value(6))
+            .andExpect(jsonPath("$.value.available").value(1))
+            .andExpect(jsonPath("$.value.reserved").value(1))
+            .andExpect(jsonPath("$.value.used").value(2))
+            .andExpect(jsonPath("$.value.expired").value(1))
+            .andExpect(jsonPath("$.value.revoked").value(1))
+            .andExpect(jsonPath("$.value.discountTotals[0].currency").value("KRW"))
+            .andExpect(jsonPath("$.value.discountTotals[0].amount").value(1500))
+
+        mvc.perform(get("/api/v1/admin/coupon-definitions/$id/coupons?size=4").principal(operator))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.values.length()").value(4))
+            .andExpect(jsonPath("$.values[0].id").value("cpn_6"))
+            .andExpect(jsonPath("$.values[0].orderRef").doesNotExist())
+            .andExpect(jsonPath("$.cursor.hasNext").value(true))
+            .andExpect(jsonPath("$.cursor.nextCursor").value("cpn_3"))
+        mvc.perform(get("/api/v1/admin/coupon-definitions/$id/coupons?size=4&cursor=cpn_3").principal(operator))
+            .andExpect(jsonPath("$.values.length()").value(2)).andExpect(jsonPath("$.cursor.hasNext").value(false))
+        mvc.perform(get("/api/v1/admin/coupon-definitions/$id/coupons?status=used").principal(operator))
+            .andExpect(jsonPath("$.values.length()").value(2))
+            .andExpect(jsonPath("$.values[0].orderRef").value("ord_5"))
+            .andExpect(jsonPath("$.values[0].usedAt").exists())
+            .andExpect(jsonPath("$.values[0].accountId").value("acc_5"))
+        mvc.perform(get("/api/v1/admin/coupon-definitions/$id/coupons?status=EXPIRED").principal(operator))
+            .andExpect(jsonPath("$.values.length()").value(1)).andExpect(jsonPath("$.values[0].id").value("cpn_2"))
+        mvc.perform(get("/api/v1/admin/coupon-definitions/$id/coupons?status=BOGUS").principal(operator)).andExpect(status().isBadRequest)
+        mvc.perform(get("/api/v1/admin/coupon-definitions/cpd_none/stats").principal(operator)).andExpect(status().isNotFound)
+        mvc.perform(get("/api/v1/admin/coupon-definitions/cpd_none/coupons").principal(operator)).andExpect(status().isNotFound)
+        mvc.perform(get("/api/v1/admin/coupon-definitions/$id/stats").principal(other)).andExpect(status().isForbidden)
+        mvc.perform(get("/api/v1/admin/coupon-definitions/$id/coupons").principal(other)).andExpect(status().isForbidden)
+        mvc.perform(get("/api/v1/admin/coupon-definitions/$id/stats")).andExpect(status().isUnauthorized)
     }
 
     @Test

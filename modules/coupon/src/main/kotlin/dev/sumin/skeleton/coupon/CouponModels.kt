@@ -38,6 +38,11 @@ data class CouponDefinition(
     val perAccountLimit: Int,
     val createdAt: Instant,
     val updatedAt: Instant,
+    /** 발행 기간 `[issueStartsAt, issueEndsAt)` - 밖에서는 운영자 발급 · 코드 등록 · 보상 지급이 거절된다. null 은 그쪽이 열려 있다 */
+    val issueStartsAt: Instant? = null,
+    val issueEndsAt: Instant? = null,
+    /** 사용 시작 - 이 시각 전에는 결제 할인으로 쓸 수 없다(쿠폰함에는 보인다). null 이면 받자마자 쓴다 */
+    val validFrom: Instant? = null,
 )
 
 /** 계정이 가진 쿠폰 한 장. [holderRef] 는 마지막으로 쥔 주문 id — 풀려도 지우지 않는다(늦은 결제 확정이 주인을 찾는다) */
@@ -67,6 +72,19 @@ data class CouponCodeRecord(
 
 /** 쿠폰 + 정의 + 지금 시각으로 읽은 상태 — 응답과 목록이 쓴다 */
 data class CouponView(val coupon: Coupon, val definition: CouponDefinition, val status: CouponStatus)
+
+/** 한 정의의 쿠폰 현황 - 상태는 지금 시각으로 읽은 것이다(기한이 지난 `AVAILABLE` 은 [expired]). [discountTotals] 는 확정된(`USED`) 쿠폰이 실제로 깎은 금액을 통화별로 */
+data class CouponStats(
+    val issued: Int,
+    val available: Int,
+    val reserved: Int,
+    val used: Int,
+    val expired: Int,
+    val revoked: Int,
+    val discountTotals: List<CouponMoney>,
+)
+
+data class CouponMoney(val currency: String, val amount: Long)
 
 /** 목록 탭 — `AVAILABLE` 은 쓸 수 있는 것(주문이 쥔 것 포함), `PAST` 는 쓴 · 끝난 것 */
 enum class CouponTab { AVAILABLE, PAST }

@@ -12,6 +12,7 @@ enum class CouponErrorCode(
 ) : ErrorCode {
     DEFINITION_INVALID("COUPON.DEFINITION_INVALID", HttpStatus.BAD_REQUEST, "Coupon definition is invalid"),
     DEFINITION_NOT_FOUND("COUPON.DEFINITION_NOT_FOUND", HttpStatus.NOT_FOUND, "Coupon definition not found"),
+    ISSUE_CLOSED("COUPON.ISSUE_CLOSED", HttpStatus.CONFLICT, "Coupon issuing is closed for now"),
     DEFINITION_NOT_ACTIVE("COUPON.DEFINITION_NOT_ACTIVE", HttpStatus.CONFLICT, "Coupon definition is not issuing"),
     NOT_FOUND("COUPON.NOT_FOUND", HttpStatus.NOT_FOUND, "Coupon not found"),
     NOT_REVOCABLE("COUPON.NOT_REVOCABLE", HttpStatus.CONFLICT, "Only an available coupon can be revoked"),

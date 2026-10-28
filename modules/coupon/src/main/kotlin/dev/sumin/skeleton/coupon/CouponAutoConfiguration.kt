@@ -49,6 +49,12 @@ class CouponAutoConfiguration {
         CouponWallet(store, time.getIfAvailable { TimeProvider.systemUtc() })
 
     @Bean
+    @ConditionalOnBean(CouponStore::class)
+    @ConditionalOnMissingBean
+    fun couponReports(store: CouponStore, time: ObjectProvider<TimeProvider>): CouponReports =
+        CouponReports(store, time.getIfAvailable { TimeProvider.systemUtc() })
+
+    @Bean
     @ConditionalOnBean(CouponDefinitions::class, CouponIssuance::class)
     @ConditionalOnMissingBean(name = ["couponRewardIssuer"])
     fun couponRewardIssuer(definitions: CouponDefinitions, issuance: CouponIssuance): RewardIssuer = CouponRewardIssuer(definitions, issuance)

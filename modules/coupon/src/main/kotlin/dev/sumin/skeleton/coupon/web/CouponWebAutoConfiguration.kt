@@ -6,6 +6,7 @@ import dev.sumin.skeleton.coupon.CouponAutoConfiguration
 import dev.sumin.skeleton.coupon.CouponCodes
 import dev.sumin.skeleton.coupon.CouponDefinitions
 import dev.sumin.skeleton.coupon.CouponIssuance
+import dev.sumin.skeleton.coupon.CouponReports
 import dev.sumin.skeleton.coupon.CouponWallet
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean
@@ -30,7 +31,7 @@ class CouponWebAutoConfiguration {
     fun couponController(wallet: CouponWallet, codes: CouponCodes): CouponController = CouponController(wallet, codes)
 
     @Bean
-    @ConditionalOnBean(CouponDefinitions::class, CouponIssuance::class, CouponCodes::class, CouponWallet::class)
+    @ConditionalOnBean(CouponDefinitions::class, CouponIssuance::class, CouponCodes::class, CouponWallet::class, CouponReports::class)
     @ConditionalOnProperty(prefix = "skeleton.coupon.admin", name = ["enabled"], havingValue = "true")
     @ConditionalOnMissingBean
     fun couponAdminController(
@@ -38,7 +39,8 @@ class CouponWebAutoConfiguration {
         issuance: CouponIssuance,
         codes: CouponCodes,
         wallet: CouponWallet,
+        reports: CouponReports,
         access: OperatorAccess,
         audit: OperatorAuditLog,
-    ): CouponAdminController = CouponAdminController(definitions, issuance, codes, wallet, access, audit)
+    ): CouponAdminController = CouponAdminController(definitions, issuance, codes, wallet, reports, access, audit)
 }

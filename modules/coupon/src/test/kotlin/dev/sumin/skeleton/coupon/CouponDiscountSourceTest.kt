@@ -109,6 +109,21 @@ class CouponDiscountSourceTest {
     }
 
     @Test
+    fun `a coupon can not be quoted or reserved before its use start, and can from that instant`() {
+        val start = NOW.plus(Duration.ofDays(1))
+        val claim = given(definition(validFrom = start))
+        assertRejected(DiscountRejection.UNAVAILABLE, claim, target())
+
+        time.current = start.minusSeconds(1)
+        assertRejected(DiscountRejection.UNAVAILABLE, claim, target())
+
+        time.current = start
+        source.quote(claim, target())
+        source.reserve(claim, target(), "ord_1")
+        assertEquals(CouponStatus.RESERVED, store.coupons.getValue("cpn_1").status)
+    }
+
+    @Test
     fun `a paused or archived definition does not take back a coupon already issued`() {
         val claim = given(definition(status = CouponDefinitionStatus.ARCHIVED))
         source.reserve(claim, target(), "ord_1")

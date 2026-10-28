@@ -37,6 +37,19 @@ class FakeCouponStore : CouponStore {
         definitions[id] = definitions.getValue(id).let { it.copy(issuedCount = it.issuedCount + 1, updatedAt = at) }
     }
 
+    var totals: List<CouponMoney> = emptyList()
+
+    private fun effective(c: Coupon, now: Instant) = CouponExpiry.statusAt(c, now)
+
+    override fun countByStatus(definitionId: String, now: Instant) =
+        coupons.values.filter { it.definitionId == definitionId }.groupingBy { effective(it, now) }.eachCount()
+
+    override fun discountTotals(definitionId: String) = totals
+
+    override fun pageByDefinition(definitionId: String, status: CouponStatus?, before: String?, limit: Int, now: Instant) =
+        coupons.values.filter { it.definitionId == definitionId && (status == null || effective(it, now) == status) && (before == null || it.id < before) }
+            .sortedByDescending { it.id }.take(limit)
+
     override fun insertCouponIfAbsent(coupon: Coupon): Boolean {
         if (coupons.values.any { it.sourceType == coupon.sourceType && it.sourceRef == coupon.sourceRef }) return false
         coupons[coupon.id] = coupon
@@ -111,7 +124,10 @@ fun definition(
     firstPurchaseOnly: Boolean = false,
     issueLimit: Int? = null,
     perAccountLimit: Int = 1,
-) = CouponDefinition(id, "30% off", status, stages, currency, minAmount, scope, firstPurchaseOnly, null, null, issueLimit, 0, perAccountLimit, NOW, NOW)
+    issueStartsAt: Instant? = null,
+    issueEndsAt: Instant? = null,
+    validFrom: Instant? = null,
+) = CouponDefinition(id, "30% off", status, stages, currency, minAmount, scope, firstPurchaseOnly, null, null, issueLimit, 0, perAccountLimit, NOW, NOW, issueStartsAt, issueEndsAt, validFrom)
 
 fun coupon(
     id: String = "cpn_1",

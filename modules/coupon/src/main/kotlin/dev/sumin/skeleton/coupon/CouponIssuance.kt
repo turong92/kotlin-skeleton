@@ -35,6 +35,7 @@ class CouponIssuance(
             ?: throw CouponException(CouponErrorCode.DEFINITION_NOT_FOUND, "coupon definition $definitionId not found")
         store.lockBySource(sourceType, sourceRef)?.let { return@inTransaction IssueOutcome.Issued(it) }
 
+        if (!CouponExpiry.issuingOpen(definition, now)) throw CouponException(CouponErrorCode.ISSUE_CLOSED, "coupon definition $definitionId is not issuing at this time")
         val expiresAt = CouponExpiry.expiresAt(definition, now)
         if (definition.status != CouponDefinitionStatus.ACTIVE || CouponExpiry.isExpired(definition.validUntil, now)) {
             throw CouponException(CouponErrorCode.DEFINITION_NOT_ACTIVE, "coupon definition $definitionId is not issuing")

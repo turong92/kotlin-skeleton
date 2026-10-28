@@ -20,22 +20,33 @@
 - `release`/`restore` 는 holder 가 맞을 때만 `AVAILABLE`로(`RESERVED` 에서 / `USED` 에서), 기한이 지났으면 `EXPIRED`. holder 가 다른 호출은 무시된다. 쿠폰은 풀려도 `holder_ref` 를 지우지 않는다 — 늦은 `confirm` 이 주인을 찾는 단서다.
 만료(`EXPIRED`)는 저장 전에도 읽을 때 판정한다(`CouponExpiry`).
 
+**발행 기간 · 사용 시작**: 정의에 `issueStartsAt` · `issueEndsAt`(발행 기간 `[시작, 끝)` - 시작은 포함, 끝은 제외)과 `validFrom`(사용 시작)을 줄 수 있다(모두 선택, `issueStartsAt < issueEndsAt` · `validFrom < validUntil` 아니면 400 `DEFINITION_INVALID`).
+발행 기간 밖이면 운영자 발급 · 공용 코드 등록 · 보상 지급(`RewardIssuer`) 모두 409 `COUPON.ISSUE_CLOSED`(같은 지급 건이 이미 만든 장은 기간이 닫혀도 같은 장을 돌려준다). 사용 시작 전의 쿠폰은 쿠폰함에는 `AVAILABLE` 로 보이되 응답의 `usableFrom` 이 그 시각이고,
+결제 할인의 견적 · 예약은 그 시각 전까지 `UNAVAILABLE` 이다(클라이언트는 `usableFrom` 이 지난 것만 결제 선택지에 보인다). `validUntil` / `validDays` 의 만료와는 별개다.
+
+**현황 · 발급 내역**(운영): 한 정의의 쿠폰 수를 지금 시각으로 읽은 상태별로(`issued` · `available` · `reserved` · `used` · `expired` · `revoked`; 기한이 지난 `AVAILABLE` 은 `expired`)와 `discountTotals`(확정된 쿠폰이 실제로 깎은 금액, 통화별).
+**금액의 출처**: 쿠폰 표에는 할인액이 없다 — `coupon-jdbc` 가 결제 장부의 `payment_order_discounts`(`kind = coupon`, `CONFIRMED`)를 읽기 전용으로 합산한다(전액 환불로 되돌려진 줄은 빠진다). 결제 장부 표가 없는 조립(`payment-jdbc` 미사용)은 빈 목록이다. 코드 의존은 없고 표 이름에만 기댄다.
+
+**대시보드 기여**(`coupon-jdbc`, 기본 꺼짐 `skeleton.coupon.dashboard.enabled=true` + `dashboard` 모듈이 있을 때만): 타일 `coupon.used`(기간 안 쿠폰 사용 수, 일별 그래프 — 전액 환불로 되돌려진 것은 세지 않는다)와 순위 `coupon.top-used`(「앱 통계」 그룹, 많이 쓰인 쿠폰). 모듈은 메커니즘만 내고 켜는 것은 앱이다.
+
 **탈퇴**: `AccountErasureListener` 가 그 계정의 쿠폰과 코드 등록 줄을 지운다(결제 장부의 할인 내역은 장부라 남는다).
 
 사용자 경로(서블릿 웹 앱 + Spring Security 필요, `skeleton.coupon.http.enabled` 기본 켜짐, 호출자 = `Authentication.name`):
 
 | 메서드 · 경로 | 하는 일 |
 |---|---|
-| `GET /api/v1/coupons?status=AVAILABLE\|PAST` | 쿠폰함, 새것부터. `AVAILABLE` 은 쓸 수 있는 것(주문이 쥔 `RESERVED` 포함), `PAST` 는 쓴 · 만료 · 회수. `{id, name, status, expiresAt, stages[{type, value, maxDiscount, periods}], scope{purposes, itemTypes, planCodes}, currency, minAmount}` |
-| `POST /api/v1/coupons/redeem {code}` | 공용 코드 등록 → 201 쿠폰. 400 `COUPON.CODE_INVALID` · 409 `CODE_USED` · 409 `CODE_EXHAUSTED` |
+| `GET /api/v1/coupons?status=AVAILABLE\|PAST` | 쿠폰함, 새것부터. `AVAILABLE` 은 쓸 수 있는 것(주문이 쥔 `RESERVED` 포함), `PAST` 는 쓴 · 만료 · 회수. `{id, name, status, expiresAt, stages[{type, value, maxDiscount, periods}], scope{purposes, itemTypes, planCodes}, currency, minAmount, usableFrom}` |
+| `POST /api/v1/coupons/redeem {code}` | 공용 코드 등록 → 201 쿠폰. 400 `COUPON.CODE_INVALID` · 409 `CODE_USED` · 409 `CODE_EXHAUSTED` · 발행 기간 밖 409 `ISSUE_CLOSED` |
 
 운영자 경로(`skeleton.coupon.admin.enabled=true` 일 때만, 꺼져 있으면 404) — 모든 호출에 `coupon.manage`(기본 역할 없음 — 전권 역할만, 익명 401 · 권한 없음 403):
 
 | 메서드 · 경로 | 하는 일 |
 |---|---|
 | `GET /api/v1/admin/coupon-definitions` | 정의 목록(새것부터) + `issuedCount` |
-| `POST /api/v1/admin/coupon-definitions` | 정의 만들기 → 201 정의 (`value.id`) |
+| `POST /api/v1/admin/coupon-definitions` | 정의 만들기 → 201 정의 (`value.id`). 본문 `issueStartsAt` · `issueEndsAt` · `validFrom` 선택 |
 | `PATCH /api/v1/admin/coupon-definitions/{id}/status {status}` | 상태 바꾸기 |
+| `GET /api/v1/admin/coupon-definitions/{id}/stats` | 현황 `{issued, available, reserved, used, expired, revoked, discountTotals: [{currency, amount}]}`. 없는 정의 404 `DEFINITION_NOT_FOUND` |
+| `GET /api/v1/admin/coupon-definitions/{id}/coupons?status&cursor&size` | 이 정의로 발급된 쿠폰, 새것부터 커서(`size` 기본 50, 최대 200). `{id, accountId, status, issuedAt, expiresAt, usableFrom, usedAt, orderRef}` - `orderRef` 는 쥐고 있거나(`RESERVED`) 쓴(`USED`) 주문. `status` 는 지금 시각으로 읽은 상태(`EXPIRED` 는 기한 지난 `AVAILABLE` 포함) |
 | `POST /api/v1/admin/coupon-definitions/{id}/issue {accountIds}` | 계정마다 한 장 → `{issued[], skipped[]}`(한도에 막힌 계정은 건너뜀, 발급 중이 아니면 409 `DEFINITION_NOT_ACTIVE`). 운영 기록 `coupon.issued` |
 | `POST /api/v1/admin/coupon-definitions/{id}/codes {code?, maxRedemptions?, expiresAt?}` | 공용 코드 → 201 `{code}` (본문 생략 가능) |
 | `GET /api/v1/admin/coupons?accountId=` | 한 계정의 쿠폰 전부(사용자 쿠폰 꼴 + `accountId` · `definitionId`) |

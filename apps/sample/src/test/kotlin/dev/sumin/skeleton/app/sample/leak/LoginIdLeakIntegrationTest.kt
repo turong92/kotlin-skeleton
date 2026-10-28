@@ -94,6 +94,12 @@ class LoginIdLeakIntegrationTest {
             "/api/v1/admin/accounts/" to listOf(w.xAcc, w.yAcc),
             "/api/v1/admin/author-profiles/" to listOf(w.a.id, w.yProfile.id),
             "/api/v1/campaigns/" to listOf(http.post("/api/v1/admin/campaigns", w.adminToken, """{"kind":"attendance","name":"Leak ${w.nonce}","startsAt":"2026-01-01T00:00:00Z","config":{"daily":[{"type":"point","params":{"amount":"10"}}]}}""", record = false).ok().read<String>("$.value.id")),   // 출석 캠페인 하나 - 운영자가 만든다
+            // 쿠폰 정의 한 개를 만들어 X · Y 에게 한 장씩 준다 - 현황 · 발급 목록 (/api/v1/admin/coupon-definitions/{id}/stats · /coupons)
+            "/api/v1/admin/coupon-definitions/" to listOf(
+                http.post("/api/v1/admin/coupon-definitions", w.adminToken, """{"name":"Leak ${w.nonce}","stages":[{"type":"FREE","periods":1}]}""", record = false).ok().read<String>("$.value.id").also { id ->
+                    http.post("/api/v1/admin/coupon-definitions/$id/issue", w.adminToken, """{"accountIds":["${w.xAcc}","${w.yAcc}"]}""", record = false).ok()
+                },
+            ),
             "/api/v1/payments/orders/" to listOf(http.post("/api/v1/payments/orders", w.yToken, """{"itemType":"cheer","itemRef":"cheer-1000","quantity":1}""", record = false).ok().read<String>("$.value.order.id")),   // 결제 장부의 주문 한 건 읽기 - Y 의 주문(결제사는 시험 소스의 가짜)
         )
     }

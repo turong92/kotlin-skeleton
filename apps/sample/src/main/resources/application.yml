@@ -228,6 +228,8 @@ skeleton:
   coupon:
     admin:
       enabled: true
+    dashboard:
+      enabled: true   # 이 앱의 선택: 대시보드에 쿠폰 사용 수 타일과 많이 쓰인 쿠폰 순위 (스켈레톤 기본은 꺼짐)
   point:
     admin:
       enabled: true

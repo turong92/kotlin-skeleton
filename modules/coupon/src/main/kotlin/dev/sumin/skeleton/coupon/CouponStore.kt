@@ -28,6 +28,17 @@ interface CouponStore {
 
     fun incrementIssued(id: String, at: Instant)
 
+    // 현황 - 운영 화면
+
+    /** 한 정의의 쿠폰 수를 [now] 로 읽은 상태별로(기한이 지난 `AVAILABLE` 은 `EXPIRED`). 줄이 없는 상태는 빠진다 */
+    fun countByStatus(definitionId: String, now: Instant): Map<CouponStatus, Int>
+
+    /** 확정된(`USED`) 쿠폰이 실제로 깎은 금액을 통화별로. 금액을 아는 곳(결제 장부)이 없으면 빈 목록 */
+    fun discountTotals(definitionId: String): List<CouponMoney>
+
+    /** 한 정의의 쿠폰, 새것부터. [status] 는 [now] 로 읽은 상태. [before] 는 직전 쪽의 마지막 id */
+    fun pageByDefinition(definitionId: String, status: CouponStatus?, before: String?, limit: Int, now: Instant): List<Coupon>
+
     // 쿠폰
 
     /** 같은 `(sourceType, sourceRef)` 가 없을 때만 넣는다. 넣었으면 true */
