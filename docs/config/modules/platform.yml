@@ -45,6 +45,8 @@ skeleton:
     #   CS: [payment.read, payment.refund]
     #   MODERATOR: [board.moderate, board.manage]
     # 비우면 기본 매핑: super-role → ["*"] + 붙은 모듈이 선언한 기본 역할 (board: MODERATOR → board.moderate, board.manage)
+    # role-includes:                           # 역할 위계 - 역할 → 물려받는 역할. 위가 아래의 권한을 모두 얻는다(전이적, 순환 금지). 순환 · 없는 역할 · 전권 포함 · 전권에 includes 는 기동 실패. authz-jdbc 에서는 첫 기동의 씨앗이다
+    #   STAFF: [CS, MODERATOR]
     super-role: ADMIN                          # 전권(`*`)을 가진 단 하나의 역할
     cache-ttl: 30s                             # 역할 → 권한 캐시 수명 (authz-jdbc 가 쓴다). 0 = 캐시 끔
   redaction:

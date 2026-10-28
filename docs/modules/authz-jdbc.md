@@ -1,8 +1,8 @@
 # authz-jdbc
 
-> **이 모듈을 붙이는 순간 yml 의 역할 → 권한 매핑(`skeleton.authz.roles`)은 첫 기동의 씨앗일 뿐이다. 그 뒤로는 표(`authz_roles` · `authz_role_permissions`)가 진실이고, yml 을 바꿔도 반영되지 않는다 — 바꾸려면 관리 API 를 쓴다.**
+> **이 모듈을 붙이는 순간 yml 의 역할 → 권한 매핑(`skeleton.authz.roles`)은 첫 기동의 씨앗일 뿐이다. 그 뒤로는 표(`authz_roles` · `authz_role_permissions` · `authz_role_includes`)가 진실이고, yml 을 바꿔도 반영되지 않는다 — 바꾸려면 관리 API 를 쓴다.**
 
-`authz` 의 저장소 포트(`AuthzRoleStore`)를 JDBC(PostgreSQL · MySQL)로 구현하고, 판정이 읽는 역할 → 권한 매핑(`RolePermissionSource`)을 yml 에서 **이 표**로 바꾼다. 테이블 2 개: `authz_roles`(역할 · `protected` 는 전권 역할) · `authz_role_permissions`(역할이 가진 권한 키, 역할을 지우면 같이 지워진다).
+`authz` 의 저장소 포트(`AuthzRoleStore`)를 JDBC(PostgreSQL · MySQL)로 구현하고, 판정이 읽는 역할 → 권한 매핑(`RolePermissionSource`)을 yml 에서 **이 표**로 바꾼다. 테이블 3 개: `authz_roles`(역할 · `protected` 는 전권 역할) · `authz_role_permissions`(역할이 **직접** 가진 권한 키, 역할을 지우면 같이 지워진다) · `authz_role_includes`(역할 → 물려받는 역할. 역할을 지우면 그 역할의 줄도 지워지고, 다른 역할이 물려받는 역할은 외래키가 못 지우게 한다). 판정이 읽는 값은 물려받은 것까지 펼친 권한이다(전권 역할은 따라가지 않는다 - 표를 손으로 만져도 전권이 새지 않는다). 위계를 바꾸는 편집은 전권 역할 줄을 `select … for update` 로 잡아 여러 인스턴스에서 A→B · B→A 를 동시에 넣어도 순환이 생기지 않게 한다. 어느 역할이든 바뀌면 캐시 전체를 비운다(아래 역할이 바뀌면 위 역할의 펼친 값도 바뀐다) - 다른 인스턴스는 `cache-ttl` 안에 반영한다.
 시각은 `SqlDialect` 로 바인딩한다. 전권 역할 줄은 고치기 · 지우기 문장이 `protected = false` 조건을 달고 있어 동시 호출에도 바뀌지 않고, 판정 쪽도 표의 줄과 상관없이 전권 역할을 `*` 로 읽는다.
 
 **첫 기동 씨앗.** 표가 비어 있을 때만 yml 매핑(`skeleton.authz.roles`, 없으면 모듈 선언의 기본 `ADMIN: [*]` · `MODERATOR: [board.moderate, board.manage]`)을 표로 옮긴다. 표에 역할이 하나라도 있으면 아무것도 하지 않는다 — 그래서 기동 사이에 yml 을 바꿔도 표는 그대로이고, 운영자가 고친 역할을 덮지 않고, 지운 역할이 되살아나지 않는다(처음 한 번만 가져오는 방식). 그 뒤 바꾸려면 관리 API 를 쓴다.

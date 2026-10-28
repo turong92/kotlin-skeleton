@@ -114,4 +114,20 @@ class AccountRoleGrantRulesTest {
         assertTrue("KEPT" in x.repo.findById(target.id)!!.roles)
         assertEquals(listOf("GONE" to true, "KEPT" to true), locked, "locked inside the transaction, before the write")
     }
+
+    @Test
+    fun `a target whose role only inherits a permission the caller lacks is still out of reach - suspending STAFF that includes CS is 403`() {
+        val hierarchy = AccountHarness(
+            roleSource = dev.sumin.skeleton.common.authz.YmlRolePermissionSource(
+                mapOf("ADMIN" to setOf("*"), "STAFF" to emptySet(), "CS" to setOf("account.manage", "payment.read")),
+                mapOf("STAFF" to setOf("CS")),
+            ),
+        )
+        val staff = hierarchy.activeAccount("staff@example.com")
+        hierarchy.repo.grantRole(staff.id, "STAFF", hierarchy.time.now())
+        assertEquals("ACCOUNT.ROLE_ESCALATION", code { hierarchy.admin.suspend("acc_x", staff.id, null, setOf("account.manage")) })
+        assertEquals(AccountStatus.ACTIVE, hierarchy.repo.findById(staff.id)!!.status)
+        hierarchy.admin.suspend("acc_x", staff.id, null, setOf("account.manage", "payment.read"))
+        assertEquals(AccountStatus.SUSPENDED, hierarchy.repo.findById(staff.id)!!.status)
+    }
 }

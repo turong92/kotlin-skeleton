@@ -9,9 +9,9 @@ class FakeRoleStore : AuthzRoleStore {
     override fun list(): List<StoredRole> = rows.values.toList()
     override fun find(name: String): StoredRole? = rows[name]
     override fun insert(role: StoredRole): Boolean = rows.putIfAbsent(role.name, role) == null
-    override fun update(name: String, description: String?, permissions: Set<String>): Boolean {
+    override fun update(name: String, description: String?, permissions: Set<String>, includes: Set<String>?): Boolean {
         var changed = false
-        rows.computeIfPresent(name) { _, old -> if (old.protected) old else { changed = true; old.copy(description = description, permissions = permissions) } }
+        rows.computeIfPresent(name) { _, old -> if (old.protected) old else { changed = true; old.copy(description = description, permissions = permissions, includes = includes ?: old.includes) } }
         return changed
     }
 

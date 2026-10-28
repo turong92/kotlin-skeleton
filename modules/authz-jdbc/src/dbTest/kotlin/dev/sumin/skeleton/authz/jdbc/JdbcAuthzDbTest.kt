@@ -12,6 +12,7 @@ import dev.sumin.skeleton.common.authz.OperatorAuditLog
 import dev.sumin.skeleton.common.authz.OperatorRef
 import dev.sumin.skeleton.common.authz.PermissionDeclaration
 import dev.sumin.skeleton.common.authz.RolePermissionSource
+import dev.sumin.skeleton.common.authz.TokenOperatorAccess
 import dev.sumin.skeleton.common.authz.YmlRolePermissionSource
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.persistence.jdbc.SqlDialect
@@ -27,6 +28,7 @@ import java.util.concurrent.CyclicBarrier
 import java.util.concurrent.Executors
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -95,6 +97,7 @@ class JdbcAuthzDbTest {
     @BeforeEach
     fun reset() {
         // 시험 사이 상태: 씨앗이 넣은 줄만 남긴다
+        jdbc.sql("delete from authz_role_includes").update()
         jdbc.sql("delete from authz_roles where name not in ('ADMIN','MODERATOR','CS')").update()
         listOf(
             StoredRole("MODERATOR", null, setOf("board.moderate", "board.manage")),
@@ -310,6 +313,136 @@ class JdbcAuthzDbTest {
             assertEquals(setOf("payment.read"), store.find("CS")!!.permissions)
         } finally {
             releaseUpper.countDown()
+            audit.onRecord = {}
+            pool.shutdownNow()
+        }
+    }
+
+    // ---- role hierarchy (includes) ----
+
+    private fun clearRoles() {
+        jdbc.sql("delete from authz_role_includes").update()
+        jdbc.sql("delete from authz_role_permissions").update()
+        jdbc.sql("delete from authz_roles").update()
+    }
+
+    @Test
+    fun `the seed moves the yml includes once, keeps each role's own permissions, and a second start adds nothing`() {
+        clearRoles()
+        try {
+            val yml = YmlRolePermissionSource(
+                mapOf("ADMIN" to setOf("*"), "BASE" to setOf("payment.read"), "TOP" to setOf("payment.refund")),
+                mapOf("TOP" to setOf("BASE")),
+            )
+            repeat(2) { AuthzRoleSeeder(jdbc, dialect, tx, time, yml, "ADMIN").afterSingletonsInstantiated() }
+
+            assertEquals(1, count("authz_role_includes"))
+            assertEquals(setOf("BASE"), store.find("TOP")!!.includes)
+            assertEquals(setOf("payment.refund"), store.find("TOP")!!.permissions, "the table keeps the direct permissions, not the inherited ones")
+            assertEquals(setOf("payment.read", "payment.refund"), JdbcRolePermissionSource(jdbc, "ADMIN").permissionsOf("TOP"))
+        } finally {
+            clearRoles()
+            AuthzRoleSeeder(
+                jdbc, dialect, tx, time,
+                YmlRolePermissionSource(mapOf("ADMIN" to setOf("*"), "MODERATOR" to setOf("board.moderate", "board.manage"), "CS" to setOf("payment.read", "payment.refund"))),
+                "ADMIN",
+            ).afterSingletonsInstantiated()
+        }
+    }
+
+    @Test
+    fun `the store keeps includes, leaves them alone when an update has none, and refuses to delete an included role`() {
+        assertTrue(store.insert(StoredRole("BASE", null, setOf("payment.read"))))
+        assertTrue(store.insert(StoredRole("TOP", null, setOf("payment.refund"), includes = setOf("BASE"))))
+        assertEquals(setOf("BASE"), store.find("TOP")!!.includes)
+        assertEquals(setOf("BASE"), store.list().single { it.name == "TOP" }.includes)
+        assertEquals(setOf("TOP"), store.includedBy("BASE"))
+
+        assertTrue(store.update("TOP", "d", setOf("payment.refund")))
+        assertEquals(setOf("BASE"), store.find("TOP")!!.includes, "no includes in the update means keep")
+        assertTrue(store.update("TOP", "d", setOf("payment.refund"), emptySet()))
+        assertEquals(emptySet(), store.find("TOP")!!.includes)
+
+        assertTrue(store.update("TOP", "d", setOf("payment.refund"), setOf("BASE")))
+        assertFailsWith<org.springframework.dao.DataIntegrityViolationException> { store.delete("BASE") }
+        assertTrue(store.delete("TOP"))
+        assertEquals(0, count("authz_role_includes"), "deleting a role takes its include rows along")
+        assertEquals(emptySet(), store.includedBy("BASE"))
+    }
+
+    @Test
+    fun `permissions are expanded through the table, the full access role is never followed, and a loop in the table ends`() {
+        store.insert(StoredRole("BASE", null, setOf("payment.read")))
+        store.insert(StoredRole("MID", null, setOf("board.manage"), includes = setOf("BASE")))
+        store.insert(StoredRole("TOP", null, setOf("payment.refund"), includes = setOf("MID")))
+        val jdbcSource = JdbcRolePermissionSource(jdbc, "ADMIN")
+        assertEquals(setOf("payment.read", "board.manage", "payment.refund"), jdbcSource.permissionsOf("TOP"))
+        assertEquals(setOf("MID"), jdbcSource.includesOf("TOP"))
+
+        // 표를 손으로 만져도 전권이 새지 않는다
+        jdbc.sql("insert into authz_role_includes (role, included) values ('BASE', 'ADMIN')").update()
+        assertEquals(setOf("payment.read", "board.manage", "payment.refund"), jdbcSource.permissionsOf("TOP"))
+        jdbc.sql("delete from authz_role_includes where role = 'BASE'").update()
+        // 손으로 만든 순환에도 판정이 끝난다
+        jdbc.sql("insert into authz_role_includes (role, included) values ('BASE', 'TOP')").update()
+        assertEquals(setOf("payment.read", "board.manage", "payment.refund"), jdbcSource.permissionsOf("BASE"))
+    }
+
+    @Test
+    fun `a change to an included role reaches the roles above it at once here and after the ttl on another instance`() {
+        store.insert(StoredRole("TOP", null, setOf("board.manage"), includes = setOf("CS")))
+        val top = OperatorRef("acc_top", setOf("TOP"))
+        assertTrue(can(top, "payment.refund"))
+
+        val clock = MutableClock(Instant.parse("2026-10-24T00:00:00Z"))
+        val otherInstance = CachingRolePermissionSource(JdbcRolePermissionSource(jdbc, "ADMIN"), Duration.ofSeconds(30), clock)
+        assertEquals(setOf("board.manage", "payment.read", "payment.refund"), otherInstance.permissionsOf("TOP"))
+
+        store.update("CS", null, setOf("payment.read"))
+
+        assertFalse(can(top, "payment.refund"), "same instance: the whole cache is dropped on commit")
+        assertTrue(can(top, "payment.read"))
+        assertEquals(setOf("board.manage", "payment.read", "payment.refund"), otherInstance.permissionsOf("TOP"), "other instance still cached")
+        clock.now = clock.now.plusSeconds(31)
+        assertEquals(setOf("board.manage", "payment.read"), otherInstance.permissionsOf("TOP"), "other instance after the ttl")
+    }
+
+    @Test
+    fun `two servers including each other's role at the same time end with one include - the second waits for the first and sees the loop`() {
+        store.insert(StoredRole("LOOP_A", null, setOf("payment.read")))
+        store.insert(StoredRole("LOOP_B", null, setOf("payment.read")))
+        val declarations = listOf(PermissionDeclaration("payment", listOf(DeclaredPermission("payment.read"))))
+        // 서버 하나 = 저장소 · 캐시 · 서비스 한 벌(프로세스 잠금도 따로) - 줄 세우는 것은 DB 의 전권 역할 줄 잠금뿐이다
+        fun server(): RoleService {
+            val cache = CachingRolePermissionSource(JdbcRolePermissionSource(jdbc, "ADMIN"), Duration.ofSeconds(30))
+            return RoleService(
+                JdbcAuthzRoleStore(jdbc, dialect, tx, time) { cache.invalidate() }, cache, TokenOperatorAccess(cache),
+                { declarations }, null, audit, "ADMIN", tx,
+            )
+        }
+        val serverOne = server()
+        val serverTwo = server()
+        val first = OperatorRef("acc_first", setOf("ADMIN"))
+        val second = OperatorRef("acc_second", setOf("ADMIN"))
+        val firstInTransaction = CountDownLatch(1)
+        val releaseFirst = CountDownLatch(1)
+        audit.onRecord = { if (it.actorId == "acc_first") { firstInTransaction.countDown(); releaseFirst.await(10, TimeUnit.SECONDS) } }
+        val pool = Executors.newFixedThreadPool(2)
+        try {
+            val one = pool.submit { serverOne.update(first, "LOOP_A", null, setOf("payment.read"), setOf("LOOP_B")) }
+            assertTrue(firstInTransaction.await(10, TimeUnit.SECONDS))
+            val two = pool.submit<Throwable?> {
+                try { serverTwo.update(second, "LOOP_B", null, setOf("payment.read"), setOf("LOOP_A")); null } catch (e: AuthzRoleException) { e }
+            }
+            Thread.sleep(500)
+            assertFalse(two.isDone, "the second include waits for the first at the hierarchy lock")
+            releaseFirst.countDown()
+            one.get(10, TimeUnit.SECONDS)
+            assertEquals("AUTHZ.ROLE_CYCLE", (two.get(10, TimeUnit.SECONDS) as? AuthzRoleException)?.errorCode?.code)
+            assertEquals(setOf("LOOP_B"), store.find("LOOP_A")!!.includes)
+            assertEquals(emptySet(), store.find("LOOP_B")!!.includes)
+        } finally {
+            releaseFirst.countDown()
             audit.onRecord = {}
             pool.shutdownNow()
         }

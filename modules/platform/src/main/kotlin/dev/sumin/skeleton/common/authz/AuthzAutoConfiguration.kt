@@ -15,14 +15,14 @@ class AuthzAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(RolePermissionSource::class)
-    fun rolePermissionSource(properties: AuthzProperties, declarations: ObjectProvider<PermissionDeclaration>): RolePermissionSource {
+    fun rolePermissionSource(properties: AuthzProperties, declarations: ObjectProvider<PermissionDeclaration>): YmlRolePermissionSource {
         check(ROLE_NAME.matches(properties.superRole)) { "Invalid skeleton.authz.super-role '${properties.superRole}': not a role name ($ROLE_NAME)" }
         val declared = declarations.orderedStream().toList().flatMap { it.permissions }
         checkDeclarations(declared)
         val roles: Map<String, Set<String>> =
             if (properties.roles.isEmpty()) defaultRoles(properties.superRole, declared)
             else explicitRoles(properties, declared.mapTo(HashSet()) { it.key })
-        return YmlRolePermissionSource(roles)
+        return YmlRolePermissionSource(roles, hierarchy(properties, roles.keys))
     }
 
     @Bean
@@ -57,6 +57,28 @@ class AuthzAutoConfiguration {
         }
         check(problems.isEmpty()) { "Invalid skeleton.authz.roles:\n  " + problems.joinToString("\n  ") }
         return properties.roles.mapValues { it.value.toSortedSet() }
+    }
+
+    /** `skeleton.authz.role-includes` 검사 — 순환 · 없는 역할 · 전권 포함 · 전권에 includes 는 기동 실패 */
+    private fun hierarchy(properties: AuthzProperties, defined: Set<String>): Map<String, Set<String>> {
+        val problems = mutableListOf<String>()
+        val superRole = properties.superRole
+        properties.roleIncludes.forEach { (role, included) ->
+            if (role == superRole) problems += "$role: the super role has full access and cannot include roles"
+            else if (role !in defined) problems += "$role: not a defined role (an env var binds the key in lower case, use the yml form)"
+            included.forEach { target ->
+                when {
+                    target == superRole -> problems += "$role: cannot include the super role $superRole"
+                    target !in defined -> problems += "$role: includes '$target', which is not a defined role"
+                }
+            }
+        }
+        val graph = properties.roleIncludes.mapValues { it.value.toSet() }
+        if (problems.isEmpty()) {
+            RoleClosure.cycleOf(graph)?.let { problems += "role-includes has a cycle: ${it.joinToString(" -> ")}" }
+        }
+        check(problems.isEmpty()) { "Invalid skeleton.authz.role-includes:\n  " + problems.joinToString("\n  ") }
+        return graph
     }
 
     private fun checkDeclarations(declared: List<DeclaredPermission>) {

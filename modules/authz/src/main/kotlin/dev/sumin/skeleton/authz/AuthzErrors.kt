@@ -16,6 +16,9 @@ enum class AuthzRoleErrorCode(
     ROLE_NOT_FOUND("AUTHZ.ROLE_NOT_FOUND", HttpStatus.NOT_FOUND, "Role not found"),
     PERMISSION_UNKNOWN("AUTHZ.PERMISSION_UNKNOWN", HttpStatus.BAD_REQUEST, "Unknown permission"),
     ESCALATION("AUTHZ.ESCALATION", HttpStatus.FORBIDDEN, "You cannot grant or take away a permission you do not hold"),
+    ROLE_CYCLE("AUTHZ.ROLE_CYCLE", HttpStatus.CONFLICT, "Roles cannot include each other in a loop"),
+    INCLUDE_UNKNOWN("AUTHZ.INCLUDE_UNKNOWN", HttpStatus.BAD_REQUEST, "Unknown role to include"),
+    ROLE_INCLUDED("AUTHZ.ROLE_INCLUDED", HttpStatus.CONFLICT, "Another role still includes this role"),
     SELF_LOCKOUT("AUTHZ.SELF_LOCKOUT", HttpStatus.CONFLICT, "This change would remove your own access to role management"),
 }
 
