@@ -1,0 +1,11 @@
+# catalog — 상품 · 가격 카탈로그(월 · 연 · 단건 · 행사가 · 통화별)와 결제 계약 구현. 저장은 catalog-jdbc.
+skeleton:
+  catalog:
+    default-locale: en             # 결제창 이름 · 구독 플랜 이름으로 쓰는 언어 (그 언어 이름이 없는 상품은 첫 언어)
+    item-type: product             # 단건 주문의 itemType - itemRef 는 단건 가격 코드
+    http:
+      enabled: false               # true 면 공개 읽기(GET /api/v1/catalog/products, 로그인 없이)가 열린다. 꺼져 있으면 404
+      base-path: /api/v1/catalog
+    admin:
+      enabled: false               # true 면 운영자 경로(catalog.manage)가 열린다. 꺼져 있으면 404
+      base-path: /api/v1/admin     # 아래에 /catalog/products · /catalog/prices · /catalog/providers

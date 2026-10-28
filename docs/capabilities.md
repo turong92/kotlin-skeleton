@@ -94,6 +94,8 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `campaign` | 이벤트 — 출석(매일 · 누적 · 연속 달성)과 친구초대(양쪽 보상)를 판정해 보상 지급 건으로 기록하고, 운영자가 이벤트를 만들고 켜고 끈다. | `--modules campaign,campaign-jdbc,reward-jdbc` | 이벤트, 출석 체크, 출석 보상, 친구 초대, 초대 코드, 초대 보상, 연속 출석 / campaign, event, attendance, check-in, referral, invite, streak | `@skeleton/rewards` |
 | `campaign-jdbc` | 이벤트 · 출석 · 초대 코드 · 초대 관계 저장을 DB 에 둔다 (PostgreSQL · MySQL). | `--modules campaign-jdbc` | 이벤트 저장, 출석 저장 / campaign store, attendance store | `@skeleton/rewards` |
 | `captcha-turnstile` | 봇 방지 — Cloudflare Turnstile 토큰을 서버에서 검증한다(TurnstileVerifier). | 스타터(apps/api)에 기본 포함 | 캡차, 봇 방지, 스팸 방지, 로봇 확인, 가입 폼 보호 / captcha, turnstile, bot protection, spam protection, cloudflare turnstile | `@skeleton/captcha-turnstile` |
+| `catalog` | 상품 · 가격 카탈로그 — 운영자가 화면에서 상품과 가격(월 · 연 · 단건 · 행사가 · 통화별)을 만들고, 가격표 · 구독 화면 · 결제가 방문 나라에 맞는 통화의 그 표를 읽는다. 결제 계약(SubscriptionPlans · PaymentCatalog · 결제사 가격 id)을 구현하고 가격은 고치지 않는다(새 줄 + 판매 중지). | `--modules catalog,catalog-jdbc` | 상품, 가격표, 요금제, 월간 연간, 행사가, 통화별 가격, 상품 관리 / product catalog, pricing table, price list, yearly monthly plans, sale price, multi-currency pricing | `@skeleton/payment` |
+| `catalog-jdbc` | 상품 · 이름 · 가격 · 결제사 링크를 DB 에 둔다 (PostgreSQL · MySQL) — 같은 상품의 가격 쓰기는 상품 줄 잠금, 코드 · 등급 · 결제사 가격 id 는 유니크. | `--modules catalog-jdbc` | 상품 저장소, 가격 DB / catalog storage, price repository | `@skeleton/payment` |
 | `config-aws-ssm` | AWS SSM Parameter Store 의 값을 시작할 때 스프링 프로퍼티로 불러온다. | `--modules config-aws-ssm` | AWS 설정, 파라미터 스토어, SSM, 비밀 불러오기 / aws ssm, parameter store, remote config, aws secrets | — |
 | `coupon` | 쿠폰 — 단계 목록(무료 · 정률 · 정액, n회차)으로 마케팅이 행 하나로 만드는 정의, 쿠폰함, 공용 코드 등록, 보상 지급기 `coupon` 과 결제 할인 수단 `coupon`(예약 · 확정 · 해제 · 복원). | `--modules coupon,coupon-jdbc` | 쿠폰, 할인 코드, 프로모션 코드, 무료 이용권, n달 무료, 쿠폰함 / coupon, promo code, discount code, voucher, coupon wallet | `@skeleton/rewards` |
 | `coupon-jdbc` | 쿠폰 정의 · 쿠폰함 · 공용 코드를 DB 에 둔다 (PostgreSQL · MySQL) — 예약 · 확정은 조건부 갱신, 발급 한도는 정의 줄 잠금. | `--modules coupon-jdbc` | 쿠폰 저장소, 쿠폰 DB / coupon storage, coupon repository | `@skeleton/rewards` |
@@ -568,6 +570,37 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 검증만 한다 — 화면의 위젯은 프런트(@skeleton/captcha-turnstile)
   - 켜기 전에는 검증기 빈이 없다
 - 키워드: 캡차, 봇 방지, 스팸 방지, 로봇 확인, 가입 폼 보호 / captcha, turnstile, bot protection, spam protection, cloudflare turnstile
+
+### `catalog` — 상품 · 가격 카탈로그 — 운영자가 화면에서 상품과 가격(월 · 연 · 단건 · 행사가 · 통화별)을 만들고, 가격표 · 구독 화면 · 결제가 방문 나라에 맞는 통화의 그 표를 읽는다. 결제 계약(SubscriptionPlans · PaymentCatalog · 결제사 가격 id)을 구현하고 가격은 고치지 않는다(새 줄 + 판매 중지).
+
+- 종류 · 상태: module · experimental — 위치 `modules/catalog`
+- 켜는 법: `--modules catalog,catalog-jdbc`
+- 의존 한 줄: `implementation(project(":modules:catalog"))`
+- 자동으로 따라온다: `crypto`, `payment`
+- 함께 골라야 한다: `catalog-jdbc`
+- 설정 접두사 `skeleton.catalog` — 키와 기본값 `docs/config/modules/catalog.yml`
+- HTTP 경로: `/api/v1/admin/catalog`, `/api/v1/catalog`
+- 문서: `docs/modules/catalog.md`
+- 짝 프런트(react-skeleton): 항목 `payment`, `payment-admin` · 패키지 `@skeleton/payment` · 조각 `--packages payment`
+- 쓰지 않는 경우:
+  - catalog 는 저장소를 모른다 — catalog-jdbc 를 같이 고른다
+  - 결제 자체는 payment 와 결제사 모듈의 몫이다 — 이 모듈은 무엇을 얼마에 파는지의 표와 운영 화면용 API 만 낸다
+  - 기존 구독자의 가격을 일괄 바꾸는 기능은 없다(가격은 고치지 않는다)
+  - 무료 플랜은 표에 넣지 않는다
+- 키워드: 상품, 가격표, 요금제, 월간 연간, 행사가, 통화별 가격, 상품 관리 / product catalog, pricing table, price list, yearly monthly plans, sale price, multi-currency pricing
+
+### `catalog-jdbc` — 상품 · 이름 · 가격 · 결제사 링크를 DB 에 둔다 (PostgreSQL · MySQL) — 같은 상품의 가격 쓰기는 상품 줄 잠금, 코드 · 등급 · 결제사 가격 id 는 유니크.
+
+- 종류 · 상태: module · experimental — 위치 `modules/catalog-jdbc`
+- 켜는 법: `--modules catalog-jdbc`
+- 의존 한 줄: `implementation(project(":modules:catalog-jdbc"))`
+- 자동으로 따라온다: `catalog`, `crypto`, `payment`
+- 설정 접두사 없음
+- 문서: `docs/modules/catalog-jdbc.md`
+- 짝 프런트(react-skeleton): 항목 `payment`, `payment-admin` · 패키지 `@skeleton/payment` · 조각 `--packages payment`
+- 쓰지 않는 경우:
+  - DataSource · db-* 모듈과 이 모듈의 마이그레이션이 적용된 스키마가 필요하다
+- 키워드: 상품 저장소, 가격 DB / catalog storage, price repository
 
 ### `config-aws-ssm` — AWS SSM Parameter Store 의 값을 시작할 때 스프링 프로퍼티로 불러온다.
 
@@ -1267,7 +1300,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 - 종류 · 상태: app · stable — 위치 `apps/workbench`
 - 켜는 법: `--with-workbench`
-- 자동으로 따라온다: `alert-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `board`, `board-jdbc`, `campaign`, `campaign-jdbc`, `config-aws-ssm`, `coupon`, `coupon-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `db-mysql`, `event-kafka`, `json`, `notification`, `notification-jdbc`, `notification-slack`, `notification-sse`, `notification-websocket`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `point`, `point-jdbc`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `reward`, `reward-jdbc`, `scheduler`, `storage`, `storage-s3`
+- 자동으로 따라온다: `alert-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `board`, `board-jdbc`, `campaign`, `campaign-jdbc`, `catalog`, `catalog-jdbc`, `config-aws-ssm`, `coupon`, `coupon-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `db-mysql`, `event-kafka`, `json`, `notification`, `notification-jdbc`, `notification-slack`, `notification-sse`, `notification-websocket`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `point`, `point-jdbc`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `reward`, `reward-jdbc`, `scheduler`, `storage`, `storage-s3`
 - HTTP 경로: `/api/v1`, `/api/v1/examples`, `/api/v1/skeleton`, `/api/v1/skeleton/enums`, `/api/v1/skeleton/json`, `/api/v1/skeleton/payments`, `/api/v1/skeleton/polymorphic/contents`
 - 문서: `docs/minimal-composition.md`, `docs/modules/README.md`
 - 짝 프런트(react-skeleton): 항목 `app-workbench` · 조각 `--with-workbench`

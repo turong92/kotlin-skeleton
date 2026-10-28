@@ -1077,6 +1077,84 @@
       }
     },
     {
+      "id": "catalog",
+      "kind": "module",
+      "module": "catalog",
+      "path": "modules/catalog",
+      "status": "experimental",
+      "summary": "상품 · 가격 카탈로그 — 운영자가 화면에서 상품과 가격(월 · 연 · 단건 · 행사가 · 통화별)을 만들고, 가격표 · 구독 화면 · 결제가 방문 나라에 맞는 통화의 그 표를 읽는다. 결제 계약(SubscriptionPlans · PaymentCatalog · 결제사 가격 id)을 구현하고 가격은 고치지 않는다(새 줄 + 판매 중지).",
+      "starter": false,
+      "newProjectFlag": "--modules catalog,catalog-jdbc",
+      "autoIncludes": ["crypto", "payment"],
+      "needs": {
+        "requires": ["catalog-jdbc"],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": ["skeleton.catalog"],
+        "snippet": "docs/config/modules/catalog.yml"
+      },
+      "basePaths": ["/api/v1/admin/catalog", "/api/v1/catalog"],
+      "secrets": [],
+      "docs": ["docs/modules/catalog.md"],
+      "frontend": {
+        "capabilities": ["payment", "payment-admin"],
+        "newProjectFlag": "--packages payment",
+        "packages": ["@skeleton/payment"]
+      },
+      "notFor": [
+        "catalog 는 저장소를 모른다 — catalog-jdbc 를 같이 고른다",
+        "결제 자체는 payment 와 결제사 모듈의 몫이다 — 이 모듈은 무엇을 얼마에 파는지의 표와 운영 화면용 API 만 낸다",
+        "기존 구독자의 가격을 일괄 바꾸는 기능은 없다(가격은 고치지 않는다)",
+        "무료 플랜은 표에 넣지 않는다"
+      ],
+      "keywords": {
+        "ko": ["상품", "가격표", "요금제", "월간 연간", "행사가", "통화별 가격", "상품 관리"],
+        "en": [
+          "product catalog",
+          "pricing table",
+          "price list",
+          "yearly monthly plans",
+          "sale price",
+          "multi-currency pricing"
+        ]
+      }
+    },
+    {
+      "id": "catalog-jdbc",
+      "kind": "module",
+      "module": "catalog-jdbc",
+      "path": "modules/catalog-jdbc",
+      "status": "experimental",
+      "summary": "상품 · 이름 · 가격 · 결제사 링크를 DB 에 둔다 (PostgreSQL · MySQL) — 같은 상품의 가격 쓰기는 상품 줄 잠금, 코드 · 등급 · 결제사 가격 id 는 유니크.",
+      "starter": false,
+      "newProjectFlag": "--modules catalog-jdbc",
+      "autoIncludes": ["catalog", "crypto", "payment"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": [],
+        "snippet": null
+      },
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/catalog-jdbc.md"],
+      "frontend": {
+        "capabilities": ["payment", "payment-admin"],
+        "newProjectFlag": "--packages payment",
+        "packages": ["@skeleton/payment"]
+      },
+      "notFor": ["DataSource · db-* 모듈과 이 모듈의 마이그레이션이 적용된 스키마가 필요하다"],
+      "keywords": {
+        "ko": ["상품 저장소", "가격 DB"],
+        "en": ["catalog storage", "price repository"]
+      }
+    },
+    {
       "id": "config-aws-ssm",
       "kind": "module",
       "module": "config-aws-ssm",
@@ -2949,6 +3027,8 @@
         "board-jdbc",
         "campaign",
         "campaign-jdbc",
+        "catalog",
+        "catalog-jdbc",
         "config-aws-ssm",
         "coupon",
         "coupon-jdbc",

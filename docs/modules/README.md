@@ -72,6 +72,8 @@
 | `reward` | 보상 지급의 허리 — 이벤트가 기록한 지급 건을 일꾼이 쿠폰 · 포인트 지급기로 주고 받았어요 알림까지 | [reward](reward.md) |
 | `reward-jdbc` | 지급 건 저장 · 작업을 DB 에 두고 일꾼을 job-queue 에 얹기 | [reward-jdbc](reward-jdbc.md) |
 | `captcha-turnstile` | Cloudflare Turnstile 토큰 검증 | [captcha-turnstile](captcha-turnstile.md) |
+| `catalog` | 상품 · 가격 카탈로그 - 월 · 연 · 단건 · 행사가 · 통화별 표를 운영자 화면에서 관리하고 결제 계약(플랜 · 단건 · 결제사 가격 id)을 구현 | [catalog](catalog.md) |
+| `catalog-jdbc` | 상품 · 가격 저장을 DB 에 두기 (상품 · 이름 · 가격 · 결제사 링크) | [catalog-jdbc](catalog-jdbc.md) |
 | `coupon` | 쿠폰 - 단계 목록 정의 · 쿠폰함 · 공용 코드 · 보상 지급기 · 결제 할인 수단 | [coupon](coupon.md) |
 | `coupon-jdbc` | 쿠폰 저장을 DB 에 두기 (정의 · 쿠폰함 · 코드) | [coupon-jdbc](coupon-jdbc.md) |
 | `db-postgresql` | PostgreSQL 방언 모듈 (db-* 중 정확히 하나) | [db-postgresql](db-postgresql.md) |

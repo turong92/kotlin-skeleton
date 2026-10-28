@@ -102,6 +102,8 @@
 - campaign: 이벤트 — 출석(매일 · 누적 · 연속 달성)과 친구초대(양쪽 보상)를… [이벤트, 출석 체크]
 - campaign-jdbc: 이벤트 · 출석 · 초대 코드 · 초대 관계 저장을 DB 에 둔다… [이벤트 저장, 출석 저장]
 - captcha-turnstile: 봇 방지 — Cloudflare Turnstile 토큰을 서버에서… [캡차, 봇 방지]
+- catalog: 상품 · 가격 카탈로그 — 운영자가 화면에서 상품과 가격(월 · 연 ·… [상품, 가격표]
+- catalog-jdbc: 상품 · 이름 · 가격 · 결제사 링크를 DB 에 둔다… [상품 저장소, 가격 DB]
 - config-aws-ssm: AWS SSM Parameter Store 의 값을 시작할 때 스프링… [AWS 설정, 파라미터 스토어]
 - coupon: 쿠폰 — 단계 목록(무료 · 정률 · 정액, n회차)으로 마케팅이 행… [쿠폰, 할인 코드]
 - coupon-jdbc: 쿠폰 정의 · 쿠폰함 · 공용 코드를 DB 에 둔다… [쿠폰 저장소, 쿠폰 DB]

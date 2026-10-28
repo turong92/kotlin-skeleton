@@ -20,6 +20,7 @@
 #  12. --modules coupon,coupon-jdbc   (쿠폰만 - 정의 · 쿠폰함 · 공용 코드 · 지급기 · 할인 수단, coupon-jdbc 의 dbTest 가 두 DB 로 돈다 - `12-coupon`)
 #  13. --modules point,point-jdbc   (포인트만 - 적립 · 차감 · 소멸 · 지급기, point-jdbc 의 dbTest 가 두 DB 로 돈다 - `13-point`)
 #  14. --modules campaign,campaign-jdbc,reward,reward-jdbc   (이벤트 + 지급 일꾼만 - 지급기(쿠폰 · 포인트) 없이 건이 FAILED 로 남고 기동은 된다 - `14-campaign`)
+#  15. --modules payment,payment-jdbc,payment-toss,catalog,catalog-jdbc   (상품 · 가격 카탈로그: 결제 계약 구현이 결제 장부와 함께 선다, catalog-jdbc 의 dbTest 가 두 DB 로 돈다 - `15-catalog`)
 #   8. docs/new-project-recipe.md 의 작업 예 3개(<!-- kotlin-stamp: … --> 블록의 명령 그대로) — 커뮤니티 · 유료 SaaS(--db mysql) · 콘텐츠 SSR(스타터 그대로)
 # macOS bash 3.2 와 GNU bash 에서 돈다. 임시 디렉토리는 끝나면 지운다 (KEEP=1 이면 남긴다).
 set -euo pipefail
@@ -380,6 +381,16 @@ CPN="$TMP/couponnojdbc"
 expect_exit 0 "coupon 만 요청하면 찍히되 coupon-jdbc 를 더하라고 알려 준다" stamp "$CPN" --modules coupon
 grep -q 'coupon has no storage of its own' <<<"$LAST_OUTPUT" && pass "저장소 없음 안내가 나온다" || fail "coupon 만 골랐는데 coupon-jdbc 안내가 없다"
 
+echo "== 8g. --modules payment,payment-jdbc,payment-toss,catalog,catalog-jdbc (상품 · 가격 카탈로그 - 결제 계약을 구현하는 모듈은 결제 장부 옆에 선다)"
+CT="$TMP/catalog"
+expect_exit 0 "카탈로그 조합을 찍는다 (rename 잔여 검사 포함)" stamp "$CT" --modules payment,payment-jdbc,payment-toss,catalog,catalog-jdbc
+for m in catalog catalog-jdbc payment payment-jdbc payment-toss; do
+  check "카탈로그 조합에 모듈 $m 이 포함된다" bash -c "grep -q 'include(\":modules:$m\")' '$CT/settings.gradle.kts' && test -d '$CT/modules/$m'"
+done
+check "dbTestModules 에 catalog-jdbc 가 들어가고 마이그레이션이 잠금에 올라 있다" bash -c "grep -q '\":modules:catalog-jdbc\"' '$CT/build.gradle.kts' && grep -q 'modules/catalog-jdbc/' '$CT/migrations.lock'"
+check "문서 쪽 · 설정 블록 · 카탈로그 항목이 남고 생성물이 맞다" bash -c "test -f '$CT/docs/modules/catalog.md' && test -f '$CT/docs/config/modules/catalog.yml' && grep -q '\"path\": \"modules/catalog\"' '$CT/capabilities.json' && cd '$CT' && perl scripts/build-capabilities.pl --check"
+check "카탈로그를 고르지 않은 기본 프로젝트에는 catalog* 디렉터리 · 문서 행 · 카탈로그 항목 · 잠금 줄이 남지 않는다" bash -c "! ls '$A/modules' | grep -q '^catalog' && ! grep -q '](catalog' '$A/docs/modules/README.md' && ! grep -Eq 'modules/catalog' '$A/capabilities.json' '$A/migrations.lock'"
+
 echo "== 9. --modules redis-core,redis-lock (Redis 환경변수 이름이 프로젝트 접두사를 따라간다 — 배포 계약)"
 J="$TMP/j"
 expect_exit 0 "redis 조합을 찍는다" stamp "$J" --modules redis-core,redis-lock
@@ -452,6 +463,7 @@ if [ "$MODE" = "--full" ]; then
   build_composition "$CP" "12-coupon"
   build_composition "$PT" "13-point"
   build_composition "$CM" "14-campaign"
+  build_composition "$CT" "15-catalog"
   for rid in $RECIPE_DIRS; do   # 레시피의 작업 예 — 문서의 명령이 낡으면 여기서 깨진다 (stamp · dry-run 은 위에서 이미 했다)
     [ "${RECIPE_PLAIN#* $rid }" != "$RECIPE_PLAIN" ] && continue   # 위치 인자 뒤에 옵션이 없는 레시피 = 스타터 그대로 = 1-defaults 와 같은 구성이라 빌드는 반복하지 않는다
     build_composition "$TMP/recipe-$rid" "recipe-$rid"
