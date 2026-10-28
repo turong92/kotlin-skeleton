@@ -82,7 +82,7 @@ class LoginIdLeakIntegrationTest {
             "commentId" to listOf(w.c0, w.c1, w.c2, w.c3, w.c4, w.cPicture).map { it.toString() },
             "eventId" to listOf(eventId),
             "type" to listOf("terms", "privacy"),
-            "key" to listOf("app.board-posts", "app.board-reactions"),   // 대시보드 순위 하나 (/api/v1/admin/dashboard/rankings/{key}) - 견본 앱에 실제로 붙은 앱 통계 순위
+            "key" to listOf("app.board-posts", "app.board-reactions", "coupon.top-used"),   // 대시보드 순위 하나 (/api/v1/admin/dashboard/rankings/{key}) - 견본 앱에 실제로 붙은 앱 통계 순위
             "accountId" to listOf(w.xAcc, w.yAcc),   // 운영자의 포인트 잔액 조회 (/api/v1/admin/points/{accountId})
         )
     }
