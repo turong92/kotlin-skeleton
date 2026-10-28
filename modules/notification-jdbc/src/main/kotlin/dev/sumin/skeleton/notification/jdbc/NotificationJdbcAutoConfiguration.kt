@@ -4,6 +4,7 @@ import dev.sumin.skeleton.json.JsonCodec
 import dev.sumin.skeleton.json.JsonAutoConfiguration
 import dev.sumin.skeleton.notification.NotificationAutoConfiguration
 import dev.sumin.skeleton.notification.NotificationInboxRepository
+import dev.sumin.skeleton.notification.NotificationMuteRepository
 import dev.sumin.skeleton.persistence.jdbc.SqlDialect
 import javax.sql.DataSource
 import org.springframework.boot.autoconfigure.AutoConfiguration
@@ -36,4 +37,13 @@ class NotificationJdbcAutoConfiguration {
             jsonCodec = jsonCodec,
             dialect = dialect,
         )
+
+    @Bean
+    @ConditionalOnBean(DataSource::class)
+    @ConditionalOnMissingBean(NotificationMuteRepository::class)
+    fun jdbcNotificationMuteRepository(
+        dataSource: DataSource,
+        dialect: SqlDialect,
+    ): NotificationMuteRepository =
+        JdbcNotificationMuteRepository(jdbc = NamedParameterJdbcTemplate(dataSource), dialect = dialect)
 }

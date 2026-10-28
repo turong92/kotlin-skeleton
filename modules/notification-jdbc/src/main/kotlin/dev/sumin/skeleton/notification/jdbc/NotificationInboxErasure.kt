@@ -10,7 +10,7 @@ import org.springframework.context.annotation.Bean
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
 
 /**
- * 계정이 지워질 때 그 계정의 받은편지함 줄을 지우고, 같은 이벤트를 받은 **다른 사람의** 줄 안 수신자 목록(`recipient_ids_json`)에서 이 계정 id 를 톰스톤으로 바꾼다.
+ * 계정이 지워질 때 그 계정의 받은편지함 줄과 알림 끄기 줄(`notification_mutes`)을 지우고, 같은 이벤트를 받은 **다른 사람의** 줄 안 수신자 목록(`recipient_ids_json`)에서 이 계정 id 를 톰스톤으로 바꾼다.
  * 남는 것(한계): 다른 사람의 알림 본문 · payload 에 이 사람이 쓴 글의 내용이 있을 수 있다 — 그 내용은 알림을 만든 모듈의 몫이다.
  * 멱등 — 다시 불러도 같다.
  */
@@ -19,6 +19,7 @@ class NotificationInboxErasureListener(private val jdbc: NamedParameterJdbcTempl
 
     override fun erase(request: ErasureRequest) {
         jdbc.update("delete from notification_inbox where recipient_id = :a", mapOf("a" to request.accountId))
+        jdbc.update("delete from notification_mutes where recipient_id = :a", mapOf("a" to request.accountId))
         // 따옴표까지 붙여 통째로 — `acc_user` 를 지울 때 `acc_user2` 의 앞부분이 바뀌지 않게 (수신자 목록은 JSON 문자열 배열이다)
         jdbc.update(
             "update notification_inbox set recipient_ids_json = replace(recipient_ids_json, :a, :t) where recipient_ids_json like :pattern",

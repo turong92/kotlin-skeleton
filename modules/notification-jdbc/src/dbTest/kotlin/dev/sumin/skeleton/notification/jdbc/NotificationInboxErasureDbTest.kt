@@ -44,6 +44,20 @@ class NotificationInboxErasureDbTest {
     }
 
     @Test
+    fun `erasing an account deletes its mute rows and leaves other accounts' alone`() {
+        val gone = "acc_gone_${UUID.randomUUID()}"
+        val stay = "acc_stay_${UUID.randomUUID()}"
+        val mutes = JdbcNotificationMuteRepository(jdbc, DbTestDatabase.dialect)
+        mutes.setMuted(gone, "NOTE_UPDATED", true)
+        mutes.setMuted(stay, "NOTE_UPDATED", true)
+
+        NotificationInboxErasureListener(jdbc).erase(ErasureRequest(gone, "deleted:0123456789abcdef"))
+
+        assertEquals(emptySet(), mutes.mutedTypes(gone))
+        assertEquals(setOf("NOTE_UPDATED"), mutes.mutedTypes(stay))
+    }
+
+    @Test
     fun `erasing acc_user leaves acc_user2 alone - only the whole quoted id is replaced`() {
         val base = "acc_${UUID.randomUUID().toString().take(8)}"
         val gone = base

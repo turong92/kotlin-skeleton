@@ -14,21 +14,51 @@ import java.util.concurrent.atomic.AtomicBoolean
  * 구독자 전달은 트랜잭션 동기화가 켜져 있으면 **커밋 뒤**로 미룬다 - 롤백된 알림이 SSE 로 새지 않게. 트랜잭션 밖이거나 `spring-tx` 가 없으면 바로 전달한다.
  * 미뤄진 발행의 [NotificationPublishResult.deliveredSubscribers] 는 0 이다(아직 전달하지 않았다).
  * 알림 실패가 업무를 실패시키면 안 되는 호출자는 커밋 뒤에 부르고 잡는다.
+ *
+ * 끌 수 있는 종류([NotificationPreferencesProperties])이면 받는 사람에서 그 종류를 끈 사람을 뺀다. 받는 사람이 정해진 알림(`recipientIds` 가 비어 있지 않음)은
+ * 전달하는 이벤트도 남은 사람으로 줄이고, **받는 사람을 모두 끈 알림은 저장도 전달도 하지 않는다**(빈 `recipientIds` 는 전체 공지라 그대로 넘기면 모두에게 간다).
+ * 받는 사람이 없는 전체 공지는 끌 수 없다.
  */
 class InMemoryNotificationBroker(
     private val inboxRepository: NotificationInboxRepository = NoopNotificationInboxRepository,
     private val recipientResolver: NotificationRecipientResolver = DefaultNotificationRecipientResolver(),
+    private val muteRepository: NotificationMuteRepository = InMemoryNotificationMuteRepository(),
+    /** 사람이 끌 수 있는 종류 ([NotificationPreferencesProperties]). 비면 끄기를 조회하지 않는다 */
+    mutableTypes: Collection<String> = emptyList(),
 ) : NotificationBroker {
+    private val mutableTypes: Set<String> = mutableTypes.toSet()
     private val subscriptions = ConcurrentHashMap<String, BrokerSubscription>()
 
     override fun publish(event: NotificationEvent): NotificationPublishResult {
-        inboxRepository.save(event, recipientResolver.resolveRecipients(event))
-        val project = ProjectContext.currentOrNull()?.id
-        if (AfterCommit.runAfterCommit { deliver(event, project) }) {
+        val recipients = recipientResolver.resolveRecipients(event)
+        val muted = mutedAmong(event, recipients)
+        val remaining = recipients - muted
+        if (muted.isNotEmpty() && remaining.isEmpty()) {
             return NotificationPublishResult(eventId = event.id, deliveredSubscribers = 0)
         }
-        return NotificationPublishResult(eventId = event.id, deliveredSubscribers = deliver(event, project))
+        val effective = if (muted.isEmpty() || event.recipientIds.isEmpty()) event else event.withoutMuted(muted, remaining)
+        inboxRepository.save(effective, remaining)
+        val project = ProjectContext.currentOrNull()?.id
+        if (AfterCommit.runAfterCommit { deliver(effective, project) }) {
+            return NotificationPublishResult(eventId = event.id, deliveredSubscribers = 0)
+        }
+        return NotificationPublishResult(eventId = event.id, deliveredSubscribers = deliver(effective, project))
     }
+
+    private fun mutedAmong(
+        event: NotificationEvent,
+        recipients: Set<String>,
+    ): Set<String> =
+        if (event.type in mutableTypes && recipients.isNotEmpty()) muteRepository.mutedAmong(event.type, recipients) else emptySet()
+
+    /**
+     * 끈 사람을 뺀 이벤트. 뺀 뒤 `recipientIds` 가 비면 전체 공지로 읽히므로, 그때는 남은 받는 사람(payload 에서 해석된 사람)으로 채운다 -
+     * 끈 사람이 있는 알림이 모두에게 새지 않는다.
+     */
+    private fun NotificationEvent.withoutMuted(
+        muted: Set<String>,
+        remaining: Set<String>,
+    ): NotificationEvent = copy(recipientIds = (recipientIds - muted).ifEmpty { remaining })
 
     private fun deliver(
         event: NotificationEvent,

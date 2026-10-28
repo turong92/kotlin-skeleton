@@ -124,6 +124,7 @@ fails when this table and the prefixes found in module code differ.
 | `migration` | `skeleton.migration` |
 | `persistence-jdbc` | `skeleton.persistence-jdbc.startup-wait` |
 | `notification` | `skeleton.notification.inbox` |
+| `notification` | `skeleton.notification.preferences` |
 | `notification` | `skeleton.notification.retention` |
 | `notification-mail` | `skeleton.notification-mail` |
 | `notification-slack` | `skeleton.notification.slack` |

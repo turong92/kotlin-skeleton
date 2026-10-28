@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `notification`: 구독자 전달(SSE · WebSocket · Slack)이 트랜잭션 안의 발행이면 **커밋 뒤**로 미뤄진다(롤백된 알림이 새지 않는다 · 그때 `deliveredSubscribers` 는 0). 저장은 호출자 트랜잭션 안 그대로. `spring-tx` 는 `compileOnly` 선택 의존.
 - `notification-jdbc`: 새 V 파일 `notification_inbox_link_collapse`(칼럼 `link` · `collapse_key` · `unread_collapse_key` · `collapsed_count`, 유니크 `(recipient_id, unread_collapse_key)`, 색인 `event_created_at` · `topic`). 같은 열쇠 동시 발행도 한 줄에 수 2 로 끝난다(PostgreSQL · MySQL 시험으로 확인).
 - `persistence-jdbc` · `db-postgresql` · `db-mysql`: `SqlDialect.insertIgnore` 가 충돌 칼럼 목록을 비우면 「어느 유니크 충돌이든 무시」로 받는다.
+- `notification` + `notification-jdbc`: 종류별 수신 끄기 - `GET /api/v1/notifications/preferences` · `PUT …/preferences/{type}`(`{ muted }`), 끌 수 있는 종류는 `skeleton.notification.preferences.types`(기본 빈 목록 = 끌 수 있는 것 없음). 브로커가 끈 사람을 받는 사람에서 빼고, 받는 사람을 모두 끈 알림은 저장도 전달도 하지 않는다(전체 공지로 새지 않는다). 저장소 계약 `NotificationMuteRepository`(기본 인메모리), 새 V 파일 `notification_mutes`, 계정 지우기가 그 줄도 지운다.
 - **Breaking**: `NotificationInboxRepository` 를 직접 구현한 앱은 `deleteOlderThan` · `deleteByTopic` · `deleteByRecipientAndTopic` 을 구현해야 한다(`countUnread` 는 기본 구현이 있다). `NotificationEvent` · `NotificationInboxRecord` 를 위치 인자로 만들던 코드는 뒤에 칸이 붙었을 뿐이라 그대로다.
 
 ### 이벤트 · 보상(쿠폰 · 포인트) · 결제 할인 · 0원 · 결제 면제 · 역할 위계 (2026-10-28)

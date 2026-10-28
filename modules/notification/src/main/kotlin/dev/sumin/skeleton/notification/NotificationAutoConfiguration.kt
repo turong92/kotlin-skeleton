@@ -15,7 +15,7 @@ import org.springframework.context.annotation.Bean
 import org.springframework.scheduling.TaskScheduler
 
 @AutoConfiguration
-@EnableConfigurationProperties(NotificationRetentionProperties::class)
+@EnableConfigurationProperties(NotificationRetentionProperties::class, NotificationPreferencesProperties::class)
 class NotificationAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(NotificationRecipientResolver::class)
@@ -28,12 +28,19 @@ class NotificationAutoConfiguration {
         InMemoryNotificationInboxRepository()
 
     @Bean
+    @ConditionalOnMissingBean(NotificationMuteRepository::class)
+    fun notificationMuteRepository(): NotificationMuteRepository =
+        InMemoryNotificationMuteRepository()
+
+    @Bean
     @ConditionalOnMissingBean(NotificationBroker::class)
     fun notificationBroker(
         notificationInboxRepository: NotificationInboxRepository,
         notificationRecipientResolver: NotificationRecipientResolver,
+        notificationMuteRepository: NotificationMuteRepository,
+        preferences: NotificationPreferencesProperties,
     ): NotificationBroker =
-        InMemoryNotificationBroker(notificationInboxRepository, notificationRecipientResolver)
+        InMemoryNotificationBroker(notificationInboxRepository, notificationRecipientResolver, notificationMuteRepository, preferences.mutableTypes)
 
     @Bean
     @ConditionalOnMissingBean

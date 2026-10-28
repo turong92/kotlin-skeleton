@@ -1697,7 +1697,7 @@
       "module": "notification",
       "path": "modules/notification",
       "status": "stable",
-      "summary": "알림 계약 · 수신자 해석 · 인메모리 브로커 + 로그인한 사람의 받은편지함 HTTP(/api/v1/notifications: 목록 · 안 읽은 수 · 읽음 · 모두 읽음). 클릭 이동 링크 · 같은 열쇠 묶기 · 보관 정리(기본 꺼짐) · 커밋 뒤 전달.",
+      "summary": "알림 계약 · 수신자 해석 · 인메모리 브로커 + 로그인한 사람의 받은편지함 HTTP(/api/v1/notifications: 목록 · 안 읽은 수 · 읽음 · 모두 읽음). 클릭 이동 링크 · 같은 열쇠 묶기 · 종류별 수신 끄기(/preferences, 끌 수 있는 종류는 설정) · 보관 정리(기본 꺼짐) · 커밋 뒤 전달.",
       "starter": false,
       "newProjectFlag": "--modules notification",
       "autoIncludes": [],
@@ -1707,10 +1707,14 @@
         "optional": []
       },
       "config": {
-        "prefixes": ["skeleton.notification.inbox", "skeleton.notification.retention"],
+        "prefixes": [
+          "skeleton.notification.inbox",
+          "skeleton.notification.retention",
+          "skeleton.notification.preferences"
+        ],
         "snippet": "docs/config/modules/notification.yml"
       },
-      "basePaths": ["/api/v1/notifications"],
+      "basePaths": ["/api/v1/notifications", "/api/v1/notifications/preferences"],
       "secrets": [],
       "docs": ["docs/modules/notification.md"],
       "frontend": {
@@ -1724,7 +1728,19 @@
         "알림을 만드는 쪽(NotificationPublisher.publish)은 앱 코드가 부른다"
       ],
       "keywords": {
-        "ko": ["알림", "알림 목록", "받은편지함", "안 읽은 알림", "알림 읽음", "알림 보내기", "알림 묶기", "알림 링크", "알림 보관 정리"],
+        "ko": [
+          "알림",
+          "알림 목록",
+          "받은편지함",
+          "안 읽은 알림",
+          "알림 읽음",
+          "알림 보내기",
+          "알림 묶기",
+          "알림 링크",
+          "알림 끄기",
+          "알림 수신 설정",
+          "알림 보관 정리"
+        ],
         "en": [
           "notification",
           "inbox",
