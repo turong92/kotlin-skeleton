@@ -4,6 +4,7 @@ import dev.sumin.skeleton.campaign.Campaign
 import dev.sumin.skeleton.campaign.CampaignStore
 import dev.sumin.skeleton.campaign.Referral
 import dev.sumin.skeleton.campaign.ReferralStatus
+import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.json.JsonCodec
 import dev.sumin.skeleton.persistence.jdbc.SqlDialect
 import java.sql.ResultSet
@@ -24,6 +25,7 @@ class JdbcCampaignStore(
     transactionManager: PlatformTransactionManager,
     private val dialect: SqlDialect,
     private val json: JsonCodec,
+    private val time: TimeProvider,
 ) : CampaignStore {
     private val transactions = TransactionTemplate(transactionManager)
 
@@ -63,7 +65,7 @@ class JdbcCampaignStore(
             existingCode(accountId)?.let { return it }
             jdbc.update(
                 insertIgnoreSql("campaign_referral_codes", listOf("account_id", "code", "created_at")),
-                mapOf("account_id" to accountId, "code" to newCode(), "created_at" to dialect.instantParam(Instant.now())),
+                mapOf("account_id" to accountId, "code" to newCode(), "created_at" to dialect.instantParam(time.now())),
             )
         }
         return existingCode(accountId) ?: error("could not allocate a referral code")   // 코드가 겹치면 다시 뽑는다
@@ -84,20 +86,34 @@ class JdbcCampaignStore(
                 .addValue("qualified_at", dialect.instantParam(referral.qualifiedAt)),
         ) == 1
 
-    override fun referralOfInvitee(inviteeId: String): Referral? =
-        jdbc.query("select * from campaign_referrals where invitee_id = :i", mapOf("i" to inviteeId)) { rs, _ ->
+    override fun referralOfInvitee(inviteeId: String, lock: Boolean): Referral? =
+        jdbc.query("select * from campaign_referrals where invitee_id = :i" + if (lock) " for update" else "", mapOf("i" to inviteeId)) { rs, _ ->
             Referral(
                 rs.getString("invitee_id"), rs.getString("inviter_id"), rs.getString("campaign_id"), ReferralStatus.valueOf(rs.getString("status")),
                 dialect.readInstant(rs, "claimed_at")!!, dialect.readInstant(rs, "qualified_at"),
             )
         }.firstOrNull()
 
-    override fun countReferrals(inviterId: String, campaignId: String?, status: ReferralStatus?): Long =
-        jdbc.queryForObject(
+    override fun countReferrals(inviterId: String, campaignId: String?, status: ReferralStatus?, lock: Boolean): Long {
+        if (lock) {
+            // 집계는 `for update` 를 못 받는다(PostgreSQL) - 줄을 잠그고 읽어 센다. 잠금 읽기는 두 방언 모두 다른 트랜잭션이 방금 커밋한 값을 본다
+            return jdbc.queryForList(
+                "select invitee_id from campaign_referrals where inviter_id = :inviter and (:campaign is null or campaign_id = :campaign) and (:status is null or status = :status) for update",
+                MapSqlParameterSource().addValue("inviter", inviterId).addValue("campaign", campaignId, java.sql.Types.VARCHAR).addValue("status", status?.name, java.sql.Types.VARCHAR),
+                String::class.java,
+            ).size.toLong()
+        }
+        return jdbc.queryForObject(
             "select count(*) from campaign_referrals where inviter_id = :inviter and (:campaign is null or campaign_id = :campaign) and (:status is null or status = :status)",
             MapSqlParameterSource().addValue("inviter", inviterId).addValue("campaign", campaignId, java.sql.Types.VARCHAR).addValue("status", status?.name, java.sql.Types.VARCHAR),
             Long::class.java,
         ) ?: 0L
+    }
+
+    override fun lockAccounts(accountIds: Collection<String>) {
+        // 정렬된 순서로 하나씩 - 두 트랜잭션이 같은 두 계정을 잡아도 같은 순서라 서로를 기다리지 않는다
+        accountIds.toSortedSet().forEach { jdbc.queryForList("select account_id from campaign_referral_codes where account_id = :a for update", mapOf("a" to it), String::class.java) }
+    }
 
     override fun settleReferral(inviteeId: String, to: ReferralStatus, at: Instant): Boolean =
         jdbc.update(
@@ -105,11 +121,13 @@ class JdbcCampaignStore(
             mapOf("i" to inviteeId, "to" to to.name, "at" to dialect.instantParam(at)),
         ) == 1
 
-    override fun deleteByAccount(accountId: String) {
+    override fun eraseAccount(accountId: String, tombstone: String) {
         val p = mapOf("a" to accountId)
         jdbc.update("delete from campaign_attendance where account_id = :a", p)
         jdbc.update("delete from campaign_referral_codes where account_id = :a", p)
-        jdbc.update("delete from campaign_referrals where invitee_id = :a or inviter_id = :a", p)
+        jdbc.update("delete from campaign_referrals where invitee_id = :a", p)
+        // 초대자 쪽 줄은 지우지 않는다 - 초대받은 사람의 「평생 한 번」이 풀리면 안 된다. 개인 식별만 끊는다
+        jdbc.update("update campaign_referrals set inviter_id = :t where inviter_id = :a", mapOf("a" to accountId, "t" to tombstone))
     }
 
     private fun insertIgnoreSql(table: String, columns: List<String>): String {

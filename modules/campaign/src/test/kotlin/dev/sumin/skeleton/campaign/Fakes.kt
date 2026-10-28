@@ -33,18 +33,20 @@ class FakeCampaignStore : CampaignStore {
     override fun referralCode(accountId: String, newCode: () -> String) = codes.getOrPut(accountId, newCode)
     override fun accountOfCode(code: String) = codes.entries.firstOrNull { it.value == code }?.key
     override fun insertReferral(referral: Referral): Boolean = referrals.putIfAbsent(referral.inviteeId, referral) == null
-    override fun referralOfInvitee(inviteeId: String) = referrals[inviteeId]
-    override fun countReferrals(inviterId: String, campaignId: String?, status: ReferralStatus?) =
+    override fun referralOfInvitee(inviteeId: String, lock: Boolean) = referrals[inviteeId]
+    override fun lockAccounts(accountIds: Collection<String>) = Unit
+    override fun countReferrals(inviterId: String, campaignId: String?, status: ReferralStatus?, lock: Boolean) =
         referrals.values.count { it.inviterId == inviterId && (campaignId == null || it.campaignId == campaignId) && (status == null || it.status == status) }.toLong()
     override fun settleReferral(inviteeId: String, to: ReferralStatus, at: Instant): Boolean {
         val r = referrals[inviteeId]?.takeIf { it.status == ReferralStatus.CLAIMED } ?: return false
         referrals[inviteeId] = r.copy(status = to, qualifiedAt = at)
         return true
     }
-    override fun deleteByAccount(accountId: String) {
+    override fun eraseAccount(accountId: String, tombstone: String) {
         attendance.removeIf { it.second == accountId }
         codes.remove(accountId)
-        referrals.values.removeIf { it.inviteeId == accountId || it.inviterId == accountId }
+        referrals.values.removeIf { it.inviteeId == accountId }
+        referrals.replaceAll { _, r -> if (r.inviterId == accountId) r.copy(inviterId = tombstone) else r }
     }
 }
 

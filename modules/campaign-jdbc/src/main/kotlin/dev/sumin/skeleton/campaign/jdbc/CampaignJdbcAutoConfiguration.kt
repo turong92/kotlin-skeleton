@@ -1,10 +1,12 @@
 package dev.sumin.skeleton.campaign.jdbc
 
 import dev.sumin.skeleton.campaign.CampaignStore
+import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.json.JsonAutoConfiguration
 import dev.sumin.skeleton.json.JsonCodec
 import dev.sumin.skeleton.persistence.jdbc.SqlDialect
 import javax.sql.DataSource
+import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
@@ -26,6 +28,6 @@ import org.springframework.transaction.PlatformTransactionManager
 class CampaignJdbcAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(CampaignStore::class)
-    fun jdbcCampaignStore(dataSource: DataSource, transactionManager: PlatformTransactionManager, dialect: SqlDialect, json: JsonCodec): CampaignStore =
-        JdbcCampaignStore(NamedParameterJdbcTemplate(dataSource), transactionManager, dialect, json)
+    fun jdbcCampaignStore(dataSource: DataSource, transactionManager: PlatformTransactionManager, dialect: SqlDialect, json: JsonCodec, time: ObjectProvider<TimeProvider>): CampaignStore =
+        JdbcCampaignStore(NamedParameterJdbcTemplate(dataSource), transactionManager, dialect, json, time.getIfAvailable { TimeProvider.systemUtc() })
 }

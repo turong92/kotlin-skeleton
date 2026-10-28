@@ -11,12 +11,12 @@
 **친구초대**: 코드는 계정당 하나(헷갈리는 글자를 뺀 8자, 처음 볼 때 만든다). `claim` 은 한 트랜잭션에서 판정한다 — 진행 중인 초대 이벤트가 있어야 하고(없으면 409 `CAMPAIGN.NOT_ACTIVE`), 아래 이유로 거절하면 `400 CAMPAIGN.REFERRAL_INVALID`(`detail` 과 `data.reason` 에 이유):
 `UNKNOWN_CODE` · `OWN_CODE`(자기 코드) · `ALREADY_INVITED`(초대받은 사람은 평생 한 번) · `MUTUAL`(내가 초대한 사람의 코드) · `NOT_NEW_ACCOUNT`(가입 후 `claimWithinDays`, 기본 7일이 지난 계정; `AccountFacts` 빈이 없으면 이 판정만 건너뛴다).
 통과하면 관계 줄 + 초대받은 사람 보상. 초대자 보상 시점은 설정 `qualifyOn` 이고 **기본값이 없다**(설정 필수): `CLAIM` 이면 같은 트랜잭션, `SIGNAL` 이면 앱이 `Referrals.qualify(inviteeId)` 를 부를 때(예: 첫 결제 — 몇 번 불러도 한 번).
-`inviterCap` 을 넘은 초대는 관계만 남고(`CAPPED`) 보상이 없다 — `CLAIM` 에서는 양쪽 모두, `SIGNAL` 에서는 초대자 쪽만(초대받은 쪽 보상은 claim 때 이미 나갔다). 동시에 몰리면 상한을 조금 넘길 수 있다(경쟁 없는 엄격한 상한은 아니다).
+`inviterCap` 을 넘은 초대는 관계만 남고(`CAPPED`) 보상이 없다 — `CLAIM` 에서는 양쪽 모두, `SIGNAL` 에서는 초대자 쪽만(초대받은 쪽 보상은 claim 때 이미 나갔다). 상한 판정과 맞초대(A↔B 동시 claim) 판정은 두 계정의 초대 코드 줄을 정렬된 순서로 `for update` 잡아 직렬화한 뒤 잠금 읽기로 센다 - 같은 코드로 동시에 몰려도 상한을 넘지 않고, 정렬된 순서라 교착하지 않는다.
 설정: `{invitee: [..], inviter: [..], qualifyOn: CLAIM|SIGNAL, claimWithinDays: 7, inviterCap: null}`.
 
 사용자 경로(`skeleton.campaign.http.enabled=false` 로 끈다; 서블릿 웹 앱 + Spring Security, 익명 401): `GET /api/v1/campaigns`(진행 중 + 내 출석 현황) · `POST /api/v1/campaigns/{id}/attendance` · `GET /api/v1/campaigns/{id}/attendance?month=YYYY-MM` · `GET /api/v1/referrals/me` · `POST /api/v1/referrals/claim {code}`(204).
 운영자 경로(`skeleton.campaign.admin.enabled=true` 일 때만, 꺼져 있으면 404) — `campaign.manage`(기본 역할 없음 — 전권만): `GET/POST /api/v1/admin/campaigns` · `PUT /{id}`(종류는 못 바꾼다) · `PATCH /{id}/enabled {enabled}`. 운영 기록 `campaign.created` · `campaign.updated`(수정 · 켜고 끄기, 대상은 id 만).
-계정이 지워지면(`AccountErasureListener`) 그 계정의 출석 · 코드 · 초대 관계(초대자든 초대받은 쪽이든)를 지운다. 오류 코드: `CAMPAIGN.NOT_FOUND` 404 · `NOT_ACTIVE` 409 · `REFERRAL_INVALID` · `CONFIG_INVALID` 400.
+계정이 지워지면(`AccountErasureListener`) 그 계정의 출석 · 코드 · 초대받은 쪽 관계를 지운다. 초대자 쪽 관계는 지우지 않고 초대자 id 만 익명화한다(초대받은 사람의 「평생 한 번」이 풀리지 않게 - 지워진 초대자에게는 `SIGNAL` 보상도 나가지 않는다). 오류 코드: `CAMPAIGN.NOT_FOUND` 404 · `NOT_ACTIVE` 409 · `REFERRAL_INVALID` · `CONFIG_INVALID` 400.
 프로젝트 모드(`skeleton.projects`)에서 시간대를 프로젝트마다 정하는 길은 아직 없다.
 
 | 항목 | 내용 |

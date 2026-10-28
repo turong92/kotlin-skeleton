@@ -64,14 +64,24 @@ interface CampaignStore {
     /** 초대받은 사람은 평생 한 번 - `invitee_id` 키가 지킨다. 새로 넣었으면 true */
     fun insertReferral(referral: Referral): Boolean
 
-    fun referralOfInvitee(inviteeId: String): Referral?
+    /** [lock] 이면 잠금 읽기(`for update`) - 다른 트랜잭션이 방금 커밋한 값을 본다. 상한 · 맞초대 판정이 쓴다 */
+    fun referralOfInvitee(inviteeId: String, lock: Boolean = false): Referral?
 
-    /** 이 초대자의 관계 수. [status] 가 null 이면 전부 */
-    fun countReferrals(inviterId: String, campaignId: String?, status: ReferralStatus?): Long
+    /** 이 초대자의 관계 수. [status] 가 null 이면 전부. [lock] 이면 센 줄을 잠그고 최신 값으로 센다 */
+    fun countReferrals(inviterId: String, campaignId: String?, status: ReferralStatus?, lock: Boolean = false): Long
+
+    /**
+     * 계정들의 초대 코드 줄을 **정렬된 순서로** 잠근다 - 초대자 단위(상한)와 두 계정 사이(맞초대) 판정을 직렬화하고, 순서가 고정이라 교착하지 않는다.
+     * 줄이 없는 계정은 건너뛴다(먼저 [referralCode] 로 만든다). 호출자 트랜잭션 안에서만 뜻이 있다.
+     */
+    fun lockAccounts(accountIds: Collection<String>)
 
     /** `CLAIMED` 일 때만 [to] 로 옮긴다. 옮겼으면 true */
     fun settleReferral(inviteeId: String, to: ReferralStatus, at: Instant): Boolean
 
-    /** 계정이 지워질 때 출석 · 코드 · 초대 관계(초대자든 초대받은 쪽이든)를 지운다 */
-    fun deleteByAccount(accountId: String)
+    /**
+     * 계정이 지워질 때: 출석 · 코드 · **초대받은 쪽** 관계는 지우고, **초대자 쪽** 관계는 지우지 않고 초대자 id 만 [tombstone] 으로 바꾼다 -
+     * 초대받은 사람의 「평생 한 번」이 풀리지 않게(지우면 다른 코드로 다시 claim 할 수 있다).
+     */
+    fun eraseAccount(accountId: String, tombstone: String)
 }

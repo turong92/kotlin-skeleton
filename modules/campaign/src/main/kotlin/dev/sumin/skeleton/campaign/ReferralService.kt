@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.campaign
 
 import dev.sumin.skeleton.common.account.AccountFacts
+import dev.sumin.skeleton.common.erasure.AccountTombstone
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.reward.RewardGrants
 import java.security.SecureRandom
@@ -38,14 +39,17 @@ class ReferralService(
             val now = time.now()
             val inviterId = store.accountOfCode(rawCode.trim().uppercase()) ?: reject(ReferralRejection.UNKNOWN_CODE)
             if (inviterId == inviteeId) reject(ReferralRejection.OWN_CODE)
-            if (store.referralOfInvitee(inviteeId) != null) reject(ReferralRejection.ALREADY_INVITED)
-            if (store.referralOfInvitee(inviterId)?.inviterId == inviteeId) reject(ReferralRejection.MUTUAL)
+            // 초대자 상한과 맞초대(A↔B 동시 claim)는 세고 넣는 사이에 끼어들면 뚫린다 - 두 계정의 코드 줄을 정렬된 순서로 먼저 잡아 직렬화하고, 이후 판정 읽기는 잠금 읽기로 최신 값을 본다
+            store.referralCode(inviteeId, ::newCode)
+            store.lockAccounts(listOf(inviterId, inviteeId))
+            if (store.referralOfInvitee(inviteeId, lock = true) != null) reject(ReferralRejection.ALREADY_INVITED)
+            if (store.referralOfInvitee(inviterId, lock = true)?.inviterId == inviteeId) reject(ReferralRejection.MUTUAL)
             if (facts != null) {
                 val createdAt = facts.createdAt(inviteeId)
                 if (createdAt == null || createdAt.plus(Duration.ofDays(config.claimWithinDays.toLong())).isBefore(now)) reject(ReferralRejection.NOT_NEW_ACCOUNT)
             }
             val capped = config.qualifyOn == QualifyOn.CLAIM && config.inviterCap != null &&
-                store.countReferrals(inviterId, campaign.id, ReferralStatus.QUALIFIED) >= config.inviterCap
+                store.countReferrals(inviterId, campaign.id, ReferralStatus.QUALIFIED, lock = true) >= config.inviterCap
             val status = when {
                 capped -> ReferralStatus.CAPPED
                 config.qualifyOn == QualifyOn.CLAIM -> ReferralStatus.QUALIFIED
@@ -62,11 +66,14 @@ class ReferralService(
 
     override fun qualify(inviteeId: String) {
         store.inTransaction {
-            val referral = store.referralOfInvitee(inviteeId) ?: return@inTransaction
+            val first = store.referralOfInvitee(inviteeId) ?: return@inTransaction
+            if (first.status != ReferralStatus.CLAIMED || AccountTombstone.isTombstone(first.inviterId)) return@inTransaction   // 탈퇴한 초대자에게는 줄 곳이 없다
+            store.lockAccounts(listOf(first.inviterId))   // 같은 초대자의 상한 판정을 직렬화한다
+            val referral = store.referralOfInvitee(inviteeId, lock = true) ?: return@inTransaction
             if (referral.status != ReferralStatus.CLAIMED) return@inTransaction
             val campaign = store.find(referral.campaignId) ?: return@inTransaction
             val config = ReferralConfig.parse(campaign.config)
-            val capped = config.inviterCap != null && store.countReferrals(referral.inviterId, campaign.id, ReferralStatus.QUALIFIED) >= config.inviterCap
+            val capped = config.inviterCap != null && store.countReferrals(referral.inviterId, campaign.id, ReferralStatus.QUALIFIED, lock = true) >= config.inviterCap
             val to = if (capped) ReferralStatus.CAPPED else ReferralStatus.QUALIFIED
             if (store.settleReferral(inviteeId, to, time.now()) && to == ReferralStatus.QUALIFIED) {
                 record(referral.inviterId, config.inviter, campaign.id, inviteeId, "inviter")
