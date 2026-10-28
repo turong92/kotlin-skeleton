@@ -78,7 +78,27 @@ class DiscountTotalsDbTest {
             tx.insertOrderDiscount(line(1, "coupon", "cpn_sub", 10_000, "KRW", OrderDiscountStatus.CONFIRMED, initial.id))
         }
         renewals.forEach { order -> PaymentDb.newStore().inTransaction { tx -> tx.insertOrderIfAbsent(order) } }   // 한 트랜잭션에 주문 하나
-        // 다른 구독의 갱신 · 다른 수단의 같은 식별은 섞이지 않는다
+        // 다른 쿠폰으로 시작한 다른 구독의 결제된 갱신은 이 쿠폰의 합계에 들어오지 않는다
+        val other = PaymentTestOrders.subscription(id = "sub_" + "u".repeat(32), accountId = "acc_2")
+        PaymentDb.newStore().inTransaction { tx ->
+            tx.insertSubscriptionIfAbsent(other)
+            tx.insertSubscriptionDiscount(
+                dev.sumin.skeleton.payment.SubscriptionDiscount(
+                    other.id, "coupon", "cpn_other_sub", "half",
+                    listOf(dev.sumin.skeleton.common.discount.DiscountStage(dev.sumin.skeleton.common.discount.DiscountStageType.PERCENT, 50, null, null)),
+                    1, dev.sumin.skeleton.payment.SubscriptionDiscountStatus.ACTIVE, now, now,
+                ),
+            )
+        }
+        PaymentDb.newStore().inTransaction { tx ->
+            tx.insertOrderIfAbsent(
+                PaymentTestOrders.order(id = "ord_" + "oren".padEnd(32, 'b'), dedupeKey = "dk_oren", status = dev.sumin.skeleton.payment.PaymentOrderStatus.PAID, amount = PaymentAmount(5_000, "KRW"))
+                    .copy(kind = dev.sumin.skeleton.payment.PaymentOrderKind.SUBSCRIPTION_RENEWAL, originType = dev.sumin.skeleton.payment.PaymentOriginType.SUBSCRIPTION, originRef = other.id, originalAmount = 10_000, discountAmount = 5_000),
+            )
+        }
+        assertEquals(listOf(CurrencyAmount("KRW", 5_000)), totals.confirmedTotals("coupon", listOf("cpn_other_sub")), "each coupon sees only the subscriptions it started")
+        assertEquals(listOf(CurrencyAmount("KRW", 25_000)), totals.confirmedTotals("coupon", listOf("cpn_sub", "cpn_other_sub")))
+        // 다른 수단의 같은 식별은 섞이지 않는다
         assertEquals(listOf(CurrencyAmount("KRW", 20_000)), totals.confirmedTotals("coupon", listOf("cpn_sub")), "10,000 (first order, 1 free month) + 5,000 + 5,000 (paid renewals)")
         assertEquals(emptyList(), totals.confirmedTotals("points", listOf("cpn_sub")))
         assertEquals(emptyList(), totals.confirmedTotals("coupon", listOf("cpn_other")))

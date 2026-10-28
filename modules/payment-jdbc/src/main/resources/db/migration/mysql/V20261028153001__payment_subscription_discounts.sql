@@ -25,3 +25,6 @@ create table if not exists payment_subscription_discount_stages (
     foreign key (subscription_id) references payment_subscriptions (id)
     /* [jooq ignore stop] */
 );
+
+-- 이 쿠폰으로 시작한 구독 찾기(쿠폰 현황의 할인 합계)
+create index idx_payment_subscription_discounts_source on payment_subscription_discounts (kind, source_ref);

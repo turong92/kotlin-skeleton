@@ -10,7 +10,7 @@
 
 **발급**(`CouponIssuance.issue(definitionId, accountId, source, sourceRef): Coupon?`): 정의 줄을 잠그고 발급 한도 · 계정당 한도를 센 뒤 한 장을 넣는다 — 같은 `(source, sourceRef)` 는 한 장으로 접히고(같은 장을 돌려준다), 한도에 막히면 `null`.
 출처는 `GRANT`(지급 건 id) · `CODE`(`<코드>:<계정>`) · `ADMIN`. 열린 트랜잭션에 합류하므로 지급기가 일꾼의 트랜잭션 안에서 불러도 된다.
-**공용 코드**(`CouponCodes`) - 운영자가 글자를 정하는 코드는 발행 기간 밖에서 등록하면 `ISSUE_CLOSED` 로 거절되므로 코드가 있다는 사실이 드러난다(동작은 그대로다): **운영자 지정 코드는 공개 직전에 만들 것**: 코드 하나를 계정당 한 번 등록해 쿠폰함으로 받는다 — 없는/끝난/멈춘 코드 400 `CODE_INVALID`, 이미 등록 409 `CODE_USED`, 한도 다 참 409 `CODE_EXHAUSTED`. 코드는 대문자로 맞춘다. `create(definitionId, code?, maxRedemptions?, expiresAt?)` 는 코드를 주면 그 글자(앱의 씨앗용), 아니면 읽기 쉬운 열 글자를 만든다.
+**공용 코드**(`CouponCodes`): 코드 하나를 계정당 한 번 등록해 쿠폰함으로 받는다 — 없는/끝난/멈춘 코드 400 `CODE_INVALID`, 이미 등록 409 `CODE_USED`, 한도 다 참 409 `CODE_EXHAUSTED`. 코드는 대문자로 맞춘다. `create(definitionId, code?, maxRedemptions?, expiresAt?)` 는 코드를 주면 그 글자(앱의 씨앗용), 아니면 읽기 쉬운 열 글자를 만든다. 코드를 발행 기간 밖에서 등록하면 `ISSUE_CLOSED` 로 거절되므로 그 코드가 있다는 사실이 드러난다(동작은 그대로다) - **운영자 지정 코드는 공개 직전에 만들 것**.
 
 **지급기 `coupon`**: params `definitionId`. `validate` 는 정의가 있는지 본다(이벤트 설정 저장 때). `issue` 는 `(GRANT, 지급 건 id)` 로 멱등. 정의가 없거나 발급 중이 아니거나 한도에 막히면 `RewardPermanentFailure`(운영자가 풀고 「다시 지급」).
 
@@ -29,7 +29,7 @@
 
 **대시보드 기여**(`coupon-jdbc`, 기본 꺼짐 `skeleton.coupon.dashboard.enabled=true` + `dashboard` 모듈이 있을 때만): 타일 `coupon.used`(기간 안 쿠폰 사용 수, 일별 그래프 — 전액 환불로 되돌려진 것은 세지 않는다)와 순위 `coupon.top-used`(「앱 통계」 그룹, 많이 쓰인 쿠폰). 모듈은 메커니즘만 내고 켜는 것은 앱이다.
 
-**탈퇴**: `AccountErasureListener` 가 그 계정의 쿠폰 줄을 **지우지 않고** `account_id` 만 비식별값(`ErasureRequest.tombstone`)으로 바꾼다 - 결제 장부의 `TOMBSTONE` 과 같은 방식이라 과거의 발급 · 사용 현황과 합계 · 대시보드 수가 줄지 않는다. 쓰지 않은(`AVAILABLE`) 쿠폰은 `REVOKED` 로 둬서 현황의 「쓸 수 있는」 수에 죽은 쿠폰이 남지 않게 한다(쥔 `RESERVED` 는 그 주문이 풀거나 확정하고, 쓴 `USED` 는 그대로). 공용 코드로 받은 줄의 출처 키(`<코드>:<계정>`)는 지우고, 코드 등록 줄은 삭제한다. 결제 장부의 할인 내역은 장부라 남는다.
+**탈퇴**: `AccountErasureListener` 가 그 계정의 쿠폰 줄을 **지우지 않고** `account_id` 만 비식별값(`ErasureRequest.tombstone`)으로 바꾼다 - 결제 장부의 `TOMBSTONE` 과 같은 방식이라 과거의 발급 · 사용 현황과 합계 · 대시보드 수가 줄지 않는다. 쓰지 않은(`AVAILABLE`, 기한 안) 쿠폰은 `REVOKED` 로 둬서 현황의 「쓸 수 있는」 수에 죽은 쿠폰이 남지 않게 한다(기한이 지난 것은 그대로 `EXPIRED` 로 읽힌다). 쥔 `RESERVED` 는 그 주문이 풀거나 확정하고 - 풀릴 때 주인이 비식별값이면(`deleted:` 로 시작) `AVAILABLE` 대신 `REVOKED` 로 둔다 - 쓴 `USED` 는 그대로다. 따라서 현황의 `revoked` 에는 운영자가 회수한 것과 탈퇴로 무효가 된 쿠폰이 함께 들어간다. 공용 코드로 받은 줄의 출처 키(`<코드>:<계정>`)는 지우고, 코드 등록 줄은 삭제한다. 결제 장부의 할인 내역은 장부라 남는다.
 
 사용자 경로(서블릿 웹 앱 + Spring Security 필요, `skeleton.coupon.http.enabled` 기본 켜짐, 호출자 = `Authentication.name`):
 

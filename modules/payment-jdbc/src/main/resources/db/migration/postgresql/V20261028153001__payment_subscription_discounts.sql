@@ -11,6 +11,8 @@ create table if not exists payment_subscription_discounts (
     updated_at      timestamptz  not null
 );
 
+create index if not exists idx_payment_subscription_discounts_source on payment_subscription_discounts (kind, source_ref);   -- 이 쿠폰으로 시작한 구독 찾기(쿠폰 현황의 할인 합계)
+
 create table if not exists payment_subscription_discount_stages (
     subscription_id varchar(40) not null references payment_subscriptions (id),
     seq             int         not null,         -- 0 부터 - 적용 순서

@@ -191,6 +191,28 @@ class CouponAdminDbTest {
     }
 
     @Test
+    fun `erasing an account revokes its live unused coupons only, and a coupon held by an order resolves to revoked once let go`() {
+        val soon = define(name = "soon $seq", validUntil = base.plusSeconds(100))
+        val later = define(name = "later $seq")
+        val account = "acc_e_$seq"
+        val lapsing = give(soon, account)
+        val live = give(later, account)
+        val held = give(later, account)
+        time.current = base.plusSeconds(200)   // 첫 쿠폰은 기한이 지났다
+        source.reserve(DiscountClaim("coupon", held.id), target(account), "ord_held_$seq")
+
+        CouponAccountErasureListener(store).erase(ErasureRequest(account, AccountTombstone.of(account)))
+        assertEquals(CouponStatus.AVAILABLE, store.findCoupon(lapsing.id)!!.status, "a lapsed coupon is left to read as expired, not turned into a revoke")
+        assertEquals(CouponStatus.REVOKED, store.findCoupon(live.id)!!.status)
+        assertEquals(CouponStatus.RESERVED, store.findCoupon(held.id)!!.status, "the order in flight decides")
+        assertEquals(1, reports.stats(soon.id).expired)
+
+        source.release("ord_held_$seq")
+        assertEquals(CouponStatus.REVOKED, store.findCoupon(held.id)!!.status, "nobody is left to use it")
+        assertEquals(2, reports.stats(later.id).revoked)
+    }
+
+    @Test
     fun `the dashboard contribution counts coupons used inside the range and ranks the most used`() {
         // 다른 시험이 같은 DB 에 남긴 사용 기록과 섞이지 않게 아무도 안 쓴 먼 날에서 센다
         time.current = Instant.parse("2031-03-03T10:00:00Z")

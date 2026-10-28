@@ -3,6 +3,7 @@ package dev.sumin.skeleton.coupon.jdbc
 import dev.sumin.skeleton.common.discount.DiscountPurpose
 import dev.sumin.skeleton.common.discount.DiscountStage
 import dev.sumin.skeleton.common.discount.DiscountStageType
+import dev.sumin.skeleton.common.erasure.AccountTombstone
 import dev.sumin.skeleton.coupon.Coupon
 import dev.sumin.skeleton.coupon.CouponCodeRecord
 import dev.sumin.skeleton.coupon.CouponDefinition
@@ -205,8 +206,10 @@ class JdbcCouponStore(
         jdbc.update(
             // used_at 을 status 보다 먼저 쓴다 - MySQL 은 set 절을 왼쪽부터 평가해 status 를 먼저 바꾸면 used_at 이 옛 상태를 못 본다
             "update coupons set used_at = case when status = 'USED' then null else used_at end, " +
-                "status = case when expires_at is not null and expires_at <= :now then 'EXPIRED' else 'AVAILABLE' end, updated_at = :now where holder_ref = :h and status = :from",
-            mapOf("h" to holderRef, "from" to from, "now" to instant(now)),
+                "status = case when expires_at is not null and expires_at <= :now then 'EXPIRED' when account_id like :erased then 'REVOKED' else 'AVAILABLE' end, " +
+                "updated_at = :now where holder_ref = :h and status = :from",
+            // 비식별 계정(탈퇴) 소유의 쿠폰은 풀려도 쓸 사람이 없다 - 기한 안이면 `REVOKED`
+            mapOf("h" to holderRef, "from" to from, "now" to instant(now), "erased" to AccountTombstone.PREFIX + "%"),
         ) == 1
 
     // 공용 코드
@@ -245,7 +248,10 @@ class JdbcCouponStore(
 
     override fun anonymizeAccount(accountId: String, tombstone: String, now: Instant): Int {
         // 쓰지 않은 쿠폰을 먼저 쓸 수 없게 하고(주인이 바뀌기 전에 - 아래 갱신이 계정 id 를 바꾼다), 그 뒤 계정 id 를 지운다. 공용 코드로 받은 줄의 출처 키(`<코드>:<계정 id>`)에도 계정 id 가 있어 함께 지운다
-        jdbc.update("update coupons set status = 'REVOKED', updated_at = :now where account_id = :a and status = 'AVAILABLE'", mapOf("a" to accountId, "now" to instant(now)))
+        jdbc.update(
+            "update coupons set status = 'REVOKED', updated_at = :now where account_id = :a and status = 'AVAILABLE' and (expires_at is null or expires_at > :now)",
+            mapOf("a" to accountId, "now" to instant(now)),
+        )
         val changed = jdbc.update(
             "update coupons set source_ref = case when source_type = 'CODE' then concat('erased:', id) else source_ref end, account_id = :t where account_id = :a",
             mapOf("a" to accountId, "t" to tombstone),
