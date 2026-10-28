@@ -53,8 +53,12 @@ class PaymentSubscriptionController(
     fun plans(authentication: Authentication?, request: HttpServletRequest): DataResponse<SubscriptionPlansResponse> {
         callers.account(authentication)
         // 이 요청의 통화(라우팅이 정한다)의 플랜만 - 브라우저가 통화를 고르는 길은 없다
-        return Response.ok(SubscriptionPlansResponse(subscriptions.plansFor(routing.currencyOf(routing.of(request))).map(SubscriptionPlanResponse::of)))
+        return Response.ok(SubscriptionPlansResponse(subscriptions.plansFor(routing.currencyOf(routing.of(request))).map { SubscriptionPlanResponse.of(it, languages(request)) }))
     }
+
+    /** 요청 언어(`Accept-Language`, 우선순위 순)의 언어 태그 - 헤더가 없으면 비어 있어 플랜의 기본 이름이 나간다 */
+    private fun languages(request: HttpServletRequest): List<String> =
+        if (request.getHeader("Accept-Language") == null) emptyList() else request.locales.toList().flatMap { listOf(it.toLanguageTag(), it.language) }.distinct()
 
     @Operation(
         summary = "Start a subscription and get the values for the card registration window",

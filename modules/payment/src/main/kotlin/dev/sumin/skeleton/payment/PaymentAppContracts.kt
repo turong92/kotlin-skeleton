@@ -132,6 +132,8 @@ data class SubscriptionPlan(
     val purchasable: Boolean = true,
     /** 정가(행사가의 비교가) - 연간 해지의 쓴 몫 · 화면 취소선. 없으면 [amount] 가 정가다 */
     val regularAmount: Long? = null,
+    /** 언어 태그(`ko`, `en`) → 그 언어의 이름. 요청 언어(`Accept-Language`)에 맞는 이름을 플랜 목록이 고른다. 없으면 [name] 그대로 */
+    val names: Map<String, String> = emptyMap(),
 )
 
 /**

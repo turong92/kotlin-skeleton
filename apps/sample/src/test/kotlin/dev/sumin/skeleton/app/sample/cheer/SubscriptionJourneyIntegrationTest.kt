@@ -6,6 +6,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.test.web.servlet.get
 
 /**
  * 구독 여정(진짜 PostgreSQL · 진짜 보안 체인 · 진짜 Flyway · 진짜 장부, 결제사만 가짜): 플랜 → 만들기 → 카드 등록 + 첫 결제 → 내 구독 → 해지 예약. 응원 기록은 남지 않는다(구독 주문은 응원이 아니다).
@@ -25,6 +26,7 @@ class SubscriptionJourneyIntegrationTest : CheerIntegrationBase() {
             jsonPath("$.value.plans[4].amount.amount") { value(9900) }
             jsonPath("$.value.plans[5].code") { value("pro-yearly") }
         }
+        mvc.get("$PAYMENTS/subscriptions/plans") { header("Authorization", "Bearer $user"); header("Accept-Language", "en") }.andExpect { jsonPath("$.value.plans[0].name") { value("Basic") }; jsonPath("$.value.plans[2].name") { value("Standard") } }
         val started = post("$PAYMENTS/subscriptions", user, """{"planCode":"standard"}""", key = "sub-key-1").andExpect { status { isCreated() } }
         val id = read(started, "$.value.subscription.id")
         assertEquals("PENDING", read(started, "$.value.subscription.status"))

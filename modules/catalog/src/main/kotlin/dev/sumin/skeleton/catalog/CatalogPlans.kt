@@ -56,6 +56,7 @@ class CatalogSubscriptionPlans(
         productCode = product.code,
         purchasable = purchasable,
         regularAmount = price.compareAtAmount,
+        names = product.texts.associate { it.locale to it.name },
     )
 }
 

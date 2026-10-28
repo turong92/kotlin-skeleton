@@ -36,7 +36,7 @@ class PaymentRequestCurrencyHttpTest {
     class MixedPlans {
         @Bean fun subscriptionPlans(): SubscriptionPlans = object : SubscriptionPlans {
             override fun list() = listOf(
-                SubscriptionPlan("basic", "Basic", PaymentAmount(3_900, "KRW"), "P1M", 1, productCode = "basic", regularAmount = 4_900),
+                SubscriptionPlan("basic", "Basic", PaymentAmount(3_900, "KRW"), "P1M", 1, productCode = "basic", regularAmount = 4_900, names = mapOf("en" to "Basic", "ko" to "베이직")),
                 SubscriptionPlan("basic-yearly", "Basic yearly", PaymentAmount(39_000, "KRW"), "P1Y", 1, productCode = "basic"),
                 SubscriptionPlan("basic-usd", "Basic", PaymentAmount(300, "USD"), "P1M", 1, productCode = "basic"),
             )
@@ -60,6 +60,16 @@ class PaymentRequestCurrencyHttpTest {
             .andExpect(jsonPath("$.value.plans[0].regularAmount").value(4_900))
             .andExpect(jsonPath("$.value.plans[1].code").value("basic-yearly"))
             .andExpect(jsonPath("$.value.plans[1].regularAmount").value(null as Any?))
+    }
+
+    @Test
+    fun `the plan name follows the request language when the plan has names, and is the plan's own name without the header or for an unknown language`() {
+        fun name(language: String?) = mvc.perform(get("$base/subscriptions/plans").asUser("acc_cur_3").header("CF-IPCountry", "US").apply { language?.let { header("Accept-Language", it) } })
+        name("ko-KR,ko;q=0.9").andExpect(jsonPath("$.value.plans[0].name").value("베이직"))
+        name("en").andExpect(jsonPath("$.value.plans[0].name").value("Basic"))
+        name("fr").andExpect(jsonPath("$.value.plans[0].name").value("Basic"))
+        name(null).andExpect(jsonPath("$.value.plans[0].name").value("Basic"))
+        name("ko").andExpect(jsonPath("$.value.plans[1].name").value("Basic yearly"))
     }
 
     @Test

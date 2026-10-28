@@ -380,7 +380,7 @@ data class WebhookEventResponse(
 
 data class SubscriptionPlanResponse(val code: String, val name: String, val amount: AmountResponse, val period: String, val level: Int, val productCode: String, val regularAmount: Long?) {
     companion object {
-        fun of(plan: dev.sumin.skeleton.payment.SubscriptionPlan) = SubscriptionPlanResponse(plan.code, plan.name, plan.amount.toResponse(), plan.period, plan.level, plan.productCode, plan.regularAmount)
+        fun of(plan: dev.sumin.skeleton.payment.SubscriptionPlan, languages: List<String> = emptyList()) = SubscriptionPlanResponse(plan.code, languages.firstNotNullOfOrNull { plan.names[it] } ?: plan.name, plan.amount.toResponse(), plan.period, plan.level, plan.productCode, plan.regularAmount)
     }
 }
 
