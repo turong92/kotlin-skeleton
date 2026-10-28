@@ -122,4 +122,87 @@ class PlanChangeNewPeriodTest {
         assertEquals(listOf("basic-yearly", "P1Y", 1), listOf(after.planCode, after.period, after.periodSeq))
         assertNull(after.pendingPeriod)
     }
+
+    private fun PaymentLedgerKit.activeIn(country: String = "KR"): PaymentSubscription {
+        val id = subscriptions.start("acc_1", "basic", IdempotencyKey("k-kr"), country).subscription.id
+        return subscriptions.activate("acc_1", id, mapOf("authKey" to "auth_1"))
+    }
+
+    @Test
+    fun `cancelling after month to year refunds on the whole new price, not on the change payment alone - the Korean policy sample`() {
+        val kit = newKit()
+        val active = kit.activeIn()
+        kit.time.advance(Duration.ofDays(15))
+        val changed = kit.planChanges.change("acc_1", active.id, "basic-yearly", 99_999, IdempotencyKey("chg-1"))
+        kit.time.advance(Duration.ofDays(8))   // 철회 기간(7일)을 지났다
+
+        val preview = kit.cancellations.preview("acc_1", changed.id).quote
+
+        assertEquals(31_590, preview.refund, "(39,000 - one month at 3,900) x 90%")
+        val result = kit.cancellations.cancelNow("acc_1", changed.id)
+        assertEquals(31_590, result.refunds.sumOf { it.amount })
+    }
+
+    @Test
+    fun `inside the withdrawal window the whole new price comes back - from the change payment and the carried part of the monthly payment`() {
+        val kit = newKit()
+        val active = kit.activeIn()
+        kit.time.advance(Duration.ofDays(15))
+        val changed = kit.planChanges.change("acc_1", active.id, "basic-yearly", 99_999, IdempotencyKey("chg-1"))
+        kit.time.advance(Duration.ofDays(3))
+
+        val result = kit.cancellations.cancelNow("acc_1", changed.id)
+
+        assertEquals(39_000, result.quote.refund)
+        val orders = kit.store.listSubscriptionOrders(active.id, 5)
+        assertEquals(2, result.refunds.size, "the change payment and the monthly payment it took the credit from")
+        assertEquals(setOf(orders[0].id, orders[1].id), result.refunds.map { it.orderId }.toSet())
+        assertEquals(39_000, result.refunds.sumOf { it.amount })
+        assertEquals(true, result.refunds.all { it.status == CancelRefundStatus.SUCCEEDED })
+    }
+
+    @Test
+    fun `a credit that covers the whole new price makes a free change order, and a cancel still gets the credited money back from the monthly payment`() {
+        val kit = newKit()
+        kit.plans.plans += SubscriptionPlan("cheap-yearly", "Cheap yearly", PaymentAmount(1_500, "KRW"), "P1Y", 1, productCode = "basic")
+        val active = kit.activeIn()
+        kit.time.advance(Duration.ofDays(15))   // 공제 약 2,000 > 새 가격 1,500
+
+        val changed = kit.planChanges.change("acc_1", active.id, "cheap-yearly", 0, IdempotencyKey("chg-1"))
+
+        assertEquals(listOf("cheap-yearly", "P1Y"), listOf(changed.planCode, changed.period))
+        val change = kit.store.listSubscriptionOrders(active.id, 1).single()
+        assertEquals(listOf(PaymentOrderKind.SUBSCRIPTION_CHANGE, PaymentOrderStatus.PAID, 0L, 1_500L), listOf(change.kind, change.status, change.amount.amount, change.originalAmount))
+        assertEquals(changed.currentPeriodStart, change.paidAt)
+        assertEquals(1_500, kit.cancellations.preview("acc_1", changed.id).quote.refund, "inside the withdrawal window the credited 1,500 comes back")
+        val result = kit.cancellations.cancelNow("acc_1", changed.id)
+        assertEquals(listOf(1_500L), result.refunds.map { it.amount })
+        assertEquals(kit.store.listSubscriptionOrders(active.id, 5).last().id, result.refunds.single().orderId, "from the monthly payment")
+    }
+
+    @Test
+    fun `refunding the change payment in full ends the subscription like any payment that bought the period`() {
+        val kit = newKit()
+        val active = kit.activeIn()
+        kit.time.advance(Duration.ofDays(15))
+        val changed = kit.planChanges.change("acc_1", active.id, "basic-yearly", 99_999, IdempotencyKey("chg-1"))
+        val changeOrder = kit.store.listSubscriptionOrders(active.id, 1).single()
+
+        kit.refunds.refund("op_1", changeOrder.id, "OPERATOR", null, IdempotencyKey("r-1"))
+
+        val after = checkNotNull(kit.store.findSubscription(changed.id))
+        assertEquals(listOf(SubscriptionStatus.ENDED, SubscriptionEndReason.REFUNDED), listOf(after.status, after.endReason))
+    }
+
+    @Test
+    fun `the preview tells the credit it took off`() {
+        val kit = newKit()
+        val active = kit.activeIn()
+        kit.time.advance(Duration.ofDays(15))
+
+        val quote = kit.planChanges.preview("acc_1", active.id, "basic-yearly")
+
+        assertEquals(39_000 - quote.charge.amount, quote.credit?.amount)
+        assertNull(kit.planChanges.preview("acc_1", active.id, "plus").credit)
+    }
 }

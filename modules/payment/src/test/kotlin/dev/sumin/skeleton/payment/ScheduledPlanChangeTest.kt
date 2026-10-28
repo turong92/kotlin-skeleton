@@ -21,6 +21,7 @@ class ScheduledPlanChangeTest {
         ),
     ).also {
         it.plans.plans += SubscriptionPlan("pro", "Pro", PaymentAmount(9_900, "KRW"), "P1M", 3)
+        it.plans.plans += SubscriptionPlan("pro-yearly", "Pro yearly", PaymentAmount(99_000, "KRW"), "P1Y", 3, productCode = "pro")
         it.plans.plans += SubscriptionPlan("plus-yearly", "Plus yearly", PaymentAmount(69_000, "KRW"), "P1Y", 2, productCode = "plus")
     }
 
@@ -148,5 +149,53 @@ class ScheduledPlanChangeTest {
         kit.renew()
 
         assertEquals(3_900L, kit.sub(active.id).regularMonthlyAmount, "the lower tier's monthly list price is written when the schedule is applied")
+    }
+
+    @Test
+    fun `a schedule waits while a plan change charge is in flight - when that change settles the upgraded plan wins and the renewal is woken again`() {
+        val kit = newKit()
+        val active = kit.active("pro")
+        kit.schedule(active.id, "basic")
+        kit.time.advance(Duration.ofDays(2))
+        kit.gateway.script(ConfirmScript.TimeoutApplied())
+        val pending = kit.planChanges.change("acc_1", active.id, "pro-yearly", 99_999, IdempotencyKey("chg-up"))
+        assertEquals("pro-yearly", pending.pendingPlanCode)
+        val charges = kit.gateway.chargeCalls.size
+
+        kit.time.set(checkNotNull(active.currentPeriodEnd).plusSeconds(1))
+        kit.renew()
+
+        val waiting = kit.sub(active.id)
+        assertEquals(listOf("pro", "basic", "pro-yearly", charges), listOf(waiting.planCode, waiting.scheduledPlanCode, waiting.pendingPlanCode, kit.gateway.chargeCalls.size), "neither applied nor charged while the change is unanswered")
+
+        kit.advance(kit.properties.reconcile.firstDelay)
+        kit.runTasks(setOf(PaymentTaskTypes.ORDER_RECONCILE))
+        kit.runTasks(setOf(PaymentTaskTypes.ORDER_FULFIL))
+
+        val upgraded = kit.sub(active.id)
+        assertEquals(listOf("pro-yearly", "P1Y", null, null), listOf(upgraded.planCode, upgraded.period, upgraded.scheduledPlanCode, upgraded.pendingPlanCode))
+        kit.time.set(checkNotNull(upgraded.currentPeriodEnd))
+        kit.renew()
+        assertEquals(99_000, kit.gateway.chargeCalls.last().amount.amount, "the renewal at the end of the new period is charged")
+    }
+
+    @Test
+    fun `a change payment that turns out stale still wakes the renewal so the subscription does not stall`() {
+        val kit = newKit()
+        val active = kit.active("pro")
+        kit.time.advance(Duration.ofDays(2))
+        kit.gateway.script(ConfirmScript.TimeoutApplied())
+        kit.planChanges.change("acc_1", active.id, "pro-yearly", 99_999, IdempotencyKey("chg-up"))
+        // 변경 결제가 오가는 사이 구독이 끝난 척 대기 값이 사라진 경우(다른 길로 비워졌다) - 늦게 PAID 가 돼도 갱신은 다시 깨어난다
+        kit.store.inTransaction { tx -> tx.updateSubscription(checkNotNull(tx.lockSubscription(active.id)).copy(pendingAmount = null)) }
+
+        kit.advance(kit.properties.reconcile.firstDelay)
+        kit.runTasks(setOf(PaymentTaskTypes.ORDER_RECONCILE))
+        kit.runTasks(setOf(PaymentTaskTypes.ORDER_FULFIL))
+
+        assertEquals("pro", kit.sub(active.id).planCode)
+        kit.time.set(checkNotNull(kit.sub(active.id).currentPeriodEnd))
+        kit.renew()
+        assertEquals(9_900, kit.gateway.chargeCalls.last().amount.amount, "the renewal was woken and charges the unchanged plan")
     }
 }

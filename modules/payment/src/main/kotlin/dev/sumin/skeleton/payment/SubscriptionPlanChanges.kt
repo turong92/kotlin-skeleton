@@ -15,6 +15,8 @@ data class PlanChangeQuote(
     val restartsPeriod: Boolean,
     val kind: PlanChangeKind = PlanChangeKind.IMMEDIATE_SAME_PERIOD,
     val effectiveAt: Instant? = null,
+    /** 더 긴 주기로 갈 때 새 가격에서 빼 준 이번 기간 남은 몫 - 아니면 null */
+    val credit: PaymentAmount? = null,
 )
 
 /** 변경 때 지금 결제할 금액(스펙 `2026-10-09-subscription-design.md` §9). */
@@ -72,7 +74,7 @@ class SubscriptionPlanChanges(
         if (before.isProviderManaged) throw PaymentPlanChangeNotAllowedException() // 결제사가 갱신하는 구독의 플랜 변경은 2차
         val dedupeKey = "subchg:$subscriptionId:${PaymentOrderIds.dedupeKey(accountId, key).take(32)}"
         if (store.findOrderByDedupeKey(dedupeKey) != null) return before // 같은 요청의 재전송 — 이미 했다
-        val gateway = billingGateway(before)
+        val gateway = billingGateway(before) // 결제 없이 예약만 하는 변경도 이 구독의 결제사를 지금 쓸 수 있는지(없음 · 모드 불일치)는 먼저 본다
 
         val claim = store.inTransaction { tx ->
             val locked = owned(tx.lockSubscription(subscriptionId), accountId) ?: throw PaymentSubscriptionNotFoundException()
@@ -83,21 +85,31 @@ class SubscriptionPlanChanges(
                 return@inTransaction Claim(lifecycle.save(tx, locked, locked.status) { it.copy(scheduledPlanCode = quote.plan.code, scheduledAmount = quote.plan.amount.amount, scheduledPeriod = quote.plan.period) }, null)
             }
             val newPeriod = quote.kind == PlanChangeKind.IMMEDIATE_NEW_PERIOD
-            if (quote.charge.amount == 0L) {
+            if (quote.charge.amount == 0L && !newPeriod) {
                 // 차액이 최소 금액 미만이다(또는 낸 돈의 남은 몫이 새 가격을 덮는다) — 과금 없이 바꾼다. 주기를 늘리는 변경은 오늘부터 새 주기
                 val changed = lifecycle.save(tx, locked, locked.status) { lifecycle.switched(it, quote.plan.code, quote.plan.amount.amount, if (newPeriod) quote.plan.period else it.period, restartAt = if (newPeriod) writer.now() else null) }
                 if (newPeriod) lifecycle.scheduleRenewal(changed)
                 return@inTransaction Claim(changed, null)
             }
-            val order = lifecycle.chargeOrder(locked, PaymentOrderKind.SUBSCRIPTION_CHANGE, quote.plan.name, ids, quote.charge, quote.plan.code, dedupeKey)
+            // 주기를 늘리는 변경은 공제액을 주문에 박는다(원래 가격 = 결제액 + 공제액) - 중도 해지가 새 가격 전체를 이번 기간의 돈으로 센다. 공제로 결제액이 0이면 결제사 없이 끝나는 주문이다
+            val credit = quote.credit?.amount?.takeIf { newPeriod && it > 0 }
+            val order = lifecycle.chargeOrder(
+                locked, PaymentOrderKind.SUBSCRIPTION_CHANGE, quote.plan.name, ids, quote.charge, quote.plan.code, dedupeKey,
+                originalAmount = credit?.let { quote.charge.amount + it }, offProvider = quote.charge.amount == 0L,
+            )
             if (!tx.insertOrderIfAbsent(order)) return@inTransaction Claim(locked, null) // 같은 키로 동시에 들어온 요청이 먼저 넣었다
             lifecycle.chargeStarted(tx, order, PaymentActor.USER, accountId)
-            lifecycle.scheduleReconcile(order)
+            if (quote.charge.amount > 0) lifecycle.scheduleReconcile(order)
             val claimed = locked.copy(chargeOrderId = order.id, pendingPlanCode = quote.plan.code, pendingAmount = quote.plan.amount.amount, pendingPeriod = if (newPeriod) quote.plan.period else null, updatedAt = writer.now())
             tx.updateSubscription(claimed)
             Claim(claimed, order)
         }
         val order = claim.order ?: return claim.subscription
+        if (order.provider == PaymentOrders.FREE_PROVIDER) {
+            // 공제가 새 가격을 덮는다 - 결제사 없이 주문을 끝내면 지급 고리가 플랜 · 주기를 바꾼다
+            charges.settleFree(order)
+            return store.findSubscription(subscriptionId) ?: claim.subscription
+        }
 
         val token = encryptor.decrypt(checkNotNull(claim.subscription.billingToken) { "a live subscription has a billing key" })
         val outcome = charges.charge(gateway, claim.subscription, order, token, PaymentActor.USER)
@@ -134,7 +146,7 @@ class SubscriptionPlanChanges(
                 // 새 가격 - 이번 기간에 **실제로 낸 돈**(쿠폰 · 환불 반영)의 남은 몫. 설정의 과금 방식과 상관없이 이 방식이다(차액만은 주기가 달라 성립하지 않고 전액은 손님 손해)
                 val credit = currentPayments.of(subscription).sumOf { Proration.remaining(it.net, it.coversFrom(start), end, now, properties.subscription.prorationZone) }
                 val due = (target.amount.amount - credit).coerceAtLeast(0)
-                PlanChangeQuote(target, PaymentAmount(if (due < minCharge) 0 else due, currency), restartsPeriod = true, kind = kind, effectiveAt = now)
+                PlanChangeQuote(target, PaymentAmount(if (due < minCharge) 0 else due, currency), restartsPeriod = true, kind = kind, effectiveAt = now, credit = PaymentAmount(minOf(credit, target.amount.amount), currency).takeIf { it.amount > 0 })
             }
             else -> {
                 val charge = PlanChangePricing.charge(option, subscription.amount, target.amount, start, end, now, minCharge, properties.subscription.prorationZone)

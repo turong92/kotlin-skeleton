@@ -163,7 +163,7 @@ class SubscriptionLifecycle(
         val subscription = tx.lockSubscription(order.originRef ?: return) ?: return
         if (subscription.isProviderManaged) return // 결제사가 기간을 정한다 — 웹훅([PaymentPushedEvents])이 옮긴다
         val current = subscription.chargeOrderId == order.id && subscription.status != SubscriptionStatus.ENDED
-        if (!current) return stale(tx, order)
+        if (!current) return staleChange(tx, subscription, order)
         val period = SubscriptionPeriod.parse(subscription.period)
         val now = writer.now()
         when {
@@ -190,7 +190,7 @@ class SubscriptionLifecycle(
             }
             order.kind == PaymentOrderKind.SUBSCRIPTION_CHANGE && (subscription.status == SubscriptionStatus.ACTIVE || subscription.status == SubscriptionStatus.CANCELING) -> {
                 val planCode = subscription.pendingPlanCode ?: order.itemRef
-                val amount = subscription.pendingAmount ?: return stale(tx, order)
+                val amount = subscription.pendingAmount ?: return staleChange(tx, subscription, order)
                 val restart = subscription.pendingPeriod != null || properties.subscription.planChange.charge == PaymentProperties.Subscription.PlanChange.Charge.FULL_RESTART
                 // 전액 결제하고 새 주기 · 주기를 늘리는 갈아타기: 지금부터 한 주기(남은 기간은 버린다). 차액만: 기간은 그대로. 올리기가 확정되면 예약해 둔 내리기는 지워진다
                 val changed = save(tx, subscription, subscription.status) { switched(it, planCode, amount, it.pendingPeriod ?: it.period, restartAt = if (restart) order.paidAt ?: now else null) }
@@ -244,8 +244,8 @@ class SubscriptionLifecycle(
     fun onOrderRefunded(tx: PaymentLedgerTx, order: PaymentOrder, keepSubscription: Boolean = false) {
         if (keepSubscription) return
         val subscription = tx.lockSubscription(order.originRef ?: return) ?: return
-        // 변경 결제의 환불은 그 기간의 구독을 끝내지 않는다(기간의 결제는 따로 있다) — 플랜은 되돌리지 않으니 운영자가 본다
-        if (subscription.status == SubscriptionStatus.ENDED || order.kind == PaymentOrderKind.SUBSCRIPTION_CHANGE) return
+        // 변경 결제의 환불은 그 기간의 구독을 끝내지 않는다(기간의 결제는 따로 있다) - 단 주기를 늘려 **지금 기간을 연** 변경 결제(월 → 연)는 기간을 산 주문이다 — 플랜은 되돌리지 않으니 운영자가 본다
+        if (subscription.status == SubscriptionStatus.ENDED || (order.kind == PaymentOrderKind.SUBSCRIPTION_CHANGE && !CurrentPeriodPayments.opensPeriod(subscription, order))) return
         // 지금 과금 주문이거나(아직 지급 전), 지금 기간을 산 주문이다(그 뒤 변경 주문이 과금 주문 자리를 차지해도) - 결제 시각이 지금 기간 안에 있다
         // 「확인 필요」로 찍힌 늦은 결제(`SUBSCRIPTION_STALE_CHARGE`)는 기간을 넘기지 않았다 - 운영자가 그 이중 결제를 환불해도 기간을 낸 다른 주문의 구독은 그대로다
         if (order.reviewReason == PaymentReviewReason.SUBSCRIPTION_STALE_CHARGE) return
@@ -275,6 +275,12 @@ class SubscriptionLifecycle(
     /** 기간 끝에 깨어나는 작업을 넣는다 — 갱신 과금 · 해지 예약의 종료 · 재시도가 모두 이 작업이다. */
     fun scheduleRenewal(subscription: PaymentSubscription, runAt: java.time.Instant? = subscription.currentPeriodEnd) {
         tasks.enqueue(PaymentTask(PaymentTaskTypes.SUBSCRIPTION_RENEW, subscription.id, runAt = runAt, maxAttempts = properties.reconcile.maxAttempts))
+    }
+
+    /** 받아들일 수 없는 늦은 결제를 「확인 필요」로 표시한다. 변경 결제였으면 변경 때문에 물러났던 갱신 작업을 다시 깨운다 - 이 길로 구독이 갱신 없이 멈추지 않게 */
+    private fun staleChange(tx: PaymentLedgerTx, subscription: PaymentSubscription, order: PaymentOrder) {
+        stale(tx, order)
+        if (order.kind == PaymentOrderKind.SUBSCRIPTION_CHANGE && subscription.status.isInUse && !subscription.isProviderManaged) scheduleRenewal(subscription, runAt = writer.now())
     }
 
     private fun stale(tx: PaymentLedgerTx, order: PaymentOrder) {

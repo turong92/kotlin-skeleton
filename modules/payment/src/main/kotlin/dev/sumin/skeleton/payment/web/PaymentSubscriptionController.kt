@@ -157,7 +157,7 @@ class PaymentSubscriptionController(
     @Operation(
         summary = "What a plan change would charge, and when it happens",
         description = "timing NOW (a higher tier of the same period, or a longer period: charge is what is paid at once, 0 = changed for free, restartsPeriod tells that a new period starts today) or NEXT_RENEWAL (a lower tier or a shorter period: charge is 0, effectiveAt is the end of this period). amount is the new plan's full price. " +
-            "409 PLAN_CHANGE_NOT_ALLOWED when the plan is the same / another currency / the subscription is not in use / a charge is in flight / plan change is off / the subscription is not in use / a charge is in flight / plan change is off · 422 ITEM_NOT_PURCHASABLE for an unknown plan.",
+            "409 PLAN_CHANGE_NOT_ALLOWED when the plan is the same / another currency / the subscription is not in use / a charge is in flight / plan change is off · 422 ITEM_NOT_PURCHASABLE for an unknown plan.",
     )
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = PlanChangePreviewResponse::class)
     @GetMapping("/subscriptions/{id}/change-preview")

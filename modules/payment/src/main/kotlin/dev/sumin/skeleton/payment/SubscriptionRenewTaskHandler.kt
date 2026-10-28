@@ -98,8 +98,10 @@ class SubscriptionRenewTaskHandler(
                         lifecycle.end(tx, subscription, SubscriptionEndReason.RENEWAL_BLOCKED)
                         return@inTransaction Step.Done
                     }
-                    // 예약해 둔 갈아타기(내리기 · 주기 줄이기)는 과금 주문을 넣는 이 트랜잭션에서 적용한다 - 새 금액으로 과금하고, 과금이 실패해 재시도해도 새 금액이다
-                    val subscription = if (subscription.scheduledPlanCode != null) lifecycle.applyScheduled(tx, subscription) else subscription
+                    // 예약해 둔 갈아타기(내리기 · 주기 줄이기)는 과금 주문을 넣는 이 트랜잭션에서 적용한다 - 새 금액으로 과금하고, 과금이 실패해 재시도해도 새 금액이다.
+                    // **과금 주문이 끝났고 변경 결제가 오가는 중이 아닐 때만** - 변경 결제가 확인되기 전에 적용하면 대기 값이 지워져 돈을 받고도 플랜이 안 바뀐다
+                    val settled = lifecycle.isSettled(subscription.chargeOrderId?.let(store::findOrder)) && subscription.pendingPlanCode == null
+                    val subscription = if (settled && subscription.scheduledPlanCode != null) lifecycle.applyScheduled(tx, subscription) else subscription
                     // 이번 과금액 - 할인 단계가 정한다. 0원이면 빌링키가 없어도 기간은 넘어간다
                     val amount = discounts?.amountFor(tx, subscription) ?: subscription.amount
                     // 락 밖에서는 무료로 어림해 결제사를 확인하지 않았는데 락 안에서는 유료다(그사이 플랜이 바뀌었다 …) - 결제사 · 모드를 확인하지 않고 과금하지 않는다.

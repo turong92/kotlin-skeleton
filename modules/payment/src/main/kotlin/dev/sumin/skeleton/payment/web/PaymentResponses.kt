@@ -481,12 +481,12 @@ data class ScheduledChangeResponse(val planCode: String, val planName: String, v
 }
 
 /** [timing] `NOW`(바로) · `NEXT_RENEWAL`(다음 갱신부터 - 지금 결제는 0, [effectiveAt] 에 바뀐다). [restartsPeriod] 면 오늘부터 새 주기. */
-data class PlanChangePreviewResponse(val planCode: String, val planName: String, val charge: AmountResponse, val amount: AmountResponse, val period: String, val restartsPeriod: Boolean, val timing: String = "NOW", val effectiveAt: Instant? = null) {
+data class PlanChangePreviewResponse(val planCode: String, val planName: String, val charge: AmountResponse, val amount: AmountResponse, val period: String, val restartsPeriod: Boolean, val timing: String = "NOW", val effectiveAt: Instant? = null, val credit: AmountResponse? = null) {
     companion object {
         fun of(quote: dev.sumin.skeleton.payment.PlanChangeQuote, planName: String = quote.plan.name) =
             PlanChangePreviewResponse(
                 quote.plan.code, planName, quote.charge.toResponse(), quote.plan.amount.toResponse(), quote.plan.period, quote.restartsPeriod,
-                if (quote.kind == dev.sumin.skeleton.payment.PlanChangeKind.SCHEDULED) "NEXT_RENEWAL" else "NOW", quote.effectiveAt,
+                if (quote.kind == dev.sumin.skeleton.payment.PlanChangeKind.SCHEDULED) "NEXT_RENEWAL" else "NOW", quote.effectiveAt, quote.credit?.toResponse(),
             )
     }
 }
