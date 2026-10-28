@@ -109,6 +109,7 @@ fails when this table and the prefixes found in module code differ.
 | `author-profile` | `skeleton.author-profile` |
 | `authz` | `skeleton.authz.admin` |
 | `board` | `skeleton.board` |
+| `campaign` | `skeleton.campaign` |
 | `captcha-turnstile` | `skeleton.captcha-turnstile` |
 | `config-aws-ssm` | `skeleton.config.aws.ssm` |
 | `crypto` | `skeleton.crypto` |

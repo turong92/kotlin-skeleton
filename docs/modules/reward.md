@@ -18,7 +18,7 @@
 | 메서드 · 경로 | 하는 일 |
 |---|---|
 | `GET /api/v1/admin/reward-grants?status&cursor&size` | 지급 건 목록, 새것부터 커서. `{id, accountId, type, label, status, sourceType, lastError, createdAt, issuedAt}` |
-| `POST /api/v1/admin/reward-grants/{id}/retry` | `FAILED` 만 다시 지급(그 밖 409 `REWARD.NOT_RETRYABLE`). 운영 기록 `reward.retried` |
+| `POST /api/v1/admin/reward-grants/{id}/retry` | `FAILED` 만 다시 지급(답은 갱신된 지급 건)(그 밖 409 `REWARD.NOT_RETRYABLE`). 운영 기록 `reward.retried` |
 | `POST /api/v1/admin/reward-grants/{id}/cancel` | `PENDING` 만 취소(그 밖 409 `REWARD.NOT_CANCELABLE`) |
 
 없는 건은 404 `REWARD.NOT_FOUND`. 계정이 지워지면(`AccountErasureListener`) 그 계정의 지급 건 줄을 지운다.

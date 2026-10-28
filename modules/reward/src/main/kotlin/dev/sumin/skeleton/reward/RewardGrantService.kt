@@ -36,6 +36,8 @@ class RewardGrantService(
         }
     }
 
+    fun find(id: String): RewardGrantRecord? = store.find(id)
+
     fun page(status: RewardGrantStatus?, before: String?, size: Int): List<RewardGrantRecord> = store.page(status, before, size)
 
     private fun requireExists(id: String) {
