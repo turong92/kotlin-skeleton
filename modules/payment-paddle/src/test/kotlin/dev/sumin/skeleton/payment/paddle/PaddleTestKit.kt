@@ -51,10 +51,17 @@ internal class FakePaddleApi : AutoCloseable {
     fun on(method: String, path: String, status: Int, body: String) {
         routes["$method $path"] = status to body
     }
+
+    private val queued = java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.ConcurrentLinkedQueue<Pair<Int, String>>>()
+
+    /** `메서드 경로` 로 오는 다음 요청 하나의 답 - 쌓인 순서대로 쓰고, 다 쓰면 [on] 의 답으로 돌아간다. */
+    fun onNext(method: String, path: String, status: Int, body: String) {
+        queued.computeIfAbsent("$method $path") { java.util.concurrent.ConcurrentLinkedQueue() }.add(status to body)
+    }
     private val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
         createContext("/") { ex ->
             requests += Req(ex.requestMethod, ex.requestURI.path, ex.requestHeaders.getFirst("Authorization"), ex.requestBody.readBytes().decodeToString())
-            val route = routes["${ex.requestMethod} ${ex.requestURI.path}"]
+            val route = queued["${ex.requestMethod} ${ex.requestURI.path}"]?.poll() ?: routes["${ex.requestMethod} ${ex.requestURI.path}"]
             val out = (route?.second ?: responseBody).toByteArray()
             ex.responseHeaders.add("Content-Type", "application/json")
             ex.sendResponseHeaders(route?.first ?: status, out.size.toLong())
@@ -103,4 +110,16 @@ internal fun adjustmentEvent(
 ) = """
 {"event_id":"$eventId","event_type":"$type","occurred_at":"2026-10-14T01:00:00Z",
  "data":{"id":"$id","action":"$action","status":"$status","transaction_id":"txn_1","subscription_id":"sub_1","currency_code":"USD","totals":{"total":"$total"}}}
+""".trim()
+
+/** Paddle 의 오류 응답. */
+internal fun paddleError(code: String) = """{"error":{"type":"request_error","code":"$code","detail":"x"},"meta":{"request_id":"req_1"}}"""
+
+/** 구독 변경 미리보기 · 적용 답 - 금액은 최소 단위의 문자열. [grandTotal] 이 null 이면 즉시 결제가 없다(`immediate_transaction: null`). */
+internal fun planChangeBody(grandTotal: String? = "500", credit: String? = "300", recurring: String = "1990", currency: String = "USD") = """
+{"data":{"id":"sub_1","status":"active","currency_code":"$currency",
+ "current_billing_period":{"starts_at":"2026-10-13T09:59:00Z","ends_at":"2026-11-13T09:59:00Z"},
+ "immediate_transaction":${grandTotal?.let { """{"billing_period":{"starts_at":"2026-10-14T09:59:00Z","ends_at":"2026-11-14T09:59:00Z"},"details":{"totals":{"total":"800","credit":"${credit ?: "0"}","grand_total":"$it"}}}""" } ?: "null"},
+ "recurring_transaction_details":{"totals":{"total":"$recurring"}},
+ "update_summary":{"credit":{"amount":"${credit?.let { "-$it" } ?: "0"}","currency_code":"$currency"},"charge":{"amount":"800","currency_code":"$currency"},"result":{"action":"charge","amount":"500","currency_code":"$currency"}}}}
 """.trim()

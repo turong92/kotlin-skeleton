@@ -16,6 +16,8 @@ import tools.jackson.databind.json.JsonMapper
 class PaddleErrorMapper(
     private val providerId: String,
     private val definitiveAllowed: Boolean = true,
+    /** 확정 거절로 읽는 오류 코드(허용 목록) - 호출마다 문서가 「아무 일도 일어나지 않았다」를 말하는 코드가 다르다. 기본은 환불용. */
+    private val definitiveCodes: Set<String> = DEFINITIVE_CODES,
     private val mapper: JsonMapper = JsonMapper.builder().build(),
 ) : ExternalHttpErrorMapper {
     override fun map(context: ExternalHttpErrorContext): PaymentProviderException {
@@ -28,7 +30,7 @@ class PaddleErrorMapper(
                 trace = ProviderTrace(provider = providerId, providerRequestId = requestIdOf(context.upstreamBody), rawCode = code, rawStatus = context.upstreamStatus.toString()),
                 upstreamStatus = context.upstreamStatus,
                 retryable = context.upstreamStatus == 429 || context.upstreamStatus >= 500,
-                definitive = definitiveAllowed && context.upstreamStatus in 400..499 && code in DEFINITIVE_CODES,
+                definitive = definitiveAllowed && context.upstreamStatus in 400..499 && code in definitiveCodes,
                 rawBody = null,
             ),
             clientName = context.clientName,
@@ -53,6 +55,17 @@ class PaddleErrorMapper(
         }
 
     companion object {
+        /**
+         * 플랜 변경(구독 PATCH)에서 확정인 코드 - 인증 · 권한, 그리고 Paddle 이 변경을 **적용하지 않았다**고 문서가 말하는 막힘(잠금 · 연체 · 한도 · 결제 거절 · 최소 금액).
+         * 출처: 같은 오류 코드 목록(2026-10-29 에 읽었다). `subscription_payment_declined` 는 `on_payment_failure` 기본(`prevent_change`)이라 바뀌지 않는다.
+         */
+        val PLAN_CHANGE_DEFINITIVE_CODES: Set<String> = setOf(
+            "invalid_token",
+            "forbidden",
+            "subscription_payment_declined",
+            "subscription_update_transaction_balance_less_than_charge_limit",
+        ) + PaddlePlanChangeBlocks.CODES
+
         private val SAFE_CODE = Regex("[a-z0-9_]{1,80}")
         private val SAFE_REQUEST_ID = Regex("[A-Za-z0-9_\\-]{1,100}")
 
@@ -77,4 +90,19 @@ class PaddleErrorMapper(
             "adjustment_transaction_missing_customer_id",
         )
     }
+}
+
+/** 플랜 바꾸기가 막히는 때의 오류 코드 - 우리 쪽에서는 「지금은 바꿀 수 없다」(409)로 읽는다. */
+internal object PaddlePlanChangeBlocks {
+    val CODES: Set<String> = setOf(
+        "subscription_update_when_past_due",
+        "subscription_locked_renewal",
+        "subscription_locked_processing",
+        "subscription_locked_pending_changes",
+        "subscription_outstanding_transaction",
+        "subscription_outstanding_pending_refund",
+        "subscription_immediate_charge_hour_limit_exceeded",
+        "subscription_immediate_charge_24_hour_limit_exceeded",
+        "subscription_invalid_billing_mode_for_scheduled_change",
+    )
 }

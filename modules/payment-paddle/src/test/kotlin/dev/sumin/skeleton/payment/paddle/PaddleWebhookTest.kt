@@ -94,4 +94,32 @@ class PaddleWebhookTest {
         assertThat(active.periodEnd).isNotNull()
         assertThat((gateway.interpret(subscriptionEvent("subscription.created", transactionId = "txn_first")) as PushedSubscription).transactionId).isEqualTo("txn_first")
     }
+
+    @Test
+    fun `a subscription update transaction is read as a change payment with the credit it used`() {
+        val change = transactionCompleted(subscriptionId = "sub_1").replace(""""origin":"web"""", """"origin":"subscription_update"""").replace(""""total":"990"""", """"total":"990","credit":"300"""")
+        val event = gateway.interpret(change) as PushedPayment
+        assertThat(event.subscriptionChange).isTrue()
+        assertThat(event.credit).isEqualTo(300)
+
+        val plain = gateway.interpret(transactionCompleted(subscriptionId = "sub_1")) as PushedPayment
+        assertThat(plain.subscriptionChange).isFalse()
+        assertThat(plain.credit).isNull()
+        assertThat((gateway.interpret(change.replace(""""credit":"300"""", """"credit":"0"""")) as PushedPayment).credit).isNull()
+    }
+
+    @Test
+    fun `a subscription updated event carries its items and a price id maps back to the plan code, links first`() {
+        val body = subscriptionEvent().replace(""""scheduled_change"""", """"items":[{"price":{"id":"pri_basic"},"quantity":1}],"scheduled_change"""")
+        assertThat((gateway.interpret(body) as PushedSubscription).items).containsExactly(dev.sumin.skeleton.payment.PushedItem("pri_basic", 1))
+        assertThat((gateway.interpret(subscriptionEvent()) as PushedSubscription).items).isEmpty()
+
+        assertThat(gateway.itemRefOf("pri_basic")).isEqualTo("basic")
+        assertThat(gateway.itemRefOf("pri_nobody")).isNull()
+        val linked = gateway(refs = object : dev.sumin.skeleton.payment.ProviderPriceRefs {
+            override fun priceIdOf(provider: String, itemRef: String) = mapOf("plus" to "pri_basic")[itemRef]
+            override fun all(provider: String) = mapOf("plus" to "pri_basic")
+        })
+        assertThat(linked.itemRefOf("pri_basic")).isEqualTo("plus")
+    }
 }
