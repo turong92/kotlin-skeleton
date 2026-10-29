@@ -130,8 +130,7 @@ class PaddleWebhookTest {
         val change = gateway.interpret(twoLines) as PushedPayment
         assertThat(change.items).containsExactly(dev.sumin.skeleton.payment.PushedItem("pri_basic", 1))
 
-        val methodChange = gateway.interpret(transactionCompleted(subscriptionId = "sub_1").replace(""""origin":"web"""", """"origin":"subscription_payment_method_change"""")) as PushedPayment
-        assertThat(methodChange.subscriptionChange).isTrue()
+        assertThat(gateway.interpret(transactionCompleted(subscriptionId = "sub_1").replace(""""origin":"web"""", """"origin":"subscription_payment_method_change""""))).isNull() // 주문 없이 수신함만 닫힌다
         assertThat((gateway.interpret(transactionCompleted(subscriptionId = "sub_1").replace(""""origin":"web"""", """"origin":"subscription_recurring"""")) as PushedPayment).subscriptionChange).isFalse()
 
         val updated = subscriptionEvent().replace(""""scheduled_change"""", """"currency_code":"usd","recurring_transaction_details":{"totals":{"total":"1990"}},"scheduled_change"""")

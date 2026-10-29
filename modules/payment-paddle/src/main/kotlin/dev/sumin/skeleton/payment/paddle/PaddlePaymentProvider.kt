@@ -113,7 +113,8 @@ class PaddlePaymentProvider(
         val occurredAt = Instant.parse(root.text("occurred_at") ?: error("Paddle payload without occurred_at"))
         val custom = data["custom_data"]
         return when (val type = root.text("event_type")) {
-            "transaction.completed" -> payment(eventId, occurredAt, data, custom)
+            // 결제 수단 변경 거래는 장부가 다루는 결제가 아니다 - 주문도 지급도 없이 수신함 줄만 닫는다(연체 해소는 구독 사건이 한다)
+            "transaction.completed" -> if (data.text("origin") == PAYMENT_METHOD_CHANGE) null else payment(eventId, occurredAt, data, custom)
             "transaction.payment_failed" -> paymentFailure(eventId, occurredAt, data, custom)
             in ADJUSTMENT_EVENTS -> adjustment(eventId, occurredAt, data)
             in SUBSCRIPTION_EVENTS -> subscription(eventId, occurredAt, data, custom, type)
@@ -209,8 +210,8 @@ class PaddlePaymentProvider(
             customerId = data.text("customer_id"),
             addressId = data.text("address_id"),
             credit = totals.text("credit")?.toLongOrNull()?.takeIf { it > 0 },
-            // 구독 변경 · 결제 수단 변경 거래는 갱신이 아니다 - 주문만 남기고 구독 금액 · 기간을 건드리지 않는다
-            subscriptionChange = data.text("origin") in NON_RENEWAL_ORIGINS,
+            // 구독 변경 거래는 갱신이 아니다 - 주문만 남기고 구독 금액 · 기간을 건드리지 않는다
+            subscriptionChange = data.text("origin") == "subscription_update",
         )
     }
 
@@ -585,7 +586,7 @@ class PaddlePaymentProvider(
         val SUBSCRIPTION_EVENTS = setOf("subscription.created", "subscription.activated", "subscription.updated", "subscription.canceled", "subscription.past_due")
         val ADJUSTMENT_EVENTS = setOf("adjustment.created", "adjustment.updated")
         val HANDLED = SUBSCRIPTION_EVENTS + ADJUSTMENT_EVENTS + setOf("transaction.completed", "transaction.payment_failed")
-        val NON_RENEWAL_ORIGINS = setOf("subscription_update", "subscription_payment_method_change")
+        const val PAYMENT_METHOD_CHANGE = "subscription_payment_method_change"
         const val PRORATED_IMMEDIATELY = "prorated_immediately"
         const val DO_NOT_BILL = "do_not_bill"
         const val PAYMENT_DECLINED = "subscription_payment_declined"

@@ -171,9 +171,9 @@ class PaymentSubscriptionController(
         @RequestParam planCode: String,
     ): DataResponse<PlanChangePreviewResponse> {
         val account = callers.account(authentication)
-        // 결제사가 갱신하는 구독의 미리보기는 결제사 API 를 부른다 - 키의 호출 한도를 지키려고 변경과 같은 한도를 건다
+        // 결제사가 갱신하는 구독의 미리보기는 결제사 API 를 부른다 - 키의 호출 한도를 지키려고 호출 한도를 건다 - 별도 통에 변경보다 큰 한도(5배)라 미리보기를 여러 번 불러도 바꾸기가 막히지 않는다
         if (planChanges.callsProvider(account, id)) {
-            limiter.acquire(account, clientIps.of(request).limitKey)?.let { retryAfter ->
+            limiter.acquire(account, clientIps.of(request).limitKey, bucket = "payment-plan-preview", scale = 5)?.let { retryAfter ->
                 response.setHeader("Retry-After", retryAfter.toString())
                 throw ApplicationException(message = "Too many requests", errorCode = PlatformErrorCode.TOO_MANY_REQUESTS, data = mapOf("retryAfterSeconds" to retryAfter))
             }
