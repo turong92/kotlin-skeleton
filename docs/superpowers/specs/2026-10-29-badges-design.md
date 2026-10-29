@@ -86,10 +86,10 @@ campaign(-jdbc) ──api──▶ reward              (기존 그대로 — 새
 | `GET /api/v1/admin/badge-awards?badgeId&accountId&cursor` | 수여 · 회수 내역(최신순 커서). 계정 이름은 `AccountLabels` — `account.read` 도 있는 운영자에게만(쿠폰 선례) | `badge.manage` |
 
 - **공개 프로필 경로(결정 1)**
-  - 열기: `skeleton.badge.http.allow-anonymous-read`(기본 `true` — 형 결정, `board` 의 같은 이름 설정은 기본 `false` 라 모듈 문서에 차이를 적는다). `http.enabled` 와 함께 `true` 면 `badgePublicEndpointContributor` 가 `GET {base}/accounts/*` 하나만 공개 경로로 넣는다(`catalog` 꼴). `false` 면 로그인 필요(401).
+  - 열기: `skeleton.badge.http.allow-anonymous-read`(**모듈 기본 `false`** — 스켈레톤 기본은 옵션 없음, `board` 의 같은 이름 설정과 같다. 견본 앱이 `true` 로 켠다 — 리뷰 반영). `true` 이고 `http.enabled` 면 `badgePublicEndpointContributor` 가 `GET {base}/accounts/*` 하나만 공개 경로로 넣는다. 설정이 없으면 로그인 필요(401).
   - 내보내지 않는 것: 보유 줄 id · 정의 id · `awardedAt` · 출처 · 수여자 · 사유 · 회수 상태 · 개수 합계. **숨긴(`visible=false`) 배지와 받지 않은 숨은 업적은 어떤 값으로도 나가지 않는다** — 질의 단계에서 `ACTIVE ∧ visible` 만 읽는다(걸러 내기가 아니라 안 읽기).
   - 없는 계정 · 탈퇴한 계정 · 배지 없는 계정 · 전부 숨긴 계정은 모두 같은 `200 {badges: []}` — 계정이 있는지 알려 주지 않는다.
-  - 속도 제한: 배지 전용 한도는 만들지 않는다. 다른 공개 읽기(`catalog` 상품 · `board` 비회원 읽기)처럼 platform `skeleton.web.rate-limit`(IP 기준, `/api/**`, 기본 꺼짐)을 따른다 — 공개로 여는 앱은 이것을 켜라고 모듈 문서에 적는다.
+  - 속도 제한: 배지 전용 한도는 만들지 않는다. 다른 공개 읽기(`catalog` 상품 · `board` 비회원 읽기)처럼 platform `skeleton.web.rate-limit`(IP 기준, 기본 꺼짐)을 따른다 — 공개로 여는 앱은 이것을 켜라고 모듈 문서에 적는다.
   - **경고(모듈 문서 · 견본 주석)**: 이 경로는 주소에 계정 id 를 담는다. `author-profile`(필명 프로필) 화면에 `ProfileBadges` 를 붙이면 필명 여러 개가 같은 계정 id · 같은 배지 묶음으로 이어져 한 사람임이 드러난다 — 필명 화면에는 붙이지 말 것.
 - 권한은 `PermissionDeclaration("badge", [badge.manage])`, 기본 역할 없음(전권만). 운영 기록 `OperatorAuditLog`: `badge.defined` · `badge.updated` · `badge.awarded` · `badge.revoked`(대상은 id 만).
 - `campaign` 쪽 새 HTTP 없음 — 업적 이벤트는 기존 `/api/v1/admin/campaigns` 로 만든다(`kind: "achievement"`). `CampaignSignals` 는 서버 API 만(포인트 사용과 같은 이유 — 브라우저가 수치를 보고하면 안 된다).
@@ -111,7 +111,7 @@ campaign(-jdbc) ──api──▶ reward              (기존 그대로 — 새
 - 멱등: 같은 지급 건을 일꾼이 두 번 → 수여 한 번 · 내역 한 줄. `Badges.award` 같은 `sourceRef` 두 번 · 동시 두 번 → 한 줄. 이미 가진 배지 수동 수여 → `alreadyHeld`.
 - 업적: 값 9 → 10 보고에 단계 10 한 번, 같은 10 다시 보고 → 추가 없음, 5 보고 → 값 그대로, 이벤트를 나중에 만든 뒤 다음 보고에서 이미 넘은 단계 지급, 꺼진 · 기간 밖 이벤트는 지급 없음, 모르는 배지 코드 · 보관된 배지를 보상으로 저장 → 400 `CAMPAIGN.CONFIG_INVALID`.
 - 숨김: `locked` 의 숨은 정의가 이름 · 설명 · 그림을 내지 않는다(응답 JSON 에 문자열이 없음). 남의 `awardId` PATCH → 404.
-- 공개 프로필: 인증 없이 200. 회수된 · `visible=false` 배지 · 받지 않은 숨은 정의의 코드 · 이름이 응답 JSON 문자열에 없다. 배지 객체의 키가 정확히 `code · name · description · imageUrl` 넷. 없는 계정 = 전부 숨긴 계정 = 빈 계정(응답 바이트 같음). `allow-anonymous-read=false` 면 비로그인 401.
+- 공개 프로필: 인증 없이 200. 회수된 · `visible=false` 배지 · 받지 않은 숨은 정의의 코드 · 이름이 응답 JSON 문자열에 없다. 배지 객체의 키가 정확히 `code · name · description · imageUrl` 넷. 없는 계정 = 전부 숨긴 계정 = 빈 계정(응답 바이트 같음). 설정이 없으면(기본) 비로그인 401, `allow-anonymous-read=true` 면 200.
 - 권한: 운영 경로 꺼짐 404 · 권한 없음 403 · `account.read` 없으면 계정 이름 없음. 회수 사유 빈 값 400.
 - 조립: `badge` 만(지급기 없이 · `notification` 없이 `noOptionalTest`), `campaign` + `reward` 에 `badge` 없음(종류 `badge` 저장 거절). 두 방언 `dbTest`, `MigrationLockTest` · `CapabilitiesCatalogTest` · `ModuleDocumentationTest`.
 
@@ -120,7 +120,7 @@ campaign(-jdbc) ──api──▶ reward              (기존 그대로 — 새
 
 ## 결정됨 (형, 2026-10-29)
 
-1. **프로필 배지 공개 범위 — 비로그인 공개까지.** 형: 「비로그인 공개까지」
+1. **프로필 배지 공개 범위 — 비로그인 공개까지.** 형: 「비로그인 공개까지」 (구현: 모듈 기본은 꺼짐, 형의 앱(견본)이 `allow-anonymous-read: true` 로 켠다 — 「스켈레톤 기본은 아무 옵션 없는게 맞고 내 취향(override) 을 따로」)
    - 로그인하지 않은 사람도 `GET /api/v1/badges/accounts/{accountId}` 로 본다. 본인이 배지마다 숨기는 `visible` 은 그대로.
    - 숨긴 배지 · 받지 않은 숨은 업적은 공개 응답에 절대 나가지 않는다 — 노출 필드는 `code · name · description · imageUrl` 넷뿐, 계정 유무도 드러내지 않는다(§5).
    - 속도 제한은 레포 공개 읽기 관례(platform `skeleton.web.rate-limit`)를 따르고 배지 전용은 만들지 않는다.

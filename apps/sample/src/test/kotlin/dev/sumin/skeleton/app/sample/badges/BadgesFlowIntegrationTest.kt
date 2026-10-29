@@ -8,8 +8,10 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.test.web.servlet.get
 
 /**
  * 노트 → 업적 이벤트 → 보상 지급 건 → 일꾼 → 배지(+ 포인트)가 견본 앱 안에서 맞물리는지(진짜 PostgreSQL · 보안 체인 · 큐 일꾼). 씨앗은 [BadgesSeed] 를 직접 돌린다.
@@ -23,11 +25,25 @@ class BadgesFlowIntegrationTest : CheerIntegrationBase() {
 
     @BeforeEach
     fun seedWorld() {
-        listOf(
-            "notes", "reward_grants", "badge_award_events", "badge_awards", "badge_definitions", "campaign_progress", "campaigns", "point_entries", "point_balances", "notification_inbox",
-        ).forEach { jdbc.sql("delete from $it").update() }
-        BadgesSeed(definitions, campaigns).run()
         userId = accountOf("user@example.com")
+        // 시험 계정의 것만 비운다(다른 시험의 노트 · 포인트는 건드리지 않는다)
+        cleanUser()
+        BadgesSeed(definitions, campaigns).run()
+        campaigns.list().filter { it.name == BadgesSeed.NOTES_ACHIEVEMENT }.forEach { campaigns.setEnabled(it.id, true) }
+    }
+
+    @AfterEach
+    fun stopAchievement() {
+        // 뒤의 시험(노트를 만드는 다른 클래스)에서 지급 건이 생기지 않게 업적 이벤트를 끈다
+        campaigns.list().filter { it.name == BadgesSeed.NOTES_ACHIEVEMENT }.forEach { campaigns.setEnabled(it.id, false) }
+        cleanUser()
+    }
+
+    private fun cleanUser() {
+        mapOf(
+            "notes" to "owner_id", "campaign_progress" to "account_id", "reward_grants" to "account_id", "badge_award_events" to "account_id", "badge_awards" to "account_id",
+            "point_entries" to "account_id", "point_balances" to "account_id", "notification_inbox" to "recipient_id",
+        ).forEach { (table, column) -> jdbc.sql("delete from $table where $column = :a").param("a", userId).update() }
     }
 
     private fun note(token: String, n: Int) =
@@ -82,5 +98,15 @@ class BadgesFlowIntegrationTest : CheerIntegrationBase() {
         get("/api/v1/badges/accounts/$userId", null).andExpect { jsonPath("$.value.badges.length()") { value(0) } }
         get("/api/v1/admin/badge-awards?accountId=$userId", operator).andExpect { status { isOk() }; jsonPath("$.values[0].action") { value("REVOKED") } }
         post("/api/v1/admin/badges/$badgeId/awards", user, """{"accountIds":["$userId"]}""").andExpect { status { isForbidden() } }
+    }
+
+    @Test
+    fun `the profile path is rate limited per IP, and the limit does not touch other paths`() {
+        // 다른 시험이 쓰는 localhost 의 한도를 쓰지 않게 이 시험만의 IP 로 부른다
+        fun profileFrom(ip: String) = mvc.get("/api/v1/badges/accounts/$userId") { with { it.remoteAddr = ip; it } }
+        repeat(60) { profileFrom("10.9.9.9").andExpect { status { isOk() } } }
+        profileFrom("10.9.9.9").andExpect { status { isTooManyRequests() } }
+        profileFrom("10.9.9.8").andExpect { status { isOk() } }
+        get("/api/v1/badges/me", user).andExpect { status { isOk() } }
     }
 }

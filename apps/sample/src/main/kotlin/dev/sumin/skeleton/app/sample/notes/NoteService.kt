@@ -31,7 +31,7 @@ class NoteService(
     private val storage: ObjectProvider<ObjectStorage>,
     private val jdbc: JdbcClient,
     private val json: ObjectMapper,
-    private val signals: CampaignSignals,
+    private val signals: ObjectProvider<CampaignSignals>,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -47,7 +47,7 @@ class NoteService(
         )
         notifier.created(saved)
         // 업적 수치: 저장 뒤 자기 개수를 세어 현재 값을 보고한다(같은 트랜잭션 - 노트가 롤백되면 보고도 사라진다). 이벤트가 없으면 수치만 쌓인다
-        signals.report(owner, NOTES_CREATED, notes.countMatching(owner, null, null, null))
+        signals.ifAvailable { it.report(owner, NOTES_CREATED, notes.countMatching(owner, null, null, null)) }
         return saved
     }
 

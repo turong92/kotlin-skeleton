@@ -89,7 +89,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `author-profile-jdbc` | 작성자 프로필 저장소 — PostgreSQL · MySQL 로 author-profile 의 저장 포트를 구현한다(author_profiles 표 · (이름 키, 꼬리표)와 첫 프로필 유니크 · 첫 프로필 줄을 잠그는 원자적 상한). | `--modules author-profile-jdbc` | 작성자 프로필 저장소, 프로필 DB / author profile storage, author profile repository, profile database | `@skeleton/author-profile` |
 | `authz` | 운영자 역할 관리 — 역할 만들기 · 고치기 · 지우기(역할 → 권한 묶음)와 붙은 모듈이 선언한 권한 카탈로그 API(/api/v1/admin/roles · /api/v1/admin/permissions). 안전장치: 전권 역할 고정 · 자기에게 없는 권한은 못 줌(403) · 쓰는 계정이 있는 역할은 못 지움 · 자기 잠금 막기. 역할 변경은 OperatorAuditLog 계약으로만 알린다(기본 아무것도 안 함). 기본 꺼짐(skeleton.authz.admin.enabled). | `--modules authz,authz-jdbc` | 역할 관리, 권한 관리, 역할 만들기, 권한 묶음, 운영자 권한, CS 담당자 역할, 환불만 허용 / role management, permissions, role based access, admin roles, least privilege, custom role | `@skeleton/auth` |
 | `authz-jdbc` | 역할 → 권한 표 저장소 — PostgreSQL · MySQL 로 authz 의 저장 포트를 구현하고(authz_roles · authz_role_permissions, 전권 역할은 표를 못 바꾼다) 판정이 읽는 역할 → 권한 매핑을 yml 에서 이 표로 바꾼다(캐시: 같은 인스턴스는 즉시, 다른 인스턴스는 skeleton.authz.cache-ttl). 첫 기동에 yml 매핑을 한 번만 옮긴다. | `--modules authz-jdbc` | 역할 권한 저장소, 권한 표 / role permission storage, authz database | `@skeleton/auth` |
-| `badge` | 배지 — 앱이 정의하는 업적 배지의 정의 · 수여/회수(사유 필수) · 내 배지 · 비로그인 공개 프로필 배지 · 보상 지급기 `badge`. 포인트 · 쿠폰 · 이벤트를 모르고 조립으로만 같이 준다. | `--modules badge,badge-jdbc` | 배지, 업적, 뱃지, 프로필 배지, 수동 수여, 회수 / badge, achievement, profile badge, award badge, revoke badge | `@skeleton/rewards` |
+| `badge` | 배지 — 앱이 정의하는 업적 배지의 정의 · 수여/회수(사유 필수) · 내 배지 · 프로필 배지(비로그인 읽기는 앱이 켠다) · 보상 지급기 `badge`. 포인트 · 쿠폰 · 이벤트를 모르고 조립으로만 같이 준다. | `--modules badge,badge-jdbc` | 배지, 업적, 뱃지, 프로필 배지, 수동 수여, 회수 / badge, achievement, profile badge, award badge, revoke badge | `@skeleton/rewards` |
 | `badge-jdbc` | 배지 정의 · 보유 · 수여/회수 내역을 DB 에 둔다 (PostgreSQL · MySQL) — 동시 수여는 보유 줄 유니크, 지급 건 재시도는 내역 유니크로 한 번. | `--modules badge-jdbc` | 배지 저장소, 배지 DB / badge storage, badge repository | `@skeleton/rewards` |
 | `board` | 게시판 — 글 · 중첩 댓글(대댓글) · 설정으로 늘리는 반응(좋아요 · 공감 …) · 운영자 숨김/고정 · 댓글 알림 · 작성자 닉네임(authorName · authorTag, AuthorDirectory 로 요청당 한 번 조회), HTTP /api/v1/boards 까지. | `--modules board,board-jdbc` | 게시판, 커뮤니티, 글쓰기, 댓글, 대댓글, 공감, 좋아요, 반응, 운영자 숨김, 공지 고정 / board, forum, community, post, comment, reply, reaction, like, moderation | `@skeleton/board` |
 | `board-jdbc` | 게시판 저장소 — PostgreSQL · MySQL 로 board 의 저장 포트 네 개를 구현한다(boards · board_* 테이블 · 원자적 카운터). | `--modules board-jdbc` | 게시판 저장소, 게시판 DB / board storage, board repository, board database | `@skeleton/board` |
@@ -499,7 +499,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 다른 DB(JPA · jOOQ)로 저장하려면 authz 의 저장 포트(AuthzRoleStore)와 RolePermissionSource 를 앱이 구현한다
 - 키워드: 역할 권한 저장소, 권한 표 / role permission storage, authz database
 
-### `badge` — 배지 — 앱이 정의하는 업적 배지의 정의 · 수여/회수(사유 필수) · 내 배지 · 비로그인 공개 프로필 배지 · 보상 지급기 `badge`. 포인트 · 쿠폰 · 이벤트를 모르고 조립으로만 같이 준다.
+### `badge` — 배지 — 앱이 정의하는 업적 배지의 정의 · 수여/회수(사유 필수) · 내 배지 · 프로필 배지(비로그인 읽기는 앱이 켠다) · 보상 지급기 `badge`. 포인트 · 쿠폰 · 이벤트를 모르고 조립으로만 같이 준다.
 
 - 종류 · 상태: module · experimental — 위치 `modules/badge`
 - 켜는 법: `--modules badge,badge-jdbc`

@@ -45,6 +45,9 @@ skeleton:
       # 긴 이름(<PREFIX>_WEB_CLIENT_IP_MODE)도 Spring 의 느슨한 바인딩으로 그대로 먹는다. 로컬 프로필은 application-local.yml 에서 direct. docs/client-ip.md
       mode: ${SKELETON_CLIENT_IP_MODE:}
       trusted-proxies: ${SKELETON_CLIENT_IP_TRUSTED_PROXIES:}
+    rate-limit:
+      enabled: true                          # 이 앱의 선택: 로그인 없이 읽는 프로필 배지 경로에만 IP 기준 한도를 건다(모듈 기본은 꺼짐, 범위도 /api/** 전체) - 다른 경로와 시험에는 영향이 없다
+      path-pattern: /api/v1/badges/accounts/**
   auth-session:
     reuse-grace: 10s                      # 이 앱의 선택: 응답을 잃은 브라우저(페이지 이동 중 refresh)의 재시도는 같은 후속 토큰을 받는다 — 세션이 죽지 않는다. 지나서 옛 토큰을 내밀면 탈취로 보고 세션을 닫는다 (docs/accounts.md)
   auth:
@@ -255,7 +258,9 @@ skeleton:
       enabled: true
   badge:
     admin:
-      enabled: true   # 이 앱의 선택: 운영 경로(정의 · 수동 수여 · 회수 · 내역, 권한 badge.manage 는 기본 역할 없이 ADMIN 전권만). 프로필 배지의 비로그인 읽기는 모듈 기본(켜짐)을 따른다 - 속도 제한은 skeleton.web.rate-limit
+      enabled: true   # 이 앱의 선택: 운영 경로(정의 · 수동 수여 · 회수 · 내역, 권한 badge.manage 는 기본 역할 없이 ADMIN 전권만)
+    http:
+      allow-anonymous-read: true   # 이 앱의 선택: 프로필 배지(GET /api/v1/badges/accounts/{accountId})를 로그인 없이 읽는다 - 스켈레톤 기본은 로그인 필요(401). 아래 web.rate-limit 과 같이 켠다
   reward:
     admin:
       enabled: true

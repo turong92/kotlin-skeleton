@@ -19,7 +19,7 @@ import org.springframework.web.bind.annotation.RestController
  * 내 배지와 프로필 배지 — 호출자는 `Authentication.name`(auth 모듈에서는 계정 id)이다. 이 클래스는 [BadgeWebAutoConfiguration] 이 등록한다
  * (`skeleton.badge.http.enabled=false` 로 끈다).
  *
- * **`GET …/accounts/{accountId}` 는 로그인 없이 읽는다**(`skeleton.badge.http.allow-anonymous-read`, 기본 켜짐). 계정이 있는지 알려 주지 않는다 - 없는 계정도 `{badges: []}` 다.
+ * **`GET …/accounts/{accountId}` 는 앱이 열면 로그인 없이 읽는다**(`skeleton.badge.http.allow-anonymous-read=true` 일 때 - 기본은 로그인 필요). 계정이 있는지 알려 주지 않는다 - 없는 계정도 `{badges: []}` 다.
  * 이 경로는 주소에 계정 id 를 담으므로 `author-profile`(필명 프로필) 화면에 붙이지 않는다 - 필명 여러 개가 같은 계정으로 이어진다.
  */
 @RestController

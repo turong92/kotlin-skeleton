@@ -173,7 +173,7 @@ local 프로필은 주문 만들기 한도(기본 계정당 10 / 10분)를 풀�
 | 경로 | 하는 일 |
 |---|---|
 | `GET /api/v1/badges/me` · `PATCH /api/v1/badges/me/{awardId} {visible}` | 내 배지(받은 것 · 아직인 것, 숨은 배지는 「?」) · 프로필에 보일지 |
-| `GET /api/v1/badges/accounts/{accountId}` | 그 계정의 프로필 배지 - **로그인 없이** 읽는다(`code · name · description · imageUrl` 넷뿐, 숨긴 배지 · 없는 계정은 빈 목록). **필명 프로필(`author-profile`) 화면에는 붙이지 않는다** - 주소의 계정 id 로 필명이 한 사람으로 이어진다. 공개로 여는 앱은 `skeleton.web.rate-limit` 을 켠다 |
+| `GET /api/v1/badges/accounts/{accountId}` | 그 계정의 프로필 배지 - 이 앱이 `skeleton.badge.http.allow-anonymous-read: true` 로 열어 **로그인 없이** 읽는다(모듈 기본은 로그인 필요; 이 경로에만 `skeleton.web.rate-limit` 을 건다; `code · name · description · imageUrl` 넷뿐, 숨긴 배지 · 없는 계정은 빈 목록). **필명 프로필(`author-profile`) 화면에는 붙이지 않는다** - 주소의 계정 id 로 필명이 한 사람으로 이어진다. 공개로 여는 앱은 `skeleton.web.rate-limit` 을 켠다 |
 | `/api/v1/admin/badges` · `/badge-awards` | 정의 · 수동 수여 · 회수(사유 필수) · 내역 - 이 앱이 `skeleton.badge.admin.enabled: true` 로 켠다(`badge.manage`, ADMIN 전권만) |
 
 **씨앗**(`local` 프로필만, 코드로 찾아 없는 것만 만든다 - `BadgesSeed`): 배지 「첫 노트」 · 「노트 10개」 · 「얼리 버드」 · 숨은 「비밀 손님」, 업적 이벤트 「노트 업적」(수치 `notes.created`: 1 → 첫 노트, 10 → 노트 10개 + 100포인트). 「얼리 버드」 · 「비밀 손님」은 운영자 수동 수여로 시연한다. 시험: `badges/BadgesFlowIntegrationTest`.

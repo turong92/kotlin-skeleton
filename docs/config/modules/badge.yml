@@ -4,7 +4,7 @@ skeleton:
     http:
       enabled: true                  # false 면 사용자 경로(내 배지 · 프로필 배지)를 닫는다
       base-path: /api/v1/badges
-      allow-anonymous-read: true     # 프로필 배지(GET …/accounts/{accountId})를 로그인 없이 읽는다. false 면 이 경로도 로그인이 필요하다 (board 의 같은 이름 설정은 기본 false)
+      allow-anonymous-read: false    # true 면 프로필 배지(GET …/accounts/{accountId})를 로그인 없이 읽는다 - 기본은 로그인 필요(401), 열기는 앱의 선택 (board 의 같은 이름 설정과 같다)
     admin:
       enabled: false                 # true 면 운영자 경로(badge.manage)가 열린다. 꺼져 있으면 404
       base-path: /api/v1/admin       # 아래에 /badges · /badge-awards

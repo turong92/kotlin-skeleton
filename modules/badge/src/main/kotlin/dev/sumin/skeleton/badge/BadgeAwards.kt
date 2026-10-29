@@ -27,7 +27,8 @@ class BadgeAwards(
 
     /** 운영자 수동 수여 - 계정마다 한 번씩(중복 입력은 접는다), 이미 가진 계정은 `alreadyHeld` */
     fun awardByOperator(badgeId: String, accountIds: List<String>, reason: String?, actorId: String): AdminAwardResult = store.inTransaction {
-        val unique = accountIds.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        // 정렬해서 잠근다 - 입력 순서가 [A,B] 와 [B,A] 인 두 요청이 서로의 줄을 기다리며 교착하지 않게
+        val unique = accountIds.map { it.trim() }.filter { it.isNotEmpty() }.distinct().sorted()
         if (unique.isEmpty()) throw BadgeException(BadgeErrorCode.CONFIG_INVALID, "accountIds is required")
         if (unique.size > MAX_ADMIN_ACCOUNTS) throw BadgeException(BadgeErrorCode.CONFIG_INVALID, "at most $MAX_ADMIN_ACCOUNTS accounts per request")
         val why = reason?.trim()?.takeIf { it.isNotEmpty() }?.also { if (it.length > MAX_REASON) throw reasonTooLong() }
@@ -97,7 +98,7 @@ class BadgeAwards(
             store.insertEventIfAbsent(BadgeAwardEvent(eventId, current.id, definition.id, accountId, BadgeAction.AWARDED, source, sourceRef, actorId, reason, now))
             if (source != BadgeSource.GRANT) AfterCommit.run { notifier().awarded(accountId, definition, source, eventId) }
         }
-        BadgeHolding(current.id, definition.code, current.awardedAt, created)
+        BadgeHolding(current.id, definition.code, current.awardedAt, created, current.status == BadgeAwardStatus.ACTIVE)
     }
 
     private fun revokeOne(award: BadgeAward, source: BadgeSource, actorId: String?, reason: String): Boolean {

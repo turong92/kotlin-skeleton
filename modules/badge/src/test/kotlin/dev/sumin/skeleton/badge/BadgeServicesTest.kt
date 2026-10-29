@@ -34,6 +34,7 @@ class BadgeServicesTest {
         val second = awards.award("acc_1", "first-note", "note:1")
         assertTrue(first.newlyAwarded)
         assertFalse(second.newlyAwarded)
+        assertTrue(first.active && second.active)
         assertEquals(first.awardId, second.awardId)
         assertEquals(1, store.awards.size)
         assertEquals(1, store.events.size)
@@ -45,7 +46,9 @@ class BadgeServicesTest {
         define("first-note")
         val first = awards.award("acc_1", "first-note", "note:1")
         assertTrue(awards.revoke("acc_1", "first-note", "mistake"))
-        assertFalse(awards.award("acc_1", "first-note", "note:1").newlyAwarded)
+        val replay = awards.award("acc_1", "first-note", "note:1")
+        assertFalse(replay.newlyAwarded)
+        assertFalse(replay.active, "a replay after a revoke must not look like a holding")
         assertEquals(BadgeAwardStatus.REVOKED, store.awards.getValue(first.awardId).status)
         val again = awards.award("acc_1", "first-note", "note:2")
         assertTrue(again.newlyAwarded)
@@ -112,6 +115,13 @@ class BadgeServicesTest {
         assertEquals("op_1", event.actorId)
         assertEquals("launch", event.reason)
         assertEquals(listOf("acc_2", "acc_1").sorted(), notifier.sent.map { it.first }.sorted())
+    }
+
+    @Test
+    fun `an operator award takes the accounts in sorted order whatever the input order`() {
+        val badge = define("early-bird")
+        awards.awardByOperator(badge.id, listOf("acc_3", "acc_1", "acc_2"), null, "op_1")
+        assertEquals(listOf("acc_1", "acc_2", "acc_3"), store.events.map { it.accountId })
     }
 
     @Test

@@ -33,15 +33,15 @@ class BadgeWebAutoConfiguration {
     fun badgeController(catalog: BadgeCatalog, properties: BadgeProperties): BadgeController = BadgeController(catalog, properties)
 
     /**
-     * 프로필 배지 한 경로만 로그인 없이 연다(프로필 경로 `GET {base}/accounts/{id}` 하나이고 내 배지 `me` 는 열리지 않는다). `skeleton.badge.http.allow-anonymous-read=false` 로 닫는다.
+     * 프로필 배지 한 경로만 로그인 없이 연다(프로필 경로 `GET {base}/accounts/{id}` 하나이고 내 배지 `me` 는 열리지 않는다). 기본은 닫혀 있고 `skeleton.badge.http.allow-anonymous-read=true` 로 연다(앱의 선택).
      * 앱은 같은 빈 이름으로 덮어쓸 수 있다.
      */
     @Bean
     @ConditionalOnBean(BadgeCatalog::class)
     @ConditionalOnMissingBean(name = ["badgePublicEndpointContributor"])
-    @ConditionalOnProperty(prefix = "skeleton.badge.http", name = ["enabled", "allow-anonymous-read"], havingValue = "true", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "skeleton.badge.http", name = ["allow-anonymous-read"], havingValue = "true")
     fun badgePublicEndpointContributor(properties: BadgeProperties): PublicEndpointContributor =
-        PublicEndpointContributor { registry -> registry.add("GET", "${properties.http.basePath}/accounts/*") }
+        PublicEndpointContributor { registry -> if (properties.http.enabled) registry.add("GET", "${properties.http.basePath}/accounts/*") }
 
     @Bean
     @ConditionalOnBean(BadgeDefinitions::class, BadgeAwards::class)

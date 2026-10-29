@@ -6,8 +6,8 @@ package dev.sumin.skeleton.badge
  */
 interface Badges {
     /**
-     * [code] 배지를 [accountId] 에게 준다. 이미 가졌으면 그 줄을 돌려준다(`newlyAwarded=false`). 같은 [sourceRef] 로 이미 처리한 호출은 다시 주지 않는다 —
-     * 회수된 뒤에 같은 [sourceRef] 로 다시 불러도 그대로다(무엇이 원인인지를 [sourceRef] 에 적는다, 60자까지).
+     * [code] 배지를 [accountId] 에게 준다. 이미 가졌으면 그 줄을 돌려준다(`newlyAwarded=false`, `active=true`). 같은 [sourceRef] 로 이미 처리한 호출은 다시 주지 않는다 —
+     * 회수된 뒤에 같은 [sourceRef] 로 다시 불러도 다시 주지 않는다(`newlyAwarded=false`, `active=false` - 보유로 오해하지 않게 `active` 를 본다; 무엇이 원인인지를 [sourceRef] 에 적는다, 60자까지).
      * 정의가 없으면 404 `BADGE.NOT_FOUND`, 보관됐으면 409 `BADGE.ARCHIVED`. 새로 받은 경우에만 커밋 뒤 알림이 나간다.
      */
     fun award(accountId: String, code: String, sourceRef: String): BadgeHolding

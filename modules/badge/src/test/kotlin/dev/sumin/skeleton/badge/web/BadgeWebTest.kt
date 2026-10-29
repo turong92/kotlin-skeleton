@@ -59,7 +59,7 @@ class BadgeTestBeans {
 }
 
 /** 사용자 경로 - 내 배지(숨은 정의 가림 · 본인만 스위치)와 로그인 없이 읽는 프로필 배지(숨긴 것 · 받지 않은 숨은 것은 어떤 문자열로도 안 나간다) */
-@SpringBootTest(classes = [BadgeWebTestApplication::class])
+@SpringBootTest(classes = [BadgeWebTestApplication::class], properties = ["skeleton.badge.http.allow-anonymous-read=true"])
 @AutoConfigureMockMvc
 @Import(BadgeTestBeans::class)
 class BadgeUserWebTest {
@@ -158,7 +158,7 @@ class BadgeUserWebTest {
     }
 }
 
-@SpringBootTest(classes = [BadgeWebTestApplication::class], properties = ["skeleton.badge.http.allow-anonymous-read=false"])
+@SpringBootTest(classes = [BadgeWebTestApplication::class])
 @AutoConfigureMockMvc
 @Import(BadgeTestBeans::class)
 class BadgeProfileClosedWebTest {
@@ -166,7 +166,7 @@ class BadgeProfileClosedWebTest {
     @Autowired lateinit var contributors: ObjectProvider<PublicEndpointContributor>
 
     @Test
-    fun `a closed profile asks for a login and declares no public path`() {
+    fun `by default the profile asks for a login and declares no public path`() {
         mvc.perform(get("/api/v1/badges/accounts/acc_1")).andExpect(status().isUnauthorized)
         mvc.perform(get("/api/v1/badges/accounts/acc_1").principal(TestingAuthenticationToken("acc_9", "n/a", "ROLE_USER"))).andExpect(status().isOk)
         assertTrue(PublicEndpointRegistry.from(WebProperties(), contributors.orderedStream().toList()).endpoints.none { it.pattern.startsWith("/api/v1/badges") })

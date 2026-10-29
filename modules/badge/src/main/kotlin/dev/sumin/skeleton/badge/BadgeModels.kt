@@ -56,8 +56,11 @@ data class BadgeAwardEvent(
 /** 프로필 같은 공개 자리에 나가도 되는 배지의 모양 — 이 넷뿐이다 */
 data class PublicBadge(val code: String, val name: String, val description: String, val imageUrl: String?)
 
-/** 앱이 [Badges.award] 로 받는 결과. [newlyAwarded] 가 false 면 이미 가지고 있었다 */
-data class BadgeHolding(val awardId: String, val code: String, val awardedAt: Instant, val newlyAwarded: Boolean)
+/**
+ * 앱이 [Badges.award] 로 받는 결과. [newlyAwarded] 가 false 면 이번 호출이 새로 준 것이 아니다 - 이미 가지고 있었거나, 같은 원인(`sourceRef`)이 이미 처리됐다.
+ * 지금 가지고 있는지는 [active] 로 본다(같은 `sourceRef` 로 회수 뒤에 다시 불렀다면 `newlyAwarded=false`, `active=false`).
+ */
+data class BadgeHolding(val awardId: String, val code: String, val awardedAt: Instant, val newlyAwarded: Boolean, val active: Boolean)
 
 /** 내 배지 화면의 받은 것 한 개 */
 data class EarnedBadge(val award: BadgeAward, val definition: BadgeDefinition)

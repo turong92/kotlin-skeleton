@@ -13,12 +13,15 @@
 **회수**: 운영자(`badge.manage`) 또는 앱(`Badges.revoke`)만, **사유 필수**(빈 값 400). 보유 줄 `REVOKED` + 내역에 사유가 남는다. 같이 받은 포인트 · 쿠폰은 되돌리지 않는다(국룰 — 회수는 배지만).
 `Badges.holdingsOf(accountIds)` 는 앱이 자기 프로필 응답에 배지를 끼울 때 쓴다 — 지금 **프로필에 보이는**(보유 ∧ 본인이 숨기지 않은) 배지만 `sort_order` 순으로 준다(계정 일괄, 배지 없는 계정은 빈 목록).
 
-**공개 프로필(비로그인)** — `GET /api/v1/badges/accounts/{accountId}`:
-- 기본으로 **로그인 없이 읽는다**(`skeleton.badge.http.allow-anonymous-read`, 기본 `true`). `badgePublicEndpointContributor` 가 이 경로 하나만 공개로 넣는다(`GET {base}/accounts/*` 꼴, 내 배지 `me` 는 아니다). 앱은 같은 빈 이름으로 덮어쓰거나 설정으로 끈다(`false` 면 로그인이 필요하다, 401). **`board` 의 `allow-anonymous-read` 는 기본 `false` 라 기본값이 다르다.**
+**공개 프로필(앱이 열면 비로그인)** — `GET /api/v1/badges/accounts/{accountId}`:
+- 앱이 `skeleton.badge.http.allow-anonymous-read=true` 로 열면 **로그인 없이 읽는다**(**모듈 기본은 `false` - 로그인 필요, 401**; `board` 의 같은 이름 설정과 같다. 스켈레톤 기본은 옵션 없음이고 열기는 앱의 선택이다 - 견본 앱이 켠다). 열면 `badgePublicEndpointContributor` 가 이 경로 하나만 공개로 넣는다(`GET {base}/accounts/*` 꼴, 내 배지 `me` 는 아니다). 앱은 같은 빈 이름으로 덮어쓸 수 있다.
 - 응답은 `{badges: [{code, name, description, imageUrl}]}` — **이 넷뿐**이다(보유 줄 id · 정의 id · 받은 시각 · 출처 · 수여자 · 사유 · 회수 상태 · 개수를 담지 않는다). 숨긴(`visible=false`) 배지와 회수된 배지, 받지 않은 숨은 업적은 **어떤 값으로도 나가지 않는다** — 걸러 내는 것이 아니라 저장소 질의가 `ACTIVE ∧ visible` 인 줄만 읽는다.
 - 없는 계정 · 탈퇴한 계정 · 배지 없는 계정 · 전부 숨긴 계정은 모두 같은 `200 {badges: []}` — 계정이 있는지 알려 주지 않는다.
-- 속도 제한은 배지 전용 한도를 만들지 않는다. 다른 공개 읽기(`catalog` 상품 · `board` 비회원 읽기)처럼 platform `skeleton.web.rate-limit`(IP 기준, `/api/**`, 기본 꺼짐)을 따른다 — **공개로 여는 앱은 이것을 켜라**.
+- 속도 제한은 배지 전용 한도를 만들지 않는다. 다른 공개 읽기(`catalog` 상품 · `board` 비회원 읽기)처럼 platform `skeleton.web.rate-limit`(IP 기준, 기본 꺼짐)을 따른다 — **공개로 여는 앱은 이것을 켜라**(`path-pattern: /api/v1/badges/accounts/**` 로 이 경로에만 걸 수 있다; 견본 앱이 그렇게 한다).
 - **경고**: 이 경로는 주소에 계정 id 를 담는다. `author-profile`(필명 프로필) 화면에 프로필 배지를 붙이면 필명 여러 개가 같은 계정 id · 같은 배지 묶음으로 이어져 한 사람임이 드러난다 — **필명 화면에는 붙이지 말 것**.
+
+**알려진 한계**: ① 이미 가진 배지를 지급 건(보상 지급기)으로 다시 주면 보유는 그대로지만 `reward` 의 「받았어요」 알림은 한 번 더 나간다(지급 건 단위 알림이라) - 다음 판에서 다룬다. ② 수동 수여는 계정이 실제로 있는지 확인하지 않는다(`coupon` 의 수동 발급과 같다) - 없는 id 를 넣으면 쓸모없는 보유 줄이 생길 뿐이며 운영 화면의 계정 검색에서 고르는 것을 전제로 한다.
+③ `Badges.award` 가 돌려주는 `BadgeHolding` 은 `newlyAwarded`(이번 호출이 새로 줬나)와 `active`(지금 보유 중인가)가 따로다 - 회수 뒤 같은 `sourceRef` 로 다시 부르면 `newlyAwarded=false`, `active=false`.
 
 **내 배지** `GET /api/v1/badges/me`(로그인): `{earned: [{awardId, code, name, description, imageUrl, hidden, archived, visible, awardedAt}], locked: [...]}`. `locked` 는 `ACTIVE` 정의 중 못 받은 것 — **숨은 정의는 `{hidden: true}` 뿐이고 코드 · 이름 · 설명 · 그림이 모두 `null`** 이다. `PATCH /api/v1/badges/me/{awardId} {visible}` 로 프로필에 보일지 바꾼다(본인 줄만 — 남의 줄 · 회수된 줄은 404 `BADGE.NOT_FOUND`).
 
@@ -42,7 +45,7 @@
 | 함께 오는 모듈 | `platform` |
 | 컴파일 전용 | `notification` (받았어요 알림 — 클래스패스에 있을 때만 켜진다), Spring Security (경로를 등록할 때만 필요하다) |
 | 설정 접두사 | `skeleton.badge` — [docs/config/modules/badge.yml](../config/modules/badge.yml) |
-| 기본 동작 | 켜짐. 사용자 경로 켜짐(프로필 배지는 비로그인 공개), 운영자 경로 꺼짐. 보상 지급기는 저장소가 있으면 빈으로 선다. |
+| 기본 동작 | 켜짐. 사용자 경로 켜짐(프로필 배지의 비로그인 읽기는 꺼짐 - 앱이 `allow-anonymous-read` 로 연다), 운영자 경로 꺼짐. 보상 지급기는 저장소가 있으면 빈으로 선다. |
 | 부팅에 필요한 것 | 저장소 포트 `BadgeStore` — `badge-jdbc` 가 낸다. 없으면 서비스 빈이 켜지지 않는다. |
 | 교체 지점 | `BadgeStore`, `BadgeDefinitions`, `BadgeAwards`, `Badges`, `BadgeCatalog`, `BadgeNotifier`, `BadgeController`, `BadgeAdminController`, 지급기 `badgeRewardIssuer`, 공개 경로 `badgePublicEndpointContributor` |
 | 마이그레이션 | 없음 (스키마는 `badge-jdbc`) |
