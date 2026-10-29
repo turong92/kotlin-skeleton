@@ -409,12 +409,13 @@ class PaddleLedgerTest {
         val line = active()
         val before = sub(line.id)
 
-        feed(payment("txn_chg", total = PaymentAmount(1_500, "USD"), at = t0.plusSeconds(3600), price = "pri_plus", change = true))
+        feed(payment("txn_chg", total = PaymentAmount(1_500, "USD"), at = t0.plusSeconds(3600), price = "pri_plus", change = true, credit = 300))
 
         val orders = kit.store.listSubscriptionOrders(line.id, 5)
         val change = orders.single { it.kind == PaymentOrderKind.SUBSCRIPTION_CHANGE }
         assertEquals("plus", change.itemRef)
-        assertEquals(PaymentAmount(1_500, "USD"), change.amount)
+        assertEquals(PaymentAmount(1_500, "USD"), change.amount, "a change transaction total is already what was paid")
+        assertEquals(0L, change.discountAmount)
         assertEquals(PaymentOrderStatus.PAID, change.status)
         assertEquals(setOf(PaymentOrderKind.SUBSCRIPTION_INITIAL, PaymentOrderKind.SUBSCRIPTION_CHANGE), orders.map { it.kind }.toSet())
         val after = sub(line.id)

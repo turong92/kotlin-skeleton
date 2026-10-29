@@ -38,14 +38,14 @@ class PaddlePlanChangeTest {
     @Test
     fun `a billing frequency change is prorated immediately too and the period restarts, an apply patches the subscription itself`() {
         FakePaddleApi().use { api ->
-            api.on("PATCH", "/subscriptions/sub_1", 200, planChangeBody(credit = null))
+            api.on("PATCH", "/subscriptions/sub_1", 200, """{"data":{"id":"sub_1","status":"active","items":[{"price":{"id":"pri_basic"},"quantity":1}]}}""") // 실측: 적용 응답에는 금액이 없다
+            api.on("PATCH", "/subscriptions/sub_1/preview", 200, planChangeBody(credit = null))
+            val provider = gateway(api.baseUrl)
 
-            val quote = gateway(api.baseUrl).applyPlanChange(up.copy(kind = PlanChangeKind.IMMEDIATE_NEW_PERIOD))
-
-            assertThat(quote.restartsPeriod).isTrue()
-            assertThat(quote.credit).isNull()
-            assertThat(api.requests.single().path).isEqualTo("/subscriptions/sub_1")
-            assertThat(api.requests.single().body).contains("prorated_immediately")
+            assertThat(provider.previewPlanChange(up.copy(kind = PlanChangeKind.IMMEDIATE_NEW_PERIOD)).restartsPeriod).isTrue()
+            provider.applyPlanChange(up.copy(kind = PlanChangeKind.IMMEDIATE_NEW_PERIOD))
+            assertThat(api.requests.last().path).isEqualTo("/subscriptions/sub_1")
+            assertThat(api.requests.last().body).contains("prorated_immediately")
         }
     }
 
@@ -54,15 +54,14 @@ class PaddlePlanChangeTest {
         FakePaddleApi().use { api ->
             for ((method, path) in listOf("PATCH" to "/subscriptions/sub_1/preview", "PATCH" to "/subscriptions/sub_1")) {
                 api.onNext(method, path, 400, paddleError("subscription_update_transaction_balance_less_than_charge_limit"))
-                api.onNext(method, path, 200, planChangeBody(grandTotal = null, credit = null))
+                api.onNext(method, path, 200, planChangeBody(grandTotal = null, credit = null)) // 적용 응답은 본문의 금액을 읽지 않는다
             }
             val provider = gateway(api.baseUrl)
 
             val preview = provider.previewPlanChange(up)
-            val applied = provider.applyPlanChange(up)
+            provider.applyPlanChange(up)
 
             assertThat(preview.charge).isEqualTo(PaymentAmount(0, "USD"))
-            assertThat(applied.charge).isEqualTo(PaymentAmount(0, "USD"))
             assertThat(api.requests.map { it.body.contains("do_not_bill") }).containsExactly(false, true, false, true)
         }
     }

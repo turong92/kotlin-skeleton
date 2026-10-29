@@ -127,7 +127,8 @@ class SubscriptionPlanChanges(
         if (before.planCode == planCode) return before
         val hosted = hosted(before, planCode)
         if (hosted.quote.charge.amount > expectedCharge) throw PaymentPlanChangeChargeChangedException()
-        val applied = hosted.gateway.applyPlanChange(hosted.change)
+        hosted.gateway.applyPlanChange(hosted.change)
+        val applied = hosted.answer
         val target = hosted.quote.plan
         return store.inTransaction { tx ->
             val locked = tx.lockSubscription(before.id) ?: throw PaymentSubscriptionNotFoundException()
@@ -147,7 +148,7 @@ class SubscriptionPlanChanges(
         }
     }
 
-    private class Hosted(val quote: PlanChangeQuote, val gateway: PaymentHostedPlanChangeGateway, val change: HostedPlanChange)
+    private class Hosted(val quote: PlanChangeQuote, val answer: HostedPlanChangeQuote, val gateway: PaymentHostedPlanChangeGateway, val change: HostedPlanChange)
 
     /** 결제사에 변경 견적을 묻는다 - 금액 · 통화는 결제사가 말한 그대로이고, 견적의 플랜 금액([PlanChangeQuote.plan])은 앞으로 갱신마다 내는 금액이다. */
     private fun hosted(subscription: PaymentSubscription, planCode: String): Hosted {
@@ -156,7 +157,7 @@ class SubscriptionPlanChanges(
         val change = HostedPlanChange(checkNotNull(subscription.providerSubscriptionId) { "a provider managed line has a provider subscription id" }, checked.target.code, checked.kind)
         val answer = gateway.previewPlanChange(change)
         val quote = PlanChangeQuote(checked.target.copy(amount = answer.recurring), answer.charge, answer.restartsPeriod, checked.kind, effectiveAt = writer.now(), credit = answer.credit)
-        return Hosted(quote, gateway, change)
+        return Hosted(quote, answer, gateway, change)
     }
 
     private fun hostedGateway(subscription: PaymentSubscription): PaymentHostedPlanChangeGateway =

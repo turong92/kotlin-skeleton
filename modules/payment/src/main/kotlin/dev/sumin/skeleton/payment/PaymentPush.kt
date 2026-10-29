@@ -154,8 +154,8 @@ interface PaymentHostedPlanChangeGateway : PaymentGateway {
     /** 적용하지 않고 견적만 낸다. */
     fun previewPlanChange(change: HostedPlanChange): HostedPlanChangeQuote
 
-    /** 적용한다 - 결제가 필요하면 결제까지 끝낸 뒤 돌아온다. */
-    fun applyPlanChange(change: HostedPlanChange): HostedPlanChangeQuote
+    /** 적용한다 - 결제가 필요하면 결제까지 끝낸 뒤 돌아온다. 금액 · 기간은 돌려주지 않는다(적용 응답에는 없다) - 직전 [previewPlanChange] 의 견적을 쓴다. */
+    fun applyPlanChange(change: HostedPlanChange)
 }
 
 /** [targetItemRef] 는 우리 플랜 코드 - 결제사 가격은 결제사 모듈이 정한다. */

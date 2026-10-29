@@ -338,15 +338,17 @@ class PaddlePaymentProvider(
 
     // --- 플랜 바꾸기 ---
 
-    override fun previewPlanChange(change: HostedPlanChange): HostedPlanChangeQuote = planChange(change, apply = false)
+    override fun previewPlanChange(change: HostedPlanChange): HostedPlanChangeQuote = checkNotNull(planChange(change, apply = false))
 
-    override fun applyPlanChange(change: HostedPlanChange): HostedPlanChangeQuote = planChange(change, apply = true)
+    override fun applyPlanChange(change: HostedPlanChange) {
+        planChange(change, apply = true)
+    }
 
     /**
      * 구독의 품목을 대상 가격 하나로 바꾼다(`PATCH /subscriptions/{id}`, 미리보기는 `…/preview`). 올리기만 하므로 청구 방식은 늘 `prorated_immediately` 이고 `on_payment_failure` 는 보내지 않는다(기본 `prevent_change`).
      * Paddle 최소 금액 미만이면 같은 호출을 `do_not_bill`(과금 없이 바꾸기)로 한 번 더 한다. 거절된 결제는 [PaymentDeclinedException], 막히는 때는 [PaymentPlanChangeNotAllowedException], 그 밖은 [PaymentProviderException] 그대로(5xx · 시간 초과는 모름).
      */
-    private fun planChange(change: HostedPlanChange, apply: Boolean): HostedPlanChangeQuote {
+    private fun planChange(change: HostedPlanChange, apply: Boolean): HostedPlanChangeQuote? {
         val price = priceIdOf(change.targetItemRef) ?: throw PaymentUnavailableException()
         val response = try {
             try {
@@ -363,6 +365,7 @@ class PaddlePaymentProvider(
             }
         }
         val data = read(response)?.get("data") ?: throw unreadable()
+        if (apply) return null // 적용 응답에는 금액 · 기간이 없다(실측) - 호출자는 직전 미리보기의 견적을 쓴다
         val currency = data.text("currency_code")?.uppercase() ?: throw unreadable()
         fun money(node: JsonNode?, name: String) = node.text(name)?.toLongOrNull()
         val period = data["current_billing_period"]

@@ -154,7 +154,8 @@ class PaymentPushedEvents(
     /** 플랜 변경으로 생긴 거래 - 주문 한 줄만 남긴다. 구독의 금액 · 주기 · 기간 · 상태는 갱신과 구독 사건이 정하고 이 거래는 정하지 않는다(일할 결제액이 정기 금액을 덮으면 안 된다). */
     private fun applyChange(tx: PaymentLedgerTx, gateway: PaymentPushGateway, lifecycle: SubscriptionLifecycle, subscription: PaymentSubscription, event: PushedPayment): String? {
         val planCode = event.items.singleOrNull()?.let { gateway.itemRefOf(it.priceId) } ?: subscription.planCode
-        val order = paidOrder(lifecycle, subscription, event).copy(kind = PaymentOrderKind.SUBSCRIPTION_CHANGE, itemRef = planCode)
+        // 변경 거래의 total 은 이미 크레딧을 뺀 실제로 낸 돈이다(실측) - 크레딧 규칙은 갱신 결제용이다
+        val order = paidOrder(lifecycle, subscription, event.copy(credit = null)).copy(kind = PaymentOrderKind.SUBSCRIPTION_CHANGE, itemRef = planCode)
         if (!tx.insertOrderIfAbsent(order)) return null
         tx.appendEvent(writer.event(order.id, PaymentEventType.CONVERGED, PaymentActor.PROVIDER, providerCode = WEBHOOK, to = PaymentOrderStatus.PAID))
         tasks.enqueue(PaymentTask(PaymentTaskTypes.ORDER_FULFIL, order.id))

@@ -28,10 +28,10 @@ class FakeHostedPushGateway(providerId: String = "paddle", mode: PaymentMode = P
         return quote
     }
 
-    override fun applyPlanChange(change: HostedPlanChange): HostedPlanChangeQuote {
+    override fun applyPlanChange(change: HostedPlanChange) {
         applies += change
-        return when (apply) {
-            Apply.APPLIED -> quote
+        when (apply) {
+            Apply.APPLIED -> Unit
             Apply.DECLINED -> throw PaymentDeclinedException("subscription_payment_declined")
             Apply.NOT_ALLOWED -> throw PaymentPlanChangeNotAllowedException()
             Apply.UNKNOWN -> throw IllegalStateException("planted timeout")
