@@ -215,6 +215,9 @@ class CouponAdminWebTest {
         mvc.perform(get("/api/v1/admin/coupon-definitions/$id/coupons?size=4&cursor=cpn_3").principal(operator))
             .andExpect(jsonPath("$.values.length()").value(2)).andExpect(jsonPath("$.cursor.hasNext").value(false))
         mvc.perform(get("/api/v1/admin/coupon-definitions/$id/coupons?status=used").principal(operator))
+            .andExpect(jsonPath("$.values[0].accountLabel").doesNotExist())   // account.read 가 없는 운영자에게는 이메일이 나가지 않는다
+        CouponTestBeans.GRANTS["acc_op"] = setOf("coupon.manage", "account.read")
+        mvc.perform(get("/api/v1/admin/coupon-definitions/$id/coupons?status=used").principal(operator))
             .andExpect(jsonPath("$.values.length()").value(2))
             .andExpect(jsonPath("$.values[0].orderRef").value("ord_5"))
             .andExpect(jsonPath("$.values[0].usedAt").exists())

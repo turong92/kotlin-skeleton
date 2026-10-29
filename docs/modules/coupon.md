@@ -46,7 +46,7 @@
 | `POST /api/v1/admin/coupon-definitions` | 정의 만들기 → 201 정의 (`value.id`). 본문 `issueStartsAt` · `issueEndsAt` · `validFrom` 선택 |
 | `PATCH /api/v1/admin/coupon-definitions/{id}/status {status}` | 상태 바꾸기 |
 | `GET /api/v1/admin/coupon-definitions/{id}/stats` | 현황 `{issued, available, reserved, used, expired, revoked, discountTotals: [{currency, amount}]}`. 없는 정의 404 `DEFINITION_NOT_FOUND` |
-| `GET /api/v1/admin/coupon-definitions/{id}/coupons?status&cursor&size` | 이 정의로 발급된 쿠폰, 새것부터 커서(`size` 기본 50, 최대 200). `{id, accountId, accountLabel, status, issuedAt, expiresAt, usableFrom, usedAt, orderRef}` - `accountLabel` 은 사람이 알아볼 계정 이름(이메일, 없으면 아이디; `account` 가 내는 `AccountLabels` 빈이 없거나 지워진 계정이면 null - 화면은 `accountId` 를 보인다). `orderRef` 는 쥐고 있거나(`RESERVED`) 쓴(`USED`) 주문. `status` 는 지금 시각으로 읽은 상태(`EXPIRED` 는 기한 지난 `AVAILABLE` 포함) |
+| `GET /api/v1/admin/coupon-definitions/{id}/coupons?status&cursor&size` | 이 정의로 발급된 쿠폰, 새것부터 커서(`size` 기본 50, 최대 200). `{id, accountId, accountLabel, status, issuedAt, expiresAt, usableFrom, usedAt, orderRef}` - `accountLabel` 은 사람이 알아볼 계정 이름(이메일, 없으면 아이디; 운영자가 `account.read` 도 가질 때만 채우고, `account` 가 내는 `AccountLabels` 빈이 없거나 지워진 계정이면 null - 화면은 `accountId` 를 보인다). `orderRef` 는 쥐고 있거나(`RESERVED`) 쓴(`USED`) 주문. `status` 는 지금 시각으로 읽은 상태(`EXPIRED` 는 기한 지난 `AVAILABLE` 포함) |
 | `POST /api/v1/admin/coupon-definitions/{id}/issue {accountIds}` | 계정마다 한 장 → `{issued[], skipped[]}`(한도에 막힌 계정은 건너뜀, 발급 중이 아니면 409 `DEFINITION_NOT_ACTIVE`, 발행 기간 밖이면 409 `ISSUE_CLOSED`). 운영 기록 `coupon.issued` |
 | `POST /api/v1/admin/coupon-definitions/{id}/codes {code?, maxRedemptions?, expiresAt?}` | 공용 코드 → 201 `{code}` (본문 생략 가능) |
 | `GET /api/v1/admin/coupons?accountId=` | 한 계정의 쿠폰 전부(사용자 쿠폰 꼴 + `accountId` · `definitionId`) |

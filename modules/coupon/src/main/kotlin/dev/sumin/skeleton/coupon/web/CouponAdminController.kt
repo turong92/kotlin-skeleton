@@ -36,6 +36,9 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 
+/** `account` 모듈의 권한 이름 - 이 모듈은 `account` 를 모르니 문자열로만 안다 */
+private const val ACCOUNT_READ = "account.read"
+
 data class StageRequest(val type: String? = null, val value: Long? = null, val maxDiscount: Long? = null, val periods: Int? = null)
 
 data class ScopeRequest(
@@ -137,13 +140,14 @@ class CouponAdminController(
         @RequestParam(required = false) cursor: String?,
         @RequestParam(required = false) size: Int?,
     ): CursorResponse<IssuedCouponResponse> {
-        operator(authentication)
+        val operator = operator(authentication)
         val wanted = status?.takeIf { it.isNotBlank() }?.let { raw ->
             CouponStatus.entries.firstOrNull { it.name == raw.trim().uppercase() }
                 ?: throw ApplicationException("Unknown status '$raw'", PlatformErrorCode.PARAMETER_VALIDATION_FAILED)
         }
         val page = reports.coupons(id, wanted, cursor?.takeIf { it.isNotBlank() }, size ?: CouponReports.DEFAULT_SIZE)
-        val names = labels?.of(page.items.map { it.coupon.accountId }) ?: emptyMap()
+        // 이메일 · 아이디는 계정을 찾고 보는 일이라 `account.read` 도 있는 운영자에게만 - 없으면 id 만 나간다
+        val names = labels?.takeIf { access.has(operator, ACCOUNT_READ) }?.of(page.items.map { it.coupon.accountId }) ?: emptyMap()
         return Response.ok(page.items.map { it.toIssuedResponse(names[it.coupon.accountId]) }, nextCursor = page.nextCursor)
     }
 
