@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 배지 · 업적 (2026-10-29)
+
+- `badge` + `badge-jdbc` (새 모듈): 배지 정의(코드 · 이름 · 설명 · 그림 주소 · 숨김 · 순서) · 계정당 한 번의 수여/회수(회수는 사유 필수, 내역은 덧붙이기만) · 내 배지 · 프로필 배지 · 보상 지급기 `badge` · 앱이 부르는 `Badges`(`award` · `revoke` · `holdingsOf`) · 운영자 경로(`skeleton.badge.admin.enabled`, `badge.manage`). `GET /api/v1/badges/accounts/{accountId}` 는 **로그인 없이 읽는다**(`skeleton.badge.http.allow-anonymous-read` 기본 `true`, `board` 의 같은 이름 설정은 기본 `false`) - 응답은 `code · name · description · imageUrl` 넷뿐이고 숨긴 배지 · 받지 않은 숨은 배지는 나가지 않는다. 마이그레이션 `V20261029100000__badges`. `reward` · `coupon` · `point` · `campaign` 에 의존하지 않는다. 문서 `docs/modules/badge.md`.
+- `campaign` + `campaign-jdbc`: 이벤트 종류 `achievement`(앱이 `CampaignSignals.report(accountId, metric, value)` 로 현재 값을 보고하면 값 이하의 모든 단계 보상을 기록, 같은 단계는 한 번) · 수치 표 `campaign_progress`(마이그레이션 `V20261029110000__campaign_progress`, 쓰기는 `max(기존, 새 값)`). 기존 이벤트 종류 · 응답 모양은 그대로.
+- `apps/sample`: `badge-jdbc` 조립 · 씨앗(`BadgesSeed`) · `NoteService.create` 가 노트 개수를 보고. `apps/workbench` 에 `badge-jdbc` 추가. 문서 `docs/sample.md` 「배지 · 업적」.
+
 ### 쿠폰 발급 내역의 계정 이름 (2026-10-29)
 
 - `platform` + `account` + `coupon`: 계약 `common/account` `AccountLabels`(계정 id → 이메일, 없으면 아이디) - `account` 가 기본 빈으로 낸다. `GET /api/v1/admin/coupon-definitions/{id}/coupons` 의 각 줄에 `accountLabel`(더하기만, 이름을 낼 수 없으면 null). 빈이 없는 조립은 그대로 동작한다.

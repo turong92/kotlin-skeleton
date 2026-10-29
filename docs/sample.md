@@ -165,6 +165,19 @@ local 프로필은 주문 만들기 한도(기본 계정당 10 / 10분)를 풀�
 
 **씨앗**(`local` 프로필만, 이름으로 찾아 없는 것만 만든다 — `RewardsSeed`): 쿠폰 정의 「1,000원 할인」 · 「응원 30%」(최대 5,000원) · 「무료 이용권」 · 「첫 달 무료 + 3달 50%」(구독용), 공용 코드 `WELCOME`(→ 응원 30%), 출석 이벤트(매일 10포인트, 누적 3일 「1,000원 할인」), 친구초대 이벤트(초대받은 사람 「응원 30%」, 초대자 500포인트는 그 친구의 첫 응원 결제 때). 포인트 유효기간 · 초대자 보상 시점은 스켈레톤 기본이 아니라 **이 앱의 선택**이다. 시험: `RewardsFlowIntegrationTest`(진짜 PostgreSQL · 보안 체인 · 큐 일꾼, 가짜 결제사).
 
+## 배지 · 업적
+
+한 줄(`badge-jdbc`)과 이 앱의 작은 조각 `badges/BadgesSeed`, 그리고 `NoteService.create` 의 한 줄(`CampaignSignals.report(owner, "notes.created", 노트 개수)`)이 전부다. 흐름: 노트 저장 뒤 **앱이 자기 개수를 세어 현재 값을 보고**(같은 트랜잭션) → 업적 이벤트(`campaign` 종류 `achievement`)가 값에 닿은 단계마다 지급 건을 기록 → 일꾼이 지급기 `badge`(와 같은 단계의 `point`)로 준다 → 「받았어요」 알림(`reward`).
+배지와 포인트를 같이 주는 것은 배지 모듈이 아니라 **이벤트 설정의 보상 목록에 나란히 적은 조립**이다 - `badge` 는 `reward` · `coupon` · `point` 를 모른다.
+
+| 경로 | 하는 일 |
+|---|---|
+| `GET /api/v1/badges/me` · `PATCH /api/v1/badges/me/{awardId} {visible}` | 내 배지(받은 것 · 아직인 것, 숨은 배지는 「?」) · 프로필에 보일지 |
+| `GET /api/v1/badges/accounts/{accountId}` | 그 계정의 프로필 배지 - **로그인 없이** 읽는다(`code · name · description · imageUrl` 넷뿐, 숨긴 배지 · 없는 계정은 빈 목록). **필명 프로필(`author-profile`) 화면에는 붙이지 않는다** - 주소의 계정 id 로 필명이 한 사람으로 이어진다. 공개로 여는 앱은 `skeleton.web.rate-limit` 을 켠다 |
+| `/api/v1/admin/badges` · `/badge-awards` | 정의 · 수동 수여 · 회수(사유 필수) · 내역 - 이 앱이 `skeleton.badge.admin.enabled: true` 로 켠다(`badge.manage`, ADMIN 전권만) |
+
+**씨앗**(`local` 프로필만, 코드로 찾아 없는 것만 만든다 - `BadgesSeed`): 배지 「첫 노트」 · 「노트 10개」 · 「얼리 버드」 · 숨은 「비밀 손님」, 업적 이벤트 「노트 업적」(수치 `notes.created`: 1 → 첫 노트, 10 → 노트 10개 + 100포인트). 「얼리 버드」 · 「비밀 손님」은 운영자 수동 수여로 시연한다. 시험: `badges/BadgesFlowIntegrationTest`.
+
 ## 구독 — 플랜과 자동결제 (`/api/v1/payments/subscriptions`)
 
 `payment` 의 구독(`docs/modules/payment.md` 「구독」)을 이 앱이 켠다. 플랜은 코드가 아니라 `catalog` 의 표가 낸다 - 씨앗 `catalog/CatalogSeed`(모든 프로필, 없는 코드만): basic 3,900 · standard 6,900 · pro 9,900원(월, 코드 `basic` · `standard` · `pro`)과 연 39,000 · 69,000 · 99,000원(`*-yearly`), 달러 월 $3 · $5 · $8 · 연 $30 · $50 · $80(`*-usd` · `*-yearly-usd`). 운영자가 화면에서 가격을 더하고 행사가를 붙인다(`/api/v1/admin/catalog`, 권한 `catalog.manage`). 방문 나라가 통화를 정한다(KR → 토스 → KRW, 그 밖 → Paddle → USD, `skeleton.payment.routing.provider-currencies`). `catalog/SampleCatalog` 가 `PaymentCatalog` 하나로 응원하기와 표의 단건을 `itemType` 으로 잇는다. 주기는 `skeleton.sample.subscription.period` · `yearly-period`. 코드는 `subscription/SubscriptionConfiguration.kt` 한 빈 — `SubscriptionRenewalGuard`(정상 `ACTIVE` 계정만 갱신 — 정지 · 삭제 유예 · 없는 계정은 그 기간 끝에 구독이 끝난다).

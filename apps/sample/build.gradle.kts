@@ -48,6 +48,7 @@ dependencies {
     implementation(project(":modules:reward-jdbc"))        // 보상 지급의 허리: 이벤트가 기록한 지급 건을 일꾼이 지급기(쿠폰 · 포인트)로 준다 (+ reward: /api/v1/admin/reward-grants) - docs/modules/reward.md
     implementation(project(":modules:catalog-jdbc"))        // 상품 · 가격 표(월 · 연 · 통화별)와 결제 계약 구현 - docs/modules/catalog.md
     implementation(project(":modules:coupon-jdbc"))        // 쿠폰: 단계 목록 정의 · 쿠폰함 · 공용 코드, 결제 할인 수단 (+ coupon: /api/v1/coupons) - docs/modules/coupon.md
+    implementation(project(":modules:badge-jdbc"))         // 배지: 정의 · 수여/회수 · 내 배지 · 프로필 배지(비로그인 공개), 보상 지급기 `badge` (+ badge: /api/v1/badges). 노트 개수 업적 - notes/NoteService, docs/modules/badge.md
     implementation(project(":modules:point-jdbc"))         // 포인트: 적립 · 차감 · 소멸 (+ point: /api/v1/points) - docs/modules/point.md
     implementation(project(":modules:campaign-jdbc"))      // 이벤트: 출석 · 친구초대 (+ campaign: /api/v1/campaigns). 첫 응원 결제가 초대자 보상을 연다 - cheer/CheerOrderListener, docs/modules/campaign.md
     implementation(project(":modules:alert-jdbc"))         // 주인 경보 (+ alert) — 5xx 몰림 · 죽은 작업을 Discord 웹훅으로. 웹훅 주소가 없으면 아무것도 안 보낸다

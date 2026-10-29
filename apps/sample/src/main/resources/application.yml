@@ -231,7 +231,7 @@ skeleton:
     retention:
       enabled: true   # 이 앱의 선택: 보관 기한(기본 90일)이 지난 알림을 지운다 (모듈 기본은 꺼짐 - 보관 정책은 앱이 정한다). scheduler 모듈이 주기를 돈다
     preferences:
-      types: [NOTE_UPDATED, comment.created, comment.replied, reward.granted]   # 이 앱의 선택: 설정 화면에서 끌 수 있는 알림 종류 (이 밖의 알림은 끌 수 없다)
+      types: [NOTE_UPDATED, comment.created, comment.replied, reward.granted, badge.awarded]   # 이 앱의 선택: 설정 화면에서 끌 수 있는 알림 종류 (이 밖의 알림은 끌 수 없다)
     sse:
       heartbeat: 15s  # 이 앱의 선택: 연결이 조용해도 프록시가 끊지 않게 15초마다 주석 한 줄 (짝 웹 클라이언트 idleTimeoutMs 는 45초)
   # 이벤트 · 보상 - 운영 경로는 모듈 기본대로 꺼져 있고 이 앱이 켠다(권한 campaign.manage · coupon.manage · point.manage · reward.operate 는 기본 역할 없이 ADMIN 전권만 - 역할 관리에서 나눠 준다)
@@ -253,6 +253,9 @@ skeleton:
   point:
     admin:
       enabled: true
+  badge:
+    admin:
+      enabled: true   # 이 앱의 선택: 운영 경로(정의 · 수동 수여 · 회수 · 내역, 권한 badge.manage 는 기본 역할 없이 ADMIN 전권만). 프로필 배지의 비로그인 읽기는 모듈 기본(켜짐)을 따른다 - 속도 제한은 skeleton.web.rate-limit
   reward:
     admin:
       enabled: true

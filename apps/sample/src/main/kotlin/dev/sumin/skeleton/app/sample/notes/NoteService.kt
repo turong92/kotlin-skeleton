@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.app.sample.notes
 
+import dev.sumin.skeleton.campaign.CampaignSignals
 import dev.sumin.skeleton.common.PageQuery
 import dev.sumin.skeleton.common.id.SortableIds
 import dev.sumin.skeleton.jobqueue.jdbc.JobQueue
@@ -30,8 +31,14 @@ class NoteService(
     private val storage: ObjectProvider<ObjectStorage>,
     private val jdbc: JdbcClient,
     private val json: ObjectMapper,
+    private val signals: CampaignSignals,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
+
+    companion object {
+        /** 업적 이벤트(`achievement`)의 `metric` - 씨앗 [dev.sumin.skeleton.app.sample.badges.BadgesSeed] 가 이 이름으로 이벤트를 만든다 */
+        const val NOTES_CREATED = "notes.created"
+    }
 
     @Transactional
     fun create(owner: String, request: CreateNoteRequest): Note {
@@ -39,6 +46,8 @@ class NoteService(
             Note(id = SortableIds.system.newUuid(), fresh = true, ownerId = owner, title = request.title.trim(), body = request.body, status = request.status, pinned = request.pinned),
         )
         notifier.created(saved)
+        // 업적 수치: 저장 뒤 자기 개수를 세어 현재 값을 보고한다(같은 트랜잭션 - 노트가 롤백되면 보고도 사라진다). 이벤트가 없으면 수치만 쌓인다
+        signals.report(owner, NOTES_CREATED, notes.countMatching(owner, null, null, null))
         return saved
     }
 
