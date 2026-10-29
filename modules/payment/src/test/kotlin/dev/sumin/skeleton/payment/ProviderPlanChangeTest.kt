@@ -56,6 +56,8 @@ class ProviderPlanChangeTest {
         val line = active()
         val moved = t0.plusSeconds(86400)
         push.quote = push.quote.copy(periodStart = moved, periodEnd = moved.plusSeconds(31 * 86400), restartsPeriod = true)
+        val reportedStart = moved.plusSeconds(5) // 적용 응답의 새 기간이 있으면 그것이 장부 기간이다(견적과 수 초 다르다)
+        push.appliedPeriod = HostedPlanApplied(reportedStart, reportedStart.plusSeconds(31 * 86400))
 
         val preview = kit.planChanges.preview("acc_1", line.id, "plus")
         assertEquals(PaymentAmount(500, "USD"), preview.charge)
@@ -69,9 +71,9 @@ class ProviderPlanChangeTest {
         assertEquals(HostedPlanChange("psub_1", "plus", PlanChangeKind.IMMEDIATE_SAME_PERIOD), push.applies.single())
         assertEquals("plus", changed.planCode)
         assertEquals(PaymentAmount(1_990, "USD"), changed.amount)
-        assertEquals(moved, changed.currentPeriodStart)
+        assertEquals(reportedStart, changed.currentPeriodStart)
         assertEquals(line.periodSeq + 1, changed.periodSeq)
-        feed(PushedSubscription("evt_${++seq}", t0.plusSeconds(86401), "psub_1", PushedSubscriptionStatus.ACTIVE, periodStart = moved, periodEnd = moved.plusSeconds(31 * 86400)))
+        feed(PushedSubscription("evt_${++seq}", t0.plusSeconds(86401), "psub_1", PushedSubscriptionStatus.ACTIVE, periodStart = reportedStart, periodEnd = reportedStart.plusSeconds(31 * 86400)))
         assertEquals(changed.periodSeq, sub(line.id).periodSeq, "the webhook for the same period does not count it again")
     }
 
@@ -114,8 +116,11 @@ class ProviderPlanChangeTest {
         assertFailsWith<IllegalStateException> { change(line.id, expected = 500) }
         assertEquals("basic", sub(line.id).planCode)
 
-        feed(PushedSubscription("evt_${++seq}", t0.plusSeconds(60), "psub_1", PushedSubscriptionStatus.ACTIVE, items = listOf(PushedItem("pri_plus", 1))))
+        val newStart = t0.plusSeconds(60)
+        feed(PushedSubscription("evt_${++seq}", newStart, "psub_1", PushedSubscriptionStatus.ACTIVE, periodStart = newStart, periodEnd = newStart.plusSeconds(365 * 86400), items = listOf(PushedItem("pri_plus", 1))))
         assertEquals("plus", sub(line.id).planCode)
+        assertEquals(newStart, sub(line.id).currentPeriodStart, "the webhook also brings the new provider period")
+        assertEquals(line.periodSeq + 1, sub(line.id).periodSeq)
     }
 
     @Test

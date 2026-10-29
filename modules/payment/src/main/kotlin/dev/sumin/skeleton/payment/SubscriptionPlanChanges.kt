@@ -127,16 +127,18 @@ class SubscriptionPlanChanges(
         if (before.planCode == planCode) return before
         val hosted = hosted(before, planCode)
         if (hosted.quote.charge.amount > expectedCharge) throw PaymentPlanChangeChargeChangedException()
-        hosted.gateway.applyPlanChange(hosted.change)
+        val reported = hosted.gateway.applyPlanChange(hosted.change)
         val applied = hosted.answer
+        val newStart = reported.periodStart.takeIf { reported.periodEnd != null } ?: applied.periodStart
+        val newEnd = reported.periodEnd.takeIf { reported.periodStart != null } ?: applied.periodEnd
         val target = hosted.quote.plan
         return store.inTransaction { tx ->
             val locked = tx.lockSubscription(before.id) ?: throw PaymentSubscriptionNotFoundException()
             if (locked.planCode == target.code || locked.status == SubscriptionStatus.ENDED) return@inTransaction locked // 웹훅이 먼저 맞췄거나 그 사이 끝났다
             lifecycle.save(tx, locked, locked.status) { line ->
                 val switched = lifecycle.switched(line, target.code, applied.recurring.amount, target.period)
-                val start = applied.periodStart
-                val end = applied.periodEnd
+                val start = newStart
+                val end = newEnd
                 if (start == null || end == null) {
                     switched
                 } else {

@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.payment.testing
 
 import dev.sumin.skeleton.payment.HostedPlanChange
+import dev.sumin.skeleton.payment.HostedPlanApplied
 import dev.sumin.skeleton.payment.HostedPlanChangeQuote
 import dev.sumin.skeleton.payment.PaymentAmount
 import dev.sumin.skeleton.payment.PaymentDeclinedException
@@ -28,10 +29,14 @@ class FakeHostedPushGateway(providerId: String = "paddle", mode: PaymentMode = P
         return quote
     }
 
-    override fun applyPlanChange(change: HostedPlanChange) {
+    /** 적용 응답이 싣는 새 기간 - 기본은 싣지 않는다. */
+    @Volatile
+    var appliedPeriod = HostedPlanApplied()
+
+    override fun applyPlanChange(change: HostedPlanChange): HostedPlanApplied {
         applies += change
-        when (apply) {
-            Apply.APPLIED -> Unit
+        return when (apply) {
+            Apply.APPLIED -> appliedPeriod
             Apply.DECLINED -> throw PaymentDeclinedException("subscription_payment_declined")
             Apply.NOT_ALLOWED -> throw PaymentPlanChangeNotAllowedException()
             Apply.UNKNOWN -> throw IllegalStateException("planted timeout")

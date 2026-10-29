@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.payment.paddle
 
+import dev.sumin.skeleton.payment.HostedPlanApplied
 import dev.sumin.skeleton.payment.HostedPlanChange
 import dev.sumin.skeleton.payment.PaymentAmount
 import dev.sumin.skeleton.payment.PaymentDeclinedException
@@ -104,7 +105,10 @@ class PaddlePlanChangeTest {
         FakePaddleApi().use { api ->
             val provider = gateway(api.baseUrl)
             api.on("PATCH", "/subscriptions/sub_1", 200, """{"data":{"id":"sub_1","status":"active","currency_code":"USD","items":[{"price":{"id":"pri_basic"},"quantity":1}],"immediate_transaction":null,"next_transaction":null,"update_summary":null,"recurring_transaction_details":null}}""")
-            provider.applyPlanChange(up)
+            assertThat(provider.applyPlanChange(up)).isEqualTo(HostedPlanApplied())
+
+            api.on("PATCH", "/subscriptions/sub_1", 200, """{"data":{"id":"sub_1","current_billing_period":{"starts_at":"2026-10-29T02:00:00Z","ends_at":"2027-10-29T02:00:00Z"},"items":[{"price":{"id":"pri_basic"},"quantity":1}]}}""")
+            assertThat(provider.applyPlanChange(up)).isEqualTo(HostedPlanApplied(Instant.parse("2026-10-29T02:00:00Z"), Instant.parse("2027-10-29T02:00:00Z")))
 
             api.on("PATCH", "/subscriptions/sub_1", 200, """{"data":{"id":"sub_1","items":[{"price":{"id":"pri_cheer"},"quantity":1}]}}""")
             assertThatThrownBy { provider.applyPlanChange(up) }.isInstanceOf(PaymentProviderException::class.java)

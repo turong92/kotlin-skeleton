@@ -6,6 +6,7 @@ import dev.sumin.skeleton.payment.BillingSetup
 import dev.sumin.skeleton.payment.PaymentBuyerCountryGateway
 import dev.sumin.skeleton.payment.CheckoutInstruction
 import dev.sumin.skeleton.payment.CheckoutOrder
+import dev.sumin.skeleton.payment.HostedPlanApplied
 import dev.sumin.skeleton.payment.HostedPlanChange
 import dev.sumin.skeleton.payment.HostedPlanChangeQuote
 import dev.sumin.skeleton.payment.HostedSubscriptionRequest
@@ -338,17 +339,35 @@ class PaddlePaymentProvider(
 
     // --- 플랜 바꾸기 ---
 
-    override fun previewPlanChange(change: HostedPlanChange): HostedPlanChangeQuote = checkNotNull(planChange(change, apply = false))
+    override fun previewPlanChange(change: HostedPlanChange): HostedPlanChangeQuote {
+        val data = planChange(change, apply = false)
+        val currency = data.text("currency_code")?.uppercase() ?: throw unreadable()
+        fun money(node: JsonNode?, name: String) = node.text(name)?.toLongOrNull()
+        val period = data["current_billing_period"]
+        return HostedPlanChangeQuote(
+            charge = PaymentAmount(money(data["immediate_transaction"]?.get("details")?.get("totals"), "grand_total") ?: 0, currency),
+            credit = money(data["update_summary"]?.get("credit"), "amount")?.let { kotlin.math.abs(it) }?.takeIf { it > 0 }?.let { PaymentAmount(it, currency) },
+            recurring = PaymentAmount(money(data["recurring_transaction_details"]?.get("totals"), "total") ?: throw unreadable(), currency),
+            periodStart = period.text("starts_at")?.let(Instant::parse),
+            periodEnd = period.text("ends_at")?.let(Instant::parse),
+            restartsPeriod = change.kind == PlanChangeKind.IMMEDIATE_NEW_PERIOD,
+        )
+    }
 
-    override fun applyPlanChange(change: HostedPlanChange) {
-        planChange(change, apply = true)
+    /** 적용 응답에는 금액이 없다(실측: immediate_transaction · next_transaction · update_summary 가 null) - 품목만 믿고, 새 기간(`current_billing_period`)이 있으면 돌려준다. 금액은 호출자가 직전 미리보기의 견적을 쓴다. */
+    override fun applyPlanChange(change: HostedPlanChange): HostedPlanApplied {
+        val data = planChange(change, apply = true)
+        val prices = itemsOf(data).map { it.priceId }
+        if (prices.isNotEmpty() && prices != listOf(priceIdOf(change.targetItemRef))) throw unreadable()
+        val period = data["current_billing_period"]
+        return HostedPlanApplied(period.text("starts_at")?.let(Instant::parse), period.text("ends_at")?.let(Instant::parse))
     }
 
     /**
-     * 구독의 품목을 대상 가격 하나로 바꾼다(`PATCH /subscriptions/{id}`, 미리보기는 `…/preview`). 올리기만 하므로 청구 방식은 늘 `prorated_immediately` 이고 `on_payment_failure` 는 보내지 않는다(기본 `prevent_change`).
+     * 구독의 품목을 대상 가격 하나로 바꾼다(`PATCH /subscriptions/{id}`, 미리보기는 `…/preview`) - 답의 `data`. 올리기만 하므로 청구 방식은 늘 `prorated_immediately` 이고 `on_payment_failure` 는 보내지 않는다(기본 `prevent_change`).
      * Paddle 최소 금액 미만이면 같은 호출을 `do_not_bill`(과금 없이 바꾸기)로 한 번 더 한다. 거절된 결제는 [PaymentDeclinedException], 막히는 때는 [PaymentPlanChangeNotAllowedException], 그 밖은 [PaymentProviderException] 그대로(5xx · 시간 초과는 모름).
      */
-    private fun planChange(change: HostedPlanChange, apply: Boolean): HostedPlanChangeQuote? {
+    private fun planChange(change: HostedPlanChange, apply: Boolean): JsonNode {
         val price = priceIdOf(change.targetItemRef) ?: throw PaymentUnavailableException()
         val response = try {
             try {
@@ -364,24 +383,7 @@ class PaddlePaymentProvider(
                 else -> throw e
             }
         }
-        val data = read(response)?.get("data") ?: throw unreadable()
-        if (apply) {
-            // 적용 응답에는 금액 · 기간이 없다(실측: immediate_transaction · next_transaction · update_summary 가 null) - 품목만 믿고, 금액 · 기간은 호출자가 직전 미리보기의 견적을 쓴다
-            val prices = itemsOf(data).map { it.priceId }
-            if (prices.isNotEmpty() && prices != listOf(price)) throw unreadable()
-            return null
-        }
-        val currency = data.text("currency_code")?.uppercase() ?: throw unreadable()
-        fun money(node: JsonNode?, name: String) = node.text(name)?.toLongOrNull()
-        val period = data["current_billing_period"]
-        return HostedPlanChangeQuote(
-            charge = PaymentAmount(money(data["immediate_transaction"]?.get("details")?.get("totals"), "grand_total") ?: 0, currency),
-            credit = money(data["update_summary"]?.get("credit"), "amount")?.let { kotlin.math.abs(it) }?.takeIf { it > 0 }?.let { PaymentAmount(it, currency) },
-            recurring = PaymentAmount(money(data["recurring_transaction_details"]?.get("totals"), "total") ?: throw unreadable(), currency),
-            periodStart = period.text("starts_at")?.let(Instant::parse),
-            periodEnd = period.text("ends_at")?.let(Instant::parse),
-            restartsPeriod = change.kind == PlanChangeKind.IMMEDIATE_NEW_PERIOD,
-        )
+        return read(response)?.get("data") ?: throw unreadable()
     }
 
     private fun sendPlanChange(providerSubscriptionId: String, priceId: String, mode: String, apply: Boolean): String =
