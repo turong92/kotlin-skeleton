@@ -163,8 +163,23 @@ class PaymentSubscriptionController(
     )
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = PlanChangePreviewResponse::class)
     @GetMapping("/subscriptions/{id}/change-preview")
-    fun changePreview(authentication: Authentication?, @PathVariable id: String, @RequestParam planCode: String): DataResponse<PlanChangePreviewResponse> =
-        Response.ok(planChanges.preview(callers.account(authentication), id, planCode).let { PlanChangePreviewResponse.of(it, nameOf(it.plan) ?: it.plan.name) })
+    fun changePreview(
+        authentication: Authentication?,
+        request: HttpServletRequest,
+        response: HttpServletResponse,
+        @PathVariable id: String,
+        @RequestParam planCode: String,
+    ): DataResponse<PlanChangePreviewResponse> {
+        val account = callers.account(authentication)
+        // 결제사가 갱신하는 구독의 미리보기는 결제사 API 를 부른다 - 키의 호출 한도를 지키려고 변경과 같은 한도를 건다
+        if (planChanges.callsProvider(account, id)) {
+            limiter.acquire(account, clientIps.of(request).limitKey)?.let { retryAfter ->
+                response.setHeader("Retry-After", retryAfter.toString())
+                throw ApplicationException(message = "Too many requests", errorCode = PlatformErrorCode.TOO_MANY_REQUESTS, data = mapOf("retryAfterSeconds" to retryAfter))
+            }
+        }
+        return Response.ok(planChanges.preview(account, id, planCode).let { PlanChangePreviewResponse.of(it, nameOf(it.plan) ?: it.plan.name) })
+    }
 
     @Operation(
         summary = "Change plan - at once, or scheduled for the next renewal",

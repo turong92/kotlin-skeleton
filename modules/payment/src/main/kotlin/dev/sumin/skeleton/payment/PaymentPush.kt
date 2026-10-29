@@ -126,6 +126,8 @@ data class PushedSubscription(
     val period: String? = null,
     /** 구독의 품목 - 결제사 쪽에서 바뀐 플랜을 따라가는 데 쓴다. 읽지 못했으면 비어 있다. */
     val items: List<PushedItem> = emptyList(),
+    /** 앞으로 갱신마다 내는 금액(세금 포함) - 사건이 실었을 때만. 플랜을 맞출 때 금액도 같이 맞추는 데 쓴다. */
+    val amount: PaymentAmount? = null,
 ) : PushedPaymentEvent
 
 /**

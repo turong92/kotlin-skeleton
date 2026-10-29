@@ -33,8 +33,13 @@ class FakeHostedPushGateway(providerId: String = "paddle", mode: PaymentMode = P
     @Volatile
     var appliedPeriod = HostedPlanApplied()
 
+    /** 결제사가 적용하는 동안 일어나는 일 - 웹훅이 변경 호출보다 먼저 장부에 닿는 경주를 시험이 만든다. */
+    @Volatile
+    var whileApplying: (() -> Unit)? = null
+
     override fun applyPlanChange(change: HostedPlanChange): HostedPlanApplied {
         applies += change
+        whileApplying?.invoke()
         return when (apply) {
             Apply.APPLIED -> appliedPeriod
             Apply.DECLINED -> throw PaymentDeclinedException("subscription_payment_declined")

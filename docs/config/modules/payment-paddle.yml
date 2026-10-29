@@ -11,6 +11,7 @@ skeleton:
     base-url: ""                         # 비우면 환경에 따른 기본 주소 (시험의 가짜 Paddle 은 여기에)
     create-transaction-timeout: 5s       # 거래 만들기(주문 · 구독 시작이 기다리는 호출) 한 번의 제한 시간
     lookup-timeout: 5s                   # 거래 조회(환불 전 확인 · 맞추기) 한 번의 제한 시간
+    plan-change-timeout: 30s             # 구독 플랜 변경(미리보기 · 적용) 호출의 제한 시간 - 적용은 카드 결제까지 끝낸 뒤 답한다. 넘으면 모름이고 웹훅이 장부를 맞춘다
     refund-timeout: 10s                  # 환불(adjustment 만들기) 호출의 제한 시간 - 넘으면 결과를 모르는 것으로 읽고 다시 보내지 않는다
     signature-tolerance: 60s             # 서명 시각이 지금과 이보다 멀면 거절
     prices: {}                           # 플랜 코드 · 상품 코드 → Paddle 가격 id (pri_…)

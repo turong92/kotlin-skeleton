@@ -178,12 +178,13 @@ class PaddlePaymentProvider(
         data["items"]?.toList().orEmpty().mapNotNull { item ->
             val priceId = (item["price"]?.text("id") ?: item.text("price_id")) ?: return@mapNotNull null
             PushedItem(priceId, item["quantity"]?.asInt(1) ?: 1)
-        }
+        }.filter { it.quantity > 0 } // 변경 거래는 옛 품목을 수량 -1 로 한 줄 더 싣는다
 
     private fun payment(eventId: String, occurredAt: Instant, data: JsonNode, custom: JsonNode?): PushedPayment {
         val totals = data["details"]?.get("totals")
         val currency = (data.text("currency_code") ?: totals?.text("currency_code")) ?: error("Paddle transaction without a currency")
-        val total = totals?.text("total")?.toLongOrNull() ?: error("Paddle transaction without a total")
+        // 바깥에서 낸 내리기 변경 거래의 total 은 음수일 수 있다(남은 몫이 고객 잔액으로) - 낸 돈은 0 이다
+        val total = (totals?.text("total")?.toLongOrNull() ?: error("Paddle transaction without a total")).coerceAtLeast(0)
         val payments = data["payments"]?.toList().orEmpty()
         val chosen = payments.firstOrNull { it.text("status") == "captured" } ?: payments.firstOrNull()
         val details = chosen?.get("method_details")
@@ -208,7 +209,8 @@ class PaddlePaymentProvider(
             customerId = data.text("customer_id"),
             addressId = data.text("address_id"),
             credit = totals.text("credit")?.toLongOrNull()?.takeIf { it > 0 },
-            subscriptionChange = data.text("origin") == "subscription_update",
+            // 구독 변경 · 결제 수단 변경 거래는 갱신이 아니다 - 주문만 남기고 구독 금액 · 기간을 건드리지 않는다
+            subscriptionChange = data.text("origin") in NON_RENEWAL_ORIGINS,
         )
     }
 
@@ -266,6 +268,7 @@ class PaddlePaymentProvider(
             periodEnd = data["current_billing_period"]?.text("ends_at")?.let(Instant::parse),
             transactionId = data.text("transaction_id"),
             items = itemsOf(data),
+            amount = data["recurring_transaction_details"]?.get("totals")?.text("total")?.toLongOrNull()?.let { total -> data.text("currency_code")?.let { PaymentAmount(total, it.uppercase()) } },
             period = cycleOf(data["billing_cycle"] ?: data["items"]?.toList().orEmpty().firstNotNullOfOrNull { it["price"]?.get("billing_cycle")?.takeIf { cycle -> cycle.isObject } }),
         )
     }
@@ -340,12 +343,17 @@ class PaddlePaymentProvider(
     // --- 플랜 바꾸기 ---
 
     override fun previewPlanChange(change: HostedPlanChange): HostedPlanChangeQuote {
-        val data = planChange(change, apply = false)
+        val (data, notBilled) = planChange(change, apply = false)
         val currency = data.text("currency_code")?.uppercase() ?: throw unreadable()
         fun money(node: JsonNode?, name: String) = node.text(name)?.toLongOrNull()
         val period = data["current_billing_period"]
+        // 즉시 거래가 없는데 Paddle 이 청구한다고 말하면(또는 요약을 못 읽으면) 0원이라고 답하지 않는다 - 읽지 못한 것이다
+        val grandTotal = money(data["immediate_transaction"]?.get("details")?.get("totals"), "grand_total")
+        val summary = data["update_summary"]
+        val chargeDue = summary?.get("result")?.let { it.text("action") == "charge" && (money(it, "amount") ?: 0) > 0 } == true
+        if (grandTotal == null && chargeDue && !notBilled) throw unreadable()
         return HostedPlanChangeQuote(
-            charge = PaymentAmount(money(data["immediate_transaction"]?.get("details")?.get("totals"), "grand_total") ?: 0, currency),
+            charge = PaymentAmount(grandTotal ?: 0, currency),
             credit = money(data["update_summary"]?.get("credit"), "amount")?.let { kotlin.math.abs(it) }?.takeIf { it > 0 }?.let { PaymentAmount(it, currency) },
             recurring = PaymentAmount(money(data["recurring_transaction_details"]?.get("totals"), "total") ?: throw unreadable(), currency),
             periodStart = period.text("starts_at")?.let(Instant::parse),
@@ -356,7 +364,7 @@ class PaddlePaymentProvider(
 
     /** 적용 응답에는 금액이 없다(실측: immediate_transaction · next_transaction · update_summary 가 null) - 품목만 믿고, 새 기간(`current_billing_period`)이 있으면 돌려준다. 금액은 호출자가 직전 미리보기의 견적을 쓴다. */
     override fun applyPlanChange(change: HostedPlanChange): HostedPlanApplied {
-        val data = planChange(change, apply = true)
+        val data = planChange(change, apply = true).first
         val prices = itemsOf(data).map { it.priceId }
         if (prices.isNotEmpty() && prices != listOf(priceIdOf(change.targetItemRef))) throw unreadable()
         val period = data["current_billing_period"]
@@ -367,13 +375,15 @@ class PaddlePaymentProvider(
      * 구독의 품목을 대상 가격 하나로 바꾼다(`PATCH /subscriptions/{id}`, 미리보기는 `…/preview`) - 답의 `data`. 올리기만 하므로 청구 방식은 늘 `prorated_immediately` 이고 `on_payment_failure` 는 보내지 않는다(기본 `prevent_change`).
      * Paddle 최소 금액 미만이면 같은 호출을 `do_not_bill`(과금 없이 바꾸기)로 한 번 더 한다. 거절된 결제는 [PaymentDeclinedException], 막히는 때는 [PaymentPlanChangeNotAllowedException], 그 밖은 [PaymentProviderException] 그대로(5xx · 시간 초과는 모름).
      */
-    private fun planChange(change: HostedPlanChange, apply: Boolean): JsonNode {
+    private fun planChange(change: HostedPlanChange, apply: Boolean): Pair<JsonNode, Boolean> {
         val price = priceIdOf(change.targetItemRef) ?: throw PaymentUnavailableException()
+        var notBilled = false
         val response = try {
             try {
                 sendPlanChange(change.providerSubscriptionId, price, PRORATED_IMMEDIATELY, apply)
             } catch (e: PaymentProviderException) {
                 if (e.providerError.code != BELOW_CHARGE_LIMIT) throw e
+                notBilled = true
                 sendPlanChange(change.providerSubscriptionId, price, DO_NOT_BILL, apply)
             }
         } catch (e: PaymentProviderException) {
@@ -383,7 +393,7 @@ class PaddlePaymentProvider(
                 else -> throw e
             }
         }
-        return read(response)?.get("data") ?: throw unreadable()
+        return (read(response)?.get("data") ?: throw unreadable()) to notBilled
     }
 
     private fun sendPlanChange(providerSubscriptionId: String, priceId: String, mode: String, apply: Boolean): String =
@@ -397,7 +407,7 @@ class PaddlePaymentProvider(
                 baseUrl(properties.resolvedBaseUrl)
                 uriVariable("id", providerSubscriptionId)
                 header(HttpHeaders.AUTHORIZATION, "Bearer ${properties.apiKey}")
-                timeout(properties.createTransactionTimeout)
+                timeout(properties.planChangeTimeout)
                 loggingTag(if (apply) "payment.paddle.plan-change" else "payment.paddle.plan-change-preview")
                 errorMapper(planChangeMapper)
             }.block(),
@@ -575,6 +585,7 @@ class PaddlePaymentProvider(
         val SUBSCRIPTION_EVENTS = setOf("subscription.created", "subscription.activated", "subscription.updated", "subscription.canceled", "subscription.past_due")
         val ADJUSTMENT_EVENTS = setOf("adjustment.created", "adjustment.updated")
         val HANDLED = SUBSCRIPTION_EVENTS + ADJUSTMENT_EVENTS + setOf("transaction.completed", "transaction.payment_failed")
+        val NON_RENEWAL_ORIGINS = setOf("subscription_update", "subscription_payment_method_change")
         const val PRORATED_IMMEDIATELY = "prorated_immediately"
         const val DO_NOT_BILL = "do_not_bill"
         const val PAYMENT_DECLINED = "subscription_payment_declined"

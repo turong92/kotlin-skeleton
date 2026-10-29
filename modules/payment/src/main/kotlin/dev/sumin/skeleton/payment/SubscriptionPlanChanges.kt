@@ -134,7 +134,9 @@ class SubscriptionPlanChanges(
         val target = hosted.quote.plan
         return store.inTransaction { tx ->
             val locked = tx.lockSubscription(before.id) ?: throw PaymentSubscriptionNotFoundException()
-            if (locked.planCode == target.code || locked.status == SubscriptionStatus.ENDED) return@inTransaction locked // 웹훅이 먼저 맞췄거나 그 사이 끝났다
+            if (locked.status == SubscriptionStatus.ENDED) return@inTransaction locked // 그 사이 끝났다
+            if (locked.planCode == target.code && locked.amount == applied.recurring) return@inTransaction locked // 웹훅이 먼저 맞췄다
+            // 웹훅이 플랜만 먼저 맞췄다면(금액을 싣지 않은 사건) 금액 · 주기를 결제사가 말한 값으로 덮는다
             lifecycle.save(tx, locked, locked.status) { line ->
                 val switched = lifecycle.switched(line, target.code, applied.recurring.amount, target.period)
                 val start = newStart
@@ -150,6 +152,10 @@ class SubscriptionPlanChanges(
         }
     }
 
+    /** 이 구독의 미리보기가 결제사를 부르는가 - 부르는 호출에는 호출 한도를 건다. */
+    fun callsProvider(accountId: String, subscriptionId: String): Boolean =
+        owned(store.findSubscription(subscriptionId), accountId)?.isProviderManaged == true
+
     private class Hosted(val quote: PlanChangeQuote, val answer: HostedPlanChangeQuote, val gateway: PaymentHostedPlanChangeGateway, val change: HostedPlanChange)
 
     /** 결제사에 변경 견적을 묻는다 - 금액 · 통화는 결제사가 말한 그대로이고, 견적의 플랜 금액([PlanChangeQuote.plan])은 앞으로 갱신마다 내는 금액이다. */
@@ -158,6 +164,7 @@ class SubscriptionPlanChanges(
         val gateway = hostedGateway(subscription)
         val change = HostedPlanChange(checkNotNull(subscription.providerSubscriptionId) { "a provider managed line has a provider subscription id" }, checked.target.code, checked.kind)
         val answer = gateway.previewPlanChange(change)
+        if (answer.recurring.currency != subscription.amount.currency) throw PaymentPlanChangeNotAllowedException() // 결제사가 다른 통화로 바꾸려 한다 - 통화는 바꾸지 않는다
         val quote = PlanChangeQuote(checked.target.copy(amount = answer.recurring), answer.charge, answer.restartsPeriod, checked.kind, effectiveAt = writer.now(), credit = answer.credit)
         return Hosted(quote, answer, gateway, change)
     }

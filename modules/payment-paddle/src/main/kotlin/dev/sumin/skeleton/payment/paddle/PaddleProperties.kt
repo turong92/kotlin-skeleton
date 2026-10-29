@@ -26,6 +26,8 @@ data class PaddleProperties(
     val signatureTolerance: Duration = Duration.ofSeconds(60),
     /** 거래 만들기(요청 한 번)의 제한 시간 - 주문 · 구독 시작이 이 호출을 기다린다. */
     val createTransactionTimeout: Duration = Duration.ofSeconds(5),
+    /** 구독 플랜 변경(미리보기 · 적용)의 제한 시간. 적용은 카드 결제까지 끝낸 뒤 답하므로 거래 만들기보다 길다. 넘으면 모름이고 웹훅이 장부를 맞춘다. */
+    val planChangeTimeout: Duration = Duration.ofSeconds(30),
     /** 거래 조회(환불 전 확인 · 맞추기)의 제한 시간. */
     val lookupTimeout: Duration = Duration.ofSeconds(5),
     /** 환불(adjustment 만들기) 호출의 제한 시간. 넘으면 결과를 모르는 것으로 읽고 다시 보내지 않는다. */

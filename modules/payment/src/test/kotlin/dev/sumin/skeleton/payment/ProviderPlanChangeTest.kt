@@ -156,4 +156,25 @@ class ProviderPlanChangeTest {
         assertTrue(push.previews.isEmpty() && push.applies.isEmpty())
         assertEquals("plus-year", sub(line.id).planCode)
     }
+
+    @Test
+    fun `a webhook that switched only the plan first does not stop the change from putting the provider's recurring amount on the line`() {
+        val line = active()
+        // 결제사가 적용하는 동안 금액을 싣지 않은 구독 사건이 먼저 장부에 닿는다
+        push.whileApplying = { feed(PushedSubscription("evt_${++seq}", t0.plusSeconds(60), "psub_1", PushedSubscriptionStatus.ACTIVE, items = listOf(PushedItem("pri_plus", 1)))) }
+
+        val changed = kit.planChanges.change("acc_1", line.id, "plus", 500, IdempotencyKey("chg-1"))
+
+        assertEquals(PaymentAmount(1_990, "USD"), changed.amount)
+        assertEquals(PaymentAmount(1_990, "USD"), sub(line.id).amount)
+    }
+
+    @Test
+    fun `a quote in another currency than the subscription is refused before the provider is asked to apply`() {
+        val line = active()
+        push.quote = push.quote.copy(recurring = PaymentAmount(1_990, "EUR"))
+
+        assertFailsWith<PaymentPlanChangeNotAllowedException> { change(line.id, expected = 500) }
+        assertTrue(push.applies.isEmpty())
+    }
 }

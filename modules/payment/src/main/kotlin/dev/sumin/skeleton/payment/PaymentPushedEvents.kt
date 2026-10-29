@@ -153,9 +153,9 @@ class PaymentPushedEvents(
 
     /** 플랜 변경으로 생긴 거래 - 주문 한 줄만 남긴다. 구독의 금액 · 주기 · 기간 · 상태는 갱신과 구독 사건이 정하고 이 거래는 정하지 않는다(일할 결제액이 정기 금액을 덮으면 안 된다). */
     private fun applyChange(tx: PaymentLedgerTx, gateway: PaymentPushGateway, lifecycle: SubscriptionLifecycle, subscription: PaymentSubscription, event: PushedPayment): String? {
-        val planCode = event.items.singleOrNull()?.let { gateway.itemRefOf(it.priceId) } ?: subscription.planCode
-        // 변경 거래의 total 은 이미 크레딧을 뺀 실제로 낸 돈이다(실측) - 크레딧 규칙은 갱신 결제용이다
-        val order = paidOrder(lifecycle, subscription, event.copy(credit = null)).copy(kind = PaymentOrderKind.SUBSCRIPTION_CHANGE, itemRef = planCode)
+        // 거래 품목은 새 품목(+1)과 옛 품목(수량 -1) 두 줄일 수 있다 - 수량이 양수이고 플랜 표가 아는 품목이 바뀐 플랜이다
+        val planCode = event.items.filter { it.quantity > 0 }.firstNotNullOfOrNull { gateway.itemRefOf(it.priceId)?.takeIf { code -> lifecycle.plans()?.find(code) != null } } ?: subscription.planCode
+        val order = paidOrder(lifecycle, subscription, event).copy(kind = PaymentOrderKind.SUBSCRIPTION_CHANGE, itemRef = planCode)
         if (!tx.insertOrderIfAbsent(order)) return null
         tx.appendEvent(writer.event(order.id, PaymentEventType.CONVERGED, PaymentActor.PROVIDER, providerCode = WEBHOOK, to = PaymentOrderStatus.PAID))
         tasks.enqueue(PaymentTask(PaymentTaskTypes.ORDER_FULFIL, order.id))
@@ -193,11 +193,13 @@ class PaymentPushedEvents(
     private fun paidOrder(lifecycle: SubscriptionLifecycle, subscription: PaymentSubscription, event: PushedPayment): PaymentOrder {
         val kind = if (subscription.chargeOrderId == null) PaymentOrderKind.SUBSCRIPTION_INITIAL else PaymentOrderKind.SUBSCRIPTION_RENEWAL
         // 크레딧으로 낸 몫은 돈이 오가지 않았다 - 실제로 낸 돈이 주문 금액이고, 정가와 크레딧은 할인 칸에 남는다(토스의 주기 늘리기 공제와 같은 표현)
-        val credit = event.credit?.coerceIn(0, event.total.amount)?.takeIf { it > 0 }
-        val paid = event.total.copy(amount = event.total.amount - (credit ?: 0))
+        // 바깥에서 낸 내리기 변경 거래의 total 은 음수일 수 있다(남은 몫이 고객 잔액으로 간다) - 낸 돈은 0 이다
+        val gross = event.total.amount.coerceAtLeast(0)
+        val credit = event.credit?.coerceIn(0, gross)?.takeIf { it > 0 }
+        val paid = event.total.copy(amount = gross - (credit ?: 0))
         return lifecycle.chargeOrder(
             subscription, kind, subscription.planCode, amount = paid, dedupeKey = "${subscription.provider}:${event.providerPaymentId}",
-            originalAmount = credit?.let { event.total.amount },
+            originalAmount = credit?.let { gross },
         ).copy(
             status = PaymentOrderStatus.PAID,
             providerPaymentId = event.providerPaymentId,
@@ -392,10 +394,12 @@ class PaymentPushedEvents(
             current = current.copy(currentPeriodStart = event.periodStart, currentPeriodEnd = event.periodEnd, periodSeq = if (moved) current.periodSeq + 1 else current.periodSeq)
         }
         // 결제사 쪽에서 플랜이 바뀌었다(우리 변경 · 대시보드) - 품목이 하나이고 우리 플랜 표가 아는 코드면 플랜 코드를 맞춘다. 금액은 다음 결제가 맞춘다
-        val itemCode = event.items.singleOrNull()?.let { gateway.itemRefOf(it.priceId) }
+        val itemCode = event.items.filter { it.quantity > 0 }.singleOrNull()?.let { gateway.itemRefOf(it.priceId) }
         if (itemCode != null && itemCode != current.planCode) {
             val plan = lifecycle.plans()?.find(itemCode)
-            if (plan != null) current = lifecycle.switched(current, plan.code, current.amount.amount, event.period ?: plan.period)
+            // 사건이 새 정기 금액을 실었고 통화가 같으면 금액도 맞춘다 - 안 실었으면 다음 결제가 맞춘다
+            val amount = event.amount?.takeIf { it.currency == current.amount.currency && it.amount > 0 }?.amount ?: current.amount.amount
+            if (plan != null) current = lifecycle.switched(current, plan.code, amount, event.period ?: plan.period)
         }
         val target = when (event.status) {
             PushedSubscriptionStatus.ACTIVE -> SubscriptionStatus.ACTIVE

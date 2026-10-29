@@ -114,4 +114,21 @@ class PaddlePlanChangeTest {
             assertThatThrownBy { provider.applyPlanChange(up) }.isInstanceOf(PaymentProviderException::class.java)
         }
     }
+
+    @Test
+    fun `a preview without an immediate transaction is zero only when the provider does not bill, never when it says it charges`() {
+        FakePaddleApi().use { api ->
+            val provider = gateway(api.baseUrl)
+            val noImmediate = """{"data":{"currency_code":"USD","current_billing_period":{"starts_at":"2026-10-13T09:59:00Z","ends_at":"2026-11-13T09:59:00Z"},"immediate_transaction":null,"recurring_transaction_details":{"totals":{"total":"1990"}},"update_summary":%s}}"""
+            api.on("PATCH", "/subscriptions/sub_1/preview", 200, noImmediate.format("""{"result":{"action":"charge","amount":"148"}}"""))
+            assertThatThrownBy { provider.previewPlanChange(up) }.isInstanceOf(PaymentProviderException::class.java)
+
+            api.on("PATCH", "/subscriptions/sub_1/preview", 200, noImmediate.format("null")) // 같은 품목 - 아무 일도 없다
+            assertThat(provider.previewPlanChange(up).charge).isEqualTo(PaymentAmount(0, "USD"))
+
+            api.onNext("PATCH", "/subscriptions/sub_1/preview", 400, paddleError("subscription_update_transaction_balance_less_than_charge_limit"))
+            api.on("PATCH", "/subscriptions/sub_1/preview", 200, noImmediate.format("""{"result":{"action":"charge","amount":"148"}}"""))
+            assertThat(provider.previewPlanChange(up).charge).isEqualTo(PaymentAmount(0, "USD")) // do_not_bill 로 다시 물었다
+        }
+    }
 }

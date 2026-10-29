@@ -22,11 +22,11 @@ class PaddleLedgerTest {
 
     private fun pending(key: String = "k1"): PaymentSubscription = kit.subscriptions.start("acc_1", "basic", IdempotencyKey(key), provider = "paddle").subscription
 
-    private fun payment(txn: String?, total: PaymentAmount = PaymentAmount(990, "USD"), at: Instant = t0, providerSub: String? = "psub_1", order: String? = null, ourSub: String? = null, price: String? = null, period: String? = null, credit: Long? = null, change: Boolean = false) =
+    private fun payment(txn: String?, total: PaymentAmount = PaymentAmount(990, "USD"), at: Instant = t0, providerSub: String? = "psub_1", order: String? = null, ourSub: String? = null, price: String? = null, period: String? = null, credit: Long? = null, change: Boolean = false, items: List<PushedItem>? = null) =
         PushedPayment(
             eventId = "evt_${++seq}", occurredAt = at, providerPaymentId = txn ?: "txn_unknown", total = total, tax = 90, paidAt = at, ourOrderId = order, ourAccountId = "acc_1",
             ourSubscriptionId = ourSub, providerSubscriptionId = providerSub, periodStart = at, periodEnd = at.plusSeconds(31 * 86400),
-            items = listOf(PushedItem(price ?: if (order != null) "pri_cheer-3000" else "pri_basic", 1)), period = period, credit = credit, subscriptionChange = change,
+            items = items ?: listOf(PushedItem(price ?: if (order != null) "pri_cheer-3000" else "pri_basic", 1)), period = period, credit = credit, subscriptionChange = change,
         )
 
     private fun state(status: PushedSubscriptionStatus, at: Instant, providerSub: String = "psub_1", txn: String? = null, items: List<PushedItem> = emptyList()) = PushedSubscription("evt_${++seq}", at, providerSub, status, null, null, t0, monthLater, txn, items = items)
@@ -414,8 +414,9 @@ class PaddleLedgerTest {
         val orders = kit.store.listSubscriptionOrders(line.id, 5)
         val change = orders.single { it.kind == PaymentOrderKind.SUBSCRIPTION_CHANGE }
         assertEquals("plus", change.itemRef)
-        assertEquals(PaymentAmount(1_500, "USD"), change.amount, "a change transaction total is already what was paid")
-        assertEquals(0L, change.discountAmount)
+        assertEquals(PaymentAmount(1_200, "USD"), change.amount, "what was paid is the total less the balance credit it used")
+        assertEquals(1_500L, change.originalAmount)
+        assertEquals(300L, change.discountAmount)
         assertEquals(PaymentOrderStatus.PAID, change.status)
         assertEquals(setOf(PaymentOrderKind.SUBSCRIPTION_INITIAL, PaymentOrderKind.SUBSCRIPTION_CHANGE), orders.map { it.kind }.toSet())
         val after = sub(line.id)
@@ -465,5 +466,37 @@ class PaddleLedgerTest {
         assertEquals("plus", sub(line.id).planCode, "more than one item is not a plan switch")
         feed(state(PushedSubscriptionStatus.ACTIVE, Instant.parse("2026-10-16T10:00:00Z"), items = listOf(PushedItem("xyz", 1))))
         assertEquals("plus", sub(line.id).planCode, "a price we do not know is left alone")
+    }
+
+    @Test
+    fun `a change transaction with the new and the old item lines takes the plan of the line with a positive quantity`() {
+        val line = active()
+
+        feed(payment("txn_chg", total = PaymentAmount(500, "USD"), at = t0.plusSeconds(3600), change = true, items = listOf(PushedItem("pri_basic", -1), PushedItem("pri_plus", 1))))
+
+        assertEquals("plus", kit.store.listSubscriptionOrders(line.id, 5).single { it.kind == PaymentOrderKind.SUBSCRIPTION_CHANGE }.itemRef)
+    }
+
+    @Test
+    fun `a change transaction that paid nothing records a zero paid order and leaves the subscription alone`() {
+        val line = active()
+
+        feed(payment("txn_down", total = PaymentAmount(0, "USD"), at = t0.plusSeconds(3600), change = true, price = "pri_basic"))
+
+        val change = kit.store.listSubscriptionOrders(line.id, 5).single { it.kind == PaymentOrderKind.SUBSCRIPTION_CHANGE }
+        assertEquals(PaymentAmount(0, "USD"), change.amount)
+        assertEquals(0L, change.paidAmount)
+        assertEquals(PaymentAmount(990, "USD"), sub(line.id).amount)
+    }
+
+    @Test
+    fun `a subscription updated that carries the new recurring amount switches the amount with the plan, and none without it`() {
+        val line = active()
+        feed(PushedSubscription("evt_${++seq}", t0.plusSeconds(60), "psub_1", PushedSubscriptionStatus.ACTIVE, items = listOf(PushedItem("pri_plus", 1)), amount = PaymentAmount(1_990, "USD")))
+        assertEquals(PaymentAmount(1_990, "USD"), sub(line.id).amount)
+
+        feed(PushedSubscription("evt_${++seq}", t0.plusSeconds(120), "psub_1", PushedSubscriptionStatus.ACTIVE, items = listOf(PushedItem("pri_basic", 1)), amount = PaymentAmount(500, "EUR")))
+        assertEquals("basic", sub(line.id).planCode)
+        assertEquals(PaymentAmount(1_990, "USD"), sub(line.id).amount, "another currency is not taken")
     }
 }

@@ -122,4 +122,25 @@ class PaddleWebhookTest {
         })
         assertThat(linked.itemRefOf("pri_basic")).isEqualTo("plus")
     }
+
+    @Test
+    fun `a change transaction drops its old item line, a payment method change is not a renewal, and a subscription update carries the recurring amount`() {
+        val twoLines = transactionCompleted(subscriptionId = "sub_1").replace(""""origin":"web"""", """"origin":"subscription_update"""")
+            .replace(""""items":[{"price":{"id":"pri_cheer","billing_cycle":{"interval":"month","frequency":1}},"quantity":1}]""", """"items":[{"price":{"id":"pri_old"},"quantity":-1},{"price":{"id":"pri_basic"},"quantity":1}]""")
+        val change = gateway.interpret(twoLines) as PushedPayment
+        assertThat(change.items).containsExactly(dev.sumin.skeleton.payment.PushedItem("pri_basic", 1))
+
+        val methodChange = gateway.interpret(transactionCompleted(subscriptionId = "sub_1").replace(""""origin":"web"""", """"origin":"subscription_payment_method_change"""")) as PushedPayment
+        assertThat(methodChange.subscriptionChange).isTrue()
+        assertThat((gateway.interpret(transactionCompleted(subscriptionId = "sub_1").replace(""""origin":"web"""", """"origin":"subscription_recurring"""")) as PushedPayment).subscriptionChange).isFalse()
+
+        val updated = subscriptionEvent().replace(""""scheduled_change"""", """"currency_code":"usd","recurring_transaction_details":{"totals":{"total":"1990"}},"scheduled_change"""")
+        assertThat((gateway.interpret(updated) as PushedSubscription).amount).isEqualTo(PaymentAmount(1990, "USD"))
+    }
+
+    @Test
+    fun `a change transaction with a negative total is read as a payment of nothing`() {
+        val down = transactionCompleted(subscriptionId = "sub_1", total = "-6591").replace(""""origin":"web"""", """"origin":"subscription_update"""")
+        assertThat((gateway.interpret(down) as PushedPayment).total).isEqualTo(PaymentAmount(0, "USD"))
+    }
 }
