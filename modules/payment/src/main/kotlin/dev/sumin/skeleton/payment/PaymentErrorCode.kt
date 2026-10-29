@@ -164,6 +164,11 @@ enum class PaymentErrorCode(
         status = HttpStatus.CONFLICT,
         title = "The plan cannot be changed",
     ),
+    PLAN_CHANGE_DOWNGRADE_UNSUPPORTED(
+        code = "PAYMENT.PLAN_CHANGE_DOWNGRADE_UNSUPPORTED",
+        status = HttpStatus.CONFLICT,
+        title = "This payment provider does not support lowering a plan",
+    ),
     PLAN_CHANGE_CHARGE_CHANGED(
         code = "PAYMENT.PLAN_CHANGE_CHARGE_CHANGED",
         status = HttpStatus.CONFLICT,

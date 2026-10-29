@@ -209,6 +209,12 @@ class PaymentPlanChangeNotAllowedException : ApplicationException(
     errorCode = PaymentErrorCode.PLAN_CHANGE_NOT_ALLOWED,
 )
 
+/** 결제사가 갱신하는 구독은 올리기(등급↑ · 주기↑)만 바꾼다 - 내리기는 이 결제사로는 하지 않는다. */
+class PaymentPlanChangeDowngradeUnsupportedException : ApplicationException(
+    message = "This payment provider only supports moving to a higher plan.",
+    errorCode = PaymentErrorCode.PLAN_CHANGE_DOWNGRADE_UNSUPPORTED,
+)
+
 /** 서버가 다시 계산한 변경 금액이 호출자가 본 금액보다 크다 — 미리보기부터 다시 한다. */
 class PaymentPlanChangeChargeChangedException : ApplicationException(
     message = "The charge for the plan change is higher than the one shown.",

@@ -12,6 +12,9 @@ interface PaymentPushGateway : PaymentWebhookGateway {
 
     /** 이 상품(단건 `itemRef`) · 플랜 코드로 서버가 거래에 넣는 결제사 가격 id - 단건과 첫 구독 결제의 품목을 이것과 대조한다(콘솔에서 품목을 바꿔 결제하는 길을 막는다). 설정에 없으면 null. */
     fun priceIdOf(itemRef: String): String?
+
+    /** [priceIdOf] 의 거꾸로 - 결제사 가격 id 가 가리키는 플랜 코드. 모르면 null(콘솔에서 만든 가격 등). */
+    fun itemRefOf(priceId: String): String? = null
 }
 
 /** 거래의 품목 한 줄 - 결제사의 가격 id 와 수량. */
@@ -55,6 +58,10 @@ data class PushedPayment(
     /** 결제사의 고객 · 주소 id - 구매자 주소의 나라를 [PaymentBuyerCountryGateway] 로 물을 때 쓴다. 결제 본문은 나라를 싣지 않는다. */
     val customerId: String? = null,
     val addressId: String? = null,
+    /** 크레딧(이전 변경의 남은 몫)으로 낸 몫 - [total] 에서 이만큼은 돈이 오가지 않았다. 없으면 null. */
+    val credit: Long? = null,
+    /** 구독 플랜을 바꾸면서 생긴 거래(Paddle `origin=subscription_update`)면 true - 갱신이 아니다. */
+    val subscriptionChange: Boolean = false,
     /** 구매자 주소의 나라(ISO-3166 두 글자) - 처리 작업이 락 밖에서 물어 채운다. 못 물었으면 null. */
     val buyerCountry: String? = null,
 ) : PushedPaymentEvent
@@ -117,6 +124,8 @@ data class PushedSubscription(
     val transactionId: String? = null,
     /** 결제사 구독의 결제 주기(ISO-8601). 모르면 null - 줄의 주기를 그대로 둔다. */
     val period: String? = null,
+    /** 구독의 품목 - 결제사 쪽에서 바뀐 플랜을 따라가는 데 쓴다. 읽지 못했으면 비어 있다. */
+    val items: List<PushedItem> = emptyList(),
 ) : PushedPaymentEvent
 
 /**
@@ -135,6 +144,35 @@ interface PaymentHostedSubscriptionGateway : PaymentGateway {
     /** 결제사에 해지를 요청한다. [atPeriodEnd] 가 false 면 즉시. 결과는 웹훅으로 장부에 닿는다. 못 하면 던진다. */
     fun cancel(providerSubscriptionId: String, atPeriodEnd: Boolean)
 }
+
+/**
+ * 결제사가 들고 있는 구독의 플랜을 올린다(등급↑ · 주기↑). 판정은 우리([PlanChangeRules]), 청구 방식과 금액은 결제사가 정한다 - 내리기는 이 능력이 다루지 않는다.
+ * 결제사 호출이므로 락 · 트랜잭션 밖에서 부른다. 결제가 거절되면 [PaymentDeclinedException], 결제사가 바꿀 수 없는 때면 [PaymentPlanChangeNotAllowedException],
+ * 그 밖(시간 초과 · 5xx)은 던진다 - 모름이고 바뀌었다면 구독 웹훅이 장부를 맞춘다.
+ */
+interface PaymentHostedPlanChangeGateway : PaymentGateway {
+    /** 적용하지 않고 견적만 낸다. */
+    fun previewPlanChange(change: HostedPlanChange): HostedPlanChangeQuote
+
+    /** 적용한다 - 결제가 필요하면 결제까지 끝낸 뒤 돌아온다. */
+    fun applyPlanChange(change: HostedPlanChange): HostedPlanChangeQuote
+}
+
+/** [targetItemRef] 는 우리 플랜 코드 - 결제사 가격은 결제사 모듈이 정한다. */
+data class HostedPlanChange(val providerSubscriptionId: String, val targetItemRef: String, val kind: PlanChangeKind)
+
+/**
+ * 결제사가 계산한 변경 견적(결제사의 통화). [charge] 는 지금 결제하는 금액(크레딧을 뺀 뒤), [credit] 은 쓴 크레딧, [recurring] 은 앞으로 갱신마다 내는 금액.
+ * 기간은 변경 뒤의 결제사 기간이고, [restartsPeriod] 는 그 기간이 지금 줄의 기간과 다르게 새로 시작한다는 뜻이다.
+ */
+data class HostedPlanChangeQuote(
+    val charge: PaymentAmount,
+    val credit: PaymentAmount?,
+    val recurring: PaymentAmount,
+    val periodStart: Instant?,
+    val periodEnd: Instant?,
+    val restartsPeriod: Boolean,
+)
 
 data class HostedSubscriptionRequest(
     val planCode: String,

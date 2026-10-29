@@ -61,8 +61,10 @@ class SubscriptionPlanChanges(
 ) {
     private val currentPayments = CurrentPeriodPayments(store)
 
-    fun preview(accountId: String, subscriptionId: String, planCode: String): PlanChangeQuote =
-        quote(owned(store.findSubscription(subscriptionId), accountId)?.also { if (it.isProviderManaged) throw PaymentPlanChangeNotAllowedException() } ?: throw PaymentSubscriptionNotFoundException(), planCode)
+    fun preview(accountId: String, subscriptionId: String, planCode: String): PlanChangeQuote {
+        val subscription = owned(store.findSubscription(subscriptionId), accountId) ?: throw PaymentSubscriptionNotFoundException()
+        return if (subscription.isProviderManaged) hosted(subscription, planCode).quote else quote(subscription, planCode)
+    }
 
     /**
      * @param expectedCharge 호출자가 미리보기로 본 금액 — 서버가 다시 계산한 값이 더 크면 [PaymentPlanChangeChargeChangedException].
@@ -71,7 +73,7 @@ class SubscriptionPlanChanges(
     fun change(accountId: String, subscriptionId: String, planCode: String, expectedCharge: Long, key: IdempotencyKey): PaymentSubscription {
         store.requireNoOpenTransaction("PaymentSubscriptions.change")
         val before = owned(store.findSubscription(subscriptionId), accountId) ?: throw PaymentSubscriptionNotFoundException()
-        if (before.isProviderManaged) throw PaymentPlanChangeNotAllowedException() // 결제사가 갱신하는 구독의 플랜 변경은 2차
+        if (before.isProviderManaged) return changeHosted(before, planCode, expectedCharge)
         val dedupeKey = "subchg:$subscriptionId:${PaymentOrderIds.dedupeKey(accountId, key).take(32)}"
         if (store.findOrderByDedupeKey(dedupeKey) != null) return before // 같은 요청의 재전송 — 이미 했다
         val gateway = billingGateway(before) // 결제 없이 예약만 하는 변경도 이 구독의 결제사를 지금 쓸 수 있는지(없음 · 모드 불일치)는 먼저 본다
@@ -117,6 +119,55 @@ class SubscriptionPlanChanges(
         return store.findSubscription(subscriptionId) ?: claim.subscription
     }
 
+    /**
+     * 결제사가 갱신하는 구독 - 결제사가 금액을 계산하고(미리보기), 본 금액보다 크지 않을 때만 바꾸고(적용), **바꾼 뒤에** 줄을 맞춘다. 올리기만 한다.
+     * 이미 그 플랜이면(재전송 · 응답 유실 뒤 웹훅이 먼저 맞췄다) 그 줄을 그대로 돌려준다. 결제사 호출은 락 · 트랜잭션 밖이다.
+     */
+    private fun changeHosted(before: PaymentSubscription, planCode: String, expectedCharge: Long): PaymentSubscription {
+        if (before.planCode == planCode) return before
+        val hosted = hosted(before, planCode)
+        if (hosted.quote.charge.amount > expectedCharge) throw PaymentPlanChangeChargeChangedException()
+        val applied = hosted.gateway.applyPlanChange(hosted.change)
+        val target = hosted.quote.plan
+        return store.inTransaction { tx ->
+            val locked = tx.lockSubscription(before.id) ?: throw PaymentSubscriptionNotFoundException()
+            if (locked.planCode == target.code || locked.status == SubscriptionStatus.ENDED) return@inTransaction locked // 웹훅이 먼저 맞췄거나 그 사이 끝났다
+            lifecycle.save(tx, locked, locked.status) { line ->
+                val switched = lifecycle.switched(line, target.code, applied.recurring.amount, target.period)
+                val start = applied.periodStart
+                val end = applied.periodEnd
+                if (start == null || end == null) {
+                    switched
+                } else {
+                    // 기간 번호는 웹훅 반영과 같은 규칙 - 새 기간이 시작했을 때만 올린다(같은 기간의 웹훅이 다시 세지 않는다)
+                    val moved = line.currentPeriodStart?.let { start.isAfter(it) } ?: true
+                    switched.copy(currentPeriodStart = start, currentPeriodEnd = end, periodSeq = if (moved) line.periodSeq + 1 else line.periodSeq)
+                }
+            }
+        }
+    }
+
+    private class Hosted(val quote: PlanChangeQuote, val gateway: PaymentHostedPlanChangeGateway, val change: HostedPlanChange)
+
+    /** 결제사에 변경 견적을 묻는다 - 금액 · 통화는 결제사가 말한 그대로이고, 견적의 플랜 금액([PlanChangeQuote.plan])은 앞으로 갱신마다 내는 금액이다. */
+    private fun hosted(subscription: PaymentSubscription, planCode: String): Hosted {
+        val checked = checked(subscription, planCode)
+        val gateway = hostedGateway(subscription)
+        val change = HostedPlanChange(checkNotNull(subscription.providerSubscriptionId) { "a provider managed line has a provider subscription id" }, checked.target.code, checked.kind)
+        val answer = gateway.previewPlanChange(change)
+        val quote = PlanChangeQuote(checked.target.copy(amount = answer.recurring), answer.charge, answer.restartsPeriod, checked.kind, effectiveAt = writer.now(), credit = answer.credit)
+        return Hosted(quote, gateway, change)
+    }
+
+    private fun hostedGateway(subscription: PaymentSubscription): PaymentHostedPlanChangeGateway =
+        try {
+            router.gateway(subscription.provider, PaymentHostedPlanChangeGateway::class).also { if (it.mode != subscription.providerMode) throw PaymentModeMismatchException() }
+        } catch (e: PaymentProviderNotFoundException) {
+            throw PaymentUnavailableException()
+        } catch (e: PaymentCapabilityUnsupportedException) {
+            throw PaymentPlanChangeNotAllowedException()
+        }
+
     private class Claim(val subscription: PaymentSubscription, val order: PaymentOrder?)
 
     /** 예약해 둔 갈아타기를 거둔다 - 예약이 없으면 그대로(두 번 눌러도 같다). */
@@ -126,15 +177,24 @@ class SubscriptionPlanChanges(
             if (locked.scheduledPlanCode == null) locked else lifecycle.save(tx, locked, locked.status) { it.copy(scheduledPlanCode = null, scheduledAmount = null, scheduledPeriod = null) }
         }
 
-    private fun quote(subscription: PaymentSubscription, planCode: String): PlanChangeQuote {
+    private data class Checked(val option: Charge, val target: SubscriptionPlan, val kind: PlanChangeKind)
+
+    /** 설정 · 상태 · 대상 플랜 · 판정 · 과금 중 주문을 본다 - 토스 경로([quote])와 결제사 경로([hosted])가 같다. 결제사 관리 구독은 플랜 표의 통화로 비교하고 내리기는 거절한다. */
+    private fun checked(subscription: PaymentSubscription, planCode: String): Checked {
         val option = properties.subscription.planChange.takeIf { it.enabled }?.charge ?: throw PaymentPlanChangeNotAllowedException()
         if (subscription.status != SubscriptionStatus.ACTIVE) throw PaymentPlanChangeNotAllowedException()
         val target = plans.find(planCode)?.takeIf { it.amount.amount > 0 && it.purchasable } ?: throw PaymentItemNotPurchasableException()
         val current = plans.find(subscription.planCode) ?: throw PaymentPlanChangeNotAllowedException()
-        val kind = PlanChangeRules.classify(current, target, subscription)
+        val kind = PlanChangeRules.classify(current, target, subscription, if (subscription.isProviderManaged) current.amount.currency else subscription.amount.currency)
         if (kind == PlanChangeKind.NOT_ALLOWED) throw PaymentPlanChangeNotAllowedException()
+        if (kind == PlanChangeKind.SCHEDULED && subscription.isProviderManaged) throw PaymentPlanChangeDowngradeUnsupportedException()
         // 과금 중인(안 끝난) 주문이 있으면 시작하지 않는다 — 갱신이 나가 있거나 앞선 변경이 확인 중이다
         if (!lifecycle.isSettled(subscription.chargeOrderId?.let(store::findOrder))) throw PaymentPlanChangeNotAllowedException()
+        return Checked(option, target, kind)
+    }
+
+    private fun quote(subscription: PaymentSubscription, planCode: String): PlanChangeQuote {
+        val (option, target, kind) = checked(subscription, planCode)
         val start = subscription.currentPeriodStart ?: throw PaymentPlanChangeNotAllowedException()
         val end = subscription.currentPeriodEnd ?: throw PaymentPlanChangeNotAllowedException()
         val now = writer.now()

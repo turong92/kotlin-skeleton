@@ -22,14 +22,14 @@ class PaddleLedgerTest {
 
     private fun pending(key: String = "k1"): PaymentSubscription = kit.subscriptions.start("acc_1", "basic", IdempotencyKey(key), provider = "paddle").subscription
 
-    private fun payment(txn: String?, total: PaymentAmount = PaymentAmount(990, "USD"), at: Instant = t0, providerSub: String? = "psub_1", order: String? = null, ourSub: String? = null, price: String? = null, period: String? = null) =
+    private fun payment(txn: String?, total: PaymentAmount = PaymentAmount(990, "USD"), at: Instant = t0, providerSub: String? = "psub_1", order: String? = null, ourSub: String? = null, price: String? = null, period: String? = null, credit: Long? = null, change: Boolean = false) =
         PushedPayment(
             eventId = "evt_${++seq}", occurredAt = at, providerPaymentId = txn ?: "txn_unknown", total = total, tax = 90, paidAt = at, ourOrderId = order, ourAccountId = "acc_1",
             ourSubscriptionId = ourSub, providerSubscriptionId = providerSub, periodStart = at, periodEnd = at.plusSeconds(31 * 86400),
-            items = listOf(PushedItem(price ?: if (order != null) "pri_cheer-3000" else "pri_basic", 1)), period = period,
+            items = listOf(PushedItem(price ?: if (order != null) "pri_cheer-3000" else "pri_basic", 1)), period = period, credit = credit, subscriptionChange = change,
         )
 
-    private fun state(status: PushedSubscriptionStatus, at: Instant, providerSub: String = "psub_1", txn: String? = null) = PushedSubscription("evt_${++seq}", at, providerSub, status, null, null, t0, monthLater, txn)
+    private fun state(status: PushedSubscriptionStatus, at: Instant, providerSub: String = "psub_1", txn: String? = null, items: List<PushedItem> = emptyList()) = PushedSubscription("evt_${++seq}", at, providerSub, status, null, null, t0, monthLater, txn, items = items)
 
     private fun feed(event: PushedPaymentEvent): WebhookReceipt = kit.deliver(push.delivery(event), token = null, provider = "paddle").also { kit.runWebhooks(); kit.runTasks(setOf(PaymentTaskTypes.ORDER_FULFIL)) }
 
@@ -402,5 +402,67 @@ class PaddleLedgerTest {
         assertEquals(2, orders.size)
         assertEquals(1, orders.count { it.reviewReason == PaymentReviewReason.BUYER_COUNTRY_KR })
         assertEquals(PaymentOrderKind.SUBSCRIPTION_INITIAL, orders.single { it.reviewReason == PaymentReviewReason.BUYER_COUNTRY_KR }.kind)
+    }
+
+    @Test
+    fun `a change payment webhook records a change order and does not overwrite the subscription amount`() {
+        val line = active()
+        val before = sub(line.id)
+
+        feed(payment("txn_chg", total = PaymentAmount(1_500, "USD"), at = t0.plusSeconds(3600), price = "pri_plus", change = true))
+
+        val orders = kit.store.listSubscriptionOrders(line.id, 5)
+        val change = orders.single { it.kind == PaymentOrderKind.SUBSCRIPTION_CHANGE }
+        assertEquals("plus", change.itemRef)
+        assertEquals(PaymentAmount(1_500, "USD"), change.amount)
+        assertEquals(PaymentOrderStatus.PAID, change.status)
+        assertEquals(setOf(PaymentOrderKind.SUBSCRIPTION_INITIAL, PaymentOrderKind.SUBSCRIPTION_CHANGE), orders.map { it.kind }.toSet())
+        val after = sub(line.id)
+        assertEquals(before.amount, after.amount)
+        assertEquals(before.period, after.period)
+        assertEquals(before.currentPeriodEnd, after.currentPeriodEnd)
+        assertEquals(before.periodSeq, after.periodSeq)
+        assertEquals(before.chargeOrderId, after.chargeOrderId)
+    }
+
+    @Test
+    fun `a renewal paid partly by credit records what was paid, the credit as discount, and keeps the plan price`() {
+        val line = active()
+
+        feed(payment("txn_renew", total = PaymentAmount(990, "USD"), at = monthLater, credit = 300))
+
+        val renewal = kit.store.listSubscriptionOrders(line.id, 5).single { it.kind == PaymentOrderKind.SUBSCRIPTION_RENEWAL }
+        assertEquals(PaymentAmount(690, "USD"), renewal.amount)
+        assertEquals(690L, renewal.paidAmount)
+        assertEquals(990L, renewal.originalAmount)
+        assertEquals(300L, renewal.discountAmount)
+        assertEquals(PaymentAmount(990, "USD"), sub(line.id).amount)
+    }
+
+    @Test
+    fun `a renewal fully paid by credit records a zero paid order and keeps the subscription amount`() {
+        val line = active()
+
+        feed(payment("txn_renew", total = PaymentAmount(990, "USD"), at = monthLater, credit = 990))
+
+        val renewal = kit.store.listSubscriptionOrders(line.id, 5).single { it.kind == PaymentOrderKind.SUBSCRIPTION_RENEWAL }
+        assertEquals(PaymentAmount(0, "USD"), renewal.amount)
+        assertEquals(0L, renewal.paidAmount)
+        assertEquals(990L, renewal.discountAmount)
+        assertEquals(PaymentAmount(990, "USD"), sub(line.id).amount)
+    }
+
+    @Test
+    fun `a subscription updated with another price switches the plan code and keeps the amount`() {
+        val line = active()
+
+        feed(state(PushedSubscriptionStatus.ACTIVE, Instant.parse("2026-10-14T10:00:00Z"), items = listOf(PushedItem("pri_plus", 1))))
+        assertEquals("plus", sub(line.id).planCode)
+        assertEquals(PaymentAmount(990, "USD"), sub(line.id).amount)
+
+        feed(state(PushedSubscriptionStatus.ACTIVE, Instant.parse("2026-10-15T10:00:00Z"), items = listOf(PushedItem("pri_unknown_to_us_x", 1), PushedItem("pri_basic", 1))))
+        assertEquals("plus", sub(line.id).planCode, "more than one item is not a plan switch")
+        feed(state(PushedSubscriptionStatus.ACTIVE, Instant.parse("2026-10-16T10:00:00Z"), items = listOf(PushedItem("xyz", 1))))
+        assertEquals("plus", sub(line.id).planCode, "a price we do not know is left alone")
     }
 }

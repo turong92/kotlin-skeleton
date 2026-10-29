@@ -23,8 +23,9 @@ enum class PlanChangeKind {
 object PlanChangeRules {
     private val ANCHOR: Instant = Instant.parse("2000-01-01T00:00:00Z")
 
-    fun classify(current: SubscriptionPlan, target: SubscriptionPlan, subscription: PaymentSubscription): PlanChangeKind {
-        if (target.code == current.code || target.amount.currency != subscription.amount.currency) return PlanChangeKind.NOT_ALLOWED
+    /** [currency] 는 비교할 통화 - 기본은 구독 금액의 통화이고, 결제사가 환산해 결제하는 구독은 플랜 표의 통화를 넘긴다. */
+    fun classify(current: SubscriptionPlan, target: SubscriptionPlan, subscription: PaymentSubscription, currency: String = subscription.amount.currency): PlanChangeKind {
+        if (target.code == current.code || target.amount.currency != currency) return PlanChangeKind.NOT_ALLOWED
         val currentEnd = SubscriptionPeriod.parse(subscription.period).after(ANCHOR, 1)
         val targetEnd = SubscriptionPeriod.parse(target.period).after(ANCHOR, 1)
         val periodOrder = targetEnd.compareTo(currentEnd)

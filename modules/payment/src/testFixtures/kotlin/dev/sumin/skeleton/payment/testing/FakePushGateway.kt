@@ -40,7 +40,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * 환불 · 조회 능력도 Paddle 처럼 거래 번호로만 답한다: 결제 사건([PushedPayment])을 [delivery] 로 등록하면 그 거래가 결제사 쪽에 생기고, [refund] 는 [refundScript] 대로
  * 환불([adjustments])을 만든다(바로 이뤄지거나 · 검토 중이거나 · 거절 · 모름). 결제사의 결정은 [decide] 로 내리고 같은 내용을 웹훅 사건([PushedRefund])으로 [delivery] 에 실을 수 있다.
  */
-class FakePushGateway(override val providerId: String = "paddle", override val mode: PaymentMode = PaymentMode.TEST) :
+open class FakePushGateway(override val providerId: String = "paddle", override val mode: PaymentMode = PaymentMode.TEST) :
     PaymentPushGateway, PaymentHostedSubscriptionGateway, PaymentTransactionGateway, PaymentCheckoutGateway, PaymentBuyerCountryGateway, PaymentRefundGateway, PaymentLookupGateway {
     private val events = ConcurrentHashMap<String, PushedPaymentEvent>()
     private val txnSeq = AtomicInteger()
@@ -166,6 +166,9 @@ class FakePushGateway(override val providerId: String = "paddle", override val m
 
     /** 서버가 거래에 넣는 가격 id - 기본은 `pri_<코드>`, [unpriced] 의 코드는 null. */
     override fun priceIdOf(itemRef: String): String? = if (itemRef in unpriced) null else "pri_$itemRef"
+
+    /** 결제사 가격 id → 우리 코드: `pri_<코드>` 만 안다(서버가 거래에 넣는 가격과 같은 규칙의 거울). */
+    override fun itemRefOf(priceId: String): String? = priceId.takeIf { it.startsWith("pri_") }?.removePrefix("pri_")
 
     override fun createTransaction(request: TransactionRequest): String {
         createFailure?.let { throw it }
