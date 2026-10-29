@@ -98,4 +98,16 @@ class PaddlePlanChangeTest {
             assertThat(api.requests).isEmpty()
         }
     }
+
+    @Test
+    fun `the real apply answer carries no amounts, only the items are checked, and an answer with another price is unknown`() {
+        FakePaddleApi().use { api ->
+            val provider = gateway(api.baseUrl)
+            api.on("PATCH", "/subscriptions/sub_1", 200, """{"data":{"id":"sub_1","status":"active","currency_code":"USD","items":[{"price":{"id":"pri_basic"},"quantity":1}],"immediate_transaction":null,"next_transaction":null,"update_summary":null,"recurring_transaction_details":null}}""")
+            provider.applyPlanChange(up)
+
+            api.on("PATCH", "/subscriptions/sub_1", 200, """{"data":{"id":"sub_1","items":[{"price":{"id":"pri_cheer"},"quantity":1}]}}""")
+            assertThatThrownBy { provider.applyPlanChange(up) }.isInstanceOf(PaymentProviderException::class.java)
+        }
+    }
 }

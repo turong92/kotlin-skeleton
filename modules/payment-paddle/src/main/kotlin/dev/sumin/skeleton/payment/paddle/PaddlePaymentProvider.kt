@@ -365,7 +365,12 @@ class PaddlePaymentProvider(
             }
         }
         val data = read(response)?.get("data") ?: throw unreadable()
-        if (apply) return null // 적용 응답에는 금액 · 기간이 없다(실측) - 호출자는 직전 미리보기의 견적을 쓴다
+        if (apply) {
+            // 적용 응답에는 금액 · 기간이 없다(실측: immediate_transaction · next_transaction · update_summary 가 null) - 품목만 믿고, 금액 · 기간은 호출자가 직전 미리보기의 견적을 쓴다
+            val prices = itemsOf(data).map { it.priceId }
+            if (prices.isNotEmpty() && prices != listOf(price)) throw unreadable()
+            return null
+        }
         val currency = data.text("currency_code")?.uppercase() ?: throw unreadable()
         fun money(node: JsonNode?, name: String) = node.text(name)?.toLongOrNull()
         val period = data["current_billing_period"]

@@ -149,3 +149,6 @@ Paddle 크레딧 adjustment 를 장부에 넣기(변경 뒤 이전 주문을 운
 2. 실행(PATCH) 응답에는 금액이 없다(`immediate_transaction`·`update_summary` null) — 청구액·기간은 직전 미리보기 값을 쓰고, PATCH 응답에서는 `items` 만 믿는다.
 3. 웹훅 `transaction.completed`(`origin: subscription_update`)는 `details.totals.credit` 이 0 이고 `total` 이 이미 상계된 실제 낸 돈이다. 계획의 「`credit > 0` 이면 주문 amount = total − credit」 규칙은 이 경로에서 발동하지 않으니, 변경 결제는 `total` 그대로 기록하고 credit 규칙은 갱신 결제용으로만 둔다(갱신에서 잔액 크레딧이 쓰일 때 값이 어떻게 오는지는 미실측). 거래 `billing_period` 가 일할 구간이 아니라 현재 기간 전체이므로 기간 갱신에 쓰지 않는다.
 4. 같은 주기 올리기는 `current_billing_period` 가 바뀌지 않는다(`restartsPeriod` false).
+
+### 구현이 따른 것 (K1)
+적용(PATCH)은 응답의 품목만 확인하고(가격이 다르면 「모름」) 금액 · 기간은 직전 미리보기 견적을 쓴다. 미리보기 크레딧 = `|update_summary.credit.amount|`. 같은 주기 올리기는 `restartsPeriod=false`. **월 → 연 변경의 `restartsPeriod` · 새 기간은 미실측**이라 판정(`IMMEDIATE_NEW_PERIOD`)대로 `true` 로 두었다 - 연 가격을 만든 뒤 재서 고친다.
