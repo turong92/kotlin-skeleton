@@ -191,4 +191,25 @@ class ProviderPlanChangeTest {
         assertFailsWith<PaymentPlanChangeNotAllowedException> { change(line.id, expected = 500) }
         assertTrue(push.applies.isEmpty())
     }
+
+    @Test
+    fun `refunding the whole monthly to yearly change transaction of a provider subscription ends the subscription although it was paid a moment after the period started`() {
+        kit.plans.plans += SubscriptionPlan("plus-year", "Plus Year", PaymentAmount(69_000, "KRW"), "P1Y", 2)
+        val line = active()
+        val start = t0.plusSeconds(86400)
+        feed(PushedSubscription("evt_${++seq}", start, "psub_1", PushedSubscriptionStatus.ACTIVE, periodStart = start, periodEnd = start.plusSeconds(365 * 86400), items = listOf(PushedItem("pri_plus-year", 1))))
+        val paidAt = start.plusMillis(330) // 실측: 거래의 결제 시각이 기간 시작보다 0.33초 뒤
+        feed(
+            PushedPayment(
+                eventId = "evt_${++seq}", occurredAt = paidAt, providerPaymentId = "txn_year", total = PaymentAmount(1_500, "USD"), tax = 100, paidAt = paidAt, ourAccountId = "acc_1",
+                providerSubscriptionId = "psub_1", periodStart = start, periodEnd = start.plusSeconds(365 * 86400), items = listOf(PushedItem("pri_plus-year", 1)), subscriptionChange = true,
+            ),
+        )
+        val change = kit.store.listSubscriptionOrders(line.id, 5).single { it.kind == PaymentOrderKind.SUBSCRIPTION_CHANGE }
+
+        kit.refunds.refund("op_1", change.id, "OPERATOR", null, IdempotencyKey("rfd-1"))
+        kit.runTasks(setOf(PaymentTaskTypes.REFUND_APPLY))
+
+        assertEquals(SubscriptionStatus.ENDED, sub(line.id).status)
+    }
 }
