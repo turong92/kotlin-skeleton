@@ -108,6 +108,7 @@ fails when this table and the prefixes found in module code differ.
 | `auth-social-x` | `skeleton.auth-social-x` |
 | `author-profile` | `skeleton.author-profile` |
 | `authz` | `skeleton.authz.admin` |
+| `badge` | `skeleton.badge` |
 | `board` | `skeleton.board` |
 | `campaign` | `skeleton.campaign` |
 | `captcha-turnstile` | `skeleton.captcha-turnstile` |

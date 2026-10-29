@@ -37,6 +37,7 @@ dependencies {
     implementation(project(":modules:notification-mail"))
     implementation(project(":modules:alert-jdbc"))   // + alert (api)
     implementation(project(":modules:reward-jdbc"))   // + reward (api) — 지급 건 기록 · 일꾼. 지급기(쿠폰 · 포인트)가 없어 건은 FAILED 로 남는다. 실제 흐름은 apps/sample
+    implementation(project(":modules:badge-jdbc"))   // + badge (api) — 배지 정의 · 수여/회수 · 내 배지 · 비로그인 공개 프로필 배지, 보상 지급기 `badge`. 실제 흐름은 apps/sample
     implementation(project(":modules:coupon-jdbc"))   // + coupon (api) — 쿠폰 정의 · 쿠폰함 · 공용 코드, 보상 지급기 `coupon` · 결제 할인 수단 `coupon`. 실제 흐름은 apps/sample
     implementation(project(":modules:campaign-jdbc"))   // + campaign (api) — 이벤트(출석 · 초대) 저장. 이벤트는 운영자가 만든다 — 아무것도 심지 않으면 비어 있다. 실제 흐름은 apps/sample
     implementation(project(":modules:catalog-jdbc"))   // + catalog (api) — 상품 · 가격 표(월 · 연 · 단건 · 행사가 · 통화별)와 결제 계약 구현(`SubscriptionPlans` · `PaymentCatalog` · `ProviderPriceRefs`). 운영자가 만들기 전에는 표가 비어 살 수 있는 것이 없다. 실제 흐름은 apps/sample

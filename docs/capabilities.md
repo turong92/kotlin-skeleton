@@ -89,6 +89,8 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `author-profile-jdbc` | 작성자 프로필 저장소 — PostgreSQL · MySQL 로 author-profile 의 저장 포트를 구현한다(author_profiles 표 · (이름 키, 꼬리표)와 첫 프로필 유니크 · 첫 프로필 줄을 잠그는 원자적 상한). | `--modules author-profile-jdbc` | 작성자 프로필 저장소, 프로필 DB / author profile storage, author profile repository, profile database | `@skeleton/author-profile` |
 | `authz` | 운영자 역할 관리 — 역할 만들기 · 고치기 · 지우기(역할 → 권한 묶음)와 붙은 모듈이 선언한 권한 카탈로그 API(/api/v1/admin/roles · /api/v1/admin/permissions). 안전장치: 전권 역할 고정 · 자기에게 없는 권한은 못 줌(403) · 쓰는 계정이 있는 역할은 못 지움 · 자기 잠금 막기. 역할 변경은 OperatorAuditLog 계약으로만 알린다(기본 아무것도 안 함). 기본 꺼짐(skeleton.authz.admin.enabled). | `--modules authz,authz-jdbc` | 역할 관리, 권한 관리, 역할 만들기, 권한 묶음, 운영자 권한, CS 담당자 역할, 환불만 허용 / role management, permissions, role based access, admin roles, least privilege, custom role | `@skeleton/auth` |
 | `authz-jdbc` | 역할 → 권한 표 저장소 — PostgreSQL · MySQL 로 authz 의 저장 포트를 구현하고(authz_roles · authz_role_permissions, 전권 역할은 표를 못 바꾼다) 판정이 읽는 역할 → 권한 매핑을 yml 에서 이 표로 바꾼다(캐시: 같은 인스턴스는 즉시, 다른 인스턴스는 skeleton.authz.cache-ttl). 첫 기동에 yml 매핑을 한 번만 옮긴다. | `--modules authz-jdbc` | 역할 권한 저장소, 권한 표 / role permission storage, authz database | `@skeleton/auth` |
+| `badge` | 배지 — 앱이 정의하는 업적 배지의 정의 · 수여/회수(사유 필수) · 내 배지 · 비로그인 공개 프로필 배지 · 보상 지급기 `badge`. 포인트 · 쿠폰 · 이벤트를 모르고 조립으로만 같이 준다. | `--modules badge,badge-jdbc` | 배지, 업적, 뱃지, 프로필 배지, 수동 수여, 회수 / badge, achievement, profile badge, award badge, revoke badge | `@skeleton/rewards` |
+| `badge-jdbc` | 배지 정의 · 보유 · 수여/회수 내역을 DB 에 둔다 (PostgreSQL · MySQL) — 동시 수여는 보유 줄 유니크, 지급 건 재시도는 내역 유니크로 한 번. | `--modules badge-jdbc` | 배지 저장소, 배지 DB / badge storage, badge repository | `@skeleton/rewards` |
 | `board` | 게시판 — 글 · 중첩 댓글(대댓글) · 설정으로 늘리는 반응(좋아요 · 공감 …) · 운영자 숨김/고정 · 댓글 알림 · 작성자 닉네임(authorName · authorTag, AuthorDirectory 로 요청당 한 번 조회), HTTP /api/v1/boards 까지. | `--modules board,board-jdbc` | 게시판, 커뮤니티, 글쓰기, 댓글, 대댓글, 공감, 좋아요, 반응, 운영자 숨김, 공지 고정 / board, forum, community, post, comment, reply, reaction, like, moderation | `@skeleton/board` |
 | `board-jdbc` | 게시판 저장소 — PostgreSQL · MySQL 로 board 의 저장 포트 네 개를 구현한다(boards · board_* 테이블 · 원자적 카운터). | `--modules board-jdbc` | 게시판 저장소, 게시판 DB / board storage, board repository, board database | `@skeleton/board` |
 | `campaign` | 이벤트 — 출석(매일 · 누적 · 연속 달성)과 친구초대(양쪽 보상)를 판정해 보상 지급 건으로 기록하고, 운영자가 이벤트를 만들고 켜고 끈다. | `--modules campaign,campaign-jdbc,reward-jdbc` | 이벤트, 출석 체크, 출석 보상, 친구 초대, 초대 코드, 초대 보상, 연속 출석 / campaign, event, attendance, check-in, referral, invite, streak | `@skeleton/rewards` |
@@ -496,6 +498,37 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - authz 없이는 쓰지 않는다(따라온다)
   - 다른 DB(JPA · jOOQ)로 저장하려면 authz 의 저장 포트(AuthzRoleStore)와 RolePermissionSource 를 앱이 구현한다
 - 키워드: 역할 권한 저장소, 권한 표 / role permission storage, authz database
+
+### `badge` — 배지 — 앱이 정의하는 업적 배지의 정의 · 수여/회수(사유 필수) · 내 배지 · 비로그인 공개 프로필 배지 · 보상 지급기 `badge`. 포인트 · 쿠폰 · 이벤트를 모르고 조립으로만 같이 준다.
+
+- 종류 · 상태: module · experimental — 위치 `modules/badge`
+- 켜는 법: `--modules badge,badge-jdbc`
+- 의존 한 줄: `implementation(project(":modules:badge"))`
+- 소스만 따라온다(컴파일 전용 — 런타임 클래스패스에는 없다. 쓰려면 apps/api 에 의존 한 줄을 더한다): `notification`
+- 함께 골라야 한다: `badge-jdbc`
+- 설정 접두사 `skeleton.badge` — 키와 기본값 `docs/config/modules/badge.yml`
+- HTTP 경로: `/api/v1/admin`, `/api/v1/badges`
+- 문서: `docs/modules/badge.md`
+- 짝 프런트(react-skeleton): 항목 `rewards`, `rewards-admin` · 패키지 `@skeleton/rewards` · 조각 `--packages rewards`
+- 쓰지 않는 경우:
+  - badge 는 저장소를 모른다 — badge-jdbc 를 같이 고른다
+  - 자동 업적(조건을 세서 주기)은 이벤트 모듈의 몫이다 — 이 모듈은 앱이 직접 주거나 보상 지급기로 받기만 한다
+  - 포인트 · 쿠폰을 같이 주는 일은 이 모듈이 하지 않는다 — 업적 단계의 보상 목록에 나란히 적는다
+  - 필명(author-profile) 화면에 프로필 배지를 붙이지 않는다 — 주소의 계정 id 로 필명이 한 사람으로 이어진다
+- 키워드: 배지, 업적, 뱃지, 프로필 배지, 수동 수여, 회수 / badge, achievement, profile badge, award badge, revoke badge
+
+### `badge-jdbc` — 배지 정의 · 보유 · 수여/회수 내역을 DB 에 둔다 (PostgreSQL · MySQL) — 동시 수여는 보유 줄 유니크, 지급 건 재시도는 내역 유니크로 한 번.
+
+- 종류 · 상태: module · experimental — 위치 `modules/badge-jdbc`
+- 켜는 법: `--modules badge-jdbc`
+- 의존 한 줄: `implementation(project(":modules:badge-jdbc"))`
+- 자동으로 따라온다: `badge`, `notification`
+- 설정 접두사 없음
+- 문서: `docs/modules/badge-jdbc.md`
+- 짝 프런트(react-skeleton): 항목 `rewards`, `rewards-admin` · 패키지 `@skeleton/rewards` · 조각 `--packages rewards`
+- 쓰지 않는 경우:
+  - DataSource · db-* 모듈과 이 모듈의 마이그레이션이 적용된 스키마가 필요하다
+- 키워드: 배지 저장소, 배지 DB / badge storage, badge repository
 
 ### `board` — 게시판 — 글 · 중첩 댓글(대댓글) · 설정으로 늘리는 반응(좋아요 · 공감 …) · 운영자 숨김/고정 · 댓글 알림 · 작성자 닉네임(authorName · authorTag, AuthorDirectory 로 요청당 한 번 조회), HTTP /api/v1/boards 까지.
 
@@ -1300,7 +1333,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 - 종류 · 상태: app · stable — 위치 `apps/workbench`
 - 켜는 법: `--with-workbench`
-- 자동으로 따라온다: `alert-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `board`, `board-jdbc`, `campaign`, `campaign-jdbc`, `catalog`, `catalog-jdbc`, `config-aws-ssm`, `coupon`, `coupon-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `db-mysql`, `event-kafka`, `json`, `notification`, `notification-jdbc`, `notification-slack`, `notification-sse`, `notification-websocket`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `point`, `point-jdbc`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `reward`, `reward-jdbc`, `scheduler`, `storage`, `storage-s3`
+- 자동으로 따라온다: `alert-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `badge`, `badge-jdbc`, `board`, `board-jdbc`, `campaign`, `campaign-jdbc`, `catalog`, `catalog-jdbc`, `config-aws-ssm`, `coupon`, `coupon-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `db-mysql`, `event-kafka`, `json`, `notification`, `notification-jdbc`, `notification-slack`, `notification-sse`, `notification-websocket`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `point`, `point-jdbc`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `reward`, `reward-jdbc`, `scheduler`, `storage`, `storage-s3`
 - HTTP 경로: `/api/v1`, `/api/v1/examples`, `/api/v1/skeleton`, `/api/v1/skeleton/enums`, `/api/v1/skeleton/json`, `/api/v1/skeleton/payments`, `/api/v1/skeleton/polymorphic/contents`
 - 문서: `docs/minimal-composition.md`, `docs/modules/README.md`
 - 짝 프런트(react-skeleton): 항목 `app-workbench` · 조각 `--with-workbench`

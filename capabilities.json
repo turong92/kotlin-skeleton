@@ -902,6 +902,77 @@
       }
     },
     {
+      "id": "badge",
+      "kind": "module",
+      "module": "badge",
+      "path": "modules/badge",
+      "status": "experimental",
+      "summary": "배지 — 앱이 정의하는 업적 배지의 정의 · 수여/회수(사유 필수) · 내 배지 · 비로그인 공개 프로필 배지 · 보상 지급기 `badge`. 포인트 · 쿠폰 · 이벤트를 모르고 조립으로만 같이 준다.",
+      "starter": false,
+      "newProjectFlag": "--modules badge,badge-jdbc",
+      "autoIncludes": ["notification"],
+      "needs": {
+        "requires": ["badge-jdbc"],
+        "oneOf": [],
+        "optional": ["notification"]
+      },
+      "config": {
+        "prefixes": ["skeleton.badge"],
+        "snippet": "docs/config/modules/badge.yml"
+      },
+      "basePaths": ["/api/v1/admin", "/api/v1/badges"],
+      "secrets": [],
+      "docs": ["docs/modules/badge.md"],
+      "frontend": {
+        "capabilities": ["rewards", "rewards-admin"],
+        "newProjectFlag": "--packages rewards",
+        "packages": ["@skeleton/rewards"]
+      },
+      "notFor": [
+        "badge 는 저장소를 모른다 — badge-jdbc 를 같이 고른다",
+        "자동 업적(조건을 세서 주기)은 이벤트 모듈의 몫이다 — 이 모듈은 앱이 직접 주거나 보상 지급기로 받기만 한다",
+        "포인트 · 쿠폰을 같이 주는 일은 이 모듈이 하지 않는다 — 업적 단계의 보상 목록에 나란히 적는다",
+        "필명(author-profile) 화면에 프로필 배지를 붙이지 않는다 — 주소의 계정 id 로 필명이 한 사람으로 이어진다"
+      ],
+      "keywords": {
+        "ko": ["배지", "업적", "뱃지", "프로필 배지", "수동 수여", "회수"],
+        "en": ["badge", "achievement", "profile badge", "award badge", "revoke badge"]
+      }
+    },
+    {
+      "id": "badge-jdbc",
+      "kind": "module",
+      "module": "badge-jdbc",
+      "path": "modules/badge-jdbc",
+      "status": "experimental",
+      "summary": "배지 정의 · 보유 · 수여/회수 내역을 DB 에 둔다 (PostgreSQL · MySQL) — 동시 수여는 보유 줄 유니크, 지급 건 재시도는 내역 유니크로 한 번.",
+      "starter": false,
+      "newProjectFlag": "--modules badge-jdbc",
+      "autoIncludes": ["badge", "notification"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": [],
+        "snippet": null
+      },
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/badge-jdbc.md"],
+      "frontend": {
+        "capabilities": ["rewards", "rewards-admin"],
+        "newProjectFlag": "--packages rewards",
+        "packages": ["@skeleton/rewards"]
+      },
+      "notFor": ["DataSource · db-* 모듈과 이 모듈의 마이그레이션이 적용된 스키마가 필요하다"],
+      "keywords": {
+        "ko": ["배지 저장소", "배지 DB"],
+        "en": ["badge storage", "badge repository"]
+      }
+    },
+    {
       "id": "board",
       "kind": "module",
       "module": "board",
@@ -3025,6 +3096,8 @@
         "author-profile-jdbc",
         "authz",
         "authz-jdbc",
+        "badge",
+        "badge-jdbc",
         "board",
         "board-jdbc",
         "campaign",

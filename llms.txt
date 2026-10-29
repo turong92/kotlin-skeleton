@@ -97,6 +97,8 @@
 - author-profile-jdbc: 작성자 프로필 저장소 — PostgreSQL · MySQL 로… [작성자 프로필 저장소, 프로필 DB]
 - authz: 운영자 역할 관리 — 역할 만들기 · 고치기 · 지우기(역할 → 권한… [역할 관리, 권한 관리]
 - authz-jdbc: 역할 → 권한 표 저장소 — PostgreSQL · MySQL 로… [역할 권한 저장소, 권한 표]
+- badge: 배지 — 앱이 정의하는 업적 배지의 정의 · 수여/회수(사유 필수) [배지, 업적]
+- badge-jdbc: 배지 정의 · 보유 · 수여/회수 내역을 DB 에 둔다… [배지 저장소, 배지 DB]
 - board: 게시판 — 글 · 중첩 댓글(대댓글) [게시판, 커뮤니티]
 - board-jdbc: 게시판 저장소 — PostgreSQL · MySQL 로 board 의… [게시판 저장소, 게시판 DB]
 - campaign: 이벤트 — 출석(매일 · 누적 · 연속 달성)과 친구초대(양쪽 보상)를… [이벤트, 출석 체크]

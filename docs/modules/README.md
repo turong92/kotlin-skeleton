@@ -71,6 +71,8 @@
 | `campaign-jdbc` | 이벤트 · 출석 · 초대 저장을 DB 에 | [campaign-jdbc](campaign-jdbc.md) |
 | `reward` | 보상 지급의 허리 — 이벤트가 기록한 지급 건을 일꾼이 쿠폰 · 포인트 지급기로 주고 받았어요 알림까지 | [reward](reward.md) |
 | `reward-jdbc` | 지급 건 저장 · 작업을 DB 에 두고 일꾼을 job-queue 에 얹기 | [reward-jdbc](reward-jdbc.md) |
+| `badge` | 배지 — 정의 · 수여/회수 · 내 배지 · 비로그인 공개 프로필 배지 · 보상 지급기 (포인트 · 쿠폰을 모른다) | [badge](badge.md) |
+| `badge-jdbc` | 배지 저장을 DB 에 두기 (정의 · 보유 · 수여/회수 내역) | [badge-jdbc](badge-jdbc.md) |
 | `captcha-turnstile` | Cloudflare Turnstile 토큰 검증 | [captcha-turnstile](captcha-turnstile.md) |
 | `catalog` | 상품 · 가격 카탈로그 - 월 · 연 · 단건 · 행사가 · 통화별 표를 운영자 화면에서 관리하고 결제 계약(플랜 · 단건 · 결제사 가격 id)을 구현 | [catalog](catalog.md) |
 | `catalog-jdbc` | 상품 · 가격 저장을 DB 에 두기 (상품 · 이름 · 가격 · 결제사 링크) | [catalog-jdbc](catalog-jdbc.md) |
