@@ -17,7 +17,7 @@ import org.springframework.context.annotation.Bean
 import org.springframework.core.env.Environment
 
 /**
- * 이벤트(출석 · 초대)와 그 서비스. 저장소 포트([CampaignStore])는 `campaign-jdbc`, 지급 기록([RewardGrants])은 `reward`(+`reward-jdbc`)가 낸다 -
+ * 이벤트(출석 · 초대 · 업적)와 그 서비스. 저장소 포트([CampaignStore])는 `campaign-jdbc`, 지급 기록([RewardGrants])은 `reward`(+`reward-jdbc`)가 낸다 -
  * 둘 중 하나라도 없으면 서비스 빈이 켜지지 않는다. 쿠폰 · 포인트를 모른다: 지급기가 하나도 없어도 뜨고(건은 `FAILED` 로 남는다), 보상 종류는 설정에 이름으로만 적힌다.
  * [AccountFacts](`account` 가 낸다)가 없으면 초대의 「새 계정만」 판정을 건너뛴다.
  */
@@ -38,6 +38,10 @@ class CampaignAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(name = ["referralKind"])
     fun referralKind(): CampaignKind = ReferralKind()
+
+    @Bean
+    @ConditionalOnMissingBean(name = ["achievementKind"])
+    fun achievementKind(): CampaignKind = AchievementKind()
 
     @Bean
     @ConditionalOnMissingBean
@@ -77,6 +81,13 @@ class CampaignAutoConfiguration {
     @ConditionalOnBean(ReferralService::class)
     @ConditionalOnMissingBean(Referrals::class)
     fun referrals(service: ReferralService): Referrals = service
+
+    /** 앱이 수치를 보고하는 서버 API - 브라우저가 수치를 보고하면 안 되므로 HTTP 경로는 없다 */
+    @Bean
+    @ConditionalOnBean(CampaignStore::class, RewardGrants::class)
+    @ConditionalOnMissingBean(CampaignSignals::class)
+    fun campaignSignals(store: CampaignStore, grants: RewardGrants, time: ObjectProvider<TimeProvider>): CampaignSignals =
+        AchievementService(store, grants, time.getIfAvailable { TimeProvider.systemUtc() })
 
     @Bean
     @ConditionalOnBean(CampaignStore::class)

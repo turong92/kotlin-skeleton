@@ -60,6 +60,20 @@ class JdbcCampaignStore(
             mapOf("c" to campaignId, "a" to accountId),
         ) { rs, _ -> rs.getObject("day", LocalDate::class.java) }
 
+    override fun upsertProgressMax(accountId: String, metric: String, value: Long, at: Instant): Long {
+        // 한 문장의 max 갱신 - 동시에 와도 큰 쪽이 남고, 행 잠금이 커밋까지 이어져 같은 수치의 보고가 줄을 선다
+        val sql = if (dialect.vendor == "mysql") {
+            "insert into campaign_progress (account_id, metric, value, updated_at) values (:a, :m, :v, :at) on duplicate key update value = greatest(value, :v), updated_at = :at"
+        } else {
+            "insert into campaign_progress (account_id, metric, value, updated_at) values (:a, :m, :v, :at) on conflict (account_id, metric) do update set value = greatest(campaign_progress.value, :v), updated_at = :at"
+        }
+        jdbc.update(sql, mapOf("a" to accountId, "m" to metric, "v" to value, "at" to dialect.instantParam(at)))
+        return progress(accountId, metric) ?: value
+    }
+
+    override fun progress(accountId: String, metric: String): Long? =
+        jdbc.query("select value from campaign_progress where account_id = :a and metric = :m", mapOf("a" to accountId, "m" to metric)) { rs, _ -> rs.getLong("value") }.firstOrNull()
+
     override fun referralCode(accountId: String, newCode: () -> String): String {
         repeat(MAX_CODE_TRIES) {
             existingCode(accountId)?.let { return it }
@@ -124,6 +138,7 @@ class JdbcCampaignStore(
     override fun eraseAccount(accountId: String, tombstone: String) {
         val p = mapOf("a" to accountId)
         jdbc.update("delete from campaign_attendance where account_id = :a", p)
+        jdbc.update("delete from campaign_progress where account_id = :a", p)
         jdbc.update("delete from campaign_referral_codes where account_id = :a", p)
         jdbc.update("delete from campaign_referrals where invitee_id = :a", p)
         // 초대자 쪽 줄은 지우지 않는다 - 초대받은 사람의 「평생 한 번」이 풀리면 안 된다. 개인 식별만 끊는다

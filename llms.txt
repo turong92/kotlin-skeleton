@@ -101,7 +101,7 @@
 - badge-jdbc: 배지 정의 · 보유 · 수여/회수 내역을 DB 에 둔다… [배지 저장소, 배지 DB]
 - board: 게시판 — 글 · 중첩 댓글(대댓글) [게시판, 커뮤니티]
 - board-jdbc: 게시판 저장소 — PostgreSQL · MySQL 로 board 의… [게시판 저장소, 게시판 DB]
-- campaign: 이벤트 — 출석(매일 · 누적 · 연속 달성)과 친구초대(양쪽 보상)를… [이벤트, 출석 체크]
+- campaign: 이벤트 — 출석(매일 · 누적 · 연속 달성) [이벤트, 출석 체크]
 - campaign-jdbc: 이벤트 · 출석 · 초대 코드 · 초대 관계 저장을 DB 에 둔다… [이벤트 저장, 출석 저장]
 - captcha-turnstile: 봇 방지 — Cloudflare Turnstile 토큰을 서버에서… [캡차, 봇 방지]
 - catalog: 상품 · 가격 카탈로그 — 운영자가 화면에서 상품과 가격(월 · 연 ·… [상품, 가격표]

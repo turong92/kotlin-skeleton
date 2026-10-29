@@ -93,7 +93,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `badge-jdbc` | 배지 정의 · 보유 · 수여/회수 내역을 DB 에 둔다 (PostgreSQL · MySQL) — 동시 수여는 보유 줄 유니크, 지급 건 재시도는 내역 유니크로 한 번. | `--modules badge-jdbc` | 배지 저장소, 배지 DB / badge storage, badge repository | `@skeleton/rewards` |
 | `board` | 게시판 — 글 · 중첩 댓글(대댓글) · 설정으로 늘리는 반응(좋아요 · 공감 …) · 운영자 숨김/고정 · 댓글 알림 · 작성자 닉네임(authorName · authorTag, AuthorDirectory 로 요청당 한 번 조회), HTTP /api/v1/boards 까지. | `--modules board,board-jdbc` | 게시판, 커뮤니티, 글쓰기, 댓글, 대댓글, 공감, 좋아요, 반응, 운영자 숨김, 공지 고정 / board, forum, community, post, comment, reply, reaction, like, moderation | `@skeleton/board` |
 | `board-jdbc` | 게시판 저장소 — PostgreSQL · MySQL 로 board 의 저장 포트 네 개를 구현한다(boards · board_* 테이블 · 원자적 카운터). | `--modules board-jdbc` | 게시판 저장소, 게시판 DB / board storage, board repository, board database | `@skeleton/board` |
-| `campaign` | 이벤트 — 출석(매일 · 누적 · 연속 달성)과 친구초대(양쪽 보상)를 판정해 보상 지급 건으로 기록하고, 운영자가 이벤트를 만들고 켜고 끈다. | `--modules campaign,campaign-jdbc,reward-jdbc` | 이벤트, 출석 체크, 출석 보상, 친구 초대, 초대 코드, 초대 보상, 연속 출석 / campaign, event, attendance, check-in, referral, invite, streak | `@skeleton/rewards` |
+| `campaign` | 이벤트 — 출석(매일 · 누적 · 연속 달성) · 친구초대(양쪽 보상) · 업적(앱이 보고한 수치가 단계에 닿으면)을 판정해 보상 지급 건으로 기록하고, 운영자가 이벤트를 만들고 켜고 끈다. | `--modules campaign,campaign-jdbc,reward-jdbc` | 이벤트, 출석 체크, 출석 보상, 친구 초대, 초대 코드, 초대 보상, 연속 출석, 업적 이벤트 / campaign, event, attendance, check-in, referral, invite, streak, achievement milestone | `@skeleton/rewards` |
 | `campaign-jdbc` | 이벤트 · 출석 · 초대 코드 · 초대 관계 저장을 DB 에 둔다 (PostgreSQL · MySQL). | `--modules campaign-jdbc` | 이벤트 저장, 출석 저장 / campaign store, attendance store | `@skeleton/rewards` |
 | `captcha-turnstile` | 봇 방지 — Cloudflare Turnstile 토큰을 서버에서 검증한다(TurnstileVerifier). | 스타터(apps/api)에 기본 포함 | 캡차, 봇 방지, 스팸 방지, 로봇 확인, 가입 폼 보호 / captcha, turnstile, bot protection, spam protection, cloudflare turnstile | `@skeleton/captcha-turnstile` |
 | `catalog` | 상품 · 가격 카탈로그 — 운영자가 화면에서 상품과 가격(월 · 연 · 단건 · 행사가 · 통화별)을 만들고, 가격표 · 구독 화면 · 결제가 방문 나라에 맞는 통화의 그 표를 읽는다. 결제 계약(SubscriptionPlans · PaymentCatalog · 결제사 가격 id)을 구현하고 가격은 고치지 않는다(새 줄 + 판매 중지). | `--modules catalog,catalog-jdbc` | 상품, 가격표, 요금제, 월간 연간, 행사가, 통화별 가격, 상품 관리 / product catalog, pricing table, price list, yearly monthly plans, sale price, multi-currency pricing | `@skeleton/payment` |
@@ -560,7 +560,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 다른 DB(JPA · jOOQ)로 저장하려면 board 의 저장 포트 네 개를 앱이 구현한다
 - 키워드: 게시판 저장소, 게시판 DB / board storage, board repository, board database
 
-### `campaign` — 이벤트 — 출석(매일 · 누적 · 연속 달성)과 친구초대(양쪽 보상)를 판정해 보상 지급 건으로 기록하고, 운영자가 이벤트를 만들고 켜고 끈다.
+### `campaign` — 이벤트 — 출석(매일 · 누적 · 연속 달성) · 친구초대(양쪽 보상) · 업적(앱이 보고한 수치가 단계에 닿으면)을 판정해 보상 지급 건으로 기록하고, 운영자가 이벤트를 만들고 켜고 끈다.
 
 - 종류 · 상태: module · experimental — 위치 `modules/campaign`
 - 켜는 법: `--modules campaign,campaign-jdbc,reward-jdbc`
@@ -575,7 +575,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - campaign 은 저장소와 지급 기록을 모른다 — campaign-jdbc 와 reward-jdbc 를 같이 고른다(없으면 서비스가 켜지지 않는다)
   - 보상을 직접 주지 않는다 — 쿠폰 · 포인트 지급기는 별도 모듈이다(지급기가 없으면 지급 건이 FAILED 로 남는다)
   - 기념일 · 공유 · 달성 · 배지 이벤트는 다음 판
-- 키워드: 이벤트, 출석 체크, 출석 보상, 친구 초대, 초대 코드, 초대 보상, 연속 출석 / campaign, event, attendance, check-in, referral, invite, streak
+- 키워드: 이벤트, 출석 체크, 출석 보상, 친구 초대, 초대 코드, 초대 보상, 연속 출석, 업적 이벤트 / campaign, event, attendance, check-in, referral, invite, streak, achievement milestone
 
 ### `campaign-jdbc` — 이벤트 · 출석 · 초대 코드 · 초대 관계 저장을 DB 에 둔다 (PostgreSQL · MySQL).
 

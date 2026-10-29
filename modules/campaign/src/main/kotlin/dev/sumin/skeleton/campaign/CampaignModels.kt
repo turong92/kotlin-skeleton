@@ -79,8 +79,13 @@ interface CampaignStore {
     /** `CLAIMED` 일 때만 [to] 로 옮긴다. 옮겼으면 true */
     fun settleReferral(inviteeId: String, to: ReferralStatus, at: Instant): Boolean
 
+    /** 계정의 수치 [metric] 을 `max(기존, value)` 로 올리고(증가만) 올린 뒤의 값을 돌려준다. 같은 수치를 동시에 올려도 큰 쪽이 남는다 */
+    fun upsertProgressMax(accountId: String, metric: String, value: Long, at: Instant): Long
+
+    fun progress(accountId: String, metric: String): Long?
+
     /**
-     * 계정이 지워질 때: 출석 · 코드 · **초대받은 쪽** 관계는 지우고, **초대자 쪽** 관계는 지우지 않고 초대자 id 만 [tombstone] 으로 바꾼다 -
+     * 계정이 지워질 때: 출석 · 업적 수치 · 코드 · **초대받은 쪽** 관계는 지우고, **초대자 쪽** 관계는 지우지 않고 초대자 id 만 [tombstone] 으로 바꾼다 -
      * 초대받은 사람의 「평생 한 번」이 풀리지 않게(지우면 다른 코드로 다시 claim 할 수 있다).
      */
     fun eraseAccount(accountId: String, tombstone: String)

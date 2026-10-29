@@ -42,7 +42,12 @@ class FakeCampaignStore : CampaignStore {
         referrals[inviteeId] = r.copy(status = to, qualifiedAt = at)
         return true
     }
+    val progress = mutableMapOf<Pair<String, String>, Long>()
+    override fun upsertProgressMax(accountId: String, metric: String, value: Long, at: Instant): Long =
+        progress.merge(accountId to metric, value) { old, new -> maxOf(old, new) }!!
+    override fun progress(accountId: String, metric: String): Long? = progress[accountId to metric]
     override fun eraseAccount(accountId: String, tombstone: String) {
+        progress.keys.removeIf { it.first == accountId }
         attendance.removeIf { it.second == accountId }
         codes.remove(accountId)
         referrals.values.removeIf { it.inviteeId == accountId }

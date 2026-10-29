@@ -1045,7 +1045,7 @@
       "module": "campaign",
       "path": "modules/campaign",
       "status": "experimental",
-      "summary": "이벤트 — 출석(매일 · 누적 · 연속 달성)과 친구초대(양쪽 보상)를 판정해 보상 지급 건으로 기록하고, 운영자가 이벤트를 만들고 켜고 끈다.",
+      "summary": "이벤트 — 출석(매일 · 누적 · 연속 달성) · 친구초대(양쪽 보상) · 업적(앱이 보고한 수치가 단계에 닿으면)을 판정해 보상 지급 건으로 기록하고, 운영자가 이벤트를 만들고 켜고 끈다.",
       "starter": false,
       "newProjectFlag": "--modules campaign,campaign-jdbc,reward-jdbc",
       "autoIncludes": ["json", "notification", "reward"],
@@ -1072,8 +1072,17 @@
         "기념일 · 공유 · 달성 · 배지 이벤트는 다음 판"
       ],
       "keywords": {
-        "ko": ["이벤트", "출석 체크", "출석 보상", "친구 초대", "초대 코드", "초대 보상", "연속 출석"],
-        "en": ["campaign", "event", "attendance", "check-in", "referral", "invite", "streak"]
+        "ko": ["이벤트", "출석 체크", "출석 보상", "친구 초대", "초대 코드", "초대 보상", "연속 출석", "업적 이벤트"],
+        "en": [
+          "campaign",
+          "event",
+          "attendance",
+          "check-in",
+          "referral",
+          "invite",
+          "streak",
+          "achievement milestone"
+        ]
       }
     },
     {

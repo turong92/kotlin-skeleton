@@ -55,6 +55,34 @@ data class ReferralConfig(
     }
 }
 
+/** 업적 한 단계 - 수치가 [value] 에 닿으면(같거나 넘으면) [rewards] 를 모두 준다 */
+data class AchievementStep(val value: Long, val rewards: List<RewardSpec>)
+
+/** 업적 설정 - [metric] 은 앱이 [CampaignSignals.report] 로 보고하는 수치의 이름, 단계는 기준값 오름차순 */
+data class AchievementConfig(val metric: String, val milestones: List<AchievementStep>) {
+    companion object {
+        val METRIC = Regex("[a-z0-9._-]{1,64}")
+        const val MAX_STEPS = 20
+
+        fun parse(raw: Map<String, Any?>): AchievementConfig {
+            val metric = (raw["metric"] as? String)?.trim().orEmpty()
+            if (!METRIC.matches(metric)) ConfigReader.fail("metric must match [a-z0-9._-]{1,64}")
+            val steps = ConfigReader.list(raw["milestones"], "milestones").mapIndexed { i, item ->
+                val m = ConfigReader.map(item, "milestones[$i]")
+                val value = ConfigReader.long(m["value"], "milestones[$i].value") ?: ConfigReader.fail("milestones[$i].value is required")
+                if (value < 1) ConfigReader.fail("milestones[$i].value must be at least 1")
+                val rewards = ConfigReader.rewards(m["rewards"], "milestones[$i].rewards")
+                if (rewards.isEmpty()) ConfigReader.fail("milestones[$i].rewards must not be empty")
+                AchievementStep(value, rewards)
+            }
+            if (steps.isEmpty()) ConfigReader.fail("an achievement campaign needs at least one milestone")
+            if (steps.size > MAX_STEPS) ConfigReader.fail("an achievement campaign has at most $MAX_STEPS milestones")
+            steps.zipWithNext().forEachIndexed { i, (a, b) -> if (b.value <= a.value) ConfigReader.fail("milestones[${i + 1}].value must be greater than the previous one") }
+            return AchievementConfig(metric, steps)
+        }
+    }
+}
+
 internal object ConfigReader {
     fun fail(message: String): Nothing = throw CampaignException(CampaignErrorCode.CONFIG_INVALID, message)
 
@@ -72,6 +100,14 @@ internal object ConfigReader {
         is Int -> raw
         is Long -> raw.toInt()
         is Number -> if (raw.toDouble() % 1.0 == 0.0) raw.toInt() else fail("$path must be a whole number")
+        else -> fail("$path must be a number")
+    }
+
+    fun long(raw: Any?, path: String): Long? = when (raw) {
+        null -> null
+        is Int -> raw.toLong()
+        is Long -> raw
+        is Number -> if (raw.toDouble() % 1.0 == 0.0) raw.toLong() else fail("$path must be a whole number")
         else -> fail("$path must be a number")
     }
 
