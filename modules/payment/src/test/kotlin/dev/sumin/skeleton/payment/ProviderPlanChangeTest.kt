@@ -52,12 +52,9 @@ class ProviderPlanChangeTest {
     private fun change(id: String, expected: Long, plan: String = "plus") = kit.planChanges.change("acc_1", id, plan, expected, IdempotencyKey("chg-1"))
 
     @Test
-    fun `a provider managed upgrade switches plan, amount and period only after the provider applied it`() {
+    fun `a provider managed upgrade switches plan and amount only after the provider applied it and keeps the period the answer did not move`() {
         val line = active()
-        val moved = t0.plusSeconds(86400)
-        push.quote = push.quote.copy(periodStart = moved, periodEnd = moved.plusSeconds(31 * 86400), restartsPeriod = true)
-        val reportedStart = moved.plusSeconds(5) // 적용 응답의 새 기간이 있으면 그것이 장부 기간이다(견적과 수 초 다르다)
-        push.appliedPeriod = HostedPlanApplied(reportedStart, reportedStart.plusSeconds(31 * 86400))
+        push.quote = push.quote.copy(periodStart = t0.plusSeconds(99), periodEnd = t0.plusSeconds(99 + 31 * 86400)) // 견적의 기간은 장부 기간이 되지 않는다
 
         val preview = kit.planChanges.preview("acc_1", line.id, "plus")
         assertEquals(PaymentAmount(500, "USD"), preview.charge)
@@ -71,10 +68,27 @@ class ProviderPlanChangeTest {
         assertEquals(HostedPlanChange("psub_1", "plus", PlanChangeKind.IMMEDIATE_SAME_PERIOD), push.applies.single())
         assertEquals("plus", changed.planCode)
         assertEquals(PaymentAmount(1_990, "USD"), changed.amount)
+        assertEquals(line.currentPeriodStart, changed.currentPeriodStart)
+        assertEquals(line.periodSeq, changed.periodSeq)
+    }
+
+    @Test
+    fun `a monthly to yearly upgrade takes the new period from the apply answer and the webhook for the same period does not count it again`() {
+        kit.plans.plans += SubscriptionPlan("plus-year", "Plus Year", PaymentAmount(69_000, "KRW"), "P1Y", 2)
+        val line = active()
+        val reportedStart = t0.plusSeconds(86400)
+        push.quote = push.quote.copy(restartsPeriod = true)
+        push.appliedPeriod = HostedPlanApplied(reportedStart, reportedStart.plusSeconds(365 * 86400))
+
+        assertEquals(PlanChangeKind.IMMEDIATE_NEW_PERIOD, kit.planChanges.preview("acc_1", line.id, "plus-year").kind)
+        val changed = change(line.id, expected = 500, plan = "plus-year")
+
+        assertEquals(HostedPlanChange("psub_1", "plus-year", PlanChangeKind.IMMEDIATE_NEW_PERIOD), push.applies.single())
+        assertEquals("P1Y", changed.period)
         assertEquals(reportedStart, changed.currentPeriodStart)
         assertEquals(line.periodSeq + 1, changed.periodSeq)
-        feed(PushedSubscription("evt_${++seq}", t0.plusSeconds(86401), "psub_1", PushedSubscriptionStatus.ACTIVE, periodStart = reportedStart, periodEnd = reportedStart.plusSeconds(31 * 86400)))
-        assertEquals(changed.periodSeq, sub(line.id).periodSeq, "the webhook for the same period does not count it again")
+        feed(PushedSubscription("evt_${++seq}", t0.plusSeconds(86401), "psub_1", PushedSubscriptionStatus.ACTIVE, periodStart = reportedStart, periodEnd = reportedStart.plusSeconds(365 * 86400)))
+        assertEquals(changed.periodSeq, sub(line.id).periodSeq)
     }
 
     @Test

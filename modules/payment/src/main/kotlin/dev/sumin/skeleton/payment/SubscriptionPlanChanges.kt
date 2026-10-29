@@ -129,8 +129,9 @@ class SubscriptionPlanChanges(
         if (hosted.quote.charge.amount > expectedCharge) throw PaymentPlanChangeChargeChangedException()
         val reported = hosted.gateway.applyPlanChange(hosted.change)
         val applied = hosted.answer
-        val newStart = reported.periodStart.takeIf { reported.periodEnd != null } ?: applied.periodStart
-        val newEnd = reported.periodEnd.takeIf { reported.periodStart != null } ?: applied.periodEnd
+        // 새 기간은 적용 응답이 알려 줄 때만 쓴다 - 없으면 기간은 그대로 두고 구독 웹훅에 맡긴다(견적의 기간은 적용 시각의 기간이 아니다)
+        val newStart = reported.periodStart.takeIf { reported.periodEnd != null }
+        val newEnd = reported.periodEnd.takeIf { reported.periodStart != null }
         val target = hosted.quote.plan
         return store.inTransaction { tx ->
             val locked = tx.lockSubscription(before.id) ?: throw PaymentSubscriptionNotFoundException()
