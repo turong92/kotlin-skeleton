@@ -100,7 +100,7 @@ payment-paddle ──▶ payment{ProviderPriceRefs}      coupon ──▶ platfo
 | 등급↓ (주기 무관) · 같은 등급 연→월 | 다음 갱신부터 예약, 취소 가능 | 거절 | 예약. 갱신 작업이 기간 끝에 플랜 · 금액 · 주기를 바꾼 뒤 새 금액으로 과금(주기가 바뀌면 기준 시각 = 옛 기간 끝). 예약 중 올리기 · 해지 예약은 예약을 지운다. 쿠폰 남은 회차는 새 금액에 이어서(지금 규칙) |
 | 등급↑ + 주기↓ (연 basic → 월 pro) | 없음 | 거절 | 다음 갱신 예약 |
 | 연→월 바로(A') | 무료 개월 환산 | 없음 | 다음에(아래) |
-| Paddle 구독 | — | 변경 거절(`isProviderManaged`) | 그대로 |
+| Paddle 구독 | — | 변경 거절(`isProviderManaged`) | 올리기만 연다(내리기 거절) - [2026-10-29-paddle-plan-change-design.md](2026-10-29-paddle-plan-change-design.md) |
 | 통화가 다른 플랜 | — | 거절 | 그대로(통화는 바꾸지 않는다) |
 
 - 판정은 지금처럼 **한 곳**: `isUpgrade` 를 `PlanChangeRules.classify(current, target, subscription)` → `IMMEDIATE_SAME_PERIOD` · `IMMEDIATE_NEW_PERIOD` · `SCHEDULED` · `NOT_ALLOWED` 로 넓힌다. 주기 비교는 `SubscriptionPeriod` 길이(같은 기준 시각에서 `after(1)`).

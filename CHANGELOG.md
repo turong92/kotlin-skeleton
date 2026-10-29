@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Paddle 구독의 플랜 올리기 (2026-10-29)
+
+- `payment`: 결제사 능력 `PaymentHostedPlanChangeGateway`(미리보기 · 적용) - 결제사가 갱신하는 구독의 **올리기**(등급↑ · 월 → 연)가 열린다. 결제사가 금액을 계산하고(구매자 통화) 결제까지 끝낸 뒤 플랜이 바뀐다(202 · 예약 없음). 내리기(예약으로 판정되는 변경)는 `409 PLAN_CHANGE_DOWNGRADE_UNSUPPORTED`. 변경 결제 웹훅은 `SUBSCRIPTION_CHANGE` 주문 한 줄이고 구독 금액을 덮지 않으며, 크레딧으로 낸 몫은 주문의 `discount_amount` 로 남는다(주문 금액 = 실제로 낸 돈). `subscription.updated` 의 품목이 플랜 코드를 맞춘다(`PaymentPushGateway.itemRefOf`). 토스 경로는 그대로.
+- `payment-paddle`: `PATCH /subscriptions/{id}`(미리보기 `…/preview`) `prorated_immediately`, 최소 금액 미만은 `do_not_bill` 로 한 번 더. API 키에 `subscription.write` 권한이 필요하다.
+
 ### 갈아타기 넓히기 (2026-10-29)
 
 - `payment` + `payment-jdbc`: 갈아타기 판정 한 곳 `PlanChangeRules.classify` — 같은 주기의 윗등급(바로, 기존 과금 방식) · **더 긴 주기로(월 → 연)**(바로, 새 가격 − 이번 기간에 실제로 낸 돈의 남은 몫, 오늘부터 새 주기, 설정의 과금 방식과 상관없다) · **등급 내리기 · 주기 줄이기(등급↑ + 주기↓ 포함)는 다음 갱신으로 예약**(결제 없음). 새 V 파일 `payment_subscriptions_plan_schedule`(`pending_period` · `scheduled_plan_code` · `scheduled_amount` · `scheduled_period`). 갱신 작업이 예약을 과금 주문을 넣는 같은 트랜잭션에서 적용한다(예약한 때의 금액, 실패한 갱신의 재시도도 새 금액, 주기가 바뀌면 기준 시각 = 옛 기간 끝). 예약 중 올리기 · 해지 예약은 예약을 지운다.

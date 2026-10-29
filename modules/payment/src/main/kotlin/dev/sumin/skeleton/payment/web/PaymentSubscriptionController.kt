@@ -157,7 +157,9 @@ class PaymentSubscriptionController(
     @Operation(
         summary = "What a plan change would charge, and when it happens",
         description = "timing NOW (a higher tier of the same period, or a longer period: charge is what is paid at once, 0 = changed for free, restartsPeriod tells that a new period starts today) or NEXT_RENEWAL (a lower tier or a shorter period: charge is 0, effectiveAt is the end of this period). amount is the new plan's full price. " +
-            "409 PLAN_CHANGE_NOT_ALLOWED when the plan is the same / another currency / the subscription is not in use / a charge is in flight / plan change is off · 422 ITEM_NOT_PURCHASABLE for an unknown plan.",
+            "For a subscription the provider renews (Paddle) only a higher tier or a longer period is offered: timing is always NOW, charge/credit/amount are what the provider calculated in the buyer's currency; " +
+            "a lower tier or a shorter period is 409 PLAN_CHANGE_DOWNGRADE_UNSUPPORTED. " +
+            "409 PLAN_CHANGE_NOT_ALLOWED when the plan is the same / another currency / the subscription is not in use / a charge is in flight / plan change is off / the provider cannot change it now · 422 ITEM_NOT_PURCHASABLE for an unknown plan.",
     )
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = PlanChangePreviewResponse::class)
     @GetMapping("/subscriptions/{id}/change-preview")
@@ -167,7 +169,8 @@ class PaymentSubscriptionController(
     @Operation(
         summary = "Change plan - at once, or scheduled for the next renewal",
         description = "Body { planCode, expectedCharge } + Idempotency-Key. 200 changed (or scheduled: subscription.scheduledChange is set and nothing is charged, expectedCharge 0) · 202 the charge is unconfirmed (subscription.pendingPlanCode is set — poll GET /subscriptions/me) · " +
-            "402 DECLINED (the plan stays) · 409 PLAN_CHANGE_CHARGE_CHANGED when the charge is now higher than expectedCharge (preview again) · 409 PLAN_CHANGE_NOT_ALLOWED · 429.",
+            "402 DECLINED (the plan stays) · 409 PLAN_CHANGE_CHARGE_CHANGED when the charge is now higher than expectedCharge (preview again) · 409 PLAN_CHANGE_NOT_ALLOWED · 409 PLAN_CHANGE_DOWNGRADE_UNSUPPORTED. " +
+            "A subscription the provider renews (Paddle) is changed by the provider at once: there is no 202 and no scheduled change, and when the answer is lost the call fails while the provider's webhook brings the plan in line later. · 429.",
     )
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = SubscriptionResponse::class)
     @PostMapping("/subscriptions/{id}/change")

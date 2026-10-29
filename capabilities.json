@@ -2186,7 +2186,7 @@
       "module": "payment-paddle",
       "path": "modules/payment-paddle",
       "status": "experimental",
-      "summary": "Paddle 해외 결제(판매 대행) — 서명된 웹훅으로 결제 · 구독 상태를 장부에 옮기고, 결제 · 갱신은 Paddle 이 한다. 구독 해지는 Paddle API.",
+      "summary": "Paddle 해외 결제(판매 대행) — 서명된 웹훅으로 결제 · 구독 상태를 장부에 옮기고, 결제 · 갱신은 Paddle 이 한다. 구독 해지 · 플랜 올리기는 Paddle API.",
       "starter": false,
       "newProjectFlag": "--modules payment-paddle",
       "autoIncludes": ["crypto", "payment"],
@@ -2223,8 +2223,8 @@
         "상품 · 가격은 Paddle 에서 만들고 설정에 가격 id 를 적는다"
       ],
       "keywords": {
-        "ko": ["패들", "해외 결제", "해외 구독", "다통화"],
-        "en": ["paddle", "merchant of record", "international subscription", "multi-currency"]
+        "ko": ["패들", "해외 결제", "해외 구독", "다통화", "플랜 변경"],
+        "en": ["paddle", "merchant of record", "international subscription", "multi-currency", "plan change"]
       }
     },
     {
