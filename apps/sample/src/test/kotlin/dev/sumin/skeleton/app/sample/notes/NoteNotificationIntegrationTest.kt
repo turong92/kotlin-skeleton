@@ -82,7 +82,7 @@ class NoteNotificationIntegrationTest : SampleIntegrationTest() {
             content = """{"muted":true}"""
         }.andExpect { status { isNotFound() } }
         val list = mockMvc.get("/api/v1/notifications/preferences") { header("Authorization", "Bearer $user") }.andReturn().response.contentAsString
-        assertEquals(listOf("NOTE_UPDATED", "comment.created", "comment.replied", "reward.granted"), JsonPath.read<List<String>>(list, "$.value.items[*].type"))
+        assertEquals(listOf("NOTE_UPDATED", "comment.created", "comment.replied", "reward.granted", "badge.awarded"), JsonPath.read<List<String>>(list, "$.value.items[*].type"))
     }
 
     @Test

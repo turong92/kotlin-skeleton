@@ -3031,6 +3031,8 @@
         "author-profile-jdbc",
         "authz",
         "authz-jdbc",
+        "badge",
+        "badge-jdbc",
         "board",
         "board-jdbc",
         "campaign",
