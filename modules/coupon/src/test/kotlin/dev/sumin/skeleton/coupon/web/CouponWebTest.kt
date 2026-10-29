@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.coupon.web
 
+import dev.sumin.skeleton.common.account.AccountLabels
 import dev.sumin.skeleton.common.authz.OperatorAccess
 import dev.sumin.skeleton.common.authz.OperatorAction
 import dev.sumin.skeleton.common.authz.OperatorAuditLog
@@ -39,6 +40,7 @@ class CouponTestBeans {
         override fun permissionsOf(ref: OperatorRef): Set<String> = GRANTS[ref.accountId] ?: emptySet()
     }
     @Bean fun audit(): OperatorAuditLog = OperatorAuditLog { AUDIT += it }
+    @Bean fun labels(): AccountLabels = AccountLabels { ids -> ids.filter { it == "acc_5" }.associateWith { "five@example.com" } }
 
     companion object {
         val GRANTS = ConcurrentHashMap<String, Set<String>>()
@@ -217,6 +219,8 @@ class CouponAdminWebTest {
             .andExpect(jsonPath("$.values[0].orderRef").value("ord_5"))
             .andExpect(jsonPath("$.values[0].usedAt").exists())
             .andExpect(jsonPath("$.values[0].accountId").value("acc_5"))
+            .andExpect(jsonPath("$.values[0].accountLabel").value("five@example.com"))
+            .andExpect(jsonPath("$.values[1].accountLabel").doesNotExist())   // 이름을 모르는 계정은 칸이 비고 화면이 id 를 보인다
         mvc.perform(get("/api/v1/admin/coupon-definitions/$id/coupons?status=EXPIRED").principal(operator))
             .andExpect(jsonPath("$.values.length()").value(1)).andExpect(jsonPath("$.values[0].id").value("cpn_2"))
         mvc.perform(get("/api/v1/admin/coupon-definitions/$id/coupons?status=BOGUS").principal(operator)).andExpect(status().isBadRequest)

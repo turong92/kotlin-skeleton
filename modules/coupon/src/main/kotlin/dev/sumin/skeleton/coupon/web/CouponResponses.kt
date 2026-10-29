@@ -64,6 +64,8 @@ data class CouponDefinitionResponse(
 data class IssuedCouponResponse(
     val id: String,
     val accountId: String,
+    /** 사람이 알아볼 계정 이름(이메일, 없으면 아이디). 이름을 낼 수 없으면 null - 화면은 [accountId] 를 보인다 */
+    val accountLabel: String?,
     val status: CouponStatus,
     val issuedAt: Instant,
     val expiresAt: Instant?,
@@ -105,8 +107,8 @@ fun CouponDefinition.toResponse() = CouponDefinitionResponse(
     id, name, status, stageResponses(), currency, minAmount, scopeResponse(), firstPurchaseOnly, validDays, validUntil, issueLimit, perAccountLimit, issuedCount, issueStartsAt, issueEndsAt, validFrom,
 )
 
-fun CouponView.toIssuedResponse() = IssuedCouponResponse(
-    coupon.id, coupon.accountId, status, coupon.createdAt, coupon.expiresAt, definition.validFrom, coupon.usedAt,
+fun CouponView.toIssuedResponse(accountLabel: String? = null) = IssuedCouponResponse(
+    coupon.id, coupon.accountId, accountLabel, status, coupon.createdAt, coupon.expiresAt, definition.validFrom, coupon.usedAt,
     coupon.holderRef.takeIf { status == CouponStatus.RESERVED || status == CouponStatus.USED },
 )
 

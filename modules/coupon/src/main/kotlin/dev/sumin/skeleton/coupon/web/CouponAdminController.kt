@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.coupon.web
 
 import dev.sumin.skeleton.common.ApplicationException
+import dev.sumin.skeleton.common.account.AccountLabels
 import dev.sumin.skeleton.common.CursorResponse
 import dev.sumin.skeleton.common.DataResponse
 import dev.sumin.skeleton.common.ListResponse
@@ -80,6 +81,8 @@ class CouponAdminController(
     private val reports: CouponReports,
     private val access: OperatorAccess,
     private val audit: OperatorAuditLog,
+    /** 발급 내역의 계정 이름 - 없으면(`account` 가 없는 조립) 이름 칸이 비어 id 만 나간다 */
+    private val labels: AccountLabels? = null,
 ) {
     @GetMapping("/coupon-definitions")
     fun listDefinitions(authentication: Authentication?): ListResponse<CouponDefinitionResponse> {
@@ -140,7 +143,8 @@ class CouponAdminController(
                 ?: throw ApplicationException("Unknown status '$raw'", PlatformErrorCode.PARAMETER_VALIDATION_FAILED)
         }
         val page = reports.coupons(id, wanted, cursor?.takeIf { it.isNotBlank() }, size ?: CouponReports.DEFAULT_SIZE)
-        return Response.ok(page.items.map { it.toIssuedResponse() }, nextCursor = page.nextCursor)
+        val names = labels?.of(page.items.map { it.coupon.accountId }) ?: emptyMap()
+        return Response.ok(page.items.map { it.toIssuedResponse(names[it.coupon.accountId]) }, nextCursor = page.nextCursor)
     }
 
     @GetMapping("/coupons")

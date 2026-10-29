@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 쿠폰 발급 내역의 계정 이름 (2026-10-29)
+
+- `platform` + `account` + `coupon`: 계약 `common/account` `AccountLabels`(계정 id → 이메일, 없으면 아이디) - `account` 가 기본 빈으로 낸다. `GET /api/v1/admin/coupon-definitions/{id}/coupons` 의 각 줄에 `accountLabel`(더하기만, 이름을 낼 수 없으면 null). 빈이 없는 조립은 그대로 동작한다.
+
 ### Paddle 구독의 플랜 올리기 (2026-10-29)
 
 - `payment`: 결제사 능력 `PaymentHostedPlanChangeGateway`(미리보기 · 적용) - 결제사가 갱신하는 구독의 **올리기**(등급↑ · 월 → 연)가 열린다. 결제사가 금액을 계산하고(구매자 통화) 결제까지 끝낸 뒤 플랜이 바뀐다(202 · 예약 없음). 내리기(예약으로 판정되는 변경)는 `409 PLAN_CHANGE_DOWNGRADE_UNSUPPORTED`. 변경 결제 웹훅은 `SUBSCRIPTION_CHANGE` 주문 한 줄이고 구독 금액을 덮지 않으며, 크레딧으로 낸 몫은 주문의 `discount_amount` 로 남는다(주문 금액 = 실제로 낸 돈). `subscription.updated` 의 품목이 플랜 코드를 맞춘다(`PaymentPushGateway.itemRefOf`). 토스 경로는 그대로.

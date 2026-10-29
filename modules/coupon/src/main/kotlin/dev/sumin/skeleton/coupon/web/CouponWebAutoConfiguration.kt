@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.coupon.web
 
+import dev.sumin.skeleton.common.account.AccountLabels
 import dev.sumin.skeleton.common.authz.OperatorAccess
 import dev.sumin.skeleton.common.authz.OperatorAuditLog
 import dev.sumin.skeleton.coupon.CouponAutoConfiguration
@@ -14,6 +15,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication
+import org.springframework.beans.factory.ObjectProvider
 import org.springframework.context.annotation.Bean
 
 /**
@@ -42,5 +44,6 @@ class CouponWebAutoConfiguration {
         reports: CouponReports,
         access: OperatorAccess,
         audit: OperatorAuditLog,
-    ): CouponAdminController = CouponAdminController(definitions, issuance, codes, wallet, reports, access, audit)
+        labels: ObjectProvider<AccountLabels>,
+    ): CouponAdminController = CouponAdminController(definitions, issuance, codes, wallet, reports, access, audit, labels.getIfAvailable())
 }

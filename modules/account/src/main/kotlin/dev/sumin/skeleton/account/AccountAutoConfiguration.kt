@@ -52,6 +52,7 @@ import dev.sumin.skeleton.common.authz.AuthzProperties
 import dev.sumin.skeleton.common.authz.OperatorAccess
 import dev.sumin.skeleton.common.authz.PermissionDeclaration
 import dev.sumin.skeleton.common.account.AccountFacts
+import dev.sumin.skeleton.common.account.AccountLabels
 import dev.sumin.skeleton.common.authz.RoleHolders
 import dev.sumin.skeleton.common.authz.RolePermissionSource
 import dev.sumin.skeleton.account.authz.AccountOperatorAccess
@@ -257,6 +258,11 @@ class AccountAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     fun accountFacts(accounts: ObjectProvider<AccountRepository>): AccountFacts = RepositoryAccountFacts { accounts.getObject() }
+
+    /** 이메일(없으면 아이디) — 운영 화면이 계정 id 옆에 사람이 알아볼 이름을 보인다(쿠폰 발급 내역) */
+    @Bean
+    @ConditionalOnMissingBean
+    fun accountLabels(accounts: ObjectProvider<AccountRepository>): AccountLabels = RepositoryAccountLabels { accounts.getObject() }
 
     @Bean
     fun accountPermissions(): PermissionDeclaration = AccountPermissions.declaration
