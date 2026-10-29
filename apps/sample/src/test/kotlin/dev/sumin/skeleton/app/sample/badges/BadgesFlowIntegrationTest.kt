@@ -104,7 +104,15 @@ class BadgesFlowIntegrationTest : CheerIntegrationBase() {
     fun `the profile path is rate limited per IP, and the limit does not touch other paths`() {
         // 다른 시험이 쓰는 localhost 의 한도를 쓰지 않게 이 시험만의 IP 로 부른다
         fun profileFrom(ip: String) = mvc.get("/api/v1/badges/accounts/$userId") { with { it.remoteAddr = ip; it } }
-        repeat(60) { profileFrom("10.9.9.9").andExpect { status { isOk() } } }
+        // 한도 창은 epoch 분 경계에 맞춘다 - 호출 도중 경계를 넘으면 계수가 0 으로 돌아가므로 429 가 나올 때까지 부른다(최대 두 창)
+        var ok = 0
+        var last = 200
+        while (ok <= 120 && last == 200) {
+            last = profileFrom("10.9.9.9").andReturn().response.status
+            if (last == 200) ok++
+        }
+        assertEquals(429, last, "the profile path must be limited within two windows (got $ok ok responses)")
+        assertTrue(ok in 60..120, "a window lets 60 through; got $ok")
         profileFrom("10.9.9.9").andExpect { status { isTooManyRequests() } }
         profileFrom("10.9.9.8").andExpect { status { isOk() } }
         get("/api/v1/badges/me", user).andExpect { status { isOk() } }
