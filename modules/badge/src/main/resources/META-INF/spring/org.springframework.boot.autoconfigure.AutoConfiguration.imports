@@ -1,0 +1,3 @@
+dev.sumin.skeleton.badge.BadgeAutoConfiguration
+dev.sumin.skeleton.badge.web.BadgeWebAutoConfiguration
+dev.sumin.skeleton.badge.notification.BadgeNotificationAutoConfiguration
