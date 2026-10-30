@@ -1,2 +1,3 @@
 dev.sumin.skeleton.workspace.WorkspaceAutoConfiguration
+dev.sumin.skeleton.workspace.mail.WorkspaceMailAutoConfiguration
 dev.sumin.skeleton.workspace.web.WorkspaceWebAutoConfiguration

@@ -134,7 +134,7 @@ class WorkspaceService(
     }
 
     /** 줄을 잠그고 → 닫히지 않았는지 → 호출자의 지금 멤버십 → 역할 검사 → [block]. 어느 단계든 실패하면 아무것도 바뀌지 않는다 */
-    private fun <T> mutate(accountId: String, workspaceId: String, min: WorkspaceRole, block: (Workspace, WorkspaceMember) -> T): T = store.inTransaction {
+    internal fun <T> mutate(accountId: String, workspaceId: String, min: WorkspaceRole, block: (Workspace, WorkspaceMember) -> T): T = store.inTransaction {
         val workspace = store.lockWorkspace(workspaceId)?.takeIf { it.status == WorkspaceStatus.ACTIVE } ?: throw notFound()
         val me = store.findMember(workspaceId, accountId) ?: throw notFound()
         if (!me.role.atLeast(min)) throw WorkspaceException(WorkspaceErrorCode.FORBIDDEN)

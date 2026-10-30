@@ -1,10 +1,17 @@
 package dev.sumin.skeleton.workspace.jdbc
 
 import dev.sumin.skeleton.common.account.AccountDeletionCheck
+import dev.sumin.skeleton.common.account.AccountFacts
 import dev.sumin.skeleton.common.erasure.AccountErasureListener
 import dev.sumin.skeleton.common.erasure.AccountTombstone
 import dev.sumin.skeleton.common.erasure.ErasureRequest
+import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.persistence.jdbc.SqlDialect
+import dev.sumin.skeleton.workspace.InvitationMail
+import dev.sumin.skeleton.workspace.InvitationStatus
+import dev.sumin.skeleton.workspace.WorkspaceInvitationService
+import dev.sumin.skeleton.workspace.WorkspaceProperties
+import dev.sumin.skeleton.workspace.WorkspaceSeatPolicy
 import dev.sumin.skeleton.workspace.WorkspaceErrorCode
 import dev.sumin.skeleton.workspace.WorkspaceException
 import dev.sumin.skeleton.workspace.WorkspaceMember
@@ -172,5 +179,73 @@ class WorkspaceDbTest {
 
         store.eraseAccount(acc("io"), AccountTombstone.of(acc("io")))
         assertEquals(setOf(AccountTombstone.of(acc("io"))), jdbc.sql("select distinct invited_by from workspace_invitations where workspace_id = ?").param(id).query(String::class.java).list().toSet())
+    }
+
+    // ---- 초대 (진짜 잠금 · 유니크)
+
+    private fun invitations(seats: WorkspaceSeatPolicy, sent: MutableList<InvitationMail>, verified: Map<String, String> = emptyMap()) = WorkspaceInvitationService(
+        store, TimeProvider.systemUtc(), seats, service,
+        object : AccountFacts {
+            override fun createdAt(accountId: String): Instant? = null
+            override fun verifiedEmail(accountId: String) = verified[accountId]
+        },
+        { m -> synchronized(sent) { sent += m } }, WorkspaceProperties.Invitation(enabled = true),
+    )
+
+    private fun sha256(text: String) = java.security.MessageDigest.getInstance("SHA-256").digest(text.toByteArray()).joinToString("") { "%02x".format(it) }
+
+    @Test
+    fun `two simultaneous accepts of the last seat let exactly one in and leave the other invitation pending`() {
+        repeat(5) { round ->
+            val owner = acc("so$round")
+            val id = team(owner, "Race Seat $round")
+            val sent = mutableListOf<InvitationMail>()
+            var limit: Int? = 3
+            val verified = mapOf(acc("sa$round") to "a$round@example.com", acc("sb$round") to "b$round@example.com")
+            val svc = invitations({ limit }, sent, verified)
+            svc.invite(owner, id, listOf("a$round@example.com", "b$round@example.com"), WorkspaceRole.MEMBER, "en")   // 소유자 1 + 대기 2 = 3
+            limit = 2   // 상한이 줄었다 - 자리는 하나만 남는다
+            val tokens = mapOf(acc("sa$round") to sent.single { it.to.startsWith("a") }.token, acc("sb$round") to sent.single { it.to.startsWith("b") }.token)
+
+            val results = concurrently(2) { i -> val who = if (i == 0) acc("sa$round") else acc("sb$round"); svc.accept(who, tokens.getValue(who)) }
+
+            assertEquals(1, results.count { it.isSuccess }, "round $round: ${results.map { it.exceptionOrNull() }}")
+            assertEquals(WorkspaceErrorCode.SEAT_LIMIT, (results.single { it.isFailure }.exceptionOrNull() as WorkspaceException).workspaceError)
+            assertEquals(2, store.countMembers(id), "round $round")
+            assertEquals(1, store.listPendingInvitations(id).size, "the refused invitation stays pending")
+        }
+    }
+
+    @Test
+    fun `a token is stored only as its hash, a resend replaces it, and revoking or accepting frees the address`() {
+        val owner = acc("to")
+        val id = team(owner, "Token Rows")
+        val sent = mutableListOf<InvitationMail>()
+        val svc = invitations({ null }, sent, mapOf(acc("ta") to "ta@example.com"))
+        svc.invite(owner, id, listOf("ta@example.com"), WorkspaceRole.MEMBER, "en")
+        val first = sent.single().token
+        val row = store.findPendingInvitation(id, "ta@example.com")!!
+
+        val everyColumn = jdbc.sql("select * from workspace_invitations where id = ?").param(row.id).query { rs, _ -> (1..rs.metaData.columnCount).map { rs.getString(it).orEmpty() } }.single()
+        assertTrue(everyColumn.none { it.contains(first) }, "a column holds the plain token")
+        assertEquals(sha256(first), row.tokenHash)
+        assertEquals(row.id, store.findInvitationByTokenHash(row.tokenHash)!!.id)
+
+        assertFailsWith<DuplicateKeyException> { store.insertInvitation(row.copy(id = "wsi_${seq}_dup", tokenHash = "f".repeat(64))) }   // 같은 주소에 대기 초대는 하나
+
+        val renewed = Instant.now().plusSeconds(60)
+        assertTrue(store.renewInvitation(row.id, "e".repeat(64), renewed, Instant.now()))
+        assertNull(store.findInvitationByTokenHash(row.tokenHash), "the old token hash is gone")
+        assertEquals(2, store.findInvitation(row.id)!!.sentCount)
+
+        assertTrue(store.closeInvitation(row.id, InvitationStatus.REVOKED, null, Instant.now()))
+        assertEquals(false, store.closeInvitation(row.id, InvitationStatus.REVOKED, null, Instant.now()), "closing twice changes nothing")
+        assertEquals(false, store.renewInvitation(row.id, "d".repeat(64), renewed, Instant.now()), "a closed invitation cannot be renewed")
+        assertEquals(listOf("ta@example.com"), svc.invite(owner, id, listOf("ta@example.com"), WorkspaceRole.MEMBER, "en").invited, "the address is free again")
+
+        val accepted = sent.last().token
+        svc.accept(acc("ta"), accepted)
+        assertEquals(InvitationStatus.ACCEPTED, store.findInvitationByTokenHash(sha256(accepted))!!.status)
+        assertEquals(0, store.listPendingInvitations(id).size)
     }
 }

@@ -9,9 +9,12 @@ class FakeWorkspaceStore : WorkspaceStore {
     private val workspaces = LinkedHashMap<String, Workspace>()
     private val history = LinkedHashMap<String, String>()
     private val members = ArrayList<WorkspaceMember>()
+    private val invitations = LinkedHashMap<String, WorkspaceInvitation>()
+    /** 줄 없이 살아 있는 초대 수를 더 얹는다(상세의 `pendingInvitations` 시험) */
     var liveInvitations = 0
 
-    fun clear() = lock.withLock { workspaces.clear(); history.clear(); members.clear(); liveInvitations = 0 }
+    fun clear() = lock.withLock { workspaces.clear(); history.clear(); members.clear(); invitations.clear(); liveInvitations = 0 }
+    fun invitationRows() = lock.withLock { invitations.values.toList() }
     fun all() = lock.withLock { workspaces.values.toList() }
     fun membersIncludingAll() = lock.withLock { members.toList() }
 
@@ -61,7 +64,37 @@ class FakeWorkspaceStore : WorkspaceStore {
 
     override fun listMembers(workspaceId: String) = lock.withLock { members.filter { it.workspaceId == workspaceId }.sortedWith(compareBy({ it.joinedAt }, { it.accountId })) }
     override fun countMembers(workspaceId: String) = listMembers(workspaceId).size
-    override fun countLiveInvitations(workspaceId: String, now: Instant) = liveInvitations
+    override fun countLiveInvitations(workspaceId: String, now: Instant) = lock.withLock {
+        liveInvitations + invitations.values.count { it.workspaceId == workspaceId && it.status == InvitationStatus.PENDING && it.expiresAt.isAfter(now) }
+    }
+
+    override fun insertInvitation(invitation: WorkspaceInvitation) {
+        lock.withLock {
+            check(invitations.values.none { it.status == InvitationStatus.PENDING && invitation.status == InvitationStatus.PENDING && it.workspaceId == invitation.workspaceId && it.email == invitation.email }) { "pending twice" }
+            check(invitations.values.none { it.tokenHash == invitation.tokenHash }) { "token twice" }
+            invitations[invitation.id] = invitation
+        }
+    }
+
+    override fun findInvitation(id: String) = lock.withLock { invitations[id] }
+    override fun findInvitationByTokenHash(tokenHash: String) = lock.withLock { invitations.values.firstOrNull { it.tokenHash == tokenHash } }
+    override fun findPendingInvitation(workspaceId: String, email: String) =
+        lock.withLock { invitations.values.firstOrNull { it.workspaceId == workspaceId && it.email == email && it.status == InvitationStatus.PENDING } }
+    override fun listPendingInvitations(workspaceId: String) =
+        lock.withLock { invitations.values.filter { it.workspaceId == workspaceId && it.status == InvitationStatus.PENDING }.sortedBy { it.createdAt } }
+    override fun countPendingInvitations(workspaceId: String) = listPendingInvitations(workspaceId).size
+
+    override fun renewInvitation(id: String, tokenHash: String, expiresAt: Instant, at: Instant): Boolean = lock.withLock {
+        val current = invitations[id]?.takeIf { it.status == InvitationStatus.PENDING } ?: return false
+        invitations[id] = current.copy(tokenHash = tokenHash, expiresAt = expiresAt, sentCount = current.sentCount + 1, lastSentAt = at, updatedAt = at)
+        true
+    }
+
+    override fun closeInvitation(id: String, status: InvitationStatus, acceptedBy: String?, at: Instant): Boolean = lock.withLock {
+        val current = invitations[id]?.takeIf { it.status == InvitationStatus.PENDING } ?: return false
+        invitations[id] = current.copy(status = status, acceptedBy = acceptedBy, acceptedAt = if (status == InvitationStatus.ACCEPTED) at else null, updatedAt = at)
+        true
+    }
 
     override fun setRole(workspaceId: String, accountId: String, role: WorkspaceRole): Boolean = lock.withLock {
         val i = members.indexOfFirst { it.workspaceId == workspaceId && it.accountId == accountId }

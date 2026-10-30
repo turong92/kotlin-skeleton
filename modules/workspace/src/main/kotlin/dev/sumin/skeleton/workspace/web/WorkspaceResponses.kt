@@ -1,6 +1,9 @@
 package dev.sumin.skeleton.workspace.web
 
 import com.fasterxml.jackson.annotation.JsonInclude
+import dev.sumin.skeleton.workspace.InvitationPreview
+import dev.sumin.skeleton.workspace.InvitationView
+import dev.sumin.skeleton.workspace.InviteResult
 import dev.sumin.skeleton.workspace.MemberView
 import dev.sumin.skeleton.workspace.MyWorkspace
 import dev.sumin.skeleton.workspace.WorkspaceDetail
@@ -39,3 +42,24 @@ fun MyWorkspace.toResponse() = WorkspaceSummaryResponse(workspace.id, workspace.
 fun WorkspaceDetail.toResponse() = WorkspaceDetailResponse(workspace.id, workspace.name, workspace.slug, role.name, memberCount, pendingInvitations, seatLimit, workspace.createdAt)
 
 fun MemberView.toResponse() = MemberResponse(member.accountId, label, member.role.name, member.joinedAt)
+
+// 초대
+
+data class InviteRequest(val emails: List<String>?, val role: String?)
+
+data class InvitationTokenRequest(val token: String?)
+
+data class InviteResponse(val invited: List<String>, val alreadyInvited: List<String>, val seatLimited: List<String>)
+
+/** 대기 목록의 한 줄 - 토큰은 없다. `expired` 면 재발송으로 되살린다. `invitedBy` 는 초대한 계정 id */
+data class InvitationResponse(val id: String, val email: String, val role: String, val expiresAt: Instant, val expired: Boolean, val sentCount: Int, val invitedBy: String)
+
+/** 로그인 없이 보이는 미리보기 - `inviterLabel` 은 이름을 알 때만(아니면 `null`), 주소는 가려서 */
+@JsonInclude(JsonInclude.Include.ALWAYS)
+data class InvitationPreviewResponse(val workspaceName: String, val inviterLabel: String?, val emailMasked: String, val role: String, val expiresAt: Instant)
+
+fun InviteResult.toResponse() = InviteResponse(invited, alreadyInvited, seatLimited)
+
+fun InvitationView.toResponse() = InvitationResponse(invitation.id, invitation.email, invitation.role.name, invitation.expiresAt, expired, invitation.sentCount, invitation.invitedBy)
+
+fun InvitationPreview.toResponse() = InvitationPreviewResponse(workspaceName, inviterLabel, emailMasked, role.name, expiresAt)

@@ -1,8 +1,10 @@
 package dev.sumin.skeleton.workspace.jdbc
 
 import dev.sumin.skeleton.persistence.jdbc.SqlDialect
+import dev.sumin.skeleton.workspace.InvitationStatus
 import dev.sumin.skeleton.workspace.MyWorkspace
 import dev.sumin.skeleton.workspace.Workspace
+import dev.sumin.skeleton.workspace.WorkspaceInvitation
 import dev.sumin.skeleton.workspace.WorkspaceMember
 import dev.sumin.skeleton.workspace.WorkspaceRole
 import dev.sumin.skeleton.workspace.WorkspaceStatus
@@ -116,6 +118,59 @@ class JdbcWorkspaceStore(
         "w" to workspaceId, "now" to instant(now),
     ).toInt()
 
+    // 초대
+
+    override fun insertInvitation(invitation: WorkspaceInvitation) {
+        jdbc.update(
+            "insert into workspace_invitations (id, workspace_id, email, role, token_hash, status, pending_key, invited_by, expires_at, sent_count, last_sent_at, accepted_by, accepted_at, created_at, updated_at) " +
+                "values (:id, :workspace_id, :email, :role, :token_hash, :status, :pending_key, :invited_by, :expires_at, :sent_count, :last_sent_at, :accepted_by, :accepted_at, :created_at, :updated_at)",
+            MapSqlParameterSource()
+                .addValue("id", invitation.id)
+                .addValue("workspace_id", invitation.workspaceId)
+                .addValue("email", invitation.email)
+                .addValue("role", invitation.role.name)
+                .addValue("token_hash", invitation.tokenHash)
+                .addValue("status", invitation.status.name)
+                .addValue("pending_key", pendingKey(invitation.workspaceId, invitation.email, invitation.status))
+                .addValue("invited_by", invitation.invitedBy)
+                .addValue("expires_at", instant(invitation.expiresAt))
+                .addValue("sent_count", invitation.sentCount)
+                .addValue("last_sent_at", instant(invitation.lastSentAt))
+                .addValue("accepted_by", invitation.acceptedBy)
+                .addValue("accepted_at", instant(invitation.acceptedAt))
+                .addValue("created_at", instant(invitation.createdAt))
+                .addValue("updated_at", instant(invitation.updatedAt)),
+        )
+    }
+
+    override fun findInvitation(id: String): WorkspaceInvitation? =
+        jdbc.query("select * from workspace_invitations where id = :id", mapOf("id" to id)) { rs, _ -> rs.toInvitation() }.firstOrNull()
+
+    override fun findInvitationByTokenHash(tokenHash: String): WorkspaceInvitation? =
+        jdbc.query("select * from workspace_invitations where token_hash = :h", mapOf("h" to tokenHash)) { rs, _ -> rs.toInvitation() }.firstOrNull()
+
+    override fun findPendingInvitation(workspaceId: String, email: String): WorkspaceInvitation? = jdbc.query(
+        "select * from workspace_invitations where workspace_id = :w and email = :e and status = 'PENDING'", mapOf("w" to workspaceId, "e" to email),
+    ) { rs, _ -> rs.toInvitation() }.firstOrNull()
+
+    override fun listPendingInvitations(workspaceId: String): List<WorkspaceInvitation> = jdbc.query(
+        "select * from workspace_invitations where workspace_id = :w and status = 'PENDING' order by created_at, id", mapOf("w" to workspaceId),
+    ) { rs, _ -> rs.toInvitation() }
+
+    override fun countPendingInvitations(workspaceId: String): Int =
+        count("select count(*) from workspace_invitations where workspace_id = :w and status = 'PENDING'", "w" to workspaceId).toInt()
+
+    override fun renewInvitation(id: String, tokenHash: String, expiresAt: Instant, at: Instant): Boolean = jdbc.update(
+        "update workspace_invitations set token_hash = :h, expires_at = :exp, sent_count = sent_count + 1, last_sent_at = :at, updated_at = :at where id = :id and status = 'PENDING'",
+        MapSqlParameterSource().addValue("h", tokenHash).addValue("exp", instant(expiresAt)).addValue("at", instant(at)).addValue("id", id),
+    ) == 1
+
+    override fun closeInvitation(id: String, status: InvitationStatus, acceptedBy: String?, at: Instant): Boolean = jdbc.update(
+        "update workspace_invitations set status = :status, pending_key = null, accepted_by = :by, accepted_at = :acc, updated_at = :at where id = :id and status = 'PENDING'",
+        MapSqlParameterSource().addValue("status", status.name).addValue("by", acceptedBy).addValue("acc", instant(if (status == InvitationStatus.ACCEPTED) at else null))
+            .addValue("at", instant(at)).addValue("id", id),
+    ) == 1
+
     override fun setRole(workspaceId: String, accountId: String, role: WorkspaceRole): Boolean = jdbc.update(
         "update workspace_members set role = :role, owner_key = :owner_key where workspace_id = :w and account_id = :a",
         MapSqlParameterSource().addValue("role", role.name).addValue("owner_key", ownerKey(workspaceId, role)).addValue("w", workspaceId).addValue("a", accountId),
@@ -153,6 +208,8 @@ class JdbcWorkspaceStore(
 
     private fun instant(value: Instant?): Any? = dialect.instantParam(value)
 
+    private fun pendingKey(workspaceId: String, email: String, status: InvitationStatus): String? = if (status == InvitationStatus.PENDING) "$workspaceId\n$email" else null
+
     private fun ownerKey(workspaceId: String, role: WorkspaceRole): String? = if (role == WorkspaceRole.OWNER) workspaceId else null
 
     private fun count(sql: String, vararg args: Pair<String, Any?>): Long = jdbc.queryForObject(sql, args.toMap(), Long::class.java) ?: 0L
@@ -174,6 +231,23 @@ class JdbcWorkspaceStore(
         role = WorkspaceRole.valueOf(getString("role")),
         joinedAt = dialect.readInstant(this, "joined_at")!!,
         invitedBy = getString("invited_by"),
+    )
+
+    private fun ResultSet.toInvitation() = WorkspaceInvitation(
+        id = getString("id"),
+        workspaceId = getString("workspace_id"),
+        email = getString("email"),
+        role = WorkspaceRole.valueOf(getString("role")),
+        tokenHash = getString("token_hash").trim(),
+        status = InvitationStatus.valueOf(getString("status")),
+        invitedBy = getString("invited_by"),
+        expiresAt = dialect.readInstant(this, "expires_at")!!,
+        sentCount = getInt("sent_count"),
+        lastSentAt = dialect.readInstant(this, "last_sent_at")!!,
+        acceptedBy = getString("accepted_by"),
+        acceptedAt = dialect.readInstant(this, "accepted_at"),
+        createdAt = dialect.readInstant(this, "created_at")!!,
+        updatedAt = dialect.readInstant(this, "updated_at")!!,
     )
 
     private companion object {

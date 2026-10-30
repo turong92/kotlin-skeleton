@@ -49,8 +49,32 @@ interface WorkspaceStore {
 
     fun countMembers(workspaceId: String): Int
 
-    /** 대기 중이고 아직 만료되지 않은 초대 수 */
+    /** 대기 중이고 아직 만료되지 않은 초대 수 — 좌석으로 센다 */
     fun countLiveInvitations(workspaceId: String, now: Instant): Int
+
+    // 초대 — 쓰기는 모두 [lockWorkspace] 아래에서 부른다
+
+    /** 대기 초대를 넣는다. 같은 (워크스페이스, 주소) 의 대기 초대가 이미 있으면 DB 가 막는다(서비스가 먼저 [findPendingInvitation] 으로 거른다) */
+    fun insertInvitation(invitation: WorkspaceInvitation)
+
+    fun findInvitation(id: String): WorkspaceInvitation?
+
+    fun findInvitationByTokenHash(tokenHash: String): WorkspaceInvitation?
+
+    /** 이 워크스페이스에서 그 주소(소문자)로 아직 대기 중인 초대 — 만료됐어도 대기 상태면 돌려준다(재발송으로 되살린다) */
+    fun findPendingInvitation(workspaceId: String, email: String): WorkspaceInvitation?
+
+    /** 대기 상태인 초대(만료 포함), 만든 순 */
+    fun listPendingInvitations(workspaceId: String): List<WorkspaceInvitation>
+
+    /** 대기 상태인 초대 수(만료 포함) — 「대기 상한」이 센다. 좌석은 [countLiveInvitations] */
+    fun countPendingInvitations(workspaceId: String): Int
+
+    /** 새 토큰 해시 · 새 만료 · 보낸 횟수 +1 · 마지막 보낸 때. 대기 상태가 아니면 false */
+    fun renewInvitation(id: String, tokenHash: String, expiresAt: Instant, at: Instant): Boolean
+
+    /** 대기 초대를 [InvitationStatus.ACCEPTED] 또는 [InvitationStatus.REVOKED] 로 닫고 같은 주소를 다시 초대할 수 있게 비운다. 대기 상태가 아니면 false */
+    fun closeInvitation(id: String, status: InvitationStatus, acceptedBy: String?, at: Instant): Boolean
 
     /** 역할을 바꾼다. [WorkspaceRole.OWNER] 로 바꾸면 소유자 표시가 서고, 아니면 사라진다 — 소유자를 옮길 때는 옛 소유자를 먼저 내린다 */
     fun setRole(workspaceId: String, accountId: String, role: WorkspaceRole): Boolean

@@ -145,7 +145,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `storage` | 저장소 계약(ObjectStorage · PresignedStorage) · 파일 크기/확장자/content-type 검증 + 브라우저 직접 업로드 HTTP(/api/v1/storage: presign · 멀티파트). | `--modules storage,storage-s3` | 파일 업로드, 이미지 업로드, 첨부파일, 프리사인, 파일 검증 / file upload, image upload, attachment, presigned url, multipart upload | `@skeleton/storage` |
 | `storage-s3` | S3 호환 저장소(AWS S3 · Cloudflare R2 · MinIO) — presign PUT/GET · 멀티파트 · 복사 · 일괄 삭제, 공개 URL RAW \| OPAQUE. | `--modules storage-s3` | S3, R2, 클라우드 스토리지, 파일 저장소, 이미지 저장 / s3, r2, cloudflare r2, minio, object storage | `@skeleton/storage` |
 | `time` | 글로벌 시간 — 요청마다 뷰어 시간대 · 로케일 · ZonedMoment(미래 현지 시각) · 사람이 읽는 이중 포맷 · 국가 → 시간대. | 스타터(apps/api)에 기본 포함 | 시간대, 타임존, 날짜 표시, 현지 시간, 예약 시각, 글로벌 / timezone, time zone, locale, zoned moment, date format, global time | `@skeleton/time` |
-| `workspace` | 워크스페이스(팀 · 조직) — 만들기 · 소유자/관리자/멤버 역할 · 주소(slug, 바꿔도 옛 주소가 따라온다) · 멤버 관리 · 소유권 이전, 그리고 요청 헤더 `X-Workspace-Id` 로 앱 데이터를 묶는 경계 `CurrentWorkspace`. 좌석 상한은 앱이 정한다. | `--modules workspace,workspace-jdbc` | 워크스페이스, 팀, 조직, 멤버 역할, 소유권 이전, 멀티 테넌트 / workspace, team, organization, tenant, member roles, ownership transfer | — |
+| `workspace` | 워크스페이스(팀 · 조직) — 만들기 · 소유자/관리자/멤버 역할 · 주소(slug, 바꿔도 옛 주소가 따라온다) · 멤버 관리 · 소유권 이전 · 메일 링크 초대(만료 · 재발송 · 취소 · 확인된 이메일로만 수락, 켜야 한다), 그리고 요청 헤더 `X-Workspace-Id` 로 앱 데이터를 묶는 경계 `CurrentWorkspace`. 좌석 상한은 앱이 정한다. | `--modules workspace,workspace-jdbc` | 워크스페이스, 팀, 조직, 멤버 역할, 소유권 이전, 멀티 테넌트 / workspace, team, organization, tenant, member roles, ownership transfer | — |
 | `workspace-jdbc` | 워크스페이스 · slug 기록 · 멤버 · 초대를 DB 에 둔다 (PostgreSQL · MySQL) — 소유자는 유니크 표시로 늘 하나, 모든 변경은 워크스페이스 줄 잠금 아래에서 현재 역할로 판정. | `--modules workspace-jdbc` | 워크스페이스 저장소, 팀 DB / workspace storage, workspace repository | — |
 
 ### 앱 (`apps/*`)
@@ -1306,14 +1306,14 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 스타터가 이미 가진다
 - 키워드: 시간대, 타임존, 날짜 표시, 현지 시간, 예약 시각, 글로벌 / timezone, time zone, locale, zoned moment, date format, global time
 
-### `workspace` — 워크스페이스(팀 · 조직) — 만들기 · 소유자/관리자/멤버 역할 · 주소(slug, 바꿔도 옛 주소가 따라온다) · 멤버 관리 · 소유권 이전, 그리고 요청 헤더 `X-Workspace-Id` 로 앱 데이터를 묶는 경계 `CurrentWorkspace`. 좌석 상한은 앱이 정한다.
+### `workspace` — 워크스페이스(팀 · 조직) — 만들기 · 소유자/관리자/멤버 역할 · 주소(slug, 바꿔도 옛 주소가 따라온다) · 멤버 관리 · 소유권 이전 · 메일 링크 초대(만료 · 재발송 · 취소 · 확인된 이메일로만 수락, 켜야 한다), 그리고 요청 헤더 `X-Workspace-Id` 로 앱 데이터를 묶는 경계 `CurrentWorkspace`. 좌석 상한은 앱이 정한다.
 
 - 종류 · 상태: module · experimental — 위치 `modules/workspace`
 - 켜는 법: `--modules workspace,workspace-jdbc`
 - 의존 한 줄: `implementation(project(":modules:workspace"))`
 - 함께 골라야 한다: `workspace-jdbc`
 - 설정 접두사 `skeleton.workspace` — 키와 기본값 `docs/config/modules/workspace.yml`
-- HTTP 경로: `/api/v1/workspaces`
+- HTTP 경로: `/api/v1/workspaces`, `/api/v1/workspace-invitations`
 - 문서: `docs/modules/workspace.md`
 - 쓰지 않는 경우:
   - workspace 는 저장소를 모른다 — workspace-jdbc 를 같이 고른다

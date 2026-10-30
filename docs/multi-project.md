@@ -37,6 +37,7 @@ skeleton:
 | 리프레시 쿠키 | `auth-session.cookie.*` | `RefreshTokenDelivery` 가 지금 프로젝트의 이름 · 경로 · 보안 속성을 쓴다 |
 | 일별 활동 기록의 시간대 | `auth-session.activity.zone` | 활동 날짜를 세는 시간대가 프로젝트마다(대시보드 시간대와 같게). 보존 기간은 서버 공통 |
 | CORS 허용 출처 | `web.cors.*` | 요청의 프로젝트가 고른다 (`skeleton.web.cors.enabled=true` 일 때) |
+| 워크스페이스 초대 메일 링크 주소 · 언어 · 로그 링크 | `workspace.mail.*` | 초대를 켠 앱만. 링크 주소는 프로젝트마다 필수(공통 값으로 내려가지 않는다) |
 | 계정 메일 링크 주소 · 브랜드 · 제목 접두사 | `account.mail.*` | 내장 메일 틀은 프로젝트마다 한 번 만든다 (앱이 자기 `AccountMailTemplates` 빈을 두면 그것을 모두가 쓴다) |
 | 시드 계정 | `account.seed.accounts[n].*` | 기동 때 프로젝트마다 그 스키마에 만든다 |
 | 소셜 로그인 (Google · Kakao · Naver) | `auth-social.providers.<id>.{enabled, client-id, client-secret, redirect-uri, …}` | 프로젝트마다 제공자를 따로 만든다 — A 에서 켠 제공자는 B 의 `/auth/methods` · 로그인 · 연결에 없다 |
@@ -142,7 +143,7 @@ DB 는 스키마 · 계정으로 갈려 공유 키가 데이터를 섞지는 않
 
 1. **모듈 고르기** — 위 표의 모듈만 두 프로젝트 이상과 함께 쓸 수 있다. Kafka 를 골랐다면 프로젝트는 하나만 서비스 중이어야 한다. 결제 · 암호화는 프로젝트마다 자기 키를 준다(위 "결제").
 2. **설정** — `application-multi.yml` 을 앱 설정으로 옮겨 `skeleton.projects.<id>.{hosts, schema, datasource, config}` 를 채운다. 찍으면 접두사가 바뀌므로(`skeleton.` → 새 접두사) 키는 `<접두사>.projects` 가 된다. `config` 에는 위 표의 키만 쓸 수 있고(그 밖은 기동 실패), 비밀 값은 환경변수로 넣는다("환경변수로만 넣기"). 공통 결제사 키(sample 의 `payment-toss.secret-key` · `easy-pays` 등)는 지우고 프로젝트마다 적는다 — 공통에서 물려받으면 기동 실패다.
-   프로젝트마다 필수인 값: `account.mail.link-base-url`, `notification-mail.from`(메일을 쓸 때), 캡차를 켰다면 `captcha-turnstile.secret-key`, `storage.web.key-secret`(OPAQUE 일 때, 서로 달라야 한다), `storage.web.guest.secret`(비회원 업로드를 켰을 때, 서로 달라야 한다), `storage.web.public.secret`(공개 영역을 켰을 때, 서로 달라야 한다) · `public.base-url` · `public.prefix`(버킷을 나눠 쓰면 프로젝트마다 다르게), 버킷을 나눠 쓰면 `storage-s3.key-prefix`, 암호화를 쓰면 `crypto.keys.<id>`(서로 다른 키 바이트), 결제를 쓰면 `payment-<결제사>.*` · `payment.webhook.path-token`(서명 없는 결제사).
+   프로젝트마다 필수인 값: `account.mail.link-base-url`, `workspace.mail.link-base-url`(워크스페이스 초대를 켰을 때), `notification-mail.from`(메일을 쓸 때), 캡차를 켰다면 `captcha-turnstile.secret-key`, `storage.web.key-secret`(OPAQUE 일 때, 서로 달라야 한다), `storage.web.guest.secret`(비회원 업로드를 켰을 때, 서로 달라야 한다), `storage.web.public.secret`(공개 영역을 켰을 때, 서로 달라야 한다) · `public.base-url` · `public.prefix`(버킷을 나눠 쓰면 프로젝트마다 다르게), 버킷을 나눠 쓰면 `storage-s3.key-prefix`, 암호화를 쓰면 `crypto.keys.<id>`(서로 다른 키 바이트), 결제를 쓰면 `payment-<결제사>.*` · `payment.webhook.path-token`(서명 없는 결제사).
 3. **DB 계정 · 스키마** — 프로젝트마다 `scripts/project-account.sql` 로 만든다(운영) 또는 `scripts/dev-multi.sh`(로컬).
 4. **도메인** — 로컬은 `*.localhost`. X 로그인은 `localhost` 콜백을 거부하므로 한 프로젝트의 hosts 에 `127.0.0.1` 을 넣어 그 주소로 연다.
 5. **확인** — 기동 로그에서 서비스 중인 프로젝트마다 소셜 · 저장소 · 약관 검사가 통과하는지 본다(잘못된 설정은 메시지에 `project '<id>'` 가 붙은 기동 실패다).

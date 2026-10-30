@@ -4,3 +4,14 @@ skeleton:
     http:
       enabled: true                  # false 면 사용자 경로(/api/v1/workspaces …)를 닫는다. 경계(CurrentWorkspace)는 그대로 쓸 수 있다
       base-path: /api/v1/workspaces
+    invitation:
+      enabled: false                 # true 면 초대(메일 링크). AccountFacts 빈(modules:account)과 mail.link-base-url 이 필요하다 - AccountFacts 가 없으면 기동 실패
+      ttl: 7d                        # 초대 만료 (재발송하면 다시 이만큼)
+      resend-interval: 60s           # 같은 초대를 이 안에 다시 보내면 429
+      max-pending: 100               # 워크스페이스 하나의 대기 초대 수 (넘으면 409, 만료된 대기 포함)
+      max-per-request: 20            # 한 번에 초대하는 주소 수
+      base-path: /api/v1/workspace-invitations   # 미리보기 · 수락 (미리보기만 로그인 없이)
+    mail:
+      link-base-url: ""              # 메일 링크 = <이 주소>/invite?token=… . stage · prod 에서는 필수, 프로젝트 모드에서는 프로젝트마다(workspace.mail.*)
+      default-locale: en             # 요청 언어가 ko · en 이 아닐 때
+      log-links: AUTO                # 메일 모듈이 없을 때 링크(토큰 포함)를 로그에 남기나: AUTO = stage · prod 가 아닐 때만, ON, OFF (보호 환경에서 ON 이면 기동 실패)

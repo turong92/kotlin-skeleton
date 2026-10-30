@@ -46,3 +46,40 @@ data class WorkspaceDetail(
 
 /** 멤버 목록의 한 줄 — [label] 은 `AccountLabels` 가 있을 때만 */
 data class MemberView(val member: WorkspaceMember, val label: String?)
+
+enum class InvitationStatus { PENDING, ACCEPTED, REVOKED }
+
+/**
+ * 초대 한 줄 — 토큰은 **sha256 해시만** 들고 있다(평문은 메일 본문에만). 만료는 상태가 아니라 [expiresAt] 으로 읽는다.
+ * [toString] 은 주소 · 해시를 싣지 않는다(로그에 새지 않게).
+ */
+data class WorkspaceInvitation(
+    val id: String,
+    val workspaceId: String,
+    /** 소문자 */
+    val email: String,
+    val role: WorkspaceRole,
+    val tokenHash: String,
+    val status: InvitationStatus,
+    val invitedBy: String,
+    val expiresAt: Instant,
+    val sentCount: Int,
+    val lastSentAt: Instant,
+    val acceptedBy: String? = null,
+    val acceptedAt: Instant? = null,
+    val createdAt: Instant,
+    val updatedAt: Instant,
+) {
+    fun expired(now: Instant): Boolean = !expiresAt.isAfter(now)
+
+    override fun toString() = "WorkspaceInvitation(id=$id, workspaceId=$workspaceId, role=$role, status=$status)"
+}
+
+/** 초대 목록의 한 줄 */
+data class InvitationView(val invitation: WorkspaceInvitation, val expired: Boolean)
+
+/** 초대하기의 결과 — 주소 하나가 셋 중 하나에 들어간다 */
+data class InviteResult(val invited: List<String>, val alreadyInvited: List<String>, val seatLimited: List<String>)
+
+/** 로그인 없이 보이는 초대 미리보기 — 주소는 가려서 */
+data class InvitationPreview(val workspaceName: String, val inviterLabel: String?, val emailMasked: String, val role: WorkspaceRole, val expiresAt: Instant)
