@@ -307,6 +307,7 @@ class AccountAutoConfiguration {
         sessionInspector: ObjectProvider<dev.sumin.skeleton.auth.session.SessionInspector>,
         authz: ObjectProvider<AuthzProperties>,
         rolePermissions: ObjectProvider<RolePermissionSource>,
+        deletionChecks: ObjectProvider<dev.sumin.skeleton.common.account.AccountDeletionCheck>,
     ): AccountCore = AccountCore(
         accounts, properties, time.getIfAvailable { TimeProvider.systemUtc() }, events, hasher, policy, tokens, mailer, links, tasks, limits, captcha,
         { sessions.getIfAvailable() }, bootstrap, challenges, { socialReauth.getIfAvailable() },
@@ -314,6 +315,7 @@ class AccountAutoConfiguration {
         names = DisplayNames(properties.displayName, rules = displayNameRules), sessionInspector = { sessionInspector.getIfAvailable() },
         superRole = authz.getIfAvailable { AuthzProperties() }.superRole,
         roles = { rolePermissions.getObject() },
+        deletionChecks = { deletionChecks.orderedStream().toList() },
     )
 
     /** 닉네임 규칙 — 앱이 같은 타입의 빈을 두면 그것이 쓰인다 (가입 · 프로필 수정 · 제공자 이름 · 시드 · 비교용 키 모두) */

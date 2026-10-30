@@ -54,6 +54,15 @@ class AccountAutoConfigurationTest {
     }
 
     @Test
+    fun `deletion checks from other modules reach the core, in bean order`() {
+        runner.run { ctx -> assertEquals(emptyList(), ctx.getBean(AccountCore::class.java).deletionChecks()) }
+        val check = dev.sumin.skeleton.common.account.AccountDeletionCheck { listOf(dev.sumin.skeleton.common.account.DeletionBlocker("x", "Y")) }
+        runner.withBean("check", dev.sumin.skeleton.common.account.AccountDeletionCheck::class.java, java.util.function.Supplier { check }).run { ctx ->
+            assertEquals(listOf(check), ctx.getBean(AccountCore::class.java).deletionChecks())
+        }
+    }
+
+    @Test
     fun `the nickname rules are a replaceable bean - the default is used until the app brings its own`() {
         runner.run { ctx -> assertTrue(ctx.getBean(AccountCore::class.java).names.rules === DefaultDisplayNameRules) }
         val mine = object : DisplayNameRules by DefaultDisplayNameRules {

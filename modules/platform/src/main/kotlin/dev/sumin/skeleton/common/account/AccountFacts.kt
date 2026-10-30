@@ -9,4 +9,7 @@ import java.time.Instant
 fun interface AccountFacts {
     /** 가입 시각. 없는 계정이면 null */
     fun createdAt(accountId: String): Instant?
+
+    /** 확인된(메일함 증명을 마친) 이메일 — 초대 수락처럼 「이 사람이 이 주소의 주인」을 대조할 때 쓴다. 확인 전 · 주소 없음 · 없는 · 지워진 계정은 null. 기본은 null(모르는 구현은 아무 주소도 확인됐다고 하지 않는다) */
+    fun verifiedEmail(accountId: String): String? = null
 }

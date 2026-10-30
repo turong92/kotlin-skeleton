@@ -61,6 +61,8 @@ class AccountCore(
     val roles: () -> dev.sumin.skeleton.common.authz.RolePermissionSource = {
         dev.sumin.skeleton.common.authz.YmlRolePermissionSource(mapOf(superRole to setOf(dev.sumin.skeleton.common.authz.ALL_PERMISSIONS)))
     },
+    /** 다른 모듈이 내놓은 「삭제를 막는 이유」 — 삭제 요청이 모은다. 없으면 막는 것이 없다 */
+    val deletionChecks: () -> List<dev.sumin.skeleton.common.account.AccountDeletionCheck> = { emptyList() },
 ) {
     /**
      * 운영자의 상태 명령(정지 · 해제 · 복구 · 지우기)이 대상 계정에 닿기 전에 거는 검사 — 대상이 가진 역할들의 권한 합집합이 호출자 권한([actorPermissions])의 부분집합이 아니거나,

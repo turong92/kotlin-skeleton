@@ -315,7 +315,7 @@ Mails a **6-digit code** to the account address (valid 10 min, 5 guesses, usable
 ### POST /api/v1/account/delete/confirmation — (for accounts WITHOUT a password) mails a **6-digit code** (valid 10 min, 5 guesses, this session only) -> `202 { status:"ACCEPTED", expiresAt, resendAvailableAt }`. Nothing is sent to an account without an address (use `socialReauth`).
 ### POST /api/v1/account/delete **[idem]** — Req `{ "currentPassword"?, "confirmationCode"?, "socialReauth"? }` (the proof that fits the account: password; else the mailed code; an account without an address: `socialReauth`) -> `202 { "value": { "status": "DELETION_SCHEDULED", "purgeAfter": "2026-11-05T..Z" } }`.
 A SUSPENDED account cannot delete itself -> `403 ACCOUNT.SUSPENDED_CANNOT_DELETE` (also for `delete/confirmation`).
-Wrong password / wrong social proof -> `400 ACCOUNT.REAUTH_FAILED`; missing -> `403 ACCOUNT.REAUTH_REQUIRED`; wrong code -> `400 ACCOUNT.CODE_INVALID`, none/expired -> `410 ACCOUNT.CODE_EXPIRED`; the only ADMIN -> `409 ACCOUNT.LAST_ADMIN`. Calling again while already deleted returns the same `purgeAfter`. `4xx` answers are not stored under the `Idempotency-Key`.
+Wrong password / wrong social proof -> `400 ACCOUNT.REAUTH_FAILED`; missing -> `403 ACCOUNT.REAUTH_REQUIRED`; wrong code -> `400 ACCOUNT.CODE_INVALID`, none/expired -> `410 ACCOUNT.CODE_EXPIRED`; the only ADMIN -> `409 ACCOUNT.LAST_ADMIN`. Another module can block the request (`AccountDeletionCheck` in `platform`; e.g. `workspace`: the owner of a workspace that has other members) -> `409 ACCOUNT.DELETION_BLOCKED` with `data.blockers: [{ module, code, refs[] }]`, answered before any proof is asked for. Calling again while already deleted returns the same `purgeAfter`. `4xx` answers are not stored under the `Idempotency-Key`.
 Effect: status DELETED (cannot sign in, sessions revoked, identities frozen); after `skeleton.account.deletion.grace` (default `30d`) the purge job
 runs every `AccountErasureListener` (board: author shown as deleted user; notification inbox deleted) and then, by `skeleton.account.deletion.mode`:
 `ANONYMIZE` (default) keeps the row with status **`ERASED`** (id + created_at only; email, name, locale, time zone, sign-in methods, roles, tokens, codes and the IP/detail of audit rows are gone) —
@@ -387,6 +387,7 @@ Data export: no endpoint; `AccountDataExporter` is an interface only (not wired)
 | ACCOUNT.LAST_ADMIN / SELF_ACTION_FORBIDDEN | 409 | admin guards |
 | ACCOUNT.NOT_FOUND | 404 | admin target missing; `me` / restore of a row that is gone or not DELETED |
 | ACCOUNT.ERASED | 410 | admin restore / suspend / grant / erase on an erased account |
+| ACCOUNT.DELETION_BLOCKED | 409 | another module blocks the delete request (`data.blockers`) |
 | ACCOUNT.SUSPENDED_CANNOT_DELETE | 403 | a suspended account asked to delete itself |
 | ACCOUNT.NOT_SUSPENDED | 409 | admin erase of an account that is not SUSPENDED |
 | ACCOUNT.REGISTRATION_BLOCKED | 403 | a proven mailbox / provider account is on the re-registration block list (sign-up code, magic link, social sign-in, **email-change confirmation, social link**) or belongs to a suspended unproven account |

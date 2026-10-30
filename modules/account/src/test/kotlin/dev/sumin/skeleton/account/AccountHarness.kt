@@ -77,6 +77,8 @@ class AccountHarness(
     val superRole: String = "ADMIN",
     /** 전권 역할 말고 정의된 역할 → 권한 (`skeleton.authz.roles`) */
     rolePermissions: Map<String, Set<String>> = emptyMap(),
+    /** 삭제 요청이 모으는 다른 모듈의 막는 이유 (`AccountDeletionCheck`) */
+    deletionChecks: List<dev.sumin.skeleton.common.account.AccountDeletionCheck> = emptyList(),
 ) {
     val time = MutableTime()
     val callLog = CallLog()
@@ -106,6 +108,7 @@ class AccountHarness(
         CaptchaGate(captcha, captchaRequired), { revoker }, bootstrap, challenges, { socialReauth }, { consents }, atomic,
         AccountBlocks.local(time, props.blocks.retention), magicLinks = { magicLinks }, names = DisplayNames(props.displayName, random), sessionInspector = { sessions }, superRole = superRole,
         roles = { roleSource ?: dev.sumin.skeleton.common.authz.YmlRolePermissionSource(mapOf(superRole to setOf("*")) + rolePermissions) },
+        deletionChecks = { deletionChecks },
     )
     val registration = RegistrationService(core)
     val availability = LoginIdAvailabilityService(core)

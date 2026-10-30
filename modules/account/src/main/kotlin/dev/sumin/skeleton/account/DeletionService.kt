@@ -40,6 +40,7 @@ class DeletionService(private val core: AccountCore) {
         val account = core.accounts.findById(accountId) ?: throw AccountException(AccountErrorCode.NOT_FOUND)
         if (account.status == AccountStatus.DELETED) return account.purgeAfter ?: core.time.now()
         if (account.status == AccountStatus.SUSPENDED) throw AccountException(AccountErrorCode.SUSPENDED_CANNOT_DELETE)   // 정지는 박제 — 탈퇴로 빠져나가지 못한다
+        requireNoBlockers(accountId)   // 다시 인증을 시키기 전에 — 어차피 막힐 일에 비밀번호를 치게 하지 않는다
         val login = core.props.login
         val allowance = core.limits.acquire("reauth:account", account.id, login.perAccount, login.window)
         if (!allowance.allowed) throw RateLimitedException(allowance.retryAfterSeconds)
@@ -57,6 +58,16 @@ class DeletionService(private val core: AccountCore) {
         account.email?.let { core.mailer.send(AccountMail(MailKind.DELETION_SCHEDULED, it, account.locale, vars = mapOf("days" to core.props.deletion.grace.toDays().toString()))) }
         core.events.publish(AccountEventType.DELETION_SCHEDULED, accountId, detail = mapOf("purgeAfter" to purgeAfter.toString()))
         return purgeAfter
+    }
+
+    /** 다른 모듈의 [dev.sumin.skeleton.common.account.AccountDeletionCheck] 를 모두 모아 하나라도 막으면 `409 ACCOUNT.DELETION_BLOCKED` (`data.blockers`) */
+    private fun requireNoBlockers(accountId: String) {
+        val blockers = core.deletionChecks().flatMap { it.blockers(accountId) }
+        if (blockers.isEmpty()) return
+        throw AccountException(
+            AccountErrorCode.DELETION_BLOCKED,
+            data = mapOf("blockers" to blockers.map { mapOf("module" to it.module, "code" to it.code, "refs" to it.refs) }),
+        )
     }
 
     /**

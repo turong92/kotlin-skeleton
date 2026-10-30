@@ -7,4 +7,7 @@ import java.time.Instant
 class RepositoryAccountFacts(private val accounts: () -> AccountRepository) : AccountFacts {
     override fun createdAt(accountId: String): Instant? =
         accounts().findById(accountId)?.takeIf { it.status != AccountStatus.ERASED }?.createdAt
+
+    override fun verifiedEmail(accountId: String): String? =
+        accounts().findById(accountId)?.takeIf { it.status != AccountStatus.ERASED && it.emailVerified }?.email
 }

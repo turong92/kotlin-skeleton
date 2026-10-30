@@ -36,6 +36,7 @@ enum class AccountErrorCode(
     ERASED("ACCOUNT.ERASED", HttpStatus.GONE, "The account was erased and cannot be used or restored"),
     ERASURE_RETRY("ACCOUNT.ERASURE_RETRY", HttpStatus.SERVICE_UNAVAILABLE, "Erasing failed for now; the account stays suspended - repeat the erase call"),
     ERASURE_IN_PROGRESS("ACCOUNT.ERASURE_IN_PROGRESS", HttpStatus.CONFLICT, "The account is being erased; finish it by repeating the erase call"),
+    DELETION_BLOCKED("ACCOUNT.DELETION_BLOCKED", HttpStatus.CONFLICT, "Another part of the service blocks deleting this account; see data.blockers"),
     DISCARD_NOT_ALLOWED("ACCOUNT.DISCARD_NOT_ALLOWED", HttpStatus.CONFLICT, "Only an unregistered account (no address, email required) can be discarded"),
     RATE_LIMITED("ACCOUNT.RATE_LIMITED", HttpStatus.TOO_MANY_REQUESTS, "Too many requests"),
     METHOD_UNKNOWN("ACCOUNT.METHOD_UNKNOWN", HttpStatus.BAD_REQUEST, "Unknown sign-in method"),
