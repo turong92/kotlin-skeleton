@@ -80,3 +80,6 @@ fun Enrollment.toResponse() = EnrollmentResponse(secret, otpauthUri, QrResponse(
 data class RecoveryCodesResponse(val recoveryCodes: List<String>?) {
     override fun toString() = "RecoveryCodesResponse(<redacted>)"
 }
+
+/** 운영자 해제 - 사유는 필수(운영자가 본인 확인을 했다는 말을 적는다). 어디에도 저장되지 않는다 - 운영 기록에는 대상 id 만 남는다 */
+data class AdminResetRequest(@field:NotBlank @field:Size(max = 200) val reason: String?)

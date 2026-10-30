@@ -8,11 +8,15 @@ import dev.sumin.skeleton.account.mail.AccountMail
 import dev.sumin.skeleton.account.mail.AccountMailer
 import dev.sumin.skeleton.account.mail.MailKind
 import dev.sumin.skeleton.auth.mfa.FakeMfaStore
+import dev.sumin.skeleton.auth.session.SessionInspector
 import dev.sumin.skeleton.auth.session.SessionRevoker
+import dev.sumin.skeleton.common.authz.OperatorAction
+import dev.sumin.skeleton.common.authz.OperatorAuditLog
 import dev.sumin.skeleton.common.time.TimeProvider
 import java.time.Duration
 import java.time.Instant
 import java.time.temporal.ChronoUnit
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import org.springframework.boot.autoconfigure.SpringBootApplication
 import org.springframework.boot.test.context.TestConfiguration
@@ -41,6 +45,17 @@ class FakeSessions : SessionRevoker {
     override fun revokeAll(accountId: String, exceptSessionId: String?) { revoked += accountId to exceptSessionId }
 }
 
+class Audits : OperatorAuditLog {
+    val all = CopyOnWriteArrayList<OperatorAction>()
+    override fun record(action: OperatorAction) { all += action }
+}
+
+/** 세션 id -> 열린 시각. 시험이 채운다 - 없는 세션은 열려 있지 않다 */
+class FakeSessionInspector : SessionInspector {
+    val openedAt = ConcurrentHashMap<String, Instant>()
+    override fun openedAt(accountId: String, sessionId: String): Instant? = openedAt[sessionId]
+}
+
 /** 시험이 시계를 쥔다 - 한 걸음(30초) 안에서 서버와 시험이 같은 코드를 보게. JWT 는 시스템 시계로 검증되므로 시작은 지금이고 조금씩만 앞으로 간다 */
 class FrozenTime(@Volatile var at: Instant = Instant.now().truncatedTo(ChronoUnit.SECONDS)) : TimeProvider {
     override fun now(): Instant = at
@@ -53,6 +68,8 @@ class MfaTestBeans {
     @Bean fun mails(): Mails = Mails()
     @Bean fun events(): Events = Events()
     @Bean fun fakeSessions(): FakeSessions = FakeSessions()
+    @Bean fun fakeSessionInspector(): FakeSessionInspector = FakeSessionInspector()
+    @Bean fun audits(): Audits = Audits()
     @Bean fun time(): FrozenTime = FrozenTime()
     @Bean fun accountTaskRunner(): AccountTaskRunner = AccountTaskRunner.DIRECT
 }

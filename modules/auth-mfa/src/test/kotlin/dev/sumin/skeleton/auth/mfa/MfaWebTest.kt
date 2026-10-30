@@ -110,6 +110,11 @@ class MfaWebTest {
 
     private fun stateOf(user: User): String = mvc.perform(get(BASE).header("Authorization", user.bearer)).andExpect(status().isOk).andReturn().response.contentAsString
 
+    @Test
+    fun `the operator reset door is closed by default - there is no route`() {
+        mvc.perform(post("/api/v1/admin/mfa/accounts/acc_x/reset").header("Authorization", signUp().bearer).contentType(MediaType.APPLICATION_JSON).content("""{"reason":"x"}""")).andExpect(status().isNotFound)
+    }
+
     // ---------------------------------------------------------------- 등록
 
     @Test

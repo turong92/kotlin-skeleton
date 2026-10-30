@@ -16,7 +16,13 @@ import org.springframework.boot.context.properties.ConfigurationProperties
  *     limits:                    # 계정마다 틀린 코드만 센다(맞으면 되돌린다). 걸리면 429 + Retry-After + 창마다 메일 한 통
  *       short: { capacity: 10, window: 15m }
  *       daily: { capacity: 30, window: 24h }
- *     required-for: NONE         # NONE | OPERATORS | ALL - 모듈 기본은 필수 없음. 필수 문(인터셉터)은 다음 조각
+ *     required-for: NONE         # NONE | OPERATORS | ALL - 모듈 기본은 필수 없음. OPERATORS = OperatorAccess 권한이 하나라도 있는 계정
+ *     required:
+ *       extra-exclude-paths: []  # 필수인데 등록 전인 계정도 열어 둘 길("METHOD /패턴" 또는 "/패턴") - 고정 목록(/api/v1/auth 아래 전부 · GET /account/me · reauth/confirmation)에 더하기만
+ *       fresh-login-window: 15m  # 이 안에 로그인으로 연 세션이면 필수 문에 걸린 계정은 다시 인증 없이 등록한다
+ *     admin:
+ *       enabled: false           # 운영자 해제 경로 - 기본 꺼짐(404). 켜면 mfa.reset 권한을 가진 운영자가 본인 확인 뒤 해제한다
+ *       base-path: /api/v1/admin/mfa/accounts
  *     http:
  *       enabled: true
  *       base-path: /api/v1/auth/mfa
@@ -30,6 +36,8 @@ data class MfaProperties(
     val challenge: Challenge = Challenge(),
     val limits: Limits = Limits(),
     val requiredFor: RequiredFor = RequiredFor.NONE,
+    val required: Required = Required(),
+    val admin: Admin = Admin(),
     val http: Http = Http(),
 ) {
     init {
@@ -58,6 +66,14 @@ data class MfaProperties(
     }
 
     enum class RequiredFor { NONE, OPERATORS, ALL }
+
+    data class Required(val extraExcludePaths: List<String> = emptyList(), val freshLoginWindow: Duration = Duration.ofMinutes(15)) {
+        init {
+            require(!freshLoginWindow.isNegative) { "skeleton.auth-mfa.required.fresh-login-window must not be negative" }
+        }
+    }
+
+    data class Admin(val enabled: Boolean = false, val basePath: String = "/api/v1/admin/mfa/accounts")
 
     data class Http(
         val enabled: Boolean = true,

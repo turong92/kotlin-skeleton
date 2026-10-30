@@ -27,6 +27,15 @@ enum class MfaErrorCode(
 
     /** 앱이 이 계정에 2단계를 필수로 정했다 - 끌 수 없다(재등록은 된다) */
     REQUIRED_BY_POLICY("MFA.REQUIRED_BY_POLICY", HttpStatus.CONFLICT, "Two-factor authentication is required for this account"),
+
+    /** 앱이 이 계정에 2단계를 필수로 정했는데 아직 등록 전이다 - 허용 목록 밖의 요청이 막힌다. 등록하면 풀린다 */
+    ENROLLMENT_REQUIRED("MFA.ENROLLMENT_REQUIRED", HttpStatus.FORBIDDEN, "Set up two-factor authentication to continue"),
+
+    /** 운영자가 자기 자신의 2단계를 해제하려 했다 - 다른 운영자가 한다 */
+    SELF_RESET("MFA.SELF_RESET", HttpStatus.CONFLICT, "You cannot reset your own two-factor authentication"),
+
+    /** 대상 계정이 호출자보다 높은 권한을 가졌다 - 높은 권한은 그 이상이 다룬다(역할 부여와 같은 규칙) */
+    ESCALATION("MFA.ESCALATION", HttpStatus.FORBIDDEN, "You cannot reset an account above your own permissions"),
 }
 
 class MfaException(val mfaError: MfaErrorCode, data: Any? = null) :

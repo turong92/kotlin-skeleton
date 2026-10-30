@@ -5,6 +5,7 @@ import dev.sumin.skeleton.auth.account.AuthAccountRepository
 import dev.sumin.skeleton.auth.principal.CurrentPrincipal
 import dev.sumin.skeleton.auth.security.BearerTokenAuthenticator
 import dev.sumin.skeleton.auth.security.BearerTokenRejectedException
+import dev.sumin.skeleton.auth.security.NonInteractiveAuthentication
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.common.web.ClientIps
 import jakarta.servlet.http.HttpServletRequest
@@ -15,13 +16,14 @@ import org.springframework.security.core.Authentication
 /**
  * 키로 인증된 요청 - 주체는 **주인 계정에 역할을 비운 것**이다(`Authentication.name` 을 쓰는 기존 컨트롤러가 그대로 돌고, 운영 경로는 역할이 없어 닿지 않는다).
  * [principal] 이 [CurrentPrincipal] 이라 계정 모듈의 호출자 해석도 그대로 읽는다. 어느 키인지 · 범위는 [keyId] · [scopes].
+ * [NonInteractiveAuthentication] 표지를 달아 「사람에게만 거는 문」(2단계 인증 등록 필수)이 키 요청을 건너뛴다 - 그 문을 낸 모듈이 이 모듈을 몰라도 된다.
  */
 class ApiKeyAuthentication(
     private val currentPrincipal: CurrentPrincipal,
     val keyId: String,
     val scopes: Set<String>,
     val owner: ApiKeyOwner,
-) : AbstractAuthenticationToken(emptyList()) {
+) : AbstractAuthenticationToken(emptyList()), NonInteractiveAuthentication {
     init {
         isAuthenticated = true
     }

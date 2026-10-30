@@ -20,7 +20,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 
 private const val PASSWORD = "tangerine-42-moon"
 
-/** 앱이 2단계를 필수로 정한 계정(`required-for: ALL`)은 상태에 `required` 가 서고 끌 수 없다(409). 재등록은 된다. 필수 문(인터셉터)은 다음 조각 */
+/** 앱이 2단계를 필수로 정한 계정(`required-for: ALL`)은 상태에 `required` 가 서고 끌 수 없다(409). 재등록은 된다. 등록 전 계정을 막는 문은 MfaRequiredGateWebTest */
 @SpringBootTest(
     classes = [MfaTestApplication::class],
     properties = [

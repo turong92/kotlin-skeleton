@@ -11,7 +11,13 @@ skeleton:
     limits:                        # 계정마다 틀린 코드만 센다(맞으면 되돌린다). 걸리면 429 MFA.TOO_MANY_ATTEMPTS + Retry-After + 창마다 메일 한 통
       short: { capacity: 10, window: 15m }
       daily: { capacity: 30, window: 24h }
-    required-for: NONE             # NONE(모듈 기본) | OPERATORS | ALL - 필수면 끌 수 없다(409 MFA.REQUIRED_BY_POLICY). 등록 전 계정을 막는 문은 다음 조각
+    required-for: NONE             # NONE(모듈 기본) | OPERATORS(OperatorAccess 권한이 하나라도 있는 계정) | ALL - 필수면 끌 수 없다(409 MFA.REQUIRED_BY_POLICY). 등록 전 계정은 허용 목록 밖에서 403 MFA.ENROLLMENT_REQUIRED
+    required:
+      extra-exclude-paths: []      # 등록 전에도 열어 둘 길 - "METHOD /패턴" 또는 "/패턴". 고정 목록(/api/v1/auth 아래 · GET /account/me · POST /account/reauth/confirmation)에 더하기만
+      fresh-login-window: 15m      # 이 안에 로그인으로 연 세션이면 필수 문에 걸린 계정은 다시 인증 없이 등록한다
+    admin:
+      enabled: false               # 운영자 해제 경로(mfa.reset). 기본 꺼짐 - 꺼져 있으면 404. 본인 확인 절차 없이 쓰지 말 것
+      base-path: /api/v1/admin/mfa/accounts
     http:
       enabled: true                # false 면 경로를 닫는다. 로그인 두 번째 단계 고리는 그대로 서 있다
       base-path: /api/v1/auth/mfa

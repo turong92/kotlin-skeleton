@@ -4,6 +4,7 @@ import dev.sumin.skeleton.auth.account.AccountIdentifier
 import dev.sumin.skeleton.auth.account.AuthAccount
 import dev.sumin.skeleton.auth.account.AuthAccountRepository
 import dev.sumin.skeleton.auth.security.BearerTokenRejectedException
+import dev.sumin.skeleton.auth.security.NonInteractiveAuthentication
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.common.web.ClientIps
 import java.time.Duration
@@ -11,6 +12,7 @@ import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 import org.springframework.mock.web.MockHttpServletRequest
 
 class ApiKeyAuthenticatorTest {
@@ -60,6 +62,11 @@ class ApiKeyAuthenticatorTest {
         assertEquals(emptyList(), auth.authorities.toList())
         assertEquals(setOf("notes.read"), auth.scopes)
         assertEquals("key_1", auth.keyId)
+    }
+
+    @Test
+    fun `a key request is marked as not a person, so person-only gates such as the two-factor enrolment door skip it`() {
+        assertTrue(call(issue()) is NonInteractiveAuthentication)
     }
 
     @Test

@@ -7,6 +7,9 @@ import dev.sumin.skeleton.account.challenge.ChallengeStore
 import dev.sumin.skeleton.auth.account.AuthAccountRepository
 import dev.sumin.skeleton.auth.api.SecondFactorGate
 import dev.sumin.skeleton.auth.mfa.erasure.MfaAccountErasureListener
+import dev.sumin.skeleton.common.authz.OperatorAccess
+import dev.sumin.skeleton.common.authz.OperatorRef
+import dev.sumin.skeleton.common.authz.PermissionDeclaration
 import dev.sumin.skeleton.common.erasure.AccountErasureListener
 import dev.sumin.skeleton.common.web.InMemoryFixedWindowRateLimitStore
 import dev.sumin.skeleton.common.web.RateLimitStore
@@ -40,9 +43,22 @@ class MfaAutoConfiguration {
         return MfaPrerequisites()
     }
 
+    /** OPERATORS = 운영 권한이 하나라도 있는 계정(`OperatorAccess`) - 저장된 역할로 판정하는 구현이 들어오면 그것을 따른다 */
     @Bean
     @ConditionalOnMissingBean
-    fun mfaPolicy(properties: MfaProperties): MfaPolicy = ConfiguredMfaPolicy(properties.requiredFor)
+    fun mfaPolicy(properties: MfaProperties, access: ObjectProvider<OperatorAccess>): MfaPolicy =
+        ConfiguredMfaPolicy(properties.requiredFor) { account ->
+            access.getIfAvailable()?.permissionsOf(OperatorRef(account.id, account.roles))?.isNotEmpty() ?: account.roles.isNotEmpty()
+        }
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun mfaRequirement(core: AccountCore, store: MfaStore, policy: MfaPolicy): MfaRequirement =
+        MfaRequirement(core.accounts, store, policy, core.time)
+
+    @Bean
+    @ConditionalOnMissingBean(name = ["mfaPermissionDeclaration"])
+    fun mfaPermissionDeclaration(): PermissionDeclaration = MfaPermissions.declaration
 
     @Bean
     @ConditionalOnMissingBean
@@ -55,12 +71,13 @@ class MfaAutoConfiguration {
         authAccounts: AuthAccountRepository,
         reauth: Reauth,
         policy: MfaPolicy,
+        requirement: MfaRequirement,
         properties: MfaProperties,
         limits: ObjectProvider<RateLimitStore>,
         environment: Environment,
     ): MfaService {
         val issuer = properties.totp.issuer.ifBlank { environment.getProperty("spring.application.name").orEmpty() }.ifBlank { "Account" }
-        return MfaService(store, encryptor, core, challengeStore, authAccounts, reauth, policy, properties, issuer) { limits.getIfAvailable { FALLBACK_LIMITS } }
+        return MfaService(store, encryptor, core, challengeStore, authAccounts, reauth, policy, requirement, properties, issuer) { limits.getIfAvailable { FALLBACK_LIMITS } }
     }
 
     @Bean

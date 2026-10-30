@@ -60,6 +60,7 @@ class MfaService(
     private val authAccounts: AuthAccountRepository,
     private val reauth: Reauth,
     private val policy: MfaPolicy,
+    private val requirement: MfaRequirement,
     private val properties: MfaProperties,
     private val issuer: String,
     private val limits: () -> RateLimitStore,
@@ -75,7 +76,7 @@ class MfaService(
     /** 새 비밀을 만들어 대기에 둔다(이미 켜져 있으면 재등록 - 옛 비밀은 새 것이 확인될 때까지 산다) */
     fun startEnrollment(accountId: String, sessionId: String?, proof: ReauthInput): Enrollment {
         val account = account(accountId)
-        val checked = reauth.check(account, proof, sessionId)
+        val checked = if (enrollmentDoorOpensFor(account, sessionId)) Reauth.Proof.NONE else reauth.check(account, proof, sessionId)
         val now = core.time.now()
         val secret = Base32.encode(Totp.newSecret())
         val expiresAt = now.plus(properties.enrollmentTtl)
@@ -104,6 +105,7 @@ class MfaService(
             throw MfaException(MfaErrorCode.ENROLLMENT_EXPIRED)   // 동시에 온 다른 확인이 이겼다
         }
         attempt.forgive()
+        requirement.invalidate(accountId)
         core.sessions()?.revokeAll(accountId, sessionId)
         core.events.publish(AccountEventType.MFA_ENABLED, accountId, ip, mapOf("via" to if (first) "enrollment" else "re_enrollment"))
         notify(account, "enabled")
@@ -154,6 +156,7 @@ class MfaService(
         if (!spend(accountId, factor)) throw wrong(attempt.left)
         attempt.forgive()
         store.deleteAll(accountId)
+        requirement.invalidate(accountId)
         checked.commit()
         core.events.publish(AccountEventType.MFA_DISABLED, accountId, ip)
         notify(account, "disabled")
@@ -174,10 +177,41 @@ class MfaService(
     /** 탈퇴 - 비밀 · 복구 코드 · 열려 있는 로그인 대기를 지운다(멱등) */
     fun erase(accountId: String) {
         store.deleteAll(accountId)
+        requirement.invalidate(accountId)
         challengeStore.deleteByAccount(accountId, listOf(ChallengePurposes.MFA_LOGIN))
     }
 
+    // ---------------------------------------------------------------- 운영자 해제
+
+    /** 켜져 있는 [accountId] 의 2단계를 지우고 모든 세션을 닫는다. [actorPermissions] 는 호출자의 권한(전권이면 `*`) - 자기 자신 409, 자기에게 없는 권한을 가진 계정 403(상승) */
+    fun reset(actorId: String, accountId: String, actorPermissions: Set<String>) {
+        if (actorId == accountId) throw MfaException(MfaErrorCode.SELF_RESET)
+        try {
+            core.requireCanManage(accountId, actorPermissions)
+        } catch (e: AccountException) {
+            throw if (e.errorCode == AccountErrorCode.ROLE_ESCALATION) MfaException(MfaErrorCode.ESCALATION) else e
+        }
+        val account = account(accountId)
+        requireEnabled(accountId)
+        store.deleteAll(accountId)
+        challengeStore.deleteByAccount(accountId, listOf(ChallengePurposes.MFA_LOGIN))
+        requirement.invalidate(accountId)
+        core.sessions()?.revokeAll(accountId)
+        core.events.publish(AccountEventType.MFA_RESET_BY_ADMIN, accountId, null, mapOf("by" to actorId))
+        notify(account, "reset")
+    }
+
     // ---------------------------------------------------------------- 안쪽
+
+    /**
+     * 필수 문에 걸린 계정(필수인데 등록 전)이 **방금 로그인한 세션**(`required.fresh-login-window`, 15분)으로 등록하면 다시 인증을 면제한다 - 첫 이메일 등록의 면제와 같은 이유(막혔는데 증거를 대라고 할 수 없다).
+     * 면제는 계정이 아니라 세션에 붙는다: 옛 세션 · 세션을 읽을 수 없는 조립(JWT 만)은 면제가 없다. 이미 켜진 계정의 재등록은 면제가 아니다.
+     */
+    private fun enrollmentDoorOpensFor(account: Account, sessionId: String?): Boolean {
+        if (sessionId == null || !policy.required(account) || store.find(account.id)?.enabled == true) return false
+        val openedAt = core.sessionInspector()?.openedAt(account.id, sessionId) ?: return false
+        return !core.time.now().isAfter(openedAt.plus(properties.required.freshLoginWindow))
+    }
 
     private fun requireEnabled(accountId: String) {
         if (store.find(accountId)?.enabled != true) throw MfaException(MfaErrorCode.NOT_ENABLED)
