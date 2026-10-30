@@ -13,6 +13,7 @@ import dev.sumin.skeleton.common.authz.OperatorAccess
 import dev.sumin.skeleton.common.project.ProjectRegistry
 import dev.sumin.skeleton.common.web.ClientIps
 import dev.sumin.skeleton.auth.security.AuthErrorWriter
+import dev.sumin.skeleton.auth.security.BearerTokenAuthenticator
 import dev.sumin.skeleton.auth.security.BreakGlassAuthenticationFilter
 import dev.sumin.skeleton.auth.security.DevLoginAuthenticationFilter
 import dev.sumin.skeleton.auth.security.JwtAuthenticationFilter
@@ -147,8 +148,9 @@ class AuthAutoConfiguration {
         jwtTokenService: JwtTokenService,
         authErrorWriter: AuthErrorWriter,
         bearerIgnored: ObjectProvider<dev.sumin.skeleton.common.web.BearerIgnoredPaths>,
+        bearerAuthenticators: ObjectProvider<BearerTokenAuthenticator>,
     ): JwtAuthenticationFilter =
-        JwtAuthenticationFilter(jwtTokenService, authErrorWriter, bearerIgnored.orderedStream().toList())
+        JwtAuthenticationFilter(jwtTokenService, authErrorWriter, bearerIgnored.orderedStream().toList(), bearerAuthenticators.orderedStream().toList())
 
     @Bean
     @ConditionalOnMissingBean

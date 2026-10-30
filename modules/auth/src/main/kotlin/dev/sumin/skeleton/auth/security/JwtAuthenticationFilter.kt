@@ -15,6 +15,8 @@ class JwtAuthenticationFilter(
     private val authErrorWriter: AuthErrorWriter,
     /** 자기 인증을 따로 하는 경로 — Bearer 를 보지 않고 지나보낸다 (예: 작업 큐 깨우기 주소가 Scheduler 의 OIDC 토큰을 받는 경우) */
     private val bearerIgnored: List<BearerIgnoredPaths> = emptyList(),
+    /** JWT 가 아닌 Bearer(API 키 …)를 읽는 고리 - JWT 로 읽기 전에 먼저 묻는다. 비어 있으면 예전과 같다 */
+    private val bearerAuthenticators: List<BearerTokenAuthenticator> = emptyList(),
 ) : OncePerRequestFilter() {
     override fun doFilterInternal(
         request: HttpServletRequest,
@@ -41,6 +43,21 @@ class JwtAuthenticationFilter(
         }
 
         if (token != null) {
+            val authenticator = bearerAuthenticators.firstOrNull { it.supports(token) }
+            if (authenticator != null) {
+                val authentication = try {
+                    authenticator.authenticate(token, request)
+                } catch (rejected: BearerTokenRejectedException) {
+                    authErrorWriter.writeRejected(response, rejected)
+                    return
+                }
+                val context = SecurityContextHolder.createEmptyContext()
+                context.authentication = authentication
+                SecurityContextHolder.setContext(context)
+                filterChain.doFilter(request, response)
+                return
+            }
+
             // 프로젝트 모드에서 프로젝트 없는 경로(어느 프로젝트의 호스트도 아님)에 온 토큰은 어느 프로젝트의 키로도 검증할 수 없다 — 인증 실패(401)이지 500 이 아니다.
             // (서비스 자체는 프로젝트 문맥 없이 부르면 일부러 예외를 던진다 — 조용히 하나를 고르지 않는다)
             val principal = try { jwtTokenService.authenticate(token) } catch (_: NoProjectContextException) { null }

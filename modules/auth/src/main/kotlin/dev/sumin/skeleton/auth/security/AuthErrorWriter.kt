@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.auth.security
 
 import dev.sumin.skeleton.common.ApiError
+import dev.sumin.skeleton.common.ErrorCode
 import dev.sumin.skeleton.common.ForbiddenLog
 import dev.sumin.skeleton.common.PlatformErrorCode
 import dev.sumin.skeleton.common.TraceIdFilter
@@ -27,10 +28,16 @@ class AuthErrorWriter(
         write(response, PlatformErrorCode.FORBIDDEN, detail)
     }
 
+    /** [BearerTokenAuthenticator] 가 거절한 토큰 - 그 고리의 에러 코드 · 상태 · `data` 로 쓴다 */
+    fun writeRejected(response: HttpServletResponse, rejected: BearerTokenRejectedException) {
+        write(response, rejected.errorCode, rejected.message, rejected.data)
+    }
+
     private fun write(
         response: HttpServletResponse,
-        errorCode: PlatformErrorCode,
+        errorCode: ErrorCode,
         detail: String?,
+        data: Any? = null,
     ) {
         if (response.isCommitted) return
 
@@ -45,6 +52,7 @@ class AuthErrorWriter(
                 detail = detail,
                 traceId = MDC.get(TraceIdFilter.MDC_KEY),
                 spanId = MDC.get(TraceIdFilter.MDC_SPAN_ID_KEY),
+                data = data,
             ),
         )
     }
