@@ -2745,6 +2745,78 @@
       }
     },
     {
+      "id": "review",
+      "kind": "module",
+      "module": "review",
+      "path": "modules/review",
+      "status": "experimental",
+      "summary": "리뷰 · 평점 — 아무 대상(종류 + id)에 별점 1~5 · 본문, 계정×대상 하나(고쳐 쓴다) · 대상별 평균/분포(원자적 집계) · 정렬/거르기 · 도움돼요 · 구매 인증(앱이 ReviewPurchases.record 로 신호를 준다) · 구매자만 옵션 · 이벤트 고리(쓰기 트랜잭션 안, 보상은 앱이 잇는다) · 비로그인 읽기(앱이 켠다) · 탈퇴. 상품 · 결제 · 보상을 모른다.",
+      "starter": false,
+      "newProjectFlag": "--modules review,review-jdbc",
+      "autoIncludes": ["notification"],
+      "needs": {
+        "requires": ["review-jdbc"],
+        "oneOf": [],
+        "optional": ["idempotency", "notification"]
+      },
+      "config": {
+        "prefixes": ["skeleton.review"],
+        "snippet": "docs/config/modules/review.yml"
+      },
+      "basePaths": ["/api/v1/reviews"],
+      "secrets": [],
+      "docs": ["docs/modules/review.md"],
+      "frontend": {
+        "capabilities": ["reviews", "reviews-admin"],
+        "newProjectFlag": "--packages reviews",
+        "packages": ["@skeleton/reviews"]
+      },
+      "notFor": [
+        "review 는 저장소를 모른다 — review-jdbc 를 같이 고른다",
+        "대상 종류는 앱이 skeleton.review.target-types 에 적어야 쓸 수 있다 — 기본은 비어 있다",
+        "구매 확인은 앱이 ReviewPurchases.record 로 신호를 줘야 한다 — 모듈은 결제를 모른다",
+        "보상(포인트 · 업적)은 하지 않는다 — 앱이 ReviewEventListener 에서 잇는다",
+        "댓글 · 대화가 아니다 — 대상당 계정 하나, 별점이 있다. 글에 달리는 댓글은 board"
+      ],
+      "keywords": {
+        "ko": ["리뷰", "후기", "별점", "평점", "구매 인증", "도움돼요", "상품 후기"],
+        "en": ["review", "rating", "star rating", "verified purchase", "helpful", "product reviews"]
+      }
+    },
+    {
+      "id": "review-jdbc",
+      "kind": "module",
+      "module": "review-jdbc",
+      "path": "modules/review-jdbc",
+      "status": "experimental",
+      "summary": "리뷰 · 대상별 집계 · 도움돼요 · 구매 신호를 DB 에 둔다 (PostgreSQL · MySQL) — 집계는 원자적 UPDATE, 새 줄은 insertIgnore 먼저(틈 잠금 교착 없음), 목록 질의는 공개 줄만 읽는다.",
+      "starter": false,
+      "newProjectFlag": "--modules review-jdbc",
+      "autoIncludes": ["notification", "review"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": [],
+        "snippet": null
+      },
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/review-jdbc.md"],
+      "frontend": {
+        "capabilities": ["reviews", "reviews-admin"],
+        "newProjectFlag": "--packages reviews",
+        "packages": ["@skeleton/reviews"]
+      },
+      "notFor": ["DataSource · db-* 모듈과 이 모듈의 마이그레이션이 적용된 스키마가 필요하다"],
+      "keywords": {
+        "ko": ["리뷰 저장소", "리뷰 DB"],
+        "en": ["review storage", "review repository"]
+      }
+    },
+    {
       "id": "reward",
       "kind": "module",
       "module": "reward",
@@ -3292,6 +3364,8 @@
         "redis-core",
         "redis-lock",
         "redis-rate-limit",
+        "review",
+        "review-jdbc",
         "reward",
         "reward-jdbc",
         "scheduler",

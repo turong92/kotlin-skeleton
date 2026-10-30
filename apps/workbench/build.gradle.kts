@@ -42,6 +42,7 @@ dependencies {
     implementation(project(":modules:coupon-jdbc"))   // + coupon (api) — 쿠폰 정의 · 쿠폰함 · 공용 코드, 보상 지급기 `coupon` · 결제 할인 수단 `coupon`. 실제 흐름은 apps/sample
     implementation(project(":modules:campaign-jdbc"))   // + campaign (api) — 이벤트(출석 · 초대) 저장. 이벤트는 운영자가 만든다 — 아무것도 심지 않으면 비어 있다. 실제 흐름은 apps/sample
     implementation(project(":modules:catalog-jdbc"))   // + catalog (api) — 상품 · 가격 표(월 · 연 · 단건 · 행사가 · 통화별)와 결제 계약 구현(`SubscriptionPlans` · `PaymentCatalog` · `ProviderPriceRefs`). 운영자가 만들기 전에는 표가 비어 살 수 있는 것이 없다. 실제 흐름은 apps/sample
+    implementation(project(":modules:review-jdbc"))   // + review (api) — 리뷰 · 평점(별점 · 본문 · 도움돼요 · 구매 인증). 대상 종류는 앱이 적어야 쓸 수 있다 — 실제 흐름은 apps/sample
     implementation(project(":modules:search-jdbc"))   // + search (api) — DB 전문 검색(한국어 2글자 조각), 밀어 넣기 포트 `SearchIndexer`. 밀어 넣는 쪽(노트 · 상품 색인)은 실제 흐름을 조립하는 앱 몫
     implementation(project(":modules:captcha-turnstile"))
     implementation(project(":modules:board"))

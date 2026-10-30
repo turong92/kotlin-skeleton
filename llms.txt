@@ -147,6 +147,8 @@
 - redis-core: Redis 연결 · StringRedisTemplate · JSON… [Redis, 레디스]
 - redis-lock: Redisson 기반 분산 락 [분산 락, 락]
 - redis-rate-limit: platform 의 rate limit 저장소를 Redis 고정 윈도… [요청 제한, 속도 제한]
+- review: 리뷰 · 평점 — 아무 대상(종류 + id)에 별점 1~5 · 본문,… [리뷰, 후기]
+- review-jdbc: 리뷰 · 대상별 집계 · 도움돼요 · 구매 신호를 DB 에 둔다… [리뷰 저장소, 리뷰 DB]
 - reward: 보상 지급의 허리 — 이벤트가 기록한 지급 건을 일꾼이 쿠폰 · 포인트… [보상 지급, 지급 건]
 - reward-jdbc: 지급 건 저장과 지급 작업을 DB 에 두고 일꾼을… [지급 건 저장, 지급 작업 큐]
 - scheduler: 어노테이션 기반 스케줄러 [스케줄러, 정기 작업]

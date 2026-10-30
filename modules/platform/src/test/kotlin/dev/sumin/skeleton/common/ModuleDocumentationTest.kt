@@ -134,7 +134,7 @@ class ModuleDocumentationTest {
 
     @Test
     fun `frontend counterparts are known react-skeleton packages or none`() {
-        val known = setOf("@skeleton/api-client", "@skeleton/auth", "@skeleton/realtime", "@skeleton/time", "@skeleton/notifications", "@skeleton/storage", "@skeleton/board", "@skeleton/author-profile", "@skeleton/payment", "@skeleton/captcha-turnstile", "@skeleton/legal", "@skeleton/dashboard", "@skeleton/rewards", "@skeleton/workspace")
+        val known = setOf("@skeleton/api-client", "@skeleton/auth", "@skeleton/realtime", "@skeleton/time", "@skeleton/notifications", "@skeleton/storage", "@skeleton/board", "@skeleton/author-profile", "@skeleton/payment", "@skeleton/captcha-turnstile", "@skeleton/legal", "@skeleton/dashboard", "@skeleton/rewards", "@skeleton/workspace", "@skeleton/reviews", "@skeleton/search")
         val problems = pageNames().flatMap { module ->
             val cell = rows(module)["프론트 짝"].orEmpty()
             val tokens = code(cell)

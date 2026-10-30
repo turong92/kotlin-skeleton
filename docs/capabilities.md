@@ -139,6 +139,8 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `redis-core` | Redis 연결 · StringRedisTemplate · JSON 템플릿 · 키 접두사 — 다른 redis-* 모듈의 바탕. | `--modules redis-core` | Redis, 레디스, 키 접두사 / redis, redis connection, key prefix | — |
 | `redis-lock` | Redisson 기반 분산 락 — @DistributedLock 어노테이션과 락 실행기. | `--modules redis-lock` | 분산 락, 락, 동시 실행 방지, 중복 실행 방지 / distributed lock, lock, mutex, redisson | — |
 | `redis-rate-limit` | platform 의 rate limit 저장소를 Redis 고정 윈도 카운터로 바꾼다(여러 인스턴스에서 한도 공유). | `--modules redis-rate-limit` | 요청 제한, 속도 제한, API 호출 제한, 도배 방지 / rate limit, throttling, request limit, redis rate limit | — |
+| `review` | 리뷰 · 평점 — 아무 대상(종류 + id)에 별점 1~5 · 본문, 계정×대상 하나(고쳐 쓴다) · 대상별 평균/분포(원자적 집계) · 정렬/거르기 · 도움돼요 · 구매 인증(앱이 ReviewPurchases.record 로 신호를 준다) · 구매자만 옵션 · 이벤트 고리(쓰기 트랜잭션 안, 보상은 앱이 잇는다) · 비로그인 읽기(앱이 켠다) · 탈퇴. 상품 · 결제 · 보상을 모른다. | `--modules review,review-jdbc` | 리뷰, 후기, 별점, 평점, 구매 인증, 도움돼요, 상품 후기 / review, rating, star rating, verified purchase, helpful, product reviews | `@skeleton/reviews` |
+| `review-jdbc` | 리뷰 · 대상별 집계 · 도움돼요 · 구매 신호를 DB 에 둔다 (PostgreSQL · MySQL) — 집계는 원자적 UPDATE, 새 줄은 insertIgnore 먼저(틈 잠금 교착 없음), 목록 질의는 공개 줄만 읽는다. | `--modules review-jdbc` | 리뷰 저장소, 리뷰 DB / review storage, review repository | `@skeleton/reviews` |
 | `reward` | 보상 지급의 허리 — 이벤트가 기록한 지급 건을 일꾼이 쿠폰 · 포인트 지급기로 주고(재시도 · 멱등), 받았어요 알림과 운영자 다시 지급 · 취소까지. | `--modules reward,reward-jdbc` | 보상 지급, 지급 건, 쿠폰 지급, 포인트 지급, 다시 지급, 받았어요 알림 / reward grant, reward issuer, payout worker, retry grant | `@skeleton/rewards` |
 | `reward-jdbc` | 지급 건 저장과 지급 작업을 DB 에 두고 일꾼을 job-queue-jdbc 에 얹는다 (PostgreSQL · MySQL). | `--modules reward-jdbc` | 지급 건 저장, 지급 작업 큐 / reward grant store, reward job | `@skeleton/rewards` |
 | `scheduler` | 어노테이션 기반 스케줄러 — 실행 가드 · 락 매니저 · 실패 핸들러(기본 락은 no-op, 단일 인스턴스용). | `--modules scheduler` | 스케줄러, 정기 작업, 크론, 주기 실행, 배치 / scheduler, cron, scheduled job, periodic task, batch | — |
@@ -1214,6 +1216,38 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 단일 인스턴스면 platform 의 인메모리 저장소로 충분하다
 - 키워드: 요청 제한, 속도 제한, API 호출 제한, 도배 방지 / rate limit, throttling, request limit, redis rate limit
 
+### `review` — 리뷰 · 평점 — 아무 대상(종류 + id)에 별점 1~5 · 본문, 계정×대상 하나(고쳐 쓴다) · 대상별 평균/분포(원자적 집계) · 정렬/거르기 · 도움돼요 · 구매 인증(앱이 ReviewPurchases.record 로 신호를 준다) · 구매자만 옵션 · 이벤트 고리(쓰기 트랜잭션 안, 보상은 앱이 잇는다) · 비로그인 읽기(앱이 켠다) · 탈퇴. 상품 · 결제 · 보상을 모른다.
+
+- 종류 · 상태: module · experimental — 위치 `modules/review`
+- 켜는 법: `--modules review,review-jdbc`
+- 의존 한 줄: `implementation(project(":modules:review"))`
+- 소스만 따라온다(컴파일 전용 — 런타임 클래스패스에는 없다. 쓰려면 apps/api 에 의존 한 줄을 더한다): `notification`
+- 함께 골라야 한다: `review-jdbc`
+- 설정 접두사 `skeleton.review` — 키와 기본값 `docs/config/modules/review.yml`
+- HTTP 경로: `/api/v1/reviews`
+- 문서: `docs/modules/review.md`
+- 짝 프런트(react-skeleton): 항목 `reviews`, `reviews-admin` · 패키지 `@skeleton/reviews` · 조각 `--packages reviews`
+- 쓰지 않는 경우:
+  - review 는 저장소를 모른다 — review-jdbc 를 같이 고른다
+  - 대상 종류는 앱이 skeleton.review.target-types 에 적어야 쓸 수 있다 — 기본은 비어 있다
+  - 구매 확인은 앱이 ReviewPurchases.record 로 신호를 줘야 한다 — 모듈은 결제를 모른다
+  - 보상(포인트 · 업적)은 하지 않는다 — 앱이 ReviewEventListener 에서 잇는다
+  - 댓글 · 대화가 아니다 — 대상당 계정 하나, 별점이 있다. 글에 달리는 댓글은 board
+- 키워드: 리뷰, 후기, 별점, 평점, 구매 인증, 도움돼요, 상품 후기 / review, rating, star rating, verified purchase, helpful, product reviews
+
+### `review-jdbc` — 리뷰 · 대상별 집계 · 도움돼요 · 구매 신호를 DB 에 둔다 (PostgreSQL · MySQL) — 집계는 원자적 UPDATE, 새 줄은 insertIgnore 먼저(틈 잠금 교착 없음), 목록 질의는 공개 줄만 읽는다.
+
+- 종류 · 상태: module · experimental — 위치 `modules/review-jdbc`
+- 켜는 법: `--modules review-jdbc`
+- 의존 한 줄: `implementation(project(":modules:review-jdbc"))`
+- 자동으로 따라온다: `notification`, `review`
+- 설정 접두사 없음
+- 문서: `docs/modules/review-jdbc.md`
+- 짝 프런트(react-skeleton): 항목 `reviews`, `reviews-admin` · 패키지 `@skeleton/reviews` · 조각 `--packages reviews`
+- 쓰지 않는 경우:
+  - DataSource · db-* 모듈과 이 모듈의 마이그레이션이 적용된 스키마가 필요하다
+- 키워드: 리뷰 저장소, 리뷰 DB / review storage, review repository
+
 ### `reward` — 보상 지급의 허리 — 이벤트가 기록한 지급 건을 일꾼이 쿠폰 · 포인트 지급기로 주고(재시도 · 멱등), 받았어요 알림과 운영자 다시 지급 · 취소까지.
 
 - 종류 · 상태: module · experimental — 위치 `modules/reward`
@@ -1397,7 +1431,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 - 종류 · 상태: app · stable — 위치 `apps/workbench`
 - 켜는 법: `--with-workbench`
-- 자동으로 따라온다: `alert-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `badge`, `badge-jdbc`, `board`, `board-jdbc`, `campaign`, `campaign-jdbc`, `catalog`, `catalog-jdbc`, `config-aws-ssm`, `coupon`, `coupon-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `db-mysql`, `event-kafka`, `json`, `notification`, `notification-jdbc`, `notification-slack`, `notification-sse`, `notification-websocket`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `point`, `point-jdbc`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `reward`, `reward-jdbc`, `scheduler`, `search`, `search-jdbc`, `storage`, `storage-s3`, `workspace`, `workspace-jdbc`
+- 자동으로 따라온다: `alert-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `badge`, `badge-jdbc`, `board`, `board-jdbc`, `campaign`, `campaign-jdbc`, `catalog`, `catalog-jdbc`, `config-aws-ssm`, `coupon`, `coupon-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `db-mysql`, `event-kafka`, `json`, `notification`, `notification-jdbc`, `notification-slack`, `notification-sse`, `notification-websocket`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `point`, `point-jdbc`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `review`, `review-jdbc`, `reward`, `reward-jdbc`, `scheduler`, `search`, `search-jdbc`, `storage`, `storage-s3`, `workspace`, `workspace-jdbc`
 - HTTP 경로: `/api/v1`, `/api/v1/examples`, `/api/v1/skeleton`, `/api/v1/skeleton/enums`, `/api/v1/skeleton/json`, `/api/v1/skeleton/payments`, `/api/v1/skeleton/polymorphic/contents`
 - 문서: `docs/minimal-composition.md`, `docs/modules/README.md`
 - 짝 프런트(react-skeleton): 항목 `app-workbench` · 조각 `--with-workbench`

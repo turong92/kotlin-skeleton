@@ -1,0 +1,12 @@
+# review — 리뷰 · 평점(별점 1~5 · 본문 · 계정×대상 하나 · 평균/분포 · 도움돼요 · 구매 인증). 저장은 review-jdbc.
+skeleton:
+  review:
+    target-types: []                 # 리뷰를 받을 대상 종류. 기본은 비어 있다 - 앱이 [product] 처럼 적는다 (대상이 진짜 있는지는 앱의 ReviewTargets 빈이 답한다)
+    require-purchase: false          # true 면 구매 신호(ReviewPurchases.record)가 있는 사람만 쓴다 (403 REVIEW.PURCHASE_REQUIRED). 꺼 두면 누구나 쓰고 구매자에게 verified 배지
+    body-min-length: 0               # 본문 최소 글자(코드 포인트). 0 = 별점만도 된다
+    body-max-length: 2000            # 본문 최대 글자 (열 길이 2000 이 상한)
+    max-photos: 0                    # 사진 칸 수 (0 = 사진 없음)
+    http:
+      enabled: true                  # false 면 사용자 경로를 닫는다
+      base-path: /api/v1/reviews
+      allow-anonymous-read: false    # true 면 대상 요약 · 일괄 요약 · 리뷰 목록 읽기를 로그인 없이 연다 - 기본은 로그인 필요(401), 열기는 앱의 선택 (badge · board 의 같은 이름 설정과 같다)
