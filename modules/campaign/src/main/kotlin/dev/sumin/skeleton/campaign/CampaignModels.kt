@@ -66,6 +66,18 @@ data class Referral(
     val claimNetwork: String? = null,
 )
 
+/** 초대 내역 목록의 거르기 - 비어 있는 칸은 거르지 않는다 */
+data class ReferralFilter(
+    val inviterId: String? = null,
+    val inviteeId: String? = null,
+    val campaignId: String? = null,
+    val status: ReferralStatus? = null,
+    val flag: ReferralFlag? = null,
+)
+
+/** 목록의 자리 - `(claimedAt, inviteeId)` 가 새것부터 정렬된 키다 */
+data class ReferralPosition(val claimedAt: Instant, val inviteeId: String)
+
 /**
  * 이벤트 저장 포트 — `campaign-jdbc` 가 구현한다. 쓰기는 [inTransaction] 안(또는 호출자 트랜잭션 안)에서 부른다.
  */
@@ -129,6 +141,9 @@ interface CampaignStore {
         settledBy: String? = null,
         cancelReason: String? = null,
     ): Boolean
+
+    /** [filter] 에 맞는 관계를 새것부터(`claimedAt`, `inviteeId` 내림차순), [after] 다음부터 [limit] 개 */
+    fun listReferrals(filter: ReferralFilter, after: ReferralPosition?, limit: Int): List<Referral>
 
     /** 보류 기한이 지난(`HELD` ∧ `release_at <= now`) 초대받은 사람 id, 기한이 빠른 것부터 */
     fun dueHeldReferrals(now: Instant, limit: Int): List<String>

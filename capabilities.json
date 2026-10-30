@@ -1126,7 +1126,7 @@
         "prefixes": ["skeleton.campaign"],
         "snippet": "docs/config/modules/campaign.yml"
       },
-      "basePaths": ["/api/v1/admin/campaigns", "/api/v1/campaigns", "/api/v1/referrals"],
+      "basePaths": ["/api/v1/admin/campaigns", "/api/v1/admin/referrals", "/api/v1/campaigns", "/api/v1/referrals"],
       "secrets": [],
       "docs": ["docs/modules/campaign.md"],
       "frontend": {

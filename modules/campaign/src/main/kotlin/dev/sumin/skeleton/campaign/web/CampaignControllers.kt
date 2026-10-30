@@ -11,9 +11,12 @@ import dev.sumin.skeleton.campaign.CampaignInput
 import dev.sumin.skeleton.campaign.CampaignPermissions
 import dev.sumin.skeleton.campaign.Campaigns
 import dev.sumin.skeleton.campaign.CheckInResult
+import dev.sumin.skeleton.campaign.Referral
 import dev.sumin.skeleton.campaign.ReferralService
+import dev.sumin.skeleton.campaign.ReferralStatus
 import dev.sumin.skeleton.campaign.ReferralSummary
 import dev.sumin.skeleton.common.ApplicationException
+import dev.sumin.skeleton.common.CursorResponse
 import dev.sumin.skeleton.common.DataResponse
 import dev.sumin.skeleton.common.ListResponse
 import dev.sumin.skeleton.common.PlatformErrorCode
@@ -22,6 +25,9 @@ import dev.sumin.skeleton.common.authz.OperatorAccess
 import dev.sumin.skeleton.common.authz.OperatorAction
 import dev.sumin.skeleton.common.authz.OperatorAuditLog
 import dev.sumin.skeleton.common.authz.OperatorRef
+import dev.sumin.skeleton.common.account.AccountLabels
+import dev.sumin.skeleton.common.web.ClientIps
+import jakarta.servlet.http.HttpServletRequest
 import java.time.Instant
 import java.time.YearMonth
 import java.time.format.DateTimeParseException
@@ -95,21 +101,59 @@ class CampaignController(private val campaigns: Campaigns, private val attendanc
     }
 }
 
-data class ReferralMeResponse(val code: String, val invited: Int, val rewarded: Int)
+@JsonInclude(JsonInclude.Include.ALWAYS)
+data class ReferralMeResponse(val code: String, val invited: Int, val rewarded: Int, val canClaim: Boolean, val claimUntil: Instant?)
 
 data class ClaimRequest(val code: String = "")
 
-/** 내 초대 코드 · 초대받은 사람이 코드를 쓰기 */
+/** 사용자에게 보이는 상태 - 확인 대기(`REVIEW`) · 표시 · 사유는 운영자만 안다 */
+enum class InviteeStatus { WAITING, PENDING, REWARDED, NOT_REWARDED }
+
+/** [label] 은 가린 이름 - 이름을 모르면 null(화면은 「친구 n」). [rewardAt] 은 보류 중이면 풀리는 때, 보상을 받았으면 받은 때 */
+data class InviteeResponse(val label: String?, val status: InviteeStatus, val claimedAt: Instant, val rewardAt: Instant?)
+
+private fun Referral.toInvitee(label: String?) = when (status) {
+    ReferralStatus.CLAIMED -> InviteeResponse(label, InviteeStatus.WAITING, claimedAt, null)
+    ReferralStatus.REVIEW -> InviteeResponse(label, InviteeStatus.PENDING, claimedAt, null)
+    ReferralStatus.HELD -> InviteeResponse(label, InviteeStatus.PENDING, claimedAt, releaseAt)
+    ReferralStatus.QUALIFIED -> InviteeResponse(label, InviteeStatus.REWARDED, claimedAt, qualifiedAt)
+    ReferralStatus.CAPPED, ReferralStatus.CANCELED -> InviteeResponse(label, InviteeStatus.NOT_REWARDED, claimedAt, null)
+}
+
+/** 앞 두 글자(두 글자 이하면 한 글자) + `***`, `@` 뒤는 버린다 */
+internal fun maskLabel(label: String): String {
+    val name = label.substringBefore('@')
+    return name.take(if (name.length <= 2) 1 else 2) + "***"
+}
+
+/** 내 초대 코드 · 내가 초대한 사람들 · 초대받은 사람이 코드를 쓰기 */
 @RestController
 @RequestMapping("/api/v1/referrals")
-class ReferralController(private val referrals: ReferralService) {
+class ReferralController(
+    private val referrals: ReferralService,
+    private val clientIps: ClientIps = ClientIps(),
+    /** 가린 이름의 재료 - 없으면(`account` 가 없는 조립) 이름 칸이 null */
+    private val labels: AccountLabels? = null,
+) {
     @GetMapping("/me")
-    fun me(authentication: Authentication?): DataResponse<ReferralMeResponse> =
-        referrals.me(accountOf(authentication)).let { s: ReferralSummary -> Response.ok(ReferralMeResponse(s.code, s.invited, s.rewarded)) }
+    fun me(authentication: Authentication?, http: HttpServletRequest): DataResponse<ReferralMeResponse> =
+        referrals.me(accountOf(authentication), clientIps.of(http).limitKey)
+            .let { s: ReferralSummary -> Response.ok(ReferralMeResponse(s.code, s.invited, s.rewarded, s.canClaim, s.claimUntil)) }
+
+    @GetMapping("/me/invitees")
+    fun invitees(
+        authentication: Authentication?,
+        @RequestParam(required = false) cursor: String?,
+        @RequestParam(required = false) size: Int?,
+    ): CursorResponse<InviteeResponse> {
+        val page = referrals.invitees(accountOf(authentication), cursor?.takeIf { it.isNotBlank() }, size ?: ReferralService.DEFAULT_PAGE)
+        val names = labels?.of(page.items.map { it.inviteeId }).orEmpty()
+        return Response.ok(page.items.map { it.toInvitee(names[it.inviteeId]?.let(::maskLabel)) }, nextCursor = page.nextCursor)
+    }
 
     @PostMapping("/claim")
-    fun claim(authentication: Authentication?, @RequestBody body: ClaimRequest): ResponseEntity<Void> {
-        referrals.claim(accountOf(authentication), body.code)
+    fun claim(authentication: Authentication?, @RequestBody body: ClaimRequest, http: HttpServletRequest): ResponseEntity<Void> {
+        referrals.claim(accountOf(authentication), body.code, clientIps.of(http).limitKey)
         return ResponseEntity.noContent().build()
     }
 }
@@ -175,9 +219,12 @@ class CampaignAdminController(
 
     private fun invalid(message: String): Nothing = throw CampaignException(CampaignErrorCode.CONFIG_INVALID, message)
 
-    private fun operator(authentication: Authentication?): OperatorRef {
-        accountOf(authentication)
-        val roles = authentication!!.authorities.mapNotNull { it.authority?.removePrefix("ROLE_") }.toSet()
-        return OperatorRef(authentication.name, roles).also { access.require(it, CampaignPermissions.MANAGE) }
-    }
+    private fun operator(authentication: Authentication?): OperatorRef = operatorOf(authentication, access)
+}
+
+/** 익명 401 · `campaign.manage` 없음 403 */
+internal fun operatorOf(authentication: Authentication?, access: OperatorAccess): OperatorRef {
+    accountOf(authentication)
+    val roles = authentication!!.authorities.mapNotNull { it.authority?.removePrefix("ROLE_") }.toSet()
+    return OperatorRef(authentication.name, roles).also { access.require(it, CampaignPermissions.MANAGE) }
 }

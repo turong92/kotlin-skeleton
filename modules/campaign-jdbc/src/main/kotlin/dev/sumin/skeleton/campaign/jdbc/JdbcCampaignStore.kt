@@ -3,7 +3,9 @@ package dev.sumin.skeleton.campaign.jdbc
 import dev.sumin.skeleton.campaign.Campaign
 import dev.sumin.skeleton.campaign.CampaignStore
 import dev.sumin.skeleton.campaign.Referral
+import dev.sumin.skeleton.campaign.ReferralFilter
 import dev.sumin.skeleton.campaign.ReferralFlag
+import dev.sumin.skeleton.campaign.ReferralPosition
 import dev.sumin.skeleton.campaign.ReferralStatus
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.json.JsonCodec
@@ -116,16 +118,33 @@ class JdbcCampaignStore(
         ) == 1
 
     override fun referralOfInvitee(inviteeId: String, lock: Boolean): Referral? =
-        jdbc.query("select * from campaign_referrals where invitee_id = :i" + if (lock) " for update" else "", mapOf("i" to inviteeId)) { rs, _ ->
-            Referral(
-                rs.getString("invitee_id"), rs.getString("inviter_id"), rs.getString("campaign_id"), ReferralStatus.valueOf(rs.getString("status")),
-                dialect.readInstant(rs, "claimed_at")!!, dialect.readInstant(rs, "qualified_at"),
-                qualifyEvent = rs.getString("qualify_event"), releaseAt = dialect.readInstant(rs, "release_at"),
-                settledAt = dialect.readInstant(rs, "settled_at"), settledBy = rs.getString("settled_by"), cancelReason = rs.getString("cancel_reason"),
-                flags = rs.getString("flags")?.split(',')?.filter { it.isNotBlank() }?.map { ReferralFlag.valueOf(it) }?.toSet() ?: emptySet(),
-                claimNetwork = rs.getString("claim_network"),
-            )
-        }.firstOrNull()
+        jdbc.query("select * from campaign_referrals where invitee_id = :i" + if (lock) " for update" else "", mapOf("i" to inviteeId)) { rs, _ -> rs.toReferral() }.firstOrNull()
+
+    override fun listReferrals(filter: ReferralFilter, after: ReferralPosition?, limit: Int): List<Referral> {
+        val where = mutableListOf<String>()
+        val params = MapSqlParameterSource().addValue("limit", limit)
+        fun eq(column: String, name: String, value: String?) { if (value != null) { where += "$column = :$name"; params.addValue(name, value) } }
+        eq("inviter_id", "inviter", filter.inviterId)
+        eq("invitee_id", "invitee", filter.inviteeId)
+        eq("campaign_id", "campaign", filter.campaignId)
+        eq("status", "status", filter.status?.name)
+        filter.flag?.let { flag -> where += "concat(',', flags, ',') like :flag"; params.addValue("flag", "%,${flag.name},%") }
+        if (after != null) {
+            where += "(claimed_at < :afterAt or (claimed_at = :afterAt and invitee_id < :afterId))"
+            params.addValue("afterAt", dialect.instantParam(after.claimedAt)).addValue("afterId", after.inviteeId)
+        }
+        val clause = if (where.isEmpty()) "" else "where ${where.joinToString(" and ")}"
+        return jdbc.query("select * from campaign_referrals $clause order by claimed_at desc, invitee_id desc limit :limit", params) { rs, _ -> rs.toReferral() }
+    }
+
+    private fun ResultSet.toReferral() = Referral(
+        getString("invitee_id"), getString("inviter_id"), getString("campaign_id"), ReferralStatus.valueOf(getString("status")),
+        dialect.readInstant(this, "claimed_at")!!, dialect.readInstant(this, "qualified_at"),
+        qualifyEvent = getString("qualify_event"), releaseAt = dialect.readInstant(this, "release_at"),
+        settledAt = dialect.readInstant(this, "settled_at"), settledBy = getString("settled_by"), cancelReason = getString("cancel_reason"),
+        flags = getString("flags")?.split(',')?.filter { it.isNotBlank() }?.map { ReferralFlag.valueOf(it) }?.toSet() ?: emptySet(),
+        claimNetwork = getString("claim_network"),
+    )
 
     override fun countReferrals(inviterId: String, campaignId: String?, status: ReferralStatus?, lock: Boolean): Long {
         if (lock) {

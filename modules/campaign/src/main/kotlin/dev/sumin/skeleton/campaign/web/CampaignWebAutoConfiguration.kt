@@ -4,8 +4,11 @@ import dev.sumin.skeleton.campaign.AttendanceService
 import dev.sumin.skeleton.campaign.CampaignAutoConfiguration
 import dev.sumin.skeleton.campaign.Campaigns
 import dev.sumin.skeleton.campaign.ReferralService
+import dev.sumin.skeleton.common.account.AccountLabels
 import dev.sumin.skeleton.common.authz.OperatorAccess
 import dev.sumin.skeleton.common.authz.OperatorAuditLog
+import dev.sumin.skeleton.common.web.ClientIps
+import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
@@ -32,7 +35,8 @@ class CampaignWebAutoConfiguration {
     @ConditionalOnBean(ReferralService::class)
     @ConditionalOnProperty(prefix = "skeleton.campaign.http", name = ["enabled"], havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
-    fun referralController(referrals: ReferralService): ReferralController = ReferralController(referrals)
+    fun referralController(referrals: ReferralService, clientIps: ObjectProvider<ClientIps>, labels: ObjectProvider<AccountLabels>): ReferralController =
+        ReferralController(referrals, clientIps.getIfAvailable { ClientIps() }, labels.getIfAvailable())
 
     @Bean
     @ConditionalOnBean(Campaigns::class)
@@ -40,4 +44,11 @@ class CampaignWebAutoConfiguration {
     @ConditionalOnMissingBean
     fun campaignAdminController(campaigns: Campaigns, access: OperatorAccess, audit: OperatorAuditLog): CampaignAdminController =
         CampaignAdminController(campaigns, access, audit)
+
+    @Bean
+    @ConditionalOnBean(ReferralService::class)
+    @ConditionalOnProperty(prefix = "skeleton.campaign.admin", name = ["enabled"], havingValue = "true")
+    @ConditionalOnMissingBean
+    fun referralAdminController(referrals: ReferralService, access: OperatorAccess, audit: OperatorAuditLog, labels: ObjectProvider<AccountLabels>): ReferralAdminController =
+        ReferralAdminController(referrals, access, audit, labels.getIfAvailable())
 }

@@ -605,7 +605,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 소스만 따라온다(컴파일 전용 — 런타임 클래스패스에는 없다. 쓰려면 apps/api 에 의존 한 줄을 더한다): `scheduler`
 - 함께 골라야 한다: `campaign-jdbc`, `reward-jdbc`
 - 설정 접두사 `skeleton.campaign` — 키와 기본값 `docs/config/modules/campaign.yml`
-- HTTP 경로: `/api/v1/admin/campaigns`, `/api/v1/campaigns`, `/api/v1/referrals`
+- HTTP 경로: `/api/v1/admin/campaigns`, `/api/v1/admin/referrals`, `/api/v1/campaigns`, `/api/v1/referrals`
 - 문서: `docs/modules/campaign.md`
 - 짝 프런트(react-skeleton): 항목 `rewards`, `rewards-admin` · 패키지 `@skeleton/rewards` · 조각 `--packages rewards`
 - 쓰지 않는 경우:

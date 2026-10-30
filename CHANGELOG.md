@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 친구초대 보류 · 확인 · 취소 (2026-10-31)
+
+- `campaign` + `campaign-jdbc`: 초대 이벤트 설정 `qualifyEvent`(신호 이름) · `holdDays`(0~90, 초대자 보상 보류) · `reviewSameNetwork`(같은 네트워크면 운영자 승인까지 보류) - 모두 비우면 예전 동작 그대로. 관계 상태 `REVIEW` · `HELD` · `CANCELED`, 표시 `SAME_NETWORK`(네트워크 값은 30일 뒤 지운다), 해제 주기 작업(`scheduler` 가 있으면 10분마다, 컴파일 전용), 마이그레이션 `V20261031090000__campaign_referral_review`(열 더하기만). `DeployGuard` 는 `reviewSameNetwork` 인데 `skeleton.web.client-ip.mode` 가 비었으면 경고한다.
+- `campaign` HTTP: `GET /api/v1/referrals/me` 에 `canClaim` · `claimUntil` 을 더했다(더하기만) · 새 `GET /api/v1/referrals/me/invitees`(가린 이름, 사용자용 상태 `WAITING` · `PENDING` · `REWARDED` · `NOT_REWARDED`) · `me` 와 `claim` 이 호출자 네트워크(`ClientIps.limitKey`)를 넘긴다 · 운영자 `GET /api/v1/admin/referrals`(이름은 `account.read` 도 있을 때만) · `POST …/{inviteeId}/approve` · `POST …/{inviteeId}/cancel {reason}`(`skeleton.campaign.admin.enabled`, `campaign.manage` - 새 권한 없음) · 운영 기록 `campaign.referral.approved` · `campaign.referral.canceled`.
+- **파괴 변경**: `Referrals` 가 `fun interface` 에서 빠졌다(메서드가 `qualify(inviteeId, event)` · `cancel` · `releaseDue` 로 늘었다 - 람다로 구현하던 코드는 `object :` 로; 부르는 쪽 `qualify(inviteeId)` 는 그대로). `CampaignStore.settleReferral` 은 `transitionReferral(from, to, …)` 로 바뀌었고 목록용 `listReferrals` 가 늘었다 - `CampaignStore` 를 직접 구현한 대역은 고쳐야 한다. `ReferralService.me(accountId, network)` · `claim(inviteeId, code, network)` 에 선택 인자가 늘었다.
+- 한계: 탈퇴 후 재가입은 막지 않는다. 회수는 보류 중 취소까지이고, 지급 뒤에는 각 모듈의 회수 도구를 쓴다([docs/modules/campaign.md](docs/modules/campaign.md)).
+
 - `account`: `AccountRepository.findByIds`(기본은 하나씩, `JdbcAccountRepository` 는 `where id in (…)` 덩어리 질의, 메모리 구현도 재정의). `RepositoryAccountLabels` 가 이걸 한 번만 불러, 쿠폰 운영 목록 · 배지 수여 내역의 계정 이름 조회가 쪽마다 N+1 이던 것이 질의 한 번이 된다. 동작은 그대로.
 
 ### API 키 (2026-10-31)

@@ -1,5 +1,7 @@
 package dev.sumin.skeleton.campaign
 
+import dev.sumin.skeleton.common.ApplicationException
+import dev.sumin.skeleton.common.PlatformErrorCode
 import dev.sumin.skeleton.common.account.AccountFacts
 import dev.sumin.skeleton.common.erasure.AccountTombstone
 import dev.sumin.skeleton.common.time.TimeProvider
@@ -7,6 +9,7 @@ import dev.sumin.skeleton.reward.RewardGrants
 import java.security.SecureRandom
 import java.time.Duration
 import java.time.Instant
+import java.util.Base64
 
 /**
  * 앱이 초대 관계에 알리는 자리.
@@ -26,7 +29,11 @@ interface Referrals {
     fun releaseDue(): Int
 }
 
-data class ReferralSummary(val code: String, val invited: Int, val rewarded: Int)
+/** [canClaim]: 진행 중인 초대 이벤트가 있고 아직 초대받지 않았고 가입 후 기간 안. [claimUntil]: 코드를 쓸 수 있는 마지막 때 - 진행 중인 이벤트가 있고 [AccountFacts] 가 있을 때만 */
+data class ReferralSummary(val code: String, val invited: Int, val rewarded: Int, val canClaim: Boolean = false, val claimUntil: Instant? = null)
+
+/** 목록 한 쪽 - 다음 쪽이 있으면 [nextCursor] */
+data class ReferralPage(val items: List<Referral>, val nextCursor: String?)
 
 /**
  * 친구초대. 코드는 계정당 하나(처음 볼 때 만든다). claim 한 트랜잭션에서 판정한다: 진행 중인 초대 이벤트 · 없는 코드 · 자기 코드 · 이미 초대받음 · 맞초대 ·
@@ -48,7 +55,33 @@ class ReferralService(
         val code = store.inTransaction {
             store.referralCode(accountId, ::newCode).also { if (network != null) store.recordInviterNetwork(accountId, network.take(MAX_NETWORK), time.now()) }
         }
-        return ReferralSummary(code, store.countReferrals(accountId, null, null).toInt(), store.countReferrals(accountId, null, ReferralStatus.QUALIFIED).toInt())
+        val campaign = campaigns.active().firstOrNull { it.kind == ReferralKind.KIND }
+        val claimUntil = campaign?.let { c -> facts?.createdAt(accountId)?.plus(Duration.ofDays(ReferralConfig.parse(c.config).claimWithinDays.toLong())) }
+        val canClaim = campaign != null && store.referralOfInvitee(accountId) == null && (facts == null || (claimUntil != null && !claimUntil.isBefore(time.now())))
+        return ReferralSummary(
+            code, store.countReferrals(accountId, null, null).toInt(), store.countReferrals(accountId, null, ReferralStatus.QUALIFIED).toInt(),
+            canClaim, claimUntil,
+        )
+    }
+
+    /** 내가 초대한 사람들, 새것부터 */
+    fun invitees(inviterId: String, cursor: String?, size: Int): ReferralPage = list(ReferralFilter(inviterId = inviterId), cursor, size)
+
+    /** 운영 목록 - [filter] 에 맞는 초대 내역, 새것부터. [cursor] 는 앞 쪽의 [ReferralPage.nextCursor] */
+    fun list(filter: ReferralFilter, cursor: String?, size: Int): ReferralPage {
+        val limit = size.coerceIn(1, MAX_PAGE)
+        val rows = store.listReferrals(filter, cursor?.let(::decodeCursor), limit + 1)
+        val page = rows.take(limit)
+        return ReferralPage(page, if (rows.size > limit) page.last().let { encodeCursor(it.claimedAt, it.inviteeId) } else null)
+    }
+
+    private fun encodeCursor(at: Instant, id: String): String = Base64.getUrlEncoder().withoutPadding().encodeToString("$at|$id".toByteArray())
+
+    private fun decodeCursor(cursor: String): ReferralPosition = try {
+        val (at, id) = String(Base64.getUrlDecoder().decode(cursor)).split('|', limit = 2)
+        ReferralPosition(Instant.parse(at), id)
+    } catch (e: RuntimeException) {   // 잘못된 base64 · 모양 · 시각 모두
+        throw ApplicationException("cursor is not valid", PlatformErrorCode.PARAMETER_VALIDATION_FAILED)
     }
 
     /** [network] 는 호출자의 네트워크 키(platform `ClientIps` 의 `limitKey`) - 모르면 null */
@@ -186,6 +219,8 @@ class ReferralService(
         const val INVITER_LEFT = "inviter_left"
         const val MAX_REASON = 200
         const val MAX_NETWORK = 64
+        const val DEFAULT_PAGE = 20
+        const val MAX_PAGE = 100
         private const val RELEASE_BATCH = 500
         /** 네트워크 값을 판정에 쓰고 보관하는 기간 - 지나면 해제 작업이 지운다 */
         val NETWORK_WINDOW: Duration = Duration.ofDays(30)

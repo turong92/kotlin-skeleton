@@ -3,7 +3,8 @@ skeleton:
   campaign:
     # zone: Asia/Seoul             # 「오늘」을 가르는 서비스 시간대. 비면 skeleton.time.default-zone, 그것도 없으면 Asia/Seoul
     admin:
-      enabled: false               # true 면 운영자 경로(campaign.manage)가 열린다. 꺼져 있으면 404
-      base-path: /api/v1/admin/campaigns
+      enabled: false               # true 면 운영자 경로(이벤트 · 초대 내역 승인/취소, campaign.manage)가 열린다. 꺼져 있으면 404
+      base-path: /api/v1/admin/campaigns   # 이벤트 경로만. 초대 내역은 /api/v1/admin/referrals 고정
     http:
       enabled: true                # false 면 사용자 경로(출석 · 초대)를 열지 않는다
+    # 초대 이벤트의 보류 · 확인 설정(qualifyEvent · holdDays · reviewSameNetwork)은 여기가 아니라 이벤트 설정(운영 화면 · Campaigns)에 적는다

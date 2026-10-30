@@ -56,6 +56,13 @@ class FakeCampaignStore : CampaignStore {
         )
         return true
     }
+    override fun listReferrals(filter: ReferralFilter, after: ReferralPosition?, limit: Int): List<Referral> =
+        referrals.values.filter {
+            (filter.inviterId == null || it.inviterId == filter.inviterId) && (filter.inviteeId == null || it.inviteeId == filter.inviteeId) &&
+                (filter.campaignId == null || it.campaignId == filter.campaignId) && (filter.status == null || it.status == filter.status) &&
+                (filter.flag == null || filter.flag in it.flags)
+        }.sortedWith(compareByDescending<Referral> { it.claimedAt }.thenByDescending { it.inviteeId })
+            .filter { after == null || it.claimedAt < after.claimedAt || (it.claimedAt == after.claimedAt && it.inviteeId < after.inviteeId) }.take(limit)
     override fun dueHeldReferrals(now: Instant, limit: Int) =
         referrals.values.filter { it.status == ReferralStatus.HELD && it.releaseAt != null && !it.releaseAt.isAfter(now) }.map { it.inviteeId }.take(limit)
 

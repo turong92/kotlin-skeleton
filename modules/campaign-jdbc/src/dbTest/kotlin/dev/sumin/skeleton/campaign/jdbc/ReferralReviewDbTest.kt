@@ -3,7 +3,9 @@ package dev.sumin.skeleton.campaign.jdbc
 import dev.sumin.skeleton.campaign.CampaignInput
 import dev.sumin.skeleton.campaign.CampaignStore
 import dev.sumin.skeleton.campaign.Campaigns
+import dev.sumin.skeleton.campaign.ReferralFilter
 import dev.sumin.skeleton.campaign.ReferralFlag
+import dev.sumin.skeleton.campaign.ReferralPosition
 import dev.sumin.skeleton.campaign.ReferralService
 import dev.sumin.skeleton.campaign.ReferralStatus
 import java.time.Duration
@@ -188,5 +190,22 @@ class ReferralReviewDbTest {
 
         store.eraseAccount("alice", "deleted:a")
         assertEquals(0L, jdbc.sql("select count(*) from campaign_referral_codes where account_id = 'alice'").query(Long::class.java).single())
+    }
+
+    @Test
+    fun `the list filters by inviter status and flag and pages newest first without skipping ties`() {
+        campaign()
+        account("alice"); account("carol")
+        referrals.me("alice", "n")
+        (1..3).forEach { i -> time.now = start.plusSeconds(60L * (if (i == 3) 1 else i)); invite("alice", "bob$i", if (i == 2) "n" else null) }   // bob1 · bob3 같은 시각
+        invite("carol", "dave")
+
+        val all = store.listReferrals(ReferralFilter(inviterId = "alice"), null, 10).map { it.inviteeId }
+        assertEquals(listOf("bob2", "bob3", "bob1"), all)
+        val page1 = store.listReferrals(ReferralFilter(inviterId = "alice"), null, 2)
+        val last = page1.last()
+        assertEquals(listOf("bob1"), store.listReferrals(ReferralFilter(inviterId = "alice"), ReferralPosition(last.claimedAt, last.inviteeId), 2).map { it.inviteeId })
+        assertEquals(listOf("bob2"), store.listReferrals(ReferralFilter(flag = ReferralFlag.SAME_NETWORK), null, 10).map { it.inviteeId })
+        assertEquals(listOf("dave"), store.listReferrals(ReferralFilter(status = ReferralStatus.CLAIMED, inviterId = "carol"), null, 10).map { it.inviteeId })
     }
 }
