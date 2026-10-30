@@ -4,6 +4,8 @@ import com.jayway.jsonpath.JsonPath
 import dev.sumin.skeleton.app.sample.TestcontainersConfiguration
 import dev.sumin.skeleton.app.sample.notes.SampleIntegrationTest
 import dev.sumin.skeleton.notification.NotificationSubscriptionRegistry
+import dev.sumin.skeleton.review.ReviewPurchases
+import dev.sumin.skeleton.review.ReviewTarget
 import java.lang.reflect.GenericArrayType
 import java.lang.reflect.ParameterizedType
 import java.lang.reflect.Type
@@ -57,6 +59,7 @@ class LoginIdLeakIntegrationTest {
     @Autowired lateinit var registry: NotificationSubscriptionRegistry
     @Autowired lateinit var mapper: ObjectMapper
     @Autowired lateinit var context: ApplicationContext
+    @Autowired lateinit var purchases: ReviewPurchases
 
     private val http by lazy { LeakHttp(mvc) }
     private val w by lazy { LeakWorld(http, registry) }
@@ -79,15 +82,25 @@ class LoginIdLeakIntegrationTest {
         created.read<String>("$.value.id") to created.read<String>("$.value.slug")
     }
 
+    /** X · Y 가 각각 구매 신호를 받고 상품 `basic` 에 리뷰를 하나씩 쓴다 - 리뷰 경로(`/api/v1/reviews/targets/{type}/{id}/…` · `/api/v1/reviews/{id}/photos/{index}`)의 변수 값. 반환 = 리뷰 id 들 */
+    private val reviewIds: List<String> by lazy {
+        listOf(w.xAcc to w.xToken, w.yAcc to w.yToken).map { (acc, token) ->
+            purchases.record(acc, ReviewTarget("product", "basic"), "leak-${w.nonce}-$acc")
+            val photo = http.post("/api/v1/storage/presign", token, """{"fileName":"photo.png","contentType":"image/png","sizeBytes":1024}""", record = false).ok().read<String>("$.value.key")   // 본인 업로드 키 한 장 - 사진 열람(302)이 닿게
+            http.post("/api/v1/reviews/targets/product/basic/reviews", token, """{"rating":5,"body":"a review by ${acc.takeLast(1)} ${w.nonce}","photos":[${json(photo)}]}""", record = false).ok().read<String>("$.value.id")
+        }
+    }
+
     /** 경로 변수 → 여정에서 얻은 값들. `{id}` 는 경로마다 뜻이 달라 접두사로 가른다 */
     private val candidates: Map<String, List<String>> by lazy {
         val eventId = http.get("/api/v1/notifications?size=100", w.yToken, record = false).ok().read<List<String>>("$.values[*].eventId").first()
         mapOf(
             "code" to listOf("general"),
+            "index" to listOf("0", "1"),   // 리뷰 사진 열람 (/api/v1/reviews/{id}/photos/{index}) - 사진 없는 리뷰는 404 여야 한다
             "postId" to listOf(w.yPost, w.postA, w.postB, w.postDraft).map { it.toString() },
             "commentId" to listOf(w.c0, w.c1, w.c2, w.c3, w.c4, w.cPicture).map { it.toString() },
             "eventId" to listOf(eventId),
-            "type" to listOf("terms", "privacy"),
+            "type" to listOf("terms", "privacy", "product"),   // 약관 종류 · 리뷰 대상 종류
             "key" to listOf("app.board-posts", "app.board-reactions", "coupon.top-used"),   // 대시보드 순위 하나 (/api/v1/admin/dashboard/rankings/{key}) - 견본 앱에 실제로 붙은 앱 통계 순위
             "slug" to listOf(workspace.second),   // 팀 주소로 풀기 (/api/v1/workspaces/by-slug/{slug})
             "accountId" to listOf(w.xAcc, w.yAcc),   // 운영자의 포인트 잔액 조회 (/api/v1/admin/points/{accountId})
@@ -96,6 +109,8 @@ class LoginIdLeakIntegrationTest {
 
     private val idByPrefix: Map<String, List<String>> by lazy {
         mapOf(
+            "/api/v1/reviews/targets/" to listOf("basic"),   // 대상 id (아래 `/api/v1/reviews/` 보다 앞에 둔다 - 접두사로 첫 일치를 고른다)
+            "/api/v1/reviews/" to reviewIds,
             "/api/v1/notes/" to listOf(createNote(w.yToken, "Y note ${w.nonce}"), createNote(w.xToken, "X note ${w.nonce}")),
             "/api/v1/workspaces/" to listOf(workspace.first),
             "/api/v1/admin/workspaces/" to listOf(workspace.first),
@@ -124,6 +139,10 @@ class LoginIdLeakIntegrationTest {
         }
         // 사진 열람 경로는 `index` 가 필수다 - 첫 번째 사진 · 없는 순번 · 고친 판의 목록으로 채운다
         if (template.endsWith("/attachments")) paths = paths.flatMap { p -> listOf("$p?index=0", "$p?index=1", "$p?index=0&from=edit") }
+        // 리뷰 요약은 `targets=type:id` 가 필수다
+        if (template == "/api/v1/reviews/summaries") paths = listOf("$template?targets=product:basic")
+        // 검색은 질의어 두 개로 훑는다 - X 의 아이디(값으로 찾기) · 노트 제목 조각 (색인에 있는 문서만 나온다)
+        if (template == "/api/v1/search") paths = listOf("$template?q=$LOGIN_ID", "$template?q=Y+note", "$template?q=basic")
         // 운영자의 계정별 쿠폰 목록은 `accountId` 가 필수다
         if (template == "/api/v1/admin/coupons") paths = listOf(w.xAcc, w.yAcc).map { "$template?accountId=$it" }
         // 출석 달력은 `month` 가 필수다
@@ -188,8 +207,8 @@ class LoginIdLeakIntegrationTest {
             assertEquals(0, found.read<Number>("$.pagination.totalElements").toInt(), "${token?.let { "Y" } ?: "anonymous"}: searching posts by the login ID finds nothing")
         }
 
-        // 훑은 것이 비어 있지 않다: 경로마다 적어도 한 독자가 2xx 를 받았다 (잘못 채운 값으로 404 만 받아 아무것도 안 본 경로가 없다)
-        val reached = everyReading.values.flatten().filter { it.captured.status in 200..299 }.map { it.captured.label.substringBefore('?').removePrefix("GET ") }.toSet()
+        // 훑은 것이 비어 있지 않다: 경로마다 적어도 한 독자가 2xx(또는 사진의 서명 주소 302)를 받았다 (잘못 채운 값으로 404 만 받아 아무것도 안 본 경로가 없다)
+        val reached = everyReading.values.flatten().filter { it.captured.status in 200..299 || it.captured.status == 302 }.map { it.captured.label.substringBefore('?').removePrefix("GET ") }.toSet()
         val untouched = paths.filter { (_, filled) -> filled.none { it.substringBefore('?') in reached } }.keys
         assertEquals(emptySet(), untouched, "documented GET paths that no reader (Y, anonymous, moderator, administrator, X) ever got a 2xx for - the journey's values do not reach them")
 
