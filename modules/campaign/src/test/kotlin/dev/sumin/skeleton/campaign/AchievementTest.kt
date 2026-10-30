@@ -98,6 +98,7 @@ class AchievementTest {
         assertEquals(spec(100), spec(" 100 "))
         assertEquals(spec(100), RewardSpec("point", mapOf("amount" to AchievementConfig.parse(config("m", step(1, mapOf("type" to "point", "params" to mapOf("amount" to 100.0))))).milestones[0].rewards[0].params.getValue("amount"))).identity())
         assertNotEquals(spec(100), spec(1000))
+        assertEquals(spec(10000000), spec(10000000.0))   // Double 의 문자열은 "1.0E7"
     }
 
     @Test

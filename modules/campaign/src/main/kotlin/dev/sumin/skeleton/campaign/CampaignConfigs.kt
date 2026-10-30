@@ -22,7 +22,7 @@ data class RewardSpec(val type: String, val params: Map<String, String>) {
     }
 
     private companion object {
-        val NUMBER = Regex("-?(0|[1-9][0-9]*)(\\.[0-9]+)?")
+        val NUMBER = Regex("-?(0|[1-9][0-9]*)(\\.[0-9]+)?([eE][+-]?[0-9]+)?")
     }
 }
 
