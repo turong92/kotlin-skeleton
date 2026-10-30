@@ -6,10 +6,24 @@ import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.reward.RewardGrants
 import java.security.SecureRandom
 import java.time.Duration
+import java.time.Instant
 
-/** 앱이 「의미 있는 행동」(예: 첫 결제)을 알릴 때 부르는 자리 - `qualifyOn: SIGNAL` 인 초대 이벤트의 초대자 보상이 이때 정해진다. 몇 번 불러도 한 번만 먹는다. */
-fun interface Referrals {
-    fun qualify(inviteeId: String)
+/**
+ * 앱이 초대 관계에 알리는 자리.
+ * - [qualify]: 「의미 있는 행동」(예: 첫 결제) - `qualifyOn: SIGNAL` 인 초대 이벤트의 초대자 보상이 이때 정해진다. 이벤트가 `qualifyEvent` 를 정했으면 [event] 가 같은 신호만 먹는다. 몇 번 불러도 한 번만 먹는다.
+ * - [cancel]: 보류 중(환불 · 사기)인 관계를 끊는다. 대기 · 확인 · 보류 중일 때만 먹고, 이미 끝났거나 없으면 `false`.
+ * - [releaseDue]: 보류 기한이 지난 관계에 초대자 보상을 준다(그리고 30일 지난 네트워크 값을 지운다). `scheduler` 가 있으면 주기 작업이 부르고, 없으면 앱이 부른다.
+ */
+interface Referrals {
+    fun qualify(inviteeId: String, event: String?)
+
+    /** 이름 없는 신호 - `qualifyEvent` 를 정하지 않은 이벤트에서만 먹는다 */
+    fun qualify(inviteeId: String) = qualify(inviteeId, null)
+
+    fun cancel(inviteeId: String, reason: String): Boolean
+
+    /** 보상을 준 관계 수 */
+    fun releaseDue(): Int
 }
 
 data class ReferralSummary(val code: String, val invited: Int, val rewarded: Int)
@@ -17,7 +31,9 @@ data class ReferralSummary(val code: String, val invited: Int, val rewarded: Int
 /**
  * 친구초대. 코드는 계정당 하나(처음 볼 때 만든다). claim 한 트랜잭션에서 판정한다: 진행 중인 초대 이벤트 · 없는 코드 · 자기 코드 · 이미 초대받음 · 맞초대 ·
  * 새 계정(가입 후 `claimWithinDays` 안, [AccountFacts] 가 없으면 이 판정만 건너뛴다) — 통과하면 관계 줄 + 초대받은 사람 보상 지급 건.
- * 초대자 보상은 `CLAIM` 이면 같은 트랜잭션, `SIGNAL` 이면 [qualify] 때. 초대자 상한([ReferralConfig.inviterCap])을 넘으면 관계만 남고 보상은 없다(`CAPPED`).
+ * 초대자 보상은 `CLAIM` 이면 같은 트랜잭션, `SIGNAL` 이면 [qualify] 때 **초대자 판정**으로 정한다(초대자 코드 줄을 잠근 채, 위에서부터 처음 맞는 것):
+ * 상한([ReferralConfig.inviterCap], `QUALIFIED + HELD + REVIEW` 가 자리를 찬다) → `CAPPED` / 같은 네트워크 확인([ReferralConfig.reviewSameNetwork]) → `REVIEW` /
+ * 보류([ReferralConfig.holdDays]) → `HELD` / 그 밖 → `QUALIFIED` + 초대자 보상. `HELD` 는 [releaseDue], `REVIEW` · `HELD` 는 [approve] 로 풀린다.
  */
 class ReferralService(
     private val store: CampaignStore,
@@ -27,12 +43,16 @@ class ReferralService(
     private val time: TimeProvider,
     private val random: SecureRandom = SecureRandom(),
 ) : Referrals {
-    fun me(accountId: String): ReferralSummary {
-        val code = store.inTransaction { store.referralCode(accountId, ::newCode) }
+    /** [network] 가 있으면 초대자의 마지막 네트워크로 적는다 - 같은 네트워크 표시의 재료 */
+    fun me(accountId: String, network: String? = null): ReferralSummary {
+        val code = store.inTransaction {
+            store.referralCode(accountId, ::newCode).also { if (network != null) store.recordInviterNetwork(accountId, network.take(MAX_NETWORK), time.now()) }
+        }
         return ReferralSummary(code, store.countReferrals(accountId, null, null).toInt(), store.countReferrals(accountId, null, ReferralStatus.QUALIFIED).toInt())
     }
 
-    fun claim(inviteeId: String, rawCode: String) {
+    /** [network] 는 호출자의 네트워크 키(platform `ClientIps` 의 `limitKey`) - 모르면 null */
+    fun claim(inviteeId: String, rawCode: String, network: String? = null) {
         store.inTransaction {
             val campaign = campaigns.active().firstOrNull { it.kind == ReferralKind.KIND } ?: throw CampaignException(CampaignErrorCode.NOT_ACTIVE, "no referral campaign is running")
             val config = ReferralConfig.parse(campaign.config)
@@ -48,14 +68,15 @@ class ReferralService(
                 val createdAt = facts.createdAt(inviteeId)
                 if (createdAt == null || createdAt.plus(Duration.ofDays(config.claimWithinDays.toLong())).isBefore(now)) reject(ReferralRejection.NOT_NEW_ACCOUNT)
             }
-            val capped = config.qualifyOn == QualifyOn.CLAIM && config.inviterCap != null &&
-                store.countReferrals(inviterId, campaign.id, ReferralStatus.QUALIFIED, lock = true) >= config.inviterCap
-            val status = when {
-                capped -> ReferralStatus.CAPPED
-                config.qualifyOn == QualifyOn.CLAIM -> ReferralStatus.QUALIFIED
-                else -> ReferralStatus.CLAIMED
-            }
-            val referral = Referral(inviteeId, inviterId, campaign.id, status, now, if (status == ReferralStatus.QUALIFIED) now else null)
+            // 같은 네트워크는 거절이 아니라 표시다 - 초대받은 사람 보상은 그대로 나간다
+            val claimNetwork = network?.take(MAX_NETWORK)
+            val flags = if (claimNetwork != null && store.networkSeen(inviterId, claimNetwork, now.minus(NETWORK_WINDOW))) setOf(ReferralFlag.SAME_NETWORK) else emptySet()
+            val verdict = if (config.qualifyOn == QualifyOn.CLAIM) judge(inviterId, campaign.id, config, flags, now) else null
+            val status = verdict?.status ?: ReferralStatus.CLAIMED
+            val referral = Referral(
+                inviteeId, inviterId, campaign.id, status, now, if (status == ReferralStatus.QUALIFIED) now else null,
+                releaseAt = verdict?.releaseAt, settledAt = if (verdict?.final == true) now else null, flags = flags, claimNetwork = claimNetwork,
+            )
             if (!store.insertReferral(referral)) reject(ReferralRejection.ALREADY_INVITED)   // 같은 사람이 동시에 두 번 - 평생 한 번
             if (status != ReferralStatus.CAPPED) {
                 record(inviteeId, config.invitee, campaign.id, inviteeId, "invitee")
@@ -64,21 +85,88 @@ class ReferralService(
         }
     }
 
-    override fun qualify(inviteeId: String) {
+    override fun qualify(inviteeId: String, event: String?) {
         store.inTransaction {
             val first = store.referralOfInvitee(inviteeId) ?: return@inTransaction
             if (first.status != ReferralStatus.CLAIMED || AccountTombstone.isTombstone(first.inviterId)) return@inTransaction   // 탈퇴한 초대자에게는 줄 곳이 없다
+            val config = ReferralConfig.parse((store.find(first.campaignId) ?: return@inTransaction).config)
+            if (config.qualifyEvent != null && config.qualifyEvent != event) return@inTransaction   // 이벤트가 고른 신호만 먹는다
             store.lockAccounts(listOf(first.inviterId))   // 같은 초대자의 상한 판정을 직렬화한다
             val referral = store.referralOfInvitee(inviteeId, lock = true) ?: return@inTransaction
             if (referral.status != ReferralStatus.CLAIMED) return@inTransaction
-            val campaign = store.find(referral.campaignId) ?: return@inTransaction
-            val config = ReferralConfig.parse(campaign.config)
-            val capped = config.inviterCap != null && store.countReferrals(referral.inviterId, campaign.id, ReferralStatus.QUALIFIED, lock = true) >= config.inviterCap
-            val to = if (capped) ReferralStatus.CAPPED else ReferralStatus.QUALIFIED
-            if (store.settleReferral(inviteeId, to, time.now()) && to == ReferralStatus.QUALIFIED) {
-                record(referral.inviterId, config.inviter, campaign.id, inviteeId, "inviter")
+            val now = time.now()
+            val verdict = judge(referral.inviterId, referral.campaignId, config, referral.flags, now)
+            if (store.transitionReferral(inviteeId, setOf(ReferralStatus.CLAIMED), verdict.status, now, releaseAt = verdict.releaseAt, qualifyEvent = event) && verdict.status == ReferralStatus.QUALIFIED) {
+                record(referral.inviterId, config.inviter, referral.campaignId, inviteeId, "inviter")
             }
         }
+    }
+
+    override fun releaseDue(): Int {
+        val now = time.now()
+        val released = store.dueHeldReferrals(now, RELEASE_BATCH).count { release(it, now) }
+        store.clearNetworksBefore(now.minus(NETWORK_WINDOW))
+        return released
+    }
+
+    private fun release(inviteeId: String, now: Instant): Boolean = store.inTransaction {
+        val referral = store.referralOfInvitee(inviteeId, lock = true)
+        if (referral == null || referral.status != ReferralStatus.HELD || referral.releaseAt == null || referral.releaseAt.isAfter(now)) return@inTransaction false
+        if (AccountTombstone.isTombstone(referral.inviterId)) {   // 탈퇴한 초대자에게는 줄 곳이 없다 - 계속 기한 목록에 남지 않게 닫는다
+            store.transitionReferral(inviteeId, setOf(ReferralStatus.HELD), ReferralStatus.CANCELED, now, cancelReason = INVITER_LEFT)
+            return@inTransaction false
+        }
+        pay(referral, now, settledBy = null, from = setOf(ReferralStatus.HELD))
+    }
+
+    /** 운영자 승인 - `REVIEW | HELD` 의 초대자 보상을 지금 준다(남은 보류를 건너뛴다). 그 밖의 상태는 409 */
+    fun approve(inviteeId: String, operatorId: String) {
+        store.inTransaction {
+            val referral = store.referralOfInvitee(inviteeId, lock = true) ?: throw CampaignException(CampaignErrorCode.REFERRAL_NOT_FOUND, "referral of $inviteeId not found")
+            if (referral.status !in ReferralStatus.APPROVABLE) throw CampaignException(CampaignErrorCode.REFERRAL_NOT_PENDING, "referral of $inviteeId is ${referral.status}")
+            if (AccountTombstone.isTombstone(referral.inviterId)) throw CampaignException(CampaignErrorCode.REFERRAL_NOT_PENDING, "the inviter of $inviteeId has left")
+            pay(referral, time.now(), operatorId, ReferralStatus.APPROVABLE)
+        }
+    }
+
+    /** 운영자 취소 - `CLAIMED | REVIEW | HELD` → `CANCELED`. 사유 필수(1..200자), 끝 상태는 409 */
+    fun cancelByOperator(inviteeId: String, reason: String, operatorId: String) {
+        cancelRelation(inviteeId, reason, operatorId, strict = true)
+    }
+
+    override fun cancel(inviteeId: String, reason: String): Boolean = cancelRelation(inviteeId, reason, APP, strict = false)
+
+    private fun cancelRelation(inviteeId: String, reason: String, by: String, strict: Boolean): Boolean {
+        val text = reason.trim()
+        if (text.isEmpty() || text.length > MAX_REASON) throw CampaignException(CampaignErrorCode.REFERRAL_REASON_INVALID, "reason must be 1..$MAX_REASON characters")
+        return store.inTransaction {
+            val referral = store.referralOfInvitee(inviteeId, lock = true)
+            if (referral == null || referral.status !in ReferralStatus.CANCELABLE) {
+                if (strict) throw CampaignException(if (referral == null) CampaignErrorCode.REFERRAL_NOT_FOUND else CampaignErrorCode.REFERRAL_NOT_CANCELABLE, "referral of $inviteeId cannot be canceled")
+                return@inTransaction false
+            }
+            store.transitionReferral(inviteeId, ReferralStatus.CANCELABLE, ReferralStatus.CANCELED, time.now(), settledBy = by, cancelReason = text)
+        }
+    }
+
+    private class Verdict(val status: ReferralStatus, val releaseAt: Instant? = null) {
+        val final: Boolean get() = status == ReferralStatus.QUALIFIED || status == ReferralStatus.CAPPED
+    }
+
+    /** 초대자 판정 - 초대자 코드 줄을 잠근 호출자 트랜잭션 안에서만. 위에서부터 처음 맞는 것 */
+    private fun judge(inviterId: String, campaignId: String, config: ReferralConfig, flags: Set<ReferralFlag>, now: Instant): Verdict = when {
+        config.inviterCap != null && store.countReferralsIn(inviterId, campaignId, ReferralStatus.SLOT_TAKING, lock = true) >= config.inviterCap -> Verdict(ReferralStatus.CAPPED)
+        config.reviewSameNetwork && ReferralFlag.SAME_NETWORK in flags -> Verdict(ReferralStatus.REVIEW)
+        config.holdDays > 0 -> Verdict(ReferralStatus.HELD, now.plus(Duration.ofDays(config.holdDays.toLong())))
+        else -> Verdict(ReferralStatus.QUALIFIED)
+    }
+
+    /** 보류 · 확인 중이던 관계의 초대자 보상을 준다 - 조건부 갱신이라 승인과 해제가 겹쳐도 한 번 */
+    private fun pay(referral: Referral, now: Instant, settledBy: String?, from: Set<ReferralStatus>): Boolean {
+        val config = ReferralConfig.parse((store.find(referral.campaignId) ?: return false).config)
+        if (!store.transitionReferral(referral.inviteeId, from, ReferralStatus.QUALIFIED, now, settledBy = settledBy)) return false
+        record(referral.inviterId, config.inviter, referral.campaignId, referral.inviteeId, "inviter")
+        return true
     }
 
     private fun record(accountId: String, rewards: List<RewardSpec>, campaignId: String, inviteeId: String, side: String) {
@@ -93,6 +181,14 @@ class ReferralService(
 
     companion object {
         const val SOURCE_TYPE = "referral"
+        /** 앱이 [Referrals.cancel] 로 끊었을 때 `settled_by` */
+        const val APP = "app"
+        const val INVITER_LEFT = "inviter_left"
+        const val MAX_REASON = 200
+        const val MAX_NETWORK = 64
+        private const val RELEASE_BATCH = 500
+        /** 네트워크 값을 판정에 쓰고 보관하는 기간 - 지나면 해제 작업이 지운다 */
+        val NETWORK_WINDOW: Duration = Duration.ofDays(30)
         const val CODE_LENGTH = 8
         private const val ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
     }

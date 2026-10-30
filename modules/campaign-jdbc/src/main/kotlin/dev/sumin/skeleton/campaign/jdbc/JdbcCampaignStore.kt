@@ -3,11 +3,13 @@ package dev.sumin.skeleton.campaign.jdbc
 import dev.sumin.skeleton.campaign.Campaign
 import dev.sumin.skeleton.campaign.CampaignStore
 import dev.sumin.skeleton.campaign.Referral
+import dev.sumin.skeleton.campaign.ReferralFlag
 import dev.sumin.skeleton.campaign.ReferralStatus
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.json.JsonCodec
 import dev.sumin.skeleton.persistence.jdbc.SqlDialect
 import java.sql.ResultSet
+import java.sql.Types
 import java.time.Instant
 import java.time.LocalDate
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource
@@ -93,11 +95,24 @@ class JdbcCampaignStore(
 
     override fun insertReferral(referral: Referral): Boolean =
         jdbc.update(
-            insertIgnoreSql("campaign_referrals", listOf("invitee_id", "inviter_id", "campaign_id", "status", "claimed_at", "qualified_at")),
+            insertIgnoreSql(
+                "campaign_referrals",
+                listOf(
+                    "invitee_id", "inviter_id", "campaign_id", "status", "claimed_at", "qualified_at",
+                    "qualify_event", "release_at", "settled_at", "settled_by", "cancel_reason", "flags", "claim_network",
+                ),
+            ),
             MapSqlParameterSource()
                 .addValue("invitee_id", referral.inviteeId).addValue("inviter_id", referral.inviterId).addValue("campaign_id", referral.campaignId)
                 .addValue("status", referral.status.name).addValue("claimed_at", dialect.instantParam(referral.claimedAt))
-                .addValue("qualified_at", dialect.instantParam(referral.qualifiedAt)),
+                .addValue("qualified_at", dialect.instantParam(referral.qualifiedAt))
+                .addValue("qualify_event", referral.qualifyEvent, Types.VARCHAR)
+                .addValue("release_at", dialect.instantParam(referral.releaseAt))
+                .addValue("settled_at", dialect.instantParam(referral.settledAt))
+                .addValue("settled_by", referral.settledBy, Types.VARCHAR)
+                .addValue("cancel_reason", referral.cancelReason, Types.VARCHAR)
+                .addValue("flags", referral.flags.takeIf { it.isNotEmpty() }?.joinToString(",") { it.name }, Types.VARCHAR)
+                .addValue("claim_network", referral.claimNetwork, Types.VARCHAR),
         ) == 1
 
     override fun referralOfInvitee(inviteeId: String, lock: Boolean): Referral? =
@@ -105,6 +120,10 @@ class JdbcCampaignStore(
             Referral(
                 rs.getString("invitee_id"), rs.getString("inviter_id"), rs.getString("campaign_id"), ReferralStatus.valueOf(rs.getString("status")),
                 dialect.readInstant(rs, "claimed_at")!!, dialect.readInstant(rs, "qualified_at"),
+                qualifyEvent = rs.getString("qualify_event"), releaseAt = dialect.readInstant(rs, "release_at"),
+                settledAt = dialect.readInstant(rs, "settled_at"), settledBy = rs.getString("settled_by"), cancelReason = rs.getString("cancel_reason"),
+                flags = rs.getString("flags")?.split(',')?.filter { it.isNotBlank() }?.map { ReferralFlag.valueOf(it) }?.toSet() ?: emptySet(),
+                claimNetwork = rs.getString("claim_network"),
             )
         }.firstOrNull()
 
@@ -124,16 +143,64 @@ class JdbcCampaignStore(
         ) ?: 0L
     }
 
+    override fun countReferralsIn(inviterId: String, campaignId: String?, statuses: Set<ReferralStatus>, lock: Boolean): Long {
+        val params = MapSqlParameterSource().addValue("inviter", inviterId).addValue("campaign", campaignId, Types.VARCHAR).addValue("statuses", statuses.map { it.name })
+        val where = "where inviter_id = :inviter and (:campaign is null or campaign_id = :campaign) and status in (:statuses)"
+        if (lock) return jdbc.queryForList("select invitee_id from campaign_referrals $where for update", params, String::class.java).size.toLong()   // countReferrals(lock) 와 같은 이유
+        return jdbc.queryForObject("select count(*) from campaign_referrals $where", params, Long::class.java) ?: 0L
+    }
+
     override fun lockAccounts(accountIds: Collection<String>) {
         // 정렬된 순서로 하나씩 - 두 트랜잭션이 같은 두 계정을 잡아도 같은 순서라 서로를 기다리지 않는다
         accountIds.toSortedSet().forEach { jdbc.queryForList("select account_id from campaign_referral_codes where account_id = :a for update", mapOf("a" to it), String::class.java) }
     }
 
-    override fun settleReferral(inviteeId: String, to: ReferralStatus, at: Instant): Boolean =
-        jdbc.update(
-            "update campaign_referrals set status = :to, qualified_at = :at where invitee_id = :i and status = 'CLAIMED'",
-            mapOf("i" to inviteeId, "to" to to.name, "at" to dialect.instantParam(at)),
-        ) == 1
+    override fun transitionReferral(
+        inviteeId: String,
+        from: Set<ReferralStatus>,
+        to: ReferralStatus,
+        at: Instant,
+        releaseAt: Instant?,
+        qualifyEvent: String?,
+        settledBy: String?,
+        cancelReason: String?,
+    ): Boolean {
+        val ended = to == ReferralStatus.QUALIFIED || to == ReferralStatus.CAPPED || to == ReferralStatus.CANCELED
+        val sets = mutableListOf("status = :to", "qualified_at = :qualified", "settled_at = :settled", "settled_by = :by", "cancel_reason = :reason")
+        val params = MapSqlParameterSource()
+            .addValue("i", inviteeId).addValue("from", from.map { it.name }).addValue("to", to.name)
+            .addValue("qualified", dialect.instantParam(if (to == ReferralStatus.QUALIFIED) at else null))
+            .addValue("settled", dialect.instantParam(if (ended) at else null))
+            .addValue("by", if (ended) settledBy else null, Types.VARCHAR)
+            .addValue("reason", if (to == ReferralStatus.CANCELED) cancelReason else null, Types.VARCHAR)
+        if (releaseAt != null) { sets += "release_at = :release"; params.addValue("release", dialect.instantParam(releaseAt)) }
+        if (qualifyEvent != null) { sets += "qualify_event = :event"; params.addValue("event", qualifyEvent) }
+        return jdbc.update("update campaign_referrals set ${sets.joinToString(", ")} where invitee_id = :i and status in (:from)", params) == 1
+    }
+
+    override fun dueHeldReferrals(now: Instant, limit: Int): List<String> =
+        jdbc.queryForList(
+            "select invitee_id from campaign_referrals where status = 'HELD' and release_at <= :now order by release_at, invitee_id limit :limit",
+            MapSqlParameterSource().addValue("now", dialect.instantParam(now)).addValue("limit", limit),
+            String::class.java,
+        ).filterNotNull()
+
+    override fun recordInviterNetwork(accountId: String, network: String, at: Instant) {
+        jdbc.update("update campaign_referral_codes set last_network = :n, last_seen_at = :at where account_id = :a", mapOf("a" to accountId, "n" to network, "at" to dialect.instantParam(at)))
+    }
+
+    override fun networkSeen(inviterId: String, network: String, since: Instant): Boolean {
+        val p = mapOf("inviter" to inviterId, "n" to network, "since" to dialect.instantParam(since))
+        val last = jdbc.queryForObject("select count(*) from campaign_referral_codes where account_id = :inviter and last_network = :n and last_seen_at >= :since", p, Long::class.java) ?: 0L
+        if (last > 0) return true
+        return (jdbc.queryForObject("select count(*) from campaign_referrals where inviter_id = :inviter and claim_network = :n and claimed_at >= :since", p, Long::class.java) ?: 0L) > 0
+    }
+
+    override fun clearNetworksBefore(before: Instant): Int {
+        val p = mapOf("before" to dialect.instantParam(before))
+        return jdbc.update("update campaign_referral_codes set last_network = null, last_seen_at = null where last_network is not null and last_seen_at < :before", p) +
+            jdbc.update("update campaign_referrals set claim_network = null where claim_network is not null and claimed_at < :before", p)
+    }
 
     override fun eraseAccount(accountId: String, tombstone: String) {
         val p = mapOf("a" to accountId)

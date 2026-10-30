@@ -1,16 +1,21 @@
 package dev.sumin.skeleton.campaign
 
 import dev.sumin.skeleton.campaign.erasure.CampaignAccountErasureListener
+import dev.sumin.skeleton.campaign.referral.ReferralDeployGuard
+import dev.sumin.skeleton.campaign.referral.ReferralReleaseJob
 import dev.sumin.skeleton.common.account.AccountFacts
 import dev.sumin.skeleton.common.authz.PermissionDeclaration
+import dev.sumin.skeleton.common.deploy.DeployGuard
 import dev.sumin.skeleton.common.erasure.AccountErasureListener
 import dev.sumin.skeleton.common.reward.RewardIssuer
 import dev.sumin.skeleton.common.time.TimeProvider
+import dev.sumin.skeleton.common.web.ClientIps
 import dev.sumin.skeleton.reward.RewardAutoConfiguration
 import dev.sumin.skeleton.reward.RewardGrants
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean
@@ -81,6 +86,20 @@ class CampaignAutoConfiguration {
     @ConditionalOnBean(ReferralService::class)
     @ConditionalOnMissingBean(Referrals::class)
     fun referrals(service: ReferralService): Referrals = service
+
+    /** `scheduler` 모듈이 클래스패스에 있을 때만 - 없으면 이 표시를 읽는 쪽이 없다 (앱이 `Referrals.releaseDue()` 를 부른다) */
+    @Bean
+    @ConditionalOnBean(Referrals::class)
+    @ConditionalOnClass(name = ["dev.sumin.skeleton.scheduler.SkeletonScheduled"])
+    @ConditionalOnMissingBean
+    fun referralReleaseJob(referrals: Referrals): ReferralReleaseJob = ReferralReleaseJob(referrals)
+
+    /** 같은 네트워크 확인을 켠 초대 이벤트인데 클라이언트 IP 규칙이 없으면 기동 로그에 경고 (막지 않는다) */
+    @Bean
+    @ConditionalOnBean(Campaigns::class)
+    @ConditionalOnMissingBean(name = ["campaignDeployGuard"])
+    fun campaignDeployGuard(campaigns: Campaigns, clientIps: ObjectProvider<ClientIps>): DeployGuard =
+        ReferralDeployGuard({ campaigns.active() }, { clientIps.getIfAvailable { ClientIps() }.configured })
 
     /** 앱이 수치를 보고하는 서버 API - 브라우저가 수치를 보고하면 안 되므로 HTTP 경로는 없다 */
     @Bean

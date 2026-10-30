@@ -37,10 +37,41 @@ class FakeCampaignStore : CampaignStore {
     override fun lockAccounts(accountIds: Collection<String>) = Unit
     override fun countReferrals(inviterId: String, campaignId: String?, status: ReferralStatus?, lock: Boolean) =
         referrals.values.count { it.inviterId == inviterId && (campaignId == null || it.campaignId == campaignId) && (status == null || it.status == status) }.toLong()
-    override fun settleReferral(inviteeId: String, to: ReferralStatus, at: Instant): Boolean {
-        val r = referrals[inviteeId]?.takeIf { it.status == ReferralStatus.CLAIMED } ?: return false
-        referrals[inviteeId] = r.copy(status = to, qualifiedAt = at)
+    override fun countReferralsIn(inviterId: String, campaignId: String?, statuses: Set<ReferralStatus>, lock: Boolean) =
+        referrals.values.count { it.inviterId == inviterId && (campaignId == null || it.campaignId == campaignId) && it.status in statuses }.toLong()
+    override fun transitionReferral(
+        inviteeId: String, from: Set<ReferralStatus>, to: ReferralStatus, at: Instant,
+        releaseAt: Instant?, qualifyEvent: String?, settledBy: String?, cancelReason: String?,
+    ): Boolean {
+        val r = referrals[inviteeId]?.takeIf { it.status in from } ?: return false
+        val ended = to == ReferralStatus.QUALIFIED || to == ReferralStatus.CAPPED || to == ReferralStatus.CANCELED
+        referrals[inviteeId] = r.copy(
+            status = to,
+            qualifiedAt = if (to == ReferralStatus.QUALIFIED) at else r.qualifiedAt,
+            releaseAt = releaseAt ?: r.releaseAt,
+            qualifyEvent = qualifyEvent ?: r.qualifyEvent,
+            settledAt = if (ended) at else r.settledAt,
+            settledBy = if (ended) settledBy else r.settledBy,
+            cancelReason = if (to == ReferralStatus.CANCELED) cancelReason else r.cancelReason,
+        )
         return true
+    }
+    override fun dueHeldReferrals(now: Instant, limit: Int) =
+        referrals.values.filter { it.status == ReferralStatus.HELD && it.releaseAt != null && !it.releaseAt.isAfter(now) }.map { it.inviteeId }.take(limit)
+
+    /** 초대자 코드 줄에 적힌 마지막 네트워크 */
+    val codeNetworks = mutableMapOf<String, Pair<String, Instant>>()
+    override fun recordInviterNetwork(accountId: String, network: String, at: Instant) {
+        if (codes.containsKey(accountId)) codeNetworks[accountId] = network to at
+    }
+    override fun networkSeen(inviterId: String, network: String, since: Instant): Boolean =
+        codeNetworks[inviterId]?.let { it.first == network && !it.second.isBefore(since) } == true ||
+            referrals.values.any { it.inviterId == inviterId && it.claimNetwork == network && !it.claimedAt.isBefore(since) }
+    override fun clearNetworksBefore(before: Instant): Int {
+        var n = 0
+        codeNetworks.entries.removeIf { (_, v) -> v.second.isBefore(before).also { if (it) n++ } }
+        referrals.replaceAll { _, r -> if (r.claimNetwork != null && r.claimedAt.isBefore(before)) r.copy(claimNetwork = null).also { n++ } else r }
+        return n
     }
     val progress = mutableMapOf<Pair<String, String>, Long>()
     override fun upsertProgressMax(accountId: String, metric: String, value: Long, at: Instant): Long =
@@ -50,6 +81,7 @@ class FakeCampaignStore : CampaignStore {
         progress.keys.removeIf { it.first == accountId }
         attendance.removeIf { it.second == accountId }
         codes.remove(accountId)
+        codeNetworks.remove(accountId)
         referrals.values.removeIf { it.inviteeId == accountId }
         referrals.replaceAll { _, r -> if (r.inviterId == accountId) r.copy(inviterId = tombstone) else r }
     }

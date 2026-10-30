@@ -56,9 +56,17 @@ data class ReferralConfig(
     val qualifyOn: QualifyOn,
     val claimWithinDays: Int,
     val inviterCap: Int?,
+    /** 이 이름의 신호만 초대자 보상을 정한다(`qualifyOn: SIGNAL` 일 때만). 없으면 아무 신호나 */
+    val qualifyEvent: String? = null,
+    /** 초대자 보상을 신호 뒤 이만큼 보류한다(환불 · 취소 기간). 0 이면 바로 */
+    val holdDays: Int = 0,
+    /** 켜면 [ReferralFlag.SAME_NETWORK] 표시가 붙은 초대는 운영자가 승인할 때까지 지급하지 않는다 */
+    val reviewSameNetwork: Boolean = false,
 ) {
     companion object {
         const val DEFAULT_CLAIM_WITHIN_DAYS = 7
+        const val MAX_HOLD_DAYS = 90
+        val QUALIFY_EVENT = Regex("[a-z0-9._-]{1,64}")
 
         fun parse(raw: Map<String, Any?>): ReferralConfig {
             val invitee = ConfigReader.rewards(raw["invitee"], "invitee")
@@ -71,7 +79,23 @@ data class ReferralConfig(
             if (within !in 1..365) ConfigReader.fail("claimWithinDays must be 1..365")
             val cap = ConfigReader.int(raw["inviterCap"], "inviterCap")
             if (cap != null && cap < 1) ConfigReader.fail("inviterCap must be at least 1")
-            return ReferralConfig(invitee, inviter, qualifyOn, within, cap)
+            val event = when (val e = raw["qualifyEvent"]) {
+                null -> null
+                is String -> e.trim().ifEmpty { null }
+                else -> ConfigReader.fail("qualifyEvent must be a string")
+            }
+            if (event != null) {
+                if (!QUALIFY_EVENT.matches(event)) ConfigReader.fail("qualifyEvent must match [a-z0-9._-]{1,64}")
+                if (qualifyOn != QualifyOn.SIGNAL) ConfigReader.fail("qualifyEvent is only for qualifyOn SIGNAL")
+            }
+            val hold = ConfigReader.int(raw["holdDays"], "holdDays") ?: 0
+            if (hold !in 0..MAX_HOLD_DAYS) ConfigReader.fail("holdDays must be 0..$MAX_HOLD_DAYS")
+            val review = when (val r = raw["reviewSameNetwork"]) {
+                null -> false
+                is Boolean -> r
+                else -> ConfigReader.fail("reviewSameNetwork must be true or false")
+            }
+            return ReferralConfig(invitee, inviter, qualifyOn, within, cap, event, hold, review)
         }
     }
 }

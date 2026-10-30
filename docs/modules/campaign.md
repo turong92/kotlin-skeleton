@@ -29,7 +29,7 @@
 |---|---|
 | 의존성 한 줄 | `implementation(project(":modules:campaign"))` |
 | 함께 오는 모듈 | `reward`, `platform` |
-| 컴파일 전용 | 없음 |
+| 컴파일 전용 | `scheduler` (보류 해제 작업의 표시. Spring Security 도 컴파일 전용 — 없으면 HTTP 를 등록하지 않는다) |
 | 설정 접두사 | `skeleton.campaign` — [docs/config/modules/campaign.yml](../config/modules/campaign.yml) |
 | 기본 동작 | 켜짐. 사용자 경로는 열리고 운영자 경로는 꺼져 있다. 이벤트는 운영자가 만든다 — 아무것도 심지 않으면 비어 있다. |
 | 부팅에 필요한 것 | 저장소 포트(`CampaignStore`) — `campaign-jdbc` 가 낸다 — 와 지급 기록(`RewardGrants`) — `reward` + `reward-jdbc` 가 낸다. 없으면 서비스 빈이 켜지지 않는다. |
