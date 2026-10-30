@@ -3000,7 +3000,12 @@
         "snippet": "docs/config/modules/workspace.yml"
       },
       "basePaths": ["/api/v1/admin", "/api/v1/workspaces", "/api/v1/workspace-invitations"],
-      "secrets": [],
+      "secrets": [
+        {
+          "env": ["<P>_WORKSPACE_MAIL_LINK_BASE_URL"],
+          "whenMissing": "초대 메일 링크가 여는 프론트 주소 — 비밀 아님(선언의 env:). 초대를 켠 앱만; 비면 보호 환경(<P>_ENV=stage|prod)에서 기동 실패"
+        }
+      ],
       "docs": ["docs/modules/workspace.md"],
       "frontend": {
         "capabilities": ["workspace", "workspace-admin"],

@@ -74,7 +74,7 @@
 | 부팅에 필요한 것 | 저장소 포트 `WorkspaceStore` — `workspace-jdbc` 가 낸다. 없으면 서비스 빈이 켜지지 않는다. 초대를 켜면 `AccountFacts`(`modules:account`)도 — 없으면 기동 실패. |
 | 교체 지점 | `WorkspaceStore`, `WorkspaceService`, `Workspaces`, `CurrentWorkspace`, `WorkspaceSeatPolicy`, `WorkspaceController`, `WorkspaceAdminService`, `WorkspaceAdminController`, `workspacePermissionDeclaration`, `WorkspaceInvitationService`, `WorkspaceInvitationMail`(문구), `WorkspaceInvitationMailer`(보내기 통째), `WorkspaceMailTransport`(보내는 길), `WorkspaceLinks`, `workspaceDeletionCheck`, `workspaceAccountErasureListener` |
 | 마이그레이션 | 없음 (스키마는 `workspace-jdbc`) |
-| 프론트 짝 | 없음 |
+| 프론트 짝 | `@skeleton/workspace` |
 | 테스트 | `modules/workspace/src/test` |
 
 [모듈 색인](README.md) · [최소 구성 가이드](../minimal-composition.md)

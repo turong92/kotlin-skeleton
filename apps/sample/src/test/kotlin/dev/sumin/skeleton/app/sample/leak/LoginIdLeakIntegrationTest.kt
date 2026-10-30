@@ -73,6 +73,12 @@ class LoginIdLeakIntegrationTest {
     private fun createNote(token: String, title: String): String =
         http.post("/api/v1/notes", token, """{"title":${json(title)},"body":"a note of mine"}""", record = false).ok().read("$.value.id")
 
+    /** Y 가 만든 워크스페이스 하나 - 팀 경로(`/api/v1/workspaces/{id}…` · `by-slug/{slug}` · 운영자 `/api/v1/admin/workspaces/{id}`)의 변수 값 */
+    private val workspace: Pair<String, String> by lazy {
+        val created = http.post("/api/v1/workspaces", w.yToken, """{"name":"Leak ${w.nonce}"}""", record = false).ok()
+        created.read<String>("$.value.id") to created.read<String>("$.value.slug")
+    }
+
     /** 경로 변수 → 여정에서 얻은 값들. `{id}` 는 경로마다 뜻이 달라 접두사로 가른다 */
     private val candidates: Map<String, List<String>> by lazy {
         val eventId = http.get("/api/v1/notifications?size=100", w.yToken, record = false).ok().read<List<String>>("$.values[*].eventId").first()
@@ -83,6 +89,7 @@ class LoginIdLeakIntegrationTest {
             "eventId" to listOf(eventId),
             "type" to listOf("terms", "privacy"),
             "key" to listOf("app.board-posts", "app.board-reactions", "coupon.top-used"),   // 대시보드 순위 하나 (/api/v1/admin/dashboard/rankings/{key}) - 견본 앱에 실제로 붙은 앱 통계 순위
+            "slug" to listOf(workspace.second),   // 팀 주소로 풀기 (/api/v1/workspaces/by-slug/{slug})
             "accountId" to listOf(w.xAcc, w.yAcc),   // 운영자의 포인트 잔액 조회 (/api/v1/admin/points/{accountId})
         )
     }
@@ -90,6 +97,8 @@ class LoginIdLeakIntegrationTest {
     private val idByPrefix: Map<String, List<String>> by lazy {
         mapOf(
             "/api/v1/notes/" to listOf(createNote(w.yToken, "Y note ${w.nonce}"), createNote(w.xToken, "X note ${w.nonce}")),
+            "/api/v1/workspaces/" to listOf(workspace.first),
+            "/api/v1/admin/workspaces/" to listOf(workspace.first),
             "/api/v1/author-profiles/" to listOf(w.yProfile.id, w.a.id, w.b.id),
             "/api/v1/admin/accounts/" to listOf(w.xAcc, w.yAcc),
             "/api/v1/admin/author-profiles/" to listOf(w.a.id, w.yProfile.id),

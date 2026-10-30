@@ -1314,6 +1314,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 함께 골라야 한다: `workspace-jdbc`
 - 설정 접두사 `skeleton.workspace` — 키와 기본값 `docs/config/modules/workspace.yml`
 - HTTP 경로: `/api/v1/admin`, `/api/v1/workspaces`, `/api/v1/workspace-invitations`
+- 비밀 · 환경변수: `<P>_WORKSPACE_MAIL_LINK_BASE_URL` — 빠지면: 초대 메일 링크가 여는 프론트 주소 — 비밀 아님(선언의 env:). 초대를 켠 앱만; 비면 보호 환경(<P>_ENV=stage|prod)에서 기동 실패
 - 문서: `docs/modules/workspace.md`
 - 짝 프런트(react-skeleton): 항목 `workspace`, `workspace-admin` · 패키지 `@skeleton/workspace` · 조각 `--packages workspace`
 - 쓰지 않는 경우:
