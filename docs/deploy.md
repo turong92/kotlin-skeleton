@@ -267,7 +267,7 @@ Caddy 가 `<api_prefix>/*` 만 백엔드로 보내고 나머지는 `data/apps/<n
 | 모듈 | 스타터에 `--modules notification-mail` (메일 발송 길). 샘플은 이미 있다 | 메일 발송 길 없음 → 기동 실패 (`account` 가드) |
 | 비밀 목록 | 선언의 `secrets: [JWT_SECRET]` (기본으로 들어 있다 — 무작위로 충분). 샘플(`apps/sample`)은 `<P>_STORAGE_WEB_KEY_SECRET` 도 (첨부 키 `OPAQUE`) **와 `<P>_ACCOUNT_BLOCKS_SECRET`** (로그인 아이디를 켠 앱 — 둘 다 선언에 이미 있다) | 이름이 빠지면 `skeleton.auth.jwt.secret is blank … list JWT_SECRET under secrets:` 로 기동 실패 |
 | 메일 | env: `<P>_NOTIFICATION_MAIL_ENABLED=true` · `_FROM=no-reply@…` · `SPRING_MAIL_HOST=<릴레이>`. 인증이 있으면 `SPRING_MAIL_PASSWORD` 를 `secrets:` + `.local.env` 로 | host · from 이 비면 발송기 빈이 없어 위와 같다 |
-| 메일 링크 주소 | env: `<P>_ACCOUNT_MAIL_LINK_BASE_URL=https://<프론트 origin>` | 비면 기동 실패 |
+| 메일 링크 주소 | env: `<P>_ACCOUNT_MAIL_LINK_BASE_URL=https://<프론트 origin>`. 워크스페이스 초대를 켠 앱(샘플)은 `<P>_WORKSPACE_MAIL_LINK_BASE_URL` 도 같은 주소로 | 비면 기동 실패 (`account` · `workspace` 가드) |
 | 클라이언트 IP | **넣지 않는다 — 플랫폼이 넣는다** (`PROXY`/`CLOUDFLARE` + 네트워크 CIDR) | 플랫폼이 안 넣으면(구버전) mode 없음 → 기동 실패 |
 | 첫 관리자 | env: `<P>_ACCOUNT_BOOTSTRAP_ADMIN_EMAIL=<내 이메일>` (선택 — 그 주소가 가입 · 확인하면 ADMIN. 샘플은 관리자 API 가 켜져 있어 없으면 경고) | (경고만) |
 | 스위치 · 프로필 | env: `<P>_ENV=prod` · `SPRING_PROFILES_ACTIVE=prod` (기본으로 들어 있다) | — |
