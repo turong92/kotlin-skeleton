@@ -21,7 +21,8 @@ class CapabilitiesCatalogTest {
         assertTrue(file.exists(), "capabilities.json 이 없다 — 레포 루트에 카탈로그가 있어야 한다(docs/capabilities.schema.json 참고)")
         Json.parse(file.readText()).obj()
     }
-    private val scriptPresent = root.resolve("scripts/new-project.sh").exists()
+    // new-project.sh 를 조각마다 실제로 돌리는 검사(약 70초)는 nightly 만 한다(-Dskeleton.test.stress=full) — 평소에는 정적 계산(autoIncludes · 닫힘)만
+    private val scriptPresent = root.resolve("scripts/new-project.sh").exists() && System.getProperty("skeleton.test.stress") == "full"
     private val react: Path? = root.parent?.resolve("react-skeleton")?.takeIf { it.resolve("capabilities.json").exists() }
 
     private fun assertNone(problems: List<String>) = assertEquals(emptyList(), problems, "\n" + problems.joinToString("\n\n"))
