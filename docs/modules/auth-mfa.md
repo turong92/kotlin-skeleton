@@ -22,6 +22,7 @@
 | `POST /verify` | **공개** (`mfaToken` 이 자격) | `{mfaToken, code \| recoveryCode}` → 로그인과 같은 응답(`AuthTokenResponse` - 같은 토큰 · 같은 쿠키 전달). 대기는 한 번뿐 |
 
 **로그인 흐름** 첫 단계를 통과한 계정이 켜져 있으면 `403 AUTH.MFA_REQUIRED` + `data{mfaToken, methods: ["totp", "recovery_code"], expiresAt}`(토큰 · 세션 없음, 대기 5분). → `POST /verify`.
+**탈퇴 대기 계정**: 2단계가 켜져 있으면 비밀번호만으로는 `403 AUTH.ACCOUNT_DELETION_PENDING`(취소 토큰)도 받지 못한다 - 먼저 `403 AUTH.MFA_REQUIRED` → `POST /verify` 가 맞아야 그 응답(`restoreToken`)이 나오고, 토큰에 「2단계 통과」 표지가 실려 `POST /account/delete/cancel` 이 2단계를 다시 묻지 않는다. 표지 없는 토큰으로 2단계 켜진 계정을 취소하면 `410 ACCOUNT.TOKEN_INVALID` 이고 계정 상태는 그대로다.
 **오류**: 틀린 코드 · 이미 쓴 걸음 `400 MFA.CODE_INVALID`(`data.attemptsLeft` - 로그인: 이 대기의 남은 시도, 그 밖: 계정 한도의 남은 수) · 대기가 없음 · 만료 · 시도 소진 `410 MFA.CHALLENGE_EXPIRED`(1단계부터 다시) ·
 한도 `429 MFA.TOO_MANY_ATTEMPTS`(`Retry-After`) · 필수인데 등록 전 `403 MFA.ENROLLMENT_REQUIRED` · 증거가 틀림 `400 ACCOUNT.CURRENT_PASSWORD_INVALID` 등(`account` 의 다시 인증) · 코드를 둘 다 보내거나 안 보냄 `400`(`errors[].field=code`).
 

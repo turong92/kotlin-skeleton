@@ -16,6 +16,8 @@ data class AuthAccount(
      * 예: 탈퇴 대기 계정의 `purgeAfter` · 취소 토큰
      */
     val blockData: (() -> Map<String, Any?>)? = null,
+    /** [blockData] 와 같되 **두 번째 단계를 마친 뒤**의 응답용 - 취소 토큰에 「2단계 통과」 표지가 실린다. 없으면 [blockData] */
+    val blockDataAfterSecondFactor: (() -> Map<String, Any?>)? = null,
 ) {
     // 비밀번호 해시가 로그에 찍히지 않게
     override fun toString() = "AuthAccount(accountId=$accountId, roles=$roles, loginBlock=$loginBlock, passwordHash=<redacted>)"

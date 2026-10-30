@@ -52,6 +52,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 class SecondFactorGateWebTest {
     class SwitchedGate : SecondFactorGate {
         @Volatile var on = false
+        override fun enrolled(account: AuthAccount) = on
         override fun challenge(account: AuthAccount) = if (on) SecondFactorChallenge(TOKEN, listOf("totp", "recovery_code"), Instant.parse("2031-01-01T00:05:00Z")) else null
     }
 
@@ -123,16 +124,20 @@ class SecondFactorGateWebTest {
     }
 
     @Test
-    fun `cancelling a pending deletion is a sign-in too - challenge, no session, first step recorded`() {
+    fun `a pending deletion is not undone by the first step alone - login meets the challenge first, and a restore token minted before the second factor was on cannot cancel`() {
         val email = register()
         val auth = "Bearer " + JsonPath.read<String>(login(email).response.contentAsString, "$.value.accessToken")
         post("/api/v1/account/delete", """{"currentPassword":"tangerine-42-moon"}""", auth).andExpect(status().isAccepted)
-        val restoreToken = JsonPath.read<String>(login(email).response.contentAsString, "$.data.restoreToken")
-        events.all.clear()
+        val oldRestoreToken = JsonPath.read<String>(login(email).response.contentAsString, "$.data.restoreToken")   // 2단계가 아직 꺼져 있을 때 받은 토큰
 
         gate.on = true
-        assertChallenge(post("/api/v1/account/delete/cancel", """{"restoreToken":"$restoreToken"}""").andReturn())
-        assertTrue(AccountEventType.LOGIN_SUCCESS in events.types(), "the restore token proved the first step")
+        assertChallenge(login(email))   // 이제는 취소 토큰이 아니라 2단계 요구가 먼저다
+        post("/api/v1/account/delete/cancel", """{"restoreToken":"$oldRestoreToken"}""").andExpect(status().isGone)
+
+        gate.on = false
+        val still = login(email)
+        assertEquals(403, still.response.status)
+        assertEquals("AUTH.ACCOUNT_DELETION_PENDING", JsonPath.read<String>(still.response.contentAsString, "$.code"), "the deletion was not undone")
     }
 
     private companion object { const val TOKEN = "mfa-token-original-value-never-logged" }

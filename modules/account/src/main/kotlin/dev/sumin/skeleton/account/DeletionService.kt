@@ -78,7 +78,11 @@ class DeletionService(private val core: AccountCore) {
     fun cancel(restoreToken: String, ip: String?, ipKey: String? = ip): dev.sumin.skeleton.auth.account.AuthAccount = cancelWithMethod(restoreToken, ip, ipKey).auth
 
     /** [cancel] + 취소 토큰을 만든 로그인의 수단 코드 — 호출자가 취소 뒤 로그인을 그 수단으로 기록한다 */
-    fun cancelWithMethod(restoreToken: String, ip: String?, ipKey: String? = ip): DeletionCancelled {
+    fun cancelWithMethod(
+        restoreToken: String, ip: String?, ipKey: String? = ip,
+        /** 이 계정에 2단계가 켜져 있나 - 켜져 있는데 토큰에 「2단계 통과」 표지가 없으면 취소하지 않는다(비밀번호만으로 탈퇴 예약이 풀리지 않게) */
+        secondFactorEnrolled: (dev.sumin.skeleton.auth.account.AuthAccount) -> Boolean = { false },
+    ): DeletionCancelled {
         ipKey?.let {
             val l = core.props.login
             val a = core.limits.acquire("delete-cancel:ip", it, l.perIp, l.window)
@@ -87,6 +91,8 @@ class DeletionService(private val core: AccountCore) {
         if (!core.props.deletion.selfRestore) throw AccountException(AccountErrorCode.TOKEN_INVALID)
         val grant = core.tokens.consume(TokenPurposes.DELETION_RESTORE, restoreToken) ?: throw AccountException(AccountErrorCode.TOKEN_INVALID)
         val account = grant.accountId?.let(core.accounts::findById) ?: throw AccountException(AccountErrorCode.TOKEN_INVALID)
+        val passed = grant.payload?.endsWith(AccountAuthRepository.SECOND_FACTOR_MARK) == true
+        if (!passed && AccountAuthRepository(core).toAuth(account)?.let(secondFactorEnrolled) == true) throw AccountException(AccountErrorCode.TOKEN_INVALID)
         val now = core.time.now()
         val reopened = core.reopenedStatus(account)
         // 조건부 갱신 한 문장: DELETED 이고 유예가 안 끝났을 때만 — 정지 · 지움과 동시에 둘 다 이기지 못한다
@@ -94,12 +100,12 @@ class DeletionService(private val core: AccountCore) {
         account.email?.let { core.mailer.send(AccountMail(MailKind.DELETION_CANCELLED, it, account.locale)) }
         core.events.publish(AccountEventType.DELETION_CANCELLED, account.id, ip)
         val auth = AccountAuthRepository(core).toAuth(core.accounts.findById(account.id) ?: account) ?: throw AccountException(AccountErrorCode.TOKEN_INVALID)
-        return DeletionCancelled(auth, grant.payload ?: SignInMethods.PASSWORD)
+        return DeletionCancelled(auth, grant.payload?.removeSuffix(AccountAuthRepository.SECOND_FACTOR_MARK) ?: SignInMethods.PASSWORD, passed)
     }
 }
 
-/** 탈퇴 취소의 결과 — 로그인할 계정과 취소 토큰을 낳은 로그인 수단 ([method]) */
-data class DeletionCancelled(val auth: dev.sumin.skeleton.auth.account.AuthAccount, val method: String)
+/** 탈퇴 취소의 결과 — 로그인할 계정과 취소 토큰을 낳은 로그인 수단 ([method]), 토큰이 2단계를 지난 뒤에 나왔는지 ([secondFactorPassed]) */
+data class DeletionCancelled(val auth: dev.sumin.skeleton.auth.account.AuthAccount, val method: String, val secondFactorPassed: Boolean = false)
 
 /**
  * 삭제 유예가 끝난 계정을 정리한다 (`deletion.mode`: ANONYMIZE = 행을 남기고 개인정보만 지움 · DELETE = 행까지 지움).

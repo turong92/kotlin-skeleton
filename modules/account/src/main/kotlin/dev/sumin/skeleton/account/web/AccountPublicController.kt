@@ -92,9 +92,10 @@ class AccountPublicController(
     @PostMapping("/account/delete/cancel")
     fun cancelDeletion(@Valid @RequestBody request: CancelDeletionRequest, http: HttpServletRequest): DataResponse<AuthTokenResponse> =
         clientIps.of(http).let { client ->
-            val cancelled = deletion.cancelWithMethod(request.restoreToken!!, client.ip, client.limitKey)
+            val cancelled = deletion.cancelWithMethod(request.restoreToken!!, client.ip, client.limitKey) { tokens().secondFactorEnrolled(it) }
             val response = try {
-                tokens().issue(cancelled.auth)
+                // 2단계를 지난 뒤에 받은 취소 토큰이면 같은 단계를 다시 묻지 않는다
+                if (cancelled.secondFactorPassed) tokens().issueAfterSecondFactor(cancelled.auth) else tokens().issue(cancelled.auth)
             } catch (secondStep: SecondFactorRequiredException) {
                 registration.recordSignIn(cancelled.auth.accountId, client.ip, cancelled.method)   // 첫 단계는 통과했다 — 토큰은 두 번째 단계 뒤에
                 throw secondStep

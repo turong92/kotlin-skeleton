@@ -15,8 +15,10 @@ class TotpSecondFactorGate(
     private val challenges: Challenges,
     private val properties: MfaProperties,
 ) : SecondFactorGate {
+    override fun enrolled(account: AuthAccount): Boolean = store.find(account.accountId)?.enabled == true
+
     override fun challenge(account: AuthAccount): SecondFactorChallenge? {
-        if (store.find(account.accountId)?.enabled != true) return null
+        if (!enrolled(account)) return null
         val opened = challenges.open(
             ChallengePurposes.MFA_LOGIN, account.accountId, properties.challenge.ttl, properties.challenge.maxAttempts,
             accountId = account.accountId, withHandle = true, dead = true,

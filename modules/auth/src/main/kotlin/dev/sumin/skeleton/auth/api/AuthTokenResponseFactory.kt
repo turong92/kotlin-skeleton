@@ -32,14 +32,20 @@ class AuthTokenResponseFactory(
     private val sessions: () -> LoginSessionIssuer? = { null },
 ) {
     fun issue(account: AuthAccount): AuthTokenResponse {
-        account.loginBlock?.let { throw AccountBlockedException(it, account.blockData?.invoke()) }
+        val block = account.loginBlock
+        // 탈퇴 대기는 2단계가 켜진 계정이면 고리를 먼저 묻는다 - 1단계(비밀번호)만으로는 취소 토큰도 받지 못한다. 다른 막힘(미확인 · 정지)은 예전 그대로 먼저 거른다
+        if (block != null && block != LoginBlock.DELETION_PENDING) throw AccountBlockedException(block, account.blockData?.invoke())
         secondFactorGates().firstNotNullOfOrNull { it.challenge(account) }?.let { throw SecondFactorRequiredException(it) }
+        if (block != null) throw AccountBlockedException(block, account.blockData?.invoke())
         return issueWith(account, sessions()?.open(account))
     }
 
-    /** 두 번째 단계를 마친 로그인 — 고리를 다시 묻지 않고 [issue] 와 같은 세션 · 토큰을 낸다 (막힌 계정은 그동안 막혔을 수 있어 다시 거른다) */
+    /** 이 계정에 두 번째 단계가 켜져 있나(대기를 열지 않는다) */
+    fun secondFactorEnrolled(account: AuthAccount): Boolean = secondFactorGates().any { it.enrolled(account) }
+
+    /** 두 번째 단계를 마친 로그인 — 고리를 다시 묻지 않고 [issue] 와 같은 세션 · 토큰을 낸다 (막힌 계정은 그동안 막혔을 수 있어 다시 거른다. 탈퇴 대기면 여기서 비로소 취소 토큰을 내고, 토큰에 「2단계 통과」 표지가 실린다) */
     fun issueAfterSecondFactor(account: AuthAccount): AuthTokenResponse {
-        account.loginBlock?.let { throw AccountBlockedException(it, account.blockData?.invoke()) }
+        account.loginBlock?.let { throw AccountBlockedException(it, (account.blockDataAfterSecondFactor ?: account.blockData)?.invoke()) }
         return issueWith(account, sessions()?.open(account))
     }
 

@@ -44,7 +44,8 @@ class AccountAuthRepository(private val core: AccountCore) : AuthAccountReposito
                 AccountStatus.SUSPENDED -> LoginBlock.SUSPENDED
                 else -> if (pending) LoginBlock.DELETION_PENDING else null
             },
-            blockData = if (pending) ({ restoreState(account, via) }) else null,
+            blockData = if (pending) ({ restoreState(account, via, secondFactorPassed = false) }) else null,
+            blockDataAfterSecondFactor = if (pending) ({ restoreState(account, via, secondFactorPassed = true) }) else null,
         )
     }
 
@@ -53,9 +54,14 @@ class AccountAuthRepository(private val core: AccountCore) : AuthAccountReposito
         core.props.deletion.selfRestore && account.status == AccountStatus.DELETED && account.purgeAfter?.isAfter(core.time.now()) == true
 
     /** 로그인에 성공해 토큰을 내려던 순간에만 부른다 — 새 취소 토큰이 이전 것을 닫는다 */
-    private fun restoreState(account: Account, via: String): Map<String, Any?> {
-        val raw = core.tokens.issue(TokenPurposes.DELETION_RESTORE, account.id, account.id, core.props.deletion.selfRestoreTtl, payload = via)
+    private fun restoreState(account: Account, via: String, secondFactorPassed: Boolean): Map<String, Any?> {
+        val raw = core.tokens.issue(TokenPurposes.DELETION_RESTORE, account.id, account.id, core.props.deletion.selfRestoreTtl, payload = if (secondFactorPassed) via + SECOND_FACTOR_MARK else via)
         return mapOf("purgeAfter" to account.purgeAfter, "restoreToken" to raw, "restoreTokenExpiresAt" to core.time.now().plus(core.props.deletion.selfRestoreTtl))
+    }
+
+    companion object {
+        /** 취소 토큰 payload 의 꼬리표 - 2단계를 지난 뒤에 낸 토큰이다 (`<수단>|2fa`) */
+        const val SECOND_FACTOR_MARK = "|2fa"
     }
 
     override val storesUpgradedPasswordHash: Boolean = true

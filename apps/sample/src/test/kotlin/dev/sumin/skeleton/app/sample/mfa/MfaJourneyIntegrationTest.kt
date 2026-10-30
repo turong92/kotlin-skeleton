@@ -1,7 +1,9 @@
 package dev.sumin.skeleton.app.sample.mfa
 
 import com.jayway.jsonpath.JsonPath
+import dev.sumin.skeleton.account.AccountCore
 import dev.sumin.skeleton.account.abuse.AccountTaskRunner
+import dev.sumin.skeleton.account.token.TokenPurposes
 import dev.sumin.skeleton.account.mail.AccountMail
 import dev.sumin.skeleton.account.mail.AccountMailer
 import dev.sumin.skeleton.account.mail.MailKind
@@ -47,6 +49,7 @@ class MfaJourneyIntegrationTest : CheerIntegrationBase() {
     }
 
     @Autowired lateinit var beans: Beans
+    @Autowired lateinit var core: AccountCore
 
     @AfterEach
     fun wipeMfa() {
@@ -145,12 +148,32 @@ class MfaJourneyIntegrationTest : CheerIntegrationBase() {
     }
 
     @Test
-    fun `cancelling a pending deletion restores the account, then the code finishes the sign-in`() {
+    fun `a pending deletion is cancelled only after the second step - login asks for the code, verify hands out the restore token, the cancel does not ask again`() {
         val on = enable(user)
         post("/api/v1/account/delete", user, """{"currentPassword":"password"}""", UUID.randomUUID().toString()).andExpect { status { isAccepted() } }
-        val restoreToken = JsonPath.read<String>(loginFor("user@example.com").andExpect { status { isForbidden() } }.andReturn().response.contentAsString, "$.data.restoreToken")
 
-        challengeThenVerify(accountOf("user@example.com"), on.secret) { post("/api/v1/account/delete/cancel", null, """{"restoreToken":"$restoreToken"}""") }
+        val mfaToken = mfaToken("user@example.com")   // 비밀번호만으로는 취소 토큰도 못 받는다
+        val restoreToken = JsonPath.read<String>(
+            verify(mfaToken, """"code":"${codeAt(on.secret, 1)}"""").andExpect { status { isForbidden() }; jsonPath("$.code") { value("AUTH.ACCOUNT_DELETION_PENDING") } }.andReturn().response.contentAsString,
+            "$.data.restoreToken",
+        )
+
+        val cancelled = post("/api/v1/account/delete/cancel", null, """{"restoreToken":"$restoreToken"}""").andExpect { status { isOk() } }.andReturn().response.contentAsString
+        assertEquals(accountOf("user@example.com"), JsonPath.read<String>(cancelled, "$.value.principal.accountId"))
         loginFor("user@example.com").andExpect { status { isForbidden() }; jsonPath("$.code") { value("AUTH.MFA_REQUIRED") } }   // 계정은 돌아왔다 - 이제 2단계를 묻는다
+    }
+
+    @Test
+    fun `a restore token without the second-factor mark cannot cancel a deletion of an account that has it on`() {
+        enable(user)
+        post("/api/v1/account/delete", user, """{"currentPassword":"password"}""", UUID.randomUUID().toString()).andExpect { status { isAccepted() } }
+        val id = accountOf("user@example.com")
+        val unmarked = core.tokens.issue(TokenPurposes.DELETION_RESTORE, id, id, java.time.Duration.ofMinutes(10), payload = "password")
+
+        post("/api/v1/account/delete/cancel", null, """{"restoreToken":"$unmarked"}""").andExpect { status { isGone() } }
+
+        assertEquals("DELETED", jdbc.sql("select status from accounts where id = :i").param("i", id).query(String::class.java).single())
+        // 시험이 계정을 되돌려 놓는다 - 다음 시험의 로그인이 막히지 않게
+        jdbc.sql("update accounts set status = 'ACTIVE' where id = :i").param("i", id).update()
     }
 }

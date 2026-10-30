@@ -20,6 +20,9 @@ data class SecondFactorChallenge(val mfaToken: String, val methods: List<String>
  */
 fun interface SecondFactorGate {
     fun challenge(account: AuthAccount): SecondFactorChallenge?
+
+    /** 이 계정에 두 번째 단계가 켜져 있나 - 대기를 열지 않고 묻는다(탈퇴 취소처럼 「1단계만으로는 안 된다」를 확인할 때). 기본은 모른다(false) */
+    fun enrolled(account: AuthAccount): Boolean = false
 }
 
 /** 첫 번째 단계(비밀번호 · 소셜 · 매직 링크 · 탈퇴 취소)는 통과했지만 토큰은 두 번째 단계 뒤에 나간다 — `403 AUTH.MFA_REQUIRED` + `data{mfaToken, methods, expiresAt}` */
