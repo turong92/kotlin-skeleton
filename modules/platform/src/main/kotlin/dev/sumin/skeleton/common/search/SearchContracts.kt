@@ -63,7 +63,8 @@ interface SearchSource {
     /** 이 소스가 내놓는 문서 종류 ([SearchDocument.type]) */
     val type: String
 
-    /** [after] 다음부터 [limit] 개까지, 안정된 순서(id 순 등)로. 더 없으면 [SearchSourcePage.next] 가 null. 색인에 있어야 하는(보여도 되는) 문서만 내놓는다 */
+    /** [after] 다음부터 [limit] 개까지, 안정된 순서(id 순 등)로. 더 없으면 [SearchSourcePage.next] 가 null. 색인에 있어야 하는(보여도 되는) 문서만 내놓는다.
+     * **잠금 읽기(`for update` 등)를 하지 않는다** - 재색인은 쪽을 읽는 동안 자기 진행 줄을 잠그고, 원본을 바꾸는 트랜잭션은 그 줄을 기다리므로 원본 행을 잠그면 서로 교착할 수 있다 */
     fun page(after: String?, limit: Int): SearchSourcePage
 }
 

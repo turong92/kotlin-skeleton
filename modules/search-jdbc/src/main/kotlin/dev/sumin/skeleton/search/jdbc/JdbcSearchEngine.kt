@@ -54,15 +54,11 @@ class JdbcSearchEngine(
     /**
      * 같은 종류의 재색인 쪽(`touch` 가 `search_rebuilds` 줄을 잠근 채 원본을 읽고 쓴다)과 겹치지 않게 그 줄을 **공유 잠금**으로 잡은 뒤 지운다 -
      * 재색인이 쓰는 동안은 기다렸다가 그 뒤에 지우고, 지우는 쪽 트랜잭션이 끝나기 전에는 재색인이 쪽을 읽지 못한다.
-     * 안 그러면 원본을 읽은 뒤 지워진 문서를 재색인이 되살린다(판매 중지 상품이 검색에 남는다). 줄이 없으면 자리 줄을 먼저 만든다. 호출자 트랜잭션에 합류한다.
+     * 안 그러면 원본을 읽은 뒤 지워진 문서를 재색인이 되살린다(판매 중지 상품이 검색에 남는다). 줄은 재색인 시작이 만든다 - 지우기는 줄을 **만들지 않고** 공유 잠금으로 읽기만 한다
+     * (만들면 MySQL 에서 종류가 다른 지우기끼리 배타 잠금으로 드물게 교착한다). 한 번도 재색인한 적 없는 종류는 잠글 줄이 없지만 그때는 겹칠 재색인이 없다. 호출자 트랜잭션에 합류한다.
      */
     override fun delete(type: String, id: String) {
         tx.executeWithoutResult {
-            val epoch = dialect.instantParam(Instant.EPOCH)
-            jdbc.update(
-                dialect.insertIgnore("search_rebuilds", listOf("doc_type", "run_id", "running", "started_at", "updated_at"), listOf("doc_type")),
-                mapOf("doc_type" to type, "run_id" to "none", "running" to false, "started_at" to epoch, "updated_at" to epoch),
-            )
             jdbc.queryForList("select 1 from search_rebuilds where doc_type = :t for share", mapOf("t" to type))
             jdbc.update("delete from search_documents where doc_type = :t and doc_id = :i", mapOf("t" to type, "i" to id))
         }
