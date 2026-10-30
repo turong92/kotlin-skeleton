@@ -5,7 +5,7 @@ import org.springframework.security.authentication.AbstractAuthenticationToken
 import org.springframework.security.core.GrantedAuthority
 import org.springframework.security.core.authority.SimpleGrantedAuthority
 
-class AuthPrincipalAuthentication(
+open class AuthPrincipalAuthentication(
     private val currentPrincipal: CurrentPrincipal,
 ) : AbstractAuthenticationToken(currentPrincipal.roles.toAuthorities()) {
 
@@ -25,3 +25,9 @@ private fun Set<String>.toAuthorities(): Collection<GrantedAuthority> =
     map { role ->
         SimpleGrantedAuthority(if (role.startsWith("ROLE_")) role else "ROLE_$role")
     }
+
+/**
+ * break-glass 필터만 다는 표지 - 비상문으로 들어온 요청이다. 「사람에게만 거는 문」 가운데 비상문이 목적이라 걸지 않는 것(2단계 인증 등록 필수)이 이것을 읽어 건너뛴다.
+ * 보통 로그인 · 키 요청은 이것을 얻을 수 없다(만드는 곳이 [BreakGlassAuthenticationFilter] 하나다).
+ */
+class BreakGlassAuthentication(principal: CurrentPrincipal) : AuthPrincipalAuthentication(principal)

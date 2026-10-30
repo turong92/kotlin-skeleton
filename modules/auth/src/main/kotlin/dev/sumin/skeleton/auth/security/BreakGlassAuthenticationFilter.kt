@@ -97,7 +97,7 @@ class BreakGlassAuthenticationFilter(
 
         val principal = account.toCurrentPrincipal()
         val context = SecurityContextHolder.createEmptyContext()
-        context.authentication = AuthPrincipalAuthentication(principal)
+        context.authentication = BreakGlassAuthentication(principal)
         SecurityContextHolder.setContext(context)
 
         breakGlassLogger.warn(

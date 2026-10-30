@@ -4,6 +4,7 @@ import dev.sumin.skeleton.account.GatePathRule
 import dev.sumin.skeleton.auth.mfa.MfaErrorCode
 import dev.sumin.skeleton.auth.mfa.MfaException
 import dev.sumin.skeleton.auth.mfa.MfaRequirement
+import dev.sumin.skeleton.auth.security.BreakGlassAuthentication
 import dev.sumin.skeleton.auth.security.NonInteractiveAuthentication
 import dev.sumin.skeleton.common.web.RequestPaths
 import jakarta.servlet.DispatcherType
@@ -21,7 +22,7 @@ import org.springframework.web.servlet.resource.ResourceHttpRequestHandler
  * 로그인은 되고(그래야 등록할 수 있다) 나머지 `/api` 아래가 잠긴다. 다른 모듈의 엔드포인트도 **경로**로 같이 막힌다(이메일 필수 문과 같은 방식 · 같은 경로 규칙 [GatePathRule]).
  *
  * 열어 두는 길: `/api/v1/auth` 아래 전부(등록 · 로그인 · 로그아웃) · `<base-path>` 아래 전부 · `GET /api/v1/account/me` · `POST /api/v1/account/reauth/confirmation`(메일 코드 다시 인증) + 설정의 `required.extra-exclude-paths`(더하기만).
- * 건드리지 않는 것: 익명(보안 체인이 401) · 에러 디스패치 · CORS preflight · 정적 자원 · **[NonInteractiveAuthentication]**(API 키 같은 프로그램 자격 - 키는 사람이 아니라 등록할 수 없다).
+ * 건드리지 않는 것: 익명(보안 체인이 401) · 에러 디스패치 · CORS preflight · 정적 자원 · **[NonInteractiveAuthentication]**(API 키 같은 프로그램 자격 - 키는 사람이 아니라 등록할 수 없다) · **[BreakGlassAuthentication]**(비상문 - 비상 때 열려야 하므로 2단계를 걸지 않는다. 대상 계정이 운영자여도 등록 전에 열린다).
  */
 class EnrollmentRequiredInterceptor(
     private val requirement: MfaRequirement,
@@ -38,7 +39,7 @@ class EnrollmentRequiredInterceptor(
         val path = RequestPaths.withinApplication(request)
         if (!GatePathRule.PROTECTED.matches(path) || open.any { it.matches(request.method, path) }) return true
         val authentication = (request.userPrincipal as? Authentication) ?: SecurityContextHolder.getContext().authentication
-        if (authentication == null || authentication is AnonymousAuthenticationToken || !authentication.isAuthenticated || authentication is NonInteractiveAuthentication) return true
+        if (authentication == null || authentication is AnonymousAuthenticationToken || !authentication.isAuthenticated || authentication is NonInteractiveAuthentication || authentication is BreakGlassAuthentication) return true
         if (requirement.enrollmentMissing(authentication.name)) throw MfaException(MfaErrorCode.ENROLLMENT_REQUIRED)
         return true
     }

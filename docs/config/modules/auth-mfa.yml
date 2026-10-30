@@ -19,5 +19,5 @@ skeleton:
       enabled: false               # 운영자 해제 경로(mfa.reset). 기본 꺼짐 - 꺼져 있으면 404. 본인 확인 절차 없이 쓰지 말 것
       base-path: /api/v1/admin/mfa/accounts
     http:
-      enabled: true                # false 면 경로를 닫는다. 로그인 두 번째 단계 고리는 그대로 서 있다
+      enabled: true                # false 면 경로를 닫는다. 로그인 두 번째 단계 고리와 required-for 의 등록 필수 문은 그대로 선다
       base-path: /api/v1/auth/mfa

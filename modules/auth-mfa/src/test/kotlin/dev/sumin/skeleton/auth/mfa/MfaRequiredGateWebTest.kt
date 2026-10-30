@@ -3,6 +3,7 @@ package dev.sumin.skeleton.auth.mfa
 import com.jayway.jsonpath.JsonPath
 import dev.sumin.skeleton.auth.principal.CurrentPrincipal
 import dev.sumin.skeleton.auth.security.AuthPrincipalAuthentication
+import dev.sumin.skeleton.auth.security.BreakGlassAuthentication
 import dev.sumin.skeleton.auth.security.NonInteractiveAuthentication
 import dev.sumin.skeleton.mfatest.FakeSessionInspector
 import dev.sumin.skeleton.mfatest.FrozenTime
@@ -112,5 +113,14 @@ class MfaRequiredGateWebTest {
         patchMe(user).andExpect(status().isForbidden).andExpect(jsonPath("$.code").value("MFA.ENROLLMENT_REQUIRED"))
         val viaKey = mvc.perform(patch(ME).with(authentication(ProgramAuthentication(user.id))).contentType(MediaType.APPLICATION_JSON).content("{}")).andReturn().response.contentAsString
         kotlin.test.assertFalse("MFA.ENROLLMENT_REQUIRED" in viaKey, viaKey)
+    }
+
+    @Test
+    fun `a break-glass request passes the door - it is the emergency way in - while the same account's ordinary login is blocked`() {
+        val user = signUp()
+
+        patchMe(user).andExpect(status().isForbidden)
+        val viaBreakGlass = mvc.perform(patch(ME).with(authentication(BreakGlassAuthentication(CurrentPrincipal(accountId = user.id)))).contentType(MediaType.APPLICATION_JSON).content("{}")).andReturn().response.contentAsString
+        kotlin.test.assertFalse("MFA.ENROLLMENT_REQUIRED" in viaBreakGlass, viaBreakGlass)
     }
 }

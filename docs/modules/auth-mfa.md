@@ -37,9 +37,9 @@
 
 ## 필수 문 (등록 전 계정 막기)
 
-필수 대상인데 등록 전인 계정도 **로그인은 된다**(그래야 등록한다). MVC 인터셉터(`EnrollmentRequiredInterceptor`, 순서 -90 - 이메일 필수 · 아이디 필수 뒤)가 허용 목록 밖의 `/api` 요청을 `403 MFA.ENROLLMENT_REQUIRED` 로 막는다. 설정이 `NONE` 이고 정책 빈도 기본 그대로면 문은 서지 않는다.
+필수 대상인데 등록 전인 계정도 **로그인은 된다**(그래야 등록한다). MVC 인터셉터(`EnrollmentRequiredInterceptor`, 순서 -90 - 이메일 필수 · 아이디 필수 뒤)가 허용 목록 밖의 `/api` 요청을 `403 MFA.ENROLLMENT_REQUIRED` 로 막는다. 설정이 `NONE` 이고 정책 빈도 기본 그대로면 문은 서지 않는다. 문은 경로 스위치 `http.enabled` 와 상관없이 선다(경로를 닫고 자기 컨트롤러를 써도 `required-for` 가 무시되지 않는다).
 - **열린 길**: `/api/v1/auth` 아래 전부(로그인 · 로그아웃 · 이 모듈의 등록 경로) · `GET /api/v1/account/me` · `POST /api/v1/account/reauth/confirmation`(메일 코드 다시 인증) + `skeleton.auth-mfa.required.extra-exclude-paths`(`"METHOD /패턴"`, 더하기만).
-- **안 거는 것**: 익명(보안 체인이 401) · 에러 디스패치 · CORS preflight · 정적 자원 · **API 키 요청**(키는 사람이 아니라 등록할 수 없다). 키를 알아보는 표지는 `auth` 의 `NonInteractiveAuthentication` 인터페이스 하나다 - `api-key` 가 키 요청의 `Authentication` 에 달고 이 문이 읽는다(두 모듈은 서로를 모른다). 앱이 만든 키 같은 자격이 있으면 그 `Authentication` 이 이 인터페이스를 구현하면 된다.
+- **안 거는 것**: 익명(보안 체인이 401) · 에러 디스패치 · CORS preflight · 정적 자원 · **API 키 요청**(키는 사람이 아니라 등록할 수 없다) · **break-glass 요청**(비상문이 목적이라 2단계를 걸지 않는다 - `auth` 의 `BreakGlassAuthentication` 표지, break-glass 필터만 단다. 대상 계정이 운영자여도 등록 전에 열린다). 키를 알아보는 표지는 `auth` 의 `NonInteractiveAuthentication` 인터페이스 하나다 - `api-key` 가 키 요청의 `Authentication` 에 달고 이 문이 읽는다(두 모듈은 서로를 모른다). 앱이 만든 키 같은 자격이 있으면 그 `Authentication` 이 이 인터페이스를 구현하면 된다.
 - **비용**: 요청마다 계정 한 줄(기본키) + 등록 상태 한 번을 읽고 **30초 캐시**한다. 등록 · 끄기 · 운영 해제 · 탈퇴는 캐시를 바로 지운다(등록하면 곧장 풀리고, 운영 해제는 곧장 다시 걸린다). 정책을 바꾸는 쪽(역할 부여 · 회수)은 최대 30초 뒤 반영된다.
 - **15분 면제**: 필수 문에 걸린 계정이 **방금 로그인한 세션**(`required.fresh-login-window`, 기본 15분, `SessionInspector`)으로 `POST /totp/enrollment` 를 하면 다시 인증을 요구하지 않는다(막아 놓고 증거를 대라고 할 수 없다 - 첫 이메일 등록의 면제와 같다). 면제는 세션에 붙는다: 옛 세션 · 세션을 읽을 수 없는 조립(JWT 만) · 이미 켜진 계정의 재등록은 해당 없다.
 
