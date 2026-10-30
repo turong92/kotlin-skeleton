@@ -216,6 +216,8 @@ local 프로필은 주문 만들기 한도(기본 계정당 10 / 10분)를 풀�
 | `GET /api/v1/search?q=&types=note,product&scope=&sort=relevance\|recent&page=&size=` | 두 글자 이상 덩어리로 찾는다(`방끈` ⊂ `가방끈`). 각 줄에 제목 · 발췌와 일치 위치 |
 | `GET /api/v1/admin/search/types` · `POST /api/v1/admin/search/rebuild {"type"}` | 종류별 색인 문서 수 · 재색인(작업 `search-rebuild`) - 검색을 붙이기 전에 있던 노트 · 상품은 이걸로 처음 채운다 |
 
+**범위 한계**: note 검색 문서의 주인은 작성자라 팀(workspace) 멤버는 서로의 팀 노트를 검색에서 못 본다 — 넓히기는 다음 조각.
+
 시험: `search/SearchFlowIntegrationTest`(주인에게만 · 고치기 · 지우기 · 상품 판매 중지/재개 · 재색인).
 
 ## 구독 — 플랜과 자동결제 (`/api/v1/payments/subscriptions`)
