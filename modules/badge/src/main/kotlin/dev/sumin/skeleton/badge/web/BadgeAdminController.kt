@@ -83,8 +83,8 @@ class BadgeAdminController(
     fun award(authentication: Authentication?, @PathVariable id: String, @RequestBody request: AwardRequest): DataResponse<AwardResultResponse> {
         val operator = operator(authentication)
         val result = awards.awardByOperator(id, request.accountIds.orEmpty(), request.reason, operator.accountId)
-        audit.record(OperatorAction(operator.accountId, "badge.awarded", "badge", id, mapOf("awarded" to result.awarded.size.toString(), "alreadyHeld" to result.alreadyHeld.size.toString())))
-        return Response.ok(AwardResultResponse(result.awarded, result.alreadyHeld))
+        audit.record(OperatorAction(operator.accountId, "badge.awarded", "badge", id, mapOf("awarded" to result.awarded.size.toString(), "alreadyHeld" to result.alreadyHeld.size.toString(), "unknown" to result.unknownAccountIds.size.toString())))
+        return Response.ok(AwardResultResponse(result.awarded, result.alreadyHeld, result.unknownAccountIds))
     }
 
     @PostMapping("/badge-awards/{awardId}/revoke")

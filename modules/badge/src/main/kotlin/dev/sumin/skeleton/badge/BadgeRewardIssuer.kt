@@ -9,6 +9,7 @@ import java.util.Locale
 
 /**
  * 보상 종류 `badge` — params `code` 의 배지를 준다. `(GRANT, 지급 건 id)` 로 멱등이라 일꾼이 두 번 불러도 한 번이다.
+ * 이미 가진 배지면 지급은 `ISSUED` 로 끝내되 알림은 보내지 않는다(`IssuedReward.notify=false`).
  * 배지가 없거나 보관됐으면 다시 해도 같으므로 [RewardPermanentFailure] 다(운영자가 풀고 「다시 지급」).
  * 이 클래스는 `platform` 의 계약만 구현한다 - `reward` · `campaign` 을 모른다.
  */
@@ -31,7 +32,7 @@ class BadgeRewardIssuer(
         } catch (e: BadgeException) {
             throw RewardPermanentFailure(e.message ?: e.badgeError.title, e)
         }
-        return IssuedReward(holding.awardId)
+        return IssuedReward(holding.awardId, notify = holding.newlyAwarded)
     }
 
     override fun describe(params: Map<String, String>, locale: Locale): RewardLabel {

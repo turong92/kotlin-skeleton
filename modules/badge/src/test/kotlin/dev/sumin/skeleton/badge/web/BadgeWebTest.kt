@@ -249,7 +249,7 @@ class BadgeAdminWebTest {
     fun `a manual award reports awarded and alreadyHeld, then the revoke needs a reason and leaves a history line`() {
         val id = create()
         mvc.perform(post("/api/v1/admin/badges/$id/awards").principal(operator).contentType(json).content("""{"accountIds":["acc_1","acc_2"],"reason":"launch week"}"""))
-            .andExpect(status().isOk).andExpect(jsonPath("$.value.awarded.length()").value(2)).andExpect(jsonPath("$.value.alreadyHeld.length()").value(0))
+            .andExpect(status().isOk).andExpect(jsonPath("$.value.awarded.length()").value(2)).andExpect(jsonPath("$.value.alreadyHeld.length()").value(0)).andExpect(jsonPath("$.value.unknownAccountIds.length()").value(0))
         mvc.perform(post("/api/v1/admin/badges/$id/awards").principal(operator).contentType(json).content("""{"accountIds":["acc_2","acc_3"]}"""))
             .andExpect(jsonPath("$.value.awarded[0]").value("acc_3")).andExpect(jsonPath("$.value.alreadyHeld[0]").value("acc_2"))
         mvc.perform(post("/api/v1/admin/badges/$id/awards").principal(operator).contentType(json).content("""{"accountIds":[]}""")).andExpect(status().isBadRequest)

@@ -10,7 +10,7 @@ import dev.sumin.skeleton.reward.RewardGrants
 interface CampaignSignals {
     /**
      * 수치를 `max(기존, [value])` 로 올리고(낮은 값은 무시), 진행 중인 `achievement` 이벤트 중 같은 [metric] 의 **값 이하인 모든 단계** 보상을 지급 건으로 기록한다.
-     * 지급 건 키(`<이벤트>:<계정>:achv:<기준값>:<보상 순서>`)가 같은 단계를 한 번으로 접으므로 같은 값을 다시 보고해도 두 번 주지 않고, 이벤트를 나중에 만들어도 다음 보고에서 이미 넘은 단계를 준다.
+     * 지급 건 키(`<이벤트>:<계정>:achv:<기준값>:<보상 해시>` - 해시는 보상의 종류 · params 로 정하므로 단계 안에서 보상을 끼우거나 순서를 바꿔도 이미 준 보상의 키는 그대로다)가 같은 단계를 한 번으로 접으므로 같은 값을 다시 보고해도 두 번 주지 않고, 이벤트를 나중에 만들어도 다음 보고에서 이미 넘은 단계를 준다.
      * 형식이 틀린 [metric] · 음수 [value] 는 `400 CAMPAIGN.CONFIG_INVALID`.
      */
     fun report(accountId: String, metric: String, value: Long)
@@ -31,8 +31,8 @@ class AchievementService(
                 val config = AchievementConfig.parse(campaign.config)
                 if (config.metric != metric) return@forEach
                 config.milestones.filter { it.value <= current }.forEach { step ->
-                    step.rewards.forEachIndexed { i, spec ->
-                        grants.record(accountId, spec.type, spec.params, SOURCE_TYPE, "${campaign.id}:$accountId:achv:${step.value}:$i")
+                    step.rewards.forEach { spec ->
+                        grants.record(accountId, spec.type, spec.params, SOURCE_TYPE, "${campaign.id}:$accountId:achv:${step.value}:${spec.identity()}")
                     }
                 }
             }

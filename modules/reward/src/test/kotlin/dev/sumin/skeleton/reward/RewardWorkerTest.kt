@@ -92,6 +92,14 @@ class RewardWorkerTest {
     }
 
     @Test
+    fun `an issuer that reports nothing new is issued without a notification`() {
+        val id = grant()
+        worker(ScriptedIssuer(notify = false)).process(id)
+        assertEquals(RewardGrantStatus.ISSUED, store.find(id)!!.status)
+        assertEquals(0, notified.size)
+    }
+
+    @Test
     fun `a label link that is not an in-app path stays out of the link field and does not lose the notification`() {
         val published = mutableListOf<NotificationEvent>()
         val notifier = NotificationRewardNotifier({ published += it; NotificationPublishResult(it.id, 0) }, "rewards")

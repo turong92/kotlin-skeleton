@@ -37,6 +37,15 @@ class BadgeRewardIssuerTest {
     }
 
     @Test
+    fun `a badge already held is issued without asking for a reward notification`() {
+        awards.award("acc_1", "first-note", "note:1")
+        val again = issuer.issue(grant(id = "rgr_9"))
+        assertEquals(false, again.notify)
+        assertEquals(true, issuer.issue(grant(id = "rgr_9", accountId = "acc_2")).notify)
+        assertEquals(0, notifier.sent.count { it.third == BadgeSource.GRANT })
+    }
+
+    @Test
     fun `an archived or missing badge is a permanent failure`() {
         assertFailsWith<RewardPermanentFailure> { issuer.issue(grant(code = "nope")) }
         definitions.setStatus(store.findDefinitionByCode("first-note")!!.id, BadgeStatus.ARCHIVED)

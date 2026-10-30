@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.badge
 
+import dev.sumin.skeleton.common.account.AccountFacts
 import dev.sumin.skeleton.common.id.SortableIds
 import dev.sumin.skeleton.common.time.TimeProvider
 
@@ -14,6 +15,8 @@ class BadgeAwards(
     private val store: BadgeStore,
     private val time: TimeProvider,
     private val ids: SortableIds = SortableIds.system,
+    /** 운영자 수여 때 계정 존재를 확인한다. 구현이 없으면 null - 확인 없이 준다 */
+    private val accountFacts: () -> AccountFacts? = { null },
     private val notifier: () -> BadgeNotifier,
 ) : Badges {
     override fun award(accountId: String, code: String, sourceRef: String): BadgeHolding {
@@ -25,7 +28,7 @@ class BadgeAwards(
     fun awardForGrant(accountId: String, code: String, grantId: String): BadgeHolding =
         awardOne(accountId, byCode(code), BadgeSource.GRANT, grantId, null, null)
 
-    /** 운영자 수동 수여 - 계정마다 한 번씩(중복 입력은 접는다), 이미 가진 계정은 `alreadyHeld` */
+    /** 운영자 수동 수여 - 계정마다 한 번씩(중복 입력은 접는다), 이미 가진 계정은 `alreadyHeld`, 없는 계정은 수여하지 않고 `unknownAccountIds` */
     fun awardByOperator(badgeId: String, accountIds: List<String>, reason: String?, actorId: String): AdminAwardResult = store.inTransaction {
         // 정렬해서 잠근다 - 입력 순서가 [A,B] 와 [B,A] 인 두 요청이 서로의 줄을 기다리며 교착하지 않게
         val unique = accountIds.map { it.trim() }.filter { it.isNotEmpty() }.distinct().sorted()
@@ -35,11 +38,17 @@ class BadgeAwards(
         val definition = store.findDefinition(badgeId) ?: throw BadgeException(BadgeErrorCode.NOT_FOUND, "badge $badgeId not found")
         val awarded = ArrayList<String>()
         val held = ArrayList<String>()
+        val unknown = ArrayList<String>()
+        val facts = accountFacts()
         for (accountId in unique) {
+            if (facts != null && facts.createdAt(accountId) == null) {
+                unknown += accountId
+                continue
+            }
             val result = awardOne(accountId, definition, BadgeSource.ADMIN, null, actorId, why)
             (if (result.newlyAwarded) awarded else held) += accountId
         }
-        AdminAwardResult(awarded, held)
+        AdminAwardResult(awarded, held, unknown)
     }
 
     override fun revoke(accountId: String, code: String, reason: String): Boolean = store.inTransaction {

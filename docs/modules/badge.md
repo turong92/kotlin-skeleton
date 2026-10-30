@@ -20,7 +20,7 @@
 - 속도 제한은 배지 전용 한도를 만들지 않는다. 다른 공개 읽기(`catalog` 상품 · `board` 비회원 읽기)처럼 platform `skeleton.web.rate-limit`(IP 기준, 기본 꺼짐)을 따른다 — **공개로 여는 앱은 이것을 켜라**(`path-pattern: /api/v1/badges/accounts/**` 로 이 경로에만 걸 수 있다; 견본 앱이 그렇게 한다).
 - **경고**: 이 경로는 주소에 계정 id 를 담는다. `author-profile`(필명 프로필) 화면에 프로필 배지를 붙이면 필명 여러 개가 같은 계정 id · 같은 배지 묶음으로 이어져 한 사람임이 드러난다 — **필명 화면에는 붙이지 말 것**.
 
-**알려진 한계**: ① 이미 가진 배지를 지급 건(보상 지급기)으로 다시 주면 보유는 그대로지만 `reward` 의 「받았어요」 알림은 한 번 더 나간다(지급 건 단위 알림이라) - 다음 판에서 다룬다. ② 수동 수여는 계정이 실제로 있는지 확인하지 않는다(`coupon` 의 수동 발급과 같다) - 없는 id 를 넣으면 쓸모없는 보유 줄이 생길 뿐이며 운영 화면의 계정 검색에서 고르는 것을 전제로 한다.
+**동작 메모**: ① 이미 가진 배지를 지급 건(보상 지급기)으로 다시 주면 지급 건은 `ISSUED` 로 끝나되 알림은 나가지 않는다(지급기가 `IssuedReward(notify=false)` 로 알려 `reward` 일꾼이 건너뛴다). ② 수동 수여는 `platform` 의 `AccountFacts`(`account` 가 내놓는다)로 계정이 있는지 확인해, 없는 id 는 수여하지 않고 응답의 `unknownAccountIds` 에 따로 센다. `AccountFacts` 구현이 없으면 확인 없이 준다.
 ③ `Badges.award` 가 돌려주는 `BadgeHolding` 은 `newlyAwarded`(이번 호출이 새로 줬나)와 `active`(지금 보유 중인가)가 따로다 - 회수 뒤 같은 `sourceRef` 로 다시 부르면 `newlyAwarded=false`, `active=false`.
 
 **내 배지** `GET /api/v1/badges/me`(로그인): `{earned: [{awardId, code, name, description, imageUrl, hidden, archived, visible, awardedAt}], locked: [...]}`. `locked` 는 `ACTIVE` 정의 중 못 받은 것 — **숨은 정의는 `{hidden: true}` 뿐이고 코드 · 이름 · 설명 · 그림이 모두 `null`** 이다. `PATCH /api/v1/badges/me/{awardId} {visible}` 로 프로필에 보일지 바꾼다(본인 줄만 — 남의 줄 · 회수된 줄은 404 `BADGE.NOT_FOUND`).
@@ -35,7 +35,7 @@
 | `POST /api/v1/admin/badges` | 정의 만들기 → 201. 운영 기록 `badge.defined` |
 | `PUT /api/v1/admin/badges/{id}` | 이름 · 설명 · 그림 · 숨김 · 순서 고치기(`code` 는 읽지 않는다). `badge.updated` |
 | `PATCH /api/v1/admin/badges/{id}/status {status}` | 보관/되살리기. `badge.updated` |
-| `POST /api/v1/admin/badges/{id}/awards {accountIds, reason?}` | 수동 수여 → `{awarded[], alreadyHeld[]}` (계정 100개까지). `badge.awarded` |
+| `POST /api/v1/admin/badges/{id}/awards {accountIds, reason?}` | 수동 수여 → `{awarded[], alreadyHeld[], unknownAccountIds[]}` (계정 100개까지). `badge.awarded` |
 | `POST /api/v1/admin/badge-awards/{awardId}/revoke {reason}` | 회수(사유 필수; 없거나 이미 회수된 줄은 404). `badge.revoked` |
 | `GET /api/v1/admin/badge-awards?badgeId&accountId&cursor&size` | 수여 · 회수 내역, 최신순 커서(`size` 기본 50, 최대 200). `accountLabel`(이메일, 없으면 아이디)은 운영자가 `account.read` 도 가질 때만 채운다 |
 

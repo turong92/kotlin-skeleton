@@ -28,13 +28,14 @@ class RewardWorker(
                     ?: throw RewardPermanentFailure("no issuer for reward type '${grant.type}'")
                 val issued = issuer.issue(grant)
                 store.markIssued(grant.id, issued.resultRef, time.now())
-                grant to issuer
+                Triple(grant, issuer, issued.notify)
             }
         } catch (e: RewardPermanentFailure) {
             store.inTransaction { store.markFailed(grantId, e.message ?: "permanent failure") }
             throw e
         } ?: return
-        val (grant, issuer) = done
+        val (grant, issuer, notify) = done
+        if (!notify) return
         try {
             notifier().issued(grant, issuer.describe(grant.params, locale))
         } catch (e: Exception) {

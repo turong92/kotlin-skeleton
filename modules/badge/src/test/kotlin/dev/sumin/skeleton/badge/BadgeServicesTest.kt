@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.badge
 
+import dev.sumin.skeleton.common.account.AccountFacts
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import kotlin.test.BeforeTest
@@ -104,6 +105,15 @@ class BadgeServicesTest {
     }
 
     @Test
+    fun `re-awarding a held badge with a new ref or by an operator sends no second notification`() {
+        val badge = define("first-note")
+        awards.award("acc_1", "first-note", "note:1")
+        awards.award("acc_1", "first-note", "note:2")
+        awards.awardByOperator(badge.id, listOf("acc_1"), null, "op_1")
+        assertEquals(1, notifier.sent.size)
+    }
+
+    @Test
     fun `an operator award reports who was newly given and who already held it`() {
         val badge = define("early-bird")
         awards.award("acc_2", "early-bird", "seed")
@@ -115,6 +125,18 @@ class BadgeServicesTest {
         assertEquals("op_1", event.actorId)
         assertEquals("launch", event.reason)
         assertEquals(listOf("acc_2", "acc_1").sorted(), notifier.sent.map { it.first }.sorted())
+    }
+
+    @Test
+    fun `an operator award skips accounts that do not exist and counts them apart`() {
+        val badge = define("early-bird")
+        val known = setOf("acc_1")
+        val checked = BadgeAwards(store, time, notifier = { notifier }, accountFacts = { AccountFacts { if (it in known) time.now() else null } })
+        val result = checked.awardByOperator(badge.id, listOf("acc_1", "ghost"), null, "op_1")
+        assertEquals(listOf("acc_1"), result.awarded)
+        assertEquals(listOf("ghost"), result.unknownAccountIds)
+        assertEquals(1, store.awards.size)
+        assertEquals(listOf("acc_1"), notifier.sent.map { it.first })
     }
 
     @Test

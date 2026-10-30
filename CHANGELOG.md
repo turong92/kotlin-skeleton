@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 배지 · 업적 (2026-10-29)
 
+- `badge`: 이미 가진 배지를 보상 지급기로 다시 주면 「받았어요」 알림이 한 번 더 나가던 것을 고쳤다 - `platform` 의 `IssuedReward` 에 `notify`(기본 `true`)를 더했고 `reward` 일꾼이 `false` 면 알림을 건너뛴다. 배지 지급기는 새로 준 때만 `true`.
+- `badge`: 운영자 수동 수여가 `AccountFacts` 로 계정 존재를 확인한다 - 없는 계정은 수여하지 않고 응답 `unknownAccountIds` 에 담는다(`AccountFacts` 구현이 없으면 이전처럼 확인 없이 수여).
+- `campaign`: 업적 보상의 지급 건 키를 `<이벤트>:<계정>:achv:<기준값>:<보상 순서>` 에서 `...:<보상 해시>`(종류 · params 의 SHA-256 앞 16자)로 바꿨다 - 진행 중인 이벤트의 단계에 보상을 끼우거나 순서를 바꿔도 이미 준 보상을 다시 주지 않는다. 한 단계에 같은 보상이 둘이면 `CONFIG_INVALID`. 키 형식이 바뀌므로 공개 릴리스 전 이벤트는 이미 기록된 업적 지급 건이 있다면 한 번 더 지급될 수 있다.
+
 - `badge` + `badge-jdbc` (새 모듈): 배지 정의(코드 · 이름 · 설명 · 그림 주소 · 숨김 · 순서) · 계정당 한 번의 수여/회수(회수는 사유 필수, 내역은 덧붙이기만) · 내 배지 · 프로필 배지 · 보상 지급기 `badge` · 앱이 부르는 `Badges`(`award` · `revoke` · `holdingsOf`) · 운영자 경로(`skeleton.badge.admin.enabled`, `badge.manage`). `GET /api/v1/badges/accounts/{accountId}` 는 앱이 `skeleton.badge.http.allow-anonymous-read=true` 로 열면 **로그인 없이 읽는다**(모듈 기본은 `false` = 로그인 필요, `board` 의 같은 이름 설정과 같다) - 응답은 `code · name · description · imageUrl` 넷뿐이고 숨긴 배지 · 받지 않은 숨은 배지는 나가지 않는다. 마이그레이션 `V20261029100000__badges`. `reward` · `coupon` · `point` · `campaign` 에 의존하지 않는다. 문서 `docs/modules/badge.md`.
 - `campaign` + `campaign-jdbc`: 이벤트 종류 `achievement`(앱이 `CampaignSignals.report(accountId, metric, value)` 로 현재 값을 보고하면 값 이하의 모든 단계 보상을 기록, 같은 단계는 한 번) · 수치 표 `campaign_progress`(마이그레이션 `V20261029110000__campaign_progress`, 쓰기는 `max(기존, 새 값)`). 기존 이벤트 종류 · 응답 모양은 그대로.
 - `apps/sample`: `badge-jdbc` 조립(프로필 배지 비로그인 읽기를 켜고 그 경로에만 속도 제한) · 씨앗(`BadgesSeed`) · `NoteService.create` 가 노트 개수를 보고. `apps/workbench` 에 `badge-jdbc` 추가. 문서 `docs/sample.md` 「배지 · 업적」.

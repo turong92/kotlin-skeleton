@@ -92,7 +92,7 @@ data class StatusRequest(val status: String? = null)
 
 data class AwardRequest(val accountIds: List<String>? = null, val reason: String? = null)
 
-data class AwardResultResponse(val awarded: List<String>, val alreadyHeld: List<String>)
+data class AwardResultResponse(val awarded: List<String>, val alreadyHeld: List<String>, val unknownAccountIds: List<String>)
 
 data class RevokeRequest(val reason: String? = null)
 

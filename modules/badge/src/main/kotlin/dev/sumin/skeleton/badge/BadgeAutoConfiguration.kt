@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.badge
 
 import dev.sumin.skeleton.badge.erasure.BadgeAccountErasureListener
+import dev.sumin.skeleton.common.account.AccountFacts
 import dev.sumin.skeleton.common.authz.PermissionDeclaration
 import dev.sumin.skeleton.common.erasure.AccountErasureListener
 import dev.sumin.skeleton.common.reward.RewardIssuer
@@ -37,8 +38,13 @@ class BadgeAutoConfiguration {
     @Bean
     @ConditionalOnBean(BadgeStore::class)
     @ConditionalOnMissingBean
-    fun badgeAwards(store: BadgeStore, time: ObjectProvider<TimeProvider>, notifier: ObjectProvider<BadgeNotifier>): BadgeAwards =
-        BadgeAwards(store, time.getIfAvailable { TimeProvider.systemUtc() }, notifier = { notifier.getObject() })
+    fun badgeAwards(
+        store: BadgeStore,
+        time: ObjectProvider<TimeProvider>,
+        notifier: ObjectProvider<BadgeNotifier>,
+        facts: ObjectProvider<AccountFacts>,
+    ): BadgeAwards =
+        BadgeAwards(store, time.getIfAvailable { TimeProvider.systemUtc() }, notifier = { notifier.getObject() }, accountFacts = { facts.getIfAvailable() })
 
     @Bean
     @ConditionalOnBean(BadgeAwards::class)

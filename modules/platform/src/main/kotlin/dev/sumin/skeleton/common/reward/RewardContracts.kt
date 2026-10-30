@@ -33,8 +33,11 @@ data class RewardGrantView(
     val sourceKey: String,
 )
 
-/** 지급 결과. [resultRef] 는 만들어진 것의 id(쿠폰 id · 포인트 내역 id) — 지급 건 줄에 남는다 */
-data class IssuedReward(val resultRef: String)
+/**
+ * 지급 결과. [resultRef] 는 만들어진 것의 id(쿠폰 id · 포인트 내역 id) — 지급 건 줄에 남는다.
+ * [notify] 가 false 면 일꾼이 「받았어요」 알림을 보내지 않는다 - 새로 준 것이 없을 때(이미 가진 배지)
+ */
+data class IssuedReward(val resultRef: String, val notify: Boolean = true)
 
 data class RewardLabel(val title: String, val message: String, val link: String? = null)
 

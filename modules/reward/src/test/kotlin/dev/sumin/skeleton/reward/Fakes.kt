@@ -59,7 +59,7 @@ class RecordingTasks : RewardTasks {
 }
 
 /** [failures] 번 던진 뒤 성공하는 지급기. 성공 횟수를 센다 */
-class ScriptedIssuer(override val type: String = "point", var failures: Int = 0, private val permanent: Boolean = false) : RewardIssuer {
+class ScriptedIssuer(override val type: String = "point", var failures: Int = 0, private val permanent: Boolean = false, private val notify: Boolean = true) : RewardIssuer {
     val issued = AtomicInteger()
     override fun validate(params: Map<String, String>) = Unit
     override fun issue(grant: RewardGrantView): IssuedReward {
@@ -69,7 +69,7 @@ class ScriptedIssuer(override val type: String = "point", var failures: Int = 0,
             error("boom")
         }
         issued.incrementAndGet()
-        return IssuedReward("res_${grant.id}")
+        return IssuedReward("res_${grant.id}", notify)
     }
     override fun describe(params: Map<String, String>, locale: Locale) = RewardLabel("Points", "You got ${params["amount"]} points", "/rewards/points")
 }

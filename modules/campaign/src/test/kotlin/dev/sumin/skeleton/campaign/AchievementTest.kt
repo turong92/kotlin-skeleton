@@ -23,6 +23,8 @@ class AchievementTest {
         store.insert(Campaign(id, "achievement", "Notes", enabled, Instant.parse(startsAt), endsAt?.let(Instant::parse), config, time.now(), time.now()))
     }
 
+    private fun id(reward: Map<String, Any?>) = RewardSpec(reward["type"] as String, @Suppress("UNCHECKED_CAST") (reward["params"] as Map<String, String>)).identity()
+
     @BeforeTest
     fun reset() {
         store.progress.clear()
@@ -64,7 +66,25 @@ class AchievementTest {
         assertEquals(2, grants.recorded.size)
         signals.report("acc_1", "notes.created", 10)
         assertEquals(2, grants.recorded.size)
-        assertEquals(setOf("achievement/cmp_1:acc_1:achv:1:0", "achievement/cmp_1:acc_1:achv:10:0"), grants.recorded.map { it.third }.toSet())
+        assertEquals(setOf("achievement/cmp_1:acc_1:achv:1:${id(reward())}", "achievement/cmp_1:acc_1:achv:10:${id(reward())}"), grants.recorded.map { it.third }.toSet())
+    }
+
+    @Test
+    fun `inserting a reward into a step after it paid does not pay the old reward again`() {
+        campaign(config = config("notes.created", step(10, reward())))
+        signals.report("acc_1", "notes.created", 10)
+        store.campaigns.clear()
+        campaign(config = config("notes.created", step(10, reward(amount = "100"), reward())))   // 새 보상을 앞에 끼워 순서가 바뀜
+        signals.report("acc_1", "notes.created", 10)
+        assertEquals(2, grants.recorded.size)
+        assertEquals(1, grants.recorded.count { it.third.endsWith(id(reward())) })
+    }
+
+    @Test
+    fun `the same reward twice in one step is refused`() {
+        val bad = config("m", step(1, reward(), reward()))
+        assertEquals("CAMPAIGN.CONFIG_INVALID", assertFailsWith<CampaignException> { kind.validate(bad, issuers) }.errorCode.code)
+        kind.validate(config("m", step(1, reward(), reward(amount = "20")), step(2, reward())), issuers)
     }
 
     @Test
@@ -77,10 +97,10 @@ class AchievementTest {
     }
 
     @Test
-    fun `every reward of a step is recorded under its own index`() {
+    fun `every reward of a step is recorded under its own key`() {
         campaign(config = config("notes.created", step(10, reward(), reward(amount = "100"))))
         signals.report("acc_1", "notes.created", 10)
-        assertEquals(listOf("achievement/cmp_1:acc_1:achv:10:0", "achievement/cmp_1:acc_1:achv:10:1"), grants.recorded.map { it.third })
+        assertEquals(listOf("achievement/cmp_1:acc_1:achv:10:${id(reward())}", "achievement/cmp_1:acc_1:achv:10:${id(reward(amount = "100"))}"), grants.recorded.map { it.third })
     }
 
     @Test

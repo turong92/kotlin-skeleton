@@ -69,7 +69,7 @@ data class EarnedBadge(val award: BadgeAward, val definition: BadgeDefinition)
 data class MyBadges(val earned: List<EarnedBadge>, val locked: List<BadgeDefinition>)
 
 /** 수동 수여 결과 */
-data class AdminAwardResult(val awarded: List<String>, val alreadyHeld: List<String>)
+data class AdminAwardResult(val awarded: List<String>, val alreadyHeld: List<String>, val unknownAccountIds: List<String> = emptyList())
 
 data class AwardHistoryRow(val event: BadgeAwardEvent, val badge: BadgeDefinition?)
 
