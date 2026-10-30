@@ -1221,6 +1221,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 종류 · 상태: module · experimental — 위치 `modules/review`
 - 켜는 법: `--modules review,review-jdbc`
 - 의존 한 줄: `implementation(project(":modules:review"))`
+- 자동으로 따라온다: `storage`
 - 소스만 따라온다(컴파일 전용 — 런타임 클래스패스에는 없다. 쓰려면 apps/api 에 의존 한 줄을 더한다): `notification`
 - 함께 골라야 한다: `review-jdbc`
 - 설정 접두사 `skeleton.review` — 키와 기본값 `docs/config/modules/review.yml`
@@ -1240,7 +1241,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 종류 · 상태: module · experimental — 위치 `modules/review-jdbc`
 - 켜는 법: `--modules review-jdbc`
 - 의존 한 줄: `implementation(project(":modules:review-jdbc"))`
-- 자동으로 따라온다: `notification`, `review`
+- 자동으로 따라온다: `notification`, `review`, `storage`
 - 설정 접두사 없음
 - 문서: `docs/modules/review-jdbc.md`
 - 짝 프런트(react-skeleton): 항목 `reviews`, `reviews-admin` · 패키지 `@skeleton/reviews` · 조각 `--packages reviews`

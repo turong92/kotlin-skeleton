@@ -2753,7 +2753,7 @@
       "summary": "리뷰 · 평점 — 아무 대상(종류 + id)에 별점 1~5 · 본문, 계정×대상 하나(고쳐 쓴다) · 대상별 평균/분포(원자적 집계) · 정렬/거르기 · 도움돼요 · 구매 인증(앱이 ReviewPurchases.record 로 신호를 준다) · 구매자만 옵션 · 신고 · 운영 큐 · 숨김/되살리기/문제없음 · 자동 가림(옵션) · 운영자 답글 · 사진(저장 키 + 서명 주소 302) · 이벤트 고리(쓰기 트랜잭션 안, 보상은 앱이 잇는다) · 비로그인 읽기(앱이 켠다) · 탈퇴. 상품 · 결제 · 보상을 모른다.",
       "starter": false,
       "newProjectFlag": "--modules review,review-jdbc",
-      "autoIncludes": ["notification"],
+      "autoIncludes": ["notification", "storage"],
       "needs": {
         "requires": ["review-jdbc"],
         "oneOf": [],
@@ -2792,7 +2792,7 @@
       "summary": "리뷰 · 대상별 집계 · 도움돼요 · 구매 신호를 DB 에 둔다 (PostgreSQL · MySQL) — 집계는 원자적 UPDATE, 새 줄은 insertIgnore 먼저(틈 잠금 교착 없음), 목록 질의는 공개 줄만 읽는다.",
       "starter": false,
       "newProjectFlag": "--modules review-jdbc",
-      "autoIncludes": ["notification", "review"],
+      "autoIncludes": ["notification", "review", "storage"],
       "needs": {
         "requires": [],
         "oneOf": [],
