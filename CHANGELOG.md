@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `account`: `AccountRepository.findByIds`(기본은 하나씩, `JdbcAccountRepository` 는 `where id in (…)` 덩어리 질의, 메모리 구현도 재정의). `RepositoryAccountLabels` 가 이걸 한 번만 불러, 쿠폰 운영 목록 · 배지 수여 내역의 계정 이름 조회가 쪽마다 N+1 이던 것이 질의 한 번이 된다. 동작은 그대로.
+
 ### 배지 · 업적 (2026-10-29)
 
 - `badge` + `badge-jdbc` (새 모듈): 배지 정의(코드 · 이름 · 설명 · 그림 주소 · 숨김 · 순서) · 계정당 한 번의 수여/회수(회수는 사유 필수, 내역은 덧붙이기만) · 내 배지 · 프로필 배지 · 보상 지급기 `badge` · 앱이 부르는 `Badges`(`award` · `revoke` · `holdingsOf`) · 운영자 경로(`skeleton.badge.admin.enabled`, `badge.manage`). `GET /api/v1/badges/accounts/{accountId}` 는 앱이 `skeleton.badge.http.allow-anonymous-read=true` 로 열면 **로그인 없이 읽는다**(모듈 기본은 `false` = 로그인 필요, `board` 의 같은 이름 설정과 같다) - 응답은 `code · name · description · imageUrl` 넷뿐이고 숨긴 배지 · 받지 않은 숨은 배지는 나가지 않는다. 마이그레이션 `V20261029100000__badges`. `reward` · `coupon` · `point` · `campaign` 에 의존하지 않는다. 문서 `docs/modules/badge.md`.

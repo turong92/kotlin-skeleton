@@ -158,6 +158,9 @@ interface AccountRepository {
 
     fun findById(id: String): Account?
 
+    /** 여러 계정을 한 번에 — 없는 id 는 결과에 없다(순서 · 중복 없음). 기본은 하나씩 부르는 길이고, 저장소는 한 질의(`where id in (…)`)로 재정의한다 */
+    fun findByIds(ids: Collection<String>): List<Account> = ids.toSet().mapNotNull(::findById)
+
     /** [email] 은 이미 정규화된(소문자 · 공백 제거) 값 */
     fun findByEmail(email: String): Account?
 

@@ -67,6 +67,11 @@ class JdbcAccountRepository(
 
     override fun findById(id: String): Account? = one("select * from accounts where id = :v", id)
 
+    override fun findByIds(ids: Collection<String>): List<Account> =
+        ids.toSet().chunked(NAMES_PER_STATEMENT).flatMap { chunk ->
+            withRoles(jdbc.query("select * from accounts where id in (:ids)", mapOf("ids" to chunk)) { rs, _ -> rs.account(emptySet()) })
+        }
+
     override fun findByEmail(email: String): Account? = one("select * from accounts where email = :v", email)
 
     override fun findByLoginId(loginId: String): Account? = one("select * from accounts where login_id = :v", loginId)

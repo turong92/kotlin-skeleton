@@ -27,6 +27,8 @@ class InMemoryAccountRepository : AccountRepository {
 
     @Synchronized override fun findById(id: String): Account? = accounts[id]
 
+    @Synchronized override fun findByIds(ids: Collection<String>): List<Account> = ids.toSet().mapNotNull { accounts[it] }
+
     @Synchronized override fun findByEmail(email: String): Account? = accounts.values.firstOrNull { it.email == email }
 
     @Synchronized override fun findByIdentity(method: String, subject: String): Account? =

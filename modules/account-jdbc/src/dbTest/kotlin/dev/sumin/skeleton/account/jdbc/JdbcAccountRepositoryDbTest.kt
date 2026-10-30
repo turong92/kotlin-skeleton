@@ -45,6 +45,17 @@ class JdbcAccountRepositoryDbTest {
     }
 
     @Test
+    fun `findByIds returns the existing accounts with their roles, skips unknown ids and an empty input asks nothing`() {
+        repo.insert(account("acc_1", "a@example.com", roles = setOf("USER", "ADMIN")), emptyList())
+        repo.insert(account("acc_2", "b@example.com"), emptyList())
+        val found = repo.findByIds(listOf("acc_2", "acc_never", "acc_1", "acc_1"))
+        assertEquals(setOf("acc_1", "acc_2"), found.map { it.id }.toSet())
+        assertEquals(2, found.size)
+        assertEquals(setOf("USER", "ADMIN"), found.single { it.id == "acc_1" }.roles)
+        assertEquals(emptyList(), repo.findByIds(emptyList()))
+    }
+
+    @Test
     fun `a duplicate email is refused by the unique key and leaves nothing behind - roles and identities included`() {
         assertTrue(repo.insert(account(), listOf(identity("idn_1"))))
         assertFalse(repo.insert(account("acc_2"), listOf(identity("idn_2", "acc_2", subject = "other@example.com"))))
