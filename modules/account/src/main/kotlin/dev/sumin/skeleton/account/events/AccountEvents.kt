@@ -18,6 +18,10 @@ enum class AccountEventType {
     LOGIN_ID_SET,
     /** 아이디 찾기 메일을 보냈다 — 계정이 있을 때만 (없으면 이벤트도 없다) */
     LOGIN_ID_REMINDER_SENT,
+    /** API 키를 만들었다 — detail `keyId` · `by`(만든 계정). 토큰은 싣지 않는다 */
+    API_KEY_CREATED,
+    /** API 키를 회수했다(본인 또는 운영자) — detail `keyId` · `by`(회수한 계정). 사유 · 토큰은 싣지 않는다 */
+    API_KEY_REVOKED,
 }
 
 /**

@@ -56,6 +56,8 @@ dependencies {
     implementation(project(":modules:alert-jdbc"))         // 주인 경보 (+ alert) — 5xx 몰림 · 죽은 작업을 Discord 웹훅으로. 웹훅 주소가 없으면 아무것도 안 보낸다
     implementation(project(":modules:workspace"))          // 워크스페이스(팀): 역할 · slug · 멤버 · 메일 링크 초대 · 운영자 읽기 (+ workspace: /api/v1/workspaces). 노트가 헤더 X-Workspace-Id 로 팀 노트가 된다 - 좌석 상한은 workspace/SubscriptionSeatPolicy, docs/modules/workspace.md
     implementation(project(":modules:workspace-jdbc"))     // 워크스페이스 저장소 (workspace 는 저장소를 모른다)
+    implementation(project(":modules:api-key"))            // API 키: 사용자가 범위 · 만료를 골라 발급(다시 인증)하고, 키로 온 요청은 @ApiKeyScope 표시한 노트 경로에만 닿는다 (/api/v1/api-keys, 운영자 /api/v1/admin/api-keys). 범위 선언 - notes/NoteApiKeyScopes, 문서 docs/modules/api-key.md
+    implementation(project(":modules:api-key-jdbc"))       // 키 저장소 (api-key 는 저장소를 모른다) - 해시만 저장
 
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-data-jdbc")

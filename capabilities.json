@@ -286,7 +286,7 @@
         "prefixes": ["skeleton.api-key"],
         "snippet": "docs/config/modules/api-key.yml"
       },
-      "basePaths": ["/api/v1/api-keys"],
+      "basePaths": ["/api/v1/api-keys", "/api/v1/admin/api-keys"],
       "secrets": [],
       "docs": ["docs/modules/api-key.md"],
       "frontend": null,
@@ -295,7 +295,7 @@
         "사람의 로그인(JWT)을 대신하지 않는다 — 키는 서버끼리의 호출용이고 운영 경로(역할)에는 닿지 않는다",
         "경로에 `@ApiKeyScope` 표시를 달지 않으면 키로 열리지 않는다 — 앱이 열 경로마다 표시 한 줄을 단다",
         "OAuth 서버(클라이언트 자격 증명 흐름) · 서명 요청(HMAC)이 아니다",
-        "운영자 목록 · 운영 회수는 아직 없다 — 다음 조각"
+        "운영자 경로(전체 목록 · 사유를 적는 회수)는 `skeleton.api-key.admin.enabled=true` 로 켠다 — 기본은 꺼짐(404)"
       ],
       "keywords": {
         "ko": ["API 키", "액세스 토큰", "개인 액세스 토큰", "B2B API", "키 발급", "범위", "키 회수"],
@@ -3303,6 +3303,8 @@
       "newProjectFlag": "--with-sample",
       "autoIncludes": [
         "alert-jdbc",
+        "api-key",
+        "api-key-jdbc",
         "auth-magic-link",
         "auth-social-google",
         "auth-social-kakao",

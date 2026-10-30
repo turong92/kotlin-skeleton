@@ -280,14 +280,14 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 의존 한 줄: `implementation(project(":modules:api-key"))`
 - 함께 골라야 한다: `api-key-jdbc`
 - 설정 접두사 `skeleton.api-key` — 키와 기본값 `docs/config/modules/api-key.yml`
-- HTTP 경로: `/api/v1/api-keys`
+- HTTP 경로: `/api/v1/api-keys`, `/api/v1/admin/api-keys`
 - 문서: `docs/modules/api-key.md`
 - 쓰지 않는 경우:
   - api-key 는 저장소를 모른다 — api-key-jdbc 를 같이 고른다
   - 사람의 로그인(JWT)을 대신하지 않는다 — 키는 서버끼리의 호출용이고 운영 경로(역할)에는 닿지 않는다
   - 경로에 `@ApiKeyScope` 표시를 달지 않으면 키로 열리지 않는다 — 앱이 열 경로마다 표시 한 줄을 단다
   - OAuth 서버(클라이언트 자격 증명 흐름) · 서명 요청(HMAC)이 아니다
-  - 운영자 목록 · 운영 회수는 아직 없다 — 다음 조각
+  - 운영자 경로(전체 목록 · 사유를 적는 회수)는 `skeleton.api-key.admin.enabled=true` 로 켠다 — 기본은 꺼짐(404)
 - 키워드: API 키, 액세스 토큰, 개인 액세스 토큰, B2B API, 키 발급, 범위, 키 회수 / api key, personal access token, scoped key, api token, key revocation, per-key rate limit
 
 ### `api-key-jdbc` — API 키를 DB 에 둔다 (PostgreSQL · MySQL) — 토큰 해시만 저장하고, 회수 · 마지막 사용(1분 해상도)은 한 문장의 조건부 갱신이라 동시에 몰려도 한 번만 쓴다.
@@ -1449,7 +1449,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 - 종류 · 상태: app · stable — 위치 `apps/sample`
 - 켜는 법: `--with-sample`
-- 자동으로 따라온다: `alert-jdbc`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `badge`, `badge-jdbc`, `board`, `board-jdbc`, `campaign`, `campaign-jdbc`, `catalog`, `catalog-jdbc`, `coupon`, `coupon-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `json`, `notification`, `notification-jdbc`, `notification-sse`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-toss`, `point`, `point-jdbc`, `review`, `review-jdbc`, `reward`, `reward-jdbc`, `scheduler`, `search`, `search-jdbc`, `storage`, `storage-s3`, `workspace`, `workspace-jdbc`
+- 자동으로 따라온다: `alert-jdbc`, `api-key`, `api-key-jdbc`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `badge`, `badge-jdbc`, `board`, `board-jdbc`, `campaign`, `campaign-jdbc`, `catalog`, `catalog-jdbc`, `coupon`, `coupon-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `json`, `notification`, `notification-jdbc`, `notification-sse`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-toss`, `point`, `point-jdbc`, `review`, `review-jdbc`, `reward`, `reward-jdbc`, `scheduler`, `search`, `search-jdbc`, `storage`, `storage-s3`, `workspace`, `workspace-jdbc`
 - HTTP 경로: `/api/v1/cheers`, `/api/v1/notes`
 - 문서: `docs/sample.md`
 - 짝 프런트(react-skeleton): 항목 `app-sample` · 조각 `--with-sample`

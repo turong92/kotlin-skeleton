@@ -16,6 +16,12 @@ interface ApiKeyStore {
     /** 이 주인의 키 전부(회수 · 만료 포함), 만든 순 최신이 먼저 */
     fun listByOwner(ownerType: String, ownerId: String): List<ApiKey>
 
+    /**
+     * 운영 목록 - 모든 주인의 키를 id 내림차순(발급이 새것인 순)으로 [limit] 개. [before] 는 이 id 보다 앞(옛것)만, [ownerId]·[status] 는 주어졌을 때만 거른다.
+     * 상태는 [now] 로 가른다(회수 > 만료 > 활성)
+     */
+    fun page(ownerId: String?, status: ApiKeyStatus?, before: String?, limit: Int, now: Instant): List<ApiKey>
+
     /** 회수되지 않았고 [now] 에 아직 만료되지 않은 키의 수 */
     fun countActive(ownerType: String, ownerId: String, now: Instant): Int
 

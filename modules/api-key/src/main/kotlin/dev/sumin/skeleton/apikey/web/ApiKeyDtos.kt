@@ -55,3 +55,29 @@ fun ApiKey.toResponse(now: Instant) = ApiKeyResponse(
 fun CreatedApiKey.toResponse(now: Instant) = CreatedApiKeyResponse(key.toResponse(now), token)
 
 fun DeclaredApiKeyScope.toResponse() = ApiKeyScopeResponse(key, module)
+
+/** 운영자가 보는 한 줄 - 내 목록의 필드에 주인 · 회수 사유가 더 있다. [ownerName] 은 `account.read` 도 가진 운영자에게만 온다. 토큰 · 해시는 없다 */
+data class AdminApiKeyResponse(
+    val id: String,
+    val ownerId: String,
+    val ownerName: String?,
+    val name: String,
+    val hint: String,
+    val scopes: List<String>,
+    val status: ApiKeyStatus,
+    val revokedBy: RevokedBy?,
+    val revokedReason: String?,
+    val createdAt: Instant,
+    val expiresAt: Instant?,
+    val lastUsedAt: Instant?,
+)
+
+data class OperatorRevokeRequest(@field:NotBlank @field:Size(max = 200) val reason: String?)
+
+fun ApiKey.toAdminResponse(now: Instant, ownerName: String?): AdminApiKeyResponse {
+    val row = toResponse(now)
+    return AdminApiKeyResponse(
+        id = id, ownerId = ownerId, ownerName = ownerName, name = name, hint = tokenHint, scopes = row.scopes, status = row.status,
+        revokedBy = row.revokedBy, revokedReason = revokedReason, createdAt = createdAt, expiresAt = expiresAt, lastUsedAt = lastUsedAt,
+    )
+}

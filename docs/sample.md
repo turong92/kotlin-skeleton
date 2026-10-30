@@ -16,6 +16,7 @@
 | 한 계정이 닉네임(작성자 프로필)을 여러 개 만들어 글 · 댓글마다 골라 쓰기 — 두 프로필이 같은 사람이라는 사실이 남에게 드러나지 않게 | `author-profile` + `author-profile-jdbc` + `skeleton.storage.web.key-owner=OPAQUE` (아래 "작성자 프로필") |
 | 돈 받기 · 환불하기 — 결제창 → 승인 → 내 결제 내역 → 환불 요청 → 운영자 환불 (샘플 상품은 「응원하기」) | `payment-jdbc`(결제 장부 + `payment`) + `payment-toss`(결제사, 꺼진 채 시작) + 이 앱의 `cheer/` (아래 "결제 — 응원하기") |
 | 팀 · 조직 — 워크스페이스 만들기 · 역할 · 메일 링크 초대 · 팀 단위 데이터 · 구독이 정하는 좌석 | `workspace` + `workspace-jdbc` + 이 앱의 `workspace/` · `notes/` (아래 "워크스페이스") |
+| 서버끼리 부르는 API 키 — 사용자가 범위 · 만료를 골라 발급(다시 인증)하고, 키로는 표시한 노트 경로만 닿는다 | `api-key` + `api-key-jdbc` + 이 앱의 `notes/NoteApiKeyScopes` (아래 "API 키") |
 | DB · 마이그레이션 · 시간 | `persistence-jdbc` · `db-postgresql` · `migration-flyway` · `time` |
 
 ## 엔드포인트
@@ -258,6 +259,19 @@ APP=sample scripts/dev.sh    # 백엔드(+프론트 WEB_DIR)만 같은 방식으
 8. **잡** — `…/NoteExportJobHandler.kt`(`JobHandler`, 멱등) + `NoteService.startExport`(같은 트랜잭션에서 `JobQueue.enqueue`). 영구 실패는 `PermanentJobFailureException`.
 9. **설정** — `apps/sample/src/main/resources/application.yml`: 모듈 기본값과 다른 값만(잡 폴링 1s, 첨부 규칙). 로컬 S3 는 `application-local.yml`.
 10. **테스트** — `apps/sample/src/test/…/notes/`: `SampleIntegrationTest`(진짜 PostgreSQL · 보안 체인 · Flyway, 저장소만 메모리 `FakePresignedStorage`) 위에 `NoteCrudIntegrationTest` · `NoteListIntegrationTest` · `NoteOwnershipIntegrationTest` · `NoteNotificationIntegrationTest` · `NoteExportIntegrationTest`. 규칙마다 테스트를 먼저 썼다(빨강 → 초록).
+
+## API 키 (`/api/v1/api-keys`)
+
+두 줄(`api-key` · `api-key-jdbc`)과 이 앱의 작은 조각 `notes/NoteApiKeyScopes.kt`(범위 `notes.read` · `notes.write` 선언), `NoteController` 의 `@ApiKeyScope` 표시 여섯 줄이 전부다.
+키로 닿는 곳은 **표시한 곳뿐**이다(기본 거부): 읽기 `GET /api/v1/notes`(목록) · `…/summary` · `…/{id}` 는 `notes.read`, 만들기 · 고치기 · 지우기는 `notes.write`. 표시 없는 경로(내보내기 · 계정 · 결제 …)와 운영 경로는 키로 열리지 않는다(`403 API_KEY.NOT_ALLOWED`) - 열고 싶으면 그 핸들러에 `@ApiKeyScope` 한 줄을 단다.
+이 앱의 선택(`application.yml` 의 `skeleton.api-key`): 토큰 접두사 `notes`(`notes_…`) · 키 하나당 1분 60번 · 만료일 필수에 최대 365일 · 운영 경로 켬(`api-key.read` · `api-key.revoke` 는 기본 역할 없이 ADMIN 전권만).
+
+| 메서드 · 경로 | 하는 일 |
+|---|---|
+| `POST /api/v1/api-keys {name, scopes[], expiresAt, currentPassword}` · `GET` · `DELETE …/{id}` · `GET …/scopes` | 사용자 설정 화면의 발급(다시 인증) · 내 목록 · 회수 · 고를 수 있는 범위 |
+| `GET /api/v1/admin/api-keys?ownerId&status&cursor` · `POST …/{id}/revoke {reason}` | 운영 화면의 전체 목록 · 사유를 적는 회수(주인 목록엔 `revokedBy: OPERATOR`) |
+
+시험: `apikey/ApiKeyJourneyIntegrationTest`(키로 노트 읽기 200 · 쓰기 403 · 계정 403 → 회수 뒤 401, 운영자 회수 → 주인 목록 `OPERATOR`).
 
 ## 이 샘플이 하지 않는 것
 

@@ -10,6 +10,8 @@ import dev.sumin.skeleton.auth.principal.CurrentPrincipal
 import dev.sumin.skeleton.common.apikey.ApiKeyScope
 import dev.sumin.skeleton.common.apikey.ApiKeyScopeDeclaration
 import dev.sumin.skeleton.common.DataResponse
+import dev.sumin.skeleton.common.authz.OperatorAction
+import dev.sumin.skeleton.common.authz.OperatorAuditLog
 import dev.sumin.skeleton.common.Response
 import java.util.concurrent.CopyOnWriteArrayList
 import org.springframework.boot.autoconfigure.SpringBootApplication
@@ -36,6 +38,11 @@ class Events : AccountEventListener {
     override fun on(event: AccountEvent) { all += event }
 }
 
+class Audits : OperatorAuditLog {
+    val all = CopyOnWriteArrayList<OperatorAction>()
+    override fun record(action: OperatorAction) { all += action }
+}
+
 data class Who(val name: String, val roles: List<String>)
 
 /** 앱의 컨트롤러 흉내 - 읽기 · 쓰기에만 표시가 있고, 표시 없는 경로와 운영 경로는 키로 닿지 않아야 한다 */
@@ -57,6 +64,7 @@ class ApiKeyTestBeans {
     @Bean fun fakeApiKeyStore(): FakeApiKeyStore = FakeApiKeyStore()
     @Bean fun mails(): Mails = Mails()
     @Bean fun events(): Events = Events()
+    @Bean fun audits(): Audits = Audits()
     @Bean fun accountTaskRunner(): AccountTaskRunner = AccountTaskRunner.DIRECT
     @Bean fun probeController(): ProbeController = ProbeController()
     @Bean fun notesScopes(): ApiKeyScopeDeclaration = ApiKeyScopeDeclaration("notes", listOf("notes.read", "notes.write"))

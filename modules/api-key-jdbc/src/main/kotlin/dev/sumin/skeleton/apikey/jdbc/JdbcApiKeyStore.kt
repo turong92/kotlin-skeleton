@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.apikey.jdbc
 
 import dev.sumin.skeleton.apikey.ApiKey
+import dev.sumin.skeleton.apikey.ApiKeyStatus
 import dev.sumin.skeleton.apikey.ApiKeyStore
 import dev.sumin.skeleton.persistence.jdbc.SqlDialect
 import java.sql.ResultSet
@@ -47,6 +48,20 @@ class JdbcApiKeyStore(
             "select * from api_keys where owner_type = :t and owner_id = :o order by created_at desc, id desc",
             mapOf("t" to ownerType, "o" to ownerId),
         ) { rs, _ -> rs.toKey() }
+
+    override fun page(ownerId: String?, status: ApiKeyStatus?, before: String?, limit: Int, now: Instant): List<ApiKey> {
+        val byStatus = when (status) {
+            null -> ""
+            ApiKeyStatus.REVOKED -> " and revoked_at is not null"
+            ApiKeyStatus.EXPIRED -> " and revoked_at is null and expires_at is not null and expires_at <= :now"
+            ApiKeyStatus.ACTIVE -> " and revoked_at is null and (expires_at is null or expires_at > :now)"
+        }
+        return jdbc.query(
+            "select * from api_keys where (:owner_id is null or owner_id = :owner_id)$byStatus and (:before is null or id < :before) order by id desc limit :limit",
+            MapSqlParameterSource().addValue("owner_id", ownerId, Types.VARCHAR).addValue("before", before, Types.VARCHAR)
+                .addValue("now", instant(now)).addValue("limit", limit),
+        ) { rs, _ -> rs.toKey() }
+    }
 
     override fun countActive(ownerType: String, ownerId: String, now: Instant): Int =
         jdbc.queryForObject(

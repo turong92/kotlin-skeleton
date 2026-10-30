@@ -287,6 +287,13 @@ skeleton:
   reward:
     admin:
       enabled: true
+  api-key:
+    token-prefix: notes        # 이 앱의 선택: 토큰이 notes_… 로 시작해 비밀 검출 규칙을 걸 수 있다(모듈 기본 apk)
+    rate-limit:
+      capacity: 60             # 이 앱의 선택: 키 하나당 1분에 60번(모듈 기본은 꺼짐)
+    max-lifetime: 365d         # 이 앱의 선택: 만료일이 필수이고 1년을 넘을 수 없다(모듈 기본은 상한 없음)
+    admin:
+      enabled: true            # 이 앱의 선택: 운영 경로(전체 목록 · 사유를 적는 회수, 권한 api-key.read · api-key.revoke 는 기본 역할 없이 ADMIN 전권만)
   dashboard:
     admin:
       enabled: true   # 이 앱의 선택: 관리자 대시보드 API(/api/v1/admin/dashboard) 를 켠다 — 스켈레톤 기본은 꺼짐(404). 보려면 권한 dashboard.read (ADMIN 은 늘 가진다)

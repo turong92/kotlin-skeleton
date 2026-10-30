@@ -1,9 +1,11 @@
 package dev.sumin.skeleton.apikey
 
+import dev.sumin.skeleton.account.events.AccountEventPublisher
 import dev.sumin.skeleton.apikey.erasure.ApiKeyAccountErasureListener
 import dev.sumin.skeleton.auth.account.AuthAccountRepository
 import dev.sumin.skeleton.auth.security.BearerTokenAuthenticator
 import dev.sumin.skeleton.common.apikey.ApiKeyScopeDeclaration
+import dev.sumin.skeleton.common.authz.PermissionDeclaration
 import dev.sumin.skeleton.common.erasure.AccountErasureListener
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.common.web.ClientIps
@@ -41,7 +43,15 @@ class ApiKeyAutoConfiguration {
         properties: ApiKeyProperties,
         time: ObjectProvider<TimeProvider>,
         tokens: ApiKeyTokens,
-    ): ApiKeys = ApiKeys(store, scopes, { policies.orderedStream().toList() }, properties, time.getIfAvailable { TimeProvider.systemUtc() }, tokens)
+        events: ObjectProvider<AccountEventPublisher>,
+    ): ApiKeys = ApiKeys(
+        store, scopes, { policies.orderedStream().toList() }, properties, time.getIfAvailable { TimeProvider.systemUtc() }, tokens,
+        events = events.getIfAvailable { AccountEventPublisher.NONE },
+    )
+
+    @Bean
+    @ConditionalOnMissingBean(name = ["apiKeyPermissionDeclaration"])
+    fun apiKeyPermissionDeclaration(): PermissionDeclaration = ApiKeyPermissions.declaration
 
     @Bean
     @ConditionalOnMissingBean(name = ["apiKeyAuthenticator"])

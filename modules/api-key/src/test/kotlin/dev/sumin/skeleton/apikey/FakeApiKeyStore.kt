@@ -22,6 +22,10 @@ class FakeApiKeyStore : ApiKeyStore {
     @Synchronized override fun listByOwner(ownerType: String, ownerId: String): List<ApiKey> =
         rows.values.filter { it.ownerType == ownerType && it.ownerId == ownerId }.sortedWith(compareByDescending<ApiKey> { it.createdAt }.thenByDescending { it.id })
 
+    @Synchronized override fun page(ownerId: String?, status: ApiKeyStatus?, before: String?, limit: Int, now: Instant): List<ApiKey> =
+        rows.values.filter { (ownerId == null || it.ownerId == ownerId) && (status == null || it.status(now) == status) && (before == null || it.id < before) }
+            .sortedByDescending { it.id }.take(limit)
+
     @Synchronized override fun countActive(ownerType: String, ownerId: String, now: Instant): Int =
         rows.values.count { it.ownerType == ownerType && it.ownerId == ownerId && it.revokedAt == null && (it.expiresAt == null || it.expiresAt.isAfter(now)) }
 

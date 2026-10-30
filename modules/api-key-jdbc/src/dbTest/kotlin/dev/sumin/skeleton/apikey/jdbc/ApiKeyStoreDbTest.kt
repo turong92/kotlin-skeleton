@@ -97,4 +97,23 @@ class ApiKeyStoreDbTest {
         assertEquals(0, store.deleteByOwner("ACCOUNT", owner))
         assertEquals(listOf("key_${seq}_14"), store.listByOwner("ACCOUNT", other).map { it.id })
     }
+
+    @Test
+    fun `the operator page is id-descending with a cursor, and filters by owner and status the same on both dialects`() {
+        val owner = "acc_${seq}_4"
+        val other = "acc_${seq}_5"
+        store.insert(key(20, owner)); store.insert(key(21, owner, expiresAt = t0.plusSeconds(5))); store.insert(key(22, owner)); store.insert(key(23, other)); store.insert(key(24, owner))
+        store.revoke("key_${seq}_22", "op", "leaked", t0.plusSeconds(9))
+        val now = t0.plusSeconds(50)
+        fun ids(status: dev.sumin.skeleton.apikey.ApiKeyStatus? = null, before: String? = null, limit: Int = 10) =
+            store.page(owner, status, before, limit, now).map { it.id.substringAfterLast('_').toInt() }
+
+        assertEquals(listOf(24, 22, 21, 20), ids())
+        assertEquals(listOf(24, 22), ids(limit = 2))
+        assertEquals(listOf(21, 20), ids(before = "key_${seq}_22"))
+        assertEquals(listOf(22), ids(dev.sumin.skeleton.apikey.ApiKeyStatus.REVOKED))
+        assertEquals(listOf(21), ids(dev.sumin.skeleton.apikey.ApiKeyStatus.EXPIRED))
+        assertEquals(listOf(24, 20), ids(dev.sumin.skeleton.apikey.ApiKeyStatus.ACTIVE))
+        assertTrue(store.page(null, null, null, 100, now).map { it.id }.containsAll(listOf("key_${seq}_23", "key_${seq}_24")), "no owner filter reads all owners")
+    }
 }

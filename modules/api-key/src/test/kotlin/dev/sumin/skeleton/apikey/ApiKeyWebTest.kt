@@ -7,6 +7,7 @@ import com.jayway.jsonpath.JsonPath
 import dev.sumin.skeleton.account.AccountPatch
 import dev.sumin.skeleton.account.AccountRepository
 import dev.sumin.skeleton.account.AccountStatus
+import dev.sumin.skeleton.account.events.AccountEventType
 import dev.sumin.skeleton.apikeytest.ApiKeyTestApplication
 import dev.sumin.skeleton.apikeytest.ApiKeyTestBeans
 import dev.sumin.skeleton.apikeytest.Events
@@ -215,6 +216,21 @@ class ApiKeyWebTest {
 
         assertEquals(0, store.all().count { it.ownerId == gone.id })
         assertEquals(1, store.all().count { it.ownerId == stays.id })
+    }
+
+    @Test
+    fun `issuing and revoking one's own key publish account events with the key id and who, and the operator paths are 404 while admin is off`() {
+        val user = signUp()
+        val (id, _) = issue(user)
+        mvc.perform(delete("/api/v1/api-keys/$id").header("Authorization", user.bearer)).andExpect(status().isNoContent)
+        mvc.perform(delete("/api/v1/api-keys/$id").header("Authorization", user.bearer)).andExpect(status().isNoContent)
+
+        val mine = events.all.filter { it.detail["keyId"] == id }
+        assertEquals(listOf(AccountEventType.API_KEY_CREATED, AccountEventType.API_KEY_REVOKED), mine.map { it.type })
+        assertTrue(mine.all { it.accountId == user.id && it.detail["by"] == user.id })
+
+        mvc.perform(get("/api/v1/admin/api-keys").header("Authorization", user.bearer)).andExpect(status().isNotFound)
+        mvc.perform(post("/api/v1/admin/api-keys/$id/revoke").header("Authorization", user.bearer).contentType(MediaType.APPLICATION_JSON).content("""{"reason":"x"}""")).andExpect(status().isNotFound)
     }
 
     @Test

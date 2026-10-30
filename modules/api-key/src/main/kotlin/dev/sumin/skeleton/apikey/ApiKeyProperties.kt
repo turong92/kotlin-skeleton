@@ -15,6 +15,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties
  *       window: 1m
  *     http:
  *       enabled: true            # false 면 사용자 경로(발급 · 목록 · 회수 · 범위 목록)를 닫는다
+ *     admin:
+ *       enabled: false           # true 면 운영자 경로(전체 목록 · 운영 회수) - 권한 api-key.read · api-key.revoke
  * ```
  */
 @ConfigurationProperties("skeleton.api-key")
@@ -24,6 +26,7 @@ data class ApiKeyProperties(
     val maxLifetime: Duration? = null,
     val rateLimit: RateLimit = RateLimit(),
     val http: Http = Http(),
+    val admin: Admin = Admin(),
 ) {
     init {
         require(PREFIX.matches(tokenPrefix)) { "skeleton.api-key.token-prefix must match ${PREFIX.pattern}: $tokenPrefix" }
@@ -46,6 +49,12 @@ data class ApiKeyProperties(
         /** `GET · POST /api/v1/api-keys` · `DELETE …/{id}` · `GET …/scopes` */
         val enabled: Boolean = true,
         val basePath: String = "/api/v1/api-keys",
+    )
+
+    data class Admin(
+        /** 운영자 경로 `GET /admin/api-keys` · `POST /admin/api-keys/{id}/revoke` - 모듈 기본은 꺼짐(404). 권한 `api-key.read` · `api-key.revoke` */
+        val enabled: Boolean = false,
+        val basePath: String = "/api/v1/admin/api-keys",
     )
 
     companion object {

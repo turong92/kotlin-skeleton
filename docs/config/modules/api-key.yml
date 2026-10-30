@@ -10,3 +10,6 @@ skeleton:
     http:
       enabled: true                # false 면 사용자 경로(발급 · 목록 · 회수 · 범위 목록)를 닫는다. 요청 인증과 접근 인터셉터는 그대로 돈다
       base-path: /api/v1/api-keys
+    admin:
+      enabled: false               # true 면 운영자 경로(GET /api/v1/admin/api-keys · POST …/{id}/revoke). 모듈 기본은 꺼짐(404). 권한 api-key.read · api-key.revoke
+      base-path: /api/v1/admin/api-keys
