@@ -281,13 +281,16 @@ class MultiInstanceDbTest {
     }
 
     private companion object {
-        const val ROUNDS = 30
-        const val ROUNDS_RARE = 50
-        const val WEBHOOK_ROUNDS = 25
-        const val ROUNDS_LIMIT = 20
+        // 라운드 수: 로컬 · push CI 는 1/5(최소 3), nightly 는 `-Dskeleton.test.stress=full` 로 전부 (build.gradle.kts 가 시험 JVM 에 넘긴다)
+        private val full = System.getProperty("skeleton.test.stress") == "full"
+        private fun rounds(n: Int) = if (full) n else maxOf(3, n / 5)
+        val ROUNDS = rounds(30)
+        val ROUNDS_RARE = rounds(50)
+        val WEBHOOK_ROUNDS = rounds(25)
+        val ROUNDS_LIMIT = rounds(20)
         const val PER_INSTANCE = 6
         const val KEYS_PER_THREAD = 5
-        const val WORKER_ROUNDS = 15
+        val WORKER_ROUNDS = rounds(15)
         const val TASKS = 60
     }
 }

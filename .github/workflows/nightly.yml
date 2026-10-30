@@ -23,7 +23,7 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
       - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew build -x newProjectChecks   # --quick 은 compositions 잡의 test-new-project.sh --full 이 이미 돈다
+      - run: ./gradlew build -x newProjectChecks -Dskeleton.test.stress=full   # --quick 은 compositions 잡의 test-new-project.sh --full 이 이미 돈다
 
   jooq-mysql:
     runs-on: ubuntu-latest
