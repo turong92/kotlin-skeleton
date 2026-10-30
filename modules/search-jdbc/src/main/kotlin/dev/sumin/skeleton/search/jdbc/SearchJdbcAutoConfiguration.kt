@@ -23,7 +23,7 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
 import org.springframework.transaction.PlatformTransactionManager
 
 /**
- * 검색 엔진([SearchEngine])과 재색인([SearchRebuilds])을 JDBC(PostgreSQL · MySQL)로 구현한다. 스키마는 모듈 마이그레이션 `db/migration/<vendor>/V20261030050000__search.sql` 을
+ * 검색 엔진([SearchEngine])과 재색인([SearchRebuilds])을 JDBC(PostgreSQL · MySQL)로 구현한다. 스키마는 모듈 마이그레이션 `db/migration/<vendor>/V20261030150000__search.sql` 을
  * 앱의 `spring.flyway.locations=classpath:db/migration/{vendor}` 가 고른다.
  *
  * **이 클래스의 이름(`dev.sumin.skeleton.search.jdbc.SearchJdbcAutoConfiguration`)을 `search` 의 `SearchAutoConfiguration` 이 문자열로 가리킨다** - 그쪽은 엔진 빈이 있어야 켜진다.

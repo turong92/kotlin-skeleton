@@ -14,7 +14,7 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
 import org.springframework.transaction.PlatformTransactionManager
 
 /**
- * 리뷰 저장([ReviewStore])을 JDBC(PostgreSQL · MySQL)로 구현한다. 스키마는 모듈 마이그레이션 `db/migration/<vendor>/V20261030100000__reviews.sql` 을
+ * 리뷰 저장([ReviewStore])을 JDBC(PostgreSQL · MySQL)로 구현한다. 스키마는 모듈 마이그레이션 `db/migration/<vendor>/V20261030150100__reviews.sql` 을
  * 앱의 `spring.flyway.locations=classpath:db/migration/{vendor}` 가 고른다.
  *
  * **이 클래스의 이름(`dev.sumin.skeleton.review.jdbc.ReviewJdbcAutoConfiguration`)을 `review` 의 `ReviewAutoConfiguration` 이 문자열로 가리킨다** - 그쪽은 저장소 빈이 있어야 켜진다.
