@@ -19,10 +19,11 @@ import java.util.Base64
  * - [releaseDue]: 보류 기한이 지난 관계에 초대자 보상을 준다(그리고 30일 지난 네트워크 값을 지운다). `scheduler` 가 있으면 주기 작업이 부르고, 없으면 **보류를 안 써도** 앱이 주기적으로 불러야 네트워크 값이 지워진다.
  */
 interface Referrals {
-    fun qualify(inviteeId: String, event: String?)
+    /** 이 호출이 관계를 신호 대기(`CLAIMED`)에서 움직였으면 `true` - 앱이 「자격을 만든 그 주문」을 기억하는 데 쓴다. 이미 판정됐거나 먹지 않은 신호는 `false` */
+    fun qualify(inviteeId: String, event: String?): Boolean
 
     /** 이름 없는 신호 - `qualifyEvent` 를 정하지 않은 이벤트에서만 먹는다 */
-    fun qualify(inviteeId: String) = qualify(inviteeId, null)
+    fun qualify(inviteeId: String): Boolean = qualify(inviteeId, null)
 
     fun cancel(inviteeId: String, reason: String): Boolean
 
@@ -122,20 +123,20 @@ class ReferralService(
         }
     }
 
-    override fun qualify(inviteeId: String, event: String?) {
-        store.inTransaction {
-            val first = store.referralOfInvitee(inviteeId) ?: return@inTransaction
-            if (first.status != ReferralStatus.CLAIMED || AccountTombstone.isTombstone(first.inviterId)) return@inTransaction   // 탈퇴한 초대자에게는 줄 곳이 없다
-            val config = ReferralConfig.parse((store.find(first.campaignId) ?: return@inTransaction).config)
-            if (config.qualifyEvent != null && config.qualifyEvent != event) return@inTransaction   // 이벤트가 고른 신호만 먹는다
+    override fun qualify(inviteeId: String, event: String?): Boolean {
+        return store.inTransaction {
+            val first = store.referralOfInvitee(inviteeId) ?: return@inTransaction false
+            if (first.status != ReferralStatus.CLAIMED || AccountTombstone.isTombstone(first.inviterId)) return@inTransaction false   // 탈퇴한 초대자에게는 줄 곳이 없다
+            val config = ReferralConfig.parse((store.find(first.campaignId) ?: return@inTransaction false).config)
+            if (config.qualifyEvent != null && config.qualifyEvent != event) return@inTransaction false   // 이벤트가 고른 신호만 먹는다
             store.lockAccounts(listOf(first.inviterId))   // 같은 초대자의 상한 판정을 직렬화한다
-            val referral = store.referralOfInvitee(inviteeId, lock = true) ?: return@inTransaction
-            if (referral.status != ReferralStatus.CLAIMED) return@inTransaction
+            val referral = store.referralOfInvitee(inviteeId, lock = true) ?: return@inTransaction false
+            if (referral.status != ReferralStatus.CLAIMED) return@inTransaction false
             val now = time.now()
             val verdict = judge(referral.inviterId, referral.campaignId, config, referral.flags, now)
-            if (store.transitionReferral(inviteeId, setOf(ReferralStatus.CLAIMED), verdict.status, now, releaseAt = verdict.releaseAt, qualifyEvent = event) && verdict.status == ReferralStatus.QUALIFIED) {
-                record(referral.inviterId, config.inviter, referral.campaignId, inviteeId, "inviter")
-            }
+            val moved = store.transitionReferral(inviteeId, setOf(ReferralStatus.CLAIMED), verdict.status, now, releaseAt = verdict.releaseAt, qualifyEvent = event)
+            if (moved && verdict.status == ReferralStatus.QUALIFIED) record(referral.inviterId, config.inviter, referral.campaignId, inviteeId, "inviter")
+            moved
         }
     }
 

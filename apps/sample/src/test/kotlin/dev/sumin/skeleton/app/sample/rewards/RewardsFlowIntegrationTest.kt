@@ -148,6 +148,25 @@ class RewardsFlowIntegrationTest : CheerIntegrationBase() {
     }
 
     @Test
+    fun `refunding a later order keeps the hold, and only a full refund of the order that opened it ends it`() {
+        val invitee = invitedStranger()
+        val first = buy(stranger)
+        val second = buy(stranger)
+        assertEquals("HELD", referralStatus(invitee))
+
+        fun refund(orderId: String) {
+            val id = read(post("$PAYMENTS/orders/$orderId/refund-requests", stranger, """{"reasonCode":"CUSTOMER_REQUEST"}""", UUID.randomUUID().toString()).andExpect { status { isCreated() } }, "$.value.id")
+            post("$ADMIN/refunds/$id/approve", operator).andExpect { status { isOk() } }
+        }
+        refund(second)
+        await { jdbc.sql("select status from cheers where order_id = :o").param("o", second).query(String::class.java).single().takeIf { it == "REFUNDED" } }
+        assertEquals("HELD", referralStatus(invitee), "refunding another order leaves the hold alone")
+
+        refund(first)
+        await { referralStatus(invitee).takeIf { it == "CANCELED" } }
+    }
+
+    @Test
     fun `an inviter at the cap of 10 gets nothing for the 11th friend - the hold counts toward the cap`() {
         val campaignId = jdbc.sql("select id from campaigns where name = :n").param("n", RewardsSeed.REFERRAL).query(String::class.java).single()
         repeat(10) {

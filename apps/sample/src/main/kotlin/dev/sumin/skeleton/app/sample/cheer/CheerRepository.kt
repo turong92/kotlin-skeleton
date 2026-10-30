@@ -61,6 +61,12 @@ class CheerRepository(private val jdbc: JdbcClient, private val dialect: SqlDial
             .param("order_id", orderId)
             .update()
 
+    /** 이 주문이 친구초대의 초대자 보상 자격을 만들었다고 표시한다 - 멱등 */
+    fun markOpenedReferral(orderId: String): Int = jdbc.sql("update cheers set opened_referral = true where order_id = :order_id").param("order_id", orderId).update()
+
+    fun openedReferral(orderId: String): Boolean =
+        jdbc.sql("select opened_referral from cheers where order_id = :order_id").param("order_id", orderId).query(Boolean::class.java).optional().orElse(false)
+
     /** 내 응원 내역, 최신순(시각, 같으면 주문 id 가 큰 쪽). [limit] 줄까지. */
     fun listByAccount(accountId: String, before: CheerCursor?, limit: Int): List<Cheer> {
         val cursorClause = if (before == null) "" else "and (created_at < :c_at or (created_at = :c_at and order_id < :c_id))"

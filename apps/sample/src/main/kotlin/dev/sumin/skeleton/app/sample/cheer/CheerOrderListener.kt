@@ -31,7 +31,7 @@ class CheerOrderListener(private val cheers: CheerRepository, private val referr
         )
         // 첫 응원 결제가 친구초대의 초대자 보상(`qualifyOn: SIGNAL`, 신호 이름 `first-payment`)을 연다 - 몇 번 불러도 한 번만 먹는다. 돈이 오간 주문만: 쿠폰으로 0원이 된 주문 · 결제 면제 주문은 「결제」가 아니다.
         // (같은 트랜잭션 안에서 지급 건 줄과 작업만 넣는다 - 외부 호출이 아니다)
-        if (order.settlement == PaymentSettlement.PROVIDER) referrals.qualify(order.accountId, FIRST_PAYMENT)
+        if (order.settlement == PaymentSettlement.PROVIDER && referrals.qualify(order.accountId, FIRST_PAYMENT)) cheers.markOpenedReferral(order.id)
     }
 
     /**
@@ -41,8 +41,8 @@ class CheerOrderListener(private val cheers: CheerRepository, private val referr
         if (order.itemType != CheerCatalog.ITEM_TYPE) return
         val full = order.status == PaymentOrderStatus.REFUNDED || order.refundedAmount >= order.amount.amount
         cheers.applyRefund(order.id, order.refundedAmount, full, refund.completedAt ?: order.updatedAt)
-        // 보류(HELD) · 운영자 확인(REVIEW) 중인 초대 보상만 거둔다 - 신호 전(CLAIMED)이거나 이미 지급한 관계는 건드리지 않는다(false). 신호 전 환불이 관계를 끊으면 진짜 첫 결제 뒤에도 보상이 안 나간다
-        referrals.cancelPending(order.accountId, "refunded")
+        // 초대자 보상이 보류(HELD) · 운영자 확인(REVIEW) 중이면, 자격을 만든 그 첫 결제가 **전액** 환불될 때만 거둔다 - 다른 주문의 환불 · 일부 환불은 건드리지 않는다(보류 기간이 회수를 대신한다)
+        if (full && cheers.openedReferral(order.id)) referrals.cancelPending(order.accountId, "refunded")
     }
 
     private companion object {

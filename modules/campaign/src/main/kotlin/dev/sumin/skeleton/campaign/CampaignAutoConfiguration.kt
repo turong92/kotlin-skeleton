@@ -98,11 +98,11 @@ class CampaignAutoConfiguration {
     @Bean
     @ConditionalOnBean(Campaigns::class)
     @ConditionalOnMissingBean(name = ["campaignDeployGuard"])
-    fun campaignDeployGuard(campaigns: Campaigns, clientIps: ObjectProvider<ClientIps>): DeployGuard =
+    fun campaignDeployGuard(campaigns: Campaigns, clientIps: ObjectProvider<ClientIps>, environment: Environment): DeployGuard =
         ReferralDeployGuard(
             { campaigns.active() },
             { clientIps.getIfAvailable { ClientIps() }.configured },
-            { runCatching { Class.forName("dev.sumin.skeleton.scheduler.SkeletonScheduled") }.isSuccess },
+            { runCatching { Class.forName("dev.sumin.skeleton.scheduler.SkeletonScheduled") }.isSuccess && environment.getProperty("skeleton.scheduler.enabled", Boolean::class.java, true) },
         )
 
     /** 앱이 수치를 보고하는 서버 API - 브라우저가 수치를 보고하면 안 되므로 HTTP 경로는 없다 */
