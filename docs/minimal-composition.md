@@ -100,6 +100,7 @@ fails when this table and the prefixes found in module code differ.
 | `alert` | wired (logs only); sends nothing until `skeleton.alert.webhook-url` is set | nothing | a Discord-compatible webhook URL, internet |
 | `alert-jdbc` | yes | a `DataSource` + one `db-*` module (+ its migration, as above) | — |
 | `account` | `skeleton.account` |
+| `api-key` | `skeleton.api-key` |
 | `auth` | `skeleton.auth` |
 | `auth-magic-link` | `skeleton.auth-magic-link` |
 | `auth-session` | `skeleton.auth-session` |

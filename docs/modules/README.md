@@ -71,6 +71,8 @@
 | `campaign-jdbc` | 이벤트 · 출석 · 초대 저장을 DB 에 | [campaign-jdbc](campaign-jdbc.md) |
 | `reward` | 보상 지급의 허리 — 이벤트가 기록한 지급 건을 일꾼이 쿠폰 · 포인트 지급기로 주고 받았어요 알림까지 | [reward](reward.md) |
 | `reward-jdbc` | 지급 건 저장 · 작업을 DB 에 두고 일꾼을 job-queue 에 얹기 | [reward-jdbc](reward-jdbc.md) |
+| `api-key` | API 키 — 발급(다시 인증) · 범위(표시한 경로만, 기본 거부) · 만료 · 회수 · 키별 한도 · 요청 인증 | [api-key](api-key.md) |
+| `api-key-jdbc` | API 키 저장을 DB 에 두기 (해시만 저장) | [api-key-jdbc](api-key-jdbc.md) |
 | `badge` | 배지 — 정의 · 수여/회수 · 내 배지 · 비로그인 공개 프로필 배지 · 보상 지급기 (포인트 · 쿠폰을 모른다) | [badge](badge.md) |
 | `badge-jdbc` | 배지 저장을 DB 에 두기 (정의 · 보유 · 수여/회수 내역) | [badge-jdbc](badge-jdbc.md) |
 | `workspace` | 워크스페이스(팀) — 만들기 · 역할(소유자 · 관리자 · 멤버) · slug · 멤버 관리 · 소유권 이전 · 요청 경계 `CurrentWorkspace` | [workspace](workspace.md) |

@@ -268,6 +268,74 @@
       }
     },
     {
+      "id": "api-key",
+      "kind": "module",
+      "module": "api-key",
+      "path": "modules/api-key",
+      "status": "experimental",
+      "summary": "API 키(B2B 호출자용 장기 자격) — 사용자가 이름 · 범위 · 만료를 골라 발급(다시 인증)하고 본인이 회수하며, 키로 온 요청은 `@ApiKeyScope` 로 표시한 경로에 한해(기본 거부) 주인 계정으로 움직인다. 키별 한도 · 활성 키 상한 · 만료 상한은 앱이 정한다. 저장은 해시뿐.",
+      "starter": false,
+      "newProjectFlag": "--modules api-key,api-key-jdbc",
+      "autoIncludes": [],
+      "needs": {
+        "requires": ["api-key-jdbc"],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": ["skeleton.api-key"],
+        "snippet": "docs/config/modules/api-key.yml"
+      },
+      "basePaths": ["/api/v1/api-keys"],
+      "secrets": [],
+      "docs": ["docs/modules/api-key.md"],
+      "frontend": null,
+      "notFor": [
+        "api-key 는 저장소를 모른다 — api-key-jdbc 를 같이 고른다",
+        "사람의 로그인(JWT)을 대신하지 않는다 — 키는 서버끼리의 호출용이고 운영 경로(역할)에는 닿지 않는다",
+        "경로에 `@ApiKeyScope` 표시를 달지 않으면 키로 열리지 않는다 — 앱이 열 경로마다 표시 한 줄을 단다",
+        "OAuth 서버(클라이언트 자격 증명 흐름) · 서명 요청(HMAC)이 아니다",
+        "운영자 목록 · 운영 회수는 아직 없다 — 다음 조각"
+      ],
+      "keywords": {
+        "ko": ["API 키", "액세스 토큰", "개인 액세스 토큰", "B2B API", "키 발급", "범위", "키 회수"],
+        "en": [
+          "api key",
+          "personal access token",
+          "scoped key",
+          "api token",
+          "key revocation",
+          "per-key rate limit"
+        ]
+      }
+    },
+    {
+      "id": "api-key-jdbc",
+      "kind": "module",
+      "module": "api-key-jdbc",
+      "path": "modules/api-key-jdbc",
+      "status": "experimental",
+      "summary": "API 키를 DB 에 둔다 (PostgreSQL · MySQL) — 토큰 해시만 저장하고, 회수 · 마지막 사용(1분 해상도)은 한 문장의 조건부 갱신이라 동시에 몰려도 한 번만 쓴다.",
+      "starter": false,
+      "newProjectFlag": "--modules api-key-jdbc",
+      "autoIncludes": ["api-key"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/api-key-jdbc.md"],
+      "frontend": null,
+      "notFor": ["DataSource · db-* 모듈과 이 모듈의 마이그레이션이 적용된 스키마가 필요하다"],
+      "keywords": {
+        "ko": ["API 키 저장소", "API 키 DB"],
+        "en": ["api key storage", "api key repository"]
+      }
+    },
+    {
       "id": "async",
       "kind": "module",
       "module": "async",
@@ -3315,6 +3383,8 @@
       "newProjectFlag": "--with-workbench",
       "autoIncludes": [
         "alert-jdbc",
+        "api-key",
+        "api-key-jdbc",
         "async",
         "async-notification",
         "auth-magic-link",

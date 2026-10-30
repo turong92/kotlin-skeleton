@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `account`: `AccountRepository.findByIds`(기본은 하나씩, `JdbcAccountRepository` 는 `where id in (…)` 덩어리 질의, 메모리 구현도 재정의). `RepositoryAccountLabels` 가 이걸 한 번만 불러, 쿠폰 운영 목록 · 배지 수여 내역의 계정 이름 조회가 쪽마다 N+1 이던 것이 질의 한 번이 된다. 동작은 그대로.
 
+### API 키 (2026-10-31)
+
+- `api-key` + `api-key-jdbc` (새 모듈): B2B 호출자용 API 키. 사용자 경로 `GET · POST /api/v1/api-keys`(발급은 **다시 인증**, 선언된 범위만, 만료 선택, 토큰은 발급 응답에만 `no-store`) · `DELETE …/{id}`(본인 회수, 남의 키 404) · `GET …/scopes`. 토큰은 `<접두사>_<base62 32자>`(모듈 기본 접두사 `apk`), 저장은 SHA-256 해시뿐. 키로 온 요청(`Authorization: Bearer`)은 주인 계정에 **역할을 비운** 주체로 움직이고, 처리기에 `@ApiKeyScope` 표시가 있고 키가 그 범위를 가질 때만 닿는다(**기본 거부** - 표시 없음 `API_KEY.NOT_ALLOWED` · 범위 없음 `API_KEY.SCOPE_MISSING`). 모르는 키 · 만료 · 회수는 401 `API_KEY.INVALID`/`EXPIRED`/`REVOKED`, 주인이 막히면 403 `API_KEY.OWNER_BLOCKED`. 모듈 기본: 활성 키 10개 상한 · 키별 한도 꺼짐 · 만료 상한 없음(`skeleton.api-key.rate-limit.capacity` · `max-lifetime` 은 앱이 켠다). `last_used_at` 은 1분 해상도 조건부 UPDATE, 탈퇴 때 그 계정의 키를 지운다. 소유자 종류의 확장점 `ApiKeyOwnerPolicy`(1차 `ACCOUNT` 본인만). 마이그레이션 `V20261031100000__api_keys`. 문서 `docs/modules/api-key.md`. 운영자 경로(목록 · 회수)와 `API_KEY_*` 계정 이벤트는 다음 조각.
+- `platform`: `@ApiKeyScope` · `ApiKeyScopeDeclaration` - 앱 · 모듈이 `api-key` 에 의존하지 않고 「키로 열 경로와 범위」를 선언한다(`PermissionDeclaration` 처럼). `api-key` 가 없으면 아무 일도 안 한다.
+- `auth`: `BearerTokenAuthenticator` 고리 - `JwtAuthenticationFilter` 가 Bearer 를 JWT 로 읽기 전에 등록된 빈들에게 먼저 묻는다(거절은 `BearerTokenRejectedException` 의 에러 코드 · 상태로 응답). 빈이 없으면 필터의 동작은 이전과 같다.
+- `apps/workbench`: `api-key-jdbc` 를 클래스패스에 추가(설정 스니펫 · 모듈 목록 시험), 자동설정은 `application.yml` 에서 꺼 둔다(account 위에 얹힌 모듈).
+
 ### 워크스페이스 (팀 · 조직) (2026-10-30)
 
 - `platform` + `account`: `AccountFacts.verifiedEmail(accountId)`(기본 null — 기존 구현은 안 깨진다, `account` 가 확인된 이메일을 준다) · 계약 `AccountDeletionCheck`/`DeletionBlocker`(삭제를 막는 이유를 모듈이 `account` 를 모르고 내놓는 자리). 계정 삭제 요청은 이것을 모아 하나라도 있으면 `409 ACCOUNT.DELETION_BLOCKED`(`data.blockers: [{module, code, refs}]`, 재인증을 묻기 전에 답한다). 구현이 없으면 동작은 그대로다.

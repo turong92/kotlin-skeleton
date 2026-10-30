@@ -81,6 +81,8 @@
 - account-jdbc: account 의 저장소 · 토큰 · 감사 기록을 PostgreSQL… [계정 저장, 계정 DB]
 - alert: 주인 경보 — 5xx 몰림 · 기동 실패 · 죽은 작업을 Discord… [경보, 주인 알림]
 - alert-jdbc: 경보 기록을 DB 에 두어 여러 인스턴스 · 재시작을 가로질러 같은… [경보 기록, 경보 중복 접기]
+- api-key: API 키(B2B 호출자용 장기 자격) [API 키, 액세스 토큰]
+- api-key-jdbc: API 키를 DB 에 둔다 (PostgreSQL · MySQL) [API 키 저장소, API 키 DB]
 - async: @Async · CompletableFuture 작업이 호출 스레드의… [비동기, 백그라운드 작업]
 - async-notification: 비동기 작업에서 처리되지 않은 예외를 알림(notification)으로… [비동기 예외 알림, 백그라운드 오류 알림]
 - auth: 로그인 — 비밀번호 로그인 · JWT 발급/검증 · 로컬… [로그인, 로그아웃]

@@ -1,0 +1,12 @@
+# api-key — B2B 용 API 키(발급 · 범위 · 만료 · 회수 · 요청 인증 · 키별 한도). 저장은 api-key-jdbc.
+skeleton:
+  api-key:
+    token-prefix: apk              # 토큰은 <접두사>_<무작위 32자>. 소문자로 시작하는 2~16자 - 앱마다 달리해 비밀 검출 규칙을 걸 수 있다
+    max-active-per-owner: 10       # 주인 하나의 활성 키 상한(자원 보호). 넘으면 409 API_KEY.LIMIT_REACHED
+    # max-lifetime: 365d           # 비면 만료 상한 없음(모듈 기본). 주면 만료일이 필수이고 이 기간을 넘을 수 없다(400 API_KEY.EXPIRES_INVALID)
+    rate-limit:
+      capacity: 0                  # 0 = 끔(모듈 기본). 키마다 window 안에 이 횟수까지, 넘으면 429 API_KEY.RATE_LIMITED
+      window: 1m
+    http:
+      enabled: true                # false 면 사용자 경로(발급 · 목록 · 회수 · 범위 목록)를 닫는다. 요청 인증과 접근 인터셉터는 그대로 돈다
+      base-path: /api/v1/api-keys
