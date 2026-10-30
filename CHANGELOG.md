@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 시험 묶음 `ModuleDocumentationTest` 의 알려진 프론트 패키지에 `@skeleton/reviews` · `@skeleton/search` 추가.
 
 - 견본 앱(`apps/sample`): `review-jdbc` 조립 - 상품 리뷰를 산 사람만 쓴다(`require-purchase`), 비로그인 읽기, 사진 5장, 운영 켬. `ReviewTargets` = 카탈로그 상품 코드 · `PaymentOrderListener` 를 `orders/SampleOrderListener` 하나로 정리해 응원 기록과 리뷰 구매 신호(구독 · 단건 주문의 가격 코드 → 상품, 전액 환불이면 취소)를 부른다 · `ReviewRewards`(`reviews.written` → 업적) · 씨앗 `ReviewsSeed`(`acc_user` 의 `product:basic` 구매 · 배지 「첫 리뷰」 · 1 → 100포인트) · 사진 키 소유 정책. 문서 `docs/sample.md` 「리뷰 · 평점」.
+- `platform`: `skeleton.web.rate-limit.path-patterns`(경로 패턴 **목록**, 기본 비어 있음) 추가 - 있으면 `path-pattern` 을 대신하고, 비어 있으면 지금까지처럼 단일 `path-pattern` 그대로다(하위 호환). 목록의 경로는 한 클라이언트(IP)가 한 카운터를 나눠 쓴다. 견본 앱은 배지 프로필 경로와 리뷰 공개 읽기 셋을 함께 건다.
 
 ### 검색 연동: 상품 · 견본 노트 (2026-10-30)
 

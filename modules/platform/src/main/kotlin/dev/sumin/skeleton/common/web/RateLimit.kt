@@ -129,14 +129,14 @@ class RateLimitFilter(
     private val objectMapper: ObjectMapper,
     private val clock: Clock = Clock.systemUTC(),
 ) : OncePerRequestFilter() {
-    private val pathPattern = RequestPaths.pattern(properties.pathPattern)
+    private val pathPatterns = properties.effectivePatterns().map { RequestPaths.pattern(it) }
 
     override fun doFilterInternal(
         request: HttpServletRequest,
         response: HttpServletResponse,
         filterChain: FilterChain,
     ) {
-        if (!RequestPaths.matches(pathPattern, request)) {
+        if (pathPatterns.none { RequestPaths.matches(it, request) }) {
             filterChain.doFilter(request, response)
             return
         }

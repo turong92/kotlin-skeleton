@@ -46,8 +46,12 @@ skeleton:
       mode: ${SKELETON_CLIENT_IP_MODE:}
       trusted-proxies: ${SKELETON_CLIENT_IP_TRUSTED_PROXIES:}
     rate-limit:
-      enabled: true                          # 이 앱의 선택: 로그인 없이 읽는 프로필 배지 경로에만 IP 기준 한도를 건다(모듈 기본은 꺼짐, 범위도 /api/** 전체) - 다른 경로와 시험에는 영향이 없다
-      path-pattern: /api/v1/badges/accounts/**
+      enabled: true                          # 이 앱의 선택: 로그인 없이 읽는 경로(배지 프로필 · 리뷰 공개 읽기)에만 IP 기준 한도를 건다(모듈 기본은 꺼짐, 범위도 /api/** 전체) - 다른 경로와 시험에는 영향이 없다
+      path-patterns:                         # 이 앱의 선택: 로그인 없이 읽는 두 경로 - 배지 프로필과 리뷰 공개 읽기(요약 · 일괄 요약 · 목록)에만 한 카운터로 건다
+        - /api/v1/badges/accounts/**
+        - /api/v1/reviews/targets/*/*/summary
+        - /api/v1/reviews/targets/*/*/reviews
+        - /api/v1/reviews/summaries
   auth-session:
     reuse-grace: 10s                      # 이 앱의 선택: 응답을 잃은 브라우저(페이지 이동 중 refresh)의 재시도는 같은 후속 토큰을 받는다 — 세션이 죽지 않는다. 지나서 옛 토큰을 내밀면 탈취로 보고 세션을 닫는다 (docs/accounts.md)
   auth:
@@ -269,7 +273,7 @@ skeleton:
     body-min-length: 10          # 이 앱의 선택: 본문 10자 이상 (기본 0)
     max-photos: 5                # 이 앱의 선택: 사진 5장까지 - 저장 키만 싣는다, 올리기는 storage (스켈레톤 기본은 0)
     http:
-      allow-anonymous-read: true   # 이 앱의 선택: 상품 화면의 요약 · 목록을 로그인 없이 읽는다 - 스켈레톤 기본은 로그인 필요(401). 속도 제한은 platform 의 web.rate-limit 이 경로 패턴 하나만 받아 배지 프로필 경로에 쓰고 있어 리뷰 읽기에는 아직 걸지 않았다
+      allow-anonymous-read: true   # 이 앱의 선택: 상품 화면의 요약 · 목록을 로그인 없이 읽는다 - 스켈레톤 기본은 로그인 필요(401). 속도 제한은 위 web.rate-limit.path-patterns 에 리뷰 읽기 셋이 들어 있다
     admin:
       enabled: true              # 이 앱의 선택: 운영 경로(신고 큐 · 숨김 · 답글, 권한 review.moderate 는 MODERATOR 기본 포함, review.reply 는 ADMIN 전권만)
   search:

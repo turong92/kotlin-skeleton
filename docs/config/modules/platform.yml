@@ -26,7 +26,8 @@ skeleton:
       trusted-proxies: ["127.0.0.0/8", "::1/128"]   # 전달 헤더를 믿을 피어 CIDR
     rate-limit:
       enabled: false                           # 요청 속도 제한 (기본 저장소는 인메모리, 공유하려면 redis-rate-limit)
-      path-pattern: /api/**
+      path-pattern: /api/**                    # 한 경로 패턴 (지금까지 그대로)
+      # path-patterns: [/api/v1/badges/accounts/**, /api/v1/reviews/targets/**]   # 여러 경로에 걸려면 목록 - 기본은 비어 있다. 하나라도 있으면 path-pattern 을 대신한다(합치지 않는다). 목록의 경로는 한 클라이언트(IP)가 한 카운터를 나눠 쓴다
       capacity: 60                             # 창(window) 안에 허용하는 요청 수
       window: 1m
   http:

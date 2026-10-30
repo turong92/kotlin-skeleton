@@ -200,7 +200,7 @@ local 프로필은 주문 만들기 한도(기본 계정당 10 / 10분)를 풀�
 - **구매 신호**: 결제 장부는 `PaymentOrderListener` 빈을 하나만 받으므로 `orders/SampleOrderListener` 가 응원 기록(`CheerOrderListener`)과 리뷰 구매 신호(`reviews/ReviewPurchaseSignals`) 둘을 부른다. 구독 주문(`itemRef` = 플랜 코드)과 단건 주문(`itemRef` = 가격 코드)의 가격 코드로 카탈로그 표에서 상품 코드를 찾아 `ReviewPurchases.record(계정, product:<상품>, "order:<주문 id>")`, 전액 환불이면 `revoke`(일부 환불은 그대로). 쿠폰으로 0원이 된 주문도 상품을 받았으니 구매다.
 - **보상**: `ReviewRewards`(`ReviewEventListener`)가 리뷰를 처음 공개할 때 계정의 리뷰 개수를 `CampaignSignals.report(계정, "reviews.written", 개수)` 로 보고한다(쓰기 트랜잭션 안 - 던지면 쓰기도 실패). 업적 이벤트 「리뷰 업적」(1 → 배지 「첫 리뷰」 + 100포인트)은 씨앗 `ReviewsSeed` 의 설정이다.
 - **사진**: 저장 키만 싣는다. `SampleReviewPolicy.canAttach` 가 `StorageKeyOwnership` 으로 호출자 자신이 올린 키만 허용한다(`OPAQUE` 키라 계정 id 가 없다). 보기는 서버가 짧은 서명 주소로 `302` 한다.
-- **읽기·운영**: 상품 요약 · 목록은 `allow-anonymous-read: true` 로 로그인 없이 읽는다(응답에 계정 id 없음 - 속도 제한은 아직 걸지 않았다: platform `web.rate-limit` 이 경로 패턴 하나라 배지 프로필 경로에 쓰고 있다). 운영 경로(`skeleton.review.admin.enabled: true`)는 신고 큐 · 숨김 · 되살리기 · 문제없음(`review.moderate`, `MODERATOR` 기본 포함)과 답글(`review.reply`, ADMIN 전권만).
+- **읽기·운영**: 상품 요약 · 목록은 `allow-anonymous-read: true` 로 로그인 없이 읽는다(응답에 계정 id 없음 - 속도 제한은 배지 프로필 경로와 같은 `skeleton.web.rate-limit.path-patterns` 목록에 읽기 셋이 들어 있다). 운영 경로(`skeleton.review.admin.enabled: true`)는 신고 큐 · 숨김 · 되살리기 · 문제없음(`review.moderate`, `MODERATOR` 기본 포함)과 답글(`review.reply`, ADMIN 전권만).
 
 **씨앗**(`local` 프로필만, 없는 것만 만든다 - `ReviewsSeed`): 시드 계정 `acc_user` 의 `product:basic` 구매 줄(결제 키 없이도 리뷰를 써 볼 수 있게), 배지 「첫 리뷰」, 업적 이벤트 「리뷰 업적」.
 

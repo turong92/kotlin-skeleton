@@ -81,7 +81,15 @@ data class WebProperties(
     data class RateLimit(
         val enabled: Boolean = false,
         val pathPattern: String = "/api/**",
+        /**
+         * 한도를 걸 경로 패턴 **목록**(예: 배지 프로필 + 리뷰 공개 읽기). 기본은 비어 있다 - 비어 있으면 위 [pathPattern] 하나만 쓰던 지금까지 그대로다.
+         * 하나라도 있으면 이 목록이 [pathPattern] 을 대신한다(둘을 합치지 않는다 - 기본값(/api 아래 전부)이 목록을 삼키지 않게). 목록의 경로는 한 클라이언트(IP)가 **한 카운터를 나눠 쓴다**.
+         */
+        val pathPatterns: List<String> = emptyList(),
         val capacity: Int = 60,
         val window: Duration = Duration.ofMinutes(1),
-    )
+    ) {
+        /** 실제로 걸 패턴 - 목록이 있으면 목록, 없으면 단일 [pathPattern] */
+        fun effectivePatterns(): List<String> = pathPatterns.filter { it.isNotBlank() }.ifEmpty { listOf(pathPattern) }
+    }
 }

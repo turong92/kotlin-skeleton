@@ -17,7 +17,7 @@
 - 앱이 `skeleton.badge.http.allow-anonymous-read=true` 로 열면 **로그인 없이 읽는다**(**모듈 기본은 `false` - 로그인 필요, 401**; `board` 의 같은 이름 설정과 같다. 스켈레톤 기본은 옵션 없음이고 열기는 앱의 선택이다 - 견본 앱이 켠다). 열면 `badgePublicEndpointContributor` 가 이 경로 하나만 공개로 넣는다(`GET {base}/accounts/*` 꼴, 내 배지 `me` 는 아니다). 앱은 같은 빈 이름으로 덮어쓸 수 있다.
 - 응답은 `{badges: [{code, name, description, imageUrl}]}` — **이 넷뿐**이다(보유 줄 id · 정의 id · 받은 시각 · 출처 · 수여자 · 사유 · 회수 상태 · 개수를 담지 않는다). 숨긴(`visible=false`) 배지와 회수된 배지, 받지 않은 숨은 업적은 **어떤 값으로도 나가지 않는다** — 걸러 내는 것이 아니라 저장소 질의가 `ACTIVE ∧ visible` 인 줄만 읽는다.
 - 없는 계정 · 탈퇴한 계정 · 배지 없는 계정 · 전부 숨긴 계정은 모두 같은 `200 {badges: []}` — 계정이 있는지 알려 주지 않는다.
-- 속도 제한은 배지 전용 한도를 만들지 않는다. 다른 공개 읽기(`catalog` 상품 · `board` 비회원 읽기)처럼 platform `skeleton.web.rate-limit`(IP 기준, 기본 꺼짐)을 따른다 — **공개로 여는 앱은 이것을 켜라**(`path-pattern: /api/v1/badges/accounts/**` 로 이 경로에만 걸 수 있다; 견본 앱이 그렇게 한다).
+- 속도 제한은 배지 전용 한도를 만들지 않는다. 다른 공개 읽기(`catalog` 상품 · `board` 비회원 읽기)처럼 platform `skeleton.web.rate-limit`(IP 기준, 기본 꺼짐)을 따른다 — **공개로 여는 앱은 이것을 켜라**(`path-pattern: /api/v1/badges/accounts/**` 로 이 경로에만 걸 수 있고, 다른 공개 읽기와 함께 걸려면 `path-patterns` 목록을 쓴다; 견본 앱은 배지 프로필과 리뷰 공개 읽기 둘을 목록으로 건다).
 - **경고**: 이 경로는 주소에 계정 id 를 담는다. `author-profile`(필명 프로필) 화면에 프로필 배지를 붙이면 필명 여러 개가 같은 계정 id · 같은 배지 묶음으로 이어져 한 사람임이 드러난다 — **필명 화면에는 붙이지 말 것**.
 
 **동작 메모**: ① 이미 가진 배지를 지급 건(보상 지급기)으로 다시 주면 지급 건은 `ISSUED` 로 끝나되 알림은 나가지 않는다(지급기가 `IssuedReward(notify=false)` 로 알려 `reward` 일꾼이 건너뛴다). ② 수동 수여는 `platform` 의 `AccountFacts`(`account` 가 내놓는다)로 계정이 있는지 확인해, 없는 id 는 수여하지 않고 응답의 `unknownAccountIds` 에 따로 센다. `AccountFacts` 구현이 없으면 확인 없이 준다. 확인은 잠그지 않는 읽기라 계정 삭제와 겹치면 보유 줄이 남을 수 있다(탈퇴 고리가 이미 지운 뒤에 들어오는 경우).
