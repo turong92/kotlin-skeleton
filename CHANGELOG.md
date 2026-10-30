@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 고침: `by-slug` 입력은 형식 검사 후 소문자로(PG · MySQL 답 동일) · slug 를 차지한 뒤 옛 slug 기록 재확인(PG 경쟁) · 계정 삭제가 소유자 줄을 지우지 않음 · 초대 토큰 요청 본문 `toString` 가림 · CORS 기본 허용 헤더에 `X-Workspace-Id`.
 
 - `apps/sample`: `workspace` · `workspace-jdbc` 조립(운영자 읽기 · 초대 켜기, 로컬 링크 주소) · 노트 `workspace_id`(`V20261030140000__notes_workspace`) - 헤더 `X-Workspace-Id` 가 있으면 그 워크스페이스의 노트(멤버 읽기 · 쓰기, 지우기는 쓴 사람 · ADMIN 이상), 없으면 예전처럼 내 노트 · 견본 `SubscriptionSeatPolicy`(소유자의 구독 → 무료 3 · 유료 10, 결제 코드는 그대로) · 로컬 씨앗 「Example Team」(`example-team`). 문서 `docs/sample.md` 「워크스페이스」.
+### 검색 연동: 상품 · 견본 노트 (2026-10-30)
+
+- `catalog`: 상품을 만들 때 · 고칠 때(이름 · 설명 · 판매 여부) platform 의 `SearchIndexer` 로 `product` 문서를 밀어 넣는다 - 호출자 쓰기 트랜잭션 안, 제목 = `skeleton.catalog.default-locale` 의 이름(없으면 첫 언어), 본문 = 모든 언어의 이름 · 설명, `scope` = 상품 종류, 문서 id = 상품 코드, 주인 없음, 판매 중지면 `delete`. `SearchSource("product")` 빈(`CatalogSearchSource`)이 판매 중인 상품만 낸다. `catalog` 는 `search` 에 의존하지 않고 `ObjectProvider` 로 부르므로 **검색을 안 붙인 앱은 동작이 그대로다**. `CatalogAdmin` 생성자에 끝 인자 둘(`searchIndexer`, `defaultLocale`)이 기본값과 함께 붙었다.
+- 견본 앱(`apps/sample`): `search-jdbc` 조립 - `NoteService` 가 만들기 · 고치기 · 지우기에서 `note` 문서(주인 = 작성자)를 같은 트랜잭션에서 넣고 빼며 `SearchSource("note")` 를 낸다. 검색은 로그인만(공개 읽기는 켜지 않았다), 운영 경로 `skeleton.search.admin.enabled: true`. **이미 쓰던 견본 DB** 는 `POST /api/v1/admin/search/rebuild` 로 `note` · `product` 를 한 번씩 돌려 채운다. 문서 `docs/sample.md` 「검색」, `docs/modules/catalog.md` 「검색 연동」.
 
 ### 배지 · 업적 (2026-10-29)
 

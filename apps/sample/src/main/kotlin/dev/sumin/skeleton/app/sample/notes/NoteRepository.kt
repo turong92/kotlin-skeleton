@@ -57,4 +57,8 @@ interface NoteRepository : CrudRepository<Note, UUID> {
         @Param("pinned") pinned: Boolean?,
         @Param("pattern") pattern: String?,
     ): Long
+
+    /** 검색 재색인용 - [after] 다음 id 부터 id 순으로 (모든 주인의 노트) */
+    @Query("SELECT * FROM notes WHERE (CAST(:after AS uuid) IS NULL OR id > CAST(:after AS uuid)) ORDER BY id LIMIT :limit")
+    fun pageAfter(@Param("after") after: String?, @Param("limit") limit: Int): List<Note>
 }

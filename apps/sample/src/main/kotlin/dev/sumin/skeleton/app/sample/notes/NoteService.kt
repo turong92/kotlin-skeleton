@@ -3,6 +3,7 @@ package dev.sumin.skeleton.app.sample.notes
 import dev.sumin.skeleton.campaign.CampaignSignals
 import dev.sumin.skeleton.common.PageQuery
 import dev.sumin.skeleton.common.id.SortableIds
+import dev.sumin.skeleton.common.search.SearchIndexer
 import dev.sumin.skeleton.jobqueue.jdbc.JobQueue
 import dev.sumin.skeleton.storage.ObjectKey
 import dev.sumin.skeleton.storage.ObjectStorage
@@ -45,6 +46,7 @@ class NoteService(
     private val jdbc: JdbcClient,
     private val json: ObjectMapper,
     private val signals: ObjectProvider<CampaignSignals>,
+    private val search: ObjectProvider<SearchIndexer>,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -60,6 +62,7 @@ class NoteService(
             Note(id = SortableIds.system.newUuid(), fresh = true, ownerId = owner, workspaceId = scope.workspaceId, title = request.title.trim(), body = request.body, status = request.status, pinned = request.pinned),
         )
         notifier.created(saved, owner)
+        search.ifAvailable { it.upsert(saved.toSearchDocument()) }   // 같은 트랜잭션 - 노트가 롤백되면 색인도 없다
         // 업적 수치: 저장 뒤 자기 개수를 세어 현재 값을 보고한다(같은 트랜잭션 - 노트가 롤백되면 보고도 사라진다). 이벤트가 없으면 수치만 쌓인다
         if (scope.workspace == null) signals.ifAvailable { it.report(owner, NOTES_CREATED, notes.countMatching(owner, null, null, null, null)) }
         return saved
@@ -94,6 +97,7 @@ class NoteService(
             ),
         )
         notifier.updated(saved, scope.caller)
+        search.ifAvailable { it.upsert(saved.toSearchDocument()) }
         if (current.attachmentKey != null && current.attachmentKey != key) discardAfterCommit(current.attachmentKey)
         return saved
     }
@@ -105,6 +109,7 @@ class NoteService(
         if (member != null && current.ownerId != scope.caller && !member.role.atLeast(WorkspaceRole.ADMIN)) throw WorkspaceException(WorkspaceErrorCode.FORBIDDEN)
         notes.delete(current)
         notifier.deleted(current, scope.caller)
+        search.ifAvailable { it.delete(NoteSearchSource.TYPE, current.id.toString()) }
         current.attachmentKey?.let(::discardAfterCommit)
     }
 

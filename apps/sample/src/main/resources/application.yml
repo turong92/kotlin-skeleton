@@ -263,6 +263,9 @@ skeleton:
   point:
     admin:
       enabled: true
+  search:
+    admin:
+      enabled: true   # 이 앱의 선택: 운영 경로(문서 종류별 개수 · 재색인, 권한 search.manage 는 기본 역할 없이 ADMIN 전권만). 검색 읽기는 모듈 기본 그대로 로그인만(allow-anonymous-read 를 켜지 않는다)
   badge:
     admin:
       enabled: true   # 이 앱의 선택: 운영 경로(정의 · 수동 수여 · 회수 · 내역, 권한 badge.manage 는 기본 역할 없이 ADMIN 전권만)

@@ -193,6 +193,17 @@ local 프로필은 주문 만들기 한도(기본 계정당 10 / 10분)를 풀�
 **노트 API 의 헤더 동작**: `X-Workspace-Id` 가 **없으면 예전 그대로** 내 노트다(`workspace_id` 가 없는 것만 - 내가 쓴 팀 노트는 내 목록에 안 나온다). **있으면** 그 워크스페이스의 노트다: 요청마다 멤버십을 DB 로 확인하고(멤버가 아니거나 없는 · 닫힌 워크스페이스는 모두 404 `WORKSPACE.NOT_FOUND`, 추방은 다음 요청부터 반영), 멤버는 모두 읽고 쓰고, 지우기는 **쓴 사람 · ADMIN 이상**(그 밖은 403 `WORKSPACE.FORBIDDEN`). 팀 노트의 `ownerId` 는 쓴 사람이다. 요약(`/summary`) · 내보내기도 같은 상자를 본다(내보내기 결과 파일과 완료 알림은 **요청한 사람**의 것이고, 그 사이 추방됐으면 잡이 끝난다). 알림(`NOTE_*`)은 **그 일을 한 사람**에게 가고 팀 노트 알림에는 링크가 없다(쓴 사람이 추방돼도 제목이 새지 않는다). 첨부와 업적 개수는 내 노트만이다: 팀 노트 `PUT` 에 `attachmentKey` 를 보내면 400 `NOTES.TEAM_ATTACHMENT_UNSUPPORTED`, 팀 노트에 이미 있는 첨부는 수정해도 그대로다.
 
 **씨앗**(`local` 프로필만, slug 로 찾아 없으면 만든다 - `workspace/WorkspaceSeed`): `user@example.com`(`acc_user`)이 소유자인 「Example Team」(slug `example-team`). 시험: `notes/WorkspaceNotesIntegrationTest`(남의 팀 노트 안 보임 · 추방 직후 404 · 헤더 없을 때 그대로 · 미리보기 공개 경로), `workspace/SubscriptionSeatPolicyTest`.
+## 검색 (`/api/v1/search`)
+
+한 줄(`search-jdbc`)과 이 앱의 작은 조각 `notes/NoteSearch.kt`(`NoteSearchSource` + `Note.toSearchDocument`), `NoteService` 의 세 줄이 전부다. `NoteService` 가 노트를 만들 때 · 고칠 때 · 지울 때 **같은 트랜잭션 안에서** `note` 문서를 색인에 넣고 빼므로(롤백되면 색인도 없다) 커밋과 함께 검색에 보인다. 문서의 주인은 작성자라 **남의 검색에는 나오지 않는다**. 상품은 `catalog` 가 상품을 만들 때 · 고칠 때 저절로 `product` 문서를 넣고(씨앗도 `CatalogAdmin` 을 지나므로 들어간다), 판매를 멈추면 뺀다 - 앱 코드는 없다.
+검색은 **로그인한 사람만** 읽는다(`skeleton.search.http.allow-anonymous-read` 를 켜지 않았다 - 켜면 주인 없는 문서, 곧 상품만 비로그인에게 보인다). 운영 경로(문서 종류별 개수 · 재색인, `search.manage` 는 기본 역할 없이 ADMIN 전권만)는 이 앱이 `skeleton.search.admin.enabled: true` 로 켠다.
+
+| 경로 | 설명 |
+|---|---|
+| `GET /api/v1/search?q=&types=note,product&scope=&sort=relevance\|recent&page=&size=` | 두 글자 이상 덩어리로 찾는다(`방끈` ⊂ `가방끈`). 각 줄에 제목 · 발췌와 일치 위치 |
+| `GET /api/v1/admin/search/types` · `POST /api/v1/admin/search/rebuild {"type"}` | 종류별 색인 문서 수 · 재색인(작업 `search-rebuild`) - 검색을 붙이기 전에 있던 노트 · 상품은 이걸로 처음 채운다 |
+
+시험: `search/SearchFlowIntegrationTest`(주인에게만 · 고치기 · 지우기 · 상품 판매 중지/재개 · 재색인).
 
 ## 구독 — 플랜과 자동결제 (`/api/v1/payments/subscriptions`)
 

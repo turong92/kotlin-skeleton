@@ -51,6 +51,7 @@ dependencies {
     implementation(project(":modules:badge-jdbc"))         // 배지: 정의 · 수여/회수 · 내 배지 · 프로필 배지(비로그인 공개), 보상 지급기 `badge` (+ badge: /api/v1/badges). 노트 개수 업적 - notes/NoteService, docs/modules/badge.md
     implementation(project(":modules:point-jdbc"))         // 포인트: 적립 · 차감 · 소멸 (+ point: /api/v1/points) - docs/modules/point.md
     implementation(project(":modules:campaign-jdbc"))      // 이벤트: 출석 · 친구초대 (+ campaign: /api/v1/campaigns). 첫 응원 결제가 초대자 보상을 연다 - cheer/CheerOrderListener, docs/modules/campaign.md
+    implementation(project(":modules:search-jdbc"))        // 전문 검색 (한국어 2글자 조각, PostgreSQL tsvector) (+ search: /api/v1/search). 노트(notes/NoteService)와 catalog 상품이 색인에 들어온다 - 검색은 로그인만, 운영 경로(재색인)는 켠다. docs/modules/search.md
     implementation(project(":modules:alert-jdbc"))         // 주인 경보 (+ alert) — 5xx 몰림 · 죽은 작업을 Discord 웹훅으로. 웹훅 주소가 없으면 아무것도 안 보낸다
     implementation(project(":modules:workspace"))          // 워크스페이스(팀): 역할 · slug · 멤버 · 메일 링크 초대 · 운영자 읽기 (+ workspace: /api/v1/workspaces). 노트가 헤더 X-Workspace-Id 로 팀 노트가 된다 - 좌석 상한은 workspace/SubscriptionSeatPolicy, docs/modules/workspace.md
     implementation(project(":modules:workspace-jdbc"))     // 워크스페이스 저장소 (workspace 는 저장소를 모른다)
