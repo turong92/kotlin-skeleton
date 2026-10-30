@@ -1,12 +1,12 @@
 # reward
 
 보상 지급의 허리 — 이벤트(`campaign`)가 「이 계정에 이 보상」을 **지급 건**으로 기록하면, 일꾼이 건마다 보상 종류의 지급기(`RewardIssuer`: 쿠폰 · 포인트)를 불러 주고, 끝나면 받은편지함에 「받았어요」를 보낸다.
-이벤트는 쿠폰 · 포인트를 모르고, 쿠폰 · 포인트는 이벤트를 모른다 — 둘 사이의 계약(`RewardIssuer` · `RewardGrantView` · `IssuedReward` · `RewardLabel` · `RewardPermanentFailure`)은 `platform` 의 `common/reward` 에 있다.
+이벤트는 쿠폰 · 포인트를 모르고, 쿠폰 · 포인트는 이벤트를 모른다 — 둘 사이의 계약(`RewardIssuer` · `RewardGrantView` · `IssuedReward`(`resultRef` · `notify`) · `RewardLabel` · `RewardPermanentFailure`)은 `platform` 의 `common/reward` 에 있다.
 저장과 작업 큐는 어댑터 `reward-jdbc` 가 한다 — 이 모듈에는 메모리 구현이 없다.
 
 흐름: ① 이벤트가 **자기 트랜잭션 안에서** `RewardGrants.record(계정, 종류, params, sourceType, sourceKey)` — 지급 건 줄과 작업이 같은 커밋에 든다(밖에서 부르면 던진다). 같은 `(sourceType, sourceKey)` 는 한 건으로 접힌다(`null` 이 돌아온다).
 ② `RewardWorker` 가 한 트랜잭션에서 건을 잠그고 `PENDING` 이 아니면 끝, 지급기의 `issue` 를 부르고 `ISSUED` + `result_ref`. 지급기는 `(GRANT, 건 id)` 로 멱등해야 한다 — 던지면 트랜잭션이 되돌아가 큐가 백오프로 다시 부른다.
-③ 커밋 뒤 `RewardNotifier`(기본: `notification` 이 있으면 받은편지함, 알림 id `rwd_<건 id>`)를 부른다. 실패는 로그만 — 보상은 이미 지급됐다.
+③ 커밋 뒤 `RewardNotifier`(기본: `notification` 이 있으면 받은편지함, 알림 id `rwd_<건 id>`)를 부른다. 실패는 로그만 — 보상은 이미 지급됐다. 지급기가 `IssuedReward(notify=false)` 를 돌려주면(새로 준 것이 없음 - 이미 가진 배지) 알림을 건너뛴다.
 지급기가 영구 실패(`RewardPermanentFailure`: 정의 보관됨 · 지급기 없음)를 알리면 재시도 없이 건이 `FAILED` 로 남는다. 지급기가 하나도 없어도 모듈은 뜨고 건은 `FAILED` 로 쌓인다.
 상태: `PENDING → ISSUED`(끝) · `PENDING → FAILED`(작업이 DEAD 또는 영구 실패; 운영자 「다시 지급」으로 `PENDING`) · `PENDING → CANCELED`(운영자, 지급 전만).
 

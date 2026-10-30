@@ -140,6 +140,14 @@ class BadgeServicesTest {
     }
 
     @Test
+    fun `an archived badge is refused even when every account is unknown`() {
+        val badge = define("old")
+        definitions.setStatus(badge.id, BadgeStatus.ARCHIVED)
+        val checked = BadgeAwards(store, time, accountFacts = { AccountFacts { null } }, notifier = { notifier })
+        assertEquals(BadgeErrorCode.ARCHIVED, assertFailsWith<BadgeException> { checked.awardByOperator(badge.id, listOf("ghost"), null, "op_1") }.badgeError)
+    }
+
+    @Test
     fun `an operator award takes the accounts in sorted order whatever the input order`() {
         val badge = define("early-bird")
         awards.awardByOperator(badge.id, listOf("acc_3", "acc_1", "acc_2"), null, "op_1")

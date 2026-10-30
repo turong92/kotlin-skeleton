@@ -86,8 +86,8 @@ class BadgesFlowIntegrationTest : CheerIntegrationBase() {
     @Test
     fun `an operator awards early-bird and revokes it with a reason, and the user's profile follows`() {
         val badgeId = JsonPath.read<List<String>>(get("/api/v1/admin/badges", operator).andExpect { status { isOk() } }.andReturn().response.contentAsString, "$.values[?(@.code=='${BadgesSeed.EARLY_BIRD}')].id").single()
-        post("/api/v1/admin/badges/$badgeId/awards", operator, """{"accountIds":["$userId"],"reason":"launch"}""")
-            .andExpect { status { isOk() }; jsonPath("$.value.awarded.length()") { value(1) } }
+        post("/api/v1/admin/badges/$badgeId/awards", operator, """{"accountIds":["$userId","acc_ghost_none"],"reason":"launch"}""")
+            .andExpect { status { isOk() }; jsonPath("$.value.awarded.length()") { value(1) }; jsonPath("$.value.unknownAccountIds[0]") { value("acc_ghost_none") } }
         assertEquals(listOf(BadgesSeed.EARLY_BIRD), earnedCodes(user))
         get("/api/v1/badges/accounts/$userId", null).andExpect { status { isOk() }; jsonPath("$.value.badges.length()") { value(1) } }
 

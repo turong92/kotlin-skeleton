@@ -6,6 +6,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNotEquals
 
 class AchievementTest {
     private val store = FakeCampaignStore()
@@ -66,7 +67,7 @@ class AchievementTest {
         assertEquals(2, grants.recorded.size)
         signals.report("acc_1", "notes.created", 10)
         assertEquals(2, grants.recorded.size)
-        assertEquals(setOf("achievement/cmp_1:acc_1:achv:1:${id(reward())}", "achievement/cmp_1:acc_1:achv:10:${id(reward())}"), grants.recorded.map { it.third }.toSet())
+        assertEquals(setOf("achievement/cmp_1:acc_1:achv:1:${id(reward())}#1", "achievement/cmp_1:acc_1:achv:10:${id(reward())}#1"), grants.recorded.map { it.third }.toSet())
     }
 
     @Test
@@ -77,14 +78,26 @@ class AchievementTest {
         campaign(config = config("notes.created", step(10, reward(amount = "100"), reward())))   // 새 보상을 앞에 끼워 순서가 바뀜
         signals.report("acc_1", "notes.created", 10)
         assertEquals(2, grants.recorded.size)
-        assertEquals(1, grants.recorded.count { it.third.endsWith(id(reward())) })
+        assertEquals(1, grants.recorded.count { it.third.endsWith(id(reward()) + "#1") })
     }
 
     @Test
-    fun `the same reward twice in one step is refused`() {
-        val bad = config("m", step(1, reward(), reward()))
-        assertEquals("CAMPAIGN.CONFIG_INVALID", assertFailsWith<CampaignException> { kind.validate(bad, issuers) }.errorCode.code)
-        kind.validate(config("m", step(1, reward(), reward(amount = "20")), step(2, reward())), issuers)
+    fun `the same reward twice in one step is paid twice once each, and a re-report adds nothing`() {
+        campaign(config = config("notes.created", step(1, reward(), reward())))
+        kind.validate(config("notes.created", step(1, reward(), reward())), issuers)
+        signals.report("acc_1", "notes.created", 1)
+        assertEquals(2, grants.recorded.size)
+        signals.report("acc_1", "notes.created", 1)
+        assertEquals(2, grants.recorded.size)
+    }
+
+    @Test
+    fun `the same amount written as 100, 100 point 0 or a string is the same reward`() {
+        fun spec(v: Any) = RewardSpec("point", mapOf("amount" to v.toString())).identity()
+        assertEquals(spec(100), spec(100.0))
+        assertEquals(spec(100), spec(" 100 "))
+        assertEquals(spec(100), RewardSpec("point", mapOf("amount" to AchievementConfig.parse(config("m", step(1, mapOf("type" to "point", "params" to mapOf("amount" to 100.0))))).milestones[0].rewards[0].params.getValue("amount"))).identity())
+        assertNotEquals(spec(100), spec(1000))
     }
 
     @Test
@@ -100,7 +113,7 @@ class AchievementTest {
     fun `every reward of a step is recorded under its own key`() {
         campaign(config = config("notes.created", step(10, reward(), reward(amount = "100"))))
         signals.report("acc_1", "notes.created", 10)
-        assertEquals(listOf("achievement/cmp_1:acc_1:achv:10:${id(reward())}", "achievement/cmp_1:acc_1:achv:10:${id(reward(amount = "100"))}"), grants.recorded.map { it.third })
+        assertEquals(listOf("achievement/cmp_1:acc_1:achv:10:${id(reward())}#1", "achievement/cmp_1:acc_1:achv:10:${id(reward(amount = "100"))}#1"), grants.recorded.map { it.third })
     }
 
     @Test

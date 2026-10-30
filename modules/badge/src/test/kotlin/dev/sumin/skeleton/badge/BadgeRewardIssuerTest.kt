@@ -41,7 +41,7 @@ class BadgeRewardIssuerTest {
         awards.award("acc_1", "first-note", "note:1")
         val again = issuer.issue(grant(id = "rgr_9"))
         assertEquals(false, again.notify)
-        assertEquals(true, issuer.issue(grant(id = "rgr_9", accountId = "acc_2")).notify)
+        assertEquals(true, issuer.issue(grant(id = "rgr_10", accountId = "acc_2")).notify)
         assertEquals(0, notifier.sent.count { it.third == BadgeSource.GRANT })
     }
 

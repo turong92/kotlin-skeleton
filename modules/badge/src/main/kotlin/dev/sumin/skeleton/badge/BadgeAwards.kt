@@ -36,6 +36,7 @@ class BadgeAwards(
         if (unique.size > MAX_ADMIN_ACCOUNTS) throw BadgeException(BadgeErrorCode.CONFIG_INVALID, "at most $MAX_ADMIN_ACCOUNTS accounts per request")
         val why = reason?.trim()?.takeIf { it.isNotEmpty() }?.also { if (it.length > MAX_REASON) throw reasonTooLong() }
         val definition = store.findDefinition(badgeId) ?: throw BadgeException(BadgeErrorCode.NOT_FOUND, "badge $badgeId not found")
+        if (definition.status == BadgeStatus.ARCHIVED) throw BadgeException(BadgeErrorCode.ARCHIVED, "badge '${definition.code}' is archived")
         val awarded = ArrayList<String>()
         val held = ArrayList<String>()
         val unknown = ArrayList<String>()

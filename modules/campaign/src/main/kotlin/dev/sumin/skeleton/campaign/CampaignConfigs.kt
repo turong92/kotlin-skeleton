@@ -4,13 +4,25 @@ import dev.sumin.skeleton.common.reward.RewardIssuer
 
 /** 이벤트 설정 안의 보상 한 줄 - [type] 은 지급기 이름(`point` · `coupon`), [params] 는 지급기마다 다른 문자열 값 */
 data class RewardSpec(val type: String, val params: Map<String, String>) {
-    /** 종류와 params(키 순서 무관)로 정해지는 짧은 이름 - 지급 건 키에 쓴다(SHA-256 앞 16자). 순서나 위치에 기대지 않는다 */
+    /**
+     * 종류와 params(키 순서 무관)로 정해지는 짧은 이름 - 지급 건 키에 쓴다(SHA-256 앞 16자). 순서나 위치에 기대지 않는다.
+     * 값은 정규화한다 - 문자열은 trim, 앞자리 0 이 없는 수(`100` · `100.0`)는 뒤 0 을 뗀 평문 표기로.
+     */
     fun identity(): String {
         val canonical = buildString {
             append(type.length).append(':').append(type)
-            params.toSortedMap().forEach { (k, v) -> append('|').append(k.length).append(':').append(k).append('=').append(v.length).append(':').append(v) }
+            params.toSortedMap().forEach { (k, v) -> append('|').append(k.length).append(':').append(k).append('=').append(normalize(v).let { it.length.toString() + ":" + it }) }
         }
         return java.security.MessageDigest.getInstance("SHA-256").digest(canonical.toByteArray()).take(8).joinToString("") { "%02x".format(it) }
+    }
+
+    private fun normalize(value: String): String {
+        val v = value.trim()
+        return if (NUMBER.matches(v)) java.math.BigDecimal(v).stripTrailingZeros().toPlainString() else v
+    }
+
+    private companion object {
+        val NUMBER = Regex("-?(0|[1-9][0-9]*)(\\.[0-9]+)?")
     }
 }
 
@@ -82,7 +94,6 @@ data class AchievementConfig(val metric: String, val milestones: List<Achievemen
                 if (value < 1) ConfigReader.fail("milestones[$i].value must be at least 1")
                 val rewards = ConfigReader.rewards(m["rewards"], "milestones[$i].rewards")
                 if (rewards.isEmpty()) ConfigReader.fail("milestones[$i].rewards must not be empty")
-                if (rewards.map { it.identity() }.toSet().size != rewards.size) ConfigReader.fail("milestones[$i].rewards must not repeat the same reward")
                 AchievementStep(value, rewards)
             }
             if (steps.isEmpty()) ConfigReader.fail("an achievement campaign needs at least one milestone")
