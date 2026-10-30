@@ -2,6 +2,7 @@ package dev.sumin.skeleton.campaign
 
 import dev.sumin.skeleton.common.ErrorCode
 import dev.sumin.skeleton.common.time.TimeProvider
+import dev.sumin.skeleton.reward.RewardGrants
 import java.time.Duration
 import java.time.Instant
 import kotlin.test.Test
@@ -139,6 +140,21 @@ class ReferralFlowTest {
     }
 
     @Test
+    fun `an operator cannot approve a relation they are part of - the money would go to themselves`() {
+        campaign("qualifyOn" to "SIGNAL", "reviewSameNetwork" to true)
+        service.me("alice", "net-1")
+        invite("alice", "bob", "net-1")
+        service.qualify("bob")
+
+        assertEquals(CampaignErrorCode.REFERRAL_SELF_APPROVAL, code { service.approve("bob", "alice") })
+        assertEquals(CampaignErrorCode.REFERRAL_SELF_APPROVAL, code { service.approve("bob", "bob") })
+        assertEquals(ReferralStatus.REVIEW, status("bob"))
+        assertEquals(0, inviterGrants().size)
+        service.approve("bob", "op_1")
+        assertEquals(1, inviterGrants().size)
+    }
+
+    @Test
     fun `approve skips what is left of a hold`() {
         campaign("qualifyOn" to "SIGNAL", "holdDays" to 30)
         invite("alice", "bob")
@@ -205,6 +221,30 @@ class ReferralFlowTest {
         assertNull(store.referralOfInvitee("bob")!!.claimNetwork)
         assertTrue(store.codeNetworks.isEmpty())
         assertEquals(setOf(ReferralFlag.SAME_NETWORK), store.referralOfInvitee("bob")!!.flags)
+    }
+
+    @Test
+    fun `one relation that fails to release does not stop the others or the network cleanup`() {
+        val failing = object : RewardGrants {
+            override fun record(accountId: String, type: String, params: Map<String, String>, sourceType: String, sourceKey: String): String? {
+                if (sourceKey.contains(":bob:inviter:")) error("grant store down for bob")
+                return grants.record(accountId, type, params, sourceType, sourceKey)
+            }
+        }
+        val svc = ReferralService(store, campaigns, failing, null, clock)
+        campaign("qualifyOn" to "SIGNAL", "holdDays" to 7)
+        svc.me("alice", "home")
+        svc.claim("bob", svc.me("alice").code, "home")
+        svc.claim("carol", svc.me("alice").code, "home")
+        svc.qualify("bob")
+        svc.qualify("carol")
+        clock.advance(Duration.ofDays(31))
+
+        assertEquals(1, svc.releaseDue())
+
+        assertEquals(1, inviterGrants().size, "carol is paid although bob's release failed")
+        assertNull(store.referralOfInvitee("carol")!!.claimNetwork, "the 30 day network cleanup still ran")
+        assertTrue(store.codeNetworks.isEmpty())
     }
 
     // 취소

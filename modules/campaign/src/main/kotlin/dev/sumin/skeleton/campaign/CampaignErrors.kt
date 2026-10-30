@@ -18,6 +18,7 @@ enum class CampaignErrorCode(
     REFERRAL_NOT_PENDING("CAMPAIGN.REFERRAL_NOT_PENDING", HttpStatus.CONFLICT, "Referral is not waiting for approval"),
     REFERRAL_NOT_CANCELABLE("CAMPAIGN.REFERRAL_NOT_CANCELABLE", HttpStatus.CONFLICT, "Referral is already settled"),
     REFERRAL_REASON_INVALID("CAMPAIGN.REFERRAL_REASON_INVALID", HttpStatus.BAD_REQUEST, "A cancel reason of 1..200 characters is required"),
+    REFERRAL_SELF_APPROVAL("CAMPAIGN.REFERRAL_SELF_APPROVAL", HttpStatus.FORBIDDEN, "An operator cannot approve a referral they are part of"),
 }
 
 class CampaignException(errorCode: CampaignErrorCode, message: String, data: Any? = null) :

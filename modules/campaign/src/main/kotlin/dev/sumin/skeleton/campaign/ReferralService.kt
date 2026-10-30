@@ -142,8 +142,16 @@ class ReferralService(
 
     override fun releaseDue(): Int {
         val now = time.now()
-        val released = store.dueHeldReferrals(now, RELEASE_BATCH).count { release(it, now) }
-        store.clearNetworksBefore(now.minus(NETWORK_WINDOW))
+        // 건마다 격리한다 - 한 건의 예외가 나머지 해제와 네트워크 정리를 멈추지 않고, 실패한 건은 HELD 로 남아 다음 회차에 다시 시도된다
+        val released = try {
+            store.dueHeldReferrals(now, RELEASE_BATCH).count { inviteeId ->
+                runCatching { release(inviteeId, now) }
+                    .onFailure { log.warn("referral release failed, retried on the next run: invitee={}", inviteeId, it) }
+                    .getOrDefault(false)
+            }
+        } finally {
+            store.clearNetworksBefore(now.minus(NETWORK_WINDOW))
+        }
         return released
     }
 
@@ -162,6 +170,7 @@ class ReferralService(
         store.inTransaction {
             val referral = store.referralOfInvitee(inviteeId, lock = true) ?: throw CampaignException(CampaignErrorCode.REFERRAL_NOT_FOUND, "referral of $inviteeId not found")
             if (referral.status !in ReferralStatus.APPROVABLE) throw CampaignException(CampaignErrorCode.REFERRAL_NOT_PENDING, "referral of $inviteeId is ${referral.status}")
+            if (operatorId == referral.inviterId || operatorId == referral.inviteeId) throw CampaignException(CampaignErrorCode.REFERRAL_SELF_APPROVAL, "an operator cannot approve a referral they are part of")
             if (AccountTombstone.isTombstone(referral.inviterId)) throw CampaignException(CampaignErrorCode.REFERRAL_NOT_PENDING, "the inviter of $inviteeId has left")
             pay(referral, time.now(), operatorId, ReferralStatus.APPROVABLE)
         }
@@ -220,6 +229,8 @@ class ReferralService(
     private fun newCode(): String = String(CharArray(CODE_LENGTH) { ALPHABET[random.nextInt(ALPHABET.length)] })
 
     companion object {
+        private val log = org.slf4j.LoggerFactory.getLogger(ReferralService::class.java)
+
         const val SOURCE_TYPE = "referral"
         /** 앱이 [Referrals.cancel] 로 끊었을 때 `settled_by` */
         const val APP = "app"
