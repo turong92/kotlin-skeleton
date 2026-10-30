@@ -39,7 +39,7 @@ DB 전문 검색 — 다른 모듈(`catalog` 상품 · 앱의 노트 …)이 **�
 | 부팅에 필요한 것 | 엔진 포트 `SearchEngine` — `search-jdbc` 가 낸다. 없으면 서비스 빈이 켜지지 않는다. |
 | 교체 지점 | `SearchEngine`, `SearchRebuilds`, `SearchReader`, `SearchAdmin`, `SearchController`, `SearchAdminController`, 공개 경로 `searchPublicEndpointContributor` |
 | 마이그레이션 | 없음 (스키마는 `search-jdbc`) |
-| 프론트 짝 | 없음 |
+| 프론트 짝 | `@skeleton/search` |
 | 테스트 | `modules/search/src/test` |
 
 [모듈 색인](README.md) · [최소 구성 가이드](../minimal-composition.md)

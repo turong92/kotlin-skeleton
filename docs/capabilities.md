@@ -142,7 +142,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `reward` | 보상 지급의 허리 — 이벤트가 기록한 지급 건을 일꾼이 쿠폰 · 포인트 지급기로 주고(재시도 · 멱등), 받았어요 알림과 운영자 다시 지급 · 취소까지. | `--modules reward,reward-jdbc` | 보상 지급, 지급 건, 쿠폰 지급, 포인트 지급, 다시 지급, 받았어요 알림 / reward grant, reward issuer, payout worker, retry grant | `@skeleton/rewards` |
 | `reward-jdbc` | 지급 건 저장과 지급 작업을 DB 에 두고 일꾼을 job-queue-jdbc 에 얹는다 (PostgreSQL · MySQL). | `--modules reward-jdbc` | 지급 건 저장, 지급 작업 큐 / reward grant store, reward job | `@skeleton/rewards` |
 | `scheduler` | 어노테이션 기반 스케줄러 — 실행 가드 · 락 매니저 · 실패 핸들러(기본 락은 no-op, 단일 인스턴스용). | `--modules scheduler` | 스케줄러, 정기 작업, 크론, 주기 실행, 배치 / scheduler, cron, scheduled job, periodic task, batch | — |
-| `search` | DB 전문 검색 — 다른 모듈이 밀어 넣은 문서(상품 · 노트 …)를 한국어 2글자 조각으로 찾는다(PostgreSQL tsvector · MySQL ngram, 확장 설치 없음). 질의(쪽 · 종류 · 범위 · 정렬 · 하이라이트 위치) · 주인 문서 가리기 · 재색인 작업 · 탈퇴. 밀어 넣기 포트는 platform 의 SearchIndexer 라 다른 모듈이 search 를 모른다. | `--modules search,search-jdbc` | 검색, 전문 검색, 한국어 검색, 부분 일치, 하이라이트, 재색인 / search, full-text search, korean search, ngram, highlight, reindex | — |
+| `search` | DB 전문 검색 — 다른 모듈이 밀어 넣은 문서(상품 · 노트 …)를 한국어 2글자 조각으로 찾는다(PostgreSQL tsvector · MySQL ngram, 확장 설치 없음). 질의(쪽 · 종류 · 범위 · 정렬 · 하이라이트 위치) · 주인 문서 가리기 · 재색인 작업 · 탈퇴. 밀어 넣기 포트는 platform 의 SearchIndexer 라 다른 모듈이 search 를 모른다. | `--modules search,search-jdbc` | 검색, 전문 검색, 한국어 검색, 부분 일치, 하이라이트, 재색인 / search, full-text search, korean search, ngram, highlight, reindex | `@skeleton/search` |
 | `search-jdbc` | 검색 색인을 DB 에 둔다 (PostgreSQL tsvector + GIN · MySQL ngram FULLTEXT) — 쓰기는 호출자 트랜잭션에 합류, 재색인은 job-queue-jdbc 작업. MySQL 마이그레이션이 불용어를 꺼서 영어 조각이 빠지지 않게 한다. | `--modules search-jdbc` | 검색 저장소, 검색 색인 DB / search storage, search index database | — |
 | `storage` | 저장소 계약(ObjectStorage · PresignedStorage) · 파일 크기/확장자/content-type 검증 + 브라우저 직접 업로드 HTTP(/api/v1/storage: presign · 멀티파트). | `--modules storage,storage-s3` | 파일 업로드, 이미지 업로드, 첨부파일, 프리사인, 파일 검증 / file upload, image upload, attachment, presigned url, multipart upload | `@skeleton/storage` |
 | `storage-s3` | S3 호환 저장소(AWS S3 · Cloudflare R2 · MinIO) — presign PUT/GET · 멀티파트 · 복사 · 일괄 삭제, 공개 URL RAW \| OPAQUE. | `--modules storage-s3` | S3, R2, 클라우드 스토리지, 파일 저장소, 이미지 저장 / s3, r2, cloudflare r2, minio, object storage | `@skeleton/storage` |
@@ -1266,6 +1266,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 설정 접두사 `skeleton.search` — 키와 기본값 `docs/config/modules/search.yml`
 - HTTP 경로: `/api/v1/admin`, `/api/v1/search`
 - 문서: `docs/modules/search.md`
+- 짝 프런트(react-skeleton): 항목 `search` · 패키지 `@skeleton/search` · 조각 `--packages search`
 - 쓰지 않는 경우:
   - search 는 엔진을 모른다 — search-jdbc 를 같이 고른다
   - 형태소 분석 · 동의어 · 오타 교정 · 자동 완성은 없다 — 2글자 조각의 부분 문자열 일치뿐이다(필요하면 바깥 엔진 어댑터를 따로)

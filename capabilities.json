@@ -2865,7 +2865,11 @@
       "basePaths": ["/api/v1/admin", "/api/v1/search"],
       "secrets": [],
       "docs": ["docs/modules/search.md"],
-      "frontend": null,
+      "frontend": {
+        "capabilities": ["search"],
+        "newProjectFlag": "--packages search",
+        "packages": ["@skeleton/search"]
+      },
       "notFor": [
         "search 는 엔진을 모른다 — search-jdbc 를 같이 고른다",
         "형태소 분석 · 동의어 · 오타 교정 · 자동 완성은 없다 — 2글자 조각의 부분 문자열 일치뿐이다(필요하면 바깥 엔진 어댑터를 따로)",
