@@ -4,6 +4,7 @@ import dev.sumin.skeleton.review.ReviewErrorCode
 import dev.sumin.skeleton.review.ReviewException
 import dev.sumin.skeleton.review.ReviewInput
 import dev.sumin.skeleton.review.ReviewModerationService
+import dev.sumin.skeleton.review.ReviewPolicy
 import dev.sumin.skeleton.review.ReviewQueue
 import dev.sumin.skeleton.review.ReviewReader
 import dev.sumin.skeleton.review.ReviewService
@@ -22,6 +23,8 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.test.context.TestConfiguration
+import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
 import org.springframework.jdbc.core.simple.JdbcClient
 
@@ -31,6 +34,15 @@ private fun <T> concurrently(count: Int, block: (Int) -> T): List<T> {
     val futures = (0 until count).map { i -> pool.submit<T> { start.await(); block(i) } }
     start.countDown()
     return futures.map { it.get(120, TimeUnit.SECONDS) }.also { pool.shutdown() }
+}
+
+/** 사진 키는 기본이 거절이다(소유를 `review` 가 모른다) - 이 시험은 저장 계층만 보므로 앱 정책을 흉내 내 허용한다 */
+@TestConfiguration
+class AllowPhotosPolicy {
+    @Bean
+    fun reviewPolicy(): ReviewPolicy = object : ReviewPolicy {
+        override fun canAttach(accountId: String, keys: List<String>) = true
+    }
 }
 
 abstract class ReviewModerationDbBase {
@@ -56,7 +68,7 @@ abstract class ReviewModerationDbBase {
 }
 
 /** 숨기기 · 되살리기가 쓰기 · 고치기 · 지우기와 섞여도 집계가 `PUBLISHED` 줄을 다시 센 값이고, 신고 · 큐 · 답글 · 사진이 두 방언에서 같다 */
-@Import(DbTestcontainers::class)
+@Import(DbTestcontainers::class, AllowPhotosPolicy::class)
 @SpringBootTest(classes = [ReviewJdbcTestApplication::class], properties = ["skeleton.review.target-types=product", "skeleton.review.max-photos=3"])
 class ReviewModerationDbTest : ReviewModerationDbBase() {
     @Test
