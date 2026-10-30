@@ -5,6 +5,12 @@ import dev.sumin.skeleton.account.Reauth
 import dev.sumin.skeleton.apikey.ApiKeyAccessInterceptor
 import dev.sumin.skeleton.apikey.ApiKeyAutoConfiguration
 import dev.sumin.skeleton.apikey.ApiKeyProperties
+import dev.sumin.skeleton.apikey.ApiKeyAuthenticator
+import dev.sumin.skeleton.apikey.ApiKeyStore
+import dev.sumin.skeleton.apikey.ApiKeyTokens
+import dev.sumin.skeleton.auth.account.AuthAccountRepository
+import dev.sumin.skeleton.auth.security.BearerTokenAuthenticator
+import dev.sumin.skeleton.common.web.ClientIps
 import dev.sumin.skeleton.apikey.ApiKeys
 import dev.sumin.skeleton.common.account.AccountLabels
 import dev.sumin.skeleton.common.authz.OperatorAccess
@@ -50,10 +56,21 @@ class ApiKeyWebAutoConfiguration {
         labels: ObjectProvider<AccountLabels>,
     ): ApiKeyAdminController = ApiKeyAdminController(keys, access, audit, time, labels.getIfAvailable())
 
-    /** 다른 문(이메일 필수 -100 · 아이디 -110 · 재동의 0)보다 먼저 - 키가 닿을 수 없는 곳이면 그 문들의 답을 보기 전에 막는다 */
     @Bean
     @ConditionalOnBean(ApiKeys::class)
-    @ConditionalOnMissingBean(name = ["apiKeyAccessConfigurer"])
+    @ConditionalOnMissingBean(name = ["apiKeyAuthenticator"])
+    fun apiKeyAuthenticator(
+        store: ApiKeyStore,
+        tokens: ApiKeyTokens,
+        accounts: AuthAccountRepository,
+        time: ObjectProvider<TimeProvider>,
+        clientIps: ObjectProvider<ClientIps>,
+    ): BearerTokenAuthenticator =
+        ApiKeyAuthenticator(store, tokens, accounts, time.getIfAvailable { TimeProvider.systemUtc() }, clientIps.getIfAvailable { ClientIps() })
+
+    /** 인증기와 같은 자동설정에 있어 함께 서고 함께 빠진다(문 없이 키만 받는 일이 없다 - 교체 지점이 아니다). 다른 문(이메일 필수 -100 · 아이디 -110 · 재동의 0)보다 먼저 - 키가 닿을 수 없는 곳이면 그 문들의 답을 보기 전에 막는다 */
+    @Bean
+    @ConditionalOnBean(ApiKeys::class)
     fun apiKeyAccessConfigurer(properties: ApiKeyProperties, limits: ObjectProvider<RateLimitStore>, time: TimeProvider): WebMvcConfigurer =
         object : WebMvcConfigurer {
             override fun addInterceptors(registry: InterceptorRegistry) {

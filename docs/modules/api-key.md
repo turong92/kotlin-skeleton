@@ -7,7 +7,7 @@ API 키 — B2B 호출자가 쓰는 장기 자격. 사용자가 **발급**(이�
 **요청 인증** `Authorization: Bearer <키>` — `auth` 의 `BearerTokenAuthenticator` 고리에 꽂힌다(`JwtAuthenticationFilter` 가 JWT 로 읽기 전에 묻고, 접두사로 가른다). 거절은 모두 JSON: 모르는 키 401 `API_KEY.INVALID` · 만료 401 `API_KEY.EXPIRED` · 회수 401 `API_KEY.REVOKED`(키를 가진 사람에게만 보이므로 이유를 알려 준다) · 주인이 막힘(정지 · 탈퇴 대기 · 없어짐) 403 `API_KEY.OWNER_BLOCKED`.
 통과하면 주체는 **주인 계정에 역할을 비운 것**이다 — `Authentication.name` 을 쓰는 기존 컨트롤러가 그대로 돌고, 역할이 없어 운영 경로(`OperatorAccess`)는 닿지 않는다. `last_used_at` · IP 는 1분보다 오래됐을 때만 조건부 UPDATE 로 쓴다(요청이 몰려도 쓰기는 분당 한 번).
 
-**키로 닿는 곳 — 기본 거부**(`ApiKeyAccessInterceptor`, 다른 문보다 먼저): 키로 온 요청은 처리기(메서드 또는 컨트롤러 클래스)에 `@ApiKeyScope("notes.read")`(`platform`) 표시가 있어야 하고(없으면 403 `API_KEY.NOT_ALLOWED` — 정적 자원 · 함수형 라우트도 같다), 키가 그 범위를 가져야 한다(403 `API_KEY.SCOPE_MISSING`, `data.scope`).
+**키로 닿는 곳 — 기본 거부**(요청 인증과 이 문은 `ApiKeyWebAutoConfiguration` 한 곳에서 함께 선다 - 이 자동설정을 빼면 키는 아예 해석되지 않아 접두사 토큰도 401 이다. 문만 빠지는 길은 없다)(`ApiKeyAccessInterceptor`, 다른 문보다 먼저): 키로 온 요청은 처리기(메서드 또는 컨트롤러 클래스)에 `@ApiKeyScope("notes.read")`(`platform`) 표시가 있어야 하고(없으면 403 `API_KEY.NOT_ALLOWED` — 정적 자원 · 함수형 라우트도 같다), 키가 그 범위를 가져야 한다(403 `API_KEY.SCOPE_MISSING`, `data.scope`).
 범위는 앱 · 모듈이 `ApiKeyScopeDeclaration(module, scopes)` 빈으로 **선언**한다(`api-key` 에 의존하지 않고 선언만 — `PermissionDeclaration` 처럼, `api-key` 가 없으면 아무 일도 안 한다). 범위 키 모양은 권한 키와 같고(`notes.read`) 운영 권한과는 다른 이름 공간이다. 이메일 필수 · 재동의 같은 사람용 문은 키에도 그대로 걸린다(주인이 풀어야 한다).
 키별 한도(`rate-limit.capacity > 0` 일 때)는 키로 온 모든 요청을 센다 — `RateLimitStore` 키 `api-key:<id>`(`redis-rate-limit` 이 있으면 Redis). 넘으면 429 `API_KEY.RATE_LIMITED` + `Retry-After` + `X-RateLimit-*`.
 
@@ -44,7 +44,7 @@ API 키 — B2B 호출자가 쓰는 장기 자격. 사용자가 **발급**(이�
 | 설정 접두사 | `skeleton.api-key` — [docs/config/modules/api-key.yml](../config/modules/api-key.yml) |
 | 기본 동작 | 켜짐. 사용자 경로 켜짐, 운영자 경로 꺼짐(404), 접두사 `apk`, 활성 키 10개 상한, 키별 한도 꺼짐, 만료 상한 없음. |
 | 부팅에 필요한 것 | 저장소 포트 `ApiKeyStore` — `api-key-jdbc` 가 낸다. 없으면 기동에 실패한다. 사용자 경로는 `account` 의 `Reauth` 가 필요하다. 운영자 경로는 `OperatorAccess`(`platform`)가 판정한다. |
-| 교체 지점 | `ApiKeyStore`, `ApiKeyOwnerPolicy`, `ApiKeys`, `ApiKeyTokens`, `ApiKeyScopes`, `ApiKeyController`, `ApiKeyAdminController`, `apiKeyPermissionDeclaration`, `apiKeyAuthenticator`, `apiKeyAccessConfigurer` |
+| 교체 지점 | `ApiKeyStore`, `ApiKeyOwnerPolicy`, `ApiKeys`, `ApiKeyTokens`, `ApiKeyScopes`, `ApiKeyController`, `ApiKeyAdminController`, `apiKeyPermissionDeclaration`, `apiKeyAuthenticator` |
 | 마이그레이션 | 없음 (스키마는 `api-key-jdbc`) |
 | 프론트 짝 | 없음 |
 | 테스트 | `modules/api-key/src/test` |
