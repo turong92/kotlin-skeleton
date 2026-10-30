@@ -1396,7 +1396,7 @@
       "docs": ["docs/modules/dashboard.md", "docs/dashboard-http-contract.md"],
       "frontend": {
         "capabilities": ["admin-dashboard"],
-        "newProjectFlag": null,
+        "newProjectFlag": "--packages dashboard",
         "packages": ["@skeleton/dashboard"]
       },
       "notFor": [
@@ -1439,7 +1439,7 @@
       "docs": ["docs/modules/dashboard-cloudflare.md"],
       "frontend": {
         "capabilities": ["admin-dashboard"],
-        "newProjectFlag": null,
+        "newProjectFlag": "--packages dashboard",
         "packages": ["@skeleton/dashboard"]
       },
       "notFor": [
@@ -1482,7 +1482,7 @@
       "docs": ["docs/modules/dashboard-ga.md"],
       "frontend": {
         "capabilities": ["admin-dashboard"],
-        "newProjectFlag": null,
+        "newProjectFlag": "--packages dashboard",
         "packages": ["@skeleton/dashboard"]
       },
       "notFor": [
@@ -1525,7 +1525,7 @@
       "docs": ["docs/modules/dashboard-jdbc.md"],
       "frontend": {
         "capabilities": ["admin-dashboard"],
-        "newProjectFlag": null,
+        "newProjectFlag": "--packages dashboard",
         "packages": ["@skeleton/dashboard"]
       },
       "notFor": [
@@ -4303,7 +4303,7 @@
         "notifications",
         "captcha-turnstile"
       ],
-      "frontendCommand": "scripts/new-project.sh ~/work/saas/web saas --packages marketing,payment,notifications,captcha-turnstile --scope @acme"
+      "frontendCommand": "scripts/new-project.sh ~/work/saas/web saas --packages marketing,payment,notifications,captcha-turnstile,dashboard --scope @acme"
     },
     {
       "id": "content-ssr",

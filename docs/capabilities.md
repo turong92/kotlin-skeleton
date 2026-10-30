@@ -197,7 +197,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 > 월 구독으로 쓰는 업무 도구. 로그인 후 대시보드 · 목록 · 상세 · 설정 화면이 있고, 요금제 페이지에서 플랜을 골라 토스로 결제하며, 가입 폼은 봇을 막고, 결제 · 작업 완료 알림을 받는다.
 
 - kotlin(이 레포): `scripts/new-project.sh ~/work/saas/api dev.example.saas saas Saas --modules payment,payment-jdbc,payment-toss,notification,notification-jdbc,dashboard,dashboard-jdbc --db mysql`
-- react: `scripts/new-project.sh ~/work/saas/web saas --packages marketing,payment,notifications,captcha-turnstile --scope @acme`
+- react: `scripts/new-project.sh ~/work/saas/web saas --packages marketing,payment,notifications,captcha-turnstile,dashboard --scope @acme`
 - 짝 프런트 항목: `account-lifecycle`, `auth`, `screen-patterns`, `pricing-page`, `payment`, `notifications`, `captcha-turnstile`
 
 ### 콘텐츠 · 랜딩 사이트 (서버 렌더링) — 검색에 노출되는 소개 · 요금 · 약관 사이트
@@ -705,7 +705,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 설정 접두사 `skeleton.dashboard` — 키와 기본값 `docs/config/modules/dashboard.yml`
 - HTTP 경로: `/api/v1/admin/dashboard`, `/api/v1/admin/dashboard/layout`
 - 문서: `docs/modules/dashboard.md`, `docs/dashboard-http-contract.md`
-- 짝 프런트(react-skeleton): 항목 `admin-dashboard` · 패키지 `@skeleton/dashboard` · 조각 기본 포함(덧붙일 것 없음)
+- 짝 프런트(react-skeleton): 항목 `admin-dashboard` · 패키지 `@skeleton/dashboard` · 조각 `--packages dashboard`
 - 쓰지 않는 경우:
   - 이 모듈에는 카드가 없다 — 가입 · 활성 · 매출 숫자는 account-jdbc · auth-session-jdbc · payment-jdbc 를 같이 고르면 기여되고, 앱 고유 숫자는 앱이 DashboardMetric · DashboardRanking 빈으로 더한다
   - 방문 · 유입 같은 접속 통계는 직접 세지 않는다 — Cloudflare · GA 출처 모듈이 기여한다
@@ -722,7 +722,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 설정 접두사 `skeleton.dashboard-cloudflare` — 키와 기본값 `docs/config/modules/dashboard-cloudflare.yml`
 - 비밀 · 환경변수: `<P>_DASHBOARD_CLOUDFLARE_API_TOKEN` — 빠지면: 토큰이 비거나 계정 id · 사이트 태그(설정, 비밀 아님)가 비면 Cloudflare 카드만 「연결하면 보입니다」 — 서버는 뜬다
 - 문서: `docs/modules/dashboard-cloudflare.md`
-- 짝 프런트(react-skeleton): 항목 `admin-dashboard` · 패키지 `@skeleton/dashboard` · 조각 기본 포함(덧붙일 것 없음)
+- 짝 프런트(react-skeleton): 항목 `admin-dashboard` · 패키지 `@skeleton/dashboard` · 조각 `--packages dashboard`
 - 쓰지 않는 경우:
   - 지난 기간(어제까지)을 보려면 dashboard-jdbc 도 같이 — 없으면 지난 날이 걸린 기간은 「기록 없음」이다
   - 프런트가 직접 세는 것(GA 의 페이지 이동 · 재방문 · 전환)은 dashboard-ga 몫이다
@@ -740,7 +740,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - HTTP 경로: `/api/v1/admin/dashboard`
 - 비밀 · 환경변수: `<P>_DASHBOARD_GA_CREDENTIALS` — 빠지면: 키가 비거나 속성 id(설정, 비밀 아님)가 비면 GA 카드만 「연결하면 보입니다」 — 서버는 뜬다
 - 문서: `docs/modules/dashboard-ga.md`
-- 짝 프런트(react-skeleton): 항목 `admin-dashboard` · 패키지 `@skeleton/dashboard` · 조각 기본 포함(덧붙일 것 없음)
+- 짝 프런트(react-skeleton): 항목 `admin-dashboard` · 패키지 `@skeleton/dashboard` · 조각 `--packages dashboard`
 - 쓰지 않는 경우:
   - 지난 기간(어제까지)을 보려면 dashboard-jdbc 도 같이 — 없으면 지난 날이 걸린 기간은 「기록 없음」이다
   - 전체 방문 수는 세지 않는다 — Cloudflare(dashboard-cloudflare)가 센다. GA 는 쿠키에 동의한 방문자만 본다
@@ -755,7 +755,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 의존 한 줄: `implementation(project(":modules:dashboard-jdbc"))`
 - 자동으로 따라온다: `dashboard`
 - 문서: `docs/modules/dashboard-jdbc.md`
-- 짝 프런트(react-skeleton): 항목 `admin-dashboard` · 패키지 `@skeleton/dashboard` · 조각 기본 포함(덧붙일 것 없음)
+- 짝 프런트(react-skeleton): 항목 `admin-dashboard` · 패키지 `@skeleton/dashboard` · 조각 `--packages dashboard`
 - 쓰지 않는 경우:
   - dashboard 없이는 쓰지 않는다(따라온다)
   - dashboard 만으로도 우리 DB 숫자 카드는 돈다 — 이 모듈은 외부 출처(Cloudflare · GA)의 지난 기간 숫자와 기기 간 화면 설정이 필요할 때
