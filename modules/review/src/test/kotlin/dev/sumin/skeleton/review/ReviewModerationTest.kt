@@ -113,17 +113,26 @@ class ReviewModerationTest {
     }
 
     @Test
-    fun `a review the author deleted after a hide cannot be rewritten until a moderator restores it`() {
+    fun `a review the author deleted after a hide cannot be rewritten until a moderator unlocks it, and is never made public again by the moderator`() {
+        write("acc_9", 3)
         val r = write("acc_1", 5)
         h.moderation.hide("acc_op", r.id, "spam")
         h.service.remove("acc_1", r.id)
         assertEquals(ReviewErrorCode.LOCKED, code { write("acc_1") })
         assertEquals(WriteBlockedReason.LOCKED, h.reader.summary("acc_1", BASIC).writeBlockedReason)
-        h.moderation.restore(r.id)   // 운영자만 푼다
-        assertEquals(ReviewStatus.PUBLISHED, h.store.find(r.id)!!.status)
+        assertEquals(listOf(r.id), queue(ReviewQueue.HIDDEN))   // 운영자가 풀 수 있게 큐에 남는다
+        h.moderation.restore(r.id)   // 운영자 되살리기: 잠금만 풀고 공개하지 않는다
+        val after = h.store.find(r.id)!!
+        assertEquals(ReviewStatus.DELETED, after.status)
+        assertNull(after.moderatedBy)
         assertEquals(1, h.store.stats(BASIC).count)
-        h.service.remove("acc_1", r.id)
-        assertEquals(r.id, write("acc_1").id)   // 풀린 뒤에는 지우고 다시 쓸 수 있다
+        assertEquals(1, h.reader.list("acc_2", BASIC, ReviewFilter(), ReviewSort.RECENT, 0, 10).total)
+        assertEquals(1, h.reader.summary("acc_2", BASIC).stats.count)
+        assertEquals(emptyList(), h.reader.mine("acc_1", null, 10).values)
+        assertEquals(emptyList(), queue(ReviewQueue.HIDDEN))
+        assertEquals(emptyList(), queue(ReviewQueue.ALL).filter { it == r.id })
+        assertFalse(r.id to false in h.listener.published)
+        assertEquals(r.id, write("acc_1").id)   // 풀린 뒤에는 작성자가 직접 다시 쓸 수 있다
     }
 
     @Test

@@ -32,17 +32,24 @@ class ReviewModerationService(
         AfterCommit.run { notifier().hidden(review.accountId, review, reason) }
     }
 
-    /** 되살린다 - 숨긴 줄, 또는 운영자가 숨긴 뒤 작성자가 지워 잠긴 줄(되살리기는 운영자만 풀 수 있다). 이미 공개면 그대로 */
+    /**
+     * 숨긴 것을 푼다. 숨긴 줄(`HIDDEN`)은 다시 공개된다. **작성자가 지운 줄은 운영자도 다시 공개하지 않는다** - 숨긴 뒤 작성자가 지워 잠긴 줄은
+     * 숨김 기록만 비워 작성자가 다시 쓸 수 있게 풀 뿐 상태는 `DELETED` 그대로이고 집계 · 이벤트도 없다. 이미 공개면 그대로
+     */
     fun restore(id: String) {
         store.inTransaction {
             val review = store.lock(id) ?: throw notFound()
-            val restorable = review.status == ReviewStatus.HIDDEN || (review.status == ReviewStatus.DELETED && review.moderatedBy != null)
-            if (review.status == ReviewStatus.PUBLISHED) return@inTransaction
-            if (!restorable) throw notFound()
             val now = time.now()
-            store.restore(id, now)
-            store.adjustStats(review.target, review.rating, +1, now)
-            listeners().forEach { it.onPublished(checkNotNull(store.find(id)), false) }
+            when {
+                review.status == ReviewStatus.PUBLISHED -> Unit
+                review.status == ReviewStatus.HIDDEN -> {
+                    store.restore(id, now)
+                    store.adjustStats(review.target, review.rating, +1, now)
+                    listeners().forEach { it.onPublished(checkNotNull(store.find(id)), false) }
+                }
+                review.status == ReviewStatus.DELETED && review.moderatedBy != null -> store.clearModeration(id, now)
+                else -> throw notFound()
+            }
         }
     }
 

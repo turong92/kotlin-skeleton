@@ -93,7 +93,7 @@ fun TargetSummary.toResponse() = SummaryResponse(stats.count, stats.average, sta
 
 fun TargetRating.toResponse(): TargetRatingResponse = summary.let { s: RatingSummary -> TargetRatingResponse(target.type, target.id, s.count, s.average) }
 
-/** 운영 목록의 한 줄 - 계정 id 는 없다. [accountLabel] 은 운영자가 `account.read` 도 가질 때만 채운다 */
+/** 운영 목록의 한 줄 - 계정 id 는 없다. `status=DELETED` 는 **작성자가 지운 줄**이다(운영자가 숨긴 뒤 지워 잠긴 줄만 `hidden` 큐에 오른다) - 개인정보를 위해 본문은 빈 문자열로 나간다. [accountLabel] 은 운영자가 `account.read` 도 가질 때만 채운다 */
 @JsonInclude(JsonInclude.Include.ALWAYS)
 data class AdminReviewResponse(
     val id: String,
@@ -113,7 +113,7 @@ data class AdminReviewResponse(
 
 fun AdminReviewRow.toResponse(accountLabel: String?) = review.let { r ->
     AdminReviewResponse(
-        r.id, r.targetType, r.targetId, r.rating, r.body, r.status, r.moderationReason, r.reportCount, reportReasons, r.reportedAt, accountLabel,
+        r.id, r.targetType, r.targetId, r.rating, if (r.status == ReviewStatus.DELETED) "" else r.body, r.status, r.moderationReason, r.reportCount, reportReasons, r.reportedAt, accountLabel,
         reply?.let { ReplyResponse(it.body, it.createdAt, it.updatedAt) }, r.publishedAt,
     )
 }

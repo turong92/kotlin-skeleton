@@ -154,8 +154,13 @@ class JdbcReviewStore(
 
     override fun restore(id: String, at: Instant): Boolean =
         jdbc.update(
-            "update reviews set status = 'PUBLISHED', moderated_by = null, moderation_reason = null, updated_at = :at " +
-                "where id = :id and (status = 'HIDDEN' or (status = 'DELETED' and moderated_by is not null))",
+            "update reviews set status = 'PUBLISHED', moderated_by = null, moderation_reason = null, updated_at = :at where id = :id and status = 'HIDDEN'",
+            mapOf("id" to id, "at" to instant(at)),
+        ) == 1
+
+    override fun clearModeration(id: String, at: Instant): Boolean =
+        jdbc.update(
+            "update reviews set moderated_by = null, moderation_reason = null, updated_at = :at where id = :id and status = 'DELETED' and moderated_by is not null",
             mapOf("id" to id, "at" to instant(at)),
         ) == 1
 
@@ -167,7 +172,7 @@ class JdbcReviewStore(
         val where = StringBuilder(
             when (queue) {
                 ReviewQueue.REPORTED -> "status = 'PUBLISHED' and report_count > 0 and (reports_reviewed_at is null or reported_at > reports_reviewed_at)"
-                ReviewQueue.HIDDEN -> "status = 'HIDDEN'"
+                ReviewQueue.HIDDEN -> "(status = 'HIDDEN' or (status = 'DELETED' and moderated_by is not null))"
                 ReviewQueue.ALL -> "status <> 'DELETED'"
             },
         )

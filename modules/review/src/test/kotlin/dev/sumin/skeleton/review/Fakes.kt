@@ -84,8 +84,13 @@ class FakeReviewStore : ReviewStore {
         return true
     }
     @Synchronized override fun restore(id: String, at: Instant): Boolean {
-        val r = reviews[id]?.takeIf { it.status == ReviewStatus.HIDDEN || (it.status == ReviewStatus.DELETED && it.moderatedBy != null) } ?: return false
+        val r = reviews[id]?.takeIf { it.status == ReviewStatus.HIDDEN } ?: return false
         reviews[id] = r.copy(status = ReviewStatus.PUBLISHED, moderatedBy = null, moderationReason = null, updatedAt = at)
+        return true
+    }
+    @Synchronized override fun clearModeration(id: String, at: Instant): Boolean {
+        val r = reviews[id]?.takeIf { it.status == ReviewStatus.DELETED && it.moderatedBy != null } ?: return false
+        reviews[id] = r.copy(moderatedBy = null, moderationReason = null, updatedAt = at)
         return true
     }
     @Synchronized override fun dismissReports(id: String, at: Instant): Boolean {
@@ -97,7 +102,7 @@ class FakeReviewStore : ReviewStore {
         reviews.values.filter { r ->
             (targetType == null || r.targetType == targetType) && (before == null || r.id < before) && when (queue) {
                 ReviewQueue.REPORTED -> r.status == ReviewStatus.PUBLISHED && r.hasOpenReports
-                ReviewQueue.HIDDEN -> r.status == ReviewStatus.HIDDEN
+                ReviewQueue.HIDDEN -> r.status == ReviewStatus.HIDDEN || (r.status == ReviewStatus.DELETED && r.moderatedBy != null)
                 ReviewQueue.ALL -> r.status != ReviewStatus.DELETED
             }
         }.sortedByDescending { it.id }.take(limit)

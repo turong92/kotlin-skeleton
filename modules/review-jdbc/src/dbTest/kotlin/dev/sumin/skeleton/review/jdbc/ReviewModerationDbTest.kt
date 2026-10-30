@@ -129,10 +129,12 @@ class ReviewModerationDbTest : ReviewModerationDbBase() {
         assertEquals(listOf(r.id), reader.list(account(1), t, dev.sumin.skeleton.review.ReviewFilter(), dev.sumin.skeleton.review.ReviewSort.RECENT, 0, 10).values.map { it.review.id })
         service.remove(account(1), r.id)
         assertEquals(ReviewErrorCode.LOCKED, assertFailsWith<ReviewException> { write(account(1), t) }.reviewError)
-        moderation.restore(r.id)
-        assertEquals(ReviewStatus.PUBLISHED, store.find(r.id)!!.status)
-        assertEquals(1, store.stats(t).count)
+        moderation.restore(r.id)   // 잠금만 풀린다 - 작성자가 지운 줄은 다시 공개되지 않는다
+        assertEquals(ReviewStatus.DELETED, store.find(r.id)!!.status)
         assertNull(store.find(r.id)!!.moderatedBy)
+        assertEquals(0, store.stats(t).count)
+        assertEquals(r.id, write(account(1), t).id)
+        assertEquals(1, store.stats(t).count)
         assertStatsMatchRows(t)
     }
 

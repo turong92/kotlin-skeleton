@@ -55,8 +55,11 @@ interface ReviewStore {
     /** `PUBLISHED` → `HIDDEN` - 숨긴 사람 · 사유를 남기고 신고를 확인한 것으로 친다. 바뀐 줄이 있으면 true */
     fun hide(id: String, by: String, reason: String, at: Instant): Boolean
 
-    /** `HIDDEN`(또는 운영자가 숨긴 뒤 작성자가 지운 `DELETED`) → `PUBLISHED` - 숨긴 기록을 비운다. 바뀐 줄이 있으면 true */
+    /** `HIDDEN` → `PUBLISHED` - 숨긴 기록을 비운다. 바뀐 줄이 있으면 true. **작성자가 지운 줄은 되살리지 않는다** */
     fun restore(id: String, at: Instant): Boolean
+
+    /** 운영자가 숨긴 뒤 작성자가 지운 `DELETED` 줄의 숨김 기록(`moderated_by` · 사유)만 비운다 - 상태는 `DELETED` 그대로, 작성자가 다시 쓸 수 있게 풀린다. 바뀐 줄이 있으면 true */
+    fun clearModeration(id: String, at: Instant): Boolean
 
     /** 신고를 확인한 것으로 친다(`reports_reviewed_at`). 바뀐 줄이 있으면 true */
     fun dismissReports(id: String, at: Instant): Boolean
