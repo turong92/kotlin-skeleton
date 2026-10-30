@@ -11,6 +11,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import org.assertj.core.api.Assertions.assertThat
+import org.junit.jupiter.api.Assumptions.assumeTrue
 
 /**
  * 스펙 §16 의 실측 — `review_reason` 은 거의 전부 NULL 인 열이다. 「확인 필요 목록」 질의가 두 방언 모두에서 `idx_payment_orders_review` 를 타는지,
@@ -19,8 +20,13 @@ import org.assertj.core.api.Assertions.assertThat
  *
  * 인덱스를 **실제로 고른 것**만 센다: PostgreSQL 은 계획 문장에 이름이 있는지, MySQL 은 `explain` 의 `key` 열(실제로 고른 인덱스)을 본다 —
  * `possible_keys` 열에는 쓰지 않은 후보도 올라오므로 행 전체를 이어 붙여 찾으면 전체 훑기(`key` = NULL)도 통과해 버린다.
+ *
+ * 성능 가드라 MySQL 쪽은 nightly(`-Dskeleton.test.stress=full`)에서만 돈다 — PostgreSQL 은 매번.
  */
 class PaymentIndexPlanDbTest {
+    @BeforeTest
+    fun onlyPostgresUnlessNightly() = assumeTrue(DbTestDatabase.vendor == "postgresql" || System.getProperty("skeleton.test.stress") == "full", "MySQL plans: nightly only")
+
     @BeforeTest
     @AfterTest
     fun clean() = PaymentDb.clean()
