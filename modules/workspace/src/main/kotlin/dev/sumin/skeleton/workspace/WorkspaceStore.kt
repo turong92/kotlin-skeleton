@@ -96,6 +96,6 @@ interface WorkspaceStore {
     /** [excluding] 말고 가장 오래된 ADMIN, 없으면 가장 오래된 MEMBER (소유자 계정이 지워질 때의 이어받을 사람) */
     fun successorCandidate(workspaceId: String, excluding: String): WorkspaceMember?
 
-    /** 계정이 지워질 때: 멤버 줄을 지우고 `created_by` · `invited_by` · `accepted_by` 를 [tombstone] 으로 바꾼다 (멱등). 바뀐 줄 수 */
+    /** 계정이 지워질 때: 소유자가 아닌 멤버 줄을 지우고(소유자 줄은 남겨 소유자 0명이 커밋되지 않게 - 서비스가 먼저 넘긴다) `created_by` · `invited_by` · `accepted_by` 를 [tombstone] 으로 바꾼다 (멱등). 바뀐 줄 수 */
     fun eraseAccount(accountId: String, tombstone: String): Int
 }

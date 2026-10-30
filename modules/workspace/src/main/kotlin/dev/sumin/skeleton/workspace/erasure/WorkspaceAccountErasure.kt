@@ -27,7 +27,12 @@ class WorkspaceAccountErasureListener(private val store: WorkspaceStore, private
     override val name: String = "workspace"
 
     override fun erase(request: ErasureRequest) {
-        store.ownedWorkspaceIds(request.accountId).forEach { handOver(it, request.accountId) }
+        // 넘기는 사이에 지워지는 계정에게 소유권이 이전될 수 있다 - 소유 줄이 없을 때까지 되풀이한다(소유자 줄은 eraseAccount 가 지우지 않는다)
+        repeat(MAX_ROUNDS) {
+            val owned = store.ownedWorkspaceIds(request.accountId)
+            if (owned.isEmpty()) return@repeat
+            owned.forEach { handOver(it, request.accountId) }
+        }
         store.eraseAccount(request.accountId, request.tombstone)
     }
 
@@ -41,5 +46,9 @@ class WorkspaceAccountErasureListener(private val store: WorkspaceStore, private
             if (successor != null) store.setRole(workspaceId, successor.accountId, WorkspaceRole.OWNER)
             else store.closeWorkspace(workspaceId, time.now())
         }
+    }
+
+    private companion object {
+        const val MAX_ROUNDS = 5
     }
 }

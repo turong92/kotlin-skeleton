@@ -273,4 +273,32 @@ class WorkspaceDbTest {
         assertEquals(listOf(c, b), store.searchWorkspaces("zq${seq}x", null, 2).map { it.workspace.id })
         assertEquals(listOf(a), store.searchWorkspaces("zq${seq}x", b, 2).map { it.workspace.id })
     }
+
+    @Test
+    fun `erasing an account never deletes its owner row, so a transfer racing the erasure cannot leave a team without an owner`() {
+        val id = team(acc("xo"), "Erase Race", acc("xm") to WorkspaceRole.MEMBER)
+        store.eraseAccount(acc("xo"), AccountTombstone.of(acc("xo")))   // 안전망이 넘기기 전에 도는 경우
+        assertEquals(1, ownersOf(id))
+        assertNotNull(store.findMember(id, acc("xo")))
+        erasers.forEach { it.erase(ErasureRequest(acc("xo"), AccountTombstone.of(acc("xo")))) }
+        assertEquals(WorkspaceRole.OWNER, store.findMember(id, acc("xm"))!!.role)
+        assertNull(store.findMember(id, acc("xo")))
+        assertEquals(1, ownersOf(id))
+    }
+
+    @Test
+    fun `a slug freed by one rename cannot be taken by another team's simultaneous rename`() {
+        repeat(8) { round ->
+            val a = team(acc("ra$round"), "Slug Race A $round")
+            val b = team(acc("rb$round"), "Slug Race B $round")
+            val old = store.findWorkspace(a)!!.slug
+            val results = concurrently(2) { i -> if (i == 0) service.update(acc("ra$round"), a, null, slug("moved-$round")) else service.update(acc("rb$round"), b, null, old) }
+            if (results[0].isSuccess) {
+                assertTrue(results[1].isFailure, "round $round: the team that left '$old' keeps it reserved")
+                assertEquals(WorkspaceErrorCode.SLUG_TAKEN, (results[1].exceptionOrNull() as WorkspaceException).workspaceError)
+                assertEquals(a, store.slugRetiredTo(old))
+            }
+            assertTrue(!(store.findWorkspaceBySlug(old) != null && store.slugRetiredTo(old) != null), "round $round: a slug is never both live and retired")
+        }
+    }
 }

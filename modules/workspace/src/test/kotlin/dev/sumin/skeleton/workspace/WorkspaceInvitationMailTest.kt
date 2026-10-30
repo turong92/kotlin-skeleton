@@ -50,6 +50,11 @@ class WorkspaceInvitationMailTest {
     }
 
     @Test
+    fun `the token request body prints without its token`() {
+        assertFalse(dev.sumin.skeleton.workspace.web.InvitationTokenRequest("secret-token-C").toString().contains("secret-token-C"))
+    }
+
+    @Test
     fun `without a mail module the token stays out of the log, unless a local app chose to show links`() {
         val hidden = logsDuring { TemplatedWorkspaceInvitationMailer(DefaultWorkspaceInvitationMail(), LogOnlyWorkspaceMailTransport(false), links).send(mail("en", token = "secret-token-A")) }
         assertTrue(hidden.isNotEmpty())

@@ -97,6 +97,9 @@ class WorkspaceService(
             store.retireSlug(workspace.slug, workspace.id, now)
         }
         if (!store.updateWorkspace(workspace.id, nextName, nextSlug, now)) throw WorkspaceException(WorkspaceErrorCode.SLUG_TAKEN)
+        // 차지한 뒤 같은 트랜잭션에서 옛 slug 기록을 다시 본다 - 위의 확인과 차지 사이에 다른 워크스페이스가 이 slug 를 놓고(커밋) 갔을 수 있다(PG READ COMMITTED).
+        // 차지(유니크 칸)는 그 커밋을 기다리므로 여기서는 반드시 그 기록이 보인다. 던지면 트랜잭션이 되돌려진다
+        if (nextSlug != workspace.slug && store.slugRetiredTo(nextSlug).let { it != null && it != workspace.id }) throw WorkspaceException(WorkspaceErrorCode.SLUG_TAKEN)
         detailOf(store.findWorkspace(workspace.id) ?: throw notFound(), me)
     }
 

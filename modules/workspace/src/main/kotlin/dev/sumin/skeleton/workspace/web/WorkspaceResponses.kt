@@ -49,7 +49,10 @@ fun MemberView.toResponse() = MemberResponse(member.accountId, label, member.rol
 
 data class InviteRequest(val emails: List<String>?, val role: String?)
 
-data class InvitationTokenRequest(val token: String?)
+data class InvitationTokenRequest(val token: String?) {
+    /** 본문 로깅(MVC DEBUG)에 평문 토큰이 남지 않게 */
+    override fun toString() = "InvitationTokenRequest(token=<redacted>)"
+}
 
 data class InviteResponse(val invited: List<String>, val alreadyInvited: List<String>, val seatLimited: List<String>)
 

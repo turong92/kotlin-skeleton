@@ -216,7 +216,7 @@ class JdbcWorkspaceStore(
 
     override fun eraseAccount(accountId: String, tombstone: String): Int {
         val args = mapOf("a" to accountId, "t" to tombstone)
-        return jdbc.update("delete from workspace_members where account_id = :a", args) +
+        return jdbc.update("delete from workspace_members where account_id = :a and role <> 'OWNER'", args) +
             jdbc.update("update workspaces set created_by = :t where created_by = :a", args) +
             jdbc.update("update workspace_members set invited_by = :t where invited_by = :a", args) +
             jdbc.update("update workspace_invitations set invited_by = :t where invited_by = :a", args) +

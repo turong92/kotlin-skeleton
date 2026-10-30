@@ -127,7 +127,7 @@ class FakeWorkspaceStore : WorkspaceStore {
 
     override fun eraseAccount(accountId: String, tombstone: String): Int = lock.withLock {
         var n = 0
-        if (members.removeIf { it.accountId == accountId }) n++
+        if (members.removeIf { it.accountId == accountId && it.role != WorkspaceRole.OWNER }) n++
         workspaces.replaceAll { _, w -> if (w.createdBy == accountId) { n++; w.copy(createdBy = tombstone) } else w }
         members.replaceAll { m -> if (m.invitedBy == accountId) { n++; m.copy(invitedBy = tombstone) } else m }
         n

@@ -53,6 +53,7 @@ data class WebProperties(
             "X-Break-Glass-Reason",
             "X-Break-Glass-Secret",
             "X-Board-Guest-Secret", // board 의 비회원 글 · 댓글 비밀값 (skeleton.board.guest.enabled)
+            "X-Workspace-Id", // workspace 의 CurrentWorkspace - 지금 워크스페이스
         ),
         val exposedHeaders: List<String> = listOf(
             "Location",
