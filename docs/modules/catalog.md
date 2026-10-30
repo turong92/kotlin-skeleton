@@ -42,6 +42,8 @@
 
 오류: `409 CATALOG.CODE_TAKEN`(상품 · 가격 코드, 이미 다른 가격에 걸린 결제사 가격 id) · `409 LEVEL_TAKEN` · `409 PRICE_OVERLAP` · `400 PRICE_INVALID`(금액 0 이하 · 통화 · 주기 · 정가 ≤ 금액 · 시작 ≥ 끝 · 이미 지난 끝 · 중지된 가격을 고침) · `404 NOT_FOUND`. 입력이 틀리면 `errors[{field, code, message}]` 로 어느 칸인지 알린다(`field` 는 요청 본문 이름, 가격은 `CATALOG.PRICE_INVALID`, 상품 쪽(코드 모양 · 종류 · 등급 · 언어 이름)은 `400 COMMON.VALIDATION_FAILED`).
 
+**검색 연동**: 검색(`search-jdbc`)을 붙인 앱이면 상품을 만들 때 · 고칠 때(이름 · 설명 · 판매 여부) `product` 문서가 같은 트랜잭션 안에서 색인에 들어간다 - 제목은 `skeleton.catalog.default-locale` 의 이름(없으면 첫 언어), 본문은 모든 언어의 이름 · 설명, 범위(`scope`)는 상품 종류(`SUBSCRIPTION` · `ONE_TIME`), 문서 id 는 상품 코드, 주인은 없다. 판매 중지(`selling=false`)가 되면 문서를 지우고 다시 켜면 다시 넣는다(가격 변경은 문서에 영향이 없다). `catalog` 는 `search` 에 의존하지 않는다 - platform 의 `SearchIndexer` 를 `ObjectProvider` 로 부르므로 검색을 안 붙인 앱은 동작이 그대로다. 검색을 나중에 붙인 앱은 `POST /api/v1/admin/search/rebuild {"type":"product"}`(운영 경로를 켠 앱) 로 처음 채운다 - `SearchSource("product")` 빈(`CatalogSearchSource`)이 판매 중인 상품만 코드 순으로 내놓는다.
+
 **코드 플랜에서 옮기는 법**: 옛 `SubscriptionPlans` 빈의 월 가격 코드를 그대로 가격 코드로 만든다(예: `basic` · `standard` · `pro`) - 기존 구독 줄의 `plan_code` · 쿠폰 범위가 그대로 맞는다. 연 가격은 새 코드(`basic-yearly`), 달러 가격은 `basic-usd` 처럼 통화별 줄을 더하고, 옛 플랜 빈은 지운다.
 단건(응원하기 같은 코드 상품)은 앱이 `PaymentCatalog` 빈을 두고 `itemType` 이 표 상품이면 `CatalogPaymentCatalog` 를 부른다.
 
@@ -53,7 +55,7 @@
 | 설정 접두사 | `skeleton.catalog` — [docs/config/modules/catalog.yml](../config/modules/catalog.yml) |
 | 기본 동작 | 켜짐. 공개 읽기 꺼짐, 운영자 경로 꺼짐. 결제 계약 구현은 저장소가 있으면 빈으로 서고 앱이 같은 타입의 빈을 두면 앱 것이 이긴다. |
 | 부팅에 필요한 것 | 저장소 포트 `CatalogStore` — `catalog-jdbc` 가 낸다. 없으면 서비스 빈이 켜지지 않는다. |
-| 교체 지점 | `CatalogStore`, `CatalogAdmin`, `CatalogReader`, 결제 계약 `SubscriptionPlans` · `PaymentCatalog` · `ProviderPriceRefs`, `CatalogController`, `CatalogAdminController` |
+| 교체 지점 | `CatalogStore`, `CatalogAdmin`, `CatalogReader`, `CatalogSearchSource`, 결제 계약 `SubscriptionPlans` · `PaymentCatalog` · `ProviderPriceRefs`, `CatalogController`, `CatalogAdminController` |
 | 마이그레이션 | 없음 (스키마는 `catalog-jdbc`) |
 | 프론트 짝 | `@skeleton/payment` |
 | 테스트 | `modules/catalog/src/test` |

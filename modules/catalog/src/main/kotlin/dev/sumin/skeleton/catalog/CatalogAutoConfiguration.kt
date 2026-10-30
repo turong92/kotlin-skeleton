@@ -2,6 +2,8 @@ package dev.sumin.skeleton.catalog
 
 import dev.sumin.skeleton.common.authz.OperatorAuditLog
 import dev.sumin.skeleton.common.authz.PermissionDeclaration
+import dev.sumin.skeleton.common.search.SearchIndexer
+import dev.sumin.skeleton.common.search.SearchSource
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.payment.PaymentCatalog
 import dev.sumin.skeleton.payment.PaymentLedgerAutoConfiguration
@@ -37,11 +39,17 @@ class CatalogAutoConfiguration {
     @Bean
     @ConditionalOnBean(CatalogStore::class)
     @ConditionalOnMissingBean
-    fun catalogAdmin(store: CatalogStore, time: ObjectProvider<TimeProvider>, audit: ObjectProvider<OperatorAuditLog>, router: ObjectProvider<PaymentProviderRouter>): CatalogAdmin =
+    fun catalogAdmin(store: CatalogStore, time: ObjectProvider<TimeProvider>, audit: ObjectProvider<OperatorAuditLog>, router: ObjectProvider<PaymentProviderRouter>, search: ObjectProvider<SearchIndexer>, properties: CatalogProperties): CatalogAdmin =
         CatalogAdmin(store, time.getIfAvailable { TimeProvider.systemUtc() }, audit.getIfAvailable { OperatorAuditLog { } }, providers = {
             // 가격 id 를 쓰는 켜진 결제사 = 서명된 웹훅이 곧 사실인 결제사(거래를 먼저 만드는 Paddle 꼴)
             router.getIfAvailable()?.providerIds(PaymentPushGateway::class).orEmpty()
-        })
+        }, searchIndexer = { search.ifAvailable }, defaultLocale = properties.defaultLocale)
+
+    /** 검색 모듈이 이 종류(`product`)를 다시 읽을 때 쓴다 - 검색을 안 붙인 앱에서는 아무도 부르지 않는 빈이다 */
+    @Bean
+    @ConditionalOnBean(CatalogStore::class)
+    @ConditionalOnMissingBean(name = ["catalogSearchSource"])
+    fun catalogSearchSource(store: CatalogStore, properties: CatalogProperties): SearchSource = CatalogSearchSource(store, properties.defaultLocale)
 
     @Bean
     @ConditionalOnBean(CatalogStore::class)

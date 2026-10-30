@@ -4,6 +4,7 @@ import dev.sumin.skeleton.common.FieldValidationException
 import dev.sumin.skeleton.common.authz.OperatorAction
 import dev.sumin.skeleton.common.authz.OperatorAuditLog
 import dev.sumin.skeleton.common.id.SortableIds
+import dev.sumin.skeleton.common.search.SearchIndexer
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.payment.SubscriptionPeriod
 import java.time.Instant
@@ -53,6 +54,10 @@ class CatalogAdmin(
     private val ids: SortableIds = SortableIds.system,
     /** 가격 id 를 쓰는 켜진 결제사 - 결제사 링크는 이 id 에만 둘 수 있다 */
     private val providers: () -> List<String> = { emptyList() },
+    /** 검색 색인에 밀어 넣는 쪽 - 검색을 안 붙인 앱은 null 을 돌려줘 아무 일도 없다. 호출자(쓰기) 트랜잭션 안에서 부른다 */
+    private val searchIndexer: () -> SearchIndexer? = { null },
+    /** 검색 문서의 제목으로 쓰는 언어 ([CatalogProperties.defaultLocale]) */
+    private val defaultLocale: String = "en",
 ) {
     fun linkableProviders(): List<String> = providers()
 
@@ -82,6 +87,7 @@ class CatalogAdmin(
             if (level != null) requireLevelFree(level, code)
             val product = CatalogProduct(ids.newId(PRODUCT_PREFIX), code, kind, level, input.highlighted, true, input.sortOrder, texts, now, now)
             store.insertProduct(product)
+            pushToSearch(product)
             audit.record(OperatorAction(actorId, "catalog.product.created", TARGET_PRODUCT, code, mapOf("kind" to kind.name)))
             CatalogEntry(product, emptyList())
         }
@@ -107,6 +113,7 @@ class CatalogAdmin(
                 updatedAt = now,
             )
             store.updateProduct(updated)
+            pushToSearch(updated)
             audit.record(OperatorAction(actorId, "catalog.product.updated", TARGET_PRODUCT, code, mapOf("selling" to updated.selling.toString())))
             CatalogEntry(updated, newestFirst(store.listPricesOf(updated.id)))
         }
@@ -196,6 +203,12 @@ class CatalogAdmin(
             val price = store.findPrice(priceCode) ?: throw notFound("price", priceCode)   // 잠근 뒤에 다시 읽는다
             block(price, store.listPricesOf(product.id))
         }
+    }
+
+    /** 판매 중이면 문서를 덮고, 중지면 지운다 - 가격 쪽 변경은 상품 문서에 영향이 없다 */
+    private fun pushToSearch(product: CatalogProduct) {
+        val indexer = searchIndexer() ?: return
+        if (product.selling) indexer.upsert(product.toSearchDocument(defaultLocale)) else indexer.delete(PRODUCT_SEARCH_TYPE, product.code)
     }
 
     private fun requireLevelFree(level: Int, code: String) {
