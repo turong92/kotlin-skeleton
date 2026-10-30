@@ -5,6 +5,7 @@ import dev.sumin.skeleton.workspace.InvitationStatus
 import dev.sumin.skeleton.workspace.MyWorkspace
 import dev.sumin.skeleton.workspace.Workspace
 import dev.sumin.skeleton.workspace.WorkspaceInvitation
+import dev.sumin.skeleton.workspace.WorkspaceListRow
 import dev.sumin.skeleton.workspace.WorkspaceMember
 import dev.sumin.skeleton.workspace.WorkspaceRole
 import dev.sumin.skeleton.workspace.WorkspaceStatus
@@ -170,6 +171,24 @@ class JdbcWorkspaceStore(
         MapSqlParameterSource().addValue("status", status.name).addValue("by", acceptedBy).addValue("acc", instant(if (status == InvitationStatus.ACCEPTED) at else null))
             .addValue("at", instant(at)).addValue("id", id),
     ) == 1
+
+    override fun searchWorkspaces(query: String?, before: String?, limit: Int): List<WorkspaceListRow> {
+        val where = ArrayList<String>()
+        val params = MapSqlParameterSource().addValue("limit", limit)
+        if (query != null) {
+            // % · _ 는 글자 그대로 - 지정한 문자(!)로 빠져나가게 한다
+            where += "(lower(w.name) like :like escape '!' or lower(w.slug) like :like escape '!' or w.id = :query)"
+            params.addValue("like", "%" + query.lowercase().replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%").addValue("query", query)
+        }
+        if (before != null) {
+            where += "w.id < :before"
+            params.addValue("before", before)
+        }
+        val sql = "select w.*, (select count(*) from workspace_members m where m.workspace_id = w.id) as member_count, " +
+            "(select min(o.account_id) from workspace_members o where o.workspace_id = w.id and o.role = 'OWNER') as owner_id " +
+            "from workspaces w" + (if (where.isEmpty()) "" else " where " + where.joinToString(" and ")) + " order by w.id desc limit :limit"
+        return jdbc.query(sql, params) { rs, _ -> WorkspaceListRow(rs.toWorkspace(), rs.getString("owner_id"), rs.getInt("member_count")) }
+    }
 
     override fun setRole(workspaceId: String, accountId: String, role: WorkspaceRole): Boolean = jdbc.update(
         "update workspace_members set role = :role, owner_key = :owner_key where workspace_id = :w and account_id = :a",

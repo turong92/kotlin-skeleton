@@ -248,4 +248,29 @@ class WorkspaceDbTest {
         assertEquals(InvitationStatus.ACCEPTED, store.findInvitationByTokenHash(sha256(accepted))!!.status)
         assertEquals(0, store.listPendingInvitations(id).size)
     }
+
+    // ---- 운영자 검색
+
+    @Test
+    fun `the operator search matches name, address or id on both dialects, escapes wildcards, shows closed teams and pages newest first`() {
+        val a = team(acc("qa"), "Zq${seq}x Alpha", acc("qm") to WorkspaceRole.MEMBER)
+        val b = service.create(acc("qb"), "Zq${seq}x 100% Beta_1", slug("qb")).workspace.id
+        val c = team(acc("qc"), "Zq${seq}x Gamma")
+        store.closeWorkspace(c, Instant.now())
+
+        val all = store.searchWorkspaces("zq${seq}x", null, 10)
+        assertEquals(listOf(c, b, a), all.map { it.workspace.id }, "newest id first, closed ones included")
+        assertEquals(listOf(acc("qc"), acc("qb"), acc("qa")), all.map { it.ownerId }, "owner is the OWNER row")
+        assertEquals(2, all.single { it.workspace.id == a }.memberCount)
+        assertEquals(WorkspaceStatus.CLOSED, all.first().workspace.status)
+
+        assertEquals(listOf(a), store.searchWorkspaces("alpha", null, 10).filter { it.workspace.id == a }.map { it.workspace.id })
+        assertEquals(listOf(b), store.searchWorkspaces("100% beta_1", null, 10).map { it.workspace.id }, "% and _ are literal")
+        assertEquals(emptyList(), store.searchWorkspaces("zq${seq}x 100_ beta", null, 10).map { it.workspace.id }, "_ is not a wildcard")
+        assertEquals(listOf(a), store.searchWorkspaces(a, null, 10).map { it.workspace.id }, "an exact id")
+        assertEquals(listOf(store.findWorkspace(a)!!.slug), store.searchWorkspaces(store.findWorkspace(a)!!.slug, null, 10).map { it.workspace.slug })
+
+        assertEquals(listOf(c, b), store.searchWorkspaces("zq${seq}x", null, 2).map { it.workspace.id })
+        assertEquals(listOf(a), store.searchWorkspaces("zq${seq}x", b, 2).map { it.workspace.id })
+    }
 }

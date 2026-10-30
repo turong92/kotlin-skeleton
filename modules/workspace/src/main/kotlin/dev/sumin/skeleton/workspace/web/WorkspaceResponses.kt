@@ -1,12 +1,14 @@
 package dev.sumin.skeleton.workspace.web
 
 import com.fasterxml.jackson.annotation.JsonInclude
+import dev.sumin.skeleton.workspace.AdminWorkspaceDetail
 import dev.sumin.skeleton.workspace.InvitationPreview
 import dev.sumin.skeleton.workspace.InvitationView
 import dev.sumin.skeleton.workspace.InviteResult
 import dev.sumin.skeleton.workspace.MemberView
 import dev.sumin.skeleton.workspace.MyWorkspace
 import dev.sumin.skeleton.workspace.WorkspaceDetail
+import dev.sumin.skeleton.workspace.WorkspaceListRow
 import java.time.Instant
 
 /** 내 목록의 한 줄 · 만들기의 응답 */
@@ -63,3 +65,34 @@ fun InviteResult.toResponse() = InviteResponse(invited, alreadyInvited, seatLimi
 fun InvitationView.toResponse() = InvitationResponse(invitation.id, invitation.email, invitation.role.name, invitation.expiresAt, expired, invitation.sentCount, invitation.invitedBy)
 
 fun InvitationPreview.toResponse() = InvitationPreviewResponse(workspaceName, inviterLabel, emailMasked, role.name, expiresAt)
+
+// 운영자 (읽기)
+
+/** 운영자 목록의 한 줄 - `ownerLabel` 은 `account.read` 가 있고 이름을 알 때만(아니면 `null`), `ownerId` 는 소유자 줄이 없으면 `null` */
+@JsonInclude(JsonInclude.Include.ALWAYS)
+data class AdminWorkspaceRow(val id: String, val name: String, val slug: String, val status: String, val ownerId: String?, val ownerLabel: String?, val memberCount: Int, val createdAt: Instant)
+
+/** 운영자 상세 - 멤버의 `label` 도 `account.read` 가 있을 때만 */
+@JsonInclude(JsonInclude.Include.ALWAYS)
+data class AdminWorkspaceDetailResponse(
+    val id: String,
+    val name: String,
+    val slug: String,
+    val status: String,
+    val createdAt: Instant,
+    val closedAt: Instant?,
+    val ownerId: String?,
+    val ownerLabel: String?,
+    val memberCount: Int,
+    val pendingInvitations: Int,
+    val seatLimit: Int?,
+    val members: List<MemberResponse>,
+)
+
+fun WorkspaceListRow.toResponse(names: Map<String, String>) =
+    AdminWorkspaceRow(workspace.id, workspace.name, workspace.slug, workspace.status.name, ownerId, ownerId?.let(names::get), memberCount, workspace.createdAt)
+
+fun AdminWorkspaceDetail.toResponse(names: Map<String, String>) = AdminWorkspaceDetailResponse(
+    workspace.id, workspace.name, workspace.slug, workspace.status.name, workspace.createdAt, workspace.closedAt, ownerId, ownerId?.let(names::get), memberCount, pendingInvitations, seatLimit,
+    members.map { MemberResponse(it.accountId, names[it.accountId], it.role.name, it.joinedAt) },
+)

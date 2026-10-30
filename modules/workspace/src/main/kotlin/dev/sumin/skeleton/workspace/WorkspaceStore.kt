@@ -76,6 +76,12 @@ interface WorkspaceStore {
     /** 대기 초대를 [InvitationStatus.ACCEPTED] 또는 [InvitationStatus.REVOKED] 로 닫고 같은 주소를 다시 초대할 수 있게 비운다. 대기 상태가 아니면 false */
     fun closeInvitation(id: String, status: InvitationStatus, acceptedBy: String?, at: Instant): Boolean
 
+    /**
+     * 운영자 검색 - 닫힌 것도 포함, 새 것부터(id 내림차순). [query] 는 이름 · slug 에 대소문자 무시로 들어 있거나 id 와 같은 것(`%` · `_` 는 글자 그대로).
+     * [before] 는 직전 쪽의 마지막 id. 멤버 수와 소유자를 함께 돌려준다
+     */
+    fun searchWorkspaces(query: String?, before: String?, limit: Int): List<WorkspaceListRow>
+
     /** 역할을 바꾼다. [WorkspaceRole.OWNER] 로 바꾸면 소유자 표시가 서고, 아니면 사라진다 — 소유자를 옮길 때는 옛 소유자를 먼저 내린다 */
     fun setRole(workspaceId: String, accountId: String, role: WorkspaceRole): Boolean
 

@@ -3,6 +3,7 @@ package dev.sumin.skeleton.workspace
 import dev.sumin.skeleton.common.account.AccountDeletionCheck
 import dev.sumin.skeleton.common.account.AccountFacts
 import dev.sumin.skeleton.common.account.AccountLabels
+import dev.sumin.skeleton.common.authz.PermissionDeclaration
 import dev.sumin.skeleton.common.deploy.DeployContext
 import dev.sumin.skeleton.common.erasure.AccountErasureListener
 import dev.sumin.skeleton.common.project.ProjectRegistry
@@ -47,6 +48,18 @@ class WorkspaceAutoConfiguration {
         seats: WorkspaceSeatPolicy,
         labels: ObjectProvider<AccountLabels>,
     ): WorkspaceService = WorkspaceService(store, time.getIfAvailable { TimeProvider.systemUtc() }, seats, labels.getIfAvailable())
+
+    /** 운영자 권한 카탈로그에 `workspace.read` 를 올린다 - 운영 경로를 켜지 않아도 선언은 남는다(모듈을 빼면 권한도 사라진다) */
+    @Bean
+    @ConditionalOnMissingBean(name = ["workspacePermissionDeclaration"])
+    fun workspacePermissionDeclaration(): PermissionDeclaration = WorkspacePermissions.declaration()
+
+    @Bean
+    @ConditionalOnBean(WorkspaceStore::class)
+    @ConditionalOnProperty(prefix = "skeleton.workspace.admin", name = ["enabled"], havingValue = "true")
+    @ConditionalOnMissingBean
+    fun workspaceAdminService(store: WorkspaceStore, time: ObjectProvider<TimeProvider>, seats: WorkspaceSeatPolicy): WorkspaceAdminService =
+        WorkspaceAdminService(store, time.getIfAvailable { TimeProvider.systemUtc() }, seats)
 
     @Bean
     @ConditionalOnBean(WorkspaceService::class)

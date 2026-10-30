@@ -83,3 +83,19 @@ data class InviteResult(val invited: List<String>, val alreadyInvited: List<Stri
 
 /** 로그인 없이 보이는 초대 미리보기 — 주소는 가려서 */
 data class InvitationPreview(val workspaceName: String, val inviterLabel: String?, val emailMasked: String, val role: WorkspaceRole, val expiresAt: Instant)
+
+// 운영자 읽기
+
+/** 운영자 목록의 한 줄 - [ownerId] 는 소유자 줄이 남아 있을 때만(닫힌 워크스페이스는 비어 있을 수 있다) */
+data class WorkspaceListRow(val workspace: Workspace, val ownerId: String?, val memberCount: Int)
+
+data class AdminWorkspacePage(val rows: List<WorkspaceListRow>, val nextCursor: String?)
+
+data class AdminWorkspaceDetail(
+    val workspace: Workspace,
+    val ownerId: String?,
+    val memberCount: Int,
+    val pendingInvitations: Int,
+    val seatLimit: Int?,
+    val members: List<WorkspaceMember>,
+)

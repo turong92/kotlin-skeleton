@@ -96,6 +96,14 @@ class FakeWorkspaceStore : WorkspaceStore {
         true
     }
 
+    override fun searchWorkspaces(query: String?, before: String?, limit: Int): List<WorkspaceListRow> = lock.withLock {
+        workspaces.values.filter { w ->
+            (query == null || w.name.contains(query, ignoreCase = true) || w.slug.contains(query, ignoreCase = true) || w.id == query) && (before == null || w.id < before)
+        }.sortedByDescending { it.id }.take(limit).map { w ->
+            WorkspaceListRow(w, members.firstOrNull { it.workspaceId == w.id && it.role == WorkspaceRole.OWNER }?.accountId, members.count { it.workspaceId == w.id })
+        }
+    }
+
     override fun setRole(workspaceId: String, accountId: String, role: WorkspaceRole): Boolean = lock.withLock {
         val i = members.indexOfFirst { it.workspaceId == workspaceId && it.accountId == accountId }
         if (i < 0) return false

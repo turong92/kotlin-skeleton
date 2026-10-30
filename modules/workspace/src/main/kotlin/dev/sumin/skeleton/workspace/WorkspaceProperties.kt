@@ -21,6 +21,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties
  *       link-base-url: https://app.example.com     # 메일 링크 = <이 주소>/invite?token=…
  *       default-locale: en
  *       log-links: AUTO                # 메일 모듈이 없을 때 링크(토큰 포함)를 로그에 남기나: AUTO = 보호 환경(stage · prod)이 아닐 때만
+ *     admin:
+ *       enabled: false                 # true 면 운영자 읽기 경로(GET /api/v1/admin/workspaces …, workspace.read). 꺼져 있으면 404
+ *       base-path: /api/v1/admin
  * ```
  */
 @ConfigurationProperties("skeleton.workspace")
@@ -28,6 +31,7 @@ data class WorkspaceProperties(
     val http: Http = Http(),
     val invitation: Invitation = Invitation(),
     val mail: Mail = Mail(),
+    val admin: Admin = Admin(),
 ) {
     data class Http(
         val enabled: Boolean = true,
@@ -51,4 +55,9 @@ data class WorkspaceProperties(
     ) {
         enum class LogLinks { AUTO, ON, OFF }
     }
+
+    data class Admin(
+        val enabled: Boolean = false,
+        val basePath: String = "/api/v1/admin",
+    )
 }

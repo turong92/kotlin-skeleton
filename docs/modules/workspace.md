@@ -1,7 +1,7 @@
 # workspace
 
 워크스페이스(팀 · 조직) — 사용자가 워크스페이스를 만들고, 소유자 · 관리자 · 멤버 역할로 나눠 쓰고, 이름 · 주소(slug)를 바꾸고, 멤버를 내보내고, 탈퇴 · 소유권 이전을 한다. 요청마다 「지금 워크스페이스」가 정해져 앱 데이터가 그 경계 안에 묶인다.
-설계와 고르지 않은 안: `docs/superpowers/specs/2026-10-30-org-design.md`. 저장은 어댑터 `workspace-jdbc`(메모리 구현 없음). **이 모듈을 안 붙인 앱의 동작은 바뀌지 않는다.** 이 조각에는 운영자 경로가 아직 없다(다음 조각).
+설계와 고르지 않은 안: `docs/superpowers/specs/2026-10-30-org-design.md`. 저장은 어댑터 `workspace-jdbc`(메모리 구현 없음). **이 모듈을 안 붙인 앱의 동작은 바뀌지 않는다.**
 
 **역할**: 고정 셋 `OWNER > ADMIN > MEMBER` — 앱은 「최소 역할」로 묻는다. 사용자 정의 역할 · 게스트는 없다. 서비스 운영자 역할(`authz`)과는 다른 축이다 — 서비스 관리자라도 멤버가 아니면 워크스페이스 데이터를 못 본다.
 **소유자는 정확히 하나** — 소유권 이전으로만 바뀐다. DB 가 소유자 표시(`owner_key`)를 유니크로 막고, 모든 변경이 워크스페이스 줄을 `for update` 로 잡은 뒤 호출자의 **현재** 멤버십을 다시 읽어 판정한다(동시 이전 · 역할 변경 · 추방이 겹쳐도 하나, 진 쪽은 새 역할로 다시 판정되어 403).
@@ -32,6 +32,17 @@
 앱 서버 코드는 `Workspaces`(`create` · `membershipOf` · `membersOf`)를 쓴다 — 가입 뒤 개인 워크스페이스를 만들거나 자기 화면에 멤버를 끼울 때. 브라우저에 열려 있지 않다.
 이 모듈은 `account` 를 모른다 — 계정 이름은 `platform` 의 `AccountLabels`, 삭제 연동은 `AccountDeletionCheck` · `AccountErasureListener` 계약으로만 만난다.
 
+## 운영자 읽기 경로
+
+`skeleton.workspace.admin.enabled=true` 로 켠다(**기본 꺼짐** — 꺼져 있으면 경로가 없어 `404`). 읽기만 한다. 모든 핸들러가 `workspace.read` 를 `OperatorAccess` 로 **매 호출** 판정한다(익명 `401`, 권한 없음 `403`). 모듈은 권한 선언 `workspace.read` 를 늘 내놓는다(기본으로 받는 역할 없음 — 전권 역할만, `skeleton.authz.roles` 로 나눈다). 서비스 관리자라도 `workspace.read` 가 없으면 못 본다 — 워크스페이스 역할(`authz` 와 다른 축)과도 섞이지 않는다.
+
+| 메서드 · 경로 (`/api/v1/admin`) | 하는 일 |
+|---|---|
+| `GET /workspaces?q&cursor&size` | 새 것부터 `[{id, name, slug, status, ownerId, ownerLabel, memberCount, createdAt}]` + `cursor{nextCursor, hasNext}`. `q` = 이름 · slug 에 들어 있는 글자(대소문자 무시, `%` `_` 는 글자 그대로) 또는 정확한 id. 닫힌 워크스페이스도 나온다. `size` 기본 50, 최대 100 |
+| `GET /workspaces/{id}` | `{id, name, slug, status, createdAt, closedAt, ownerId, ownerLabel, memberCount, pendingInvitations, seatLimit, members:[{accountId, label, role, joinedAt}]}`. 없는 id 는 `404 WORKSPACE.NOT_FOUND` |
+
+**계정 이름**(`ownerLabel` · 멤버 `label`)은 호출자에게 `account.read` 도 있을 때만 채운다 — 없으면 `null`(id 만). 쿠폰 · 배지와 같은 규칙이다.
+
 ## 초대
 
 `skeleton.workspace.invitation.enabled=true` 로 켠다(**기본 꺼짐** — 켜려면 `AccountFacts` 빈과 메일 링크 주소가 있어야 한다). 켰는데 `AccountFacts`(`modules:account` 가 낸다)가 없으면 **기동이 실패**한다 — 수락이 호출자의 *확인된* 이메일을 초대 주소와 대조하는데 그 사실을 줄 곳이 없기 때문이다. 메시지가 빈 이름과 스위치를 적는다.
@@ -59,9 +70,9 @@
 | 함께 오는 모듈 | `platform` |
 | 컴파일 전용 | Spring Security (경로를 등록할 때만 필요하다), `notification-mail` (초대 메일 — 없으면 로그만) |
 | 설정 접두사 | `skeleton.workspace` — [docs/config/modules/workspace.yml](../config/modules/workspace.yml) |
-| 기본 동작 | 켜짐. 사용자 경로 켜짐(`skeleton.workspace.http.enabled=false` 로 끈다 — 경계 `CurrentWorkspace` 는 그대로), 좌석 상한 없음, **초대는 꺼짐**(`skeleton.workspace.invitation.enabled=true`). |
+| 기본 동작 | 켜짐. 사용자 경로 켜짐(`skeleton.workspace.http.enabled=false` 로 끈다 — 경계 `CurrentWorkspace` 는 그대로), 좌석 상한 없음, **초대 · 운영자 경로는 꺼짐**(`skeleton.workspace.invitation.enabled` · `skeleton.workspace.admin.enabled`). |
 | 부팅에 필요한 것 | 저장소 포트 `WorkspaceStore` — `workspace-jdbc` 가 낸다. 없으면 서비스 빈이 켜지지 않는다. 초대를 켜면 `AccountFacts`(`modules:account`)도 — 없으면 기동 실패. |
-| 교체 지점 | `WorkspaceStore`, `WorkspaceService`, `Workspaces`, `CurrentWorkspace`, `WorkspaceSeatPolicy`, `WorkspaceController`, `WorkspaceInvitationService`, `WorkspaceInvitationMail`(문구), `WorkspaceInvitationMailer`(보내기 통째), `WorkspaceMailTransport`(보내는 길), `WorkspaceLinks`, `workspaceDeletionCheck`, `workspaceAccountErasureListener` |
+| 교체 지점 | `WorkspaceStore`, `WorkspaceService`, `Workspaces`, `CurrentWorkspace`, `WorkspaceSeatPolicy`, `WorkspaceController`, `WorkspaceAdminService`, `WorkspaceAdminController`, `workspacePermissionDeclaration`, `WorkspaceInvitationService`, `WorkspaceInvitationMail`(문구), `WorkspaceInvitationMailer`(보내기 통째), `WorkspaceMailTransport`(보내는 길), `WorkspaceLinks`, `workspaceDeletionCheck`, `workspaceAccountErasureListener` |
 | 마이그레이션 | 없음 (스키마는 `workspace-jdbc`) |
 | 프론트 짝 | 없음 |
 | 테스트 | `modules/workspace/src/test` |

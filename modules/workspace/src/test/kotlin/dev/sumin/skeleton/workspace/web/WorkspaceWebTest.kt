@@ -105,6 +105,12 @@ class WorkspaceWebTest {
     }
 
     @Test
+    fun `the operator routes do not exist unless the app turns them on`() {
+        mvc.perform(get("/api/v1/admin/workspaces").by("acc_o")).andExpect(status().isNotFound)
+        mvc.perform(get("/api/v1/admin/workspaces/$ws").by("acc_o")).andExpect(status().isNotFound)
+    }
+
+    @Test
     fun `without a caller the answer is 401`() {
         mvc.perform(get("/probe/member").inWs(ws)).andExpect(status().isUnauthorized)
         mvc.perform(get("/api/v1/workspaces")).andExpect(status().isUnauthorized)

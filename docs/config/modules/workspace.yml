@@ -15,3 +15,6 @@ skeleton:
       link-base-url: ""              # 메일 링크 = <이 주소>/invite?token=… . stage · prod 에서는 필수, 프로젝트 모드에서는 프로젝트마다(workspace.mail.*)
       default-locale: en             # 요청 언어가 ko · en 이 아닐 때
       log-links: AUTO                # 메일 모듈이 없을 때 링크(토큰 포함)를 로그에 남기나: AUTO = stage · prod 가 아닐 때만, ON, OFF (보호 환경에서 ON 이면 기동 실패)
+    admin:
+      enabled: false                 # true 면 운영자 읽기 경로(GET {base-path}/workspaces …, workspace.read). 꺼져 있으면 404
+      base-path: /api/v1/admin
