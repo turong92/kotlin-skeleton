@@ -230,6 +230,13 @@ skeleton:
   authz:
     admin:
       enabled: true   # 이 앱의 선택: 역할 관리 API(/api/v1/admin/roles) 를 켠다 — 스켈레톤 기본은 꺼짐(404)
+  workspace:
+    admin:
+      enabled: true   # 이 앱의 선택: 운영자 워크스페이스 목록 · 상세(GET /api/v1/admin/workspaces, 권한 workspace.read - ADMIN 전권) - 모듈 기본은 꺼짐(404)
+    invitation:
+      enabled: true   # 이 앱의 선택: 멤버를 메일 링크로 초대한다 - 모듈 기본은 꺼짐. 링크가 여는 프런트 주소는 환경변수 SKELETON_WORKSPACE_MAIL_LINK_BASE_URL (stage · prod 에서 비면 기동 실패), 로컬은 application-local.yml. 메일은 위 notification-mail 이 보낸다 - 링크 모양 <주소>/invite?token=…
+    mail:
+      default-locale: ko   # 계정 메일과 같은 언어 (모듈 기본 en)
   notification:
     retention:
       enabled: true   # 이 앱의 선택: 보관 기한(기본 90일)이 지난 알림을 지운다 (모듈 기본은 꺼짐 - 보관 정책은 앱이 정한다). scheduler 모듈이 주기를 돈다

@@ -3079,7 +3079,7 @@
       "module": null,
       "path": "apps/sample",
       "status": "stable",
-      "summary": "참조 앱 Notes — 로그인한 사람이 첨부 있는 노트를 관리하는 제품 모양의 작은 앱(스타터 + idempotency · notification-jdbc/sse · storage-s3 · job-queue-jdbc · board · author-profile · alert-jdbc · payment-jdbc/payment-toss 의 결제 「응원하기」). 로그인 아이디를 켜고 이메일은 쓰기 때 받는다. 새 기능은 이 앱의 한 조각을 따라 한다.",
+      "summary": "참조 앱 Notes — 로그인한 사람이 첨부 있는 노트를 관리하는 제품 모양의 작은 앱(스타터 + idempotency · notification-jdbc/sse · storage-s3 · job-queue-jdbc · board · author-profile · alert-jdbc · payment-jdbc/payment-toss 의 결제 「응원하기」 · workspace 의 팀 노트와 구독이 정하는 좌석). 로그인 아이디를 켜고 이메일은 쓰기 때 받는다. 새 기능은 이 앱의 한 조각을 따라 한다.",
       "starter": false,
       "newProjectFlag": "--with-sample",
       "autoIncludes": [
@@ -3125,7 +3125,9 @@
         "reward-jdbc",
         "scheduler",
         "storage",
-        "storage-s3"
+        "storage-s3",
+        "workspace",
+        "workspace-jdbc"
       ],
       "needs": {
         "requires": [],

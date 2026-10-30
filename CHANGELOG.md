@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `platform` + `account`: `AccountFacts.verifiedEmail(accountId)`(기본 null — 기존 구현은 안 깨진다, `account` 가 확인된 이메일을 준다) · 계약 `AccountDeletionCheck`/`DeletionBlocker`(삭제를 막는 이유를 모듈이 `account` 를 모르고 내놓는 자리). 계정 삭제 요청은 이것을 모아 하나라도 있으면 `409 ACCOUNT.DELETION_BLOCKED`(`data.blockers: [{module, code, refs}]`, 재인증을 묻기 전에 답한다). 구현이 없으면 동작은 그대로다.
 - `workspace` + `workspace-jdbc` (새 모듈): 워크스페이스 만들기 · 역할(소유자 > 관리자 > 멤버, 소유자는 정확히 하나 — DB 유니크 + 줄 잠금) · 이름 · 주소(slug, 바꾸면 옛 주소가 남아 다른 팀이 못 가져가고 `by-slug` 가 푼다) · 멤버 목록 · 역할 바꾸기 · 추방 · 탈퇴 · 소유권 이전 · 경계 `CurrentWorkspace`(헤더 `X-Workspace-Id`, 요청마다 DB 로 멤버십 확인 — 없는 · 남의 · 닫힌 팀은 같은 404) · 좌석 상한 계약 `WorkspaceSeatPolicy`(기본 무제한) · 계정 삭제 요청 막기와 삭제 안전망(가장 오래된 관리자 → 멤버에게 이전, 혼자면 닫음). 표 넷(`V20261030100000__workspaces`, 초대 표는 초대 조각이 쓴다). 초대 · 운영자 경로는 다음 조각. 문서 `docs/modules/workspace.md`. `apps/workbench` 에 `workspace-jdbc` 추가.
 
+- `apps/sample`: `workspace` · `workspace-jdbc` 조립(운영자 읽기 · 초대 켜기, 로컬 링크 주소) · 노트 `workspace_id`(`V20261030140000__notes_workspace`) - 헤더 `X-Workspace-Id` 가 있으면 그 워크스페이스의 노트(멤버 읽기 · 쓰기, 지우기는 쓴 사람 · ADMIN 이상), 없으면 예전처럼 내 노트 · 견본 `SubscriptionSeatPolicy`(소유자의 구독 → 무료 3 · 유료 10, 결제 코드는 그대로) · 로컬 씨앗 「Example Team」(`example-team`). 문서 `docs/sample.md` 「워크스페이스」.
+
 ### 배지 · 업적 (2026-10-29)
 
 - `badge`: 이미 가진 배지를 보상 지급기로 다시 주면 「받았어요」 알림이 한 번 더 나가던 것을 고쳤다 - `platform` 의 `IssuedReward` 에 `notify`(기본 `true`)를 더했고 `reward` 일꾼이 `false` 면 알림을 건너뛴다. 배지 지급기는 새로 준 때만 `true`.

@@ -7,6 +7,7 @@ import dev.sumin.skeleton.common.openapi.AcceptedOperation
 import dev.sumin.skeleton.common.openapi.CreatedOperation
 import dev.sumin.skeleton.common.openapi.NoContentOperation
 import dev.sumin.skeleton.idempotency.IdempotentOperation
+import dev.sumin.skeleton.workspace.CurrentWorkspace
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import org.springdoc.core.annotations.ParameterObject
@@ -29,12 +30,15 @@ import org.springframework.web.servlet.support.ServletUriComponentsBuilder
 @RestController
 @RequestMapping("/api/v1/notes")
 @Tag(name = "Notes")
-class NoteController(private val service: NoteService) {
+class NoteController(private val service: NoteService, private val workspace: CurrentWorkspace) {
+    /** 헤더 [CurrentWorkspace.HEADER] 가 있으면 그 워크스페이스의 노트(멤버가 아니면 404), 없으면 예전처럼 내 노트 */
+    private fun scope(authentication: Authentication) = NoteScope(authentication.name, workspace.get())
+
     @PostMapping
     @CreatedOperation
     @IdempotentOperation
     fun create(authentication: Authentication, @Valid @RequestBody request: CreateNoteRequest) =
-        service.create(authentication.name, request).toResponse().let { note ->
+        service.create(scope(authentication), request).toResponse().let { note ->
             Response.created(
                 ServletUriComponentsBuilder.fromCurrentRequest().path("/{id}").buildAndExpand(note.id).toUri(),
                 note,
@@ -49,28 +53,28 @@ class NoteController(private val service: NoteService) {
         @RequestParam(required = false) status: NoteStatus?,
         @RequestParam(required = false) pinned: Boolean?,
     ): PageResponse<NoteResponse> {
-        val page = service.list(authentication.name, pageQuery, q, status, pinned)
+        val page = service.list(scope(authentication), pageQuery, q, status, pinned)
         return Response.ok(page.notes.map { it.toResponse() }, pageQuery.toPagination(page.totalElements))
     }
 
     @GetMapping("/summary")
-    fun summary(authentication: Authentication) = Response.ok(service.summary(authentication.name))
+    fun summary(authentication: Authentication) = Response.ok(service.summary(scope(authentication)))
 
     @GetMapping("/{id}")
     fun get(authentication: Authentication, @PathVariable id: String) =
-        Response.ok(service.get(authentication.name, id).toResponse())
+        Response.ok(service.get(scope(authentication), id).toResponse())
 
     @PutMapping("/{id}")
     fun replace(authentication: Authentication, @PathVariable id: String, @Valid @RequestBody request: ReplaceNoteRequest) =
-        Response.ok(service.replace(authentication.name, id, request).toResponse())
+        Response.ok(service.replace(scope(authentication), id, request).toResponse())
 
     @DeleteMapping("/{id}")
     @NoContentOperation
     fun delete(authentication: Authentication, @PathVariable id: String) =
-        service.delete(authentication.name, id).let { Response.noContent() }
+        service.delete(scope(authentication), id).let { Response.noContent() }
 
     @PostMapping("/{id}/export")
     @AcceptedOperation
     fun export(authentication: Authentication, @PathVariable id: String) =
-        Response.accepted(ExportStartedResponse(service.startExport(authentication.name, id).toString()))
+        Response.accepted(ExportStartedResponse(service.startExport(scope(authentication), id).toString()))
 }

@@ -17,7 +17,10 @@ enum class NoteStatus { DRAFT, ACTIVE, ARCHIVED }
 @Table("notes")
 data class Note(
     @Id val id: UUID,
+    /** 쓴 사람. [workspaceId] 가 없으면 곧 주인(내 노트) */
     val ownerId: String,
+    /** 이 노트가 속한 워크스페이스. null 이면 내 노트 - 워크스페이스 표는 모듈의 것이라 외래 키는 없고, 접근은 요청마다 멤버십으로 판정한다 */
+    val workspaceId: String? = null,
     val title: String,
     val body: String = "",
     val status: NoteStatus = NoteStatus.DRAFT,

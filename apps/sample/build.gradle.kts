@@ -52,6 +52,8 @@ dependencies {
     implementation(project(":modules:point-jdbc"))         // 포인트: 적립 · 차감 · 소멸 (+ point: /api/v1/points) - docs/modules/point.md
     implementation(project(":modules:campaign-jdbc"))      // 이벤트: 출석 · 친구초대 (+ campaign: /api/v1/campaigns). 첫 응원 결제가 초대자 보상을 연다 - cheer/CheerOrderListener, docs/modules/campaign.md
     implementation(project(":modules:alert-jdbc"))         // 주인 경보 (+ alert) — 5xx 몰림 · 죽은 작업을 Discord 웹훅으로. 웹훅 주소가 없으면 아무것도 안 보낸다
+    implementation(project(":modules:workspace"))          // 워크스페이스(팀): 역할 · slug · 멤버 · 메일 링크 초대 · 운영자 읽기 (+ workspace: /api/v1/workspaces). 노트가 헤더 X-Workspace-Id 로 팀 노트가 된다 - 좌석 상한은 workspace/SubscriptionSeatPolicy, docs/modules/workspace.md
+    implementation(project(":modules:workspace-jdbc"))     // 워크스페이스 저장소 (workspace 는 저장소를 모른다)
 
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-data-jdbc")

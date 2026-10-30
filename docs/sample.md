@@ -15,6 +15,7 @@
 | 게시판(글 · 대댓글 · 공감 같은 반응 종류) | `board` + `board-jdbc` (아래 "게시판") |
 | 한 계정이 닉네임(작성자 프로필)을 여러 개 만들어 글 · 댓글마다 골라 쓰기 — 두 프로필이 같은 사람이라는 사실이 남에게 드러나지 않게 | `author-profile` + `author-profile-jdbc` + `skeleton.storage.web.key-owner=OPAQUE` (아래 "작성자 프로필") |
 | 돈 받기 · 환불하기 — 결제창 → 승인 → 내 결제 내역 → 환불 요청 → 운영자 환불 (샘플 상품은 「응원하기」) | `payment-jdbc`(결제 장부 + `payment`) + `payment-toss`(결제사, 꺼진 채 시작) + 이 앱의 `cheer/` (아래 "결제 — 응원하기") |
+| 팀 · 조직 — 워크스페이스 만들기 · 역할 · 메일 링크 초대 · 팀 단위 데이터 · 구독이 정하는 좌석 | `workspace` + `workspace-jdbc` + 이 앱의 `workspace/` · `notes/` (아래 "워크스페이스") |
 | DB · 마이그레이션 · 시간 | `persistence-jdbc` · `db-postgresql` · `migration-flyway` · `time` |
 
 ## 엔드포인트
@@ -177,6 +178,21 @@ local 프로필은 주문 만들기 한도(기본 계정당 10 / 10분)를 풀�
 | `/api/v1/admin/badges` · `/badge-awards` | 정의 · 수동 수여 · 회수(사유 필수) · 내역 - 이 앱이 `skeleton.badge.admin.enabled: true` 로 켠다(`badge.manage`, ADMIN 전권만) |
 
 **씨앗**(`local` 프로필만, 코드로 찾아 없는 것만 만든다 - `BadgesSeed`): 배지 「첫 노트」 · 「노트 10개」 · 「얼리 버드」 · 숨은 「비밀 손님」, 업적 이벤트 「노트 업적」(수치 `notes.created`: 1 → 첫 노트, 10 → 노트 10개 + 100포인트). 「얼리 버드」 · 「비밀 손님」은 운영자 수동 수여로 시연한다. 시험: `badges/BadgesFlowIntegrationTest`.
+
+## 워크스페이스 (팀 · 조직)
+
+두 줄(`workspace` · `workspace-jdbc`)과 이 앱의 조각 둘이 전부다 - 모듈 내부는 건드리지 않았고, 이 앱의 선택은 모두 `application.yml` 에 있다(모듈 기본은 중립: 운영자 읽기 · 초대는 꺼짐).
+
+| 선택 | 어디 |
+|---|---|
+| 운영자 목록 · 상세(`GET /api/v1/admin/workspaces`, 권한 `workspace.read`)를 켠다 | `skeleton.workspace.admin.enabled: true` |
+| 멤버를 메일 링크로 초대한다. 링크 = `<link-base-url>/invite?token=…`. 로컬은 프런트 개발 서버(`http://localhost:5173`)고 메일은 mailpit 이 받는다. 배포는 환경변수 `SKELETON_WORKSPACE_MAIL_LINK_BASE_URL`(비면 stage · prod 기동 실패) | `skeleton.workspace.invitation.enabled: true` · `application-local.yml` 의 `mail.link-base-url` |
+| 좌석 상한(멤버 + 대기 초대)은 **소유자의 구독**이 정한다: 쓰고 있는 구독(해지 예약 포함)이 있으면 10, 아니면 3. 구독을 읽기만 한다(`PaymentSubscriptions.current`) - 결제 코드는 그대로다. 구독을 안 켠 로컬 · 시험은 모두 3 | `workspace/SubscriptionSeatPolicy` |
+| 노트가 팀에 속할 수 있다 - `notes.workspace_id`(null = 내 노트) | `V20261030140000__notes_workspace.sql` |
+
+**노트 API 의 헤더 동작**: `X-Workspace-Id` 가 **없으면 예전 그대로** 내 노트다(`workspace_id` 가 없는 것만 - 내가 쓴 팀 노트는 내 목록에 안 나온다). **있으면** 그 워크스페이스의 노트다: 요청마다 멤버십을 DB 로 확인하고(멤버가 아니거나 없는 · 닫힌 워크스페이스는 모두 404 `WORKSPACE.NOT_FOUND`, 추방은 다음 요청부터 반영), 멤버는 모두 읽고 쓰고, 지우기는 **쓴 사람 · ADMIN 이상**(그 밖은 403 `WORKSPACE.FORBIDDEN`). 팀 노트의 `ownerId` 는 쓴 사람이다. 요약(`/summary`) · 내보내기도 같은 상자를 본다. 첨부와 업적 개수는 아직 내 노트만이다(첨부 키 검사가 계정 기준이고, 업적은 내 노트 개수를 센다).
+
+**씨앗**(`local` 프로필만, slug 로 찾아 없으면 만든다 - `workspace/WorkspaceSeed`): `user@example.com`(`acc_user`)이 소유자인 「Example Team」(slug `example-team`). 시험: `notes/WorkspaceNotesIntegrationTest`(남의 팀 노트 안 보임 · 추방 직후 404 · 헤더 없을 때 그대로 · 미리보기 공개 경로), `workspace/SubscriptionSeatPolicyTest`.
 
 ## 구독 — 플랜과 자동결제 (`/api/v1/payments/subscriptions`)
 
