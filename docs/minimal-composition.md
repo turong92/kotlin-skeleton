@@ -154,6 +154,7 @@ fails when this table and the prefixes found in module code differ.
 | `redis-rate-limit` | `skeleton.redis-rate-limit` |
 | `reward` | `skeleton.reward` |
 | `scheduler` | `skeleton.scheduler` |
+| `search` | `skeleton.search` |
 | `storage` | `skeleton.storage` |
 | `storage-s3` | `skeleton.storage-s3` |
 | `time` | `skeleton.time` |
@@ -219,6 +220,8 @@ test proving a context with only that module (and its declared dependencies) boo
 | `redis-cache` | yes — `FAIL_OPEN`: cache errors are ignored | nothing | a Redis server for hits |
 | `redis-rate-limit` | yes — replaces the in-memory store, used only when `skeleton.web.rate-limit.enabled=true`; `FAIL_OPEN` | nothing | a Redis server when rate limiting is on |
 | `scheduler` | yes (no-op lock, single instance; its own `skeletonTaskScheduler`, replaced by a bean of the same name) | nothing | `redis-lock` for several instances |
+| `search` | yes (services stay off until a `SearchEngine` exists) | `search-jdbc` | — |
+| `search-jdbc` | yes | a `DataSource` + one `db-*` module + `job-queue-jdbc` enabled (+ its migration `search`, as above) | — |
 | `storage` | yes | nothing | — |
 | `storage-s3` | yes — no bucket, no `PresignedStorage` bean | nothing | bucket (+ endpoint / keys for R2 · MinIO) |
 | `time` | yes | nothing | — |

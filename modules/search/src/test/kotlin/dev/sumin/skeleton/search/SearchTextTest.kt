@@ -14,6 +14,14 @@ class SearchTextTest {
         assertEquals("a b\nc", SearchText.normalize("a\u0007b\nc"))
     }
 
+    @Test
+    fun `clip cuts at a UTF-16 limit without splitting a surrogate pair`() {
+        assertEquals("abc", SearchText.clip("abcdef", 3))
+        assertEquals("ab", SearchText.clip("ab", 10))
+        assertEquals("😀", SearchText.clip("😀😀", 2))
+        assertEquals("😀", SearchText.clip("😀😀", 3))
+    }
+
     // ---- 2글자 조각 ----
 
     @Test

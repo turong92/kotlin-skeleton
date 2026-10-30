@@ -142,6 +142,8 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `reward` | 보상 지급의 허리 — 이벤트가 기록한 지급 건을 일꾼이 쿠폰 · 포인트 지급기로 주고(재시도 · 멱등), 받았어요 알림과 운영자 다시 지급 · 취소까지. | `--modules reward,reward-jdbc` | 보상 지급, 지급 건, 쿠폰 지급, 포인트 지급, 다시 지급, 받았어요 알림 / reward grant, reward issuer, payout worker, retry grant | `@skeleton/rewards` |
 | `reward-jdbc` | 지급 건 저장과 지급 작업을 DB 에 두고 일꾼을 job-queue-jdbc 에 얹는다 (PostgreSQL · MySQL). | `--modules reward-jdbc` | 지급 건 저장, 지급 작업 큐 / reward grant store, reward job | `@skeleton/rewards` |
 | `scheduler` | 어노테이션 기반 스케줄러 — 실행 가드 · 락 매니저 · 실패 핸들러(기본 락은 no-op, 단일 인스턴스용). | `--modules scheduler` | 스케줄러, 정기 작업, 크론, 주기 실행, 배치 / scheduler, cron, scheduled job, periodic task, batch | — |
+| `search` | DB 전문 검색 — 다른 모듈이 밀어 넣은 문서(상품 · 노트 …)를 한국어 2글자 조각으로 찾는다(PostgreSQL tsvector · MySQL ngram, 확장 설치 없음). 질의(쪽 · 종류 · 범위 · 정렬 · 하이라이트 위치) · 주인 문서 가리기 · 재색인 작업 · 탈퇴. 밀어 넣기 포트는 platform 의 SearchIndexer 라 다른 모듈이 search 를 모른다. | `--modules search,search-jdbc` | 검색, 전문 검색, 한국어 검색, 부분 일치, 하이라이트, 재색인 / search, full-text search, korean search, ngram, highlight, reindex | — |
+| `search-jdbc` | 검색 색인을 DB 에 둔다 (PostgreSQL tsvector + GIN · MySQL ngram FULLTEXT) — 쓰기는 호출자 트랜잭션에 합류, 재색인은 job-queue-jdbc 작업. MySQL 마이그레이션이 불용어를 꺼서 영어 조각이 빠지지 않게 한다. | `--modules search-jdbc` | 검색 저장소, 검색 색인 DB / search storage, search index database | — |
 | `storage` | 저장소 계약(ObjectStorage · PresignedStorage) · 파일 크기/확장자/content-type 검증 + 브라우저 직접 업로드 HTTP(/api/v1/storage: presign · 멀티파트). | `--modules storage,storage-s3` | 파일 업로드, 이미지 업로드, 첨부파일, 프리사인, 파일 검증 / file upload, image upload, attachment, presigned url, multipart upload | `@skeleton/storage` |
 | `storage-s3` | S3 호환 저장소(AWS S3 · Cloudflare R2 · MinIO) — presign PUT/GET · 멀티파트 · 복사 · 일괄 삭제, 공개 URL RAW \| OPAQUE. | `--modules storage-s3` | S3, R2, 클라우드 스토리지, 파일 저장소, 이미지 저장 / s3, r2, cloudflare r2, minio, object storage | `@skeleton/storage` |
 | `time` | 글로벌 시간 — 요청마다 뷰어 시간대 · 로케일 · ZonedMoment(미래 현지 시각) · 사람이 읽는 이중 포맷 · 국가 → 시간대. | 스타터(apps/api)에 기본 포함 | 시간대, 타임존, 날짜 표시, 현지 시간, 예약 시각, 글로벌 / timezone, time zone, locale, zoned moment, date format, global time | `@skeleton/time` |
@@ -1255,6 +1257,35 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 재시도 · 영속 큐가 아니다(job-queue-jdbc)
 - 키워드: 스케줄러, 정기 작업, 크론, 주기 실행, 배치 / scheduler, cron, scheduled job, periodic task, batch
 
+### `search` — DB 전문 검색 — 다른 모듈이 밀어 넣은 문서(상품 · 노트 …)를 한국어 2글자 조각으로 찾는다(PostgreSQL tsvector · MySQL ngram, 확장 설치 없음). 질의(쪽 · 종류 · 범위 · 정렬 · 하이라이트 위치) · 주인 문서 가리기 · 재색인 작업 · 탈퇴. 밀어 넣기 포트는 platform 의 SearchIndexer 라 다른 모듈이 search 를 모른다.
+
+- 종류 · 상태: module · experimental — 위치 `modules/search`
+- 켜는 법: `--modules search,search-jdbc`
+- 의존 한 줄: `implementation(project(":modules:search"))`
+- 함께 골라야 한다: `search-jdbc`
+- 설정 접두사 `skeleton.search` — 키와 기본값 `docs/config/modules/search.yml`
+- HTTP 경로: `/api/v1/admin`, `/api/v1/search`
+- 문서: `docs/modules/search.md`
+- 쓰지 않는 경우:
+  - search 는 엔진을 모른다 — search-jdbc 를 같이 고른다
+  - 형태소 분석 · 동의어 · 오타 교정 · 자동 완성은 없다 — 2글자 조각의 부분 문자열 일치뿐이다(필요하면 바깥 엔진 어댑터를 따로)
+  - 원본 상태(판매 중지 · 숨김)를 따라가지 않는다 — 밀어 넣는 쪽이 delete 한다
+  - 비로그인 읽기는 앱이 켠다 — 켜면 주인 없는 문서만 보인다
+- 키워드: 검색, 전문 검색, 한국어 검색, 부분 일치, 하이라이트, 재색인 / search, full-text search, korean search, ngram, highlight, reindex
+
+### `search-jdbc` — 검색 색인을 DB 에 둔다 (PostgreSQL tsvector + GIN · MySQL ngram FULLTEXT) — 쓰기는 호출자 트랜잭션에 합류, 재색인은 job-queue-jdbc 작업. MySQL 마이그레이션이 불용어를 꺼서 영어 조각이 빠지지 않게 한다.
+
+- 종류 · 상태: module · experimental — 위치 `modules/search-jdbc`
+- 켜는 법: `--modules search-jdbc`
+- 의존 한 줄: `implementation(project(":modules:search-jdbc"))`
+- 자동으로 따라온다: `search`
+- 설정 접두사 없음
+- 문서: `docs/modules/search-jdbc.md`
+- 쓰지 않는 경우:
+  - DataSource · db-* 모듈 · job-queue-jdbc 와 이 모듈의 마이그레이션이 적용된 스키마가 필요하다
+  - MySQL 에서 색인을 다른 세션이 다시 만들면 불용어가 다시 켜진다 — 같은 SET 을 먼저 한다
+- 키워드: 검색 저장소, 검색 색인 DB / search storage, search index database
+
 ### `storage` — 저장소 계약(ObjectStorage · PresignedStorage) · 파일 크기/확장자/content-type 검증 + 브라우저 직접 업로드 HTTP(/api/v1/storage: presign · 멀티파트).
 
 - 종류 · 상태: module · stable — 위치 `modules/storage`
@@ -1365,7 +1396,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 - 종류 · 상태: app · stable — 위치 `apps/workbench`
 - 켜는 법: `--with-workbench`
-- 자동으로 따라온다: `alert-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `badge`, `badge-jdbc`, `board`, `board-jdbc`, `campaign`, `campaign-jdbc`, `catalog`, `catalog-jdbc`, `config-aws-ssm`, `coupon`, `coupon-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `db-mysql`, `event-kafka`, `json`, `notification`, `notification-jdbc`, `notification-slack`, `notification-sse`, `notification-websocket`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `point`, `point-jdbc`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `reward`, `reward-jdbc`, `scheduler`, `storage`, `storage-s3`, `workspace`, `workspace-jdbc`
+- 자동으로 따라온다: `alert-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `badge`, `badge-jdbc`, `board`, `board-jdbc`, `campaign`, `campaign-jdbc`, `catalog`, `catalog-jdbc`, `config-aws-ssm`, `coupon`, `coupon-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `db-mysql`, `event-kafka`, `json`, `notification`, `notification-jdbc`, `notification-slack`, `notification-sse`, `notification-websocket`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `point`, `point-jdbc`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `reward`, `reward-jdbc`, `scheduler`, `search`, `search-jdbc`, `storage`, `storage-s3`, `workspace`, `workspace-jdbc`
 - HTTP 경로: `/api/v1`, `/api/v1/examples`, `/api/v1/skeleton`, `/api/v1/skeleton/enums`, `/api/v1/skeleton/json`, `/api/v1/skeleton/payments`, `/api/v1/skeleton/polymorphic/contents`
 - 문서: `docs/minimal-composition.md`, `docs/modules/README.md`
 - 짝 프런트(react-skeleton): 항목 `app-workbench` · 조각 `--with-workbench`

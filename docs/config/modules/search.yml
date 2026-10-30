@@ -1,0 +1,12 @@
+# search — DB 전문 검색(한국어 2글자 조각). 질의 · 운영 경로 · 재색인. 저장은 search-jdbc.
+skeleton:
+  search:
+    http:
+      enabled: true                  # false 면 검색 경로를 닫는다
+      base-path: /api/v1/search
+      allow-anonymous-read: false    # true 면 검색을 로그인 없이 읽는다(주인 없는 문서만) - 기본은 로그인 필요(401), 열기는 앱의 선택 (board · badge 의 같은 이름 설정과 같다)
+    admin:
+      enabled: false                 # true 면 운영자 경로(search.manage)가 열린다. 꺼져 있으면 404
+      base-path: /api/v1/admin       # 아래에 /search/types · /search/rebuild
+    rebuild:
+      stale-after: PT15M             # 재색인이 이 시간 동안 진행이 없으면 멈춘 것으로 보고 새 재색인을 받는다

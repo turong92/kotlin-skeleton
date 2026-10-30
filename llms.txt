@@ -150,6 +150,8 @@
 - reward: 보상 지급의 허리 — 이벤트가 기록한 지급 건을 일꾼이 쿠폰 · 포인트… [보상 지급, 지급 건]
 - reward-jdbc: 지급 건 저장과 지급 작업을 DB 에 두고 일꾼을… [지급 건 저장, 지급 작업 큐]
 - scheduler: 어노테이션 기반 스케줄러 [스케줄러, 정기 작업]
+- search: DB 전문 검색 — 다른 모듈이 밀어 넣은 문서(상품 · 노트 …)를… [검색, 전문 검색]
+- search-jdbc: 검색 색인을 DB 에 둔다 (PostgreSQL tsvector +… [검색 저장소, 검색 색인 DB]
 - storage: 저장소 계약(ObjectStorage · PresignedStorage) [파일 업로드, 이미지 업로드]
 - storage-s3: S3 호환 저장소(AWS S3 · Cloudflare R2 ·… [S3, R2]
 - time: 글로벌 시간 — 요청마다 뷰어 시간대 · 로케일 ·… [시간대, 타임존]

@@ -3,7 +3,6 @@ dependencies {
     implementation(project(":modules:platform"))   // TimeProvider · 색인 계약 타입
     implementation(project(":modules:persistence-jdbc"))   // SqlDialect (시각 바인딩)
     implementation(project(":modules:job-queue-jdbc"))   // 재색인 일꾼이 얹히는 큐 (JobQueue · JobHandler) — 자체 폴링 워커를 만들지 않는다
-    implementation(project(":modules:json"))   // 재색인 작업의 payload
 
     implementation("org.springframework.boot:spring-boot-autoconfigure")
     implementation("org.springframework.boot:spring-boot-starter-jdbc")

@@ -16,6 +16,8 @@ object SearchText {
      */
     const val BREAK = "brk"
 
+    /** 색인하는 본문 길이 - PostgreSQL tsvector 의 위치 상한(16,383)과 MySQL `text` 열(4바이트 글자 16,000자 = 64,000바이트)에 모두 들어간다 */
+    const val MAX_BODY = 16_000
     const val MAX_PHRASES = 5
     const val SNIPPET_RADIUS = 120
     private const val ELLIPSIS = "…"
@@ -26,6 +28,14 @@ object SearchText {
         val out = StringBuilder(nfkc.length)
         for (c in nfkc) out.append(if (Character.isISOControl(c) && c != '\n' && c != '\t') ' ' else c)
         return out.toString()
+    }
+
+    /** 앞 [max] UTF-16 단위까지 - 서로게이트 쌍을 가르지 않는다 */
+    fun clip(text: String, max: Int): String {
+        if (text.length <= max) return text
+        var end = max
+        if (end > 0 && text[end - 1].isHighSurrogate()) end--
+        return text.substring(0, end)
     }
 
     /** 코드 포인트마다 소문자로 - 길이가 달라지면(드문 경우) 위치가 어긋나므로 그대로 둔다 */
