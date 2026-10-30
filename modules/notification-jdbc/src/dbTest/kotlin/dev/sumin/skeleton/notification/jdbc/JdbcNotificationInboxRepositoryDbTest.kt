@@ -249,15 +249,15 @@ class JdbcNotificationInboxRepositoryDbTest {
         val recipient = "acc_${UUID.randomUUID()}"
         val topic = "retention-${UUID.randomUUID()}"
         val cutoff = Instant.parse("2026-02-01T00:00:00Z")
-        repeat(2500) { i ->
+        repeat(OLD_ROWS) { i ->
             repository.save(NotificationEvent(id = "old$i-$recipient", topic = topic, type = "t", createdAt = Instant.parse("2026-01-01T00:00:00Z")), setOf(recipient))
         }
         repository.save(collapsing("edge-$recipient", "edge", topic = topic, at = "2026-02-01T00:00:00Z"), setOf(recipient))
         repository.save(collapsing("new-$recipient", "new", topic = topic, at = "2026-03-01T00:00:00Z"), setOf(recipient))
         repository.markRead(recipient, "old0-$recipient")   // 읽음 여부와 무관하게 지운다
 
-        // 이 DB 의 다른 시험 줄은 모두 2026-03-01 이후라 cutoff 보다 옛 줄은 이 시험의 2500 줄뿐이다
-        assertEquals(2500, repository.deleteOlderThan(cutoff))
+        // 이 DB 의 다른 시험 줄은 모두 2026-03-01 이후라 cutoff 보다 옛 줄은 이 시험의 OLD_ROWS 줄뿐이다 (삭제 배치 크기 1000 을 하나 넘겨 두 배치가 돈다)
+        assertEquals(OLD_ROWS, repository.deleteOlderThan(cutoff))
         val left = repository.findByRecipient(recipient, NotificationInboxQuery(size = 100)).values.map { it.event.id }
         assertEquals(setOf("edge-$recipient", "new-$recipient"), left.toSet())
         assertEquals(0, repository.deleteOlderThan(cutoff))
@@ -278,5 +278,9 @@ class JdbcNotificationInboxRepositoryDbTest {
         assertEquals(1, repository.deleteByTopic(topic))
         assertEquals(setOf(other), repository.findByRecipient(a, NotificationInboxQuery()).values.map { it.event.topic }.toSet())
         assertEquals(0, repository.deleteByTopic(topic))
+    }
+
+    private companion object {
+        const val OLD_ROWS = 1001   // JdbcNotificationInboxRepository.DELETE_BATCH_SIZE(1000) + 1 — 배치 경계를 넘기는 최소
     }
 }
