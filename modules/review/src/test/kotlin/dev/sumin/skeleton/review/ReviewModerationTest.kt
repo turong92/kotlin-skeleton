@@ -190,6 +190,7 @@ class ReviewModerationTest {
     @Test
     fun `photos are stored as keys within the limit, replaced on edit and counted`() {
         h = Harness(ReviewProperties(targetTypes = listOf("product"), maxPhotos = 2))
+        h.policy = object : ReviewPolicy { override fun canAttach(accountId: String, keys: List<String>) = true }
         val r = h.service.create("acc_1", BASIC, ReviewInput(5, "with pictures", listOf(" a.jpg ", "b.jpg", "a.jpg")))
         assertEquals(2, h.store.find(r.id)!!.photoCount)
         assertEquals("a.jpg", h.store.photoKey(r.id, 0))
@@ -205,6 +206,15 @@ class ReviewModerationTest {
     }
 
     @Test
+    fun `without a policy of the app, photos are refused by default - nobody can attach a key that is not provably their own`() {
+        h = Harness(ReviewProperties(targetTypes = listOf("product"), maxPhotos = 2))
+        assertEquals(ReviewErrorCode.FORBIDDEN, code { h.service.create("acc_1", BASIC, ReviewInput(5, "x", listOf("uploads/someone-elses-note-attachment.jpg"))) })
+        val r = h.service.create("acc_1", BASIC, ReviewInput(5, "no photo needed"))
+        assertEquals(ReviewErrorCode.FORBIDDEN, code { h.service.update("acc_1", r.id, ReviewPatch(photos = listOf("uploads/other.jpg"))) })
+        assertEquals(0, h.store.find(r.id)!!.photoCount)
+    }
+
+    @Test
     fun `a key holding the author's account id is refused, and the policy can refuse attachments`() {
         h = Harness(ReviewProperties(targetTypes = listOf("product"), maxPhotos = 2))
         assertEquals(ReviewErrorCode.CONTENT_INVALID, code { h.service.create("acc_1", BASIC, ReviewInput(5, "x", listOf("uploads/acc_1/a.jpg"))) })
@@ -216,6 +226,7 @@ class ReviewModerationTest {
     @Test
     fun `photo keys are readable only by people who can see the review`() {
         h = Harness(ReviewProperties(targetTypes = listOf("product"), maxPhotos = 2))
+        h.policy = object : ReviewPolicy { override fun canAttach(accountId: String, keys: List<String>) = true }
         val r = h.service.create("acc_1", BASIC, ReviewInput(5, "x", listOf("reviews/a.jpg")))
         assertEquals("reviews/a.jpg", h.reader.photoKey("acc_2", false, r.id, 0))
         assertNull(h.reader.photoKey("acc_2", false, r.id, 1))

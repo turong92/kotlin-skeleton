@@ -35,6 +35,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 @TestConfiguration(proxyBeanMethods = false)
 class ReviewAdminTestBeans {
     @Bean fun fakeStore() = FakeReviewStore()
+    @Bean fun policy(): dev.sumin.skeleton.review.ReviewPolicy = object : dev.sumin.skeleton.review.ReviewPolicy { override fun canAttach(accountId: String, keys: List<String>) = true }
     @Bean fun access(): OperatorAccess = object : OperatorAccess {
         override fun permissionsOf(ref: OperatorRef): Set<String> = GRANTS[ref.accountId] ?: emptySet()
     }

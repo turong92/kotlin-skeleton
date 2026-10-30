@@ -16,18 +16,18 @@
 
 **신고** `POST {base}/{id}/reports {reason, detail?}` → 204. 사유 코드 `SPAM · ABUSE · PRIVACY · OFF_TOPIC · OTHER`, 계정당 한 번(두 번째도 같은 204), 자기 리뷰 403 `REVIEW.OWN_REVIEW`, 공개된 줄만(아니면 404). `skeleton.review.report.auto-hide-at=N`(기본 0 = 꺼짐)이면 N 번째 신고에서 자동으로 숨긴다(사유 `AUTO_REPORTS`).
 **운영(앱이 열면)** `skeleton.review.admin.enabled=true`(기본 꺼짐 → 경로가 없어 404)일 때 `{admin base}/reviews`(기본 `/api/v1/admin/reviews`). 매 호출이 권한을 판정한다(익명 401 · 권한 없음 403): `review.moderate`(`MODERATOR` 기본 포함) — 큐 · 숨김 · 되살리기 · 문제없음, `review.reply`(전권 역할만) — 답글. 앱의 `ReviewPolicy.canModerate` 가 한 번 더 거절할 수 있다.
-- `GET ?queue=reported|hidden|all&targetType&cursor&size` — 운영 목록(커서). 한 줄 `{id, targetType, targetId, rating, body, status, moderationReason, reportCount, reportReasons{사유: 수}, lastReportedAt, accountLabel|null, reply|null, createdAt}`. `reported` 는 **공개 중이고 확인 안 한 신고**가 있는 줄(숨기거나 「문제없음」을 누르면 빠지고, 새 신고가 들어오면 다시 오른다). `accountLabel`(이메일, 없으면 null)은 운영자가 `account.read` 도 가질 때만 — 계정 id 는 나가지 않는다.
-- `PUT /{id}/moderation {status: HIDDEN|PUBLISHED, reason}` → 204 — 숨김은 사유 필수(집계 −1, 이벤트 `onRemoved`, 작성자에게 알림), 되살리기는 집계 +1 · 숨김 기록 삭제. **운영자가 숨긴 뒤 작성자가 지운 줄도 여기서 되살리면 다시 쓸 수 있다**(되살리기는 운영자만). `POST /{id}/reports/dismiss` → 204 (문제없음). `PUT`/`DELETE /{id}/reply {body}` → 204 (리뷰당 하나, 공개 줄에만).
+- `GET ?queue=reported|hidden|all&targetType&cursor&size` — 운영 목록(커서). 한 줄 `{id, targetType, targetId, rating, body, status, moderationReason, reportCount, reportReasons{사유: 수}, lastReportedAt, accountLabel|null, reply|null, createdAt}`. `hidden` 큐에는 숨긴 줄과 함께 **운영자가 숨긴 뒤 작성자가 지워 잠긴 줄**이 `status: "DELETED"`, `body: ""`(개인정보 때문에 본문을 비운다)로 온다 — 운영자가 잠금을 풀 수 있게. `reported` 는 **공개 중이고 확인 안 한 신고**가 있는 줄(숨기거나 「문제없음」을 누르면 빠지고, 새 신고가 들어오면 다시 오른다). `accountLabel`(이메일, 없으면 null)은 운영자가 `account.read` 도 가질 때만 — 계정 id 는 나가지 않는다.
+- `PUT /{id}/moderation {status: HIDDEN|PUBLISHED, reason}` → 204 — 숨김은 사유 필수(집계 −1, 이벤트 `onRemoved`, 작성자에게 알림), `PUBLISHED` 는 숨긴 줄(`HIDDEN`)을 다시 공개한다(집계 +1 · 숨김 기록 삭제). **작성자가 지운 줄은 운영자도 다시 공개하지 않는다** — 숨긴 뒤 작성자가 지워 잠긴 줄은 숨김 기록만 비워 작성자가 다시 쓸 수 있게 풀 뿐 `DELETED` 그대로이고 집계 · 이벤트도 없다(되살리기는 운영자만 풀 수 있다). `POST /{id}/reports/dismiss` → 204 (문제없음). `PUT`/`DELETE /{id}/reply {body}` → 204 (리뷰당 하나, 공개 줄에만).
 - 운영 기록 `review.hidden` · `review.restored` · `review.reports_dismissed` · `review.replied`(대상은 리뷰 id 만). 숨긴 리뷰는 작성자 본인에게 「숨겨짐 + 사유」로 보이고(고칠 수 없고 지우기만), 남에게는 본문 · 사유가 어떤 응답에도 없다. 답글은 공개 줄의 `reply: {body, createdAt, updatedAt}`.
 - 알림(`ReviewNotifier`, 커밋 뒤, 실패해도 운영 처리는 남는다): 기본은 아무것도 안 한다 — `notification` 이 있으면 받은편지함(주제 `reviews`, `skeleton.review.notify.enabled=false` 로 끈다).
-**사진** `skeleton.review.max-photos=N`(기본 0)이면 쓰기 · 고치기에 `photos: [저장 키…]`(N 개까지)를 받는다. `PATCH` 는 `photos` 가 **없으면 그대로, 있으면 그 목록으로 전체 교체**(빈 목록 = 모두 지움). 올리기는 앱이 `storage` 로 한다(`ReviewPolicy.canAttach` 로 키 소유를 좁힌다). **키에 작성자 계정 id 가 들어 있으면 거절**한다(서명 주소로 새 나간다).
+**사진** `skeleton.review.max-photos=N`(기본 0)이면 쓰기 · 고치기에 `photos: [저장 키…]`(N 개까지)를 받는다. `PATCH` 는 `photos` 가 **없으면 그대로, 있으면 그 목록으로 전체 교체**(빈 목록 = 모두 지움). 올리기는 앱이 `storage` 로 한다(`ReviewPolicy.canAttach` 로 키 소유를 좁힌다). **키에 작성자 계정 id 가 들어 있으면 거절**한다(서명 주소로 새 나간다). **사진을 켜면 키 소유 확인이 필수다 - 기본 `ReviewPolicy.canAttach` 는 거절이다**(키를 서명 주소로 열어 주므로 남의 비공개 업로드를 붙일 수 없어야 한다). `storage` 가 클래스패스에 있고 앱이 `ReviewPolicy` 빈을 안 두면 `StorageKeyOwnership` 으로 좁힌 정책이 자동으로 선다(`ReviewStorageAutoConfiguration`). 정책 빈을 직접 두면 `canAttach` 를 덮어 소유를 확인한다.
 응답의 `photos` 는 `[{index}]` 이고 **저장 키(`key`)는 작성자 본인 줄에만** 실린다(고칠 때 기존 사진을 그대로 다시 보내려고). 보기: `GET {base}/{id}/photos/{index}`(로그인) → `302` 로 짧은 서명 주소(`PrivateUploadAccess`), `Cache-Control: private`. 그 리뷰를 볼 수 있는 사람(공개 줄은 누구나, 숨긴 줄은 작성자 · 운영자)만 — 숨기는 순간 바로 안 보인다. 못 보면 404.
 **구매 신호(앱이 준다)**: `ReviewPurchases.record(accountId, ReviewTarget(type, id), ref)` — 결제 리스너 · 외부 주문 · 수동 어디서든 같은 한 줄. 호출자 트랜잭션에 합류하고, 같은 `ref` 두 번은 한 줄이며, 그 (계정, 대상)의 리뷰는 `verified=true` 가 된다. 리뷰를 쓰는 순간에도 살아 있는 구매 줄이 있으면 `verified` 다.
 `revoke(ref)`(전액 환불)는 구매를 취소하고, 그 대상에 다른 살아 있는 구매가 없으면 `verified=false` 로 내린다. **모듈을 붙이기 전의 구매는 앱이 한 번 `record` 로 채운다.**
 **이벤트 고리**: 앱이 `ReviewEventListener` 빈을 두면(여러 개) 공개 `onPublished(review, firstTime)`(`firstTime` = 이 줄이 처음 공개됨, 되살림은 false)와 `onRemoved(review)`(작성자가 지움)가 **쓰기 트랜잭션 안에서** 불린다 — 짧게 하고, **던지면 쓰기도 실패한다**(`PaymentOrderListener` 와 같은 규칙; 보상 지급 건은 내구성이 필요해서다). 리뷰는 보상을 모른다 — 앱이 `CampaignSignals.report` 같은 곳에 잇는다.
 `Reviews.countWritten(accountId)` 는 그 계정의 리뷰 줄 수(줄은 지워지지 않아 늘기만 한다 — 업적 수치로 쓴다). `ReviewStats.of(targets)` 는 앱이 자기 상품 목록 응답에 평균을 끼울 때 쓰는 일괄 조회다.
 
-**비로그인 읽기(앱이 열면)**: `skeleton.review.http.allow-anonymous-read=true`(**모듈 기본은 `false` — 로그인 필요, 401**; `badge` · `board` 와 같다)면 요약 · 일괄 요약 · 목록의 `GET` 셋만 공개 경로가 된다(`reviewPublicEndpointContributor`). `config` · `me` · 쓰기 · 도움돼요는 항상 로그인이 필요하다. 비로그인 요약은 `canWrite=false`, `writeBlockedReason=SIGN_IN`. 열면서 platform `skeleton.web.rate-limit` 도 켠다(리뷰 전용 한도는 없다).
+**비로그인 읽기(앱이 열면)**: `skeleton.review.http.allow-anonymous-read=true`(**모듈 기본은 `false` — 로그인 필요, 401**; `badge` · `board` 와 같다)면 요약 · 일괄 요약 · 목록의 `GET` 셋만 공개 경로가 된다(`reviewPublicEndpointContributor`). `config` · `me` · 쓰기 · 도움돼요는 항상 로그인이 필요하다. 비로그인 요약은 `canWrite=false`, `writeBlockedReason=SIGN_IN`. 열면서 platform `skeleton.web.rate-limit` 도 켠다(리뷰 전용 한도는 없다) — 읽기 셋에만 걸려면 `path-patterns: [{base}/targets/*/*/summary, {base}/targets/*/*/reviews, {base}/summaries]` 처럼 목록으로 적는다(견본 앱은 배지 프로필 경로와 함께 건다).
 **탈퇴**: `AccountErasureListener` 가 그 계정의 리뷰 · 도움돼요 · 신고의 계정을 계정마다 하나인 톰스톤으로 바꾼다(줄 · 집계는 남는다). 구매 줄은 지운다.
 **알려진 한계**: 같은 (계정, 대상)의 구매 신호와 첫 리뷰가 **같은 밀리초에** 서로 커밋 전이면 `verified` 가 한 번 놓칠 수 있다(트랜잭션끼리 서로의 미커밋 줄을 못 본다) — 다음 `record`/`revoke` 가 맞춘다.
 
@@ -35,7 +35,7 @@
 |---|---|
 | 의존성 한 줄 | `implementation(project(":modules:review"))` |
 | 함께 오는 모듈 | `platform` |
-| 컴파일 전용 | `notification` (숨김 · 답글 알림 — 클래스패스에 있을 때만 켜진다), `idempotency` (쓰기의 멱등 표시), Spring Security (경로를 등록할 때만 필요하다) |
+| 컴파일 전용 | `notification` (숨김 · 답글 알림 — 클래스패스에 있을 때만 켜진다), `idempotency` (쓰기의 멱등 표시), `storage` (사진 키 소유 확인 — 클래스패스에 있을 때만), Spring Security (경로를 등록할 때만 필요하다) |
 | 설정 접두사 | `skeleton.review` — [docs/config/modules/review.yml](../config/modules/review.yml) |
 | 기본 동작 | 켜짐. 사용자 경로 켜짐(대상 종류는 앱이 적어야 쓸 수 있다, 비로그인 읽기는 꺼짐 — 앱이 `allow-anonymous-read` 로 연다), 구매자만 쓰기 꺼짐, 운영자 경로 꺼짐, 자동 가림 꺼짐, 사진 꺼짐. |
 | 부팅에 필요한 것 | 저장소 포트 `ReviewStore` — `review-jdbc` 가 낸다. 없으면 서비스 빈이 켜지지 않는다. |

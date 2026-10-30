@@ -5,7 +5,7 @@ skeleton:
     require-purchase: false          # true 면 구매 신호(ReviewPurchases.record)가 있는 사람만 쓴다 (403 REVIEW.PURCHASE_REQUIRED). 꺼 두면 누구나 쓰고 구매자에게 verified 배지
     body-min-length: 0               # 본문 최소 글자(코드 포인트). 0 = 별점만도 된다
     body-max-length: 2000            # 본문 최대 글자 (열 길이 2000 이 상한)
-    max-photos: 0                    # 사진 칸 수 (0 = 사진 없음). 저장 키만 싣는다 - 올리기는 앱이 storage 로 하고, 볼 때 서버가 짧은 서명 주소로 302 한다
+    max-photos: 0                    # 사진 칸 수 (0 = 사진 없음). 켜면 키 소유 확인이 필수 - 기본 정책은 사진을 거절하고, storage 가 있으면 StorageKeyOwnership 정책이 자동으로 선다(직접 둔 ReviewPolicy 는 canAttach 를 덮는다). 저장 키만 싣는다 - 올리기는 앱이 storage 로 하고, 볼 때 서버가 짧은 서명 주소로 302 한다
     report:
       auto-hide-at: 0                # N 번째 신고에서 자동으로 숨긴다(사유 AUTO_REPORTS). 0 = 꺼짐
     admin:

@@ -9,14 +9,17 @@ fun interface ReviewTargets {
 }
 
 /**
- * 누가 쓸 수 있나 · 무엇을 붙일 수 있나 · 누가 운영하나를 앱이 **좁히는** 자리(`BoardPolicy` 와 같은 방식). 기본은 모두 허용 - 거절만 한다.
+ * 누가 쓸 수 있나 · 무엇을 붙일 수 있나 · 누가 운영하나를 앱이 **좁히는** 자리(`BoardPolicy` 와 같은 방식). 쓰기 · 운영은 기본 허용(거절만 한다), 사진 붙이기만 기본 거절이다.
  * `canModerate` 는 운영 권한(`review.moderate`)을 이미 가진 사람에게 앱이 한 번 더 거절할 때만 쓴다(권한을 주는 자리가 아니다).
  */
 interface ReviewPolicy {
     fun canWrite(accountId: String, target: ReviewTarget): Boolean = true
 
-    /** 사진 저장 키를 붙여도 되나 - 키 소유 확인은 앱이 `StorageKeyOwnership` 으로 좁힌다 */
-    fun canAttach(accountId: String, keys: List<String>): Boolean = true
+    /**
+     * 사진 저장 키를 붙여도 되나. **기본은 거절이다** - 키가 호출자 자신의 업로드인지 `review` 는 모른다(서명 주소로 열어 주므로 남의 비공개 키를 붙이게 둘 수 없다).
+     * `storage` 가 클래스패스에 있고 앱이 정책 빈을 안 두면 `StorageKeyOwnership` 으로 좁힌 정책이 자동으로 선다. 직접 정책을 두면 이 메서드를 덮어 소유를 확인한다.
+     */
+    fun canAttach(accountId: String, keys: List<String>): Boolean = false
 
     fun canModerate(accountId: String): Boolean = true
 }

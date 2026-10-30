@@ -5,6 +5,8 @@ dependencies {
     // spring-security-core: 호출자(Authentication) — 없으면 경로를 등록하지 않는다
     compileOnly(project(":modules:notification"))
     compileOnly(project(":modules:idempotency"))
+    // storage: 사진 키 소유 확인 StorageKeyOwnership (ReviewStorageAutoConfiguration 이 클래스패스에 있고 앱이 정책을 안 뒀을 때만 기본 정책을 낸다 - 사진은 기본 거절)
+    compileOnly(project(":modules:storage"))
     compileOnly("org.springframework.security:spring-security-core")
 
     api(project(":modules:platform"))   // 타입(ApplicationException · AuthorDirectory · TimeProvider)이 이 모듈의 공개 API 에 나온다
@@ -17,6 +19,7 @@ dependencies {
 
     testImplementation(project(":modules:notification"))
     testImplementation(project(":modules:idempotency"))
+    testImplementation(project(":modules:storage"))
     testImplementation("org.springframework.security:spring-security-core")
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("org.assertj:assertj-core")
