@@ -87,6 +87,8 @@
 - async-notification: 비동기 작업에서 처리되지 않은 예외를 알림(notification)으로… [비동기 예외 알림, 백그라운드 오류 알림]
 - auth: 로그인 — 비밀번호 로그인 · JWT 발급/검증 · 로컬… [로그인, 로그아웃]
 - auth-magic-link: 이메일로 받은 한 번 쓰는 링크로 로그인(비밀번호 없이) [매직링크, 링크 로그인]
+- auth-mfa: 2단계 인증(TOTP) — 모든 로그인 길(비밀번호 · 소셜 · 매직… [2단계 인증, 이중 인증]
+- auth-mfa-jdbc: 2단계 인증 저장을 DB 에 둔다 (PostgreSQL · MySQL) [2단계 인증 저장소, MFA DB]
 - auth-session: 로그인 세션 — 불투명한 리프레시 토큰(해시 저장 · 매번 회전 ·… [세션, 리프레시 토큰]
 - auth-session-jdbc: auth-session 의 세션 · 리프레시 토큰 저장을… [세션 저장, 세션 DB]
 - auth-social: 소셜 로그인의 제공자 중립 계약 [소셜 로그인, 간편 로그인]

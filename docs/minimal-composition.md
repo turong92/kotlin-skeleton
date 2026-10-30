@@ -104,6 +104,7 @@ fails when this table and the prefixes found in module code differ.
 | `inquiry` | `skeleton.inquiry` |
 | `auth` | `skeleton.auth` |
 | `auth-magic-link` | `skeleton.auth-magic-link` |
+| `auth-mfa` | `skeleton.auth-mfa` |
 | `auth-session` | `skeleton.auth-session` |
 | `auth-social` | `skeleton.auth-social` |
 | `auth-social-oidc` | `skeleton.auth-social-oidc` |

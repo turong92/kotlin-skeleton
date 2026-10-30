@@ -31,6 +31,9 @@ spring:
       - dev.sumin.skeleton.apikey.ApiKeyAutoConfiguration
       - dev.sumin.skeleton.apikey.web.ApiKeyWebAutoConfiguration
       - dev.sumin.skeleton.apikey.jdbc.ApiKeyJdbcAutoConfiguration
+      - dev.sumin.skeleton.auth.mfa.MfaAutoConfiguration
+      - dev.sumin.skeleton.auth.mfa.web.MfaWebAutoConfiguration
+      - dev.sumin.skeleton.auth.mfa.jdbc.MfaJdbcAutoConfiguration
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/app}  # 시각 바인딩은 modules:db-postgresql (SqlDialect)
     username: ${SPRING_DATASOURCE_USERNAME:app}

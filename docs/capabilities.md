@@ -79,6 +79,8 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `async-notification` | 비동기 작업에서 처리되지 않은 예외를 알림(notification)으로 흘려 보낸다. | `--modules async-notification` | 비동기 예외 알림, 백그라운드 오류 알림, 비동기 에러 / async exception alert, background error notification, uncaught async exception | — |
 | `auth` | 로그인 — 비밀번호 로그인 · JWT 발급/검증 · 로컬 dev-login · 비상용 break-glass · SecurityFilterChain (계정 저장소는 앱이 정한다). | 스타터(apps/api)에 기본 포함 | 로그인, 로그아웃, 인증, 토큰, JWT, 권한, 관리자 로그인, 비상 접근 / login, authentication, jwt, token, dev login, break glass, security | `@skeleton/auth` |
 | `auth-magic-link` | 이메일로 받은 한 번 쓰는 링크로 로그인(비밀번호 없이) — 이미 있는 계정으로 들어오고(skeleton.auth-magic-link.sign-up 으로 가입도 허용), 미확인 계정에서는 가입 때의 미확인 비밀번호를 버린다. | `--modules auth-magic-link` | 매직링크, 링크 로그인, 비밀번호 없는 로그인, 이메일 로그인 / magic link, passwordless, email sign in, link login | `@skeleton/auth` |
+| `auth-mfa` | 2단계 인증(TOTP) — 모든 로그인 길(비밀번호 · 소셜 · 매직 링크 · 탈퇴 취소)의 두 번째 단계. 인증 앱 등록(서버가 만든 QR) · 복구 코드 10개 · 틀린 코드 한도(대기 5번 · 계정 15분 10번) + 알림 메일 · 같은 코드 재사용 방지 · 끄기(다시 인증 + 코드). 비밀은 crypto 봉투로 저장. | `--modules auth-mfa,auth-mfa-jdbc` | 2단계 인증, 이중 인증, OTP, TOTP, 인증 앱, 복구 코드, MFA / two-factor authentication, 2fa, mfa, totp, authenticator app, recovery codes, second factor | — |
+| `auth-mfa-jdbc` | 2단계 인증 저장을 DB 에 둔다 (PostgreSQL · MySQL) — 비밀은 암호화 봉투, 복구 코드는 해시만. 같은 TOTP 걸음 · 같은 복구 코드는 한 문장의 조건부 갱신이라 동시에 몰려도 하나만 통과한다. | `--modules auth-mfa-jdbc` | 2단계 인증 저장소, MFA DB / two-factor storage, mfa repository | — |
 | `auth-session` | 로그인 세션 — 불투명한 리프레시 토큰(해시 저장 · 매번 회전 · 재사용 탐지 + 이벤트), 세션 목록 · 개별 로그아웃, body 전달(기본) 또는 HttpOnly 쿠키(CSRF 헤더). 끝난 세션 주기 청소와 계정 삭제 때 세션 행 삭제. | 스타터(apps/api)에 기본 포함 | 세션, 리프레시 토큰, 토큰 갱신, 로그인 유지, 기기 목록, 다른 기기 로그아웃 / session, refresh token, token rotation, keep signed in, device list, sign out everywhere | `@skeleton/auth` |
 | `auth-session-jdbc` | auth-session 의 세션 · 리프레시 토큰 저장을 PostgreSQL · MySQL 로 — 한 토큰은 조건부 UPDATE 한 문장으로 한 번만 쓰이고, 인스턴스끼리 세션을 나눈다. | 스타터(apps/api)에 기본 포함 | 세션 저장, 세션 DB, 리프레시 토큰 저장 / session storage, session table, refresh token storage | `@skeleton/auth` |
 | `auth-social` | 소셜 로그인의 제공자 중립 계약 — POST /api/v1/auth/social/{provider}/login 라우팅 · 계정 연결 · 가입 정책 (제공자는 google · kakao · naver 모듈). | 스타터(apps/api)에 기본 포함 | 소셜 로그인, 간편 로그인, 구글 로그인, 카카오 로그인, 네이버 로그인, OAuth, 계정 연결 / social login, oauth, sign in with google, kakao login, naver login, account linking | `@skeleton/auth` |
@@ -368,6 +370,34 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 비밀번호 로그인이 목적이면 필요 없다 — account 만으로 된다
   - 링크를 열기만 해서는 로그인되지 않는다 — 프런트가 redeem 을 POST 한다
 - 키워드: 매직링크, 링크 로그인, 비밀번호 없는 로그인, 이메일 로그인 / magic link, passwordless, email sign in, link login
+
+### `auth-mfa` — 2단계 인증(TOTP) — 모든 로그인 길(비밀번호 · 소셜 · 매직 링크 · 탈퇴 취소)의 두 번째 단계. 인증 앱 등록(서버가 만든 QR) · 복구 코드 10개 · 틀린 코드 한도(대기 5번 · 계정 15분 10번) + 알림 메일 · 같은 코드 재사용 방지 · 끄기(다시 인증 + 코드). 비밀은 crypto 봉투로 저장.
+
+- 종류 · 상태: module · experimental — 위치 `modules/auth-mfa`
+- 켜는 법: `--modules auth-mfa,auth-mfa-jdbc`
+- 의존 한 줄: `implementation(project(":modules:auth-mfa"))`
+- 자동으로 따라온다: `crypto`
+- 함께 골라야 한다: `auth-mfa-jdbc`
+- 설정 접두사 `skeleton.auth-mfa` — 키와 기본값 `docs/config/modules/auth-mfa.yml`
+- HTTP 경로: `/api/v1/auth/mfa`
+- 문서: `docs/modules/auth-mfa.md`
+- 쓰지 않는 경우:
+  - auth-mfa 는 저장소를 모른다 — auth-mfa-jdbc 를 같이 고른다
+  - 암호화 키가 필요하다(crypto 의 skeleton.crypto.keys) — 없으면 기동에 실패한다
+  - 인증 앱(TOTP)만 — SMS · 이메일 코드 · 패스키(WebAuthn) · 신뢰 기기 기억은 아직 없다
+  - 필수로 정하는 문(등록 전 계정의 모든 API 차단) · 운영자 해제는 아직 없다 — required-for 는 상태 표시와 끄기 거절에만 쓰인다
+- 키워드: 2단계 인증, 이중 인증, OTP, TOTP, 인증 앱, 복구 코드, MFA / two-factor authentication, 2fa, mfa, totp, authenticator app, recovery codes, second factor
+
+### `auth-mfa-jdbc` — 2단계 인증 저장을 DB 에 둔다 (PostgreSQL · MySQL) — 비밀은 암호화 봉투, 복구 코드는 해시만. 같은 TOTP 걸음 · 같은 복구 코드는 한 문장의 조건부 갱신이라 동시에 몰려도 하나만 통과한다.
+
+- 종류 · 상태: module · experimental — 위치 `modules/auth-mfa-jdbc`
+- 켜는 법: `--modules auth-mfa-jdbc`
+- 의존 한 줄: `implementation(project(":modules:auth-mfa-jdbc"))`
+- 자동으로 따라온다: `auth-mfa`, `crypto`
+- 문서: `docs/modules/auth-mfa-jdbc.md`
+- 쓰지 않는 경우:
+  - DataSource · db-* 모듈과 이 모듈의 마이그레이션이 적용된 스키마가 필요하다
+- 키워드: 2단계 인증 저장소, MFA DB / two-factor storage, mfa repository
 
 ### `auth-session` — 로그인 세션 — 불투명한 리프레시 토큰(해시 저장 · 매번 회전 · 재사용 탐지 + 이벤트), 세션 목록 · 개별 로그아웃, body 전달(기본) 또는 HttpOnly 쿠키(CSRF 헤더). 끝난 세션 주기 청소와 계정 삭제 때 세션 행 삭제.
 
@@ -1665,7 +1695,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 - 종류 · 상태: app · stable — 위치 `apps/workbench`
 - 켜는 법: `--with-workbench`
-- 자동으로 따라온다: `alert-jdbc`, `api-key`, `api-key-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `badge`, `badge-jdbc`, `board`, `board-jdbc`, `campaign`, `campaign-jdbc`, `catalog`, `catalog-jdbc`, `config-aws-ssm`, `coupon`, `coupon-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `inquiry`, `inquiry-jdbc`, `db-mysql`, `event-kafka`, `json`, `notification`, `notification-fcm`, `notification-jdbc`, `notification-legal`, `notification-push`, `notification-push-jdbc`, `notification-push-legal`, `notification-slack`, `notification-sse`, `notification-webpush`, `notification-websocket`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `point`, `point-jdbc`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `review`, `review-jdbc`, `reward`, `reward-jdbc`, `scheduler`, `search`, `search-jdbc`, `storage`, `storage-image`, `storage-image-imageio`, `storage-image-imgproxy`, `storage-image-jdbc`, `storage-image-pdfbox`, `storage-s3`, `workspace`, `workspace-jdbc`
+- 자동으로 따라온다: `alert-jdbc`, `api-key`, `api-key-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-mfa`, `auth-mfa-jdbc`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `badge`, `badge-jdbc`, `board`, `board-jdbc`, `campaign`, `campaign-jdbc`, `catalog`, `catalog-jdbc`, `config-aws-ssm`, `coupon`, `coupon-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `inquiry`, `inquiry-jdbc`, `db-mysql`, `event-kafka`, `json`, `notification`, `notification-fcm`, `notification-jdbc`, `notification-legal`, `notification-push`, `notification-push-jdbc`, `notification-push-legal`, `notification-slack`, `notification-sse`, `notification-webpush`, `notification-websocket`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `point`, `point-jdbc`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `review`, `review-jdbc`, `reward`, `reward-jdbc`, `scheduler`, `search`, `search-jdbc`, `storage`, `storage-image`, `storage-image-imageio`, `storage-image-imgproxy`, `storage-image-jdbc`, `storage-image-pdfbox`, `storage-s3`, `workspace`, `workspace-jdbc`
 - HTTP 경로: `/api/v1`, `/api/v1/examples`, `/api/v1/skeleton`, `/api/v1/skeleton/enums`, `/api/v1/skeleton/json`, `/api/v1/skeleton/payments`, `/api/v1/skeleton/polymorphic/contents`
 - 문서: `docs/minimal-composition.md`, `docs/modules/README.md`
 - 짝 프런트(react-skeleton): 항목 `app-workbench` · 조각 `--with-workbench`

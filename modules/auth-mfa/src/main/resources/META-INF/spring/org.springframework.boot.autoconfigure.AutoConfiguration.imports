@@ -1,0 +1,2 @@
+dev.sumin.skeleton.auth.mfa.MfaAutoConfiguration
+dev.sumin.skeleton.auth.mfa.web.MfaWebAutoConfiguration

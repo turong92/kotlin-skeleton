@@ -477,6 +477,74 @@
       }
     },
     {
+      "id": "auth-mfa",
+      "kind": "module",
+      "module": "auth-mfa",
+      "path": "modules/auth-mfa",
+      "status": "experimental",
+      "summary": "2단계 인증(TOTP) — 모든 로그인 길(비밀번호 · 소셜 · 매직 링크 · 탈퇴 취소)의 두 번째 단계. 인증 앱 등록(서버가 만든 QR) · 복구 코드 10개 · 틀린 코드 한도(대기 5번 · 계정 15분 10번) + 알림 메일 · 같은 코드 재사용 방지 · 끄기(다시 인증 + 코드). 비밀은 crypto 봉투로 저장.",
+      "starter": false,
+      "newProjectFlag": "--modules auth-mfa,auth-mfa-jdbc",
+      "autoIncludes": ["crypto"],
+      "needs": {
+        "requires": ["auth-mfa-jdbc"],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": ["skeleton.auth-mfa"],
+        "snippet": "docs/config/modules/auth-mfa.yml"
+      },
+      "basePaths": ["/api/v1/auth/mfa"],
+      "secrets": [],
+      "docs": ["docs/modules/auth-mfa.md"],
+      "frontend": null,
+      "notFor": [
+        "auth-mfa 는 저장소를 모른다 — auth-mfa-jdbc 를 같이 고른다",
+        "암호화 키가 필요하다(crypto 의 skeleton.crypto.keys) — 없으면 기동에 실패한다",
+        "인증 앱(TOTP)만 — SMS · 이메일 코드 · 패스키(WebAuthn) · 신뢰 기기 기억은 아직 없다",
+        "필수로 정하는 문(등록 전 계정의 모든 API 차단) · 운영자 해제는 아직 없다 — required-for 는 상태 표시와 끄기 거절에만 쓰인다"
+      ],
+      "keywords": {
+        "ko": ["2단계 인증", "이중 인증", "OTP", "TOTP", "인증 앱", "복구 코드", "MFA"],
+        "en": [
+          "two-factor authentication",
+          "2fa",
+          "mfa",
+          "totp",
+          "authenticator app",
+          "recovery codes",
+          "second factor"
+        ]
+      }
+    },
+    {
+      "id": "auth-mfa-jdbc",
+      "kind": "module",
+      "module": "auth-mfa-jdbc",
+      "path": "modules/auth-mfa-jdbc",
+      "status": "experimental",
+      "summary": "2단계 인증 저장을 DB 에 둔다 (PostgreSQL · MySQL) — 비밀은 암호화 봉투, 복구 코드는 해시만. 같은 TOTP 걸음 · 같은 복구 코드는 한 문장의 조건부 갱신이라 동시에 몰려도 하나만 통과한다.",
+      "starter": false,
+      "newProjectFlag": "--modules auth-mfa-jdbc",
+      "autoIncludes": ["auth-mfa", "crypto"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/auth-mfa-jdbc.md"],
+      "frontend": null,
+      "notFor": ["DataSource · db-* 모듈과 이 모듈의 마이그레이션이 적용된 스키마가 필요하다"],
+      "keywords": {
+        "ko": ["2단계 인증 저장소", "MFA DB"],
+        "en": ["two-factor storage", "mfa repository"]
+      }
+    },
+    {
       "id": "auth-session",
       "kind": "module",
       "module": "auth-session",
@@ -3857,6 +3925,8 @@
         "async",
         "async-notification",
         "auth-magic-link",
+        "auth-mfa",
+        "auth-mfa-jdbc",
         "auth-social-google",
         "auth-social-kakao",
         "auth-social-naver",
