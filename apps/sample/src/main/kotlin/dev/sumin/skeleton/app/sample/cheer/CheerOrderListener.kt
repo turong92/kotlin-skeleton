@@ -41,8 +41,8 @@ class CheerOrderListener(private val cheers: CheerRepository, private val referr
         if (order.itemType != CheerCatalog.ITEM_TYPE) return
         val full = order.status == PaymentOrderStatus.REFUNDED || order.refundedAmount >= order.amount.amount
         cheers.applyRefund(order.id, order.refundedAmount, full, refund.completedAt ?: order.updatedAt)
-        // 보류 · 운영자 확인 중인 초대 보상을 거둔다 - 이미 지급했거나 대상이 아니면 아무것도 하지 않는다(false)
-        referrals.cancel(order.accountId, "refunded")
+        // 보류(HELD) · 운영자 확인(REVIEW) 중인 초대 보상만 거둔다 - 신호 전(CLAIMED)이거나 이미 지급한 관계는 건드리지 않는다(false). 신호 전 환불이 관계를 끊으면 진짜 첫 결제 뒤에도 보상이 안 나간다
+        referrals.cancelPending(order.accountId, "refunded")
     }
 
     private companion object {

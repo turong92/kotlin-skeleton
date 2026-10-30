@@ -132,6 +132,22 @@ class RewardsFlowIntegrationTest : CheerIntegrationBase() {
     }
 
     @Test
+    fun `a refund of an order from before the signal does not end a relation that is still waiting for its first payment`() {
+        val invitee = invitedStranger()
+        val orderId = buy(stranger)
+        // 그 주문이 신호를 내기 전이었던 것처럼 되돌린다 - 신호 전(CLAIMED) 관계에 환불이 오는 경우
+        jdbc.sql("update campaign_referrals set status = 'CLAIMED', release_at = null, qualify_event = null").update()
+
+        val refundId = read(post("$PAYMENTS/orders/$orderId/refund-requests", stranger, """{"reasonCode":"CUSTOMER_REQUEST"}""", UUID.randomUUID().toString()).andExpect { status { isCreated() } }, "$.value.id")
+        post("$ADMIN/refunds/$refundId/approve", operator).andExpect { status { isOk() } }
+        await { myCheers(stranger).takeIf { it.contains("REFUNDED") } }
+
+        assertEquals("CLAIMED", referralStatus(invitee), "a refund only ends a reward that is on hold or under review")
+        buy(stranger)
+        assertEquals("HELD", referralStatus(invitee), "the real first payment still opens the inviter's reward")
+    }
+
+    @Test
     fun `an inviter at the cap of 10 gets nothing for the 11th friend - the hold counts toward the cap`() {
         val campaignId = jdbc.sql("select id from campaigns where name = :n").param("n", RewardsSeed.REFERRAL).query(String::class.java).single()
         repeat(10) {

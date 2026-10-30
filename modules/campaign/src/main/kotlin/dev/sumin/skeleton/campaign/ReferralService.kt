@@ -15,7 +15,8 @@ import java.util.Base64
  * 앱이 초대 관계에 알리는 자리.
  * - [qualify]: 「의미 있는 행동」(예: 첫 결제) - `qualifyOn: SIGNAL` 인 초대 이벤트의 초대자 보상이 이때 정해진다. 이벤트가 `qualifyEvent` 를 정했으면 [event] 가 같은 신호만 먹는다. 몇 번 불러도 한 번만 먹는다.
  * - [cancel]: 보류 중(환불 · 사기)인 관계를 끊는다. 대기 · 확인 · 보류 중일 때만 먹고, 이미 끝났거나 없으면 `false`.
- * - [releaseDue]: 보류 기한이 지난 관계에 초대자 보상을 준다(그리고 30일 지난 네트워크 값을 지운다). `scheduler` 가 있으면 주기 작업이 부르고, 없으면 앱이 부른다.
+ * - [cancelPending]: [cancel] 인데 `HELD` · `REVIEW` 만 - 신호 전 관계는 건드리지 않는다.
+ * - [releaseDue]: 보류 기한이 지난 관계에 초대자 보상을 준다(그리고 30일 지난 네트워크 값을 지운다). `scheduler` 가 있으면 주기 작업이 부르고, 없으면 **보류를 안 써도** 앱이 주기적으로 불러야 네트워크 값이 지워진다.
  */
 interface Referrals {
     fun qualify(inviteeId: String, event: String?)
@@ -24,6 +25,9 @@ interface Referrals {
     fun qualify(inviteeId: String) = qualify(inviteeId, null)
 
     fun cancel(inviteeId: String, reason: String): Boolean
+
+    /** [cancel] 과 같되 이미 보류(`HELD`) · 확인 중(`REVIEW`)인 관계만 끊는다 - 아직 신호 전(`CLAIMED`)인 관계는 그대로 둔다 */
+    fun cancelPending(inviteeId: String, reason: String): Boolean
 
     /** 보상을 준 관계 수 */
     fun releaseDue(): Int
@@ -169,16 +173,18 @@ class ReferralService(
 
     override fun cancel(inviteeId: String, reason: String): Boolean = cancelRelation(inviteeId, reason, APP, strict = false)
 
-    private fun cancelRelation(inviteeId: String, reason: String, by: String, strict: Boolean): Boolean {
+    override fun cancelPending(inviteeId: String, reason: String): Boolean = cancelRelation(inviteeId, reason, APP, strict = false, from = ReferralStatus.APPROVABLE)
+
+    private fun cancelRelation(inviteeId: String, reason: String, by: String, strict: Boolean, from: Set<ReferralStatus> = ReferralStatus.CANCELABLE): Boolean {
         val text = reason.trim()
         if (text.isEmpty() || text.length > MAX_REASON) throw CampaignException(CampaignErrorCode.REFERRAL_REASON_INVALID, "reason must be 1..$MAX_REASON characters")
         return store.inTransaction {
             val referral = store.referralOfInvitee(inviteeId, lock = true)
-            if (referral == null || referral.status !in ReferralStatus.CANCELABLE) {
+            if (referral == null || referral.status !in from) {
                 if (strict) throw CampaignException(if (referral == null) CampaignErrorCode.REFERRAL_NOT_FOUND else CampaignErrorCode.REFERRAL_NOT_CANCELABLE, "referral of $inviteeId cannot be canceled")
                 return@inTransaction false
             }
-            store.transitionReferral(inviteeId, ReferralStatus.CANCELABLE, ReferralStatus.CANCELED, time.now(), settledBy = by, cancelReason = text)
+            store.transitionReferral(inviteeId, from, ReferralStatus.CANCELED, time.now(), settledBy = by, cancelReason = text)
         }
     }
 
