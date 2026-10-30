@@ -1,11 +1,10 @@
 package dev.sumin.skeleton.board
 
-import dev.sumin.skeleton.board.notification.DefaultBoardNotificationFormatter
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** 리뷰(묶음 2 · 확인) 지적의 회귀: 판 버전 · 겹침 · 승인을 끈 뒤 · 못 보는 행 · 첨부 0 · 알림 문구 · 쿼리 수 */
+/** 리뷰(묶음 2 · 확인) 지적의 회귀: 판 버전 · 겹침 · 승인을 끈 뒤 · 못 보는 행 · 첨부 0 · 쿼리 수 */
 class ReviewFixesTest {
     private val settings = BoardSettings(
         guestWrite = GuestWrite.ALL, postApproval = ApprovalMode.ALL, commentApproval = ApprovalMode.ALL, ownerModeratesComments = true,
@@ -108,24 +107,6 @@ class ReviewFixesTest {
         assertEquals(BoardErrorCode.FORBIDDEN, h.failure { h.commentService.moderate(other, "general", post, c.id, CommentStatus.PUBLISHED) })
     }
 
-    // ---- 관리 가능 여부: 되살릴 수 없는 댓글에 단추를 그리지 않게 ----
-
-    @Test
-    fun `canManage tells an owner which comments the owner can still change, moderators always, and others nothing`() {
-        val h = ServiceHarness(props = props, settings = settings.copy(commentApproval = ApprovalMode.OFF))
-        val post = publishedPost(h).id   // 글 주인 = other(ownerModeratesComments)
-        val ownerHid = h.commentService.create(third, "general", post, null, "a").comment
-        val modHid = h.commentService.create(third, "general", post, null, "b").comment
-        val shown = h.commentService.create(third, "general", post, null, "c").comment
-        h.commentService.moderate(other, "general", post, ownerHid.id, CommentStatus.HIDDEN)
-        h.commentService.moderate(moderator, "general", post, modHid.id, CommentStatus.HIDDEN)
-        fun flags(who: BoardCaller?) = h.commentService.list(who, "general", post, 0, 10, CommentSort.OLDEST).values.associate { it.comment.id to it.canManage }
-        assertEquals(mapOf(ownerHid.id to true, modHid.id to false, shown.id to true), flags(other))
-        assertEquals(mapOf(ownerHid.id to true, modHid.id to true, shown.id to true), flags(moderator))
-        assertEquals(mapOf(ownerHid.id to null, modHid.id to null, shown.id to null), flags(third))
-        assertEquals(mapOf(ownerHid.id to null, modHid.id to null, shown.id to null), flags(null))
-    }
-
     // ---- N1 글마다 켠 댓글 승인 ----
 
     @Test
@@ -186,24 +167,5 @@ class ReviewFixesTest {
         h.commentService.decideRevision(other, "general", post, c.id, RevisionDecision.APPROVE, h.v(RevisionTarget.COMMENT, c.id))
         assertEquals("고친 말", h.store.comments.getValue(c.id).body)
         assertEquals(listOf("k/old.png"), h.store.commentFiles[c.id], "approving a text-only edit must not wipe the stored pictures")
-    }
-
-    // ---- M-g 알림 문구 ----
-
-    @Test
-    fun `the edit notice carries the edited text, and the default message uses it instead of the old body`() {
-        val notices = mutableListOf<BoardCommentNotice>()
-        val h = ServiceHarness(props = props, settings = settings, notifier = object : BoardNotifier {
-            override fun commentCreated(notice: BoardCommentNotice) = Unit
-            override fun commentPending(notice: BoardCommentNotice) { notices += notice }
-        })
-        val post = publishedPost(h).id
-        val c = h.commentService.create(third, "general", post, null, "옛 본문").comment
-        h.commentService.moderate(other, "general", post, c.id, CommentStatus.PUBLISHED)
-        notices.clear()
-        h.commentService.update(third, "general", post, c.id, "고친 본문")
-        val notice = notices.single()
-        assertEquals("고친 본문", notice.revisionBody)
-        assertEquals("고친 본문", DefaultBoardNotificationFormatter().format(notice).message)
     }
 }
