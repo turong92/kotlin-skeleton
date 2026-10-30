@@ -25,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `review` 운영 조각: 신고(사유 코드, 계정당 한 번) · 운영 큐 · 숨김/되살리기/문제없음 · 자동 가림 `report.auto-hide-at`(기본 0 = 꺼짐) · 운영자 답글(리뷰당 하나) · 사진(저장 키만, `max-photos`, 볼 때 `PrivateUploadAccess` 서명 주소 `302` + `Cache-Control: private`, 키에 계정 id 가 있으면 거절) · 권한 `review.moderate`(`MODERATOR` 기본) · `review.reply`(전권만) · 운영 기록 `review.hidden/restored/reports_dismissed/replied` · `ReviewNotifier`(`notification` 이 있으면 받은편지함). 운영자 경로는 `skeleton.review.admin.enabled=true` 일 때만(기본 404). 마이그레이션 추가 없음(표는 `V20261030100000__reviews` 에 이미 있다). `ReviewPolicy.canModerate` 의 기본은 true(권한을 주는 자리가 아니라 거절하는 자리).
 - 시험 묶음 `ModuleDocumentationTest` 의 알려진 프론트 패키지에 `@skeleton/reviews` · `@skeleton/search` 추가.
 
+- 견본 앱(`apps/sample`): `review-jdbc` 조립 - 상품 리뷰를 산 사람만 쓴다(`require-purchase`), 비로그인 읽기, 사진 5장, 운영 켬. `ReviewTargets` = 카탈로그 상품 코드 · `PaymentOrderListener` 를 `orders/SampleOrderListener` 하나로 정리해 응원 기록과 리뷰 구매 신호(구독 · 단건 주문의 가격 코드 → 상품, 전액 환불이면 취소)를 부른다 · `ReviewRewards`(`reviews.written` → 업적) · 씨앗 `ReviewsSeed`(`acc_user` 의 `product:basic` 구매 · 배지 「첫 리뷰」 · 1 → 100포인트) · 사진 키 소유 정책. 문서 `docs/sample.md` 「리뷰 · 평점」.
+
 ### 검색 연동: 상품 · 견본 노트 (2026-10-30)
 
 - `catalog`: 상품을 만들 때 · 고칠 때(이름 · 설명 · 판매 여부) platform 의 `SearchIndexer` 로 `product` 문서를 밀어 넣는다 - 호출자 쓰기 트랜잭션 안, 제목 = `skeleton.catalog.default-locale` 의 이름(없으면 첫 언어), 본문 = 모든 언어의 이름 · 설명, `scope` = 상품 종류, 문서 id = 상품 코드, 주인 없음, 판매 중지면 `delete`. `SearchSource("product")` 빈(`CatalogSearchSource`)이 판매 중인 상품만 낸다. `catalog` 는 `search` 에 의존하지 않고 `ObjectProvider` 로 부르므로 **검색을 안 붙인 앱은 동작이 그대로다**. `CatalogAdmin` 생성자에 끝 인자 둘(`searchIndexer`, `defaultLocale`)이 기본값과 함께 붙었다.

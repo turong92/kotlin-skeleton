@@ -193,6 +193,19 @@ local 프로필은 주문 만들기 한도(기본 계정당 10 / 10분)를 풀�
 **노트 API 의 헤더 동작**: `X-Workspace-Id` 가 **없으면 예전 그대로** 내 노트다(`workspace_id` 가 없는 것만 - 내가 쓴 팀 노트는 내 목록에 안 나온다). **있으면** 그 워크스페이스의 노트다: 요청마다 멤버십을 DB 로 확인하고(멤버가 아니거나 없는 · 닫힌 워크스페이스는 모두 404 `WORKSPACE.NOT_FOUND`, 추방은 다음 요청부터 반영), 멤버는 모두 읽고 쓰고, 지우기는 **쓴 사람 · ADMIN 이상**(그 밖은 403 `WORKSPACE.FORBIDDEN`). 팀 노트의 `ownerId` 는 쓴 사람이다. 요약(`/summary`) · 내보내기도 같은 상자를 본다(내보내기 결과 파일과 완료 알림은 **요청한 사람**의 것이고, 그 사이 추방됐으면 잡이 끝난다). 알림(`NOTE_*`)은 **그 일을 한 사람**에게 가고 팀 노트 알림에는 링크가 없다(쓴 사람이 추방돼도 제목이 새지 않는다). 첨부와 업적 개수는 내 노트만이다: 팀 노트 `PUT` 에 `attachmentKey` 를 보내면 400 `NOTES.TEAM_ATTACHMENT_UNSUPPORTED`, 팀 노트에 이미 있는 첨부는 수정해도 그대로다.
 
 **씨앗**(`local` 프로필만, slug 로 찾아 없으면 만든다 - `workspace/WorkspaceSeed`): `user@example.com`(`acc_user`)이 소유자인 「Example Team」(slug `example-team`). 시험: `notes/WorkspaceNotesIntegrationTest`(남의 팀 노트 안 보임 · 추방 직후 404 · 헤더 없을 때 그대로 · 미리보기 공개 경로), `workspace/SubscriptionSeatPolicyTest`.
+## 리뷰 · 평점 (`/api/v1/reviews`)
+
+한 줄(`review-jdbc`)과 이 앱의 작은 조각 `reviews/`·`orders/` 가 전부다. 상품(`catalog`)에 **산 사람만** 별점 · 본문 · 사진 리뷰를 쓴다(`skeleton.review.require-purchase: true` · `body-min-length: 10` · `max-photos: 5`, 대상 종류 `[product]`).
+- **대상**: `SampleReviewTargets` 가 카탈로그 상품 코드를 확인한다(`review` 는 상품을 모른다).
+- **구매 신호**: 결제 장부는 `PaymentOrderListener` 빈을 하나만 받으므로 `orders/SampleOrderListener` 가 응원 기록(`CheerOrderListener`)과 리뷰 구매 신호(`reviews/ReviewPurchaseSignals`) 둘을 부른다. 구독 주문(`itemRef` = 플랜 코드)과 단건 주문(`itemRef` = 가격 코드)의 가격 코드로 카탈로그 표에서 상품 코드를 찾아 `ReviewPurchases.record(계정, product:<상품>, "order:<주문 id>")`, 전액 환불이면 `revoke`(일부 환불은 그대로). 쿠폰으로 0원이 된 주문도 상품을 받았으니 구매다.
+- **보상**: `ReviewRewards`(`ReviewEventListener`)가 리뷰를 처음 공개할 때 계정의 리뷰 개수를 `CampaignSignals.report(계정, "reviews.written", 개수)` 로 보고한다(쓰기 트랜잭션 안 - 던지면 쓰기도 실패). 업적 이벤트 「리뷰 업적」(1 → 배지 「첫 리뷰」 + 100포인트)은 씨앗 `ReviewsSeed` 의 설정이다.
+- **사진**: 저장 키만 싣는다. `SampleReviewPolicy.canAttach` 가 `StorageKeyOwnership` 으로 호출자 자신이 올린 키만 허용한다(`OPAQUE` 키라 계정 id 가 없다). 보기는 서버가 짧은 서명 주소로 `302` 한다.
+- **읽기·운영**: 상품 요약 · 목록은 `allow-anonymous-read: true` 로 로그인 없이 읽는다(응답에 계정 id 없음 - 속도 제한은 아직 걸지 않았다: platform `web.rate-limit` 이 경로 패턴 하나라 배지 프로필 경로에 쓰고 있다). 운영 경로(`skeleton.review.admin.enabled: true`)는 신고 큐 · 숨김 · 되살리기 · 문제없음(`review.moderate`, `MODERATOR` 기본 포함)과 답글(`review.reply`, ADMIN 전권만).
+
+**씨앗**(`local` 프로필만, 없는 것만 만든다 - `ReviewsSeed`): 시드 계정 `acc_user` 의 `product:basic` 구매 줄(결제 키 없이도 리뷰를 써 볼 수 있게), 배지 「첫 리뷰」, 업적 이벤트 「리뷰 업적」.
+
+시험: `reviews/ReviewsFlowIntegrationTest`(구매 신호 → 쓰기 · 비로그인 읽기 · 환불 → 배지 내림 · 리뷰 → 배지 + 100포인트 · 사진 키 소유 · 운영 경로).
+
 ## 검색 (`/api/v1/search`)
 
 한 줄(`search-jdbc`)과 이 앱의 작은 조각 `notes/NoteSearch.kt`(`NoteSearchSource` + `Note.toSearchDocument`), `NoteService` 의 세 줄이 전부다. `NoteService` 가 노트를 만들 때 · 고칠 때 · 지울 때 **같은 트랜잭션 안에서** `note` 문서를 색인에 넣고 빼므로(롤백되면 색인도 없다) 커밋과 함께 검색에 보인다. 문서의 주인은 작성자라 **남의 검색에는 나오지 않는다**. 상품은 `catalog` 가 상품을 만들 때 · 고칠 때 저절로 `product` 문서를 넣고(씨앗도 `CatalogAdmin` 을 지나므로 들어간다), 판매를 멈추면 뺀다 - 앱 코드는 없다.

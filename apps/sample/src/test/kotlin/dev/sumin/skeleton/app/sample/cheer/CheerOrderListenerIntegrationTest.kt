@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.app.sample.cheer
 
 import dev.sumin.skeleton.payment.PaymentAmount
+import dev.sumin.skeleton.app.sample.orders.SampleOrderListener
 import dev.sumin.skeleton.payment.PaymentOrderListener
 import dev.sumin.skeleton.payment.PaymentOrderStatus
 import dev.sumin.skeleton.payment.PaymentRefundStatus
@@ -28,7 +29,7 @@ class CheerOrderListenerIntegrationTest : CheerIntegrationBase() {
 
     @Test
     fun `the listener on the context is this app's, and onPaid writes one line - twice is still one`() {
-        assertEquals(CheerOrderListener::class, listener::class)
+        assertEquals(SampleOrderListener::class, listener::class)
         val order = paidOrder()
         listener.onPaid(order)
         listener.onPaid(order)

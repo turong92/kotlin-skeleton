@@ -263,6 +263,15 @@ skeleton:
   point:
     admin:
       enabled: true
+  review:
+    target-types: [product]      # 이 앱의 선택: 리뷰를 받는 대상은 카탈로그 상품(reviews/SampleReviewTargets 가 상품 코드를 확인한다) - 스켈레톤 기본은 비어 있다
+    require-purchase: true       # 이 앱의 선택: 산 사람만 쓴다(국내 커머스 관행) - 결제 리스너(orders/SampleOrderListener)가 구매 신호를 넣는다. 스켈레톤 기본은 누구나
+    body-min-length: 10          # 이 앱의 선택: 본문 10자 이상 (기본 0)
+    max-photos: 5                # 이 앱의 선택: 사진 5장까지 - 저장 키만 싣는다, 올리기는 storage (스켈레톤 기본은 0)
+    http:
+      allow-anonymous-read: true   # 이 앱의 선택: 상품 화면의 요약 · 목록을 로그인 없이 읽는다 - 스켈레톤 기본은 로그인 필요(401). 속도 제한은 platform 의 web.rate-limit 이 경로 패턴 하나만 받아 배지 프로필 경로에 쓰고 있어 리뷰 읽기에는 아직 걸지 않았다
+    admin:
+      enabled: true              # 이 앱의 선택: 운영 경로(신고 큐 · 숨김 · 답글, 권한 review.moderate 는 MODERATOR 기본 포함, review.reply 는 ADMIN 전권만)
   search:
     admin:
       enabled: true   # 이 앱의 선택: 운영 경로(문서 종류별 개수 · 재색인, 권한 search.manage 는 기본 역할 없이 ADMIN 전권만). 검색 읽기는 모듈 기본 그대로 로그인만(allow-anonymous-read 를 켜지 않는다)
