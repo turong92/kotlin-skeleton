@@ -16,9 +16,6 @@ interface NoteRepository : CrudRepository<Note, UUID> {
 
     fun findByIdAndWorkspaceId(id: UUID, workspaceId: String): Note?
 
-    /** 잡(내보내기)이 쓴 사람으로 찾는다 */
-    fun findByIdAndOwnerId(id: UUID, ownerId: String): Note?
-
     @Query(
         """
         SELECT * FROM notes

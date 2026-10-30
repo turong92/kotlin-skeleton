@@ -63,7 +63,7 @@ class NoteExportIntegrationTest : SampleIntegrationTest() {
     @Test
     fun `an export job whose note no longer exists goes straight to DEAD without a notification`() {
         val gone = UUID.randomUUID()
-        val jobId = jobs.enqueue("note-export", """{"noteId":"$gone","ownerId":"acc_user"}""")
+        val jobId = jobs.enqueue("note-export", """{"noteId":"$gone","requesterId":"acc_user","workspaceId":null}""")
 
         val status = await {
             jdbc.sql("select status from jobs where id = :id").param("id", jobId).query(String::class.java).single()

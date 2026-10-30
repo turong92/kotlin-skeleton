@@ -6,13 +6,14 @@ import dev.sumin.skeleton.jobqueue.jdbc.PermanentJobFailureException
 import dev.sumin.skeleton.storage.ObjectKey
 import dev.sumin.skeleton.storage.ObjectStorage
 import dev.sumin.skeleton.storage.UploadObjectRequest
+import dev.sumin.skeleton.workspace.Workspaces
 import java.util.UUID
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.stereotype.Component
 import tools.jackson.databind.ObjectMapper
 
 /**
- * `note-export` 잡: 노트를 마크다운으로 만들어 저장소(`<key-prefix>/<계정 id>/exports/<noteId>.md`)에 올리고 주인에게 알린다.
+ * `note-export` 잡: 노트를 마크다운으로 만들어 저장소(`<key-prefix>/<계정 id>/exports/<noteId>.md`)에 올리고 요청한 사람에게 알린다.
  * 잡은 다시 돌 수 있으므로 멱등이다 — 같은 키를 덮어쓰고, 알림 이벤트 id 는 잡 id 라 받은편지함에 한 번만 쌓인다.
  * 노트가 이미 사라졌거나 저장소가 없으면 다시 해도 소용없으니 [PermanentJobFailureException] 으로 바로 DEAD.
  */
@@ -23,17 +24,21 @@ class NoteExportJobHandler(
     private val keys: OwnedKeys,
     private val notifier: NoteNotifier,
     private val json: ObjectMapper,
+    private val workspaces: Workspaces,
 ) : JobHandler {
     override val type = TYPE
 
     override fun handle(job: Job) {
         val payload = json.readTree(job.payloadJson)
-        val owner = payload["ownerId"].asString()
+        val requester = payload["requesterId"].asString()
         val noteId = UUID.fromString(payload["noteId"].asString())
-        val note = notes.findByIdAndOwnerId(noteId, owner) ?: throw PermanentJobFailureException("note $noteId no longer exists")
+        val workspaceId = payload["workspaceId"]?.takeIf { !it.isNull }?.asString()
+        // 팀 노트는 요청한 사람이 지금도 멤버일 때만(그 사이 추방됐으면 끝낸다), 내 노트는 예전처럼 주인 것만
+        val note = (if (workspaceId == null) notes.findByIdAndOwnerIdAndWorkspaceIdIsNull(noteId, requester) else notes.findByIdAndWorkspaceId(noteId, workspaceId)?.takeIf { workspaces.membershipOf(requester, workspaceId) != null })
+            ?: throw PermanentJobFailureException("note $noteId no longer exists or is not readable by $requester")
         val objectStorage = storage.getIfAvailable() ?: throw PermanentJobFailureException("object storage is not configured")
 
-        val key = "${keys.prefix(owner)}exports/$noteId.md"
+        val key = "${keys.prefix(requester)}exports/$noteId.md"
         objectStorage.upload(
             UploadObjectRequest(
                 key = ObjectKey(key),
@@ -42,7 +47,7 @@ class NoteExportJobHandler(
                 contentDisposition = "attachment; filename=\"note-${noteId.toString().take(8)}.md\"",
             ),
         )
-        notifier.exported(note, job.id, key)
+        notifier.exported(note, job.id, key, requester)
     }
 
     private fun markdown(note: Note): String = buildString {

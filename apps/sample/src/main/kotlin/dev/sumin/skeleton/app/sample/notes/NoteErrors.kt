@@ -11,10 +11,17 @@ enum class NotesErrorCode(
     override val title: String,
 ) : ErrorCode {
     NOT_FOUND("NOTES.NOT_FOUND", HttpStatus.NOT_FOUND, "Note not found"),
+    TEAM_ATTACHMENT_UNSUPPORTED("NOTES.TEAM_ATTACHMENT_UNSUPPORTED", HttpStatus.BAD_REQUEST, "Team notes cannot carry attachments"),
 }
 
 /** 없는 노트와 남의 노트는 구별하지 않는다 — 둘 다 404 (남의 노트의 존재를 알려 주지 않는다) */
 class NoteNotFoundException(id: Any) : ApplicationException(
     message = "Note not found: $id",
     errorCode = NotesErrorCode.NOT_FOUND,
+)
+
+/** 첨부 키 검사가 계정 기준이라 팀 노트의 첨부는 지원하지 않는다 - 서버가 막는다(화면이 아니라) */
+class TeamNoteAttachmentException : ApplicationException(
+    message = "Team notes cannot carry attachments",
+    errorCode = NotesErrorCode.TEAM_ATTACHMENT_UNSUPPORTED,
 )

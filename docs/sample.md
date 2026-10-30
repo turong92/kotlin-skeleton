@@ -190,7 +190,7 @@ local 프로필은 주문 만들기 한도(기본 계정당 10 / 10분)를 풀�
 | 좌석 상한(멤버 + 대기 초대)은 **소유자의 구독**이 정한다: 쓰고 있는 구독(해지 예약 포함)이 있으면 10, 아니면 3. 구독을 읽기만 한다(`PaymentSubscriptions.current`) - 결제 코드는 그대로다. 구독을 안 켠 로컬 · 시험은 모두 3 | `workspace/SubscriptionSeatPolicy` |
 | 노트가 팀에 속할 수 있다 - `notes.workspace_id`(null = 내 노트) | `V20261030140000__notes_workspace.sql` |
 
-**노트 API 의 헤더 동작**: `X-Workspace-Id` 가 **없으면 예전 그대로** 내 노트다(`workspace_id` 가 없는 것만 - 내가 쓴 팀 노트는 내 목록에 안 나온다). **있으면** 그 워크스페이스의 노트다: 요청마다 멤버십을 DB 로 확인하고(멤버가 아니거나 없는 · 닫힌 워크스페이스는 모두 404 `WORKSPACE.NOT_FOUND`, 추방은 다음 요청부터 반영), 멤버는 모두 읽고 쓰고, 지우기는 **쓴 사람 · ADMIN 이상**(그 밖은 403 `WORKSPACE.FORBIDDEN`). 팀 노트의 `ownerId` 는 쓴 사람이다. 요약(`/summary`) · 내보내기도 같은 상자를 본다. 첨부와 업적 개수는 아직 내 노트만이다(첨부 키 검사가 계정 기준이고, 업적은 내 노트 개수를 센다).
+**노트 API 의 헤더 동작**: `X-Workspace-Id` 가 **없으면 예전 그대로** 내 노트다(`workspace_id` 가 없는 것만 - 내가 쓴 팀 노트는 내 목록에 안 나온다). **있으면** 그 워크스페이스의 노트다: 요청마다 멤버십을 DB 로 확인하고(멤버가 아니거나 없는 · 닫힌 워크스페이스는 모두 404 `WORKSPACE.NOT_FOUND`, 추방은 다음 요청부터 반영), 멤버는 모두 읽고 쓰고, 지우기는 **쓴 사람 · ADMIN 이상**(그 밖은 403 `WORKSPACE.FORBIDDEN`). 팀 노트의 `ownerId` 는 쓴 사람이다. 요약(`/summary`) · 내보내기도 같은 상자를 본다(내보내기 결과 파일과 완료 알림은 **요청한 사람**의 것이고, 그 사이 추방됐으면 잡이 끝난다). 알림(`NOTE_*`)은 **그 일을 한 사람**에게 가고 팀 노트 알림에는 링크가 없다(쓴 사람이 추방돼도 제목이 새지 않는다). 첨부와 업적 개수는 내 노트만이다: 팀 노트 `PUT` 에 `attachmentKey` 를 보내면 400 `NOTES.TEAM_ATTACHMENT_UNSUPPORTED`, 팀 노트에 이미 있는 첨부는 수정해도 그대로다.
 
 **씨앗**(`local` 프로필만, slug 로 찾아 없으면 만든다 - `workspace/WorkspaceSeed`): `user@example.com`(`acc_user`)이 소유자인 「Example Team」(slug `example-team`). 시험: `notes/WorkspaceNotesIntegrationTest`(남의 팀 노트 안 보임 · 추방 직후 404 · 헤더 없을 때 그대로 · 미리보기 공개 경로), `workspace/SubscriptionSeatPolicyTest`.
 

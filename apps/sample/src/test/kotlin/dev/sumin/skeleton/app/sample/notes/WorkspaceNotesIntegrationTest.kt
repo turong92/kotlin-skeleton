@@ -9,6 +9,7 @@ import java.time.Instant
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.MediaType
 import org.springframework.test.web.servlet.ResultActionsDsl
@@ -75,6 +76,47 @@ class WorkspaceNotesIntegrationTest : SampleIntegrationTest() {
         putNote(user, id, """{"title":"바뀜","body":"","status":"DRAFT","pinned":false}""", null).andExpect { status { isOk() } }
         mockMvc.get("/api/v1/notes/summary") { header("Authorization", "Bearer $user") }.andExpect { jsonPath("$.value.total") { value(1) } }
         listNotes(other, null).andExpect { jsonPath("$.values.length()") { value(0) } }
+    }
+
+    @Test
+    fun `a team note's notifications go to whoever acted, never to an expelled author`() {
+        val ws = createWorkspace(user, "Notify Team")
+        join(ws, "acc_admin", WorkspaceRole.MEMBER)
+        val note = createdTeamNote(other, ws, "쫓겨날 사람의 노트")
+        mockMvc.delete("/api/v1/workspaces/$ws/members/acc_admin") { header("Authorization", "Bearer $user") }.andExpect { status { isNoContent() } }
+
+        putNote(user, note, """{"title":"새 제목 비밀","body":"","status":"DRAFT","pinned":false}""", ws).andExpect { status { isOk() } }
+        deleteNote(user, note, ws).andExpect { status { isNoContent() } }
+
+        await { inbox(user).takeIf { it.contains("NOTE_DELETED") } }   // 고치고 지운 사람(소유자)이 받았다
+        val rejected = inbox(other)
+        assertTrue(!rejected.contains("새 제목 비밀") && !rejected.contains("NOTE_DELETED") && !rejected.contains("NOTE_UPDATED"), rejected)
+    }
+
+    @Test
+    fun `exporting someone else's team note finishes for the requester`() {
+        val ws = createWorkspace(user, "Export Team")
+        join(ws, "acc_admin", WorkspaceRole.MEMBER)
+        val note = createdTeamNote(user, ws, "팀 내보내기")
+
+        mockMvc.post("/api/v1/notes/$note/export") { header("Authorization", "Bearer $other"); header("X-Workspace-Id", ws) }.andExpect { status { isAccepted() } }
+
+        val done = await { inbox(other).takeIf { it.contains("NOTE_EXPORTED") } }
+        assertTrue(done.contains(note), done)
+    }
+
+    @Test
+    fun `team notes take no attachment and a member's edit never deletes the author's file`() {
+        val ws = createWorkspace(user, "Attach Team")
+        join(ws, "acc_admin", WorkspaceRole.MEMBER)
+        val note = createdTeamNote(user, ws, "첨부 시도")
+
+        putNote(other, note, """{"title":"x","attachmentKey":"uploads/acc_admin/a.png"}""", ws)
+            .andExpect { status { isBadRequest() }; jsonPath("$.code") { value("NOTES.TEAM_ATTACHMENT_UNSUPPORTED") } }
+
+        jdbc.sql("update notes set attachment_key = 'uploads/acc_user/keep.png', attachment_name = 'keep.png' where id = :id::uuid").param("id", note).update()
+        putNote(other, note, """{"title":"고침","body":"","status":"DRAFT","pinned":false}""", ws).andExpect { status { isOk() } }
+        assertEquals("uploads/acc_user/keep.png", jdbc.sql("select attachment_key from notes where id = :id::uuid").param("id", note).query(String::class.java).single())
     }
 
     @Test

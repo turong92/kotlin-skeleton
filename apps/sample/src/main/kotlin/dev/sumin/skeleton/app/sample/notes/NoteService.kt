@@ -59,7 +59,7 @@ class NoteService(
         val saved = aggregates.insert(
             Note(id = SortableIds.system.newUuid(), fresh = true, ownerId = owner, workspaceId = scope.workspaceId, title = request.title.trim(), body = request.body, status = request.status, pinned = request.pinned),
         )
-        notifier.created(saved)
+        notifier.created(saved, owner)
         // 업적 수치: 저장 뒤 자기 개수를 세어 현재 값을 보고한다(같은 트랜잭션 - 노트가 롤백되면 보고도 사라진다). 이벤트가 없으면 수치만 쌓인다
         if (scope.workspace == null) signals.ifAvailable { it.report(owner, NOTES_CREATED, notes.countMatching(owner, null, null, null, null)) }
         return saved
@@ -80,7 +80,9 @@ class NoteService(
     @Transactional
     fun replace(scope: NoteScope, id: String, request: ReplaceNoteRequest): Note {
         val current = find(scope, id)
-        val key = request.attachmentKey
+        if (scope.workspace != null && request.attachmentKey != null) throw TeamNoteAttachmentException()
+        // 팀 노트의 첨부는 건드리지 않는다(다른 멤버가 칸을 비워도 쓴 사람의 파일이 지워지지 않게)
+        val key = if (scope.workspace != null) current.attachmentKey else request.attachmentKey
         val saved = notes.save(
             current.copy(
                 title = request.title.trim(),
@@ -88,10 +90,10 @@ class NoteService(
                 status = request.status,
                 pinned = request.pinned,
                 attachmentKey = key,
-                attachmentName = key?.let { request.attachmentName?.takeIf { name -> name.isNotBlank() } ?: it.substringAfterLast('/') },
+                attachmentName = if (scope.workspace != null) current.attachmentName else key?.let { request.attachmentName?.takeIf { name -> name.isNotBlank() } ?: it.substringAfterLast('/') },
             ),
         )
-        notifier.updated(saved)
+        notifier.updated(saved, scope.caller)
         if (current.attachmentKey != null && current.attachmentKey != key) discardAfterCommit(current.attachmentKey)
         return saved
     }
@@ -102,7 +104,7 @@ class NoteService(
         val member = scope.workspace
         if (member != null && current.ownerId != scope.caller && !member.role.atLeast(WorkspaceRole.ADMIN)) throw WorkspaceException(WorkspaceErrorCode.FORBIDDEN)
         notes.delete(current)
-        notifier.deleted(current)
+        notifier.deleted(current, scope.caller)
         current.attachmentKey?.let(::discardAfterCommit)
     }
 
@@ -128,7 +130,7 @@ class NoteService(
     fun startExport(scope: NoteScope, id: String): Long {
         val owner = scope.caller
         val note = find(scope, id)
-        val payload = json.writeValueAsString(mapOf("noteId" to note.id.toString(), "ownerId" to owner))
+        val payload = json.writeValueAsString(mapOf("noteId" to note.id.toString(), "requesterId" to owner, "workspaceId" to note.workspaceId))
         return jobs.enqueue(NoteExportJobHandler.TYPE, payload)
     }
 
