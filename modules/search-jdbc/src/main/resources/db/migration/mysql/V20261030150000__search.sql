@@ -17,11 +17,14 @@ create table if not exists search_documents (
     body              text         not null,
     source_updated_at datetime(6)  not null,                -- 원본이 바뀐 시각 - 더 옛것은 덮어쓰지 않는다
     indexed_at        datetime(6)  not null,                -- 이 줄을 쓴 시각 - 재색인 끝의 사라진 원본 정리가 쓴다
-    constraint uq_search_documents_doc unique (doc_type, doc_id),
+    constraint uq_search_documents_doc unique (doc_type, doc_id)
+    -- 인라인 index · fulltext 는 jOOQ DDLDatabase 가 못 읽는다 → [jooq ignore] 마커 (설명: modules/job-queue-jdbc 의 마이그레이션)
+    /* [jooq ignore start] */,
     index idx_search_documents_owner (owner_id),
     index idx_search_documents_type_indexed (doc_type, indexed_at),
     fulltext index ft_search_documents_title (title) with parser ngram,
     fulltext index ft_search_documents_text (title, body) with parser ngram
+    /* [jooq ignore stop] */
 );
 
 -- 종류별 재색인 진행. running 이고 updated_at 이 오래되면 멈춘 것으로 본다 (새 재색인을 받는다). finished_at 은 마지막으로 끝난 시각
