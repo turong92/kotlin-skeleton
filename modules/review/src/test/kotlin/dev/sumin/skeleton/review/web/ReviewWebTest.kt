@@ -38,10 +38,10 @@ class ReviewTestBeans {
     @Bean fun fakeStore() = FakeReviewStore()
 }
 
-private const val BASE = "/api/v1/reviews"
+internal const val BASE = "/api/v1/reviews"
 
 /** 쓰기에는 `Idempotency-Key` 가 필요하다 - 시험마다 새 키 */
-private fun post(path: String): MockHttpServletRequestBuilder = MockMvcRequestBuilders.post(path).header("Idempotency-Key", java.util.UUID.randomUUID().toString())
+internal fun post(path: String): MockHttpServletRequestBuilder = MockMvcRequestBuilders.post(path).header("Idempotency-Key", java.util.UUID.randomUUID().toString())
 private val PRODUCT = "product" to "basic"
 
 abstract class ReviewWebBase {

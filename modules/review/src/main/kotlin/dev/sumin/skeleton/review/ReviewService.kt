@@ -19,6 +19,7 @@ class ReviewService(
     private val targets: ReviewTargetRules,
     private val policy: () -> ReviewPolicy,
     private val listeners: () -> List<ReviewEventListener>,
+    private val moderation: ReviewModerationService,
     private val time: TimeProvider,
     private val ids: SortableIds = SortableIds.system,
 ) {
@@ -26,8 +27,9 @@ class ReviewService(
         targets.requireExists(target)
         val rating = content.rating(input.rating)
         val body = content.body(input.body)
-        content.photos(input.photos)
+        val photos = content.photos(input.photos, accountId).orEmpty()
         if (!policy().canWrite(accountId, target)) throw ReviewException(ReviewErrorCode.FORBIDDEN, "Not allowed to review this")
+        requireAttachable(accountId, photos)
         return store.inTransaction {
             store.findByTarget(target, accountId)?.let(::requireRewritable)
             val verified = store.hasLivePurchase(accountId, target)
@@ -36,9 +38,10 @@ class ReviewService(
             val fresh = Review(
                 id = ids.newId("rvw_"), targetType = target.type, targetId = target.id, accountId = accountId, rating = rating, body = body,
                 status = ReviewStatus.PUBLISHED, verified = verified, helpfulCount = 0, reportCount = 0, moderatedBy = null, moderationReason = null,
-                photoCount = 0, createdAt = now, updatedAt = now, publishedAt = now,
+                photoCount = photos.size, createdAt = now, updatedAt = now, publishedAt = now,
             )
             if (store.insertIfAbsent(fresh)) {
+                if (photos.isNotEmpty()) store.replacePhotos(fresh.id, photos)
                 store.adjustStats(target, rating, +1, now)
                 publish(fresh, firstTime = true)
                 return@inTransaction fresh
@@ -47,6 +50,7 @@ class ReviewService(
             val existing = store.lockByTarget(target, accountId) ?: throw ReviewException(ReviewErrorCode.ALREADY_WRITTEN, "Already reviewed")
             requireRewritable(existing)
             store.revive(existing.id, rating, body, verified, now)
+            if (photos.isNotEmpty()) store.replacePhotos(existing.id, photos)
             store.adjustStats(target, rating, +1, now)
             val revived = checkNotNull(store.find(existing.id))
             publish(revived, firstTime = false)
@@ -59,9 +63,11 @@ class ReviewService(
         if (current.status != ReviewStatus.PUBLISHED) throw ReviewException(ReviewErrorCode.FORBIDDEN, "A hidden review can only be deleted")
         val rating = patch.rating?.let { content.rating(it) } ?: current.rating
         val body = patch.body?.let { content.body(it) } ?: current.body
-        content.photos(patch.photos)
+        val photos = content.photos(patch.photos, accountId)
+        if (photos != null) requireAttachable(accountId, photos)
         val now = time.now()
         store.updateContent(id, rating, body, now)
+        if (photos != null) store.replacePhotos(id, photos)
         if (rating != current.rating) {
             store.adjustStats(current.target, current.rating, -1, now)
             store.adjustStats(current.target, rating, +1, now)
@@ -95,6 +101,29 @@ class ReviewService(
         HelpfulState(count, store.hasHelpful(id, accountId))
     }
 
+    /**
+     * 신고 - 계정당 한 번(두 번째는 같은 응답으로 조용히 끝난다), 자기 리뷰 403, 공개된 줄만(아니면 404).
+     * `report.auto-hide-at` 이 N 이면 N 번째 신고에서 자동으로 숨긴다(사유 `AUTO_REPORTS`).
+     */
+    fun report(accountId: String, id: String, reason: String?, detail: String?) {
+        val code = content.reportReason(reason)
+        val text = content.reportDetail(detail)
+        store.inTransaction {
+            val review = store.lock(id)?.takeIf { it.status == ReviewStatus.PUBLISHED } ?: throw notFound()
+            if (review.accountId == accountId) throw ReviewException(ReviewErrorCode.OWN_REVIEW, "You cannot report your own review")
+            if (store.hasReport(id, accountId)) return@inTransaction
+            val now = time.now()
+            store.insertReport(id, accountId, code, text, now)
+            val count = store.addReportCount(id, now)
+            val limit = properties.report.autoHideAt
+            if (limit > 0 && count >= limit) moderation.hideLocked(review, AUTO_HIDE_ACTOR, AUTO_HIDE_REASON)
+        }
+    }
+
+    private fun requireAttachable(accountId: String, keys: List<String>) {
+        if (keys.isNotEmpty() && !policy().canAttach(accountId, keys)) throw ReviewException(ReviewErrorCode.FORBIDDEN, "Not allowed to attach these photos")
+    }
+
     /** 작성자 본인의 살아 있는(`DELETED` 아닌) 줄을 잠가 읽는다. 남의 줄은 공개 상태일 때만 403, 아니면 없는 것과 같은 404 */
     private fun ownedLive(accountId: String, id: String): Review {
         val review = store.lock(id)?.takeIf { it.status != ReviewStatus.DELETED } ?: throw notFound()
@@ -115,4 +144,10 @@ class ReviewService(
     private fun publish(review: Review, firstTime: Boolean) = listeners().forEach { it.onPublished(review, firstTime) }
 
     private fun notFound() = ReviewException(ReviewErrorCode.NOT_FOUND, "Review not found")
+
+    companion object {
+        /** 자동 가림이 `moderated_by` 에 남기는 값 - 운영자 계정이 아니라는 표시 */
+        const val AUTO_HIDE_ACTOR = "system:auto-reports"
+        const val AUTO_HIDE_REASON = "AUTO_REPORTS"
+    }
 }

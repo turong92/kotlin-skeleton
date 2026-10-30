@@ -11,6 +11,12 @@ import org.springframework.boot.context.properties.ConfigurationProperties
  *     body-min-length: 0
  *     body-max-length: 2000
  *     max-photos: 0               # 사진 칸 수 (0 = 사진 없음)
+ *     report:
+ *       auto-hide-at: 0             # N 번째 신고에서 자동으로 숨긴다 (0 = 꺼짐)
+ *     admin:
+ *       enabled: false              # true 면 운영자 경로(review.moderate · review.reply)가 열린다. 꺼져 있으면 404
+ *     notify:
+ *       enabled: true               # notification 이 있을 때만 뜻이 있다
  *     http:
  *       enabled: true
  *       base-path: /api/v1/reviews
@@ -25,9 +31,31 @@ data class ReviewProperties(
     val requirePurchase: Boolean = false,
     val bodyMinLength: Int = 0,
     val bodyMaxLength: Int = 2000,
+    /** 사진 칸 수 - 저장 키만 싣는다(올리기는 앱이 storage 로). 0 이면 사진 없음 */
     val maxPhotos: Int = 0,
+    val report: Report = Report(),
+    val admin: Admin = Admin(),
+    val notify: Notify = Notify(),
     val http: Http = Http(),
 ) {
+    data class Report(
+        /** N 이면 N 번째 신고에서 `HIDDEN`(사유 `AUTO_REPORTS`). 기본 0 = 꺼짐 - 자동 가림은 서비스마다 달라 켜는 것은 앱의 선택이다 */
+        val autoHideAt: Int = 0,
+    )
+
+    data class Admin(
+        /** 운영자 경로. 기본 꺼짐 → 경로가 없어 404 */
+        val enabled: Boolean = false,
+        val basePath: String = "/api/v1/admin",
+    )
+
+    data class Notify(
+        /** false 면 숨김 · 답글 알림을 보내지 않는다 */
+        val enabled: Boolean = true,
+        val topic: String = "reviews",
+    )
+
+
     data class Http(
         val enabled: Boolean = true,
         val basePath: String = "/api/v1/reviews",

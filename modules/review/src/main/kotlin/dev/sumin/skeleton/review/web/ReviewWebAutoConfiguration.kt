@@ -1,6 +1,11 @@
 package dev.sumin.skeleton.review.web
 
+import dev.sumin.skeleton.common.account.AccountLabels
+import dev.sumin.skeleton.common.authz.OperatorAccess
+import dev.sumin.skeleton.common.authz.OperatorAuditLog
+import dev.sumin.skeleton.common.upload.PrivateUploadAccess
 import dev.sumin.skeleton.common.web.PublicEndpointContributor
+import dev.sumin.skeleton.review.ReviewModerationService
 import dev.sumin.skeleton.review.ReviewAutoConfiguration
 import dev.sumin.skeleton.review.ReviewPolicy
 import dev.sumin.skeleton.review.ReviewProperties
@@ -16,7 +21,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplicat
 import org.springframework.context.annotation.Bean
 
 /**
- * 사용자 경로(`skeleton.review.http.enabled` 기본 켜짐). 서블릿 웹 앱이고 Spring Security(호출자)가 클래스패스에 있을 때만.
+ * 사용자 경로(`skeleton.review.http.enabled` 기본 켜짐)와 운영자 경로(`skeleton.review.admin.enabled=true` 일 때만). 서블릿 웹 앱이고 Spring Security(호출자)가 클래스패스에 있을 때만.
  */
 @AutoConfiguration(after = [ReviewAutoConfiguration::class])
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
@@ -26,8 +31,28 @@ class ReviewWebAutoConfiguration {
     @ConditionalOnBean(ReviewService::class, ReviewReader::class)
     @ConditionalOnProperty(prefix = "skeleton.review.http", name = ["enabled"], havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
-    fun reviewController(reader: ReviewReader, service: ReviewService, properties: ReviewProperties, policy: ObjectProvider<ReviewPolicy>): ReviewController =
-        ReviewController(reader, service, properties) { policy.getObject() }
+    fun reviewController(
+        reader: ReviewReader,
+        service: ReviewService,
+        properties: ReviewProperties,
+        policy: ObjectProvider<ReviewPolicy>,
+        access: ObjectProvider<OperatorAccess>,
+        uploads: ObjectProvider<PrivateUploadAccess>,
+    ): ReviewController = ReviewController(reader, service, properties, { policy.getObject() }, access.getIfAvailable(), uploads.getIfAvailable())
+
+    /** 운영자 경로 - `skeleton.review.admin.enabled=true` 일 때만(꺼져 있으면 경로가 없어 404) */
+    @Bean
+    @ConditionalOnBean(ReviewReader::class, ReviewModerationService::class)
+    @ConditionalOnProperty(prefix = "skeleton.review.admin", name = ["enabled"], havingValue = "true")
+    @ConditionalOnMissingBean
+    fun reviewAdminController(
+        reader: ReviewReader,
+        moderation: ReviewModerationService,
+        access: OperatorAccess,
+        audit: OperatorAuditLog,
+        policy: ObjectProvider<ReviewPolicy>,
+        labels: ObjectProvider<AccountLabels>,
+    ): ReviewAdminController = ReviewAdminController(reader, moderation, access, audit, { policy.getObject() }, labels.getIfAvailable())
 
     /**
      * 읽기 셋(대상 요약 · 일괄 요약 · 리뷰 목록)의 `GET` 만 로그인 없이 연다. 기본은 닫혀 있고 `skeleton.review.http.allow-anonymous-read=true` 로 연다(앱의 선택).

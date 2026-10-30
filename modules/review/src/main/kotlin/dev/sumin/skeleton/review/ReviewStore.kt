@@ -43,6 +43,45 @@ interface ReviewStore {
     /** 내 리뷰(`DELETED` 제외), id 내림차순. [before] 는 직전 쪽의 마지막 id */
     fun pageMine(accountId: String, before: String?, limit: Int): List<Review>
 
+    // 신고 · 운영 - 호출자가 리뷰 줄을 잠근 채로 부른다
+
+    fun hasReport(reviewId: String, accountId: String): Boolean
+
+    fun insertReport(reviewId: String, accountId: String, reason: ReportReason, detail: String?, at: Instant)
+
+    /** `report_count + 1` · `reported_at = at` 를 하고 바뀐 개수를 돌려준다 */
+    fun addReportCount(reviewId: String, at: Instant): Int
+
+    /** `PUBLISHED` → `HIDDEN` - 숨긴 사람 · 사유를 남기고 신고를 확인한 것으로 친다. 바뀐 줄이 있으면 true */
+    fun hide(id: String, by: String, reason: String, at: Instant): Boolean
+
+    /** `HIDDEN`(또는 운영자가 숨긴 뒤 작성자가 지운 `DELETED`) → `PUBLISHED` - 숨긴 기록을 비운다. 바뀐 줄이 있으면 true */
+    fun restore(id: String, at: Instant): Boolean
+
+    /** 신고를 확인한 것으로 친다(`reports_reviewed_at`). 바뀐 줄이 있으면 true */
+    fun dismissReports(id: String, at: Instant): Boolean
+
+    fun pageAdmin(queue: ReviewQueue, targetType: String?, before: String?, limit: Int): List<Review>
+
+    /** 리뷰별 사유 코드별 신고 수 */
+    fun reportReasonCounts(reviewIds: Collection<String>): Map<String, Map<String, Int>>
+
+    // 답글
+
+    fun repliesOf(reviewIds: Collection<String>): Map<String, ReviewReply>
+
+    /** 답글을 넣거나(없을 때) 고친다 */
+    fun saveReply(reviewId: String, body: String, actorId: String, at: Instant)
+
+    fun deleteReply(reviewId: String): Boolean
+
+    // 사진
+
+    /** 사진 저장 키를 [keys] 로 바꾼다(순서가 인덱스) - `photo_count` 도 맞춘다 */
+    fun replacePhotos(reviewId: String, keys: List<String>)
+
+    fun photoKey(reviewId: String, index: Int): String?
+
     /** 그 계정의 리뷰 줄 수(줄은 지워지지 않으니 늘기만 한다) */
     fun countWritten(accountId: String): Int
 

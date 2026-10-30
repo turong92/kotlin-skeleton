@@ -13,6 +13,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class Harness(val properties: ReviewProperties = ReviewProperties(targetTypes = listOf("product"))) {
+    val notifier = RecordingNotifier()
     val store = FakeReviewStore()
     val time = TickingTime()
     val listener = RecordingListener()
@@ -20,7 +21,8 @@ class Harness(val properties: ReviewProperties = ReviewProperties(targetTypes = 
     var policy: ReviewPolicy = object : ReviewPolicy {}
     var directory: AuthorDirectory = AuthorDirectory { ids, _ -> ids.associateWith { AuthorCard("name-$it", "0001") } }
     private val rules = ReviewTargetRules(properties) { targets }
-    val service = ReviewService(store, properties, ReviewContentRules(properties), rules, { policy }, { listOf(listener) }, time, SortableIds())
+    val moderation = ReviewModerationService(store, ReviewContentRules(properties), { listOf(listener) }, { notifier }, time)
+    val service = ReviewService(store, properties, ReviewContentRules(properties), rules, { policy }, { listOf(listener) }, moderation, time, SortableIds())
     val purchases = ReviewPurchaseService(store, time, SortableIds())
     val reader = ReviewReader(store, properties, rules, { policy }, { directory })
 }
@@ -187,7 +189,7 @@ class ReviewServicesTest {
         val failing = Harness()
         val service = ReviewService(failing.store, failing.properties, ReviewContentRules(failing.properties), ReviewTargetRules(failing.properties) { null }, { failing.policy }, {
             listOf(object : ReviewEventListener { override fun onPublished(review: Review, firstTime: Boolean) { throw boom } })
-        }, failing.time, SortableIds())
+        }, failing.moderation, failing.time, SortableIds())
         val thrown = assertFailsWith<IllegalStateException> { service.create("acc_1", BASIC, ReviewInput(5, "body")) }
         assertEquals(boom, thrown)
     }

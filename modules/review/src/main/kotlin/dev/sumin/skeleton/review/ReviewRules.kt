@@ -53,9 +53,38 @@ class ReviewContentRules(private val properties: ReviewProperties) {
         return text
     }
 
-    /** 사진 조각 전까지는 사진 키를 받지 않는다 - 조용히 버리지 않고 거절한다 */
-    fun photos(raw: List<String>?) {
-        if (!raw.isNullOrEmpty()) invalid("photos are not enabled")
+    /**
+     * 사진 저장 키 - 올리기는 앱이 storage 로 한다. null 이면 바꾸지 않는다. 빈 목록은 사진을 비운다.
+     * **키에 작성자 계정 id 가 들어 있으면 거절한다** - 보여 줄 때 서버가 키로 서명 주소를 만들어 넘기므로, 계정 id 가 든 키는 다른 사람에게 새 나간다.
+     */
+    fun photos(raw: List<String>?, accountId: String): List<String>? {
+        if (raw == null) return null
+        val keys = raw.map { it.trim() }
+        if (keys.any { it.isEmpty() || it.length > MAX_KEY_LENGTH }) invalid("photo keys must be 1..$MAX_KEY_LENGTH characters")
+        val distinct = keys.distinct()
+        if (distinct.size > properties.maxPhotos) invalid(if (properties.maxPhotos == 0) "photos are not enabled" else "at most ${properties.maxPhotos} photos")
+        if (distinct.any { it.contains(accountId) }) invalid("photo keys must not contain the account id")
+        return distinct
+    }
+
+    fun reportReason(raw: String?): ReportReason =
+        ReportReason.entries.firstOrNull { it.name == raw?.trim()?.uppercase() } ?: invalid("reason is one of ${ReportReason.entries.joinToString()}")
+
+    fun reportDetail(raw: String?): String? = raw?.let { clean(it) }?.takeIf { it.isNotEmpty() }?.also { limit("detail", it, MAX_DETAIL) }
+
+    /** 운영자가 적는 숨김 사유 - 필수 */
+    fun moderationReason(raw: String?): String = required("reason", raw, MAX_REASON)
+
+    fun replyBody(raw: String?): String = required("reply body", raw, MAX_REPLY)
+
+    private fun required(what: String, raw: String?, max: Int): String {
+        val text = clean(raw)
+        if (text.isEmpty()) invalid("$what must not be blank")
+        return text.also { limit(what, it, max) }
+    }
+
+    private fun limit(what: String, text: String, max: Int) {
+        if (text.codePointCount(0, text.length) > max) invalid("$what must be at most $max characters")
     }
 
     private fun clean(raw: String?): String {
@@ -73,4 +102,11 @@ class ReviewContentRules(private val properties: ReviewProperties) {
     }
 
     private fun invalid(message: String): Nothing = throw ReviewException(ReviewErrorCode.CONTENT_INVALID, message)
+
+    private companion object {
+        const val MAX_KEY_LENGTH = 500
+        const val MAX_DETAIL = 500
+        const val MAX_REASON = 200
+        const val MAX_REPLY = 2000
+    }
 }

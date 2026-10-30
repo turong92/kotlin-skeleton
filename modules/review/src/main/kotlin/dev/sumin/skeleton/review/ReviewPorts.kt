@@ -9,8 +9,8 @@ fun interface ReviewTargets {
 }
 
 /**
- * 누가 쓸 수 있나 · 무엇을 붙일 수 있나 · 누가 운영하나를 앱이 좁히는 자리(`BoardPolicy` 와 같은 방식). 기본은 모두 허용(운영은 거절).
- * `canAttach` · `canModerate` 는 사진 · 운영 조각이 쓴다.
+ * 누가 쓸 수 있나 · 무엇을 붙일 수 있나 · 누가 운영하나를 앱이 **좁히는** 자리(`BoardPolicy` 와 같은 방식). 기본은 모두 허용 - 거절만 한다.
+ * `canModerate` 는 운영 권한(`review.moderate`)을 이미 가진 사람에게 앱이 한 번 더 거절할 때만 쓴다(권한을 주는 자리가 아니다).
  */
 interface ReviewPolicy {
     fun canWrite(accountId: String, target: ReviewTarget): Boolean = true
@@ -18,7 +18,7 @@ interface ReviewPolicy {
     /** 사진 저장 키를 붙여도 되나 - 키 소유 확인은 앱이 `StorageKeyOwnership` 으로 좁힌다 */
     fun canAttach(accountId: String, keys: List<String>): Boolean = true
 
-    fun canModerate(accountId: String): Boolean = false
+    fun canModerate(accountId: String): Boolean = true
 }
 
 /**
@@ -55,4 +55,15 @@ interface ReviewStats {
 interface Reviews {
     /** 그 계정의 리뷰 줄 수 - 줄은 지워지지 않으니 늘기만 한다 */
     fun countWritten(accountId: String): Int
+}
+
+/**
+ * 운영자가 숨겼을 때 · 답글을 달았을 때 작성자에게 알리는 자리 - **커밋 뒤에** 불리고 던져도 운영 처리는 성공한다.
+ * 기본은 아무것도 하지 않는다. `notification` 이 있으면 받은편지함으로 보낸다(`NotificationReviewNotifier`).
+ */
+interface ReviewNotifier {
+    /** [reason] 은 운영자가 적은 사유 - 자동 가림이면 `AUTO_REPORTS` */
+    fun hidden(accountId: String, review: Review, reason: String) {}
+
+    fun replied(accountId: String, review: Review) {}
 }

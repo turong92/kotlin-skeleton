@@ -1,7 +1,9 @@
 package dev.sumin.skeleton.review.web
 
 import com.fasterxml.jackson.annotation.JsonInclude
+import dev.sumin.skeleton.review.AdminReviewRow
 import dev.sumin.skeleton.review.RatingSummary
+import dev.sumin.skeleton.review.ReportReason
 import dev.sumin.skeleton.review.ReviewLine
 import dev.sumin.skeleton.review.ReviewStatus
 import dev.sumin.skeleton.review.TargetRating
@@ -9,7 +11,7 @@ import dev.sumin.skeleton.review.TargetSummary
 import java.time.Instant
 
 /** 신고 사유 코드 - 문구는 프론트가 고른다 */
-val REPORT_REASONS = listOf("SPAM", "ABUSE", "PRIVACY", "OFF_TOPIC", "OTHER")
+val REPORT_REASONS = ReportReason.entries.map { it.name }
 
 @JsonInclude(JsonInclude.Include.ALWAYS)
 data class ConfigResponse(
@@ -36,7 +38,7 @@ data class SummaryResponse(
 data class TargetRatingResponse(val targetType: String, val targetId: String, val count: Int, val average: Double?)
 
 @JsonInclude(JsonInclude.Include.ALWAYS)
-data class PhotoResponse(val index: Int)
+data class PhotoResponse(val index: Int, @field:JsonInclude(JsonInclude.Include.NON_NULL) val key: String? = null)
 
 @JsonInclude(JsonInclude.Include.ALWAYS)
 data class ReplyResponse(val body: String, val createdAt: Instant, val updatedAt: Instant)
@@ -80,7 +82,7 @@ fun ReviewLine.toResponse(): ReviewResponse {
     return ReviewResponse(
         id = r.id, rating = r.rating, body = r.body, verified = r.verified, helpfulCount = r.helpfulCount, helpful = helpful, mine = mine,
         authorName = authorName, authorTag = authorTag, authorDeleted = authorDeleted, edited = r.updatedAt.isAfter(r.publishedAt),
-        photos = (0 until r.photoCount).map { PhotoResponse(it) }, reply = null, createdAt = r.publishedAt, updatedAt = r.updatedAt,
+        photos = (0 until r.photoCount).map { PhotoResponse(it, photoKeys?.getOrNull(it)) }, reply = reply?.let { ReplyResponse(it.body, it.createdAt, it.updatedAt) }, createdAt = r.publishedAt, updatedAt = r.updatedAt,
         status = r.status.takeIf { mine }, moderationReason = r.moderationReason.takeIf { mine },
     )
 }
@@ -90,3 +92,34 @@ fun ReviewLine.toMyResponse() = MyReviewResponse(toResponse(), review.targetType
 fun TargetSummary.toResponse() = SummaryResponse(stats.count, stats.average, stats.distribution, myReviewId, canWrite, writeBlockedReason?.name)
 
 fun TargetRating.toResponse(): TargetRatingResponse = summary.let { s: RatingSummary -> TargetRatingResponse(target.type, target.id, s.count, s.average) }
+
+/** 운영 목록의 한 줄 - 계정 id 는 없다. [accountLabel] 은 운영자가 `account.read` 도 가질 때만 채운다 */
+@JsonInclude(JsonInclude.Include.ALWAYS)
+data class AdminReviewResponse(
+    val id: String,
+    val targetType: String,
+    val targetId: String,
+    val rating: Int,
+    val body: String,
+    val status: ReviewStatus,
+    val moderationReason: String?,
+    val reportCount: Int,
+    val reportReasons: Map<String, Int>,
+    val lastReportedAt: Instant?,
+    val accountLabel: String?,
+    val reply: ReplyResponse?,
+    val createdAt: Instant,
+)
+
+fun AdminReviewRow.toResponse(accountLabel: String?) = review.let { r ->
+    AdminReviewResponse(
+        r.id, r.targetType, r.targetId, r.rating, r.body, r.status, r.moderationReason, r.reportCount, reportReasons, r.reportedAt, accountLabel,
+        reply?.let { ReplyResponse(it.body, it.createdAt, it.updatedAt) }, r.publishedAt,
+    )
+}
+
+data class ReportRequest(val reason: String? = null, val detail: String? = null)
+
+data class ModerationRequest(val status: String? = null, val reason: String? = null)
+
+data class ReplyRequest(val body: String? = null)

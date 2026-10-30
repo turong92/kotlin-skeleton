@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.review
 
 import dev.sumin.skeleton.common.author.AuthorDirectory
+import dev.sumin.skeleton.common.authz.PermissionDeclaration
 import dev.sumin.skeleton.common.erasure.AccountErasureListener
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.review.erasure.ReviewAccountErasureListener
@@ -23,6 +24,14 @@ class ReviewAutoConfiguration {
     fun defaultReviewPolicy(): ReviewPolicy = object : ReviewPolicy {}
 
     @Bean
+    @ConditionalOnMissingBean(name = ["reviewPermissionDeclaration"])
+    fun reviewPermissionDeclaration(): PermissionDeclaration = ReviewPermissions.declaration()
+
+    @Bean
+    @ConditionalOnMissingBean(ReviewNotifier::class)
+    fun noReviewNotifier(): ReviewNotifier = object : ReviewNotifier {}
+
+    @Bean
     @ConditionalOnMissingBean
     fun reviewTargetRules(properties: ReviewProperties, targets: ObjectProvider<ReviewTargets>): ReviewTargetRules =
         ReviewTargetRules(properties) { targets.getIfAvailable() }
@@ -34,6 +43,19 @@ class ReviewAutoConfiguration {
     @Bean
     @ConditionalOnBean(ReviewStore::class)
     @ConditionalOnMissingBean
+    fun reviewModerationService(
+        store: ReviewStore,
+        content: ReviewContentRules,
+        listeners: ObjectProvider<ReviewEventListener>,
+        notifier: ObjectProvider<ReviewNotifier>,
+        time: ObjectProvider<TimeProvider>,
+    ): ReviewModerationService = ReviewModerationService(
+        store, content, { listeners.orderedStream().toList() }, { notifier.getObject() }, time.getIfAvailable { TimeProvider.systemUtc() },
+    )
+
+    @Bean
+    @ConditionalOnBean(ReviewStore::class)
+    @ConditionalOnMissingBean
     fun reviewService(
         store: ReviewStore,
         properties: ReviewProperties,
@@ -41,9 +63,10 @@ class ReviewAutoConfiguration {
         targets: ReviewTargetRules,
         policy: ObjectProvider<ReviewPolicy>,
         listeners: ObjectProvider<ReviewEventListener>,
+        moderation: ReviewModerationService,
         time: ObjectProvider<TimeProvider>,
     ): ReviewService = ReviewService(
-        store, properties, content, targets, { policy.getObject() }, { listeners.orderedStream().toList() }, time.getIfAvailable { TimeProvider.systemUtc() },
+        store, properties, content, targets, { policy.getObject() }, { listeners.orderedStream().toList() }, moderation, time.getIfAvailable { TimeProvider.systemUtc() },
     )
 
     @Bean

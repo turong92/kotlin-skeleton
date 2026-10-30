@@ -10,9 +10,12 @@ class FakeReviewStore : ReviewStore {
     private val stats = HashMap<ReviewTarget, IntArray>()   // [count, sum, r1..r5]
     private val helpful = HashSet<Pair<String, String>>()
     private val purchases = LinkedHashMap<String, ReviewPurchase>()
+    private val reports = LinkedHashMap<Pair<String, String>, ReportReason>()
+    private val replies = HashMap<String, ReviewReply>()
+    private val photos = HashMap<String, List<String>>()
 
     @Synchronized fun clear() {
-        reviews.clear(); stats.clear(); helpful.clear(); purchases.clear()
+        reviews.clear(); stats.clear(); helpful.clear(); purchases.clear(); reports.clear(); replies.clear(); photos.clear()
     }
 
     @Synchronized fun put(review: Review) { reviews[review.id] = review }
@@ -35,8 +38,9 @@ class FakeReviewStore : ReviewStore {
 
     @Synchronized override fun revive(id: String, rating: Int, body: String, verified: Boolean, at: Instant): Boolean {
         val r = reviews[id]?.takeIf { it.status == ReviewStatus.DELETED } ?: return false
-        reviews[id] = r.copy(status = ReviewStatus.PUBLISHED, rating = rating, body = body, verified = verified, helpfulCount = 0, reportCount = 0, createdAt = at, updatedAt = at, publishedAt = at, photoCount = 0)
+        reviews[id] = r.copy(status = ReviewStatus.PUBLISHED, rating = rating, body = body, verified = verified, helpfulCount = 0, reportCount = 0, reportedAt = null, reportsReviewedAt = null, createdAt = at, updatedAt = at, publishedAt = at, photoCount = 0)
         helpful.removeAll { it.first == id }
+        reports.keys.removeAll { it.first == id }; replies.remove(id); photos.remove(id)
         return true
     }
 
@@ -66,6 +70,51 @@ class FakeReviewStore : ReviewStore {
         }
         return ReviewRows(ordered.drop(offset).take(limit), matching.size.toLong())
     }
+
+    @Synchronized override fun hasReport(reviewId: String, accountId: String) = (reviewId to accountId) in reports
+    @Synchronized override fun insertReport(reviewId: String, accountId: String, reason: ReportReason, detail: String?, at: Instant) { reports[reviewId to accountId] = reason }
+    @Synchronized override fun addReportCount(reviewId: String, at: Instant): Int {
+        val r = reviews.getValue(reviewId).let { it.copy(reportCount = it.reportCount + 1, reportedAt = at) }
+        reviews[reviewId] = r
+        return r.reportCount
+    }
+    @Synchronized override fun hide(id: String, by: String, reason: String, at: Instant): Boolean {
+        val r = reviews[id]?.takeIf { it.status == ReviewStatus.PUBLISHED } ?: return false
+        reviews[id] = r.copy(status = ReviewStatus.HIDDEN, moderatedBy = by, moderationReason = reason, reportsReviewedAt = at, updatedAt = at)
+        return true
+    }
+    @Synchronized override fun restore(id: String, at: Instant): Boolean {
+        val r = reviews[id]?.takeIf { it.status == ReviewStatus.HIDDEN || (it.status == ReviewStatus.DELETED && it.moderatedBy != null) } ?: return false
+        reviews[id] = r.copy(status = ReviewStatus.PUBLISHED, moderatedBy = null, moderationReason = null, updatedAt = at)
+        return true
+    }
+    @Synchronized override fun dismissReports(id: String, at: Instant): Boolean {
+        val r = reviews[id] ?: return false
+        reviews[id] = r.copy(reportsReviewedAt = at)
+        return true
+    }
+    @Synchronized override fun pageAdmin(queue: ReviewQueue, targetType: String?, before: String?, limit: Int) =
+        reviews.values.filter { r ->
+            (targetType == null || r.targetType == targetType) && (before == null || r.id < before) && when (queue) {
+                ReviewQueue.REPORTED -> r.status == ReviewStatus.PUBLISHED && r.hasOpenReports
+                ReviewQueue.HIDDEN -> r.status == ReviewStatus.HIDDEN
+                ReviewQueue.ALL -> r.status != ReviewStatus.DELETED
+            }
+        }.sortedByDescending { it.id }.take(limit)
+    @Synchronized override fun reportReasonCounts(reviewIds: Collection<String>) =
+        reviewIds.associateWith { id -> reports.filterKeys { it.first == id }.values.groupingBy { it.name }.eachCount() }.filterValues { it.isNotEmpty() }
+
+    @Synchronized override fun repliesOf(reviewIds: Collection<String>) = reviewIds.mapNotNull { id -> replies[id]?.let { id to it } }.toMap()
+    @Synchronized override fun saveReply(reviewId: String, body: String, actorId: String, at: Instant) {
+        replies[reviewId] = ReviewReply(body, actorId, replies[reviewId]?.createdAt ?: at, at)
+    }
+    @Synchronized override fun deleteReply(reviewId: String) = replies.remove(reviewId) != null
+
+    @Synchronized override fun replacePhotos(reviewId: String, keys: List<String>) {
+        photos[reviewId] = keys
+        reviews[reviewId] = reviews.getValue(reviewId).copy(photoCount = keys.size)
+    }
+    @Synchronized override fun photoKey(reviewId: String, index: Int) = photos[reviewId]?.getOrNull(index)
 
     @Synchronized override fun pageMine(accountId: String, before: String?, limit: Int) =
         reviews.values.filter { it.accountId == accountId && it.status != ReviewStatus.DELETED && (before == null || it.id < before) }.sortedByDescending { it.id }.take(limit)
@@ -133,4 +182,11 @@ class RecordingListener : ReviewEventListener {
     val removed = ConcurrentHashMap.newKeySet<String>()
     override fun onPublished(review: Review, firstTime: Boolean) { published += review.id to firstTime }
     override fun onRemoved(review: Review) { removed += review.id }
+}
+
+class RecordingNotifier : ReviewNotifier {
+    val hidden = java.util.concurrent.CopyOnWriteArrayList<Triple<String, String, String>>()
+    val replied = java.util.concurrent.CopyOnWriteArrayList<Pair<String, String>>()
+    override fun hidden(accountId: String, review: Review, reason: String) { hidden += Triple(accountId, review.id, reason) }
+    override fun replied(accountId: String, review: Review) { replied += accountId to review.id }
 }

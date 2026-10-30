@@ -9,6 +9,8 @@ data class ReviewPageView(val values: List<ReviewLine>, val total: Long)
 
 data class ReviewCursorView(val values: List<ReviewLine>, val nextCursor: String?, val hasNext: Boolean)
 
+data class AdminReviewPage(val rows: List<AdminReviewRow>, val nextCursor: String?, val hasNext: Boolean)
+
 data class TargetRating(val target: ReviewTarget, val summary: RatingSummary)
 
 /**
@@ -61,6 +63,32 @@ class ReviewReader(
         return ReviewCursorView(lines(accountId, page), if (hasNext) page.lastOrNull()?.id else null, hasNext)
     }
 
+    /** 운영 목록 - 신고 큐 · 숨긴 것 · 전부(지운 것 빼고). 사유별 신고 수와 답글을 얹는다 */
+    fun adminPage(queue: ReviewQueue, targetType: String?, cursor: String?, size: Int): AdminReviewPage {
+        val rows = store.pageAdmin(queue, targetType, cursor, size + 1)
+        val page = rows.take(size)
+        val ids = page.map { it.id }
+        val reasons = store.reportReasonCounts(ids)
+        val replies = store.repliesOf(ids)
+        val hasNext = rows.size > size
+        return AdminReviewPage(page.map { AdminReviewRow(it, reasons[it.id].orEmpty(), replies[it.id]) }, if (hasNext) page.lastOrNull()?.id else null, hasNext)
+    }
+
+    /**
+     * 사진 한 칸의 저장 키 - 그 리뷰를 **볼 수 있는 사람**에게만(공개 줄은 누구나, 숨긴 줄은 작성자 · 운영자). 못 보면 없는 것과 같은 null.
+     * [moderator] 는 운영 권한(`review.moderate`)을 가진 사람인가 - 경로가 판정한다.
+     */
+    fun photoKey(viewer: String?, moderator: Boolean, id: String, index: Int): String? {
+        val review = store.find(id) ?: return null
+        val visible = when (review.status) {
+            ReviewStatus.PUBLISHED -> true
+            ReviewStatus.HIDDEN -> moderator || (viewer != null && review.accountId == viewer)
+            ReviewStatus.DELETED -> false
+        }
+        if (!visible || index !in 0 until review.photoCount) return null
+        return store.photoKey(id, index)
+    }
+
     /** 한 줄을 보는 사람 기준으로 - 방금 쓰거나 고친 내 줄을 응답 모양으로 만들 때 */
     fun one(viewer: String, id: String): ReviewLine? = store.find(id)?.let { lines(viewer, listOf(it)).single() }
 
@@ -71,11 +99,13 @@ class ReviewReader(
 
     private fun lines(viewer: String?, rows: List<Review>): List<ReviewLine> {
         if (rows.isEmpty()) return emptyList()
+        val replies = store.repliesOf(rows.map(Review::id))
         val helpful = viewer?.let { store.helpfulOf(it, rows.map(Review::id)) }.orEmpty()
         val names = rows.groupBy { it.targetType }.mapValues { (type, group) -> namesOf(type, group.map { it.accountId }.filterNot(::isTombstone).distinct()) }
         return rows.map { r ->
             val card = names[r.targetType]?.get(r.accountId)
-            ReviewLine(r, helpful = r.id in helpful, mine = r.accountId == viewer, authorName = card?.name, authorTag = card?.tag, authorDeleted = isTombstone(r.accountId) || card?.deleted == true)
+            ReviewLine(r, helpful = r.id in helpful, mine = r.accountId == viewer, authorName = card?.name, authorTag = card?.tag, authorDeleted = isTombstone(r.accountId) || card?.deleted == true, reply = replies[r.id],
+                photoKeys = if (r.accountId == viewer && r.photoCount > 0) (0 until r.photoCount).mapNotNull { store.photoKey(r.id, it) } else null)
         }
     }
 

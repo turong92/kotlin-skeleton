@@ -8,7 +8,11 @@ import dev.sumin.skeleton.common.PageResponse
 import dev.sumin.skeleton.common.PaginationMeta
 import dev.sumin.skeleton.common.PlatformErrorCode
 import dev.sumin.skeleton.common.Response
+import dev.sumin.skeleton.common.authz.OperatorAccess
+import dev.sumin.skeleton.common.upload.PrivateUploadAccess
 import dev.sumin.skeleton.idempotency.IdempotentOperation
+import dev.sumin.skeleton.review.ReviewPermissions
+import dev.sumin.skeleton.review.ReviewErrorCode
 import dev.sumin.skeleton.review.ReviewFilter
 import dev.sumin.skeleton.review.ReviewInput
 import dev.sumin.skeleton.review.ReviewPolicy
@@ -17,6 +21,9 @@ import dev.sumin.skeleton.review.ReviewReader
 import dev.sumin.skeleton.review.ReviewService
 import dev.sumin.skeleton.review.ReviewSort
 import dev.sumin.skeleton.review.ReviewTarget
+import org.springframework.http.CacheControl
+import org.springframework.http.HttpHeaders
+import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.authentication.AnonymousAuthenticationToken
 import org.springframework.security.core.Authentication
@@ -45,14 +52,20 @@ class ReviewController(
     private val service: ReviewService,
     private val properties: ReviewProperties,
     private val policy: () -> ReviewPolicy,
+    /** 운영 권한 판정 - 없으면(운영 모듈 구성이 아니면) 운영 칸은 모두 false */
+    private val access: OperatorAccess? = null,
+    /** 사진을 짧은 서명 주소로 넘기는 자리 - 없으면 사진 경로는 404 */
+    private val uploads: PrivateUploadAccess? = null,
 ) {
     @GetMapping("/config")
     fun config(authentication: Authentication?): DataResponse<ConfigResponse> {
         val account = accountId(authentication)
+        val ref = OperatorRefs.require(authentication)
         return Response.ok(
             ConfigResponse(
                 properties.targetTypes, properties.bodyMinLength, properties.bodyMaxLength, properties.maxPhotos, REPORT_REASONS,
-                canModerate = policy().canModerate(account), canReply = false,
+                canModerate = access?.has(ref, ReviewPermissions.MODERATE) == true && policy().canModerate(account),
+                canReply = access?.has(ref, ReviewPermissions.REPLY) == true,
             ),
         )
     }
@@ -116,6 +129,27 @@ class ReviewController(
     @DeleteMapping("/{id}/helpful")
     fun unhelpful(authentication: Authentication?, @PathVariable id: String): DataResponse<HelpfulResponse> =
         service.setHelpful(accountId(authentication), id, false).let { Response.ok(HelpfulResponse(it.helpfulCount, it.helpful)) }
+
+    @PostMapping("/{id}/reports")
+    fun report(authentication: Authentication?, @PathVariable id: String, @RequestBody request: ReportRequest): ResponseEntity<Void> {
+        service.report(accountId(authentication), id, request.reason, request.detail)
+        return Response.noContent()
+    }
+
+    /** 사진 한 칸 - 그 리뷰를 볼 수 있는 로그인한 사람에게 짧은 서명 주소로 302. 못 보면 없는 것과 같은 404 */
+    @GetMapping("/{id}/photos/{index}")
+    fun photo(authentication: Authentication?, @PathVariable id: String, @PathVariable index: Int): ResponseEntity<Void> {
+        val account = accountId(authentication)
+        val ref = OperatorRefs.require(authentication)
+        val moderator = access?.has(ref, ReviewPermissions.MODERATE) == true && policy().canModerate(account)
+        val key = reader.photoKey(account, moderator, id, index)
+        val signer = uploads?.takeIf { it.enabled() }
+        if (key == null || signer == null) throw ApplicationException("Photo not found", ReviewErrorCode.NOT_FOUND)
+        return ResponseEntity.status(HttpStatus.FOUND)
+            .header(HttpHeaders.LOCATION, signer.downloadUrl(key, signer.defaultTtl))
+            .cacheControl(CacheControl.empty().cachePrivate())
+            .build()
+    }
 
     @GetMapping("/me")
     fun mine(authentication: Authentication?, @RequestParam(required = false) cursor: String?, @RequestParam(defaultValue = "20") size: Int): CursorResponse<MyReviewResponse> {

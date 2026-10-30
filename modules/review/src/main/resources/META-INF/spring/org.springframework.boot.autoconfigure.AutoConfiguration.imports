@@ -1,2 +1,3 @@
 dev.sumin.skeleton.review.ReviewAutoConfiguration
 dev.sumin.skeleton.review.web.ReviewWebAutoConfiguration
+dev.sumin.skeleton.review.notification.ReviewNotificationAutoConfiguration

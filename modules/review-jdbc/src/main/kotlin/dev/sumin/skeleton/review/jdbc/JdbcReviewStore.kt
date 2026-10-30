@@ -1,9 +1,12 @@
 package dev.sumin.skeleton.review.jdbc
 
 import dev.sumin.skeleton.persistence.jdbc.SqlDialect
+import dev.sumin.skeleton.review.ReportReason
 import dev.sumin.skeleton.review.Review
 import dev.sumin.skeleton.review.ReviewFilter
 import dev.sumin.skeleton.review.ReviewPurchase
+import dev.sumin.skeleton.review.ReviewQueue
+import dev.sumin.skeleton.review.ReviewReply
 import dev.sumin.skeleton.review.ReviewRows
 import dev.sumin.skeleton.review.ReviewSort
 import dev.sumin.skeleton.review.ReviewStatus
@@ -19,7 +22,7 @@ import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 
 /**
- * 리뷰 표 여섯(`reviews` · `review_target_stats` · `review_helpful` · `review_purchases` + 운영 조각의 `review_reports` · `review_replies` · `review_photos`).
+ * 리뷰 표 일곱(`reviews` · `review_target_stats` · `review_helpful` · `review_purchases` · `review_reports` · `review_replies` · `review_photos`).
  * **잠금 순서는 리뷰 줄 → 집계 줄.** 새 줄은 [SqlDialect.insertIgnore] 로 먼저 넣고(PG 에서 유니크 위반 예외는 호출자 트랜잭션 전체를 abort 시키고,
  * 없는 키를 `for update` 로 잠그면 MySQL 의 틈 잠금 때문에 동시에 온 두 호출이 교착한다) **넣었는지는 내가 만든 id 가 있는지로 본다**
  * (MySQL 의 `on duplicate key update` 는 이미 있는 행에도 1 을 돌려준다). 집계는 `set n = n + :d` 원자적 갱신이라 동시에 와도 어긋나지 않는다.
@@ -124,6 +127,100 @@ class JdbcReviewStore(
         val cursor = if (before != null) " and id < :before".also { params.addValue("before", before) } else ""
         return jdbc.query("select * from reviews where account_id = :a and status <> 'DELETED'$cursor order by id desc limit :limit", params) { rs, _ -> rs.toReview() }
     }
+
+    // 신고 · 운영
+
+    override fun hasReport(reviewId: String, accountId: String): Boolean =
+        jdbc.queryForObject("select count(*) from review_reports where review_id = :r and account_id = :a", mapOf("r" to reviewId, "a" to accountId), Long::class.java) == 1L
+
+    override fun insertReport(reviewId: String, accountId: String, reason: ReportReason, detail: String?, at: Instant) {
+        jdbc.update(
+            dialect.insertIgnore("review_reports", listOf("review_id", "account_id", "reason", "detail", "created_at"), listOf("review_id", "account_id")),
+            MapSqlParameterSource().addValue("review_id", reviewId).addValue("account_id", accountId).addValue("reason", reason.name)
+                .addValue("detail", detail, Types.VARCHAR).addValue("created_at", instant(at)),
+        )
+    }
+
+    override fun addReportCount(reviewId: String, at: Instant): Int {
+        jdbc.update("update reviews set report_count = report_count + 1, reported_at = :at where id = :id", mapOf("id" to reviewId, "at" to instant(at)))
+        return jdbc.queryForObject("select report_count from reviews where id = :id", mapOf("id" to reviewId), Int::class.java) ?: 0
+    }
+
+    override fun hide(id: String, by: String, reason: String, at: Instant): Boolean =
+        jdbc.update(
+            "update reviews set status = 'HIDDEN', moderated_by = :by, moderation_reason = :reason, reports_reviewed_at = :at, updated_at = :at where id = :id and status = 'PUBLISHED'",
+            mapOf("id" to id, "by" to by, "reason" to reason, "at" to instant(at)),
+        ) == 1
+
+    override fun restore(id: String, at: Instant): Boolean =
+        jdbc.update(
+            "update reviews set status = 'PUBLISHED', moderated_by = null, moderation_reason = null, updated_at = :at " +
+                "where id = :id and (status = 'HIDDEN' or (status = 'DELETED' and moderated_by is not null))",
+            mapOf("id" to id, "at" to instant(at)),
+        ) == 1
+
+    override fun dismissReports(id: String, at: Instant): Boolean =
+        jdbc.update("update reviews set reports_reviewed_at = :at where id = :id and status <> 'DELETED'", mapOf("id" to id, "at" to instant(at))) == 1
+
+    override fun pageAdmin(queue: ReviewQueue, targetType: String?, before: String?, limit: Int): List<Review> {
+        val params = MapSqlParameterSource().addValue("limit", limit)
+        val where = StringBuilder(
+            when (queue) {
+                ReviewQueue.REPORTED -> "status = 'PUBLISHED' and report_count > 0 and (reports_reviewed_at is null or reported_at > reports_reviewed_at)"
+                ReviewQueue.HIDDEN -> "status = 'HIDDEN'"
+                ReviewQueue.ALL -> "status <> 'DELETED'"
+            },
+        )
+        targetType?.let { where.append(" and target_type = :type"); params.addValue("type", it) }
+        before?.let { where.append(" and id < :before"); params.addValue("before", it) }
+        return jdbc.query("select * from reviews where $where order by id desc limit :limit", params) { rs, _ -> rs.toReview() }
+    }
+
+    override fun reportReasonCounts(reviewIds: Collection<String>): Map<String, Map<String, Int>> {
+        if (reviewIds.isEmpty()) return emptyMap()
+        val counts = HashMap<String, MutableMap<String, Int>>()
+        jdbc.query("select review_id, reason, count(*) as n from review_reports where review_id in (:ids) group by review_id, reason", mapOf("ids" to reviewIds.toList())) { rs ->
+            counts.getOrPut(rs.getString("review_id")) { LinkedHashMap() }[rs.getString("reason")] = rs.getInt("n")
+        }
+        return counts
+    }
+
+    // 답글
+
+    override fun repliesOf(reviewIds: Collection<String>): Map<String, ReviewReply> {
+        if (reviewIds.isEmpty()) return emptyMap()
+        return jdbc.query("select * from review_replies where review_id in (:ids)", mapOf("ids" to reviewIds.toList())) { rs, _ ->
+            rs.getString("review_id") to ReviewReply(rs.getString("body"), rs.getString("actor_id"), dialect.readInstant(rs, "created_at")!!, dialect.readInstant(rs, "updated_at")!!)
+        }.toMap()
+    }
+
+    override fun saveReply(reviewId: String, body: String, actorId: String, at: Instant) {
+        val changed = jdbc.update(
+            "update review_replies set body = :body, actor_id = :actor, updated_at = :at where review_id = :r",
+            mapOf("r" to reviewId, "body" to body, "actor" to actorId, "at" to instant(at)),
+        )
+        if (changed == 0) {
+            jdbc.update(
+                dialect.insertIgnore("review_replies", listOf("review_id", "body", "actor_id", "created_at", "updated_at"), listOf("review_id")),
+                mapOf("review_id" to reviewId, "body" to body, "actor_id" to actorId, "created_at" to instant(at), "updated_at" to instant(at)),
+            )
+        }
+    }
+
+    override fun deleteReply(reviewId: String): Boolean = jdbc.update("delete from review_replies where review_id = :r", mapOf("r" to reviewId)) == 1
+
+    // 사진
+
+    override fun replacePhotos(reviewId: String, keys: List<String>) {
+        jdbc.update("delete from review_photos where review_id = :r", mapOf("r" to reviewId))
+        keys.forEachIndexed { index, key ->
+            jdbc.update("insert into review_photos (review_id, idx, storage_key) values (:r, :i, :k)", mapOf("r" to reviewId, "i" to index, "k" to key))
+        }
+        jdbc.update("update reviews set photo_count = :n where id = :r", mapOf("r" to reviewId, "n" to keys.size))
+    }
+
+    override fun photoKey(reviewId: String, index: Int): String? =
+        jdbc.queryForList("select storage_key from review_photos where review_id = :r and idx = :i", mapOf("r" to reviewId, "i" to index), String::class.java).firstOrNull()
 
     override fun countWritten(accountId: String): Int =
         jdbc.queryForObject("select count(*) from reviews where account_id = :a", mapOf("a" to accountId), Int::class.java) ?: 0
@@ -252,6 +349,8 @@ class JdbcReviewStore(
         createdAt = dialect.readInstant(this, "created_at")!!,
         updatedAt = dialect.readInstant(this, "updated_at")!!,
         publishedAt = dialect.readInstant(this, "published_at")!!,
+        reportedAt = dialect.readInstant(this, "reported_at"),
+        reportsReviewedAt = dialect.readInstant(this, "reports_reviewed_at"),
     )
 
     private companion object {

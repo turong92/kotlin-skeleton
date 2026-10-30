@@ -30,9 +30,29 @@ data class Review(
     val updatedAt: Instant,
     /** 이 내용이 공개된 시각 - 목록 정렬 기준이고 [updatedAt] 이 이보다 늦으면 「수정됨」이다 */
     val publishedAt: Instant,
+    /** 가장 최근 신고 시각 - 운영 큐의 「새 신고」 판정 */
+    val reportedAt: Instant? = null,
+    /** 운영자가 신고를 확인(숨김 · 문제없음)한 시각 */
+    val reportsReviewedAt: Instant? = null,
 ) {
     val target: ReviewTarget get() = ReviewTarget(targetType, targetId)
+
+    /** 확인하지 않은 신고가 있다 */
+    val hasOpenReports: Boolean
+        get() = reportCount > 0 && reportedAt != null && (reportsReviewedAt == null || reportedAt.isAfter(reportsReviewedAt))
 }
+
+/** 운영자 답글 - 리뷰당 하나 */
+data class ReviewReply(val body: String, val actorId: String, val createdAt: Instant, val updatedAt: Instant)
+
+/** 신고 사유 코드 - 문구는 프론트가 고른다 */
+enum class ReportReason { SPAM, ABUSE, PRIVACY, OFF_TOPIC, OTHER }
+
+/** 운영 큐 - 신고가 있고 아직 확인 안 한 공개 리뷰 / 숨긴 리뷰 / 지운 것만 빼고 전부 */
+enum class ReviewQueue { REPORTED, HIDDEN, ALL }
+
+/** 운영 목록 한 줄 - 사유별 신고 수와 작성자 계정(응답에는 나가지 않고, 이름 조회에만 쓴다) */
+data class AdminReviewRow(val review: Review, val reportReasons: Map<String, Int>, val reply: ReviewReply?)
 
 /** 대상 하나의 집계 - `PUBLISHED` 줄만 센다 */
 data class TargetStats(val count: Int, val ratingSum: Int, val distribution: Map<Int, Int>) {
@@ -83,6 +103,9 @@ data class ReviewLine(
     val authorName: String?,
     val authorTag: String?,
     val authorDeleted: Boolean,
+    val reply: ReviewReply? = null,
+    /** 사진 저장 키 - **작성자 본인 줄에만** 채운다(고칠 때 기존 사진을 그대로 다시 보내려고). 남에게는 null */
+    val photoKeys: List<String>? = null,
 )
 
 /** [ReviewStats.of] 가 돌려주는 대상별 평균 - 앱이 자기 목록 응답에 끼운다 */
