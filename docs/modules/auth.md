@@ -4,7 +4,7 @@
 계정 저장소(`AuthAccountRepository`)는 앱이 정한다. 기본 구현은 로컬 시드 사용자뿐이라 운영 프로필에서는 앱이 반드시 대체한다.
 
 **계정 · 세션을 얹는 고리** (모두 선택 — `auth` 만 쓰면 그대로다): `LoginHooks`(비밀번호 로그인 앞뒤 — `account` 가 한도 · 이벤트를 건다), `LoginSessionIssuer`/`SessionRevoker`(`auth-session` 이 구현 — 어떤 로그인 방법이든 세션이 열린다),
-`AuthAccount.loginBlock`(이메일 미확인 · 정지는 비밀번호가 맞은 뒤에 403), `upgradePasswordHash`(로그인 때 해시를 새 방식으로), 계정이 없어도 해시 비교를 한 번 한다(응답 시간으로 존재가 드러나지 않게). 진짜 계정: [account](account.md) · [계정 수명주기](../accounts.md).
+`SecondFactorGate`(2단계 고리 — 빈이 있으면 **모든** 로그인 방법이 지나는 `AuthTokenResponseFactory.issue` 한 곳에서 켜진 계정에 세션 · 토큰 없이 `403 AUTH.MFA_REQUIRED` + `data{mfaToken, methods, expiresAt}` 를 준다. 막힌 계정 거르기 다음, 새로고침(`issueWith`)은 묻지 않는다. 두 번째 단계를 마친 쪽은 `issueAfterSecondFactor`. 고리가 비면 응답은 바이트까지 같다. 구현은 `auth-mfa`), `AuthAccount.loginBlock`(이메일 미확인 · 정지는 비밀번호가 맞은 뒤에 403), `upgradePasswordHash`(로그인 때 해시를 새 방식으로), 계정이 없어도 해시 비교를 한 번 한다(응답 시간으로 존재가 드러나지 않게). 진짜 계정: [account](account.md) · [계정 수명주기](../accounts.md).
 
 `GET /api/v1/auth/me` 와 로그인 · 갱신 응답의 `principal` 은 `permissions`(운영자 권한 키, 사전순, 전권이면 `["*"]`, 늘 있다)를 함께 준다 — 공용 검사기 `OperatorAccess` 의 결과이고 화면이 메뉴를 숨기는 데만 쓴다. [platform](platform.md) 「운영자 권한」.
 
@@ -16,7 +16,7 @@
 | 설정 접두사 | `skeleton.auth` — [docs/config/modules/auth.yml](../config/modules/auth.yml) |
 | 기본 동작 | 켜짐. |
 | 부팅에 필요한 것 | `local` · `dev` · `test` · 프로필 없음: 없음. `prod` · `staging`(`skeleton.auth.protected-profiles`): `skeleton.auth.jwt.secret` 32바이트 이상과 앱의 `AuthAccountRepository` 빈이 없으면 시작에 실패한다. `skeleton.env=stage|prod`(옵트인 — [배포](../deploy.md))이면 프로필 없이도 같다. 규칙은 `DeployGuard`(`auth`)로도 보인다. |
-| 교체 지점 | `AuthAccountRepository`, `PasswordLoginService`, `LoginHooks`, `LoginSessionIssuer`, `SessionRevoker`, `PasswordEncoder`, `JwtTokenService`, `AuthTokenResponseFactory`, `AuthErrorWriter`, `SecurityFilterChain`, `AuthDeployGuard` |
+| 교체 지점 | `AuthAccountRepository`, `PasswordLoginService`, `LoginHooks`, `SecondFactorGate`, `LoginSessionIssuer`, `SessionRevoker`, `PasswordEncoder`, `JwtTokenService`, `AuthTokenResponseFactory`, `AuthErrorWriter`, `SecurityFilterChain`, `AuthDeployGuard` |
 | 마이그레이션 | 없음 |
 | 프론트 짝 | `@skeleton/auth` |
 | 테스트 | `modules/auth/src/test` |

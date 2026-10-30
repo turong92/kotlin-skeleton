@@ -1,12 +1,14 @@
 package dev.sumin.skeleton.auth.login
 
 import dev.sumin.skeleton.auth.account.AccountIdentifier
+import dev.sumin.skeleton.auth.account.AuthAccount
 import dev.sumin.skeleton.auth.account.AuthAccountRepository
 import dev.sumin.skeleton.auth.api.AccountBlockedException
 import dev.sumin.skeleton.auth.api.AuthTokenResponse
 import dev.sumin.skeleton.auth.api.AuthTokenResponseFactory
 import dev.sumin.skeleton.auth.api.InvalidCredentialsException
 import dev.sumin.skeleton.auth.api.PasswordLoginRequest
+import dev.sumin.skeleton.auth.api.SecondFactorRequiredException
 import org.springframework.security.crypto.password.PasswordEncoder
 
 /**
@@ -48,12 +50,20 @@ class PasswordLoginService(
         } catch (blocked: AccountBlockedException) {
             active.forEach { it.onFailure(attempt, LoginFailure.BLOCKED, account) }
             throw blocked
+        } catch (secondStep: SecondFactorRequiredException) {
+            // 비밀번호는 맞았다 — 이것이 1단계 통과다 (소셜 · 매직 링크가 1단계에서 로그인을 기록하는 것과 같다). 토큰은 2단계 뒤에
+            firstStepPassed(account, password, attempt, active)
+            throw secondStep
         }
+        firstStepPassed(account, password, attempt, active)
+        return response
+    }
+
+    private fun firstStepPassed(account: AuthAccount, password: String?, attempt: LoginAttempt, active: List<LoginHooks>) {
         if (accounts.storesUpgradedPasswordHash && passwordEncoder.upgradeEncoding(account.passwordHash)) {
             passwordEncoder.encode(password)?.let { accounts.upgradePasswordHash(account.accountId, it, account.passwordHash) }
         }
         active.forEach { it.onSuccess(attempt, account) }
-        return response
     }
 
     /** bcrypt 는 72바이트를 넘는 입력을 거부하기도 한다 — 그건 서버 오류가 아니라 틀린 비밀번호다 */

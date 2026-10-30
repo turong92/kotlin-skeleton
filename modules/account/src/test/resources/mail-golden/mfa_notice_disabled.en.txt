@@ -1,0 +1,9 @@
+subject: Two-step verification is off
+
+Two-step verification was turned off for your account.
+
+If this was not you, change your password now.
+
+If you did not request this, you can ignore this email.
+Notes
+Notes Inc. · Seoul

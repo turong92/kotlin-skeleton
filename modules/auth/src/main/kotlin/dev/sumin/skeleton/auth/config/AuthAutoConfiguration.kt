@@ -5,6 +5,7 @@ import dev.sumin.skeleton.auth.account.AuthAccountRepository
 import dev.sumin.skeleton.auth.account.SeedAuthAccountRepository
 import dev.sumin.skeleton.auth.api.AuthController
 import dev.sumin.skeleton.auth.api.AuthTokenResponseFactory
+import dev.sumin.skeleton.auth.api.SecondFactorGate
 import dev.sumin.skeleton.auth.jwt.JwtTokenService
 import dev.sumin.skeleton.auth.login.LoginHooks
 import dev.sumin.skeleton.auth.login.PasswordLoginService
@@ -90,8 +91,9 @@ class AuthAutoConfiguration {
         jwtTokenService: JwtTokenService,
         sessions: ObjectProvider<LoginSessionIssuer>,
         operatorAccess: ObjectProvider<OperatorAccess>,
+        secondFactorGates: ObjectProvider<SecondFactorGate>,
     ): AuthTokenResponseFactory =
-        AuthTokenResponseFactory(jwtTokenService, { operatorAccess.getIfAvailable() }) { sessions.getIfAvailable() }
+        AuthTokenResponseFactory(jwtTokenService, { operatorAccess.getIfAvailable() }, { secondFactorGates.orderedStream().toList() }) { sessions.getIfAvailable() }
 
     @Bean
     @ConditionalOnMissingBean

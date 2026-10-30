@@ -1,0 +1,9 @@
+subject: Two-step verification is on
+
+Two-step verification was turned on for your account. From now on, signing in also asks for a code from your authenticator app.
+
+If this was not you, change your password and contact support right away.
+
+If you did not request this, you can ignore this email.
+Notes
+Notes Inc. · Seoul

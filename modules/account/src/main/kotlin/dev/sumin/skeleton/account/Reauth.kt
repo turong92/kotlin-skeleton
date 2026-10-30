@@ -76,6 +76,12 @@ class Reauth(private val core: AccountCore) {
         return Proof { if (!core.challenges.consume(row.id)) throw AccountException(AccountErrorCode.CODE_EXPIRED) }
     }
 
+    /** 계정 id 만 가진 다른 모듈(`auth-mfa` · `api-key` …)용 — 계정을 읽어 위와 똑같이 확인한다. 없는 계정이면 `ACCOUNT.NOT_FOUND` */
+    fun check(
+        accountId: String, input: ReauthInput, sessionId: String?,
+        codePurpose: String = ChallengePurposes.REAUTH, passwordFailure: AccountErrorCode = AccountErrorCode.CURRENT_PASSWORD_INVALID,
+    ): Proof = check(core.accounts.findById(accountId) ?: throw AccountException(AccountErrorCode.NOT_FOUND), input, sessionId, codePurpose, passwordFailure)
+
     /** 이메일이 없는 계정 — 이미 연결된 제공자의 **새** 인가 코드. 확인할 고리가 없거나(소셜 모듈 없음) 안 보냈으면 REAUTH_REQUIRED, 이 계정의 것이 아니면 REAUTH_FAILED */
     private fun socialProof(account: Account, social: SocialReauth?): Proof {
         social ?: throw AccountException(AccountErrorCode.REAUTH_REQUIRED)

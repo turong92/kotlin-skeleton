@@ -17,6 +17,8 @@ enum class MailKind {
     EMAIL_REGISTRATION_ATTEMPT,
     /** 아이디 찾기 — **계정 이메일**로만. 아이디가 있으면 아이디 한 줄, 없으면 "아직 정하지 않았어요" (두 본문). 링크는 로그인 페이지(토큰 없음) */
     LOGIN_ID_REMINDER,
+    /** 2단계 인증 알림 — **계정 이메일**로만. `vars["change"]` = enabled | disabled | reset | recovery_code_used | throttled (모르는 값이면 일반 문구). 코드 · 비밀 없음 */
+    MFA_NOTICE,
 }
 
 /** 보낼 메일 한 통의 의미 — 문구는 [AccountMailTemplates] 가 고른다. [link] 에 토큰이 들어 있다 (이 객체를 로그에 싣지 않는다 — toString 은 가려 둔다) */

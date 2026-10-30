@@ -14,6 +14,7 @@ class AccountMailGoldenTest {
     private val dir: Path = Path.of(System.getProperty("user.dir")).resolve("src/test/resources/mail-golden")
     private val update = System.getenv("UPDATE_GOLDEN") == "1"
     private val templates = DefaultAccountMailTemplates(MailFixtures.props)
+    private val MFA_CHANGES = listOf("enabled", "disabled", "reset", "recovery_code_used", "throttled")
 
     private fun check(name: String, actual: String) {
         val file = dir.resolve(name)
@@ -51,11 +52,21 @@ class AccountMailGoldenTest {
     }
 
     @Test
+    fun `the two-step notice for each change matches its golden files`() {
+        for (change in MFA_CHANGES) for (lang in MailFixtures.langs) {
+            val r = templates.render(MailKind.MFA_NOTICE, lang, MailFixtures.vars + ("change" to change), null)
+            check("mfa_notice_$change.$lang.txt", "subject: ${r.subject}\n\n${r.text}\n")
+            check("mfa_notice_$change.$lang.html", r.html!! + "\n")
+        }
+    }
+
+    @Test
     fun `the golden directory holds exactly the files of the current kinds`() {
         if (update) return
         val expected = MailKind.entries.flatMap { k -> MailFixtures.langs.flatMap { l -> listOf("${k.name.lowercase()}.$l.txt", "${k.name.lowercase()}.$l.html") } }.toSet() +
             MailFixtures.langs.flatMap { l -> listOf("already_registered_with_links.$l.txt", "already_registered_with_links.$l.html") } +
-            MailFixtures.langs.flatMap { l -> listOf("login_id_reminder_unset.$l.txt", "login_id_reminder_unset.$l.html") }
+            MailFixtures.langs.flatMap { l -> listOf("login_id_reminder_unset.$l.txt", "login_id_reminder_unset.$l.html") } +
+            MFA_CHANGES.flatMap { c -> MailFixtures.langs.flatMap { l -> listOf("mfa_notice_$c.$l.txt", "mfa_notice_$c.$l.html") } }
         assertEquals(expected, Files.list(dir).use { s -> s.map { it.fileName.toString() }.toList().toSet() })
     }
 }

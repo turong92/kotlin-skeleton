@@ -22,6 +22,22 @@ enum class AccountEventType {
     API_KEY_CREATED,
     /** API 키를 회수했다(본인 또는 운영자) — detail `keyId` · `by`(회수한 계정). 사유 · 토큰은 싣지 않는다 */
     API_KEY_REVOKED,
+    /** 2단계 인증(TOTP)을 켰다(재등록 포함) — detail `via` = enrollment | re_enrollment. 비밀 · 코드는 싣지 않는다. 이 아래 `MFA_*` 도 같다 */
+    MFA_ENABLED,
+    /** 본인이 2단계 인증을 껐다 */
+    MFA_DISABLED,
+    /** 운영자가 대상의 2단계 인증을 풀었다 — detail `by`(운영자 계정). 사유는 운영 기록에만 */
+    MFA_RESET_BY_ADMIN,
+    /** 복구 코드를 새로 받았다(옛 코드는 모두 무효) */
+    MFA_RECOVERY_CODES_REGENERATED,
+    /** 복구 코드로 로그인 · 끄기를 했다 — detail `remaining`(남은 개수) */
+    MFA_RECOVERY_CODE_USED,
+    /** 두 번째 단계를 통과했다 — detail `method` = totp | recovery_code */
+    MFA_VERIFIED,
+    /** 비밀번호는 맞았지만 두 번째 단계 코드가 틀렸다 */
+    MFA_FAILED,
+    /** 두 번째 단계 틀린 시도가 계정 한도에 걸렸다(창마다 한 번) */
+    MFA_THROTTLED,
 }
 
 /**

@@ -7,6 +7,7 @@ import dev.sumin.skeleton.account.SignUpStatus
 import dev.sumin.skeleton.account.password.PasswordPolicy
 import dev.sumin.skeleton.auth.api.AuthTokenResponse
 import dev.sumin.skeleton.auth.api.AuthTokenResponseFactory
+import dev.sumin.skeleton.auth.api.SecondFactorRequiredException
 import dev.sumin.skeleton.common.DataResponse
 import dev.sumin.skeleton.common.Response
 import dev.sumin.skeleton.common.openapi.AcceptedOperation
@@ -92,7 +93,12 @@ class AccountPublicController(
     fun cancelDeletion(@Valid @RequestBody request: CancelDeletionRequest, http: HttpServletRequest): DataResponse<AuthTokenResponse> =
         clientIps.of(http).let { client ->
             val cancelled = deletion.cancelWithMethod(request.restoreToken!!, client.ip, client.limitKey)
-            val response = tokens().issue(cancelled.auth)
+            val response = try {
+                tokens().issue(cancelled.auth)
+            } catch (secondStep: SecondFactorRequiredException) {
+                registration.recordSignIn(cancelled.auth.accountId, client.ip, cancelled.method)   // 첫 단계는 통과했다 — 토큰은 두 번째 단계 뒤에
+                throw secondStep
+            }
             registration.recordSignIn(cancelled.auth.accountId, client.ip, cancelled.method)   // 취소를 낳은 로그인의 실제 수단
             Response.ok(response)
         }

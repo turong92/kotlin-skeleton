@@ -19,7 +19,12 @@ class DefaultAccountMailTemplates(
         val lang = pickLocale(locale, props.defaultLocale)
         // 아이디 찾기는 본문이 둘이다 — 아이디가 있으면 한 줄로 알리고, 없으면 "아직 정하지 않았어요" (같은 제목 틀 · 같은 로그인 링크)
         val unsetId = kind == MailKind.LOGIN_ID_REMINDER && vars["loginId"].isNullOrBlank()
-        val copy = if (unsetId) (if (lang == "ko") LOGIN_ID_UNSET_KO else LOGIN_ID_UNSET_EN) else (if (lang == "ko") KO else EN).getValue(kind)
+        val copy = when {
+            unsetId -> if (lang == "ko") LOGIN_ID_UNSET_KO else LOGIN_ID_UNSET_EN
+            // 2단계 인증 알림은 무엇이 바뀌었는지(`change`)로 본문을 고른다 — 모르는 값은 일반 문구
+            kind == MailKind.MFA_NOTICE -> (if (lang == "ko") MFA_KO else MFA_EN).let { it[vars["change"]] ?: it.getValue("changed") }
+            else -> (if (lang == "ko") KO else EN).getValue(kind)
+        }
         // 한 번에 치환한다 — 값 안의 {이름} 이 다시 풀리지 않는다
         fun fill(s: String) = PLACEHOLDER.replace(s) { m -> vars[m.groupValues[1]] ?: m.value }
         var lines = copy.lines.map(::fill)
@@ -100,6 +105,25 @@ class DefaultAccountMailTemplates(
 
         val LOGIN_ID_UNSET_EN = Copy("You have not chosen a login ID yet", listOf("You have not chosen a login ID yet.", "Sign in and you can choose one."), "Sign in")
         val LOGIN_ID_UNSET_KO = Copy("아직 아이디를 정하지 않았어요", listOf("아직 아이디를 정하지 않았어요.", "로그인하면 정할 수 있어요."), "로그인")
+
+        /** `MFA_NOTICE` 의 `change` 별 문구 — 코드 · 비밀 · 기기 정보는 싣지 않는다 (알림이다) */
+        val MFA_EN = mapOf(
+            "enabled" to Copy("Two-step verification is on", listOf("Two-step verification was turned on for your account. From now on, signing in also asks for a code from your authenticator app.", "If this was not you, change your password and contact support right away."), null),
+            "disabled" to Copy("Two-step verification is off", listOf("Two-step verification was turned off for your account.", "If this was not you, change your password now."), null),
+            "reset" to Copy("Two-step verification was reset by support", listOf("Support turned off two-step verification for your account after confirming who you are. You can turn it on again in your account settings.", "If you did not ask for this, change your password and contact support."), null),
+            "recovery_code_used" to Copy("A recovery code was used", listOf("A recovery code was used to complete a sign-in to your account. Each recovery code works only once.", "If this was not you, change your password and get new recovery codes in your account settings now."), null),
+            "throttled" to Copy("Sign-in stopped at the second step", listOf("Someone entered your password correctly but the two-step code wrongly too many times, so further tries are paused for a while.", "If this was not you, change your password now."), null),
+            "changed" to Copy("Two-step verification changed", listOf("The two-step verification settings of your account changed.", "If this was not you, change your password now."), null),
+        )
+
+        val MFA_KO = mapOf(
+            "enabled" to Copy("2단계 인증이 켜졌어요", listOf("계정에 2단계 인증이 켜졌어요. 이제 로그인할 때 인증 앱의 코드도 입력해야 해요.", "본인이 아니라면 바로 비밀번호를 바꾸고 문의해 주세요."), null),
+            "disabled" to Copy("2단계 인증이 꺼졌어요", listOf("계정의 2단계 인증이 꺼졌어요.", "본인이 아니라면 지금 비밀번호를 바꿔 주세요."), null),
+            "reset" to Copy("운영팀이 2단계 인증을 해제했어요", listOf("본인 확인을 거쳐 운영팀이 계정의 2단계 인증을 해제했어요. 계정 설정에서 다시 켤 수 있어요.", "요청하지 않았다면 비밀번호를 바꾸고 문의해 주세요."), null),
+            "recovery_code_used" to Copy("복구 코드를 사용했어요", listOf("복구 코드로 로그인이 마무리됐어요. 복구 코드는 한 번만 쓸 수 있어요.", "본인이 아니라면 지금 비밀번호를 바꾸고 계정 설정에서 복구 코드를 새로 받아 주세요."), null),
+            "throttled" to Copy("2단계에서 로그인이 멈췄어요", listOf("누군가 비밀번호는 맞게 입력했지만 2단계 코드를 여러 번 틀려서 한동안 더 시도할 수 없게 됐어요.", "본인이 아니라면 지금 비밀번호를 바꿔 주세요."), null),
+            "changed" to Copy("2단계 인증이 바뀌었어요", listOf("계정의 2단계 인증 설정이 바뀌었어요.", "본인이 아니라면 지금 비밀번호를 바꿔 주세요."), null),
+        )
 
         val EN = mapOf(
             MailKind.VERIFY_CODE to Copy("Your verification code", listOf("Your verification code is {code}.", "Enter it in the sign-up page to finish creating your account. It works {minutes} minutes and only for the page that asked for it.", "Never tell this code to anyone, not even to us."), null),

@@ -33,6 +33,12 @@ enum class AuthErrorCode(
         title = "Account deletion pending",
         defaultDetail = "This account is scheduled for deletion. It can be restored until the deletion date",
     ),
+    MFA_REQUIRED(
+        code = "AUTH.MFA_REQUIRED",
+        status = HttpStatus.FORBIDDEN,
+        title = "Second factor required",
+        defaultDetail = "A second verification step is required to finish signing in",
+    ),
     TOO_MANY_ATTEMPTS(
         code = "AUTH.TOO_MANY_ATTEMPTS",
         status = HttpStatus.TOO_MANY_REQUESTS,

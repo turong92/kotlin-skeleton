@@ -357,6 +357,7 @@ Data export: no endpoint; `AccountDataExporter` is an interface only (not wired)
 | AUTH.EMAIL_NOT_VERIFIED | 403 | login with right password, unverified email |
 | AUTH.ACCOUNT_SUSPENDED | 403 | login / refresh / magic link for a suspended account |
 | AUTH.ACCOUNT_DELETION_PENDING | 403 | (`deletion.self-restore=true`) correct sign-in of an account in its deletion grace — `data.purgeAfter`, `data.restoreToken`; see §8 |
+| AUTH.MFA_REQUIRED | 403 | (a `SecondFactorGate` such as `auth-mfa` is installed and the account has a second step) every sign-in — password, social, magic link, deletion cancel — answers this instead of tokens: `data{mfaToken, methods, expiresAt}`; the first step counts as the sign-in (`LOGIN_SUCCESS`). Refresh is not asked |
 | AUTH.TOO_MANY_ATTEMPTS | 429 | login throttle |
 | ACCOUNT.ROLE_UNKNOWN | 400 | admin grant of a role no one defined |
 | ACCOUNT.ROLE_ESCALATION | 403 | admin grant of a role with permissions the caller lacks |

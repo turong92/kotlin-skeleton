@@ -64,6 +64,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `account`: `AccountRepository.findByIds`(기본은 하나씩, `JdbcAccountRepository` 는 `where id in (…)` 덩어리 질의, 메모리 구현도 재정의). `RepositoryAccountLabels` 가 이걸 한 번만 불러, 쿠폰 운영 목록 · 배지 수여 내역의 계정 이름 조회가 쪽마다 N+1 이던 것이 질의 한 번이 된다. 동작은 그대로.
 
+### 2단계 인증 고리 (2026-10-31)
+
+- `auth`: `SecondFactorGate`(`challenge(account): SecondFactorChallenge?`) - 모든 로그인(비밀번호 · 소셜 · 매직 링크 · 탈퇴 취소)이 지나는 `AuthTokenResponseFactory.issue` 한 곳에서, 막힌 계정을 거른 다음 켜진 계정에 세션 · 토큰 없이 `403 AUTH.MFA_REQUIRED` + `data{mfaToken, methods, expiresAt}` 를 낸다. 두 번째 단계를 마친 로그인은 `issueAfterSecondFactor`, 새로고침(`issueWith`)은 묻지 않는다. `PasswordLoginService` 는 이때도 1단계 통과로 보고 `LoginHooks.onSuccess` 를 부르고 해시를 올린다. 고리 빈이 없으면 응답은 이전과 바이트까지 같다(`AuthTokenResponseFactory` 생성자에 `secondFactorGates` 가 `operatorAccess` 와 `sessions` 사이에 들어갔다 - 이름으로 넘기지 않고 직접 만든 앱은 확인).
+- `account`: 이벤트 `MFA_ENABLED` · `MFA_DISABLED` · `MFA_RESET_BY_ADMIN` · `MFA_RECOVERY_CODES_REGENERATED` · `MFA_RECOVERY_CODE_USED` · `MFA_VERIFIED` · `MFA_FAILED` · `MFA_THROTTLED`, 메일 `MailKind.MFA_NOTICE`(ko/en 골든, `vars["change"]`; `AccountMailTemplates` 를 바꿔 끼운 앱은 새 종류를 처리해야 한다), `ChallengePurposes.MFA_LOGIN`, `Reauth.check(accountId, …)` 오버로드. 탈퇴 취소 응답이 2단계 고리 때문에 403 이어도 첫 단계 로그인(`LOGIN_SUCCESS`)은 남는다.
+
 ### API 키 (2026-10-31)
 
 - `api-key` + `api-key-jdbc` (새 모듈): B2B 호출자용 API 키. 사용자 경로 `GET · POST /api/v1/api-keys`(발급은 **다시 인증**, 선언된 범위만, 만료 선택, 토큰은 발급 응답에만 `no-store`) · `DELETE …/{id}`(본인 회수, 남의 키 404) · `GET …/scopes`. 토큰은 `<접두사>_<base62 32자>`(모듈 기본 접두사 `apk`), 저장은 SHA-256 해시뿐. 키로 온 요청(`Authorization: Bearer`)은 주인 계정에 **역할을 비운** 주체로 움직이고, 처리기에 `@ApiKeyScope` 표시가 있고 키가 그 범위를 가질 때만 닿는다(**기본 거부** - 표시 없음 `API_KEY.NOT_ALLOWED` · 범위 없음 `API_KEY.SCOPE_MISSING`). 모르는 키 · 만료 · 회수는 401 `API_KEY.INVALID`/`EXPIRED`/`REVOKED`, 주인이 막히면 403 `API_KEY.OWNER_BLOCKED`. 모듈 기본: 활성 키 10개 상한 · 키별 한도 꺼짐 · 만료 상한 없음(`skeleton.api-key.rate-limit.capacity` · `max-lifetime` 은 앱이 켠다). `last_used_at` 은 1분 해상도 조건부 UPDATE, 탈퇴 때 그 계정의 키를 지운다. 소유자 종류의 확장점 `ApiKeyOwnerPolicy`(1차 `ACCOUNT` 본인만). 마이그레이션 `V20261031100000__api_keys`. 문서 `docs/modules/api-key.md`.

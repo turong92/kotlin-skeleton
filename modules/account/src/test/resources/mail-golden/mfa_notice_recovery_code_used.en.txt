@@ -1,0 +1,9 @@
+subject: A recovery code was used
+
+A recovery code was used to complete a sign-in to your account. Each recovery code works only once.
+
+If this was not you, change your password and get new recovery codes in your account settings now.
+
+If you did not request this, you can ignore this email.
+Notes
+Notes Inc. · Seoul

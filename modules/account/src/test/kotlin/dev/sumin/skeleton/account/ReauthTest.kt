@@ -96,4 +96,12 @@ class ReauthTest {
         assertEquals("ann@example.com", notice.to)
         assertEquals("google", notice.vars["method"])
     }
+
+    @Test
+    fun `another module can re-authenticate by account id alone - same checks as with the account`() {
+        val a = h.activeAccount()
+        assertEquals("ACCOUNT.CURRENT_PASSWORD_INVALID", code { h.reauth.check(a.id, ReauthInput("not-the-password"), ses) })
+        h.reauth.check(a.id, ReauthInput("tangerine-42-moon"), ses)
+        assertEquals("ACCOUNT.NOT_FOUND", code { h.reauth.check("acc_missing", ReauthInput("tangerine-42-moon"), ses) })
+    }
 }

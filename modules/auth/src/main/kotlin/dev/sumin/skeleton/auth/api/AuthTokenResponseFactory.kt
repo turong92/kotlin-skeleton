@@ -22,13 +22,23 @@ class AccountBlockedException(block: LoginBlock, data: Map<String, Any?>? = null
 /**
  * 모든 로그인 방법이 지나는 토큰 발급 한 곳. 막힌 계정은 여기서 거르고, [sessions] 가 있으면(`auth-session`) 세션을 열어
  * 세션 id 를 액세스 토큰(`sid`)과 응답에 싣는다 — 없으면 지금까지처럼 액세스 토큰만 낸다.
+ * [secondFactorGates] 가 있으면 막힌 계정을 거른 다음, 두 번째 단계가 켜진 계정에는 **세션도 토큰도 내지 않고** [SecondFactorRequiredException] 을 던진다
+ * (두 번째 단계를 마친 뒤에는 [issueAfterSecondFactor]). 고리가 비면 아무것도 달라지지 않는다.
  */
 class AuthTokenResponseFactory(
     private val jwtTokenService: JwtTokenService,
     private val operatorAccess: () -> OperatorAccess? = { null },
+    private val secondFactorGates: () -> List<SecondFactorGate> = { emptyList() },
     private val sessions: () -> LoginSessionIssuer? = { null },
 ) {
     fun issue(account: AuthAccount): AuthTokenResponse {
+        account.loginBlock?.let { throw AccountBlockedException(it, account.blockData?.invoke()) }
+        secondFactorGates().firstNotNullOfOrNull { it.challenge(account) }?.let { throw SecondFactorRequiredException(it) }
+        return issueWith(account, sessions()?.open(account))
+    }
+
+    /** 두 번째 단계를 마친 로그인 — 고리를 다시 묻지 않고 [issue] 와 같은 세션 · 토큰을 낸다 (막힌 계정은 그동안 막혔을 수 있어 다시 거른다) */
+    fun issueAfterSecondFactor(account: AuthAccount): AuthTokenResponse {
         account.loginBlock?.let { throw AccountBlockedException(it, account.blockData?.invoke()) }
         return issueWith(account, sessions()?.open(account))
     }

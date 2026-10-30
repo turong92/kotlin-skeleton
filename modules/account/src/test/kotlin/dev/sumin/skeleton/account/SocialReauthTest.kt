@@ -36,7 +36,8 @@ class SocialReauthTest {
     private val h = AccountHarness(socialReauth = SocialReauthVerifier { accountId, proof -> verifier.verify(accountId, proof) })
     init {
         val naver = OneShotProvider("naver")
-        verifier = AccountSocialReauthVerifier(OAuthProviderRegistry(listOf(naver), AuthSocialProperties(providers = mapOf("naver" to AuthSocialProperties.Provider(enabled = true)))), h.core)
+        val kakao = OneShotProvider("kakao")
+        verifier = AccountSocialReauthVerifier(OAuthProviderRegistry(listOf(naver, kakao), AuthSocialProperties(providers = mapOf("naver" to AuthSocialProperties.Provider(enabled = true), "kakao" to AuthSocialProperties.Provider(enabled = true)))), h.core)
     }
     private val ses = "ses_1"
     private val good = ReauthInput(social = SocialReauth("naver", "good-own", "https://app/cb"))
@@ -66,6 +67,13 @@ class SocialReauthTest {
         val now = h.time.now()   // the provider account "naver-someone-else" really exists - it is linked to ANOTHER account
         h.repo.insert(Account("acc_other", null, false, AccountStatus.ACTIVE, setOf("USER"), null, null, null, now, now), listOf(Identity("idn_o", "acc_other", "naver", "naver-someone-else", true, createdAt = now)))
         assertEquals("ACCOUNT.REAUTH_FAILED", code { h.emailChange.request("acc_n", "new@example.com", ReauthInput(social = SocialReauth("naver", "good-someone-else")), ses) })
+        assertEquals(0, h.mailer.of(MailKind.EMAIL_CHANGE_CODE).size)
+    }
+
+    @Test
+    fun `a fresh code of a provider this account never linked does not count either`() {
+        emailless()   // linked: naver + google. kakao is enabled in the app but not linked to this account
+        assertEquals("ACCOUNT.REAUTH_FAILED", code { h.emailChange.request("acc_n", "new@example.com", ReauthInput(social = SocialReauth("kakao", "good-own")), ses) })
         assertEquals(0, h.mailer.of(MailKind.EMAIL_CHANGE_CODE).size)
     }
 

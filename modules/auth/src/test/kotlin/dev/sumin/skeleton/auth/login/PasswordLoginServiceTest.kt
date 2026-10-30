@@ -140,4 +140,14 @@ class PasswordLoginServiceTest {
         repeat(3) { own.login(request(), null) }
         assertEquals(0, encoder.encodes - before, "a bcrypt hash computed and thrown away on every login")
     }
+    @Test
+    fun `a right password on an account with a second step is the first step - success is recorded, the upgrade happens, and the response is the 403 challenge`() {
+        encoder.upgradeAnswer = true
+        val gate = dev.sumin.skeleton.auth.api.SecondFactorGate { dev.sumin.skeleton.auth.api.SecondFactorChallenge("mfa-1", listOf("totp"), java.time.Instant.parse("2030-01-01T00:00:00Z")) }
+        val gated = PasswordLoginService(repo, encoder, AuthTokenResponseFactory(jwt, secondFactorGates = { listOf(gate) })) { listOf(hooks) }
+        val ex = assertFailsWith<dev.sumin.skeleton.auth.api.SecondFactorRequiredException> { gated.login(request(), "9.9.9.9") }
+        assertEquals("AUTH.MFA_REQUIRED", ex.errorCode.code)
+        assertEquals(listOf("before:email:ann@example.com:9.9.9.9", "success:acc_1"), hooks.events.toList(), "the first step passed - no failure is recorded")
+        assertEquals(1, repo.upgrades.size, "the password was verified, so the stronger hash is stored")
+    }
 }

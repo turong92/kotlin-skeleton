@@ -17,6 +17,8 @@ object ChallengePurposes {
     const val REAUTH = "reauth"
     const val DELETE_CONFIRM = "delete_confirm"
     const val CONTACT_EMAIL = "contact_email"
+    /** 로그인의 두 번째 단계 대기 — id = `mfaToken` 의 SHA-256, 시도 · 만료는 `auth-mfa` 가 정한다. 코드가 아니라 로그인 한 건에 묶인 대기다 */
+    const val MFA_LOGIN = "mfa_login"
 }
 
 /**
