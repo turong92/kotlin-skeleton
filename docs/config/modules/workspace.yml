@@ -1,0 +1,6 @@
+# workspace — 워크스페이스(팀 · 조직) · 멤버 · 역할 · slug · 경계(CurrentWorkspace). 저장은 workspace-jdbc.
+skeleton:
+  workspace:
+    http:
+      enabled: true                  # false 면 사용자 경로(/api/v1/workspaces …)를 닫는다. 경계(CurrentWorkspace)는 그대로 쓸 수 있다
+      base-path: /api/v1/workspaces

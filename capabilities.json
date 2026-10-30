@@ -2981,6 +2981,69 @@
       }
     },
     {
+      "id": "workspace",
+      "kind": "module",
+      "module": "workspace",
+      "path": "modules/workspace",
+      "status": "experimental",
+      "summary": "워크스페이스(팀 · 조직) — 만들기 · 소유자/관리자/멤버 역할 · 주소(slug, 바꿔도 옛 주소가 따라온다) · 멤버 관리 · 소유권 이전, 그리고 요청 헤더 `X-Workspace-Id` 로 앱 데이터를 묶는 경계 `CurrentWorkspace`. 좌석 상한은 앱이 정한다.",
+      "starter": false,
+      "newProjectFlag": "--modules workspace,workspace-jdbc",
+      "autoIncludes": [],
+      "needs": {
+        "requires": ["workspace-jdbc"],
+        "oneOf": [],
+        "optional": ["account"]
+      },
+      "config": {
+        "prefixes": ["skeleton.workspace"],
+        "snippet": "docs/config/modules/workspace.yml"
+      },
+      "basePaths": ["/api/v1/workspaces"],
+      "secrets": [],
+      "docs": ["docs/modules/workspace.md"],
+      "frontend": null,
+      "notFor": [
+        "workspace 는 저장소를 모른다 — workspace-jdbc 를 같이 고른다",
+        "서비스 운영자 권한(authz)을 대신하지 않는다 — 워크스페이스 역할은 그 팀 안에서만 뜻이 있다",
+        "기존 모듈(board · storage · notification …)의 데이터에 경계를 걸어 주지 않는다 — 앱 컨트롤러가 CurrentWorkspace 로 직접 건다",
+        "구독 · 결제를 팀 단위로 바꾸지 않는다 — 좌석 상한 계약(WorkspaceSeatPolicy)만 있고 값은 앱이 정한다"
+      ],
+      "keywords": {
+        "ko": ["워크스페이스", "팀", "조직", "멤버 역할", "소유권 이전", "멀티 테넌트"],
+        "en": ["workspace", "team", "organization", "tenant", "member roles", "ownership transfer"]
+      }
+    },
+    {
+      "id": "workspace-jdbc",
+      "kind": "module",
+      "module": "workspace-jdbc",
+      "path": "modules/workspace-jdbc",
+      "status": "experimental",
+      "summary": "워크스페이스 · slug 기록 · 멤버 · 초대를 DB 에 둔다 (PostgreSQL · MySQL) — 소유자는 유니크 표시로 늘 하나, 모든 변경은 워크스페이스 줄 잠금 아래에서 현재 역할로 판정.",
+      "starter": false,
+      "newProjectFlag": "--modules workspace-jdbc",
+      "autoIncludes": ["workspace"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": {
+        "prefixes": [],
+        "snippet": null
+      },
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/workspace-jdbc.md"],
+      "frontend": null,
+      "notFor": ["DataSource · db-* 모듈과 이 모듈의 마이그레이션이 적용된 스키마가 필요하다"],
+      "keywords": {
+        "ko": ["워크스페이스 저장소", "팀 DB"],
+        "en": ["workspace storage", "workspace repository"]
+      }
+    },
+    {
       "id": "app-api",
       "kind": "app",
       "module": null,
@@ -3150,7 +3213,9 @@
         "reward-jdbc",
         "scheduler",
         "storage",
-        "storage-s3"
+        "storage-s3",
+        "workspace",
+        "workspace-jdbc"
       ],
       "needs": {
         "requires": [],

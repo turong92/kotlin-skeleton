@@ -145,6 +145,8 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `storage` | 저장소 계약(ObjectStorage · PresignedStorage) · 파일 크기/확장자/content-type 검증 + 브라우저 직접 업로드 HTTP(/api/v1/storage: presign · 멀티파트). | `--modules storage,storage-s3` | 파일 업로드, 이미지 업로드, 첨부파일, 프리사인, 파일 검증 / file upload, image upload, attachment, presigned url, multipart upload | `@skeleton/storage` |
 | `storage-s3` | S3 호환 저장소(AWS S3 · Cloudflare R2 · MinIO) — presign PUT/GET · 멀티파트 · 복사 · 일괄 삭제, 공개 URL RAW \| OPAQUE. | `--modules storage-s3` | S3, R2, 클라우드 스토리지, 파일 저장소, 이미지 저장 / s3, r2, cloudflare r2, minio, object storage | `@skeleton/storage` |
 | `time` | 글로벌 시간 — 요청마다 뷰어 시간대 · 로케일 · ZonedMoment(미래 현지 시각) · 사람이 읽는 이중 포맷 · 국가 → 시간대. | 스타터(apps/api)에 기본 포함 | 시간대, 타임존, 날짜 표시, 현지 시간, 예약 시각, 글로벌 / timezone, time zone, locale, zoned moment, date format, global time | `@skeleton/time` |
+| `workspace` | 워크스페이스(팀 · 조직) — 만들기 · 소유자/관리자/멤버 역할 · 주소(slug, 바꿔도 옛 주소가 따라온다) · 멤버 관리 · 소유권 이전, 그리고 요청 헤더 `X-Workspace-Id` 로 앱 데이터를 묶는 경계 `CurrentWorkspace`. 좌석 상한은 앱이 정한다. | `--modules workspace,workspace-jdbc` | 워크스페이스, 팀, 조직, 멤버 역할, 소유권 이전, 멀티 테넌트 / workspace, team, organization, tenant, member roles, ownership transfer | — |
+| `workspace-jdbc` | 워크스페이스 · slug 기록 · 멤버 · 초대를 DB 에 둔다 (PostgreSQL · MySQL) — 소유자는 유니크 표시로 늘 하나, 모든 변경은 워크스페이스 줄 잠금 아래에서 현재 역할로 판정. | `--modules workspace-jdbc` | 워크스페이스 저장소, 팀 DB / workspace storage, workspace repository | — |
 
 ### 앱 (`apps/*`)
 
@@ -1304,6 +1306,34 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 스타터가 이미 가진다
 - 키워드: 시간대, 타임존, 날짜 표시, 현지 시간, 예약 시각, 글로벌 / timezone, time zone, locale, zoned moment, date format, global time
 
+### `workspace` — 워크스페이스(팀 · 조직) — 만들기 · 소유자/관리자/멤버 역할 · 주소(slug, 바꿔도 옛 주소가 따라온다) · 멤버 관리 · 소유권 이전, 그리고 요청 헤더 `X-Workspace-Id` 로 앱 데이터를 묶는 경계 `CurrentWorkspace`. 좌석 상한은 앱이 정한다.
+
+- 종류 · 상태: module · experimental — 위치 `modules/workspace`
+- 켜는 법: `--modules workspace,workspace-jdbc`
+- 의존 한 줄: `implementation(project(":modules:workspace"))`
+- 함께 골라야 한다: `workspace-jdbc`
+- 설정 접두사 `skeleton.workspace` — 키와 기본값 `docs/config/modules/workspace.yml`
+- HTTP 경로: `/api/v1/workspaces`
+- 문서: `docs/modules/workspace.md`
+- 쓰지 않는 경우:
+  - workspace 는 저장소를 모른다 — workspace-jdbc 를 같이 고른다
+  - 서비스 운영자 권한(authz)을 대신하지 않는다 — 워크스페이스 역할은 그 팀 안에서만 뜻이 있다
+  - 기존 모듈(board · storage · notification …)의 데이터에 경계를 걸어 주지 않는다 — 앱 컨트롤러가 CurrentWorkspace 로 직접 건다
+  - 구독 · 결제를 팀 단위로 바꾸지 않는다 — 좌석 상한 계약(WorkspaceSeatPolicy)만 있고 값은 앱이 정한다
+- 키워드: 워크스페이스, 팀, 조직, 멤버 역할, 소유권 이전, 멀티 테넌트 / workspace, team, organization, tenant, member roles, ownership transfer
+
+### `workspace-jdbc` — 워크스페이스 · slug 기록 · 멤버 · 초대를 DB 에 둔다 (PostgreSQL · MySQL) — 소유자는 유니크 표시로 늘 하나, 모든 변경은 워크스페이스 줄 잠금 아래에서 현재 역할로 판정.
+
+- 종류 · 상태: module · experimental — 위치 `modules/workspace-jdbc`
+- 켜는 법: `--modules workspace-jdbc`
+- 의존 한 줄: `implementation(project(":modules:workspace-jdbc"))`
+- 자동으로 따라온다: `workspace`
+- 설정 접두사 없음
+- 문서: `docs/modules/workspace-jdbc.md`
+- 쓰지 않는 경우:
+  - DataSource · db-* 모듈과 이 모듈의 마이그레이션이 적용된 스키마가 필요하다
+- 키워드: 워크스페이스 저장소, 팀 DB / workspace storage, workspace repository
+
 ### `app-api` — 스타터 — 새 프로젝트가 복사해 시작하는 최소 조립(platform · auth · persistence-jdbc · db-postgresql · migration-flyway · time)과 HelloController 하나. Redis · Kafka · S3 · 메일 없이 부팅한다.
 
 - 종류 · 상태: app · stable — 위치 `apps/api`
@@ -1333,7 +1363,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 - 종류 · 상태: app · stable — 위치 `apps/workbench`
 - 켜는 법: `--with-workbench`
-- 자동으로 따라온다: `alert-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `badge`, `badge-jdbc`, `board`, `board-jdbc`, `campaign`, `campaign-jdbc`, `catalog`, `catalog-jdbc`, `config-aws-ssm`, `coupon`, `coupon-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `db-mysql`, `event-kafka`, `json`, `notification`, `notification-jdbc`, `notification-slack`, `notification-sse`, `notification-websocket`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `point`, `point-jdbc`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `reward`, `reward-jdbc`, `scheduler`, `storage`, `storage-s3`
+- 자동으로 따라온다: `alert-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `badge`, `badge-jdbc`, `board`, `board-jdbc`, `campaign`, `campaign-jdbc`, `catalog`, `catalog-jdbc`, `config-aws-ssm`, `coupon`, `coupon-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `db-mysql`, `event-kafka`, `json`, `notification`, `notification-jdbc`, `notification-slack`, `notification-sse`, `notification-websocket`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `point`, `point-jdbc`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `reward`, `reward-jdbc`, `scheduler`, `storage`, `storage-s3`, `workspace`, `workspace-jdbc`
 - HTTP 경로: `/api/v1`, `/api/v1/examples`, `/api/v1/skeleton`, `/api/v1/skeleton/enums`, `/api/v1/skeleton/json`, `/api/v1/skeleton/payments`, `/api/v1/skeleton/polymorphic/contents`
 - 문서: `docs/minimal-composition.md`, `docs/modules/README.md`
 - 짝 프런트(react-skeleton): 항목 `app-workbench` · 조각 `--with-workbench`
