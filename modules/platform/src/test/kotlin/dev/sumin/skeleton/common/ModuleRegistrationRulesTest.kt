@@ -32,11 +32,14 @@ class ModuleRegistrationRulesTest {
 
     @Test
     fun `an MVC handler marker is allowed only when the module's AutoConfiguration registers that class as a bean`() {
-        val violations = moduleMainSources().flatMap { file ->
+        val sources = moduleMainSources()
+        // 모듈마다 AutoConfiguration 텍스트를 한 번만 읽는다 (파일마다 다시 훑으면 모듈 수의 제곱으로 느려진다)
+        val autoConfigurationsByModule = sources.filter { it.name.endsWith("AutoConfiguration.kt") }
+            .groupBy({ repoRoot.relativize(it).subpath(0, 2) }, { Files.readString(it) })
+            .mapValues { (_, texts) -> texts.joinToString("\n") }
+        val violations = sources.flatMap { file ->
             val module = repoRoot.relativize(file).subpath(0, 2) // modules/<name>
-            val autoConfigurations = moduleMainSources().filter {
-                repoRoot.relativize(it).startsWith(module) && it.name.endsWith("AutoConfiguration.kt")
-            }.joinToString("\n") { Files.readString(it) }
+            val autoConfigurations = autoConfigurationsByModule[module].orEmpty()
             annotationHits(file).filter { it.annotation in MVC_HANDLER_MARKERS }.mapNotNull { hit ->
                 val className = Regex("""\bclass\s+(\w+)""").find(file.readLines().drop(hit.line).joinToString("\n"))?.groupValues?.get(1)
                 val registered = className != null && Regex("""\)\s*:\s*$className\b""").containsMatchIn(autoConfigurations)

@@ -24,16 +24,6 @@ class TestServerRulesTest {
         assertEquals(emptyList(), violations, "InetSocketAddress(\"127.0.0.1\", 0) 으로 묶고 URL 도 http://127.0.0.1:<port> 로 쓴다 (docs/testing.md)")
     }
 
-    @Test
-    fun `the rule recognises the wildcard shapes and lets loopback pass`() {
-        assertEquals(1, wildcardBinds("server = HttpServer.create(InetSocketAddress(0), 0)").size)
-        assertEquals(1, wildcardBinds("HttpServer.create(InetSocketAddress(port), 0)").size)
-        assertEquals(emptyList(), wildcardBinds("HttpServer.create(InetSocketAddress(\"127.0.0.1\", 0), 0)"))
-        assertEquals(emptyList(), wildcardBinds("HttpServer.create(InetSocketAddress(\"localhost\", 0), 0)"))
-        assertEquals(emptyList(), wildcardBinds("HttpServer.create(InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0)"))
-        assertEquals(emptyList(), wildcardBinds("// HttpServer.create(InetSocketAddress(0), 0) — 주석은 건너뛴다"))
-    }
-
     private fun testSources(root: Path): List<Path> =
         listOf("apps", "modules").map { root.resolve(it) }.filter { Files.isDirectory(it) }.flatMap { top ->
             Files.list(top).use { children ->

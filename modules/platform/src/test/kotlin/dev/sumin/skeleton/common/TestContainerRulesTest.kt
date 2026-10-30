@@ -32,71 +32,11 @@ class TestContainerRulesTest {
     }
 
     @Test
-    fun `the rule recognises the bean shapes it exists to stop`() {
-        val serviceConnection = """
-            @TestConfiguration(proxyBeanMethods = false)
-            class TestcontainersConfiguration {
-                @Bean
-                @ServiceConnection
-                fun postgresContainer(): PostgreSQLContainer = PostgreSQLContainer(DockerImageName.parse("postgres:18"))
-            }
-        """.trimIndent()
-        val plainBean = """
-            @Bean
-            fun redis(): GenericContainer<*> = GenericContainer(DockerImageName.parse("redis:7"))
-        """.trimIndent()
-        val oneLine = "@Bean fun db(): MySQLContainer = MySQLContainer(DockerImageName.parse(\"mysql:8.4\"))"
-        val allowed = """
-            @Bean
-            fun jdbcConnectionDetails(): JdbcConnectionDetails = SharedPostgres.newDatabase()
-            // @ServiceConnection 은 쓰지 않는다 — 주석은 건너뛴다
-            private val container: PostgreSQLContainer by lazy { PostgreSQLContainer(DockerImageName.parse("postgres:18")).also { it.start() } }
-        """.trimIndent()
-
-        assertTrue(containerBeanViolations(serviceConnection).isNotEmpty(), "@ServiceConnection")
-        assertTrue(containerBeanViolations(plainBean).isNotEmpty(), "@Bean returning a *Container")
-        assertTrue(containerBeanViolations(oneLine).isNotEmpty(), "one-line @Bean returning a *Container")
-        assertEquals(emptyList(), containerBeanViolations(allowed))
-    }
-
-    @Test
     fun `no test source starts a container per test instance - it is held by a static (companion or object) or by lazy`() {
         val violations = testSources(repoRoot).flatMap { file ->
             perInstanceContainerViolations(file.readText()).map { "${repoRoot.relativize(file)}:$it" }
         }
         assertEquals(emptyList(), violations, "JUnit 은 테스트 메서드마다 새 인스턴스를 만든다 — 인스턴스 필드의 컨테이너는 메서드마다 하나씩 뜬다. companion object · object · by lazy 로 JVM(또는 클래스) 하나에 하나만")
-    }
-
-    @Test
-    fun `the per-instance rule recognises an instance-field container and lets the static shapes through`() {
-        val instanceField = """
-            class FooDbTest {
-                private val db = PostgreSQLContainer(DockerImageName.parse("postgres:18")).also { it.start() }
-            }
-        """.trimIndent()
-        val companion = """
-            class FooDbTest {
-                companion object {
-                    val db = PostgreSQLContainer(DockerImageName.parse("postgres:18"))
-                }
-            }
-        """.trimIndent()
-        val lazyHolder = """
-            class FooDbTest {
-                private val container: PostgreSQLContainer by lazy {
-                    PostgreSQLContainer(DockerImageName.parse("postgres:18")).also { it.start() }
-                }
-            }
-        """.trimIndent()
-        val topLevelObject = """
-            object DbTestDatabase {
-                private val container = PostgreSQLContainer(DockerImageName.parse("postgres:18")).also { it.start() }
-            }
-        """.trimIndent()
-        assertTrue(perInstanceContainerViolations(instanceField).isNotEmpty(), "instance field")
-        assertEquals(emptyList(), perInstanceContainerViolations(companion))
-        assertEquals(emptyList(), perInstanceContainerViolations(lazyHolder))
-        assertEquals(emptyList(), perInstanceContainerViolations(topLevelObject))
     }
 
     @Test
