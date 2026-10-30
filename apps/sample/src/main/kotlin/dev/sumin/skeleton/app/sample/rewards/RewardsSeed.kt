@@ -19,8 +19,8 @@ import org.springframework.stereotype.Component
 
 /**
  * 로컬 프로필의 씨앗(스펙 §10) - 쿠폰 정의 넷(구독용 「첫 달 무료 + 3달 50%」 포함)과 공용 코드, 출석 이벤트(매일 10포인트, 누적 3일 「1,000원 할인」), 친구초대 이벤트(초대받은 사람 「응원 30%」, 초대자 500포인트는
- * 첫 응원 결제 때 - `CheerOrderListener` 가 `qualify` 를 부른다). 이름으로 찾아 **없는 것만** 만든다 - 다시 떠도 늘지 않고, 운영 화면에서 고친 것을 덮지 않는다.
- * 보상 종류의 선택(포인트 유효기간 없음 · 초대자 보상 시점 `SIGNAL`)은 스켈레톤 기본이 아니라 이 앱의 선택이다.
+ * 첫 응원 결제 때 - `CheerOrderListener` 가 `qualify(id, "first-payment")` 를 부르고, 청약철회 7일 동안 보류하며 같은 네트워크면 운영자 확인으로 보낸다). 이름으로 찾아 **없는 것만** 만든다 - 다시 떠도 늘지 않고, 운영 화면에서 고친 것을 덮지 않는다.
+ * 보상 종류의 선택(포인트 유효기간 없음 · 초대자 보상 시점 `SIGNAL` · 보류 7일 · 같은 네트워크 확인)은 스켈레톤 기본이 아니라 이 앱의 선택이다.
  */
 @Component
 @Profile("local")
@@ -67,6 +67,9 @@ class RewardsSeed(
                         "invitee" to listOf(reward("coupon", "definitionId" to cheer30.id)),
                         "inviter" to listOf(reward("point", "amount" to "500")),
                         "qualifyOn" to "SIGNAL",
+                        "qualifyEvent" to "first-payment",
+                        "holdDays" to 7,
+                        "reviewSameNetwork" to true,
                         "claimWithinDays" to 7,
                         "inviterCap" to 10,
                     ),

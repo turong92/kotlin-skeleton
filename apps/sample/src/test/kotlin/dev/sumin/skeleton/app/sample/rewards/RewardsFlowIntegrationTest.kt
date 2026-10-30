@@ -5,6 +5,7 @@ import dev.sumin.skeleton.app.sample.cheer.ADMIN
 import dev.sumin.skeleton.app.sample.cheer.CheerIntegrationBase
 import dev.sumin.skeleton.app.sample.cheer.PAYMENTS
 import dev.sumin.skeleton.campaign.Campaigns
+import dev.sumin.skeleton.campaign.Referrals
 import dev.sumin.skeleton.coupon.CouponCodes
 import dev.sumin.skeleton.coupon.CouponDefinitions
 import java.util.UUID
@@ -22,6 +23,7 @@ class RewardsFlowIntegrationTest : CheerIntegrationBase() {
     @Autowired lateinit var definitions: CouponDefinitions
     @Autowired lateinit var codes: CouponCodes
     @Autowired lateinit var campaigns: Campaigns
+    @Autowired lateinit var referrals: Referrals
 
     private lateinit var userId: String
 
@@ -76,19 +78,74 @@ class RewardsFlowIntegrationTest : CheerIntegrationBase() {
         assertEquals(1L, jdbc.sql("select count(*) from reward_grants where account_id = :a and status = 'ISSUED'").param("a", userId).query(Long::class.java).single())
     }
 
-    @Test
-    fun `a claimed invite gives the invitee a coupon, and the invitee's first paid cheer gives the inviter 500 points - once`() {
+    /** 초대 관계 한 벌 - user 가 초대하고 stranger 가 코드를 쓴다. MockMvc 는 둘 다 같은 주소라 네트워크 표시를 지워 「다른 네트워크」로 둔다(같은 네트워크 판정은 모듈 시험과 e2e 가 맡는다). */
+    private fun invitedStranger(): String {
         val code = JsonPath.read<String>(get("/api/v1/referrals/me", user).andExpect { status { isOk() } }.andReturn().response.contentAsString, "$.value.code")
         post("/api/v1/referrals/claim", stranger, """{"code":"$code"}""").andExpect { status { isNoContent() } }
-
+        jdbc.sql("update campaign_referral_codes set last_network = null").update()
+        jdbc.sql("update campaign_referrals set claim_network = null, flags = null").update()
         await { couponId(stranger, "AVAILABLE", RewardsSeed.CHEER_30) }
+        return accountOf("moderator@example.com")
+    }
+
+    private fun referralStatus(inviteeId: String): String = jdbc.sql("select status from campaign_referrals where invitee_id = :i").param("i", inviteeId).query(String::class.java).single()
+
+    /** 시계를 옮긴다 - 보류 기한을 하루 전으로 되돌려 「7일이 지난」 상태로 만든 뒤 해제 작업을 한 번 부른다 */
+    private fun passHoldPeriod() {
+        jdbc.sql("update campaign_referrals set release_at = release_at - interval '8 days' where status = 'HELD'").update()
+        referrals.releaseDue()
+    }
+
+    @Test
+    fun `a claimed invite gives the invitee a coupon, and the inviter's 500 points wait for the 7 day hold after the invitee's first paid cheer - once`() {
+        val invitee = invitedStranger()
         assertEquals(0L, balance(user), "the inviter is paid on the first purchase, not on the claim")
 
         buy(stranger)
+        assertEquals("HELD", referralStatus(invitee))
+        Thread.sleep(1500)
+        assertEquals(0L, balance(user), "the withdrawal period holds the reward")
+
+        passHoldPeriod()
         await { balance(user).takeIf { it == 500L } }
+        assertEquals("QUALIFIED", referralStatus(invitee))
         buy(stranger)
+        passHoldPeriod()
         Thread.sleep(1500)
         assertEquals(500L, balance(user), "the second purchase pays the inviter nothing more")
+    }
+
+    @Test
+    fun `a full refund during the hold cancels the inviter's reward for good`() {
+        val invitee = invitedStranger()
+        val orderId = buy(stranger)
+        assertEquals("HELD", referralStatus(invitee))
+
+        val refundId = read(post("$PAYMENTS/orders/$orderId/refund-requests", stranger, """{"reasonCode":"CUSTOMER_REQUEST"}""", UUID.randomUUID().toString()).andExpect { status { isCreated() } }, "$.value.id")
+        post("$ADMIN/refunds/$refundId/approve", operator).andExpect { status { isOk() } }
+        await { referralStatus(invitee).takeIf { it == "CANCELED" } }
+
+        jdbc.sql("update campaign_referrals set release_at = release_at - interval '8 days'").update()
+        referrals.releaseDue()
+        Thread.sleep(1500)
+        assertEquals(0L, balance(user), "a canceled relation is never paid, not even after the hold date")
+    }
+
+    @Test
+    fun `an inviter at the cap of 10 gets nothing for the 11th friend - the hold counts toward the cap`() {
+        val campaignId = jdbc.sql("select id from campaigns where name = :n").param("n", RewardsSeed.REFERRAL).query(String::class.java).single()
+        repeat(10) {
+            jdbc.sql("insert into campaign_referrals (invitee_id, inviter_id, campaign_id, status, claimed_at, release_at) values (:i, :u, :c, 'HELD', now(), now() + interval '100 days')")
+                .param("i", "held-$it").param("u", userId).param("c", campaignId).update()
+        }
+        val invitee = invitedStranger()
+        buy(stranger)
+        assertEquals("CAPPED", referralStatus(invitee))
+
+        passHoldPeriod()
+        Thread.sleep(1500)
+        assertEquals(0L, balance(user))
+        assertEquals("CAPPED", referralStatus(invitee))
     }
 
     @Test

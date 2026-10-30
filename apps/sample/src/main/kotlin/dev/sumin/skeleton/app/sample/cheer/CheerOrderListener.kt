@@ -29,9 +29,9 @@ class CheerOrderListener(private val cheers: CheerRepository, private val referr
                 refundedAt = null,
             ),
         )
-        // 첫 응원 결제가 친구초대의 초대자 보상(`qualifyOn: SIGNAL`)을 연다 - 몇 번 불러도 한 번만 먹는다. 돈이 오간 주문만: 쿠폰으로 0원이 된 주문 · 결제 면제 주문은 「결제」가 아니다.
+        // 첫 응원 결제가 친구초대의 초대자 보상(`qualifyOn: SIGNAL`, 신호 이름 `first-payment`)을 연다 - 몇 번 불러도 한 번만 먹는다. 돈이 오간 주문만: 쿠폰으로 0원이 된 주문 · 결제 면제 주문은 「결제」가 아니다.
         // (같은 트랜잭션 안에서 지급 건 줄과 작업만 넣는다 - 외부 호출이 아니다)
-        if (order.settlement == PaymentSettlement.PROVIDER) referrals.qualify(order.accountId)
+        if (order.settlement == PaymentSettlement.PROVIDER) referrals.qualify(order.accountId, FIRST_PAYMENT)
     }
 
     /**
@@ -41,5 +41,11 @@ class CheerOrderListener(private val cheers: CheerRepository, private val referr
         if (order.itemType != CheerCatalog.ITEM_TYPE) return
         val full = order.status == PaymentOrderStatus.REFUNDED || order.refundedAmount >= order.amount.amount
         cheers.applyRefund(order.id, order.refundedAmount, full, refund.completedAt ?: order.updatedAt)
+        // 보류 · 운영자 확인 중인 초대 보상을 거둔다 - 이미 지급했거나 대상이 아니면 아무것도 하지 않는다(false)
+        referrals.cancel(order.accountId, "refunded")
+    }
+
+    private companion object {
+        const val FIRST_PAYMENT = "first-payment"
     }
 }
