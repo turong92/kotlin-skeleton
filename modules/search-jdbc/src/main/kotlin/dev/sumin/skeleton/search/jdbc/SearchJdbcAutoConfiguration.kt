@@ -36,8 +36,8 @@ import org.springframework.transaction.PlatformTransactionManager
 class SearchJdbcAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(SearchEngine::class)
-    fun jdbcSearchEngine(dataSource: DataSource, dialect: SqlDialect, time: ObjectProvider<TimeProvider>): SearchEngine =
-        JdbcSearchEngine(NamedParameterJdbcTemplate(dataSource), dialect, time.getIfAvailable { TimeProvider.systemUtc() })
+    fun jdbcSearchEngine(dataSource: DataSource, transactionManager: PlatformTransactionManager, dialect: SqlDialect): SearchEngine =
+        JdbcSearchEngine(NamedParameterJdbcTemplate(dataSource), transactionManager, dialect)
 
     @Bean
     @ConditionalOnMissingBean

@@ -1,7 +1,6 @@
 package dev.sumin.skeleton.search.jdbc
 
 import dev.sumin.skeleton.common.search.SearchDocument
-import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.persistence.jdbc.SqlDialect
 import dev.sumin.skeleton.search.SearchEngine
 import dev.sumin.skeleton.search.SearchHit
@@ -11,6 +10,8 @@ import dev.sumin.skeleton.search.SearchReader
 import dev.sumin.skeleton.search.SearchText
 import java.time.Instant
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.TransactionTemplate
 
 /**
  * 검색 엔진을 같은 DB 의 `search_documents` 로 구현한다(PostgreSQL: 2글자 조각 tsvector + GIN, MySQL: ngram FULLTEXT).
@@ -19,16 +20,21 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
  */
 class JdbcSearchEngine(
     private val jdbc: NamedParameterJdbcTemplate,
+    transactionManager: PlatformTransactionManager,
     private val dialect: SqlDialect,
-    private val time: TimeProvider,
 ) : SearchEngine {
     private val sql = SearchSql.of(dialect.vendor)
+    private val tx = TransactionTemplate(transactionManager)
 
-    override fun upsert(document: SearchDocument) = write(document, force = false)
+    override fun upsert(document: SearchDocument) = write(document)
 
-    override fun reindex(document: SearchDocument) = write(document, force = true)
+    /** [upsert] 와 같은 시각 가드(원본이 더 새 쓰기를 옛 쪽 스냅숏으로 덮지 않는다) + 가드에 막혀도 `indexed_at` 은 갱신해 재색인 끝 정리가 살아 있는 문서를 지우지 않게 한다 */
+    override fun reindex(document: SearchDocument) {
+        write(document)
+        jdbc.update("update search_documents set indexed_at = ${sql.dbNow} where doc_type = :t and doc_id = :i", mapOf("t" to document.type, "i" to document.id))
+    }
 
-    private fun write(document: SearchDocument, force: Boolean) {
+    private fun write(document: SearchDocument) {
         // 정규화하면 길이가 늘 수 있다(호환 문자) - 열 길이에 맞춰 다시 자른다
         val title = SearchText.clip(SearchText.normalize(document.title), SearchDocument.MAX_TITLE)
         val body = SearchText.clip(SearchText.normalize(document.body), SearchText.MAX_BODY)
@@ -40,15 +46,26 @@ class JdbcSearchEngine(
             "title" to title,
             "body" to body,
             "source_updated_at" to dialect.instantParam(document.updatedAt),
-            "indexed_at" to dialect.instantParam(time.now()),
-            "force" to force,
         )
         params += sql.extraWriteParams(title, body)
         jdbc.update(sql.upsert, params)
     }
 
+    /**
+     * 같은 종류의 재색인 쪽(`touch` 가 `search_rebuilds` 줄을 잠근 채 원본을 읽고 쓴다)과 겹치지 않게 그 줄을 **공유 잠금**으로 잡은 뒤 지운다 -
+     * 재색인이 쓰는 동안은 기다렸다가 그 뒤에 지우고, 지우는 쪽 트랜잭션이 끝나기 전에는 재색인이 쪽을 읽지 못한다.
+     * 안 그러면 원본을 읽은 뒤 지워진 문서를 재색인이 되살린다(판매 중지 상품이 검색에 남는다). 줄이 없으면 자리 줄을 먼저 만든다. 호출자 트랜잭션에 합류한다.
+     */
     override fun delete(type: String, id: String) {
-        jdbc.update("delete from search_documents where doc_type = :t and doc_id = :i", mapOf("t" to type, "i" to id))
+        tx.executeWithoutResult {
+            val epoch = dialect.instantParam(Instant.EPOCH)
+            jdbc.update(
+                dialect.insertIgnore("search_rebuilds", listOf("doc_type", "run_id", "running", "started_at", "updated_at"), listOf("doc_type")),
+                mapOf("doc_type" to type, "run_id" to "none", "running" to false, "started_at" to epoch, "updated_at" to epoch),
+            )
+            jdbc.queryForList("select 1 from search_rebuilds where doc_type = :t for share", mapOf("t" to type))
+            jdbc.update("delete from search_documents where doc_type = :t and doc_id = :i", mapOf("t" to type, "i" to id))
+        }
     }
 
     override fun search(query: SearchQuery): SearchHits {

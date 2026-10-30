@@ -31,8 +31,23 @@ class MutableSource(override val type: String) : SearchSource {
     }
 }
 
+/** 쪽을 읽는 도중(원본을 읽은 뒤 색인에 쓰기 전)에 다른 트랜잭션이 문서를 지우는 경주를 일으키는 원본 */
+class RacingSource(override val type: String, private val engine: SearchEngine) : SearchSource {
+    val documents = CopyOnWriteArrayList<SearchDocument>()
+    @Volatile var deleter: Thread? = null
+
+    override fun page(after: String?, limit: Int): SearchSourcePage {
+        val snapshot = documents.toList()   // 지우기 전의 원본을 읽었다
+        val thread = Thread { engine.delete(type, "gone") }.also { it.start() }
+        deleter = thread
+        thread.join(1_500)                  // 재색인이 쓰는 동안 지우기는 기다려야 한다(기다리지 않으면 여기서 이미 끝난다)
+        return SearchSourcePage(snapshot, null)
+    }
+}
+
 @TestConfiguration(proxyBeanMethods = false)
 class RebuildTestBeans {
+    @Bean fun sourceRace(engine: SearchEngine) = RacingSource("rb-race", engine)
     @Bean fun sourceOne() = MutableSource("rb-one")
     @Bean fun sourceTwo() = MutableSource("rb-two")
     @Bean fun sourceThree() = MutableSource("rb-three")
@@ -49,6 +64,7 @@ class SearchRebuildDbTest {
     @Autowired lateinit var sourceOne: MutableSource
     @Autowired lateinit var sourceTwo: MutableSource
     @Autowired lateinit var sourceThree: MutableSource
+    @Autowired lateinit var sourceRace: RacingSource
 
     private val at = Instant.parse("2026-10-30T00:00:00Z")
 
@@ -104,5 +120,16 @@ class SearchRebuildDbTest {
         assertTrue(rebuilds.start("rb-three"))
         awaitIdle("rb-three")
         assertEquals(1, count("rb-three"))
+    }
+
+    @Test
+    fun `a document deleted while its page is being rebuilt does not come back`() {
+        sourceRace.documents += listOf(doc("rb-race", "gone", "가방끈 판매중지"), doc("rb-race", "kept", "가방끈 판매중"))
+        engine.upsert(doc("rb-race", "gone", "가방끈 판매중지"))
+        assertTrue(rebuilds.start("rb-race"))
+        awaitIdle("rb-race")
+        sourceRace.deleter!!.join(30_000)
+        assertEquals(0, jdbc.sql("select count(*) from search_documents where doc_type = 'rb-race' and doc_id = 'gone'").query(Long::class.java).single())
+        assertEquals(1, jdbc.sql("select count(*) from search_documents where doc_type = 'rb-race' and doc_id = 'kept'").query(Long::class.java).single())
     }
 }

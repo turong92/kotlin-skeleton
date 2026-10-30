@@ -6,8 +6,14 @@ import dev.sumin.skeleton.search.SearchText
 
 /** 방언마다 다른 SQL 두 조각 - 쓰기(조각 계산 포함)와 질의의 일치 · 순위 식. 나머지는 [JdbcSearchEngine] 이 같다 */
 internal sealed interface SearchSql {
-    /** 이름 있는 파라미터: doc_type doc_id owner_id scope title body source_updated_at indexed_at force (+ 방언별 [extraWriteParams]) */
+    /** 이름 있는 파라미터: doc_type doc_id owner_id scope title body source_updated_at (+ 방언별 [extraWriteParams]). 더 옛 source_updated_at 은 덮지 않는다 */
     val upsert: String
+
+    /**
+     * DB 서버의 지금(UTC) - `indexed_at` · 재색인 `started_at` 에 쓴다. 인스턴스마다 시계가 다르므로 둘을 같은 시계(DB)로 재야
+     * 재색인 끝의 「시작 전에 색인된 줄」 정리가 살아 있는 문서를 지우지 않는다
+     */
+    val dbNow: String
 
     fun extraWriteParams(title: String, body: String): Map<String, Any?>
 
@@ -30,12 +36,14 @@ internal object PostgresSearchSql : SearchSql {
         insert into search_documents (doc_type, doc_id, owner_id, scope, title, body, terms, source_updated_at, indexed_at)
         values (:doc_type, :doc_id, :owner_id, :scope, :title, :body,
                 setweight(to_tsvector('simple', :title_grams), 'A') || setweight(to_tsvector('simple', :body_grams), 'B'),
-                :source_updated_at, :indexed_at)
+                :source_updated_at, clock_timestamp())
         on conflict (doc_type, doc_id) do update set
             owner_id = excluded.owner_id, scope = excluded.scope, title = excluded.title, body = excluded.body, terms = excluded.terms,
             source_updated_at = excluded.source_updated_at, indexed_at = excluded.indexed_at
-        where :force or search_documents.source_updated_at <= excluded.source_updated_at
+        where search_documents.source_updated_at <= excluded.source_updated_at
     """.trimIndent()
+
+    override val dbNow = "clock_timestamp()"
 
     override fun extraWriteParams(title: String, body: String): Map<String, Any?> =
         mapOf("title_grams" to SearchText.grams(title), "body_grams" to SearchText.grams(body))
@@ -52,11 +60,11 @@ internal object PostgresSearchSql : SearchSql {
 
 internal object MySqlSearchSql : SearchSql {
     // ON DUPLICATE KEY UPDATE 의 대입은 왼쪽부터 평가되어 뒤 대입이 앞 대입의 결과를 본다 - 비교에 쓰는 source_updated_at 은 맨 끝에 대입한다
-    private const val NEWER = "(:force or search_documents.source_updated_at <= incoming.source_updated_at)"
+    private const val NEWER = "(search_documents.source_updated_at <= incoming.source_updated_at)"
 
     override val upsert = """
         insert into search_documents (doc_type, doc_id, owner_id, scope, title, body, source_updated_at, indexed_at)
-        values (:doc_type, :doc_id, :owner_id, :scope, :title, :body, :source_updated_at, :indexed_at) as incoming
+        values (:doc_type, :doc_id, :owner_id, :scope, :title, :body, :source_updated_at, utc_timestamp(6)) as incoming
         on duplicate key update
             owner_id = if($NEWER, incoming.owner_id, search_documents.owner_id),
             scope = if($NEWER, incoming.scope, search_documents.scope),
@@ -65,6 +73,8 @@ internal object MySqlSearchSql : SearchSql {
             indexed_at = if($NEWER, incoming.indexed_at, search_documents.indexed_at),
             source_updated_at = if($NEWER, incoming.source_updated_at, search_documents.source_updated_at)
     """.trimIndent()
+
+    override val dbNow = "utc_timestamp(6)"
 
     override fun extraWriteParams(title: String, body: String): Map<String, Any?> = emptyMap()
 

@@ -28,6 +28,7 @@ class JdbcSearchRebuilds(
     private val staleAfter: Duration,
 ) : SearchRebuilds {
     private val tx = TransactionTemplate(transactionManager)
+    private val dbNow = SearchSql.of(dialect.vendor).dbNow
 
     override fun start(type: String): Boolean = tx.execute {
         val now = time.now()
@@ -39,13 +40,12 @@ class JdbcSearchRebuilds(
         val row = jdbc.query("select run_id, running, updated_at from search_rebuilds where doc_type = :t for update", mapOf("t" to type)) { rs, _ ->
             Triple(rs.getString("run_id"), rs.getBoolean("running"), dialect.readInstant(rs, "updated_at")!!)
         }.single()
-        if (row.first != run) {
-            if (row.second && row.third.isAfter(now.minus(staleAfter))) return@execute false
-            jdbc.update(
-                "update search_rebuilds set run_id = :run, running = true, started_at = :now, updated_at = :now where doc_type = :t",
-                mapOf("run" to run, "now" to dialect.instantParam(now), "t" to type),
-            )
-        }
+        if (row.first != run && row.second && row.third.isAfter(now.minus(staleAfter))) return@execute false
+        // 시작 시각은 DB 시계다 - 색인 줄의 indexed_at 과 같은 시계라야 끝 정리의 비교가 인스턴스 시계 차이에 흔들리지 않는다
+        jdbc.update(
+            "update search_rebuilds set run_id = :run, running = true, started_at = $dbNow, updated_at = :now where doc_type = :t",
+            mapOf("run" to run, "now" to dialect.instantParam(now), "t" to type),
+        )
         queue.enqueue(SEARCH_REBUILD_JOB_TYPE, payload(type, run, null))
         true
     }!!

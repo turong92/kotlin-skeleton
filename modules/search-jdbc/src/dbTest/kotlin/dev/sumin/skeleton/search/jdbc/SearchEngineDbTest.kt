@@ -185,15 +185,19 @@ class SearchEngineDbTest {
     }
 
     @Test
-    fun `an older source time does not overwrite, a newer one does, and reindex always does`() {
+    fun `an older source time does not overwrite, a newer one does, and reindex only refreshes the indexed time`() {
         val t = newType()
         put(t, "a", "가방끈 새것", at = base.plusSeconds(10))
         put(t, "a", "가방끈 옛것", at = base)
         assertEquals("가방끈 새것", find(t, "가방끈").results.single().title)
         put(t, "a", "가방끈 더새것", at = base.plusSeconds(20))
         assertEquals("가방끈 더새것", find(t, "가방끈").results.single().title)
-        engine.reindex(SearchDocument(t, "a", "가방끈 원본", "", null, null, base))
-        assertEquals("가방끈 원본", find(t, "가방끈").results.single().title)
+        fun indexedAt() = jdbc.sql("select indexed_at from search_documents where doc_type = ?").param(t).query(java.sql.Timestamp::class.java).single()
+        val before = indexedAt()
+        Thread.sleep(20)
+        engine.reindex(SearchDocument(t, "a", "가방끈 옛스냅숏", "", null, null, base))   // 옛 쪽 스냅숏 - 내용은 못 덮지만 정리에서 살아남게 시각은 갱신한다
+        assertEquals("가방끈 더새것", find(t, "가방끈").results.single().title)
+        assertTrue(indexedAt().after(before))
         assertEquals(1, jdbc.sql("select count(*) from search_documents where doc_type = ?").param(t).query(Long::class.java).single())
     }
 
