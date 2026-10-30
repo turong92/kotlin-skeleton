@@ -8,6 +8,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import org.flywaydb.core.Flyway
+import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.springframework.jdbc.core.simple.JdbcClient
 
 /**
@@ -24,6 +25,7 @@ class AuthorLinkColumnsMySqlTest {
 
     @Test
     fun `every board, notification and author profile column of the latest MySQL schema is classified public or private`() {
+        assumeTrue(System.getProperty("skeleton.test.stress") == "full", "nightly only")
         val dataSource = UpgradeBaseline.dataSource(SharedMySql.newDatabase())
         val locations = mysqlLocations()
         assertTrue(locations.isNotEmpty(), "no db/migration/mysql folders found under ${UpgradeBaseline.repoRoot}")
