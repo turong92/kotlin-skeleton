@@ -30,7 +30,8 @@ class NoteExportJobHandler(
 
     override fun handle(job: Job) {
         val payload = json.readTree(job.payloadJson)
-        val requester = payload["requesterId"].asString()
+        // 배포 전에 큐에 들어간 옛 잡은 `ownerId` 만 있다 - 그때는 내 노트뿐이었으니 요청자와 같다
+        val requester = (payload["requesterId"] ?: payload["ownerId"]).asString()
         val noteId = UUID.fromString(payload["noteId"].asString())
         val workspaceId = payload["workspaceId"]?.takeIf { !it.isNull }?.asString()
         // 팀 노트는 요청한 사람이 지금도 멤버일 때만(그 사이 추방됐으면 끝낸다), 내 노트는 예전처럼 주인 것만

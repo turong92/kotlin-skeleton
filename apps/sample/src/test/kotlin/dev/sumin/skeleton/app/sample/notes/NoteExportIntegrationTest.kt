@@ -72,4 +72,13 @@ class NoteExportIntegrationTest : SampleIntegrationTest() {
         assertEquals("DEAD", status)
         assertFalse(inbox(user).contains("NOTE_EXPORTED"))
     }
+
+    @Test
+    fun `a job queued before the requester field existed still exports the owner's own note`() {
+        val id = createdId(user, title = "옛 잡")
+        jobs.enqueue("note-export", """{"noteId":"$id","ownerId":"acc_user"}""")
+
+        val done = await { inbox(user).takeIf { it.contains("NOTE_EXPORTED") } }
+        assertTrue(done.contains(id), done)
+    }
 }
