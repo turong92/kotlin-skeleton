@@ -495,7 +495,7 @@
         "prefixes": ["skeleton.auth-mfa"],
         "snippet": "docs/config/modules/auth-mfa.yml"
       },
-      "basePaths": ["/api/v1/auth/mfa"],
+      "basePaths": ["/api/v1/auth/mfa", "/api/v1/admin/mfa/accounts"],
       "secrets": [],
       "docs": ["docs/modules/auth-mfa.md"],
       "frontend": null,
@@ -503,7 +503,8 @@
         "auth-mfa 는 저장소를 모른다 — auth-mfa-jdbc 를 같이 고른다",
         "암호화 키가 필요하다(crypto 의 skeleton.crypto.keys) — 없으면 기동에 실패한다",
         "인증 앱(TOTP)만 — SMS · 이메일 코드 · 패스키(WebAuthn) · 신뢰 기기 기억은 아직 없다",
-        "필수로 정하는 문(등록 전 계정의 모든 API 차단) · 운영자 해제는 아직 없다 — required-for 는 상태 표시와 끄기 거절에만 쓰인다"
+        "운영자 해제(skeleton.auth-mfa.admin.enabled=true, 권한 mfa.reset)는 기본 꺼짐(404) — 본인 확인 절차 없이 쓰지 말 것",
+        "필수(required-for)는 모듈 기본 NONE — OPERATORS · ALL 로 켜면 등록 전 계정이 허용 목록 밖에서 403 MFA.ENROLLMENT_REQUIRED 로 막힌다(API 키 요청은 안 막힌다)"
       ],
       "keywords": {
         "ko": ["2단계 인증", "이중 인증", "OTP", "TOTP", "인증 앱", "복구 코드", "MFA"],
@@ -3830,6 +3831,8 @@
         "api-key",
         "api-key-jdbc",
         "auth-magic-link",
+        "auth-mfa",
+        "auth-mfa-jdbc",
         "auth-social-google",
         "auth-social-kakao",
         "auth-social-naver",

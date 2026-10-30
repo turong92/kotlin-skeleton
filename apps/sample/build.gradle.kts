@@ -68,6 +68,8 @@ dependencies {
     implementation(project(":modules:api-key-jdbc"))       // 키 저장소 (api-key 는 저장소를 모른다) - 해시만 저장
     implementation(project(":modules:inquiry"))            // 문의 · 의견 받기: 로그인 없이도 보낼 수 있는 한 줄 폼 (/api/v1/inquiries) — captcha-turnstile 이 있으면 로그인하지 않은 호출의 사람 확인을 그 검증기로, alert 가 있으면 접수 경보. 운영자 경로(/api/v1/admin/inquiries)는 켠다
     implementation(project(":modules:inquiry-jdbc"))       // 문의 저장소 (inquiry 는 저장소를 모른다)
+    implementation(project(":modules:auth-mfa"))           // 2단계 인증(TOTP): 로그인 뒤 인증 앱의 6자리 코드 (/api/v1/auth/mfa, 운영자 해제 /api/v1/admin/mfa/accounts). 운영자는 필수(OPERATORS) - 등록 전엔 다른 API 가 403. 암호화 키(crypto) 필요 - 문서 docs/modules/auth-mfa.md
+    implementation(project(":modules:auth-mfa-jdbc"))      // 2단계 저장소 (auth-mfa 는 저장소를 모른다) - 비밀은 암호화 봉투, 복구 코드는 해시만
 
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-data-jdbc")

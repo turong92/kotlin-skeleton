@@ -379,13 +379,14 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 자동으로 따라온다: `crypto`
 - 함께 골라야 한다: `auth-mfa-jdbc`
 - 설정 접두사 `skeleton.auth-mfa` — 키와 기본값 `docs/config/modules/auth-mfa.yml`
-- HTTP 경로: `/api/v1/auth/mfa`
+- HTTP 경로: `/api/v1/auth/mfa`, `/api/v1/admin/mfa/accounts`
 - 문서: `docs/modules/auth-mfa.md`
 - 쓰지 않는 경우:
   - auth-mfa 는 저장소를 모른다 — auth-mfa-jdbc 를 같이 고른다
   - 암호화 키가 필요하다(crypto 의 skeleton.crypto.keys) — 없으면 기동에 실패한다
   - 인증 앱(TOTP)만 — SMS · 이메일 코드 · 패스키(WebAuthn) · 신뢰 기기 기억은 아직 없다
-  - 필수로 정하는 문(등록 전 계정의 모든 API 차단) · 운영자 해제는 아직 없다 — required-for 는 상태 표시와 끄기 거절에만 쓰인다
+  - 운영자 해제(skeleton.auth-mfa.admin.enabled=true, 권한 mfa.reset)는 기본 꺼짐(404) — 본인 확인 절차 없이 쓰지 말 것
+  - 필수(required-for)는 모듈 기본 NONE — OPERATORS · ALL 로 켜면 등록 전 계정이 허용 목록 밖에서 403 MFA.ENROLLMENT_REQUIRED 로 막힌다(API 키 요청은 안 막힌다)
 - 키워드: 2단계 인증, 이중 인증, OTP, TOTP, 인증 앱, 복구 코드, MFA / two-factor authentication, 2fa, mfa, totp, authenticator app, recovery codes, second factor
 
 ### `auth-mfa-jdbc` — 2단계 인증 저장을 DB 에 둔다 (PostgreSQL · MySQL) — 비밀은 암호화 봉투, 복구 코드는 해시만. 같은 TOTP 걸음 · 같은 복구 코드는 한 문장의 조건부 갱신이라 동시에 몰려도 하나만 통과한다.
@@ -1682,7 +1683,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 - 종류 · 상태: app · stable — 위치 `apps/sample`
 - 켜는 법: `--with-sample`
-- 자동으로 따라온다: `alert-jdbc`, `api-key`, `api-key-jdbc`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `badge`, `badge-jdbc`, `board`, `board-jdbc`, `campaign`, `campaign-jdbc`, `catalog`, `catalog-jdbc`, `coupon`, `coupon-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `inquiry`, `inquiry-jdbc`, `json`, `notification`, `notification-fcm`, `notification-jdbc`, `notification-legal`, `notification-push`, `notification-push-jdbc`, `notification-push-legal`, `notification-sse`, `notification-webpush`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-toss`, `point`, `point-jdbc`, `review`, `review-jdbc`, `reward`, `reward-jdbc`, `scheduler`, `search`, `search-jdbc`, `storage`, `storage-image`, `storage-image-imageio`, `storage-image-jdbc`, `storage-s3`, `workspace`, `workspace-jdbc`
+- 자동으로 따라온다: `alert-jdbc`, `api-key`, `api-key-jdbc`, `auth-magic-link`, `auth-mfa`, `auth-mfa-jdbc`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `badge`, `badge-jdbc`, `board`, `board-jdbc`, `campaign`, `campaign-jdbc`, `catalog`, `catalog-jdbc`, `coupon`, `coupon-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `inquiry`, `inquiry-jdbc`, `json`, `notification`, `notification-fcm`, `notification-jdbc`, `notification-legal`, `notification-push`, `notification-push-jdbc`, `notification-push-legal`, `notification-sse`, `notification-webpush`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-toss`, `point`, `point-jdbc`, `review`, `review-jdbc`, `reward`, `reward-jdbc`, `scheduler`, `search`, `search-jdbc`, `storage`, `storage-image`, `storage-image-imageio`, `storage-image-jdbc`, `storage-s3`, `workspace`, `workspace-jdbc`
 - HTTP 경로: `/api/v1/cheers`, `/api/v1/notes`
 - 문서: `docs/sample.md`
 - 짝 프런트(react-skeleton): 항목 `app-sample` · 조각 `--with-sample`

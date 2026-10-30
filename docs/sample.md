@@ -232,7 +232,7 @@ local 프로필은 주문 만들기 한도(기본 계정당 10 / 10분)를 풀�
 | 값 | 이름 |
 |---|---|
 | 켜기 | `SKELETON_PAYMENT_SUBSCRIPTION_ENABLED=true` (로컬 프로필은 토스를 켰을 때 함께 켠다) |
-| 빌링키 암호화 키 | `SKELETON_CRYPTO_KEYS_MAIN` — base64 로 인코딩한 32바이트(비밀, 배포 선언의 `secrets:` 에 이름을 더한다). 켰는데 없으면 기동 실패 |
+| 암호화 키 | `SKELETON_CRYPTO_KEYS_MAIN` — base64 로 인코딩한 32바이트(비밀, 배포 선언의 `secrets:` 에 이름이 있다). 빌링키와 2단계 인증의 TOTP 비밀을 암호화한다 - 이 앱은 2단계 인증이 늘 쓰므로 없으면 기동 실패 |
 | 주기 | `SKELETON_SAMPLE_SUBSCRIPTION_PERIOD` (ISO-8601, 기본 `P1M`; 로컬 프로필 `PT3M`) · 연 가격 `SKELETON_SAMPLE_SUBSCRIPTION_YEARLY_PERIOD` (기본 `P1Y`; 로컬 `PT36M`) - 씨앗을 뿌릴 때만 먹는다(가격은 만든 뒤 못 고친다) |
 
 로컬은 갱신 · 재시도를 몇 분 안에 볼 수 있다: 주기 3분, 거절되면 1분 뒤 다시(`skeleton.payment.subscription.renewal.retry-interval`), 세 번 거절되면 구독이 끝난다. 토스 테스트 키로 카드 등록 창은 인증 번호 `000000` 과 국내 카드만 받는다([real-provider-setup §11.7](real-provider-setup.md)).
@@ -303,6 +303,14 @@ APP=sample scripts/dev.sh    # 백엔드(+프론트 WEB_DIR)만 같은 방식으
 | `GET /api/v1/admin/inquiries?status&limit` · `PUT …/{id}/status {status}` | 운영 화면의 최신순 목록(계정 id 없음) · 처리함 표시(`inquiry.read` · `inquiry.handle`, 기본 역할 없이 ADMIN 전권만) |
 
 시험: `inquiry/InquiryJourneyIntegrationTest`(익명 202 · 로그인 계정 연결 · 400 위반 · 운영자만 목록 · 처리 표시).
+## 2단계 인증 (`/api/v1/auth/mfa`)
+두 줄(`auth-mfa` · `auth-mfa-jdbc`)과 `application.yml` 의 `skeleton.auth-mfa` 가 전부다(코드 한 줄 없이 모듈이 로그인의 모든 길에 두 번째 단계를 꽂는다 - `docs/modules/auth-mfa.md`).
+이 앱의 선택: 인증 앱에 보이는 이름 `Notes` · **운영자는 필수**(`required-for: OPERATORS` - 운영 권한이 하나라도 있는 계정, 예 ADMIN) · 운영자 해제 켬(권한 `mfa.reset` 은 기본 역할 없이 ADMIN 전권만).
+- 일반 사용자는 설정에서 스스로 켠다(비밀번호 다시 인증 → QR → 첫 코드 → 복구 코드 10개). 켠 뒤 로그인은 `403 AUTH.MFA_REQUIRED` → `POST /api/v1/auth/mfa/verify`(코드 또는 복구 코드).
+- **운영자는 등록 전까지 다른 API 가 `403 MFA.ENROLLMENT_REQUIRED`** 다(`/api/v1/auth` 아래 · `GET /account/me` 만 열림). 방금 로그인한 세션(15분 안)이면 다시 인증 없이 등록하고, 등록하면 곧장 풀린다. 시험 · e2e 의 admin 이 보호된 경로를 부르려면 먼저 등록해야 한다.
+- 인증 앱과 복구 코드를 모두 잃은 사람은 `POST /api/v1/admin/mfa/accounts/{id}/reset {reason}`(**본인 확인을 마친 뒤에만**) - 대상의 모든 세션이 닫히고 메일이 간다.
+- 비밀을 암호화하는 키 `SKELETON_CRYPTO_KEYS_MAIN` 이 없으면 기동하지 않는다(위 「구독」 표).
+시험: `mfa/MfaJourneyIntegrationTest`(스펙 §6 ① ~ ④ 의 백엔드 쪽 - 켜기 → 코드 로그인 · 복구 코드로 로그인(남은 9) · 같은 코드 재사용 거절 · 운영자 등록 전 403 → 등록 → 열림 → 운영자 해제 → 코드 없이 로그인, 그리고 소셜 · 매직 링크 · 탈퇴 취소 길도 403 → 코드로 로그인). 시험 설정(`src/test/resources/config/application.yml`)은 다른 시험의 ADMIN 이 막히지 않게 `required-for: NONE` 이고 이 시험만 OPERATORS 로 켠다.
 
 ## 이 샘플이 하지 않는 것
 

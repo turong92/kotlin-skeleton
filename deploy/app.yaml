@@ -38,6 +38,7 @@ secrets:
   - SKELETON_AUTH_SOCIAL_PROVIDERS_KAKAO_CLIENT_SECRET    # [auth-social-kakao] 운영자 (.local.env)
   - SKELETON_AUTH_SOCIAL_PROVIDERS_NAVER_CLIENT_SECRET    # [auth-social-naver] 운영자 (.local.env)
   - SKELETON_CAPTCHA_TURNSTILE_SECRET_KEY                 # [captcha-turnstile] 운영자 (.local.env)
+  - SKELETON_CRYPTO_KEYS_MAIN                             # [auth-mfa] 운영자 (.local.env) — base64 로 인코딩한 32바이트 AES 키(예: openssl rand -base64 32). TOTP 비밀을 이 키로 암호화한다 - 없으면 기동 실패. 키 id 는 env: 의 SKELETON_CRYPTO_PRIMARY_KEY_ID(기본 main), 바꾸면 이 이름도 따라 바꾼다
   - SKELETON_DASHBOARD_CLOUDFLARE_API_TOKEN               # [dashboard-cloudflare] 운영자 (.local.env) — 권한 Account / Account Analytics / Read 하나. 계정 id · 사이트 태그는 env: 에 적는다
   - SKELETON_DASHBOARD_GA_CREDENTIALS                     # [dashboard-ga] 운영자 (.local.env) — 서비스 계정 키 JSON 의 base64 (속성에 「뷰어」로 추가된 계정). 속성 id 는 env: 에 적는다
   - SKELETON_PAYMENT_TOSS_SECRET_KEY                      # [payment-toss] 운영자 (.local.env)

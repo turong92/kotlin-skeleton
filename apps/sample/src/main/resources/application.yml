@@ -194,7 +194,7 @@ skeleton:
   crypto:
     primary-key-id: ${SKELETON_CRYPTO_PRIMARY_KEY_ID:main}
     keys:
-      main: ${SKELETON_CRYPTO_KEYS_MAIN:}   # base64 로 인코딩한 32바이트 AES 키 — 비밀이라 커밋하지 않는다(배포는 선언의 secrets:). 구독을 켰는데 비면 기동 실패
+      main: ${SKELETON_CRYPTO_KEYS_MAIN:}   # base64 로 인코딩한 32바이트 AES 키 — 비밀이라 커밋하지 않는다(배포는 선언의 secrets:). 2단계 인증(auth-mfa)이 TOTP 비밀을 이 키로 암호화하므로 비면 기동 실패(구독도 같은 키를 쓴다)
   sample:
     subscription:
       period: ${SKELETON_SAMPLE_SUBSCRIPTION_PERIOD:P1M}   # 견본 월 가격의 갱신 주기(ISO-8601). 로컬 프로필은 PT3M
@@ -324,6 +324,11 @@ skeleton:
   inquiry:
     admin:
       enabled: true            # 이 앱의 선택: 운영 경로(목록 · 처리 표시, 권한 inquiry.read · inquiry.handle 은 기본 역할 없이 ADMIN 전권만)
+  auth-mfa:
+    totp:
+      issuer: Notes            # 이 앱의 선택: 인증 앱에 「Notes」 로 보인다(모듈 기본은 spring.application.name)
+    required-for: OPERATORS    # 이 앱의 선택: 운영 권한이 하나라도 있는 계정(ADMIN 등)은 2단계 필수 - 등록 전엔 /api/v1/auth · GET /account/me 말고는 403 MFA.ENROLLMENT_REQUIRED (모듈 기본은 NONE)
+      enabled: true            # 이 앱의 선택: 운영자 해제(권한 mfa.reset 은 기본 역할 없이 ADMIN 전권만) - 본인 확인 절차를 운영 규칙으로 정한 뒤에만 쓴다. 모듈 기본은 꺼짐(404)
   dashboard:
     admin:
       enabled: true   # 이 앱의 선택: 관리자 대시보드 API(/api/v1/admin/dashboard) 를 켠다 — 스켈레톤 기본은 꺼짐(404). 보려면 권한 dashboard.read (ADMIN 은 늘 가진다)
