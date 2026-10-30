@@ -3002,7 +3002,11 @@
       "basePaths": ["/api/v1/admin", "/api/v1/workspaces", "/api/v1/workspace-invitations"],
       "secrets": [],
       "docs": ["docs/modules/workspace.md"],
-      "frontend": null,
+      "frontend": {
+        "capabilities": ["workspace", "workspace-admin"],
+        "newProjectFlag": "--packages workspace",
+        "packages": ["@skeleton/workspace"]
+      },
       "notFor": [
         "workspace 는 저장소를 모른다 — workspace-jdbc 를 같이 고른다",
         "서비스 운영자 권한(authz)을 대신하지 않는다 — 워크스페이스 역할은 그 팀 안에서만 뜻이 있다",
