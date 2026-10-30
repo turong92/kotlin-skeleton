@@ -24,6 +24,7 @@ class WorkspaceInvitationServiceTest {
     private val facts = object : AccountFacts {
         override fun createdAt(accountId: String) = null
         override fun verifiedEmail(accountId: String) = verified[accountId]
+        override fun accountIdByVerifiedEmail(email: String) = verified.entries.firstOrNull { it.value == email }?.key
     }
     private val props = WorkspaceProperties.Invitation(enabled = true)
     private val service = WorkspaceInvitationService(store, clock, seats, workspaces, facts, { sent += it }, props, labels)
@@ -119,6 +120,38 @@ class WorkspaceInvitationServiceTest {
         assertEquals(WorkspaceErrorCode.TOO_MANY_PENDING, code { small.invite("acc_o", ws, listOf("b@example.com", "c@example.com"), WorkspaceRole.MEMBER, "en") })
         assertEquals(1, store.countPendingInvitations(ws))
         assertTrue(sent.isEmpty())
+    }
+
+    @Test
+    fun `an address that already belongs to a member is refused as alreadyMember and takes no seat or invitation row`() {
+        val ws = team()
+        join(ws, "acc_m", WorkspaceRole.MEMBER)
+        verified["acc_m"] = "m@example.com"
+        verified["acc_o"] = "o@example.com"
+        seatLimit = 3
+        val result = service.invite("acc_o", ws, listOf("m@example.com", "O@example.com", "new@example.com"), WorkspaceRole.MEMBER, "en")
+        assertEquals(listOf("m@example.com", "o@example.com"), result.alreadyMember)
+        assertEquals(listOf("new@example.com"), result.invited)
+        assertEquals(1, store.invitationRows().size)
+        assertEquals(listOf("new@example.com"), sent.map { it.to })
+        assertEquals(emptyList(), result.seatLimited, "the member addresses took no seat")
+    }
+
+    @Test
+    fun `only the owner can resend or revoke an invitation to admin`() {
+        val ws = team()
+        join(ws, "acc_a", WorkspaceRole.ADMIN)
+        invite(ws, "boss@example.com", role = WorkspaceRole.ADMIN)
+        invite(ws, "peer@example.com")
+        val adminInvite = store.findPendingInvitation(ws, "boss@example.com")!!.id
+        val memberInvite = store.findPendingInvitation(ws, "peer@example.com")!!.id
+        clock.advance(props.resendInterval.seconds)
+        assertEquals(WorkspaceErrorCode.FORBIDDEN, code { service.resend("acc_a", ws, adminInvite, "en") })
+        assertEquals(WorkspaceErrorCode.FORBIDDEN, code { service.revoke("acc_a", ws, adminInvite) })
+        service.resend("acc_a", ws, memberInvite, "en")
+        service.revoke("acc_a", ws, memberInvite)
+        service.resend("acc_o", ws, adminInvite, "en")
+        service.revoke("acc_o", ws, adminInvite)
     }
 
     // ---- 토큰은 해시로만

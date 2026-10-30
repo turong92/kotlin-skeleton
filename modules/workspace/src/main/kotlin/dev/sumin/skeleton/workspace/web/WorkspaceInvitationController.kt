@@ -41,7 +41,7 @@ class WorkspaceInvitationController(private val service: WorkspaceInvitationServ
 
     @Operation(
         summary = "Invite up to 20 email addresses (admin or owner; only the owner can invite admins)",
-        description = "Each address lands in invited, alreadyInvited (a pending invitation exists - resend it) or seatLimited. 409 WORKSPACE.TOO_MANY_PENDING refuses the whole request.",
+        description = "Each address lands in invited, alreadyInvited (a pending invitation exists - resend it), alreadyMember (the verified address already belongs to a member) or seatLimited. 409 WORKSPACE.TOO_MANY_PENDING refuses the whole request.",
     )
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = InviteResponse::class)
     @PostMapping("/{id}/invitations")

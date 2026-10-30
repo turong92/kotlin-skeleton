@@ -39,6 +39,7 @@ class WorkspaceInvitationService(
         val invited = ArrayList<String>()
         val already = ArrayList<String>()
         val limited = ArrayList<String>()
+        val members = ArrayList<String>()
         val context = workspaces.mutate(accountId, workspaceId, WorkspaceRole.ADMIN) { workspace, me ->
             if (role == WorkspaceRole.ADMIN && me.role != WorkspaceRole.OWNER) throw WorkspaceException(WorkspaceErrorCode.FORBIDDEN)
             val now = time.now()
@@ -46,6 +47,8 @@ class WorkspaceInvitationService(
             var seatsUsed = store.countMembers(workspace.id) + store.countLiveInvitations(workspace.id, now)
             for (email in addresses) {
                 if (store.findPendingInvitation(workspace.id, email) != null) { already += email; continue }
+                // 이미 멤버인 (확인된) 주소는 거절한다 - 좌석도 초대 줄도 잡지 않는다
+                if (facts.accountIdByVerifiedEmail(email)?.let { store.findMember(workspace.id, it) } != null) { members += email; continue }
                 if (limit != null && seatsUsed >= limit) { limited += email; continue }
                 val token = InvitationTokens.newToken()
                 val invitation = WorkspaceInvitation(
@@ -62,7 +65,7 @@ class WorkspaceInvitationService(
             workspace.name
         }
         deliver(issued, context, accountId, locale)
-        return InviteResult(invited, already, limited)
+        return InviteResult(invited, already, limited, members)
     }
 
     // 목록 · 재발송 · 취소 — ADMIN 이상
@@ -76,8 +79,8 @@ class WorkspaceInvitationService(
 
     /** 새 토큰(옛 링크는 바로 무효) · 만료 다시 [WorkspaceProperties.Invitation.ttl]. 같은 초대를 [WorkspaceProperties.Invitation.resendInterval] 안에 또 보내면 429 */
     fun resend(accountId: String, workspaceId: String, invitationId: String, locale: String?) {
-        val issued = workspaces.mutate(accountId, workspaceId, WorkspaceRole.ADMIN) { workspace, _ ->
-            val invitation = pendingOf(workspaceId, invitationId)
+        val issued = workspaces.mutate(accountId, workspaceId, WorkspaceRole.ADMIN) { workspace, me ->
+            val invitation = pendingOf(workspaceId, invitationId, me)
             val now = time.now()
             if (now.isBefore(invitation.lastSentAt.plus(props.resendInterval))) throw WorkspaceException(WorkspaceErrorCode.RESEND_TOO_SOON)
             val token = InvitationTokens.newToken()
@@ -89,15 +92,19 @@ class WorkspaceInvitationService(
     }
 
     fun revoke(accountId: String, workspaceId: String, invitationId: String) {
-        workspaces.mutate(accountId, workspaceId, WorkspaceRole.ADMIN) { _, _ ->
-            store.closeInvitation(pendingOf(workspaceId, invitationId).id, InvitationStatus.REVOKED, null, time.now())
+        workspaces.mutate(accountId, workspaceId, WorkspaceRole.ADMIN) { _, me ->
+            store.closeInvitation(pendingOf(workspaceId, invitationId, me).id, InvitationStatus.REVOKED, null, time.now())
             Unit
         }
     }
 
-    private fun pendingOf(workspaceId: String, invitationId: String): WorkspaceInvitation =
-        store.findInvitation(invitationId)?.takeIf { it.workspaceId == workspaceId && it.status == InvitationStatus.PENDING }
+    /** ADMIN 초대는 소유자만 만들 수 있으니 재발송 · 취소도 소유자만 한다 */
+    private fun pendingOf(workspaceId: String, invitationId: String, me: WorkspaceMember): WorkspaceInvitation {
+        val invitation = store.findInvitation(invitationId)?.takeIf { it.workspaceId == workspaceId && it.status == InvitationStatus.PENDING }
             ?: throw WorkspaceException(WorkspaceErrorCode.INVITATION_NOT_FOUND)
+        if (invitation.role == WorkspaceRole.ADMIN && me.role != WorkspaceRole.OWNER) throw WorkspaceException(WorkspaceErrorCode.FORBIDDEN)
+        return invitation
+    }
 
     // 미리보기 — 로그인 없이
 

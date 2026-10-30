@@ -56,7 +56,9 @@ class WorkspaceService(
     }
 
     /** 지금 slug 든 옛 slug 든 푼다 — 응답의 `slug` 는 늘 지금 값이다. 없음 · 멤버 아님 · 닫힘은 같은 `NOT_FOUND` */
-    fun bySlug(accountId: String, slug: String): WorkspaceDetail {
+    fun bySlug(accountId: String, rawSlug: String): WorkspaceDetail {
+        // 형식이 틀리면 바로 같은 404 - 대소문자는 소문자로 맞춰 PostgreSQL(구분)과 MySQL(무시)의 답이 같게
+        val slug = rawSlug.trim().lowercase().takeIf { WorkspaceSlugs.VALID.matches(it) } ?: throw notFound()
         val workspace = store.findWorkspaceBySlug(slug) ?: store.slugRetiredTo(slug)?.let(store::findWorkspace) ?: throw notFound()
         val (found, me) = readable(accountId, workspace.id)
         return detailOf(found, me)

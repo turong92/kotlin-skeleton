@@ -78,8 +78,8 @@ data class WorkspaceInvitation(
 /** 초대 목록의 한 줄 */
 data class InvitationView(val invitation: WorkspaceInvitation, val expired: Boolean)
 
-/** 초대하기의 결과 — 주소 하나가 셋 중 하나에 들어간다 */
-data class InviteResult(val invited: List<String>, val alreadyInvited: List<String>, val seatLimited: List<String>)
+/** 초대하기의 결과 — 주소 하나가 넷 중 하나에 들어간다([alreadyMember] = 이미 멤버인 확인된 주소, 좌석 · 초대 줄을 잡지 않는다) */
+data class InviteResult(val invited: List<String>, val alreadyInvited: List<String>, val seatLimited: List<String>, val alreadyMember: List<String> = emptyList())
 
 /** 로그인 없이 보이는 초대 미리보기 — 주소는 가려서 */
 data class InvitationPreview(val workspaceName: String, val inviterLabel: String?, val emailMasked: String, val role: WorkspaceRole, val expiresAt: Instant)

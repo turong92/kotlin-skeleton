@@ -54,7 +54,7 @@ data class InvitationTokenRequest(val token: String?) {
     override fun toString() = "InvitationTokenRequest(token=<redacted>)"
 }
 
-data class InviteResponse(val invited: List<String>, val alreadyInvited: List<String>, val seatLimited: List<String>)
+data class InviteResponse(val invited: List<String>, val alreadyInvited: List<String>, val seatLimited: List<String>, val alreadyMember: List<String>)
 
 /** 대기 목록의 한 줄 - 토큰은 없다. `expired` 면 재발송으로 되살린다. `invitedBy` 는 초대한 계정 id */
 data class InvitationResponse(val id: String, val email: String, val role: String, val expiresAt: Instant, val expired: Boolean, val sentCount: Int, val invitedBy: String)
@@ -63,7 +63,7 @@ data class InvitationResponse(val id: String, val email: String, val role: Strin
 @JsonInclude(JsonInclude.Include.ALWAYS)
 data class InvitationPreviewResponse(val workspaceName: String, val inviterLabel: String?, val emailMasked: String, val role: String, val expiresAt: Instant)
 
-fun InviteResult.toResponse() = InviteResponse(invited, alreadyInvited, seatLimited)
+fun InviteResult.toResponse() = InviteResponse(invited, alreadyInvited, seatLimited, alreadyMember)
 
 fun InvitationView.toResponse() = InvitationResponse(invitation.id, invitation.email, invitation.role.name, invitation.expiresAt, expired, invitation.sentCount, invitation.invitedBy)
 

@@ -35,6 +35,17 @@ class AccountFactsTest {
     }
 
     @Test
+    fun `accountIdByVerifiedEmail finds only a confirmed, live account by its address`() {
+        insert("acc_v", "v@example.com", true)
+        insert("acc_u", "u@example.com", false, AccountStatus.PENDING_VERIFICATION)
+        insert("acc_e", "e@example.com", true, AccountStatus.ERASED)
+        assertEquals("acc_v", facts.accountIdByVerifiedEmail(" V@Example.com "))
+        assertNull(facts.accountIdByVerifiedEmail("u@example.com"))
+        assertNull(facts.accountIdByVerifiedEmail("e@example.com"))
+        assertNull(facts.accountIdByVerifiedEmail("nobody@example.com"))
+    }
+
+    @Test
     fun `verifiedEmail of an erased account is null`() {
         insert("acc_e", "e@example.com", true, AccountStatus.ERASED)
         assertNull(facts.verifiedEmail("acc_e"))

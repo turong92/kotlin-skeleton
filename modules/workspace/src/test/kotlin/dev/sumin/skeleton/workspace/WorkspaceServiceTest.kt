@@ -135,6 +135,8 @@ class WorkspaceServiceTest {
         assertEquals(id, service.bySlug("acc_o", "new-name").workspace.id)
         assertEquals(WorkspaceErrorCode.NOT_FOUND, code { service.bySlug("acc_p", oldSlug) }, "not a member -> the same 404")
         assertEquals(WorkspaceErrorCode.NOT_FOUND, code { service.bySlug("acc_o", "never-was") })
+        assertEquals(id, service.bySlug("acc_o", "  NEW-Name ").workspace.id, "case does not matter, so PostgreSQL and MySQL answer alike")
+        assertEquals(WorkspaceErrorCode.NOT_FOUND, code { service.bySlug("acc_o", "not a slug!") }, "a malformed address is a plain 404")
 
         assertEquals(oldSlug, service.update("acc_o", id, null, oldSlug).workspace.slug, "the same team may go back to its old slug")
         assertEquals(oldSlug, service.bySlug("acc_o", oldSlug).workspace.slug)

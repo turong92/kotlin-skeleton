@@ -10,4 +10,7 @@ class RepositoryAccountFacts(private val accounts: () -> AccountRepository) : Ac
 
     override fun verifiedEmail(accountId: String): String? =
         accounts().findById(accountId)?.takeIf { it.status != AccountStatus.ERASED && it.emailVerified }?.email
+
+    override fun accountIdByVerifiedEmail(email: String): String? =
+        accounts().findByEmail(email.trim().lowercase())?.takeIf { it.status != AccountStatus.ERASED && it.emailVerified }?.id
 }

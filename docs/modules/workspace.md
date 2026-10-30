@@ -47,7 +47,7 @@
 
 `skeleton.workspace.invitation.enabled=true` 로 켠다(**기본 꺼짐** — 켜려면 `AccountFacts` 빈과 메일 링크 주소가 있어야 한다). 켰는데 `AccountFacts`(`modules:account` 가 낸다)가 없으면 **기동이 실패**한다 — 수락이 호출자의 *확인된* 이메일을 초대 주소와 대조하는데 그 사실을 줄 곳이 없기 때문이다. 메시지가 빈 이름과 스위치를 적는다.
 
-- **초대하기** ADMIN 이상이 주소를 한 번에 20개까지. ADMIN 은 MEMBER 로만, OWNER 는 ADMIN 으로도. 주소는 소문자로 정리해 중복을 뺀다. 주소마다 결과가 셋 중 하나다 — `invited`(메일 나감), `alreadyInvited`(이미 대기 초대가 있다 — 재발송은 따로, 만료됐어도 대기 상태면 여기), `seatLimited`(좌석 = 멤버 + 살아 있는 초대 ≥ 상한). 대기 초대가 `max-pending`(100)을 넘게 되면 요청 전체가 `409 WORKSPACE.TOO_MANY_PENDING`.
+- **초대하기** ADMIN 이상이 주소를 한 번에 20개까지. ADMIN 은 MEMBER 로만, OWNER 는 ADMIN 으로도. 주소는 소문자로 정리해 중복을 뺀다. 주소마다 결과가 넷 중 하나다 — `invited`(메일 나감), `alreadyMember`(이미 멤버인 *확인된* 주소 — 좌석 · 초대 줄을 잡지 않는다. 주소→계정은 `AccountFacts.accountIdByVerifiedEmail`, `modules:account` 가 구현하고 없으면 이 거름이 꺼진다), `alreadyInvited`(이미 대기 초대가 있다 — 재발송은 따로, 만료됐어도 대기 상태면 여기), `seatLimited`(좌석 = 멤버 + 살아 있는 초대 ≥ 상한). 대기 초대가 `max-pending`(100)을 넘게 되면 요청 전체가 `409 WORKSPACE.TOO_MANY_PENDING`.
 - **재발송** 새 토큰(옛 링크는 **바로** 무효)과 만료 다시 7일. 같은 초대를 60초 안에 또 보내면 `429 WORKSPACE.RESEND_TOO_SOON`. **취소**는 초대를 닫아 같은 주소를 다시 초대할 수 있게 한다.
 - **미리보기**(로그인 불필요) `POST /api/v1/workspace-invitations/preview {token}` → `{workspaceName, inviterLabel, emailMasked, role, expiresAt}`. **수락**(로그인) `POST …/accept {token}` → `{id, name, slug, role}`. 토큰은 주소가 아니라 **본문**으로 받는다 — 접근 로그에 안 남게.
 - **토큰** 무작위 32바이트(base64url). 저장은 sha256 만이고 평문은 메일 본문에만 있다 — 응답 · 로그 · `toString` · DB 어디에도 없다. 만료는 상태가 아니라 `expires_at` 로 읽는다(정리 작업 없음).
@@ -57,8 +57,8 @@
 | 메서드 · 경로 | 하는 일 | 권한 |
 |---|---|---|
 | `GET /api/v1/workspaces/{id}/invitations` | 대기 목록(만료 포함) `[{id, email, role, expiresAt, expired, sentCount, invitedBy}]` | ADMIN 이상 |
-| `POST …/invitations {emails, role?}` | 초대 → `{invited, alreadyInvited, seatLimited}` (`role` 기본 `MEMBER`) | ADMIN 이상 |
-| `POST …/invitations/{invitationId}/resend` · `DELETE …/invitations/{invitationId}` | 재발송 · 취소 → 204 (없는 · 끝난 초대 `404 INVITATION_NOT_FOUND`) | ADMIN 이상 |
+| `POST …/invitations {emails, role?}` | 초대 → `{invited, alreadyInvited, seatLimited, alreadyMember}` (`role` 기본 `MEMBER`) | ADMIN 이상 |
+| `POST …/invitations/{invitationId}/resend` · `DELETE …/invitations/{invitationId}` | 재발송 · 취소 → 204 (ADMIN 초대는 소유자만, 아니면 403) (없는 · 끝난 초대 `404 INVITATION_NOT_FOUND`) | ADMIN 이상 |
 | `POST /api/v1/workspace-invitations/preview` · `/accept` `{token}` | 미리보기(**로그인 불필요**) · 수락 | 공개 · 로그인 |
 
 **메일**: 문구는 `WorkspaceInvitationMail`(제목 · 본문 ko/en 내장, 앱이 같은 타입 빈으로 교체), 보내는 길은 `WorkspaceMailTransport` — `notification-mail` 이 있으면 그 `MailSender` 로, 없으면 **로그에만** 남긴다(보내지 않는다). 언어는 초대하는 사람의 `Accept-Language`(ko · en, 아니면 `mail.default-locale`). 링크는 `<skeleton.workspace.mail.link-base-url>/invite?token=…`. 메일 모듈이 없을 때 링크(토큰)를 로그에 남기는지는 `mail.log-links`: `AUTO`(기본) = 보호 환경(`skeleton.env` stage · prod)이 아닐 때만, `ON`, `OFF`. 메일을 보낸 길이 실패해도 초대는 남는다(재발송이 있다) — 메일은 커밋 **뒤에** 보낸다.
