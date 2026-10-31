@@ -664,6 +664,32 @@ SKELETON_PAYMENT_NAVERPAY_ALLOWED_RETURN_ORIGINS=         # 선택, 쉼표로 �
 | 환불이 구독에 미치는 영향은 Paddle 문서에 없다 | 전액 환불한 구독이 Paddle 에서 계속 과금된다 - 그래서 우리가 환불로 끝낸 구독에 즉시 해지(`POST /subscriptions/{id}/cancel`)를 보낸다 | 구독 첫 결제를 전액 환불하고 구독 상태를 본다 |
 <!-- payment-paddle:end -->
 
+## 15. 푸시 알림 키 (웹 푸시 VAPID · 모바일 FCM)
+
+### 15.1 웹 푸시 VAPID 키 만들기 (`notification-webpush`)
+
+```bash
+npx web-push generate-vapid-keys
+```
+
+`Public Key` 는 비밀이 아니라 `skeleton.notification.webpush.public-key`(env `<P>_NOTIFICATION_WEBPUSH_VAPID_PUBLIC_KEY`), `Private Key` 는 **운영자 비밀**이라 `private-key`(env `<P>_NOTIFICATION_WEBPUSH_VAPID_PRIVATE_KEY`)에 환경변수로만 넣는다. `subject` 는 `mailto:` 또는 `https:` 연락처(Apple 은 없으면 거절). **한 번 만들어 고정한다** — 바꾸면 기존 브라우저 구독이 모두 다음 방문까지 끊긴다. 서버를 옮길 때는 이 키 쌍을 들고 간다. 견본의 시험용 쌍은 보호 환경에서 기동이 실패한다.
+
+### 15.2 Firebase 프로젝트와 서비스 계정 (`notification-fcm`)
+
+1. Firebase 콘솔에서 프로젝트를 만든다(이미 있으면 그것). 안드로이드 · iOS 앱은 앱 쪽 일이다(이 레포의 범위 밖).
+2. 콘솔 → 프로젝트 설정 → 서비스 계정 → 「새 비공개 키 생성」으로 JSON 을 받는다. 구글 클라우드 콘솔의 IAM 에서 이 서비스 계정의 역할을 **「Firebase Cloud Messaging API Admin」 하나만** 남긴다(다른 권한을 주지 않는다). 프로젝트의 「Firebase Cloud Messaging API (V1)」 가 켜져 있어야 한다(기본 켜짐).
+3. JSON 을 한 줄 base64 로 바꿔 `skeleton.notification.fcm.credentials`(env `<P>_NOTIFICATION_FCM_CREDENTIALS`, **운영자 비밀**)에 넣는다: `base64 < service-account.json | tr -d '\n'`. 원본 JSON 은 어디에도 커밋하지 않는다. 프로젝트 id 는 JSON 의 `project_id` 를 쓰므로 따로 적지 않는다.
+4. iOS 는 FCM 이 APNs 로 넘기므로 콘솔 → 프로젝트 설정 → 클라우드 메시징 → Apple 앱 구성에 **APNs 인증 키(.p8)** 를 올린다(Apple 개발자 계정의 Keys 에서 Apple Push Notifications service 를 켠 키). 이 키가 틀리면 보내기가 `THIRD_PARTY_AUTH_ERROR` 로 거절되는데, 기기 줄은 **지우지 않고** 실패로 남는다(죽은 작업 경보).
+
+### 15.3 진짜 발송 시험
+
+`FCM_TEST_CREDENTIALS`(위 base64)와 `FCM_TEST_TOKEN`(앱이 받은 기기 토큰)을 둘 다 주면 한 번 진짜로 보낸다. 없으면 건너뛴다.
+
+```bash
+FCM_TEST_CREDENTIALS=$(base64 < service-account.json | tr -d '\n') FCM_TEST_TOKEN=<기기 토큰> \
+  ./gradlew :modules:notification-fcm:test --tests '*FcmRealSendTest'
+```
+
 ## 게시판 사진의 CDN 캐시 비우기 (Cloudflare)
 
 공개된 글 · 댓글의 사진을 Cloudflare CDN 으로 내보내고 가린 뒤에도 캐시에 남지 않게 하려면 `skeleton.storage.web.public.purge.cloudflare` 를 켠다([storage.md](modules/storage.md)).

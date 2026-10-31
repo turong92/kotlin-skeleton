@@ -119,7 +119,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `migration` | 마이그레이션 공통 규칙 — DB 를 지우는 설정이 허용 프로필 밖에서 켜지면 시작을 막는 가드(도구 중립). | 스타터(apps/api)에 기본 포함 | 마이그레이션 가드, DB 초기화 방지, 스키마 보호 / migration guard, prevent db wipe, schema safety | — |
 | `migration-flyway` | Flyway 구현 — 로컬 clean 옵트인 · 마이그레이션 파일 이름 규칙(V<UTC 14자리>__snake_case.sql) 검사. | 스타터(apps/api)에 기본 포함 | Flyway, 마이그레이션, DB 스키마 버전, 스키마 변경 / flyway, database migration, schema migration, schema version | — |
 | `notification` | 알림 계약 · 수신자 해석 · 인메모리 브로커 + 로그인한 사람의 받은편지함 HTTP(/api/v1/notifications: 목록 · 안 읽은 수 · 읽음 · 모두 읽음). 클릭 이동 링크 · 같은 열쇠 묶기 · 종류별 수신 끄기(/preferences, 끌 수 있는 종류는 설정) · 보관 정리(기본 꺼짐) · 커밋 뒤 전달. | `--modules notification` | 알림, 알림 목록, 받은편지함, 안 읽은 알림, 알림 읽음, 알림 보내기, 알림 묶기, 알림 링크, 알림 끄기, 알림 수신 설정, 알림 보관 정리 / notification, inbox, unread, mark as read, publish notification, collapse notifications, notification link, notification retention | `@skeleton/notifications` |
-| `notification-fcm` | 모바일 푸시(FCM HTTP v1) 전달 수단 — 자리만 잡혀 있다(구현은 이어서). notification-push 의 PushSender 로 끼운다. | `--modules notification-fcm` | 모바일 푸시, FCM, 안드로이드 푸시 / mobile push, FCM, android push | — |
+| `notification-fcm` | 모바일 푸시(FCM HTTP v1) 전달 수단 — 안드로이드 · iOS 기기 토큰으로 푸시를 보낸다. 서비스 계정 -> 접근 토큰(JDK) · 판정 표 · 자격 기동 검사. notification-push 의 PushSender 로 끼운다. | `--modules notification-fcm` | 모바일 푸시, FCM, 안드로이드 푸시 / mobile push, FCM, android push | — |
 | `notification-jdbc` | 알림 받은편지함을 DB 테이블에 저장한다(notification_inbox). | `--modules notification-jdbc` | 알림 저장, 알림 DB, 알림 기록 유지 / notification storage, persist notifications, inbox database | `@skeleton/notifications` |
 | `notification-mail` | SMTP 로 메일을 보내는 MailSender (spring.mail.* 위에). | 스타터(apps/api)에 기본 포함 | 메일 발송, 이메일 보내기, SMTP, 메일 / send email, smtp, mail sender, email | — |
 | `notification-push` | 알림이 받는 사람의 기기로도 간다 — 기기 등록 · 종류 × 채널 푸시 끄기 · 잠금 화면 옵션 · 세션 연동. 저장은 notification-push-jdbc, 전달은 notification-webpush · notification-fcm. | `--modules notification-push,notification-push-jdbc` | 푸시 알림, 웹 푸시 기기 등록, 푸시 끄기, 종류별 푸시, 잠금 화면 내용 / push notification, device registration, per-type push mute, lock screen content | — |
@@ -934,16 +934,18 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 알림을 만드는 쪽(NotificationPublisher.publish)은 앱 코드가 부른다
 - 키워드: 알림, 알림 목록, 받은편지함, 안 읽은 알림, 알림 읽음, 알림 보내기, 알림 묶기, 알림 링크, 알림 끄기, 알림 수신 설정, 알림 보관 정리 / notification, inbox, unread, mark as read, publish notification, collapse notifications, notification link, notification retention
 
-### `notification-fcm` — 모바일 푸시(FCM HTTP v1) 전달 수단 — 자리만 잡혀 있다(구현은 이어서). notification-push 의 PushSender 로 끼운다.
+### `notification-fcm` — 모바일 푸시(FCM HTTP v1) 전달 수단 — 안드로이드 · iOS 기기 토큰으로 푸시를 보낸다. 서비스 계정 -> 접근 토큰(JDK) · 판정 표 · 자격 기동 검사. notification-push 의 PushSender 로 끼운다.
 
 - 종류 · 상태: module · experimental — 위치 `modules/notification-fcm`
 - 켜는 법: `--modules notification-fcm`
 - 의존 한 줄: `implementation(project(":modules:notification-fcm"))`
 - 자동으로 따라온다: `notification`, `notification-push`
+- 설정 접두사 `skeleton.notification.fcm` — 키와 기본값 `docs/config/modules/notification-fcm.yml`
 - 문서: `docs/modules/notification-fcm.md`
 - 쓰지 않는 경우:
-  - 구현이 들어오기 전에는 아무것도 하지 않는다
+  - 꺼짐이 기본이다 — skeleton.notification.fcm.enabled=true 와 Firebase 서비스 계정(credentials)을 앱이 정한다
   - notification-push 없이는 쓰지 않는다(따라온다)
+  - 브라우저 푸시는 notification-webpush
 - 키워드: 모바일 푸시, FCM, 안드로이드 푸시 / mobile push, FCM, android push
 
 ### `notification-jdbc` — 알림 받은편지함을 DB 테이블에 저장한다(notification_inbox).

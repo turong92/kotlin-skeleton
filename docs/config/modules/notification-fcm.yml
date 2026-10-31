@@ -1,0 +1,7 @@
+# notification-fcm — 모바일 푸시(FCM HTTP v1) 전달 수단. 기본 꺼짐. 접두사는 skeleton.notification.fcm. notification-push 의 PushSender(kind FCM)로 끼운다.
+skeleton:
+  notification:
+    fcm:
+      enabled: false               # true 면 FCM 센더가 선다 (notification-push 도 켜야 알림이 간다). 서비스 계정이 비었거나 못 읽으면 센더가 없고, 보호 환경(stage · prod)은 기동 실패
+      credentials: ""              # Firebase 서비스 계정 키(JSON)의 base64 - 운영자 비밀. 환경변수 <P>_NOTIFICATION_FCM_CREDENTIALS 로만(배포 선언의 secrets:), 파일에 쓰지 않는다. 프로젝트 id 는 이 JSON 의 project_id
+      timeout: 10s                 # 구글 서버 한 번 호출(토큰 발급 · 보내기)의 시간 제한
