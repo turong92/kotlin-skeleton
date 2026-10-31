@@ -63,6 +63,17 @@ class PushAdvertisingWorkerTest {
     }
 
     @Test
+    fun `a job whose type became advertising while it waited is sent with the advertising mark`() {
+        val device = devices.add("acc_a")
+        policy.overrides["acc_a"] = AdvertisingConsent(send = true, night = false)
+        val plain = PushJob(device.id, device.accountId, PushMessage("evt_1", "promo.tips", "새 기능", createdAt = noon, expiresAt = noon.plusSeconds(86_400)))
+
+        worker.process(plain)
+
+        assertEquals("(광고) 새 기능", sender.sent.single().second.title)
+    }
+
+    @Test
     fun `a job picked up early at night without the night consent is held again instead of sent`() {
         val device = devices.add("acc_a")
         policy.overrides["acc_a"] = AdvertisingConsent(send = true, night = false)

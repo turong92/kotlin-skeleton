@@ -106,6 +106,7 @@ class AdvertisingGateTest {
 
         assertEquals("(광고) 새 기능", branded.title)
         assertEquals("(광고) 새 기능", again.title)
+        assertEquals(branded.body, again.body)   // 처리기가 다시 붙여도 본문 끝 문구가 겹치지 않는다
         assertTrue(branded.body!!.endsWith("수신 거부: 설정 > 알림"))
         assertTrue(branded.body!!.toByteArray().size <= 3000)
         assertEquals("(광고) 이미 붙음", g.brand(message.copy(title = "(광고) 이미 붙음")).title)
@@ -121,6 +122,7 @@ class AdvertisingGateTest {
         assertTrue(gate(properties = props(advertising = PushProperties.Advertising(fallbackZone = "Asia/Seoul"))).problems().any { "sender-name" in it })
         assertTrue(gate(properties = props(advertising = PushProperties.Advertising(fallbackZone = "Mars/Base", senderName = "x"))).problems().any { "fallback-zone" in it })
         assertTrue(gate(properties = props(advertising = PushProperties.Advertising(fallbackZone = "Asia/Seoul", senderName = "x", nightStart = "9pm"))).problems().any { "night-start" in it })
+        assertTrue(gate(properties = props(advertising = PushProperties.Advertising(fallbackZone = "Asia/Seoul", senderName = "x", nightStart = "21:00", nightEnd = "21:00"))).problems().any { "night-start" in it && "night-end" in it })
         assertTrue(gate(properties = props(ttl = Duration.ofHours(11))).problems().any { "ttl" in it })
         assertTrue(gate(properties = props(advertising = PushProperties.Advertising(fallbackZone = "Asia/Seoul", senderName = "x", nightConsentType = "marketing"))).problems().any { "consent" in it })
         assertTrue(gate(properties = props(adTypes = listOf("advertising.consent.changed"))).problems().any { "advertising.consent" in it })

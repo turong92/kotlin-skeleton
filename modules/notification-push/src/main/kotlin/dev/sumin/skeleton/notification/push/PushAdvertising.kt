@@ -80,6 +80,7 @@ class AdvertisingGate(
             if (advertising.senderName.isNullOrBlank()) add("advertising.sender-name is required when advertising-types is set (the notices name the sender)")
             if (nightStart == null) add("advertising.night-start '${advertising.nightStart}' is not a HH:mm time")
             if (nightEnd == null) add("advertising.night-end '${advertising.nightEnd}' is not a HH:mm time")
+            if (nightStart != null && nightStart == nightEnd) add("advertising.night-start and advertising.night-end must differ (equal times would switch the night rule off)")
             if (advertising.titlePrefix.isBlank()) add("advertising.title-prefix must not be blank (the advertising mark is mandatory)")
             if (properties.ttl < MIN_TTL) add("ttl must be at least 12 hours when advertising-types is set (a night hold can last 11 hours and must not expire the advertisement)")
             if (advertising.consentType == advertising.nightConsentType) add("advertising.consent-type and advertising.night-consent-type must be different documents")
@@ -113,7 +114,7 @@ class AdvertisingGate(
         val prefix = advertising.titlePrefix.trim()
         val title = if (prefix.isEmpty() || message.title.trimStart().startsWith(prefix)) message.title else "$prefix ${message.title}"
         val suffix = advertising.bodySuffix
-        if (suffix.isEmpty()) return message.copy(title = title)
+        if (suffix.isEmpty() || message.body?.endsWith(suffix) == true) return message.copy(title = title)   // 이미 붙었으면 그대로 - 멱등
         val room = (PushText.MAX_BODY_BYTES - suffix.toByteArray(Charsets.UTF_8).size - 1).coerceAtLeast(0)   // -1: 줄바꿈
         val body = message.body?.let { PushText.truncateUtf8(it, room) }.orEmpty()
         val glue = if (body.isEmpty() || body.endsWith("\n")) "" else "\n"

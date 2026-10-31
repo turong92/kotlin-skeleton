@@ -27,10 +27,11 @@ class PushDeliveryWorker(
         val expiresAt = job.message.expiresAt
         if (expiresAt != null && !now.isBefore(expiresAt)) return
         if (mutes.mutedAmong(job.message.type, setOf(job.recipientId)).isNotEmpty()) return
+        var message = job.message
         if (job.advertising || gate.isAdvertising(job.message.type)) {
             when (val decision = gate.decide(job.recipientId)) {
                 AdvertisingDecision.Skip -> return
-                AdvertisingDecision.SendNow -> Unit
+                AdvertisingDecision.SendNow -> message = gate.brand(message)   // 대기 중 광고로 바뀐 종류도 「(광고)」 표기를 달고 나간다(이미 있으면 그대로)
                 is AdvertisingDecision.Hold -> {
                     tasks?.enqueue(job.copy(advertising = true), decision.runAt)
                     return
@@ -42,7 +43,7 @@ class PushDeliveryWorker(
             log.warn("push job dropped: no sender for kind={} device={}", device.kind, device.id)
             return
         }
-        when (val result = sender.send(device, job.message)) {
+        when (val result = sender.send(device, message)) {
             PushResult.Delivered -> devices.markSuccess(device.id, now)
             PushResult.Gone -> devices.delete(device.id)
             is PushResult.Retry -> throw PushRetryException(result.after)
