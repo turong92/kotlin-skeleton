@@ -37,7 +37,8 @@ class ConsentFixture(
     )
     val rules = LegalRules(required, requiredAtSignUp, "ko", grace, emptyMap())
     val catalog = LegalCatalog(manifest, { t, ver, l -> sources["$t/$ver.$l"] }, rules)
-    val service = ConsentService(catalog, rules, store, clock, options)
+    val listeners = mutableListOf<ConsentChangeListener>()
+    val service = ConsentService(catalog, rules, store, clock, options, listeners = { listeners.toList() })
 
     fun hash(type: String, version: String, locale: String = "ko") = LegalText.sha256(sources["$type/$version.$locale"]!!)
 }

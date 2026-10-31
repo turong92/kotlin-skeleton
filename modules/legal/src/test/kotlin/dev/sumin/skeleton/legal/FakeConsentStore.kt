@@ -25,6 +25,13 @@ class FakeConsentStore : ConsentStore {
     }
 
     @Synchronized
+    override fun latestAgreementsBefore(type: String, before: Instant, afterSubjectId: String?, limit: Int): List<ConsentEvent> =
+        rows.filter { it.type == type && it.subject.type == Subject.ACCOUNT && it.referenceId == null && !it.subject.id.startsWith("deleted:") }
+            .groupBy { it.subject.id }.mapNotNull { (_, v) -> v.maxBy { it.seq } }
+            .filter { it.action == ConsentAction.AGREED && it.at.isBefore(before) && (afterSubjectId == null || it.subject.id > afterSubjectId) }
+            .sortedBy { it.subject.id }.take(limit)
+
+    @Synchronized
     override fun history(subject: Subject, page: Int, size: Int): ConsentPage {
         val all = rows.filter { it.subject == subject }.sortedByDescending { it.id }
         return ConsentPage(all.drop(page * size).take(size), all.size.toLong())

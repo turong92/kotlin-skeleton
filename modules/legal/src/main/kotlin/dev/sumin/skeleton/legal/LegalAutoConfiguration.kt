@@ -68,9 +68,11 @@ class LegalAutoConfiguration {
         properties: LegalProperties,
         retention: ConsentRetention,
         time: ObjectProvider<TimeProvider>,
+        listeners: ObjectProvider<ConsentChangeListener>,
     ): ConsentService = ConsentService(
         catalog, rules, store, time.getIfAvailable { TimeProvider.systemUtc() },
         ConsentOptions(properties.record.storeIp, properties.record.storeUserAgent, properties.record.maxEventsPerDay), retention,
+        { listeners.orderedStream().toList() },
     )
 
     @Bean

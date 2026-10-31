@@ -18,6 +18,8 @@ class ConsentService(
     private val time: TimeProvider,
     private val options: ConsentOptions = ConsentOptions(),
     private val retention: ConsentRetention? = null,
+    /** 사건이 저장된 뒤 불리는 리스너들([ConsentChangeListener]) - 호출 때마다 읽는다 */
+    private val listeners: () -> List<ConsentChangeListener> = { emptyList() },
 ) {
     /** 모든 종류의 상태 — 시행된 판이 있는 종류만. `missing` 은 **필수** 종류만 */
     fun status(subject: Subject, referenceId: String? = null): ConsentStatus {
@@ -72,7 +74,10 @@ class ConsentService(
                 subject, type, latest.version, latest.sha256, latest.locale, ConsentAction.WITHDRAWN, "withdraw", null, latest.seq + 1,
                 ip(context), userAgent(context), time.now(),
             )
-            if (store.append(event)) return status(subject)
+            if (store.append(event)) {
+                notifyChange(event)
+                return status(subject)
+            }
         }
         error("could not record the withdrawal of $type after $MAX_ROUNDS rounds")
     }
@@ -81,13 +86,18 @@ class ConsentService(
         val shown = catalog.render(document, claim.locale ?: rules.defaultLocale)
         repeat(MAX_ROUNDS) {
             val latest = store.latest(subject, listOf(claim.type), referenceId)[claim.type]
-            if (latest != null && latest.action == ConsentAction.AGREED && latest.version == document.version) return
+            // 재확인은 이미 그 판에 동의한 상태에서도 사건을 더한다(2년이 새로 시작된다) - 단 첫 판에서만: 동시에 온 같은 재확인에 진 쪽은 이긴 쪽의 사건으로 충분하다
+            val reconfirm = source == RECONFIRM_SOURCE && it == 0
+            if (!reconfirm && latest != null && latest.action == ConsentAction.AGREED && latest.version == document.version) return
             if (rateGuard) guardRate(subject)
             val event = NewConsentEvent(
                 subject, claim.type, document.version, shown.sha256, shown.locale, ConsentAction.AGREED, source, referenceId, (latest?.seq ?: 0) + 1,
                 ip(context), userAgent(context), time.now(),
             )
-            if (store.append(event)) return
+            if (store.append(event)) {
+                notifyChange(event)
+                return
+            }
         }
         error("could not record the consent to ${claim.type} after $MAX_ROUNDS rounds")
     }
@@ -95,6 +105,14 @@ class ConsentService(
     /** 보관 기간이 지난 IP · UA 정리 — 기록하는 김에 간격마다 한 번. 실패해도 기록은 이미 끝났다 */
     private fun sweep() {
         runCatching { retention?.runIfDue() }
+    }
+
+    /** 저장된 사건을 리스너에게 알린다 - 던지는 리스너는 삼킨다(증거는 이미 저장됐다) */
+    private fun notifyChange(event: NewConsentEvent) {
+        val stored = ConsentEvent(
+            0, event.subject, event.type, event.version, event.sha256, event.locale, event.action, event.source, event.referenceId, event.seq, event.ip, event.userAgent, event.at,
+        )
+        listeners().forEach { listener -> runCatching { listener.onChange(stored) } }
     }
 
     private fun items(subject: Subject, types: Collection<String>, referenceId: String?): List<TypeStatus> {

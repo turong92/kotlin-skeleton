@@ -15,7 +15,7 @@
 | 유예 (grace) | 새 판이 시행된 뒤 `previous-version-grace` 동안 **바로 앞 판**의 동의도 받아 준다. 모듈 기본 0 |
 | 주체 (subject) | `subjectType` + `subjectId`. 기본은 `account` + 계정 id. 조직 · 기기 같은 다른 주체도 같은 서비스를 쓴다 |
 | 참조 (referenceId) | 선택. 주문 같은 것에 묶인 동의(`checkout`)를 일반 동의와 따로 센다. 서비스 API 로만 쓴다 — HTTP 는 받지 않는다 (남용 방지) |
-| 동의 사건 | `AGREED` / `WITHDRAWN` 한 줄. **더하기만 한다**. 종류 · 판 · 원문 해시 · 본 언어 · 시각 · 출처(`sign-up` · `consent` · `re-consent` · `checkout` · `withdraw`) · (설정하면) IP · UA |
+| 동의 사건 | `AGREED` / `WITHDRAWN` 한 줄. **더하기만 한다**. 종류 · 판 · 원문 해시 · 본 언어 · 시각 · 출처(`sign-up` · `consent` · `re-consent` · `reconfirm` · `checkout` · `withdraw`) · (설정하면) IP · UA |
 
 ### 문서는 앱이 싣는다
 
@@ -67,6 +67,7 @@ src/main/resources/legal/
 
 - 선택 종류(`required` 에 없는 것)는 `POST /consents/{type}/withdraw` 로 거둔다 — 철회는 **자기 사건**이고 동의 줄은 그대로다. 필수 종류의 철회는 거절(`409`) — 나가는 길은 계정 삭제.
 - 사용자 이력 `GET /consents/me/history`(IP 없음), 운영자 `GET /admin/consents`(필터).
+- **재확인과 변경 통지의 기계장치**(광고 수신 동의처럼 유효 기간이 있는 선택 동의를 쓰는 모듈 - 예: [notification-push-legal](modules/notification-push-legal.md) - 을 위한 세 가지, 쓰는 곳이 없으면 닿지 않는다): ① `source: "reconfirm"` 인 동의는 **이미 현재 판에 동의한 상태에서도** `AGREED` 사건을 더한다(기존 「같은 판이면 아무것도 안 함」 멱등의 단 하나의 예외 - 일일 한도 · 판 검사는 그대로, 동시에 온 같은 재확인에 진 쪽은 이긴 쪽의 사건으로 충분하다) - 새 경로는 없고 `POST /consents` 에 `source` 만 싣는다. ② `ConsentChangeListener`(`fun interface`) 빈이 있으면 사건이 **저장된 뒤** 불린다 - 동의 · 철회 · 재확인이 어느 경로(HTTP · 가입 · 앱 코드)로 와도 같고, 던지면 삼킨다(증거는 이미 저장됐다). ③ `ConsentStore.latestAgreementsBefore(type, before, afterSubjectId, limit)` - 가장 최근 사건이 `AGREED` 이고 `before` 보다 오래된 **계정** 주체를 주체 id 순으로 한 쪽씩(참조가 붙은 동의 · 익명화된 주체는 제외).
 - 데이터 내보내기: `AccountDataExporter`(구역 `legal`) — 앱이 모아 쓴다.
 - **계정 삭제**(`AccountErasureListener`): 기본 `ANONYMIZE` — 줄은 남기고 사람을 지운다(주체 id → `deleted:<해시>`, IP · UA 비움). 종류 · 판 · 해시 · 시각 · 출처가 남아 "그 시점에 이 판에 동의한 누군가가 있었다" 는 증거가 되지만 누구인지는 알 수 없다. `DELETE` 로 바꾸면 익명화한 뒤 줄까지 지운다. DB 트리거: 지우기는 익명화된 줄에만, 고치기는 익명화 · IP/UA 비우기에만 허락한다 — 그 밖의 `UPDATE`/`DELETE` 는 DB 가 거절한다.
 - IP · UA 보관: `record.store-ip` / `store-user-agent`(끄면 아예 안 남긴다), `record.personal-data-retention`(기본 365일)이 지나면 비운다(줄은 남는다) — 기록할 때 간격마다 한 번 돈다(스케줄러 불필요).

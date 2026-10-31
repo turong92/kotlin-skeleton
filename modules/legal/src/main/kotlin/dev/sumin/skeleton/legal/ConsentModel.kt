@@ -59,6 +59,14 @@ interface ConsentStore {
     /** 같은 (주체, 종류, 참조, 순번)이 이미 있으면 false — 동시에 온 다른 요청이 먼저 넣은 것 */
     fun append(event: NewConsentEvent): Boolean
 
+    /**
+     * 종류 [type] 의 **가장 최근 사건이 `AGREED` 이고 `at < before`** 인 계정 주체의 그 사건을 주체 id 순으로 한 쪽 - [afterSubjectId] 보다 큰 id 부터 [limit] 개.
+     * 참조가 붙은 동의 · 계정이 아닌 주체 · 익명화된 주체는 내지 않는다. 재확인 스캔처럼 「동의한 지 오래된 사람」을 찾는 용도.
+     * 기본 구현은 던진다 - 이 포트를 직접 구현한 앱(JPA · jOOQ)이 컴파일은 그대로 되고, 재확인 스캔을 쓸 때만 이 메서드를 구현하라는 오류를 본다.
+     */
+    fun latestAgreementsBefore(type: String, before: Instant, afterSubjectId: String?, limit: Int): List<ConsentEvent> =
+        throw UnsupportedOperationException("this ConsentStore does not implement latestAgreementsBefore - implement it to use the reconfirmation scan")
+
     fun history(subject: Subject, page: Int, size: Int): ConsentPage
 
     fun search(search: ConsentSearch, page: Int, size: Int): ConsentPage

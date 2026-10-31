@@ -47,6 +47,17 @@ class JdbcConsentStore(private val jdbc: JdbcClient, private val dialect: SqlDia
         false
     }
 
+    override fun latestAgreementsBefore(type: String, before: Instant, afterSubjectId: String?, limit: Int): List<ConsentEvent> =
+        jdbc.sql(
+            """select c.* from legal_consents c
+               join (select subject_id, max(seq) as m from legal_consents
+                     where subject_type = 'account' and document_type = :dt and reference_id = '' and subject_id not like 'deleted:%'
+                       and subject_id > :after
+                     group by subject_id) x on c.subject_id = x.subject_id and c.seq = x.m
+               where c.subject_type = 'account' and c.document_type = :dt and c.reference_id = '' and c.action = 'AGREED' and c.created_at < :before
+               order by c.subject_id limit :limit""",
+        ).param("dt", type).param("after", afterSubjectId.orEmpty()).param("before", dialect.instantParam(before)).param("limit", limit).query(::map).list()
+
     override fun history(subject: Subject, page: Int, size: Int): ConsentPage =
         search(ConsentSearch(subject.type, subject.id), page, size)
 

@@ -290,4 +290,39 @@ class JdbcLegalDbTest {
         assertEquals(listOf(null, "203.0.113.9"), rows.map { it.ip })
         assertEquals(2, rows.size)
     }
+
+    @Test
+    fun `latestAgreementsBefore returns only subjects whose latest event is an agreement older than the cut-off, in subject order, page by page`() {
+        val cut = t0
+        val old = t0.minus(Duration.ofDays(10))
+        store.append(event(1, type = "marketing", subject = Subject.account("acc_a"), at = old))                                              // 동의, 오래됨 -> 나온다
+        store.append(event(1, type = "marketing", subject = Subject.account("acc_b"), at = old))
+        store.append(event(2, type = "marketing", subject = Subject.account("acc_b"), action = ConsentAction.WITHDRAWN, at = old))            // 최신이 철회 -> 안 나온다
+        store.append(event(1, type = "marketing", subject = Subject.account("acc_c"), at = old))
+        store.append(event(2, type = "marketing", subject = Subject.account("acc_c"), at = t0.plusSeconds(1)))                                 // 최신 동의가 컷 이후(재확인) -> 안 나온다
+        store.append(event(1, type = "marketing", subject = Subject.account("acc_d"), at = old))
+        store.append(event(1, type = "terms", subject = Subject.account("acc_e"), at = old))                                                   // 다른 종류
+        store.append(event(1, type = "marketing", subject = Subject("device", "dev_1"), at = old))                                             // 계정 아닌 주체
+        store.append(event(1, type = "marketing", subject = Subject.account("acc_f"), reference = "order-1", at = old))                        // 참조가 붙은 동의
+        store.append(event(1, type = "marketing", subject = Subject.account("acc_g"), at = old))
+        store.anonymize(Subject.account("acc_g"), "deleted:g")                                                                                 // 지워진 주체
+
+        val first = store.latestAgreementsBefore("marketing", cut, null, 1)
+        val second = store.latestAgreementsBefore("marketing", cut, first.last().subject.id, 10)
+
+        assertEquals(listOf("acc_a"), first.map { it.subject.id })
+        assertEquals(listOf("acc_d"), second.map { it.subject.id })
+        assertEquals(ConsentAction.AGREED, first.single().action)
+        assertEquals(old, first.single().at)
+    }
+
+    @Test
+    fun `latestAgreementsBefore sees the reconfirm event as the latest one`() {
+        val old = t0.minus(Duration.ofDays(800))
+        store.append(event(1, type = "marketing", subject = Subject.account("acc_a"), at = old))
+        store.append(event(2, type = "marketing", subject = Subject.account("acc_a"), at = t0.minus(Duration.ofDays(1))))
+
+        assertEquals(emptyList(), store.latestAgreementsBefore("marketing", t0.minus(Duration.ofDays(30)), null, 10).map { it.subject.id })
+        assertEquals(listOf("acc_a"), store.latestAgreementsBefore("marketing", t0, null, 10).map { it.subject.id })
+    }
 }

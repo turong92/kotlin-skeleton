@@ -262,4 +262,85 @@ class ConsentServiceTest {
         assertEquals(emptyList(), f.service.status(me).items)
         assertEquals(emptyList(), f.service.status(me).missing)
     }
+
+    @Test
+    fun `a reconfirm adds an agreement event even for the version already agreed to, an ordinary agreement does not`() {
+        val f = ConsentFixture()
+        f.service.record(me, listOf(claim("marketing", "v1")), ctx, "consent")
+        f.service.record(me, listOf(claim("marketing", "v1")), ctx, "consent")
+        assertEquals(1, f.store.rows.size)
+
+        f.clock.now = f.clock.now.plus(Duration.ofDays(700))
+        f.service.record(me, listOf(claim("marketing", "v1")), ctx, "reconfirm")
+
+        assertEquals(listOf(1, 2), f.store.rows.map { it.seq })
+        assertEquals(listOf("consent", "reconfirm"), f.store.rows.map { it.source })
+        assertEquals(f.clock.now, f.store.rows.last().at)
+        assertEquals(ConsentAction.AGREED, f.store.rows.last().action)
+    }
+
+    @Test
+    fun `a reconfirm still refuses a stale version and counts against the daily limit`() {
+        val f = ConsentFixture(options = ConsentOptions(maxEventsPerDay = 1))
+        f.service.record(me, listOf(claim("marketing", "v1")), ctx, "consent")
+
+        assertEquals(LegalErrorCode.RATE_LIMITED, assertFailsWith<LegalException> { f.service.record(me, listOf(claim("marketing", "v1")), ctx, "reconfirm") }.errorCode)
+        assertEquals(LegalErrorCode.VERSION_STALE, assertFailsWith<LegalException> { f.service.record(me, listOf(claim("terms", "v1")), ctx, "reconfirm") }.errorCode)
+        assertEquals(1, f.store.rows.size)
+    }
+
+    @Test
+    fun `identical concurrent reconfirms leave at most one extra event per lost race`() {
+        val f = ConsentFixture()
+        f.service.record(me, listOf(claim("marketing", "v1")), ctx, "consent")
+        val pool = Executors.newFixedThreadPool(8)
+        val start = CountDownLatch(1)
+        val jobs = (1..8).map { pool.submit { start.await(); f.service.record(me, listOf(claim("marketing", "v1")), ctx, "reconfirm") } }
+        start.countDown()
+        jobs.forEach { it.get(10, TimeUnit.SECONDS) }
+        pool.shutdown()
+
+        assertEquals(f.store.rows.size, f.store.rows.map { it.seq }.distinct().size)   // 순번은 이어지고 겹치지 않는다
+        assertTrue(f.store.rows.size in 2..9)
+    }
+
+    @Test
+    fun `a change listener hears every stored event once - agreement, reconfirm, withdrawal`() {
+        val f = ConsentFixture()
+        val heard = mutableListOf<ConsentEvent>()
+        f.listeners += ConsentChangeListener { heard += it }
+
+        f.service.record(me, listOf(claim("marketing", "v1")), ctx, "consent")
+        f.service.record(me, listOf(claim("marketing", "v1")), ctx, "consent")   // 아무 일 없음 - 통지도 없다
+        f.service.record(me, listOf(claim("marketing", "v1")), ctx, "reconfirm")
+        f.service.withdraw(me, "marketing", ctx)
+
+        assertEquals(listOf(ConsentAction.AGREED to "consent", ConsentAction.AGREED to "reconfirm", ConsentAction.WITHDRAWN to "withdraw"), heard.map { it.action to it.source })
+        assertEquals(setOf(me), heard.map { it.subject }.toSet())
+    }
+
+    @Test
+    fun `a sign-up consent is heard by the listener too`() {
+        val f = ConsentFixture()
+        val heard = mutableListOf<ConsentEvent>()
+        f.listeners += ConsentChangeListener { heard += it }
+
+        f.service.recordSignUp(me, listOf(claim("marketing", "v1")), ctx)
+
+        assertEquals(listOf("sign-up"), heard.map { it.source })
+    }
+
+    @Test
+    fun `a listener that throws neither loses the record nor stops the next listener`() {
+        val f = ConsentFixture()
+        val heard = mutableListOf<ConsentEvent>()
+        f.listeners += ConsentChangeListener { error("notification down") }
+        f.listeners += ConsentChangeListener { heard += it }
+
+        val status = f.service.record(me, listOf(claim("marketing", "v1")), ctx, "consent")
+
+        assertEquals(1, f.store.rows.size)
+        assertEquals(ConsentState.CURRENT, status.items.single { it.type == "marketing" }.state)
+        assertEquals(1, heard.size)
+    }
 }
