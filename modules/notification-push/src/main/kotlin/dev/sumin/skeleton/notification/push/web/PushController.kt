@@ -66,7 +66,12 @@ data class PushDeviceRequest(
     val platform: String? = null,
     val label: String? = null,
 ) {
-    data class Keys(val p256dh: String? = null, val auth: String? = null)
+    /** 끝점 · 구독 열쇠 · 기기 토큰은 비밀이다 - 자동 toString 을 쓰지 않는다 */
+    override fun toString(): String = "PushDeviceRequest(kind=$kind, platform=$platform)"
+
+    data class Keys(val p256dh: String? = null, val auth: String? = null) {
+        override fun toString(): String = "Keys(***)"
+    }
 }
 
 data class PushPreferenceResponse(val type: String, val push: Boolean, val allChannelsMuted: Boolean)

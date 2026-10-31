@@ -16,5 +16,10 @@ class PushSecretsTest {
         for (text in listOf(device.toString(), registration.toString(), PushDeviceRegistration("acc_a", "inst", null, registration, null, Instant.EPOCH, 20).toString())) {
             assertFalse("SECRET" in text, text)
         }
+        val request = dev.sumin.skeleton.notification.push.web.PushDeviceRequest(
+            PushKinds.WEBPUSH, "https://push.example.com/send/SECRET-ENDPOINT",
+            dev.sumin.skeleton.notification.push.web.PushDeviceRequest.Keys("SECRET-P256DH", "SECRET-AUTH"), "SECRET-TOKEN", PushPlatforms.WEB, "label",
+        )
+        assertFalse("SECRET" in request.toString(), request.toString())
     }
 }
