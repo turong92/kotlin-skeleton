@@ -1,0 +1,3 @@
+dev.sumin.skeleton.notification.push.PushAutoConfiguration
+dev.sumin.skeleton.notification.push.PushSessionAutoConfiguration
+dev.sumin.skeleton.notification.push.web.PushWebAutoConfiguration
