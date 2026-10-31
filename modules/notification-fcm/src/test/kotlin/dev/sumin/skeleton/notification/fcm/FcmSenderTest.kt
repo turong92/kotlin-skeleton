@@ -103,10 +103,9 @@ class FcmSenderTest {
     // ---- 판정 표
 
     @Test
-    fun `UNREGISTERED and SENDER_ID_MISMATCH and an INVALID_ARGUMENT that points at the token delete the device`() {
+    fun `UNREGISTERED and an INVALID_ARGUMENT that points at the token delete the device`() {
         listOf(
             404 to fcmError(404, "NOT_FOUND", errorCode = "UNREGISTERED"),
-            403 to fcmError(403, "PERMISSION_DENIED", errorCode = "SENDER_ID_MISMATCH"),
             400 to fcmError(400, "INVALID_ARGUMENT", errorCode = "INVALID_ARGUMENT", violationField = "message.token"),
         ).forEach { (status, body) ->
             google.sendStatus = status
@@ -134,6 +133,7 @@ class FcmSenderTest {
             400 to fcmError(400, "FAILED_PRECONDITION", errorCode = "THIRD_PARTY_AUTH_ERROR"),
             401 to fcmError(401, "UNAUTHENTICATED"),
             403 to fcmError(403, "PERMISSION_DENIED"),
+            403 to fcmError(403, "PERMISSION_DENIED", errorCode = "SENDER_ID_MISMATCH"),   // 다른 프로젝트의 서비스 계정을 넣은 설정 실수 - 모든 토큰이 이 답을 받는다
             404 to fcmError(404, "NOT_FOUND"),   // 프로젝트가 틀려도 404 — UNREGISTERED 가 아니면 줄을 지우지 않는다
         ).forEach { (status, body) ->
             google.sendStatus = status

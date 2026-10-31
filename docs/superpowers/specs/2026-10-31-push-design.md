@@ -13,7 +13,7 @@
 | 웹 푸시 규격 | RFC 8030(전달) · 8291(본문 암호화 `aes128gcm`) · 8292(VAPID, ES256 JWT). 모든 브라우저가 이 하나로 된다(Chrome → `fcm.googleapis.com`, Firefox → Mozilla, Safari 16+ → `web.push.apple.com`, Edge → WNS) | 표준 VAPID 하나. 웹에 Firebase JS SDK 는 쓰지 않는다 |
 | VAPID 키 | `web-push generate-vapid-keys` 로 한 번 만들고 고정. 바꾸면 기존 구독이 모두 못 쓰게 된다(구독이 공개 키에 묶인다). `sub`(mailto: · https:) 필수 — Apple 은 없으면 거절 | 공개 키 = 설정(비밀 아님), 개인 키 = **운영자 비밀**, `subject` 필수. 기동 때 두 키가 한 쌍인지 확인. 견본 로컬은 시험용 고정 쌍, 보호 환경에서 그 키면 `DeployGuard` 가 막는다 |
 | 키 교체 | 클라이언트가 시작할 때 구독의 `applicationServerKey` 와 서버 공개 키를 비교해 다르면 다시 구독 | 기기 줄에 `vapid_key_id`(공개 키 해시 앞 16자). 다른 키의 줄에는 보내지 않고, 화면이 다음 방문에 다시 구독 |
-| 죽은 구독 정리 | 웹 푸시 `404` · `410` → 지운다. FCM `UNREGISTERED`(404) · 토큰을 가리킨 `INVALID_ARGUMENT`(400) · `SENDER_ID_MISMATCH`(403) → 지운다. `429` · `5xx` → 백오프 재시도(`Retry-After`) | 그대로. **`401` · `403`(웹 푸시)은 지우지 않는다** — 우리 VAPID 설정이 틀린 것일 수 있어 지우면 전부 사라진다(영구 실패로 기록 → 죽은 작업 경보) |
+| 죽은 구독 정리 | 웹 푸시 `404` · `410` → 지운다. FCM `UNREGISTERED`(404) · 토큰을 가리킨 `INVALID_ARGUMENT`(400) → 지운다(`SENDER_ID_MISMATCH`(403)는 지우지 않는다 — 다른 프로젝트의 서비스 계정을 잘못 넣으면 모든 토큰이 받는다). `429` · `5xx` → 백오프 재시도(`Retry-After`) | 그대로. **`401` · `403`(웹 푸시)은 지우지 않는다** — 우리 VAPID 설정이 틀린 것일 수 있어 지우면 전부 사라진다(영구 실패로 기록 → 죽은 작업 경보) |
 | 토큰 갱신 · 오래된 기기 | Firebase: 토큰을 올릴 때마다 시각을 적고, 앱을 열 때마다 다시 올린다. 한 달쯤 안 보인 토큰은 오래된 것(기준은 서비스가), 안드로이드는 270일 비활성에 FCM 이 만료 | 앱 · 화면이 열릴 때마다 `PUT` 으로 `last_seen_at` 갱신. 오래된 기기 정리 작업은 **기본 꺼짐**(보관 정책 = 앱), 켜면 기본 60일 |
 | 한 기기 = 한 줄 | Firebase 는 설치 id(FID)를 토큰과 함께 저장하길 권한다 — 토큰이 바뀌어도 같은 설치 | 클라이언트가 만든 무작위 `installationId` 가 기본 열쇠. 같은 주소(endpoint · token)를 다른 설치 · 계정이 등록하면 옛 줄을 지운다(주소는 한 줄에만) |
 | 권한 요청 UX | Chrome 은 거절이 많은 사이트에 조용한 요청 UI, Firefox 72+ · Safari 는 사용자 동작 없이 묻지 못한다. 관행은 「먼저 앱 안에서 묻고(soft ask) 수락하면 브라우저 창」, 들어오자마자 묻지 않는다 | 의미 있는 동작 뒤 앱 안 띠 → 「알림 받기」 클릭 안에서만 `requestPermission`. 「나중에」는 14일 쉼. 거절(`denied`)이면 다시 묻지 않고 브라우저 설정 안내 |
@@ -109,7 +109,7 @@ platform ◀── 다섯 모두 (ExternalHttpClient · DeployGuard · AccountEr
 | 전달 수단 | Delivered | Gone(지움) | Retry | Failed(남김) |
 |---|---|---|---|---|
 | 웹 푸시 | 201 | 404 · 410 | 429 · 5xx · 시간 초과 | 400 · 401 · 403 · 413 · 그 밖 |
-| FCM | 200 | `UNREGISTERED` · `SENDER_ID_MISMATCH` · `INVALID_ARGUMENT` 중 `fieldViolations` 가 `message.token` 인 것 | `QUOTA_EXCEEDED` · `UNAVAILABLE` · `INTERNAL` · 시간 초과 | 그 밖(`THIRD_PARTY_AUTH_ERROR` — APNs 키 문제 등) |
+| FCM | 200 | `UNREGISTERED` · `INVALID_ARGUMENT` 중 `fieldViolations` 가 `message.token` 인 것 | `QUOTA_EXCEEDED` · `UNAVAILABLE` · `INTERNAL` · 시간 초과 | 그 밖(`SENDER_ID_MISMATCH` — 다른 프로젝트 서비스 계정 설정 실수일 수 있어 지우지 않는다 · `THIRD_PARTY_AUTH_ERROR` — APNs 키 문제 등) |
 
 5. 웹 푸시 머리: `TTL`(남은 초) · `Urgency`(`ERROR` · `WARNING` 이면 `high`, 아니면 `normal`) · `Topic`(묶기 열쇠의 sha256 → base64url 32자 — 안 받은 같은 열쇠 푸시를 대신한다). 본문 JSON `{v:1, id, type, title, body, link, tag}`.
    FCM: `notification{title, body}` + `data{eventId, type, link}` + `android{collapse_key, ttl, notification.tag}` + `apns{headers{apns-collapse-id(≤64바이트 해시), apns-expiration}}`.
@@ -189,6 +189,7 @@ platform ◀── 다섯 모두 (ExternalHttpClient · DeployGuard · AccountEr
 16. (결정 3) 광고 규칙은 코어, 동의 읽기는 어댑터 `notification-push-legal`. 동의 · 철회는 `legal` 의 기존 경로로 받아 증거를 한 곳에 둔다.
 17. (결정 3) 만료된 동의는 없는 것으로 본다. 새 판이 시행돼 유예가 끝난 `OUTDATED` 도 없는 것으로 본다(안전 쪽 — 문서에 「동의 범위가 바뀔 때만 새 판」 이라고 적는다). 동의 조회가 실패하면 보내지 않는다.
 18. (결정 3) 시간대는 앱이 정한 출처(`PushRecipientZones`) → 서버 설정 `fallback-zone`; 시스템 기본 시간대는 쓰지 않는다. 야간 21~08시와 2년은 법정 값이라 모듈 기본으로 둔다.
+19. FCM 의 `SENDER_ID_MISMATCH` 는 지우지 않는다(실패로 남긴다) - 반목표 「설정 실수로 대량 삭제」 가 우선이다. 다른 프로젝트의 서비스 계정을 넣으면 모든 토큰이 이 답을 받는다. 정말 다른 프로젝트 토큰이면 오래된 기기 정리가 치운다.
 
 ## 10. 작업 계획 (계획 `docs/superpowers/plans/2026-10-31-push.md`)
 

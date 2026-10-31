@@ -10,7 +10,7 @@
 
 **등록 검사**: 토큰은 1~4096자에 공백 · 제어 문자 없음, `platform` 은 `android` · `ios`.
 
-**판정**(`PushSender.send` → 코어 처리기): `200` 전달 · `UNREGISTERED` · `SENDER_ID_MISMATCH` · 오류의 `fieldViolations` 가 `message.token` 을 가리키는 `INVALID_ARGUMENT` → 그 기기 줄만 지움 · `QUOTA_EXCEEDED` · `UNAVAILABLE` · `INTERNAL` · `429`(`Retry-After` 초 단위) · `5xx` · 연결 실패 · 시간 초과 → 재시도 · **그 밖은 실패로 남긴다 — 지우지 않는다**: 토큰을 가리키지 않는 `INVALID_ARGUMENT`(메시지 모양 문제), `THIRD_PARTY_AUTH_ERROR`(APNs 키 문제), `401` · `403` · `404`(우리 자격 · 프로젝트 문제 — 지우면 모든 기기 줄이 사라진다). 접근 토큰을 못 얻어도 같다(구글이 서비스 계정을 거절하면 실패, 일시 장애면 재시도). 죽은 작업이 되어 `alert` 가 있으면 경보.
+**판정**(`PushSender.send` → 코어 처리기): `200` 전달 · `UNREGISTERED` · 오류의 `fieldViolations` 가 `message.token` 을 가리키는 `INVALID_ARGUMENT` → 그 기기 줄만 지움 · `QUOTA_EXCEEDED` · `UNAVAILABLE` · `INTERNAL` · `429`(`Retry-After` 초 단위) · `5xx` · 연결 실패 · 시간 초과 → 재시도 · **그 밖은 실패로 남긴다 — 지우지 않는다**: 토큰을 가리키지 않는 `INVALID_ARGUMENT`(메시지 모양 문제), `SENDER_ID_MISMATCH`(토큰이 다른 프로젝트 것이라는 뜻이지만, 다른 프로젝트의 서비스 계정을 잘못 넣어도 모든 토큰이 이 답을 받는다 — 설정 실수가 기기 줄 대량 삭제로 번지지 않게 지우지 않는다), `THIRD_PARTY_AUTH_ERROR`(APNs 키 문제), `401` · `403` · `404`(우리 자격 · 프로젝트 문제 — 지우면 모든 기기 줄이 사라진다). 접근 토큰을 못 얻어도 같다(구글이 서비스 계정을 거절하면 실패, 일시 장애면 재시도). 죽은 작업이 되어 `alert` 가 있으면 경보.
 
 **메시지 모양**: `notification{title, body}` + `data{eventId, type, link}` + `android{collapse_key, ttl(남은 초), priority, notification.tag}` + `apns.headers{apns-collapse-id(묶기 열쇠의 sha256 base64url, 64바이트 이하), apns-expiration, apns-priority}`. `HIGH` 긴급도는 `priority: HIGH` · `apns-priority: 10`.
 

@@ -18,8 +18,8 @@ import java.util.Base64
 import tools.jackson.databind.json.JsonMapper
 
 /**
- * FCM HTTP v1 센더. 판정 표: 200 전달 / `UNREGISTERED` · `SENDER_ID_MISMATCH` · 토큰(`message.token`)을 가리킨 `INVALID_ARGUMENT` 지움 /
- * `QUOTA_EXCEEDED` · `UNAVAILABLE` · `INTERNAL` · 429 · 5xx · 연결 실패 재시도 / **그 밖 - 토큰을 가리키지 않는 400 · `THIRD_PARTY_AUTH_ERROR` · 401 · 403 · 404 - 은 실패로 남긴다
+ * FCM HTTP v1 센더. 판정 표: 200 전달 / `UNREGISTERED` · 토큰(`message.token`)을 가리킨 `INVALID_ARGUMENT` 지움 /
+ * `QUOTA_EXCEEDED` · `UNAVAILABLE` · `INTERNAL` · 429 · 5xx · 연결 실패 재시도 / **그 밖 - 토큰을 가리키지 않는 400 · `SENDER_ID_MISMATCH`(다른 프로젝트의 서비스 계정을 넣으면 모든 토큰이 받는다) · `THIRD_PARTY_AUTH_ERROR` · 401 · 403 · 404 - 은 실패로 남긴다
  * (우리 자격 · 프로젝트 · 요청 실수가 기기 줄 대량 삭제로 번지지 않게)**. 실패 이유 · [toString] 에는 서비스 계정 · 접근 토큰 · FCM 토큰 · 구글이 보낸 설명 문장을 싣지 않는다.
  * 요청 주소는 `fcm.googleapis.com` 으로 고정이고 프로젝트 id 는 검사를 통과한 서비스 계정에서만 온다.
  */
@@ -72,7 +72,7 @@ class FcmSender(
         val errorCode = details.firstOrNull { it.path("errorCode").isString }?.path("errorCode")?.asString() ?: status
         val pointsAtToken = details.any { d -> d.path("fieldViolations").any { it.path("field").asString() == TOKEN_FIELD } }
         return when {
-            errorCode == "UNREGISTERED" || errorCode == "SENDER_ID_MISMATCH" -> PushResult.Gone
+            errorCode == "UNREGISTERED" -> PushResult.Gone
             errorCode == "INVALID_ARGUMENT" && pointsAtToken -> PushResult.Gone
             errorCode in RETRYABLE || response.status == 429 || response.status in 500..599 ->
                 PushResult.Retry(response.retryAfter?.trim()?.toLongOrNull()?.takeIf { it >= 0 }?.let(Duration::ofSeconds))
