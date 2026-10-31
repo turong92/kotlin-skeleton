@@ -1,6 +1,8 @@
 package dev.sumin.skeleton.notification.push
 
 import java.time.Duration
+import java.time.temporal.ChronoUnit
+import org.springframework.boot.convert.DurationUnit
 import org.springframework.boot.context.properties.ConfigurationProperties
 
 enum class LockScreen { FULL, HIDDEN }
@@ -73,7 +75,12 @@ data class PushProperties(
     /** 오래 안 본 기기 정리 — 보관 정책은 앱이 정하므로 기본 꺼짐 */
     data class StaleCleanup(
         val enabled: Boolean = false,
-        val staleAfter: Duration = Duration.ofDays(60),
+        /** 단위 없이 쓰면 일이다(`60` = 60일). 1일 미만이면 시작이 실패한다 - 잘못 쓴 값이 전 계정의 기기를 지우지 않게 */
+        @param:DurationUnit(ChronoUnit.DAYS) val staleAfter: Duration = Duration.ofDays(60),
         val interval: Duration = Duration.ofHours(6),
-    )
+    ) {
+        init {
+            require(!enabled || staleAfter >= Duration.ofDays(1)) { "skeleton.notification.push.stale-cleanup.stale-after must be at least 1 day (a bare number counts days)" }
+        }
+    }
 }

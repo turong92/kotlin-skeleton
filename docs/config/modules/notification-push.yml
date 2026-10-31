@@ -28,5 +28,5 @@ skeleton:
         enabled: true              # false 면 /api/v1/push 를 등록하지 않는다 (서블릿 앱 + Spring Security 가 있을 때만 등록)
       stale-cleanup:
         enabled: false             # true 면 interval 마다 stale-after 동안 안 본 기기를 지운다 (기본 꺼짐 - 보관 정책은 앱). scheduler 모듈의 skeletonTaskScheduler 가 있어야 돈다
-        stale-after: 60d           # last_seen_at 이 이 기간보다 오래된 기기를 지운다
+        stale-after: 60d           # (단위 없이 쓰면 일, 1일 미만이면 기동 실패) last_seen_at 이 이 기간보다 오래된 기기를 지운다
         interval: 6h               # 정리를 도는 간격
