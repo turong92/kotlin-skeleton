@@ -18,7 +18,7 @@ import javax.crypto.spec.SecretKeySpec
  * 새로고침은 매번 새 토큰을 내고 옛 토큰을 쓴 것으로 표시한다 — 쓴 토큰이 다시 오면 세션 전체를 닫는다(재사용 탐지).
  * 두 요청이 같은 토큰으로 동시에 와도 [SessionStore.markTokenUsed] 의 원자성이 한 쪽만 통과시킨다.
  *
- * [onEvent] 로 재사용 탐지 · 세션 철회를 알린다 (자동설정이 `SessionEventListener` 빈들로 잇는다). 토큰은 어디에도 싣지 않는다.
+ * [onEvent] 로 재사용 탐지 · 세션 철회(로그아웃 포함)를 알린다 (자동설정이 `SessionEventListener` 빈들로 잇는다). 토큰은 어디에도 싣지 않는다.
  * 쓴 토큰은 **세션이 살아 있는 동안** 기억한다 — 도둑이 먼저 쓰고 계속 돌려 쓰는 사이 주인이 며칠 뒤 돌아와도 재사용으로 잡히도록
  * (`reuse-memory` 를 정하면 그 시간만큼만 기억한다: 표가 커지는 것을 막는 대신 그 창이 지나면 탐지가 안 된다).
  */
@@ -87,7 +87,11 @@ class SessionService(
     fun logout(rawToken: String) {
         if (!rawToken.startsWith(PREFIX) || rawToken.length > MAX_TOKEN) return
         val token = store.findToken(hash(rawToken)) ?: return
-        store.revoke(token.sessionId, time.now(), "LOGOUT")
+        val session = store.find(token.sessionId) ?: return
+        // 로그아웃한 기기는 푸시도 끊긴다 - 사건을 내야 듣는 쪽(기기 정리 · 감사)이 안다. 이미 닫힌 세션의 두 번째 로그아웃은 사건이 없다(멱등)
+        if (store.revoke(token.sessionId, time.now(), "LOGOUT")) {
+            onEvent(SessionEvent(SessionEventType.SESSION_REVOKED, session.accountId, token.sessionId, count = 1, reason = "LOGOUT"))
+        }
     }
 
     fun list(accountId: String, currentSessionId: String?): List<SessionView> {

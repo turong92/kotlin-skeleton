@@ -4,6 +4,11 @@ import dev.sumin.skeleton.auth.principal.CurrentPrincipal
 import dev.sumin.skeleton.auth.session.SessionEvent
 import dev.sumin.skeleton.auth.session.SessionEventListener
 import dev.sumin.skeleton.auth.session.SessionEventType
+import dev.sumin.skeleton.auth.sessions.AuthSessionProperties
+import dev.sumin.skeleton.auth.sessions.InMemorySessionStore
+import dev.sumin.skeleton.auth.sessions.SessionClient
+import dev.sumin.skeleton.auth.sessions.SessionEventDispatch
+import dev.sumin.skeleton.auth.sessions.SessionService
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import org.springframework.boot.autoconfigure.AutoConfigurations
@@ -44,6 +49,19 @@ class PushSessionEventsTest {
         store.add("acc_b", "inst_s4_0123456789")
         listener.on(SessionEvent(SessionEventType.REFRESH_REUSE_DETECTED, "acc_b", sessionId = "ses_3"))
         assertEquals(emptyList(), store.devices.map { it.accountId })
+    }
+
+    @Test
+    fun `logging out through the real session service removes the devices that session registered`() = withStore { store, listener ->
+        val sessions = SessionService(InMemorySessionStore(), AuthSessionProperties(), onEvent = SessionEventDispatch { listOf(listener) })
+        val opened = sessions.open("acc_a", SessionClient(null, null, null))
+        val other = sessions.open("acc_a", SessionClient(null, null, null))
+        store.add("acc_a", "inst_s1_0123456789", sessionId = opened.sessionId)
+        store.add("acc_a", "inst_s2_0123456789", sessionId = other.sessionId)
+
+        sessions.logout(opened.refreshToken!!)
+
+        assertEquals(listOf("inst_s2_0123456789"), store.devices.map { it.installationId })
     }
 
     @Test

@@ -16,6 +16,7 @@ dependencies {
     implementation("tools.jackson.module:jackson-module-kotlin")
 
     testImplementation(project(":modules:auth"))   // 세션 사건 시험 (compileOnly 와 같은 모듈)
+    testImplementation(project(":modules:auth-session"))   // 로그아웃 -> 기기 줄 사라짐 시험 (진짜 SessionService 사건 경로)
     testImplementation("org.springframework.security:spring-security-core")
     testImplementation("org.springframework.security:spring-security-test")   // 인증된 호출자를 보안 필터 체인(auth)에 싣는다
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")

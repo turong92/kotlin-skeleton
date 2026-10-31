@@ -187,6 +187,7 @@ class SessionServiceTest {
         s.logout(opened.refreshToken!!)
         s.logout("garbage")
         assertEquals("AUTH.REFRESH_INVALID", code { s.refresh(opened.refreshToken!!, client) })
+        assertEquals(listOf(opened.sessionId), events.filter { it.type == SessionEventType.SESSION_REVOKED && it.reason == "LOGOUT" }.map { it.sessionId })   // 한 번만 알린다
     }
 
     @Test
