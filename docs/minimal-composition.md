@@ -133,6 +133,7 @@ fails when this table and the prefixes found in module code differ.
 | `notification-push` | `skeleton.notification.push` |
 | `notification-mail` | `skeleton.notification-mail` |
 | `notification-slack` | `skeleton.notification.slack` |
+| `notification-webpush` | `skeleton.notification.webpush` |
 | `notification-sse` | `skeleton.notification.sse` |
 | `notification-websocket` | `skeleton.notification-websocket` |
 | `payment` | `skeleton.payment` |
@@ -210,7 +211,8 @@ test proving a context with only that module (and its declared dependencies) boo
 | `notification-jdbc` | yes | a `DataSource` + one `db-*` module (+ its migration, as above) | — |
 | `notification-push` | off until `skeleton.notification.push.enabled=true` + `types` | the `PushDeviceStore` · `PushTypeMuteStore` · `PushTasks` beans — `notification-push-jdbc` provides them, startup fails naming the module | a delivery module (`notification-webpush` · `notification-fcm`) to reach devices |
 | `notification-push-jdbc` | yes | a `DataSource` + one `db-*` module + `job-queue-jdbc` enabled (+ its migrations `push_devices` · `push_type_mutes`, as above) | — |
-| `notification-webpush` / `notification-fcm` / `notification-push-legal` | placeholders until their code lands (no beans yet) | nothing | — |
+| `notification-webpush` | off until `skeleton.notification.webpush.enabled=true` | a VAPID key pair (`public-key` · `private-key`) + `subject` — protected environments (`skeleton.env=stage\|prod`) refuse to start without them, with a mismatched pair, or with the sample test key; elsewhere there is just no sender | `notification-push` to feed it |
+| `notification-fcm` / `notification-push-legal` | placeholders until their code lands (no beans yet) | nothing | — |
 | `notification-mail` | off until `enabled=true` + `spring.mail.host` + `from` | nothing | an SMTP server |
 | `notification-slack` | wired; sends nothing until `enabled=true` + `webhook-url` | nothing | webhook URL, internet |
 | `notification-sse` | yes | nothing | — |

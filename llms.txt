@@ -135,7 +135,7 @@
 - notification-push-legal: 광고성 푸시의 동의 어댑터 — 자리만 잡혀 있다(구현은 이어서). [광고 푸시 동의, 마케팅 수신 동의]
 - notification-slack: 알림과 @SlackException 예외 알림을 Slack 웹훅으로… [슬랙 알림, 슬랙]
 - notification-sse: 알림을 Server-Sent Events 로 브라우저에 실시간… [실시간 알림, SSE]
-- notification-webpush: 웹 푸시(VAPID) 전달 수단 — 자리만 잡혀 있다(구현은 이어서). [웹 푸시, 브라우저 푸시]
+- notification-webpush: 웹 푸시(VAPID) 전달 수단 — 브라우저 구독으로 푸시를 보낸다. [웹 푸시, 브라우저 푸시]
 - notification-websocket: 알림을 STOMP over… [웹소켓, 실시간 알림]
 - payment: 결제 계약 + 장부 HTTP — PaymentService ·… [결제, 결제 승인]
 - payment-jdbc: 결제 장부 저장소 — PostgreSQL · MySQL 로… [결제 장부, 주문 장부]

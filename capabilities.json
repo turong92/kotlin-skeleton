@@ -2239,7 +2239,7 @@
       "module": "notification-webpush",
       "path": "modules/notification-webpush",
       "status": "experimental",
-      "summary": "웹 푸시(VAPID) 전달 수단 — 자리만 잡혀 있다(구현은 이어서). notification-push 의 PushSender 로 끼운다.",
+      "summary": "웹 푸시(VAPID) 전달 수단 — 브라우저 구독으로 푸시를 보낸다. RFC 8291 암호화(JDK) · 끝점 허용 목록(SSRF 방어) · 키 쌍 기동 검사. notification-push 의 PushSender 로 끼운다.",
       "starter": false,
       "newProjectFlag": "--modules notification-webpush",
       "autoIncludes": ["notification", "notification-push"],
@@ -2248,12 +2248,19 @@
         "oneOf": [],
         "optional": []
       },
-      "config": null,
+      "config": {
+        "prefixes": ["skeleton.notification.webpush"],
+        "snippet": "docs/config/modules/notification-webpush.yml"
+      },
       "basePaths": [],
       "secrets": [],
       "docs": ["docs/modules/notification-webpush.md"],
       "frontend": null,
-      "notFor": ["구현이 들어오기 전에는 아무것도 하지 않는다", "notification-push 없이는 쓰지 않는다(따라온다)"],
+      "notFor": [
+        "꺼짐이 기본이다 — skeleton.notification.webpush.enabled=true 와 VAPID 키 쌍 · subject 를 앱이 정한다",
+        "notification-push 없이는 쓰지 않는다(따라온다)",
+        "모바일 앱 푸시(FCM)는 notification-fcm"
+      ],
       "keywords": {
         "ko": ["웹 푸시", "브라우저 푸시", "VAPID"],
         "en": ["web push", "browser push", "VAPID"]

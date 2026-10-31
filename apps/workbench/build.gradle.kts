@@ -18,6 +18,7 @@ dependencies {
     implementation(project(":modules:notification-slack"))
     implementation(project(":modules:notification-jdbc"))
     implementation(project(":modules:notification-push-jdbc"))   // + notification-push (api) — 푸시 알림 계약 · 채널 · 기기 저장. 꺼짐이 기본이라 클래스패스에만 둔다(설정 스니펫 · 모듈 목록 시험). 전달 수단(webpush · fcm) · 견본 조립은 apps/sample
+    implementation(project(":modules:notification-webpush"))   // 웹 푸시(VAPID) 전달 수단 - 꺼짐이 기본이라 클래스패스에만 둔다(설정 스니펫 시험). 견본 조립은 apps/sample
     implementation(project(":modules:notification-sse"))
     implementation(project(":modules:notification-websocket"))
     implementation(project(":modules:payment-stripe"))

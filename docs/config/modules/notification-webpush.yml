@@ -1,0 +1,14 @@
+# notification-webpush — 웹 푸시(VAPID) 전달 수단. 기본 꺼짐. 접두사는 skeleton.notification.webpush. notification-push 의 PushSender(kind WEBPUSH)로 끼운다.
+skeleton:
+  notification:
+    webpush:
+      enabled: false               # true 면 웹 푸시 센더가 선다 (notification-push 도 켜야 알림이 간다). 키가 비었거나 한 쌍이 아니면 센더가 없고, 보호 환경(stage · prod)은 기동 실패
+      public-key: ""               # VAPID 공개 키(base64url 65바이트, 비밀 아님, env <P>_NOTIFICATION_WEBPUSH_VAPID_PUBLIC_KEY) - npx web-push generate-vapid-keys 의 Public Key. 한 번 만들어 고정(바꾸면 모든 구독이 끊긴다)
+      private-key: ""              # VAPID 개인 키(base64url 32바이트) - 운영자 비밀. 환경변수 <P>_NOTIFICATION_WEBPUSH_VAPID_PRIVATE_KEY 로만(배포 선언의 secrets:), 파일에 쓰지 않는다
+      subject: ""                  # VAPID sub(env <P>_NOTIFICATION_WEBPUSH_SUBJECT) - mailto:ops@example.com 또는 https://example.com/contact (Apple 은 없으면 거절)
+      allowed-hosts:               # 구독 끝점으로 허용할 푸시 서비스 (SSRF 방어). host | *.suffix | http://host:port(개발 · e2e 가짜 푸시 서비스 전용 - 보호 환경은 기동 실패)
+        - fcm.googleapis.com
+        - updates.push.services.mozilla.com
+        - "*.push.apple.com"
+        - "*.notify.windows.com"
+      timeout: 10s                 # 푸시 서비스 한 번 호출의 시간 제한
