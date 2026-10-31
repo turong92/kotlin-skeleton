@@ -23,7 +23,7 @@
 | 부팅에 필요한 것 | 켰다면 VAPID 키 쌍(`public-key` · `private-key`)과 `subject` — 보호 환경에서는 비었거나 · 한 쌍이 아니거나 · 시험 키면 기동 실패. 개인 키는 운영자 비밀(`<P>_NOTIFICATION_WEBPUSH_VAPID_PRIVATE_KEY`). 공개 키 `_VAPID_PUBLIC_KEY` · `_SUBJECT` 는 환경변수(`env:`). |
 | 교체 지점 | `PushSender`(`webPushSender` 빈), `WebPushHttp`(전송 — 시험·프록시용), `DeployGuard`(`webPushDeployGuard` 빈) |
 | 마이그레이션 | 없음 |
-| 프론트 짝 | 없음 — 짝 프런트 패키지(@skeleton/push)는 react-skeleton 에서 준비 중 |
+| 프론트 짝 | `@skeleton/push` (브라우저 구독 · 서비스 워커 · pushServiceWorker Vite 플러그인) |
 | 테스트 | `modules/notification-webpush/src/test` |
 
 자세히: [notification-push](notification-push.md)

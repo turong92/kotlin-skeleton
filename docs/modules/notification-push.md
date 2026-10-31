@@ -37,7 +37,7 @@
 | 부팅에 필요한 것 | 켰다면 `PushDeviceStore` · `PushTypeMuteStore` · `PushTasks` 빈(`notification-push-jdbc` 가 낸다) — 없으면 시작이 실패하고 무엇을 얹을지 말한다. 전달 수단(`PushSender`)은 없어도 뜬다(기기 등록이 400). |
 | 교체 지점 | `PushSender`, `PushMessageFactory`, `PushDeviceStore`, `PushTypeMuteStore`, `PushTasks`, `PushSessionIdResolver`, `PushNotificationChannel`, `PushDeliveryWorker`, `PushDeviceService`, `PushController`, `AdvertisingGate`, `AdvertisingConsentPolicy`, `PushRecipientZones` |
 | 마이그레이션 | 없음 (표는 `notification-push-jdbc`) |
-| 프론트 짝 | 없음 — 짝 프런트 패키지(@skeleton/push)는 react-skeleton 에서 준비 중 |
+| 프론트 짝 | `@skeleton/push` (HTTP 계약: [push-http-contract.md](../push-http-contract.md)) — 기기 등록 · 설정 칸 · 서비스 워커 · 앱 안 띠 |
 | 테스트 | `modules/notification-push/src/test`, `modules/notification-push/src/noOptionalTest` (`auth` 없이 뜨는지) |
 
 자세히: [notification](notification.md) · [푸시 HTTP 계약](../push-http-contract.md)

@@ -56,6 +56,8 @@ secrets:
   - SKELETON_STORAGE_S3_CREDENTIALS_SECRET_ACCESS_KEY     # [storage-s3] 운영자 (.local.env)
   - SPRING_MAIL_PASSWORD                                  # [notification-mail] 운영자 (.local.env) — 인증 없는 릴레이면 이 줄을 지운다
   - SKELETON_NOTIFICATION_SLACK_WEBHOOK_URL               # [notification-slack] 운영자 (.local.env)
+  - SKELETON_NOTIFICATION_WEBPUSH_VAPID_PRIVATE_KEY       # [notification-webpush] 운영자 (.local.env) — VAPID 개인 키(npx web-push generate-vapid-keys), env: 의 공개 키와 한 쌍. 푸시를 안 쓰면 이 줄을 지우고 SKELETON_NOTIFICATION_WEBPUSH_ENABLED=false. 처음 정한 뒤 바꾸지 않는다(모든 웹 구독이 끊긴다)
+  - SKELETON_NOTIFICATION_FCM_CREDENTIALS                 # [notification-fcm] 운영자 (.local.env) — Firebase 서비스 계정 JSON 의 base64 (FCM 을 켤 때만; 안 쓰면 이 줄을 지운다)
   - SKELETON_ALERT_WEBHOOK_URL                            # [alert] 운영자 (.local.env) — 안 쓰면 이 줄을 지운다 (없으면 경보는 로그로만)
 #
 # 선택한 모듈이 요구하는 환경변수 — 빠졌을 때의 동작 (모듈이 없으면 줄이 지워진다). 비밀이 아닌 값은 아래 env: 에, 비밀은 위 secrets: + .local.env
@@ -87,6 +89,8 @@ secrets:
 #   [storage-s3] (env:) SKELETON_STORAGE_S3_BUCKET · _ENDPOINT_OVERRIDE   버킷이 비면 저장소 빈이 없다 · 키가 비면 AWS 기본 자격 증명 체인으로 가서 첫 사용에서 실패 (기동은 된다)
 #   [notification-mail] (env:) SKELETON_NOTIFICATION_MAIL_ENABLED=true · _FROM · SPRING_MAIL_HOST · SPRING_MAIL_USERNAME   host · from 이 비면 발송기 빈이 없다 · 비밀번호가 틀리면 첫 발송에서 실패
 #   [notification-slack] (env:) SKELETON_NOTIFICATION_SLACK_ENABLED=true   웹훅 URL 이 비면 아무것도 보내지 않는다
+#   [notification-webpush] (env:) SKELETON_NOTIFICATION_WEBPUSH_VAPID_PUBLIC_KEY · SKELETON_NOTIFICATION_WEBPUSH_SUBJECT (비밀 아님)   켠 채(apps/sample 은 켠다) 키가 비었거나 한 쌍이 아니거나 시험 키면 stage|prod 에서 기동 실패 — 끄려면 SKELETON_NOTIFICATION_WEBPUSH_ENABLED=false
+#   [notification-fcm] (env:) SKELETON_NOTIFICATION_FCM_ENABLED=true   서비스 계정(위 secrets:)이 비었거나 못 읽으면 stage|prod 에서 기동 실패 (기본 꺼짐)
 #   [alert] 웹훅 URL 이 비면 경보가 로그로만 남는다 (기동은 된다)
 #   [crypto] SKELETON_CRYPTO_PRIMARY_KEY_ID (env:) · SKELETON_CRYPTO_KEYS_<ID> (base64 AES 키 — 운영자 비밀, secrets: 에 그 이름을 더한다)   키가 없으면 암호화 빈이 없다
 #   [config-aws-ssm] AWS_PROFILE · AWS 자격 증명   홈서버에는 AWS 가 없다 — 이 모듈은 고르지 않는다 (paths 를 정하면 부팅에서 자격 증명을 찾는다)

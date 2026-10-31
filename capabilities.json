@@ -1999,7 +1999,12 @@
         "snippet": "docs/config/modules/notification-fcm.yml"
       },
       "basePaths": [],
-      "secrets": [],
+      "secrets": [
+        {
+          "env": ["<P>_NOTIFICATION_FCM_ENABLED=true", "<P>_NOTIFICATION_FCM_CREDENTIALS"],
+          "whenMissing": "켰는데 서비스 계정(JSON 의 base64)이 비었거나 못 읽으면 보호 환경(stage|prod)에서 기동 실패, 그 밖의 환경은 센더가 없고 경고. 꺼져 있으면(기본) 읽지 않는다"
+        }
+      ],
       "docs": ["docs/modules/notification-fcm.md"],
       "frontend": null,
       "notFor": [
@@ -2104,7 +2109,11 @@
       "basePaths": ["/api/v1/push"],
       "secrets": [],
       "docs": ["docs/modules/notification-push.md"],
-      "frontend": null,
+      "frontend": {
+        "capabilities": ["push"],
+        "newProjectFlag": "--packages push",
+        "packages": ["@skeleton/push"]
+      },
       "notFor": [
         "notification-push 는 저장소를 모른다 — notification-push-jdbc 를 같이 고른다",
         "전달 수단(notification-webpush · notification-fcm)이 하나도 없으면 기기를 등록할 수 없다",
@@ -2161,7 +2170,11 @@
       "basePaths": ["/api/v1/push/advertising"],
       "secrets": [],
       "docs": ["docs/modules/notification-push-legal.md"],
-      "frontend": null,
+      "frontend": {
+        "capabilities": ["push"],
+        "newProjectFlag": "--packages push",
+        "packages": ["@skeleton/push"]
+      },
       "notFor": [
         "광고성 종류(skeleton.notification.push.advertising-types)를 쓰지 않는 앱은 얹지 않는다 — notification-push 만으로 legal 없이 푸시를 쓴다",
         "이 게이트는 푸시 채널(웹 푸시 · FCM)에만 있다 — 메일 · 슬랙 · SSE 로 광고를 보내는 앱은 AdvertisingConsentPolicy 를 직접 부른다",
@@ -2270,9 +2283,22 @@
         "snippet": "docs/config/modules/notification-webpush.yml"
       },
       "basePaths": [],
-      "secrets": [],
+      "secrets": [
+        {
+          "env": [
+            "<P>_NOTIFICATION_WEBPUSH_VAPID_PRIVATE_KEY",
+            "<P>_NOTIFICATION_WEBPUSH_VAPID_PUBLIC_KEY",
+            "<P>_NOTIFICATION_WEBPUSH_SUBJECT"
+          ],
+          "whenMissing": "켰는데(기본 켜짐 — 끄려면 <P>_NOTIFICATION_WEBPUSH_ENABLED=false) 비었거나 · 공개/개인 키가 한 쌍이 아니거나 · 시험 키이거나 · 허용 목록에 http:// 항목이 있으면 보호 환경(stage|prod)에서 기동 실패, 그 밖의 환경은 센더가 없고 경고(기기 등록이 400). 개인 키를 바꾸면 모든 웹 구독이 다음 방문까지 끊긴다"
+        }
+      ],
       "docs": ["docs/modules/notification-webpush.md"],
-      "frontend": null,
+      "frontend": {
+        "capabilities": ["push"],
+        "newProjectFlag": "--packages push",
+        "packages": ["@skeleton/push"]
+      },
       "notFor": [
         "꺼짐이 기본이다 — skeleton.notification.webpush.enabled=true 와 VAPID 키 쌍 · subject 를 앱이 정한다",
         "notification-push 없이는 쓰지 않는다(따라온다)",
@@ -3494,8 +3520,13 @@
         "dashboard-jdbc",
         "json",
         "notification",
+        "notification-fcm",
         "notification-jdbc",
+        "notification-push",
+        "notification-push-jdbc",
+        "notification-push-legal",
         "notification-sse",
+        "notification-webpush",
         "payment",
         "payment-jdbc",
         "payment-kakaopay",

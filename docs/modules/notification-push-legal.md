@@ -31,7 +31,7 @@
 | 부팅에 필요한 것 | `legal` 의 `ConsentService`(`legal` + `legal-jdbc`), 재확인 표시 저장소(`notification-push-jdbc`), 알림 발행기(`notification`). 광고 설정(`fallback-zone` · `sender-name` · `ttl` ≥ 12시간)은 코어가 검사한다. |
 | 교체 지점 | `LegalAdvertisingConsents`, `AdvertisingConsentNotifier`, `AdvertisingReconfirmScanner`, `AdvertisingController`, `legalAdvertisingConsentPolicy`, `advertisingReconfirmSchedule` |
 | 마이그레이션 | 없음 (표는 `notification-push-jdbc`) |
-| 프론트 짝 | 없음 |
+| 프론트 짝 | `@skeleton/push` (광고 동의 칸 AdvertisingSettings — 부분 경로 advertising. 광고 문서 화면은 @skeleton/legal) |
 | 테스트 | `modules/notification-push-legal/src/test` |
 
 자세히: [notification-push](notification-push.md) · [legal](legal.md)

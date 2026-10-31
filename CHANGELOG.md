@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 푸시 알림 (2026-10-31)
+
+- 새 모듈 다섯 - `notification-push`(알림이 받는 사람의 **기기로도** 간다: 기기 등록 `PUT/DELETE /api/v1/push/devices/{installationId}` · 시험 알림 · 종류 × 채널 「푸시만 끄기」 `GET/PUT /api/v1/push/preferences` · 잠금 화면 `lock-screen: FULL|HIDDEN` · 세션이 끊기면 기기도 · 오래된 기기 정리), `notification-push-jdbc`(기기 · 끄기 저장 + 발송 작업을 `job-queue-jdbc` 에, 두 방언), `notification-webpush`(VAPID 웹 푸시, RFC 8291 암호화는 JDK · 끝점 허용 목록 · 키 쌍 기동 검사), `notification-fcm`(FCM HTTP v1, 서비스 계정 -> 접근 토큰), `notification-push-legal`(광고성 푸시의 동의 어댑터). 모두 **꺼짐이 기본**이고 `notification` 계약은 바뀌지 않는다 - 이 모듈들을 안 붙인 앱의 동작은 그대로다. 문서 `docs/modules/notification-push*.md` · `notification-webpush.md` · `notification-fcm.md` · HTTP 계약 `docs/push-http-contract.md` · 키 만들기 `docs/real-provider-setup.md` §15.
+- 광고성 푸시(`push.advertising-types`): 동의(`marketing`)가 없거나 철회 · 2년 만료 · 새 판 · 조회 실패면 작업이 안 생긴다 · 야간(21~08시, 받는 사람 시간대)은 야간 동의(`marketing-night`)가 없으면 다음 08시로 보류 · 제목 `(광고)` 표기는 채널이 붙인다 · 동의 변경 통지와 2년 재확인 안내 · `GET /api/v1/push/advertising`. 법률 자문이 아니다 - 문서 내용 · 전송자 정보는 앱 몫. 시작 검사(정책 빈 · `fallback-zone` · `sender-name` · `ttl` ≥ 12h)가 어긋나면 기동 실패.
+- `legal` + `legal-jdbc`: `ConsentChangeListener`(동의 변경을 듣는 자리) · `ConsentStore.latestAgreementsBefore`(기본 구현이 던진다 - **`ConsentStore` 를 직접 구현한 앱은 이 한 메서드를 더해야 광고 재확인이 돈다**) · 동의 출처 `reconfirm`.
+- 배포(`DeployGuard` `notification-webpush` · `notification-fcm`): 켰는데 VAPID 키가 비었거나 한 쌍이 아니거나 · 시험 키이거나 · 허용 목록에 `http://` 항목이 있거나, FCM 서비스 계정이 비었거나 못 읽으면 보호 환경(`stage|prod`)에서 **기동 실패**. 선언에서 바꿀 것은 [docs/deploy.md](docs/deploy.md) §7 · §11 의 표(운영자 비밀 `<P>_NOTIFICATION_WEBPUSH_VAPID_PRIVATE_KEY` · FCM `<P>_NOTIFICATION_FCM_CREDENTIALS`). **VAPID 키 쌍을 바꾸면 모든 웹 구독이 다음 방문까지 끊긴다.**
+- `apps/sample`: 다섯 모듈 조립 - `push.enabled` · `lock-screen: FULL`(일부러 명시) · `types` 일곱 · 광고 종류 `promo.notes-tips` + `sender-name` · `fallback-zone: Asia/Seoul` · `stale-cleanup`(60일) · `webpush.enabled: true`(로컬 프로필은 시험용 VAPID 고정 쌍, `SKELETON_NOTIFICATION_WEBPUSH_VAPID_*` 로 덮는다) · `fcm.enabled: ${SKELETON_NOTIFICATION_FCM_ENABLED:false}` · 이메일 없는 계정도 하는 푸시 설정 경로 넷(`email.extra-exclude-paths`, `WriteGateCensusTest`) · 받는 사람 시간대 `push/SamplePushConfiguration`(계정 프로필의 `timeZone`) · 견본 `legal` 문서에 `marketing-night`(DRAFT · 견본임을 적음, ko/en)과 푸시를 말하는 `marketing`. 통합 시험 `push/PushJourneyIntegrationTest`. `apps/workbench` 는 클래스패스에 다섯을 모두 두되 켜지 않는다(공존 증명).
+- 프론트 짝 `@skeleton/push`(react-skeleton). `ModuleDocumentationTest` 의 알려진 패키지에 더했다.
+
 ### 친구초대 보류 · 확인 · 취소 (2026-10-31)
 
 - `campaign` + `campaign-jdbc`: 초대 이벤트 설정 `qualifyEvent`(신호 이름) · `holdDays`(0~90, 초대자 보상 보류) · `reviewSameNetwork`(같은 네트워크면 운영자 승인까지 보류) - 모두 비우면 예전 동작 그대로. 관계 상태 `REVIEW` · `HELD` · `CANCELED`, 표시 `SAME_NETWORK`(네트워크 값은 30일 뒤 지운다), 해제 주기 작업(`scheduler` 가 있으면 10분마다, 컴파일 전용), 마이그레이션 `V20261031090000__campaign_referral_review`(열 더하기만). `DeployGuard` 는 `reviewSameNetwork` 인데 `skeleton.web.client-ip.mode` 가 비었으면 경고한다.

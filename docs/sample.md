@@ -273,6 +273,22 @@ APP=sample scripts/dev.sh    # 백엔드(+프론트 WEB_DIR)만 같은 방식으
 
 시험: `apikey/ApiKeyJourneyIntegrationTest`(키로 노트 읽기 200 · 쓰기 403 · 계정 403 → 회수 뒤 401, 운영자 회수 → 주인 목록 `OPERATOR`).
 
+## 푸시 알림 (`/api/v1/push`)
+
+다섯 줄(`notification-push` · `-jdbc` · `notification-webpush` · `notification-fcm` · `notification-push-legal`)과 이 앱의 조각 하나(`push/SamplePushConfiguration`)가 전부다 - 모듈 내부는 건드리지 않았고 이 앱의 선택은 `application.yml` 의 `skeleton.notification.push` · `webpush` · `fcm` 에 있다. 흐름: 알림(`NotificationPublisher.publish`)이 받은편지함에 쌓인 뒤 받는 사람의 **기기마다** 작업이 하나 생기고 처리기가 전달 수단으로 보낸다. 모듈 문서 [notification-push](modules/notification-push.md) · HTTP 계약 [push-http-contract](push-http-contract.md).
+
+| 선택 | 어디 |
+|---|---|
+| 푸시로도 갈 종류: `NOTE_UPDATED` · `comment.created` · `comment.replied` · `reward.granted` · `badge.awarded` + 광고 동의 변경 · 재확인 안내. 종류마다 사람이 「푸시만 끄기」를 할 수 있다 | `push.types` |
+| 잠금 화면에 제목 · 본문이 그대로 보인다(모듈 기본과 같지만 일부러 적었다 - 견본은 내용을 보이는 쪽을 골랐다는 표시). 가리려면 `HIDDEN` | `push.lock-screen: FULL` |
+| 60일 동안 안 본 기기 줄을 지운다 | `push.stale-cleanup.enabled: true` |
+| 웹 푸시(VAPID)는 켠 채 시작한다. 로컬 프로필은 시험용 고정 쌍(`application-local.yml`, 모듈의 `WebPushTestKeys`)이라 보호 환경에서는 기동이 막힌다 - 운영은 `SKELETON_NOTIFICATION_WEBPUSH_VAPID_*` ([deploy §7](deploy.md)) | `webpush.*` |
+| FCM 은 꺼진 채 시작한다(`SKELETON_NOTIFICATION_FCM_ENABLED=true` + 서비스 계정) | `fcm.enabled` |
+| 기기 등록 · 끄기는 자기 설정이라 이메일 없는 계정도 한다 | `account.email.extra-exclude-paths`(`WriteGateCensusTest` 가 목록을 고정) |
+| 광고성 종류 `promo.notes-tips`: 동의(`marketing`)가 없으면 작업이 안 생기고, 밤 9시~아침 8시는 야간 동의(`marketing-night`)가 없으면 다음 08시로 보류하며, 제목에 `(광고)` 가 붙는다. **견본에는 이 알림을 보내는 화면이 없다**(보내는 쪽은 제품마다 다르다) - `publish` 하면 규칙이 적용된다. 받는 사람의 시간대는 계정 프로필의 `timeZone`(`push/SamplePushConfiguration`), 없으면 `Asia/Seoul` | `push.advertising-types` · `advertising.*` · `legal/manifest.json` 의 `marketing-night` |
+
+**로컬 e2e(가짜 푸시 서비스)**: 브라우저 구독의 끝점은 허용 목록(기본 `fcm.googleapis.com` · `updates.push.services.mozilla.com` · `*.push.apple.com` · `*.notify.windows.com`) 밖이면 400 이다. 가짜 푸시 서비스를 쓰는 e2e 는 환경변수로만 `SKELETON_NOTIFICATION_WEBPUSH_ALLOWED_HOSTS=http://127.0.0.1:<포트>` 를 준다(`http://` 항목은 보호 환경에서 기동 실패 - yml 에는 넣지 않는다). 시험: `push/PushJourneyIntegrationTest`(댓글 → 작업 → 가짜 보내기, 광고 종류 동의 게이트, 프로필 시간대).
+
 ## 이 샘플이 하지 않는 것
 
 - 노트 시드 데이터 없음 — 빈 상태가 정직하게 보인다.
