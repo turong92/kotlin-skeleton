@@ -5,6 +5,7 @@ import dev.sumin.skeleton.jobqueue.jdbc.JobQueue
 import dev.sumin.skeleton.jobqueue.jdbc.JobQueueJdbcAutoConfiguration
 import dev.sumin.skeleton.json.JsonAutoConfiguration
 import dev.sumin.skeleton.json.JsonCodec
+import dev.sumin.skeleton.notification.push.PushAdvertisingNoticeStore
 import dev.sumin.skeleton.notification.push.PushDeliveryWorker
 import dev.sumin.skeleton.notification.push.PushDeviceStore
 import dev.sumin.skeleton.notification.push.PushProperties
@@ -24,7 +25,7 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
 import org.springframework.transaction.PlatformTransactionManager
 
 /**
- * 기기 저장소 · 「푸시만 끄기」 저장소 · 작업 포트를 JDBC(PostgreSQL · MySQL)로 구현하고, 발송 처리기를 `job-queue-jdbc` 에 얹는다.
+ * 기기 저장소 · 「푸시만 끄기」 저장소 · 재확인 안내 표시 저장소 · 작업 포트를 JDBC(PostgreSQL · MySQL)로 구현하고, 발송 처리기를 `job-queue-jdbc` 에 얹는다.
  * 스키마는 모듈 마이그레이션 `db/migration/<vendor>/V20261031130000__push_devices.sql` · `V20261031130100__push_type_mutes.sql` 을 앱의 `spring.flyway.locations=classpath:db/migration/{vendor}` 가 고른다.
  *
  * **이 클래스의 이름(`dev.sumin.skeleton.notification.push.jdbc.PushJdbcAutoConfiguration`)을 `notification-push` 의 `PushAutoConfiguration` 이 문자열로 가리킨다** - 그쪽은 저장소 빈이 있어야 뜬다.
@@ -46,6 +47,11 @@ class PushJdbcAutoConfiguration {
     @ConditionalOnMissingBean(PushTypeMuteStore::class)
     fun jdbcPushTypeMuteStore(dataSource: DataSource, dialect: SqlDialect): PushTypeMuteStore =
         JdbcPushTypeMuteStore(NamedParameterJdbcTemplate(dataSource), dialect)
+
+    @Bean
+    @ConditionalOnMissingBean(PushAdvertisingNoticeStore::class)
+    fun jdbcPushAdvertisingNoticeStore(dataSource: DataSource, dialect: SqlDialect): PushAdvertisingNoticeStore =
+        JdbcPushAdvertisingNoticeStore(NamedParameterJdbcTemplate(dataSource), dialect)
 
     @Bean
     @ConditionalOnMissingBean(PushTasks::class)

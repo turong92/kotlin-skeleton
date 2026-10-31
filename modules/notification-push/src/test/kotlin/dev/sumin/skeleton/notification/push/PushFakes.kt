@@ -1,7 +1,9 @@
 package dev.sumin.skeleton.notification.push
 
+import dev.sumin.skeleton.common.time.TimeProvider
 import java.time.Duration
 import java.time.Instant
+import java.time.ZoneId
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.ConcurrentHashMap
 
@@ -89,3 +91,27 @@ class FakePushSender(
 }
 
 val DEFAULT_TTL: Duration = Duration.ofHours(24)
+
+class MutableTime(@Volatile var now: Instant) : TimeProvider {
+    override fun now(): Instant = now
+}
+
+/** 시험용 광고 동의 정책 - 계정마다 답을 정해 두고, [failure] 가 있으면 던진다. [calls] 는 조회한 계정들 */
+class FakeAdvertisingPolicy(private val answers: Map<String, AdvertisingConsent> = emptyMap()) : AdvertisingConsentPolicy {
+    val calls = CopyOnWriteArrayList<String>()
+    @Volatile var failure: RuntimeException? = null
+    val overrides = ConcurrentHashMap<String, AdvertisingConsent>()
+
+    override fun consentOf(accountId: String, now: Instant): AdvertisingConsent {
+        calls += accountId
+        failure?.let { throw it }
+        return overrides[accountId] ?: answers[accountId] ?: AdvertisingConsent(send = false, night = false)
+    }
+}
+
+class FakeRecipientZones(private val zones: Map<String, ZoneId?> = emptyMap(), private val failure: RuntimeException? = null) : PushRecipientZones {
+    override fun zoneOf(accountId: String): ZoneId? {
+        failure?.let { throw it }
+        return zones[accountId]
+    }
+}

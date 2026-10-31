@@ -6,7 +6,7 @@
 **꺼짐이 기본이다**(모듈 기본값 중립) — 앱 yml 이 켠다: `skeleton.notification.push.enabled=true` + 푸시로도 갈 종류 `types`(기본 빈 목록 = 아무것도 안 간다). 이 모듈을 안 붙인 앱, 붙였어도 안 켠 앱의 동작은 그대로다.
 
 **흐름**: `publish(event)` → 브로커(끈 사람 빼기 · 받은편지함 저장) → 커밋 뒤 `PushNotificationChannel`(슬랙 전달기와 같은 서버 전체 리스너) → 받는 사람의 기기마다 작업 `notification.push` 하나 → 처리기 `PushDeliveryWorker` → `PushSender.send` 의 판정.
-- 건너뜀: 받는 사람이 없는 전체 공지 · `types` 밖의 종류 · 그 종류의 푸시를 끈 사람 · `PushMessageFactory` 가 null · 지금 서버 공개 키와 다른 키로 구독한 웹 푸시 기기. 채널은 **모든 예외를 잡고 로그만** 남긴다(브로커는 던진 구독자를 닫아 채널이 영영 떨어진다). 커밋과 큐 넣기 사이에 죽으면 그 푸시는 잃는다 — 푸시는 최선 노력이고 받은편지함이 원본이다.
+- 건너뜀: 받는 사람이 없는 전체 공지 · `types` 와 `advertising-types` 밖의 종류 · 그 종류의 푸시를 끈 사람 · `PushMessageFactory` 가 null · 지금 서버 공개 키와 다른 키로 구독한 웹 푸시 기기. 채널은 **모든 예외를 잡고 로그만** 남긴다(브로커는 던진 구독자를 닫아 채널이 영영 떨어진다). 커밋과 큐 넣기 사이에 죽으면 그 푸시는 잃는다 — 푸시는 최선 노력이고 받은편지함이 원본이다.
 - 처리기는 보내기 직전에 다시 확인한다: 기기 줄이 없다 · **기기 주인이 바뀌었다**(공용 PC 에서 다른 사람이 로그인) · `ttl`(기본 24시간)이 지났다 · 큐에서 기다리는 동안 그 종류를 푸시만 끄게 됐다 → 보내지 않는다.
 - 판정: `Delivered` → `last_success_at` · `Gone`(404 · 410 · `UNREGISTERED`) → 그 줄만 지운다 · `Retry` → 큐 백오프 재시도(`max-attempts` 기본 5) · `Failed` → 줄은 남기고 죽은 작업(우리 설정 실수가 구독 대량 삭제로 번지지 않게 — 웹 푸시 401 · 403 은 지우지 않는다).
 
@@ -17,7 +17,15 @@
 **세션**: `auth` 가 있으면(컴파일 전용) 기기 줄에 로그인 세션 id 를 적고, 세션이 끊기면(로그아웃 · 「모든 기기 로그아웃」 · 토큰 재사용 탐지) 같이 지운다. 없으면 이 연동만 빠진다.
 
 **HTTP**(`/api/v1/push`, 서블릿 + Spring Security 일 때, `skeleton.notification.push.http.enabled=false` 로 뺀다, 모두 인증): `GET /config` · `GET /devices` · `PUT /devices/{installationId}` · `DELETE /devices/{installationId}` · `POST /devices/{installationId}/test`(계정당 60초에 한 번) · `GET /preferences` · `PUT /preferences/{type}`. 모양: [push-http-contract](../push-http-contract.md).
-계정 지우기와 저장은 `notification-push-jdbc` 가 한다. **광고성 종류**(`advertising-types`)의 동의 게이트는 `notification-push-legal` 이 붙는 조각에서 켜진다 — 그 전에는 이 종류의 푸시가 나가지 않는다.
+계정 지우기와 저장은 `notification-push-jdbc` 가 한다. 광고 동의 상태 읽기(`GET /advertising`)는 `notification-push-legal` 이 더한다.
+
+**광고성 푸시**(`advertising-types`, 기본 빈 목록 = 꺼짐 — 아래 규칙은 아무것도 하지 않는다): 광고 종류는 정보성 경로(`types`)로 가지 않고 **동의 게이트**(`AdvertisingGate`)를 거친다. 법률 자문이 아니다 — 문서 내용 · 전송자 정보 · 법 해석은 앱의 몫.
+- 받는 사람마다 `AdvertisingConsentPolicy.consentOf` 를 읽는다. **미동의 · 철회 · 2년 만료 · 새 판(OUTDATED) · 조회 실패는 안 보낸다**(작업이 안 생긴다 — 웹 푸시 · FCM 기기 모두). 정보성 종류는 영향이 없다.
+- 야간(받는 사람 시간대 21:00 이상 ~ 08:00 미만)이고 **야간 동의가 없으면** 버리지 않고 그 시간대의 **다음 08시**로 보류한다(`runAt`, 서머타임은 `ZonedDateTime` 이 푼다). 처리기가 보류 작업을 집을 때 **다시 같은 판정**을 한다 — 대기 중 철회 · 만료면 `PushSender.send` 를 부르지 않고, 앞당겨 집혔는데 아직 야간이면 다시 보류한다. `ttl` 은 12시간 이상이어야 한다(보류가 최대 11시간).
+- 제목 앞 `title-prefix`(기본 「(광고)」)는 채널이 `PushMessageFactory` **뒤에서** 붙인다 — 앱 factory 가 잊어도 빠지지 않고 두 번 붙지 않는다. 본문 끝에 `body-suffix`(예: 수신 거부 안내)를 붙일 수 있다. 광고 종류는 `lock-screen: HIDDEN` 이어도 내용을 보인다(기본 factory 기준).
+- 시간대: 앱이 구현한 `PushRecipientZones`(예: 계정 프로필의 시간대) → `advertising.fallback-zone`. 시스템 기본 시간대는 쓰지 않는다.
+- 시작 검사(광고 종류가 있을 때): 정책 빈(`notification-push-legal`) · `fallback-zone` · `sender-name` · `night-start`/`night-end` 형식 · `title-prefix` 비어 있지 않음 · `ttl` ≥ 12시간 · 두 동의 종류가 서로 다름 · 광고 종류가 알림 종류 `advertising.consent.*` 와 겹치지 않음 — 하나라도 어긋나면 시작이 실패한다.
+- **이 게이트는 푸시 채널에만 있다.** 메일 · 슬랙 · SSE 로 광고를 보내는 앱은 `AdvertisingConsentPolicy` 를 직접 불러 동의를 확인한다(`notification` 계약은 광고를 모른다).
 
 | 항목 | 내용 |
 |---|---|
@@ -27,7 +35,7 @@
 | 설정 접두사 | `skeleton.notification.push` — [docs/config/modules/notification-push.yml](../config/modules/notification-push.yml) |
 | 기본 동작 | 꺼짐. `skeleton.notification.push.enabled=true` 로 켠다. |
 | 부팅에 필요한 것 | 켰다면 `PushDeviceStore` · `PushTypeMuteStore` · `PushTasks` 빈(`notification-push-jdbc` 가 낸다) — 없으면 시작이 실패하고 무엇을 얹을지 말한다. 전달 수단(`PushSender`)은 없어도 뜬다(기기 등록이 400). |
-| 교체 지점 | `PushSender`, `PushMessageFactory`, `PushDeviceStore`, `PushTypeMuteStore`, `PushTasks`, `PushSessionIdResolver`, `PushNotificationChannel`, `PushDeliveryWorker`, `PushDeviceService`, `PushController` |
+| 교체 지점 | `PushSender`, `PushMessageFactory`, `PushDeviceStore`, `PushTypeMuteStore`, `PushTasks`, `PushSessionIdResolver`, `PushNotificationChannel`, `PushDeliveryWorker`, `PushDeviceService`, `PushController`, `AdvertisingGate`, `AdvertisingConsentPolicy`, `PushRecipientZones` |
 | 마이그레이션 | 없음 (표는 `notification-push-jdbc`) |
 | 프론트 짝 | 없음 — 짝 프런트 패키지(@skeleton/push)는 react-skeleton 에서 준비 중 |
 | 테스트 | `modules/notification-push/src/test`, `modules/notification-push/src/noOptionalTest` (`auth` 없이 뜨는지) |

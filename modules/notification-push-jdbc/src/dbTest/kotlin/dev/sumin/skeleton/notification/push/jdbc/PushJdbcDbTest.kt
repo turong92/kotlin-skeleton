@@ -7,6 +7,7 @@ import dev.sumin.skeleton.jobqueue.jdbc.JobHandler
 import dev.sumin.skeleton.jobqueue.jdbc.JobQueueProperties
 import dev.sumin.skeleton.jobqueue.jdbc.JobQueueWorker
 import dev.sumin.skeleton.notification.push.PushDevice
+import dev.sumin.skeleton.notification.push.PushAdvertisingNoticeStore
 import dev.sumin.skeleton.notification.push.PushDeviceRegistration
 import dev.sumin.skeleton.notification.push.PushDeviceStore
 import dev.sumin.skeleton.notification.push.PushJob
@@ -63,6 +64,7 @@ class PushJdbcDbTest {
 
     @Autowired lateinit var store: PushDeviceStore
     @Autowired lateinit var mutes: PushTypeMuteStore
+    @Autowired lateinit var notices: PushAdvertisingNoticeStore
     @Autowired lateinit var tasks: PushTasks
     @Autowired lateinit var erasure: dev.sumin.skeleton.common.erasure.AccountErasureListener
     @Autowired lateinit var sender: RecordingSender
@@ -77,6 +79,7 @@ class PushJdbcDbTest {
     fun clean() {
         jdbc.sql("delete from push_devices").update()
         jdbc.sql("delete from push_type_mutes").update()
+        jdbc.sql("delete from push_advertising_notices").update()
         jdbc.sql("delete from jobs").update()
         sender.sent.clear()
         sender.result = PushResult.Delivered
@@ -245,5 +248,36 @@ class PushJdbcDbTest {
         assertNotNull(store.find(device.id))
         assertEquals(1L, jdbc.sql("select count(*) from jobs where status = 'DEAD' and job_type = 'notification.push'").query(Long::class.java).single())
         assertEquals(1, sender.sent.size)
+    }
+
+    @Test
+    fun `a reconfirm notice is remembered per account, type and agreement time, marking twice is one row, and erasure forgets that account only`() {
+        val agreed = Instant.parse("2026-01-02T03:04:05.123456Z")
+
+        assertEquals(false, notices.isNoticed("acc_a", "marketing", agreed))
+        notices.markNoticed("acc_a", "marketing", agreed, base)
+        notices.markNoticed("acc_a", "marketing", agreed, base.plusSeconds(5))
+        notices.markNoticed("acc_b", "marketing", agreed, base)
+
+        assertEquals(true, notices.isNoticed("acc_a", "marketing", agreed))
+        assertEquals(false, notices.isNoticed("acc_a", "marketing-night", agreed), "another type")
+        assertEquals(false, notices.isNoticed("acc_a", "marketing", agreed.plusSeconds(1)), "a later agreement cycle is a new notice")
+        assertEquals(2L, jdbc.sql("select count(*) from push_advertising_notices").query(Long::class.java).single())
+
+        erasure.erase(ErasureRequest("acc_a", "deleted:0123456789abcdef"))
+
+        assertEquals(false, notices.isNoticed("acc_a", "marketing", agreed))
+        assertEquals(true, notices.isNoticed("acc_b", "marketing", agreed))
+    }
+
+    @Test
+    fun `the advertising mark survives the queue, and an advertising job in an app without advertising configuration is dropped unsent`() {
+        val device = register("acc_a", "inst_aaaaaaaaaaaaaaaa")
+        tasks.enqueue(job(device, Instant.now().plus(Duration.ofHours(1))).copy(advertising = true), Instant.now().minusSeconds(1))
+
+        queueWorker().pollOnce()
+
+        assertTrue(sender.sent.isEmpty())
+        assertEquals(1L, jdbc.sql("select count(*) from jobs where status = 'DONE' and job_type = 'notification.push'").query(Long::class.java).single())
     }
 }

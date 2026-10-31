@@ -51,6 +51,25 @@ class PushAutoConfiguration {
     @ConditionalOnMissingBean(PushMessageFactory::class)
     fun pushMessageFactory(properties: PushProperties): PushMessageFactory = DefaultPushMessageFactory(properties)
 
+    /**
+     * 광고 규칙 - 광고 종류(`advertising-types`)를 설정했는데 동의 정책 빈 · `fallback-zone` · `sender-name` 이 없거나 `ttl` 이 12시간보다 짧으면 **시작을 멈춘다**
+     * (동의 확인 없이 광고가 나가는 구성이 조용히 생기지 않게). 광고 종류가 없으면 아무 검사도 하지 않는다.
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    fun advertisingGate(
+        @Suppress("UNUSED_PARAMETER") ports: PushPortsCheck,
+        properties: PushProperties,
+        policy: ObjectProvider<AdvertisingConsentPolicy>,
+        zones: ObjectProvider<PushRecipientZones>,
+        time: ObjectProvider<TimeProvider>,
+    ): AdvertisingGate {
+        val gate = AdvertisingGate(properties, policy.getIfAvailable(), zones.getIfAvailable(), time.getIfAvailable { TimeProvider.systemUtc() })
+        val problems = gate.problems()
+        check(problems.isEmpty()) { "skeleton.notification.push advertising is not configured completely: ${problems.joinToString("; ")}" }
+        return gate
+    }
+
     @Bean
     @ConditionalOnMissingBean
     fun pushNotificationChannel(
@@ -62,8 +81,9 @@ class PushAutoConfiguration {
         mutes: PushTypeMuteStore,
         tasks: PushTasks,
         senders: ObjectProvider<PushSender>,
+        gate: AdvertisingGate,
     ): PushNotificationChannel =
-        PushNotificationChannel(registry, properties, factory, devices, mutes, tasks) { senders.orderedStream().toList() }
+        PushNotificationChannel(registry, properties, factory, devices, mutes, tasks, { senders.orderedStream().toList() }, gate)
 
     @Bean
     @ConditionalOnMissingBean
@@ -73,8 +93,10 @@ class PushAutoConfiguration {
         mutes: PushTypeMuteStore,
         senders: ObjectProvider<PushSender>,
         time: ObjectProvider<TimeProvider>,
+        gate: AdvertisingGate,
+        tasks: PushTasks,
     ): PushDeliveryWorker =
-        PushDeliveryWorker(devices, mutes, { senders.orderedStream().toList() }, time.getIfAvailable { TimeProvider.systemUtc() })
+        PushDeliveryWorker(devices, mutes, { senders.orderedStream().toList() }, time.getIfAvailable { TimeProvider.systemUtc() }, gate, tasks)
 
     @Bean
     @ConditionalOnMissingBean

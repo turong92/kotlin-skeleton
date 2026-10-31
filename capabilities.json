@@ -2141,7 +2141,7 @@
       "module": "notification-push-legal",
       "path": "modules/notification-push-legal",
       "status": "experimental",
-      "summary": "광고성 푸시의 동의 어댑터 — 자리만 잡혀 있다(구현은 이어서). 규칙은 notification-push, 동의 읽기는 legal 의 동의 기록.",
+      "summary": "광고성 푸시의 동의 어댑터 — legal 동의 기록을 읽어 동의 정책을 구현하고, 동의 변경 통지 · 2년 재확인 안내 · 동의 상태 읽기(GET /api/v1/push/advertising)를 낸다. 규칙은 notification-push.",
       "starter": false,
       "newProjectFlag": "--modules notification-push-legal",
       "autoIncludes": ["notification", "notification-push"],
@@ -2151,14 +2151,24 @@
         "optional": []
       },
       "config": null,
-      "basePaths": [],
+      "basePaths": ["/api/v1/push/advertising"],
       "secrets": [],
       "docs": ["docs/modules/notification-push-legal.md"],
       "frontend": null,
-      "notFor": ["구현이 들어오기 전에는 아무것도 하지 않는다", "광고를 안 쓰는 앱은 얹지 않는다 — notification-push 만으로 legal 없이 푸시를 쓴다"],
+      "notFor": [
+        "광고성 종류(skeleton.notification.push.advertising-types)를 쓰지 않는 앱은 얹지 않는다 — notification-push 만으로 legal 없이 푸시를 쓴다",
+        "이 게이트는 푸시 채널(웹 푸시 · FCM)에만 있다 — 메일 · 슬랙 · SSE 로 광고를 보내는 앱은 AdvertisingConsentPolicy 를 직접 부른다",
+        "광고 문서(marketing · marketing-night) 본문 · 전송자 정보 · 법 해석은 앱과 법률 검토의 몫이다"
+      ],
       "keywords": {
-        "ko": ["광고 푸시 동의", "마케팅 수신 동의"],
-        "en": ["advertising push consent", "marketing consent"]
+        "ko": ["광고 푸시 동의", "마케팅 수신 동의", "야간 광고 동의", "수신 동의 재확인", "광고 표기"],
+        "en": [
+          "advertising push consent",
+          "marketing consent",
+          "night-time advertising consent",
+          "consent reconfirmation",
+          "advertisement mark"
+        ]
       }
     },
     {

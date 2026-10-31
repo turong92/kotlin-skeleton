@@ -38,4 +38,52 @@ class PushAutoConfigurationTest {
                 assertEquals(1, context.getBeansOfType(PushDeliveryWorker::class.java).size)
             }
     }
+
+    private val withPorts = runner.withPropertyValues("skeleton.notification.push.enabled=true", "skeleton.notification.push.advertising-types=promo.tips")
+        .withBean(PushDeviceStore::class.java, { FakePushDeviceStore() })
+        .withBean(PushTypeMuteStore::class.java, { FakePushTypeMuteStore() })
+        .withBean(PushTasks::class.java, { RecordingPushTasks() })
+
+    private fun failureOf(context: org.springframework.context.ApplicationContext) =
+        generateSequence((context as org.springframework.boot.test.context.assertj.AssertableApplicationContext).startupFailure) { it.cause }.mapNotNull { it.message }.joinToString(" | ")
+
+    @Test
+    fun `advertising types without a consent policy fail to start and tell which module to add`() {
+        withPorts.withPropertyValues("skeleton.notification.push.advertising.fallback-zone=Asia/Seoul", "skeleton.notification.push.advertising.sender-name=Example Co.")
+            .run { context -> assertTrue("notification-push-legal" in failureOf(context), failureOf(context)) }
+    }
+
+    @Test
+    fun `advertising types without fallback-zone or sender-name, or with a ttl under twelve hours, fail to start`() {
+        val policy = AdvertisingConsentPolicy { _, _ -> AdvertisingConsent(send = false, night = false) }
+        val base = withPorts.withBean(AdvertisingConsentPolicy::class.java, { policy })
+
+        base.run { context -> assertTrue("fallback-zone" in failureOf(context), failureOf(context)) }
+        base.withPropertyValues("skeleton.notification.push.advertising.fallback-zone=Asia/Seoul").run { context -> assertTrue("sender-name" in failureOf(context), failureOf(context)) }
+        base.withPropertyValues("skeleton.notification.push.advertising.fallback-zone=Asia/Seoul", "skeleton.notification.push.advertising.sender-name=x", "skeleton.notification.push.ttl=PT11H")
+            .run { context -> assertTrue("ttl" in failureOf(context), failureOf(context)) }
+    }
+
+    @Test
+    fun `a complete advertising configuration wires the gate into the channel and the worker`() {
+        val policy = AdvertisingConsentPolicy { _, _ -> AdvertisingConsent(send = false, night = false) }
+        withPorts.withBean(AdvertisingConsentPolicy::class.java, { policy })
+            .withPropertyValues("skeleton.notification.push.advertising.fallback-zone=Asia/Seoul", "skeleton.notification.push.advertising.sender-name=Example Co.")
+            .run { context ->
+                assertEquals(null, context.startupFailure)
+                assertTrue(context.getBean(AdvertisingGate::class.java).isAdvertising("promo.tips"))
+            }
+    }
+
+    @Test
+    fun `no advertising types means no advertising checks at all`() {
+        runner.withPropertyValues("skeleton.notification.push.enabled=true")
+            .withBean(PushDeviceStore::class.java, { FakePushDeviceStore() })
+            .withBean(PushTypeMuteStore::class.java, { FakePushTypeMuteStore() })
+            .withBean(PushTasks::class.java, { RecordingPushTasks() })
+            .run { context ->
+                assertEquals(null, context.startupFailure)
+                assertTrue(!context.getBean(AdvertisingGate::class.java).isAdvertising("promo.tips"))
+            }
+    }
 }

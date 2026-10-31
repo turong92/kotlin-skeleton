@@ -28,6 +28,8 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
         "skeleton.notification.push.enabled=true",
         "skeleton.notification.push.types=NOTE_UPDATED,comment.created",
         "skeleton.notification.push.advertising-types=promo.tips",
+        "skeleton.notification.push.advertising.fallback-zone=Asia/Seoul",
+        "skeleton.notification.push.advertising.sender-name=Example Co.",
         "skeleton.notification.preferences.types=comment.created",
     ],
 )
@@ -40,6 +42,7 @@ class PushWebTest {
         @Bean fun pushTypeMuteStore(): PushTypeMuteStore = FakePushTypeMuteStore()
         @Bean fun pushTasks(): PushTasks = RecordingPushTasks()
         @Bean fun webSender(): PushSender = StrictWebSender()
+        @Bean fun advertisingPolicy(): AdvertisingConsentPolicy = AdvertisingConsentPolicy { _, _ -> AdvertisingConsent(send = false, night = false) }
     }
 
     /** endpoint 에 `bad` 가 들어 있으면 거절하는 웹 푸시 전달 수단 */

@@ -4,7 +4,20 @@ skeleton:
     push:
       enabled: false               # true 면 알림 채널 · 발송 처리기 · /api/v1/push 가 선다 (기기 저장소는 notification-push-jdbc)
       types: []                    # 푸시로도 갈 알림 type (사람이 종류마다 「푸시만 끄기」를 할 수 있다). 비면 아무것도 안 간다 - 제품이 정한다
-      advertising-types: []        # 광고성 종류. 동의 게이트(notification-push-legal)가 붙기 전에는 이 종류의 푸시는 나가지 않는다
+      advertising-types: []        # 광고성 종류 (제품이 정한다). 기본 빈 목록 = 광고 규칙 꺼짐. 설정하면 동의 정책 빈(notification-push-legal)과 아래 advertising.fallback-zone · sender-name 이 필수 - 없으면 시작이 실패한다
+      advertising:                 # advertising-types 가 비어 있지 않을 때만 쓰인다 (정보통신망법 §50 관행 - 법률 자문이 아니다)
+        consent-type: marketing    # legal 문서 종류 - 광고 수신 동의
+        night-consent-type: marketing-night  # 야간(21~08시) 수신 별도 동의 (다른 문서 · 다른 체크박스)
+        night-start: "21:00"       # 법정 값이라 모듈 기본으로 둔다 (HH:mm, 이상)
+        night-end: "08:00"         # (미만) 야간 동의가 없으면 이 시각까지 보류한다
+        # fallback-zone: Asia/Seoul   # 필수(기본값 없음) - 받는 사람 시간대를 모를 때(PushRecipientZones 가 null). 시스템 기본 시간대는 쓰지 않는다
+        # sender-name: Example Co.     # 필수(기본값 없음) - 전송자 명칭 (동의 변경 · 재확인 안내에 쓴다)
+        reconfirm-after: 730d      # 동의 유효 기간 - 가장 최근 동의 + 이 기간이 지나면 없는 것으로 본다 (2년)
+        reconfirm-notice-before: 30d    # 만료 이 기간 전부터 재확인 안내를 동의 주기당 한 번 보낸다
+        reconfirm-scan-interval: 6h     # 재확인 안내 스캔 간격 (scheduler 모듈의 skeletonTaskScheduler 가 있어야 돈다)
+        reconfirm-link: /settings/notifications  # 안내 알림을 누르면 가는 앱 안 경로
+        title-prefix: "(광고)"      # 광고 푸시 제목 앞 표기 - 앱 factory 가 잊어도 채널이 붙인다
+        body-suffix: ""            # 광고 본문 끝에 붙일 문구 (예: 수신 거부: 설정 > 알림)
       lock-screen: FULL            # FULL: 제목 · 본문 그대로 | HIDDEN: 실제 내용을 푸시 서비스에 보내지 않고 hidden-title 만 (기본 factory 에만 적용)
       hidden-title: 새 알림이 있습니다  # lock-screen=HIDDEN 일 때의 제목
       hidden-body: ""              # lock-screen=HIDDEN 일 때의 본문 (비면 없음)

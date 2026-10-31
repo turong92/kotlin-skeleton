@@ -124,7 +124,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `notification-mail` | SMTP 로 메일을 보내는 MailSender (spring.mail.* 위에). | 스타터(apps/api)에 기본 포함 | 메일 발송, 이메일 보내기, SMTP, 메일 / send email, smtp, mail sender, email | — |
 | `notification-push` | 알림이 받는 사람의 기기로도 간다 — 기기 등록 · 종류 × 채널 푸시 끄기 · 잠금 화면 옵션 · 세션 연동. 저장은 notification-push-jdbc, 전달은 notification-webpush · notification-fcm. | `--modules notification-push,notification-push-jdbc` | 푸시 알림, 웹 푸시 기기 등록, 푸시 끄기, 종류별 푸시, 잠금 화면 내용 / push notification, device registration, per-type push mute, lock screen content | — |
 | `notification-push-jdbc` | 푸시 기기 · 「푸시만 끄기」를 DB 에 저장하고 발송 작업을 job-queue-jdbc 에 얹는다 (PostgreSQL · MySQL). | `--modules notification-push-jdbc` | 푸시 기기 저장, 푸시 작업 큐 / push device store, push job queue | — |
-| `notification-push-legal` | 광고성 푸시의 동의 어댑터 — 자리만 잡혀 있다(구현은 이어서). 규칙은 notification-push, 동의 읽기는 legal 의 동의 기록. | `--modules notification-push-legal` | 광고 푸시 동의, 마케팅 수신 동의 / advertising push consent, marketing consent | — |
+| `notification-push-legal` | 광고성 푸시의 동의 어댑터 — legal 동의 기록을 읽어 동의 정책을 구현하고, 동의 변경 통지 · 2년 재확인 안내 · 동의 상태 읽기(GET /api/v1/push/advertising)를 낸다. 규칙은 notification-push. | `--modules notification-push-legal` | 광고 푸시 동의, 마케팅 수신 동의, 야간 광고 동의, 수신 동의 재확인, 광고 표기 / advertising push consent, marketing consent, night-time advertising consent, consent reconfirmation, advertisement mark | — |
 | `notification-slack` | 알림과 @SlackException 예외 알림을 Slack 웹훅으로 보낸다. | `--modules notification-slack` | 슬랙 알림, 슬랙, 예외 알림 / slack notification, slack webhook, exception alert | — |
 | `notification-sse` | 알림을 Server-Sent Events 로 브라우저에 실시간 전달한다(GET /api/v1/notifications/sse) — 받는 사람이 정해진 알림은 그 사람에게만. | `--modules notification-sse` | 실시간 알림, SSE, 알림 즉시 표시, 푸시 알림, 서버 푸시 / realtime notification, sse, server-sent events, push notification | `@skeleton/realtime` |
 | `notification-webpush` | 웹 푸시(VAPID) 전달 수단 — 브라우저 구독으로 푸시를 보낸다. RFC 8291 암호화(JDK) · 끝점 허용 목록(SSRF 방어) · 키 쌍 기동 검사. notification-push 의 PushSender 로 끼운다. | `--modules notification-webpush` | 웹 푸시, 브라우저 푸시, VAPID / web push, browser push, VAPID | — |
@@ -1000,17 +1000,19 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - DataSource · db-* 모듈과 job-queue-jdbc 스키마, 이 모듈의 마이그레이션이 적용된 스키마가 필요하다
 - 키워드: 푸시 기기 저장, 푸시 작업 큐 / push device store, push job queue
 
-### `notification-push-legal` — 광고성 푸시의 동의 어댑터 — 자리만 잡혀 있다(구현은 이어서). 규칙은 notification-push, 동의 읽기는 legal 의 동의 기록.
+### `notification-push-legal` — 광고성 푸시의 동의 어댑터 — legal 동의 기록을 읽어 동의 정책을 구현하고, 동의 변경 통지 · 2년 재확인 안내 · 동의 상태 읽기(GET /api/v1/push/advertising)를 낸다. 규칙은 notification-push.
 
 - 종류 · 상태: module · experimental — 위치 `modules/notification-push-legal`
 - 켜는 법: `--modules notification-push-legal`
 - 의존 한 줄: `implementation(project(":modules:notification-push-legal"))`
 - 자동으로 따라온다: `notification`, `notification-push`
+- HTTP 경로: `/api/v1/push/advertising`
 - 문서: `docs/modules/notification-push-legal.md`
 - 쓰지 않는 경우:
-  - 구현이 들어오기 전에는 아무것도 하지 않는다
-  - 광고를 안 쓰는 앱은 얹지 않는다 — notification-push 만으로 legal 없이 푸시를 쓴다
-- 키워드: 광고 푸시 동의, 마케팅 수신 동의 / advertising push consent, marketing consent
+  - 광고성 종류(skeleton.notification.push.advertising-types)를 쓰지 않는 앱은 얹지 않는다 — notification-push 만으로 legal 없이 푸시를 쓴다
+  - 이 게이트는 푸시 채널(웹 푸시 · FCM)에만 있다 — 메일 · 슬랙 · SSE 로 광고를 보내는 앱은 AdvertisingConsentPolicy 를 직접 부른다
+  - 광고 문서(marketing · marketing-night) 본문 · 전송자 정보 · 법 해석은 앱과 법률 검토의 몫이다
+- 키워드: 광고 푸시 동의, 마케팅 수신 동의, 야간 광고 동의, 수신 동의 재확인, 광고 표기 / advertising push consent, marketing consent, night-time advertising consent, consent reconfirmation, advertisement mark
 
 ### `notification-slack` — 알림과 @SlackException 예외 알림을 Slack 웹훅으로 보낸다.
 
