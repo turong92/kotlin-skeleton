@@ -23,6 +23,11 @@
 | `async-notification` | 비동기 예외를 알림으로 보낸다 | [async-notification](async-notification.md) |
 | `notification` | 알림 계약 · 수신자 해석 · 인메모리 브로커 | [notification](notification.md) |
 | `notification-jdbc` | 알림 인박스를 DB 테이블에 저장 | [notification-jdbc](notification-jdbc.md) |
+| `notification-push` | 푸시 알림의 허리 — 알림이 받는 사람의 기기로도 간다 (기기 등록 · 종류 × 채널 끄기 · 잠금 화면 옵션) | [notification-push](notification-push.md) |
+| `notification-push-jdbc` | 푸시 기기 · 종류별 푸시 끄기를 DB 에 저장하고 발송 작업을 job-queue 에 얹기 | [notification-push-jdbc](notification-push-jdbc.md) |
+| `notification-webpush` | 웹 푸시(VAPID) 전달 수단 (자리만 — 구현은 이어서) | [notification-webpush](notification-webpush.md) |
+| `notification-fcm` | 모바일 푸시(FCM) 전달 수단 (자리만 — 구현은 이어서) | [notification-fcm](notification-fcm.md) |
+| `notification-push-legal` | 광고성 푸시의 동의 어댑터 — legal 동의 기록을 읽는다 (자리만 — 구현은 이어서) | [notification-push-legal](notification-push-legal.md) |
 | `notification-websocket` | STOMP/WebSocket 알림 전달 | [notification-websocket](notification-websocket.md) |
 | `notification-sse` | SSE 알림 전달 | [notification-sse](notification-sse.md) |
 | `notification-slack` | Slack 웹훅 알림 · 예외 알림 | [notification-slack](notification-slack.md) |

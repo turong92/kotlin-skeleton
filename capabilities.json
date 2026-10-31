@@ -1980,6 +1980,32 @@
       }
     },
     {
+      "id": "notification-fcm",
+      "kind": "module",
+      "module": "notification-fcm",
+      "path": "modules/notification-fcm",
+      "status": "experimental",
+      "summary": "모바일 푸시(FCM HTTP v1) 전달 수단 — 자리만 잡혀 있다(구현은 이어서). notification-push 의 PushSender 로 끼운다.",
+      "starter": false,
+      "newProjectFlag": "--modules notification-fcm",
+      "autoIncludes": ["notification", "notification-push"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/notification-fcm.md"],
+      "frontend": null,
+      "notFor": ["구현이 들어오기 전에는 아무것도 하지 않는다", "notification-push 없이는 쓰지 않는다(따라온다)"],
+      "keywords": {
+        "ko": ["모바일 푸시", "FCM", "안드로이드 푸시"],
+        "en": ["mobile push", "FCM", "android push"]
+      }
+    },
+    {
       "id": "notification-jdbc",
       "kind": "module",
       "module": "notification-jdbc",
@@ -2047,6 +2073,92 @@
       "keywords": {
         "ko": ["메일 발송", "이메일 보내기", "SMTP", "메일"],
         "en": ["send email", "smtp", "mail sender", "email"]
+      }
+    },
+    {
+      "id": "notification-push",
+      "kind": "module",
+      "module": "notification-push",
+      "path": "modules/notification-push",
+      "status": "experimental",
+      "summary": "알림이 받는 사람의 기기로도 간다 — 기기 등록 · 종류 × 채널 푸시 끄기 · 잠금 화면 옵션 · 세션 연동. 저장은 notification-push-jdbc, 전달은 notification-webpush · notification-fcm.",
+      "starter": false,
+      "newProjectFlag": "--modules notification-push,notification-push-jdbc",
+      "autoIncludes": ["json", "notification"],
+      "needs": {
+        "requires": ["notification-push-jdbc"],
+        "oneOf": [],
+        "optional": ["auth"]
+      },
+      "config": {
+        "prefixes": ["skeleton.notification.push"],
+        "snippet": "docs/config/modules/notification-push.yml"
+      },
+      "basePaths": ["/api/v1/push"],
+      "secrets": [],
+      "docs": ["docs/modules/notification-push.md"],
+      "frontend": null,
+      "notFor": [
+        "notification-push 는 저장소를 모른다 — notification-push-jdbc 를 같이 고른다",
+        "전달 수단(notification-webpush · notification-fcm)이 하나도 없으면 기기를 등록할 수 없다",
+        "꺼짐이 기본이다 — skeleton.notification.push.enabled=true 와 푸시로 갈 types 를 앱 yml 이 정한다",
+        "받는 사람이 없는 전체 공지는 푸시하지 않는다"
+      ],
+      "keywords": {
+        "ko": ["푸시 알림", "웹 푸시 기기 등록", "푸시 끄기", "종류별 푸시", "잠금 화면 내용"],
+        "en": ["push notification", "device registration", "per-type push mute", "lock screen content"]
+      }
+    },
+    {
+      "id": "notification-push-jdbc",
+      "kind": "module",
+      "module": "notification-push-jdbc",
+      "path": "modules/notification-push-jdbc",
+      "status": "experimental",
+      "summary": "푸시 기기 · 「푸시만 끄기」를 DB 에 저장하고 발송 작업을 job-queue-jdbc 에 얹는다 (PostgreSQL · MySQL).",
+      "starter": false,
+      "newProjectFlag": "--modules notification-push-jdbc",
+      "autoIncludes": ["json", "notification", "notification-push"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/notification-push-jdbc.md"],
+      "frontend": null,
+      "notFor": ["DataSource · db-* 모듈과 job-queue-jdbc 스키마, 이 모듈의 마이그레이션이 적용된 스키마가 필요하다"],
+      "keywords": {
+        "ko": ["푸시 기기 저장", "푸시 작업 큐"],
+        "en": ["push device store", "push job queue"]
+      }
+    },
+    {
+      "id": "notification-push-legal",
+      "kind": "module",
+      "module": "notification-push-legal",
+      "path": "modules/notification-push-legal",
+      "status": "experimental",
+      "summary": "광고성 푸시의 동의 어댑터 — 자리만 잡혀 있다(구현은 이어서). 규칙은 notification-push, 동의 읽기는 legal 의 동의 기록.",
+      "starter": false,
+      "newProjectFlag": "--modules notification-push-legal",
+      "autoIncludes": ["notification", "notification-push"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/notification-push-legal.md"],
+      "frontend": null,
+      "notFor": ["구현이 들어오기 전에는 아무것도 하지 않는다", "광고를 안 쓰는 앱은 얹지 않는다 — notification-push 만으로 legal 없이 푸시를 쓴다"],
+      "keywords": {
+        "ko": ["광고 푸시 동의", "마케팅 수신 동의"],
+        "en": ["advertising push consent", "marketing consent"]
       }
     },
     {
@@ -2119,6 +2231,32 @@
       "keywords": {
         "ko": ["실시간 알림", "SSE", "알림 즉시 표시", "푸시 알림", "서버 푸시"],
         "en": ["realtime notification", "sse", "server-sent events", "push notification"]
+      }
+    },
+    {
+      "id": "notification-webpush",
+      "kind": "module",
+      "module": "notification-webpush",
+      "path": "modules/notification-webpush",
+      "status": "experimental",
+      "summary": "웹 푸시(VAPID) 전달 수단 — 자리만 잡혀 있다(구현은 이어서). notification-push 의 PushSender 로 끼운다.",
+      "starter": false,
+      "newProjectFlag": "--modules notification-webpush",
+      "autoIncludes": ["notification", "notification-push"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/notification-webpush.md"],
+      "frontend": null,
+      "notFor": ["구현이 들어오기 전에는 아무것도 하지 않는다", "notification-push 없이는 쓰지 않는다(따라온다)"],
+      "keywords": {
+        "ko": ["웹 푸시", "브라우저 푸시", "VAPID"],
+        "en": ["web push", "browser push", "VAPID"]
       }
     },
     {
@@ -3419,9 +3557,14 @@
         "event-kafka",
         "json",
         "notification",
+        "notification-fcm",
         "notification-jdbc",
+        "notification-push",
+        "notification-push-jdbc",
+        "notification-push-legal",
         "notification-slack",
         "notification-sse",
+        "notification-webpush",
         "notification-websocket",
         "payment",
         "payment-jdbc",

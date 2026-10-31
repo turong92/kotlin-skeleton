@@ -1,0 +1,19 @@
+# notification-push — 푸시 알림(알림이 받는 사람의 기기로도 간다). 기본 꺼짐. 접두사는 skeleton.notification.push. 저장은 notification-push-jdbc, 전달은 notification-webpush · notification-fcm.
+skeleton:
+  notification:
+    push:
+      enabled: false               # true 면 알림 채널 · 발송 처리기 · /api/v1/push 가 선다 (기기 저장소는 notification-push-jdbc)
+      types: []                    # 푸시로도 갈 알림 type (사람이 종류마다 「푸시만 끄기」를 할 수 있다). 비면 아무것도 안 간다 - 제품이 정한다
+      advertising-types: []        # 광고성 종류. 동의 게이트(notification-push-legal)가 붙기 전에는 이 종류의 푸시는 나가지 않는다
+      lock-screen: FULL            # FULL: 제목 · 본문 그대로 | HIDDEN: 실제 내용을 푸시 서비스에 보내지 않고 hidden-title 만 (기본 factory 에만 적용)
+      hidden-title: 새 알림이 있습니다  # lock-screen=HIDDEN 일 때의 제목
+      hidden-body: ""              # lock-screen=HIDDEN 일 때의 본문 (비면 없음)
+      max-devices-per-account: 20  # 계정당 기기 상한 - 넘으면 last_seen_at 이 가장 오랜 줄부터 지운다
+      ttl: 24h                     # 푸시 만료 - 지나면 보내지 않는다
+      max-attempts: 5              # 푸시 하나(기기 하나)의 최대 시도 수
+      http:
+        enabled: true              # false 면 /api/v1/push 를 등록하지 않는다 (서블릿 앱 + Spring Security 가 있을 때만 등록)
+      stale-cleanup:
+        enabled: false             # true 면 interval 마다 stale-after 동안 안 본 기기를 지운다 (기본 꺼짐 - 보관 정책은 앱). scheduler 모듈의 skeletonTaskScheduler 가 있어야 돈다
+        stale-after: 60d           # last_seen_at 이 이 기간보다 오래된 기기를 지운다
+        interval: 6h               # 정리를 도는 간격

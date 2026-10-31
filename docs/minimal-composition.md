@@ -130,6 +130,7 @@ fails when this table and the prefixes found in module code differ.
 | `notification` | `skeleton.notification.inbox` |
 | `notification` | `skeleton.notification.preferences` |
 | `notification` | `skeleton.notification.retention` |
+| `notification-push` | `skeleton.notification.push` |
 | `notification-mail` | `skeleton.notification-mail` |
 | `notification-slack` | `skeleton.notification.slack` |
 | `notification-sse` | `skeleton.notification.sse` |
@@ -207,6 +208,9 @@ test proving a context with only that module (and its declared dependencies) boo
 | `migration` / `migration-flyway` | yes | Flyway on the classpath (`spring-boot-starter-flyway`) | — |
 | `notification` | yes (in-memory broker) | nothing | — |
 | `notification-jdbc` | yes | a `DataSource` + one `db-*` module (+ its migration, as above) | — |
+| `notification-push` | off until `skeleton.notification.push.enabled=true` + `types` | the `PushDeviceStore` · `PushTypeMuteStore` · `PushTasks` beans — `notification-push-jdbc` provides them, startup fails naming the module | a delivery module (`notification-webpush` · `notification-fcm`) to reach devices |
+| `notification-push-jdbc` | yes | a `DataSource` + one `db-*` module + `job-queue-jdbc` enabled (+ its migrations `push_devices` · `push_type_mutes`, as above) | — |
+| `notification-webpush` / `notification-fcm` / `notification-push-legal` | placeholders until their code lands (no beans yet) | nothing | — |
 | `notification-mail` | off until `enabled=true` + `spring.mail.host` + `from` | nothing | an SMTP server |
 | `notification-slack` | wired; sends nothing until `enabled=true` + `webhook-url` | nothing | webhook URL, internet |
 | `notification-sse` | yes | nothing | — |

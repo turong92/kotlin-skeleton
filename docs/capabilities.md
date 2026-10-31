@@ -119,10 +119,15 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `migration` | 마이그레이션 공통 규칙 — DB 를 지우는 설정이 허용 프로필 밖에서 켜지면 시작을 막는 가드(도구 중립). | 스타터(apps/api)에 기본 포함 | 마이그레이션 가드, DB 초기화 방지, 스키마 보호 / migration guard, prevent db wipe, schema safety | — |
 | `migration-flyway` | Flyway 구현 — 로컬 clean 옵트인 · 마이그레이션 파일 이름 규칙(V<UTC 14자리>__snake_case.sql) 검사. | 스타터(apps/api)에 기본 포함 | Flyway, 마이그레이션, DB 스키마 버전, 스키마 변경 / flyway, database migration, schema migration, schema version | — |
 | `notification` | 알림 계약 · 수신자 해석 · 인메모리 브로커 + 로그인한 사람의 받은편지함 HTTP(/api/v1/notifications: 목록 · 안 읽은 수 · 읽음 · 모두 읽음). 클릭 이동 링크 · 같은 열쇠 묶기 · 종류별 수신 끄기(/preferences, 끌 수 있는 종류는 설정) · 보관 정리(기본 꺼짐) · 커밋 뒤 전달. | `--modules notification` | 알림, 알림 목록, 받은편지함, 안 읽은 알림, 알림 읽음, 알림 보내기, 알림 묶기, 알림 링크, 알림 끄기, 알림 수신 설정, 알림 보관 정리 / notification, inbox, unread, mark as read, publish notification, collapse notifications, notification link, notification retention | `@skeleton/notifications` |
+| `notification-fcm` | 모바일 푸시(FCM HTTP v1) 전달 수단 — 자리만 잡혀 있다(구현은 이어서). notification-push 의 PushSender 로 끼운다. | `--modules notification-fcm` | 모바일 푸시, FCM, 안드로이드 푸시 / mobile push, FCM, android push | — |
 | `notification-jdbc` | 알림 받은편지함을 DB 테이블에 저장한다(notification_inbox). | `--modules notification-jdbc` | 알림 저장, 알림 DB, 알림 기록 유지 / notification storage, persist notifications, inbox database | `@skeleton/notifications` |
 | `notification-mail` | SMTP 로 메일을 보내는 MailSender (spring.mail.* 위에). | 스타터(apps/api)에 기본 포함 | 메일 발송, 이메일 보내기, SMTP, 메일 / send email, smtp, mail sender, email | — |
+| `notification-push` | 알림이 받는 사람의 기기로도 간다 — 기기 등록 · 종류 × 채널 푸시 끄기 · 잠금 화면 옵션 · 세션 연동. 저장은 notification-push-jdbc, 전달은 notification-webpush · notification-fcm. | `--modules notification-push,notification-push-jdbc` | 푸시 알림, 웹 푸시 기기 등록, 푸시 끄기, 종류별 푸시, 잠금 화면 내용 / push notification, device registration, per-type push mute, lock screen content | — |
+| `notification-push-jdbc` | 푸시 기기 · 「푸시만 끄기」를 DB 에 저장하고 발송 작업을 job-queue-jdbc 에 얹는다 (PostgreSQL · MySQL). | `--modules notification-push-jdbc` | 푸시 기기 저장, 푸시 작업 큐 / push device store, push job queue | — |
+| `notification-push-legal` | 광고성 푸시의 동의 어댑터 — 자리만 잡혀 있다(구현은 이어서). 규칙은 notification-push, 동의 읽기는 legal 의 동의 기록. | `--modules notification-push-legal` | 광고 푸시 동의, 마케팅 수신 동의 / advertising push consent, marketing consent | — |
 | `notification-slack` | 알림과 @SlackException 예외 알림을 Slack 웹훅으로 보낸다. | `--modules notification-slack` | 슬랙 알림, 슬랙, 예외 알림 / slack notification, slack webhook, exception alert | — |
 | `notification-sse` | 알림을 Server-Sent Events 로 브라우저에 실시간 전달한다(GET /api/v1/notifications/sse) — 받는 사람이 정해진 알림은 그 사람에게만. | `--modules notification-sse` | 실시간 알림, SSE, 알림 즉시 표시, 푸시 알림, 서버 푸시 / realtime notification, sse, server-sent events, push notification | `@skeleton/realtime` |
+| `notification-webpush` | 웹 푸시(VAPID) 전달 수단 — 자리만 잡혀 있다(구현은 이어서). notification-push 의 PushSender 로 끼운다. | `--modules notification-webpush` | 웹 푸시, 브라우저 푸시, VAPID / web push, browser push, VAPID | — |
 | `notification-websocket` | 알림을 STOMP over WebSocket(/ws/notifications)으로 전달한다 — 인증 · trace 인터셉터 · 하트비트를 갖춘 인프로세스 브로커. | `--modules notification-websocket` | 웹소켓, 실시간 알림, 양방향 통신, STOMP / websocket, stomp, realtime notification, two-way | `@skeleton/realtime` |
 | `payment` | 결제 계약 + 장부 HTTP — PaymentService · PaymentProviderRouter(제공자는 payment-toss \| payment-kakaopay \| payment-naverpay \| payment-stripe \| payment-paddle). 장부(payment-jdbc)가 있으면 사용자 경로(/api/v1/payments: 설정 · 주문 만들기(PaymentCatalog 빈이 있을 때) · 승인 · 환불 요청), 꺼 둔 운영자 경로(/api/v1/admin/payments), 결제사가 부르는 웹훅 수신 경로, 탈퇴 고리 · 내보내기 고리를 연다. 구독(skeleton.payment.subscription.enabled — 꺼짐이 기본): 카드 등록 + 첫 결제, 기간 끝 갱신 작업, 해지 예약 (/api/v1/payments/subscriptions, 빌링키는 crypto 로 암호화). | `--modules payment` — `payment-toss` \| `payment-kakaopay` \| `payment-naverpay` \| `payment-stripe` \| `payment-paddle` 중 하나 이상 고른다 | 결제, 결제 승인, 환불, 결제 취소, 유료 / payment, checkout, refund, payment confirm, paid | `@skeleton/payment` |
 | `payment-jdbc` | 결제 장부 저장소 — PostgreSQL · MySQL 로 payment 의 저장 포트(PaymentLedgerStore)와 작업 포트(PaymentTasks, job-queue-jdbc 에 싣는다)를 구현한다(payment_* 표 4개 · 주문 줄 락 · 유니크 · check 제약). | `--modules payment-jdbc` | 결제 장부, 주문 장부, 결제 저장소, 결제 DB / payment ledger, payment storage, payment repository, order ledger | `@skeleton/payment` |
@@ -929,6 +934,18 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 알림을 만드는 쪽(NotificationPublisher.publish)은 앱 코드가 부른다
 - 키워드: 알림, 알림 목록, 받은편지함, 안 읽은 알림, 알림 읽음, 알림 보내기, 알림 묶기, 알림 링크, 알림 끄기, 알림 수신 설정, 알림 보관 정리 / notification, inbox, unread, mark as read, publish notification, collapse notifications, notification link, notification retention
 
+### `notification-fcm` — 모바일 푸시(FCM HTTP v1) 전달 수단 — 자리만 잡혀 있다(구현은 이어서). notification-push 의 PushSender 로 끼운다.
+
+- 종류 · 상태: module · experimental — 위치 `modules/notification-fcm`
+- 켜는 법: `--modules notification-fcm`
+- 의존 한 줄: `implementation(project(":modules:notification-fcm"))`
+- 자동으로 따라온다: `notification`, `notification-push`
+- 문서: `docs/modules/notification-fcm.md`
+- 쓰지 않는 경우:
+  - 구현이 들어오기 전에는 아무것도 하지 않는다
+  - notification-push 없이는 쓰지 않는다(따라온다)
+- 키워드: 모바일 푸시, FCM, 안드로이드 푸시 / mobile push, FCM, android push
+
 ### `notification-jdbc` — 알림 받은편지함을 DB 테이블에 저장한다(notification_inbox).
 
 - 종류 · 상태: module · stable — 위치 `modules/notification-jdbc`
@@ -954,6 +971,46 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 수신 · 템플릿 엔진 · 메일 서비스(SES 등) 연동은 없다 — SMTP 만
   - host · from 을 정하기 전에는 꺼져 있다
 - 키워드: 메일 발송, 이메일 보내기, SMTP, 메일 / send email, smtp, mail sender, email
+
+### `notification-push` — 알림이 받는 사람의 기기로도 간다 — 기기 등록 · 종류 × 채널 푸시 끄기 · 잠금 화면 옵션 · 세션 연동. 저장은 notification-push-jdbc, 전달은 notification-webpush · notification-fcm.
+
+- 종류 · 상태: module · experimental — 위치 `modules/notification-push`
+- 켜는 법: `--modules notification-push,notification-push-jdbc`
+- 의존 한 줄: `implementation(project(":modules:notification-push"))`
+- 자동으로 따라온다: `json`, `notification`
+- 함께 골라야 한다: `notification-push-jdbc`
+- 설정 접두사 `skeleton.notification.push` — 키와 기본값 `docs/config/modules/notification-push.yml`
+- HTTP 경로: `/api/v1/push`
+- 문서: `docs/modules/notification-push.md`
+- 쓰지 않는 경우:
+  - notification-push 는 저장소를 모른다 — notification-push-jdbc 를 같이 고른다
+  - 전달 수단(notification-webpush · notification-fcm)이 하나도 없으면 기기를 등록할 수 없다
+  - 꺼짐이 기본이다 — skeleton.notification.push.enabled=true 와 푸시로 갈 types 를 앱 yml 이 정한다
+  - 받는 사람이 없는 전체 공지는 푸시하지 않는다
+- 키워드: 푸시 알림, 웹 푸시 기기 등록, 푸시 끄기, 종류별 푸시, 잠금 화면 내용 / push notification, device registration, per-type push mute, lock screen content
+
+### `notification-push-jdbc` — 푸시 기기 · 「푸시만 끄기」를 DB 에 저장하고 발송 작업을 job-queue-jdbc 에 얹는다 (PostgreSQL · MySQL).
+
+- 종류 · 상태: module · experimental — 위치 `modules/notification-push-jdbc`
+- 켜는 법: `--modules notification-push-jdbc`
+- 의존 한 줄: `implementation(project(":modules:notification-push-jdbc"))`
+- 자동으로 따라온다: `json`, `notification`, `notification-push`
+- 문서: `docs/modules/notification-push-jdbc.md`
+- 쓰지 않는 경우:
+  - DataSource · db-* 모듈과 job-queue-jdbc 스키마, 이 모듈의 마이그레이션이 적용된 스키마가 필요하다
+- 키워드: 푸시 기기 저장, 푸시 작업 큐 / push device store, push job queue
+
+### `notification-push-legal` — 광고성 푸시의 동의 어댑터 — 자리만 잡혀 있다(구현은 이어서). 규칙은 notification-push, 동의 읽기는 legal 의 동의 기록.
+
+- 종류 · 상태: module · experimental — 위치 `modules/notification-push-legal`
+- 켜는 법: `--modules notification-push-legal`
+- 의존 한 줄: `implementation(project(":modules:notification-push-legal"))`
+- 자동으로 따라온다: `notification`, `notification-push`
+- 문서: `docs/modules/notification-push-legal.md`
+- 쓰지 않는 경우:
+  - 구현이 들어오기 전에는 아무것도 하지 않는다
+  - 광고를 안 쓰는 앱은 얹지 않는다 — notification-push 만으로 legal 없이 푸시를 쓴다
+- 키워드: 광고 푸시 동의, 마케팅 수신 동의 / advertising push consent, marketing consent
 
 ### `notification-slack` — 알림과 @SlackException 예외 알림을 Slack 웹훅으로 보낸다.
 
@@ -985,6 +1042,18 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 양방향 통신은 notification-websocket
   - 인스턴스가 여러 개면 인프로세스 브로커라 다른 인스턴스의 알림을 못 받는다
 - 키워드: 실시간 알림, SSE, 알림 즉시 표시, 푸시 알림, 서버 푸시 / realtime notification, sse, server-sent events, push notification
+
+### `notification-webpush` — 웹 푸시(VAPID) 전달 수단 — 자리만 잡혀 있다(구현은 이어서). notification-push 의 PushSender 로 끼운다.
+
+- 종류 · 상태: module · experimental — 위치 `modules/notification-webpush`
+- 켜는 법: `--modules notification-webpush`
+- 의존 한 줄: `implementation(project(":modules:notification-webpush"))`
+- 자동으로 따라온다: `notification`, `notification-push`
+- 문서: `docs/modules/notification-webpush.md`
+- 쓰지 않는 경우:
+  - 구현이 들어오기 전에는 아무것도 하지 않는다
+  - notification-push 없이는 쓰지 않는다(따라온다)
+- 키워드: 웹 푸시, 브라우저 푸시, VAPID / web push, browser push, VAPID
 
 ### `notification-websocket` — 알림을 STOMP over WebSocket(/ws/notifications)으로 전달한다 — 인증 · trace 인터셉터 · 하트비트를 갖춘 인프로세스 브로커.
 
@@ -1463,7 +1532,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 - 종류 · 상태: app · stable — 위치 `apps/workbench`
 - 켜는 법: `--with-workbench`
-- 자동으로 따라온다: `alert-jdbc`, `api-key`, `api-key-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `badge`, `badge-jdbc`, `board`, `board-jdbc`, `campaign`, `campaign-jdbc`, `catalog`, `catalog-jdbc`, `config-aws-ssm`, `coupon`, `coupon-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `db-mysql`, `event-kafka`, `json`, `notification`, `notification-jdbc`, `notification-slack`, `notification-sse`, `notification-websocket`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `point`, `point-jdbc`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `review`, `review-jdbc`, `reward`, `reward-jdbc`, `scheduler`, `search`, `search-jdbc`, `storage`, `storage-s3`, `workspace`, `workspace-jdbc`
+- 자동으로 따라온다: `alert-jdbc`, `api-key`, `api-key-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `badge`, `badge-jdbc`, `board`, `board-jdbc`, `campaign`, `campaign-jdbc`, `catalog`, `catalog-jdbc`, `config-aws-ssm`, `coupon`, `coupon-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `db-mysql`, `event-kafka`, `json`, `notification`, `notification-fcm`, `notification-jdbc`, `notification-push`, `notification-push-jdbc`, `notification-push-legal`, `notification-slack`, `notification-sse`, `notification-webpush`, `notification-websocket`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `point`, `point-jdbc`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `review`, `review-jdbc`, `reward`, `reward-jdbc`, `scheduler`, `search`, `search-jdbc`, `storage`, `storage-s3`, `workspace`, `workspace-jdbc`
 - HTTP 경로: `/api/v1`, `/api/v1/examples`, `/api/v1/skeleton`, `/api/v1/skeleton/enums`, `/api/v1/skeleton/json`, `/api/v1/skeleton/payments`, `/api/v1/skeleton/polymorphic/contents`
 - 문서: `docs/minimal-composition.md`, `docs/modules/README.md`
 - 짝 프런트(react-skeleton): 항목 `app-workbench` · 조각 `--with-workbench`
