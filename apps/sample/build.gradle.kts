@@ -38,6 +38,11 @@ dependencies {
     implementation(project(":modules:auth-social-naver"))
     implementation(project(":modules:auth-social-oidc"))   // 범용 OpenID Connect (LINE 프리셋 포함)
     implementation(project(":modules:auth-social-x"))      // X(Twitter) OAuth 2.0 + PKCE
+    implementation(project(":modules:notification-push"))      // 푸시 알림: 알림이 받는 사람의 기기로도 간다 (+ push: /api/v1/push). 켜기·종류는 application.yml - 문서 docs/modules/notification-push.md
+    implementation(project(":modules:notification-push-jdbc")) // 푸시 기기 · 「푸시만 끄기」 저장 + 발송 작업을 job-queue-jdbc 에 얹는다 (notification-push 는 저장소를 모른다)
+    implementation(project(":modules:notification-webpush"))   // 웹 푸시(VAPID) 전달 수단 - 브라우저 구독. 키(SKELETON_NOTIFICATION_WEBPUSH_VAPID_*)가 없으면 로컬은 센더가 없고, 보호 환경은 기동 실패. docs/modules/notification-webpush.md
+    implementation(project(":modules:notification-fcm"))       // 모바일 푸시(FCM) 전달 수단 - 꺼진 채 시작한다: SKELETON_NOTIFICATION_FCM_ENABLED=true + SKELETON_NOTIFICATION_FCM_CREDENTIALS (docs/real-provider-setup.md)
+    implementation(project(":modules:notification-push-legal")) // 광고성 푸시의 동의 어댑터 - legal 동의 기록을 읽는다. 견본은 광고 종류 promo.notes-tips 를 둔다(보내는 화면은 없다). docs/modules/notification-push-legal.md
     implementation(project(":modules:notification-mail")) // 계정 메일(인증 · 재설정 · 매직 링크). 로컬은 compose mail 프로필(mailpit)이 받는다
     implementation(project(":modules:payment-jdbc"))       // 결제 장부: 주문 · 승인 · 환불 · 웹훅 수신함 (+ payment: /api/v1/payments, 운영자 /api/v1/admin/payments). 상품은 cheer/ 의 PaymentCatalog — docs/sample.md
     implementation(project(":modules:crypto"))             // 구독의 빌링키를 암호화해 저장한다 (payment 가 TextEncryptor 를 쓴다) — 키: SKELETON_CRYPTO_KEYS_MAIN (docs/sample.md)

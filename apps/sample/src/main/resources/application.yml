@@ -90,6 +90,10 @@ skeleton:
         - PATCH /api/v1/notifications/*/read   # 알림함을 여는 것은 읽기인데 화면이 읽음 표시를 보낸다
         - PATCH /api/v1/notifications/read-all
         - PUT /api/v1/notifications/preferences/*   # 알림 끄기는 자기 설정일 뿐 남에게 영향이 없다 - 이메일 없는 계정도 끌 수 있어야 한다
+        - PUT /api/v1/push/devices/*   # 이 기기에서 푸시 받기 / 끄기는 자기 기기 설정일 뿐 남에게 영향이 없다 - 이메일 없는 계정도 할 수 있어야 한다
+        - DELETE /api/v1/push/devices/*
+        - POST /api/v1/push/devices/*/test   # 내 기기에 시험 알림 하나 (계정당 60초에 한 번)
+        - PUT /api/v1/push/preferences/*   # 종류별 「푸시만 끄기」 - 위 알림 끄기와 같은 자기 설정
         - POST /api/v1/storage/presign-download  # 글의 첨부를 보려면 필요하다 — 읽기처럼 보이는 POST
     login-id:
       enabled: true                       # 이 앱의 선택: 이메일이 바뀌어도 안 바뀌는 로그인 아이디 — 가입 때 받고, 소셜 첫 로그인 · 아이디 없는 기존 계정은 403 ACCOUNT.LOGIN_ID_REQUIRED 로 정하게 한다 (docs/accounts.md). 서버 비밀 <PREFIX>_ACCOUNT_BLOCKS_SECRET 이 stage · prod 에서 필요하다
@@ -248,6 +252,24 @@ skeleton:
       types: [NOTE_UPDATED, comment.created, comment.replied, reward.granted, badge.awarded]   # 이 앱의 선택: 설정 화면에서 끌 수 있는 알림 종류 (이 밖의 알림은 끌 수 없다)
     sse:
       heartbeat: 15s  # 이 앱의 선택: 연결이 조용해도 프록시가 끊지 않게 15초마다 주석 한 줄 (짝 웹 클라이언트 idleTimeoutMs 는 45초)
+    push:
+      enabled: true   # 이 앱의 선택: 알림이 받는 사람의 기기로도 간다 (모듈 기본은 꺼짐). 기기 저장은 notification-push-jdbc, 전달은 아래 webpush · fcm - docs/modules/notification-push.md
+      lock-screen: FULL   # 이 앱의 선택(모듈 기본과 같다 - 일부러 적는다): 잠금 화면에 알림 제목 · 본문이 그대로 보인다. 내용을 가리려면 HIDDEN
+      types: [NOTE_UPDATED, comment.created, comment.replied, reward.granted, badge.awarded, advertising.consent.changed, advertising.consent.reconfirm]   # 이 앱의 선택: 푸시로도 갈 알림 종류 - 위 preferences.types 와 같은 종류 + 광고 동의 변경 · 재확인 안내(정보성, 안 넣으면 알림함에만 쌓인다). 사람이 종류마다 「푸시만 끄기」를 할 수 있다
+      advertising-types: [promo.notes-tips]   # 이 앱의 선택: 광고성 종류 - 동의(marketing)가 있는 사람에게만, 야간(21~08시)은 별도 동의(marketing-night)가 없으면 다음 08시로 보류한다. 견본에는 이 알림을 보내는 화면이 없다 - 보내는 쪽은 제품마다 다르다(publish 하면 규칙이 적용된다). 시험: push/PushJourneyIntegrationTest
+      advertising:
+        sender-name: Notes Sample   # 필수: 전송자 명칭 (동의 변경 · 재확인 안내에 쓴다)
+        fallback-zone: Asia/Seoul   # 필수: 받는 사람 시간대를 모를 때 - 시간대의 출처는 push/SamplePushConfiguration (계정 프로필의 timeZone)
+      stale-cleanup:
+        enabled: true   # 이 앱의 선택(모듈 기본은 꺼짐): 60일 동안 안 본 기기 줄을 지운다 (scheduler 가 주기를 돈다)
+    webpush:
+      enabled: true   # 이 앱의 선택: 웹 푸시(VAPID). 키 쌍(아래 환경변수)이 없으면 로컬은 센더가 없고(기기 등록이 400), 보호 환경(stage · prod)은 기동 실패 - 끄려면 SKELETON_NOTIFICATION_WEBPUSH_ENABLED=false. 로컬 프로필은 시험용 고정 쌍(application-local.yml)
+      public-key: ${SKELETON_NOTIFICATION_WEBPUSH_VAPID_PUBLIC_KEY:}   # 비밀 아님 (선언의 env:)
+      private-key: ${SKELETON_NOTIFICATION_WEBPUSH_VAPID_PRIVATE_KEY:}   # 운영자 비밀 (선언의 secrets: + .local.env). 바꾸면 모든 웹 구독이 다음 방문까지 끊긴다 - 서버를 옮길 때 들고 간다
+      subject: ${SKELETON_NOTIFICATION_WEBPUSH_SUBJECT:mailto:ops@example.com}   # VAPID sub - 실제 운영 연락처로 덮는다 (Apple 은 없으면 거절)
+    fcm:
+      enabled: ${SKELETON_NOTIFICATION_FCM_ENABLED:false}   # 꺼진 채 시작한다 - 켜려면 true + 서비스 계정 (docs/real-provider-setup.md). 켰는데 비었거나 못 읽으면 보호 환경은 기동 실패
+      credentials: ${SKELETON_NOTIFICATION_FCM_CREDENTIALS:}   # 운영자 비밀: Firebase 서비스 계정 JSON 의 base64
   # 이벤트 · 보상 - 운영 경로는 모듈 기본대로 꺼져 있고 이 앱이 켠다(권한 campaign.manage · coupon.manage · point.manage · reward.operate 는 기본 역할 없이 ADMIN 전권만 - 역할 관리에서 나눠 준다)
   campaign:
     admin:

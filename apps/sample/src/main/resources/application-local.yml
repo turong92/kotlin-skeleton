@@ -29,6 +29,12 @@ skeleton:
         - { id: acc_user, email: user@example.com, password: password, display-name: User, login-id: sample-user }
         - { id: acc_admin, email: admin@example.com, password: password, roles: [ADMIN], display-name: Admin, login-id: sample-admin }
         - { id: acc_moderator, email: moderator@example.com, password: password, roles: [MODERATOR], display-name: Moderator, login-id: sample-moderator }
+  notification:
+    webpush:
+      # 로컬 · e2e 전용 시험 VAPID 쌍 (모듈의 WebPushTestKeys 와 같다 - 비밀이 아니다). 보호 환경(stage · prod)에서 이 공개 키면 기동 실패 (WebPushDeployGuard). 운영 값은 SKELETON_NOTIFICATION_WEBPUSH_VAPID_*
+      public-key: BKHphhcs7lo2uPUj_8zQArEHejEcaV66-4IrYRYiszNilMwvkTXFwgoOT-hfcoj2w_AYh29HQo57wFQIBYRhljY
+      private-key: 71dZ0ZsGh3NhlPCHjrZtu2lsuR0hgB6uI9bTsbNRCFg
+      subject: mailto:ops@example.com
   workspace:
     mail:
       link-base-url: http://localhost:5173   # react-skeleton 개발 서버 (apps/sample) - 초대 메일의 링크 <주소>/invite?token=… . 메일은 mailpit(http://localhost:8025)이 받는다

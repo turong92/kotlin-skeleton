@@ -20,6 +20,7 @@ dependencies {
     implementation(project(":modules:notification-push-jdbc"))   // + notification-push (api) — 푸시 알림 계약 · 채널 · 기기 저장. 꺼짐이 기본이라 클래스패스에만 둔다(설정 스니펫 · 모듈 목록 시험). 전달 수단(webpush · fcm) · 견본 조립은 apps/sample
     implementation(project(":modules:notification-webpush"))   // 웹 푸시(VAPID) 전달 수단 - 꺼짐이 기본이라 클래스패스에만 둔다(설정 스니펫 시험). 견본 조립은 apps/sample
     implementation(project(":modules:notification-fcm"))   // 모바일 푸시(FCM) 전달 수단 - 꺼짐이 기본이라 클래스패스에만 둔다(설정 스니펫 시험). 견본 조립은 apps/sample
+    implementation(project(":modules:notification-push-legal"))   // 광고성 푸시의 동의 어댑터 - 광고 종류를 설정하지 않으면 빈이 하나도 안 선다(꺼짐). 클래스패스에만 둔다(공존 증명). 견본 조립은 apps/sample
     implementation(project(":modules:notification-sse"))
     implementation(project(":modules:notification-websocket"))
     implementation(project(":modules:payment-stripe"))

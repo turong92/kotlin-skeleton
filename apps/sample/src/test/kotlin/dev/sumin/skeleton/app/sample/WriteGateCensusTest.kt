@@ -75,6 +75,11 @@ class WriteGateCensusTest {
             "PATCH /api/v1/notifications/{eventId}/read",
             "PATCH /api/v1/notifications/read-all",
             "PUT /api/v1/notifications/preferences/{type}",
+            // 푸시: 자기 기기 · 종류별 푸시 끄기 설정 (notification-push) - 광고 동의는 /api/v1/legal 이라 이미 열려 있다
+            "PUT /api/v1/push/devices/{installationId}",
+            "DELETE /api/v1/push/devices/{installationId}",
+            "POST /api/v1/push/devices/{installationId}/test",
+            "PUT /api/v1/push/preferences/{type}",
             "POST /api/v1/storage/presign-download",
         )
 
