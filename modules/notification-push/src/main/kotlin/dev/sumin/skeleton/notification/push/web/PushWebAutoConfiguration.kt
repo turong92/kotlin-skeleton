@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.notification.push.web
 
 import dev.sumin.skeleton.notification.NotificationMuteRepository
+import dev.sumin.skeleton.notification.advertising.AdvertisingGate
 import dev.sumin.skeleton.notification.NotificationPreferencesProperties
 import dev.sumin.skeleton.notification.push.PushAutoConfiguration
 import dev.sumin.skeleton.notification.push.PushDeviceService
@@ -34,8 +35,9 @@ class PushWebAutoConfiguration {
         allChannelMutes: NotificationMuteRepository,
         notificationPreferences: NotificationPreferencesProperties,
         properties: PushProperties,
+        gate: AdvertisingGate,
         senders: ObjectProvider<PushSender>,
         sessionIds: PushSessionIdResolver,
     ): PushController =
-        PushController(service, devices, mutes, allChannelMutes, notificationPreferences, properties, { senders.orderedStream().toList() }, sessionIds)
+        PushController(service, devices, mutes, allChannelMutes, notificationPreferences, properties, gate, { senders.orderedStream().toList() }, sessionIds)
 }

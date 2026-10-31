@@ -12,8 +12,10 @@ import dev.sumin.skeleton.notification.NotificationAutoConfiguration
 import dev.sumin.skeleton.notification.NotificationEvent
 import dev.sumin.skeleton.notification.NotificationSubscriber
 import dev.sumin.skeleton.notification.NotificationSubscriptionRegistry
-import dev.sumin.skeleton.notification.push.AdvertisingConsentPolicy
-import dev.sumin.skeleton.notification.push.AdvertisingNotificationTypes
+import dev.sumin.skeleton.notification.advertising.AdvertisingConsentPolicy
+import dev.sumin.skeleton.notification.advertising.AdvertisingNotificationTypes
+import dev.sumin.skeleton.notification.legal.LegalAdvertisingConsentPolicy
+import dev.sumin.skeleton.notification.legal.NotificationLegalAutoConfiguration
 import dev.sumin.skeleton.notification.push.PushAdvertisingNoticeStore
 import dev.sumin.skeleton.notification.push.PushAutoConfiguration
 import dev.sumin.skeleton.notification.push.PushDeviceStore
@@ -35,7 +37,7 @@ class PushLegalAutoConfigurationTest {
     private inline fun <reified T : Any> stub(): T = Proxy.newProxyInstance(T::class.java.classLoader, arrayOf(T::class.java)) { _, _, _ -> null } as T
 
     private val base = ApplicationContextRunner()
-        .withConfiguration(AutoConfigurations.of(NotificationAutoConfiguration::class.java, LegalAutoConfiguration::class.java, PushAutoConfiguration::class.java, PushLegalAutoConfiguration::class.java))
+        .withConfiguration(AutoConfigurations.of(NotificationAutoConfiguration::class.java, LegalAutoConfiguration::class.java, PushAutoConfiguration::class.java, NotificationLegalAutoConfiguration::class.java, PushLegalAutoConfiguration::class.java))
         .withBean(ConsentStore::class.java, { MemoryConsentStore() })
         .withBean(LegalLedger::class.java, { MemoryLedger() })
         .withBean(PushDeviceStore::class.java, { stub<PushDeviceStore>() })
@@ -45,9 +47,9 @@ class PushLegalAutoConfigurationTest {
         .withPropertyValues("skeleton.notification.push.enabled=true", "skeleton.legal.acknowledge-template=true")
 
     private val ads = arrayOf(
-        "skeleton.notification.push.advertising-types=promo.tips",
-        "skeleton.notification.push.advertising.fallback-zone=Asia/Seoul",
-        "skeleton.notification.push.advertising.sender-name=Example Co.",
+        "skeleton.notification.advertising.types=promo.tips",
+        "skeleton.notification.advertising.fallback-zone=Asia/Seoul",
+        "skeleton.notification.advertising.sender-name=Example Co.",
     )
 
     private fun failureOf(context: AssertableApplicationContext) =
@@ -90,7 +92,7 @@ class PushLegalAutoConfigurationTest {
     @Test
     fun `advertising types without the legal module fail to start naming the module to add`() {
         ApplicationContextRunner()
-            .withConfiguration(AutoConfigurations.of(NotificationAutoConfiguration::class.java, PushAutoConfiguration::class.java, PushLegalAutoConfiguration::class.java))
+            .withConfiguration(AutoConfigurations.of(NotificationAutoConfiguration::class.java, PushAutoConfiguration::class.java, NotificationLegalAutoConfiguration::class.java, PushLegalAutoConfiguration::class.java))
             .withBean(PushDeviceStore::class.java, { stub<PushDeviceStore>() })
             .withBean(PushTypeMuteStore::class.java, { stub<PushTypeMuteStore>() })
             .withBean(PushTasks::class.java, { stub<PushTasks>() })

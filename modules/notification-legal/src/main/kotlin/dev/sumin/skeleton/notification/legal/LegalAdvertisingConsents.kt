@@ -1,11 +1,11 @@
-package dev.sumin.skeleton.notification.push.legal
+package dev.sumin.skeleton.notification.legal
 
 import dev.sumin.skeleton.legal.ConsentService
 import dev.sumin.skeleton.legal.ConsentState
 import dev.sumin.skeleton.legal.Subject
-import dev.sumin.skeleton.notification.push.AdvertisingConsent
-import dev.sumin.skeleton.notification.push.AdvertisingConsentPolicy
-import dev.sumin.skeleton.notification.push.PushProperties
+import dev.sumin.skeleton.notification.advertising.AdvertisingConsent
+import dev.sumin.skeleton.notification.advertising.AdvertisingConsentPolicy
+import dev.sumin.skeleton.notification.advertising.AdvertisingProperties
 import java.time.Instant
 
 /**
@@ -31,7 +31,7 @@ data class AdvertisingConsentItem(
 data class AdvertisingConsentSnapshot(val consent: AdvertisingConsentItem, val night: AdvertisingConsentItem)
 
 /** `legal` 의 동의 기록에서 광고 동의의 지금 상태를 읽는다 - 정책 구현과 `GET /advertising` 이 같은 계산을 쓴다. 동의 조회는 받는 사람 한 명당 읽기 한 번 */
-class LegalAdvertisingConsents(private val service: ConsentService, private val advertising: PushProperties.Advertising) {
+class LegalAdvertisingConsents(private val service: ConsentService, private val advertising: AdvertisingProperties) {
     fun snapshot(accountId: String, now: Instant): AdvertisingConsentSnapshot {
         val items = service.status(Subject.account(accountId)).items.associateBy { it.type }
         val consent = item(advertising.consentType, items[advertising.consentType], now)

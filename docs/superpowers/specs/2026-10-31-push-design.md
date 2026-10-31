@@ -68,7 +68,7 @@ platform ◀── 다섯 모두 (ExternalHttpClient · DeployGuard · AccountEr
 | `PushTypeMuteStore`(`mutedTypes(accountId)` · `mutedAmong(type, accountIds)` · `setMuted`) | `notification-push`, 구현 `-jdbc`(`push_type_mutes`) | 결정 1 B — 「푸시만 끄기」. 모든 채널 끄기(`NotificationMuteRepository`)와 별개의 표 |
 | `skeleton.notification.push.lock-screen` = `FULL`\|`HIDDEN` (+ `hidden-title` · `hidden-body`) | 설정 | 결정 2. 모듈 기본 `FULL`. `HIDDEN` 문구 기본 제목 「새 알림이 있습니다」 · 본문 없음, 설정으로 덮는다. 접두사는 레포 관례(`skeleton.notification.push.*`) |
 | `skeleton.notification.push.advertising-types` + `advertising.*` | 설정 | 결정 3. 어느 종류가 광고성인지는 제품이 정한다(기본 빈 목록 = 광고 규칙 꺼짐). 나머지 키는 §11 |
-| `AdvertisingConsentPolicy`(`consentOf(accountId, now): AdvertisingConsent`) · `PushRecipientZones`(`zoneOf(accountId): ZoneId?`) | `notification-push`, 구현 `notification-push-legal`(동의) · 앱(시간대) | 결정 3. 광고 종류가 하나라도 설정돼 있는데 정책 빈이 없으면 기동 실패(「`notification-push-legal` 을 얹어라」) |
+| `AdvertisingConsentPolicy`(`consentOf(accountId, now): AdvertisingConsent`) · `AdvertisingRecipientZones`(`zoneOf(accountId): ZoneId?`) | `notification-push`, 구현 `notification-push-legal`(동의) · 앱(시간대) | 결정 3. 광고 종류가 하나라도 설정돼 있는데 정책 빈이 없으면 기동 실패(「`notification-push-legal` 을 얹어라」) |
 
 ## 3. 데이터 (`notification-push-jdbc`, 두 방언 짝 V 파일 · `migrations.lock`, 시각 PG `timestamptz` · MySQL `datetime(6)` UTC)
 
@@ -214,10 +214,10 @@ platform ◀── 다섯 모두 (ExternalHttpClient · DeployGuard · AccountEr
 
 > 법률 자문이 아니다. 모듈은 「동의를 증거로 남기고, 동의 없이는 보내지 않고, 야간에는 보류한다」는 기계장치를 준다. 광고 문서의 내용 · 전송자 정보 · 법 해석은 앱(주인)과 법률 검토의 몫이다(`docs/legal.md` 와 같은 선).
 
-### 11.1 모듈 경계 — 새 모듈 `notification-push-legal` (어댑터 짝)
+### 11.1 모듈 경계 — 채널 무관 게이트(`notification`) + 어댑터 둘 (`notification-legal` · `notification-push-legal`) _(K5b 에서 바뀜)_
 
-- **규칙은 `notification-push` 코어, 동의 읽기는 `notification-push-legal`.** 코어는 `AdvertisingConsentPolicy` 포트만 보고 돈다 — 코어가 `legal` 을 몰라야 광고를 안 쓰는 앱이 `legal` 없이 푸시를 쓰고(캡슐화), 광고 규칙 시험이 가짜 정책으로 된다. 동의 증거는 `legal` 의 일이라 어댑터가 `legal` 을 `api` 로 안다(`-jdbc` 와 같은 포트/어댑터 짝, 코어에 `compileOnly` 다리를 두지 않는다).
-- 모듈 기본값은 꺼짐(중립): `advertising-types` 가 빈 목록이면 광고 규칙은 없는 것과 같고, 이 모듈을 안 붙인 앱의 동작은 바뀌지 않는다. 광고 종류를 설정했는데 `AdvertisingConsentPolicy` 빈이 없으면 기동 실패(「`notification-push-legal` 을 얹어라」) — 동의 확인 없이 광고가 나가는 구성이 조용히 생기지 않게.
+- **판정은 채널과 무관한 부품 `AdvertisingGate`(모듈 `notification`, 패키지 `notification.advertising`), 동의 읽기는 채널 무관 어댑터 `notification-legal`, 푸시 전용 통지 · 안내 · 상태 읽기는 `notification-push-legal`.** 설정은 `skeleton.notification.advertising.*`. 푸시 채널과 처리기는 게이트를 부르기만 한다(보류 시각 `runAt` 도 게이트가 준다). 게이트는 `AdvertisingConsentPolicy` 포트만 보고 돈다 — `notification`/푸시가 `legal` 을 몰라야 광고를 안 쓰는 앱이 `legal` 없이 푸시를 쓰고(캡슐화), 광고 규칙 시험이 가짜 정책으로 된다. 동의 증거는 `legal` 의 일이라 어댑터가 `legal` 을 `api` 로 안다(`-jdbc` 와 같은 포트/어댑터 짝, 코어에 `compileOnly` 다리를 두지 않는다). 시간대 포트는 `AdvertisingRecipientZones`(옛 `PushRecipientZones`).
+- 모듈 기본값은 꺼짐(중립): `advertising-types` 가 빈 목록이면 광고 규칙은 없는 것과 같고, 이 모듈을 안 붙인 앱의 동작은 바뀌지 않는다. 광고 종류를 설정했는데 `AdvertisingConsentPolicy` 빈이 없으면 기동 실패(「`notification-legal` 을 얹어라」) — 동의 확인 없이 광고가 나가는 구성이 조용히 생기지 않게.
 - **`legal` 에 더하는 기계장치 셋**(기본 동작은 그대로, 옵트인 사용처가 없으면 닿지 않는다):
   1. `source = "reconfirm"` 인 동의는 이미 현재 판에 동의한 상태에서도 `AGREED` 사건을 더한다(기존 「같은 판이면 아무것도 안 함」 멱등의 단 하나의 예외). 일일 한도 · 판 검사는 그대로. 새 경로는 없다 — `POST /legal/consents` 에 `source: "reconfirm"` 을 실을 뿐.
   2. `ConsentChangeListener`(`fun interface`, `onChange(event: ConsentEvent)`) — 사건이 저장된 뒤 불린다. 빈이 없으면 아무 일도 없고, 던져도 삼킨다(증거는 이미 저장됐다). 동의 · 철회가 어느 경로(`legal` HTTP · 가입 · 앱 코드)로 와도 같은 통지를 보내려는 자리.
@@ -236,27 +236,26 @@ platform ◀── 다섯 모두 (ExternalHttpClient · DeployGuard · AccountEr
 | 철회 방법은 동의만큼 쉽게 | 설정 화면의 스위치 하나 → `POST /legal/consents/{type}/withdraw` |
 | 동의 없는 광고의 **야간 보류** | 야간(받는 사람 시간대 21:00~08:00)이고 야간 동의가 없으면 버리지 않고 **다음 08시 이후로 보류** 후 발송. 작업 큐가 지연 실행을 지원한다(`JobQueue.enqueue(..., runAt)` — 확인함) |
 
-### 11.3 설정 (`skeleton.notification.push.*`, 모듈 기본 = 광고 꺼짐)
+### 11.3 설정 (`skeleton.notification.advertising.*` — K5b 전에는 `skeleton.notification.push.advertising*`, 모듈 기본 = 광고 꺼짐)
 
 ```yaml
-skeleton.notification.push:
-  advertising-types: []              # 광고성 종류(제품이 정한다). 비어 있으면 아래 규칙은 아무것도 하지 않는다
-  advertising:
-    consent-type: marketing          # legal 문서 종류 — 광고 수신 동의
-    night-consent-type: marketing-night  # 야간(21~08시) 별도 동의
-    night-start: "21:00"             # 법정 값이라 모듈 기본으로 둔다
-    night-end: "08:00"
-    fallback-zone:                   # 받는 사람 시간대를 모를 때. 켜면 필수 — ZoneId.systemDefault() 는 쓰지 않는다
-    sender-name:                     # 전송자 명칭. 켜면 필수
-    reconfirm-after: P730D
-    reconfirm-notice-before: P30D
-    reconfirm-scan-interval: PT6H
-    reconfirm-link: /settings/notifications   # 안내 알림을 누르면 가는 앱 안 경로
-    title-prefix: "(광고)"
-    body-suffix: ""
+skeleton.notification.advertising:
+  types: []                          # 광고성 종류(제품이 정한다). 비어 있으면 아래 규칙은 아무것도 하지 않는다
+  consent-type: marketing          # legal 문서 종류 — 광고 수신 동의
+  night-consent-type: marketing-night  # 야간(21~08시) 별도 동의
+  night-start: "21:00"             # 법정 값이라 모듈 기본으로 둔다
+  night-end: "08:00"
+  fallback-zone:                   # 받는 사람 시간대를 모를 때. 켜면 필수 — ZoneId.systemDefault() 는 쓰지 않는다
+  sender-name:                     # 전송자 명칭. 켜면 필수
+  reconfirm-after: P730D
+  reconfirm-notice-before: P30D
+  reconfirm-scan-interval: PT6H
+  reconfirm-link: /settings/notifications   # 안내 알림을 누르면 가는 앱 안 경로
+  title-prefix: "(광고)"
+  body-suffix: ""
 ```
 
-기동 검사(`advertising-types` 가 비어 있지 않을 때): 정책 빈 있음 · `fallback-zone` · `sender-name` 있음 · `night-start`/`night-end` 가 읽힘 · `ttl` ≥ 12시간(야간 보류가 최대 11시간이라 만료로 광고가 사라지지 않게) · 두 동의 종류가 다름 · `advertising-types` 가 알림 종류 `advertising.consent.*` 와 겹치지 않음. 안내 알림 종류가 단말에 가려면 앱이 `push.types` 에 넣는다(안 넣으면 알림함에만 쌓인다).
+기동 검사(`advertising.types` 가 비어 있지 않을 때): 정책 빈 있음 · `fallback-zone` · `sender-name` 있음 · `night-start`/`night-end` 가 읽힘 · 푸시의 `ttl` ≥ 12시간(푸시 쪽 검사 — 야간 보류가 최대 11시간이라 만료로 광고가 사라지지 않게) · 두 동의 종류가 다름 · `advertising-types` 가 알림 종류 `advertising.consent.*` 와 겹치지 않음. 안내 알림 종류가 단말에 가려면 앱이 `push.types` 에 넣는다(안 넣으면 알림함에만 쌓인다).
 
 ### 11.4 발송 규칙 (`PushNotificationChannel` + 작업 처리기)
 
@@ -329,7 +328,7 @@ skeleton.notification.push:
 
 ### 11.9 범위 밖 · 앱의 몫
 
-- **푸시 밖 채널**: 이 게이트는 푸시 채널(웹 푸시 · FCM)에만 있다. 메일 · 슬랙 · SSE 로 광고를 보내는 앱은 직접 동의를 본다(`AdvertisingConsentPolicy` 는 공개 포트라 `notification-mail` 이 나중에 같은 정책을 쓸 수 있다). 받은편지함 저장은 전송이 아니라 앱 안 기록이다. 모듈 문서에 경고 한 줄.
+- **푸시 밖 채널**: 판정은 채널과 무관한 부품이지만 **걸려 있는 곳은 푸시 채널뿐이다**(웹 푸시 · FCM). 메일 · 슬랙 · SSE 로 광고를 보내는 앱은 보내기 전에 `AdvertisingGate` 를 불러야 한다(`decide` = 보냄 / 안 보냄 / 이 시각까지 보류, `brand` = 「(광고)」 표기) — `notification-mail` 같은 채널이 나중에 같은 부품을 부르기만 하면 된다. 받은편지함 저장은 전송이 아니라 앱 안 기록이다. 모듈 문서에 경고 한 줄(「지금 광고 게이트는 푸시 채널에만 걸린다 — 광고성 메일 · 슬랙 등을 보내는 앱은 보내기 전에 이 부품을 불러야 한다(정보통신망법 §50)」).
 - 광고 문서(`marketing` · `marketing-night`) 본문 · 전송자 연락처 · 청소년 등 다른 동의 · 법 해석은 앱 + 법률 검토.
 - 대량 발송 일괄 API · 전달 통계 · 받는 사람 세분화는 다음.
 

@@ -130,6 +130,7 @@ fails when this table and the prefixes found in module code differ.
 | `notification` | `skeleton.notification.inbox` |
 | `notification` | `skeleton.notification.preferences` |
 | `notification` | `skeleton.notification.retention` |
+| `notification` | `skeleton.notification.advertising` |
 | `notification-push` | `skeleton.notification.push` |
 | `notification-mail` | `skeleton.notification-mail` |
 | `notification-slack` | `skeleton.notification.slack` |
@@ -214,7 +215,8 @@ test proving a context with only that module (and its declared dependencies) boo
 | `notification-push-jdbc` | yes | a `DataSource` + one `db-*` module + `job-queue-jdbc` enabled (+ its migrations `push_devices` · `push_type_mutes`, as above) | — |
 | `notification-webpush` | off until `skeleton.notification.webpush.enabled=true` | a VAPID key pair (`public-key` · `private-key`) + `subject` — protected environments (`skeleton.env=stage\|prod`) refuse to start without them, with a mismatched pair, or with the sample test key; elsewhere there is just no sender | `notification-push` to feed it |
 | `notification-fcm` | off until `skeleton.notification.fcm.enabled=true` | the Firebase service account key (`credentials`, base64 of the JSON) — protected environments (`skeleton.env=stage\|prod`) refuse to start when it is empty or unreadable; elsewhere there is just no sender | `notification-push` to feed it |
-| `notification-push-legal` | placeholder until its code lands (no beans yet) | nothing | — |
+| `notification-legal` | off until `skeleton.notification.advertising.types` is set and `legal` is present | `legal` (+ `legal-jdbc`) — advertising types without it fail startup naming this module | — |
+| `notification-push-legal` | off until push is enabled and advertising types are set | the notice store of `notification-push-jdbc`, `legal` | `notification-legal` (comes along) |
 | `notification-mail` | off until `enabled=true` + `spring.mail.host` + `from` | nothing | an SMTP server |
 | `notification-slack` | wired; sends nothing until `enabled=true` + `webhook-url` | nothing | webhook URL, internet |
 | `notification-sse` | yes | nothing | — |

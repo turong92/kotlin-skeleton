@@ -1,6 +1,9 @@
 package dev.sumin.skeleton.notification.push
 
 import dev.sumin.skeleton.common.time.TimeProvider
+import dev.sumin.skeleton.notification.advertising.AdvertisingDecision
+import dev.sumin.skeleton.notification.advertising.AdvertisingGate
+import dev.sumin.skeleton.notification.advertising.AdvertisingProperties
 import dev.sumin.skeleton.notification.NotificationEvent
 import dev.sumin.skeleton.notification.NotificationSubscriber
 import dev.sumin.skeleton.notification.NotificationSubscription
@@ -11,8 +14,8 @@ import org.slf4j.LoggerFactory
 /**
  * 알림이 받는 사람의 기기로도 간다. 슬랙 전달기와 같은 꼴로 브로커에 **서버 전체 리스너**로 붙는다 - 끄기(브로커가 받는 사람에서 뺌) · 커밋 뒤 전달 · 프로젝트 문맥이 따라온다.
  *
- * 건너뜀: 받는 사람이 없는 전체 공지 · `push.types` 와 `advertising-types` 밖의 종류 · 그 종류의 푸시를 끈 사람 · factory 가 null.
- * **광고 종류**(`advertising-types`)는 정보성 경로로 가지 않고 [AdvertisingGate] 를 거친다: 받는 사람마다 동의 없음 · 철회 · 만료 · 조회 실패면 작업이 없고,
+ * 건너뜀: 받는 사람이 없는 전체 공지 · `push.types` 와 `skeleton.notification.advertising.types` 밖의 종류 · 그 종류의 푸시를 끈 사람 · factory 가 null.
+ * **광고 종류**(`skeleton.notification.advertising.types`)는 정보성 경로로 가지 않고 [AdvertisingGate] 를 거친다: 받는 사람마다 동의 없음 · 철회 · 만료 · 조회 실패면 작업이 없고,
  * 야간이고 야간 동의가 없으면 다음 야간 끝으로 보류(`runAt`)한 작업을 넣는다. 제목 `(광고)` 표기는 factory **뒤에서** 붙인다(앱 factory 가 잊어도 빠지지 않는다).
  * 받는 사람의 기기마다 작업 하나를 넣는다. **모든 예외를 잡고 로그만 남긴다** - 브로커는 던진 구독자를 닫아 채널이 영영 떨어지기 때문이다.
  * 커밋과 넣기 사이에 프로세스가 죽으면 그 푸시는 잃는다(푸시는 최선 노력, 받은편지함이 원본).
@@ -25,7 +28,7 @@ class PushNotificationChannel(
     private val mutes: PushTypeMuteStore,
     private val tasks: PushTasks,
     private val senders: () -> List<PushSender>,
-    private val gate: AdvertisingGate = AdvertisingGate(properties, null, null, TimeProvider.systemUtc()),
+    private val gate: AdvertisingGate = AdvertisingGate(AdvertisingProperties(), null, null, TimeProvider.systemUtc()),
 ) : AutoCloseable {
     private val log = LoggerFactory.getLogger(javaClass)
     private val types = properties.pushTypes.toSet()
@@ -59,7 +62,7 @@ class PushNotificationChannel(
         }
         if (runAtOf.isEmpty()) return
         val created = factory.create(event) ?: return
-        val message = if (advertising) gate.brand(created) else created
+        val message = if (advertising) gate.brand(created.title, created.body, PushText.MAX_BODY_BYTES).let { created.copy(title = it.title, body = it.body) } else created
         val prepared = message.copy(
             body = message.body?.let { PushText.truncateUtf8(it, PushText.MAX_BODY_BYTES) },
             expiresAt = message.createdAt.plus(properties.ttl),

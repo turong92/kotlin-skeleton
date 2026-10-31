@@ -1,5 +1,7 @@
 package dev.sumin.skeleton.notification.push
 
+import dev.sumin.skeleton.notification.advertising.AdvertisingConsent
+import dev.sumin.skeleton.notification.advertising.AdvertisingConsentPolicy
 import dev.sumin.skeleton.pushtest.PushWebTestApplication
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -27,9 +29,9 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
     properties = [
         "skeleton.notification.push.enabled=true",
         "skeleton.notification.push.types=NOTE_UPDATED,comment.created",
-        "skeleton.notification.push.advertising-types=promo.tips",
-        "skeleton.notification.push.advertising.fallback-zone=Asia/Seoul",
-        "skeleton.notification.push.advertising.sender-name=Example Co.",
+        "skeleton.notification.advertising.types=promo.tips",
+        "skeleton.notification.advertising.fallback-zone=Asia/Seoul",
+        "skeleton.notification.advertising.sender-name=Example Co.",
         "skeleton.notification.preferences.types=comment.created",
     ],
 )

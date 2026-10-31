@@ -32,7 +32,7 @@
 - `state`: `AGREED`(동의했고 만료 전) · `EXPIRED`(동의했지만 `expiresAt` 이 지남) · `OUTDATED`(새 판이 시행됐다 - 다시 동의) · `WITHDRAWN` · `NONE`(한 적 없음 또는 문서가 없음). `agreedAt` 은 `WITHDRAWN` · `NONE` 이면 null, `expiresAt` 은 `AGREED` · `EXPIRED` 만 값이 있다.
 - `effective` = 실제로 보낼 수 있다. `consent.effective` = `state == AGREED`, `night.effective` = 야간 동의가 `AGREED` **이고** `consent.effective`(광고 동의가 없으면 야간 동의가 남아 있어도 보내지 않는다 - 화면은 야간 체크를 잠근다).
 - `reconfirmDue` = `AGREED` 이고 만료까지 30일(`reconfirm-notice-before`) 이내. 만료되면 `EXPIRED`.
-- `nightWindow.zone` = 이 사용자에게 적용되는 시간대(앱의 `PushRecipientZones` → `fallback-zone`).
+- `nightWindow.zone` = 이 사용자에게 적용되는 시간대(앱의 `AdvertisingRecipientZones` → `fallback-zone`).
 
 동의 · 철회 · 재확인은 **`legal` 의 기존 경로**다([legal-http-contract](legal-http-contract.md)) - 증거(IP · UA · 판 해시)가 한 곳에 쌓인다. 동의하기 전에 `GET /api/v1/legal/documents` 로 현재 판을 읽어 그 `version` 을 싣는다.
 

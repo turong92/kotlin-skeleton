@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.notification.push.web
 
 import dev.sumin.skeleton.common.ApplicationException
+import dev.sumin.skeleton.notification.advertising.AdvertisingGate
 import dev.sumin.skeleton.common.BasicResponse
 import dev.sumin.skeleton.common.DataResponse
 import dev.sumin.skeleton.common.Response
@@ -94,9 +95,13 @@ class PushController(
     private val allChannelMutes: NotificationMuteRepository,
     private val notificationPreferences: NotificationPreferencesProperties,
     private val properties: PushProperties,
+    private val gate: AdvertisingGate,
     private val senders: () -> List<PushSender>,
     private val sessionIds: PushSessionIdResolver,
 ) {
+    /** 사람이 푸시만 끌 수 있는 종류 - 광고 종류는 동의가 정하므로 뺀다 */
+    private fun pushableTypes(): List<String> = properties.pushTypes.filterNot(gate::isAdvertising)
+
     @Operation(summary = "Push client configuration", description = "Public key for subscribing, which kinds are on, and which notification types can be pushed.")
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = PushConfigResponse::class)
     @GetMapping("/config")
@@ -108,8 +113,8 @@ class PushController(
             PushConfigResponse(
                 webPush = webKey?.let(::PushWebPushConfig),
                 fcm = all.any { it.kind == PushKinds.FCM },
-                types = properties.pushTypes,
-                advertisingTypes = properties.advertisingTypeList,
+                types = pushableTypes(),
+                advertisingTypes = gate.types,
             ),
         )
     }
@@ -153,7 +158,7 @@ class PushController(
     @GetMapping("/preferences")
     fun preferences(authentication: Authentication?): DataResponse<PushPreferencesResponse> {
         val accountId = authentication.accountId()
-        val types = properties.pushTypes
+        val types = pushableTypes()
         if (types.isEmpty()) return Response.ok(PushPreferencesResponse(emptyList()))
         val pushMuted = mutes.mutedTypes(accountId)
         val allMuted = allChannelMutes.mutedTypes(accountId)
@@ -169,7 +174,7 @@ class PushController(
         @Valid @RequestBody request: PushPreferenceRequest,
     ): DataResponse<PushPreferenceResponse> {
         val accountId = authentication.accountId()
-        if (type !in properties.pushTypes) throw PushException(PushErrorCode.UNKNOWN_TYPE, "Push type is not switchable: $type")
+        if (type !in pushableTypes()) throw PushException(PushErrorCode.UNKNOWN_TYPE, "Push type is not switchable: $type")
         mutes.setMuted(accountId, type, muted = !requireNotNull(request.enabled))
         return Response.ok(type.toPreference(mutes.mutedTypes(accountId), allChannelMutes.mutedTypes(accountId)))
     }

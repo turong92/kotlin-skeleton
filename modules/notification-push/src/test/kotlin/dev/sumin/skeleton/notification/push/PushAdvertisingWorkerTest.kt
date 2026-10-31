@@ -1,5 +1,8 @@
 package dev.sumin.skeleton.notification.push
 
+import dev.sumin.skeleton.notification.advertising.AdvertisingConsent
+import dev.sumin.skeleton.notification.advertising.AdvertisingGate
+import dev.sumin.skeleton.notification.advertising.AdvertisingProperties
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -15,10 +18,7 @@ class PushAdvertisingWorkerTest {
     private val sender = FakePushSender()
     private val tasks = RecordingPushTasks()
     private val policy = FakeAdvertisingPolicy()
-    private val properties = PushProperties(
-        enabled = true, advertisingTypes = listOf("promo.tips"),
-        advertising = PushProperties.Advertising(fallbackZone = "Asia/Seoul", senderName = "Example Co."),
-    )
+    private val properties = AdvertisingProperties(types = listOf("promo.tips"), fallbackZone = "Asia/Seoul", senderName = "Example Co.")
     private val worker = PushDeliveryWorker(devices, mutes, { listOf(sender) }, clock, AdvertisingGate(properties, policy, null, clock), tasks)
 
     private fun job(device: PushDevice, advertising: Boolean = true, type: String = "promo.tips") = PushJob(

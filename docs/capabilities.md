@@ -121,10 +121,11 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `notification` | 알림 계약 · 수신자 해석 · 인메모리 브로커 + 로그인한 사람의 받은편지함 HTTP(/api/v1/notifications: 목록 · 안 읽은 수 · 읽음 · 모두 읽음). 클릭 이동 링크 · 같은 열쇠 묶기 · 종류별 수신 끄기(/preferences, 끌 수 있는 종류는 설정) · 보관 정리(기본 꺼짐) · 커밋 뒤 전달. | `--modules notification` | 알림, 알림 목록, 받은편지함, 안 읽은 알림, 알림 읽음, 알림 보내기, 알림 묶기, 알림 링크, 알림 끄기, 알림 수신 설정, 알림 보관 정리 / notification, inbox, unread, mark as read, publish notification, collapse notifications, notification link, notification retention | `@skeleton/notifications` |
 | `notification-fcm` | 모바일 푸시(FCM HTTP v1) 전달 수단 — 안드로이드 · iOS 기기 토큰으로 푸시를 보낸다. 서비스 계정 -> 접근 토큰(JDK) · 판정 표 · 자격 기동 검사. notification-push 의 PushSender 로 끼운다. | `--modules notification-fcm` | 모바일 푸시, FCM, 안드로이드 푸시 / mobile push, FCM, android push | — |
 | `notification-jdbc` | 알림 받은편지함을 DB 테이블에 저장한다(notification_inbox). | `--modules notification-jdbc` | 알림 저장, 알림 DB, 알림 기록 유지 / notification storage, persist notifications, inbox database | `@skeleton/notifications` |
+| `notification-legal` | 광고성 정보 게이트(notification 의 AdvertisingGate)의 동의 어댑터 — legal 동의 기록으로 광고 동의 정책(수신 동의 · 야간 별도 동의 · 2년 만료)을 구현한다. 채널(푸시 · 메일 · 슬랙)과 무관하다. | `--modules notification-legal` | 광고 동의 정책, 마케팅 수신 동의 확인, 야간 광고 동의 / advertising consent policy, marketing consent check, night-time advertising consent | — |
 | `notification-mail` | SMTP 로 메일을 보내는 MailSender (spring.mail.* 위에). | 스타터(apps/api)에 기본 포함 | 메일 발송, 이메일 보내기, SMTP, 메일 / send email, smtp, mail sender, email | — |
 | `notification-push` | 알림이 받는 사람의 기기로도 간다 — 기기 등록 · 종류 × 채널 푸시 끄기 · 잠금 화면 옵션 · 세션 연동. 저장은 notification-push-jdbc, 전달은 notification-webpush · notification-fcm. | `--modules notification-push,notification-push-jdbc` | 푸시 알림, 웹 푸시 기기 등록, 푸시 끄기, 종류별 푸시, 잠금 화면 내용 / push notification, device registration, per-type push mute, lock screen content | `@skeleton/push` |
 | `notification-push-jdbc` | 푸시 기기 · 「푸시만 끄기」를 DB 에 저장하고 발송 작업을 job-queue-jdbc 에 얹는다 (PostgreSQL · MySQL). | `--modules notification-push-jdbc` | 푸시 기기 저장, 푸시 작업 큐 / push device store, push job queue | — |
-| `notification-push-legal` | 광고성 푸시의 동의 어댑터 — legal 동의 기록을 읽어 동의 정책을 구현하고, 동의 변경 통지 · 2년 재확인 안내 · 동의 상태 읽기(GET /api/v1/push/advertising)를 낸다. 규칙은 notification-push. | `--modules notification-push-legal` | 광고 푸시 동의, 마케팅 수신 동의, 야간 광고 동의, 수신 동의 재확인, 광고 표기 / advertising push consent, marketing consent, night-time advertising consent, consent reconfirmation, advertisement mark | `@skeleton/push` |
+| `notification-push-legal` | 광고성 푸시의 통지 · 안내 어댑터 — 동의 변경 통지 · 2년 재확인 안내 · 동의 상태 읽기(GET /api/v1/push/advertising)를 낸다. 판정은 notification 의 광고 게이트, 동의 정책은 notification-legal. | `--modules notification-push-legal` | 광고 푸시 동의, 마케팅 수신 동의, 야간 광고 동의, 수신 동의 재확인, 광고 표기 / advertising push consent, marketing consent, night-time advertising consent, consent reconfirmation, advertisement mark | `@skeleton/push` |
 | `notification-slack` | 알림과 @SlackException 예외 알림을 Slack 웹훅으로 보낸다. | `--modules notification-slack` | 슬랙 알림, 슬랙, 예외 알림 / slack notification, slack webhook, exception alert | — |
 | `notification-sse` | 알림을 Server-Sent Events 로 브라우저에 실시간 전달한다(GET /api/v1/notifications/sse) — 받는 사람이 정해진 알림은 그 사람에게만. | `--modules notification-sse` | 실시간 알림, SSE, 알림 즉시 표시, 푸시 알림, 서버 푸시 / realtime notification, sse, server-sent events, push notification | `@skeleton/realtime` |
 | `notification-webpush` | 웹 푸시(VAPID) 전달 수단 — 브라우저 구독으로 푸시를 보낸다. RFC 8291 암호화(JDK) · 끝점 허용 목록(SSRF 방어) · 키 쌍 기동 검사. notification-push 의 PushSender 로 끼운다. | `--modules notification-webpush` | 웹 푸시, 브라우저 푸시, VAPID / web push, browser push, VAPID | `@skeleton/push` |
@@ -924,7 +925,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 종류 · 상태: module · stable — 위치 `modules/notification`
 - 켜는 법: `--modules notification`
 - 의존 한 줄: `implementation(project(":modules:notification"))`
-- 설정 접두사 `skeleton.notification.inbox`, `skeleton.notification.retention`, `skeleton.notification.preferences` — 키와 기본값 `docs/config/modules/notification.yml`
+- 설정 접두사 `skeleton.notification.inbox`, `skeleton.notification.retention`, `skeleton.notification.preferences`, `skeleton.notification.advertising` — 키와 기본값 `docs/config/modules/notification.yml`
 - HTTP 경로: `/api/v1/notifications`, `/api/v1/notifications/preferences`
 - 문서: `docs/modules/notification.md`
 - 짝 프런트(react-skeleton): 항목 `notifications` · 패키지 `@skeleton/notifications` · 조각 `--packages notifications`
@@ -961,6 +962,19 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - notification 없이는 쓰지 않는다(따라온다)
   - DataSource · db-* 모듈과 마이그레이션이 적용된 스키마가 필요하다
 - 키워드: 알림 저장, 알림 DB, 알림 기록 유지 / notification storage, persist notifications, inbox database
+
+### `notification-legal` — 광고성 정보 게이트(notification 의 AdvertisingGate)의 동의 어댑터 — legal 동의 기록으로 광고 동의 정책(수신 동의 · 야간 별도 동의 · 2년 만료)을 구현한다. 채널(푸시 · 메일 · 슬랙)과 무관하다.
+
+- 종류 · 상태: module · experimental — 위치 `modules/notification-legal`
+- 켜는 법: `--modules notification-legal`
+- 의존 한 줄: `implementation(project(":modules:notification-legal"))`
+- 자동으로 따라온다: `notification`
+- 문서: `docs/modules/notification-legal.md`
+- 쓰지 않는 경우:
+  - 광고성 종류(skeleton.notification.advertising.types)를 쓰지 않는 앱은 얹지 않는다
+  - 지금 광고 게이트는 푸시 채널에만 걸린다 — 광고성 메일 · 슬랙 등을 보내는 앱은 보내기 전에 AdvertisingGate 를 불러야 한다(정보통신망법 §50)
+  - 광고 문서(marketing · marketing-night) 본문 · 전송자 정보 · 법 해석은 앱과 법률 검토의 몫이다
+- 키워드: 광고 동의 정책, 마케팅 수신 동의 확인, 야간 광고 동의 / advertising consent policy, marketing consent check, night-time advertising consent
 
 ### `notification-mail` — SMTP 로 메일을 보내는 MailSender (spring.mail.* 위에).
 
@@ -1004,18 +1018,18 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - DataSource · db-* 모듈과 job-queue-jdbc 스키마, 이 모듈의 마이그레이션이 적용된 스키마가 필요하다
 - 키워드: 푸시 기기 저장, 푸시 작업 큐 / push device store, push job queue
 
-### `notification-push-legal` — 광고성 푸시의 동의 어댑터 — legal 동의 기록을 읽어 동의 정책을 구현하고, 동의 변경 통지 · 2년 재확인 안내 · 동의 상태 읽기(GET /api/v1/push/advertising)를 낸다. 규칙은 notification-push.
+### `notification-push-legal` — 광고성 푸시의 통지 · 안내 어댑터 — 동의 변경 통지 · 2년 재확인 안내 · 동의 상태 읽기(GET /api/v1/push/advertising)를 낸다. 판정은 notification 의 광고 게이트, 동의 정책은 notification-legal.
 
 - 종류 · 상태: module · experimental — 위치 `modules/notification-push-legal`
 - 켜는 법: `--modules notification-push-legal`
 - 의존 한 줄: `implementation(project(":modules:notification-push-legal"))`
-- 자동으로 따라온다: `notification`, `notification-push`
+- 자동으로 따라온다: `notification`, `notification-legal`, `notification-push`
 - HTTP 경로: `/api/v1/push/advertising`
 - 문서: `docs/modules/notification-push-legal.md`
 - 짝 프런트(react-skeleton): 항목 `push` · 패키지 `@skeleton/push` · 조각 `--packages push`
 - 쓰지 않는 경우:
-  - 광고성 종류(skeleton.notification.push.advertising-types)를 쓰지 않는 앱은 얹지 않는다 — notification-push 만으로 legal 없이 푸시를 쓴다
-  - 이 게이트는 푸시 채널(웹 푸시 · FCM)에만 있다 — 메일 · 슬랙 · SSE 로 광고를 보내는 앱은 AdvertisingConsentPolicy 를 직접 부른다
+  - 광고성 종류(skeleton.notification.advertising.types)를 쓰지 않는 앱은 얹지 않는다 — notification-push 만으로 legal 없이 푸시를 쓴다
+  - 지금 광고 게이트는 푸시 채널에만 걸린다 — 광고성 메일 · 슬랙 등을 보내는 앱은 보내기 전에 AdvertisingGate 를 불러야 한다(정보통신망법 §50)
   - 광고 문서(marketing · marketing-night) 본문 · 전송자 정보 · 법 해석은 앱과 법률 검토의 몫이다
 - 키워드: 광고 푸시 동의, 마케팅 수신 동의, 야간 광고 동의, 수신 동의 재확인, 광고 표기 / advertising push consent, marketing consent, night-time advertising consent, consent reconfirmation, advertisement mark
 
@@ -1530,7 +1544,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 - 종류 · 상태: app · stable — 위치 `apps/sample`
 - 켜는 법: `--with-sample`
-- 자동으로 따라온다: `alert-jdbc`, `api-key`, `api-key-jdbc`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `badge`, `badge-jdbc`, `board`, `board-jdbc`, `campaign`, `campaign-jdbc`, `catalog`, `catalog-jdbc`, `coupon`, `coupon-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `json`, `notification`, `notification-fcm`, `notification-jdbc`, `notification-push`, `notification-push-jdbc`, `notification-push-legal`, `notification-sse`, `notification-webpush`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-toss`, `point`, `point-jdbc`, `review`, `review-jdbc`, `reward`, `reward-jdbc`, `scheduler`, `search`, `search-jdbc`, `storage`, `storage-s3`, `workspace`, `workspace-jdbc`
+- 자동으로 따라온다: `alert-jdbc`, `api-key`, `api-key-jdbc`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `badge`, `badge-jdbc`, `board`, `board-jdbc`, `campaign`, `campaign-jdbc`, `catalog`, `catalog-jdbc`, `coupon`, `coupon-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `json`, `notification`, `notification-fcm`, `notification-jdbc`, `notification-legal`, `notification-push`, `notification-push-jdbc`, `notification-push-legal`, `notification-sse`, `notification-webpush`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-toss`, `point`, `point-jdbc`, `review`, `review-jdbc`, `reward`, `reward-jdbc`, `scheduler`, `search`, `search-jdbc`, `storage`, `storage-s3`, `workspace`, `workspace-jdbc`
 - HTTP 경로: `/api/v1/cheers`, `/api/v1/notes`
 - 문서: `docs/sample.md`
 - 짝 프런트(react-skeleton): 항목 `app-sample` · 조각 `--with-sample`
@@ -1543,7 +1557,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 - 종류 · 상태: app · stable — 위치 `apps/workbench`
 - 켜는 법: `--with-workbench`
-- 자동으로 따라온다: `alert-jdbc`, `api-key`, `api-key-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `badge`, `badge-jdbc`, `board`, `board-jdbc`, `campaign`, `campaign-jdbc`, `catalog`, `catalog-jdbc`, `config-aws-ssm`, `coupon`, `coupon-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `db-mysql`, `event-kafka`, `json`, `notification`, `notification-fcm`, `notification-jdbc`, `notification-push`, `notification-push-jdbc`, `notification-push-legal`, `notification-slack`, `notification-sse`, `notification-webpush`, `notification-websocket`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `point`, `point-jdbc`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `review`, `review-jdbc`, `reward`, `reward-jdbc`, `scheduler`, `search`, `search-jdbc`, `storage`, `storage-s3`, `workspace`, `workspace-jdbc`
+- 자동으로 따라온다: `alert-jdbc`, `api-key`, `api-key-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `badge`, `badge-jdbc`, `board`, `board-jdbc`, `campaign`, `campaign-jdbc`, `catalog`, `catalog-jdbc`, `config-aws-ssm`, `coupon`, `coupon-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `db-mysql`, `event-kafka`, `json`, `notification`, `notification-fcm`, `notification-jdbc`, `notification-legal`, `notification-push`, `notification-push-jdbc`, `notification-push-legal`, `notification-slack`, `notification-sse`, `notification-webpush`, `notification-websocket`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `point`, `point-jdbc`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `review`, `review-jdbc`, `reward`, `reward-jdbc`, `scheduler`, `search`, `search-jdbc`, `storage`, `storage-s3`, `workspace`, `workspace-jdbc`
 - HTTP 경로: `/api/v1`, `/api/v1/examples`, `/api/v1/skeleton`, `/api/v1/skeleton/enums`, `/api/v1/skeleton/json`, `/api/v1/skeleton/payments`, `/api/v1/skeleton/polymorphic/contents`
 - 문서: `docs/minimal-composition.md`, `docs/modules/README.md`
 - 짝 프런트(react-skeleton): 항목 `app-workbench` · 조각 `--with-workbench`

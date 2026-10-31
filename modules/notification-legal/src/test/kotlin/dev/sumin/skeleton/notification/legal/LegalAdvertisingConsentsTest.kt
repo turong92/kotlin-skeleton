@@ -1,7 +1,7 @@
-package dev.sumin.skeleton.notification.push.legal
+package dev.sumin.skeleton.notification.legal
 
-import dev.sumin.skeleton.notification.push.AdvertisingConsent
-import dev.sumin.skeleton.notification.push.PushProperties
+import dev.sumin.skeleton.notification.advertising.AdvertisingConsent
+import dev.sumin.skeleton.notification.advertising.AdvertisingProperties
 import java.time.Duration
 import java.time.Instant
 import kotlin.test.Test
@@ -11,7 +11,7 @@ import kotlin.test.assertNull
 /** 광고 동의가 「지금 보내도 되나」로 바뀌는 규칙 - 미동의 · 철회 · 2년 만료 · 새 판(OUTDATED) · 야간은 광고 동의 위에서만 */
 class LegalAdvertisingConsentsTest {
     private val kit = LegalKit()
-    private val advertising = PushProperties.Advertising(fallbackZone = "Asia/Seoul", senderName = "Example Co.")
+    private val advertising = AdvertisingProperties(fallbackZone = "Asia/Seoul", senderName = "Example Co.")
     private val consents = LegalAdvertisingConsents(kit.service, advertising)
     private val policy = LegalAdvertisingConsentPolicy(consents)
     private val t0 = kit.clock.now

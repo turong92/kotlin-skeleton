@@ -1,5 +1,9 @@
 package dev.sumin.skeleton.notification.push
 
+import dev.sumin.skeleton.notification.advertising.AdvertisingConsent
+import dev.sumin.skeleton.notification.advertising.AdvertisingConsentPolicy
+import dev.sumin.skeleton.notification.advertising.AdvertisingGate
+import dev.sumin.skeleton.notification.advertising.AdvertisingProperties
 import dev.sumin.skeleton.notification.InMemoryNotificationBroker
 import dev.sumin.skeleton.notification.InMemoryNotificationInboxRepository
 import dev.sumin.skeleton.notification.InMemoryNotificationMuteRepository
@@ -30,19 +34,17 @@ class PushAdvertisingChannelTest {
             "acc_withdrawn" to AdvertisingConsent(send = false, night = false),
         ),
     )
-    private val properties = PushProperties(
-        enabled = true, types = listOf("comment.created"), advertisingTypes = listOf("promo.tips"),
-        advertising = PushProperties.Advertising(fallbackZone = "Asia/Seoul", senderName = "Example Co."),
-    )
+    private val properties = PushProperties(enabled = true, types = listOf("comment.created"))
+    private val adProps = AdvertisingProperties(types = listOf("promo.tips"), fallbackZone = "Asia/Seoul", senderName = "Example Co.")
 
     private fun channel(
         props: PushProperties = properties,
-        factory: PushMessageFactory = DefaultPushMessageFactory(props),
+        factory: PushMessageFactory? = null,
         gatePolicy: AdvertisingConsentPolicy? = policy,
-    ) = PushNotificationChannel(
-        broker, props, factory, devices, mutes, tasks, { listOf(web, fcm) },
-        AdvertisingGate(props, gatePolicy, null, clock),
-    )
+    ): PushNotificationChannel {
+        val gate = AdvertisingGate(adProps, gatePolicy, null, clock)
+        return PushNotificationChannel(broker, props, factory ?: DefaultPushMessageFactory(props, gate), devices, mutes, tasks, { listOf(web, fcm) }, gate)
+    }
 
     private fun ad(vararg recipients: String, type: String = "promo.tips", title: String? = "신기능 안내") = NotificationEvent(
         topic = "promo", type = type, recipientIds = recipients.toSet(), title = title, message = "새 기능이 나왔어요", link = "/news", createdAt = clock.now,

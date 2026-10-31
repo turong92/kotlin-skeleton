@@ -1,5 +1,8 @@
 package dev.sumin.skeleton.notification.push
 
+import dev.sumin.skeleton.notification.advertising.AdvertisingConsent
+import dev.sumin.skeleton.notification.advertising.AdvertisingConsentPolicy
+import dev.sumin.skeleton.notification.advertising.AdvertisingRecipientZones
 import dev.sumin.skeleton.common.time.TimeProvider
 import java.time.Duration
 import java.time.Instant
@@ -109,7 +112,7 @@ class FakeAdvertisingPolicy(private val answers: Map<String, AdvertisingConsent>
     }
 }
 
-class FakeRecipientZones(private val zones: Map<String, ZoneId?> = emptyMap(), private val failure: RuntimeException? = null) : PushRecipientZones {
+class FakeRecipientZones(private val zones: Map<String, ZoneId?> = emptyMap(), private val failure: RuntimeException? = null) : AdvertisingRecipientZones {
     override fun zoneOf(accountId: String): ZoneId? {
         failure?.let { throw it }
         return zones[accountId]

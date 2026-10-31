@@ -256,12 +256,12 @@ skeleton:
       enabled: true   # 이 앱의 선택: 알림이 받는 사람의 기기로도 간다 (모듈 기본은 꺼짐). 기기 저장은 notification-push-jdbc, 전달은 아래 webpush · fcm - docs/modules/notification-push.md
       lock-screen: FULL   # 이 앱의 선택(모듈 기본과 같다 - 일부러 적는다): 잠금 화면에 알림 제목 · 본문이 그대로 보인다. 내용을 가리려면 HIDDEN
       types: [NOTE_UPDATED, comment.created, comment.replied, reward.granted, badge.awarded, advertising.consent.changed, advertising.consent.reconfirm]   # 이 앱의 선택: 푸시로도 갈 알림 종류 - 위 preferences.types 와 같은 종류 + 광고 동의 변경 · 재확인 안내(정보성, 안 넣으면 알림함에만 쌓인다). 사람이 종류마다 「푸시만 끄기」를 할 수 있다
-      advertising-types: [promo.notes-tips]   # 이 앱의 선택: 광고성 종류 - 동의(marketing)가 있는 사람에게만, 야간(21~08시)은 별도 동의(marketing-night)가 없으면 다음 08시로 보류한다. 견본에는 이 알림을 보내는 화면이 없다 - 보내는 쪽은 제품마다 다르다(publish 하면 규칙이 적용된다). 시험: push/PushJourneyIntegrationTest
-      advertising:
-        sender-name: Notes Sample   # 필수: 전송자 명칭 (동의 변경 · 재확인 안내에 쓴다)
-        fallback-zone: Asia/Seoul   # 필수: 받는 사람 시간대를 모를 때 - 시간대의 출처는 push/SamplePushConfiguration (계정 프로필의 timeZone)
       stale-cleanup:
         enabled: true   # 이 앱의 선택(모듈 기본은 꺼짐): 60일 동안 안 본 기기 줄을 지운다 (scheduler 가 주기를 돈다)
+    advertising:   # 광고성 정보 규칙(채널 무관 - 푸시가 지금 이 규칙을 부른다, docs/modules/notification-legal.md)
+      types: [promo.notes-tips]   # 이 앱의 선택: 광고성 종류 - 동의(marketing)가 있는 사람에게만, 야간(21~08시)은 별도 동의(marketing-night)가 없으면 다음 08시로 보류한다. 견본에는 이 알림을 보내는 화면이 없다 - 보내는 쪽은 제품마다 다르다(publish 하면 규칙이 적용된다). 시험: push/PushJourneyIntegrationTest
+      sender-name: Notes Sample   # 필수: 전송자 명칭 (동의 변경 · 재확인 안내에 쓴다)
+      fallback-zone: Asia/Seoul   # 필수: 받는 사람 시간대를 모를 때 - 시간대의 출처는 push/SamplePushConfiguration (계정 프로필의 timeZone)
     webpush:
       enabled: true   # 이 앱의 선택: 웹 푸시(VAPID). 키 쌍(아래 환경변수)이 없으면 로컬은 센더가 없고(기기 등록이 400), 보호 환경(stage · prod)은 기동 실패 - 끄려면 SKELETON_NOTIFICATION_WEBPUSH_ENABLED=false. 로컬 프로필은 시험용 고정 쌍(application-local.yml)
       public-key: ${SKELETON_NOTIFICATION_WEBPUSH_VAPID_PUBLIC_KEY:}   # 비밀 아님 (선언의 env:)

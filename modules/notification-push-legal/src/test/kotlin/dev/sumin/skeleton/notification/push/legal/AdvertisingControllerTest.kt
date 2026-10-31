@@ -1,7 +1,8 @@
 package dev.sumin.skeleton.notification.push.legal
 
-import dev.sumin.skeleton.notification.push.AdvertisingGate
-import dev.sumin.skeleton.notification.push.PushProperties
+import dev.sumin.skeleton.notification.advertising.AdvertisingGate
+import dev.sumin.skeleton.notification.advertising.AdvertisingProperties
+import dev.sumin.skeleton.notification.legal.LegalAdvertisingConsents
 import dev.sumin.skeleton.notification.push.legal.web.AdvertisingController
 import java.time.Duration
 import kotlin.test.Test
@@ -13,11 +14,8 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders
 
 class AdvertisingControllerTest {
     private val kit = LegalKit()
-    private val properties = PushProperties(
-        enabled = true, advertisingTypes = listOf("promo.tips"),
-        advertising = PushProperties.Advertising(fallbackZone = "Asia/Seoul", senderName = "Example Co."),
-    )
-    private val consents = LegalAdvertisingConsents(kit.service, properties.advertising)
+    private val properties = AdvertisingProperties(types = listOf("promo.tips"), fallbackZone = "Asia/Seoul", senderName = "Example Co.")
+    private val consents = LegalAdvertisingConsents(kit.service, properties)
     private val controller = AdvertisingController(consents, AdvertisingGate(properties, null, null, kit.clock), properties, kit.clock)
     private val mockMvc = MockMvcBuilders.standaloneSetup(controller).build()
     private val caller = TestingAuthenticationToken("acc_a", "n/a", "ROLE_USER")

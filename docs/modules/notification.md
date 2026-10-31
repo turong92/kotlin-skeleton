@@ -25,10 +25,12 @@
 
 | 항목 | 내용 |
 |---|---|
+**광고성 정보 게이트**(`skeleton.notification.advertising.*`, 기본 꺼짐 — `types` 가 비면 아무것도 하지 않는다): 채널과 무관한 부품 `AdvertisingGate`(패키지 `notification.advertising`)가 네 가지를 판정한다 — 광고 수신 동의가 지금 유효한가 · 야간(21~08시) 별도 동의 · 2년 재확인 만료(동의 정책의 몫) · 야간 보류 시각(받는 사람 시간대의 다음 08시). `decide(accountId)` = `SendNow` / `Skip` / `Hold(runAt)` (조회가 실패하면 `Skip` — 실패 시 닫힘, 던지지 않는다), `brand(title, body, maxBodyBytes)` = 「(광고)」 표기. 동의를 읽는 포트는 `AdvertisingConsentPolicy`(구현은 [notification-legal](notification-legal.md)), 시간대는 앱의 `AdvertisingRecipientZones`. 지금 광고 게이트는 푸시 채널에만 걸린다 — 광고성 메일 · 슬랙 등을 보내는 앱은 보내기 전에 이 부품을 불러야 한다(정보통신망법 §50).
+
 | 의존성 한 줄 | `implementation(project(":modules:notification"))` |
 | 함께 오는 모듈 | `platform` |
 | 컴파일 전용 | 없음 |
-| 설정 접두사 | `skeleton.notification.inbox` · `skeleton.notification.retention` · `skeleton.notification.preferences` — [docs/config/modules/notification.yml](../config/modules/notification.yml) |
+| 설정 접두사 | `skeleton.notification.inbox` · `skeleton.notification.retention` · `skeleton.notification.preferences` · `skeleton.notification.advertising` — [docs/config/modules/notification.yml](../config/modules/notification.yml) |
 | 기본 동작 | 켜짐. 기본은 인메모리 브로커다 (프로세스 안에서만 전달). 서블릿 앱이면 받은편지함 엔드포인트도 켜진다. |
 | 부팅에 필요한 것 | 없음. |
 | 교체 지점 | `NotificationBroker`, `NotificationRecipientResolver`, `NotificationInboxRepository`, `NotificationMuteRepository`, `NotificationInboxRetention`, `NotificationInboxController` |

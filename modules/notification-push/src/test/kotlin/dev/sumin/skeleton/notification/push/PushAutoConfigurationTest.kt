@@ -1,5 +1,8 @@
 package dev.sumin.skeleton.notification.push
 
+import dev.sumin.skeleton.notification.advertising.AdvertisingConsent
+import dev.sumin.skeleton.notification.advertising.AdvertisingConsentPolicy
+import dev.sumin.skeleton.notification.advertising.AdvertisingGate
 import dev.sumin.skeleton.notification.NotificationAutoConfiguration
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -39,7 +42,7 @@ class PushAutoConfigurationTest {
             }
     }
 
-    private val withPorts = runner.withPropertyValues("skeleton.notification.push.enabled=true", "skeleton.notification.push.advertising-types=promo.tips")
+    private val withPorts = runner.withPropertyValues("skeleton.notification.push.enabled=true", "skeleton.notification.advertising.types=promo.tips")
         .withBean(PushDeviceStore::class.java, { FakePushDeviceStore() })
         .withBean(PushTypeMuteStore::class.java, { FakePushTypeMuteStore() })
         .withBean(PushTasks::class.java, { RecordingPushTasks() })
@@ -49,8 +52,8 @@ class PushAutoConfigurationTest {
 
     @Test
     fun `advertising types without a consent policy fail to start and tell which module to add`() {
-        withPorts.withPropertyValues("skeleton.notification.push.advertising.fallback-zone=Asia/Seoul", "skeleton.notification.push.advertising.sender-name=Example Co.")
-            .run { context -> assertTrue("notification-push-legal" in failureOf(context), failureOf(context)) }
+        withPorts.withPropertyValues("skeleton.notification.advertising.fallback-zone=Asia/Seoul", "skeleton.notification.advertising.sender-name=Example Co.")
+            .run { context -> assertTrue("notification-legal" in failureOf(context), failureOf(context)) }
     }
 
     @Test
@@ -59,8 +62,8 @@ class PushAutoConfigurationTest {
         val base = withPorts.withBean(AdvertisingConsentPolicy::class.java, { policy })
 
         base.run { context -> assertTrue("fallback-zone" in failureOf(context), failureOf(context)) }
-        base.withPropertyValues("skeleton.notification.push.advertising.fallback-zone=Asia/Seoul").run { context -> assertTrue("sender-name" in failureOf(context), failureOf(context)) }
-        base.withPropertyValues("skeleton.notification.push.advertising.fallback-zone=Asia/Seoul", "skeleton.notification.push.advertising.sender-name=x", "skeleton.notification.push.ttl=PT11H")
+        base.withPropertyValues("skeleton.notification.advertising.fallback-zone=Asia/Seoul").run { context -> assertTrue("sender-name" in failureOf(context), failureOf(context)) }
+        base.withPropertyValues("skeleton.notification.advertising.fallback-zone=Asia/Seoul", "skeleton.notification.advertising.sender-name=x", "skeleton.notification.push.ttl=PT11H")
             .run { context -> assertTrue("ttl" in failureOf(context), failureOf(context)) }
     }
 
@@ -68,7 +71,7 @@ class PushAutoConfigurationTest {
     fun `a complete advertising configuration wires the gate into the channel and the worker`() {
         val policy = AdvertisingConsentPolicy { _, _ -> AdvertisingConsent(send = false, night = false) }
         withPorts.withBean(AdvertisingConsentPolicy::class.java, { policy })
-            .withPropertyValues("skeleton.notification.push.advertising.fallback-zone=Asia/Seoul", "skeleton.notification.push.advertising.sender-name=Example Co.")
+            .withPropertyValues("skeleton.notification.advertising.fallback-zone=Asia/Seoul", "skeleton.notification.advertising.sender-name=Example Co.")
             .run { context ->
                 assertEquals(null, context.startupFailure)
                 assertTrue(context.getBean(AdvertisingGate::class.java).isAdvertising("promo.tips"))

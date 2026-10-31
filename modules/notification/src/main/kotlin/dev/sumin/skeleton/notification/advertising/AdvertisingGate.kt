@@ -1,4 +1,4 @@
-package dev.sumin.skeleton.notification.push
+package dev.sumin.skeleton.notification.advertising
 
 import dev.sumin.skeleton.common.time.TimeProvider
 import java.time.Instant
@@ -14,17 +14,16 @@ import org.slf4j.LoggerFactory
 data class AdvertisingConsent(val send: Boolean, val night: Boolean)
 
 /**
- * 광고 동의를 읽는 포트. 구현은 `notification-push-legal`(`legal` 의 동의 기록). 던지거나 모르는 사람이면 **안 보낸다**(실패 시 닫힘).
+ * 광고 동의를 읽는 포트. 구현은 `notification-legal`(`legal` 의 동의 기록). 던지거나 모르는 사람이면 **안 보낸다**(실패 시 닫힘).
  *
- * 이 게이트는 **푸시 채널(웹 푸시 · FCM)에만** 있다. 메일 · 슬랙 · SSE 로 광고를 보내는 앱은 이 정책을 직접 불러 동의를 확인해야 한다 -
- * `notification` 계약은 광고를 모른다.
+ * 지금 광고 게이트([AdvertisingGate])는 푸시 채널(웹 푸시 · FCM)에만 걸린다 - 광고성 메일 · 슬랙 등을 보내는 앱은 보내기 전에 게이트를 불러야 한다(정보통신망법 §50).
  */
 fun interface AdvertisingConsentPolicy {
     fun consentOf(accountId: String, now: Instant): AdvertisingConsent
 }
 
-/** 받는 사람의 시간대 - 야간 판정에 쓴다. 앱이 구현한다(예: 계정 프로필의 시간대). null 이면 `advertising.fallback-zone` */
-fun interface PushRecipientZones {
+/** 받는 사람의 시간대 - 야간 판정에 쓴다. 앱이 구현한다(예: 계정 프로필의 시간대). null 이면 `fallback-zone` */
+fun interface AdvertisingRecipientZones {
     fun zoneOf(accountId: String): ZoneId?
 }
 
@@ -34,6 +33,9 @@ object AdvertisingNotificationTypes {
     const val CONSENT_RECONFIRM = "advertising.consent.reconfirm"
     const val PREFIX = "advertising.consent."
 }
+
+/** [AdvertisingGate.brand] 의 결과 */
+data class BrandedText(val title: String, val body: String?)
 
 sealed interface AdvertisingDecision {
     /** 안 보낸다 - 동의 없음 · 철회 · 만료 · 조회 실패 */
@@ -51,41 +53,42 @@ sealed interface AdvertisingDecision {
  * 구성이 덜 됐으면 [problems] 가 이유를 말한다(자동설정이 시작을 멈춘다). 구성이 덜 된 채로 [decide] 를 부르면 늘 [AdvertisingDecision.Skip] 이다.
  */
 class AdvertisingGate(
-    private val properties: PushProperties,
+    private val advertising: AdvertisingProperties,
     private val policy: AdvertisingConsentPolicy?,
-    private val zones: PushRecipientZones?,
+    private val zones: AdvertisingRecipientZones?,
     private val time: TimeProvider,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
-    private val types = properties.advertisingTypeList.toSet()
-    private val advertising = properties.advertising
+    private val typeSet = advertising.typeList.toSet()
     private val nightStart = runCatching { LocalTime.parse(advertising.nightStart.trim()) }.getOrNull()
     private val nightEnd = runCatching { LocalTime.parse(advertising.nightEnd.trim()) }.getOrNull()
     private val fallback = advertising.fallbackZone?.trim()?.takeIf { it.isNotEmpty() }?.let { runCatching { ZoneId.of(it) }.getOrNull() }
 
-    val enabled: Boolean get() = types.isNotEmpty()
+    val enabled: Boolean get() = typeSet.isNotEmpty()
 
-    fun isAdvertising(type: String): Boolean = type in types
+    /** 설정된 광고 종류(설정 순서 그대로) */
+    val types: List<String> get() = advertising.typeList
+
+    fun isAdvertising(type: String): Boolean = type in typeSet
 
     /** 시작을 막는 구성 문제들 - 비어 있으면 괜찮다. 광고 종류가 없으면 늘 비어 있다 */
     fun problems(): List<String> {
         if (!enabled) return emptyList()
         return buildList {
-            if (policy == null) add("advertising-types needs an AdvertisingConsentPolicy bean - add the notification-push-legal module (it reads the consent records of legal)")
+            if (policy == null) add("skeleton.notification.advertising.types needs an AdvertisingConsentPolicy bean - add the notification-legal module (it reads the consent records of legal)")
             if (advertising.fallbackZone.isNullOrBlank()) {
-                add("advertising.fallback-zone is required when advertising-types is set (the system time zone is never used), e.g. Asia/Seoul")
+                add("fallback-zone is required when types is set (the system time zone is never used), e.g. Asia/Seoul")
             } else if (fallback == null) {
-                add("advertising.fallback-zone '${advertising.fallbackZone}' is not a time zone name")
+                add("fallback-zone '${advertising.fallbackZone}' is not a time zone name")
             }
-            if (advertising.senderName.isNullOrBlank()) add("advertising.sender-name is required when advertising-types is set (the notices name the sender)")
-            if (nightStart == null) add("advertising.night-start '${advertising.nightStart}' is not a HH:mm time")
-            if (nightEnd == null) add("advertising.night-end '${advertising.nightEnd}' is not a HH:mm time")
-            if (nightStart != null && nightStart == nightEnd) add("advertising.night-start and advertising.night-end must differ (equal times would switch the night rule off)")
-            if (advertising.titlePrefix.isBlank()) add("advertising.title-prefix must not be blank (the advertising mark is mandatory)")
-            if (properties.ttl < MIN_TTL) add("ttl must be at least 12 hours when advertising-types is set (a night hold can last 11 hours and must not expire the advertisement)")
-            if (advertising.consentType == advertising.nightConsentType) add("advertising.consent-type and advertising.night-consent-type must be different documents")
-            val clash = types.filter { it.startsWith(AdvertisingNotificationTypes.PREFIX) }
-            if (clash.isNotEmpty()) add("advertising-types must not contain the informational consent notices (${clash.joinToString()})")
+            if (advertising.senderName.isNullOrBlank()) add("sender-name is required when types is set (the notices name the sender)")
+            if (nightStart == null) add("night-start '${advertising.nightStart}' is not a HH:mm time")
+            if (nightEnd == null) add("night-end '${advertising.nightEnd}' is not a HH:mm time")
+            if (nightStart != null && nightStart == nightEnd) add("night-start and night-end must differ (equal times would switch the night rule off)")
+            if (advertising.titlePrefix.isBlank()) add("title-prefix must not be blank (the advertising mark is mandatory)")
+            if (advertising.consentType == advertising.nightConsentType) add("consent-type and night-consent-type must be different documents")
+            val clash = typeSet.filter { it.startsWith(AdvertisingNotificationTypes.PREFIX) }
+            if (clash.isNotEmpty()) add("types must not contain the informational consent notices (${clash.joinToString()})")
         }
     }
 
@@ -109,16 +112,19 @@ class AdvertisingGate(
     /** 이 사람에게 적용되는 시간대 - 앱이 답한 것, 없으면 `fallback-zone`. 구성이 덜 됐으면 던진다(안내 화면용 - 발송 판정은 [decide]) */
     fun zoneOf(accountId: String): ZoneId = zoneOrNull(accountId) ?: error("no time zone for $accountId")
 
-    /** 제목 앞에 광고 표기를(이미 있으면 그대로), 본문 끝에 [PushProperties.Advertising.bodySuffix] 를 - 본문은 푸시 한도 안에서 */
-    fun brand(message: PushMessage): PushMessage {
+    /**
+     * 제목 앞에 광고 표기를(이미 있으면 그대로), 본문 끝에 [AdvertisingProperties.bodySuffix] 를 단다 - 본문은 [maxBodyBytes](채널의 한도) 안에서. 이미 달렸으면 그대로(멱등).
+     * 문구를 어디에 싣는지는 채널의 몫이다(푸시는 제목 · 본문, 메일은 제목 · 본문 끝 등).
+     */
+    fun brand(title: String, body: String?, maxBodyBytes: Int): BrandedText {
         val prefix = advertising.titlePrefix.trim()
-        val title = if (prefix.isEmpty() || message.title.trimStart().startsWith(prefix)) message.title else "$prefix ${message.title}"
+        val marked = if (prefix.isEmpty() || title.trimStart().startsWith(prefix)) title else "$prefix $title"
         val suffix = advertising.bodySuffix
-        if (suffix.isEmpty() || message.body?.endsWith(suffix) == true) return message.copy(title = title)   // 이미 붙었으면 그대로 - 멱등
-        val room = (PushText.MAX_BODY_BYTES - suffix.toByteArray(Charsets.UTF_8).size - 1).coerceAtLeast(0)   // -1: 줄바꿈
-        val body = message.body?.let { PushText.truncateUtf8(it, room) }.orEmpty()
-        val glue = if (body.isEmpty() || body.endsWith("\n")) "" else "\n"
-        return message.copy(title = title, body = body + glue + suffix)
+        if (suffix.isEmpty() || body?.endsWith(suffix) == true) return BrandedText(marked, body)
+        val room = (maxBodyBytes - suffix.toByteArray(Charsets.UTF_8).size - 1).coerceAtLeast(0)   // -1: 줄바꿈
+        val kept = body?.let { truncateUtf8(it, room) }.orEmpty()
+        val glue = if (kept.isEmpty() || kept.endsWith("\n")) "" else "\n"
+        return BrandedText(marked, kept + glue + suffix)
     }
 
     private fun zoneOrNull(accountId: String): ZoneId? = (zones?.zoneOf(accountId)) ?: fallback
@@ -143,7 +149,17 @@ class AdvertisingGate(
         }
     }
 
-    private companion object {
-        val MIN_TTL: java.time.Duration = java.time.Duration.ofHours(12)
+    private fun truncateUtf8(text: String, maxBytes: Int): String {
+        if (text.toByteArray(Charsets.UTF_8).size <= maxBytes) return text
+        var bytes = 0
+        var end = 0
+        while (end < text.length) {
+            val cp = text.codePointAt(end)
+            val size = String(Character.toChars(cp)).toByteArray(Charsets.UTF_8).size
+            if (bytes + size > maxBytes) break
+            bytes += size
+            end += Character.charCount(cp)
+        }
+        return text.substring(0, end)
     }
 }

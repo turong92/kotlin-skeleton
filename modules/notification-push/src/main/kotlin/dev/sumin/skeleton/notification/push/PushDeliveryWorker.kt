@@ -1,6 +1,9 @@
 package dev.sumin.skeleton.notification.push
 
 import dev.sumin.skeleton.common.time.TimeProvider
+import dev.sumin.skeleton.notification.advertising.AdvertisingDecision
+import dev.sumin.skeleton.notification.advertising.AdvertisingGate
+import dev.sumin.skeleton.notification.advertising.AdvertisingProperties
 import org.slf4j.LoggerFactory
 
 /**
@@ -15,7 +18,7 @@ class PushDeliveryWorker(
     private val mutes: PushTypeMuteStore,
     private val senders: () -> List<PushSender>,
     private val time: TimeProvider,
-    private val gate: AdvertisingGate = AdvertisingGate(PushProperties(), null, null, time),
+    private val gate: AdvertisingGate = AdvertisingGate(AdvertisingProperties(), null, null, time),
     private val tasks: PushTasks? = null,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
@@ -31,7 +34,7 @@ class PushDeliveryWorker(
         if (job.advertising || gate.isAdvertising(job.message.type)) {
             when (val decision = gate.decide(job.recipientId)) {
                 AdvertisingDecision.Skip -> return
-                AdvertisingDecision.SendNow -> message = gate.brand(message)   // 대기 중 광고로 바뀐 종류도 「(광고)」 표기를 달고 나간다(이미 있으면 그대로)
+                AdvertisingDecision.SendNow -> message = gate.brand(message.title, message.body, PushText.MAX_BODY_BYTES).let { message.copy(title = it.title, body = it.body) }   // 대기 중 광고로 바뀐 종류도 「(광고)」 표기를 달고 나간다(이미 있으면 그대로)
                 is AdvertisingDecision.Hold -> {
                     tasks?.enqueue(job.copy(advertising = true), decision.runAt)
                     return

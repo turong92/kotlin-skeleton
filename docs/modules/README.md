@@ -27,6 +27,7 @@
 | `notification-push-jdbc` | 푸시 기기 · 종류별 푸시 끄기를 DB 에 저장하고 발송 작업을 job-queue 에 얹기 | [notification-push-jdbc](notification-push-jdbc.md) |
 | `notification-webpush` | 웹 푸시(VAPID) 전달 수단 (자리만 — 구현은 이어서) | [notification-webpush](notification-webpush.md) |
 | `notification-fcm` | 모바일 푸시(FCM) 전달 수단 (자리만 — 구현은 이어서) | [notification-fcm](notification-fcm.md) |
+| `notification-legal` | 광고성 정보 게이트의 동의 어댑터(채널 무관) — legal 동의 기록으로 광고 동의 정책을 구현한다 | [notification-legal](notification-legal.md) |
 | `notification-push-legal` | 광고성 푸시의 동의 어댑터 — legal 동의 기록을 읽고 동의 변경 통지 · 2년 재확인 안내 · 동의 상태 읽기를 낸다 | [notification-push-legal](notification-push-legal.md) |
 | `notification-websocket` | STOMP/WebSocket 알림 전달 | [notification-websocket](notification-websocket.md) |
 | `notification-sse` | SSE 알림 전달 | [notification-sse](notification-sse.md) |

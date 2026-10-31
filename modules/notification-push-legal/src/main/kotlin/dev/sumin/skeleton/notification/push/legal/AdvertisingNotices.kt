@@ -9,10 +9,10 @@ import dev.sumin.skeleton.legal.RECONFIRM_SOURCE
 import dev.sumin.skeleton.legal.Subject
 import dev.sumin.skeleton.notification.NotificationEvent
 import dev.sumin.skeleton.notification.NotificationPublisher
-import dev.sumin.skeleton.notification.push.AdvertisingGate
-import dev.sumin.skeleton.notification.push.AdvertisingNotificationTypes
+import dev.sumin.skeleton.notification.advertising.AdvertisingGate
+import dev.sumin.skeleton.notification.advertising.AdvertisingNotificationTypes
 import dev.sumin.skeleton.notification.push.PushAdvertisingNoticeStore
-import dev.sumin.skeleton.notification.push.PushProperties
+import dev.sumin.skeleton.notification.advertising.AdvertisingProperties
 import java.security.MessageDigest
 import java.time.Instant
 import java.time.ZoneId
@@ -25,7 +25,7 @@ private val STAMP = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
 private val DAY = DateTimeFormatter.ofPattern("yyyy-MM-dd")
 private const val TOPIC = "advertising"
 
-private fun scopeLabel(night: Boolean, advertising: PushProperties.Advertising) =
+private fun scopeLabel(night: Boolean, advertising: AdvertisingProperties) =
     if (night) "야간(${advertising.nightStart}~${advertising.nightEnd}) 광고성 정보 수신" else "광고성 정보 수신"
 
 private fun zoneOf(gate: AdvertisingGate, accountId: String): ZoneId = runCatching { gate.zoneOf(accountId) }.getOrDefault(ZoneOffset.UTC)
@@ -36,7 +36,7 @@ private fun zoneOf(gate: AdvertisingGate, accountId: String): ZoneId = runCatchi
  */
 class AdvertisingConsentNotifier(
     private val publisher: NotificationPublisher,
-    private val advertising: PushProperties.Advertising,
+    private val advertising: AdvertisingProperties,
     private val gate: AdvertisingGate,
 ) : ConsentChangeListener {
     override fun onChange(event: ConsentEvent) {
@@ -69,7 +69,7 @@ class AdvertisingConsentNotifier(
 }
 
 /**
- * 동의가 만료되기 [PushProperties.Advertising.reconfirmNoticeBefore] 전에 재확인 안내 `advertising.consent.reconfirm` 을 **동의 주기당 한 번** 보낸다(정보성 - 동의가 이미 만료됐거나 없는 사람에게도 간다).
+ * 동의가 만료되기 [AdvertisingProperties.reconfirmNoticeBefore] 전에 재확인 안내 `advertising.consent.reconfirm` 을 **동의 주기당 한 번** 보낸다(정보성 - 동의가 이미 만료됐거나 없는 사람에게도 간다).
  * 각 동의 종류마다 `latestAgreementsBefore` 로 「가장 최근 사건이 동의이고 `만료일 − 안내 기간` 보다 오래된」 사람을 쪽 단위로 읽고, 표시가 없으면 발행 → 표시 순서로 처리한다
  * (사이에서 죽으면 다음 스캔이 같은 id 로 한 번 더 보내고 받은편지함은 한 줄로 합친다). 한 사람이 실패해도 나머지는 계속한다.
  * 동의 주기를 연 사건의 시각이 열쇠라서 재확인하면 새 주기 = 새 안내다.
@@ -79,7 +79,7 @@ class AdvertisingReconfirmScanner(
     private val notices: PushAdvertisingNoticeStore,
     private val publisher: NotificationPublisher,
     private val gate: AdvertisingGate,
-    private val advertising: PushProperties.Advertising,
+    private val advertising: AdvertisingProperties,
     private val time: TimeProvider,
     private val pageSize: Int = 500,
 ) {

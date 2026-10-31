@@ -1936,7 +1936,8 @@
         "prefixes": [
           "skeleton.notification.inbox",
           "skeleton.notification.retention",
-          "skeleton.notification.preferences"
+          "skeleton.notification.preferences",
+          "skeleton.notification.advertising"
         ],
         "snippet": "docs/config/modules/notification.yml"
       },
@@ -2045,6 +2046,36 @@
       "keywords": {
         "ko": ["알림 저장", "알림 DB", "알림 기록 유지"],
         "en": ["notification storage", "persist notifications", "inbox database"]
+      }
+    },
+    {
+      "id": "notification-legal",
+      "kind": "module",
+      "module": "notification-legal",
+      "path": "modules/notification-legal",
+      "status": "experimental",
+      "summary": "광고성 정보 게이트(notification 의 AdvertisingGate)의 동의 어댑터 — legal 동의 기록으로 광고 동의 정책(수신 동의 · 야간 별도 동의 · 2년 만료)을 구현한다. 채널(푸시 · 메일 · 슬랙)과 무관하다.",
+      "starter": false,
+      "newProjectFlag": "--modules notification-legal",
+      "autoIncludes": ["notification"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/notification-legal.md"],
+      "frontend": null,
+      "notFor": [
+        "광고성 종류(skeleton.notification.advertising.types)를 쓰지 않는 앱은 얹지 않는다",
+        "지금 광고 게이트는 푸시 채널에만 걸린다 — 광고성 메일 · 슬랙 등을 보내는 앱은 보내기 전에 AdvertisingGate 를 불러야 한다(정보통신망법 §50)",
+        "광고 문서(marketing · marketing-night) 본문 · 전송자 정보 · 법 해석은 앱과 법률 검토의 몫이다"
+      ],
+      "keywords": {
+        "ko": ["광고 동의 정책", "마케팅 수신 동의 확인", "야간 광고 동의"],
+        "en": ["advertising consent policy", "marketing consent check", "night-time advertising consent"]
       }
     },
     {
@@ -2157,10 +2188,10 @@
       "module": "notification-push-legal",
       "path": "modules/notification-push-legal",
       "status": "experimental",
-      "summary": "광고성 푸시의 동의 어댑터 — legal 동의 기록을 읽어 동의 정책을 구현하고, 동의 변경 통지 · 2년 재확인 안내 · 동의 상태 읽기(GET /api/v1/push/advertising)를 낸다. 규칙은 notification-push.",
+      "summary": "광고성 푸시의 통지 · 안내 어댑터 — 동의 변경 통지 · 2년 재확인 안내 · 동의 상태 읽기(GET /api/v1/push/advertising)를 낸다. 판정은 notification 의 광고 게이트, 동의 정책은 notification-legal.",
       "starter": false,
       "newProjectFlag": "--modules notification-push-legal",
-      "autoIncludes": ["notification", "notification-push"],
+      "autoIncludes": ["notification", "notification-legal", "notification-push"],
       "needs": {
         "requires": [],
         "oneOf": [],
@@ -2176,8 +2207,8 @@
         "packages": ["@skeleton/push"]
       },
       "notFor": [
-        "광고성 종류(skeleton.notification.push.advertising-types)를 쓰지 않는 앱은 얹지 않는다 — notification-push 만으로 legal 없이 푸시를 쓴다",
-        "이 게이트는 푸시 채널(웹 푸시 · FCM)에만 있다 — 메일 · 슬랙 · SSE 로 광고를 보내는 앱은 AdvertisingConsentPolicy 를 직접 부른다",
+        "광고성 종류(skeleton.notification.advertising.types)를 쓰지 않는 앱은 얹지 않는다 — notification-push 만으로 legal 없이 푸시를 쓴다",
+        "지금 광고 게이트는 푸시 채널에만 걸린다 — 광고성 메일 · 슬랙 등을 보내는 앱은 보내기 전에 AdvertisingGate 를 불러야 한다(정보통신망법 §50)",
         "광고 문서(marketing · marketing-night) 본문 · 전송자 정보 · 법 해석은 앱과 법률 검토의 몫이다"
       ],
       "keywords": {
@@ -3522,6 +3553,7 @@
         "notification",
         "notification-fcm",
         "notification-jdbc",
+        "notification-legal",
         "notification-push",
         "notification-push-jdbc",
         "notification-push-legal",
@@ -3614,6 +3646,7 @@
         "notification",
         "notification-fcm",
         "notification-jdbc",
+        "notification-legal",
         "notification-push",
         "notification-push-jdbc",
         "notification-push-legal",

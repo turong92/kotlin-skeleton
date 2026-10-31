@@ -1,8 +1,8 @@
 package dev.sumin.skeleton.notification.push.legal
 
-import dev.sumin.skeleton.notification.push.AdvertisingGate
-import dev.sumin.skeleton.notification.push.AdvertisingNotificationTypes
-import dev.sumin.skeleton.notification.push.PushProperties
+import dev.sumin.skeleton.notification.advertising.AdvertisingGate
+import dev.sumin.skeleton.notification.advertising.AdvertisingNotificationTypes
+import dev.sumin.skeleton.notification.advertising.AdvertisingProperties
 import java.time.Duration
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -11,9 +11,8 @@ import kotlin.test.assertTrue
 class AdvertisingNoticesTest {
     private val kit = LegalKit()
     private val publisher = RecordingPublisher()
-    private val advertising = PushProperties.Advertising(fallbackZone = "Asia/Seoul", senderName = "Example Co.")
-    private val properties = PushProperties(enabled = true, advertisingTypes = listOf("promo.tips"), advertising = advertising)
-    private val gate = AdvertisingGate(properties, null, null, kit.clock)
+    private val advertising = AdvertisingProperties(types = listOf("promo.tips"), fallbackZone = "Asia/Seoul", senderName = "Example Co.")
+    private val gate = AdvertisingGate(advertising, null, null, kit.clock)
     private val t0 = kit.clock.now
 
     private fun hook() {

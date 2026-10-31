@@ -6,10 +6,10 @@ import dev.sumin.skeleton.common.Response
 import dev.sumin.skeleton.common.openapi.ApiEnvelopeType
 import dev.sumin.skeleton.common.openapi.ApiResponseEnvelope
 import dev.sumin.skeleton.common.time.TimeProvider
-import dev.sumin.skeleton.notification.push.AdvertisingGate
-import dev.sumin.skeleton.notification.push.PushProperties
-import dev.sumin.skeleton.notification.push.legal.AdvertisingConsentItem
-import dev.sumin.skeleton.notification.push.legal.LegalAdvertisingConsents
+import dev.sumin.skeleton.notification.advertising.AdvertisingGate
+import dev.sumin.skeleton.notification.advertising.AdvertisingProperties
+import dev.sumin.skeleton.notification.legal.AdvertisingConsentItem
+import dev.sumin.skeleton.notification.legal.LegalAdvertisingConsents
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
 import java.time.Instant
@@ -48,7 +48,7 @@ data class AdvertisingResponse(
 class AdvertisingController(
     private val consents: LegalAdvertisingConsents,
     private val gate: AdvertisingGate,
-    private val properties: PushProperties,
+    private val properties: AdvertisingProperties,
     private val time: TimeProvider,
 ) {
     @Operation(summary = "My advertising consent state", description = "Consent and night consent with state, agreement and expiry time, whether a reconfirm is due and whether advertising can actually be sent; plus the night window in my time zone. Agree, withdraw and reconfirm go through /api/v1/legal/consents.")
@@ -60,11 +60,11 @@ class AdvertisingController(
         val snapshot = consents.snapshot(accountId, time.now())
         return Response.ok(
             AdvertisingResponse(
-                advertisingTypes = properties.advertisingTypeList,
-                senderName = properties.advertising.senderName,
+                advertisingTypes = properties.typeList,
+                senderName = properties.senderName,
                 consent = snapshot.consent.toResponse(),
                 night = snapshot.night.toResponse(),
-                nightWindow = NightWindowResponse(properties.advertising.nightStart, properties.advertising.nightEnd, gate.zoneOf(accountId).id),
+                nightWindow = NightWindowResponse(properties.nightStart, properties.nightEnd, gate.zoneOf(accountId).id),
             ),
         )
     }

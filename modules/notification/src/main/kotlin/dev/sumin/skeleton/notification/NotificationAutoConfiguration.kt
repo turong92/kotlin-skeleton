@@ -2,6 +2,10 @@ package dev.sumin.skeleton.notification
 
 import dev.sumin.skeleton.common.project.ProjectRegistry
 import dev.sumin.skeleton.common.time.TimeProvider
+import dev.sumin.skeleton.notification.advertising.AdvertisingConsentPolicy
+import dev.sumin.skeleton.notification.advertising.AdvertisingGate
+import dev.sumin.skeleton.notification.advertising.AdvertisingProperties
+import dev.sumin.skeleton.notification.advertising.AdvertisingRecipientZones
 import java.time.Instant
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.ObjectProvider
@@ -15,8 +19,26 @@ import org.springframework.context.annotation.Bean
 import org.springframework.scheduling.TaskScheduler
 
 @AutoConfiguration
-@EnableConfigurationProperties(NotificationRetentionProperties::class, NotificationPreferencesProperties::class)
+@EnableConfigurationProperties(NotificationRetentionProperties::class, NotificationPreferencesProperties::class, AdvertisingProperties::class)
 class NotificationAutoConfiguration {
+    /**
+     * 광고 규칙 - 광고 종류(`skeleton.notification.advertising.types`)를 설정했는데 동의 정책 빈 · `fallback-zone` · `sender-name` 이 없으면 **시작을 멈춘다**
+     * (동의 확인 없이 광고가 나가는 구성이 조용히 생기지 않게). 광고 종류가 없으면 아무 검사도 하지 않고 게이트는 늘 「광고 아님」이다.
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    fun advertisingGate(
+        properties: AdvertisingProperties,
+        policy: ObjectProvider<AdvertisingConsentPolicy>,
+        zones: ObjectProvider<AdvertisingRecipientZones>,
+        time: ObjectProvider<TimeProvider>,
+    ): AdvertisingGate {
+        val gate = AdvertisingGate(properties, policy.getIfAvailable(), zones.getIfAvailable(), time.getIfAvailable { TimeProvider.systemUtc() })
+        val problems = gate.problems()
+        check(problems.isEmpty()) { "skeleton.notification.advertising is not configured completely: ${problems.joinToString("; ")}" }
+        return gate
+    }
+
     @Bean
     @ConditionalOnMissingBean(NotificationRecipientResolver::class)
     fun notificationRecipientResolver(): NotificationRecipientResolver =
