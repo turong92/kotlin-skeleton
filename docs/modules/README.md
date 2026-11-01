@@ -84,6 +84,8 @@
 | `reward-jdbc` | 지급 건 저장 · 작업을 DB 에 두고 일꾼을 job-queue 에 얹기 | [reward-jdbc](reward-jdbc.md) |
 | `api-key` | API 키 — 발급(다시 인증) · 범위(표시한 경로만, 기본 거부) · 만료 · 회수 · 키별 한도 · 요청 인증 | [api-key](api-key.md) |
 | `api-key-jdbc` | API 키 저장을 DB 에 두기 (해시만 저장) | [api-key-jdbc](api-key-jdbc.md) |
+| `inquiry` | 문의 · 의견 받기 (질문 · 기능 제안 · 오류 신고 — 공개 POST · 접수 경보 · 운영자 목록 · 처리 표시) | [inquiry](inquiry.md) |
+| `inquiry-jdbc` | 문의 저장을 DB 에 두기 | [inquiry-jdbc](inquiry-jdbc.md) |
 | `badge` | 배지 — 정의 · 수여/회수 · 내 배지 · 비로그인 공개 프로필 배지 · 보상 지급기 (포인트 · 쿠폰을 모른다) | [badge](badge.md) |
 | `badge-jdbc` | 배지 저장을 DB 에 두기 (정의 · 보유 · 수여/회수 내역) | [badge-jdbc](badge-jdbc.md) |
 | `workspace` | 워크스페이스(팀) — 만들기 · 역할(소유자 · 관리자 · 멤버) · slug · 멤버 관리 · 소유권 이전 · 요청 경계 `CurrentWorkspace` | [workspace](workspace.md) |

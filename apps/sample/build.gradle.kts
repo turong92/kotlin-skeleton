@@ -66,6 +66,8 @@ dependencies {
     implementation(project(":modules:workspace-jdbc"))     // 워크스페이스 저장소 (workspace 는 저장소를 모른다)
     implementation(project(":modules:api-key"))            // API 키: 사용자가 범위 · 만료를 골라 발급(다시 인증)하고, 키로 온 요청은 @ApiKeyScope 표시한 노트 경로에만 닿는다 (/api/v1/api-keys, 운영자 /api/v1/admin/api-keys). 범위 선언 - notes/NoteApiKeyScopes, 문서 docs/modules/api-key.md
     implementation(project(":modules:api-key-jdbc"))       // 키 저장소 (api-key 는 저장소를 모른다) - 해시만 저장
+    implementation(project(":modules:inquiry"))            // 문의 · 의견 받기: 로그인 없이도 보낼 수 있는 한 줄 폼 (/api/v1/inquiries) — captcha-turnstile 이 있으면 로그인하지 않은 호출의 사람 확인을 그 검증기로, alert 가 있으면 접수 경보. 운영자 경로(/api/v1/admin/inquiries)는 켠다
+    implementation(project(":modules:inquiry-jdbc"))       // 문의 저장소 (inquiry 는 저장소를 모른다)
 
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-data-jdbc")

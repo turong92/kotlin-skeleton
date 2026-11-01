@@ -44,6 +44,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `platform`: `UploadKeyHolder`(업로드 키를 저장하는 모듈의 표지 빈) · `UploadedKeyUsage.answers`(대답하는 모듈 이름, 기본 빈 집합 - 기존 구현은 그대로 컴파일된다) · `UploadedKeyUsages.unanswered`. 정리를 켰는데 대답 없는 표지가 있거나 `UploadedKeyUsage` 가 하나도 없으면 **기동 실패**(메시지에 모듈 이름).
 - `board` · `review` 가 표지(`board` · `review`)를 낸다. `board-jdbc` 의 `UploadedKeyUsage` 가 `board` 를 대답하고, `review-jdbc` 에 새 `UploadedKeyUsage`(`review_photos` 의 저장 키)가 생겼다. 앱이 자기 표에 업로드 키를 저장하면 표지 + `answers` 가 있는 사용처를 짝으로 둔다.
 
+### 문의 · 의견 받기 (2026-11-01)
+
+- `inquiry` + `inquiry-jdbc` (새 모듈): 로그인 없이도 보내는 한 줄 폼. 공개 경로 `POST /api/v1/inquiries`(202 `no-store`, 종류 `QUESTION`·`FEATURE`·`BUG`·`OTHER`, 본문 10~2000자, 답장 이메일·`context` 선택, 어긴 칸을 한꺼번에 `INQUIRY.INVALID` `data.violations`) — 값 검사 → 한도(로그인하지 않으면 `ClientIps.limitKey` 별 5/h, 로그인하면 계정별 10/h, `RateLimitStore` 빈이 있으면 그것) → (로그인하지 않았으면) 사람 확인 → 저장 → 리스너. 로그인한 호출은 `Authentication.name` 이 계정으로 붙고 사람 확인을 건너뛴다. 본문 · 이메일은 `toString` 으로 안 찍힌다.
+- 사람 확인 `InquiryHumanCheck`(기본 **통과** - 공개 서비스는 `captcha-turnstile` 을 붙이거나 직접 구현) · 접수 경보 `InquiryListener`(여럿 가능, 던져도 접수는 끝난다). `captcha-turnstile` 검증기 빈이 있으면 사람 확인을 자동으로 잇고(`InquiryTurnstileAutoConfiguration`), `alert` 의 `OwnerAlerts` 가 있으면 「문의 #번호 (종류)」를 알린다(`InquiryAlertAutoConfiguration` - 본문 · 이메일 없음). 둘 다 `compileOnly` 이고 `noOptionalTest` 가 없는 쪽을 증명한다.
+- 운영자 경로(`skeleton.inquiry.admin.enabled=true`, 모듈 기본 꺼짐 → 404): `GET /api/v1/admin/inquiries?status&limit`(권한 `inquiry.read` - 계정 id 는 응답에 없고 로그인 여부만) · `PUT …/{id}/status {status}`(권한 `inquiry.handle`, 운영 기록 `inquiry.status.changed`). 두 권한은 기본 역할 없이 ADMIN 전권만. 탈퇴하면 `AccountErasureListener`(`inquiry`)가 계정 연결만 끊고 본문은 남는다.
+- 표 `inquiries`(마이그레이션 `V20261101100000__inquiries`, PostgreSQL · MySQL, 계정 id 외래 키 없음). 문서 `docs/modules/inquiry.md` · `inquiry-jdbc.md`. 프론트 짝은 react-skeleton `@skeleton/inquiry`.
+- `apps/sample`: `inquiry` · `inquiry-jdbc` 조립(운영 경로 켬), 시험 `inquiry/InquiryJourneyIntegrationTest`. `apps/workbench`: `inquiry-jdbc` 클래스패스 추가.
+
 ### 친구초대 보류 · 확인 · 취소 (2026-10-31)
 
 - `campaign` + `campaign-jdbc`: 초대 이벤트 설정 `qualifyEvent`(신호 이름) · `holdDays`(0~90, 초대자 보상 보류) · `reviewSameNetwork`(같은 네트워크면 운영자 승인까지 보류) - 모두 비우면 예전 동작 그대로. 관계 상태 `REVIEW` · `HELD` · `CANCELED`, 표시 `SAME_NETWORK`(네트워크 값은 30일 뒤 지운다), 해제 주기 작업(`scheduler` 가 있으면 10분마다, 컴파일 전용), 마이그레이션 `V20261031090000__campaign_referral_review`(열 더하기만). `DeployGuard` 는 `reviewSameNetwork` 인데 `skeleton.web.client-ip.mode` 가 비었으면 경고한다.

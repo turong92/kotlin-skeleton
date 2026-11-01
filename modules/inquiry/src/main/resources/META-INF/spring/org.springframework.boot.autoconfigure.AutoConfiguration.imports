@@ -1,0 +1,4 @@
+dev.sumin.skeleton.inquiry.InquiryAutoConfiguration
+dev.sumin.skeleton.inquiry.web.InquiryWebAutoConfiguration
+dev.sumin.skeleton.inquiry.captcha.InquiryTurnstileAutoConfiguration
+dev.sumin.skeleton.inquiry.alert.InquiryAlertAutoConfiguration

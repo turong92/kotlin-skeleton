@@ -49,6 +49,7 @@ dependencies {
     implementation(project(":modules:badge-jdbc"))   // + badge (api) — 배지 정의 · 수여/회수 · 내 배지 · 비로그인 공개 프로필 배지, 보상 지급기 `badge`. 실제 흐름은 apps/sample
     implementation(project(":modules:workspace-jdbc"))   // + workspace (api) — 워크스페이스(팀) · 역할 · slug · 멤버 관리 · 경계 `CurrentWorkspace`. 초대 · 운영자 읽기는 앱이 켠다. 실제 흐름은 apps/sample
     implementation(project(":modules:api-key-jdbc"))   // + api-key (api) — API 키 발급 · 범위 · 회수 · 요청 인증. account 위에 얹힌 모듈이라 클래스패스에만 둔다(설정 스니펫 · 모듈 목록 시험), 자동설정은 application.yml 에서 꺼 둔다. 실제 흐름은 apps/sample
+    implementation(project(":modules:inquiry-jdbc"))   // + inquiry (api) — 문의 · 의견 받기(POST /api/v1/inquiries, 접수 경보 · 사람 확인 연결, 운영자 목록은 앱이 켠다). 실제 흐름은 apps/sample
     implementation(project(":modules:coupon-jdbc"))   // + coupon (api) — 쿠폰 정의 · 쿠폰함 · 공용 코드, 보상 지급기 `coupon` · 결제 할인 수단 `coupon`. 실제 흐름은 apps/sample
     implementation(project(":modules:campaign-jdbc"))   // + campaign (api) — 이벤트(출석 · 초대) 저장. 이벤트는 운영자가 만든다 — 아무것도 심지 않으면 비어 있다. 실제 흐름은 apps/sample
     implementation(project(":modules:catalog-jdbc"))   // + catalog (api) — 상품 · 가격 표(월 · 연 · 단건 · 행사가 · 통화별)와 결제 계약 구현(`SubscriptionPlans` · `PaymentCatalog` · `ProviderPriceRefs`). 운영자가 만들기 전에는 표가 비어 살 수 있는 것이 없다. 실제 흐름은 apps/sample

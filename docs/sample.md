@@ -17,6 +17,7 @@
 | 돈 받기 · 환불하기 — 결제창 → 승인 → 내 결제 내역 → 환불 요청 → 운영자 환불 (샘플 상품은 「응원하기」) | `payment-jdbc`(결제 장부 + `payment`) + `payment-toss`(결제사, 꺼진 채 시작) + 이 앱의 `cheer/` (아래 "결제 — 응원하기") |
 | 팀 · 조직 — 워크스페이스 만들기 · 역할 · 메일 링크 초대 · 팀 단위 데이터 · 구독이 정하는 좌석 | `workspace` + `workspace-jdbc` + 이 앱의 `workspace/` · `notes/` (아래 "워크스페이스") |
 | 서버끼리 부르는 API 키 — 사용자가 범위 · 만료를 골라 발급(다시 인증)하고, 키로는 표시한 노트 경로만 닿는다 | `api-key` + `api-key-jdbc` + 이 앱의 `notes/NoteApiKeyScopes` (아래 "API 키") |
+| 로그인 없이도 보내는 문의 · 의견 한 줄 폼 — 로그인해서 보내면 계정이 붙고, 운영자가 목록을 보고 처리함으로 표시한다 | `inquiry` + `inquiry-jdbc` (아래 "문의") |
 | DB · 마이그레이션 · 시간 | `persistence-jdbc` · `db-postgresql` · `migration-flyway` · `time` |
 
 ## 엔드포인트
@@ -291,6 +292,17 @@ APP=sample scripts/dev.sh    # 백엔드(+프론트 WEB_DIR)만 같은 방식으
 | 광고성 종류 `promo.notes-tips`: 동의(`marketing`)가 없으면 작업이 안 생기고, 밤 9시~아침 8시는 야간 동의(`marketing-night`)가 없으면 다음 08시로 보류하며, 제목에 `(광고)` 가 붙는다. **견본에는 이 알림을 보내는 화면이 없다**(보내는 쪽은 제품마다 다르다) - `publish` 하면 규칙이 적용된다. 받는 사람의 시간대는 계정 프로필의 `timeZone`(`push/SamplePushConfiguration`), 없으면 `Asia/Seoul` | `advertising.types` · `advertising.*` · `legal/manifest.json` 의 `marketing-night` |
 
 **로컬 e2e(가짜 푸시 서비스)**: 브라우저 구독의 끝점은 허용 목록(기본 `fcm.googleapis.com` · `updates.push.services.mozilla.com` · `*.push.apple.com` · `*.notify.windows.com`) 밖이면 400 이다. 가짜 푸시 서비스를 쓰는 e2e 는 환경변수로만 `SKELETON_NOTIFICATION_WEBPUSH_ALLOWED_HOSTS=http://127.0.0.1:<포트>` 를 준다(`http://` 항목은 보호 환경에서 기동 실패 - yml 에는 넣지 않는다). 시험: `push/PushJourneyIntegrationTest`(댓글 → 작업 → 가짜 보내기, 광고 종류 동의 게이트, 프로필 시간대).
+
+## 문의 (`/api/v1/inquiries`)
+
+두 줄(`inquiry` · `inquiry-jdbc`)과 `application.yml` 의 `skeleton.inquiry.admin.enabled: true` 한 줄이 전부다 — 앱 코드는 없다. 이 앱에는 `captcha-turnstile` 이 있어도 꺼져 있어(검증기 빈이 없다) 사람 확인은 모듈 기본(통과)이고, `alert` 가 웹훅 없이 떠 있어 접수 경보는 로그 한 줄이다. 공개 서비스에서는 Turnstile 을 켜면 로그인하지 않은 호출의 사람 확인이 자동으로 그 검증기가 된다.
+
+| 메서드 · 경로 | 하는 일 |
+|---|---|
+| `POST /api/v1/inquiries {kind, body, replyEmail?, context?, lang?, captchaToken?}` | 로그인 없이 202. 로그인(액세스 토큰)해서 보내면 계정이 붙는다 |
+| `GET /api/v1/admin/inquiries?status&limit` · `PUT …/{id}/status {status}` | 운영 화면의 최신순 목록(계정 id 없음) · 처리함 표시(`inquiry.read` · `inquiry.handle`, 기본 역할 없이 ADMIN 전권만) |
+
+시험: `inquiry/InquiryJourneyIntegrationTest`(익명 202 · 로그인 계정 연결 · 400 위반 · 운영자만 목록 · 처리 표시).
 
 ## 이 샘플이 하지 않는 것
 

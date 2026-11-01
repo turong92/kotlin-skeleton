@@ -1,0 +1,9 @@
+# inquiry — 문의 · 의견 받기 (POST /api/v1/inquiries). 저장은 inquiry-jdbc.
+skeleton:
+  inquiry:
+    enabled: true        # false 면 공개 경로를 등록하지 않는다 (서블릿 앱 + Spring Security 가 있을 때만 등록)
+    per-client: 5        # 로그인하지 않은 호출: 클라이언트(IP)마다 window 동안 문의 수
+    per-account: 10      # 로그인한 호출: 계정마다 window 동안 문의 수
+    window: 1h
+    admin:
+      enabled: false     # true 면 운영자 경로(GET /api/v1/admin/inquiries · PUT …/{id}/status). 모듈 기본은 꺼짐(404). 권한 inquiry.read · inquiry.handle

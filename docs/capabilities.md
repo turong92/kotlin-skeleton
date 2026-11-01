@@ -112,6 +112,8 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `db-postgresql` | PostgreSQL 방언(기본) — 드라이버 · Flyway PostgreSQL 지원 · SqlDialect · Data JDBC 시간 변환. | 스타터(apps/api)에 기본 포함 | PostgreSQL, 포스트그레스, DB 방언, 데이터베이스 / postgresql, postgres, database dialect, database | — |
 | `event-kafka` | 이벤트를 Kafka 로 발행하는 KafkaEventPublisher 와 키 · 메시지 · 직렬화 전략(켜기 전에는 로그만 남긴다). | `--modules event-kafka` | 카프카, 이벤트 발행, 메시지 큐, 이벤트 스트림 / kafka, event publishing, message broker, event stream | — |
 | `idempotency` | Idempotency-Key 헤더로 명령 요청(결제 · 생성)의 중복 실행을 막고 첫 응답을 재생한다. | 스타터(apps/api)에 기본 포함 | 멱등, 중복 요청 방지, 두 번 눌러도 한 번, 멱등 키, 중복 결제 방지 / idempotency, idempotency key, duplicate request, replay response | — |
+| `inquiry` | 문의 · 의견 받기 — 로그인 없이도 보내는 한 줄 폼(질문 · 기능 제안 · 오류 신고 · 기타). 값 검사 → 한도(IP · 계정별) → 사람 확인 → 저장 → 접수 경보, 로그인한 호출은 계정이 붙고 사람 확인을 건너뛴다. captcha-turnstile · alert 가 있으면 자동으로 잇고, 운영자 목록 · 처리 표시는 켜서 쓴다(권한 inquiry.read · inquiry.handle). | `--modules inquiry` | 문의, 문의하기, 의견 보내기, 피드백, 기능 제안, 오류 신고, 고객 문의, 연락하기 / inquiry, contact form, feedback, feature request, bug report, support request | `@skeleton/inquiry` |
+| `inquiry-jdbc` | 문의를 DB 에 둔다 (PostgreSQL · MySQL) — 표 하나 `inquiries`, 처리 표시는 한 문장 갱신, 탈퇴하면 계정 연결만 끊고 본문은 남는다. | `--modules inquiry-jdbc` | 문의 저장소, 문의 DB / inquiry storage, inquiry repository | `@skeleton/inquiry` |
 | `job-queue-jdbc` | DB 테이블 기반 재시도 작업 큐 — 백오프 · DEAD 처리 · FOR UPDATE SKIP LOCKED, Redis 없이 여러 인스턴스에서 안전. | 스타터(apps/api)에 기본 포함 | 작업 큐, 백그라운드 작업, 재시도, 비동기 작업, 내보내기 작업, 잡 큐 / job queue, background job, retry, dead letter, task queue | — |
 | `json` | JsonCodec · 임의 JSON 을 담는 JsonDocument · 버전 있는 페이로드 · JPA/JDBC 변환기. | `--modules json` | JSON, JSON 칼럼, 버전 있는 페이로드, 직렬화 / json, json column, versioned payload, serialization | — |
 | `legal` | 약관 · 개인정보 처리방침 · 동의 기록 — 종류 · 판(시행일 · DRAFT/REVIEWED) · 원문 해시를 못 박는 장부 · 가입 동의(코드 확인 때 계정과 같은 트랜잭션에 기록) · 선택 동의 철회 · 새 판 재동의(403) · 계정 삭제 때 익명화, HTTP /api/v1/legal 까지. 문서는 앱이 싣고 예시 TEMPLATE 은 prod 에서 막는다. | 스타터(apps/api)에 기본 포함 | 약관, 이용약관, 개인정보 처리방침, 동의, 재동의, 마케팅 수신 동의, 동의 기록, 약관 버전, 법적 문서, 동의 철회 / terms of service, privacy policy, consent, re-consent, marketing consent, consent record, document version, legal documents, withdraw consent | `@skeleton/legal` |
@@ -848,6 +850,35 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 쓰지 않는 경우:
   - 기본 저장소는 인메모리(인스턴스별) — 여러 인스턴스면 앱이 IdempotencyStore 를 대체한다
 - 키워드: 멱등, 중복 요청 방지, 두 번 눌러도 한 번, 멱등 키, 중복 결제 방지 / idempotency, idempotency key, duplicate request, replay response
+
+### `inquiry` — 문의 · 의견 받기 — 로그인 없이도 보내는 한 줄 폼(질문 · 기능 제안 · 오류 신고 · 기타). 값 검사 → 한도(IP · 계정별) → 사람 확인 → 저장 → 접수 경보, 로그인한 호출은 계정이 붙고 사람 확인을 건너뛴다. captcha-turnstile · alert 가 있으면 자동으로 잇고, 운영자 목록 · 처리 표시는 켜서 쓴다(권한 inquiry.read · inquiry.handle).
+
+- 종류 · 상태: module · experimental — 위치 `modules/inquiry`
+- 켜는 법: `--modules inquiry`
+- 의존 한 줄: `implementation(project(":modules:inquiry"))`
+- 설정 접두사 `skeleton.inquiry` — 키와 기본값 `docs/config/modules/inquiry.yml`
+- HTTP 경로: `/api/v1/admin/inquiries`, `/api/v1/inquiries`
+- 문서: `docs/modules/inquiry.md`
+- 짝 프런트(react-skeleton): 항목 `inquiry` · 패키지 `@skeleton/inquiry` · 조각 `--packages inquiry`
+- 쓰지 않는 경우:
+  - 저장소 없이 두면 메모리에 남아 다시 켜면 사라진다 — inquiry-jdbc 를 같이 고른다
+  - 답장 메일을 보내지 않는다 — 운영자가 목록에서 답장 이메일을 보고 직접 보낸다
+  - 티켓 · 대화 · 첨부가 있는 고객 지원 도구가 아니다 — 한 번 받는 한 줄 폼이다
+  - 사람 확인은 기본이 통과다 — 공개 서비스는 captcha-turnstile 을 붙이거나 InquiryHumanCheck 빈을 둔다
+  - 운영자 경로는 `skeleton.inquiry.admin.enabled=true` 로 켠다 — 기본은 꺼짐(404)
+- 키워드: 문의, 문의하기, 의견 보내기, 피드백, 기능 제안, 오류 신고, 고객 문의, 연락하기 / inquiry, contact form, feedback, feature request, bug report, support request
+
+### `inquiry-jdbc` — 문의를 DB 에 둔다 (PostgreSQL · MySQL) — 표 하나 `inquiries`, 처리 표시는 한 문장 갱신, 탈퇴하면 계정 연결만 끊고 본문은 남는다.
+
+- 종류 · 상태: module · experimental — 위치 `modules/inquiry-jdbc`
+- 켜는 법: `--modules inquiry-jdbc`
+- 의존 한 줄: `implementation(project(":modules:inquiry-jdbc"))`
+- 자동으로 따라온다: `inquiry`
+- 문서: `docs/modules/inquiry-jdbc.md`
+- 짝 프런트(react-skeleton): 항목 `inquiry` · 패키지 `@skeleton/inquiry` · 조각 `--packages inquiry`
+- 쓰지 않는 경우:
+  - DataSource · db-* 모듈과 이 모듈의 마이그레이션이 적용된 스키마가 필요하다
+- 키워드: 문의 저장소, 문의 DB / inquiry storage, inquiry repository
 
 ### `job-queue-jdbc` — DB 테이블 기반 재시도 작업 큐 — 백오프 · DEAD 처리 · FOR UPDATE SKIP LOCKED, Redis 없이 여러 인스턴스에서 안전.
 
@@ -1621,7 +1652,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 - 종류 · 상태: app · stable — 위치 `apps/sample`
 - 켜는 법: `--with-sample`
-- 자동으로 따라온다: `alert-jdbc`, `api-key`, `api-key-jdbc`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `badge`, `badge-jdbc`, `board`, `board-jdbc`, `campaign`, `campaign-jdbc`, `catalog`, `catalog-jdbc`, `coupon`, `coupon-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `json`, `notification`, `notification-fcm`, `notification-jdbc`, `notification-legal`, `notification-push`, `notification-push-jdbc`, `notification-push-legal`, `notification-sse`, `notification-webpush`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-toss`, `point`, `point-jdbc`, `review`, `review-jdbc`, `reward`, `reward-jdbc`, `scheduler`, `search`, `search-jdbc`, `storage`, `storage-image`, `storage-image-imageio`, `storage-image-jdbc`, `storage-s3`, `workspace`, `workspace-jdbc`
+- 자동으로 따라온다: `alert-jdbc`, `api-key`, `api-key-jdbc`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `badge`, `badge-jdbc`, `board`, `board-jdbc`, `campaign`, `campaign-jdbc`, `catalog`, `catalog-jdbc`, `coupon`, `coupon-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `inquiry`, `inquiry-jdbc`, `json`, `notification`, `notification-fcm`, `notification-jdbc`, `notification-legal`, `notification-push`, `notification-push-jdbc`, `notification-push-legal`, `notification-sse`, `notification-webpush`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-toss`, `point`, `point-jdbc`, `review`, `review-jdbc`, `reward`, `reward-jdbc`, `scheduler`, `search`, `search-jdbc`, `storage`, `storage-image`, `storage-image-imageio`, `storage-image-jdbc`, `storage-s3`, `workspace`, `workspace-jdbc`
 - HTTP 경로: `/api/v1/cheers`, `/api/v1/notes`
 - 문서: `docs/sample.md`
 - 짝 프런트(react-skeleton): 항목 `app-sample` · 조각 `--with-sample`
@@ -1634,7 +1665,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 - 종류 · 상태: app · stable — 위치 `apps/workbench`
 - 켜는 법: `--with-workbench`
-- 자동으로 따라온다: `alert-jdbc`, `api-key`, `api-key-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `badge`, `badge-jdbc`, `board`, `board-jdbc`, `campaign`, `campaign-jdbc`, `catalog`, `catalog-jdbc`, `config-aws-ssm`, `coupon`, `coupon-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `db-mysql`, `event-kafka`, `json`, `notification`, `notification-fcm`, `notification-jdbc`, `notification-legal`, `notification-push`, `notification-push-jdbc`, `notification-push-legal`, `notification-slack`, `notification-sse`, `notification-webpush`, `notification-websocket`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `point`, `point-jdbc`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `review`, `review-jdbc`, `reward`, `reward-jdbc`, `scheduler`, `search`, `search-jdbc`, `storage`, `storage-image`, `storage-image-imageio`, `storage-image-imgproxy`, `storage-image-jdbc`, `storage-image-pdfbox`, `storage-s3`, `workspace`, `workspace-jdbc`
+- 자동으로 따라온다: `alert-jdbc`, `api-key`, `api-key-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `badge`, `badge-jdbc`, `board`, `board-jdbc`, `campaign`, `campaign-jdbc`, `catalog`, `catalog-jdbc`, `config-aws-ssm`, `coupon`, `coupon-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `inquiry`, `inquiry-jdbc`, `db-mysql`, `event-kafka`, `json`, `notification`, `notification-fcm`, `notification-jdbc`, `notification-legal`, `notification-push`, `notification-push-jdbc`, `notification-push-legal`, `notification-slack`, `notification-sse`, `notification-webpush`, `notification-websocket`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `point`, `point-jdbc`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `review`, `review-jdbc`, `reward`, `reward-jdbc`, `scheduler`, `search`, `search-jdbc`, `storage`, `storage-image`, `storage-image-imageio`, `storage-image-imgproxy`, `storage-image-jdbc`, `storage-image-pdfbox`, `storage-s3`, `workspace`, `workspace-jdbc`
 - HTTP 경로: `/api/v1`, `/api/v1/examples`, `/api/v1/skeleton`, `/api/v1/skeleton/enums`, `/api/v1/skeleton/json`, `/api/v1/skeleton/payments`, `/api/v1/skeleton/polymorphic/contents`
 - 문서: `docs/minimal-composition.md`, `docs/modules/README.md`
 - 짝 프런트(react-skeleton): 항목 `app-workbench` · 조각 `--with-workbench`

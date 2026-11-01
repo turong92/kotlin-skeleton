@@ -101,6 +101,7 @@ fails when this table and the prefixes found in module code differ.
 | `alert-jdbc` | yes | a `DataSource` + one `db-*` module (+ its migration, as above) | — |
 | `account` | `skeleton.account` |
 | `api-key` | `skeleton.api-key` |
+| `inquiry` | `skeleton.inquiry` |
 | `auth` | `skeleton.auth` |
 | `auth-magic-link` | `skeleton.auth-magic-link` |
 | `auth-session` | `skeleton.auth-session` |
@@ -209,6 +210,8 @@ test proving a context with only that module (and its declared dependencies) boo
 | `db-postgresql` / `db-mysql` | yes — exactly one | a reachable database matching the dialect (`SqlDialectVerifier` names the mismatch) | — |
 | `event-kafka` | yes, as a logging sender | nothing | `enabled=true` + a `KafkaOperations` bean + Kafka |
 | `idempotency` | yes (in-memory store) | nothing | — |
+| `inquiry` | yes (in-memory store; the human check passes everything until `captcha-turnstile` or an app bean) | `inquiry-jdbc` | — |
+| `inquiry-jdbc` | yes | a `DataSource` + one `db-*` module (+ its migration `inquiries`, as above) | — |
 | `job-queue-jdbc` | yes | a `DataSource` + one `db-*` module (its `jobs` migration is picked up by `spring.flyway.locations: classpath:db/migration/{vendor}`) | — |
 | `json` | yes | nothing | — |
 | `migration` / `migration-flyway` | yes | Flyway on the classpath (`spring-boot-starter-flyway`) | — |

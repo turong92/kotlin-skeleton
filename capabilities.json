@@ -1720,6 +1720,75 @@
       }
     },
     {
+      "id": "inquiry",
+      "kind": "module",
+      "module": "inquiry",
+      "path": "modules/inquiry",
+      "status": "experimental",
+      "summary": "문의 · 의견 받기 — 로그인 없이도 보내는 한 줄 폼(질문 · 기능 제안 · 오류 신고 · 기타). 값 검사 → 한도(IP · 계정별) → 사람 확인 → 저장 → 접수 경보, 로그인한 호출은 계정이 붙고 사람 확인을 건너뛴다. captcha-turnstile · alert 가 있으면 자동으로 잇고, 운영자 목록 · 처리 표시는 켜서 쓴다(권한 inquiry.read · inquiry.handle).",
+      "starter": false,
+      "newProjectFlag": "--modules inquiry",
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": ["alert", "captcha-turnstile", "inquiry-jdbc"]
+      },
+      "config": {
+        "prefixes": ["skeleton.inquiry"],
+        "snippet": "docs/config/modules/inquiry.yml"
+      },
+      "basePaths": ["/api/v1/admin/inquiries", "/api/v1/inquiries"],
+      "secrets": [],
+      "docs": ["docs/modules/inquiry.md"],
+      "frontend": {
+        "capabilities": ["inquiry"],
+        "newProjectFlag": "--packages inquiry",
+        "packages": ["@skeleton/inquiry"]
+      },
+      "notFor": [
+        "저장소 없이 두면 메모리에 남아 다시 켜면 사라진다 — inquiry-jdbc 를 같이 고른다",
+        "답장 메일을 보내지 않는다 — 운영자가 목록에서 답장 이메일을 보고 직접 보낸다",
+        "티켓 · 대화 · 첨부가 있는 고객 지원 도구가 아니다 — 한 번 받는 한 줄 폼이다",
+        "사람 확인은 기본이 통과다 — 공개 서비스는 captcha-turnstile 을 붙이거나 InquiryHumanCheck 빈을 둔다",
+        "운영자 경로는 `skeleton.inquiry.admin.enabled=true` 로 켠다 — 기본은 꺼짐(404)"
+      ],
+      "keywords": {
+        "ko": ["문의", "문의하기", "의견 보내기", "피드백", "기능 제안", "오류 신고", "고객 문의", "연락하기"],
+        "en": ["inquiry", "contact form", "feedback", "feature request", "bug report", "support request"]
+      }
+    },
+    {
+      "id": "inquiry-jdbc",
+      "kind": "module",
+      "module": "inquiry-jdbc",
+      "path": "modules/inquiry-jdbc",
+      "status": "experimental",
+      "summary": "문의를 DB 에 둔다 (PostgreSQL · MySQL) — 표 하나 `inquiries`, 처리 표시는 한 문장 갱신, 탈퇴하면 계정 연결만 끊고 본문은 남는다.",
+      "starter": false,
+      "newProjectFlag": "--modules inquiry-jdbc",
+      "autoIncludes": ["inquiry"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/inquiry-jdbc.md"],
+      "frontend": {
+        "capabilities": ["inquiry"],
+        "newProjectFlag": "--packages inquiry",
+        "packages": ["@skeleton/inquiry"]
+      },
+      "notFor": ["DataSource · db-* 모듈과 이 모듈의 마이그레이션이 적용된 스키마가 필요하다"],
+      "keywords": {
+        "ko": ["문의 저장소", "문의 DB"],
+        "en": ["inquiry storage", "inquiry repository"]
+      }
+    },
+    {
       "id": "job-queue-jdbc",
       "kind": "module",
       "module": "job-queue-jdbc",
@@ -3717,6 +3786,8 @@
         "dashboard-cloudflare",
         "dashboard-ga",
         "dashboard-jdbc",
+        "inquiry",
+        "inquiry-jdbc",
         "json",
         "notification",
         "notification-fcm",
@@ -3811,6 +3882,8 @@
         "dashboard-cloudflare",
         "dashboard-ga",
         "dashboard-jdbc",
+        "inquiry",
+        "inquiry-jdbc",
         "db-mysql",
         "event-kafka",
         "json",
