@@ -2,8 +2,11 @@ package dev.sumin.skeleton.storage.image
 
 import dev.sumin.skeleton.common.upload.UploadImageState
 
-/** 상태 줄의 변환본 하나 - 키는 저장하지 않고 원본 키에서 계산한다. [ext] 가 [ORIGINAL] 이면 변환본이 아니라 원본을 가리킨다(움직이는 이미지의 `display`) */
-data class StoredVariant(val width: Int, val height: Int, val ext: String) {
+/**
+ * 상태 줄의 변환본 하나 - 키는 저장하지 않고 원본 키에서 계산한다. [ext] 가 [ORIGINAL] 이면 변환본이 아니라 원본을 가리킨다(움직이는 이미지의 `display`).
+ * [alt] 는 같은 그림의 다른 형식 확장자들(크기는 같다, 예 `["webp"]`) - 소문자 영문뿐
+ */
+data class StoredVariant(val width: Int, val height: Int, val ext: String, val alt: List<String> = emptyList()) {
     companion object {
         const val ORIGINAL = "-"
     }

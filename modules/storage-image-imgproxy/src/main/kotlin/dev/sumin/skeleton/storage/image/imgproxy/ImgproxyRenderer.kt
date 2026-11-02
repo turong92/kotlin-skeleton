@@ -14,26 +14,26 @@ import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
-import java.time.Duration
 import java.util.Base64
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
 /**
  * imgproxy(libvips) 컨테이너로 변환하는 선택 엔진 - HEIC · AVIF 입력, **WebP 출력**, 메모리가 적다. 서버(컨테이너) 하나가 더 뜬다.
+ * 기본은 변환본마다 기본 형식(JPEG, 투명하면 PNG)과 WebP 둘을 만든다([Rendered.alternates], `output` 으로 끈다) - 브라우저가 `Accept` 로 고른다.
  *
  * - **원본은 비공개 그대로다**: imgproxy 에는 설정된 저장소가 서명한 **짧은 수명의 원본 주소**([sourceUrl])만 준다. 임의 주소를 받는 길이 없다(SSRF) -
  *   imgproxy 쪽에도 `IMGPROXY_ALLOWED_SOURCES` 로 저장소 주소만 허용해 이중으로 막는다.
  * - **imgproxy 요청 주소는 key/salt 로 서명한다**(HMAC-SHA256) - 서명 없는 imgproxy 는 쓰지 않는다. 처리 옵션을 남이 바꿀 수 없다.
- * - 출력은 메타데이터 없는 WebP(`strip_metadata` · `strip_color_profile`), EXIF 방향은 픽셀에 반영(`auto_rotate`), 키우지 않는다(`enlarge` 끔).
+ * - 출력은 메타데이터 없는 WebP · JPEG · PNG(`strip_metadata` · `strip_color_profile`), EXIF 방향은 픽셀에 반영(`auto_rotate`), 키우지 않는다(`enlarge` 끔).
  * - 요청마다 시간 상한([ImgproxyProperties.timeout]), 응답 크기 상한([ImgproxyProperties.maxResponseBytes]). 원본 해상도 · 바이트 상한은 imgproxy 가 한 번 더 지킨다(`IMGPROXY_MAX_SRC_RESOLUTION` · `IMGPROXY_MAX_SRC_FILE_SIZE`) - `docs/deploy.md`.
  * - 한계: 움직이는 이미지는 첫 장만 변환한다(imgproxy 기본). 크기는 머리에서 읽은 그대로라 EXIF 회전을 반영하지 않는다(변환본의 크기는 맞다).
  */
 class ImgproxyRenderer(
     private val properties: ImgproxyProperties,
     private val http: HttpClient = HttpClient.newBuilder().connectTimeout(properties.timeout).followRedirects(HttpClient.Redirect.NEVER).build(),
-    /** 원본의 서명 읽기 주소 - 저장소가 서명한 것만 */
-    private val sourceUrl: (ObjectKey, Duration) -> URI,
+    /** 원본 주소 - 설정된 저장소의 것만([ImgproxySourceResolver]) */
+    private val sources: ImgproxySourceResolver,
 ) : ImageRenderer {
     private val keyBytes = hex(properties.key)
     private val saltBytes = hex(properties.salt)
@@ -46,25 +46,35 @@ class ImgproxyRenderer(
     override fun probe(head: ByteArray, kind: DetectedKind): ImageInfo {
         val (width, height) = ImageHeaderSize.of(head, kind)
             ?: throw ImageRejectedException(ImageReasons.NOT_AN_IMAGE, "The image header cannot be read")
-        return ImageInfo(kind.mime, width, height)
+        return ImageInfo(kind.mime, width, height, transparent = ImageHeaderSize.transparent(head, kind))
     }
 
     override fun render(source: () -> InputStream, info: ImageInfo, specs: List<VariantSpec>): List<Rendered> =
         throw UnsupportedOperationException("imgproxy reads the original through a signed address - call render(key, …)")
 
     override fun render(key: ObjectKey, source: () -> InputStream, info: ImageInfo, specs: List<VariantSpec>): List<Rendered> {
-        val original = sourceUrl(key, properties.sourceTtl).toString()
+        val original = sources.sourceUrl(key, properties.sourceTtl)
+        val fallback = if (info.transparent) "png" else "jpg"
         return specs.map { spec ->
-            val bytes = fetch(signedUrl(original, spec))
-            val (w, h) = ImageHeaderSize.webp(bytes) ?: throw IOException("imgproxy returned something that is not a WebP image")
-            Rendered(spec.name, bytes, "image/webp", w, h)
+            when (properties.output) {
+                ImgproxyProperties.Output.WEBP_ONLY -> convert(original, spec, "webp")
+                ImgproxyProperties.Output.FALLBACK_ONLY -> convert(original, spec, fallback)
+                ImgproxyProperties.Output.BOTH -> convert(original, spec, fallback).let { first -> Rendered(first.name, first.bytes, first.contentType, first.width, first.height, listOf(convert(original, spec, "webp"))) }
+            }
         }
     }
 
-    /** `<imgproxy>/<서명>/<처리 옵션>/<원본 주소(base64url)>.webp` - 서명은 HMAC-SHA256(key, salt + 경로) */
-    internal fun signedUrl(original: String, spec: VariantSpec): String {
+    private fun convert(original: String, spec: VariantSpec, ext: String): Rendered {
+        val bytes = fetch(signedUrl(original, spec, ext))
+        val kind = when (ext) { "webp" -> DetectedKind.WEBP; "png" -> DetectedKind.PNG; else -> DetectedKind.JPEG }
+        val (w, h) = ImageHeaderSize.of(bytes, kind) ?: throw IOException("imgproxy returned something that is not a $ext image")
+        return Rendered(spec.name, bytes, if (ext == "jpg") "image/jpeg" else "image/$ext", w, h)
+    }
+
+    /** `<imgproxy>/<서명>/<처리 옵션>/<원본 주소(base64url)>.<webp|jpg|png>` - 서명은 HMAC-SHA256(key, salt + 경로) */
+    internal fun signedUrl(original: String, spec: VariantSpec, ext: String): String {
         val path = "/rs:fit:${spec.maxWidth}:${spec.maxHeight}/el:0/q:${spec.quality}/sm:1/kcr:0/scp:1/ar:1/" +
-            Base64.getUrlEncoder().withoutPadding().encodeToString(original.toByteArray(Charsets.UTF_8)) + ".webp"
+            Base64.getUrlEncoder().withoutPadding().encodeToString(original.toByteArray(Charsets.UTF_8)) + ".$ext"
         val mac = Mac.getInstance("HmacSHA256").apply { init(SecretKeySpec(keyBytes, "HmacSHA256")) }
         mac.update(saltBytes)
         val signature = Base64.getUrlEncoder().withoutPadding().encodeToString(mac.doFinal(path.toByteArray(Charsets.UTF_8)))

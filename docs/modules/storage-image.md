@@ -7,6 +7,7 @@
 작업(`ImageVariantProcessor`)은 다시 검사한 뒤(매직 바이트 → 머리의 크기 → 상한) 엔진으로 변환본을 만들어 `<prefix>/<원본 키 sha256 앞 32자>/<이름>.<확장자>` 에 `Cache-Control: private, max-age=31536000, immutable` 로 올리고 줄을 `READY` 로 바꾼다. 같은 작업이 두 번 돌아도 결과가 같다. 내용 때문에 못 만들면(`REJECTED` 깨짐 · 상한, `UNSUPPORTED` 엔진이 못 읽는 형식) 줄에 적고 끝낸다 — **비동기 단계는 원본을 지우지 않는다**(동기 완료 거절만 그 키를 지운다). 저장소 · 일시 오류는 던져서 큐가 다시 하고, 다 쓰면 `FAILED`.
 
 **`ImageRenderer` 확장 지점** `kinds`(이 엔진이 읽는 내용 종류 `DetectedKind`) · `probe(head, kind): ImageInfo`(앞 256KB 로 크기 · 방향 · 움직임, 디코드 없이) · `render(source, info, specs): List<Rendered>`(변환본마다 하나, 메타데이터 없이) - 처리기는 원본 키를 더한 `render(key, source, info, specs)` 를 부르고, 기본 구현은 `source` 스트림으로 위를 부른다(원본을 서명 주소로 넘기는 imgproxy 엔진이 재정의한다). 엔진은 여럿이어도 된다 — `ImageRenderers` 가 `@Order` 순으로 **그 종류를 가진 첫 엔진**에 맡긴다(예: `imageio` 는 JPEG · PNG · GIF · WebP, `pdfbox` 는 PDF, `imgproxy` 는 HEIC · AVIF). 이미지인데 아무 엔진도 못 읽으면 `UNSUPPORTED`(남에게 보이지 않는다). 읽을 수 없는 내용은 `ImageRejectedException(code)` 로 알리고, 저장소 · 일시 오류는 그대로 던진다.
+**여러 형식**: 엔진은 변환본마다 같은 그림의 다른 형식을 `Rendered.alternates` 로 더 낼 수 있다(imgproxy 엔진의 WebP). 처리기가 함께 올리고 상태 줄(`StoredVariant.alt`)에 적으며, `UploadImageVariant.alternates` 로 보인다. 기본 형식(`contentType`)이 누구나 읽는 형식이고, `UploadImages.signedVariantUrl(key, variant, ttl, accept)` 가 `Accept` 로 고른다.
 **움직이는 이미지**는 썸네일만 첫 장으로 만들고 `display` 는 원본을 가리킨다.
 
 **남에게 보이기** 이 모듈이 켜지면 `UploadImages` 빈이 선다 — 공개 영역은 `display`(+ `.thumb`) 변환본을 복사하고(변환 전이면 늦춘다), 변환할 수 없는 이미지는 공개하지 않는다. 비회원 회수는 `forget` 으로 줄과 변환본 폴더를 함께 지운다.

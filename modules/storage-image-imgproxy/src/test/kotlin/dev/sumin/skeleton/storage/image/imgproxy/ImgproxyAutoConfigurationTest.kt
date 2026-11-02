@@ -55,4 +55,28 @@ class ImgproxyAutoConfigurationTest {
                 assertThat(context.getBean(ImgproxyRenderer::class.java).kinds).contains(DetectedKind.HEIC, DetectedKind.AVIF, DetectedKind.JPEG)
             }
     }
+
+    @Test
+    fun `source S3 needs a bucket - its own or the storage-s3 one - and then needs no storage bean`() {
+        val s3 = arrayOf(*ok, "skeleton.storage.image.imgproxy.enabled=true", "skeleton.storage.image.imgproxy.source=S3")
+
+        runner.withPropertyValues(*s3).run { context ->
+            assertThat(context).hasFailed()
+            assertThat(context.startupFailure).hasStackTraceContaining("s3-bucket")
+        }
+        runner.withPropertyValues(*s3, "skeleton.storage-s3.bucket=photos").run { context ->
+            assertThat(context).hasNotFailed()
+            assertThat(context.getBean(ImgproxySourceResolver::class.java)).isInstanceOf(S3SourceResolver::class.java)
+        }
+        runner.withPropertyValues(*s3, "skeleton.storage.image.imgproxy.s3-bucket=own", "skeleton.storage-s3.bucket=photos").run { context ->
+            assertThat(context.getBean(ImgproxySourceResolver::class.java).sourceUrl(dev.sumin.skeleton.storage.ObjectKey("k"), java.time.Duration.ZERO)).isEqualTo("s3://own/k")
+        }
+    }
+
+    @Test
+    fun `an app resolver bean replaces the built-in ones and needs no storage`() {
+        runner.withPropertyValues(*ok, "skeleton.storage.image.imgproxy.enabled=true")
+            .withBean(ImgproxySourceResolver::class.java, { ImgproxySourceResolver { key, _ -> "gs://bucket/${key.value}" } })
+            .run { context -> assertThat(context).hasNotFailed().hasSingleBean(ImgproxyRenderer::class.java) }
+    }
 }

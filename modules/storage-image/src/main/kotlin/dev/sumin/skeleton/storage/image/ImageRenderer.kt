@@ -13,13 +13,18 @@ data class ImageInfo(
     val animated: Boolean = false,
     /** 엔진이 픽셀에 반영할 EXIF 방향 1..8 (엔진 안에서만 쓰는 값) */
     val orientation: Int = 1,
+    /** 투명한 픽셀이 있을 수 있다 - 엔진이 기본 형식을 JPEG 대신 PNG 로 고르는 데 쓴다(머리에서 알 수 있는 만큼) */
+    val transparent: Boolean = false,
 )
 
 /** 만들 변환본 하나 - 긴 변을 [maxWidth] x [maxHeight] 상자에 맞춘다(키우지 않는다) */
 data class VariantSpec(val name: String, val maxWidth: Int, val maxHeight: Int, val quality: Int)
 
-/** 만든 변환본 - 메타데이터가 없는 바이트. [contentType] 은 `image/jpeg` · `image/png` · `image/webp` */
-class Rendered(val name: String, val bytes: ByteArray, val contentType: String, val width: Int, val height: Int) {
+/**
+ * 만든 변환본 - 메타데이터가 없는 바이트. [contentType] 은 `image/jpeg` · `image/png` · `image/webp`.
+ * [alternates] 는 같은 그림의 다른 형식(예: 기본이 JPEG 일 때 WebP, 이름 · 크기 같음) - 엔진이 둘을 만들면 처리기가 함께 올리고 상태 줄에 적는다
+ */
+class Rendered(val name: String, val bytes: ByteArray, val contentType: String, val width: Int, val height: Int, val alternates: List<Rendered> = emptyList()) {
     /** 저장소 키 · 상태 표에 쓰는 확장자 */
     val extension: String get() = extensionOf(contentType)
 }

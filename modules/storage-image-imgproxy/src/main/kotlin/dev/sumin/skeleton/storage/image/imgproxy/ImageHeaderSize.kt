@@ -17,6 +17,24 @@ internal object ImageHeaderSize {
         null
     }
 
+    /** 투명한 픽셀이 있을 수 있나 - 머리에서 알 수 있는 만큼(모르면 false) */
+    fun transparent(head: ByteArray, kind: DetectedKind): Boolean = try {
+        val text by lazy { String(head, Charsets.ISO_8859_1) }
+        when (kind) {
+            DetectedKind.PNG -> head.size > 25 && (head[25].toInt() == 4 || head[25].toInt() == 6 || (head[25].toInt() == 3 && "tRNS" in text))
+            DetectedKind.GIF -> (0 until head.size - 7).any { head[it] == 0x21.toByte() && head[it + 1] == 0xF9.toByte() && head[it + 2] == 4.toByte() && (head[it + 3].toInt() and 1) == 1 }
+            DetectedKind.WEBP -> when (text.substring(12, 16)) {
+                "VP8X" -> (head[20].toInt() and 0x10) != 0
+                "VP8L" -> (((head[21].toInt() and 0xFF) or ((head[22].toInt() and 0xFF) shl 8) or ((head[23].toInt() and 0xFF) shl 16) or ((head[24].toInt() and 0xFF) shl 24)) ushr 28) and 1 == 1
+                else -> false
+            }
+            DetectedKind.AVIF, DetectedKind.HEIC, DetectedKind.HEIF -> "auxiliary:alpha" in text
+            else -> false
+        }
+    } catch (e: IndexOutOfBoundsException) {
+        false
+    }
+
     /** 변환본(WebP)의 크기 - imgproxy 는 크기를 알려 주지 않는다 */
     fun webp(b: ByteArray): Pair<Int, Int>? {
         if (b.size < 30 || String(b, 0, 4, Charsets.ISO_8859_1) != "RIFF" || String(b, 8, 4, Charsets.ISO_8859_1) != "WEBP") return null

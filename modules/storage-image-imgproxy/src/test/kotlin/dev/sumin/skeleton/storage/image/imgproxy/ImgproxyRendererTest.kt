@@ -4,21 +4,13 @@ import com.sun.net.httpserver.HttpServer
 import dev.sumin.skeleton.storage.DetectedKind
 import dev.sumin.skeleton.storage.ObjectKey
 import dev.sumin.skeleton.storage.UploadMagicBytes
-import dev.sumin.skeleton.storage.image.ImageRejectedException
-import dev.sumin.skeleton.storage.image.ImageReasons
 import dev.sumin.skeleton.storage.image.VariantSpec
-import java.awt.Color
-import java.awt.image.BufferedImage
-import java.io.ByteArrayOutputStream
 import java.net.InetSocketAddress
-import java.net.URI
 import java.nio.ByteBuffer
 import java.time.Duration
-import javax.imageio.ImageIO
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
-import kotlin.test.assertFailsWith
 import org.assertj.core.api.Assertions.assertThat
 import org.testcontainers.DockerClientFactory
 import org.testcontainers.containers.GenericContainer
@@ -56,7 +48,7 @@ class ImgproxyRendererTest {
         container = c
         renderer = ImgproxyRenderer(
             ImgproxyProperties(enabled = true, url = "http://${c.host}:${c.getMappedPort(8080)}", key = KEY, salt = SALT, timeout = Duration.ofSeconds(60)),
-        ) { key, _ -> URI("http://host.docker.internal:$port/orig/${key.value}") }
+        ) { key, _ -> "http://host.docker.internal:$port/orig/${key.value}" }
     }
 
     @AfterTest
@@ -73,32 +65,38 @@ class ImgproxyRendererTest {
     }
 
     @Test
-    fun `a jpeg with GPS comes back as webp that carries nothing from the input metadata`() {
-        val photo = jpegWithGps(800, 400)
-        assertThat(String(photo, Charsets.ISO_8859_1)).contains("Exif")   // 입력에는 정말 EXIF(GPS) 가 있다
-        val plain = ByteArrayOutputStream().also { ImageIO.write(BufferedImage(800, 400, BufferedImage.TYPE_INT_RGB), "jpeg", it) }.toByteArray()
+    fun `a heic photo with GPS becomes a jpeg and a webp that carry nothing from the input metadata`() {
+        val photo = ImgproxyRendererTest::class.java.getResourceAsStream("/exif-gps.heic")!!.readBytes()
+        val text = String(photo, Charsets.ISO_8859_1)
+        assertThat(text).contains("TestCam").contains(GPS_IFD_POINTER_BE)   // 입력에는 정말 EXIF(기기 · GPS)가 있다
 
-        val out = render("members/1/photo.jpg", photo, VariantSpec("thumb", 200, 200, 80)).single()
-        val reference = render("members/1/plain.jpg", plain, VariantSpec("thumb", 200, 200, 80)).single()
+        val out = render("members/1/photo.heic", photo, VariantSpec("thumb", 48, 48, 80)).single()
 
-        assertThat(out.contentType).isEqualTo("image/webp")
-        assertThat(out.extension).isEqualTo("webp")
-        assertThat(out.width to out.height).isEqualTo(200 to 100)
-        val webp = String(out.bytes, Charsets.ISO_8859_1)
-        assertThat(webp).startsWith("RIFF").contains("WEBP").doesNotContain("XMP ").doesNotContain("ICCP")
-        // libvips 가 뼈대 EXIF(해상도 · 버전 - 입력과 무관)를 적는다: GPS 마디는 없고, 입력에 EXIF 가 있든 없든 똑같다
-        assertThat(exifChunk(out.bytes)).isEqualTo(exifChunk(reference.bytes))
-        assertThat(String(exifChunk(out.bytes), Charsets.ISO_8859_1)).doesNotContain(GPS_IFD_POINTER_LE)
+        assertThat(out.contentType).isEqualTo("image/jpeg")
+        assertThat(out.width to out.height).isEqualTo(48 to 32)
+        val webp = out.alternates.single()
+        assertThat(webp.contentType).isEqualTo("image/webp")
+        assertThat(webp.width to webp.height).isEqualTo(48 to 32)
+        listOf(out, webp).forEach { v ->
+            val bytes = String(v.bytes, Charsets.ISO_8859_1)
+            assertThat(bytes).doesNotContain("TestCam").doesNotContain("XMP ").doesNotContain("ICCP")
+        }
+        // libvips 가 WebP 에 입력과 무관한 뼈대 EXIF(해상도 · 버전)를 적는다: GPS 마디는 없다
+        assertThat(String(exifChunk(webp.bytes), Charsets.ISO_8859_1)).doesNotContain(GPS_IFD_POINTER_LE)
+        assertThat(String(jpegExif(out.bytes), Charsets.ISO_8859_1)).doesNotContain(GPS_IFD_POINTER_LE).doesNotContain(GPS_IFD_POINTER_BE)
     }
 
-    @Test
-    fun `an image over the source resolution limit is rejected by imgproxy for good`() {
-        val gray = ByteArrayOutputStream().also { ImageIO.write(BufferedImage(8_000, 8_000, BufferedImage.TYPE_BYTE_GRAY), "png", it) }.toByteArray()   // 64 MP, 한도 50 MP - 압축하면 작다
-        assertThat(gray.size).isLessThan(1_000_000)
-
-        val e = assertFailsWith<ImageRejectedException> { render("members/1/bomb.png", gray, VariantSpec("thumb", 200, 200, 80)) }
-
-        assertThat(e.code).describedAs(e.message).isEqualTo(ImageReasons.NOT_AN_IMAGE)   // imgproxy 는 이유를 말하지 않는다 - 영구 거절이면 된다
+    /** JPEG 의 APP1(Exif) 마디 내용(없으면 빈 배열) - 압축 데이터 앞의 마디만 본다 */
+    private fun jpegExif(jpeg: ByteArray): ByteArray {
+        var i = 2
+        while (i + 4 <= jpeg.size && jpeg[i] == 0xFF.toByte()) {
+            val marker = jpeg[i + 1].toInt() and 0xFF
+            if (marker == 0xDA) break
+            val length = ((jpeg[i + 2].toInt() and 0xFF) shl 8) or (jpeg[i + 3].toInt() and 0xFF)
+            if (marker == 0xE1) return jpeg.copyOfRange(i + 4, i + 2 + length)
+            i += 2 + length
+        }
+        return ByteArray(0)
     }
 
     /** RIFF 의 `EXIF` 마디 내용(없으면 빈 배열) */
@@ -112,24 +110,9 @@ class ImgproxyRendererTest {
         return ByteArray(0)
     }
 
-    private fun jpegWithGps(width: Int, height: Int): ByteArray {
-        val img = BufferedImage(width, height, BufferedImage.TYPE_INT_RGB).apply { createGraphics().apply { color = Color(200, 40, 40); fillRect(0, 0, width, height); dispose() } }
-        val jpeg = ByteArrayOutputStream().also { ImageIO.write(img, "jpeg", it) }.toByteArray()
-        val tiff = ByteBuffer.allocate(128)
-        tiff.put("MM".toByteArray()).putShort(0x002A).putInt(8)
-        tiff.putShort(1).putShort(0x8825.toShort()).putShort(4).putInt(1).putInt(26).putInt(0)   // IFD0: GPS IFD 포인터
-        tiff.putShort(2)
-        tiff.putShort(1).putShort(2).putInt(2).put('N'.code.toByte()).put(0).putShort(0)
-        tiff.putShort(2).putShort(5).putInt(3).putInt(56)
-        tiff.putInt(0)
-        tiff.putInt(37).putInt(1).putInt(33).putInt(1).putInt(0).putInt(1)
-        val body = "Exif".toByteArray() + byteArrayOf(0, 0) + tiff.array().copyOf(tiff.position())
-        val app1 = byteArrayOf(0xFF.toByte(), 0xE1.toByte()) + ByteBuffer.allocate(2).putShort((body.size + 2).toShort()).array() + body
-        return jpeg.copyOfRange(0, 2) + app1 + jpeg.copyOfRange(2, jpeg.size)
-    }
-
     private companion object {
         const val GPS_IFD_POINTER_LE = "%\u0088"   // 태그 0x8825 (리틀 엔디안)
+        const val GPS_IFD_POINTER_BE = "\u0088%"   // 태그 0x8825 (빅 엔디안)
         const val IMAGE = "ghcr.io/imgproxy/imgproxy:v3.30.1"
         const val KEY = "943b421c9eb07c830af81030552c86009268de4e532ba2ee2eab8247c6da0881"
         const val SALT = "520f986b998545b4785e0defbc4f3c1203f22de2374a3d53cb7a7fe9fea309c5"

@@ -33,8 +33,10 @@ class StorageImages(
         return store.findAll(hashes.keys).mapNotNull { (hash, row) -> hashes[hash]?.let { it to row.toStatus() } }.toMap()
     }
 
-    override fun signedVariantUrl(privateKey: String, variant: String, ttl: Duration): String? {
-        val v = status(privateKey)?.takeIf { it.state == UploadImageState.READY }?.variants?.get(variant) ?: return null
+    override fun signedVariantUrl(privateKey: String, variant: String, ttl: Duration): String? = signedVariantUrl(privateKey, variant, ttl, null)
+
+    override fun signedVariantUrl(privateKey: String, variant: String, ttl: Duration, accept: String?): String? {
+        val v = status(privateKey)?.takeIf { it.state == UploadImageState.READY }?.variants?.get(variant)?.forAccept(accept) ?: return null
         return storage.presignDownload(PresignedDownloadRequest(ObjectKey(v.key), expiresIn = ttl)).url.toString()
     }
 
@@ -74,8 +76,10 @@ class StorageImages(
         val folder = variantFolder(properties.prefix, keyHash)
         val mapped = variants.mapValues { (name, v) ->
             if (v.ext == StoredVariant.ORIGINAL) UploadImageVariant(objectKey, v.width, v.height, "image/" + (format ?: "jpeg"))
-            else UploadImageVariant("$folder$name.${v.ext}", v.width, v.height, if (v.ext == "jpg") "image/jpeg" else "image/${v.ext}")
+            else UploadImageVariant("$folder$name.${v.ext}", v.width, v.height, contentTypeOf(v.ext), v.alt.map { UploadImageVariant("$folder$name.$it", v.width, v.height, contentTypeOf(it)) })
         }
         return UploadImageStatus(state, width, height, mapped)
     }
+
+    private fun contentTypeOf(ext: String) = if (ext == "jpg") "image/jpeg" else "image/$ext"
 }

@@ -75,15 +75,16 @@ class ImageVariantProcessor(
         }
 
         val folder = variantFolder(properties.prefix, keyHash)
-        rendered.forEach {
+        val files = rendered.flatMap { listOf(it) + it.alternates }
+        files.forEach {
             storage.upload(UploadObjectRequest(ObjectKey("$folder${it.name}.${it.extension}"), it.bytes, it.contentType, cacheControl = CACHE_CONTROL))
         }
-        val variants = rendered.associate { it.name to StoredVariant(it.width, it.height, it.extension) } +
+        val variants = rendered.associate { it.name to StoredVariant(it.width, it.height, it.extension, it.alternates.map { alt -> alt.extension }) } +
             if (info.animated) mapOf(UploadImages.DISPLAY to StoredVariant(info.width, info.height, StoredVariant.ORIGINAL)) else emptyMap()
         val format = info.contentType.substringAfter('/')
         if (!store.markReady(keyHash, info.width, info.height, format, info.animated, variants) && store.find(keyHash) == null) {
             // 그 사이 상태 줄이 지워졌다(원본 회수) - 방금 올린 변환본이 고아가 되지 않게 치운다
-            rendered.forEach { storage.delete(ObjectKey("$folder${it.name}.${it.extension}")) }
+            files.forEach { storage.delete(ObjectKey("$folder${it.name}.${it.extension}")) }
         }
     }
 

@@ -7,6 +7,10 @@ skeleton:
         url: ""                             # imgproxy 의 주소(앱에서 닿는 곳) - 예 http://imgproxy:8080
         key: ""                             # IMGPROXY_KEY 와 같은 값(16진수) - 비밀: 환경변수/비밀 저장소로만
         salt: ""                            # IMGPROXY_SALT 와 같은 값(16진수) - 비밀
+        source: SIGNED_URL                  # 원본을 imgproxy 가 가져가는 방법: SIGNED_URL(저장소가 서명한 짧은 수명의 주소) | S3(s3://버킷/키 - imgproxy 가 자기 읽기 전용 자격으로 읽음). 다른 저장소는 ImgproxySourceResolver 빈
+        s3-bucket: ""                       # source=S3 일 때 원본 버킷 - 비우면 skeleton.storage-s3.bucket (같은 버킷이어야 한다). 둘 다 비면 기동 실패
+        s3-key-prefix: ""                   # source=S3 일 때 키 앞에 붙일 접두사 (저장소를 접두사로 감싼 앱만)
+        output: BOTH                        # BOTH(기본 형식 JPEG/투명하면 PNG + WebP 둘, Accept 로 고른다 - imgproxy 요청이 두 배) | WEBP_ONLY | FALLBACK_ONLY
         timeout: 30s                        # 안전 상한: 요청 하나(원본을 받아 변환해 돌려주기까지)의 시간. 넘으면 일시 오류로 보고 큐가 다시 한다
         max-response-bytes: 20971520        # 안전 상한: 변환본 응답 바이트 (20 MB). 넘으면 거절
-        source-ttl: 5m                      # imgproxy 에 주는 원본 서명 주소의 수명 - 받아 가기에 충분한 만큼만
+        source-ttl: 5m                      # source=SIGNED_URL 일 때 imgproxy 에 주는 원본 서명 주소의 수명 - 받아 가기에 충분한 만큼만

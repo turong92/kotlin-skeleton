@@ -20,7 +20,34 @@ data class ImgproxyProperties(
     val maxResponseBytes: Long = 20L * 1024 * 1024,
     /** imgproxy 에 주는 **원본 서명 주소**의 수명 - imgproxy 가 받아 가기에 충분한 만큼만 */
     val sourceTtl: Duration = Duration.ofMinutes(5),
+    /** imgproxy 가 원본을 가져가는 방법 */
+    val source: Source = Source.SIGNED_URL,
+    /** [source] 가 [Source.S3] 일 때 원본 버킷 - 비면 `skeleton.storage-s3.bucket` (같은 버킷이어야 한다) */
+    val s3Bucket: String = "",
+    /** [source] 가 [Source.S3] 일 때 키 앞에 붙일 접두사(저장소를 접두사로 감싼 앱만) */
+    val s3KeyPrefix: String = "",
+    /** 만드는 형식 */
+    val output: Output = Output.BOTH,
 ) {
+    enum class Source {
+        /** 설정된 저장소가 서명한 짧은 수명의 주소를 준다 - imgproxy 에 저장소 자격이 필요 없다 */
+        SIGNED_URL,
+
+        /** `s3://버킷/키` 를 주고 imgproxy 가 자기 자격으로 읽는다(S3 호환: AWS S3 · R2 · MinIO) */
+        S3,
+    }
+
+    enum class Output {
+        /** 기본 형식(JPEG, 투명하면 PNG)과 WebP 둘 - 브라우저의 Accept 로 고른다. 요청이 두 배 */
+        BOTH,
+
+        /** WebP 하나만 */
+        WEBP_ONLY,
+
+        /** JPEG(투명하면 PNG) 하나만 - HEIC 를 읽기만 하고 WebP 는 필요 없을 때 */
+        FALLBACK_ONLY,
+    }
+
     init {
         if (enabled) {
             require(url.isNotBlank()) { "skeleton.storage.image.imgproxy.url is required when the imgproxy engine is enabled (the address of the imgproxy container)" }

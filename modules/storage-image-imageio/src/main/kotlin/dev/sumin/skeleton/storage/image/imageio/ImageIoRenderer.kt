@@ -91,8 +91,9 @@ class ImageIoRenderer : ImageRenderer {
         FileCacheImageInputStream(stream, null).use { input ->
             withReader(input) { reader ->
                 val (tw, th) = fit(info.width, info.height, largest.maxWidth, largest.maxHeight)
-                // 디코드한 크기가 가장 큰 변환본 이상이 되는 가장 큰 정수 표본 간격
-                val step = max(1, min(info.width / tw, info.height / th))
+                // 디코드한 크기가 가장 큰 변환본의 **두 배 이상**이 되는 가장 큰 정수 표본 간격 - 표본 추출은 점 표본이라 변환본과 같은 크기로 읽으면
+                // 가는 줄무늬에서 무아레가 생긴다. 두 배로 읽어 아래 단계가 반씩 평균내며 줄이게 한다(메모리는 약 네 배)
+                val step = max(1, min(info.width / (2 * tw), info.height / (2 * th)))
                 val param = reader.defaultReadParam.also { it.setSourceSubsampling(step, step, 0, 0) }
                 reader.read(0, param)
             }

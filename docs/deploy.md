@@ -229,7 +229,7 @@ class StorageDeployGuard(private val properties: StorageProperties) : DeployGuar
 | storage (비회원 업로드) | `<P>_STORAGE_WEB_GUEST_SECRET` — **선언의 `secrets:` (무작위로 충분)**, `skeleton.storage.web.guest.enabled=true`(`apps/sample` 이 켠다)일 때만 필요 | 켠 채로 비었거나 32자보다 짧으면 **기동 실패**(`guest.secret must be at least 32 characters`). 기본(꺼짐)에서는 읽지 않는다. 바꾸면 발급했지만 아직 글 · 댓글에 안 붙은 비회원 키가 맞지 않게 된다(붙은 키는 DB 에 있고 그대로 보인다) |
 | storage | `<P>_STORAGE_WEB_KEY_SECRET` — **선언의 `secrets:` (무작위로 충분)**, `skeleton.storage.web.key-owner=OPAQUE`(작성자 프로필 앱의 첨부 키 — `apps/sample` 이 이 선택을 켠다)일 때만 필요 | `OPAQUE` 인데 비었거나 32자보다 짧으면 **기동 실패**(`key-secret must be at least 32 characters`). 기본(`ACCOUNT_ID`)에서는 읽지 않는다. 바꾸면 이미 발급한 `OPAQUE` 키가 소유 확인에서 떨어진다(옛 `ACCOUNT_ID` 꼴 키는 그대로) — **서버를 옮길 때 이 값을 반드시 들고 간다** |
 | storage-s3 | `<P>_STORAGE_S3_BUCKET` · `_ENDPOINT_OVERRIDE` (env:) · `_CREDENTIALS_ACCESS_KEY_ID` · `_CREDENTIALS_SECRET_ACCESS_KEY` (**운영자**) | 버킷이 비면 저장소 빈이 없다. 키가 비면 AWS 기본 자격 증명 체인으로 가 **첫 사용에서** 실패(기동은 된다) |
-| storage-image-imgproxy | `<P>_STORAGE_IMAGE_IMGPROXY_KEY` · `_SALT` (**운영자** — `secrets:` + `.local.env`, imgproxy 컨테이너의 `IMGPROXY_KEY` · `IMGPROXY_SALT` 와 같은 16진수 값) · `<P>_STORAGE_IMAGE_IMGPROXY_URL` (env:) · `_ENABLED=true` (env:) — `skeleton.storage.image.imgproxy.enabled=true` 일 때만 필요 | 켠 채 주소 · key · salt 중 하나라도 비면 **기동 실패**(서명 없는 imgproxy 는 쓰지 않는다). 기본(꺼짐)에서는 읽지 않는다. 컨테이너와 값이 다르면 변환이 `FAILED` 로 끝난다 — 아래 [이미지 변환 컨테이너 imgproxy](#이미지-변환-컨테이너-imgproxy--선택-storage-image-imgproxy) |
+| storage-image-imgproxy | `<P>_STORAGE_IMAGE_IMGPROXY_KEY` · `_SALT` (**운영자** — `secrets:` + `.local.env`, imgproxy 컨테이너의 `IMGPROXY_KEY` · `IMGPROXY_SALT` 와 같은 16진수 값) · `<P>_STORAGE_IMAGE_IMGPROXY_URL` (env:) · `_SOURCE=S3` · `_S3_BUCKET` (env:, 선택) · `_ENABLED=true` (env:) — `skeleton.storage.image.imgproxy.enabled=true` 일 때만 필요 | 켠 채 주소 · key · salt 중 하나라도 비면 **기동 실패**(서명 없는 imgproxy 는 쓰지 않는다). 기본(꺼짐)에서는 읽지 않는다. 컨테이너와 값이 다르면 변환이 `FAILED` 로 끝난다 — 아래 [이미지 변환 컨테이너 imgproxy](#이미지-변환-컨테이너-imgproxy--선택-storage-image-imgproxy) |
 | storage-image (기본 엔진 imageio) | 없음 — 비밀 · 환경변수 없이 `skeleton.storage.image.enabled=true` 만 | 엔진이 JVM 의 **headless AWT**(ImageIO)를 쓴다: 컨테이너에 `-Djava.awt.headless=true`(스프링 부트가 기본으로 켠다) 와 글꼴·디스플레이는 필요 없지만 JRE 에 `java.desktop` 모듈이 있어야 한다(jlink 로 줄인 런타임이면 더한다). **네이티브 이미지(`-Pnative`)에서는 이 모듈을 빼고** 변환은 `storage-image-imgproxy`(컨테이너)로 한다. 변환 메모리 ≈ 한 장 × `max-concurrent`(기본 1) — 작은 홈서버에서는 기본을 그대로 둔다 |
 | notification-mail | `<P>_NOTIFICATION_MAIL_ENABLED=true` · `_FROM` · `SPRING_MAIL_HOST` · `_USERNAME` (env:) · `SPRING_MAIL_PASSWORD` (**운영자**, 인증 없는 릴레이면 필요 없다) | host · from 이 비면 발송기 빈이 없다. 비밀번호가 틀리면 첫 발송에서 실패 |
 | notification-slack | `<P>_NOTIFICATION_SLACK_ENABLED=true` (env:) · `_WEBHOOK_URL` (**운영자**) | 아무것도 보내지 않는다 |
@@ -244,16 +244,86 @@ class StorageDeployGuard(private val properties: StorageProperties) : DeployGuar
 
 ### 이미지 변환 컨테이너 imgproxy — 선택 (`storage-image-imgproxy`)
 
-HEIC · AVIF 입력이나 WebP 출력이 필요한 앱만 켠다(기본 엔진 `storage-image-imageio` 는 컨테이너가 없다). 켜면 홈서버에 컨테이너 **하나가 더** 뜬다 — 앱과 같은 도커 네트워크에서만 닿게 두고 **밖으로 포트를 열지 않는다**.
+HEIC(아이폰 사진) 입력이나 WebP 출력이 필요한 앱만 켠다(기본 엔진 `storage-image-imageio` 는 컨테이너가 없고 JPEG/PNG 만 쓴다). 켜면 **서버(컨테이너) 하나가 더** 뜬다. 앱은 변환본마다 기본 형식(JPEG, 투명하면 PNG)과 WebP 를 함께 만들어 저장소에 두고, 브라우저의 `Accept` 로 고른다(요청이 두 배 - `output: WEBP_ONLY | FALLBACK_ONLY` 로 줄일 수 있다). imgproxy 는 **앱만 부른다**(브라우저가 직접 부르지 않는다) - 밖으로 포트를 열지 않는다.
+
+앱 설정(`apps/sample` 은 이 줄이 없다 = 앱 안 엔진):
+
+```yaml
+skeleton:
+  storage:
+    image:
+      imgproxy:
+        enabled: true
+        url: http://imgproxy:8080        # 앱에서 닿는 주소 (Cloud Run 이면 서비스 주소)
+        source: S3                       # 원본을 imgproxy 가 직접 읽는다. 기본 SIGNED_URL 은 아래 「원본 주소」
+        # s3-bucket: 비우면 skeleton.storage-s3.bucket (같은 버킷이어야 한다)
+        # key / salt 는 yml 에 쓰지 않는다 - 환경변수 <P>_STORAGE_IMAGE_IMGPROXY_KEY / _SALT
+```
+
+원본은 Cloudflare R2(S3 호환) 라고 가정한다 - 아래 둘 다 같은 환경변수를 쓴다. `example.com` · `<account-id>` · `<bucket>` 은 자리표시다.
+
+| imgproxy 환경변수 | 값 |
+|---|---|
+| `IMGPROXY_KEY` · `IMGPROXY_SALT` | 앱과 같은 16진수 값 (`openssl rand -hex 32` 둘). **서명 없는 요청은 imgproxy 가 거절한다** |
+| `IMGPROXY_USE_S3` | `true` |
+| `IMGPROXY_S3_ENDPOINT` | `https://<account-id>.r2.cloudflarestorage.com` (R2 엔드포인트, storage-s3 의 `endpoint-override` 와 같은 계정) |
+| `IMGPROXY_S3_REGION` | `auto` |
+| `AWS_ACCESS_KEY_ID` · `AWS_SECRET_ACCESS_KEY` | **읽기 전용** R2 토큰(원본 버킷 하나에 Object Read) - 앱의 쓰기 키와 분리 |
+| `IMGPROXY_ALLOWED_SOURCES` | `s3://<bucket>/` - 허용 원본을 그 버킷 하나로 묶는다(SSRF 이중 방어: 앱은 사용자 입력을 주소로 쓰지 않고, imgproxy 도 다른 곳은 안 읽는다) |
+| `IMGPROXY_MAX_SRC_RESOLUTION` | `50` (메가픽셀, 앱의 `max-pixels` 와 맞춘다) · `IMGPROXY_MAX_SRC_FILE_SIZE` = `52428800` — 픽셀 폭탄 · 큰 파일 상한 |
+| `IMGPROXY_DOWNLOAD_TIMEOUT` · `IMGPROXY_TIMEOUT` | `10` · `20` (초) — 앱의 요청 타임아웃(`timeout`, 30s)보다 짧게 |
+| `IMGPROXY_CONCURRENCY` | `2` — 동시 변환 수(메모리를 묶는다) |
+| `IMGPROXY_STRIP_METADATA` · `IMGPROXY_STRIP_COLOR_PROFILE` | `true` (앱 요청도 같은 옵션을 서명해 보낸다) |
+
+**메모리**: libvips 는 이미지를 줄여 읽어 앱 안 변환보다 적게 들지만 HEIC 디코드는 더 든다 - 대략 유휴 100 MB 안팎, 변환 중에는 (원본 픽셀 수 x 4~8 바이트) x 동시 수. 12MP 사진 한 장이 수백 MB 까지 간다. **512 MiB 는 12MP 급까지, 48MP 급(최신 폰)을 받으면 1 GiB** + `IMGPROXY_CONCURRENCY=2`, `IMGPROXY_MAX_SRC_RESOLUTION` 으로 그 위는 거절한다. 앱의 `max-concurrent`(기본 1)가 앱 쪽 동시 요청을 이미 묶는다.
+
+**① 홈서버 — docker compose (앱과 같은 망 컨테이너)**
+
+```yaml
+services:
+  imgproxy:
+    image: darthsim/imgproxy:v3.30.1       # 고정 태그 (:latest 금지). ghcr.io/imgproxy/imgproxy 도 같은 태그
+    restart: unless-stopped
+    mem_limit: 512m
+    environment:
+      IMGPROXY_KEY: ${IMGPROXY_KEY}
+      IMGPROXY_SALT: ${IMGPROXY_SALT}
+      IMGPROXY_USE_S3: "true"
+      IMGPROXY_S3_ENDPOINT: https://<account-id>.r2.cloudflarestorage.com
+      IMGPROXY_S3_REGION: auto
+      AWS_ACCESS_KEY_ID: ${R2_READ_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${R2_READ_SECRET_ACCESS_KEY}
+      IMGPROXY_ALLOWED_SOURCES: s3://<bucket>/
+      IMGPROXY_MAX_SRC_RESOLUTION: "50"
+      IMGPROXY_MAX_SRC_FILE_SIZE: "52428800"
+      IMGPROXY_DOWNLOAD_TIMEOUT: "10"
+      IMGPROXY_TIMEOUT: "20"
+      IMGPROXY_CONCURRENCY: "2"
+    # ports: 없음 - 앱과 같은 도커 네트워크의 http://imgproxy:8080 으로만 닿는다
+```
+
+앱 선언에는 `<P>_STORAGE_IMAGE_IMGPROXY_ENABLED=true` · `_URL=http://imgproxy:8080` · `_SOURCE=S3` (`env:`), `_KEY` · `_SALT` (**운영자 비밀** — `secrets:` + `.local.env`, 컨테이너와 같은 값).
+
+**② Google Cloud Run — 별도 서비스**
 
 ```
-docker run -d --name imgproxy --restart unless-stopped --memory 512m -e IMGPROXY_KEY=<hex> -e IMGPROXY_SALT=<hex> -e IMGPROXY_ALLOWED_SOURCES=<저장소 주소>/ -e IMGPROXY_MAX_SRC_RESOLUTION=50 -e IMGPROXY_MAX_SRC_FILE_SIZE=52428800 -e IMGPROXY_DOWNLOAD_TIMEOUT=10 -e IMGPROXY_TIMEOUT=20 -e IMGPROXY_STRIP_METADATA=true ghcr.io/imgproxy/imgproxy:v3.30.1
+gcloud run deploy imgproxy \
+  --image <region>-docker.pkg.dev/<project>/<docker-hub-remote-repo>/darthsim/imgproxy:v3.30.1 \
+  --port 8080 --memory 1Gi --cpu 1 --min-instances 0 --max-instances 3 --concurrency 4 --timeout 30 \
+  --set-secrets IMGPROXY_KEY=imgproxy-key:latest,IMGPROXY_SALT=imgproxy-salt:latest,AWS_ACCESS_KEY_ID=r2-read-key-id:latest,AWS_SECRET_ACCESS_KEY=r2-read-secret:latest \
+  --set-env-vars IMGPROXY_USE_S3=true,IMGPROXY_S3_REGION=auto,IMGPROXY_S3_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com,IMGPROXY_ALLOWED_SOURCES=s3://<bucket>/,IMGPROXY_MAX_SRC_RESOLUTION=50,IMGPROXY_MAX_SRC_FILE_SIZE=52428800,IMGPROXY_CONCURRENCY=2
 ```
 
-- **메모리**: libvips 는 이미지를 줄여 읽어 앱 안 변환(수십 MB 이상)보다 적게 든다 — 대략 유휴 100 MB 안팎, 변환 중 한 장에 수십~수백 MB(`IMGPROXY_CONCURRENCY` 기본은 CPU 수 x 2). 홈서버에서는 `--memory 512m` 정도로 묶고 `IMGPROXY_CONCURRENCY=2` 로 줄인다. 앱의 `max-concurrent` 가 앱 쪽 동시 요청을 이미 묶는다.
-- **서명 필수**: `IMGPROXY_KEY` · `IMGPROXY_SALT`(16진수, `openssl rand -hex 32`)를 컨테이너와 앱(`<P>_STORAGE_IMAGE_IMGPROXY_KEY` · `_SALT` — **선언의 `secrets:` + 운영자가 정한다(`.local.env`)**, `_URL` 은 `env:`)에 같은 값으로 준다. 서명이 없는 요청은 imgproxy 가 거절한다. 켰는데 하나라도 비면 앱이 **기동 실패**한다.
-- **원본 주소(SSRF)**: 앱은 imgproxy 에 설정된 저장소가 서명한 짧은 수명의 원본 주소만 준다. imgproxy 쪽에서도 `IMGPROXY_ALLOWED_SOURCES` 에 **저장소 주소 하나**만 적는다(예 `http://seaweedfs:8333/`) - 기본 `IMGPROXY_ALLOW_LOOPBACK_SOURCE_ADDRESSES` · `…LINK_LOCAL…` 은 꺼진 채로 두고, 저장소가 사설 주소라 막히면 `IMGPROXY_ALLOW_PRIVATE_SOURCE_ADDRESSES`(기본 켜짐)는 그대로 둔다. 서명 주소의 호스트가 **imgproxy 컨테이너에서 닿아야** 한다(저장소의 presign 엔드포인트가 도커 내부 이름이면 그대로, 공개 주소면 밖으로 나갔다 들어온다).
-- 이미지 태그는 **고정 버전**(`:latest` 금지). 올릴 때는 이 문서의 태그와 `ImgproxyRendererTest` 의 태그를 함께 바꾼다.
+- 이미지는 **공식 `darthsim/imgproxy` 의 고정 태그**를 Artifact Registry 원격 저장소(Docker Hub 프록시)나 미러로 쓴다. `--min-instances 0` 이면 변환이 없을 때 비용이 0 이고, 첫 요청의 콜드 스타트(수 초)는 작업 큐가 흡수한다(앱은 변환을 기다리지 않고 `PENDING` 으로 답한다).
+- 메모리는 **1 GiB**부터(512 MiB 는 12MP 급까지). `--concurrency` 는 `IMGPROXY_CONCURRENCY` 와 같은 자리수로 낮게.
+- 서비스는 서명 없이는 아무것도 하지 않으므로 공개 호출을 허용해도 되지만, 앱이 Cloud Run 이면 서비스 간 인증(`roles/run.invoker`)을 걸어 이중으로 막는 편이 낫다 - 이 모듈은 인증 헤더를 보내지 않으므로 그럴 때는 앱 쪽 프록시/`HttpClient` 를 직접 맞춘다(이 모듈의 한계).
+- **앞에 CDN 캐시**: 이 모듈에서 imgproxy 의 호출자는 앱(변환 작업)뿐이고 결과는 앱이 저장소에 저장하므로, imgproxy 앞의 캐시는 재시도 같은 같은 요청의 반복에만 듣는다. imgproxy 를 브라우저가 부르는 공개 변환 경로로도 쓰려면(이 모듈의 사용법이 아니다) 그 앞에 CDN 캐시를 두고 서명 주소를 만료 없이 안정적으로 만든다.
+- **사이드카(앱 컨테이너 옆)는 권하지 않는다**: 앱 인스턴스마다 imgproxy 가 따라 떠서 메모리를 이중으로 쓰고, 변환 부하가 앱 요청 수로 스케일되며, 별도 서비스라면 가능한 `min-instances 0` 도 앱 쪽 사정(상시 가동)에 묶인다.
+
+**원본 주소 방식(`source`)** — 두 가지 + 포트:
+- `S3`(위): `s3://<bucket>/<key>` 를 주고 imgproxy 가 자기 읽기 전용 자격으로 읽는다. 저장소 키에 접두사를 붙이는 앱은 `s3-key-prefix` 를 맞춘다.
+- `SIGNED_URL`(기본): 앱의 저장소가 서명한 **짧은 수명(`source-ttl` 5m)의 읽기 주소**를 준다 - imgproxy 에 저장소 자격이 필요 없다. 대신 그 주소의 호스트가 **imgproxy 에서 닿아야** 하고, `IMGPROXY_ALLOWED_SOURCES` 에 **저장소 호스트 하나**(예 `https://<account-id>.r2.cloudflarestorage.com/`)만 적는다 - 기본으로 꺼진 `IMGPROXY_ALLOW_LOOPBACK_SOURCE_ADDRESSES` · `…LINK_LOCAL…` 은 그대로 둔다(사설 망 저장소면 사설 주소는 기본 허용).
+- 다른 저장소(예: `gs://` + `IMGPROXY_USE_GCS`)는 `ImgproxySourceResolver` 빈을 두면 끼운다(이 레포는 구현을 주지 않는다).
 
 ## 8. 정적 프론트엔드
 
