@@ -1,11 +1,13 @@
 package dev.sumin.skeleton.notification.push.web
 
+import dev.sumin.skeleton.common.web.PublicEndpointContributor
 import dev.sumin.skeleton.notification.NotificationMuteRepository
 import dev.sumin.skeleton.notification.advertising.AdvertisingGate
 import dev.sumin.skeleton.notification.NotificationPreferencesProperties
 import dev.sumin.skeleton.notification.push.PushAutoConfiguration
 import dev.sumin.skeleton.notification.push.PushDeviceService
 import dev.sumin.skeleton.notification.push.PushDeviceStore
+import dev.sumin.skeleton.notification.push.PushOpenReporter
 import dev.sumin.skeleton.notification.push.PushProperties
 import dev.sumin.skeleton.notification.push.PushSender
 import dev.sumin.skeleton.notification.push.PushSessionIdResolver
@@ -40,4 +42,17 @@ class PushWebAutoConfiguration {
         sessionIds: PushSessionIdResolver,
     ): PushController =
         PushController(service, devices, mutes, allChannelMutes, notificationPreferences, properties, gate, { senders.orderedStream().toList() }, sessionIds)
+
+    /** 클릭 보고 경로 - 보고가 켜져 있을 때만(`PushOpenReporter` 빈) */
+    @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnBean(PushOpenReporter::class)
+    fun pushOpenController(reporter: PushOpenReporter): PushOpenController = PushOpenController(reporter)
+
+    /** 서비스 워커는 로그인 쿠키가 없다 - 이 경로 하나만 공개하고 토큰 서명이 인증한다 */
+    @Bean
+    @ConditionalOnMissingBean(name = ["pushOpenPublicEndpointContributor"])
+    @ConditionalOnBean(PushOpenReporter::class)
+    fun pushOpenPublicEndpointContributor(): PublicEndpointContributor =
+        PublicEndpointContributor { registry -> registry.add("POST", "/api/v1/push/opened") }
 }

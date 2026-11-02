@@ -32,6 +32,9 @@ data class NotificationInboxPage(
     val totalElements: Long,
 )
 
+/** 이벤트 하나의 알림함 줄 수 - [stored] 저장된 줄(받는 사람마다 하나), [read] 그중 읽은 줄 */
+data class InboxEventStats(val stored: Long, val read: Long)
+
 interface NotificationInboxRepository {
     /**
      * 받는 사람마다 한 줄을 넣는다. [NotificationEvent.collapseKey] 가 있으면 그 사람의 **안 읽은** 같은 열쇠 줄에 접는다:
@@ -73,6 +76,9 @@ interface NotificationInboxRepository {
         recipientId: String,
         topic: String,
     ): Int
+
+    /** 이벤트 하나의 저장 · 읽음 줄 수. 셀 수 없는 저장소는 null(모름) - 기본이다. 보관 정리로 지워진 줄은 빠진다 */
+    fun eventStats(eventId: String): InboxEventStats? = null
 }
 
 fun interface NotificationRecipientResolver {

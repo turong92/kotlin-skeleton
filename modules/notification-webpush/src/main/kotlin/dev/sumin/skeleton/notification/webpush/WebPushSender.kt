@@ -88,6 +88,7 @@ class WebPushSender(
         message.body?.let { content["body"] = it }
         message.link?.let { content["link"] = it }
         message.tag?.let { content["tag"] = it }
+        message.openToken?.let { content["open"] = it }
         return JSON.writeValueAsBytes(content)
     }
 

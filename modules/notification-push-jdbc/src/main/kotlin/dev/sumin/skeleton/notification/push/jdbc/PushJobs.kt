@@ -1,10 +1,14 @@
 package dev.sumin.skeleton.notification.push.jdbc
 
 import dev.sumin.skeleton.jobqueue.jdbc.Job
+import dev.sumin.skeleton.jobqueue.jdbc.JobDeadListener
 import dev.sumin.skeleton.jobqueue.jdbc.JobHandler
 import dev.sumin.skeleton.jobqueue.jdbc.JobQueue
 import dev.sumin.skeleton.jobqueue.jdbc.PermanentJobFailureException
 import dev.sumin.skeleton.json.JsonCodec
+import dev.sumin.skeleton.notification.DeliveryOutcome
+import dev.sumin.skeleton.notification.NotificationDeliveryHooks
+import dev.sumin.skeleton.notification.push.PushChannel
 import dev.sumin.skeleton.notification.push.PushDeliveryWorker
 import dev.sumin.skeleton.notification.push.PushJob
 import dev.sumin.skeleton.notification.push.PushPermanentFailure
@@ -41,6 +45,24 @@ class PushJobHandler(private val json: JsonCodec, private val worker: () -> Push
             worker().process(push)
         } catch (e: PushPermanentFailure) {
             throw PermanentJobFailureException(e.message ?: "permanent push failure", e)
+        }
+    }
+}
+
+/**
+ * 작업이 DEAD 가 되는 모든 길(재시도를 다 씀 · 영구 실패 · 처리기 없음 · 멈춘 채 시도를 다 씀)에서 부르는 고리 - 우리 푸시 작업이면 전달 고리에 FAILED 로 알린다.
+ * 내용을 못 읽으면 어느 이벤트인지 몰라 알리지 않는다. 던지지 않는다.
+ */
+class PushDeadListener(private val json: JsonCodec, private val hooks: () -> NotificationDeliveryHooks) : JobDeadListener {
+    private val log = org.slf4j.LoggerFactory.getLogger(javaClass)
+
+    override fun onDead(job: Job, reason: String) {
+        if (job.type != PUSH_JOB_TYPE) return
+        try {
+            val push = json.fromDocument(json.parse(job.payloadJson), PushJob::class)
+            hooks().onOutcome(push.message.eventId, PushChannel.KEY, DeliveryOutcome.FAILED)
+        } catch (e: Exception) {
+            log.warn("push dead-job hook failed job={} exception={}", job.id, e.javaClass.simpleName)
         }
     }
 }

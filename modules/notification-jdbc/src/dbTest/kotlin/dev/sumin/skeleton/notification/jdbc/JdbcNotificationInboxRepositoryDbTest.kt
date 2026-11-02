@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.notification.jdbc
 
 import dev.sumin.skeleton.json.JacksonJsonCodec
+import dev.sumin.skeleton.notification.InboxEventStats
 import dev.sumin.skeleton.notification.NotificationEvent
 import dev.sumin.skeleton.notification.NotificationInboxQuery
 import java.time.Instant
@@ -50,6 +51,18 @@ class JdbcNotificationInboxRepositoryDbTest {
         assertNotNull(read)
         assertEquals(readAt, read.readAt)
         assertEquals(0, unread.totalElements)
+    }
+
+    @Test
+    fun `each stored row lists only its own recipient and eventStats counts stored and read rows of one event`() {
+        val e = event().copy(recipientIds = setOf("acc_x1", "acc_x2", "acc_x3"))
+        repository.save(e, e.recipientIds)
+        repository.markRead("acc_x2", e.id)
+
+        assertEquals(setOf("acc_x1"), repository.findByRecipient("acc_x1").values.single().event.recipientIds)
+        assertEquals(setOf("acc_x3"), repository.findByRecipient("acc_x3").values.single().event.recipientIds)
+        assertEquals(InboxEventStats(stored = 3, read = 1), repository.eventStats(e.id))
+        assertEquals(InboxEventStats(stored = 0, read = 0), repository.eventStats("evt_unknown"))
     }
 
     @Test

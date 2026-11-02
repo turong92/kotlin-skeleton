@@ -1,6 +1,8 @@
 package dev.sumin.skeleton.notification.push
 
 import dev.sumin.skeleton.common.time.TimeProvider
+import dev.sumin.skeleton.notification.DeliveryOutcome
+import dev.sumin.skeleton.notification.NotificationDeliveryHooks
 import java.time.Duration
 import java.time.Instant
 import kotlin.test.Test
@@ -78,5 +80,29 @@ class PushDeliveryWorkerTest {
         sender.result = PushResult.Failed("unauthorized")
         assertFailsWith<PushPermanentFailure> { worker.process(job(device)) }
         assertEquals(1, devices.devices.size)
+    }
+
+    @Test
+    fun `a halted event is dropped before the sender is reached, and the other outcomes are reported once each`() {
+        val hook = RecordingDeliveryHook()
+        val observed = PushDeliveryWorker(devices, mutes, { listOf(sender) }, TimeProvider.fixed(now), hooks = NotificationDeliveryHooks(hook))
+        val device = devices.add("acc_a")
+
+        hook.haltedIds += "evt_1"
+        observed.process(job(device))                                   // 멈춘 공지: 큐에서 기다리던 푸시도 안 나간다
+        assertTrue(sender.sent.isEmpty())
+        hook.haltedIds.clear()
+
+        observed.process(job(device))                                   // 전달
+        observed.process(job(device, recipient = "acc_other"))          // 주인이 바뀜 -> 건너뜀
+        sender.result = PushResult.Gone
+        observed.process(job(device))                                   // 기기 사라짐 -> 실패
+        observed.process(job(device))                                   // 지워진 기기 -> 건너뜀(보내지 않음)
+
+        assertEquals(
+            listOf(DeliveryOutcome.DROPPED, DeliveryOutcome.DELIVERED, DeliveryOutcome.DROPPED, DeliveryOutcome.FAILED, DeliveryOutcome.DROPPED),
+            hook.outcomes.map { it.third },
+        )
+        assertTrue(hook.outcomes.all { it.first == "evt_1" && it.second == "push" })
     }
 }

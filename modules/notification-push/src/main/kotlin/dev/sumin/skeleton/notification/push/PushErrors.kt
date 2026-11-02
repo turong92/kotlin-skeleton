@@ -14,6 +14,7 @@ enum class PushErrorCode(
     KIND_DISABLED("PUSH.KIND_DISABLED", HttpStatus.BAD_REQUEST, "Push kind is not enabled"),
     UNKNOWN_TYPE("PUSH.UNKNOWN_TYPE", HttpStatus.NOT_FOUND, "Push preference type not found"),
     DEVICE_NOT_FOUND("PUSH.DEVICE_NOT_FOUND", HttpStatus.NOT_FOUND, "Push device not found"),
+    INVALID_OPEN_TOKEN("PUSH.INVALID_OPEN_TOKEN", HttpStatus.BAD_REQUEST, "Invalid push open token"),
     TEST_TOO_SOON("PUSH.TEST_TOO_SOON", HttpStatus.TOO_MANY_REQUESTS, "Test push was sent too recently"),
 }
 

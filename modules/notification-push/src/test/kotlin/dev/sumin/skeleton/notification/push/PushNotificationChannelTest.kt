@@ -5,6 +5,7 @@ import dev.sumin.skeleton.notification.InMemoryNotificationBroker
 import dev.sumin.skeleton.notification.InMemoryNotificationInboxRepository
 import dev.sumin.skeleton.notification.InMemoryNotificationMuteRepository
 import dev.sumin.skeleton.notification.NotificationEvent
+import dev.sumin.skeleton.notification.NotificationDeliveryHooks
 import dev.sumin.skeleton.notification.NotificationInboxQuery
 import dev.sumin.skeleton.notification.NotificationSeverity
 import dev.sumin.skeleton.notification.advertising.AdvertisingGate
@@ -109,5 +110,26 @@ class PushNotificationChannelTest {
         assertEquals(null, message.body)
         assertEquals("/notes/1", message.link)
         assertFalse(message.toString().contains("비밀"))
+    }
+
+    @Test
+    fun `an event narrowed to other channels creates no push job, a null or push-listing one does, and onQueued counts the jobs`() {
+        devices.add("acc_a", "inst_a1_0123456789")
+        devices.add("acc_a", "inst_a2_0123456789")
+        val hook = RecordingDeliveryHook()
+        PushNotificationChannel(
+            broker, properties, DefaultPushMessageFactory(properties, AdvertisingGate(AdvertisingProperties(), null, null, TimeProvider.systemUtc())),
+            devices, mutes, tasks, { listOf(webSender) }, hooks = NotificationDeliveryHooks(hook),
+        ).use {
+            broker.publish(event().copy(id = "evt_none", channels = emptySet()))
+            broker.publish(event().copy(id = "evt_mail", channels = setOf("mail")))
+            assertEquals(0, tasks.jobs.size)
+            assertTrue(hook.queued.isEmpty())
+            broker.publish(event().copy(id = "evt_push", channels = setOf("push", "mail")))
+            broker.publish(event().copy(id = "evt_all", channels = null))
+        }
+
+        assertEquals(4, tasks.jobs.size)
+        assertEquals(listOf(Triple("evt_push", "push", 2), Triple("evt_all", "push", 2)), hook.queued.toList())
     }
 }

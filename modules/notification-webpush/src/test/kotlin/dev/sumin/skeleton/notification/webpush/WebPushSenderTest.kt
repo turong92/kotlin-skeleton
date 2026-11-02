@@ -42,7 +42,7 @@ class WebPushSenderTest {
 
     private fun message(urgency: PushUrgency = PushUrgency.NORMAL, tag: String? = "comment:42") = PushMessage(
         eventId = "evt1", type = "comment.created", title = "새 댓글", body = "안녕", link = "/notes/1", tag = tag,
-        urgency = urgency, createdAt = now, expiresAt = now.plus(Duration.ofHours(1)),
+        urgency = urgency, createdAt = now, expiresAt = now.plus(Duration.ofHours(1)), openToken = "dev1.mac",
     )
 
     @Test
@@ -66,6 +66,7 @@ class WebPushSenderTest {
         assertThat(payload["body"].asString()).isEqualTo("안녕")
         assertThat(payload["link"].asString()).isEqualTo("/notes/1")
         assertThat(payload["tag"].asString()).isEqualTo("comment:42")
+        assertThat(payload["open"].asString()).isEqualTo("dev1.mac")   // 클릭 보고 토큰
 
         val claims = verifyVapid(request.headers.getValue("authorization"), vapid.vapidPublic)
         assertThat(claims["aud"].asString()).isEqualTo(service.origin)

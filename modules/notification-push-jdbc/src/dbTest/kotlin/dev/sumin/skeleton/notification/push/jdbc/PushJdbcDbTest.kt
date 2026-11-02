@@ -3,10 +3,14 @@ package dev.sumin.skeleton.notification.push.jdbc
 import dev.sumin.skeleton.common.erasure.ErasureRequest
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.jobqueue.jdbc.JdbcJobRepository
+import dev.sumin.skeleton.jobqueue.jdbc.JobDeadListener
 import dev.sumin.skeleton.jobqueue.jdbc.JobHandler
 import dev.sumin.skeleton.jobqueue.jdbc.JobQueueProperties
 import dev.sumin.skeleton.jobqueue.jdbc.JobQueueWorker
+import dev.sumin.skeleton.notification.DeliveryOutcome
+import dev.sumin.skeleton.notification.NotificationDeliveryHook
 import dev.sumin.skeleton.notification.push.PushDevice
+import dev.sumin.skeleton.notification.push.PushOpenStore
 import dev.sumin.skeleton.notification.push.PushAdvertisingNoticeStore
 import dev.sumin.skeleton.notification.push.PushDeviceRegistration
 import dev.sumin.skeleton.notification.push.PushDeviceStore
@@ -57,9 +61,15 @@ class PushJdbcDbTest {
         }
     }
 
+    class RecordingHook : NotificationDeliveryHook {
+        val outcomes = CopyOnWriteArrayList<Pair<String, DeliveryOutcome>>()
+        override fun onOutcome(eventId: String, channel: String, outcome: DeliveryOutcome) { outcomes += eventId to outcome }
+    }
+
     @TestConfiguration(proxyBeanMethods = false)
     class Fixtures {
         @Bean fun sender() = RecordingSender()
+        @Bean fun deliveryHook() = RecordingHook()
     }
 
     @Autowired lateinit var store: PushDeviceStore
@@ -72,6 +82,9 @@ class PushJdbcDbTest {
     @Autowired lateinit var repository: JdbcJobRepository
     @Autowired lateinit var properties: JobQueueProperties
     @Autowired lateinit var handlers: List<JobHandler>
+    @Autowired lateinit var deadListeners: List<JobDeadListener>
+    @Autowired lateinit var hook: RecordingHook
+    @Autowired lateinit var opens: PushOpenStore
 
     private val base = Instant.parse("2026-10-31T00:00:00Z")
 
@@ -80,6 +93,8 @@ class PushJdbcDbTest {
         jdbc.sql("delete from push_devices").update()
         jdbc.sql("delete from push_type_mutes").update()
         jdbc.sql("delete from push_advertising_notices").update()
+        jdbc.sql("delete from push_opens").update()
+        hook.outcomes.clear()
         jdbc.sql("delete from jobs").update()
         sender.sent.clear()
         sender.result = PushResult.Delivered
@@ -208,7 +223,7 @@ class PushJdbcDbTest {
         assertEquals(1, store.listByAccount("acc_b").size)
     }
 
-    private fun queueWorker() = JobQueueWorker(repository, handlers, properties, TimeProvider.systemUtc())
+    private fun queueWorker() = JobQueueWorker(repository, handlers, properties, TimeProvider.systemUtc(), deadListeners = deadListeners)
 
     private fun job(device: PushDevice, expiresAt: Instant) = PushJob(
         device.id, device.accountId,
@@ -248,6 +263,22 @@ class PushJdbcDbTest {
         assertNotNull(store.find(device.id))
         assertEquals(1L, jdbc.sql("select count(*) from jobs where status = 'DEAD' and job_type = 'notification.push'").query(Long::class.java).single())
         assertEquals(1, sender.sent.size)
+        assertEquals(listOf("evt_1" to DeliveryOutcome.FAILED), hook.outcomes.toList())   // 죽은 작업은 전달 고리에 실패로 알린다
+    }
+
+    @Test
+    fun `the first click of an event by a recipient is recorded once and erasure forgets that recipient`() {
+        val at = Instant.parse("2026-11-02T00:00:00Z")
+
+        assertTrue(opens.recordFirst("evt_1", "acc_a", at))
+        assertEquals(false, opens.recordFirst("evt_1", "acc_a", at.plusSeconds(5)))
+        assertTrue(opens.recordFirst("evt_1", "acc_b", at))
+        assertTrue(opens.recordFirst("evt_2", "acc_a", at))
+
+        erasure.erase(ErasureRequest("acc_a", "deleted:0123456789abcdef"))
+
+        assertTrue(opens.recordFirst("evt_1", "acc_a", at))        // 지운 사람의 기록은 없다
+        assertEquals(false, opens.recordFirst("evt_1", "acc_b", at))
     }
 
     @Test

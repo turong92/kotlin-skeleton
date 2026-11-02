@@ -60,6 +60,12 @@ class NotificationAutoConfiguration {
         return gate
     }
 
+    /** 채널(푸시 …)이 전달 과정을 알릴 곳 - 빈으로 올라온 [NotificationDeliveryHook] 들을 모은다. 고리가 없으면 아무 일도 안 한다 */
+    @Bean
+    @ConditionalOnMissingBean
+    fun notificationDeliveryHooks(hooks: ObjectProvider<NotificationDeliveryHook>): NotificationDeliveryHooks =
+        NotificationDeliveryHooks { hooks.orderedStream().toList() }
+
     @Bean
     @ConditionalOnMissingBean(NotificationRecipientResolver::class)
     fun notificationRecipientResolver(): NotificationRecipientResolver =

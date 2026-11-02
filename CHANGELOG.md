@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `auth-session`: 회전이 `markTokenUsed` 전에 후속 토큰을 먼저 넣는다 - 부분 실패(콜드 스타트의 DB 풀 타임아웃 등)가 나도 옛 토큰이 쓰이지 않은 채로 남아 같은 토큰의 재시도가 정상 회전이 된다. 보호 환경에서 `reuse-grace` 가 0 이면 기동 경고(`DeployGuard` 경고, 실패 아님). `apps/api` · `apps/sample` 은 `reuse-grace: 60s`(관행의 상한) - 실제 창은 grace 하나이고, 콜드 스타트로 응답을 잃은 클라이언트는 그 안에 같은 토큰으로 재시도해야 한다. 문서 `docs/cloud-run-scale-to-zero.md` §5.
 
+### 알림 채널 표지 · 전달 고리 · 푸시 클릭 열람 (2026-11-02)
+
+- `notification`: `NotificationEvent.channels`(null = 모든 채널, 집합 = 그 안의 채널만 - 좁히기만) · `NotificationChannelDeclaration` · 전달 고리 `NotificationDeliveryHook`(`halted` · `onQueued` · `onOutcome` · `onOpened`, 모두 기본 no-op) · `NotificationInboxRepository.eventStats`(기본 null). 안 쓰는 앱의 동작은 그대로다. `notification-jdbc`: 알림함 줄의 `recipient_ids_json` 이 **그 줄의 받는 사람 한 명만** 담는다(옛 줄은 그대로) · 새 색인 `idx_notification_inbox_event`(마이그레이션 `V20261102100000`, 줄이 많은 표는 한가한 때 배포) · `eventStats`.
+- `notification-push`: `channels` 에 `push` 가 없으면 건너뜀 · 전달 고리 호출(`onQueued` · `onOutcome`, 멈춘 이벤트의 큐 푸시는 보내지 않음) · `notification-push-jdbc` 의 DEAD 고리가 FAILED 를 알린다.
+- 푸시 클릭 열람(기본 꺼짐): `skeleton.notification.push.open-report.secret`(32자 이상)을 주면 웹 푸시 페이로드에 서명 토큰 `open` 이 실리고, 로그인 없는 `POST /api/v1/push/opened` 가 열리며(토큰이 인증), 같은 클릭은 한 번으로 센다(`push_opens`, 마이그레이션 `V20261102100100`). 위조 · 다른 이벤트 · 주인이 바뀐 기기의 토큰은 400 `PUSH.INVALID_OPEN_TOKEN`. FCM 전달기는 아직 `open` 을 싣지 않는다.
+
 ### 푸시 알림 (2026-10-31)
 
 - 새 모듈 다섯 - `notification-push`(알림이 받는 사람의 **기기로도** 간다: 기기 등록 `PUT/DELETE /api/v1/push/devices/{installationId}` · 시험 알림 · 종류 × 채널 「푸시만 끄기」 `GET/PUT /api/v1/push/preferences` · 잠금 화면 `lock-screen: FULL|HIDDEN` · 세션이 끊기면 기기도 · 오래된 기기 정리), `notification-push-jdbc`(기기 · 끄기 저장 + 발송 작업을 `job-queue-jdbc` 에, 두 방언), `notification-webpush`(VAPID 웹 푸시, RFC 8291 암호화는 JDK · 끝점 허용 목록 · 키 쌍 기동 검사), `notification-fcm`(FCM HTTP v1, 서비스 계정 -> 접근 토큰), `notification-push-legal`(광고성 푸시의 동의 어댑터). 모두 **꺼짐이 기본**이고 `notification` 계약은 바뀌지 않는다 - 이 모듈들을 안 붙인 앱의 동작은 그대로다. 문서 `docs/modules/notification-push*.md` · `notification-webpush.md` · `notification-fcm.md` · HTTP 계약 `docs/push-http-contract.md` · 키 만들기 `docs/real-provider-setup.md` §15.

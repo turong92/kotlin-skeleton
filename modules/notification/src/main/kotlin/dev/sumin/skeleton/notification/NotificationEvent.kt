@@ -8,7 +8,9 @@ import java.time.Instant
  * 링크는 퍼센트 인코딩된 경로여야 한다(공백 등 `java.net.URI` 로 파싱이 안 되면 거절).
  * 브라우저가 `/\` 를 `//` 처럼 읽으므로 역슬래시와 제어 문자도 거절한다.
  * [collapseKey] 가 있으면 받는 사람의 **안 읽은** 같은 열쇠 줄에 접힌다(내용은 새 것, 수 +1, 읽음 주소는 처음 이벤트 id). 255자 이하.
- * 둘 다 null 이면 지금까지와 같다.
+ * [channels] 는 이 알림을 보낼 **채널 이름**을 좁힌다: null 이면 모든 채널(지금까지와 같다), 집합이면 그 안의 채널만(채널 자신의 종류 규칙은 그대로 - 좁히기만 한다).
+ * 알림함 저장과 SSE 는 채널이 아니라 늘 간다. 이 표지를 지키는 채널은 푸시(`push`)뿐이다 - 다른 채널 모듈은 자기 구독자에서 지킨다.
+ * 셋 다 null 이면 지금까지와 같다.
  */
 data class NotificationEvent(
     val topic: String,
@@ -22,6 +24,7 @@ data class NotificationEvent(
     val createdAt: Instant = Instant.now(),
     val link: String? = null,
     val collapseKey: String? = null,
+    val channels: Set<String>? = null,
 ) {
     init {
         require(topic.isNotBlank()) { "topic must not be blank" }
@@ -33,6 +36,7 @@ data class NotificationEvent(
                 "link must be an in-app path: a single leading '/', at most $MAX_LINK_LENGTH characters, no backslash or control character"
             }
         }
+        channels?.let { require(it.none { name -> name.isBlank() }) { "channels must not contain blank values" } }
         collapseKey?.let {
             require(it.isNotBlank()) { "collapseKey must not be blank" }
             require(it.length <= MAX_COLLAPSE_KEY_LENGTH) { "collapseKey must be at most $MAX_COLLAPSE_KEY_LENGTH characters" }

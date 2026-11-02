@@ -14,6 +14,12 @@
 - 접힌 줄의 `eventId` 는 처음 이벤트 id 라, SSE 로 오는 사건의 `id` 와 목록 줄의 `eventId` 가 다를 수 있다 — 읽음 처리는 줄의 `eventId` 로 한다. 접힌 id 의 재발행(재시도)은 수도 줄도 바꾸지 않는다(DB 는 마지막 접힌 id 를 `last_event_id` 에 기억한다).
 - `NotificationInboxRepository` 의 새 메서드: `countUnread`(기본 구현 있음) · `deleteOlderThan(cutoff)` · `deleteByTopic` · `deleteByRecipientAndTopic`(지우기 셋은 추상 — 저장소를 직접 구현했다면 구현해야 한다). 서버 API 만, HTTP 로는 열지 않는다.
 
+**채널 좁히기 · 전달 고리**(대량 공지 같은 쓰임을 위한 자리, 모두 기본은 지금과 같다):
+- `NotificationEvent.channels: Set<String>? = null` — null 이면 모든 채널, 집합이면 그 안의 채널만(**좁히기만**: 채널 자신의 종류 규칙은 그대로). 알림함 저장과 SSE 는 채널이 아니라 늘 간다. 지키는 채널은 푸시(`push`) — 다른 채널 모듈은 자기 구독자에서 지킨다.
+- `NotificationChannelDeclaration(key)` 빈 — 붙은 채널 목록(채널 모듈이 올린다. 푸시가 `push`).
+- `NotificationDeliveryHook`(빈 여럿, 모든 메서드 기본 no-op): `halted(eventId)`(보내기 직전 「멈췄나」) · `onQueued(eventId, channel, count)` · `onOutcome(eventId, channel, DELIVERED|FAILED|DROPPED)` · `onOpened(eventId, channel)`(받는 사람이 눌러 연 첫 한 번). 채널은 `NotificationDeliveryHooks` 빈으로 부르고 고리가 던진 예외는 삼킨다. 받는 사람 id 는 싣지 않는다(통계만).
+- `NotificationInboxRepository.eventStats(eventId): InboxEventStats(stored, read)?` — 기본 null(셀 수 없음). `notification-jdbc` 가 구현한다.
+
 **마이그레이션 주의**: `notification_inbox` 에 칼럼 · 유니크 · 색인 셋을 더한다. 줄이 아주 많은 표에서는 색인 만들기가 표 크기에 비례해 오래 걸리고 그동안 쓰기가 느려질 수 있다 — 한가한 시간에 배포한다.
 
 **보관 정리**: `skeleton.notification.retention.enabled=true` 면 `interval` 마다 `max-age`(기본 90일)보다 오래된 줄을 지운다. 기본 꺼짐. `scheduler` 모듈의 `skeletonTaskScheduler` 가 없으면 경고 한 줄만 남기고 돌지 않으며, 앱이 `NotificationInboxRetention.run(now)` 을 직접 부를 수 있다. 프로젝트 모드(`skeleton.projects`)면 서비스 중인 프로젝트마다 돈다.
@@ -33,7 +39,7 @@
 | 설정 접두사 | `skeleton.notification.inbox` · `skeleton.notification.retention` · `skeleton.notification.preferences` · `skeleton.notification.advertising` — [docs/config/modules/notification.yml](../config/modules/notification.yml) |
 | 기본 동작 | 켜짐. 기본은 인메모리 브로커다 (프로세스 안에서만 전달). 서블릿 앱이면 받은편지함 엔드포인트도 켜진다. |
 | 부팅에 필요한 것 | 없음. |
-| 교체 지점 | `NotificationBroker`, `NotificationRecipientResolver`, `NotificationInboxRepository`, `NotificationMuteRepository`, `NotificationInboxRetention`, `NotificationInboxController` |
+| 교체 지점 | `NotificationDeliveryHook`, `NotificationChannelDeclaration`, `NotificationBroker`, `NotificationRecipientResolver`, `NotificationInboxRepository`, `NotificationMuteRepository`, `NotificationInboxRetention`, `NotificationInboxController` |
 | 마이그레이션 | 없음 |
 | 프론트 짝 | `@skeleton/notifications` |
 | 테스트 | `modules/notification/src/test` |

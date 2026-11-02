@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.notification.jdbc
 
 import dev.sumin.skeleton.json.JsonCodec
+import dev.sumin.skeleton.notification.InboxEventStats
 import dev.sumin.skeleton.notification.NotificationEvent
 import dev.sumin.skeleton.notification.NotificationInboxPage
 import dev.sumin.skeleton.notification.NotificationInboxQuery
@@ -20,6 +21,7 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
  * 그 사이 읽혀 열쇠가 풀렸으면(접기가 0 줄) ① 부터 다시. 접기 update 는 칼럼 값을 실제로 바꾸므로 갱신 행 수를 믿을 수 있다 - 넣기의 갱신 행 수(MySQL 은 이미 있어도 1)는 쓰지 않는다.
  * **접기를 먼저 시도하지 않는 이유(실측, MySQL 8.4)**: 없는 열쇠를 찾는 update 는 REPEATABLE READ 에서 간격 잠금을 걸어, 같은 열쇠를 동시에 저장하는 두 트랜잭션이 서로의 간격에 넣으려다 교착한다.
  * 넣기를 먼저 하면 뒤 쪽은 앞 쪽 커밋까지 기다렸다가 충돌을 무시하고 접는다 (PostgreSQL 도 같다).
+ * **줄마다 `recipient_ids_json` 에는 그 줄의 받는 사람 한 명만** 적는다 - 이벤트의 받는 사람 전체를 줄마다 복제하면 대량 공지에서 저장이 폭증하고 남의 id 가 남는다(옛 줄은 그대로).
  * 부르는 쪽 트랜잭션 안에서 돈다(롤백되면 같이 사라진다). 트랜잭션이 없으면 문장마다 커밋된다 - 같은 규칙이 성립한다.
  */
 class JdbcNotificationInboxRepository(
@@ -220,6 +222,12 @@ class JdbcNotificationInboxRepository(
             MapSqlParameterSource().addValue("recipientId", recipientId.trim()).addValue("topic", topic),
         )
 
+    override fun eventStats(eventId: String): InboxEventStats =
+        jdbc.query(
+            "select count(*) as stored_count, count(read_at) as read_count from notification_inbox where event_id = :eventId",
+            MapSqlParameterSource().addValue("eventId", eventId),
+        ) { rs, _ -> InboxEventStats(stored = rs.getLong("stored_count"), read = rs.getLong("read_count")) }.single()
+
     /** `select … limit` 으로 기본 키를 모아 `delete … in (…)` - 큰 표를 한 문장으로 지우지 않는다 (JdbcJobRepository.deleteFinishedBefore 꼴) */
     private fun deleteInBatches(
         condition: String,
@@ -255,7 +263,7 @@ class JdbcNotificationInboxRepository(
                 .addValue("title", event.title)
                 .addValue("message", event.message)
                 .addValue("payload_json", jsonCodec.canonicalString(jsonCodec.toDocument(event.payload)))
-                .addValue("recipient_ids_json", jsonCodec.canonicalString(jsonCodec.toDocument(event.recipientIds)))
+                .addValue("recipient_ids_json", jsonCodec.canonicalString(jsonCodec.toDocument(setOf(recipientId))))
                 .addValue("event_created_at", dialect.instantParam(event.createdAt))
                 .addValue("link", event.link)
                 .addValue("collapse_key", event.collapseKey)

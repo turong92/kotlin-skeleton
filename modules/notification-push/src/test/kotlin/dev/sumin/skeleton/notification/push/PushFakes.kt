@@ -4,6 +4,8 @@ import dev.sumin.skeleton.notification.advertising.AdvertisingConsent
 import dev.sumin.skeleton.notification.advertising.AdvertisingConsentPolicy
 import dev.sumin.skeleton.notification.advertising.AdvertisingRecipientZones
 import dev.sumin.skeleton.common.time.TimeProvider
+import dev.sumin.skeleton.notification.DeliveryOutcome
+import dev.sumin.skeleton.notification.NotificationDeliveryHook
 import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
@@ -117,4 +119,23 @@ class FakeRecipientZones(private val zones: Map<String, ZoneId?> = emptyMap(), p
         failure?.let { throw it }
         return zones[accountId]
     }
+}
+
+/** 시험용 첫 클릭 기록 - (이벤트, 받는 사람) 쌍이 처음일 때만 true */
+class FakePushOpenStore : PushOpenStore {
+    val rows = ConcurrentHashMap.newKeySet<Pair<String, String>>()
+    override fun recordFirst(eventId: String, recipientId: String, at: Instant): Boolean = rows.add(eventId to recipientId)
+}
+
+/** 시험용 전달 고리 - 불린 것을 모두 적고, [haltedIds] 에 든 이벤트는 멈춘 것으로 답한다 */
+class RecordingDeliveryHook : NotificationDeliveryHook {
+    val haltedIds: MutableSet<String> = ConcurrentHashMap.newKeySet()
+    val queued = CopyOnWriteArrayList<Triple<String, String, Int>>()
+    val outcomes = CopyOnWriteArrayList<Triple<String, String, DeliveryOutcome>>()
+    val opened = CopyOnWriteArrayList<Pair<String, String>>()
+
+    override fun halted(eventId: String) = eventId in haltedIds
+    override fun onQueued(eventId: String, channel: String, count: Int) { queued += Triple(eventId, channel, count) }
+    override fun onOutcome(eventId: String, channel: String, outcome: DeliveryOutcome) { outcomes += Triple(eventId, channel, outcome) }
+    override fun onOpened(eventId: String, channel: String) { opened += eventId to channel }
 }

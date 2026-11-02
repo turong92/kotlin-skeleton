@@ -4,6 +4,8 @@ import dev.sumin.skeleton.common.project.ProjectRegistry
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.notification.advertising.AdvertisingGate
 import dev.sumin.skeleton.notification.NotificationAutoConfiguration
+import dev.sumin.skeleton.notification.NotificationChannelDeclaration
+import dev.sumin.skeleton.notification.NotificationDeliveryHooks
 import dev.sumin.skeleton.notification.NotificationSubscriptionRegistry
 import java.time.Instant
 import org.slf4j.LoggerFactory
@@ -11,6 +13,7 @@ import org.springframework.beans.factory.ObjectProvider
 import org.springframework.beans.factory.SmartInitializingSingleton
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.boot.autoconfigure.AutoConfiguration
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.boot.context.properties.EnableConfigurationProperties
@@ -64,10 +67,11 @@ class PushAutoConfiguration {
         tasks: PushTasks,
         senders: ObjectProvider<PushSender>,
         gate: AdvertisingGate,
+        hooks: NotificationDeliveryHooks,
     ): PushNotificationChannel {
         // 광고 푸시는 야간 보류(최대 11시간)를 견뎌야 한다 - 푸시 만료(ttl)가 그보다 짧으면 보류된 광고가 만료돼 사라진다
         check(!gate.enabled || properties.ttl >= MIN_ADVERTISING_TTL) { "skeleton.notification.push.ttl must be at least 12 hours when skeleton.notification.advertising.types is set (a night hold can last 11 hours and must not expire the advertisement)" }
-        return PushNotificationChannel(registry, properties, factory, devices, mutes, tasks, { senders.orderedStream().toList() }, gate)
+        return PushNotificationChannel(registry, properties, factory, devices, mutes, tasks, { senders.orderedStream().toList() }, gate, hooks)
     }
 
     @Bean
@@ -80,8 +84,39 @@ class PushAutoConfiguration {
         time: ObjectProvider<TimeProvider>,
         gate: AdvertisingGate,
         tasks: PushTasks,
+        hooks: NotificationDeliveryHooks,
+        openTokens: ObjectProvider<PushOpenTokens>,
     ): PushDeliveryWorker =
-        PushDeliveryWorker(devices, mutes, { senders.orderedStream().toList() }, time.getIfAvailable { TimeProvider.systemUtc() }, gate, tasks)
+        PushDeliveryWorker(devices, mutes, { senders.orderedStream().toList() }, time.getIfAvailable { TimeProvider.systemUtc() }, gate, tasks, hooks, openTokens.getIfAvailable())
+
+    /** 붙어 있는 채널 이름표 - `NotificationEvent.channels` 에 쓰는 `push` */
+    @Bean
+    @ConditionalOnMissingBean(name = ["pushChannelDeclaration"])
+    fun pushChannelDeclaration(): NotificationChannelDeclaration = NotificationChannelDeclaration(PushChannel.KEY)
+
+    /** 클릭 보고 토큰 - `open-report.secret` 이 있을 때만(없으면 페이로드에 `open` 도 보고 경로도 없다) */
+    @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnExpression(OPEN_REPORT_ON)
+    fun pushOpenTokens(properties: PushProperties): PushOpenTokens = PushOpenTokens(properties.openReport.secret)
+
+    /** 클릭 기록 저장소(`PushOpenStore`)는 `notification-push-jdbc` 가 내놓는다 - 보고를 켰는데 없으면 시작을 멈춘다 */
+    @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnExpression(OPEN_REPORT_ON)
+    fun pushOpenReporter(
+        @Suppress("UNUSED_PARAMETER") ports: PushPortsCheck,
+        tokens: PushOpenTokens,
+        devices: PushDeviceStore,
+        store: ObjectProvider<PushOpenStore>,
+        hooks: NotificationDeliveryHooks,
+        time: ObjectProvider<TimeProvider>,
+    ): PushOpenReporter =
+        PushOpenReporter(
+            tokens, devices,
+            checkNotNull(store.getIfAvailable()) { "skeleton.notification.push.open-report.secret is set but there is no PushOpenStore - add the notification-push-jdbc module and its migrations" },
+            hooks, time.getIfAvailable { TimeProvider.systemUtc() },
+        )
 
     @Bean
     @ConditionalOnMissingBean
@@ -153,3 +188,6 @@ class PushAutoConfiguration {
 object PushPortsCheck
 
 private val MIN_ADVERTISING_TTL: java.time.Duration = java.time.Duration.ofHours(12)
+
+/** 클릭 보고 비밀이 비어 있지 않을 때(빈 문자열은 「속성 있음」으로 읽히므로 `@ConditionalOnProperty` 를 쓰지 않는다) */
+private const val OPEN_REPORT_ON = "#{'\${skeleton.notification.push.open-report.secret:}' != ''}"

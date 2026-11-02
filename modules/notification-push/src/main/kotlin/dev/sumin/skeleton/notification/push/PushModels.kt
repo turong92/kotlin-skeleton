@@ -79,6 +79,8 @@ data class PushMessage(
     val urgency: PushUrgency = PushUrgency.NORMAL,
     val createdAt: Instant,
     val expiresAt: Instant? = null,
+    /** 클릭 보고 토큰 - 보내는 순간 처리기가 기기마다 채운다(큐에 저장되지 않는다). 전달 수단이 페이로드 `open` 으로 싣는다. 보고를 끈 서버는 null */
+    val openToken: String? = null,
 )
 
 /** 작업 `notification.push` 의 내용 — 기기 하나에 푸시 하나. 받는 사람 id 를 같이 실어 기기 주인이 바뀐 뒤의 작업을 걸러 낸다 */

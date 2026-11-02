@@ -32,10 +32,29 @@ data class PushProperties(
     /** 푸시 하나(기기 하나)의 최대 시도 수 */
     val maxAttempts: Int = 5,
     val http: Http = Http(),
+    val openReport: OpenReport = OpenReport(),
     val staleCleanup: StaleCleanup = StaleCleanup(),
 ) {
     /** 앞뒤 공백을 떼고 빈 글자 · 중복을 뺀, 설정 순서 그대로의 목록. 광고 종류(`skeleton.notification.advertising.types`)는 푸시 채널이 따로 다룬다 - 사람이 푸시만 끄는 목록에는 들어가지 않는다 */
     val pushTypes: List<String> = types.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+
+    /** 푸시 클릭 열람 보고 - 비밀이 비면 꺼짐(페이로드에 `open` 이 없고 `POST /api/v1/push/opened` 도 없다) */
+    data class OpenReport(
+        /** 클릭 토큰 서명 비밀(32자 이상). 비밀이다 - 로그 · toString 에 싣지 않는다 */
+        val secret: String = "",
+    ) {
+        init {
+            require(secret.isEmpty() || secret.length >= MIN_SECRET_LENGTH) { "skeleton.notification.push.open-report.secret must be at least $MIN_SECRET_LENGTH characters (or empty to turn click reports off)" }
+        }
+
+        val enabled: Boolean get() = secret.isNotEmpty()
+
+        override fun toString(): String = "OpenReport(enabled=$enabled)"
+
+        companion object {
+            const val MIN_SECRET_LENGTH = 32
+        }
+    }
 
     data class Http(
         /** false 면 `/api/v1/push` 를 등록하지 않는다 (앱이 자기 컨트롤러를 둘 때) */

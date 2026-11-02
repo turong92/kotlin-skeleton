@@ -24,12 +24,19 @@ class NotificationInboxErasureDbTest {
         payload = mapOf("k" to "v"), createdAt = Instant.parse("2026-03-01T00:30:00.123456Z"),
     )
 
+    /** 지금은 줄마다 받는 사람 한 명만 적지만, 옛 줄에는 받는 사람 전체가 들어 있다 - 지우기가 그 줄도 닦는지 보려고 옛 모양으로 되돌린다 */
+    private fun asLegacyRow(event: NotificationEvent, recipient: String) {
+        val all = event.recipientIds.joinToString(",", "[", "]") { "\"$it\"" }
+        jdbc.update("update notification_inbox set recipient_ids_json = :j where recipient_id = :r and event_id = :e", mapOf("j" to all, "r" to recipient, "e" to event.id))
+    }
+
     @Test
     fun `erasing an account deletes its inbox and scrubs its id from other recipients' rows`() {
         val gone = "acc_gone_${UUID.randomUUID()}"
         val stay = "acc_stay_${UUID.randomUUID()}"
         val shared = event(setOf(gone, stay))
         repository.save(shared, setOf(gone, stay))
+        asLegacyRow(shared, stay)
         val solo = event(setOf(gone))
         repository.save(solo, setOf(gone))
 
@@ -64,6 +71,7 @@ class NotificationInboxErasureDbTest {
         val longer = base + "2"          // the erased id is a prefix of this recipient's id
         val shared = event(setOf(gone, longer))
         repository.save(shared, setOf(gone, longer))
+        asLegacyRow(shared, longer)
 
         NotificationInboxErasureListener(jdbc).erase(ErasureRequest(gone, "deleted:0123456789abcdef"))
 

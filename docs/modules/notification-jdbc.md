@@ -7,10 +7,14 @@
 저장은 「넣기(어느 유니크 충돌이든 무시) → 내 이벤트 줄이 있으면 끝 → 없으면 안 읽은 줄을 접기」 순서이고, 같은 열쇠를 동시에 저장하는 두 트랜잭션도 한 줄에 수 2 로 끝난다. 접기를 먼저 시도하면 MySQL 이 간격 잠금으로 교착한다(실측). 부르는 쪽 트랜잭션 안에서 돌아 롤백되면 같이 사라진다.
 `deleteOlderThan` · `deleteByTopic` · `deleteByRecipientAndTopic` 은 1000줄씩 나눠 지운다. 방언 `insertIgnore` 는 충돌 칼럼 목록을 비우면 「어느 유니크 충돌이든 무시」로 받는다.
 
+**줄마다 받는 사람 한 명**: 저장할 때 줄의 `recipient_ids_json` 에는 그 줄의 받는 사람 한 명만 적는다(이벤트의 받는 사람 전체를 줄마다 복제하면 대량 공지에서 저장이 폭증하고 남의 id 가 남는다). 옛 줄은 옮기지 않는다. `eventStats(eventId)` 는 `event_id` 색인(새 마이그레이션 `V20261102100000__notification_inbox_event_index` - 줄이 많은 표는 한가한 때 배포)으로 저장 · 읽음 줄 수를 센다. 보관 정리로 지워진 줄은 빠진다.
+
 **계정 삭제**: `account` 가 계정을 지울 때(platform 의 `AccountErasureListener`) 그 계정의 받은편지함 줄과 알림 끄기 줄(`notification_mutes`)을 지우고, 같은 이벤트를 받은 다른 사람의 줄 안 수신자 목록에서 계정 id 를 톰스톤으로 바꾼다.
 
 | 항목 | 내용 |
 |---|---|
+**줄마다 받는 사람 한 명**: 저장할 때 줄의 `recipient_ids_json` 에는 그 줄의 받는 사람 한 명만 적는다(이벤트의 받는 사람 전체를 줄마다 복제하면 대량 공지에서 저장이 폭증하고 남의 id 가 남는다). 옛 줄은 옮기지 않는다. `eventStats(eventId)` 는 `event_id` 색인으로 저장 · 읽음 줄 수를 센다(보관 정리로 지워진 줄은 빠진다). 새 마이그레이션 `V20261102100000__notification_inbox_event_index`(줄이 많은 표는 한가한 때 배포).
+
 | 의존성 한 줄 | `implementation(project(":modules:notification-jdbc"))` |
 | 함께 오는 모듈 | `notification`, `json`, `persistence-jdbc`, `platform` |
 | 컴파일 전용 | 없음 |

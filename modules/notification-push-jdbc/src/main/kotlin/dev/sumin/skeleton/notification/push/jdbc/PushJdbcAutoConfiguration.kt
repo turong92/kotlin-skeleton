@@ -5,7 +5,10 @@ import dev.sumin.skeleton.jobqueue.jdbc.JobQueue
 import dev.sumin.skeleton.jobqueue.jdbc.JobQueueJdbcAutoConfiguration
 import dev.sumin.skeleton.json.JsonAutoConfiguration
 import dev.sumin.skeleton.json.JsonCodec
+import dev.sumin.skeleton.notification.NotificationAutoConfiguration
+import dev.sumin.skeleton.notification.NotificationDeliveryHooks
 import dev.sumin.skeleton.notification.push.PushAdvertisingNoticeStore
+import dev.sumin.skeleton.notification.push.PushOpenStore
 import dev.sumin.skeleton.notification.push.PushDeliveryWorker
 import dev.sumin.skeleton.notification.push.PushDeviceStore
 import dev.sumin.skeleton.notification.push.PushProperties
@@ -26,14 +29,14 @@ import org.springframework.transaction.PlatformTransactionManager
 
 /**
  * 기기 저장소 · 「푸시만 끄기」 저장소 · 재확인 안내 표시 저장소 · 작업 포트를 JDBC(PostgreSQL · MySQL)로 구현하고, 발송 처리기를 `job-queue-jdbc` 에 얹는다.
- * 스키마는 모듈 마이그레이션 `db/migration/<vendor>/V20261031130000__push_devices.sql` · `V20261031130100__push_type_mutes.sql` 을 앱의 `spring.flyway.locations=classpath:db/migration/{vendor}` 가 고른다.
+ * 스키마는 모듈 마이그레이션 `db/migration/<vendor>/V20261031130000__push_devices.sql` · `V20261031130100__push_type_mutes.sql` · `V20261102100100__push_opens.sql` 을 앱의 `spring.flyway.locations=classpath:db/migration/{vendor}` 가 고른다.
  *
  * **이 클래스의 이름(`dev.sumin.skeleton.notification.push.jdbc.PushJdbcAutoConfiguration`)을 `notification-push` 의 `PushAutoConfiguration` 이 문자열로 가리킨다** - 그쪽은 저장소 빈이 있어야 뜬다.
  * 큐(`job-queue-jdbc`)가 꺼져 있으면(`skeleton.job-queue.enabled=false`) 시작이 실패하고 `JobQueue` 빈이 없다고 말한다 - 뒷일 없이 푸시를 약속할 수 없다.
  * SqlDialect 는 조건에 넣지 않는다 (방언 자동설정보다 먼저 평가된다 - 존재는 SqlDialectVerifier 가 보장).
  */
 @AutoConfiguration(
-    after = [DataSourceAutoConfiguration::class, DataSourceTransactionManagerAutoConfiguration::class, JobQueueJdbcAutoConfiguration::class, JsonAutoConfiguration::class],
+    after = [DataSourceAutoConfiguration::class, DataSourceTransactionManagerAutoConfiguration::class, JobQueueJdbcAutoConfiguration::class, JsonAutoConfiguration::class, NotificationAutoConfiguration::class],
 )
 @ConditionalOnClass(NamedParameterJdbcTemplate::class)
 @ConditionalOnBean(DataSource::class)
@@ -52,6 +55,17 @@ class PushJdbcAutoConfiguration {
     @ConditionalOnMissingBean(PushAdvertisingNoticeStore::class)
     fun jdbcPushAdvertisingNoticeStore(dataSource: DataSource, dialect: SqlDialect): PushAdvertisingNoticeStore =
         JdbcPushAdvertisingNoticeStore(NamedParameterJdbcTemplate(dataSource), dialect)
+
+    @Bean
+    @ConditionalOnMissingBean(PushOpenStore::class)
+    fun jdbcPushOpenStore(dataSource: DataSource, dialect: SqlDialect): PushOpenStore =
+        JdbcPushOpenStore(NamedParameterJdbcTemplate(dataSource), dialect)
+
+    /** 죽은 푸시 작업을 전달 고리에 FAILED 로 알린다 - 고리는 늦게 찾는다(빈 순환을 피한다) */
+    @Bean
+    @ConditionalOnMissingBean(PushDeadListener::class)
+    fun pushDeadListener(json: JsonCodec, hooks: ObjectProvider<NotificationDeliveryHooks>): PushDeadListener =
+        PushDeadListener(json) { hooks.getObject() }
 
     @Bean
     @ConditionalOnMissingBean(PushTasks::class)

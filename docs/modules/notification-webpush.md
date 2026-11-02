@@ -15,6 +15,8 @@
 
 | 항목 | 내용 |
 |---|---|
+푸시 페이로드(`v: 1`)는 `id` · `type` · `title` · `body` · `link` · `tag` 에 더해, 클릭 보고가 켜져 있으면 `open`(서명 토큰, [notification-push](notification-push.md) 의 「푸시 클릭 열람」)을 싣는다.
+
 | 의존성 한 줄 | `implementation(project(":modules:notification-webpush"))` |
 | 함께 오는 모듈 | `notification-push`, `notification`, `platform` |
 | 컴파일 전용 | 없음 |
