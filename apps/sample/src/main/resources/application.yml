@@ -53,8 +53,7 @@ skeleton:
         - /api/v1/reviews/targets/*/*/reviews
         - /api/v1/reviews/summaries
   auth-session:
-    reuse-grace: 30s                      # 이 앱의 선택: 응답을 잃은 브라우저(페이지 이동 · 콜드 스타트로 느린 refresh)의 재시도는 같은 후속 토큰을 받는다 — 세션이 죽지 않는다
-    reuse-grace-max: 2m                   # 후속 토큰이 아직 한 번도 안 쓰였으면 이 시간까지 같은 후속 토큰을 다시 준다. 후속이 쓰인 뒤나 이 시간 뒤의 옛 토큰은 탈취로 보고 세션을 닫는다 (docs/cloud-run-scale-to-zero.md)
+    reuse-grace: 60s                      # 이 앱의 선택: 응답을 잃은 브라우저(페이지 이동 · 콜드 스타트로 느린 refresh)가 이 안에 같은 토큰으로 재시도하면 같은 후속 토큰을 받는다 — 세션이 죽지 않는다. 지나서 옛 토큰을 내밀면 탈취로 보고 세션을 닫는다 (docs/cloud-run-scale-to-zero.md)
   auth:
     jwt:
       secret: ${JWT_SECRET:dev-local-jwt-secret-change-me-32-bytes}   # 배포 선언의 secrets: [JWT_SECRET] 별칭. 기본값(개발용)으로는 prod · staging · SKELETON_ENV=stage|prod 에서 기동 실패 (docs/deploy.md)

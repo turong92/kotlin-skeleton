@@ -63,32 +63,29 @@ class SessionService(
         // **이미 쓴 토큰은 한도를 보지 않고** 바로 아래 재사용 규칙으로 간다 — 도둑이 창을 채워 놓고 주인의 옛 토큰을 429 로 덮을 수 없게 (그 경로는 행을 늘리지 않는다)
         if (token.usedAt == null) rotationLimiter.exceeded(session.id)?.let { throw RefreshRateLimitedException(it) }
 
+        val next = successorOf(rawToken)
         var usedAt = token.usedAt
-        if (usedAt == null && !store.markTokenUsed(oldHash, now)) {
-            // 같은 토큰을 동시에 낸 다른 요청이 먼저 썼다 — 그쪽이 쓴 시각을 다시 읽어 아래 재사용 규칙으로
-            usedAt = store.findToken(oldHash)?.usedAt ?: now
+        if (usedAt == null) {
+            // 후속 토큰을 **먼저** 넣고(멱등 · 결정적) 그 다음 옛 토큰을 쓴 것으로 표시한다 - 콜드 스타트의 부분 실패(DB 풀 타임아웃 등)가 둘 사이에서 나도
+            // 옛 토큰이 쓰이지 않은 채로 남아, 같은 토큰의 재시도가 정상 회전이 된다. 동시 요청이 져도 같은 후속 행이라 해롭지 않다
+            store.addToken(session.id, hash(next), now)
+            if (!store.markTokenUsed(oldHash, now)) {
+                // 같은 토큰을 동시에 낸 다른 요청이 먼저 썼다 — 그쪽이 쓴 시각을 다시 읽어 아래 재사용 규칙으로
+                usedAt = store.findToken(oldHash)?.usedAt ?: now
+            }
         }
         // 유예 안의 재제시(응답을 잃은 브라우저 · 동시 새로고침)는 **같은 후속 토큰**을 돌려준다 — 새 토큰을 또 찍어 갈래를 만들지도, 세션을 닫지도 않는다
-        if (usedAt != null && !withinReuseWindow(rawToken, usedAt, now)) {
+        if (usedAt != null && !(properties.reuseGrace.toMillis() > 0 && !usedAt.plus(properties.reuseGrace).isBefore(now))) {
             store.revoke(session.id, now, "REUSE")
             onEvent(SessionEvent(SessionEventType.REFRESH_REUSE_DETECTED, session.accountId, session.id, ip = client.ip))
             throw RefreshReusedException()
         }
 
-        val next = successorOf(rawToken)
-        store.addToken(session.id, hash(next), now)   // 멱등 — 같은 후속 토큰이 이미 있으면 그대로
+        store.addToken(session.id, hash(next), now)   // 멱등 — 유예 안의 재제시는 같은 후속 토큰을 그대로 돌려준다
         store.touch(session.id, now, client.ip, client.userAgent)
         properties.reuseMemory?.let { store.pruneUsedTokens(session.id, now.minus(it)) }
         activity.record(session.accountId)
         return RefreshResult(session.accountId, OpenedSession(session.id, next, session.expiresAt))
-    }
-
-    /** 쓴 토큰의 재제시가 허용되는가: 회전 뒤 grace 안이거나, 후속 토큰이 아직 한 번도 안 쓰였고 grace-max 안 (응답이 느려 잃은 경우) */
-    private fun withinReuseWindow(rawToken: String, usedAt: Instant, now: Instant): Boolean {
-        fun within(d: java.time.Duration) = d.toMillis() > 0 && !usedAt.plus(d).isBefore(now)
-        if (within(properties.reuseGrace)) return true
-        if (!within(properties.reuseGraceMax)) return false
-        return store.findToken(hash(successorOf(rawToken)))?.let { it.usedAt == null } == true
     }
 
     /** 토큰 하나로 그 세션을 닫는다. 모르는 토큰 · 이미 닫힌 세션도 조용히 (로그아웃은 멱등) */

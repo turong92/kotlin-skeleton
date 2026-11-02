@@ -120,38 +120,36 @@ class SessionServiceTest {
         assertTrue(events.any { it.type == SessionEventType.REFRESH_REUSE_DETECTED })
     }
 
-    private val coldStart = AuthSessionProperties(reuseGrace = Duration.ofSeconds(30), reuseGraceMax = Duration.ofMinutes(2))
-
     @Test
-    fun `cold start - the rotation succeeded but the response was lost, the old token 25 s later still gets the SAME successor and the session lives`() {
-        val s = service(coldStart)
+    fun `cold start - the response was lost and the client retries the same token 25 s later, inside a 60 s grace - it gets the SAME successor and the session lives`() {
+        val s = service(AuthSessionProperties(reuseGrace = Duration.ofSeconds(60)))
         val first = s.open(account.accountId, client)
         val lost = s.refresh(first.refreshToken!!, client)
-        time.advance(Duration.ofSeconds(25 + 30))                   // past the plain grace; the successor was never used
+        time.advance(Duration.ofSeconds(25))
         val retry = s.refresh(first.refreshToken!!, client)
         assertEquals(lost.session.refreshToken, retry.session.refreshToken)
         s.refresh(retry.session.refreshToken!!, client)
         assertTrue(events.none { it.type == SessionEventType.REFRESH_REUSE_DETECTED })
+        time.advance(Duration.ofSeconds(61))
+        assertEquals("AUTH.REFRESH_REUSED", code { s.refresh(first.refreshToken!!, client) })
     }
 
     @Test
-    fun `once the successor has been used, the old token is theft again even inside the max window`() {
-        val s = service(coldStart)
+    fun `a partial failure while rotating (the successor could not be stored) leaves the old token unused - the same token retried later rotates normally, not as theft`() {
+        var failOnce = true
+        val flaky = object : SessionStore by store {
+            override fun addToken(sessionId: String, hash: String, now: Instant) {
+                if (failOnce) { failOnce = false; error("pool timeout") }
+                store.addToken(sessionId, hash, now)
+            }
+        }
+        val s = SessionService(flaky, AuthSessionProperties(reuseGrace = Duration.ofSeconds(30)), time) { events += it }
         val first = s.open(account.accountId, client)
-        val next = s.refresh(first.refreshToken!!, client)
-        s.refresh(next.session.refreshToken!!, client)              // the client did receive it and moved on
-        time.advance(Duration.ofSeconds(45))
-        assertEquals("AUTH.REFRESH_REUSED", code { s.refresh(first.refreshToken!!, client) })
-        assertTrue(events.any { it.type == SessionEventType.REFRESH_REUSE_DETECTED })
-    }
-
-    @Test
-    fun `beyond the max window the old token is reuse even if the successor was never used`() {
-        val s = service(coldStart)
-        val first = s.open(account.accountId, client)
-        s.refresh(first.refreshToken!!, client)
-        time.advance(Duration.ofMinutes(2).plusSeconds(1))
-        assertEquals("AUTH.REFRESH_REUSED", code { s.refresh(first.refreshToken!!, client) })
+        assertFailsWith<IllegalStateException> { s.refresh(first.refreshToken!!, client) }
+        time.advance(Duration.ofSeconds(45))                        // well past the grace
+        val retry = s.refresh(first.refreshToken!!, client)
+        s.refresh(retry.session.refreshToken!!, client)
+        assertTrue(events.none { it.type == SessionEventType.REFRESH_REUSE_DETECTED })
     }
 
     @Test

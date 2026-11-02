@@ -62,7 +62,7 @@ class AuthSessionDeployGuardTest {
         val guard = AuthSessionDeployGuard(AuthSessionProperties(), PROTECTED) { NotInMemory }
         assertTrue(guard.warnings(prod).single().contains("reuse-grace"), guard.warnings(prod).toString())
         assertEquals(emptyList(), guard.warnings(unset))
-        val tuned = AuthSessionProperties(reuseGrace = Duration.ofSeconds(30), reuseGraceMax = Duration.ofMinutes(2))
+        val tuned = AuthSessionProperties(reuseGrace = Duration.ofSeconds(60))
         assertEquals(emptyList(), AuthSessionDeployGuard(tuned, PROTECTED) { NotInMemory }.warnings(prod))
     }
 

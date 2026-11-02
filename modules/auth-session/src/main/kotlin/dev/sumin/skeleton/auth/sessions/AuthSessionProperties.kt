@@ -24,15 +24,9 @@ data class AuthSessionProperties(
     /**
      * 방금 회전해서 쓴 옛 토큰을 이 시간 안에 다시 내밀면(응답을 잃은 브라우저 · 탭 두 개 동시 새로고침) 재사용으로 치지 않고 **같은 후속 토큰**을 돌려준다
      * (새 토큰을 또 찍지 않는다 — 갈래가 생기지 않는다). 지나서 내밀면 재사용 → 세션 종료. 0 이면 유예 없음 (모듈 기본: 중립).
-     * 이 유예 안에서 도둑이 옛 토큰을 내밀어도 얻는 것은 주인이 이미 가진 후속 토큰뿐이다. 앱이 정한다 — `apps/api` · `apps/sample` 은 10s.
+     * 이 유예 안에서 도둑이 옛 토큰을 내밀어도 얻는 것은 주인이 이미 가진 후속 토큰뿐이다. 앱이 정한다 — `apps/api` · `apps/sample` 은 60s(관행의 상한: Okta 최대 60초 · Auth0 reuse interval). 콜드 스타트로 응답을 잃은 클라이언트는 이 안에 같은 토큰으로 재시도해야 한다.
      */
     val reuseGrace: Duration = Duration.ZERO,
-    /**
-     * 응답이 **느려서** 잃은 경우(콜드 스타트 · 앞단 프록시 타임아웃)를 위한 상한. 회전 뒤 [reuseGrace] 가 지났어도, 그 **후속 토큰이 아직 한 번도 쓰이지 않았다면**
-     * 이 시간 안에는 옛 토큰을 다시 받고 같은 후속 토큰을 돌려준다 (후속이 한 번이라도 쓰였으면 지금처럼 재사용 = 탈취). 0 이면 끔 (모듈 기본: 중립).
-     * [reuseGrace] 이상이어야 한다. 권장: `reuse-grace: 30s` + `reuse-grace-max: 2m` (docs/cloud-run-scale-to-zero.md).
-     */
-    val reuseGraceMax: Duration = Duration.ZERO,
     /** 계정 하나가 가질 수 있는 세션 수 — 넘으면 가장 오래된 세션부터 닫는다 */
     val maxSessionsPerAccount: Int = 20,
     val rotation: Rotation = Rotation(),
@@ -43,8 +37,7 @@ data class AuthSessionProperties(
 ) {
     init {
         require(!absoluteTtl.isNegative && !absoluteTtl.isZero && !idleTtl.isNegative && !idleTtl.isZero) { "skeleton.auth-session.*-ttl must be > 0" }
-        require(!reuseGrace.isNegative && reuseMemory?.isNegative != true && !reuseGraceMax.isNegative) { "skeleton.auth-session.reuse-* must be >= 0" }
-        require(reuseGraceMax.isZero || reuseGraceMax >= reuseGrace) { "skeleton.auth-session.reuse-grace-max must be 0 or >= reuse-grace" }
+        require(!reuseGrace.isNegative && reuseMemory?.isNegative != true) { "skeleton.auth-session.reuse-* must be >= 0" }
         require(maxSessionsPerAccount >= 1) { "skeleton.auth-session.max-sessions-per-account must be >= 1" }
     }
 

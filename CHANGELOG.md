@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 콜드스타트로 로그인이 풀리는 문제 (2026-11-02)
 
-- `auth-session`: `reuse-grace-max`(기본 0s = 끔) - 회전 뒤 `reuse-grace` 가 지나도 **후속 토큰이 한 번도 쓰이지 않았다면** 이 상한 안에서는 옛 토큰을 다시 내면 같은 후속 토큰을 돌려준다(응답이 느려 잃은 경우). 후속이 쓰인 뒤나 상한 뒤는 그대로 재사용 = 세션 종료. 보호 환경에서 `reuse-grace` 가 0 이면 기동 경고(`DeployGuard` 경고, 실패 아님). `apps/api` · `apps/sample` 은 `30s` + `2m`. 문서 `docs/cloud-run-scale-to-zero.md` §5.
+- `auth-session`: 회전이 `markTokenUsed` 전에 후속 토큰을 먼저 넣는다 - 부분 실패(콜드 스타트의 DB 풀 타임아웃 등)가 나도 옛 토큰이 쓰이지 않은 채로 남아 같은 토큰의 재시도가 정상 회전이 된다. 보호 환경에서 `reuse-grace` 가 0 이면 기동 경고(`DeployGuard` 경고, 실패 아님). `apps/api` · `apps/sample` 은 `reuse-grace: 60s`(관행의 상한) - 실제 창은 grace 하나이고, 콜드 스타트로 응답을 잃은 클라이언트는 그 안에 같은 토큰으로 재시도해야 한다. 문서 `docs/cloud-run-scale-to-zero.md` §5.
 
 ### 푸시 알림 (2026-10-31)
 

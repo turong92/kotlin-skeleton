@@ -8,8 +8,7 @@ skeleton:
     rotation:
       max-per-window: 30               # 세션 하나가 창 안에 새로고침(회전)할 수 있는 횟수 — 토큰 행 수의 상한. 넘으면 429 AUTH.TOO_MANY_REFRESHES (세션은 그대로). 0 이면 끔
       window: 10m
-    reuse-grace: 0s                    # 같은 옛 토큰을 이 시간 안에 한 번 더 내밀면(탭 두 개 동시 새로고침) 재사용으로 치지 않는다. 0 이면 유예 없음
-    reuse-grace-max: 0s                # 후속 토큰이 아직 안 쓰였으면 이 시간까지 같은 후속 토큰을 다시 준다(콜드 스타트 · 프록시 타임아웃으로 응답을 잃은 경우). 0 이면 끔. 권장: reuse-grace 30s + reuse-grace-max 2m
+    reuse-grace: 0s                    # 같은 옛 토큰을 이 시간 안에 한 번 더 내밀면(탭 두 개 동시 새로고침 · 응답 유실 뒤 재시도) 재사용으로 치지 않고 같은 후속 토큰을 준다. 0 이면 유예 없음. 권장 60s(관행의 상한)
     max-sessions-per-account: 20       # 넘으면 가장 오래된 세션부터 닫는다
     cookie:
       name: skeleton_refresh

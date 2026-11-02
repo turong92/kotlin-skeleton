@@ -18,7 +18,7 @@ import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.get
 import org.springframework.test.web.servlet.post
 
-/** 스타터의 yml 이 정한 기본(`reuse-grace: 10s`)으로 — 응답을 잃은 refresh 의 재시도가 세션을 죽이지 않는다 */
+/** 스타터의 yml 이 정한 기본(`reuse-grace: 60s`)으로 — 응답을 잃은 refresh 의 재시도가 세션을 죽이지 않는다 */
 @SpringBootTest(properties = ["skeleton.account.password.bcrypt-strength=4", "skeleton.account.mail.link-base-url=https://app.example.com"])
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration::class, RefreshGraceIntegrationTest.Mails::class)
