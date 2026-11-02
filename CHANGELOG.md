@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `apps/sample`: 다섯 모듈 조립 - `push.enabled` · `lock-screen: FULL`(일부러 명시) · `types` 일곱 · 광고 종류 `promo.notes-tips` + `sender-name` · `fallback-zone: Asia/Seoul` · `stale-cleanup`(60일) · `webpush.enabled: true`(로컬 프로필은 시험용 VAPID 고정 쌍, `SKELETON_NOTIFICATION_WEBPUSH_VAPID_*` 로 덮는다) · `fcm.enabled: ${SKELETON_NOTIFICATION_FCM_ENABLED:false}` · 이메일 없는 계정도 하는 푸시 설정 경로 넷(`email.extra-exclude-paths`, `WriteGateCensusTest`) · 받는 사람 시간대 `push/SamplePushConfiguration`(계정 프로필의 `timeZone`) · 견본 `legal` 문서에 `marketing-night`(DRAFT · 견본임을 적음, ko/en)과 푸시를 말하는 `marketing`. 통합 시험 `push/PushJourneyIntegrationTest`. `apps/workbench` 는 클래스패스에 다섯을 모두 두되 켜지 않는다(공존 증명).
 - 프론트 짝 `@skeleton/push`(react-skeleton). `ModuleDocumentationTest` 의 알려진 패키지에 더했다.
 
+### 쓰는 곳 수정 (files review fix1)
+
+- `review`: 사진이 이미지인지를 확장자가 아니라 이미지 모듈의 상태 줄로 정한다(`.heif` · 확장자 없는 키에서 원본이 남에게 가던 것). 줄이 없는 이미지 꼴 키는 남에게 404.
+- `board`: 댓글 사진의 서명 열람 - 댓글을 관리하는 글 주인(다른 계정)에게는 이미지 모듈이 있을 때 원본 대신 변환본(`BoardUploads.signed(key, privileged)`). 이미지 모듈을 켜기 전에 공개 영역으로 복사된 사진(원본 사본)은 전체 대조가 맞추기 큐에 다시 넣어 변환본으로 덮어쓴다(`PublicImages.unregistered`). 켠 뒤 최대 하루 동안은 옛 사본이 남는다.
+
 ### 형식 협상 · 변환 대기 표시 (files K3b, 2026-11-02)
 
 - `board`: `attachmentImages` 에 `alternates: { "image/webp": { thumb, display } }`(엔진이 WebP 도 만들 때만 채워진다, 아니면 `{}` - 공개 영역에 `.alt.webp` 사본을 따로 복사한다) · 새 `attachmentsPending: [키]`(변환 중인 이미지 - 이때 `attachmentUrls` 에서 주소를 뺀다. 원본을 대신 줄 수 없고 주소는 404 였다). 상태 줄이 없는 옛 첨부와 PDF 는 그대로. platform `PublicUploads.imagesOf` 가 `PublicImages(ready, pending, refused)` 를 돌려준다(K3 에서 더한 것의 모양 변경).
