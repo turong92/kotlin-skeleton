@@ -2,6 +2,7 @@ dependencies {
     api(project(":modules:storage-image"))   // ImageRenderer 포트가 이 모듈의 공개 API 에 나온다 — 의존성 한 줄로 충분하게
 
     implementation("org.springframework.boot:spring-boot-autoconfigure")
+    implementation("org.apache.pdfbox:pdfbox:3.0.8")   // PDF 파서 · 렌더러 (Apache-2.0, 순수 자바 - AWT 로 그린다)
     implementation("org.jetbrains.kotlin:kotlin-reflect")
 
     testImplementation("org.assertj:assertj-core")

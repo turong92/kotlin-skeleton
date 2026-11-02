@@ -1,0 +1,12 @@
+# storage-image-pdfbox - PDF 1쪽 썸네일. 기본 꺼짐: 앱 yml 이 켠다. 아래 상한은 모두 안전 장치(PDF 파서는 무겁고 공격면이 넓다) - 모듈 기본으로 두고 필요할 때만 덮는다.
+skeleton:
+  storage:
+    image:
+      pdf:
+        enabled: false                      # true 면 PDF 도 변환 대상이 된다(작업 큐에서 1쪽을 그려 thumb/display JPEG 로). 암호가 걸렸거나 깨진 PDF 는 REJECTED, 원본은 지우지 않는다
+        max-source-bytes: 20971520          # 안전 상한: 원본 바이트 (20 MB) - 넘으면 읽지 않고 거절
+        max-pages: 500                      # 안전 상한: 쪽 수 - 넘으면 거절 (PDF_TOO_MANY_PAGES)
+        max-page-pixels: 25000000           # 안전 상한: 1쪽의 가로 x 세로(포인트 = 1/72 인치) - A4 는 약 50만. 넘으면 거절
+        render-timeout: 20s                 # 안전 상한: 1쪽을 그리는 시간 - 넘으면 그리기를 중단하고 거절 (PDF_RENDER_TIMEOUT)
+        max-main-memory-bytes: 16777216     # PDFBox 가 한 문서에 메모리로 쓰는 상한 (16 MB) - 넘는 만큼은 임시 파일
+        max-temp-bytes: 268435456           # PDFBox 가 한 문서에 임시 파일로 쓰는 상한 (256 MB) - 넘으면 거절

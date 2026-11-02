@@ -1538,6 +1538,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 켜는 법: `--modules storage-image-pdfbox`
 - 의존 한 줄: `implementation(project(":modules:storage-image-pdfbox"))`
 - 자동으로 따라온다: `storage`, `storage-image`
+- 설정 접두사 `skeleton.storage.image.pdf` — 키와 기본값 `docs/config/modules/storage-image-pdfbox.yml`
 - 문서: `docs/modules/storage-image-pdfbox.md`
 - 쓰지 않는 경우:
   - storage-image 없이는 쓰지 않는다(따라온다)

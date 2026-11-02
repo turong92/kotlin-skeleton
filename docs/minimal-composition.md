@@ -164,6 +164,7 @@ fails when this table and the prefixes found in module code differ.
 | `storage` | `skeleton.storage` |
 | `storage-image` | `skeleton.storage.image` |
 | `storage-image-imgproxy` | `skeleton.storage.image.imgproxy` |
+| `storage-image-pdfbox` | `skeleton.storage.image.pdf` |
 | `storage-s3` | `skeleton.storage-s3` |
 | `time` | `skeleton.time` |
 

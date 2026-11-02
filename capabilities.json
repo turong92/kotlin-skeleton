@@ -3480,7 +3480,10 @@
         "oneOf": [],
         "optional": []
       },
-      "config": null,
+      "config": {
+        "prefixes": ["skeleton.storage.image.pdf"],
+        "snippet": "docs/config/modules/storage-image-pdfbox.yml"
+      },
       "basePaths": [],
       "secrets": [],
       "docs": ["docs/modules/storage-image-pdfbox.md"],
