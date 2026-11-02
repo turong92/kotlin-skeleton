@@ -270,6 +270,16 @@ class S3PresignedStorageService(
             }
         }
 
+    /** 범위가 있으면 `Range: bytes=a-b` 로 그 구간만 받는다 (S3 는 객체 끝을 넘는 구간을 끝까지로 자른다) */
+    override fun read(key: ObjectKey, range: LongRange?): java.io.InputStream =
+        s3Client.getObject(
+            GetObjectRequest.builder()
+                .bucket(bucket)
+                .key(key.value)
+                .apply { range?.let { this.range("bytes=${it.first}-${it.last}") } }
+                .build(),
+        )
+
     /** DeleteObjects 는 요청당 1000개 제한 → 묶어서 보낸다 */
     override fun deleteAll(keys: Collection<ObjectKey>) {
         keys.distinct().chunked(1000).forEach { chunk ->

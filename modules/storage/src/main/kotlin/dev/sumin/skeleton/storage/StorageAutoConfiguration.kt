@@ -3,7 +3,9 @@ package dev.sumin.skeleton.storage
 import dev.sumin.skeleton.common.project.ProjectRegistry
 import dev.sumin.skeleton.common.project.ProjectScoped
 import dev.sumin.skeleton.common.upload.GuestUploadKeys
+import dev.sumin.skeleton.common.upload.UploadImages
 import org.springframework.beans.factory.ObjectProvider
+import org.springframework.beans.factory.SmartInitializingSingleton
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.context.properties.EnableConfigurationProperties
@@ -22,11 +24,27 @@ class StorageAutoConfiguration {
     fun storageKeyOwnership(properties: StorageProperties, projects: ObjectProvider<ProjectRegistry>): StorageKeyOwnership =
         StorageKeySchemes.create(properties, projects.getIfAvailable())
 
+    @Bean
+    fun storageImageVariantPrefixCheck(images: ObjectProvider<UploadImages>, properties: StorageProperties, projects: ObjectProvider<ProjectRegistry>): SmartInitializingSingleton =
+        SmartInitializingSingleton { checkImageVariantPrefix(images.getIfAvailable(), properties, projects.getIfAvailable()) }
+
     /** 비회원 업로드 키 확인 - 앱이 `StorageKeyOwnership` 을 바꿔도 이 빈은 남는다. 꺼져 있으면 참이 되는 키가 없다 */
     @Bean
     @ConditionalOnMissingBean
     fun guestUploadKeys(properties: StorageProperties, projects: ObjectProvider<ProjectRegistry>): GuestUploadKeys =
         StorageGuestKeys(StorageKeySchemes.create(properties, projects.getIfAvailable()))
+}
+
+/** 이미지 모듈이 조립돼 있으면 변환본 접두사가 업로드 · 공개 접두사와 겹치지 않는지 기동 때 확인한다(프로젝트 모드는 프로젝트마다) */
+internal fun checkImageVariantPrefix(images: UploadImages?, properties: StorageProperties, registry: ProjectRegistry?) {
+    images ?: return
+    if (registry == null) {
+        properties.web.requireDisjointFrom(images.variantPrefix)
+    } else {
+        registry.active.forEach { project ->
+            registry.bind(project, "skeleton.storage", StorageProperties::class.java).web.requireDisjointFrom(images.variantPrefix)
+        }
+    }
 }
 
 object StorageKeySchemes {

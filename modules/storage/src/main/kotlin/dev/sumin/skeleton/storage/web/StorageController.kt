@@ -17,6 +17,8 @@ import dev.sumin.skeleton.storage.StartMultipartUploadRequest
 import dev.sumin.skeleton.storage.StorageFileCandidate
 import dev.sumin.skeleton.storage.StorageFileValidator
 import dev.sumin.skeleton.storage.StorageKeyScheme
+import dev.sumin.skeleton.storage.StorageUploadCompletion
+import dev.sumin.skeleton.storage.UploadCompletionResult
 import dev.sumin.skeleton.storage.StorageWebProperties
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
@@ -64,6 +66,11 @@ data class StorageGuestCandidateRequest(
 )
 
 data class StorageKeyRequest(@field:NotBlank val key: String)
+
+/** 완료 호출의 응답 - [image] 는 이미지 모듈이 있고 이 파일을 이미지로 등록했을 때만 */
+data class StorageCompleteResponse(val key: String, val contentType: String?, val sizeBytes: Long, val image: StorageImageInfo?)
+
+data class StorageImageInfo(val status: String, val width: Int?, val height: Int?)
 
 data class StorageMultipartStartResponse(val key: String, val uploadId: String)
 
@@ -130,7 +137,34 @@ class StorageController(
     private val keys: StorageKeyScheme = StorageKeyScheme(web),
     private val guestUploads: StorageGuestUploads? = null,
     private val clientIps: ClientIps = ClientIps(),
+    private val completion: StorageUploadCompletion = StorageUploadCompletion(storage),
 ) {
+    @Operation(
+        summary = "Tell the server a direct upload is done, so it can inspect the bytes",
+        description = "Reads the head of the caller's object, checks its content against the declared type (and any UploadInspector), and answers the sniffed type. " +
+            "A refused file is deleted (400 STORAGE.FILE_REJECTED). Someone else's key is a 404 and nothing is read. Idempotent.",
+    )
+    @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = StorageCompleteResponse::class)
+    @PostMapping("/complete")
+    fun complete(authentication: Authentication?, @Valid @RequestBody request: StorageKeyRequest): Any {
+        val key = ownedKey(authentication.accountId(), request.key)
+        return Response.ok(completion.complete(key, validator.rule.maxSizeBytes).toResponse())
+    }
+
+    @Operation(
+        summary = "Complete a guest upload (the same inspection, without signing in)",
+        description = "Only when skeleton.storage.web.guest.enabled (else 401). Counted per IP separately from presigning; a key that is not a genuine guest key is a 404.",
+    )
+    @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = StorageCompleteResponse::class)
+    @PostMapping("/guest/complete")
+    fun completeGuest(http: HttpServletRequest, @Valid @RequestBody request: StorageKeyRequest): Any {
+        val uploads = guestUploads ?: throw ApplicationException("Authentication required", StorageErrorCode.UNAUTHENTICATED)
+        uploads.admitCompletion(clientIps.of(http).limitKey)
+        val key = runCatching { ObjectKey(request.key) }.getOrNull()
+        if (key == null || !keys.isGuestKey(key.value)) throw ApplicationException("Object not found: ${request.key}", StorageErrorCode.OBJECT_NOT_FOUND)
+        return Response.ok(completion.complete(key, keys.properties().guest.maxSizeBytes).toResponse())
+    }
+
     @Operation(
         summary = "Presign a direct image upload without signing in",
         description = "Only when skeleton.storage.web.guest.enabled (else 401). One image, an IP rate limit, no SVG; the key is `<prefix>/g/<uuid>.<mac>/file.<ext>`.",
@@ -238,6 +272,9 @@ class StorageController(
         }
         return key
     }
+
+    private fun UploadCompletionResult.toResponse() =
+        StorageCompleteResponse(key, contentType, sizeBytes, image?.let { StorageImageInfo(it.state.name, it.width, it.height) })
 
     private fun StorageCandidateRequest.toCandidate() = StorageFileCandidate(fileName, contentType, sizeBytes)
 

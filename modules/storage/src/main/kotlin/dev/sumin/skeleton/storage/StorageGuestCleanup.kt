@@ -2,11 +2,12 @@ package dev.sumin.skeleton.storage
 
 import dev.sumin.skeleton.common.project.ProjectRegistry
 import dev.sumin.skeleton.common.time.TimeProvider
+import dev.sumin.skeleton.common.upload.UploadImages
 import dev.sumin.skeleton.common.upload.UploadedKeyUsage
 import org.slf4j.LoggerFactory
 
 /**
- * 비회원 업로드 중 [StorageGuestProperties.GuestCleanup.ttl] 안에 글 · 댓글에 붙지 않은 것을 지운다 (`skeleton.storage.web.guest.cleanup.enabled=true` 일 때만 주기 작업이 부른다).
+ * 비회원 업로드 중 [StorageGuestProperties.GuestCleanup.ttl] 안에 글 · 댓글에 붙지 않은 것을 지운다 (`skeleton.storage.web.guest.cleanup.enabled=true` 일 때만 주기 작업이 부른다). 이미지 모듈이 있으면 지운 키의 변환본도 지운다.
  * 지우는 조건: 키가 비회원 꼴이고 MAC 이 맞으며(남이 둔 파일은 건드리지 않는다), 만든 지 ttl 이 지났고, [UploadedKeyUsage] 가 사용 중이라고 하지 않은 것.
  * [UploadedKeyUsage] 구현이 없으면 아무것도 지우지 않는다. 쪽마다 붙었는지 물어 고아가 [StorageGuestProperties.GuestCleanup.batchSize] 개 모일 때까지 넘기고 그만큼만 지운다 - 남은 것은 다음 틱에.
  * 프로젝트 모드에서는 프로젝트마다 그 프로젝트의 설정 · 저장소로 돈다.
@@ -17,6 +18,8 @@ class StorageGuestCleanup(
     private val usage: () -> UploadedKeyUsage?,
     private val time: TimeProvider,
     private val projects: ProjectRegistry? = null,
+    /** 이미지 모듈 - 있으면 지운 키의 상태 줄과 변환본도 같이 지운다 */
+    private val images: () -> UploadImages? = { null },
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -49,7 +52,10 @@ class StorageGuestCleanup(
             token = page.nextContinuationToken.takeIf { page.truncated }
         } while (token != null && orphans.size < cleanup.batchSize)
         val doomed = orphans.take(cleanup.batchSize)
-        if (doomed.isNotEmpty()) storage.deleteAll(doomed)
+        if (doomed.isNotEmpty()) {
+            storage.deleteAll(doomed)
+            images()?.forget(doomed.map { it.value })   // 원본을 지운 뒤에 - 원본이 남은 채 변환본만 사라지지 않게
+        }
         return doomed.size
     }
 }

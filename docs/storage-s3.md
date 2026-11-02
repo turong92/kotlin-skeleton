@@ -41,7 +41,7 @@ If `bucket` is missing, the S3 client and presigner can exist but the
 ## HTTP endpoints for browsers (`modules:storage`)
 
 With a bucket configured (`PresignedStorage` bean exists), a servlet app with Spring Security gets `/api/v1/storage/*` from `modules:storage`
-(`StorageController`, authenticated, OpenAPI-documented): `POST /validate`, `/presign`, `/presign-download`, `/multipart/start|part|complete|abort`.
+(`StorageController`, authenticated, OpenAPI-documented): `POST /validate`, `/presign`, `/presign-download`, `/multipart/start|part|complete|abort`, and `POST /complete` (the browser says the direct upload is done; the server inspects the bytes — `ObjectStorage.read(key, range)` is a ranged `GetObject` here — and deletes a file whose content does not match its declared type, see `docs/modules/storage.md`).
 The server picks the key — `<skeleton.storage.web.key-prefix>/<account id>/<uuid>/<file name>` — and only accepts keys under the caller's own prefix
 (someone else's key is `404 STORAGE.OBJECT_NOT_FOUND`). `skeleton.storage.web.key-owner=OPAQUE` (needs `key-secret`, env `<P>_STORAGE_WEB_KEY_SECRET`) issues `<key-prefix>/o/<uuid>.<mac>/file[.<ext>]` (the client file name is dropped; only a known extension is kept) instead, so the key never carries the account id; `StorageKeyOwnership.owns(accountId, key)` is the bean an app's attachment check uses (see `docs/modules/storage.md`). Uploads must pass `StorageFileValidator` (`skeleton.storage.validation.*`); a rejected file is
 `400 STORAGE.FILE_REJECTED` with the reasons in `data.errors`. `skeleton.storage.web.enabled=false` removes the controller (an app that wants its own
@@ -68,6 +68,8 @@ val copied = storage.copy(
 )
 
 val listed = storage.list(ListObjectsRequest(prefix = "avatars/", maxKeys = 100))
+
+val head = storage.read(ObjectKey("avatars/user-1.png"), 0L..262143L).use { it.readNBytes(262144) }   // Range: bytes=0-262143
 ```
 
 Result DTOs include the object key, ETag/version when the provider returns them,

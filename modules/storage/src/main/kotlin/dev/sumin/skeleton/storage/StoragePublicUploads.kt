@@ -3,6 +3,9 @@ package dev.sumin.skeleton.storage
 import dev.sumin.skeleton.common.upload.PrivateUploadAccess
 import dev.sumin.skeleton.common.upload.PublicUploadPurger
 import dev.sumin.skeleton.common.upload.PublicUploads
+import dev.sumin.skeleton.common.upload.UploadImageState
+import dev.sumin.skeleton.common.upload.UploadImages
+import dev.sumin.skeleton.common.upload.UploadVariantsPendingException
 import java.time.Duration
 
 /**
@@ -12,6 +15,8 @@ import java.time.Duration
 class StoragePublicUploads(
     private val storage: ObjectStorage,
     private val keys: StorageKeyScheme,
+    /** 이미지 모듈 - 있으면 이미지는 원본이 아니라 변환본(`display` · `thumb`, 메타데이터 없음)이 공개 영역에 복사된다 */
+    private val images: () -> UploadImages? = { null },
     private val purger: () -> PublicUploadPurger? = { null },
 ) : PublicUploads {
     override fun urlOf(privateKey: String): String {
@@ -28,6 +33,9 @@ class StoragePublicUploads(
 
     override fun publicKeyOf(privateKey: String): String = keys.publicKeyOf(privateKey)
 
+    override fun publicKeysOf(privateKey: String): List<String> =
+        if (images() != null && isImageKey(privateKey)) listOf(keys.publicKeyOf(privateKey), thumbKeyOf(privateKey)) else listOf(keys.publicKeyOf(privateKey))
+
     override fun mayPublish(privateKey: String): Boolean =
         keys.properties().`public`.enabled &&
             privateKey.substringAfterLast('/').substringAfterLast('.', missingDelimiterValue = "").lowercase() in PUBLISHABLE_EXTENSIONS
@@ -38,6 +46,8 @@ class StoragePublicUploads(
         // 원본의 Content-Type 을 그대로 쓴다 (확장자로 짐작하지 않는다) - 허용 밖이면 공개하지 않는다
         val type = storage.metadata(ObjectKey(privateKey))?.contentType?.substringBefore(';')?.trim()?.lowercase() ?: return false
         if (type !in PUBLISHABLE_TYPES) return false
+        val imageModule = images()
+        if (imageModule != null && type in IMAGE_TYPES) return publishVariants(imageModule, privateKey, pub.cacheControl)
         storage.copy(
             CopyObjectRequest(
                 sourceKey = ObjectKey(privateKey),
@@ -49,7 +59,38 @@ class StoragePublicUploads(
         return true
     }
 
-    override fun unpublish(privateKey: String) = deletePublicKey(keys.publicKeyOf(privateKey))
+    /** 남에게는 원본이 아니라 변환본 - 변환 전이면 늦춰 다시 하게 하고(원본을 대신 주지 않는다), 변환할 수 없는 이미지는 공개하지 않는다 */
+    private fun publishVariants(imageModule: UploadImages, privateKey: String, cacheControl: String): Boolean {
+        val status = imageModule.status(privateKey)
+        if (status == null) {
+            imageModule.ensure(privateKey)
+            throw UploadVariantsPendingException(privateKey)
+        }
+        when (status.state) {
+            UploadImageState.READY -> Unit
+            UploadImageState.PENDING -> throw UploadVariantsPendingException(privateKey)
+            UploadImageState.REJECTED, UploadImageState.UNSUPPORTED, UploadImageState.FAILED -> return false
+        }
+        val display = status.variants[UploadImages.DISPLAY] ?: return false
+        copyVariant(display, keys.publicKeyOf(privateKey), cacheControl)
+        status.variants[UploadImages.THUMB]?.let { copyVariant(it, thumbKeyOf(privateKey), cacheControl) }
+        return true
+    }
+
+    private fun copyVariant(variant: dev.sumin.skeleton.common.upload.UploadImageVariant, destination: String, cacheControl: String) {
+        storage.copy(CopyObjectRequest(sourceKey = ObjectKey(variant.key), destinationKey = ObjectKey(destination), contentType = variant.contentType, cacheControl = cacheControl))
+    }
+
+    /** 공개 키 꼬리의 확장자 앞에 `.thumb` - 비공개 키에서만 계산된다 */
+    private fun thumbKeyOf(privateKey: String): String {
+        val publicKey = keys.publicKeyOf(privateKey)
+        val dot = publicKey.lastIndexOf('.')
+        return if (dot > publicKey.lastIndexOf('/')) publicKey.substring(0, dot) + ".thumb" + publicKey.substring(dot) else "$publicKey.thumb"
+    }
+
+    private fun isImageKey(privateKey: String) = privateKey.substringAfterLast('/').substringAfterLast('.', missingDelimiterValue = "").lowercase() in IMAGE_EXTENSIONS
+
+    override fun unpublish(privateKey: String) = publicKeysOf(privateKey).forEach(::deletePublicKey)
 
     override fun deletePublicKey(publicKey: String) {
         storage.delete(ObjectKey(publicKey))   // 객체 삭제가 먼저이고 동기다 - 공개 쪽 보장
@@ -75,6 +116,8 @@ class StoragePublicUploads(
     private companion object {
         /** 공개해도 되는 형식 - 이미지(SVG 제외: 스크립트를 담을 수 있다)와 PDF. 그 밖은 비공개로만 둔다 */
         val PUBLISHABLE_EXTENSIONS = setOf("jpg", "jpeg", "png", "webp", "gif", "avif", "heic", "pdf")
+        val IMAGE_EXTENSIONS = setOf("jpg", "jpeg", "png", "webp", "gif", "avif", "heic")
+        val IMAGE_TYPES = setOf("image/jpeg", "image/png", "image/webp", "image/gif", "image/avif", "image/heic")
         val PUBLISHABLE_TYPES = setOf("image/jpeg", "image/png", "image/webp", "image/gif", "image/avif", "image/heic", "application/pdf")
     }
 }

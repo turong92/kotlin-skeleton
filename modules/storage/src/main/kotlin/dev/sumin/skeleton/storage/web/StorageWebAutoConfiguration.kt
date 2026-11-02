@@ -7,6 +7,7 @@ import dev.sumin.skeleton.common.time.asClock
 import dev.sumin.skeleton.common.upload.PrivateUploadAccess
 import dev.sumin.skeleton.common.upload.PublicUploadPurger
 import dev.sumin.skeleton.common.upload.PublicUploads
+import dev.sumin.skeleton.common.upload.UploadImages
 import dev.sumin.skeleton.common.upload.UploadedKeyUsage
 import dev.sumin.skeleton.common.upload.UploadedKeyUsages
 import dev.sumin.skeleton.common.web.ClientIps
@@ -26,6 +27,9 @@ import dev.sumin.skeleton.storage.StorageKeySchemes
 import dev.sumin.skeleton.storage.StoragePrivateUploadAccess
 import dev.sumin.skeleton.storage.StorageProperties
 import dev.sumin.skeleton.storage.StoragePublicUploads
+import dev.sumin.skeleton.storage.StorageUploadCompletion
+import dev.sumin.skeleton.storage.UploadCompletionListener
+import dev.sumin.skeleton.storage.UploadInspector
 import java.time.Duration
 import java.time.Instant
 import org.slf4j.LoggerFactory
@@ -77,14 +81,29 @@ class StorageWebAutoConfiguration {
         projects: ObjectProvider<ProjectRegistry>,
         guestUploads: StorageGuestUploads,
         clientIps: ObjectProvider<ClientIps>,
-    ): StorageController = StorageController(storage, validator, properties.web, StorageKeySchemes.create(properties, projects.getIfAvailable()), guestUploads, clientIps.getIfAvailable { ClientIps() })
+        completion: StorageUploadCompletion,
+    ): StorageController = StorageController(storage, validator, properties.web, StorageKeySchemes.create(properties, projects.getIfAvailable()), guestUploads, clientIps.getIfAvailable { ClientIps() }, completion)
+
+    /** 완료 호출 - 검사기 · 완료 리스너 · 이미지 모듈은 부를 때마다 빈에서 찾는다(이미지 모듈이 뒤에 조립돼도 된다) */
+    @Bean
+    @ConditionalOnBean(PresignedStorage::class)
+    @ConditionalOnMissingBean
+    fun storageUploadCompletion(
+        storage: PresignedStorage,
+        inspectors: ObjectProvider<UploadInspector>,
+        listeners: ObjectProvider<UploadCompletionListener>,
+        images: ObjectProvider<UploadImages>,
+    ): StorageUploadCompletion = StorageUploadCompletion(storage, { inspectors.orderedStream().toList() }, { listeners.orderedStream().toList() }, { images.getIfAvailable() })
 
     /** 켜져 있을 때만 비회원 발급 경로 하나를 익명에 연다 - 다른 경로는 그대로 로그인이 필요하다 */
     @Bean
     @ConditionalOnMissingBean(name = ["storageGuestPublicEndpointContributor"])
     @ConditionalOnProperty(prefix = "skeleton.storage.web.guest", name = ["enabled"], havingValue = "true")
     fun storageGuestPublicEndpointContributor(): PublicEndpointContributor =
-        PublicEndpointContributor { registry -> registry.add("POST", "/api/v1/storage/guest/presign") }
+        PublicEndpointContributor { registry ->
+            registry.add("POST", "/api/v1/storage/guest/presign")
+            registry.add("POST", "/api/v1/storage/guest/complete")
+        }
 
     /**
      * 공개 영역 - 빈은 저장소가 있으면 늘 만들고(프로젝트 모드에서는 어느 프로젝트가 켰는지를 시작 때 알 수 없다), **켜졌는지는 부를 때마다 지금 프로젝트의 설정으로** 묻는다([PublicUploads.enabled]).
@@ -98,7 +117,8 @@ class StorageWebAutoConfiguration {
         properties: StorageProperties,
         projects: ObjectProvider<ProjectRegistry>,
         purgers: ObjectProvider<PublicUploadPurger>,
-    ): PublicUploads = StoragePublicUploads(storage, StorageKeySchemes.create(properties, projects.getIfAvailable())) { purgers.getIfAvailable() }
+        images: ObjectProvider<UploadImages>,
+    ): PublicUploads = StoragePublicUploads(storage, StorageKeySchemes.create(properties, projects.getIfAvailable()), { images.getIfAvailable() }, { purgers.getIfAvailable() })
 
     @Bean
     @ConditionalOnBean(PresignedStorage::class)
@@ -126,7 +146,8 @@ class StorageWebAutoConfiguration {
         usage: ObjectProvider<UploadedKeyUsage>,
         time: ObjectProvider<TimeProvider>,
         projects: ObjectProvider<ProjectRegistry>,
-    ): StorageGuestCleanup = StorageGuestCleanup(storage, StorageKeySchemes.create(properties, projects.getIfAvailable()), { UploadedKeyUsages.union(usage.orderedStream().toList()) }, time.getIfAvailable { TimeProvider.systemUtc() }, projects.getIfAvailable())
+        images: ObjectProvider<UploadImages>,
+    ): StorageGuestCleanup = StorageGuestCleanup(storage, StorageKeySchemes.create(properties, projects.getIfAvailable()), { UploadedKeyUsages.union(usage.orderedStream().toList()) }, time.getIfAvailable { TimeProvider.systemUtc() }, projects.getIfAvailable(), { images.getIfAvailable() })
 
     /**
      * 한 시간마다(처음은 5분 뒤) 회수를 돌린다 - `scheduler` 모듈의 `skeletonTaskScheduler` 빈이 있어야 돈다 (없으면 경고만 하고 돌지 않는다).

@@ -38,9 +38,33 @@ class FakePresignedStorage : PresignedStorage {
         aborted += request
     }
 
-    override fun upload(request: UploadObjectRequest) = StoredObjectWriteResult(request.key)
-    override fun copy(request: CopyObjectRequest) = StoredObjectWriteResult(request.destinationKey)
-    override fun list(request: ListObjectsRequest) = ListedObjects(emptyList())
-    override fun metadata(key: ObjectKey): StoredObjectMetadata? = null
-    override fun delete(key: ObjectKey) = Unit
+    /** 올라와 있는 객체 - 완료 호출 시험이 채운다 (키 -> 바이트 · 선언한 Content-Type) */
+    val objects = linkedMapOf<String, Pair<ByteArray, String?>>()
+    val reads = mutableListOf<String>()
+    val deleted = mutableListOf<String>()
+
+    override fun upload(request: UploadObjectRequest): StoredObjectWriteResult {
+        objects[request.key.value] = request.content to request.contentType
+        return StoredObjectWriteResult(request.key)
+    }
+
+    override fun copy(request: CopyObjectRequest): StoredObjectWriteResult {
+        val source = objects[request.sourceKey.value]
+        if (source != null) objects[request.destinationKey.value] = source.first to (request.contentType ?: source.second)
+        return StoredObjectWriteResult(request.destinationKey)
+    }
+
+    override fun list(request: ListObjectsRequest) = ListedObjects(objects.keys.filter { it.startsWith(request.prefix) }.map { StoredObjectSummary(ObjectKey(it)) })
+    override fun metadata(key: ObjectKey): StoredObjectMetadata? = objects[key.value]?.let { StoredObjectMetadata(key, sizeBytes = it.first.size.toLong(), contentType = it.second) }
+
+    override fun read(key: ObjectKey, range: LongRange?): java.io.InputStream {
+        reads += key.value
+        val bytes = objects[key.value]?.first ?: error("no such object: ${key.value}")
+        return (if (range == null) bytes else bytes.copyOfRange(range.first.toInt(), minOf(bytes.size.toLong(), range.last + 1).toInt())).inputStream()
+    }
+
+    override fun delete(key: ObjectKey) {
+        deleted += key.value
+        objects.remove(key.value)
+    }
 }

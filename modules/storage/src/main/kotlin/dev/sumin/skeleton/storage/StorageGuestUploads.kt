@@ -44,6 +44,17 @@ class StorageGuestUploads(
         return ObjectKey(keys.issueGuest(candidate.contentType!!))
     }
 
+    /**
+     * 비회원 완료 호출을 들이는 문턱: 켜져 있는가 -> IP 별 한도(발급과 **따로 센다** - 발급 한도를 비우지도 먹지도 않는다). 통과하면 돌아오고, 아니면 [ApplicationException] (꺼짐 401 · 한도 429).
+     * 한도는 소유 확인보다 먼저 센다 - 틀린 키를 두들기는 요청도 한도를 먹는다.
+     */
+    fun admitCompletion(limitKey: String) {
+        val guest = keys.properties().guest
+        if (!guest.enabled) throw ApplicationException("Authentication required", StorageErrorCode.UNAUTHENTICATED)
+        val decision = limiter().consume("storage:guest-complete:$limitKey", guest.rateLimit.capacity, guest.rateLimit.window.toMillis(), clock.instant())
+        if (!decision.allowed) throw ApplicationException("Too many uploads", StorageErrorCode.RATE_LIMITED)
+    }
+
     private fun check(c: StorageCandidateInput, guest: StorageGuestProperties): List<StorageValidationIssue> {
         val issues = mutableListOf<StorageValidationIssue>()
         val type = c.contentType?.trim()?.lowercase()

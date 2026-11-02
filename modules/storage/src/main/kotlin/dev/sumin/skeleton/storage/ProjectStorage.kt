@@ -21,6 +21,7 @@ class ProjectRoutedStorage(private val parts: ProjectScoped<java.util.Optional<P
     override fun copy(request: CopyObjectRequest) = target.copy(request)
     override fun move(request: MoveObjectRequest) = target.move(request)
     override fun list(request: ListObjectsRequest) = target.list(request)
+    override fun read(key: ObjectKey, range: LongRange?) = target.read(key, range)
     override fun presignUpload(request: PresignedUploadRequest) = target.presignUpload(request)
     override fun presignDownload(request: PresignedDownloadRequest) = target.presignDownload(request)
     override fun startMultipartUpload(request: StartMultipartUploadRequest) = target.startMultipartUpload(request)
@@ -53,6 +54,8 @@ class KeyPrefixedPresignedStorage(private val delegate: PresignedStorage, prefix
         val listed = delegate.list(request.copy(prefix = prefix + request.prefix))
         return listed.copy(objects = listed.objects.map { it.copy(key = plain(it.key)) })
     }
+
+    override fun read(key: ObjectKey, range: LongRange?) = delegate.read(real(key), range)
 
     override fun presignUpload(request: PresignedUploadRequest) = delegate.presignUpload(request.copy(key = real(request.key))).let { it.copy(key = plain(it.key)) }
     override fun presignDownload(request: PresignedDownloadRequest) = delegate.presignDownload(request.copy(key = real(request.key))).let { it.copy(key = plain(it.key)) }

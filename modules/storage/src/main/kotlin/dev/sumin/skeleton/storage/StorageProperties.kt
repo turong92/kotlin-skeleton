@@ -42,6 +42,22 @@ data class StorageWebProperties(
         }
     }
 
+    /**
+     * 이미지 변환본의 접두사([dev.sumin.skeleton.common.upload.UploadImages.variantPrefix])가 업로드 접두사(비회원 `g/` 포함) · 공개 접두사와 겹치지 않는가 -
+     * 겹치면 변환본이 누구의 업로드로 읽히거나 공개 영역의 전체 대조가 변환본을 지운다. 겹치면 기동 실패.
+     */
+    fun requireDisjointFrom(variantPrefix: String) {
+        val variants = variantPrefix.trim('/')
+        require(variants.isNotEmpty()) { "The image variant prefix must not be blank" }
+        fun overlaps(other: String) = variants == other || variants.startsWith("$other/") || other.startsWith("$variants/")
+        val up = keyPrefix.trim('/')
+        require(!overlaps(up)) { "The image variant prefix ('$variants') must not overlap skeleton.storage.web.key-prefix ('$up') - variants are not uploads" }
+        if (`public`.enabled) {
+            val pub = `public`.prefix.trim('/')
+            require(!overlaps(pub)) { "The image variant prefix ('$variants') must not overlap skeleton.storage.web.public.prefix ('$pub') - the public area must hold only published copies" }
+        }
+    }
+
     /** 비밀은 로그 · 오류 메시지에 나오지 않는다 */
     override fun toString(): String =
         "StorageWebProperties(enabled=$enabled, keyPrefix=$keyPrefix, keyOwner=$keyOwner, keySecret=${if (keySecret.isEmpty()) "" else "****"})"

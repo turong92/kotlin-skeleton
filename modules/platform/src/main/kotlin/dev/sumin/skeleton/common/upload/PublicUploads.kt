@@ -29,12 +29,19 @@ interface PublicUploads {
     fun publicKeyOf(privateKey: String): String
 
     /**
+     * 이 비공개 키가 공개 영역에 만드는 객체 전부 - 이미지 모듈이 있으면 `display` 복사본([publicKeyOf])과 썸네일 복사본.
+     * 전체 대조는 「줄이 가리키는 공개 객체」를 이것으로 센다(안 그러면 썸네일을 고아로 지운다). 기본은 [publicKeyOf] 하나
+     */
+    fun publicKeysOf(privateKey: String): List<String> = listOf(publicKeyOf(privateKey))
+
+    /**
      * 공개 영역에 복사한다(있으면 덮어쓴다). 원본의 Content-Type 을 읽어 그대로 쓰고 허용 목록(image/jpeg · png · webp · gif · avif · heic, application/pdf)
      * 밖이면 **공개하지 않고** false 를 돌려준다.
+     * 이미지 모듈([UploadImages])이 있으면 원본이 아니라 변환본을 복사한다 - 변환 전이면 [UploadVariantsPendingException], 변환할 수 없는 이미지면 false.
      */
     fun publish(privateKey: String): Boolean
 
-    /** 공개 영역에서 **객체만** 지운다(동기). CDN 캐시는 [purgePublicKey] 가 따로 - 요청 스레드에서 외부 CDN 을 기다리지 않는다 */
+    /** 공개 영역에서 **객체만**([publicKeysOf] 전부) 지운다(동기). CDN 캐시는 [purgePublicKey] 가 따로 - 요청 스레드에서 외부 CDN 을 기다리지 않는다 */
     fun unpublish(privateKey: String)
 
     /** 공개 영역에 있는 객체의 키 전부(쪽을 넘겨 가며) - 줄이 가리키지 않는 객체를 찾는 전체 대조용 */

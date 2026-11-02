@@ -54,6 +54,13 @@ interface ObjectStorage : StorageService {
     }
 
     fun list(request: ListObjectsRequest): ListedObjects
+
+    /**
+     * 객체의 바이트를 읽는다 - [range] 가 있으면 그 구간만(양 끝 포함, 객체 끝을 넘으면 끝까지). 서버가 올라온 내용을 보는 유일한 길(업로드 검사 · 이미지 변환).
+     * 호출한 쪽이 스트림을 닫는다. 없는 객체는 예외. 읽기를 구현하지 않은 저장소는 [UnsupportedOperationException] 이다(옛 구현이 그대로 컴파일되도록 기본 구현이 던진다).
+     */
+    fun read(key: ObjectKey, range: LongRange? = null): java.io.InputStream =
+        throw UnsupportedOperationException("${javaClass.name} does not support reading objects (ObjectStorage.read)")
 }
 
 interface PresignedStorage : ObjectStorage {
