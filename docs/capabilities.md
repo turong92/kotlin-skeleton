@@ -1481,6 +1481,8 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 의존 한 줄: `implementation(project(":modules:storage-image"))`
 - 자동으로 따라온다: `storage`
 - 함께 골라야 한다: `storage-image-jdbc`, `storage-image-imageio`
+- 설정 접두사 `skeleton.storage.image` — 키와 기본값 `docs/config/modules/storage-image.yml`
+- HTTP 경로: `/api/v1/storage`
 - 문서: `docs/modules/storage-image.md`
 - 짝 프런트(react-skeleton): 항목 `storage` · 패키지 `@skeleton/storage` · 조각 `--packages storage`
 - 쓰지 않는 경우:

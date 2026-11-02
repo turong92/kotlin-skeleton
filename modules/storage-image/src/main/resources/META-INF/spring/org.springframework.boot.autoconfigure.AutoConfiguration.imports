@@ -1,0 +1,2 @@
+dev.sumin.skeleton.storage.image.StorageImageAutoConfiguration
+dev.sumin.skeleton.storage.image.web.StorageImageWebAutoConfiguration

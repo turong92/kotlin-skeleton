@@ -162,6 +162,7 @@ fails when this table and the prefixes found in module code differ.
 | `scheduler` | `skeleton.scheduler` |
 | `search` | `skeleton.search` |
 | `storage` | `skeleton.storage` |
+| `storage-image` | `skeleton.storage.image` |
 | `storage-s3` | `skeleton.storage-s3` |
 | `time` | `skeleton.time` |
 

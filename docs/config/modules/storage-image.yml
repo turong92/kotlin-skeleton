@@ -1,0 +1,21 @@
+# storage-image — 업로드한 이미지의 변환본(thumb · display). 기본 꺼짐: 앱 yml 이 켠다. 엔진(storage-image-imageio)과 상태 저장소(storage-image-jdbc)가 함께 있어야 한다.
+skeleton:
+  storage:
+    image:
+      enabled: false                        # true 면 변환본을 만들고 남에게는 원본 대신 변환본만 준다 (공개 영역 · 리뷰 사진). 엔진 · 상태 저장소 빈이 없으면 기동 실패
+      prefix: variants                      # 변환본이 놓이는 저장소 접두사 - 업로드 key-prefix · 공개 prefix 와 겹치면 기동 실패. 경로는 <prefix>/<원본 키 해시 앞 32자>/<thumb|display>.<jpg|png>
+      max-pixels: 100000000                 # 안전 상한: 폭 x 높이가 이보다 크면 디코드하지 않고 거절 (완료 호출 IMAGE_TOO_LARGE · 작업은 REJECTED, 원본은 남는다)
+      max-source-bytes: 52428800            # 안전 상한: 원본 바이트 (50 MB)
+      max-concurrent: 1                     # 안전 상한: 인스턴스당 동시에 변환하는 작업 수 (기다리는 동안 큐 일꾼 스레드를 잡는다). 변환 메모리 ≈ 한 장 × 이 값
+      access-ttl: 10m                       # POST /api/v1/storage/images 가 내는 변환본 서명 주소의 수명
+      variants:                             # 이름 둘(thumb · display)은 board · review · 화면이 아는 계약, 크기 · 품질만 정한다 (긴 변을 상자에 맞추고 키우지 않는다)
+        thumb:
+          max-width: 400
+          max-height: 400
+          quality: 82                       # JPEG 품질 1..100 (투명 이미지는 PNG 라 무시)
+        display:
+          max-width: 1600
+          max-height: 1600
+          quality: 82
+      http:
+        enabled: true                       # false 면 POST /api/v1/storage/images 를 등록하지 않는다

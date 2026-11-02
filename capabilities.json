@@ -3342,8 +3342,11 @@
         "oneOf": [],
         "optional": ["storage-image-imgproxy", "storage-image-pdfbox"]
       },
-      "config": null,
-      "basePaths": [],
+      "config": {
+        "prefixes": ["skeleton.storage.image"],
+        "snippet": "docs/config/modules/storage-image.yml"
+      },
+      "basePaths": ["/api/v1/storage"],
       "secrets": [],
       "docs": ["docs/modules/storage-image.md"],
       "frontend": {
