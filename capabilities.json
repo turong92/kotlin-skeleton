@@ -3279,7 +3279,7 @@
       "module": "storage",
       "path": "modules/storage",
       "status": "stable",
-      "summary": "저장소 계약(ObjectStorage · PresignedStorage) · 파일 크기/확장자/content-type 검증 + 브라우저 직접 업로드 HTTP(/api/v1/storage: presign · 멀티파트).",
+      "summary": "저장소 계약(ObjectStorage · PresignedStorage) · 파일 크기/확장자/content-type 검증 + 브라우저 직접 업로드 HTTP(/api/v1/storage: presign · 멀티파트 · 올림 완료 검사 /complete) · 매직 바이트 판정 · 검사기(UploadInspector) 확장 지점.",
       "starter": false,
       "newProjectFlag": "--modules storage,storage-s3",
       "autoIncludes": ["crypto"],
@@ -3320,11 +3320,160 @@
       "notFor": [
         "실제 저장소는 어댑터(storage-s3)가 구현한다 — 함께 고른다",
         "PresignedStorage 빈이 있어야(= 버킷 설정) HTTP 길이 열린다",
-        "이미지 변환 · 썸네일은 없다"
+        "이미지 변환 · 썸네일은 storage-image 가 한다(이 모듈은 내용 검사까지)"
       ],
       "keywords": {
         "ko": ["파일 업로드", "이미지 업로드", "첨부파일", "프리사인", "파일 검증"],
         "en": ["file upload", "image upload", "attachment", "presigned url", "multipart upload"]
+      }
+    },
+    {
+      "id": "storage-image",
+      "kind": "module",
+      "module": "storage-image",
+      "path": "modules/storage-image",
+      "status": "experimental",
+      "summary": "업로드한 이미지의 변환본(썸네일 thumb · 표시본 display, EXIF 없음)을 작업 큐로 만들고 남에게는 원본 대신 변환본만 준다 — 이미지 크기(픽셀 폭탄) 상한 · 지연 등록. 기본 꺼짐.",
+      "starter": false,
+      "newProjectFlag": "--modules storage-image,storage-image-jdbc,storage-image-imageio",
+      "autoIncludes": ["storage"],
+      "needs": {
+        "requires": ["storage-image-jdbc", "storage-image-imageio"],
+        "oneOf": [],
+        "optional": ["storage-image-imgproxy", "storage-image-pdfbox"]
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/storage-image.md"],
+      "frontend": {
+        "capabilities": ["storage"],
+        "newProjectFlag": "--packages storage",
+        "packages": ["@skeleton/storage"]
+      },
+      "notFor": [
+        "storage 가 먼저다 — 완료 호출과 검사는 storage 에 있고 이 모듈은 이미지 변환만 한다",
+        "엔진(storage-image-imageio 등)과 상태 저장소(storage-image-jdbc)를 함께 고른다 — 없으면 켰을 때 기동 실패",
+        "켜지 않으면(기본) 아무것도 바뀌지 않는다"
+      ],
+      "keywords": {
+        "ko": ["이미지 썸네일", "이미지 리사이즈", "표시본", "EXIF 제거"],
+        "en": ["image thumbnail", "image resize", "strip exif", "image variants"]
+      }
+    },
+    {
+      "id": "storage-image-imageio",
+      "kind": "module",
+      "module": "storage-image-imageio",
+      "path": "modules/storage-image-imageio",
+      "status": "experimental",
+      "summary": "storage-image 의 기본 변환 엔진 — 앱 안 순수 자바(ImageIO + TwelveMonkeys), 추가 서버 없음. 출력은 JPEG(투명이면 PNG), JVM 전용.",
+      "starter": false,
+      "newProjectFlag": "--modules storage-image-imageio",
+      "autoIncludes": ["storage", "storage-image"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/storage-image-imageio.md"],
+      "frontend": null,
+      "notFor": [
+        "storage-image 없이는 쓰지 않는다(따라온다)",
+        "HEIC · AVIF 원본은 읽지 못한다 — 그런 입력이 필요하면 storage-image-imgproxy",
+        "네이티브 이미지(AWT)에서는 쓰지 않는다"
+      ],
+      "keywords": {
+        "ko": ["이미지 변환 엔진", "순수 자바 이미지 리사이즈"],
+        "en": ["image renderer", "java imageio", "image resize engine"]
+      }
+    },
+    {
+      "id": "storage-image-imgproxy",
+      "kind": "module",
+      "module": "storage-image-imgproxy",
+      "path": "modules/storage-image-imgproxy",
+      "status": "experimental",
+      "summary": "storage-image 의 선택 변환 엔진 — imgproxy 컨테이너(libvips)로 HEIC · AVIF 입력 · WebP 출력, 메모리가 적다. 서버(컨테이너) 하나가 더 필요하다.",
+      "starter": false,
+      "newProjectFlag": "--modules storage-image-imgproxy",
+      "autoIncludes": ["storage", "storage-image"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/storage-image-imgproxy.md"],
+      "frontend": null,
+      "notFor": [
+        "storage-image 없이는 쓰지 않는다(따라온다)",
+        "imgproxy 컨테이너를 따로 띄워야 한다 — 서버 하나를 더 쓰고 싶지 않으면 기본 엔진(storage-image-imageio)"
+      ],
+      "keywords": {
+        "ko": ["imgproxy", "HEIC 변환", "WebP 변환"],
+        "en": ["imgproxy", "heic conversion", "webp output"]
+      }
+    },
+    {
+      "id": "storage-image-jdbc",
+      "kind": "module",
+      "module": "storage-image-jdbc",
+      "path": "modules/storage-image-jdbc",
+      "status": "experimental",
+      "summary": "이미지 상태 저장소 — PostgreSQL · MySQL 로 storage-image 의 상태 포트를 구현한다(이미지 원본 하나당 한 줄).",
+      "starter": false,
+      "newProjectFlag": "--modules storage-image-jdbc",
+      "autoIncludes": ["storage", "storage-image"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/storage-image-jdbc.md"],
+      "frontend": {
+        "capabilities": ["storage"],
+        "newProjectFlag": "--packages storage",
+        "packages": ["@skeleton/storage"]
+      },
+      "notFor": ["storage-image 없이는 쓰지 않는다(따라온다)", "DataSource · db-* 모듈과 이 모듈의 마이그레이션이 적용된 스키마가 필요하다"],
+      "keywords": {
+        "ko": ["이미지 상태 저장소", "썸네일 상태 DB"],
+        "en": ["image status storage", "thumbnail status database"]
+      }
+    },
+    {
+      "id": "storage-image-pdfbox",
+      "kind": "module",
+      "module": "storage-image-pdfbox",
+      "path": "modules/storage-image-pdfbox",
+      "status": "experimental",
+      "summary": "PDF 첫 쪽 썸네일 — storage-image 의 변환 작업에서 PDFBox 로 1쪽을 그린다(쪽 수 · 크기 · 렌더 시간 상한, 기본 꺼짐).",
+      "starter": false,
+      "newProjectFlag": "--modules storage-image-pdfbox",
+      "autoIncludes": ["storage", "storage-image"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/storage-image-pdfbox.md"],
+      "frontend": null,
+      "notFor": ["storage-image 없이는 쓰지 않는다(따라온다)", "PDF 파서는 무겁고 공격면이 넓다 — 상한을 지키고 필요할 때만 켠다"],
+      "keywords": {
+        "ko": ["PDF 썸네일", "PDF 미리보기"],
+        "en": ["pdf thumbnail", "pdf preview"]
       }
     },
     {
@@ -3678,6 +3827,11 @@
         "search",
         "search-jdbc",
         "storage",
+        "storage-image",
+        "storage-image-imageio",
+        "storage-image-imgproxy",
+        "storage-image-jdbc",
+        "storage-image-pdfbox",
         "storage-s3",
         "workspace",
         "workspace-jdbc"

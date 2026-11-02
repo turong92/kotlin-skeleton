@@ -238,6 +238,11 @@ test proving a context with only that module (and its declared dependencies) boo
 | `search-jdbc` | yes | a `DataSource` + one `db-*` module + `job-queue-jdbc` enabled (+ its migration `search`, as above) | — |
 | `storage` | yes | nothing | — |
 | `storage-s3` | yes — no bucket, no `PresignedStorage` bean | nothing | bucket (+ endpoint / keys for R2 · MinIO) |
+| `storage-image` | off until `skeleton.storage.image.enabled=true` | `storage-image-jdbc` + an engine (`storage-image-imageio`) — enabling without them fails boot with a message naming the missing module | — |
+| `storage-image-jdbc` | yes (stays idle until `storage-image` is enabled) | a `DataSource` + one `db-*` module (+ its migration) | — |
+| `storage-image-imageio` | yes (the default engine once `storage-image` is enabled) | nothing | headless AWT in a JVM image (not native-image) |
+| `storage-image-imgproxy` | off until enabled | an imgproxy container + its address / signing key | the imgproxy server |
+| `storage-image-pdfbox` | off until enabled | nothing | — |
 | `time` | yes | nothing | — |
 
 What changed to make this true (2026-10-05 audit of every `matchIfMissing = true` and `enabled: false` pairing): `redis-lock` used to

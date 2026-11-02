@@ -34,6 +34,11 @@
 | `notification-slack` | Slack 웹훅 알림 · 예외 알림 | [notification-slack](notification-slack.md) |
 | `storage` | 저장소 계약 · 파일 검증 | [storage](storage.md) |
 | `storage-s3` | S3 / R2 저장소 (presign · 서버 업로드) | [storage-s3](storage-s3.md) |
+| `storage-image` | 업로드한 이미지의 변환본(썸네일 · 표시본)과 남에게는 원본을 주지 않는 규칙 (기본 꺼짐) | [storage-image](storage-image.md) |
+| `storage-image-jdbc` | 이미지 상태 저장소 (PostgreSQL · MySQL) | [storage-image-jdbc](storage-image-jdbc.md) |
+| `storage-image-imageio` | 기본 변환 엔진: 앱 안 순수 자바(ImageIO), 추가 서버 없음 | [storage-image-imageio](storage-image-imageio.md) |
+| `storage-image-imgproxy` | 선택 변환 엔진: imgproxy 컨테이너 (HEIC 입력 · WebP 출력) | [storage-image-imgproxy](storage-image-imgproxy.md) |
+| `storage-image-pdfbox` | PDF 첫 쪽 썸네일 (기본 꺼짐, 상한 있음) | [storage-image-pdfbox](storage-image-pdfbox.md) |
 | `board` | 게시판: 글 · 댓글 트리(대댓글) · 설정으로 늘리는 반응 종류, 운영자 숨김 · 고정, 댓글 알림 | [board](board.md) |
 | `board-jdbc` | 게시판 저장소 (PostgreSQL · MySQL) | [board-jdbc](board-jdbc.md) |
 | `author-profile` | 작성자 프로필: 한 계정이 닉네임 여러 개를 글 · 댓글마다 골라 쓴다 (서로 이어지지 않게), 첫 프로필 넘겨받기 | [author-profile](author-profile.md) |
