@@ -45,6 +45,7 @@ class StorageImages(
         if (store.find(hash) != null) return
         val meta = storage.metadata(ObjectKey(privateKey)) ?: return   // 없는 객체는 등록하지 않는다
         val kinds = UploadMagicBytes.declaredKinds(meta.contentType)
+        // `handles` 는 이미지 종류면 엔진이 못 읽어도 참이다 - HEIC 같은 것은 여기서 줄이 생기고 작업이 UNSUPPORTED 로 적는다(「일반 파일」로 보이지 않는다)
         if (kinds != null && kinds.any { renderers.handles(it) }) return register(privateKey)   // 이미지(또는 엔진이 읽는 종류)로 선언했다
         // 이미지로 선언하지 않은 모든 키는 선언을 믿지 않고 앞 바이트(매직 넘버)로 본다 - 이미지인데 줄이 없어 「일반 파일」로 남에게 원본이 가는 길을 막는다(완료 호출을 빼먹은 경우)
         if ((meta.sizeBytes ?: 0L) == 0L) return   // 빈 객체는 범위 읽기가 안 된다 - 아직 판정하지 않는다

@@ -192,4 +192,15 @@ class ImageAlternateFormatsTest {
         w.storage.failReads = true
         w.images.ensure("members/1/notes.pdf")   // 저장소를 읽으면 던진다 - 던지지 않으니 읽지 않았다
     }
+
+    @Test
+    fun `a heic nobody can read is an unsupported image row and never the not-an-image verdict`() {
+        listOf("image/heic" to "members/1/declared", "application/octet-stream" to "members/1/undeclared").forEach { (declared, key) ->
+            val w = Wiring(ImageIoRenderer())
+            w.storage.put(key, heic, declared)
+            w.images.ensure(key)
+            w.processor.process(imageKeyHash(key))
+            assertThat(w.images.status(key)?.state).describedAs(declared).isEqualTo(UploadImageState.UNSUPPORTED)   // NOT_IMAGE 였다면 status 가 null
+        }
+    }
 }
