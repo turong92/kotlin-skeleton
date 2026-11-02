@@ -285,7 +285,7 @@ APP=sample scripts/dev.sh    # 백엔드(+프론트 WEB_DIR)만 같은 방식으
 | 웹 푸시(VAPID)는 켠 채 시작한다. 로컬 프로필은 시험용 고정 쌍(`application-local.yml`, 모듈의 `WebPushTestKeys`)이라 보호 환경에서는 기동이 막힌다 - 운영은 `SKELETON_NOTIFICATION_WEBPUSH_VAPID_*` ([deploy §7](deploy.md)) | `webpush.*` |
 | FCM 은 꺼진 채 시작한다(`SKELETON_NOTIFICATION_FCM_ENABLED=true` + 서비스 계정) | `fcm.enabled` |
 | 기기 등록 · 끄기는 자기 설정이라 이메일 없는 계정도 한다 | `account.email.extra-exclude-paths`(`WriteGateCensusTest` 가 목록을 고정) |
-| 광고성 종류 `promo.notes-tips`: 동의(`marketing`)가 없으면 작업이 안 생기고, 밤 9시~아침 8시는 야간 동의(`marketing-night`)가 없으면 다음 08시로 보류하며, 제목에 `(광고)` 가 붙는다. **견본에는 이 알림을 보내는 화면이 없다**(보내는 쪽은 제품마다 다르다) - `publish` 하면 규칙이 적용된다. 받는 사람의 시간대는 계정 프로필의 `timeZone`(`push/SamplePushConfiguration`), 없으면 `Asia/Seoul` | `push.advertising-types` · `advertising.*` · `legal/manifest.json` 의 `marketing-night` |
+| 광고성 종류 `promo.notes-tips`: 동의(`marketing`)가 없으면 작업이 안 생기고, 밤 9시~아침 8시는 야간 동의(`marketing-night`)가 없으면 다음 08시로 보류하며, 제목에 `(광고)` 가 붙는다. **견본에는 이 알림을 보내는 화면이 없다**(보내는 쪽은 제품마다 다르다) - `publish` 하면 규칙이 적용된다. 받는 사람의 시간대는 계정 프로필의 `timeZone`(`push/SamplePushConfiguration`), 없으면 `Asia/Seoul` | `advertising.types` · `advertising.*` · `legal/manifest.json` 의 `marketing-night` |
 
 **로컬 e2e(가짜 푸시 서비스)**: 브라우저 구독의 끝점은 허용 목록(기본 `fcm.googleapis.com` · `updates.push.services.mozilla.com` · `*.push.apple.com` · `*.notify.windows.com`) 밖이면 400 이다. 가짜 푸시 서비스를 쓰는 e2e 는 환경변수로만 `SKELETON_NOTIFICATION_WEBPUSH_ALLOWED_HOSTS=http://127.0.0.1:<포트>` 를 준다(`http://` 항목은 보호 환경에서 기동 실패 - yml 에는 넣지 않는다). 시험: `push/PushJourneyIntegrationTest`(댓글 → 작업 → 가짜 보내기, 광고 종류 동의 게이트, 프로필 시간대).
 

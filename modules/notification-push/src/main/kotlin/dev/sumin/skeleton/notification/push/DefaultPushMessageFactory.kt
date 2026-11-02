@@ -1,10 +1,8 @@
 package dev.sumin.skeleton.notification.push
 
-import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.notification.NotificationEvent
 import dev.sumin.skeleton.notification.NotificationSeverity
 import dev.sumin.skeleton.notification.advertising.AdvertisingGate
-import dev.sumin.skeleton.notification.advertising.AdvertisingProperties
 
 /**
  * 기본 factory — `lock-screen` 설정을 따른다.
@@ -15,7 +13,7 @@ import dev.sumin.skeleton.notification.advertising.AdvertisingProperties
  */
 class DefaultPushMessageFactory(
     private val properties: PushProperties,
-    private val gate: AdvertisingGate = AdvertisingGate(AdvertisingProperties(), null, null, TimeProvider.systemUtc()),
+    private val gate: AdvertisingGate,
 ) : PushMessageFactory {
     override fun create(event: NotificationEvent): PushMessage {
         val urgency = if (event.severity == NotificationSeverity.ERROR || event.severity == NotificationSeverity.WARNING) PushUrgency.HIGH else PushUrgency.NORMAL

@@ -1,11 +1,14 @@
 package dev.sumin.skeleton.notification.push
 
+import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.notification.InMemoryNotificationBroker
 import dev.sumin.skeleton.notification.InMemoryNotificationInboxRepository
 import dev.sumin.skeleton.notification.InMemoryNotificationMuteRepository
 import dev.sumin.skeleton.notification.NotificationEvent
 import dev.sumin.skeleton.notification.NotificationInboxQuery
 import dev.sumin.skeleton.notification.NotificationSeverity
+import dev.sumin.skeleton.notification.advertising.AdvertisingGate
+import dev.sumin.skeleton.notification.advertising.AdvertisingProperties
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -25,7 +28,7 @@ class PushNotificationChannelTest {
     private fun channel(
         props: PushProperties = properties,
         senders: List<PushSender> = listOf(webSender),
-    ) = PushNotificationChannel(broker, props, DefaultPushMessageFactory(props), devices, mutes, tasks, { senders })
+    ) = PushNotificationChannel(broker, props, DefaultPushMessageFactory(props, AdvertisingGate(AdvertisingProperties(), null, null, TimeProvider.systemUtc())), devices, mutes, tasks, { senders })
 
     private fun event(
         type: String = "comment.created",

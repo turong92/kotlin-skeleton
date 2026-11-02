@@ -3,6 +3,8 @@
 광고성 정보 게이트(`AdvertisingGate`, 모듈 [notification](notification.md))의 **동의 읽기 어댑터**다 — 채널(푸시 · 메일 · 슬랙)과 무관하다. `AdvertisingConsentPolicy` 를 `legal` 의 동의 기록(append-only 사건)으로 구현한다.
 `-jdbc` 와 같은 포트/어댑터 짝이다: `notification` 이 `legal` 을 몰라야 광고를 안 쓰는 앱이 `legal` 없이 알림을 쓰고, 규칙 시험이 가짜 정책으로 된다. 법률 자문이 아니다 — 광고 문서(`marketing` · `marketing-night`) 본문 · 전송자 연락처 · 법 해석은 앱(주인)과 법률 검토의 몫이다.
 
+**이 모듈만으로는 동의 처리 결과 통지와 2년 재확인 안내가 없다** — 통지·재확인 안내는 지금 notification-push-legal(푸시 켜짐)에만 있다. 푸시 없는 앱은 직접 구현해야 한다(정보통신망법 §50).
+
 **꺼짐이 기본이다** — `skeleton.notification.advertising.types`(광고성 종류)가 비어 있으면 빈을 하나도 내지 않는다(이 모듈 없는 앱과 같다). 광고 종류를 설정했는데 이 모듈(정책 빈)이 없으면 시작이 실패하고 「이 모듈을 얹어라」고 말한다. 켜면 `legal` + `legal-jdbc` 가 같이 있어야 한다(동의 기록).
 
 **정책**: 광고 수신 동의(`consent-type`, 기본 `marketing`)가 **유효**할 때만 보낸다 — `legal` 상태가 `CURRENT`/`GRACE` **이고** 가장 최근 `AGREED` 사건 + `reconfirm-after`(기본 730일)가 아직 안 지났을 때. 미동의 · 철회 · 2년 만료 · 새 판 시행 뒤 유예 밖(`OUTDATED`)은 모두 「없는 동의」. 야간 수신은 **별도 문서**(`night-consent-type`, 기본 `marketing-night`)이고 광고 동의가 유효할 때만 유효하다(철회 한 번이면 광고 전체가 멈춘다 — 계산으로, 연쇄 쓰기 없이). 상태 계산(`LegalAdvertisingConsents`)은 `GET /api/v1/push/advertising`(`notification-push-legal`)과 같은 것을 쓴다.

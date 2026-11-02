@@ -19,6 +19,7 @@ import org.springframework.context.annotation.Bean
 @AutoConfiguration(after = [PushLegalAutoConfiguration::class, NotificationLegalAutoConfiguration::class])
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 @ConditionalOnClass(name = ["org.springframework.security.core.Authentication"])
+@ConditionalOnProperty(prefix = "skeleton.notification.push", name = ["enabled"], havingValue = "true")
 @ConditionalOnProperty(prefix = "skeleton.notification.push.http", name = ["enabled"], havingValue = "true", matchIfMissing = true)
 @ConditionalOnBean(LegalAdvertisingConsents::class)
 class PushLegalWebAutoConfiguration {

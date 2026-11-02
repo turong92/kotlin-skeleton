@@ -15,12 +15,30 @@ import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.boot.context.properties.EnableConfigurationProperties
+import org.springframework.boot.context.properties.bind.Bindable
+import org.springframework.boot.context.properties.bind.Binder
 import org.springframework.context.annotation.Bean
+import org.springframework.core.env.Environment
 import org.springframework.scheduling.TaskScheduler
 
 @AutoConfiguration
 @EnableConfigurationProperties(NotificationRetentionProperties::class, NotificationPreferencesProperties::class, AdvertisingProperties::class)
 class NotificationAutoConfiguration {
+    /**
+     * 옛 설정 키(`skeleton.notification.push.advertising-types` · `push.advertising.*`)가 남아 있으면 **시작을 멈춘다** - 새 접두사로 옮기지 않으면 조용히 무시되어
+     * 광고 종류가 비고, 그러면 광고가 동의 확인 없이 나갈 수 있다.
+     */
+    @Bean
+    fun legacyAdvertisingKeysGuard(environment: Environment): LegacyAdvertisingKeysGuard {
+        val binder = Binder.get(environment)
+        val old = listOfNotNull(
+            "skeleton.notification.push.advertising-types".takeIf { binder.bind(it, Bindable.listOf(String::class.java)).isBound },
+            "skeleton.notification.push.advertising.*".takeIf { binder.bind("skeleton.notification.push.advertising", Bindable.mapOf(String::class.java, Any::class.java)).isBound },
+        )
+        check(old.isEmpty()) { "old advertising settings found (${old.joinToString()}) - move them under skeleton.notification.advertising.* (they would be ignored and ads could go out without a consent check)" }
+        return LegacyAdvertisingKeysGuard
+    }
+
     /**
      * 광고 규칙 - 광고 종류(`skeleton.notification.advertising.types`)를 설정했는데 동의 정책 빈 · `fallback-zone` · `sender-name` 이 없으면 **시작을 멈춘다**
      * (동의 확인 없이 광고가 나가는 구성이 조용히 생기지 않게). 광고 종류가 없으면 아무 검사도 하지 않고 게이트는 늘 「광고 아님」이다.
@@ -117,3 +135,6 @@ class NotificationAutoConfiguration {
         }
     }
 }
+
+/** [NotificationAutoConfiguration.legacyAdvertisingKeysGuard] 의 표지 - 검사는 빈을 만들 때 끝난다 */
+object LegacyAdvertisingKeysGuard

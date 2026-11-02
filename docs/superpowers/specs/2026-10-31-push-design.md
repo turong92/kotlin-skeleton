@@ -67,7 +67,7 @@ platform ◀── 다섯 모두 (ExternalHttpClient · DeployGuard · AccountEr
 | `skeleton.notification.push.types` | 설정 | 푸시로도 갈 종류는 제품이 정한다(기본 빈 목록 = 아무것도 안 간다). 끌 수 있는 종류 목록과 같은 꼴 |
 | `PushTypeMuteStore`(`mutedTypes(accountId)` · `mutedAmong(type, accountIds)` · `setMuted`) | `notification-push`, 구현 `-jdbc`(`push_type_mutes`) | 결정 1 B — 「푸시만 끄기」. 모든 채널 끄기(`NotificationMuteRepository`)와 별개의 표 |
 | `skeleton.notification.push.lock-screen` = `FULL`\|`HIDDEN` (+ `hidden-title` · `hidden-body`) | 설정 | 결정 2. 모듈 기본 `FULL`. `HIDDEN` 문구 기본 제목 「새 알림이 있습니다」 · 본문 없음, 설정으로 덮는다. 접두사는 레포 관례(`skeleton.notification.push.*`) |
-| `skeleton.notification.push.advertising-types` + `advertising.*` | 설정 | 결정 3. 어느 종류가 광고성인지는 제품이 정한다(기본 빈 목록 = 광고 규칙 꺼짐). 나머지 키는 §11 |
+| `skeleton.notification.advertising.types` + `advertising.*` | 설정 | 결정 3. 어느 종류가 광고성인지는 제품이 정한다(기본 빈 목록 = 광고 규칙 꺼짐). 나머지 키는 §11 |
 | `AdvertisingConsentPolicy`(`consentOf(accountId, now): AdvertisingConsent`) · `AdvertisingRecipientZones`(`zoneOf(accountId): ZoneId?`) | `notification-push`, 구현 `notification-push-legal`(동의) · 앱(시간대) | 결정 3. 광고 종류가 하나라도 설정돼 있는데 정책 빈이 없으면 기동 실패(「`notification-push-legal` 을 얹어라」) |
 
 ## 3. 데이터 (`notification-push-jdbc`, 두 방언 짝 V 파일 · `migrations.lock`, 시각 PG `timestamptz` · MySQL `datetime(6)` UTC)
@@ -100,7 +100,7 @@ platform ◀── 다섯 모두 (ExternalHttpClient · DeployGuard · AccountEr
    주인이 바뀌는 등록(공용 PC 에서 다른 사람이 로그인)은 옛 주인의 줄을 그대로 넘겨받는다 — 옛 주인 앞으로 쌓인 작업은 발송 때 걸러진다(아래 3).
 
 **발송** 앱 → `publish(event)` → 브로커(끈 사람 빼기 · 받은편지함 저장) → 커밋 뒤 `PushNotificationChannel.onNotification(event)`:
-1. 건너뜀: `recipientIds` 가 비었다(전체 공지) · `event.type` 이 `push.types` 와 `advertising-types` 둘 다 밖 · **푸시를 끈 사람**(결정 1 B — `PushTypeMuteStore.mutedAmong`; 모든 채널을 끈 사람은 브로커가 이미 뺐다) · **광고 종류면 §11 의 게이트**(동의 없음 → 그 사람 건너뜀, 야간 동의 없는 야간 → 보류) · `PushMessageFactory` 가 null.
+1. 건너뜀: `recipientIds` 가 비었다(전체 공지) · `event.type` 이 `push.types` 와 `advertising.types` 둘 다 밖 · **푸시를 끈 사람**(결정 1 B — `PushTypeMuteStore.mutedAmong`; 모든 채널을 끈 사람은 브로커가 이미 뺐다) · **광고 종류면 §11 의 게이트**(동의 없음 → 그 사람 건너뜀, 야간 동의 없는 야간 → 보류) · `PushMessageFactory` 가 null.
 2. 받는 사람들의 기기를 한 번에 읽고(`vapid_key_id` 가 지금 키와 다른 웹 줄 제외) 기기마다 작업 `notification.push` 하나: `{deviceId, recipientId, message{eventId, type, title, body, link, tag, urgency, createdAt}, advertising: bool}`(보류면 작업의 `runAt` = 다음 08시). 본문은 UTF-8 3000바이트에서 자른다(웹 푸시 레코드 4096 한도 · FCM 4KB). 모든 예외를 잡고 로그(채널이 떨어지지 않게). 커밋과 넣기 사이에 죽으면 그 푸시는 잃는다 — 푸시는 최선 노력(받은편지함이 원본).
 3. 작업 처리기: 기기 줄을 읽는다 → 없으면 끝 · **`account_id ≠ recipientId` 면 끝**(주인이 바뀌었다) · `createdAt + ttl`(기본 24h) 지났으면 끝 · **그 종류를 푸시만 끈 사람이면 끝**(큐에서 기다리는 동안 끈 경우) · **광고면 지금 동의·야간을 다시 확인**(§11 — 대기 중 철회는 안 보낸다) → `PushSender.send` →
    `Delivered` → `last_success_at` · `Gone` → 그 줄 지움 · `Retry` → 던짐(큐 백오프, 최대 `max-attempts` 기본 5) · `Failed` → `PermanentJobFailureException`(줄은 남김, 죽은 작업 → `alert` 가 있으면 경보).
@@ -148,7 +148,7 @@ platform ◀── 다섯 모두 (ExternalHttpClient · DeployGuard · AccountEr
 
 ## 7. 견본 앱 조립
 
-**kotlin `apps/sample`**: 의존 다섯(`notification-push` · `-jdbc` · `notification-webpush` · `notification-fcm` · `notification-push-legal`). yml(이 앱의 선택): `push.enabled: true` · **`push.lock-screen: FULL`(모듈 기본과 같아도 일부러 명시 — 견본은 내용을 보이는 쪽을 고른 것이라는 표시, 결정 2)** · `push.types: [NOTE_UPDATED, comment.created, comment.replied, reward.granted, badge.awarded, advertising.consent.changed, advertising.consent.reconfirm]` · 광고: `push.advertising-types: [promo.notes-tips]` · `advertising.sender-name`(견본 이름) · `advertising.fallback-zone: Asia/Seoul` · `legal/manifest.json` 에 `marketing` · `marketing-night` 견본 문서(DRAFT · 견본임을 적음, ko/en). 계정 시간대는 `PushRecipientZones` 빈이 `account` 프로필의 `timeZone` 으로 답한다(`ProfileService` 로 읽을 수 있는지 K4 가 먼저 확인, 안 되면 `fallback-zone` 만 쓰고 보고) — 견본에 광고를 보내는 화면은 없다(보내는 쪽은 제품마다 다르다), 통합 시험이 `publish` 로 증명한다 · `push.stale-cleanup.enabled: true`(60d) · `webpush.enabled: true` · `subject: mailto:ops@example.com`(환경변수로 덮는다) · `fcm.enabled: ${…_FCM_ENABLED:false}`. `application-local.yml` 에 시험용 VAPID 고정 쌍. `email.extra-exclude-paths` 에 `PUT|DELETE /api/v1/push/devices/*` · `POST …/test`(자기 기기 설정). `apps/workbench` 는 의존 한 줄씩만(모두 꺼짐 — 공존 증명).
+**kotlin `apps/sample`**: 의존 다섯(`notification-push` · `-jdbc` · `notification-webpush` · `notification-fcm` · `notification-push-legal`). yml(이 앱의 선택): `push.enabled: true` · **`push.lock-screen: FULL`(모듈 기본과 같아도 일부러 명시 — 견본은 내용을 보이는 쪽을 고른 것이라는 표시, 결정 2)** · `push.types: [NOTE_UPDATED, comment.created, comment.replied, reward.granted, badge.awarded, advertising.consent.changed, advertising.consent.reconfirm]` · 광고: `advertising.types: [promo.notes-tips]` · `advertising.sender-name`(견본 이름) · `advertising.fallback-zone: Asia/Seoul` · `legal/manifest.json` 에 `marketing` · `marketing-night` 견본 문서(DRAFT · 견본임을 적음, ko/en). 계정 시간대는 `PushRecipientZones` 빈이 `account` 프로필의 `timeZone` 으로 답한다(`ProfileService` 로 읽을 수 있는지 K4 가 먼저 확인, 안 되면 `fallback-zone` 만 쓰고 보고) — 견본에 광고를 보내는 화면은 없다(보내는 쪽은 제품마다 다르다), 통합 시험이 `publish` 로 증명한다 · `push.stale-cleanup.enabled: true`(60d) · `webpush.enabled: true` · `subject: mailto:ops@example.com`(환경변수로 덮는다) · `fcm.enabled: ${…_FCM_ENABLED:false}`. `application-local.yml` 에 시험용 VAPID 고정 쌍. `email.extra-exclude-paths` 에 `PUT|DELETE /api/v1/push/devices/*` · `POST …/test`(자기 기기 설정). `apps/workbench` 는 의존 한 줄씩만(모두 꺼짐 — 공존 증명).
 **react `apps/sample`**: 설정 페이지에 `AdvertisingSettings`(`PushSettings` 아래, R3 뒤에 R2 가 조립) · `vite.config.ts` 에 `pushServiceWorker()` · `public/manifest.webmanifest` · 설정 페이지에 `PushSettings`(알림 끄기 칸 아래) · 노트를 처음 저장한 뒤 `PushPrompt` · 로그아웃이 `unregisterPush` 먼저 · 로그인 뒤 `usePushSync`.
 **배포**: `docs/deploy.md` §7 에 두 줄 — webpush: `<P>_NOTIFICATION_WEBPUSH_VAPID_PRIVATE_KEY`(**운영자**, `secrets:` + `.local.env`) · `_VAPID_PUBLIC_KEY` · `_SUBJECT`(env:), 켰는데 비었거나 · 쌍이 안 맞거나 · 시험 키면 보호 환경 기동 실패(`DeployGuard` `notification-webpush`), **바꾸면 모든 웹 구독이 다음 방문까지 끊긴다 — 서버를 옮길 때 들고 간다**. fcm: `<P>_NOTIFICATION_FCM_CREDENTIALS`(**운영자**, 서비스 계정 JSON 의 base64), 켰는데 비었거나 못 읽으면 보호 환경 기동 실패. 「따라가며 더할 것」 표 한 줄, `docs/real-provider-setup.md` 에 VAPID 키 만들기(`npx web-push generate-vapid-keys`) · Firebase 프로젝트 · 서비스 계정(역할 「Firebase Cloud Messaging API Admin」만) · APNs 키 올리기.
 
@@ -217,7 +217,7 @@ platform ◀── 다섯 모두 (ExternalHttpClient · DeployGuard · AccountEr
 ### 11.1 모듈 경계 — 채널 무관 게이트(`notification`) + 어댑터 둘 (`notification-legal` · `notification-push-legal`) _(K5b 에서 바뀜)_
 
 - **판정은 채널과 무관한 부품 `AdvertisingGate`(모듈 `notification`, 패키지 `notification.advertising`), 동의 읽기는 채널 무관 어댑터 `notification-legal`, 푸시 전용 통지 · 안내 · 상태 읽기는 `notification-push-legal`.** 설정은 `skeleton.notification.advertising.*`. 푸시 채널과 처리기는 게이트를 부르기만 한다(보류 시각 `runAt` 도 게이트가 준다). 게이트는 `AdvertisingConsentPolicy` 포트만 보고 돈다 — `notification`/푸시가 `legal` 을 몰라야 광고를 안 쓰는 앱이 `legal` 없이 푸시를 쓰고(캡슐화), 광고 규칙 시험이 가짜 정책으로 된다. 동의 증거는 `legal` 의 일이라 어댑터가 `legal` 을 `api` 로 안다(`-jdbc` 와 같은 포트/어댑터 짝, 코어에 `compileOnly` 다리를 두지 않는다). 시간대 포트는 `AdvertisingRecipientZones`(옛 `PushRecipientZones`).
-- 모듈 기본값은 꺼짐(중립): `advertising-types` 가 빈 목록이면 광고 규칙은 없는 것과 같고, 이 모듈을 안 붙인 앱의 동작은 바뀌지 않는다. 광고 종류를 설정했는데 `AdvertisingConsentPolicy` 빈이 없으면 기동 실패(「`notification-legal` 을 얹어라」) — 동의 확인 없이 광고가 나가는 구성이 조용히 생기지 않게.
+- 모듈 기본값은 꺼짐(중립): `advertising.types` 가 빈 목록이면 광고 규칙은 없는 것과 같고, 이 모듈을 안 붙인 앱의 동작은 바뀌지 않는다. 광고 종류를 설정했는데 `AdvertisingConsentPolicy` 빈이 없으면 기동 실패(「`notification-legal` 을 얹어라」) — 동의 확인 없이 광고가 나가는 구성이 조용히 생기지 않게.
 - **`legal` 에 더하는 기계장치 셋**(기본 동작은 그대로, 옵트인 사용처가 없으면 닿지 않는다):
   1. `source = "reconfirm"` 인 동의는 이미 현재 판에 동의한 상태에서도 `AGREED` 사건을 더한다(기존 「같은 판이면 아무것도 안 함」 멱등의 단 하나의 예외). 일일 한도 · 판 검사는 그대로. 새 경로는 없다 — `POST /legal/consents` 에 `source: "reconfirm"` 을 실을 뿐.
   2. `ConsentChangeListener`(`fun interface`, `onChange(event: ConsentEvent)`) — 사건이 저장된 뒤 불린다. 빈이 없으면 아무 일도 없고, 던져도 삼킨다(증거는 이미 저장됐다). 동의 · 철회가 어느 경로(`legal` HTTP · 가입 · 앱 코드)로 와도 같은 통지를 보내려는 자리.
@@ -255,7 +255,7 @@ skeleton.notification.advertising:
   body-suffix: ""
 ```
 
-기동 검사(`advertising.types` 가 비어 있지 않을 때): 정책 빈 있음 · `fallback-zone` · `sender-name` 있음 · `night-start`/`night-end` 가 읽힘 · 푸시의 `ttl` ≥ 12시간(푸시 쪽 검사 — 야간 보류가 최대 11시간이라 만료로 광고가 사라지지 않게) · 두 동의 종류가 다름 · `advertising-types` 가 알림 종류 `advertising.consent.*` 와 겹치지 않음. 안내 알림 종류가 단말에 가려면 앱이 `push.types` 에 넣는다(안 넣으면 알림함에만 쌓인다).
+기동 검사(`advertising.types` 가 비어 있지 않을 때): 정책 빈 있음 · `fallback-zone` · `sender-name` 있음 · `night-start`/`night-end` 가 읽힘 · 푸시의 `ttl` ≥ 12시간(푸시 쪽 검사 — 야간 보류가 최대 11시간이라 만료로 광고가 사라지지 않게) · 두 동의 종류가 다름 · `advertising.types` 가 알림 종류 `advertising.consent.*` 와 겹치지 않음. 안내 알림 종류가 단말에 가려면 앱이 `push.types` 에 넣는다(안 넣으면 알림함에만 쌓인다).
 
 ### 11.4 발송 규칙 (`PushNotificationChannel` + 작업 처리기)
 

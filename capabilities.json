@@ -2071,6 +2071,7 @@
       "notFor": [
         "광고성 종류(skeleton.notification.advertising.types)를 쓰지 않는 앱은 얹지 않는다",
         "지금 광고 게이트는 푸시 채널에만 걸린다 — 광고성 메일 · 슬랙 등을 보내는 앱은 보내기 전에 AdvertisingGate 를 불러야 한다(정보통신망법 §50)",
+        "통지·재확인 안내는 지금 notification-push-legal(푸시 켜짐)에만 있다. 푸시 없는 앱은 직접 구현해야 한다(정보통신망법 §50)",
         "광고 문서(marketing · marketing-night) 본문 · 전송자 정보 · 법 해석은 앱과 법률 검토의 몫이다"
       ],
       "keywords": {
