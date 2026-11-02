@@ -38,6 +38,8 @@ data class PostDetailView(
     val attachmentUrls: Map<String, String> = emptyMap(),
     /** 이미지 모듈이 있고 이 글이 공개일 때: 변환이 끝난 첨부 이미지 키 -> 폭 · 높이 · 썸네일 · 본 이미지 공개 주소 */
     val attachmentImages: Map<String, PublicUploadImage> = emptyMap(),
+    /** 이미지 모듈이 있고 이 글이 공개일 때: 변환 중이라 아직 공개 주소가 없는 첨부 키 */
+    val attachmentsPending: List<String> = emptyList(),
 )
 
 /** 최상위 댓글이면 [replies] 에 모든 자손이 작성 순으로 평평하게 들어 있다 (답글의 replies 는 항상 비어 있다). body 는 PUBLISHED 가 아니면 null. */
@@ -62,6 +64,8 @@ data class CommentView(
     val attachmentUrls: Map<String, String> = emptyMap(),
     /** 이미지 모듈이 있고 이 댓글이 공개일 때: 변환이 끝난 첨부 이미지 키 -> 폭 · 높이 · 썸네일 · 본 이미지 공개 주소 */
     val attachmentImages: Map<String, PublicUploadImage> = emptyMap(),
+    /** 이미지 모듈이 있고 이 댓글이 공개일 때: 변환 중이라 아직 공개 주소가 없는 첨부 키 */
+    val attachmentsPending: List<String> = emptyList(),
 )
 
 data class BoardConfigView(

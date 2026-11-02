@@ -1,6 +1,8 @@
 package dev.sumin.skeleton.storage
 
 import dev.sumin.skeleton.common.time.TimeProvider
+import dev.sumin.skeleton.common.upload.PublicImages
+import dev.sumin.skeleton.common.upload.PublicUploadFormat
 import dev.sumin.skeleton.common.upload.UploadImageState
 import dev.sumin.skeleton.common.upload.UploadImageStatus
 import dev.sumin.skeleton.common.upload.UploadImageVariant
@@ -46,15 +48,22 @@ class StorageImageVariantsTest {
     private val images = FakeImages(storage)
     private val uploads = StoragePublicUploads(storage, scheme, { images })
 
-    private fun ready(key: String) = UploadImageStatus(
-        UploadImageState.READY, 4000, 3000,
-        mapOf(
-            "thumb" to UploadImageVariant("variants/${key.hashCode()}/thumb.jpg", 400, 300, "image/jpeg"),
-            "display" to UploadImageVariant("variants/${key.hashCode()}/display.jpg", 1600, 1200, "image/jpeg"),
-        ),
-    ).also {
-        storage.objects["variants/${key.hashCode()}/thumb.jpg"] = "thumb-bytes".toByteArray() to "image/jpeg"
-        storage.objects["variants/${key.hashCode()}/display.jpg"] = "display-bytes".toByteArray() to "image/jpeg"
+    private fun ready(key: String, webp: Boolean = false): UploadImageStatus {
+        fun alt(name: String, w: Int, h: Int) = if (webp) listOf(UploadImageVariant("variants/${key.hashCode()}/$name.webp", w, h, "image/webp")) else emptyList()
+        return UploadImageStatus(
+            UploadImageState.READY, 4000, 3000,
+            mapOf(
+                "thumb" to UploadImageVariant("variants/${key.hashCode()}/thumb.jpg", 400, 300, "image/jpeg", alt("thumb", 400, 300)),
+                "display" to UploadImageVariant("variants/${key.hashCode()}/display.jpg", 1600, 1200, "image/jpeg", alt("display", 1600, 1200)),
+            ),
+        ).also {
+            storage.objects["variants/${key.hashCode()}/thumb.jpg"] = "thumb-bytes".toByteArray() to "image/jpeg"
+            storage.objects["variants/${key.hashCode()}/display.jpg"] = "display-bytes".toByteArray() to "image/jpeg"
+            if (webp) {
+                storage.objects["variants/${key.hashCode()}/thumb.webp"] = "thumb-webp".toByteArray() to "image/webp"
+                storage.objects["variants/${key.hashCode()}/display.webp"] = "display-webp".toByteArray() to "image/webp"
+            }
+        }
     }
 
     @Test
@@ -85,9 +94,8 @@ class StorageImageVariantsTest {
         uploads.publish(key)
 
         val pointedTo = uploads.publicKeysOf(key).toSet()
-        assertEquals(2, pointedTo.size)
-        assertEquals(storage.objects.keys.filter { it.startsWith("public/") }.toSet(), pointedTo, "every public object is accounted for by the row that points at it")
-        assertEquals(uploads.listPublicKeys().toSet(), pointedTo)
+        assertTrue(storage.objects.keys.filter { it.startsWith("public/") }.toSet().all { it in pointedTo }, "every public object is accounted for by the row that points at it")
+        assertEquals(uploads.listPublicKeys().toSet(), storage.objects.keys.filter { it.startsWith("public/") }.toSet())
 
         uploads.unpublish(key)
         assertTrue(storage.objects.keys.none { it.startsWith("public/") }, "unpublish removes the thumbnail as well")
@@ -95,20 +103,46 @@ class StorageImageVariantsTest {
     }
 
     @Test
-    fun `imagesOf describes only ready images, with the public addresses of the display copy and the thumbnail`() {
+    fun `imagesOf tells ready images from waiting and refused ones, with WebP addresses only when the copy exists`() {
         val readyKey = scheme.issue("acc_a", "photo.jpg")
+        val webpKey = scheme.issue("acc_a", "both.jpg")
         val pendingKey = scheme.issue("acc_a", "wait.jpg")
+        val refusedKey = scheme.issue("acc_a", "bad.jpg")
+        val legacyKey = scheme.issue("acc_a", "old.jpg")   // 이미지 모듈을 켜기 전에 올린 것 - 줄이 없다
         val pdfKey = scheme.issue("acc_a", "doc.pdf")
         images.statuses[readyKey] = ready(readyKey)
+        images.statuses[webpKey] = ready(webpKey, webp = true)
         images.statuses[pendingKey] = UploadImageStatus(UploadImageState.PENDING)
+        images.statuses[refusedKey] = UploadImageStatus(UploadImageState.REJECTED)
 
-        val found = uploads.imagesOf(listOf(readyKey, pendingKey, pdfKey, scheme.issue("acc_a", "unknown.jpg")))
-        assertEquals(setOf(readyKey), found.keys, "pending, non-image and unregistered keys are left out")
-        val image = found.getValue(readyKey)
+        val found = uploads.imagesOf(listOf(readyKey, webpKey, pendingKey, refusedKey, legacyKey, pdfKey))
+        assertEquals(setOf(readyKey, webpKey), found.ready.keys)
+        assertEquals(setOf(pendingKey), found.pending)
+        assertEquals(setOf(refusedKey), found.refused)
+        val image = found.ready.getValue(readyKey)
         assertEquals(1600 to 1200, image.width to image.height, "the size of the copy people get, not of the original")
         assertEquals(uploads.urlOf(readyKey), image.display)
         assertEquals(uploads.urlOf(readyKey).substringBeforeLast('.') + ".thumb." + uploads.urlOf(readyKey).substringAfterLast('.'), image.thumb)
-        assertEquals(emptyMap(), StoragePublicUploads(storage, scheme).imagesOf(listOf(readyKey)), "without the image module there is nothing to describe")
+        assertEquals(emptyMap(), image.alternates, "an engine that makes one format leaves the field empty")
+        val head = uploads.urlOf(webpKey).substringBeforeLast('.')
+        assertEquals(mapOf("image/webp" to PublicUploadFormat(thumb = "$head.thumb.alt.webp", display = "$head.alt.webp")), found.ready.getValue(webpKey).alternates)
+        assertEquals(PublicImages(), StoragePublicUploads(storage, scheme).imagesOf(listOf(readyKey)), "without the image module there is nothing to describe")
+    }
+
+    @Test
+    fun `a WebP copy goes to the public area next to the others, is named by publicKeysOf and leaves with them`() {
+        val key = scheme.issue("acc_a", "photo.jpg")
+        images.statuses[key] = ready(key, webp = true)
+        storage.objects[key] = "original".toByteArray() to "image/jpeg"
+        assertTrue(uploads.publish(key))
+
+        val pointedTo = uploads.publicKeysOf(key).toSet()
+        assertEquals(4, pointedTo.size)
+        assertEquals(storage.objects.keys.filter { it.startsWith("public/") }.toSet(), pointedTo, "every public object is accounted for - a full reconciliation must not see the WebP copies as orphans")
+        assertEquals("display-webp", String(storage.objects.getValue(pointedTo.first { it.endsWith(".alt.webp") && ".thumb." !in it }).first))
+        assertEquals("image/webp", storage.objects.getValue(pointedTo.first { it.endsWith(".thumb.alt.webp") }).second)
+        uploads.unpublish(key)
+        assertTrue(storage.objects.keys.none { it.startsWith("public/") }, "unpublish takes every copy down")
     }
 
     @Test

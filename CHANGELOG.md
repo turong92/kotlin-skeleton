@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `apps/sample`: 다섯 모듈 조립 - `push.enabled` · `lock-screen: FULL`(일부러 명시) · `types` 일곱 · 광고 종류 `promo.notes-tips` + `sender-name` · `fallback-zone: Asia/Seoul` · `stale-cleanup`(60일) · `webpush.enabled: true`(로컬 프로필은 시험용 VAPID 고정 쌍, `SKELETON_NOTIFICATION_WEBPUSH_VAPID_*` 로 덮는다) · `fcm.enabled: ${SKELETON_NOTIFICATION_FCM_ENABLED:false}` · 이메일 없는 계정도 하는 푸시 설정 경로 넷(`email.extra-exclude-paths`, `WriteGateCensusTest`) · 받는 사람 시간대 `push/SamplePushConfiguration`(계정 프로필의 `timeZone`) · 견본 `legal` 문서에 `marketing-night`(DRAFT · 견본임을 적음, ko/en)과 푸시를 말하는 `marketing`. 통합 시험 `push/PushJourneyIntegrationTest`. `apps/workbench` 는 클래스패스에 다섯을 모두 두되 켜지 않는다(공존 증명).
 - 프론트 짝 `@skeleton/push`(react-skeleton). `ModuleDocumentationTest` 의 알려진 패키지에 더했다.
 
+### 형식 협상 · 변환 대기 표시 (files K3b, 2026-11-02)
+
+- `board`: `attachmentImages` 에 `alternates: { "image/webp": { thumb, display } }`(엔진이 WebP 도 만들 때만 채워진다, 아니면 `{}` - 공개 영역에 `.alt.webp` 사본을 따로 복사한다) · 새 `attachmentsPending: [키]`(변환 중인 이미지 - 이때 `attachmentUrls` 에서 주소를 뺀다. 원본을 대신 줄 수 없고 주소는 404 였다). 상태 줄이 없는 옛 첨부와 PDF 는 그대로. platform `PublicUploads.imagesOf` 가 `PublicImages(ready, pending, refused)` 를 돌려준다(K3 에서 더한 것의 모양 변경).
+- **수정**: 전체 대조가 썸네일 사본을 고아로 지우던 것을 고쳤다(`publicKeysOf` 로 센다). `review` 사진 302 · `POST /storage/images` 는 `Accept` 로 WebP 를 고르고 `Vary: Accept` 를 단다.
+- `storage`: 버려진 회원 업로드 정리가 지우기 직전에 사용처를 한 번 더 묻는다(훑는 사이 붙은 키).
+
 ### 이미지 변환본을 쓰는 곳 (files K3, 2026-11-02)
 
 - `board`: 응답에 `attachmentImages: { <첨부 키>: { width, height, thumb, display } }` 를 **덧붙인다**(공개된 항목의 변환이 끝난 이미지만, 공개 주소 - 이미지 모듈이 없으면 키가 없다). `attachmentUrls` 는 그대로. 새 platform 계약 `PublicUploads.imagesOf`(기본 빈 맵) · `PublicUploadImage`. 변환 전에 승인된 글의 복사는 맞추기 큐가 `UploadVariantsPendingException` 으로 다시 한다.

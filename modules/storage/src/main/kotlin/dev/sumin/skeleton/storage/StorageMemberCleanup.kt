@@ -10,7 +10,7 @@ import org.slf4j.LoggerFactory
  * 버려진 회원 업로드를 지운다 (`skeleton.storage.web.cleanup.enabled=true` 일 때만 주기 작업이 부른다).
  * 지우는 조건: 업로드 접두사 아래이고 · 비회원 영역(`<prefix>/g/`)이 아니고 · 만든 지 [StorageCleanupProperties.minAge] 가 지났고 · [UploadedKeyUsage] 가 사용 중이라고 하지 않은 것.
  * 공개 영역 · 변환본 접두사는 업로드 접두사와 겹치지 않으므로(기동 때 확인) 목록에 나오지 않는다. 이미지 모듈이 있으면 지운 키의 변환본 · 상태 줄도 같이 지운다.
- * 사용처 구현이 없으면 아무것도 지우지 않는다. 한 번에 [StorageCleanupProperties.batchSize] 개까지 - 남은 것은 다음 틱에. 프로젝트 모드에서는 프로젝트마다 그 프로젝트의 설정 · 저장소로 돈다.
+ * 지우기 직전에 사용처를 한 번 더 묻는다(훑는 사이 붙은 키). 사용처 구현이 없으면 아무것도 지우지 않는다. 한 번에 [StorageCleanupProperties.batchSize] 개까지 - 남은 것은 다음 틱에. 프로젝트 모드에서는 프로젝트마다 그 프로젝트의 설정 · 저장소로 돈다.
  */
 class StorageMemberCleanup(
     private val storage: ObjectStorage,
@@ -52,7 +52,10 @@ class StorageMemberCleanup(
             }
             token = page.nextContinuationToken.takeIf { page.truncated }
         } while (token != null && orphans.size < cleanup.batchSize)
-        val doomed = orphans.take(cleanup.batchSize)
+        // 지우기 직전에 한 번 더 묻는다 - 훑는 사이(목록이 길면 수 초) 글 · 리뷰에 붙은 키를 지우지 않는다. 남은 틈은 이 한 번의 질의와 삭제 사이뿐이다
+        val candidates = orphans.take(cleanup.batchSize)
+        val usedNow = if (candidates.isEmpty()) emptySet() else inUse.inUse(candidates.map { it.value })
+        val doomed = candidates.filter { it.value !in usedNow }
         if (doomed.isNotEmpty()) {
             storage.deleteAll(doomed)
             images()?.forget(doomed.map { it.value })   // 원본을 지운 뒤에 - 원본이 남은 채 변환본만 사라지지 않게

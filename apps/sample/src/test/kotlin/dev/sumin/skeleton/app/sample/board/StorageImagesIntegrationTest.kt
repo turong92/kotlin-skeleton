@@ -68,6 +68,8 @@ class StorageImagesIntegrationTest : SampleIntegrationTest() {
         assertTrue((image["thumb"] as String).contains(".thumb."), image.toString())
         assertEquals(600 to 800, (image["height"] as Number).toInt() to (image["width"] as Number).toInt(), "the size of the display copy (not enlarged)")
 
+        assertFalse("attachmentsPending" in detail, "a ready image is not listed as pending")
+        assertTrue((JsonPath.read<Map<String, Any>>(detail, "$.value.attachmentImages").getValue(key) as Map<*, *>)["alternates"] == emptyMap<String, Any>(), "the Java engine makes one format - nothing to choose between")
         val publicObjects = storage.objects.filterKeys { it.startsWith("public/") }
         assertEquals(2, publicObjects.size, "the display copy and the thumbnail copy: ${publicObjects.keys}")
         publicObjects.forEach { (name, bytes) ->

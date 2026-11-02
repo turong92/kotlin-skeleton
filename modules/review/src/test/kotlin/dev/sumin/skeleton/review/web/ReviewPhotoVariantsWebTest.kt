@@ -28,6 +28,8 @@ class FakeUploadImages : UploadImages {
     override fun status(privateKey: String) = statuses[privateKey]
     override fun signedVariantUrl(privateKey: String, variant: String, ttl: Duration): String? =
         statuses[privateKey]?.takeIf { it.state == UploadImageState.READY && variant in it.variants }?.let { "https://files.example.com/variant/$privateKey/$variant" }
+    override fun signedVariantUrl(privateKey: String, variant: String, ttl: Duration, accept: String?): String? =
+        signedVariantUrl(privateKey, variant, ttl)?.let { if (accept?.contains("image/webp") == true) "$it.webp" else it }
     override fun ensure(privateKey: String) { ensured += privateKey }
     override fun forget(privateKeys: Collection<String>) = Unit
 }
@@ -75,6 +77,10 @@ class ReviewPhotoVariantsWebTest : ReviewWebBase() {
         )
         assertEquals(302 to "https://files.example.com/variant/reviews/one.jpg/display", location(id, bob), "display is the default")
         assertEquals(302 to "https://files.example.com/variant/reviews/one.jpg/thumb", location(id, bob, "?variant=thumb"))
+
+        val negotiated = mvc.perform(get("$BASE/$id/photos/0").principal(bob).header("Accept", "image/avif,image/webp,*/*;q=0.8")).andReturn().response
+        assertEquals("https://files.example.com/variant/reviews/one.jpg/display.webp", negotiated.getHeader("Location"), "a browser that names WebP gets the WebP variant")
+        assertEquals("Accept", negotiated.getHeader("Vary"), "the answer depends on Accept")
 
         images.statuses["reviews/one.jpg"] = UploadImageStatus(UploadImageState.REJECTED)
         assertEquals(404, location(id, bob).first, "a refused image is not shown to others either")

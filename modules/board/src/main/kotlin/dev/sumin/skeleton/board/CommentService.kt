@@ -421,14 +421,16 @@ class CommentService(
     private fun view(
         caller: BoardCaller?, c: Comment, publicId: String, card: AuthorCard?, body: String?,
         state: ReactionState, replyCount: Int, replies: List<CommentView> = emptyList(), revision: Revision? = null, attachments: List<String> = emptyList(), pending: PendingVisibility? = null, postPublic: Boolean = false,
-    ) = CommentView(
+    ): CommentView {
+        val shown = if (postPublic && body != null && c.status == CommentStatus.PUBLISHED) uploads.publicAttachments(attachments) else PublicAttachments()
+        return CommentView(
         c, publicId, BoardAuthors.isDeleted(c.authorId) || card?.deleted == true, caller?.accountId == c.authorId, body, state, replyCount, replies, card, revision?.view(),
         // 가린 · 지운 댓글의 사진은 본문처럼 나가지 않는다
         if (body != null) attachments else emptyList(),
         canManage = if (caller != null && pending?.all == true) caller.moderator || ownerMayTouch(c) else null,
-        attachmentUrls = if (postPublic && body != null && c.status == CommentStatus.PUBLISHED) uploads.publicUrls(attachments) else emptyMap(),
-        attachmentImages = if (postPublic && body != null && c.status == CommentStatus.PUBLISHED) uploads.publicImages(attachments) else emptyMap(),
-    )
+        attachmentUrls = shown.urls, attachmentImages = shown.images, attachmentsPending = shown.pending,
+        )
+    }
 
     /** 운영자가 아닌 관리자(글 주인)가 이 댓글의 상태를 바꿀 수 있는가 - [moderate] 의 막는 규칙과 같다(운영자가 가렸거나 모르는 옛 행 · 삭제된 행은 못 건드린다) */
     private fun ownerMayTouch(c: Comment) = c.status != CommentStatus.DELETED && !(c.status == CommentStatus.HIDDEN && c.moderatedBy != ModeratedBy.OWNER)

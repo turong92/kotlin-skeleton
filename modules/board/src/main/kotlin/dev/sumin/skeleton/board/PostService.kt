@@ -312,12 +312,12 @@ class PostService(
         val card = if (BoardAuthors.isGuest(post.authorId)) AuthorCard(post.guestName) else authors.one(post.boardCode, publicId)
         val board = if (caller != null) access.board(post.boardCode) else null
         val manage = caller != null && board != null && policy.canManageComments(caller, post, board)
+        val shown = if (post.status == PostStatus.PUBLISHED) uploads.publicAttachments(post.attachments) else PublicAttachments()
         return PostDetailView(
             post, reactions.state(ReactionTarget.POST, post.id, caller), publicId,
             BoardAuthors.isDeleted(post.authorId) || card?.deleted == true, caller?.accountId == post.authorId, card, manage,
             (revision ?: board?.let { visibleRevision(caller, post, it) })?.view(),
-            if (post.status == PostStatus.PUBLISHED) uploads.publicUrls(post.attachments) else emptyMap(),
-            if (post.status == PostStatus.PUBLISHED) uploads.publicImages(post.attachments) else emptyMap(),
+            shown.urls, shown.images, shown.pending,
         )
     }
 

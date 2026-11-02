@@ -41,7 +41,7 @@ class StorageImagesControllerTest {
 
     @Test
     fun `only the callers own keys are answered and signed - another account's key is left out`() {
-        val answer = controller.images(me, StorageImagesRequest(listOf("uploads/7/a/x.jpg", "uploads/8/b/x.jpg", "../etc/passwd", "uploads/7/fresh/y.png")))
+        val answer = controller.images(me, StorageImagesRequest(listOf("uploads/7/a/x.jpg", "uploads/8/b/x.jpg", "../etc/passwd", "uploads/7/fresh/y.png")), null, org.springframework.mock.web.MockHttpServletResponse())
 
         @Suppress("UNCHECKED_CAST")
         val items = ((answer as DataResponse<StorageImagesResponse>).value).items

@@ -37,6 +37,7 @@ import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.PutMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder
@@ -149,6 +150,7 @@ class ReviewController(
     fun photo(
         authentication: Authentication?, @PathVariable id: String, @PathVariable index: Int,
         @RequestParam(required = false) variant: String?,
+        @RequestHeader(HttpHeaders.ACCEPT, required = false) accept: String?,
     ): ResponseEntity<Void> {
         val account = accountId(authentication)
         val ref = OperatorRefs.require(authentication)
@@ -160,7 +162,7 @@ class ReviewController(
         if (name != UploadImages.DISPLAY && name != UploadImages.THUMB) invalid("variant must be thumb or display")
         val module = images()?.takeIf { isImage(photo.key) }
         val location = if (module == null) signer.downloadUrl(photo.key, signer.defaultTtl) else {
-            val ready = module.status(photo.key)?.takeIf { it.state == UploadImageState.READY }?.let { module.signedVariantUrl(photo.key, name, signer.defaultTtl) }
+            val ready = module.status(photo.key)?.takeIf { it.state == UploadImageState.READY }?.let { module.signedVariantUrl(photo.key, name, signer.defaultTtl, accept) }
             ready ?: run {
                 module.ensure(photo.key)
                 if (!photo.privileged) throw ApplicationException("Photo not found", ReviewErrorCode.NOT_FOUND)
@@ -169,6 +171,7 @@ class ReviewController(
         }
         return ResponseEntity.status(HttpStatus.FOUND)
             .header(HttpHeaders.LOCATION, location)
+            .header(HttpHeaders.VARY, HttpHeaders.ACCEPT)   // 변환본의 형식(WebP 여부)이 Accept 에 따라 달라진다
             .cacheControl(CacheControl.empty().cachePrivate())
             .build()
     }

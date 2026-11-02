@@ -35,10 +35,12 @@ interface PublicUploads {
     fun publicKeysOf(privateKey: String): List<String> = listOf(publicKeyOf(privateKey))
 
     /**
-     * 이미지 모듈이 있을 때, 이 비공개 키들 중 **변환이 끝난(READY)** 이미지의 공개 모습 - 폭 · 높이와 `thumb` · `display` 공개 주소. 아닌 키(PDF · 변환 전 · 거절)는 빠진다.
-     * 복사가 되어 있다는 뜻은 아니다([urlOf] 와 같다 - 복사는 board 의 맞추기 큐가 한다). 기본은 빈 맵
+     * 이미지 모듈이 있을 때, 이 비공개 키들의 이미지 상태 - 변환이 끝난(READY) 것은 공개 모습(폭 · 높이 · `thumb` · `display` 주소, 다른 형식은 [PublicUploadImage.alternates]),
+     * 변환 중(PENDING)이면 [PublicImages.pending], 영구히 공개할 수 없으면(거절 · 못 읽는 형식 · 실패) [PublicImages.refused]. 이미지가 아닌 키(PDF …)와
+     * **상태 줄이 없는 키(이미지 모듈을 켜기 전에 올린 옛 업로드)** 는 어디에도 없다 - 호출하는 쪽은 그 키를 지금까지처럼 다룬다.
+     * 복사가 되어 있다는 뜻은 아니다([urlOf] 와 같다 - 복사는 board 의 맞추기 큐가 한다). 기본은 빈 결과
      */
-    fun imagesOf(privateKeys: Collection<String>): Map<String, PublicUploadImage> = emptyMap()
+    fun imagesOf(privateKeys: Collection<String>): PublicImages = PublicImages()
 
     /**
      * 공개 영역에 복사한다(있으면 덮어쓴다). 원본의 Content-Type 을 읽어 그대로 쓰고 허용 목록(image/jpeg · png · webp · gif · avif · heic, application/pdf)
@@ -60,8 +62,28 @@ interface PublicUploads {
     fun purgePublicKey(publicKey: String) = Unit
 }
 
-/** 공개된 이미지 하나 - [width] · [height] 는 `display` 사본의 크기, 주소는 공개 주소 */
-data class PublicUploadImage(val width: Int, val height: Int, val thumb: String, val display: String)
+/**
+ * 공개된 이미지 하나 - [width] · [height] 는 `display` 사본의 크기, 주소는 공개 주소(기본 형식: JPEG, 투명하면 PNG).
+ * 공개 영역은 정적 CDN 이라 서버가 `Accept` 로 고를 수 없으므로 같은 그림의 다른 형식은 [alternates] 에 형식(MIME)별로 실린다 - 화면이 `<picture><source type=…>` 로 고른다.
+ * 앱 안 엔진만 쓰면 비어 있다.
+ */
+data class PublicUploadImage(
+    val width: Int,
+    val height: Int,
+    val thumb: String,
+    val display: String,
+    val alternates: Map<String, PublicUploadFormat> = emptyMap(),
+)
+
+/** 같은 그림의 다른 형식 하나의 `thumb` · `display` 공개 주소 */
+data class PublicUploadFormat(val thumb: String, val display: String)
+
+/** [PublicUploads.imagesOf] 의 답 - 키 -> 준비된 이미지 / 변환 중인 키 / 공개할 수 없는 키 */
+data class PublicImages(
+    val ready: Map<String, PublicUploadImage> = emptyMap(),
+    val pending: Set<String> = emptySet(),
+    val refused: Set<String> = emptySet(),
+)
 
 /** 비공개 업로드를 짧은 수명의 서명 주소로 읽는다 - 승인 전 · 판 사진을 관리하는 사람이 볼 때 */
 fun interface PrivateUploadAccess {

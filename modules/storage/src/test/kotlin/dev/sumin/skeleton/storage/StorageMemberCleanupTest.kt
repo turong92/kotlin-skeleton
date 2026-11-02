@@ -73,4 +73,18 @@ class StorageMemberCleanupTest {
         assertEquals(0, StorageMemberCleanup(storage, scheme, { null }, TimeProvider.fixed(now)).run())
         assertTrue(storage.deleted.isEmpty())
     }
+
+    @Test
+    fun `a key attached between the scan and the delete is asked about once more and stays`() {
+        val raced = scheme.issue("acc_a", "raced.png")
+        val orphan = scheme.issue("acc_a", "orphan.png")
+        val storage = ListingStorage(listOf(raced, orphan).map { StoredObjectSummary(ObjectKey(it), lastModified = old) })
+        var asked = 0
+        // 처음 물을 때는 둘 다 안 쓰이지만, 지우기 직전에 다시 물으면 방금 글에 붙은 raced 가 쓰이는 것으로 답한다
+        val usage = UploadedKeyUsage { keys -> if (++asked == 1) emptySet() else keys.filter { it == raced }.toSet() }
+        val images = RecordingImages()
+        assertEquals(1, StorageMemberCleanup(storage, scheme, { usage }, TimeProvider.fixed(now), null) { images }.run())
+        assertEquals(listOf(orphan), storage.deleted, "the key that got attached in the meantime is not deleted")
+        assertEquals(listOf(orphan), images.forgotten)
+    }
 }

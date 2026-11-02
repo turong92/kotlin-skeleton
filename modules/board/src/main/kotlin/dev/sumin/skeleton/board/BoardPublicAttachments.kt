@@ -149,7 +149,7 @@ class BoardPublicAttachments(
             if (page.isEmpty()) break
             page.forEach {
                 val publicKey = store.publicKeyOf(it.key)
-                expected += publicKey
+                expected += store.publicKeysOf(it.key)   // 썸네일 · 대안 형식 사본까지 - 줄이 가리키는 공개 객체를 고아로 지우지 않는다
                 // 줄은 있는데 객체가 없다(복사가 끊겼다) - 공개 조건에 들면 다시 복사하고, 아니면 줄을 거둔다
                 if (publicKey !in listedSet && guarded { if (it.key in repository.eligible(it.target, it.targetId)) add(store, it) else remove(store, it) }) fixed++
             }

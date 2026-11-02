@@ -124,6 +124,8 @@ data class PostDetailResponse(
     @get:JsonInclude(JsonInclude.Include.NON_NULL) val attachmentUrls: Map<String, String>? = null,
     /** 이미지 모듈이 있고 이 글이 공개일 때, 변환이 끝난 이미지의 첨부 키 -> 폭 · 높이 · 썸네일 · 본 이미지 공개 주소 (없으면 키 자체가 빠진다) */
     @get:JsonInclude(JsonInclude.Include.NON_NULL) val attachmentImages: Map<String, dev.sumin.skeleton.common.upload.PublicUploadImage>? = null,
+    /** 변환 중이라 아직 공개 주소가 없는 이미지의 첨부 키 (없으면 키가 없다) - 주소 대신 「처리 중」으로 그리고 다시 읽는다 */
+    @get:JsonInclude(JsonInclude.Include.NON_NULL) val attachmentsPending: List<String>? = null,
 )
 
 /** 목록의 한 줄이면 replies 가 있다 (최상위: 모든 자손 작성 순 평평하게, 답글: 빈 배열). 한 댓글만 돌려주는 응답에는 replies 가 없다. */
@@ -165,6 +167,7 @@ data class CommentResponse(
     val attachmentUrls: Map<String, String>? = null,
     /** 이미지 모듈이 있을 때, 변환이 끝난 이미지의 첨부 키 -> 폭 · 높이 · 썸네일 · 본 이미지 공개 주소 (없으면 키가 없다) */
     val attachmentImages: Map<String, dev.sumin.skeleton.common.upload.PublicUploadImage>? = null,
+    val attachmentsPending: List<String>? = null,
 )
 
 /** 승인 전 · 판 사진을 관리하는 사람이 짧게 읽는 서명 주소 */
@@ -255,7 +258,7 @@ internal fun PostDetailView.toResponse(excerptLength: Int) = with(post) {
         reactions.counts, reactions.myReactions, attachments.size, createdAt, updatedAt,
         authorDeleted, authorName = author?.name, authorTag = author?.tag, mine = mine, authorGuest = BoardAuthors.isGuest(authorId),
         canManageComments = canManageComments, commentApproval = commentApproval, pendingRevision = pendingRevision?.toResponse(),
-        attachmentUrls = attachmentUrls.ifEmpty { null }, attachmentImages = attachmentImages.ifEmpty { null },
+        attachmentUrls = attachmentUrls.ifEmpty { null }, attachmentImages = attachmentImages.ifEmpty { null }, attachmentsPending = attachmentsPending.ifEmpty { null },
     )
 }
 
@@ -266,7 +269,7 @@ internal fun CommentView.toResponse(thread: Boolean = false): CommentResponse = 
         reactions.counts, reactions.myReactions, replyCount, createdAt, updatedAt,
         replies = if (thread) replies.map { it.toResponse(thread = true) } else null,
         authorDeleted = authorDeleted, authorName = author?.name, authorTag = author?.tag, mine = mine, authorGuest = BoardAuthors.isGuest(authorId),
-        pendingRevision = pendingRevision?.toResponse(), attachments = this@toResponse.attachments, canManage = canManage, attachmentUrls = attachmentUrls.ifEmpty { null }, attachmentImages = attachmentImages.ifEmpty { null },
+        pendingRevision = pendingRevision?.toResponse(), attachments = this@toResponse.attachments, canManage = canManage, attachmentUrls = attachmentUrls.ifEmpty { null }, attachmentImages = attachmentImages.ifEmpty { null }, attachmentsPending = attachmentsPending.ifEmpty { null },
     )
 }
 

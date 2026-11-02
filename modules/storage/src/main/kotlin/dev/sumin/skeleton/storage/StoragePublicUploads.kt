@@ -2,6 +2,8 @@ package dev.sumin.skeleton.storage
 
 import dev.sumin.skeleton.common.upload.PrivateUploadAccess
 import dev.sumin.skeleton.common.upload.PublicUploadPurger
+import dev.sumin.skeleton.common.upload.PublicImages
+import dev.sumin.skeleton.common.upload.PublicUploadFormat
 import dev.sumin.skeleton.common.upload.PublicUploadImage
 import dev.sumin.skeleton.common.upload.PublicUploads
 import dev.sumin.skeleton.common.upload.UploadImageState
@@ -34,20 +36,40 @@ class StoragePublicUploads(
 
     override fun publicKeyOf(privateKey: String): String = keys.publicKeyOf(privateKey)
 
+    /** 이미지 모듈이 있으면 키만으로 정해지는 모든 사본의 이름 - 있을 수 있는 것 전부(WebP 사본이 실제로 있는지는 묻지 않는다). 전체 대조가 이것으로 「줄이 가리키는 공개 객체」를 세므로 모자라면 사본을 고아로 지우고, [unpublish] 가 이것을 지우므로 모자라면 사본이 남는다 */
     override fun publicKeysOf(privateKey: String): List<String> =
-        if (images() != null && isImageKey(privateKey)) listOf(keys.publicKeyOf(privateKey), thumbKeyOf(privateKey)) else listOf(keys.publicKeyOf(privateKey))
+        if (images() != null && isImageKey(privateKey)) {
+            listOf(keys.publicKeyOf(privateKey), thumbKeyOf(privateKey), altKeyOf(privateKey, thumb = false), altKeyOf(privateKey, thumb = true))
+        } else listOf(keys.publicKeyOf(privateKey))
 
-    override fun imagesOf(privateKeys: Collection<String>): Map<String, PublicUploadImage> {
-        val module = images() ?: return emptyMap()
+    override fun imagesOf(privateKeys: Collection<String>): PublicImages {
+        val module = images() ?: return PublicImages()
         val candidates = privateKeys.filter(::isImageKey)
-        if (candidates.isEmpty()) return emptyMap()
+        if (candidates.isEmpty()) return PublicImages()
         val base = keys.properties().`public`.baseUrl.trimEnd('/')
-        return module.views(candidates).mapNotNull { (key, status) ->
+        val ready = mutableMapOf<String, PublicUploadImage>()
+        val pending = mutableSetOf<String>()
+        val refused = mutableSetOf<String>()
+        module.views(candidates).forEach { (key, status) ->
             val display = status.variants[UploadImages.DISPLAY]
-            if (status.state != UploadImageState.READY || display == null) null
-            else key to PublicUploadImage(display.width, display.height, thumb = if (UploadImages.THUMB in status.variants) "$base/${thumbKeyOf(key)}" else urlOf(key), display = urlOf(key))
-        }.toMap()
+            when {
+                status.state == UploadImageState.PENDING -> pending += key
+                status.state != UploadImageState.READY || display == null -> refused += key
+                else -> {
+                    val thumb = status.variants[UploadImages.THUMB]
+                    val hasWebp = webpOf(display) != null && thumb?.let(::webpOf) != null   // publish 가 사본을 만드는 조건과 같다
+                    ready[key] = PublicUploadImage(
+                        display.width, display.height,
+                        thumb = if (thumb != null) "$base/${thumbKeyOf(key)}" else urlOf(key), display = urlOf(key),
+                        alternates = if (hasWebp) mapOf(WEBP to PublicUploadFormat(thumb = "$base/${altKeyOf(key, thumb = true)}", display = "$base/${altKeyOf(key, thumb = false)}")) else emptyMap(),
+                    )
+                }
+            }
+        }
+        return PublicImages(ready, pending, refused)
     }
+
+    private fun webpOf(variant: dev.sumin.skeleton.common.upload.UploadImageVariant) = variant.alternates.firstOrNull { it.contentType == WEBP }
 
     override fun mayPublish(privateKey: String): Boolean =
         keys.properties().`public`.enabled &&
@@ -86,12 +108,28 @@ class StoragePublicUploads(
         }
         val display = status.variants[UploadImages.DISPLAY] ?: return false
         copyVariant(display, keys.publicKeyOf(privateKey), cacheControl)
-        status.variants[UploadImages.THUMB]?.let { copyVariant(it, thumbKeyOf(privateKey), cacheControl) }
+        val thumb = status.variants[UploadImages.THUMB]
+        thumb?.let { copyVariant(it, thumbKeyOf(privateKey), cacheControl) }
+        // 같은 그림의 WebP - 정적 CDN 은 Accept 를 못 보므로 별도 사본으로 두고 화면이 고른다. 둘 다 있을 때만(썸네일만 있는 짝 없는 사본은 만들지 않는다)
+        val displayWebp = webpOf(display)
+        val thumbWebp = thumb?.let(::webpOf)
+        if (displayWebp != null && thumbWebp != null) {
+            copyVariant(displayWebp, altKeyOf(privateKey, thumb = false), cacheControl)
+            copyVariant(thumbWebp, altKeyOf(privateKey, thumb = true), cacheControl)
+        }
         return true
     }
 
     private fun copyVariant(variant: dev.sumin.skeleton.common.upload.UploadImageVariant, destination: String, cacheControl: String) {
         storage.copy(CopyObjectRequest(sourceKey = ObjectKey(variant.key), destinationKey = ObjectKey(destination), contentType = variant.contentType, cacheControl = cacheControl))
+    }
+
+    /** WebP 사본 - 공개 키의 확장자 자리를 `.alt.webp` 로 (`<hmac32>.alt.webp`, 썸네일은 `<hmac32>.thumb.alt.webp`). 원본이 `.webp` 여도 본 사본(`<hmac32>.webp`)과 겹치지 않는다 */
+    private fun altKeyOf(privateKey: String, thumb: Boolean): String {
+        val publicKey = keys.publicKeyOf(privateKey)
+        val dot = publicKey.lastIndexOf('.')
+        val head = if (dot > publicKey.lastIndexOf('/')) publicKey.substring(0, dot) else publicKey
+        return head + (if (thumb) ".thumb" else "") + ".alt.webp"
     }
 
     /** 공개 키 꼬리의 확장자 앞에 `.thumb` - 비공개 키에서만 계산된다 */
@@ -127,6 +165,7 @@ class StoragePublicUploads(
     }
 
     private companion object {
+        const val WEBP = "image/webp"
         /** 공개해도 되는 형식 - 이미지(SVG 제외: 스크립트를 담을 수 있다)와 PDF. 그 밖은 비공개로만 둔다 */
         val PUBLISHABLE_EXTENSIONS = setOf("jpg", "jpeg", "png", "webp", "gif", "avif", "heic", "pdf")
         val IMAGE_EXTENSIONS = setOf("jpg", "jpeg", "png", "webp", "gif", "avif", "heic")

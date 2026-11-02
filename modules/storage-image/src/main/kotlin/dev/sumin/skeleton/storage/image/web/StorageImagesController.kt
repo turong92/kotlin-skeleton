@@ -11,14 +11,17 @@ import dev.sumin.skeleton.storage.StorageKeyOwnership
 import dev.sumin.skeleton.storage.web.StorageErrorCode
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
+import jakarta.servlet.http.HttpServletResponse
 import jakarta.validation.Valid
 import jakarta.validation.constraints.NotEmpty
 import jakarta.validation.constraints.Size
 import java.time.Duration
+import org.springframework.http.HttpHeaders
 import org.springframework.security.authentication.AnonymousAuthenticationToken
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
+import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 
@@ -52,14 +55,19 @@ class StorageImagesController(
     )
     @ApiResponseEnvelope(type = ApiEnvelopeType.VALUE, value = StorageImagesResponse::class)
     @PostMapping("/images")
-    fun images(authentication: Authentication?, @Valid @RequestBody request: StorageImagesRequest): Any {
+    fun images(
+        authentication: Authentication?, @Valid @RequestBody request: StorageImagesRequest,
+        @RequestHeader(HttpHeaders.ACCEPT, required = false) accept: String?,
+        response: HttpServletResponse,
+    ): Any {
+        response.setHeader(HttpHeaders.VARY, HttpHeaders.ACCEPT)   // 서명 주소의 형식(WebP 여부)이 Accept 에 따라 달라진다
         val accountId = authentication?.takeIf { it.isAuthenticated && it !is AnonymousAuthenticationToken }?.name
             ?: throw ApplicationException("Authentication required", StorageErrorCode.UNAUTHENTICATED)
         val own = request.keys.distinct().filter { raw -> runCatching { ObjectKey(raw) }.isSuccess && ownership.owns(accountId, raw) }
         val items = own.mapNotNull { key ->
             val status = images.status(key) ?: run { images.ensure(key); images.status(key) } ?: return@mapNotNull null
             val variants = if (status.state != UploadImageState.READY) emptyMap() else status.variants.mapNotNull { (name, v) ->
-                images.signedVariantUrl(key, name, accessTtl)?.let { name to StorageImageVariantView(it, v.width, v.height) }
+                images.signedVariantUrl(key, name, accessTtl, accept)?.let { name to StorageImageVariantView(it, v.width, v.height) }
             }.toMap()
             StorageImageItem(key, status.state.name, status.width, status.height, variants)
         }

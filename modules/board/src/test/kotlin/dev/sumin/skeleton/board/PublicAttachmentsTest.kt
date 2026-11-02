@@ -1,6 +1,8 @@
 package dev.sumin.skeleton.board
 
 import dev.sumin.skeleton.common.upload.PrivateUploadAccess
+import dev.sumin.skeleton.common.upload.PublicImages
+import dev.sumin.skeleton.common.upload.PublicUploadFormat
 import dev.sumin.skeleton.common.upload.PublicUploadImage
 import dev.sumin.skeleton.common.upload.PublicUploads
 import java.time.Duration
@@ -130,21 +132,36 @@ class PublicAttachmentsTest {
     }
 
     @Test
-    fun `attachmentImages carries the ready images of a published post and comment - none without the image module`() {
-        val image = PublicUploadImage(1600, 1200, thumb = "https://cdn.example/a.thumb.jpg", display = "https://cdn.example/a.jpg")
+    fun `attachmentImages carries the ready images of a published post and comment, a waiting image has no address but is listed as pending - none without the image module`() {
+        val image = PublicUploadImage(1600, 1200, thumb = "https://cdn.example/a.thumb.jpg", display = "https://cdn.example/a.jpg",
+            alternates = mapOf("image/webp" to PublicUploadFormat("https://cdn.example/a.thumb.webp", "https://cdn.example/a.webp")))
         val withImages = BoardUploads(
             publicUploads = { object : FakePublic() {
-                override fun imagesOf(privateKeys: Collection<String>) = privateKeys.filter { it == "k/a.png" }.associateWith { image }
+                override fun imagesOf(privateKeys: Collection<String>) = PublicImages(
+                    ready = privateKeys.filter { it == "k/a.png" }.associateWith { image },
+                    pending = privateKeys.filter { it == "k/wait.png" }.toSet(),
+                    refused = privateKeys.filter { it == "k/bad.png" }.toSet(),
+                )
             } },
         )
-        val (h, post, c) = world(withImages)
-        h.commentService.moderate(other, "general", post, c.id, CommentStatus.PUBLISHED)
-        assertEquals(mapOf("k/a.png" to image), h.commentService.list(stranger, "general", post, 0, 10, CommentSort.OLDEST).values.single().attachmentImages)
-        h.commentService.moderate(other, "general", post, c.id, CommentStatus.HIDDEN)
-        assertEquals(emptyMap(), h.commentService.list(other, "general", post, 0, 10, CommentSort.OLDEST).values.single().attachmentImages, "hidden: nothing public")
+        val h = ServiceHarness(props = BoardProperties(commentMaxAttachments = 4, guest = BoardProperties.Guest(enabled = true)), settings = settings, uploads = withImages)
+        val post = h.postService.create(other, "general", CreatePost("제목", "본문", null, null)).post
+        h.postService.moderate(moderator, "general", post.id, PostStatus.PUBLISHED, null)
+        val c = h.commentService.create(third, "general", post.id, null, "사진", attachments = listOf("k/a.png", "k/wait.png", "k/bad.png", "k/doc.pdf")).comment
+        h.commentService.moderate(other, "general", post.id, c.id, CommentStatus.PUBLISHED)
+        fun shown() = h.commentService.list(stranger, "general", post.id, 0, 10, CommentSort.OLDEST).values.single()
+        assertEquals(mapOf("k/a.png" to image), shown().attachmentImages)
+        assertEquals(listOf("k/wait.png"), shown().attachmentsPending, "the client learns that this one is on its way")
+        assertEquals(setOf("k/a.png", "k/doc.pdf"), shown().attachmentUrls.keys, "no address for an image that is not converted yet (the original must not be shown) or refused - the PDF is unaffected")
+        h.commentService.moderate(other, "general", post.id, c.id, CommentStatus.HIDDEN)
+        val hidden = h.commentService.list(other, "general", post.id, 0, 10, CommentSort.OLDEST).values.single()
+        assertEquals(emptyMap(), hidden.attachmentImages, "hidden: nothing public")
+        assertEquals(emptyList(), hidden.attachmentsPending)
 
         val (plain, plainPost, plainComment) = world()
         plain.commentService.moderate(other, "general", plainPost, plainComment.id, CommentStatus.PUBLISHED)
-        assertEquals(emptyMap(), plain.commentService.list(stranger, "general", plainPost, 0, 10, CommentSort.OLDEST).values.single().attachmentImages)
+        val plainShown = plain.commentService.list(stranger, "general", plainPost, 0, 10, CommentSort.OLDEST).values.single()
+        assertEquals(emptyMap(), plainShown.attachmentImages)
+        assertEquals(setOf("k/a.png"), plainShown.attachmentUrls.keys, "without the image module addresses are as before")
     }
 }

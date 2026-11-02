@@ -54,8 +54,13 @@ class JdbcPublicAttachmentDbTest {
             if (purgeFails) error("CDN purge failed")
             purged += publicKey
         }
-        override fun listPublicKeys() = objects.map { "pub/$it" }
-        override fun deletePublicKey(publicKey: String) { objects.removeIf { "pub/$it" == publicKey } }
+        /** 이미지 모듈이 있을 때처럼 한 비공개 키가 공개 객체를 여럿 만든다(썸네일 · WebP 사본) - 켜면 [publicKeysOf] 가 그것들을 말하고 [extras] 에 객체가 놓인다 */
+        var withVariants = false
+        val extras = mutableSetOf<String>()
+        override fun publicKeysOf(privateKey: String) =
+            if (withVariants) listOf("pub/$privateKey", "pub/$privateKey.thumb", "pub/$privateKey.alt.webp", "pub/$privateKey.thumb.alt.webp") else listOf("pub/$privateKey")
+        override fun listPublicKeys() = objects.map { "pub/$it" } + extras
+        override fun deletePublicKey(publicKey: String) { objects.removeIf { "pub/$it" == publicKey }; extras -= publicKey }
     }
 
     private val uploads = FakeUploads()
@@ -187,6 +192,25 @@ class JdbcPublicAttachmentDbTest {
         now = now.plus(Duration.ofDays(2))
         sync.fullPass()
         assertEquals(setOf("kept.png"), mine())
+    }
+
+    @Test
+    fun `the full pass never deletes the thumbnail or WebP copies a row points to, and still deletes an unreferenced one`() {
+        uploads.withVariants = true
+        val post = db.newPost(db.newBoard())
+        val kept = comment(post.id, CommentStatus.PUBLISHED, "photo.jpg")
+        sync.reconcile(RevisionTarget.COMMENT, kept.id)
+        val pub = "pub/${tag}photo.jpg"
+        uploads.extras += listOf("$pub.thumb", "$pub.alt.webp", "$pub.thumb.alt.webp")   // 복사가 만든 사본들
+        uploads.extras += "pub/${tag}orphan.jpg.alt.webp"                                // 어느 줄도 가리키지 않는 사본
+        now = now.plus(Duration.ofDays(2))
+        sync.fullPass()
+        assertEquals(setOf("$pub.thumb", "$pub.alt.webp", "$pub.thumb.alt.webp"), uploads.extras.filter { it.startsWith("pub/$tag") && !it.contains("orphan") }.toSet(), "every public object a row points to survives")
+        assertFalse("pub/${tag}orphan.jpg.alt.webp" in uploads.extras, "the unreferenced copy is still cleaned")
+        // 내려갈 때는 사본까지 함께
+        db.comments.setStatus(kept.id, CommentStatus.HIDDEN, T0)
+        sync.reconcile(RevisionTarget.COMMENT, kept.id)
+        assertEquals(emptySet(), mine())
     }
 
     @Test
