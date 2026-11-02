@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `apps/sample`: 다섯 모듈 조립 - `push.enabled` · `lock-screen: FULL`(일부러 명시) · `types` 일곱 · 광고 종류 `promo.notes-tips` + `sender-name` · `fallback-zone: Asia/Seoul` · `stale-cleanup`(60일) · `webpush.enabled: true`(로컬 프로필은 시험용 VAPID 고정 쌍, `SKELETON_NOTIFICATION_WEBPUSH_VAPID_*` 로 덮는다) · `fcm.enabled: ${SKELETON_NOTIFICATION_FCM_ENABLED:false}` · 이메일 없는 계정도 하는 푸시 설정 경로 넷(`email.extra-exclude-paths`, `WriteGateCensusTest`) · 받는 사람 시간대 `push/SamplePushConfiguration`(계정 프로필의 `timeZone`) · 견본 `legal` 문서에 `marketing-night`(DRAFT · 견본임을 적음, ko/en)과 푸시를 말하는 `marketing`. 통합 시험 `push/PushJourneyIntegrationTest`. `apps/workbench` 는 클래스패스에 다섯을 모두 두되 켜지 않는다(공존 증명).
 - 프론트 짝 `@skeleton/push`(react-skeleton). `ModuleDocumentationTest` 의 알려진 패키지에 더했다.
 
+### 버려진 회원 업로드 정리 (files K6, 2026-11-02)
+
+- `storage`: **꺼진 채 시작하는** `skeleton.storage.web.cleanup.{enabled,min-age,batch-size}`(7일 · 500) - 업로드 접두사 아래에서 나이를 넘기고 어떤 `UploadedKeyUsage` 도 쓴다고 하지 않은 원본을 한 시간마다 지운다(`StorageMemberCleanup`, `scheduler` 필요). 비회원 영역 · 공개 영역 · 변환본 접두사는 건드리지 않고, 이미지 모듈이 있으면 변환본 · 상태 줄도 같이 지운다.
+- `platform`: `UploadKeyHolder`(업로드 키를 저장하는 모듈의 표지 빈) · `UploadedKeyUsage.answers`(대답하는 모듈 이름, 기본 빈 집합 - 기존 구현은 그대로 컴파일된다) · `UploadedKeyUsages.unanswered`. 정리를 켰는데 대답 없는 표지가 있거나 `UploadedKeyUsage` 가 하나도 없으면 **기동 실패**(메시지에 모듈 이름).
+- `board` · `review` 가 표지(`board` · `review`)를 낸다. `board-jdbc` 의 `UploadedKeyUsage` 가 `board` 를 대답하고, `review-jdbc` 에 새 `UploadedKeyUsage`(`review_photos` 의 저장 키)가 생겼다. 앱이 자기 표에 업로드 키를 저장하면 표지 + `answers` 가 있는 사용처를 짝으로 둔다.
+
 ### 친구초대 보류 · 확인 · 취소 (2026-10-31)
 
 - `campaign` + `campaign-jdbc`: 초대 이벤트 설정 `qualifyEvent`(신호 이름) · `holdDays`(0~90, 초대자 보상 보류) · `reviewSameNetwork`(같은 네트워크면 운영자 승인까지 보류) - 모두 비우면 예전 동작 그대로. 관계 상태 `REVIEW` · `HELD` · `CANCELED`, 표시 `SAME_NETWORK`(네트워크 값은 30일 뒤 지운다), 해제 주기 작업(`scheduler` 가 있으면 10분마다, 컴파일 전용), 마이그레이션 `V20261031090000__campaign_referral_review`(열 더하기만). `DeployGuard` 는 `reviewSameNetwork` 인데 `skeleton.web.client-ip.mode` 가 비었으면 경고한다.

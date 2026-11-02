@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.review.jdbc
 
+import dev.sumin.skeleton.common.upload.UploadedKeyUsage
 import dev.sumin.skeleton.review.ReviewStore
 import dev.sumin.skeleton.persistence.jdbc.SqlDialect
 import javax.sql.DataSource
@@ -28,4 +29,9 @@ class ReviewJdbcAutoConfiguration {
     @ConditionalOnMissingBean(ReviewStore::class)
     fun jdbcReviewStore(dataSource: DataSource, transactionManager: PlatformTransactionManager, dialect: SqlDialect): ReviewStore =
         JdbcReviewStore(NamedParameterJdbcTemplate(dataSource), transactionManager, dialect)
+
+    /** storage 의 회원 업로드 정리가 사진으로 붙은 키를 알아보는 데 쓴다 (정리를 켜지 않으면 아무도 부르지 않는다) */
+    @Bean
+    @ConditionalOnMissingBean(name = ["jdbcReviewUploadedKeyUsage"])   // 타입으로 비키지 않는다 - 다른 구현과 합집합으로 쓰인다 (UploadedKeyUsages)
+    fun jdbcReviewUploadedKeyUsage(dataSource: DataSource): UploadedKeyUsage = JdbcReviewUploadedKeyUsage(NamedParameterJdbcTemplate(dataSource))
 }

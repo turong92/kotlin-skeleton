@@ -9,7 +9,8 @@
 구매 취소는 구매 줄 → 리뷰 줄 순으로 잠그고 취소 뒤 살아 있는 구매를 다시 센다 ·
 **남에게 보이는 목록 질의는 `status = 'PUBLISHED'`(보는 사람 자신의 `HIDDEN` 만 더)인 줄만 읽는다** — 걸러 내는 것이 아니라 읽지 않는다 ·
 운영 큐(`reported`)는 `status = 'PUBLISHED' and report_count > 0 and (reports_reviewed_at is null or reported_at > reports_reviewed_at)` 로 읽는다 · 다시 쓰기로 되살린 줄은 도움돼요 · 신고 · 답글 · 사진을 비운다 ·
-탈퇴 때 리뷰 · 도움돼요 · 신고의 계정을 톰스톤으로 바꾸고 구매 줄을 지운다.
+탈퇴 때 리뷰 · 도움돼요 · 신고의 계정을 톰스톤으로 바꾸고 구매 줄을 지운다 ·
+`JdbcReviewUploadedKeyUsage`(`UploadedKeyUsage`, `answers = {review}`)가 `review_photos` 의 저장 키를 「쓰이는 파일」로 알린다 - storage 의 버려진 회원 업로드 정리(`skeleton.storage.web.cleanup`, 기본 꺼짐)가 사진을 지우지 않게 묻는 자리다. 교체 시에는 같은 이름의 빈(`jdbcReviewUploadedKeyUsage`)을 둔다.
 
 | 항목 | 내용 |
 |---|---|

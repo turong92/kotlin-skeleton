@@ -4,6 +4,7 @@ import dev.sumin.skeleton.common.author.AuthorDirectory
 import dev.sumin.skeleton.common.authz.PermissionDeclaration
 import dev.sumin.skeleton.common.erasure.AccountErasureListener
 import dev.sumin.skeleton.common.time.TimeProvider
+import dev.sumin.skeleton.common.upload.UploadKeyHolder
 import dev.sumin.skeleton.review.erasure.ReviewAccountErasureListener
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.autoconfigure.AutoConfiguration
@@ -19,6 +20,12 @@ import org.springframework.context.annotation.Bean
 @AutoConfiguration(afterName = ["dev.sumin.skeleton.review.jdbc.ReviewJdbcAutoConfiguration"])
 @EnableConfigurationProperties(ReviewProperties::class)
 class ReviewAutoConfiguration {
+    /** 저장소가 있으면 사진 키가 저장될 수 있다 - 회원 업로드 정리는 이 이름에 답하는 `UploadedKeyUsage`(review-jdbc)가 있어야 켜진다 */
+    @Bean
+    @ConditionalOnBean(ReviewStore::class)
+    @ConditionalOnMissingBean(name = ["reviewUploadKeyHolder"])
+    fun reviewUploadKeyHolder(): UploadKeyHolder = UploadKeyHolder(REVIEW_UPLOAD_KEY_MODULE)
+
     @Bean
     @ConditionalOnMissingBean(ReviewPolicy::class)
     fun defaultReviewPolicy(): ReviewPolicy = object : ReviewPolicy {}
@@ -91,3 +98,6 @@ class ReviewAutoConfiguration {
     @ConditionalOnMissingBean(name = ["reviewAccountErasureListener"])
     fun reviewAccountErasureListener(store: ReviewStore): AccountErasureListener = ReviewAccountErasureListener(store)
 }
+
+/** [UploadKeyHolder.module] 에 쓰는 이름 - `UploadedKeyUsage.answers` 가 같은 이름을 대답한다 */
+const val REVIEW_UPLOAD_KEY_MODULE = "review"

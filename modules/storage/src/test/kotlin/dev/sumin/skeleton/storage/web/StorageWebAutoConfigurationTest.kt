@@ -82,4 +82,39 @@ class StorageWebAutoConfigurationTest {
                 assertThat(context).hasSingleBean(dev.sumin.skeleton.storage.StorageGuestCleanup::class.java)
             }
     }
+
+    private val cleanupOn = arrayOf("skeleton.storage.web.cleanup.enabled=true")
+
+    @Test
+    fun `member cleanup refuses to start while an assembled module stores upload keys without a matching usage`() {
+        runner.withBean(FakePresignedStorage::class.java, Supplier { FakePresignedStorage() })
+            .withBean("boardHolder", dev.sumin.skeleton.common.upload.UploadKeyHolder::class.java, Supplier { dev.sumin.skeleton.common.upload.UploadKeyHolder("board") })
+            .withBean("reviewHolder", dev.sumin.skeleton.common.upload.UploadKeyHolder::class.java, Supplier { dev.sumin.skeleton.common.upload.UploadKeyHolder("review") })
+            .withBean("boardUsage", dev.sumin.skeleton.common.upload.UploadedKeyUsage::class.java, Supplier { object : dev.sumin.skeleton.common.upload.UploadedKeyUsage {
+                override fun inUse(keys: Collection<String>) = emptySet<String>()
+                override val answers = setOf("board")
+            } })
+            .withPropertyValues(*cleanupOn)
+            .run { context ->
+                assertThat(context).hasFailed()
+                assertThat(context.startupFailure).hasStackTraceContaining("review").hasStackTraceContaining("UploadedKeyUsage")
+            }
+    }
+
+    @Test
+    fun `member cleanup starts when every holder is answered, and is not even created when off`() {
+        val base = runner.withBean(FakePresignedStorage::class.java, Supplier { FakePresignedStorage() })
+            .withBean("boardHolder", dev.sumin.skeleton.common.upload.UploadKeyHolder::class.java, Supplier { dev.sumin.skeleton.common.upload.UploadKeyHolder("board") })
+        base.withBean("boardUsage", dev.sumin.skeleton.common.upload.UploadedKeyUsage::class.java, Supplier { object : dev.sumin.skeleton.common.upload.UploadedKeyUsage {
+            override fun inUse(keys: Collection<String>) = emptySet<String>()
+            override val answers = setOf("board")
+        } }).withPropertyValues(*cleanupOn).run { context ->
+            assertThat(context).hasNotFailed()
+            assertThat(context).hasSingleBean(dev.sumin.skeleton.storage.StorageMemberCleanup::class.java)
+        }
+        base.run { context ->   // 기본 꺼짐 - 대답 없는 사용처가 있어도 기동은 평소대로
+            assertThat(context).hasNotFailed()
+            assertThat(context).doesNotHaveBean(dev.sumin.skeleton.storage.StorageMemberCleanup::class.java)
+        }
+    }
 }

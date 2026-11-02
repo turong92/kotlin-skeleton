@@ -37,4 +37,8 @@ skeleton:
           enabled: false                    # true 면 ttl 안에 글 · 댓글에 붙지 않은 비회원 업로드를 주기 작업(scheduler 모듈 필요)이 지운다
           ttl: 24h
           batch-size: 500
+      cleanup:                              # 버려진 회원 업로드 정리 - 업로드 접두사 아래에서 min-age 를 넘기고 어디에도(리뷰 사진 · 게시판 첨부 …) 안 붙은 원본을 지운다 (docs/modules/storage.md)
+        enabled: false                      # 기본 꺼짐 - 앱 yml 이 켠다. 켜면 키를 저장하는 모든 모듈(board · review …)의 UploadedKeyUsage 가 조립돼 있어야 하고, 아니면 기동 실패. scheduler 모듈 필요
+        min-age: 7d                         # 올린 지 이만큼 지나고도 안 붙은 것만 - 글을 쓰다 말고 돌아오는 시간보다 넉넉하게
+        batch-size: 500                     # 한 번에 지우는 최대 개수 (1~1000)
       key-secret: ""                        # OPAQUE 키의 HMAC 비밀(32자 이상, 비밀 — env <P>_STORAGE_WEB_KEY_SECRET). OPAQUE 인데 비면 기동 실패. 바꾸면 발급한 OPAQUE 키가 맞지 않게 된다

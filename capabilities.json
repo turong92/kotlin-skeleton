@@ -3279,7 +3279,7 @@
       "module": "storage",
       "path": "modules/storage",
       "status": "stable",
-      "summary": "저장소 계약(ObjectStorage · PresignedStorage) · 파일 크기/확장자/content-type 검증 + 브라우저 직접 업로드 HTTP(/api/v1/storage: presign · 멀티파트 · 올림 완료 검사 /complete) · 매직 바이트 판정 · 검사기(UploadInspector) 확장 지점.",
+      "summary": "저장소 계약(ObjectStorage · PresignedStorage) · 파일 크기/확장자/content-type 검증 + 브라우저 직접 업로드 HTTP(/api/v1/storage: presign · 멀티파트 · 올림 완료 검사 /complete) · 매직 바이트 판정 · 검사기(UploadInspector) 확장 지점 · 버려진 회원 업로드 정리(기본 꺼짐, UploadedKeyUsage 로 쓰이는 파일 보호).",
       "starter": false,
       "newProjectFlag": "--modules storage,storage-s3",
       "autoIncludes": ["crypto"],

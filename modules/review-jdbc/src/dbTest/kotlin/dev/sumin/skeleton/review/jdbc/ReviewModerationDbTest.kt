@@ -51,6 +51,7 @@ abstract class ReviewModerationDbBase {
     @Autowired lateinit var reader: ReviewReader
     @Autowired lateinit var store: ReviewStore
     @Autowired lateinit var jdbc: JdbcClient
+    @Autowired lateinit var usage: dev.sumin.skeleton.common.upload.UploadedKeyUsage
 
     val seq = UUID.randomUUID().toString().take(8)
     fun account(n: Int) = "acc_${seq}_$n"
@@ -168,6 +169,16 @@ class ReviewModerationDbTest : ReviewModerationDbBase() {
         assertEquals(0L, count("select count(*) from review_photos where review_id = ?", r.id))
         assertEquals(0, store.find(r.id)!!.photoCount)
         assertEquals(0, store.find(r.id)!!.reportCount)
+    }
+
+    @Test
+    fun `the upload key usage answers for stored photo keys only, and for the review module`() {
+        val r = write(account(1), target("usage"), 5, listOf("reviews/used-a.jpg", "reviews/used-b.jpg"))
+        assertEquals(setOf("reviews/used-a.jpg"), usage.inUse(listOf("reviews/used-a.jpg", "reviews/never-attached.jpg")))
+        service.update(account(1), r.id, ReviewInput(photos = listOf("reviews/used-b.jpg")))
+        assertEquals(setOf("reviews/used-b.jpg"), usage.inUse(listOf("reviews/used-a.jpg", "reviews/used-b.jpg")), "a replaced photo is no longer in use")
+        assertEquals(emptySet(), usage.inUse(emptyList()))
+        assertEquals(setOf("review"), usage.answers)
     }
 
     @Test

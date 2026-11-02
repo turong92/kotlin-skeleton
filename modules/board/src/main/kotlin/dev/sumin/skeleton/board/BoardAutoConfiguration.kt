@@ -10,6 +10,7 @@ import dev.sumin.skeleton.common.project.ProjectRegistry
 import dev.sumin.skeleton.common.upload.GuestUploadKeys
 import dev.sumin.skeleton.common.upload.PrivateUploadAccess
 import dev.sumin.skeleton.common.upload.PublicUploads
+import dev.sumin.skeleton.common.upload.UploadKeyHolder
 import java.time.Duration
 import java.time.Instant
 import org.slf4j.LoggerFactory
@@ -33,6 +34,11 @@ import org.springframework.context.annotation.Bean
 @EnableConfigurationProperties(BoardProperties::class)
 class BoardAutoConfiguration {
     /** 이 모듈이 가진 권한 — 모듈을 빼면 권한 카탈로그에서도 사라진다 */
+    /** 글 · 댓글 · 고친 판이 첨부 키를 저장한다 - 회원 업로드 정리는 이 이름에 답하는 `UploadedKeyUsage`(board-jdbc)가 있어야 켜진다 */
+    @Bean
+    @ConditionalOnMissingBean(name = ["boardUploadKeyHolder"])
+    fun boardUploadKeyHolder(): UploadKeyHolder = UploadKeyHolder(BOARD_UPLOAD_KEY_MODULE)
+
     @Bean
     @ConditionalOnMissingBean(name = ["boardPermissionDeclaration"])
     fun boardPermissionDeclaration(): PermissionDeclaration = BoardPermissions.declaration()
@@ -250,3 +256,6 @@ class BoardAutoConfiguration {
     @ConditionalOnMissingBean(name = ["boardSeedRunner"])
     fun boardSeedRunner(service: BoardService): ApplicationRunner = ApplicationRunner { service.seed() }
 }
+
+/** [UploadKeyHolder.module] 에 쓰는 이름 - `UploadedKeyUsage.answers` 가 같은 이름을 대답한다 */
+const val BOARD_UPLOAD_KEY_MODULE = "board"

@@ -154,7 +154,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `scheduler` | 어노테이션 기반 스케줄러 — 실행 가드 · 락 매니저 · 실패 핸들러(기본 락은 no-op, 단일 인스턴스용). | `--modules scheduler` | 스케줄러, 정기 작업, 크론, 주기 실행, 배치 / scheduler, cron, scheduled job, periodic task, batch | — |
 | `search` | DB 전문 검색 — 다른 모듈이 밀어 넣은 문서(상품 · 노트 …)를 한국어 2글자 조각으로 찾는다(PostgreSQL tsvector · MySQL ngram, 확장 설치 없음). 질의(쪽 · 종류 · 범위 · 정렬 · 하이라이트 위치) · 주인 문서 가리기 · 재색인 작업 · 탈퇴. 밀어 넣기 포트는 platform 의 SearchIndexer 라 다른 모듈이 search 를 모른다. | `--modules search,search-jdbc` | 검색, 전문 검색, 한국어 검색, 부분 일치, 하이라이트, 재색인 / search, full-text search, korean search, ngram, highlight, reindex | `@skeleton/search` |
 | `search-jdbc` | 검색 색인을 DB 에 둔다 (PostgreSQL tsvector + GIN · MySQL ngram FULLTEXT) — 쓰기는 호출자 트랜잭션에 합류, 재색인은 job-queue-jdbc 작업. MySQL 마이그레이션이 불용어를 꺼서 영어 조각이 빠지지 않게 한다. | `--modules search-jdbc` | 검색 저장소, 검색 색인 DB / search storage, search index database | — |
-| `storage` | 저장소 계약(ObjectStorage · PresignedStorage) · 파일 크기/확장자/content-type 검증 + 브라우저 직접 업로드 HTTP(/api/v1/storage: presign · 멀티파트 · 올림 완료 검사 /complete) · 매직 바이트 판정 · 검사기(UploadInspector) 확장 지점. | `--modules storage,storage-s3` | 파일 업로드, 이미지 업로드, 첨부파일, 프리사인, 파일 검증 / file upload, image upload, attachment, presigned url, multipart upload | `@skeleton/storage` |
+| `storage` | 저장소 계약(ObjectStorage · PresignedStorage) · 파일 크기/확장자/content-type 검증 + 브라우저 직접 업로드 HTTP(/api/v1/storage: presign · 멀티파트 · 올림 완료 검사 /complete) · 매직 바이트 판정 · 검사기(UploadInspector) 확장 지점 · 버려진 회원 업로드 정리(기본 꺼짐, UploadedKeyUsage 로 쓰이는 파일 보호). | `--modules storage,storage-s3` | 파일 업로드, 이미지 업로드, 첨부파일, 프리사인, 파일 검증 / file upload, image upload, attachment, presigned url, multipart upload | `@skeleton/storage` |
 | `storage-image` | 업로드한 이미지의 변환본(썸네일 thumb · 표시본 display, EXIF 없음)을 작업 큐로 만들고 남에게는 원본 대신 변환본만 준다 — 이미지 크기(픽셀 폭탄) 상한 · 지연 등록. 기본 꺼짐. | `--modules storage-image,storage-image-jdbc,storage-image-imageio` | 이미지 썸네일, 이미지 리사이즈, 표시본, EXIF 제거 / image thumbnail, image resize, strip exif, image variants | `@skeleton/storage` |
 | `storage-image-imageio` | storage-image 의 기본 변환 엔진 — 앱 안 순수 자바(ImageIO + TwelveMonkeys), 추가 서버 없음. 출력은 JPEG(투명이면 PNG), JVM 전용. | `--modules storage-image-imageio` | 이미지 변환 엔진, 순수 자바 이미지 리사이즈 / image renderer, java imageio, image resize engine | — |
 | `storage-image-imgproxy` | storage-image 의 선택 변환 엔진 — imgproxy 컨테이너(libvips)로 HEIC · AVIF 입력 · WebP 출력, 메모리가 적다. 서버(컨테이너) 하나가 더 필요하다. | `--modules storage-image-imgproxy` | imgproxy, HEIC 변환, WebP 변환 / imgproxy, heic conversion, webp output | — |
@@ -1453,7 +1453,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - MySQL 에서 색인을 다른 세션이 다시 만들면 불용어가 다시 켜진다 — 같은 SET 을 먼저 한다
 - 키워드: 검색 저장소, 검색 색인 DB / search storage, search index database
 
-### `storage` — 저장소 계약(ObjectStorage · PresignedStorage) · 파일 크기/확장자/content-type 검증 + 브라우저 직접 업로드 HTTP(/api/v1/storage: presign · 멀티파트 · 올림 완료 검사 /complete) · 매직 바이트 판정 · 검사기(UploadInspector) 확장 지점.
+### `storage` — 저장소 계약(ObjectStorage · PresignedStorage) · 파일 크기/확장자/content-type 검증 + 브라우저 직접 업로드 HTTP(/api/v1/storage: presign · 멀티파트 · 올림 완료 검사 /complete) · 매직 바이트 판정 · 검사기(UploadInspector) 확장 지점 · 버려진 회원 업로드 정리(기본 꺼짐, UploadedKeyUsage 로 쓰이는 파일 보호).
 
 - 종류 · 상태: module · stable — 위치 `modules/storage`
 - 켜는 법: `--modules storage,storage-s3`

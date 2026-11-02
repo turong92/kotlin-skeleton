@@ -22,6 +22,8 @@ data class StorageWebProperties(
     val guest: StorageGuestProperties = StorageGuestProperties(),
     /** 게시판 사진의 공개 영역 - **기본 꺼짐** */
     val `public`: StoragePublicProperties = StoragePublicProperties(),
+    /** 버려진 회원 업로드 정리 - **기본 꺼짐**, 앱 yml 이 켠다 */
+    val cleanup: StorageCleanupProperties = StorageCleanupProperties(),
 ) {
     init {
         if (`public`.enabled) {
@@ -64,6 +66,22 @@ data class StorageWebProperties(
 
     companion object {
         const val MIN_KEY_SECRET_LENGTH = 32
+    }
+}
+
+/**
+ * 버려진 회원 업로드 정리(`skeleton.storage.web.cleanup.*`) - 업로드 접두사 아래에서 [minAge] 보다 오래됐고 어떤 사용처([dev.sumin.skeleton.common.upload.UploadedKeyUsage])도 쓴다고 하지 않은 원본을 지운다.
+ * 켜려면 키를 저장하는 모든 모듈이 사용처로 대답해야 한다(아니면 기동 실패). 비회원 키는 `guest.cleanup` 이 따로 맡는다.
+ */
+data class StorageCleanupProperties(
+    val enabled: Boolean = false,
+    /** 이 나이를 넘기고도 어디에도 안 붙은 것만 지운다 - 올린 뒤 글을 쓰는 데 걸리는 시간보다 넉넉하게 */
+    val minAge: java.time.Duration = java.time.Duration.ofDays(7),
+    /** 한 번에 지우는 최대 개수 */
+    val batchSize: Int = 500,
+) {
+    init {
+        require(!minAge.isZero && !minAge.isNegative && batchSize in 1..1000) { "skeleton.storage.web.cleanup: min-age must be positive and batch-size 1..1000" }
     }
 }
 

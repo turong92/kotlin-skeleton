@@ -12,8 +12,23 @@ fun interface GuestUploadKeys {
 object UploadedKeyUsages {
     /** 구현이 하나도 없으면 null (회수는 아무것도 지우지 않는다) */
     fun union(all: List<UploadedKeyUsage>): UploadedKeyUsage? =
-        if (all.isEmpty()) null else UploadedKeyUsage { keys -> all.flatMapTo(mutableSetOf()) { it.inUse(keys) } }
+        if (all.isEmpty()) null else object : UploadedKeyUsage {
+            override fun inUse(keys: Collection<String>): Set<String> = all.flatMapTo(mutableSetOf()) { it.inUse(keys) }
+            override val answers: Set<String> = all.flatMapTo(mutableSetOf()) { it.answers }
+        }
+
+    /** [holders] 중 [usages] 의 어느 구현도 대답한다고 하지 않은 모듈 이름 (정렬) - 비어 있어야 회원 업로드 정리를 켤 수 있다 */
+    fun unanswered(holders: Collection<UploadKeyHolder>, usages: Collection<UploadedKeyUsage>): List<String> {
+        val answered = usages.flatMapTo(mutableSetOf()) { it.answers }
+        return holders.map { it.module }.filter { it !in answered }.distinct().sorted()
+    }
 }
+
+/**
+ * 업로드 저장 키를 자기 표에 저장하는 모듈의 표지 빈 - `board` · `review` 가 조립되면 스스로 낸다(앱이 자기 키 저장소를 두면 그 앱도 하나 낸다).
+ * 회원 업로드 정리는 표지마다 같은 이름을 [UploadedKeyUsage.answers] 로 대답하는 구현이 있어야 켤 수 있다 - 대답 없는 저장소가 있으면 쓰이는 파일을 지울 수 있어서다.
+ */
+data class UploadKeyHolder(val module: String)
 
 /**
  * 저장 키 중 지금 어딘가(글 · 댓글 · 고친 판 …)에 붙어 있는 것 - 앱의 저장소 모듈이 구현하고(board-jdbc), storage 의 고아 회수가
@@ -23,4 +38,7 @@ object UploadedKeyUsages {
 fun interface UploadedKeyUsage {
     /** [keys] 중 사용 중인 것의 부분집합 */
     fun inUse(keys: Collection<String>): Set<String>
+
+    /** 이 구현이 대답하는 [UploadKeyHolder.module] 이름들 - 회원 업로드 정리가 켜질 때 표지마다 짝이 있는지 본다. 비회원 회수는 보지 않는다 */
+    val answers: Set<String> get() = emptySet()
 }

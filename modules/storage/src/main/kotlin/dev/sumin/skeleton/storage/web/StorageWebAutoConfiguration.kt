@@ -8,6 +8,7 @@ import dev.sumin.skeleton.common.upload.PrivateUploadAccess
 import dev.sumin.skeleton.common.upload.PublicUploadPurger
 import dev.sumin.skeleton.common.upload.PublicUploads
 import dev.sumin.skeleton.common.upload.UploadImages
+import dev.sumin.skeleton.common.upload.UploadKeyHolder
 import dev.sumin.skeleton.common.upload.UploadedKeyUsage
 import dev.sumin.skeleton.common.upload.UploadedKeyUsages
 import dev.sumin.skeleton.common.web.ClientIps
@@ -23,6 +24,7 @@ import dev.sumin.skeleton.storage.StorageGuestCaptcha
 import dev.sumin.skeleton.storage.StorageGuestCaptchaMode
 import dev.sumin.skeleton.storage.StorageGuestCleanup
 import dev.sumin.skeleton.storage.StorageGuestUploads
+import dev.sumin.skeleton.storage.StorageMemberCleanup
 import dev.sumin.skeleton.storage.StorageKeySchemes
 import dev.sumin.skeleton.storage.StoragePrivateUploadAccess
 import dev.sumin.skeleton.storage.StorageProperties
@@ -174,6 +176,67 @@ class StorageWebAutoConfiguration {
                     }
                 },
                 Instant.now().plus(Duration.ofMinutes(5)),
+                Duration.ofHours(1),
+            )
+        }
+    }
+
+    /**
+     * 버려진 회원 업로드 정리 - `cleanup.enabled=true` 일 때만. 기동이 끝난 뒤 **키를 저장하는 모듈마다 짝 사용처가 있는지** 확인하고 없으면 기동 실패한다
+     * (대답 없는 저장소의 파일을 지우면 쓰이는 파일이 사라진다). 주기는 [storageMemberCleanupSchedule].
+     */
+    @Bean
+    @ConditionalOnBean(ObjectStorage::class)
+    @ConditionalOnMissingBean
+    @ConditionalOnProperty(prefix = "skeleton.storage.web.cleanup", name = ["enabled"], havingValue = "true")
+    fun storageMemberCleanup(
+        storage: ObjectStorage,
+        properties: StorageProperties,
+        usage: ObjectProvider<UploadedKeyUsage>,
+        time: ObjectProvider<TimeProvider>,
+        projects: ObjectProvider<ProjectRegistry>,
+        images: ObjectProvider<UploadImages>,
+    ): StorageMemberCleanup = StorageMemberCleanup(storage, StorageKeySchemes.create(properties, projects.getIfAvailable()), { UploadedKeyUsages.union(usage.orderedStream().toList()) }, time.getIfAvailable { TimeProvider.systemUtc() }, projects.getIfAvailable(), { images.getIfAvailable() })
+
+    @Bean
+    @ConditionalOnBean(StorageMemberCleanup::class)
+    @ConditionalOnMissingBean(name = ["storageMemberCleanupCheck"])
+    fun storageMemberCleanupCheck(usage: ObjectProvider<UploadedKeyUsage>, holders: ObjectProvider<UploadKeyHolder>): SmartInitializingSingleton =
+        SmartInitializingSingleton {
+            val usages = usage.orderedStream().toList()
+            check(usages.isNotEmpty()) {
+                "skeleton.storage.web.cleanup.enabled=true but no UploadedKeyUsage bean exists - every old upload would look abandoned. " +
+                    "Assemble board-jdbc / review-jdbc, or define an UploadedKeyUsage for the keys your app stores"
+            }
+            val missing = UploadedKeyUsages.unanswered(holders.orderedStream().toList(), usages)
+            check(missing.isEmpty()) {
+                "skeleton.storage.web.cleanup.enabled=true but the module(s) ${missing.joinToString()} store upload keys and no UploadedKeyUsage answers for them " +
+                    "(UploadedKeyUsage.answers) - deleting would remove files still in use. Add the module's store (e.g. board-jdbc / review-jdbc), define the usage, or turn the cleanup off"
+            }
+        }
+
+    /** 한 시간마다(처음은 10분 뒤) 정리를 돈다 - `scheduler` 모듈의 `skeletonTaskScheduler` 가 있어야 돈다. 지우기는 멱등이라 인스턴스마다 돌아도 안전하다 */
+    @Bean
+    @ConditionalOnBean(StorageMemberCleanup::class)
+    @ConditionalOnMissingBean(name = ["storageMemberCleanupSchedule"])
+    fun storageMemberCleanupSchedule(
+        cleanup: StorageMemberCleanup,
+        @Qualifier("skeletonTaskScheduler") schedulers: ObjectProvider<TaskScheduler>,
+    ): SmartInitializingSingleton = SmartInitializingSingleton {
+        val log = LoggerFactory.getLogger(StorageMemberCleanup::class.java)
+        val scheduler = schedulers.getIfAvailable()
+        if (scheduler == null) {
+            log.warn("skeleton.storage.web.cleanup.enabled=true but there is no skeletonTaskScheduler bean (add the scheduler module) - abandoned member uploads are not cleaned")
+        } else {
+            scheduler.scheduleWithFixedDelay(
+                {
+                    try {
+                        cleanup.run().takeIf { it > 0 }?.let { log.info("storage member cleanup deleted {} abandoned upload(s)", it) }
+                    } catch (e: Exception) {
+                        log.warn("storage member cleanup failed: {}", e.toString())
+                    }
+                },
+                Instant.now().plus(Duration.ofMinutes(10)),
                 Duration.ofHours(1),
             )
         }
