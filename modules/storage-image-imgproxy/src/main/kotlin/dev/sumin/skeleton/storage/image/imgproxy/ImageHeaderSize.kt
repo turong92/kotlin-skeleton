@@ -17,6 +17,42 @@ internal object ImageHeaderSize {
         null
     }
 
+    /** 움직이는 GIF(그림이 둘 이상) · WebP(`VP8X` 의 움직임 비트)인가 - 머리(256KB)에서 알 수 있는 만큼. 두 번째 장이 머리 밖에서 시작하는 GIF 는 정지로 본다 */
+    fun animated(head: ByteArray, kind: DetectedKind): Boolean = try {
+        when (kind) {
+            DetectedKind.GIF -> gifFrames(head) > 1
+            DetectedKind.WEBP -> head.size > 20 && String(head, 12, 4, Charsets.ISO_8859_1) == "VP8X" && (head[20].toInt() and 0x02) != 0
+            else -> false
+        }
+    } catch (e: IndexOutOfBoundsException) {
+        false
+    }
+
+    private fun gifFrames(gif: ByteArray): Int {
+        var i = 13 + if ((gif[10].toInt() and 0x80) != 0) 3 * (1 shl ((gif[10].toInt() and 0x07) + 1)) else 0
+        var frames = 0
+        fun skip(from: Int): Int {
+            var p = from
+            while (true) {
+                val size = gif[p].toInt() and 0xFF
+                p += 1 + size
+                if (size == 0) return p
+            }
+        }
+        while (i < gif.size && frames < 2) {
+            when (gif[i].toInt() and 0xFF) {
+                0x21 -> i = skip(i + 2)
+                0x2C -> {
+                    frames++
+                    val lct = if ((gif[i + 9].toInt() and 0x80) != 0) 3 * (1 shl ((gif[i + 9].toInt() and 0x07) + 1)) else 0
+                    i = skip(i + 10 + lct + 1)
+                }
+                else -> return frames
+            }
+        }
+        return frames
+    }
+
     /** 투명한 픽셀이 있을 수 있나 - 머리에서 알 수 있는 만큼(모르면 false) */
     fun transparent(head: ByteArray, kind: DetectedKind): Boolean = try {
         val text by lazy { String(head, Charsets.ISO_8859_1) }

@@ -4,6 +4,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-autoconfigure")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
 
+    testImplementation(project(":modules:platform"))   // TimeProvider (시험이 처리기를 조립한다)
     testImplementation("org.assertj:assertj-core")
     testImplementation("org.testcontainers:testcontainers-junit-jupiter")   // imgproxy 컨테이너 (Docker 가 없으면 시험을 건너뛴다)
     testImplementation("org.springframework.boot:spring-boot-test")

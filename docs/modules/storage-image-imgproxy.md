@@ -9,7 +9,7 @@
 - **출력** 메타데이터를 벗긴다(`strip_metadata` · `strip_color_profile` · 저작권 보존 끔), EXIF 방향은 픽셀에 반영, 키우지 않는다. 시험이 실제 컨테이너로 GPS · 기기 정보가 든 HEIC 의 JPEG · WebP 변환본에 입력의 EXIF 가 없음을 본다(libvips 가 적는 입력과 무관한 뼈대 EXIF - 해상도 · 버전 - 는 남는다).
 - **상한** 요청마다 `timeout`, 응답 `max-response-bytes`. 처리기는 imgproxy 를 부르기 전에 머리의 크기로 `max-pixels` 를 확인하고, imgproxy 도 `IMGPROXY_MAX_SRC_RESOLUTION` · `IMGPROXY_MAX_SRC_FILE_SIZE` · `IMGPROXY_DOWNLOAD_TIMEOUT` · `IMGPROXY_TIMEOUT` 으로 한 번 더 지킨다. 서명 오류(401/403)는 설정 오류라 던져서 큐가 소진시킨다(`FAILED`), 해석할 수 없는 이미지(422)는 `REJECTED`(운영 모드의 imgproxy 는 이유를 말하지 않는다).
 - **엔진 순서** 켜면 `@Order` 최우선이라 모든 이미지 종류를 이 엔진이 맡는다(기본 엔진은 쓰이지 않는다).
-- **한계** 움직이는 GIF · WebP 는 첫 장만 변환한다(imgproxy 기본, 표시본도 첫 장). 상태 줄의 원본 크기는 머리에서 읽은 그대로라 EXIF 회전을 반영하지 않는다(변환본의 크기는 맞다). 변환본마다 imgproxy 가 원본을 한 번씩 받는다(`BOTH` 면 두 번). 같은 그림의 두 형식은 크기가 같다고 보고 상태 줄에는 기본 형식의 크기만 적는다. 서비스 간 인증이 필요한 imgproxy(예: 인증 필요한 Cloud Run)로는 인증 헤더를 보내지 않는다.
+- **한계** 움직이는 GIF · WebP 는 머리에서 알아본 것만 움직임으로 본다(두 번째 장이 앞 256KB 밖에서 시작하는 GIF 는 정지로 본다). 움직이는 이미지는 썸네일만 imgproxy 가 첫 장으로 만들고 `display` 는 움직임을 그대로 둔 메타데이터 없는 사본이다(기본 엔진과 같다). 상태 줄의 원본 크기는 머리에서 읽은 그대로라 EXIF 회전을 반영하지 않는다(변환본의 크기는 맞다). 변환본마다 imgproxy 가 원본을 한 번씩 받는다(`BOTH` 면 두 번). 같은 그림의 두 형식은 크기가 같다고 보고 상태 줄에는 기본 형식의 크기만 적는다. 서비스 간 인증이 필요한 imgproxy(예: 인증 필요한 Cloud Run)로는 인증 헤더를 보내지 않는다.
 
 | 항목 | 내용 |
 |---|---|

@@ -27,7 +27,8 @@ import javax.crypto.spec.SecretKeySpec
  * - **imgproxy 요청 주소는 key/salt 로 서명한다**(HMAC-SHA256) - 서명 없는 imgproxy 는 쓰지 않는다. 처리 옵션을 남이 바꿀 수 없다.
  * - 출력은 메타데이터 없는 WebP · JPEG · PNG(`strip_metadata` · `strip_color_profile`), EXIF 방향은 픽셀에 반영(`auto_rotate`), 키우지 않는다(`enlarge` 끔).
  * - 요청마다 시간 상한([ImgproxyProperties.timeout]), 응답 크기 상한([ImgproxyProperties.maxResponseBytes]). 원본 해상도 · 바이트 상한은 imgproxy 가 한 번 더 지킨다(`IMGPROXY_MAX_SRC_RESOLUTION` · `IMGPROXY_MAX_SRC_FILE_SIZE`) - `docs/deploy.md`.
- * - 한계: 움직이는 이미지는 첫 장만 변환한다(imgproxy 기본). 크기는 머리에서 읽은 그대로라 EXIF 회전을 반영하지 않는다(변환본의 크기는 맞다).
+ * - 움직이는 GIF · WebP 는 [probe] 가 `animated` 로 알리고, 처리기가 썸네일(imgproxy, 첫 장)만 요청하고 `display` 는 움직임을 남긴 메타데이터 없는 사본으로 만든다(기본 엔진과 같다).
+ * - 한계: 크기는 머리에서 읽은 그대로라 EXIF 회전을 반영하지 않는다(변환본의 크기는 맞다).
  */
 class ImgproxyRenderer(
     private val properties: ImgproxyProperties,
@@ -46,7 +47,7 @@ class ImgproxyRenderer(
     override fun probe(head: ByteArray, kind: DetectedKind): ImageInfo {
         val (width, height) = ImageHeaderSize.of(head, kind)
             ?: throw ImageRejectedException(ImageReasons.NOT_AN_IMAGE, "The image header cannot be read")
-        return ImageInfo(kind.mime, width, height, transparent = ImageHeaderSize.transparent(head, kind))
+        return ImageInfo(kind.mime, width, height, animated = ImageHeaderSize.animated(head, kind), transparent = ImageHeaderSize.transparent(head, kind))
     }
 
     override fun render(source: () -> InputStream, info: ImageInfo, specs: List<VariantSpec>): List<Rendered> =
