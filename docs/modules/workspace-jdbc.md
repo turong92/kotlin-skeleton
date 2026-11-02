@@ -9,6 +9,8 @@
 slug 가 겹치면 넣기가 조용히 비켜 서비스가 다음 후보(`-2`…)를 시도하고, 바꾸기는 유니크 위반을 잡아 `SLUG_TAKEN` 으로 바꾼다 · 시각은 PG `timestamptz` · MySQL `datetime(6)`(UTC) ·
 계정 삭제 때 멤버 줄을 지우고 `created_by` · `invited_by` · `accepted_by` 를 묘비 값으로 바꾼다.
 
+- **공지 대상**: `platform` 의 `AudienceSource` 로 `workspace`(열린 워크스페이스의 멤버, 값 = 워크스페이스 id)를 낸다 - 닫힌 · 없는 워크스페이스는 `validate` 가 거절하고, 떠난 멤버(줄이 지워진 사람 · 지워진 계정)는 나오지 않는다. 계정 표를 모르므로 정지 · 삭제 유예 중인 계정의 멤버십은 대상에 든다. 멤버의 계정 id 오름차순 키셋이다(`WorkspaceAudienceDbTest` 두 DB). 이 빈을 읽는 모듈이 없으면 아무 일도 하지 않는다. 설정 키는 없다.
+
 | 항목 | 내용 |
 |---|---|
 | 의존성 한 줄 | `implementation(project(":modules:workspace-jdbc"))` |

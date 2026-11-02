@@ -6,6 +6,8 @@
 
 - **대시보드 기여**: `dashboard` 모듈이 클래스패스에 있으면 신규 가입 타일(`account.signed-up`, 기간 안 `created_at` — 탈퇴로 지운 ERASED 계정도 센다)과 퍼널의 묶음(기간 안 가입자의 계정 id + 가입 시각, 메모리에서만)을 기여한다. 질의는 인덱스 `idx_accounts_created`(마이그레이션이라 `dashboard` 를 안 붙인 앱에도 들어간다) 로 범위를 끊는다.
 
+- **공지 대상**: `platform` 의 `AudienceSource` 로 `all`(활성 계정 전체) · `role`(그 역할을 가진 활성 계정, 값 = 역할 이름)을 낸다 - 대기 · 정지 · 삭제 유예 · 지워진 계정은 빠진다. 계정 id 오름차순 키셋(`id > after order by id limit n`)이라 쪽마다 새로 읽어도 겹치거나 빠지지 않고(`JdbcAccountAudienceDbTest` 두 DB), 이 빈들을 읽는 모듈이 없으면 부르는 곳이 없어 아무 일도 하지 않는다. 설정 키는 없다.
+
 | 항목 | 내용 |
 |---|---|
 | 의존성 한 줄 | `implementation(project(":modules:account-jdbc"))` |

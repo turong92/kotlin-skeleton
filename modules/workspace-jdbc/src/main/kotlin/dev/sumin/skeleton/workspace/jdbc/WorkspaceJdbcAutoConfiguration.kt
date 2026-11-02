@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.workspace.jdbc
 
+import dev.sumin.skeleton.common.audience.AudienceSource
 import dev.sumin.skeleton.persistence.jdbc.SqlDialect
 import dev.sumin.skeleton.workspace.WorkspaceStore
 import javax.sql.DataSource
@@ -28,4 +29,9 @@ class WorkspaceJdbcAutoConfiguration {
     @ConditionalOnMissingBean(WorkspaceStore::class)
     fun jdbcWorkspaceStore(dataSource: DataSource, transactionManager: PlatformTransactionManager, dialect: SqlDialect): WorkspaceStore =
         JdbcWorkspaceStore(NamedParameterJdbcTemplate(dataSource), transactionManager, dialect)
+
+    /** 공지 대상 `workspace` - 공지 모듈이 없으면 아무도 읽지 않는 빈이다 (읽을 때만 DB 를 부른다) */
+    @Bean
+    @ConditionalOnMissingBean(name = ["workspaceAudience"])
+    fun workspaceAudience(dataSource: DataSource): AudienceSource = JdbcWorkspaceAudience(NamedParameterJdbcTemplate(dataSource))
 }
