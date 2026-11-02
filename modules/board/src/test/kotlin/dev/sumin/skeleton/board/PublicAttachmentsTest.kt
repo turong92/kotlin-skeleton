@@ -164,4 +164,28 @@ class PublicAttachmentsTest {
         assertEquals(emptyMap(), plainShown.attachmentImages)
         assertEquals(setOf("k/a.png"), plainShown.attachmentUrls.keys, "without the image module addresses are as before")
     }
+
+    @Test
+    fun `with the image module the post owner who manages comments gets the variant of someone else's comment picture, never the original - the author and moderators still get it`() {
+        val images = object : dev.sumin.skeleton.common.upload.UploadImages {
+            val statuses = mutableMapOf<String, dev.sumin.skeleton.common.upload.UploadImageStatus>()
+            override val variantPrefix = "variants"
+            override fun status(privateKey: String) = statuses[privateKey]
+            override fun signedVariantUrl(privateKey: String, variant: String, ttl: Duration) = statuses[privateKey]?.let { "https://variant.example/$privateKey/$variant" }
+            override fun ensure(privateKey: String) = Unit
+            override fun forget(privateKeys: Collection<String>) = Unit
+        }
+        val uploads = BoardUploads(
+            publicUploads = { FakePublic() },
+            access = { object : PrivateUploadAccess { override fun downloadUrl(privateKey: String, ttl: Duration) = "https://signed.example/$privateKey" } },
+            images = { images },
+        )
+        val (h, post, c) = world(uploads)
+        fun access(who: BoardCaller) = h.commentService.attachmentAccess(who, "general", post, c.id, 0).url
+        assertEquals(BoardErrorCode.COMMENT_NOT_FOUND, h.failure { access(other) }, "an image with no variant yet is not given to the post owner as the original")
+        images.statuses["k/a.png"] = dev.sumin.skeleton.common.upload.UploadImageStatus(dev.sumin.skeleton.common.upload.UploadImageState.READY)
+        assertEquals("https://variant.example/k/a.png/display", access(other), "the post owner sees the metadata-free variant")
+        assertEquals("https://signed.example/k/a.png", access(third), "the uploader may see their own original")
+        assertEquals("https://signed.example/k/a.png", access(moderator), "moderators may too")
+    }
 }

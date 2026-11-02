@@ -10,6 +10,7 @@ import dev.sumin.skeleton.common.project.ProjectRegistry
 import dev.sumin.skeleton.common.upload.GuestUploadKeys
 import dev.sumin.skeleton.common.upload.PrivateUploadAccess
 import dev.sumin.skeleton.common.upload.PublicUploads
+import dev.sumin.skeleton.common.upload.UploadImages
 import dev.sumin.skeleton.common.upload.UploadKeyHolder
 import java.time.Duration
 import java.time.Instant
@@ -139,9 +140,10 @@ class BoardAutoConfiguration {
         publicUploads: ObjectProvider<PublicUploads>,
         access: ObjectProvider<PrivateUploadAccess>,
         reconciler: ObjectProvider<BoardPublicAttachments>,
+        images: ObjectProvider<UploadImages>,
     ): BoardUploads =
         // 공개 주소는 조정자(저장소 포트가 있어야 생긴다)가 있을 때만 낸다 - 앱이 자기 저장소를 두고 포트를 구현하지 않았다면 복사하는 이가 없어 주소가 404 가 된다
-        BoardUploads({ if (reconciler.getIfAvailable() != null) publicUploads.getIfAvailable() else null }, { access.getIfAvailable() })
+        BoardUploads({ if (reconciler.getIfAvailable() != null) publicUploads.getIfAvailable() else null }, { access.getIfAvailable() }, { images.getIfAvailable() })
 
     /** 공개 영역을 board 상태에 맞추는 조정자 - 저장소 포트(board-jdbc)가 있을 때만. `skeleton.storage.web.public` 이 꺼져 있으면 아무것도 하지 않는다 */
     @Bean

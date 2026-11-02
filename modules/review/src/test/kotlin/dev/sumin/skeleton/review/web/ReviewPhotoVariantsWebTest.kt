@@ -30,7 +30,12 @@ class FakeUploadImages : UploadImages {
         statuses[privateKey]?.takeIf { it.state == UploadImageState.READY && variant in it.variants }?.let { "https://files.example.com/variant/$privateKey/$variant" }
     override fun signedVariantUrl(privateKey: String, variant: String, ttl: Duration, accept: String?): String? =
         signedVariantUrl(privateKey, variant, ttl)?.let { if (accept?.contains("image/webp") == true) "$it.webp" else it }
-    override fun ensure(privateKey: String) { ensured += privateKey }
+    /** ensure 가 상태 줄(PENDING)을 만드는 키 - 이미지로 선언된 업로드. 그 밖은 줄이 없다(PDF · 텍스트) */
+    val imageKeys = CopyOnWriteArrayList<String>()
+    override fun ensure(privateKey: String) {
+        ensured += privateKey
+        if (privateKey in imageKeys) statuses.putIfAbsent(privateKey, UploadImageStatus(UploadImageState.PENDING))
+    }
     override fun forget(privateKeys: Collection<String>) = Unit
 }
 
@@ -91,5 +96,24 @@ class ReviewPhotoVariantsWebTest : ReviewWebBase() {
         images.statuses.clear()
         val id = review("reviews/receipt.pdf")
         assertEquals(302 to "https://files.example.com/signed/reviews/receipt.pdf?sig=abc", location(id, bob))
+    }
+
+    @Test
+    fun `an image whose key has an unusual or no extension is still treated as an image - others never get the original`() {
+        val ready = UploadImageStatus(
+            UploadImageState.READY, 4000, 3000,
+            mapOf("display" to dev.sumin.skeleton.common.upload.UploadImageVariant("v/display.jpg", 1600, 1200, "image/jpeg")),
+        )
+        images.statuses.clear(); images.imageKeys.clear()
+        images.imageKeys += listOf("reviews/file", "reviews/phone.heif", "reviews/notes.txt")   // 선언 형식이 이미지인 업로드들 (확장자는 믿을 수 없다)
+        val id = review("reviews/file", "reviews/phone.heif", "reviews/notes.txt")
+        listOf("reviews/file", "reviews/phone.heif", "reviews/notes.txt").forEachIndexed { index, key ->
+            fun at(who: org.springframework.security.authentication.TestingAuthenticationToken) =
+                mvc.perform(get("$BASE/$id/photos/$index").principal(who)).andReturn().response.let { it.status to it.getHeader("Location") }
+            assertEquals(404 to null, at(bob), "$key: not converted yet - no original for another person")
+            assertEquals(302 to "https://files.example.com/signed/$key?sig=abc", at(alice), "$key: the uploader may see it")
+            images.statuses[key] = ready
+            assertEquals(302 to "https://files.example.com/variant/$key/display", at(bob), "$key: ready - the variant")
+        }
     }
 }

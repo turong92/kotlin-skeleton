@@ -37,7 +37,7 @@ interface PublicUploads {
     /**
      * 이미지 모듈이 있을 때, 이 비공개 키들의 이미지 상태 - 변환이 끝난(READY) 것은 공개 모습(폭 · 높이 · `thumb` · `display` 주소, 다른 형식은 [PublicUploadImage.alternates]),
      * 변환 중(PENDING)이면 [PublicImages.pending], 영구히 공개할 수 없으면(거절 · 못 읽는 형식 · 실패) [PublicImages.refused]. 이미지가 아닌 키(PDF …)와
-     * **상태 줄이 없는 키(이미지 모듈을 켜기 전에 올린 옛 업로드)** 는 어디에도 없다 - 호출하는 쪽은 그 키를 지금까지처럼 다룬다.
+     * **상태 줄이 없는 키(이미지 모듈을 켜기 전에 올린 옛 업로드)** 는 [PublicImages.unregistered] 에만 있다 - 호출하는 쪽은 그 키를 지금까지처럼 다룬다.
      * 복사가 되어 있다는 뜻은 아니다([urlOf] 와 같다 - 복사는 board 의 맞추기 큐가 한다). 기본은 빈 결과
      */
     fun imagesOf(privateKeys: Collection<String>): PublicImages = PublicImages()
@@ -83,6 +83,8 @@ data class PublicImages(
     val ready: Map<String, PublicUploadImage> = emptyMap(),
     val pending: Set<String> = emptySet(),
     val refused: Set<String> = emptySet(),
+    /** 이미지 형식인데 상태 줄이 없는 키 - 이미지 모듈을 켜기 전에 올린(공개 영역에 원본이 복사됐을 수 있는) 업로드. 맞추기가 이것을 보고 다시 공개한다 */
+    val unregistered: Set<String> = emptySet(),
 )
 
 /** 비공개 업로드를 짧은 수명의 서명 주소로 읽는다 - 승인 전 · 판 사진을 관리하는 사람이 볼 때 */

@@ -119,6 +119,7 @@ class StorageImageVariantsTest {
         assertEquals(setOf(readyKey, webpKey), found.ready.keys)
         assertEquals(setOf(pendingKey), found.pending)
         assertEquals(setOf(refusedKey), found.refused)
+        assertEquals(setOf(legacyKey), found.unregistered, "an image key with no status row is named so a reconciliation can register it and re-publish a converted copy")
         val image = found.ready.getValue(readyKey)
         assertEquals(1600 to 1200, image.width to image.height, "the size of the copy people get, not of the original")
         assertEquals(uploads.urlOf(readyKey), image.display)

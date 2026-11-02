@@ -50,7 +50,9 @@ class StoragePublicUploads(
         val ready = mutableMapOf<String, PublicUploadImage>()
         val pending = mutableSetOf<String>()
         val refused = mutableSetOf<String>()
-        module.views(candidates).forEach { (key, status) ->
+        val rows = module.views(candidates)
+        val unregistered = candidates.filter { it !in rows }.toSet()
+        rows.forEach { (key, status) ->
             val display = status.variants[UploadImages.DISPLAY]
             when {
                 status.state == UploadImageState.PENDING -> pending += key
@@ -66,7 +68,7 @@ class StoragePublicUploads(
                 }
             }
         }
-        return PublicImages(ready, pending, refused)
+        return PublicImages(ready, pending, refused, unregistered)
     }
 
     private fun webpOf(variant: dev.sumin.skeleton.common.upload.UploadImageVariant) = variant.alternates.firstOrNull { it.contentType == WEBP }

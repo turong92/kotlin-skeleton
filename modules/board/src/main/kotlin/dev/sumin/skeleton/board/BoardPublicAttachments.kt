@@ -153,6 +153,12 @@ class BoardPublicAttachments(
                 // 줄은 있는데 객체가 없다(복사가 끊겼다) - 공개 조건에 들면 다시 복사하고, 아니면 줄을 거둔다
                 if (publicKey !in listedSet && guarded { if (it.key in repository.eligible(it.target, it.targetId)) add(store, it) else remove(store, it) }) fixed++
             }
+            // 이미지 모듈을 켜기 전에 복사된 사진은 공개 영역에 원본(EXIF · GPS)이 그대로다 - 상태 줄이 없는 이미지 키를 만나면 항목을 큐에 다시 적는다.
+            // 큐의 맞추기가 publish 를 부르면 이미지 모듈이 키를 등록하고(변환 전이라 늦춰 다시 한다) 변환이 끝나면 변환본이 같은 공개 키를 덮어쓴다. 등록된 뒤에는 이 조건에 안 걸려 한 번만 돈다
+            val legacy = store.imagesOf(page.map { it.key }.distinct()).unregistered
+            page.filter { it.key in legacy }.forEach { copy ->
+                if (copy.key in repository.eligible(copy.target, copy.targetId) && guarded { repository.enqueue(copy.target, copy.targetId, time.now()) }) fixed++
+            }
             after = page.last()
         }
         for (key in listed) {

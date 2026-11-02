@@ -160,14 +160,19 @@ class ReviewController(
         if (photo == null || signer == null) throw ApplicationException("Photo not found", ReviewErrorCode.NOT_FOUND)
         val name = variant ?: UploadImages.DISPLAY
         if (name != UploadImages.DISPLAY && name != UploadImages.THUMB) invalid("variant must be thumb or display")
-        val module = images()?.takeIf { isImage(photo.key) }
-        val location = if (module == null) signer.downloadUrl(photo.key, signer.defaultTtl) else {
-            val ready = module.status(photo.key)?.takeIf { it.state == UploadImageState.READY }?.let { module.signedVariantUrl(photo.key, name, signer.defaultTtl, accept) }
-            ready ?: run {
-                module.ensure(photo.key)
-                if (!photo.privileged) throw ApplicationException("Photo not found", ReviewErrorCode.NOT_FOUND)
-                signer.downloadUrl(photo.key, signer.defaultTtl)
+        val module = images()
+        val location = run {
+            val original = { signer.downloadUrl(photo.key, signer.defaultTtl) }
+            if (module == null) return@run original()
+            // 이미지인가는 확장자가 아니라 상태 줄로 정한다(heif · 확장자 없음 · 선언과 다른 확장자). 줄이 없으면 등록을 걸고 다시 본다
+            val status = module.status(photo.key) ?: run { module.ensure(photo.key); module.status(photo.key) }
+            if (status == null) {
+                // 등록되지 않았다 = 이미지로 선언되지 않은 첨부(pdf · txt …)면 원본. 확장자가 이미지인데 줄이 없으면 모르는 것이라 올린 사람 · 운영자만 원본, 남은 404
+                if (!photo.privileged && isImageName(photo.key)) throw ApplicationException("Photo not found", ReviewErrorCode.NOT_FOUND)
+                return@run original()
             }
+            (if (status.state == UploadImageState.READY) module.signedVariantUrl(photo.key, name, signer.defaultTtl, accept) else null)
+                ?: if (photo.privileged) original() else throw ApplicationException("Photo not found", ReviewErrorCode.NOT_FOUND)
         }
         return ResponseEntity.status(HttpStatus.FOUND)
             .header(HttpHeaders.LOCATION, location)
@@ -176,7 +181,7 @@ class ReviewController(
             .build()
     }
 
-    private fun isImage(key: String) = key.substringAfterLast('/').substringAfterLast('.', "").lowercase() in IMAGE_EXTENSIONS
+    private fun isImageName(key: String) = key.substringAfterLast('/').substringAfterLast('.', "").lowercase() in IMAGE_EXTENSIONS
 
     @GetMapping("/me")
     fun mine(authentication: Authentication?, @RequestParam(required = false) cursor: String?, @RequestParam(defaultValue = "20") size: Int): CursorResponse<MyReviewResponse> {
@@ -215,6 +220,6 @@ class ReviewController(
         const val MAX_SIZE = 100
         const val MAX_TARGETS = 50
         /** 변환 대상으로 보는 사진 확장자 - 그 밖(pdf · txt …)은 이미지 모듈이 있어도 원본으로 간다 */
-        val IMAGE_EXTENSIONS = setOf("jpg", "jpeg", "png", "webp", "gif", "avif", "heic")
+        val IMAGE_EXTENSIONS = setOf("jpg", "jpeg", "png", "webp", "gif", "avif", "heic", "heif")
     }
 }

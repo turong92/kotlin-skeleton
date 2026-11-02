@@ -55,6 +55,8 @@ class JdbcPublicAttachmentDbTest {
             purged += publicKey
         }
         /** 이미지 모듈이 있을 때처럼 한 비공개 키가 공개 객체를 여럿 만든다(썸네일 · WebP 사본) - 켜면 [publicKeysOf] 가 그것들을 말하고 [extras] 에 객체가 놓인다 */
+        var legacy = emptySet<String>()   // 이미지 모듈을 켜기 전에 복사된(상태 줄 없는) 비공개 키
+        override fun imagesOf(privateKeys: Collection<String>) = dev.sumin.skeleton.common.upload.PublicImages(unregistered = privateKeys.filter { it in legacy }.toSet())
         var withVariants = false
         val extras = mutableSetOf<String>()
         override fun publicKeysOf(privateKey: String) =
@@ -192,6 +194,19 @@ class JdbcPublicAttachmentDbTest {
         now = now.plus(Duration.ofDays(2))
         sync.fullPass()
         assertEquals(setOf("kept.png"), mine())
+    }
+
+    @Test
+    fun `the full pass queues a copy made before the image module for a fresh publish, once the module has no status row for it`() {
+        val post = db.newPost(db.newBoard())
+        val c = comment(post.id, CommentStatus.PUBLISHED, "old.jpg")
+        sync.reconcile(RevisionTarget.COMMENT, c.id)
+        assertEquals(setOf("old.jpg"), mine())
+        uploads.legacy = setOf("${tag}old.jpg")
+        now = now.plus(Duration.ofDays(2))
+        sync.fullPass()
+        val queued = repo.claimQueued(1000, now.plus(Duration.ofHours(1)), Duration.ofMinutes(2))
+        assertTrue(queued.any { it.target == RevisionTarget.COMMENT && it.id == c.id }, "the item is put back on the queue, where publish registers the image and re-copies the converted version")
     }
 
     @Test

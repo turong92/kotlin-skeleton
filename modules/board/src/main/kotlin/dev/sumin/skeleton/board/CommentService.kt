@@ -144,7 +144,9 @@ class CommentService(
             AttachmentSource.EDIT -> revisions.find(RevisionTarget.COMMENT, listOf(comment.id))[comment.id]?.attachments.orEmpty()
         }
         val key = keys.getOrNull(index) ?: notFound(commentId)
-        return uploads.signed(key) ?: notFound(commentId)
+        // 원본은 올린 사람(댓글 작성자)과 운영자만 - 남의 댓글을 관리하는 글 주인은 변환본(이미지 모듈이 있을 때)
+        val ownPicture = if (caller != null) caller.accountId == comment.authorId else role == AttachmentRole.AUTHOR
+        return uploads.signed(key, privileged = moderator || ownPicture) ?: notFound(commentId)
     }
 
     fun update(
