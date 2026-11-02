@@ -27,6 +27,12 @@ data class AuthSessionProperties(
      * 이 유예 안에서 도둑이 옛 토큰을 내밀어도 얻는 것은 주인이 이미 가진 후속 토큰뿐이다. 앱이 정한다 — `apps/api` · `apps/sample` 은 10s.
      */
     val reuseGrace: Duration = Duration.ZERO,
+    /**
+     * 응답이 **느려서** 잃은 경우(콜드 스타트 · 앞단 프록시 타임아웃)를 위한 상한. 회전 뒤 [reuseGrace] 가 지났어도, 그 **후속 토큰이 아직 한 번도 쓰이지 않았다면**
+     * 이 시간 안에는 옛 토큰을 다시 받고 같은 후속 토큰을 돌려준다 (후속이 한 번이라도 쓰였으면 지금처럼 재사용 = 탈취). 0 이면 끔 (모듈 기본: 중립).
+     * [reuseGrace] 이상이어야 한다. 권장: `reuse-grace: 30s` + `reuse-grace-max: 2m` (docs/cloud-run-scale-to-zero.md).
+     */
+    val reuseGraceMax: Duration = Duration.ZERO,
     /** 계정 하나가 가질 수 있는 세션 수 — 넘으면 가장 오래된 세션부터 닫는다 */
     val maxSessionsPerAccount: Int = 20,
     val rotation: Rotation = Rotation(),
@@ -37,7 +43,8 @@ data class AuthSessionProperties(
 ) {
     init {
         require(!absoluteTtl.isNegative && !absoluteTtl.isZero && !idleTtl.isNegative && !idleTtl.isZero) { "skeleton.auth-session.*-ttl must be > 0" }
-        require(!reuseGrace.isNegative && reuseMemory?.isNegative != true) { "skeleton.auth-session.reuse-* must be >= 0" }
+        require(!reuseGrace.isNegative && reuseMemory?.isNegative != true && !reuseGraceMax.isNegative) { "skeleton.auth-session.reuse-* must be >= 0" }
+        require(reuseGraceMax.isZero || reuseGraceMax >= reuseGrace) { "skeleton.auth-session.reuse-grace-max must be 0 or >= reuse-grace" }
         require(maxSessionsPerAccount >= 1) { "skeleton.auth-session.max-sessions-per-account must be >= 1" }
     }
 

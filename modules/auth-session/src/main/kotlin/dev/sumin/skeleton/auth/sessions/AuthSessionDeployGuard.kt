@@ -30,6 +30,9 @@ class AuthSessionDeployGuard(
     override fun warnings(context: DeployContext): List<String> = buildList {
         if (!context.protectedBy(protectedProfiles)) return@buildList
         views().forEach { (at, p) ->
+            if (p.reuseGrace.isZero) {
+                add("${at}skeleton.auth-session.reuse-grace=0s: a refresh whose response is lost (cold start, proxy timeout) ends the session on the retry. Recommended: reuse-grace: 30s and reuse-grace-max: 2m (docs/cloud-run-scale-to-zero.md)")
+            }
             if (p.delivery == AuthSessionProperties.Delivery.COOKIE && p.cookie.sameSite.equals("None", ignoreCase = true)) {
                 add("${at}skeleton.auth-session.cookie.same-site=None sends the refresh cookie on cross-site requests: CSRF protection then rests on the ${p.cookie.csrfHeader} header alone")
             }

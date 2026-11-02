@@ -120,6 +120,40 @@ class SessionServiceTest {
         assertTrue(events.any { it.type == SessionEventType.REFRESH_REUSE_DETECTED })
     }
 
+    private val coldStart = AuthSessionProperties(reuseGrace = Duration.ofSeconds(30), reuseGraceMax = Duration.ofMinutes(2))
+
+    @Test
+    fun `cold start - the rotation succeeded but the response was lost, the old token 25 s later still gets the SAME successor and the session lives`() {
+        val s = service(coldStart)
+        val first = s.open(account.accountId, client)
+        val lost = s.refresh(first.refreshToken!!, client)
+        time.advance(Duration.ofSeconds(25 + 30))                   // past the plain grace; the successor was never used
+        val retry = s.refresh(first.refreshToken!!, client)
+        assertEquals(lost.session.refreshToken, retry.session.refreshToken)
+        s.refresh(retry.session.refreshToken!!, client)
+        assertTrue(events.none { it.type == SessionEventType.REFRESH_REUSE_DETECTED })
+    }
+
+    @Test
+    fun `once the successor has been used, the old token is theft again even inside the max window`() {
+        val s = service(coldStart)
+        val first = s.open(account.accountId, client)
+        val next = s.refresh(first.refreshToken!!, client)
+        s.refresh(next.session.refreshToken!!, client)              // the client did receive it and moved on
+        time.advance(Duration.ofSeconds(45))
+        assertEquals("AUTH.REFRESH_REUSED", code { s.refresh(first.refreshToken!!, client) })
+        assertTrue(events.any { it.type == SessionEventType.REFRESH_REUSE_DETECTED })
+    }
+
+    @Test
+    fun `beyond the max window the old token is reuse even if the successor was never used`() {
+        val s = service(coldStart)
+        val first = s.open(account.accountId, client)
+        s.refresh(first.refreshToken!!, client)
+        time.advance(Duration.ofMinutes(2).plusSeconds(1))
+        assertEquals("AUTH.REFRESH_REUSED", code { s.refresh(first.refreshToken!!, client) })
+    }
+
     @Test
     fun `the successor cannot be derived from a stolen old token alone - it depends on a server key`() {
         val a = SessionService(InMemorySessionStore(), AuthSessionProperties(), time, "key-one-key-one-key-one-key-one!".toByteArray())

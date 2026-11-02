@@ -2,6 +2,7 @@ package dev.sumin.skeleton.auth.sessions
 
 import dev.sumin.skeleton.common.deploy.DeployContext
 import dev.sumin.skeleton.common.deploy.DeployEnv
+import java.time.Duration
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -49,11 +50,20 @@ class AuthSessionDeployGuardTest {
 
     @Test
     fun `SameSite=None on the refresh cookie is called out in a protected env - CSRF then rests on the header alone`() {
-        val props = AuthSessionProperties(delivery = AuthSessionProperties.Delivery.COOKIE, cookie = AuthSessionProperties.Cookie(sameSite = "None"))
+        val props = AuthSessionProperties(delivery = AuthSessionProperties.Delivery.COOKIE, cookie = AuthSessionProperties.Cookie(sameSite = "None"), reuseGrace = Duration.ofSeconds(30))
         val guard = AuthSessionDeployGuard(props, PROTECTED) { NotInMemory }
         assertTrue(guard.warnings(prod).single().contains("same-site"), guard.warnings(prod).toString())
         assertEquals(emptyList(), guard.warnings(unset))
-        assertEquals(emptyList(), AuthSessionDeployGuard(AuthSessionProperties(), PROTECTED) { NotInMemory }.warnings(prod))
+        assertEquals(emptyList(), AuthSessionDeployGuard(AuthSessionProperties(reuseGrace = Duration.ofSeconds(30)), PROTECTED) { NotInMemory }.warnings(prod))
+    }
+
+    @Test
+    fun `no reuse grace in a protected env is a warning - a slow refresh response can lose the session`() {
+        val guard = AuthSessionDeployGuard(AuthSessionProperties(), PROTECTED) { NotInMemory }
+        assertTrue(guard.warnings(prod).single().contains("reuse-grace"), guard.warnings(prod).toString())
+        assertEquals(emptyList(), guard.warnings(unset))
+        val tuned = AuthSessionProperties(reuseGrace = Duration.ofSeconds(30), reuseGraceMax = Duration.ofMinutes(2))
+        assertEquals(emptyList(), AuthSessionDeployGuard(tuned, PROTECTED) { NotInMemory }.warnings(prod))
     }
 
     @Test

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 콜드스타트로 로그인이 풀리는 문제 (2026-11-02)
+
+- `auth-session`: `reuse-grace-max`(기본 0s = 끔) - 회전 뒤 `reuse-grace` 가 지나도 **후속 토큰이 한 번도 쓰이지 않았다면** 이 상한 안에서는 옛 토큰을 다시 내면 같은 후속 토큰을 돌려준다(응답이 느려 잃은 경우). 후속이 쓰인 뒤나 상한 뒤는 그대로 재사용 = 세션 종료. 보호 환경에서 `reuse-grace` 가 0 이면 기동 경고(`DeployGuard` 경고, 실패 아님). `apps/api` · `apps/sample` 은 `30s` + `2m`. 문서 `docs/cloud-run-scale-to-zero.md` §5.
+
 ### 푸시 알림 (2026-10-31)
 
 - 새 모듈 다섯 - `notification-push`(알림이 받는 사람의 **기기로도** 간다: 기기 등록 `PUT/DELETE /api/v1/push/devices/{installationId}` · 시험 알림 · 종류 × 채널 「푸시만 끄기」 `GET/PUT /api/v1/push/preferences` · 잠금 화면 `lock-screen: FULL|HIDDEN` · 세션이 끊기면 기기도 · 오래된 기기 정리), `notification-push-jdbc`(기기 · 끄기 저장 + 발송 작업을 `job-queue-jdbc` 에, 두 방언), `notification-webpush`(VAPID 웹 푸시, RFC 8291 암호화는 JDK · 끝점 허용 목록 · 키 쌍 기동 검사), `notification-fcm`(FCM HTTP v1, 서비스 계정 -> 접근 토큰), `notification-push-legal`(광고성 푸시의 동의 어댑터). 모두 **꺼짐이 기본**이고 `notification` 계약은 바뀌지 않는다 - 이 모듈들을 안 붙인 앱의 동작은 그대로다. 문서 `docs/modules/notification-push*.md` · `notification-webpush.md` · `notification-fcm.md` · HTTP 계약 `docs/push-http-contract.md` · 키 만들기 `docs/real-provider-setup.md` §15.
