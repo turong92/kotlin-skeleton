@@ -106,7 +106,7 @@ class StoragePublicUploads(
         when (status.state) {
             UploadImageState.READY -> Unit
             UploadImageState.PENDING -> throw UploadVariantsPendingException(privateKey)
-            UploadImageState.REJECTED, UploadImageState.UNSUPPORTED, UploadImageState.FAILED -> return false
+            UploadImageState.REJECTED, UploadImageState.UNSUPPORTED, UploadImageState.FAILED, UploadImageState.NOT_IMAGE -> return false
         }
         val display = status.variants[UploadImages.DISPLAY] ?: return false
         copyVariant(display, keys.publicKeyOf(privateKey), cacheControl)

@@ -26,11 +26,11 @@ class StorageImages(
 ) : UploadImages {
     override val variantPrefix: String get() = properties.prefix.trim('/')
 
-    override fun status(privateKey: String): UploadImageStatus? = store.find(imageKeyHash(privateKey))?.toStatus()
+    override fun status(privateKey: String): UploadImageStatus? = store.find(imageKeyHash(privateKey))?.takeIf { it.state != UploadImageState.NOT_IMAGE }?.toStatus()
 
     override fun views(privateKeys: Collection<String>): Map<String, UploadImageStatus> {
         val hashes = privateKeys.associateBy { imageKeyHash(it) }
-        return store.findAll(hashes.keys).mapNotNull { (hash, row) -> hashes[hash]?.let { it to row.toStatus() } }.toMap()
+        return store.findAll(hashes.keys).mapNotNull { (hash, row) -> hashes[hash]?.takeIf { row.state != UploadImageState.NOT_IMAGE }?.let { it to row.toStatus() } }.toMap()
     }
 
     override fun signedVariantUrl(privateKey: String, variant: String, ttl: Duration): String? = signedVariantUrl(privateKey, variant, ttl, null)
@@ -44,16 +44,15 @@ class StorageImages(
         val hash = imageKeyHash(privateKey)
         if (store.find(hash) != null) return
         val meta = storage.metadata(ObjectKey(privateKey)) ?: return   // 없는 객체는 등록하지 않는다
-        val declared = meta.contentType   // 비어 있을 수 있다 - 아래에서 앞 바이트로 판정
-        val kinds = UploadMagicBytes.declaredKinds(declared)
-        if (kinds == null) {
-            if ((meta.sizeBytes ?: 0L) == 0L) return   // 빈 객체는 범위 읽기가 안 된다 - 이미지가 아니다
-            // 선언(octet-stream · 빈 형식 · 표 밖)으로는 모른다 - 앞 바이트로 판정한다. 이미지인데 줄이 없어 「일반 파일」로 남에게 원본이 가는 길을 막는다(완료 호출을 빼먹은 경우)
-            val head = storage.read(ObjectKey(privateKey), 0L until UploadMagicBytes.HEAD_BYTES.toLong()).use { it.readNBytes(UploadMagicBytes.HEAD_BYTES) }
-            val kind = UploadMagicBytes.detect(head) ?: return
-            if (!renderers.handles(kind)) return
-        } else if (kinds.none { renderers.handles(it) }) return
-        register(privateKey)
+        val kinds = UploadMagicBytes.declaredKinds(meta.contentType)
+        if (kinds != null && kinds.any { renderers.handles(it) }) return register(privateKey)   // 이미지(또는 엔진이 읽는 종류)로 선언했다
+        // 이미지로 선언하지 않은 모든 키는 선언을 믿지 않고 앞 바이트(매직 넘버)로 본다 - 이미지인데 줄이 없어 「일반 파일」로 남에게 원본이 가는 길을 막는다(완료 호출을 빼먹은 경우)
+        if ((meta.sizeBytes ?: 0L) == 0L) return   // 빈 객체는 범위 읽기가 안 된다 - 아직 판정하지 않는다
+        val head = storage.read(ObjectKey(privateKey), 0L until UploadMagicBytes.HEAD_BYTES.toLong()).use { it.readNBytes(UploadMagicBytes.HEAD_BYTES) }
+        val kind = UploadMagicBytes.detect(head)
+        if (kind != null && renderers.handles(kind)) return register(privateKey)
+        // 이미지가 아니다 - 판정을 기억해 남이 볼 때마다 범위 읽기가 붙지 않게 한다(작업은 넣지 않는다). 그 사이 다른 호출이 이미 줄을 만들었으면 건드리지 않는다
+        if (store.register(hash, privateKey) { }) store.markTerminal(hash, UploadImageState.NOT_IMAGE, ImageReasons.NOT_AN_IMAGE)
     }
 
     /** 완료 리스너 · [ensure] 가 부른다 - 줄이 없을 때만 줄 + 작업 (동시에 와도 하나) */

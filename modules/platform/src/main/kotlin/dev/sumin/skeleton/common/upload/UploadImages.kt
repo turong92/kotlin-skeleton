@@ -18,6 +18,9 @@ enum class UploadImageState {
 
     /** 재시도를 다 썼다 */
     FAILED,
+
+    /** 앞 바이트를 봤더니 이미지가 아니었다 - 판정을 기억해 두는 표지일 뿐이다. [UploadImages.status] 는 이 줄을 **없는 것으로** 돌려주므로 쓰는 곳에서는 보이지 않는다 */
+    NOT_IMAGE,
 }
 
 /**

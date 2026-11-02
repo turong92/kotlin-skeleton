@@ -165,7 +165,7 @@ class ImageAlternateFormatsTest {
 
     @Test
     fun `a jpeg declared as octet-stream or nothing is still registered by its first bytes so the use sites never treat it as a plain file`() {
-        listOf("application/octet-stream", null, "text/plain").forEachIndexed { i, declared ->
+        listOf("application/octet-stream", null, "text/plain", "application/pdf").forEachIndexed { i, declared ->
             val w = Wiring(ImageIoRenderer())
             val key = "members/1/file$i"   // 이미지 확장자도 없다
             w.storage.put(key, Photos.jpeg(80, 40, gps = true), declared)
@@ -178,5 +178,18 @@ class ImageAlternateFormatsTest {
         w.storage.put("members/1/notes", "just text".toByteArray(), "application/octet-stream")
         w.images.ensure("members/1/notes")
         assertThat(w.images.status("members/1/notes")).isNull()   // 이미지가 아니면 줄을 만들지 않는다
+    }
+
+    @Test
+    fun `the verdict that a key is not an image is remembered so later views read nothing`() {
+        val w = Wiring(ImageIoRenderer())
+        w.storage.put("members/1/notes.pdf", "%PDF-1.7 not an image".toByteArray(), "application/pdf")
+        w.images.ensure("members/1/notes.pdf")
+
+        assertThat(w.store.rows.getValue(imageKeyHash("members/1/notes.pdf")).state).isEqualTo(UploadImageState.NOT_IMAGE)
+        assertThat(w.images.status("members/1/notes.pdf")).isNull()   // 쓰는 곳에는 줄이 없는 것으로 보인다
+        assertThat(w.images.views(listOf("members/1/notes.pdf"))).isEmpty()
+        w.storage.failReads = true
+        w.images.ensure("members/1/notes.pdf")   // 저장소를 읽으면 던진다 - 던지지 않으니 읽지 않았다
     }
 }
