@@ -275,9 +275,11 @@ Caddy 가 `<api_prefix>/*` 만 백엔드로 보내고 나머지는 `data/apps/<n
 | 스위치 · 프로필 | env: `<P>_ENV=prod` · `SPRING_PROFILES_ACTIVE=prod` (기본으로 들어 있다) | — |
 | 저장소 | `db: postgres` (플랫폼이 `SPRING_DATASOURCE_*` 를 넣는다). 계정 · 세션 저장소는 JDBC 라 통과 | 메모리 저장소 → 기동 실패 |
 | 약관 문서 | 앱 자기 문서(`src/main/resources/legal/` + REVIEWED)로 바꾼다. **시험 배포만**: env `<P>_LEGAL_ACKNOWLEDGE_TEMPLATE=true` (모듈의 예시 TEMPLATE 문서를 일부러 허락 — 실사용자 전에 문서를 바꾼다, docs/legal.md). MySQL(`db: mysql`)이면 서버가 `log_bin_trust_function_creators=1` 이거나 binlog 가 꺼져 있어야 마이그레이션이 트리거를 만든다 | TEMPLATE 문서 · DRAFT 에 시행일 · 빠진 사실(`skeleton.legal.facts.*`) → 기동 실패 (`legal` 가드, 값은 싣지 않는다) |
+| 웹 푸시 (샘플) | 샘플은 웹 푸시(VAPID)를 켠 채 시작한다. `secrets:` 에 `<P>_NOTIFICATION_WEBPUSH_VAPID_PRIVATE_KEY`(운영자 비밀 — 공개 키와 한 쌍), env: `<P>_NOTIFICATION_WEBPUSH_VAPID_PUBLIC_KEY`(비밀 아님) · `_SUBJECT`. 키 쌍은 `npx web-push generate-vapid-keys` 로 한 번 만든다. 끄려면 `<P>_NOTIFICATION_WEBPUSH_ENABLED=false`. **샘플 yml 의 기본값은 키 없이 보호 환경에서 뜨지 못한다**(웹 푸시가 켜져 있다). FCM 은 기본 꺼짐이라 시험 배포에 필요 없다 — 켜면 `<P>_NOTIFICATION_FCM_ENABLED=true` + `secrets:` 의 `<P>_NOTIFICATION_FCM_CREDENTIALS` | 키가 비었거나 한 쌍이 아니면 · 시험 키면 기동 실패 (`notification-webpush` 가드, 설정 이름을 말한다) |
 | 시드 계정 | 넣지 않는다 (로컬 전용) | 있으면 기동 실패 |
 
 `scripts/test-deploy-contract.sh` 의 **D 단계**가 apps/sample(= 스타터 + `notification-mail` …) 이미지를 이 조합 + **플랫폼이 넣는 클라이언트 IP 두 변수**(대문자 mode · 실제 도커 네트워크 CIDR 하나)로 `SKELETON_ENV=prod` 에 띄워 헬스체크 · 가드 요약을 확인하고,
+D 단계는 시험 안에서 일회용 VAPID 쌍을 만들어 넣는다(실키 아님).
 하나씩 빼면(클라이언트 IP · 메일 · TEMPLATE 허락 · 첨부 키 비밀 · 계정 차단/아이디 해시 비밀) 가드가 그 이름을 말하며 실패함을 확인한다. 스타터(apps/api)는 메일 모듈이 없으므로 C2 단계가 "메일 발송 길 · client-ip 를 요구하며 실패" 를 확인한다.
 첫 로그인 확인: 가입 → (메일이 릴레이로 간다) 확인 링크 → 그 주소가 `BOOTSTRAP_ADMIN_EMAIL` 이면 ADMIN.
 

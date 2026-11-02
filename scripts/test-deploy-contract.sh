@@ -271,11 +271,16 @@ for APP in $(echo "$APPS" | tr ',' ' '); do
     JWT="$(head -c 36 /dev/urandom | base64 | tr -d '\n=')"
     # TEMPLATE 허락: 약관 문서가 모듈의 TEMPLATE 인 시험 배포 — 일부러 허락 (docs/deploy.md §10, docs/legal.md)
     # BLOCKS_SECRET: 로그인 아이디를 켠 앱(apps/sample)은 보호 환경에서 이 비밀이 없으면 기동하지 않는다 — 선언의 secrets: 에서 플랫폼이 무작위로 채우는 값 (docs/deploy.md §11)
+    # 웹 푸시(VAPID): 견본이 웹 푸시를 켠 채 시작하므로 보호 환경은 한 쌍을 요구한다 — 이 시험 안에서 만든 일회용 쌍(실키 아님, 커밋하지 않는다). 개인 키는 운영에선 secrets: + .local.env
+    VAPID_DER="$(mktemp)"; openssl ecparam -name prime256v1 -genkey -noout -outform DER > "$VAPID_DER"
+    b64url() { base64 | tr -d '\n=' | tr '+/' '-_'; }
+    VAPID_PRIVATE="$(tail -c +8 "$VAPID_DER" | head -c 32 | b64url)"; VAPID_PUBLIC="$(tail -c 65 "$VAPID_DER" | b64url)"; rm -f "$VAPID_DER"
     base_d_env() {   # $1 = nomail 이면 메일 발송 길을 뺀다
       printf '%s\n' -e SKELETON_ENV=prod -e SPRING_PROFILES_ACTIVE=prod -e "JWT_SECRET=$JWT" \
         -e SKELETON_ACCOUNT_MAIL_LINK_BASE_URL=https://app.example.com -e SKELETON_WORKSPACE_MAIL_LINK_BASE_URL=https://app.example.com \
         -e SKELETON_ACCOUNT_BOOTSTRAP_ADMIN_EMAIL=boss@example.com \
-        -e SKELETON_LEGAL_ACKNOWLEDGE_TEMPLATE=true -e SKELETON_ACCOUNT_BLOCKS_SECRET=contract-test-blocks-secret-0123456789
+        -e SKELETON_LEGAL_ACKNOWLEDGE_TEMPLATE=true -e SKELETON_ACCOUNT_BLOCKS_SECRET=contract-test-blocks-secret-0123456789 \
+        -e "SKELETON_NOTIFICATION_WEBPUSH_VAPID_PUBLIC_KEY=$VAPID_PUBLIC" -e "SKELETON_NOTIFICATION_WEBPUSH_VAPID_PRIVATE_KEY=$VAPID_PRIVATE"
       [ "${1:-}" = nomail ] || printf '%s\n' -e SKELETON_NOTIFICATION_MAIL_ENABLED=true -e SKELETON_NOTIFICATION_MAIL_FROM=no-reply@example.com -e SPRING_MAIL_HOST=mail-relay.invalid
     }
     C="$RUN-$APP-d"; CONTAINERS="$CONTAINERS $C"

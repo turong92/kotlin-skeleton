@@ -21,6 +21,9 @@ import org.springframework.context.annotation.Bean
 import org.springframework.core.env.Environment
 import org.springframework.scheduling.TaskScheduler
 
+/** 옛 접두사 - 거부용이지 살아 있는 설정이 아니다(접두사 표 시험이 `.bind("…")` 리터럴만 센다) */
+private const val OLD_ADVERTISING_PREFIX = "skeleton.notification.push.advertising"
+
 @AutoConfiguration
 @EnableConfigurationProperties(NotificationRetentionProperties::class, NotificationPreferencesProperties::class, AdvertisingProperties::class)
 class NotificationAutoConfiguration {
@@ -33,7 +36,7 @@ class NotificationAutoConfiguration {
         val binder = Binder.get(environment)
         val old = listOfNotNull(
             "skeleton.notification.push.advertising-types".takeIf { binder.bind(it, Bindable.listOf(String::class.java)).isBound },
-            "skeleton.notification.push.advertising.*".takeIf { binder.bind("skeleton.notification.push.advertising", Bindable.mapOf(String::class.java, Any::class.java)).isBound },
+            "skeleton.notification.push.advertising.*".takeIf { binder.bind(OLD_ADVERTISING_PREFIX, Bindable.mapOf(String::class.java, Any::class.java)).isBound },
         )
         check(old.isEmpty()) { "old advertising settings found (${old.joinToString()}) - move them under skeleton.notification.advertising.* (they would be ignored and ads could go out without a consent check)" }
         return LegacyAdvertisingKeysGuard
