@@ -43,9 +43,16 @@ class StorageImages(
     override fun ensure(privateKey: String) {
         val hash = imageKeyHash(privateKey)
         if (store.find(hash) != null) return
-        val declared = storage.metadata(ObjectKey(privateKey))?.contentType ?: return   // 없는 객체는 등록하지 않는다
-        val kinds = UploadMagicBytes.declaredKinds(declared) ?: return
-        if (kinds.none { renderers.handles(it) }) return
+        val meta = storage.metadata(ObjectKey(privateKey)) ?: return   // 없는 객체는 등록하지 않는다
+        val declared = meta.contentType   // 비어 있을 수 있다 - 아래에서 앞 바이트로 판정
+        val kinds = UploadMagicBytes.declaredKinds(declared)
+        if (kinds == null) {
+            if ((meta.sizeBytes ?: 0L) == 0L) return   // 빈 객체는 범위 읽기가 안 된다 - 이미지가 아니다
+            // 선언(octet-stream · 빈 형식 · 표 밖)으로는 모른다 - 앞 바이트로 판정한다. 이미지인데 줄이 없어 「일반 파일」로 남에게 원본이 가는 길을 막는다(완료 호출을 빼먹은 경우)
+            val head = storage.read(ObjectKey(privateKey), 0L until UploadMagicBytes.HEAD_BYTES.toLong()).use { it.readNBytes(UploadMagicBytes.HEAD_BYTES) }
+            val kind = UploadMagicBytes.detect(head) ?: return
+            if (!renderers.handles(kind)) return
+        } else if (kinds.none { renderers.handles(it) }) return
         register(privateKey)
     }
 

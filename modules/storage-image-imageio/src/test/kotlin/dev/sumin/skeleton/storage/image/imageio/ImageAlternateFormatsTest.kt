@@ -162,4 +162,21 @@ class ImageAlternateFormatsTest {
         assertThat(clean.last()).isEqualTo(0x3B.toByte())
         assertThat(clean.size).isEqualTo(gif.size - 51 - 7)   // XMP 확장 · 주석 확장이 빠진 만큼
     }
+
+    @Test
+    fun `a jpeg declared as octet-stream or nothing is still registered by its first bytes so the use sites never treat it as a plain file`() {
+        listOf("application/octet-stream", null, "text/plain").forEachIndexed { i, declared ->
+            val w = Wiring(ImageIoRenderer())
+            val key = "members/1/file$i"   // 이미지 확장자도 없다
+            w.storage.put(key, Photos.jpeg(80, 40, gps = true), declared)
+
+            w.images.ensure(key)
+
+            assertThat(w.images.status(key)?.state).describedAs("declared as $declared").isEqualTo(UploadImageState.PENDING)
+        }
+        val w = Wiring(ImageIoRenderer())
+        w.storage.put("members/1/notes", "just text".toByteArray(), "application/octet-stream")
+        w.images.ensure("members/1/notes")
+        assertThat(w.images.status("members/1/notes")).isNull()   // 이미지가 아니면 줄을 만들지 않는다
+    }
 }

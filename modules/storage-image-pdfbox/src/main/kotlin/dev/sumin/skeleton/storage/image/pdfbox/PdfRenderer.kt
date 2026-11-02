@@ -35,6 +35,7 @@ import org.apache.pdfbox.pdmodel.encryption.InvalidPasswordException
 import org.apache.pdfbox.pdmodel.font.PDFont
 import org.apache.pdfbox.pdmodel.font.PDType3Font
 import org.apache.pdfbox.pdmodel.graphics.image.PDImage
+import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject
 import org.apache.pdfbox.rendering.ImageType
 import org.apache.pdfbox.rendering.PDFRenderer
 import org.apache.pdfbox.rendering.PageDrawer
@@ -262,8 +263,11 @@ private class DeadlineRenderer(document: PDDocument, private val deadline: Long,
         override fun strokePath() { abortIfLate(); super.strokePath() }
         override fun drawImage(pdImage: PDImage) {
             abortIfLate()
-            val pixels = pdImage.width.toLong() * pdImage.height
-            if (pixels > maxImagePixels) throw ImageTooLargeInPdf("An image in the PDF is ${pdImage.width}x${pdImage.height} pixels, more than the $maxImagePixels allowed")
+            // 본체와 마스크(/SMask · /Mask)는 따로 디코드된다 - 모두 같은 상한
+            val parts = listOfNotNull(pdImage, (pdImage as? PDImageXObject)?.softMask, (pdImage as? PDImageXObject)?.mask)
+            parts.firstOrNull { it.width.toLong() * it.height > maxImagePixels }?.let {
+                throw ImageTooLargeInPdf("An image in the PDF is ${it.width}x${it.height} pixels, more than the $maxImagePixels allowed")
+            }
             super.drawImage(pdImage)
         }
         override fun shadingFill(shadingName: COSName) { abortIfLate(); super.shadingFill(shadingName) }
