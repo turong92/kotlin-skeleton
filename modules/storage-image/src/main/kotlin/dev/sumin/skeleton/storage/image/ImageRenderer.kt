@@ -9,7 +9,7 @@ data class ImageInfo(
     val contentType: String,
     val width: Int,
     val height: Int,
-    /** 움직이는 이미지 - 썸네일만 첫 장으로 만들고 표시본은 원본을 가리킨다 */
+    /** 움직이는 이미지 - 썸네일만 첫 장으로 만든다(처리기가 표시본 요청을 빼고, 움직임을 남긴 메타데이터 없는 사본을 따로 만든다) */
     val animated: Boolean = false,
     /** 엔진이 픽셀에 반영할 EXIF 방향 1..8 (엔진 안에서만 쓰는 값) */
     val orientation: Int = 1,

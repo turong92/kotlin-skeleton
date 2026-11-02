@@ -4,7 +4,7 @@
 
 규칙: 줄의 열쇠는 원본 키의 sha256(`key_hash`, 긴 키도 유니크 색인에 들어간다) · 이미지가 아닌 파일은 줄이 없다 · 계정 id 는 줄에도 변환본 키에도 없다 · 상태는 `PENDING → READY | REJECTED | UNSUPPORTED | FAILED` 로 한 번만 간다(`PENDING` 일 때만 바뀐다) ·
 새 줄은 `SqlDialect.insertIgnore` 로 넣고 **작업을 넣을 권리는 `queued=false → true` 갱신이 1행일 때만** 갖는다(MySQL 의 insert-ignore 는 이미 있는 줄에도 1 을 돌려줘서 갱신 행 수로 「내가 만들었나」를 알 수 없다) — 같은 키에 완료와 지연 등록이 동시에 와도 줄 하나 · 작업 하나, 줄과 작업은 한 트랜잭션이라 함께 커밋되거나 함께 사라진다 ·
-`variants` 는 `{"thumb":{"w":400,"h":300,"ext":"jpg"},…}` 닫힌 모양이고 `ext` 가 `-` 면 원본을 가리킨다(움직이는 이미지의 `display`) ·
+`variants` 는 `{"thumb":{"w":400,"h":300,"ext":"jpg"},…}` 닫힌 모양이고 `ext` 가 `-` 면 원본을 가리킨다(이전 버전이 만든 움직이는 이미지의 `display` - 지금은 만들지 않는다) ·
 작업이 DEAD 가 되면(재시도 소진) 아직 `PENDING` 인 줄을 `FAILED` 로 적는다(원본은 그대로). 큐가 꺼져 있으면(`skeleton.job-queue.enabled=false`) `storage-image` 를 켤 때 기동이 실패한다.
 
 | 항목 | 내용 |

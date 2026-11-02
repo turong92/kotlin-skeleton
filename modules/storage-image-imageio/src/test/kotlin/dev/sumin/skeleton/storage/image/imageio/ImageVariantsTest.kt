@@ -111,7 +111,7 @@ class ImageVariantsTest {
     }
 
     @Test
-    fun `an animated GIF gets a thumbnail only and its display points at the original`() {
+    fun `an animated GIF gets a first-frame thumbnail and a display copy that is not the original`() {
         val h = Harness()
         val row = h.run("uploads/7/g/x.gif", Photos.animatedGif(60, 40), "image/gif")
 
@@ -119,10 +119,10 @@ class ImageVariantsTest {
         assertTrue(row.animated)
         assertNotNull(row.variants[UploadImages.THUMB])
         val status = h.images.status("uploads/7/g/x.gif")!!
-        assertEquals("uploads/7/g/x.gif", status.variants.getValue(UploadImages.DISPLAY).key, "display is the original")
+        assertTrue(status.variants.getValue(UploadImages.DISPLAY).key.startsWith("variants/"), "display is a copy in the variants folder, never the original")
         assertEquals("image/gif", status.variants.getValue(UploadImages.DISPLAY).contentType)
         assertTrue(status.variants.getValue(UploadImages.THUMB).key.startsWith("variants/"))
-        assertEquals(2, h.storage.objects.size, "the original and one thumbnail, nothing else")
+        assertEquals(3, h.storage.objects.size, "the original, one thumbnail and the metadata-free display copy")
     }
 
     @Test

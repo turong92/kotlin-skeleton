@@ -7,6 +7,7 @@ skeleton:
         max-source-bytes: 20971520          # 안전 상한: 원본 바이트 (20 MB) - 넘으면 읽지 않고 거절
         max-pages: 500                      # 안전 상한: 쪽 수 - 넘으면 거절 (PDF_TOO_MANY_PAGES)
         max-page-pixels: 25000000           # 안전 상한: 1쪽의 가로 x 세로(포인트 = 1/72 인치) - A4 는 약 50만. 넘으면 거절
+        max-image-pixels: 16000000          # 안전 상한: 쪽 안 이미지 하나의 가로 x 세로 - 디코드하기 전에 거절 (IMAGE_TOO_LARGE). 압축된 거대 이미지가 힙을 채우는 것을 막는다 (16MP = 디코드 약 64MB)
         render-timeout: 20s                 # 안전 상한: 1쪽을 그리는 시간 - 넘으면 그리기를 중단하고 거절 (PDF_RENDER_TIMEOUT)
         max-main-memory-bytes: 16777216     # PDFBox 가 한 문서에 메모리로 쓰는 상한 (16 MB) - 넘는 만큼은 임시 파일
         max-temp-bytes: 268435456           # PDFBox 가 한 문서에 임시 파일로 쓰는 상한 (256 MB) - 넘으면 거절

@@ -6,6 +6,7 @@ import dev.sumin.skeleton.storage.image.ImageRejectedException
 import dev.sumin.skeleton.storage.image.ImageRenderer
 import dev.sumin.skeleton.storage.image.Rendered
 import dev.sumin.skeleton.storage.image.VariantSpec
+import dev.sumin.skeleton.storage.image.ImageReasons
 import java.awt.RenderingHints
 import java.awt.geom.AffineTransform
 import java.awt.image.BufferedImage
@@ -19,6 +20,7 @@ import javax.imageio.ImageWriteParam
 import javax.imageio.stream.FileCacheImageInputStream
 import javax.imageio.stream.ImageInputStream
 import javax.imageio.stream.MemoryCacheImageInputStream
+import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -34,7 +36,10 @@ import kotlin.math.roundToInt
  *
  * JVM 전용이다 - headless AWT 를 쓰므로 네이티브 이미지에서는 뺀다. WebP 디코더는 표본 추출을 지키지 않을 수 있어 WebP 는 `max-pixels` 에 비례해 메모리를 쓴다(픽셀당 4바이트).
  */
-class ImageIoRenderer : ImageRenderer {
+class ImageIoRenderer(
+    /** 표본 추출을 지키지 않아 전체를 디코드하는 형식(WebP)의 픽셀 상한 - 넘으면 읽기 전에 `IMAGE_TOO_LARGE` 로 거절. 기본 2400만(디코드 약 100MB) */
+    private val maxFullDecodePixels: Long = 24_000_000L,
+) : ImageRenderer {
     init {
         ImageIO.scanForPlugins()   // 파트 jar 안에서는 플러그인이 자동으로 안 보이는 환경(스프링 부트 중첩 jar)이 있다 - 문맥 클래스 로더로 다시 찾는다
     }
@@ -65,35 +70,48 @@ class ImageIoRenderer : ImageRenderer {
     override fun render(source: () -> InputStream, info: ImageInfo, specs: List<VariantSpec>): List<Rendered> {
         if (specs.isEmpty()) return emptyList()
         val largest = specs.maxBy { it.maxWidth.toLong() * it.maxHeight }
+        val (bw, bh) = fit(info.width, info.height, largest.maxWidth, largest.maxHeight)
+        val step = sampleStep(info, bw, bh)
+        // 표본 추출을 지키지 않는 WebP 는 원본 전체를 디코드한다 - 한 장 메모리 예산(픽셀)을 넘으면 읽기 전에 거절
+        if (info.contentType == "image/webp" && info.width.toLong() * info.height > maxFullDecodePixels) {
+            throw ImageRejectedException(ImageReasons.IMAGE_TOO_LARGE, "A ${info.width}x${info.height} WebP is decoded in full and exceeds the $maxFullDecodePixels pixel budget")
+        }
         val guard = GuardedStream(source())
         val decoded = try {
-            guard.use { decode(it, info, largest) }
+            guard.use { decode(it, step) }
         } catch (e: Exception) {
             guard.failure?.let { throw it }   // 저장소가 읽다 끊겼다 - 내용이 아니라 일시 오류다. 큐가 다시 한다
             if (e is ImageRejectedException) throw e
             throw ImageRejectedException(UNDECODABLE, "The image cannot be decoded", e)
         }
         val alpha = decoded.colorModel.hasAlpha()
-        val oriented = orient(decoded, info.orientation, alpha)
+        val swap = info.orientation >= 5
+        val orientedWidth = if (swap) decoded.height else decoded.width
+        val orientedHeight = if (swap) decoded.width else decoded.height
         val made = HashMap<String, Rendered>()
         val chain = mutableListOf<BufferedImage>()
         specs.sortedByDescending { it.maxWidth.toLong() * it.maxHeight }.forEach { spec ->
-            val (tw, th) = fit(oriented.width, oriented.height, spec.maxWidth, spec.maxHeight)
-            val basis = chain.lastOrNull { it.width >= tw && it.height >= th } ?: oriented
-            val scaled = scaleTo(basis, tw, th, alpha)
+            val (tw, th) = fit(orientedWidth, orientedHeight, spec.maxWidth, spec.maxHeight)
+            val basis = chain.lastOrNull { it.width >= tw && it.height >= th }
+            // 방향 반영은 줄인 뒤에 한다 - 디코드한 큰 그림의 회전 사본을 만들지 않는다
+            val scaled = if (basis != null) scaleTo(basis, tw, th, alpha)
+            else orient(scaleTo(decoded, if (swap) th else tw, if (swap) tw else th, alpha), info.orientation, alpha)
             chain += scaled
             made[spec.name] = encode(spec, scaled, alpha)
         }
         return specs.map { made.getValue(it.name) }
     }
 
-    private fun decode(stream: InputStream, info: ImageInfo, largest: VariantSpec): BufferedImage =
+    /**
+     * 가장 큰 변환본([bw] x [bh])의 **두 배 이하**이면서 최대한 가까운 정수 표본 간격(올림) - 표본 추출은 점 표본이라 변환본과 같은 크기로 읽으면 가는 줄무늬에서
+     * 무아레가 생긴다. 두 배 근처로 읽어 아래 단계가 평균내며 줄이게 한다. 디코드한 한 변이 변환본의 두 배를 넘지 않으므로 픽셀은 변환본(상자)의 네 배 이하다
+     */
+    private fun sampleStep(info: ImageInfo, bw: Int, bh: Int): Int =
+        max(1, ceil(max(info.width / (2.0 * bw), info.height / (2.0 * bh))).toInt())
+
+    private fun decode(stream: InputStream, step: Int): BufferedImage =
         FileCacheImageInputStream(stream, null).use { input ->
             withReader(input) { reader ->
-                val (tw, th) = fit(info.width, info.height, largest.maxWidth, largest.maxHeight)
-                // 디코드한 크기가 가장 큰 변환본의 **두 배 이상**이 되는 가장 큰 정수 표본 간격 - 표본 추출은 점 표본이라 변환본과 같은 크기로 읽으면
-                // 가는 줄무늬에서 무아레가 생긴다. 두 배로 읽어 아래 단계가 반씩 평균내며 줄이게 한다(메모리는 약 네 배)
-                val step = max(1, min(info.width / (2 * tw), info.height / (2 * th)))
                 val param = reader.defaultReadParam.also { it.setSourceSubsampling(step, step, 0, 0) }
                 reader.read(0, param)
             }

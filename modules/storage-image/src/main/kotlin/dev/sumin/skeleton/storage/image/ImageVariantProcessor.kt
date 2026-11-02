@@ -45,12 +45,14 @@ class ImageVariantProcessor(
             return
         }
         val size = meta.sizeBytes ?: 0L
-        if (size > properties.maxSourceBytes) return reject(keyHash, UploadImageState.REJECTED, ImageReasons.IMAGE_TOO_LARGE)
         if (size == 0L) return reject(keyHash, UploadImageState.REJECTED, ImageReasons.NOT_AN_IMAGE)
 
         val head = storage.read(key, 0L until minOf(size, UploadMagicBytes.HEAD_BYTES.toLong())).use { it.readNBytes(UploadMagicBytes.HEAD_BYTES) }
         val kind = UploadMagicBytes.detect(head)
         if (kind == null || !renderers.handles(kind)) return reject(keyHash, UploadImageState.REJECTED, ImageReasons.NOT_AN_IMAGE)
+        // 바이트 · 픽셀 상한은 이미지 종류에만 - PDF 같은 엔진 전용 종류의 상한은 그 엔진이 지킨다
+        val isImage = kind in ImageRenderers.IMAGE_KINDS
+        if (isImage && size > properties.maxSourceBytes) return reject(keyHash, UploadImageState.REJECTED, ImageReasons.IMAGE_TOO_LARGE)
         val renderer = renderers.forKind(kind) ?: return reject(keyHash, UploadImageState.UNSUPPORTED, ImageReasons.UNSUPPORTED_FORMAT)
 
         val info = try {
@@ -58,11 +60,11 @@ class ImageVariantProcessor(
         } catch (e: ImageRejectedException) {
             return reject(keyHash, UploadImageState.REJECTED, e.code, e)
         }
-        if (info.width.toLong() * info.height > properties.maxPixels) {
+        if (isImage && info.width.toLong() * info.height > properties.maxPixels) {
             return reject(keyHash, UploadImageState.REJECTED, ImageReasons.IMAGE_TOO_LARGE, width = info.width, height = info.height)
         }
 
-        // 움직이는 이미지는 썸네일만 첫 장으로 - 표시본은 원본을 가리킨다
+        // 움직이는 이미지는 썸네일만 첫 장으로 - 표시본은 움직임을 남기고 메타데이터를 걷어낸 사본이다(원본을 남에게 주지 않는다)
         val specs = properties.sizes().filterKeys { !info.animated || it == UploadImages.THUMB }
             .map { (name, s) -> VariantSpec(name, s.maxWidth, s.maxHeight, s.quality) }
         permits.acquireUninterruptibly()
@@ -75,12 +77,21 @@ class ImageVariantProcessor(
         }
 
         val folder = variantFolder(properties.prefix, keyHash)
-        val files = rendered.flatMap { listOf(it) + it.alternates }
+        val files = rendered.flatMap { listOf(it) + it.alternates }.toMutableList()
+        if (info.animated) {
+            // 원본 전체를 메모리로 읽는다(최대 max-source-bytes) - 동시에 하나(max-concurrent)
+            val clean = try {
+                AnimatedImageCleaner.clean(info.contentType, storage.read(key).use { it.readAllBytes() })
+            } catch (e: ImageRejectedException) {
+                return reject(keyHash, UploadImageState.REJECTED, e.code, e, info.width, info.height)
+            }
+            files += Rendered(UploadImages.DISPLAY, clean, info.contentType, info.width, info.height)
+        }
         files.forEach {
             storage.upload(UploadObjectRequest(ObjectKey("$folder${it.name}.${it.extension}"), it.bytes, it.contentType, cacheControl = CACHE_CONTROL))
         }
         val variants = rendered.associate { it.name to StoredVariant(it.width, it.height, it.extension, it.alternates.map { alt -> alt.extension }) } +
-            if (info.animated) mapOf(UploadImages.DISPLAY to StoredVariant(info.width, info.height, StoredVariant.ORIGINAL)) else emptyMap()
+            if (info.animated) mapOf(UploadImages.DISPLAY to StoredVariant(info.width, info.height, extensionOf(info.contentType))) else emptyMap()
         val format = info.contentType.substringAfter('/')
         if (!store.markReady(keyHash, info.width, info.height, format, info.animated, variants) && store.find(keyHash) == null) {
             // 그 사이 상태 줄이 지워졌다(원본 회수) - 방금 올린 변환본이 고아가 되지 않게 치운다

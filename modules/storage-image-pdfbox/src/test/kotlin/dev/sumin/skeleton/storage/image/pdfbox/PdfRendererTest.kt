@@ -113,4 +113,48 @@ class PdfRendererTest {
             assertThat(context.startupFailure).hasStackTraceContaining("skeleton.storage.image.pdf.max-pages")
         }
     }
+
+    @Test
+    fun `a small pdf that holds a huge compressed image is rejected before the image is decoded`() {
+        // 20000 x 20000 RGB 는 풀면 1.2GB 지만 Flate 로는 약 1MB - 쪽 크기와 파일 크기 상한 안이다
+        val bomb = PDDocument().use { doc ->
+            val page = PDPage(PDRectangle.A4).also { doc.addPage(it) }
+            val zeros = object : java.io.InputStream() {
+                private var left = 20_000L * 20_000 * 3
+                override fun read(): Int = if (left-- > 0) 0 else -1
+                override fun read(b: ByteArray, off: Int, len: Int): Int {
+                    if (left <= 0) return -1
+                    val n = minOf(len.toLong(), left).toInt()
+                    java.util.Arrays.fill(b, off, off + n, 0)
+                    left -= n
+                    return n
+                }
+            }
+            val image = org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject(
+                doc, java.util.zip.DeflaterInputStream(zeros), org.apache.pdfbox.cos.COSName.FLATE_DECODE, 20_000, 20_000, 8,
+                org.apache.pdfbox.pdmodel.graphics.color.PDDeviceRGB.INSTANCE,
+            )
+            PDPageContentStream(doc, page).use { it.drawImage(image, 0f, 0f, 100f, 100f) }
+            ByteArrayOutputStream().also { doc.save(it) }.toByteArray()
+        }
+        assertThat(bomb.size).isLessThan(5_000_000)
+
+        val e = assertFailsWith<ImageRejectedException> { render(PdfRenderer(PdfProperties(enabled = true)), bomb, thumb) }
+
+        assertThat(e.code).isEqualTo(ImageReasons.IMAGE_TOO_LARGE)
+    }
+
+    @Test
+    fun `the completion inspector leaves a pdf alone - the pdf limits belong to the pdf engine and a thumbnail that cannot be made only ends the job`() {
+        val big = pdf(size = PDRectangle(14_400f, 14_400f))
+        val inspector = dev.sumin.skeleton.storage.image.ImageHeaderInspector(
+            ImageRenderers(listOf(PdfRenderer(PdfProperties(enabled = true)))),
+            dev.sumin.skeleton.storage.image.ImageProperties(enabled = true, maxPixels = 1_000, maxSourceBytes = 100),
+        )
+        val upload = dev.sumin.skeleton.storage.InspectedUpload(
+            dev.sumin.skeleton.storage.ObjectKey("members/1/big.pdf"), "application/pdf", "application/pdf", big.size.toLong(), big.copyOf(minOf(big.size, UploadMagicBytes.HEAD_BYTES)),
+        ) { ByteArrayInputStream(big) }
+
+        assertThat(inspector.inspect(upload)).isEqualTo(dev.sumin.skeleton.storage.InspectionVerdict.Accept)
+    }
 }

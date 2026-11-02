@@ -10,13 +10,16 @@ import dev.sumin.skeleton.storage.image.VariantSpec
 import java.awt.RenderingHints
 import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
+import java.io.IOException
 import java.io.InputStream
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeoutException
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.imageio.IIOImage
 import javax.imageio.ImageIO
 import javax.imageio.ImageWriteParam
@@ -56,6 +59,9 @@ object PdfReasons {
  * JVM 전용 - AWT 로 그리므로 **headless** 로 돌린다(`java.awt.headless=true` 를 정하지 않았으면 켠다). 폰트가 박히지 않은 PDF 는 시스템 폰트를 쓰므로 배포 이미지에 폰트(예: fontconfig + 기본 폰트)가 있어야 글자가 모양대로 그려진다. 네이티브 이미지에서는 뺀다.
  */
 class PdfRenderer(private val properties: PdfProperties) : ImageRenderer {
+    /** 실제로 그리고 있는 스레드 수의 상한 - 시간이 넘은 스레드가 끝나기 전에는 다음 그리기가 들어오지 못한다 */
+    private val renders = Semaphore(1)
+
     init {
         if (System.getProperty("java.awt.headless") == null) System.setProperty("java.awt.headless", "true")
     }
@@ -76,7 +82,13 @@ class PdfRenderer(private val properties: PdfProperties) : ImageRenderer {
         val file = Files.createTempFile("skeleton-pdf-", ".pdf")
         try {
             copyLimited(source, file)
-            return load(file).use { document -> renderFirstPage(document, specs) }
+            val document = load(file)
+            val handedOff = AtomicBoolean(false)   // 시간이 넘어 그리는 스레드가 아직 문서를 쓰고 있으면 문서 닫기는 그 스레드가 맡는다
+            try {
+                return renderFirstPage(document, specs, handedOff)
+            } finally {
+                if (!handedOff.get()) document.close()
+            }
         } finally {
             Files.deleteIfExists(file)
         }
@@ -107,7 +119,7 @@ class PdfRenderer(private val properties: PdfProperties) : ImageRenderer {
         throw ImageRejectedException(ImageReasons.NOT_AN_IMAGE, "The PDF cannot be read", e)   // 깨졌거나 PDFBox 의 메모리 · 임시 파일 상한을 넘었다
     }
 
-    private fun renderFirstPage(document: PDDocument, specs: List<VariantSpec>): List<Rendered> {
+    private fun renderFirstPage(document: PDDocument, specs: List<VariantSpec>, handedOff: AtomicBoolean): List<Rendered> {
         val pages = document.numberOfPages
         if (pages < 1) throw ImageRejectedException(ImageReasons.NOT_AN_IMAGE, "The PDF has no pages")
         if (pages > properties.maxPages) throw ImageRejectedException(PdfReasons.TOO_MANY_PAGES, "The PDF has $pages pages, more than the ${properties.maxPages} allowed")
@@ -125,7 +137,7 @@ class PdfRenderer(private val properties: PdfProperties) : ImageRenderer {
         // 가장 큰 변환본에 맞춰 한 번 그리고 나머지는 줄인다(키우지 않는다, 단 72dpi 의 두 배까지는 선명하게)
         val largest = specs.maxBy { it.maxWidth.toLong() * it.maxHeight }
         val scale = min(MAX_SCALE, min(largest.maxWidth / width, largest.maxHeight / height)).toFloat()
-        val drawn = draw(document, scale)
+        val drawn = draw(document, scale, handedOff)
         return specs.map { spec ->
             val (w, h) = fit(drawn.width, drawn.height, spec.maxWidth, spec.maxHeight)
             val image = scaleTo(drawn, w, h)
@@ -133,20 +145,44 @@ class PdfRenderer(private val properties: PdfProperties) : ImageRenderer {
         }
     }
 
-    /** 별도 스레드에서 그리고 시간 상한까지만 기다린다 - 그리는 쪽도 마감을 넘기면 스스로 멈춘다([DeadlineRenderer]) */
-    private fun draw(document: PDDocument, scale: Float): BufferedImage {
+    /**
+     * 별도 스레드에서 그리고 시간 상한까지만 기다린다 - 그리는 쪽도 연산마다 마감을 확인해 스스로 멈춘다([DeadlineRenderer]). 스레드를 죽일 수는 없으므로
+     * **그리는 스레드가 정말 끝날 때까지 자리([renders])를 놓지 않는다** - 시간이 넘어 돌아간 작업 뒤에 새 작업이 겹쳐 그리지 못하고(자리가 날 때까지 기다리다 일시 오류), 문서는 그 스레드가 끝난 뒤 닫는다
+     */
+    private fun draw(document: PDDocument, scale: Float, handedOff: AtomicBoolean): BufferedImage {
+        if (!renders.tryAcquire(properties.renderTimeout.toNanos(), TimeUnit.NANOSECONDS)) throw IOException("A previous PDF drawing is still running - try again later")
         val deadline = System.nanoTime() + properties.renderTimeout.toNanos()
         val executor = Executors.newSingleThreadExecutor { r -> Thread(r, "pdf-render").apply { isDaemon = true } }
         try {
-            val future = executor.submit<BufferedImage> { DeadlineRenderer(document, deadline).renderImage(0, scale, ImageType.RGB) }
+            val future = try {
+                executor.submit<BufferedImage> {
+                    try {
+                        DeadlineRenderer(document, deadline, properties.maxImagePixels).renderImage(0, scale, ImageType.RGB)
+                    } finally {
+                        renders.release()
+                        if (handedOff.get()) runCatching { document.close() }
+                    }
+                }
+            } catch (e: RuntimeException) {
+                renders.release()
+                throw e
+            }
             return try {
                 future.get(properties.renderTimeout.toNanos(), TimeUnit.NANOSECONDS)
             } catch (e: TimeoutException) {
+                handedOff.set(true)
                 future.cancel(true)
+                if (future.isDone) runCatching { document.close() }
                 throw ImageRejectedException(PdfReasons.RENDER_TIMEOUT, "Drawing the first page took longer than ${properties.renderTimeout}")
             } catch (e: ExecutionException) {
-                if (e.cause is RenderDeadlineExceeded) throw ImageRejectedException(PdfReasons.RENDER_TIMEOUT, "Drawing the first page took longer than ${properties.renderTimeout}")
-                throw ImageRejectedException(ImageReasons.NOT_AN_IMAGE, "The first page cannot be drawn", e.cause)
+                when (e.cause) {
+                    is RenderDeadlineExceeded -> {
+                        handedOff.set(false)
+                        throw ImageRejectedException(PdfReasons.RENDER_TIMEOUT, "Drawing the first page took longer than ${properties.renderTimeout}")
+                    }
+                    is ImageTooLargeInPdf -> throw ImageRejectedException(ImageReasons.IMAGE_TOO_LARGE, e.cause!!.message ?: "An image in the PDF is too large")
+                    else -> throw ImageRejectedException(ImageReasons.NOT_AN_IMAGE, "The first page cannot be drawn", e.cause)
+                }
             }
         } finally {
             executor.shutdownNow()
@@ -206,8 +242,17 @@ class PdfRenderer(private val properties: PdfProperties) : ImageRenderer {
 
 private class RenderDeadlineExceeded : RuntimeException("PDF render deadline exceeded", null, false, false)
 
-/** 그리기 연산마다 마감을 확인한다 - 넘기면 [RenderDeadlineExceeded] 로 그리기를 끝낸다(스레드를 죽일 수 없으니 그리는 쪽이 멈추게 한다) */
-private class DeadlineRenderer(document: PDDocument, private val deadline: Long) : PDFRenderer(document) {
+private class ImageTooLargeInPdf(message: String) : RuntimeException(message, null, false, false)
+
+/**
+ * 그리기 연산마다 마감을 확인한다 - 넘기면 [RenderDeadlineExceeded] 로 그리기를 끝낸다(스레드를 죽일 수 없으니 그리는 쪽이 멈추게 한다).
+ * 쪽 안 이미지는 **디코드하기 전에** 픽셀 수를 확인하고([ImageTooLargeInPdf]), 표본 추출을 켜 큰 JPEG 가 줄여서 읽히게 한다.
+ */
+private class DeadlineRenderer(document: PDDocument, private val deadline: Long, private val maxImagePixels: Long) : PDFRenderer(document) {
+    init {
+        isSubsamplingAllowed = true
+    }
+
     override fun createPageDrawer(parameters: PageDrawerParameters): PageDrawer = object : PageDrawer(parameters) {
         private fun abortIfLate() {
             if (System.nanoTime() - deadline > 0 || Thread.currentThread().isInterrupted) throw RenderDeadlineExceeded()
@@ -215,7 +260,12 @@ private class DeadlineRenderer(document: PDDocument, private val deadline: Long)
 
         override fun fillPath(windingRule: Int) { abortIfLate(); super.fillPath(windingRule) }
         override fun strokePath() { abortIfLate(); super.strokePath() }
-        override fun drawImage(pdImage: PDImage) { abortIfLate(); super.drawImage(pdImage) }
+        override fun drawImage(pdImage: PDImage) {
+            abortIfLate()
+            val pixels = pdImage.width.toLong() * pdImage.height
+            if (pixels > maxImagePixels) throw ImageTooLargeInPdf("An image in the PDF is ${pdImage.width}x${pdImage.height} pixels, more than the $maxImagePixels allowed")
+            super.drawImage(pdImage)
+        }
         override fun shadingFill(shadingName: COSName) { abortIfLate(); super.shadingFill(shadingName) }
         override fun showFontGlyph(textRenderingMatrix: Matrix, font: PDFont, code: Int, displacement: Vector) { abortIfLate(); super.showFontGlyph(textRenderingMatrix, font, code, displacement) }
         override fun showType3Glyph(textRenderingMatrix: Matrix, font: PDType3Font, code: Int, displacement: Vector) { abortIfLate(); super.showType3Glyph(textRenderingMatrix, font, code, displacement) }

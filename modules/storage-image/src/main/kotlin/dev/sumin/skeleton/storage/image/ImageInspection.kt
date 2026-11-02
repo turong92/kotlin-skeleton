@@ -13,7 +13,8 @@ import dev.sumin.skeleton.storage.UploadMagicBytes
  */
 class ImageHeaderInspector(private val renderers: ImageRenderers, private val properties: ImageProperties) : UploadInspector {
     override fun inspect(upload: InspectedUpload): InspectionVerdict {
-        val kind = UploadMagicBytes.detect(upload.head)?.takeIf { renderers.handles(it) } ?: return InspectionVerdict.Accept
+        // 이미지 종류에만 - PDF 같은 엔진 전용 종류의 상한(바이트 · 쪽 크기)은 그 엔진이 맡고, 썸네일을 못 만드는 것은 비동기 REJECTED 로 끝난다(원본 유지)
+        val kind = UploadMagicBytes.detect(upload.head)?.takeIf { it in ImageRenderers.IMAGE_KINDS } ?: return InspectionVerdict.Accept
         val code = StorageFileValidationErrorCode.IMAGE_TOO_LARGE.name
         if (upload.sizeBytes > properties.maxSourceBytes) {
             return InspectionVerdict.Reject(code, "Image size ${upload.sizeBytes} exceeds maximum ${properties.maxSourceBytes}.")

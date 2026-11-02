@@ -113,4 +113,53 @@ class ImageAlternateFormatsTest {
         assertThat(run(engine)).isEqualTo(UploadImageState.READY)
         assertThat(run(ImageIoRenderer())).isEqualTo(UploadImageState.UNSUPPORTED)
     }
+
+    private fun le32(n: Int) = java.nio.ByteBuffer.allocate(4).order(java.nio.ByteOrder.LITTLE_ENDIAN).putInt(n).array()
+    private fun chunk(id: String, payload: ByteArray) = id.toByteArray() + le32(payload.size) + payload + (if (payload.size % 2 == 1) byteArrayOf(0) else byteArrayOf())
+
+    /** 움직임 + EXIF + XMP 비트가 켜진 WebP - EXIF 마디에 GPS 처럼 보이는 글자를 넣었다 */
+    private val animatedWebp: ByteArray = run {
+        val vp8x = byteArrayOf((0x02 or 0x08 or 0x04).toByte(), 0, 0, 0) + byteArrayOf(95, 0, 0, 63, 0, 0)
+        val body = "WEBP".toByteArray() + chunk("VP8X", vp8x) + chunk("ANIM", ByteArray(6)) + chunk("EXIF", "Exif\u0000\u0000GPSLatitude=37.5".toByteArray()) +
+            chunk("ANMF", ByteArray(16) { 7 }) + chunk("XMP ", "<x:xmpmeta>secret place</x:xmpmeta>".toByteArray())
+        "RIFF".toByteArray() + le32(body.size) + body
+    }
+
+    @Test
+    fun `an animated image's display variant is a metadata-free copy - never the original`() {
+        val engine = object : ImageRenderer {
+            override val kinds = setOf(DetectedKind.WEBP)
+            override fun probe(head: ByteArray, kind: DetectedKind) = ImageInfo("image/webp", 96, 64, animated = true)
+            override fun render(source: () -> InputStream, info: ImageInfo, specs: List<VariantSpec>) = specs.map { Rendered(it.name, "jpg".toByteArray(), "image/jpeg", 48, 32) }
+        }
+        val w = Wiring(engine)
+        w.storage.put("members/1/a.webp", animatedWebp, "image/webp")
+        w.images.ensure("members/1/a.webp")
+        w.processor.process(imageKeyHash("members/1/a.webp"))
+
+        val display = w.images.status("members/1/a.webp")!!.variants.getValue("display")
+        assertThat(display.key).startsWith("variants/").endsWith("/display.webp")
+        val copy = w.storage.objects.getValue(display.key).first
+        val text = String(copy, Charsets.ISO_8859_1)
+        assertThat(text).doesNotContain("Exif").doesNotContain("GPSLatitude").doesNotContain("xmpmeta").doesNotContain("EXIF").doesNotContain("XMP ")
+        assertThat(text).contains("ANMF").contains("ANIM")   // 움직임은 남는다
+        assertThat(java.nio.ByteBuffer.wrap(copy, 4, 4).order(java.nio.ByteOrder.LITTLE_ENDIAN).int).isEqualTo(copy.size - 8)   // RIFF 길이가 맞다
+        assertThat(copy[20].toInt() and (0x08 or 0x04)).isZero()   // VP8X 의 EXIF · XMP 비트가 꺼졌다
+        assertThat(copy[20].toInt() and 0x02).isNotZero()
+    }
+
+    @Test
+    fun `an animated gif loses its XMP extension but keeps the loop count`() {
+        fun ext(label: Int, id: String, data: ByteArray) = byteArrayOf(0x21, label.toByte(), 11) + id.toByteArray() + byteArrayOf(data.size.toByte()) + data + byteArrayOf(0)
+        val frame = byteArrayOf(0x2C, 0, 0, 0, 0, 2, 0, 2, 0, 0, 2, 2, 0x44, 0x01, 0)
+        val gif = "GIF89a".toByteArray() + byteArrayOf(2, 0, 2, 0, 0, 0, 0) + ext(0xFF, "NETSCAPE2.0", byteArrayOf(1, 0, 0)) +
+            ext(0xFF, "XMP DataXMP", "<x:xmpmeta>secret place</x:xmpmeta>".toByteArray()) + byteArrayOf(0x21, 0xFE.toByte(), 3, 'a'.code.toByte(), 'b'.code.toByte(), 'c'.code.toByte(), 0) + frame + frame + byteArrayOf(0x3B)
+
+        val clean = dev.sumin.skeleton.storage.image.AnimatedImageCleaner.clean("image/gif", gif)
+
+        val text = String(clean, Charsets.ISO_8859_1)
+        assertThat(text).startsWith("GIF89a").contains("NETSCAPE2.0").doesNotContain("xmpmeta").doesNotContain("abc")
+        assertThat(clean.last()).isEqualTo(0x3B.toByte())
+        assertThat(clean.size).isEqualTo(gif.size - 51 - 7)   // XMP 확장 · 주석 확장이 빠진 만큼
+    }
 }
