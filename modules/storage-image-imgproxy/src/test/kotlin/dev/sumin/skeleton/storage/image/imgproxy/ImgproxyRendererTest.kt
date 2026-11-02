@@ -20,42 +20,8 @@ import org.junit.jupiter.api.Assumptions.assumeTrue
 
 /** 실제 imgproxy 컨테이너로 시험한다(Docker 가 없으면 건너뜀). 끝나면 컨테이너와 원본 서버를 내린다 */
 class ImgproxyRendererTest {
-    private val originals = HashMap<String, ByteArray>()
-    private lateinit var server: HttpServer
-    private var container: GenericContainer<*>? = null
-    private lateinit var renderer: ImgproxyRenderer
-
     @BeforeTest
-    fun start() {
-        assumeTrue(DockerClientFactory.instance().isDockerAvailable, "Docker is not available")
-        server = HttpServer.create(InetSocketAddress("0.0.0.0", 0), 0).apply {
-            createContext("/orig/") { ex ->
-                val bytes = originals[ex.requestURI.path.removePrefix("/orig/")]
-                if (bytes == null) ex.sendResponseHeaders(404, -1) else { ex.sendResponseHeaders(200, bytes.size.toLong()); ex.responseBody.use { it.write(bytes) } }
-                ex.close()
-            }
-            start()
-        }
-        val port = server.address.port
-        val c = GenericContainer(DockerImageName.parse(IMAGE))
-            .withEnv("IMGPROXY_KEY", KEY).withEnv("IMGPROXY_SALT", SALT)
-            .withEnv("IMGPROXY_ALLOWED_SOURCES", "http://host.docker.internal:$port/")   // 서명된 우리 원본 서버 말고는 가져오지 않는다
-            .withEnv("IMGPROXY_MAX_SRC_RESOLUTION", "50")
-            .withExtraHost("host.docker.internal", "host-gateway")
-            .withExposedPorts(8080)
-            .waitingFor(Wait.forHttp("/health").forStatusCode(200))
-        c.start()
-        container = c
-        renderer = ImgproxyRenderer(
-            ImgproxyProperties(enabled = true, url = "http://${c.host}:${c.getMappedPort(8080)}", key = KEY, salt = SALT, timeout = Duration.ofSeconds(60)),
-        ) { key, _ -> "http://host.docker.internal:$port/orig/${key.value}" }
-    }
-
-    @AfterTest
-    fun stop() {
-        container?.stop()
-        if (::server.isInitialized) server.stop(0)
-    }
+    fun requireDocker() = assumeTrue(DockerClientFactory.instance().isDockerAvailable, "Docker is not available")
 
     private fun render(key: String, bytes: ByteArray, vararg specs: VariantSpec): List<dev.sumin.skeleton.storage.image.Rendered> {
         originals[key] = bytes
@@ -110,11 +76,48 @@ class ImgproxyRendererTest {
         return ByteArray(0)
     }
 
+
     private companion object {
         const val GPS_IFD_POINTER_LE = "%\u0088"   // 태그 0x8825 (리틀 엔디안)
         const val GPS_IFD_POINTER_BE = "\u0088%"   // 태그 0x8825 (빅 엔디안)
         const val IMAGE = "ghcr.io/imgproxy/imgproxy:v3.30.1"
         const val KEY = "943b421c9eb07c830af81030552c86009268de4e532ba2ee2eab8247c6da0881"
         const val SALT = "520f986b998545b4785e0defbc4f3c1203f22de2374a3d53cb7a7fe9fea309c5"
+
+        val originals = java.util.concurrent.ConcurrentHashMap<String, ByteArray>()
+
+        /** 원본을 내주는 서버 - JVM 당 하나(JVM 이 끝날 때 내린다) */
+        val server: HttpServer by lazy {
+            HttpServer.create(InetSocketAddress("0.0.0.0", 0), 0).apply {
+                createContext("/orig/") { ex ->
+                    val bytes = originals[ex.requestURI.path.removePrefix("/orig/")]
+                    if (bytes == null) ex.sendResponseHeaders(404, -1) else { ex.sendResponseHeaders(200, bytes.size.toLong()); ex.responseBody.use { it.write(bytes) } }
+                    ex.close()
+                }
+                start()
+                Runtime.getRuntime().addShutdownHook(Thread { stop(0) })
+            }
+        }
+
+        /** imgproxy 컨테이너 - JVM 당 하나, 테스트 인스턴스마다 띄우지 않는다. JVM 이 끝날 때 내린다(Testcontainers 의 정리 컨테이너도 거둔다) */
+        val container: GenericContainer<*> by lazy {
+            GenericContainer(DockerImageName.parse(IMAGE))
+                .withEnv("IMGPROXY_KEY", KEY).withEnv("IMGPROXY_SALT", SALT)
+                .withEnv("IMGPROXY_ALLOWED_SOURCES", "http://host.docker.internal:${server.address.port}/")   // 서명된 우리 원본 서버 말고는 가져오지 않는다
+                .withEnv("IMGPROXY_MAX_SRC_RESOLUTION", "50")
+                .withExtraHost("host.docker.internal", "host-gateway")
+                .withExposedPorts(8080)
+                .waitingFor(Wait.forHttp("/health").forStatusCode(200))
+                .also {
+                    it.start()
+                    Runtime.getRuntime().addShutdownHook(Thread { it.stop() })
+                }
+        }
+
+        val renderer: ImgproxyRenderer by lazy {
+            ImgproxyRenderer(
+                ImgproxyProperties(enabled = true, url = "http://${container.host}:${container.getMappedPort(8080)}", key = KEY, salt = SALT, timeout = Duration.ofSeconds(60)),
+            ) { key, _ -> "http://host.docker.internal:${server.address.port}/orig/${key.value}" }
+        }
     }
 }
