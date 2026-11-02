@@ -3,6 +3,7 @@ package dev.sumin.skeleton.account.jdbc
 import dev.sumin.skeleton.account.AccountAutoConfiguration
 import dev.sumin.skeleton.account.AccountBlockStore
 import dev.sumin.skeleton.account.AccountMaintenanceLease
+import dev.sumin.skeleton.common.audience.AudienceSource
 import dev.sumin.skeleton.common.time.TimeProvider
 import org.springframework.beans.factory.ObjectProvider
 import dev.sumin.skeleton.account.AccountRepository
@@ -68,4 +69,13 @@ class AccountJdbcAutoConfiguration {
     @ConditionalOnMissingBean(name = ["jdbcAccountAuditListener"])
     @ConditionalOnProperty(prefix = "skeleton.account.audit", name = ["enabled"], havingValue = "true")
     fun jdbcAccountAuditListener(dataSource: DataSource, dialect: SqlDialect): AccountEventListener = JdbcAccountAuditListener(NamedParameterJdbcTemplate(dataSource), dialect)
+
+    /** 공지 대상 `all` · `role` — 공지 모듈이 없으면 아무도 읽지 않는 빈이다 (읽을 때만 DB 를 부른다) */
+    @Bean
+    @ConditionalOnMissingBean(name = ["accountAllAudience"])
+    fun accountAllAudience(dataSource: DataSource): AudienceSource = JdbcAccountAudiences.all(NamedParameterJdbcTemplate(dataSource))
+
+    @Bean
+    @ConditionalOnMissingBean(name = ["accountRoleAudience"])
+    fun accountRoleAudience(dataSource: DataSource): AudienceSource = JdbcAccountAudiences.role(NamedParameterJdbcTemplate(dataSource))
 }
