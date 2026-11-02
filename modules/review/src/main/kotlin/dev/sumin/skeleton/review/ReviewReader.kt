@@ -78,7 +78,10 @@ class ReviewReader(
      * 사진 한 칸의 저장 키 - 그 리뷰를 **볼 수 있는 사람**에게만(공개 줄은 누구나, 숨긴 줄은 작성자 · 운영자). 못 보면 없는 것과 같은 null.
      * [moderator] 는 운영 권한(`review.moderate`)을 가진 사람인가 - 경로가 판정한다.
      */
-    fun photoKey(viewer: String?, moderator: Boolean, id: String, index: Int): String? {
+    fun photoKey(viewer: String?, moderator: Boolean, id: String, index: Int): String? = photoRef(viewer, moderator, id, index)?.key
+
+    /** [photoKey] 에 「올린 사람이거나 운영자인가」를 더한 것 - 이미지 변환이 끝나기 전에 원본을 봐도 되는 사람이다 */
+    fun photoRef(viewer: String?, moderator: Boolean, id: String, index: Int): PhotoRef? {
         val review = store.find(id) ?: return null
         val visible = when (review.status) {
             ReviewStatus.PUBLISHED -> true
@@ -86,7 +89,8 @@ class ReviewReader(
             ReviewStatus.DELETED -> false
         }
         if (!visible || index !in 0 until review.photoCount) return null
-        return store.photoKey(id, index)
+        val key = store.photoKey(id, index) ?: return null
+        return PhotoRef(key, privileged = moderator || (viewer != null && review.accountId == viewer))
     }
 
     /** 한 줄을 보는 사람 기준으로 - 방금 쓰거나 고친 내 줄을 응답 모양으로 만들 때 */
@@ -130,3 +134,6 @@ class ReviewReader(
         private const val DELETED_PREFIX = "deleted:"
     }
 }
+
+/** 사진 한 칸 - 저장 키와, 보는 사람이 올린 사람이거나 운영자인가 */
+data class PhotoRef(val key: String, val privileged: Boolean)

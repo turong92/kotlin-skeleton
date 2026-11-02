@@ -26,26 +26,37 @@ import java.util.concurrent.ConcurrentHashMap
 class FakePresignedStorage : PresignedStorage {
     val objects = ConcurrentHashMap<String, ByteArray>()
 
+    /** 객체의 Content-Type - 올릴 때 · 복사할 때 따라간다 */
+    val types = ConcurrentHashMap<String, String>()
+
     private fun url(key: ObjectKey, method: String) =
         PresignedUrl(key, method, URI.create("http://storage.test/${key.value}"), emptyMap(), Instant.now().plusSeconds(600))
 
     override fun upload(request: UploadObjectRequest): StoredObjectWriteResult {
         objects[request.key.value] = request.content
+        request.contentType?.let { types[request.key.value] = it }
         return StoredObjectWriteResult(request.key)
     }
 
     override fun copy(request: CopyObjectRequest): StoredObjectWriteResult {
         objects[request.destinationKey.value] = requireNotNull(objects[request.sourceKey.value])
+        (request.contentType ?: types[request.sourceKey.value])?.let { types[request.destinationKey.value] = it }
         return StoredObjectWriteResult(request.destinationKey)
     }
 
     override fun list(request: ListObjectsRequest): ListedObjects = ListedObjects(emptyList())
 
     override fun metadata(key: ObjectKey): StoredObjectMetadata? =
-        objects[key.value]?.let { StoredObjectMetadata(key, sizeBytes = it.size.toLong()) }
+        objects[key.value]?.let { StoredObjectMetadata(key, sizeBytes = it.size.toLong(), contentType = types[key.value]) }
+
+    override fun read(key: ObjectKey, range: LongRange?): java.io.InputStream {
+        val bytes = requireNotNull(objects[key.value]) { "no such object: ${key.value}" }
+        return (if (range == null) bytes else bytes.copyOfRange(range.first.toInt(), minOf(bytes.size.toLong(), range.last + 1).toInt())).inputStream()
+    }
 
     override fun delete(key: ObjectKey) {
         objects.remove(key.value)
+        types.remove(key.value)
     }
 
     override fun presignUpload(request: PresignedUploadRequest): PresignedUrl = url(request.key, "PUT")

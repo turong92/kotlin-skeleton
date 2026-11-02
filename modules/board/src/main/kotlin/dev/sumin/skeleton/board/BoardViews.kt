@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.board
 
+import dev.sumin.skeleton.common.upload.PublicUploadImage
 import dev.sumin.skeleton.common.author.AuthorCard
 import dev.sumin.skeleton.common.author.AuthorDirectory
 
@@ -35,6 +36,8 @@ data class PostDetailView(
     val pendingRevision: RevisionView? = null,
     /** 공개 영역이 켜져 있고 이 글이 공개(PUBLISHED)일 때만: 첨부 키 -> 공개 주소 */
     val attachmentUrls: Map<String, String> = emptyMap(),
+    /** 이미지 모듈이 있고 이 글이 공개일 때: 변환이 끝난 첨부 이미지 키 -> 폭 · 높이 · 썸네일 · 본 이미지 공개 주소 */
+    val attachmentImages: Map<String, PublicUploadImage> = emptyMap(),
 )
 
 /** 최상위 댓글이면 [replies] 에 모든 자손이 작성 순으로 평평하게 들어 있다 (답글의 replies 는 항상 비어 있다). body 는 PUBLISHED 가 아니면 null. */
@@ -57,6 +60,8 @@ data class CommentView(
     val canManage: Boolean? = null,
     /** 공개 영역이 켜져 있고 이 댓글이 공개(PUBLISHED, 글도 PUBLISHED)일 때만: 첨부 키 -> 공개 주소 */
     val attachmentUrls: Map<String, String> = emptyMap(),
+    /** 이미지 모듈이 있고 이 댓글이 공개일 때: 변환이 끝난 첨부 이미지 키 -> 폭 · 높이 · 썸네일 · 본 이미지 공개 주소 */
+    val attachmentImages: Map<String, PublicUploadImage> = emptyMap(),
 )
 
 data class BoardConfigView(

@@ -36,6 +36,11 @@ dependencies {
     implementation(project(":modules:redis-rate-limit"))
     implementation(project(":modules:scheduler"))
     implementation(project(":modules:storage-s3"))
+    implementation(project(":modules:storage-image"))   // 이미지 변환본 (thumb · display) - 꺼진 채 공존한다(skeleton.storage.image.enabled=false). 실제 흐름은 apps/sample
+    implementation(project(":modules:storage-image-jdbc"))
+    implementation(project(":modules:storage-image-imageio"))
+    implementation(project(":modules:storage-image-imgproxy"))   // 선택 엔진(HEIC/AVIF 입력) - 꺼진 채 공존한다. 켜면 imgproxy 컨테이너가 필요하다
+    implementation(project(":modules:storage-image-pdfbox"))     // PDF 1쪽 썸네일 엔진 - 꺼진 채 공존한다
     implementation(project(":modules:time"))
     implementation(project(":modules:job-queue-jdbc"))
     implementation(project(":modules:notification-mail"))

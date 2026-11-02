@@ -39,6 +39,7 @@
 검증 실패는 400 `COMMON.VALIDATION_FAILED` + `errors: [{field, code, message}]` — `field` 는 JSON 속성 이름이다. 알 수 없는 `status` 값이나 `?status=NOPE` 는 400.
 알림: 토픽 `notes`, 타입 `NOTE_CREATED | NOTE_UPDATED | NOTE_DELETED | NOTE_EXPORTED`, `payload.noteId`(딥링크) · `payload.noteTitle`. 받는 사람은 노트 주인뿐이다(SSE 도 그 사람에게만 흐른다).
 첨부 규칙(앱의 선택, `application.yml`): png · jpg · gif · webp · pdf · txt, 5 MB 이하. 첨부 키는 **내가 올린 것**이어야 한다(아니면 `errors[attachmentKey]`) — 판정은 storage 모듈의 `StorageKeyOwnership.owns(계정, 키)` 빈이 한다. 이 앱은 `key-owner=OPAQUE` 라 업로드 키가 `uploads/o/<uuid>.<mac>/file[.<확장자>]` 이고 키만 봐서는 누구 것인지 알 수 없다(접두사 비교는 앱 코드에 없다). 옛 `uploads/<계정 id>/…` 꼴 키도 그대로 인정된다.
+이 앱은 이미지 변환(`storage-image` + `-jdbc` + `-imageio`, `storage.image.enabled: true`)과 버려진 회원 업로드 정리(`storage.web.cleanup.enabled: true`)도 켠다: 올린 사진은 EXIF · GPS 없는 `thumb` · `display` 로 공개 영역에 복사되고(글 응답의 `attachmentImages`), 7일이 지나도록 노트 · 게시판 · 리뷰 어디에도 안 붙은 업로드는 지워진다. 노트 첨부와 내보내기 파일은 앱의 `NoteUploadKeys` 가 「쓰이는 파일」로 대답한다 - 자기 표에 업로드 키를 저장하는 앱이 따라 할 모양이다. imgproxy · PDF 썸네일은 쓰지 않는다.
 **표시 이름은 키가 아니라 노트가 저장한다**: OPAQUE 키에서는 클라이언트가 보낸 파일 이름이 키에서 사라지므로(`file.png`) `PUT` 의 `attachmentName`(예: `고양이.png`)을 노트가 그대로 저장해 `Note.attachmentName` 으로 돌려준다. 보내지 않으면 키의 마지막 구간(`file.png`)이 들어가니 프론트는 항상 파일 이름을 같이 보낸다(react-skeleton 의 apps/sample 은 이미 `attachmentName: file.name` 을 보낸다 — 계약 변화 없음). **한계**: 키에 원래 이름이 없으니 업로드 직후 `presign-download` 로 받는 파일 이름은 `file.<확장자>` 가 된다(표시 이름은 노트의 `attachmentName`). 내보내기 결과 키(`uploads/<계정 id>/exports/…`)는 서버가 정하는 키라 옛 꼴 그대로이고 노트 주인에게만 알림 payload 로 간다.
 
 ## 게시판 (`/api/v1/boards`)

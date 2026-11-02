@@ -35,6 +35,12 @@ interface PublicUploads {
     fun publicKeysOf(privateKey: String): List<String> = listOf(publicKeyOf(privateKey))
 
     /**
+     * 이미지 모듈이 있을 때, 이 비공개 키들 중 **변환이 끝난(READY)** 이미지의 공개 모습 - 폭 · 높이와 `thumb` · `display` 공개 주소. 아닌 키(PDF · 변환 전 · 거절)는 빠진다.
+     * 복사가 되어 있다는 뜻은 아니다([urlOf] 와 같다 - 복사는 board 의 맞추기 큐가 한다). 기본은 빈 맵
+     */
+    fun imagesOf(privateKeys: Collection<String>): Map<String, PublicUploadImage> = emptyMap()
+
+    /**
      * 공개 영역에 복사한다(있으면 덮어쓴다). 원본의 Content-Type 을 읽어 그대로 쓰고 허용 목록(image/jpeg · png · webp · gif · avif · heic, application/pdf)
      * 밖이면 **공개하지 않고** false 를 돌려준다.
      * 이미지 모듈([UploadImages])이 있으면 원본이 아니라 변환본을 복사한다 - 변환 전이면 [UploadVariantsPendingException], 변환할 수 없는 이미지면 false.
@@ -53,6 +59,9 @@ interface PublicUploads {
     /** 이 공개 키의 CDN 캐시를 비운다([PublicUploadPurger]). 실패하면 예외 - 호출한 쪽(조정자의 비동기 작업)이 늦춰 다시 한다. 구현이 없으면 아무 일도 안 한다 */
     fun purgePublicKey(publicKey: String) = Unit
 }
+
+/** 공개된 이미지 하나 - [width] · [height] 는 `display` 사본의 크기, 주소는 공개 주소 */
+data class PublicUploadImage(val width: Int, val height: Int, val thumb: String, val display: String)
 
 /** 비공개 업로드를 짧은 수명의 서명 주소로 읽는다 - 승인 전 · 판 사진을 관리하는 사람이 볼 때 */
 fun interface PrivateUploadAccess {

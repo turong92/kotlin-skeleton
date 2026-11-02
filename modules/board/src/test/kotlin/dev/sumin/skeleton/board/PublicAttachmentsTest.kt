@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.board
 
 import dev.sumin.skeleton.common.upload.PrivateUploadAccess
+import dev.sumin.skeleton.common.upload.PublicUploadImage
 import dev.sumin.skeleton.common.upload.PublicUploads
 import java.time.Duration
 import kotlin.test.Test
@@ -14,16 +15,18 @@ class PublicAttachmentsTest {
     private val third = BoardCaller("acc_third")
     private val stranger = BoardCaller("acc_stranger")
 
+    private open class FakePublic : PublicUploads {
+        override fun urlOf(privateKey: String) = "https://cdn.example/${privateKey.hashCode()}"
+        override fun mayPublish(privateKey: String) = !privateKey.endsWith(".txt")
+        override fun publicKeyOf(privateKey: String) = "public/${privateKey.hashCode()}"
+        override fun publish(privateKey: String) = true
+        override fun unpublish(privateKey: String) = Unit
+        override fun listPublicKeys() = emptyList<String>()
+        override fun deletePublicKey(publicKey: String) = Unit
+    }
+
     private val on = BoardUploads(
-        publicUploads = { object : PublicUploads {
-            override fun urlOf(privateKey: String) = "https://cdn.example/${privateKey.hashCode()}"
-            override fun mayPublish(privateKey: String) = !privateKey.endsWith(".txt")
-            override fun publicKeyOf(privateKey: String) = "public/${privateKey.hashCode()}"
-            override fun publish(privateKey: String) = true
-            override fun unpublish(privateKey: String) = Unit
-            override fun listPublicKeys() = emptyList<String>()
-            override fun deletePublicKey(publicKey: String) = Unit
-        } },
+        publicUploads = { FakePublic() },
         access = { object : PrivateUploadAccess {
             override fun downloadUrl(privateKey: String, ttl: Duration) = "https://signed.example/$privateKey?ttl=${ttl.seconds}"
         } },
@@ -124,5 +127,24 @@ class PublicAttachmentsTest {
         val shown = h.commentService.list(stranger, "general", post.id, 0, 10, CommentSort.OLDEST).values.single { it.comment.id == c.id }
         assertEquals(setOf("k/a.png"), shown.attachmentUrls.keys, "the text file would answer 404 - no address for it")
         assertEquals(listOf("k/a.png", "k/notes.txt"), shown.attachments, "the keys stay")
+    }
+
+    @Test
+    fun `attachmentImages carries the ready images of a published post and comment - none without the image module`() {
+        val image = PublicUploadImage(1600, 1200, thumb = "https://cdn.example/a.thumb.jpg", display = "https://cdn.example/a.jpg")
+        val withImages = BoardUploads(
+            publicUploads = { object : FakePublic() {
+                override fun imagesOf(privateKeys: Collection<String>) = privateKeys.filter { it == "k/a.png" }.associateWith { image }
+            } },
+        )
+        val (h, post, c) = world(withImages)
+        h.commentService.moderate(other, "general", post, c.id, CommentStatus.PUBLISHED)
+        assertEquals(mapOf("k/a.png" to image), h.commentService.list(stranger, "general", post, 0, 10, CommentSort.OLDEST).values.single().attachmentImages)
+        h.commentService.moderate(other, "general", post, c.id, CommentStatus.HIDDEN)
+        assertEquals(emptyMap(), h.commentService.list(other, "general", post, 0, 10, CommentSort.OLDEST).values.single().attachmentImages, "hidden: nothing public")
+
+        val (plain, plainPost, plainComment) = world()
+        plain.commentService.moderate(other, "general", plainPost, plainComment.id, CommentStatus.PUBLISHED)
+        assertEquals(emptyMap(), plain.commentService.list(stranger, "general", plainPost, 0, 10, CommentSort.OLDEST).values.single().attachmentImages)
     }
 }

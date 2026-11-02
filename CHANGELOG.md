@@ -16,6 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `apps/sample`: 다섯 모듈 조립 - `push.enabled` · `lock-screen: FULL`(일부러 명시) · `types` 일곱 · 광고 종류 `promo.notes-tips` + `sender-name` · `fallback-zone: Asia/Seoul` · `stale-cleanup`(60일) · `webpush.enabled: true`(로컬 프로필은 시험용 VAPID 고정 쌍, `SKELETON_NOTIFICATION_WEBPUSH_VAPID_*` 로 덮는다) · `fcm.enabled: ${SKELETON_NOTIFICATION_FCM_ENABLED:false}` · 이메일 없는 계정도 하는 푸시 설정 경로 넷(`email.extra-exclude-paths`, `WriteGateCensusTest`) · 받는 사람 시간대 `push/SamplePushConfiguration`(계정 프로필의 `timeZone`) · 견본 `legal` 문서에 `marketing-night`(DRAFT · 견본임을 적음, ko/en)과 푸시를 말하는 `marketing`. 통합 시험 `push/PushJourneyIntegrationTest`. `apps/workbench` 는 클래스패스에 다섯을 모두 두되 켜지 않는다(공존 증명).
 - 프론트 짝 `@skeleton/push`(react-skeleton). `ModuleDocumentationTest` 의 알려진 패키지에 더했다.
 
+### 이미지 변환본을 쓰는 곳 (files K3, 2026-11-02)
+
+- `board`: 응답에 `attachmentImages: { <첨부 키>: { width, height, thumb, display } }` 를 **덧붙인다**(공개된 항목의 변환이 끝난 이미지만, 공개 주소 - 이미지 모듈이 없으면 키가 없다). `attachmentUrls` 는 그대로. 새 platform 계약 `PublicUploads.imagesOf`(기본 빈 맵) · `PublicUploadImage`. 변환 전에 승인된 글의 복사는 맞추기 큐가 `UploadVariantsPendingException` 으로 다시 한다.
+- `review`: `GET /api/v1/reviews/{id}/photos/{index}?variant=thumb|display`(없으면 `display`) - 이미지 모듈이 있으면 변환본 서명 주소로 302, 변환 전에는 올린 사람 · 운영자만 원본 · 그 밖은 404(+ 지연 등록). 이미지가 아닌 첨부와 이미지 모듈이 없는 앱은 지금과 같다. 새 `ReviewReader.photoRef`.
+- `apps/sample`: `storage-image` · `-jdbc` · `-imageio` + `storage.image.enabled: true`(크기는 모듈 기본) + 버려진 회원 업로드 정리(`storage.web.cleanup.enabled: true`, 노트 첨부 · 내보내기는 `NoteUploadKeys` 가 대답한다). imgproxy · PDF 썸네일은 쓰지 않는다. `apps/workbench`: 새 모듈 다섯을 꺼진 채 얹었고, 설정 스니펫 시험이 중첩된 접두사(`skeleton.storage` ⊃ `.image` ⊃ `.pdf`)를 가장 긴 것으로 센다.
+- `docs/deploy.md`: 기본 엔진은 headless AWT(네이티브 이미지에서는 빼고 imgproxy 로).
+
 ### 버려진 회원 업로드 정리 (files K6, 2026-11-02)
 
 - `storage`: **꺼진 채 시작하는** `skeleton.storage.web.cleanup.{enabled,min-age,batch-size}`(7일 · 500) - 업로드 접두사 아래에서 나이를 넘기고 어떤 `UploadedKeyUsage` 도 쓴다고 하지 않은 원본을 한 시간마다 지운다(`StorageMemberCleanup`, `scheduler` 필요). 비회원 영역 · 공개 영역 · 변환본 접두사는 건드리지 않고, 이미지 모듈이 있으면 변환본 · 상태 줄도 같이 지운다.

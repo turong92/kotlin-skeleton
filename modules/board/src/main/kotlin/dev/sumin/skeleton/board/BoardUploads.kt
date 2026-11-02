@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.board
 
 import dev.sumin.skeleton.common.upload.PrivateUploadAccess
+import dev.sumin.skeleton.common.upload.PublicUploadImage
 import dev.sumin.skeleton.common.upload.PublicUploads
 
 /** 서명 열람이 가리키는 첨부 목록 - 공개된 항목의 현재 첨부, 또는 대기 중인 고친 판의 첨부(순번이 따로다) */
@@ -19,6 +20,10 @@ data class SignedAttachment(val url: String, val expiresInSeconds: Long)
 class BoardUploads(private val publicUploads: () -> PublicUploads? = { null }, private val access: () -> PrivateUploadAccess? = { null }) {
     fun publicUrls(keys: List<String>): Map<String, String> =
         if (keys.isEmpty()) emptyMap() else publicUploads()?.takeIf { it.enabled() }?.let { uploads -> keys.filter { uploads.mayPublish(it) }.associateWith { uploads.urlOf(it) } } ?: emptyMap()
+
+    /** 공개된 항목의 변환이 끝난 이미지 - 키 -> 폭 · 높이 · `thumb` · `display` 공개 주소. 이미지 모듈이 없으면 빈 맵 */
+    fun publicImages(keys: List<String>): Map<String, PublicUploadImage> =
+        if (keys.isEmpty()) emptyMap() else publicUploads()?.takeIf { it.enabled() }?.let { uploads -> uploads.imagesOf(keys.filter { uploads.mayPublish(it) }) } ?: emptyMap()
 
     fun signed(key: String): SignedAttachment? =
         access()?.takeIf { it.enabled() }?.let { reader -> SignedAttachment(reader.downloadUrl(key, reader.defaultTtl), reader.defaultTtl.seconds) }

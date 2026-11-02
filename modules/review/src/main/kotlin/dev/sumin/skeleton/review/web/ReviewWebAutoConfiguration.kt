@@ -4,6 +4,7 @@ import dev.sumin.skeleton.common.account.AccountLabels
 import dev.sumin.skeleton.common.authz.OperatorAccess
 import dev.sumin.skeleton.common.authz.OperatorAuditLog
 import dev.sumin.skeleton.common.upload.PrivateUploadAccess
+import dev.sumin.skeleton.common.upload.UploadImages
 import dev.sumin.skeleton.common.web.PublicEndpointContributor
 import dev.sumin.skeleton.review.ReviewModerationService
 import dev.sumin.skeleton.review.ReviewAutoConfiguration
@@ -38,7 +39,8 @@ class ReviewWebAutoConfiguration {
         policy: ObjectProvider<ReviewPolicy>,
         access: ObjectProvider<OperatorAccess>,
         uploads: ObjectProvider<PrivateUploadAccess>,
-    ): ReviewController = ReviewController(reader, service, properties, { policy.getObject() }, access.getIfAvailable(), uploads.getIfAvailable())
+        images: ObjectProvider<UploadImages>,
+    ): ReviewController = ReviewController(reader, service, properties, { policy.getObject() }, access.getIfAvailable(), uploads.getIfAvailable()) { images.getIfAvailable() }
 
     /** 운영자 경로 - `skeleton.review.admin.enabled=true` 일 때만(꺼져 있으면 경로가 없어 404) */
     @Bean

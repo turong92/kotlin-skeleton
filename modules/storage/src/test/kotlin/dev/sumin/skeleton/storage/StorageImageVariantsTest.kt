@@ -95,6 +95,23 @@ class StorageImageVariantsTest {
     }
 
     @Test
+    fun `imagesOf describes only ready images, with the public addresses of the display copy and the thumbnail`() {
+        val readyKey = scheme.issue("acc_a", "photo.jpg")
+        val pendingKey = scheme.issue("acc_a", "wait.jpg")
+        val pdfKey = scheme.issue("acc_a", "doc.pdf")
+        images.statuses[readyKey] = ready(readyKey)
+        images.statuses[pendingKey] = UploadImageStatus(UploadImageState.PENDING)
+
+        val found = uploads.imagesOf(listOf(readyKey, pendingKey, pdfKey, scheme.issue("acc_a", "unknown.jpg")))
+        assertEquals(setOf(readyKey), found.keys, "pending, non-image and unregistered keys are left out")
+        val image = found.getValue(readyKey)
+        assertEquals(1600 to 1200, image.width to image.height, "the size of the copy people get, not of the original")
+        assertEquals(uploads.urlOf(readyKey), image.display)
+        assertEquals(uploads.urlOf(readyKey).substringBeforeLast('.') + ".thumb." + uploads.urlOf(readyKey).substringAfterLast('.'), image.thumb)
+        assertEquals(emptyMap(), StoragePublicUploads(storage, scheme).imagesOf(listOf(readyKey)), "without the image module there is nothing to describe")
+    }
+
+    @Test
     fun `guest cleanup also forgets the variants of the key it deletes and leaves other keys' variants alone`() {
         val now = Instant.parse("2026-10-18T12:00:00Z")
         val old = now.minus(Duration.ofHours(30))

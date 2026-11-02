@@ -10,6 +10,8 @@ import dev.sumin.skeleton.common.PlatformErrorCode
 import dev.sumin.skeleton.common.Response
 import dev.sumin.skeleton.common.authz.OperatorAccess
 import dev.sumin.skeleton.common.upload.PrivateUploadAccess
+import dev.sumin.skeleton.common.upload.UploadImageState
+import dev.sumin.skeleton.common.upload.UploadImages
 import dev.sumin.skeleton.idempotency.IdempotentOperation
 import dev.sumin.skeleton.review.ReviewPermissions
 import dev.sumin.skeleton.review.ReviewErrorCode
@@ -56,6 +58,8 @@ class ReviewController(
     private val access: OperatorAccess? = null,
     /** 사진을 짧은 서명 주소로 넘기는 자리 - 없으면 사진 경로는 404 */
     private val uploads: PrivateUploadAccess? = null,
+    /** 이미지 모듈 - 있으면 이미지 사진은 변환본으로 나간다(남에게 원본 금지). 부를 때마다 찾는다 */
+    private val images: () -> UploadImages? = { null },
 ) {
     @GetMapping("/config")
     fun config(authentication: Authentication?): DataResponse<ConfigResponse> {
@@ -136,20 +140,40 @@ class ReviewController(
         return Response.noContent()
     }
 
-    /** 사진 한 칸 - 그 리뷰를 볼 수 있는 로그인한 사람에게 짧은 서명 주소로 302. 못 보면 없는 것과 같은 404 */
+    /**
+     * 사진 한 칸 - 그 리뷰를 볼 수 있는 로그인한 사람에게 짧은 서명 주소로 302. 못 보면 없는 것과 같은 404.
+     * 이미지 모듈이 있으면 이미지는 `?variant=thumb|display`(기본 `display`) 변환본으로 간다. 변환이 끝나기 전(또는 못 만든 이미지)에는
+     * 올린 사람 · 운영자만 원본을 보고 남은 404 이다(원본의 EXIF · GPS 가 남에게 가지 않게) - 이때 아직 줄이 없으면 변환을 시작시킨다. 이미지가 아닌 첨부는 늘 원본.
+     */
     @GetMapping("/{id}/photos/{index}")
-    fun photo(authentication: Authentication?, @PathVariable id: String, @PathVariable index: Int): ResponseEntity<Void> {
+    fun photo(
+        authentication: Authentication?, @PathVariable id: String, @PathVariable index: Int,
+        @RequestParam(required = false) variant: String?,
+    ): ResponseEntity<Void> {
         val account = accountId(authentication)
         val ref = OperatorRefs.require(authentication)
         val moderator = access?.has(ref, ReviewPermissions.MODERATE) == true && policy().canModerate(account)
-        val key = reader.photoKey(account, moderator, id, index)
+        val photo = reader.photoRef(account, moderator, id, index)
         val signer = uploads?.takeIf { it.enabled() }
-        if (key == null || signer == null) throw ApplicationException("Photo not found", ReviewErrorCode.NOT_FOUND)
+        if (photo == null || signer == null) throw ApplicationException("Photo not found", ReviewErrorCode.NOT_FOUND)
+        val name = variant ?: UploadImages.DISPLAY
+        if (name != UploadImages.DISPLAY && name != UploadImages.THUMB) invalid("variant must be thumb or display")
+        val module = images()?.takeIf { isImage(photo.key) }
+        val location = if (module == null) signer.downloadUrl(photo.key, signer.defaultTtl) else {
+            val ready = module.status(photo.key)?.takeIf { it.state == UploadImageState.READY }?.let { module.signedVariantUrl(photo.key, name, signer.defaultTtl) }
+            ready ?: run {
+                module.ensure(photo.key)
+                if (!photo.privileged) throw ApplicationException("Photo not found", ReviewErrorCode.NOT_FOUND)
+                signer.downloadUrl(photo.key, signer.defaultTtl)
+            }
+        }
         return ResponseEntity.status(HttpStatus.FOUND)
-            .header(HttpHeaders.LOCATION, signer.downloadUrl(key, signer.defaultTtl))
+            .header(HttpHeaders.LOCATION, location)
             .cacheControl(CacheControl.empty().cachePrivate())
             .build()
     }
+
+    private fun isImage(key: String) = key.substringAfterLast('/').substringAfterLast('.', "").lowercase() in IMAGE_EXTENSIONS
 
     @GetMapping("/me")
     fun mine(authentication: Authentication?, @RequestParam(required = false) cursor: String?, @RequestParam(defaultValue = "20") size: Int): CursorResponse<MyReviewResponse> {
@@ -187,5 +211,7 @@ class ReviewController(
     private companion object {
         const val MAX_SIZE = 100
         const val MAX_TARGETS = 50
+        /** 변환 대상으로 보는 사진 확장자 - 그 밖(pdf · txt …)은 이미지 모듈이 있어도 원본으로 간다 */
+        val IMAGE_EXTENSIONS = setOf("jpg", "jpeg", "png", "webp", "gif", "avif", "heic")
     }
 }

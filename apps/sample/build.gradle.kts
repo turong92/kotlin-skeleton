@@ -21,6 +21,9 @@ dependencies {
     implementation(project(":modules:notification-jdbc"))  // 받은편지함 저장 (+ notification: 계약 · /api/v1/notifications)
     implementation(project(":modules:notification-sse"))   // 실시간 전달 (/api/v1/notifications/sse)
     implementation(project(":modules:storage-s3"))         // 첨부 업로드 (+ storage: /api/v1/storage)
+    implementation(project(":modules:storage-image"))      // 올린 이미지의 변환본(thumb · display, EXIF 제거) - 공개 영역 · 리뷰 사진은 원본 대신 변환본을 준다. 켜기 skeleton.storage.image.enabled. docs/modules/storage-image.md
+    implementation(project(":modules:storage-image-jdbc")) // 변환 상태 표 + 변환 작업(job-queue) (storage-image 는 저장소를 모른다)
+    implementation(project(":modules:storage-image-imageio")) // 변환 엔진 - JVM 의 ImageIO(기본). HEIC/AVIF 입력이 필요하면 storage-image-imgproxy(컨테이너) - 이 앱은 쓰지 않는다
     implementation(project(":modules:scheduler"))          // 비회원 업로드 고아 회수의 주기 작업(@SkeletonScheduled) - storage.web.guest.cleanup
     implementation(project(":modules:job-queue-jdbc"))     // 내보내기 같은 오래 걸리는 일 (재시도 큐)
     implementation(project(":modules:board"))              // 게시판: 글 · 대댓글 · 종류가 있는 반응 (/api/v1/boards). 댓글 알림은 위 notification 이 있어서 켜진다

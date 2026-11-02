@@ -83,7 +83,11 @@ class ModuleConfigSnippetsTest {
         val missing = snippets().flatMap { snippet ->
             val text = snippet.readText()
             val source = yaml(snippet)
-            val prefixes = propertyClasses.filterKeys { prefix -> source.propertyNames.toList().any { it == prefix || it.startsWith("$prefix.") } }
+            // 접두사가 중첩될 수 있다(skeleton.storage ⊃ skeleton.storage.image ⊃ skeleton.storage.image.pdf) - 키마다 가장 긴 접두사의 클래스만 그 스니펫의 몫이다
+            val names = source.propertyNames.toList()
+            fun owner(name: String) = propertyClasses.keys.filter { name == it || name.startsWith("$it.") }.maxByOrNull { it.length }
+            val owners = names.mapNotNull(::owner).toSet()
+            val prefixes = propertyClasses.filterKeys { it in owners }
             prefixes.flatMap { (prefix, type) ->
                 leafKeys(type).filter { key -> !Regex("(^|[\\s#])${Regex.escape(key)}:").containsMatchIn(text) }
                     .map { "${snippet.name}: $prefix.$it" }

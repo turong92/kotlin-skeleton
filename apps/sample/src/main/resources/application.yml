@@ -121,9 +121,14 @@ skeleton:
         # 캡차는 끈 채(captcha: OFF)다 - 견본에는 Turnstile 키가 없다. **공개 서비스에서는 board 의 guest.captcha 와 함께 REQUIRED 로 켠다**(익명 스토리지 쓰기이므로 스팸 위험이 같다)
         cleanup:
           enabled: true                 # 24시간 안에 글 · 댓글에 붙지 않은 비회원 업로드를 한 시간마다 지운다(scheduler 모듈 필요 - 위 build.gradle.kts)
+      cleanup:
+        enabled: true                   # 이 앱의 선택: 올린 지 7일(모듈 기본 min-age)이 지나도록 어디에도 안 붙은 회원 업로드를 한 시간마다 지운다 - 리뷰 사진(review-jdbc) · 게시판 첨부(board-jdbc) · 노트 첨부와 내보내기(notes/NoteUploadKeys)는 사용 중이라 남는다. 대답 없는 저장소가 있으면 기동 실패(docs/modules/storage.md). 모듈 기본은 꺼짐
       public:
         enabled: true                   # 이 앱의 선택: 공개된 글 · 댓글의 사진은 공개 주소(CDN)로, 승인 전 · 거절 · 가림 · 판의 사진은 비공개로 둔다 - 승인하면 공개 영역으로 복사하고 가리면 지운다 (docs/modules/storage.md "게시판 사진의 공개 영역"). 모듈 기본은 꺼짐
         base-url: ${SKELETON_STORAGE_WEB_PUBLIC_BASE_URL:}   # 공개 영역 앞의 주소(CDN 또는 공개 읽기 버킷). 비밀이 아니다 - 비면 기동 실패. 로컬은 application-local.yml. 비밀(공개 키 HMAC)은 환경변수 SKELETON_STORAGE_WEB_PUBLIC_SECRET (선언의 secrets:)
+    image:
+      enabled: true                     # 이 앱의 선택: 올린 이미지(jpeg · png · gif · webp)의 변환본(thumb · display, EXIF · GPS 제거)을 만들고 남에게는 원본 대신 변환본만 준다 - 게시판 공개 영역 · 리뷰 사진. 크기 · 상한은 모듈 기본(thumb 400 · display 1600 · 100 MP · 동시 1장) 그대로 - docs/modules/storage-image.md. 모듈 기본은 꺼짐
+      # 쓰지 않는 것: imgproxy(HEIC/AVIF 입력 · WebP 출력, 별도 컨테이너가 필요하다 - storage-image-imgproxy) · PDF 썸네일(storage-image-pdfbox). 둘 다 의존을 더하고 skeleton.storage.image.{imgproxy,pdf}.enabled 를 켜야 한다
     validation:                       # 첨부 규칙 — 서버가 presign 전에 검사한다 (프론트도 같은 규칙을 미리 보여 준다)
       max-size-bytes: 5242880         # 5 MB
       allowed-content-types: [image/png, image/jpeg, image/gif, image/webp, application/pdf, text/plain]

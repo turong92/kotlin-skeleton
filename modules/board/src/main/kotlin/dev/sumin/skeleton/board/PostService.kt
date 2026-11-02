@@ -317,6 +317,7 @@ class PostService(
             BoardAuthors.isDeleted(post.authorId) || card?.deleted == true, caller?.accountId == post.authorId, card, manage,
             (revision ?: board?.let { visibleRevision(caller, post, it) })?.view(),
             if (post.status == PostStatus.PUBLISHED) uploads.publicUrls(post.attachments) else emptyMap(),
+            if (post.status == PostStatus.PUBLISHED) uploads.publicImages(post.attachments) else emptyMap(),
         )
     }
 

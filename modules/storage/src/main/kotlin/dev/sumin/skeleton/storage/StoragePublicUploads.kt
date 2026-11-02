@@ -2,6 +2,7 @@ package dev.sumin.skeleton.storage
 
 import dev.sumin.skeleton.common.upload.PrivateUploadAccess
 import dev.sumin.skeleton.common.upload.PublicUploadPurger
+import dev.sumin.skeleton.common.upload.PublicUploadImage
 import dev.sumin.skeleton.common.upload.PublicUploads
 import dev.sumin.skeleton.common.upload.UploadImageState
 import dev.sumin.skeleton.common.upload.UploadImages
@@ -35,6 +36,18 @@ class StoragePublicUploads(
 
     override fun publicKeysOf(privateKey: String): List<String> =
         if (images() != null && isImageKey(privateKey)) listOf(keys.publicKeyOf(privateKey), thumbKeyOf(privateKey)) else listOf(keys.publicKeyOf(privateKey))
+
+    override fun imagesOf(privateKeys: Collection<String>): Map<String, PublicUploadImage> {
+        val module = images() ?: return emptyMap()
+        val candidates = privateKeys.filter(::isImageKey)
+        if (candidates.isEmpty()) return emptyMap()
+        val base = keys.properties().`public`.baseUrl.trimEnd('/')
+        return module.views(candidates).mapNotNull { (key, status) ->
+            val display = status.variants[UploadImages.DISPLAY]
+            if (status.state != UploadImageState.READY || display == null) null
+            else key to PublicUploadImage(display.width, display.height, thumb = if (UploadImages.THUMB in status.variants) "$base/${thumbKeyOf(key)}" else urlOf(key), display = urlOf(key))
+        }.toMap()
+    }
 
     override fun mayPublish(privateKey: String): Boolean =
         keys.properties().`public`.enabled &&

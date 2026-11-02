@@ -11,6 +11,9 @@
 
 **남에게 보이기** 이 모듈이 켜지면 `UploadImages` 빈이 선다 — 공개 영역은 `display`(+ `.thumb`) 변환본을 복사하고(변환 전이면 늦춘다), 변환할 수 없는 이미지는 공개하지 않는다. 비회원 회수는 `forget` 으로 줄과 변환본 폴더를 함께 지운다.
 
+**쓰는 곳** 게시판 응답 `attachmentImages: { <첨부 키>: { width, height, thumb, display } }` - 공개된 글 · 댓글의 **변환이 끝난 이미지**만(`PublicUploads.imagesOf`), 주소는 공개 주소, `width` · `height` 는 `display` 사본의 크기. `attachmentUrls`(= `display`)는 그대로다. 리뷰 사진 `GET /api/v1/reviews/{id}/photos/{index}?variant=thumb|display`(기본 `display`)는 변환본 서명 주소로 302 - 변환이 끝나기 전(또는 만들 수 없는 이미지)에는 **올린 사람 · 운영자만 원본, 그 밖은 404**(이때 줄이 없으면 변환을 시작시킨다), 이미지가 아닌 첨부(pdf · txt)는 늘 원본. 이 모듈이 없으면 둘 다 지금과 같다.
+**PDF** 공개 영역은 PDF 를 **원본 그대로** 복사한다(문서 자체가 공개 대상이고 EXIF 같은 이미지 메타데이터 문제가 아니다) - `storage-image-pdfbox` 를 켜도 공개 영역에 PDF 썸네일 사본을 더하지 않는다(`attachmentImages` 에도 PDF 는 빠진다). 변환본(`thumb` · `display`)은 `POST /api/v1/storage/images` 로 편집 화면이 미리보기에 쓴다.
+
 **한계** `ImageIoRenderer` 는 JVM 의 headless AWT 를 쓴다(네이티브 이미지에서는 뺀다). 상태 줄이 있는 키는 완료 호출이 저장소를 다시 읽지 않는다. 프로젝트 여럿에서도 설정은 공통이고 줄 · 저장소는 프로젝트마다다.
 
 | 항목 | 내용 |

@@ -427,6 +427,7 @@ class CommentService(
         if (body != null) attachments else emptyList(),
         canManage = if (caller != null && pending?.all == true) caller.moderator || ownerMayTouch(c) else null,
         attachmentUrls = if (postPublic && body != null && c.status == CommentStatus.PUBLISHED) uploads.publicUrls(attachments) else emptyMap(),
+        attachmentImages = if (postPublic && body != null && c.status == CommentStatus.PUBLISHED) uploads.publicImages(attachments) else emptyMap(),
     )
 
     /** 운영자가 아닌 관리자(글 주인)가 이 댓글의 상태를 바꿀 수 있는가 - [moderate] 의 막는 규칙과 같다(운영자가 가렸거나 모르는 옛 행 · 삭제된 행은 못 건드린다) */
