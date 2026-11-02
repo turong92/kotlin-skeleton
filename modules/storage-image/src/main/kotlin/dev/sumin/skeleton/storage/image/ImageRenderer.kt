@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.storage.image
 
 import dev.sumin.skeleton.storage.DetectedKind
+import dev.sumin.skeleton.storage.ObjectKey
 import java.io.InputStream
 
 /** 엔진이 머리에서 읽은 이미지 정보 - [width] · [height] 는 **회전을 반영한** 크기, [contentType] 은 원본의 형식 */
@@ -45,6 +46,9 @@ interface ImageRenderer {
 
     /** [specs] 마다 변환본 하나를 같은 순서로 돌려준다. [source] 는 원본 전체를 새 스트림으로 연다(엔진이 닫는다). 메타데이터 없이, 회전을 픽셀에 반영해서 */
     fun render(source: () -> InputStream, info: ImageInfo, specs: List<VariantSpec>): List<Rendered>
+
+    /** 원본 객체 키를 아는 호출 - 처리기는 이것을 부른다. 원본을 스트림이 아니라 서명 주소로 넘기는 엔진(imgproxy)이 재정의하고, 기본은 [source] 스트림으로 [render] 한다 */
+    fun render(key: ObjectKey, source: () -> InputStream, info: ImageInfo, specs: List<VariantSpec>): List<Rendered> = render(source, info, specs)
 }
 
 /** 엔진 목록 - 종류로 고른다 */

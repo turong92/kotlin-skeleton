@@ -1,0 +1,12 @@
+# storage-image-imgproxy - 선택 변환 엔진(imgproxy 컨테이너: HEIC · AVIF 입력, WebP 출력). 기본 꺼짐: 앱 yml 이 켠다. 서버(컨테이너) 하나가 더 뜬다.
+skeleton:
+  storage:
+    image:
+      imgproxy:
+        enabled: false                      # true 면 이 엔진이 기본 엔진(imageio)보다 먼저 이미지를 맡는다. 켰는데 url · key · salt 가 하나라도 비면 기동 실패 (서명 없는 imgproxy 는 쓰지 않는다)
+        url: ""                             # imgproxy 의 주소(앱에서 닿는 곳) - 예 http://imgproxy:8080
+        key: ""                             # IMGPROXY_KEY 와 같은 값(16진수) - 비밀: 환경변수/비밀 저장소로만
+        salt: ""                            # IMGPROXY_SALT 와 같은 값(16진수) - 비밀
+        timeout: 30s                        # 안전 상한: 요청 하나(원본을 받아 변환해 돌려주기까지)의 시간. 넘으면 일시 오류로 보고 큐가 다시 한다
+        max-response-bytes: 20971520        # 안전 상한: 변환본 응답 바이트 (20 MB). 넘으면 거절
+        source-ttl: 5m                      # imgproxy 에 주는 원본 서명 주소의 수명 - 받아 가기에 충분한 만큼만

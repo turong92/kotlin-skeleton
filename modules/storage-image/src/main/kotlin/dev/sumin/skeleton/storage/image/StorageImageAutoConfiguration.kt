@@ -19,6 +19,8 @@ import org.springframework.context.annotation.Bean
     afterName = [
         "dev.sumin.skeleton.storage.s3.S3StorageAutoConfiguration",
         "dev.sumin.skeleton.storage.image.imageio.ImageIoRendererAutoConfiguration",
+        "dev.sumin.skeleton.storage.image.imgproxy.ImgproxyRendererAutoConfiguration",
+        "dev.sumin.skeleton.storage.image.pdfbox.PdfRendererAutoConfiguration",
         "dev.sumin.skeleton.storage.image.jdbc.StorageImageJdbcAutoConfiguration",
     ],
 )

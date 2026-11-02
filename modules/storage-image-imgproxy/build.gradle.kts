@@ -5,6 +5,7 @@ dependencies {
     implementation("org.jetbrains.kotlin:kotlin-reflect")
 
     testImplementation("org.assertj:assertj-core")
+    testImplementation("org.testcontainers:testcontainers-junit-jupiter")   // imgproxy 컨테이너 (Docker 가 없으면 시험을 건너뛴다)
     testImplementation("org.springframework.boot:spring-boot-test")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")

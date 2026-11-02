@@ -240,6 +240,19 @@ class StorageDeployGuard(private val properties: StorageProperties) : DeployGuar
 
 **결제 웹훅 주소**(결제사 개발자센터에 등록): `https://<도메인>/api/v1/payments/webhooks/toss/<token>` — `<token>` 은 `<P>_PAYMENT_WEBHOOK_PATH_TOKEN` 의 값이다. Cloudflare Tunnel 뒤에서 그대로 닿는다(새 포트 · 새 경로 규칙이 필요 없다 — `api_prefix` 안이다). 이 주소는 우리 로그에서 비밀 조각이 가려진다(`payment` 모듈 문서의 「로그에 관해」 — payment 를 고른 프로젝트에 있다). 값을 바꾸면 결제사에 등록한 주소도 바꾼다.
 
+### 이미지 변환 컨테이너 imgproxy — 선택 (`storage-image-imgproxy`)
+
+HEIC · AVIF 입력이나 WebP 출력이 필요한 앱만 켠다(기본 엔진 `storage-image-imageio` 는 컨테이너가 없다). 켜면 홈서버에 컨테이너 **하나가 더** 뜬다 — 앱과 같은 도커 네트워크에서만 닿게 두고 **밖으로 포트를 열지 않는다**.
+
+```
+docker run -d --name imgproxy --restart unless-stopped --memory 512m -e IMGPROXY_KEY=<hex> -e IMGPROXY_SALT=<hex> -e IMGPROXY_ALLOWED_SOURCES=<저장소 주소>/ -e IMGPROXY_MAX_SRC_RESOLUTION=50 -e IMGPROXY_MAX_SRC_FILE_SIZE=52428800 -e IMGPROXY_DOWNLOAD_TIMEOUT=10 -e IMGPROXY_TIMEOUT=20 -e IMGPROXY_STRIP_METADATA=true ghcr.io/imgproxy/imgproxy:v3.30.1
+```
+
+- **메모리**: libvips 는 이미지를 줄여 읽어 앱 안 변환(수십 MB 이상)보다 적게 든다 — 대략 유휴 100 MB 안팎, 변환 중 한 장에 수십~수백 MB(`IMGPROXY_CONCURRENCY` 기본은 CPU 수 x 2). 홈서버에서는 `--memory 512m` 정도로 묶고 `IMGPROXY_CONCURRENCY=2` 로 줄인다. 앱의 `max-concurrent` 가 앱 쪽 동시 요청을 이미 묶는다.
+- **서명 필수**: `IMGPROXY_KEY` · `IMGPROXY_SALT`(16진수, `openssl rand -hex 32`)를 컨테이너와 앱(`<P>_STORAGE_IMAGE_IMGPROXY_KEY` · `_SALT` — **선언의 `secrets:` + 운영자가 정한다(`.local.env`)**, `_URL` 은 `env:`)에 같은 값으로 준다. 서명이 없는 요청은 imgproxy 가 거절한다. 켰는데 하나라도 비면 앱이 **기동 실패**한다.
+- **원본 주소(SSRF)**: 앱은 imgproxy 에 설정된 저장소가 서명한 짧은 수명의 원본 주소만 준다. imgproxy 쪽에서도 `IMGPROXY_ALLOWED_SOURCES` 에 **저장소 주소 하나**만 적는다(예 `http://seaweedfs:8333/`) - 기본 `IMGPROXY_ALLOW_LOOPBACK_SOURCE_ADDRESSES` · `…LINK_LOCAL…` 은 꺼진 채로 두고, 저장소가 사설 주소라 막히면 `IMGPROXY_ALLOW_PRIVATE_SOURCE_ADDRESSES`(기본 켜짐)는 그대로 둔다. 서명 주소의 호스트가 **imgproxy 컨테이너에서 닿아야** 한다(저장소의 presign 엔드포인트가 도커 내부 이름이면 그대로, 공개 주소면 밖으로 나갔다 들어온다).
+- 이미지 태그는 **고정 버전**(`:latest` 금지). 올릴 때는 이 문서의 태그와 `ImgproxyRendererTest` 의 태그를 함께 바꾼다.
+
 ## 8. 정적 프론트엔드
 
 같은 호스트에서 정적 프론트를 서빙하려면 선언에 `web` 과 `api_prefix` 를 함께 둔다 (`web` 만 있으면 플랫폼이 거부한다).

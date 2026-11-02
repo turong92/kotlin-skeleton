@@ -3409,9 +3409,21 @@
         "oneOf": [],
         "optional": []
       },
-      "config": null,
+      "config": {
+        "prefixes": ["skeleton.storage.image.imgproxy"],
+        "snippet": "docs/config/modules/storage-image-imgproxy.yml"
+      },
       "basePaths": [],
-      "secrets": [],
+      "secrets": [
+        {
+          "env": ["<P>_STORAGE_IMAGE_IMGPROXY_KEY", "<P>_STORAGE_IMAGE_IMGPROXY_SALT"],
+          "whenMissing": "imgproxy 컨테이너의 IMGPROXY_KEY · IMGPROXY_SALT 와 같은 값(16진수) — 운영자가 정한다(secrets: + .local.env). imgproxy 엔진을 켠 채 비면 기동 실패(서명 없는 imgproxy 는 쓰지 않는다)"
+        },
+        {
+          "env": ["<P>_STORAGE_IMAGE_IMGPROXY_URL"],
+          "whenMissing": "imgproxy 컨테이너의 주소 — 비밀 아님(선언의 env:). 엔진을 켠 채 비면 기동 실패"
+        }
+      ],
       "docs": ["docs/modules/storage-image-imgproxy.md"],
       "frontend": null,
       "notFor": [

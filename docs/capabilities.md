@@ -1510,6 +1510,9 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 켜는 법: `--modules storage-image-imgproxy`
 - 의존 한 줄: `implementation(project(":modules:storage-image-imgproxy"))`
 - 자동으로 따라온다: `storage`, `storage-image`
+- 설정 접두사 `skeleton.storage.image.imgproxy` — 키와 기본값 `docs/config/modules/storage-image-imgproxy.yml`
+- 비밀 · 환경변수: `<P>_STORAGE_IMAGE_IMGPROXY_KEY`, `<P>_STORAGE_IMAGE_IMGPROXY_SALT` — 빠지면: imgproxy 컨테이너의 IMGPROXY_KEY · IMGPROXY_SALT 와 같은 값(16진수) — 운영자가 정한다(secrets: + .local.env). imgproxy 엔진을 켠 채 비면 기동 실패(서명 없는 imgproxy 는 쓰지 않는다)
+- 비밀 · 환경변수: `<P>_STORAGE_IMAGE_IMGPROXY_URL` — 빠지면: imgproxy 컨테이너의 주소 — 비밀 아님(선언의 env:). 엔진을 켠 채 비면 기동 실패
 - 문서: `docs/modules/storage-image-imgproxy.md`
 - 쓰지 않는 경우:
   - storage-image 없이는 쓰지 않는다(따라온다)

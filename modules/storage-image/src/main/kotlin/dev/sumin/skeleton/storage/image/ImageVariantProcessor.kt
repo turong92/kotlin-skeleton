@@ -67,7 +67,7 @@ class ImageVariantProcessor(
             .map { (name, s) -> VariantSpec(name, s.maxWidth, s.maxHeight, s.quality) }
         permits.acquireUninterruptibly()
         val rendered = try {
-            renderer.render({ storage.read(key) }, info, specs)
+            renderer.render(key, { storage.read(key) }, info, specs)
         } catch (e: ImageRejectedException) {
             return reject(keyHash, UploadImageState.REJECTED, e.code, e, info.width, info.height)
         } finally {
