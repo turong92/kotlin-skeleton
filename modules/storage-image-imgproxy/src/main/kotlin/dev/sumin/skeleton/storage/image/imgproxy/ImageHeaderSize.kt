@@ -17,18 +17,18 @@ internal object ImageHeaderSize {
         null
     }
 
-    /** 움직이는 GIF(그림이 둘 이상) · WebP(`VP8X` 의 움직임 비트)인가 - 머리(256KB)에서 알 수 있는 만큼. 두 번째 장이 머리 밖에서 시작하는 GIF 는 정지로 본다 */
-    fun animated(head: ByteArray, kind: DetectedKind): Boolean = try {
-        when (kind) {
-            DetectedKind.GIF -> gifFrames(head) > 1
-            DetectedKind.WEBP -> head.size > 20 && String(head, 12, 4, Charsets.ISO_8859_1) == "VP8X" && (head[20].toInt() and 0x02) != 0
-            else -> false
-        }
-    } catch (e: IndexOutOfBoundsException) {
-        false
+    /**
+     * 움직일 수 있는 GIF · WebP 인가 - GIF 는 그림이 둘 이상이거나, **머리(256KB)에서 끝까지 확인하지 못했으면**(첫 장이 커서 두 번째 장을 못 만났다) 움직일 수 있는 것으로 본다.
+     * 정지 GIF 라도 움직이는 경로(메타데이터를 걷어낸 사본)의 결과가 맞다. WebP 는 첫 마디 `VP8X` 의 움직임 비트로 정해진다
+     */
+    fun animated(head: ByteArray, kind: DetectedKind): Boolean = when (kind) {
+        DetectedKind.GIF -> try { gifFrames(head).let { (frames, complete) -> frames > 1 || !complete } } catch (e: IndexOutOfBoundsException) { true }
+        DetectedKind.WEBP -> try { head.size > 20 && String(head, 12, 4, Charsets.ISO_8859_1) == "VP8X" && (head[20].toInt() and 0x02) != 0 } catch (e: IndexOutOfBoundsException) { false }
+        else -> false
     }
 
-    private fun gifFrames(gif: ByteArray): Int {
+    /** (센 그림 수, 끝 표시 `;` 까지 읽었는가) - 두 번째 그림을 만나면 거기서 멈추고 완료로 친다 */
+    private fun gifFrames(gif: ByteArray): Pair<Int, Boolean> {
         var i = 13 + if ((gif[10].toInt() and 0x80) != 0) 3 * (1 shl ((gif[10].toInt() and 0x07) + 1)) else 0
         var frames = 0
         fun skip(from: Int): Int {
@@ -39,7 +39,8 @@ internal object ImageHeaderSize {
                 if (size == 0) return p
             }
         }
-        while (i < gif.size && frames < 2) {
+        while (frames < 2) {
+            if (i >= gif.size) return frames to false
             when (gif[i].toInt() and 0xFF) {
                 0x21 -> i = skip(i + 2)
                 0x2C -> {
@@ -47,10 +48,11 @@ internal object ImageHeaderSize {
                     val lct = if ((gif[i + 9].toInt() and 0x80) != 0) 3 * (1 shl ((gif[i + 9].toInt() and 0x07) + 1)) else 0
                     i = skip(i + 10 + lct + 1)
                 }
-                else -> return frames
+                0x3B -> return frames to true
+                else -> return frames to true   // 알 수 없는 블록 - 변환기가 거절한다
             }
         }
-        return frames
+        return frames to true
     }
 
     /** 투명한 픽셀이 있을 수 있나 - 머리에서 알 수 있는 만큼(모르면 false) */

@@ -107,4 +107,22 @@ class ImgproxyAnimatedTest {
         val payload = "WEBP".toByteArray() + "VP8L".toByteArray() + le32(chunk.size) + chunk + ByteArray(9)
         return "RIFF".toByteArray() + le32(payload.size) + payload
     }
+
+    @Test
+    fun `a gif whose first frame is bigger than the head is still treated as moving and both frames stay`() {
+        val big = byteArrayOf(0x2C, 0, 0, 0, 0, 2, 0, 2, 0, 0, 2) + (0 until 1_100).flatMap { listOf(0xFF.toByte()) + List(255) { 1.toByte() } } + byteArrayOf(0)   // 약 280KB 한 장
+        val gif = "GIF89a".toByteArray() + byteArrayOf(2, 0, 2, 0, 0, 0, 0) + big + big + byteArrayOf(0x3B)
+        val key = "members/1/big.gif"
+        objects[key] = gif to "image/gif"
+        val properties = ImageProperties(enabled = true)
+        val renderers = ImageRenderers(listOf(ImgproxyRenderer(ImgproxyProperties(enabled = true, url = "http://127.0.0.1:${server.address.port}", key = "00ff", salt = "ab12"), sources = S3SourceResolver("photos"))))
+        store.register(imageKeyHash(key), key) { }
+
+        ImageVariantProcessor(storage, store, renderers, properties, TimeProvider.systemUtc()).process(imageKeyHash(key))
+
+        assertThat(rows.getValue(imageKeyHash(key)).animated).isTrue()
+        val display = objects.getValue("variants/${imageKeyHash(key).take(32)}/display.gif").first.toList()
+        val prefix = big.take(12)
+        assertThat(display.windowed(12).count { it == prefix }).describedAs("both big frames kept").isEqualTo(2)
+    }
 }
