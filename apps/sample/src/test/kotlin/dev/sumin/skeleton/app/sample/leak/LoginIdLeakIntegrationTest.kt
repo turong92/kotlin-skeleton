@@ -117,6 +117,7 @@ class LoginIdLeakIntegrationTest {
             "/api/v1/author-profiles/" to listOf(w.yProfile.id, w.a.id, w.b.id),
             "/api/v1/admin/accounts/" to listOf(w.xAcc, w.yAcc),
             "/api/v1/admin/mfa/accounts/" to listOf(w.xAcc, w.yAcc),   // 운영자의 2단계 상태 보기 (/api/v1/admin/mfa/accounts/{id})
+            "/api/v1/admin/broadcasts/" to listOf(http.post("/api/v1/admin/broadcasts", w.adminToken, """{"type":"notice.service","title":"Leak ${w.nonce}","body":"b","channels":["push"],"audience":{"kind":"all"}}""", record = false).ok().read<String>("$.value.id")),   // 보내지 않은 공지 초안 하나 (/api/v1/admin/broadcasts/{id})
             "/api/v1/admin/author-profiles/" to listOf(w.a.id, w.yProfile.id),
             "/api/v1/campaigns/" to listOf(http.post("/api/v1/admin/campaigns", w.adminToken, """{"kind":"attendance","name":"Leak ${w.nonce}","startsAt":"2026-01-01T00:00:00Z","config":{"daily":[{"type":"point","params":{"amount":"10"}}]}}""", record = false).ok().read<String>("$.value.id")),   // 출석 캠페인 하나 - 운영자가 만든다
             // 쿠폰 정의 한 개를 만들어 X · Y 에게 한 장씩 준다 - 현황 · 발급 목록 (/api/v1/admin/coupon-definitions/{id}/stats · /coupons)
@@ -146,6 +147,8 @@ class LoginIdLeakIntegrationTest {
         if (template == "/api/v1/search") paths = listOf("$template?q=$LOGIN_ID", "$template?q=Y+note", "$template?q=basic")
         // 운영자의 계정별 쿠폰 목록은 `accountId` 가 필수다
         if (template == "/api/v1/admin/coupons") paths = listOf(w.xAcc, w.yAcc).map { "$template?accountId=$it" }
+        // 공지 대상 수 미리보기는 `kind` 가 필수다
+        if (template == "/api/v1/admin/broadcasts/audience-count") paths = listOf("$template?kind=all", "$template?kind=role&param=USER")
         // 출석 달력은 `month` 가 필수다
         if (template.endsWith("/attendance")) paths = paths.map { "$it?month=${java.time.YearMonth.now()}" }
         return paths
