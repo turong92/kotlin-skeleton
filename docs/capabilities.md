@@ -171,7 +171,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `storage-s3` | S3 호환 저장소(AWS S3 · Cloudflare R2 · MinIO) — presign PUT/GET · 멀티파트 · 복사 · 일괄 삭제, 공개 URL RAW \| OPAQUE. | `--modules storage-s3` | S3, R2, 클라우드 스토리지, 파일 저장소, 이미지 저장 / s3, r2, cloudflare r2, minio, object storage | `@skeleton/storage` |
 | `time` | 글로벌 시간 — 요청마다 뷰어 시간대 · 로케일 · ZonedMoment(미래 현지 시각) · 사람이 읽는 이중 포맷 · 국가 → 시간대. | 스타터(apps/api)에 기본 포함 | 시간대, 타임존, 날짜 표시, 현지 시간, 예약 시각, 글로벌 / timezone, time zone, locale, zoned moment, date format, global time | `@skeleton/time` |
 | `video` | 영상 올리기 + 변환 일꾼 API — 브라우저가 파일을 객체 저장소(R2 등)로 직접 멀티파트로 올리고(조각 주소 · 이어 올리기 · 마침에서 HEAD 크기 확인, 멱등) 서버는 상태(UPLOADING → UPLOADED → QUEUED → REMUXING → PLAYABLE) · 정책(VideoAccessPolicy, 기본 올린 계정만) · 용량(VideoQuota) · 청소만 맡는다. 변환은 서버가 아니라 일꾼(apps/video-worker, 어디서든 토큰으로 집어 간다)이 하고 서버는 일꾼 API(claim · heartbeat 진행률 · upload-urls 허용 이름만 서명 · complete 폴더 대조 · fail)와 임대(만료 → 다시 줄, 3회 뒤 실패) · 트랙 결정(호환 · 사다리) · 원 파일 삭제(원본 단 검증 1시간 뒤) · VideoEvents · 경보 넷을 맡는다. 영상마다 공개/비공개를 올릴 때 고른다. 파일은 4GB(16MB × 256 조각)까지. 재생은 영상마다 공개(공개 영역 주소, CDN 캐시) / 비공개(재생 허가마다 출입증이 경로에 든 재생 목록 — 열 때 조각 줄을 출입증 남은 수명의 서명 주소로 바꿔 쓴다, 로그인 없이 열리는 GET 은 그것뿐)이고 VideoPlayback 하나로 바꿔 끼운다. 삭제(소유자 · VideoOperatorPolicy 운영자)는 줄을 먼저 닫고 폴더 정리를 후속으로 맡긴다(공개면 CDN 캐시를 먼저 비운다, 되돌리기 없음). 켜기 skeleton.video.enabled(모듈 기본 꺼짐), 저장은 video-jdbc. | `--modules video` | 영상 올리기, 동영상 업로드, 영상, 이어 올리기, 큰 파일 올리기, 멀티파트 업로드 / video upload, multipart upload, resumable upload, large file upload, video | — |
-| `video-cloudrun` | (자리만 — 구현은 다음 조각) 일이 생기면 Google Cloud Run 작업을 깨우는 VideoWaker 구현. 홈서버 컨테이너나 아무 기계에서 같은 일꾼 이미지를 도는 길은 이 모듈이 필요 없다. | `--modules video-cloudrun` | 클라우드 런, 영상 변환 깨우기 / cloud run, wake video worker | — |
+| `video-cloudrun` | 일이 생기면 Google Cloud Run 작업을 깨우는 VideoWaker 구현 — Admin API jobs/<작업>:run(덮어쓰기 없음), 서비스 계정 키로 JWT 를 서명(구글 라이브러리 없음), 창 안 실행 상한 · 최소 간격으로 돈을 막고, 연속 실패면 VIDEO_WAKE_FAILED 경보를 낸다(자동으로 다른 곳으로 넘기지 않는다 — 일은 큐에 남는다). 기본 꺼짐. 홈서버 컨테이너나 아무 기계에서 같은 일꾼 이미지를 도는 길은 이 모듈이 필요 없다. | `--modules video-cloudrun` | 클라우드 런, 영상 변환 깨우기 / cloud run, wake video worker | — |
 | `video-jdbc` | 영상 저장을 DB 에 둔다 (PostgreSQL · MySQL) — 표 셋(videos · video_workers · video_wake_runs), 상태 전이와 임대는 한 문장 조건부 갱신이라 동시에 온 호출 중 하나만 이기고(집기는 FOR UPDATE SKIP LOCKED), 후속 작업(video.finalize · video.wake)은 job-queue-jdbc 에 상태 변경과 같은 트랜잭션으로 얹는다. | `--modules video-jdbc` | 영상 저장소, 영상 DB / video storage, video repository | — |
 | `waiting-room` | 대기열(가상 대기실) — 로그인한 사람만 줄을 선다(1인 1순번 = 계정 1개 1순번). 오픈 전 줄은 오픈 순간 한 번 무작위로 섞고 그 뒤는 온 순서, 분당 입장 수(속도 구간, 멈춤 가능)만 정한다. 순번표 · 입장권은 계정에 묶인 서명 토큰(키 돌리기 가능, 보호 환경에서 키가 없으면 기동 실패)이고 입장권 검사 WaitingRooms.requireEntry 는 DB 를 읽지 않는다. 저장은 waiting-room-jdbc. | `--modules waiting-room` | 대기열, 대기실, 가상 대기실, 줄 서기, 접속 폭주 / waiting room, virtual queue, queue, traffic spike | — |
 | `waiting-room-jdbc` | 대기열을 DB 에 둔다 (PostgreSQL · MySQL) — 표 셋(대기실 · 속도 구간 · 순번표). 번호는 방 줄 잠금 뒤에 줘서 1..n 빈틈 없이, 섞기는 조건부 갱신을 이긴 한 번만. | `--modules waiting-room-jdbc` | 대기열 저장소, 대기열 DB / waiting room storage, queue repository | — |
@@ -1730,16 +1730,20 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 누가 올릴 수 있는지 · 용량 규칙(요금제 등)은 앱이 VideoAccessPolicy · VideoQuota 빈으로 정한다 — 모듈은 뜻을 모른다
 - 키워드: 영상 올리기, 동영상 업로드, 영상, 이어 올리기, 큰 파일 올리기, 멀티파트 업로드 / video upload, multipart upload, resumable upload, large file upload, video
 
-### `video-cloudrun` — (자리만 — 구현은 다음 조각) 일이 생기면 Google Cloud Run 작업을 깨우는 VideoWaker 구현. 홈서버 컨테이너나 아무 기계에서 같은 일꾼 이미지를 도는 길은 이 모듈이 필요 없다.
+### `video-cloudrun` — 일이 생기면 Google Cloud Run 작업을 깨우는 VideoWaker 구현 — Admin API jobs/<작업>:run(덮어쓰기 없음), 서비스 계정 키로 JWT 를 서명(구글 라이브러리 없음), 창 안 실행 상한 · 최소 간격으로 돈을 막고, 연속 실패면 VIDEO_WAKE_FAILED 경보를 낸다(자동으로 다른 곳으로 넘기지 않는다 — 일은 큐에 남는다). 기본 꺼짐. 홈서버 컨테이너나 아무 기계에서 같은 일꾼 이미지를 도는 길은 이 모듈이 필요 없다.
 
 - 종류 · 상태: module · experimental — 위치 `modules/video-cloudrun`
 - 켜는 법: `--modules video-cloudrun`
 - 의존 한 줄: `implementation(project(":modules:video-cloudrun"))`
 - 자동으로 따라온다: `scheduler`, `storage`, `video`
+- 설정 접두사 `skeleton.video.cloud-run` — 키와 기본값 `docs/config/modules/video-cloudrun.yml`
+- 비밀 · 환경변수: `<P>_VIDEO_CLOUDRUN_ENABLED=true`, `<P>_VIDEO_CLOUDRUN_CREDENTIALS_JSON` — 빠지면: 켰는데 서비스 계정 키(JSON 원문 — 그 Cloud Run 작업 하나만 실행하는 계정)가 비었거나 못 읽으면 기동 실패(속성 이름만 말한다). 꺼져 있으면(기본) 읽지 않는다. project · region · job 은 비밀 아님(선언의 env:)
 - 문서: `docs/modules/video-cloudrun.md`
 - 쓰지 않는 경우:
-  - 지금은 코드가 없다 — 카탈로그와 문서의 자리만 있다
-  - Cloud Run 이 아닌 곳(홈서버 컨테이너 · 아무 기계)에서 일꾼을 돌리는 데는 필요 없다
+  - 꺼짐이 기본이다 — skeleton.video.cloud-run.enabled=true 와 project · region · job · 서비스 계정 키를 앱이 정한다(Cloud Run 은 원할 때만 켜는 선택)
+  - video 를 켜고 video-jdbc 가 있어야 쓴다(깨우기 기록 표 video_wake_runs)
+  - Cloud Run 이 아닌 곳(홈서버 컨테이너 · 아무 기계)에서 일꾼을 상주로 돌리는 데는 필요 없다
+  - 실제 구글 계정과의 연결은 가짜 서버 시험까지만 확인됐다 — 계정을 만든 뒤 stage 에서 먼저 본다
 - 키워드: 클라우드 런, 영상 변환 깨우기 / cloud run, wake video worker
 
 ### `video-jdbc` — 영상 저장을 DB 에 둔다 (PostgreSQL · MySQL) — 표 셋(videos · video_workers · video_wake_runs), 상태 전이와 임대는 한 문장 조건부 갱신이라 동시에 온 호출 중 하나만 이기고(집기는 FOR UPDATE SKIP LOCKED), 후속 작업(video.finalize · video.wake)은 job-queue-jdbc 에 상태 변경과 같은 트랜잭션으로 얹는다.

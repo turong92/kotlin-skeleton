@@ -1,0 +1,16 @@
+# video-cloudrun - Cloud Run 작업(Job)으로 호환 · 사다리 일꾼을 깨운다. 기본 꺼짐. 접두사는 skeleton.video.cloud-run. skeleton.video.enabled 와 video-jdbc 가 함께 있어야 쓸모가 있다.
+skeleton:
+  video:
+    cloud-run:
+      enabled: false               # true 면 서버가 호환 · 사다리 일이 줄 설 때 Cloud Run 작업을 깨운다. 켠 채 project · region · job 이 이름 모양이 아니거나 credentials-json 이 비었거나 못 읽으면 기동 실패
+      project: ""                  # 구글 클라우드 프로젝트 id (영숫자 · - · _) - 비밀 아님(선언의 env:, 환경변수 <P>_VIDEO_CLOUDRUN_PROJECT)
+      region: ""                   # 작업이 있는 지역, 예 asia-northeast3 (<P>_VIDEO_CLOUDRUN_REGION)
+      job: ""                      # 작업(Job) 이름 - MODE=once 로 정의한 일꾼 작업 (<P>_VIDEO_CLOUDRUN_JOB)
+      credentials-json: ""         # 그 작업 하나만 실행하는 서비스 계정 키(JSON 원문) - 운영자 비밀. 환경변수 <P>_VIDEO_CLOUDRUN_CREDENTIALS_JSON 로만(선언의 secrets:), 파일에 쓰지 않는다
+      execution-window: 10m        # 이 시간 안에 받아들여진 깨우기를 「실행 중」으로 센다 (실행은 큐가 빌 때까지 집고 끝난다)
+      max-executions: 3            # 창 안에 띄울 실행 수의 상한 - 넘으면 구글을 부르지 않고 넘어간다 (돈 상한)
+      min-wake-gap: 30s            # 연달아 깨우지 않는 간격
+      alert-after-failures: 3      # 깨우기가 연속 이만큼 실패하면 VIDEO_WAKE_FAILED 경보 (alert 모듈이 있을 때). 자동으로 다른 곳으로 넘기지 않는다 - 일은 큐에 남는다
+      timeout: 10s                 # 구글 서버 한 번 호출(토큰 · 실행)의 시간 제한
+      api-base: https://run.googleapis.com                  # 작업 실행 API 주소 - 시험이 가짜 서버로 바꾸는 값이다. 운영은 건드리지 않는다
+      token-uri: https://oauth2.googleapis.com/token        # 접근 토큰을 받는 주소 - 키 파일 안의 token_uri 는 읽지 않는다. 시험이 가짜 서버로 바꾸는 값이다. 운영은 건드리지 않는다

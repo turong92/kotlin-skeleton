@@ -9,6 +9,7 @@ import dev.sumin.skeleton.video.VideoFollowUps
 import dev.sumin.skeleton.video.VideoStore
 import dev.sumin.skeleton.video.VideoTransactions
 import dev.sumin.skeleton.video.VideoWakeRunner
+import dev.sumin.skeleton.video.VideoWakeRuns
 import dev.sumin.skeleton.video.VideoWorkerStore
 import javax.sql.DataSource
 import org.springframework.beans.factory.ObjectProvider
@@ -43,6 +44,10 @@ class VideoJdbcAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(VideoWorkerStore::class)
     fun jdbcVideoWorkerStore(dataSource: DataSource, dialect: SqlDialect): VideoWorkerStore = JdbcVideoWorkerStore(NamedParameterJdbcTemplate(dataSource), dialect)
+
+    @Bean
+    @ConditionalOnMissingBean(VideoWakeRuns::class)
+    fun jdbcVideoWakeRuns(dataSource: DataSource, dialect: SqlDialect): VideoWakeRuns = JdbcVideoWakeRuns(NamedParameterJdbcTemplate(dataSource), dialect)
 
     @Bean
     @ConditionalOnMissingBean(VideoTransactions::class)

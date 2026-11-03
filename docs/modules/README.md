@@ -96,7 +96,7 @@
 | `waiting-room-jdbc` | 대기열 저장을 DB 에 두기 (번호는 방 줄 잠금 뒤에 — 1..n 빈틈 없음, PostgreSQL · MySQL) | [waiting-room-jdbc](waiting-room-jdbc.md) |
 | `video` | 영상 올리기 — 저장소로 직접 멀티파트(이어 올리기) · 정책 · 용량 · 상태 기계 · 버려진 올리기 청소 (변환 · 재생은 다음 조각, 기본 꺼짐) | [video](video.md) |
 | `video-jdbc` | 영상 저장을 DB 에 두기 (표 셋, 상태 전이는 조건부 갱신, PostgreSQL · MySQL) | [video-jdbc](video-jdbc.md) |
-| `video-cloudrun` | (자리만) Cloud Run 작업 깨우기 — 구현은 다음 조각 | [video-cloudrun](video-cloudrun.md) |
+| `video-cloudrun` | Cloud Run 작업 깨우기 — 창 안 실행 상한 · 최소 간격 · 연속 실패 경보, 기본 꺼짐 | [video-cloudrun](video-cloudrun.md) |
 | `badge` | 배지 — 정의 · 수여/회수 · 내 배지 · 비로그인 공개 프로필 배지 · 보상 지급기 (포인트 · 쿠폰을 모른다) | [badge](badge.md) |
 | `badge-jdbc` | 배지 저장을 DB 에 두기 (정의 · 보유 · 수여/회수 내역) | [badge-jdbc](badge-jdbc.md) |
 | `workspace` | 워크스페이스(팀) — 만들기 · 역할(소유자 · 관리자 · 멤버) · slug · 멤버 관리 · 소유권 이전 · 요청 경계 `CurrentWorkspace` | [workspace](workspace.md) |
