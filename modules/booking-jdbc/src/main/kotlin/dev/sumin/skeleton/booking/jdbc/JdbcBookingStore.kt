@@ -7,7 +7,6 @@ import dev.sumin.skeleton.booking.BookingSeat
 import dev.sumin.skeleton.booking.BookingStore
 import dev.sumin.skeleton.booking.HoldEmptyException
 import dev.sumin.skeleton.booking.HoldExpiredException
-import dev.sumin.skeleton.booking.HoldLockedException
 import dev.sumin.skeleton.booking.HoldNotFoundException
 import dev.sumin.skeleton.booking.HoldOutcome
 import dev.sumin.skeleton.booking.HoldStatus
@@ -44,7 +43,7 @@ import org.springframework.transaction.support.TransactionTemplate
  * 여러 자리는 한 트랜잭션에서 전부 아니면 전무(하나라도 못 잡으면 예외로 통째 롤백)다.
  *
  * 규칙 (모든 쓰기가 같다):
- * - **트랜잭션의 첫 문장은 그 계정의 사용량 줄 잠금**이다([inAccountTx] - 줄을 만드는 일만 트랜잭션 밖에서). 한 계정의 보류 쓰기가 여기서 직렬이 되어, 열린 보류를 찾거나 만드는 데 유니크 충돌 · 빈 줄 틈 잠금(MySQL)이 끼지 않는다.
+ * - **트랜잭션의 첫 문장은 그 계정의 사용량 줄 잠금**이다([inAccountTx] - 줄 만들기는 그 앞이고, 바깥 트랜잭션이 없을 때만 트랜잭션 밖이다). 한 계정의 보류 쓰기가 여기서 직렬이 되어, 열린 보류를 찾거나 만드는 데 유니크 충돌 · 빈 줄 틈 잠금(MySQL)이 끼지 않는다.
  *   MySQL 반복 읽기의 스냅샷은 첫 일반 읽기에서 만들어지므로, **잠그기 전에 일반 읽기를 하지 않는다** — 누가 보류인지 알아내는 읽기는 트랜잭션 밖(자동 커밋)에서 한다.
  * - 잠금 순서: 사용량 줄 → 보류 줄(전이는 조건부 갱신) → 자리 줄(**id 오름차순, 한 문장에 한 줄**). 그래서 {X, Y} 와 {Y, X} 를 동시에 잡아도 교착이 없다.
  *   자리를 못 잡았을 때의 분류 읽기(`for update`)도 그 자리 차례에 하므로 순서가 깨지지 않는다.
@@ -167,7 +166,6 @@ class JdbcBookingStore(
             val existing = openHold(poolId, accountId)
             if (existing != null) {
                 if (!existing.expiresAt.isAfter(now)) throw HoldExpiredException(existing.id)
-                if (existing.checkoutStartedAt != null) throw HoldLockedException()
             }
             val have = existing?.let { heldSeatIds(it.id) }.orEmpty()
             val fresh = wanted.filter { it !in have }
@@ -201,7 +199,6 @@ class JdbcBookingStore(
         return inAccountTx(poolId, accountId) {
             val hold = openHold(poolId, accountId) ?: throw HoldNotFoundException()
             if (!hold.expiresAt.isAfter(now)) throw HoldExpiredException(hold.id)
-            if (hold.checkoutStartedAt != null) throw HoldLockedException()
             if (seatId !in heldSeatIds(hold.id)) return@inAccountTx HoldOutcome(loadHold(hold.id), emptyList())
             // 자리 줄이 내 보류의 HELD 일 때만 풀린다. 사용량 · 보류의 자리 수는 그 한 줄과 같이 줄어든다
             check(jdbc.update(
@@ -262,22 +259,14 @@ class JdbcBookingStore(
         }
     }
 
-    override fun startCheckout(accountId: String, holdId: String, now: Instant): BookingHold {
-        val owned = findOwned(accountId, holdId) ?: throw HoldNotFoundException()
-        return inAccountTx(owned.poolId, accountId) {
-            val hold = lockedHold(holdId)
-            if (hold.status == HoldStatus.CONFIRMED) throw NotPayableException()
-            if (hold.status != HoldStatus.HELD || !hold.expiresAt.isAfter(now)) throw HoldExpiredException(holdId)
-            if (hold.checkoutStartedAt != null) return@inAccountTx loadHold(holdId)   // 이미 박혔다 - 자리가 고정이라 금액도 그대로
-            if (hold.seatCount == 0) throw HoldEmptyException()
-            val total = hold.total ?: throw NotPayableException()
-            if (checkNotNull(findPool(hold.poolId)).currency == null) throw NotPayableException()
-            check(jdbc.update(
-                "update booking_holds set checkout_started_at = :now, amount = :amount where id = :id and status = 'HELD' and checkout_started_at is null",
-                mapOf("now" to ts(now), "amount" to total, "id" to holdId),
-            ) == 1) { "hold $holdId changed under the account lock" }
-            loadHold(holdId)
-        }
+    override fun priceHold(accountId: String, holdId: String, now: Instant): BookingHold {
+        findOwned(accountId, holdId) ?: throw HoldNotFoundException()
+        val hold = loadHold(holdId)
+        if (hold.status == HoldStatus.CONFIRMED) throw NotPayableException()
+        if (hold.status != HoldStatus.HELD || !hold.expiresAt.isAfter(now)) throw HoldExpiredException(holdId)
+        if (hold.seatCount == 0) throw HoldEmptyException()
+        if (hold.total == null || checkNotNull(findPool(hold.poolId)).currency == null) throw NotPayableException()
+        return hold
     }
 
     override fun settlePaid(orderId: String, accountId: String, holdId: String, quotedAmount: Long, currency: String, now: Instant): PaidOutcome {
@@ -288,7 +277,8 @@ class JdbcBookingStore(
             // 상태는 잠금 읽기로 본다 - 바깥(결제)의 트랜잭션에 참여한 때 MySQL 반복 읽기의 낡은 스냅샷을 피한다
             val hold = lockedHold(holdId)
             val pool = checkNotNull(findPool(hold.poolId))
-            val matches = hold.amount != null && hold.amount == quotedAmount && pool.currency.equals(currency.trim(), ignoreCase = true)
+            // 견적 뒤 자리를 바꿨으면 지금 가격 합이 낸 금액과 달라 환불로 간다 - 자리를 묶지 않으니 돈만 내고 자리가 안 맞는 일은 이 비교가 막는다
+            val matches = hold.total != null && hold.total == quotedAmount && pool.currency.equals(currency.trim(), ignoreCase = true)
             var changed = emptyList<String>()
             val outcome = when {
                 hold.status == HoldStatus.CONFIRMED -> OrderOutcome.DUPLICATE
@@ -414,8 +404,10 @@ class JdbcBookingStore(
     }
 
     /**
-     * 한 계정의 쓰기 트랜잭션 - **첫 문장이 그 계정의 사용량 줄 잠금**이다. 줄을 만드는 일은 트랜잭션 밖(자동 커밋)에서 먼저 한다:
-     * 트랜잭션 안에서 만들면 업무 실패로 롤백될 때 줄이 사라지고, 그 줄을 기다리던 같은 계정의 다른 요청들이 한꺼번에 깨어 서로 막아 교착한다(MySQL 실측).
+     * 한 계정의 쓰기 트랜잭션 - **이 저장소의 첫 문장이 그 계정의 사용량 줄 잠금**이다. 줄 만들기(`insert … on duplicate key update` / `on conflict do nothing`)는 잠금 앞에서 한다:
+     * 바깥 트랜잭션이 **없으면** 자동 커밋이라 트랜잭션 밖이다 - 트랜잭션 안에서 만들면 업무 실패로 롤백될 때 줄이 사라지고, 그 줄을 기다리던 같은 계정의 다른 요청들이 한꺼번에 깨어 서로 막아 교착한다(MySQL 실측).
+     * 바깥 트랜잭션이 **있으면**(결제의 `onPaid` 가 부를 때) 줄 만들기도 그 트랜잭션 안이다 - 이미 있는 줄이면 MySQL 의 `on duplicate key update` 가 그 줄에 X 잠금을 걸어 같은 계정의 다른 호출이 여기서 줄을 서므로
+     * (S 잠금을 쥔 채 X 로 올리려다 서로 막는 일이 없다) 직렬이 되고, 업무 실패로 던지지 않는 결제 쓰기는 롤백으로 줄이 사라질 일도 없다. 시험: `BookingPaymentDbTest` 의 「joined」 줄.
      */
     private fun <T> inAccountTx(poolId: String, accountId: String, body: () -> T): T {
         jdbc.update(insertUsage, mapOf("pool_id" to poolId, "account_id" to accountId, "seats" to 0))
@@ -449,7 +441,7 @@ class JdbcBookingStore(
             "insert into booking_holds (id, pool_id, account_id, seat_count, status, active_slot, expires_at, created_at) values (:id, :p, :a, 0, 'HELD', 1, :exp, :now)",
             mapOf("id" to id, "p" to poolId, "a" to accountId, "exp" to ts(expiresAt), "now" to ts(now)),
         )
-        return OwnedHold(id, poolId, accountId, HoldStatus.HELD, 0, expiresAt, null)
+        return OwnedHold(id, poolId, accountId, HoldStatus.HELD, 0, expiresAt)
     }
 
     /** 이 계정의 이 풀 열린 보류. 사용량 줄을 잠근 안에서 읽는다 */
@@ -514,12 +506,11 @@ class JdbcBookingStore(
         val status: HoldStatus,
         val seatCount: Int,
         val expiresAt: Instant,
-        val checkoutStartedAt: Instant?,
     )
 
     private fun ResultSet.toOwned() = OwnedHold(
         getString("id"), getString("pool_id"), getString("account_id"), HoldStatus.valueOf(getString("status")), getInt("seat_count"),
-        dialect.readInstant(this, "expires_at")!!, dialect.readInstant(this, "checkout_started_at"),
+        dialect.readInstant(this, "expires_at")!!,
     )
 
     private fun ResultSet.toPool() = BookingPool(
@@ -556,9 +547,7 @@ class JdbcBookingStore(
         accountId = getString("account_id"),
         status = HoldStatus.valueOf(getString("status")),
         seatCount = getInt("seat_count"),
-        amount = getLong("amount").takeUnless { wasNull() },
         expiresAt = dialect.readInstant(this, "expires_at")!!,
-        checkoutStartedAt = dialect.readInstant(this, "checkout_started_at"),
         confirmedOrderId = getString("confirmed_order_id"),
         seats = seats,
         createdAt = dialect.readInstant(this, "created_at")!!,

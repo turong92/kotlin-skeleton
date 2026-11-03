@@ -1,11 +1,9 @@
 package dev.sumin.skeleton.booking.jdbc
 
-import dev.sumin.skeleton.booking.HoldLockedException
 import dev.sumin.skeleton.booking.HoldStatus
 import dev.sumin.skeleton.booking.OrderOutcome
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
 
@@ -26,7 +24,7 @@ class BookingPaymentDbTest {
 
     private fun checkout(pool: String, account: String, seat: String): Pair<String, Long> {
         val hold = a.holds.addSeats(pool, account, listOf(seat))
-        return hold.id to checkNotNull(a.holds.startCheckout(account, hold.id).amount)
+        return hold.id to checkNotNull(a.holds.priceHold(account, hold.id).total)
     }
 
     @Test
@@ -80,14 +78,41 @@ class BookingPaymentDbTest {
     }
 
     @Test
-    fun `3 - once checkout has started, adding or removing a seat is HOLD_LOCKED`() {
+    fun `3 - pricing a hold changes nothing, and a seat changed after the quote is refunded instead of confirmed`() {
         val (pool, seats) = BookingDb.newPool(seats = 3, maxPerHold = 3, price = 1000)
-        val hold = a.holds.addSeats(pool, "locker", listOf(seats[0]))
-        a.holds.startCheckout("locker", hold.id)
-        assertFailsWith<HoldLockedException> { a.holds.addSeats(pool, "locker", listOf(seats[1])) }
-        assertFailsWith<HoldLockedException> { a.holds.removeSeat(pool, "locker", seats[0]) }
-        assertEquals("AVAILABLE", seatStatus(seats[1]))
+        val hold = a.holds.addSeats(pool, "quoter", listOf(seats[0]))
+        val quoted = checkNotNull(a.holds.priceHold("quoter", hold.id).total)
+        a.holds.priceHold("quoter", hold.id)   // 견적을 몇 번 불러도
+        // 견적은 자리를 묶지 않는다: 더하기 · 빼기가 그대로 된다
+        a.holds.addSeats(pool, "quoter", listOf(seats[1]))
+        assertEquals(2, a.jdbc.queryForObject("select seat_count from booking_holds where id = :h", mapOf("h" to hold.id), Int::class.java))
+        // 견적(1000원) 뒤 자리를 바꿔 2000원이 된 보류에 옛 금액이 결제됐다 - 돈만 내고 자리가 안 맞는 일 없이 환불
+        val stale = newOrder()
+        assertEquals(OrderOutcome.UNFULFILLED, a.holds.settlePaid(stale, "quoter", hold.id, quoted, "KRW").outcome)
+        assertEquals("HELD", status(hold.id))
+        assertEquals(1, a.refundQueue.forOrder(stale).size)
+        // 지금 값으로 다시 결제하면 확정
+        val fresh = newOrder()
+        assertEquals(OrderOutcome.CONFIRMED, a.holds.settlePaid(fresh, "quoter", hold.id, checkNotNull(a.holds.priceHold("quoter", hold.id).total), "KRW").outcome)
+        assertEquals("SOLD", seatStatus(seats[1]))
         assertInvariants(jdbc, pool)
+    }
+
+    @Test
+    fun `3 - two orders of one account settled at the same time inside an outer transaction (the way payment calls onPaid) do not deadlock`() {
+        val template = org.springframework.transaction.support.TransactionTemplate(org.springframework.jdbc.datasource.DataSourceTransactionManager(a.dataSource))
+        repeat(10) { round ->
+            val (pool, seats) = BookingDb.newPool(seats = 1, price = 7000)
+            val (hold, amount) = checkout(pool, "joined-payer", seats[0])
+            val orderIds = listOf(newOrder(), newOrder())
+            val outcomes = raceAll(2) { i ->
+                // 결제 모듈이 주문 줄 락 트랜잭션 안에서 부르는 모양 - 저장소의 트랜잭션은 이 바깥 트랜잭션에 참여한다
+                template.execute { a.holds.settlePaid(orderIds[i], "joined-payer", hold, amount, "KRW").outcome }
+            }
+            assertEquals(listOf(OrderOutcome.CONFIRMED, OrderOutcome.DUPLICATE), outcomes.sortedBy { it!!.ordinal }, "round $round")
+            assertEquals(1, a.refundQueue.jobs.count { it.first in orderIds }, "round $round")
+            assertInvariants(jdbc, pool)
+        }
     }
 
     @Test

@@ -15,8 +15,8 @@
 - **무료 확정 · 취소** — 자리 모두 가격이 없는 보류는 `confirm`(만료 전만) 으로 `CONFIRMED` · 자리 `SOLD`. 무료 확정은 판매 끝 전까지 본인이 `cancel` 한다. 가격이 붙은 자리는 `confirm` 이 `409 BOOKING.PAYMENT_REQUIRED` — 결제로 확정한다(아래).
 
 **결제**(`payment` 가 클래스패스에 있을 때): `payment` 의 `PaymentCatalog` · `PaymentOrderListener` 는 앱 빈 하나뿐이라 앱이 `itemType = "booking"`(`BookingPayments.ITEM_TYPE`)으로 갈라 `BookingPayments` 를 부른다(`catalog` 선례). 주문은 기존 `POST /api/v1/payments/orders {itemType: "booking", itemRef: holdId}` 다.
-- **`itemFor(holdId, accountId)`** — 결제창을 열 때. 금액(= 자리 가격의 합, 서버만 정한다)을 보류에 박고 **자리를 고정**한다(그 뒤 자리 더하기 · 빼기는 `409 HOLD_LOCKED` — 바꾸려면 모두 놓고 다시). 멱등이다. **결제를 시작해도 보류 시간은 늘지 않는다.** 무료 · 이미 확정된 보류는 `409 NOT_PAYABLE`.
-- **`onPaid(order)`** — 주문 하나에 한 번만 효과가 있다(`booking_orders` 줄). 보류가 `HELD` 면 확정(시간이 지났어도 아직 회수 전이면 그대로). 이미 회수 · 놓기 된 보류면 가졌던 자리를 **전부 아니면 전무**로 다시 잡아 확정하고, 못 잡으면 보류는 `UNFULFILLED` 이고 환불 작업이 걸린다. 이미 **다른 주문으로** 확정된 보류면 이 주문은 환불 작업(`DUPLICATE`). 금액 · 통화가 보류에 박힌 것과 다르면 보류는 그대로 두고 환불한다. 쿠폰으로 깎였어도 박힌 금액(깎이기 전)과 맞춘다. 같은 계정의 쓰기가 사용량 줄 잠금으로 직렬이라 회수 ∥ 늦은 결제에서도 자리는 한 번만 풀린다.
+- **`itemFor(holdId, accountId)`** — 결제창을 열 때. 금액(= 자리 가격의 합, 서버만 정한다)을 알려 준다. **부수 효과가 없다** - `payment` 의 견적(`/orders/quote`)도 같은 길을 타서 카탈로그가 견적과 주문 만들기를 가르지 못하므로, 여기서 자리를 묶으면 할인 미리보기만으로 보류가 잠긴다. 그래서 자리를 묶지 않고, 견적 뒤 자리를 바꿨다면 `onPaid` 가 금액 불일치로 가려 환불한다(아래). **결제를 시작해도 보류 시간은 늘지 않는다.** 무료 · 이미 확정된 보류는 `409 NOT_PAYABLE`.
+- **`onPaid(order)`** — 주문 하나에 한 번만 효과가 있다(`booking_orders` 줄). 보류가 `HELD` 면 확정(시간이 지났어도 아직 회수 전이면 그대로). 이미 회수 · 놓기 된 보류면 가졌던 자리를 **전부 아니면 전무**로 다시 잡아 확정하고, 못 잡으면 보류는 `UNFULFILLED` 이고 환불 작업이 걸린다. 이미 **다른 주문으로** 확정된 보류면 이 주문은 환불 작업(`DUPLICATE`). 낸 금액(쿠폰으로 깎이기 전 금액)이 **지금 보류의 자리 가격 합**과 다르거나 통화가 다르면(견적 뒤 자리를 바꿨다) 보류는 그대로 두고 환불한다 - 돈만 내고 자리가 안 맞는 일이 없다. 같은 계정의 쓰기가 사용량 줄 잠금으로 직렬이라 회수 ∥ 늦은 결제에서도 자리는 한 번만 풀린다.
 - **`onRefunded(order, refund)`** — 전액 환불이면 확정을 취소(`CANCELED`)하고 자리를 돌려준다. 부분 환불은 자리 그대로.
 - **`booking-refund` 작업**(`job-queue-jdbc` 가 있을 때 처리기가 서고, 작업은 보류 줄을 바꾼 **같은 트랜잭션**에서 들어간다 — 돈만 받고 방치되지 않는다): `PaymentRefunds.refund("system:booking", 주문, 사유, 전액, key = 주문 id)` - 키가 주문 id 라 몇 번 돌아도 환불 줄은 하나. 사유는 결제가 아는 `NOT_DELIVERED`(자리를 못 줬다) · `DUPLICATE`(같은 보류의 둘째 결제). 못 하면 큐가 백오프로 다시 하고 끝내 못 하면 DEAD 경보.
 - 결제 훅은 주문 줄 락 안에서 돈다 — 결제의 트랜잭션에 참여해 같이 커밋 · 롤백되고, 자리 사건은 그 트랜잭션이 **커밋된 뒤에** 중계된다.
@@ -46,7 +46,7 @@
 | `GET …/holds/me` | 내 열린(만료 전) · 확정 보류 목록 |
 | `POST …/holds/{id}/confirm` · `/release` · `/cancel` | 무료 확정 · 모두 놓기 · 확정 취소 |
 
-오류(모두 `BOOKING.` 접두): `409 SEAT_TAKEN`(`data.seatIds`) · `LIMIT_REACHED`(한 번에 잡는 상한 · 계정당 한도) · `NOT_OPEN`(판매 전 · 끝 · 멈춤) · `HOLD_EXPIRED` · `HOLD_LOCKED`(결제를 시작한 보류의 자리 바꾸기) · `HOLD_EMPTY` · `PAYMENT_REQUIRED`(무료가 아닌 보류의 `confirm`) · `NOT_PAYABLE`(무료 · 이미 확정된 보류의 결제) · `NOT_CANCELABLE` · `SEAT_EXISTS` · `SEAT_IN_USE`(`data.seatIds`), `404 POOL_NOT_FOUND · HOLD_NOT_FOUND · SEAT_NOT_FOUND`. 대기실 입장권이 없으면 `403 WAITING_ROOM.ENTRY_REQUIRED`(문 구현이 던진다).
+오류(모두 `BOOKING.` 접두): `409 SEAT_TAKEN`(`data.seatIds`) · `LIMIT_REACHED`(한 번에 잡는 상한 · 계정당 한도) · `NOT_OPEN`(판매 전 · 끝 · 멈춤) · `HOLD_EXPIRED` · `HOLD_EMPTY` · `PAYMENT_REQUIRED`(무료가 아닌 보류의 `confirm`) · `NOT_PAYABLE`(무료 · 이미 확정된 보류의 결제) · `NOT_CANCELABLE` · `SEAT_EXISTS` · `SEAT_IN_USE`(`data.seatIds`), `404 POOL_NOT_FOUND · HOLD_NOT_FOUND · SEAT_NOT_FOUND`. 대기실 입장권이 없으면 `403 WAITING_ROOM.ENTRY_REQUIRED`(문 구현이 던진다).
 
 **배치도 반영**(SSE): 서버는 `notification-sse` 와 같은 방식으로 예약 전용 흐름을 따로 연다 — 연결은 풀 하나에만 묶이고, 구독을 등록한 **뒤에** `ready` 를 보낸다. 화면은 흐름을 먼저 열고 `ready` 를 받은 뒤 스냅샷을 읽고, 자리마다 **`v` 가 큰 쪽**을 남긴다(연결 전 변화는 스냅샷에, 연결 뒤 변화는 흐름에 있어 빠지는 것이 없다). 다시 붙을 때마다 같은 순서를 되풀이한다.
 화면의 상태는 둘뿐이다 — `HELD` 는 `heldUntil` 이 붙은 `TAKEN`, `SOLD` · `BLOCKED` 는 붙지 않은 `TAKEN`. `heldUntil` 시각에 화면이 스스로 「열림」으로 바꾼다. 종료가 시작되면 웹 서버 종료 단계보다 먼저 열린 연결을 모두 닫고(30초를 기다리지 않는다), 15초마다 주석 한 줄(심장박동), 연결 30분이면 서버가 닫는다(화면이 다시 붙고 스냅샷으로 맞춘다) — 두 값은 고정이다.

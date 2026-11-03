@@ -127,8 +127,8 @@ class BookingHolds(
 
     fun mine(accountId: String): List<BookingHold> = store.holdsOf(accountId, time.now())
 
-    /** 결제를 시작한다 - 금액을 박고 자리를 고정한다(멱등). 시간이 지난 보류는 응답하기 전에 회수한다 */
-    fun startCheckout(accountId: String, holdId: String): BookingHold = withExpiredCleanup { store.startCheckout(accountId, holdId, time.now()) }
+    /** 결제할 보류의 값을 본다 - 아무것도 바꾸지 않는다(견적 호출도 이 길을 탄다). 시간이 지난 보류는 응답하기 전에 회수한다 */
+    fun priceHold(accountId: String, holdId: String): BookingHold = withExpiredCleanup { store.priceHold(accountId, holdId, time.now()) }
 
     /** 주문이 결제됐다(`onPaid`) - 주문 하나에 한 번만 효과가 있다. 자리를 다시 잡았다면 그 사건을 중계한다 */
     fun settlePaid(orderId: String, accountId: String, holdId: String, quotedAmount: Long, currency: String): PaidOutcome {

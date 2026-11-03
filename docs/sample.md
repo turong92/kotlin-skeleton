@@ -160,7 +160,7 @@ local 프로필은 주문 만들기 한도(기본 계정당 10 / 10분)를 풀�
 
 | 자리 | 하는 일 |
 |---|---|
-| `catalog/SampleCatalog` | `PaymentCatalog` 는 하나뿐이라 `itemType == "booking"` 이면 `BookingPayments.itemFor(itemRef = 보류 id, 계정)` - 금액은 자리 가격의 합, 이 호출이 자리를 고정한다 |
+| `catalog/SampleCatalog` | `PaymentCatalog` 는 하나뿐이라 `itemType == "booking"` 이면 `BookingPayments.itemFor(itemRef = 보류 id, 계정)` - 금액은 자리 가격의 합(견적 호출도 이 길을 타므로 부수 효과 없음) |
 | `orders/SampleOrderListener` | `onPaid` / `onRefunded` 에서 `order.itemType == "booking"` 이면 `BookingPayments` 를 부른다(확정 · 늦은 결제의 다시 잡기 · 자동 환불 / 전액 환불이면 자리 반환) |
 | `booking/BookingSeed` | **로컬 프로필 씨앗**(없는 것만): 풀 「워크숍 20석」(무료, 일반 20석, 한 번에 2석, 대기실 `sample-workshop`)과 「소극장 공연 120석」(KRW, R석 40 × 50,000원 · S석 80 × 30,000원, 한 번에 4석, 대기실 `sample-theater`). 대기실은 둘 다 분당 30명으로 **이미 열려 있다** |
 | `application.yml` | `skeleton.waiting-room.token.key: ${WAITING_ROOM_TOKEN_KEY:}`(보호 환경은 없으면 기동 실패 - 배포 선언의 `secrets` 에 이름을 더한다) · `skeleton.booking.admin.enabled: ${BOOKING_ADMIN_ENABLED:false}` · `management.health.redis.enabled: false`(Redis 가 없다고 `/health` 를 내리지 않는다) |

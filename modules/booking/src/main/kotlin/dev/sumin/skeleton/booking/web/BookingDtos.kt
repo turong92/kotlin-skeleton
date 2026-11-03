@@ -73,7 +73,7 @@ data class HoldResponse(
 ) {
     companion object {
         fun of(hold: BookingHold) = HoldResponse(
-            hold.id, hold.poolId, hold.status.name, hold.seats.map(SeatResponse::of), hold.expiresAt, hold.amount ?: hold.total,
+            hold.id, hold.poolId, hold.status.name, hold.seats.map(SeatResponse::of), hold.expiresAt, hold.total,
         )
     }
 }

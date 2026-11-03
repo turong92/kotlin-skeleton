@@ -4,6 +4,7 @@ import dev.sumin.skeleton.common.authz.PermissionDeclaration
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.common.wake.OnRequestTask
 import dev.sumin.skeleton.common.wake.SimpleOnRequestTask
+import org.slf4j.LoggerFactory
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
@@ -38,7 +39,11 @@ data class BookingProperties(val http: Http = Http(), val admin: Admin = Admin()
 class BookingAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(BookingSeatRelay::class)
-    fun localBookingSeatRelay(): BookingSeatRelay = LocalBookingSeatRelay()
+    fun localBookingSeatRelay(): BookingSeatRelay {
+        // 정상 구성이다(한 대, 또는 redis-core 없이) - 사건마다 알리지 않고 기동 때 한 줄만
+        LoggerFactory.getLogger(BookingAutoConfiguration::class.java).info("booking seat events are relayed inside this instance only; add redis-core to reach screens connected to other instances")
+        return LocalBookingSeatRelay()
+    }
 
     @Bean
     @ConditionalOnMissingBean(name = ["bookingPermissionDeclaration"])

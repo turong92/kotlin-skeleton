@@ -70,7 +70,7 @@ class BookingController(
 
     @Operation(
         summary = "Take seats into my hold (all or nothing; picking a seat that is already in my hold does nothing)",
-        description = "409 BOOKING.SEAT_TAKEN (data.seatIds) · LIMIT_REACHED · NOT_OPEN · HOLD_EXPIRED · HOLD_LOCKED · 403 WAITING_ROOM.ENTRY_REQUIRED.",
+        description = "409 BOOKING.SEAT_TAKEN (data.seatIds) · LIMIT_REACHED · NOT_OPEN · HOLD_EXPIRED · 403 WAITING_ROOM.ENTRY_REQUIRED.",
     )
     @PostMapping("/pools/{id}/hold/seats")
     fun hold(

@@ -27,6 +27,9 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("org.springframework.security:spring-security-core")
     testImplementation("org.springframework:spring-tx")
+    testImplementation(project(":modules:payment"))   // booking-refund 처리기를 진짜 환불 로직(메모리 장부)에 대고 시험한다
+    testImplementation(testFixtures(project(":modules:payment")))
+    testImplementation(project(":modules:job-queue-jdbc"))
     testImplementation("org.assertj:assertj-core")
     testImplementation("org.springframework.boot:spring-boot-test")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")

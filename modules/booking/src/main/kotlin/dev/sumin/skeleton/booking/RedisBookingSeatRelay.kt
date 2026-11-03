@@ -38,6 +38,7 @@ class RedisBookingSeatRelay(
     private val sender = Executors.newSingleThreadExecutor { task -> Thread(task, THREAD).apply { isDaemon = true } }
     private val receiver = Receiver()
     private val running = AtomicBoolean(false)
+    private val sendFailing = AtomicBoolean(false)
     @Volatile private var subscriber: Thread? = null
 
     init {
@@ -82,8 +83,10 @@ class RedisBookingSeatRelay(
             sender.execute {
                 try {
                     redis.convertAndSend(channel, message)
+                    if (sendFailing.compareAndSet(true, false)) log.info("booking seat events reach the other instances again")
                 } catch (ex: Exception) {
-                    log.warn("booking seat event not sent to the other instances: {}", ex.toString())
+                    // 끊긴 동안 사건마다 찍으면 로그가 넘친다 - 끊긴 첫 번째만 경고하고 다시 붙으면 한 줄 알린다
+                    if (sendFailing.compareAndSet(false, true)) log.warn("booking seat events are not reaching the other instances (further failures are not logged until it recovers): {}", ex.toString())
                 }
             }
         } catch (_: RejectedExecutionException) {

@@ -14,7 +14,6 @@ enum class BookingErrorCode(
     LIMIT_REACHED("BOOKING.LIMIT_REACHED", HttpStatus.CONFLICT, "한 번에 잡을 수 있는 자리 수를 넘었다"),
     NOT_OPEN("BOOKING.NOT_OPEN", HttpStatus.CONFLICT, "지금은 자리를 잡을 수 있는 때가 아니다"),
     HOLD_EXPIRED("BOOKING.HOLD_EXPIRED", HttpStatus.CONFLICT, "보류 시간이 지나 자리가 풀렸다"),
-    HOLD_LOCKED("BOOKING.HOLD_LOCKED", HttpStatus.CONFLICT, "결제를 시작해 자리를 바꿀 수 없다 — 모두 놓고 다시 고른다"),
     HOLD_EMPTY("BOOKING.HOLD_EMPTY", HttpStatus.CONFLICT, "잡은 자리가 없다"),
     PAYMENT_REQUIRED("BOOKING.PAYMENT_REQUIRED", HttpStatus.CONFLICT, "유료 자리는 결제로 확정한다"),
     NOT_PAYABLE("BOOKING.NOT_PAYABLE", HttpStatus.CONFLICT, "결제할 수 없는 보류다 — 무료이거나 이미 확정됐다"),
@@ -39,8 +38,6 @@ class NotOpenException : ApplicationException("booking pool is not open", Bookin
 
 /** 내 보류가 시간이 지났다. 서비스가 [holdId] 를 회수한 뒤 그대로 응답한다 */
 class HoldExpiredException(val holdId: String) : ApplicationException("hold expired: $holdId", BookingErrorCode.HOLD_EXPIRED)
-
-class HoldLockedException : ApplicationException("hold is locked for checkout", BookingErrorCode.HOLD_LOCKED)
 
 class HoldEmptyException : ApplicationException("hold has no seats", BookingErrorCode.HOLD_EMPTY)
 
