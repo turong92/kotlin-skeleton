@@ -96,6 +96,15 @@ class NotificationSseServiceTest {
     }
 
     @Test
+    fun `the data a connection receives names only the caller among the recipients, never the other people of a batch`() {
+        val batch = NotificationEvent(topic = "notes", type = "t", recipientIds = setOf("a", "b", "c"))
+        val forEveryone = NotificationEvent(topic = "notes", type = "t")
+
+        assertEquals(setOf("b"), NotificationSseService.toConnection(batch, "b").recipientIds)
+        assertEquals(emptySet(), NotificationSseService.toConnection(forEveryone, "b").recipientIds)
+    }
+
+    @Test
     fun `connect accepts the caller so recipient-addressed events can be filtered`() {
         val registry = RecordingSubscriptionRegistry()
         val service = NotificationSseService(registry, NotificationSseProperties())

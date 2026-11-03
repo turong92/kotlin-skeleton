@@ -44,6 +44,8 @@ class NotificationWebSocketBridge(
         val headers = project?.let { mapOf<String, Any>(PROJECT_MESSAGE_HEADER to it) }
         destinationResolver.resolveDestinations(event).forEach { destination ->
             val user = destination.user
+            // 묶음 이벤트의 받는 사람 목록(남의 id)이 한 사람의 화면에 실리지 않게: 사용자 큐는 그 사람만, 토픽은 비운다
+            val event = if (event.recipientIds.isEmpty()) event else event.copy(recipientIds = setOfNotNull(user))
             when {
                 user == null && headers == null -> messagingTemplate.convertAndSend(destination.destination, event)
                 user == null -> messagingTemplate.convertAndSend(destination.destination, event, headers!!)

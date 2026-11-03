@@ -97,7 +97,7 @@ class NotificationSseService(
             subscriptionRef.get()?.close()
         }
         val subscription = subscriptionRegistry.subscribe(normalizedTopics) { event ->
-            if (isVisibleTo(event, recipientId)) emitter.sendNotification(event)
+            if (isVisibleTo(event, recipientId)) emitter.sendNotification(toConnection(event, recipientId))
         }
         subscriptionRef.set(subscription)
 
@@ -126,6 +126,10 @@ class NotificationSseService(
 
         fun isVisibleTo(event: NotificationEvent, recipientId: String?): Boolean =
             event.recipientIds.isEmpty() || (recipientId != null && recipientId in event.recipientIds)
+
+        /** 연결로 내보내는 모양: 묶음 이벤트의 받는 사람 목록에서 연결 본인만 남긴다(남의 id 를 싣지 않는다). [isVisibleTo] 를 통과한 이벤트에 쓴다 */
+        fun toConnection(event: NotificationEvent, recipientId: String?): NotificationEvent =
+            if (event.recipientIds.isEmpty()) event else event.copy(recipientIds = setOfNotNull(recipientId))
     }
 
     private fun SseEmitter.sendNotification(event: NotificationEvent) {

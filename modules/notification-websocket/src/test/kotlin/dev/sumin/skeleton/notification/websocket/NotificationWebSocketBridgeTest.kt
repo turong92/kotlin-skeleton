@@ -36,6 +36,27 @@ class NotificationWebSocketBridgeTest {
     }
 
     @Test
+    fun `a batch event reaches each destination without the other recipients - the user queue names only that user, the topic none`() {
+        val registry = RecordingSubscriptionRegistry()
+        val channel = RecordingMessageChannel()
+        val bridge = NotificationWebSocketBridge(
+            subscriptionRegistry = registry,
+            messagingTemplate = SimpMessagingTemplate(channel),
+            destinationResolver = { listOf(
+                NotificationWebSocketDestination.topic("/topic/notifications/notes"),
+                NotificationWebSocketDestination.user("b", "/queue/notifications"),
+            ) },
+            properties = NotificationWebSocketProperties(),
+        )
+
+        bridge.start()
+        registry.subscriber.onNotification(NotificationEvent(topic = "notes", type = "t", recipientIds = setOf("a", "b", "c")))
+
+        val recipients = channel.messages.map { (it.payload as NotificationEvent).recipientIds }
+        assertEquals(listOf(emptySet(), setOf("b")), recipients)
+    }
+
+    @Test
     fun `bridge closes notification subscription when stopped`() {
         val registry = RecordingSubscriptionRegistry()
         val bridge = NotificationWebSocketBridge(

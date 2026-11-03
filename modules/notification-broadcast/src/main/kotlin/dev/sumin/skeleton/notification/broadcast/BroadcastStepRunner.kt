@@ -31,7 +31,7 @@ class BroadcastStepRunner internal constructor(
                 ?: throw BroadcastPermanentFailure("audience kind '${audience.kind}' is no longer available")
             val now = time.now()
             val after = broadcast.cursorId
-            val page = source.page(audience.param, after, properties.batchSize).filter { after == null || it > after }.distinct()
+            val page = source.page(audience.param, after, properties.batchSize).distinct()
             if (page.isEmpty()) {
                 store.finish(broadcast.id, now)
                 return@transaction
@@ -41,7 +41,7 @@ class BroadcastStepRunner internal constructor(
             if (recipients.isNotEmpty()) {
                 publisher.publish(events.event(broadcast, broadcast.id, recipients.toSet(), "", now))
             }
-            store.advance(broadcast.id, page.max(), page.size, now)
+            store.advance(broadcast.id, page.last(), page.size, now)
             tasks.enqueue(BroadcastStep(broadcast.id, step.token, step.seq + 1), now.plus(properties.stepInterval))
         }
     }

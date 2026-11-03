@@ -262,7 +262,7 @@ skeleton:
       lock-screen: FULL   # 이 앱의 선택(모듈 기본과 같다 - 일부러 적는다): 잠금 화면에 알림 제목 · 본문이 그대로 보인다. 내용을 가리려면 HIDDEN
       types: [NOTE_UPDATED, comment.created, comment.replied, reward.granted, badge.awarded, advertising.consent.changed, advertising.consent.reconfirm, notice.service]   # 이 앱의 선택: 푸시로도 갈 알림 종류 - 위 preferences.types 와 같은 종류 + 광고 동의 변경 · 재확인 안내(정보성, 안 넣으면 알림함에만 쌓인다) + 서비스 공지(notice.service, 아래 broadcast). 사람이 종류마다 「푸시만 끄기」를 할 수 있다
       open-report:
-        secret: ${SKELETON_NOTIFICATION_PUSH_OPEN_REPORT_SECRET:}   # 운영자 비밀(32자 이상, 선언의 secrets:): 있으면 웹 푸시를 눌러 연 것을 센다(공지 통계의 「열람」) - 비우면 꺼진다(푸시는 그대로, 클릭 통계만 없다). 로컬 · 시험은 고정 값
+        secret: ${SKELETON_NOTIFICATION_PUSH_OPEN_REPORT_SECRET:}   # 선택 비밀(32자 이상, 환경변수로 준다 - 배포 선언의 secrets 에는 넣지 않았다): 있으면 웹 푸시를 눌러 연 것을 센다(공지 통계의 「열람」) - 비우면 꺼진다(푸시는 그대로, 클릭 통계만 없다). 로컬 · 시험은 고정 값
       stale-cleanup:
         enabled: true   # 이 앱의 선택(모듈 기본은 꺼짐): 60일 동안 안 본 기기 줄을 지운다 (scheduler 가 주기를 돈다)
     broadcast:
