@@ -31,14 +31,18 @@ interface WaitingRoomStore {
     /** 오픈 전 줄에 번호 없이 선다. 같은 계정이 이미 있으면 그 순번표 */
     fun addPrequeueTicket(roomId: String, accountId: String, now: Instant): WaitingTicket
 
-    /** 오픈 뒤(섞기 뒤) 맨 뒤 번호로 선다. 같은 계정이 이미 있으면 그 순번표 */
-    fun addTailTicket(roomId: String, accountId: String, now: Instant): WaitingTicket
+    /**
+     * 오픈 뒤(섞기 뒤) 맨 뒤 번호로 선다. 같은 계정이 이미 있으면 그 순번표.
+     * 번호 = `max(번호의 끝, [floor]) + 1` - [floor] 는 지금의 서빙(입장 번호)이다. 줄이 한산해 서빙이 번호의 끝을 앞질렀으면 이미 지나간 번호가 아니라 서빙 바로 다음 번호를 받아
+     * 곧 입장하고, 그 뒤 사람들은 속도대로 이어진다(번호에 빈틈이 생길 뿐 분당 제한은 그대로).
+     */
+    fun addTailTicket(roomId: String, accountId: String, now: Instant, floor: Long): WaitingTicket
 
     /**
      * 순번표에 맨 뒤 번호를 새로 준다 - [expected] 가 그 순번표의 지금 번호일 때만(번호 없는 늦은 줄 null, 입장 시간이 지난 번호 n).
-     * 그 사이 다른 호출이 먼저 바꿨으면 아무것도 하지 않고 지금 순번표를 돌려준다.
+     * 번호는 [addTailTicket] 과 같이 `max(끝, floor) + 1`. 그 사이 다른 호출이 먼저 바꿨으면 아무것도 하지 않고 지금 순번표를 돌려준다.
      */
-    fun renumber(ticket: WaitingTicket, expected: Long?, now: Instant): WaitingTicket
+    fun renumber(ticket: WaitingTicket, expected: Long?, now: Instant, floor: Long): WaitingTicket
 
     /** 번호 없이 서 있는 사람 수 */
     fun countPrequeue(roomId: String): Long

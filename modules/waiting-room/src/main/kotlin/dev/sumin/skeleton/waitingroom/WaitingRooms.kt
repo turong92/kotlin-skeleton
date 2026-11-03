@@ -79,9 +79,9 @@ class WaitingRooms(
         if (open) view = shuffled(view, now)
 
         var ticket = store.findTicket(roomId, accountId)
-            ?: if (open) store.addTailTicket(roomId, accountId, now) else store.addPrequeueTicket(roomId, accountId, now)
+            ?: if (open) store.addTailTicket(roomId, accountId, now, Serving.served(view.room.opensAt, view.rates, now)) else store.addPrequeueTicket(roomId, accountId, now)
         val number = ticket.queueNo
-        if (open && (number == null || expired(view, number, now))) ticket = store.renumber(ticket, number, now)
+        if (open && (number == null || expired(view, number, now))) ticket = store.renumber(ticket, number, now, Serving.served(view.room.opensAt, view.rates, now))
         return statusOf(view, accountId, ticket.queueNo, now, ticket = tokens.ticket(roomId, accountId, ticket.queueNo))
     }
 
@@ -96,7 +96,7 @@ class WaitingRooms(
         if (number == null && now >= view.room.opensAt && view.room.status != RoomStatus.CLOSED) {
             view = shuffled(view, now)
             var ticket = store.findTicket(roomId, accountId) ?: throw TicketInvalidException()
-            if (ticket.queueNo == null) ticket = store.renumber(ticket, null, now)
+            if (ticket.queueNo == null) ticket = store.renumber(ticket, null, now, Serving.served(view.room.opensAt, view.rates, now))
             number = ticket.queueNo
             refreshed = tokens.ticket(roomId, accountId, number)
         }

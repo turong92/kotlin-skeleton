@@ -102,11 +102,11 @@ class JdbcWaitingRoomStore(
         }
     }
 
-    override fun addTailTicket(roomId: String, accountId: String, now: Instant): WaitingTicket {
+    override fun addTailTicket(roomId: String, accountId: String, now: Instant, floor: Long): WaitingTicket {
         val id = ids.newId("wrt_")
         return try {
             tx.execute {
-                val number = nextNumber(roomId)
+                val number = nextNumber(roomId, floor)
                 WaitingTicket(id, roomId, accountId, number, now).also { insertTicket(it) }
             }!!
         } catch (_: DuplicateKeyException) {
@@ -114,9 +114,9 @@ class JdbcWaitingRoomStore(
         }
     }
 
-    override fun renumber(ticket: WaitingTicket, expected: Long?, now: Instant): WaitingTicket {
+    override fun renumber(ticket: WaitingTicket, expected: Long?, now: Instant, floor: Long): WaitingTicket {
         val number = tx.execute { status ->
-            val next = nextNumber(ticket.roomId)
+            val next = nextNumber(ticket.roomId, floor)
             val updated = jdbc.update(
                 "update waiting_room_tickets set queue_no = :no, created_at = :now where id = :id and " + if (expected == null) "queue_no is null" else "queue_no = :expected",
                 mapOf("no" to next, "now" to ts(now), "id" to ticket.id, "expected" to expected),
@@ -134,9 +134,12 @@ class JdbcWaitingRoomStore(
     override fun countPrequeue(roomId: String): Long =
         jdbc.queryForObject("select count(*) from waiting_room_tickets where room_id = :id and queue_no is null", mapOf("id" to roomId), Long::class.java)!!
 
-    /** 방 줄을 잠그고 다음 번호를 읽는다 - 트랜잭션 안에서만 */
-    private fun nextNumber(roomId: String): Long {
-        jdbc.update("update waiting_rooms set queue_tail = queue_tail + 1 where id = :id", mapOf("id" to roomId))
+    /** 방 줄을 잠그고 다음 번호 `max(끝, floor) + 1` 를 읽는다 - 서빙이 끝을 앞질렀으면(줄이 한산했으면) 서빙 바로 다음 번호 - 트랜잭션 안에서만 */
+    private fun nextNumber(roomId: String, floor: Long): Long {
+        jdbc.update(
+            "update waiting_rooms set queue_tail = case when queue_tail < :floor then :floor + 1 else queue_tail + 1 end where id = :id",
+            mapOf("id" to roomId, "floor" to floor),
+        )
         return jdbc.queryForObject("select queue_tail from waiting_rooms where id = :id", mapOf("id" to roomId), Long::class.java)!!
     }
 

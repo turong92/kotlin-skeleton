@@ -111,6 +111,26 @@ class WaitingRoomDbTest {
     }
 
     @Test
+    fun `someone arriving long after the line drained is not expired on arrival and the rate still limits`() {
+        val room = WaitingDb.newRoom(perMinute = 60, entryMinutes = 1)
+        WaitingDb.now = room.opensAt
+        rooms.issueTicket(room.id, "early")
+        WaitingDb.now = room.opensAt.plusSeconds(3600)   // 줄은 오래전에 비었고 서빙은 3600 이다
+
+        val a = rooms.issueTicket(room.id, "late-a")
+        val b = rooms.issueTicket(room.id, "late-b")
+
+        assertEquals(3601L, a.position)
+        assertEquals(QueueState.WAITING, a.state)   // EXPIRED 가 아니다 - 곧 입장
+        assertEquals(0L, a.ahead)
+        WaitingDb.now = WaitingDb.now.plusSeconds(1)
+        assertEquals(QueueState.ADMITTED, rooms.status(room.id, "late-a", a.ticket).state)
+        assertEquals(QueueState.WAITING, rooms.status(room.id, "late-b", b.ticket).state)   // 둘이 한꺼번에 입장하지 않는다
+        WaitingDb.now = WaitingDb.now.plusSeconds(1)
+        assertEquals(QueueState.ADMITTED, rooms.status(room.id, "late-b", b.ticket).state)
+    }
+
+    @Test
     fun `a number whose entry time ran out goes to the back, and a numberless late ticket is numbered at the back`() {
         val room = WaitingDb.newRoom(perMinute = 60, entryMinutes = 1)
         WaitingDb.now = room.opensAt
@@ -131,7 +151,7 @@ class WaitingRoomDbTest {
         assertEquals(QueueState.EXPIRED, rooms.status(room.id, "first", first.ticket).state)
         assertFailsWith<EntryRequiredException> { rooms.requireEntry(room.id, "first", admitted.entryToken) }
         val again = rooms.issueTicket(room.id, "first")
-        assertEquals(3L, again.position)   // 맨 뒤 - 옛 번호 1 은 비고, 번호는 늘 겹치지 않는다
-        assertEquals(listOf(2L, 3L), WaitingDb.ticketNumbers(room.id))
+        assertEquals(62L, again.position)   // 서빙(61) 바로 다음 - 옛 번호 1 은 비고, 번호는 늘 겹치지 않는다
+        assertEquals(listOf(2L, 62L), WaitingDb.ticketNumbers(room.id))
     }
 }
