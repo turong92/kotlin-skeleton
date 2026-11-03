@@ -25,6 +25,8 @@
 | `notification-jdbc` | 알림 인박스를 DB 테이블에 저장 | [notification-jdbc](notification-jdbc.md) |
 | `notification-push` | 푸시 알림의 허리 — 알림이 받는 사람의 기기로도 간다 (기기 등록 · 종류 × 채널 끄기 · 잠금 화면 옵션) | [notification-push](notification-push.md) |
 | `notification-push-jdbc` | 푸시 기기 · 종류별 푸시 끄기를 DB 에 저장하고 발송 작업을 job-queue 에 얹기 | [notification-push-jdbc](notification-push-jdbc.md) |
+| `notification-broadcast` | 공지 발송 — 운영자가 전체 · 대상(역할 · 워크스페이스 · 세그먼트)에게 공지를 보낸다 (알림함 + 푸시, 예약 · 취소 · 이어 보내기 · 통계 · 광고 동의 존중) | [notification-broadcast](notification-broadcast.md) |
+| `notification-broadcast-jdbc` | 공지 · 채널별 전달 숫자를 DB 에 저장하고 단계 작업을 job-queue 에 얹기 | [notification-broadcast-jdbc](notification-broadcast-jdbc.md) |
 | `notification-webpush` | 웹 푸시(VAPID) 전달 수단 (자리만 — 구현은 이어서) | [notification-webpush](notification-webpush.md) |
 | `notification-fcm` | 모바일 푸시(FCM) 전달 수단 (자리만 — 구현은 이어서) | [notification-fcm](notification-fcm.md) |
 | `notification-legal` | 광고성 정보 게이트의 동의 어댑터(채널 무관) — legal 동의 기록으로 광고 동의 정책을 구현한다 | [notification-legal](notification-legal.md) |

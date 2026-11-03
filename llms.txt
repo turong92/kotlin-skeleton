@@ -131,6 +131,8 @@
 - migration: 마이그레이션 공통 규칙 [마이그레이션 가드, DB 초기화 방지]
 - migration-flyway: Flyway 구현 — 로컬 clean 옵트인 · 마이그레이션 파일 이름… [Flyway, 마이그레이션]
 - notification: 알림 계약 · 수신자 해석 · 인메모리 브로커 + 로그인한 사람의… [알림, 알림 목록]
+- notification-broadcast: 공지 발송 — 서비스 운영자가 전체 · 역할 · 워크스페이스 · 앱… [공지 발송, 전체 공지]
+- notification-broadcast-jdbc: 공지 · 채널별 전달 숫자를 DB 에 저장하고 단계 작업을… [공지 저장, 공지 작업 큐]
 - notification-fcm: 모바일 푸시(FCM HTTP v1) [모바일 푸시, FCM]
 - notification-jdbc: 알림 받은편지함을 DB 테이블에… [알림 저장, 알림 DB]
 - notification-legal: 광고성 정보 게이트(notification 의… [광고 동의 정책, 마케팅 수신 동의 확인]

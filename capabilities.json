@@ -2119,6 +2119,83 @@
       }
     },
     {
+      "id": "notification-broadcast",
+      "kind": "module",
+      "module": "notification-broadcast",
+      "path": "modules/notification-broadcast",
+      "status": "experimental",
+      "summary": "공지 발송 — 서비스 운영자가 전체 · 역할 · 워크스페이스 · 앱 세그먼트에게 공지를 보낸다(알림함 + 푸시, 즉시 / 예약, 취소, 중간 실패 뒤 이어 보내기, 나에게 테스트, 광고성은 동의 없는 사람 제외, 전달 · 열람 · 푸시 클릭 통계). 받는 사람 묶음마다 기존 publish 를 부른다. 저장은 notification-broadcast-jdbc, 화면은 @skeleton/notifications/admin.",
+      "starter": false,
+      "newProjectFlag": "--modules notification-broadcast,notification-broadcast-jdbc",
+      "autoIncludes": ["json", "notification", "notification-jdbc"],
+      "needs": {
+        "requires": ["notification-broadcast-jdbc"],
+        "oneOf": [],
+        "optional": ["account", "notification-push", "workspace"]
+      },
+      "config": {
+        "prefixes": ["skeleton.notification.broadcast"],
+        "snippet": "docs/config/modules/notification-broadcast.yml"
+      },
+      "basePaths": ["/api/v1/admin/broadcasts"],
+      "secrets": [],
+      "docs": ["docs/modules/notification-broadcast.md"],
+      "frontend": {
+        "capabilities": ["notifications"],
+        "newProjectFlag": "--packages notifications",
+        "packages": ["@skeleton/notifications"]
+      },
+      "notFor": [
+        "notification-broadcast 는 저장소를 모른다 — notification-broadcast-jdbc 를 같이 고른다",
+        "꺼짐이 기본이다 — skeleton.notification.broadcast.enabled=true 와 공지 types, 운영자 경로는 admin.enabled=true 를 앱 yml 이 정한다",
+        "대상(AudienceSource)은 account(전체 · 역할) · workspace 가 낸다 — 둘 다 없으면 앱이 빈을 만든다",
+        "공개 공지 게시판(로그인 없이 보는 목록)은 board 의 몫이다",
+        "이미 간 푸시는 거두지 않는다 — 취소는 더 보내지 않는 것이다",
+        "서비스 운영자만 보낸다(권한 notification-broadcast.read · .send, 기본 역할 없음) — 팀 관리자의 자기 공지는 없다"
+      ],
+      "keywords": {
+        "ko": ["공지 발송", "전체 공지", "공지 푸시", "대량 알림", "예약 발송", "공지 통계"],
+        "en": [
+          "broadcast",
+          "announcement",
+          "bulk notification",
+          "scheduled send",
+          "push to all users",
+          "notice delivery stats"
+        ]
+      }
+    },
+    {
+      "id": "notification-broadcast-jdbc",
+      "kind": "module",
+      "module": "notification-broadcast-jdbc",
+      "path": "modules/notification-broadcast-jdbc",
+      "status": "experimental",
+      "summary": "공지 · 채널별 전달 숫자를 DB 에 저장하고 단계 작업을 job-queue-jdbc 에 얹는다 (PostgreSQL · MySQL).",
+      "starter": false,
+      "newProjectFlag": "--modules notification-broadcast-jdbc",
+      "autoIncludes": ["json", "notification", "notification-broadcast", "notification-jdbc"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/notification-broadcast-jdbc.md"],
+      "frontend": {
+        "capabilities": ["notifications"],
+        "newProjectFlag": "--packages notifications",
+        "packages": ["@skeleton/notifications"]
+      },
+      "notFor": ["DataSource · db-* 모듈과 job-queue-jdbc 스키마, 이 모듈의 마이그레이션이 적용된 스키마가 필요하다"],
+      "keywords": {
+        "ko": ["공지 저장", "공지 작업 큐"],
+        "en": ["broadcast store", "broadcast job queue"]
+      }
+    },
+    {
       "id": "notification-fcm",
       "kind": "module",
       "module": "notification-fcm",
@@ -3961,6 +4038,8 @@
         "event-kafka",
         "json",
         "notification",
+        "notification-broadcast",
+        "notification-broadcast-jdbc",
         "notification-fcm",
         "notification-jdbc",
         "notification-legal",

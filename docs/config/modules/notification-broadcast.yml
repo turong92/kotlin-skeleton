@@ -1,0 +1,16 @@
+# notification-broadcast — 공지 발송(전체 · 대상 공지 → 알림함 + 푸시). 기본 꺼짐. 접두사는 skeleton.notification.broadcast. 저장은 notification-broadcast-jdbc, 운영자 화면은 @skeleton/notifications/admin.
+skeleton:
+  notification:
+    broadcast:
+      enabled: false               # true 면 공지 서비스 · 단계 작업 · 전달 고리가 선다 (켰는데 notification-broadcast-jdbc · types · 대상 빈이 없으면 기동 실패)
+      types: []                    # 운영자가 고를 알림 종류(예: notice.service · promo.event). 켰는데 비면 기동 실패. 광고 종류는 skeleton.notification.advertising.types 안의 것 - 동의 없는 사람은 통째로 빠진다
+      topic: broadcast             # 알림함 topic (화면의 「공지」 탭 거르기에 쓴다)
+      batch-size: 200              # 한 묶음(알림 한 번 · 작업 하나)의 받는 사람 수. 1~1000
+      recipients-per-minute: 6000  # 분당 받는 사람 수 - 묶음 사이 간격 = batch-size / 이 값 분 (기본 2초)
+      step-max-attempts: 5         # 단계 작업 하나의 최대 시도 수(큐의 백오프) - 다 쓰면 공지는 FAILED, 운영자가 이어 보낸다
+      max-schedule-ahead: P90D     # 예약은 지금부터 이 기간 안
+      test-title-prefix: "[테스트] "  # 나에게 테스트 발송의 제목 머리
+      test-cooldown: 30s           # 운영자 한 명이 테스트를 다시 보내려면 기다릴 시간
+      admin:
+        enabled: false             # true 면 /api/v1/admin/broadcasts 운영자 경로가 열린다 (꺼져 있으면 404). 권한 notification-broadcast.read · .send - 기본 역할 없음(전권만)
+        base-path: /api/v1/admin/broadcasts

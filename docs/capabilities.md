@@ -123,6 +123,8 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `migration` | 마이그레이션 공통 규칙 — DB 를 지우는 설정이 허용 프로필 밖에서 켜지면 시작을 막는 가드(도구 중립). | 스타터(apps/api)에 기본 포함 | 마이그레이션 가드, DB 초기화 방지, 스키마 보호 / migration guard, prevent db wipe, schema safety | — |
 | `migration-flyway` | Flyway 구현 — 로컬 clean 옵트인 · 마이그레이션 파일 이름 규칙(V<UTC 14자리>__snake_case.sql) 검사. | 스타터(apps/api)에 기본 포함 | Flyway, 마이그레이션, DB 스키마 버전, 스키마 변경 / flyway, database migration, schema migration, schema version | — |
 | `notification` | 알림 계약 · 수신자 해석 · 인메모리 브로커 + 로그인한 사람의 받은편지함 HTTP(/api/v1/notifications: 목록 · 안 읽은 수 · 읽음 · 모두 읽음). 클릭 이동 링크 · 같은 열쇠 묶기 · 종류별 수신 끄기(/preferences, 끌 수 있는 종류는 설정) · 보관 정리(기본 꺼짐) · 커밋 뒤 전달. | `--modules notification` | 알림, 알림 목록, 받은편지함, 안 읽은 알림, 알림 읽음, 알림 보내기, 알림 묶기, 알림 링크, 알림 끄기, 알림 수신 설정, 알림 보관 정리 / notification, inbox, unread, mark as read, publish notification, collapse notifications, notification link, notification retention | `@skeleton/notifications` |
+| `notification-broadcast` | 공지 발송 — 서비스 운영자가 전체 · 역할 · 워크스페이스 · 앱 세그먼트에게 공지를 보낸다(알림함 + 푸시, 즉시 / 예약, 취소, 중간 실패 뒤 이어 보내기, 나에게 테스트, 광고성은 동의 없는 사람 제외, 전달 · 열람 · 푸시 클릭 통계). 받는 사람 묶음마다 기존 publish 를 부른다. 저장은 notification-broadcast-jdbc, 화면은 @skeleton/notifications/admin. | `--modules notification-broadcast,notification-broadcast-jdbc` | 공지 발송, 전체 공지, 공지 푸시, 대량 알림, 예약 발송, 공지 통계 / broadcast, announcement, bulk notification, scheduled send, push to all users, notice delivery stats | `@skeleton/notifications` |
+| `notification-broadcast-jdbc` | 공지 · 채널별 전달 숫자를 DB 에 저장하고 단계 작업을 job-queue-jdbc 에 얹는다 (PostgreSQL · MySQL). | `--modules notification-broadcast-jdbc` | 공지 저장, 공지 작업 큐 / broadcast store, broadcast job queue | `@skeleton/notifications` |
 | `notification-fcm` | 모바일 푸시(FCM HTTP v1) 전달 수단 — 안드로이드 · iOS 기기 토큰으로 푸시를 보낸다. 서비스 계정 -> 접근 토큰(JDK) · 판정 표 · 자격 기동 검사. notification-push 의 PushSender 로 끼운다. | `--modules notification-fcm` | 모바일 푸시, FCM, 안드로이드 푸시 / mobile push, FCM, android push | — |
 | `notification-jdbc` | 알림 받은편지함을 DB 테이블에 저장한다(notification_inbox). | `--modules notification-jdbc` | 알림 저장, 알림 DB, 알림 기록 유지 / notification storage, persist notifications, inbox database | `@skeleton/notifications` |
 | `notification-legal` | 광고성 정보 게이트(notification 의 AdvertisingGate)의 동의 어댑터 — legal 동의 기록으로 광고 동의 정책(수신 동의 · 야간 별도 동의 · 2년 만료)을 구현한다. 채널(푸시 · 메일 · 슬랙)과 무관하다. | `--modules notification-legal` | 광고 동의 정책, 마케팅 수신 동의 확인, 야간 광고 동의 / advertising consent policy, marketing consent check, night-time advertising consent | — |
@@ -1002,6 +1004,38 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 알림을 만드는 쪽(NotificationPublisher.publish)은 앱 코드가 부른다
 - 키워드: 알림, 알림 목록, 받은편지함, 안 읽은 알림, 알림 읽음, 알림 보내기, 알림 묶기, 알림 링크, 알림 끄기, 알림 수신 설정, 알림 보관 정리 / notification, inbox, unread, mark as read, publish notification, collapse notifications, notification link, notification retention
 
+### `notification-broadcast` — 공지 발송 — 서비스 운영자가 전체 · 역할 · 워크스페이스 · 앱 세그먼트에게 공지를 보낸다(알림함 + 푸시, 즉시 / 예약, 취소, 중간 실패 뒤 이어 보내기, 나에게 테스트, 광고성은 동의 없는 사람 제외, 전달 · 열람 · 푸시 클릭 통계). 받는 사람 묶음마다 기존 publish 를 부른다. 저장은 notification-broadcast-jdbc, 화면은 @skeleton/notifications/admin.
+
+- 종류 · 상태: module · experimental — 위치 `modules/notification-broadcast`
+- 켜는 법: `--modules notification-broadcast,notification-broadcast-jdbc`
+- 의존 한 줄: `implementation(project(":modules:notification-broadcast"))`
+- 자동으로 따라온다: `json`, `notification`, `notification-jdbc`
+- 함께 골라야 한다: `notification-broadcast-jdbc`
+- 설정 접두사 `skeleton.notification.broadcast` — 키와 기본값 `docs/config/modules/notification-broadcast.yml`
+- HTTP 경로: `/api/v1/admin/broadcasts`
+- 문서: `docs/modules/notification-broadcast.md`
+- 짝 프런트(react-skeleton): 항목 `notifications` · 패키지 `@skeleton/notifications` · 조각 `--packages notifications`
+- 쓰지 않는 경우:
+  - notification-broadcast 는 저장소를 모른다 — notification-broadcast-jdbc 를 같이 고른다
+  - 꺼짐이 기본이다 — skeleton.notification.broadcast.enabled=true 와 공지 types, 운영자 경로는 admin.enabled=true 를 앱 yml 이 정한다
+  - 대상(AudienceSource)은 account(전체 · 역할) · workspace 가 낸다 — 둘 다 없으면 앱이 빈을 만든다
+  - 공개 공지 게시판(로그인 없이 보는 목록)은 board 의 몫이다
+  - 이미 간 푸시는 거두지 않는다 — 취소는 더 보내지 않는 것이다
+  - 서비스 운영자만 보낸다(권한 notification-broadcast.read · .send, 기본 역할 없음) — 팀 관리자의 자기 공지는 없다
+- 키워드: 공지 발송, 전체 공지, 공지 푸시, 대량 알림, 예약 발송, 공지 통계 / broadcast, announcement, bulk notification, scheduled send, push to all users, notice delivery stats
+
+### `notification-broadcast-jdbc` — 공지 · 채널별 전달 숫자를 DB 에 저장하고 단계 작업을 job-queue-jdbc 에 얹는다 (PostgreSQL · MySQL).
+
+- 종류 · 상태: module · experimental — 위치 `modules/notification-broadcast-jdbc`
+- 켜는 법: `--modules notification-broadcast-jdbc`
+- 의존 한 줄: `implementation(project(":modules:notification-broadcast-jdbc"))`
+- 자동으로 따라온다: `json`, `notification`, `notification-broadcast`, `notification-jdbc`
+- 문서: `docs/modules/notification-broadcast-jdbc.md`
+- 짝 프런트(react-skeleton): 항목 `notifications` · 패키지 `@skeleton/notifications` · 조각 `--packages notifications`
+- 쓰지 않는 경우:
+  - DataSource · db-* 모듈과 job-queue-jdbc 스키마, 이 모듈의 마이그레이션이 적용된 스키마가 필요하다
+- 키워드: 공지 저장, 공지 작업 큐 / broadcast store, broadcast job queue
+
 ### `notification-fcm` — 모바일 푸시(FCM HTTP v1) 전달 수단 — 안드로이드 · iOS 기기 토큰으로 푸시를 보낸다. 서비스 계정 -> 접근 토큰(JDK) · 판정 표 · 자격 기동 검사. notification-push 의 PushSender 로 끼운다.
 
 - 종류 · 상태: module · experimental — 위치 `modules/notification-fcm`
@@ -1696,7 +1730,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 - 종류 · 상태: app · stable — 위치 `apps/workbench`
 - 켜는 법: `--with-workbench`
-- 자동으로 따라온다: `alert-jdbc`, `api-key`, `api-key-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-mfa`, `auth-mfa-jdbc`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `badge`, `badge-jdbc`, `board`, `board-jdbc`, `campaign`, `campaign-jdbc`, `catalog`, `catalog-jdbc`, `config-aws-ssm`, `coupon`, `coupon-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `inquiry`, `inquiry-jdbc`, `db-mysql`, `event-kafka`, `json`, `notification`, `notification-fcm`, `notification-jdbc`, `notification-legal`, `notification-push`, `notification-push-jdbc`, `notification-push-legal`, `notification-slack`, `notification-sse`, `notification-webpush`, `notification-websocket`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `point`, `point-jdbc`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `review`, `review-jdbc`, `reward`, `reward-jdbc`, `scheduler`, `search`, `search-jdbc`, `storage`, `storage-image`, `storage-image-imageio`, `storage-image-imgproxy`, `storage-image-jdbc`, `storage-image-pdfbox`, `storage-s3`, `workspace`, `workspace-jdbc`
+- 자동으로 따라온다: `alert-jdbc`, `api-key`, `api-key-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-mfa`, `auth-mfa-jdbc`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `badge`, `badge-jdbc`, `board`, `board-jdbc`, `campaign`, `campaign-jdbc`, `catalog`, `catalog-jdbc`, `config-aws-ssm`, `coupon`, `coupon-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `inquiry`, `inquiry-jdbc`, `db-mysql`, `event-kafka`, `json`, `notification`, `notification-broadcast`, `notification-broadcast-jdbc`, `notification-fcm`, `notification-jdbc`, `notification-legal`, `notification-push`, `notification-push-jdbc`, `notification-push-legal`, `notification-slack`, `notification-sse`, `notification-webpush`, `notification-websocket`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `point`, `point-jdbc`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `review`, `review-jdbc`, `reward`, `reward-jdbc`, `scheduler`, `search`, `search-jdbc`, `storage`, `storage-image`, `storage-image-imageio`, `storage-image-imgproxy`, `storage-image-jdbc`, `storage-image-pdfbox`, `storage-s3`, `workspace`, `workspace-jdbc`
 - HTTP 경로: `/api/v1`, `/api/v1/examples`, `/api/v1/skeleton`, `/api/v1/skeleton/enums`, `/api/v1/skeleton/json`, `/api/v1/skeleton/payments`, `/api/v1/skeleton/polymorphic/contents`
 - 문서: `docs/minimal-composition.md`, `docs/modules/README.md`
 - 짝 프런트(react-skeleton): 항목 `app-workbench` · 조각 `--with-workbench`
