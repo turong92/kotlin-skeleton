@@ -71,6 +71,9 @@ dependencies {
     implementation(project(":modules:inquiry-jdbc"))       // 문의 저장소 (inquiry 는 저장소를 모른다)
     implementation(project(":modules:auth-mfa"))           // 2단계 인증(TOTP): 로그인 뒤 인증 앱의 6자리 코드 (/api/v1/auth/mfa, 운영자 해제 /api/v1/admin/mfa/accounts). 운영자는 필수(OPERATORS) - 등록 전엔 다른 API 가 403. 암호화 키(crypto) 필요 - 문서 docs/modules/auth-mfa.md
     implementation(project(":modules:auth-mfa-jdbc"))      // 2단계 저장소 (auth-mfa 는 저장소를 모른다) - 비밀은 암호화 봉투, 복구 코드는 해시만
+    implementation(project(":modules:booking-jdbc"))       // 예약(좌석 지정 · 선착순): 풀 · 배치도 · 자리 잡기 · 보류 시간 자동 반환 · 결제 확정 · 늦은 결제 자동 환불 (+ booking: /api/v1/booking, 운영자 /api/v1/admin/booking). 상품 분기 - catalog/SampleCatalog · orders/SampleOrderListener, 씨앗 - booking/BookingSeed, docs/modules/booking.md
+    implementation(project(":modules:waiting-room-jdbc"))  // 대기열: 로그인한 사람만 줄 서고 입장권이 있어야 자리를 잡는다 (+ waiting-room: /api/v1/waiting-rooms). 예약 풀이 대기실 id 를 달면 booking 이 입장권을 검사한다. docs/modules/waiting-room.md
+    implementation(project(":modules:redis-core"))         // 여러 대일 때 배치도 사건을 Redis pub/sub 로 잇는다 (booking 이 저절로 쓴다). Redis 가 없어도 앱은 뜨고 한 대 안의 반영은 그대로다 - 로컬은 docker compose --profile redis
 
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-data-jdbc")

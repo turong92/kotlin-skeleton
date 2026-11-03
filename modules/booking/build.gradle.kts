@@ -32,3 +32,22 @@ dependencies {
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
+
+// payment · job-queue-jdbc · waiting-room · redis-core · scheduler 가 클래스패스에 정말 없을 때를 증명하는 별도 묶음 — 일반 test 는 얹지 않지만, 이 묶음이 「예약만」 조립(대기열 없이, 결제 없이 무료 풀만, Redis 없이)의 증거다
+testing {
+    suites {
+        register("noOptionalTest", JvmTestSuite::class) {
+            useJUnitJupiter()
+            dependencies {
+                implementation(project())   // 소비자 시점: compileOnly 인 payment · job-queue-jdbc · waiting-room · redis-core · scheduler 는 따라오지 않는다
+                implementation("org.assertj:assertj-core")
+                implementation("org.springframework.boot:spring-boot-test")
+                implementation("org.springframework.boot:spring-boot-autoconfigure")
+                implementation("org.springframework:spring-tx")   // 저장소(booking-jdbc)가 가져오는 것
+                implementation("org.jetbrains.kotlin:kotlin-test-junit5")
+                runtimeOnly("org.junit.platform:junit-platform-launcher")
+            }
+        }
+    }
+}
+tasks.named("check") { dependsOn("noOptionalTest") }

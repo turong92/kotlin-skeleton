@@ -152,6 +152,27 @@ local 프로필은 주문 만들기 한도(기본 계정당 10 / 10분)를 풀�
 
 통합 시험(`apps/sample/src/test/…/cheer/` — 진짜 PostgreSQL · 보안 체인 · 결제 장부, 결제사만 시험 소스의 `ScriptedGateway` 빈): `CheerJourneyIntegrationTest`(가입 → 주문 → 승인 → 응원 기록 → 환불 요청 → 운영자 환불 → 「환불됨」 · 일부 환불 · 금액 목록 밖 · 승인이 "모름"으로 끝난 뒤 조회 작업이 기록을 만든다) · `CheerAccessIntegrationTest`(남의 주문 404 · 본인은 환불을 실행할 수 없다 · 운영자 판정이 저장소의 지금 역할 · 웹훅 경로가 익명으로 닿되 POST 두 모양뿐 · 사용자 응답에 운영자 칸 · 심은 값 없음) · `CheerOrderListenerIntegrationTest` · `CheerOrderRateLimitIntegrationTest`(429) · `CheerOperatorDisabledIntegrationTest`(꺼져 있으면 404) · `CheerWithoutProviderIntegrationTest`(토스 없이 기동) · `PaymentEnvironmentOnlyBootTest`(환경변수만으로 기동) · `AccountJourneyIntegrationTest`(탈퇴 뒤 전체 표 스캔 — 카드 두 칸이 비고 응원 기록이 지워지고 심은 값이 없고, 운영자는 여전히 환불할 수 있다) · `MigrationUpgradeIntegrationTest` · `MySqlMigrationUpgradeTest`(기준선 데이터 위에서 새 표가 올라가고 탈퇴 고리가 카드 두 칸을 비운다).
 
+## 예약 — 좌석 지정 · 대기열 · 결제 (`/api/v1/booking`, `/api/v1/waiting-rooms`)
+
+`booking` · `waiting-room`(+ `-jdbc`)과 `redis-core` 를 조립했다. 모듈 설명은 [booking](modules/booking.md) · [waiting-room](modules/waiting-room.md).
+
+**앱이 잇는 곳** (`…/app/sample/`):
+
+| 자리 | 하는 일 |
+|---|---|
+| `catalog/SampleCatalog` | `PaymentCatalog` 는 하나뿐이라 `itemType == "booking"` 이면 `BookingPayments.itemFor(itemRef = 보류 id, 계정)` - 금액은 자리 가격의 합, 이 호출이 자리를 고정한다 |
+| `orders/SampleOrderListener` | `onPaid` / `onRefunded` 에서 `order.itemType == "booking"` 이면 `BookingPayments` 를 부른다(확정 · 늦은 결제의 다시 잡기 · 자동 환불 / 전액 환불이면 자리 반환) |
+| `booking/BookingSeed` | **로컬 프로필 씨앗**(없는 것만): 풀 「워크숍 20석」(무료, 일반 20석, 한 번에 2석, 대기실 `sample-workshop`)과 「소극장 공연 120석」(KRW, R석 40 × 50,000원 · S석 80 × 30,000원, 한 번에 4석, 대기실 `sample-theater`). 대기실은 둘 다 분당 30명으로 **이미 열려 있다** |
+| `application.yml` | `skeleton.waiting-room.token.key: ${WAITING_ROOM_TOKEN_KEY:}`(보호 환경은 없으면 기동 실패 - 배포 선언의 `secrets` 에 이름을 더한다) · `skeleton.booking.admin.enabled: ${BOOKING_ADMIN_ENABLED:false}` · `management.health.redis.enabled: false`(Redis 가 없다고 `/health` 를 내리지 않는다) |
+| `application-local.yml` | 서명 키 고정 값 · 두 모듈의 운영자 경로 켬(시드 `admin@example.com` 이 ADMIN) |
+
+**Redis**: `redis-core` 가 있으면 배치도 사건을 다른 인스턴스로 잇는다(`docker compose --profile redis up -d`). 없어도 앱은 뜨고 한 대 안의 반영은 그대로다 - 연결을 5초마다 다시 시도하며 경고 로그만 남긴다.
+
+**여정 시험하기** (react e2e 도 이 길): 시드 계정으로 로그인 → 운영자로 `GET /api/v1/admin/booking/pools` 에서 이름으로 풀 id 와 `waitingRoomId` 를 찾는다 → `POST /api/v1/waiting-rooms/{roomId}/tickets` → `GET …/status`(헤더 `X-Ticket`)가 `ADMITTED` 가 되면 `entryToken` → `GET /api/v1/booking/pools/{id}/seats` · `…/seats/stream` · `POST …/hold/seats`(헤더 `X-Entry-Token`) → 무료 풀은 `POST /api/v1/booking/holds/{holdId}/confirm`, 유료 풀은 `POST /api/v1/payments/orders {itemType: "booking", itemRef: holdId, quantity: 1}`.
+**오픈 전 → 오픈**은 시계를 앞당기지 않고 운영자 경로로 만든다: `POST /api/v1/admin/waiting-rooms {scopeKey, opensAt: 몇 초 뒤, prequeueMinutes, perMinute}` 로 새 대기실을 만들고 `POST /api/v1/admin/booking/pools {…, waitingRoomId}` + `…/seats` 로 풀을 만든다 - 오픈 전에는 번호 없이 줄에 서고(`PREQUEUE`), 오픈 시각 뒤 첫 요청이 섞어 번호를 매긴다.
+
+**시험**: `booking/BookingHttpLoadIntegrationTest`(스펙 시험 6) - 진짜 서버(RANDOM_PORT) · 진짜 보안 체인 · 진짜 PostgreSQL 에서 가상 스레드 1000 개가 서로 다른 계정으로 같은 10자리를 HTTP 로 찍는다: 200 은 열 번, 나머지 `409 BOOKING.SEAT_TAKEN`, 5xx 0. 지연(p50 · p95)은 출력만 하고 단정하지 않는다. 예약 모듈만의 조립은 `modules/booking` 의 `noOptionalTest`(대기열 · 결제 · Redis · 스케줄러 없이도 서고 기본 문 · 기본 중계가 선다).
+
 ## 이벤트 · 보상 · 쿠폰 · 결제 면제
 
 네 줄(`reward-jdbc` · `coupon-jdbc` · `point-jdbc` · `campaign-jdbc`)과 이 앱의 작은 조각 `rewards/RewardsSeed` 가 전부다. 흐름: **이벤트가 조건을 판정해 「지급 건」을 기록**(`campaign`, 자기 트랜잭션에서 끝) → **일꾼이 건마다 지급기를 불러 준다**(`reward`, 작업 큐 위, 재시도 · 멱등) → **쿠폰 · 포인트가 각자 지급기로 받는다**(`coupon` · `point`). 이벤트는 쿠폰 · 포인트를 모른다 — 모듈 문서: [campaign](modules/campaign.md) · [reward](modules/reward.md) · [coupon](modules/coupon.md) · [point](modules/point.md).

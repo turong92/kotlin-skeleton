@@ -25,6 +25,8 @@ management:
       exposure:
         include: health, info
   health:
+    redis:
+      enabled: false      # 예약의 Redis 중계(redis-core)는 Redis 가 죽어도 앱이 서 있게 짠 것이다 - 없다고 /health 를 내리지 않는다 (docs/modules/booking.md)
     mail:
       enabled: false      # /health 는 앱 + DB 가 떠 있을 때만 200 — SMTP 릴레이가 죽었다고 컨테이너를 unhealthy 로 만들지 않는다 (docs/deploy.md §3)
 
@@ -354,3 +356,9 @@ skeleton:
     property-id: ""
     credentials: ""
     key-event: ""
+  waiting-room:
+    token:
+      key: ${WAITING_ROOM_TOKEN_KEY:}        # 순번표 · 입장권 서명 키(24자 이상 · 서로 다른 글자 8개 이상). 비우면 보호 환경(stage · prod)에서 기동 실패 - 배포 선언의 secrets 에 WAITING_ROOM_TOKEN_KEY 를 더한다 (docs/sample.md 「예약」)
+  booking:
+    admin:
+      enabled: ${BOOKING_ADMIN_ENABLED:false}   # 이 앱의 선택: 운영자 경로(/api/v1/admin/booking · waiting-rooms)는 배포가 켠다. 로컬은 application-local.yml 이 켠다

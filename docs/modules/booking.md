@@ -67,6 +67,6 @@ pub/sub 는 많아야 한 번이라, 이 인스턴스의 **구독이 끊겼다 �
 | 교체 지점 | `BookingStore`, `BookingAdmission`(문), `BookingSeatRelay`(중계), `BookingRefundQueue`(환불 작업 넣기), `BookingPools`, `BookingHolds`, `BookingPayments`, `BookingController`, `BookingAdminController`, `BookingSeatStreamService`, `BookingExpiryJob`, `bookingHoldExpiryTask`, `bookingRefundJobHandler`, 권한 `bookingPermissionDeclaration` |
 | 마이그레이션 | 없음 (`booking-jdbc` 가 가진다) |
 | 프론트 짝 | 없음 |
-| 테스트 | `modules/booking/src/test` |
+| 테스트 | `modules/booking/src/test`, 모듈만의 조립 `modules/booking/src/noOptionalTest`; 견본 HTTP 부하 `apps/sample` 의 `BookingHttpLoadIntegrationTest` |
 
 [모듈 색인](README.md) · [최소 구성 가이드](../minimal-composition.md)

@@ -88,3 +88,11 @@ skeleton:
     credentials:
       access-key-id: dev
       secret-access-key: dev-secret
+  waiting-room:
+    token:
+      key: local-dev-only-waiting-room-token-key-0123456789   # 로컬 · e2e 전용 고정 값(24자 이상) - 순번표 · 입장권 서명. 운영 값은 환경변수 WAITING_ROOM_TOKEN_KEY
+    admin:
+      enabled: true                      # 로컬 · e2e: 대기실 운영자 경로를 연다 - 시드 admin@example.com 이 ADMIN
+  booking:
+    admin:
+      enabled: true                      # 로컬 · e2e: 예약 운영자 경로를 연다. 씨앗(booking/BookingSeed)이 풀 둘과 대기실 둘을 만든다

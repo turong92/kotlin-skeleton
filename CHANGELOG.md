@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 예약(좌석 지정 · 선착순) + 대기열 (2026-11-03)
+
+- 새 모듈 넷 - `booking`(회차 = 풀의 배치도에서 자리를 직접 찍어 **잡고** · 다시 눌러 **놓고** · 보류 시간(기본 10분, 늘지 않는다)이 지나면 **자동 반환** · 무료 확정 · 본인 취소, 여러 자리는 전부 아니면 전무, 이중 판매 0 의 정본은 DB 자리 줄 조건부 갱신), `booking-jdbc`(PostgreSQL · MySQL, 표 여섯), `waiting-room`(로그인한 사람만 서는 대기열: 오픈 전 줄은 오픈 순간 한 번 섞고 그 뒤는 온 순서, 분당 입장 수, 서명한 순번표 · 입장권), `waiting-room-jdbc`. 모두 **꺼짐이 기본**이고 이 모듈들을 안 붙인 앱의 동작은 그대로다.
+- 배치도는 스냅샷 + SSE 흐름(자리별 버전 `v`, 다시 붙으면 스냅샷)이다. `redis-core` 가 있으면 여러 대를 Redis pub/sub 로 잇는다 - Redis 가 없어도 앱은 뜨고 한 대 안의 반영은 멈추지 않으며, 구독이 끊겼다 다시 붙으면 그 인스턴스의 흐름 연결을 닫아 화면이 스냅샷으로 맞춘다.
+- 결제(`payment` 가 있을 때): `BookingPayments` - 결제를 시작하면 금액을 박고 자리를 고정, 결제되면 확정, 보류 시간이 지난 뒤 늦게 온 결제는 자리를 다시 잡고 못 잡으면 자동 환불(`booking-refund` 작업, 주문당 하나), 같은 보류의 둘째 결제도 환불, 전액 환불이면 자리 반환. 대기열(`waiting-room`)이 있으면 대기실을 단 풀은 입장권을 본다. 운영자 경로(`skeleton.booking.admin.enabled` / `skeleton.waiting-room.admin.enabled`)는 기본 꺼짐(404).
+- 새 마이그레이션 `V20261103100000__booking.sql` · `V20261103110000__waiting_room.sql` · `V20261103120000__booking_payment.sql`(두 방언). 서명 키 `skeleton.waiting-room.token.key`(`WAITING_ROOM_TOKEN_KEY`)는 보호 환경에서 없거나 약하면 기동 실패. 문서 `docs/modules/booking.md` · `waiting-room.md` · `docs/cloud-run-scale-to-zero.md`(미리 깨우기 · 열린 연결 수).
+- `apps/sample`: 예약 조립 - `SampleCatalog` · `SampleOrderListener` 가 `itemType = "booking"` 을 `BookingPayments` 로 잇고, 로컬 씨앗이 풀 둘(「워크숍 20석」 무료 · 「소극장 공연 120석」 유료 R/S)과 대기실 둘(분당 30)을 만든다. 시험 `BookingHttpLoadIntegrationTest`(가상 스레드 1000 개가 HTTP 로 같은 10자리를 찍는다 - 200 열 번 · 나머지 `409 SEAT_TAKEN` · 5xx 0) · `modules/booking` 의 `noOptionalTest`. 프론트 짝 `@skeleton/waiting-room` · `@skeleton/booking`(react-skeleton, 진행 중).
+
 ### 콜드스타트로 로그인이 풀리는 문제 (2026-11-02)
 
 - `auth-session`: 회전이 `markTokenUsed` 전에 후속 토큰을 먼저 넣는다 - 부분 실패(콜드 스타트의 DB 풀 타임아웃 등)가 나도 옛 토큰이 쓰이지 않은 채로 남아 같은 토큰의 재시도가 정상 회전이 된다. 보호 환경에서 `reuse-grace` 가 0 이면 기동 경고(`DeployGuard` 경고, 실패 아님). `apps/api` · `apps/sample` 은 `reuse-grace: 60s`(관행의 상한) - 실제 창은 grace 하나이고, 콜드 스타트로 응답을 잃은 클라이언트는 그 안에 같은 토큰으로 재시도해야 한다. 문서 `docs/cloud-run-scale-to-zero.md` §5.
