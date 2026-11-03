@@ -54,6 +54,8 @@ dependencies {
     implementation(project(":modules:auth-mfa-jdbc"))   // + auth-mfa (api) — 2단계 인증(TOTP). account 위에 얹힌 모듈이라 클래스패스에만 둔다(설정 스니펫 · 모듈 목록 시험), 자동설정은 application.yml 에서 꺼 둔다
     implementation(project(":modules:booking-jdbc"))   // + booking (api) — 예약(좌석 지정 · 선착순): 자리 잡기 · 놓기 · 보류 시간 자동 반환 · 무료 확정 · 배치도 스냅샷 + SSE. 설정 스니펫 · 모듈 목록 시험을 위해 클래스패스에 둔다.
     implementation(project(":modules:waiting-room-jdbc"))   // + waiting-room (api) — 대기열(로그인한 사람만 줄 서기 · 오픈 순간 섞기 · 분당 입장 수 · 서명 입장권). 설정 스니펫 · 모듈 목록 시험을 위해 클래스패스에 둔다.
+    implementation(project(":modules:video-jdbc"))   // + video (api) — 영상 올리기(저장소로 직접 멀티파트 · 이어 올리기 · 정책 · 용량 · 청소, 켜기 skeleton.video.enabled). 설정 스니펫 · 모듈 목록 시험을 위해 클래스패스에 둔다.
+    implementation(project(":modules:video-cloudrun"))   // 자리만 있는 모듈(Cloud Run 깨우기는 다음 조각) — 모듈 목록 시험을 위해 클래스패스에 둔다.
     implementation(project(":modules:coupon-jdbc"))   // + coupon (api) — 쿠폰 정의 · 쿠폰함 · 공용 코드, 보상 지급기 `coupon` · 결제 할인 수단 `coupon`. 실제 흐름은 apps/sample
     implementation(project(":modules:campaign-jdbc"))   // + campaign (api) — 이벤트(출석 · 초대) 저장. 이벤트는 운영자가 만든다 — 아무것도 심지 않으면 비어 있다. 실제 흐름은 apps/sample
     implementation(project(":modules:catalog-jdbc"))   // + catalog (api) — 상품 · 가격 표(월 · 연 · 단건 · 행사가 · 통화별)와 결제 계약 구현(`SubscriptionPlans` · `PaymentCatalog` · `ProviderPriceRefs`). 운영자가 만들기 전에는 표가 비어 살 수 있는 것이 없다. 실제 흐름은 apps/sample

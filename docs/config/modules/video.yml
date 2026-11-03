@@ -1,0 +1,11 @@
+# video — 영상 올리기(저장소로 직접 올리는 멀티파트 · 이어 올리기). 저장은 video-jdbc. 모듈 기본은 꺼짐.
+skeleton:
+  video:
+    enabled: false         # true 로 켜면 VideoStore · VideoWorkerStore(video-jdbc)와 PresignedStorage(storage-s3)가 있어야 기동한다
+    prefix: videos         # 영상이 쓰는 저장소 키의 맨 앞 구간 — 업로드(skeleton.storage.web.key-prefix) · 공개(…public.prefix) 구간과 겹치면 기동 실패
+    max-bytes: 4GB         # 올리는 파일 하나의 상한 (조각 16MB × 256)
+    part-size: 16MB        # 멀티파트 조각 크기 (마지막 조각 말고는 5MB 이상 · 조각 수는 10,000 이하)
+    max-in-flight: 2       # 한 계정이 동시에 진행하는 영상 수 (올리는 중 ~ 변환 중)
+    stale-upload-age: 1h   # 이 시간 움직임이 없는 올리기는 청소(5분마다)가 중단하고 FAILED(UPLOAD_ABANDONED) 로 둔다
+    http:
+      enabled: true        # false 면 /api/v1/videos 를 등록하지 않는다 (앱이 자기 컨트롤러를 둘 때)

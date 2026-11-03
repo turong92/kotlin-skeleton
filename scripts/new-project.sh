@@ -2,7 +2,7 @@
 # 새 프로젝트 한 줄 찍어내기: 복사 → 모듈 고르기 → (선택) DB 바꾸기 → 의존성 · 설정 블록 더하기 → rename.
 #
 #   scripts/new-project.sh <target-dir> <root-package> <config-prefix> <ClassPrefix> \
-#       [--modules a,b,c] [--db postgresql|mysql] [--with-workbench] [--with-sample]
+#       [--modules a,b,c] [--db postgresql|mysql] [--with-workbench] [--with-sample] [--with-video-worker]
 #
 #   예) scripts/new-project.sh ~/work/acme com.acme.shop acme Acme
 #       scripts/new-project.sh ~/work/acme com.acme.shop acme Acme --modules job-queue-jdbc,storage-s3,scheduler
@@ -12,6 +12,7 @@
 #   1. 이 레포를 <target-dir> 로 복사한다 (build · .gradle · .kotlin · .git · .superpowers · .claude · node_modules · .env 제외).
 #      apps/api(스타터)는 남기고 apps/workbench 는 --with-workbench 일 때만 남긴다
 #      (워크벤치는 모든 모듈을 쓰므로 그 경우 모든 모듈이 남고 PostgreSQL 전용이다).
+#      apps/video-worker(영상 변환 일꾼 — 별도 컨테이너 이미지)는 기본으로 **빠진다** — --with-video-worker 일 때만 남는다.
 #      apps/sample(제품 모양 예시 "Notes", docs/sample.md)은 기본으로 **빠진다** — --with-sample 일 때만 남고, 그 앱이 쓰는 모듈이 닫힘에 더해진다(PostgreSQL 전용).
 #   2. 모듈 = 스타터의 모듈 + --modules, 모듈끼리의 project(":modules:x") 의존(api · implementation · runtimeOnly)으로 닫는다.
 #      테스트에만 쓰는 모듈 의존(testImplementation)도 테스트가 컴파일되려면 필요하므로 따라온다 — 따라온 이유를 출력한다.
@@ -32,7 +33,7 @@ SRC="$(cd "$(dirname "$0")/.." && pwd -P)"
 usage() {
   cat <<'EOF'
 usage: scripts/new-project.sh <target-dir> <root-package> <config-prefix> <ClassPrefix>
-                              [--modules a,b,c] [--db postgresql|mysql] [--with-workbench] [--with-sample] [--dry-run]
+                              [--modules a,b,c] [--db postgresql|mysql] [--with-workbench] [--with-sample] [--with-video-worker] [--dry-run]
 
   <target-dir>     새로 만들 디렉토리 (이미 있으면 거부)
   <root-package>   예: com.acme.shop
@@ -42,6 +43,7 @@ usage: scripts/new-project.sh <target-dir> <root-package> <config-prefix> <Class
   --db             postgresql(기본) | mysql
   --with-workbench apps/workbench(모든 모듈 데모)도 남긴다 — 모든 모듈이 남고 PostgreSQL 전용
   --with-sample    apps/sample(제품 모양 예시 앱 "Notes" — 새 기능을 어떻게 얹는지 보는 정본)도 남긴다 — 그 앱의 모듈이 더해지고 PostgreSQL 전용
+  --with-video-worker apps/video-worker(영상 변환 일꾼 이미지)도 남긴다 — 서버 모듈은 따로 `--modules video,video-jdbc` 로 고른다
   --dry-run        고른 모듈과 따라온 이유만 보이고 아무것도 만들지 않는다
 EOF
 }
@@ -71,6 +73,7 @@ MODULES_ARG=""
 DB="postgresql"
 WITH_WORKBENCH=0
 WITH_SAMPLE=0
+WITH_VIDEO_WORKER=0
 DRY_RUN=0
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -80,6 +83,7 @@ while [ $# -gt 0 ]; do
     --db=*) DB="${1#--db=}"; shift ;;
     --with-workbench) WITH_WORKBENCH=1; shift ;;
     --with-sample) WITH_SAMPLE=1; shift ;;
+    --with-video-worker) WITH_VIDEO_WORKER=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     -h|--help) usage; exit 0 ;;
     --*) die_usage "unknown option: $1" ;;
@@ -220,7 +224,7 @@ if in_list campaign "$SELECTED_SORTED"; then
 fi
 
 echo "→ $TARGET"
-echo "  package $PKG, prefix $PREFIX, class prefix $CLASS, db $DB$([ "$WITH_WORKBENCH" = 1 ] && echo ', with workbench')$([ "$WITH_SAMPLE" = 1 ] && echo ', with sample')"
+echo "  package $PKG, prefix $PREFIX, class prefix $CLASS, db $DB$([ "$WITH_WORKBENCH" = 1 ] && echo ', with workbench')$([ "$WITH_SAMPLE" = 1 ] && echo ', with sample')$([ "$WITH_VIDEO_WORKER" = 1 ] && echo ', with video worker')"
 echo "  modules ($(printf '%s\n' "$SELECTED_SORTED" | wc -l | tr -d ' ')): $(printf '%s\n' "$SELECTED_SORTED" | tr '\n' ' ')"
 [ -z "$REQUESTED" ] || echo "  requested: $(printf '%s\n' "$REQUESTED" | tr '\n' ' ')"
 printf '%s' "$REASONS" | sed 's/^/  /'
@@ -252,6 +256,7 @@ rm -f apps/api/src/test/kotlin/dev/sumin/skeleton/app/api/MultiProject*.kt apps/
 
 # ---------------------------------------------------------------------------------------------------- 지우기
 [ "$WITH_WORKBENCH" = 1 ] || { rm -rf apps/workbench; perl -ni -e 'print unless /^include\(":apps:workbench"\)\s*$/' settings.gradle.kts; }
+[ "$WITH_VIDEO_WORKER" = 1 ] || { rm -rf apps/video-worker; perl -ni -e 'print unless /^include\(":apps:video-worker"\)\s*$/' settings.gradle.kts; }
 # 네이티브 이미지(docs/native-image.md): 스켈레톤 자신의 시험용 조립(tools/native-check)과 그 흐름 시험(scripts/native-smoke.sh)은 새 프로젝트에 가지 않는다.
 # 빌드 · 시험 도구(scripts/native-build.sh · scripts/native-test.sh · Dockerfile.native)는 남는다 — 앱(apps/api)을 대상으로 쓰고, 프로젝트가 자기 핵심 흐름 시험을 `--smoke` 로 붙인다.
 # 워크플로는 손으로 돌리는 것(workflow_dispatch)만 남긴다: 프로젝트가 네이티브로 가기로 하면 릴리스 태그 · 의존성 파일 PR 트리거를 켠다(스켈레톤의 .github/workflows/native.yml 이 틀).
@@ -405,7 +410,7 @@ fi
 
 # ---------------------------------------------------------------------------------------------------- 기능 카탈로그 (고른 모듈 · 앱만 남긴다 — 생성물은 rename 이 새 이름으로 다시 만든다)
 if [ -f capabilities.json ] && [ -f scripts/build-capabilities.pl ]; then
-  CAT_APPS="api"; [ "$WITH_WORKBENCH" = 0 ] || CAT_APPS="$CAT_APPS workbench"; [ "$WITH_SAMPLE" = 0 ] || CAT_APPS="$CAT_APPS sample"
+  CAT_APPS="api"; [ "$WITH_WORKBENCH" = 0 ] || CAT_APPS="$CAT_APPS workbench"; [ "$WITH_SAMPLE" = 0 ] || CAT_APPS="$CAT_APPS sample"; [ "$WITH_VIDEO_WORKER" = 0 ] || CAT_APPS="$CAT_APPS video-worker"
   perl "$SRC/scripts/new-project.d/stamp-capabilities.pl" --selected "$(printf '%s ' $SELECTED_SORTED)" --apps "$CAT_APPS" --db "$DB"
 fi
 

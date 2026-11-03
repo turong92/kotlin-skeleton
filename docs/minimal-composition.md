@@ -104,6 +104,7 @@ fails when this table and the prefixes found in module code differ.
 | `inquiry` | `skeleton.inquiry` |
 | `booking` | `skeleton.booking` |
 | `waiting-room` | `skeleton.waiting-room` |
+| `video` | `skeleton.video` |
 | `auth` | `skeleton.auth` |
 | `auth-magic-link` | `skeleton.auth-magic-link` |
 | `auth-mfa` | `skeleton.auth-mfa` |
@@ -220,6 +221,9 @@ test proving a context with only that module (and its declared dependencies) boo
 | `booking-jdbc` | yes | a `DataSource` + one `db-*` module (+ its migration `booking`, as above) | — |
 | `waiting-room` | wired only once a `WaitingRoomStore` exists (then the server API `WaitingRooms`; HTTP `/api/v1/waiting-rooms` for a servlet app with Spring Security; no room exists until one is created; in a protected env (stage · prod) the signing keys `skeleton.waiting-room.token.key` must be set) | `waiting-room-jdbc` | `spring-security-core` (HTTP; compile-only) |
 | `waiting-room-jdbc` | yes | a `DataSource` + one `db-*` module (+ its migration `waiting_room`, as above) | — |
+| `video` | off until `skeleton.video.enabled=true` (then the upload service, owner-only policy, open quota, cleanup; HTTP `/api/v1/videos` for a servlet app with Spring Security) | when switched on: a `VideoStore` + `VideoWorkerStore` (`video-jdbc`) and a `PresignedStorage` (`storage-s3`) — startup fails naming the missing bean; the video key prefix must not overlap the upload / public prefixes | `scheduler` (the 5-minute abandoned-upload sweep; compile-only), `spring-security-core` (HTTP; compile-only) |
+| `video-jdbc` | yes | a `DataSource` + one `db-*` module (+ its migration `videos`, as above) | — |
+| `video-cloudrun` | nothing yet (a placeholder for the Cloud Run waker) | — | — |
 | `job-queue-jdbc` | yes | a `DataSource` + one `db-*` module (its `jobs` migration is picked up by `spring.flyway.locations: classpath:db/migration/{vendor}`) | — |
 | `json` | yes | nothing | — |
 | `migration` / `migration-flyway` | yes | Flyway on the classpath (`spring-boot-starter-flyway`) | — |

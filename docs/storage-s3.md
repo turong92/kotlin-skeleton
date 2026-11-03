@@ -137,7 +137,9 @@ Set `cacheControl = "public, max-age=31536000, immutable"` on the request to sig
 `PresignedUrl.headers`; the browser must send exactly that value). Unset (the default) signs nothing.
 
 Use multipart when large files need resumable part uploads. The skeleton exposes
-start, part presign, complete, and abort as stable DTOs.
+start, part presign, complete, and abort as stable DTOs. `PresignedStorage.listParts` returns every part already held for an open
+multipart upload (S3 `ListParts`, paged) so a reloaded page can upload only the missing ones; a storage written before it existed
+refuses with `UnsupportedOperationException` instead of answering empty (used by `video`).
 
 ## Testing Posture
 

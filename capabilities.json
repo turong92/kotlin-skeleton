@@ -3864,6 +3864,96 @@
       }
     },
     {
+      "id": "video",
+      "kind": "module",
+      "module": "video",
+      "path": "modules/video",
+      "status": "experimental",
+      "summary": "영상 올리기 — 브라우저가 파일을 객체 저장소(R2 등)로 직접 멀티파트로 올리고(조각 주소 · 새로 고친 뒤 빠진 조각만 이어 올리기 · 마침에서 HEAD 크기 확인, 멱등) 서버는 상태(UPLOADING → UPLOADED → QUEUED …) · 정책(VideoAccessPolicy, 기본 올린 계정만) · 용량(VideoQuota) · 버려진 올리기 청소(1시간)만 맡는다. 영상마다 공개/비공개를 올릴 때 고른다. 파일은 4GB(16MB × 256 조각)까지. 변환(HLS 원본 단 · 호환 · 사다리) · 일꾼 · 재생은 같은 묶음의 다음 조각. 켜기 skeleton.video.enabled(모듈 기본 꺼짐), 저장은 video-jdbc.",
+      "starter": false,
+      "newProjectFlag": "--modules video",
+      "autoIncludes": ["scheduler", "storage"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": ["scheduler"]
+      },
+      "config": {
+        "prefixes": ["skeleton.video"],
+        "snippet": "docs/config/modules/video.yml"
+      },
+      "basePaths": ["/api/v1/videos"],
+      "secrets": [],
+      "docs": ["docs/modules/video.md"],
+      "frontend": null,
+      "notFor": [
+        "꺼진 채 시작한다 — 앱 yml 이 skeleton.video.enabled=true 로 켠다. 켜면 video-jdbc(저장)와 storage-s3(객체 저장소)가 있어야 기동한다",
+        "지금 조각은 올리기까지다 — 변환 · 일꾼 API · 재생 허가는 다음 조각이 같은 모듈에 얹는다",
+        "받아들이는 영상은 H.264 · HEVC mp4 · mov 만이다(webm · VP9 · AV1 은 다음)",
+        "올린 파일 하나 4GB 까지 — 조각 크기를 키우지 않는 한 그 위는 413 이다",
+        "누가 올릴 수 있는지 · 용량 규칙(요금제 등)은 앱이 VideoAccessPolicy · VideoQuota 빈으로 정한다 — 모듈은 뜻을 모른다"
+      ],
+      "keywords": {
+        "ko": ["영상 올리기", "동영상 업로드", "영상", "이어 올리기", "큰 파일 올리기", "멀티파트 업로드"],
+        "en": ["video upload", "multipart upload", "resumable upload", "large file upload", "video"]
+      }
+    },
+    {
+      "id": "video-cloudrun",
+      "kind": "module",
+      "module": "video-cloudrun",
+      "path": "modules/video-cloudrun",
+      "status": "experimental",
+      "summary": "(자리만 — 구현은 다음 조각) 일이 생기면 Google Cloud Run 작업을 깨우는 VideoWaker 구현. 홈서버 컨테이너나 아무 기계에서 같은 일꾼 이미지를 도는 길은 이 모듈이 필요 없다.",
+      "starter": false,
+      "newProjectFlag": "--modules video-cloudrun",
+      "autoIncludes": ["scheduler", "storage", "video"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/video-cloudrun.md"],
+      "frontend": null,
+      "notFor": ["지금은 코드가 없다 — 카탈로그와 문서의 자리만 있다", "Cloud Run 이 아닌 곳(홈서버 컨테이너 · 아무 기계)에서 일꾼을 돌리는 데는 필요 없다"],
+      "keywords": {
+        "ko": ["클라우드 런", "영상 변환 깨우기"],
+        "en": ["cloud run", "wake video worker"]
+      }
+    },
+    {
+      "id": "video-jdbc",
+      "kind": "module",
+      "module": "video-jdbc",
+      "path": "modules/video-jdbc",
+      "status": "experimental",
+      "summary": "영상 저장을 DB 에 둔다 (PostgreSQL · MySQL) — 표 셋(videos · video_workers · video_wake_runs), 상태 전이는 한 문장 조건부 갱신이라 동시에 온 호출 중 하나만 이긴다.",
+      "starter": false,
+      "newProjectFlag": "--modules video-jdbc",
+      "autoIncludes": ["scheduler", "storage", "video"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/video-jdbc.md"],
+      "frontend": null,
+      "notFor": [
+        "DataSource · db-* 모듈과 이 모듈의 마이그레이션이 적용된 스키마가 필요하다",
+        "video 를 켜지 않으면(skeleton.video.enabled) 표만 만들고 쓰이지 않는다"
+      ],
+      "keywords": {
+        "ko": ["영상 저장소", "영상 DB"],
+        "en": ["video storage", "video repository"]
+      }
+    },
+    {
       "id": "waiting-room",
       "kind": "module",
       "module": "waiting-room",
@@ -4134,6 +4224,36 @@
       }
     },
     {
+      "id": "app-video-worker",
+      "kind": "app",
+      "module": null,
+      "path": "apps/video-worker",
+      "status": "experimental",
+      "summary": "(자리만 — 일꾼은 다음 조각에서 옮겨 온다) 영상 변환 일꾼 — Kotlin + ffmpeg 이미지가 서버의 일꾼 API(/api/internal/video/*)에서 일을 집어 가 원본 단(재인코딩 없는 HLS 조각) · 호환 · 사다리를 만든다. 저장소 키를 갖지 않고 서버가 서명한 GET · PUT 만 쓴다.",
+      "starter": false,
+      "newProjectFlag": "--with-video-worker",
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/video.md"],
+      "frontend": null,
+      "notFor": [
+        "지금은 코드가 없다 — 카탈로그 자리만 있다",
+        "서버 모듈이 아니다 — 별도 컨테이너 이미지로 돌고 서버 API 한 장만 안다",
+        "새 프로젝트에는 복사되지 않는다(스켈레톤 전용 — 찍는 방법은 일꾼이 들어오는 조각에서 정한다)"
+      ],
+      "keywords": {
+        "ko": ["영상 변환 일꾼", "ffmpeg 일꾼", "HLS 변환"],
+        "en": ["video worker", "ffmpeg worker", "hls transcode"]
+      }
+    },
+    {
       "id": "app-workbench",
       "kind": "app",
       "module": null,
@@ -4178,10 +4298,10 @@
         "dashboard-cloudflare",
         "dashboard-ga",
         "dashboard-jdbc",
-        "inquiry",
-        "inquiry-jdbc",
         "db-mysql",
         "event-kafka",
+        "inquiry",
+        "inquiry-jdbc",
         "json",
         "notification",
         "notification-broadcast",
@@ -4225,6 +4345,9 @@
         "storage-image-jdbc",
         "storage-image-pdfbox",
         "storage-s3",
+        "video",
+        "video-cloudrun",
+        "video-jdbc",
         "waiting-room",
         "waiting-room-jdbc",
         "workspace",

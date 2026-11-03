@@ -170,6 +170,9 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `storage-image-pdfbox` | PDF 첫 쪽 썸네일 — storage-image 의 변환 작업에서 PDFBox 로 1쪽을 그린다(쪽 수 · 크기 · 렌더 시간 상한, 기본 꺼짐). | `--modules storage-image-pdfbox` | PDF 썸네일, PDF 미리보기 / pdf thumbnail, pdf preview | — |
 | `storage-s3` | S3 호환 저장소(AWS S3 · Cloudflare R2 · MinIO) — presign PUT/GET · 멀티파트 · 복사 · 일괄 삭제, 공개 URL RAW \| OPAQUE. | `--modules storage-s3` | S3, R2, 클라우드 스토리지, 파일 저장소, 이미지 저장 / s3, r2, cloudflare r2, minio, object storage | `@skeleton/storage` |
 | `time` | 글로벌 시간 — 요청마다 뷰어 시간대 · 로케일 · ZonedMoment(미래 현지 시각) · 사람이 읽는 이중 포맷 · 국가 → 시간대. | 스타터(apps/api)에 기본 포함 | 시간대, 타임존, 날짜 표시, 현지 시간, 예약 시각, 글로벌 / timezone, time zone, locale, zoned moment, date format, global time | `@skeleton/time` |
+| `video` | 영상 올리기 — 브라우저가 파일을 객체 저장소(R2 등)로 직접 멀티파트로 올리고(조각 주소 · 새로 고친 뒤 빠진 조각만 이어 올리기 · 마침에서 HEAD 크기 확인, 멱등) 서버는 상태(UPLOADING → UPLOADED → QUEUED …) · 정책(VideoAccessPolicy, 기본 올린 계정만) · 용량(VideoQuota) · 버려진 올리기 청소(1시간)만 맡는다. 영상마다 공개/비공개를 올릴 때 고른다. 파일은 4GB(16MB × 256 조각)까지. 변환(HLS 원본 단 · 호환 · 사다리) · 일꾼 · 재생은 같은 묶음의 다음 조각. 켜기 skeleton.video.enabled(모듈 기본 꺼짐), 저장은 video-jdbc. | `--modules video` | 영상 올리기, 동영상 업로드, 영상, 이어 올리기, 큰 파일 올리기, 멀티파트 업로드 / video upload, multipart upload, resumable upload, large file upload, video | — |
+| `video-cloudrun` | (자리만 — 구현은 다음 조각) 일이 생기면 Google Cloud Run 작업을 깨우는 VideoWaker 구현. 홈서버 컨테이너나 아무 기계에서 같은 일꾼 이미지를 도는 길은 이 모듈이 필요 없다. | `--modules video-cloudrun` | 클라우드 런, 영상 변환 깨우기 / cloud run, wake video worker | — |
+| `video-jdbc` | 영상 저장을 DB 에 둔다 (PostgreSQL · MySQL) — 표 셋(videos · video_workers · video_wake_runs), 상태 전이는 한 문장 조건부 갱신이라 동시에 온 호출 중 하나만 이긴다. | `--modules video-jdbc` | 영상 저장소, 영상 DB / video storage, video repository | — |
 | `waiting-room` | 대기열(가상 대기실) — 로그인한 사람만 줄을 선다(1인 1순번 = 계정 1개 1순번). 오픈 전 줄은 오픈 순간 한 번 무작위로 섞고 그 뒤는 온 순서, 분당 입장 수(속도 구간, 멈춤 가능)만 정한다. 순번표 · 입장권은 계정에 묶인 서명 토큰(키 돌리기 가능, 보호 환경에서 키가 없으면 기동 실패)이고 입장권 검사 WaitingRooms.requireEntry 는 DB 를 읽지 않는다. 저장은 waiting-room-jdbc. | `--modules waiting-room` | 대기열, 대기실, 가상 대기실, 줄 서기, 접속 폭주 / waiting room, virtual queue, queue, traffic spike | — |
 | `waiting-room-jdbc` | 대기열을 DB 에 둔다 (PostgreSQL · MySQL) — 표 셋(대기실 · 속도 구간 · 순번표). 번호는 방 줄 잠금 뒤에 줘서 1..n 빈틈 없이, 섞기는 조건부 갱신을 이긴 한 번만. | `--modules waiting-room-jdbc` | 대기열 저장소, 대기열 DB / waiting room storage, queue repository | — |
 | `workspace` | 워크스페이스(팀 · 조직) — 만들기 · 소유자/관리자/멤버 역할 · 주소(slug, 바꿔도 옛 주소가 따라온다) · 멤버 관리 · 소유권 이전 · 메일 링크 초대(만료 · 재발송 · 취소 · 확인된 이메일로만 수락, 켜야 한다), 그리고 요청 헤더 `X-Workspace-Id` 로 앱 데이터를 묶는 경계 `CurrentWorkspace`. 좌석 상한은 앱이 정한다. 운영자 읽기 경로(목록 · 검색 · 상세, `workspace.read`)는 꺼져 있다가 앱이 켠다. | `--modules workspace,workspace-jdbc` | 워크스페이스, 팀, 조직, 멤버 역할, 소유권 이전, 멀티 테넌트 / workspace, team, organization, tenant, member roles, ownership transfer | `@skeleton/workspace` |
@@ -181,6 +184,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 |---|---|---|---|---|
 | `app-api` | 스타터 — 새 프로젝트가 복사해 시작하는 최소 조립(platform · auth · persistence-jdbc · db-postgresql · migration-flyway · time)과 HelloController 하나. Redis · Kafka · S3 · 메일 없이 부팅한다. | 스타터(apps/api)에 기본 포함 | 스타터, 시작 템플릿, 새 앱, 최소 구성, 기본 앱 / starter, boilerplate, minimal app, new app, template |  |
 | `app-sample` | 참조 앱 Notes — 로그인한 사람이 첨부 있는 노트를 관리하는 제품 모양의 작은 앱(스타터 + idempotency · notification-jdbc/sse · storage-s3 · storage-image(+jdbc · imageio) · job-queue-jdbc · board · author-profile · alert-jdbc · search-jdbc 의 노트·상품 검색 · review-jdbc 의 상품 리뷰(산 사람만, 결제 → 구매 신호, 리뷰 → 보상) · payment-jdbc/payment-toss 의 결제 「응원하기」 · booking-jdbc/waiting-room-jdbc 의 좌석 예약 + 대기열 + 결제 · redis-core 의 배치도 중계). 로그인 아이디를 켜고 이메일은 쓰기 때 받는다. 새 기능은 이 앱의 한 조각을 따라 한다. | `--with-sample` | 참조 앱, 예제 앱, 샘플, 노트 앱, 제품 모양 예시, 결제 예제, 응원하기 / sample app, reference app, example, notes app, payment example, cheer |  |
+| `app-video-worker` | (자리만 — 일꾼은 다음 조각에서 옮겨 온다) 영상 변환 일꾼 — Kotlin + ffmpeg 이미지가 서버의 일꾼 API(/api/internal/video/*)에서 일을 집어 가 원본 단(재인코딩 없는 HLS 조각) · 호환 · 사다리를 만든다. 저장소 키를 갖지 않고 서버가 서명한 GET · PUT 만 쓴다. | `--with-video-worker` | 영상 변환 일꾼, ffmpeg 일꾼, HLS 변환 / video worker, ffmpeg worker, hls transcode | — |
 | `app-workbench` | 데모 — 모든 모듈을 함께 얹고 샘플 엔드포인트(/api/v1/skeleton · /api/v1/examples)와 통합 테스트로 모듈이 공존함을 증명한다(react-skeleton 워크벤치 화면의 백엔드). | `--with-workbench` | 워크벤치, 모듈 데모, 전체 모듈, 모든 모듈 함께 / workbench, demo, all modules, module smoke test |  |
 
 ### 스크립트 (`scripts/*`)
@@ -1705,6 +1709,48 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 스타터가 이미 가진다
 - 키워드: 시간대, 타임존, 날짜 표시, 현지 시간, 예약 시각, 글로벌 / timezone, time zone, locale, zoned moment, date format, global time
 
+### `video` — 영상 올리기 — 브라우저가 파일을 객체 저장소(R2 등)로 직접 멀티파트로 올리고(조각 주소 · 새로 고친 뒤 빠진 조각만 이어 올리기 · 마침에서 HEAD 크기 확인, 멱등) 서버는 상태(UPLOADING → UPLOADED → QUEUED …) · 정책(VideoAccessPolicy, 기본 올린 계정만) · 용량(VideoQuota) · 버려진 올리기 청소(1시간)만 맡는다. 영상마다 공개/비공개를 올릴 때 고른다. 파일은 4GB(16MB × 256 조각)까지. 변환(HLS 원본 단 · 호환 · 사다리) · 일꾼 · 재생은 같은 묶음의 다음 조각. 켜기 skeleton.video.enabled(모듈 기본 꺼짐), 저장은 video-jdbc.
+
+- 종류 · 상태: module · experimental — 위치 `modules/video`
+- 켜는 법: `--modules video`
+- 의존 한 줄: `implementation(project(":modules:video"))`
+- 자동으로 따라온다: `storage`
+- 소스만 따라온다(컴파일 전용 — 런타임 클래스패스에는 없다. 쓰려면 apps/api 에 의존 한 줄을 더한다): `scheduler`
+- 설정 접두사 `skeleton.video` — 키와 기본값 `docs/config/modules/video.yml`
+- HTTP 경로: `/api/v1/videos`
+- 문서: `docs/modules/video.md`
+- 쓰지 않는 경우:
+  - 꺼진 채 시작한다 — 앱 yml 이 skeleton.video.enabled=true 로 켠다. 켜면 video-jdbc(저장)와 storage-s3(객체 저장소)가 있어야 기동한다
+  - 지금 조각은 올리기까지다 — 변환 · 일꾼 API · 재생 허가는 다음 조각이 같은 모듈에 얹는다
+  - 받아들이는 영상은 H.264 · HEVC mp4 · mov 만이다(webm · VP9 · AV1 은 다음)
+  - 올린 파일 하나 4GB 까지 — 조각 크기를 키우지 않는 한 그 위는 413 이다
+  - 누가 올릴 수 있는지 · 용량 규칙(요금제 등)은 앱이 VideoAccessPolicy · VideoQuota 빈으로 정한다 — 모듈은 뜻을 모른다
+- 키워드: 영상 올리기, 동영상 업로드, 영상, 이어 올리기, 큰 파일 올리기, 멀티파트 업로드 / video upload, multipart upload, resumable upload, large file upload, video
+
+### `video-cloudrun` — (자리만 — 구현은 다음 조각) 일이 생기면 Google Cloud Run 작업을 깨우는 VideoWaker 구현. 홈서버 컨테이너나 아무 기계에서 같은 일꾼 이미지를 도는 길은 이 모듈이 필요 없다.
+
+- 종류 · 상태: module · experimental — 위치 `modules/video-cloudrun`
+- 켜는 법: `--modules video-cloudrun`
+- 의존 한 줄: `implementation(project(":modules:video-cloudrun"))`
+- 자동으로 따라온다: `scheduler`, `storage`, `video`
+- 문서: `docs/modules/video-cloudrun.md`
+- 쓰지 않는 경우:
+  - 지금은 코드가 없다 — 카탈로그와 문서의 자리만 있다
+  - Cloud Run 이 아닌 곳(홈서버 컨테이너 · 아무 기계)에서 일꾼을 돌리는 데는 필요 없다
+- 키워드: 클라우드 런, 영상 변환 깨우기 / cloud run, wake video worker
+
+### `video-jdbc` — 영상 저장을 DB 에 둔다 (PostgreSQL · MySQL) — 표 셋(videos · video_workers · video_wake_runs), 상태 전이는 한 문장 조건부 갱신이라 동시에 온 호출 중 하나만 이긴다.
+
+- 종류 · 상태: module · experimental — 위치 `modules/video-jdbc`
+- 켜는 법: `--modules video-jdbc`
+- 의존 한 줄: `implementation(project(":modules:video-jdbc"))`
+- 자동으로 따라온다: `scheduler`, `storage`, `video`
+- 문서: `docs/modules/video-jdbc.md`
+- 쓰지 않는 경우:
+  - DataSource · db-* 모듈과 이 모듈의 마이그레이션이 적용된 스키마가 필요하다
+  - video 를 켜지 않으면(skeleton.video.enabled) 표만 만들고 쓰이지 않는다
+- 키워드: 영상 저장소, 영상 DB / video storage, video repository
+
 ### `waiting-room` — 대기열(가상 대기실) — 로그인한 사람만 줄을 선다(1인 1순번 = 계정 1개 1순번). 오픈 전 줄은 오픈 순간 한 번 무작위로 섞고 그 뒤는 온 순서, 분당 입장 수(속도 구간, 멈춤 가능)만 정한다. 순번표 · 입장권은 계정에 묶인 서명 토큰(키 돌리기 가능, 보호 환경에서 키가 없으면 기동 실패)이고 입장권 검사 WaitingRooms.requireEntry 는 DB 를 읽지 않는다. 저장은 waiting-room-jdbc.
 
 - 종류 · 상태: module · experimental — 위치 `modules/waiting-room`
@@ -1788,11 +1834,22 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - PostgreSQL 전용이다(--db mysql 과 함께 쓸 수 없다)
 - 키워드: 참조 앱, 예제 앱, 샘플, 노트 앱, 제품 모양 예시, 결제 예제, 응원하기 / sample app, reference app, example, notes app, payment example, cheer
 
+### `app-video-worker` — (자리만 — 일꾼은 다음 조각에서 옮겨 온다) 영상 변환 일꾼 — Kotlin + ffmpeg 이미지가 서버의 일꾼 API(/api/internal/video/*)에서 일을 집어 가 원본 단(재인코딩 없는 HLS 조각) · 호환 · 사다리를 만든다. 저장소 키를 갖지 않고 서버가 서명한 GET · PUT 만 쓴다.
+
+- 종류 · 상태: app · experimental — 위치 `apps/video-worker`
+- 켜는 법: `--with-video-worker`
+- 문서: `docs/modules/video.md`
+- 쓰지 않는 경우:
+  - 지금은 코드가 없다 — 카탈로그 자리만 있다
+  - 서버 모듈이 아니다 — 별도 컨테이너 이미지로 돌고 서버 API 한 장만 안다
+  - 새 프로젝트에는 복사되지 않는다(스켈레톤 전용 — 찍는 방법은 일꾼이 들어오는 조각에서 정한다)
+- 키워드: 영상 변환 일꾼, ffmpeg 일꾼, HLS 변환 / video worker, ffmpeg worker, hls transcode
+
 ### `app-workbench` — 데모 — 모든 모듈을 함께 얹고 샘플 엔드포인트(/api/v1/skeleton · /api/v1/examples)와 통합 테스트로 모듈이 공존함을 증명한다(react-skeleton 워크벤치 화면의 백엔드).
 
 - 종류 · 상태: app · stable — 위치 `apps/workbench`
 - 켜는 법: `--with-workbench`
-- 자동으로 따라온다: `alert-jdbc`, `api-key`, `api-key-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-mfa`, `auth-mfa-jdbc`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `badge`, `badge-jdbc`, `board`, `board-jdbc`, `booking`, `booking-jdbc`, `campaign`, `campaign-jdbc`, `catalog`, `catalog-jdbc`, `config-aws-ssm`, `coupon`, `coupon-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `inquiry`, `inquiry-jdbc`, `db-mysql`, `event-kafka`, `json`, `notification`, `notification-broadcast`, `notification-broadcast-jdbc`, `notification-fcm`, `notification-jdbc`, `notification-legal`, `notification-push`, `notification-push-jdbc`, `notification-push-legal`, `notification-slack`, `notification-sse`, `notification-webpush`, `notification-websocket`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `point`, `point-jdbc`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `review`, `review-jdbc`, `reward`, `reward-jdbc`, `scheduler`, `search`, `search-jdbc`, `storage`, `storage-image`, `storage-image-imageio`, `storage-image-imgproxy`, `storage-image-jdbc`, `storage-image-pdfbox`, `storage-s3`, `waiting-room`, `waiting-room-jdbc`, `workspace`, `workspace-jdbc`
+- 자동으로 따라온다: `alert-jdbc`, `api-key`, `api-key-jdbc`, `async`, `async-notification`, `auth-magic-link`, `auth-mfa`, `auth-mfa-jdbc`, `auth-social-google`, `auth-social-kakao`, `auth-social-naver`, `auth-social-oidc`, `auth-social-x`, `author-profile`, `author-profile-jdbc`, `authz`, `authz-jdbc`, `badge`, `badge-jdbc`, `board`, `board-jdbc`, `booking`, `booking-jdbc`, `campaign`, `campaign-jdbc`, `catalog`, `catalog-jdbc`, `config-aws-ssm`, `coupon`, `coupon-jdbc`, `crypto`, `dashboard`, `dashboard-cloudflare`, `dashboard-ga`, `dashboard-jdbc`, `db-mysql`, `event-kafka`, `inquiry`, `inquiry-jdbc`, `json`, `notification`, `notification-broadcast`, `notification-broadcast-jdbc`, `notification-fcm`, `notification-jdbc`, `notification-legal`, `notification-push`, `notification-push-jdbc`, `notification-push-legal`, `notification-slack`, `notification-sse`, `notification-webpush`, `notification-websocket`, `payment`, `payment-jdbc`, `payment-kakaopay`, `payment-naverpay`, `payment-paddle`, `payment-stripe`, `payment-toss`, `persistence-jooq`, `persistence-jpa`, `point`, `point-jdbc`, `redis-cache`, `redis-core`, `redis-lock`, `redis-rate-limit`, `review`, `review-jdbc`, `reward`, `reward-jdbc`, `scheduler`, `search`, `search-jdbc`, `storage`, `storage-image`, `storage-image-imageio`, `storage-image-imgproxy`, `storage-image-jdbc`, `storage-image-pdfbox`, `storage-s3`, `video`, `video-cloudrun`, `video-jdbc`, `waiting-room`, `waiting-room-jdbc`, `workspace`, `workspace-jdbc`
 - HTTP 경로: `/api/v1`, `/api/v1/examples`, `/api/v1/skeleton`, `/api/v1/skeleton/enums`, `/api/v1/skeleton/json`, `/api/v1/skeleton/payments`, `/api/v1/skeleton/polymorphic/contents`
 - 문서: `docs/minimal-composition.md`, `docs/modules/README.md`
 - 짝 프런트(react-skeleton): 항목 `app-workbench` · 조각 `--with-workbench`
