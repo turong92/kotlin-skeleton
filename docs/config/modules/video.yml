@@ -13,7 +13,7 @@ skeleton:
     cleanup-delay: 1h      # 원본 단 검증 뒤 이만큼 있다가 올린 원 파일을 지우고 중복 결과 폴더를 쓴다
     worker:
       lease-duration: 10m  # 한 번 집으면 이만큼 임대 - heartbeat 가 늘린다. 끝나면 청소가 다시 줄 세운다(3회 뒤 실패)
-      url-ttl: 2h          # 일꾼에게 주는 읽기 · 올리기 서명 주소의 수명
+      url-ttl: 6h          # 일꾼에게 주는 읽기 · 올리기 서명 주소의 수명
     playback:
       secret: ""           # 비공개 영상 재생 출입증의 HMAC 비밀 (32자 이상, 비밀 - env <P>_VIDEO_PLAYBACK_SECRET, 선언의 secrets:). enabled 인데 비면 기동 실패. 무작위로 충분, 바꾸면 발급한 출입증이 모두 끊긴다
       ttl: 4h              # 재생 허가 한 번의 출입증 수명 - 안의 조각 주소도 이 남은 수명으로 서명한다

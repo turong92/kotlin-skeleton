@@ -10,9 +10,9 @@
 **여러 형식**: 엔진은 변환본마다 같은 그림의 다른 형식을 `Rendered.alternates` 로 더 낼 수 있다(imgproxy 엔진의 WebP). 처리기가 함께 올리고 상태 줄(`StoredVariant.alt`)에 적으며, `UploadImageVariant.alternates` 로 보인다. 기본 형식(`contentType`)이 누구나 읽는 형식이고, `UploadImages.signedVariantUrl(key, variant, ttl, accept)` 가 `Accept` 로 고른다.
 **움직이는 이미지**는 썸네일을 첫 장으로 만들고 `display` 는 움직임을 남기고 메타데이터를 걷어낸 사본(`AnimatedImageCleaner`)이다 - 원본이 남에게 가지 않는다. 상태 줄의 `ext` `-`(원본을 가리킴)는 이 변경 전에 만든 줄에만 남아 있다.
 
-**움직이는 표시본 변환 확장 지점** `AnimatedDisplayConverter`(기본 없음 - 사본이 그대로 쓰인다): 처리기가 사본 `display` 로 줄을 `READY` 로 만든 **뒤에** `requestConversion(keyHash, objectKey)` 를 부른다(던진 예외는 삼키고 로그만). 변환 구현(`video` 모듈이 `video` 와 함께 켜졌을 때 채운다)은 `AnimatedDisplays` 로 변환본 폴더(`folder`)를 알고 파일을 올린 뒤 `use(keyHash, ext)` 로 표시본을 바꿔 끼운다(`mp4` → `video/mp4`, `webp`) - 사본과 같은 확장자는 사본을 덮어쓰므로 거절한다. 변환이 안 끝났거나 실패하면 상태 줄의 `display` 는 사본 그대로다.
+**움직이는 표시본 변환 확장 지점** `AnimatedDisplayConverter`(기본 없음 - 사본이 그대로 쓰인다): 처리기가 사본 `display` 로 줄을 `READY` 로 만든 **뒤에** `requestConversion(keyHash, objectKey)` 를 부른다(던진 예외는 삼키고 로그만). 변환 구현(`video` 모듈이 `video` 와 함께 켜졌을 때 채운다)은 `AnimatedDisplays` 로 변환본 폴더(`folder`)를 알고 파일을 올린 뒤 `use(keyHash, ext)` 로 표시본의 다른 형식(`alt`)으로 더한다(`mp4` → `video/mp4`, `webp`; 사본 `display` 는 그대로) - 사본과 같은 확장자는 사본을 덮어쓰므로 거절한다. 변환이 안 끝났거나 실패하면 상태 줄의 `display` 는 사본 그대로다.
 
-**응답의 형식**: `POST /api/v1/storage/images` 의 변환본마다 `contentType` 이 실린다 - 움직이는 이미지의 `display` 가 변환됐다면 `video/mp4`(소리 없는 반복 영상, `<video autoplay loop muted playsinline>`), 아니면 `image/jpeg` · `image/png` · `image/webp` · `image/gif`. 공개 영역으로 복사된 변환본은 그 순간의 형식 그대로다(사본이면 사본).
+**응답의 형식**: `POST /api/v1/storage/images` 의 변환본마다 `contentType` 이 실린다 - `image/jpeg` · `image/png` · `image/webp` · `image/gif` 같은 이미지 형식(`url` 은 늘 `<img>` 로 그려도 되는 파일)이고, 같은 그림의 다른 형식은 `alternates[]` 에 `{url, contentType}` 로 실린다 - 움직이는 이미지의 `display` 가 변환됐다면 `video/mp4`(소리 없는 반복 영상, `<video autoplay loop muted playsinline>`) 또는 투명이면 `image/webp`. 공개 영역으로 복사된 변환본은 그 순간의 형식 그대로다(사본이면 사본).
 
 **남에게 보이기** 이 모듈이 켜지면 `UploadImages` 빈이 선다 — 공개 영역은 `display`(+ `.thumb`) 변환본을 복사하고(변환 전이면 늦춘다), 변환할 수 없는 이미지는 공개하지 않는다. 비회원 회수는 `forget` 으로 줄과 변환본 폴더를 함께 지운다.
 

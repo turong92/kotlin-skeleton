@@ -19,7 +19,7 @@ import org.springframework.util.unit.DataSize
  *     verify-public: true     # 공개 영상은 일꾼이 올리기 전에 모든 프레임을 디코드해 본다(claim 응답의 verifyDecode)
  *     worker-token-sha256: "" # 로컬 전용 — 이 해시(SHA-256 16진수 64자)의 일꾼을 기동 때 등록한다. stage · prod 에서는 기동 실패
  *     cleanup-delay: 1h       # 원본 단 검증 뒤 이만큼 있다가 올린 원 파일을 지우고 중복 결과 폴더를 쓴다
- *     worker: { lease-duration: 10m, url-ttl: 2h }
+ *     worker: { lease-duration: 10m, url-ttl: 6h }
  *     playback:
  *       secret: ""            # 비공개 영상 재생 출입증의 HMAC 비밀 — 켜면 32자 이상 필수(환경변수 <P>_VIDEO_PLAYBACK_SECRET, 선언의 secrets:). 무작위로 충분, 바꾸면 발급된 출입증이 모두 끊긴다
  *       ttl: 4h               # 재생 허가 한 번의 출입증 수명 — 조각 주소도 이 남은 수명으로 서명한다
@@ -50,8 +50,8 @@ data class VideoProperties(
     data class Worker(
         /** 한 번 집으면 이만큼 임대 — heartbeat 가 늘린다 */
         val leaseDuration: Duration = Duration.ofMinutes(10),
-        /** 일꾼에게 주는 읽기 · 올리기 서명 주소의 수명 */
-        val urlTtl: Duration = Duration.ofHours(2),
+        /** 일꾼에게 주는 읽기 · 올리기 서명 주소의 수명 - 일꾼의 작업 한도(4h)보다 길어야 긴 영상의 입력 · 올리기가 도중에 만료되지 않는다 */
+        val urlTtl: Duration = Duration.ofHours(6),
     )
 
     /** 비공개 영상 재생 — 출입증은 `v1.<영상 id>.<만료>.<mac>` 이고 경로에 든다 */

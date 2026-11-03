@@ -31,6 +31,8 @@ class VideoUploads(
     private val policy: VideoAccessPolicy,
     private val quota: VideoQuota,
     private val time: TimeProvider,
+    /** 공개 영역(`skeleton.storage.web.public.enabled`)이 켜져 있나 - 꺼져 있으면 공개 영상을 받지 않는다(받으면 재생 허가 · 일꾼 입력이 영영 실패해 줄 전체를 막는다) */
+    private val publicAreaEnabled: () -> Boolean = { true },
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -39,6 +41,7 @@ class VideoUploads(
         if (purpose == null || !PURPOSE.matches(purpose)) throw VideoInvalidException("purpose")
         val vis = visibility?.let { v -> VideoVisibility.entries.firstOrNull { it.name == v } } ?: throw VideoInvalidException("visibility")
         if (contentType == null || !VideoLimits.allowedContentType(contentType)) throw VideoUnsupportedException()
+        if (vis == VideoVisibility.PUBLIC && !publicAreaEnabled()) throw VideoPublicUnavailableException()
         if (!policy.canUpload(caller, purpose, vis)) throw VideoForbiddenException()
         if (bytes > props.maxBytes.toBytes()) throw VideoTooLargeException(props.maxBytes.toBytes())
         if (store.countInFlight(caller) >= props.maxInFlight) throw VideoTooManyUploadsException(props.maxInFlight)
@@ -67,7 +70,12 @@ class VideoUploads(
         }
         store.touchUpload(video.id, time.now())
         val key = ObjectKey(video.uploadKey!!)
-        return numbers.map { storage.presignMultipartUploadPart(PresignedMultipartUploadPartRequest(key, video.uploadId!!, it)) }
+        // 조각마다 정확한 크기로 서명한다 - 마지막 조각만 나머지. 선언한 크기 상한이 조각 하나에 5GB 를 싣는 길로 새지 않게
+        val partSize = props.partSize.toBytes()
+        return numbers.map {
+            val length = if (it < partCount) partSize else video.uploadBytes - partSize * (partCount - 1)
+            storage.presignMultipartUploadPart(PresignedMultipartUploadPartRequest(key, video.uploadId!!, it, contentLength = length))
+        }
     }
 
     /** 저장소가 가진 조각 — 새로 고침 뒤 같은 파일을 다시 고르면 빠진 번호만 올린다 */
@@ -114,8 +122,8 @@ class VideoUploads(
             store.markDeleted(video.id, time.now())
             throw VideoSizeMismatchException()
         }
-        step(video.id, VideoStatus.UPLOADING, VideoEvent.COMPLETE)
-        step(video.id, VideoStatus.UPLOADED, VideoEvent.VERIFIED)
+        // 한 문장으로 UPLOADING -> QUEUED - 사이 상태(UPLOADED)에서 죽으면 1시간 뒤 청소가 다 올린 파일을 지운다
+        store.advance(video.id, VideoStatus.UPLOADING, VideoStatus.QUEUED, time.now())
         return store.find(video.id)!!
     }
 
@@ -148,11 +156,6 @@ class VideoUploads(
 
     private fun uploading(caller: String, videoId: String): Video =
         find(caller, videoId).also { if (it.status != VideoStatus.UPLOADING) throw VideoBadStateException(it.status) }
-
-    /** 전이표([VideoStatus.next])가 정한 다음 상태로 — 진 쪽(동시에 온 다른 호출이 이미 했다)은 조용히 넘어간다 */
-    private fun step(id: String, from: VideoStatus, event: VideoEvent) {
-        store.advance(id, from, checkNotNull(from.next(event)) { "$from has no $event" }, time.now())
-    }
 
     private fun abortQuietly(key: ObjectKey, uploadId: String) {
         runCatching { storage.abortMultipartUpload(AbortMultipartUploadRequest(key, uploadId)) }

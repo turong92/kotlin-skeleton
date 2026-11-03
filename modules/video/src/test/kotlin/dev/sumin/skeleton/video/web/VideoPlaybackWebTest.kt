@@ -42,7 +42,7 @@ class VideoPlaybackWebTest {
     private val tokens = VideoPlaybackTokens(PlaybackFixtures.SECRET, time)
     private val playlists = VideoPlaylists(tokens, store, VideoKeys(props, StorageWebProperties()), storage)
     private val playback = StorageVideoPlayback(props, VideoKeys(props, StorageWebProperties()), storage, { StoragePublicProperties() }, tokens)
-    private val library = VideoLibrary(store, OwnerVideoAccessPolicy, playback, followUps, FakeTransactions(), time)
+    private val library = VideoLibrary(store, OwnerVideoAccessPolicy, playback, followUps, FakeTransactions(), time, java.time.Duration.ofHours(2))
     private var operator = false
     private val mvc: MockMvc = MockMvcBuilders
         .standaloneSetup(VideoPlaylistController(playlists), VideoAdminController(library, VideoOperatorPolicy { operator }))
@@ -90,6 +90,6 @@ class VideoPlaybackWebTest {
         mvc.perform(delete("/api/v1/videos/admin/vid1").principal(caller("acc_z")).param("reason", "REPORTED")).andExpect(status().isNoContent)
 
         assertEquals(VideoStatus.DELETED, store.rows.getValue("vid1").status)
-        assertEquals(listOf(VideoFinalizeEvent.DELETED), followUps.events("vid1"))
+        assertEquals(listOf(VideoFinalizeEvent.DELETED, VideoFinalizeEvent.DELETED), followUps.events("vid1"))
     }
 }

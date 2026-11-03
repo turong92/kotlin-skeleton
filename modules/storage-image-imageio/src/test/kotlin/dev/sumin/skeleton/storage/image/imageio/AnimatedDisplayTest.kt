@@ -41,15 +41,19 @@ class AnimatedDisplayTest {
     }
 
     @Test
-    fun `using a converted display switches the variant to the new file and its content type - the status answer tells the format`() {
+    fun `using a converted display keeps the image copy as the display and lists the video as another format of it`() {
         val h = Harness()
         val row = h.run("uploads/7/g/x.gif", gif, "image/gif")
+        val copyKey = h.images.status("uploads/7/g/x.gif")!!.variants.getValue(UploadImages.DISPLAY).key
 
         assertTrue(h.displays.use(row.keyHash, "mp4"))
+        assertTrue(h.displays.use(row.keyHash, "mp4"), "같은 호출이 또 와도 같은 결과")
 
         val display = h.images.status("uploads/7/g/x.gif")!!.variants.getValue(UploadImages.DISPLAY)
-        assertEquals("video/mp4", display.contentType)
-        assertEquals("${h.displays.folder(row.keyHash)}display.mp4", display.key)
+        assertEquals("image/gif", display.contentType, "<img> 로 그리는 소비자가 받는 것은 늘 이미지 사본이다")
+        assertEquals(copyKey, display.key)
+        assertEquals(listOf("${h.displays.folder(row.keyHash)}display.mp4"), display.alternates.map { it.key })
+        assertEquals(listOf("video/mp4"), display.alternates.map { it.contentType })
         assertEquals(60 to 40, display.width to display.height)
         assertTrue(h.images.status("uploads/7/g/x.gif")!!.variants.containsKey(UploadImages.THUMB), "썸네일은 그대로")
     }

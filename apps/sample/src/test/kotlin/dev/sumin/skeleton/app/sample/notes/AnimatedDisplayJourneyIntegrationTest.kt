@@ -56,8 +56,9 @@ class AnimatedDisplayJourneyIntegrationTest : SampleIntegrationTest() {
         worker("/jobs/$hash/complete", """{"workerId":"w","display":{"name":"display.mp4","bytes":900}}""").andExpect { status { isNoContent() } }
 
         val display = displayOf(key)
-        assertEquals("video/mp4", display.contentType)
-        assertEquals(folder + "display.mp4", display.key)
+        assertEquals("image/gif", display.contentType, "표시본은 이미지 사본 그대로 - 영상은 다른 형식으로 실린다")
+        assertEquals(listOf(folder + "display.mp4"), display.alternates.map { it.key })
+        assertEquals(listOf("video/mp4"), display.alternates.map { it.contentType })
         assertEquals("image/jpeg", images.status(key)!!.variants.getValue(UploadImages.THUMB).contentType)
     }
 

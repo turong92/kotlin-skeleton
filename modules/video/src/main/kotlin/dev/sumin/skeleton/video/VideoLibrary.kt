@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.video
 
 import dev.sumin.skeleton.common.time.TimeProvider
+import java.time.Duration
 import org.slf4j.LoggerFactory
 
 /**
@@ -15,6 +16,8 @@ class VideoLibrary(
     private val followUps: VideoFollowUps,
     private val tx: VideoTransactions,
     private val time: TimeProvider,
+    /** 지운 뒤 폴더 정리를 한 번 더 하는 지연 - 변환 중이던 일꾼이 서명 주소로 뒤늦게 올린 파일이 지운 폴더에 남지 않게, 일꾼의 서명 주소 수명(`worker.url-ttl`) */
+    private val lateCleanupDelay: Duration,
     /** 이미지 모듈이 있으면 검사 전의 일꾼 포스터를 내주지 않는다 */
     private val posters: VideoPosters? = null,
 ) {
@@ -40,7 +43,7 @@ class VideoLibrary(
     fun delete(videoId: String, reason: String): Boolean {
         if (!REASON.matches(reason)) throw VideoInvalidException("reason")
         val closed = tx.run {
-            store.markDeleted(videoId, time.now()).also { if (it) followUps.finalize(videoId, VideoFinalizeEvent.DELETED) }
+            store.markDeleted(videoId, time.now()).also { if (it) { followUps.finalize(videoId, VideoFinalizeEvent.DELETED); followUps.finalize(videoId, VideoFinalizeEvent.DELETED, lateCleanupDelay) } }
         }
         if (closed) log.info("video deleted video={} reason={}", videoId, reason)
         return closed

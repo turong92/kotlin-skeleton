@@ -80,7 +80,7 @@ class VideoJobsTest {
         assertEquals(1, job.attempt)
         assertEquals(t0.plus(Duration.ofMinutes(10)), job.leaseUntil)
         assertTrue(job.inputUrl.startsWith("http://s3.test/videos/u/older"), job.inputUrl)
-        assertEquals(Duration.ofHours(2), storage.signedDownloads.single().expiresIn)
+        assertEquals(Duration.ofHours(6), storage.signedDownloads.single().expiresIn)
         assertEquals(1000, job.inputBytes)
         val row = store.rows.getValue("older")
         assertEquals(VideoStatus.REMUXING, row.status)
@@ -173,7 +173,7 @@ class VideoJobsTest {
             listOf("videos/p/v1/o-$hash/index.m3u8", "videos/p/v1/o-$hash/init.mp4", "videos/p/v1/o-$hash/s00000.m4s", "videos/p/v1/p-$hash.jpg"),
             storage.signedUploads.map { it.key.value },
         )
-        assertTrue(storage.signedUploads.all { it.cacheControl == "private, max-age=31536000, immutable" && it.expiresIn == Duration.ofHours(2) })
+        assertTrue(storage.signedUploads.all { it.cacheControl == "private, max-age=31536000, immutable" && it.expiresIn == Duration.ofHours(6) })
         assertEquals("application/vnd.apple.mpegurl", storage.signedUploads[0].contentType)
         assertEquals("video/mp4", storage.signedUploads[2].contentType)
         assertEquals("image/jpeg", storage.signedUploads[3].contentType)

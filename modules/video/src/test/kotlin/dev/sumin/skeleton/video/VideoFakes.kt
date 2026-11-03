@@ -41,7 +41,14 @@ class FakeStorage : PresignedStorage {
         return StartedMultipartUpload(request.key, "up-${started.size}")
     }
 
-    override fun presignMultipartUploadPart(request: PresignedMultipartUploadPartRequest) =
+    val partRequests = mutableListOf<PresignedMultipartUploadPartRequest>()
+
+    override fun presignMultipartUploadPart(request: PresignedMultipartUploadPartRequest): PresignedMultipartUploadPart {
+        partRequests += request
+        return presignedPart(request)
+    }
+
+    private fun presignedPart(request: PresignedMultipartUploadPartRequest) =
         PresignedMultipartUploadPart(request.key, request.uploadId, request.partNumber, "PUT", URI("http://s3.test/${request.key.value}?part=${request.partNumber}"), emptyMap(), expires)
 
     override fun completeMultipartUpload(request: CompleteMultipartUploadRequest): CompletedMultipartUpload {

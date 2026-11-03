@@ -31,8 +31,14 @@ data class StorageImagesRequest(@field:NotEmpty @field:Size(max = MAX_KEYS) val 
     }
 }
 
-/** [contentType] 은 [url] 이 가리키는 파일의 형식이다 - 움직이는 이미지의 표시본이 영상으로 바뀌면 `video/mp4`(소리 없는 반복 영상, `<video autoplay loop muted playsinline>`), 아니면 `image/jpeg` 같은 이미지 형식 */
-data class StorageImageVariantView(val url: String, val width: Int, val height: Int, val contentType: String)
+/** 같은 그림의 다른 형식 하나 - [url] 은 서명 주소, [contentType] 은 그 파일의 형식 */
+data class StorageImageAlternateView(val url: String, val contentType: String)
+
+/**
+ * [contentType] 은 [url] 이 가리키는 파일의 형식이다(늘 이미지 - `<img>` 로 그려도 된다). [alternates] 는 같은 그림의 **다른** 형식들 -
+ * 움직이는 이미지의 표시본이 영상으로 변환됐으면 `video/mp4`(소리 없는 반복 영상, 화면이 `<video autoplay loop muted playsinline>` 로 고른다), 투명하면 `image/webp`
+ */
+data class StorageImageVariantView(val url: String, val width: Int, val height: Int, val contentType: String, val alternates: List<StorageImageAlternateView> = emptyList())
 
 data class StorageImageItem(val key: String, val status: String, val width: Int?, val height: Int?, val variants: Map<String, StorageImageVariantView>)
 
@@ -68,7 +74,13 @@ class StorageImagesController(
         val items = own.mapNotNull { key ->
             val status = images.status(key) ?: run { images.ensure(key); images.status(key) } ?: return@mapNotNull null
             val variants = if (status.state != UploadImageState.READY) emptyMap() else status.variants.mapNotNull { (name, v) ->
-                images.signedVariantUrl(key, name, accessTtl, accept)?.let { name to StorageImageVariantView(it, v.width, v.height, v.forAccept(accept).contentType) }
+                images.signedVariantUrl(key, name, accessTtl, accept)?.let {
+                    val picked = v.forAccept(accept).contentType
+                    val others = v.formats().filter { f -> f.contentType != picked }.mapNotNull { f ->
+                        images.signedVariantUrl(key, name, accessTtl, f.contentType)?.let { url -> StorageImageAlternateView(url, f.contentType) }
+                    }
+                    name to StorageImageVariantView(it, v.width, v.height, picked, others)
+                }
             }.toMap()
             StorageImageItem(key, status.state.name, status.width, status.height, variants)
         }

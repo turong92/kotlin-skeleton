@@ -78,7 +78,22 @@ class VideoMaintenanceTest {
         leased("h", VideoStatus.PLAYABLE, VideoLane.COMPAT, attempts = 1, track = TrackStatus.RUNNING)
         waker = object : VideoWaker { override val enabled = true; override fun wake() = WakeTicket(null) }
         maintenance().run()
+        assertEquals(2, followUps.wakes, "the lease expiry asks and the sweep of waiting tracks asks - the waker's own cap folds them")
+    }
+
+    @Test
+    fun `a track waiting for a worker is woken for every sweep - a wake the cap skipped earlier must not leave the work standing for good`() {
+        waker = object : VideoWaker { override val enabled = true; override fun wake() = WakeTicket(null) }
+        maintenance().run()
+        assertEquals(0, followUps.wakes, "nothing waits")
+
+        store.rows["w"] = leased("w", VideoStatus.PLAYABLE, VideoLane.COMPAT, attempts = 0, track = TrackStatus.QUEUED).copy(leaseOwner = null, leaseUntil = null, lane = null)
+        maintenance().run()
         assertEquals(1, followUps.wakes)
+
+        waker = NoopWaker
+        maintenance().run()
+        assertEquals(1, followUps.wakes, "no waker, no ask")
     }
 
     @Test

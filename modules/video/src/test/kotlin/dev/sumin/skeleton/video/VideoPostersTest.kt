@@ -31,7 +31,7 @@ class VideoPostersTest {
     private val keys = VideoKeys(props, web)
     private val posters = VideoPosters(store, storage, keys, OwnerVideoAccessPolicy, { acc, key -> key.startsWith("uploads/$acc/") }, { images }, followUps, FakeTransactions(), time)
     private val library = VideoLibrary(
-        store, OwnerVideoAccessPolicy, StorageVideoPlayback(props, keys, storage, { web.`public` }, VideoPlaybackTokens(SECRET, time)), followUps, FakeTransactions(), time, posters,
+        store, OwnerVideoAccessPolicy, StorageVideoPlayback(props, keys, storage, { web.`public` }, VideoPlaybackTokens(SECRET, time)), followUps, FakeTransactions(), time, java.time.Duration.ofHours(2), posters,
     )
 
     private val raw = "videos/p/vid1/$POSTER"

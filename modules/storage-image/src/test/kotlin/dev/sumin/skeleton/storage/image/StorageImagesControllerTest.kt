@@ -7,6 +7,7 @@ import dev.sumin.skeleton.common.upload.UploadImageVariant
 import dev.sumin.skeleton.common.upload.UploadImages
 import dev.sumin.skeleton.storage.StorageKeyScheme
 import dev.sumin.skeleton.storage.StorageWebProperties
+import dev.sumin.skeleton.storage.image.web.StorageImageAlternateView
 import dev.sumin.skeleton.storage.image.web.StorageImagesController
 import dev.sumin.skeleton.storage.image.web.StorageImagesRequest
 import dev.sumin.skeleton.storage.image.web.StorageImagesResponse
@@ -25,7 +26,9 @@ class StorageImagesControllerTest {
             UploadImageState.READY, 200, 100,
             mapOf(
                 UploadImages.THUMB to UploadImageVariant("variants/m/thumb.jpg", 100, 50, "image/jpeg"),
-                UploadImages.DISPLAY to UploadImageVariant("variants/m/display.mp4", 200, 100, "video/mp4"),
+                UploadImages.DISPLAY to UploadImageVariant(
+                    "variants/m/display.gif", 200, 100, "image/gif", listOf(UploadImageVariant("variants/m/display.mp4", 200, 100, "video/mp4")),
+                ),
             ),
         ),
         "uploads/8/b/x.jpg" to UploadImageStatus(UploadImageState.READY, 20, 10, mapOf(UploadImages.THUMB to UploadImageVariant("variants/h2/thumb.jpg", 20, 10, "image/jpeg"))),
@@ -36,6 +39,10 @@ class StorageImagesControllerTest {
         override fun signedVariantUrl(privateKey: String, variant: String, ttl: Duration): String? {
             signed += privateKey
             return rows[privateKey]?.variants?.get(variant)?.let { "https://s3.test/${it.key}?sig" }
+        }
+        override fun signedVariantUrl(privateKey: String, variant: String, ttl: Duration, accept: String?): String? {
+            signed += privateKey
+            return rows[privateKey]?.variants?.get(variant)?.forAccept(accept)?.let { "https://s3.test/${it.key}?sig" }
         }
         override fun ensure(privateKey: String) {
             ensured += privateKey
@@ -61,12 +68,16 @@ class StorageImagesControllerTest {
     }
 
     @Test
-    fun `each variant says its content type - a converted animated display is video mp4 so the screen knows to play it`() {
+    fun `an animated display answers the image copy and lists the converted video as another format the screen may pick`() {
         val answer = controller.images(me, StorageImagesRequest(listOf("uploads/7/m/x.gif")), null, org.springframework.mock.web.MockHttpServletResponse())
 
         @Suppress("UNCHECKED_CAST")
         val item = ((answer as DataResponse<StorageImagesResponse>).value).items.single()
-        assertEquals("video/mp4", item.variants.getValue("display").contentType)
+        val display = item.variants.getValue("display")
+        assertEquals("image/gif", display.contentType)
+        assertEquals("https://s3.test/variants/m/display.gif?sig", display.url)
+        assertEquals(listOf(StorageImageAlternateView("https://s3.test/variants/m/display.mp4?sig", "video/mp4")), display.alternates)
         assertEquals("image/jpeg", item.variants.getValue("thumb").contentType)
+        assertTrue(item.variants.getValue("thumb").alternates.isEmpty())
     }
 }

@@ -14,6 +14,7 @@ enum class VideoErrorCode(
     UNSUPPORTED("VIDEO.UNSUPPORTED", HttpStatus.UNSUPPORTED_MEDIA_TYPE, "MP4 · MOV 영상만 받는다"),
     TOO_LARGE("VIDEO.TOO_LARGE", HttpStatus.PAYLOAD_TOO_LARGE, "영상 파일이 너무 크다"),
     FORBIDDEN("VIDEO.FORBIDDEN", HttpStatus.FORBIDDEN, "이 영상을 올릴 수 없다"),
+    PUBLIC_UNAVAILABLE("VIDEO.PUBLIC_UNAVAILABLE", HttpStatus.BAD_REQUEST, "이 앱은 공개 영상을 받지 않는다"),
     QUOTA("VIDEO.QUOTA", HttpStatus.PAYLOAD_TOO_LARGE, "남은 용량이 모자라다"),
     TOO_MANY_UPLOADS("VIDEO.TOO_MANY_UPLOADS", HttpStatus.TOO_MANY_REQUESTS, "동시에 올릴 수 있는 영상 수를 넘었다"),
     NOT_FOUND("VIDEO.NOT_FOUND", HttpStatus.NOT_FOUND, "그런 영상이 없다"),
@@ -35,6 +36,8 @@ class VideoTooLargeException(maxBytes: Long) :
     ApplicationException("video too large", VideoErrorCode.TOO_LARGE, data = mapOf("maxBytes" to maxBytes))
 
 class VideoForbiddenException : ApplicationException("video upload not allowed", VideoErrorCode.FORBIDDEN)
+
+class VideoPublicUnavailableException : ApplicationException("video public area is off", VideoErrorCode.PUBLIC_UNAVAILABLE)
 
 class VideoQuotaException : ApplicationException("video quota", VideoErrorCode.QUOTA)
 

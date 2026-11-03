@@ -22,7 +22,8 @@ class VideoUploadsTest {
         override fun canUpload(caller: String, purpose: String, visibility: VideoVisibility) = canUpload
     }
     private val quota = VideoQuota { _, _, _ -> quotaOk }
-    private val uploads = VideoUploads(VideoProperties(enabled = true), store, storage, policy, quota, TimeProvider { clock })
+    private var publicArea = true
+    private val uploads = VideoUploads(VideoProperties(enabled = true), store, storage, policy, quota, TimeProvider { clock }) { publicArea }
 
     private fun begin(caller: String = "acc_a", bytes: Long? = 40L * 1024 * 1024, type: String? = "video/mp4", purpose: String? = "note", visibility: String? = "PRIVATE") =
         uploads.start(caller, bytes, type, purpose, visibility)
@@ -72,6 +73,17 @@ class VideoUploadsTest {
     }
 
     @Test
+    fun `start refuses a public video when the public area is off - or one stuck public video would block the whole compat and ladder line`() {
+        publicArea = false
+        val e = assertFailsWith<VideoPublicUnavailableException> { begin(visibility = "PUBLIC") }
+        assertEquals(VideoErrorCode.PUBLIC_UNAVAILABLE, e.errorCode)
+        assertTrue(storage.started.isEmpty() && store.rows.isEmpty())
+        begin(visibility = "PRIVATE")
+        publicArea = true
+        begin(visibility = "PUBLIC")
+    }
+
+    @Test
     fun `start refuses a third upload in flight for the same account but not for another one`() {
         begin(); begin()
         assertFailsWith<VideoTooManyUploadsException> { begin() }
@@ -84,6 +96,15 @@ class VideoUploadsTest {
         assertFailsWith<IllegalStateException> { begin() }
         assertEquals(1, storage.aborted.size)
         assertEquals(storage.started.single().key, storage.aborted.single().key)
+    }
+
+    @Test
+    fun `every part url is signed for the exact size of its part - the last one for the rest - so no part can carry more than announced`() {
+        val mb = 1024L * 1024
+        val id = begin(bytes = 40 * mb).videoId
+        uploads.partUrls("acc_a", id, listOf(1, 2, 3))
+
+        assertEquals(mapOf(1 to 16 * mb, 2 to 16 * mb, 3 to 8 * mb), storage.partRequests.associate { it.partNumber to it.contentLength })
     }
 
     @Test
@@ -134,6 +155,20 @@ class VideoUploadsTest {
         val again = uploads.complete("acc_a", id, listOf(1 to "a", 2 to "b", 3 to "c"))
         assertEquals(VideoStatus.QUEUED, again.status)
         assertEquals(1, storage.completed.size, "the store of objects is not asked twice")
+    }
+
+    @Test
+    fun `complete goes from UPLOADING to QUEUED in one step - never leaves the row at UPLOADED where the hourly sweep would delete a finished upload`() {
+        val id = begin().videoId
+        storage.objects["videos/u/$id"] = 40L * 1024 * 1024
+        val steps = mutableListOf<VideoStatus>()
+        val recording = object : VideoStore by store {
+            override fun advance(id: String, from: VideoStatus, to: VideoStatus, at: Instant): Boolean = store.advance(id, from, to, at).also { steps += to }
+        }
+
+        VideoUploads(VideoProperties(enabled = true), recording, storage, policy, quota, TimeProvider { clock }).complete("acc_a", id, listOf(1 to "a", 2 to "b", 3 to "c"))
+
+        assertEquals(listOf(VideoStatus.QUEUED), steps)
     }
 
     @Test

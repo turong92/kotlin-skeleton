@@ -342,6 +342,17 @@ gcloud run deploy imgproxy \
 
 **자원과 격리.** 홈서버 일꾼은 세 차선 전부를 맡는다(결정: CPU 2 · 메모리 3GB · 낮은 우선순위 - 선언의 `VIDEO_WORKER_NICE: "10"`). **현재 플랫폼 선언에는 CPU · 메모리 · 읽기 전용 루트 · `cap_drop` · `/work` 볼륨 칸이 없다**(`infra/modules/app-docker/variables.tf`) - 그 칸이 생길 때까지 한도 없이 돈다. 이미지는 비루트(uid 10001) · 읽기 전용 루트에서 `/work` 만 쓰는 것을 전제로 만들었고, 로컬 `docker-compose.yml` 의 `video-worker` 가 그 격리를 그대로 건 예다(`cap_drop: ALL` · `pids_limit` · `tmpfs` · `mem_limit: 3g` · `cpus: 2`). 믿지 못하는 영상을 읽는 컨테이너라 격리 없이 오래 두지 않는다.
 
+**막는 규칙: 플랫폼 선언에 격리 칸이 생기기 전에는, 공개 업로드를 받는 앱에 이 일꾼을 운영 배포하지 않는다.** 사용자가 올린 영상을 ffmpeg 가 읽기 때문에, 격리 없는 컨테이너는 디코더 취약점 하나로 같은 기계의 다른 앱까지 열린다. 로그인한 소수만 올리는 내부 앱이나 로컬 `docker-compose.yml` 의 격리된 일꾼은 괜찮다. 격리가 필요한 칸은 다음과 같다 - 플랫폼 선언이 이것을 받을 때 `deploy/video-worker.yaml` 에 채우고 이 규칙을 지운다.
+
+| 칸 | 값 |
+|---|---|
+| CPU | 2 |
+| 메모리 | 3GB |
+| 루트 파일시스템 | 읽기 전용 (`/work` 만 쓰기 볼륨) |
+| 권한 | `cap_drop: ALL` · `no-new-privileges` |
+| 프로세스 수 상한 | `pids_limit` |
+| 임시 공간 | `/work` 볼륨 또는 tmpfs |
+
 **메모리 · 디스크 표** (원 구현 실측 - 일꾼 프로세스 전체. JVM 힙은 96MB 고정이고 ffmpeg 가 쓴다):
 
 | 일 | 입력 | 프로세스 메모리 | 비고 |

@@ -14,7 +14,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
-import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -29,7 +28,7 @@ class VideoLibraryTest {
     private val web = StorageWebProperties(`public` = StoragePublicProperties(enabled = true, secret = "s".repeat(40), prefix = "public", baseUrl = "https://cdn.example.com"))
     private val tokens = VideoPlaybackTokens(SECRET, time)
     private val playback = StorageVideoPlayback(props, VideoKeys(props, web), storage, { web.`public` }, tokens)
-    private val library = VideoLibrary(store, OwnerVideoAccessPolicy, playback, followUps, tx, time)
+    private val library = VideoLibrary(store, OwnerVideoAccessPolicy, playback, followUps, tx, time, LATE_CLEANUP)
 
     private fun put(v: Video) = v.also { store.rows[it.id] = it }
 
@@ -110,9 +109,18 @@ class VideoLibraryTest {
         library.deleteOwn("acc_a", "vid1")
 
         assertEquals(VideoStatus.DELETED, store.rows.getValue("vid1").status)
-        assertEquals(listOf(VideoFinalizeEvent.DELETED), followUps.events("vid1"))
+        assertEquals(listOf(VideoFinalizeEvent.DELETED, VideoFinalizeEvent.DELETED), followUps.events("vid1"))
         assertEquals(1, tx.runs)
         assertTrue(storage.deleted.isEmpty(), "objects go in the follow-up, never in the request")
+    }
+
+    @Test
+    fun `a delete queues the folder cleanup a second time after the worker's signed urls have run out - a late upload from a mid-conversion worker must not outlive the delete`() {
+        put(PlaybackFixtures.video())
+
+        library.deleteOwn("acc_a", "vid1")
+
+        assertEquals(listOf(Duration.ZERO, LATE_CLEANUP), followUps.finalized.map { it.third })
     }
 
     @Test
@@ -125,7 +133,7 @@ class VideoLibraryTest {
         assertFailsWith<VideoNotFoundException> { library.deleteOwn("acc_a", "vid1") }
         assertFailsWith<VideoNotFoundException> { library.deleteOwn("acc_a", "nope") }
 
-        assertEquals(1, followUps.finalized.size)
+        assertEquals(2, followUps.finalized.size, "one delete = the cleanup and its late repeat; the refused deletes queue nothing")
     }
 
     @Test
@@ -139,6 +147,10 @@ class VideoLibraryTest {
         assertTrue(library.delete("vid1", "OPERATOR"))
         assertFalse(library.delete("vid1", "OPERATOR"))
         assertFalse(library.delete("nope", "OPERATOR"))
-        assertNotNull(followUps.events("vid1").singleOrNull())
+        assertEquals(2, followUps.events("vid1").size)
+    }
+
+    private companion object {
+        val LATE_CLEANUP: Duration = Duration.ofHours(6)
     }
 }

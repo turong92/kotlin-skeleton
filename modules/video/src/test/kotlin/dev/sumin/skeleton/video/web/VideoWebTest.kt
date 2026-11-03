@@ -40,7 +40,7 @@ class VideoWebTest {
     private val props = VideoProperties(enabled = true)
     private val uploads = VideoUploads(props, store, storage, OwnerVideoAccessPolicy, VideoQuota { _, _, _ -> true }, time)
     private val playback = StorageVideoPlayback(props, VideoKeys(props, StorageWebProperties()), storage, { StoragePublicProperties() }, VideoPlaybackTokens(PlaybackFixtures.SECRET, time))
-    private val library = VideoLibrary(store, OwnerVideoAccessPolicy, playback, followUps, FakeTransactions(), time)
+    private val library = VideoLibrary(store, OwnerVideoAccessPolicy, playback, followUps, FakeTransactions(), time, java.time.Duration.ofHours(2))
     private val mvc: MockMvc = MockMvcBuilders.standaloneSetup(VideoController(uploads, library)).setControllerAdvice(GlobalExceptionHandler()).build()
 
     private fun caller(id: String) = TestingAuthenticationToken(id, "n/a", "ROLE_USER").apply { isAuthenticated = true }
@@ -181,6 +181,6 @@ class VideoWebTest {
         mvc.perform(delete("/api/v1/videos/vid1").principal(caller("acc_a"))).andExpect(status().isNoContent)
 
         kotlin.test.assertEquals(VideoStatus.DELETED, store.rows.getValue("vid1").status)
-        kotlin.test.assertEquals(listOf(VideoFinalizeEvent.DELETED), followUps.events("vid1"))
+        kotlin.test.assertEquals(listOf(VideoFinalizeEvent.DELETED, VideoFinalizeEvent.DELETED), followUps.events("vid1"))
     }
 }

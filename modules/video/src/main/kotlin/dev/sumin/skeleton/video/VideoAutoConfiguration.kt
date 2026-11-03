@@ -77,8 +77,9 @@ class VideoAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    fun videoUploads(props: VideoProperties, ports: VideoPorts, policy: VideoAccessPolicy, quota: VideoQuota, time: TimeProvider): VideoUploads =
-        VideoUploads(props, ports.store, ports.storage, policy, quota, time)
+    fun videoUploads(
+        props: VideoProperties, ports: VideoPorts, policy: VideoAccessPolicy, quota: VideoQuota, time: TimeProvider, storageProperties: ObjectProvider<StorageProperties>,
+    ): VideoUploads = VideoUploads(props, ports.store, ports.storage, policy, quota, time) { storageProperties.getIfAvailable { StorageProperties() }.web.`public`.enabled }
 
     /** 비공개 재생 출입증 — 비밀이 없거나 32자보다 짧으면 기동 실패(비공개 영상은 이 비밀 없이 틀 수 없다) */
     @Bean
@@ -115,8 +116,8 @@ class VideoAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    fun videoLibrary(ports: VideoPorts, policy: VideoAccessPolicy, playback: VideoPlayback, time: TimeProvider, posters: VideoPosters): VideoLibrary =
-        VideoLibrary(ports.store, policy, playback, ports.followUps, ports.tx, time, posters)
+    fun videoLibrary(props: VideoProperties, ports: VideoPorts, policy: VideoAccessPolicy, playback: VideoPlayback, time: TimeProvider, posters: VideoPosters): VideoLibrary =
+        VideoLibrary(ports.store, policy, playback, ports.followUps, ports.tx, time, props.worker.urlTtl, posters)
 
     /** 호환 · 사다리 일꾼이 읽을 원본 단 재생 목록 주소 — 공개 영상은 공개 주소, 비공개 영상은 일꾼 작업 수명의 출입증 경로 */
     @Bean

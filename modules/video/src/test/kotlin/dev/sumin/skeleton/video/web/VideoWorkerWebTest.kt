@@ -53,7 +53,7 @@ class VideoWorkerWebTest {
     private val library = VideoLibrary(
         store, OwnerVideoAccessPolicy,
         StorageVideoPlayback(props, VideoKeys(props, StorageWebProperties()), storage, { StoragePublicProperties() }, VideoPlaybackTokens("k".repeat(40), time)),
-        FakeFollowUps(), FakeTransactions(), time,
+        FakeFollowUps(), FakeTransactions(), time, java.time.Duration.ofHours(2),
     )
     private var operator = false
     private val mvc: MockMvc = MockMvcBuilders

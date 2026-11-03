@@ -25,7 +25,14 @@ class VideoMaintenance(
         staleUploads = step("abandoned uploads") { uploads.cleanupStaleUploads() },
         leasesExpired = step("lease expiry") { tx.run { time.now().let { VideoLeases.expire(store, followUps, waker, props, it, it).total } } },
         laddersQueued = step("deferred ladders") { queueDeferredLadders() },
-    )
+    ).also { step("stranded tracks") { wakeStrandedTracks() } }
+
+    /** 상한 · 간격에 걸려 조용히 넘어간 깨우기가 일을 영영 세워 두지 않게 - 집을 트랙이 남아 있으면 이 청소가 다시 깨운다(상한은 깨우기 구현이 지킨다) */
+    private fun wakeStrandedTracks(): Int {
+        if (!waker.enabled || store.countClaimableTracks() == 0) return 0
+        tx.run { followUps.wake() }
+        return 1
+    }
 
     private fun queueDeferredLadders(): Int {
         if (!props.ladder) return 0
