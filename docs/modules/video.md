@@ -65,7 +65,7 @@
 | 부팅에 필요한 것 | 켰을 때 `TimeProvider`(platform), `PresignedStorage`(storage-s3), 재생 비밀 `skeleton.video.playback.secret`(32자 이상), `VideoStore` · `VideoWorkerStore` · `VideoFollowUps` · `VideoTransactions`(video-jdbc, 작업 큐 `job-queue-jdbc` 필요) 빈. 없으면 기동 실패. |
 | 교체 지점 | `VideoAccessPolicy`, `VideoQuota`, `VideoEvents`, `VideoWaker`, `VideoWorkerInputs`, `VideoPlayback`, `VideoOperatorPolicy`, `VideoStore`, `VideoWorkerStore`, `VideoController`, `VideoPlaylistController`, `VideoWorkerController`, `videoCleanupTask` |
 | 마이그레이션 | 없음 (`video-jdbc` 가 가진다) |
-| 프론트 짝 | 없음 (영상 화면 패키지는 따로 온다) |
+| 프론트 짝 | `@skeleton/video` |
 | 테스트 | `modules/video/src/test`, `modules/video/src/noOptionalTest` |
 
 [모듈 색인](README.md) · [video-jdbc](video-jdbc.md) · [storage](storage.md)

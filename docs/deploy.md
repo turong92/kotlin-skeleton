@@ -328,6 +328,59 @@ gcloud run deploy imgproxy \
 - `SIGNED_URL`(기본): 앱의 저장소가 서명한 **짧은 수명(`source-ttl` 5m)의 읽기 주소**를 준다 - imgproxy 에 저장소 자격이 필요 없다. 대신 그 주소의 호스트가 **imgproxy 에서 닿아야** 하고, `IMGPROXY_ALLOWED_SOURCES` 에 **저장소 호스트 하나**(예 `https://<account-id>.r2.cloudflarestorage.com/`)만 적는다 - 기본으로 꺼진 `IMGPROXY_ALLOW_LOOPBACK_SOURCE_ADDRESSES` · `…LINK_LOCAL…` 은 그대로 둔다(사설 망 저장소면 사설 주소는 기본 허용).
 - 다른 저장소(예: `gs://` + `IMGPROXY_USE_GCS`)는 `ImgproxySourceResolver` 빈을 두면 끼운다(이 레포는 구현을 주지 않는다).
 
+### 영상 변환 일꾼 — `apps/video-worker` (`video` 를 고른 앱)
+
+`video` 모듈은 **변환하지 않는다.** 올린 영상은 서버의 일꾼 API(`/api/internal/video/*`)에 줄을 서고, 별도 컨테이너인 변환 일꾼(`apps/video-worker`: Kotlin + ffmpeg)이 **스스로 집어 가** 원본 단 · 호환 단 · 사다리를 만들어 저장소로 직접 올린다. 서버는 일꾼을 부르지 않는다(Cloud Run 일꾼만 예외 - 아래). 앱 이미지와 일꾼 이미지는 따로 빌드한다.
+
+**선언 한 장 `deploy/video-worker.yaml`** (홈서버 레포의 `infra/apps/video-worker.yaml` 로 복사): 도메인 없음 · DB 없음 · 호스트 포트 없음 - 밖에서 들어오는 길이 없다. 헬스는 컨테이너 안 `wget /health`(이미지에 wget 이 있다 · 상주 모양에서만 뜨는 작은 서버). 비밀은 일꾼 토큰 `VIDEO_WORKER_TOKEN` 하나이고 **랜덤이 아니라 운영자가 정한 값**이라 `operator_only` 로 적는다. 배포 순서:
+
+1. 앱을 먼저 배포한다(`<P>_VIDEO_PLAYBACK_SECRET` 포함 - 위 표).
+2. 운영자 계정으로 `POST /api/v1/videos/admin/workers {"name":"home-worker","lanes":["REMUX","COMPAT","LADDER"]}` - 응답의 `token` 평문은 **이때 한 번만** 보인다. 서버에는 해시만 남는다. (`VideoOperatorPolicy` 빈이 허락한 계정만 부를 수 있다 - 기본은 모두 거절. 로컬에서는 이 단계 없이 `skeleton.video.worker-token-sha256` 로 등록된다 - stage · prod 에서는 기동 실패.)
+3. 그 평문을 홈서버의 `data/secrets/video-worker.local.env`(0600)에 `VIDEO_WORKER_TOKEN=…` 으로 적고, `./gradlew :apps:video-worker:installDist` → `docker build -t video-worker:<tag> apps/video-worker` → 선언의 `tag` 를 올려 적용한다. 토큰을 바꾸려면 새로 발급하고 옛 것은 `DELETE /api/v1/videos/admin/workers/{id}` 로 폐기한다.
+
+**일꾼 → 앱 주소는 플랫폼 내부 망으로 닿는다**(이 레포가 확인한 것: 홈서버 레포 `infra/modules/app-docker`): 앱 컨테이너는 `<프로젝트>_web` 네트워크에 별칭 `app-<앱 name>` 으로 붙고, 일꾼 컨테이너도 같은 네트워크에 붙으므로 선언의 `VIDEO_WORKER_API: http://app-<앱 name>:8080` 하나로 된다 - 도메인 · Caddy · 터널을 거치지 않는다. 비공개 영상의 입력 재생 목록 경로(`/api/v1/videos/play/…`)도 이 주소 기준으로 풀린다. 플랫폼이 망을 나누게 되면 앱의 공개 주소(`https://<도메인>`)를 쓴다 - 일꾼 API 는 JSON 뿐이라 터널을 거쳐도 무겁지 않고, 영상 바이트는 어느 쪽이든 저장소로 직접 오간다. **일꾼 → 저장소는 서명 주소로 인터넷을 거친다** - 외부 나가는 길만 있으면 된다.
+
+**자원과 격리.** 홈서버 일꾼은 세 차선 전부를 맡는다(결정: CPU 2 · 메모리 3GB · 낮은 우선순위 - 선언의 `VIDEO_WORKER_NICE: "10"`). **현재 플랫폼 선언에는 CPU · 메모리 · 읽기 전용 루트 · `cap_drop` · `/work` 볼륨 칸이 없다**(`infra/modules/app-docker/variables.tf`) - 그 칸이 생길 때까지 한도 없이 돈다. 이미지는 비루트(uid 10001) · 읽기 전용 루트에서 `/work` 만 쓰는 것을 전제로 만들었고, 로컬 `docker-compose.yml` 의 `video-worker` 가 그 격리를 그대로 건 예다(`cap_drop: ALL` · `pids_limit` · `tmpfs` · `mem_limit: 3g` · `cpus: 2`). 믿지 못하는 영상을 읽는 컨테이너라 격리 없이 오래 두지 않는다.
+
+**메모리 · 디스크 표** (원 구현 실측 - 일꾼 프로세스 전체. JVM 힙은 96MB 고정이고 ffmpeg 가 쓴다):
+
+| 일 | 입력 | 프로세스 메모리 | 비고 |
+|---|---|---|---|
+| remux (원본 단) | 1080p H.264 3분 / 4K HEVC 3분 | 16 / 17MB | 병목은 디스크(입력 + 출력, 4K 3분 ≈ 1.6GB) · 저장소 왕복. 벽시계 1.7 / 2.5초 |
+| 호환 단 | 1080p 3분 / 4K HEVC 30초 | 189 / 238MB | 1 CPU 에서 122초 / 36.5초 |
+| 사다리 720 + 480 | 1080p 3분 | 178MB | 158초 |
+| 사다리 1080 + 720 + 480 | 4K HEVC 30초 | 470MB | 1GB 컨테이너에서 이 크기까지가 한계 - **4K 위단까지 재인코딩은 1GB 에서 OOM, 4K 사다리는 컨테이너 2~3GB** |
+| 사다리 전부 | 4K HEVC 3분, 전 스레드 | RSS 1.76GB | 홈서버급 기계 |
+| 검증 디코드(공개 영상) | 1080p 3분 / 4K 3분 | 56 / 169MB | 1 CPU 에서 52초 / 150초 |
+
+`/work` 에는 **입력 파일 + 만든 조각**이 함께 있다 - 올리는 파일 상한(4GB)의 두 배보다 넉넉히 둔다. 분당 저장량 **[측정]**: 1080p H.264 17Mbps → 원본 단 129 + 사다리 32 = 161MB/분 · 1080p HEVC → 76.6 + 호환 21 + 32 = 129.6 · 4K HEVC → 266.4 + 21 + 62.8 = 350.2.
+
+**올린 원래 파일은 원본 단이 생기면 1시간 뒤 지워진다.** 원본 단(`o-<해시>/`)은 **재인코딩 없이** 올린 영상의 영상 · 소리 스트림을 HLS 조각으로 나눈 것이라 화질은 올린 그대로 남는다(호환 단 · 사다리만 재인코딩이고 원본 단은 늘 보관된다). 그래서 영상을 지우면 되돌릴 수 없다 - 폴더를 지우면 끝이다. 원본 단을 서버가 검증(폴더 나열 · 합계 크기 · 해시)하기 전에는 올린 파일을 지우지 않는다.
+
+**영상 버킷 설정** (비공개 영상은 CDN 없이 저장소 서명 주소로 받는다 - 버킷 공개 설정은 켜지 않는다):
+- **CORS** - 브라우저가 조각을 직접 `PUT` 하고 재생기가 `GET` 하므로 허용 origin(프론트 주소) 에 `PUT` · `GET` · `HEAD`, `AllowedHeaders: *`, **`ExposeHeaders: ETag`**(마칠 때 조각마다 ETag 가 필요하다). 로컬 compose 의 `s3-cors` 가 같은 모양이다.
+
+  ```json
+  {"CORSRules":[{"AllowedOrigins":["https://app.example.com"],"AllowedMethods":["GET","PUT","HEAD"],"AllowedHeaders":["*"],"ExposeHeaders":["ETag"],"MaxAgeSeconds":600}]}
+  ```
+- **끝나지 않은 멀티파트 올리기에 수명 규칙** **[확인 필요: 쓰는 저장소가 지원하는지 · 기본 기간]** - 서버 청소는 한 시간(`stale-upload-age`) 움직임 없는 올리기를 중단하지만, 서버가 죽어 있던 사이 버려진 멀티파트는 저장소가 조각 값을 계속 받는다. 안전망으로 버킷에 「미완료 멀티파트 올리기 중단」 규칙(S3 `AbortIncompleteMultipartUpload` - 1~2일)을 둔다. R2 · S3 가 이 규칙을 지원하지만 정확한 설정 위치와 기본 기간은 쓰는 공급자의 문서로 확인한다.
+- 공개 영상은 `skeleton.storage.web.public.*`(공개 영역 · CDN)가 필요하다 - 위 storage 공개 영역 줄.
+
+**Cloud Run 은 원할 때만 켜는 선택이다.** 홈서버 일꾼이 세 차선을 다 하므로 필요 없으면 켜지 않는다. 켜는 순서(프로젝트 · 결제 · 예산 알림 · API · 이미지 저장소 · 작업 정의 `VIDEO_WORKER_MODE=once` · 작업 하나만 실행하는 서비스 계정 키)와 단가는 [video-cloudrun](modules/video-cloudrun.md) 에 있다 - 같은 이미지가 `once` 모양으로 돈다.
+
+**일꾼이 죽었을 때**
+
+| 상황 | 영상에 일어나는 일 | 알려 주는 것 | 할 일 |
+|---|---|---|---|
+| 일꾼이 떠 있지 않다 | 올린 영상이 `QUEUED`(화면: 준비 중)로 줄만 선다. 일꾼이 돌아오면 이어서 처리 - 잃는 것 없음 | 5분 넘게 못 봤고 대기가 있으면 `VIDEO_QUEUE_STALE` | 컨테이너 로그 · 일꾼 토큰이 폐기되지 않았는지 · `VIDEO_WORKER_API` |
+| 변환 도중 죽었다 | 임대(10분)가 끝나면 다시 줄을 선다. 시도 3번을 다 쓰면 영상이 `FAILED`(올린 사람이 다시 올린다) | 한 시간에 5건 이상 실패하면 `VIDEO_FAILED_SURGE` | 로그의 실패 사유 · 올린 형식 |
+| 호환 단 · 사다리만 못 만든다 | 영상은 `PLAYABLE` 그대로 **원본 단으로 재생된다.** 「다른 기기용 판 준비 중」이 계속되고, 트랙만 `FAILED` 가 된다 | 호환 단이 2시간 넘게 대기하면 `VIDEO_COMPAT_STALE` | 일꾼에 `COMPAT` · `LADDER` 차선이 있는지 · 메모리(위 표) |
+| 임대를 잃은 일꾼이 뒤늦게 결과를 보낸다 | 409 로 무시된다. 그 폴더는 청소가 쓴다 | - | 없음 |
+| 앱이 죽었다 | 일꾼은 죽지 않고 5초마다 다시 집어 본다 | - | 앱을 되살린다 |
+| Cloud Run 깨우기가 연속 실패 | 일은 큐에 그대로 남고 **다른 곳으로 자동으로 돌리지 않는다** | `VIDEO_WAKE_FAILED` | [video-cloudrun](modules/video-cloudrun.md) 의 자격 · 설정 |
+
+경보는 `alert` 모듈이 있을 때 주인 경보(웹훅)로 간다 - 없으면 안 알려 준다(위 `alert` 줄).
+
 ## 8. 정적 프론트엔드
 
 같은 호스트에서 정적 프론트를 서빙하려면 선언에 `web` 과 `api_prefix` 를 함께 둔다 (`web` 만 있으면 플랫폼이 거부한다).
@@ -340,6 +393,7 @@ Caddy 가 `<api_prefix>/*` 만 백엔드로 보내고 나머지는 `data/apps/<n
 
 ## 9. 알려진 한계 · 플랫폼에 묻는 것
 
+- 영상 변환 일꾼(`deploy/video-worker.yaml`)은 CPU · 메모리 한도, 읽기 전용 루트, `cap_drop`, 쓰기 볼륨을 선언으로 받을 칸이 아직 플랫폼에 없다 - 플랫폼에 칸을 요청한다 (§7 「영상 변환 일꾼」).
 - 운영자 비밀은 `data/secrets/<name>.local.env` 로 넣는다 (§7). `secrets:` 에 적고 파일에 안 적으면 무작위 값이 들어간다.
 - `<ENV_PREFIX>_CLIENT_IP_MODE` · `_CLIENT_IP_TRUSTED_PROXIES` 는 플랫폼이 넣는다 (§3).
 - 계정(`account`)이 `AuthAccountRepository` 를 대신하므로 스타터는 내장 시드 계정 없이 prod 에서 뜬다 (시드 계정은 로컬 프로필 전용 — 보호 환경에서는 기동 실패).

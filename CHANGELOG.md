@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 영상 - 올리기 · 일꾼 · 재생 · Cloud Run (2026-11-04)
+
+- 새 모듈 셋 - `video`(영상 올리기 · 재생 · 삭제: 브라우저가 저장소로 직접 멀티파트로 올리고 새로 고쳐도 빠진 조각만 이어 올린다 · 정책 `VideoAccessPolicy` · 용량 `VideoQuota` · 상태 기계 · 버려진 올리기 청소 · 변환 일꾼용 API `/api/internal/video`(집기 · 임대 · 진행률 · 결과 올릴 주소 · 마침 · 실패, 일꾼 토큰은 운영자가 발급하고 해시만 저장) · 결과 검증(허용 이름 · 폴더 해시 · 합계 크기) · 임대 만료와 재시도 3회 · 공개 영상은 공개 영역 주소, 비공개 영상은 경로에 출입증이 든 재생 목록(조각 주소를 남은 수명으로 서명) · 삭제는 되돌릴 수 없다 · 주인 경보 넷), `video-jdbc`(PostgreSQL · MySQL, 표 셋, 상태 전이는 한 문장 조건부 갱신, 후속은 `job-queue-jdbc`), `video-cloudrun`(일이 줄 서면 Cloud Run 작업을 깨운다 - 창 안 실행 상한 · 최소 간격 · 연속 실패 경보, 기본 꺼짐). 모두 기본 꺼짐 - 앱 yml 이 `skeleton.video.enabled=true` 로 켠다(재생 비밀 `<P>_VIDEO_PLAYBACK_SECRET` 32자 이상 필수).
+- 새 앱 `apps/video-worker`(Kotlin + ffmpeg 이미지): 서버의 일꾼 API 에서 일을 집어 원본 단(**재인코딩 없는 HLS 조각 - 화질은 올린 그대로**) · 호환 단(H.264 720p) · 사다리(1080/720/480)와 포스터를 만든다. 저장소 키를 갖지 않고 서버가 서명한 주소만 쓴다. 상주(`poll`, 작은 `/health`) · `once`(Cloud Run 작업) 두 모양, 믿지 못하는 파일 격리(허용 코덱 · 프로토콜 목록 · 비루트 · 읽기 전용 루트). 올린 원래 파일은 원본 단을 검증한 뒤 1시간 뒤 지운다. `new-project.sh --with-video-worker` 로만 찍힌다.
+- `storage`: `PresignedStorage.listParts`(이어 올리기 - 기본 구현은 미지원 예외, S3 구현이 전부 모은다).
+- 새 마이그레이션 `V20261104100000__videos.sql`(두 방언). 문서 `docs/modules/video.md` · `video-jdbc.md` · `video-cloudrun.md`, 설정 스니펫 `docs/config/modules/video*.yml`. 프론트 짝은 react-skeleton `@skeleton/video`.
+- `apps/sample`: 노트에 영상 한 편 - 늘 비공개, 주인만 올리고 · 보고 · 지운다(`NoteVideoPolicy`), 일꾼 토큰 발급은 ADMIN(`NoteVideoOperator`). 마이그레이션 `V20261104120000__notes_video.sql`(`notes.video_id`). 시험 `NoteVideoJourneyIntegrationTest` 가 가짜 일꾼으로 올리기부터 재생 · 다른 계정 404 까지 간다.
+- 로컬: `docker-compose.yml` 의 `video-worker`(profile `video`) - 세 차선 상주, CPU 2 · 메모리 3GB · 낮은 우선순위, 비루트 · 읽기 전용 루트 · `cap_drop: ALL`, `/work` 볼륨. 비공개 재생 목록 안의 조각 주소(`localhost:S3_PORT`)가 컨테이너에서 열리도록 로컬 S3 와 네트워크를 나눠 쓴다. `scripts/dev.sh` 가 video 모듈을 쓰는 앱(`APP=sample`)이면 이미지를 만들어 함께 올린다.
+- 배포: `deploy/video-worker.yaml`(도메인 없음 · DB 없음 · 비밀 `VIDEO_WORKER_TOKEN` · 앱까지 플랫폼 내부 망 주소), `docs/deploy.md` §7 「영상 변환 일꾼」(일꾼 토큰 발급 순서 · 메모리 표 · 버킷 CORS `PUT` `GET` `ExposeHeaders: ETag` · 미완료 멀티파트 수명 규칙 [확인 필요] · 일꾼이 죽었을 때 표). 움짤(GIF) 변환은 다음 조각이 더한다.
+
 ### 예약(좌석 지정 · 선착순) + 대기열 (2026-11-03)
 
 - 새 모듈 넷 - `booking`(회차 = 풀의 배치도에서 자리를 직접 찍어 **잡고** · 다시 눌러 **놓고** · 보류 시간(기본 10분, 늘지 않는다)이 지나면 **자동 반환** · 무료 확정 · 본인 취소, 여러 자리는 전부 아니면 전무, 이중 판매 0 의 정본은 DB 자리 줄 조건부 갱신), `booking-jdbc`(PostgreSQL · MySQL, 표 여섯), `waiting-room`(로그인한 사람만 서는 대기열: 오픈 전 줄은 오픈 순간 한 번 섞고 그 뒤는 온 순서, 분당 입장 수, 서명한 순번표 · 입장권), `waiting-room-jdbc`. 모두 **꺼짐이 기본**이고 이 모듈들을 안 붙인 앱의 동작은 그대로다.

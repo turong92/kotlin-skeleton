@@ -18,7 +18,7 @@
 | 부팅에 필요한 것 | `DataSource` 와 `db-*` 모듈 하나, 그리고 이 모듈의 마이그레이션이 적용된 스키마. |
 | 교체 지점 | `JdbcVideoStore`, `JdbcVideoWorkerStore`, `JobQueueVideoFollowUps` |
 | 마이그레이션 | `modules/video-jdbc/src/main/resources/db/migration/postgresql`, `modules/video-jdbc/src/main/resources/db/migration/mysql` |
-| 프론트 짝 | 없음 |
+| 프론트 짝 | `@skeleton/video` |
 | 테스트 | `modules/video-jdbc/src/dbTest` (PostgreSQL · MySQL 컨테이너로 두 번 돈다 (`postgresTest`, `mysqlTest`)) |
 
 자세히: [video](video.md) · [스키마 관리](../schema-management.md)

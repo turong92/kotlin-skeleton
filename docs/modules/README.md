@@ -94,7 +94,7 @@
 | `booking-jdbc` | 예약 저장을 DB 에 두기 (자리 줄 조건부 갱신이 정본, PostgreSQL · MySQL) | [booking-jdbc](booking-jdbc.md) |
 | `waiting-room` | 대기열(가상 대기실) — 로그인한 사람만 줄 서기 · 오픈 순간 무작위 섞기 · 분당 입장 수 · 서명 입장권 `requireEntry` | [waiting-room](waiting-room.md) |
 | `waiting-room-jdbc` | 대기열 저장을 DB 에 두기 (번호는 방 줄 잠금 뒤에 — 1..n 빈틈 없음, PostgreSQL · MySQL) | [waiting-room-jdbc](waiting-room-jdbc.md) |
-| `video` | 영상 올리기 — 저장소로 직접 멀티파트(이어 올리기) · 정책 · 용량 · 상태 기계 · 버려진 올리기 청소 (변환 · 재생은 다음 조각, 기본 꺼짐) | [video](video.md) |
+| `video` | 영상 올리기 · 재생 — 저장소로 직접 멀티파트(이어 올리기) · 정책 · 용량 · 일꾼 API(변환은 별도 일꾼) · 비공개 재생 출입증 · 삭제 · 청소 (기본 꺼짐) | [video](video.md) |
 | `video-jdbc` | 영상 저장을 DB 에 두기 (표 셋, 상태 전이는 조건부 갱신, PostgreSQL · MySQL) | [video-jdbc](video-jdbc.md) |
 | `video-cloudrun` | Cloud Run 작업 깨우기 — 창 안 실행 상한 · 최소 간격 · 연속 실패 경보, 기본 꺼짐 | [video-cloudrun](video-cloudrun.md) |
 | `badge` | 배지 — 정의 · 수여/회수 · 내 배지 · 비로그인 공개 프로필 배지 · 보상 지급기 (포인트 · 쿠폰을 모른다) | [badge](badge.md) |

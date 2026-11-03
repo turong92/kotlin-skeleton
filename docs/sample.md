@@ -341,12 +341,25 @@ APP=sample scripts/dev.sh    # 백엔드(+프론트 WEB_DIR)만 같은 방식으
 | 푸시를 눌러 연 것을 센다(공지 통계의 「열람」) - 비밀이 비면 꺼진다(푸시는 그대로, 클릭 통계만 없다). 로컬 · 시험은 고정 값, 운영은 환경변수 `SKELETON_NOTIFICATION_PUSH_OPEN_REPORT_SECRET`(32자 이상) | `push.open-report.secret` |
 쓰는 법: 운영자(로컬 시드 `admin@example.com`)로 로그인해 `POST /api/v1/admin/broadcasts`(종류 · 제목 · 본문 · 채널 · 대상) -> `POST /{id}/send` -> `GET /{id}` 가 `SENT` 가 되면 통계(`stats`)를 본다. 화면은 react 견본의 `/admin/broadcasts`. 시험: `broadcast/BroadcastJourneyIntegrationTest`(시드 3명에게 보내기 -> 알림함 3줄 · 가짜 보내기가 기기 수만큼 · 한 명이 읽음 -> `read = 1` · 클릭 보고 두 번 -> `opened = 1`).
 
+## 노트의 영상 (`/api/v1/videos`, `PUT /api/v1/notes/{id}` 의 `videoId`)
+두 줄(`video` · `video-jdbc`)과 이 앱의 조각 셋이다 - 올리기 · 일꾼 API · 재생 출입증은 모듈이 하고, 이 앱은 **누가 올리고 · 보느냐**만 정한다.
+
+| 선택 | 어디 |
+| 영상을 켠다(모듈 기본은 꺼짐). 재생 출입증의 비밀 - 로컬은 `application-local.yml` 의 고정 값, 운영은 환경변수 `SKELETON_VIDEO_PLAYBACK_SECRET`(32자 이상, 선언 `secrets:`), 시험은 test config | `video.enabled` · `video.playback.secret` |
+| 영상은 노트에 붙이는 한 가지 용도(`purpose=note`)이고 **늘 `PRIVATE`** - 올리기 · 재생 · 지우기 모두 주인만. 공개 영상은 이 앱이 받지 않는다(403 `VIDEO.FORBIDDEN`). 남의 영상은 재생 허가 · 조회 · 지우기 · 노트에 걸기 모두 404 | `notes/NoteVideoPolicy` (`VideoAccessPolicy`) |
+| 변환 일꾼 토큰을 발급 · 폐기하는 운영자 경로는 ADMIN 만 | `notes/NoteVideoOperator` (`VideoOperatorPolicy`) |
+| 노트의 영상 한 편(`notes.video_id`, 외래 키 없음) - 붙일 때 내 영상인지 확인(남의 영상 404), 통째로 바꾸는 PUT 이라 `videoId` 를 안 보내면 영상이 떨어진다. 영상을 떼거나 노트를 지우면 영상도 지운다(커밋 뒤, 첨부와 같다). 팀 노트는 영상을 못 붙인다 | `notes/NoteService` · 마이그레이션 `V20261104120000__notes_video.sql` |
+
+쓰는 법: `POST /api/v1/videos {bytes, contentType, purpose:"note", visibility:"PRIVATE"}` -> 조각 주소(`POST …/parts`)로 저장소에 직접 `PUT` -> `POST …/complete` -> 노트 `PUT` 에 `videoId` -> 상태(`GET /api/v1/videos/{id}`)가 `PLAYABLE` 이 되면 `POST …/playback` 이 재생 허가(비공개라 주소에 출입증이 든다)를 준다.
+**변환은 일꾼이 한다** - 서버 안에서 돌지 않는다. 로컬은 `scripts/dev.sh`(`APP=sample`)가 compose 의 `video-worker`(세 차선 · 상주)를 함께 올린다. 일꾼이 없으면 올린 영상은 `QUEUED` 로 줄만 선다. 운영 일꾼은 [deploy.md](deploy.md) 「영상 변환 일꾼」 + `deploy/video-worker.yaml`.
+시험: `notes/NoteVideoJourneyIntegrationTest` - 가짜 일꾼(시험이 일꾼 API 를 일꾼 토큰으로 직접 부른다. ffmpeg 도 이미지도 없다)으로 올리기 -> claim -> 결과 올리기 -> `PLAYABLE` -> 재생 허가 -> 재생 목록 -> 다른 계정 404 -> 노트를 지우면 영상 삭제까지 한 여정.
+
 ## 이 샘플이 하지 않는 것
 
 - 노트 시드 데이터 없음 — 빈 상태가 정직하게 보인다.
 - 응원하기는 알림 · 메일을 보내지 않는다 — `PaymentOrderListener` 는 주문 줄 락 안에서 돌아 짧아야 한다. 결제 알림이 필요하면 `NoteNotifier` 처럼 `NotificationPublisher` 를 부르거나 작업으로 넘긴다(스펙 §4.2).
 - 구독 · 정기결제 · 영수증 · 세금계산서는 없다(결제 장부 1단계는 단건 결제 + 환불).
-- 첨부는 노트 하나에 파일 하나. 목록 · 버전 · 공유는 도메인이 커질 때의 일이다.
+- 첨부는 노트 하나에 파일 하나, 영상도 노트 하나에 한 편. 목록 · 버전 · 공유는 도메인이 커질 때의 일이다.
 - 인증은 스켈레톤 기본(시드 계정 · 15분 액세스 토큰). 실제 계정 저장소는 `AuthAccountRepository` 빈을 앱이 둔다(README "Protected profiles").
 - PostgreSQL 전용(마이그레이션 · 쿼리의 `ILIKE` · `FILTER`). 그래서 `scripts/new-project.sh --with-sample` 은 `--db mysql` 과 같이 못 쓴다.
 

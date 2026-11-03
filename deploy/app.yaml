@@ -59,6 +59,8 @@ secrets:
   - SKELETON_NOTIFICATION_SLACK_WEBHOOK_URL               # [notification-slack] 운영자 (.local.env)
   - SKELETON_NOTIFICATION_WEBPUSH_VAPID_PRIVATE_KEY       # [notification-webpush] 운영자 (.local.env) — VAPID 개인 키(npx web-push generate-vapid-keys), env: 의 공개 키와 한 쌍. 푸시를 안 쓰면 이 줄을 지우고 SKELETON_NOTIFICATION_WEBPUSH_ENABLED=false. 처음 정한 뒤 바꾸지 않는다(모든 웹 구독이 끊긴다)
   - SKELETON_NOTIFICATION_FCM_CREDENTIALS                 # [notification-fcm] 운영자 (.local.env) — Firebase 서비스 계정 JSON 의 base64 (FCM 을 켤 때만; 안 쓰면 이 줄을 지운다)
+  - SKELETON_VIDEO_PLAYBACK_SECRET                        # [video] 무작위로 충분 — 비공개 영상 재생 출입증의 HMAC 키(32자 이상, skeleton.video.enabled=true 일 때만 필요 - 샘플은 켠다; 안 쓰면 이 줄을 지운다; 바꾸면 발급한 출입증이 모두 끊긴다)
+  - SKELETON_VIDEO_CLOUDRUN_CREDENTIALS_JSON              # [video-cloudrun] 운영자 (.local.env) — 그 Cloud Run 작업 하나만 실행하는 서비스 계정 키 JSON 원문. Cloud Run 일꾼을 켤 때만; 안 쓰면 이 줄을 지운다 (docs/modules/video-cloudrun.md)
   - SKELETON_ALERT_WEBHOOK_URL                            # [alert] 운영자 (.local.env) — 안 쓰면 이 줄을 지운다 (없으면 경보는 로그로만)
 #
 # 선택한 모듈이 요구하는 환경변수 — 빠졌을 때의 동작 (모듈이 없으면 줄이 지워진다). 비밀이 아닌 값은 아래 env: 에, 비밀은 위 secrets: + .local.env
@@ -92,6 +94,8 @@ secrets:
 #   [notification-slack] (env:) SKELETON_NOTIFICATION_SLACK_ENABLED=true   웹훅 URL 이 비면 아무것도 보내지 않는다
 #   [notification-webpush] (env:) SKELETON_NOTIFICATION_WEBPUSH_VAPID_PUBLIC_KEY · SKELETON_NOTIFICATION_WEBPUSH_SUBJECT (비밀 아님)   켠 채(apps/sample 은 켠다) 키가 비었거나 한 쌍이 아니거나 시험 키면 stage|prod 에서 기동 실패 — 끄려면 SKELETON_NOTIFICATION_WEBPUSH_ENABLED=false
 #   [notification-fcm] (env:) SKELETON_NOTIFICATION_FCM_ENABLED=true   서비스 계정(위 secrets:)이 비었거나 못 읽으면 stage|prod 에서 기동 실패 (기본 꺼짐)
+#   [video] SKELETON_VIDEO_PLAYBACK_SECRET  (비밀 — secrets: 에 이름이 있다) 켠 채(skeleton.video.enabled=true) 비었거나 32자보다 짧으면 기동 실패. 변환은 별도 일꾼(apps/video-worker)이 한다 — 선언 한 장 deploy/video-worker.yaml, 일꾼 토큰은 운영자 발급 API(POST /api/v1/videos/admin/workers)가 한 번 보여 준다 (docs/deploy.md §7 「영상 변환 일꾼」)
+#   [video-cloudrun] (env:) SKELETON_VIDEO_CLOUDRUN_ENABLED=true · _PROJECT · _REGION · _JOB (비밀 아님)   켠 채 서비스 계정 키(위 secrets:)가 비었거나 못 읽으면 기동 실패 — 안 켜면 읽지 않는다
 #   [alert] 웹훅 URL 이 비면 경보가 로그로만 남는다 (기동은 된다)
 #   [crypto] SKELETON_CRYPTO_PRIMARY_KEY_ID (env:) · SKELETON_CRYPTO_KEYS_<ID> (base64 AES 키 — 운영자 비밀, secrets: 에 그 이름을 더한다)   키가 없으면 암호화 빈이 없다
 #   [config-aws-ssm] AWS_PROFILE · AWS 자격 증명   홈서버에는 AWS 가 없다 — 이 모듈은 고르지 않는다 (paths 를 정하면 부팅에서 자격 증명을 찾는다)

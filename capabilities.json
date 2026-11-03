@@ -3896,7 +3896,11 @@
         }
       ],
       "docs": ["docs/modules/video.md"],
-      "frontend": null,
+      "frontend": {
+        "capabilities": ["video"],
+        "newProjectFlag": "--packages video",
+        "packages": ["@skeleton/video"]
+      },
       "notFor": [
         "꺼진 채 시작한다 — 앱 yml 이 skeleton.video.enabled=true 로 켠다. 켜면 video-jdbc(저장)와 storage-s3(객체 저장소)가 있어야 기동한다",
         "변환 자체는 이 모듈이 하지 않는다 — 일꾼 앱(apps/video-worker)이 일꾼 API 로 집어 간다",
@@ -3969,7 +3973,11 @@
       "basePaths": [],
       "secrets": [],
       "docs": ["docs/modules/video-jdbc.md"],
-      "frontend": null,
+      "frontend": {
+        "capabilities": ["video"],
+        "newProjectFlag": "--packages video",
+        "packages": ["@skeleton/video"]
+      },
       "notFor": [
         "DataSource · db-* 모듈과 이 모듈의 마이그레이션이 적용된 스키마가 필요하다",
         "video 를 켜지 않으면(skeleton.video.enabled) 표만 만들고 쓰이지 않는다"
@@ -4153,7 +4161,7 @@
       "module": null,
       "path": "apps/sample",
       "status": "stable",
-      "summary": "참조 앱 Notes — 로그인한 사람이 첨부 있는 노트를 관리하는 제품 모양의 작은 앱(스타터 + idempotency · notification-jdbc/sse · storage-s3 · storage-image(+jdbc · imageio) · job-queue-jdbc · board · author-profile · alert-jdbc · search-jdbc 의 노트·상품 검색 · review-jdbc 의 상품 리뷰(산 사람만, 결제 → 구매 신호, 리뷰 → 보상) · payment-jdbc/payment-toss 의 결제 「응원하기」 · booking-jdbc/waiting-room-jdbc 의 좌석 예약 + 대기열 + 결제 · redis-core 의 배치도 중계). 로그인 아이디를 켜고 이메일은 쓰기 때 받는다. 새 기능은 이 앱의 한 조각을 따라 한다.",
+      "summary": "참조 앱 Notes — 로그인한 사람이 첨부 있는 노트를 관리하는 제품 모양의 작은 앱(스타터 + idempotency · notification-jdbc/sse · storage-s3 · storage-image(+jdbc · imageio) · job-queue-jdbc · board · author-profile · alert-jdbc · search-jdbc 의 노트·상품 검색 · review-jdbc 의 상품 리뷰(산 사람만, 결제 → 구매 신호, 리뷰 → 보상) · payment-jdbc/payment-toss 의 결제 「응원하기」 · booking-jdbc/waiting-room-jdbc 의 좌석 예약 + 대기열 + 결제 · redis-core 의 배치도 중계 · video/video-jdbc 의 노트 영상 한 편(비공개, 변환은 별도 일꾼 apps/video-worker, 로컬은 compose 의 video 프로필)). 로그인 아이디를 켜고 이메일은 쓰기 때 받는다. 새 기능은 이 앱의 한 조각을 따라 한다.",
       "starter": false,
       "newProjectFlag": "--with-sample",
       "autoIncludes": [
@@ -4224,6 +4232,8 @@
         "storage-image-imageio",
         "storage-image-jdbc",
         "storage-s3",
+        "video",
+        "video-jdbc",
         "waiting-room",
         "waiting-room-jdbc",
         "workspace",

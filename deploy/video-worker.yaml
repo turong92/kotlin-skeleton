@@ -1,0 +1,36 @@
+# 영상 변환 일꾼의 홈서버 배포 선언 한 장 (docs/deploy.md §7 「영상 변환 일꾼」). 앱 선언(app.yaml)과는 별개의 컨테이너 하나 — 홈서버 레포의 infra/apps/video-worker.yaml 로 복사해 쓴다.
+# 앱(video 모듈)의 일꾼 API 에서 일을 집어 가 변환하고 결과를 저장소로 직접 올린다 — **밖에서 들어오는 길이 없다**: 도메인 없음 · DB 없음 · 호스트 포트 없음. 일꾼이 밖(앱 · 저장소)으로 나갈 뿐이다.
+#
+# ★ GHCR 는 쓰지 않는다 (app.yaml 과 같다). 홈서버에서 로컬로 빌드한다:
+#   1) ./gradlew :apps:video-worker:installDist        (프로그램을 먼저 만든다)
+#   2) docker build -t video-worker:v0.1.0 apps/video-worker     (ffmpeg 는 이미지 안에 apt 버전 고정으로 들어간다 - apps/video-worker/Dockerfile)
+#   3) 이 파일의 tag 를 v0.1.0 으로 올려 플랫폼에 적용한다. tag 는 불변이다 — 롤백 = 이전 값으로 되돌리기.
+# 한 일꾼은 한 앱에 묶인다(일꾼 토큰의 해시가 그 앱 DB 에 있다). 앱이 둘 이상이면 name 을 앱마다 다르게 하고(예: notes-video-worker) 선언을 하나씩 둔다.
+
+name: video-worker               # ^[a-z][a-z0-9-]{1,19}$ — 컨테이너 이름은 app-video-worker
+image: video-worker              # 로컬에서 빌드한 이미지 이름 (docker build -t video-worker:<tag>)
+image_local: true
+tag: v0.1.0
+port: 8080                       # 컨테이너 안 /health 의 포트(VIDEO_WORKER_HEALTH_PORT 기본값). 호스트 포트는 열지 않는다
+health: /health                  # 컨테이너 안에서 `wget` 으로 읽는다 — 이미지에 wget 이 들어 있다. 상주(poll) 모양일 때만 뜨는 작은 서버(200 {"status":"UP"})
+env_prefix: VIDEO_WORKER         # 이 일꾼의 환경변수 접두사 (VIDEO_WORKER_*)
+db: none                         # DB 를 쓰지 않는다 — 상태는 전부 앱 쪽 영상 표에 있다
+redis: false
+
+# 일꾼 토큰: 앱의 운영자 발급 API(POST /api/v1/videos/admin/workers {name, lanes})가 한 번 보여 주는 평문이다. 랜덤 값이 아니라 **운영자가 정한 값**이므로
+# 값은 홈서버의 data/secrets/video-worker.local.env (0600) 에 `VIDEO_WORKER_TOKEN=값` 으로 적는다 — 파일에 없으면 plan 이 거부한다(operator_only).
+secrets:
+  - VIDEO_WORKER_TOKEN
+operator_only:
+  - VIDEO_WORKER_TOKEN
+
+env:
+  # 앱 주소 — **플랫폼 내부 망으로 닿는다**: 앱 컨테이너는 `<프로젝트>_web` 네트워크에 별칭 `app-<앱 name>` 으로 붙고 일꾼도 같은 네트워크에 붙으므로 도메인 · Caddy · 터널을 거치지 않는다.
+  # 비공개 영상의 입력 재생 목록 경로(/api/v1/videos/play/…)도 이 주소 기준으로 풀린다. <앱 name> 은 앱 선언(app.yaml)의 name.
+  VIDEO_WORKER_API: http://app-<앱 name>:8080
+  VIDEO_WORKER_ID: home-worker
+  VIDEO_WORKER_LANES: REMUX,COMPAT,LADDER   # 홈서버 일꾼이 세 차선 전부 맡는다(Cloud Run 일꾼은 원할 때만 — docs/modules/video-cloudrun.md)
+  VIDEO_WORKER_MODE: poll
+  VIDEO_WORKER_NICE: "10"                   # 낮은 우선순위(nice) — 같은 기계의 다른 앱에 양보한다
+# 이 선언에는 아직 자원 칸이 없다 — CPU 2 · 메모리 3GB · 읽기 전용 루트 · cap_drop ALL · pids 상한 · /work 볼륨은 플랫폼이 선언 필드로 받을 때 더한다.
+# 그때까지 한도 없이 돈다: 3GB 보다 작은 컨테이너에서는 4K 영상의 사다리가 죽는다(docs/deploy.md 메모리 표).
