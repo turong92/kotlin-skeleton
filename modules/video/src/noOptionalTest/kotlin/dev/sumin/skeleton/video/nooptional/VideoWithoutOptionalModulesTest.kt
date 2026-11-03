@@ -24,7 +24,7 @@ class VideoWithoutOptionalModulesTest {
     fun `video stands without the scheduler and spring security on the classpath`() {
         WebApplicationContextRunner()
             .withConfiguration(AutoConfigurations.of(VideoAutoConfiguration::class.java, VideoWebAutoConfiguration::class.java))
-            .withPropertyValues("skeleton.video.enabled=true")
+            .withPropertyValues("skeleton.video.enabled=true", "skeleton.video.playback.secret=${"k".repeat(40)}")
             .withBean(TimeProvider::class.java, { TimeProvider { java.time.Instant.now() } })
             .withBean(PresignedStorage::class.java, { unused(PresignedStorage::class.java) })
             .withBean(VideoStore::class.java, { unused(VideoStore::class.java) })
@@ -37,6 +37,7 @@ class VideoWithoutOptionalModulesTest {
                 assertTrue(!ctx.containsBean("videoCleanupJob"), "the scheduled marker needs the scheduler module")
                 assertTrue(!ctx.containsBean("videoController"), "HTTP needs spring security")
                 assertTrue(!ctx.containsBean("videoWorkerController"), "the worker API needs spring security too")
+                assertTrue(!ctx.containsBean("videoPlaylistController") && !ctx.containsBean("videoAdminController"), "the playlist and operator doors need spring security too")
                 assertTrue(!ctx.containsBean("videoMonitor"), "the alerts need the alert module")
             }
     }

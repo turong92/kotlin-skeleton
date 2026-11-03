@@ -68,6 +68,15 @@ class FakeStorage : PresignedStorage {
 
     override fun upload(request: UploadObjectRequest) = StoredObjectWriteResult(request.key)
     override fun copy(request: CopyObjectRequest) = StoredObjectWriteResult(request.destinationKey)
+    /** [read] 가 돌려줄 객체 내용 — 재생 목록 시험이 채운다 */
+    val texts = linkedMapOf<String, String>()
+    val reads = mutableListOf<String>()
+
+    override fun read(key: ObjectKey, range: LongRange?): java.io.InputStream {
+        reads += key.value
+        return (texts[key.value] ?: error("NoSuchKey ${key.value}")).byteInputStream()
+    }
+
     override fun list(request: ListObjectsRequest) =
         ListedObjects(objects.filterKeys { it.startsWith(request.prefix) }.map { (k, v) -> StoredObjectSummary(ObjectKey(k), sizeBytes = v) })
 
@@ -118,7 +127,7 @@ class FakeVideoStore : VideoStore {
 
     override fun markDeleted(id: String, at: Instant): Boolean {
         val v = rows[id]?.takeIf { it.status != VideoStatus.DELETED } ?: return false
-        rows[id] = v.copy(status = VideoStatus.DELETED, updatedAt = at)
+        rows[id] = v.copy(status = VideoStatus.DELETED, leaseOwner = null, leaseUntil = null, lane = null, progress = null, updatedAt = at)
         return true
     }
 
@@ -299,4 +308,5 @@ class RecordingEvents : VideoEvents {
     override fun onPlayable(video: Video) { calls += "playable:${video.id}" }
     override fun onTrackReady(video: Video, lane: VideoLane) { calls += "track:${lane.name}:${video.id}" }
     override fun onFailed(video: Video) { calls += "failed:${video.id}" }
+    override fun onDeleted(video: Video) { calls += "deleted:${video.id}" }
 }

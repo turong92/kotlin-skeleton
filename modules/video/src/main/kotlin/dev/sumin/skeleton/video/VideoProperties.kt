@@ -20,6 +20,9 @@ import org.springframework.util.unit.DataSize
  *     worker-token-sha256: "" # 로컬 전용 — 이 해시(SHA-256 16진수 64자)의 일꾼을 기동 때 등록한다. stage · prod 에서는 기동 실패
  *     cleanup-delay: 1h       # 원본 단 검증 뒤 이만큼 있다가 올린 원 파일을 지우고 중복 결과 폴더를 쓴다
  *     worker: { lease-duration: 10m, url-ttl: 2h }
+ *     playback:
+ *       secret: ""            # 비공개 영상 재생 출입증의 HMAC 비밀 — 켜면 32자 이상 필수(환경변수 <P>_VIDEO_PLAYBACK_SECRET, 선언의 secrets:). 무작위로 충분, 바꾸면 발급된 출입증이 모두 끊긴다
+ *       ttl: 4h               # 재생 허가 한 번의 출입증 수명 — 조각 주소도 이 남은 수명으로 서명한다
  *     monitor: { worker-absent: 5m, compat-stale-after: 2h, failure-surge-count: 5, failure-window: 1h }   # 주인 경보 문턱
  *     http:
  *       enabled: true         # false 면 /api/v1/videos 를 등록하지 않는다
@@ -38,6 +41,7 @@ data class VideoProperties(
     val workerTokenSha256: String = "",
     val cleanupDelay: Duration = Duration.ofHours(1),
     val worker: Worker = Worker(),
+    val playback: Playback = Playback(),
     val monitor: Monitor = Monitor(),
     val http: Http = Http(),
 ) {
@@ -49,6 +53,18 @@ data class VideoProperties(
         /** 일꾼에게 주는 읽기 · 올리기 서명 주소의 수명 */
         val urlTtl: Duration = Duration.ofHours(2),
     )
+
+    /** 비공개 영상 재생 — 출입증은 `v1.<영상 id>.<만료>.<mac>` 이고 경로에 든다 */
+    data class Playback(
+        val secret: String = "",
+        val ttl: Duration = Duration.ofHours(4),
+    ) {
+        init {
+            require(!ttl.isZero && !ttl.isNegative) { "skeleton.video.playback.ttl must be positive" }
+        }
+
+        override fun toString(): String = "Playback(secret=${if (secret.isEmpty()) "" else "****"}, ttl=$ttl)"
+    }
 
     /** 주인 경보 문턱 */
     data class Monitor(

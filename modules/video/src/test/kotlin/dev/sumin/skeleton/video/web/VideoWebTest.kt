@@ -2,12 +2,23 @@ package dev.sumin.skeleton.video.web
 
 import dev.sumin.skeleton.common.GlobalExceptionHandler
 import dev.sumin.skeleton.common.time.TimeProvider
+import dev.sumin.skeleton.storage.StoragePublicProperties
+import dev.sumin.skeleton.storage.StorageWebProperties
 import dev.sumin.skeleton.storage.UploadedPart
+import dev.sumin.skeleton.video.FakeFollowUps
 import dev.sumin.skeleton.video.FakeStorage
+import dev.sumin.skeleton.video.FakeTransactions
 import dev.sumin.skeleton.video.FakeVideoStore
 import dev.sumin.skeleton.video.OwnerVideoAccessPolicy
+import dev.sumin.skeleton.video.PlaybackFixtures
+import dev.sumin.skeleton.video.StorageVideoPlayback
+import dev.sumin.skeleton.video.VideoFinalizeEvent
+import dev.sumin.skeleton.video.VideoKeys
+import dev.sumin.skeleton.video.VideoLibrary
+import dev.sumin.skeleton.video.VideoPlaybackTokens
 import dev.sumin.skeleton.video.VideoProperties
 import dev.sumin.skeleton.video.VideoQuota
+import dev.sumin.skeleton.video.VideoStatus
 import dev.sumin.skeleton.video.VideoUploads
 import kotlin.test.Test
 import org.springframework.http.MediaType
@@ -23,8 +34,14 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders
 /** 올리기 HTTP 모양 — 시작 · 조각 주소 · 조각 목록 · 마침 · 지우기. 남의 영상은 모두 404, 로그인하지 않으면 401 */
 class VideoWebTest {
     private val storage = FakeStorage()
-    private val uploads = VideoUploads(VideoProperties(enabled = true), FakeVideoStore(), storage, OwnerVideoAccessPolicy, VideoQuota { _, _, _ -> true }, TimeProvider.systemUtc())
-    private val mvc: MockMvc = MockMvcBuilders.standaloneSetup(VideoController(uploads)).setControllerAdvice(GlobalExceptionHandler()).build()
+    private val store = FakeVideoStore()
+    private val followUps = FakeFollowUps()
+    private val time = TimeProvider { PlaybackFixtures.t0 }
+    private val props = VideoProperties(enabled = true)
+    private val uploads = VideoUploads(props, store, storage, OwnerVideoAccessPolicy, VideoQuota { _, _, _ -> true }, time)
+    private val playback = StorageVideoPlayback(props, VideoKeys(props, StorageWebProperties()), storage, { StoragePublicProperties() }, VideoPlaybackTokens(PlaybackFixtures.SECRET, time))
+    private val library = VideoLibrary(store, OwnerVideoAccessPolicy, playback, followUps, FakeTransactions(), time)
+    private val mvc: MockMvc = MockMvcBuilders.standaloneSetup(VideoController(uploads, library)).setControllerAdvice(GlobalExceptionHandler()).build()
 
     private fun caller(id: String) = TestingAuthenticationToken(id, "n/a", "ROLE_USER").apply { isAuthenticated = true }
 
@@ -126,5 +143,44 @@ class VideoWebTest {
         val id = start()
         mvc.perform(delete("/api/v1/videos/$id").principal(caller("acc_a"))).andExpect(status().isNoContent)
         mvc.perform(get("/api/v1/videos").param("purpose", "note").principal(caller("acc_a"))).andExpect(status().isOk).andExpect(jsonPath("$.values.length()").value(0))
+    }
+
+    @Test
+    fun `playback of a playable video answers the grant the player reads, and nothing for someone else's`() {
+        store.rows["vid1"] = PlaybackFixtures.video()
+
+        mvc.perform(post("/api/v1/videos/vid1/playback").principal(caller("acc_a")))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.value.src").value(org.hamcrest.Matchers.startsWith("/api/v1/videos/play/v1.vid1.")))
+            .andExpect(jsonPath("$.value.compat").exists())
+            .andExpect(jsonPath("$.value.hls").exists())
+            .andExpect(jsonPath("$.value.poster").exists())
+            .andExpect(jsonPath("$.value.codec").value("avc1.640028"))
+            .andExpect(jsonPath("$.value.w").value(1080))
+            .andExpect(jsonPath("$.value.h").value(1920))
+            .andExpect(jsonPath("$.value.durationMs").value(180000))
+            .andExpect(jsonPath("$.value.big").value(true))
+            .andExpect(jsonPath("$.value.expiresAt").exists())
+        mvc.perform(post("/api/v1/videos/vid1/playback").principal(caller("acc_b"))).andExpect(status().isNotFound).andExpect(jsonPath("$.code").value("VIDEO.NOT_FOUND"))
+        mvc.perform(post("/api/v1/videos/vid1/playback")).andExpect(status().isUnauthorized)
+    }
+
+    @Test
+    fun `playback of a video that is not playable yet is 409 VIDEO_NOT_READY`() {
+        val id = start()
+
+        mvc.perform(post("/api/v1/videos/$id/playback").principal(caller("acc_a")))
+            .andExpect(status().isConflict).andExpect(jsonPath("$.code").value("VIDEO.NOT_READY"))
+    }
+
+    @Test
+    fun `delete of a playable video queues the folder cleanup`() {
+        store.rows["vid1"] = PlaybackFixtures.video()
+
+        mvc.perform(delete("/api/v1/videos/vid1").principal(caller("acc_b"))).andExpect(status().isNotFound)
+        mvc.perform(delete("/api/v1/videos/vid1").principal(caller("acc_a"))).andExpect(status().isNoContent)
+
+        kotlin.test.assertEquals(VideoStatus.DELETED, store.rows.getValue("vid1").status)
+        kotlin.test.assertEquals(listOf(VideoFinalizeEvent.DELETED), followUps.events("vid1"))
     }
 }

@@ -19,7 +19,7 @@ import org.slf4j.LoggerFactory
 data class VideoStarted(val videoId: String, val uploadId: String, val partSize: Long, val partCount: Int)
 
 /**
- * 저장소로 직접 올리는 멀티파트 올리기. 서버는 파일을 지나가지 않는다 — 시작 · 조각 주소 · 조각 목록 · 마침(크기 확인) · 지우기만 한다.
+ * 저장소로 직접 올리는 멀티파트 올리기. 서버는 파일을 지나가지 않는다 — 시작 · 조각 주소 · 조각 목록 · 마침(크기 확인)만 한다(지우기는 [VideoLibrary]).
  * 순서: 시작(형식 · 정책 · 파일 상한 · 동시 수 · 용량 — 여기까지는 빠른 거절) → 멀티파트 열기 → 줄 넣기(떨어지면 연 멀티파트를 닫는다) →
  * parts · 조각 목록(새로 고침 뒤 이어 올리기) → complete(멀티파트 마침 → HEAD 크기 → QUEUED, 멱등).
  * 남의 영상은 모든 호출이 [VideoNotFoundException] 이다. 변환 일꾼이 집는 것은 QUEUED 부터다. 로그에는 presign 주소를 남기지 않는다.
@@ -122,15 +122,6 @@ class VideoUploads(
     fun get(caller: String, videoId: String): Video = find(caller, videoId)
 
     fun list(caller: String, purpose: String?): List<Video> = store.listByOwner(caller, purpose)
-
-    /** 지우기 — 줄을 DELETED 로 먼저(진실의 원천), 그다음 객체: 올리는 중이면 멀티파트 중단, 올린 파일 삭제 */
-    fun delete(caller: String, videoId: String) {
-        val video = find(caller, videoId)
-        if (!store.markDeleted(video.id, time.now())) return
-        val key = video.uploadKey?.let(::ObjectKey) ?: return
-        if (video.status == VideoStatus.UPLOADING) video.uploadId?.let { abortQuietly(key, it) }
-        runCatching { storage.delete(key) }.onFailure { log.warn("video upload file delete failed video={}", video.id) }
-    }
 
     /**
      * 한 시간 넘게 움직임 없는 UPLOADING · UPLOADED 올리기를 치운다 — 멀티파트 중단 + 올린(고아) 객체 삭제, 줄은 FAILED `UPLOAD_ABANDONED`

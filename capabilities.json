@@ -3869,7 +3869,7 @@
       "module": "video",
       "path": "modules/video",
       "status": "experimental",
-      "summary": "영상 올리기 + 변환 일꾼 API — 브라우저가 파일을 객체 저장소(R2 등)로 직접 멀티파트로 올리고(조각 주소 · 이어 올리기 · 마침에서 HEAD 크기 확인, 멱등) 서버는 상태(UPLOADING → UPLOADED → QUEUED → REMUXING → PLAYABLE) · 정책(VideoAccessPolicy, 기본 올린 계정만) · 용량(VideoQuota) · 청소만 맡는다. 변환은 서버가 아니라 일꾼(apps/video-worker, 어디서든 토큰으로 집어 간다)이 하고 서버는 일꾼 API(claim · heartbeat 진행률 · upload-urls 허용 이름만 서명 · complete 폴더 대조 · fail)와 임대(만료 → 다시 줄, 3회 뒤 실패) · 트랙 결정(호환 · 사다리) · 원 파일 삭제(원본 단 검증 1시간 뒤) · VideoEvents · 경보 넷을 맡는다. 영상마다 공개/비공개를 올릴 때 고른다. 파일은 4GB(16MB × 256 조각)까지. 재생 허가는 같은 묶음의 다음 조각. 켜기 skeleton.video.enabled(모듈 기본 꺼짐), 저장은 video-jdbc.",
+      "summary": "영상 올리기 + 변환 일꾼 API — 브라우저가 파일을 객체 저장소(R2 등)로 직접 멀티파트로 올리고(조각 주소 · 이어 올리기 · 마침에서 HEAD 크기 확인, 멱등) 서버는 상태(UPLOADING → UPLOADED → QUEUED → REMUXING → PLAYABLE) · 정책(VideoAccessPolicy, 기본 올린 계정만) · 용량(VideoQuota) · 청소만 맡는다. 변환은 서버가 아니라 일꾼(apps/video-worker, 어디서든 토큰으로 집어 간다)이 하고 서버는 일꾼 API(claim · heartbeat 진행률 · upload-urls 허용 이름만 서명 · complete 폴더 대조 · fail)와 임대(만료 → 다시 줄, 3회 뒤 실패) · 트랙 결정(호환 · 사다리) · 원 파일 삭제(원본 단 검증 1시간 뒤) · VideoEvents · 경보 넷을 맡는다. 영상마다 공개/비공개를 올릴 때 고른다. 파일은 4GB(16MB × 256 조각)까지. 재생은 영상마다 공개(공개 영역 주소, CDN 캐시) / 비공개(재생 허가마다 출입증이 경로에 든 재생 목록 — 열 때 조각 줄을 출입증 남은 수명의 서명 주소로 바꿔 쓴다, 로그인 없이 열리는 GET 은 그것뿐)이고 VideoPlayback 하나로 바꿔 끼운다. 삭제(소유자 · VideoOperatorPolicy 운영자)는 줄을 먼저 닫고 폴더 정리를 후속으로 맡긴다(공개면 CDN 캐시를 먼저 비운다, 되돌리기 없음). 켜기 skeleton.video.enabled(모듈 기본 꺼짐), 저장은 video-jdbc.",
       "starter": false,
       "newProjectFlag": "--modules video",
       "autoIncludes": ["scheduler", "storage"],
@@ -3882,14 +3882,26 @@
         "prefixes": ["skeleton.video"],
         "snippet": "docs/config/modules/video.yml"
       },
-      "basePaths": ["/api/internal/video", "/api/v1/videos", "/api/v1/videos/admin/workers"],
-      "secrets": [],
+      "basePaths": [
+        "/api/internal/video",
+        "/api/v1/videos",
+        "/api/v1/videos/admin",
+        "/api/v1/videos/admin/workers",
+        "/api/v1/videos/play"
+      ],
+      "secrets": [
+        {
+          "env": ["<P>_VIDEO_PLAYBACK_SECRET"],
+          "whenMissing": "skeleton.video.enabled=true 인데 비었거나 32자보다 짧으면 기동 실패(비공개 영상 재생 출입증의 HMAC 비밀) · 선언의 secrets: (무작위로 충분) · 바꾸면 이미 발급한 출입증이 모두 끊긴다 · 꺼진 채(기본)면 읽지 않는다"
+        }
+      ],
       "docs": ["docs/modules/video.md"],
       "frontend": null,
       "notFor": [
         "꺼진 채 시작한다 — 앱 yml 이 skeleton.video.enabled=true 로 켠다. 켜면 video-jdbc(저장)와 storage-s3(객체 저장소)가 있어야 기동한다",
-        "변환 자체는 이 모듈이 하지 않는다 — 일꾼 앱(apps/video-worker)이 일꾼 API 로 집어 간다. 재생 허가 · 삭제 · 운영자 경로는 다음 조각이 같은 모듈에 얹는다",
-        "비공개 영상의 호환 · 사다리 입력 주소는 재생 조각이 VideoWorkerInputs 빈으로 채운다 — 그 전에는 공개 영상만 호환 · 사다리를 만든다",
+        "변환 자체는 이 모듈이 하지 않는다 — 일꾼 앱(apps/video-worker)이 일꾼 API 로 집어 간다",
+        "비공개 영상의 조각은 CDN 캐시를 거치지 않고 저장소에서 서명 주소로 바로 받는다(객체마다 서명) — CDN 캐시가 필요하면 공개 영상으로 올리거나 VideoPlayback 을 바꿔 끼운다",
+        "삭제는 되돌릴 수 없다 — 원본 단이 곧 보관본이라 폴더를 지우면 끝이다",
         "받아들이는 영상은 H.264 · HEVC mp4 · mov 만이다(webm · VP9 · AV1 은 다음)",
         "올린 파일 하나 4GB 까지 — 조각 크기를 키우지 않는 한 그 위는 413 이다",
         "누가 올릴 수 있는지 · 용량 규칙(요금제 등)은 앱이 VideoAccessPolicy · VideoQuota 빈으로 정한다 — 모듈은 뜻을 모른다"
@@ -4230,7 +4242,7 @@
       "module": null,
       "path": "apps/video-worker",
       "status": "experimental",
-      "summary": "(자리만 — 일꾼은 다음 조각에서 옮겨 온다) 영상 변환 일꾼 — Kotlin + ffmpeg 이미지가 서버의 일꾼 API(/api/internal/video/*)에서 일을 집어 가 원본 단(재인코딩 없는 HLS 조각) · 호환 · 사다리를 만든다. 저장소 키를 갖지 않고 서버가 서명한 GET · PUT 만 쓴다.",
+      "summary": "영상 변환 일꾼 — Kotlin + ffmpeg 이미지(JVM -Xmx96m)가 서버의 일꾼 API(/api/internal/video/*)에서 일을 집어 가 원본 단(재인코딩 없는 HLS 조각) · 호환 · 사다리 · 포스터(표지 그림이 있으면 그것)를 만든다. 저장소 키를 갖지 않고 서버가 서명한 GET · PUT 만 쓴다. 상주(poll, 작은 /health)와 once(Cloud Run 작업) 두 모양, 환경변수 VIDEO_WORKER_*. 올린 파일은 ffmpeg 허용 목록(CVE 완화)으로만 읽고, 공개 영상은 올리기 전에 끝까지 디코드해 본다.",
       "starter": false,
       "newProjectFlag": "--with-video-worker",
       "autoIncludes": [],
@@ -4245,9 +4257,9 @@
       "docs": ["docs/modules/video.md"],
       "frontend": null,
       "notFor": [
-        "지금은 코드가 없다 — 카탈로그 자리만 있다",
         "서버 모듈이 아니다 — 별도 컨테이너 이미지로 돌고 서버 API 한 장만 안다",
-        "새 프로젝트에는 복사되지 않는다(스켈레톤 전용 — 찍는 방법은 일꾼이 들어오는 조각에서 정한다)"
+        "새 프로젝트에는 기본으로 빠진다 — --with-video-worker 일 때만 남는다. 서버 모듈은 따로 --modules video,video-jdbc 로 고른다",
+        "이미지 빌드는 이 맥에서 수십 분이다(ffmpeg apt 설치) — Dockerfile 머리말의 두 줄(베이스 다이제스트 · ffmpeg 버전)을 함께 올린다"
       ],
       "keywords": {
         "ko": ["영상 변환 일꾼", "ffmpeg 일꾼", "HLS 변환"],

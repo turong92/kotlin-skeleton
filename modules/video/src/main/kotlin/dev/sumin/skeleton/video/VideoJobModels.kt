@@ -58,8 +58,8 @@ data class VideoJobResult(
 )
 
 /**
- * 호환 · 사다리 일꾼이 읽을 **원본 단 재생 목록 주소**를 만드는 자리. 공개 영상은 공개 주소 하나로 끝나지만(기본 구현), 비공개 영상은 서명된 재생 목록 주소가 필요해
- * 재생 모듈(다음 조각)이 이 인터페이스를 채운다 — 그 전에는 비공개 영상의 호환 · 사다리 일을 집으면 [IllegalStateException] 이다
+ * 호환 · 사다리 일꾼이 읽을 **원본 단 재생 목록 주소**를 만드는 자리. 기본 구현([StorageVideoWorkerInputs])은 공개 영상이면 공개 주소,
+ * 비공개 영상이면 일꾼 작업 수명의 출입증이 든 **서버 경로**(`/api/v1/videos/play/<토큰>/o-<해시>/index.m3u8`)를 준다 — 일꾼이 claim 을 부른 서버 주소를 기준으로 푼다
  */
 fun interface VideoWorkerInputs {
     fun originalPlaylistUrl(video: Video, ttl: java.time.Duration): String

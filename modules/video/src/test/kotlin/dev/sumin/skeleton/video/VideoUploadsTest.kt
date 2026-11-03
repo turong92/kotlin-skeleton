@@ -111,12 +111,11 @@ class VideoUploadsTest {
     }
 
     @Test
-    fun `someone else's video answers not found for parts, listing, completing and deleting - and nothing is touched`() {
+    fun `someone else's video answers not found for parts, listing and completing - and nothing is touched`() {
         val id = begin().videoId
         assertFailsWith<VideoNotFoundException> { uploads.partUrls("acc_b", id, listOf(1)) }
         assertFailsWith<VideoNotFoundException> { uploads.uploadedParts("acc_b", id) }
         assertFailsWith<VideoNotFoundException> { uploads.complete("acc_b", id, listOf(1 to "e", 2 to "e", 3 to "e")) }
-        assertFailsWith<VideoNotFoundException> { uploads.delete("acc_b", id) }
         assertFailsWith<VideoNotFoundException> { uploads.get("acc_b", id) }
         assertFailsWith<VideoNotFoundException> { uploads.uploadedParts("acc_a", "nope") }
         assertTrue(storage.listed.isEmpty() && storage.completed.isEmpty() && storage.aborted.isEmpty() && storage.deleted.isEmpty())
@@ -165,18 +164,6 @@ class VideoUploadsTest {
     }
 
     @Test
-    fun `delete marks the row DELETED and releases the multipart upload and the uploaded file`() {
-        val id = begin().videoId
-
-        uploads.delete("acc_a", id)
-
-        assertEquals(VideoStatus.DELETED, store.rows.getValue(id).status)
-        assertEquals(1, storage.aborted.size)
-        assertEquals(listOf("videos/u/$id"), storage.deleted)
-        assertFailsWith<VideoNotFoundException> { uploads.get("acc_a", id) }
-    }
-
-    @Test
     fun `cleanup fails uploads idle for an hour with UPLOAD_ABANDONED and frees their storage, fresh ones stay`() {
         val stale = begin().videoId
         clock = start.plus(Duration.ofMinutes(50))
@@ -197,7 +184,7 @@ class VideoUploadsTest {
         val a = begin(purpose = "note").videoId
         begin(purpose = "avatar")
         begin(caller = "acc_b")
-        uploads.delete("acc_a", a)
+        store.markDeleted(a, clock)
 
         assertEquals(listOf("avatar"), uploads.list("acc_a", null).map { it.purpose })
         assertEquals(emptyList(), uploads.list("acc_a", "note"))

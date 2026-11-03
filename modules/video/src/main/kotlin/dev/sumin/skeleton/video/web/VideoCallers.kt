@@ -14,4 +14,11 @@ internal object VideoCallers {
         }
         return authentication.name
     }
+
+    /** 로그인한 운영자만 — 로그인하지 않았으면 401, 운영자가 아니면 403. 계정 id 를 돌려준다 */
+    fun operator(authentication: Authentication?, policy: VideoOperatorPolicy): String {
+        val account = account(authentication)
+        if (!policy.isOperator(authentication!!)) throw ApplicationException("operator only", PlatformErrorCode.FORBIDDEN)
+        return account
+    }
 }

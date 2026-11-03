@@ -92,13 +92,43 @@ class VideoAutoConfigurationTest {
     }
 
     @Test
+    fun `enabled without the playback secret, or with one shorter than 32 characters, stops the start and names the setting and the variable`() {
+        listOf(bare(), bare().withPropertyValues("skeleton.video.playback.secret=short")).forEach { r ->
+            r.run { ctx ->
+                val all = messages(ctx.startupFailure).joinToString(" | ")
+                assertTrue("skeleton.video.playback.secret" in all && "VIDEO_PLAYBACK_SECRET" in all, all)
+                assertTrue("short" !in all.replace("shorter", ""), "the value is never echoed")
+            }
+        }
+    }
+
+    @Test
+    fun `enabled with the secret stands with the library, the playlists, the default playback and the worker inputs`() {
+        enabled().run { ctx ->
+            assertNull(ctx.startupFailure)
+            assertEquals(1, ctx.getBeansOfType(VideoLibrary::class.java).size)
+            assertEquals(1, ctx.getBeansOfType(VideoPlaylists::class.java).size)
+            assertTrue(ctx.getBean(VideoPlayback::class.java) is StorageVideoPlayback)
+            assertTrue(ctx.getBean(VideoWorkerInputs::class.java) is StorageVideoWorkerInputs)
+        }
+    }
+
+    @Test
+    fun `an app that brings its own playback replaces the default - a vendor stream plugs in here`() {
+        val own = VideoPlayback { _, _ -> PlaybackGrant("s", null, null, null, "c", 1, 1, 1, false, null) }
+        enabled().withBean(VideoPlayback::class.java, { own }).run { ctx -> assertSame(own, ctx.getBean(VideoPlayback::class.java)) }
+    }
+
+    @Test
     fun `a video prefix inside the upload area stops the start`() {
         enabled().withPropertyValues("skeleton.video.prefix=uploads/videos").run { ctx ->
             assertTrue(messages(ctx.startupFailure).any { "key-prefix" in it }, messages(ctx.startupFailure).toString())
         }
     }
 
-    private fun enabled() = runner.withPropertyValues("skeleton.video.enabled=true")
+    private fun enabled() = bare().withPropertyValues("skeleton.video.playback.secret=${PlaybackFixtures.SECRET}")
+
+    private fun bare() = runner.withPropertyValues("skeleton.video.enabled=true")
         .withBean(VideoStore::class.java, { FakeVideoStore() })
         .withBean(VideoWorkerStore::class.java, { FakeVideoWorkerStore() })
         .withBean(VideoFollowUps::class.java, { FakeFollowUps() })

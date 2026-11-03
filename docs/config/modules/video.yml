@@ -1,4 +1,4 @@
-# video — 영상 올리기(저장소로 직접 올리는 멀티파트 · 이어 올리기) + 변환 일꾼 API. 저장은 video-jdbc. 모듈 기본은 꺼짐.
+# video — 영상 올리기(저장소로 직접 올리는 멀티파트 · 이어 올리기) + 변환 일꾼 API + 재생(공개 주소 / 비공개 출입증 목록) · 삭제. 저장은 video-jdbc. 모듈 기본은 꺼짐.
 skeleton:
   video:
     enabled: false         # true 로 켜면 VideoStore · VideoWorkerStore(video-jdbc)와 PresignedStorage(storage-s3)가 있어야 기동한다
@@ -14,6 +14,9 @@ skeleton:
     worker:
       lease-duration: 10m  # 한 번 집으면 이만큼 임대 - heartbeat 가 늘린다. 끝나면 청소가 다시 줄 세운다(3회 뒤 실패)
       url-ttl: 2h          # 일꾼에게 주는 읽기 · 올리기 서명 주소의 수명
+    playback:
+      secret: ""           # 비공개 영상 재생 출입증의 HMAC 비밀 (32자 이상, 비밀 - env <P>_VIDEO_PLAYBACK_SECRET, 선언의 secrets:). enabled 인데 비면 기동 실패. 무작위로 충분, 바꾸면 발급한 출입증이 모두 끊긴다
+      ttl: 4h              # 재생 허가 한 번의 출입증 수명 - 안의 조각 주소도 이 남은 수명으로 서명한다
     monitor:               # 주인 경보 문턱 (alert 모듈이 있을 때)
       worker-absent: 5m    # remux 일꾼을 이만큼 못 봤고 대기가 있으면 VIDEO_QUEUE_STALE
       compat-stale-after: 2h   # 호환 단이 이만큼 넘게 대기 중이면 VIDEO_COMPAT_STALE

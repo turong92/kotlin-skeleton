@@ -3,9 +3,11 @@ package dev.sumin.skeleton.video.web
 import dev.sumin.skeleton.common.DataResponse
 import dev.sumin.skeleton.common.ListResponse
 import dev.sumin.skeleton.common.Response
+import dev.sumin.skeleton.video.PlaybackGrant
 import dev.sumin.skeleton.video.TrackStatus
 import dev.sumin.skeleton.video.Video
 import dev.sumin.skeleton.video.VideoStatus
+import dev.sumin.skeleton.video.VideoLibrary
 import dev.sumin.skeleton.video.VideoUploads
 import dev.sumin.skeleton.video.VideoVisibility
 import io.swagger.v3.oas.annotations.Operation
@@ -71,7 +73,7 @@ data class VideoResponse(
 @RestController
 @RequestMapping("/api/v1/videos")
 @Tag(name = "Videos")
-class VideoController(private val uploads: VideoUploads) {
+class VideoController(private val uploads: VideoUploads, private val library: VideoLibrary) {
     @Operation(
         summary = "Start a direct upload (multipart) of an mp4 / mov",
         description = "visibility is PUBLIC or PRIVATE and cannot be changed later. 413 VIDEO.TOO_LARGE (data.maxBytes) · VIDEO.QUOTA · 415 VIDEO.UNSUPPORTED · 403 VIDEO.FORBIDDEN · 429 VIDEO.TOO_MANY_UPLOADS.",
@@ -109,10 +111,21 @@ class VideoController(private val uploads: VideoUploads) {
     fun list(@RequestParam(required = false) purpose: String?, authentication: Authentication?): ListResponse<VideoResponse> =
         Response.ok(uploads.list(VideoCallers.account(authentication), purpose).map(VideoResponse::of))
 
-    @Operation(summary = "Delete: aborts an unfinished upload and removes the uploaded file")
+    @Operation(
+        summary = "A playback grant: the addresses a player needs (original tier src, compat, hls master, poster) and when a private video's token ends",
+        description = "A private video's addresses carry a short-lived token in the path and need no login; a public video's are the plain public addresses. " +
+            "409 VIDEO.NOT_READY until the video is PLAYABLE. The apps that show public videos without a login put this answer in their own public response.",
+    )
+    @PostMapping("/{id}/playback")
+    fun playback(@PathVariable id: String, authentication: Authentication?): DataResponse<PlaybackGrant> =
+        Response.ok(library.playback(VideoCallers.account(authentication), id))
+
+    @Operation(
+        summary = "Delete: closes the video at once; the uploaded file, any open multipart and the whole video folder are removed right after (a public video's CDN copies are purged first). There is no undo",
+    )
     @DeleteMapping("/{id}")
     fun delete(@PathVariable id: String, authentication: Authentication?): ResponseEntity<Void> {
-        uploads.delete(VideoCallers.account(authentication), id)
+        library.deleteOwn(VideoCallers.account(authentication), id)
         return Response.noContent()
     }
 }

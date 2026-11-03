@@ -1,6 +1,7 @@
 package dev.sumin.skeleton.video
 
 import dev.sumin.skeleton.common.time.TimeProvider
+import dev.sumin.skeleton.storage.StoragePublicProperties
 import dev.sumin.skeleton.storage.StorageWebProperties
 import java.time.Duration
 import java.time.Instant
@@ -30,9 +31,8 @@ class VideoJobsTest {
     private val remuxOnly = all.copy(id = 2, name = "remux-only", lanes = setOf(VideoLane.REMUX))
     private val compatOnly = all.copy(id = 3, name = "compat-only", lanes = setOf(VideoLane.COMPAT))
 
-    private fun jobs() = VideoJobs(
-        props, store, storage, VideoKeys(props, StorageWebProperties()), VideoWorkerInputs { v, _ -> "https://cdn.example.com/${v.origKey}" },
-        followUps, tx, waker, TimeProvider { clock },
+    private fun jobs(inputs: VideoWorkerInputs = VideoWorkerInputs { v, _ -> "https://cdn.example.com/${v.origKey}" }) = VideoJobs(
+        props, store, storage, VideoKeys(props, StorageWebProperties()), inputs, followUps, tx, waker, TimeProvider { clock },
     )
 
     private fun video(id: String = "v1", status: VideoStatus = VideoStatus.QUEUED, visibility: VideoVisibility = VideoVisibility.PRIVATE, bytes: Long = 1000, created: Instant = t0) =
@@ -341,6 +341,22 @@ class VideoJobsTest {
     }
 
     // ---------- complete: tracks ----------
+
+    @Test
+    fun `a private video's compat and ladder jobs can now be claimed - the input is a token-signed playlist address`() {
+        val ready = playable()   // PRIVATE · 호환 단 대기
+        val tokens = VideoPlaybackTokens("k".repeat(40), TimeProvider { clock })
+        val storageInputs = StorageVideoWorkerInputs(VideoKeys(props, StorageWebProperties()), tokens, { StoragePublicProperties() })
+
+        val job = jobs(storageInputs).claim(all, "w9", null)!!
+
+        assertEquals(VideoLane.COMPAT, job.lane)
+        val token = job.inputUrl.removePrefix("/api/v1/videos/play/").substringBefore('/')
+        assertEquals(ready.id, tokens.verify(token)?.videoId)
+        assertTrue(job.inputUrl.endsWith("/o-$hash/index.m3u8"), job.inputUrl)
+        assertEquals(clock.plus(props.worker.urlTtl), tokens.verify(token)?.expiresAt)
+    }
+
 
     @Test
     fun `a compat job reads the original tier playlist and complete marks the compat tier ready`() {

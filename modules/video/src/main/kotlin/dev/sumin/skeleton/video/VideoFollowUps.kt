@@ -1,9 +1,12 @@
 package dev.sumin.skeleton.video
 
 import dev.sumin.skeleton.common.time.TimeProvider
+import dev.sumin.skeleton.common.upload.PublicUploadPurger
+import dev.sumin.skeleton.storage.AbortMultipartUploadRequest
 import dev.sumin.skeleton.storage.ListObjectsRequest
 import dev.sumin.skeleton.storage.ObjectKey
 import dev.sumin.skeleton.storage.PresignedStorage
+import dev.sumin.skeleton.storage.StoragePublicProperties
 import java.time.Duration
 import org.slf4j.LoggerFactory
 
@@ -22,6 +25,9 @@ enum class VideoFinalizeEvent {
 
     /** 원본 단 검증 [VideoProperties.cleanupDelay] 뒤 — 올린 원 파일을 지운다 */
     UPLOAD_CLEANUP,
+
+    /** 영상이 지워졌다 — 올린 파일 · 열린 멀티파트 · 영상 폴더를 치우고(공개면 CDN 캐시를 먼저 비운다) 앱에 알린다. 실패하면 큐가 다시 돌린다 */
+    DELETED,
 
     /** 트랙이 끝난(또는 실패한) 뒤 — 이긴 쪽 결과만 남기고 늦은 쪽 · 옛 시도의 결과를 쓸어낸다 */
     SWEEP,
@@ -107,13 +113,17 @@ class VideoFinalizer(
     private val keys: VideoKeys,
     private val events: VideoEvents,
     private val time: TimeProvider = TimeProvider.systemUtc(),
+    /** 공개 영상의 폴더를 지우기 전에 CDN 캐시를 비운다 — 없으면(비우는 구현이 없으면) 비우지 않는다 */
+    private val purger: PublicUploadPurger? = null,
+    private val publicProps: () -> StoragePublicProperties = { StoragePublicProperties() },
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
     fun handle(videoId: String, event: VideoFinalizeEvent) {
         val video = store.find(videoId) ?: return
-        if (video.status == VideoStatus.DELETED) return
+        if (video.status == VideoStatus.DELETED && event != VideoFinalizeEvent.DELETED) return
         when (event) {
+            VideoFinalizeEvent.DELETED -> if (video.status == VideoStatus.DELETED) cleanupDeleted(video)
             VideoFinalizeEvent.PLAYABLE -> if (video.status == VideoStatus.PLAYABLE) events.onPlayable(video)
             VideoFinalizeEvent.COMPAT_READY -> if (video.status == VideoStatus.PLAYABLE) events.onTrackReady(video, VideoLane.COMPAT)
             VideoFinalizeEvent.LADDER_READY -> if (video.status == VideoStatus.PLAYABLE) events.onTrackReady(video, VideoLane.LADDER)
@@ -122,6 +132,34 @@ class VideoFinalizer(
             VideoFinalizeEvent.UPLOAD_CLEANUP -> cleanupUpload(video)
             VideoFinalizeEvent.SWEEP -> sweep(video)
         }
+    }
+
+    /**
+     * 지운 영상의 정리 — 올린 파일과 열린 멀티파트, 그리고 **이 영상의 폴더만**(`keys.folder` 는 슬래시로 끝나 id 가 닮은 다른 영상에 걸치지 않는다).
+     * 공개 영상은 지우기 **전에** 캐시를 비운다: 주소가 immutable 이라 지운 뒤에는 목록이 비어 비울 주소를 잃는다. 비우기가 실패하면 아무것도 지우지 않고 던져 큐가 다시 돌린다
+     */
+    private fun cleanupDeleted(video: Video) {
+        video.uploadKey?.let { key ->
+            video.uploadId?.let { id ->
+                runCatching { storage.abortMultipartUpload(AbortMultipartUploadRequest(ObjectKey(key), id)) }.onFailure { log.warn("video multipart abort failed video={}", video.id) }
+            }
+            storage.delete(ObjectKey(key))
+        }
+        val purge = purger.takeIf { video.visibility == VideoVisibility.PUBLIC && publicProps().enabled }
+        var token: String? = null
+        var removed = 0
+        do {
+            val listed = storage.list(ListObjectsRequest(prefix = keys.folder(video), continuationToken = token, maxKeys = 1000))
+            val found = listed.objects.map { it.key }
+            if (found.isNotEmpty()) {
+                purge?.purge(found.map { publicProps().absoluteUrl(it.value) })
+                storage.deleteAll(found)
+                removed += found.size
+            }
+            token = listed.nextContinuationToken.takeIf { listed.truncated }
+        } while (token != null)
+        log.info("video delete cleanup video={} removed={}", video.id, removed)
+        events.onDeleted(video)
     }
 
     private fun cleanupUpload(video: Video) {

@@ -2,6 +2,7 @@ package dev.sumin.skeleton.video.web
 
 import dev.sumin.skeleton.common.GlobalExceptionHandler
 import dev.sumin.skeleton.common.time.TimeProvider
+import dev.sumin.skeleton.storage.StoragePublicProperties
 import dev.sumin.skeleton.storage.StorageWebProperties
 import dev.sumin.skeleton.video.FakeFollowUps
 import dev.sumin.skeleton.video.FakeStorage
@@ -11,8 +12,11 @@ import dev.sumin.skeleton.video.FakeVideoWorkerStore
 import dev.sumin.skeleton.video.NoopWaker
 import dev.sumin.skeleton.video.OwnerVideoAccessPolicy
 import dev.sumin.skeleton.video.VideoJobs
+import dev.sumin.skeleton.video.StorageVideoPlayback
 import dev.sumin.skeleton.video.VideoKeys
 import dev.sumin.skeleton.video.VideoLane
+import dev.sumin.skeleton.video.VideoLibrary
+import dev.sumin.skeleton.video.VideoPlaybackTokens
 import dev.sumin.skeleton.video.VideoProperties
 import dev.sumin.skeleton.video.VideoQuota
 import dev.sumin.skeleton.video.VideoStatus
@@ -46,9 +50,14 @@ class VideoWorkerWebTest {
         FakeFollowUps(), FakeTransactions(), NoopWaker, time,
     )
     private val uploads = VideoUploads(props, store, storage, OwnerVideoAccessPolicy, VideoQuota { _, _, _ -> true }, time)
+    private val library = VideoLibrary(
+        store, OwnerVideoAccessPolicy,
+        StorageVideoPlayback(props, VideoKeys(props, StorageWebProperties()), storage, { StoragePublicProperties() }, VideoPlaybackTokens("k".repeat(40), time)),
+        FakeFollowUps(), FakeTransactions(), time,
+    )
     private var operator = false
     private val mvc: MockMvc = MockMvcBuilders
-        .standaloneSetup(VideoWorkerController(jobs), VideoController(uploads), VideoWorkerAdminController(workers, VideoOperatorPolicy { operator }))
+        .standaloneSetup(VideoWorkerController(jobs), VideoController(uploads, library), VideoWorkerAdminController(workers, VideoOperatorPolicy { operator }))
         .setCustomArgumentResolvers(VideoWorkerResolver(workers))
         .setControllerAdvice(GlobalExceptionHandler())
         .build()

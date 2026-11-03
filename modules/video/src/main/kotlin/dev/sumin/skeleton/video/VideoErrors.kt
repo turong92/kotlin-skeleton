@@ -18,6 +18,7 @@ enum class VideoErrorCode(
     TOO_MANY_UPLOADS("VIDEO.TOO_MANY_UPLOADS", HttpStatus.TOO_MANY_REQUESTS, "동시에 올릴 수 있는 영상 수를 넘었다"),
     NOT_FOUND("VIDEO.NOT_FOUND", HttpStatus.NOT_FOUND, "그런 영상이 없다"),
     BAD_STATE("VIDEO.BAD_STATE", HttpStatus.CONFLICT, "지금 상태에서는 할 수 없다"),
+    NOT_READY("VIDEO.NOT_READY", HttpStatus.CONFLICT, "아직 재생할 수 없다"),
     PART_RANGE("VIDEO.PART_RANGE", HttpStatus.BAD_REQUEST, "조각 번호가 범위 밖이다"),
     PARTS_INVALID("VIDEO.PARTS_INVALID", HttpStatus.BAD_REQUEST, "조각 목록이 올린 조각과 맞지 않다"),
     UPLOAD_INCOMPLETE("VIDEO.UPLOAD_INCOMPLETE", HttpStatus.BAD_REQUEST, "올리기를 마칠 수 없다 — 조각을 다시 확인한다"),
@@ -43,6 +44,10 @@ class VideoNotFoundException : ApplicationException("video not found", VideoErro
 
 class VideoBadStateException(status: VideoStatus) :
     ApplicationException("video bad state: $status", VideoErrorCode.BAD_STATE, data = mapOf("status" to status.name))
+
+/** 재생 허가는 `PLAYABLE` 부터 — 그 전(올리는 중 · 변환 중)이나 실패한 영상 */
+class VideoNotReadyException(status: VideoStatus) :
+    ApplicationException("video not ready: $status", VideoErrorCode.NOT_READY, data = mapOf("status" to status.name))
 
 class VideoPartRangeException(partCount: Int) :
     ApplicationException("video part range", VideoErrorCode.PART_RANGE, data = mapOf("partCount" to partCount))

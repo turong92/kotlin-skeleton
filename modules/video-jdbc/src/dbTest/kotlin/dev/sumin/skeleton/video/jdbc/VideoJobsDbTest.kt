@@ -166,6 +166,21 @@ class VideoJobsDbTest {
     }
 
     @Test
+    fun `deleting a leased video takes the lease away - the worker's heartbeat is refused and the expiry sweep has nothing to requeue`() {
+        val id = queued()
+        store.claimNext(VideoLane.REMUX, "w1", t0.plusSeconds(600), "b".repeat(32), t0)
+        assertTrue(store.markDeleted(id, t0))
+
+        assertFalse(store.extendLease(id, "w1", t0.plusSeconds(1200), 10, t0))
+        store.find(id)!!.also {
+            assertEquals(VideoStatus.DELETED, it.status)
+            assertNull(it.leaseOwner)
+            assertNull(it.leaseUntil)
+        }
+        assertEquals(0, store.expireLeases(t0.plusSeconds(3600), t0).total)
+    }
+
+    @Test
     fun `failLeased requeues while attempts remain, ends the video for a remux failure and only the track for a track failure`() {
         val id = queued()
         store.claimNext(VideoLane.REMUX, "w1", t0.plusSeconds(600), "b".repeat(32), t0)

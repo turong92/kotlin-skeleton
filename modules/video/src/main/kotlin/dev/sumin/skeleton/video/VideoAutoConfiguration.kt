@@ -2,6 +2,7 @@ package dev.sumin.skeleton.video
 
 import dev.sumin.skeleton.common.deploy.DeployGuard
 import dev.sumin.skeleton.common.time.TimeProvider
+import dev.sumin.skeleton.common.upload.PublicUploadPurger
 import dev.sumin.skeleton.common.wake.OnRequestTask
 import dev.sumin.skeleton.common.wake.SimpleOnRequestTask
 import dev.sumin.skeleton.storage.PresignedStorage
@@ -77,15 +78,37 @@ class VideoAutoConfiguration {
     fun videoUploads(props: VideoProperties, ports: VideoPorts, policy: VideoAccessPolicy, quota: VideoQuota, time: TimeProvider): VideoUploads =
         VideoUploads(props, ports.store, ports.storage, policy, quota, time)
 
-    /** 호환 · 사다리 일꾼이 읽을 원본 단 재생 목록 주소 — 기본은 공개 영상의 공개 주소. 비공개 영상은 재생 모듈이 채울 때까지 지원하지 않는다 */
+    /** 비공개 재생 출입증 — 비밀이 없거나 32자보다 짧으면 기동 실패(비공개 영상은 이 비밀 없이 틀 수 없다) */
+    @Bean
+    @ConditionalOnMissingBean
+    fun videoPlaybackTokens(props: VideoProperties, time: TimeProvider): VideoPlaybackTokens {
+        require(props.playback.secret.length >= VideoPlaybackTokens.MIN_SECRET_LENGTH) {
+            "skeleton.video.playback.secret must be at least ${VideoPlaybackTokens.MIN_SECRET_LENGTH} characters when skeleton.video.enabled=true " +
+                "(env <P>_VIDEO_PLAYBACK_SECRET - list it under secrets:)"
+        }
+        return VideoPlaybackTokens(props.playback.secret, time)
+    }
+
+    /** 재생 허가 — 공개 영상은 공개 주소, 비공개 영상은 출입증 경로. 벤더 스트리밍은 이 빈을 바꿔 끼운다 */
+    @Bean
+    @ConditionalOnMissingBean(VideoPlayback::class)
+    fun videoPlayback(props: VideoProperties, keys: VideoKeys, ports: VideoPorts, tokens: VideoPlaybackTokens, storageProperties: ObjectProvider<StorageProperties>): VideoPlayback =
+        StorageVideoPlayback(props, keys, ports.storage, { storageProperties.getIfAvailable { StorageProperties() }.web.`public` }, tokens)
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun videoPlaylists(tokens: VideoPlaybackTokens, ports: VideoPorts, keys: VideoKeys): VideoPlaylists = VideoPlaylists(tokens, ports.store, keys, ports.storage)
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun videoLibrary(ports: VideoPorts, policy: VideoAccessPolicy, playback: VideoPlayback, time: TimeProvider): VideoLibrary =
+        VideoLibrary(ports.store, policy, playback, ports.followUps, ports.tx, time)
+
+    /** 호환 · 사다리 일꾼이 읽을 원본 단 재생 목록 주소 — 공개 영상은 공개 주소, 비공개 영상은 일꾼 작업 수명의 출입증 경로 */
     @Bean
     @ConditionalOnMissingBean(VideoWorkerInputs::class)
-    fun publicVideoWorkerInputs(storageProperties: ObjectProvider<StorageProperties>): VideoWorkerInputs = VideoWorkerInputs { video, _ ->
-        val pub = storageProperties.getIfAvailable { StorageProperties() }.web.`public`
-        check(video.visibility == VideoVisibility.PUBLIC) { "a private video's track input is a signed playlist address - bring a VideoWorkerInputs bean (the playback module does)" }
-        check(pub.enabled) { "a public video needs skeleton.storage.web.public.enabled=true to be read by the track workers" }
-        pub.absoluteUrl(checkNotNull(video.origKey) { "video without an original tier" })
-    }
+    fun videoWorkerInputs(keys: VideoKeys, tokens: VideoPlaybackTokens, storageProperties: ObjectProvider<StorageProperties>): VideoWorkerInputs =
+        StorageVideoWorkerInputs(keys, tokens, { storageProperties.getIfAvailable { StorageProperties() }.web.`public` })
 
     @Bean
     @ConditionalOnMissingBean
@@ -106,7 +129,15 @@ class VideoAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    fun videoFinalizer(ports: VideoPorts, keys: VideoKeys, events: VideoEvents, time: TimeProvider): VideoFinalizer = VideoFinalizer(ports.store, ports.storage, keys, events, time)
+    fun videoFinalizer(
+        ports: VideoPorts,
+        keys: VideoKeys,
+        events: VideoEvents,
+        time: TimeProvider,
+        purgers: ObjectProvider<PublicUploadPurger>,
+        storageProperties: ObjectProvider<StorageProperties>,
+    ): VideoFinalizer =
+        VideoFinalizer(ports.store, ports.storage, keys, events, time, purgers.getIfAvailable()) { storageProperties.getIfAvailable { StorageProperties() }.web.`public` }
 
     @Bean
     @ConditionalOnMissingBean

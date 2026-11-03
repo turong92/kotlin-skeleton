@@ -80,7 +80,8 @@ class JdbcVideoStore(
 
     override fun markDeleted(id: String, at: Instant): Boolean =
         jdbc.update(
-            "update videos set status = 'DELETED', updated_at = :at where id = :id and status <> 'DELETED'",
+            // 일꾼이 쥔 임대도 함께 끊는다 — 지운 영상에 일꾼의 heartbeat · 결과가 더는 받아들여지지 않는다
+            "update videos set status = 'DELETED', $RELEASE where id = :id and status <> 'DELETED'",
             MapSqlParameterSource().addValue("at", dialect.instantParam(at)).addValue("id", id),
         ) == 1
 

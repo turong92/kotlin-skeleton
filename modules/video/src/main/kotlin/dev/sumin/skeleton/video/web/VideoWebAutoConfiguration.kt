@@ -4,6 +4,8 @@ import dev.sumin.skeleton.common.web.BearerIgnoredPaths
 import dev.sumin.skeleton.common.web.PublicEndpointContributor
 import dev.sumin.skeleton.video.VideoAutoConfiguration
 import dev.sumin.skeleton.video.VideoJobs
+import dev.sumin.skeleton.video.VideoLibrary
+import dev.sumin.skeleton.video.VideoPlaylists
 import dev.sumin.skeleton.video.VideoUploads
 import dev.sumin.skeleton.video.VideoWorkerService
 import org.springframework.boot.autoconfigure.AutoConfiguration
@@ -26,7 +28,22 @@ class VideoWebAutoConfiguration {
     @Bean
     @ConditionalOnProperty(prefix = "skeleton.video.http", name = ["enabled"], havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
-    fun videoController(uploads: VideoUploads): VideoController = VideoController(uploads)
+    fun videoController(uploads: VideoUploads, library: VideoLibrary): VideoController = VideoController(uploads, library)
+
+    @Bean
+    @ConditionalOnProperty(prefix = "skeleton.video.http", name = ["enabled"], havingValue = "true", matchIfMissing = true)
+    @ConditionalOnMissingBean
+    fun videoPlaylistController(playlists: VideoPlaylists): VideoPlaylistController = VideoPlaylistController(playlists)
+
+    @Bean
+    @ConditionalOnProperty(prefix = "skeleton.video.http", name = ["enabled"], havingValue = "true", matchIfMissing = true)
+    @ConditionalOnMissingBean
+    fun videoAdminController(library: VideoLibrary, policy: VideoOperatorPolicy): VideoAdminController = VideoAdminController(library, policy)
+
+    /** 비공개 영상의 재생 목록 GET 만 로그인 없이 — 경로의 출입증이 인증이다 */
+    @Bean
+    @ConditionalOnMissingBean(name = ["videoPlaylistPublicEndpointContributor"])
+    fun videoPlaylistPublicEndpointContributor(): PublicEndpointContributor = PublicEndpointContributor { registry -> registry.add("GET", "/api/v1/videos/play/**") }
 
     @Bean
     @ConditionalOnMissingBean
