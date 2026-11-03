@@ -126,6 +126,21 @@ class VideoStoreDbTest {
     }
 
     @Test
+    fun `a poster is replaced only on a playable video, and can be cleared`() {
+        val id = store.insert(new()).id
+
+        assertFalse(store.replacePoster(id, "videos/p/$id/poster-0123456789abcdef.jpg", 1280, 720, at))   // 아직 재생 전
+        jdbc.update("update videos set status = 'PLAYABLE' where id = ?", id)
+
+        assertTrue(store.replacePoster(id, "videos/p/$id/poster-0123456789abcdef.jpg", 1280, 720, at))
+        store.find(id)!!.let { assertEquals(listOf("videos/p/$id/poster-0123456789abcdef.jpg", 1280, 720), listOf(it.posterKey, it.posterWidth, it.posterHeight)) }
+        assertTrue(store.replacePoster(id, null, null, null, at))
+        assertNull(store.find(id)!!.posterKey)
+        assertTrue(store.markDeleted(id, at))
+        assertFalse(store.replacePoster(id, "x", 1, 1, at))
+    }
+
+    @Test
     fun `abandoned uploads are found oldest first, fresh and touched ones are not, and they fail with UPLOAD_ABANDONED`() {
         val old = store.insert(new(at = at.minusSeconds(7200))).id
         val older = store.insert(new(at = at.minusSeconds(9000))).id

@@ -85,6 +85,12 @@ class JdbcVideoStore(
             MapSqlParameterSource().addValue("at", dialect.instantParam(at)).addValue("id", id),
         ) == 1
 
+    override fun replacePoster(id: String, key: String?, width: Int?, height: Int?, at: Instant): Boolean =
+        jdbc.update(
+            "update videos set poster_key = :key, poster_w = :w, poster_h = :h, updated_at = :at where id = :id and status = 'PLAYABLE'",
+            MapSqlParameterSource().addValue("key", key).addValue("w", width).addValue("h", height).addValue("at", dialect.instantParam(at)).addValue("id", id),
+        ) == 1
+
     override fun markUploadAbandoned(id: String, at: Instant): Boolean =
         jdbc.update(
             "update videos set status = 'FAILED', fail_code = 'UPLOAD_ABANDONED', updated_at = :at where id = :id and status in ('UPLOADING', 'UPLOADED')",

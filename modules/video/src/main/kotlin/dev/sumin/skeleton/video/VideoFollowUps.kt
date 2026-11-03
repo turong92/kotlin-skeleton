@@ -29,6 +29,9 @@ enum class VideoFinalizeEvent {
     /** 영상이 지워졌다 — 올린 파일 · 열린 멀티파트 · 영상 폴더를 치우고(공개면 CDN 캐시를 먼저 비운다) 앱에 알린다. 실패하면 큐가 다시 돌린다 */
     DELETED,
 
+    /** 일꾼이 올린 포스터를 이미지 검사에 부치고 끝나면 검사를 거친 사본으로 바꾼다([VideoPosters.adopt]) - 이미지 모듈이 있을 때만 넣는다. 검사가 안 끝났으면 큐가 다시 한다 */
+    POSTER,
+
     /** 트랙이 끝난(또는 실패한) 뒤 — 이긴 쪽 결과만 남기고 늦은 쪽 · 옛 시도의 결과를 쓸어낸다 */
     SWEEP,
 }
@@ -116,6 +119,7 @@ class VideoFinalizer(
     /** 공개 영상의 폴더를 지우기 전에 CDN 캐시를 비운다 — 없으면(비우는 구현이 없으면) 비우지 않는다 */
     private val purger: PublicUploadPurger? = null,
     private val publicProps: () -> StoragePublicProperties = { StoragePublicProperties() },
+    private val posters: VideoPosters? = null,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -129,6 +133,7 @@ class VideoFinalizer(
             VideoFinalizeEvent.LADDER_READY -> if (video.status == VideoStatus.PLAYABLE) events.onTrackReady(video, VideoLane.LADDER)
             VideoFinalizeEvent.FAILED -> if (video.status == VideoStatus.FAILED) events.onFailed(video)
             VideoFinalizeEvent.TRACK_FAILED -> log.warn("video track failed for good video={} code={}", video.id, video.failCode)
+            VideoFinalizeEvent.POSTER -> posters?.adopt(video.id)
             VideoFinalizeEvent.UPLOAD_CLEANUP -> cleanupUpload(video)
             VideoFinalizeEvent.SWEEP -> sweep(video)
         }
@@ -186,6 +191,9 @@ class VideoFinalizer(
             }.forEach { doomed += it.key }
             token = listed.nextContinuationToken.takeIf { listed.truncated }
         } while (token != null)
+        // 바뀐 포스터는 공개 영상에서 이미 퍼져 있을 수 있다 - 지우기 전에 CDN 캐시를 비운다(실패하면 지우지 않고 던져 큐가 다시 한다). 그 밖의 진 쪽 결과는 공개된 적이 없다
+        val stalePosters = doomed.filter { video.visibility == VideoVisibility.PUBLIC && VideoPosterNames.isPoster(it.value) }
+        if (stalePosters.isNotEmpty() && publicProps().enabled) purger?.purge(stalePosters.map { publicProps().absoluteUrl(it.value) })
         doomed.forEach { storage.delete(it) }
         if (doomed.isNotEmpty()) log.info("video sweep video={} removed={}", video.id, doomed.size)
     }

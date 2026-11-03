@@ -67,7 +67,13 @@ class FakeStorage : PresignedStorage {
     }
 
     override fun upload(request: UploadObjectRequest) = StoredObjectWriteResult(request.key)
-    override fun copy(request: CopyObjectRequest) = StoredObjectWriteResult(request.destinationKey)
+    val copies = mutableListOf<CopyObjectRequest>()
+
+    override fun copy(request: CopyObjectRequest): StoredObjectWriteResult {
+        copies += request
+        objects[request.destinationKey.value] = objects[request.sourceKey.value] ?: 1
+        return StoredObjectWriteResult(request.destinationKey)
+    }
     /** [read] 가 돌려줄 객체 내용 — 재생 목록 시험이 채운다 */
     val texts = linkedMapOf<String, String>()
     val reads = mutableListOf<String>()
@@ -128,6 +134,12 @@ class FakeVideoStore : VideoStore {
     override fun markDeleted(id: String, at: Instant): Boolean {
         val v = rows[id]?.takeIf { it.status != VideoStatus.DELETED } ?: return false
         rows[id] = v.copy(status = VideoStatus.DELETED, leaseOwner = null, leaseUntil = null, lane = null, progress = null, updatedAt = at)
+        return true
+    }
+
+    override fun replacePoster(id: String, key: String?, width: Int?, height: Int?, at: Instant): Boolean {
+        val v = rows[id]?.takeIf { it.status == VideoStatus.PLAYABLE } ?: return false
+        rows[id] = v.copy(posterKey = key, posterWidth = width, posterHeight = height, updatedAt = at)
         return true
     }
 

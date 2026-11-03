@@ -28,6 +28,8 @@ class VideoJobs(
     private val time: TimeProvider,
     /** 움직이는 이미지 표시본 변환(ANIMATED 차선) - `storage-image` 가 함께 켜졌을 때만 있다 */
     private val display: VideoDisplayJobs? = null,
+    /** 포스터를 이미지 검사에 부치는 면 - `UploadImages`(storage-image)가 있을 때만 일을 한다 */
+    private val posters: VideoPosters? = null,
 ) {
     private val random = SecureRandom()
 
@@ -153,6 +155,7 @@ class VideoJobs(
         tx.run {
             if (!store.markPlayable(video.id, workerId, playable, time.now())) return@run   // 동시에 온 다른 호출이 이겼다
             followUps.finalize(video.id, VideoFinalizeEvent.PLAYABLE)
+            if (poster != null && posters?.enabled == true) followUps.finalize(video.id, VideoFinalizeEvent.POSTER)
             followUps.finalize(video.id, VideoFinalizeEvent.UPLOAD_CLEANUP, props.cleanupDelay)
             if (compat == TrackStatus.QUEUED || ladder == TrackStatus.QUEUED) requestWake()
         }

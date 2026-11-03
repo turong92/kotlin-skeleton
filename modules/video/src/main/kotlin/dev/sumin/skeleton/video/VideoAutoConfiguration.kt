@@ -3,9 +3,11 @@ package dev.sumin.skeleton.video
 import dev.sumin.skeleton.common.deploy.DeployGuard
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.common.upload.PublicUploadPurger
+import dev.sumin.skeleton.common.upload.UploadImages
 import dev.sumin.skeleton.common.wake.OnRequestTask
 import dev.sumin.skeleton.common.wake.SimpleOnRequestTask
 import dev.sumin.skeleton.storage.PresignedStorage
+import dev.sumin.skeleton.storage.StorageKeyOwnership
 import dev.sumin.skeleton.storage.StorageProperties
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.autoconfigure.AutoConfiguration
@@ -99,10 +101,22 @@ class VideoAutoConfiguration {
     @ConditionalOnMissingBean
     fun videoPlaylists(tokens: VideoPlaybackTokens, ports: VideoPorts, keys: VideoKeys): VideoPlaylists = VideoPlaylists(tokens, ports.store, keys, ports.storage)
 
+    /**
+     * 포스터를 파일 묶음의 이미지 길로 보낸다 - `UploadImages`(`storage-image`)가 있을 때만 일을 한다(없으면 일꾼 포스터 그대로).
+     * 올린 이미지의 주인 확인은 `storage` 의 [StorageKeyOwnership] - 빈이 없으면 어떤 이미지도 내 것이 아니다
+     */
     @Bean
     @ConditionalOnMissingBean
-    fun videoLibrary(ports: VideoPorts, policy: VideoAccessPolicy, playback: VideoPlayback, time: TimeProvider): VideoLibrary =
-        VideoLibrary(ports.store, policy, playback, ports.followUps, ports.tx, time)
+    fun videoPosters(
+        ports: VideoPorts, keys: VideoKeys, policy: VideoAccessPolicy, ownership: ObjectProvider<StorageKeyOwnership>, images: ObjectProvider<UploadImages>, time: TimeProvider,
+    ): VideoPosters = VideoPosters(
+        ports.store, ports.storage, keys, policy, ownership.getIfAvailable { StorageKeyOwnership { _, _ -> false } }, { images.getIfAvailable() }, ports.followUps, ports.tx, time,
+    )
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun videoLibrary(ports: VideoPorts, policy: VideoAccessPolicy, playback: VideoPlayback, time: TimeProvider, posters: VideoPosters): VideoLibrary =
+        VideoLibrary(ports.store, policy, playback, ports.followUps, ports.tx, time, posters)
 
     /** 호환 · 사다리 일꾼이 읽을 원본 단 재생 목록 주소 — 공개 영상은 공개 주소, 비공개 영상은 일꾼 작업 수명의 출입증 경로 */
     @Bean
@@ -126,9 +140,9 @@ class VideoAutoConfiguration {
     @ConditionalOnMissingBean
     fun videoJobs(
         props: VideoProperties, ports: VideoPorts, keys: VideoKeys, inputs: VideoWorkerInputs, waker: VideoWaker, time: TimeProvider,
-        display: ObjectProvider<VideoDisplayJobs>,
+        display: ObjectProvider<VideoDisplayJobs>, posters: VideoPosters,
     ): VideoJobs =
-        VideoJobs(props, ports.store, ports.storage, keys, inputs, ports.followUps, ports.tx, waker, time, display.getIfAvailable())
+        VideoJobs(props, ports.store, ports.storage, keys, inputs, ports.followUps, ports.tx, waker, time, display.getIfAvailable(), posters)
 
     @Bean
     @ConditionalOnMissingBean
@@ -139,8 +153,9 @@ class VideoAutoConfiguration {
         time: TimeProvider,
         purgers: ObjectProvider<PublicUploadPurger>,
         storageProperties: ObjectProvider<StorageProperties>,
+        posters: VideoPosters,
     ): VideoFinalizer =
-        VideoFinalizer(ports.store, ports.storage, keys, events, time, purgers.getIfAvailable()) { storageProperties.getIfAvailable { StorageProperties() }.web.`public` }
+        VideoFinalizer(ports.store, ports.storage, keys, events, time, purgers.getIfAvailable(), { storageProperties.getIfAvailable { StorageProperties() }.web.`public` }, posters)
 
     @Bean
     @ConditionalOnMissingBean

@@ -26,6 +26,9 @@ interface VideoStore {
     /** 지워지지 않은 줄을 `DELETED` 로 */
     fun markDeleted(id: String, at: Instant): Boolean
 
+    /** `PLAYABLE` 영상의 포스터를 바꾼다(null 이면 포스터 없음) - 지워졌거나 아직 재생 전이면 false */
+    fun replacePoster(id: String, key: String?, width: Int?, height: Int?, at: Instant): Boolean
+
     /** `UPLOADING` · `UPLOADED` 를 `FAILED(UPLOAD_ABANDONED)` 로 */
     fun markUploadAbandoned(id: String, at: Instant): Boolean
 

@@ -6,6 +6,7 @@ import dev.sumin.skeleton.video.VideoAutoConfiguration
 import dev.sumin.skeleton.video.VideoJobs
 import dev.sumin.skeleton.video.VideoLibrary
 import dev.sumin.skeleton.video.VideoPlaylists
+import dev.sumin.skeleton.video.VideoPosters
 import dev.sumin.skeleton.video.VideoUploads
 import dev.sumin.skeleton.video.VideoWorkerService
 import org.springframework.boot.autoconfigure.AutoConfiguration
@@ -29,6 +30,11 @@ class VideoWebAutoConfiguration {
     @ConditionalOnProperty(prefix = "skeleton.video.http", name = ["enabled"], havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
     fun videoController(uploads: VideoUploads, library: VideoLibrary): VideoController = VideoController(uploads, library)
+
+    @Bean
+    @ConditionalOnProperty(prefix = "skeleton.video.http", name = ["enabled"], havingValue = "true", matchIfMissing = true)
+    @ConditionalOnMissingBean
+    fun videoPosterController(posters: VideoPosters): VideoPosterController = VideoPosterController(posters)
 
     @Bean
     @ConditionalOnProperty(prefix = "skeleton.video.http", name = ["enabled"], havingValue = "true", matchIfMissing = true)

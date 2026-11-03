@@ -23,6 +23,8 @@ enum class VideoErrorCode(
     PARTS_INVALID("VIDEO.PARTS_INVALID", HttpStatus.BAD_REQUEST, "조각 목록이 올린 조각과 맞지 않다"),
     UPLOAD_INCOMPLETE("VIDEO.UPLOAD_INCOMPLETE", HttpStatus.BAD_REQUEST, "올리기를 마칠 수 없다 — 조각을 다시 확인한다"),
     SIZE_MISMATCH("VIDEO.SIZE_MISMATCH", HttpStatus.BAD_REQUEST, "올린 파일 크기가 처음 말한 크기와 다르다"),
+    POSTER_PENDING("VIDEO.POSTER_PENDING", HttpStatus.CONFLICT, "이미지 검사가 아직 끝나지 않았다 — 잠시 뒤 다시 한다"),
+    POSTER_REJECTED("VIDEO.POSTER_REJECTED", HttpStatus.UNPROCESSABLE_ENTITY, "이 이미지는 포스터로 쓸 수 없다"),
 }
 
 class VideoInvalidException(why: String) : ApplicationException("video invalid: $why", VideoErrorCode.INVALID)
@@ -48,6 +50,12 @@ class VideoBadStateException(status: VideoStatus) :
 /** 재생 허가는 `PLAYABLE` 부터 — 그 전(올리는 중 · 변환 중)이나 실패한 영상 */
 class VideoNotReadyException(status: VideoStatus) :
     ApplicationException("video not ready: $status", VideoErrorCode.NOT_READY, data = mapOf("status" to status.name))
+
+/** 지정한 이미지의 검사(변환)가 아직 끝나지 않았다 — 클라이언트가 잠시 뒤 다시 부른다. 후속 작업이 던지면 큐가 늦춰 다시 한다 */
+class VideoPosterPendingException : ApplicationException("video poster image pending", VideoErrorCode.POSTER_PENDING)
+
+/** 이미지 검사가 거절했거나 · 이미지가 아니거나 · 이미지 모듈이 없어 검사할 수 없다 */
+class VideoPosterRejectedException : ApplicationException("video poster image rejected", VideoErrorCode.POSTER_REJECTED)
 
 class VideoPartRangeException(partCount: Int) :
     ApplicationException("video part range", VideoErrorCode.PART_RANGE, data = mapOf("partCount" to partCount))

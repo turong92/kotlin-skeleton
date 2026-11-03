@@ -15,6 +15,8 @@ class VideoLibrary(
     private val followUps: VideoFollowUps,
     private val tx: VideoTransactions,
     private val time: TimeProvider,
+    /** 이미지 모듈이 있으면 검사 전의 일꾼 포스터를 내주지 않는다 */
+    private val posters: VideoPosters? = null,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -22,7 +24,8 @@ class VideoLibrary(
     fun playback(viewer: String?, videoId: String): PlaybackGrant {
         val video = store.find(videoId)?.takeIf { it.status != VideoStatus.DELETED && policy.canPlay(viewer, it) } ?: throw VideoNotFoundException()
         if (video.status != VideoStatus.PLAYABLE) throw VideoNotReadyException(video.status)
-        return playback.grant(video, viewer)
+        val grant = playback.grant(video, viewer)
+        return if (posters?.hides(video) == true) grant.copy(poster = null) else grant
     }
 
     /** 올린 사람(= [VideoAccessPolicy.canManage])의 삭제 */
