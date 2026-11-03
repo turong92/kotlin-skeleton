@@ -24,7 +24,7 @@ class SampleCatalog(store: CatalogStore, time: ObjectProvider<TimeProvider>, pro
 
     override fun quote(request: PurchaseRequest): PurchaseQuote = when (request.itemType) {
         CheerCatalog.ITEM_TYPE -> cheer.quote(request)
-        // 예약: itemRef 가 보류 id - 금액은 보류의 자리 가격 합이다. 견적(`/orders/quote`)도 이 길을 타므로 부수 효과가 없다(수량은 1)
+        // 예약: itemRef 가 보류 id - 금액은 결제를 시작한(`POST /api/v1/booking/holds/{id}/checkout`) 보류에 박힌 값이고, 시작하지 않았으면 409 다. 견적(`/orders/quote`)도 이 길을 타므로 부수 효과가 없다(수량은 1)
         BookingPayments.ITEM_TYPE ->
             if (request.quantity != 1) throw PaymentItemNotPurchasableException() else booking.itemFor(request.itemRef, request.accountId)
         else -> table.quote(request)

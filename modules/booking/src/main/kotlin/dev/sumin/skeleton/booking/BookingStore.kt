@@ -51,8 +51,14 @@ interface BookingStore {
     fun cancel(accountId: String, holdId: String, now: Instant): HoldOutcome
 
     /**
-     * 결제할 보류의 값을 본다 - **아무것도 바꾸지 않는다**(자리를 고정하지 않는다). 결제 모듈의 견적(`/orders/quote`)도 같은 길을 타므로 부수 효과가 있으면 미리보기만으로 보류가 묶인다.
-     * 무료 · 이미 확정된 보류는 [NotPayableException], 시간이 지났으면 [HoldExpiredException]. 그 뒤 자리를 바꾸면 금액이 달라져 [settlePaid] 가 환불로 가른다.
+     * **결제 시작** - 금액(= 자리 가격의 합, 서버만 정한다)을 보류에 박고 **자리를 고정**한다: 그 뒤 더하기 · 빼기 · 모두 놓기는 [HoldLockedException], 보류 시간이 끝나면 그대로 반환된다(늘지 않는다).
+     * 멱등 - 이미 시작했으면 박힌 그대로 돌려준다. 무료 · 이미 확정된 보류는 [NotPayableException], 시간이 지났으면 [HoldExpiredException]. 쓰기라 잠금 순서(사용량 줄 → 보류 줄)를 지킨다.
+     */
+    fun startCheckout(accountId: String, holdId: String, now: Instant): BookingHold
+
+    /**
+     * 주문(`itemFor`)을 위해 결제를 시작한 보류의 박힌 금액을 본다 - **아무것도 바꾸지 않는다**(결제 모듈의 견적 `/orders/quote` 도 같은 길을 타서 부수 효과가 있으면 미리보기만으로 묶인다).
+     * 결제를 시작하지 않은 보류는 [CheckoutRequiredException] - 그래서 자리가 고정되지 않은 채 주문이 만들어지지 않는다.
      */
     fun priceHold(accountId: String, holdId: String, now: Instant): BookingHold
 

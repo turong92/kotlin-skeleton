@@ -5,8 +5,10 @@ import dev.sumin.skeleton.booking.BookingPool
 import dev.sumin.skeleton.booking.BookingRefundQueue
 import dev.sumin.skeleton.booking.BookingSeat
 import dev.sumin.skeleton.booking.BookingStore
+import dev.sumin.skeleton.booking.CheckoutRequiredException
 import dev.sumin.skeleton.booking.HoldEmptyException
 import dev.sumin.skeleton.booking.HoldExpiredException
+import dev.sumin.skeleton.booking.HoldLockedException
 import dev.sumin.skeleton.booking.HoldNotFoundException
 import dev.sumin.skeleton.booking.HoldOutcome
 import dev.sumin.skeleton.booking.HoldStatus
@@ -166,6 +168,7 @@ class JdbcBookingStore(
             val existing = openHold(poolId, accountId)
             if (existing != null) {
                 if (!existing.expiresAt.isAfter(now)) throw HoldExpiredException(existing.id)
+                if (existing.checkoutStartedAt != null) throw HoldLockedException()
             }
             val have = existing?.let { heldSeatIds(it.id) }.orEmpty()
             val fresh = wanted.filter { it !in have }
@@ -199,6 +202,7 @@ class JdbcBookingStore(
         return inAccountTx(poolId, accountId) {
             val hold = openHold(poolId, accountId) ?: throw HoldNotFoundException()
             if (!hold.expiresAt.isAfter(now)) throw HoldExpiredException(hold.id)
+            if (hold.checkoutStartedAt != null) throw HoldLockedException()
             if (seatId !in heldSeatIds(hold.id)) return@inAccountTx HoldOutcome(loadHold(hold.id), emptyList())
             // 자리 줄이 내 보류의 HELD 일 때만 풀린다. 사용량 · 보류의 자리 수는 그 한 줄과 같이 줄어든다
             check(jdbc.update(
@@ -215,6 +219,8 @@ class JdbcBookingStore(
     override fun release(accountId: String, holdId: String, now: Instant): HoldOutcome {
         val owned = findOwned(accountId, holdId) ?: throw HoldNotFoundException()
         return inAccountTx(owned.poolId, accountId) {
+            // 결제를 시작한 보류는 놓지 못한다(결제창이 열려 있는 동안 자리가 풀리면 결제 뒤에 자리가 없다) - 보류 시간이 끝나야 풀린다
+            if (openHold(owned.poolId, accountId)?.let { it.id == holdId && it.checkoutStartedAt != null } == true) throw HoldLockedException()
             closeLocked(owned, HoldStatus.HELD, HoldStatus.RELEASED, SeatStatus.HELD, null) ?: HoldOutcome(loadHold(holdId), emptyList())
         }
     }
@@ -259,13 +265,30 @@ class JdbcBookingStore(
         }
     }
 
+    override fun startCheckout(accountId: String, holdId: String, now: Instant): BookingHold {
+        val owned = findOwned(accountId, holdId) ?: throw HoldNotFoundException()
+        return inAccountTx(owned.poolId, accountId) {
+            val hold = lockedHold(holdId)
+            if (hold.status == HoldStatus.CONFIRMED) throw NotPayableException()
+            if (hold.status != HoldStatus.HELD || !hold.expiresAt.isAfter(now)) throw HoldExpiredException(holdId)
+            if (hold.checkoutStartedAt != null) return@inAccountTx loadHold(holdId)   // 이미 시작했다 - 자리가 고정이라 금액도 그대로(멱등)
+            if (hold.seatCount == 0) throw HoldEmptyException()
+            val total = hold.total ?: throw NotPayableException()
+            if (checkNotNull(findPool(hold.poolId)).currency == null) throw NotPayableException()
+            check(jdbc.update(
+                "update booking_holds set checkout_started_at = :now, amount = :amount where id = :id and status = 'HELD' and checkout_started_at is null",
+                mapOf("now" to ts(now), "amount" to total, "id" to holdId),
+            ) == 1) { "hold $holdId changed under the account lock" }
+            loadHold(holdId)
+        }
+    }
+
     override fun priceHold(accountId: String, holdId: String, now: Instant): BookingHold {
         findOwned(accountId, holdId) ?: throw HoldNotFoundException()
         val hold = loadHold(holdId)
         if (hold.status == HoldStatus.CONFIRMED) throw NotPayableException()
         if (hold.status != HoldStatus.HELD || !hold.expiresAt.isAfter(now)) throw HoldExpiredException(holdId)
-        if (hold.seatCount == 0) throw HoldEmptyException()
-        if (hold.total == null || checkNotNull(findPool(hold.poolId)).currency == null) throw NotPayableException()
+        if (hold.checkoutStartedAt == null || hold.amount == null) throw CheckoutRequiredException()
         return hold
     }
 
@@ -277,8 +300,8 @@ class JdbcBookingStore(
             // 상태는 잠금 읽기로 본다 - 바깥(결제)의 트랜잭션에 참여한 때 MySQL 반복 읽기의 낡은 스냅샷을 피한다
             val hold = lockedHold(holdId)
             val pool = checkNotNull(findPool(hold.poolId))
-            // 견적 뒤 자리를 바꿨으면 지금 가격 합이 낸 금액과 달라 환불로 간다 - 자리를 묶지 않으니 돈만 내고 자리가 안 맞는 일은 이 비교가 막는다
-            val matches = hold.total != null && hold.total == quotedAmount && pool.currency.equals(currency.trim(), ignoreCase = true)
+            // 결제를 시작하면 자리가 고정이라 박힌 금액과 낸 금액이 같다 - 다르면(주문이 다른 길로 만들어졌다) 안전망으로 환불한다
+            val matches = hold.amount != null && hold.amount == quotedAmount && pool.currency.equals(currency.trim(), ignoreCase = true)
             var changed = emptyList<String>()
             val outcome = when {
                 hold.status == HoldStatus.CONFIRMED -> OrderOutcome.DUPLICATE
@@ -441,7 +464,7 @@ class JdbcBookingStore(
             "insert into booking_holds (id, pool_id, account_id, seat_count, status, active_slot, expires_at, created_at) values (:id, :p, :a, 0, 'HELD', 1, :exp, :now)",
             mapOf("id" to id, "p" to poolId, "a" to accountId, "exp" to ts(expiresAt), "now" to ts(now)),
         )
-        return OwnedHold(id, poolId, accountId, HoldStatus.HELD, 0, expiresAt)
+        return OwnedHold(id, poolId, accountId, HoldStatus.HELD, 0, expiresAt, null)
     }
 
     /** 이 계정의 이 풀 열린 보류. 사용량 줄을 잠근 안에서 읽는다 */
@@ -506,11 +529,12 @@ class JdbcBookingStore(
         val status: HoldStatus,
         val seatCount: Int,
         val expiresAt: Instant,
+        val checkoutStartedAt: Instant?,
     )
 
     private fun ResultSet.toOwned() = OwnedHold(
         getString("id"), getString("pool_id"), getString("account_id"), HoldStatus.valueOf(getString("status")), getInt("seat_count"),
-        dialect.readInstant(this, "expires_at")!!,
+        dialect.readInstant(this, "expires_at")!!, dialect.readInstant(this, "checkout_started_at"),
     )
 
     private fun ResultSet.toPool() = BookingPool(
@@ -547,7 +571,9 @@ class JdbcBookingStore(
         accountId = getString("account_id"),
         status = HoldStatus.valueOf(getString("status")),
         seatCount = getInt("seat_count"),
+        amount = getLong("amount").takeUnless { wasNull() },
         expiresAt = dialect.readInstant(this, "expires_at")!!,
+        checkoutStartedAt = dialect.readInstant(this, "checkout_started_at"),
         confirmedOrderId = getString("confirmed_order_id"),
         seats = seats,
         createdAt = dialect.readInstant(this, "created_at")!!,

@@ -160,7 +160,7 @@ local 프로필은 주문 만들기 한도(기본 계정당 10 / 10분)를 풀�
 
 | 자리 | 하는 일 |
 |---|---|
-| `catalog/SampleCatalog` | `PaymentCatalog` 는 하나뿐이라 `itemType == "booking"` 이면 `BookingPayments.itemFor(itemRef = 보류 id, 계정)` - 금액은 자리 가격의 합(견적 호출도 이 길을 타므로 부수 효과 없음) |
+| `catalog/SampleCatalog` | `PaymentCatalog` 는 하나뿐이라 `itemType == "booking"` 이면 `BookingPayments.itemFor(itemRef = 보류 id, 계정)` - 금액은 결제를 시작한 보류에 박힌 값(견적 호출도 이 길을 타므로 부수 효과 없음, 시작하지 않은 보류는 409) |
 | `orders/SampleOrderListener` | `onPaid` / `onRefunded` 에서 `order.itemType == "booking"` 이면 `BookingPayments` 를 부른다(확정 · 늦은 결제의 다시 잡기 · 자동 환불 / 전액 환불이면 자리 반환) |
 | `booking/BookingSeed` | **로컬 프로필 씨앗**(없는 것만): 풀 「워크숍 20석」(무료, 일반 20석, 한 번에 2석, 대기실 `sample-workshop`)과 「소극장 공연 120석」(KRW, R석 40 × 50,000원 · S석 80 × 30,000원, 한 번에 4석, 대기실 `sample-theater`). 대기실은 둘 다 분당 30명으로 **이미 열려 있다** |
 | `application.yml` | `skeleton.waiting-room.token.key: ${WAITING_ROOM_TOKEN_KEY:}`(보호 환경은 없으면 기동 실패 - 배포 선언의 `secrets` 에 이름을 더한다) · `skeleton.booking.admin.enabled: ${BOOKING_ADMIN_ENABLED:false}` · `management.health.redis.enabled: false`(Redis 가 없다고 `/health` 를 내리지 않는다) |
@@ -168,7 +168,7 @@ local 프로필은 주문 만들기 한도(기본 계정당 10 / 10분)를 풀�
 
 **Redis**: `redis-core` 가 있으면 배치도 사건을 다른 인스턴스로 잇는다(`docker compose --profile redis up -d`). 없어도 앱은 뜨고 한 대 안의 반영은 그대로다 - 연결을 5초마다 다시 시도하며 경고 로그만 남긴다.
 
-**여정 시험하기** (react e2e 도 이 길): 시드 계정으로 로그인 → 운영자로 `GET /api/v1/admin/booking/pools` 에서 이름으로 풀 id 와 `waitingRoomId` 를 찾는다 → `POST /api/v1/waiting-rooms/{roomId}/tickets` → `GET …/status`(헤더 `X-Ticket`)가 `ADMITTED` 가 되면 `entryToken` → `GET /api/v1/booking/pools/{id}/seats` · `…/seats/stream` · `POST …/hold/seats`(헤더 `X-Entry-Token`) → 무료 풀은 `POST /api/v1/booking/holds/{holdId}/confirm`, 유료 풀은 `POST /api/v1/payments/orders {itemType: "booking", itemRef: holdId, quantity: 1}`.
+**여정 시험하기** (react e2e 도 이 길): 시드 계정으로 로그인 → 운영자로 `GET /api/v1/admin/booking/pools` 에서 이름으로 풀 id 와 `waitingRoomId` 를 찾는다 → `POST /api/v1/waiting-rooms/{roomId}/tickets` → `GET …/status`(헤더 `X-Ticket`)가 `ADMITTED` 가 되면 `entryToken` → `GET /api/v1/booking/pools/{id}/seats` · `…/seats/stream` · `POST …/hold/seats`(헤더 `X-Entry-Token`) → 무료 풀은 `POST /api/v1/booking/holds/{holdId}/confirm`, 유료 풀은 `POST /api/v1/booking/holds/{holdId}/checkout`(자리 고정) 다음 `POST /api/v1/payments/orders {itemType: "booking", itemRef: holdId, quantity: 1}`.
 **오픈 전 → 오픈**은 시계를 앞당기지 않고 운영자 경로로 만든다: `POST /api/v1/admin/waiting-rooms {scopeKey, opensAt: 몇 초 뒤, prequeueMinutes, perMinute}` 로 새 대기실을 만들고 `POST /api/v1/admin/booking/pools {…, waitingRoomId}` + `…/seats` 로 풀을 만든다 - 오픈 전에는 번호 없이 줄에 서고(`PREQUEUE`), 오픈 시각 뒤 첫 요청이 섞어 번호를 매긴다.
 
 **시험**: `booking/BookingHttpLoadIntegrationTest`(스펙 시험 6) - 진짜 서버(RANDOM_PORT) · 진짜 보안 체인 · 진짜 PostgreSQL 에서 가상 스레드 1000 개가 서로 다른 계정으로 같은 10자리를 HTTP 로 찍는다: 200 은 열 번, 나머지 `409 BOOKING.SEAT_TAKEN`, 5xx 0. 지연(p50 · p95)은 출력만 하고 단정하지 않는다. 예약 모듈만의 조립은 `modules/booking` 의 `noOptionalTest`(대기열 · 결제 · Redis · 스케줄러 없이도 서고 기본 문 · 기본 중계가 선다).

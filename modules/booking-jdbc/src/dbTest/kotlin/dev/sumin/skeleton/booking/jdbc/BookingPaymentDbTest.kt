@@ -1,9 +1,12 @@
 package dev.sumin.skeleton.booking.jdbc
 
+import dev.sumin.skeleton.booking.CheckoutRequiredException
+import dev.sumin.skeleton.booking.HoldLockedException
 import dev.sumin.skeleton.booking.HoldStatus
 import dev.sumin.skeleton.booking.OrderOutcome
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate
 
@@ -24,7 +27,7 @@ class BookingPaymentDbTest {
 
     private fun checkout(pool: String, account: String, seat: String): Pair<String, Long> {
         val hold = a.holds.addSeats(pool, account, listOf(seat))
-        return hold.id to checkNotNull(a.holds.priceHold(account, hold.id).total)
+        return hold.id to checkNotNull(a.holds.startCheckout(account, hold.id).amount)
     }
 
     @Test
@@ -78,23 +81,21 @@ class BookingPaymentDbTest {
     }
 
     @Test
-    fun `3 - pricing a hold changes nothing, and a seat changed after the quote is refunded instead of confirmed`() {
+    fun `3 - once checkout has started, adding, removing or releasing is HOLD_LOCKED, and starting twice gives the same pinned amount`() {
         val (pool, seats) = BookingDb.newPool(seats = 3, maxPerHold = 3, price = 1000)
-        val hold = a.holds.addSeats(pool, "quoter", listOf(seats[0]))
-        val quoted = checkNotNull(a.holds.priceHold("quoter", hold.id).total)
-        a.holds.priceHold("quoter", hold.id)   // 견적을 몇 번 불러도
-        // 견적은 자리를 묶지 않는다: 더하기 · 빼기가 그대로 된다
-        a.holds.addSeats(pool, "quoter", listOf(seats[1]))
-        assertEquals(2, a.jdbc.queryForObject("select seat_count from booking_holds where id = :h", mapOf("h" to hold.id), Int::class.java))
-        // 견적(1000원) 뒤 자리를 바꿔 2000원이 된 보류에 옛 금액이 결제됐다 - 돈만 내고 자리가 안 맞는 일 없이 환불
-        val stale = newOrder()
-        assertEquals(OrderOutcome.UNFULFILLED, a.holds.settlePaid(stale, "quoter", hold.id, quoted, "KRW").outcome)
-        assertEquals("HELD", status(hold.id))
-        assertEquals(1, a.refundQueue.forOrder(stale).size)
-        // 지금 값으로 다시 결제하면 확정
-        val fresh = newOrder()
-        assertEquals(OrderOutcome.CONFIRMED, a.holds.settlePaid(fresh, "quoter", hold.id, checkNotNull(a.holds.priceHold("quoter", hold.id).total), "KRW").outcome)
-        assertEquals("SOLD", seatStatus(seats[1]))
+        val hold = a.holds.addSeats(pool, "locker", listOf(seats[0]))
+        assertFailsWith<CheckoutRequiredException> { a.holds.priceHold("locker", hold.id) }   // 시작하지 않은 보류는 주문할 수 없다
+        val first = a.holds.startCheckout("locker", hold.id)
+        val second = a.holds.startCheckout("locker", hold.id)   // 멱등
+        assertEquals(1000L, first.amount)
+        assertEquals(first.amount, second.amount)
+        assertEquals(first.checkoutStartedAt, second.checkoutStartedAt)
+        assertEquals(1000L, a.holds.priceHold("locker", hold.id).amount)   // 주문 쪽 읽기는 아무것도 바꾸지 않는다
+        assertFailsWith<HoldLockedException> { a.holds.addSeats(pool, "locker", listOf(seats[1])) }
+        assertFailsWith<HoldLockedException> { a.holds.removeSeat(pool, "locker", seats[0]) }
+        assertFailsWith<HoldLockedException> { a.holds.release("locker", hold.id) }
+        assertEquals("AVAILABLE", seatStatus(seats[1]))
+        assertEquals("HELD", seatStatus(seats[0]))
         assertInvariants(jdbc, pool)
     }
 
@@ -130,7 +131,8 @@ class BookingPaymentDbTest {
                 val outcomes = raceAll(5) { i ->
                     when (i) {
                         0, 1 -> attempt { a.holds.expireDue().toString() }
-                        2 -> attempt { a.holds.release("owner", holdId).id }
+                        // 결제를 시작한 보류는 놓지 못한다 - 막혔다는 답도 정상이다
+                        2 -> attempt { try { a.holds.release("owner", holdId).id } catch (_: HoldLockedException) { "locked" } }
                         3 -> attempt { b.holds.addSeats(pool, "newcomer", listOf(seat)).id }
                         else -> attempt { b.holds.settlePaid(order, "owner", holdId, amount, "KRW").outcome.name }
                     }
