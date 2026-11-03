@@ -328,6 +328,7 @@ skeleton:
     totp:
       issuer: Notes            # 이 앱의 선택: 인증 앱에 「Notes」 로 보인다(모듈 기본은 spring.application.name)
     required-for: OPERATORS    # 이 앱의 선택: 운영 권한이 하나라도 있는 계정(ADMIN 등)은 2단계 필수 - 등록 전엔 /api/v1/auth · GET /account/me 말고는 403 MFA.ENROLLMENT_REQUIRED (모듈 기본은 NONE)
+    admin:
       enabled: true            # 이 앱의 선택: 운영자 해제(권한 mfa.reset 은 기본 역할 없이 ADMIN 전권만) - 본인 확인 절차를 운영 규칙으로 정한 뒤에만 쓴다. 모듈 기본은 꺼짐(404)
   dashboard:
     admin:
