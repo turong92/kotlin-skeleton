@@ -92,8 +92,8 @@
 | `auth-mfa-jdbc` | 2단계 저장을 DB 에 두기 (비밀은 암호화 봉투, 복구 코드는 해시) | [auth-mfa-jdbc](auth-mfa-jdbc.md) |
 | `booking` | 예약(좌석 지정 · 선착순) — 자리 잡기 · 놓기 · 보류 시간 자동 반환 · 무료 확정 · 배치도 스냅샷 + SSE 흐름 · 이중 판매 0 | [booking](booking.md) |
 | `booking-jdbc` | 예약 저장을 DB 에 두기 (자리 줄 조건부 갱신이 정본, PostgreSQL · MySQL) | [booking-jdbc](booking-jdbc.md) |
-| `waiting-room` | 대기열(가상 대기실) — 구현 전(자리만) | [waiting-room](waiting-room.md) |
-| `waiting-room-jdbc` | 대기열 저장을 DB 에 두기 — 구현 전(자리만) | [waiting-room-jdbc](waiting-room-jdbc.md) |
+| `waiting-room` | 대기열(가상 대기실) — 로그인한 사람만 줄 서기 · 오픈 순간 무작위 섞기 · 분당 입장 수 · 서명 입장권 `requireEntry` | [waiting-room](waiting-room.md) |
+| `waiting-room-jdbc` | 대기열 저장을 DB 에 두기 (번호는 방 줄 잠금 뒤에 — 1..n 빈틈 없음, PostgreSQL · MySQL) | [waiting-room-jdbc](waiting-room-jdbc.md) |
 | `badge` | 배지 — 정의 · 수여/회수 · 내 배지 · 비로그인 공개 프로필 배지 · 보상 지급기 (포인트 · 쿠폰을 모른다) | [badge](badge.md) |
 | `badge-jdbc` | 배지 저장을 DB 에 두기 (정의 · 보유 · 수여/회수 내역) | [badge-jdbc](badge-jdbc.md) |
 | `workspace` | 워크스페이스(팀) — 만들기 · 역할(소유자 · 관리자 · 멤버) · slug · 멤버 관리 · 소유권 이전 · 요청 경계 `CurrentWorkspace` | [workspace](workspace.md) |

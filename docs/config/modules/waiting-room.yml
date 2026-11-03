@@ -1,0 +1,10 @@
+# waiting-room — 대기열(가상 대기실). 로그인한 사람만 줄을 선다. 사용자 경로 /api/v1/waiting-rooms. 저장은 waiting-room-jdbc.
+skeleton:
+  waiting-room:
+    http:
+      enabled: true      # false 면 사용자 경로를 등록하지 않는다 (서블릿 앱 + Spring Security 가 있을 때만 등록). 서버 API(WaitingRooms)는 그대로 쓸 수 있다
+    admin:
+      enabled: false     # true 면 운영자 경로 /api/v1/admin/waiting-rooms (대기실 만들기 · 속도 · 닫기 · 현황, 권한 waiting-room.manage). 꺼져 있으면 404
+    # token:
+    #   key: ${WAITING_ROOM_TOKEN_KEY}   # 순번표 · 입장권 서명 키 (환경변수 <P>_WAITING_ROOM_TOKEN_KEY). 24자 이상 · 서로 다른 글자 8개 이상 — 보호 환경(stage · prod)에서 없거나 약하면 기동 실패
+    #   previous-key:                    # 키를 돌릴 때만: 옛 키(검증에만 쓴다). 새 키를 key 로 옮겨 배포하고, 입장 시간이 지나 옛 토큰이 다 끝나면 뺀다

@@ -170,8 +170,8 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `storage-image-pdfbox` | PDF 첫 쪽 썸네일 — storage-image 의 변환 작업에서 PDFBox 로 1쪽을 그린다(쪽 수 · 크기 · 렌더 시간 상한, 기본 꺼짐). | `--modules storage-image-pdfbox` | PDF 썸네일, PDF 미리보기 / pdf thumbnail, pdf preview | — |
 | `storage-s3` | S3 호환 저장소(AWS S3 · Cloudflare R2 · MinIO) — presign PUT/GET · 멀티파트 · 복사 · 일괄 삭제, 공개 URL RAW \| OPAQUE. | `--modules storage-s3` | S3, R2, 클라우드 스토리지, 파일 저장소, 이미지 저장 / s3, r2, cloudflare r2, minio, object storage | `@skeleton/storage` |
 | `time` | 글로벌 시간 — 요청마다 뷰어 시간대 · 로케일 · ZonedMoment(미래 현지 시각) · 사람이 읽는 이중 포맷 · 국가 → 시간대. | 스타터(apps/api)에 기본 포함 | 시간대, 타임존, 날짜 표시, 현지 시간, 예약 시각, 글로벌 / timezone, time zone, locale, zoned moment, date format, global time | `@skeleton/time` |
-| `waiting-room` | 대기열(가상 대기실) — 아직 구현 전(자리만 잡혀 있다). 로그인한 사람만 줄을 서고, 오픈 전 줄은 오픈 순간 섞고 그 뒤는 온 순서, 분당 입장 수만 정한다(설계: docs/superpowers/specs/2026-11-02-booking-design.md). | `--modules waiting-room` | 대기열, 대기실, 가상 대기실, 줄 서기, 접속 폭주 / waiting room, virtual queue, queue, traffic spike | — |
-| `waiting-room-jdbc` | 대기열을 DB 에 둔다 — 아직 구현 전(자리만 잡혀 있다). | `--modules waiting-room-jdbc` | 대기열 저장소, 대기열 DB / waiting room storage, queue repository | — |
+| `waiting-room` | 대기열(가상 대기실) — 로그인한 사람만 줄을 선다(1인 1순번 = 계정 1개 1순번). 오픈 전 줄은 오픈 순간 한 번 무작위로 섞고 그 뒤는 온 순서, 분당 입장 수(속도 구간, 멈춤 가능)만 정한다. 순번표 · 입장권은 계정에 묶인 서명 토큰(키 돌리기 가능, 보호 환경에서 키가 없으면 기동 실패)이고 입장권 검사 WaitingRooms.requireEntry 는 DB 를 읽지 않는다. 저장은 waiting-room-jdbc. | `--modules waiting-room` | 대기열, 대기실, 가상 대기실, 줄 서기, 접속 폭주 / waiting room, virtual queue, queue, traffic spike | — |
+| `waiting-room-jdbc` | 대기열을 DB 에 둔다 (PostgreSQL · MySQL) — 표 셋(대기실 · 속도 구간 · 순번표). 번호는 방 줄 잠금 뒤에 줘서 1..n 빈틈 없이, 섞기는 조건부 갱신을 이긴 한 번만. | `--modules waiting-room-jdbc` | 대기열 저장소, 대기열 DB / waiting room storage, queue repository | — |
 | `workspace` | 워크스페이스(팀 · 조직) — 만들기 · 소유자/관리자/멤버 역할 · 주소(slug, 바꿔도 옛 주소가 따라온다) · 멤버 관리 · 소유권 이전 · 메일 링크 초대(만료 · 재발송 · 취소 · 확인된 이메일로만 수락, 켜야 한다), 그리고 요청 헤더 `X-Workspace-Id` 로 앱 데이터를 묶는 경계 `CurrentWorkspace`. 좌석 상한은 앱이 정한다. 운영자 읽기 경로(목록 · 검색 · 상세, `workspace.read`)는 꺼져 있다가 앱이 켠다. | `--modules workspace,workspace-jdbc` | 워크스페이스, 팀, 조직, 멤버 역할, 소유권 이전, 멀티 테넌트 / workspace, team, organization, tenant, member roles, ownership transfer | `@skeleton/workspace` |
 | `workspace-jdbc` | 워크스페이스 · slug 기록 · 멤버 · 초대를 DB 에 둔다 (PostgreSQL · MySQL) — 소유자는 유니크 표시로 늘 하나, 모든 변경은 워크스페이스 줄 잠금 아래에서 현재 역할로 판정. | `--modules workspace-jdbc` | 워크스페이스 저장소, 팀 DB / workspace storage, workspace repository | — |
 
@@ -1703,17 +1703,24 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 스타터가 이미 가진다
 - 키워드: 시간대, 타임존, 날짜 표시, 현지 시간, 예약 시각, 글로벌 / timezone, time zone, locale, zoned moment, date format, global time
 
-### `waiting-room` — 대기열(가상 대기실) — 아직 구현 전(자리만 잡혀 있다). 로그인한 사람만 줄을 서고, 오픈 전 줄은 오픈 순간 섞고 그 뒤는 온 순서, 분당 입장 수만 정한다(설계: docs/superpowers/specs/2026-11-02-booking-design.md).
+### `waiting-room` — 대기열(가상 대기실) — 로그인한 사람만 줄을 선다(1인 1순번 = 계정 1개 1순번). 오픈 전 줄은 오픈 순간 한 번 무작위로 섞고 그 뒤는 온 순서, 분당 입장 수(속도 구간, 멈춤 가능)만 정한다. 순번표 · 입장권은 계정에 묶인 서명 토큰(키 돌리기 가능, 보호 환경에서 키가 없으면 기동 실패)이고 입장권 검사 WaitingRooms.requireEntry 는 DB 를 읽지 않는다. 저장은 waiting-room-jdbc.
 
 - 종류 · 상태: module · experimental — 위치 `modules/waiting-room`
 - 켜는 법: `--modules waiting-room`
 - 의존 한 줄: `implementation(project(":modules:waiting-room"))`
+- 설정 접두사 `skeleton.waiting-room` — 키와 기본값 `docs/config/modules/waiting-room.yml`
+- HTTP 경로: `/api/v1/admin/waiting-rooms`, `/api/v1/waiting-rooms`
+- 비밀 · 환경변수: `<P>_WAITING_ROOM_TOKEN_KEY`, `<P>_WAITING_ROOM_TOKEN_PREVIOUS_KEY` — 빠지면: 순번표 · 입장권 서명 키(24자 이상 무작위) — 보호 환경(<P>_ENV=stage|prod)에서 없거나 약하면 기동 실패. PREVIOUS_KEY 는 키를 돌릴 때만(옛 키, 검증에만 쓴다)
 - 문서: `docs/modules/waiting-room.md`
 - 쓰지 않는 경우:
-  - 아직 구현 전이다 — 쓰지 않는다
+  - 저장소 없이는 서지 않는다 — waiting-room-jdbc 를 같이 고른다(메모리 저장소는 없다)
+  - 로그인한 사람만 줄을 선다 — 익명 · 캡차 기반 대기열이 아니다(계정 없이 쓰는 앱은 그 앱이 자체로 만든다)
+  - 보호 환경(stage · prod)에서는 서명 키(skeleton.waiting-room.token.key)가 없거나 약하면 기동 실패한다
+  - 닫아도 이미 낸 입장권은 자기 만료(입장 시간)까지 통한다 — 입장권 검사는 토큰만 본다
+  - 운영자 경로는 `skeleton.waiting-room.admin.enabled=true` 로 켠다 — 기본은 꺼짐(404)
 - 키워드: 대기열, 대기실, 가상 대기실, 줄 서기, 접속 폭주 / waiting room, virtual queue, queue, traffic spike
 
-### `waiting-room-jdbc` — 대기열을 DB 에 둔다 — 아직 구현 전(자리만 잡혀 있다).
+### `waiting-room-jdbc` — 대기열을 DB 에 둔다 (PostgreSQL · MySQL) — 표 셋(대기실 · 속도 구간 · 순번표). 번호는 방 줄 잠금 뒤에 줘서 1..n 빈틈 없이, 섞기는 조건부 갱신을 이긴 한 번만.
 
 - 종류 · 상태: module · experimental — 위치 `modules/waiting-room-jdbc`
 - 켜는 법: `--modules waiting-room-jdbc`
@@ -1721,7 +1728,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 자동으로 따라온다: `waiting-room`
 - 문서: `docs/modules/waiting-room-jdbc.md`
 - 쓰지 않는 경우:
-  - 아직 구현 전이다 — 쓰지 않는다
+  - DataSource · db-* 모듈과 이 모듈의 마이그레이션이 적용된 스키마가 필요하다
 - 키워드: 대기열 저장소, 대기열 DB / waiting room storage, queue repository
 
 ### `workspace` — 워크스페이스(팀 · 조직) — 만들기 · 소유자/관리자/멤버 역할 · 주소(slug, 바꿔도 옛 주소가 따라온다) · 멤버 관리 · 소유권 이전 · 메일 링크 초대(만료 · 재발송 · 취소 · 확인된 이메일로만 수락, 켜야 한다), 그리고 요청 헤더 `X-Workspace-Id` 로 앱 데이터를 묶는 경계 `CurrentWorkspace`. 좌석 상한은 앱이 정한다. 운영자 읽기 경로(목록 · 검색 · 상세, `workspace.read`)는 꺼져 있다가 앱이 켠다.

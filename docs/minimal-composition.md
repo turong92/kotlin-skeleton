@@ -103,6 +103,7 @@ fails when this table and the prefixes found in module code differ.
 | `api-key` | `skeleton.api-key` |
 | `inquiry` | `skeleton.inquiry` |
 | `booking` | `skeleton.booking` |
+| `waiting-room` | `skeleton.waiting-room` |
 | `auth` | `skeleton.auth` |
 | `auth-magic-link` | `skeleton.auth-magic-link` |
 | `auth-mfa` | `skeleton.auth-mfa` |
@@ -217,6 +218,8 @@ test proving a context with only that module (and its declared dependencies) boo
 | `inquiry-jdbc` | yes | a `DataSource` + one `db-*` module (+ its migration `inquiries`, as above) | — |
 | `booking` | wired only once a `BookingStore` exists (then the server API `BookingPools` · `BookingHolds`; HTTP `/api/v1/booking` for a servlet app with Spring Security; the door lets everyone in, the relay stays in this instance) | `booking-jdbc` | `scheduler` (the 1-minute expiry sweep; compile-only), `spring-security-core` (HTTP; compile-only) |
 | `booking-jdbc` | yes | a `DataSource` + one `db-*` module (+ its migration `booking`, as above) | — |
+| `waiting-room` | wired only once a `WaitingRoomStore` exists (then the server API `WaitingRooms`; HTTP `/api/v1/waiting-rooms` for a servlet app with Spring Security; no room exists until one is created; in a protected env (stage · prod) the signing keys `skeleton.waiting-room.token.key` must be set) | `waiting-room-jdbc` | `spring-security-core` (HTTP; compile-only) |
+| `waiting-room-jdbc` | yes | a `DataSource` + one `db-*` module (+ its migration `waiting_room`, as above) | — |
 | `job-queue-jdbc` | yes | a `DataSource` + one `db-*` module (its `jobs` migration is picked up by `spring.flyway.locations: classpath:db/migration/{vendor}`) | — |
 | `json` | yes | nothing | — |
 | `migration` / `migration-flyway` | yes | Flyway on the classpath (`spring-boot-starter-flyway`) | — |
