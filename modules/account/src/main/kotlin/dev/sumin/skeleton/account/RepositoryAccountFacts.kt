@@ -13,4 +13,7 @@ class RepositoryAccountFacts(private val accounts: () -> AccountRepository) : Ac
 
     override fun accountIdByVerifiedEmail(email: String): String? =
         accounts().findByEmail(email.trim().lowercase())?.takeIf { it.status != AccountStatus.ERASED && it.emailVerified }?.id
+
+    override fun activeAmong(accountIds: Collection<String>): Set<String> =
+        accounts().findByIds(accountIds).filter { it.status == AccountStatus.ACTIVE }.map { it.id }.toSet()
 }

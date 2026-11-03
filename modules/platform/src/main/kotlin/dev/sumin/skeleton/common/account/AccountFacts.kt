@@ -15,4 +15,7 @@ fun interface AccountFacts {
 
     /** [verifiedEmail] 의 반대 - 이 주소가 **확인된** 살아 있는 계정의 id. 확인 전 · 없는 · 지워진 계정은 null (초대가 「이미 멤버인 주소」를 거를 때). 기본은 null(모르는 구현은 아무 주소도 계정에 잇지 않는다) */
     fun accountIdByVerifiedEmail(email: String): String? = null
+
+    /** 주어진 id 중 **활성** 계정(로그인할 수 있는 계정)만 — 대기 · 정지 · 삭제 유예 · 지워진 · 없는 계정은 빠진다. 계정을 모르는 모듈의 목록(멤버 등)을 거를 때 쓴다. 기본은 전원 통과(모르는 구현은 아무도 거르지 않는다) */
+    fun activeAmong(accountIds: Collection<String>): Set<String> = accountIds.toSet()
 }

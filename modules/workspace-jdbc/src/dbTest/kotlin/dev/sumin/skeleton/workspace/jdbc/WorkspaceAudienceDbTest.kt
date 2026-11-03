@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.workspace.jdbc
 
+import dev.sumin.skeleton.common.account.AccountFacts
 import dev.sumin.skeleton.common.audience.AudienceSource
 import dev.sumin.skeleton.workspace.WorkspaceMember
 import dev.sumin.skeleton.workspace.WorkspaceRole
@@ -13,15 +14,27 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.test.context.TestConfiguration
+import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
 
 /** 두 방언에서 — 공지 대상 `workspace` 는 열린 워크스페이스의 멤버만 id 순으로 내고, 떠난 멤버 · 닫힌 워크스페이스는 내지 않고, 키셋은 빠지거나 겹치지 않는다 */
-@Import(DbTestcontainers::class)
+@Import(DbTestcontainers::class, WorkspaceAudienceDbTest.Facts::class)
 @SpringBootTest(classes = [WorkspaceJdbcTestApplication::class])
 class WorkspaceAudienceDbTest {
     @Autowired lateinit var service: WorkspaceService
     @Autowired lateinit var store: WorkspaceStore
     @Autowired lateinit var sources: List<AudienceSource>
+
+    /** 계정 모듈 대신 — 이름이 `_off` 로 끝나는 계정은 정지 상태다 */
+    @TestConfiguration(proxyBeanMethods = false)
+    class Facts {
+        @Bean
+        fun accountFacts(): AccountFacts = object : AccountFacts {
+            override fun createdAt(accountId: String): Instant? = Instant.EPOCH
+            override fun activeAmong(accountIds: Collection<String>): Set<String> = accountIds.filterNot { it.endsWith("_off") }.toSet()
+        }
+    }
 
     private val seq = UUID.randomUUID().toString().take(8)
     private fun acc(name: String) = "acc_${seq}_$name"
@@ -70,5 +83,15 @@ class WorkspaceAudienceDbTest {
         assertNotNull(audience.validate(id))
         assertEquals(0, audience.count(id))
         assertEquals(emptyList(), audience.page(id, null, 10))
+    }
+
+    @Test
+    fun `suspended members are left out of the count and the pages, even when a whole page of them comes first`() {
+        val id = team("mixed", acc("a"), acc("b_off"), acc("c_off"), acc("d_off"), acc("e"), acc("f_off"), acc("g"))
+        val expected = listOf("a", "e", "g").map(::acc)
+
+        assertEquals(3, audience.count(id))
+        listOf(1, 2, 10).forEach { assertEquals(expected, walk(id, it), "limit $it") }
+        assertEquals(listOf(acc("e")), audience.page(id, acc("a"), 1), "the page fills past the suspended rows")
     }
 }

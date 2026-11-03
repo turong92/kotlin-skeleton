@@ -1,9 +1,11 @@
 package dev.sumin.skeleton.workspace.jdbc
 
+import dev.sumin.skeleton.common.account.AccountFacts
 import dev.sumin.skeleton.common.audience.AudienceSource
 import dev.sumin.skeleton.persistence.jdbc.SqlDialect
 import dev.sumin.skeleton.workspace.WorkspaceStore
 import javax.sql.DataSource
+import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
@@ -30,8 +32,9 @@ class WorkspaceJdbcAutoConfiguration {
     fun jdbcWorkspaceStore(dataSource: DataSource, transactionManager: PlatformTransactionManager, dialect: SqlDialect): WorkspaceStore =
         JdbcWorkspaceStore(NamedParameterJdbcTemplate(dataSource), transactionManager, dialect)
 
-    /** 공지 대상 `workspace` - 공지 모듈이 없으면 아무도 읽지 않는 빈이다 (읽을 때만 DB 를 부른다) */
+    /** 공지 대상 `workspace`(활성 계정만 거르려고 `AccountFacts` 가 있으면 쓴다) - 공지 모듈이 없으면 아무도 읽지 않는 빈이다 (읽을 때만 DB 를 부른다) */
     @Bean
     @ConditionalOnMissingBean(name = ["workspaceAudience"])
-    fun workspaceAudience(dataSource: DataSource): AudienceSource = JdbcWorkspaceAudience(NamedParameterJdbcTemplate(dataSource))
+    fun workspaceAudience(dataSource: DataSource, facts: ObjectProvider<AccountFacts>): AudienceSource =
+        JdbcWorkspaceAudience(NamedParameterJdbcTemplate(dataSource)) { facts.getIfAvailable() }
 }

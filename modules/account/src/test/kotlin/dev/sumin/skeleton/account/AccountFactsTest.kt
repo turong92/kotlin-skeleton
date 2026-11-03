@@ -50,4 +50,14 @@ class AccountFactsTest {
         insert("acc_e", "e@example.com", true, AccountStatus.ERASED)
         assertNull(facts.verifiedEmail("acc_e"))
     }
+
+    @Test
+    fun `activeAmong keeps only the active accounts`() {
+        insert("acc_a", "a@example.com", true)
+        insert("acc_p", "p@example.com", false, AccountStatus.PENDING_VERIFICATION)
+        insert("acc_s", "s@example.com", true, AccountStatus.SUSPENDED)
+        insert("acc_d", "d@example.com", true, AccountStatus.DELETED)
+        insert("acc_e", "e@example.com", true, AccountStatus.ERASED)
+        assertEquals(setOf("acc_a"), facts.activeAmong(listOf("acc_a", "acc_p", "acc_s", "acc_d", "acc_e", "acc_never")))
+    }
 }
