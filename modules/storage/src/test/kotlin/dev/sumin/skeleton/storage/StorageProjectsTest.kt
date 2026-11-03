@@ -71,6 +71,11 @@ class StorageProjectsTest {
         override fun presignMultipartUploadPart(request: PresignedMultipartUploadPartRequest) = error("unused")
         override fun completeMultipartUpload(request: CompleteMultipartUploadRequest) = error("unused")
         override fun abortMultipartUpload(request: AbortMultipartUploadRequest) = Unit
+        val listed = mutableListOf<ListUploadedPartsRequest>()
+        override fun listParts(request: ListUploadedPartsRequest): List<UploadedPart> {
+            listed += request
+            return listOf(UploadedPart(1, "e1", 5))
+        }
     }
 
     @Test
@@ -103,5 +108,33 @@ class StorageProjectsTest {
         assertEquals(listOf("proj-a/k/x.png", "proj-a/k/y.png"), fake.deleted.map { it.value })
         assertEquals("k/x.png", storage.presignDownload(PresignedDownloadRequest(ObjectKey("k/x.png"))).key.value)
         assertEquals("k/new.png", storage.copy(CopyObjectRequest(ObjectKey("k/x.png"), ObjectKey("k/new.png"))).key.value)
+    }
+
+    @Test
+    fun `listing the uploaded parts goes to the project storage and the prefixed storage hides its prefix`() {
+        val fake = Recording()
+        val prefixed = KeyPrefixedPresignedStorage(fake, "proj-a/")
+        assertEquals(listOf(UploadedPart(1, "e1", 5)), prefixed.listParts(ListUploadedPartsRequest(ObjectKey("v/u/1"), "up-1")))
+        assertEquals("proj-a/v/u/1", fake.listed.single().key.value)
+        assertEquals("up-1", fake.listed.single().uploadId)
+    }
+
+    @Test
+    fun `a storage written before listParts existed refuses instead of answering empty`() {
+        assertFailsWith<UnsupportedOperationException> { OldStorage().listParts(ListUploadedPartsRequest(ObjectKey("k"), "u")) }
+    }
+
+    private class OldStorage : PresignedStorage {
+        override fun metadata(key: ObjectKey) = null
+        override fun delete(key: ObjectKey) = Unit
+        override fun upload(request: UploadObjectRequest) = StoredObjectWriteResult(request.key)
+        override fun copy(request: CopyObjectRequest) = StoredObjectWriteResult(request.destinationKey)
+        override fun list(request: ListObjectsRequest) = ListedObjects(emptyList())
+        override fun presignUpload(request: PresignedUploadRequest) = error("unused")
+        override fun presignDownload(request: PresignedDownloadRequest) = error("unused")
+        override fun startMultipartUpload(request: StartMultipartUploadRequest) = error("unused")
+        override fun presignMultipartUploadPart(request: PresignedMultipartUploadPartRequest) = error("unused")
+        override fun completeMultipartUpload(request: CompleteMultipartUploadRequest) = error("unused")
+        override fun abortMultipartUpload(request: AbortMultipartUploadRequest) = Unit
     }
 }

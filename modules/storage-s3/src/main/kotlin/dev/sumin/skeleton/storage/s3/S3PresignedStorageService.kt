@@ -5,6 +5,7 @@ import dev.sumin.skeleton.storage.CompleteMultipartUploadRequest
 import dev.sumin.skeleton.storage.CompletedMultipartUpload
 import dev.sumin.skeleton.storage.CopyObjectRequest
 import dev.sumin.skeleton.storage.ListObjectsRequest
+import dev.sumin.skeleton.storage.ListUploadedPartsRequest
 import dev.sumin.skeleton.storage.ListedObjects
 import dev.sumin.skeleton.storage.ObjectKey
 import dev.sumin.skeleton.storage.PresignedDownloadRequest
@@ -20,6 +21,7 @@ import dev.sumin.skeleton.storage.StoredObjectSummary
 import dev.sumin.skeleton.storage.StoredObjectWriteResult
 import dev.sumin.skeleton.storage.StoredObjectMetadata
 import dev.sumin.skeleton.storage.UploadObjectRequest
+import dev.sumin.skeleton.storage.UploadedPart
 import java.net.URI
 import java.time.Duration
 import software.amazon.awssdk.core.sync.RequestBody
@@ -35,6 +37,7 @@ import software.amazon.awssdk.services.s3.model.Delete
 import software.amazon.awssdk.services.s3.model.GetObjectRequest
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Request
+import software.amazon.awssdk.services.s3.model.ListPartsRequest
 import software.amazon.awssdk.services.s3.model.MetadataDirective
 import software.amazon.awssdk.services.s3.model.PutObjectRequest
 import software.amazon.awssdk.services.s3.model.S3Exception
@@ -251,6 +254,25 @@ class S3PresignedStorageService(
                 .uploadId(request.uploadId)
                 .build(),
         )
+    }
+
+    /** ListParts 는 한 번에 최대 1000개 — `partNumberMarker` 로 이어 받아 전부 모은다 */
+    override fun listParts(request: ListUploadedPartsRequest): List<UploadedPart> {
+        val parts = mutableListOf<UploadedPart>()
+        var marker: Int? = null
+        do {
+            val response = s3Client.listParts(
+                ListPartsRequest.builder()
+                    .bucket(bucket)
+                    .key(request.key.value)
+                    .uploadId(request.uploadId)
+                    .apply { marker?.let { partNumberMarker(it) } }
+                    .build(),
+            )
+            response.parts().forEach { parts += UploadedPart(it.partNumber(), it.eTag(), it.size()) }
+            marker = response.nextPartNumberMarker().takeIf { response.isTruncated == true }
+        } while (marker != null)
+        return parts
     }
 
     override fun metadata(key: ObjectKey): StoredObjectMetadata? =

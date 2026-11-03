@@ -5,6 +5,8 @@ import dev.sumin.skeleton.storage.CompleteMultipartUploadRequest
 import dev.sumin.skeleton.storage.CompletedUploadPart
 import dev.sumin.skeleton.storage.CopyObjectRequest
 import dev.sumin.skeleton.storage.ListObjectsRequest
+import dev.sumin.skeleton.storage.ListUploadedPartsRequest
+import dev.sumin.skeleton.storage.UploadedPart
 import dev.sumin.skeleton.storage.MoveObjectRequest
 import dev.sumin.skeleton.storage.ObjectKey
 import dev.sumin.skeleton.storage.PresignedDownloadRequest
@@ -44,6 +46,9 @@ import software.amazon.awssdk.services.s3.model.HeadObjectRequest
 import software.amazon.awssdk.services.s3.model.HeadObjectResponse
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Request
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Response
+import software.amazon.awssdk.services.s3.model.ListPartsRequest
+import software.amazon.awssdk.services.s3.model.ListPartsResponse
+import software.amazon.awssdk.services.s3.model.Part
 import software.amazon.awssdk.services.s3.model.PutObjectRequest
 import software.amazon.awssdk.services.s3.model.PutObjectResponse
 import software.amazon.awssdk.services.s3.model.S3Object
@@ -171,6 +176,16 @@ class S3PresignedStorageServiceTest {
     }
 
     @Test
+    fun `lists every uploaded part across pages so a resumed upload knows what is missing`() {
+        val parts = service.listParts(ListUploadedPartsRequest(ObjectKey("videos/u/abc"), "upload-123"))
+
+        assertEquals(listOf(UploadedPart(1, "\"e1\"", 16), UploadedPart(2, "\"e2\"", 16), UploadedPart(3, "\"e3\"", 7)), parts)
+        assertEquals(listOf(null, 2), recordingClient.listPartsRequests.map { it.partNumberMarker() })
+        assertEquals(setOf("upload-123"), recordingClient.listPartsRequests.map { it.uploadId() }.toSet())
+        assertEquals("videos/u/abc", recordingClient.listPartsRequests.first().key())
+    }
+
+    @Test
     fun `returns metadata public urls and deletes objects through s3 client`() {
         val metadata = service.metadata(ObjectKey("images/cat.png"))
         val publicUrl = service.publicUrl(ObjectKey("images/cat.png"))
@@ -239,6 +254,7 @@ class S3PresignedStorageServiceTest {
         val copyObjectRequests = mutableListOf<AwsCopyObjectRequest>()
         val headObjectRequests = mutableListOf<HeadObjectRequest>()
         val listObjectRequests = mutableListOf<ListObjectsV2Request>()
+        val listPartsRequests = mutableListOf<ListPartsRequest>()
         val deleteObjectRequests = mutableListOf<DeleteObjectRequest>()
         val deleteObjectsRequests = mutableListOf<DeleteObjectsRequest>()
         var abortMultipartUploadCount = 0
@@ -326,6 +342,19 @@ class S3PresignedStorageServiceTest {
                                 .eTag("\"list-etag\"")
                                 .lastModified(Instant.parse("2026-06-12T00:00:00Z"))
                                 .build(),
+                        )
+                        .build()
+                }
+                "listParts" -> {
+                    val request = args?.first() as ListPartsRequest
+                    listPartsRequests += request
+                    val first = request.partNumberMarker() == null
+                    ListPartsResponse.builder()
+                        .isTruncated(first)
+                        .nextPartNumberMarker(if (first) 2 else null)
+                        .parts(
+                            if (first) listOf(Part.builder().partNumber(1).eTag("\"e1\"").size(16).build(), Part.builder().partNumber(2).eTag("\"e2\"").size(16).build())
+                            else listOf(Part.builder().partNumber(3).eTag("\"e3\"").size(7).build()),
                         )
                         .build()
                 }

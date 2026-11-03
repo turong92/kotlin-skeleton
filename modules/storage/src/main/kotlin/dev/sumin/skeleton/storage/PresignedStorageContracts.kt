@@ -142,6 +142,22 @@ data class AbortMultipartUploadRequest(
     }
 }
 
+data class ListUploadedPartsRequest(
+    val key: ObjectKey,
+    val uploadId: String,
+) {
+    init {
+        require(uploadId.isNotBlank()) { "Upload id must not be blank." }
+    }
+}
+
+/** 멀티파트에 이미 올라간 조각 하나 — 새로 고침 뒤 이어 올릴 때 빠진 번호를 가려내는 데 쓴다 */
+data class UploadedPart(
+    val partNumber: Int,
+    val eTag: String,
+    val sizeBytes: Long,
+)
+
 private fun requirePositiveDuration(duration: Duration) {
     require(!duration.isZero && !duration.isNegative) { "Duration must be positive." }
 }

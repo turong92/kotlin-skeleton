@@ -75,4 +75,11 @@ interface PresignedStorage : ObjectStorage {
     fun completeMultipartUpload(request: CompleteMultipartUploadRequest): CompletedMultipartUpload
 
     fun abortMultipartUpload(request: AbortMultipartUploadRequest)
+
+    /**
+     * 열린 멀티파트에 이미 올라간 조각을 번호순으로 전부 돌려준다(이어 올리기). 조각 목록을 구현하지 않은 저장소는 [UnsupportedOperationException] 이다
+     * (옛 구현이 그대로 컴파일되도록 기본 구현이 던진다 — 빈 목록으로 답하면 올린 조각을 다시 올리게 되어 틀린 답이다)
+     */
+    fun listParts(request: ListUploadedPartsRequest): List<UploadedPart> =
+        throw UnsupportedOperationException("${javaClass.name} does not support listing multipart parts (PresignedStorage.listParts)")
 }
