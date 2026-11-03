@@ -33,11 +33,7 @@ class BookingRedisDbTest {
     private class Node(name: String, redis: GenericContainer<*>, channel: String, base: BookingInstance) : AutoCloseable {
         val factory = LettuceConnectionFactory(RedisStandaloneConfiguration(redis.host, redis.getMappedPort(6379))).also { it.afterPropertiesSet() }
         val template = StringRedisTemplate(factory).also { it.afterPropertiesSet() }
-        val listeners = RedisMessageListenerContainer().apply {
-            setConnectionFactory(factory)
-            setRecoveryInterval(300L)
-            afterPropertiesSet()
-        }
+        val listeners = listenerContainer(factory)
         val relay = RedisBookingSeatRelay(template, listeners, channel, instanceId = name).also { it.start() }
         val holds = BookingHolds(base.store, relay, AllowAllBookingAdmission, BookingDb.time)
         val pools = BookingPools(base.store, relay, BookingDb.time)
@@ -199,4 +195,11 @@ class BookingRedisDbTest {
     private fun kill(by: Node, clientId: Long) {
         by.commands { it.clientKill(KillArgs.Builder.id(clientId)).get() }
     }
+}
+
+/** Redis 구독 리스너 컨테이너(Testcontainers 컨테이너가 아니다) - 노드마다 하나 */
+private fun listenerContainer(factory: LettuceConnectionFactory) = RedisMessageListenerContainer().apply {
+    setConnectionFactory(factory)
+    setRecoveryInterval(300L)
+    afterPropertiesSet()
 }
