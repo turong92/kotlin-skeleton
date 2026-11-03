@@ -260,9 +260,16 @@ skeleton:
     push:
       enabled: true   # 이 앱의 선택: 알림이 받는 사람의 기기로도 간다 (모듈 기본은 꺼짐). 기기 저장은 notification-push-jdbc, 전달은 아래 webpush · fcm - docs/modules/notification-push.md
       lock-screen: FULL   # 이 앱의 선택(모듈 기본과 같다 - 일부러 적는다): 잠금 화면에 알림 제목 · 본문이 그대로 보인다. 내용을 가리려면 HIDDEN
-      types: [NOTE_UPDATED, comment.created, comment.replied, reward.granted, badge.awarded, advertising.consent.changed, advertising.consent.reconfirm]   # 이 앱의 선택: 푸시로도 갈 알림 종류 - 위 preferences.types 와 같은 종류 + 광고 동의 변경 · 재확인 안내(정보성, 안 넣으면 알림함에만 쌓인다). 사람이 종류마다 「푸시만 끄기」를 할 수 있다
+      types: [NOTE_UPDATED, comment.created, comment.replied, reward.granted, badge.awarded, advertising.consent.changed, advertising.consent.reconfirm, notice.service]   # 이 앱의 선택: 푸시로도 갈 알림 종류 - 위 preferences.types 와 같은 종류 + 광고 동의 변경 · 재확인 안내(정보성, 안 넣으면 알림함에만 쌓인다) + 서비스 공지(notice.service, 아래 broadcast). 사람이 종류마다 「푸시만 끄기」를 할 수 있다
+      open-report:
+        secret: ${SKELETON_NOTIFICATION_PUSH_OPEN_REPORT_SECRET:}   # 운영자 비밀(32자 이상, 선언의 secrets:): 있으면 웹 푸시를 눌러 연 것을 센다(공지 통계의 「열람」) - 비우면 꺼진다(푸시는 그대로, 클릭 통계만 없다). 로컬 · 시험은 고정 값
       stale-cleanup:
         enabled: true   # 이 앱의 선택(모듈 기본은 꺼짐): 60일 동안 안 본 기기 줄을 지운다 (scheduler 가 주기를 돈다)
+    broadcast:
+      enabled: true   # 이 앱의 선택: 서비스 운영자의 공지 발송 (모듈 기본은 꺼짐). 저장은 notification-broadcast-jdbc, 대상은 account-jdbc(전체 · 역할) · workspace-jdbc(워크스페이스) - docs/modules/notification-broadcast.md
+      types: [notice.service, promo.notes-tips]   # 이 앱의 선택: 운영자가 고를 수 있는 종류 - 서비스 공지(정보성: 동의와 무관하게 전원, 푸시 끄기만 존중) + 광고성 promo.notes-tips(위 advertising.types: 동의 없는 사람은 통째로 빠진다)
+      admin:
+        enabled: true   # 이 앱의 선택: 운영자 경로 /api/v1/admin/broadcasts 를 연다 - 권한 notification-broadcast.read · .send 는 기본 역할 없이 ADMIN 전권만(역할 관리에서 나눠 준다)
     advertising:   # 광고성 정보 규칙(채널 무관 - 푸시가 지금 이 규칙을 부른다, docs/modules/notification-legal.md)
       types: [promo.notes-tips]   # 이 앱의 선택: 광고성 종류 - 동의(marketing)가 있는 사람에게만, 야간(21~08시)은 별도 동의(marketing-night)가 없으면 다음 08시로 보류한다. 견본에는 이 알림을 보내는 화면이 없다 - 보내는 쪽은 제품마다 다르다(publish 하면 규칙이 적용된다). 시험: push/PushJourneyIntegrationTest
       sender-name: Notes Sample   # 필수: 전송자 명칭 (동의 변경 · 재확인 안내에 쓴다)

@@ -21,6 +21,10 @@ skeleton:
       key-secret: test-only-storage-key-secret-0123456789abcdef   # key-owner=OPAQUE(main application.yml)의 HMAC 비밀 — 시험 전용 고정 값
   auth-mfa:
     required-for: NONE   # 견본은 운영자에게 2단계를 필수로 정했다(OPERATORS) - 시험의 ADMIN 은 로그인 토큰만 들고 보호된 경로를 부른다. 필수 문은 MfaJourneyIntegrationTest 가 켜서 시험한다
+  notification:
+    push:
+      open-report:
+        secret: test-only-push-open-report-secret-0123456789abcdef   # 푸시 클릭 보고 토큰(main application.yml)의 HMAC 비밀 - 시험 전용 고정 값
   crypto:
     primary-key-id: test
     keys:

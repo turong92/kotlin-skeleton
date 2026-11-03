@@ -30,6 +30,9 @@ skeleton:
         - { id: acc_admin, email: admin@example.com, password: password, roles: [ADMIN], display-name: Admin, login-id: sample-admin }
         - { id: acc_moderator, email: moderator@example.com, password: password, roles: [MODERATOR], display-name: Moderator, login-id: sample-moderator }
   notification:
+    push:
+      open-report:
+        secret: local-dev-only-push-open-report-secret-0123456789   # 로컬 · e2e 전용 고정 값(32자 이상) - 푸시 클릭 보고 토큰의 HMAC. 운영 값은 환경변수 SKELETON_NOTIFICATION_PUSH_OPEN_REPORT_SECRET
     webpush:
       # 로컬 · e2e 전용 시험 VAPID 쌍 (모듈의 WebPushTestKeys 와 같다 - 비밀이 아니다). 보호 환경(stage · prod)에서 이 공개 키면 기동 실패 (WebPushDeployGuard). 운영 값은 SKELETON_NOTIFICATION_WEBPUSH_VAPID_*
       public-key: BKHphhcs7lo2uPUj_8zQArEHejEcaV66-4IrYRYiszNilMwvkTXFwgoOT-hfcoj2w_AYh29HQo57wFQIBYRhljY

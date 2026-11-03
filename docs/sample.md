@@ -283,7 +283,7 @@ APP=sample scripts/dev.sh    # 백엔드(+프론트 WEB_DIR)만 같은 방식으
 
 | 선택 | 어디 |
 |---|---|
-| 푸시로도 갈 종류: `NOTE_UPDATED` · `comment.created` · `comment.replied` · `reward.granted` · `badge.awarded` + 광고 동의 변경 · 재확인 안내. 종류마다 사람이 「푸시만 끄기」를 할 수 있다 | `push.types` |
+| 푸시로도 갈 종류: `NOTE_UPDATED` · `comment.created` · `comment.replied` · `reward.granted` · `badge.awarded` + 광고 동의 변경 · 재확인 안내 + 서비스 공지 `notice.service`. 종류마다 사람이 「푸시만 끄기」를 할 수 있다 | `push.types` |
 | 잠금 화면에 제목 · 본문이 그대로 보인다(모듈 기본과 같지만 일부러 적었다 - 견본은 내용을 보이는 쪽을 골랐다는 표시). 가리려면 `HIDDEN` | `push.lock-screen: FULL` |
 | 60일 동안 안 본 기기 줄을 지운다 | `push.stale-cleanup.enabled: true` |
 | 웹 푸시(VAPID)는 켠 채 시작한다. 로컬 프로필은 시험용 고정 쌍(`application-local.yml`, 모듈의 `WebPushTestKeys`)이라 보호 환경에서는 기동이 막힌다 - 운영은 `SKELETON_NOTIFICATION_WEBPUSH_VAPID_*` ([deploy §7](deploy.md)) | `webpush.*` |
@@ -311,6 +311,14 @@ APP=sample scripts/dev.sh    # 백엔드(+프론트 WEB_DIR)만 같은 방식으
 - 인증 앱과 복구 코드를 모두 잃은 사람은 `POST /api/v1/admin/mfa/accounts/{id}/reset {reason}`(**본인 확인을 마친 뒤에만**) - 대상의 모든 세션이 닫히고 메일이 간다.
 - 비밀을 암호화하는 키 `SKELETON_CRYPTO_KEYS_MAIN` 이 없으면 기동하지 않는다(위 「구독」 표).
 시험: `mfa/MfaJourneyIntegrationTest`(스펙 §6 ① ~ ④ 의 백엔드 쪽 - 켜기 → 코드 로그인 · 복구 코드로 로그인(남은 9) · 같은 코드 재사용 거절 · 운영자 등록 전 403 → 등록 → 열림 → 운영자 해제 → 코드 없이 로그인, 그리고 소셜 · 매직 링크 · 탈퇴 취소 길도 403 → 코드로 로그인). 시험 설정(`src/test/resources/config/application.yml`)은 다른 시험의 ADMIN 이 막히지 않게 `required-for: NONE` 이고 이 시험만 OPERATORS 로 켠다.
+## 공지 발송 (`/api/v1/admin/broadcasts`)
+한 줄(`notification-broadcast-jdbc`, `notification-broadcast` 가 따라온다)과 `application.yml` 의 선택이 전부다 - 이 앱의 조각은 없다. 서비스 운영자(권한 `notification-broadcast.read` · `.send`, 기본 역할 없이 ADMIN 전권만 - 역할 관리 `/api/v1/admin/roles` 에서 나눠 준다)가 전체 · 역할 · 워크스페이스에게 공지를 알림함 + 푸시로 보낸다. 대상은 `account-jdbc`(전체 · 역할) · `workspace-jdbc`(워크스페이스)가 낸다. 모듈 문서 [notification-broadcast](modules/notification-broadcast.md).
+| 선택 | 어디 |
+| 공지 발송을 켠다(모듈 기본은 꺼짐). 운영자 경로는 `admin.enabled` 도 있어야 열린다 | `broadcast.enabled` · `broadcast.admin.enabled` |
+| 운영자가 고를 종류: `notice.service`(정보성 - 동의와 무관하게 전원, 푸시 끄기만 존중) · `promo.notes-tips`(광고성 - 동의 없는 사람은 통째로 빠진다) | `broadcast.types` |
+| 서비스 공지는 푸시로도 간다(안 넣으면 알림함에만 쌓인다) | `push.types` 의 `notice.service` |
+| 푸시를 눌러 연 것을 센다(공지 통계의 「열람」) - 비밀이 비면 꺼진다(푸시는 그대로, 클릭 통계만 없다). 로컬 · 시험은 고정 값, 운영은 환경변수 `SKELETON_NOTIFICATION_PUSH_OPEN_REPORT_SECRET`(32자 이상) | `push.open-report.secret` |
+쓰는 법: 운영자(로컬 시드 `admin@example.com`)로 로그인해 `POST /api/v1/admin/broadcasts`(종류 · 제목 · 본문 · 채널 · 대상) -> `POST /{id}/send` -> `GET /{id}` 가 `SENT` 가 되면 통계(`stats`)를 본다. 화면은 react 견본의 `/admin/broadcasts`. 시험: `broadcast/BroadcastJourneyIntegrationTest`(시드 3명에게 보내기 -> 알림함 3줄 · 가짜 보내기가 기기 수만큼 · 한 명이 읽음 -> `read = 1` · 클릭 보고 두 번 -> `opened = 1`).
 
 ## 이 샘플이 하지 않는 것
 

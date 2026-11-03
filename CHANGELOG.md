@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `auth-session`: 회전이 `markTokenUsed` 전에 후속 토큰을 먼저 넣는다 - 부분 실패(콜드 스타트의 DB 풀 타임아웃 등)가 나도 옛 토큰이 쓰이지 않은 채로 남아 같은 토큰의 재시도가 정상 회전이 된다. 보호 환경에서 `reuse-grace` 가 0 이면 기동 경고(`DeployGuard` 경고, 실패 아님). `apps/api` · `apps/sample` 은 `reuse-grace: 60s`(관행의 상한) - 실제 창은 grace 하나이고, 콜드 스타트로 응답을 잃은 클라이언트는 그 안에 같은 토큰으로 재시도해야 한다. 문서 `docs/cloud-run-scale-to-zero.md` §5.
 
+### 공지 발송 - 견본 조립 (2026-11-03)
+
+- `apps/sample`: `notification-broadcast-jdbc` 한 줄 + `broadcast.enabled` · `types: [notice.service, promo.notes-tips]` · `admin.enabled`, `push.types` 에 `notice.service`, `push.open-report.secret`(운영 값은 `SKELETON_NOTIFICATION_PUSH_OPEN_REPORT_SECRET`, 비면 클릭 통계만 꺼진다 - 로컬 · 시험은 고정 값). 통합 시험 `broadcast/BroadcastJourneyIntegrationTest`. `apps/workbench` 는 클래스패스에 두되 켜지 않는다(공존 증명). `scripts/test-new-project.sh` 의 샘플 기대값(모듈 목록 · `dbTestModules`)에 두 모듈을 더했다. 문서 `docs/sample.md` "공지 발송".
+
 ### 공지 발송 (2026-11-02)
 
 - 새 모듈 둘 - `notification-broadcast`(서비스 운영자가 전체 · 역할 · 워크스페이스 · 앱 세그먼트(`AudienceSource`)에게 공지를 보낸다: 받는 사람 묶음마다 기존 `publish` 를 부르는 이어 달리기 단계 작업 · 즉시 / 예약(최대 90일) · 취소(큐 속 푸시 포함) · 중간 실패 뒤 이어 보내기 · 나에게 테스트 · 광고성 종류는 동의 없는 사람 제외 · 채널별 전달 / 클릭 통계 · 권한 `notification-broadcast.read` / `.send`(기본 역할 없음) · 운영자 경로 `/api/v1/admin/broadcasts`)와 `notification-broadcast-jdbc`(저장 + 큐 어댑터, 두 방언, 마이그레이션 `V20261102110000`). **꺼짐이 기본**(`skeleton.notification.broadcast.enabled`, 운영자 경로는 `admin.enabled` 도 있어야 열림) - 이 모듈들을 안 붙인 앱의 동작은 그대로다. 문서 `docs/modules/notification-broadcast*.md`.
