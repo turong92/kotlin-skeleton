@@ -23,6 +23,7 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
       - uses: gradle/actions/setup-gradle@v4
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg   # 영상 일꾼의 ffmpeg 시험 (ci.yml 과 같다)
       - run: ./gradlew build -x newProjectChecks -Dskeleton.test.stress=full   # --quick 은 compositions 잡의 test-new-project.sh --full 이 이미 돈다
 
   jooq-mysql:
