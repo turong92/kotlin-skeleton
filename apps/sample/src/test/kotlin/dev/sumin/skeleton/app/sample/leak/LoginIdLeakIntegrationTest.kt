@@ -116,6 +116,7 @@ class LoginIdLeakIntegrationTest {
             "/api/v1/admin/workspaces/" to listOf(workspace.first),
             "/api/v1/author-profiles/" to listOf(w.yProfile.id, w.a.id, w.b.id),
             "/api/v1/admin/accounts/" to listOf(w.xAcc, w.yAcc),
+            "/api/v1/admin/mfa/accounts/" to listOf(w.xAcc, w.yAcc),   // 운영자의 2단계 상태 보기 (/api/v1/admin/mfa/accounts/{id})
             "/api/v1/admin/author-profiles/" to listOf(w.a.id, w.yProfile.id),
             "/api/v1/campaigns/" to listOf(http.post("/api/v1/admin/campaigns", w.adminToken, """{"kind":"attendance","name":"Leak ${w.nonce}","startsAt":"2026-01-01T00:00:00Z","config":{"daily":[{"type":"point","params":{"amount":"10"}}]}}""", record = false).ok().read<String>("$.value.id")),   // 출석 캠페인 하나 - 운영자가 만든다
             // 쿠폰 정의 한 개를 만들어 X · Y 에게 한 장씩 준다 - 현황 · 발급 목록 (/api/v1/admin/coupon-definitions/{id}/stats · /coupons)
