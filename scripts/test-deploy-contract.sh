@@ -96,7 +96,9 @@ sleep 2   # 초기화 직후 재시작 구간을 넘긴다
 # 계약의 환경변수만 — 스프링 프로필 · 앱 접두사 DB 변수 · 비밀은 첨부 키 비밀(secret_env) 하나뿐이다: 선언의 secrets: 에서 플랫폼이 무작위로 채우는 값이고, 샘플 앱은 key-owner=OPAQUE 라 없으면 기동하지 않는다. 앱을 띄우는 모든 docker run 이 쓴다. (보호 환경으로 띄우는 D 단계는 base_d_env 에서 JWT · 차단/아이디 해시 비밀을 더 준다 — secret_env 는 두 줄 그대로다.)
 DBNAME=app
 # 비밀만 — 샘플 앱은 key-owner=OPAQUE 라 첨부 키 비밀이 없으면 기동하지 않는다(어떤 컨테이너를 띄우든 이것은 준다). apps/api 는 읽지 않는다
-secret_env() { printf '%s\n' "-e" "SKELETON_STORAGE_WEB_KEY_SECRET=contract-test-storage-key-secret-0123456789" "-e" "SKELETON_STORAGE_WEB_GUEST_SECRET=contract-test-storage-guest-secret-0123456789" "-e" "SKELETON_STORAGE_WEB_PUBLIC_SECRET=contract-test-storage-public-secret-0123456789" "-e" "SKELETON_STORAGE_WEB_PUBLIC_BASE_URL=http://cdn.contract.test/app"; }
+# auth-mfa 의 TOTP 비밀 암호화 키 - 이 실행에서 그 자리에서 만든 무작위 32바이트(base64)다. 선언의 secrets: 에 이름(SKELETON_CRYPTO_KEYS_MAIN)이 있고 운영자가 채우는 값이다. 없으면 샘플 앱이 기동하지 않는다
+CRYPTO_KEY_MAIN="$(openssl rand -base64 32)"
+secret_env() { printf '%s\n' "-e" "SKELETON_CRYPTO_KEYS_MAIN=$CRYPTO_KEY_MAIN" "-e" "SKELETON_STORAGE_WEB_KEY_SECRET=contract-test-storage-key-secret-0123456789" "-e" "SKELETON_STORAGE_WEB_GUEST_SECRET=contract-test-storage-guest-secret-0123456789" "-e" "SKELETON_STORAGE_WEB_PUBLIC_SECRET=contract-test-storage-public-secret-0123456789" "-e" "SKELETON_STORAGE_WEB_PUBLIC_BASE_URL=http://cdn.contract.test/app"; }
 contract_env() { printf '%s\n' "-e" "SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/$DBNAME" "-e" "SPRING_DATASOURCE_USERNAME=app" "-e" "SPRING_DATASOURCE_PASSWORD=contract-test-pw"; secret_env; }
 
 for APP in $(echo "$APPS" | tr ',' ' '); do
