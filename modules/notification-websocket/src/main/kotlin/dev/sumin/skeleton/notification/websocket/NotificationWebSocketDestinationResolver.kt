@@ -27,6 +27,11 @@ class DefaultNotificationWebSocketDestinationResolver(
 ) : NotificationWebSocketDestinationResolver {
     override fun resolveDestinations(event: NotificationEvent): List<NotificationWebSocketDestination> {
         val destinations = mutableListOf<NotificationWebSocketDestination>()
+        // 받는 사람이 정해진 알림은 공개 토픽으로 보내지 않는다(구독자 전원에게 새 나간다) - 받는 사람마다 사용자 큐로만
+        if (event.recipientIds.isNotEmpty()) {
+            val queue = normalizedDestination(properties.broker.userNotificationDestination)
+            return event.recipientIds.map { NotificationWebSocketDestination.user(it, queue) }
+        }
         destinations += NotificationWebSocketDestination.topic(
             joinDestination(properties.broker.notificationDestinationPrefix, event.topic),
         )

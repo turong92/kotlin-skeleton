@@ -94,6 +94,20 @@ class NotificationWebSocketBridgeTest {
         )
     }
 
+    @Test
+    fun `default destination resolver sends an event with recipients to each recipient's user queue only, never to the public topic`() {
+        val resolver = DefaultNotificationWebSocketDestinationResolver(NotificationWebSocketProperties())
+        val event = NotificationEvent(topic = "notes", type = "t", recipientIds = setOf("a", "b"))
+
+        assertEquals(
+            listOf(
+                NotificationWebSocketDestination.user("a", "/queue/notifications"),
+                NotificationWebSocketDestination.user("b", "/queue/notifications"),
+            ),
+            resolver.resolveDestinations(event),
+        )
+    }
+
     private class RecordingSubscriptionRegistry : NotificationSubscriptionRegistry {
         lateinit var subscriber: NotificationSubscriber
         lateinit var subscription: RecordingSubscription
