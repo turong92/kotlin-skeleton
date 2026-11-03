@@ -1,0 +1,99 @@
+package dev.sumin.skeleton.video.web
+
+import dev.sumin.skeleton.common.GlobalExceptionHandler
+import dev.sumin.skeleton.common.time.TimeProvider
+import dev.sumin.skeleton.storage.UploadedPart
+import dev.sumin.skeleton.video.FakeStorage
+import dev.sumin.skeleton.video.FakeVideoStore
+import dev.sumin.skeleton.video.OwnerVideoAccessPolicy
+import dev.sumin.skeleton.video.VideoProperties
+import dev.sumin.skeleton.video.VideoQuota
+import dev.sumin.skeleton.video.VideoUploads
+import kotlin.test.Test
+import org.springframework.http.MediaType
+import org.springframework.security.authentication.TestingAuthenticationToken
+import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import org.springframework.test.web.servlet.setup.MockMvcBuilders
+
+/** 올리기 HTTP 모양 — 시작 · 조각 주소 · 조각 목록 · 마침 · 지우기. 남의 영상은 모두 404, 로그인하지 않으면 401 */
+class VideoWebTest {
+    private val storage = FakeStorage()
+    private val uploads = VideoUploads(VideoProperties(enabled = true), FakeVideoStore(), storage, OwnerVideoAccessPolicy, VideoQuota { _, _, _ -> true }, TimeProvider.systemUtc())
+    private val mvc: MockMvc = MockMvcBuilders.standaloneSetup(VideoController(uploads)).setControllerAdvice(GlobalExceptionHandler()).build()
+
+    private fun caller(id: String) = TestingAuthenticationToken(id, "n/a", "ROLE_USER").apply { isAuthenticated = true }
+
+    private fun start(account: String = "acc_a"): String {
+        val body = mvc.perform(
+            post("/api/v1/videos").principal(caller(account)).contentType(MediaType.APPLICATION_JSON)
+                .content("""{"bytes":40000000,"contentType":"video/mp4","purpose":"note","visibility":"PRIVATE"}"""),
+        ).andExpect(status().isCreated).andReturn().response.contentAsString
+        return Regex(""""id":"([^"]+)"""").find(body)!!.groupValues[1]
+    }
+
+    @Test
+    fun `start answers 201 with the id, the upload id and the part size`() {
+        mvc.perform(
+            post("/api/v1/videos").principal(caller("acc_a")).contentType(MediaType.APPLICATION_JSON)
+                .content("""{"bytes":40000000,"contentType":"video/mp4","purpose":"note","visibility":"PUBLIC"}"""),
+        ).andExpect(status().isCreated)
+            .andExpect(jsonPath("$.value.uploadId").value("up-1"))
+            .andExpect(jsonPath("$.value.partSize").value(16 * 1024 * 1024))
+            .andExpect(jsonPath("$.value.partCount").value(3))
+    }
+
+    @Test
+    fun `an anonymous call is 401 and a file over 4GB is 413 VIDEO_TOO_LARGE`() {
+        mvc.perform(post("/api/v1/videos").contentType(MediaType.APPLICATION_JSON).content("{}")).andExpect(status().isUnauthorized)
+        mvc.perform(
+            post("/api/v1/videos").principal(caller("acc_a")).contentType(MediaType.APPLICATION_JSON)
+                .content("""{"bytes":4294967297,"contentType":"video/mp4","purpose":"note","visibility":"PRIVATE"}"""),
+        ).andExpect(status().isPayloadTooLarge).andExpect(jsonPath("$.code").value("VIDEO.TOO_LARGE"))
+    }
+
+    @Test
+    fun `part urls and the list of uploaded parts`() {
+        val id = start()
+        storage.parts = listOf(UploadedPart(1, "\"e1\"", 16777216))
+
+        mvc.perform(post("/api/v1/videos/$id/parts").principal(caller("acc_a")).contentType(MediaType.APPLICATION_JSON).content("""{"numbers":[2,3]}"""))
+            .andExpect(status().isOk).andExpect(jsonPath("$.value.parts[0].number").value(2)).andExpect(jsonPath("$.value.parts[0].method").value("PUT"))
+        mvc.perform(get("/api/v1/videos/$id/parts").principal(caller("acc_a")))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.value.parts[0].n").value(1))
+            .andExpect(jsonPath("$.value.parts[0].etag").value("\"e1\""))
+            .andExpect(jsonPath("$.value.parts[0].bytes").value(16777216))
+    }
+
+    @Test
+    fun `complete queues the video and exposes its state`() {
+        val id = start()
+        storage.objects["videos/u/$id"] = 40000000
+        mvc.perform(
+            post("/api/v1/videos/$id/complete").principal(caller("acc_a")).contentType(MediaType.APPLICATION_JSON)
+                .content("""{"parts":[{"n":1,"etag":"a"},{"n":2,"etag":"b"},{"n":3,"etag":"c"}]}"""),
+        ).andExpect(status().isOk).andExpect(jsonPath("$.value.status").value("QUEUED")).andExpect(jsonPath("$.value.purpose").value("note"))
+    }
+
+    @Test
+    fun `someone else's video is 404 for parts, listing parts, get and delete`() {
+        val id = start("acc_a")
+        mvc.perform(post("/api/v1/videos/$id/parts").principal(caller("acc_b")).contentType(MediaType.APPLICATION_JSON).content("""{"numbers":[1]}""")).andExpect(status().isNotFound)
+        mvc.perform(get("/api/v1/videos/$id/parts").principal(caller("acc_b"))).andExpect(status().isNotFound).andExpect(jsonPath("$.code").value("VIDEO.NOT_FOUND"))
+        mvc.perform(get("/api/v1/videos/$id").principal(caller("acc_b"))).andExpect(status().isNotFound)
+        mvc.perform(delete("/api/v1/videos/$id").principal(caller("acc_b"))).andExpect(status().isNotFound)
+        mvc.perform(get("/api/v1/videos/$id").principal(caller("acc_a"))).andExpect(status().isOk)
+    }
+
+    @Test
+    fun `delete answers 204 and the list no longer shows the video`() {
+        val id = start()
+        mvc.perform(delete("/api/v1/videos/$id").principal(caller("acc_a"))).andExpect(status().isNoContent)
+        mvc.perform(get("/api/v1/videos").param("purpose", "note").principal(caller("acc_a"))).andExpect(status().isOk).andExpect(jsonPath("$.values.length()").value(0))
+    }
+}
