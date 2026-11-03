@@ -3938,6 +3938,8 @@
         "inquiry-jdbc",
         "json",
         "notification",
+        "notification-broadcast",
+        "notification-broadcast-jdbc",
         "notification-fcm",
         "notification-jdbc",
         "notification-legal",
