@@ -21,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 알림 채널 표지 · 전달 고리 · 푸시 클릭 열람 (2026-11-02)
 
-- `notification`: `NotificationEvent.channels`(null = 모든 채널, 집합 = 그 안의 채널만 - 좁히기만) · `NotificationChannelDeclaration` · 전달 고리 `NotificationDeliveryHook`(`halted` · `onQueued` · `onOutcome` · `onOpened`, 모두 기본 no-op) · `NotificationInboxRepository.eventStats`(기본 null). 안 쓰는 앱의 동작은 그대로다. `notification-jdbc`: 알림함 줄의 `recipient_ids_json` 이 **그 줄의 받는 사람 한 명만** 담는다(옛 줄은 그대로) · 새 색인 `idx_notification_inbox_event`(마이그레이션 `V20261102100000`, 줄이 많은 표는 한가한 때 배포) · `eventStats`.
+- `notification`: `NotificationEvent.channels`(null = 모든 채널, 집합 = 그 안의 채널만 - 좁히기만) · `NotificationChannelDeclaration` · 전달 고리 `NotificationDeliveryHook`(`halted` · `onQueued` · `onOutcome` · `onOpened`, 모두 기본 no-op) · `NotificationInboxRepository.eventStats`(기본 null). 안 쓰는 앱의 동작은 그대로다. `notification-jdbc`: 알림함 줄의 `recipient_ids_json` 이 **그 줄의 받는 사람 한 명만** 담는다(옛 줄은 그대로) · 새 색인 `idx_notification_inbox_event`(마이그레이션 `V20261102100200`, 줄이 많은 표는 한가한 때 배포) · `eventStats`.
 - `notification-push`: `channels` 에 `push` 가 없으면 건너뜀 · 전달 고리 호출(`onQueued` · `onOutcome`, 멈춘 이벤트의 큐 푸시는 보내지 않음) · `notification-push-jdbc` 의 DEAD 고리가 FAILED 를 알린다.
 - 푸시 클릭 열람(기본 꺼짐): `skeleton.notification.push.open-report.secret`(32자 이상)을 주면 웹 푸시 페이로드에 서명 토큰 `open` 이 실리고, 로그인 없는 `POST /api/v1/push/opened` 가 열리며(토큰이 인증), 같은 클릭은 한 번으로 센다(`push_opens`, 마이그레이션 `V20261102100100`). 위조 · 다른 이벤트 · 주인이 바뀐 기기의 토큰은 400 `PUSH.INVALID_OPEN_TOKEN`. FCM 전달기는 아직 `open` 을 싣지 않는다.
 
