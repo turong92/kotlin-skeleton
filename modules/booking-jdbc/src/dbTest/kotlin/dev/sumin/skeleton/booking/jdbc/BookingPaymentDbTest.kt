@@ -81,7 +81,7 @@ class BookingPaymentDbTest {
     }
 
     @Test
-    fun `3 - once checkout has started, adding, removing or releasing is HOLD_LOCKED, and starting twice gives the same pinned amount`() {
+    fun `3 - once checkout has started, adding or removing a seat is HOLD_LOCKED, and starting twice gives the same pinned amount`() {
         val (pool, seats) = BookingDb.newPool(seats = 3, maxPerHold = 3, price = 1000)
         val hold = a.holds.addSeats(pool, "locker", listOf(seats[0]))
         assertFailsWith<CheckoutRequiredException> { a.holds.priceHold("locker", hold.id) }   // 시작하지 않은 보류는 주문할 수 없다
@@ -93,10 +93,33 @@ class BookingPaymentDbTest {
         assertEquals(1000L, a.holds.priceHold("locker", hold.id).amount)   // 주문 쪽 읽기는 아무것도 바꾸지 않는다
         assertFailsWith<HoldLockedException> { a.holds.addSeats(pool, "locker", listOf(seats[1])) }
         assertFailsWith<HoldLockedException> { a.holds.removeSeat(pool, "locker", seats[0]) }
-        assertFailsWith<HoldLockedException> { a.holds.release("locker", hold.id) }
         assertEquals("AVAILABLE", seatStatus(seats[1]))
         assertEquals("HELD", seatStatus(seats[0]))
         assertInvariants(jdbc, pool)
+    }
+
+    @Test
+    fun `3 - leaving after the checkout started frees the seats at once, and the payment that still arrives re-takes them or is refunded once`() {
+        repeat(2) { variant ->
+            val (pool, seats) = BookingDb.newPool(seats = 1, price = 4000)
+            val (hold, amount) = checkout(pool, "leaver", seats[0])
+            assertEquals(HoldStatus.RELEASED, a.holds.release("leaver", hold).status)   // 「나가기」 - 잠금 뒤에도 보류 전체는 놓는다
+            assertEquals("AVAILABLE", seatStatus(seats[0]))
+            val order = newOrder()
+            if (variant == 0) {
+                // 아무도 안 잡았다 - 늦은 결제가 다시 잡아 확정한다
+                assertEquals(OrderOutcome.CONFIRMED, a.holds.settlePaid(order, "leaver", hold, amount, "KRW").outcome)
+                assertEquals("SOLD", seatStatus(seats[0]))
+                assertEquals(0, a.refundQueue.forOrder(order).size)
+            } else {
+                // 그사이 남이 잡았다 - UNFULFILLED + 환불 작업 하나
+                a.holds.addSeats(pool, "someone-else", listOf(seats[0]))
+                repeat(2) { assertEquals(OrderOutcome.UNFULFILLED, a.holds.settlePaid(order, "leaver", hold, amount, "KRW").outcome) }
+                assertEquals("UNFULFILLED", status(hold))
+                assertEquals(1, a.refundQueue.forOrder(order).size)
+            }
+            assertInvariants(jdbc, pool)
+        }
     }
 
     @Test
@@ -131,8 +154,7 @@ class BookingPaymentDbTest {
                 val outcomes = raceAll(5) { i ->
                     when (i) {
                         0, 1 -> attempt { a.holds.expireDue().toString() }
-                        // 결제를 시작한 보류는 놓지 못한다 - 막혔다는 답도 정상이다
-                        2 -> attempt { try { a.holds.release("owner", holdId).id } catch (_: HoldLockedException) { "locked" } }
+                        2 -> attempt { a.holds.release("owner", holdId).id }
                         3 -> attempt { b.holds.addSeats(pool, "newcomer", listOf(seat)).id }
                         else -> attempt { b.holds.settlePaid(order, "owner", holdId, amount, "KRW").outcome.name }
                     }

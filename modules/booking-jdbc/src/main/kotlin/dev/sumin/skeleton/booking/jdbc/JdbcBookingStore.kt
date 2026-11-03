@@ -219,8 +219,7 @@ class JdbcBookingStore(
     override fun release(accountId: String, holdId: String, now: Instant): HoldOutcome {
         val owned = findOwned(accountId, holdId) ?: throw HoldNotFoundException()
         return inAccountTx(owned.poolId, accountId) {
-            // 결제를 시작한 보류는 놓지 못한다(결제창이 열려 있는 동안 자리가 풀리면 결제 뒤에 자리가 없다) - 보류 시간이 끝나야 풀린다
-            if (openHold(owned.poolId, accountId)?.let { it.id == holdId && it.checkoutStartedAt != null } == true) throw HoldLockedException()
+            // 결제를 시작한 보류도 사용자의 명시적 「나가기」로 통째로 놓는다(결제창을 닫고 나가는 길) - 그 사이 들어온 결제는 늦은 결제로 다시 잡거나 자동 환불된다
             closeLocked(owned, HoldStatus.HELD, HoldStatus.RELEASED, SeatStatus.HELD, null) ?: HoldOutcome(loadHold(holdId), emptyList())
         }
     }

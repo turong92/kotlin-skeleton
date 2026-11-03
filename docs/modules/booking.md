@@ -15,7 +15,7 @@
 - **무료 확정 · 취소** — 자리 모두 가격이 없는 보류는 `confirm`(만료 전만) 으로 `CONFIRMED` · 자리 `SOLD`. 무료 확정은 판매 끝 전까지 본인이 `cancel` 한다. 가격이 붙은 자리는 `confirm` 이 `409 BOOKING.PAYMENT_REQUIRED` — 결제로 확정한다(아래).
 
 **결제**(`payment` 가 클래스패스에 있을 때): `payment` 의 `PaymentCatalog` · `PaymentOrderListener` 는 앱 빈 하나뿐이라 앱이 `itemType = "booking"`(`BookingPayments.ITEM_TYPE`)으로 갈라 `BookingPayments` 를 부른다(`catalog` 선례). 주문은 기존 `POST /api/v1/payments/orders {itemType: "booking", itemRef: holdId}` 다.
-- **결제 시작 `POST /api/v1/booking/holds/{id}/checkout`** (`BookingHolds.startCheckout`) — 금액(= 자리 가격의 합, 서버만 정한다)을 보류에 박고 **자리를 고정**한다: 그 뒤 자리 더하기 · 빼기 · 모두 놓기는 `409 HOLD_LOCKED`(보류 시간이 끝나면 그대로 반환된다 - 결제를 시작해도 시간은 늘지 않는다). 멱등 - 다시 부르면 같은 금액. 무료 · 이미 확정된 보류는 `409 NOT_PAYABLE`. 주문은 이 뒤에 기존 `POST /api/v1/payments/orders` 가 만든다(주문 만들기에는 결제사 · 나라 · 할인 정하기가 따라붙어 `payment` 몫이다 - 같은 `Idempotency-Key` 가 같은 주문을 돌려준다).
+- **결제 시작 `POST /api/v1/booking/holds/{id}/checkout`** (`BookingHolds.startCheckout`) — 금액(= 자리 가격의 합, 서버만 정한다)을 보류에 박고 **자리를 고정**한다: 그 뒤 자리 더하기 · 빼기는 `409 HOLD_LOCKED`. **보류 전체를 끝내는 「나가기」(모두 놓기)는 결제를 시작한 뒤에도 된다** - 자리가 바로 돌아오고, 그 사이 들어온 결제는 늦은 결제로 다시 잡거나 안 되면 자동 환불된다. 보류 시간이 끝나도 그대로 반환된다(결제를 시작해도 시간은 늘지 않는다). 멱등 - 다시 부르면 같은 금액. 무료 · 이미 확정된 보류는 `409 NOT_PAYABLE`. 주문은 이 뒤에 기존 `POST /api/v1/payments/orders` 가 만든다(주문 만들기에는 결제사 · 나라 · 할인 정하기가 따라붙어 `payment` 몫이다 - 같은 `Idempotency-Key` 가 같은 주문을 돌려준다).
 - **`itemFor(holdId, accountId)`** — 주문 · 견적이 부르는 카탈로그 자리. 결제를 시작한 보류의 박힌 금액만 읽고 **부수 효과가 없다**(`/orders/quote` 도 같은 길을 타서 카탈로그가 견적과 주문 만들기를 가르지 못한다). 시작하지 않은 보류는 `409 CHECKOUT_REQUIRED` - 자리가 고정되지 않은 채 주문이 만들어질 수 없다. **결제를 시작해도 보류 시간은 늘지 않는다.** 무료 · 이미 확정된 보류는 `409 NOT_PAYABLE`.
 - **`onPaid(order)`** — 주문 하나에 한 번만 효과가 있다(`booking_orders` 줄). 보류가 `HELD` 면 확정(시간이 지났어도 아직 회수 전이면 그대로). 이미 회수 · 놓기 된 보류면 가졌던 자리를 **전부 아니면 전무**로 다시 잡아 확정하고, 못 잡으면 보류는 `UNFULFILLED` 이고 환불 작업이 걸린다. 이미 **다른 주문으로** 확정된 보류면 이 주문은 환불 작업(`DUPLICATE`). 낸 금액(쿠폰으로 깎이기 전 금액)이 박힌 금액과 다르거나 통화가 다르면(주문이 다른 길로 만들어졌다) 보류는 그대로 두고 환불한다 - 안전망이다. 같은 계정의 쓰기가 사용량 줄 잠금으로 직렬이라 회수 ∥ 늦은 결제에서도 자리는 한 번만 풀린다.
 - **`onRefunded(order, refund)`** — 전액 환불이면 확정을 취소(`CANCELED`)하고 자리를 돌려준다. 부분 환불은 자리 그대로.
@@ -45,10 +45,10 @@
 | `POST …/pools/{id}/hold/seats {seatIds}` | 자리 잡기 → `{holdId, poolId, status, seats, expiresAt, amount?}`. 대기실이 있으면 `X-Entry-Token` |
 | `DELETE …/pools/{id}/hold/seats/{seatId}` | 다시 눌러 풀기 → 같은 모양의 보류 |
 | `GET …/holds/me` | 내 열린(만료 전) · 확정 보류 목록 |
-| `POST …/holds/{id}/confirm` · `/release` · `/cancel` | 무료 확정 · 모두 놓기(결제를 시작했으면 `409 HOLD_LOCKED`) · 확정 취소 |
+| `POST …/holds/{id}/confirm` · `/release` · `/cancel` | 무료 확정 · 모두 놓기(결제를 시작한 뒤에도 된다) · 확정 취소 |
 | `POST …/holds/{id}/checkout` | 결제 시작 - 금액을 박고 자리를 고정(멱등) → 보류 |
 
-오류(모두 `BOOKING.` 접두): `409 SEAT_TAKEN`(`data.seatIds`) · `LIMIT_REACHED`(한 번에 잡는 상한 · 계정당 한도) · `NOT_OPEN`(판매 전 · 끝 · 멈춤) · `HOLD_EXPIRED` · `HOLD_LOCKED`(결제를 시작한 보류의 자리 바꾸기 · 모두 놓기) · `CHECKOUT_REQUIRED`(결제를 시작하지 않은 보류의 주문) · `HOLD_EMPTY` · `PAYMENT_REQUIRED`(무료가 아닌 보류의 `confirm`) · `NOT_PAYABLE`(무료 · 이미 확정된 보류의 결제) · `NOT_CANCELABLE` · `SEAT_EXISTS` · `SEAT_IN_USE`(`data.seatIds`), `404 POOL_NOT_FOUND · HOLD_NOT_FOUND · SEAT_NOT_FOUND`. 대기실 입장권이 없으면 `403 WAITING_ROOM.ENTRY_REQUIRED`(문 구현이 던진다).
+오류(모두 `BOOKING.` 접두): `409 SEAT_TAKEN`(`data.seatIds`) · `LIMIT_REACHED`(한 번에 잡는 상한 · 계정당 한도) · `NOT_OPEN`(판매 전 · 끝 · 멈춤) · `HOLD_EXPIRED` · `HOLD_LOCKED`(결제를 시작한 보류의 자리 더하기 · 빼기) · `CHECKOUT_REQUIRED`(결제를 시작하지 않은 보류의 주문) · `HOLD_EMPTY` · `PAYMENT_REQUIRED`(무료가 아닌 보류의 `confirm`) · `NOT_PAYABLE`(무료 · 이미 확정된 보류의 결제) · `NOT_CANCELABLE` · `SEAT_EXISTS` · `SEAT_IN_USE`(`data.seatIds`), `404 POOL_NOT_FOUND · HOLD_NOT_FOUND · SEAT_NOT_FOUND`. 대기실 입장권이 없으면 `403 WAITING_ROOM.ENTRY_REQUIRED`(문 구현이 던진다).
 
 **배치도 반영**(SSE): 서버는 `notification-sse` 와 같은 방식으로 예약 전용 흐름을 따로 연다 — 연결은 풀 하나에만 묶이고, 구독을 등록한 **뒤에** `ready` 를 보낸다. 화면은 흐름을 먼저 열고 `ready` 를 받은 뒤 스냅샷을 읽고, 자리마다 **`v` 가 큰 쪽**을 남긴다(연결 전 변화는 스냅샷에, 연결 뒤 변화는 흐름에 있어 빠지는 것이 없다). 다시 붙을 때마다 같은 순서를 되풀이한다.
 화면의 상태는 둘뿐이다 — `HELD` 는 `heldUntil` 이 붙은 `TAKEN`, `SOLD` · `BLOCKED` 는 붙지 않은 `TAKEN`. `heldUntil` 시각에 화면이 스스로 「열림」으로 바꾼다. 종료가 시작되면 웹 서버 종료 단계보다 먼저 열린 연결을 모두 닫고(30초를 기다리지 않는다), 15초마다 주석 한 줄(심장박동), 연결 30분이면 서버가 닫는다(화면이 다시 붙고 스냅샷으로 맞춘다) — 두 값은 고정이다.

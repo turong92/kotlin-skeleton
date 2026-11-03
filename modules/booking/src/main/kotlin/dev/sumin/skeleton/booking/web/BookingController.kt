@@ -98,14 +98,14 @@ class BookingController(
 
     @Operation(
         summary = "Start the checkout of my hold: pins the amount (sum of the seat prices) and locks the seats",
-        description = "Idempotent - calling again returns the same hold and amount. After this, adding, removing or releasing seats is 409 BOOKING.HOLD_LOCKED; the hold still ends at expiresAt. " +
+        description = "Idempotent - calling again returns the same hold and amount. After this, adding or removing a seat is 409 BOOKING.HOLD_LOCKED; leaving (release) still works and frees the seats at once, and the hold otherwise ends at expiresAt. " +
             "Then create the payment order with POST /api/v1/payments/orders {itemType: \"booking\", itemRef: holdId}; an order for a hold that has not started is 409 BOOKING.CHECKOUT_REQUIRED. 409 NOT_PAYABLE for free or confirmed holds.",
     )
     @PostMapping("/holds/{id}/checkout")
     fun checkout(@PathVariable id: String, authentication: Authentication?): DataResponse<HoldResponse> =
         Response.ok(HoldResponse.of(holds.startCheckout(BookingCallers.account(authentication), id)))
 
-    @Operation(summary = "Let go of every seat of my hold (does nothing to a hold that is already confirmed; 409 BOOKING.HOLD_LOCKED once the checkout has started)")
+    @Operation(summary = "Let go of every seat of my hold (does nothing to a hold that is already confirmed; still allowed after the checkout started - it is the way out of the checkout)")
     @PostMapping("/holds/{id}/release")
     fun release(@PathVariable id: String, authentication: Authentication?): DataResponse<HoldResponse> =
         Response.ok(HoldResponse.of(holds.release(BookingCallers.account(authentication), id)))

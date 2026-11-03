@@ -51,7 +51,7 @@ interface BookingStore {
     fun cancel(accountId: String, holdId: String, now: Instant): HoldOutcome
 
     /**
-     * **결제 시작** - 금액(= 자리 가격의 합, 서버만 정한다)을 보류에 박고 **자리를 고정**한다: 그 뒤 더하기 · 빼기 · 모두 놓기는 [HoldLockedException], 보류 시간이 끝나면 그대로 반환된다(늘지 않는다).
+     * **결제 시작** - 금액(= 자리 가격의 합, 서버만 정한다)을 보류에 박고 **자리를 고정**한다: 그 뒤 더하기 · 빼기는 [HoldLockedException]. 보류 전체를 끝내는 모두 놓기(나가기)는 계속 되고, 보류 시간이 끝나면 그대로 반환된다(늘지 않는다).
      * 멱등 - 이미 시작했으면 박힌 그대로 돌려준다. 무료 · 이미 확정된 보류는 [NotPayableException], 시간이 지났으면 [HoldExpiredException]. 쓰기라 잠금 순서(사용량 줄 → 보류 줄)를 지킨다.
      */
     fun startCheckout(accountId: String, holdId: String, now: Instant): BookingHold
