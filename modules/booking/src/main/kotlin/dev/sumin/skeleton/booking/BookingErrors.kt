@@ -17,6 +17,7 @@ enum class BookingErrorCode(
     HOLD_LOCKED("BOOKING.HOLD_LOCKED", HttpStatus.CONFLICT, "결제를 시작해 자리를 바꿀 수 없다 — 모두 놓고 다시 고른다"),
     HOLD_EMPTY("BOOKING.HOLD_EMPTY", HttpStatus.CONFLICT, "잡은 자리가 없다"),
     PAYMENT_REQUIRED("BOOKING.PAYMENT_REQUIRED", HttpStatus.CONFLICT, "유료 자리는 결제로 확정한다"),
+    NOT_PAYABLE("BOOKING.NOT_PAYABLE", HttpStatus.CONFLICT, "결제할 수 없는 보류다 — 무료이거나 이미 확정됐다"),
     NOT_CANCELABLE("BOOKING.NOT_CANCELABLE", HttpStatus.CONFLICT, "취소할 수 없는 예약이다"),
     SEAT_EXISTS("BOOKING.SEAT_EXISTS", HttpStatus.CONFLICT, "같은 구역 · 열 · 번호의 자리가 이미 있다"),
     SEAT_IN_USE("BOOKING.SEAT_IN_USE", HttpStatus.CONFLICT, "잡히거나 팔린 자리는 막을 수 없다"),
@@ -44,6 +45,8 @@ class HoldLockedException : ApplicationException("hold is locked for checkout", 
 class HoldEmptyException : ApplicationException("hold has no seats", BookingErrorCode.HOLD_EMPTY)
 
 class PaymentRequiredException : ApplicationException("priced seats are confirmed by payment", BookingErrorCode.PAYMENT_REQUIRED)
+
+class NotPayableException : ApplicationException("hold cannot be paid", BookingErrorCode.NOT_PAYABLE)
 
 class NotCancelableException : ApplicationException("booking cannot be canceled", BookingErrorCode.NOT_CANCELABLE)
 

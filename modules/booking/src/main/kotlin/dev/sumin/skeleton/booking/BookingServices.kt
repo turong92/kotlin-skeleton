@@ -3,9 +3,14 @@ package dev.sumin.skeleton.booking
 import dev.sumin.skeleton.common.FieldValidationException
 import dev.sumin.skeleton.common.time.TimeProvider
 import org.slf4j.LoggerFactory
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
 
 /** 한 번에 다룰 수 있는 자리 수 상한(입력 크기 방어) — 풀의 `maxPerHold` 와 별개 */
 private const val MAX_SEATS_PER_CALL = 500
+
+/** 운영자가 한 번에 넣는 자리 수 상한(입력 크기 방어) */
+private const val MAX_SEATS_PER_ADD = 5000
 
 /** 만료 회수 한 번에 훑는 보류 수 */
 private const val EXPIRE_BATCH = 200
@@ -22,17 +27,37 @@ class BookingPools(
 
     fun get(id: String): BookingPool = store.findPool(id) ?: throw PoolNotFoundException()
 
-    fun counts(poolId: String): SeatCounts = store.counts(get(poolId).id)
+    fun list(): List<BookingPool> = store.listPools()
 
-    fun addSeats(poolId: String, seats: List<NewSeat>): List<BookingSeat> = store.addPoolSeats(get(poolId).id, seats, time.now())
-
-    /** 막기 — 잡히거나 팔린 자리는 [SeatInUseException] */
-    fun block(poolId: String, seatIds: List<String>) {
-        relay.safely(poolId, store.blockSeats(get(poolId).id, seatIds.distinct()))
+    /** 이름 · 판매 끝 · 상태(멈춤 `PAUSED` · 닫기 `CLOSED`)를 바꾼다. `null` 은 그대로 */
+    fun update(poolId: String, name: String?, closesAt: java.time.Instant?, status: PoolStatus?): BookingPool {
+        val pool = get(poolId)
+        if (name != null && name.isBlank()) throw FieldValidationException("name", "NotBlank", "name must not be blank")
+        if (closesAt != null && !closesAt.isAfter(pool.opensAt)) throw FieldValidationException("closesAt", "After", "closesAt must be after opensAt")
+        return store.updatePool(pool.id, name, closesAt, status)
     }
 
-    fun unblock(poolId: String, seatIds: List<String>) {
-        relay.safely(poolId, store.unblockSeats(get(poolId).id, seatIds.distinct()))
+    fun stats(poolId: String): PoolStats = store.stats(get(poolId).id)
+
+    fun counts(poolId: String): SeatCounts = store.counts(get(poolId).id)
+
+    fun addSeats(poolId: String, seats: List<NewSeat>): List<BookingSeat> {
+        val pool = get(poolId)
+        if (seats.size > MAX_SEATS_PER_ADD) throw FieldValidationException("seats", "Size", "add at most $MAX_SEATS_PER_ADD seats at a time")
+        // 가격이 붙은 자리는 통화가 있어야 결제할 수 있다 - 사는 사람이 막히기 전에 운영자가 알게
+        if (pool.currency == null && seats.any { it.price != null }) throw FieldValidationException("seats", "Currency", "the pool has no currency, so its seats cannot have a price")
+        return store.addPoolSeats(pool.id, seats, time.now())
+    }
+
+    /** 막기 — 잡히거나 팔린 자리는 [SeatInUseException] */
+    fun block(poolId: String, seatIds: List<String>): Int = relayed(poolId, store.blockSeats(get(poolId).id, seatIds.distinct()))
+
+    fun unblock(poolId: String, seatIds: List<String>): Int = relayed(poolId, store.unblockSeats(get(poolId).id, seatIds.distinct()))
+
+    /** 바뀐 자리 수 */
+    private fun relayed(poolId: String, changes: List<SeatChange>): Int {
+        relay.safely(poolId, changes)
+        return changes.size
     }
 
     /** 자리 목록과 지금 상태를 한 번에 — 캐시하지 않는다(캐시된 옛 상태와 연결 전 사건 사이에 빈틈이 생긴다) */
@@ -102,6 +127,22 @@ class BookingHolds(
 
     fun mine(accountId: String): List<BookingHold> = store.holdsOf(accountId, time.now())
 
+    /** 결제를 시작한다 - 금액을 박고 자리를 고정한다(멱등). 시간이 지난 보류는 응답하기 전에 회수한다 */
+    fun startCheckout(accountId: String, holdId: String): BookingHold = withExpiredCleanup { store.startCheckout(accountId, holdId, time.now()) }
+
+    /** 주문이 결제됐다(`onPaid`) - 주문 하나에 한 번만 효과가 있다. 자리를 다시 잡았다면 그 사건을 중계한다 */
+    fun settlePaid(orderId: String, accountId: String, holdId: String, quotedAmount: Long, currency: String): PaidOutcome {
+        val outcome = store.settlePaid(orderId, accountId, holdId, quotedAmount, currency, time.now())
+        relay.safely(outcome.hold.poolId, outcome.changes)
+        return outcome
+    }
+
+    /** 확정에 쓰인 주문이 전액 환불됐다 - 확정을 취소하고 자리를 돌려준다. 그 주문의 보류가 없거나 이미 취소됐으면 null */
+    fun cancelRefunded(orderId: String): BookingHold? {
+        val outcome = store.cancelRefunded(orderId, time.now()) ?: return null
+        return commit(outcome.hold.poolId, outcome)
+    }
+
     /** 시간이 지난 보류를 회수한다(주기 작업 · 요청 구동). 여러 인스턴스가 동시에 돌려도 보류 줄 전이가 1줄일 때만 자리가 돌아와 한 번만 풀린다. 회수한 보류 수 */
     fun expireDue(): Int {
         var reclaimed = 0
@@ -136,11 +177,23 @@ class BookingHolds(
     }
 }
 
+/**
+ * 자리 사건은 **커밋 뒤에** 중계한다. 앱(결제의 `onPaid` 처럼)의 바깥 트랜잭션 안에서 불렸으면 그 트랜잭션이 커밋된 뒤로 미룬다 - 롤백되면 사건도 없다.
+ */
 private fun BookingSeatRelay.safely(poolId: String, changes: List<SeatChange>) {
     if (changes.isEmpty()) return
-    try {
-        publish(poolId, changes)
-    } catch (ex: Exception) {
-        LoggerFactory.getLogger(BookingSeatRelay::class.java).warn("booking seat event not relayed: {}", ex.toString())
+    val send = {
+        try {
+            publish(poolId, changes)
+        } catch (ex: Exception) {
+            LoggerFactory.getLogger(BookingSeatRelay::class.java).warn("booking seat event not relayed: {}", ex.toString())
+        }
+    }
+    if (TransactionSynchronizationManager.isSynchronizationActive()) {
+        TransactionSynchronizationManager.registerSynchronization(object : TransactionSynchronization {
+            override fun afterCommit() = send()
+        })
+    } else {
+        send()
     }
 }

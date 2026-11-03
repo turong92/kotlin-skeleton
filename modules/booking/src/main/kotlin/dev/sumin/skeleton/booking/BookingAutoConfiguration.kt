@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.booking
 
+import dev.sumin.skeleton.common.authz.PermissionDeclaration
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.common.wake.OnRequestTask
 import dev.sumin.skeleton.common.wake.SimpleOnRequestTask
@@ -17,11 +18,15 @@ import org.springframework.context.annotation.Bean
  *   booking:
  *     http:
  *       enabled: true    # false 면 사용자 경로 /api/v1/booking 을 등록하지 않는다
+ *     admin:
+ *       enabled: false   # true 면 운영자 경로 /api/v1/admin/booking (권한 booking.manage · booking.read)
  * ```
  */
 @ConfigurationProperties("skeleton.booking")
-data class BookingProperties(val http: Http = Http()) {
+data class BookingProperties(val http: Http = Http(), val admin: Admin = Admin()) {
     data class Http(val enabled: Boolean = true)
+
+    data class Admin(val enabled: Boolean = false)
 }
 
 /**
@@ -34,6 +39,10 @@ class BookingAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(BookingSeatRelay::class)
     fun localBookingSeatRelay(): BookingSeatRelay = LocalBookingSeatRelay()
+
+    @Bean
+    @ConditionalOnMissingBean(name = ["bookingPermissionDeclaration"])
+    fun bookingPermissionDeclaration(): PermissionDeclaration = BookingPermissions.declaration
 
     @Bean
     @ConditionalOnMissingBean(BookingAdmission::class)

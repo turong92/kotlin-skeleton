@@ -106,3 +106,14 @@ fun BookingSeat.toChange(): SeatChange = when (status) {
 data class HoldOutcome(val hold: BookingHold, val changes: List<SeatChange>)
 
 data class SeatCounts(val total: Int, val available: Int)
+
+/** 풀 현황(운영자). [unfulfilled] 는 돈은 받았는데 자리를 못 준 보류 수 */
+data class PoolStats(val total: Int, val available: Int, val held: Int, val sold: Int, val blocked: Int, val unfulfilled: Int)
+
+/**
+ * 결제된 주문 하나를 보류에 맞춘 결과. [CONFIRMED] 면 그 주문이 보류를 확정했다(자리 `SOLD`).
+ * [UNFULFILLED] 는 자리를 못 줘서(다시 못 잡았다 · 금액이 다르다) · [DUPLICATE] 는 같은 보류가 이미 다른 주문으로 확정돼서 — 둘 다 환불 작업이 하나 걸린다.
+ */
+enum class OrderOutcome { CONFIRMED, UNFULFILLED, DUPLICATE }
+
+data class PaidOutcome(val outcome: OrderOutcome, val hold: BookingHold, val changes: List<SeatChange>)

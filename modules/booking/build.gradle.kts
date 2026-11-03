@@ -5,6 +5,17 @@ dependencies {
     // scheduler: 만료 회수의 @SkeletonScheduled 표시만 쓴다 — 없으면 표시가 무시되고 요청 구동 모드(OnRequestTask)나 잡기가 막힐 때의 그 자리 회수가 맡는다
     compileOnly(project(":modules:scheduler"))
 
+    // payment · job-queue-jdbc: 결제 확정 · 늦은 결제의 환불 작업 (BookingPayments · booking-refund) - 둘이 함께 있을 때만 자동설정이 선다
+    // waiting-room: 대기실 입장권 검사 (BookingAdmission 구현) - 있을 때만
+    // redis-core / spring-data-redis: 여러 대를 잇는 자리 사건 중계 (RedisBookingSeatRelay) - 있을 때만
+    compileOnly(project(":modules:payment"))
+    compileOnly(project(":modules:job-queue-jdbc"))
+    compileOnly(project(":modules:waiting-room"))
+    compileOnly(project(":modules:redis-core"))
+    compileOnly("org.springframework.boot:spring-boot-starter-data-redis")
+    // spring-tx: 자리 사건을 바깥 트랜잭션이 커밋된 뒤로 미룬다 (저장소를 쓰는 앱엔 늘 있다)
+    compileOnly("org.springframework:spring-tx")
+
     api(project(":modules:platform"))   // 타입(ApplicationException · TimeProvider · OnRequestTask)이 이 모듈의 공개 API 에 나온다
 
     implementation("org.springframework.boot:spring-boot-starter")
@@ -15,6 +26,7 @@ dependencies {
 
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("org.springframework.security:spring-security-core")
+    testImplementation("org.springframework:spring-tx")
     testImplementation("org.assertj:assertj-core")
     testImplementation("org.springframework.boot:spring-boot-test")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")

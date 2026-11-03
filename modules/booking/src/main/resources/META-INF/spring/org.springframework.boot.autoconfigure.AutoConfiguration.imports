@@ -1,2 +1,5 @@
 dev.sumin.skeleton.booking.BookingAutoConfiguration
+dev.sumin.skeleton.booking.BookingPaymentAutoConfiguration
+dev.sumin.skeleton.booking.BookingWaitingRoomAutoConfiguration
+dev.sumin.skeleton.booking.BookingRedisAutoConfiguration
 dev.sumin.skeleton.booking.web.BookingWebAutoConfiguration

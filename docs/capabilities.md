@@ -97,8 +97,8 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `badge-jdbc` | 배지 정의 · 보유 · 수여/회수 내역을 DB 에 둔다 (PostgreSQL · MySQL) — 동시 수여는 보유 줄 유니크, 지급 건 재시도는 내역 유니크로 한 번. | `--modules badge-jdbc` | 배지 저장소, 배지 DB / badge storage, badge repository | `@skeleton/rewards` |
 | `board` | 게시판 — 글 · 중첩 댓글(대댓글) · 설정으로 늘리는 반응(좋아요 · 공감 …) · 운영자 숨김/고정 · 댓글 알림 · 작성자 닉네임(authorName · authorTag, AuthorDirectory 로 요청당 한 번 조회), HTTP /api/v1/boards 까지. | `--modules board,board-jdbc` | 게시판, 커뮤니티, 글쓰기, 댓글, 대댓글, 공감, 좋아요, 반응, 운영자 숨김, 공지 고정 / board, forum, community, post, comment, reply, reaction, like, moderation | `@skeleton/board` |
 | `board-jdbc` | 게시판 저장소 — PostgreSQL · MySQL 로 board 의 저장 포트 네 개를 구현한다(boards · board_* 테이블 · 원자적 카운터). | `--modules board-jdbc` | 게시판 저장소, 게시판 DB / board storage, board repository, board database | `@skeleton/board` |
-| `booking` | 예약(좌석 지정 · 선착순) — 회차(풀)의 배치도에서 자리를 직접 찍어 잡고(여럿은 전부 아니면 전무) · 다시 눌러 놓고 · 보류 시간이 지나면 자동 반환 · 무료 확정 · 본인 취소. 이중 판매 0 의 정본은 DB 자리 줄 조건부 갱신이고, 배치도는 스냅샷 + SSE 흐름(자리별 버전, 다시 붙으면 스냅샷)으로 맞춘다. 서버 API 는 BookingPools · BookingHolds, 문(BookingAdmission)의 기본은 늘 허용. 저장은 booking-jdbc. | `--modules booking` | 예약, 좌석 예약, 좌석 지정, 티켓팅, 선착순, 배치도, 자리 선점, 공연 예매, 수강 신청, 이중 예약 / booking, seat reservation, seat map, ticketing, first come first served, seat hold, double booking, race condition | — |
-| `booking-jdbc` | 예약을 DB 에 둔다 (PostgreSQL · MySQL) — 표 다섯(풀 · 자리 · 보류 · 보류 자리 · 계정 사용량), 자리 줄 조건부 갱신으로 이중 판매 0 · 여러 자리 전부 아니면 전무 · 계정 사용량 줄 잠금 뒤 자리 id 오름차순으로 교착 없이. | `--modules booking-jdbc` | 예약 저장소, 예약 DB, 좌석 DB / booking storage, booking repository, seat store | — |
+| `booking` | 예약(좌석 지정 · 선착순) — 회차(풀)의 배치도에서 자리를 직접 찍어 잡고(여럿은 전부 아니면 전무) · 다시 눌러 놓고 · 보류 시간이 지나면 자동 반환 · 무료 확정 · 본인 취소 · 결제 확정(payment 가 있으면: 결제를 시작하면 자리 고정, 늦은 결제는 다시 잡거나 자동 환불, 전액 환불이면 자리 반환). 이중 판매 0 의 정본은 DB 자리 줄 조건부 갱신이고, 배치도는 스냅샷 + SSE 흐름(자리별 버전, 다시 붙으면 스냅샷)으로 맞추며 redis-core 가 있으면 여러 대를 Redis pub/sub 로 잇는다. 서버 API 는 BookingPools · BookingHolds · BookingPayments, 문(BookingAdmission)의 기본은 늘 허용(waiting-room 이 있으면 입장권 검사). 운영자 경로는 skeleton.booking.admin.enabled 로 켠다. 저장은 booking-jdbc. | `--modules booking` | 예약, 좌석 예약, 좌석 지정, 티켓팅, 선착순, 배치도, 자리 선점, 공연 예매, 수강 신청, 이중 예약 / booking, seat reservation, seat map, ticketing, first come first served, seat hold, double booking, race condition | — |
+| `booking-jdbc` | 예약을 DB 에 둔다 (PostgreSQL · MySQL) — 표 여섯(풀 · 자리 · 보류 · 보류 자리 · 계정 사용량 · 결제된 주문), 자리 줄 조건부 갱신으로 이중 판매 0 · 여러 자리 전부 아니면 전무 · 계정 사용량 줄 잠금 뒤 자리 id 오름차순으로 교착 없이. | `--modules booking-jdbc` | 예약 저장소, 예약 DB, 좌석 DB / booking storage, booking repository, seat store | — |
 | `campaign` | 이벤트 — 출석(매일 · 누적 · 연속 달성) · 친구초대(양쪽 보상) · 업적(앱이 보고한 수치가 단계에 닿으면)을 판정해 보상 지급 건으로 기록하고, 운영자가 이벤트를 만들고 켜고 끈다. | `--modules campaign,campaign-jdbc,reward-jdbc` | 이벤트, 출석 체크, 출석 보상, 친구 초대, 초대 코드, 초대 보상, 연속 출석, 업적 이벤트 / campaign, event, attendance, check-in, referral, invite, streak, achievement milestone | `@skeleton/rewards` |
 | `campaign-jdbc` | 이벤트 · 출석 · 초대 코드 · 초대 관계 저장을 DB 에 둔다 (PostgreSQL · MySQL). | `--modules campaign-jdbc` | 이벤트 저장, 출석 저장 / campaign store, attendance store | `@skeleton/rewards` |
 | `captcha-turnstile` | 봇 방지 — Cloudflare Turnstile 토큰을 서버에서 검증한다(TurnstileVerifier). | 스타터(apps/api)에 기본 포함 | 캡차, 봇 방지, 스팸 방지, 로봇 확인, 가입 폼 보호 / captcha, turnstile, bot protection, spam protection, cloudflare turnstile | `@skeleton/captcha-turnstile` |
@@ -646,29 +646,31 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 다른 DB(JPA · jOOQ)로 저장하려면 board 의 저장 포트 네 개를 앱이 구현한다
 - 키워드: 게시판 저장소, 게시판 DB / board storage, board repository, board database
 
-### `booking` — 예약(좌석 지정 · 선착순) — 회차(풀)의 배치도에서 자리를 직접 찍어 잡고(여럿은 전부 아니면 전무) · 다시 눌러 놓고 · 보류 시간이 지나면 자동 반환 · 무료 확정 · 본인 취소. 이중 판매 0 의 정본은 DB 자리 줄 조건부 갱신이고, 배치도는 스냅샷 + SSE 흐름(자리별 버전, 다시 붙으면 스냅샷)으로 맞춘다. 서버 API 는 BookingPools · BookingHolds, 문(BookingAdmission)의 기본은 늘 허용. 저장은 booking-jdbc.
+### `booking` — 예약(좌석 지정 · 선착순) — 회차(풀)의 배치도에서 자리를 직접 찍어 잡고(여럿은 전부 아니면 전무) · 다시 눌러 놓고 · 보류 시간이 지나면 자동 반환 · 무료 확정 · 본인 취소 · 결제 확정(payment 가 있으면: 결제를 시작하면 자리 고정, 늦은 결제는 다시 잡거나 자동 환불, 전액 환불이면 자리 반환). 이중 판매 0 의 정본은 DB 자리 줄 조건부 갱신이고, 배치도는 스냅샷 + SSE 흐름(자리별 버전, 다시 붙으면 스냅샷)으로 맞추며 redis-core 가 있으면 여러 대를 Redis pub/sub 로 잇는다. 서버 API 는 BookingPools · BookingHolds · BookingPayments, 문(BookingAdmission)의 기본은 늘 허용(waiting-room 이 있으면 입장권 검사). 운영자 경로는 skeleton.booking.admin.enabled 로 켠다. 저장은 booking-jdbc.
 
 - 종류 · 상태: module · experimental — 위치 `modules/booking`
 - 켜는 법: `--modules booking`
 - 의존 한 줄: `implementation(project(":modules:booking"))`
-- 소스만 따라온다(컴파일 전용 — 런타임 클래스패스에는 없다. 쓰려면 apps/api 에 의존 한 줄을 더한다): `scheduler`
+- 자동으로 따라온다: `crypto`
+- 소스만 따라온다(컴파일 전용 — 런타임 클래스패스에는 없다. 쓰려면 apps/api 에 의존 한 줄을 더한다): `payment`, `redis-core`, `scheduler`, `waiting-room`
 - 설정 접두사 `skeleton.booking` — 키와 기본값 `docs/config/modules/booking.yml`
-- HTTP 경로: `/api/v1/booking`
+- HTTP 경로: `/api/v1/admin/booking/pools`, `/api/v1/booking`
 - 문서: `docs/modules/booking.md`
 - 쓰지 않는 경우:
   - 저장소 없이는 서지 않는다 — booking-jdbc 를 같이 고른다(메모리 저장소는 없다)
-  - 여러 대로 돌리면 다른 인스턴스의 변화는 연결이 다시 붙을 때(최대 30분)까지 배치도에 안 보인다 — 중계(BookingSeatRelay)는 기본이 프로세스 안이다. 찍는 순간 DB 가 판정하므로 이중 판매는 없다
-  - 유료 자리의 결제 확정 · 운영자 경로는 아직 없다 — 지금은 무료 자리만 확정된다
+  - 여러 대로 돌리는데 redis-core 를 안 붙이면 다른 인스턴스의 변화는 연결이 다시 붙을 때(최대 30분)까지 배치도에 안 보인다 — 중계(BookingSeatRelay)는 redis-core 가 있을 때만 Redis pub/sub 이다. 찍는 순간 DB 가 판정하므로 이중 판매는 없다
+  - 유료 자리는 payment 와 앱의 결제 훅 연결(itemType "booking" 으로 BookingPayments 를 부름)이 있어야 확정된다 — 모듈만으로는 결제창이 열리지 않는다
+  - 운영자 경로는 `skeleton.booking.admin.enabled=true` 로 켠다 — 기본은 꺼짐(404)
   - 대기열이 아니다 — 입장 순서를 정하려면 waiting-room 을 앞에 둔다(문 BookingAdmission 이 이어진다)
   - 수량형 재고(자리 번호 없는 N장)를 위한 모듈이 아니다 — 배치도의 자리 하나하나가 경쟁 단위다
 - 키워드: 예약, 좌석 예약, 좌석 지정, 티켓팅, 선착순, 배치도, 자리 선점, 공연 예매, 수강 신청, 이중 예약 / booking, seat reservation, seat map, ticketing, first come first served, seat hold, double booking, race condition
 
-### `booking-jdbc` — 예약을 DB 에 둔다 (PostgreSQL · MySQL) — 표 다섯(풀 · 자리 · 보류 · 보류 자리 · 계정 사용량), 자리 줄 조건부 갱신으로 이중 판매 0 · 여러 자리 전부 아니면 전무 · 계정 사용량 줄 잠금 뒤 자리 id 오름차순으로 교착 없이.
+### `booking-jdbc` — 예약을 DB 에 둔다 (PostgreSQL · MySQL) — 표 여섯(풀 · 자리 · 보류 · 보류 자리 · 계정 사용량 · 결제된 주문), 자리 줄 조건부 갱신으로 이중 판매 0 · 여러 자리 전부 아니면 전무 · 계정 사용량 줄 잠금 뒤 자리 id 오름차순으로 교착 없이.
 
 - 종류 · 상태: module · experimental — 위치 `modules/booking-jdbc`
 - 켜는 법: `--modules booking-jdbc`
 - 의존 한 줄: `implementation(project(":modules:booking-jdbc"))`
-- 자동으로 따라온다: `booking`, `scheduler`
+- 자동으로 따라온다: `booking`, `crypto`, `payment`, `redis-core`, `scheduler`, `waiting-room`
 - 문서: `docs/modules/booking-jdbc.md`
 - 쓰지 않는 경우:
   - DataSource · db-* 모듈과 이 모듈의 마이그레이션이 적용된 스키마가 필요하다

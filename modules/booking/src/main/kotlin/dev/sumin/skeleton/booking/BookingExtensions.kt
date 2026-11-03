@@ -21,6 +21,17 @@ object AllowAllBookingAdmission : BookingAdmission {
 
 fun interface BookingSeatListener {
     fun onChanges(changes: List<SeatChange>)
+
+    /** 이 인스턴스가 사건을 놓쳤을 수 있다(중계가 끊겼다 다시 붙었다) - 연결은 스스로 닫고 화면이 다시 붙어 스냅샷으로 맞춘다 */
+    fun onMissed() {}
+}
+
+/**
+ * 돈만 받고 자리를 못 준 주문의 환불 작업 넣기 - **부르는 쪽 트랜잭션에 참여한다**(보류 줄이 커밋되면 작업도 있고 롤백되면 함께 사라진다).
+ * `payment` 와 `job-queue-jdbc` 가 있으면 `booking-refund` 작업을 넣는 구현이 저절로 선다.
+ */
+fun interface BookingRefundQueue {
+    fun enqueue(orderId: String, reason: String)
 }
 
 /**
@@ -57,12 +68,26 @@ class LocalBookingSeatRelay : BookingSeatRelay, DisposableBean {
         return AutoCloseable { listeners[poolId]?.remove(listener) }
     }
 
-    private fun deliver(poolId: String, changes: List<SeatChange>) {
+    /** 이 스레드에서 바로 넘긴다 - 다른 인스턴스에서 온 사건이 부른다 */
+    internal fun deliver(poolId: String, changes: List<SeatChange>) {
         listeners[poolId]?.forEach { listener ->
             try {
                 listener.onChanges(changes)
             } catch (ex: Exception) {
                 log.warn("booking seat listener failed: {}", ex.toString())
+            }
+        }
+    }
+
+    /** 사건을 놓쳤을 수 있다 - 이 인스턴스의 모든 연결에 알린다 */
+    internal fun missed() {
+        listeners.values.forEach { set ->
+            set.forEach { listener ->
+                try {
+                    listener.onMissed()
+                } catch (ex: Exception) {
+                    log.warn("booking seat listener failed: {}", ex.toString())
+                }
             }
         }
     }

@@ -91,6 +91,7 @@
 | `auth-mfa` | 2단계 인증(TOTP) — 모든 로그인 길의 두 번째 단계 · 등록(QR) · 복구 코드 · 한도 · 재사용 방지 · 끄기(다시 인증 + 코드) | [auth-mfa](auth-mfa.md) |
 | `auth-mfa-jdbc` | 2단계 저장을 DB 에 두기 (비밀은 암호화 봉투, 복구 코드는 해시) | [auth-mfa-jdbc](auth-mfa-jdbc.md) |
 | `booking` | 예약(좌석 지정 · 선착순) — 자리 잡기 · 놓기 · 보류 시간 자동 반환 · 무료 확정 · 배치도 스냅샷 + SSE 흐름 · 이중 판매 0 | [booking](booking.md) |
+| `booking` | 예약(좌석 지정 · 선착순) — 자리 잡기 · 놓기 · 보류 시간 자동 반환 · 무료 확정 · 결제 확정 · 늦은 결제 자동 환불 · 배치도 스냅샷 + SSE 흐름(Redis 중계) · 이중 판매 0 | [booking](booking.md) |
 | `booking-jdbc` | 예약 저장을 DB 에 두기 (자리 줄 조건부 갱신이 정본, PostgreSQL · MySQL) | [booking-jdbc](booking-jdbc.md) |
 | `waiting-room` | 대기열(가상 대기실) — 로그인한 사람만 줄 서기 · 오픈 순간 무작위 섞기 · 분당 입장 수 · 서명 입장권 `requireEntry` | [waiting-room](waiting-room.md) |
 | `waiting-room-jdbc` | 대기열 저장을 DB 에 두기 (번호는 방 줄 잠금 뒤에 — 1..n 빈틈 없음, PostgreSQL · MySQL) | [waiting-room-jdbc](waiting-room-jdbc.md) |

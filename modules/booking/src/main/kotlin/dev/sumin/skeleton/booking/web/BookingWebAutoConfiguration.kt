@@ -5,6 +5,8 @@ import dev.sumin.skeleton.booking.BookingAutoConfiguration
 import dev.sumin.skeleton.booking.BookingHolds
 import dev.sumin.skeleton.booking.BookingPools
 import dev.sumin.skeleton.booking.BookingSeatRelay
+import dev.sumin.skeleton.common.authz.OperatorAccess
+import dev.sumin.skeleton.common.authz.OperatorAuditLog
 import dev.sumin.skeleton.common.web.PublicEndpointContributor
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean
@@ -17,23 +19,33 @@ import org.springframework.context.annotation.Bean
 /**
  * 예약 HTTP — 서블릿 웹 앱이고 Spring Security(호출자)가 클래스패스에 있고 서비스([BookingHolds] 빈)가 있을 때만.
  * 사용자 경로 `/api/v1/booking` 은 `skeleton.booking.http.enabled=false` 로 끈다. 풀 정보(`GET /pools/{id}`)만 공개다.
+ * 운영자 경로 `/api/v1/admin/booking` 은 `skeleton.booking.admin.enabled=true` 일 때만 켜진다(꺼져 있으면 404).
  */
 @AutoConfiguration(after = [BookingAutoConfiguration::class])
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 @ConditionalOnClass(name = ["org.springframework.security.core.Authentication"])
 @ConditionalOnBean(BookingHolds::class)
-@ConditionalOnProperty(prefix = "skeleton.booking.http", name = ["enabled"], havingValue = "true", matchIfMissing = true)
 class BookingWebAutoConfiguration {
     @Bean
+    @ConditionalOnProperty(prefix = "skeleton.booking.http", name = ["enabled"], havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
     fun bookingSeatStreamService(relay: BookingSeatRelay): BookingSeatStreamService = BookingSeatStreamService(relay)
 
     @Bean
+    @ConditionalOnProperty(prefix = "skeleton.booking.http", name = ["enabled"], havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
     fun bookingController(pools: BookingPools, holds: BookingHolds, streams: BookingSeatStreamService, admission: BookingAdmission): BookingController =
         BookingController(pools, holds, streams, admission)
 
+    /** 운영자 경로 - 기본 꺼짐. 꺼져 있으면 경로가 없어 404 */
     @Bean
+    @ConditionalOnProperty(prefix = "skeleton.booking.admin", name = ["enabled"], havingValue = "true")
+    @ConditionalOnMissingBean
+    fun bookingAdminController(pools: BookingPools, access: OperatorAccess, audit: OperatorAuditLog): BookingAdminController =
+        BookingAdminController(pools, access, audit)
+
+    @Bean
+    @ConditionalOnProperty(prefix = "skeleton.booking.http", name = ["enabled"], havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean(name = ["bookingPublicEndpointContributor"])
     fun bookingPublicEndpointContributor(): PublicEndpointContributor =
         PublicEndpointContributor { registry -> registry.add("GET", "/api/v1/booking/pools/*") }

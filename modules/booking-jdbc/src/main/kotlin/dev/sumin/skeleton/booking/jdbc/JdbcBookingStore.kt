@@ -2,6 +2,7 @@ package dev.sumin.skeleton.booking.jdbc
 
 import dev.sumin.skeleton.booking.BookingHold
 import dev.sumin.skeleton.booking.BookingPool
+import dev.sumin.skeleton.booking.BookingRefundQueue
 import dev.sumin.skeleton.booking.BookingSeat
 import dev.sumin.skeleton.booking.BookingStore
 import dev.sumin.skeleton.booking.HoldEmptyException
@@ -14,9 +15,13 @@ import dev.sumin.skeleton.booking.LimitReachedException
 import dev.sumin.skeleton.booking.NewBookingPool
 import dev.sumin.skeleton.booking.NewSeat
 import dev.sumin.skeleton.booking.NotCancelableException
+import dev.sumin.skeleton.booking.NotPayableException
 import dev.sumin.skeleton.booking.NotOpenException
+import dev.sumin.skeleton.booking.OrderOutcome
+import dev.sumin.skeleton.booking.PaidOutcome
 import dev.sumin.skeleton.booking.PaymentRequiredException
 import dev.sumin.skeleton.booking.PoolNotFoundException
+import dev.sumin.skeleton.booking.PoolStats
 import dev.sumin.skeleton.booking.PoolStatus
 import dev.sumin.skeleton.booking.SeatChange
 import dev.sumin.skeleton.booking.SeatCounts
@@ -51,6 +56,8 @@ class JdbcBookingStore(
     private val tx: TransactionTemplate,
     private val dialect: SqlDialect,
     private val ids: SortableIds = SortableIds.system,
+    /** 돈만 받고 자리를 못 준 주문의 환불 작업 - 결제가 없는 조립에서는 null (그때는 환불할 주문도 없다) */
+    private val refunds: BookingRefundQueue? = null,
 ) : BookingStore {
     private val insertUsage = dialect.insertIgnore("booking_usage", listOf("pool_id", "account_id", "seats"), listOf("pool_id", "account_id"))
 
@@ -72,6 +79,18 @@ class JdbcBookingStore(
 
     override fun findPool(id: String): BookingPool? =
         jdbc.query("select * from booking_pools where id = :id", mapOf("id" to id)) { rs, _ -> rs.toPool() }.firstOrNull()
+
+    override fun listPools(): List<BookingPool> =
+        jdbc.query("select * from booking_pools order by created_at desc, id desc limit 200", emptyMap<String, Any>()) { rs, _ -> rs.toPool() }
+
+    override fun updatePool(poolId: String, name: String?, closesAt: Instant?, status: PoolStatus?): BookingPool {
+        val current = findPool(poolId) ?: throw PoolNotFoundException()
+        jdbc.update(
+            "update booking_pools set name = :name, closes_at = :closes, status = :status where id = :id",
+            mapOf("name" to (name ?: current.name), "closes" to ts(closesAt ?: current.closesAt), "status" to (status ?: current.status).name, "id" to poolId),
+        )
+        return checkNotNull(findPool(poolId))
+    }
 
     override fun addPoolSeats(poolId: String, seats: List<NewSeat>, now: Instant): List<BookingSeat> {
         findPool(poolId) ?: throw PoolNotFoundException()
@@ -128,6 +147,13 @@ class JdbcBookingStore(
             "select count(*) as total, coalesce(sum(case when status = 'AVAILABLE' then 1 else 0 end), 0) as available from booking_seats where pool_id = :p",
             mapOf("p" to poolId),
         ) { rs, _ -> SeatCounts(rs.getInt("total"), rs.getInt("available")) }!!
+
+    override fun stats(poolId: String): PoolStats {
+        val byStatus = jdbc.query("select status, count(*) as n from booking_seats where pool_id = :p group by status", mapOf("p" to poolId)) { rs, _ -> rs.getString("status") to rs.getInt("n") }.toMap()
+        val unfulfilled = jdbc.queryForObject("select count(*) from booking_holds where pool_id = :p and status = 'UNFULFILLED'", mapOf("p" to poolId), Int::class.java)!!
+        fun n(status: SeatStatus) = byStatus[status.name] ?: 0
+        return PoolStats(byStatus.values.sum(), n(SeatStatus.AVAILABLE), n(SeatStatus.HELD), n(SeatStatus.SOLD), n(SeatStatus.BLOCKED), unfulfilled)
+    }
 
     // ---- 보류 ------------------------------------------------------------------------------------------------------
 
@@ -236,6 +262,114 @@ class JdbcBookingStore(
         }
     }
 
+    override fun startCheckout(accountId: String, holdId: String, now: Instant): BookingHold {
+        val owned = findOwned(accountId, holdId) ?: throw HoldNotFoundException()
+        return inAccountTx(owned.poolId, accountId) {
+            val hold = lockedHold(holdId)
+            if (hold.status == HoldStatus.CONFIRMED) throw NotPayableException()
+            if (hold.status != HoldStatus.HELD || !hold.expiresAt.isAfter(now)) throw HoldExpiredException(holdId)
+            if (hold.checkoutStartedAt != null) return@inAccountTx loadHold(holdId)   // 이미 박혔다 - 자리가 고정이라 금액도 그대로
+            if (hold.seatCount == 0) throw HoldEmptyException()
+            val total = hold.total ?: throw NotPayableException()
+            if (checkNotNull(findPool(hold.poolId)).currency == null) throw NotPayableException()
+            check(jdbc.update(
+                "update booking_holds set checkout_started_at = :now, amount = :amount where id = :id and status = 'HELD' and checkout_started_at is null",
+                mapOf("now" to ts(now), "amount" to total, "id" to holdId),
+            ) == 1) { "hold $holdId changed under the account lock" }
+            loadHold(holdId)
+        }
+    }
+
+    override fun settlePaid(orderId: String, accountId: String, holdId: String, quotedAmount: Long, currency: String, now: Instant): PaidOutcome {
+        val owned = findOwned(accountId, holdId) ?: throw HoldNotFoundException()
+        return inAccountTx(owned.poolId, accountId) {
+            // 주문 하나에 한 번만 효과가 있다 - 같은 계정의 쓰기는 사용량 줄 잠금으로 직렬이라, 먼저 온 호출의 결과가 여기서 보인다
+            recordedOutcome(orderId)?.let { return@inAccountTx PaidOutcome(it, loadHold(holdId), emptyList()) }
+            // 상태는 잠금 읽기로 본다 - 바깥(결제)의 트랜잭션에 참여한 때 MySQL 반복 읽기의 낡은 스냅샷을 피한다
+            val hold = lockedHold(holdId)
+            val pool = checkNotNull(findPool(hold.poolId))
+            val matches = hold.amount != null && hold.amount == quotedAmount && pool.currency.equals(currency.trim(), ignoreCase = true)
+            var changed = emptyList<String>()
+            val outcome = when {
+                hold.status == HoldStatus.CONFIRMED -> OrderOutcome.DUPLICATE
+                !matches -> OrderOutcome.UNFULFILLED
+                hold.status == HoldStatus.HELD -> {
+                    // 시간이 지났어도 아직 회수 전이면 그대로 확정한다
+                    changed = confirmSeats(hold, orderId)
+                    OrderOutcome.CONFIRMED
+                }
+                hold.status in REGRABBABLE -> {
+                    val seats = regrab(hold, pool, orderId)
+                    if (seats != null) {
+                        changed = seats
+                        OrderOutcome.CONFIRMED
+                    } else {
+                        jdbc.update("update booking_holds set status = 'UNFULFILLED' where id = :id and status in ('RELEASED', 'EXPIRED')", mapOf("id" to holdId))
+                        OrderOutcome.UNFULFILLED
+                    }
+                }
+                else -> OrderOutcome.UNFULFILLED   // 취소된 보류
+            }
+            jdbc.update(
+                "insert into booking_orders (order_id, hold_id, outcome, created_at) values (:o, :h, :outcome, :now)",
+                mapOf("o" to orderId, "h" to holdId, "outcome" to outcome.name, "now" to ts(now)),
+            )
+            if (outcome != OrderOutcome.CONFIRMED) {
+                val queue = checkNotNull(refunds) { "order $orderId was paid but cannot be given the seats and there is no refund queue to return the money" }
+                queue.enqueue(orderId, if (outcome == OrderOutcome.DUPLICATE) "DUPLICATE" else "NOT_DELIVERED")
+            }
+            PaidOutcome(outcome, loadHold(holdId), changesOf(changed))
+        }
+    }
+
+    override fun cancelRefunded(orderId: String, now: Instant): HoldOutcome? {
+        val owned = jdbc.query("select * from booking_holds where confirmed_order_id = :o", mapOf("o" to orderId)) { rs, _ -> rs.toOwned() }.firstOrNull() ?: return null
+        return inAccountTx(owned.poolId, owned.accountId) {
+            closeLocked(owned, HoldStatus.CONFIRMED, HoldStatus.CANCELED, SeatStatus.SOLD, null)
+        }
+    }
+
+    /** `HELD` 보류를 [orderId] 로 `CONFIRMED` 로 옮기고 그 자리를 `SOLD` 로. 바꾼 자리 id (오름차순) */
+    private fun confirmSeats(hold: BookingHold, orderId: String): List<String> {
+        check(jdbc.update(
+            "update booking_holds set status = 'CONFIRMED', active_slot = null, confirmed_order_id = :o where id = :id and status = 'HELD'",
+            mapOf("o" to orderId, "id" to hold.id),
+        ) == 1) { "hold ${hold.id} left HELD under the account lock" }
+        val seatIds = hold.seats.map { it.id }.sorted()
+        seatIds.forEach { id ->
+            check(jdbc.update(
+                "update booking_seats set status = 'SOLD', held_until = null, version = version + 1 where id = :id and hold_id = :h and status = 'HELD'",
+                mapOf("id" to id, "h" to hold.id),
+            ) == 1) { "seat $id of hold ${hold.id} is not held" }
+        }
+        return seatIds
+    }
+
+    /**
+     * 이미 회수 · 놓기 된 보류가 가졌던 자리를 **전부 아니면 전무**로 다시 잡아 확정한다. 자리는 id 오름차순으로 한 줄씩 잠그고(잠금 읽기),
+     * 하나라도 `AVAILABLE` 이 아니거나 계정당 한도에 걸리면 아무것도 바꾸지 않고 null. 성공하면 확정한 자리 id.
+     */
+    private fun regrab(hold: BookingHold, pool: BookingPool, orderId: String): List<String>? {
+        val seatIds = heldSeatIds(hold.id).sorted()
+        if (seatIds.isEmpty()) return null
+        if (seatIds.any { lockedSeat(it)?.status != SeatStatus.AVAILABLE }) return null
+        if (!tryAddUsage(pool.id, hold.accountId, seatIds.size, pool.perAccountLimit)) return null
+        seatIds.forEach { id ->
+            check(jdbc.update(
+                "update booking_seats set status = 'SOLD', hold_id = :h, held_until = null, version = version + 1 where id = :id and pool_id = :p and status = 'AVAILABLE'",
+                mapOf("h" to hold.id, "id" to id, "p" to pool.id),
+            ) == 1) { "seat $id was locked as available but could not be taken" }
+        }
+        check(jdbc.update(
+            "update booking_holds set status = 'CONFIRMED', active_slot = null, confirmed_order_id = :o where id = :id and status in ('RELEASED', 'EXPIRED', 'UNFULFILLED')",
+            mapOf("o" to orderId, "id" to hold.id),
+        ) == 1) { "hold ${hold.id} changed under the account lock" }
+        return seatIds
+    }
+
+    private fun recordedOutcome(orderId: String): OrderOutcome? =
+        jdbc.query("select outcome from booking_orders where order_id = :o", mapOf("o" to orderId)) { rs, _ -> OrderOutcome.valueOf(rs.getString("outcome")) }.firstOrNull()
+
     override fun expire(holdId: String, now: Instant): HoldOutcome? {
         val owned = jdbc.query("select * from booking_holds where id = :id", mapOf("id" to holdId)) { rs, _ -> rs.toOwned() }.firstOrNull() ?: return null
         if (owned.status != HoldStatus.HELD || owned.expiresAt.isAfter(now)) return null
@@ -294,15 +428,19 @@ class JdbcBookingStore(
 
     /** 사용량에 [delta] 를 더한다. [limit] 이 있으면 넘는 순간 [LimitReachedException] (조건부 갱신 — 0줄) */
     private fun addUsage(poolId: String, accountId: String, delta: Int, limit: Int?) {
-        if (delta == 0) return   // 값이 안 바뀌는 갱신은 MySQL 이 0줄로 셀 수 있다
-        val changed = jdbc.update(
-            "update booking_usage set seats = seats + :d where pool_id = :p and account_id = :a and seats + :d >= 0" + if (limit != null) " and seats + :d <= :limit" else "",
-            mapOf("d" to delta, "p" to poolId, "a" to accountId, "limit" to limit),
-        )
-        if (changed == 0) {
+        if (!tryAddUsage(poolId, accountId, delta, limit)) {
             if (limit != null && delta > 0) throw LimitReachedException()
             error("booking usage of $accountId in $poolId would go below zero")
         }
+    }
+
+    /** [addUsage] 의 던지지 않는 판 - 한도에 걸리면 false (바깥 트랜잭션을 롤백 표시하지 않고 가르고 싶을 때) */
+    private fun tryAddUsage(poolId: String, accountId: String, delta: Int, limit: Int?): Boolean {
+        if (delta == 0) return true   // 값이 안 바뀌는 갱신은 MySQL 이 0줄로 셀 수 있다
+        return jdbc.update(
+            "update booking_usage set seats = seats + :d where pool_id = :p and account_id = :a and seats + :d >= 0" + if (limit != null) " and seats + :d <= :limit" else "",
+            mapOf("d" to delta, "p" to poolId, "a" to accountId, "limit" to limit),
+        ) == 1
     }
 
     private fun insertHold(poolId: String, accountId: String, expiresAt: Instant, now: Instant): OwnedHold {
@@ -325,12 +463,15 @@ class JdbcBookingStore(
     private fun heldSeatIds(holdId: String): Set<String> =
         jdbc.query("select seat_id from booking_hold_seats where hold_id = :h", mapOf("h" to holdId)) { rs, _ -> rs.getString("seat_id") }.toSet()
 
-    private fun loadHold(id: String): BookingHold {
+    /** 보류 줄을 잠그고(잠금 읽기 - 최신) 읽는다. 사용량 줄을 잠근 안에서만 부른다 */
+    private fun lockedHold(id: String): BookingHold = loadHold(id, locking = true)
+
+    private fun loadHold(id: String, locking: Boolean = false): BookingHold {
         val seats = jdbc.query(
             "select s.* from booking_hold_seats hs join booking_seats s on s.id = hs.seat_id where hs.hold_id = :h order by s.section, s.row_label, s.number",
             mapOf("h" to id),
         ) { rs, _ -> rs.toSeat() }
-        return jdbc.query("select * from booking_holds where id = :id", mapOf("id" to id)) { rs, _ -> rs.toHold(seats) }.first()
+        return jdbc.query("select * from booking_holds where id = :id" + if (locking) " for update" else "", mapOf("id" to id)) { rs, _ -> rs.toHold(seats) }.first()
     }
 
     /** 자리 줄 조건부 갱신 - `AVAILABLE` 일 때만 이 보류의 것이 된다. 1줄이면 내 것 */
@@ -360,6 +501,11 @@ class JdbcBookingStore(
         else jdbc.query("select * from booking_seats where id in (:ids) order by id", mapOf("ids" to seatIds)) { rs, _ -> rs.toSeat().toChange() }
 
     private fun ts(value: Instant?): Any? = dialect.instantParam(value)
+
+    private companion object {
+        /** 늦은 결제가 다시 잡아 볼 수 있는 닫힌 보류 */
+        val REGRABBABLE = setOf(HoldStatus.RELEASED, HoldStatus.EXPIRED, HoldStatus.UNFULFILLED)
+    }
 
     private data class OwnedHold(
         val id: String,

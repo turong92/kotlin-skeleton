@@ -1,5 +1,6 @@
 package dev.sumin.skeleton.booking.web
 
+import dev.sumin.skeleton.booking.BookingSeatListener
 import dev.sumin.skeleton.booking.BookingSeatRelay
 import dev.sumin.skeleton.booking.SeatChange
 import java.time.Duration
@@ -30,11 +31,19 @@ class BookingSeatStreamService(
     private var heartbeatExecutor: ScheduledExecutorService? = null
 
     /** 지금 열려 있는 연결 수 (시험용) */
-    internal val openConnections: Int get() = open.size
+    val openConnections: Int get() = open.size
 
     fun connect(poolId: String): SseEmitter {
         val emitter = StreamEmitter(maxAge.toMillis())
-        emitter.subscription = relay.subscribe(poolId) { changes -> emitter.sendSeats(changes) }
+        emitter.subscription = relay.subscribe(poolId, object : BookingSeatListener {
+            override fun onChanges(changes: List<SeatChange>) = emitter.sendSeats(changes)
+
+            // 사건을 놓쳤을 수 있다 - 연결을 닫으면 화면이 다시 붙어 스냅샷으로 맞춘다
+            override fun onMissed() {
+                open -= emitter
+                emitter.complete()
+            }
+        })
         open += emitter
         emitter.onCompletion { drop(emitter) }
         emitter.onTimeout { emitter.complete() }

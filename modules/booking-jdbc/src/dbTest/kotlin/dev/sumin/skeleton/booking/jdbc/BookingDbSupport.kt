@@ -4,6 +4,7 @@ import com.zaxxer.hikari.HikariDataSource
 import dev.sumin.skeleton.booking.AllowAllBookingAdmission
 import dev.sumin.skeleton.booking.BookingHolds
 import dev.sumin.skeleton.booking.BookingPools
+import dev.sumin.skeleton.booking.BookingRefundQueue
 import dev.sumin.skeleton.booking.BookingSeatListener
 import dev.sumin.skeleton.booking.BookingSeatRelay
 import dev.sumin.skeleton.booking.NewBookingPool
@@ -24,12 +25,23 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource
 import org.springframework.transaction.support.TransactionTemplate
 
 /** 같은 DB 를 보는 인스턴스 하나(연결 풀 · 저장소 · 서비스) - 둘을 만들면 「여러 대」다 */
-class BookingInstance(val dataSource: HikariDataSource, val time: TimeProvider) {
+class BookingInstance(val dataSource: HikariDataSource, val time: TimeProvider, val refundQueue: RecordingRefundQueue) {
     val jdbc = NamedParameterJdbcTemplate(dataSource)
-    val store = JdbcBookingStore(jdbc, TransactionTemplate(DataSourceTransactionManager(dataSource)), DbTestDatabase.dialect)
+    val store = JdbcBookingStore(jdbc, TransactionTemplate(DataSourceTransactionManager(dataSource)), DbTestDatabase.dialect, refunds = refundQueue)
     val relay = RecordingRelay(jdbc)
     val holds = BookingHolds(store, relay, AllowAllBookingAdmission, time)
     val pools = BookingPools(store, relay, time)
+}
+
+/** 환불 작업 넣기를 기록한다 - 진짜 큐는 같은 트랜잭션에 참여하는 것만 다르다 */
+class RecordingRefundQueue : BookingRefundQueue {
+    val jobs = CopyOnWriteArrayList<Pair<String, String>>()
+
+    override fun enqueue(orderId: String, reason: String) {
+        jobs += orderId to reason
+    }
+
+    fun forOrder(orderId: String) = jobs.filter { it.first == orderId }
 }
 
 /** 중계에 들어온 것을 기록하고, **부르는 순간 다른 연결에서 DB 를 읽어** 변화가 이미 커밋돼 있는지 본다 */
@@ -63,10 +75,13 @@ object BookingDb {
         }
     }
 
-    val first = BookingInstance(pool().also { Flyway.configure().dataSource(it).locations("classpath:db/migration/${DbTestDatabase.vendor}").load().migrate() }, time)
+    /** 두 인스턴스가 한 큐를 쓴다 - 진짜 큐도 DB 의 표 하나다 */
+    val refunds = RecordingRefundQueue()
+
+    val first = BookingInstance(pool().also { Flyway.configure().dataSource(it).locations("classpath:db/migration/${DbTestDatabase.vendor}").load().migrate() }, time, refunds)
 
     /** 같은 DB 를 보는 두 번째 인스턴스 (여러 대) */
-    val second = BookingInstance(pool(), time)
+    val second = BookingInstance(pool(), time, refunds)
 
     fun newPool(
         holdMinutes: Int = 10,
@@ -74,10 +89,12 @@ object BookingDb {
         perAccountLimit: Int? = null,
         seats: Int = 1,
         price: Long? = null,
+        currency: String? = if (price != null) "KRW" else null,
+        waitingRoomId: String? = null,
         instance: BookingInstance = first,
     ): Pair<String, List<String>> {
         val pool = instance.pools.create(
-            NewBookingPool("race-${System.nanoTime()}", now.minusSeconds(3600), null, maxPerHold, perAccountLimit, null, holdMinutes),
+            NewBookingPool("race-${System.nanoTime()}", now.minusSeconds(3600), null, maxPerHold, perAccountLimit, currency, holdMinutes, waitingRoomId),
         )
         val created = instance.pools.addSeats(pool.id, (1..seats).map { NewSeat("A", "1", it, "R", price) })
         return pool.id to created.map { it.id }

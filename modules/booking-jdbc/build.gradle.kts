@@ -8,6 +8,9 @@ dependencies {
     implementation("org.jetbrains.kotlin:kotlin-reflect")
 
     // src/dbTest — postgresTest · mysqlTest 묶음이 물려받는다 (루트 build.gradle.kts dbTestModules)
+    testImplementation(project(":modules:waiting-room"))   // 입장 시간이 지난 계정의 문 (BookingAdmissionDbTest)
+    testImplementation("org.springframework.boot:spring-boot-starter-webmvc")   // 배치도 흐름 서비스(SseEmitter)를 직접 연다
+    testImplementation("org.springframework.boot:spring-boot-starter-data-redis")   // 여러 대 중계 시험 (BookingRedisDbTest) - Redis 는 컨테이너
     testImplementation("org.assertj:assertj-core")
     testImplementation("org.springframework.boot:spring-boot-test")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
