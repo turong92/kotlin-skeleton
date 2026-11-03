@@ -148,6 +148,7 @@ class FakeVideoStore : VideoStore {
             VideoLane.REMUX -> leased.copy(status = VideoStatus.REMUXING)
             VideoLane.COMPAT -> leased.copy(compatStatus = TrackStatus.RUNNING)
             VideoLane.LADDER -> leased.copy(ladderStatus = TrackStatus.RUNNING, ladderBuild = ladderBuild)
+            VideoLane.ANIMATED -> error("not a video lane")
         }.also { rows[it.id] = it }
     }
 
@@ -155,6 +156,7 @@ class FakeVideoStore : VideoStore {
         VideoLane.REMUX -> v.status == VideoStatus.QUEUED
         VideoLane.COMPAT -> v.status == VideoStatus.PLAYABLE && v.compatStatus == TrackStatus.QUEUED && v.leaseOwner == null
         VideoLane.LADDER -> v.status == VideoStatus.PLAYABLE && v.ladderStatus == TrackStatus.QUEUED && v.leaseOwner == null
+        VideoLane.ANIMATED -> false
     }
 
     override fun extendLease(id: String, owner: String, until: Instant, progress: Int?, at: Instant): Boolean {
@@ -194,7 +196,7 @@ class FakeVideoStore : VideoStore {
             VideoLane.REMUX -> if (requeue) released.copy(status = VideoStatus.QUEUED) else released.copy(status = VideoStatus.FAILED, failCode = code, failDetail = detail)
             VideoLane.COMPAT -> if (requeue) released.copy(compatStatus = TrackStatus.QUEUED) else released.copy(compatStatus = TrackStatus.FAILED, failCode = code, failDetail = detail, attempts = 0)
             VideoLane.LADDER -> if (requeue) released.copy(ladderStatus = TrackStatus.QUEUED) else released.copy(ladderStatus = TrackStatus.FAILED, failCode = code, failDetail = detail, attempts = 0)
-            null -> return null
+            VideoLane.ANIMATED, null -> return null
         }
         return if (requeue) LeaseEnd.REQUEUED else LeaseEnd.FAILED
     }
@@ -309,4 +311,59 @@ class RecordingEvents : VideoEvents {
     override fun onTrackReady(video: Video, lane: VideoLane) { calls += "track:${lane.name}:${video.id}" }
     override fun onFailed(video: Video) { calls += "failed:${video.id}" }
     override fun onDeleted(video: Video) { calls += "deleted:${video.id}" }
+}
+
+/** 변환 일 표의 메모리 구현 - 전이 규칙은 진짜 구현(video-jdbc)과 같은 조건부 갱신이다 */
+class FakeDisplayJobStore : DisplayJobStore {
+    val rows = linkedMapOf<String, DisplayJob>()
+
+    override fun enqueue(keyHash: String, objectKey: String, at: Instant) {
+        rows.putIfAbsent(keyHash, DisplayJob(keyHash, objectKey, DisplayState.QUEUED, 0, null, null))
+    }
+
+    override fun find(keyHash: String) = rows[keyHash]
+
+    override fun claimNext(owner: String, leaseUntil: Instant, at: Instant): DisplayJob? {
+        val job = rows.values.firstOrNull { it.state == DisplayState.QUEUED } ?: return null
+        return job.copy(state = DisplayState.RUNNING, attempts = job.attempts + 1, leaseOwner = owner, leaseUntil = leaseUntil).also { rows[it.keyHash] = it }
+    }
+
+    override fun extendLease(keyHash: String, owner: String, until: Instant, at: Instant): Boolean {
+        val job = rows[keyHash]?.takeIf { it.state == DisplayState.RUNNING && it.leaseOwner == owner } ?: return false
+        rows[keyHash] = job.copy(leaseUntil = until)
+        return true
+    }
+
+    override fun finish(keyHash: String, owner: String, at: Instant): Boolean {
+        val job = rows[keyHash]?.takeIf { it.state == DisplayState.RUNNING && it.leaseOwner == owner } ?: return false
+        rows[keyHash] = job.copy(state = DisplayState.DONE, leaseOwner = null, leaseUntil = null)
+        return true
+    }
+
+    override fun release(keyHash: String, owner: String?, retry: Boolean, code: String, at: Instant): Boolean {
+        val job = rows[keyHash]?.takeIf { it.state == DisplayState.RUNNING && (owner == null || it.leaseOwner == owner) } ?: return false
+        val again = retry && job.attempts < VideoStatus.MAX_ATTEMPTS
+        rows[keyHash] = job.copy(state = if (again) DisplayState.QUEUED else DisplayState.FAILED, leaseOwner = null, leaseUntil = null)
+        return true
+    }
+
+    override fun expireLeases(now: Instant): Int {
+        val expired = rows.values.filter { it.state == DisplayState.RUNNING && it.leaseUntil != null && it.leaseUntil < now }
+        expired.forEach { release(it.keyHash, null, true, "LEASE_EXPIRED", now) }
+        return expired.size
+    }
+}
+
+/** storage-image 쪽 면의 가짜 - [copyExt] 에 있는 이미지만 「움직이는 READY」다. [used] 는 표시본으로 바꾼 기록 */
+class FakeDisplayTarget(private val folder: String) : DisplayTarget {
+    val copyExt = linkedMapOf<String, String>()
+    val used = mutableListOf<Pair<String, String>>()
+
+    override fun folder(keyHash: String) = folder
+    override fun copyExtension(keyHash: String) = copyExt[keyHash]
+    override fun use(keyHash: String, ext: String): Boolean {
+        if (keyHash !in copyExt || ext == copyExt[keyHash]) return false
+        used += keyHash to ext
+        return true
+    }
 }

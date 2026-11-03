@@ -71,4 +71,21 @@ class VideoResultVerifierTest {
         assertFalse(VideoResultVerifier.hashMatches("o-${"a".repeat(16)}/index.m3u8", sha))
         assertFalse(VideoResultVerifier.hashMatches("o-$hash/index.m3u8", "zz"))
     }
+
+    @Test
+    fun `움직이는 이미지 차선은 display 점 mp4 와 webp 두 이름만 - 다른 차선은 이 이름을 못 올리고 이 차선은 다른 차선의 이름을 못 올린다`() {
+        assertTrue(VideoResultVerifier.allowedName(VideoLane.ANIMATED, null, "display.mp4"))
+        assertTrue(VideoResultVerifier.allowedName(VideoLane.ANIMATED, null, "display.webp"))
+        listOf("display.gif", "display.jpg", "display.mp4/x", "../display.mp4", "x/display.mp4", "Display.mp4", "display.mp4 ", "thumb.jpg", "display.m3u8", "").forEach {
+            assertFalse(VideoResultVerifier.allowedName(VideoLane.ANIMATED, null, it), "ANIMATED 가 받으면 안 되는 이름: '$it'")
+        }
+        listOf("o-$hash/index.m3u8", "o-$hash/init.mp4", "p-$hash.jpg", "c-$hash/index.m3u8").forEach {
+            assertFalse(VideoResultVerifier.allowedName(VideoLane.ANIMATED, build, it), "ANIMATED 가 받으면 안 되는 이름: '$it'")
+        }
+        listOf(VideoLane.REMUX, VideoLane.COMPAT, VideoLane.LADDER).forEach { lane ->
+            listOf("display.mp4", "display.webp").forEach { assertFalse(VideoResultVerifier.allowedName(lane, build, it), "$lane 이 받으면 안 되는 이름: $it") }
+        }
+        assertEquals("image/webp", VideoResultVerifier.contentTypeOf("display.webp"))
+        assertEquals("video/mp4", VideoResultVerifier.contentTypeOf("display.mp4"))
+    }
 }

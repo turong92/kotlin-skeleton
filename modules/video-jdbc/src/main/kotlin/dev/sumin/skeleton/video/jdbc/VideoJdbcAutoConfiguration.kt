@@ -4,6 +4,7 @@ import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.jobqueue.jdbc.JobQueue
 import dev.sumin.skeleton.jobqueue.jdbc.JobQueueJdbcAutoConfiguration
 import dev.sumin.skeleton.persistence.jdbc.SqlDialect
+import dev.sumin.skeleton.video.DisplayJobStore
 import dev.sumin.skeleton.video.VideoFinalizer
 import dev.sumin.skeleton.video.VideoFollowUps
 import dev.sumin.skeleton.video.VideoStore
@@ -48,6 +49,11 @@ class VideoJdbcAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(VideoWakeRuns::class)
     fun jdbcVideoWakeRuns(dataSource: DataSource, dialect: SqlDialect): VideoWakeRuns = JdbcVideoWakeRuns(NamedParameterJdbcTemplate(dataSource), dialect)
+
+    @Bean
+    @ConditionalOnMissingBean(DisplayJobStore::class)
+    fun jdbcDisplayJobStore(dataSource: DataSource, dialect: SqlDialect, transactionManager: PlatformTransactionManager): DisplayJobStore =
+        JdbcDisplayJobStore(NamedParameterJdbcTemplate(dataSource), dialect, TransactionTemplate(transactionManager))
 
     @Bean
     @ConditionalOnMissingBean(VideoTransactions::class)

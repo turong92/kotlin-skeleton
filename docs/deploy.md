@@ -335,7 +335,7 @@ gcloud run deploy imgproxy \
 **선언 한 장 `deploy/video-worker.yaml`** (홈서버 레포의 `infra/apps/video-worker.yaml` 로 복사): 도메인 없음 · DB 없음 · 호스트 포트 없음 - 밖에서 들어오는 길이 없다. 헬스는 컨테이너 안 `wget /health`(이미지에 wget 이 있다 · 상주 모양에서만 뜨는 작은 서버). 비밀은 일꾼 토큰 `VIDEO_WORKER_TOKEN` 하나이고 **랜덤이 아니라 운영자가 정한 값**이라 `operator_only` 로 적는다. 배포 순서:
 
 1. 앱을 먼저 배포한다(`<P>_VIDEO_PLAYBACK_SECRET` 포함 - 위 표).
-2. 운영자 계정으로 `POST /api/v1/videos/admin/workers {"name":"home-worker","lanes":["REMUX","COMPAT","LADDER"]}` - 응답의 `token` 평문은 **이때 한 번만** 보인다. 서버에는 해시만 남는다. (`VideoOperatorPolicy` 빈이 허락한 계정만 부를 수 있다 - 기본은 모두 거절. 로컬에서는 이 단계 없이 `skeleton.video.worker-token-sha256` 로 등록된다 - stage · prod 에서는 기동 실패.)
+2. 운영자 계정으로 `POST /api/v1/videos/admin/workers {"name":"home-worker","lanes":["REMUX","COMPAT","LADDER","ANIMATED"]}` - 응답의 `token` 평문은 **이때 한 번만** 보인다. 서버에는 해시만 남는다. (`VideoOperatorPolicy` 빈이 허락한 계정만 부를 수 있다 - 기본은 모두 거절. 로컬에서는 이 단계 없이 `skeleton.video.worker-token-sha256` 로 등록된다 - stage · prod 에서는 기동 실패.)
 3. 그 평문을 홈서버의 `data/secrets/video-worker.local.env`(0600)에 `VIDEO_WORKER_TOKEN=…` 으로 적고, `./gradlew :apps:video-worker:installDist` → `docker build -t video-worker:<tag> apps/video-worker` → 선언의 `tag` 를 올려 적용한다. 토큰을 바꾸려면 새로 발급하고 옛 것은 `DELETE /api/v1/videos/admin/workers/{id}` 로 폐기한다.
 
 **일꾼 → 앱 주소는 플랫폼 내부 망으로 닿는다**(이 레포가 확인한 것: 홈서버 레포 `infra/modules/app-docker`): 앱 컨테이너는 `<프로젝트>_web` 네트워크에 별칭 `app-<앱 name>` 으로 붙고, 일꾼 컨테이너도 같은 네트워크에 붙으므로 선언의 `VIDEO_WORKER_API: http://app-<앱 name>:8080` 하나로 된다 - 도메인 · Caddy · 터널을 거치지 않는다. 비공개 영상의 입력 재생 목록 경로(`/api/v1/videos/play/…`)도 이 주소 기준으로 풀린다. 플랫폼이 망을 나누게 되면 앱의 공개 주소(`https://<도메인>`)를 쓴다 - 일꾼 API 는 JSON 뿐이라 터널을 거쳐도 무겁지 않고, 영상 바이트는 어느 쪽이든 저장소로 직접 오간다. **일꾼 → 저장소는 서명 주소로 인터넷을 거친다** - 외부 나가는 길만 있으면 된다.

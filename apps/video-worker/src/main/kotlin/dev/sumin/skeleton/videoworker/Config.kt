@@ -14,7 +14,7 @@ data class WorkerConfig(
     val apiBase: String,
     val token: String,
     val workerId: String,
-    val lanes: Set<String> = setOf("REMUX", "COMPAT", "LADDER"),
+    val lanes: Set<String> = setOf("REMUX", "COMPAT", "LADDER", "ANIMATED"),
     val mode: Mode = Mode.POLL,
     val pollInterval: Duration = Duration.ofSeconds(5),
     val heartbeatInterval: Duration = Duration.ofSeconds(30),
@@ -34,12 +34,12 @@ data class WorkerConfig(
     override fun toString(): String = "WorkerConfig(apiBase=$apiBase, workerId=$workerId, lanes=$lanes, mode=$mode, workDir=$workDir, healthPort=$healthPort)"
 
     companion object {
-        private val LANES = setOf("REMUX", "COMPAT", "LADDER")
+        private val LANES = setOf("REMUX", "COMPAT", "LADDER", "ANIMATED")
 
         fun fromEnv(env: Map<String, String>): WorkerConfig {
             fun need(name: String) = env[name]?.takeIf { it.isNotBlank() } ?: error("환경변수 $name 이 필요하다")
             val lanes = env["VIDEO_WORKER_LANES"]?.takeIf { it.isNotBlank() }?.split(',')?.map { it.trim().uppercase() }?.toSet() ?: LANES
-            require(lanes.isNotEmpty() && lanes.all { it in LANES }) { "VIDEO_WORKER_LANES 는 REMUX · COMPAT · LADDER 중에서 쉼표로" }
+            require(lanes.isNotEmpty() && lanes.all { it in LANES }) { "VIDEO_WORKER_LANES 는 REMUX · COMPAT · LADDER · ANIMATED 중에서 쉼표로" }
             return WorkerConfig(
                 apiBase = need("VIDEO_WORKER_API").trimEnd('/'),
                 token = need("VIDEO_WORKER_TOKEN"),

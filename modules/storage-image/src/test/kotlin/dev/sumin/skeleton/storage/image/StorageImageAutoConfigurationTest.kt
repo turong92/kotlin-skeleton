@@ -24,6 +24,7 @@ class StorageImageAutoConfigurationTest {
         override fun register(keyHash: String, objectKey: String, onCreated: () -> Unit) = false
         override fun markReady(keyHash: String, width: Int, height: Int, format: String, animated: Boolean, variants: Map<String, StoredVariant>) = false
         override fun markTerminal(keyHash: String, state: UploadImageState, reason: String, width: Int?, height: Int?) = false
+        override fun replaceVariant(keyHash: String, name: String, variant: StoredVariant) = false
         override fun delete(keyHashes: Collection<String>) = Unit
     }
 

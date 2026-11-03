@@ -21,6 +21,13 @@ class StorageImagesControllerTest {
     private val ensured = mutableListOf<String>()
     private val rows = mutableMapOf(
         "uploads/7/a/x.jpg" to UploadImageStatus(UploadImageState.READY, 200, 100, mapOf(UploadImages.THUMB to UploadImageVariant("variants/h/thumb.jpg", 100, 50, "image/jpeg"))),
+        "uploads/7/m/x.gif" to UploadImageStatus(
+            UploadImageState.READY, 200, 100,
+            mapOf(
+                UploadImages.THUMB to UploadImageVariant("variants/m/thumb.jpg", 100, 50, "image/jpeg"),
+                UploadImages.DISPLAY to UploadImageVariant("variants/m/display.mp4", 200, 100, "video/mp4"),
+            ),
+        ),
         "uploads/8/b/x.jpg" to UploadImageStatus(UploadImageState.READY, 20, 10, mapOf(UploadImages.THUMB to UploadImageVariant("variants/h2/thumb.jpg", 20, 10, "image/jpeg"))),
     )
     private val images = object : UploadImages {
@@ -51,5 +58,15 @@ class StorageImagesControllerTest {
         assertEquals(listOf("uploads/7/a/x.jpg"), signed, "no one else's key is ever signed")
         assertEquals(listOf("uploads/7/fresh/y.png"), ensured)
         assertTrue(items.none { it.key.startsWith("uploads/8") })
+    }
+
+    @Test
+    fun `each variant says its content type - a converted animated display is video mp4 so the screen knows to play it`() {
+        val answer = controller.images(me, StorageImagesRequest(listOf("uploads/7/m/x.gif")), null, org.springframework.mock.web.MockHttpServletResponse())
+
+        @Suppress("UNCHECKED_CAST")
+        val item = ((answer as DataResponse<StorageImagesResponse>).value).items.single()
+        assertEquals("video/mp4", item.variants.getValue("display").contentType)
+        assertEquals("image/jpeg", item.variants.getValue("thumb").contentType)
     }
 }

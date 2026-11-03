@@ -60,6 +60,14 @@ class StorageImageAutoConfiguration {
     @Bean
     @ConditionalOnBean(PresignedStorage::class)
     @ConditionalOnMissingBean
-    fun imageVariantProcessor(storage: PresignedStorage, store: ImageStatusStore, renderers: ImageRenderers, properties: ImageProperties, time: ObjectProvider<TimeProvider>): ImageVariantProcessor =
-        ImageVariantProcessor(storage, store, renderers, properties, time.getIfAvailable { TimeProvider.systemUtc() })
+    fun imageVariantProcessor(
+        storage: PresignedStorage, store: ImageStatusStore, renderers: ImageRenderers, properties: ImageProperties, time: ObjectProvider<TimeProvider>,
+        converter: ObjectProvider<AnimatedDisplayConverter>,
+    ): ImageVariantProcessor =
+        ImageVariantProcessor(storage, store, renderers, properties, time.getIfAvailable { TimeProvider.systemUtc() }, converter.getIfAvailable { AnimatedDisplayConverter.NONE })
+
+    /** 움직이는 표시본 변환을 하는 쪽(예: `video`)이 변환본을 놓을 폴더를 알고 표시본을 바꿔 끼우는 면 */
+    @Bean
+    @ConditionalOnMissingBean
+    fun animatedDisplays(store: ImageStatusStore, properties: ImageProperties): AnimatedDisplays = AnimatedDisplays(store, properties)
 }

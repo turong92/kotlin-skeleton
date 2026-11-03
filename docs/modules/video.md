@@ -28,12 +28,14 @@
 | `POST /claim {workerId, lanes?}` | 토큰의 차선 ∩ 요청 차선 안에서 다음 일 하나를 집는다(`FOR UPDATE SKIP LOCKED` 임대 10분). 없으면 204. `{value: {jobId, lane, attempt, leaseUntil, inputUrl, inputBytes, width, height, durationMs, codec, expectedOutputBytes, build, origFolder, verifyDecode}}` |
 | `POST /jobs/{jobId}/heartbeat {workerId, progress?}` | 임대를 늘리고 진행률(0~100)을 적는다. 임대를 잃었으면 409 `LEASE_LOST` |
 | `POST /jobs/{jobId}/upload-urls {workerId, names}` | 차선별 허용 이름만 서명한 `PUT` 주소 `{values: [{name, method, url, headers, expiresAt}]}`. 하나라도 허용 밖이면 400 `PATH_NOT_ALLOWED` 이고 **하나도 서명하지 않는다** |
-| `POST /jobs/{jobId}/complete {workerId, orig? \| compat? \| ladderBuild?, …}` | 결과 폴더를 나열해 합계 크기 · 필수 파일 · 폴더 이름의 해시를 대조한 뒤 반영한다. 204. 같은 호출을 또 해도 결과가 같고, 임대를 잃은 일꾼의 늦은 결과는 409 로 무시된다 |
+| `POST /jobs/{jobId}/complete {workerId, orig? \| compat? \| ladderBuild? \| display?, …}` | 결과 폴더를 나열해 합계 크기 · 필수 파일 · 폴더 이름의 해시를 대조한 뒤 반영한다. 204. 같은 호출을 또 해도 결과가 같고, 임대를 잃은 일꾼의 늦은 결과는 409 로 무시된다 |
 | `POST /jobs/{jobId}/fail {workerId, code, detail?, retryable?}` | 일꾼이 낸 실패. 204 |
 
-허용 이름: REMUX = `o-<해시16>/{index.m3u8, init.mp4, s#####.m4s}` · `p-<해시16>.jpg` / COMPAT = `c-<해시16>/…` / LADDER = 서버가 정한 `h-<빌드32>/<이름>.{m3u8,m4s,mp4}` 한 겹. 한 덩어리 `*.mp4` 는 `init.mp4` 말고는 없다. 폴더는 영상마다(`<공개 영역>/v/<id>/` 또는 `<video.prefix>/p/<id>/`).
+허용 이름: REMUX = `o-<해시16>/{index.m3u8, init.mp4, s#####.m4s}` · `p-<해시16>.jpg` / COMPAT = `c-<해시16>/…` / LADDER = 서버가 정한 `h-<빌드32>/<이름>.{m3u8,m4s,mp4}` 한 겹. 한 덩어리 `*.mp4` 는 `init.mp4` 말고는 없다. 폴더는 영상마다(`<공개 영역>/v/<id>/` 또는 `<video.prefix>/p/<id>/`). ANIMATED = `display.mp4` · `display.webp` 둘뿐이고 폴더는 이미지 모듈의 변환본 폴더다(아래).
+
+**움직이는 이미지 표시본(ANIMATED 차선)**: `storage-image` 도 켜져 있으면(`VideoDisplayAutoConfiguration` 이 서고, 한쪽만 켜면 서로를 모른 채 지금처럼 동작한다) 움직이는 GIF · WebP 의 표시본 변환이 일꾼에게 간다. `storage-image` 는 `video` 를 모른다 — 그쪽이 낸 확장 지점 `AnimatedDisplayConverter`(기본 없음)를 이 모듈이 채워, 이미지가 사본 `display` 로 `READY` 가 된 **뒤에** 변환 일(`video_display_jobs`)을 한 줄 넣는다. 일꾼은 같은 API 로 이 일을 집는다: job id 는 영상 id 가 아니라 이미지 상태 줄의 열쇠(sha256 hex 64자), `inputUrl` 은 올린 원본 이미지의 서명 읽기 주소, 결과는 `display.mp4`(불투명 - 소리 없는 H.264 반복 영상, 크기 · 프레임 시간 그대로) 또는 `display.webp`(투명한 배경이 있을 때) 하나를 올리고 `complete {display: {name, bytes}}` — 서버는 올린 파일의 크기를 대조한 뒤에야 표시본을 바꾼다. 투명 판정은 파일의 투명 표시가 아니라 ffmpeg 가 합성한 실제 화면의 알파다(GIF 의 「앞 장면과 같은 부분」 최적화 투명에 속지 않는다) - 변환과 같은 디코드에서 본다. **변환이 늦거나 실패해도 사본 display 가 그대로 쓰인다**: 변환본이 원본보다 크거나 일꾼의 ffmpeg 가 못 읽는 형식(움직이는 WebP 는 ffmpeg 6.1 에 디코더가 없다)이면 일꾼은 올리지 않고 실패로 알리고, 일은 `FAILED` 로 닫히며 이미지는 그대로다. 변환본은 사본의 파일 이름(`display.<원본 형식>`)을 덮어쓰지 않는다. 응답에서는 `POST /api/v1/storage/images` 의 `variants.display.contentType` 이 `video/mp4` 이면 영상으로 틀어야 한다(`<video autoplay loop muted playsinline>`). Cloud Run 깨우기는 이 일을 깨우지 않는다 - 상주 일꾼이 집는다.
 **운영자**(`/api/v1/videos/admin/workers`): `POST {name, lanes}` 로 토큰 발급(평문은 응답에 한 번) · `GET` 목록 · `DELETE /{id}` 폐기. `VideoOperatorPolicy` 빈이 허락해야 열린다(기본은 모두 거절 → 403).
-**로컬**: `skeleton.video.worker-token-sha256`(평문 토큰의 SHA-256)을 두면 기동 때 그 일꾼을 세 차선으로 한 번 등록한다 — `skeleton.env=stage|prod` 에서는 기동 실패다.
+**로컬**: `skeleton.video.worker-token-sha256`(평문 토큰의 SHA-256)을 두면 기동 때 그 일꾼을 모든 차선(ANIMATED 포함)으로 한 번 등록한다 — `skeleton.env=stage|prod` 에서는 기동 실패다.
 
 **원 파일**: 올린 파일은 **원본 단을 검증(`complete`)한 뒤 한 시간 뒤에** `video.finalize` 가 지운다(그 전에는 지우지 않는다). 임대 만료는 시도 +1 로 다시 줄을 세우고 3회째에 `FAILED(LEASE_EXPIRED)`; 호환 · 사다리의 실패는 그 트랙만 `FAILED` 이고 영상은 `PLAYABLE`, 원본 단은 그대로다. 늦게 끝난 중복 결과 폴더는 트랙이 끝난 한 시간 뒤 쓸기가 지운다(이긴 쪽만 남긴다).
 **후속**: 상태가 바뀌는 같은 트랜잭션에서 `video.finalize` 작업(`PLAYABLE` · `COMPAT_READY` · `LADDER_READY` · `FAILED` · `TRACK_FAILED` · `DELETED` · `UPLOAD_CLEANUP` · `SWEEP`)을 큐에 넣고, 처리기가 앱의 `VideoEvents`(`onPlayable` · `onTrackReady` · `onFailed` · `onDeleted`)를 부른다(적어도 한 번 — 멱등하게 쓴다). 깨울 일이 생기면 `video.wake` — `VideoWaker`(기본 `NoopWaker`, 상주 일꾼은 스스로 집는다).
@@ -59,7 +61,7 @@
 |---|---|
 | 의존성 한 줄 | `implementation(project(":modules:video"))` |
 | 함께 오는 모듈 | `platform`, `storage` |
-| 컴파일 전용 | `scheduler`, `alert` |
+| 컴파일 전용 | `scheduler`, `alert`, `storage-image` |
 | 설정 접두사 | `skeleton.video` — [docs/config/modules/video.yml](../config/modules/video.yml) |
 | 기본 동작 | 꺼짐. 앱 yml 이 `skeleton.video.enabled=true` 로 켜면 올리기 서비스 · 일꾼 일 서비스 · 기본 정책 · 청소가 서고, 서블릿 앱(+ Spring Security)이면 `/api/v1/videos` · 일꾼 API · 운영자 일꾼 발급도 켜진다. |
 | 부팅에 필요한 것 | 켰을 때 `TimeProvider`(platform), `PresignedStorage`(storage-s3), 재생 비밀 `skeleton.video.playback.secret`(32자 이상), `VideoStore` · `VideoWorkerStore` · `VideoFollowUps` · `VideoTransactions`(video-jdbc, 작업 큐 `job-queue-jdbc` 필요) 빈. 없으면 기동 실패. |

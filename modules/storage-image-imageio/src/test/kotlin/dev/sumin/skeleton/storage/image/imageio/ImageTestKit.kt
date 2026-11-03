@@ -83,17 +83,25 @@ class MemoryStore : ImageStatusStore {
         return true
     }
 
+    @Synchronized
+    override fun replaceVariant(keyHash: String, name: String, variant: StoredVariant): Boolean {
+        val row = rows[keyHash]?.takeIf { it.state == UploadImageState.READY && name in it.variants } ?: return false
+        rows[keyHash] = row.copy(variants = row.variants + (name to variant))
+        return true
+    }
+
     override fun delete(keyHashes: Collection<String>) { keyHashes.forEach { rows.remove(it) } }
 }
 
 /** 처리기 · 등록 · 검사기를 한 벌로 묶는다 - 큐 대신 넣은 작업(키 해시)을 [jobs] 에 모은다 */
-class Harness(val properties: ImageProperties = ImageProperties(enabled = true)) {
+class Harness(val properties: ImageProperties = ImageProperties(enabled = true), converter: AnimatedDisplayConverter = AnimatedDisplayConverter.NONE) {
     val storage = MemoryStorage()
     val store = MemoryStore()
     val jobs = java.util.Collections.synchronizedList(mutableListOf<String>())
     val renderers = ImageRenderers(listOf(ImageIoRenderer()))
     val images = StorageImages(storage, store, { jobs += it }, renderers, properties)
-    val processor = ImageVariantProcessor(storage, store, renderers, properties, TimeProvider.systemUtc())
+    val processor = ImageVariantProcessor(storage, store, renderers, properties, TimeProvider.systemUtc(), converter)
+    val displays = AnimatedDisplays(store, properties)
 
     /** 올려 두고 등록해서 작업 하나를 돌린다 - 돌려주는 값은 상태 줄 */
     fun upload(key: String, bytes: ByteArray, contentType: String): String {

@@ -163,16 +163,16 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `search` | DB 전문 검색 — 다른 모듈이 밀어 넣은 문서(상품 · 노트 …)를 한국어 2글자 조각으로 찾는다(PostgreSQL tsvector · MySQL ngram, 확장 설치 없음). 질의(쪽 · 종류 · 범위 · 정렬 · 하이라이트 위치) · 주인 문서 가리기 · 재색인 작업 · 탈퇴. 밀어 넣기 포트는 platform 의 SearchIndexer 라 다른 모듈이 search 를 모른다. | `--modules search,search-jdbc` | 검색, 전문 검색, 한국어 검색, 부분 일치, 하이라이트, 재색인 / search, full-text search, korean search, ngram, highlight, reindex | `@skeleton/search` |
 | `search-jdbc` | 검색 색인을 DB 에 둔다 (PostgreSQL tsvector + GIN · MySQL ngram FULLTEXT) — 쓰기는 호출자 트랜잭션에 합류, 재색인은 job-queue-jdbc 작업. MySQL 마이그레이션이 불용어를 꺼서 영어 조각이 빠지지 않게 한다. | `--modules search-jdbc` | 검색 저장소, 검색 색인 DB / search storage, search index database | — |
 | `storage` | 저장소 계약(ObjectStorage · PresignedStorage) · 파일 크기/확장자/content-type 검증 + 브라우저 직접 업로드 HTTP(/api/v1/storage: presign · 멀티파트 · 올림 완료 검사 /complete) · 매직 바이트 판정 · 검사기(UploadInspector) 확장 지점 · 버려진 회원 업로드 정리(기본 꺼짐, UploadedKeyUsage 로 쓰이는 파일 보호). | `--modules storage,storage-s3` | 파일 업로드, 이미지 업로드, 첨부파일, 프리사인, 파일 검증 / file upload, image upload, attachment, presigned url, multipart upload | `@skeleton/storage` |
-| `storage-image` | 업로드한 이미지의 변환본(썸네일 thumb · 표시본 display, EXIF 없음)을 작업 큐로 만들고 남에게는 원본 대신 변환본만 준다 — 이미지 크기(픽셀 폭탄) 상한 · 지연 등록. 기본 꺼짐. | `--modules storage-image,storage-image-jdbc,storage-image-imageio` | 이미지 썸네일, 이미지 리사이즈, 표시본, EXIF 제거 / image thumbnail, image resize, strip exif, image variants | `@skeleton/storage` |
+| `storage-image` | 업로드한 이미지의 변환본(썸네일 thumb · 표시본 display, EXIF 없음)을 작업 큐로 만들고 남에게는 원본 대신 변환본만 준다 — 이미지 크기(픽셀 폭탄) 상한 · 지연 등록. 움직이는 GIF · WebP 의 표시본은 메타데이터를 걷어낸 사본이고, 변환 확장 지점(AnimatedDisplayConverter)을 채우면(video 가 채운다) 소리 없는 반복 MP4 / 투명이면 움직이는 WebP 로 바뀐다 — 응답의 contentType 으로 알린다. 기본 꺼짐. | `--modules storage-image,storage-image-jdbc,storage-image-imageio` | 이미지 썸네일, 이미지 리사이즈, 표시본, EXIF 제거 / image thumbnail, image resize, strip exif, image variants | `@skeleton/storage` |
 | `storage-image-imageio` | storage-image 의 기본 변환 엔진 — 앱 안 순수 자바(ImageIO + TwelveMonkeys), 추가 서버 없음. 출력은 JPEG(투명이면 PNG), JVM 전용. | `--modules storage-image-imageio` | 이미지 변환 엔진, 순수 자바 이미지 리사이즈 / image renderer, java imageio, image resize engine | — |
 | `storage-image-imgproxy` | storage-image 의 선택 변환 엔진 — imgproxy 컨테이너(libvips)로 HEIC · AVIF 입력 · WebP 출력, 메모리가 적다. 서버(컨테이너) 하나가 더 필요하다. | `--modules storage-image-imgproxy` | imgproxy, HEIC 변환, WebP 변환 / imgproxy, heic conversion, webp output | — |
 | `storage-image-jdbc` | 이미지 상태 저장소 — PostgreSQL · MySQL 로 storage-image 의 상태 포트를 구현한다(이미지 원본 하나당 한 줄). | `--modules storage-image-jdbc` | 이미지 상태 저장소, 썸네일 상태 DB / image status storage, thumbnail status database | `@skeleton/storage` |
 | `storage-image-pdfbox` | PDF 첫 쪽 썸네일 — storage-image 의 변환 작업에서 PDFBox 로 1쪽을 그린다(쪽 수 · 크기 · 렌더 시간 상한, 기본 꺼짐). | `--modules storage-image-pdfbox` | PDF 썸네일, PDF 미리보기 / pdf thumbnail, pdf preview | — |
 | `storage-s3` | S3 호환 저장소(AWS S3 · Cloudflare R2 · MinIO) — presign PUT/GET · 멀티파트 · 복사 · 일괄 삭제, 공개 URL RAW \| OPAQUE. | `--modules storage-s3` | S3, R2, 클라우드 스토리지, 파일 저장소, 이미지 저장 / s3, r2, cloudflare r2, minio, object storage | `@skeleton/storage` |
 | `time` | 글로벌 시간 — 요청마다 뷰어 시간대 · 로케일 · ZonedMoment(미래 현지 시각) · 사람이 읽는 이중 포맷 · 국가 → 시간대. | 스타터(apps/api)에 기본 포함 | 시간대, 타임존, 날짜 표시, 현지 시간, 예약 시각, 글로벌 / timezone, time zone, locale, zoned moment, date format, global time | `@skeleton/time` |
-| `video` | 영상 올리기 + 변환 일꾼 API — 브라우저가 파일을 객체 저장소(R2 등)로 직접 멀티파트로 올리고(조각 주소 · 이어 올리기 · 마침에서 HEAD 크기 확인, 멱등) 서버는 상태(UPLOADING → UPLOADED → QUEUED → REMUXING → PLAYABLE) · 정책(VideoAccessPolicy, 기본 올린 계정만) · 용량(VideoQuota) · 청소만 맡는다. 변환은 서버가 아니라 일꾼(apps/video-worker, 어디서든 토큰으로 집어 간다)이 하고 서버는 일꾼 API(claim · heartbeat 진행률 · upload-urls 허용 이름만 서명 · complete 폴더 대조 · fail)와 임대(만료 → 다시 줄, 3회 뒤 실패) · 트랙 결정(호환 · 사다리) · 원 파일 삭제(원본 단 검증 1시간 뒤) · VideoEvents · 경보 넷을 맡는다. 영상마다 공개/비공개를 올릴 때 고른다. 파일은 4GB(16MB × 256 조각)까지. 재생은 영상마다 공개(공개 영역 주소, CDN 캐시) / 비공개(재생 허가마다 출입증이 경로에 든 재생 목록 — 열 때 조각 줄을 출입증 남은 수명의 서명 주소로 바꿔 쓴다, 로그인 없이 열리는 GET 은 그것뿐)이고 VideoPlayback 하나로 바꿔 끼운다. 삭제(소유자 · VideoOperatorPolicy 운영자)는 줄을 먼저 닫고 폴더 정리를 후속으로 맡긴다(공개면 CDN 캐시를 먼저 비운다, 되돌리기 없음). 켜기 skeleton.video.enabled(모듈 기본 꺼짐), 저장은 video-jdbc. | `--modules video` | 영상 올리기, 동영상 업로드, 영상, 이어 올리기, 큰 파일 올리기, 멀티파트 업로드 / video upload, multipart upload, resumable upload, large file upload, video | `@skeleton/video` |
+| `video` | 영상 올리기 + 변환 일꾼 API — 브라우저가 파일을 객체 저장소(R2 등)로 직접 멀티파트로 올리고(조각 주소 · 이어 올리기 · 마침에서 HEAD 크기 확인, 멱등) 서버는 상태(UPLOADING → UPLOADED → QUEUED → REMUXING → PLAYABLE) · 정책(VideoAccessPolicy, 기본 올린 계정만) · 용량(VideoQuota) · 청소만 맡는다. 변환은 서버가 아니라 일꾼(apps/video-worker, 어디서든 토큰으로 집어 간다)이 하고 서버는 일꾼 API(claim · heartbeat 진행률 · upload-urls 허용 이름만 서명 · complete 폴더 대조 · fail)와 임대(만료 → 다시 줄, 3회 뒤 실패) · 트랙 결정(호환 · 사다리) · 원 파일 삭제(원본 단 검증 1시간 뒤) · VideoEvents · 경보 넷을 맡는다. 영상마다 공개/비공개를 올릴 때 고른다. 파일은 4GB(16MB × 256 조각)까지. 재생은 영상마다 공개(공개 영역 주소, CDN 캐시) / 비공개(재생 허가마다 출입증이 경로에 든 재생 목록 — 열 때 조각 줄을 출입증 남은 수명의 서명 주소로 바꿔 쓴다, 로그인 없이 열리는 GET 은 그것뿐)이고 VideoPlayback 하나로 바꿔 끼운다. 삭제(소유자 · VideoOperatorPolicy 운영자)는 줄을 먼저 닫고 폴더 정리를 후속으로 맡긴다(공개면 CDN 캐시를 먼저 비운다, 되돌리기 없음). storage-image 도 함께 켜면 움직이는 GIF · WebP 의 표시본을 일꾼이 소리 없는 MP4(투명이면 움직이는 WebP)로 바꾼다(ANIMATED 차선, 끝나기 전 · 실패해도 사본이 계속 쓰인다). 켜기 skeleton.video.enabled(모듈 기본 꺼짐), 저장은 video-jdbc. | `--modules video` | 영상 올리기, 동영상 업로드, 영상, 이어 올리기, 큰 파일 올리기, 멀티파트 업로드 / video upload, multipart upload, resumable upload, large file upload, video | `@skeleton/video` |
 | `video-cloudrun` | 일이 생기면 Google Cloud Run 작업을 깨우는 VideoWaker 구현 — Admin API jobs/<작업>:run(덮어쓰기 없음), 서비스 계정 키로 JWT 를 서명(구글 라이브러리 없음), 창 안 실행 상한 · 최소 간격으로 돈을 막고, 연속 실패면 VIDEO_WAKE_FAILED 경보를 낸다(자동으로 다른 곳으로 넘기지 않는다 — 일은 큐에 남는다). 기본 꺼짐. 홈서버 컨테이너나 아무 기계에서 같은 일꾼 이미지를 도는 길은 이 모듈이 필요 없다. | `--modules video-cloudrun` | 클라우드 런, 영상 변환 깨우기 / cloud run, wake video worker | — |
-| `video-jdbc` | 영상 저장을 DB 에 둔다 (PostgreSQL · MySQL) — 표 셋(videos · video_workers · video_wake_runs), 상태 전이와 임대는 한 문장 조건부 갱신이라 동시에 온 호출 중 하나만 이기고(집기는 FOR UPDATE SKIP LOCKED), 후속 작업(video.finalize · video.wake)은 job-queue-jdbc 에 상태 변경과 같은 트랜잭션으로 얹는다. | `--modules video-jdbc` | 영상 저장소, 영상 DB / video storage, video repository | `@skeleton/video` |
+| `video-jdbc` | 영상 저장을 DB 에 둔다 (PostgreSQL · MySQL) — 표 넷(videos · video_workers · video_wake_runs · video_display_jobs), 상태 전이와 임대는 한 문장 조건부 갱신이라 동시에 온 호출 중 하나만 이기고(집기는 FOR UPDATE SKIP LOCKED), 후속 작업(video.finalize · video.wake)은 job-queue-jdbc 에 상태 변경과 같은 트랜잭션으로 얹는다. | `--modules video-jdbc` | 영상 저장소, 영상 DB / video storage, video repository | `@skeleton/video` |
 | `waiting-room` | 대기열(가상 대기실) — 로그인한 사람만 줄을 선다(1인 1순번 = 계정 1개 1순번). 오픈 전 줄은 오픈 순간 한 번 무작위로 섞고 그 뒤는 온 순서, 분당 입장 수(속도 구간, 멈춤 가능)만 정한다. 순번표 · 입장권은 계정에 묶인 서명 토큰(키 돌리기 가능, 보호 환경에서 키가 없으면 기동 실패)이고 입장권 검사 WaitingRooms.requireEntry 는 DB 를 읽지 않는다. 저장은 waiting-room-jdbc. | `--modules waiting-room` | 대기열, 대기실, 가상 대기실, 줄 서기, 접속 폭주 / waiting room, virtual queue, queue, traffic spike | — |
 | `waiting-room-jdbc` | 대기열을 DB 에 둔다 (PostgreSQL · MySQL) — 표 셋(대기실 · 속도 구간 · 순번표). 번호는 방 줄 잠금 뒤에 줘서 1..n 빈틈 없이, 섞기는 조건부 갱신을 이긴 한 번만. | `--modules waiting-room-jdbc` | 대기열 저장소, 대기열 DB / waiting room storage, queue repository | — |
 | `workspace` | 워크스페이스(팀 · 조직) — 만들기 · 소유자/관리자/멤버 역할 · 주소(slug, 바꿔도 옛 주소가 따라온다) · 멤버 관리 · 소유권 이전 · 메일 링크 초대(만료 · 재발송 · 취소 · 확인된 이메일로만 수락, 켜야 한다), 그리고 요청 헤더 `X-Workspace-Id` 로 앱 데이터를 묶는 경계 `CurrentWorkspace`. 좌석 상한은 앱이 정한다. 운영자 읽기 경로(목록 · 검색 · 상세, `workspace.read`)는 꺼져 있다가 앱이 켠다. | `--modules workspace,workspace-jdbc` | 워크스페이스, 팀, 조직, 멤버 역할, 소유권 이전, 멀티 테넌트 / workspace, team, organization, tenant, member roles, ownership transfer | `@skeleton/workspace` |
@@ -1608,7 +1608,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 이미지 변환 · 썸네일은 storage-image 가 한다(이 모듈은 내용 검사까지)
 - 키워드: 파일 업로드, 이미지 업로드, 첨부파일, 프리사인, 파일 검증 / file upload, image upload, attachment, presigned url, multipart upload
 
-### `storage-image` — 업로드한 이미지의 변환본(썸네일 thumb · 표시본 display, EXIF 없음)을 작업 큐로 만들고 남에게는 원본 대신 변환본만 준다 — 이미지 크기(픽셀 폭탄) 상한 · 지연 등록. 기본 꺼짐.
+### `storage-image` — 업로드한 이미지의 변환본(썸네일 thumb · 표시본 display, EXIF 없음)을 작업 큐로 만들고 남에게는 원본 대신 변환본만 준다 — 이미지 크기(픽셀 폭탄) 상한 · 지연 등록. 움직이는 GIF · WebP 의 표시본은 메타데이터를 걷어낸 사본이고, 변환 확장 지점(AnimatedDisplayConverter)을 채우면(video 가 채운다) 소리 없는 반복 MP4 / 투명이면 움직이는 WebP 로 바뀐다 — 응답의 contentType 으로 알린다. 기본 꺼짐.
 
 - 종류 · 상태: module · experimental — 위치 `modules/storage-image`
 - 켜는 법: `--modules storage-image,storage-image-jdbc,storage-image-imageio`
@@ -1709,13 +1709,13 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 스타터가 이미 가진다
 - 키워드: 시간대, 타임존, 날짜 표시, 현지 시간, 예약 시각, 글로벌 / timezone, time zone, locale, zoned moment, date format, global time
 
-### `video` — 영상 올리기 + 변환 일꾼 API — 브라우저가 파일을 객체 저장소(R2 등)로 직접 멀티파트로 올리고(조각 주소 · 이어 올리기 · 마침에서 HEAD 크기 확인, 멱등) 서버는 상태(UPLOADING → UPLOADED → QUEUED → REMUXING → PLAYABLE) · 정책(VideoAccessPolicy, 기본 올린 계정만) · 용량(VideoQuota) · 청소만 맡는다. 변환은 서버가 아니라 일꾼(apps/video-worker, 어디서든 토큰으로 집어 간다)이 하고 서버는 일꾼 API(claim · heartbeat 진행률 · upload-urls 허용 이름만 서명 · complete 폴더 대조 · fail)와 임대(만료 → 다시 줄, 3회 뒤 실패) · 트랙 결정(호환 · 사다리) · 원 파일 삭제(원본 단 검증 1시간 뒤) · VideoEvents · 경보 넷을 맡는다. 영상마다 공개/비공개를 올릴 때 고른다. 파일은 4GB(16MB × 256 조각)까지. 재생은 영상마다 공개(공개 영역 주소, CDN 캐시) / 비공개(재생 허가마다 출입증이 경로에 든 재생 목록 — 열 때 조각 줄을 출입증 남은 수명의 서명 주소로 바꿔 쓴다, 로그인 없이 열리는 GET 은 그것뿐)이고 VideoPlayback 하나로 바꿔 끼운다. 삭제(소유자 · VideoOperatorPolicy 운영자)는 줄을 먼저 닫고 폴더 정리를 후속으로 맡긴다(공개면 CDN 캐시를 먼저 비운다, 되돌리기 없음). 켜기 skeleton.video.enabled(모듈 기본 꺼짐), 저장은 video-jdbc.
+### `video` — 영상 올리기 + 변환 일꾼 API — 브라우저가 파일을 객체 저장소(R2 등)로 직접 멀티파트로 올리고(조각 주소 · 이어 올리기 · 마침에서 HEAD 크기 확인, 멱등) 서버는 상태(UPLOADING → UPLOADED → QUEUED → REMUXING → PLAYABLE) · 정책(VideoAccessPolicy, 기본 올린 계정만) · 용량(VideoQuota) · 청소만 맡는다. 변환은 서버가 아니라 일꾼(apps/video-worker, 어디서든 토큰으로 집어 간다)이 하고 서버는 일꾼 API(claim · heartbeat 진행률 · upload-urls 허용 이름만 서명 · complete 폴더 대조 · fail)와 임대(만료 → 다시 줄, 3회 뒤 실패) · 트랙 결정(호환 · 사다리) · 원 파일 삭제(원본 단 검증 1시간 뒤) · VideoEvents · 경보 넷을 맡는다. 영상마다 공개/비공개를 올릴 때 고른다. 파일은 4GB(16MB × 256 조각)까지. 재생은 영상마다 공개(공개 영역 주소, CDN 캐시) / 비공개(재생 허가마다 출입증이 경로에 든 재생 목록 — 열 때 조각 줄을 출입증 남은 수명의 서명 주소로 바꿔 쓴다, 로그인 없이 열리는 GET 은 그것뿐)이고 VideoPlayback 하나로 바꿔 끼운다. 삭제(소유자 · VideoOperatorPolicy 운영자)는 줄을 먼저 닫고 폴더 정리를 후속으로 맡긴다(공개면 CDN 캐시를 먼저 비운다, 되돌리기 없음). storage-image 도 함께 켜면 움직이는 GIF · WebP 의 표시본을 일꾼이 소리 없는 MP4(투명이면 움직이는 WebP)로 바꾼다(ANIMATED 차선, 끝나기 전 · 실패해도 사본이 계속 쓰인다). 켜기 skeleton.video.enabled(모듈 기본 꺼짐), 저장은 video-jdbc.
 
 - 종류 · 상태: module · experimental — 위치 `modules/video`
 - 켜는 법: `--modules video`
 - 의존 한 줄: `implementation(project(":modules:video"))`
 - 자동으로 따라온다: `storage`
-- 소스만 따라온다(컴파일 전용 — 런타임 클래스패스에는 없다. 쓰려면 apps/api 에 의존 한 줄을 더한다): `scheduler`
+- 소스만 따라온다(컴파일 전용 — 런타임 클래스패스에는 없다. 쓰려면 apps/api 에 의존 한 줄을 더한다): `scheduler`, `storage-image`
 - 설정 접두사 `skeleton.video` — 키와 기본값 `docs/config/modules/video.yml`
 - HTTP 경로: `/api/internal/video`, `/api/v1/videos`, `/api/v1/videos/admin`, `/api/v1/videos/admin/workers`, `/api/v1/videos/play`
 - 비밀 · 환경변수: `<P>_VIDEO_PLAYBACK_SECRET` — 빠지면: skeleton.video.enabled=true 인데 비었거나 32자보다 짧으면 기동 실패(비공개 영상 재생 출입증의 HMAC 비밀) · 선언의 secrets: (무작위로 충분) · 바꾸면 이미 발급한 출입증이 모두 끊긴다 · 꺼진 채(기본)면 읽지 않는다
@@ -1736,7 +1736,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 종류 · 상태: module · experimental — 위치 `modules/video-cloudrun`
 - 켜는 법: `--modules video-cloudrun`
 - 의존 한 줄: `implementation(project(":modules:video-cloudrun"))`
-- 자동으로 따라온다: `scheduler`, `storage`, `video`
+- 자동으로 따라온다: `scheduler`, `storage`, `storage-image`, `video`
 - 설정 접두사 `skeleton.video.cloud-run` — 키와 기본값 `docs/config/modules/video-cloudrun.yml`
 - 비밀 · 환경변수: `<P>_VIDEO_CLOUDRUN_ENABLED=true`, `<P>_VIDEO_CLOUDRUN_CREDENTIALS_JSON` — 빠지면: 켰는데 서비스 계정 키(JSON 원문 — 그 Cloud Run 작업 하나만 실행하는 계정)가 비었거나 못 읽으면 기동 실패(속성 이름만 말한다). 꺼져 있으면(기본) 읽지 않는다. project · region · job 은 비밀 아님(선언의 env:)
 - 문서: `docs/modules/video-cloudrun.md`
@@ -1747,12 +1747,12 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 실제 구글 계정과의 연결은 가짜 서버 시험까지만 확인됐다 — 계정을 만든 뒤 stage 에서 먼저 본다
 - 키워드: 클라우드 런, 영상 변환 깨우기 / cloud run, wake video worker
 
-### `video-jdbc` — 영상 저장을 DB 에 둔다 (PostgreSQL · MySQL) — 표 셋(videos · video_workers · video_wake_runs), 상태 전이와 임대는 한 문장 조건부 갱신이라 동시에 온 호출 중 하나만 이기고(집기는 FOR UPDATE SKIP LOCKED), 후속 작업(video.finalize · video.wake)은 job-queue-jdbc 에 상태 변경과 같은 트랜잭션으로 얹는다.
+### `video-jdbc` — 영상 저장을 DB 에 둔다 (PostgreSQL · MySQL) — 표 넷(videos · video_workers · video_wake_runs · video_display_jobs), 상태 전이와 임대는 한 문장 조건부 갱신이라 동시에 온 호출 중 하나만 이기고(집기는 FOR UPDATE SKIP LOCKED), 후속 작업(video.finalize · video.wake)은 job-queue-jdbc 에 상태 변경과 같은 트랜잭션으로 얹는다.
 
 - 종류 · 상태: module · experimental — 위치 `modules/video-jdbc`
 - 켜는 법: `--modules video-jdbc`
 - 의존 한 줄: `implementation(project(":modules:video-jdbc"))`
-- 자동으로 따라온다: `scheduler`, `storage`, `video`
+- 자동으로 따라온다: `scheduler`, `storage`, `storage-image`, `video`
 - 문서: `docs/modules/video-jdbc.md`
 - 짝 프런트(react-skeleton): 항목 `video` · 패키지 `@skeleton/video` · 조각 `--packages video`
 - 쓰지 않는 경우:

@@ -10,7 +10,7 @@
 | `VIDEO_WORKER_API` | (필수) | 서버 주소 (`http://app:8080`) |
 | `VIDEO_WORKER_TOKEN` | (필수) | 일꾼 토큰 — 운영자 발급 API 가 한 번 보여 준 평문. 로그 · 출력에 안 찍힌다 |
 | `VIDEO_WORKER_ID` | `worker-<HOSTNAME>` | 일꾼 이름(`[A-Za-z0-9._:-]{1,64}`) |
-| `VIDEO_WORKER_LANES` | `REMUX,COMPAT,LADDER` | 이 일꾼이 맡을 차선 (토큰의 차선과 겹치는 것만 받는다) |
+| `VIDEO_WORKER_LANES` | `REMUX,COMPAT,LADDER,ANIMATED` | 이 일꾼이 맡을 차선 (토큰의 차선과 겹치는 것만 받는다). `ANIMATED` = 움직이는 GIF · WebP 의 표시본 변환(소리 없는 MP4, 투명 배경이면 움직이는 WebP) |
 | `VIDEO_WORKER_MODE` | `poll` | `poll` = 상주(큐가 비면 쉬었다 다시 집는다) · `once` = 일이 없을 때까지 하고 끝낸다(Cloud Run 작업) |
 | `VIDEO_WORKER_POLL_SECONDS` | `5` | `poll` 에서 큐가 비었을 때 쉬는 간격 |
 | `VIDEO_WORKER_NICE` | `0` | 양수면 `nice -n` 으로 낮춘 우선순위로 ffmpeg 를 돌린다(홈서버에서 다른 일과 같이 쓸 때) |
@@ -19,6 +19,10 @@
 | `VIDEO_WORKER_HEALTH_PORT` | `8080` | `poll` 모양의 `GET /health`(200 `{"status":"UP"}`) 포트. `0` 이면 안 띄운다. `once` 는 안 띄운다 |
 | `VIDEO_WORKER_WORKDIR` | `/work` | 일마다 임시 폴더를 만드는 곳 (이미지에서는 `/work`) |
 | `VIDEO_WORKER_STORAGE_ORIGIN` | (없음) | 로컬 compose 에서만 — 서명 주소의 출처가 컨테이너 안에서 안 열릴 때 이 출처로 바꿔 부른다(서명에 든 Host 는 유지) |
+
+## 움직이는 이미지 차선 (`ANIMATED`)
+
+서버(`storage-image` 와 `video` 가 함께 켜졌을 때)가 올린 움직이는 GIF · WebP 의 표시본 변환을 준다. 한 번의 ffmpeg 디코드에서 ① 소리 없는 H.264 MP4(`-crf 14`, 크기 · 프레임 시간 그대로, 홀수 크기는 마지막 한 줄만 자름, BT.709 표시) ② 움직이는 WebP(무손실, 투명 유지) ③ 합성한 실제 화면(RGBA)의 알파 최솟값을 한꺼번에 낸다. 알파가 255 미만인 픽셀이 하나라도 있으면 WebP(`display.webp`), 없으면 MP4(`display.mp4`)를 올리고 나머지는 버린다 - 파일의 투명 표시가 아니라 합성 결과를 본다. 올리지 않고 끝나는 길은 모두 **다시 하지 않는 실패**다(서버의 표시본은 사본으로 남는다): 변환본이 원본보다 작지 않다 → `PROCESSING_FAILED` · ffmpeg 가 못 읽는다(움직이는 WebP 는 ffmpeg 6.1 이 못 풀고, 정지 이미지로만 풀려도 같다) → `UNSUPPORTED_FORMAT` · 이미 투명한 움직이는 WebP → 변환하지 않는다. 입력 허용 목록(`-format_whitelist` · `-codec_whitelist`)은 이 차선만 `gif` · `webp` 를 열고 영상 차선의 목록은 그대로다.
 
 ## 한 일의 순서
 

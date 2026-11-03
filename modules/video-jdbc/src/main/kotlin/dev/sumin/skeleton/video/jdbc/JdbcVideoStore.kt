@@ -107,6 +107,7 @@ class JdbcVideoStore(
             VideoLane.REMUX -> "status = 'REMUXING'"
             VideoLane.COMPAT -> "compat_status = 'RUNNING'"
             VideoLane.LADDER -> "ladder_status = 'RUNNING', ladder_build = :build"
+            VideoLane.ANIMATED -> error("not a video lane")
         }
         val claimed = jdbc.update(
             "update videos set lease_owner = :owner, lease_until = :until, lane = :lane, attempts = attempts + 1, progress = null, updated_at = :at, $set where id = :id and ${candidate(lane)}",
@@ -120,6 +121,7 @@ class JdbcVideoStore(
         VideoLane.REMUX -> "status = 'QUEUED'"
         VideoLane.COMPAT -> "status = 'PLAYABLE' and compat_status = 'QUEUED' and lease_owner is null"
         VideoLane.LADDER -> "status = 'PLAYABLE' and ladder_status = 'QUEUED' and lease_owner is null"
+        VideoLane.ANIMATED -> error("not a video lane")
     }
 
     override fun extendLease(id: String, owner: String, until: Instant, progress: Int?, at: Instant): Boolean =
@@ -167,7 +169,7 @@ class JdbcVideoStore(
         val lane = row.second
         if (row.first != owner || lane == null) return null
         val requeue = retry && row.third < VideoStatus.MAX_ATTEMPTS
-        val column = when (lane) { VideoLane.REMUX -> "status"; VideoLane.COMPAT -> "compat_status"; VideoLane.LADDER -> "ladder_status" }
+        val column = when (lane) { VideoLane.REMUX -> "status"; VideoLane.COMPAT -> "compat_status"; VideoLane.LADDER -> "ladder_status"; VideoLane.ANIMATED -> error("not a video lane") }
         val set = when {
             requeue -> "$column = 'QUEUED'"
             lane == VideoLane.REMUX -> "status = 'FAILED', fail_code = :code, fail_detail = :detail"

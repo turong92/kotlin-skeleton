@@ -108,7 +108,7 @@ services:
       VIDEO_WORKER_API: http://host.docker.internal:${SERVER_PORT:-8080}   # 앱 주소 - 비공개 영상의 입력 재생 목록 경로(/api/v1/videos/play/…)도 이 출처로 푼다
       VIDEO_WORKER_TOKEN: local-dev-only-video-worker-token
       VIDEO_WORKER_ID: local-worker
-      VIDEO_WORKER_LANES: REMUX,COMPAT,LADDER
+      VIDEO_WORKER_LANES: REMUX,COMPAT,LADDER,ANIMATED
       VIDEO_WORKER_MODE: poll
       VIDEO_WORKER_NICE: "10"
       VIDEO_WORKER_HEALTH_PORT: "8081"   # s3 컨테이너가 8080 을 쓴다(SeaweedFS 볼륨 서버)

@@ -45,7 +45,7 @@ data class ProbeResult(
 
 data class LadderRung(val name: String, val height: Int, val bandwidth: Long)
 
-/** `complete` 본문 — 차선은 어떤 칸이 있느냐로 안다: [orig] = remux, [compat] = 호환 단, [ladderBuild] = 사다리 */
+/** `complete` 본문 — 차선은 어떤 칸이 있느냐로 안다: [orig] = remux, [compat] = 호환 단, [ladderBuild] = 사다리, [display] = 움직이는 이미지 표시본 */
 data class VideoJobResult(
     val orig: ResultFile? = null,
     val poster: ResultFile? = null,
@@ -55,6 +55,8 @@ data class VideoJobResult(
     val compatible: Boolean? = null,
     val ladderBuild: String? = null,
     val rungs: List<LadderRung>? = null,
+    /** ANIMATED 차선 - 올린 표시본(`display.mp4` 또는 `display.webp`) */
+    val display: ResultFile? = null,
 )
 
 /**

@@ -26,6 +26,8 @@ class VideoJobs(
     private val tx: VideoTransactions,
     private val waker: VideoWaker,
     private val time: TimeProvider,
+    /** 움직이는 이미지 표시본 변환(ANIMATED 차선) - `storage-image` 가 함께 켜졌을 때만 있다 */
+    private val display: VideoDisplayJobs? = null,
 ) {
     private val random = SecureRandom()
 
@@ -33,11 +35,13 @@ class VideoJobs(
     fun claim(worker: VideoWorker, workerId: String, requested: Set<VideoLane>?): VideoJob? {
         requireWorkerId(workerId)
         val lanes = if (requested.isNullOrEmpty()) worker.lanes else worker.lanes.intersect(requested)
+        // 움직이는 이미지 변환은 짧고 작다 - 긴 영상 변환 뒤에 줄 서지 않게 먼저 본다
+        if (display != null && VideoLane.ANIMATED in lanes) display.claim(workerId)?.let { return it }
         return tx.run {
             val now = time.now()
             VideoLeases.expire(store, followUps, waker, props, now, now)
             val leaseUntil = now.plus(props.worker.leaseDuration)
-            VideoLane.entries.filter { it in lanes }.firstNotNullOfOrNull { lane ->
+            VideoLane.entries.filter { it in lanes && it != VideoLane.ANIMATED }.firstNotNullOfOrNull { lane ->
                 store.claimNext(lane, workerId, leaseUntil, newBuild(), now)?.let { job(it, lane) }
             }
         }
@@ -45,6 +49,7 @@ class VideoJobs(
 
     /** 임대를 늘린다(+ 진행률). 소유자가 아니면 409 */
     fun heartbeat(worker: VideoWorker, workerId: String, jobId: String, progress: Int?): Instant {
+        displayJob(worker, workerId, jobId)?.let { return it.heartbeat(workerId, jobId) }
         val video = leased(worker, workerId, jobId)
         val until = time.now().plus(props.worker.leaseDuration)
         val ok = tx.run { store.extendLease(video.id, workerId, until, progress?.coerceIn(0, 100), time.now()) }
@@ -54,6 +59,7 @@ class VideoJobs(
 
     /** 허용 이름만 서명한다 — 하나라도 어긋나면 하나도 서명하지 않는다. 해시가 든 이름이라 `immutable` 캐시를 서명에 싣는다(일꾼은 응답의 headers 를 그대로 보낸다) */
     fun uploadUrls(worker: VideoWorker, workerId: String, jobId: String, names: List<String>): List<UploadUrl> {
+        displayJob(worker, workerId, jobId)?.let { return it.uploadUrls(workerId, jobId, names) }
         val video = leased(worker, workerId, jobId)
         val lane = video.lane ?: throw VideoLeaseLostException()
         if (names.isEmpty() || names.size > MAX_UPLOAD_URLS) throw VideoWorkerInvalidException("names")
@@ -79,6 +85,7 @@ class VideoJobs(
     fun complete(worker: VideoWorker, workerId: String, jobId: String, result: VideoJobResult) {
         requireWorkerId(workerId)
         requireLane(worker, resultLane(result))
+        if (result.display != null) return (display?.takeIf { VideoDisplayJobs.isJobId(jobId) } ?: throw VideoNotFoundException()).complete(workerId, jobId, result.display)
         val video = find(jobId)
         when {
             result.orig != null -> completeRemux(workerId, video, result)
@@ -91,6 +98,7 @@ class VideoJobs(
     fun fail(worker: VideoWorker, workerId: String, jobId: String, code: String, detail: String?, retry: Boolean) {
         requireWorkerId(workerId)
         if (code !in VideoFailCode.WORKER_REPORTABLE) throw VideoFailCodeInvalidException()
+        displayJob(worker, workerId, jobId)?.let { return it.fail(workerId, jobId, code, retry) }
         val video = find(jobId)
         video.lane?.let { requireLane(worker, it) }
         if (video.status == VideoStatus.FAILED) return   // 이미 실패로 닫혔다 — 같은 보고가 또 왔다
@@ -209,6 +217,7 @@ class VideoJobs(
             durationMs = video.srcDurationMs,
             codec = video.srcCodecString,
             expectedOutputBytes = when (lane) {
+                VideoLane.ANIMATED -> error("display jobs are built by VideoDisplayJobs")
                 VideoLane.REMUX -> video.uploadBytes
                 VideoLane.COMPAT -> (minutes * COMPAT_BYTES_PER_MINUTE).toLong()
                 VideoLane.LADDER -> (minutes * LADDER_BYTES_PER_MINUTE).toLong()
@@ -232,7 +241,16 @@ class VideoJobs(
         result.orig != null -> VideoLane.REMUX
         result.compat != null -> VideoLane.COMPAT
         result.ladderBuild != null -> VideoLane.LADDER
+        result.display != null -> VideoLane.ANIMATED
         else -> throw VideoWorkerInvalidException("result")
+    }
+
+    /** 변환 일의 id(sha256 hex)면 그 차선 토큰만 이 일을 만진다 - 기능이 안 켜졌으면 null 로 영상 길을 타서 「없는 영상」이 된다 */
+    private fun displayJob(worker: VideoWorker, workerId: String, jobId: String): VideoDisplayJobs? {
+        if (display == null || !VideoDisplayJobs.isJobId(jobId)) return null
+        requireWorkerId(workerId)
+        requireLane(worker, VideoLane.ANIMATED)
+        return display
     }
 
     private fun find(jobId: String): Video = store.find(jobId)?.takeIf { it.status != VideoStatus.DELETED } ?: throw VideoNotFoundException()

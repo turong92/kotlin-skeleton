@@ -199,4 +199,21 @@ class PlansTest {
         assertFalse(silent.substringAfter("v0.m3u8").contains("mp4a"))
         kotlin.test.assertFailsWith<IllegalArgumentException> { OriginalRung.patch(master, "../x", info(), null, 1) }
     }
+
+    @Test
+    fun `움직이는 이미지 차선 - gif · webp 입력은 이 차선만 허용하고 다른 차선의 허용 목록은 그대로다`() {
+        val gif = AnimatedPlan.args("/work/in", AnimatedKind.GIF)
+        assertEquals("gif", gif.pair("-format_whitelist"))
+        assertEquals("gif", gif.pair("-codec_whitelist"))
+        assertEquals("file,pipe", gif.pair("-protocol_whitelist"))
+        assertTrue(gif.indexOf("-codec_whitelist") < gif.indexOf("-i"), "입력 옵션이라 -i 앞에 있어야 걸린다")
+        val webp = AnimatedPlan.args("/work/in", AnimatedKind.WEBP)
+        assertEquals("webp_pipe", webp.pair("-format_whitelist"))
+        assertEquals("webp", webp.pair("-codec_whitelist"))
+        listOf(Allowed.UPLOAD_FORMATS, Allowed.UPLOAD_CODECS, Allowed.BUILT_CODECS).forEach { list ->
+            assertFalse(list.split(',').any { it == "gif" || it == "webp" || it == "webp_pipe" }, "영상 차선 목록에 gif · webp 가 들어갔다: $list")
+        }
+        assertContains(gif, "-an")
+        assertEquals("passthrough", gif.pair("-fps_mode"))
+    }
 }

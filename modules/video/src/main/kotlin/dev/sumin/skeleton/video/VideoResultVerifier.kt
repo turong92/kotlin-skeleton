@@ -15,17 +15,20 @@ object VideoResultVerifier {
     private val COMPAT_PLAYLIST = Regex("^c-[0-9a-f]{16}/index\\.m3u8$")
     private val HLS_FILE = Regex("^[A-Za-z0-9][A-Za-z0-9_-]{0,63}\\.(m3u8|m4s|mp4)$")
     private val BUILD = Regex("^[0-9a-f]{32}$")
+    private val DISPLAY = Regex("^display\\.(mp4|webp)$")
 
     /** [build] 는 사다리 차선에서 서버가 정해 준 폴더 id */
     fun allowedName(lane: VideoLane, build: String?, name: String): Boolean = when (lane) {
         VideoLane.REMUX -> ORIG.matches(name) || POSTER.matches(name)
         VideoLane.COMPAT -> COMPAT.matches(name)
         VideoLane.LADDER -> build != null && BUILD.matches(build) && name.startsWith("h-$build/") && HLS_FILE.matches(name.removePrefix("h-$build/"))
+        VideoLane.ANIMATED -> DISPLAY.matches(name)
     }
 
     fun contentTypeOf(name: String): String? = when (name.substringAfterLast('.', "")) {
         "mp4", "m4s" -> "video/mp4"
         "jpg" -> "image/jpeg"
+        "webp" -> "image/webp"
         "m3u8" -> "application/vnd.apple.mpegurl"
         else -> null
     }

@@ -59,6 +59,8 @@ data class CompleteBody(
     val compatible: Boolean? = null,
     val ladderBuild: String? = null,
     val rungs: List<LadderRungResult>? = null,
+    /** ANIMATED 차선 - `display.mp4` 또는 `display.webp` */
+    val display: ResultFile? = null,
 )
 
 /** 임대를 잃었다(409) — 하던 일을 멈춘다 */

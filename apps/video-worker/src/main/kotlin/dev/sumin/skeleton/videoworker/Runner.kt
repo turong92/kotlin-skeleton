@@ -77,6 +77,7 @@ class Runner(
                 "REMUX" -> remux(job, dir, cancel, progress)
                 "COMPAT" -> compat(job, dir, cancel, progress)
                 "LADDER" -> ladder(job, dir, cancel, progress)
+                "ANIMATED" -> animated(job, dir, cancel, progress)
                 else -> throw JobFailure(VideoFail.PROCESSING_FAILED, "모르는 차선 ${job.lane}")
             }
             log.info("일 끝 job={} lane={}", job.jobId, job.lane)
@@ -195,6 +196,39 @@ class Runner(
         api.complete(job.jobId, CompleteBody(config.workerId, ladderBuild = build, rungs = rungs.map { LadderRungResult(it.name, it.height, it.bandwidth) }))
     }
 
+    /**
+     * 움직이는 GIF · WebP → 소리 없는 MP4(불투명) 또는 움직이는 WebP(투명). 서버는 이미 사본을 표시본으로 쓰고 있다 -
+     * 여기서 올리지 않고 끝내는 모든 길(못 읽음 · 변환본이 더 큼)은 **다시 하지 않는 실패**로 알려 사본이 계속 쓰이게 한다
+     */
+    private fun animated(job: Job, dir: Path, cancel: AtomicBoolean, progress: Progress) {
+        val input = dir.resolve("in")
+        transfer.download(job.inputUrl, input, job.inputBytes)
+        progress.raise(10)
+        val kind = AnimatedKind.sniff(Files.newInputStream(input).use { it.readNBytes(12) }) ?: throw JobFailure(VideoFail.UNSUPPORTED_FORMAT, "GIF 도 WebP 도 아니다")
+        val out = Files.createDirectories(dir.resolve("a"))
+        try {
+            tools.run(AnimatedPlan.args(input.toString(), kind), out, cancel)
+        } catch (e: ToolFailure) {
+            // 움직이는 WebP 디코더는 최근 ffmpeg 에만 있다 - 못 풀면 파일 탓이 아니라 이 일꾼 탓이니 변환하지 않는다(사본을 쓴다)
+            if (kind == AnimatedKind.WEBP) throw JobFailure(VideoFail.UNSUPPORTED_FORMAT, "이 ffmpeg 는 움직이는 WebP 를 못 푼다")
+            throw e
+        }
+        progress.raise(85)
+        val alpha = AnimatedPlan.parseAlpha(Files.readString(out.resolve(AnimatedPlan.ALPHA_STATS)))
+        // 정지 이미지로만 풀렸다(움직이는 WebP 를 첫 장만 읽는 ffmpeg) - 서버가 움직이는 이미지로 보냈으니 한 장이면 못 푼 것이다
+        if (alpha.frames < 2) throw JobFailure(VideoFail.UNSUPPORTED_FORMAT, "프레임 ${alpha.frames}장만 풀렸다")
+        val transparent = alpha.minAlpha < 255
+        // 투명한 움직이는 WebP 는 이미 가장 알맞은 형식이다(결과 이름이 사본 `display.webp` 와 겹치기도 한다)
+        if (transparent && kind == AnimatedKind.WEBP) throw JobFailure(VideoFail.PROCESSING_FAILED, "이미 투명한 움직이는 WebP - 변환하지 않는다")
+        val name = if (transparent) AnimatedPlan.WEBP else AnimatedPlan.MP4
+        val result = out.resolve(name)
+        val size = if (result.isRegularFile()) result.fileSize() else 0L
+        if (size <= 0) throw JobFailure(VideoFail.PROCESSING_FAILED, "변환본이 안 만들어졌다", retryable = true)
+        if (size >= job.inputBytes) throw JobFailure(VideoFail.PROCESSING_FAILED, "변환본($size)이 원본(${job.inputBytes})보다 작지 않다 - 사본을 쓴다")
+        upload(job, listOf(name to result))
+        api.complete(job.jobId, CompleteBody(config.workerId, display = ResultFile(name, size)))
+    }
+
     // ---- 도움 ----
 
     /**
@@ -291,7 +325,7 @@ class Runner(
     private fun checkSpace(job: Job) {
         Files.createDirectories(config.workDir)
         val free = Files.getFileStore(config.workDir).usableSpace
-        val need = if (job.lane == "REMUX") job.inputBytes + job.expectedOutputBytes else job.expectedOutputBytes
+        val need = if (job.lane == "REMUX" || job.lane == "ANIMATED") job.inputBytes + job.expectedOutputBytes else job.expectedOutputBytes
         if (need > free) throw JobFailure(VideoFail.TOO_BIG_FOR_WORKER, "필요 $need 바이트 > 여유 $free")
     }
 

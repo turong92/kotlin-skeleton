@@ -1,3 +1,4 @@
 dev.sumin.skeleton.video.VideoAutoConfiguration
+dev.sumin.skeleton.video.VideoDisplayAutoConfiguration
 dev.sumin.skeleton.video.web.VideoWebAutoConfiguration
 dev.sumin.skeleton.video.alert.VideoAlertAutoConfiguration

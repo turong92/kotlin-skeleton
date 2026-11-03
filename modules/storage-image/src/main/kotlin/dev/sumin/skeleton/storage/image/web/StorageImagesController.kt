@@ -31,7 +31,8 @@ data class StorageImagesRequest(@field:NotEmpty @field:Size(max = MAX_KEYS) val 
     }
 }
 
-data class StorageImageVariantView(val url: String, val width: Int, val height: Int)
+/** [contentType] 은 [url] 이 가리키는 파일의 형식이다 - 움직이는 이미지의 표시본이 영상으로 바뀌면 `video/mp4`(소리 없는 반복 영상, `<video autoplay loop muted playsinline>`), 아니면 `image/jpeg` 같은 이미지 형식 */
+data class StorageImageVariantView(val url: String, val width: Int, val height: Int, val contentType: String)
 
 data class StorageImageItem(val key: String, val status: String, val width: Int?, val height: Int?, val variants: Map<String, StorageImageVariantView>)
 
@@ -67,7 +68,7 @@ class StorageImagesController(
         val items = own.mapNotNull { key ->
             val status = images.status(key) ?: run { images.ensure(key); images.status(key) } ?: return@mapNotNull null
             val variants = if (status.state != UploadImageState.READY) emptyMap() else status.variants.mapNotNull { (name, v) ->
-                images.signedVariantUrl(key, name, accessTtl, accept)?.let { name to StorageImageVariantView(it, v.width, v.height) }
+                images.signedVariantUrl(key, name, accessTtl, accept)?.let { name to StorageImageVariantView(it, v.width, v.height, v.forAccept(accept).contentType) }
             }.toMap()
             StorageImageItem(key, status.state.name, status.width, status.height, variants)
         }

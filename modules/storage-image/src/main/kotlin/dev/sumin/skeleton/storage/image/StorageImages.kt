@@ -88,5 +88,9 @@ class StorageImages(
         return UploadImageStatus(state, width, height, mapped)
     }
 
-    private fun contentTypeOf(ext: String) = if (ext == "jpg") "image/jpeg" else "image/$ext"
+    private fun contentTypeOf(ext: String) = when (ext) {
+        "jpg" -> "image/jpeg"
+        "mp4" -> "video/mp4"   // 움직이는 이미지의 변환된 표시본 - 소리 없는 반복 영상
+        else -> "image/$ext"
+    }
 }

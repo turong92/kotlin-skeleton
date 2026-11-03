@@ -56,6 +56,7 @@ data class CompleteJobRequest(
     val compatible: Boolean? = null,
     val ladderBuild: String? = null,
     val rungs: List<LadderRung>? = null,
+    val display: ResultFile? = null,
 )
 
 data class FailJobRequest(val workerId: String? = null, val code: String? = null, val detail: String? = null, val retryable: Boolean? = null)
@@ -86,12 +87,12 @@ class VideoWorkerController(private val jobs: VideoJobs) {
     fun uploadUrls(worker: VideoWorker, @PathVariable jobId: String, @RequestBody request: UploadUrlsRequest): ListResponse<UploadUrl> =
         Response.ok(jobs.uploadUrls(worker, request.workerId.orEmpty(), jobId, request.names.orEmpty()))
 
-    @Operation(summary = "Report the finished result - the lane is told by which field is present (orig / compat / ladderBuild)")
+    @Operation(summary = "Report the finished result - the lane is told by which field is present (orig / compat / ladderBuild / display)")
     @PostMapping("/jobs/{jobId}/complete")
     fun complete(worker: VideoWorker, @PathVariable jobId: String, @RequestBody request: CompleteJobRequest): ResponseEntity<Void> {
         jobs.complete(
             worker, request.workerId.orEmpty(), jobId,
-            VideoJobResult(request.orig, request.poster, request.compat, request.probe, request.compatible, request.ladderBuild, request.rungs),
+            VideoJobResult(request.orig, request.poster, request.compat, request.probe, request.compatible, request.ladderBuild, request.rungs, request.display),
         )
         return Response.noContent()
     }
@@ -147,7 +148,7 @@ data class IssuedWorkerResponse(val id: Long, val name: String, val lanes: List<
 @RequestMapping("/api/v1/videos/admin/workers")
 @Tag(name = "Video workers (operator)")
 class VideoWorkerAdminController(private val workers: VideoWorkerService, private val policy: VideoOperatorPolicy) {
-    @Operation(summary = "Issue a worker token for the given lanes (REMUX, COMPAT, LADDER) - the token is shown once")
+    @Operation(summary = "Issue a worker token for the given lanes (REMUX, COMPAT, LADDER, ANIMATED) - the token is shown once")
     @PostMapping
     fun issue(@RequestBody body: IssueWorkerRequest, authentication: Authentication?): ResponseEntity<DataResponse<IssuedWorkerResponse>> {
         operator(authentication)

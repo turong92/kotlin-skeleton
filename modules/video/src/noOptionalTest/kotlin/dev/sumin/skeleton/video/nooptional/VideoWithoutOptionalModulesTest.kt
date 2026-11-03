@@ -3,6 +3,7 @@ package dev.sumin.skeleton.video.nooptional
 import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.storage.PresignedStorage
 import dev.sumin.skeleton.video.VideoAutoConfiguration
+import dev.sumin.skeleton.video.VideoDisplayAutoConfiguration
 import dev.sumin.skeleton.video.web.VideoWebAutoConfiguration
 import dev.sumin.skeleton.video.VideoFollowUps
 import dev.sumin.skeleton.video.VideoStore
@@ -23,7 +24,7 @@ class VideoWithoutOptionalModulesTest {
     @Test
     fun `video stands without the scheduler and spring security on the classpath`() {
         WebApplicationContextRunner()
-            .withConfiguration(AutoConfigurations.of(VideoAutoConfiguration::class.java, VideoWebAutoConfiguration::class.java))
+            .withConfiguration(AutoConfigurations.of(VideoAutoConfiguration::class.java, VideoDisplayAutoConfiguration::class.java, VideoWebAutoConfiguration::class.java))
             .withPropertyValues("skeleton.video.enabled=true", "skeleton.video.playback.secret=${"k".repeat(40)}")
             .withBean(TimeProvider::class.java, { TimeProvider { java.time.Instant.now() } })
             .withBean(PresignedStorage::class.java, { unused(PresignedStorage::class.java) })
@@ -39,6 +40,7 @@ class VideoWithoutOptionalModulesTest {
                 assertTrue(!ctx.containsBean("videoWorkerController"), "the worker API needs spring security too")
                 assertTrue(!ctx.containsBean("videoPlaylistController") && !ctx.containsBean("videoAdminController"), "the playlist and operator doors need spring security too")
                 assertTrue(!ctx.containsBean("videoMonitor"), "the alerts need the alert module")
+                assertTrue(!ctx.containsBean("videoDisplayJobs"), "the animated display conversion needs the storage-image module")
             }
     }
 }

@@ -107,4 +107,19 @@ class StorageImageStatusDbTest {
         store.delete(listOf(hash))
         assertNull(store.find(hash))
     }
+
+    @Test
+    fun `replacing a variant swaps only that variant of a READY row - others and non-READY rows are left alone`() {
+        val hash = imageKeyHash("uploads/7/swap/x.gif")
+        assertTrue(store.register(hash, "uploads/7/swap/x.gif") {})
+        assertFalse(store.replaceVariant(hash, UploadImages.DISPLAY, StoredVariant(10, 10, "mp4")), "PENDING 줄은 바꾸지 않는다")
+        val variants = mapOf(UploadImages.THUMB to StoredVariant(5, 5, "jpg"), UploadImages.DISPLAY to StoredVariant(10, 10, "gif"))
+        assertTrue(store.markReady(hash, 10, 10, "gif", true, variants))
+
+        assertTrue(store.replaceVariant(hash, UploadImages.DISPLAY, StoredVariant(10, 10, "mp4")))
+
+        assertEquals(mapOf(UploadImages.THUMB to StoredVariant(5, 5, "jpg"), UploadImages.DISPLAY to StoredVariant(10, 10, "mp4")), store.find(hash)!!.variants)
+        assertFalse(store.replaceVariant(hash, "nope", StoredVariant(1, 1, "mp4")), "없는 이름은 만들지 않는다")
+        assertFalse(store.replaceVariant("0".repeat(64), UploadImages.DISPLAY, StoredVariant(10, 10, "mp4")))
+    }
 }

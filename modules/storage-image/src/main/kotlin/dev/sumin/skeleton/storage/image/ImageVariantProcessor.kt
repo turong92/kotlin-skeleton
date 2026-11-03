@@ -32,6 +32,7 @@ class ImageVariantProcessor(
     private val renderers: ImageRenderers,
     private val properties: ImageProperties,
     private val time: TimeProvider,
+    private val converter: AnimatedDisplayConverter = AnimatedDisplayConverter.NONE,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val permits = Semaphore(properties.maxConcurrent)
@@ -96,6 +97,9 @@ class ImageVariantProcessor(
         if (!store.markReady(keyHash, info.width, info.height, format, info.animated, variants) && store.find(keyHash) == null) {
             // 그 사이 상태 줄이 지워졌다(원본 회수) - 방금 올린 변환본이 고아가 되지 않게 치운다
             files.forEach { storage.delete(ObjectKey("$folder${it.name}.${it.extension}")) }
+        } else if (info.animated) {
+            // 사본 display 가 이미 쓰이는 중이다 - 변환은 뒤에서 하고, 요청이 실패해도 이미지는 사본으로 남는다
+            runCatching { converter.requestConversion(keyHash, row.objectKey) }.onFailure { log.warn("animated display conversion request failed {}: {}", keyHash.take(12), it.message) }
         }
     }
 

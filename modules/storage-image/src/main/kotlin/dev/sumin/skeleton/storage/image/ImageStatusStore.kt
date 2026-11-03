@@ -43,6 +43,9 @@ interface ImageStatusStore {
     /** `PENDING` -> `REJECTED` · `UNSUPPORTED` · `FAILED`. [reason] 은 사용자에게 보여도 되는 코드 */
     fun markTerminal(keyHash: String, state: UploadImageState, reason: String, width: Int? = null, height: Int? = null): Boolean
 
+    /** `READY` 줄의 변환본 하나를 바꾼다(움직이는 표시본이 영상으로 바뀔 때). 줄이 없거나 `READY` 가 아니거나 그 이름의 변환본이 없으면 false */
+    fun replaceVariant(keyHash: String, name: String, variant: StoredVariant): Boolean
+
     fun delete(keyHashes: Collection<String>)
 }
 

@@ -62,6 +62,15 @@ class JdbcImageStatusStore(
         ) == 1
     }
 
+    override fun replaceVariant(keyHash: String, name: String, variant: StoredVariant): Boolean = transactions.execute {
+        val current = jdbc.query("select variants from storage_images where key_hash = :h and status = 'READY' for update", mapOf("h" to keyHash)) { rs, _ -> variantsOf(rs.getString(1)) }.firstOrNull()
+        if (current == null || name !in current) return@execute false
+        jdbc.update(
+            "update storage_images set variants = :v, updated_at = :now where key_hash = :h and status = 'READY'",
+            MapSqlParameterSource().addValue("v", (current + (name to variant)).toJson()).addValue("now", dialect.instantParam(time.now())).addValue("h", keyHash),
+        ) == 1
+    }!!
+
     override fun delete(keyHashes: Collection<String>) {
         keyHashes.distinct().chunked(500).forEach { jdbc.update("delete from storage_images where key_hash in (:hashes)", mapOf("hashes" to it)) }
     }
@@ -79,12 +88,12 @@ class JdbcImageStatusStore(
     )
 
     companion object {
-        private val ENTRY = Regex(""""([a-z]+)":\{"w":(\d+),"h":(\d+),"ext":"([a-z-]+)"(?:,"alt":"([a-z,]+)")?}""")
+        private val ENTRY = Regex(""""([a-z]+)":\{"w":(\d+),"h":(\d+),"ext":"([a-z0-9-]+)"(?:,"alt":"([a-z0-9,]+)")?}""")
 
-        /** 닫힌 모양 `{"thumb":{"w":400,"h":300,"ext":"jpg","alt":"webp"},…}`(`alt` 는 다른 형식이 있을 때만, 쉼표로 이음) - 이름은 소문자, 확장자는 소문자 또는 `-` 뿐이라 이스케이프가 필요 없다 */
+        /** 닫힌 모양 `{"thumb":{"w":400,"h":300,"ext":"jpg","alt":"webp"},…}`(`alt` 는 다른 형식이 있을 때만, 쉼표로 이음) - 이름은 소문자, 확장자는 소문자 · 숫자(`mp4`) 또는 `-` 뿐이라 이스케이프가 필요 없다 */
         internal fun Map<String, StoredVariant>.toJson(): String? =
             takeIf { it.isNotEmpty() }?.entries?.joinToString(",", "{", "}") { (name, v) ->
-                require(name.all { it in 'a'..'z' } && v.ext.all { it in 'a'..'z' || it == '-' } && v.alt.all { a -> a.isNotEmpty() && a.all { it in 'a'..'z' } }) { "unexpected variant name or extension" }
+                require(name.all { it in 'a'..'z' } && v.ext.all { it in 'a'..'z' || it in '0'..'9' || it == '-' } && v.alt.all { a -> a.isNotEmpty() && a.all { it in 'a'..'z' || it in '0'..'9' } }) { "unexpected variant name or extension" }
                 val alt = if (v.alt.isEmpty()) "" else ""","alt":"${v.alt.joinToString(",")}""""
                 """"$name":{"w":${v.width},"h":${v.height},"ext":"${v.ext}"$alt}"""
             }

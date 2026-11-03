@@ -67,6 +67,7 @@ class ImgproxyAnimatedTest {
             rows[keyHash] = r.copy(state = UploadImageState.READY, width = width, height = height, format = format, animated = animated, variants = variants)
             return true
         }
+        override fun replaceVariant(keyHash: String, name: String, variant: StoredVariant) = false
         override fun markTerminal(keyHash: String, state: UploadImageState, reason: String, width: Int?, height: Int?): Boolean {
             val r = rows[keyHash]?.takeIf { it.state == UploadImageState.PENDING } ?: return false
             rows[keyHash] = r.copy(state = state, reason = reason)

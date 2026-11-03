@@ -128,5 +128,37 @@ object Synth {
         return out
     }
 
+    /** 움직이는 GIF — 장면이 계속 바뀌는 불투명 그림. [optimized] 면 「앞 장면과 같은 부분」을 투명으로 적는 최적화(transdiff)를 켠다: 파일에는 투명 표시가 있지만 합성한 화면은 불투명이다 */
+    fun gifOpaque(dir: Path, name: String = "opaque.gif", w: Int = 240, h: Int = 180, sec: Int = 3, optimized: Boolean = true): Path {
+        val out = dir.resolve(name)
+        ffmpeg("-f", "lavfi", "-i", "testsrc2=size=${w}x$h:rate=10:duration=$sec", *(if (optimized) arrayOf("-gifflags", "+offsetting+transdiff") else emptyArray()), out.toString())
+        return out
+    }
+
+    /** 실제 투명 배경 GIF — 투명한 바탕 위를 빨간 네모가 움직인다(합성한 화면에 알파 0 픽셀이 있다) */
+    fun gifTransparent(dir: Path, name: String = "transparent.gif", sec: Int = 2): Path {
+        val out = dir.resolve(name)
+        ffmpeg(
+            "-f", "lavfi", "-i", "color=c=black@0:s=64x48:r=10:d=$sec,format=rgba[bg];color=c=red:s=16x16:r=10:d=$sec,format=rgba[fg];[bg][fg]overlay=x=n*3:y=10:format=auto,split[a][b];[a]palettegen=reserve_transparent=1[p];[b][p]paletteuse",
+            out.toString(),
+        )
+        return out
+    }
+
+    /** 움직이는 WebP — ffmpeg 가 이것을 못 풀면(6.x · 8.0) 일꾼은 변환하지 않는다 */
+    fun webpAnimated(dir: Path, name: String = "anim.webp", sec: Int = 2): Path {
+        val out = dir.resolve(name)
+        ffmpeg(*src(96, 72, sec), "-c:v", "libwebp_anim", "-lossless", "1", "-loop", "0", out.toString())
+        return out
+    }
+
+    /** 이 ffmpeg 가 움직이는 WebP 를 프레임 여럿으로 푸는가 — 움직이는 WebP 디코더는 최근 버전에만 있다 */
+    fun decodesAnimatedWebp(dir: Path): Boolean = runCatching {
+        val webp = webpAnimated(dir, "probe.webp")
+        val p = ProcessBuilder("ffmpeg", "-hide_banner", "-nostdin", "-v", "info", "-f", "webp_pipe", "-i", webp.toString(), "-vf", "showinfo", "-f", "null", "-").redirectErrorStream(true).start()
+        val text = p.inputStream.readAllBytes().toString(Charsets.UTF_8)
+        p.waitFor() == 0 && Regex("n:\\s*1\\b").containsMatchIn(text)   // 두 번째 프레임(n: 1)까지 풀렸나
+    }.getOrDefault(false)
+
     fun tempDir(): Path = Files.createTempDirectory("video-worker-test-")
 }

@@ -124,8 +124,11 @@ class VideoAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    fun videoJobs(props: VideoProperties, ports: VideoPorts, keys: VideoKeys, inputs: VideoWorkerInputs, waker: VideoWaker, time: TimeProvider): VideoJobs =
-        VideoJobs(props, ports.store, ports.storage, keys, inputs, ports.followUps, ports.tx, waker, time)
+    fun videoJobs(
+        props: VideoProperties, ports: VideoPorts, keys: VideoKeys, inputs: VideoWorkerInputs, waker: VideoWaker, time: TimeProvider,
+        display: ObjectProvider<VideoDisplayJobs>,
+    ): VideoJobs =
+        VideoJobs(props, ports.store, ports.storage, keys, inputs, ports.followUps, ports.tx, waker, time, display.getIfAvailable())
 
     @Bean
     @ConditionalOnMissingBean

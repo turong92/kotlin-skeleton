@@ -29,7 +29,7 @@ env:
   # 비공개 영상의 입력 재생 목록 경로(/api/v1/videos/play/…)도 이 주소 기준으로 풀린다. <앱 name> 은 앱 선언(app.yaml)의 name.
   VIDEO_WORKER_API: http://app-<앱 name>:8080
   VIDEO_WORKER_ID: home-worker
-  VIDEO_WORKER_LANES: REMUX,COMPAT,LADDER   # 홈서버 일꾼이 세 차선 전부 맡는다(Cloud Run 일꾼은 원할 때만 — docs/modules/video-cloudrun.md)
+  VIDEO_WORKER_LANES: REMUX,COMPAT,LADDER,ANIMATED   # 홈서버 일꾼이 차선 전부 맡는다(Cloud Run 일꾼은 원할 때만 — docs/modules/video-cloudrun.md)
   VIDEO_WORKER_MODE: poll
   VIDEO_WORKER_NICE: "10"                   # 낮은 우선순위(nice) — 같은 기계의 다른 앱에 양보한다
 # 이 선언에는 아직 자원 칸이 없다 — CPU 2 · 메모리 3GB · 읽기 전용 루트 · cap_drop ALL · pids 상한 · /work 볼륨은 플랫폼이 선언 필드로 받을 때 더한다.
