@@ -1177,6 +1177,76 @@
       }
     },
     {
+      "id": "booking",
+      "kind": "module",
+      "module": "booking",
+      "path": "modules/booking",
+      "status": "experimental",
+      "summary": "예약(좌석 지정 · 선착순) — 회차(풀)의 배치도에서 자리를 직접 찍어 잡고(여럿은 전부 아니면 전무) · 다시 눌러 놓고 · 보류 시간이 지나면 자동 반환 · 무료 확정 · 본인 취소. 이중 판매 0 의 정본은 DB 자리 줄 조건부 갱신이고, 배치도는 스냅샷 + SSE 흐름(자리별 버전, 다시 붙으면 스냅샷)으로 맞춘다. 서버 API 는 BookingPools · BookingHolds, 문(BookingAdmission)의 기본은 늘 허용. 저장은 booking-jdbc.",
+      "starter": false,
+      "newProjectFlag": "--modules booking",
+      "autoIncludes": ["scheduler"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": ["booking-jdbc", "scheduler"]
+      },
+      "config": {
+        "prefixes": ["skeleton.booking"],
+        "snippet": "docs/config/modules/booking.yml"
+      },
+      "basePaths": ["/api/v1/booking"],
+      "secrets": [],
+      "docs": ["docs/modules/booking.md"],
+      "frontend": null,
+      "notFor": [
+        "저장소 없이는 서지 않는다 — booking-jdbc 를 같이 고른다(메모리 저장소는 없다)",
+        "여러 대로 돌리면 다른 인스턴스의 변화는 연결이 다시 붙을 때(최대 30분)까지 배치도에 안 보인다 — 중계(BookingSeatRelay)는 기본이 프로세스 안이다. 찍는 순간 DB 가 판정하므로 이중 판매는 없다",
+        "유료 자리의 결제 확정 · 운영자 경로는 아직 없다 — 지금은 무료 자리만 확정된다",
+        "대기열이 아니다 — 입장 순서를 정하려면 waiting-room 을 앞에 둔다(문 BookingAdmission 이 이어진다)",
+        "수량형 재고(자리 번호 없는 N장)를 위한 모듈이 아니다 — 배치도의 자리 하나하나가 경쟁 단위다"
+      ],
+      "keywords": {
+        "ko": ["예약", "좌석 예약", "좌석 지정", "티켓팅", "선착순", "배치도", "자리 선점", "공연 예매", "수강 신청", "이중 예약"],
+        "en": [
+          "booking",
+          "seat reservation",
+          "seat map",
+          "ticketing",
+          "first come first served",
+          "seat hold",
+          "double booking",
+          "race condition"
+        ]
+      }
+    },
+    {
+      "id": "booking-jdbc",
+      "kind": "module",
+      "module": "booking-jdbc",
+      "path": "modules/booking-jdbc",
+      "status": "experimental",
+      "summary": "예약을 DB 에 둔다 (PostgreSQL · MySQL) — 표 다섯(풀 · 자리 · 보류 · 보류 자리 · 계정 사용량), 자리 줄 조건부 갱신으로 이중 판매 0 · 여러 자리 전부 아니면 전무 · 계정 사용량 줄 잠금 뒤 자리 id 오름차순으로 교착 없이.",
+      "starter": false,
+      "newProjectFlag": "--modules booking-jdbc",
+      "autoIncludes": ["booking", "scheduler"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/booking-jdbc.md"],
+      "frontend": null,
+      "notFor": ["DataSource · db-* 모듈과 이 모듈의 마이그레이션이 적용된 스키마가 필요하다"],
+      "keywords": {
+        "ko": ["예약 저장소", "예약 DB", "좌석 DB"],
+        "en": ["booking storage", "booking repository", "seat store"]
+      }
+    },
+    {
       "id": "campaign",
       "kind": "module",
       "module": "campaign",
@@ -3793,6 +3863,58 @@
       }
     },
     {
+      "id": "waiting-room",
+      "kind": "module",
+      "module": "waiting-room",
+      "path": "modules/waiting-room",
+      "status": "experimental",
+      "summary": "대기열(가상 대기실) — 아직 구현 전(자리만 잡혀 있다). 로그인한 사람만 줄을 서고, 오픈 전 줄은 오픈 순간 섞고 그 뒤는 온 순서, 분당 입장 수만 정한다(설계: docs/superpowers/specs/2026-11-02-booking-design.md).",
+      "starter": false,
+      "newProjectFlag": "--modules waiting-room",
+      "autoIncludes": [],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": ["waiting-room-jdbc"]
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/waiting-room.md"],
+      "frontend": null,
+      "notFor": ["아직 구현 전이다 — 쓰지 않는다"],
+      "keywords": {
+        "ko": ["대기열", "대기실", "가상 대기실", "줄 서기", "접속 폭주"],
+        "en": ["waiting room", "virtual queue", "queue", "traffic spike"]
+      }
+    },
+    {
+      "id": "waiting-room-jdbc",
+      "kind": "module",
+      "module": "waiting-room-jdbc",
+      "path": "modules/waiting-room-jdbc",
+      "status": "experimental",
+      "summary": "대기열을 DB 에 둔다 — 아직 구현 전(자리만 잡혀 있다).",
+      "starter": false,
+      "newProjectFlag": "--modules waiting-room-jdbc",
+      "autoIncludes": ["waiting-room"],
+      "needs": {
+        "requires": [],
+        "oneOf": [],
+        "optional": []
+      },
+      "config": null,
+      "basePaths": [],
+      "secrets": [],
+      "docs": ["docs/modules/waiting-room-jdbc.md"],
+      "frontend": null,
+      "notFor": ["아직 구현 전이다 — 쓰지 않는다"],
+      "keywords": {
+        "ko": ["대기열 저장소", "대기열 DB"],
+        "en": ["waiting room storage", "queue repository"]
+      }
+    },
+    {
       "id": "workspace",
       "kind": "module",
       "module": "workspace",
@@ -4022,6 +4144,8 @@
         "badge-jdbc",
         "board",
         "board-jdbc",
+        "booking",
+        "booking-jdbc",
         "campaign",
         "campaign-jdbc",
         "catalog",
@@ -4081,6 +4205,8 @@
         "storage-image-jdbc",
         "storage-image-pdfbox",
         "storage-s3",
+        "waiting-room",
+        "waiting-room-jdbc",
         "workspace",
         "workspace-jdbc"
       ],

@@ -102,6 +102,7 @@ fails when this table and the prefixes found in module code differ.
 | `account` | `skeleton.account` |
 | `api-key` | `skeleton.api-key` |
 | `inquiry` | `skeleton.inquiry` |
+| `booking` | `skeleton.booking` |
 | `auth` | `skeleton.auth` |
 | `auth-magic-link` | `skeleton.auth-magic-link` |
 | `auth-mfa` | `skeleton.auth-mfa` |
@@ -214,6 +215,8 @@ test proving a context with only that module (and its declared dependencies) boo
 | `idempotency` | yes (in-memory store) | nothing | — |
 | `inquiry` | yes (in-memory store; the human check passes everything until `captcha-turnstile` or an app bean) | `inquiry-jdbc` | — |
 | `inquiry-jdbc` | yes | a `DataSource` + one `db-*` module (+ its migration `inquiries`, as above) | — |
+| `booking` | wired only once a `BookingStore` exists (then the server API `BookingPools` · `BookingHolds`; HTTP `/api/v1/booking` for a servlet app with Spring Security; the door lets everyone in, the relay stays in this instance) | `booking-jdbc` | `scheduler` (the 1-minute expiry sweep; compile-only), `spring-security-core` (HTTP; compile-only) |
+| `booking-jdbc` | yes | a `DataSource` + one `db-*` module (+ its migration `booking`, as above) | — |
 | `job-queue-jdbc` | yes | a `DataSource` + one `db-*` module (its `jobs` migration is picked up by `spring.flyway.locations: classpath:db/migration/{vendor}`) | — |
 | `json` | yes | nothing | — |
 | `migration` / `migration-flyway` | yes | Flyway on the classpath (`spring-boot-starter-flyway`) | — |

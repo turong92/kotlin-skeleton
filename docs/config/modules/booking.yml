@@ -1,0 +1,5 @@
+# booking — 예약(좌석 지정 · 선착순). 사용자 경로 /api/v1/booking. 저장은 booking-jdbc.
+skeleton:
+  booking:
+    http:
+      enabled: true      # false 면 사용자 경로를 등록하지 않는다 (서블릿 앱 + Spring Security 가 있을 때만 등록). 서버 API(BookingPools · BookingHolds)는 그대로 쓸 수 있다
