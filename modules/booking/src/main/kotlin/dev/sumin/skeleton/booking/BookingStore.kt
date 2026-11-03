@@ -65,7 +65,7 @@ interface BookingStore {
     /**
      * 주문 [orderId] 가 결제됐다(`onPaid`). 주문 하나에 한 번만 효과가 있고(다시 불려도 같은 결과) 결과는 [OrderOutcome] 이다.
      * 보류가 `HELD` 면(시간이 지났어도 아직 회수 전이면) 확정, 이미 회수 · 놓기 된 보류면 가졌던 자리를 **전부 아니면 전무**로 다시 잡아 확정하고 못 잡으면 `UNFULFILLED`,
-     * 이미 다른 주문으로 확정된 보류면 이 주문은 [OrderOutcome.DUPLICATE]. [quotedAmount] · [currency] 가 지금 보류의 자리 가격 합 · 풀의 통화와 다르면(견적 뒤 자리를 바꿨다) 보류는 그대로 두고 환불한다.
+     * 이미 다른 주문으로 확정된 보류면 이 주문은 [OrderOutcome.DUPLICATE]. [quotedAmount] · [currency] 가 결제를 시작할 때 보류에 박힌 금액 · 풀의 통화와 다르면(주문이 결제 시작을 거치지 않은 다른 길로 만들어졌다) 보류는 그대로 두고 환불한다 - 안전망이다.
      * 환불이 필요한 결과는 같은 트랜잭션에서 환불 작업을 넣는다([BookingRefundQueue]) - 돈만 받고 방치되지 않게.
      */
     fun settlePaid(orderId: String, accountId: String, holdId: String, quotedAmount: Long, currency: String, now: Instant): PaidOutcome
