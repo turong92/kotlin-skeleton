@@ -24,6 +24,8 @@ dependencies {
     implementation(project(":modules:storage-image"))      // 올린 이미지의 변환본(thumb · display, EXIF 제거) - 공개 영역 · 리뷰 사진은 원본 대신 변환본을 준다. 켜기 skeleton.storage.image.enabled. docs/modules/storage-image.md
     implementation(project(":modules:storage-image-jdbc")) // 변환 상태 표 + 변환 작업(job-queue) (storage-image 는 저장소를 모른다)
     implementation(project(":modules:storage-image-imageio")) // 변환 엔진 - JVM 의 ImageIO(기본). HEIC/AVIF 입력이 필요하면 storage-image-imgproxy(컨테이너) - 이 앱은 쓰지 않는다
+    implementation(project(":modules:video"))              // 영상 올리기 · 재생: 저장소로 직접 멀티파트 올리기 · 이어 올리기 · 일꾼 API · 비공개 재생 출입증 (+ video: /api/v1/videos). 노트의 영상 한 편 - notes/NoteVideoPolicy. 켜기 skeleton.video.enabled, docs/modules/video.md
+    implementation(project(":modules:video-jdbc"))         // 영상 저장소 (video 는 저장소를 모른다) - 표 셋 + 후속 작업을 job-queue-jdbc 에 얹는다. 변환은 별도 일꾼(apps/video-worker, 로컬은 compose 의 video 프로필)이 한다
     implementation(project(":modules:scheduler"))          // 비회원 업로드 고아 회수의 주기 작업(@SkeletonScheduled) - storage.web.guest.cleanup
     implementation(project(":modules:job-queue-jdbc"))     // 내보내기 같은 오래 걸리는 일 (재시도 큐)
     implementation(project(":modules:board"))              // 게시판: 글 · 대댓글 · 종류가 있는 반응 (/api/v1/boards). 댓글 알림은 위 notification 이 있어서 켜진다

@@ -93,6 +93,38 @@ services:
         aws s3api head-bucket --bucket app 2>/dev/null || aws s3api create-bucket --bucket app
         aws s3api put-bucket-cors --bucket app --cors-configuration file:///etc/cors.json
 
+  # video 모듈로 조립한 앱의 로컬 영상 변환 일꾼(apps/video-worker) - 세 차선(원본 단 · 호환 · 사다리) 전부, 상주. scripts/dev.sh 가 이미지를 만들어 올린다
+  # (손으로는 `./gradlew :apps:video-worker:installDist` 뒤 `docker compose --profile s3 --profile video up -d --build video-worker`). 로컬 일꾼 토큰은 앱의 application-local.yml
+  # (skeleton.video.worker-token-sha256)이 해시로 아는 로컬 전용 값이다 - 운영 토큰은 운영자 발급 API 가 한 번 보여 준다(docs/deploy.md §7).
+  # **s3 와 네트워크를 나눠 쓴다**(network_mode): 비공개 영상의 재생 목록 안 조각 주소는 서버가 서명한 저장소 주소(localhost:S3_PORT)라, 일꾼 컨테이너 안에서도 localhost:8333 이
+  # 로컬 S3 로 닿아야 한다. 그래서 S3_PORT 를 8333 이 아닌 값으로 바꾸면 일꾼은 조각을 못 받는다. 앱은 호스트에서 돌아 host.docker.internal 로 닿는다(Docker Desktop 에서 확인. 리눅스 엔진은 host.docker.internal 이 기본으로 없어 직접 이어 줘야 한다 - 확인하지 않았다).
+  # 격리: 비루트 · 읽기 전용 루트 · cap_drop ALL · pids 상한 · tmpfs /tmp · 쓰기는 /work 볼륨만. 자원: CPU 2 · 메모리 3GB(4K 사다리는 1GB 에서 OOM - docs/deploy.md 메모리 표) · 낮은 우선순위(nice + cpu_shares)
+  video-worker:
+    build: apps/video-worker
+    profiles: [video]
+    depends_on: [s3]
+    network_mode: "service:s3"
+    environment:
+      VIDEO_WORKER_API: http://host.docker.internal:${SERVER_PORT:-8080}   # 앱 주소 - 비공개 영상의 입력 재생 목록 경로(/api/v1/videos/play/…)도 이 출처로 푼다
+      VIDEO_WORKER_TOKEN: local-dev-only-video-worker-token
+      VIDEO_WORKER_ID: local-worker
+      VIDEO_WORKER_LANES: REMUX,COMPAT,LADDER
+      VIDEO_WORKER_MODE: poll
+      VIDEO_WORKER_NICE: "10"
+      VIDEO_WORKER_HEALTH_PORT: "8081"   # s3 컨테이너가 8080 을 쓴다(SeaweedFS 볼륨 서버)
+    mem_limit: 3g
+    cpus: 2
+    cpu_shares: 256   # 기본 1024 의 1/4 - 다른 일과 같이 쓸 때 양보한다
+    pids_limit: 256
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs:
+      - /tmp
+    volumes:
+      - video-work:/work
+    restart: unless-stopped
+
   app:
     build: .
     depends_on:
@@ -117,3 +149,4 @@ volumes:
   mysql-data:
   redis-data:
   s3-data:
+  video-work:

@@ -257,6 +257,8 @@ rm -f apps/api/src/test/kotlin/dev/sumin/skeleton/app/api/MultiProject*.kt apps/
 # ---------------------------------------------------------------------------------------------------- 지우기
 [ "$WITH_WORKBENCH" = 1 ] || { rm -rf apps/workbench; perl -ni -e 'print unless /^include\(":apps:workbench"\)\s*$/' settings.gradle.kts; }
 [ "$WITH_VIDEO_WORKER" = 1 ] || { rm -rf apps/video-worker; perl -ni -e 'print unless /^include\(":apps:video-worker"\)\s*$/' settings.gradle.kts; }
+# 일꾼 앱이 없으면 그 로컬 컨테이너(docker-compose.yml 의 video-worker + 볼륨)와 배포 선언(deploy/video-worker.yaml)도 가지 않는다
+[ "$WITH_VIDEO_WORKER" = 1 ] || { rm -f deploy/video-worker.yaml; perl -0pi -e 's/^  # video 모듈로 조립한 앱의 로컬 영상 변환 일꾼.*?^    restart: unless-stopped\n\n//ms; s/^  video-work:\n//m' docker-compose.yml; }
 # 네이티브 이미지(docs/native-image.md): 스켈레톤 자신의 시험용 조립(tools/native-check)과 그 흐름 시험(scripts/native-smoke.sh)은 새 프로젝트에 가지 않는다.
 # 빌드 · 시험 도구(scripts/native-build.sh · scripts/native-test.sh · Dockerfile.native)는 남는다 — 앱(apps/api)을 대상으로 쓰고, 프로젝트가 자기 핵심 흐름 시험을 `--smoke` 로 붙인다.
 # 워크플로는 손으로 돌리는 것(workflow_dispatch)만 남긴다: 프로젝트가 네이티브로 가기로 하면 릴리스 태그 · 의존성 파일 PR 트리거를 켠다(스켈레톤의 .github/workflows/native.yml 이 틀).

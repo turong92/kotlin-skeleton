@@ -27,6 +27,8 @@ data class Note(
     val pinned: Boolean = false,
     val attachmentKey: String? = null,
     val attachmentName: String? = null,
+    /** 붙인 영상 한 편(비공개, 영상 모듈의 id) - 영상 표는 모듈의 것이라 외래 키는 없고, 붙일 때 주인의 영상인지 확인한다 */
+    val videoId: String? = null,
     @Embedded.Nullable
     override val audit: AuditTimestamps = AuditTimestamps.now(),
     /** 아직 저장하지 않은 새 줄이다. DB 에서 읽은 줄은 항상 false(저장 컬럼이 아니라 기본값이 쓰인다). */

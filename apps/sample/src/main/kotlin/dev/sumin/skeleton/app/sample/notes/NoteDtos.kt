@@ -20,6 +20,8 @@ data class ReplaceNoteRequest(
     val pinned: Boolean = false,
     @field:OwnAttachmentKey val attachmentKey: String? = null,
     @field:Size(max = 255) val attachmentName: String? = null,
+    /** 노트에 붙일 영상(`POST /api/v1/videos` 로 올린 내 영상의 id). 통째로 바꾸는 PUT 이라 보내지 않으면 영상이 떨어진다 */
+    @field:Size(max = 32) val videoId: String? = null,
 )
 
 data class NoteResponse(
@@ -30,6 +32,7 @@ data class NoteResponse(
     val pinned: Boolean,
     val attachmentKey: String?,
     val attachmentName: String?,
+    val videoId: String?,
     val createdAt: Instant,
     val updatedAt: Instant,
 )
@@ -53,6 +56,7 @@ fun Note.toResponse() = NoteResponse(
     pinned = pinned,
     attachmentKey = attachmentKey,
     attachmentName = attachmentName,
+    videoId = videoId,
     createdAt = audit.createdAt,
     updatedAt = audit.updatedAt,
 )

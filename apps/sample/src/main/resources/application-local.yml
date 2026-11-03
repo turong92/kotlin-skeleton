@@ -88,6 +88,10 @@ skeleton:
     credentials:
       access-key-id: dev
       secret-access-key: dev-secret
+  video:
+    playback:
+      secret: local-dev-only-video-playback-secret-0123456789   # 로컬 · e2e 전용 고정 값(32자 이상) - 비공개 영상 재생 출입증의 HMAC. 운영 값은 환경변수 SKELETON_VIDEO_PLAYBACK_SECRET (docs/deploy.md §7)
+    worker-token-sha256: 6e0a48f9d32f6ad392db8d589abe6546b64022f50a116741798f6e2e10bfe914   # 로컬 일꾼 토큰 'local-dev-only-video-worker-token' 의 SHA-256 - 기동 때 세 차선 일꾼으로 등록한다. docker-compose.yml 의 video-worker 가 같은 평문 토큰을 쓴다. stage · prod 에서는 기동 실패
   waiting-room:
     token:
       key: local-dev-only-waiting-room-token-key-0123456789   # 로컬 · e2e 전용 고정 값(24자 이상) - 순번표 · 입장권 서명. 운영 값은 환경변수 WAITING_ROOM_TOKEN_KEY

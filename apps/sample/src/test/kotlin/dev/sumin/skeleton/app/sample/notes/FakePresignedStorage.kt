@@ -23,7 +23,7 @@ import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 
 /** S3 없이 테스트하는 메모리 저장소 — 업로드한 바이트를 `objects` 에서 확인한다. 서명한 URL 은 가짜 호스트를 가리킨다. */
-class FakePresignedStorage : PresignedStorage {
+open class FakePresignedStorage : PresignedStorage {
     val objects = ConcurrentHashMap<String, ByteArray>()
 
     /** 객체의 Content-Type - 올릴 때 · 복사할 때 따라간다 */

@@ -7,6 +7,8 @@ import dev.sumin.skeleton.common.search.SearchIndexer
 import dev.sumin.skeleton.jobqueue.jdbc.JobQueue
 import dev.sumin.skeleton.storage.ObjectKey
 import dev.sumin.skeleton.storage.ObjectStorage
+import dev.sumin.skeleton.video.VideoLibrary
+import dev.sumin.skeleton.video.VideoUploads
 import dev.sumin.skeleton.workspace.WorkspaceErrorCode
 import dev.sumin.skeleton.workspace.WorkspaceException
 import dev.sumin.skeleton.workspace.WorkspaceMember
@@ -47,6 +49,8 @@ class NoteService(
     private val json: ObjectMapper,
     private val signals: ObjectProvider<CampaignSignals>,
     private val search: ObjectProvider<SearchIndexer>,
+    private val videos: VideoUploads,
+    private val videoLibrary: VideoLibrary,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -83,7 +87,10 @@ class NoteService(
     @Transactional
     fun replace(scope: NoteScope, id: String, request: ReplaceNoteRequest): Note {
         val current = find(scope, id)
-        if (scope.workspace != null && request.attachmentKey != null) throw TeamNoteAttachmentException()
+        if (scope.workspace != null && (request.attachmentKey != null || request.videoId != null)) throw TeamNoteAttachmentException()
+        // 영상은 내 영상만 붙인다(남의 · 없는 영상은 404 VIDEO.NOT_FOUND). 팀 노트의 영상은 건드리지 않는다
+        if (scope.workspace == null && request.videoId != null && request.videoId != current.videoId) videos.get(scope.caller, request.videoId)
+        val videoId = if (scope.workspace != null) current.videoId else request.videoId
         // 팀 노트의 첨부는 건드리지 않는다(다른 멤버가 칸을 비워도 쓴 사람의 파일이 지워지지 않게)
         val key = if (scope.workspace != null) current.attachmentKey else request.attachmentKey
         val saved = notes.save(
@@ -93,12 +100,14 @@ class NoteService(
                 status = request.status,
                 pinned = request.pinned,
                 attachmentKey = key,
+                videoId = videoId,
                 attachmentName = if (scope.workspace != null) current.attachmentName else key?.let { request.attachmentName?.takeIf { name -> name.isNotBlank() } ?: it.substringAfterLast('/') },
             ),
         )
         notifier.updated(saved, scope.caller)
         search.ifAvailable { it.upsert(saved.toSearchDocument()) }
         if (current.attachmentKey != null && current.attachmentKey != key) discardAfterCommit(current.attachmentKey)
+        if (current.videoId != null && current.videoId != videoId) discardVideoAfterCommit(current.videoId)
         return saved
     }
 
@@ -111,6 +120,7 @@ class NoteService(
         notifier.deleted(current, scope.caller)
         search.ifAvailable { it.delete(NoteSearchSource.TYPE, current.id.toString()) }
         current.attachmentKey?.let(::discardAfterCommit)
+        current.videoId?.let(::discardVideoAfterCommit)
     }
 
     @Transactional(readOnly = true)
@@ -144,6 +154,20 @@ class NoteService(
         val workspaceId = scope.workspaceId
         val found = if (workspaceId != null) notes.findByIdAndWorkspaceId(uuid, workspaceId) else notes.findByIdAndOwnerIdAndWorkspaceIdIsNull(uuid, scope.caller)
         return found ?: throw NoteNotFoundException(id)
+    }
+
+    /** 떨어졌거나 노트와 함께 지워진 영상도 커밋 뒤에 지운다(되돌릴 수 없는 일이라 롤백되면 그대로여야 한다). 이미 없거나 실패해도 노트 변경은 되돌리지 않는다 */
+    private fun discardVideoAfterCommit(videoId: String) {
+        val delete = {
+            runCatching { videoLibrary.delete(videoId, "NOTE_CHANGED") }.onFailure { log.warn("note video cleanup failed: {}", videoId, it) }
+        }
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(object : TransactionSynchronization {
+                override fun afterCommit() { delete() }
+            })
+        } else {
+            delete()
+        }
     }
 
     /** 첨부 파일은 DB 가 커밋된 뒤에 지운다 — 롤백되면 파일은 그대로여야 한다. 실패해도 노트 변경은 되돌리지 않는다 */

@@ -3,8 +3,9 @@
 #
 #   scripts/dev.sh            # 컨테이너(DB · S3) → (프론트) → ./gradlew :apps:api:bootRun --spring.profiles.active=local
 #   APP=sample scripts/dev.sh # 같은 흐름으로 샘플 앱(apps/sample, docs/sample.md) — 짝 프론트까지 한 번에는 scripts/dev-sample.sh
-#   scripts/dev.sh down       # 컨테이너를 내린다 (데이터 볼륨은 남는다. 지우려면 docker compose --profile s3 down -v)
+#   scripts/dev.sh down       # 컨테이너를 내린다 (데이터 볼륨은 남는다. 지우려면 docker compose --profile s3 --profile video down -v)
 #
+# video 모듈을 쓰는 앱(APP=sample)이면 변환 일꾼(apps/video-worker, compose 의 video 프로필)도 함께 올린다 — 토큰 · 주소는 docker-compose.yml 주석.
 # 프론트는 이 레포와 나란히 둔다: <작업 폴더>/api (이 레포) 와 <작업 폴더>/web (react-skeleton 에서 찍은 것).
 # 다른 위치면 WEB_DIR=../my-web scripts/dev.sh, 프론트 없이 백엔드만이면 WEB_DIR= scripts/dev.sh.
 # 프론트는 Vite(5173)가 /api/v1 을 localhost:8080 으로 넘긴다 — CORS 설정이 필요 없다.
@@ -24,20 +25,32 @@ uses() { grep -Eq "^[[:space:]]*(implementation|api)\(project\(\":modules:$1\"\)
 uses db-mysql && DB=mysql
 WITH_S3=0
 uses storage-s3 && WITH_S3=1
+WITH_VIDEO=0
+uses video && WITH_VIDEO=1
+[ "$WITH_VIDEO" = 0 ] || [ "$WITH_S3" = 1 ] || { echo "video 모듈은 객체 저장소가 필요하다 — $APP_BUILD 에 storage-s3 도 있어야 한다" >&2; exit 2; }
 
 # 시험용: 무엇을 올릴지만 찍고 끝낸다 (scripts/test-new-project.sh 가 쓴다)
-[ -z "${DEV_DRY_RUN:-}" ] || { echo "infra: $DB s3=$WITH_S3 app=$APP"; exit 0; }
+[ -z "${DEV_DRY_RUN:-}" ] || { echo "infra: $DB s3=$WITH_S3$([ "$WITH_VIDEO" = 1 ] && echo ' video=1') app=$APP"; exit 0; }
 
 if [ "${1:-}" = down ]; then
-  docker compose --profile s3 down
+  docker compose --profile s3 --profile video down
   exit 0
 fi
 
-echo "== 컨테이너: $DB$([ "$WITH_S3" = 1 ] && echo ' + s3 (storage-s3)')"
+echo "== 컨테이너: $DB$([ "$WITH_S3" = 1 ] && echo ' + s3 (storage-s3)')$([ "$WITH_VIDEO" = 1 ] && echo ' + video-worker (video)')"
 docker compose up -d --wait "$DB"
 if [ "$WITH_S3" = 1 ]; then
   docker compose --profile s3 up -d s3
   docker compose --profile s3 run --rm s3-init      # 버킷 app + CORS (이미 있으면 그대로)
+fi
+if [ "$WITH_VIDEO" = 1 ]; then
+  # 영상 변환 일꾼(세 차선, 상주) — 앱(호스트)이 아직 안 떠 있어도 일꾼은 5초마다 집어 본다. 이미지는 처음 한 번만 ffmpeg 를 받느라 몇 분 걸린다
+  if [ -d apps/video-worker ]; then
+    ./gradlew :apps:video-worker:installDist
+    docker compose --profile s3 --profile video up -d --build video-worker
+  else
+    echo "   apps/video-worker 가 없다 — 변환 일꾼은 따로 띄운다 (docs/deploy.md). 올린 영상은 일꾼이 올 때까지 줄 서서 기다린다" >&2
+  fi
 fi
 
 WEB_DIR="${WEB_DIR-../web}"

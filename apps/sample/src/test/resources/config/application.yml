@@ -19,6 +19,10 @@ skeleton:
       guest:
         secret: test-only-storage-guest-secret-0123456789abcdef   # 비회원 업로드(main application.yml 이 켠다)의 HMAC 비밀 - 시험 전용 고정 값
       key-secret: test-only-storage-key-secret-0123456789abcdef   # key-owner=OPAQUE(main application.yml)의 HMAC 비밀 — 시험 전용 고정 값
+  video:
+    playback:
+      secret: test-only-video-playback-secret-0123456789abcdef   # 비공개 영상 재생 출입증(main application.yml 이 영상을 켠다)의 HMAC 비밀 - 시험 전용 고정 값
+    worker-token-sha256: f92b39493425520f575f770808281d12c98cb84d962841461c0aac2798dd3cd5   # 시험의 가짜 일꾼 토큰 'test-only-video-worker-token' 의 SHA-256 (NoteVideoJourneyIntegrationTest)
   auth-mfa:
     required-for: NONE   # 견본은 운영자에게 2단계를 필수로 정했다(OPERATORS) - 시험의 ADMIN 은 로그인 토큰만 들고 보호된 경로를 부른다. 필수 문은 MfaJourneyIntegrationTest 가 켜서 시험한다
   notification:

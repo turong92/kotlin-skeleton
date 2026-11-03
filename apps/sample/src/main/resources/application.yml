@@ -135,6 +135,10 @@ skeleton:
       max-size-bytes: 5242880         # 5 MB
       allowed-content-types: [image/png, image/jpeg, image/gif, image/webp, application/pdf, text/plain]
       allowed-extensions: [png, jpg, jpeg, gif, webp, pdf, txt]
+  video:
+    enabled: true                       # 이 앱의 선택: 노트에 영상 한 편을 붙인다 - 올리기(저장소로 직접 멀티파트 · 이어 올리기) · 변환(별도 일꾼 apps/video-worker) · 비공개 재생. 모듈 기본은 꺼짐. 일꾼이 없으면 올린 영상은 줄 서서 기다린다 (docs/modules/video.md · docs/deploy.md §7)
+    # playback.secret(비공개 영상 재생 출입증의 HMAC 비밀, 32자 이상)은 여기 쓰지 않는다 — 환경변수 SKELETON_VIDEO_PLAYBACK_SECRET (선언의 secrets: · deploy/app.yaml 의 [video] 줄). 비었거나 짧으면 기동 실패.
+    # 로컬 · e2e 는 application-local.yml, 시험은 test config/application.yml 이 고정 더미 값을 둔다. 4GB 상한 · 조각 16MB · 계정당 동시 2편 · 사다리 켜짐 등 나머지는 모듈 기본 그대로
   # author-profile(build.gradle.kts 의 두 줄): 이 앱은 모듈 기본 그대로 쓴다 — 계정당 5개 · adopt-on-startup 켜짐 · 이름 규칙은 위 account.display-name (docs/modules/author-profile.md)
   board:
     reaction:

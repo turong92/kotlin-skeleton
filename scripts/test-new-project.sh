@@ -192,7 +192,7 @@ check "dev.sh 는 S3 를 쓰는 조합에서 s3 서비스를 같이 올린다" h
 check "dev.sh 는 앱이 쓰는 모듈로 인프라를 정한다 — storage-s3 를 고른 조합은 postgres + s3" bash -c "[ \"\$(DEV_DRY_RUN=1 APP=api bash -c 'cd \"$B\" && bash scripts/dev.sh' 2>&1 | tail -1)\" = 'infra: postgres s3=1 app=api' ]"
 check "dev.sh 는 기본 조합에서 s3 를 올리지 않는다" bash -c "[ \"\$(DEV_DRY_RUN=1 bash -c 'cd \"$A\" && bash scripts/dev.sh' 2>&1 | tail -1)\" = 'infra: postgres s3=0 app=api' ]"
 check "dev.sh 는 소스 레포(두 DB 모듈이 다 있다)에서도 스타터 apps/api 에 postgres 를 고른다 — 폴더 존재로 고르면 mysql 이 된다" bash -c "[ \"\$(DEV_DRY_RUN=1 bash -c 'cd \"$SRC\" && bash scripts/dev.sh' 2>&1 | tail -1)\" = 'infra: postgres s3=0 app=api' ]"
-check "dev.sh APP=sample 은 postgres + s3" bash -c "[ \"\$(DEV_DRY_RUN=1 APP=sample bash -c 'cd \"$SRC\" && bash scripts/dev.sh' 2>&1 | tail -1)\" = 'infra: postgres s3=1 app=sample' ]"
+check "dev.sh APP=sample 은 postgres + s3" bash -c "[ \"\$(DEV_DRY_RUN=1 APP=sample bash -c 'cd \"$SRC\" && bash scripts/dev.sh' 2>&1 | tail -1)\" = 'infra: postgres s3=1 video=1 app=sample' ]"
 check "persistence-jooq 가 없으니 그 모듈이 읽던 형제 폴더 문제도 없다" test ! -e "$B/modules/persistence-jooq"
 check "배포 선언에 고른 모듈(storage-s3 · notification-mail)의 비밀 설명이 남고 고르지 않은 모듈(payment-toss)은 없다" bash -c "grep -q '\[storage-s3\] (env:) ACME_STORAGE_S3_BUCKET' '$B/deploy/app.yaml' && grep -q 'ACME_STORAGE_WEB_KEY_SECRET' '$B/deploy/app.yaml' && grep -q '\[notification-mail\]' '$B/deploy/app.yaml' && ! grep -q '\[payment-toss\]' '$B/deploy/app.yaml'"
 
