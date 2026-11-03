@@ -2,6 +2,7 @@ dependencies {
     api(project(":modules:video"))   // 포트 · 모델 타입(VideoStore · Video)이 이 모듈의 공개 API 에 나온다 — 의존성 한 줄로 충분하게
     implementation(project(":modules:persistence-jdbc"))   // SqlDialect (시각 바인딩 · 방언 차이)
     implementation(project(":modules:platform"))
+    implementation(project(":modules:job-queue-jdbc"))   // video.finalize · video.wake 후속이 얹히는 큐 (JobQueue · JobHandler) — 자체 폴링 워커를 만들지 않는다
 
     implementation("org.springframework.boot:spring-boot-autoconfigure")
     implementation("org.springframework.boot:spring-boot-starter-jdbc")

@@ -1,4 +1,4 @@
-# video — 영상 올리기(저장소로 직접 올리는 멀티파트 · 이어 올리기). 저장은 video-jdbc. 모듈 기본은 꺼짐.
+# video — 영상 올리기(저장소로 직접 올리는 멀티파트 · 이어 올리기) + 변환 일꾼 API. 저장은 video-jdbc. 모듈 기본은 꺼짐.
 skeleton:
   video:
     enabled: false         # true 로 켜면 VideoStore · VideoWorkerStore(video-jdbc)와 PresignedStorage(storage-s3)가 있어야 기동한다
@@ -7,5 +7,17 @@ skeleton:
     part-size: 16MB        # 멀티파트 조각 크기 (마지막 조각 말고는 5MB 이상 · 조각 수는 10,000 이하)
     max-in-flight: 2       # 한 계정이 동시에 진행하는 영상 수 (올리는 중 ~ 변환 중)
     stale-upload-age: 1h   # 이 시간 움직임이 없는 올리기는 청소(5분마다)가 중단하고 FAILED(UPLOAD_ABANDONED) 로 둔다
+    ladder: true           # 화질 사다리(아랫단) 트랙을 만든다. 끄면 NONE 으로 두고, 켜질 때 청소가 줄 세운다
+    verify-public: true    # 공개 영상은 일꾼이 올리기 전에 모든 프레임을 디코드해 본다 (claim 응답의 verifyDecode) - 운영자만 올리는 앱은 false
+    worker-token-sha256: ""   # 로컬 전용 - 이 해시(SHA-256 16진수 64자)의 일꾼을 기동 때 등록한다. stage · prod 에서는 기동 실패 (환경변수 <P>_VIDEO_WORKER_TOKEN_SHA256)
+    cleanup-delay: 1h      # 원본 단 검증 뒤 이만큼 있다가 올린 원 파일을 지우고 중복 결과 폴더를 쓴다
+    worker:
+      lease-duration: 10m  # 한 번 집으면 이만큼 임대 - heartbeat 가 늘린다. 끝나면 청소가 다시 줄 세운다(3회 뒤 실패)
+      url-ttl: 2h          # 일꾼에게 주는 읽기 · 올리기 서명 주소의 수명
+    monitor:               # 주인 경보 문턱 (alert 모듈이 있을 때)
+      worker-absent: 5m    # remux 일꾼을 이만큼 못 봤고 대기가 있으면 VIDEO_QUEUE_STALE
+      compat-stale-after: 2h   # 호환 단이 이만큼 넘게 대기 중이면 VIDEO_COMPAT_STALE
+      failure-surge-count: 5   # failure-window 안에 실패가 이만큼 이상이면 VIDEO_FAILED_SURGE
+      failure-window: 1h
     http:
-      enabled: true        # false 면 /api/v1/videos 를 등록하지 않는다 (앱이 자기 컨트롤러를 둘 때)
+      enabled: true        # false 면 /api/v1/videos 를 등록하지 않는다 (앱이 자기 컨트롤러를 둘 때). 일꾼 API(/api/internal/video/...)는 영향 없다

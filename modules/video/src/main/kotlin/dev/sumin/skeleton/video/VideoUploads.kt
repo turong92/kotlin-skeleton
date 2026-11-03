@@ -72,7 +72,8 @@ class VideoUploads(
 
     /** 저장소가 가진 조각 — 새로 고침 뒤 같은 파일을 다시 고르면 빠진 번호만 올린다 */
     fun uploadedParts(caller: String, videoId: String): List<UploadedPart> {
-        val video = uploading(caller, videoId)
+        // 이미 마쳤거나 닫힌 올리기는 「없는 올리기」다 — 화면이 이 404 를 보고 처음부터 다시 올린다
+        val video = find(caller, videoId).also { if (it.status != VideoStatus.UPLOADING) throw VideoNotFoundException() }
         store.touchUpload(video.id, time.now())
         return storage.listParts(ListUploadedPartsRequest(ObjectKey(video.uploadKey!!), video.uploadId!!))
     }

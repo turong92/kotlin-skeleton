@@ -31,10 +31,111 @@ interface VideoStore {
 
     /** 마지막 움직임이 [before] 보다 오래된 `UPLOADING` · `UPLOADED` — 오래된 것부터 [limit] 개 */
     fun staleUploads(before: Instant, limit: Int): List<Video>
+
+    // ---------- 일꾼(변환) — 임대 · 결과 반영. 전부 조건부 갱신이라 먼저 끝낸 쪽이 이기고 늦은 쪽은 false / null ----------
+
+    /**
+     * [lane] 의 다음 일 한 건을 집는다 — 두 일꾼이 같은 줄을 못 갖는다(`FOR UPDATE SKIP LOCKED`). 집으면 임대 · 시도 +1 · 차선을 적는다.
+     * 호환 · 사다리는 영상이 `PLAYABLE` 이고 다른 차선이 임대를 쥐고 있지 않을 때만. 사다리는 [ladderBuild] 를 폴더 id 로 적는다. 없으면 null
+     */
+    fun claimNext(lane: VideoLane, owner: String, leaseUntil: Instant, ladderBuild: String, at: Instant): Video?
+
+    /** 임대 소유자만 임대를 늘린다(+ [progress] 가 있으면 진행률). 임대가 거둬졌으면 false */
+    fun extendLease(id: String, owner: String, until: Instant, progress: Int?, at: Instant): Boolean
+
+    /** `REMUXING` → `PLAYABLE` — 임대 소유자만, 한 번만. 원본 단 · 포스터 · 트랙 시작 상태를 한꺼번에 적고 임대를 비운다 */
+    fun markPlayable(id: String, owner: String, result: PlayableResult, at: Instant): Boolean
+
+    /** 호환 단 `RUNNING` → `READY` — 임대 소유자만, 한 번만 */
+    fun markCompatReady(id: String, owner: String, key: String, bytes: Long, at: Instant): Boolean
+
+    /** 사다리 `RUNNING` → `READY` — [rungsJson] 은 판 목록 */
+    fun markLadderReady(id: String, owner: String, build: String, bytes: Long, rungsJson: String, at: Instant): Boolean
+
+    /**
+     * 일꾼이 낸 실패 — 임대 소유자만. [retry] 이고 시도가 남았으면 다시 줄 세우고, 아니면 remux 는 영상 `FAILED`, 호환 · 사다리는 트랙만 `FAILED`.
+     * 임대 소유자가 아니면 null
+     */
+    fun failLeased(id: String, owner: String, code: String, detail: String?, retry: Boolean, at: Instant): LeaseEnd?
+
+    /**
+     * 임대가 끝난 일을 되돌린다 — 시도가 [VideoStatus.MAX_ATTEMPTS] 에 닿았으면 다시 줄 세우지 않고 실패(remux 는 영상 `FAILED`, 트랙은 트랙만 `FAILED` 이고
+     * 영상은 `PLAYABLE` 그대로). 그 밖엔 대기로. 되돌린 줄 수와 끝내 실패한 줄을 돌려준다
+     */
+    fun expireLeases(now: Instant, at: Instant): LeaseExpiry
+
+    /** 올린 원 파일을 지운 뒤 키를 비운다 — `PLAYABLE` 인 영상만. 비웠으면 true */
+    fun clearUploadKey(id: String, at: Instant): Boolean
+
+    /** 사다리 `NONE`(스위치가 꺼진 동안 만들어진 영상)을 `QUEUED` 로 — 짧은 변이 [floor] 보다 큰 재생 가능 영상만. 줄 세운 수 */
+    fun queueDeferredLadders(floor: Int, at: Instant): Int
+
+    /** remux 를 기다리는(`QUEUED`) 영상 수 — 일꾼 부재 경보가 본다 */
+    fun countQueuedRemux(): Int
+
+    /** 지금 일꾼이 집을 수 있는 호환 · 사다리 대기 수 — 깨우기가 이 수가 0 이면 부르지 않는다 */
+    fun countClaimableTracks(): Int
+
+    /** 호환 단이 [before] 이전부터 대기 중인 영상 수 */
+    fun countCompatQueuedBefore(before: Instant): Int
+
+    /** [since] 이후 실패로 닫힌(영상 · 호환 · 사다리) 영상 수 */
+    fun countFailedSince(since: Instant): Int
 }
 
-/** 일꾼 토큰 저장 포트 (표 `video_workers`) — 일꾼 API 가 들어오는 다음 조각에서 메서드가 생긴다. `video.enabled` 이면 구현이 있어야 기동한다 */
-interface VideoWorkerStore
+/** 일꾼이 낸 실패의 결과 — 다시 줄 섰나, 끝내 실패했나 */
+enum class LeaseEnd { REQUEUED, FAILED }
+
+/** 임대 만료 처리 결과 — [requeued] 는 다시 줄 선 수, [failed] 는 시도를 다 써서 끝내 실패한 줄 */
+data class LeaseExpiry(val requeued: Int, val failed: List<ExpiredFailure>) {
+    val total: Int get() = requeued + failed.size
+}
+
+/** [remux] 면 영상이 `FAILED`, 아니면 호환 · 사다리 트랙만 `FAILED` */
+data class ExpiredFailure(val id: String, val remux: Boolean)
+
+/** `REMUXING` → `PLAYABLE` 때 한꺼번에 적는 칸 — 일꾼의 probe 결과 · 원본 단 · 포스터 · 두 트랙의 시작 상태 */
+data class PlayableResult(
+    val origKey: String,
+    val origBytes: Long,
+    val origSha256: String,
+    val srcContainer: String?,
+    val srcCodec: String?,
+    val srcCodecString: String?,
+    val srcWidth: Int,
+    val srcHeight: Int,
+    val srcRotation: Int?,
+    val srcDurationMs: Long,
+    val srcFps: Double?,
+    val srcBitrate: Long?,
+    val srcAudioCodec: String?,
+    val posterKey: String?,
+    val posterWidth: Int?,
+    val posterHeight: Int?,
+    val compat: TrackStatus,
+    val ladder: TrackStatus,
+)
+
+/** 일꾼 토큰 저장 포트 (표 `video_workers`) — 토큰은 SHA-256 16진수만 든다. `video.enabled` 이면 구현이 있어야 기동한다 */
+interface VideoWorkerStore {
+    fun insert(name: String, lanes: Set<VideoLane>, tokenSha256: String, at: Instant): VideoWorker
+
+    /** 폐기되지 않은 일꾼만 */
+    fun findActiveByTokenSha256(tokenSha256: String): VideoWorker?
+
+    /** 폐기한 것까지 — 기동 등록이 폐기한 일꾼을 되살리지 않게 */
+    fun existsByTokenSha256(tokenSha256: String): Boolean
+
+    fun touch(id: Long, at: Instant)
+
+    /** 폐기 — 행은 남긴다. 이미 폐기했으면 false */
+    fun revoke(id: Long, at: Instant): Boolean
+
+    fun list(): List<VideoWorker>
+
+    /** remux 차선을 맡는 폐기되지 않은 일꾼이 마지막으로 보인 시각 — 없으면 null */
+    fun lastSeenRemux(): Instant?
+}
 
 /** 누가 올리고 · 보고 · 다룰 수 있는가 — 도메인이 정한다. 기본은 [OwnerVideoAccessPolicy](올린 계정만, 공개 영상 재생은 누구나) */
 interface VideoAccessPolicy {

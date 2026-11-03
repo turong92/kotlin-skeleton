@@ -54,3 +54,33 @@ class VideoUploadIncompleteException(cause: Throwable?) :
     ApplicationException("video upload incomplete", VideoErrorCode.UPLOAD_INCOMPLETE, cause = cause)
 
 class VideoSizeMismatchException : ApplicationException("video size mismatch", VideoErrorCode.SIZE_MISMATCH)
+
+/** 일꾼 API(`/api/internal/video/...`)의 오류 — 사용자 API 의 [VideoErrorCode] 와 접두사가 다르다 */
+enum class VideoWorkerErrorCode(
+    override val code: String,
+    override val status: HttpStatus,
+    override val title: String,
+    override val defaultDetail: String? = null,
+) : ErrorCode {
+    UNAUTHORIZED("VIDEO_WORKER.UNAUTHORIZED", HttpStatus.UNAUTHORIZED, "일꾼 토큰이 없거나 맞지 않다"),
+    LANE_FORBIDDEN("VIDEO_WORKER.LANE_FORBIDDEN", HttpStatus.FORBIDDEN, "이 토큰이 맡을 수 없는 차선이다"),
+    LEASE_LOST("VIDEO_WORKER.LEASE_LOST", HttpStatus.CONFLICT, "이 일의 임대를 갖고 있지 않다"),
+    PATH_NOT_ALLOWED("VIDEO_WORKER.PATH_NOT_ALLOWED", HttpStatus.BAD_REQUEST, "올릴 수 없는 파일 이름이다"),
+    RESULT_MISMATCH("VIDEO_WORKER.RESULT_MISMATCH", HttpStatus.BAD_REQUEST, "올린 결과가 보고와 맞지 않다"),
+    FAIL_CODE_INVALID("VIDEO_WORKER.FAIL_CODE_INVALID", HttpStatus.BAD_REQUEST, "실패 사유 코드가 표에 없다"),
+    INVALID("VIDEO_WORKER.INVALID", HttpStatus.BAD_REQUEST, "요청이 올바르지 않다"),
+}
+
+class VideoWorkerUnauthorizedException : ApplicationException("video worker unauthorized", VideoWorkerErrorCode.UNAUTHORIZED)
+
+class VideoWorkerForbiddenException : ApplicationException("video worker lane forbidden", VideoWorkerErrorCode.LANE_FORBIDDEN)
+
+class VideoLeaseLostException : ApplicationException("video lease lost", VideoWorkerErrorCode.LEASE_LOST)
+
+class VideoPathNotAllowedException : ApplicationException("video path not allowed", VideoWorkerErrorCode.PATH_NOT_ALLOWED)
+
+class VideoResultMismatchException(why: String) : ApplicationException("video result mismatch: $why", VideoWorkerErrorCode.RESULT_MISMATCH)
+
+class VideoFailCodeInvalidException : ApplicationException("video fail code invalid", VideoWorkerErrorCode.FAIL_CODE_INVALID)
+
+class VideoWorkerInvalidException(why: String) : ApplicationException("video worker request invalid: $why", VideoWorkerErrorCode.INVALID)

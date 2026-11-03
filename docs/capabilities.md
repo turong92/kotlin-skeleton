@@ -170,9 +170,9 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 | `storage-image-pdfbox` | PDF 첫 쪽 썸네일 — storage-image 의 변환 작업에서 PDFBox 로 1쪽을 그린다(쪽 수 · 크기 · 렌더 시간 상한, 기본 꺼짐). | `--modules storage-image-pdfbox` | PDF 썸네일, PDF 미리보기 / pdf thumbnail, pdf preview | — |
 | `storage-s3` | S3 호환 저장소(AWS S3 · Cloudflare R2 · MinIO) — presign PUT/GET · 멀티파트 · 복사 · 일괄 삭제, 공개 URL RAW \| OPAQUE. | `--modules storage-s3` | S3, R2, 클라우드 스토리지, 파일 저장소, 이미지 저장 / s3, r2, cloudflare r2, minio, object storage | `@skeleton/storage` |
 | `time` | 글로벌 시간 — 요청마다 뷰어 시간대 · 로케일 · ZonedMoment(미래 현지 시각) · 사람이 읽는 이중 포맷 · 국가 → 시간대. | 스타터(apps/api)에 기본 포함 | 시간대, 타임존, 날짜 표시, 현지 시간, 예약 시각, 글로벌 / timezone, time zone, locale, zoned moment, date format, global time | `@skeleton/time` |
-| `video` | 영상 올리기 — 브라우저가 파일을 객체 저장소(R2 등)로 직접 멀티파트로 올리고(조각 주소 · 새로 고친 뒤 빠진 조각만 이어 올리기 · 마침에서 HEAD 크기 확인, 멱등) 서버는 상태(UPLOADING → UPLOADED → QUEUED …) · 정책(VideoAccessPolicy, 기본 올린 계정만) · 용량(VideoQuota) · 버려진 올리기 청소(1시간)만 맡는다. 영상마다 공개/비공개를 올릴 때 고른다. 파일은 4GB(16MB × 256 조각)까지. 변환(HLS 원본 단 · 호환 · 사다리) · 일꾼 · 재생은 같은 묶음의 다음 조각. 켜기 skeleton.video.enabled(모듈 기본 꺼짐), 저장은 video-jdbc. | `--modules video` | 영상 올리기, 동영상 업로드, 영상, 이어 올리기, 큰 파일 올리기, 멀티파트 업로드 / video upload, multipart upload, resumable upload, large file upload, video | — |
+| `video` | 영상 올리기 + 변환 일꾼 API — 브라우저가 파일을 객체 저장소(R2 등)로 직접 멀티파트로 올리고(조각 주소 · 이어 올리기 · 마침에서 HEAD 크기 확인, 멱등) 서버는 상태(UPLOADING → UPLOADED → QUEUED → REMUXING → PLAYABLE) · 정책(VideoAccessPolicy, 기본 올린 계정만) · 용량(VideoQuota) · 청소만 맡는다. 변환은 서버가 아니라 일꾼(apps/video-worker, 어디서든 토큰으로 집어 간다)이 하고 서버는 일꾼 API(claim · heartbeat 진행률 · upload-urls 허용 이름만 서명 · complete 폴더 대조 · fail)와 임대(만료 → 다시 줄, 3회 뒤 실패) · 트랙 결정(호환 · 사다리) · 원 파일 삭제(원본 단 검증 1시간 뒤) · VideoEvents · 경보 넷을 맡는다. 영상마다 공개/비공개를 올릴 때 고른다. 파일은 4GB(16MB × 256 조각)까지. 재생 허가는 같은 묶음의 다음 조각. 켜기 skeleton.video.enabled(모듈 기본 꺼짐), 저장은 video-jdbc. | `--modules video` | 영상 올리기, 동영상 업로드, 영상, 이어 올리기, 큰 파일 올리기, 멀티파트 업로드 / video upload, multipart upload, resumable upload, large file upload, video | — |
 | `video-cloudrun` | (자리만 — 구현은 다음 조각) 일이 생기면 Google Cloud Run 작업을 깨우는 VideoWaker 구현. 홈서버 컨테이너나 아무 기계에서 같은 일꾼 이미지를 도는 길은 이 모듈이 필요 없다. | `--modules video-cloudrun` | 클라우드 런, 영상 변환 깨우기 / cloud run, wake video worker | — |
-| `video-jdbc` | 영상 저장을 DB 에 둔다 (PostgreSQL · MySQL) — 표 셋(videos · video_workers · video_wake_runs), 상태 전이는 한 문장 조건부 갱신이라 동시에 온 호출 중 하나만 이긴다. | `--modules video-jdbc` | 영상 저장소, 영상 DB / video storage, video repository | — |
+| `video-jdbc` | 영상 저장을 DB 에 둔다 (PostgreSQL · MySQL) — 표 셋(videos · video_workers · video_wake_runs), 상태 전이와 임대는 한 문장 조건부 갱신이라 동시에 온 호출 중 하나만 이기고(집기는 FOR UPDATE SKIP LOCKED), 후속 작업(video.finalize · video.wake)은 job-queue-jdbc 에 상태 변경과 같은 트랜잭션으로 얹는다. | `--modules video-jdbc` | 영상 저장소, 영상 DB / video storage, video repository | — |
 | `waiting-room` | 대기열(가상 대기실) — 로그인한 사람만 줄을 선다(1인 1순번 = 계정 1개 1순번). 오픈 전 줄은 오픈 순간 한 번 무작위로 섞고 그 뒤는 온 순서, 분당 입장 수(속도 구간, 멈춤 가능)만 정한다. 순번표 · 입장권은 계정에 묶인 서명 토큰(키 돌리기 가능, 보호 환경에서 키가 없으면 기동 실패)이고 입장권 검사 WaitingRooms.requireEntry 는 DB 를 읽지 않는다. 저장은 waiting-room-jdbc. | `--modules waiting-room` | 대기열, 대기실, 가상 대기실, 줄 서기, 접속 폭주 / waiting room, virtual queue, queue, traffic spike | — |
 | `waiting-room-jdbc` | 대기열을 DB 에 둔다 (PostgreSQL · MySQL) — 표 셋(대기실 · 속도 구간 · 순번표). 번호는 방 줄 잠금 뒤에 줘서 1..n 빈틈 없이, 섞기는 조건부 갱신을 이긴 한 번만. | `--modules waiting-room-jdbc` | 대기열 저장소, 대기열 DB / waiting room storage, queue repository | — |
 | `workspace` | 워크스페이스(팀 · 조직) — 만들기 · 소유자/관리자/멤버 역할 · 주소(slug, 바꿔도 옛 주소가 따라온다) · 멤버 관리 · 소유권 이전 · 메일 링크 초대(만료 · 재발송 · 취소 · 확인된 이메일로만 수락, 켜야 한다), 그리고 요청 헤더 `X-Workspace-Id` 로 앱 데이터를 묶는 경계 `CurrentWorkspace`. 좌석 상한은 앱이 정한다. 운영자 읽기 경로(목록 · 검색 · 상세, `workspace.read`)는 꺼져 있다가 앱이 켠다. | `--modules workspace,workspace-jdbc` | 워크스페이스, 팀, 조직, 멤버 역할, 소유권 이전, 멀티 테넌트 / workspace, team, organization, tenant, member roles, ownership transfer | `@skeleton/workspace` |
@@ -1709,7 +1709,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - 스타터가 이미 가진다
 - 키워드: 시간대, 타임존, 날짜 표시, 현지 시간, 예약 시각, 글로벌 / timezone, time zone, locale, zoned moment, date format, global time
 
-### `video` — 영상 올리기 — 브라우저가 파일을 객체 저장소(R2 등)로 직접 멀티파트로 올리고(조각 주소 · 새로 고친 뒤 빠진 조각만 이어 올리기 · 마침에서 HEAD 크기 확인, 멱등) 서버는 상태(UPLOADING → UPLOADED → QUEUED …) · 정책(VideoAccessPolicy, 기본 올린 계정만) · 용량(VideoQuota) · 버려진 올리기 청소(1시간)만 맡는다. 영상마다 공개/비공개를 올릴 때 고른다. 파일은 4GB(16MB × 256 조각)까지. 변환(HLS 원본 단 · 호환 · 사다리) · 일꾼 · 재생은 같은 묶음의 다음 조각. 켜기 skeleton.video.enabled(모듈 기본 꺼짐), 저장은 video-jdbc.
+### `video` — 영상 올리기 + 변환 일꾼 API — 브라우저가 파일을 객체 저장소(R2 등)로 직접 멀티파트로 올리고(조각 주소 · 이어 올리기 · 마침에서 HEAD 크기 확인, 멱등) 서버는 상태(UPLOADING → UPLOADED → QUEUED → REMUXING → PLAYABLE) · 정책(VideoAccessPolicy, 기본 올린 계정만) · 용량(VideoQuota) · 청소만 맡는다. 변환은 서버가 아니라 일꾼(apps/video-worker, 어디서든 토큰으로 집어 간다)이 하고 서버는 일꾼 API(claim · heartbeat 진행률 · upload-urls 허용 이름만 서명 · complete 폴더 대조 · fail)와 임대(만료 → 다시 줄, 3회 뒤 실패) · 트랙 결정(호환 · 사다리) · 원 파일 삭제(원본 단 검증 1시간 뒤) · VideoEvents · 경보 넷을 맡는다. 영상마다 공개/비공개를 올릴 때 고른다. 파일은 4GB(16MB × 256 조각)까지. 재생 허가는 같은 묶음의 다음 조각. 켜기 skeleton.video.enabled(모듈 기본 꺼짐), 저장은 video-jdbc.
 
 - 종류 · 상태: module · experimental — 위치 `modules/video`
 - 켜는 법: `--modules video`
@@ -1717,11 +1717,12 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 - 자동으로 따라온다: `storage`
 - 소스만 따라온다(컴파일 전용 — 런타임 클래스패스에는 없다. 쓰려면 apps/api 에 의존 한 줄을 더한다): `scheduler`
 - 설정 접두사 `skeleton.video` — 키와 기본값 `docs/config/modules/video.yml`
-- HTTP 경로: `/api/v1/videos`
+- HTTP 경로: `/api/internal/video`, `/api/v1/videos`, `/api/v1/videos/admin/workers`
 - 문서: `docs/modules/video.md`
 - 쓰지 않는 경우:
   - 꺼진 채 시작한다 — 앱 yml 이 skeleton.video.enabled=true 로 켠다. 켜면 video-jdbc(저장)와 storage-s3(객체 저장소)가 있어야 기동한다
-  - 지금 조각은 올리기까지다 — 변환 · 일꾼 API · 재생 허가는 다음 조각이 같은 모듈에 얹는다
+  - 변환 자체는 이 모듈이 하지 않는다 — 일꾼 앱(apps/video-worker)이 일꾼 API 로 집어 간다. 재생 허가 · 삭제 · 운영자 경로는 다음 조각이 같은 모듈에 얹는다
+  - 비공개 영상의 호환 · 사다리 입력 주소는 재생 조각이 VideoWorkerInputs 빈으로 채운다 — 그 전에는 공개 영상만 호환 · 사다리를 만든다
   - 받아들이는 영상은 H.264 · HEVC mp4 · mov 만이다(webm · VP9 · AV1 은 다음)
   - 올린 파일 하나 4GB 까지 — 조각 크기를 키우지 않는 한 그 위는 413 이다
   - 누가 올릴 수 있는지 · 용량 규칙(요금제 등)은 앱이 VideoAccessPolicy · VideoQuota 빈으로 정한다 — 모듈은 뜻을 모른다
@@ -1739,7 +1740,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
   - Cloud Run 이 아닌 곳(홈서버 컨테이너 · 아무 기계)에서 일꾼을 돌리는 데는 필요 없다
 - 키워드: 클라우드 런, 영상 변환 깨우기 / cloud run, wake video worker
 
-### `video-jdbc` — 영상 저장을 DB 에 둔다 (PostgreSQL · MySQL) — 표 셋(videos · video_workers · video_wake_runs), 상태 전이는 한 문장 조건부 갱신이라 동시에 온 호출 중 하나만 이긴다.
+### `video-jdbc` — 영상 저장을 DB 에 둔다 (PostgreSQL · MySQL) — 표 셋(videos · video_workers · video_wake_runs), 상태 전이와 임대는 한 문장 조건부 갱신이라 동시에 온 호출 중 하나만 이기고(집기는 FOR UPDATE SKIP LOCKED), 후속 작업(video.finalize · video.wake)은 job-queue-jdbc 에 상태 변경과 같은 트랜잭션으로 얹는다.
 
 - 종류 · 상태: module · experimental — 위치 `modules/video-jdbc`
 - 켜는 법: `--modules video-jdbc`

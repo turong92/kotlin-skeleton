@@ -17,6 +17,7 @@ import dev.sumin.skeleton.storage.PresignedUrl
 import dev.sumin.skeleton.storage.StartMultipartUploadRequest
 import dev.sumin.skeleton.storage.StartedMultipartUpload
 import dev.sumin.skeleton.storage.StoredObjectMetadata
+import dev.sumin.skeleton.storage.StoredObjectSummary
 import dev.sumin.skeleton.storage.StoredObjectWriteResult
 import dev.sumin.skeleton.storage.UploadObjectRequest
 import dev.sumin.skeleton.storage.UploadedPart
@@ -67,9 +68,21 @@ class FakeStorage : PresignedStorage {
 
     override fun upload(request: UploadObjectRequest) = StoredObjectWriteResult(request.key)
     override fun copy(request: CopyObjectRequest) = StoredObjectWriteResult(request.destinationKey)
-    override fun list(request: ListObjectsRequest) = ListedObjects(emptyList())
-    override fun presignUpload(request: PresignedUploadRequest) = PresignedUrl(request.key, "PUT", URI("http://s3.test/${request.key.value}"), emptyMap(), expires)
-    override fun presignDownload(request: PresignedDownloadRequest) = PresignedUrl(request.key, "GET", URI("http://s3.test/${request.key.value}"), emptyMap(), expires)
+    override fun list(request: ListObjectsRequest) =
+        ListedObjects(objects.filterKeys { it.startsWith(request.prefix) }.map { (k, v) -> StoredObjectSummary(ObjectKey(k), sizeBytes = v) })
+
+    val signedUploads = mutableListOf<PresignedUploadRequest>()
+    val signedDownloads = mutableListOf<PresignedDownloadRequest>()
+
+    override fun presignUpload(request: PresignedUploadRequest): PresignedUrl {
+        signedUploads += request
+        return PresignedUrl(request.key, "PUT", URI("http://s3.test/${request.key.value}"), request.cacheControl?.let { mapOf("Cache-Control" to it) } ?: emptyMap(), expires)
+    }
+
+    override fun presignDownload(request: PresignedDownloadRequest): PresignedUrl {
+        signedDownloads += request
+        return PresignedUrl(request.key, "GET", URI("http://s3.test/${request.key.value}?sig=1"), emptyMap(), expires)
+    }
 }
 
 /** 저장소 포트의 메모리 구현 — 전이 규칙은 진짜 구현(video-jdbc)과 같은 조건부 갱신이다 */
@@ -118,7 +131,172 @@ class FakeVideoStore : VideoStore {
     override fun staleUploads(before: Instant, limit: Int) =
         rows.values.filter { (it.status == VideoStatus.UPLOADING || it.status == VideoStatus.UPLOADED) && it.lastUploadActivityAt < before }.take(limit)
 
+    /** 일꾼 쪽 조건부 갱신 — 진짜 구현(video-jdbc)과 같은 조건이다. 시험은 줄을 [rows] 에 바로 심고 읽는다 */
+    override fun claimNext(lane: VideoLane, owner: String, leaseUntil: Instant, ladderBuild: String, at: Instant): Video? {
+        val row = rows.values.filter { candidate(lane, it) }.minByOrNull { it.createdAt } ?: return null
+        val leased = row.copy(leaseOwner = owner, leaseUntil = leaseUntil, lane = lane, attempts = row.attempts + 1, progress = null, updatedAt = at)
+        return when (lane) {
+            VideoLane.REMUX -> leased.copy(status = VideoStatus.REMUXING)
+            VideoLane.COMPAT -> leased.copy(compatStatus = TrackStatus.RUNNING)
+            VideoLane.LADDER -> leased.copy(ladderStatus = TrackStatus.RUNNING, ladderBuild = ladderBuild)
+        }.also { rows[it.id] = it }
+    }
+
+    private fun candidate(lane: VideoLane, v: Video) = when (lane) {
+        VideoLane.REMUX -> v.status == VideoStatus.QUEUED
+        VideoLane.COMPAT -> v.status == VideoStatus.PLAYABLE && v.compatStatus == TrackStatus.QUEUED && v.leaseOwner == null
+        VideoLane.LADDER -> v.status == VideoStatus.PLAYABLE && v.ladderStatus == TrackStatus.QUEUED && v.leaseOwner == null
+    }
+
+    override fun extendLease(id: String, owner: String, until: Instant, progress: Int?, at: Instant): Boolean {
+        val v = rows[id]?.takeIf { it.leaseOwner == owner && it.leaseUntil != null } ?: return false
+        rows[id] = v.copy(leaseUntil = until, progress = progress ?: v.progress, updatedAt = at)
+        return true
+    }
+
+    override fun markPlayable(id: String, owner: String, result: PlayableResult, at: Instant): Boolean {
+        val v = rows[id]?.takeIf { it.status == VideoStatus.REMUXING && it.leaseOwner == owner } ?: return false
+        rows[id] = v.copy(
+            status = VideoStatus.PLAYABLE, origKey = result.origKey, origBytes = result.origBytes, origSha256 = result.origSha256,
+            srcCodecString = result.srcCodecString, srcWidth = result.srcWidth, srcHeight = result.srcHeight, srcDurationMs = result.srcDurationMs,
+            posterKey = result.posterKey, compatStatus = result.compat, compatKey = if (result.compat == TrackStatus.SKIPPED) result.origKey else null,
+            ladderStatus = result.ladder, attempts = 0, leaseOwner = null, leaseUntil = null, lane = null, progress = null, updatedAt = at,
+        )
+        return true
+    }
+
+    override fun markCompatReady(id: String, owner: String, key: String, bytes: Long, at: Instant): Boolean {
+        val v = rows[id]?.takeIf { it.status == VideoStatus.PLAYABLE && it.compatStatus == TrackStatus.RUNNING && it.leaseOwner == owner } ?: return false
+        rows[id] = v.copy(compatStatus = TrackStatus.READY, compatKey = key, compatBytes = bytes, attempts = 0, leaseOwner = null, leaseUntil = null, lane = null, progress = null, updatedAt = at)
+        return true
+    }
+
+    override fun markLadderReady(id: String, owner: String, build: String, bytes: Long, rungsJson: String, at: Instant): Boolean {
+        val v = rows[id]?.takeIf { it.status == VideoStatus.PLAYABLE && it.ladderStatus == TrackStatus.RUNNING && it.leaseOwner == owner } ?: return false
+        rows[id] = v.copy(ladderStatus = TrackStatus.READY, ladderBuild = build, ladderBytes = bytes, ladderRungs = rungsJson, attempts = 0, leaseOwner = null, leaseUntil = null, lane = null, progress = null, updatedAt = at)
+        return true
+    }
+
+    override fun failLeased(id: String, owner: String, code: String, detail: String?, retry: Boolean, at: Instant): LeaseEnd? {
+        val v = rows[id]?.takeIf { it.leaseOwner == owner } ?: return null
+        val requeue = retry && v.attempts < VideoStatus.MAX_ATTEMPTS
+        val released = v.copy(leaseOwner = null, leaseUntil = null, lane = null, progress = null, updatedAt = at)
+        rows[id] = when (v.lane) {
+            VideoLane.REMUX -> if (requeue) released.copy(status = VideoStatus.QUEUED) else released.copy(status = VideoStatus.FAILED, failCode = code, failDetail = detail)
+            VideoLane.COMPAT -> if (requeue) released.copy(compatStatus = TrackStatus.QUEUED) else released.copy(compatStatus = TrackStatus.FAILED, failCode = code, failDetail = detail, attempts = 0)
+            VideoLane.LADDER -> if (requeue) released.copy(ladderStatus = TrackStatus.QUEUED) else released.copy(ladderStatus = TrackStatus.FAILED, failCode = code, failDetail = detail, attempts = 0)
+            null -> return null
+        }
+        return if (requeue) LeaseEnd.REQUEUED else LeaseEnd.FAILED
+    }
+
+    override fun expireLeases(now: Instant, at: Instant): LeaseExpiry {
+        var requeued = 0
+        val failed = mutableListOf<ExpiredFailure>()
+        for (v in rows.values.toList()) {
+            val expired = v.leaseOwner != null && v.leaseUntil != null && v.leaseUntil < now
+            if (!expired) continue
+            val exhausted = v.attempts >= VideoStatus.MAX_ATTEMPTS
+            val released = v.copy(leaseOwner = null, leaseUntil = null, lane = null, progress = null, updatedAt = at)
+            when {
+                v.status == VideoStatus.REMUXING ->
+                    if (exhausted) { rows[v.id] = released.copy(status = VideoStatus.FAILED, failCode = VideoFailCode.LEASE_EXPIRED); failed += ExpiredFailure(v.id, true) }
+                    else { rows[v.id] = released.copy(status = VideoStatus.QUEUED); requeued++ }
+                v.status == VideoStatus.PLAYABLE && v.lane == VideoLane.COMPAT ->
+                    if (exhausted) { rows[v.id] = released.copy(compatStatus = TrackStatus.FAILED, failCode = VideoFailCode.LEASE_EXPIRED, attempts = 0); failed += ExpiredFailure(v.id, false) }
+                    else { rows[v.id] = released.copy(compatStatus = TrackStatus.QUEUED); requeued++ }
+                v.status == VideoStatus.PLAYABLE && v.lane == VideoLane.LADDER ->
+                    if (exhausted) { rows[v.id] = released.copy(ladderStatus = TrackStatus.FAILED, failCode = VideoFailCode.LEASE_EXPIRED, attempts = 0); failed += ExpiredFailure(v.id, false) }
+                    else { rows[v.id] = released.copy(ladderStatus = TrackStatus.QUEUED); requeued++ }
+            }
+        }
+        return LeaseExpiry(requeued, failed)
+    }
+
+    override fun clearUploadKey(id: String, at: Instant): Boolean {
+        val v = rows[id]?.takeIf { it.status == VideoStatus.PLAYABLE && it.uploadKey != null } ?: return false
+        rows[id] = v.copy(uploadKey = null, updatedAt = at)
+        return true
+    }
+
+    override fun queueDeferredLadders(floor: Int, at: Instant): Int {
+        val ids = rows.values.filter { it.status == VideoStatus.PLAYABLE && it.ladderStatus == TrackStatus.NONE && minOf(it.srcWidth ?: 0, it.srcHeight ?: 0) > floor }.map { it.id }
+        ids.forEach { rows[it] = rows.getValue(it).copy(ladderStatus = TrackStatus.QUEUED, updatedAt = at) }
+        return ids.size
+    }
+
+    override fun countQueuedRemux() = rows.values.count { it.status == VideoStatus.QUEUED }
+
+    override fun countClaimableTracks() = rows.values.count { candidate(VideoLane.COMPAT, it) || candidate(VideoLane.LADDER, it) }
+
+    override fun countCompatQueuedBefore(before: Instant) =
+        rows.values.count { it.status == VideoStatus.PLAYABLE && it.compatStatus == TrackStatus.QUEUED && it.updatedAt < before }
+
+    override fun countFailedSince(since: Instant) =
+        rows.values.count { it.updatedAt >= since && it.status != VideoStatus.DELETED && (it.status == VideoStatus.FAILED || it.compatStatus == TrackStatus.FAILED || it.ladderStatus == TrackStatus.FAILED) }
+
     private companion object {
         val IN_FLIGHT = setOf(VideoStatus.UPLOADING, VideoStatus.UPLOADED, VideoStatus.QUEUED, VideoStatus.REMUXING)
     }
+}
+
+class FakeVideoWorkerStore : VideoWorkerStore {
+    val rows = linkedMapOf<Long, VideoWorker>()
+    private val hashes = linkedMapOf<Long, String>()
+
+    override fun insert(name: String, lanes: Set<VideoLane>, tokenSha256: String, at: Instant): VideoWorker {
+        val id = rows.size + 1L
+        return VideoWorker(id, name, lanes, at, null, null).also { rows[id] = it; hashes[id] = tokenSha256 }
+    }
+
+    override fun findActiveByTokenSha256(tokenSha256: String) = hashes.entries.firstOrNull { it.value == tokenSha256 }?.let { rows[it.key] }?.takeIf { it.revokedAt == null }
+
+    override fun existsByTokenSha256(tokenSha256: String) = tokenSha256 in hashes.values
+
+    override fun touch(id: Long, at: Instant) {
+        rows.computeIfPresent(id) { _, w -> w.copy(lastSeenAt = at) }
+    }
+
+    override fun revoke(id: Long, at: Instant): Boolean {
+        val w = rows[id]?.takeIf { it.revokedAt == null } ?: return false
+        rows[id] = w.copy(revokedAt = at)
+        return true
+    }
+
+    override fun list() = rows.values.toList()
+
+    override fun lastSeenRemux() = rows.values.filter { it.revokedAt == null && VideoLane.REMUX in it.lanes }.mapNotNull { it.lastSeenAt }.maxOrNull()
+}
+
+/** 후속 작업 포트의 기록 — 진짜 구현은 한 트랜잭션 안에서 작업 큐에 넣는다 */
+class FakeFollowUps : VideoFollowUps {
+    val finalized = mutableListOf<Triple<String, VideoFinalizeEvent, java.time.Duration>>()
+    var wakes = 0
+
+    override fun finalize(videoId: String, event: VideoFinalizeEvent, delay: java.time.Duration) {
+        finalized += Triple(videoId, event, delay)
+    }
+
+    override fun wake() {
+        wakes++
+    }
+
+    fun events(videoId: String) = finalized.filter { it.first == videoId }.map { it.second }
+}
+
+class FakeTransactions : VideoTransactions {
+    var runs = 0
+
+    override fun <T> run(block: () -> T): T {
+        runs++
+        return block()
+    }
+}
+
+class RecordingEvents : VideoEvents {
+    val calls = mutableListOf<String>()
+
+    override fun onPlayable(video: Video) { calls += "playable:${video.id}" }
+    override fun onTrackReady(video: Video, lane: VideoLane) { calls += "track:${lane.name}:${video.id}" }
+    override fun onFailed(video: Video) { calls += "failed:${video.id}" }
 }

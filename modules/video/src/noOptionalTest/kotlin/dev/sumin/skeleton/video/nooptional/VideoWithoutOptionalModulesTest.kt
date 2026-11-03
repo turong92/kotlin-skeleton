@@ -4,7 +4,9 @@ import dev.sumin.skeleton.common.time.TimeProvider
 import dev.sumin.skeleton.storage.PresignedStorage
 import dev.sumin.skeleton.video.VideoAutoConfiguration
 import dev.sumin.skeleton.video.web.VideoWebAutoConfiguration
+import dev.sumin.skeleton.video.VideoFollowUps
 import dev.sumin.skeleton.video.VideoStore
+import dev.sumin.skeleton.video.VideoTransactions
 import dev.sumin.skeleton.video.VideoUploads
 import dev.sumin.skeleton.video.VideoWorkerStore
 import java.lang.reflect.Proxy
@@ -27,11 +29,15 @@ class VideoWithoutOptionalModulesTest {
             .withBean(PresignedStorage::class.java, { unused(PresignedStorage::class.java) })
             .withBean(VideoStore::class.java, { unused(VideoStore::class.java) })
             .withBean(VideoWorkerStore::class.java, { unused(VideoWorkerStore::class.java) })
+            .withBean(VideoFollowUps::class.java, { unused(VideoFollowUps::class.java) })
+            .withBean(VideoTransactions::class.java, { unused(VideoTransactions::class.java) })
             .run { ctx ->
                 assertNull(ctx.startupFailure)
                 assertTrue(ctx.getBean(VideoUploads::class.java) != null)
                 assertTrue(!ctx.containsBean("videoCleanupJob"), "the scheduled marker needs the scheduler module")
                 assertTrue(!ctx.containsBean("videoController"), "HTTP needs spring security")
+                assertTrue(!ctx.containsBean("videoWorkerController"), "the worker API needs spring security too")
+                assertTrue(!ctx.containsBean("videoMonitor"), "the alerts need the alert module")
             }
     }
 }

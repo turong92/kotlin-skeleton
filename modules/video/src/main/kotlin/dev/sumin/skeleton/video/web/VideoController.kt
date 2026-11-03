@@ -33,13 +33,9 @@ data class CompleteVideoRequest(val parts: List<CompletedPartRequest>? = null)
 
 data class VideoStartedResponse(val id: String, val uploadId: String, val partSize: Long, val partCount: Int)
 
-data class VideoPartUrl(val number: Int, val method: String, val url: String, val headers: Map<String, String>, val expiresAt: Instant)
-
-data class VideoPartsResponse(val parts: List<VideoPartUrl>)
+data class VideoPartUrl(val number: Int, val method: String, val url: String, val headers: Map<String, String>)
 
 data class UploadedPartView(val n: Int, val etag: String, val bytes: Long)
-
-data class UploadedPartsResponse(val parts: List<UploadedPartView>)
 
 /** 화면이 그리는 영상 한 편 — 올리는 중 · 준비 중 · 재생 가능 · (다른 기기용 판 준비 중) · 실패 */
 data class VideoResponse(
@@ -88,18 +84,13 @@ class VideoController(private val uploads: VideoUploads) {
 
     @Operation(summary = "Signed PUT addresses for the requested part numbers (at most 100 per call)")
     @PostMapping("/{id}/parts")
-    fun parts(@PathVariable id: String, @RequestBody body: VideoPartsRequest, authentication: Authentication?): DataResponse<VideoPartsResponse> =
-        Response.ok(
-            VideoPartsResponse(
-                uploads.partUrls(VideoCallers.account(authentication), id, body.numbers)
-                    .map { VideoPartUrl(it.partNumber, it.method, it.url.toString(), it.headers, it.expiresAt) },
-            ),
-        )
+    fun parts(@PathVariable id: String, @RequestBody body: VideoPartsRequest, authentication: Authentication?): ListResponse<VideoPartUrl> =
+        Response.ok(uploads.partUrls(VideoCallers.account(authentication), id, body.numbers).map { VideoPartUrl(it.partNumber, it.method, it.url.toString(), it.headers) })
 
-    @Operation(summary = "The parts the store already holds - upload only the missing ones after a reload")
+    @Operation(summary = "The parts the store already holds - upload only the missing ones after a reload", description = "404 VIDEO.NOT_FOUND for an upload that is gone or already finished - start over")
     @GetMapping("/{id}/parts")
-    fun uploadedParts(@PathVariable id: String, authentication: Authentication?): DataResponse<UploadedPartsResponse> =
-        Response.ok(UploadedPartsResponse(uploads.uploadedParts(VideoCallers.account(authentication), id).map { UploadedPartView(it.partNumber, it.eTag, it.sizeBytes) }))
+    fun uploadedParts(@PathVariable id: String, authentication: Authentication?): ListResponse<UploadedPartView> =
+        Response.ok(uploads.uploadedParts(VideoCallers.account(authentication), id).map { UploadedPartView(it.partNumber, it.eTag, it.sizeBytes) })
 
     @Operation(summary = "Finish the upload (checks the stored size) and queue the video. Calling it again returns the same video")
     @PostMapping("/{id}/complete")

@@ -4,6 +4,8 @@ dependencies {
     // scheduler: 올리기 청소의 @SkeletonScheduled 표시만 쓴다 — 없으면 표시가 무시되고 요청 구동 모드(OnRequestTask)가 맡는다
     compileOnly("org.springframework.security:spring-security-core")
     compileOnly(project(":modules:scheduler"))
+    // alert: 영상 경보 셋(VIDEO_QUEUE_STALE · VIDEO_WAKE_FAILED · VIDEO_FAILED_SURGE · VIDEO_COMPAT_STALE) — alert 가 있을 때만 서는 별도 자동설정
+    compileOnly(project(":modules:alert"))
 
     api(project(":modules:platform"))   // 타입(ApplicationException · TimeProvider · OnRequestTask)이 이 모듈의 공개 API 에 나온다
     api(project(":modules:storage"))    // PresignedStorage · StorageProperties 가 이 모듈의 공개 API 에 나온다 — 의존성 한 줄로 충분하게
@@ -16,6 +18,7 @@ dependencies {
 
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("org.springframework.security:spring-security-core")
+    testImplementation(project(":modules:alert"))   // 경보 시험용 — compileOnly 와 같은 모듈. 부재는 noOptionalTest 가 증명한다
     testImplementation("tools.jackson.module:jackson-module-kotlin")
     testImplementation("org.assertj:assertj-core")
     testImplementation("org.springframework.boot:spring-boot-test")

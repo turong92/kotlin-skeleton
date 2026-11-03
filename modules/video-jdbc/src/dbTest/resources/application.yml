@@ -2,3 +2,6 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration/{vendor}
+skeleton:
+  job-queue:
+    worker-enabled: false   # 시험은 작업 줄만 읽는다 - 큐 워커가 집어 가지 않게

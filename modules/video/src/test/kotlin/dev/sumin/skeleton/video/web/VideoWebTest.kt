@@ -62,12 +62,43 @@ class VideoWebTest {
         storage.parts = listOf(UploadedPart(1, "\"e1\"", 16777216))
 
         mvc.perform(post("/api/v1/videos/$id/parts").principal(caller("acc_a")).contentType(MediaType.APPLICATION_JSON).content("""{"numbers":[2,3]}"""))
-            .andExpect(status().isOk).andExpect(jsonPath("$.value.parts[0].number").value(2)).andExpect(jsonPath("$.value.parts[0].method").value("PUT"))
+            .andExpect(status().isOk).andExpect(jsonPath("$.values[0].number").value(2)).andExpect(jsonPath("$.values[0].method").value("PUT"))
+            .andExpect(jsonPath("$.values[0].headers").exists()).andExpect(jsonPath("$.values[0].url").value("http://s3.test/videos/u/$id?part=2"))
+            .andExpect(jsonPath("$.values.length()").value(2))
         mvc.perform(get("/api/v1/videos/$id/parts").principal(caller("acc_a")))
             .andExpect(status().isOk)
-            .andExpect(jsonPath("$.value.parts[0].n").value(1))
-            .andExpect(jsonPath("$.value.parts[0].etag").value("\"e1\""))
-            .andExpect(jsonPath("$.value.parts[0].bytes").value(16777216))
+            .andExpect(jsonPath("$.values[0].n").value(1))
+            .andExpect(jsonPath("$.values[0].etag").value("\"e1\""))
+            .andExpect(jsonPath("$.values[0].bytes").value(16777216))
+    }
+
+    @Test
+    fun `listing the parts of an upload that is gone or already finished is 404 so the client starts over`() {
+        val id = start()
+        storage.objects["videos/u/$id"] = 40000000
+        mvc.perform(
+            post("/api/v1/videos/$id/complete").principal(caller("acc_a")).contentType(MediaType.APPLICATION_JSON)
+                .content("""{"parts":[{"n":1,"etag":"a"},{"n":2,"etag":"b"},{"n":3,"etag":"c"}]}"""),
+        ).andExpect(status().isOk)
+        mvc.perform(get("/api/v1/videos/$id/parts").principal(caller("acc_a"))).andExpect(status().isNotFound).andExpect(jsonPath("$.code").value("VIDEO.NOT_FOUND"))
+    }
+
+    @Test
+    fun `an item carries the fields the screens read - one line of the list is the complete answer`() {
+        val id = start()
+        mvc.perform(get("/api/v1/videos").param("purpose", "note").principal(caller("acc_a")))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.values[0].id").value(id))
+            .andExpect(jsonPath("$.values[0].purpose").value("note"))
+            .andExpect(jsonPath("$.values[0].visibility").value("PRIVATE"))
+            .andExpect(jsonPath("$.values[0].status").value("UPLOADING"))
+            .andExpect(jsonPath("$.values[0].bytes").value(40000000))
+            .andExpect(jsonPath("$.values[0].compat").value("NONE"))
+            .andExpect(jsonPath("$.values[0].ladder").value("NONE"))
+            .andExpect(jsonPath("$.values[0].progress").doesNotExist())
+            .andExpect(jsonPath("$.values[0].failCode").doesNotExist())
+            .andExpect(jsonPath("$.values[0].width").doesNotExist())
+            .andExpect(jsonPath("$.values[0].createdAt").exists())
     }
 
     @Test

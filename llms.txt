@@ -178,7 +178,7 @@
 - storage-image-pdfbox: PDF 첫 쪽 썸네일 — storage-image 의 변환 작업에서… [PDF 썸네일, PDF 미리보기]
 - storage-s3: S3 호환 저장소(AWS S3 · Cloudflare R2 ·… [S3, R2]
 - time: 글로벌 시간 — 요청마다 뷰어 시간대 · 로케일 ·… [시간대, 타임존]
-- video: 영상 올리기 — 브라우저가 파일을 객체 저장소(R2 등)로 직접… [영상 올리기, 동영상 업로드]
+- video: 영상 올리기 + 변환 일꾼 API — 브라우저가 파일을 객체… [영상 올리기, 동영상 업로드]
 - video-cloudrun: (자리만 — 구현은 다음 조각) [클라우드 런, 영상 변환 깨우기]
 - video-jdbc: 영상 저장을 DB 에 둔다 (PostgreSQL · MySQL) [영상 저장소, 영상 DB]
 - waiting-room: 대기열(가상 대기실) — 로그인한 사람만 줄을 선다(1인 1순번 =… [대기열, 대기실]

@@ -28,7 +28,7 @@ class VideoAutoConfigurationTest {
 
     @Test
     fun `enabled without a VideoStore stops the start and names the module that brings one`() {
-        runner.withPropertyValues("skeleton.video.enabled=true").withBean(VideoWorkerStore::class.java, { object : VideoWorkerStore {} }).run { ctx ->
+        runner.withPropertyValues("skeleton.video.enabled=true").withBean(VideoWorkerStore::class.java, { FakeVideoWorkerStore() }).run { ctx ->
             assertTrue(messages(ctx.startupFailure).any { "VideoStore" in it && "video-jdbc" in it }, messages(ctx.startupFailure).toString())
         }
     }
@@ -51,6 +51,38 @@ class VideoAutoConfigurationTest {
     }
 
     @Test
+    fun `enabled without the follow-up port or the transaction port stops the start and names the module that brings them`() {
+        runner.withPropertyValues("skeleton.video.enabled=true")
+            .withBean(VideoStore::class.java, { FakeVideoStore() }).withBean(VideoWorkerStore::class.java, { FakeVideoWorkerStore() })
+            .withBean(VideoTransactions::class.java, { FakeTransactions() })
+            .run { ctx -> assertTrue(messages(ctx.startupFailure).any { "VideoFollowUps" in it && "video-jdbc" in it }, messages(ctx.startupFailure).toString()) }
+    }
+
+    @Test
+    fun `enabled stands with the job services, a waker that does nothing, silent events and the deploy guard`() {
+        enabled().run { ctx ->
+            assertNull(ctx.startupFailure)
+            assertEquals(1, ctx.getBeansOfType(VideoJobs::class.java).size)
+            assertEquals(1, ctx.getBeansOfType(VideoWorkerService::class.java).size)
+            assertEquals(1, ctx.getBeansOfType(VideoMaintenance::class.java).size)
+            assertEquals(1, ctx.getBeansOfType(VideoFinalizer::class.java).size)
+            assertSame(NoopWaker, ctx.getBean(VideoWaker::class.java))
+            assertSame(VideoEvents.NONE, ctx.getBean(VideoEvents::class.java))
+            assertTrue(ctx.getBeansOfType(dev.sumin.skeleton.common.deploy.DeployGuard::class.java).values.any { it is VideoDeployGuard })
+        }
+    }
+
+    @Test
+    fun `an app that brings its own events and waker replaces the defaults`() {
+        val events = RecordingEvents()
+        val waker = object : VideoWaker { override val enabled = true; override fun wake() = WakeTicket("x") }
+        enabled().withBean(VideoEvents::class.java, { events }).withBean(VideoWaker::class.java, { waker }).run { ctx ->
+            assertSame(events, ctx.getBean(VideoEvents::class.java))
+            assertSame(waker, ctx.getBean(VideoWaker::class.java))
+        }
+    }
+
+    @Test
     fun `an app that brings its own policy and quota replaces the defaults`() {
         val own = object : VideoAccessPolicy by OwnerVideoAccessPolicy {}
         enabled().withBean(VideoAccessPolicy::class.java, { own }).withBean(VideoQuota::class.java, { VideoQuota { _, _, _ -> false } }).run { ctx ->
@@ -68,5 +100,7 @@ class VideoAutoConfigurationTest {
 
     private fun enabled() = runner.withPropertyValues("skeleton.video.enabled=true")
         .withBean(VideoStore::class.java, { FakeVideoStore() })
-        .withBean(VideoWorkerStore::class.java, { object : VideoWorkerStore {} })
+        .withBean(VideoWorkerStore::class.java, { FakeVideoWorkerStore() })
+        .withBean(VideoFollowUps::class.java, { FakeFollowUps() })
+        .withBean(VideoTransactions::class.java, { FakeTransactions() })
 }

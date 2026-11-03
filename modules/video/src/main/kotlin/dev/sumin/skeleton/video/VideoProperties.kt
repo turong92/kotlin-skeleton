@@ -15,6 +15,12 @@ import org.springframework.util.unit.DataSize
  *     part-size: 16MB         # 멀티파트 조각 크기(마지막 조각 말고는 5MB 이상)
  *     max-in-flight: 2        # 한 계정이 동시에 진행하는 영상 수(올리는 중 ~ 변환 중)
  *     stale-upload-age: 1h    # 이 시간 움직임이 없는 올리기는 청소가 중단한다
+ *     ladder: true            # 화질 사다리(아랫단) 트랙을 만든다 — 끄면 NONE 으로 두고 켜질 때 청소가 줄 세운다
+ *     verify-public: true     # 공개 영상은 일꾼이 올리기 전에 모든 프레임을 디코드해 본다(claim 응답의 verifyDecode)
+ *     worker-token-sha256: "" # 로컬 전용 — 이 해시(SHA-256 16진수 64자)의 일꾼을 기동 때 등록한다. stage · prod 에서는 기동 실패
+ *     cleanup-delay: 1h       # 원본 단 검증 뒤 이만큼 있다가 올린 원 파일을 지우고 중복 결과 폴더를 쓴다
+ *     worker: { lease-duration: 10m, url-ttl: 2h }
+ *     monitor: { worker-absent: 5m, compat-stale-after: 2h, failure-surge-count: 5, failure-window: 1h }   # 주인 경보 문턱
  *     http:
  *       enabled: true         # false 면 /api/v1/videos 를 등록하지 않는다
  * ```
@@ -27,9 +33,33 @@ data class VideoProperties(
     val partSize: DataSize = DataSize.ofMegabytes(16),
     val maxInFlight: Int = 2,
     val staleUploadAge: Duration = Duration.ofHours(1),
+    val ladder: Boolean = true,
+    val verifyPublic: Boolean = true,
+    val workerTokenSha256: String = "",
+    val cleanupDelay: Duration = Duration.ofHours(1),
+    val worker: Worker = Worker(),
+    val monitor: Monitor = Monitor(),
     val http: Http = Http(),
 ) {
     data class Http(val enabled: Boolean = true)
+
+    data class Worker(
+        /** 한 번 집으면 이만큼 임대 — heartbeat 가 늘린다 */
+        val leaseDuration: Duration = Duration.ofMinutes(10),
+        /** 일꾼에게 주는 읽기 · 올리기 서명 주소의 수명 */
+        val urlTtl: Duration = Duration.ofHours(2),
+    )
+
+    /** 주인 경보 문턱 */
+    data class Monitor(
+        /** remux 일꾼을 이만큼 못 봤고 대기가 있으면 `VIDEO_QUEUE_STALE` */
+        val workerAbsent: Duration = Duration.ofMinutes(5),
+        /** 호환 단이 이만큼 넘게 대기 중이면 `VIDEO_COMPAT_STALE` */
+        val compatStaleAfter: Duration = Duration.ofHours(2),
+        /** [failureWindow] 안에 실패(영상 · 호환 · 사다리)가 이만큼 이상이면 `VIDEO_FAILED_SURGE` */
+        val failureSurgeCount: Int = 5,
+        val failureWindow: Duration = Duration.ofHours(1),
+    )
 
     init {
         require(root.isNotEmpty() && root.split('/').none { it.isEmpty() || it == "." || it == ".." }) { "skeleton.video.prefix must be a plain relative key prefix (got '$prefix')" }
@@ -39,6 +69,9 @@ data class VideoProperties(
         }
         require(maxInFlight >= 1) { "skeleton.video.max-in-flight must be at least 1" }
         require(!staleUploadAge.isZero && !staleUploadAge.isNegative) { "skeleton.video.stale-upload-age must be positive" }
+        require(workerTokenSha256.isBlank() || SHA256.matches(workerTokenSha256.trim())) { "skeleton.video.worker-token-sha256 must be a SHA-256 hash (64 hex characters), not the token itself" }
+        require(!cleanupDelay.isNegative) { "skeleton.video.cleanup-delay must not be negative" }
+        require(!worker.leaseDuration.isZero && !worker.leaseDuration.isNegative && !worker.urlTtl.isZero && !worker.urlTtl.isNegative) { "skeleton.video.worker durations must be positive" }
     }
 
     /** `/` 를 뗀 영상 키 구간 */
@@ -57,6 +90,7 @@ data class VideoProperties(
 
     private companion object {
         const val MIN_PART_BYTES = 5L * 1024 * 1024
+        val SHA256 = Regex("^[0-9a-fA-F]{64}$")
     }
 }
 
