@@ -34,7 +34,7 @@
 - 비밀번호 재설정은 2단계를 끄지 않는다(복구 길이 MFA 를 우회하면 안 된다 - OWASP).
 - **이벤트**(`account` 의 `AccountEventType`, detail 에 코드 · 비밀 없음): `MFA_ENABLED`(`via` = enrollment \| re_enrollment) · `MFA_DISABLED` · `MFA_RESET_BY_ADMIN`(`by`) · `MFA_RECOVERY_CODES_REGENERATED` · `MFA_RECOVERY_CODE_USED`(`remaining`) · `MFA_VERIFIED`(`method`) · `MFA_FAILED`(`method`) · `MFA_THROTTLED`(`window`). 메일(`MFA_NOTICE`, `vars.change`): enabled · disabled · reset · recovery_code_used · throttled — 재발급은 메일 없이 이벤트만. 계정에 이메일이 없으면 메일은 건너뛴다.
 - **탈퇴**: `AccountErasureListener`(`auth-mfa`)가 비밀 · 복구 코드 · 열려 있는 로그인 대기를 지운다.
-- **필수**(`required-for: NONE | OPERATORS | ALL`, 모듈 기본 NONE): 상태의 `required`, 끄기 409(`MFA.REQUIRED_BY_POLICY`, 재등록은 된다), 그리고 아래 「필수 문」. `OPERATORS` = `OperatorAccess` 권한이 하나라도 있는 계정(저장된 역할로 판정). 「요금제 · 역할별 필수」는 `MfaPolicy` 빈 하나로 갈아 끼운다.
+- **필수**(`required-for: NONE | OPERATORS | ALL`, 모듈 기본 NONE): 상태의 `required`, 끄기 409(`MFA.REQUIRED_BY_POLICY`, 재등록은 된다), 그리고 아래 「필수 문」. `OPERATORS` = `OperatorAccess` 권한이 하나라도 있는 계정(저장된 역할로 판정). **권한의 종류는 가리지 않는다** - 혜택형 권한(예: 견본의 `payment.exempt`)도 하나라도 있으면 필수다(면제 권한도 돈 경로라 탈취 이득이 있어 보수적으로 센다). 좁히려면 `MfaPolicy` 빈을 갈아 끼운다. 「요금제 · 역할별 필수」는 `MfaPolicy` 빈 하나로 갈아 끼운다.
 
 ## 필수 문 (등록 전 계정 막기)
 

@@ -305,7 +305,7 @@ APP=sample scripts/dev.sh    # 백엔드(+프론트 WEB_DIR)만 같은 방식으
 시험: `inquiry/InquiryJourneyIntegrationTest`(익명 202 · 로그인 계정 연결 · 400 위반 · 운영자만 목록 · 처리 표시).
 ## 2단계 인증 (`/api/v1/auth/mfa`)
 두 줄(`auth-mfa` · `auth-mfa-jdbc`)과 `application.yml` 의 `skeleton.auth-mfa` 가 전부다(코드 한 줄 없이 모듈이 로그인의 모든 길에 두 번째 단계를 꽂는다 - `docs/modules/auth-mfa.md`).
-이 앱의 선택: 인증 앱에 보이는 이름 `Notes` · **운영자는 필수**(`required-for: OPERATORS` - 운영 권한이 하나라도 있는 계정, 예 ADMIN) · 운영자 해제 켬(권한 `mfa.reset` 은 기본 역할 없이 ADMIN 전권만).
+이 앱의 선택: 인증 앱에 보이는 이름 `Notes` · **운영자는 필수**(`required-for: OPERATORS` - 운영 권한이 하나라도 있는 계정, 예 ADMIN. 혜택형 권한 `payment.exempt` 도 센다 - 좁히려면 `MfaPolicy` 빈을 갈아 끼운다) · 운영자 해제 켬(권한 `mfa.reset` 은 기본 역할 없이 ADMIN 전권만).
 - 일반 사용자는 설정에서 스스로 켠다(비밀번호 다시 인증 → QR → 첫 코드 → 복구 코드 10개). 켠 뒤 로그인은 `403 AUTH.MFA_REQUIRED` → `POST /api/v1/auth/mfa/verify`(코드 또는 복구 코드).
 - **운영자는 등록 전까지 다른 API 가 `403 MFA.ENROLLMENT_REQUIRED`** 다(`/api/v1/auth` 아래 · `GET /account/me` 만 열림). 방금 로그인한 세션(15분 안)이면 다시 인증 없이 등록하고, 등록하면 곧장 풀린다. 시험 · e2e 의 admin 이 보호된 경로를 부르려면 먼저 등록해야 한다.
 - 인증 앱과 복구 코드를 모두 잃은 사람은 `POST /api/v1/admin/mfa/accounts/{id}/reset {reason}`(**본인 확인을 마친 뒤에만**) - 대상의 모든 세션이 닫히고 메일이 간다.
