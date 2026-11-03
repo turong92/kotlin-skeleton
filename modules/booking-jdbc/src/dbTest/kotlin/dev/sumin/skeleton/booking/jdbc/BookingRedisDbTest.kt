@@ -33,12 +33,12 @@ class BookingRedisDbTest {
     private class Node(name: String, redis: GenericContainer<*>, channel: String, base: BookingInstance) : AutoCloseable {
         val factory = LettuceConnectionFactory(RedisStandaloneConfiguration(redis.host, redis.getMappedPort(6379))).also { it.afterPropertiesSet() }
         val template = StringRedisTemplate(factory).also { it.afterPropertiesSet() }
-        val container = RedisMessageListenerContainer().apply {
+        val listeners = RedisMessageListenerContainer().apply {
             setConnectionFactory(factory)
             setRecoveryInterval(300L)
             afterPropertiesSet()
         }
-        val relay = RedisBookingSeatRelay(template, container, channel, instanceId = name).also { it.start() }
+        val relay = RedisBookingSeatRelay(template, listeners, channel, instanceId = name).also { it.start() }
         val holds = BookingHolds(base.store, relay, AllowAllBookingAdmission, BookingDb.time)
         val pools = BookingPools(base.store, relay, BookingDb.time)
         val streams = BookingSeatStreamService(relay)
@@ -50,7 +50,7 @@ class BookingRedisDbTest {
         override fun close() {
             runCatching { streams.stop() }
             runCatching { relay.destroy() }
-            runCatching { container.destroy() }
+            runCatching { listeners.destroy() }
             runCatching { factory.destroy() }
         }
     }

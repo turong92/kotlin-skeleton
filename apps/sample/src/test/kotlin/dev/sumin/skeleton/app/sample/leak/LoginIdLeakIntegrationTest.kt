@@ -3,6 +3,8 @@ package dev.sumin.skeleton.app.sample.leak
 import com.jayway.jsonpath.JsonPath
 import dev.sumin.skeleton.app.sample.TestcontainersConfiguration
 import dev.sumin.skeleton.app.sample.notes.SampleIntegrationTest
+import dev.sumin.skeleton.booking.BookingPools
+import dev.sumin.skeleton.booking.NewBookingPool
 import dev.sumin.skeleton.notification.NotificationSubscriptionRegistry
 import dev.sumin.skeleton.review.ReviewPurchases
 import dev.sumin.skeleton.review.ReviewTarget
@@ -52,7 +54,10 @@ class LoginIdLeakIntegrationTest {
         val ALLOWED_TYPES = setOf("MeView", "AdminAccountResponse", "AuthMethodsView")
 
         /** 스트림이라 한 번의 응답으로 끝나지 않는 GET — 이름으로 빼고, 이벤트는 `sweep.sseEventsForY()` 로 따로 훑는다 */
-        val STREAMS = setOf("/api/v1/notifications/sse")
+        val STREAMS = setOf("/api/v1/notifications/sse", "/api/v1/booking/pools/{id}/seats/stream")
+
+        /** 자기 순번표(헤더)가 있어야만 답하는 GET — 남의 표는 403 이라 토큰만 든 독자는 2xx 를 못 받는다. 답은 부른 사람 자신의 순번뿐이다 */
+        val TICKET_GATED = setOf("/api/v1/waiting-rooms/{id}/status")
     }
 
     @Autowired lateinit var mvc: MockMvc
@@ -60,6 +65,7 @@ class LoginIdLeakIntegrationTest {
     @Autowired lateinit var mapper: ObjectMapper
     @Autowired lateinit var context: ApplicationContext
     @Autowired lateinit var purchases: ReviewPurchases
+    @Autowired lateinit var bookingPools: BookingPools
 
     private val http by lazy { LeakHttp(mvc) }
     private val w by lazy { LeakWorld(http, registry) }
@@ -118,6 +124,7 @@ class LoginIdLeakIntegrationTest {
             "/api/v1/admin/accounts/" to listOf(w.xAcc, w.yAcc),
             "/api/v1/admin/mfa/accounts/" to listOf(w.xAcc, w.yAcc),   // 운영자의 2단계 상태 보기 (/api/v1/admin/mfa/accounts/{id})
             "/api/v1/admin/broadcasts/" to listOf(http.post("/api/v1/admin/broadcasts", w.adminToken, """{"type":"notice.service","title":"Leak ${w.nonce}","body":"b","channels":["push"],"audience":{"kind":"all"}}""", record = false).ok().read<String>("$.value.id")),   // 보내지 않은 공지 초안 하나 (/api/v1/admin/broadcasts/{id})
+            "/api/v1/booking/pools/" to listOf(bookingPools.create(NewBookingPool("Leak ${w.nonce}", java.time.Instant.now().minusSeconds(60), maxPerHold = 2)).id),   // 대기실 없는 풀 하나 - 상세 · 배치도 (/api/v1/booking/pools/{id} · /seats)
             "/api/v1/admin/author-profiles/" to listOf(w.a.id, w.yProfile.id),
             "/api/v1/campaigns/" to listOf(http.post("/api/v1/admin/campaigns", w.adminToken, """{"kind":"attendance","name":"Leak ${w.nonce}","startsAt":"2026-01-01T00:00:00Z","config":{"daily":[{"type":"point","params":{"amount":"10"}}]}}""", record = false).ok().read<String>("$.value.id")),   // 출석 캠페인 하나 - 운영자가 만든다
             // 쿠폰 정의 한 개를 만들어 X · Y 에게 한 장씩 준다 - 현황 · 발급 목록 (/api/v1/admin/coupon-definitions/{id}/stats · /coupons)
@@ -162,7 +169,7 @@ class LoginIdLeakIntegrationTest {
     private fun hits(readings: List<Reading>) = LeakScan.forbiddenHits(readings.map { it.captured }, forbidden)
 
     private fun resolved(): Map<String, List<String>> {
-        val templates = documentedGets().filter { it !in STREAMS }
+        val templates = documentedGets().filter { it !in STREAMS && it !in TICKET_GATED }
         val unfilled = templates.filter { fill(it) == null }
         assertEquals(emptyList(), unfilled, "path variables the journey does not know - give them a value in `candidates` / `idByPrefix` (a path is never skipped silently)")
         assertTrue(STREAMS.all { it in documentedGets() }, "STREAMS names a path the documentation does not list")

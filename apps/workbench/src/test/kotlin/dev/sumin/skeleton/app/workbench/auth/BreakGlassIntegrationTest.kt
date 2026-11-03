@@ -31,6 +31,7 @@ import org.springframework.test.web.servlet.post
         "skeleton.auth.break-glass.enabled=true",
         "skeleton.auth.break-glass.secret=test-break-glass-secret",
         "skeleton.auth.break-glass.allowed-account-ids[0]=acc_admin",
+        "skeleton.waiting-room.token.key=prod-test-waiting-room-key-0123456789",
     ],
 )
 @AutoConfigureMockMvc
