@@ -1,0 +1,2 @@
+dev.sumin.skeleton.notification.broadcast.BroadcastAutoConfiguration
+dev.sumin.skeleton.notification.broadcast.web.BroadcastWebAutoConfiguration
