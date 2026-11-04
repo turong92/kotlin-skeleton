@@ -3,6 +3,8 @@
 Google OAuth 토큰 교환 · 프로필 조회 HTTP 클라이언트를 `auth-social` 의 제공자로 등록한다.
 클라이언트 id · secret 만 있으면 된다. 별도 설정 접두사는 없고 `auth-social` 블록의 `providers` 아래에 둔다.
 
+**앱 토큰(`POST /auth/social/google/token` · 연결 · 다시 인증)**: 앱 SDK 의 `idToken` 을 받는다(`GET /auth/methods` 의 `nativeToken: "id_token"`, 제공자가 켜지면 열린다). 구글 JWKS(`https://www.googleapis.com/oauth2/v3/certs`, `api-base-url` 로 덮는다)로 RS256 서명을, `iss` 가 `https://accounts.google.com` · `accounts.google.com`, `aud` 가 **웹 `client-id` 하나**, `exp`/`nbf` 를 본다. 앱은 `serverClientId` 를 웹 client id 로 초기화해야 안드로이드 · iOS 토큰이 모두 이 `aud` 로 온다(실기기 확인 필요) — client id 를 여러 개 받는 설정은 없다. `nonce` 는 요청에 있으면 토큰과 같아야 하고 없으면 보지 않는다(`google_sign_in` 7 은 로그인마다 새 nonce 를 줄 수 없다). 이메일 권위자 판정은 위와 같고 `hd` 는 서명을 검증한 이 토큰에서 읽는다.
+
 **PKCE**: `pkce=SUPPORTED` — 프론트가 `code_challenge`(S256)를 보냈다면 `codeVerifier` 를 `code_verifier` 로 토큰 엔드포인트에 넘긴다(`client_secret` 은 그대로 필요하다). Google 의 discovery 문서는 `code_challenge_methods_supported: ["plain","S256"]` 를 싣지만
 ([OpenID Connect 문서](https://developers.google.com/identity/openid-connect/openid-connect)) **웹 서버 앱 문서([web-server](https://developers.google.com/identity/protocols/oauth2/web-server))에는 PKCE 파라미터 설명이 없다 — 웹 클라이언트 + client secret 조합에서 Google 이 검증기를 실제로 강제하는지는 확인 필요**(내일 실제 앱으로 `code_challenge` 를 보낸 흐름과 안 보낸 흐름을 둘 다 확인한다). SUPPORTED 라서 어느 쪽이든 동작한다.
 `email_verified` 클레임은 문서대로 "사용자의 이메일이 확인되었는가" 이고 그대로 `emailVerified` 가 된다.
