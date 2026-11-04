@@ -2,6 +2,7 @@ package dev.sumin.skeleton.payment
 
 import dev.sumin.skeleton.common.id.SortableIds
 import org.slf4j.LoggerFactory
+import java.time.Instant
 import java.util.UUID
 
 /**
@@ -77,6 +78,9 @@ class PaymentStorePurchases(
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
+    /** 스토어에 묻기 직전에 불러 [record] 의 `askedAt` 으로 넘긴다(이 장부의 시계). */
+    fun now(): Instant = writer.now()
+
     /** 한 시도의 결과 - [granted] 는 이번 트랜잭션이 새로 지급을 걸어 둔 주문 id(커밋 뒤에 지급을 시도하고 승인 통지를 한다). */
     private class Attempt(val result: StoreRecordResult, val granted: String? = null)
 
@@ -84,8 +88,9 @@ class PaymentStorePurchases(
      * @param gateway 이 구매를 확인한 스토어 결제사 - 장부의 결제사 id 가 된다.
      * @param purchase [PaymentStoreGateway.fetch] 가 돌려준 값. 앱이 보낸 값이 아니다.
      * @param product 상품 지도로 푼 우리 쪽 상품 - 구매의 종류와 같아야 한다([IllegalArgumentException]).
+     * @param askedAt 스토어에 묻기 직전의 시각([now] 로 받는다). 구독의 상태를 맞출 때 이 구매가 말한 사건의 시각으로 쓴다 - 묻는 동안 반영된 더 새로운 웹훅을 지난 값이 덮지 않게.
      */
-    fun record(gateway: PaymentStoreGateway, accountId: String, purchase: StorePurchase, product: StoreProduct): StoreRecordResult {
+    fun record(gateway: PaymentStoreGateway, accountId: String, purchase: StorePurchase, product: StoreProduct, askedAt: Instant = writer.now()): StoreRecordResult {
         require(purchase.kind == product.kind) { "a ${purchase.kind} purchase cannot be recorded as a ${product.kind} product" }
         if (purchase.state != StorePurchaseState.PURCHASED) return StoreRecordResult(StoreRecordOutcome.NOT_PURCHASED)
         if (purchase.accountToken?.equals(StoreAccountTokens.of(accountId), ignoreCase = true) == false) return StoreRecordResult(StoreRecordOutcome.OWNED_BY_ANOTHER_ACCOUNT)
@@ -96,7 +101,7 @@ class PaymentStorePurchases(
                 store.inTransaction { tx ->
                     when (product) {
                         is StoreProduct.OneTime -> oneTime(tx, provider, accountId, purchase, product)
-                        is StoreProduct.Subscription -> subscription(tx, provider, accountId, purchase, product.plan)
+                        is StoreProduct.Subscription -> subscription(tx, provider, accountId, purchase, product.plan, askedAt)
                     }
                 }
             } catch (e: PaymentLedgerConflictException) {
@@ -170,10 +175,10 @@ class PaymentStorePurchases(
             StoreRecordResult(if (order.accountId == accountId) StoreRecordOutcome.ALREADY_RECORDED else StoreRecordOutcome.OWNED_BY_ANOTHER_ACCOUNT, orderId = order.id.takeIf { order.accountId == accountId }),
         )
 
-    private fun subscription(tx: PaymentLedgerTx, provider: String, accountId: String, purchase: StorePurchase, plan: SubscriptionPlan): Attempt? {
+    private fun subscription(tx: PaymentLedgerTx, provider: String, accountId: String, purchase: StorePurchase, plan: SubscriptionPlan, askedAt: Instant): Attempt? {
         val lifecycle = checkNotNull(lifecycle) { "store subscriptions need the subscription feature (skeleton.payment.subscription.enabled=true)" }
         val providerSubscriptionId = requireNotNull(purchase.providerSubscriptionId) { "a store subscription purchase carries its subscription id" }
-        store.findSubscriptionByProviderId(provider, providerSubscriptionId)?.let { return restore(tx, lifecycle, provider, accountId, purchase, it) }
+        store.findSubscriptionByProviderId(provider, providerSubscriptionId)?.let { return restore(tx, lifecycle, provider, accountId, purchase, it, askedAt) }
         if (purchase.subscriptionStatus == PushedSubscriptionStatus.ENDED) return Attempt(StoreRecordResult(StoreRecordOutcome.NOT_PURCHASED))
 
         // 구글의 새 토큰이 우리 줄을 가리킨다(올리기 · 다시 구독) - 같은 트랜잭션에서 옛 줄을 끝내 자리를 풀고 새 줄을 연다
@@ -248,7 +253,7 @@ class PaymentStorePurchases(
     }
 
     /** 장부에 이미 있는 구독 줄 - 주인을 확인하고 스토어의 지금 상태 · 기간에 맞춘다. 지금 기간의 주문이 없으면 그것만 더한다. */
-    private fun restore(tx: PaymentLedgerTx, lifecycle: SubscriptionLifecycle, provider: String, accountId: String, purchase: StorePurchase, existing: PaymentSubscription): Attempt {
+    private fun restore(tx: PaymentLedgerTx, lifecycle: SubscriptionLifecycle, provider: String, accountId: String, purchase: StorePurchase, existing: PaymentSubscription, askedAt: Instant): Attempt {
         val other = Attempt(StoreRecordResult(StoreRecordOutcome.OWNED_BY_ANOTHER_ACCOUNT))
         if (existing.accountId != accountId) return other
         // 끝난 줄에 웹훅이 먼저 넣은 이 결제의 주문(`SUBSCRIPTION_STALE_CHARGE`)이 있으면 그것을 먼저 잠근다(주문 → 구독 순서)
@@ -277,7 +282,7 @@ class PaymentStorePurchases(
             }
         }
         val state = PushedSubscription(
-            eventId = "store-confirm", occurredAt = current.providerSyncedAt ?: purchase.paidAt, providerSubscriptionId = checkNotNull(current.providerSubscriptionId),
+            eventId = "store-confirm", occurredAt = askedAt, providerSubscriptionId = checkNotNull(current.providerSubscriptionId),
             status = purchase.subscriptionStatus ?: PushedSubscriptionStatus.ACTIVE, periodStart = purchase.periodStart, periodEnd = purchase.periodEnd, mode = purchase.mode,
         )
         pushed.applySubscriptionState(tx, lifecycle, current, state, purchase.mode) { null }?.let { log.info("the store state was not applied to the subscription line reason={}", it) }

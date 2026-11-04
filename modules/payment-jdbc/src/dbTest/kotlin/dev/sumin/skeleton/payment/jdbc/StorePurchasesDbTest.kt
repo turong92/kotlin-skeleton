@@ -73,7 +73,8 @@ class StorePurchasesDbTest {
         state = StorePurchaseState.PURCHASED, subscriptionStatus = PushedSubscriptionStatus.ACTIVE,
     )
 
-    private fun record(purchase: StorePurchase, product: StoreProduct, account: String = "acc_1") = purchases.record(gateway, account, purchase, product)
+    /** the fixture ledger clock sits before the fixed purchase times, so the "asked" time is pinned after them. */
+    private fun record(purchase: StorePurchase, product: StoreProduct, account: String = "acc_1") = purchases.record(gateway, account, purchase, product, monthLater.plusSeconds(1))
 
     private fun orderRows() = PaymentDb.count("select count(*) from payment_orders where provider = 'appstore'")
 

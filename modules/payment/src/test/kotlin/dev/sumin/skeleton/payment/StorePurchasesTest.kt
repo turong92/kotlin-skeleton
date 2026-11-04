@@ -47,7 +47,7 @@ class StorePurchasesTest {
         state = StorePurchaseState.PURCHASED, subscriptionStatus = status,
     )
 
-    private fun record(purchase: StorePurchase, product: StoreProduct, account: String = "acc_1") = kit.storePurchases.record(gateway, account, purchase, product)
+    private fun record(purchase: StorePurchase, product: StoreProduct, account: String = "acc_1", askedAt: Instant = monthLater.plusSeconds(1)) = kit.storePurchases.record(gateway, account, purchase, product, askedAt)
 
     private fun orders(provider: String = "appstore") = kit.store.listOrdersForOperator(OperatorOrderScope.ALL, OperatorOrderFilter(), null, null, 100).filter { it.provider == provider }
 
@@ -295,6 +295,24 @@ class StorePurchasesTest {
         kit.runTasks()
         assertEquals(2, kit.listener.paid.size)
         assertEquals(2, orders().size)
+    }
+
+    @Test
+    fun `a confirmation whose store answer is older than a push applied meanwhile does not overwrite the push`() {
+        val first = record(subscription(), basic)
+        val asked = t0.plusSeconds(60)
+        // the app's confirmation asked the store at `asked`; before it reached the ledger the store's past-due push (signed later) was applied
+        kit.store.inTransaction { tx ->
+            kit.pushed.apply(
+                tx, gateway,
+                PushedSubscription(eventId = "evt_past_due", occurredAt = asked.plusSeconds(30), providerSubscriptionId = "orig_1", status = PushedSubscriptionStatus.PAST_DUE, mode = PaymentMode.LIVE),
+            )
+        }
+        assertEquals(SubscriptionStatus.PAST_DUE, checkNotNull(kit.store.findSubscription(checkNotNull(first.subscriptionId))).status)
+
+        record(subscription(status = PushedSubscriptionStatus.ACTIVE), basic, askedAt = asked)
+
+        assertEquals(SubscriptionStatus.PAST_DUE, checkNotNull(kit.store.findSubscription(checkNotNull(first.subscriptionId))).status, "the older answer does not undo the newer push")
     }
 
     @Test

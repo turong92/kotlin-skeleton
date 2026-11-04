@@ -56,6 +56,7 @@ class IapPurchases(
 
     fun confirm(store: String, accountId: String, claim: StoreClaim): IapResult {
         val gateway = gatewayOf(store) ?: throw PaymentUnavailableException()
+        val askedAt = purchases.now()
         val purchase = fetch(gateway, claim) ?: throw IapPurchaseNotFoundException()
         // 구글의 productId 는 어느 API 로 물을지 고르는 힌트일 뿐이다 - 스토어가 말한 상품과 다르면 앱이 보낸 값을 믿지 않는다
         if (claim.productId != null && claim.productId != purchase.productId) throw IapPurchaseNotFoundException()
@@ -68,7 +69,7 @@ class IapPurchases(
             throw IapProductUnknownException()
         }
         if (purchase.state == StorePurchaseState.PENDING) return IapResult.Pending
-        val result = purchases.record(gateway, accountId, purchase, product)
+        val result = purchases.record(gateway, accountId, purchase, product, askedAt)
         return when (result.outcome) {
             StoreRecordOutcome.RECORDED, StoreRecordOutcome.ALREADY_RECORDED ->
                 IapResult.Granted(purchase.kind, result.orderId, result.subscriptionId?.let(ledger::findSubscription))
