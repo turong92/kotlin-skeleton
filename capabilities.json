@@ -11,6 +11,11 @@
       "llms": "llms.txt",
       "recipe": "docs/new-project-recipe.md",
       "usage": "scripts/new-project.sh <target-dir> <name> [--packages a,b,c] [--ssr] [--without-storybook] [--with-workbench] [--with-sample] [--scope @acme]"
+    },
+    "mobile": {
+      "repo": "flutter-skeleton",
+      "catalog": "capabilities.json",
+      "llms": "llms.txt"
     }
   },
   "starterModules": [

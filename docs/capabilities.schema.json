@@ -32,6 +32,17 @@
             "usage": { "type": "string", "description": "그 레포 new-project.sh 의 사용법(그쪽 카탈로그의 newProject.react.usage 와 같아야 한다)." },
             "recipe": { "type": "string", "description": "그 레포 안의 새 프로젝트 레시피 경로." }
           }
+        },
+        "mobile": {
+          "type": "object",
+          "description": "모바일 짝(flutter-skeleton). 모듈의 모바일 짝은 그쪽 카탈로그의 backend 가 정본이다 — 여기에는 위치만 적는다.",
+          "required": ["repo", "catalog"],
+          "additionalProperties": false,
+          "properties": {
+            "repo": { "type": "string" },
+            "catalog": { "type": "string", "description": "그 레포 안의 카탈로그 경로." },
+            "llms": { "type": "string" }
+          }
         }
       }
     },

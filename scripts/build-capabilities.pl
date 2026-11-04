@@ -192,6 +192,7 @@ sub render_md {
     if ($cat->{siblings} && $cat->{siblings}{frontend}{usage}) {
       $out .= "- react: " . code($cat->{siblings}{frontend}{usage}) . "\n";
     }
+    $out .= "- mobile: " . code($cat->{siblings}{mobile}{repo}) . " 레포의 " . code($cat->{siblings}{mobile}{catalog}) . " — 모듈의 모바일 짝은 거기 `backend` 에서 찾는다\n" if $cat->{siblings} && $cat->{siblings}{mobile};
     $out .= "- 조각을 합치는 법: `--modules` 는 하나로 합치고(쉼표) 다른 옵션(`--db` · `--with-sample` …)은 그대로 덧붙인다. 의존으로 닫히는 모듈은 적지 않아도 따라온다. `--dry-run` 을 붙이면 아무것도 만들지 않고 고른 모듈과 따라온 이유만 보인다.\n";
     $out .= "- 완성된 예(명령 · 환경변수 · 실행 · 검증 · 배포)와 손으로 써야 하는 것: `docs/new-project-recipe.md`\n\n";
   }
@@ -313,6 +314,7 @@ sub render_llms {
     $out .= "## 새 프로젝트 세팅 (두 레포 — 각 스켈레톤 레포 루트에서 실행)\n\n";
     $out .= "- kotlin: `" . $cat->{newProject}{usage} . "`\n";
     $out .= "- react: `" . $cat->{siblings}{frontend}{usage} . "`  (react-skeleton 레포에서 실행)\n" if $cat->{siblings} && $cat->{siblings}{frontend}{usage};
+    $out .= "- mobile: `" . $cat->{siblings}{mobile}{repo} . "` 레포의 `" . $cat->{siblings}{mobile}{catalog} . "` — 모듈의 모바일 짝은 거기 backend 에서 찾는다\n" if $cat->{siblings} && $cat->{siblings}{mobile};
     $out .= "- 아래 기능 줄의 「→ kotlin / react」 조각을 합쳐 쓴다: `--modules` 는 하나로(쉼표) 합치고 다른 옵션은 덧붙인다. 의존으로 닫히는 모듈은 적지 않아도 따라온다. `--dry-run` 은 고른 모듈만 보인다. 완성된 예와 손으로 써야 하는 것: docs/new-project-recipe.md · docs/capabilities.md\n";
     $out .= "- 스타터(apps/api)에 이미 있어 조각에 적지 않는 모듈: " . starter_line($cat) . "\n\n";
   }

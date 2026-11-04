@@ -17,6 +17,7 @@ Kotlin + Spring Boot 백엔드 스켈레톤 — 새 프로젝트가 필요한 �
 
 - kotlin: `scripts/new-project.sh <target-dir> <root-package> <config-prefix> <ClassPrefix> [--modules a,b,c] [--db postgresql|mysql] [--with-workbench] [--with-sample] [--dry-run]`
 - react: `scripts/new-project.sh <target-dir> <name> [--packages a,b,c] [--ssr] [--without-storybook] [--with-workbench] [--with-sample] [--scope @acme]`
+- mobile: `flutter-skeleton` 레포의 `capabilities.json` — 모듈의 모바일 짝은 거기 `backend` 에서 찾는다
 - 조각을 합치는 법: `--modules` 는 하나로 합치고(쉼표) 다른 옵션(`--db` · `--with-sample` …)은 그대로 덧붙인다. 의존으로 닫히는 모듈은 적지 않아도 따라온다. `--dry-run` 을 붙이면 아무것도 만들지 않고 고른 모듈과 따라온 이유만 보인다.
 - 완성된 예(명령 · 환경변수 · 실행 · 검증 · 배포)와 손으로 써야 하는 것: `docs/new-project-recipe.md`
 
