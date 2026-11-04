@@ -1,0 +1,21 @@
+# payment-iap — 앱용 인앱결제 HTTP(설정 응답 + 구매 확인). 기본 꺼짐. 스토어 모듈(payment-appstore · payment-googleplay)을 같이 골라야 의미가 있다.
+skeleton:
+  payment-iap:
+    enabled: false                       # true 면 GET /api/v1/payments/iap/config · POST /api/v1/payments/iap/{store}/purchases 가 선다 (장부(payment-jdbc)가 있을 때만)
+    web-checkout-url: ""                 # 웹 결제(예: payment-toss) 화면 주소, 예: https://example.com/pricing — 앱이 바깥 브라우저로 연다. 채널에 웹이 드는 값이 하나라도 있으면 비울 수 없다(기동 실패)
+    channels:
+      default: IAP_ONLY                  # IAP_ONLY | IAP_AND_WEB | WEB_ONLY — 기본: 모든 나라 · 플랫폼 인앱결제만 (= 지역 스위치 꺼짐)
+      countries: {}                      # 나라(두 글자) → 플랫폼(ios · android) → 채널. 빠진 칸은 default. 예)
+      #  US:
+      #    ios: IAP_AND_WEB              # 2026-11 기준 앱 안 링크가 자유로운 곳은 미국뿐이다 (EU · 일본은 신청 + 외부 구매 신고가 따로라 이 스위치만으로 켜지 않는다)
+      #    android: IAP_ONLY
+    products: []                         # 상품 지도 — 한 줄은 (item-type + item-ref) 또는 plan 중 하나. 스토어 상품 id 가 겹치면 기동 실패. 지도에 없는 상품은 지급하지 않는다(422)
+      # - item-type: cheer               # 단건: PaymentCatalog 의 itemType · itemRef
+      #   item-ref: cheer-3000
+      #   ios-product-id: com.example.sample.cheer3000
+      #   play-product-id: cheer_3000
+      # - plan: premium-monthly-krw      # 구독: SubscriptionPlans 의 플랜 코드
+      #   ios-product-id: com.example.sample.premium.monthly
+      #   play-product-id: premium       # 구글 구독 상품 id
+      #   play-base-plan-id: monthly     # 구글 기본 요금제 id (구독만 — 같은 상품의 요금제를 가른다)
+# 요청 수 한도는 skeleton.payment.http.order-rate-limit (주문 만들기와 같은 값 · 별도 통)
