@@ -15,11 +15,11 @@
 | 항목 | 내용 |
 |---|---|
 | 의존성 한 줄 | `implementation(project(":modules:auth-web-handoff"))` |
-| 함께 오는 모듈 | `account`, `auth`, `platform` (세션 장치 `auth-session` 은 같이 얹어야 한다) |
+| 함께 오는 모듈 | `account`, `auth`, `platform` |
 | 컴파일 전용 | 없음 |
 | 설정 접두사 | `skeleton.auth-web-handoff` — [docs/config/modules/auth-web-handoff.yml](../config/modules/auth-web-handoff.yml) |
 | 기본 동작 | 꺼짐. `enabled=true` 면 `account` 위에 redeem 경로 하나와 세션 사건 듣는 쪽이 선다. |
-| 부팅에 필요한 것 | `account` 의 부팅 조건 + `SessionInspector` 빈(`auth-session`) — 없으면 앱이 뜨지 않는다 |
+| 부팅에 필요한 것 | `account` 의 부팅 조건 + `SessionInspector` 빈 — 세션 장치 `auth-session` 을 같이 얹어야 한다(따라오지 않는다). 없으면 앱이 뜨지 않는다 |
 | 교체 지점 | `WebHandoff`, `WebHandoffController`, `webHandoffSessionEventListener` |
 | 마이그레이션 | 없음 (`account_tokens` 를 쓴다 — 용도 `web_handoff`) |
 | 프론트 짝 | 없음 (웹 결제 화면이 주소의 #handoff 조각을 읽어 redeem 을 부른다 - react 패키지는 아직 없다) |

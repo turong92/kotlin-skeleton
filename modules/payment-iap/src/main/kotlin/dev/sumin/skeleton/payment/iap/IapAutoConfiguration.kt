@@ -21,7 +21,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean
-import org.springframework.context.annotation.Configuration
 
 /**
  * 앱용 인앱결제 HTTP(스펙 §3) - `skeleton.payment-iap.enabled=true` 일 때만. 설정이 잘못되면(웹 채널인데 링크가 없다 · 스토어 상품 id 가 겹친다) **기동이 실패한다**.
@@ -46,7 +45,7 @@ class IapAutoConfiguration {
     @ConditionalOnMissingBean
     fun iapChannelPolicy(properties: IapProperties): IapChannelPolicy = ConfiguredIapChannelPolicy(properties)
 
-    @Configuration(proxyBeanMethods = false)
+    // 중첩 설정에는 @Configuration 표지를 달지 않는다 - @Bean 메서드만으로 중첩 설정으로 읽힌다 (ModuleRegistrationRulesTest)
     @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
     @ConditionalOnClass(name = ["org.springframework.security.core.Authentication"])
     @ConditionalOnBean(PaymentStorePurchases::class, PaymentCallers::class, PaymentCountryRouting::class)
@@ -75,21 +74,28 @@ class IapAutoConfiguration {
             clientIps: ObjectProvider<ClientIps>,
             properties: IapProperties,
         ): IapController = IapController(callers, purchases, products, channels, routing, router, limiter, clientIps.getIfAvailable { ClientIps() }, properties)
+    }
 
-        /** 앱 -> 웹 결제 자동 로그인 주소 - `auth-web-handoff` 의 발급자 빈이 있을 때만 선다 (없으면 이 경로는 없다). */
-        @Configuration(proxyBeanMethods = false)
-        @ConditionalOnBean(dev.sumin.skeleton.common.account.WebHandoffIssuer::class)
-        class WebCheckoutLink {
-            @Bean
-            @ConditionalOnMissingBean
-            fun iapWebCheckoutLinkController(
-                callers: PaymentCallers,
-                channels: IapChannelPolicy,
-                routing: PaymentCountryRouting,
-                handoff: dev.sumin.skeleton.common.account.WebHandoffIssuer,
-                properties: IapProperties,
-            ): IapWebCheckoutLinkController = IapWebCheckoutLinkController(callers, channels, routing, handoff, properties)
-        }
+    /**
+     * 앱 -> 웹 결제 자동 로그인 주소 - `Http` 와 같은 조건에 `auth-web-handoff` 의 발급자 빈이 있을 때만 선다 (없으면 이 경로는 없다).
+     * `Http` 안에 두지 않는다: 표지 없는 중첩 설정의 중첩 클래스는 읽히지 않는다.
+     */
+    @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
+    @ConditionalOnClass(name = ["org.springframework.security.core.Authentication"])
+    @ConditionalOnBean(
+        PaymentStorePurchases::class, PaymentCallers::class, PaymentCountryRouting::class,
+        dev.sumin.skeleton.common.account.WebHandoffIssuer::class,
+    )
+    class WebCheckoutLink {
+        @Bean
+        @ConditionalOnMissingBean
+        fun iapWebCheckoutLinkController(
+            callers: PaymentCallers,
+            channels: IapChannelPolicy,
+            routing: PaymentCountryRouting,
+            handoff: dev.sumin.skeleton.common.account.WebHandoffIssuer,
+            properties: IapProperties,
+        ): IapWebCheckoutLinkController = IapWebCheckoutLinkController(callers, channels, routing, handoff, properties)
     }
 }
 
