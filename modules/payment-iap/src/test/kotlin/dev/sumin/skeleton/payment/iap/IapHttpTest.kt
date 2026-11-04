@@ -133,6 +133,11 @@ class IapHttpTest {
     }
 
     @Test
+    fun `without a web handoff issuer there is no web checkout link route at all`() {
+        mvc.perform(post("$base/web-checkout-link").param("platform", "ios").param("storefront", "USA").asUser(account())).andExpect(status().isNotFound)
+    }
+
+    @Test
     fun `the config needs a known platform and a login`() {
         mvc.perform(get("$base/config").asUser(account())).andExpect(status().isBadRequest)
         mvc.perform(get("$base/config").param("platform", "windows").asUser(account())).andExpect(status().isBadRequest)

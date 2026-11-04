@@ -6,6 +6,7 @@ import dev.sumin.skeleton.account.token.OneTimeTokens
 import dev.sumin.skeleton.auth.account.AccountIdentifier
 import dev.sumin.skeleton.auth.account.AuthAccount
 import dev.sumin.skeleton.auth.account.AuthAccountRepository
+import dev.sumin.skeleton.common.account.WebHandoffIssuer
 import org.springframework.boot.context.properties.ConfigurationProperties
 import java.time.Duration
 
@@ -16,14 +17,6 @@ data class WebHandoffProperties(
     /** 코드 유효 시간 - 한 번 쓰고 나면 곧바로 죽는다. 브라우저를 여는 시간이면 되니 분 단위로 짧게 */
     val ttl: Duration = Duration.ofMinutes(2),
 )
-
-/**
- * 로그인한 계정을 위해 **한 번 쓰는 웹 로그인 코드**를 낸다. 원문은 이 반환값에만 있다 - 호출자가 주소의 `#` 조각에 실어 앱에 돌려주고(조각은 서버로 가지 않는다) 어디에도 남기지 않는다.
- * 같은 계정의 열린 코드는 새 코드를 낼 때 닫힌다.
- */
-fun interface WebHandoffIssuer {
-    fun issue(accountId: String): String
-}
 
 /**
  * 앱 -> 웹 넘어가기. 메일 링크 로그인과 **같은 토큰 장치**([OneTimeTokens]: 해시만 저장 · 원자적 한 번 · 만료 · 용도 구분)를 쓴다 - 주인(subject)은 계정 id 다.

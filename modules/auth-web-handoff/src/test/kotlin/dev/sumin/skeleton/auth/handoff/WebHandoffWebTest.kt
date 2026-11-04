@@ -5,6 +5,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import com.jayway.jsonpath.JsonPath
 import dev.sumin.skeleton.account.signin.AccountSignInService
+import dev.sumin.skeleton.common.account.WebHandoffIssuer
 import dev.sumin.skeleton.account.signin.SignInProof
 import dev.sumin.skeleton.account.token.InMemoryOneTimeTokenStore
 import dev.sumin.skeleton.account.token.OneTimeTokenStore

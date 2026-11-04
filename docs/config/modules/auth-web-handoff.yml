@@ -1,0 +1,5 @@
+# auth-web-handoff — 앱에서 웹으로 넘어갈 때 쓰는 한 번 쓰는 로그인 코드. 기본 꺼짐.
+skeleton:
+  auth-web-handoff:
+    enabled: false                     # true 면 POST /api/v1/auth/web-handoff/redeem 와 코드 발급자(WebHandoffIssuer)가 선다
+    ttl: 2m                            # 코드 유효 시간 — 한 번 쓰면 곧바로 죽고, 계정의 세션이 한꺼번에 닫히거나 새 코드를 내면 먼저 닫힌다
