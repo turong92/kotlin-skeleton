@@ -303,7 +303,8 @@ class PaymentPushedEvents(
                         it.copy(providerRefundId = number, failureCode = PROVIDER_REJECTED, completedAt = writer.now())
                     }
                 }
-            PushedRefundStatus.REVERSED -> Unit // 되돌려지는 것은 차지백뿐이다
+            // 스토어가 환불을 되돌렸다(애플 REFUND_REVERSED) - 이뤄졌던 그 줄만 REVERSED. 지급 · 구독은 되살리지 않는다(차지백 되돌림과 같은 규칙)
+            PushedRefundStatus.REVERSED -> if (line != null && line.status == PaymentRefundStatus.SUCCEEDED) refundLines.reverse(tx, order, line)
         }
         return null
     }

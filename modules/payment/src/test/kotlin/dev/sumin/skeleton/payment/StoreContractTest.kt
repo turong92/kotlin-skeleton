@@ -121,6 +121,25 @@ class StoreContractTest {
     }
 
     @Test
+    fun `a store refund that is reversed turns its refund line to reversed and does not bring back the supply or the subscription`() {
+        val line = active()
+        val paid = kit.store.listSubscriptionOrders(line.id, 5).single()
+        val refund = { status: PushedRefundStatus -> PushedRefund("evt_${++seq}", monthLater, PushedRefundKind.REFUND, "refund-txn", paid.providerPaymentId!!, status, PaymentAmount(990, "USD")) }
+        feed(refund(PushedRefundStatus.APPROVED))
+        kit.runTasks(setOf(PaymentTaskTypes.REFUND_APPLY, PaymentTaskTypes.ORDER_FULFIL))
+        assertEquals(PaymentRefundStatus.SUCCEEDED, kit.store.listRefunds(paid.id).single().status)
+        assertEquals(SubscriptionStatus.ENDED, sub(line.id).status)
+
+        feed(refund(PushedRefundStatus.REVERSED))
+
+        assertEquals(PaymentRefundStatus.REVERSED, kit.store.listRefunds(paid.id).single().status)
+        assertEquals(PaymentOrderStatus.PAID, kit.order(paid.id).status)
+        assertEquals(0, kit.order(paid.id).refundedAmount)
+        assertEquals(SubscriptionStatus.ENDED, sub(line.id).status, "the subscription is not brought back by a reversal")
+        assertEquals(1, kit.listener.refunded.size, "the supply is not given back either")
+    }
+
+    @Test
     fun `canceling, canceling now or changing the plan of a line the store bills is a 409 and the line and the provider stay untouched`() {
         val line = active()
 
